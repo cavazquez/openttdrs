@@ -17,6 +17,26 @@ Esto significa:
 
 ---
 
+## Relación con OpenTTD upstream
+
+El [informe de arquitectura](INFORME_ARQUITECTURA_OPENTTD.md) resume el código de `reference/openttd-upstream/` (Clases tile bit-packed, `TimerGameTick`, `CargoPacket`, YAPF, comandos, saveload, red). Estos incrementos **no copian** el upstream línea a línea; la tabla siguiente enlaza conceptos para cuando conviene mirar el original:
+
+| Concepto upstream | Dónde en OpenTTD | Cómo se traduce aquí |
+|-------------------|------------------|----------------------|
+| `TileBase` + `TileExtended` (~10 B/tile), accessor `Tile` | `map_func.h` | MVP: `Vec<Tile>` o equivalente simple; optimización tipo SoA si el profiler lo pide. |
+| `TileType` (11 variantes en 4 bits) | `tile_type.h` | **I1:** `TileKind` propio con subset jugable; no replicar todos los tipos C++ de entrada. |
+| `TimerGameTick`, constantes `Ticks::*` | `timer/timer_game_tick.h` | **I0:** `GameTick`; **I2:** usar **`INDUSTRY_PRODUCE_TICKS = 256`** como periodo por defecto de producción (literal del upstream). `DAY_TICKS = 74` si más adelante se calibra UI “por día”. |
+| Industria `ProducedCargo` / `AcceptedCargo`, `PRODLEVEL_*` | `industry.h` | **I2:** MVP con `stock` y tasas fijas; historia mensual y cierre por abandono después. |
+| `CargoPacket` (origen, `periods_in_transit`, …) | `cargopacket.h` | **I4:** balances `u32` bastan para el primer ciclo; packets completos cuando importe rating/pago realista. |
+| Jerarquía `Vehicle`, movimiento sub-tile | `vehicle_base.h` | **I3:** salto tesela a tesela; `progress` y distancias axiales (`TILE_AXIAL_DISTANCE`) cuando el MVP lo exija. |
+| Órdenes `Order`, listas compartidas | `order_base.h` | **I4:** cola mínima “ir a estación”; órdenes compartidas más tarde. |
+| YAPF (siguiente tramo, cachés, regiones agua) | `pathfinder/yapf/` | **I5:** BFS que devuelve **`Vec` de teselas** es deliberado y más simple; migrar a heurística tipo A* si el mapa crece. |
+| Registro masivo de comandos `*_cmd` | `command.cpp` | **I6:** mismo patrón abstracto (`Command` + `apply`), sin el árbol enorme del upstream. |
+| `SaveLoadVersion` (`SLV_*`) | `saveload/saveload.h` | **I7:** formato propio versionado; compatibilidad binaria con `.sav` fuera de alcance. |
+| Red = replay de comandos + hash estado | `network/` | **I8:** misma idea lógica; protocolo y seguridad mínimos. |
+
+---
+
 ## Estado actual (Incremento 0 — ya en `main`)
 
 Lo que existe hoy:
@@ -73,6 +93,8 @@ map.rs
 
 **Fuera de este incremento:** industrias, producción, vehículos, comandos del jugador.
 
+**Referencia upstream:** `TileType` enum en `tile_type.h` (Clear, Railway, Road, House, Trees, Station, Water, Void, Industry, TunnelBridge, Object). Aquí los nombres y la granularidad son deliberadamente más simples para el MVP.
+
 ---
 
 ### Incremento 2 — "Una industria existe en el mapa"
@@ -98,7 +120,7 @@ GameState {
 }
 ```
 
-`GameState::step()` llama a `Industry::produce(&mut self, tick)` que cada N ticks incrementa `stock` en una cantidad fija. Determinista, sin RNG.
+`GameState::step()` llama a `Industry::produce(&mut self, tick)` cada **256 ticks** (`INDUSTRY_PRODUCE_TICKS` en el upstream) incrementando `stock` en cantidad fija. Determinista, sin RNG.
 
 **Tests:**
 - `industry_produces_on_schedule()` — después de N ticks el stock aumenta la cantidad esperada.
@@ -110,6 +132,8 @@ GameState {
 - Texto o color de intensidad que refleja `stock` actual.
 
 **Fuera:** transporte de cargo, estaciones, jugador.
+
+**Referencia upstream:** struct `Industry` con `ProducedCargo` / `AcceptedCargo`, niveles `PRODLEVEL_*`, abandono tras años económicos (`industry.h`). MVP: solo producción periódica y tope de stock.
 
 ---
 
@@ -149,6 +173,8 @@ Movimiento por pasos: cada tick el vehículo avanza **una tesela** en la direcci
 
 **Fuera:** pathfinding real, vías, carga/descarga, estaciones.
 
+**Referencia upstream:** pool global `_vehicle_pool`, campos `tile`, órdenes, `VehicleCargoList` (`vehicle_base.h`). MVP: vector simple y movimiento Manhattan sin sub-tile.
+
 ---
 
 ### Incremento 4 — "Un vehículo recoge y entrega cargo"
@@ -186,6 +212,8 @@ Reglas de `step()`:
 
 **Fuera:** dinero del jugador, costes, UI de construcción.
 
+**Referencia upstream:** `CargoPacket` con origen y envejecimiento (`cargopacket.h`); pagos con inflación (`economy_type.h`). MVP: contadores `u32` y `income`; sin rating ni feeder_share hasta que el modelo lo requiera.
+
 ---
 
 ### Incremento 5 — "El mapa tiene vías y el vehículo las sigue"
@@ -215,6 +243,8 @@ BFS sobre teselas adyacentes con `TileKind::Road` o `Rail`. El vehículo sigue e
 - El vehículo solo se mueve si hay camino trazado.
 
 **Fuera:** construcción de vías por el jugador, señales, múltiples modos de transporte.
+
+**Referencia upstream:** YAPF elige **solo el siguiente tramo** (`yapf.h`, plantillas en `yapf_*.cpp`); barcos usan regiones de agua (`water_regions.*`). Aquí BFS devuelve una ruta explícita por simplicidad en mapas pequeños.
 
 ---
 
@@ -248,6 +278,8 @@ command.rs
 
 **Fuera:** coste económico del comando, deshacer, red.
 
+**Referencia upstream:** `command.cpp` enlaza cientos de handlers `*_cmd`; flags offline/servidor (`command_func.h`). MVP: serialización + validación local como base para red posterior.
+
 ---
 
 ### Incremento 7 — "El estado persiste en disco"
@@ -275,6 +307,8 @@ save.rs
 
 **Fuera:** versionado de formato, migraciones, compatibilidad con OpenTTD.
 
+**Referencia upstream:** `SaveLoadVersion` inmutable y tablas por subsistema (`saveload/saveload.h`, `*_sl.cpp`). MVP: un formato único con campo `version` en JSON/binario propio.
+
 ---
 
 ### Incremento 8 — "Dos instancias comparten el mundo"
@@ -301,6 +335,8 @@ clientes aplican el log y avanzan ticks sincrónicos.
 - Arg `--server` / `--client <addr>` en el binario existente.
 
 **Fuera:** seguridad, cheating, latencia, reconexión.
+
+**Referencia upstream:** los clientes aplican la misma secuencia de comandos que el servidor; desync por divergencia de estado (`network_*`). MVP: misma disciplina determinista + hash opcional del `GameState`.
 
 ---
 

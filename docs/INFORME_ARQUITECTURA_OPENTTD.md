@@ -3,6 +3,8 @@
 > Basado en análisis directo del código fuente en `reference/openttd-upstream/` (clon shallow, rama principal, abril 2026).  
 > Licencia upstream: GPL-2.0 (`COPYING.md`). Ver advertencias de licencia al final.
 
+El **plan de trabajo del port** (incrementos I0–I8, qué implementar en cada PR) está en [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md), enlazado con este informe por tabla y referencias por incremento.
+
 ---
 
 ## 1. Visión general

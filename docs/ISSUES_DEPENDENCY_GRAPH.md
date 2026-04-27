@@ -2,20 +2,24 @@
 
 Los issues del plan de implementación están creados en el repositorio. Números actuales (rama `main`, abril 2026):
 
-| # | Título | Dificultad |
-|---|--------|------------|
-| [2](https://github.com/cavazquez/openttdrs/issues/2) | Infra: workspace Rust 2024, CI y Dependabot | baja |
-| [3](https://github.com/cavazquez/openttdrs/issues/3) | Docs: clon de referencia OpenTTD e informe de arquitectura | baja |
-| [4](https://github.com/cavazquez/openttdrs/issues/4) | Core: mapa por teselas, reloj de tick y estado de simulación | baja |
-| [5](https://github.com/cavazquez/openttdrs/issues/5) | Core: tests de invariantes y regresión | media |
-| [6](https://github.com/cavazquez/openttdrs/issues/6) | Cliente Bevy: ventana, cámara y vista debug del mapa | media |
-| [7](https://github.com/cavazquez/openttdrs/issues/7) | Simulación: industrias y economía reducida | media |
-| [8](https://github.com/cavazquez/openttdrs/issues/8) | Pathfinding mínimo (carretera o raíl simplificado) | alta |
-| [9](https://github.com/cavazquez/openttdrs/issues/9) | Vehículos, órdenes y estaciones | alta |
-| [10](https://github.com/cavazquez/openttdrs/issues/10) | UI Bevy: construcción e interacción con infraestructura | alta |
-| [11](https://github.com/cavazquez/openttdrs/issues/11) | Contenido: NewGRF / basesets (compatibilidad parcial) | muy alta |
-| [12](https://github.com/cavazquez/openttdrs/issues/12) | Red: multijugador cliente/servidor determinista | muy alta |
-| [13](https://github.com/cavazquez/openttdrs/issues/13) | Guardados: formato versionado y compatibilidad | muy alta |
+## Hito **0.1 — vertical slice**
+
+Todos los issues del roadmap están agrupados en el hito [0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1). Los **#2–#6** quedaron **cerrados** como bootstrap ya mergeado en `main`; el trabajo pendiente del corte 0.1 sigue en **#7–#13** (abiertos).
+
+| # | Título | Dificultad | Estado |
+|---|--------|------------|--------|
+| [2](https://github.com/cavazquez/openttdrs/issues/2) | Infra: workspace Rust 2024, CI y Dependabot | baja | cerrado |
+| [3](https://github.com/cavazquez/openttdrs/issues/3) | Docs: clon de referencia OpenTTD e informe de arquitectura | baja | cerrado |
+| [4](https://github.com/cavazquez/openttdrs/issues/4) | Core: mapa por teselas, reloj de tick y estado de simulación | baja | cerrado |
+| [5](https://github.com/cavazquez/openttdrs/issues/5) | Core: tests de invariantes y regresión | media | cerrado (MVP; se puede reabrir ampliación) |
+| [6](https://github.com/cavazquez/openttdrs/issues/6) | Cliente Bevy: ventana, cámara y vista debug del mapa | media | cerrado |
+| [7](https://github.com/cavazquez/openttdrs/issues/7) | Simulación: industrias y economía reducida | media | abierto |
+| [8](https://github.com/cavazquez/openttdrs/issues/8) | Pathfinding mínimo (carretera o raíl simplificado) | alta | abierto |
+| [9](https://github.com/cavazquez/openttdrs/issues/9) | Vehículos, órdenes y estaciones | alta | abierto |
+| [10](https://github.com/cavazquez/openttdrs/issues/10) | UI Bevy: construcción e interacción con infraestructura | alta | abierto |
+| [11](https://github.com/cavazquez/openttdrs/issues/11) | Contenido: NewGRF / basesets (compatibilidad parcial) | muy alta | abierto |
+| [12](https://github.com/cavazquez/openttdrs/issues/12) | Red: multijugador cliente/servidor determinista | muy alta | abierto |
+| [13](https://github.com/cavazquez/openttdrs/issues/13) | Guardados: formato versionado y compatibilidad | muy alta | abierto |
 
 > Si los números cambian en otro fork, vuelve a ejecutar el script o ajusta esta tabla.
 

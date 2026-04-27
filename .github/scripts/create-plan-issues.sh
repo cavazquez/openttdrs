@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Crea issues del roadmap (ejecutar una sola vez). Requiere gh autenticado.
+# Crea issues del roadmap. SOLO para un repo vacío de issues o un fork nuevo:
+# en cavazquez/openttdrs ya existen #2–#13; no re-ejecutar o duplicarás entradas.
+# Requiere: gh autenticado.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 

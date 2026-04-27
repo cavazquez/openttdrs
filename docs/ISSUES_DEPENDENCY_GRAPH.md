@@ -1,83 +1,52 @@
-# Roadmap en GitHub Issues
+# Roadmap en GitHub Issues — diseño incremental
 
-Los issues del plan de implementación están creados en el repositorio. Números actuales (rama `main`, abril 2026):
+El roadmap usa **incrementos** en lugar de fases. Cada incremento es una rebanada delgada que cruza todas las capas (core, tests, cliente Bevy) y deja el sistema funcionando y observable. Ver [docs/DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) para la spec detallada de cada uno.
 
-## Hito **0.1 — vertical slice**
+## Hito [0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1)
 
-Todos los issues del roadmap están agrupados en el hito [0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1). Los **#2–#6** quedaron **cerrados** como bootstrap ya mergeado en `main`; el trabajo pendiente del corte 0.1 sigue en **#7–#13** (abiertos).
+| # | Incremento | Qué hace | Dificultad | Estado |
+|---|-----------|----------|------------|--------|
+| I0 | — | Grid + tick + cliente Bevy debug | — | cerrado (#2–#6, ya en `main`) |
+| [#14](https://github.com/cavazquez/openttdrs/issues/14) | I1 | Tipos de tesela (`TileKind`) | baja | abierto |
+| [#15](https://github.com/cavazquez/openttdrs/issues/15) | I2 | Industria produce por tick | baja | abierto |
+| [#16](https://github.com/cavazquez/openttdrs/issues/16) | I3 | Vehículo con movimiento naive | baja | abierto |
+| [#17](https://github.com/cavazquez/openttdrs/issues/17) | I4 | Estaciones y ciclo económico | media | abierto |
+| [#18](https://github.com/cavazquez/openttdrs/issues/18) | I5 | Vías y BFS pathfinding | media | abierto |
+| [#19](https://github.com/cavazquez/openttdrs/issues/19) | I6 | Comandos del jugador | media | abierto |
+| [#20](https://github.com/cavazquez/openttdrs/issues/20) | I7 | Save / Load del estado | media | abierto |
+| [#21](https://github.com/cavazquez/openttdrs/issues/21) | I8 | Red — dos instancias | alta | abierto |
 
-| # | Título | Dificultad | Estado |
-|---|--------|------------|--------|
-| [2](https://github.com/cavazquez/openttdrs/issues/2) | Infra: workspace Rust 2024, CI y Dependabot | baja | cerrado |
-| [3](https://github.com/cavazquez/openttdrs/issues/3) | Docs: clon de referencia OpenTTD e informe de arquitectura | baja | cerrado |
-| [4](https://github.com/cavazquez/openttdrs/issues/4) | Core: mapa por teselas, reloj de tick y estado de simulación | baja | cerrado |
-| [5](https://github.com/cavazquez/openttdrs/issues/5) | Core: tests de invariantes y regresión | media | cerrado (MVP; se puede reabrir ampliación) |
-| [6](https://github.com/cavazquez/openttdrs/issues/6) | Cliente Bevy: ventana, cámara y vista debug del mapa | media | cerrado |
-| [7](https://github.com/cavazquez/openttdrs/issues/7) | Simulación: industrias y economía reducida | media | abierto |
-| [8](https://github.com/cavazquez/openttdrs/issues/8) | Pathfinding mínimo (carretera o raíl simplificado) | alta | abierto |
-| [9](https://github.com/cavazquez/openttdrs/issues/9) | Vehículos, órdenes y estaciones | alta | abierto |
-| [10](https://github.com/cavazquez/openttdrs/issues/10) | UI Bevy: construcción e interacción con infraestructura | alta | abierto |
-| [11](https://github.com/cavazquez/openttdrs/issues/11) | Contenido: NewGRF / basesets (compatibilidad parcial) | muy alta | abierto |
-| [12](https://github.com/cavazquez/openttdrs/issues/12) | Red: multijugador cliente/servidor determinista | muy alta | abierto |
-| [13](https://github.com/cavazquez/openttdrs/issues/13) | Guardados: formato versionado y compatibilidad | muy alta | abierto |
-
-> Si los números cambian en otro fork, vuelve a ejecutar el script o ajusta esta tabla.
+> Los issues de fase #7–#13 (plan anterior) están **cerrados como reemplazados**.
 
 ## Grafo de dependencias
 
-```mermaid
-flowchart TB
-  I2[2 Infra CI]
-  I3[3 Docs referencia]
-  I4[4 Core mapa]
-  I5[5 Tests core]
-  I6[6 Cliente Bevy]
-  I7[7 Industrias]
-  I8[8 Pathfinding]
-  I9[9 Vehículos]
-  I10[10 UI construcción]
-  I11[11 NewGRF]
-  I12[12 Red]
-  I13[13 Saves]
+La cadena es lineal: cada incremento extiende los tipos del anterior.
 
-  I2 --> I4
-  I2 --> I6
-  I3 -.-> I2
-  I4 --> I5
-  I4 --> I6
-  I4 --> I7
-  I5 --> I7
-  I7 --> I8
-  I7 --> I9
-  I8 --> I9
-  I5 --> I12
-  I6 --> I10
-  I9 --> I10
-  I4 --> I11
-  I9 --> I11
-  I9 --> I13
-  I12 --> I13
+```mermaid
+flowchart LR
+  I0["I0 ya mergeado"]
+  I1["#14 I1\nTileKind"]
+  I2["#15 I2\nIndustria"]
+  I3["#16 I3\nVehículo"]
+  I4["#17 I4\nEstaciones"]
+  I5["#18 I5\nVías BFS"]
+  I6["#19 I6\nComandos"]
+  I7["#20 I7\nSave Load"]
+  I8["#21 I8\nRed"]
+
+  I0 --> I1 --> I2 --> I3 --> I4 --> I5 --> I6 --> I7 --> I8
 ```
 
-Leyenda: flecha sólida = bloqueo explícito en el cuerpo del issue; línea punteada = dependencia opcional o débil.
+## Reglas de trabajo
 
-### Lista explícita
-
-- **#4** depende de **#2**.
-- **#5** depende de **#4**.
-- **#6** depende de **#2**, **#4**.
-- **#7** depende de **#4**, **#5**.
-- **#8** depende de **#4**, **#7**.
-- **#9** depende de **#7**, **#8**.
-- **#10** depende de **#6**, **#9**.
-- **#11** depende de **#4**, **#9**.
-- **#12** depende de **#5**, **#9**.
-- **#13** depende de **#9**; recomendado tras **#12**.
-- **#3** puede ir en paralelo a **#2** (solo referencia documental).
+1. Un incremento = un PR. Nunca mezclar dos incrementos.
+2. Los tests del incremento anterior no pueden romperse.
+3. Cada PR deja el cliente Bevy en un estado observable.
+4. No se diseña el incremento N+2 hasta que N está mergeado.
 
 ## Script de recreación
 
-Para otro repositorio o si hace falta recrear issues (evitar duplicados en el mismo repo):
+Para otro repositorio o fork nuevo (no re-ejecutar en `cavazquez/openttdrs`):
 
 ```bash
 ./.github/scripts/create-plan-issues.sh

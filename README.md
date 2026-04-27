@@ -4,6 +4,8 @@ Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.o
 
 > **Rendimiento en tu máquina:** compilar Bevy y dependencias puede ser pesado. Si notas saturación de CPU o RAM, usa por ejemplo `cargo build -j 1` o deja que el flujo de [CI](.github/workflows/ci.yml) valide el build en GitHub Actions.
 
+**Roadmap en issues:** tabla, dificultades y grafo de dependencias en [docs/ISSUES_DEPENDENCY_GRAPH.md](docs/ISSUES_DEPENDENCY_GRAPH.md) (issues [#2](https://github.com/cavazquez/openttdrs/issues/2)–[#13](https://github.com/cavazquez/openttdrs/issues/13) en este repo).
+
 ---
 
 ## Stack tecnológico

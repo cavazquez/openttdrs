@@ -1,217 +1,423 @@
 # Informe de arquitectura: OpenTTD upstream (referencia para openttdrs)
 
-Este documento resume la organización del código fuente de **OpenTTD** tal como aparece en un clon local (por ejemplo `reference/openttd-upstream/`). Sirve como mapa mental para un port incremental a Rust; **no** es una guía línea a línea ni una especificación formal.
-
-- **Repositorio oficial**: [https://github.com/OpenTTD/OpenTTD](https://github.com/OpenTTD/OpenTTD)  
-- **Licencia**: GPL-2.0 (ver `COPYING.md` en el upstream). Cualquier reutilización de diseño o código debe respetar compatibilidad de licencias y atribución.
+> Basado en análisis directo del código fuente en `reference/openttd-upstream/` (clon shallow, rama principal, abril 2026).  
+> Licencia upstream: GPL-2.0 (`COPYING.md`). Ver advertencias de licencia al final.
 
 ---
 
-## 1. Visión general del árbol
+## 1. Visión general
 
-OpenTTD es un motor monolítico en **C++** con CMake, centrado en:
+OpenTTD es un motor de simulación **monolítico en C++** con build CMake. Los pilares son:
 
-1. Un **bucle de juego** determinista (ticks, comandos, economía).
-2. Un **mapa** discreto por teselas con muchos tipos de ocupación (vías, carretera, agua, edificios, industrias).
-3. **Vehículos** con órdenes, carga y routing.
-4. **Extensibilidad** (NewGRF, scripts, basesets).
-5. **Persistencia** (guardados con versionado y compatibilidad hacia atrás).
-6. **Multijugador** (cliente/servidor, sincronización por comandos).
-
-Carpetas de primer nivel relevantes en el clon:
-
-| Ruta | Rol |
-|------|-----|
-| `src/` | Casi toda la lógica del juego, GUI, red, saveload, pathfinding. |
-| `bin/` | Herramientas auxiliares / datos de arranque según plataforma. |
-| `media/` | Recursos, basesets, documentación de medios. |
-| `regression/` | Pruebas de regresión del simulador. |
-| `docs/` | Documentación del proyecto upstream. |
-| `cmake/`, `os/` | Build y adaptación por SO. |
+1. Un **mapa discreto de teselas** con layout en memoria muy comprimido.
+2. Un **bucle de tick determinista** sobre el que se ejecutan todos los subsistemas.
+3. Un **sistema de comandos** serializable que es la única fuente de cambios al estado del mundo (y la base del multijugador).
+4. Una capa de **NewGRF** que extiende casi todos los aspectos del juego.
+5. Un sistema de **saveload** fuertemente versionado con compatibilidad hacia atrás desde v0.1.
 
 ---
 
-## 2. Mapa y mundo (`src/` — teselas, terreno, infraestructura)
+## 2. El mapa y las teselas (`src/map_func.h`, `src/tile_type.h`, `src/map.cpp`, `src/tile_map.h`)
 
-La simulación gira en torno a **teselas** (tiles) y estructuras derivadas.
+### 2.1 Representación en memoria
 
-### 2.1 Conceptos
+Cada tesela está representada por **10 bytes** divididos en dos arrays paralelos de tamaño `Map::size`:
 
-- **Coordenadas y tipos de tesela**: definiciones dispersas en cabeceras como `tile_type.h`, `tile_map.h`, `tile_map.cpp`, `map_type.h`, `map_func.h`, `map.cpp`.
-- **Comandos de modificación del mapa**: muchos archivos `*_cmd.cpp` / `*_cmd.h` (por ejemplo `clear_cmd`, `water_cmd`, `tunnelbridge_cmd`, `road_cmd`, `rail_cmd`, etc.) encapsulan acciones del jugador o de la IA que mutan el mundo a través del sistema de comandos.
-- **Capas semánticas del mapa**: archivos `*_map.h` describen qué hay “en” una tesela para un subsistema (por ejemplo `rail_map.h`, `road_map.h`, `water_map.h`, `station_map.h`, `industry_map.h`, `town_map.h`).
-- **Terraformado y pendientes**: lógica relacionada con altura y superficie (por ejemplo `clear_map.h`, `autoslope.h`, generación procedural en `tgp.cpp` / `tgp.h`).
+```
+TileBase (8 bytes):
+  type    u8  — bits 4-7: TileType (4 bits), bits 2-3: puentes, bits 0-1: zona trópico
+  height  u8  — altura de la esquina norte (0-255)
+  m1      u8  — principalmente propiedad (owner)
+  m2     u16  — índice a town, industry o station según tipo
+  m3      u8  — uso general
+  m4      u8  — uso general
+  m5      u8  — uso general
 
-### 2.2 Implicaciones para openttdrs
+TileExtended (4 bytes):
+  m6      u8  — uso general
+  m7      u8  — principalmente soporte NewGRF
+  m8     u16  — uso general
+```
 
-- Extraer primero un **modelo de mapa puro** (dimensiones, tesela, altura o nivel simplificado) en un crate sin Bevy, como ya hace `openttdrs-core`, y crecer hacia tipos de ocupación y comandos validados.
-- Los `*_cmd` del upstream son la referencia natural para diseñar una **capa de comandos** serializable (útil más adelante para red y replays).
+Hay **un solo** array por el mundo; no hay objetos `Tile` heap-allocated. `class Tile` es un **wrapper sin datos propios** que recibe un `TileIndex` y accede los arrays globales estáticos. El compilador lo elimina completamente en builds optimizados.
 
----
+### 2.2 `TileType` — tipos de tesela reales
 
-## 3. Economía y carga (`economy*`, `cargo*`, `cargopacket*`)
+```cpp
+enum class TileType : uint8_t {
+    Clear,        // pasto, rocas, campos de granja
+    Railway,      // vía férrea
+    Road,         // carretera y/o tranvía
+    House,        // edificio de pueblo
+    Trees,        // árboles
+    Station,      // estación o aeropuerto
+    Water,        // agua
+    Void,         // borde invisible del mapa
+    Industry,     // parte de una industria
+    TunnelBridge, // entrada de túnel o cabeza de puente
+    Object,       // objetos: transmisores, tierra propia
+};
+```
 
-Archivos representativos:
+Los 4 bits del tipo permiten hasta 16 tipos; hay 11 activos más `End` como marcador.
 
-- `economy.cpp`, `economy_base.h`, `economy_cmd.h`, `economy_func.h`, `economy_type.h`: flujo de dinero, costes, subsidios y reglas económicas de alto nivel.
-- `cargo_type.h`, `cargotype.cpp`, `cargotype.h`: definición de tipos de carga.
-- `cargopacket.cpp`, `cargopacket.h`: paquetes de carga transportados y metadatos asociados.
-- `cargoaction.cpp`, `cargoaction.h`, `cargomonitor.cpp`, `cargomonitor.h`: acciones y monitorización ligadas a carga.
+### 2.3 Dimensiones del mapa
 
-### 3.1 Implicaciones
+- Mínimo: 64×64 (`2^6`), Máximo: 4096×4096 (`2^12`).
+- Las dimensiones **deben ser potencias de 2**: el índice lineal se calcula con shift en lugar de multiplicación para máxima velocidad.
+- El índice de una tesela en `(x, y)` es `y * Map::SizeX() + x`.
+- Hay `TileAddWrap` para detectar cuando un desplazamiento cruza el borde del mapa (devuelve `INVALID_TILE`).
+- La altura máxima es 255 niveles; cada nivel equivale a 8 píxeles en el render base.
 
-- La economía depende fuertemente del **tick** y de las **estaciones/industrias**. Conviene modelar **carga** y **producción** como datos y reglas en `openttdrs-core` antes de pintar sprites.
-- Los tests de regresión del upstream (`regression/`) pueden inspirar casos de prueba mínimos (producción, transferencia, decay de carga, etc.) cuando el port avance.
+### 2.4 Consecuencias para openttdrs
 
----
-
-## 4. Vehículos, órdenes y estaciones
-
-### 4.1 Vehículos
-
-Familias por modo, con GUI y comandos separados:
-
-- Trenes: `train_cmd.cpp`, `train_gui.cpp`, `train.h`, etc.
-- Carretera: `roadveh_*`, `road_cmd`, autobuses/camiones.
-- Aviones: `aircraft_*`, `airport_*`.
-- Barcos: `ship_*`.
-
-Patrones comunes: `vehicle_base.h`, `vehicle.cpp`, `vehicle_cmd.cpp`, `vehicle_gui.cpp`, `articulated_vehicles.*`.
-
-### 4.2 Órdenes
-
-- `order_base.h`, `order_cmd.cpp`, `order_cmd.h`, `order_gui.cpp`, `order_type.h`, `order_backup.*`: colas de órdenes, tipos de parada, copias de respaldo para UI y simulación.
-
-### 4.3 Estaciones y waypoints
-
-- `station_*`, `waypoint_*`, `base_station_base.h`: recepción de carga, plataformas, layouts.
-
-### 4.4 Implicaciones
-
-- Es uno de los bloques **más grandes** del port: máquina de estados por vehículo + interacción con vías y señales.
-- Para Bevy: mantener la **simulación** fuera del ECS de render; el motor solo refleja estado y eventos (por ejemplo cambio de posición o sprite).
+- La clase `Tile` en Rust puede ser un struct de valor; lo que OpenTTD llama `m1..m8` en Rust conviene modelar como campos con nombre según el subsistema.
+- El mapa actual de openttdrs (`Vec<Tile>` de structs) es correcto; para escala real habría que medir si el layout comprimido (SoA en lugar de AoS) importa en rendimiento.
+- **Los bits del tipo son 4 en OpenTTD** (usa `(tile.type() >> 4) & 0xF`); en Rust un `enum TileKind` con `u8` o `repr(u8)` modela esto limpiamente.
 
 ---
 
-## 5. IA y scripts (`src/ai`, `src/script`)
+## 3. El reloj de tick (`src/timer/timer_game_tick.h`)
 
-- **`src/ai`**: motor de AIs de compañía (`ai_core`, `ai_instance`, configuración, escaneo de scripts, GUI).
-- **`src/script`**: infraestructura de **Game Script** y API expuesta a Squirrel (`script_instance`, `script_scanner`, `api/` con definiciones de funciones expuestas al lenguaje de script).
+```cpp
+class TimerGameTick {
+    using TickCounter = uint64_t;  // monotónico global
+    static TickCounter counter;
+};
+```
 
-### 5.1 Implicaciones
+Constantes **literales del código**:
 
-- La compatibilidad con scripts del upstream es **opcional** en fases tempranas; sustituir por reglas nativas en Rust o un DSL propio es válido si se documenta la ruptura.
-- Si en el futuro se desea compatibilidad, habría que aislar una **capa de API** estable similar a `script/api`.
+| Constante | Valor | Significado |
+|-----------|-------|-------------|
+| `DAY_TICKS` | 74 | Ticks por día de juego |
+| `TICKS_PER_SECOND` | ~37 | Ticks por segundo real |
+| `INDUSTRY_PRODUCE_TICKS` | 256 | Cada cuántos ticks producen las industrias |
+| `STATION_RATING_TICKS` | 185 | Ciclo de rating de estación |
+| `CARGO_AGING_TICKS` | 185 | Ciclo de envejecimiento de carga |
+| `TOWN_GROWTH_TICKS` | 70 | Ciclo de crecimiento de pueblos |
 
----
+El reloj tiene además `TimerGameCalendar` (fecha legible para el jugador) y `TimerGameEconomy` (año económico, más lento), separados del tick puro.
 
-## 6. Pathfinding (`src/pathfinder`, YAPF)
+### Para openttdrs
 
-- Directorio `src/pathfinder/` con utilidades compartidas (`pathfinder_type.h`, `follow_track.hpp`, regiones de agua `water_regions.*`).
-- Subcarpeta **`pathfinder/yapf/`**: Yet Another Pathfinder — implementación principal por modos de transporte (`yapf_rail.cpp`, `yapf_road.cpp`, `yapf_ship.cpp`, plantillas en `.hpp` para nodos, costes y cachés).
-
-OpenTTD históricamente también tuvo componentes NPF; en el código actual YAPF domina el routing de red ferroviaria y otros modos según configuración.
-
-### 6.1 Implicaciones
-
-- El pathfinding está **acoplado** al mapa y al tipo de vía; conviene introducir primero un **grafo abstracto** o grid reducido en Rust antes de copiar heurísticas.
-- Cachés y costes (archivos `yapf_cost*.hpp`) son críticos para rendimiento; perfilar en Rust con benchmarks desde etapas medias.
-
----
-
-## 7. NewGRF y extensiones (`src/newgrf*`)
-
-Gran cantidad de archivos `newgrf_*.cpp/.h`: industrias, casas, aeropuertos, estaciones, textos, almacenamiento de variables, grupos de sprites, etc.
-
-- `newgrf.cpp`, `newgrf.h`: núcleo de carga y resolución.
-- `newgrf_config.*`, `newgrf_gui.*`: interfaz y configuración de GRF.
-- `newgrf_spritegroup.*`: selección de sprites según variables (jumpíng del spec).
-
-### 7.1 Implicaciones
-
-- Bloque **de mayor riesgo** para un port: formato binario, evolución del spec y compatibilidad con contenidos de la comunidad.
-- Estrategia razonable: primero **baseset fijo** y datos propios; luego un subconjunto documentado de NewGRF si el proyecto lo prioriza.
+- `GameTick(u64)` ya modela el contador monotónico correctamente.
+- Para Incremento 2 (industrias): producir cada **256 ticks** es la referencia directa del upstream.
 
 ---
 
-## 8. Red (`src/network`)
+## 4. Los comandos (`src/command.cpp`, `src/command_func.h`)
 
-Archivos como `network.cpp`, `network_client.*`, `network_server.*`, `network_command.cpp`, `network_crypto.*`, `network_content.*`, coordinación (`network_coordinator.*`), administración (`network_admin.*`), etc.
+Uno de los patrones de diseño más importantes de OpenTTD. `command.cpp` importa **todos** los `*_cmd.h` del juego y los registra. Cada acción del jugador es un `Command` con:
 
-### 8.1 Ideas clave del diseño upstream
+- Un `CommandType` (enum).
+- Parámetros serializados en un `EndianBuffer`.
+- `CommandFlags` que indican si es válido offline, si lo ejecuta el servidor, etc.
+- Un resultado: `CommandCost` (el coste en dinero y si fue exitoso).
 
-- Los clientes ejecutan la misma simulación que el servidor aplicando la **misma secuencia de comandos**.
-- Cualquier divergencia sutil produce **desync**; por eso tipos flotantes, iteración sobre hash maps no deterministas y condiciones de carrera son enemigos históricos.
+El servidor retransmite comandos a todos los clientes; cada cliente los ejecuta independientemente sobre su copia del estado. Esto garantiza sincronización sin enviar el estado completo.
 
-### 8.2 Implicaciones
+### Comandos existentes (lista parcial de `command.cpp`)
 
-- Diseñar openttdrs con **determinismo** explícito (RNG sembrado, orden estable, tests de replay).
-- La red debería ser una **última fase** tras comandos y estado estable.
+`rail_cmd`, `road_cmd`, `train_cmd`, `roadveh_cmd`, `water_cmd`, `station_cmd`, `town_cmd`, `industry_cmd`, `terraform_cmd`, `tunnelbridge_cmd`, `order_cmd`, `timetable_cmd`, `vehicle_cmd`, `engine_cmd`, `group_cmd`, `company_cmd`, `settings_cmd`, `object_cmd`, `waypoint_cmd`, `depot_cmd`, `goal_cmd`, `story_cmd`, `subsidy_cmd`, `signs_cmd`, `news_cmd`, `misc_cmd`, etc.
 
----
+### Para openttdrs
 
-## 9. Guardados (`src/saveload`)
-
-Decenas de archivos `*_sl.cpp` (saveload por subsistema): `map_sl`, `company_sl`, `engine_sl`, `newgrf_sl`, `game_sl`, etc., más directorio `saveload/compat` para versiones antiguas.
-
-### 9.1 Implicaciones
-
-- El formato de save es un **contrato longitudinal**; reimplementarlo en Rust con paridad total es costoso.
-- Alternativas: formato propio versionado + herramientas de importación parcial, o limitar compatibilidad a un subconjunto de partidas.
+- El patrón `enum Command + fn apply(state, cmd) -> Result<Cost, Error>` en Rust es un **mapeo directo** del sistema de comandos de OpenTTD.
+- Que los comandos sean datos serializables es lo que habilita el multijugador (Incremento 8) y el replay/undo.
 
 ---
 
-## 10. Vista, render y UI nativa
+## 5. Economía y carga (`src/economy_type.h`, `src/cargo_type.h`, `src/cargopacket.h`)
 
-- **`viewport.*`**: cámara del mundo, ordenación de sprites, interacción con el mapa.
-- **`video/`**: drivers (SDL2, OpenGL, null, dedicado, etc.).
-- **`window.*`, `widget_*`**: sistema de ventanas y controles propio del juego.
-- **`blitter/`**: composición de píxeles en distintos modos.
+### 5.1 `Money` y precios
 
-### 10.1 Implicaciones para Bevy
+```cpp
+typedef OverflowSafeInt64 Money;
+```
 
-- En openttdrs, **Bevy** sustituye `video` + parte de `viewport` + UI progresivamente.
-- Mantener separación: **estado del mapa** (core) frente a **presentación** (sprites, cámara isométrica más adelante, UI Bevy).
+OpenTTD tiene 64 tipos de precio (`enum Price`): construcción de vías, edificación de puentes, costes de corrida de vehículos, terraforming, etc. Hay inflación acumulada con parte fraccional de 16 bits.
+
+### 5.2 Tipos de carga
+
+`CargoType` es un `uint8_t`. Los tipos **originales** (Temperate) son:
+
+`PASS`, `COAL`, `MAIL`, `OIL`, `LVST`, `GOOD`, `GRAI`, `WOOD`, `IORE`, `STEL`, `VALU` (11 tipos, más hasta 64 con NewGRF). Los climas Arctic, Tropic y Toyland añaden tipos alternativos.
+
+Los **labels son 4 bytes ASCII** (FourCC): `'COAL'`, `'WOOD'`, etc.
+
+### 5.3 `CargoPacket` — la unidad de transporte
+
+```cpp
+struct CargoPacket {
+    uint16_t count;             // unidades de carga
+    uint16_t periods_in_transit;// envejecimiento
+    Money    feeder_share;      // parte del pago a feeder
+    TileIndex source_xy;        // origen geográfico
+    Source source;              // industria o pueblo origen
+    StationID first_station;    // primera estación de paso
+    StationID next_hop;         // próximo destino
+};
+```
+
+Un `CargoPacket` guarda el **origen y tiempo de tránsito** de un lote de carga. Esto determina el pago: cuanto más rápido llega, más paga (la función de pago de OpenTTD penaliza el envejecimiento). Hay dos listas: `VehicleCargoList` (en el vehículo) y `StationCargoList` (en la estación).
+
+### 5.4 Tipos de economía
+
+```cpp
+enum class EconomyType {
+    Original, // imita TT original: cambios bruscos
+    Smooth,   // cambios más frecuentes y pequeños
+    Frozen,   // sin cambios: para scenarios controlados
+};
+```
+
+### 5.5 Para openttdrs
+
+- En el Incremento 2, una industria puede producir N unidades de un cargo por cada 256 ticks: número exacto del upstream.
+- El envejecimiento del `CargoPacket` (`periods_in_transit`) en Rust sería un campo `u16` en la entidad de carga que crece cada N ticks.
+- Para el Incremento 4 (ciclo económico mínimo), el pago simplificado puede ser: `income = count` sin envejecimiento; se puede sofisticar después.
 
 ---
 
-## 11. Temporización (`src/timer`)
+## 6. Industrias (`src/industry.h`)
 
-Archivos `timer_game_tick.*`, `timer_game_calendar.*`, `timer_game_economy.*`, `timer_game_realtime.*`, `timer_manager.h`: separan el reloj de tick de juego, calendario, economía y tiempo real.
+### 6.1 Estructura real
 
-### 11.1 Implicaciones
+```cpp
+struct Industry {
+    struct ProducedCargo {
+        CargoType cargo;      // tipo de cargo producido
+        uint16_t  waiting;    // stock esperando ser recogido
+        uint8_t   rate;       // tasa de producción
+        HistoryData<ProducedHistory> history; // historial 24 meses
+    };
+    struct AcceptedCargo {
+        CargoType cargo;      // cargo que acepta (insumo)
+        uint16_t  waiting;    // stock esperando ser procesado
+        Date      last_accepted;
+    };
 
-- El `GameTick` de `openttdrs-core` puede evolucionar hacia varios contadores alineados con estos conceptos.
+    TileArea  location;      // área de teselas que ocupa
+    Town*     town;          // pueblo asociado
+    uint8_t   prod_level;    // PRODLEVEL 0x00-0x80
+    IndustryControlFlags control_flags; // control por GameScript
+};
+```
+
+Constantes clave:
+
+| Constante | Valor | Descripción |
+|-----------|-------|-------------|
+| `PRODLEVEL_MINIMUM` | 0x04 | Por debajo: la industria se cierra |
+| `PRODLEVEL_DEFAULT` | 0x10 | Nivel al crearse |
+| `PRODLEVEL_MAXIMUM` | 0x80 | Producción plena |
+| `PROCESSING_INDUSTRY_ABANDONMENT_YEARS` | 5 | Años sin producir → cierre |
+
+Una industria puede **producir Y aceptar** cargos (ejemplo: una acería acepta mineral de hierro y produce acero).
+
+### 6.2 Para openttdrs (Incremento 2)
+
+- El struct mínimo útil en Rust es `Industry { pos: TileCoord, kind: IndustryKind, produced: [(CargoKind, u32)], accepted: [(CargoKind, u32)] }`.
+- `rate` en OpenTTD es `u8` (0–255); en un MVP basta con tasa fija hardcodeada por tipo.
+- La producción cada 256 ticks se puede implementar como `if tick.get() % 256 == 0 { stock += rate }`.
 
 ---
 
-## 12. Tabla orientativa: OpenTTD (C++) → openttdrs (Rust)
+## 7. Vehículos (`src/vehicle_base.h`)
 
-| Zona upstream (indicativa) | Prioridad sugerida | Crate / capa Rust |
-|----------------------------|--------------------|-------------------|
-| `tile_*`, `map_*`, pendiente/terraform | Alta (fundamentos) | `openttdrs-core` |
-| `timer/timer_game_*` | Alta | `openttdrs-core` |
-| `economy_*`, `cargo_*` | Media | `openttdrs-core` |
-| `pathfinder/yapf` | Media-alta | `openttdrs-core` o crate `openttdrs-path` |
-| `vehicle_*`, `order_*`, `station_*` | Media | `openttdrs-core` + tests |
-| `newgrf_*` | Baja al inicio | crate aparte o feature opcional |
-| `network_*` | Baja | crate `openttdrs-net` (futuro) |
-| `saveload/*` | Baja | crate `openttdrs-save` (futuro) |
-| `viewport`, `video`, `window` | Paralela al core | `openttdrs-client` (Bevy) |
+### 7.1 Jerarquía
+
+OpenTTD tiene una jerarquía de herencia en C++:
+
+```
+Vehicle (base)
+├── GroundVehicle
+│   ├── Train (consta de wagons articulados)
+│   └── RoadVehicle
+├── Aircraft
+└── Ship
+```
+
+El `Vehicle` base tiene más de 1200 líneas de definición con campos como:
+
+```cpp
+VehicleID   index;         // ID único en el pool
+VehicleType type;          // Train, Road, Air, Ship
+Order       current_order; // orden actual ejecutada
+OrderList  *orders;        // lista de órdenes
+TileIndex   tile;          // posición en el mapa
+uint8_t     x_pos, y_pos;  // coordenadas sub-tile
+Direction   direction;     // dirección de movimiento
+uint8_t     progress;      // progreso dentro de un tile (0-255)
+VehicleCargoList cargo;    // lote de carga a bordo
+uint8_t     cargo_cap;     // capacidad máxima
+VehStates   vehstatus;     // estado (parado, oculto, chocado…)
+```
+
+### 7.2 Movimiento sub-tile
+
+Los vehículos no saltan de tesela a tesela: tienen `progress` (0-255) dentro de cada tesela, incrementado por velocidad. `TILE_AXIAL_DISTANCE = 192` es la distancia lógica de cruzar una tesela en diagonal.
+
+### 7.3 Para openttdrs (Incrementos 3-4)
+
+- Para el Incremento 3 (movimiento naive), basta con saltar de tesela a tesela por tick; el `progress` sub-tile se puede agregar después.
+- Para el Incremento 4 (carga/descarga), la regla real es: el vehículo llega a la `TileIndex` de la estación, transfiere `CargoPacket`s entre `VehicleCargoList` y `StationCargoList`.
 
 ---
 
-## 13. Orden de lectura recomendado en el clon
+## 8. Órdenes (`src/order_base.h`)
 
-1. `README.md` y `docs/` del upstream para contexto de build y diseño.
-2. `src/map_func.h`, `src/tile_map.h`, `src/command.cpp` (flujo de comandos).
-3. `src/timer/timer_game_tick.cpp` y economía ligera.
-4. `src/pathfinder/yapf/yapf.hpp` (visión general YAPF).
-5. `src/network/network_internal.h` (solo cuando abordes multijugador).
-6. `src/saveload/game_sl.cpp` (visión de serialización global).
+```cpp
+struct Order {
+    uint8_t   type;          // tipo de orden (GoToStation, GoToDepot, etc.)
+    uint8_t   flags;         // load/unload, non-stop, etc.
+    DestinationID dest;      // ID de la estación/depot/waypoint
+    CargoType refit_cargo;   // refit automático
+    uint16_t  wait_time;     // cuánto esperar (ticks)
+    uint16_t  travel_time;   // tiempo estimado de viaje (ticks)
+};
+```
+
+Las órdenes se agrupan en `OrderList` con back-references a todos los vehículos que comparten la misma lista (para edición masiva). El vehículo itera la lista cíclicamente.
+
+### Para openttdrs (Incremento 4)
+
+- Una orden mínima: `GoTo(StationId)`. Lista como `Vec<Order>` con un índice actual.
+- El sistema de **órdenes compartidas** se puede diferir hasta el Incremento 9+.
 
 ---
 
-## 14. Conclusión
+## 9. Pathfinding — YAPF (`src/pathfinder/yapf/`)
 
-OpenTTD concentra décadas de reglas de negocio en un solo árbol `src/`. Un port sano a Rust separa **simulación determinista**, **contenido** (GRF opcional) y **presentación** (Bevy). Este informe debe actualizarse cuando el clon de referencia cambie de versión o cuando openttdrs incorpore nuevos subsistemas con nombres propios.
+### 9.1 Arquitectura YAPF
+
+YAPF (Yet Another Pathfinder) es un **A\*** genérico parametrizado por plantillas C++. Los componentes son:
+
+```
+yapf_base.hpp      — bucle principal A*, gestión de nodos
+yapf_costbase.hpp  — función heurística base
+yapf_costrail.hpp  — costes específicos de vía férrea (señales, pendientes, curvas)
+yapf_costcache.hpp — cachés de segmentos de vía para evitar recalcular rutas
+yapf_node.hpp      — nodo del grafo con key+parent
+yapf_node_rail.hpp / _road.hpp / _ship.hpp — nodos especializados
+yapf_rail.cpp      — punto de entrada tren
+yapf_road.cpp      — punto de entrada vehículo de carretera
+yapf_ship.cpp      — punto de entrada barco
+```
+
+La API hacia el resto del juego (en `yapf.h`) es por funciones libres:
+
+```cpp
+Track YapfTrainChooseTrack(...);     // devuelve el siguiente track del tren
+Trackdir YapfRoadVehicleChooseTrack(...);  // devuelve el siguiente trackdir del RV
+Track YapfShipChooseTrack(...);      // devuelve el siguiente track del barco
+```
+
+El resultado **no es una ruta completa** sino **la siguiente dirección a tomar**. YAPF recalcula en cada intersección o cuando es necesario, con cachés de segmentos que se invalidan al cambiar el mapa.
+
+### 9.2 Agua y regiones
+
+Los barcos usan un sistema extra de `WaterRegion` (bloques de 16×16 teselas) para pathfinding de largo alcance, ya que el grafo de agua es mucho menos estructurado que las vías.
+
+### 9.3 Para openttdrs (Incremento 5)
+
+- YAPF no devuelve rutas completas; el Incremento 5 sí puede devolver `Vec<TileCoord>` completo (BFS simple) porque los mapas del MVP serán pequeños.
+- Para escala real, habría que migrar a un A* con heurística Manhattan o similar, con cachés de segmentos.
+- `follow_track.hpp` es la parte que sabe qué teselas son accesibles desde una dada en una dirección; en Rust sería una función `neighbors(map, coord, kind) -> Vec<TileCoord>`.
+
+---
+
+## 10. Saveload (`src/saveload/saveload.h`)
+
+La versión de saveload actual supera **SLV_300+** (cada PR que agrega un campo al estado sube la versión). El sistema es:
+
+- Cada subsistema registra su descriptor (`SaveLoadTable`) con los campos a serializar.
+- Hay archivos `*_sl.cpp` por subsistema: `map_sl`, `company_sl`, `engine_sl`, `vehicle_sl`, etc., más un directorio `compat/` con conversores de versiones antiguas.
+- `afterload.cpp` tiene fixups para versiones muy antiguas que cambiaron semántica de campos.
+
+La **cadena de versiones es un contrato inmutable**: jamás se reutiliza un número de versión ni se reordena el enum `SaveLoadVersion`.
+
+### Para openttdrs
+
+- Compatibilidad binaria con OpenTTD es impráctica sin reimplementar el parseador completo.
+- La estrategia sensata (Incremento 7): formato propio con `serde_json` o `bincode`, con **versión semántica** en el archivo.
+
+---
+
+## 11. Red (`src/network/`)
+
+El diseño central: **solo se transmiten comandos, no el estado**. Cada cliente arranca desde el mismo estado inicial y aplica la misma secuencia de comandos, produciendo el mismo resultado.
+
+Archivos clave:
+
+| Archivo | Rol |
+|---------|-----|
+| `network_server.*` | Acepta clientes, distribuye `CommandPacket` |
+| `network_client.*` | Recibe comandos del servidor, los ejecuta |
+| `network_command.cpp` | Serializa/deserializa comandos para la red |
+| `network_coordinator.*` | Servidor central de coordinación (NAT traversal) |
+| `network_crypto.*` | Handshake y autenticación |
+
+El **desync** ocurre cuando dos instancias divergen. OpenTTD lo detecta comparando hashes del estado; cuando pasa, el cliente se desconecta. Las causas históricas de desync incluyen: uso de floats, iteración sobre containers no deterministas, dependencias de puntero.
+
+### Para openttdrs (Incremento 8)
+
+- El hash de estado en Rust puede ser un `u64` derivado de `std::hash::Hasher` sobre campos deterministas del `GameState`.
+- El primer protocolo puede ser tan simple como: servidor → `Vec<Command>` serializado como JSON; cliente → aplica, avanza ticks.
+
+---
+
+## 12. Vista y render (`src/viewport.cpp`, `src/video/`, `src/blitter/`)
+
+En OpenTTD el render **no está separado del estado**. Los objetos del juego tienen campos de sprite directamente en `Vehicle`, `Station`, etc. El viewport ordena sprites por capa (suelo → estructuras → vehículos → efectos visuales) usando una k-d tree para culling.
+
+Los `blitter/` son implementaciones de composición de píxeles en distintos modos (8bpp paleta, 32bpp RGBA, acelerado OpenGL).
+
+### Para openttdrs
+
+- Bevy **sí separa** render de simulación. Los sistemas de Bevy leen el `GameState` y producen entidades/sprites. Esto es mucho más limpio que el enfoque de OpenTTD.
+- No hay nada del render de OpenTTD que valga copiar: la separación ECS de Bevy es superior.
+
+---
+
+## 13. Tabla completa: OpenTTD → openttdrs
+
+| Subsistema upstream | Archivos clave | Incremento openttdrs | Complejidad de port |
+|---------------------|---------------|---------------------|---------------------|
+| Layout de mapa / teselas | `map_func.h`, `tile_type.h`, `tile_map.h` | I1 | Baja — ya hay base |
+| Reloj de tick | `timer_game_tick.h` | I0 (hecho) | Baja — ya hecho |
+| Tipos de carga | `cargo_type.h` | I2 | Baja — solo enums |
+| Industrias | `industry.h`, `industry_cmd.*` | I2 | Media — producción + rate |
+| Vehículos (base) | `vehicle_base.h` | I3–I4 | Alta — sub-tile, sprites, pool |
+| Órdenes | `order_base.h` | I4 | Media — lista cíclica |
+| Estaciones | `station_base.h` | I4 | Media — GoodsEntry, rating |
+| Comandos | `command.cpp`, `*_cmd.*` | I6 | Media — patrón es directo |
+| Pathfinding (BFS) | `pathfinder/yapf/yapf_base.hpp` | I5 | Media — YAPF es A*, overkill para MVP |
+| Saveload | `saveload/saveload.h`, `*_sl.cpp` | I7 | Alta — versionado extenso |
+| Red | `network_*` | I8 | Muy alta — determinismo estricto |
+| NewGRF | `newgrf*.cpp` | Pospuesto | Muy alta — spec binaria 20+ años |
+| Render / viewport | `viewport.*`, `video/`, `blitter/` | No portar | — Bevy lo reemplaza |
+
+---
+
+## 14. Advertencia de licencia
+
+El upstream OpenTTD es **GPL-2.0**. Este informe cita diseños y constantes del código fuente con fines de documentación interna. Cualquier copia literal de código C++ en openttdrs requiere que el proyecto openttdrs mantenga compatibilidad con GPL-2.0 y cite el origen. Para tipos de datos, interfaces y algoritmos independientes reimplementados en Rust, la interpretación de la licencia es más permisiva (ideas no son copyrightables), pero conviene consultar si el alcance crece hacia compatibilidad binaria o copia extensiva.
+
+---
+
+## 15. Orden de lectura recomendado en el clon
+
+Para cada incremento del diseño, el mapa de lectura es:
+
+| Incremento | Leer en el clon |
+|-----------|-----------------|
+| I1 | `tile_type.h`, `tile_map.h`, `clear_map.h` |
+| I2 | `industry.h`, `industrytype.h`, `timer_game_tick.h` (constantes) |
+| I3 | `vehicle_base.h` (primeras 200 líneas), `transport_type.h` |
+| I4 | `order_base.h`, `station_base.h`, `cargopacket.h` |
+| I5 | `pathfinder/yapf/yapf.h`, `pathfinder/follow_track.hpp` |
+| I6 | `command.cpp` (primeras 80 líneas), `command_type.h` |
+| I7 | `saveload/saveload.h` (primeras 100 líneas), cualquier `*_sl.cpp` |
+| I8 | `network/network_internal.h`, `network/network_command.cpp` |

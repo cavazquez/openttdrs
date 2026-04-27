@@ -1,0 +1,16 @@
+[workspace]
+resolver = "3"
+members = ["crates/openttdrs-core", "crates/openttdrs-client"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89.0"
+license = "GPL-2.0"
+repository = "https://github.com/cavazquez/openttdrs"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+pedantic = "warn"

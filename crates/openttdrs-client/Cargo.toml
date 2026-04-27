@@ -1,0 +1,32 @@
+[package]
+name = "openttdrs-client"
+description = "Cliente gráfico Bevy para openttdrs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "openttdrs-client"
+path = "src/main.rs"
+
+[dependencies]
+# Sin `wayland` para compilar en sistemas donde falte `libwayland-client` (solo X11).
+bevy = { version = "0.18.1", default-features = false, features = [
+    "default_app",
+    "std",
+    "multi_threaded",
+    "default_font",
+    "bevy_winit",
+    "x11",
+    "webgl2",
+    "2d_bevy_render",
+    "bevy_state",
+    "scene",
+    "png",
+] }
+openttdrs-core = { path = "../openttdrs-core" }
+
+[lints]
+workspace = true

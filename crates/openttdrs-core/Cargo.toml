@@ -1,0 +1,13 @@
+[package]
+name = "openttdrs-core"
+description = "Lógica de simulación OpenTTD-style sin motor gráfico"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

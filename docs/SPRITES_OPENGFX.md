@@ -1,0 +1,298 @@
+# Sprites de OpenGFX — Guía de referencia
+
+Este documento registra todo lo aprendido sobre la extracción y uso de sprites de
+[OpenGFX](https://github.com/OpenTTD/OpenGFX) en el renderer isométrico de openttdrs.
+
+---
+
+## Estructura del paquete OpenGFX
+
+Descargado con `scripts/descargar_graficos.sh` (versión 8.0 por defecto) en
+`assets/opengfx/` (carpeta ignorada por git).
+
+```
+assets/opengfx/opengfx-8.0/
+├── ogfx1_base.grf          ← Sprite sheet principal (clima templado)
+├── ogfxc_arctic.grf        ← Clima ártico
+├── ogfxh_tropical.grf      ← Clima tropical
+├── ogfxt_toyland.grf       ← Clima toyland
+├── ogfxe_extra.grf         ← Sprites extra
+├── ogfxi_logos.grf         ← Logos
+├── sprites/
+│   ├── ogfx1_base.nfo      ← Índice de sprites (coordenadas, offsets)
+│   ├── ogfx1_base00.png    ← Hoja de sprites 8bpp (palette PNG, 800×15968)
+│   └── ogfx1_base00.32.png ← Hoja de sprites 32bpp (no legible por PIL directamente)
+└── tiles/                  ← Sprites individuales extraídos (generados por el script)
+```
+
+Para generar la carpeta `sprites/` hay que decodificar el GRF con
+[grfcodec](https://github.com/OpenTTD/grfcodec):
+
+```bash
+sudo apt install grfcodec
+grfcodec -d -p 2 assets/opengfx/opengfx-8.0/ogfx1_base.grf \
+         -o assets/opengfx/opengfx-8.0/sprites/
+```
+
+---
+
+## Formato del NFO
+
+El archivo `ogfx1_base.nfo` tiene una línea por sprite:
+
+```
+<sprite_id>  sprites/<archivo>.png  <profundidad>  <x>  <y>  <w>  <h>  <xrel>  <yrel>  <flags>
+```
+
+| Campo | Descripción |
+|-------|-------------|
+| `sprite_id` | ID numérico del sprite (referenciado en el código de OpenTTD) |
+| `x`, `y` | Posición del recorte en la hoja de sprites (píxeles desde arriba-izquierda) |
+| `w`, `h` | Ancho y alto del sprite en píxeles |
+| `xrel`, `yrel` | Offsets en pantalla **respecto al punto de referencia** (coordenadas Y-down) |
+
+### Conversión xrel/yrel → posición Bevy (Y-up)
+
+El punto de referencia de OpenTTD es el **vértice superior del rombo** de la tesela.
+Para calcular el centro del sprite en Bevy:
+
+```
+center_x = ref_x + xrel + w / 2
+center_y = ref_y - yrel - h / 2      ← invertir Y (Y-down → Y-up)
+```
+
+Donde `(ref_x, ref_y)` es la salida de `iso(tx, ty)` en el código Rust.
+
+---
+
+## Transparencia en los sprites 8bpp
+
+La hoja `ogfx1_base00.png` es un PNG con paleta de 256 colores. El color de índice 0
+(azul puro `RGB(0, 0, 255)`) es el color transparente de OpenTTD.
+
+Al convertir con PIL hay que sustituirlo manualmente por `(0, 0, 0, 0)`:
+
+```python
+img = Image.open("ogfx1_base00.png")
+pal = img.getpalette()
+transparent_rgb = tuple(pal[0:3])   # → (0, 0, 255)
+img_rgba = img.convert("RGBA")
+data = list(img_rgba.getdata())
+data = [(0,0,0,0) if (r,g,b)==transparent_rgb else (r,g,b,a)
+        for r,g,b,a in data]
+img_rgba.putdata(data)
+```
+
+---
+
+## Sprites de tesela de suelo
+
+Todas las teselas de suelo miden **64×31 px** con `xrel=-31, yrel=0`.
+
+| Archivo extraído | Sprite ID | Descripción |
+|-----------------|-----------|-------------|
+| `grass.png` | 3924 | Prado liso (suelo principal) |
+| `grass_rough.png` | 3925 | Prado rugoso (Forest, CoalField con tinte) |
+| `water.png` | ~3984 | Agua (azul) |
+| `road_ty.png` | 1332 (`SPR_ROAD_Y`) | Carretera en dirección ty (NW-SE en pantalla) |
+| `road_tx.png` | 1333 (`SPR_ROAD_X`) | Carretera en dirección tx (NE-SW en pantalla) |
+| `road_cross.png` | 1338 | Cruce de carretera (tx + ty) |
+| `road_corner_a.png` | 1335 | Esquina NE-SW |
+| `road_corner_b.png` | 1337 | Esquina NW-SE |
+
+### Atención: convención de nombres de SPR_ROAD_*
+
+En OpenTTD, `SPR_ROAD_Y` (1332) indica una carretera que corre en la **dirección ty**
+del mapa (de tile `(tx,ty)` a `(tx,ty+1)`), que visualmente aparece como una diagonal
+NW-SE en pantalla. El nombre "Y" se refiere al eje del mapa, no al eje de pantalla.
+
+En el renderer de openttdrs se detecta la dirección mirando los tiles vecinos:
+
+```rust
+let has_tx = is_road(pos + (±1, 0));   // vecinos en dirección tx
+let has_ty = is_road(pos + (0, ±1));   // vecinos en dirección ty
+```
+
+---
+
+## Sprites de árboles (clima templado)
+
+Los árboles son **overlays** sobre la tesela de suelo (el suelo sigue siendo prado).
+Miden **35×43 px** con `xrel=-19, yrel=-36`.
+
+| Archivo | Sprite ID | Descripción |
+|---------|-----------|-------------|
+| `tree_1.png` | 1621 | Árbol maduro variante 1 |
+| `tree_2.png` | 1622 | Árbol maduro variante 2 |
+| `tree_3.png` | 1623 | Árbol maduro variante 3 |
+
+Los sprites 1617-1624 son árboles en crecimiento (del más pequeño al más grande).
+Los 1625-1640 son otras especies de árbol.
+
+En openttdrs se usa un hash de Wang para elegir variante y offset X determinista:
+
+```rust
+let h = wang_hash(tx, ty, 0xCAFE);
+let tree_idx = (h % 3) as usize;          // variante 1/2/3
+let ox = ((h >> 2) % 17) as f32 - 8.0;   // offset X ±8 px
+```
+
+---
+
+## Sprites de vehículos de carretera (camiones)
+
+Los camiones tienen 8 vistas (una por dirección), en grupos de 8 sprites consecutivos.
+Cada vista mide aproximadamente **20×14 px**.
+
+| Archivo | Sprite ID | Dirección en pantalla | Movimiento en tile |
+|---------|-----------|----------------------|--------------------|
+| `truck_ne.png` | 3585 | Arriba-derecha (NE) | `ty-1` |
+| `truck_se.png` | 3587 | Abajo-derecha (SE) | `tx+1` |
+| `truck_sw.png` | 3589 | Abajo-izquierda (SW) | `ty+1` |
+| `truck_nw.png` | 3591 | Arriba-izquierda (NW) | `tx-1` |
+
+Los sprites 3585-3592 son el primer modelo de camión. Los modelos siguientes están en
+rangos de +8 (3593-3600, 3601-3608, etc.).
+
+En isométrico, un movimiento en `+tx` (tile a la derecha-abajo) se visualiza en
+dirección SE, y un movimiento en `-ty` (tile arriba-derecha) se visualiza en NE.
+
+---
+
+## Sprites de industrias — clima templado
+
+### ⚠️ Error frecuente: identificar sprites por posición Y en la hoja
+
+Los sprites de industrias **no tienen etiquetas en el NFO**. Para identificarlos hay que
+cruzar el `sprite_id` con la tabla `_industry_draw_tile_data[]` en
+`src/table/industry_land.h` del código fuente de OpenTTD.
+
+Esa tabla usa IDs **en hexadecimal**. Ejemplo: `0x7db = 2011`.
+
+### Orden de industrias templadas y rango de sprites
+
+| IT | Nombre | Sprite building (aprox.) |
+|----|--------|--------------------------|
+| 0 | Coal Mine | 2011–2035 |
+| 1 | Power Station | 2036–2066 |
+| 2 | Sawmill | 2067–2095 |
+| 3 | Forest | 2096–2111 |
+| 4 | Oil Refinery | 2112–2132 |
+| 5 | Oil Rig | 2133–2152 |
+| 6 | Factory | 2153–2173 |
+| 7 | Printing Works | 2174–2199 ← **aquí está el sprite 2179** |
+| 8 | Steel Mill | 2200–2219 |
+| 9 | Iron Ore Mine | 2220–… |
+| 12 | Oil Wells | ~2079–2095 (con frames animados) |
+
+> **El sprite 2179 (29×43)** que inicialmente se etiquetó como "coal_mine" es en
+> realidad parte de la **Printing Works** (imprenta). Se parece a un derrick o
+> prensa industrial.
+
+### Coal Mine — sprites correctos
+
+| Archivo | Sprite ID | Tamaño | xrel | yrel | Descripción |
+|---------|-----------|--------|------|------|-------------|
+| `coal_mine_hq.png` | 2013 | 58×50 | -16 | -33 | Headframe principal (torre de extracción) |
+| `coal_mine_tower.png` | 2028 | 46×53 | -14 | -38 | Torre de extracción alternativa |
+| `coal_mine_entry.png` | 2011 | 36×25 | -17 | -7 | Entrada/componente pequeño |
+
+El sprite **2013** (58×50) es el edificio más representativo de la mina de carbón —
+el armazón metálico que cubre el pozo de extracción.
+
+### Identificar sprites de industrias desconocidos
+
+1. Encontrar el `sprite_id` en el NFO.
+2. Convertir a hex: `hex(sprite_id)`.
+3. Buscarlo en `src/table/industry_land.h` del upstream.
+4. Contar las entradas `M(...)` antes de esa posición y dividir por 16
+   (cada industria tiene ~16 tiles × 4 estados ≈ 16-32 entradas).
+5. Mapear al índice de `IT_*` para identificar la industria.
+
+---
+
+## Sprites de estaciones y puntos de parada
+
+| Sprite ID | Nombre en sprites.h | Descripción |
+|-----------|---------------------|-------------|
+| 2708 | `SPR_TRUCK_STOP_NE_GROUND` | Suelo de parada de camiones (NE) |
+| 2712 | `SPR_TRUCK_STOP_NE_BUILD_A` | Edificio de parada (NE) |
+| 1313 | `SPR_ROAD_PAVED_STRAIGHT_Y` | Carretera pavimentada Y |
+| 1314 | `SPR_ROAD_PAVED_STRAIGHT_X` | Carretera pavimentada X |
+
+---
+
+## Proyección isométrica
+
+OpenTTD usa una proyección isométrica **2:1** (el ancho del rombo es el doble que su
+alto). Las teselas miden 64×31 px (ligeramente menos que los 32 px teóricos del
+ratio 2:1, lo que produce un gap de 1 px entre tiles).
+
+### Fórmulas de conversión tile → pantalla (Bevy Y-up)
+
+```rust
+const ISO_HW: f32 = 32.0;  // mitad del ancho de la tesela
+const ISO_QH: f32 = 16.0;  // cuarto del alto teórico (32/2)
+
+fn iso(tx: i32, ty: i32) -> Vec2 {
+    Vec2::new(
+        (tx - ty) as f32 * ISO_HW,    // X: diferencia de ejes
+        (tx + ty) as f32 * -ISO_QH,   // Y: suma de ejes (negativo = Y-up)
+    )
+}
+```
+
+### Referencia de posicionamiento
+
+En OpenTTD, el **punto de referencia** de cada sprite es el **vértice superior** del
+rombo de la tesela (el píxel más alto del diamante). Esto se confirma porque todas las
+teselas de suelo tienen `xrel=-31, yrel=0` en el NFO, lo que coloca el vértice superior
+exactamente en el punto de referencia.
+
+Para centrar un sprite con `Anchor::Center` en Bevy equivalente al anchor top-center:
+
+```rust
+// Desplazar el centro del sprite 15.5 px por debajo del vértice superior
+fn tile_pos(tx: i32, ty: i32, layer: f32) -> Vec3 {
+    let p = iso(tx, ty);
+    Vec3::new(p.x, p.y - 15.5, (tx + ty) as f32 * 0.01 + layer)
+}
+```
+
+### Z-ordering (painter's algorithm)
+
+Los sprites con mayor `tx + ty` están más cerca del espectador y deben renderizarse
+encima. Se usa un incremento pequeño de Z:
+
+```rust
+z = (tx + ty) as f32 * 0.01 + layer
+```
+
+Donde `layer` diferencia entre suelo (0.0), overlays naturales (0.3), edificios (0.6)
+y vehículos (1.0).
+
+---
+
+## Centro de la cámara para el mapa 24×18
+
+Para que la cámara muestre el mapa completo centrado en una ventana de 1280×720:
+
+```
+cam_x = ((MAP_W - 1) - (MAP_H - 1)) / 2 × ISO_HW  =  96.0
+cam_y = -((MAP_W - 1) + (MAP_H - 1)) / 2 × ISO_QH - 15.5  =  -335.5
+```
+
+El mapa isométrico ocupa aproximadamente 1280×671 px, encajando bien en 1280×720.
+
+---
+
+## Scripts de utilidad
+
+| Script | Descripción |
+|--------|-------------|
+| `scripts/descargar_graficos.sh` | Descarga OpenGFX y extrae sprites a `assets/opengfx/tiles/` |
+| `scripts/descargar_sonidos.sh` | Descarga OpenSFX a `assets/opensfx/` |
+| `scripts/fetch-openttd-reference.sh` | Clona el código fuente de OpenTTD en `reference/` |
+
+Los sprites extraídos se guardan en `assets/opengfx/tiles/` (ignorado por git).
+El script de descarga incluye extracción automática con PIL si `grfcodec` está disponible.

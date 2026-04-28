@@ -12,10 +12,21 @@ impl TileCoord {
     }
 }
 
-/// Una tesela con altura base (simplificación de `TileHeight` + pendiente).
+/// Tipo semántico de una tesela (subconjunto jugable de `TileType` del upstream).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TileKind {
+    #[default]
+    Grass,
+    Water,
+    Forest,
+    CoalField,
+}
+
+/// Una tesela con altura base y tipo semántico.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tile {
     pub height: u8,
+    pub kind: TileKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,7 +55,7 @@ impl Map {
         Self {
             width,
             height,
-            tiles: vec![Tile { height: level }; count],
+            tiles: vec![Tile { height: level, kind: TileKind::Grass }; count],
         }
     }
 
@@ -75,5 +86,17 @@ impl Map {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
         self.tiles[i].height = height;
         Ok(())
+    }
+
+    pub fn set_kind(&mut self, c: TileCoord, kind: TileKind) -> Result<(), MapError> {
+        let i = self.index(c).ok_or(MapError::OutOfBounds)?;
+        self.tiles[i].kind = kind;
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn get_kind(&self, c: TileCoord) -> Option<TileKind> {
+        let i = self.index(c)?;
+        Some(self.tiles[i].kind)
     }
 }

@@ -34,15 +34,18 @@ pub enum TileKind {
 
 /// Una tesela con altura base, tipo semántico y bytes auxiliares de `OpenTTD`.
 ///
-/// `m5` almacena el byte m5 del savegame original:
-/// - Para `Road`: bits 0-3 = road bits (NW=1, SW=2, SE=4, NE=8), bits 6-7 = sub-tipo.
-/// - Para `Rail`: bits 0-3 = trackbits.
-/// - Para `Industry`: gfx index (índice del tile en el layout de la industria).
-/// - En mapas generados (no cargados desde .sav) vale 0.
+/// Datos de mapa OpenTTD para una tesela.
 ///
-/// `m1` almacena información adicional:
-/// - Para `Industry`: bits 0-6 = índice de la industria en el array global.
-/// - Para otros tipos: owner u otros datos.
+/// | Campo | Fuente     | Uso principal |
+/// |-------|-----------|---------------|
+/// | `m5`  | MAP5 (`MAP5`)  | Road bits (0-3), TrackBits (0-5), gfx industria (0-7), ObjectType (MP_OBJECT) |
+/// | `m1`  | MAP1 (`MAPO`)  | Owner/índice de industria |
+/// | `m6`  | MAP6 (`MAPE`)  | bit 2 = bit 8 del gfx de industria (9 bits totales); StationType en MP_STATION |
+/// | `m8`  | MAP8 (`MAP8`)  | HouseID en MP_HOUSE (12 bits); dato extra para NewGRF |
+///
+/// Para `MP_RAILWAY`, TrackBits ocupa **bits 0-5** de m5 (6 bits); bits 6-7 son `RailTileType`.
+/// Para `MP_INDUSTRY`, gfx = `m5 | ((m6 >> 2) & 1) << 8` (9 bits).
+/// Para `MP_OBJECT`, m5 contiene el `ObjectType` (precomputado por `parse_sav.py` desde OBJS).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tile {
     pub height: u8,
@@ -50,8 +53,12 @@ pub struct Tile {
     /// Byte MAPT del savegame (nibble alto = `TileType` `OpenTTD`). 0 en mapas generados.
     pub mapt: u8,
     pub m5: u8,
-    /// Byte M1 del savegame. Para industrias: índice de industria (bits 0-6).
+    /// Byte M1 del savegame. Para industrias: bits 0-6 = índice de industria.
     pub m1: u8,
+    /// Byte M6 del savegame. bit 2 = bit 8 del gfx de industria.
+    pub m6: u8,
+    /// Bytes M8 del savegame (little-endian, 2 bytes). HouseID en MP_HOUSE.
+    pub m8: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,6 +94,8 @@ impl Map {
                     mapt: 0,
                     m5: 0,
                     m1: 0,
+                    m6: 0,
+                    m8: 0,
                 };
                 count
             ],
@@ -137,12 +146,17 @@ impl Map {
     /// Carga un mapa desde un archivo `.ottdmap` generado por `scripts/parse_sav.py`.
     ///
     /// Formato:
+    /// Formato binario `.ottdmap` v3:
+    ///
     /// - 4 bytes: magic `MAPO`
     /// - 4 bytes LE: width
     /// - 4 bytes LE: height
     /// - W×H bytes: `tile_type` (nibble alto = `TileType` `OpenTTD`)
     /// - W×H bytes: height por tesela
-    /// - W×H bytes: m5 (road bits, etc.)
+    /// - W×H bytes: m5 (road bits, TrackBits, gfx industria bajo, ObjectType)
+    /// - W×H bytes: m1 (owner, índice de industria)  [v2+]
+    /// - W×H bytes: m6 (bit 2 = bit 8 del gfx industria; StationType)  [v3+]
+    /// - W×H×2 bytes: m8 LE (HouseID en MP_HOUSE; datos NewGRF)  [v3+]
     ///
     /// La correspondencia de tipos `OpenTTD` → `TileKind`:
     ///
@@ -179,10 +193,23 @@ impl Map {
         let tile_types = &data[12..12 + n];
         let heights = &data[12 + n..12 + 2 * n];
         let m5_data = &data[12 + 2 * n..12 + 3 * n];
-        // Formato v2: m1 está después de m5 (opcional, para compatibilidad)
+        // v2+: m1 después de m5
         let has_m1 = data.len() >= 12 + n * 4;
         let m1_data = if has_m1 {
             &data[12 + 3 * n..12 + 4 * n]
+        } else {
+            &[] as &[u8]
+        };
+        // v3+: m6 después de m1, luego m8 (2 bytes/tile LE)
+        let has_m6 = data.len() >= 12 + n * 5;
+        let m6_data = if has_m6 {
+            &data[12 + 4 * n..12 + 5 * n]
+        } else {
+            &[] as &[u8]
+        };
+        let has_m8 = data.len() >= 12 + n * 5 + n * 2;
+        let m8_data = if has_m8 {
+            &data[12 + 5 * n..12 + 5 * n + n * 2]
         } else {
             &[] as &[u8]
         };
@@ -193,6 +220,12 @@ impl Map {
             let ottd_type = (raw_type >> 4) & 0xF;
             let m5 = m5_data[i];
             let m1 = if has_m1 { m1_data[i] } else { 0 };
+            let m6 = if has_m6 { m6_data[i] } else { 0 };
+            let m8 = if has_m8 {
+                u16::from_le_bytes([m8_data[i * 2], m8_data[i * 2 + 1]])
+            } else {
+                0
+            };
 
             let kind = match ottd_type {
                 0 | 10 => TileKind::Grass, // MP_CLEAR, MP_OBJECT
@@ -203,11 +236,7 @@ impl Map {
                 5 => TileKind::Station,    // MP_STATION
                 6 => TileKind::Water,      // MP_WATER
                 7 => TileKind::Void,       // MP_VOID
-                8 => {
-                    // MP_INDUSTRY: el tipo exacto está en otros bytes (m1/m5).
-                    let _ = m5;
-                    TileKind::Industry
-                }
+                8 => TileKind::Industry,   // MP_INDUSTRY
                 9 => {
                     // MP_TUNNELBRIDGE: Road o Rail según m5 bit 2
                     if m5 & 0x04 != 0 {
@@ -225,6 +254,8 @@ impl Map {
                 mapt: raw_type,
                 m5,
                 m1,
+                m6,
+                m8,
             });
         }
 

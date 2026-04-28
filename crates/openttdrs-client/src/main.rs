@@ -319,9 +319,11 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
                 ));
             } else if kind == TileKind::Industry {
-                // Tile base: con edificio→suelo marrón; sin edificio (campo/suelo)→grass
-                // para evitar el cuadrado negro en campos de Farm y tiles de suelo.
-                let gfx = tile.map_or(0, |t| t.m5);
+                // gfx de industria es de 9 bits: m5 (bits 0-7) | bit 2 de m6 (bit 8)
+                // Fuente: GetCleanIndustryGfx() en industry_map.h de OpenTTD
+                let gfx = tile.map_or(0u16, |t| {
+                    u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8)
+                });
                 let has_building = sprites::industry_sprite_for_gfx(gfx).is_some();
                 let (ground_img, ground_color) = if has_building {
                     (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45))
@@ -369,6 +371,8 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                 } else {
                     let ottd_type = tile.map_or(0u8, |t| (t.mapt >> 4) & 0xF);
                     let tile_m5 = tile.map_or(0u8, |t| t.m5);
+                    let _tile_m6 = tile.map_or(0u8, |t| t.m6);
+                    let _tile_m8 = tile.map_or(0u16, |t| t.m8);
 
                     // MP_CLEAR (0): distinguir subtipo de suelo via m5 bits 2-4
                     // MP_OBJECT (10): grass de base + overlay de objeto

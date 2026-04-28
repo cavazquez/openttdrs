@@ -3,14 +3,16 @@
 Convierte un savegame de OpenTTD (.sav) a un archivo binario simple
 que puede cargar openttdrs-client sin dependencias externas.
 
-Formato de salida (.ottdmap) v2:
+Formato de salida (.ottdmap) v3:
   4 bytes LE  – magic: 0x4D41504F ('MAPO')
   4 bytes LE  – width
   4 bytes LE  – height
   W*H bytes   – tile_type (bits 7-4 = TileType OpenTTD, bits 3-0 = tropic/aux)
   W*H bytes   – height (0-255)
-  W*H bytes   – m5 (road bits, rail type, industry gfx, etc.)
-  W*H bytes   – m1 (industry index, owner, etc.) [NEW in v2]
+  W*H bytes   – m5 (road bits, TrackBits 0-5, industry gfx bits 0-7, ObjectType en MP_OBJECT)
+  W*H bytes   – m1 (industry index, owner, etc.) [v2+]
+  W*H bytes   – m6 (bit 2 = bit 8 del gfx industria; StationType en MP_STATION) [v3+]
+  W*H*2 bytes – m8 LE (HouseID en MP_HOUSE, 16 bits little-endian) [v3+]
 
 Tipos de tesela OpenTTD (nibble alto de tile_type):
   0  MP_CLEAR       → prado/rough/rocks/fields/desert
@@ -377,11 +379,16 @@ def main() -> None:
 
     print(f"  Mapa: {dim_x} × {dim_y} = {dim_x*dim_y:,} teselas")
 
-    # Datos de teselas
+    # Datos de teselas.
+    # Nombres reales de chunks en el savegame (map_sl.cpp de OpenTTD):
+    #   MAPT = tile types, MAPH = heights, MAPO = MAP1 (owner),
+    #   MAP2 = misc, M3LO/M3HI = MAP3, MAP5 = m5, MAPE = MAP6, MAP7, MAP8
     mapt = chunks.get('MAPT', b'')
     maph = chunks.get('MAPH', b'')
     map5 = chunks.get('MAP5', b'')
-    map1 = chunks.get('MAP1', b'')
+    map1 = chunks.get('MAPO', b'')  # MAPO = MAP1 (owner/datos de tesela 1)
+    map6 = chunks.get('MAPE', b'')  # MAPE = MAP6 (bit 2 = bit 8 del gfx industria)
+    map8 = chunks.get('MAP8', b'')  # MAP8 = HouseID (2 bytes por tesela)
     # OBJS: diccionario {tile_index → ObjectType}  (0=Transmisor, 1=Faro)
     obj_types: dict[int, int] = chunks.get('OBJS', {})  # type: ignore[assignment]
 
@@ -396,6 +403,10 @@ def main() -> None:
         map5 = map5 + b'\x00' * (expected - len(map5))
     if len(map1) < expected:
         map1 = map1 + b'\x00' * (expected - len(map1))
+    if len(map6) < expected:
+        map6 = map6 + b'\x00' * (expected - len(map6))
+    if len(map8) < expected * 2:
+        map8 = map8 + b'\x00' * (expected * 2 - len(map8))
 
     # Para tiles MP_OBJECT, sobreescribir m5 con el ObjectType real (de OBJS).
     # En OpenTTD moderno, MAP5 para MP_OBJECT guarda bits altos del ObjectID,
@@ -412,14 +423,16 @@ def main() -> None:
         print(f"  Objetos con tipo resuelto desde OBJS: {n_fixed}")
     m5_data = bytes(m5_list)
 
-    # Escribir archivo de salida (formato v2 con m1)
+    # Escribir archivo de salida (formato v3: + m6 + m8)
     magic_out = b'MAPO'
     header = struct.pack('<4sII', magic_out, dim_x, dim_y)
     tile_types = mapt[:expected]
     heights    = maph[:expected]
     m1_data    = map1[:expected]
+    m6_data    = map6[:expected]
+    m8_data    = map8[:expected * 2]
 
-    out_path.write_bytes(header + tile_types + heights + m5_data + m1_data)
+    out_path.write_bytes(header + tile_types + heights + m5_data + m1_data + m6_data + m8_data)
     print(f"✓ Escrito: {out_path}  ({out_path.stat().st_size:,} bytes)")
 
     # Estadísticas de tipos de tesela

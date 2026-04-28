@@ -291,7 +291,9 @@ pub const INDUSTRY_GFX_DATA: [IndustryGfxSprite; 120] = [
 
 /// Devuelve los metadatos del sprite de industria para el gfx dado (byte m5).
 /// Retorna `None` si el gfx no tiene overlay de edificio (solo suelo) o está fuera del rango.
-pub fn industry_sprite_for_gfx(gfx: u8) -> Option<&'static IndustryGfxSprite> {
+/// Devuelve el sprite de industria para el índice gfx de 9 bits:
+/// `gfx = m5 | ((m6 >> 2) & 1) << 8`
+pub fn industry_sprite_for_gfx(gfx: u16) -> Option<&'static IndustryGfxSprite> {
     let entry = INDUSTRY_GFX_DATA.get(usize::from(gfx))?;
     if entry.sprite_id != 0 {
         Some(entry)

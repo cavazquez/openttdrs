@@ -94,11 +94,31 @@ Todas las teselas de suelo miden **64×31 px** con `xrel=-31, yrel=0`.
 | `grass.png` | 3924 | Prado liso (suelo principal) |
 | `grass_rough.png` | 3925 | Prado rugoso (Forest, CoalField con tinte) |
 | `water.png` | ~3984 | Agua (azul) |
+| `shore_0.png` … `shore_7.png` | 4062–4069 (`SPR_SHORE_BASE`) | Costa: **un** sprite según pendiente en teselas Coast, no máscara por vecinos |
 | `road_ty.png` | 1332 (`SPR_ROAD_Y`) | Recorte “Y” en OpenGFX; en el cliente se usa para `RoadDir::Tx` |
 | `road_tx.png` | 1333 (`SPR_ROAD_X`) | Recorte “X” en OpenGFX; en el cliente se usa para `RoadDir::Ty` |
 | `road_cross.png` | 1338 | Cruce de carretera (tx + ty) |
 | `road_corner_a.png` | 1335 | Esquina NE-SW |
 | `road_corner_b.png` | 1337 | Esquina NW-SE |
+
+### Costa (`shore_*.png`) y `WaterTileType::Coast`
+
+Los archivos `shore_0.png` … `shore_7.png` corresponden aproximadamente a los sprites
+**4062–4069** (`SPR_SHORE_BASE` + offset). No son un “set de orientación” que se elige
+mirando **vecinos** N/E/S/W sobre agua plana.
+
+En OpenTTD, las teselas **MP_WATER** con tipo **Coast** (`m5` bits 4–7 = 1, ver
+`water_map.h`) se dibujan con **`DrawShoreTile(tileh)`** (`water_cmd.cpp`): **un solo
+sprite** según la **pendiente** de la tesela (`Slope` / `tileh`), vía la tabla
+`tileh_to_shoresprite[]`. El agua “libre” (Clear) usa el sprite de agua animada, sin
+superponer costa por adyacencia a tierra.
+
+En openttdrs, el renderer alinea con eso: si `water_tile_type == 1` (Coast), se elige
+`shore_{n}.png` con `shore_png_index(compute_tileh(...))` y posición
+`tile_pos_half(..., SLOPE_HALF_H[tileh])` (ver `crates/openttdrs-client/src/iso.rs`).
+Si el `.ottdmap` no conserva el subtipo Coast en `m5` (todo agua como Clear), se aplica el
+mismo dibujo de costa cuando la tesela de agua **linda con tierra** (un solo criterio
+geométrico; el sprite sigue siendo el de `tileh`, no una máscara por vecinos).
 
 ### Atención: convención de nombres de SPR_ROAD_*
 

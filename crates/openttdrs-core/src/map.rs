@@ -315,4 +315,71 @@ mod ottdmap_binary_tests {
         b[0] = b'X';
         assert!(Map::from_ottd_binary(&b).is_err());
     }
+
+    /// `.ottdmap` v1 mínimo (solo MAPT + heights + m5): una tesela `MP_WATER` Coast.
+    /// `m5 = 0x10` → bits 4–7 = `WaterTileType::Coast` (`water_map.h` en OpenTTD).
+    fn minimal_ottdmap_water_coast_v1() -> Vec<u8> {
+        let w = 1_u32;
+        let h = 1_u32;
+        let mut v = Vec::with_capacity(15);
+        v.extend_from_slice(b"MAPO");
+        v.extend_from_slice(&w.to_le_bytes());
+        v.extend_from_slice(&h.to_le_bytes());
+        v.push(0x60); // nibble alto 6 = MP_WATER
+        v.push(3); // altura
+        v.push(0x10); // Coast
+        v
+    }
+
+    /// 2×2 v1: hierba + agua Clear + agua Coast (comprueba que `m5` no se pierde por celda).
+    fn minimal_ottdmap_mixed_water_v1() -> Vec<u8> {
+        let w = 2_u32;
+        let h = 2_u32;
+        let n = 4_usize;
+        let mut v = Vec::with_capacity(12 + n * 3);
+        v.extend_from_slice(b"MAPO");
+        v.extend_from_slice(&w.to_le_bytes());
+        v.extend_from_slice(&h.to_le_bytes());
+        // Orden i = y*width + x (x rápido): (0,0),(1,0),(0,1),(1,1)
+        v.extend_from_slice(&[
+            0x00, 0x60, // fila y=0: Clear, Water
+            0x60, 0x60, // fila y=1: Water, Water
+        ]);
+        v.extend_from_slice(&[4, 1, 1, 1]); // heights
+        v.extend_from_slice(&[0, 0, 0x10, 0]); // m5: Clear agua, Coast, Clear agua
+        v
+    }
+
+    #[test]
+    fn from_ottd_binary_preserves_water_coast_m5() {
+        let map = Map::from_ottd_binary(&minimal_ottdmap_water_coast_v1()).expect("mapa válido");
+        assert_eq!(map.dimensions(), (1, 1));
+        let t = map.get(TileCoord::new(0, 0)).expect("tile");
+        assert_eq!(t.kind, TileKind::Water);
+        assert_eq!(t.m5, 0x10, "WaterTileType::Coast en bits 4–7");
+        assert_eq!((t.m5 >> 4) & 0x0F, 1);
+    }
+
+    #[test]
+    fn from_ottd_binary_mixed_water_m5_per_tile() {
+        let map = Map::from_ottd_binary(&minimal_ottdmap_mixed_water_v1()).expect("mapa válido");
+        assert_eq!(map.dimensions(), (2, 2));
+        let clear_land = map.get(TileCoord::new(0, 0)).expect("tile");
+        assert_eq!(clear_land.kind, TileKind::Grass);
+        assert_eq!(clear_land.m5, 0);
+
+        let sea_clear = map.get(TileCoord::new(1, 0)).expect("tile");
+        assert_eq!(sea_clear.kind, TileKind::Water);
+        assert_eq!(sea_clear.m5, 0);
+        assert_eq!((sea_clear.m5 >> 4) & 0x0F, 0, "Clear");
+
+        let coast = map.get(TileCoord::new(0, 1)).expect("tile");
+        assert_eq!(coast.kind, TileKind::Water);
+        assert_eq!(coast.m5, 0x10);
+        assert_eq!((coast.m5 >> 4) & 0x0F, 1, "Coast");
+
+        let sea2 = map.get(TileCoord::new(1, 1)).expect("tile");
+        assert_eq!(sea2.kind, TileKind::Water);
+        assert_eq!(sea2.m5, 0);
+    }
 }

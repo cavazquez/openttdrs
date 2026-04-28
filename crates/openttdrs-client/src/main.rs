@@ -23,12 +23,13 @@ use std::path::Path;
 use bevy::image::ImageSamplerDescriptor;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{IndustryKind, TileCoord, TileKind, Vehicle};
+use openttdrs_core::{IndustryKind, Map, TileCoord, TileKind, Vehicle};
 
 use camera::{CameraVelocity, move_camera};
 use iso::{
     ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, compute_tileh, gizmo_diamond, iso, overlay_pos,
-    tile_pos, tile_pos_half, wang_hash,
+    infer_coast_tileh_when_flat, shore_png_index, tile_min_corner_height, tile_min_z, tile_pos,
+    tile_pos_half, wang_hash,
 };
 use sprites::{
     HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites,
@@ -74,6 +75,23 @@ fn vehicle_dir(v: &Vehicle) -> VehicleDir {
         (_, 1) => VehicleDir::Sw,
         _ => VehicleDir::Ne,
     }
+}
+
+/// `true` si algún vecino ortogonal no es agua ni vacío (borde mar/tierra o río).
+///
+/// Los exports `.ottdmap` a veces dejan `m5=0` en toda el agua y se pierde
+/// `WaterTileType::Coast` en bits 4–7; sin esto solo se pinta agua plana en la orilla.
+fn water_tile_touches_land(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32) -> bool {
+    let is_land = |x: i32, y: i32| -> bool {
+        if x < 0 || y < 0 || x >= mw as i32 || y >= mh as i32 {
+            return false;
+        }
+        map.get(TileCoord::new(x, y))
+            .is_some_and(|t| t.kind != TileKind::Water && t.kind != TileKind::Void)
+    };
+    let x = tx as i32;
+    let y = ty as i32;
+    is_land(x - 1, y) || is_land(x + 1, y) || is_land(x, y - 1) || is_land(x, y + 1)
 }
 
 // ── Recursos ──────────────────────────────────────────────────────────────────
@@ -199,7 +217,8 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     commands.spawn((
         Camera2d,
         Camera {
-            clear_color: ClearColorConfig::Custom(Color::srgb(0.45, 0.60, 0.75)),
+            // Tonos cercanos al mar oscuro: si hay huecos de 1px entre sprites, menos brillo que el cielo.
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.22, 0.38, 0.52)),
             ..default()
         },
         Transform::from_translation(Vec3::new(cam_x, cam_y, 999.9)),
@@ -306,7 +325,8 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
             let c = TileCoord::new(tx as i32, ty as i32);
             let tile = sim.state.map.get(c);
             let kind = tile.map_or(TileKind::Grass, |t| t.kind);
-            let height = tile.map_or(0, |t| t.height);
+            // Elevación del sprite de suelo: mínimo de esquinas (GetTileZ), no solo `t.height`.
+            let base_z = tile_min_corner_height(&sim.state.map, tx, ty);
             let p = iso(tx as i32, ty as i32);
 
             if kind == TileKind::Void {
@@ -320,7 +340,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
             if kind == TileKind::Road {
                 let fi = road_flat_index(road_bits_for_render(&sim.state.map, c, mw, mh));
                 let pos_road =
-                    tile_pos_half(tx as i32, ty as i32, height, 0.0, ROAD_FLAT_HALF_H[fi]);
+                    tile_pos_half(tx as i32, ty as i32, base_z, 0.0, ROAD_FLAT_HALF_H[fi]);
                 commands.spawn((
                     Sprite {
                         image: road_flat[fi].clone(),
@@ -345,7 +365,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                             color: Color::srgb(0.88, 0.88, 0.97),
                             ..default()
                         },
-                        Transform::from_translation(tile_pos(tx as i32, ty as i32, height, z)),
+                        Transform::from_translation(tile_pos(tx as i32, ty as i32, base_z, z)),
                     ));
                 }
             } else if kind == TileKind::House {
@@ -365,7 +385,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     Transform::from_translation(tile_pos_half(
                         tx as i32,
                         ty as i32,
-                        height,
+                        base_z,
                         0.0,
                         slope_half_ground,
                     )),
@@ -382,7 +402,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         spec.s1_yrel,
                         spec.s1_w,
                         spec.s1_h,
-                        height,
+                        base_z,
                         0.4,
                         tx as i32,
                         ty as i32,
@@ -405,7 +425,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         spec.s2_yrel,
                         spec.s2_w,
                         spec.s2_h,
-                        height,
+                        base_z,
                         0.5,
                         tx as i32,
                         ty as i32,
@@ -430,7 +450,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         Transform::from_translation(tile_pos_half(
                             tx as i32,
                             ty as i32,
-                            height,
+                            base_z,
                             0.0,
                             slope_half_ground,
                         )),
@@ -443,7 +463,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         color: Color::WHITE,
                         ..default()
                     },
-                    Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.01)),
+                    Transform::from_translation(tile_pos(tx as i32, ty as i32, base_z, 0.01)),
                 ));
             } else if kind == TileKind::Industry {
                 // gfx de industria es de 9 bits: m5 (bits 0-7) | bit 2 de m6 (bit 8)
@@ -480,7 +500,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     Transform::from_translation(tile_pos_half(
                         tx as i32,
                         ty as i32,
-                        height,
+                        base_z,
                         0.0,
                         slope_half_ground,
                     )),
@@ -490,7 +510,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     && let Some(img) = industry_tex.get(&s.sprite_id)
                 {
                     let pos3 = overlay_pos(
-                        p, s.xrel, s.yrel, s.w, s.h, height, 0.5, tx as i32, ty as i32,
+                        p, s.xrel, s.yrel, s.w, s.h, base_z, 0.5, tx as i32, ty as i32,
                     );
                     commands.spawn((
                         Sprite {
@@ -503,67 +523,75 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                 }
             } else {
                 if kind == TileKind::Water {
-                    // Emula el patrón indexado de OpenTTD:
-                    // - dark water: 5 fases con gradiente espacial estable
-                    // - glitter: 15 fases pseudoaleatorias por tile
-                    let dark_phase = ((tx + 2 * ty).rem_euclid(5)) as u8;
-                    let glitter_phase = (wang_hash(tx, ty, 0xA9FE) % 15) as u8;
-                    commands.spawn((
-                        WaterTile {
-                            dark_phase,
-                            glitter_phase,
-                        },
-                        Sprite {
-                            image: h_water.clone(),
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                        Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
-                    ));
+                    let m5_w = tile.map_or(0u8, |t| t.m5);
+                    // water_map.h: `WaterTileType` en bits 4–7 de m5 (Clear=0, Coast=1, …)
+                    let water_tile_type = (m5_w >> 4) & 0x0F;
+                    // Coast explícito, o Clear junto a tierra (mapas sin subtipo Coast en m5).
+                    let use_shore_graphics = water_tile_type == 1
+                        || (water_tile_type == 0
+                            && water_tile_touches_land(&sim.state.map, tx, ty, mw, mh));
 
-                    // Costa: superponer shore_* cuando el agua linda con tierra.
-                    let is_land = |x: i32, y: i32| -> bool {
-                        if x < 0 || y < 0 || x >= mw as i32 || y >= mh as i32 {
-                            return false;
+                    if use_shore_graphics {
+                        // `DrawShoreTile(tileh)` — un sprite según pendiente (`water_cmd.cpp`).
+                        let mut th = compute_tileh(&sim.state.map, tx, ty);
+                        if th == 0 {
+                            // Costas con MAPH plano en el 2×2: la tierra a menudo queda fuera
+                            // del muestreo; OpenTTD no usa agua plana en Coast.
+                            th = infer_coast_tileh_when_flat(&sim.state.map, tx, ty, mw, mh);
                         }
-                        sim.state
-                            .map
-                            .get(TileCoord::new(x, y))
-                            .is_some_and(|t| t.kind != TileKind::Water && t.kind != TileKind::Void)
-                    };
-                    let n = is_land(tx as i32, ty as i32 - 1);
-                    let e = is_land(tx as i32 + 1, ty as i32);
-                    let s = is_land(tx as i32, ty as i32 + 1);
-                    let w = is_land(tx as i32 - 1, ty as i32);
-                    let mask = (n as u8) | ((e as u8) << 1) | ((s as u8) << 2) | ((w as u8) << 3);
-                    // Tabla explícita de orientación para shore_0..7.
-                    // 1,2,4,8 = un lado de tierra; 3,6,12,9 = esquinas.
-                    // Casos de 3 lados usan la orientación del lado faltante.
-                    let shore_idx = match mask {
-                        0b0001 => Some(0), // N
-                        0b0010 => Some(1), // E
-                        0b0100 => Some(2), // S
-                        0b1000 => Some(3), // W
-                        0b0011 => Some(4), // N+E
-                        0b0110 => Some(5), // E+S
-                        0b1100 => Some(6), // S+W
-                        0b1001 => Some(7), // W+N
-                        0b1110 => Some(0), // falta N
-                        0b1101 => Some(1), // falta E
-                        0b1011 => Some(2), // falta S
-                        0b0111 => Some(3), // falta W
-                        _ => None,
-                    };
-                    if let Some(i) = shore_idx {
+                        if th == 0 {
+                            let dark_phase = ((tx + 2 * ty).rem_euclid(5)) as u8;
+                            let glitter_phase = (wang_hash(tx, ty, 0xA9FE) % 15) as u8;
+                            commands.spawn((
+                                WaterTile {
+                                    dark_phase,
+                                    glitter_phase,
+                                },
+                                Sprite {
+                                    image: h_water.clone(),
+                                    color: Color::WHITE,
+                                    ..default()
+                                },
+                                Transform::from_translation(tile_pos(
+                                    tx as i32,
+                                    ty as i32,
+                                    base_z,
+                                    0.0,
+                                )),
+                            ));
+                        } else {
+                            let si = shore_png_index(th);
+                            let hh = SLOPE_HALF_H[th as usize];
+                            commands.spawn((
+                                Sprite {
+                                    image: shore_tex[si].clone(),
+                                    color: Color::WHITE,
+                                    ..default()
+                                },
+                                Transform::from_translation(tile_pos_half(
+                                    tx as i32,
+                                    ty as i32,
+                                    base_z,
+                                    0.0,
+                                    hh,
+                                )),
+                            ));
+                        }
+                    } else {
+                        // Agua libre (Clear, Lock, Depot en mapas típicos: Clear).
+                        let dark_phase = ((tx + 2 * ty).rem_euclid(5)) as u8;
+                        let glitter_phase = (wang_hash(tx, ty, 0xA9FE) % 15) as u8;
                         commands.spawn((
+                            WaterTile {
+                                dark_phase,
+                                glitter_phase,
+                            },
                             Sprite {
-                                image: shore_tex[i].clone(),
+                                image: h_water.clone(),
                                 color: Color::WHITE,
                                 ..default()
                             },
-                            Transform::from_translation(tile_pos(
-                                tx as i32, ty as i32, height, 0.02,
-                            )),
+                            Transform::from_translation(tile_pos(tx as i32, ty as i32, base_z, 0.0)),
                         ));
                     }
                 } else {
@@ -623,7 +651,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         Transform::from_translation(tile_pos_half(
                             tx as i32,
                             ty as i32,
-                            height,
+                            base_z,
                             0.0,
                             slope_half_h,
                         )),
@@ -643,7 +671,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         };
                         if let Some(img) = obj_img {
                             let pos3 = overlay_pos(
-                                p, obj_xrel, obj_yrel, obj_w, obj_h, height, 0.6, tx as i32,
+                                p, obj_xrel, obj_yrel, obj_w, obj_h, base_z, 0.6, tx as i32,
                                 ty as i32,
                             );
                             commands.spawn((
@@ -669,7 +697,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     -36.0,
                     35.0,
                     43.0,
-                    height,
+                    base_z,
                     0.3,
                     tx as i32,
                     ty as i32,
@@ -688,7 +716,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     // ── Sprites de vehículos ───────────────────────────────────────────────────
     let h_truck_ne_init = asset_server.load::<Image>("opengfx/tiles/vehicle_bus_sw.png");
     for vehicle in &sim.state.vehicles {
-        let vh = sim.state.map.get(vehicle.pos).map_or(0, |t| t.height);
+        let vh = tile_min_z(&sim.state.map, vehicle.pos);
         let p = iso(vehicle.pos.x, vehicle.pos.y);
         let pos3 = overlay_pos(
             p,
@@ -794,7 +822,7 @@ fn update_vehicles(
             continue;
         };
         let dir = vehicle_dir(v);
-        let vh = sim.state.map.get(v.pos).map_or(0, |t| t.height);
+        let vh = tile_min_z(&sim.state.map, v.pos);
         let p = iso(v.pos.x, v.pos.y);
 
         let (xrel, yrel, w, h) = match dir {

@@ -16,6 +16,7 @@ Código relevante:
 
 1. [Byte MAPT (tipo de tesela)](#1-byte-mapt-tipo-de-tesela)
 2. [Formato .ottdmap v1→v2→v3](#2-formato-ottdmap-v1v2v3)
+   - [MP_WATER, MAP5 y costa en el cliente](#mp-water-map5-y-costa-en-el-cliente)
 3. [Nombres reales de chunks en OpenTTD](#3-nombres-reales-de-chunks-en-openttd)
 4. [Struct Tile en Rust](#4-struct-tile-en-rust)
 5. [Byte m5 en MP_ROAD](#5-byte-m5-en-mp_road)
@@ -116,6 +117,51 @@ let has_m1 = data.len() >= 12 + n * 4;   // v2+
 let has_m6 = data.len() >= 12 + n * 5;   // v3+
 let has_m8 = data.len() >= 12 + n * 5 + n * 2; // v3+
 ```
+
+### MP_WATER, MAP5 y costa en el cliente
+
+En OpenTTD, en teselas `MP_WATER`, el byte `MAP5` (`m5`) codifica el subtipo en **bits
+4–7** (`WaterTileType` en `water_map.h`):
+
+| Valor (bits 4–7) | Nombre        | Uso típico                          |
+|----------------:|---------------|-------------------------------------|
+| 0               | `Clear`       | Mar, río, canal (agua animada)      |
+| 1               | `Coast`       | Orilla: sprite `SPR_SHORE_*` + pendiente |
+| 2               | `Lock`        | Esclusa                           |
+| 3               | `Depot`       | Depósito naval                    |
+
+**Export `.ottdmap`:** `scripts/parse_sav.py` copia el chunk `MAP5` del save **tal
+cual** a la sección `m5` del binario (salvo la sustitución de `MP_OBJECT` con datos
+`OBJS`). En saves normales de OpenTTD, las teselas de costa suelen llevar **`Coast`
+(`0x10` en bits 4–7, es decir `m5 & 0xF0 == 0x10`)** cuando el juego las guardó
+correctamente.
+
+**Cliente (`openttdrs-client`):** se dibujan sprites de costa (`shore_*.png` vía
+`compute_tileh` + `shore_png_index`) si:
+
+1. **`(m5 >> 4) & 0xF == 1`** (Coast explícito), **o**
+2. **`(m5 >> 4) & 0xF == 0`** (Clear) **y** la tesela de agua **linda con tierra** en
+   un vecino ortogonal (no `Water`, no `Void`) — función `water_tile_touches_land` en
+   `main.rs`.
+
+El caso (2) cubre mapas o pipelines donde el agua en la orilla queda como **Clear**
+con `m5 = 0` pero el relieve sigue siendo válido: **no** se usa una máscara N/E/S/W
+para elegir el PNG de costa; solo decide *si* entramos en el modo costa; el índice
+del sprite sigue siendo el de la **pendiente** (`tileh`). El agua abierta sin tierra
+ortogonal adyacente sigue siendo solo agua animada.
+
+Si `compute_tileh` devuelve **0** en una tesela que igual debe dibujarse como costa (las
+cuatro alturas del bloque 2×2 son iguales — típico cuando la tierra solo está **fuera**
+de ese bloque, p. ej. costa recta con tierra al norte), OpenTTD no usa agua plana en
+Coast. El cliente aplica `infer_coast_tileh_when_flat` (`iso.rs`) antes de elegir
+`shore_*.png`.
+
+Tests unitarios de `compute_tileh` (mapas 2×2, borde 1×1, franja 2×1): `iso.rs`,
+módulo `compute_tileh_tests`.
+
+Tests de carga `.ottdmap` con `MP_WATER` y `m5` (Coast `0x10` vs Clear `0`): `map.rs`,
+módulo `ottdmap_binary_tests` (`minimal_ottdmap_water_coast_v1`,
+`minimal_ottdmap_mixed_water_v1`).
 
 ---
 
@@ -515,18 +561,19 @@ Cada tesela tiene cuatro esquinas. La pendiente (`tileh`) es un bitmask de 4 bit
 donde cada bit indica si esa esquina está por **encima del mínimo** entre las cuatro:
 
 ```text
-h0 = height(tx,   ty  )  → esquina N  (bit 3)
-h1 = height(tx+1, ty  )  → esquina S  (bit 1)
-h2 = height(tx,   ty+1)  → esquina W  (bit 0)
-h3 = height(tx+1, ty+1)  → esquina E  (bit 2)
+hnorth = height(tx,   ty  )
+hwest  = height(tx+1, ty  )
+heast  = height(tx,   ty+1)
+hsouth = height(tx+1, ty+1)
 
-min_h = min(h0, h1, h2, h3)
+min_h = min(hnorth, hwest, heast, hsouth)
 tileh = 0
-if h2 > min_h: tileh |= 1  (SLOPE_W)
-if h1 > min_h: tileh |= 2  (SLOPE_S)
-if h3 > min_h: tileh |= 4  (SLOPE_E)
-if h0 > min_h: tileh |= 8  (SLOPE_N)
+if hwest  > min_h: tileh |= 1  (SLOPE_W)
+if hsouth > min_h: tileh |= 2  (SLOPE_S)
+if heast  > min_h: tileh |= 4  (SLOPE_E)
+if hnorth > min_h: tileh |= 8  (SLOPE_N)
 ```
+(Misma convención que `GetTileSlopeGivenHeight` en `tile_map.cpp` de OpenTTD.)
 
 Implementado en `crates/openttdrs-client/src/iso.rs` → `compute_tileh`.
 
@@ -583,13 +630,13 @@ pub const SLOPE_HALF_H: [f32; 15] = [
 La fórmula completa de posición de una tesela:
 
 ```rust
-// iso.rs: tile_pos_half(tx, ty, height, layer, half_h)
+// iso.rs: tile_pos_half(tx, ty, base_z, layer, half_h) — base_z = mínimo de esquinas (GetTileZ)
 let p = iso(tx, ty);          // proyección isométrica plana
-let elev = height as f32 * HEIGHT_PX;  // HEIGHT_PX = 8.0
+let elev = base_z as f32 * HEIGHT_PX;  // HEIGHT_PX = 8.0
 Vec3::new(
     p.x,
     p.y - half_h + elev,
-    (tx + ty) as f32 * 0.01 + height as f32 * 0.001 + layer,
+    (tx + ty) as f32 * 0.01 + base_z as f32 * 0.001 + layer,
 )
 ```
 
@@ -671,11 +718,20 @@ OpenTTD usa **8 píxeles** de desplazamiento vertical por unidad de altura (`TIL
 en el upstream). En el cliente, `HEIGHT_PX = 8.0` separa visualmente mesetas sin
 renderizar pendientes reales.
 
-El orden Z mezcla `(tx + ty)` con un término en `height` para reducir parpadeos
+La **cota** que entra en `tile_pos_half` / `tile_pos` / `overlay_pos` para suelo,
+agua, costa y overlays sobre tesela debe ser el **mínimo de las cuatro esquinas**
+muestreadas igual que en `GetTileSlopeZ` — en upstream eso es `GetTileZ` (`tile_map.cpp`).
+Usar solo `Tile.height` (la altura almacenada en `MAPH` para esa celda, esquina N)
+desplaza los sprites en pendiente respecto a los vecinos y produce **huecos**,
+costas rotas o teselas en “V”. En openttdrs: `tile_min_corner_height` y
+`tile_min_z` en `iso.rs`; el bucle de `setup` en `main.rs` usa `base_z` derivado de
+ese mínimo.
+
+El orden Z mezcla `(tx + ty)` con un término en la cota base (`base_z`) para reducir parpadeos
 entre teselas a distinta cota:
 
 ```rust
-z = (tx + ty) as f32 * 0.01 + height as f32 * 0.001 + layer
+z = (tx + ty) as f32 * 0.01 + base_z as f32 * 0.001 + layer
 ```
 
 `layer` es un pequeño offset usado para priorizar overlays sobre el suelo.

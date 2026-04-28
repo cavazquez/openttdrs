@@ -32,22 +32,31 @@ El [informe de arquitectura](INFORME_ARQUITECTURA_OPENTTD.md) resume el código 
 | Órdenes `Order`, listas compartidas | `order_base.h` | **I4:** cola mínima “ir a estación”; órdenes compartidas más tarde. |
 | YAPF (siguiente tramo, cachés, regiones agua) | `pathfinder/yapf/` | **I5:** BFS que devuelve **`Vec` de teselas** es deliberado y más simple; migrar a heurística tipo A* si el mapa crece. |
 | Registro masivo de comandos `*_cmd` | `command.cpp` | **I6:** mismo patrón abstracto (`Command` + `apply`), sin el árbol enorme del upstream. |
-| `SaveLoadVersion` (`SLV_*`) | `saveload/saveload.h` | **I7:** formato propio versionado; compatibilidad binaria con `.sav` fuera de alcance. |
+| `SaveLoadVersion` (`SLV_*`) | `saveload/saveload.h` | **I7:** formato propio versionado; **parcial:** `scripts/parse_sav.py` lee `.sav` → `.ottdmap` (solo mapa, no economía). |
 | Red = replay de comandos + hash estado | `network/` | **I8:** misma idea lógica; protocolo y seguridad mínimos. |
 
 ---
 
-## Estado actual (Incremento 0 — ya en `main`)
+## Estado actual del código (abril 2026)
 
-Lo que existe hoy:
+Los incrementos **I0–I5** están implementados en `main`. Además hay trabajo **visual y de
+mapas** que no reemplaza I6–I8 pero sí el cliente y la documentación de referencia.
 
-| Capa | Qué hay |
-|------|---------|
-| `openttdrs-core` | `TileCoord`, `Tile { height }`, `Map` (grid denso), `GameTick`, `GameState` |
-| Tests | Dimensiones, tick, altura roundtrip |
-| `openttdrs-client` | Ventana Bevy, cámara 2D, rejilla coloreada por altura, título con tick |
+| Capa | Qué hay hoy |
+|------|-------------|
+| `openttdrs-core` | `Tile { height, kind, mapt, m5 }`, `TileKind` ampliado, `Map`, `Map::from_ottd_binary`, industrias, estaciones, vehículos, BFS `find_path`, tests (18). |
+| `openttdrs-client` | Vista **isométrica**, sprites **OpenGFX** (suelo, agua, carreteras, árboles, camión, mina), gizmos, cámara con pan/zoom, carga opcional `OTTDMAP_FILE`. |
+| Scripts | `parse_sav.py` (`.sav` → `.ottdmap`), `descargar_graficos.sh` / `descargar_sonidos.sh`. |
+| Docs | [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md), [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md), [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md). |
 
-El sistema funciona y es observable. El mapa es uniforme y sin contenido semántico.
+**Carreteras en mapas reales:** orientación desde `mapt` + `m5` (normal, cruce a nivel,
+depósito, túnel/puente carretera). Los PNG `road_tx` / `road_ty` se asignan **cruzados**
+respecto a `RoadDir` para alinear la textura con la proyección del cliente (~90° respecto
+a “nombre de archivo = eje”); validado en pantalla.
+
+Lo **pendiente** de la cadena incremental formal sigue siendo **I6–I8** (comandos, save/load
+propio del `GameState`, red). Ver [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) para opciones
+priorizadas.
 
 ---
 

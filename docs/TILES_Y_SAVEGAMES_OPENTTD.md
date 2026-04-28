@@ -140,6 +140,8 @@ Regla en el cliente (`RoadDir` desde road bits / cruces / vecinos):
 
 Es un **intercambio intencional** respecto al nombre del archivo: los recortes OpenGFX y
 nuestra proyección isométrica quedan alineados así (~90° respecto a asignar “tx→tx”).
+Comprobado en capturas sobre `.ottdmap` de regresión / partidas reales (trazados rectos y
+cruces coherentes).
 
 El **cruce** no se invierte.
 

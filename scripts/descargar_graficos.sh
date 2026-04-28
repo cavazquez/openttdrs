@@ -358,6 +358,21 @@ for sid in [2119, 2121, 2123, 2126, 2128]:
 # gfx 58-59: Bank (templado)
 for sid in [2180, 2181]:
     crop_by_id(sid, f"industry_{sid}.png")
+# gfx 60-71: Copper Ore Mine
+for sid in [2190, 2193, 2196, 2199, 2202, 2205, 2206, 2208, 2209, 2212, 2213, 2214]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 72-88: Plantaciones/otros climas (algunos tiles con edificio)
+for sid in [2247, 2249, 2250, 2263, 2265]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 89-90: Gold Mine
+for sid in [2186, 2187]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 91-99: Iron Ore Mine
+for sid in [2284, 2285, 2286, 2287, 2290]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 116-119: Otros climas con edificio
+for sid in [2342, 2343, 2349, 2352]:
+    crop_by_id(sid, f"industry_{sid}.png")
 
 # =============================================================================
 # AEROPUERTOS

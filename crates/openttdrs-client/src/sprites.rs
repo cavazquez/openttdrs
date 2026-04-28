@@ -95,26 +95,31 @@ const fn gfx_ground() -> IndustryGfxSprite {
     }
 }
 
-/// Tabla gfx → sprite para clima templado.
+/// Tabla gfx → sprite para todos los climas de OpenTTD.
 /// Índice = gfx (valor de m5 para tile de industria completada, stage 3).
 /// Derivado de `_industry_draw_tile_data` en `table/industry_land.h` de OpenTTD.
 ///
 /// Rangos por industria:
-/// |  gfx  | Industria        |
-/// |-------|------------------|
-/// |  0- 6 | Coal Mine        |
-/// |  7-10 | Power Station    |
-/// | 11-15 | Sawmill          |
-/// | 16-23 | Oil Refinery     |
-/// | 24-28 | Forest           |
-/// | 29-32 | Printing Works   |
-/// | 33-38 | Oil Rig          |
-/// | 39-42 | Steel Mill       |
-/// | 43-46 | Factory          |
-/// | 47-51 | Oil Wells        |
-/// | 52-57 | Farm             |
-/// | 58-59 | Bank (Templado)  |
-pub const INDUSTRY_GFX_DATA: [IndustryGfxSprite; 60] = [
+/// |   gfx   | Industria               |
+/// |---------|-------------------------|
+/// |   0-  6 | Coal Mine               |
+/// |   7- 10 | Power Station           |
+/// |  11- 15 | Sawmill                 |
+/// |  16- 23 | Oil Refinery            |
+/// |  24- 28 | Forest                  |
+/// |  29- 32 | Printing Works          |
+/// |  33- 38 | Oil Rig                 |
+/// |  39- 42 | Steel Mill              |
+/// |  43- 46 | Factory                 |
+/// |  47- 51 | Oil Wells               |
+/// |  52- 57 | Farm                    |
+/// |  58- 59 | Bank (Templado)         |
+/// |  60- 71 | Copper Ore Mine         |
+/// |  72- 88 | (Plantaciones/otros)    |
+/// |  89- 90 | Gold Mine               |
+/// |  91- 99 | Iron Ore Mine           |
+/// | 100-119 | (Otros climas)          |
+pub const INDUSTRY_GFX_DATA: [IndustryGfxSprite; 120] = [
     // ── Coal Mine (gfx 0-6) ──────────────────────────────────────────────────
     // Valores exactos del NFO de OpenGFX.
     IndustryGfxSprite {
@@ -212,6 +217,76 @@ pub const INDUSTRY_GFX_DATA: [IndustryGfxSprite; 60] = [
     // ── Bank Templado (gfx 58-59) ────────────────────────────────────────────
     gfx_building(2180), // 58
     gfx_building(2181), // 59
+    // ── Copper Ore Mine (gfx 60-65) ──────────────────────────────────────────
+    // Sprites 0x88C-0x8A6 (2188-2214), 6 tiles
+    gfx_building(2190), // 60 → 0x88E
+    gfx_building(2193), // 61 → 0x891
+    gfx_building(2196), // 62 → 0x894
+    gfx_building(2199), // 63 → 0x897
+    gfx_building(2202), // 64 → 0x89A
+    gfx_building(2214), // 65 → 0x8A6 (suelo especial)
+    // ── Copper Ore Mine (gfx 66-71) continuación ─────────────────────────────
+    gfx_building(2205), // 66 → 0x89D
+    gfx_building(2206), // 67 → 0x89E
+    gfx_building(2208), // 68 → 0x8A0
+    gfx_building(2209), // 69 → 0x8A1
+    gfx_building(2212), // 70 → 0x8A4
+    gfx_building(2213), // 71 → 0x8A5
+    // ── Plantaciones/otros (gfx 72-88) ───────────────────────────────────────
+    // Mayoría ground-only; algunos tiles tienen edificios animados.
+    gfx_building(2247), // 72 → 0x8C7
+    gfx_ground(),       // 73
+    gfx_building(2249), // 74 → 0x8C9
+    gfx_building(2250), // 75 → 0x8CA
+    gfx_ground(),       // 76
+    gfx_ground(),       // 77
+    gfx_ground(),       // 78
+    gfx_building(2263), // 79 → 0x8D7
+    gfx_ground(),       // 80
+    gfx_ground(),       // 81
+    gfx_ground(),       // 82
+    gfx_ground(),       // 83
+    gfx_ground(),       // 84
+    gfx_ground(),       // 85
+    gfx_ground(),       // 86
+    gfx_ground(),       // 87
+    gfx_building(2265), // 88 → 0x8D9
+    // ── Gold Mine (gfx 89-90) ────────────────────────────────────────────────
+    gfx_building(2186), // 89 → 0x88A
+    gfx_building(2187), // 90 → 0x88B
+    // ── Iron Ore Mine (gfx 91-99) ────────────────────────────────────────────
+    // Sprites 0x8EC-0x8F4 (2284-2292)
+    gfx_building(2284), // 91 → 0x8EC
+    gfx_building(2285), // 92 → 0x8ED
+    gfx_building(2286), // 93 → 0x8EE
+    gfx_building(2287), // 94 → 0x8EF
+    gfx_ground(),       // 95
+    gfx_ground(),       // 96
+    gfx_building(2290), // 97 → 0x8F2
+    gfx_ground(),       // 98
+    gfx_ground(),       // 99
+    // ── Otros climas (gfx 100-119) ───────────────────────────────────────────
+    // Todos ground-only en este rango (plantaciones, fábricas trópico, etc.)
+    gfx_ground(),       // 100
+    gfx_ground(),       // 101
+    gfx_ground(),       // 102
+    gfx_ground(),       // 103
+    gfx_ground(),       // 104
+    gfx_ground(),       // 105
+    gfx_ground(),       // 106
+    gfx_ground(),       // 107
+    gfx_ground(),       // 108
+    gfx_ground(),       // 109
+    gfx_ground(),       // 110
+    gfx_ground(),       // 111
+    gfx_ground(),       // 112
+    gfx_ground(),       // 113
+    gfx_ground(),       // 114
+    gfx_ground(),       // 115
+    gfx_building(2342), // 116 → 0x926
+    gfx_building(2343), // 117 → 0x927
+    gfx_building(2349), // 118 → 0x92D
+    gfx_building(2352), // 119 → 0x930
 ];
 
 /// Devuelve los metadatos del sprite de industria para el gfx dado (byte m5).

@@ -294,31 +294,38 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
                 ));
             } else if kind == TileKind::Industry {
-                // Suelo de grass marrón (base para industrias)
+                // Tile base: con edificio→suelo marrón; sin edificio (campo/suelo)→grass
+                // para evitar el cuadrado negro en campos de Farm y tiles de suelo.
+                let gfx = tile.map_or(0, |t| t.m5);
+                let has_building = sprites::industry_sprite_for_gfx(gfx).is_some();
+                let (ground_img, ground_color) = if has_building {
+                    (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45))
+                } else {
+                    (h_grass.clone(), Color::WHITE)
+                };
                 commands.spawn((
                     Sprite {
-                        image: h_rough.clone(),
-                        color: Color::srgb(0.55, 0.50, 0.45),
+                        image: ground_img,
+                        color: ground_color,
                         ..default()
                     },
                     Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
                 ));
                 // Edificio de industria según gfx (m5)
-                let gfx = tile.map_or(0, |t| t.m5);
-                if let Some(s) = sprites::industry_sprite_for_gfx(gfx) {
-                    if let Some(img) = industry_tex.get(&s.sprite_id) {
-                        let pos3 = overlay_pos(
-                            p, s.xrel, s.yrel, s.w, s.h, height, 0.5, tx as i32, ty as i32,
-                        );
-                        commands.spawn((
-                            Sprite {
-                                image: img.clone(),
-                                color: Color::WHITE,
-                                ..default()
-                            },
-                            Transform::from_translation(pos3),
-                        ));
-                    }
+                if let Some(s) = sprites::industry_sprite_for_gfx(gfx)
+                    && let Some(img) = industry_tex.get(&s.sprite_id)
+                {
+                    let pos3 = overlay_pos(
+                        p, s.xrel, s.yrel, s.w, s.h, height, 0.5, tx as i32, ty as i32,
+                    );
+                    commands.spawn((
+                        Sprite {
+                            image: img.clone(),
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                        Transform::from_translation(pos3),
+                    ));
                 }
             } else {
                 let (image, color) = match kind {

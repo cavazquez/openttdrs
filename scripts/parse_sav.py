@@ -367,6 +367,9 @@ def main() -> None:
     # Dimensiones
     if 'MAPS' in chunks and isinstance(chunks['MAPS'], tuple):
         dim_x, dim_y = chunks['MAPS']
+    elif 'MAPS' in chunks and isinstance(chunks['MAPS'], (bytes, bytearray)) and len(chunks['MAPS']) >= 8:
+        # En saves más viejos MAPS puede venir como CH_RIFF de 8 bytes BE (dim_x, dim_y).
+        dim_x, dim_y = struct.unpack_from('>II', chunks['MAPS'], 0)
     elif 'MAPT' in chunks:
         mapt = chunks['MAPT']
         dims = infer_dimensions(len(mapt))

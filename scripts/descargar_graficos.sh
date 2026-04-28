@@ -42,10 +42,10 @@ TILES_DIR="${DEST}/tiles"
 if [[ ! -f "${SPRITES_DIR}/ogfx1_base00.png" && ! -f "${SPRITES_DIR}/ogfx1_base00.pcx" ]]; then
   if command -v grfcodec &>/dev/null; then
     echo ""
-    echo "Decodificando ogfx1_base.grf con grfcodec..."
+    echo "Decodificando ogfx1_base.grf con grfcodec (salida PNG)..."
     mkdir -p "${SPRITES_DIR}"
-    grfcodec -d -p 2 "${DEST}/opengfx-${VERSION}/ogfx1_base.grf" \
-      -o "${SPRITES_DIR}/" 2>/dev/null || true
+    grfcodec -d -o png -p 2 "${DEST}/opengfx-${VERSION}/ogfx1_base.grf" \
+      "${SPRITES_DIR}/" 2>/dev/null || true
   else
     echo ""
     echo "grfcodec no encontrado."
@@ -73,11 +73,26 @@ def load_sheet(png_path: Path) -> Image.Image:
         pal = img.getpalette()
         transparent_rgb = tuple(pal[0:3])
         img_rgba = img.convert("RGBA")
-        data = [(0, 0, 0, 0) if (r, g, b) == transparent_rgb else (r, g, b, a)
-                for r, g, b, a in img_rgba.getdata()]
+        data = []
+        for r, g, b, a in img_rgba.getdata():
+            # Transparencia por índice de paleta 0 y por colorkey magenta.
+            # Algunos pipelines de grfcodec dejan 240/0/240 u 241/0/241 como fondo.
+            if (r, g, b) == transparent_rgb or (g <= 1 and r >= 240 and b >= 240):
+                data.append((0, 0, 0, 0))
+            else:
+                data.append((r, g, b, a))
         img_rgba.putdata(data)
         return img_rgba
-    return img.convert("RGBA")
+    img_rgba = img.convert("RGBA")
+    # Fallback: también limpiar colorkey magenta en imágenes no palettizadas.
+    data = []
+    for r, g, b, a in img_rgba.getdata():
+        if g <= 1 and r >= 240 and b >= 240:
+            data.append((0, 0, 0, 0))
+        else:
+            data.append((r, g, b, a))
+    img_rgba.putdata(data)
+    return img_rgba
 
 # Cargar todos los sheets ogfx1_baseXX en PNG o PCX.
 sheets: dict[str, Image.Image] = {}

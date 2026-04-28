@@ -5,6 +5,7 @@ use openttdrs_core::{
     GameState, Industry, IndustryKind, Map, Station, TileCoord, TileKind, Vehicle, VehicleKind,
     find_path,
 };
+use std::collections::BTreeMap;
 
 /// Dimensiones del mapa generado proceduralmente (sin `OTTDMAP_FILE`).
 pub const MAP_W: u32 = 24;
@@ -27,7 +28,7 @@ impl Default for SimWorld {
                         info!("Mapa cargado desde {path}");
                         let mut state = GameState::from_map(map);
                         place_industries(&mut state, true);
-                        info!("Industrias detectadas: {}", state.industries.len());
+                        log_detection_summary(&state);
                         return Self {
                             state,
                             loaded_file: true,
@@ -44,10 +45,72 @@ impl Default for SimWorld {
         place_stations(&mut state);
         place_roads(&mut state);
         place_vehicles(&mut state);
+        log_detection_summary(&state);
         Self {
             state,
             loaded_file: false,
         }
+    }
+}
+
+fn log_detection_summary(state: &GameState) {
+    let (mw, mh) = state.map.dimensions();
+    info!("Resumen detección: mapa {mw}x{mh} ({} teselas)", mw * mh);
+
+    let mut tiles: BTreeMap<String, u32> = BTreeMap::new();
+    for y in 0..mh {
+        for x in 0..mw {
+            let c = TileCoord::new(x as i32, y as i32);
+            let Some(kind) = state.map.get_kind(c) else {
+                continue;
+            };
+            let key = match kind {
+                TileKind::Grass => "Grass".to_string(),
+                TileKind::Water => "Water".to_string(),
+                TileKind::Forest => "Forest".to_string(),
+                TileKind::CoalField => "CoalField".to_string(),
+                TileKind::Road => "Road".to_string(),
+                TileKind::Rail => "Rail".to_string(),
+                TileKind::House => "House".to_string(),
+                TileKind::Station => "Station".to_string(),
+                TileKind::Industry => "Industry".to_string(),
+                TileKind::Void => "Void".to_string(),
+                TileKind::Unknown(v) => format!("Unknown({v})"),
+            };
+            *tiles.entry(key).or_insert(0) += 1;
+        }
+    }
+
+    info!("Teselas detectadas por tipo:");
+    for (kind, count) in tiles {
+        info!("  - {kind}: {count}");
+    }
+
+    let mut industries: BTreeMap<&'static str, u32> = BTreeMap::new();
+    for ind in &state.industries {
+        let key = match ind.kind {
+            IndustryKind::CoalMine => "CoalMine",
+            IndustryKind::Forest => "Forest",
+        };
+        *industries.entry(key).or_insert(0) += 1;
+    }
+    info!("Industrias detectadas: {}", state.industries.len());
+    for (kind, count) in industries {
+        info!("  - Industria {kind}: {count}");
+    }
+
+    info!("Estaciones detectadas: {}", state.stations.len());
+
+    let mut vehicles: BTreeMap<&'static str, u32> = BTreeMap::new();
+    for v in &state.vehicles {
+        let key = match v.kind {
+            VehicleKind::Truck => "Truck",
+        };
+        *vehicles.entry(key).or_insert(0) += 1;
+    }
+    info!("Vehículos detectados: {}", state.vehicles.len());
+    for (kind, count) in vehicles {
+        info!("  - Vehículo {kind}: {count}");
     }
 }
 

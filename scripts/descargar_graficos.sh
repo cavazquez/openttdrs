@@ -39,7 +39,7 @@ fi
 SPRITES_DIR="${DEST}/opengfx-${VERSION}/sprites"
 TILES_DIR="${DEST}/tiles"
 
-if [[ ! -f "${SPRITES_DIR}/ogfx1_base00.png" ]]; then
+if [[ ! -f "${SPRITES_DIR}/ogfx1_base00.png" && ! -f "${SPRITES_DIR}/ogfx1_base00.pcx" ]]; then
   if command -v grfcodec &>/dev/null; then
     echo ""
     echo "Decodificando ogfx1_base.grf con grfcodec..."
@@ -48,11 +48,13 @@ if [[ ! -f "${SPRITES_DIR}/ogfx1_base00.png" ]]; then
       -o "${SPRITES_DIR}/" 2>/dev/null || true
   else
     echo ""
-    echo "grfcodec no encontrado; instalalo con: sudo apt install grfcodec"
+    echo "grfcodec no encontrado."
+    echo "Instalación recomendada (Ubuntu/Debian): sudo apt update && sudo apt install -y grfcodec"
+    echo "Alternativa: descargar binario/fuentes desde https://github.com/OpenTTD/grfcodec"
   fi
 fi
 
-if [[ -f "${SPRITES_DIR}/ogfx1_base00.png" ]]; then
+if [[ -f "${SPRITES_DIR}/ogfx1_base00.png" || -f "${SPRITES_DIR}/ogfx1_base00.pcx" ]]; then
   echo ""
   echo "Extrayendo sprites de tesela a ${TILES_DIR}/..."
   export SPRITES_DIR TILES_DIR
@@ -77,9 +79,11 @@ def load_sheet(png_path: Path) -> Image.Image:
         return img_rgba
     return img.convert("RGBA")
 
-# Cargar todos los sheets ogfx1_baseXX.png disponibles
+# Cargar todos los sheets ogfx1_baseXX en PNG o PCX.
 sheets: dict[str, Image.Image] = {}
 for p in sorted(sprites_dir.glob("ogfx1_base??.png")):
+    sheets[p.name] = load_sheet(p)
+for p in sorted(sprites_dir.glob("ogfx1_base??.pcx")):
     sheets[p.name] = load_sheet(p)
 
 # Parsear NFO para todos los sheets (ogfx1_base00, 01, ...)
@@ -87,17 +91,17 @@ nfo_path = sprites_dir / "ogfx1_base.nfo"
 sprite_rect: dict[int, tuple] = {}  # sid -> (x, y, w, h, xr, yr, sheet_name)
 if nfo_path.is_file():
     pat = re.compile(
-        r"^\s*(\d+)\s+sprites/(ogfx1_base\d+\.png)\s+8bpp\s+"
+        r"^\s*(\d+)\s+(\S*?(ogfx1_base\d+\.(?:png|pcx)))\s+8bpp\s+"
         r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
     )
     for line in nfo_path.read_text(errors="replace").splitlines():
         m = pat.match(line)
         if m:
             sid = int(m.group(1))
-            sheet = m.group(2)
-            sprite_rect[sid] = (int(m.group(3)), int(m.group(4)),
-                                 int(m.group(5)), int(m.group(6)),
-                                 int(m.group(7)), int(m.group(8)), sheet)
+            sheet = Path(m.group(2)).name
+            sprite_rect[sid] = (int(m.group(4)), int(m.group(5)),
+                                 int(m.group(6)), int(m.group(7)),
+                                 int(m.group(8)), int(m.group(9)), sheet)
 
 
 def crop_by_id(sid: int, out_name: str) -> None:
@@ -105,13 +109,21 @@ def crop_by_id(sid: int, out_name: str) -> None:
         print(f"  (omitido {out_name}: sprite {sid} no en NFO)")
         return
     x, y, w, h, xr, yr, sheet = sprite_rect[sid]
-    if sheet not in sheets:
-        print(f"  (omitido {out_name}: sheet {sheet} no encontrado)")
+    sheet_key = sheet
+    if sheet_key not in sheets:
+        # grfcodec suele generar PCX aunque el NFO refiera PNG.
+        alt = Path(sheet).with_suffix(".pcx").name
+        if alt in sheets:
+            sheet_key = alt
+        else:
+            print(f"  (omitido {out_name}: sheet {sheet} no encontrado)")
+            return
+    if sheet_key not in sheets:
         return
-    crop = sheets[sheet].crop((x, y, x + w, y + h))
+    crop = sheets[sheet_key].crop((x, y, x + w, y + h))
     out = tiles_dir / out_name
     crop.save(out)
-    print(f"  {out_name} ({w}×{h} xrel={xr} yrel={yr}) ← sprite {sid} [{sheet}]")
+    print(f"  {out_name} ({w}×{h} xrel={xr} yrel={yr}) ← sprite {sid} [{sheet_key}]")
 
 
 # =============================================================================
@@ -176,6 +188,12 @@ for sid in range(1005, 1011):
 # Vías combinadas (suelo + raíles)
 for sid in range(1011, 1023):
     crop_by_id(sid, f"rail_track_{sid - 1011}.png")
+# Alias usados por el cliente Bevy actual (rail_<sprite_id>.png)
+for sid in [1005, 1006, 1007, 1008, 1009, 1010,
+            1011, 1012, 1013, 1014, 1015, 1016,
+            1017, 1018, 1019, 1020, 1021, 1022,
+            1035, 1036]:
+    crop_by_id(sid, f"rail_{sid}.png")
 # Vías HORZ/VERT
 crop_by_id(1035, "rail_track_ns.png")
 crop_by_id(1036, "rail_track_ns_1.png")
@@ -241,6 +259,9 @@ for i, sid in enumerate([2704, 2705, 2706, 2707]):
 # Truck stops
 for i, sid in enumerate([2708, 2709, 2710, 2711]):
     crop_by_id(sid, f"truck_stop_{dirs[i]}_ground.png")
+# Alias de suelo usados por el cliente Bevy actual (0..3 = ne,se,sw,nw)
+for i, sid in enumerate([2708, 2709, 2710, 2711]):
+    crop_by_id(sid, f"truck_stop_ground_{i}.png")
 for i, sid in enumerate([2712, 2713, 2714, 2715]):
     crop_by_id(sid, f"truck_stop_{dirs[i]}_build_a.png")
 for i, sid in enumerate([2716, 2717, 2718, 2719]):
@@ -502,12 +523,14 @@ legacy = {
     "grass_rough": (562, 13640, 64, 31),
     "water":       (402, 14392, 64, 31),
     "truck":       (594, 12408,  8, 16),
+    # Fallback para el cliente actual (usa vehicle_bus_sw.png).
+    "vehicle_bus_sw": (594, 12408,  8, 16),
 }
 
-sheet00 = sheets.get("ogfx1_base00.png")
+sheet00 = sheets.get("ogfx1_base00.png") or sheets.get("ogfx1_base00.pcx")
 for name, (x, y, w, h) in legacy.items():
     if sheet00 is None:
-        print(f"  (omitido {name}: sheet ogfx1_base00.png no encontrado)")
+        print(f"  (omitido {name}: sheet ogfx1_base00.(png|pcx) no encontrado)")
         continue
     crop = sheet00.crop((x, y, x + w, y + h))
     crop.save(tiles_dir / f"{name}.png")
@@ -517,7 +540,10 @@ print(f"Sprites listos en {tiles_dir}/")
 PYEOF
 else
   echo ""
-  echo "Hoja de sprites no disponible; asegurate de tener grfcodec instalado."
+  echo "Hoja de sprites no disponible (faltan ${SPRITES_DIR}/ogfx1_base00.(png|pcx) y/o hojas relacionadas)."
+  echo "Para generarlas, instalá grfcodec y volvé a ejecutar este script:"
+  echo "  Ubuntu/Debian: sudo apt update && sudo apt install -y grfcodec"
+  echo "  Alternativa: https://github.com/OpenTTD/grfcodec"
   echo "Los sprites ya extraídos en ${TILES_DIR}/ se usarán si existen."
 fi
 

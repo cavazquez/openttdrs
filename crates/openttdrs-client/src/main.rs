@@ -18,6 +18,7 @@ mod state;
 mod ui;
 
 use std::collections::HashMap;
+use std::path::Path;
 
 use bevy::image::ImageSamplerDescriptor;
 use bevy::prelude::*;
@@ -42,11 +43,12 @@ const TRUCK_SCALE: f32 = 2.0;
 // ── Animación de agua ─────────────────────────────────────────────────────────
 
 /// Marca los tiles de agua para la animación por ondas.
-/// Almacena la fase aleatoria por tile para que cada tile se mueva
-/// de forma independiente, simulando olas.
+/// Almacena fases discretas por tile para emular el ciclado de paleta
+/// (dark water 5 pasos + glitter 15 pasos).
 #[derive(Component)]
 struct WaterTile {
-    phase: f32,
+    dark_phase: u8,
+    glitter_phase: u8,
 }
 
 // ── Dirección de vehículo ─────────────────────────────────────────────────────
@@ -104,6 +106,9 @@ struct VehicleSprite(u32);
 
 fn main() {
     let asset_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
+    if !check_required_assets(asset_root) {
+        return;
+    }
 
     App::new()
         .add_plugins(
@@ -146,6 +151,35 @@ fn main() {
                 .chain(),
         )
         .run();
+}
+
+fn check_required_assets(asset_root: &str) -> bool {
+    let tiles_dir = Path::new(asset_root).join("opengfx/tiles");
+    let required = [
+        tiles_dir.join("grass.png"),
+        tiles_dir.join("water.png"),
+        tiles_dir.join("vehicle_bus_sw.png"),
+    ];
+
+    let missing: Vec<String> = required
+        .iter()
+        .filter(|p| !p.is_file())
+        .map(|p| p.display().to_string())
+        .collect();
+
+    if missing.is_empty() {
+        return true;
+    }
+
+    eprintln!(
+        "No se encontraron assets OpenGFX requeridos. Faltan {} archivos.",
+        missing.len()
+    );
+    for path in &missing {
+        eprintln!("Archivo faltante: {path}");
+    }
+    eprintln!("Genera los assets con: ./scripts/descargar_graficos.sh");
+    false
 }
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
@@ -414,11 +448,16 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                 }
             } else {
                 if kind == TileKind::Water {
-                    // Fase aleatoria por tile para desfasar las olas entre vecinos
-                    let phase = wang_hash(tx, ty, 0xA9FE) as f32
-                        * (std::f32::consts::TAU / u32::MAX as f32);
+                    // Emula el patrón indexado de OpenTTD:
+                    // - dark water: 5 fases con gradiente espacial estable
+                    // - glitter: 15 fases pseudoaleatorias por tile
+                    let dark_phase = ((tx + 2 * ty).rem_euclid(5)) as u8;
+                    let glitter_phase = (wang_hash(tx, ty, 0xA9FE) % 15) as u8;
                     commands.spawn((
-                        WaterTile { phase },
+                        WaterTile {
+                            dark_phase,
+                            glitter_phase,
+                        },
                         Sprite {
                             image: h_water.clone(),
                             color: Color::WHITE,
@@ -650,21 +689,34 @@ fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
     }
 }
 
-/// Anima los tiles de agua con una onda senoidal desfasada por tile.
+/// Anima agua con ciclos discretos para aproximar la paleta animada de OpenTTD.
 ///
-/// El sprite de agua (OpenGFX 4061) ya tiene el color azul/textura de olas
-/// baked-in. Aquí solo modulamos el brillo levemente para simular el reflejo
-/// de luz en movimiento, sin teñir el color original del sprite.
+/// En OpenTTD clásico el agua se mueve ciclando índices de paleta:
+/// - dark water: ciclo de 5 entradas
+/// - glitter water: ciclo de 15 colores, muestreado de 3 en 3
+///
+/// Este cliente usa sprites RGBA (no indexados), por eso emulamos ese efecto
+/// modulando brillo/tinte en pasos discretos sincronizados.
 fn animate_water(time: Res<Time>, mut query: Query<(&WaterTile, &mut Sprite)>) {
-    let t = time.elapsed_secs();
+    const DARK_CYCLE: [f32; 5] = [0.92, 0.95, 0.98, 1.01, 1.04];
+    const GLITTER_CYCLE: [f32; 15] = [
+        0.00, 0.02, 0.05, 0.01, 0.03, 0.07, 0.02, 0.00, 0.04, 0.08, 0.03, 0.01, 0.06, 0.02, 0.00,
+    ];
+    // Paso base del ciclo dark (5 estados).
+    let dark_tick = ((time.elapsed_secs() * 3.0) as usize) % DARK_CYCLE.len();
+    // Glitter en 15 estados, avanzando de 3 en 3 (como DoPaletteAnimations).
+    let glitter_tick = (((time.elapsed_secs() * 3.0) as usize) * 3) % GLITTER_CYCLE.len();
+
     for (water, mut sprite) in &mut query {
-        // Onda lenta: reflejo suave de luz en la superficie
-        let wave = (t * 1.4 + water.phase).sin();
-        // Onda rápida superpuesta: efecto de pequeñas olas/rizado
-        let ripple = (t * 2.7 + water.phase * 1.3).sin() * 0.3;
-        // Amplitud pequeña (±5%) para no distorsionar el color original del sprite
-        let v = 0.95 + (wave + ripple) * 0.025;
-        sprite.color = Color::srgb(v, v, v);
+        let dark_idx = (dark_tick + water.dark_phase as usize) % DARK_CYCLE.len();
+        let glitter_idx = (glitter_tick + water.glitter_phase as usize) % GLITTER_CYCLE.len();
+        let dark = DARK_CYCLE[dark_idx];
+        let glitter = GLITTER_CYCLE[glitter_idx];
+
+        // Mantener amplitud baja para respetar el color original del sprite.
+        let v = (dark + glitter * 0.40).clamp(0.88, 1.08);
+        // Leve sesgo a azul para recordar el tono del agua original.
+        sprite.color = Color::srgb(v * 0.95, v * 0.99, v * 1.03);
     }
 }
 

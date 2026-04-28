@@ -57,14 +57,15 @@ if [[ -f "${SPRITES_DIR}/ogfx1_base00.png" ]]; then
   echo "Extrayendo sprites de tesela a ${TILES_DIR}/..."
   export SPRITES_DIR TILES_DIR
   python3 - <<'PYEOF'
-import sys, os
+import os, re
+from pathlib import Path
 from PIL import Image
 
-sprites_dir = os.environ["SPRITES_DIR"]
-tiles_dir   = os.environ["TILES_DIR"]
-os.makedirs(tiles_dir, exist_ok=True)
+sprites_dir = Path(os.environ["SPRITES_DIR"])
+tiles_dir   = Path(os.environ["TILES_DIR"])
+tiles_dir.mkdir(parents=True, exist_ok=True)
 
-src = os.path.join(sprites_dir, "ogfx1_base00.png")
+src = sprites_dir / "ogfx1_base00.png"
 img = Image.open(src)
 
 if img.mode == "P":
@@ -72,26 +73,353 @@ if img.mode == "P":
     transparent_rgb = tuple(pal[0:3])
     img_rgba = img.convert("RGBA")
     data = list(img_rgba.getdata())
-    data = [(0,0,0,0) if (r,g,b)==transparent_rgb else (r,g,b,a)
-            for r,g,b,a in data]
+    data = [(0, 0, 0, 0) if (r, g, b) == transparent_rgb else (r, g, b, a)
+            for r, g, b, a in data]
     img_rgba.putdata(data)
 else:
     img_rgba = img.convert("RGBA")
 
-sprites = {
+nfo_path = sprites_dir / "ogfx1_base.nfo"
+sprite_rect = {}
+if nfo_path.is_file():
+    pat = re.compile(
+        r"^\s*(\d+)\s+sprites/ogfx1_base00\.png\s+8bpp\s+"
+        r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
+    )
+    for line in nfo_path.read_text(errors="replace").splitlines():
+        m = pat.match(line)
+        if m:
+            sid = int(m.group(1))
+            sprite_rect[sid] = tuple(int(m.group(i)) for i in range(2, 8))
+
+
+def crop_by_id(sid: int, out_name: str) -> None:
+    if sid not in sprite_rect:
+        print(f"  (omitido {out_name}: sprite {sid} no en NFO)")
+        return
+    x, y, w, h, _xr, _yr = sprite_rect[sid]
+    crop = img_rgba.crop((x, y, x + w, y + h))
+    out = tiles_dir / out_name
+    crop.save(out)
+    print(f"  {out_name} ({w}×{h}) ← sprite {sid}")
+
+
+# =============================================================================
+# TERRENO BASE (MP_CLEAR)
+# =============================================================================
+crop_by_id(3924, "terrain_bare.png")           # SPR_FLAT_BARE_LAND
+crop_by_id(3943, "terrain_grass_1_3.png")      # SPR_FLAT_1_THIRD_GRASS_TILE
+crop_by_id(3962, "terrain_grass_2_3.png")      # SPR_FLAT_2_THIRD_GRASS_TILE
+crop_by_id(3981, "terrain_grass.png")          # SPR_FLAT_GRASS_TILE
+crop_by_id(4000, "terrain_rough.png")          # SPR_FLAT_ROUGH_LAND
+for i, sid in enumerate([4019, 4020, 4021, 4022]):
+    crop_by_id(sid, f"terrain_rough_{i+1}.png")
+crop_by_id(4023, "terrain_rocky_1.png")        # SPR_FLAT_ROCKY_LAND_1
+crop_by_id(4042, "terrain_rocky_2.png")        # SPR_FLAT_ROCKY_LAND_2
+# Nieve/desierto
+crop_by_id(4493, "terrain_snow_1_4.png")
+crop_by_id(4512, "terrain_snow_2_4.png")
+crop_by_id(4531, "terrain_snow_3_4.png")
+crop_by_id(4550, "terrain_snow_full.png")
+
+# =============================================================================
+# AGUA (MP_WATER)
+# =============================================================================
+crop_by_id(4061, "water_flat.png")             # SPR_FLAT_WATER_TILE
+# Costas originales (4062-4069)
+for i, sid in enumerate(range(4062, 4070)):
+    crop_by_id(sid, f"shore_{i}.png")
+# Ship depot
+crop_by_id(4070, "ship_depot_se_front.png")
+crop_by_id(4071, "ship_depot_sw_front.png")
+crop_by_id(4072, "ship_depot_nw.png")
+crop_by_id(4073, "ship_depot_ne.png")
+crop_by_id(4074, "ship_depot_se_rear.png")
+crop_by_id(4075, "ship_depot_sw_rear.png")
+crop_by_id(4076, "buoy.png")
+
+# =============================================================================
+# CARRETERAS (MP_ROAD)
+# =============================================================================
+# Carretera plana: SPR_ROAD_Y (1332) + offset → 19 variantes
+for sid in range(1332, 1351):
+    crop_by_id(sid, f"road_flat_{sid - 1332:02d}.png")
+# Carretera con nieve
+crop_by_id(1351, "road_y_snow.png")
+crop_by_id(1352, "road_x_snow.png")
+# Depósito de carretera (4 direcciones)
+for i, sid in enumerate(range(1408, 1412)):
+    crop_by_id(sid, f"road_depot_{i}.png")
+
+# =============================================================================
+# VÍAS FÉRREAS (MP_RAILWAY)
+# =============================================================================
+# Piezas sueltas para overlays en junctions
+for sid in range(1005, 1011):
+    crop_by_id(sid, f"rail_single_{sid - 1005}.png")
+# Vías combinadas (suelo + raíles)
+for sid in range(1011, 1023):
+    crop_by_id(sid, f"rail_track_{sid - 1011}.png")
+# Vías HORZ/VERT
+crop_by_id(1035, "rail_track_ns.png")
+crop_by_id(1036, "rail_track_ns_1.png")
+# Nieve
+crop_by_id(1037, "rail_track_y_snow.png")
+crop_by_id(1038, "rail_track_x_snow.png")
+# Depósitos de tren
+crop_by_id(1063, "rail_depot_se_1.png")
+crop_by_id(1064, "rail_depot_se_2.png")
+crop_by_id(1065, "rail_depot_sw_1.png")
+crop_by_id(1066, "rail_depot_sw_2.png")
+crop_by_id(1067, "rail_depot_ne.png")
+crop_by_id(1068, "rail_depot_nw.png")
+# Estaciones de tren: plataformas
+crop_by_id(1069, "rail_platform_y_front.png")
+crop_by_id(1070, "rail_platform_x_rear.png")
+crop_by_id(1071, "rail_platform_y_rear.png")
+crop_by_id(1072, "rail_platform_x_front.png")
+crop_by_id(1073, "rail_platform_building_x.png")
+crop_by_id(1074, "rail_platform_building_y.png")
+crop_by_id(1075, "rail_platform_pillars_y_front.png")
+crop_by_id(1076, "rail_platform_pillars_x_rear.png")
+crop_by_id(1077, "rail_platform_pillars_y_rear.png")
+crop_by_id(1078, "rail_platform_pillars_x_front.png")
+# Techos
+for sid in range(1079, 1087):
+    crop_by_id(sid, f"rail_roof_{sid - 1079}.png")
+# Monorraíl
+for sid in range(1087, 1093):
+    crop_by_id(sid, f"mono_single_{sid - 1087}.png")
+crop_by_id(1093, "mono_track_y.png")
+crop_by_id(1094, "mono_track_x.png")
+for sid in range(1100, 1118):
+    crop_by_id(sid, f"mono_track_{sid - 1100}.png")
+# Maglev
+for sid in range(1169, 1175):
+    crop_by_id(sid, f"mglv_single_{sid - 1169}.png")
+crop_by_id(1175, "mglv_track_y.png")
+crop_by_id(1176, "mglv_track_x.png")
+for sid in range(1182, 1200):
+    crop_by_id(sid, f"mglv_track_{sid - 1182}.png")
+# Vallas de vía
+for sid in range(1301, 1309):
+    crop_by_id(sid, f"track_fence_{sid - 1301}.png")
+# Cruces a nivel
+crop_by_id(1370, "crossing_rail_x.png")
+crop_by_id(1382, "crossing_mono_x.png")
+crop_by_id(1394, "crossing_mglv_x.png")
+
+# =============================================================================
+# PARADAS DE CARRETERA (BUS/TRUCK)
+# =============================================================================
+dirs = ["ne", "se", "sw", "nw"]
+# Bus stops
+for i, sid in enumerate([2692, 2693, 2694, 2695]):
+    crop_by_id(sid, f"bus_stop_{dirs[i]}_ground.png")
+for i, sid in enumerate([2696, 2697, 2698, 2699]):
+    crop_by_id(sid, f"bus_stop_{dirs[i]}_build_a.png")
+for i, sid in enumerate([2700, 2701, 2702, 2703]):
+    crop_by_id(sid, f"bus_stop_{dirs[i]}_build_b.png")
+for i, sid in enumerate([2704, 2705, 2706, 2707]):
+    crop_by_id(sid, f"bus_stop_{dirs[i]}_build_c.png")
+# Truck stops
+for i, sid in enumerate([2708, 2709, 2710, 2711]):
+    crop_by_id(sid, f"truck_stop_{dirs[i]}_ground.png")
+for i, sid in enumerate([2712, 2713, 2714, 2715]):
+    crop_by_id(sid, f"truck_stop_{dirs[i]}_build_a.png")
+for i, sid in enumerate([2716, 2717, 2718, 2719]):
+    crop_by_id(sid, f"truck_stop_{dirs[i]}_build_b.png")
+for i, sid in enumerate([2720, 2721, 2722, 2723]):
+    crop_by_id(sid, f"truck_stop_{dirs[i]}_build_c.png")
+
+# =============================================================================
+# CASAS URBANAS (MP_HOUSE)
+# =============================================================================
+# Tall Office
+crop_by_id(1421, "house_talloffice_cnst1.png")
+crop_by_id(1422, "house_talloffice_cnst2.png")
+crop_by_id(1423, "house_talloffice_cnst3.png")
+crop_by_id(1424, "house_talloffice_ground.png")
+crop_by_id(1425, "house_talloffice_build.png")
+# Office 01
+crop_by_id(1426, "house_office01_cnst1.png")
+crop_by_id(1427, "house_office01_cnst2.png")
+crop_by_id(1428, "house_office01_build.png")
+crop_by_id(1429, "house_office01_ground.png")
+# Small Block Flats
+crop_by_id(1430, "house_smlflats_cnst1.png")
+crop_by_id(1431, "house_smlflats_cnst2.png")
+crop_by_id(1432, "house_smlflats_build.png")
+crop_by_id(1433, "house_smlflats_ground.png")
+# Church
+crop_by_id(1434, "house_church_cnst1.png")
+crop_by_id(1435, "house_church_cnst2.png")
+crop_by_id(1436, "house_church_build.png")
+crop_by_id(1437, "house_church_ground.png")
+# Large Office
+crop_by_id(1440, "house_largeoffice_cnst1.png")
+crop_by_id(1441, "house_largeoffice_cnst2.png")
+crop_by_id(1442, "house_largeoffice_build.png")
+# Lift (ascensor animado)
+crop_by_id(1443, "house_lift.png")
+# Townhouse V1
+crop_by_id(1444, "house_townhouse_v1_cnst1.png")
+crop_by_id(1445, "house_townhouse_v1_cnst2.png")
+crop_by_id(1446, "house_townhouse_v1_build.png")
+crop_by_id(1447, "house_townhouse_v1_ground.png")
+# Hotel
+crop_by_id(1448, "house_hotel_nw_cnst1.png")
+crop_by_id(1449, "house_hotel_nw_cnst2.png")
+crop_by_id(1450, "house_hotel_nw_build.png")
+crop_by_id(1451, "house_hotel_se_cnst1.png")
+crop_by_id(1452, "house_hotel_se_cnst2.png")
+crop_by_id(1453, "house_hotel_se_build.png")
+# Decorativos
+crop_by_id(1454, "house_statue_horse.png")
+crop_by_id(1455, "house_fountain.png")
+crop_by_id(1456, "house_parkstatue.png")
+crop_by_id(1457, "house_parkalley.png")
+# Shop/Office
+crop_by_id(1458, "house_office0d_cnst1.png")
+crop_by_id(1459, "house_office0d_cnst2.png")
+crop_by_id(1460, "house_office0d_build.png")
+crop_by_id(1461, "house_shopoffice0e_cnst1.png")
+crop_by_id(1462, "house_shopoffice0e_cnst2.png")
+crop_by_id(1463, "house_shopoffice0e_build.png")
+crop_by_id(1464, "house_shopoffice0f_cnst1.png")
+crop_by_id(1465, "house_shopoffice0f_cnst2.png")
+crop_by_id(1466, "house_shopoffice0f_build.png")
+# Stadium
+crop_by_id(1479, "house_stadium_n.png")
+crop_by_id(1480, "house_stadium_e.png")
+crop_by_id(1481, "house_stadium_w.png")
+crop_by_id(1482, "house_stadium_s.png")
+# Townhouse V2
+crop_by_id(1501, "house_townhouse_v2_cnst1.png")
+crop_by_id(1502, "house_townhouse_v2_pipes.png")
+crop_by_id(1503, "house_townhouse_v2_cnst2_g.png")
+crop_by_id(1504, "house_townhouse_v2_cnst2.png")
+crop_by_id(1505, "house_townhouse_v2_ground.png")
+crop_by_id(1506, "house_townhouse_v2_build.png")
+
+# =============================================================================
+# ÁRBOLES (MP_TREES)
+# =============================================================================
+# Templado (muestras de diferentes tipos y etapas)
+tree_ids = [
+    1576, 1577, 1578, 1579, 1580, 1581, 1582, 1583,  # Tipo 1
+    1584, 1585, 1586, 1587, 1588, 1589,              # Tipo 2
+    1590, 1591, 1592, 1593, 1594, 1595, 1596,        # Tipo 3
+    1597, 1598, 1599, 1600, 1601, 1602, 1603,        # Tipo 4
+    1604, 1605, 1606, 1607, 1608, 1609, 1610,        # Tipo 5
+    1611, 1612, 1613, 1614, 1615, 1616, 1617,        # Tipo 6
+]
+for i, sid in enumerate(tree_ids):
+    crop_by_id(sid, f"tree_{i:02d}.png")
+
+# =============================================================================
+# INDUSTRIAS
+# =============================================================================
+crop_by_id(2013, "industry_coalmine_hq.png")
+crop_by_id(2011, "industry_coalmine_entry.png")
+crop_by_id(2028, "industry_coalmine_tower.png")
+crop_by_id(2054, "industry_powerplant_transformers.png")
+
+# =============================================================================
+# AEROPUERTOS
+# =============================================================================
+crop_by_id(2633, "airport_heliport.png")
+crop_by_id(2634, "airport_apron.png")
+crop_by_id(2635, "airport_stand.png")
+for i, sid in enumerate(range(2636, 2645)):
+    crop_by_id(sid, f"airport_taxiway_{i}.png")
+for i, sid in enumerate(range(2645, 2650)):
+    crop_by_id(sid, f"airport_runway_{i}.png")
+crop_by_id(2650, "airport_terminal_a.png")
+crop_by_id(2651, "airport_tower.png")
+crop_by_id(2652, "airport_concourse.png")
+crop_by_id(2653, "airport_terminal_b.png")
+crop_by_id(2654, "airport_terminal_c.png")
+crop_by_id(2655, "airport_hangar_front.png")
+crop_by_id(2656, "airport_hangar_rear.png")
+crop_by_id(2657, "airfield_hangar_front.png")
+crop_by_id(2658, "airfield_hangar_rear.png")
+# Radar (animado, 12 frames)
+for i, sid in enumerate(range(2680, 2692)):
+    crop_by_id(sid, f"airport_radar_{i:02d}.png")
+
+# =============================================================================
+# MUELLES
+# =============================================================================
+crop_by_id(2727, "dock_slope_ne.png")
+crop_by_id(2728, "dock_slope_se.png")
+crop_by_id(2729, "dock_slope_sw.png")
+crop_by_id(2730, "dock_slope_nw.png")
+crop_by_id(2731, "dock_flat_x.png")
+crop_by_id(2732, "dock_flat_y.png")
+
+# =============================================================================
+# TÚNELES Y PUENTES
+# =============================================================================
+crop_by_id(2365, "tunnel_rail_rear.png")
+crop_by_id(2373, "tunnel_mono_rear.png")
+crop_by_id(2381, "tunnel_mglv_rear.png")
+crop_by_id(2389, "tunnel_road_rear.png")
+# Puente de madera
+crop_by_id(2545, "bridge_wood_rail_y.png")
+crop_by_id(2546, "bridge_wood_rail_x.png")
+crop_by_id(2547, "bridge_wood_road_y.png")
+crop_by_id(2548, "bridge_wood_road_x.png")
+crop_by_id(2549, "bridge_wood_y_front.png")
+crop_by_id(2550, "bridge_wood_x_front.png")
+crop_by_id(2551, "bridge_wood_y_pillar.png")
+crop_by_id(2552, "bridge_wood_x_pillar.png")
+
+# =============================================================================
+# OBJETOS ESPECIALES
+# =============================================================================
+crop_by_id(2601, "object_transmitter.png")
+crop_by_id(2602, "object_lighthouse.png")
+# HQ Tiny
+for i, sid in enumerate(range(2603, 2607)):
+    crop_by_id(sid, f"hq_tiny_{i}.png")
+# HQ Small
+for i, sid in enumerate(range(2607, 2611)):
+    crop_by_id(sid, f"hq_small_{i}.png")
+# HQ Medium
+for i, sid in enumerate(range(2611, 2618)):
+    crop_by_id(sid, f"hq_medium_{i}.png")
+# HQ Large
+for i, sid in enumerate(range(2618, 2625)):
+    crop_by_id(sid, f"hq_large_{i}.png")
+# HQ Huge
+for i, sid in enumerate(range(2625, 2632)):
+    crop_by_id(sid, f"hq_huge_{i}.png")
+crop_by_id(2632, "object_statue_company.png")
+crop_by_id(1420, "object_concrete.png")
+crop_by_id(4790, "object_bought_land.png")
+
+# =============================================================================
+# VEHÍCULOS (muestras para debug/overlay)
+# =============================================================================
+# Camiones básicos - usaremos coords fijas o buscar IDs específicos
+# Los vehículos están en rangos complejos, por ahora solo algunos ejemplos
+crop_by_id(3097, "vehicle_bus_sw.png")
+crop_by_id(3098, "vehicle_bus_side.png")
+
+# =============================================================================
+# LEGACY (coords fijas para compatibilidad con código existente)
+# =============================================================================
+legacy = {
     "grass":       (610, 13496, 64, 31),
     "grass_rough": (562, 13640, 64, 31),
     "water":       (402, 14392, 64, 31),
-    "road_x":      (322,  3912, 64, 31),
-    "road_y":      (402,  3912, 64, 31),
-    "coal_mine":   (322,  8136, 29, 43),
     "truck":       (594, 12408,  8, 16),
 }
 
-for name, (x, y, w, h) in sprites.items():
-    crop = img_rgba.crop((x, y, x+w, y+h))
-    out  = os.path.join(tiles_dir, f"{name}.png")
-    crop.save(out)
+for name, (x, y, w, h) in legacy.items():
+    crop = img_rgba.crop((x, y, x + w, y + h))
+    crop.save(tiles_dir / f"{name}.png")
     print(f"  {name}.png ({w}×{h})")
 
 print(f"Sprites listos en {tiles_dir}/")

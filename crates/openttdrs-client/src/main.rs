@@ -30,6 +30,9 @@ const ISO_HW: f32 = 32.0;
 const ISO_QH: f32 = 16.0;
 /// Factor de escala para los sprites de camiones (son 20×14 px nativo).
 const TRUCK_SCALE: f32 = 2.0;
+/// Píxeles de elevación en Y por cada unidad de altura de OpenTTD.
+/// En el juego original, 1 unidad = 8 px de pantalla.
+const HEIGHT_PX: f32 = 8.0;
 
 // ── Utilidades de proyección ──────────────────────────────────────────────────
 
@@ -44,16 +47,17 @@ fn iso(tx: i32, ty: i32) -> Vec2 {
 /// La mitad de la altura de los sprites de tesela (64×31 → 15.5 px).
 const TILE_HALF_H: f32 = 15.5;
 
-/// Vec3 para teselas de suelo (painter's algorithm: mayor tx+ty = al frente).
+/// Vec3 para teselas de suelo con soporte de altura isométrica.
 ///
-/// Equivalente a Anchor::TopCenter: posiciona el centro del sprite 15.5 px por debajo
-/// del vértice superior del rombo, que es la convención de referencia de OpenTTD.
-fn tile_pos(tx: i32, ty: i32, layer: f32) -> Vec3 {
+/// `height` (unidades OpenTTD) desplaza la tesela hacia arriba en Y para simular
+/// el relieve del terreno sin necesidad de sprites de pendiente.
+fn tile_pos(tx: i32, ty: i32, height: u8, layer: f32) -> Vec3 {
     let p = iso(tx, ty);
+    let elev = f32::from(height) * HEIGHT_PX;
     Vec3::new(
         p.x,
-        p.y - TILE_HALF_H,
-        (tx + ty) as f32 * 0.01 + layer,
+        p.y - TILE_HALF_H + elev,
+        (tx + ty) as f32 * 0.01 + f32::from(height) * 0.001 + layer,
     )
 }
 
@@ -62,11 +66,16 @@ fn tile_pos(tx: i32, ty: i32, layer: f32) -> Vec3 {
 /// - `ref_pos`: vértice superior del rombo de la tesela (salida de `iso()`).
 /// - `xrel`, `yrel`: offsets del NFO (en coords pantalla Y-down).
 /// - `w`, `h`: dimensiones del sprite en píxeles.
-fn overlay_pos(ref_pos: Vec2, xrel: f32, yrel: f32, w: f32, h: f32, layer: f32, tx: i32, ty: i32) -> Vec3 {
+/// - `height`: elevación de la tesela (OpenTTD units).
+fn overlay_pos(
+    ref_pos: Vec2, xrel: f32, yrel: f32, w: f32, h: f32,
+    height: u8, layer: f32, tx: i32, ty: i32,
+) -> Vec3 {
+    let elev = f32::from(height) * HEIGHT_PX;
     Vec3::new(
         ref_pos.x + xrel + w / 2.0,
-        ref_pos.y - yrel - h / 2.0,
-        (tx + ty) as f32 * 0.01 + layer,
+        ref_pos.y - yrel - h / 2.0 + elev,
+        (tx + ty) as f32 * 0.01 + f32::from(height) * 0.001 + layer,
     )
 }
 
@@ -87,21 +96,49 @@ fn gizmo_diamond(gizmos: &mut Gizmos, center: Vec2, hw: f32, hh: f32, color: Col
 /// Dirección predominante de un tramo de carretera.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum RoadDir {
-    /// Conecta en la dirección tx (±1, 0) → sprite NE-SW.
+    /// Conecta en la dirección tx (±1, 0) → sprite NE-SW (ROAD_X en OpenTTD).
     Tx,
-    /// Conecta en la dirección ty (0, ±1) → sprite NW-SE.
+    /// Conecta en la dirección ty (0, ±1) → sprite NW-SE (ROAD_Y en OpenTTD).
     Ty,
     /// Conecta en ambas → cruce o esquina.
     Both,
 }
 
-/// Detecta la dirección de una tesela de carretera mirando sus vecinas.
+/// Detecta la dirección de una tesela de carretera.
+///
+/// Prioridad: si el byte m5 del tile contiene road bits, se usan directamente
+/// (lectura del savegame real). Si m5==0 (mapa generado), se consultan los vecinos.
+///
+/// Road bits en m5 (bits 0-3, MP_ROAD normal, bits 6-7 = 0):
+///   bit 0 = NW,  bit 1 = SW,  bit 2 = SE,  bit 3 = NE
+///   ROAD_X (tx)  = SW+NE = 0b1010 = 0xA
+///   ROAD_Y (ty)  = NW+SE = 0b0101 = 0x5
 fn road_dir(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> RoadDir {
+    // Obtener el tile y su m5
+    let tile = map.get(pos);
+    let m5 = tile.map(|t| t.m5).unwrap_or(0);
+
+    // Si es una carretera normal (m5 bits 6-7 = 0) con road bits reales, usarlos.
+    let road_tile_type = (m5 >> 6) & 0x3;
+    if road_tile_type == 0 {
+        let road_bits = m5 & 0x0F;
+        if road_bits != 0 {
+            let has_tx = (road_bits & 0x0A) != 0; // SW(bit1) o NE(bit3) → eje tx
+            let has_ty = (road_bits & 0x05) != 0; // NW(bit0) o SE(bit2) → eje ty
+            return match (has_tx, has_ty) {
+                (true, false) => RoadDir::Tx,
+                (false, true) => RoadDir::Ty,
+                _ => RoadDir::Both,
+            };
+        }
+    }
+
+    // Fallback: detectar por vecinos (mapas generados proceduralmente).
     let is_road = |c: TileCoord| -> bool {
         if c.x < 0 || c.y < 0 || c.x >= mw as i32 || c.y >= mh as i32 {
             return false;
         }
-        matches!(map.get_kind(c), Some(TileKind::Road | TileKind::Rail))
+        matches!(map.get_kind(c), Some(TileKind::Road | TileKind::Rail | TileKind::Station))
     };
     let has_tx = is_road(TileCoord::new(pos.x - 1, pos.y))
         || is_road(TileCoord::new(pos.x + 1, pos.y));
@@ -428,7 +465,9 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     for ty in 0..mh {
         for tx in 0..mw {
             let c = TileCoord::new(tx as i32, ty as i32);
-            let kind = sim.state.map.get_kind(c).unwrap_or(TileKind::Grass);
+            let tile = sim.state.map.get(c);
+            let kind    = tile.map(|t| t.kind).unwrap_or(TileKind::Grass);
+            let height  = tile.map(|t| t.height).unwrap_or(0);
             let p = iso(tx as i32, ty as i32);
 
             // Void: borde del mapa, no renderizar
@@ -462,21 +501,19 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
 
             commands.spawn((
                 Sprite { image, color, ..default() },
-                Transform::from_translation(tile_pos(tx as i32, ty as i32, 0.0)),
+                Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
             ));
 
             // ── Árbol sobre teselas Forest ────────────────────────────────────
-            // 1 árbol cuya variante y pequeño offset X se derivan del hash de la posición.
             if kind == TileKind::Forest {
                 let h = wang_hash(tx, ty, 0xCAFE);
                 let tree_idx = (h % 3) as usize;
-                // Offset X determinista dentro del rombo (±8 px máx).
                 let ox = ((h >> 2) % 17) as f32 - 8.0;
                 // NFO: tree_1-3 → xrel=-19 yrel=-36 w=35 h=43
                 let pos3 = overlay_pos(
                     Vec2::new(p.x + ox, p.y),
                     -19.0, -36.0, 35.0, 43.0,
-                    0.3,
+                    height, 0.3,
                     tx as i32, ty as i32,
                 );
                 commands.spawn((
@@ -490,9 +527,11 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     // ── Edificios de industrias ───────────────────────────────────────────────
     for industry in &sim.state.industries {
         if industry.kind == IndustryKind::CoalMine {
-            let p = iso(industry.pos.x, industry.pos.y);
+            let pos = industry.pos;
+            let h = sim.state.map.get(pos).map(|t| t.height).unwrap_or(0);
+            let p = iso(pos.x, pos.y);
             // sid=2013: headframe de la Coal Mine, 58×50, xrel=-16, yrel=-33
-            let pos3 = overlay_pos(p, -16.0, -33.0, 58.0, 50.0, 0.6, industry.pos.x, industry.pos.y);
+            let pos3 = overlay_pos(p, -16.0, -33.0, 58.0, 50.0, h, 0.6, pos.x, pos.y);
             commands.spawn((
                 Sprite { image: h_coal.clone(), ..default() },
                 Transform::from_translation(pos3),
@@ -506,9 +545,10 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     // Por ahora cargamos el handle NE como placeholder; update_vehicles lo corrige en el primer frame.
     let h_truck_ne_init = asset_server.load::<Image>("opengfx/tiles/truck_ne.png");
     for vehicle in &sim.state.vehicles {
+        let vh = sim.state.map.get(vehicle.pos).map(|t| t.height).unwrap_or(0);
         let p = iso(vehicle.pos.x, vehicle.pos.y);
         // NFO truck_ne: xrel=-14 yrel=-5 w=20 h=14
-        let pos3 = overlay_pos(p, -14.0, -5.0, 20.0, 14.0, 1.0, vehicle.pos.x, vehicle.pos.y);
+        let pos3 = overlay_pos(p, -14.0, -5.0, 20.0, 14.0, vh, 1.0, vehicle.pos.x, vehicle.pos.y);
         commands.spawn((
             VehicleSprite(vehicle.id),
             Sprite {
@@ -549,6 +589,7 @@ fn update_vehicles(
             continue;
         };
         let dir = vehicle_dir(v);
+        let vh = sim.state.map.get(v.pos).map(|t| t.height).unwrap_or(0);
         let p = iso(v.pos.x, v.pos.y);
 
         // Offset según dirección (xrel/yrel del NFO para cada vista del camión).
@@ -558,7 +599,7 @@ fn update_vehicles(
             VehicleDir::Sw => (-14.0, -6.0, 20.0, 15.0),
             VehicleDir::Nw => (-6.0, -5.0, 20.0, 14.0),
         };
-        let pos3 = overlay_pos(p, xrel, yrel, w, h, 1.0, v.pos.x, v.pos.y);
+        let pos3 = overlay_pos(p, xrel, yrel, w, h, vh, 1.0, v.pos.x, v.pos.y);
         transform.translation = pos3;
         sprite.image = trucks.for_dir(dir);
     }

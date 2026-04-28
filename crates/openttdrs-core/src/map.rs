@@ -32,11 +32,17 @@ pub enum TileKind {
     Unknown(u8), // cualquier tipo no mapeado (raw nibble alto de tile_type)
 }
 
-/// Una tesela con altura base y tipo semántico.
+/// Una tesela con altura base, tipo semántico y byte auxiliar m5 de OpenTTD.
+///
+/// `m5` almacena el byte m5 del savegame original:
+/// - Para `Road`: bits 0-3 = road bits (NW=1, SW=2, SE=4, NE=8), bits 6-7 = sub-tipo.
+/// - Para `Rail`: bits 0-3 = trackbits.
+/// - En mapas generados (no cargados desde .sav) vale 0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tile {
     pub height: u8,
     pub kind: TileKind,
+    pub m5: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,7 +71,7 @@ impl Map {
         Self {
             width,
             height,
-            tiles: vec![Tile { height: level, kind: TileKind::Grass }; count],
+            tiles: vec![Tile { height: level, kind: TileKind::Grass, m5: 0 }; count],
         }
     }
 
@@ -183,7 +189,7 @@ impl Map {
                 t  => TileKind::Unknown(t),
             };
 
-            tiles.push(Tile { height: heights[i], kind });
+            tiles.push(Tile { height: heights[i], kind, m5 });
         }
 
         Ok(Self { width, height, tiles })

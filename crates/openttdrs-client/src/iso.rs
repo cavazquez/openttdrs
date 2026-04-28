@@ -123,15 +123,8 @@ pub const SLOPE_HALF_H: [f32; 15] = [
 ///    heast → SLOPE_E (4); hsouth → SLOPE_S (2)
 /// ```
 ///
-/// El resultado está limitado a 0–14 (pendientes simples; las empinadas (15)
-/// requieren sprites especiales y se omiten por ahora).
-#[must_use]
-pub fn compute_tileh(map: &Map, tx: u32, ty: u32) -> u8 {
-    let get_h = |dtx: i32, dty: i32| map.get(TileCoord::new(dtx, dty)).map_or(0, |t| t.height);
-    let hnorth = get_h(tx as i32, ty as i32);
-    let hwest = get_h(tx as i32 + 1, ty as i32);
-    let heast = get_h(tx as i32, ty as i32 + 1);
-    let hsouth = get_h(tx as i32 + 1, ty as i32 + 1);
+#[inline]
+fn slope_bits_from_corner_vals(hnorth: u8, hwest: u8, heast: u8, hsouth: u8) -> (u8, u8) {
     let min_h = hnorth.min(hwest).min(heast).min(hsouth);
     let mut tileh: u8 = 0;
     if hwest > min_h {
@@ -146,7 +139,152 @@ pub fn compute_tileh(map: &Map, tx: u32, ty: u32) -> u8 {
     if hnorth > min_h {
         tileh |= 8;
     } // SLOPE_N
-    tileh.min(14)
+    (tileh.min(14), min_h)
+}
+
+/// Pendiente y `min_h` **solo** desde las cuatro alturas de esquina (sin truco de UI
+/// para MP_WATER). Es lo que usa OpenTTD en [`GetTileSlopeZ`].
+#[must_use]
+pub fn tile_slope_bits_from_heights(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
+    let (mw, mh) = map.dimensions();
+    let get_h =
+        |dtx: i32, dty: i32| height_for_slope_corner_sample(map, dtx, dty, mw, mh);
+    let hnorth = get_h(tx as i32, ty as i32);
+    let hwest = get_h(tx as i32 + 1, ty as i32);
+    let heast = get_h(tx as i32, ty as i32 + 1);
+    let hsouth = get_h(tx as i32 + 1, ty as i32 + 1);
+    slope_bits_from_corner_vals(hnorth, hwest, heast, hsouth)
+}
+
+/// `tileh` para [`DrawShoreTile`] (`water_cmd.cpp`): la costa usa la pendiente **real**
+/// del MAPH cuando no es plana (SW, NE, …); si el 2×2 es uniforme se usa
+/// [`infer_coast_tileh_when_flat`] mirando vecinos de tierra.
+///
+/// No reutilizar `tile_slope_and_min_z` sobre MP_WATER: ahí forzamos `tileh=0` para la
+/// UI; aquí hace falta el bitmask crudo o la silueta costera sería solo N/E/S/W.
+#[must_use]
+pub fn shore_tileh_for_draw_shore(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32) -> u8 {
+    let (raw, _) = tile_slope_bits_from_heights(map, tx, ty);
+    if raw == 0 {
+        return infer_coast_tileh_when_flat(map, tx, ty, mw, mh);
+    }
+    // `water_cmd.cpp`: assert sin sprite costa para pendientes “todo el ancho”.
+    if raw == 5 || raw == 10 {
+        return infer_coast_tileh_when_flat(map, tx, ty, mw, mh);
+    }
+    raw
+}
+
+/// El resultado está limitado a 0–14 (pendientes simples; las empinadas (15)
+/// requieren sprites especiales y se omiten por ahora).
+#[must_use]
+pub fn tile_slope_and_min_z(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
+    let (mw, mh) = map.dimensions();
+    let get_h =
+        |dtx: i32, dty: i32| height_for_slope_corner_sample(map, dtx, dty, mw, mh);
+    let hnorth = get_h(tx as i32, ty as i32);
+    let hwest = get_h(tx as i32 + 1, ty as i32);
+    let heast = get_h(tx as i32, ty as i32 + 1);
+    let hsouth = get_h(tx as i32 + 1, ty as i32 + 1);
+    let (tileh_computed, min_h) =
+        slope_bits_from_corner_vals(hnorth, hwest, heast, hsouth);
+    let center = map.get(TileCoord::new(tx as i32, ty as i32));
+    let is_water = center.is_some_and(|t| t.kind == TileKind::Water);
+    // MP_WATER se dibuja como superficie plana (Clear / costa); `tileh`≠0 aquí solo
+    // confunde UI y el grid de costa — las pendientes vienen de `DrawShoreTile` en el
+    // agua o del terreno en MP_CLEAR, no de “pendiente de rombo” sobre el mar.
+    //
+    // `min_z` debe ser siempre `min_h` (= [`GetTileZ`]) también en agua: si usamos otra
+    // métrica (p. ej. mediana), la costa y la hierba lindera quedan desfasadas en Y y
+    // aparece la “sierra” / escalones entre rombos.
+    let tileh_out = if is_water { 0 } else { tileh_computed };
+    (tileh_out, min_h)
+}
+
+/// Altura usada en una esquina del 2×2 de [`tile_slope_and_min_z`], análoga a
+/// [`GetTileSlopeZ`] / `TileHeight` en OpenTTD.
+///
+/// Los exports `.ottdmap` a veces guardan **`height = 0`** en `MP_WATER` aunque el mar
+/// comparta nivel con la costa; si usamos ese valor literal, `min_h` cae y el suelo
+/// “cuelga” sobre el agua. Para **`Water`** y **`Void`** inferimos un nivel con el
+/// **mínimo** de `Tile.height` en teselas de **tierra** (no agua/void) en el
+/// vecindario de 8 celdas (incluye diagonales). Así en una **bahía** o esquina
+/// entrante las celdas de agua comparten el mismo “nivel de mar”; usar `max` daba
+/// alturas distintas por celda y pendientes/costas asimétricas con la hierba lindera.
+#[inline]
+fn height_for_slope_corner_sample(map: &Map, cx: i32, cy: i32, mw: u32, mh: u32) -> u8 {
+    if cx < 0 || cy < 0 {
+        return 0;
+    }
+    let Ok(ux) = u32::try_from(cx) else {
+        return 0;
+    };
+    let Ok(uy) = u32::try_from(cy) else {
+        return 0;
+    };
+    if ux >= mw || uy >= mh {
+        return 0;
+    }
+    let Some(t) = map.get(TileCoord::new(cx, cy)) else {
+        return 0;
+    };
+    if matches!(t.kind, TileKind::Water | TileKind::Void) {
+        water_void_effective_height_for_slope(map, ux, uy, mw, mh, t.height)
+    } else {
+        t.height
+    }
+}
+
+fn water_void_effective_height_for_slope(
+    map: &Map,
+    ux: u32,
+    uy: u32,
+    mw: u32,
+    mh: u32,
+    stored: u8,
+) -> u8 {
+    let x = ux as i32;
+    let y = uy as i32;
+    const NEIGH8: [(i32, i32); 8] = [
+        (0, -1),
+        (0, 1),
+        (-1, 0),
+        (1, 0),
+        (-1, -1),
+        (-1, 1),
+        (1, -1),
+        (1, 1),
+    ];
+    let mut best: Option<u8> = None;
+    for (dx, dy) in NEIGH8 {
+        let nx = x + dx;
+        let ny = y + dy;
+        if nx < 0 || ny < 0 {
+            continue;
+        }
+        let Ok(nux) = u32::try_from(nx) else {
+            continue;
+        };
+        let Ok(nuy) = u32::try_from(ny) else {
+            continue;
+        };
+        if nux >= mw || nuy >= mh {
+            continue;
+        }
+        let Some(nt) = map.get(TileCoord::new(nx, ny)) else {
+            continue;
+        };
+        if matches!(nt.kind, TileKind::Water | TileKind::Void) {
+            continue;
+        }
+        best = Some(best.map_or(nt.height, |b| b.min(nt.height)));
+    }
+    best.unwrap_or(stored)
+}
+
+#[must_use]
+pub fn compute_tileh(map: &Map, tx: u32, ty: u32) -> u8 {
+    tile_slope_and_min_z(map, tx, ty).0
 }
 
 /// Altura base de la tesela para dibujar el suelo: **mínimo** de las cuatro esquinas
@@ -157,12 +295,7 @@ pub fn compute_tileh(map: &Map, tx: u32, ty: u32) -> u8 {
 /// huecos entre teselas vecinas.
 #[must_use]
 pub fn tile_min_corner_height(map: &Map, tx: u32, ty: u32) -> u8 {
-    let get_h = |dtx: i32, dty: i32| map.get(TileCoord::new(dtx, dty)).map_or(0, |t| t.height);
-    let hnorth = get_h(tx as i32, ty as i32);
-    let hwest = get_h(tx as i32 + 1, ty as i32);
-    let heast = get_h(tx as i32, ty as i32 + 1);
-    let hsouth = get_h(tx as i32 + 1, ty as i32 + 1);
-    hnorth.min(hwest).min(heast).min(hsouth)
+    tile_slope_and_min_z(map, tx, ty).1
 }
 
 /// [`tile_min_corner_height`] para una coordenada de tesela (vehículos, etc.).
@@ -378,6 +511,84 @@ mod compute_tileh_tests {
         let m = Map::new_flat(3, 3, 5);
         assert_eq!(compute_tileh(&m, 1, 1), 0);
         assert_eq!(compute_tileh(&m, 0, 1), 0);
+    }
+}
+
+#[cfg(test)]
+mod water_coast_height_tests {
+    //! Agua con `height` 0 en el export no debe hundir las esquinas de la costa.
+
+    use super::{shore_tileh_for_draw_shore, tile_slope_and_min_z};
+    use openttdrs_core::{Map, TileCoord, TileKind};
+
+    #[test]
+    fn peninsula_grass_flat_when_water_corners_stored_zero() {
+        let mut m = Map::new_flat(2, 2, 0);
+        m.set_kind(TileCoord::new(0, 0), TileKind::Grass).unwrap();
+        m.set_height(TileCoord::new(0, 0), 5).unwrap();
+        for (x, y) in [(1, 0), (0, 1), (1, 1)] {
+            m.set_kind(TileCoord::new(x, y), TileKind::Water).unwrap();
+            m.set_height(TileCoord::new(x, y), 0).unwrap();
+        }
+        let (tileh, min_z) = tile_slope_and_min_z(&m, 0, 0);
+        assert_eq!(min_z, 5, "min_h no debe ser 0 por las celdas de agua");
+        assert_eq!(tileh, 0);
+    }
+
+    #[test]
+    fn water_pool_inherits_ring_grass_height() {
+        // Anillo de hierba h=5, charco 2×2 de agua con height 0 en el centro de un 4×4.
+        let mut m = Map::new_flat(4, 4, 0);
+        for y in 0..4 {
+            for x in 0..4 {
+                let ring = x == 0 || y == 0 || x == 3 || y == 3;
+                if ring {
+                    m.set_kind(TileCoord::new(x, y), TileKind::Grass).unwrap();
+                    m.set_height(TileCoord::new(x, y), 5).unwrap();
+                } else {
+                    m.set_kind(TileCoord::new(x, y), TileKind::Water).unwrap();
+                    m.set_height(TileCoord::new(x, y), 0).unwrap();
+                }
+            }
+        }
+        let (tileh, min_z) = tile_slope_and_min_z(&m, 1, 1);
+        assert_eq!(min_z, 5);
+        assert_eq!(tileh, 0);
+    }
+
+    #[test]
+    fn mp_water_never_exposes_terrain_slope_bits() {
+        use super::compute_tileh;
+        let mut m = Map::new_flat(4, 4, 0);
+        for y in 0..4 {
+            for x in 0..4 {
+                let ring = x == 0 || y == 0 || x == 3 || y == 3;
+                if ring {
+                    m.set_kind(TileCoord::new(x, y), TileKind::Grass).unwrap();
+                    m.set_height(TileCoord::new(x, y), 5).unwrap();
+                } else {
+                    m.set_kind(TileCoord::new(x, y), TileKind::Water).unwrap();
+                    m.set_height(TileCoord::new(x, y), 0).unwrap();
+                }
+            }
+        }
+        assert_eq!(compute_tileh(&m, 1, 1), 0);
+    }
+
+    #[test]
+    fn shore_tileh_uses_diagonal_slope_not_infer_priority_w() {
+        // 2×2: agua (0,0); hierba con alturas que dan SLOPE_SW (3) en el cuarteto.
+        // `infer_coast` miraría primero tierra en (1,0) y devolvería solo W (1).
+        let mut m = Map::new_flat(2, 2, 1);
+        m.set_kind(TileCoord::new(0, 0), TileKind::Water).unwrap();
+        m.set_height(TileCoord::new(0, 0), 1).unwrap();
+        m.set_kind(TileCoord::new(1, 0), TileKind::Grass).unwrap();
+        m.set_height(TileCoord::new(1, 0), 3).unwrap();
+        m.set_kind(TileCoord::new(0, 1), TileKind::Grass).unwrap();
+        m.set_height(TileCoord::new(0, 1), 1).unwrap();
+        m.set_kind(TileCoord::new(1, 1), TileKind::Grass).unwrap();
+        m.set_height(TileCoord::new(1, 1), 3).unwrap();
+        assert_eq!(shore_tileh_for_draw_shore(&m, 0, 0, 2, 2), 3);
     }
 }
 

@@ -21,15 +21,16 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use bevy::image::ImageSamplerDescriptor;
+use bevy::math::{Affine3A, Rect};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{IndustryKind, Map, TileCoord, TileKind, Vehicle};
 
 use camera::{CameraVelocity, move_camera};
 use iso::{
-    ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, compute_tileh, gizmo_diamond, iso, overlay_pos,
-    infer_coast_tileh_when_flat, shore_png_index, tile_min_corner_height, tile_min_z, tile_pos,
-    tile_pos_half, wang_hash,
+    ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, gizmo_diamond, iso, overlay_pos, shore_png_index,
+    tile_min_z, tile_pos, tile_pos_half, shore_tileh_for_draw_shore, tile_slope_and_min_z,
+    wang_hash,
 };
 use sprites::{
     HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites,
@@ -40,6 +41,11 @@ use ui::{SelectedTileInfo, handle_tile_click, setup_tile_info_ui, update_tile_in
 
 /// Factor de escala para los sprites de camiones (son 20×14 px nativo).
 const TRUCK_SCALE: f32 = 2.0;
+
+/// Sesgo en la componente Z de **solo** el agua animada (sin sprite `shore_*`).
+/// El orden de dibujo usa `(tx+ty)`; el mar al **este/sur** tiene suma mayor y acaba
+/// encima del borde costero del vecino NO/NE → sierra y rectángulos azules oscuros.
+const FLAT_WATER_LAYER_FRAC: f32 = -0.014;
 
 // ── Animación de agua ─────────────────────────────────────────────────────────
 
@@ -115,6 +121,34 @@ impl TruckHandles {
     }
 }
 
+/// Índice `Vehicle.id` → posición en `GameState::vehicles` (evita `find` O(V) por sprite).
+#[derive(Resource)]
+struct VehicleIndex {
+    by_id: HashMap<u32, usize>,
+}
+
+impl Default for VehicleIndex {
+    fn default() -> Self {
+        Self {
+            by_id: HashMap::new(),
+        }
+    }
+}
+
+impl VehicleIndex {
+    fn rebuild(&mut self, vehicles: &[Vehicle]) {
+        self.by_id.clear();
+        self.by_id.reserve(vehicles.len());
+        for (i, v) in vehicles.iter().enumerate() {
+            self.by_id.insert(v.id, i);
+        }
+    }
+}
+
+fn rebuild_vehicle_index(sim: Res<SimWorld>, mut idx: ResMut<VehicleIndex>) {
+    idx.rebuild(&sim.state.vehicles);
+}
+
 // ── Componentes ───────────────────────────────────────────────────────────────
 
 #[derive(Component)]
@@ -152,7 +186,8 @@ fn main() {
         .init_resource::<SimWorld>()
         .init_resource::<SelectedTileInfo>()
         .init_resource::<CameraVelocity>()
-        .add_systems(Startup, (setup, setup_tile_info_ui))
+        .init_resource::<VehicleIndex>()
+        .add_systems(Startup, (setup, rebuild_vehicle_index, setup_tile_info_ui).chain())
         .add_systems(
             Update,
             (
@@ -318,23 +353,55 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
         nw: h_truck_nw,
     });
 
+    let map = &sim.state.map;
+    let grid_len = (mw * mh) as usize;
+    let mut tileh_grid = vec![0u8; grid_len];
+    let mut base_z_grid = vec![0u8; grid_len];
+    let mut use_shore_grid = vec![false; grid_len];
+    for ty in 0..mh {
+        for tx in 0..mw {
+            let idx = (ty * mw + tx) as usize;
+            let (th, bz) = tile_slope_and_min_z(map, tx, ty);
+            tileh_grid[idx] = th;
+            base_z_grid[idx] = bz;
+        }
+    }
+    for ty in 0..mh {
+        for tx in 0..mw {
+            let c = TileCoord::new(tx as i32, ty as i32);
+            let tile = map.get(c);
+            let kind = tile.map_or(TileKind::Grass, |t| t.kind);
+            if kind != TileKind::Water {
+                continue;
+            }
+            let idx = (ty * mw + tx) as usize;
+            let m5_w = tile.map_or(0u8, |t| t.m5);
+            let water_tile_type = (m5_w >> 4) & 0x0F;
+            use_shore_grid[idx] = water_tile_type == 1
+                || (water_tile_type == 0 && water_tile_touches_land(map, tx, ty, mw, mh));
+        }
+    }
+
+    let mut batch_water: Vec<(WaterTile, Sprite, Transform)> = Vec::new();
+    let mut batch_shore: Vec<(Sprite, Transform)> = Vec::new();
+    let mut batch_trees: Vec<(Sprite, Transform)> = Vec::new();
+
     // ── Teselas de suelo ───────────────────────────────────────────────────────
     let mut rail_layers: Vec<u32> = Vec::with_capacity(8);
     for ty in 0..mh {
         for tx in 0..mw {
+            let idx = (ty * mw + tx) as usize;
             let c = TileCoord::new(tx as i32, ty as i32);
             let tile = sim.state.map.get(c);
             let kind = tile.map_or(TileKind::Grass, |t| t.kind);
-            // Elevación del sprite de suelo: mínimo de esquinas (GetTileZ), no solo `t.height`.
-            let base_z = tile_min_corner_height(&sim.state.map, tx, ty);
+            let base_z = base_z_grid[idx];
+            let tileh = tileh_grid[idx];
             let p = iso(tx as i32, ty as i32);
 
             if kind == TileKind::Void {
                 continue;
             }
 
-            // Pendiente del terreno (OpenTTD `Slope` / tileh 0–14) desde alturas de tesela.
-            let tileh = compute_tileh(&sim.state.map, tx, ty);
             let slope_half_ground = SLOPE_HALF_H[tileh as usize];
 
             if kind == TileKind::Road {
@@ -523,26 +590,14 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                 }
             } else {
                 if kind == TileKind::Water {
-                    let m5_w = tile.map_or(0u8, |t| t.m5);
-                    // water_map.h: `WaterTileType` en bits 4–7 de m5 (Clear=0, Coast=1, …)
-                    let water_tile_type = (m5_w >> 4) & 0x0F;
-                    // Coast explícito, o Clear junto a tierra (mapas sin subtipo Coast en m5).
-                    let use_shore_graphics = water_tile_type == 1
-                        || (water_tile_type == 0
-                            && water_tile_touches_land(&sim.state.map, tx, ty, mw, mh));
-
-                    if use_shore_graphics {
-                        // `DrawShoreTile(tileh)` — un sprite según pendiente (`water_cmd.cpp`).
-                        let mut th = compute_tileh(&sim.state.map, tx, ty);
-                        if th == 0 {
-                            // Costas con MAPH plano en el 2×2: la tierra a menudo queda fuera
-                            // del muestreo; OpenTTD no usa agua plana en Coast.
-                            th = infer_coast_tileh_when_flat(&sim.state.map, tx, ty, mw, mh);
-                        }
+                    if use_shore_grid[idx] {
+                        // `DrawShoreTile(tileh)` — igual que OpenTTD: pendiente real del 2×2
+                        // cuando no es plana; si no, vecinos de tierra (`infer_coast`).
+                        let th = shore_tileh_for_draw_shore(&sim.state.map, tx, ty, mw, mh);
                         if th == 0 {
                             let dark_phase = ((tx + 2 * ty).rem_euclid(5)) as u8;
                             let glitter_phase = (wang_hash(tx, ty, 0xA9FE) % 15) as u8;
-                            commands.spawn((
+                            batch_water.push((
                                 WaterTile {
                                     dark_phase,
                                     glitter_phase,
@@ -556,13 +611,13 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                                     tx as i32,
                                     ty as i32,
                                     base_z,
-                                    0.0,
+                                    FLAT_WATER_LAYER_FRAC,
                                 )),
                             ));
                         } else {
                             let si = shore_png_index(th);
                             let hh = SLOPE_HALF_H[th as usize];
-                            commands.spawn((
+                            batch_shore.push((
                                 Sprite {
                                     image: shore_tex[si].clone(),
                                     color: Color::WHITE,
@@ -581,7 +636,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         // Agua libre (Clear, Lock, Depot en mapas típicos: Clear).
                         let dark_phase = ((tx + 2 * ty).rem_euclid(5)) as u8;
                         let glitter_phase = (wang_hash(tx, ty, 0xA9FE) % 15) as u8;
-                        commands.spawn((
+                        batch_water.push((
                             WaterTile {
                                 dark_phase,
                                 glitter_phase,
@@ -591,7 +646,12 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                                 color: Color::WHITE,
                                 ..default()
                             },
-                            Transform::from_translation(tile_pos(tx as i32, ty as i32, base_z, 0.0)),
+                            Transform::from_translation(tile_pos(
+                                tx as i32,
+                                ty as i32,
+                                base_z,
+                                FLAT_WATER_LAYER_FRAC,
+                            )),
                         ));
                     }
                 } else {
@@ -702,7 +762,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     tx as i32,
                     ty as i32,
                 );
-                commands.spawn((
+                batch_trees.push((
                     Sprite {
                         image: trees[tree_idx].clone(),
                         ..default()
@@ -712,6 +772,10 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
             }
         }
     }
+
+    commands.spawn_batch(batch_water);
+    commands.spawn_batch(batch_shore);
+    commands.spawn_batch(batch_trees);
 
     // ── Sprites de vehículos ───────────────────────────────────────────────────
     let h_truck_ne_init = asset_server.load::<Image>("opengfx/tiles/vehicle_bus_sw.png");
@@ -742,13 +806,23 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
 
 // ── Sistemas de actualización ─────────────────────────────────────────────────
 
-fn advance_sim(time: Res<Time>, mut sim: ResMut<SimWorld>, mut acc: Local<f32>) {
+fn advance_sim(
+    time: Res<Time>,
+    mut sim: ResMut<SimWorld>,
+    mut vehicle_index: ResMut<VehicleIndex>,
+    mut acc: Local<f32>,
+) {
     const TICK_HZ: f32 = 15.0;
     *acc += time.delta_secs();
     let period = 1.0 / TICK_HZ;
+    let mut stepped = false;
     while *acc >= period {
         *acc -= period;
         sim.state.step();
+        stepped = true;
+    }
+    if stepped {
+        vehicle_index.rebuild(&sim.state.vehicles);
     }
 }
 
@@ -815,10 +889,14 @@ fn sync_window_title(
 fn update_vehicles(
     sim: Res<SimWorld>,
     trucks: Res<TruckHandles>,
+    vehicle_index: Res<VehicleIndex>,
     mut q: Query<(&VehicleSprite, &mut Transform, &mut Sprite)>,
 ) {
     for (vs, mut transform, mut sprite) in &mut q {
-        let Some(v) = sim.state.vehicles.iter().find(|v| v.id == vs.0) else {
+        let Some(&i) = vehicle_index.by_id.get(&vs.0) else {
+            continue;
+        };
+        let Some(v) = sim.state.vehicles.get(i) else {
             continue;
         };
         let dir = vehicle_dir(v);
@@ -867,7 +945,11 @@ fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
 ///
 /// Este cliente usa sprites RGBA (no indexados), por eso emulamos ese efecto
 /// modulando brillo/tinte en pasos discretos sincronizados.
-fn animate_water(time: Res<Time>, mut query: Query<(&WaterTile, &mut Sprite)>) {
+fn animate_water(
+    time: Res<Time>,
+    cam_q: Query<(&GlobalTransform, &Projection), With<Camera2d>>,
+    mut query: Query<(&WaterTile, &GlobalTransform, &mut Sprite)>,
+) {
     const DARK_CYCLE: [f32; 5] = [0.92, 0.95, 0.98, 1.01, 1.04];
     const GLITTER_CYCLE: [f32; 15] = [
         0.00, 0.02, 0.05, 0.01, 0.03, 0.07, 0.02, 0.00, 0.04, 0.08, 0.03, 0.01, 0.06, 0.02, 0.00,
@@ -877,7 +959,26 @@ fn animate_water(time: Res<Time>, mut query: Query<(&WaterTile, &mut Sprite)>) {
     // Glitter en 15 estados, avanzando de 3 en 3 (como DoPaletteAnimations).
     let glitter_tick = (((time.elapsed_secs() * 3.0) as usize) * 3) % GLITTER_CYCLE.len();
 
-    for (water, mut sprite) in &mut query {
+    let cull: Option<(Affine3A, Rect)> = cam_q.iter().next().and_then(|(cam_gt, proj)| {
+            let Projection::Orthographic(ortho) = proj else {
+                return None;
+            };
+            Some((cam_gt.affine().inverse(), ortho.area))
+        });
+    let margin = ISO_HW * 4.0;
+
+    for (water, wg, mut sprite) in &mut query {
+        if let Some((world_to_view, area)) = cull.as_ref() {
+            let wpos = wg.translation();
+            let local = world_to_view.transform_point3(wpos);
+            if local.x < area.min.x - margin
+                || local.x > area.max.x + margin
+                || local.y < area.min.y - margin
+                || local.y > area.max.y + margin
+            {
+                continue;
+            }
+        }
         let dark_idx = (dark_tick + water.dark_phase as usize) % DARK_CYCLE.len();
         let glitter_idx = (glitter_tick + water.glitter_phase as usize) % GLITTER_CYCLE.len();
         let dark = DARK_CYCLE[dark_idx];

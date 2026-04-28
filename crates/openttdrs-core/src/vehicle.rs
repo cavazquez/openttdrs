@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::map::TileCoord;
 
 /// Capacidad de carga por defecto (unidades de cargo).
@@ -8,8 +10,10 @@ pub enum VehicleKind {
     Truck,
 }
 
-/// Vehículo que se desplaza tesela a tesela en dirección cardinal hacia su destino.
+/// Vehículo que se desplaza tesela a tesela siguiendo un camino BFS.
 ///
+/// Si no hay camino calculado (`path` vacío y `pos != dest`) usa movimiento Manhattan
+/// como fallback para preservar compatibilidad con tests sin vías.
 /// Al llegar invierte el trayecto (va y vuelve entre `origin` y `dest`).
 #[derive(Debug, Clone)]
 pub struct Vehicle {
@@ -21,28 +25,46 @@ pub struct Vehicle {
     pub dest:     TileCoord,
     pub cargo:    u32,
     pub capacity: u32,
+    /// Camino calculado por el pathfinder (siguiente tile en el frente).
+    pub path:     VecDeque<TileCoord>,
 }
 
 impl Vehicle {
     #[must_use]
     pub fn new(id: u32, kind: VehicleKind, pos: TileCoord, dest: TileCoord) -> Self {
-        Self { id, kind, pos, origin: pos, dest, cargo: 0, capacity: VEHICLE_CAPACITY }
+        Self {
+            id,
+            kind,
+            pos,
+            origin: pos,
+            dest,
+            cargo: 0,
+            capacity: VEHICLE_CAPACITY,
+            path: VecDeque::new(),
+        }
     }
 
-    /// Avanza una tesela en la dirección cardinal que reduce la distancia Manhattan al destino.
-    /// Prioriza el eje X; si está en el mismo X, mueve en Y.
-    /// Al llegar intercambia `dest` y `origin` para invertir el trayecto.
+    /// Avanza un paso: sigue el path BFS si está disponible; si no, Manhattan.
+    /// Al llegar al destino invierte trayecto y vacía el path (se recomputa en GameState).
     pub fn step(&mut self) {
-        if self.pos == self.dest {
+        if let Some(next) = self.path.pop_front() {
+            self.pos = next;
+            if self.pos == self.dest {
+                std::mem::swap(&mut self.dest, &mut self.origin);
+                // path ya está vacío; GameState recomputa el próximo tick
+            }
+        } else if self.pos == self.dest {
+            // Llegada sin path (modo Manhattan): invertir
             std::mem::swap(&mut self.dest, &mut self.origin);
-            return;
-        }
-        let dx = self.dest.x - self.pos.x;
-        let dy = self.dest.y - self.pos.y;
-        if dx != 0 {
-            self.pos.x += dx.signum();
         } else {
-            self.pos.y += dy.signum();
+            // Manhattan fallback: no hay vías en el mapa
+            let dx = self.dest.x - self.pos.x;
+            let dy = self.dest.y - self.pos.y;
+            if dx != 0 {
+                self.pos.x += dx.signum();
+            } else if dy != 0 {
+                self.pos.y += dy.signum();
+            }
         }
     }
 

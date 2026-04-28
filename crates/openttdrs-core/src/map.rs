@@ -20,6 +20,8 @@ pub enum TileKind {
     Water,
     Forest,
     CoalField,
+    Road,
+    Rail,
 }
 
 /// Una tesela con altura base y tipo semántico.

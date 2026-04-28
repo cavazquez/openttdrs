@@ -7,12 +7,14 @@
 
 pub mod industry;
 pub mod map;
+pub mod pathfinder;
 pub mod station;
 pub mod tick;
 pub mod vehicle;
 
 pub use industry::{Industry, IndustryKind, INDUSTRY_PRODUCE_TICKS};
 pub use map::{Map, MapError, Tile, TileCoord, TileKind};
+pub use pathfinder::find_path;
 pub use station::Station;
 pub use tick::GameTick;
 pub use vehicle::{Vehicle, VehicleKind};
@@ -79,7 +81,16 @@ impl GameState {
             }
         }
 
-        // Movimiento: una tesela hacia el destino (o inversión de trayecto al llegar).
+        // Recomputa el path BFS para vehículos que lo necesiten (path vacío y no en destino).
+        for i in 0..self.vehicles.len() {
+            if self.vehicles[i].path.is_empty() && self.vehicles[i].pos != self.vehicles[i].dest {
+                if let Some(path) = pathfinder::find_path(&self.map, self.vehicles[i].pos, self.vehicles[i].dest) {
+                    self.vehicles[i].path = path.into_iter().collect();
+                }
+            }
+        }
+
+        // Movimiento: sigue el path BFS o Manhattan fallback.
         for vehicle in &mut self.vehicles {
             vehicle.step();
         }
@@ -138,6 +149,44 @@ mod tests {
         assert_eq!(s.map.get_kind(c), Some(TileKind::Forest));
         s.map.set_kind(c, TileKind::CoalField).unwrap();
         assert_eq!(s.map.get_kind(c), Some(TileKind::CoalField));
+    }
+
+    #[test]
+    fn bfs_finds_path_on_straight_road() {
+        let mut m = Map::new_flat(8, 8, 0);
+        for x in 0..=4_i32 {
+            m.set_kind(TileCoord::new(x, 0), TileKind::Road).unwrap();
+        }
+        let path = pathfinder::find_path(&m, TileCoord::new(0, 0), TileCoord::new(4, 0));
+        assert!(path.is_some());
+        let path = path.unwrap();
+        assert_eq!(*path.last().unwrap(), TileCoord::new(4, 0));
+        assert_eq!(path.len(), 4);
+    }
+
+    #[test]
+    fn bfs_returns_none_when_blocked() {
+        let m = Map::new_flat(8, 8, 0); // todo Grass, sin carreteras
+        let path = pathfinder::find_path(&m, TileCoord::new(0, 0), TileCoord::new(4, 0));
+        assert!(path.is_none());
+    }
+
+    #[test]
+    fn vehicle_follows_path() {
+        let mut s = GameState::new(8, 8);
+        for x in 0..=4_i32 {
+            s.map.set_kind(TileCoord::new(x, 0), TileKind::Road).unwrap();
+        }
+        let start = TileCoord::new(0, 0);
+        let dest  = TileCoord::new(4, 0);
+        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+
+        let expected = pathfinder::find_path(&s.map, start, dest).expect("hay carretera");
+
+        for (i, &tile) in expected.iter().enumerate() {
+            s.step();
+            assert_eq!(s.vehicles[0].pos, tile, "tick {} posición incorrecta", i + 1);
+        }
     }
 
     #[test]

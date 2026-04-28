@@ -8,7 +8,7 @@
 use bevy::color::palettes::css::{DARK_GRAY, LIMEGREEN};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{GameState, Industry, IndustryKind, Station, TileCoord, TileKind, Vehicle, VehicleKind};
+use openttdrs_core::{GameState, Industry, IndustryKind, Station, TileCoord, TileKind, Vehicle, VehicleKind, find_path};
 
 const TILE_WORLD: f32 = 20.0;
 const MAP_W: u32 = 24;
@@ -44,6 +44,7 @@ impl Default for SimWorld {
         distribute_tile_kinds(&mut state, 0xDEAD_BEEF_CAFE_1234);
         place_industries(&mut state);
         place_stations(&mut state);
+        place_roads(&mut state);
         place_vehicles(&mut state);
         Self { state }
     }
@@ -109,16 +110,55 @@ fn place_industries(state: &mut GameState) {
     }
 }
 
-/// Coloca una estación por industria, desplazada 3 teselas en X (clampeda al mapa).
+/// Coloca una estación por industria con offset (+3 X, ±3 Y) alternado según índice.
+///
+/// Esto genera rutas en L que obligan a los trucks a moverse tanto horizontal como verticalmente.
 fn place_stations(state: &mut GameState) {
-    let (mw, _mh) = state.map.dimensions();
+    let (mw, mh) = state.map.dimensions();
     let positions: Vec<TileCoord> = state
         .industries
         .iter()
-        .map(|ind| TileCoord::new((ind.pos.x + 3).min(mw as i32 - 1), ind.pos.y))
+        .enumerate()
+        .map(|(i, ind)| {
+            let dy = if i % 2 == 0 { 3i32 } else { -3i32 };
+            TileCoord::new(
+                (ind.pos.x + 3).clamp(0, mw as i32 - 1),
+                (ind.pos.y + dy).clamp(0, mh as i32 - 1),
+            )
+        })
         .collect();
     for pos in positions {
         state.stations.push(Station::new(pos));
+    }
+}
+
+/// Traza una carretera Manhattan entre cada industria y su estación pareada.
+///
+/// Marca los tiles intermedios como Road; los endpoints (industria/estación) conservan
+/// su tipo original porque el pathfinder permite entrar/salir de tiles no-road.
+fn place_roads(state: &mut GameState) {
+    let routes: Vec<(TileCoord, TileCoord)> = state
+        .industries
+        .iter()
+        .zip(state.stations.iter())
+        .map(|(ind, st)| (ind.pos, st.pos))
+        .collect();
+
+    for (from, to) in routes {
+        // Traza en X primero, luego en Y (Manhattan).
+        let mut cur = from;
+        while cur.x != to.x {
+            cur.x += (to.x - cur.x).signum();
+            if cur != to && cur != from {
+                let _ = state.map.set_kind(cur, TileKind::Road);
+            }
+        }
+        while cur.y != to.y {
+            cur.y += (to.y - cur.y).signum();
+            if cur != to && cur != from {
+                let _ = state.map.set_kind(cur, TileKind::Road);
+            }
+        }
     }
 }
 
@@ -132,7 +172,12 @@ fn place_vehicles(state: &mut GameState) {
         .collect();
 
     for (i, (a, b)) in routes.into_iter().enumerate() {
-        state.vehicles.push(Vehicle::new(i as u32, VehicleKind::Truck, a, b));
+        let mut v = Vehicle::new(i as u32, VehicleKind::Truck, a, b);
+        // Pre-computa el path inicial para que el vehículo empiece a moverse en el tick 1.
+        if let Some(path) = find_path(&state.map, a, b) {
+            v.path = path.into_iter().collect();
+        }
+        state.vehicles.push(v);
     }
 }
 
@@ -158,10 +203,12 @@ fn advance_sim(time: Res<Time>, mut sim: ResMut<SimWorld>, mut acc: Local<f32>) 
 
 fn tile_color(kind: TileKind) -> Color {
     match kind {
-        TileKind::Grass => Color::srgb(0.45, 0.75, 0.25),
-        TileKind::Water => Color::srgb(0.15, 0.40, 0.80),
-        TileKind::Forest => Color::srgb(0.10, 0.45, 0.15),
+        TileKind::Grass     => Color::srgb(0.45, 0.75, 0.25),
+        TileKind::Water     => Color::srgb(0.15, 0.40, 0.80),
+        TileKind::Forest    => Color::srgb(0.10, 0.45, 0.15),
         TileKind::CoalField => Color::srgb(0.22, 0.20, 0.20),
+        TileKind::Road      => Color::srgb(0.55, 0.52, 0.48),
+        TileKind::Rail      => Color::srgb(0.40, 0.38, 0.36),
     }
 }
 

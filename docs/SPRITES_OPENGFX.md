@@ -278,6 +278,14 @@ y vehículos (1.0).
 
 ---
 
+## Pendiente de terreno y cimientos (foundations)
+
+**Terreno (MP_CLEAR, bosques, etc.):** el cliente calcula `tileh` con las alturas de las cuatro esquinas (`compute_tileh` / `iso.rs`) y elige `terrain_grass_slope_01..14` o `terrain_rough_slope_01..14` junto con `SLOPE_HALF_H` para posicionar el sprite.
+
+**Cimientos de hormigón:** en OpenTTD se dibujan bajo carreteras, raíles y edificios cuando la tesela no está nivelada; los IDs de sprite dependen del NewGRF base (internamente hay macros tipo `SPR_FOUNDATION_*`). Para reproducirlos hay que localizar el bloque correspondiente en `ogfx1_base.nfo`, añadir recortes en `descargar_graficos.sh` y pintar una capa intermedia entre el terreno y el overlay — trabajo pendiente.
+
+---
+
 ## Centro de la cámara para el mapa 24×18
 
 Para que la cámara muestre el mapa completo centrado en una ventana de 1280×720:

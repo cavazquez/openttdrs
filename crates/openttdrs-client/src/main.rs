@@ -27,8 +27,8 @@ use openttdrs_core::{IndustryKind, TileCoord, TileKind, Vehicle};
 
 use camera::{CameraVelocity, move_camera};
 use iso::{
-    ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, gizmo_diamond, iso, overlay_pos, tile_pos,
-    tile_pos_half, wang_hash,
+    ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, compute_tileh, gizmo_diamond, iso, overlay_pos,
+    tile_pos, tile_pos_half, wang_hash,
 };
 use sprites::{
     HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites,
@@ -313,6 +313,10 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                 continue;
             }
 
+            // Pendiente del terreno (OpenTTD `Slope` / tileh 0–14) desde alturas de tesela.
+            let tileh = compute_tileh(&sim.state.map, tx, ty);
+            let slope_half_ground = SLOPE_HALF_H[tileh as usize];
+
             if kind == TileKind::Road {
                 let fi = road_flat_index(road_bits_for_render(&sim.state.map, c, mw, mh));
                 let pos_road =
@@ -347,13 +351,24 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
             } else if kind == TileKind::House {
                 // GetCleanHouseType: GB(m8, 0, 12) — el resto es datos NewGRF
                 let house_id = tile.map_or(0u16, |t| t.m8 & 0xFFF) as usize;
+                let house_base = if tileh == 0 {
+                    h_grass.clone()
+                } else {
+                    grass_slopes[tileh as usize - 1].clone()
+                };
                 commands.spawn((
                     Sprite {
-                        image: h_grass.clone(),
+                        image: house_base,
                         color: Color::WHITE,
                         ..default()
                     },
-                    Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
+                    Transform::from_translation(tile_pos_half(
+                        tx as i32,
+                        ty as i32,
+                        height,
+                        0.0,
+                        slope_half_ground,
+                    )),
                 ));
                 // Para IDs >= 128 (climas ártico/tropical u otros) se reduce modulo
                 let spec_idx = house_id % HOUSE_DRAW_DATA.len();
@@ -405,6 +420,22 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     ));
                 }
             } else if kind == TileKind::Station {
+                if tileh != 0 {
+                    commands.spawn((
+                        Sprite {
+                            image: grass_slopes[tileh as usize - 1].clone(),
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                        Transform::from_translation(tile_pos_half(
+                            tx as i32,
+                            ty as i32,
+                            height,
+                            0.0,
+                            slope_half_ground,
+                        )),
+                    ));
+                }
                 let dir = wang_hash(tx, ty, 0xCAFE) as usize % station_grounds.len();
                 commands.spawn((
                     Sprite {
@@ -412,7 +443,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         color: Color::WHITE,
                         ..default()
                     },
-                    Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
+                    Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.01)),
                 ));
             } else if kind == TileKind::Industry {
                 // gfx de industria es de 9 bits: m5 (bits 0-7) | bit 2 de m6 (bit 8)
@@ -422,9 +453,23 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                 });
                 let has_building = sprites::industry_sprite_for_gfx(gfx).is_some();
                 let (ground_img, ground_color) = if has_building {
-                    (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45))
+                    (
+                        if tileh == 0 {
+                            h_rough.clone()
+                        } else {
+                            rough_slopes[tileh as usize - 1].clone()
+                        },
+                        Color::srgb(0.55, 0.50, 0.45),
+                    )
                 } else {
-                    (h_grass.clone(), Color::WHITE)
+                    (
+                        if tileh == 0 {
+                            h_grass.clone()
+                        } else {
+                            grass_slopes[tileh as usize - 1].clone()
+                        },
+                        Color::WHITE,
+                    )
                 };
                 commands.spawn((
                     Sprite {
@@ -432,7 +477,13 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         color: ground_color,
                         ..default()
                     },
-                    Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
+                    Transform::from_translation(tile_pos_half(
+                        tx as i32,
+                        ty as i32,
+                        height,
+                        0.0,
+                        slope_half_ground,
+                    )),
                 ));
                 // Edificio de industria según gfx (m5)
                 if let Some(s) = sprites::industry_sprite_for_gfx(gfx)
@@ -523,11 +574,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
 
                     // MP_CLEAR (0): distinguir subtipo de suelo via m5 bits 2-4
                     // MP_OBJECT (10): grass de base + overlay de objeto
-                    // TODO(renderer): reactivar pendientes reales cuando foundations/cliffs
-                    // estén implementados. Mientras tanto forzamos plano para evitar
-                    // huecos visuales ("diamantes vacíos") en mapas reales.
-                    let tileh: u8 = 0;
-                    let slope_half_h = SLOPE_HALF_H[tileh as usize];
+                    let slope_half_h = slope_half_ground;
 
                     // Helpers para elegir sprite plano o con pendiente
                     let grass_img = || {

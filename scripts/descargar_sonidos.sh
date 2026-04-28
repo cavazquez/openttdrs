@@ -16,20 +16,27 @@ CDN="https://cdn.openttd.org/opensfx-releases/${VERSION}/opensfx-${VERSION}-all.
 
 if [[ -d "${DEST}" && -n "$(ls -A "${DEST}" 2>/dev/null)" ]]; then
   echo "OpenSFX ya está en ${DEST}. Borrá la carpeta para re-descargar."
-  exit 0
+else
+  mkdir -p "${DEST}"
+
+  echo "Descargando OpenSFX ${VERSION} desde ${CDN} ..."
+  TMP="$(mktemp -d)"
+  trap 'rm -rf "${TMP}"' EXIT
+
+  curl -fL "${CDN}" -o "${TMP}/opensfx.zip"
+  unzip -q "${TMP}/opensfx.zip" -d "${TMP}/opensfx"
+
+  shopt -s dotglob
+  cp -r "${TMP}/opensfx/"*/* "${DEST}/" 2>/dev/null || cp -r "${TMP}/opensfx/"* "${DEST}/"
 fi
 
-mkdir -p "${DEST}"
-
-echo "Descargando OpenSFX ${VERSION} desde ${CDN} ..."
-TMP="$(mktemp -d)"
-trap 'rm -rf "${TMP}"' EXIT
-
-curl -fL "${CDN}" -o "${TMP}/opensfx.zip"
-unzip -q "${TMP}/opensfx.zip" -d "${TMP}/opensfx"
-
-shopt -s dotglob
-cp -r "${TMP}/opensfx/"*/* "${DEST}/" 2>/dev/null || cp -r "${TMP}/opensfx/"* "${DEST}/"
+BASE_DIR="${DEST}/opensfx-${VERSION}"
+BASE_TAR="${BASE_DIR}.tar"
+if [[ ! -d "${BASE_DIR}" && -f "${BASE_TAR}" ]]; then
+  echo ""
+  echo "Extrayendo ${BASE_TAR} ..."
+  tar -xf "${BASE_TAR}" -C "${DEST}"
+fi
 
 echo ""
 echo "Listo. Archivos en ${DEST}/:"

@@ -5,11 +5,11 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 /// Paneo con botón derecho: factor × `OrthographicProjection::scale` × delta en píxeles.
-const PAN_RMB_SCALE: f32 = 1.05;
+const PAN_RMB_SCALE: f32 = 1.35;
 /// Zoom con teclado (+/-): fracción de `scale` por segundo al mantener pulsado.
 const ZOOM_KEY_RATE: f32 = 3.5;
 /// Zoom con rueda: multiplicador por unidad de `scroll.delta.y`.
-const ZOOM_WHEEL_SENS: f32 = 0.16;
+const ZOOM_WHEEL_SENS: f32 = 0.23;
 /// Velocidad de aceleración WASD (unidades/s²).
 const WASD_ACCEL: f32 = 2000.0;
 /// Factor de desaceleración por fricción (fracción de velocidad que se pierde por segundo).

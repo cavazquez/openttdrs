@@ -27,8 +27,8 @@ use openttdrs_core::{IndustryKind, TileCoord, TileKind, Vehicle};
 
 use camera::{CameraVelocity, move_camera};
 use iso::{
-    ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, compute_tileh, gizmo_diamond, iso, overlay_pos,
-    tile_pos, tile_pos_half, wang_hash,
+    ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, gizmo_diamond, iso, overlay_pos, tile_pos,
+    tile_pos_half, wang_hash,
 };
 use sprites::{
     HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites,
@@ -519,7 +519,10 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
 
                     // MP_CLEAR (0): distinguir subtipo de suelo via m5 bits 2-4
                     // MP_OBJECT (10): grass de base + overlay de objeto
-                    let tileh = compute_tileh(&sim.state.map, tx, ty);
+                    // TODO(renderer): reactivar pendientes reales cuando foundations/cliffs
+                    // estén implementados. Mientras tanto forzamos plano para evitar
+                    // huecos visuales ("diamantes vacíos") en mapas reales.
+                    let tileh: u8 = 0;
                     let slope_half_h = SLOPE_HALF_H[tileh as usize];
 
                     // Helpers para elegir sprite plano o con pendiente

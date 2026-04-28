@@ -124,6 +124,7 @@ pub const SLOPE_HALF_H: [f32; 15] = [
 /// El resultado está limitado a 0–14 (pendientes simples; las empinadas (15)
 /// requieren sprites especiales y se omiten por ahora).
 #[must_use]
+#[allow(dead_code)]
 pub fn compute_tileh(map: &Map, tx: u32, ty: u32) -> u8 {
     let get_h = |dtx: i32, dty: i32| map.get(TileCoord::new(dtx, dty)).map_or(0, |t| t.height);
     let h0 = get_h(tx as i32, ty as i32);

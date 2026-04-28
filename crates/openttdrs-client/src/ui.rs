@@ -5,7 +5,7 @@ use bevy::sprite::Anchor;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{TileCoord, TileKind};
 
-use crate::iso::world_to_tile;
+use crate::iso::{compute_tileh, slope_label, world_to_tile};
 use crate::sprites::road_bits_for_render;
 use crate::state::SimWorld;
 
@@ -104,13 +104,15 @@ pub fn update_tile_info_text(
     text_transform.translation.y = cam_transform.translation.y + half_h - 10.0 * proj.scale;
     text_transform.scale = Vec3::splat(proj.scale);
 
+    let zoom_label = format!("Zoom {:.2}×", proj.scale);
+
     let Some(pos) = selected.pos else {
-        **text = "Click en tile para ver info".to_string();
+        **text = format!("{zoom_label}\nClick en tile para ver info");
         return;
     };
 
     let Some(tile) = sim.state.map.get(pos) else {
-        **text = format!("({}, {}): fuera del mapa", pos.x, pos.y);
+        **text = format!("{zoom_label}\n({}, {}): fuera del mapa", pos.x, pos.y);
         return;
     };
 
@@ -126,7 +128,7 @@ pub fn update_tile_info_text(
         TileKind::Forest => "Forest",
         TileKind::CoalField => "CoalField",
         TileKind::Unknown(n) => {
-            **text = format!("({}, {}): Unknown({})", pos.x, pos.y, n);
+            **text = format!("{zoom_label}\n({}, {}): Unknown({})", pos.x, pos.y, n);
             return;
         }
     };
@@ -145,8 +147,26 @@ pub fn update_tile_info_text(
         String::new()
     };
 
+    let mw = sim.state.map.dimensions().0;
+    let mh = sim.state.map.dimensions().1;
+    let tileh = if pos.x >= 0 && pos.y >= 0 && (pos.x as u32) < mw && (pos.y as u32) < mh {
+        compute_tileh(&sim.state.map, pos.x as u32, pos.y as u32)
+    } else {
+        0
+    };
+    let slope_str = slope_label(tileh);
+
     **text = format!(
-        "Tile ({},{}) {}\nh:{} mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X}{}",
-        pos.x, pos.y, kind_str, tile.height, tile.mapt, tile.m5, tile.m1, extra
+        "{zoom_label}\nTile ({},{}) {}\nh:{} slope:{} ({}) mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X}{}",
+        pos.x,
+        pos.y,
+        kind_str,
+        tile.height,
+        tileh,
+        slope_str,
+        tile.mapt,
+        tile.m5,
+        tile.m1,
+        extra
     );
 }

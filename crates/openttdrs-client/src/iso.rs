@@ -124,7 +124,6 @@ pub const SLOPE_HALF_H: [f32; 15] = [
 /// El resultado está limitado a 0–14 (pendientes simples; las empinadas (15)
 /// requieren sprites especiales y se omiten por ahora).
 #[must_use]
-#[allow(dead_code)]
 pub fn compute_tileh(map: &Map, tx: u32, ty: u32) -> u8 {
     let get_h = |dtx: i32, dty: i32| map.get(TileCoord::new(dtx, dty)).map_or(0, |t| t.height);
     let h0 = get_h(tx as i32, ty as i32);
@@ -146,6 +145,30 @@ pub fn compute_tileh(map: &Map, tx: u32, ty: u32) -> u8 {
         tileh |= 8;
     } // SLOPE_N
     tileh.min(14)
+}
+
+/// Nombre corto del bitmask de pendiente OpenTTD (`Slope` / `tileh` 0–14).
+/// Bits: W=1, S=2, E=4, N=8 (esquinas elevadas respecto al mínimo local).
+#[must_use]
+pub fn slope_label(tileh: u8) -> &'static str {
+    match tileh.min(14) {
+        0 => "FLAT",
+        1 => "W",
+        2 => "S",
+        3 => "SW",
+        4 => "E",
+        5 => "WE",
+        6 => "SE",
+        7 => "WSE",
+        8 => "N",
+        9 => "NW",
+        10 => "NS",
+        11 => "NWS",
+        12 => "NE",
+        13 => "NWE",
+        14 => "NSE",
+        _ => "?",
+    }
 }
 
 /// Hash de Wang para generar variación determinista (sin RNG en el core).

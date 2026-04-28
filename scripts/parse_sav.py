@@ -12,7 +12,9 @@ Formato de salida (.ottdmap) v3:
   W*H bytes   – m5 (road bits, TrackBits 0-5, industry gfx bits 0-7, ObjectType en MP_OBJECT)
   W*H bytes   – m1 (industry index, owner, etc.) [v2+]
   W*H bytes   – m6 (bit 2 = bit 8 del gfx industria; StationType en MP_STATION) [v3+]
-  W*H*2 bytes – m8 LE (HouseID en MP_HOUSE, 16 bits little-endian) [v3+]
+  W*H*2 bytes – m8 LE (HouseID en MP_HOUSE; 12 bits bajos = tipo, ver town_map.h) [v3+]
+    En saves OpenTTD con versión < 348 el HouseID en disco está en M3HI/M3LO;
+    parse_sav.py lo copia a m8 como hace afterload.cpp al cargar.
 
 Tipos de tesela OpenTTD (nibble alto de tile_type):
   0  MP_CLEAR       → prado/rough/rocks/fields/desert
@@ -169,6 +171,12 @@ MAGIC_OTTZ = b'OTTZ'  # zlib
 MAGIC_OTTX = b'OTTX'  # lzma
 MAGIC_OTTD = b'OTTD'  # LZO (no soportado aquí)
 MAGIC_NONE = b'OTTN'  # sin compresión
+
+# saveload.h (OpenTTD): antes de esta versión el HouseID no está en MAP8/m8,
+# sino en M3HI (= m4) + un bit en M3LO (= m3); al cargar, afterload.cpp lo
+# copia a m8 (ver SLV_INCREASE_HOUSE_LIMIT / PR#12288).
+SLV_INCREASE_HOUSE_LIMIT = 348
+MP_HOUSE = 3
 
 
 def decompress(raw: bytes) -> tuple[bytes, int]:
@@ -385,13 +393,15 @@ def main() -> None:
     # Datos de teselas.
     # Nombres reales de chunks en el savegame (map_sl.cpp de OpenTTD):
     #   MAPT = tile types, MAPH = heights, MAPO = MAP1 (owner),
-    #   MAP2 = misc, M3LO/M3HI = MAP3, MAP5 = m5, MAPE = MAP6, MAP7, MAP8
+    #   MAP2 = m2, M3LO = byte bajo de m3, M3HI = m4, MAP5 = m5, MAPE = m6, MAP7, MAP8 = m8
     mapt = chunks.get('MAPT', b'')
     maph = chunks.get('MAPH', b'')
     map5 = chunks.get('MAP5', b'')
     map1 = chunks.get('MAPO', b'')  # MAPO = MAP1 (owner/datos de tesela 1)
     map6 = chunks.get('MAPE', b'')  # MAPE = MAP6 (bit 2 = bit 8 del gfx industria)
-    map8 = chunks.get('MAP8', b'')  # MAP8 = HouseID (2 bytes por tesela)
+    map8 = chunks.get('MAP8', b'')  # MAP8 = m8 (HouseID en MP_HOUSE; 12 bits útiles)
+    m3lo = chunks.get('M3LO', b'')  # byte bajo de m3()
+    m3hi = chunks.get('M3HI', b'')  # m4() en OpenTTD (map_sl.cpp)
     # OBJS: diccionario {tile_index → ObjectType}  (0=Transmisor, 1=Faro)
     obj_types: dict[int, int] = chunks.get('OBJS', {})  # type: ignore[assignment]
 
@@ -410,6 +420,10 @@ def main() -> None:
         map6 = map6 + b'\x00' * (expected - len(map6))
     if len(map8) < expected * 2:
         map8 = map8 + b'\x00' * (expected * 2 - len(map8))
+    if len(m3lo) < expected:
+        m3lo = m3lo + b'\x00' * (expected - len(m3lo))
+    if len(m3hi) < expected:
+        m3hi = m3hi + b'\x00' * (expected - len(m3hi))
 
     # Para tiles MP_OBJECT, sobreescribir m5 con el ObjectType real (de OBJS).
     # En OpenTTD moderno, MAP5 para MP_OBJECT guarda bits altos del ObjectID,
@@ -426,6 +440,24 @@ def main() -> None:
         print(f"  Objetos con tipo resuelto desde OBJS: {n_fixed}")
     m5_data = bytes(m5_list)
 
+    # m8 (HouseID): en saves antiguos (< SLV_INCREASE_HOUSE_LIMIT) el chunk MAP8
+    # suele ser todo ceros en disco; el tipo real está en m4 (M3HI) + bit 6 de m3 (M3LO).
+    m8_buf = bytearray(map8[: expected * 2])
+    if version < SLV_INCREASE_HOUSE_LIMIT:
+        n_legacy = 0
+        for i in range(expected):
+            if ((mapt[i] >> 4) & 0xF) != MP_HOUSE:
+                continue
+            m3 = m3lo[i]
+            m4 = m3hi[i]
+            hid = m4 | (((m3 >> 6) & 1) << 8)
+            struct.pack_into('<H', m8_buf, i * 2, hid & 0xFFFF)
+            n_legacy += 1
+        print(
+            f"  HouseID desde M3HI/M3LO (save < {SLV_INCREASE_HOUSE_LIMIT}): "
+            f'{n_legacy:,} teselas MP_HOUSE'
+        )
+
     # Escribir archivo de salida (formato v3: + m6 + m8)
     magic_out = b'MAPO'
     header = struct.pack('<4sII', magic_out, dim_x, dim_y)
@@ -433,7 +465,7 @@ def main() -> None:
     heights    = maph[:expected]
     m1_data    = map1[:expected]
     m6_data    = map6[:expected]
-    m8_data    = map8[:expected * 2]
+    m8_data    = bytes(m8_buf)
 
     out_path.write_bytes(header + tile_types + heights + m5_data + m1_data + m6_data + m8_data)
     print(f"✓ Escrito: {out_path}  ({out_path.stat().st_size:,} bytes)")

@@ -345,7 +345,8 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     ));
                 }
             } else if kind == TileKind::House {
-                let house_id = tile.map_or(0u16, |t| t.m8) as usize;
+                // GetCleanHouseType: GB(m8, 0, 12) — el resto es datos NewGRF
+                let house_id = tile.map_or(0u16, |t| t.m8 & 0xFFF) as usize;
                 commands.spawn((
                     Sprite {
                         image: h_grass.clone(),
@@ -673,21 +674,63 @@ fn advance_sim(time: Res<Time>, mut sim: ResMut<SimWorld>, mut acc: Local<f32>) 
     }
 }
 
+/// Estado del título: FPS se refresca ~1 vez/s; el zoom se refleja al instante al mover la rueda.
+#[derive(Default)]
+struct WindowTitleSync {
+    last_scale: f32,
+    fps_dt: f32,
+    fps_frames: u32,
+    last_fps: f32,
+}
+
 fn sync_window_title(
     sim: Res<SimWorld>,
     time: Res<Time>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
-    mut fps_acc: Local<(f32, u32)>, // (acum_dt, frames)
+    cam_q: Query<&Projection, With<Camera2d>>,
+    mut state: Local<WindowTitleSync>,
 ) {
-    fps_acc.0 += time.delta_secs();
-    fps_acc.1 += 1;
-    // Actualizar título ~1 vez por segundo
-    if fps_acc.0 >= 1.0 {
-        let fps = fps_acc.1 as f32 / fps_acc.0;
-        *fps_acc = (0.0, 0);
-        if let Ok(mut window) = windows.single_mut() {
-            window.title = format!("openttdrs — tick {} — {fps:.0} FPS", sim.state.tick.get());
-        }
+    let scale = cam_q
+        .single()
+        .ok()
+        .and_then(|p| match p {
+            Projection::Orthographic(o) => Some(o.scale),
+            _ => None,
+        })
+        .unwrap_or(1.0);
+
+    state.fps_dt += time.delta_secs();
+    state.fps_frames += 1;
+
+    let scale_changed = (scale - state.last_scale).abs() > 0.000_5;
+    if scale_changed {
+        state.last_scale = scale;
+    }
+
+    let fps_tick = state.fps_dt >= 1.0;
+    if fps_tick {
+        state.last_fps = state.fps_frames as f32 / state.fps_dt;
+        state.fps_dt = 0.0;
+        state.fps_frames = 0;
+    }
+
+    if !scale_changed && !fps_tick {
+        return;
+    }
+
+    let fps = if state.last_fps > 0.0 {
+        state.last_fps
+    } else {
+        60.0
+    };
+
+    if let Ok(mut window) = windows.single_mut() {
+        window.title = format!(
+            "openttdrs — tick {} — zoom {:.2}× — {:.0} FPS",
+            sim.state.tick.get(),
+            scale,
+            fps
+        );
     }
 }
 

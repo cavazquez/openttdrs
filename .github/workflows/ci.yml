@@ -46,5 +46,8 @@ jobs:
       - name: test
         run: cargo test --workspace
 
+      - name: Golden parse_sav (tests/fixtures)
+        run: python3 scripts/verify_parse_sav_reference.py
+
       - name: build (incluye cliente Bevy)
         run: cargo build --workspace

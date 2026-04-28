@@ -112,6 +112,7 @@ impl GameState {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use industry::INDUSTRY_PRODUCE_AMOUNT;
     use vehicle::VEHICLE_CAPACITY;

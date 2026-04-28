@@ -1,3 +1,6 @@
+//! Estructura del mapa y carga de `.ottdmap` (v2/v3).
+#![allow(clippy::doc_markdown, clippy::expect_used, clippy::unwrap_used)]
+
 /// Coordenada de tesela en el plano X/Y del mapa (análoga a índices de tesela en `OpenTTD`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TileCoord {
@@ -264,5 +267,52 @@ impl Map {
             height,
             tiles,
         })
+    }
+}
+
+#[cfg(test)]
+mod ottdmap_binary_tests {
+    use super::*;
+
+    /// Mapa binario v3 mínimo 2×2 con una tesela casa y `m8 = 42` en el origen.
+    fn minimal_ottdmap_v3() -> Vec<u8> {
+        let w = 2_u32;
+        let h = 2_u32;
+        let n = 4_usize;
+        let mut v = Vec::with_capacity(12 + n * 7);
+        v.extend_from_slice(b"MAPO");
+        v.extend_from_slice(&w.to_le_bytes());
+        v.extend_from_slice(&h.to_le_bytes());
+        // MAPT: tesela 0 = MP_HOUSE (nibble alto 3), resto Clear (0)
+        v.extend_from_slice(&[0x30, 0x00, 0x00, 0x00]);
+        v.extend_from_slice(&[1, 1, 1, 1]); // heights
+        v.extend_from_slice(&[0; 4]); // m5
+        v.extend_from_slice(&[0; 4]); // m1
+        v.extend_from_slice(&[0; 4]); // m6
+        // m8 LE por tesela; tesela 0 = 42
+        v.extend_from_slice(&42_u16.to_le_bytes());
+        v.extend_from_slice(&0_u16.to_le_bytes());
+        v.extend_from_slice(&0_u16.to_le_bytes());
+        v.extend_from_slice(&0_u16.to_le_bytes());
+        v
+    }
+
+    #[test]
+    fn from_ottd_binary_loads_house_m8() {
+        let bytes = minimal_ottdmap_v3();
+        let map = Map::from_ottd_binary(&bytes).expect("mapa válido");
+        assert_eq!(map.dimensions(), (2, 2));
+        let t0 = map.get(TileCoord::new(0, 0)).expect("tile");
+        assert_eq!(t0.kind, TileKind::House);
+        assert_eq!(t0.m8, 42);
+        let t1 = map.get(TileCoord::new(1, 0)).expect("tile");
+        assert_eq!(t1.kind, TileKind::Grass);
+    }
+
+    #[test]
+    fn from_ottd_binary_rejects_bad_magic() {
+        let mut b = minimal_ottdmap_v3();
+        b[0] = b'X';
+        assert!(Map::from_ottd_binary(&b).is_err());
     }
 }

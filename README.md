@@ -16,8 +16,8 @@ Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.o
 | 📦 [Cargo](https://doc.rust-lang.org/cargo/) | Workspace con crates `openttdrs-core` y `openttdrs-client`. |
 | 🎮 [Bevy](https://bevyengine.org/) | Motor ECS, ventana, cámara 2D, gizmos de depuración (cliente). |
 | 🖼️ [wgpu](https://wgpu.rs/) (vía Bevy) | API gráfica usada por debajo del render de Bevy. |
-| 🧪 Tests + clippy | Calidad en `openttdrs-core`; CI en GitHub. |
-| ✅ [GitHub Actions](https://docs.github.com/en/actions) | Workflow `ci.yml`: `fmt`, `clippy`, `test`, `build`. |
+| 🧪 Tests + clippy | `cargo test` en el workspace; golden `parse_sav` en Python; CI en GitHub. |
+| ✅ [GitHub Actions](https://docs.github.com/en/actions) | Workflow `ci.yml`: `fmt`, `clippy`, `test`, golden `parse_sav`, `build`. |
 | 🤖 [Dependabot](https://docs.github.com/en/code-security/dependabot) | Actualizaciones **mensuales** de Cargo y Actions (`.github/dependabot.yml`). |
 | 📚 OpenTTD upstream | Solo referencia local; ver sección siguiente. |
 
@@ -47,7 +47,11 @@ El cliente muestra una rejilla de depuración del mapa y el **tick** de simulaci
 
 ```bash
 cargo test -p openttdrs-core
+# o todo el workspace (incluye comprobaciones del mapa en openttdrs-core):
+cargo test --workspace
 ```
+
+Tras tocar `scripts/parse_sav.py`, conviene ejecutar `python3 scripts/verify_parse_sav_reference.py` (misma comprobación que en CI).
 
 ---
 
@@ -82,6 +86,32 @@ Si preferís scripts individuales:
 
 ---
 
+## Savegames → `.ottdmap` (`scripts/parse_sav.py`)
+
+Convierte un save de OpenTTD (`.sav`) al binario que carga el cliente (`MAPO` / v3), incluyendo **HouseID** correcto en saves antiguos (`m8` desde M3HI/M3LO si la versión del save es &lt; 348).
+
+```bash
+python3 scripts/parse_sav.py ruta/al/mapa.sav salida.ottdmap
+OTTDMAP_FILE=salida.ottdmap cargo run -p openttdrs-client
+```
+
+**Nota:** la carpeta `assets/` está en `.gitignore`. Los gráficos se generan con los scripts de la sección anterior; los `.ottdmap` que generes en local **no se versionan** salvo que los pongas en otro path (por ejemplo `tests/fixtures/` para pruebas).
+
+**Regenerar el golden usado en CI** (tras cambiar la lógica de `parse_sav.py`):
+
+```bash
+python3 scripts/emit_parse_sav_golden.py tests/fixtures/stationlist-test.sav \
+  > tests/fixtures/parse_sav_stationlist_golden.json
+```
+
+Comprobación manual respecto al golden:
+
+```bash
+python3 scripts/verify_parse_sav_reference.py
+```
+
+---
+
 ## Estructura del repo
 
 ```
@@ -90,7 +120,8 @@ rust-toolchain.toml
 crates/openttdrs-core/     # Mapa, tick, estado sin Bevy
 crates/openttdrs-client/   # Binario Bevy
 docs/                      # Informe de arquitectura upstream
-scripts/                   # fetch-openttd-reference.sh
+scripts/                   # fetch-openttd-reference.sh, parse_sav, assets
+tests/fixtures/            # .sav + golden JSON para verify_parse_sav (sí versionados)
 .github/                   # CI + Dependabot
 reference/                 # Clon local ignorado por git
 ```

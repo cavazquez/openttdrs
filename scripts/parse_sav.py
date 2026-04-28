@@ -179,6 +179,104 @@ SLV_INCREASE_HOUSE_LIMIT = 348
 MP_HOUSE = 3
 
 
+def build_m8_le_for_save(
+    version: int,
+    mapt: bytes,
+    map8_raw: bytes,
+    m3lo_raw: bytes,
+    m3hi_raw: bytes,
+    expected: int,
+) -> bytes:
+    """Construye el bloque m8 en little-endian (``expected * 2`` bytes).
+
+    Para saves con ``version < SLV_INCREASE_HOUSE_LIMIT``, el HouseID en teselas
+    ``MP_HOUSE`` se toma de M3HI/M3LO (equivalente a afterload.cpp).
+    """
+    buf = bytearray(map8_raw[: expected * 2])
+    if len(buf) < expected * 2:
+        buf.extend(b"\x00" * (expected * 2 - len(buf)))
+    m3lo = m3lo_raw[:expected].ljust(expected, b"\x00")
+    m3hi = m3hi_raw[:expected].ljust(expected, b"\x00")
+    if version < SLV_INCREASE_HOUSE_LIMIT:
+        for i in range(expected):
+            if ((mapt[i] >> 4) & 0xF) != MP_HOUSE:
+                continue
+            hid = m3hi[i] | (((m3lo[i] >> 6) & 1) << 8)
+            struct.pack_into("<H", buf, i * 2, hid & 0xFFFF)
+    return bytes(buf)
+
+
+def dimensions_from_chunks(chunks: dict) -> tuple[int, int]:
+    """Devuelve ``(dim_x, dim_y)`` desde chunks MAPS/MAPT."""
+    if "MAPS" in chunks and isinstance(chunks["MAPS"], tuple):
+        dim_x, dim_y = chunks["MAPS"]
+        return dim_x, dim_y
+    if "MAPS" in chunks and isinstance(chunks["MAPS"], (bytes, bytearray)) and len(chunks["MAPS"]) >= 8:
+        dim_x, dim_y = struct.unpack_from(">II", chunks["MAPS"], 0)
+        return dim_x, dim_y
+    if "MAPT" in chunks:
+        mapt = chunks["MAPT"]
+        dims = infer_dimensions(len(mapt))
+        if dims is None:
+            raise ValueError(f"No se pueden inferir dimensiones desde MAPT ({len(mapt)} bytes)")
+        return dims
+    raise ValueError("Chunk MAPT no encontrado")
+
+
+def analyze_save(raw: bytes) -> dict:
+    """Estadísticas deterministas para golden JSON y tests (sin escribir disco).
+
+    Devuelve un dict con ``save_version``, ``dimensions``, ``tile_type_counts`` y
+    ``house`` (Histograma de HouseID en teselas MP_HOUSE tras aplicar
+    :func:`build_m8_le_for_save`).
+    """
+    data, version = decompress(raw)
+    chunks = parse_chunks(data)
+    dim_x, dim_y = dimensions_from_chunks(chunks)
+    expected = dim_x * dim_y
+    mapt = chunks.get("MAPT", b"")
+    if len(mapt) < expected:
+        raise ValueError(f"MAPT demasiado corto: {len(mapt)} bytes, esperados {expected}")
+    map8 = chunks.get("MAP8", b"")
+    m3lo = chunks.get("M3LO", b"")
+    m3hi = chunks.get("M3HI", b"")
+    if len(map8) < expected * 2:
+        map8 = map8 + b"\x00" * (expected * 2 - len(map8))
+    if len(m3lo) < expected:
+        m3lo = m3lo + b"\x00" * (expected - len(m3lo))
+    if len(m3hi) < expected:
+        m3hi = m3hi + b"\x00" * (expected - len(m3hi))
+
+    m8_data = build_m8_le_for_save(version, mapt, map8, m3lo, m3hi, expected)
+
+    type_counts: dict[str, int] = {}
+    for b in mapt[:expected]:
+        t = (b >> 4) & 0xF
+        key = str(t)
+        type_counts[key] = type_counts.get(key, 0) + 1
+
+    hist: dict[str, int] = {}
+    n_house = 0
+    for i in range(expected):
+        if ((mapt[i] >> 4) & 0xF) != MP_HOUSE:
+            continue
+        n_house += 1
+        hid = struct.unpack_from("<H", m8_data, i * 2)[0]
+        key = str(hid)
+        hist[key] = hist.get(key, 0) + 1
+
+    return {
+        "save_version": version,
+        "dimensions": [dim_x, dim_y],
+        "tile_type_counts": {k: type_counts[k] for k in sorted(type_counts, key=int)},
+        "house": {
+            "tiles": n_house,
+            "unique_m8": len(hist),
+            "m8_histogram": {k: hist[k] for k in sorted(hist, key=int)},
+        },
+    }
+
+
 def decompress(raw: bytes) -> tuple[bytes, int]:
     """Descomprime el payload y devuelve (datos_descomprimidos, versión_del_savegame)."""
     magic = raw[:4]
@@ -373,20 +471,16 @@ def main() -> None:
     print(f"  Chunks encontrados: {found}")
 
     # Dimensiones
-    if 'MAPS' in chunks and isinstance(chunks['MAPS'], tuple):
-        dim_x, dim_y = chunks['MAPS']
-    elif 'MAPS' in chunks and isinstance(chunks['MAPS'], (bytes, bytearray)) and len(chunks['MAPS']) >= 8:
-        # En saves más viejos MAPS puede venir como CH_RIFF de 8 bytes BE (dim_x, dim_y).
-        dim_x, dim_y = struct.unpack_from('>II', chunks['MAPS'], 0)
-    elif 'MAPT' in chunks:
-        mapt = chunks['MAPT']
-        dims = infer_dimensions(len(mapt))
-        if dims is None:
-            sys.exit(f"No se pueden inferir dimensiones desde MAPT ({len(mapt)} bytes)")
-        dim_x, dim_y = dims
-        print(f"  ⚠ MAPS no encontrado, inferido: {dim_x}×{dim_y}")
-    else:
-        sys.exit("Chunk MAPT no encontrado. ¿Es un savegame válido?")
+    if "MAPS" not in chunks and "MAPT" in chunks:
+        mapt0 = chunks["MAPT"]
+        inferred = infer_dimensions(len(mapt0))
+        if inferred is not None:
+            print(f"  ⚠ MAPS no encontrado, inferido: {inferred[0]}×{inferred[1]}")
+    try:
+        dim_x, dim_y = dimensions_from_chunks(chunks)
+    except ValueError as e:
+        msg = str(e) if str(e) else "Chunk MAPT no encontrado. ¿Es un savegame válido?"
+        sys.exit(msg)
 
     print(f"  Mapa: {dim_x} × {dim_y} = {dim_x*dim_y:,} teselas")
 
@@ -442,20 +536,14 @@ def main() -> None:
 
     # m8 (HouseID): en saves antiguos (< SLV_INCREASE_HOUSE_LIMIT) el chunk MAP8
     # suele ser todo ceros en disco; el tipo real está en m4 (M3HI) + bit 6 de m3 (M3LO).
-    m8_buf = bytearray(map8[: expected * 2])
+    m8_data = build_m8_le_for_save(version, mapt[:expected], map8, m3lo, m3hi, expected)
     if version < SLV_INCREASE_HOUSE_LIMIT:
-        n_legacy = 0
-        for i in range(expected):
-            if ((mapt[i] >> 4) & 0xF) != MP_HOUSE:
-                continue
-            m3 = m3lo[i]
-            m4 = m3hi[i]
-            hid = m4 | (((m3 >> 6) & 1) << 8)
-            struct.pack_into('<H', m8_buf, i * 2, hid & 0xFFFF)
-            n_legacy += 1
+        n_legacy = sum(
+            1 for i in range(expected) if ((mapt[i] >> 4) & 0xF) == MP_HOUSE
+        )
         print(
             f"  HouseID desde M3HI/M3LO (save < {SLV_INCREASE_HOUSE_LIMIT}): "
-            f'{n_legacy:,} teselas MP_HOUSE'
+            f"{n_legacy:,} teselas MP_HOUSE"
         )
 
     # Escribir archivo de salida (formato v3: + m6 + m8)
@@ -465,8 +553,6 @@ def main() -> None:
     heights    = maph[:expected]
     m1_data    = map1[:expected]
     m6_data    = map6[:expected]
-    m8_data    = bytes(m8_buf)
-
     out_path.write_bytes(header + tile_types + heights + m5_data + m1_data + m6_data + m8_data)
     print(f"✓ Escrito: {out_path}  ({out_path.stat().st_size:,} bytes)")
 

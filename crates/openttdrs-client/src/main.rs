@@ -1,38 +1,107 @@
-//! Cliente mínimo: ventana Bevy, cámara 2D y rejilla de depuración del [`GameState`] del core.
+//! Cliente isométrico: sprites de OpenGFX + gizmos de overlay para el [`GameState`] del core.
 
 #![warn(clippy::pedantic)]
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::default_constructed_unit_structs)]
 
-use bevy::color::palettes::css::{DARK_GRAY, LIMEGREEN};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{GameState, Industry, IndustryKind, Station, TileCoord, TileKind, Vehicle, VehicleKind, find_path};
+use openttdrs_core::{
+    find_path, GameState, Industry, IndustryKind, Station, TileCoord, TileKind, Vehicle,
+    VehicleKind,
+};
 
-const TILE_WORLD: f32 = 20.0;
+// ── Constantes isométricas ────────────────────────────────────────────────────
 const MAP_W: u32 = 24;
 const MAP_H: u32 = 18;
+/// Desplazamiento horizontal por tesela en pantalla (la tesela mide 64 px de ancho).
+const ISO_HW: f32 = 32.0;
+/// Desplazamiento vertical por tesela en pantalla (ratio 2:1 isométrico).
+const ISO_QH: f32 = 16.0;
+
+// ── Utilidades de proyección ──────────────────────────────────────────────────
+
+/// Convierte coordenadas de tesela (tx, ty) a posición 2D de pantalla isométrica.
+///
+/// El eje X del mapa va hacia la derecha-abajo, el Y hacia la izquierda-abajo.
+fn iso(tx: i32, ty: i32) -> Vec2 {
+    Vec2::new(
+        (tx - ty) as f32 * ISO_HW,
+        (tx + ty) as f32 * -ISO_QH,
+    )
+}
+
+/// La mitad de la altura de los sprites de tesela (64×31 → 15.5 px).
+const TILE_HALF_H: f32 = 15.5;
+
+/// Vec3 para la tesela incluyendo la capa Z (painter's algorithm: mayor tx+ty = al frente).
+///
+/// Posiciona el centro del sprite 15.5 px por debajo del vértice superior del rombo,
+/// equivalente a un anchor top-center. Esto es la convención de referencia de OpenTTD
+/// (xrel=-31, yrel=0 en el NFO) donde el punto de referencia es el vértice superior.
+fn tile_pos(tx: i32, ty: i32, layer: f32) -> Vec3 {
+    let p = iso(tx, ty);
+    Vec3::new(
+        p.x,
+        p.y - TILE_HALF_H,
+        (tx + ty) as f32 * 0.01 + layer,
+    )
+}
+
+/// Dibuja el contorno de un rombo isométrico alineado con la tesela.
+fn gizmo_diamond(gizmos: &mut Gizmos, center: Vec2, hw: f32, hh: f32, color: Color) {
+    let t = center + Vec2::new(0.0, hh);
+    let r = center + Vec2::new(hw, 0.0);
+    let b = center + Vec2::new(0.0, -hh);
+    let l = center + Vec2::new(-hw, 0.0);
+    gizmos.line_2d(t, r, color);
+    gizmos.line_2d(r, b, color);
+    gizmos.line_2d(b, l, color);
+    gizmos.line_2d(l, t, color);
+}
+
+// ── App ───────────────────────────────────────────────────────────────────────
 
 fn main() {
+    // La carpeta assets/ vive en la raíz del workspace, dos niveles arriba del crate.
+    let asset_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
+
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "openttdrs — vista debug".into(),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "openttdrs".into(),
+                        resolution: (1280_u32, 720_u32).into(),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                .set(AssetPlugin {
+                    file_path: asset_root.into(),
+                    ..default()
+                }),
+        )
         .init_resource::<SimWorld>()
-        .add_systems(Startup, setup_camera)
+        .add_systems(Startup, setup)
         .add_systems(
             Update,
-            (advance_sim, sync_window_title, draw_map_debug, draw_industries, draw_stations, draw_vehicles).chain(),
+            (
+                advance_sim,
+                sync_window_title,
+                draw_industries,
+                draw_stations,
+                draw_vehicles,
+            )
+                .chain(),
         )
         .run();
 }
 
-/// Copia del estado de simulación expuesta al motor (se avanza a ritmo fijo por simplicidad).
+// ── Simulación ────────────────────────────────────────────────────────────────
+
+/// Copia del estado de simulación expuesta al motor (avance a ritmo fijo).
 #[derive(Resource)]
 struct SimWorld {
     state: GameState,
@@ -50,10 +119,9 @@ impl Default for SimWorld {
     }
 }
 
-/// Distribuye tipos de tesela con una semilla fija (solo visual; sin RNG en core).
+/// Distribuye tipos de tesela con una semilla fija (sin RNG en core).
 ///
-/// Usa un hash multiplicativo de Wang para producir una distribución determinista:
-/// ~20 % agua, ~20 % bosque, ~10 % carbón, resto prado.
+/// Usa un hash multiplicativo de Wang: ~20 % agua, ~20 % bosque, ~10 % carbón, resto prado.
 fn distribute_tile_kinds(state: &mut GameState, seed: u64) {
     let (mw, mh) = state.map.dimensions();
     for y in 0..mh {
@@ -82,9 +150,9 @@ fn tile_kind_hash(x: u32, y: u32, seed: u64) -> TileKind {
     }
 }
 
-/// Coloca una industria en teselas CoalField y Forest (una de cada N para no saturar el mapa).
+/// Coloca una industria cada STRIDE teselas del mismo tipo para no saturar el mapa.
 fn place_industries(state: &mut GameState) {
-    const STRIDE: u32 = 4; // una industria cada 4 teselas del mismo tipo
+    const STRIDE: u32 = 4;
     let (mw, mh) = state.map.dimensions();
     let mut coal_n = 0u32;
     let mut forest_n = 0u32;
@@ -112,7 +180,7 @@ fn place_industries(state: &mut GameState) {
 
 /// Coloca una estación por industria con offset (+3 X, ±3 Y) alternado según índice.
 ///
-/// Esto genera rutas en L que obligan a los trucks a moverse tanto horizontal como verticalmente.
+/// Genera rutas en L con movimiento horizontal y vertical.
 fn place_stations(state: &mut GameState) {
     let (mw, mh) = state.map.dimensions();
     let positions: Vec<TileCoord> = state
@@ -132,10 +200,7 @@ fn place_stations(state: &mut GameState) {
     }
 }
 
-/// Traza una carretera Manhattan entre cada industria y su estación pareada.
-///
-/// Marca los tiles intermedios como Road; los endpoints (industria/estación) conservan
-/// su tipo original porque el pathfinder permite entrar/salir de tiles no-road.
+/// Traza carretera Manhattan entre cada industria y su estación pareada.
 fn place_roads(state: &mut GameState) {
     let routes: Vec<(TileCoord, TileCoord)> = state
         .industries
@@ -145,7 +210,6 @@ fn place_roads(state: &mut GameState) {
         .collect();
 
     for (from, to) in routes {
-        // Traza en X primero, luego en Y (Manhattan).
         let mut cur = from;
         while cur.x != to.x {
             cur.x += (to.x - cur.x).signum();
@@ -173,7 +237,6 @@ fn place_vehicles(state: &mut GameState) {
 
     for (i, (a, b)) in routes.into_iter().enumerate() {
         let mut v = Vehicle::new(i as u32, VehicleKind::Truck, a, b);
-        // Pre-computa el path inicial para que el vehículo empiece a moverse en el tick 1.
         if let Some(path) = find_path(&state.map, a, b) {
             v.path = path.into_iter().collect();
         }
@@ -181,13 +244,52 @@ fn place_vehicles(state: &mut GameState) {
     }
 }
 
-fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2d);
-}
+// ── Sistemas de Bevy ──────────────────────────────────────────────────────────
 
-fn sync_window_title(sim: Res<SimWorld>, mut windows: Query<&mut Window, With<PrimaryWindow>>) {
-    if let Ok(mut window) = windows.single_mut() {
-        window.title = format!("openttdrs — tick {}", sim.state.tick.get());
+/// Genera la cámara y los sprites de tesela isométricos al arrancar.
+fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWorld>) {
+    // Centro del mapa isométrico (para 24×18 teselas).
+    // Con Anchor::TopCenter, el mapa se extiende hacia abajo desde los vértices superiores,
+    // por eso desplazamos la cámara media altura de tesela extra (TILE_HALF_H).
+    let cam_x = ((MAP_W as i32 - 1) - (MAP_H as i32 - 1)) as f32 / 2.0 * ISO_HW;
+    let cam_y = -((MAP_W as i32 - 1) + (MAP_H as i32 - 1)) as f32 / 2.0 * ISO_QH
+        - TILE_HALF_H;
+
+    commands.spawn((
+        Camera2d,
+        Camera {
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.45, 0.60, 0.75)),
+            ..default()
+        },
+        Transform::from_translation(Vec3::new(cam_x, cam_y, 999.9)),
+    ));
+
+    // Handles de sprites de tesela (todos desde assets/opengfx/tiles/).
+    let h_grass = asset_server.load::<Image>("opengfx/tiles/grass.png");
+    let h_rough = asset_server.load::<Image>("opengfx/tiles/grass_rough.png");
+    let h_water = asset_server.load::<Image>("opengfx/tiles/water.png");
+    let h_road = asset_server.load::<Image>("opengfx/tiles/road_x.png");
+
+    let (mw, mh) = sim.state.map.dimensions();
+    for ty in 0..mh {
+        for tx in 0..mw {
+            let c = TileCoord::new(tx as i32, ty as i32);
+            let kind = sim.state.map.get_kind(c).unwrap_or(TileKind::Grass);
+
+            let (image, color) = match kind {
+                TileKind::Grass => (h_grass.clone(), Color::WHITE),
+                TileKind::Forest => (h_rough.clone(), Color::srgb(0.6, 1.0, 0.45)),
+                TileKind::CoalField => (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45)),
+                TileKind::Water => (h_water.clone(), Color::WHITE),
+                TileKind::Road => (h_road.clone(), Color::WHITE),
+                TileKind::Rail => (h_road.clone(), Color::srgb(0.75, 0.75, 1.0)),
+            };
+
+            commands.spawn((
+                Sprite { image, color, ..default() },
+                Transform::from_translation(tile_pos(tx as i32, ty as i32, 0.0)),
+            ));
+        }
     }
 }
 
@@ -201,148 +303,66 @@ fn advance_sim(time: Res<Time>, mut sim: ResMut<SimWorld>, mut acc: Local<f32>) 
     }
 }
 
-fn tile_color(kind: TileKind) -> Color {
-    match kind {
-        TileKind::Grass     => Color::srgb(0.45, 0.75, 0.25),
-        TileKind::Water     => Color::srgb(0.15, 0.40, 0.80),
-        TileKind::Forest    => Color::srgb(0.10, 0.45, 0.15),
-        TileKind::CoalField => Color::srgb(0.22, 0.20, 0.20),
-        TileKind::Road      => Color::srgb(0.55, 0.52, 0.48),
-        TileKind::Rail      => Color::srgb(0.40, 0.38, 0.36),
+fn sync_window_title(sim: Res<SimWorld>, mut windows: Query<&mut Window, With<PrimaryWindow>>) {
+    if let Ok(mut window) = windows.single_mut() {
+        window.title = format!("openttdrs — tick {}", sim.state.tick.get());
     }
 }
 
-fn draw_map_debug(sim: Res<SimWorld>, mut gizmos: Gizmos) {
-    let (mw, mh) = sim.state.map.dimensions();
-    let ox = -(mw as f32) * TILE_WORLD * 0.5;
-    let oy = -(mh as f32) * TILE_WORLD * 0.5;
+/// Dibuja un rombo de contorno por cada industria.
+fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
+    for industry in &sim.state.industries {
+        let center = iso(industry.pos.x, industry.pos.y);
+        let color = match industry.kind {
+            IndustryKind::CoalMine => Color::srgb(1.0, 0.9, 0.1),
+            IndustryKind::Forest => Color::srgb(1.0, 0.5, 0.05),
+        };
+        // Rombo exterior (borde de la tesela).
+        gizmo_diamond(&mut gizmos, center, 30.0, 14.0, color);
 
-    for y in 0..mh {
-        for x in 0..mw {
-            let xi = i32::try_from(x).expect("map index fits i32");
-            let yi = i32::try_from(y).expect("map index fits i32");
-            let c = TileCoord::new(xi, yi);
-            let kind = sim.state.map.get_kind(c).unwrap_or(TileKind::Grass);
-            let wx = ox + (x as f32) * TILE_WORLD;
-            let wy = oy + (y as f32) * TILE_WORLD;
-            gizmos.rect_2d(
-                Isometry2d::from_translation(Vec2::new(wx, wy)),
-                Vec2::splat(TILE_WORLD - 1.0),
-                tile_color(kind),
+        // Barra de stock en el interior del rombo.
+        if industry.stock > 0 {
+            let fill = industry.stock as f32 / industry.capacity as f32;
+            let bar_w = 56.0 * fill;
+            let bar_y = center.y - 12.0;
+            gizmos.line_2d(
+                Vec2::new(center.x - bar_w / 2.0, bar_y),
+                Vec2::new(center.x + bar_w / 2.0, bar_y),
+                Color::WHITE,
             );
         }
     }
-
-    // Contorno del mapa (solo trazo, sin relleno adicional encima de las teselas).
-    let half_w = (mw as f32) * TILE_WORLD * 0.5;
-    let half_h = (mh as f32) * TILE_WORLD * 0.5;
-    let a = Vec2::new(ox - TILE_WORLD * 0.5, oy - TILE_WORLD * 0.5);
-    let b = Vec2::new(ox + half_w * 2.0 - TILE_WORLD * 0.5, oy - TILE_WORLD * 0.5);
-    let c = Vec2::new(
-        ox + half_w * 2.0 - TILE_WORLD * 0.5,
-        oy + half_h * 2.0 - TILE_WORLD * 0.5,
-    );
-    let d = Vec2::new(ox - TILE_WORLD * 0.5, oy + half_h * 2.0 - TILE_WORLD * 0.5);
-    gizmos.line_2d(a, b, LIMEGREEN);
-    gizmos.line_2d(b, c, LIMEGREEN);
-    gizmos.line_2d(c, d, LIMEGREEN);
-    gizmos.line_2d(d, a, LIMEGREEN);
-
-    gizmos.line_2d(Vec2::ZERO, Vec2::new(80.0, 40.0), DARK_GRAY);
 }
 
+/// Dibuja un rombo cian por cada estación.
 fn draw_stations(sim: Res<SimWorld>, mut gizmos: Gizmos) {
-    let (mw, mh) = sim.state.map.dimensions();
-    let ox = -(mw as f32) * TILE_WORLD * 0.5;
-    let oy = -(mh as f32) * TILE_WORLD * 0.5;
-
     for station in &sim.state.stations {
-        let wx = ox + (station.pos.x as f32) * TILE_WORLD;
-        let wy = oy + (station.pos.y as f32) * TILE_WORLD;
+        let center = iso(station.pos.x, station.pos.y);
+        gizmo_diamond(&mut gizmos, center, 26.0, 12.0, Color::srgb(0.0, 0.9, 0.9));
 
-        // Cuadrado cian que representa la estación.
-        gizmos.rect_2d(
-            Isometry2d::from_translation(Vec2::new(wx, wy)),
-            Vec2::splat(TILE_WORLD * 0.6),
-            Color::srgb(0.0, 0.85, 0.85),
-        );
-
-        // Barra de income: escala logarítmica para que sea visible desde el primer ciclo.
+        // Barra de income (escala logarítmica).
         if station.income > 0 {
-            let fill = (station.income as f32).log2() / 10.0; // 2^10=1024 → barra llena
-            let fill = fill.min(1.0);
-            let bar_w = (TILE_WORLD - 2.0) * fill;
-            let bar_h = 3.0;
-            let bar_x = wx - (TILE_WORLD - 2.0) * 0.5 + bar_w * 0.5;
-            let bar_y = wy - TILE_WORLD * 0.5 + bar_h * 0.5 + 1.0;
-            gizmos.rect_2d(
-                Isometry2d::from_translation(Vec2::new(bar_x, bar_y)),
-                Vec2::new(bar_w, bar_h),
+            let fill = ((station.income as f32).log2() / 10.0).min(1.0);
+            let bar_w = 48.0 * fill;
+            let bar_y = center.y - 10.0;
+            gizmos.line_2d(
+                Vec2::new(center.x - bar_w / 2.0, bar_y),
+                Vec2::new(center.x + bar_w / 2.0, bar_y),
                 Color::srgb(1.0, 1.0, 0.0),
             );
         }
     }
 }
 
+/// Dibuja un pequeño rombo blanco/amarillo por cada vehículo.
 fn draw_vehicles(sim: Res<SimWorld>, mut gizmos: Gizmos) {
-    let (mw, mh) = sim.state.map.dimensions();
-    let ox = -(mw as f32) * TILE_WORLD * 0.5;
-    let oy = -(mh as f32) * TILE_WORLD * 0.5;
-
     for vehicle in &sim.state.vehicles {
-        let wx = ox + (vehicle.pos.x as f32) * TILE_WORLD;
-        let wy = oy + (vehicle.pos.y as f32) * TILE_WORLD;
-        // Blanco cuando vacío, amarillo cuando cargado.
+        let center = iso(vehicle.pos.x, vehicle.pos.y);
         let color = if vehicle.cargo > 0 {
             Color::srgb(1.0, 0.9, 0.1)
         } else {
             Color::WHITE
         };
-        gizmos.rect_2d(
-            Isometry2d::from_translation(Vec2::new(wx, wy)),
-            Vec2::splat(TILE_WORLD * 0.3),
-            color,
-        );
-    }
-}
-
-fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
-    let (mw, mh) = sim.state.map.dimensions();
-    let ox = -(mw as f32) * TILE_WORLD * 0.5;
-    let oy = -(mh as f32) * TILE_WORLD * 0.5;
-
-    for industry in &sim.state.industries {
-        let wx = ox + (industry.pos.x as f32) * TILE_WORLD;
-        let wy = oy + (industry.pos.y as f32) * TILE_WORLD;
-
-        // Color base según tipo de industria.
-        let base_color = match industry.kind {
-            IndustryKind::CoalMine => Color::srgb(0.9, 0.85, 0.1),  // amarillo
-            IndustryKind::Forest   => Color::srgb(0.8, 0.4, 0.05),  // naranja
-        };
-
-        // Cuadrado central que representa la industria.
-        let icon_size = TILE_WORLD * 0.55;
-        gizmos.rect_2d(
-            Isometry2d::from_translation(Vec2::new(wx, wy)),
-            Vec2::splat(icon_size),
-            base_color,
-        );
-
-        // Barra de stock: rectángulo estrecho en el borde inferior de la tesela,
-        // cuya anchura escala con el nivel de stock.
-        let fill = industry.stock as f32 / industry.capacity as f32;
-        // Solo dibujar la barra cuando hay stock producido, cada INDUSTRY_PRODUCE_TICKS ticks.
-        if fill > 0.0 {
-            let bar_w = (TILE_WORLD - 2.0) * fill;
-            let bar_h = 3.0;
-            let bar_x = wx - (TILE_WORLD - 2.0) * 0.5 + bar_w * 0.5;
-            let bar_y = wy - TILE_WORLD * 0.5 + bar_h * 0.5 + 1.0;
-            gizmos.rect_2d(
-                Isometry2d::from_translation(Vec2::new(bar_x, bar_y)),
-                Vec2::new(bar_w, bar_h),
-                Color::WHITE,
-            );
-        }
+        gizmo_diamond(&mut gizmos, center, 8.0, 4.0, color);
     }
 }

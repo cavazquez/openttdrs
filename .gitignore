@@ -22,3 +22,6 @@ target
 
 # Código de referencia (no versionar el clone completo)
 /reference/openttd-upstream/
+
+# Assets descargados por los scripts (gráficos y sonidos)
+/assets/

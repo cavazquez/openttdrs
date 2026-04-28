@@ -1,13 +1,18 @@
-# Optimizaciones recomendadas por Bevy para desarrollo:
-# - Las dependencias (incluyendo Bevy) se compilan con opt-level=3
-#   → el motor corre a velocidad casi-release mientras se desarrolla.
-# - El código propio usa opt-level=1 para compilaciones rápidas.
-# - La recompilación incremental sigue siendo rápida (solo el crate propio).
+# Configuración recomendada por Bevy para desarrollo:
 #
-# Para producción: cargo run --release (opt-level=3 en todo).
+# - Las dependencias compilan con opt-level=1 (no 3, que causa OOM/bus-error en lld
+#   con inputs muy grandes). Da suficiente optimización para que Bevy corra bien.
+# - El código propio usa opt-level=1 también: compilación incremental rápida.
+#
+# Para usar mold (más rápido y robusto que lld, instalable con `sudo apt install mold`):
+#   [target.x86_64-unknown-linux-gnu]
+#   linker = "clang"
+#   rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+#
+# Para producción: cargo run --release
 
 [profile.dev]
 opt-level = 1
 
 [profile.dev.package."*"]
-opt-level = 3
+opt-level = 1

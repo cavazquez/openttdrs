@@ -25,8 +25,8 @@ use openttdrs_core::{IndustryKind, TileCoord, TileKind, Vehicle};
 
 use camera::move_camera;
 use iso::{
-    ISO_HW, ISO_QH, TILE_HALF_H, gizmo_diamond, iso, overlay_pos, tile_pos, tile_pos_half,
-    wang_hash,
+    ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, compute_tileh, gizmo_diamond, iso, overlay_pos,
+    tile_pos, tile_pos_half, wang_hash,
 };
 use sprites::{
     HOUSE_META, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites,
@@ -171,6 +171,17 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     // ── Handles de teselas de suelo ───────────────────────────────────────────
     let h_grass = asset_server.load::<Image>("opengfx/tiles/grass.png");
     let h_rough = asset_server.load::<Image>("opengfx/tiles/grass_rough.png");
+    // Pendientes de grass y rough: índice 0 = tileh 1, índice 13 = tileh 14
+    let grass_slopes: Vec<Handle<Image>> = (1u8..=14)
+        .map(|tileh| {
+            asset_server.load::<Image>(format!("opengfx/tiles/terrain_grass_slope_{tileh:02}.png"))
+        })
+        .collect();
+    let rough_slopes: Vec<Handle<Image>> = (1u8..=14)
+        .map(|tileh| {
+            asset_server.load::<Image>(format!("opengfx/tiles/terrain_rough_slope_{tileh:02}.png"))
+        })
+        .collect();
     let h_water = asset_server.load::<Image>("opengfx/tiles/water.png");
     // Objetos estáticos del mapa (MP_OBJECT): faro (type 1) y transmisor (type 0)
     let h_lighthouse = asset_server.load::<Image>("opengfx/tiles/object_lighthouse.png");
@@ -361,20 +372,39 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
 
                     // MP_CLEAR (0): distinguir subtipo de suelo via m5 bits 2-4
                     // MP_OBJECT (10): grass de base + overlay de objeto
+                    let tileh = compute_tileh(&sim.state.map, tx, ty);
+                    let slope_half_h = SLOPE_HALF_H[tileh as usize];
+
+                    // Helpers para elegir sprite plano o con pendiente
+                    let grass_img = || {
+                        if tileh == 0 {
+                            h_grass.clone()
+                        } else {
+                            grass_slopes[tileh as usize - 1].clone()
+                        }
+                    };
+                    let rough_img = || {
+                        if tileh == 0 {
+                            h_rough.clone()
+                        } else {
+                            rough_slopes[tileh as usize - 1].clone()
+                        }
+                    };
+
                     let (image, color) = match kind {
                         TileKind::Grass if ottd_type == 0 => {
                             // bits 2-4 de m5 = ClearGround
                             // 0=grass, 1=rough, 2=rocky, 3=fields, 4=snow, 5=desert
                             match (tile_m5 >> 2) & 0x7 {
-                                0 => (h_grass.clone(), Color::WHITE), // grass verde
-                                3 => (h_rough.clone(), Color::srgb(0.82, 0.72, 0.45)), // campos arados
-                                _ => (h_rough.clone(), Color::srgb(0.78, 0.73, 0.58)), // rough/rocky
+                                0 => (grass_img(), Color::WHITE),
+                                3 => (rough_img(), Color::srgb(0.82, 0.72, 0.45)), // campos
+                                _ => (rough_img(), Color::srgb(0.78, 0.73, 0.58)), // rough/rocky
                             }
                         }
-                        TileKind::Grass => (h_grass.clone(), Color::WHITE), // MP_OBJECT u otros
-                        TileKind::Forest => (h_rough.clone(), Color::srgb(0.6, 1.0, 0.45)),
-                        TileKind::CoalField => (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45)),
-                        TileKind::Unknown(_) => (h_grass.clone(), Color::srgb(1.0, 0.0, 1.0)),
+                        TileKind::Grass => (grass_img(), Color::WHITE), // MP_OBJECT u otros
+                        TileKind::Forest => (rough_img(), Color::srgb(0.6, 1.0, 0.45)),
+                        TileKind::CoalField => (rough_img(), Color::srgb(0.55, 0.50, 0.45)),
+                        TileKind::Unknown(_) => (grass_img(), Color::srgb(1.0, 0.0, 1.0)),
                         TileKind::House
                         | TileKind::Station
                         | TileKind::Road
@@ -389,7 +419,13 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                             color,
                             ..default()
                         },
-                        Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
+                        Transform::from_translation(tile_pos_half(
+                            tx as i32,
+                            ty as i32,
+                            height,
+                            0.0,
+                            slope_half_h,
+                        )),
                     ));
 
                     // MP_OBJECT: renderizar faro o transmisor como overlay

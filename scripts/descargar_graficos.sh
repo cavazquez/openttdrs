@@ -111,7 +111,13 @@ crop_by_id(3924, "terrain_bare.png")           # SPR_FLAT_BARE_LAND
 crop_by_id(3943, "terrain_grass_1_3.png")      # SPR_FLAT_1_THIRD_GRASS_TILE
 crop_by_id(3962, "terrain_grass_2_3.png")      # SPR_FLAT_2_THIRD_GRASS_TILE
 crop_by_id(3981, "terrain_grass.png")          # SPR_FLAT_GRASS_TILE
+# Pendientes de grass: SPR_FLAT_GRASS_TILE+1..+14 (tileh 1-14)
+for tileh in range(1, 15):
+    crop_by_id(3981 + tileh, f"terrain_grass_slope_{tileh:02d}.png")
 crop_by_id(4000, "terrain_rough.png")          # SPR_FLAT_ROUGH_LAND
+# Pendientes de rough: SPR_FLAT_ROUGH_LAND+1..+14
+for tileh in range(1, 15):
+    crop_by_id(4000 + tileh, f"terrain_rough_slope_{tileh:02d}.png")
 for i, sid in enumerate([4019, 4020, 4021, 4022]):
     crop_by_id(sid, f"terrain_rough_{i+1}.png")
 crop_by_id(4023, "terrain_rocky_1.png")        # SPR_FLAT_ROCKY_LAND_1

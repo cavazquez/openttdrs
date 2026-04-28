@@ -1,6 +1,7 @@
 //! Utilidades de proyección isométrica.
 
 use bevy::prelude::*;
+use openttdrs_core::{Map, TileCoord};
 
 /// Desplazamiento horizontal por tesela en pantalla (la tesela mide 64 px de ancho).
 pub const ISO_HW: f32 = 32.0;
@@ -79,6 +80,71 @@ pub fn gizmo_diamond(gizmos: &mut Gizmos, center: Vec2, hw: f32, hh: f32, color:
     gizmos.line_2d(r, b, color);
     gizmos.line_2d(b, l, color);
     gizmos.line_2d(l, t, color);
+}
+
+// ── Pendientes (slopes) ───────────────────────────────────────────────────────
+
+/// `half_h` para `tile_pos_half` según el índice `tileh` (0–14).
+///
+/// Derivado de los campos `height` y `yrel` del NFO de OpenGFX:
+/// - Plano (tileh=0): 31 px, yrel=0 → half_h = 15.5
+/// - Pendiente con esquina N elevada (bit 3): yrel=-8, h varía → half_h menor
+///
+/// Bitmask de `tileh` (idéntico al `Slope` de OpenTTD):
+/// `bit0=W, bit1=S, bit2=E, bit3=N`
+pub const SLOPE_HALF_H: [f32; 15] = [
+    15.5, // 0:  flat
+    15.5, // 1:  W
+    11.5, // 2:  S
+    11.5, // 3:  WS
+    15.5, // 4:  E
+    15.5, // 5:  WE
+    11.5, // 6:  SE
+    11.5, // 7:  WSE
+    11.5, // 8:  N
+    11.5, // 9:  NW
+    7.5,  // 10: NS
+    7.5,  // 11: NWS
+    11.5, // 12: NE
+    11.5, // 13: NWE
+    7.5,  // 14: NSE
+];
+
+/// Calcula el bitmask de pendiente (`tileh`) de la tesela `(tx, ty)` a partir
+/// de las alturas de los cuatro tiles de esquina, según la fórmula de OpenTTD:
+///
+/// ```text
+/// h0=(tx,  ty  ) → CORNER_N (bit 3)
+/// h1=(tx+1,ty  ) → CORNER_S (bit 1)
+/// h2=(tx,  ty+1) → CORNER_W (bit 0)
+/// h3=(tx+1,ty+1) → CORNER_E (bit 2)
+/// tileh bit_i = (hi > min(h0,h1,h2,h3))
+/// ```
+///
+/// El resultado está limitado a 0–14 (pendientes simples; las empinadas (15)
+/// requieren sprites especiales y se omiten por ahora).
+#[must_use]
+pub fn compute_tileh(map: &Map, tx: u32, ty: u32) -> u8 {
+    let get_h = |dtx: i32, dty: i32| map.get(TileCoord::new(dtx, dty)).map_or(0, |t| t.height);
+    let h0 = get_h(tx as i32, ty as i32);
+    let h1 = get_h(tx as i32 + 1, ty as i32);
+    let h2 = get_h(tx as i32, ty as i32 + 1);
+    let h3 = get_h(tx as i32 + 1, ty as i32 + 1);
+    let min_h = h0.min(h1).min(h2).min(h3);
+    let mut tileh: u8 = 0;
+    if h2 > min_h {
+        tileh |= 1;
+    } // SLOPE_W
+    if h1 > min_h {
+        tileh |= 2;
+    } // SLOPE_S
+    if h3 > min_h {
+        tileh |= 4;
+    } // SLOPE_E
+    if h0 > min_h {
+        tileh |= 8;
+    } // SLOPE_N
+    tileh.min(14)
 }
 
 /// Hash de Wang para generar variación determinista (sin RNG en el core).

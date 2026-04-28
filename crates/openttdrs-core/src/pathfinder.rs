@@ -15,6 +15,7 @@ fn is_traversable(kind: TileKind) -> bool {
 /// a `from` hasta `to` inclusive. Si `from == to` devuelve `Some(vec![])`.
 /// Devuelve `None` si no existe camino.
 #[must_use]
+#[allow(clippy::cast_possible_wrap)]
 pub fn find_path(map: &Map, from: TileCoord, to: TileCoord) -> Option<Vec<TileCoord>> {
     if from == to {
         return Some(vec![]);
@@ -43,7 +44,7 @@ pub fn find_path(map: &Map, from: TileCoord, to: TileCoord) -> Option<Vec<TileCo
                 continue;
             }
             let next_kind = map.get_kind(next).unwrap_or(TileKind::Grass);
-            let cur_kind  = map.get_kind(cur).unwrap_or(TileKind::Grass);
+            let cur_kind = map.get_kind(cur).unwrap_or(TileKind::Grass);
             // Un tile es alcanzable si:
             // - Es Road/Rail (tile intermedio traversable), O
             // - Es el destino Y el tile actual (cur) ya es Road/Rail
@@ -64,7 +65,11 @@ pub fn find_path(map: &Map, from: TileCoord, to: TileCoord) -> Option<Vec<TileCo
     None
 }
 
-fn reconstruct(from: TileCoord, to: TileCoord, parent: &HashMap<TileCoord, TileCoord>) -> Vec<TileCoord> {
+fn reconstruct(
+    from: TileCoord,
+    to: TileCoord,
+    parent: &HashMap<TileCoord, TileCoord>,
+) -> Vec<TileCoord> {
     let mut path = Vec::new();
     let mut cur = to;
     while cur != from {

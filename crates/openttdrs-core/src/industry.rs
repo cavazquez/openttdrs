@@ -17,9 +17,9 @@ pub enum IndustryKind {
 
 #[derive(Debug, Clone)]
 pub struct Industry {
-    pub pos:      TileCoord,
-    pub kind:     IndustryKind,
-    pub stock:    u32,
+    pub pos: TileCoord,
+    pub kind: IndustryKind,
+    pub stock: u32,
     pub capacity: u32,
 }
 
@@ -36,8 +36,11 @@ impl Industry {
 
     /// Produce cargo si el tick actual es múltiplo del período de producción.
     pub fn produce(&mut self, tick: u64) {
-        if tick > 0 && tick % INDUSTRY_PRODUCE_TICKS == 0 {
-            self.stock = self.stock.saturating_add(INDUSTRY_PRODUCE_AMOUNT).min(self.capacity);
+        if tick > 0 && tick.is_multiple_of(INDUSTRY_PRODUCE_TICKS) {
+            self.stock = self
+                .stock
+                .saturating_add(INDUSTRY_PRODUCE_AMOUNT)
+                .min(self.capacity);
         }
     }
 }

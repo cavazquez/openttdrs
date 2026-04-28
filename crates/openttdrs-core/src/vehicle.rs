@@ -17,16 +17,16 @@ pub enum VehicleKind {
 /// Al llegar invierte el trayecto (va y vuelve entre `origin` y `dest`).
 #[derive(Debug, Clone)]
 pub struct Vehicle {
-    pub id:       u32,
-    pub kind:     VehicleKind,
-    pub pos:      TileCoord,
+    pub id: u32,
+    pub kind: VehicleKind,
+    pub pos: TileCoord,
     /// Punto de partida del trayecto actual; se intercambia con `dest` en cada llegada.
-    pub origin:   TileCoord,
-    pub dest:     TileCoord,
-    pub cargo:    u32,
+    pub origin: TileCoord,
+    pub dest: TileCoord,
+    pub cargo: u32,
     pub capacity: u32,
     /// Camino calculado por el pathfinder (siguiente tile en el frente).
-    pub path:     VecDeque<TileCoord>,
+    pub path: VecDeque<TileCoord>,
 }
 
 impl Vehicle {
@@ -45,7 +45,7 @@ impl Vehicle {
     }
 
     /// Avanza un paso: sigue el path BFS si está disponible; si no, Manhattan.
-    /// Al llegar al destino invierte trayecto y vacía el path (se recomputa en GameState).
+    /// Al llegar al destino invierte trayecto y vacía el path (se recomputa en `GameState`).
     pub fn step(&mut self) {
         if let Some(next) = self.path.pop_front() {
             self.pos = next;

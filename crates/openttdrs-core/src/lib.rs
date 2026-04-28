@@ -12,7 +12,7 @@ pub mod station;
 pub mod tick;
 pub mod vehicle;
 
-pub use industry::{Industry, IndustryKind, INDUSTRY_PRODUCE_TICKS};
+pub use industry::{INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind};
 pub use map::{Map, MapError, Tile, TileCoord, TileKind};
 pub use pathfinder::find_path;
 pub use station::Station;
@@ -22,22 +22,22 @@ pub use vehicle::{Vehicle, VehicleKind};
 /// Estado global mínimo del mundo simulado.
 #[derive(Debug, Clone)]
 pub struct GameState {
-    pub map:        Map,
-    pub tick:       GameTick,
+    pub map: Map,
+    pub tick: GameTick,
     pub industries: Vec<Industry>,
-    pub vehicles:   Vec<Vehicle>,
-    pub stations:   Vec<Station>,
+    pub vehicles: Vec<Vehicle>,
+    pub stations: Vec<Station>,
 }
 
 impl GameState {
     #[must_use]
     pub fn new(map_width: u32, map_height: u32) -> Self {
         Self {
-            map:        Map::new_flat(map_width, map_height, 1),
-            tick:       GameTick::default(),
+            map: Map::new_flat(map_width, map_height, 1),
+            tick: GameTick::default(),
             industries: Vec::new(),
-            vehicles:   Vec::new(),
-            stations:   Vec::new(),
+            vehicles: Vec::new(),
+            stations: Vec::new(),
         }
     }
 
@@ -46,10 +46,10 @@ impl GameState {
     pub fn from_map(map: Map) -> Self {
         Self {
             map,
-            tick:       GameTick::default(),
+            tick: GameTick::default(),
             industries: Vec::new(),
-            vehicles:   Vec::new(),
-            stations:   Vec::new(),
+            vehicles: Vec::new(),
+            stations: Vec::new(),
         }
     }
 
@@ -71,34 +71,36 @@ impl GameState {
         for i in 0..self.vehicles.len() {
             let vpos = self.vehicles[i].pos;
             let vcap = self.vehicles[i].capacity;
-            if self.vehicles[i].cargo == 0 {
-                if let Some(ind) = self.industries.iter_mut().find(|ind| ind.pos == vpos) {
-                    let load = ind.stock.min(vcap);
-                    self.vehicles[i].cargo = load;
-                    ind.stock -= load;
-                }
+            if self.vehicles[i].cargo == 0
+                && let Some(ind) = self.industries.iter_mut().find(|ind| ind.pos == vpos)
+            {
+                let load = ind.stock.min(vcap);
+                self.vehicles[i].cargo = load;
+                ind.stock -= load;
             }
         }
 
         // Descarga: vehículo en posición de estación con cargo → entrega.
         for i in 0..self.vehicles.len() {
-            let vpos   = self.vehicles[i].pos;
+            let vpos = self.vehicles[i].pos;
             let vcargo = self.vehicles[i].cargo;
-            if vcargo > 0 {
-                if let Some(st) = self.stations.iter_mut().find(|st| st.pos == vpos) {
-                    st.stock  += vcargo;
-                    st.income += u64::from(vcargo);
-                    self.vehicles[i].cargo = 0;
-                }
+            if vcargo > 0
+                && let Some(st) = self.stations.iter_mut().find(|st| st.pos == vpos)
+            {
+                st.stock += vcargo;
+                st.income += u64::from(vcargo);
+                self.vehicles[i].cargo = 0;
             }
         }
 
         // Recomputa el path BFS para vehículos que lo necesiten (path vacío y no en destino).
         for i in 0..self.vehicles.len() {
-            if self.vehicles[i].path.is_empty() && self.vehicles[i].pos != self.vehicles[i].dest {
-                if let Some(path) = pathfinder::find_path(&self.map, self.vehicles[i].pos, self.vehicles[i].dest) {
-                    self.vehicles[i].path = path.into_iter().collect();
-                }
+            if self.vehicles[i].path.is_empty()
+                && self.vehicles[i].pos != self.vehicles[i].dest
+                && let Some(path) =
+                    pathfinder::find_path(&self.map, self.vehicles[i].pos, self.vehicles[i].dest)
+            {
+                self.vehicles[i].path = path.into_iter().collect();
             }
         }
 
@@ -187,17 +189,25 @@ mod tests {
     fn vehicle_follows_path() {
         let mut s = GameState::new(8, 8);
         for x in 0..=4_i32 {
-            s.map.set_kind(TileCoord::new(x, 0), TileKind::Road).unwrap();
+            s.map
+                .set_kind(TileCoord::new(x, 0), TileKind::Road)
+                .unwrap();
         }
         let start = TileCoord::new(0, 0);
-        let dest  = TileCoord::new(4, 0);
-        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+        let dest = TileCoord::new(4, 0);
+        s.vehicles
+            .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
 
         let expected = pathfinder::find_path(&s.map, start, dest).expect("hay carretera");
 
         for (i, &tile) in expected.iter().enumerate() {
             s.step();
-            assert_eq!(s.vehicles[0].pos, tile, "tick {} posición incorrecta", i + 1);
+            assert_eq!(
+                s.vehicles[0].pos,
+                tile,
+                "tick {} posición incorrecta",
+                i + 1
+            );
         }
     }
 
@@ -210,7 +220,8 @@ mod tests {
         ind.stock = 50;
         s.industries.push(ind);
         s.stations.push(Station::new(spos));
-        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
+        s.vehicles
+            .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
 
         // Primer step: vehicle en ipos, cargo == 0 → carga.
         s.step();
@@ -227,7 +238,8 @@ mod tests {
         ind.stock = 20;
         s.industries.push(ind);
         s.stations.push(Station::new(spos));
-        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
+        s.vehicles
+            .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
 
         // Tick 1: carga en industria.
         s.step();
@@ -251,7 +263,8 @@ mod tests {
         ind.stock = 1000;
         s.industries.push(ind);
         s.stations.push(Station::new(spos));
-        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
+        s.vehicles
+            .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
 
         // Un ciclo completo: carga (tick 1) + viaje 2 tiles (tick 2-3) +
         // llegada/descarga (tick 3) + inversión (tick 3) + regreso 2 tiles (tick 4-5)
@@ -259,15 +272,19 @@ mod tests {
         for _ in 0..10 {
             s.step();
         }
-        assert!(s.stations[0].income > 0, "debe haber income tras varios ticks");
+        assert!(
+            s.stations[0].income > 0,
+            "debe haber income tras varios ticks"
+        );
     }
 
     #[test]
     fn vehicle_moves_toward_dest() {
         let mut s = GameState::new(8, 8);
         let start = TileCoord::new(0, 0);
-        let dest  = TileCoord::new(5, 0);
-        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+        let dest = TileCoord::new(5, 0);
+        s.vehicles
+            .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
 
         let dist_before = s.vehicles[0].manhattan_to_dest();
         s.step();
@@ -279,8 +296,9 @@ mod tests {
     fn vehicle_inverts_on_arrival() {
         let mut s = GameState::new(8, 8);
         let start = TileCoord::new(0, 0);
-        let dest  = TileCoord::new(3, 0);
-        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+        let dest = TileCoord::new(3, 0);
+        s.vehicles
+            .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
 
         // Avanzar hasta llegar al destino (3 pasos + 1 de inversión).
         for _ in 0..=3 {
@@ -301,11 +319,12 @@ mod tests {
     #[test]
     fn two_worlds_same_vehicles_same_position() {
         let start = TileCoord::new(0, 0);
-        let dest  = TileCoord::new(4, 3);
+        let dest = TileCoord::new(4, 3);
         let mut a = GameState::new(8, 8);
         let mut b = GameState::new(8, 8);
         for s in [&mut a, &mut b] {
-            s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+            s.vehicles
+                .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
         }
         for _ in 0..50 {
             a.step();
@@ -317,7 +336,8 @@ mod tests {
     #[test]
     fn industry_produces_on_schedule() {
         let mut s = GameState::new(8, 8);
-        s.industries.push(Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine));
+        s.industries
+            .push(Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine));
 
         // Sin ticks no hay producción.
         assert_eq!(s.industries[0].stock, 0);
@@ -360,8 +380,12 @@ mod tests {
         let mut a = GameState::new(8, 8);
         let mut b = GameState::new(8, 8);
         for state in [&mut a, &mut b] {
-            state.industries.push(Industry::new(TileCoord::new(1, 2), IndustryKind::CoalMine));
-            state.industries.push(Industry::new(TileCoord::new(3, 4), IndustryKind::Forest));
+            state
+                .industries
+                .push(Industry::new(TileCoord::new(1, 2), IndustryKind::CoalMine));
+            state
+                .industries
+                .push(Industry::new(TileCoord::new(3, 4), IndustryKind::Forest));
         }
         for _ in 0..INDUSTRY_PRODUCE_TICKS * 3 {
             a.step();

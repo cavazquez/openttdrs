@@ -13,4 +13,15 @@ repository = "https://github.com/cavazquez/openttdrs"
 unsafe_code = "forbid"
 
 [workspace.lints.clippy]
-pedantic = "warn"
+# Lints que deben ser errores (graves)
+unwrap_used = "warn"
+expect_used = "warn"
+# Lints útiles de pedantic (warn, no error)
+needless_pass_by_value = "warn"
+cloned_instead_of_copied = "warn"
+explicit_iter_loop = "warn"
+implicit_clone = "warn"
+redundant_closure_for_method_calls = "warn"
+uninlined_format_args = "warn"
+inefficient_to_string = "warn"
+semicolon_if_nothing_returned = "warn"

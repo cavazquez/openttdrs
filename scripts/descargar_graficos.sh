@@ -65,43 +65,53 @@ sprites_dir = Path(os.environ["SPRITES_DIR"])
 tiles_dir   = Path(os.environ["TILES_DIR"])
 tiles_dir.mkdir(parents=True, exist_ok=True)
 
-src = sprites_dir / "ogfx1_base00.png"
-img = Image.open(src)
+def load_sheet(png_path: Path) -> Image.Image:
+    img = Image.open(png_path)
+    if img.mode == "P":
+        pal = img.getpalette()
+        transparent_rgb = tuple(pal[0:3])
+        img_rgba = img.convert("RGBA")
+        data = [(0, 0, 0, 0) if (r, g, b) == transparent_rgb else (r, g, b, a)
+                for r, g, b, a in img_rgba.getdata()]
+        img_rgba.putdata(data)
+        return img_rgba
+    return img.convert("RGBA")
 
-if img.mode == "P":
-    pal = img.getpalette()
-    transparent_rgb = tuple(pal[0:3])
-    img_rgba = img.convert("RGBA")
-    data = list(img_rgba.getdata())
-    data = [(0, 0, 0, 0) if (r, g, b) == transparent_rgb else (r, g, b, a)
-            for r, g, b, a in data]
-    img_rgba.putdata(data)
-else:
-    img_rgba = img.convert("RGBA")
+# Cargar todos los sheets ogfx1_baseXX.png disponibles
+sheets: dict[str, Image.Image] = {}
+for p in sorted(sprites_dir.glob("ogfx1_base??.png")):
+    sheets[p.name] = load_sheet(p)
 
+# Parsear NFO para todos los sheets (ogfx1_base00, 01, ...)
 nfo_path = sprites_dir / "ogfx1_base.nfo"
-sprite_rect = {}
+sprite_rect: dict[int, tuple] = {}  # sid -> (x, y, w, h, xr, yr, sheet_name)
 if nfo_path.is_file():
     pat = re.compile(
-        r"^\s*(\d+)\s+sprites/ogfx1_base00\.png\s+8bpp\s+"
+        r"^\s*(\d+)\s+sprites/(ogfx1_base\d+\.png)\s+8bpp\s+"
         r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
     )
     for line in nfo_path.read_text(errors="replace").splitlines():
         m = pat.match(line)
         if m:
             sid = int(m.group(1))
-            sprite_rect[sid] = tuple(int(m.group(i)) for i in range(2, 8))
+            sheet = m.group(2)
+            sprite_rect[sid] = (int(m.group(3)), int(m.group(4)),
+                                 int(m.group(5)), int(m.group(6)),
+                                 int(m.group(7)), int(m.group(8)), sheet)
 
 
 def crop_by_id(sid: int, out_name: str) -> None:
     if sid not in sprite_rect:
         print(f"  (omitido {out_name}: sprite {sid} no en NFO)")
         return
-    x, y, w, h, xr, yr = sprite_rect[sid]
-    crop = img_rgba.crop((x, y, x + w, y + h))
+    x, y, w, h, xr, yr, sheet = sprite_rect[sid]
+    if sheet not in sheets:
+        print(f"  (omitido {out_name}: sheet {sheet} no encontrado)")
+        return
+    crop = sheets[sheet].crop((x, y, x + w, y + h))
     out = tiles_dir / out_name
     crop.save(out)
-    print(f"  {out_name} ({w}×{h} xrel={xr} yrel={yr}) ← sprite {sid}")
+    print(f"  {out_name} ({w}×{h} xrel={xr} yrel={yr}) ← sprite {sid} [{sheet}]")
 
 
 # =============================================================================
@@ -312,6 +322,25 @@ crop_by_id(1311, "house_concrete_ground.png")
 crop_by_id(4569, "house_largeoffice_v2.png")
 
 # =============================================================================
+# CASAS – sprites por ID numérico para HOUSE_DRAW_DATA (HouseIDs 0-127)
+# Nombrados house_s{sprite_id}.png para lookup directo.
+# Cubre ground (s1) y building (s2) de los 128 tipos de casa temperate.
+# =============================================================================
+for sid in [
+    # Ground sprites (s1)
+    1311, 1424, 1429, 1433, 1437, 1447, 1487, 1489, 1491, 1493,
+    1495, 1499, 1505, 1511, 1517, 1522, 1528, 1534, 1536, 1538,
+    1544, 1550, 1552, 1574,
+    # Building sprites (s2)
+    1423, 1425, 1428, 1432, 1436, 1442, 1446, 1450, 1453, 1454,
+    1455, 1456, 1457, 1460, 1463, 1466, 1469, 1472, 1475, 1478,
+    1483, 1484, 1485, 1486, 1488, 1490, 1492, 1494, 1496, 1500,
+    1506, 1512, 1518, 1523, 1529, 1535, 1537, 1539, 1545, 1551,
+    1553, 1575, 4569,
+]:
+    crop_by_id(sid, f"house_s{sid}.png")
+
+# =============================================================================
 # ÁRBOLES (MP_TREES)
 # =============================================================================
 # Templado (muestras de diferentes tipos y etapas)
@@ -475,8 +504,12 @@ legacy = {
     "truck":       (594, 12408,  8, 16),
 }
 
+sheet00 = sheets.get("ogfx1_base00.png")
 for name, (x, y, w, h) in legacy.items():
-    crop = img_rgba.crop((x, y, x + w, y + h))
+    if sheet00 is None:
+        print(f"  (omitido {name}: sheet ogfx1_base00.png no encontrado)")
+        continue
+    crop = sheet00.crop((x, y, x + w, y + h))
     crop.save(tiles_dir / f"{name}.png")
     print(f"  {name}.png ({w}×{h})")
 

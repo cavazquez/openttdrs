@@ -30,7 +30,7 @@ use iso::{
     tile_pos, tile_pos_half, wang_hash,
 };
 use sprites::{
-    HOUSE_DRAW_DATA, HOUSE_META, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H,
+    HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H,
     collect_rail_sprites, rail_trackbits_for_render, road_bits_for_render, road_flat_index,
 };
 use state::SimWorld;
@@ -213,22 +213,16 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
         .collect();
 
     // ── Handles de casas urbanas ───────────────────────────────────────────────
-    // house_tex: fallback hash-based para HouseID >= 30
-    let house_tex: Vec<Handle<Image>> = (0..8)
-        .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/house_{i}.png")))
-        .collect();
-    // house_building_tex: sprites reales por sprite_id para HouseIDs 0-29
+    // house_building_tex: sprites por sprite_id (house_s{id}.png) para HouseIDs 0-127
     let house_building_tex: HashMap<u32, Handle<Image>> = {
         let mut map = HashMap::new();
         for spec in &HOUSE_DRAW_DATA {
             for &sid in &[spec.s1, spec.s2] {
                 if sid != 0 {
                     let fname = sprites::house_sprite_filename(sid);
-                    if !fname.is_empty() {
-                        map.entry(sid).or_insert_with(|| {
-                            asset_server.load::<Image>(format!("opengfx/tiles/{fname}"))
-                        });
-                    }
+                    map.entry(sid).or_insert_with(|| {
+                        asset_server.load::<Image>(format!("opengfx/tiles/{fname}"))
+                    });
                 }
             }
         }
@@ -323,61 +317,49 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     },
                     Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
                 ));
-                if house_id < HOUSE_DRAW_DATA.len() {
-                    let spec = &HOUSE_DRAW_DATA[house_id];
-                    if spec.s1 != 0
-                        && let Some(img) = house_building_tex.get(&spec.s1)
-                    {
-                        let pos3 = overlay_pos(
-                            p,
-                            spec.s1_xrel,
-                            spec.s1_yrel,
-                            spec.s1_w,
-                            spec.s1_h,
-                            height,
-                            0.4,
-                            tx as i32,
-                            ty as i32,
-                        );
-                        commands.spawn((
-                            Sprite {
-                                image: img.clone(),
-                                color: Color::WHITE,
-                                ..default()
-                            },
-                            Transform::from_translation(pos3),
-                        ));
-                    }
-                    if spec.s2 != 0
-                        && let Some(img) = house_building_tex.get(&spec.s2)
-                    {
-                        let pos3 = overlay_pos(
-                            p,
-                            spec.s2_xrel,
-                            spec.s2_yrel,
-                            spec.s2_w,
-                            spec.s2_h,
-                            height,
-                            0.5,
-                            tx as i32,
-                            ty as i32,
-                        );
-                        commands.spawn((
-                            Sprite {
-                                image: img.clone(),
-                                color: Color::WHITE,
-                                ..default()
-                            },
-                            Transform::from_translation(pos3),
-                        ));
-                    }
-                } else {
-                    let hi = wang_hash(tx, ty, 0xBEEF) as usize % house_tex.len();
-                    let (w, h, xr, yr) = HOUSE_META[hi];
-                    let pos3 = overlay_pos(p, xr, yr, w, h, height, 0.5, tx as i32, ty as i32);
+                // Para IDs >= 128 (climas ártico/tropical u otros) se reduce modulo
+                let spec_idx = house_id % HOUSE_DRAW_DATA.len();
+                let spec = &HOUSE_DRAW_DATA[spec_idx];
+                if spec.s1 != 0
+                    && let Some(img) = house_building_tex.get(&spec.s1)
+                {
+                    let pos3 = overlay_pos(
+                        p,
+                        spec.s1_xrel,
+                        spec.s1_yrel,
+                        spec.s1_w,
+                        spec.s1_h,
+                        height,
+                        0.4,
+                        tx as i32,
+                        ty as i32,
+                    );
                     commands.spawn((
                         Sprite {
-                            image: house_tex[hi].clone(),
+                            image: img.clone(),
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                        Transform::from_translation(pos3),
+                    ));
+                }
+                if spec.s2 != 0
+                    && let Some(img) = house_building_tex.get(&spec.s2)
+                {
+                    let pos3 = overlay_pos(
+                        p,
+                        spec.s2_xrel,
+                        spec.s2_yrel,
+                        spec.s2_w,
+                        spec.s2_h,
+                        height,
+                        0.5,
+                        tx as i32,
+                        ty as i32,
+                    );
+                    commands.spawn((
+                        Sprite {
+                            image: img.clone(),
                             color: Color::WHITE,
                             ..default()
                         },

@@ -191,6 +191,25 @@ graphics_mode = os.environ["GRAPHICS_MODE"]
 tiles_dir.mkdir(parents=True, exist_ok=True)
 
 def load_sheet(png_path: Path) -> Image.Image:
+    if graphics_mode == "32bpp":
+        # En 32bpp no aplicar heurística magenta. Pero si el sheet viene en
+        # paleta (8bpp fallback), mantener transparencia por índice 0.
+        img = Image.open(png_path)
+        if img.mode == "P":
+            pal = img.getpalette()
+            transparent_rgb = tuple(pal[0:3]) if pal else None
+            img_rgba = img.convert("RGBA")
+            if transparent_rgb is not None:
+                data = []
+                for r, g, b, a in img_rgba.getdata():
+                    if (r, g, b) == transparent_rgb:
+                        data.append((0, 0, 0, 0))
+                    else:
+                        data.append((r, g, b, a))
+                img_rgba.putdata(data)
+            return img_rgba
+        return img.convert("RGBA")
+
     def is_magenta_key(r: int, g: int, b: int) -> bool:
         # Detecta variantes de colorkey magenta típicas de conversión 8bpp->RGBA.
         # Mantiene una ventana amplia para capturar ruido de cuantización.
@@ -297,18 +316,9 @@ def crop_by_id(sid: int, out_name: str) -> None:
         return
     x, y, w, h, xr, yr, sheet = sprite_rect[sid]
     sheet_key = sheet
-    if graphics_mode == "32bpp":
-        # En OpenGFX2 High Def, grfcodec lista el sheet 8bpp en el NFO, pero
-        # genera el homólogo RGBA como "<sheet>.32.png". Priorizamos ese.
-        p = Path(sheet)
-        if p.suffix == ".png":
-            hd = p.with_name(f"{p.stem}.32.png").name
-            if hd in sheets:
-                sheet_key = hd
-        elif p.suffix == ".pcx":
-            hd = p.with_suffix(".32.png").name
-            if hd in sheets:
-                sheet_key = hd
+    # Nota: no forzar ".32.png" aquí. Las coordenadas del NFO generado por
+    # grfcodec en este flujo refieren al atlas base; usar .32 directo produce
+    # recortes fuera de lugar (huecos celestes masivos en el mapa).
     if sheet_key not in sheets:
         # grfcodec suele generar PCX aunque el NFO refiera PNG.
         alt = Path(sheet).with_suffix(".pcx").name
@@ -744,6 +754,22 @@ if graphics_mode != "32bpp":
         crop = sheet00.crop((x, y, x + w, y + h))
         crop.save(tiles_dir / f"{name}.png")
         print(f"  {name}.png ({w}×{h})")
+else:
+    # Alias requeridos por el cliente actual también en modo 32bpp.
+    aliases = {
+        "terrain_grass.png": "grass.png",
+        "terrain_rough.png": "grass_rough.png",
+        "water_flat.png": "water.png",
+    }
+    for src, dst in aliases.items():
+        src_p = tiles_dir / src
+        dst_p = tiles_dir / dst
+        if not src_p.exists():
+            print(f"  (omitido alias {dst}: no existe {src})")
+            continue
+        img = Image.open(src_p).convert("RGBA")
+        img.save(dst_p)
+        print(f"  {dst} (alias de {src})")
 
 print(f"Sprites listos en {tiles_dir}/")
 PYEOF

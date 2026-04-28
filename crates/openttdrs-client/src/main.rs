@@ -497,20 +497,19 @@ fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
 
 /// Anima los tiles de agua con una onda senoidal desfasada por tile.
 ///
-/// Cada tile tiene una `phase` aleatoria que desplaza la ola, creando el
-/// efecto de que el agua "respira" con olas que se mueven de forma natural.
-/// La frecuencia (1.8 Hz) y amplitud (±8% de brillo) están calibradas
-/// para parecerse a la animación de agua de OpenTTD.
+/// El sprite de agua (OpenGFX 4061) ya tiene el color azul/textura de olas
+/// baked-in. Aquí solo modulamos el brillo levemente para simular el reflejo
+/// de luz en movimiento, sin teñir el color original del sprite.
 fn animate_water(time: Res<Time>, mut query: Query<(&WaterTile, &mut Sprite)>) {
     let t = time.elapsed_secs();
     for (water, mut sprite) in &mut query {
-        // Onda principal de brillo: simula el reflejo de luz en el agua
-        let wave = (t * 1.8 + water.phase).sin();
-        // Onda secundaria a diferente frecuencia para más naturalidad
-        let ripple = (t * 3.1 + water.phase * 1.7).sin() * 0.4;
-        let v = 0.92 + (wave + ripple) * 0.04;
-        // Tinte azul/celeste del agua con leve variación de brillo
-        sprite.color = Color::srgb(v * 0.72, v * 0.88, v);
+        // Onda lenta: reflejo suave de luz en la superficie
+        let wave = (t * 1.4 + water.phase).sin();
+        // Onda rápida superpuesta: efecto de pequeñas olas/rizado
+        let ripple = (t * 2.7 + water.phase * 1.3).sin() * 0.3;
+        // Amplitud pequeña (±5%) para no distorsionar el color original del sprite
+        let v = 0.95 + (wave + ripple) * 0.025;
+        sprite.color = Color::srgb(v, v, v);
     }
 }
 

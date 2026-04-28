@@ -30,8 +30,8 @@ use iso::{
     tile_pos, tile_pos_half, wang_hash,
 };
 use sprites::{
-    HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H,
-    collect_rail_sprites, rail_trackbits_for_render, road_bits_for_render, road_flat_index,
+    HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites,
+    rail_trackbits_for_render, road_bits_for_render, road_flat_index,
 };
 use state::SimWorld;
 use ui::{SelectedTileInfo, handle_tile_click, setup_tile_info_ui, update_tile_info_text};

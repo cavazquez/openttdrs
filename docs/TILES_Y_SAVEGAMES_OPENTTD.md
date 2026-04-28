@@ -428,20 +428,49 @@ HouseID = m8  (u16, little-endian)
 El byte `m5` en MP_HOUSE guarda otras cosas (etapa de construcción, etc.), **no** el
 HouseID.
 
-### Estado actual en openttdrs
+### Implementación en openttdrs
 
-Tenemos el campo `m8: u16` en `Tile` y lo leemos correctamente desde el formato v3.
-Sin embargo, no disponemos aún de una tabla completa de `HouseID → sprite`. Por ahora
-se usa un hash Wang de las coordenadas para seleccionar una variante de las 8 casas
-extraídas del NFO de OpenGFX:
+El campo `m8: u16` en `Tile` se lee desde el formato `.ottdmap` v3. La tabla
+`HOUSE_DRAW_DATA` en `sprites.rs` cubre los **128 tipos de casa del clima temperate**,
+derivada directamente de `_town_draw_tile_data` en `table/town_land.h` de OpenTTD.
+
+Cada entrada tiene dos componentes (stage 3 = edificio completado):
+- **`s1`**: sprite de suelo/base (`0` = usar grass por defecto)
+- **`s2`**: sprite del edificio overlay (`0` = sin edificio)
+
+Los sprites se cargan como `house_s{sprite_id}.png` (67 sprites únicos, IDs 1311–1575 + 4569).
 
 ```rust
-// main.rs (placeholder)
-let variant = wang_hash(tx, ty, 0x1234) as usize % HOUSE_META.len();
+// main.rs
+let spec_idx = house_id % HOUSE_DRAW_DATA.len();  // 128 entradas
+let spec = &HOUSE_DRAW_DATA[spec_idx];
+// s1 = ground overlay si != 0, s2 = building overlay
 ```
 
-Cuando se implemente el mapeo real, se usará `tile.m8` para seleccionar el sprite
-correcto según la tabla de casas de OpenTTD.
+Para HouseIDs ≥ 128 (climas ártico/tropical o NewGRF) se aplica `house_id % 128`
+como fallback razonable hasta implementar esos climas.
+
+### Tabla de tipos de casa temperate (stage 3)
+
+| HouseIDs | s1 (ground)         | s2 (building)            | Descripción              |
+|----------|---------------------|--------------------------|--------------------------|
+| 0        | 1424 (ground)       | 1423 (tall office)       | Tall Office Block        |
+| 1–3      | 1424                | 1425                     | Office Block variants    |
+| 4–7      | 1429                | 1428                     | Large Office Block       |
+| 8–11     | 1433                | 1432                     | Small Block of Flats     |
+| 12–15    | 1437                | 1436                     | Church                   |
+| 16–19    | 1311 (concrete)     | 1442                     | Large Office (concrete)  |
+| 20–23    | 1311                | 4569 (ogfx1_base01.png)  | Large Office v2          |
+| 24–25    | 1447                | 1446                     | Townhouse V1             |
+| 26–27    | 1505                | 1506                     | Townhouse V2             |
+| 28–31    | 1311                | 1450                     | Hotel NW                 |
+| 32–35    | 1311                | 1453                     | Hotel SE                 |
+| 36–79    | 1311 / 0(grass)     | 1454–1478                | Decorativos, torres, etc.|
+| 80–95    | 0 (grass)           | 1483–1486                | Casas pequeñas, cottages |
+| 96–127   | 1487–1574           | 1488–1575                | Tiendas, shops, townhouses|
+
+> **Nota**: el sprite 4569 está en `ogfx1_base01.png`, no en `ogfx1_base00.png`. El script
+> `descargar_graficos.sh` ahora carga ambos sheets automáticamente.
 
 ---
 
@@ -717,7 +746,19 @@ Bajo `reference/openttd-upstream/src/`:
 | `house_map.h`        | `GetHouseType` (HouseID desde m8)                    |
 | `object_map.h`       | `GetObjectType` (ObjectType desde array OBJS)        |
 | `tunnelbridge_map.h` | Dirección y tipo de transporte                       |
+| `table/town_land.h`  | `_town_draw_tile_data`: sprite por HouseID y stage   |
 | `saveload/map_sl.cpp`| Registro de chunks `MAPT`, `MAPH`, `MAPO`→MAP1, etc. |
+
+### Nota sobre town_land.h y los sprites de casas
+
+El array `_town_draw_tile_data` tiene una entrada por `(HouseID * 4 + stage)`.
+Los sprite IDs están en hexadecimal (p.ej. `0x58d` = 1421). Los ground sprites especiales:
+
+| Constante             | ID decimal | Descripción              |
+|-----------------------|------------|--------------------------|
+| `SPR_FLAT_BARE_LAND`  | 3924       | Hierba plana (grass)     |
+| `SPR_FLAT_GRASS_TILE` | 3943       | Hierba con flores        |
+| `SPR_CONCRETE_GROUND` | 1311       | Suelo de concreto        |
 
 ---
 
@@ -725,10 +766,11 @@ Bajo `reference/openttd-upstream/src/`:
 
 | Archivo | Rol |
 |---------|-----|
+| `scripts/descargar_graficos.sh` | Descarga OpenGFX y extrae sprites a `assets/opengfx/tiles/`; soporta `ogfx1_base00.png` y `ogfx1_base01.png` |
 | `scripts/parse_sav.py` | `.sav` → `.ottdmap` v3; resuelve OBJS para MP_OBJECT |
 | `crates/openttdrs-core/src/map.rs` | `Tile`, `Map`, `from_ottd_binary` |
 | `crates/openttdrs-client/src/iso.rs` | Proyección isométrica, `compute_tileh`, `SLOPE_HALF_H` |
-| `crates/openttdrs-client/src/sprites.rs` | Constantes de sprites, `INDUSTRY_GFX_DATA`, road/rail bits |
+| `crates/openttdrs-client/src/sprites.rs` | `HOUSE_DRAW_DATA` (128 casas), `INDUSTRY_GFX_DATA`, road/rail bits |
 | `crates/openttdrs-client/src/main.rs` | Sistema de render Bevy: teselas, overlays, cámara |
 | `docs/SPRITES_OPENGFX_COMPLETO.md` | Catálogo completo de IDs de sprites OpenGFX |
 | `docs/INDUSTRIAS_OPENGFX.md` | Detalle de sprites de industrias |

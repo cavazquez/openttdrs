@@ -106,7 +106,12 @@ En OpenTTD, `SPR_ROAD_Y` (1332) indica una carretera que corre en la **direcció
 del mapa (de tile `(tx,ty)` a `(tx,ty+1)`), que visualmente aparece como una diagonal
 NW-SE en pantalla. El nombre "Y" se refiere al eje del mapa, no al eje de pantalla.
 
-En el renderer de openttdrs se detecta la dirección mirando los tiles vecinos:
+En mapas cargados desde `.ottdmap`, la orientación sale del **MAPT + m5** (carretera
+normal, cruce a nivel, depósito, túnel/puente). Ver
+[TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md).
+
+En mapas **generados en código** (`m5 = 0`), el cliente usa un **fallback** mirando
+vecinos:
 
 ```rust
 let has_tx = is_road(pos + (±1, 0));   // vecinos en dirección tx

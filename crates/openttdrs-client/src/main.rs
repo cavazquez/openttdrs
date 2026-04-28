@@ -19,7 +19,6 @@ mod ui;
 
 use std::collections::HashMap;
 
-use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
 use bevy::image::ImageSamplerDescriptor;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
@@ -127,15 +126,6 @@ fn main() {
                     default_sampler: ImageSamplerDescriptor::nearest(),
                 }),
         )
-        .add_plugins(FpsOverlayPlugin {
-            config: FpsOverlayConfig {
-                text_config: TextFont {
-                    font_size: 14.0,
-                    ..default()
-                },
-                ..default()
-            },
-        })
         .init_resource::<SimWorld>()
         .init_resource::<SelectedTileInfo>()
         .init_resource::<CameraVelocity>()
@@ -544,9 +534,21 @@ fn advance_sim(time: Res<Time>, mut sim: ResMut<SimWorld>, mut acc: Local<f32>) 
     }
 }
 
-fn sync_window_title(sim: Res<SimWorld>, mut windows: Query<&mut Window, With<PrimaryWindow>>) {
-    if let Ok(mut window) = windows.single_mut() {
-        window.title = format!("openttdrs — tick {}", sim.state.tick.get());
+fn sync_window_title(
+    sim: Res<SimWorld>,
+    time: Res<Time>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+    mut fps_acc: Local<(f32, u32)>, // (acum_dt, frames)
+) {
+    fps_acc.0 += time.delta_secs();
+    fps_acc.1 += 1;
+    // Actualizar título ~1 vez por segundo
+    if fps_acc.0 >= 1.0 {
+        let fps = fps_acc.1 as f32 / fps_acc.0;
+        *fps_acc = (0.0, 0);
+        if let Ok(mut window) = windows.single_mut() {
+            window.title = format!("openttdrs — tick {} — {fps:.0} FPS", sim.state.tick.get());
+        }
     }
 }
 

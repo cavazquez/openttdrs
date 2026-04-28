@@ -25,7 +25,6 @@ bevy = { version = "0.18.1", default-features = false, features = [
     "bevy_state",
     "scene",
     "png",
-    "bevy_dev_tools",     # FPS overlay
 ] }
 openttdrs-core = { path = "../openttdrs-core" }
 

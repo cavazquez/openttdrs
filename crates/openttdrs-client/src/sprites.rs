@@ -41,6 +41,7 @@ const RAIL_3WAY_NW: u8 = RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LEFT;
 const RAIL_3WAY_SE: u8 = RAIL_TB_Y | RAIL_TB_LOWER | RAIL_TB_RIGHT;
 
 /// Metadatos de casas: (w, h, xrel, yrel) extraídos del NFO.
+/// Usados como fallback para HouseID >= 30.
 pub const HOUSE_META: [(f32, f32, f32, f32); 8] = [
     (64.0, 37.0, -31.0, -6.0),
     (65.0, 71.0, -31.0, -40.0),
@@ -51,6 +52,158 @@ pub const HOUSE_META: [(f32, f32, f32, f32); 8] = [
     (64.0, 35.0, -31.0, -4.0),
     (64.0, 34.0, -31.0, -3.0),
 ];
+
+/// Especificación de dibujo de una casa (stage completado).
+///
+/// `s1` es el sprite de suelo/base del tile (0 = omitir, se usa grass).
+/// `s2` es el sprite del edificio principal (0 = sin overlay).
+pub struct HouseDrawSpec {
+    pub s1: u32,
+    pub s1_w: f32,
+    pub s1_h: f32,
+    pub s1_xrel: f32,
+    pub s1_yrel: f32,
+    pub s2: u32,
+    pub s2_w: f32,
+    pub s2_h: f32,
+    pub s2_xrel: f32,
+    pub s2_yrel: f32,
+}
+
+#[allow(clippy::too_many_arguments)]
+const fn house_spec(
+    s1: u32,
+    s1_w: f32,
+    s1_h: f32,
+    s1_xrel: f32,
+    s1_yrel: f32,
+    s2: u32,
+    s2_w: f32,
+    s2_h: f32,
+    s2_xrel: f32,
+    s2_yrel: f32,
+) -> HouseDrawSpec {
+    HouseDrawSpec {
+        s1,
+        s1_w,
+        s1_h,
+        s1_xrel,
+        s1_yrel,
+        s2,
+        s2_w,
+        s2_h,
+        s2_xrel,
+        s2_yrel,
+    }
+}
+
+/// Tabla de dibujo de casas para HouseIDs 0–29 (stage completado).
+///
+/// Derivada de `town_land.h` de OpenTTD: cada entrada es el stage 3
+/// (`house_id * 4 + 3`) de `_town_draw_tile_data`.
+///
+/// Dimensiones extraídas del NFO de OpenGFX (ogfx1_base.nfo).
+pub const HOUSE_DRAW_DATA: [HouseDrawSpec; 30] = [
+    // 0: Tall Office Block – ground 1424, build 1423
+    house_spec(
+        1424, 64.0, 37.0, -31.0, -6.0, 1423, 65.0, 76.0, -32.0, -45.0,
+    ),
+    // 1: Office Block – ground 1424, build 1425
+    house_spec(
+        1424, 64.0, 37.0, -31.0, -6.0, 1425, 65.0, 71.0, -31.0, -40.0,
+    ),
+    // 2: Small Block of Flats – ground 1424, build 1425
+    house_spec(
+        1424, 64.0, 37.0, -31.0, -6.0, 1425, 65.0, 71.0, -31.0, -40.0,
+    ),
+    // 3: Church (fallback) – ground 1424, build 1425
+    house_spec(
+        1424, 64.0, 37.0, -31.0, -6.0, 1425, 65.0, 71.0, -31.0, -40.0,
+    ),
+    // 4-7: Large Office Block – ground 1429, build 1428
+    house_spec(
+        1429, 64.0, 36.0, -31.0, -5.0, 1428, 66.0, 87.0, -32.0, -56.0,
+    ),
+    house_spec(
+        1429, 64.0, 36.0, -31.0, -5.0, 1428, 66.0, 87.0, -32.0, -56.0,
+    ),
+    house_spec(
+        1429, 64.0, 36.0, -31.0, -5.0, 1428, 66.0, 87.0, -32.0, -56.0,
+    ),
+    house_spec(
+        1429, 64.0, 36.0, -31.0, -5.0, 1428, 66.0, 87.0, -32.0, -56.0,
+    ),
+    // 8-11: Small Block Flats v2 – ground 1433, build 1432
+    house_spec(
+        1433, 64.0, 35.0, -31.0, -4.0, 1432, 35.0, 37.0, -18.0, -15.0,
+    ),
+    house_spec(
+        1433, 64.0, 35.0, -31.0, -4.0, 1432, 35.0, 37.0, -18.0, -15.0,
+    ),
+    house_spec(
+        1433, 64.0, 35.0, -31.0, -4.0, 1432, 35.0, 37.0, -18.0, -15.0,
+    ),
+    house_spec(
+        1433, 64.0, 35.0, -31.0, -4.0, 1432, 35.0, 37.0, -18.0, -15.0,
+    ),
+    // 12-15: Church – ground 1437, build 1436
+    house_spec(
+        1437, 64.0, 34.0, -31.0, -3.0, 1436, 38.0, 38.0, -19.0, -14.0,
+    ),
+    house_spec(
+        1437, 64.0, 34.0, -31.0, -3.0, 1436, 38.0, 38.0, -19.0, -14.0,
+    ),
+    house_spec(
+        1437, 64.0, 34.0, -31.0, -3.0, 1436, 38.0, 38.0, -19.0, -14.0,
+    ),
+    house_spec(
+        1437, 64.0, 34.0, -31.0, -3.0, 1436, 38.0, 38.0, -19.0, -14.0,
+    ),
+    // 16-19: Large Office (concrete ground) – ground 1311, build 1442
+    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1442, 60.0, 77.0, -30.0, -48.0),
+    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1442, 60.0, 77.0, -30.0, -48.0),
+    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1442, 60.0, 77.0, -30.0, -48.0),
+    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1442, 60.0, 77.0, -30.0, -48.0),
+    // 20-23: Large Office variant – ground 1311, build 4569
+    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 4569, 60.0, 77.0, -30.0, -48.0),
+    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 4569, 60.0, 77.0, -30.0, -48.0),
+    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 4569, 60.0, 77.0, -30.0, -48.0),
+    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 4569, 60.0, 77.0, -30.0, -48.0),
+    // 24-25: Townhouse V1 – ground 1447, build 1446
+    house_spec(1447, 64.0, 34.0, -31.0, -3.0, 1446, 26.0, 29.0, -14.0, -5.0),
+    house_spec(1447, 64.0, 34.0, -31.0, -3.0, 1446, 26.0, 29.0, -14.0, -5.0),
+    // 26-27: Townhouse V2 – ground 1505, build 1506
+    house_spec(1505, 64.0, 34.0, -31.0, -3.0, 1506, 38.0, 24.0, -16.0, -1.0),
+    house_spec(1505, 64.0, 34.0, -31.0, -3.0, 1506, 38.0, 24.0, -16.0, -1.0),
+    // 28-29: Hotel NW – ground 1311, build 1450
+    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1450, 58.0, 74.0, -25.0, -43.0),
+    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1450, 58.0, 74.0, -25.0, -43.0),
+];
+
+/// Devuelve el nombre de archivo (relativo a `opengfx/tiles/`) para un sprite de casa dado.
+/// Retorna `""` si el sprite_id no está mapeado.
+pub fn house_sprite_filename(sprite_id: u32) -> &'static str {
+    match sprite_id {
+        1311 => "house_concrete_ground.png",
+        1423 => "house_talloffice_cnst3.png",
+        1424 => "house_talloffice_ground.png",
+        1425 => "house_talloffice_build.png",
+        1428 => "house_office01_build.png",
+        1429 => "house_office01_ground.png",
+        1432 => "house_smlflats_build.png",
+        1433 => "house_smlflats_ground.png",
+        1436 => "house_church_build.png",
+        1437 => "house_church_ground.png",
+        1442 => "house_largeoffice_build.png",
+        1446 => "house_townhouse_v1_build.png",
+        1447 => "house_townhouse_v1_ground.png",
+        1450 => "house_hotel_nw_build.png",
+        1505 => "house_townhouse_v2_ground.png",
+        1506 => "house_townhouse_v2_build.png",
+        4569 => "house_largeoffice_v2.png",
+        _ => "",
+    }
+}
 
 // ── Industrias: mapeo gfx → sprite ──────────────────────────────────────────
 // Basado en _industry_draw_tile_data de OpenTTD (table/industry_land.h).

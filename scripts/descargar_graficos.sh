@@ -307,6 +307,9 @@ crop_by_id(1503, "house_townhouse_v2_cnst2_g.png")
 crop_by_id(1504, "house_townhouse_v2_cnst2.png")
 crop_by_id(1505, "house_townhouse_v2_ground.png")
 crop_by_id(1506, "house_townhouse_v2_build.png")
+# Suelo concreto (SPR_CONCRETE_GROUND) y variante de Large Office
+crop_by_id(1311, "house_concrete_ground.png")
+crop_by_id(4569, "house_largeoffice_v2.png")
 
 # =============================================================================
 # ÁRBOLES (MP_TREES)

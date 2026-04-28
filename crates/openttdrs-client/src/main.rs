@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{
-    find_path, GameState, Industry, IndustryKind, Station, TileCoord, TileKind, Vehicle,
+    find_path, GameState, Industry, IndustryKind, Map, Station, TileCoord, TileKind, Vehicle,
     VehicleKind,
 };
 
@@ -19,12 +19,12 @@ const MAP_H: u32 = 18;
 const ISO_HW: f32 = 32.0;
 /// Desplazamiento vertical por tesela en pantalla (ratio 2:1 isométrico).
 const ISO_QH: f32 = 16.0;
+/// Factor de escala para los sprites de camiones (son 20×14 px nativo).
+const TRUCK_SCALE: f32 = 2.0;
 
 // ── Utilidades de proyección ──────────────────────────────────────────────────
 
-/// Convierte coordenadas de tesela (tx, ty) a posición 2D de pantalla isométrica.
-///
-/// El eje X del mapa va hacia la derecha-abajo, el Y hacia la izquierda-abajo.
+/// Convierte coordenadas de tesela a posición del vértice superior del rombo (Bevy Y-up).
 fn iso(tx: i32, ty: i32) -> Vec2 {
     Vec2::new(
         (tx - ty) as f32 * ISO_HW,
@@ -35,11 +35,10 @@ fn iso(tx: i32, ty: i32) -> Vec2 {
 /// La mitad de la altura de los sprites de tesela (64×31 → 15.5 px).
 const TILE_HALF_H: f32 = 15.5;
 
-/// Vec3 para la tesela incluyendo la capa Z (painter's algorithm: mayor tx+ty = al frente).
+/// Vec3 para teselas de suelo (painter's algorithm: mayor tx+ty = al frente).
 ///
-/// Posiciona el centro del sprite 15.5 px por debajo del vértice superior del rombo,
-/// equivalente a un anchor top-center. Esto es la convención de referencia de OpenTTD
-/// (xrel=-31, yrel=0 en el NFO) donde el punto de referencia es el vértice superior.
+/// Equivalente a Anchor::TopCenter: posiciona el centro del sprite 15.5 px por debajo
+/// del vértice superior del rombo, que es la convención de referencia de OpenTTD.
 fn tile_pos(tx: i32, ty: i32, layer: f32) -> Vec3 {
     let p = iso(tx, ty);
     Vec3::new(
@@ -49,7 +48,20 @@ fn tile_pos(tx: i32, ty: i32, layer: f32) -> Vec3 {
     )
 }
 
-/// Dibuja el contorno de un rombo isométrico alineado con la tesela.
+/// Calcula la posición del centro de un sprite overlay a partir del xrel/yrel del NFO.
+///
+/// - `ref_pos`: vértice superior del rombo de la tesela (salida de `iso()`).
+/// - `xrel`, `yrel`: offsets del NFO (en coords pantalla Y-down).
+/// - `w`, `h`: dimensiones del sprite en píxeles.
+fn overlay_pos(ref_pos: Vec2, xrel: f32, yrel: f32, w: f32, h: f32, layer: f32, tx: i32, ty: i32) -> Vec3 {
+    Vec3::new(
+        ref_pos.x + xrel + w / 2.0,
+        ref_pos.y - yrel - h / 2.0,
+        (tx + ty) as f32 * 0.01 + layer,
+    )
+}
+
+/// Dibuja el contorno de un rombo isométrico.
 fn gizmo_diamond(gizmos: &mut Gizmos, center: Vec2, hw: f32, hh: f32, color: Color) {
     let t = center + Vec2::new(0.0, hh);
     let r = center + Vec2::new(hw, 0.0);
@@ -61,10 +73,98 @@ fn gizmo_diamond(gizmos: &mut Gizmos, center: Vec2, hw: f32, hh: f32, color: Col
     gizmos.line_2d(l, t, color);
 }
 
+// ── Dirección de carretera ────────────────────────────────────────────────────
+
+/// Dirección predominante de un tramo de carretera.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RoadDir {
+    /// Conecta en la dirección tx (±1, 0) → sprite NE-SW.
+    Tx,
+    /// Conecta en la dirección ty (0, ±1) → sprite NW-SE.
+    Ty,
+    /// Conecta en ambas → cruce o esquina.
+    Both,
+}
+
+/// Detecta la dirección de una tesela de carretera mirando sus vecinas.
+fn road_dir(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> RoadDir {
+    let is_road = |c: TileCoord| -> bool {
+        if c.x < 0 || c.y < 0 || c.x >= mw as i32 || c.y >= mh as i32 {
+            return false;
+        }
+        matches!(map.get_kind(c), Some(TileKind::Road | TileKind::Rail))
+    };
+    let has_tx = is_road(TileCoord::new(pos.x - 1, pos.y))
+        || is_road(TileCoord::new(pos.x + 1, pos.y));
+    let has_ty = is_road(TileCoord::new(pos.x, pos.y - 1))
+        || is_road(TileCoord::new(pos.x, pos.y + 1));
+    match (has_tx, has_ty) {
+        (true, false) => RoadDir::Tx,
+        (false, true) => RoadDir::Ty,
+        (true, true) => RoadDir::Both,
+        (false, false) => RoadDir::Ty,
+    }
+}
+
+// ── Dirección de vehículo ─────────────────────────────────────────────────────
+
+/// Dirección de movimiento de un vehículo en pantalla isométrica.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+enum VehicleDir {
+    #[default]
+    Ne,
+    Se,
+    Sw,
+    Nw,
+}
+
+/// Deduce la dirección del vehículo a partir del siguiente paso en su path.
+fn vehicle_dir(v: &Vehicle) -> VehicleDir {
+    let Some(next) = v.path.front() else {
+        return VehicleDir::default();
+    };
+    let dx = next.x - v.pos.x;
+    let dy = next.y - v.pos.y;
+    // En isométrico: +tx = SE, -tx = NW, +ty = SW, -ty = NE
+    match (dx.signum(), dy.signum()) {
+        (1, _) => VehicleDir::Se,
+        (-1, _) => VehicleDir::Nw,
+        (_, 1) => VehicleDir::Sw,
+        _ => VehicleDir::Ne,
+    }
+}
+
+// ── Recursos ──────────────────────────────────────────────────────────────────
+
+/// Handles de los sprites de camiones en las 4 direcciones isométricas.
+#[derive(Resource)]
+struct TruckHandles {
+    ne: Handle<Image>,
+    se: Handle<Image>,
+    sw: Handle<Image>,
+    nw: Handle<Image>,
+}
+
+impl TruckHandles {
+    fn for_dir(&self, dir: VehicleDir) -> Handle<Image> {
+        match dir {
+            VehicleDir::Ne => self.ne.clone(),
+            VehicleDir::Se => self.se.clone(),
+            VehicleDir::Sw => self.sw.clone(),
+            VehicleDir::Nw => self.nw.clone(),
+        }
+    }
+}
+
+// ── Componentes ───────────────────────────────────────────────────────────────
+
+/// Marca la entidad sprite de un vehículo; el valor es el `id` del vehículo.
+#[derive(Component)]
+struct VehicleSprite(u32);
+
 // ── App ───────────────────────────────────────────────────────────────────────
 
 fn main() {
-    // La carpeta assets/ vive en la raíz del workspace, dos niveles arriba del crate.
     let asset_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
 
     App::new()
@@ -90,9 +190,9 @@ fn main() {
             (
                 advance_sim,
                 sync_window_title,
+                update_vehicles,
                 draw_industries,
                 draw_stations,
-                draw_vehicles,
             )
                 .chain(),
         )
@@ -101,7 +201,6 @@ fn main() {
 
 // ── Simulación ────────────────────────────────────────────────────────────────
 
-/// Copia del estado de simulación expuesta al motor (avance a ritmo fijo).
 #[derive(Resource)]
 struct SimWorld {
     state: GameState,
@@ -119,9 +218,6 @@ impl Default for SimWorld {
     }
 }
 
-/// Distribuye tipos de tesela con una semilla fija (sin RNG en core).
-///
-/// Usa un hash multiplicativo de Wang: ~20 % agua, ~20 % bosque, ~10 % carbón, resto prado.
 fn distribute_tile_kinds(state: &mut GameState, seed: u64) {
     let (mw, mh) = state.map.dimensions();
     for y in 0..mh {
@@ -150,7 +246,6 @@ fn tile_kind_hash(x: u32, y: u32, seed: u64) -> TileKind {
     }
 }
 
-/// Coloca una industria cada STRIDE teselas del mismo tipo para no saturar el mapa.
 fn place_industries(state: &mut GameState) {
     const STRIDE: u32 = 4;
     let (mw, mh) = state.map.dimensions();
@@ -178,9 +273,6 @@ fn place_industries(state: &mut GameState) {
     }
 }
 
-/// Coloca una estación por industria con offset (+3 X, ±3 Y) alternado según índice.
-///
-/// Genera rutas en L con movimiento horizontal y vertical.
 fn place_stations(state: &mut GameState) {
     let (mw, mh) = state.map.dimensions();
     let positions: Vec<TileCoord> = state
@@ -200,7 +292,6 @@ fn place_stations(state: &mut GameState) {
     }
 }
 
-/// Traza carretera Manhattan entre cada industria y su estación pareada.
 fn place_roads(state: &mut GameState) {
     let routes: Vec<(TileCoord, TileCoord)> = state
         .industries
@@ -226,7 +317,6 @@ fn place_roads(state: &mut GameState) {
     }
 }
 
-/// Coloca un truck por cada par (industria[i], estación[i]).
 fn place_vehicles(state: &mut GameState) {
     let routes: Vec<(TileCoord, TileCoord)> = state
         .industries
@@ -244,16 +334,13 @@ fn place_vehicles(state: &mut GameState) {
     }
 }
 
-// ── Sistemas de Bevy ──────────────────────────────────────────────────────────
+// ── Setup ─────────────────────────────────────────────────────────────────────
 
-/// Genera la cámara y los sprites de tesela isométricos al arrancar.
+#[allow(clippy::too_many_lines)]
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWorld>) {
-    // Centro del mapa isométrico (para 24×18 teselas).
-    // Con Anchor::TopCenter, el mapa se extiende hacia abajo desde los vértices superiores,
-    // por eso desplazamos la cámara media altura de tesela extra (TILE_HALF_H).
+    // Centro del mapa isométrico.
     let cam_x = ((MAP_W as i32 - 1) - (MAP_H as i32 - 1)) as f32 / 2.0 * ISO_HW;
-    let cam_y = -((MAP_W as i32 - 1) + (MAP_H as i32 - 1)) as f32 / 2.0 * ISO_QH
-        - TILE_HALF_H;
+    let cam_y = -((MAP_W as i32 - 1) + (MAP_H as i32 - 1)) as f32 / 2.0 * ISO_QH - TILE_HALF_H;
 
     commands.spawn((
         Camera2d,
@@ -264,34 +351,121 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
         Transform::from_translation(Vec3::new(cam_x, cam_y, 999.9)),
     ));
 
-    // Handles de sprites de tesela (todos desde assets/opengfx/tiles/).
+    // ── Handles de teselas de suelo ───────────────────────────────────────────
     let h_grass = asset_server.load::<Image>("opengfx/tiles/grass.png");
     let h_rough = asset_server.load::<Image>("opengfx/tiles/grass_rough.png");
     let h_water = asset_server.load::<Image>("opengfx/tiles/water.png");
-    let h_road = asset_server.load::<Image>("opengfx/tiles/road_x.png");
+    // SPR_ROAD_X (1333): carretera en dirección tx (NE-SW en pantalla).
+    let h_road_tx = asset_server.load::<Image>("opengfx/tiles/road_tx.png");
+    // SPR_ROAD_Y (1332): carretera en dirección ty (NW-SE en pantalla).
+    let h_road_ty = asset_server.load::<Image>("opengfx/tiles/road_ty.png");
+    // Cruce de carretera (sprite 1338).
+    let h_road_cross = asset_server.load::<Image>("opengfx/tiles/road_cross.png");
 
+    // ── Handles de overlays ───────────────────────────────────────────────────
+    let h_tree_1 = asset_server.load::<Image>("opengfx/tiles/tree_1.png");
+    let h_tree_2 = asset_server.load::<Image>("opengfx/tiles/tree_2.png");
+    let h_tree_3 = asset_server.load::<Image>("opengfx/tiles/tree_3.png");
+    let h_coal = asset_server.load::<Image>("opengfx/tiles/coal_mine.png");
+    let trees = [h_tree_1, h_tree_2, h_tree_3];
+
+    // ── Handles de camiones ───────────────────────────────────────────────────
+    let h_truck_ne = asset_server.load::<Image>("opengfx/tiles/truck_ne.png");
+    let h_truck_se = asset_server.load::<Image>("opengfx/tiles/truck_se.png");
+    let h_truck_sw = asset_server.load::<Image>("opengfx/tiles/truck_sw.png");
+    let h_truck_nw = asset_server.load::<Image>("opengfx/tiles/truck_nw.png");
+    commands.insert_resource(TruckHandles {
+        ne: h_truck_ne,
+        se: h_truck_se,
+        sw: h_truck_sw,
+        nw: h_truck_nw,
+    });
+
+    // ── Teselas de suelo ──────────────────────────────────────────────────────
     let (mw, mh) = sim.state.map.dimensions();
     for ty in 0..mh {
         for tx in 0..mw {
             let c = TileCoord::new(tx as i32, ty as i32);
             let kind = sim.state.map.get_kind(c).unwrap_or(TileKind::Grass);
+            let p = iso(tx as i32, ty as i32);
 
             let (image, color) = match kind {
                 TileKind::Grass => (h_grass.clone(), Color::WHITE),
                 TileKind::Forest => (h_rough.clone(), Color::srgb(0.6, 1.0, 0.45)),
                 TileKind::CoalField => (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45)),
                 TileKind::Water => (h_water.clone(), Color::WHITE),
-                TileKind::Road => (h_road.clone(), Color::WHITE),
-                TileKind::Rail => (h_road.clone(), Color::srgb(0.75, 0.75, 1.0)),
+                TileKind::Road => {
+                    let img = match road_dir(&sim.state.map, c, mw, mh) {
+                        RoadDir::Tx => h_road_tx.clone(),
+                        RoadDir::Ty => h_road_ty.clone(),
+                        RoadDir::Both => h_road_cross.clone(),
+                    };
+                    (img, Color::WHITE)
+                }
+                TileKind::Rail => (h_road_tx.clone(), Color::srgb(0.75, 0.75, 1.0)),
             };
 
             commands.spawn((
                 Sprite { image, color, ..default() },
                 Transform::from_translation(tile_pos(tx as i32, ty as i32, 0.0)),
             ));
+
+            // ── Árbol sobre teselas Forest ────────────────────────────────────
+            // 1 árbol cuya variante y pequeño offset X se derivan del hash de la posición.
+            if kind == TileKind::Forest {
+                let h = wang_hash(tx, ty, 0xCAFE);
+                let tree_idx = (h % 3) as usize;
+                // Offset X determinista dentro del rombo (±8 px máx).
+                let ox = ((h >> 2) % 17) as f32 - 8.0;
+                // NFO: tree_1-3 → xrel=-19 yrel=-36 w=35 h=43
+                let pos3 = overlay_pos(
+                    Vec2::new(p.x + ox, p.y),
+                    -19.0, -36.0, 35.0, 43.0,
+                    0.3,
+                    tx as i32, ty as i32,
+                );
+                commands.spawn((
+                    Sprite { image: trees[tree_idx].clone(), ..default() },
+                    Transform::from_translation(pos3),
+                ));
+            }
         }
     }
+
+    // ── Edificios de industrias ───────────────────────────────────────────────
+    for industry in &sim.state.industries {
+        if industry.kind == IndustryKind::CoalMine {
+            let p = iso(industry.pos.x, industry.pos.y);
+            // NFO: coal_mine → xrel=-9 yrel=-28 w=29 h=43
+            let pos3 = overlay_pos(p, -9.0, -28.0, 29.0, 43.0, 0.6, industry.pos.x, industry.pos.y);
+            commands.spawn((
+                Sprite { image: h_coal.clone(), ..default() },
+                Transform::from_translation(pos3),
+            ));
+        }
+    }
+
+    // ── Sprites de vehículos ──────────────────────────────────────────────────
+    // Se spawnean aquí y se actualizan en update_vehicles cada tick.
+    // TruckHandles se insertó arriba; los accedemos desde el resource en update_vehicles.
+    // Por ahora cargamos el handle NE como placeholder; update_vehicles lo corrige en el primer frame.
+    let h_truck_ne_init = asset_server.load::<Image>("opengfx/tiles/truck_ne.png");
+    for vehicle in &sim.state.vehicles {
+        let p = iso(vehicle.pos.x, vehicle.pos.y);
+        // NFO truck_ne: xrel=-14 yrel=-5 w=20 h=14
+        let pos3 = overlay_pos(p, -14.0, -5.0, 20.0, 14.0, 1.0, vehicle.pos.x, vehicle.pos.y);
+        commands.spawn((
+            VehicleSprite(vehicle.id),
+            Sprite {
+                image: h_truck_ne_init.clone(),
+                ..default()
+            },
+            Transform::from_translation(pos3).with_scale(Vec3::splat(TRUCK_SCALE)),
+        ));
+    }
 }
+
+// ── Sistemas de actualización ─────────────────────────────────────────────────
 
 fn advance_sim(time: Res<Time>, mut sim: ResMut<SimWorld>, mut acc: Local<f32>) {
     const TICK_HZ: f32 = 15.0;
@@ -309,7 +483,33 @@ fn sync_window_title(sim: Res<SimWorld>, mut windows: Query<&mut Window, With<Pr
     }
 }
 
-/// Dibuja un rombo de contorno por cada industria.
+/// Actualiza posición y dirección de cada sprite de vehículo.
+fn update_vehicles(
+    sim: Res<SimWorld>,
+    trucks: Res<TruckHandles>,
+    mut q: Query<(&VehicleSprite, &mut Transform, &mut Sprite)>,
+) {
+    for (vs, mut transform, mut sprite) in &mut q {
+        let Some(v) = sim.state.vehicles.iter().find(|v| v.id == vs.0) else {
+            continue;
+        };
+        let dir = vehicle_dir(v);
+        let p = iso(v.pos.x, v.pos.y);
+
+        // Offset según dirección (xrel/yrel del NFO para cada vista del camión).
+        let (xrel, yrel, w, h) = match dir {
+            VehicleDir::Ne => (-14.0, -5.0, 20.0, 14.0),
+            VehicleDir::Se => (-6.0, -6.0, 20.0, 15.0),
+            VehicleDir::Sw => (-14.0, -6.0, 20.0, 15.0),
+            VehicleDir::Nw => (-6.0, -5.0, 20.0, 14.0),
+        };
+        let pos3 = overlay_pos(p, xrel, yrel, w, h, 1.0, v.pos.x, v.pos.y);
+        transform.translation = pos3;
+        sprite.image = trucks.for_dir(dir);
+    }
+}
+
+/// Dibuja contorno de rombo para cada industria + barra de stock.
 fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
     for industry in &sim.state.industries {
         let center = iso(industry.pos.x, industry.pos.y);
@@ -317,10 +517,8 @@ fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
             IndustryKind::CoalMine => Color::srgb(1.0, 0.9, 0.1),
             IndustryKind::Forest => Color::srgb(1.0, 0.5, 0.05),
         };
-        // Rombo exterior (borde de la tesela).
         gizmo_diamond(&mut gizmos, center, 30.0, 14.0, color);
 
-        // Barra de stock en el interior del rombo.
         if industry.stock > 0 {
             let fill = industry.stock as f32 / industry.capacity as f32;
             let bar_w = 56.0 * fill;
@@ -334,13 +532,12 @@ fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
     }
 }
 
-/// Dibuja un rombo cian por cada estación.
+/// Dibuja contorno cian para cada estación + barra de income.
 fn draw_stations(sim: Res<SimWorld>, mut gizmos: Gizmos) {
     for station in &sim.state.stations {
         let center = iso(station.pos.x, station.pos.y);
         gizmo_diamond(&mut gizmos, center, 26.0, 12.0, Color::srgb(0.0, 0.9, 0.9));
 
-        // Barra de income (escala logarítmica).
         if station.income > 0 {
             let fill = ((station.income as f32).log2() / 10.0).min(1.0);
             let bar_w = 48.0 * fill;
@@ -354,15 +551,15 @@ fn draw_stations(sim: Res<SimWorld>, mut gizmos: Gizmos) {
     }
 }
 
-/// Dibuja un pequeño rombo blanco/amarillo por cada vehículo.
-fn draw_vehicles(sim: Res<SimWorld>, mut gizmos: Gizmos) {
-    for vehicle in &sim.state.vehicles {
-        let center = iso(vehicle.pos.x, vehicle.pos.y);
-        let color = if vehicle.cargo > 0 {
-            Color::srgb(1.0, 0.9, 0.1)
-        } else {
-            Color::WHITE
-        };
-        gizmo_diamond(&mut gizmos, center, 8.0, 4.0, color);
-    }
+// ── Utilidades ────────────────────────────────────────────────────────────────
+
+/// Hash de Wang para generar variación determinista (sin RNG en el core).
+fn wang_hash(x: u32, y: u32, seed: u32) -> u32 {
+    let mut h = seed
+        .wrapping_add(x.wrapping_mul(0x9E37_79B9))
+        .wrapping_add(y.wrapping_mul(0x6C62_272E));
+    h ^= h >> 16;
+    h = h.wrapping_mul(0x45D9_F3B);
+    h ^= h >> 16;
+    h
 }

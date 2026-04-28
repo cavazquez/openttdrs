@@ -86,6 +86,28 @@ fn log_detection_summary(state: &GameState, loaded_from_file: bool) {
         info!("  - {kind}: {count}");
     }
 
+    if loaded_from_file {
+        let mut industry_groups: BTreeMap<&'static str, u32> = BTreeMap::new();
+        for y in 0..mh {
+            for x in 0..mw {
+                let c = TileCoord::new(x as i32, y as i32);
+                let Some(tile) = state.map.get(c) else {
+                    continue;
+                };
+                if tile.kind != TileKind::Industry {
+                    continue;
+                }
+                let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
+                let group = industry_group_from_gfx(gfx);
+                *industry_groups.entry(group).or_insert(0) += 1;
+            }
+        }
+        info!("Teselas de industria por grupo OpenTTD (gfx):");
+        for (group, count) in industry_groups {
+            info!("  - {group}: {count}");
+        }
+    }
+
     let mut industries: BTreeMap<&'static str, u32> = BTreeMap::new();
     for ind in &state.industries {
         let key = match ind.kind {
@@ -153,7 +175,6 @@ pub fn place_industries(state: &mut GameState, from_ottd_file: bool) {
     let mut coal_n = 0u32;
     let mut forest_n = 0u32;
     let mut industry_n = 0u32;
-    let mut placed_from_industry = 0u32;
 
     let stride_proc = 4u32;
     let stride_ottd = 16u32;
@@ -161,8 +182,11 @@ pub fn place_industries(state: &mut GameState, from_ottd_file: bool) {
     for y in 0..mh {
         for x in 0..mw {
             let c = TileCoord::new(x as i32, y as i32);
-            match state.map.get_kind(c) {
-                Some(TileKind::CoalField) if !from_ottd_file => {
+            let Some(tile) = state.map.get(c) else {
+                continue;
+            };
+            match tile.kind {
+                TileKind::CoalField if !from_ottd_file => {
                     if coal_n.is_multiple_of(stride_proc) {
                         state
                             .industries
@@ -170,7 +194,7 @@ pub fn place_industries(state: &mut GameState, from_ottd_file: bool) {
                     }
                     coal_n += 1;
                 }
-                Some(TileKind::Forest) if !from_ottd_file => {
+                TileKind::Forest if !from_ottd_file => {
                     if forest_n.is_multiple_of(stride_proc) {
                         state
                             .industries
@@ -178,21 +202,59 @@ pub fn place_industries(state: &mut GameState, from_ottd_file: bool) {
                     }
                     forest_n += 1;
                 }
-                Some(TileKind::Industry) => {
+                TileKind::Industry => {
                     if industry_n.is_multiple_of(stride_ottd) {
-                        let kind = if placed_from_industry.is_multiple_of(2) {
-                            IndustryKind::CoalMine
-                        } else {
-                            IndustryKind::Forest
-                        };
+                        let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
+                        let kind = classify_industry_kind_from_gfx(gfx);
                         state.industries.push(Industry::new(c, kind));
-                        placed_from_industry += 1;
                     }
                     industry_n += 1;
                 }
                 _ => {}
             }
         }
+    }
+}
+
+fn classify_industry_kind_from_gfx(gfx: u16) -> IndustryKind {
+    // El core todavía modela dos tipos de industria (CoalMine / Forest).
+    // Mapeamos grupos OpenTTD reales a uno de esos dos para simulación.
+    match gfx {
+        // Industrias de extracción/mina → CoalMine
+        0..=6 | 47..=51 | 60..=71 | 89..=90 | 91..=99 => IndustryKind::CoalMine,
+        // Industrias de bosque/campo/plantación → Forest
+        24..=28 | 52..=57 | 72..=88 => IndustryKind::Forest,
+        // Industrias de procesamiento/servicios: fallback estable por gfx.
+        _ => {
+            if gfx.is_multiple_of(2) {
+                IndustryKind::CoalMine
+            } else {
+                IndustryKind::Forest
+            }
+        }
+    }
+}
+
+fn industry_group_from_gfx(gfx: u16) -> &'static str {
+    match gfx {
+        0..=6 => "Coal Mine",
+        7..=10 => "Power Station",
+        11..=15 => "Sawmill",
+        16..=23 => "Oil Refinery",
+        24..=28 => "Forest",
+        29..=32 => "Printing Works",
+        33..=38 => "Oil Rig",
+        39..=42 => "Steel Mill",
+        43..=46 => "Factory",
+        47..=51 => "Oil Wells",
+        52..=57 => "Farm",
+        58..=59 => "Bank",
+        60..=71 => "Copper Ore Mine",
+        72..=88 => "Plantations/Others",
+        89..=90 => "Gold Mine",
+        91..=99 => "Iron Ore Mine",
+        100..=119 => "Other climates",
+        _ => "Unknown gfx",
     }
 }
 

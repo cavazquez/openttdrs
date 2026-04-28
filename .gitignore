@@ -26,3 +26,6 @@ target
 # Assets descargados por los scripts (gráficos y sonidos)
 /assets/
 /assets/maps/*.ottdmap
+
+# Python cache
+**/__pycache__/

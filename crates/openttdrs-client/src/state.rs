@@ -28,7 +28,7 @@ impl Default for SimWorld {
                         info!("Mapa cargado desde {path}");
                         let mut state = GameState::from_map(map);
                         place_industries(&mut state, true);
-                        log_detection_summary(&state);
+                        log_detection_summary(&state, true);
                         return Self {
                             state,
                             loaded_file: true,
@@ -45,7 +45,7 @@ impl Default for SimWorld {
         place_stations(&mut state);
         place_roads(&mut state);
         place_vehicles(&mut state);
-        log_detection_summary(&state);
+        log_detection_summary(&state, false);
         Self {
             state,
             loaded_file: false,
@@ -53,7 +53,7 @@ impl Default for SimWorld {
     }
 }
 
-fn log_detection_summary(state: &GameState) {
+fn log_detection_summary(state: &GameState, loaded_from_file: bool) {
     let (mw, mh) = state.map.dimensions();
     info!("Resumen detección: mapa {mw}x{mh} ({} teselas)", mw * mh);
 
@@ -100,6 +100,9 @@ fn log_detection_summary(state: &GameState) {
     }
 
     info!("Estaciones detectadas: {}", state.stations.len());
+    if loaded_from_file && state.stations.is_empty() {
+        info!("  - Nota: en mapas .ottdmap todavía no se sintetizan estaciones para la simulación.");
+    }
 
     let mut vehicles: BTreeMap<&'static str, u32> = BTreeMap::new();
     for v in &state.vehicles {
@@ -109,6 +112,9 @@ fn log_detection_summary(state: &GameState) {
         *vehicles.entry(key).or_insert(0) += 1;
     }
     info!("Vehículos detectados: {}", state.vehicles.len());
+    if loaded_from_file && state.vehicles.is_empty() {
+        info!("  - Nota: en mapas .ottdmap todavía no se sintetizan vehículos para la simulación.");
+    }
     for (kind, count) in vehicles {
         info!("  - Vehículo {kind}: {count}");
     }
@@ -147,6 +153,7 @@ pub fn place_industries(state: &mut GameState, from_ottd_file: bool) {
     let mut coal_n = 0u32;
     let mut forest_n = 0u32;
     let mut industry_n = 0u32;
+    let mut placed_from_industry = 0u32;
 
     let stride_proc = 4u32;
     let stride_ottd = 16u32;
@@ -173,12 +180,13 @@ pub fn place_industries(state: &mut GameState, from_ottd_file: bool) {
                 }
                 Some(TileKind::Industry) => {
                     if industry_n.is_multiple_of(stride_ottd) {
-                        let kind = if industry_n.is_multiple_of(2) {
+                        let kind = if placed_from_industry.is_multiple_of(2) {
                             IndustryKind::CoalMine
                         } else {
                             IndustryKind::Forest
                         };
                         state.industries.push(Industry::new(c, kind));
+                        placed_from_industry += 1;
                     }
                     industry_n += 1;
                 }

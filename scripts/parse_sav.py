@@ -3,13 +3,14 @@
 Convierte un savegame de OpenTTD (.sav) a un archivo binario simple
 que puede cargar openttdrs-client sin dependencias externas.
 
-Formato de salida (.ottdmap):
+Formato de salida (.ottdmap) v2:
   4 bytes LE  – magic: 0x4D41504F ('MAPO')
   4 bytes LE  – width
   4 bytes LE  – height
   W*H bytes   – tile_type (bits 7-4 = TileType OpenTTD, bits 3-0 = tropic/aux)
   W*H bytes   – height (0-255)
-  W*H bytes   – m5 (road bits, rail type, etc.)
+  W*H bytes   – m5 (road bits, rail type, industry gfx, etc.)
+  W*H bytes   – m1 (industry index, owner, etc.) [NEW in v2]
 
 Tipos de tesela OpenTTD (nibble alto de tile_type):
   0  MP_CLEAR       → prado/rough/rocks/fields/desert
@@ -319,6 +320,7 @@ def main() -> None:
     mapt = chunks.get('MAPT', b'')
     maph = chunks.get('MAPH', b'')
     map5 = chunks.get('MAP5', b'')
+    map1 = chunks.get('MAP1', b'')
 
     expected = dim_x * dim_y
     if len(mapt) < expected:
@@ -329,15 +331,18 @@ def main() -> None:
         maph = maph + b'\x00' * (expected - len(maph))
     if len(map5) < expected:
         map5 = map5 + b'\x00' * (expected - len(map5))
+    if len(map1) < expected:
+        map1 = map1 + b'\x00' * (expected - len(map1))
 
-    # Escribir archivo de salida
+    # Escribir archivo de salida (formato v2 con m1)
     magic_out = b'MAPO'
     header = struct.pack('<4sII', magic_out, dim_x, dim_y)
     tile_types = mapt[:expected]
     heights    = maph[:expected]
     m5_data    = map5[:expected]
+    m1_data    = map1[:expected]
 
-    out_path.write_bytes(header + tile_types + heights + m5_data)
+    out_path.write_bytes(header + tile_types + heights + m5_data + m1_data)
     print(f"✓ Escrito: {out_path}  ({out_path.stat().st_size:,} bytes)")
 
     # Estadísticas de tipos de tesela

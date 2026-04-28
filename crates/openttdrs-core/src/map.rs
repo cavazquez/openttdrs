@@ -32,12 +32,17 @@ pub enum TileKind {
     Unknown(u8), // cualquier tipo no mapeado (raw nibble alto de tile_type)
 }
 
-/// Una tesela con altura base, tipo semántico y byte auxiliar m5 de `OpenTTD`.
+/// Una tesela con altura base, tipo semántico y bytes auxiliares de `OpenTTD`.
 ///
 /// `m5` almacena el byte m5 del savegame original:
 /// - Para `Road`: bits 0-3 = road bits (NW=1, SW=2, SE=4, NE=8), bits 6-7 = sub-tipo.
 /// - Para `Rail`: bits 0-3 = trackbits.
+/// - Para `Industry`: gfx index (índice del tile en el layout de la industria).
 /// - En mapas generados (no cargados desde .sav) vale 0.
+///
+/// `m1` almacena información adicional:
+/// - Para `Industry`: bits 0-6 = índice de la industria en el array global.
+/// - Para otros tipos: owner u otros datos.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Tile {
     pub height: u8,
@@ -45,6 +50,8 @@ pub struct Tile {
     /// Byte MAPT del savegame (nibble alto = `TileType` `OpenTTD`). 0 en mapas generados.
     pub mapt: u8,
     pub m5: u8,
+    /// Byte M1 del savegame. Para industrias: índice de industria (bits 0-6).
+    pub m1: u8,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +85,8 @@ impl Map {
                     height: level,
                     kind: TileKind::Grass,
                     mapt: 0,
-                    m5: 0
+                    m5: 0,
+                    m1: 0,
                 };
                 count
             ],
@@ -171,12 +179,20 @@ impl Map {
         let tile_types = &data[12..12 + n];
         let heights = &data[12 + n..12 + 2 * n];
         let m5_data = &data[12 + 2 * n..12 + 3 * n];
+        // Formato v2: m1 está después de m5 (opcional, para compatibilidad)
+        let has_m1 = data.len() >= 12 + n * 4;
+        let m1_data = if has_m1 {
+            &data[12 + 3 * n..12 + 4 * n]
+        } else {
+            &[] as &[u8]
+        };
 
         let mut tiles = Vec::with_capacity(n);
         for i in 0..n {
             let raw_type = tile_types[i];
             let ottd_type = (raw_type >> 4) & 0xF;
             let m5 = m5_data[i];
+            let m1 = if has_m1 { m1_data[i] } else { 0 };
 
             let kind = match ottd_type {
                 0 | 10 => TileKind::Grass, // MP_CLEAR, MP_OBJECT
@@ -208,6 +224,7 @@ impl Map {
                 kind,
                 mapt: raw_type,
                 m5,
+                m1,
             });
         }
 

@@ -52,6 +52,60 @@ pub const HOUSE_META: [(f32, f32, f32, f32); 8] = [
     (64.0, 34.0, -31.0, -3.0),
 ];
 
+// ── Industrias: mapeo gfx → sprite ──────────────────────────────────────────
+// Basado en _industry_draw_tile_data de OpenTTD (table/industry_land.h).
+// El gfx es el valor de m5 para tiles de industria.
+// Cada entrada mapea a un sprite del set OpenGFX.
+
+/// Mapeo de gfx de industria a (sprite_id, w, h, xrel, yrel).
+/// Sprite 0 significa "solo suelo, sin edificio".
+/// Los valores son para industria completada (stage 3).
+///
+/// Coal Mine: gfx 0-6
+/// Power Station: gfx 7-14
+/// etc.
+pub const INDUSTRY_GFX_SPRITES: [(u32, f32, f32, f32, f32); 8] = [
+    // Coal Mine (gfx 0-3 tienen edificios, 4-6 solo suelo)
+    (2013, 58.0, 50.0, -16.0, -33.0), // gfx 0: headframe principal
+    (2015, 46.0, 53.0, -14.0, -38.0), // gfx 1: torre animada
+    (2018, 64.0, 39.0, -31.0, -8.0),  // gfx 2: edificio auxiliar
+    (2021, 44.0, 38.0, -13.0, -21.0), // gfx 3: edificio pequeño
+    (0, 0.0, 0.0, 0.0, 0.0),          // gfx 4: solo suelo
+    (0, 0.0, 0.0, 0.0, 0.0),          // gfx 5: solo suelo
+    (0, 0.0, 0.0, 0.0, 0.0),          // gfx 6: solo suelo
+    (0, 0.0, 0.0, 0.0, 0.0),          // placeholder
+];
+
+/// Devuelve el sprite y metadatos para un tile de industria dado su gfx (m5).
+/// Retorna None si es gfx desconocido o solo suelo.
+pub fn industry_sprite_for_gfx(gfx: u8) -> Option<(u32, f32, f32, f32, f32)> {
+    // Solo soportamos Coal Mine por ahora (gfx 0-6)
+    if gfx < 7 {
+        let entry = INDUSTRY_GFX_SPRITES[gfx as usize];
+        if entry.0 != 0 {
+            return Some(entry);
+        }
+    }
+    // Para otros gfx, usar sprite genérico basado en patrón
+    // Muchas industrias comparten sprites similares
+    match gfx {
+        // Power Station (gfx 7-14)
+        7..=14 => Some((2013, 58.0, 50.0, -16.0, -33.0)), // usar headframe como placeholder
+        // Oil Rig (gfx 24-28)
+        24..=28 => Some((2013, 58.0, 50.0, -16.0, -33.0)),
+        // Otros: usar el sprite que tengamos más a mano
+        _ => {
+            // Para gfx > 6, algunos tienen edificios y otros no
+            // Usamos headframe como fallback genérico
+            if gfx % 4 < 3 {
+                Some((2013, 58.0, 50.0, -16.0, -33.0))
+            } else {
+                None // Solo suelo
+            }
+        }
+    }
+}
+
 /// IDs de sprites de vía férrea usados.
 pub const RAIL_SPRITE_IDS: [u32; 20] = [
     1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020,

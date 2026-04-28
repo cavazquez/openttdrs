@@ -132,12 +132,14 @@ pub fn update_tile_info_text(
             sim.state.map.dimensions().1,
         );
         format!(" rb:0x{rb:02X}")
+    } else if tile.kind == TileKind::Industry {
+        format!(" gfx:{} ind:{}", tile.m5, tile.m1 & 0x7F)
     } else {
         String::new()
     };
 
     **text = format!(
-        "Tile ({},{}) {}\nh:{} mapt:0x{:02X} m5:0x{:02X}{}",
-        pos.x, pos.y, kind_str, tile.height, tile.mapt, tile.m5, extra
+        "Tile ({},{}) {}\nh:{} mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X}{}",
+        pos.x, pos.y, kind_str, tile.height, tile.mapt, tile.m5, tile.m1, extra
     );
 }

@@ -189,31 +189,22 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     let h_tree_3 = asset_server.load::<Image>("opengfx/tiles/tree_14.png");
     let trees = [h_tree_1, h_tree_2, h_tree_3];
 
-    // ── Handles de industrias (Coal Mine) ─────────────────────────────────────
-    // Sprites de la mina de carbón con sus metadatos (w, h, xrel, yrel)
-    let industry_sprites: Vec<(Handle<Image>, f32, f32, f32, f32)> = vec![
+    // ── Handles de industrias ─────────────────────────────────────────────────
+    // Mapa de sprite_id → Handle<Image> para edificios de industria
+    let industry_tex: HashMap<u32, Handle<Image>> = [
+        (2013_u32, "industry_coalmine_hq.png"), // headframe principal
+        (2015, "industry_coalmine_tower.png"),  // torre animada
+        (2018, "industry_coalmine_hq.png"),     // placeholder (necesita sprite real)
+        (2021, "industry_coalmine_entry.png"),  // edificio pequeño
+    ]
+    .into_iter()
+    .map(|(id, name)| {
         (
-            asset_server.load::<Image>("opengfx/tiles/industry_coalmine_hq.png"),
-            58.0,
-            50.0,
-            -16.0,
-            -33.0,
-        ),
-        (
-            asset_server.load::<Image>("opengfx/tiles/industry_coalmine_tower.png"),
-            46.0,
-            53.0,
-            -14.0,
-            -38.0,
-        ),
-        (
-            asset_server.load::<Image>("opengfx/tiles/industry_coalmine_entry.png"),
-            36.0,
-            25.0,
-            -17.0,
-            -7.0,
-        ),
-    ];
+            id,
+            asset_server.load::<Image>(format!("opengfx/tiles/{name}")),
+        )
+    })
+    .collect();
 
     // ── Handles de camiones ────────────────────────────────────────────────────
     let h_truck_ne = asset_server.load::<Image>("opengfx/tiles/vehicle_bus_sw.png");
@@ -303,7 +294,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
                 ));
             } else if kind == TileKind::Industry {
-                // Suelo de grass marrón
+                // Suelo de grass marrón (base para industrias)
                 commands.spawn((
                     Sprite {
                         image: h_rough.clone(),
@@ -312,18 +303,22 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     },
                     Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
                 ));
-                // Edificio de industria (seleccionado por hash de posición)
-                let idx = wang_hash(tx, ty, 0xC0A1) as usize % industry_sprites.len();
-                let (ref img, w, h, xr, yr) = industry_sprites[idx];
-                let pos3 = overlay_pos(p, xr, yr, w, h, height, 0.5, tx as i32, ty as i32);
-                commands.spawn((
-                    Sprite {
-                        image: img.clone(),
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                    Transform::from_translation(pos3),
-                ));
+                // Edificio de industria según gfx (m5)
+                let gfx = tile.map_or(0, |t| t.m5);
+                if let Some((sprite_id, w, h, xr, yr)) = sprites::industry_sprite_for_gfx(gfx) {
+                    // Buscar el handle del sprite por ID
+                    if let Some(img) = industry_tex.get(&sprite_id) {
+                        let pos3 = overlay_pos(p, xr, yr, w, h, height, 0.5, tx as i32, ty as i32);
+                        commands.spawn((
+                            Sprite {
+                                image: img.clone(),
+                                color: Color::WHITE,
+                                ..default()
+                            },
+                            Transform::from_translation(pos3),
+                        ));
+                    }
+                }
             } else {
                 let (image, color) = match kind {
                     TileKind::Grass => (h_grass.clone(), Color::WHITE),

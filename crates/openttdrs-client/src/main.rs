@@ -1,10 +1,18 @@
 //! Cliente isométrico: sprites de OpenGFX + gizmos de overlay para el [`GameState`] del core.
+//!
+//! Para cargar un mapa real de OpenTTD, exportar con `scripts/parse_sav.py` y
+//! luego ejecutar el cliente con la variable de entorno:
+//!
+//! ```
+//! OTTDMAP_FILE=/ruta/al/mapa.ottdmap cargo run -p openttdrs-client
+//! ```
 
 #![warn(clippy::pedantic)]
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::default_constructed_unit_structs)]
 
+use bevy::input::mouse::AccumulatedMouseScroll;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{
@@ -13,6 +21,7 @@ use openttdrs_core::{
 };
 
 // ── Constantes isométricas ────────────────────────────────────────────────────
+/// Dimensiones del mapa generado proceduralmente (sin OTTDMAP_FILE).
 const MAP_W: u32 = 24;
 const MAP_H: u32 = 18;
 /// Desplazamiento horizontal por tesela en pantalla (la tesela mide 64 px de ancho).
@@ -193,6 +202,7 @@ fn main() {
                 update_vehicles,
                 draw_industries,
                 draw_stations,
+                move_camera,
             )
                 .chain(),
         )
@@ -203,18 +213,37 @@ fn main() {
 
 #[derive(Resource)]
 struct SimWorld {
-    state: GameState,
+    state:       GameState,
+    /// Indica que el mapa se cargó desde un archivo .ottdmap externo.
+    loaded_file: bool,
 }
 
 impl Default for SimWorld {
     fn default() -> Self {
+        // Si la variable de entorno OTTDMAP_FILE apunta a un .ottdmap válido, cargarlo.
+        if let Ok(path) = std::env::var("OTTDMAP_FILE") {
+            match std::fs::read(&path) {
+                Ok(data) => match Map::from_ottd_binary(&data) {
+                    Ok(map) => {
+                        info!("Mapa cargado desde {path}");
+                        return Self {
+                            state:       GameState::from_map(map),
+                            loaded_file: true,
+                        };
+                    }
+                    Err(e) => error!("Error al parsear {path}: {e:?}"),
+                },
+                Err(e) => error!("No se pudo leer {path}: {e}"),
+            }
+        }
+        // Mapa generado proceduralmente (modo de desarrollo).
         let mut state = GameState::new(MAP_W, MAP_H);
         distribute_tile_kinds(&mut state, 0xDEAD_BEEF_CAFE_1234);
         place_industries(&mut state);
         place_stations(&mut state);
         place_roads(&mut state);
         place_vehicles(&mut state);
-        Self { state }
+        Self { state, loaded_file: false }
     }
 }
 
@@ -338,9 +367,16 @@ fn place_vehicles(state: &mut GameState) {
 
 #[allow(clippy::too_many_lines)]
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWorld>) {
-    // Centro del mapa isométrico.
-    let cam_x = ((MAP_W as i32 - 1) - (MAP_H as i32 - 1)) as f32 / 2.0 * ISO_HW;
-    let cam_y = -((MAP_W as i32 - 1) + (MAP_H as i32 - 1)) as f32 / 2.0 * ISO_QH - TILE_HALF_H;
+    let (mw, mh) = sim.state.map.dimensions();
+
+    // Centro del mapa isométrico (funciona para cualquier tamaño).
+    let cam_x = ((mw as i32 - 1) - (mh as i32 - 1)) as f32 / 2.0 * ISO_HW;
+    let cam_y = -((mw as i32 - 1) + (mh as i32 - 1)) as f32 / 2.0 * ISO_QH - TILE_HALF_H;
+
+    // Zoom inicial: para el mapa generado (24×18) scale=1; para mapas grandes escalar
+    // para que quepan ≈64 teselas de ancho en la ventana de 1280 px.
+    let target_tiles_wide: f32 = if sim.loaded_file { 64.0 } else { mw as f32 };
+    let cam_scale = (target_tiles_wide * ISO_HW * 2.0 / 1280.0).max(1.0);
 
     commands.spawn((
         Camera2d,
@@ -349,6 +385,10 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
             ..default()
         },
         Transform::from_translation(Vec3::new(cam_x, cam_y, 999.9)),
+        Projection::Orthographic(OrthographicProjection {
+            scale: cam_scale,
+            ..OrthographicProjection::default_2d()
+        }),
     ));
 
     // ── Handles de teselas de suelo ───────────────────────────────────────────
@@ -391,20 +431,33 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
             let kind = sim.state.map.get_kind(c).unwrap_or(TileKind::Grass);
             let p = iso(tx as i32, ty as i32);
 
+            // Void: borde del mapa, no renderizar
+            if kind == TileKind::Void {
+                continue;
+            }
+
             let (image, color) = match kind {
-                TileKind::Grass => (h_grass.clone(), Color::WHITE),
-                TileKind::Forest => (h_rough.clone(), Color::srgb(0.6, 1.0, 0.45)),
-                TileKind::CoalField => (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45)),
-                TileKind::Water => (h_water.clone(), Color::WHITE),
-                TileKind::Road => {
+                TileKind::Grass   => (h_grass.clone(), Color::WHITE),
+                TileKind::Forest  => (h_rough.clone(), Color::srgb(0.6, 1.0, 0.45)),
+                TileKind::CoalField | TileKind::Industry
+                                  => (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45)),
+                TileKind::Water   => (h_water.clone(), Color::WHITE),
+                TileKind::Road    => {
                     let img = match road_dir(&sim.state.map, c, mw, mh) {
-                        RoadDir::Tx => h_road_tx.clone(),
-                        RoadDir::Ty => h_road_ty.clone(),
+                        RoadDir::Tx   => h_road_tx.clone(),
+                        RoadDir::Ty   => h_road_ty.clone(),
                         RoadDir::Both => h_road_cross.clone(),
                     };
                     (img, Color::WHITE)
                 }
-                TileKind::Rail => (h_road_tx.clone(), Color::srgb(0.75, 0.75, 1.0)),
+                TileKind::Rail    => (h_road_tx.clone(), Color::srgb(0.75, 0.75, 1.0)),
+                // Edificios urbanos: tono amarillo-crema
+                TileKind::House   => (h_grass.clone(), Color::srgb(0.95, 0.90, 0.70)),
+                // Estaciones: tono azul claro
+                TileKind::Station => (h_rough.clone(), Color::srgb(0.65, 0.80, 1.00)),
+                // Tipo desconocido: magenta brillante para depuración
+                TileKind::Unknown(_) => (h_grass.clone(), Color::srgb(1.0, 0.0, 1.0)),
+                TileKind::Void    => unreachable!(), // filtrado arriba
             };
 
             commands.spawn((
@@ -550,6 +603,52 @@ fn draw_stations(sim: Res<SimWorld>, mut gizmos: Gizmos) {
                 Color::srgb(1.0, 1.0, 0.0),
             );
         }
+    }
+}
+
+/// Mueve la cámara con WASD y rueda del ratón; velocidad proporcional al zoom actual.
+///
+/// | Tecla          | Acción          |
+/// |----------------|-----------------|
+/// | W/A/S/D o flechas | Mover cámara |
+/// | + / =          | Zoom in         |
+/// | -              | Zoom out        |
+/// | Rueda ratón    | Zoom in / out   |
+fn move_camera(
+    time:   Res<Time>,
+    kbd:    Res<ButtonInput<KeyCode>>,
+    scroll: Res<AccumulatedMouseScroll>,
+    mut cam_q: Query<(&mut Transform, &mut Projection), With<Camera2d>>,
+) {
+    let Ok((mut transform, mut projection)) = cam_q.single_mut() else { return };
+    let Projection::Orthographic(ref mut proj) = *projection else { return };
+
+    let speed = 300.0 * proj.scale * time.delta_secs();
+
+    if kbd.pressed(KeyCode::KeyW) || kbd.pressed(KeyCode::ArrowUp) {
+        transform.translation.y += speed;
+    }
+    if kbd.pressed(KeyCode::KeyS) || kbd.pressed(KeyCode::ArrowDown) {
+        transform.translation.y -= speed;
+    }
+    if kbd.pressed(KeyCode::KeyA) || kbd.pressed(KeyCode::ArrowLeft) {
+        transform.translation.x -= speed;
+    }
+    if kbd.pressed(KeyCode::KeyD) || kbd.pressed(KeyCode::ArrowRight) {
+        transform.translation.x += speed;
+    }
+
+    // Zoom con teclado (mantener pulsado)
+    if kbd.pressed(KeyCode::Equal) || kbd.pressed(KeyCode::NumpadAdd) {
+        proj.scale = (proj.scale * (1.0 - 2.0 * time.delta_secs())).max(0.25);
+    }
+    if kbd.pressed(KeyCode::Minus) || kbd.pressed(KeyCode::NumpadSubtract) {
+        proj.scale = (proj.scale * (1.0 + 2.0 * time.delta_secs())).min(20.0);
+    }
+
+    // Zoom con rueda del ratón (AccumulatedMouseScroll se resetea cada frame)
+    if scroll.delta.y.abs() > 0.0 {
+        proj.scale = (proj.scale * (1.0 - scroll.delta.y * 0.1)).clamp(0.25, 20.0);
     }
 }
 

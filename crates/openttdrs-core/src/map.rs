@@ -12,7 +12,10 @@ impl TileCoord {
     }
 }
 
-/// Tipo semántico de una tesela (subconjunto jugable de `TileType` del upstream).
+/// Tipo semántico de una tesela.
+///
+/// Cubre los tipos de `TileType` de OpenTTD necesarios para el renderer.
+/// Los tipos sin sprite dedicado se renderizan con un color de fallback.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TileKind {
     #[default]
@@ -22,6 +25,11 @@ pub enum TileKind {
     CoalField,
     Road,
     Rail,
+    House,     // MP_HOUSE  (3) – edificio urbano
+    Station,   // MP_STATION (5)
+    Industry,  // MP_INDUSTRY (8) – genérico (sin sub-tipo conocido)
+    Void,      // MP_VOID (7) – borde del mapa
+    Unknown(u8), // cualquier tipo no mapeado (raw nibble alto de tile_type)
 }
 
 /// Una tesela con altura base y tipo semántico.
@@ -100,5 +108,84 @@ impl Map {
     pub fn get_kind(&self, c: TileCoord) -> Option<TileKind> {
         let i = self.index(c)?;
         Some(self.tiles[i].kind)
+    }
+
+    /// Carga un mapa desde un archivo `.ottdmap` generado por `scripts/parse_sav.py`.
+    ///
+    /// Formato:
+    /// - 4 bytes: magic `MAPO`
+    /// - 4 bytes LE: width
+    /// - 4 bytes LE: height
+    /// - W×H bytes: tile_type (nibble alto = TileType OpenTTD)
+    /// - W×H bytes: height por tesela
+    /// - W×H bytes: m5 (road bits, etc.)
+    ///
+    /// La correspondencia de tipos OpenTTD → `TileKind`:
+    ///
+    /// | TileType | Nombre         | TileKind         |
+    /// |----------|----------------|------------------|
+    /// | 0        | MP_CLEAR       | Grass            |
+    /// | 1        | MP_RAILWAY     | Rail             |
+    /// | 2        | MP_ROAD        | Road             |
+    /// | 3        | MP_HOUSE       | House            |
+    /// | 4        | MP_TREES       | Forest           |
+    /// | 5        | MP_STATION     | Station          |
+    /// | 6        | MP_WATER       | Water            |
+    /// | 7        | MP_VOID        | Void             |
+    /// | 8        | MP_INDUSTRY    | Industry/Coal    |
+    /// | 9        | MP_TUNNELBRIDGE| Road/Rail        |
+    /// | 10       | MP_OBJECT      | Grass            |
+    ///
+    /// # Errors
+    ///
+    /// Devuelve `Err` si el archivo no tiene el magic correcto o está truncado.
+    pub fn from_ottd_binary(data: &[u8]) -> Result<Self, MapError> {
+        if data.len() < 12 || &data[0..4] != b"MAPO" {
+            return Err(MapError::OutOfBounds);
+        }
+        let width  = u32::from_le_bytes(data[4..8].try_into().unwrap());
+        let height = u32::from_le_bytes(data[8..12].try_into().unwrap());
+        let n = (width as usize).saturating_mul(height as usize);
+        if data.len() < 12 + n * 3 {
+            return Err(MapError::OutOfBounds);
+        }
+
+        let tile_types = &data[12..12 + n];
+        let heights    = &data[12 + n..12 + 2 * n];
+        let m5_data    = &data[12 + 2 * n..12 + 3 * n];
+
+        let mut tiles = Vec::with_capacity(n);
+        for i in 0..n {
+            let raw_type = tile_types[i];
+            let ottd_type = (raw_type >> 4) & 0xF;
+            let m5 = m5_data[i];
+
+            let kind = match ottd_type {
+                0 => TileKind::Grass,   // MP_CLEAR
+                1 => TileKind::Rail,    // MP_RAILWAY
+                2 => TileKind::Road,    // MP_ROAD
+                3 => TileKind::House,   // MP_HOUSE
+                4 => TileKind::Forest,  // MP_TREES
+                5 => TileKind::Station, // MP_STATION
+                6 => TileKind::Water,   // MP_WATER
+                7 => TileKind::Void,    // MP_VOID
+                8 => {
+                    // MP_INDUSTRY: el tipo exacto está en otros bytes (m1/m5).
+                    // Por ahora usamos CoalField como proxy visual.
+                    let _ = m5;
+                    TileKind::CoalField
+                }
+                9 => {
+                    // MP_TUNNELBRIDGE: puede ser Road o Rail según m5 bit 2
+                    if m5 & 0x04 != 0 { TileKind::Rail } else { TileKind::Road }
+                }
+                10 => TileKind::Grass,  // MP_OBJECT
+                t  => TileKind::Unknown(t),
+            };
+
+            tiles.push(Tile { height: heights[i], kind });
+        }
+
+        Ok(Self { width, height, tiles })
     }
 }

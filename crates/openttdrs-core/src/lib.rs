@@ -41,6 +41,18 @@ impl GameState {
         }
     }
 
+    /// Crea un estado a partir de un mapa ya construido (sin industrias ni vehículos).
+    #[must_use]
+    pub fn from_map(map: Map) -> Self {
+        Self {
+            map,
+            tick:       GameTick::default(),
+            industries: Vec::new(),
+            vehicles:   Vec::new(),
+            stations:   Vec::new(),
+        }
+    }
+
     /// Avanza un tick de simulación (equivalente conceptual a un frame lógico del juego).
     ///
     /// Orden dentro del tick:

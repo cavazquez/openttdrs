@@ -396,10 +396,10 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     // ObjectType (m5): 0=Transmisor, 1=Faro
                     if ottd_type == 10 {
                         let (obj_img, obj_xrel, obj_yrel, obj_w, obj_h) = match tile_m5 {
-                            // Faro: sprite 2602, 41×61, xrel=-22, yrel=-48
-                            1 => (Some(h_lighthouse.clone()), -22.0, -48.0, 41.0, 61.0),
                             // Transmisor: sprite 2601, 55×77, xrel=-26, yrel=-71
-                            0 => (Some(h_transmitter.clone()), -26.0, -71.0, 55.0, 77.0),
+                            1 => (Some(h_transmitter.clone()), -26.0, -71.0, 55.0, 77.0),
+                            // Faro: sprite 2602, 41×61, xrel=-22, yrel=-48
+                            0 => (Some(h_lighthouse.clone()), -22.0, -48.0, 41.0, 61.0),
                             _ => (None, 0.0, 0.0, 0.0, 0.0),
                         };
                         if let Some(img) = obj_img {

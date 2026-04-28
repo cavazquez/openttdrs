@@ -8,7 +8,7 @@
 use bevy::color::palettes::css::{DARK_GRAY, LIMEGREEN};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{GameState, Industry, IndustryKind, TileCoord, TileKind, Vehicle, VehicleKind};
+use openttdrs_core::{GameState, Industry, IndustryKind, Station, TileCoord, TileKind, Vehicle, VehicleKind};
 
 const TILE_WORLD: f32 = 20.0;
 const MAP_W: u32 = 24;
@@ -27,7 +27,7 @@ fn main() {
         .add_systems(Startup, setup_camera)
         .add_systems(
             Update,
-            (advance_sim, sync_window_title, draw_map_debug, draw_industries, draw_vehicles).chain(),
+            (advance_sim, sync_window_title, draw_map_debug, draw_industries, draw_stations, draw_vehicles).chain(),
         )
         .run();
 }
@@ -43,6 +43,7 @@ impl Default for SimWorld {
         let mut state = GameState::new(MAP_W, MAP_H);
         distribute_tile_kinds(&mut state, 0xDEAD_BEEF_CAFE_1234);
         place_industries(&mut state);
+        place_stations(&mut state);
         place_vehicles(&mut state);
         Self { state }
     }
@@ -108,16 +109,29 @@ fn place_industries(state: &mut GameState) {
     }
 }
 
-/// Coloca un truck entre cada par consecutivo de industrias.
-fn place_vehicles(state: &mut GameState) {
-    let positions: Vec<(TileCoord, TileCoord)> = state
+/// Coloca una estación por industria, desplazada 3 teselas en X (clampeda al mapa).
+fn place_stations(state: &mut GameState) {
+    let (mw, _mh) = state.map.dimensions();
+    let positions: Vec<TileCoord> = state
         .industries
-        .chunks(2)
-        .filter(|pair| pair.len() == 2)
-        .map(|pair| (pair[0].pos, pair[1].pos))
+        .iter()
+        .map(|ind| TileCoord::new((ind.pos.x + 3).min(mw as i32 - 1), ind.pos.y))
+        .collect();
+    for pos in positions {
+        state.stations.push(Station::new(pos));
+    }
+}
+
+/// Coloca un truck por cada par (industria[i], estación[i]).
+fn place_vehicles(state: &mut GameState) {
+    let routes: Vec<(TileCoord, TileCoord)> = state
+        .industries
+        .iter()
+        .zip(state.stations.iter())
+        .map(|(ind, st)| (ind.pos, st.pos))
         .collect();
 
-    for (i, (a, b)) in positions.into_iter().enumerate() {
+    for (i, (a, b)) in routes.into_iter().enumerate() {
         state.vehicles.push(Vehicle::new(i as u32, VehicleKind::Truck, a, b));
     }
 }
@@ -190,6 +204,39 @@ fn draw_map_debug(sim: Res<SimWorld>, mut gizmos: Gizmos) {
     gizmos.line_2d(Vec2::ZERO, Vec2::new(80.0, 40.0), DARK_GRAY);
 }
 
+fn draw_stations(sim: Res<SimWorld>, mut gizmos: Gizmos) {
+    let (mw, mh) = sim.state.map.dimensions();
+    let ox = -(mw as f32) * TILE_WORLD * 0.5;
+    let oy = -(mh as f32) * TILE_WORLD * 0.5;
+
+    for station in &sim.state.stations {
+        let wx = ox + (station.pos.x as f32) * TILE_WORLD;
+        let wy = oy + (station.pos.y as f32) * TILE_WORLD;
+
+        // Cuadrado cian que representa la estación.
+        gizmos.rect_2d(
+            Isometry2d::from_translation(Vec2::new(wx, wy)),
+            Vec2::splat(TILE_WORLD * 0.6),
+            Color::srgb(0.0, 0.85, 0.85),
+        );
+
+        // Barra de income: escala logarítmica para que sea visible desde el primer ciclo.
+        if station.income > 0 {
+            let fill = (station.income as f32).log2() / 10.0; // 2^10=1024 → barra llena
+            let fill = fill.min(1.0);
+            let bar_w = (TILE_WORLD - 2.0) * fill;
+            let bar_h = 3.0;
+            let bar_x = wx - (TILE_WORLD - 2.0) * 0.5 + bar_w * 0.5;
+            let bar_y = wy - TILE_WORLD * 0.5 + bar_h * 0.5 + 1.0;
+            gizmos.rect_2d(
+                Isometry2d::from_translation(Vec2::new(bar_x, bar_y)),
+                Vec2::new(bar_w, bar_h),
+                Color::srgb(1.0, 1.0, 0.0),
+            );
+        }
+    }
+}
+
 fn draw_vehicles(sim: Res<SimWorld>, mut gizmos: Gizmos) {
     let (mw, mh) = sim.state.map.dimensions();
     let ox = -(mw as f32) * TILE_WORLD * 0.5;
@@ -198,10 +245,16 @@ fn draw_vehicles(sim: Res<SimWorld>, mut gizmos: Gizmos) {
     for vehicle in &sim.state.vehicles {
         let wx = ox + (vehicle.pos.x as f32) * TILE_WORLD;
         let wy = oy + (vehicle.pos.y as f32) * TILE_WORLD;
+        // Blanco cuando vacío, amarillo cuando cargado.
+        let color = if vehicle.cargo > 0 {
+            Color::srgb(1.0, 0.9, 0.1)
+        } else {
+            Color::WHITE
+        };
         gizmos.rect_2d(
             Isometry2d::from_translation(Vec2::new(wx, wy)),
             Vec2::splat(TILE_WORLD * 0.3),
-            Color::WHITE,
+            color,
         );
     }
 }

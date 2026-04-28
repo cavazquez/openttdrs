@@ -7,11 +7,13 @@
 
 pub mod industry;
 pub mod map;
+pub mod station;
 pub mod tick;
 pub mod vehicle;
 
 pub use industry::{Industry, IndustryKind, INDUSTRY_PRODUCE_TICKS};
 pub use map::{Map, MapError, Tile, TileCoord, TileKind};
+pub use station::Station;
 pub use tick::GameTick;
 pub use vehicle::{Vehicle, VehicleKind};
 
@@ -22,6 +24,7 @@ pub struct GameState {
     pub tick:       GameTick,
     pub industries: Vec<Industry>,
     pub vehicles:   Vec<Vehicle>,
+    pub stations:   Vec<Station>,
 }
 
 impl GameState {
@@ -32,16 +35,51 @@ impl GameState {
             tick:       GameTick::default(),
             industries: Vec::new(),
             vehicles:   Vec::new(),
+            stations:   Vec::new(),
         }
     }
 
     /// Avanza un tick de simulación (equivalente conceptual a un frame lógico del juego).
+    ///
+    /// Orden dentro del tick:
+    /// 1. Producción de industrias.
+    /// 2. Carga/descarga según posición actual del vehículo.
+    /// 3. Movimiento del vehículo (vehicle.step).
     pub fn step(&mut self) {
         self.tick.advance();
         let t = self.tick.get();
+
         for industry in &mut self.industries {
             industry.produce(t);
         }
+
+        // Carga: vehículo en posición de industria sin cargo → toma lo disponible.
+        for i in 0..self.vehicles.len() {
+            let vpos = self.vehicles[i].pos;
+            let vcap = self.vehicles[i].capacity;
+            if self.vehicles[i].cargo == 0 {
+                if let Some(ind) = self.industries.iter_mut().find(|ind| ind.pos == vpos) {
+                    let load = ind.stock.min(vcap);
+                    self.vehicles[i].cargo = load;
+                    ind.stock -= load;
+                }
+            }
+        }
+
+        // Descarga: vehículo en posición de estación con cargo → entrega.
+        for i in 0..self.vehicles.len() {
+            let vpos   = self.vehicles[i].pos;
+            let vcargo = self.vehicles[i].cargo;
+            if vcargo > 0 {
+                if let Some(st) = self.stations.iter_mut().find(|st| st.pos == vpos) {
+                    st.stock  += vcargo;
+                    st.income += u64::from(vcargo);
+                    self.vehicles[i].cargo = 0;
+                }
+            }
+        }
+
+        // Movimiento: una tesela hacia el destino (o inversión de trayecto al llegar).
         for vehicle in &mut self.vehicles {
             vehicle.step();
         }
@@ -51,6 +89,7 @@ impl GameState {
 #[cfg(test)]
 mod tests {
     use industry::INDUSTRY_PRODUCE_AMOUNT;
+    use vehicle::VEHICLE_CAPACITY;
 
     use super::*;
 
@@ -99,6 +138,67 @@ mod tests {
         assert_eq!(s.map.get_kind(c), Some(TileKind::Forest));
         s.map.set_kind(c, TileKind::CoalField).unwrap();
         assert_eq!(s.map.get_kind(c), Some(TileKind::CoalField));
+    }
+
+    #[test]
+    fn vehicle_loads_from_industry() {
+        let mut s = GameState::new(8, 8);
+        let ipos = TileCoord::new(0, 0);
+        let spos = TileCoord::new(4, 0);
+        let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
+        ind.stock = 50;
+        s.industries.push(ind);
+        s.stations.push(Station::new(spos));
+        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
+
+        // Primer step: vehicle en ipos, cargo == 0 → carga.
+        s.step();
+        assert_eq!(s.vehicles[0].cargo, VEHICLE_CAPACITY.min(50));
+        assert_eq!(s.industries[0].stock, 50 - VEHICLE_CAPACITY.min(50));
+    }
+
+    #[test]
+    fn vehicle_delivers_to_station() {
+        let mut s = GameState::new(8, 8);
+        let ipos = TileCoord::new(0, 0);
+        let spos = TileCoord::new(1, 0);
+        let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
+        ind.stock = 20;
+        s.industries.push(ind);
+        s.stations.push(Station::new(spos));
+        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
+
+        // Tick 1: carga en industria.
+        s.step();
+        assert!(s.vehicles[0].cargo > 0);
+
+        // Tick 2: vehicle.step() lo lleva a spos (dest a 1 tile); luego descarga.
+        s.step();
+        assert_eq!(s.vehicles[0].pos, spos);
+        assert_eq!(s.vehicles[0].cargo, 0);
+        assert!(s.stations[0].income > 0);
+    }
+
+    #[test]
+    fn economic_cycle_roundtrip() {
+        let mut s = GameState::new(16, 16);
+        let ipos = TileCoord::new(0, 0);
+        let spos = TileCoord::new(2, 0); // 2 tiles de distancia
+
+        // Industria con stock suficiente para varios ciclos.
+        let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
+        ind.stock = 1000;
+        s.industries.push(ind);
+        s.stations.push(Station::new(spos));
+        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
+
+        // Un ciclo completo: carga (tick 1) + viaje 2 tiles (tick 2-3) +
+        // llegada/descarga (tick 3) + inversión (tick 3) + regreso 2 tiles (tick 4-5)
+        // + llegada (tick 5) + inversión (tick 5) → income > 0 después de pocos ticks.
+        for _ in 0..10 {
+            s.step();
+        }
+        assert!(s.stations[0].income > 0, "debe haber income tras varios ticks");
     }
 
     #[test]

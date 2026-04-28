@@ -1,5 +1,8 @@
 use crate::map::TileCoord;
 
+/// Capacidad de carga por defecto (unidades de cargo).
+pub const VEHICLE_CAPACITY: u32 = 20;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VehicleKind {
     Truck,
@@ -10,19 +13,20 @@ pub enum VehicleKind {
 /// Al llegar invierte el trayecto (va y vuelve entre `origin` y `dest`).
 #[derive(Debug, Clone)]
 pub struct Vehicle {
-    pub id:     u32,
-    pub kind:   VehicleKind,
-    pub pos:    TileCoord,
+    pub id:       u32,
+    pub kind:     VehicleKind,
+    pub pos:      TileCoord,
     /// Punto de partida del trayecto actual; se intercambia con `dest` en cada llegada.
-    pub origin: TileCoord,
-    pub dest:   TileCoord,
-    pub cargo:  u32,
+    pub origin:   TileCoord,
+    pub dest:     TileCoord,
+    pub cargo:    u32,
+    pub capacity: u32,
 }
 
 impl Vehicle {
     #[must_use]
     pub fn new(id: u32, kind: VehicleKind, pos: TileCoord, dest: TileCoord) -> Self {
-        Self { id, kind, pos, origin: pos, dest, cargo: 0 }
+        Self { id, kind, pos, origin: pos, dest, cargo: 0, capacity: VEHICLE_CAPACITY }
     }
 
     /// Avanza una tesela en la dirección cardinal que reduce la distancia Manhattan al destino.

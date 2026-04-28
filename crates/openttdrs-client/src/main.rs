@@ -38,6 +38,16 @@ use ui::{SelectedTileInfo, handle_tile_click, setup_tile_info_ui, update_tile_in
 /// Factor de escala para los sprites de camiones (son 20×14 px nativo).
 const TRUCK_SCALE: f32 = 2.0;
 
+// ── Animación de agua ─────────────────────────────────────────────────────────
+
+/// Marca los tiles de agua para la animación por ondas.
+/// Almacena la fase aleatoria por tile para que cada tile se mueva
+/// de forma independiente, simulando olas.
+#[derive(Component)]
+struct WaterTile {
+    phase: f32,
+}
+
 // ── Dirección de vehículo ─────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -119,6 +129,7 @@ fn main() {
                 advance_sim,
                 sync_window_title,
                 update_vehicles,
+                animate_water,
                 draw_industries,
                 draw_stations,
                 move_camera,
@@ -328,28 +339,42 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     ));
                 }
             } else {
-                let (image, color) = match kind {
-                    TileKind::Grass => (h_grass.clone(), Color::WHITE),
-                    TileKind::Forest => (h_rough.clone(), Color::srgb(0.6, 1.0, 0.45)),
-                    TileKind::CoalField => (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45)),
-                    TileKind::Water => (h_water.clone(), Color::WHITE),
-                    TileKind::Unknown(_) => (h_grass.clone(), Color::srgb(1.0, 0.0, 1.0)),
-                    TileKind::House
-                    | TileKind::Station
-                    | TileKind::Road
-                    | TileKind::Rail
-                    | TileKind::Industry
-                    | TileKind::Void => unreachable!(),
-                };
-
-                commands.spawn((
-                    Sprite {
-                        image,
-                        color,
-                        ..default()
-                    },
-                    Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
-                ));
+                if kind == TileKind::Water {
+                    // Fase aleatoria por tile para desfasar las olas entre vecinos
+                    let phase = wang_hash(tx, ty, 0xA9FE) as f32
+                        * (std::f32::consts::TAU / u32::MAX as f32);
+                    commands.spawn((
+                        WaterTile { phase },
+                        Sprite {
+                            image: h_water.clone(),
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                        Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
+                    ));
+                } else {
+                    let (image, color) = match kind {
+                        TileKind::Grass => (h_grass.clone(), Color::WHITE),
+                        TileKind::Forest => (h_rough.clone(), Color::srgb(0.6, 1.0, 0.45)),
+                        TileKind::CoalField => (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45)),
+                        TileKind::Unknown(_) => (h_grass.clone(), Color::srgb(1.0, 0.0, 1.0)),
+                        TileKind::House
+                        | TileKind::Station
+                        | TileKind::Road
+                        | TileKind::Rail
+                        | TileKind::Industry
+                        | TileKind::Water
+                        | TileKind::Void => unreachable!(),
+                    };
+                    commands.spawn((
+                        Sprite {
+                            image,
+                            color,
+                            ..default()
+                        },
+                        Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
+                    ));
+                }
             }
 
             if kind == TileKind::Forest {
@@ -467,6 +492,25 @@ fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
                 Color::WHITE,
             );
         }
+    }
+}
+
+/// Anima los tiles de agua con una onda senoidal desfasada por tile.
+///
+/// Cada tile tiene una `phase` aleatoria que desplaza la ola, creando el
+/// efecto de que el agua "respira" con olas que se mueven de forma natural.
+/// La frecuencia (1.8 Hz) y amplitud (±8% de brillo) están calibradas
+/// para parecerse a la animación de agua de OpenTTD.
+fn animate_water(time: Res<Time>, mut query: Query<(&WaterTile, &mut Sprite)>) {
+    let t = time.elapsed_secs();
+    for (water, mut sprite) in &mut query {
+        // Onda principal de brillo: simula el reflejo de luz en el agua
+        let wave = (t * 1.8 + water.phase).sin();
+        // Onda secundaria a diferente frecuencia para más naturalidad
+        let ripple = (t * 3.1 + water.phase * 1.7).sin() * 0.4;
+        let v = 0.92 + (wave + ripple) * 0.04;
+        // Tinte azul/celeste del agua con leve variación de brillo
+        sprite.color = Color::srgb(v * 0.72, v * 0.88, v);
     }
 }
 

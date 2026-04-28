@@ -395,11 +395,13 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     // MP_OBJECT: renderizar faro o transmisor como overlay
                     // ObjectType (m5): 0=Transmisor, 1=Faro
                     if ottd_type == 10 {
+                        // ObjectType de OpenTTD: 0=Transmisor, 1=Faro
+                        // m5 contiene el ObjectType real (resuelto por parse_sav.py desde OBJS)
                         let (obj_img, obj_xrel, obj_yrel, obj_w, obj_h) = match tile_m5 {
-                            // Transmisor: sprite 2601, 55×77, xrel=-26, yrel=-71
-                            1 => (Some(h_transmitter.clone()), -26.0, -71.0, 55.0, 77.0),
-                            // Faro: sprite 2602, 41×61, xrel=-22, yrel=-48
-                            0 => (Some(h_lighthouse.clone()), -22.0, -48.0, 41.0, 61.0),
+                            // OBJECT_TRANSMITTER=0: sprite 2601, 55×77, xrel=-26, yrel=-71
+                            0 => (Some(h_transmitter.clone()), -26.0, -71.0, 55.0, 77.0),
+                            // OBJECT_LIGHTHOUSE=1: sprite 2602, 41×61, xrel=-22, yrel=-48
+                            1 => (Some(h_lighthouse.clone()), -22.0, -48.0, 41.0, 61.0),
                             _ => (None, 0.0, 0.0, 0.0, 0.0),
                         };
                         if let Some(img) = obj_img {

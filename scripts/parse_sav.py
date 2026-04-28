@@ -196,7 +196,7 @@ def decompress(raw: bytes) -> tuple[bytes, int]:
 
 
 # ---------------------------------------------------------------------------
-# Parsear chunks y extraer MAPS, MAPT, MAPH, MAP5
+# Parsear chunks y extraer MAPS, MAPT, MAPH, MAP5, MAP2, OBJS
 # ---------------------------------------------------------------------------
 
 CH_RIFF          = 0
@@ -204,6 +204,64 @@ CH_ARRAY         = 1
 CH_SPARSE_ARRAY  = 2
 CH_TABLE         = 3
 CH_SPARSE_TABLE  = 4
+
+
+def parse_objs_table(data: bytes, offset: int) -> tuple[dict[int, int], int]:
+    """Parsea el chunk OBJS (CH_TABLE) y devuelve {tile_index: object_type}.
+
+    El ObjectType de OpenTTD es:
+      0 = OBJECT_TRANSMITTER (antena)
+      1 = OBJECT_LIGHTHOUSE  (faro)
+    """
+    # 1. Header con descriptores de campos
+    n, offset = read_gamma(data, offset)
+    header = data[offset: offset + n - 1]
+    offset += n - 1
+
+    # Parsear nombres y tipos de campos del header
+    fields: list[tuple[str, int]] = []
+    h = 0
+    while h < len(header):
+        ftype = header[h]; h += 1
+        if ftype == 0:
+            break
+        name_len, h = read_gamma(header, h)
+        fname = header[h: h + name_len].decode('utf-8', errors='replace')
+        h += name_len
+        fields.append((fname, ftype))
+
+    # 2. Elementos de datos (uno por objeto)
+    result: dict[int, int] = {}
+    while True:
+        n, offset = read_gamma(data, offset)
+        if n == 0:
+            break
+        elem = data[offset: offset + n - 1]
+        offset += n - 1
+
+        ep = 0
+        vals: dict[str, int] = {}
+        for fname, ftype in fields:
+            fb = ftype & 0x0F  # SLE_FILE_TYPE bits
+            if fb == 6:        # U32
+                vals[fname] = struct.unpack_from('>I', elem, ep)[0]; ep += 4
+            elif fb == 5:      # I32
+                vals[fname] = struct.unpack_from('>i', elem, ep)[0]; ep += 4
+            elif fb == 4:      # U16
+                vals[fname] = struct.unpack_from('>H', elem, ep)[0]; ep += 2
+            elif fb == 3:      # I16
+                vals[fname] = struct.unpack_from('>h', elem, ep)[0]; ep += 2
+            elif fb in (1, 2): # I8 / U8
+                vals[fname] = elem[ep]; ep += 1
+            else:
+                break          # tipo desconocido, no seguimos
+
+        tile = vals.get('location.tile')
+        obj_type = vals.get('type')
+        if tile is not None and obj_type is not None:
+            result[tile] = obj_type
+
+    return result, offset
 
 
 def parse_chunks(data: bytes) -> dict[str, bytes | tuple]:
@@ -238,6 +296,9 @@ def parse_chunks(data: bytes) -> dict[str, bytes | tuple]:
                 if chunk_name == 'MAPS':
                     dim_x, dim_y, offset = parse_maps_table(data, offset)
                     chunks['MAPS'] = (dim_x, dim_y)
+                elif chunk_name == 'OBJS':
+                    obj_types, offset = parse_objs_table(data, offset)
+                    chunks['OBJS'] = obj_types
                 else:
                     offset = skip_array(data, offset)
 
@@ -321,6 +382,8 @@ def main() -> None:
     maph = chunks.get('MAPH', b'')
     map5 = chunks.get('MAP5', b'')
     map1 = chunks.get('MAP1', b'')
+    # OBJS: diccionario {tile_index → ObjectType}  (0=Transmisor, 1=Faro)
+    obj_types: dict[int, int] = chunks.get('OBJS', {})  # type: ignore[assignment]
 
     expected = dim_x * dim_y
     if len(mapt) < expected:
@@ -334,12 +397,26 @@ def main() -> None:
     if len(map1) < expected:
         map1 = map1 + b'\x00' * (expected - len(map1))
 
+    # Para tiles MP_OBJECT, sobreescribir m5 con el ObjectType real (de OBJS).
+    # En OpenTTD moderno, MAP5 para MP_OBJECT guarda bits altos del ObjectID,
+    # no el tipo.  El tipo real se obtiene del array Object a través de OBJS.
+    m5_list = bytearray(map5[:expected])
+    if obj_types:
+        n_fixed = 0
+        for i in range(expected):
+            if (mapt[i] >> 4) & 0xF == 10:  # MP_OBJECT
+                t = obj_types.get(i, 0xFF)
+                m5_list[i] = t if t != 0xFF else m5_list[i]
+                if t != 0xFF:
+                    n_fixed += 1
+        print(f"  Objetos con tipo resuelto desde OBJS: {n_fixed}")
+    m5_data = bytes(m5_list)
+
     # Escribir archivo de salida (formato v2 con m1)
     magic_out = b'MAPO'
     header = struct.pack('<4sII', magic_out, dim_x, dim_y)
     tile_types = mapt[:expected]
     heights    = maph[:expected]
-    m5_data    = map5[:expected]
     m1_data    = map1[:expected]
 
     out_path.write_bytes(header + tile_types + heights + m5_data + m1_data)

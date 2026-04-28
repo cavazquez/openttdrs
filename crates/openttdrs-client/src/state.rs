@@ -123,7 +123,9 @@ fn log_detection_summary(state: &GameState, loaded_from_file: bool) {
 
     info!("Estaciones detectadas: {}", state.stations.len());
     if loaded_from_file && state.stations.is_empty() {
-        info!("  - Nota: en mapas .ottdmap todavía no se sintetizan estaciones para la simulación.");
+        info!(
+            "  - Nota: en mapas .ottdmap todavía no se sintetizan estaciones para la simulación."
+        );
     }
 
     let mut vehicles: BTreeMap<&'static str, u32> = BTreeMap::new();

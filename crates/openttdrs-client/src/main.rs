@@ -475,9 +475,10 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         if x < 0 || y < 0 || x >= mw as i32 || y >= mh as i32 {
                             return false;
                         }
-                        sim.state.map.get(TileCoord::new(x, y)).is_some_and(|t| {
-                            t.kind != TileKind::Water && t.kind != TileKind::Void
-                        })
+                        sim.state
+                            .map
+                            .get(TileCoord::new(x, y))
+                            .is_some_and(|t| t.kind != TileKind::Water && t.kind != TileKind::Void)
                     };
                     let n = is_land(tx as i32, ty as i32 - 1);
                     let e = is_land(tx as i32 + 1, ty as i32);
@@ -509,7 +510,9 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                                 color: Color::WHITE,
                                 ..default()
                             },
-                            Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.02)),
+                            Transform::from_translation(tile_pos(
+                                tx as i32, ty as i32, height, 0.02,
+                            )),
                         ));
                     }
                 } else {

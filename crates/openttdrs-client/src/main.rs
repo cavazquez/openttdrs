@@ -366,7 +366,9 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     let h_tree_1 = asset_server.load::<Image>("opengfx/tiles/tree_1.png");
     let h_tree_2 = asset_server.load::<Image>("opengfx/tiles/tree_2.png");
     let h_tree_3 = asset_server.load::<Image>("opengfx/tiles/tree_3.png");
-    let h_coal = asset_server.load::<Image>("opengfx/tiles/coal_mine.png");
+    // sid=2013 (58×50): headframe principal de la Coal Mine (IT_COAL_MINE = 0).
+    // El sprite 2179 que usábamos antes era de la Printing Works (IT_PRINT = 7).
+    let h_coal = asset_server.load::<Image>("opengfx/tiles/coal_mine_hq.png");
     let trees = [h_tree_1, h_tree_2, h_tree_3];
 
     // ── Handles de camiones ───────────────────────────────────────────────────
@@ -436,8 +438,8 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     for industry in &sim.state.industries {
         if industry.kind == IndustryKind::CoalMine {
             let p = iso(industry.pos.x, industry.pos.y);
-            // NFO: coal_mine → xrel=-9 yrel=-28 w=29 h=43
-            let pos3 = overlay_pos(p, -9.0, -28.0, 29.0, 43.0, 0.6, industry.pos.x, industry.pos.y);
+            // sid=2013: headframe de la Coal Mine, 58×50, xrel=-16, yrel=-33
+            let pos3 = overlay_pos(p, -16.0, -33.0, 58.0, 50.0, 0.6, industry.pos.x, industry.pos.y);
             commands.spawn((
                 Sprite { image: h_coal.clone(), ..default() },
                 Transform::from_translation(pos3),

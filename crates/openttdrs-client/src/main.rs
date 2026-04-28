@@ -515,14 +515,17 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                                   => (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45)),
                 TileKind::Water   => (h_water.clone(), Color::WHITE),
                 TileKind::Road    => {
+                    // Los PNG `road_tx` / `road_ty` quedan visualmente a ~90° respecto a la
+                    // convención ROAD_X/ROAD_Y + proyección isométrica del cliente; se intercambian.
                     let img = match road_dir(&sim.state.map, c, mw, mh) {
-                        RoadDir::Tx   => h_road_tx.clone(),
-                        RoadDir::Ty   => h_road_ty.clone(),
+                        RoadDir::Tx   => h_road_ty.clone(),
+                        RoadDir::Ty   => h_road_tx.clone(),
                         RoadDir::Both => h_road_cross.clone(),
                     };
                     (img, Color::WHITE)
                 }
-                TileKind::Rail    => (h_road_tx.clone(), Color::srgb(0.75, 0.75, 1.0)),
+                // Mismo intercambio que carretera hasta tener sprites de vía propios.
+                TileKind::Rail    => (h_road_ty.clone(), Color::srgb(0.75, 0.75, 1.0)),
                 // Edificios urbanos: tono amarillo-crema
                 TileKind::House   => (h_grass.clone(), Color::srgb(0.95, 0.90, 0.70)),
                 // Estaciones: tono azul claro

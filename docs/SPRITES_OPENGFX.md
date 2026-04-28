@@ -94,8 +94,8 @@ Todas las teselas de suelo miden **64×31 px** con `xrel=-31, yrel=0`.
 | `grass.png` | 3924 | Prado liso (suelo principal) |
 | `grass_rough.png` | 3925 | Prado rugoso (Forest, CoalField con tinte) |
 | `water.png` | ~3984 | Agua (azul) |
-| `road_ty.png` | 1332 (`SPR_ROAD_Y`) | Carretera en dirección ty (NW-SE en pantalla) |
-| `road_tx.png` | 1333 (`SPR_ROAD_X`) | Carretera en dirección tx (NE-SW en pantalla) |
+| `road_ty.png` | 1332 (`SPR_ROAD_Y`) | Recorte “Y” en OpenGFX; en el cliente se usa para `RoadDir::Tx` |
+| `road_tx.png` | 1333 (`SPR_ROAD_X`) | Recorte “X” en OpenGFX; en el cliente se usa para `RoadDir::Ty` |
 | `road_cross.png` | 1338 | Cruce de carretera (tx + ty) |
 | `road_corner_a.png` | 1335 | Esquina NE-SW |
 | `road_corner_b.png` | 1337 | Esquina NW-SE |

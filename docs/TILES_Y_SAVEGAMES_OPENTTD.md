@@ -132,12 +132,22 @@ boca del túnel sigue la misma idea que `DiagDirToRoadBits` (un solo bit en 0–
 Solo tenemos tres gráficos de carretera base: `road_tx.png`, `road_ty.png`, `road_cross.png`
 (ver [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md)).
 
-Regla aproximada en el cliente:
+Regla en el cliente (`RoadDir` desde road bits / cruces / vecinos):
 
-- Si solo hay bits del eje X (`0x0A` o subconjuntos no vacíos solo en `0x0A`): sprite **tx**.
-- Si solo hay bits del eje Y (`0x05` o subconjuntos solo en `0x05`): sprite **ty**.
+- `RoadDir::Tx` (eje X del mapa, `ROAD_X`, bits `0x0A`) → sprite **`road_ty.png`**.
+- `RoadDir::Ty` (eje Y del mapa, `ROAD_Y`, bits `0x05`) → sprite **`road_tx.png`**.
+- `RoadDir::Both` → **`road_cross.png`**.
+
+Es un **intercambio intencional** respecto al nombre del archivo: los recortes OpenGFX y
+nuestra proyección isométrica quedan alineados así (~90° respecto a asignar “tx→tx”).
+
+El **cruce** no se invierte.
+
 - Si hay presencia en **ambos** ejes (p. ej. `0x0F`, T, L): sprite **cruce** (aproximación;
   OpenTTD usa más variantes para esquinas y tes).
+
+Las **vías** (`TileKind::Rail`) usan provisionalmente el mismo par intercambiado hasta
+tener sprites de rail.
 
 Los **subconjuntos** de un eje (p. ej. solo `NE` sin `SW`) siguen mostrando el sprite de
 tramo completo: es una limitación hasta extraer más sprites o recortar en shader.

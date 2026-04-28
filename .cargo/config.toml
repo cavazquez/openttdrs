@@ -4,11 +4,11 @@
 #   con inputs muy grandes). Da suficiente optimización para que Bevy corra bien.
 # - El código propio usa opt-level=1 también: compilación incremental rápida.
 #
-# Para usar mold (más rápido y robusto que lld, instalable con `sudo apt install mold`):
-#   [target.x86_64-unknown-linux-gnu]
-#   linker = "clang"
-#   rustflags = ["-C", "link-arg=-fuse-ld=mold"]
-#
+# mold: linker más rápido y robusto (sudo apt install mold)
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
 # Para producción: cargo run --release
 
 [profile.dev]

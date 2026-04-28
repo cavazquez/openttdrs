@@ -8,7 +8,7 @@
 use bevy::color::palettes::css::{DARK_GRAY, LIMEGREEN};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{GameState, Industry, IndustryKind, TileCoord, TileKind};
+use openttdrs_core::{GameState, Industry, IndustryKind, TileCoord, TileKind, Vehicle, VehicleKind};
 
 const TILE_WORLD: f32 = 20.0;
 const MAP_W: u32 = 24;
@@ -27,7 +27,7 @@ fn main() {
         .add_systems(Startup, setup_camera)
         .add_systems(
             Update,
-            (advance_sim, sync_window_title, draw_map_debug, draw_industries).chain(),
+            (advance_sim, sync_window_title, draw_map_debug, draw_industries, draw_vehicles).chain(),
         )
         .run();
 }
@@ -43,6 +43,7 @@ impl Default for SimWorld {
         let mut state = GameState::new(MAP_W, MAP_H);
         distribute_tile_kinds(&mut state, 0xDEAD_BEEF_CAFE_1234);
         place_industries(&mut state);
+        place_vehicles(&mut state);
         Self { state }
     }
 }
@@ -104,6 +105,20 @@ fn place_industries(state: &mut GameState) {
                 _ => {}
             }
         }
+    }
+}
+
+/// Coloca un truck entre cada par consecutivo de industrias.
+fn place_vehicles(state: &mut GameState) {
+    let positions: Vec<(TileCoord, TileCoord)> = state
+        .industries
+        .chunks(2)
+        .filter(|pair| pair.len() == 2)
+        .map(|pair| (pair[0].pos, pair[1].pos))
+        .collect();
+
+    for (i, (a, b)) in positions.into_iter().enumerate() {
+        state.vehicles.push(Vehicle::new(i as u32, VehicleKind::Truck, a, b));
     }
 }
 
@@ -173,6 +188,22 @@ fn draw_map_debug(sim: Res<SimWorld>, mut gizmos: Gizmos) {
     gizmos.line_2d(d, a, LIMEGREEN);
 
     gizmos.line_2d(Vec2::ZERO, Vec2::new(80.0, 40.0), DARK_GRAY);
+}
+
+fn draw_vehicles(sim: Res<SimWorld>, mut gizmos: Gizmos) {
+    let (mw, mh) = sim.state.map.dimensions();
+    let ox = -(mw as f32) * TILE_WORLD * 0.5;
+    let oy = -(mh as f32) * TILE_WORLD * 0.5;
+
+    for vehicle in &sim.state.vehicles {
+        let wx = ox + (vehicle.pos.x as f32) * TILE_WORLD;
+        let wy = oy + (vehicle.pos.y as f32) * TILE_WORLD;
+        gizmos.rect_2d(
+            Isometry2d::from_translation(Vec2::new(wx, wy)),
+            Vec2::splat(TILE_WORLD * 0.3),
+            Color::WHITE,
+        );
+    }
 }
 
 fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {

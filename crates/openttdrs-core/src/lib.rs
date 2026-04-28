@@ -8,10 +8,12 @@
 pub mod industry;
 pub mod map;
 pub mod tick;
+pub mod vehicle;
 
 pub use industry::{Industry, IndustryKind, INDUSTRY_PRODUCE_TICKS};
 pub use map::{Map, MapError, Tile, TileCoord, TileKind};
 pub use tick::GameTick;
+pub use vehicle::{Vehicle, VehicleKind};
 
 /// Estado global mínimo del mundo simulado.
 #[derive(Debug, Clone)]
@@ -19,6 +21,7 @@ pub struct GameState {
     pub map:        Map,
     pub tick:       GameTick,
     pub industries: Vec<Industry>,
+    pub vehicles:   Vec<Vehicle>,
 }
 
 impl GameState {
@@ -28,6 +31,7 @@ impl GameState {
             map:        Map::new_flat(map_width, map_height, 1),
             tick:       GameTick::default(),
             industries: Vec::new(),
+            vehicles:   Vec::new(),
         }
     }
 
@@ -37,6 +41,9 @@ impl GameState {
         let t = self.tick.get();
         for industry in &mut self.industries {
             industry.produce(t);
+        }
+        for vehicle in &mut self.vehicles {
+            vehicle.step();
         }
     }
 }
@@ -92,6 +99,58 @@ mod tests {
         assert_eq!(s.map.get_kind(c), Some(TileKind::Forest));
         s.map.set_kind(c, TileKind::CoalField).unwrap();
         assert_eq!(s.map.get_kind(c), Some(TileKind::CoalField));
+    }
+
+    #[test]
+    fn vehicle_moves_toward_dest() {
+        let mut s = GameState::new(8, 8);
+        let start = TileCoord::new(0, 0);
+        let dest  = TileCoord::new(5, 0);
+        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+
+        let dist_before = s.vehicles[0].manhattan_to_dest();
+        s.step();
+        let dist_after = s.vehicles[0].manhattan_to_dest();
+        assert!(dist_after < dist_before, "debe acercarse al destino");
+    }
+
+    #[test]
+    fn vehicle_inverts_on_arrival() {
+        let mut s = GameState::new(8, 8);
+        let start = TileCoord::new(0, 0);
+        let dest  = TileCoord::new(3, 0);
+        s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+
+        // Avanzar hasta llegar al destino (3 pasos + 1 de inversión).
+        for _ in 0..=3 {
+            s.step();
+        }
+        assert_eq!(s.vehicles[0].pos, dest);
+        // Ahora el destino debe ser el origen original.
+        assert_eq!(s.vehicles[0].dest, start);
+
+        // Avanzar de vuelta hasta el origen.
+        for _ in 0..=3 {
+            s.step();
+        }
+        assert_eq!(s.vehicles[0].pos, start);
+        assert_eq!(s.vehicles[0].dest, dest);
+    }
+
+    #[test]
+    fn two_worlds_same_vehicles_same_position() {
+        let start = TileCoord::new(0, 0);
+        let dest  = TileCoord::new(4, 3);
+        let mut a = GameState::new(8, 8);
+        let mut b = GameState::new(8, 8);
+        for s in [&mut a, &mut b] {
+            s.vehicles.push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+        }
+        for _ in 0..50 {
+            a.step();
+            b.step();
+        }
+        assert_eq!(a.vehicles[0].pos, b.vehicles[0].pos);
     }
 
     #[test]

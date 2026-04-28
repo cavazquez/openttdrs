@@ -104,32 +104,65 @@ enum RoadDir {
     Both,
 }
 
-/// Detecta la dirección de una tesela de carretera.
-///
-/// Prioridad: si el byte m5 del tile contiene road bits, se usan directamente
-/// (lectura del savegame real). Si m5==0 (mapa generado), se consultan los vecinos.
-///
-/// Road bits en m5 (bits 0-3, MP_ROAD normal, bits 6-7 = 0):
-///   bit 0 = NW,  bit 1 = SW,  bit 2 = SE,  bit 3 = NE
-///   ROAD_X (tx)  = SW+NE = 0b1010 = 0xA
-///   ROAD_Y (ty)  = NW+SE = 0b0101 = 0x5
-fn road_dir(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> RoadDir {
-    // Obtener el tile y su m5
-    let tile = map.get(pos);
-    let m5 = tile.map(|t| t.m5).unwrap_or(0);
+/// Tipos de tesela OpenTTD (nibble alto del byte MAPT).
+const OTTD_MP_ROAD: u8 = 2;
+const OTTD_MP_TUNNELBRIDGE: u8 = 9;
 
-    // Si es una carretera normal (m5 bits 6-7 = 0) con road bits reales, usarlos.
-    let road_tile_type = (m5 >> 6) & 0x3;
-    if road_tile_type == 0 {
-        let road_bits = m5 & 0x0F;
-        if road_bits != 0 {
-            let has_tx = (road_bits & 0x0A) != 0; // SW(bit1) o NE(bit3) → eje tx
-            let has_ty = (road_bits & 0x05) != 0; // NW(bit0) o SE(bit2) → eje ty
-            return match (has_tx, has_ty) {
-                (true, false) => RoadDir::Tx,
-                (false, true) => RoadDir::Ty,
-                _ => RoadDir::Both,
-            };
+/// Decodifica los road bits efectivos desde m5 según el tipo de tesela OpenTTD.
+///
+/// - `MP_ROAD` normal: bits 0-3 = road bits; cruces ferroviarios (`subtype 1`) guardan
+///   el eje de la carretera en el bit 0, no como road bits; depósitos (`subtype 2`)
+///   guardan `DiagDirection` en bits 0-1.
+/// - `MP_TUNNELBRIDGE` con `TileKind::Road`: dirección en bits 0-1 (igual que depósito).
+///
+/// Ver `road_map.h` (`GetCrossingRoadBits`, `GetRoadDepotDirection`, `GetTunnelBridgeDirection`).
+fn effective_road_bits(mapt: u8, m5: u8, kind: TileKind) -> Option<u8> {
+    let tt = (mapt >> 4) & 0xF;
+    match tt {
+        OTTD_MP_ROAD => {
+            let subtype = (m5 >> 6) & 0x3;
+            match subtype {
+                0 => {
+                    let rb = m5 & 0x0F;
+                    if rb == 0 { None } else { Some(rb) }
+                }
+                // Cruce a nivel: bit 0 = eje de la carretera (AXIS_X → ROAD_X).
+                1 => {
+                    let axis = m5 & 1;
+                    Some(if axis == 0 { 0x0A } else { 0x05 })
+                }
+                // Depósito de carretera: DiagDirection en bits 0-1 → un solo road bit.
+                2 => {
+                    let d = m5 & 0x3;
+                    Some((1u8 << (3 ^ d)) & 0x0F)
+                }
+                _ => None,
+            }
+        }
+        OTTD_MP_TUNNELBRIDGE if kind == TileKind::Road => {
+            let d = m5 & 0x3;
+            Some((1u8 << (3 ^ d)) & 0x0F)
+        }
+        _ => None,
+    }
+}
+
+fn road_bits_to_dir(rb: u8) -> RoadDir {
+    let tx = rb & 0x0A;
+    let ty = rb & 0x05;
+    match (tx != 0, ty != 0) {
+        (true, false) => RoadDir::Tx,
+        (false, true) => RoadDir::Ty,
+        (true, true) => RoadDir::Both,
+        (false, false) => RoadDir::Ty,
+    }
+}
+
+/// Detecta la dirección de una tesela de carretera.
+fn road_dir(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> RoadDir {
+    if let Some(t) = map.get(pos) {
+        if let Some(rb) = effective_road_bits(t.mapt, t.m5, t.kind) {
+            return road_bits_to_dir(rb);
         }
     }
 

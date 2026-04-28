@@ -42,6 +42,8 @@ pub enum TileKind {
 pub struct Tile {
     pub height: u8,
     pub kind: TileKind,
+    /// Byte MAPT del savegame (nibble alto = `TileType` OpenTTD). 0 en mapas generados.
+    pub mapt: u8,
     pub m5: u8,
 }
 
@@ -71,7 +73,7 @@ impl Map {
         Self {
             width,
             height,
-            tiles: vec![Tile { height: level, kind: TileKind::Grass, m5: 0 }; count],
+            tiles: vec![Tile { height: level, kind: TileKind::Grass, mapt: 0, m5: 0 }; count],
         }
     }
 
@@ -189,7 +191,7 @@ impl Map {
                 t  => TileKind::Unknown(t),
             };
 
-            tiles.push(Tile { height: heights[i], kind, m5 });
+            tiles.push(Tile { height: heights[i], kind, mapt: raw_type, m5 });
         }
 
         Ok(Self { width, height, tiles })

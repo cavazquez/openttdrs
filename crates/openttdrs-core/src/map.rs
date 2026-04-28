@@ -190,7 +190,7 @@ impl Map {
                 8 => {
                     // MP_INDUSTRY: el tipo exacto está en otros bytes (m1/m5).
                     let _ = m5;
-                    TileKind::CoalField
+                    TileKind::Industry
                 }
                 9 => {
                     // MP_TUNNELBRIDGE: Road o Rail según m5 bit 2

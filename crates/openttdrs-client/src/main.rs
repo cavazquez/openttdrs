@@ -187,8 +187,33 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     let h_tree_1 = asset_server.load::<Image>("opengfx/tiles/tree_00.png");
     let h_tree_2 = asset_server.load::<Image>("opengfx/tiles/tree_07.png");
     let h_tree_3 = asset_server.load::<Image>("opengfx/tiles/tree_14.png");
-    let h_coal = asset_server.load::<Image>("opengfx/tiles/industry_coalmine_hq.png");
     let trees = [h_tree_1, h_tree_2, h_tree_3];
+
+    // ── Handles de industrias (Coal Mine) ─────────────────────────────────────
+    // Sprites de la mina de carbón con sus metadatos (w, h, xrel, yrel)
+    let industry_sprites: Vec<(Handle<Image>, f32, f32, f32, f32)> = vec![
+        (
+            asset_server.load::<Image>("opengfx/tiles/industry_coalmine_hq.png"),
+            58.0,
+            50.0,
+            -16.0,
+            -33.0,
+        ),
+        (
+            asset_server.load::<Image>("opengfx/tiles/industry_coalmine_tower.png"),
+            46.0,
+            53.0,
+            -14.0,
+            -38.0,
+        ),
+        (
+            asset_server.load::<Image>("opengfx/tiles/industry_coalmine_entry.png"),
+            36.0,
+            25.0,
+            -17.0,
+            -7.0,
+        ),
+    ];
 
     // ── Handles de camiones ────────────────────────────────────────────────────
     let h_truck_ne = asset_server.load::<Image>("opengfx/tiles/vehicle_bus_sw.png");
@@ -277,19 +302,40 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     },
                     Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
                 ));
+            } else if kind == TileKind::Industry {
+                // Suelo de grass marrón
+                commands.spawn((
+                    Sprite {
+                        image: h_rough.clone(),
+                        color: Color::srgb(0.55, 0.50, 0.45),
+                        ..default()
+                    },
+                    Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
+                ));
+                // Edificio de industria (seleccionado por hash de posición)
+                let idx = wang_hash(tx, ty, 0xC0A1) as usize % industry_sprites.len();
+                let (ref img, w, h, xr, yr) = industry_sprites[idx];
+                let pos3 = overlay_pos(p, xr, yr, w, h, height, 0.5, tx as i32, ty as i32);
+                commands.spawn((
+                    Sprite {
+                        image: img.clone(),
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                    Transform::from_translation(pos3),
+                ));
             } else {
                 let (image, color) = match kind {
                     TileKind::Grass => (h_grass.clone(), Color::WHITE),
                     TileKind::Forest => (h_rough.clone(), Color::srgb(0.6, 1.0, 0.45)),
-                    TileKind::CoalField | TileKind::Industry => {
-                        (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45))
-                    }
+                    TileKind::CoalField => (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45)),
                     TileKind::Water => (h_water.clone(), Color::WHITE),
                     TileKind::Unknown(_) => (h_grass.clone(), Color::srgb(1.0, 0.0, 1.0)),
                     TileKind::House
                     | TileKind::Station
                     | TileKind::Road
                     | TileKind::Rail
+                    | TileKind::Industry
                     | TileKind::Void => unreachable!(),
                 };
 
@@ -326,23 +372,6 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     Transform::from_translation(pos3),
                 ));
             }
-        }
-    }
-
-    // ── Edificios de industrias ────────────────────────────────────────────────
-    for industry in &sim.state.industries {
-        if industry.kind == IndustryKind::CoalMine {
-            let pos = industry.pos;
-            let h = sim.state.map.get(pos).map_or(0, |t| t.height);
-            let p = iso(pos.x, pos.y);
-            let pos3 = overlay_pos(p, -16.0, -33.0, 58.0, 50.0, h, 0.6, pos.x, pos.y);
-            commands.spawn((
-                Sprite {
-                    image: h_coal.clone(),
-                    ..default()
-                },
-                Transform::from_translation(pos3),
-            ));
         }
     }
 

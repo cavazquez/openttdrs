@@ -19,11 +19,13 @@ mod ui;
 
 use std::collections::HashMap;
 
+use bevy::dev_tools::fps_overlay::{FpsOverlayConfig, FpsOverlayPlugin};
+use bevy::image::ImageSamplerDescriptor;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{IndustryKind, TileCoord, TileKind, Vehicle};
 
-use camera::move_camera;
+use camera::{CameraVelocity, move_camera};
 use iso::{
     ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, compute_tileh, gizmo_diamond, iso, overlay_pos,
     tile_pos, tile_pos_half, wang_hash,
@@ -118,10 +120,25 @@ fn main() {
                 .set(AssetPlugin {
                     file_path: asset_root.into(),
                     ..default()
+                })
+                // Nearest-neighbor: sprites pixel-art nítidos en todos los zoom levels.
+                // Bevy usa bilinear por defecto, que desenfoca los sprites al hacer zoom.
+                .set(ImagePlugin {
+                    default_sampler: ImageSamplerDescriptor::nearest(),
                 }),
         )
+        .add_plugins(FpsOverlayPlugin {
+            config: FpsOverlayConfig {
+                text_config: TextFont {
+                    font_size: 14.0,
+                    ..default()
+                },
+                ..default()
+            },
+        })
         .init_resource::<SimWorld>()
         .init_resource::<SelectedTileInfo>()
+        .init_resource::<CameraVelocity>()
         .add_systems(Startup, (setup, setup_tile_info_ui))
         .add_systems(
             Update,

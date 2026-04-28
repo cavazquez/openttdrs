@@ -1,4 +1,4 @@
-//! Sistema de cámara: movimiento WASD, arrastre con botón derecho y zoom.
+//! Sistema de cámara: movimiento WASD con inercia, arrastre con botón derecho y zoom.
 
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
@@ -10,8 +10,19 @@ const PAN_RMB_SCALE: f32 = 1.05;
 const ZOOM_KEY_RATE: f32 = 3.5;
 /// Zoom con rueda: multiplicador por unidad de `scroll.delta.y`.
 const ZOOM_WHEEL_SENS: f32 = 0.16;
+/// Velocidad de aceleración WASD (unidades/s²).
+const WASD_ACCEL: f32 = 2000.0;
+/// Factor de desaceleración por fricción (fracción de velocidad que se pierde por segundo).
+/// 1.0 = para instantáneamente; valores menores (~10-15) dan inercia suave.
+const WASD_FRICTION: f32 = 12.0;
+/// Velocidad máxima WASD (unidades de mundo/s, relativa a scale=1).
+const WASD_MAX_SPEED: f32 = 600.0;
 
-/// Mueve la cámara con WASD, arrastre con botón derecho y rueda del ratón.
+/// Velocidad de la cámara (inercia WASD).
+#[derive(Resource, Default)]
+pub struct CameraVelocity(pub Vec2);
+
+/// Mueve la cámara con WASD (con inercia), arrastre con botón derecho y rueda del ratón.
 pub fn move_camera(
     time: Res<Time>,
     kbd: Res<ButtonInput<KeyCode>>,
@@ -20,6 +31,7 @@ pub fn move_camera(
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut cam_q: Query<(&mut Transform, &mut Projection), With<Camera2d>>,
+    mut vel: ResMut<CameraVelocity>,
 ) {
     let Ok((mut transform, mut projection)) = cam_q.single_mut() else {
         return;
@@ -28,31 +40,51 @@ pub fn move_camera(
         return;
     };
 
-    let speed = 300.0 * proj.scale * time.delta_secs();
+    let dt = time.delta_secs();
 
-    // Arrastre con botón derecho
+    // Arrastre con botón derecho (inmediato, sin inercia)
     if mouse.pressed(MouseButton::Right) && motion.delta != Vec2::ZERO {
         let s = proj.scale * PAN_RMB_SCALE;
         transform.translation.x -= motion.delta.x * s;
         transform.translation.y += motion.delta.y * s;
+        vel.0 = Vec2::ZERO;
     }
 
-    // Movimiento con teclado
+    // WASD: acumular dirección deseada
+    let mut dir = Vec2::ZERO;
     if kbd.pressed(KeyCode::KeyW) || kbd.pressed(KeyCode::ArrowUp) {
-        transform.translation.y += speed;
+        dir.y += 1.0;
     }
     if kbd.pressed(KeyCode::KeyS) || kbd.pressed(KeyCode::ArrowDown) {
-        transform.translation.y -= speed;
+        dir.y -= 1.0;
     }
     if kbd.pressed(KeyCode::KeyA) || kbd.pressed(KeyCode::ArrowLeft) {
-        transform.translation.x -= speed;
+        dir.x -= 1.0;
     }
     if kbd.pressed(KeyCode::KeyD) || kbd.pressed(KeyCode::ArrowRight) {
-        transform.translation.x += speed;
+        dir.x += 1.0;
     }
 
+    let max_speed = WASD_MAX_SPEED * proj.scale;
+    if dir != Vec2::ZERO {
+        vel.0 += dir.normalize() * WASD_ACCEL * proj.scale * dt;
+        if vel.0.length() > max_speed {
+            vel.0 = vel.0.normalize() * max_speed;
+        }
+    }
+
+    // Fricción: desacelera aunque no haya tecla presionada
+    let friction = (1.0 - WASD_FRICTION * dt).max(0.0);
+    vel.0 *= friction;
+    if vel.0.length() < 0.5 {
+        vel.0 = Vec2::ZERO;
+    }
+
+    transform.translation.x += vel.0.x * dt;
+    transform.translation.y += vel.0.y * dt;
+
     // Zoom con teclado
-    let z = ZOOM_KEY_RATE * time.delta_secs();
+    let z = ZOOM_KEY_RATE * dt;
     if kbd.pressed(KeyCode::Equal) || kbd.pressed(KeyCode::NumpadAdd) {
         proj.scale = (proj.scale * (1.0 - z)).max(0.25);
     }

@@ -1,219 +1,735 @@
-# Teselas, mapas y savegames de OpenTTD — Referencia para openttdrs
+# Teselas, mapas y savegames de OpenTTD — Referencia técnica para openttdrs
 
-Este documento recoge lo aprendido al cargar mapas reales (`.sav` → `.ottdmap`) y al
-renderizar carreteras y relieve. Complementa [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md)
-(gráficos) y el código en `crates/openttdrs-core` / `crates/openttdrs-client`.
+Este documento recoge **todo lo aprendido** al cargar mapas reales (`.sav` → `.ottdmap`) y
+al renderizar terreno, carreteras, vías, industrias y objetos. Complementa
+[SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) y [SPRITES_OPENGFX_COMPLETO.md](SPRITES_OPENGFX_COMPLETO.md).
+
+Código relevante:
+- `scripts/parse_sav.py` — conversor `.sav` → `.ottdmap`
+- `crates/openttdrs-core/src/map.rs` — struct `Tile`, `Map::from_ottd_binary`
+- `crates/openttdrs-client/src/iso.rs` — proyección isométrica y pendientes
+- `crates/openttdrs-client/src/sprites.rs` — constantes y lógica de sprites
 
 ---
 
-## Byte MAPT (tipo de tesela en el savegame)
+## Índice
 
-En el mapa descomprimido de OpenTTD, cada tesela tiene un byte en el chunk `MAPT`.
-El **tipo principal** está en los **bits 4–7** (4 bits):
+1. [Byte MAPT (tipo de tesela)](#1-byte-mapt-tipo-de-tesela)
+2. [Formato .ottdmap v1→v2→v3](#2-formato-ottdmap-v1v2v3)
+3. [Nombres reales de chunks en OpenTTD](#3-nombres-reales-de-chunks-en-openttd)
+4. [Struct Tile en Rust](#4-struct-tile-en-rust)
+5. [Byte m5 en MP_ROAD](#5-byte-m5-en-mp_road)
+6. [MP_TUNNELBRIDGE](#6-mp_tunnelbridge)
+7. [MP_RAILWAY: TrackBits en m5](#7-mp_railway-trackbits-en-m5)
+8. [MP_INDUSTRY: gfx de 9 bits](#8-mp_industry-gfx-de-9-bits)
+9. [MP_OBJECT: resolución de ObjectType desde OBJS](#9-mp_object-resolución-de-objecttype-desde-objs)
+10. [MP_HOUSE: HouseID en m8](#10-mp_house-houseid-en-m8)
+11. [MP_CLEAR: ClearGround en m5](#11-mp_clear-clearground-en-m5)
+12. [Sistema de pendientes (slopes)](#12-sistema-de-pendientes-slopes)
+13. [Sprites OpenGFX para terreno](#13-sprites-opengfx-para-terreno)
+14. [De road bits a sprites](#14-de-road-bits-a-sprites)
+15. [Relieve (altura) en pantalla](#15-relieve-altura-en-pantalla)
+16. [Carga de partidas (.sav)](#16-carga-de-partidas-sav)
+17. [Referencias en el código fuente de OpenTTD](#17-referencias-en-el-código-fuente-de-openttd)
+18. [Resumen de archivos del proyecto](#18-resumen-de-archivos-del-proyecto)
+
+---
+
+## 1. Byte MAPT (tipo de tesela)
+
+En el stream descomprimido, el chunk `MAPT` tiene un byte por tesela.
+El **tipo principal** está en los **bits 4–7**:
 
 ```text
 TileType = (mapt_byte >> 4) & 0xF
 ```
 
-Valores habituales (`tile_map.h` / `tile_type.h` del upstream):
+| Valor | Nombre upstream    | Uso típico                           |
+|------:|--------------------|--------------------------------------|
+| 0     | `MP_CLEAR`         | Prado, rocas, campos, desierto, nieve |
+| 1     | `MP_RAILWAY`       | Vías de tren (normal, señales, depósito) |
+| 2     | `MP_ROAD`          | Carretera, cruce a nivel, depósito   |
+| 3     | `MP_HOUSE`         | Casas / urbano                       |
+| 4     | `MP_TREES`         | Árboles / bosque                     |
+| 5     | `MP_STATION`       | Estaciones, paradas, aeropuertos     |
+| 6     | `MP_WATER`         | Agua, canales                        |
+| 7     | `MP_VOID`          | Borde del mapa                       |
+| 8     | `MP_INDUSTRY`      | Industrias                           |
+| 9     | `MP_TUNNELBRIDGE`  | Entrada túnel o rampa de puente      |
+| 10    | `MP_OBJECT`        | Objetos (transmisores, faros, HQ…)   |
 
-| Valor | Nombre upstream   | Uso típico                          |
-|------:|-------------------|-------------------------------------|
-| 0     | `MP_CLEAR`        | Prado, rocas, campos…               |
-| 1     | `MP_RAILWAY`      | Vías                                |
-| 2     | `MP_ROAD`         | Carretera, cruce, depósito carretera |
-| 3     | `MP_HOUSE`        | Casas / urbano                      |
-| 4     | `MP_TREES`        | Árboles                             |
-| 5     | `MP_STATION`      | Estaciones / paradas                |
-| 6     | `MP_WATER`        | Agua                                |
-| 7     | `MP_VOID`         | Borde del mapa                      |
-| 8     | `MP_INDUSTRY`     | Industrias                          |
-| 9     | `MP_TUNNELBRIDGE` | Entrada túnel o rampa puente       |
-| 10    | `MP_OBJECT`       | Objetos NewGRF                      |
+Los **bits 0–3** del MAPT guardan datos auxiliares (zona trópico, etc.).
 
-Los **bits 0–3** del MAPT guardan otros datos (p. ej. zona trópico en clear), no solo
-el tipo.
+### Por qué guardamos `mapt` en `Tile`
 
-### Por qué guardamos `mapt` en `Tile` (Rust)
-
-`openttdrs` reduce el tipo a un `TileKind` (`crates/openttdrs-core/src/map.rs`), pero el **byte `m5`**
-tiene significados distintos según el tipo real de OpenTTD:
-
-- En `MP_ROAD`, `m5` sigue la convención de carreteras (ver abajo).
-- En `MP_TUNNELBRIDGE` con transporte carretera, `m5` codifica dirección y tipo de
-  transporte **no** como una carretera normal.
-
-Sin el MAPT crudo no se puede decodificar bien `m5`. Por eso `Tile` incluye `mapt: u8`
-además de `kind` y `m5`.
+El byte `m5` tiene significados completamente distintos según el tipo de tesela.
+Sin el MAPT crudo no se puede decodificar `m5` correctamente (road bits, TrackBits,
+gfx de industria, etc. son campos incompatibles según el tipo). Por eso `Tile` incluye
+`mapt: u8` además de `kind`.
 
 ---
 
-## Byte `m5` en teselas `MP_ROAD`
+## 2. Formato .ottdmap v1→v2→v3
 
-Fuente principal: `reference/openttd-upstream/src/road_map.h`.
+Binario producido por `scripts/parse_sav.py` y consumido por `Map::from_ottd_binary`.
 
-### Subtipo de tesela carretera: bits 6–7
+### Cabecera común (todas las versiones)
+
+| Offset | Tamaño | Contenido              |
+|--------|--------|------------------------|
+| 0–3    | 4 B    | Magic `MAPO` (0x4D41504F, LE) |
+| 4–7    | 4 B    | `width` u32 LE         |
+| 8–11   | 4 B    | `height` u32 LE        |
+
+Tras el header siguen secciones de `W×H` bytes/palabras en orden `i = y*width + x`
+(x varía rápido, igual que en los chunks MAPT/MAPH de OpenTTD).
+
+### Secciones por versión
+
+| Sección     | Tamaño      | Versión | Contenido                                              |
+|-------------|-------------|---------|--------------------------------------------------------|
+| `tile_type` | W×H bytes   | v1+     | Byte MAPT original (nibble alto = TileType)            |
+| `height`    | W×H bytes   | v1+     | Altura base de la tesela (0–255)                       |
+| `m5`        | W×H bytes   | v1+     | Ver secciones 5–11; modificado para MP_OBJECT (v3+)    |
+| `m1`        | W×H bytes   | v2+     | Byte MAP1/MAPO: owner, índice de industria             |
+| `m6`        | W×H bytes   | v3+     | Byte MAP6/MAPE: bit 2 = bit 8 del gfx industria; StationType |
+| `m8`        | W×H×2 bytes | v3+     | Bytes MAP8 LE: HouseID en MP_HOUSE (u16)               |
+
+### Evolución v1 → v2 → v3
+
+**v1** (inicial): solo `mapt`, `height`, `m5`. Suficiente para renderizar suelo y
+carreteras básicas.
+
+**v2**: añade `m1` (byte MAPO del savegame). Permite obtener el owner de cada tesela
+y el índice de industria en MP_INDUSTRY (bits 0–6 de m1). Antes `m1` era todo ceros
+porque no se exportaba — los que cargaban partidas veían cero en ese campo siempre.
+
+**v3**: añade `m6` (byte MAPE) y `m8` (2 bytes LE por tesela, MAP8). Con `m6` se
+pueden leer los gfx de industria de 9 bits correctamente. Con `m8` se obtiene el
+HouseID real de cada casa urbana.
+
+### Detección de versión en el lector Rust
+
+```rust
+// from_ottd_binary (map.rs)
+let has_m1 = data.len() >= 12 + n * 4;   // v2+
+let has_m6 = data.len() >= 12 + n * 5;   // v3+
+let has_m8 = data.len() >= 12 + n * 5 + n * 2; // v3+
+```
+
+---
+
+## 3. Nombres reales de chunks en OpenTTD
+
+El código fuente de OpenTTD (`saveload/map_sl.cpp`) registra los chunks del mapa con
+nombres que **no siempre coinciden** con el nombre lógico del buffer. Este fue uno
+de los descubrimientos críticos del proyecto:
+
+| Nombre chunk (savegame) | Buffer lógico | Contenido                              |
+|------------------------|---------------|----------------------------------------|
+| `MAPT`                 | —             | TileType por tesela (nibble 4–7)       |
+| `MAPH`                 | —             | Altura base                            |
+| `MAPO`                 | MAP1          | Owner / datos de tesela 1              |
+| `MAP2`                 | MAP2          | Datos misceláneos                      |
+| `M3LO`                 | MAP3 low      | Datos de tesela 3 (bits 0–7)           |
+| `M3HI`                 | MAP3 high     | Datos de tesela 3 (bits 8–15)          |
+| `MAP5`                 | MAP5          | Byte m5 principal                      |
+| `MAPE`                 | MAP6          | Byte m6                                |
+| `MAP7`                 | MAP7          | Datos extra (reservado/NewGRF)         |
+| `MAP8`                 | MAP8          | HouseID y datos NewGRF (2 bytes/tile)  |
+| `MAPS`                 | —             | Dimensiones (CH_TABLE con dim_x, dim_y)|
+| `OBJS`                 | —             | Array de objetos (CH_TABLE sparse)     |
+
+### Por qué m1 era todo ceros antes de v2
+
+El script en v1 buscaba `MAP1` como nombre de chunk, pero el nombre real es `MAPO`.
+Al no encontrarlo, el chunk quedaba vacío y `m1` se rellenaba de ceros. La corrección
+fue buscar `chunks.get('MAPO')` en lugar de `'MAP1'`.
+
+```python
+# parse_sav.py (corrección v2)
+map1 = chunks.get('MAPO', b'')  # MAPO = MAP1 (owner/datos de tesela 1)
+map6 = chunks.get('MAPE', b'')  # MAPE = MAP6
+map8 = chunks.get('MAP8', b'')  # MAP8 = HouseID (2 bytes/tile)
+```
+
+---
+
+## 4. Struct Tile en Rust
+
+```rust
+// crates/openttdrs-core/src/map.rs
+pub struct Tile {
+    pub height: u8,
+    pub kind:   TileKind,
+    pub mapt:   u8,   // byte MAPT original
+    pub m5:     u8,   // byte MAP5
+    pub m1:     u8,   // byte MAPO (v2+)
+    pub m6:     u8,   // byte MAPE (v3+)
+    pub m8:     u16,  // bytes MAP8 LE (v3+)
+}
+```
+
+Correspondencia `TileType` → `TileKind`:
+
+| TileType | Nombre          | TileKind            |
+|----------|-----------------|---------------------|
+| 0        | `MP_CLEAR`      | `Grass`             |
+| 1        | `MP_RAILWAY`    | `Rail`              |
+| 2        | `MP_ROAD`       | `Road`              |
+| 3        | `MP_HOUSE`      | `House`             |
+| 4        | `MP_TREES`      | `Forest`            |
+| 5        | `MP_STATION`    | `Station`           |
+| 6        | `MP_WATER`      | `Water`             |
+| 7        | `MP_VOID`       | `Void`              |
+| 8        | `MP_INDUSTRY`   | `Industry`          |
+| 9        | `MP_TUNNELBRIDGE`| `Rail` o `Road` según m5 bit 2 |
+| 10       | `MP_OBJECT`     | `Grass` (placeholder) |
+
+---
+
+## 5. Byte m5 en MP_ROAD
+
+Fuente: `reference/openttd-upstream/src/road_map.h`.
+
+### Subtipo (bits 6–7)
 
 ```text
 RoadTileType = (m5 >> 6) & 0x3
 ```
 
-| Valor | `RoadTileType` | Significado        |
-|------:|----------------|--------------------|
-| 0     | `Normal`       | Carretera normal   |
+| Valor | `RoadTileType` | Significado            |
+|------:|----------------|------------------------|
+| 0     | `Normal`       | Carretera normal        |
 | 1     | `Crossing`     | Cruce a nivel (vía + carretera) |
-| 2     | `Depot`        | Depósito de carreteras |
+| 2     | `Depot`        | Depósito de carreteras  |
 
-### Caso `Normal` (subtipo 0)
+### Caso Normal (subtipo 0)
 
-Los **road bits** están en los bits **0–3** de `m5` (`GetRoadBits` para carretera, no tranvía).
+Road bits en **bits 0–3**:
 
-Convención `RoadBit` (`road_type.h`):
+| Bit | RoadBit | Dirección          |
+|----:|---------|--------------------|
+| 0   | `NW`    | hacia (x, y-1)     |
+| 1   | `SW`    | hacia (x+1, y)     |
+| 2   | `SE`    | hacia (x, y+1)     |
+| 3   | `NE`    | hacia (x-1, y)     |
 
-| Bit | Arista del rombo |
-|----:|------------------|
-| 0   | NW               |
-| 1   | SW               |
-| 2   | SE               |
-| 3   | NE               |
+Combinaciones comunes:
 
-Constantes útiles:
+| Constante  | Bits    | Valor | Descripción                |
+|------------|---------|-------|----------------------------|
+| `ROAD_X`   | SW+NE   | 0x0A  | Diagonal / (NE↔SW)         |
+| `ROAD_Y`   | NW+SE   | 0x05  | Diagonal \ (NW↔SE)         |
+| `ROAD_ALL` | todos   | 0x0F  | Cruce 4 vías               |
 
-- **`ROAD_X`** (eje X del mapa): `SW + NE` → valor `0x0A`.
-- **`ROAD_Y`** (eje Y del mapa): `NW + SE` → valor `0x05`.
-- **`ROAD_ALL`**: `0x0F` (cruce carretera a carretera).
+### Caso Crossing (subtipo 1) — error frecuente
 
-**Tranvía:** en tiles normales, los bits de **tranvía** pueden ir en **`m3`** (no en `m5`).
-Nuestro `.ottdmap` actual **no** exporta `m3`; mapas con mucho tranvía pueden verse
-incompletos hasta ampliar el formato.
+En un cruce a nivel, los bits 0–3 **no** son road bits estándar.
+El eje de la carretera está en **bit 0** (`GetCrossingRoadAxis`):
 
-### Caso `Crossing` (subtipo 1) — error frecuente
+- `AXIS_X` (0) → carretera como `ROAD_X` (0x0A).
+- `AXIS_Y` (1) → carretera como `ROAD_Y` (0x05).
 
-En un **cruce a nivel**, los bits 0–3 **no** son road bits estándar.
+**Bug histórico en openttdrs:** tratar el cruce como carretera normal y leer road bits
+en 0–3 producía valores absurdos; el código caía en fallback por vecinos, rompiendo
+trazados rectos en mapas con cruces a nivel.
 
-- El **eje de la carretera** está en el **bit 0** (`GetCrossingRoadAxis`):
+### Caso Depot (subtipo 2)
 
-  - `AXIS_X` (0) → carretera como **`ROAD_X`** (`0x0A`).
-  - `AXIS_Y` (1) → carretera como **`ROAD_Y`** (`0x05`).
-
-Otros bits de `m5` en cruces (reservas, barreras, etc.) están documentados en el mismo
-`road_map.h`; para orientar el sprite de carretera basta el eje.
-
-**Bug histórico en openttdrs:** tratar el cruce como carretera “normal” y leer road bits
-en 0–3 producía valores absurdos y el código caía en un **fallback por vecinos**, rompiendo
-trazados rectos y alineación con el mapa original.
-
-### Caso `Depot` (subtipo 2)
-
-La salida del depósito es una **dirección diagonal** en los bits **0–1**:
-`GetRoadDepotDirection` → `DiagDirection` (0 = NE, 1 = SE, 2 = SW, 3 = NW).
-
-Un solo “tramo” de carretera en esa arista se obtiene con la misma fórmula que el upstream
-`DiagDirToRoadBits` (`road_func.h`):
+Dirección diagonal de la salida en **bits 0–1** (`DiagDirection`):
 
 ```text
 road_bits = (1 << (3 ^ d)) & 0xF   // d = DiagDirection 0..3
 ```
 
+| d | DiagDirection | En pantalla    |
+|---|--------------|----------------|
+| 0 | NE           | Arriba-derecha |
+| 1 | SE           | Abajo-derecha  |
+| 2 | SW           | Abajo-izquierda|
+| 3 | NW           | Arriba-izquierda|
+
 ---
 
-## `MP_TUNNELBRIDGE` con carretera
+## 6. MP_TUNNELBRIDGE
 
 `GetTunnelBridgeDirection`: dirección diagonal en bits **0–1** de `m5`.
-`GetTunnelBridgeTransportType`: bits **2–3** (carretera vs raíl).
+`GetTunnelBridgeTransportType`: bits **2–3** (0 = carretera, 1 = raíl).
 
-Si el juego mapea la tesela a `TileKind::Road`, la orientación del tramo en la rampa /
-boca del túnel sigue la misma idea que `DiagDirToRoadBits` (un solo bit en 0–3).
+```rust
+// map.rs: MP_TUNNELBRIDGE → Rail o Road
+9 => {
+    if m5 & 0x04 != 0 { TileKind::Rail } else { TileKind::Road }
+}
+```
 
----
-
-## De road bits a sprites en openttdrs
-
-Solo tenemos tres gráficos de carretera base: `road_tx.png`, `road_ty.png`, `road_cross.png`
-(ver [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md)).
-
-Regla en el cliente (`RoadDir` desde road bits / cruces / vecinos):
-
-- `RoadDir::Tx` (eje X del mapa, `ROAD_X`, bits `0x0A`) → sprite **`road_ty.png`**.
-- `RoadDir::Ty` (eje Y del mapa, `ROAD_Y`, bits `0x05`) → sprite **`road_tx.png`**.
-- `RoadDir::Both` → **`road_cross.png`**.
-
-Es un **intercambio intencional** respecto al nombre del archivo: los recortes OpenGFX y
-nuestra proyección isométrica quedan alineados así (~90° respecto a asignar “tx→tx”).
-Comprobado en capturas sobre `.ottdmap` de regresión / partidas reales (trazados rectos y
-cruces coherentes).
-
-El **cruce** no se invierte.
-
-- Si hay presencia en **ambos** ejes (p. ej. `0x0F`, T, L): sprite **cruce** (aproximación;
-  OpenTTD usa más variantes para esquinas y tes).
-
-Las **vías** (`TileKind::Rail`) usan provisionalmente el mismo par intercambiado hasta
-tener sprites de rail.
-
-Los **subconjuntos** de un eje (p. ej. solo `NE` sin `SW`) siguen mostrando el sprite de
-tramo completo: es una limitación hasta extraer más sprites o recortar en shader.
+Para obtener el tramo de carretera en la boca del túnel/rampa se aplica la misma
+fórmula que el depósito: `(1 << (3 ^ d)) & 0xF`.
 
 ---
 
-## Formato `.ottdmap` (salida de `scripts/parse_sav.py`)
+## 7. MP_RAILWAY: TrackBits en m5
 
-Binario consumido por `Map::from_ottd_binary`:
+Fuente: `reference/openttd-upstream/src/rail_map.h`.
 
-| Offset | Contenido |
-|--------|-----------|
-| 0–3    | Magic `MAPO` |
-| 4–7    | `width` u32 LE |
-| 8–11   | `height` u32 LE |
-| 12 + i | `mapt[i]` — byte MAPT original |
-| + W×H  | `height[i]` — altura tesela |
-| + W×H  | `m5[i]` |
+### RailTileType (bits 6–7 de m5)
 
-Índice lineal: `i = y * width + x` (x varía rápido), igual que el orden de los chunks
-`MAPT` / `MAPH` / `MAP5` en el savegame.
+```text
+RailTileType = (m5 >> 6) & 0x3
+```
 
----
+| Valor | Constante           | Significado          |
+|------:|---------------------|----------------------|
+| 0     | `RAIL_TILE_NORMAL`  | Vía normal           |
+| 1     | `RAIL_TILE_SIGNALS` | Vía con señales      |
+| 3     | `RAIL_TILE_DEPOT`   | Depósito de trenes   |
 
-## Relieve (altura) en pantalla
+### TrackBits (bits 0–5 de m5)
 
-OpenTTD usa **8 píxeles** de desplazamiento vertical por unidad de altura de tesela
-(`TILE_HEIGHT` en el upstream). En el cliente, `tile_pos` / `overlay_pos` aplican
-`HEIGHT_PX = 8.0` en coordenadas Bevy (Y hacia arriba) para separar visualmente mesetas
-sin pintar pendientes reales.
+Para tipos `Normal` y `Signals`, los **6 bits** bajos de m5 son el bitmask de vías:
 
-El orden Z mezcla `(tx + ty)` con un pequeño término en `height` para reducir parpadeos
-entre teselas a distinta cota.
+| Bit | Constante      | Valor | Descripción                     |
+|----:|----------------|------:|---------------------------------|
+| 0   | `TRACK_BIT_X`  | 1     | Diagonal X (NE↔SW)              |
+| 1   | `TRACK_BIT_Y`  | 2     | Diagonal Y (NW↔SE)              |
+| 2   | `TRACK_BIT_UPPER` | 4  | Tramo superior (horizontal N)   |
+| 3   | `TRACK_BIT_LOWER` | 8  | Tramo inferior (horizontal S)   |
+| 4   | `TRACK_BIT_LEFT`  | 16 | Tramo izquierdo (vertical W)    |
+| 5   | `TRACK_BIT_RIGHT` | 32 | Tramo derecho (vertical E)      |
 
----
+> **Crítico**: son **6 bits**, no 4. La máscara correcta es `m5 & 0x3F`.
+> Si se usa `m5 & 0x0F` se pierde LEFT y RIGHT, rompiendo vías en esos ejes.
 
-## Carga de partidas (`.sav`)
-
-- Formato binario comprimido (`OTTZ` zlib, `OTTX` xz/lzma, `OTTN` sin comprimir, `OTTD` LZO
-  antiguo).
-- Tras descomprimir: stream de **chunks** de 4 caracteres; los del mapa incluyen `MAPS`,
-  `MAPT`, `MAPH`, `MAP5`, etc. Ver comentarios en `scripts/parse_sav.py` y
-  `reference/.../src/saveload/map_sl.cpp`.
+Para tipo `Depot`, la dirección está en bits 0–1 (igual que depósito de carretera).
 
 ---
 
-## Resumen de archivos del proyecto
+## 8. MP_INDUSTRY: gfx de 9 bits
+
+Fuente: `reference/openttd-upstream/src/industry_map.h`, `GetCleanIndustryGfx`.
+
+### Por qué m5 solo (8 bits) no alcanza
+
+OpenTTD tiene más de 255 tipos de gfx de industria en total. El campo `gfx` es
+conceptualmente de 9 bits. El bit 8 (el noveno) está almacenado en **bit 2 de m6**:
+
+```text
+gfx = m5 | (((m6 >> 2) & 1) << 8)
+```
+
+Equivalente en Python (parse_sav.py) y Rust (sprites.rs):
+
+```rust
+// sprites.rs
+pub fn industry_sprite_for_gfx(gfx: u16) -> Option<&'static IndustryGfxSprite> {
+    let entry = INDUSTRY_GFX_DATA.get(usize::from(gfx))?;
+    ...
+}
+
+// Llamada en main.rs:
+let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
+```
+
+### Tabla de rangos por industria
+
+| gfx     | Industria               |
+|---------|-------------------------|
+| 0–6     | Coal Mine               |
+| 7–10    | Power Station           |
+| 11–15   | Sawmill                 |
+| 16–23   | Oil Refinery            |
+| 24–28   | Forest                  |
+| 29–32   | Printing Works          |
+| 33–38   | Oil Rig                 |
+| 39–42   | Steel Mill              |
+| 43–46   | Factory                 |
+| 47–51   | Oil Wells               |
+| 52–57   | Farm                    |
+| 58–59   | Bank (Templado)         |
+| 60–71   | Copper Ore Mine         |
+| 72–88   | Plantaciones/otros      |
+| 89–90   | Gold Mine               |
+| 91–99   | Iron Ore Mine           |
+| 100–119 | Otros climas (trópico…) |
+
+La tabla completa está en `crates/openttdrs-client/src/sprites.rs` (`INDUSTRY_GFX_DATA`).
+
+### m1 en MP_INDUSTRY
+
+Bits 0–6 de m1 = índice de la industria en el array global (`IndustryID`), útil para
+agrupar tiles de la misma planta.
+
+---
+
+## 9. MP_OBJECT: resolución de ObjectType desde OBJS
+
+### Problema en savegames modernos (v300+)
+
+En OpenTTD moderno, el chunk `MAP5` para teselas `MP_OBJECT` **no contiene el ObjectType**;
+contiene los bits altos del `ObjectID` (instancia específica del objeto). El `ObjectType`
+real (qué clase de objeto es: transmisor, faro, HQ…) está almacenado en el chunk `OBJS`.
+
+Si se lee `m5` directamente para MP_OBJECT se obtiene un valor incorrecto que no corresponde
+a ningún tipo semántico útil.
+
+### Estructura del chunk OBJS (CH_TABLE / CH_SPARSE_TABLE)
+
+`OBJS` es un array disperso donde cada elemento representa un objeto colocado en el mapa.
+Los campos relevantes parseados en `parse_sav.py`:
+
+| Campo            | Tipo  | Significado                              |
+|------------------|-------|------------------------------------------|
+| `location.tile`  | U32   | Índice lineal del tile base del objeto   |
+| `type`           | U16   | ObjectType (0 = Transmisor, 1 = Faro…)  |
+
+### Tipos conocidos de ObjectType
+
+| ObjectType | Nombre              |
+|------------|---------------------|
+| 0          | `OBJECT_TRANSMITTER` (antena) |
+| 1          | `OBJECT_LIGHTHOUSE`  (faro)   |
+| 2+         | HQ de empresa, estatuas, etc. |
+
+### Cómo parse_sav.py resuelve el ObjectType
+
+```python
+# parse_sav.py
+obj_types: dict[int, int] = chunks.get('OBJS', {})  # {tile_index: object_type}
+
+m5_list = bytearray(map5[:expected])
+if obj_types:
+    for i in range(expected):
+        if (mapt[i] >> 4) & 0xF == 10:  # MP_OBJECT
+            t = obj_types.get(i, 0xFF)
+            if t != 0xFF:
+                m5_list[i] = t  # sobrescribir con ObjectType real
+m5_data = bytes(m5_list)
+```
+
+Tras este paso, `m5` en el `.ottdmap` contiene el `ObjectType` real (no el `ObjectID`)
+para los tiles `MP_OBJECT`. Así el renderer puede distinguir transmisor de faro
+sin acceder al chunk OBJS en tiempo de ejecución.
+
+---
+
+## 10. MP_HOUSE: HouseID en m8
+
+### Por qué m5 no alcanza
+
+`MP_HOUSE` tiene más de 255 tipos de casas en OpenTTD (especialmente con NewGRF).
+El `HouseID` es un **u16** y se almacena en el chunk `MAP8` (2 bytes little-endian
+por tesela).
+
+```text
+HouseID = m8  (u16, little-endian)
+```
+
+El byte `m5` en MP_HOUSE guarda otras cosas (etapa de construcción, etc.), **no** el
+HouseID.
+
+### Estado actual en openttdrs
+
+Tenemos el campo `m8: u16` en `Tile` y lo leemos correctamente desde el formato v3.
+Sin embargo, no disponemos aún de una tabla completa de `HouseID → sprite`. Por ahora
+se usa un hash Wang de las coordenadas para seleccionar una variante de las 8 casas
+extraídas del NFO de OpenGFX:
+
+```rust
+// main.rs (placeholder)
+let variant = wang_hash(tx, ty, 0x1234) as usize % HOUSE_META.len();
+```
+
+Cuando se implemente el mapeo real, se usará `tile.m8` para seleccionar el sprite
+correcto según la tabla de casas de OpenTTD.
+
+---
+
+## 11. MP_CLEAR: ClearGround en m5
+
+Fuente: `reference/openttd-upstream/src/clear_map.h`.
+
+### ClearGround (bits 2–4 de m5)
+
+```text
+ClearGround = (m5 >> 2) & 0x7
+```
+
+| Valor | `ClearGround`        | Descripción               |
+|------:|----------------------|---------------------------|
+| 0     | `CLEAR_GRASS`        | Hierba (densidad en 0–1)  |
+| 1     | `CLEAR_ROUGH`        | Terreno irregular         |
+| 2     | `CLEAR_ROCKY`        | Rocoso                    |
+| 3     | `CLEAR_FIELDS`       | Campos de cultivo         |
+| 4     | `CLEAR_SNOW`         | Nieve (ártico)            |
+| 5     | `CLEAR_DESERT`       | Desierto (tropical)       |
+
+### Densidad de hierba (bits 0–1 de m5 cuando ClearGround = GRASS)
+
+```text
+grass_density = m5 & 0x3   // 0=bare, 1=1/3, 2=2/3, 3=full
+```
+
+Esto determina qué sprite base usar:
+- 0 → `SPR_FLAT_BARE_LAND` (3924)
+- 1 → `SPR_FLAT_1_THIRD_GRASS_TILE` (3943)
+- 2 → `SPR_FLAT_2_THIRD_GRASS_TILE` (3962)
+- 3 → `SPR_FLAT_GRASS_TILE` (3981)
+
+---
+
+## 12. Sistema de pendientes (slopes)
+
+### Concepto: tileh como bitmask de esquinas elevadas
+
+Cada tesela tiene cuatro esquinas. La pendiente (`tileh`) es un bitmask de 4 bits
+donde cada bit indica si esa esquina está por **encima del mínimo** entre las cuatro:
+
+```text
+h0 = height(tx,   ty  )  → esquina N  (bit 3)
+h1 = height(tx+1, ty  )  → esquina S  (bit 1)
+h2 = height(tx,   ty+1)  → esquina W  (bit 0)
+h3 = height(tx+1, ty+1)  → esquina E  (bit 2)
+
+min_h = min(h0, h1, h2, h3)
+tileh = 0
+if h2 > min_h: tileh |= 1  (SLOPE_W)
+if h1 > min_h: tileh |= 2  (SLOPE_S)
+if h3 > min_h: tileh |= 4  (SLOPE_E)
+if h0 > min_h: tileh |= 8  (SLOPE_N)
+```
+
+Implementado en `crates/openttdrs-client/src/iso.rs` → `compute_tileh`.
+
+### Valores de tileh válidos (0–14)
+
+`tileh = 15` (todas las esquinas elevadas) es una **pendiente empinada** que requiere
+sprites especiales; actualmente se trata como `min(tileh, 14)`.
+
+| tileh | Esquinas elevadas | Descripción          |
+|------:|-------------------|----------------------|
+| 0     | ninguna           | Plano                |
+| 1     | W                 | Pendiente W          |
+| 2     | S                 | Pendiente S          |
+| 3     | WS                | Esquina doble WS     |
+| 4     | E                 | Pendiente E          |
+| 5     | WE                | Pendiente WE (doble) |
+| 6     | SE                | Esquina doble SE     |
+| 7     | WSE               | Tres esquinas        |
+| 8     | N                 | Pendiente N          |
+| 9     | NW                | Esquina doble NW     |
+| 10    | NS                | Pendiente NS (doble) |
+| 11    | NWS               | Tres esquinas        |
+| 12    | NE                | Esquina doble NE     |
+| 13    | NWE               | Tres esquinas        |
+| 14    | NSE               | Tres esquinas        |
+
+### SLOPE_HALF_H: ajuste vertical por pendiente
+
+Para renderizar cada tesela en la posición vertical correcta se usa `tile_pos_half`
+con una constante `half_h` que varía según `tileh`. Derivada del campo `height` y
+`yrel` del NFO de OpenGFX:
+
+```rust
+// iso.rs
+pub const SLOPE_HALF_H: [f32; 15] = [
+    15.5, // 0:  flat
+    15.5, // 1:  W
+    11.5, // 2:  S
+    11.5, // 3:  WS
+    15.5, // 4:  E
+    15.5, // 5:  WE
+    11.5, // 6:  SE
+    11.5, // 7:  WSE
+    11.5, // 8:  N
+    11.5, // 9:  NW
+    7.5,  // 10: NS
+    7.5,  // 11: NWS
+    11.5, // 12: NE
+    11.5, // 13: NWE
+    7.5,  // 14: NSE
+];
+```
+
+La fórmula completa de posición de una tesela:
+
+```rust
+// iso.rs: tile_pos_half(tx, ty, height, layer, half_h)
+let p = iso(tx, ty);          // proyección isométrica plana
+let elev = height as f32 * HEIGHT_PX;  // HEIGHT_PX = 8.0
+Vec3::new(
+    p.x,
+    p.y - half_h + elev,
+    (tx + ty) as f32 * 0.01 + height as f32 * 0.001 + layer,
+)
+```
+
+---
+
+## 13. Sprites OpenGFX para terreno
+
+### Terreno plano y pendientes (MP_CLEAR, hierba)
+
+```text
+flat_sprite    = SPR_FLAT_GRASS_TILE = 3981
+slope_sprite   = 3981 + tileh         (tileh 1–14 → sprites 3982–3995)
+```
+
+### Terreno rough (CLEAR_ROUGH)
+
+```text
+flat_sprite   = SPR_FLAT_ROUGH_LAND = 4000
+slope_sprite  = 4000 + tileh          (slopes 4001–4014)
+```
+
+Variantes adicionales:
+- `SPR_FLAT_ROUGH_LAND_1..4` = 4019–4022 (variación aleatoria en suelo plano)
+
+### Terreno rocoso (CLEAR_ROCKY)
+
+- `SPR_FLAT_ROCKY_LAND_1` = 4023  (rocas tipo 1, plano)
+- `SPR_FLAT_ROCKY_LAND_2` = 4042  (rocas tipo 2, plano)
+
+### Agua (MP_WATER)
+
+- `SPR_FLAT_WATER_TILE` = 4061 (agua plana)
+- Costas: 4062–4069 (`SPR_ORIGINALSHORE_START`)
+
+---
+
+## 14. De road bits a sprites
+
+Solo tenemos tres gráficos de carretera base extraídos del NFO:
+
+| `RoadDir` | Bits    | Sprite           |
+|-----------|---------|------------------|
+| `Tx` (eje X del mapa, `0x0A`) | SW+NE | `road_ty.png` |
+| `Ty` (eje Y del mapa, `0x05`) | NW+SE | `road_tx.png` |
+| `Both` (ambos ejes) | 0x0F | `road_cross.png` |
+
+> **Intercambio intencional**: `ROAD_X` → sprite `road_ty.png` y viceversa.
+> Verificado con capturas sobre `.ottdmap` de partidas reales.
+
+Para la tabla completa `road_bits → offset` en OpenGFX (19 variantes):
+
+```rust
+// sprites.rs
+pub const ROAD_FLAT_OFFSET_TBL: [u8; 16] =
+    [0, 18, 17, 7, 16, 0, 10, 5, 15, 8, 1, 4, 9, 3, 6, 2];
+// Sprite final = SPR_ROAD_Y (1332) + ROAD_FLAT_OFFSET_TBL[road_bits & 0x0F]
+```
+
+### Sprites de vía férrea (TrackBits → sprite)
+
+| TrackBits | Sprite ID |
+|-----------|-----------|
+| Y (2)     | 1011      |
+| X (1)     | 1012      |
+| UPPER (4) | 1013      |
+| LOWER (8) | 1014      |
+| RIGHT (32)| 1015      |
+| LEFT (16) | 1016      |
+| X+Y cruce | 1017      |
+| HORZ (UPPER+LOWER) | 1035 |
+| VERT (LEFT+RIGHT)  | 1036 |
+| Junctions (3+ vías)| 1018–1022 (base) + overlays 1005–1010 |
+
+---
+
+## 15. Relieve (altura) en pantalla
+
+OpenTTD usa **8 píxeles** de desplazamiento vertical por unidad de altura (`TILE_HEIGHT`
+en el upstream). En el cliente, `HEIGHT_PX = 8.0` separa visualmente mesetas sin
+renderizar pendientes reales.
+
+El orden Z mezcla `(tx + ty)` con un término en `height` para reducir parpadeos
+entre teselas a distinta cota:
+
+```rust
+z = (tx + ty) as f32 * 0.01 + height as f32 * 0.001 + layer
+```
+
+`layer` es un pequeño offset usado para priorizar overlays sobre el suelo.
+
+---
+
+## 16. Carga de partidas (.sav)
+
+### Formatos de compresión
+
+| Magic | Compresión | Notas                          |
+|-------|------------|--------------------------------|
+| `OTTZ`| zlib       | Más común en versiones modernas |
+| `OTTX`| lzma/xz    | Compresión alternativa         |
+| `OTTN`| ninguna    | Para debug                     |
+| `OTTD`| LZO        | Formato antiguo; no soportado  |
+
+La versión del savegame está en los bytes 4–5 (big-endian u16) del header sin comprimir.
+Los savegames modernos usan versión ≥ 300.
+
+### Estructura del stream de chunks
+
+```
+[chunk_id: 4 bytes BE ASCII]
+[m: 1 byte]  → chunk_type = m & 0x0F
+  CH_RIFF          = 0 → tamaño y datos inline
+  CH_ARRAY         = 1 → secuencia gamma+datos, termina con gamma=0
+  CH_SPARSE_ARRAY  = 2 → igual, con índice disperso
+  CH_TABLE         = 3 → igual que ARRAY pero primer elemento = header
+  CH_SPARSE_TABLE  = 4 → igual que SPARSE_ARRAY con header
+[datos del chunk...]
+```
+
+#### Gamma encoding (SlReadSimpleGamma)
+
+Utilizado para longitudes de elementos en todos los tipos array/table:
+
+```
+0xxxxxxx         → 7 bits (1 byte)
+10xxxxxx xx      → 14 bits (2 bytes)
+110xxxxx xx xx   → 21 bits (3 bytes)
+1110xxxx xx xx xx → 28 bits (4 bytes)
+11110000 xx xx xx xx → 32 bits (5 bytes)
+```
+
+### Parseo de MAPS (dimensiones)
+
+`MAPS` es un `CH_TABLE` con campos `dim_x` y `dim_y` (SLE_FILE_U32, big-endian).
+Si `MAPS` no se encuentra (savegames muy antiguos), se infieren las dimensiones
+asumiendo mapa cuadrado de potencia de 2 desde el tamaño de `MAPT`.
+
+---
+
+## 17. Referencias en el código fuente de OpenTTD
+
+Bajo `reference/openttd-upstream/src/`:
+
+| Archivo              | Contenido relevante                                  |
+|----------------------|------------------------------------------------------|
+| `tile_map.h`         | `GetTileType`, acceso a altura                       |
+| `road_map.h`         | `GetRoadBits`, `GetRoadTileType`, `GetCrossingRoadAxis` |
+| `road_func.h`        | `DiagDirToRoadBits`, `AxisToRoadBits`                |
+| `road_type.h`        | `RoadBit`, `ROAD_X`, `ROAD_Y`                        |
+| `rail_map.h`         | `GetTrackBits`, `GetRailTileType`, TrackBits         |
+| `track_type.h`       | Constantes `TRACK_BIT_*`                             |
+| `industry_map.h`     | `GetCleanIndustryGfx` (9 bits desde m5+m6)          |
+| `clear_map.h`        | `GetClearGround`, `GetClearDensity`                  |
+| `house_map.h`        | `GetHouseType` (HouseID desde m8)                    |
+| `object_map.h`       | `GetObjectType` (ObjectType desde array OBJS)        |
+| `tunnelbridge_map.h` | Dirección y tipo de transporte                       |
+| `saveload/map_sl.cpp`| Registro de chunks `MAPT`, `MAPH`, `MAPO`→MAP1, etc. |
+
+---
+
+## 18. Resumen de archivos del proyecto
 
 | Archivo | Rol |
 |---------|-----|
-| `scripts/parse_sav.py` | `.sav` → `.ottdmap` |
-| `crates/openttdrs-core/src/map.rs` | `Tile { height, kind, mapt, m5 }`, `from_ottd_binary` |
-| `crates/openttdrs-client/src/main.rs` | `effective_road_bits`, relieve, sprites |
-| `docs/SPRITES_OPENGFX.md` | NFO, IDs de sprite, transparencia |
-
----
-
-## Referencias en el código fuente de OpenTTD (local)
-
-Rutas bajo `reference/openttd-upstream/src/`:
-
-- `road_map.h` — cruces, depósitos, `GetCrossingRoadBits`, `GetRoadBits`
-- `road_func.h` — `DiagDirToRoadBits`, `AxisToRoadBits`
-- `road_type.h` — `RoadBit`, `ROAD_X`, `ROAD_Y`
-- `tunnelbridge_map.h` — dirección y tipo de túnel/puente
-- `tile_map.h` — `GetTileType`, altura
-- `saveload/map_sl.cpp` — chunks `MAPT`, `MAPH`, `MAP5`
+| `scripts/parse_sav.py` | `.sav` → `.ottdmap` v3; resuelve OBJS para MP_OBJECT |
+| `crates/openttdrs-core/src/map.rs` | `Tile`, `Map`, `from_ottd_binary` |
+| `crates/openttdrs-client/src/iso.rs` | Proyección isométrica, `compute_tileh`, `SLOPE_HALF_H` |
+| `crates/openttdrs-client/src/sprites.rs` | Constantes de sprites, `INDUSTRY_GFX_DATA`, road/rail bits |
+| `crates/openttdrs-client/src/main.rs` | Sistema de render Bevy: teselas, overlays, cámara |
+| `docs/SPRITES_OPENGFX_COMPLETO.md` | Catálogo completo de IDs de sprites OpenGFX |
+| `docs/INDUSTRIAS_OPENGFX.md` | Detalle de sprites de industrias |
+| `docs/INFORME_ARQUITECTURA_OPENTTD.md` | Arquitectura general del proyecto |

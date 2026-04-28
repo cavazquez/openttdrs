@@ -172,6 +172,9 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     let h_grass = asset_server.load::<Image>("opengfx/tiles/grass.png");
     let h_rough = asset_server.load::<Image>("opengfx/tiles/grass_rough.png");
     let h_water = asset_server.load::<Image>("opengfx/tiles/water.png");
+    // Objetos estáticos del mapa (MP_OBJECT): faro (type 1) y transmisor (type 0)
+    let h_lighthouse = asset_server.load::<Image>("opengfx/tiles/object_lighthouse.png");
+    let h_transmitter = asset_server.load::<Image>("opengfx/tiles/object_transmitter.png");
     let road_flat: Vec<Handle<Image>> = (0..19)
         .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/road_flat_{i:02}.png")))
         .collect();
@@ -353,8 +356,22 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
                     ));
                 } else {
+                    let ottd_type = tile.map_or(0u8, |t| (t.mapt >> 4) & 0xF);
+                    let tile_m5 = tile.map_or(0u8, |t| t.m5);
+
+                    // MP_CLEAR (0): distinguir subtipo de suelo via m5 bits 2-4
+                    // MP_OBJECT (10): grass de base + overlay de objeto
                     let (image, color) = match kind {
-                        TileKind::Grass => (h_grass.clone(), Color::WHITE),
+                        TileKind::Grass if ottd_type == 0 => {
+                            // bits 2-4 de m5 = ClearGround
+                            // 0=grass, 1=rough, 2=rocky, 3=fields, 4=snow, 5=desert
+                            match (tile_m5 >> 2) & 0x7 {
+                                0 => (h_grass.clone(), Color::WHITE), // grass verde
+                                3 => (h_rough.clone(), Color::srgb(0.82, 0.72, 0.45)), // campos arados
+                                _ => (h_rough.clone(), Color::srgb(0.78, 0.73, 0.58)), // rough/rocky
+                            }
+                        }
+                        TileKind::Grass => (h_grass.clone(), Color::WHITE), // MP_OBJECT u otros
                         TileKind::Forest => (h_rough.clone(), Color::srgb(0.6, 1.0, 0.45)),
                         TileKind::CoalField => (h_rough.clone(), Color::srgb(0.55, 0.50, 0.45)),
                         TileKind::Unknown(_) => (h_grass.clone(), Color::srgb(1.0, 0.0, 1.0)),
@@ -374,6 +391,32 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         },
                         Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
                     ));
+
+                    // MP_OBJECT: renderizar faro o transmisor como overlay
+                    // ObjectType (m5): 0=Transmisor, 1=Faro
+                    if ottd_type == 10 {
+                        let (obj_img, obj_xrel, obj_yrel, obj_w, obj_h) = match tile_m5 {
+                            // Faro: sprite 2602, 41×61, xrel=-22, yrel=-48
+                            1 => (Some(h_lighthouse.clone()), -22.0, -48.0, 41.0, 61.0),
+                            // Transmisor: sprite 2601, 55×77, xrel=-26, yrel=-71
+                            0 => (Some(h_transmitter.clone()), -26.0, -71.0, 55.0, 77.0),
+                            _ => (None, 0.0, 0.0, 0.0, 0.0),
+                        };
+                        if let Some(img) = obj_img {
+                            let pos3 = overlay_pos(
+                                p, obj_xrel, obj_yrel, obj_w, obj_h, height, 0.6, tx as i32,
+                                ty as i32,
+                            );
+                            commands.spawn((
+                                Sprite {
+                                    image: img,
+                                    color: Color::WHITE,
+                                    ..default()
+                                },
+                                Transform::from_translation(pos3),
+                            ));
+                        }
+                    }
                 }
             }
 

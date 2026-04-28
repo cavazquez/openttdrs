@@ -1,6 +1,7 @@
 //! UI de información de tile seleccionado.
 
 use bevy::prelude::*;
+use bevy::sprite::Anchor;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{TileCoord, TileKind};
 
@@ -18,7 +19,7 @@ pub struct SelectedTileInfo {
 #[derive(Component)]
 pub struct TileInfoText;
 
-/// Crea el texto de información del tile (flotante, sigue a la cámara).
+/// Crea el texto de información del tile.
 pub fn setup_tile_info_ui(mut commands: Commands) {
     commands.spawn((
         TileInfoText,
@@ -29,6 +30,7 @@ pub fn setup_tile_info_ui(mut commands: Commands) {
         },
         TextColor(Color::srgb(1.0, 1.0, 0.8)),
         Transform::from_xyz(0.0, 0.0, 1000.0),
+        Anchor::TOP_LEFT,
     ));
 }
 
@@ -78,6 +80,7 @@ pub fn handle_tile_click(
 pub fn update_tile_info_text(
     selected: Res<SelectedTileInfo>,
     sim: Res<SimWorld>,
+    windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<(&Transform, &Projection), With<Camera2d>>,
     mut text_q: Query<(&mut Text2d, &mut Transform), (With<TileInfoText>, Without<Camera2d>)>,
 ) {
@@ -90,11 +93,15 @@ pub fn update_tile_info_text(
     let Projection::Orthographic(proj) = projection else {
         return;
     };
+    let Ok(window) = windows.single() else {
+        return;
+    };
 
-    let offset_x = -580.0 * proj.scale;
-    let offset_y = 320.0 * proj.scale;
-    text_transform.translation.x = cam_transform.translation.x + offset_x;
-    text_transform.translation.y = cam_transform.translation.y + offset_y;
+    // Posicionar en esquina superior izquierda de la ventana (en coordenadas del mundo)
+    let half_w = window.width() / 2.0 * proj.scale;
+    let half_h = window.height() / 2.0 * proj.scale;
+    text_transform.translation.x = cam_transform.translation.x - half_w + 10.0 * proj.scale;
+    text_transform.translation.y = cam_transform.translation.y + half_h - 10.0 * proj.scale;
     text_transform.scale = Vec3::splat(proj.scale);
 
     let Some(pos) = selected.pos else {

@@ -136,7 +136,9 @@ fn main() {
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWorld>) {
     let (mw, mh) = sim.state.map.dimensions();
 
-    let cam_x = ((mw as i32 - 1) - (mh as i32 - 1)) as f32 / 2.0 * ISO_HW;
+    // Con iso(tx,ty) = (ty-tx)*ISO_HW, el centro del mapa está en iso(mw/2, mh/2):
+    // screen_x = (mh/2 - mw/2) * ISO_HW
+    let cam_x = ((mh as i32 - 1) - (mw as i32 - 1)) as f32 / 2.0 * ISO_HW;
     let cam_y = -((mw as i32 - 1) + (mh as i32 - 1)) as f32 / 2.0 * ISO_QH - TILE_HALF_H;
 
     let target_tiles_wide: f32 = if sim.loaded_file { 64.0 } else { mw as f32 };

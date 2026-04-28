@@ -12,18 +12,22 @@ pub const TILE_HALF_H: f32 = 15.5;
 pub const HEIGHT_PX: f32 = 8.0;
 
 /// Convierte coordenadas de tesela a posición del vértice superior del rombo (Bevy Y-up).
+///
+/// Fórmula de OpenTTD: `screen_x = (ty - tx) * half_tile_w` (igual que `RemapCoords` con z=0).
+/// Con esto: +tx mueve al SW (abajo-izquierda), +ty mueve al SE (abajo-derecha),
+/// lo que produce la orientación Norte-arriba estándar de OpenTTD.
 #[inline]
 pub fn iso(tx: i32, ty: i32) -> Vec2 {
-    Vec2::new((tx - ty) as f32 * ISO_HW, (tx + ty) as f32 * -ISO_QH)
+    Vec2::new((ty - tx) as f32 * ISO_HW, (tx + ty) as f32 * -ISO_QH)
 }
 
 /// Convierte posición del mundo a coordenadas de tesela (inversa de `iso`).
 #[inline]
 pub fn world_to_tile(world_pos: Vec2) -> (i32, i32) {
-    let a = world_pos.x / ISO_HW;
-    let b = world_pos.y / -ISO_QH;
-    let tx = f32::midpoint(a, b);
-    let ty = (b - a) / 2.0;
+    let a = world_pos.x / ISO_HW; // = ty - tx
+    let b = world_pos.y / -ISO_QH; // = tx + ty
+    let ty = f32::midpoint(a, b);
+    let tx = (b - a) / 2.0;
     (tx.floor() as i32, ty.floor() as i32)
 }
 

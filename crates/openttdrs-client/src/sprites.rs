@@ -80,30 +80,16 @@ pub const INDUSTRY_GFX_SPRITES: [(u32, f32, f32, f32, f32); 8] = [
 /// Retorna None si es gfx desconocido o solo suelo.
 pub fn industry_sprite_for_gfx(gfx: u8) -> Option<(u32, f32, f32, f32, f32)> {
     // Solo soportamos Coal Mine por ahora (gfx 0-6)
+    // Otros gfx retornan None para evitar sprites incorrectos
     if gfx < 7 {
         let entry = INDUSTRY_GFX_SPRITES[gfx as usize];
         if entry.0 != 0 {
             return Some(entry);
         }
     }
-    // Para otros gfx, usar sprite genérico basado en patrón
-    // Muchas industrias comparten sprites similares
-    match gfx {
-        // Power Station (gfx 7-14)
-        7..=14 => Some((2013, 58.0, 50.0, -16.0, -33.0)), // usar headframe como placeholder
-        // Oil Rig (gfx 24-28)
-        24..=28 => Some((2013, 58.0, 50.0, -16.0, -33.0)),
-        // Otros: usar el sprite que tengamos más a mano
-        _ => {
-            // Para gfx > 6, algunos tienen edificios y otros no
-            // Usamos headframe como fallback genérico
-            if gfx % 4 < 3 {
-                Some((2013, 58.0, 50.0, -16.0, -33.0))
-            } else {
-                None // Solo suelo
-            }
-        }
-    }
+    // Para gfx desconocidos, no mostrar edificio (solo suelo marrón)
+    // Esto es mejor que mostrar el sprite equivocado
+    None
 }
 
 /// IDs de sprites de vía férrea usados.
@@ -114,16 +100,16 @@ pub const RAIL_SPRITE_IDS: [u32; 20] = [
 
 // ── Lógica de road bits ─────────────────────────────────────────────────────
 
-/// Intercambia bits NW (0) ↔ SE (2) para compensar eje Y invertido.
-#[inline]
-fn swap_y_road_bits(bits: u8) -> u8 {
-    (bits & 0b1010) | ((bits & 0b0001) << 2) | ((bits & 0b0100) >> 2)
-}
-
 /// Decodifica los road bits efectivos desde m5 según el tipo de tesela.
+///
+/// Los bits del savegame ya están en la orientación correcta de OpenTTD:
+/// - NW (bit 0) = conexión hacia (x, y-1)  → visualmente arriba-izquierda
+/// - SW (bit 1) = conexión hacia (x+1, y)  → visualmente abajo-izquierda
+/// - SE (bit 2) = conexión hacia (x, y+1)  → visualmente abajo-derecha
+/// - NE (bit 3) = conexión hacia (x-1, y)  → visualmente arriba-derecha
 pub fn effective_road_bits(mapt: u8, m5: u8, kind: TileKind) -> Option<u8> {
     let tt = (mapt >> 4) & 0xF;
-    let raw = match tt {
+    match tt {
         OTTD_MP_ROAD => {
             let subtype = (m5 >> 6) & 0x3;
             match subtype {
@@ -147,8 +133,7 @@ pub fn effective_road_bits(mapt: u8, m5: u8, kind: TileKind) -> Option<u8> {
             Some((1u8 << (3 ^ d)) & 0x0F)
         }
         _ => None,
-    };
-    raw.map(swap_y_road_bits)
+    }
 }
 
 #[inline]
@@ -157,6 +142,12 @@ pub fn road_flat_index(road_bits: u8) -> usize {
 }
 
 /// Road bits para dibujar: `m5` / vecinos (mapa procedural).
+///
+/// Asignación de bits conforme a OpenTTD (con iso correcta):
+/// - NE (bit 3 = 8): vecino en (x-1, y) → arriba-derecha en pantalla
+/// - NW (bit 0 = 1): vecino en (x, y-1) → arriba-izquierda en pantalla
+/// - SW (bit 1 = 2): vecino en (x+1, y) → abajo-izquierda en pantalla
+/// - SE (bit 2 = 4): vecino en (x, y+1) → abajo-derecha en pantalla
 pub fn road_bits_for_render(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> u8 {
     if let Some(t) = map.get(pos)
         && let Some(rb) = effective_road_bits(t.mapt, t.m5, t.kind)
@@ -175,16 +166,16 @@ pub fn road_bits_for_render(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> u8 {
     };
     let mut bits = 0u8;
     if is_road_or_station(TileCoord::new(pos.x - 1, pos.y)) {
-        bits |= 8;
-    }
-    if is_road_or_station(TileCoord::new(pos.x, pos.y + 1)) {
-        bits |= 1;
-    }
-    if is_road_or_station(TileCoord::new(pos.x + 1, pos.y)) {
-        bits |= 2;
+        bits |= 8; // NE
     }
     if is_road_or_station(TileCoord::new(pos.x, pos.y - 1)) {
-        bits |= 4;
+        bits |= 1; // NW: y-1 → arriba-izquierda
+    }
+    if is_road_or_station(TileCoord::new(pos.x + 1, pos.y)) {
+        bits |= 2; // SW
+    }
+    if is_road_or_station(TileCoord::new(pos.x, pos.y + 1)) {
+        bits |= 4; // SE: y+1 → abajo-derecha
     }
     if bits == 0 {
         bits = 0x05;
@@ -224,13 +215,15 @@ fn synthetic_rail_trackbits(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> u8 {
         }
         matches!(map.get_kind(c), Some(TileKind::Rail | TileKind::Station))
     };
+    // Vecinos en eje x (dx=±1) forman la diagonal NE-SW → RAIL_TB_X
     let has_tx = rail_neighbor(TileCoord::new(pos.x - 1, pos.y))
         || rail_neighbor(TileCoord::new(pos.x + 1, pos.y));
+    // Vecinos en eje y (dy=±1) forman la diagonal NW-SE → RAIL_TB_Y
     let has_ty = rail_neighbor(TileCoord::new(pos.x, pos.y - 1))
         || rail_neighbor(TileCoord::new(pos.x, pos.y + 1));
     match (has_tx, has_ty) {
-        (true, false) => RAIL_TB_Y,
-        (false, true) => RAIL_TB_X,
+        (true, false) => RAIL_TB_X,
+        (false, true) => RAIL_TB_Y,
         (true, true) => RAIL_TB_CROSS,
         (false, false) => RAIL_TB_Y,
     }

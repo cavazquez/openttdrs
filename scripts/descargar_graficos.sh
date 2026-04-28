@@ -36,8 +36,18 @@ else
 fi
 
 # ── Extracción de sprites de tesela para el renderer isométrico ───────────────
+BASE_DIR="${DEST}/opengfx-${VERSION}"
+BASE_TAR="${BASE_DIR}.tar"
 SPRITES_DIR="${DEST}/opengfx-${VERSION}/sprites"
 TILES_DIR="${DEST}/tiles"
+
+# En descarga manual/limpia, OpenGFX suele venir como .tar dentro de DEST.
+# Si falta la carpeta base pero existe el tar, extraerla automáticamente.
+if [[ ! -d "${BASE_DIR}" && -f "${BASE_TAR}" ]]; then
+  echo ""
+  echo "Extrayendo ${BASE_TAR} ..."
+  tar -xf "${BASE_TAR}" -C "${DEST}"
+fi
 
 if [[ ! -f "${SPRITES_DIR}/ogfx1_base00.png" && ! -f "${SPRITES_DIR}/ogfx1_base00.pcx" ]]; then
   if command -v grfcodec &>/dev/null; then
@@ -68,6 +78,16 @@ tiles_dir   = Path(os.environ["TILES_DIR"])
 tiles_dir.mkdir(parents=True, exist_ok=True)
 
 def load_sheet(png_path: Path) -> Image.Image:
+    def is_magenta_key(r: int, g: int, b: int) -> bool:
+        # Detecta variantes de colorkey magenta típicas de conversión 8bpp->RGBA.
+        # Mantiene una ventana amplia para capturar ruido de cuantización.
+        return (
+            r >= 220
+            and b >= 220
+            and g <= 40
+            and abs(r - b) <= 24
+        )
+
     img = Image.open(png_path)
     if img.mode == "P":
         pal = img.getpalette()
@@ -76,8 +96,7 @@ def load_sheet(png_path: Path) -> Image.Image:
         data = []
         for r, g, b, a in img_rgba.getdata():
             # Transparencia por índice de paleta 0 y por colorkey magenta.
-            # Algunos pipelines de grfcodec dejan 240/0/240 u 241/0/241 como fondo.
-            if (r, g, b) == transparent_rgb or (g <= 1 and r >= 240 and b >= 240):
+            if (r, g, b) == transparent_rgb or is_magenta_key(r, g, b):
                 data.append((0, 0, 0, 0))
             else:
                 data.append((r, g, b, a))
@@ -87,7 +106,7 @@ def load_sheet(png_path: Path) -> Image.Image:
     # Fallback: también limpiar colorkey magenta en imágenes no palettizadas.
     data = []
     for r, g, b, a in img_rgba.getdata():
-        if g <= 1 and r >= 240 and b >= 240:
+        if is_magenta_key(r, g, b):
             data.append((0, 0, 0, 0))
         else:
             data.append((r, g, b, a))

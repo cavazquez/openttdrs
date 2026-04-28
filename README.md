@@ -51,6 +51,37 @@ cargo test -p openttdrs-core
 
 ---
 
+## Descarga de assets (gráficos, sonidos, música)
+
+Para simplificar, usá el wrapper:
+
+```bash
+./scripts/descargar_assets.sh graficos --32bpp
+./scripts/descargar_assets.sh sonidos
+./scripts/descargar_assets.sh musica
+```
+
+También podés ejecutar todo junto:
+
+```bash
+./scripts/descargar_assets.sh todo --32bpp
+```
+
+Notas:
+- El modo de gráficos es obligatorio: `--8bpp` o `--32bpp`.
+- La cache de descargas se guarda en `/.downloads/openttd/` (ignorada por git).
+- Los assets finales quedan bajo `assets/`.
+
+Si preferís scripts individuales:
+
+```bash
+./scripts/descargar_graficos.sh --32bpp
+./scripts/descargar_sonidos.sh --opensfx
+./scripts/descargar_musica.sh --openmsx
+```
+
+---
+
 ## Estructura del repo
 
 ```

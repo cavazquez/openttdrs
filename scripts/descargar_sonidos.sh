@@ -5,41 +5,88 @@
 # Versión configurable con la variable de entorno OPENSFX_VERSION.
 #
 # Uso:
-#   ./scripts/descargar_sonidos.sh
-#   OPENSFX_VERSION=1.0.3 ./scripts/descargar_sonidos.sh
+#   ./scripts/descargar_sonidos.sh --opensfx
+#   OPENSFX_VERSION=1.0.3 ./scripts/descargar_sonidos.sh --opensfx
 set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Uso:
+  ./scripts/descargar_sonidos.sh --opensfx
+
+Opciones:
+  --opensfx   Descarga y prepara OpenSFX
+  -h, --help  Muestra esta ayuda
+EOF
+}
+
+if [[ $# -ne 1 ]]; then
+  echo "Error: debés indicar --opensfx." >&2
+  usage
+  exit 1
+fi
+
+case "${1}" in
+  --opensfx) ;;
+  -h|--help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "Error: opción desconocida '${1}'." >&2
+    usage
+    exit 1
+    ;;
+esac
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${OPENSFX_VERSION:-1.0.3}"
 DEST="${ROOT}/assets/opensfx"
+DOWNLOADS_DIR="${ROOT}/.downloads/openttd"
 CDN="https://cdn.openttd.org/opensfx-releases/${VERSION}/opensfx-${VERSION}-all.zip"
+ZIP_CACHE="${DOWNLOADS_DIR}/opensfx-${VERSION}-all.zip"
+TAR_CACHE="${DOWNLOADS_DIR}/opensfx-${VERSION}.tar"
 
-if [[ -d "${DEST}" && -n "$(ls -A "${DEST}" 2>/dev/null)" ]]; then
-  echo "OpenSFX ya está en ${DEST}. Borrá la carpeta para re-descargar."
+mkdir -p "${DEST}"
+mkdir -p "${DOWNLOADS_DIR}"
+
+if [[ -f "${TAR_CACHE}" ]]; then
+  echo "OpenSFX ${VERSION} ya descargado en ${TAR_CACHE}"
 else
-  mkdir -p "${DEST}"
+  if [[ ! -f "${ZIP_CACHE}" ]]; then
+    echo "Descargando OpenSFX ${VERSION} desde ${CDN} ..."
+    curl -fL "${CDN}" -o "${ZIP_CACHE}"
+  else
+    echo "Zip en cache detectado: ${ZIP_CACHE}"
+  fi
 
-  echo "Descargando OpenSFX ${VERSION} desde ${CDN} ..."
+  echo "Preparando ${TAR_CACHE} ..."
   TMP="$(mktemp -d)"
   trap 'rm -rf "${TMP}"' EXIT
-
-  curl -fL "${CDN}" -o "${TMP}/opensfx.zip"
-  unzip -q "${TMP}/opensfx.zip" -d "${TMP}/opensfx"
-
-  shopt -s dotglob
-  cp -r "${TMP}/opensfx/"*/* "${DEST}/" 2>/dev/null || cp -r "${TMP}/opensfx/"* "${DEST}/"
+  unzip -q "${ZIP_CACHE}" -d "${TMP}/opensfx"
+  CANDIDATE_TAR="$(rg --files "${TMP}/opensfx" | rg "opensfx-${VERSION}\\.tar$" | awk 'NR==1{print; exit}' || true)"
+  if [[ -z "${CANDIDATE_TAR}" ]]; then
+    echo "No encontré opensfx-${VERSION}.tar dentro del zip."
+    exit 1
+  fi
+  cp "${CANDIDATE_TAR}" "${TAR_CACHE}"
 fi
 
 BASE_DIR="${DEST}/opensfx-${VERSION}"
-BASE_TAR="${BASE_DIR}.tar"
-if [[ ! -d "${BASE_DIR}" && -f "${BASE_TAR}" ]]; then
+if [[ ! -d "${BASE_DIR}" && -f "${TAR_CACHE}" ]]; then
   echo ""
-  echo "Extrayendo ${BASE_TAR} ..."
-  tar -xf "${BASE_TAR}" -C "${DEST}"
+  echo "Extrayendo ${TAR_CACHE} en ${DEST} ..."
+  tar -xf "${TAR_CACHE}" -C "${DEST}"
 fi
 
+# Limpieza de layout legado: tar dentro de assets/.
+rm -f "${DEST}/opensfx-${VERSION}.tar"
+
 echo ""
-echo "Listo. Archivos en ${DEST}/:"
+echo "Cache de descargas en ${DOWNLOADS_DIR}/:"
+ls -1 "${DOWNLOADS_DIR}/"
+echo ""
+echo "Listo. Archivos en ${DEST}/ (assets finales):"
 ls -1 "${DEST}/"
 echo ""
 echo "Los sonidos están en formato .cat (Catálogo de samples)."

@@ -1,44 +1,142 @@
 #!/usr/bin/env bash
-# Descarga OpenGFX — gráficos de reemplazo libre para OpenTTD.
+# Descarga gráficos base para OpenTTD/OpenTTDRS.
 #
 # Los archivos se extraen en assets/opengfx/ (carpeta ignorada por git).
 # Luego extrae los sprites de tesela a assets/opengfx/tiles/ para el renderer.
-# Versión configurable con la variable de entorno OPENGFX_VERSION.
+# Modos:
+#   - --8bpp  : OpenGFX clásico.
+#   - --32bpp : OpenGFX2 High Def.
 #
 # Uso:
-#   ./scripts/descargar_graficos.sh
-#   OPENGFX_VERSION=7.1 ./scripts/descargar_graficos.sh
+#   ./scripts/descargar_graficos.sh --8bpp
+#   ./scripts/descargar_graficos.sh --32bpp
+#   OPENGFX_VERSION=7.1 ./scripts/descargar_graficos.sh --8bpp
 set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Uso:
+  ./scripts/descargar_graficos.sh --8bpp
+  ./scripts/descargar_graficos.sh --32bpp
+
+Opciones:
+  --8bpp     Descarga y procesa OpenGFX clásico (8bpp)
+  --32bpp    Descarga y procesa OpenGFX2 High Def (32bpp)
+  -h, --help Muestra esta ayuda
+
+Notas:
+  - Debés elegir exactamente una opción de modo.
+  - OPENGFX_VERSION aplica solo a --8bpp.
+  - OPENGFX2_TAG aplica solo a --32bpp.
+EOF
+}
+
+GRAPHICS_MODE=""
+for arg in "$@"; do
+  case "$arg" in
+    --8bpp)
+      if [[ -n "${GRAPHICS_MODE}" ]]; then
+        echo "Error: elegí solo un modo (--8bpp o --32bpp)." >&2
+        usage
+        exit 1
+      fi
+      GRAPHICS_MODE="8bpp"
+      ;;
+    --32bpp)
+      if [[ -n "${GRAPHICS_MODE}" ]]; then
+        echo "Error: elegí solo un modo (--8bpp o --32bpp)." >&2
+        usage
+        exit 1
+      fi
+      GRAPHICS_MODE="32bpp"
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "Error: opción desconocida '${arg}'." >&2
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -z "${GRAPHICS_MODE}" ]]; then
+  echo "Error: debés indicar un modo (--8bpp o --32bpp)." >&2
+  usage
+  exit 1
+fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${OPENGFX_VERSION:-8.0}"
 DEST="${ROOT}/assets/opengfx"
-CDN="https://cdn.openttd.org/opengfx-releases/${VERSION}/opengfx-${VERSION}-all.zip"
+DOWNLOADS_DIR="${ROOT}/.downloads/openttd"
+OPENGFX2_TAG="${OPENGFX2_TAG:-v0.1}"
+CDN_8BPP="https://cdn.openttd.org/opengfx-releases/${VERSION}/opengfx-${VERSION}-all.zip"
+CDN_32BPP="https://github.com/OpenTTD/OpenGFX2/releases/download/${OPENGFX2_TAG}/opengfx2_32ez.tar"
+ZIP_CACHE_8BPP="${DOWNLOADS_DIR}/opengfx-${VERSION}-all.zip"
+TAR_CACHE_8BPP="${DOWNLOADS_DIR}/opengfx-${VERSION}.tar"
+TAR_CACHE_32BPP="${DOWNLOADS_DIR}/opengfx2-${OPENGFX2_TAG}-32ez.tar"
 
-if [[ -d "${DEST}" && -n "$(ls -A "${DEST}" 2>/dev/null)" ]]; then
-  echo "OpenGFX ya está en ${DEST}. Borrá la carpeta para re-descargar."
-else
+if [[ ! -d "${DEST}" || -z "$(ls -A "${DEST}" 2>/dev/null)" ]]; then
   mkdir -p "${DEST}"
+fi
+mkdir -p "${DOWNLOADS_DIR}"
 
-  echo "Descargando OpenGFX ${VERSION} desde ${CDN} ..."
-  TMP="$(mktemp -d)"
-  trap 'rm -rf "${TMP}"' EXIT
+if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
+  if [[ -f "${TAR_CACHE_32BPP}" ]]; then
+    echo "OpenGFX2 32bpp ya descargado en ${TAR_CACHE_32BPP}"
+  else
+    echo "Descargando OpenGFX2 High Def (${OPENGFX2_TAG}) desde ${CDN_32BPP} ..."
+    curl -fL "${CDN_32BPP}" -o "${TAR_CACHE_32BPP}"
+  fi
+else
+  if [[ -f "${TAR_CACHE_8BPP}" ]]; then
+    echo "OpenGFX ${VERSION} ya descargado en ${TAR_CACHE_8BPP}"
+  else
+    if [[ ! -f "${ZIP_CACHE_8BPP}" ]]; then
+      echo "Descargando OpenGFX ${VERSION} desde ${CDN_8BPP} ..."
+      curl -fL "${CDN_8BPP}" -o "${ZIP_CACHE_8BPP}"
+    else
+      echo "Zip en cache detectado: ${ZIP_CACHE_8BPP}"
+    fi
 
-  curl -fL "${CDN}" -o "${TMP}/opengfx.zip"
-  unzip -q "${TMP}/opengfx.zip" -d "${TMP}/opengfx"
-
-  shopt -s dotglob
-  cp -r "${TMP}/opengfx/"*/* "${DEST}/" 2>/dev/null || cp -r "${TMP}/opengfx/"* "${DEST}/"
-
-  echo ""
-  echo "Archivos descargados en ${DEST}/:"
-  ls -1 "${DEST}/"
+    echo "Preparando ${TAR_CACHE_8BPP} ..."
+    TMP="$(mktemp -d)"
+    trap 'rm -rf "${TMP}"' EXIT
+    unzip -q "${ZIP_CACHE_8BPP}" -d "${TMP}/opengfx"
+    CANDIDATE_TAR="$(rg --files "${TMP}/opengfx" | rg "opengfx-${VERSION}\\.tar$" | awk 'NR==1{print; exit}' || true)"
+    if [[ -z "${CANDIDATE_TAR}" ]]; then
+      echo "No encontré opengfx-${VERSION}.tar dentro del zip."
+      exit 1
+    fi
+    cp "${CANDIDATE_TAR}" "${TAR_CACHE_8BPP}"
+  fi
 fi
 
+echo ""
+echo "Cache de descargas en ${DOWNLOADS_DIR}/:"
+ls -1 "${DOWNLOADS_DIR}/"
+echo ""
+echo "Archivos disponibles en ${DEST}/ (assets finales):"
+ls -1 "${DEST}/"
+
 # ── Extracción de sprites de tesela para el renderer isométrico ───────────────
-BASE_DIR="${DEST}/opengfx-${VERSION}"
-BASE_TAR="${BASE_DIR}.tar"
-SPRITES_DIR="${DEST}/opengfx-${VERSION}/sprites"
+if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
+  BASE_DIR="${DEST}/opengfx2-32ez"
+  BASE_TAR="${TAR_CACHE_32BPP}"
+  BASE_GRF="${BASE_DIR}/ogfx21_base_32ez.grf"
+  NFO_NAME="ogfx21_base_32ez.nfo"
+  SHEET_PREFIX="ogfx21_base_32ez"
+else
+  BASE_DIR="${DEST}/opengfx-${VERSION}"
+  BASE_TAR="${TAR_CACHE_8BPP}"
+  BASE_GRF="${BASE_DIR}/ogfx1_base.grf"
+  NFO_NAME="ogfx1_base.nfo"
+  SHEET_PREFIX="ogfx1_base"
+fi
+SPRITES_DIR="${BASE_DIR}/sprites"
 TILES_DIR="${DEST}/tiles"
 
 # En descarga manual/limpia, OpenGFX suele venir como .tar dentro de DEST.
@@ -46,16 +144,27 @@ TILES_DIR="${DEST}/tiles"
 if [[ ! -d "${BASE_DIR}" && -f "${BASE_TAR}" ]]; then
   echo ""
   echo "Extrayendo ${BASE_TAR} ..."
-  tar -xf "${BASE_TAR}" -C "${DEST}"
+  if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
+    mkdir -p "${BASE_DIR}"
+    tar -xf "${BASE_TAR}" -C "${BASE_DIR}"
+  else
+    tar -xf "${BASE_TAR}" -C "${DEST}"
+  fi
 fi
 
-if [[ ! -f "${SPRITES_DIR}/ogfx1_base00.png" && ! -f "${SPRITES_DIR}/ogfx1_base00.pcx" ]]; then
+# Limpieza de layout legado: tars sueltos dentro de assets/.
+rm -f "${DEST}/opengfx-${VERSION}.tar" "${DEST}/opengfx2_32ez.tar"
+
+if [[ ! -f "${SPRITES_DIR}/${SHEET_PREFIX}00.png" && ! -f "${SPRITES_DIR}/${SHEET_PREFIX}00.pcx" && ! -f "${SPRITES_DIR}/${SHEET_PREFIX}00.32.png" ]]; then
   if command -v grfcodec &>/dev/null; then
     echo ""
-    echo "Decodificando ogfx1_base.grf con grfcodec (salida PNG)..."
+    echo "Decodificando $(basename "${BASE_GRF}") con grfcodec (salida PNG)..."
     mkdir -p "${SPRITES_DIR}"
-    grfcodec -d -o png -p 2 "${DEST}/opengfx-${VERSION}/ogfx1_base.grf" \
-      "${SPRITES_DIR}/" 2>/dev/null || true
+    if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
+      grfcodec -d -o png "${BASE_GRF}" "${SPRITES_DIR}/" 2>/dev/null || true
+    else
+      grfcodec -d -o png -p 2 "${BASE_GRF}" "${SPRITES_DIR}/" 2>/dev/null || true
+    fi
   else
     echo ""
     echo "grfcodec no encontrado."
@@ -64,17 +173,21 @@ if [[ ! -f "${SPRITES_DIR}/ogfx1_base00.png" && ! -f "${SPRITES_DIR}/ogfx1_base0
   fi
 fi
 
-if [[ -f "${SPRITES_DIR}/ogfx1_base00.png" || -f "${SPRITES_DIR}/ogfx1_base00.pcx" ]]; then
+if [[ -f "${SPRITES_DIR}/${SHEET_PREFIX}00.png" || -f "${SPRITES_DIR}/${SHEET_PREFIX}00.pcx" || -f "${SPRITES_DIR}/${SHEET_PREFIX}00.32.png" ]]; then
   echo ""
   echo "Extrayendo sprites de tesela a ${TILES_DIR}/..."
-  export SPRITES_DIR TILES_DIR
+  export SPRITES_DIR TILES_DIR NFO_NAME SHEET_PREFIX GRAPHICS_MODE
   python3 - <<'PYEOF'
 import os, re
+from collections import Counter
 from pathlib import Path
 from PIL import Image
 
 sprites_dir = Path(os.environ["SPRITES_DIR"])
 tiles_dir   = Path(os.environ["TILES_DIR"])
+nfo_name    = os.environ["NFO_NAME"]
+sheet_prefix = os.environ["SHEET_PREFIX"]
+graphics_mode = os.environ["GRAPHICS_MODE"]
 tiles_dir.mkdir(parents=True, exist_ok=True)
 
 def load_sheet(png_path: Path) -> Image.Image:
@@ -113,19 +226,59 @@ def load_sheet(png_path: Path) -> Image.Image:
     img_rgba.putdata(data)
     return img_rgba
 
-# Cargar todos los sheets ogfx1_baseXX en PNG o PCX.
+def cleanup_speckles(img: Image.Image) -> Image.Image:
+    src = img.convert("RGBA")
+    w, h = src.size
+    pix = src.load()
+    out = src.copy()
+    out_pix = out.load()
+
+    def suspicious(r: int, g: int, b: int, a: int) -> bool:
+        if a == 0:
+            return False
+        # Píxeles típicos de artefacto de paleta (cian/blanco muy brillantes).
+        cyan_like = (b >= 170 and g >= 140 and r <= 140)
+        white_like = (r >= 210 and g >= 210 and b >= 210)
+        return cyan_like or white_like
+
+    for y in range(1, h - 1):
+        for x in range(1, w - 1):
+            r, g, b, a = pix[x, y]
+            if not suspicious(r, g, b, a):
+                continue
+
+            neigh = []
+            for ny in range(y - 1, y + 2):
+                for nx in range(x - 1, x + 2):
+                    if nx == x and ny == y:
+                        continue
+                    nr, ng, nb, na = pix[nx, ny]
+                    if na > 0:
+                        neigh.append((nr, ng, nb, na))
+            if len(neigh) < 5:
+                continue
+
+            # Si la mayoría de vecinos son mucho más oscuros, el pixel suele ser ruido.
+            lum = lambda c: c[0] * 0.2126 + c[1] * 0.7152 + c[2] * 0.0722
+            avg_neigh_lum = sum(lum(c) for c in neigh) / len(neigh)
+            if avg_neigh_lum < 155:
+                rep = Counter(neigh).most_common(1)[0][0]
+                out_pix[x, y] = rep
+    return out
+
+# Cargar todos los sheets del prefijo en PNG o PCX (incluye .32.png).
 sheets: dict[str, Image.Image] = {}
-for p in sorted(sprites_dir.glob("ogfx1_base??.png")):
+for p in sorted(sprites_dir.glob(f"{sheet_prefix}*.png")):
     sheets[p.name] = load_sheet(p)
-for p in sorted(sprites_dir.glob("ogfx1_base??.pcx")):
+for p in sorted(sprites_dir.glob(f"{sheet_prefix}*.pcx")):
     sheets[p.name] = load_sheet(p)
 
-# Parsear NFO para todos los sheets (ogfx1_base00, 01, ...)
-nfo_path = sprites_dir / "ogfx1_base.nfo"
+# Parsear NFO para todos los sheets del set.
+nfo_path = sprites_dir / nfo_name
 sprite_rect: dict[int, tuple] = {}  # sid -> (x, y, w, h, xr, yr, sheet_name)
 if nfo_path.is_file():
     pat = re.compile(
-        r"^\s*(\d+)\s+(\S*?(ogfx1_base\d+\.(?:png|pcx)))\s+8bpp\s+"
+        r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfx21_base_32ez)\d+\.(?:32\.png|png|pcx)))\s+(?:8bpp|32bpp)\s+"
         r"(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
     )
     for line in nfo_path.read_text(errors="replace").splitlines():
@@ -144,6 +297,18 @@ def crop_by_id(sid: int, out_name: str) -> None:
         return
     x, y, w, h, xr, yr, sheet = sprite_rect[sid]
     sheet_key = sheet
+    if graphics_mode == "32bpp":
+        # En OpenGFX2 High Def, grfcodec lista el sheet 8bpp en el NFO, pero
+        # genera el homólogo RGBA como "<sheet>.32.png". Priorizamos ese.
+        p = Path(sheet)
+        if p.suffix == ".png":
+            hd = p.with_name(f"{p.stem}.32.png").name
+            if hd in sheets:
+                sheet_key = hd
+        elif p.suffix == ".pcx":
+            hd = p.with_suffix(".32.png").name
+            if hd in sheets:
+                sheet_key = hd
     if sheet_key not in sheets:
         # grfcodec suele generar PCX aunque el NFO refiera PNG.
         alt = Path(sheet).with_suffix(".pcx").name
@@ -155,6 +320,15 @@ def crop_by_id(sid: int, out_name: str) -> None:
     if sheet_key not in sheets:
         return
     crop = sheets[sheet_key].crop((x, y, x + w, y + h))
+    # Limpieza de artefactos en sprites de terreno/árboles/vías.
+    if graphics_mode != "32bpp" and (
+        out_name.startswith("terrain_")
+        or out_name.startswith("grass")
+        or out_name.startswith("tree_")
+        or out_name.startswith("rail_")
+        or out_name.startswith("road_")
+    ):
+        crop = cleanup_speckles(crop)
     out = tiles_dir / out_name
     crop.save(out)
     print(f"  {out_name} ({w}×{h} xrel={xr} yrel={yr}) ← sprite {sid} [{sheet_key}]")
@@ -561,20 +735,21 @@ legacy = {
     "vehicle_bus_sw": (594, 12408,  8, 16),
 }
 
-sheet00 = sheets.get("ogfx1_base00.png") or sheets.get("ogfx1_base00.pcx")
-for name, (x, y, w, h) in legacy.items():
-    if sheet00 is None:
-        print(f"  (omitido {name}: sheet ogfx1_base00.(png|pcx) no encontrado)")
-        continue
-    crop = sheet00.crop((x, y, x + w, y + h))
-    crop.save(tiles_dir / f"{name}.png")
-    print(f"  {name}.png ({w}×{h})")
+if graphics_mode != "32bpp":
+    sheet00 = sheets.get("ogfx1_base00.png") or sheets.get("ogfx1_base00.pcx")
+    for name, (x, y, w, h) in legacy.items():
+        if sheet00 is None:
+            print(f"  (omitido {name}: sheet ogfx1_base00.(png|pcx) no encontrado)")
+            continue
+        crop = sheet00.crop((x, y, x + w, y + h))
+        crop.save(tiles_dir / f"{name}.png")
+        print(f"  {name}.png ({w}×{h})")
 
 print(f"Sprites listos en {tiles_dir}/")
 PYEOF
 else
   echo ""
-  echo "Hoja de sprites no disponible (faltan ${SPRITES_DIR}/ogfx1_base00.(png|pcx) y/o hojas relacionadas)."
+  echo "Hoja de sprites no disponible (faltan ${SPRITES_DIR}/${SHEET_PREFIX}00.(png|pcx|32.png) y/o hojas relacionadas)."
   echo "Para generarlas, instalá grfcodec y volvé a ejecutar este script:"
   echo "  Ubuntu/Debian: sudo apt update && sudo apt install -y grfcodec"
   echo "  Alternativa: https://github.com/OpenTTD/grfcodec"

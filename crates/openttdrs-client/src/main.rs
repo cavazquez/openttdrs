@@ -224,6 +224,9 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
         })
         .collect();
     let h_water = asset_server.load::<Image>("opengfx/tiles/water.png");
+    let shore_tex: Vec<Handle<Image>> = (0..8)
+        .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/shore_{i}.png")))
+        .collect();
     // Objetos estáticos del mapa (MP_OBJECT): faro (type 1) y transmisor (type 0)
     let h_lighthouse = asset_server.load::<Image>("opengfx/tiles/object_lighthouse.png");
     let h_transmitter = asset_server.load::<Image>("opengfx/tiles/object_transmitter.png");
@@ -465,6 +468,49 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         },
                         Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.0)),
                     ));
+
+                    // Costa: superponer shore_* cuando el agua linda con tierra.
+                    let is_land = |x: i32, y: i32| -> bool {
+                        if x < 0 || y < 0 || x >= mw as i32 || y >= mh as i32 {
+                            return false;
+                        }
+                        sim.state.map.get(TileCoord::new(x, y)).is_some_and(|t| {
+                            t.kind != TileKind::Water && t.kind != TileKind::Void
+                        })
+                    };
+                    let n = is_land(tx as i32, ty as i32 - 1);
+                    let e = is_land(tx as i32 + 1, ty as i32);
+                    let s = is_land(tx as i32, ty as i32 + 1);
+                    let w = is_land(tx as i32 - 1, ty as i32);
+                    let mask = (n as u8) | ((e as u8) << 1) | ((s as u8) << 2) | ((w as u8) << 3);
+                    // Tabla explícita de orientación para shore_0..7.
+                    // 1,2,4,8 = un lado de tierra; 3,6,12,9 = esquinas.
+                    // Casos de 3 lados usan la orientación del lado faltante.
+                    let shore_idx = match mask {
+                        0b0001 => Some(0), // N
+                        0b0010 => Some(1), // E
+                        0b0100 => Some(2), // S
+                        0b1000 => Some(3), // W
+                        0b0011 => Some(4), // N+E
+                        0b0110 => Some(5), // E+S
+                        0b1100 => Some(6), // S+W
+                        0b1001 => Some(7), // W+N
+                        0b1110 => Some(0), // falta N
+                        0b1101 => Some(1), // falta E
+                        0b1011 => Some(2), // falta S
+                        0b0111 => Some(3), // falta W
+                        _ => None,
+                    };
+                    if let Some(i) = shore_idx {
+                        commands.spawn((
+                            Sprite {
+                                image: shore_tex[i].clone(),
+                                color: Color::WHITE,
+                                ..default()
+                            },
+                            Transform::from_translation(tile_pos(tx as i32, ty as i32, height, 0.02)),
+                        ));
+                    }
                 } else {
                     let ottd_type = tile.map_or(0u8, |t| (t.mapt >> 4) & 0xF);
                     let tile_m5 = tile.map_or(0u8, |t| t.m5);

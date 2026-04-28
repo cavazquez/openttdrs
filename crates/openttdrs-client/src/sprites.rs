@@ -54,42 +54,175 @@ pub const HOUSE_META: [(f32, f32, f32, f32); 8] = [
 
 // ── Industrias: mapeo gfx → sprite ──────────────────────────────────────────
 // Basado en _industry_draw_tile_data de OpenTTD (table/industry_land.h).
-// El gfx es el valor de m5 para tiles de industria.
-// Cada entrada mapea a un sprite del set OpenGFX.
+// El gfx es el valor del byte m5 para tiles de industria (construction_stage=3).
+// Cada entrada representa un tile de industria completada.
+//
+// Fórmula de sprite_id: s2 del M() macro en industry_land.h para stage 3.
+// Dimensiones (w, h, xrel, yrel): extraídas del NFO de OpenGFX.
+// Para tiles sin edificio (solo suelo), sprite_id = 0.
 
-/// Mapeo de gfx de industria a (sprite_id, w, h, xrel, yrel).
-/// Sprite 0 significa "solo suelo, sin edificio".
-/// Los valores son para industria completada (stage 3).
+/// Metadatos de un sprite de tile de industria.
+pub struct IndustryGfxSprite {
+    /// Sprite ID en OpenGFX (0 = solo suelo, sin overlay de edificio).
+    pub sprite_id: u32,
+    pub w: f32,
+    pub h: f32,
+    /// Offset horizontal desde el vértice superior del rombo (pantalla).
+    pub xrel: f32,
+    /// Offset vertical hacia arriba desde el vértice (positivo = más arriba en NFO = negativo yrel).
+    pub yrel: f32,
+}
+
+/// Default genérico para edificios cuyas dimensiones exactas no se han calibrado aún.
+/// Centra un sprite 64×48 sobre el tile.
+const fn gfx_building(sprite_id: u32) -> IndustryGfxSprite {
+    IndustryGfxSprite {
+        sprite_id,
+        w: 64.0,
+        h: 48.0,
+        xrel: -32.0,
+        yrel: -32.0,
+    }
+}
+
+const fn gfx_ground() -> IndustryGfxSprite {
+    IndustryGfxSprite {
+        sprite_id: 0,
+        w: 0.0,
+        h: 0.0,
+        xrel: 0.0,
+        yrel: 0.0,
+    }
+}
+
+/// Tabla gfx → sprite para clima templado.
+/// Índice = gfx (valor de m5 para tile de industria completada, stage 3).
+/// Derivado de `_industry_draw_tile_data` en `table/industry_land.h` de OpenTTD.
 ///
-/// Coal Mine: gfx 0-6
-/// Power Station: gfx 7-14
-/// etc.
-pub const INDUSTRY_GFX_SPRITES: [(u32, f32, f32, f32, f32); 8] = [
-    // Coal Mine (gfx 0-3 tienen edificios, 4-6 solo suelo)
-    (2013, 58.0, 50.0, -16.0, -33.0), // gfx 0: headframe principal
-    (2015, 46.0, 53.0, -14.0, -38.0), // gfx 1: torre animada
-    (2018, 64.0, 39.0, -31.0, -8.0),  // gfx 2: edificio auxiliar
-    (2021, 44.0, 38.0, -13.0, -21.0), // gfx 3: edificio pequeño
-    (0, 0.0, 0.0, 0.0, 0.0),          // gfx 4: solo suelo
-    (0, 0.0, 0.0, 0.0, 0.0),          // gfx 5: solo suelo
-    (0, 0.0, 0.0, 0.0, 0.0),          // gfx 6: solo suelo
-    (0, 0.0, 0.0, 0.0, 0.0),          // placeholder
+/// Rangos por industria:
+/// |  gfx  | Industria        |
+/// |-------|------------------|
+/// |  0- 6 | Coal Mine        |
+/// |  7-10 | Power Station    |
+/// | 11-15 | Sawmill          |
+/// | 16-23 | Oil Refinery     |
+/// | 24-28 | Forest           |
+/// | 29-32 | Printing Works   |
+/// | 33-38 | Oil Rig          |
+/// | 39-42 | Steel Mill       |
+/// | 43-46 | Factory          |
+/// | 47-51 | Oil Wells        |
+/// | 52-57 | Farm             |
+/// | 58-59 | Bank (Templado)  |
+pub const INDUSTRY_GFX_DATA: [IndustryGfxSprite; 60] = [
+    // ── Coal Mine (gfx 0-6) ──────────────────────────────────────────────────
+    // Valores exactos del NFO de OpenGFX.
+    IndustryGfxSprite {
+        sprite_id: 2013,
+        w: 58.0,
+        h: 50.0,
+        xrel: -16.0,
+        yrel: -33.0,
+    }, // 0 headframe
+    IndustryGfxSprite {
+        sprite_id: 2015,
+        w: 46.0,
+        h: 53.0,
+        xrel: -14.0,
+        yrel: -38.0,
+    }, // 1 torre
+    IndustryGfxSprite {
+        sprite_id: 2018,
+        w: 64.0,
+        h: 39.0,
+        xrel: -31.0,
+        yrel: -8.0,
+    }, // 2 aux
+    IndustryGfxSprite {
+        sprite_id: 2021,
+        w: 44.0,
+        h: 38.0,
+        xrel: -13.0,
+        yrel: -21.0,
+    }, // 3 pequeño
+    gfx_ground(), // 4 suelo
+    gfx_ground(), // 5 suelo
+    gfx_ground(), // 6 suelo
+    // ── Power Station (gfx 7-10) ─────────────────────────────────────────────
+    gfx_building(2047), // 7  chimenea (sz=44 → edificio alto)
+    gfx_building(2050), // 8  generador
+    gfx_building(2053), // 9  transformador
+    gfx_building(2054), // 10 edificio principal (proc especial)
+    // ── Sawmill (gfx 11-15) ──────────────────────────────────────────────────
+    gfx_building(2063), // 11
+    gfx_building(2066), // 12
+    gfx_building(2069), // 13
+    gfx_building(2070), // 14
+    gfx_building(2071), // 15
+    // ── Oil Refinery (gfx 16-23) ─────────────────────────────────────────────
+    gfx_building(2075), // 16
+    gfx_building(2076), // 17
+    gfx_building(2080), // 18
+    gfx_building(2083), // 19
+    gfx_building(2086), // 20
+    gfx_building(2089), // 21
+    gfx_building(2092), // 22
+    gfx_building(2095), // 23
+    // ── Forest (gfx 24-28) ───────────────────────────────────────────────────
+    gfx_ground(),       // 24 suelo animado (sin overlay estático)
+    gfx_building(2099), // 25 árbol cluster 1
+    gfx_building(2100), // 26 árbol cluster 2
+    gfx_building(2101), // 27 árbol cluster 3
+    gfx_building(2102), // 28 árbol cluster 4
+    // ── Printing Works (gfx 29-32) ───────────────────────────────────────────
+    gfx_building(2174), // 29
+    gfx_building(2178), // 30
+    gfx_building(2177), // 31
+    gfx_building(2174), // 32
+    // ── Oil Rig (gfx 33-38) ──────────────────────────────────────────────────
+    gfx_building(2108), // 33
+    gfx_building(2109), // 34
+    gfx_building(2111), // 35
+    gfx_building(2113), // 36
+    gfx_building(2115), // 37
+    gfx_building(2117), // 38
+    // ── Steel Mill (gfx 39-42) ───────────────────────────────────────────────
+    gfx_building(2150), // 39
+    gfx_building(2151), // 40
+    gfx_building(2152), // 41
+    gfx_ground(),       // 42 suelo
+    // ── Factory (gfx 43-46) ──────────────────────────────────────────────────
+    gfx_building(2169), // 43
+    gfx_building(2170), // 44
+    gfx_building(2171), // 45
+    gfx_building(2172), // 46
+    // ── Oil Wells (gfx 47-51) ────────────────────────────────────────────────
+    gfx_building(2028), // 47
+    gfx_building(2030), // 48
+    gfx_building(2033), // 49
+    gfx_building(2036), // 50
+    gfx_building(2039), // 51
+    // ── Farm (gfx 52-57) ─────────────────────────────────────────────────────
+    gfx_building(2119), // 52
+    gfx_building(2121), // 53
+    gfx_building(2123), // 54
+    gfx_ground(),       // 55 campo (sin edificio)
+    gfx_building(2126), // 56
+    gfx_building(2128), // 57
+    // ── Bank Templado (gfx 58-59) ────────────────────────────────────────────
+    gfx_building(2180), // 58
+    gfx_building(2181), // 59
 ];
 
-/// Devuelve el sprite y metadatos para un tile de industria dado su gfx (m5).
-/// Retorna None si es gfx desconocido o solo suelo.
-pub fn industry_sprite_for_gfx(gfx: u8) -> Option<(u32, f32, f32, f32, f32)> {
-    // Solo soportamos Coal Mine por ahora (gfx 0-6)
-    // Otros gfx retornan None para evitar sprites incorrectos
-    if gfx < 7 {
-        let entry = INDUSTRY_GFX_SPRITES[gfx as usize];
-        if entry.0 != 0 {
-            return Some(entry);
-        }
+/// Devuelve los metadatos del sprite de industria para el gfx dado (byte m5).
+/// Retorna `None` si el gfx no tiene overlay de edificio (solo suelo) o está fuera del rango.
+pub fn industry_sprite_for_gfx(gfx: u8) -> Option<&'static IndustryGfxSprite> {
+    let entry = INDUSTRY_GFX_DATA.get(usize::from(gfx))?;
+    if entry.sprite_id != 0 {
+        Some(entry)
+    } else {
+        None
     }
-    // Para gfx desconocidos, no mostrar edificio (solo suelo marrón)
-    // Esto es mejor que mostrar el sprite equivocado
-    None
 }
 
 /// IDs de sprites de vía férrea usados.

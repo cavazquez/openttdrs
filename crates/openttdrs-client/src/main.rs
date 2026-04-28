@@ -29,8 +29,8 @@ use iso::{
     wang_hash,
 };
 use sprites::{
-    HOUSE_META, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites, rail_trackbits_for_render,
-    road_bits_for_render, road_flat_index,
+    HOUSE_META, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites,
+    rail_trackbits_for_render, road_bits_for_render, road_flat_index,
 };
 use state::SimWorld;
 use ui::{SelectedTileInfo, handle_tile_click, setup_tile_info_ui, update_tile_info_text};
@@ -192,21 +192,19 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     let trees = [h_tree_1, h_tree_2, h_tree_3];
 
     // ── Handles de industrias ─────────────────────────────────────────────────
-    // Mapa de sprite_id → Handle<Image> para edificios de industria
-    let industry_tex: HashMap<u32, Handle<Image>> = [
-        (2013_u32, "industry_coalmine_hq.png"), // headframe principal
-        (2015, "industry_coalmine_tower.png"),  // torre animada
-        (2018, "industry_coalmine_hq.png"),     // placeholder (necesita sprite real)
-        (2021, "industry_coalmine_entry.png"),  // edificio pequeño
-    ]
-    .into_iter()
-    .map(|(id, name)| {
-        (
-            id,
-            asset_server.load::<Image>(format!("opengfx/tiles/{name}")),
-        )
-    })
-    .collect();
+    // Carga dinámica: itera INDUSTRY_GFX_DATA y agrupa los sprite_ids únicos.
+    let industry_tex: HashMap<u32, Handle<Image>> = {
+        let mut map = HashMap::new();
+        for entry in &INDUSTRY_GFX_DATA {
+            if entry.sprite_id != 0 {
+                map.entry(entry.sprite_id).or_insert_with(|| {
+                    asset_server
+                        .load::<Image>(format!("opengfx/tiles/industry_{}.png", entry.sprite_id))
+                });
+            }
+        }
+        map
+    };
 
     // ── Handles de camiones ────────────────────────────────────────────────────
     let h_truck_ne = asset_server.load::<Image>("opengfx/tiles/vehicle_bus_sw.png");
@@ -307,10 +305,11 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                 ));
                 // Edificio de industria según gfx (m5)
                 let gfx = tile.map_or(0, |t| t.m5);
-                if let Some((sprite_id, w, h, xr, yr)) = sprites::industry_sprite_for_gfx(gfx) {
-                    // Buscar el handle del sprite por ID
-                    if let Some(img) = industry_tex.get(&sprite_id) {
-                        let pos3 = overlay_pos(p, xr, yr, w, h, height, 0.5, tx as i32, ty as i32);
+                if let Some(s) = sprites::industry_sprite_for_gfx(gfx) {
+                    if let Some(img) = industry_tex.get(&s.sprite_id) {
+                        let pos3 = overlay_pos(
+                            p, s.xrel, s.yrel, s.w, s.h, height, 0.5, tx as i32, ty as i32,
+                        );
                         commands.spawn((
                             Sprite {
                                 image: img.clone(),

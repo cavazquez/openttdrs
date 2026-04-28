@@ -97,11 +97,11 @@ def crop_by_id(sid: int, out_name: str) -> None:
     if sid not in sprite_rect:
         print(f"  (omitido {out_name}: sprite {sid} no en NFO)")
         return
-    x, y, w, h, _xr, _yr = sprite_rect[sid]
+    x, y, w, h, xr, yr = sprite_rect[sid]
     crop = img_rgba.crop((x, y, x + w, y + h))
     out = tiles_dir / out_name
     crop.save(out)
-    print(f"  {out_name} ({w}×{h}) ← sprite {sid}")
+    print(f"  {out_name} ({w}×{h} xrel={xr} yrel={yr}) ← sprite {sid}")
 
 
 # =============================================================================
@@ -318,12 +318,46 @@ for i, sid in enumerate(tree_ids):
     crop_by_id(sid, f"tree_{i:02d}.png")
 
 # =============================================================================
-# INDUSTRIAS
+# INDUSTRIAS — todos los sprites de edificios por sprite_id
+# Nombres: industry_{sprite_id}.png
+# Nota: se imprimen xrel/yrel del NFO para calibrar INDUSTRY_GFX_DATA en sprites.rs
 # =============================================================================
-crop_by_id(2013, "industry_coalmine_hq.png")
-crop_by_id(2011, "industry_coalmine_entry.png")
-crop_by_id(2028, "industry_coalmine_tower.png")
-crop_by_id(2054, "industry_powerplant_transformers.png")
+# gfx 0-3: Coal Mine (headframe, torre, aux, pequeño)
+for sid in [2013, 2015, 2018, 2021]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 7-10: Power Station
+for sid in [2047, 2050, 2053, 2054]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 11-15: Sawmill
+for sid in [2063, 2066, 2069, 2070, 2071]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 16-23: Oil Refinery
+for sid in [2075, 2076, 2080, 2083, 2086, 2089, 2092, 2095]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 25-28: Forest (árboles industriales)
+for sid in [2099, 2100, 2101, 2102]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 29-32: Printing Works
+for sid in [2174, 2177, 2178]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 33-38: Oil Rig
+for sid in [2108, 2109, 2111, 2113, 2115, 2117]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 39-41: Steel Mill
+for sid in [2150, 2151, 2152]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 43-46: Factory
+for sid in [2169, 2170, 2171, 2172]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 47-51: Oil Wells
+for sid in [2028, 2030, 2033, 2036, 2039]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 52-57: Farm (edificios + granero)
+for sid in [2119, 2121, 2123, 2126, 2128]:
+    crop_by_id(sid, f"industry_{sid}.png")
+# gfx 58-59: Bank (templado)
+for sid in [2180, 2181]:
+    crop_by_id(sid, f"industry_{sid}.png")
 
 # =============================================================================
 # AEROPUERTOS

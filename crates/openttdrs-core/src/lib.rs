@@ -5,36 +5,46 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
+pub mod industry;
 pub mod map;
 pub mod tick;
 
+pub use industry::{Industry, IndustryKind, INDUSTRY_PRODUCE_TICKS};
 pub use map::{Map, MapError, Tile, TileCoord, TileKind};
 pub use tick::GameTick;
 
 /// Estado global mínimo del mundo simulado.
 #[derive(Debug, Clone)]
 pub struct GameState {
-    pub map: Map,
-    pub tick: GameTick,
+    pub map:        Map,
+    pub tick:       GameTick,
+    pub industries: Vec<Industry>,
 }
 
 impl GameState {
     #[must_use]
     pub fn new(map_width: u32, map_height: u32) -> Self {
         Self {
-            map: Map::new_flat(map_width, map_height, 1),
-            tick: GameTick::default(),
+            map:        Map::new_flat(map_width, map_height, 1),
+            tick:       GameTick::default(),
+            industries: Vec::new(),
         }
     }
 
     /// Avanza un tick de simulación (equivalente conceptual a un frame lógico del juego).
     pub fn step(&mut self) {
         self.tick.advance();
+        let t = self.tick.get();
+        for industry in &mut self.industries {
+            industry.produce(t);
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use industry::INDUSTRY_PRODUCE_AMOUNT;
+
     use super::*;
 
     #[test]
@@ -82,6 +92,63 @@ mod tests {
         assert_eq!(s.map.get_kind(c), Some(TileKind::Forest));
         s.map.set_kind(c, TileKind::CoalField).unwrap();
         assert_eq!(s.map.get_kind(c), Some(TileKind::CoalField));
+    }
+
+    #[test]
+    fn industry_produces_on_schedule() {
+        let mut s = GameState::new(8, 8);
+        s.industries.push(Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine));
+
+        // Sin ticks no hay producción.
+        assert_eq!(s.industries[0].stock, 0);
+
+        // Avanzar exactamente INDUSTRY_PRODUCE_TICKS ticks.
+        for _ in 0..INDUSTRY_PRODUCE_TICKS {
+            s.step();
+        }
+        assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT);
+
+        // Un segundo ciclo completo.
+        for _ in 0..INDUSTRY_PRODUCE_TICKS {
+            s.step();
+        }
+        assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT * 2);
+    }
+
+    #[test]
+    fn industry_does_not_exceed_capacity() {
+        let mut s = GameState::new(8, 8);
+        let mut ind = Industry::new(TileCoord::new(0, 0), IndustryKind::Forest);
+        ind.capacity = INDUSTRY_PRODUCE_AMOUNT; // capacidad mínima: un ciclo
+        s.industries.push(ind);
+
+        // Primer ciclo llena hasta capacity.
+        for _ in 0..INDUSTRY_PRODUCE_TICKS {
+            s.step();
+        }
+        assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT);
+
+        // Segundo ciclo: stock saturado, no supera capacity.
+        for _ in 0..INDUSTRY_PRODUCE_TICKS {
+            s.step();
+        }
+        assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT);
+    }
+
+    #[test]
+    fn two_worlds_same_industries_same_stock() {
+        let mut a = GameState::new(8, 8);
+        let mut b = GameState::new(8, 8);
+        for state in [&mut a, &mut b] {
+            state.industries.push(Industry::new(TileCoord::new(1, 2), IndustryKind::CoalMine));
+            state.industries.push(Industry::new(TileCoord::new(3, 4), IndustryKind::Forest));
+        }
+        for _ in 0..INDUSTRY_PRODUCE_TICKS * 3 {
+            a.step();
+            b.step();
+        }
+        assert_eq!(a.industries[0].stock, b.industries[0].stock);
+        assert_eq!(a.industries[1].stock, b.industries[1].stock);
     }
 
     #[test]

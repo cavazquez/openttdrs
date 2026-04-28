@@ -8,7 +8,7 @@
 use bevy::color::palettes::css::{DARK_GRAY, LIMEGREEN};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{GameState, TileCoord, TileKind};
+use openttdrs_core::{GameState, Industry, IndustryKind, TileCoord, TileKind};
 
 const TILE_WORLD: f32 = 20.0;
 const MAP_W: u32 = 24;
@@ -27,7 +27,7 @@ fn main() {
         .add_systems(Startup, setup_camera)
         .add_systems(
             Update,
-            (advance_sim, sync_window_title, draw_map_debug).chain(),
+            (advance_sim, sync_window_title, draw_map_debug, draw_industries).chain(),
         )
         .run();
 }
@@ -42,6 +42,7 @@ impl Default for SimWorld {
     fn default() -> Self {
         let mut state = GameState::new(MAP_W, MAP_H);
         distribute_tile_kinds(&mut state, 0xDEAD_BEEF_CAFE_1234);
+        place_industries(&mut state);
         Self { state }
     }
 }
@@ -75,6 +76,34 @@ fn tile_kind_hash(x: u32, y: u32, seed: u64) -> TileKind {
         2 | 3 => TileKind::Forest,
         4 => TileKind::CoalField,
         _ => TileKind::Grass,
+    }
+}
+
+/// Coloca una industria en teselas CoalField y Forest (una de cada N para no saturar el mapa).
+fn place_industries(state: &mut GameState) {
+    const STRIDE: u32 = 4; // una industria cada 4 teselas del mismo tipo
+    let (mw, mh) = state.map.dimensions();
+    let mut coal_n = 0u32;
+    let mut forest_n = 0u32;
+    for y in 0..mh {
+        for x in 0..mw {
+            let c = TileCoord::new(x as i32, y as i32);
+            match state.map.get_kind(c) {
+                Some(TileKind::CoalField) => {
+                    if coal_n % STRIDE == 0 {
+                        state.industries.push(Industry::new(c, IndustryKind::CoalMine));
+                    }
+                    coal_n += 1;
+                }
+                Some(TileKind::Forest) => {
+                    if forest_n % STRIDE == 0 {
+                        state.industries.push(Industry::new(c, IndustryKind::Forest));
+                    }
+                    forest_n += 1;
+                }
+                _ => {}
+            }
+        }
     }
 }
 
@@ -144,4 +173,45 @@ fn draw_map_debug(sim: Res<SimWorld>, mut gizmos: Gizmos) {
     gizmos.line_2d(d, a, LIMEGREEN);
 
     gizmos.line_2d(Vec2::ZERO, Vec2::new(80.0, 40.0), DARK_GRAY);
+}
+
+fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
+    let (mw, mh) = sim.state.map.dimensions();
+    let ox = -(mw as f32) * TILE_WORLD * 0.5;
+    let oy = -(mh as f32) * TILE_WORLD * 0.5;
+
+    for industry in &sim.state.industries {
+        let wx = ox + (industry.pos.x as f32) * TILE_WORLD;
+        let wy = oy + (industry.pos.y as f32) * TILE_WORLD;
+
+        // Color base según tipo de industria.
+        let base_color = match industry.kind {
+            IndustryKind::CoalMine => Color::srgb(0.9, 0.85, 0.1),  // amarillo
+            IndustryKind::Forest   => Color::srgb(0.8, 0.4, 0.05),  // naranja
+        };
+
+        // Cuadrado central que representa la industria.
+        let icon_size = TILE_WORLD * 0.55;
+        gizmos.rect_2d(
+            Isometry2d::from_translation(Vec2::new(wx, wy)),
+            Vec2::splat(icon_size),
+            base_color,
+        );
+
+        // Barra de stock: rectángulo estrecho en el borde inferior de la tesela,
+        // cuya anchura escala con el nivel de stock.
+        let fill = industry.stock as f32 / industry.capacity as f32;
+        // Solo dibujar la barra cuando hay stock producido, cada INDUSTRY_PRODUCE_TICKS ticks.
+        if fill > 0.0 {
+            let bar_w = (TILE_WORLD - 2.0) * fill;
+            let bar_h = 3.0;
+            let bar_x = wx - (TILE_WORLD - 2.0) * 0.5 + bar_w * 0.5;
+            let bar_y = wy - TILE_WORLD * 0.5 + bar_h * 0.5 + 1.0;
+            gizmos.rect_2d(
+                Isometry2d::from_translation(Vec2::new(bar_x, bar_y)),
+                Vec2::new(bar_w, bar_h),
+                Color::WHITE,
+            );
+        }
+    }
 }

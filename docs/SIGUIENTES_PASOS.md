@@ -29,6 +29,15 @@ de I0–I5 y del renderer isométrico con mapas reales.
 5. **Limitaciones actuales** — solo tres sprites de carretera (tramo X, Y, cruce): esquinas y
    T reales del original son aproximaciones; tranvía en `m3` no está en el `.ottdmap`.
 
+## Estado del refactor del cliente
+
+- `main.rs` conserva el armado de la app y los sistemas principales, pero el render de mapa vive
+  en `crates/openttdrs-client/src/render/`.
+- El render/índice de vehículos quedó aislado en `vehicle_render.rs`, separando esa lógica de la
+  construcción de teselas.
+- Las variables de entorno del cliente se leen desde `config.rs` para evitar parsing duplicado.
+- `RenderGrid` tiene tests para la inferencia de costa en agua exportada con `m5=0`.
+
 ---
 
 ## Cómo seguir (prioridades sugeridas)
@@ -58,6 +67,8 @@ Orden **no estricto**: depende de si querés **parecerse más al original**, **j
 - Mantener `reference/openttd-upstream/` actualizado (`scripts/fetch-openttd-reference.sh`).
 - Tests que carguen un `.ottdmap` pequeño en memoria y comprueben `effective_road_bits` /
   dimensiones (opcional, sin Bevy).
+- Seguir achicando `main.rs`: buenos candidatos son hotkeys/save-load, debug gizmos y animación
+  de agua.
 
 ---
 

@@ -26,87 +26,131 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
                 align_items: AlignItems::Center,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.06, 0.08, 0.11, 0.94)),
+            BackgroundColor(Color::srgba(0.05, 0.07, 0.1, 0.96)),
             GlobalZIndex(3000),
             MainMenuUi,
         ))
         .with_children(|p| {
             p.spawn((
                 Node {
-                    position_type: PositionType::Absolute,
-                    top: Val::Px(96.0),
+                    width: Val::Px(460.0),
+                    height: Val::Px(300.0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                    padding: UiRect::new(Val::Px(18.0), Val::Px(18.0), Val::Px(18.0), Val::Px(14.0)),
+                    border: UiRect::all(Val::Px(3.0)),
                     ..default()
                 },
-                children![(
+                BackgroundColor(Color::srgba(0.18, 0.17, 0.12, 0.96)),
+                BorderColor::all(Color::srgb(0.74, 0.68, 0.5)),
+            ))
+            .with_children(|panel| {
+                panel.spawn((
                     Text::new("OpenTTDRS"),
                     TextFont {
-                        font_size: 44.0,
+                        font_size: 48.0,
                         ..default()
                     },
-                    TextColor(Color::srgb(0.95, 0.9, 0.72)),
-                )],
-            ));
+                    TextColor(Color::srgb(0.96, 0.91, 0.72)),
+                ));
+
+                panel.spawn((
+                    Text::new("Sandbox isometrico inspirado en OpenTTD"),
+                    TextFont {
+                        font_size: 14.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.83, 0.79, 0.64)),
+                ));
+
+                panel.spawn((
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(8.0),
+                        ..default()
+                    },
+                ))
+                .with_children(|menu| {
+                    menu.spawn((
+                        Button,
+                        MainMenuStartButton,
+                        Node {
+                            width: Val::Px(260.0),
+                            height: Val::Px(50.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(2.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.35, 0.33, 0.24)),
+                        BorderColor::all(Color::srgb(0.7, 0.66, 0.5)),
+                        Interaction::default(),
+                    ))
+                    .with_children(|b| {
+                        b.spawn((
+                            Text::new("Iniciar juego"),
+                            TextFont {
+                                font_size: 22.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgb(0.95, 0.92, 0.8)),
+                        ));
+                    });
+
+                    menu.spawn((
+                        Button,
+                        MainMenuQuitButton,
+                        Node {
+                            width: Val::Px(260.0),
+                            height: Val::Px(42.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(2.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.24, 0.22, 0.16)),
+                        BorderColor::all(Color::srgb(0.58, 0.54, 0.4)),
+                        Interaction::default(),
+                    ))
+                    .with_children(|b| {
+                        b.spawn((
+                            Text::new("Salir"),
+                            TextFont {
+                                font_size: 18.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgb(0.91, 0.88, 0.76)),
+                        ));
+                    });
+                });
+
+                panel.spawn((
+                    Text::new("v0.1.0 · Enter/Espacio iniciar · Esc salir"),
+                    TextFont {
+                        font_size: 12.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.76, 0.72, 0.58)),
+                ));
+            });
 
             p.spawn((
                 Node {
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(8.0),
+                    position_type: PositionType::Absolute,
+                    bottom: Val::Px(12.0),
+                    right: Val::Px(14.0),
                     ..default()
                 },
-            ))
-            .with_children(|menu| {
-                menu.spawn((
-                    Button,
-                    MainMenuStartButton,
-                    Node {
-                        width: Val::Px(260.0),
-                        height: Val::Px(50.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(2.0)),
+                children![(
+                    Text::new("OpenTTDRS Preview"),
+                    TextFont {
+                        font_size: 11.0,
                         ..default()
                     },
-                    BackgroundColor(Color::srgb(0.35, 0.33, 0.24)),
-                    BorderColor::all(Color::srgb(0.7, 0.66, 0.5)),
-                    Interaction::default(),
-                ))
-                .with_children(|b| {
-                    b.spawn((
-                        Text::new("Iniciar juego"),
-                        TextFont {
-                            font_size: 22.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgb(0.95, 0.92, 0.8)),
-                    ));
-                });
-
-                menu.spawn((
-                    Button,
-                    MainMenuQuitButton,
-                    Node {
-                        width: Val::Px(260.0),
-                        height: Val::Px(42.0),
-                        justify_content: JustifyContent::Center,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(2.0)),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.24, 0.22, 0.16)),
-                    BorderColor::all(Color::srgb(0.58, 0.54, 0.4)),
-                    Interaction::default(),
-                ))
-                .with_children(|b| {
-                    b.spawn((
-                        Text::new("Salir"),
-                        TextFont {
-                            font_size: 18.0,
-                            ..default()
-                        },
-                        TextColor(Color::srgb(0.91, 0.88, 0.76)),
-                    ));
-                });
-            });
+                    TextColor(Color::srgb(0.68, 0.74, 0.84)),
+                )],
+            ));
         });
 }
 

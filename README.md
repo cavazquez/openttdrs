@@ -101,7 +101,8 @@ Persistencia de la simulación (JSON del core) y atajos en el cliente:
 
 ```bash
 OTTDJSON_LOAD=partida.json cargo run -p openttdrs-client   # arranque desde JSON
-# En ventana: F5 guarda, F9 carga (por defecto openttdrs_sim.json; OPENTTDRS_JSON_SAVE para otra ruta)
+# En ventana: F5 guarda, F9 carga (por defecto openttdrs_sim.json; OPENTTDRS_JSON_SAVE para otra ruta).
+# F9 redibuja suelo/vías/vehículos y mueve la cámara aunque el JSON cambie el tamaño del mapa.
 ```
 
 Bases de sprites de señal (OpenGFX 8bpp por defecto): `OPENTTDRS_SIGNAL_BASE` y `OPENTTDRS_SIGNAL_ALT_BASE` (enteros 512–4096).

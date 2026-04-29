@@ -646,11 +646,32 @@ pub fn industry_sprite_for_gfx(gfx: u16) -> Option<&'static IndustryGfxSprite> {
     }
 }
 
-/// IDs de sprites de vía férrea usados.
-pub const RAIL_SPRITE_IDS: [u32; 20] = [
+/// IDs de sprites de vía férrea usados (incluye cruces a nivel 1370/1371, `road_cmd.cpp`).
+pub const RAIL_SPRITE_IDS: [u32; 22] = [
     1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020,
-    1021, 1022, 1035, 1036,
+    1021, 1022, 1035, 1036, 1370, 1371,
 ];
+
+/// `RoadTileType::Crossing` en bits 6–7 de `m5` (`road_map.h`).
+#[must_use]
+pub fn is_road_level_crossing(mapt: u8, m5: u8, kind: TileKind) -> bool {
+    kind == TileKind::Road && (mapt >> 4) & 0xF == OTTD_MP_ROAD && ((m5 >> 6) & 0x3) == 1
+}
+
+/// Sprite de raíl del cruce: `GetRailTypeInfo(...)->base_sprites.crossing + GetCrossingRailAxis(tile)` → 1370 + eje de **vía**.
+#[must_use]
+pub fn level_crossing_rail_sprite_id(m5: u8) -> u32 {
+    const SPR_CROSSING_OFF_X_RAIL: u32 = 1370;
+    let road_axis = m5 & 1;
+    let rail_axis = 1 - road_axis;
+    SPR_CROSSING_OFF_X_RAIL + u32::from(rail_axis)
+}
+
+/// Vía con señales (`RailTileType::Signals`, bits 6–7 de `m5`).
+#[must_use]
+pub fn rail_tile_is_signals(m5: u8) -> bool {
+    (m5 >> 6) & 0x3 == RAIL_TILE_SIGNALS
+}
 
 // ── Lógica de road bits ─────────────────────────────────────────────────────
 
@@ -908,5 +929,34 @@ mod road_sprite_index_tests {
     fn other_slopes_keep_flat_road_variant_from_bits() {
         let bits = 0x0A;
         assert_eq!(road_flat_sprite_index(1, bits), road_flat_index(bits)); // SLOPE_W
+    }
+}
+
+#[cfg(test)]
+mod level_crossing_tests {
+    use super::{
+        OTTD_MP_ROAD, RAIL_TILE_SIGNALS, is_road_level_crossing, level_crossing_rail_sprite_id,
+        rail_tile_is_signals,
+    };
+    use openttdrs_core::TileKind;
+
+    #[test]
+    fn crossing_detected_on_mp_road_subtype_1() {
+        let mapt = OTTD_MP_ROAD << 4;
+        let m5 = 0x40; // Crossing << 6, road axis 0
+        assert!(is_road_level_crossing(mapt, m5, TileKind::Road));
+        assert!(!is_road_level_crossing(mapt, 0, TileKind::Road));
+    }
+
+    #[test]
+    fn crossing_rail_sprite_alternates_with_road_axis() {
+        assert_eq!(level_crossing_rail_sprite_id(0x40), 1371);
+        assert_eq!(level_crossing_rail_sprite_id(0x41), 1370);
+    }
+
+    #[test]
+    fn signals_subtype_is_bit_pattern() {
+        assert!(rail_tile_is_signals(0x01 | (RAIL_TILE_SIGNALS << 6)));
+        assert!(!rail_tile_is_signals(0x01));
     }
 }

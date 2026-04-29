@@ -356,7 +356,8 @@ organizados en la tabla `_industry_draw_tile_data` en `industry_land.h`.)
 
 | Constante | ID | Descripción |
 |-----------|-----|-------------|
-| `SPR_CROSSING_OFF_X_RAIL` | 1370 | Rail cruce X (barrera arriba) |
+| `SPR_CROSSING_OFF_X_RAIL` | 1370 | Rail cruce (eje vía X); `rail_1370.png` en el cliente |
+| (siguiente eje vía Y) | 1371 | Par del cruce; `rail_1371.png` (`base_sprites.crossing + rail_axis`) |
 | `SPR_CROSSING_OFF_X_MONO` | 1382 | Mono cruce X |
 | `SPR_CROSSING_OFF_X_MAGLEV` | 1394 | Maglev cruce X |
 

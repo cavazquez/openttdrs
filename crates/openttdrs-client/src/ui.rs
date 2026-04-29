@@ -6,7 +6,9 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::{TileCoord, TileKind};
 
 use crate::iso::{compute_tileh, slope_label, world_to_tile};
-use crate::sprites::road_bits_for_render;
+use crate::sprites::{
+    is_road_level_crossing, level_crossing_rail_sprite_id, rail_tile_is_signals, road_bits_for_render,
+};
 use crate::state::SimWorld;
 
 /// Información del tile actualmente seleccionado (click izquierdo).
@@ -140,7 +142,16 @@ pub fn update_tile_info_text(
             sim.state.map.dimensions().0,
             sim.state.map.dimensions().1,
         );
-        format!(" rb:0x{rb:02X}")
+        let mut s = format!(" rb:0x{rb:02X}");
+        if is_road_level_crossing(tile.mapt, tile.m5, tile.kind) {
+            s.push_str(&format!(
+                " Xing rail:{}",
+                level_crossing_rail_sprite_id(tile.m5)
+            ));
+        }
+        s
+    } else if tile.kind == TileKind::Rail && rail_tile_is_signals(tile.m5) {
+        format!(" signals present:0x{:X} m2:0x{:02X}", (tile.m3 >> 4) & 0xF, tile.m2)
     } else if tile.kind == TileKind::Industry {
         format!(" gfx:{} ind:{}", tile.m5, tile.m1 & 0x7F)
     } else {

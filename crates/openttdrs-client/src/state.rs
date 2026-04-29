@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    GameState, Industry, IndustryKind, Map, OttdmapExtras, Station, TileCoord, TileKind, TnbpDecoded,
-    Vehicle, VehicleKind, find_path, jgr_tunnels_from_decoded,
+    GameState, Industry, IndustryKind, Map, OttdmapExtras, Station, TileCoord, TileKind,
+    TnbpDecoded, Vehicle, VehicleKind, find_path, jgr_tunnels_from_decoded,
 };
 use std::collections::{BTreeMap, HashSet};
 
@@ -25,7 +25,7 @@ impl Default for SimWorld {
     fn default() -> Self {
         if let Ok(path) = std::env::var("OTTDJSON_LOAD") {
             match std::fs::read_to_string(&path) {
-                Ok(text) => match GameState::load_json(&text) {
+                Ok(text) => match openttdrs_core::save::load_from_str(&text) {
                     Ok(state) => {
                         info!("Estado de simulación cargado desde JSON: {path}");
                         log_detection_summary(&state, true, None);

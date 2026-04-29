@@ -49,9 +49,9 @@ Orden **no estricto**: depende de si querés **parecerse más al original**, **j
 
 ### B. Cadena incremental formal (gameplay)
 
-- **I6 — Comandos del jugador** (`PlaceRoad`, etc.) según spec en `DISENO_INCREMENTAL.md`.
-- **I7 — Save/load** del `GameState` propio (serde); distinto del `.sav` de OpenTTD.
-- **I8 — Red** mínima con log de comandos.
+- **I6 — Comandos del jugador** — hecho: `openttdrs_core::command`, clics en cliente.
+- **I7 — Save/load** — hecho: `openttdrs_core::save` (JSON con `version` + `state`, carga de legado plano); atajos F5/Ctrl+S, F9/Ctrl+L.
+- **I8 — Red** mínima con log de comandos (pendiente).
 
 ### C. Higiene y referencia
 

@@ -5,27 +5,33 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
+pub mod command;
 pub mod industry;
 pub mod map;
 pub mod ottdmap_extras;
-pub mod tnbp_decode;
 pub mod pathfinder;
+pub mod save;
 pub mod station;
 pub mod tick;
+pub mod tnbp_decode;
 pub mod vehicle;
 
+pub use command::{Command, CommandError, apply_command};
 pub use industry::{INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, industry_produce_period_ticks};
 pub use map::{
-    Map, MapError, Tile, TileCoord, TileKind, OTTD_TILETYPE_TUNNELBRIDGE, openttd_tile_index_to_coord,
+    Map, MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind,
+    openttd_tile_index_to_coord,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
+pub use pathfinder::find_path;
+pub use save::SaveError;
+pub use save::load_from_str;
+pub use station::Station;
+pub use tick::GameTick;
 pub use tnbp_decode::{
     JgrTunnelRecord, SlPrimitive, SlTableField, TnbpDecodeError, TnbpDecoded, decode_tnbp_blob,
     jgr_tunnels_from_decoded, read_sl_gamma, split_sl_gamma_segments, tnbp_blob_to_json_value,
 };
-pub use pathfinder::find_path;
-pub use station::Station;
-pub use tick::GameTick;
 pub use vehicle::{Vehicle, VehicleKind};
 
 /// Contadores acumulativos de la simulación (carga/descarga, producción).

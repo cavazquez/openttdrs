@@ -39,24 +39,21 @@ El [informe de arquitectura](INFORME_ARQUITECTURA_OPENTTD.md) resume el código 
 
 ## Estado actual del código (abril 2026)
 
-Los incrementos **I0–I5** están implementados en `main`. Además hay trabajo **visual y de
-mapas** que no reemplaza I6–I8 pero sí el cliente y la documentación de referencia.
+Los incrementos **I0–I6** están implementados en `main`; **I7** está cubierto por `openttdrs_core::save` (JSON versionado + compatibilidad con guardados planos). **I8** sigue pendiente.
 
 | Capa | Qué hay hoy |
 |------|-------------|
-| `openttdrs-core` | `Tile { height, kind, mapt, m5 }`, `TileKind` ampliado, `Map`, `Map::from_ottd_binary`, industrias, estaciones, vehículos, BFS `find_path`, tests (18). |
-| `openttdrs-client` | Vista **isométrica**, sprites **OpenGFX** (suelo, agua, carreteras, árboles, camión, mina), gizmos, cámara con pan/zoom, carga opcional `OTTDMAP_FILE`. |
-| Scripts | `parse_sav.py` (`.sav` → `.ottdmap`), `descargar_graficos.sh` / `descargar_sonidos.sh`. |
-| Docs | [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md), [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md), [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md). |
+| `openttdrs-core` | `Tile { height, kind, mapt, m5 }`, `TileKind` ampliado, `Map`, `Map::from_ottd_binary`, TNBP/JGR decode, `command` (carretera/estación), `save`, industrias, estaciones, vehículos, BFS `find_path`, tests. |
+| `openttdrs-client` | Vista **isométrica**, sprites **OpenGFX**, clics **izq/der** (comandos I6), **F5/Ctrl+S** y **F9/Ctrl+L** persistencia, gizmos, cámara, `OTTDMAP_FILE` / `OTTDJSON_LOAD`. |
+| Scripts | `parse_sav.py` (`.sav` → `.ottdmap`), `descargar_graficos.sh` / `descargar_sonidos.sh`, validación TNBP en CI con fixture `v5p12_tnbp.ottdmap`. |
+| Docs | [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md), [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md), [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md), [FLUJO_MAPA_Y_CLIENTE.md](FLUJO_MAPA_Y_CLIENTE.md). |
 
 **Carreteras en mapas reales:** orientación desde `mapt` + `m5` (normal, cruce a nivel,
 depósito, túnel/puente carretera). Los PNG `road_tx` / `road_ty` se asignan **cruzados**
 respecto a `RoadDir` para alinear la textura con la proyección del cliente (~90° respecto
 a “nombre de archivo = eje”); validado en pantalla.
 
-Lo **pendiente** de la cadena incremental formal sigue siendo **I6–I8** (comandos, save/load
-propio del `GameState`, red). Ver [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) para opciones
-priorizadas.
+Lo **pendiente** principal es **I8** (red / log de comandos); migraciones de formato de save y refinamiento de UI son opcionales. Ver [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md).
 
 ---
 
@@ -312,11 +309,11 @@ save.rs
 - `save_load_after_N_steps()` — determinismo no se rompe al reanudar.
 
 **Cliente Bevy:**
-- Tecla `S` guarda en `save.json`, `L` carga.
+- **Hecho:** `F5` / **Ctrl+S** guardan y `F9` / **Ctrl+L** cargan (ruta configurable); formato versionado en `openttdrs_core::save`.
 
-**Fuera:** versionado de formato, migraciones, compatibilidad con OpenTTD.
+**Fuera:** migraciones entre versiones de save; compatibilidad con `.sav` OpenTTD (sigue siendo `parse_sav` → `.ottdmap`).
 
-**Referencia upstream:** `SaveLoadVersion` inmutable y tablas por subsistema (`saveload/saveload.h`, `*_sl.cpp`). MVP: un formato único con campo `version` en JSON/binario propio.
+**Referencia upstream:** `SaveLoadVersion` inmutable y tablas por subsistema (`saveload/saveload.h`, `*_sl.cpp`). MVP: campo `version` en el JSON del envoltorio (`save.rs`).
 
 ---
 

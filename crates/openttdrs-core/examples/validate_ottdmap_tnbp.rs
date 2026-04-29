@@ -2,17 +2,15 @@
 //!
 //! Uso: `cargo run -p openttdrs-core --example validate_ottdmap_tnbp -- ruta.ottdmap`
 
-use openttdrs_core::{
-    Map, decode_tnbp_blob, jgr_tunnels_from_decoded, tnbp_blob_to_json_value,
-};
+use openttdrs_core::{Map, decode_tnbp_blob, jgr_tunnels_from_decoded, tnbp_blob_to_json_value};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args()
         .nth(1)
         .ok_or("uso: validate_ottdmap_tnbp <archivo.ottdmap>")?;
     let data = std::fs::read(&path)?;
-    let (map, ex) = Map::from_ottd_binary_with_extras(&data)
-        .map_err(|e| format!("mapa inválido: {e:?}"))?;
+    let (map, ex) =
+        Map::from_ottd_binary_with_extras(&data).map_err(|e| format!("mapa inválido: {e:?}"))?;
     let (w, h) = map.dimensions();
     println!("Mapa: {w}×{h}");
     let len = ex.tnbp_blob_len();

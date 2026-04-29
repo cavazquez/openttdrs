@@ -217,6 +217,11 @@ sheet_prefix = os.environ["SHEET_PREFIX"]
 graphics_mode = os.environ["GRAPHICS_MODE"]
 tiles_dir.mkdir(parents=True, exist_ok=True)
 
+def write_rail_placeholder(out_path: Path) -> None:
+    """Bevy exige ruta existente; si el NFO no declara el sprite, evitamos error con 1×1 transparente."""
+    img = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+    img.save(out_path)
+
 def load_sheet(png_path: Path) -> Image.Image:
     if graphics_mode == "32bpp":
         # En 32bpp no aplicar heurística magenta. Pero si el sheet viene en
@@ -357,6 +362,10 @@ if nfo_path.is_file():
 def crop_by_id(sid: int, out_name: str) -> None:
     if sid not in sprite_rect:
         print(f"  (omitido {out_name}: sprite {sid} no en NFO)")
+        if out_name.startswith("rail_") and out_name.endswith(".png"):
+            p = tiles_dir / out_name
+            write_rail_placeholder(p)
+            print(f"  → placeholder {out_name}")
         return
     x, y, w, h, xr, yr, sheet = sprite_rect[sid]
     sheet_key = sheet
@@ -370,8 +379,14 @@ def crop_by_id(sid: int, out_name: str) -> None:
             sheet_key = alt
         else:
             print(f"  (omitido {out_name}: sheet {sheet} no encontrado)")
+            if out_name.startswith("rail_") and out_name.endswith(".png"):
+                write_rail_placeholder(tiles_dir / out_name)
+                print(f"  → placeholder {out_name}")
             return
     if sheet_key not in sheets:
+        if out_name.startswith("rail_") and out_name.endswith(".png"):
+            write_rail_placeholder(tiles_dir / out_name)
+            print(f"  → placeholder {out_name} (sheet ausente)")
         return
     crop = sheets[sheet_key].crop((x, y, x + w, y + h))
     # Limpieza de artefactos en sprites de terreno/árboles/vías.
@@ -457,8 +472,8 @@ for sid in [1005, 1006, 1007, 1008, 1009, 1010,
             1035, 1036,
             1370, 1371, 1372, 1373]:
     crop_by_id(sid, f"rail_{sid}.png")
-# Señales ferroviarias (bloque clásico + extensión semaphore/PBS en OpenGFX, `rail_cmd.cpp`)
-for sid in range(1275, 1520):
+# Señales ferroviarias (bloque clásico + PBS: la fórmula del cliente puede superar 1519)
+for sid in range(1275, 1700):
     crop_by_id(sid, f"rail_{sid}.png")
 # Vías HORZ/VERT
 crop_by_id(1035, "rail_track_ns.png")

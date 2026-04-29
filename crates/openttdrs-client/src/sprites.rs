@@ -648,10 +648,10 @@ pub fn industry_sprite_for_gfx(gfx: u16) -> Option<&'static IndustryGfxSprite> {
     }
 }
 
-/// IDs de sprites de vía férrea usados (incluye cruces a nivel 1370/1371, `road_cmd.cpp`).
-pub const RAIL_SPRITE_IDS: [u32; 22] = [
+/// IDs de sprites de vía férrea usados (cruce a nivel 1370–1373 con barreras, `road_cmd.cpp`).
+pub const RAIL_SPRITE_IDS: [u32; 24] = [
     1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020,
-    1021, 1022, 1035, 1036, 1370, 1371,
+    1021, 1022, 1035, 1036, 1370, 1371, 1372, 1373,
 ];
 
 /// `RoadTileType::Crossing` en bits 6–7 de `m5` (`road_map.h`).
@@ -835,6 +835,27 @@ pub fn collect_signal_sprite_ids(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<u32> {
         push_if(2, 3, OTTD_TRACK_Y); // NW
     }
     out
+}
+
+/// IDs para precargar `opengfx/tiles/rail_<id>.png`: piezas de vía y **todas** las señales que
+/// puede devolver [`signal_sprite_id`] con las bases por defecto / env (`OPENTTDRS_SIGNAL_*`).
+///
+/// Evita `asset_server.load` sobre el rango entero `1275..1520` cuando OpenGFX no incluye cada
+/// fila del NFO (huecos sin PNG).
+#[must_use]
+pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
+    use std::collections::BTreeSet;
+    let mut set: BTreeSet<u32> = RAIL_SPRITE_IDS.iter().copied().collect();
+    for sig_type in 0u8..=7u8 {
+        for variant in 0u8..=1u8 {
+            for image in 0u8..=7u8 {
+                for green in [false, true] {
+                    set.insert(signal_sprite_id(sig_type, variant, image, green));
+                }
+            }
+        }
+    }
+    set.into_iter().collect()
 }
 
 // ── Lógica de road bits ─────────────────────────────────────────────────────
@@ -1146,6 +1167,20 @@ mod signal_sprite_collect_tests {
         assert_eq!(ids_e.len(), 2);
         assert_eq!(ids_s.len(), 2);
         assert_ne!(ids_e[0], ids_s[0]);
+    }
+
+    #[test]
+    fn rail_preload_includes_crossings_and_signals_bounded() {
+        use super::rail_sprite_ids_for_preload;
+        let ids = rail_sprite_ids_for_preload();
+        assert!(!ids.is_empty());
+        assert!(ids.contains(&1372));
+        assert!(ids.contains(&1279));
+        let mx = ids.iter().copied().max().unwrap_or(0);
+        assert!(
+            mx < 1700,
+            "máx sprite id {mx}: ampliar range(1275,…) en descargar_graficos.sh si hace falta"
+        );
     }
 
     #[test]

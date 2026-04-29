@@ -1,10 +1,12 @@
-//! UI de información de tile seleccionado.
+//! UI de información de tile seleccionado y menú de construcción (I6).
 
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
+use bevy::ui::FocusPolicy;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{TileCoord, TileKind};
+use openttdrs_core::{Command, TileCoord, TileKind, apply_command};
 
+use crate::RemapMapVisualsPending;
 use crate::iso::{compute_tileh, slope_label, world_to_tile};
 use crate::sprites::{
     is_road_level_crossing, level_crossing_rail_sprite_id, rail_tile_is_signals,
@@ -39,11 +41,22 @@ pub struct SelectedTileInfo {
 #[derive(Component)]
 pub struct TileInfoText;
 
+/// Marca nodos del menú “Construir” para ignorar clics en el mapa cuando el cursor está encima.
+#[derive(Component)]
+pub(crate) struct BuildMenuUi;
+
+/// Acción del botón del menú de construcción.
+#[derive(Component, Clone, Copy)]
+pub(crate) enum BuildMenuAction {
+    Road,
+    Station,
+}
+
 /// Crea el texto de información del tile.
 pub fn setup_tile_info_ui(mut commands: Commands) {
     commands.spawn((
         TileInfoText,
-        Text2d::new("Click en tile para ver info"),
+        Text2d::new("Clic en mapa: seleccionar tile · Construir: panel inferior izquierdo"),
         TextFont {
             font_size: 14.0,
             ..default()
@@ -54,15 +67,115 @@ pub fn setup_tile_info_ui(mut commands: Commands) {
     ));
 }
 
-/// Detecta click izquierdo y actualiza el tile seleccionado.
+/// Panel flotante: carretera / estación sobre el tile seleccionado.
+pub fn setup_build_menu(mut commands: Commands) {
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                left: Val::Px(12.0),
+                bottom: Val::Px(12.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(6.0),
+                padding: UiRect::all(Val::Px(10.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.1, 0.12, 0.16, 0.94)),
+            BorderColor::all(Color::srgb(0.35, 0.4, 0.48)),
+            GlobalZIndex(2000),
+            FocusPolicy::Block,
+            BuildMenuUi,
+            Interaction::default(),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("Construir (tile activo)"),
+                TextFont {
+                    font_size: 13.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.92, 0.88, 0.78)),
+            ));
+            for (label, action) in [
+                ("Carretera", BuildMenuAction::Road),
+                ("Estación", BuildMenuAction::Station),
+            ] {
+                parent
+                    .spawn((
+                        Button,
+                        action,
+                        BuildMenuUi,
+                        Node {
+                            width: Val::Px(148.0),
+                            height: Val::Px(34.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.22, 0.25, 0.3)),
+                        BorderColor::all(Color::srgb(0.42, 0.46, 0.52)),
+                        Interaction::default(),
+                    ))
+                    .with_children(|p| {
+                        p.spawn((
+                            Text::new(label),
+                            TextFont {
+                                font_size: 14.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgb(0.93, 0.9, 0.84)),
+                        ));
+                    });
+            }
+        });
+}
+
+/// Aplica comando según botón del menú (tile [`SelectedTileInfo::pos`]).
+#[allow(clippy::type_complexity)]
+pub(crate) fn build_menu_interaction(
+    mut q: Query<
+        (&Interaction, &BuildMenuAction),
+        (Changed<Interaction>, With<Button>),
+    >,
+    selected: Res<SelectedTileInfo>,
+    mut sim: ResMut<SimWorld>,
+    mut pending: ResMut<RemapMapVisualsPending>,
+) {
+    for (interaction, action) in &mut q {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let Some(pos) = selected.pos else {
+            continue;
+        };
+        let cmd = match *action {
+            BuildMenuAction::Road => Command::PlaceRoad(pos),
+            BuildMenuAction::Station => Command::PlaceStation(pos),
+        };
+        if apply_command(&mut sim.state, &cmd).is_ok() {
+            pending.pending = true;
+        }
+    }
+}
+
+/// Clic izquierdo: solo selecciona tile (no construye). Ignora si el cursor está sobre el menú.
 pub fn handle_tile_click(
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<(&Transform, &Projection), With<Camera2d>>,
     mut selected: ResMut<SelectedTileInfo>,
     sim: Res<SimWorld>,
+    menu_pointer: Query<&Interaction, With<BuildMenuUi>>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+
+    if menu_pointer
+        .iter()
+        .any(|i| *i != Interaction::None)
+    {
         return;
     }
 
@@ -134,7 +247,9 @@ pub fn update_tile_info_text(
     let hud_footer = format!("{pause_l} | JSON: {} | F4 otra ruta", hud.json_save_path);
 
     let Some(pos) = selected.pos else {
-        **text = format!("{zoom_label}\n{hud_footer}\nClick en tile para ver info");
+        **text = format!(
+            "{zoom_label}\n{hud_footer}\nClic mapa: elegir tile · panel Construir abajo"
+        );
         return;
     };
 

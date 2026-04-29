@@ -97,7 +97,10 @@ pub fn read_sl_gamma(data: &[u8], off: &mut usize) -> Result<u32, TnbpDecodeErro
         *off += 1;
         let b3 = *data.get(*off).ok_or(TnbpDecodeError::Truncado)?;
         *off += 1;
-        return Ok((u32::from(b) << 24) | (u32::from(b1) << 16) | (u32::from(b2) << 8) | u32::from(b3));
+        return Ok((u32::from(b) << 24)
+            | (u32::from(b1) << 16)
+            | (u32::from(b2) << 8)
+            | u32::from(b3));
     }
     b &= !0x10;
     if b & 0x08 != 0 {
@@ -182,7 +185,11 @@ fn parse_sl_table_header(hdr: &[u8]) -> Result<Vec<SlTableField>, TnbpDecodeErro
     Ok(fields)
 }
 
-fn read_primitive(file_type: u8, row: &[u8], off: &mut usize) -> Result<SlPrimitive, TnbpDecodeError> {
+fn read_primitive(
+    file_type: u8,
+    row: &[u8],
+    off: &mut usize,
+) -> Result<SlPrimitive, TnbpDecodeError> {
     match file_type {
         SLE_FILE_I8 => {
             let v = *row.get(*off).ok_or(TnbpDecodeError::FilaTruncada)?;
@@ -213,7 +220,10 @@ fn read_primitive(file_type: u8, row: &[u8], off: &mut usize) -> Result<SlPrimit
     }
 }
 
-fn parse_row(fields: &[SlTableField], payload: &[u8]) -> Result<Vec<(String, SlPrimitive)>, TnbpDecodeError> {
+fn parse_row(
+    fields: &[SlTableField],
+    payload: &[u8],
+) -> Result<Vec<(String, SlPrimitive)>, TnbpDecodeError> {
     let mut off = 0usize;
     let mut cells = Vec::with_capacity(fields.len());
     for f in fields {

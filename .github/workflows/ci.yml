@@ -46,6 +46,9 @@ jobs:
       - name: test
         run: cargo test --workspace
 
+      - name: Validar TNBP (fixture v5p12_tnbp.ottdmap)
+        run: cargo run -q -p openttdrs-core --example validate_ottdmap_tnbp -- crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap
+
       - name: Golden parse_sav (tests/fixtures)
         run: python3 scripts/verify_parse_sav_reference.py
 
@@ -54,6 +57,7 @@ jobs:
           python3 -m py_compile scripts/parse_sav.py
           python3 -m py_compile scripts/verify_parse_sav_reference.py
           python3 -m py_compile scripts/emit_parse_sav_golden.py
+          python3 -m py_compile scripts/gen_tnbp_fixture_ottdmap.py
 
       - name: build (incluye cliente Bevy)
         run: cargo build --workspace

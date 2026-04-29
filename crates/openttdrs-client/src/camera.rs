@@ -56,7 +56,8 @@ pub fn move_camera(
     if kbd.pressed(KeyCode::KeyW) || kbd.pressed(KeyCode::ArrowUp) {
         dir.y += 1.0;
     }
-    if kbd.pressed(KeyCode::KeyS) || kbd.pressed(KeyCode::ArrowDown) {
+    let save_combo = kbd.pressed(KeyCode::ControlLeft) || kbd.pressed(KeyCode::ControlRight);
+    if (kbd.pressed(KeyCode::KeyS) && !save_combo) || kbd.pressed(KeyCode::ArrowDown) {
         dir.y -= 1.0;
     }
     if kbd.pressed(KeyCode::KeyA) || kbd.pressed(KeyCode::ArrowLeft) {

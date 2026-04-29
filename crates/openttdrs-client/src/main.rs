@@ -7,12 +7,13 @@
 //! OTTDMAP_FILE=/ruta/al/mapa.ottdmap cargo run -p openttdrs-client
 //! ```
 //!
-//! Estado de simulación JSON (mismo esquema que `GameState::save_json` en el core):
-//! `OTTDJSON_LOAD=/ruta/estado.json` al arranque, o **F5** para guardar y **F9** para
-//! cargar (archivo por defecto `openttdrs_sim.json`, o `OPENTTDRS_JSON_SAVE`). Tras F9 se
+//! Persistencia JSON (`openttdrs_core::save`, versión + `state` o legado plano):
+//! `OTTDJSON_LOAD=/ruta/estado.json` al arranque, o **F5** / **Ctrl+S** para guardar y **F9** / **Ctrl+L** para
+//! cargar (archivo por defecto `openttdrs_sim.json`, o `OPENTTDRS_JSON_SAVE`). Tras cargar se
 //! redibuja todo el mapa y se reajusta la cámara (también si cambia el tamaño del mapa en el JSON).
 //! **P** pausa el tick de simulación; **F4** alterna la ruta de guardado entre `openttdrs_sim.json` y
-//! `openttdrs_autosave.json` (visible en el HUD de la esquina).
+//! `openttdrs_autosave.json` (visible en el HUD). **Clic en el mapa** selecciona tesela; **panel Construir**
+//! (esquina inferior izquierda) aplica carretera / estación en esa tesela.
 //! Bases de sprites de señal: `OPENTTDRS_SIGNAL_BASE` / `OPENTTDRS_SIGNAL_ALT_BASE` (512–4096).
 
 #![allow(clippy::needless_pass_by_value)]
@@ -32,7 +33,8 @@ use bevy::image::ImageSamplerDescriptor;
 use bevy::math::{Affine3A, Rect};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{GameState, IndustryKind, Map, TileCoord, TileKind, Vehicle};
+use openttdrs_core::save;
+use openttdrs_core::{IndustryKind, Map, TileCoord, TileKind, Vehicle};
 
 use camera::{CameraVelocity, move_camera};
 use iso::{
@@ -41,7 +43,8 @@ use iso::{
     wang_hash,
 };
 use sprites::{
-    HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites,
+    HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, ROAD_FLAT_HALF_H, collect_rail_sprites,
+    rail_sprite_ids_for_preload,
     collect_signal_sprite_ids, house_draw_data_index_for_tile, is_road_level_crossing,
     level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_tile_is_signals,
     rail_track_base_color, rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
@@ -49,8 +52,9 @@ use sprites::{
 };
 use state::SimWorld;
 use ui::{
-    SelectedTileInfo, SimHudControls, cycle_json_save_path_hotkey, handle_pause_toggle,
-    handle_tile_click, setup_tile_info_ui, update_tile_info_text,
+    SelectedTileInfo, SimHudControls, build_menu_interaction, cycle_json_save_path_hotkey,
+    handle_pause_toggle, handle_tile_click, setup_build_menu, setup_tile_info_ui,
+    update_tile_info_text,
 };
 
 /// Factor de escala para los sprites de camiones (son 20×14 px nativo).
@@ -164,9 +168,12 @@ struct VehicleSprite(u32);
 #[derive(Component)]
 struct MapVisualLayer;
 
-/// Se marca en true tras F9 con JSON válido; `apply_remap_map_visuals` lo consume y redibuja el mapa.
+/// Petición de redibujo del mapa. `sync_camera`: solo tras F9 / cambio de tamaño (no al editar teselas con clic).
 #[derive(Resource, Default)]
-struct RemapMapVisualsPending(bool);
+pub(crate) struct RemapMapVisualsPending {
+    pub(crate) pending: bool,
+    pub(crate) sync_camera: bool,
+}
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
@@ -205,7 +212,7 @@ fn main() {
         .init_resource::<SimHudControls>()
         .add_systems(
             Startup,
-            (setup, rebuild_vehicle_index, setup_tile_info_ui).chain(),
+            (setup, rebuild_vehicle_index, setup_tile_info_ui, setup_build_menu).chain(),
         )
         .add_systems(
             Update,
@@ -221,6 +228,7 @@ fn main() {
                 draw_industries,
                 draw_stations,
                 move_camera,
+                build_menu_interaction,
                 handle_tile_click,
                 update_tile_info_text,
             )
@@ -316,10 +324,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
     let road_flat: Vec<Handle<Image>> = (0..19)
         .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/road_flat_{i:02}.png")))
         .collect();
-    let rail_tex: HashMap<u32, Handle<Image>> = RAIL_SPRITE_IDS
-        .iter()
-        .copied()
-        .chain(1275..1520_u32)
+    let rail_tex: HashMap<u32, Handle<Image>> = rail_sprite_ids_for_preload()
+        .into_iter()
         .map(|id| {
             (
                 id,
@@ -991,16 +997,20 @@ fn apply_remap_map_visuals(
     asset_server: Res<AssetServer>,
     sim: Res<SimWorld>,
 ) {
-    if !pending.0 {
+    if !pending.pending {
         return;
     }
-    pending.0 = false;
+    let do_sync_camera = pending.sync_camera;
+    pending.pending = false;
+    pending.sync_camera = false;
     let to_remove: Vec<Entity> = q_vis.iter().collect();
     for e in to_remove {
         commands.entity(e).despawn();
     }
     spawn_world_layer(&mut commands, &asset_server, &sim);
-    sync_camera_for_sim(&mut q_cam, &sim);
+    if do_sync_camera {
+        sync_camera_for_sim(&mut q_cam, &sim);
+    }
 }
 
 fn handle_sim_json_hotkeys(
@@ -1011,18 +1021,21 @@ fn handle_sim_json_hotkeys(
     hud: Res<SimHudControls>,
 ) {
     let save_path = hud.json_save_path.clone();
-    if keyboard.just_pressed(KeyCode::F5) {
-        match sim.state.save_json() {
-            Ok(json) => match std::fs::write(&save_path, json) {
-                Ok(()) => info!("F5: estado guardado en {save_path}"),
-                Err(e) => error!("F5: no se pudo escribir {save_path}: {e}"),
-            },
-            Err(e) => error!("F5: error al serializar JSON: {e}"),
+    let ctrl = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
+    let save_shortcut =
+        keyboard.just_pressed(KeyCode::F5) || (ctrl && keyboard.just_pressed(KeyCode::KeyS));
+    let load_shortcut =
+        keyboard.just_pressed(KeyCode::F9) || (ctrl && keyboard.just_pressed(KeyCode::KeyL));
+
+    if save_shortcut {
+        match save::save(&sim.state, std::path::Path::new(&save_path)) {
+            Ok(()) => info!("Guardado en {save_path}"),
+            Err(e) => error!("No se pudo guardar en {save_path}: {e}"),
         }
     }
-    if keyboard.just_pressed(KeyCode::F9) {
+    if load_shortcut {
         match std::fs::read_to_string(&save_path) {
-            Ok(text) => match GameState::load_json(&text) {
+            Ok(text) => match save::load_from_str(&text) {
                 Ok(loaded) => {
                     let prev = sim.state.map.dimensions();
                     let nw = loaded.map.dimensions();
@@ -1030,16 +1043,17 @@ fn handle_sim_json_hotkeys(
                     sim.ottdmap_extras = None;
                     sim.loaded_file = true;
                     vehicle_index.rebuild(&sim.state.vehicles);
-                    remap.0 = true;
+                    remap.pending = true;
+                    remap.sync_camera = true;
                     if prev != nw {
-                        info!("F9: mapa {prev:?} → {nw:?}; recarga visual y cámara.");
+                        info!("Mapa {prev:?} → {nw:?}; recarga visual y cámara.");
                     } else {
-                        info!("F9: estado cargado desde {save_path}; recarga visual.");
+                        info!("Estado cargado desde {save_path}; recarga visual.");
                     }
                 }
-                Err(e) => error!("F9: JSON inválido: {e}"),
+                Err(e) => error!("Carga: JSON inválido ({save_path}): {e}"),
             },
-            Err(e) => error!("F9: no se pudo leer {save_path}: {e}"),
+            Err(e) => error!("Carga: no se pudo leer {save_path}: {e}"),
         }
     }
 }

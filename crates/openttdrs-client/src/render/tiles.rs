@@ -18,6 +18,8 @@ use crate::sprites::{
 /// El orden de dibujo usa `(tx+ty)`; el mar al **este/sur** tiene suma mayor y acaba
 /// encima del borde costero del vecino NO/NE → sierra y rectángulos azules oscuros.
 const FLAT_WATER_LAYER_FRAC: f32 = -0.014;
+/// Solape mínimo para ocultar costuras finas entre tiles adyacentes.
+const TILE_OVERLAP_SCALE: f32 = 1.002;
 
 fn sloped_or_flat_image(
     tileh: u8,
@@ -51,7 +53,8 @@ fn spawn_ground_sprite(
             ctx.info.base_z,
             0.0,
             half_h,
-        )),
+        ))
+        .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
     ));
 }
 
@@ -79,7 +82,8 @@ fn push_water_sprite(
             ctx.ty_i32(),
             ctx.info.base_z,
             FLAT_WATER_LAYER_FRAC,
-        )),
+        ))
+        .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
     ));
 }
 
@@ -150,7 +154,8 @@ pub(crate) fn spawn_road_tile(
             base_z,
             0.02,
             road_half_h,
-        )),
+        ))
+        .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
     ));
 
     // Cruce a nivel: carretera + sprite de vía encima (`base_sprites.crossing + rail_axis`).
@@ -245,7 +250,8 @@ pub(crate) fn spawn_rail_tile(
                 base_z,
                 z,
                 rail_half_h,
-            )),
+            ))
+            .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
         ));
     }
     if let Some(t) = ctx.tile.filter(|t| rail_tile_is_signals(t.m5)) {
@@ -414,7 +420,8 @@ pub(crate) fn spawn_station_tile(
             color: Color::WHITE,
             ..default()
         },
-        Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), ctx.info.base_z, 0.01)),
+        Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), ctx.info.base_z, 0.01))
+            .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
     ));
 }
 
@@ -570,6 +577,8 @@ pub(crate) fn flush_map_batches(commands: &mut Commands, batches: MapSpriteBatch
         commands.spawn((MapVisualLayer, wt, sp, tr));
     }
     for (sp, tr) in batches.shore {
+        let mut tr = tr;
+        tr.scale = Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0);
         commands.spawn((MapVisualLayer, sp, tr));
     }
     for (sp, tr) in batches.trees {

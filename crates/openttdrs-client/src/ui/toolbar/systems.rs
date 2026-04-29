@@ -25,17 +25,28 @@ pub(crate) fn toolbar_group_interaction(
 
 pub(crate) fn update_toolbar_group_visuals(
     toolbar_state: Res<ToolbarState>,
-    mut q: Query<(&ToolbarGroup, &Interaction, &mut BackgroundColor), With<ToolbarGroupButton>>,
+    mut q: Query<
+        (&ToolbarGroup, &Interaction, &mut BackgroundColor, &mut BorderColor),
+        With<ToolbarGroupButton>,
+    >,
 ) {
-    for (group, interaction, mut bg) in &mut q {
-        *bg = if *group == toolbar_state.active_group && *interaction == Interaction::Pressed {
-            BackgroundColor(Color::srgb(0.7, 0.64, 0.44))
+    for (group, interaction, mut bg, mut border) in &mut q {
+        let is_active = *group == toolbar_state.active_group;
+        *bg = if is_active && *interaction == Interaction::Pressed {
+            BackgroundColor(Color::srgb(0.78, 0.68, 0.43))
+        } else if is_active && *interaction == Interaction::Hovered {
+            BackgroundColor(Color::srgb(0.7, 0.61, 0.38))
         } else if *group == toolbar_state.active_group {
-            BackgroundColor(Color::srgb(0.58, 0.52, 0.34))
+            BackgroundColor(Color::srgb(0.62, 0.54, 0.34))
         } else if *interaction == Interaction::Hovered {
-            BackgroundColor(Color::srgb(0.44, 0.4, 0.28))
+            BackgroundColor(Color::srgb(0.42, 0.36, 0.24))
         } else {
-            BackgroundColor(Color::srgb(0.36, 0.33, 0.24))
+            BackgroundColor(Color::srgb(0.33, 0.28, 0.19))
+        };
+        *border = if is_active {
+            BorderColor::all(Color::srgb(0.86, 0.76, 0.5))
+        } else {
+            BorderColor::all(Color::srgb(0.64, 0.57, 0.39))
         };
     }
 }
@@ -81,18 +92,33 @@ pub(crate) fn build_menu_interaction(
 /// Resalta el boton de herramienta actualmente activo.
 pub(crate) fn update_tool_button_visuals(
     tool_state: Res<UiToolState>,
-    mut q: Query<(&BuildMenuAction, &Interaction, &mut BackgroundColor), With<ToolSelectButton>>,
+    mut q: Query<
+        (
+            &BuildMenuAction,
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+        ),
+        With<ToolSelectButton>,
+    >,
 ) {
-    for (action, interaction, mut bg) in &mut q {
+    for (action, interaction, mut bg, mut border) in &mut q {
         let is_active = tool_state.active_tool.is_some_and(|active| active == *action);
         *bg = if is_active && *interaction == Interaction::Pressed {
-            BackgroundColor(Color::srgb(0.64, 0.58, 0.4))
+            BackgroundColor(Color::srgb(0.76, 0.67, 0.42))
+        } else if is_active && *interaction == Interaction::Hovered {
+            BackgroundColor(Color::srgb(0.68, 0.59, 0.37))
         } else if is_active {
-            BackgroundColor(Color::srgb(0.54, 0.48, 0.33))
+            BackgroundColor(Color::srgb(0.6, 0.52, 0.33))
         } else if *interaction == Interaction::Hovered {
-            BackgroundColor(Color::srgb(0.42, 0.38, 0.27))
+            BackgroundColor(Color::srgb(0.4, 0.34, 0.23))
         } else {
-            BackgroundColor(Color::srgb(0.3, 0.28, 0.2))
+            BackgroundColor(Color::srgb(0.28, 0.24, 0.16))
+        };
+        *border = if is_active {
+            BorderColor::all(Color::srgb(0.84, 0.74, 0.5))
+        } else {
+            BorderColor::all(Color::srgb(0.64, 0.57, 0.39))
         };
     }
 }

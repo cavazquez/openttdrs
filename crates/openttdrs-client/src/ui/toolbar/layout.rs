@@ -12,11 +12,11 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(12.0),
+                top: Val::Px(10.0),
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
-                row_gap: Val::Px(2.0),
+                row_gap: Val::Px(1.0),
                 ..default()
             },
             BuildMenuUi,
@@ -28,13 +28,13 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
         root.spawn((
             Node {
                 flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(2.0),
-                padding: UiRect::all(Val::Px(4.0)),
+                column_gap: Val::Px(1.0),
+                padding: UiRect::axes(Val::Px(5.0), Val::Px(3.0)),
                 border: UiRect::all(Val::Px(2.0)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.22, 0.2, 0.16, 0.95)),
-            BorderColor::all(Color::srgb(0.55, 0.5, 0.36)),
+            BackgroundColor(Color::srgba(0.2, 0.17, 0.12, 0.96)),
+            BorderColor::all(Color::srgb(0.68, 0.61, 0.42)),
             FocusPolicy::Block,
             BuildMenuUi,
             Interaction::default(),
@@ -63,15 +63,15 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                         },
                         BuildMenuUi,
                         Node {
-                            width: Val::Px(22.0),
-                            height: Val::Px(22.0),
+                            width: Val::Px(24.0),
+                            height: Val::Px(24.0),
                             justify_content: JustifyContent::Center,
                             align_items: AlignItems::Center,
                             border: UiRect::all(Val::Px(1.0)),
                             ..default()
                         },
-                        BackgroundColor(Color::srgb(0.36, 0.33, 0.24)),
-                        BorderColor::all(Color::srgb(0.62, 0.58, 0.44)),
+                        BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
+                        BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
                         Interaction::default(),
                     ))
                     .with_children(|p| {
@@ -80,6 +80,7 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                             Node {
                                 width: Val::Px(16.0),
                                 height: Val::Px(16.0),
+                                padding: UiRect::all(Val::Px(0.5)),
                                 ..default()
                             },
                         ));
@@ -88,11 +89,11 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                     parent.spawn((
                         Node {
                             width: Val::Px(1.0),
-                            height: Val::Px(18.0),
+                            height: Val::Px(20.0),
                             margin: UiRect::horizontal(Val::Px(1.0)),
                             ..default()
                         },
-                        BackgroundColor(Color::srgb(0.5, 0.46, 0.34)),
+                        BackgroundColor(Color::srgb(0.62, 0.55, 0.38)),
                         BuildMenuUi,
                     ));
                 }
@@ -102,13 +103,13 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
         root.spawn((
             Node {
                 flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(2.0),
-                padding: UiRect::all(Val::Px(4.0)),
+                column_gap: Val::Px(1.0),
+                padding: UiRect::axes(Val::Px(5.0), Val::Px(3.0)),
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.2, 0.18, 0.14, 0.94)),
-            BorderColor::all(Color::srgb(0.62, 0.58, 0.44)),
+            BackgroundColor(Color::srgba(0.18, 0.15, 0.11, 0.95)),
+            BorderColor::all(Color::srgb(0.66, 0.6, 0.42)),
             FocusPolicy::Block,
             BuildMenuUi,
             ToolButtonGroup(ToolbarGroup::Build),
@@ -129,13 +130,13 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
         root.spawn((
             Node {
                 flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(2.0),
-                padding: UiRect::all(Val::Px(4.0)),
+                column_gap: Val::Px(1.0),
+                padding: UiRect::axes(Val::Px(5.0), Val::Px(3.0)),
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.2, 0.18, 0.14, 0.94)),
-            BorderColor::all(Color::srgb(0.62, 0.58, 0.44)),
+            BackgroundColor(Color::srgba(0.18, 0.15, 0.11, 0.95)),
+            BorderColor::all(Color::srgb(0.66, 0.6, 0.42)),
             FocusPolicy::Block,
             BuildMenuUi,
             ToolButtonGroup(ToolbarGroup::Transport),
@@ -153,30 +154,14 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
             );
         });
 
-        for (label, group) in [
-            ("Economia: pronto", ToolbarGroup::Economy),
-            ("Info: pronto", ToolbarGroup::Info),
-            ("Ajustes: pronto", ToolbarGroup::Settings),
-        ] {
+        for group in [ToolbarGroup::Economy, ToolbarGroup::Info, ToolbarGroup::Settings] {
             root.spawn((
                 Node {
-                    padding: UiRect::all(Val::Px(6.0)),
-                    border: UiRect::all(Val::Px(1.0)),
+                    display: Display::None,
                     ..default()
                 },
-                BackgroundColor(Color::srgba(0.2, 0.18, 0.14, 0.94)),
-                BorderColor::all(Color::srgb(0.62, 0.58, 0.44)),
-                FocusPolicy::Block,
                 BuildMenuUi,
                 ToolButtonGroup(group),
-                children![(
-                    Text::new(label),
-                    TextFont {
-                        font_size: 11.0,
-                        ..default()
-                    },
-                    TextColor(Color::srgb(0.9, 0.86, 0.72)),
-                )],
             ));
         }
 
@@ -187,8 +172,8 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                 display: Display::None,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.12, 0.11, 0.08, 0.95)),
-            BorderColor::all(Color::srgb(0.76, 0.7, 0.52)),
+            BackgroundColor(Color::srgba(0.15, 0.12, 0.08, 0.97)),
+            BorderColor::all(Color::srgb(0.8, 0.72, 0.5)),
             BuildMenuUi,
             TooltipBox,
             children![(
@@ -225,15 +210,15 @@ fn spawn_tool_buttons(
                 },
                 BuildMenuUi,
                 Node {
-                    width: Val::Px(86.0),
-                    height: Val::Px(22.0),
+                    width: Val::Px(90.0),
+                    height: Val::Px(24.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     border: UiRect::all(Val::Px(1.0)),
                     ..default()
                 },
-                BackgroundColor(Color::srgb(0.3, 0.28, 0.2)),
-                BorderColor::all(Color::srgb(0.62, 0.58, 0.44)),
+                BackgroundColor(Color::srgb(0.28, 0.24, 0.16)),
+                BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
                 Interaction::default(),
             ))
             .with_children(|p| {

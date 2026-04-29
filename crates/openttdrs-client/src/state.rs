@@ -2,10 +2,10 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    GameState, Industry, IndustryKind, Map, Station, TileCoord, TileKind, Vehicle, VehicleKind,
-    find_path,
+    GameState, Industry, IndustryKind, Map, OttdmapExtras, Station, TileCoord, TileKind, Vehicle,
+    VehicleKind, find_path,
 };
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 /// Dimensiones del mapa generado proceduralmente (sin `OTTDMAP_FILE`).
 pub const MAP_W: u32 = 24;
@@ -17,21 +17,27 @@ pub struct SimWorld {
     pub state: GameState,
     /// Indica que el mapa se cargó desde un archivo .ottdmap externo.
     pub loaded_file: bool,
+    /// Footers `INDP` / blobs opcionales si el mapa se cargó con `from_ottd_binary_with_extras`.
+    pub ottdmap_extras: Option<OttdmapExtras>,
 }
 
 impl Default for SimWorld {
     fn default() -> Self {
         if let Ok(path) = std::env::var("OTTDMAP_FILE") {
             match std::fs::read(&path) {
-                Ok(data) => match Map::from_ottd_binary(&data) {
-                    Ok(map) => {
+                Ok(data) => match Map::from_ottd_binary_with_extras(&data) {
+                    Ok((map, extras)) => {
                         info!("Mapa cargado desde {path}");
                         let mut state = GameState::from_map(map);
-                        place_industries(&mut state, true);
-                        log_detection_summary(&state, true);
+                        place_industries(&mut state, true, Some(&extras));
+                        place_stations(&mut state);
+                        place_stations_from_map_tiles(&mut state);
+                        place_vehicles(&mut state);
+                        log_detection_summary(&state, true, Some(&extras));
                         return Self {
                             state,
                             loaded_file: true,
+                            ottdmap_extras: Some(extras),
                         };
                     }
                     Err(e) => error!("Error al parsear {path}: {e:?}"),
@@ -41,19 +47,24 @@ impl Default for SimWorld {
         }
         let mut state = GameState::new(MAP_W, MAP_H);
         distribute_tile_kinds(&mut state, 0xDEAD_BEEF_CAFE_1234);
-        place_industries(&mut state, false);
+        place_industries(&mut state, false, None);
         place_stations(&mut state);
         place_roads(&mut state);
         place_vehicles(&mut state);
-        log_detection_summary(&state, false);
+        log_detection_summary(&state, false, None);
         Self {
             state,
             loaded_file: false,
+            ottdmap_extras: None,
         }
     }
 }
 
-fn log_detection_summary(state: &GameState, loaded_from_file: bool) {
+fn log_detection_summary(
+    state: &GameState,
+    loaded_from_file: bool,
+    extras: Option<&OttdmapExtras>,
+) {
     let (mw, mh) = state.map.dimensions();
     info!("Resumen detección: mapa {mw}x{mh} ({} teselas)", mw * mh);
 
@@ -108,6 +119,27 @@ fn log_detection_summary(state: &GameState, loaded_from_file: bool) {
         }
     }
 
+    if let Some(ex) = extras {
+        if !ex.industry_types.is_empty() {
+            info!(
+                "Footers .ottdmap: INDP con {} pares (índice industria → tipo OpenTTD)",
+                ex.industry_types.len()
+            );
+        }
+        if let Some(b) = ex.stnn_blob.as_ref() {
+            info!(
+                "Footers .ottdmap: STNN blob {} bytes (pool estaciones en save; no parseado aún)",
+                b.len()
+            );
+        }
+        if let Some(b) = ex.tnbp_blob.as_ref() {
+            info!(
+                "Footers .ottdmap: TNBP blob {} bytes (túneles/puentes en save)",
+                b.len()
+            );
+        }
+    }
+
     let mut industries: BTreeMap<&'static str, u32> = BTreeMap::new();
     for ind in &state.industries {
         let key = match ind.kind {
@@ -123,9 +155,7 @@ fn log_detection_summary(state: &GameState, loaded_from_file: bool) {
 
     info!("Estaciones detectadas: {}", state.stations.len());
     if loaded_from_file && state.stations.is_empty() {
-        info!(
-            "  - Nota: en mapas .ottdmap todavía no se sintetizan estaciones para la simulación."
-        );
+        info!("  - Nota: no hay teselas MP_STATION ni estaciones junto a industrias simuladas.");
     }
 
     let mut vehicles: BTreeMap<&'static str, u32> = BTreeMap::new();
@@ -137,10 +167,32 @@ fn log_detection_summary(state: &GameState, loaded_from_file: bool) {
     }
     info!("Vehículos detectados: {}", state.vehicles.len());
     if loaded_from_file && state.vehicles.is_empty() {
-        info!("  - Nota: en mapas .ottdmap todavía no se sintetizan vehículos para la simulación.");
+        info!("  - Nota: no hay vehículos (hace falta al menos una industria y una estación).");
     }
     for (kind, count) in vehicles {
         info!("  - Vehículo {kind}: {count}");
+    }
+}
+
+/// Añade [`Station`] por teselas `MP_STATION` del mapa (deduplica con estaciones ya creadas).
+pub fn place_stations_from_map_tiles(state: &mut GameState) {
+    let (mw, mh) = state.map.dimensions();
+    let mut seen: HashSet<(i32, i32)> = state
+        .stations
+        .iter()
+        .map(|s| (s.pos.x, s.pos.y))
+        .collect();
+    for y in 0..mh {
+        for x in 0..mw {
+            let c = TileCoord::new(x as i32, y as i32);
+            if state.map.get_kind(c) != Some(TileKind::Station) {
+                continue;
+            }
+            let key = (c.x, c.y);
+            if seen.insert(key) {
+                state.stations.push(Station::new(c));
+            }
+        }
     }
 }
 
@@ -172,7 +224,20 @@ fn tile_kind_hash(x: u32, y: u32, seed: u64) -> TileKind {
     }
 }
 
-pub fn place_industries(state: &mut GameState, from_ottd_file: bool) {
+/// Mapea `IndustryType` de OpenTTD (footer `INDP`) a los dos tipos simulados del core.
+fn industry_kind_from_ottd_type(t: u8) -> IndustryKind {
+    match t {
+        // Bosques, granjas, plantaciones, aserradero / papel (cadena madera).
+        2 | 3 | 9 | 14 | 19 | 20 | 24 | 25 => IndustryKind::Forest,
+        _ => IndustryKind::CoalMine,
+    }
+}
+
+pub fn place_industries(
+    state: &mut GameState,
+    from_ottd_file: bool,
+    ottd_extras: Option<&OttdmapExtras>,
+) {
     let (mw, mh) = state.map.dimensions();
     let mut coal_n = 0u32;
     let mut forest_n = 0u32;
@@ -206,8 +271,19 @@ pub fn place_industries(state: &mut GameState, from_ottd_file: bool) {
                 }
                 TileKind::Industry => {
                     if industry_n.is_multiple_of(stride_ottd) {
-                        let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
-                        let kind = classify_industry_kind_from_gfx(gfx);
+                        let kind = if let Some(ex) = ottd_extras {
+                            ex.industry_type_for_tile_index(tile.m1)
+                                .map(industry_kind_from_ottd_type)
+                                .unwrap_or_else(|| {
+                                    let gfx = u16::from(tile.m5)
+                                        | (u16::from((tile.m6 >> 2) & 1) << 8);
+                                    classify_industry_kind_from_gfx(gfx)
+                                })
+                        } else {
+                            let gfx = u16::from(tile.m5)
+                                | (u16::from((tile.m6 >> 2) & 1) << 8);
+                            classify_industry_kind_from_gfx(gfx)
+                        };
                         state.industries.push(Industry::new(c, kind));
                     }
                     industry_n += 1;

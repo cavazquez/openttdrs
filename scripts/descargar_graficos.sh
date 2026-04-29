@@ -438,7 +438,10 @@ for sid in [1005, 1006, 1007, 1008, 1009, 1010,
             1011, 1012, 1013, 1014, 1015, 1016,
             1017, 1018, 1019, 1020, 1021, 1022,
             1035, 1036,
-            1370, 1371]:
+            1370, 1371, 1372, 1373]:
+    crop_by_id(sid, f"rail_{sid}.png")
+# Señales ferroviarias (bloque clásico + extensión semaphore/PBS en OpenGFX, `rail_cmd.cpp`)
+for sid in range(1275, 1520):
     crop_by_id(sid, f"rail_{sid}.png")
 # Vías HORZ/VERT
 crop_by_id(1035, "rail_track_ns.png")

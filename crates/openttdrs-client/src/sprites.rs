@@ -659,18 +659,159 @@ pub fn is_road_level_crossing(mapt: u8, m5: u8, kind: TileKind) -> bool {
 }
 
 /// Sprite de raíl del cruce: `GetRailTypeInfo(...)->base_sprites.crossing + GetCrossingRailAxis(tile)` → 1370 + eje de **vía**.
+/// Si el cruce está barrado (`IsCrossingBarred`, bit 5 de `m5`), OpenTTD suma **+2** al sprite (`road_cmd.cpp`).
 #[must_use]
 pub fn level_crossing_rail_sprite_id(m5: u8) -> u32 {
     const SPR_CROSSING_OFF_X_RAIL: u32 = 1370;
     let road_axis = m5 & 1;
     let rail_axis = 1 - road_axis;
-    SPR_CROSSING_OFF_X_RAIL + u32::from(rail_axis)
+    let mut sid = SPR_CROSSING_OFF_X_RAIL + u32::from(rail_axis);
+    if (m5 >> 5) & 1 != 0 {
+        sid += 2;
+    }
+    sid
+}
+
+/// Reserva PBS en el cruce (bit 4 de `m5`, `HasCrossingReservation`).
+#[must_use]
+pub fn level_crossing_has_rail_reservation(m5: u8) -> bool {
+    (m5 >> 4) & 1 != 0
+}
+
+/// Tranvía presente en la tesela de carretera (`GetRoadTypeTram` ≠ inválido; 6 bits altos de `m8`).
+#[must_use]
+pub fn road_tile_has_tram_track(m8: u16) -> bool {
+    let t = (m8 >> 6) & 0x3F;
+    t != 0 && t != 0x3F
 }
 
 /// Vía con señales (`RailTileType::Signals`, bits 6–7 de `m5`).
 #[must_use]
 pub fn rail_tile_is_signals(m5: u8) -> bool {
     (m5 >> 6) & 0x3 == RAIL_TILE_SIGNALS
+}
+
+// OpenTTD `Track` / `TrackBits` (`track_type.h`, `rail_cmd.cpp::DrawSignals`).
+const OTTD_TRACK_X: u8 = 0;
+const OTTD_TRACK_Y: u8 = 1;
+const OTTD_TRACK_UPPER: u8 = 2;
+const OTTD_TRACK_LOWER: u8 = 3;
+const OTTD_TRACK_LEFT: u8 = 4;
+const OTTD_TRACK_RIGHT: u8 = 5;
+const TB_X: u8 = 1 << OTTD_TRACK_X;
+const TB_Y: u8 = 1 << OTTD_TRACK_Y;
+const TB_UPPER: u8 = 1 << OTTD_TRACK_UPPER;
+const TB_LOWER: u8 = 1 << OTTD_TRACK_LOWER;
+const TB_LEFT: u8 = 1 << OTTD_TRACK_LEFT;
+const TB_RIGHT: u8 = 1 << OTTD_TRACK_RIGHT;
+
+/// Sprite base OpenTTD para señales eléctricas clásicas (`SPR_ORIGINAL_SIGNALS_BASE`).
+const SPR_ORIGINAL_SIGNALS_BASE: u32 = 1275;
+/// Base aproximada OpenGFX 8bpp para bloque semaphore/PBS cuando no aplica el truco `1275` (`rail_cmd.cpp`: `SPR_SIGNALS_BASE - 16` sustituido por rango contiguo en el GRF extraído).
+const SPR_SIGNAL_ALT_BASE: u32 = 1352;
+const SIGTYPE_LAST_NOPBS: u8 = 3;
+
+#[inline]
+fn signal_type_from_m2(m2: u8, track: u8) -> u8 {
+    let base = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
+        4
+    } else {
+        0
+    };
+    (m2 >> base) & 7
+}
+
+#[inline]
+fn signal_variant_from_m2(m2: u8, track: u8) -> u8 {
+    let bit = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
+        7
+    } else {
+        3
+    };
+    (m2 >> bit) & 1
+}
+
+/// Offset de imagen en la hoja de señales (`SignalOffsets` en `rail_cmd.cpp`).
+#[inline]
+fn signal_sprite_id(sig_type: u8, variant: u8, image: u8, green: bool) -> u32 {
+    let cond = u32::from(green);
+    let pbs_extra = if sig_type > SIGTYPE_LAST_NOPBS { 64 } else { 0 };
+    let base = if sig_type == 0 && variant == 0 {
+        SPR_ORIGINAL_SIGNALS_BASE
+    } else {
+        SPR_SIGNAL_ALT_BASE
+    };
+    base + u32::from(sig_type) * 16
+        + u32::from(variant) * 64
+        + u32::from(image) * 2
+        + cond
+        + pbs_extra
+}
+
+/// Bits de señal presentes en el nibble alto de M3LO (`GetPresentSignals`, `rail_map.h`).
+#[must_use]
+pub fn rail_signal_present_mask(m3: u8) -> u8 {
+    (m3 >> 4) & 0x0F
+}
+
+/// Estados rojo/verde por bit de señal: nibble alto de **`m4()`** (`GetSignalStates`); el chunk save `M3HI` carga en `m4` (`map_sl.cpp`), exportado como `m3hi` en `.ottdmap`.
+#[must_use]
+pub fn rail_signal_state_mask(m3hi: u8) -> u8 {
+    (m3hi >> 4) & 0x0F
+}
+
+/// IDs de sprites (OpenGFX) para cada señal visible en la tesela, en orden de pintado.
+/// Replica la selección de `DrawSignals` + fórmula de `DrawSingleSignal` para el bloque clásico.
+#[must_use]
+pub fn collect_signal_sprite_ids(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<u32> {
+    if !rail_tile_is_signals(m5) {
+        return Vec::new();
+    }
+    let rails = m5 & 0x3F;
+    let present = rail_signal_present_mask(m3);
+    let states = rail_signal_state_mask(m3hi);
+    if present == 0 {
+        return Vec::new();
+    }
+
+    let mut out = Vec::with_capacity(4);
+    let mut push_if = |sig_bit: u8, image: u8, track: u8| {
+        if present & (1 << sig_bit) == 0 {
+            return;
+        }
+        let green = (states >> sig_bit) & 1 != 0;
+        let ty = signal_type_from_m2(m2, track);
+        let var = signal_variant_from_m2(m2, track);
+        out.push(signal_sprite_id(ty, var, image, green));
+    };
+
+    if rails & TB_Y == 0 {
+        if rails & TB_X == 0 {
+            if rails & TB_LEFT != 0 {
+                push_if(2, 7, OTTD_TRACK_LEFT); // NORTH
+                push_if(3, 6, OTTD_TRACK_LEFT); // SOUTH
+            }
+            if rails & TB_RIGHT != 0 {
+                push_if(0, 7, OTTD_TRACK_RIGHT);
+                push_if(1, 6, OTTD_TRACK_RIGHT);
+            }
+            if rails & TB_UPPER != 0 {
+                push_if(3, 5, OTTD_TRACK_UPPER); // WEST
+                push_if(2, 4, OTTD_TRACK_UPPER); // EAST
+            }
+            if rails & TB_LOWER != 0 {
+                push_if(1, 5, OTTD_TRACK_LOWER);
+                push_if(0, 4, OTTD_TRACK_LOWER);
+            }
+        } else {
+            push_if(3, 0, OTTD_TRACK_X); // SW
+            push_if(2, 1, OTTD_TRACK_X); // NE
+        }
+    } else {
+        push_if(3, 2, OTTD_TRACK_Y); // SE
+        push_if(2, 3, OTTD_TRACK_Y); // NW
+    }
+    out
 }
 
 // ── Lógica de road bits ─────────────────────────────────────────────────────
@@ -955,8 +1096,44 @@ mod level_crossing_tests {
     }
 
     #[test]
+    fn crossing_rail_sprite_adds_two_when_barred() {
+        assert_eq!(level_crossing_rail_sprite_id(0x40 | 0x20), 1373);
+        assert_eq!(level_crossing_rail_sprite_id(0x41 | 0x20), 1372);
+    }
+
+    #[test]
     fn signals_subtype_is_bit_pattern() {
         assert!(rail_tile_is_signals(0x01 | (RAIL_TILE_SIGNALS << 6)));
         assert!(!rail_tile_is_signals(0x01));
+    }
+}
+
+#[cfg(test)]
+mod signal_sprite_collect_tests {
+    use super::{
+        collect_signal_sprite_ids, rail_tile_is_signals, RAIL_TILE_SIGNALS, RAIL_TB_Y,
+    };
+
+    #[test]
+    fn semaphore_variant_changes_sprite_id() {
+        let m5 = (RAIL_TILE_SIGNALS << 6) | RAIL_TB_Y;
+        let m3 = 0xC0;
+        let m3hi = 0;
+        let ids_e = collect_signal_sprite_ids(0, m3, m3hi, m5);
+        // variant 1 en bit 3 del byte bajo de m2 para pistas que leen variante en bit 3 (TRACK_X/Y)
+        let ids_s = collect_signal_sprite_ids(0x08, m3, m3hi, m5);
+        assert_eq!(ids_e.len(), 2);
+        assert_eq!(ids_s.len(), 2);
+        assert_ne!(ids_e[0], ids_s[0]);
+    }
+
+    #[test]
+    fn y_track_two_present_signals_two_sprites() {
+        let m5 = (RAIL_TILE_SIGNALS << 6) | RAIL_TB_Y;
+        assert!(rail_tile_is_signals(m5));
+        let m3 = 0xC0; // bits 2,3 en nibble alto → presentes
+        let m3hi = 0x80; // bit 3 del nibble alto de estados → verde en señal 3
+        let ids = collect_signal_sprite_ids(0, m3, m3hi, m5);
+        assert_eq!(ids.len(), 2);
     }
 }

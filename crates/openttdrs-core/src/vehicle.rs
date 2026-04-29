@@ -5,7 +5,7 @@ use crate::map::TileCoord;
 /// Capacidad de carga por defecto (unidades de cargo).
 pub const VEHICLE_CAPACITY: u32 = 20;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum VehicleKind {
     Truck,
 }
@@ -15,7 +15,7 @@ pub enum VehicleKind {
 /// Si no hay camino calculado (`path` vacío y `pos != dest`) usa movimiento Manhattan
 /// como fallback para preservar compatibilidad con tests sin vías.
 /// Al llegar invierte el trayecto (va y vuelve entre `origin` y `dest`).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Vehicle {
     pub id: u32,
     pub kind: VehicleKind,

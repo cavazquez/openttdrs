@@ -34,9 +34,10 @@ use iso::{
 };
 use sprites::{
     HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites,
-    house_draw_data_index_for_tile, is_road_level_crossing, level_crossing_rail_sprite_id,
-    rail_tile_is_signals, rail_track_base_color, rail_trackbits_for_render, road_bits_for_render,
-    road_flat_sprite_color, road_flat_sprite_index,
+    collect_signal_sprite_ids, house_draw_data_index_for_tile, is_road_level_crossing,
+    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_tile_is_signals,
+    rail_track_base_color, rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
+    road_flat_sprite_index, road_tile_has_tram_track,
 };
 use state::SimWorld;
 use ui::{SelectedTileInfo, handle_tile_click, setup_tile_info_ui, update_tile_info_text};
@@ -287,6 +288,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
     let rail_tex: HashMap<u32, Handle<Image>> = RAIL_SPRITE_IDS
         .iter()
         .copied()
+        .chain(1275..1520_u32)
         .map(|id| {
             (
                 id,
@@ -443,7 +445,15 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         .unwrap_or(1370);
                     if let Some(img) = rail_tex.get(&sid) {
                         let crossing_paint = tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
-                            rail_track_base_color(t.mapt, TileKind::Rail, t.m5, t.m3)
+                            let mut c =
+                                rail_track_base_color(t.mapt, TileKind::Rail, t.m5, t.m3);
+                            if level_crossing_has_rail_reservation(t.m5) {
+                                c = c.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26);
+                            }
+                            if road_tile_has_tram_track(t.m8) {
+                                c = c.mix(&Color::srgb(0.55, 0.88, 0.58), 0.12);
+                            }
+                            c
                         });
                         commands.spawn((
                             Sprite {
@@ -512,6 +522,29 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                             rail_half_h,
                         )),
                     ));
+                }
+                if let Some(t) = tile.filter(|t| rail_tile_is_signals(t.m5)) {
+                    let sig_ids = collect_signal_sprite_ids(t.m2, t.m3, t.m3hi, t.m5);
+                    for (si, sid) in sig_ids.iter().copied().enumerate() {
+                        let Some(img) = rail_tex.get(&sid) else {
+                            continue;
+                        };
+                        let z = 0.032 + si as f32 * 0.0015;
+                        commands.spawn((
+                            Sprite {
+                                image: img.clone(),
+                                color: Color::WHITE,
+                                ..default()
+                            },
+                            Transform::from_translation(tile_pos_half(
+                                tx as i32,
+                                ty as i32,
+                                base_z,
+                                z,
+                                rail_half_h,
+                            )),
+                        ));
+                    }
                 }
             } else if kind == TileKind::House {
                 // GetCleanHouseType: GB(m8, 0, 12) — el resto es datos NewGRF
@@ -950,9 +983,21 @@ fn sync_window_title(
     };
 
     if let Ok(mut window) = windows.single_mut() {
+        let indp_n = sim
+            .ottdmap_extras
+            .as_ref()
+            .map(|e| e.industry_types.len())
+            .unwrap_or(0);
+        let indp_tag = if indp_n > 0 {
+            format!(" — INDP {indp_n}")
+        } else {
+            String::new()
+        };
         window.title = format!(
-            "openttdrs — tick {} — zoom {:.2}× — {:.0} FPS",
+            "openttdrs — tick {} — cargas {}/{}{indp_tag} — zoom {:.2}× — {:.0} FPS",
             sim.state.tick.get(),
+            sim.state.stats.cargo_pickups,
+            sim.state.stats.cargo_deliveries,
             scale,
             fps
         );

@@ -14,9 +14,10 @@ Formato de salida (.ottdmap) v5 (compatible v1–v4 al leer):
   W*H bytes   – m6 (bit 2 = bit 8 del gfx industria; StationType en MP_STATION) [v3+]
   W*H*2 bytes – m8 LE (HouseID en MP_HOUSE; en MP_ROAD bits altos incluyen RoadType tram) [v3+]
   W*H bytes   – m3 (M3LO) [v4+]
-  W*H bytes   – m2 (MAP2) [v5+]
+  W*H bytes   – m2 bajo (MAP2 LE byte 0; en save OpenTTD `m2()` es u16) [v5+]
   W*H bytes   – m7 (MAP7) [v5+]
-  W*H bytes   – m3hi (M3HI / byte alto de m3 en OpenTTD) [v5+]
+  W*H bytes   – m3hi (chunk M3HI = **`m4()`** en `map_sl.cpp`, p.ej. estados de señal) [v5+]
+  W*H bytes   – m2_hi (byte alto MAP2; reserva PBS / bits altos de `m2()`) [v5+12, si el .sav trae MAP2×2]
   Footers opcionales (magic ASCII + u32 LE length + payload):
     INDP  – industrias: count × (u16 industry_index, u8 industry_type)
     STNN  – blob crudo del chunk STNN (CH_TABLE o CH_ARRAY según versión del save)
@@ -579,7 +580,13 @@ def main() -> None:
 
     m8_data = build_m8_le_for_save(version, mapt[:expected], map8, m3lo, m3hi, expected)
     m3_export = m3lo[:expected]
-    m2_export = map2[:expected]
+    if len(map2) >= 2 * expected:
+        m2_lo = bytes(map2[i * 2] for i in range(expected))
+        m2_hi_plane = bytes(map2[i * 2 + 1] for i in range(expected))
+        print(f"  MAP2 u16: plano bajo+alto ({2 * expected:,} bytes en save → .ottdmap v5+12)")
+    else:
+        m2_lo = (map2[:expected] if len(map2) >= expected else map2 + b"\x00" * expected)[:expected]
+        m2_hi_plane = b"\x00" * expected
     m7_export = map7[:expected]
     m3hi_export = m3hi[:expected]
 
@@ -606,9 +613,10 @@ def main() -> None:
         + m6_data
         + m8_data
         + m3_export
-        + m2_export
+        + m2_lo
         + m7_export
         + m3hi_export
+        + m2_hi_plane
     )
 
     indp_pairs: list[tuple[int, int]] = []
@@ -634,7 +642,7 @@ def main() -> None:
         print(f"  TNBP: blob {len(tnbp_blob):,} bytes")
 
     out_path.write_bytes(body)
-    print(f"✓ Escrito: {out_path}  ({out_path.stat().st_size:,} bytes)  [v5 + footers]")
+    print(f"✓ Escrito: {out_path}  ({out_path.stat().st_size:,} bytes)  [v5+12 densidad + footers]")
 
     type_counts: dict[int, int] = {}
     for b in tile_types:

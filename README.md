@@ -88,7 +88,7 @@ Si preferís scripts individuales:
 
 ## Savegames → `.ottdmap` (`scripts/parse_sav.py`)
 
-Convierte un save de OpenTTD (`.sav`) al binario que carga el cliente (`MAPO`). **v5** extiende v4 con un byte por tesela de **MAP2**, **MAP7** y **M3HI** (tras **M3LO**), footers opcionales **INDP** (índice de industria → tipo), **STNN** (blob del chunk de estaciones) y **TNBP** (blob de túnel/puente si el save trae TNBP/TBUS/TUNN). Sigue aplicando la reconstrucción de **HouseID** en saves antiguos (`m8` desde M3HI/M3LO si la versión del save es &lt; 348).
+Convierte un save de OpenTTD (`.sav`) al binario que carga el cliente (`MAPO`). **v5** extiende v4 con un byte por tesela de **MAP2** (bajo), **MAP7** y **M3HI** —en el motor OpenTTD el chunk `M3HI` es el byte **`m4()`** del mapa, no el “alto” de `m3`— y **v5+12** añade un byte por tesela del **alto de MAP2** cuando el save trae `MAP2` como `u16` (reserva PBS en bits altos). Footers opcionales: **INDP**, **STNN** (blob estaciones), **TNBP** (túnel/puente). Sigue aplicando la reconstrucción de **HouseID** en saves antiguos (`m8` desde M3HI/M3LO si la versión del save es &lt; 348).
 
 Saves comprimidos con magic **OTTD** (LZO) requieren el paquete opcional `python-lzo` (`pip install python-lzo`); **OTTZ** (zlib) y **OTTX** (xz) no lo necesitan.
 

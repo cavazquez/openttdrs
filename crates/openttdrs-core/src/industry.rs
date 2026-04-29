@@ -9,13 +9,13 @@ pub const INDUSTRY_PRODUCE_AMOUNT: u32 = 8;
 /// Capacidad máxima de stock por defecto.
 pub const INDUSTRY_STOCK_CAPACITY: u32 = 500;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum IndustryKind {
     CoalMine,
     Forest,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Industry {
     pub pos: TileCoord,
     pub kind: IndustryKind,

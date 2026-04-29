@@ -7,6 +7,7 @@
 
 pub mod industry;
 pub mod map;
+pub mod ottdmap_extras;
 pub mod pathfinder;
 pub mod station;
 pub mod tick;
@@ -14,19 +15,38 @@ pub mod vehicle;
 
 pub use industry::{INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind};
 pub use map::{Map, MapError, Tile, TileCoord, TileKind};
+pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::find_path;
 pub use station::Station;
 pub use tick::GameTick;
 pub use vehicle::{Vehicle, VehicleKind};
 
+/// Contadores acumulativos de la simulación (carga/descarga, producción).
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize,
+)]
+pub struct SimStats {
+    /// Eventos de carga (vehículo tomó cargo en una industria).
+    pub cargo_pickups: u64,
+    /// Eventos de descarga (vehículo entregó en una estación).
+    pub cargo_deliveries: u64,
+    /// Unidades de cargo cargadas (suma de `load`).
+    pub cargo_units_loaded: u64,
+    /// Unidades de cargo entregadas en estación.
+    pub cargo_units_delivered: u64,
+    /// Unidades añadidas al stock de industrias por `Industry::produce`.
+    pub industry_cargo_units_produced: u64,
+}
+
 /// Estado global mínimo del mundo simulado.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GameState {
     pub map: Map,
     pub tick: GameTick,
     pub industries: Vec<Industry>,
     pub vehicles: Vec<Vehicle>,
     pub stations: Vec<Station>,
+    pub stats: SimStats,
 }
 
 impl GameState {
@@ -38,6 +58,7 @@ impl GameState {
             industries: Vec::new(),
             vehicles: Vec::new(),
             stations: Vec::new(),
+            stats: SimStats::default(),
         }
     }
 
@@ -50,6 +71,7 @@ impl GameState {
             industries: Vec::new(),
             vehicles: Vec::new(),
             stations: Vec::new(),
+            stats: SimStats::default(),
         }
     }
 
@@ -64,7 +86,10 @@ impl GameState {
         let t = self.tick.get();
 
         for industry in &mut self.industries {
+            let before = industry.stock;
             industry.produce(t);
+            self.stats.industry_cargo_units_produced +=
+                u64::from(industry.stock.saturating_sub(before));
         }
 
         // Carga: vehículo en posición de industria sin cargo → toma lo disponible.
@@ -77,6 +102,10 @@ impl GameState {
                 let load = ind.stock.min(vcap);
                 self.vehicles[i].cargo = load;
                 ind.stock -= load;
+                if load > 0 {
+                    self.stats.cargo_pickups += 1;
+                    self.stats.cargo_units_loaded += u64::from(load);
+                }
             }
         }
 
@@ -89,6 +118,8 @@ impl GameState {
             {
                 st.stock += vcargo;
                 st.income += u64::from(vcargo);
+                self.stats.cargo_deliveries += 1;
+                self.stats.cargo_units_delivered += u64::from(vcargo);
                 self.vehicles[i].cargo = 0;
             }
         }
@@ -108,6 +139,24 @@ impl GameState {
         for vehicle in &mut self.vehicles {
             vehicle.step();
         }
+    }
+
+    /// Serializa el estado a JSON (UTF-8) para guardado o depuración.
+    ///
+    /// # Errors
+    ///
+    /// Falla si algún campo no es serializable (no debería ocurrir en tipos propios).
+    pub fn save_json(&self) -> Result<String, serde_json::Error> {
+        serde_json::to_string_pretty(self)
+    }
+
+    /// Restaura un estado desde JSON producido por [`Self::save_json`].
+    ///
+    /// # Errors
+    ///
+    /// Devuelve error si el texto no es JSON válido o no coincide el esquema.
+    pub fn load_json(s: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(s)
     }
 }
 
@@ -251,6 +300,39 @@ mod tests {
         assert_eq!(s.vehicles[0].pos, spos);
         assert_eq!(s.vehicles[0].cargo, 0);
         assert!(s.stations[0].income > 0);
+    }
+
+    #[test]
+    fn sim_stats_count_pickup_and_delivery() {
+        let mut s = GameState::new(8, 8);
+        let ipos = TileCoord::new(0, 0);
+        let spos = TileCoord::new(1, 0);
+        let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
+        ind.stock = 20;
+        s.industries.push(ind);
+        s.stations.push(Station::new(spos));
+        s.vehicles
+            .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
+        assert_eq!(s.stats.cargo_pickups, 0);
+        assert_eq!(s.stats.cargo_deliveries, 0);
+        s.step();
+        assert_eq!(s.stats.cargo_pickups, 1);
+        assert!(s.stats.cargo_units_loaded > 0);
+        s.step();
+        assert_eq!(s.stats.cargo_deliveries, 1);
+        assert!(s.stats.cargo_units_delivered > 0);
+    }
+
+    #[test]
+    fn game_state_json_roundtrip() {
+        let mut s = GameState::new(4, 4);
+        s.industries
+            .push(Industry::new(TileCoord::new(0, 0), IndustryKind::Forest));
+        let j = s.save_json().expect("json");
+        let s2 = GameState::load_json(&j).expect("parse");
+        assert_eq!(s2.map.dimensions(), (4, 4));
+        assert_eq!(s2.industries.len(), 1);
+        assert_eq!(s2.industries[0].kind, IndustryKind::Forest);
     }
 
     #[test]

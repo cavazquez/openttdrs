@@ -2,7 +2,9 @@
 #![allow(clippy::doc_markdown, clippy::expect_used, clippy::unwrap_used)]
 
 /// Coordenada de tesela en el plano X/Y del mapa (análoga a índices de tesela en `OpenTTD`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub struct TileCoord {
     pub x: i32,
     pub y: i32,
@@ -19,7 +21,7 @@ impl TileCoord {
 ///
 /// Cubre los tipos de `TileType` de `OpenTTD` necesarios para el renderer.
 /// Los tipos sin sprite dedicado se renderizan con un color de fallback.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum TileKind {
     #[default]
     Grass,
@@ -48,12 +50,13 @@ pub enum TileKind {
 /// | `m3`  | M3LO (byte bajo de `m3`) | v4+: bits 0–3 = tram track bits en carretera normal; 4–7 = owner tranvía |
 /// | `m2`  | MAP2 | v5+: índice town/station/industry según tipo de tesela |
 /// | `m7`  | MAP7 | v5+: reserva cruces, NewGRF en mapa, etc. |
-/// | `m3hi` | M3HI | v5+: byte alto de `m3` (m4 en terminología `map_sl`) |
+/// | `m3hi` | M3HI | v5+: byte **`m4()`** del mapa OpenTTD (`M3HI` en `map_sl.cpp`; señales: `GetSignalStates` en nibble alto) |
+/// | `m2_hi` | MAP2 hi | v5+12: byte alto de **`m2()`** 16-bit por tesela (reserva PBS en bits altos del save) |
 ///
 /// Para `MP_RAILWAY`, TrackBits ocupa **bits 0-5** de m5 (6 bits); bits 6-7 son `RailTileType`.
 /// Para `MP_INDUSTRY`, gfx = `m5 | ((m6 >> 2) & 1) << 8` (9 bits).
 /// Para `MP_OBJECT`, m5 contiene el `ObjectType` (precomputado por `parse_sav.py` desde OBJS).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Tile {
     pub height: u8,
     pub kind: TileKind,
@@ -68,11 +71,13 @@ pub struct Tile {
     pub m8: u16,
     /// Byte M3LO del savegame (`.ottdmap` v4+). `0` si el archivo no incluye la sección.
     pub m3: u8,
-    /// Byte MAP2 (`.ottdmap` v5+).
+    /// Byte bajo de MAP2 (`.ottdmap` v5+); en el save OpenTTD `m2()` es `u16` LE.
     pub m2: u8,
+    /// Byte alto de MAP2 (`.ottdmap` v5+12); `0` si el archivo no incluye el plano extra.
+    pub m2_hi: u8,
     /// Byte MAP7 (`.ottdmap` v5+).
     pub m7: u8,
-    /// Byte M3HI (`.ottdmap` v5+).
+    /// Byte M3HI = **`m4()`** en OpenTTD (`.ottdmap` v5+).
     pub m3hi: u8,
 }
 
@@ -94,6 +99,7 @@ struct OttdmapDenseSlices<'a> {
     m2: &'a [u8],
     m7: &'a [u8],
     m3hi: &'a [u8],
+    m2_hi: &'a [u8],
 }
 
 fn ottdmap_dense_slices(data: &[u8], n: usize) -> Result<OttdmapDenseSlices<'_>, MapError> {
@@ -139,6 +145,11 @@ fn ottdmap_dense_slices(data: &[u8], n: usize) -> Result<OttdmapDenseSlices<'_>,
     } else {
         (&[] as &[u8], &[] as &[u8], &[] as &[u8])
     };
+    let m2_hi = if data.len() >= v5_base + 4 * n {
+        &data[v5_base + 3 * n..v5_base + 4 * n]
+    } else {
+        &[] as &[u8]
+    };
     Ok(OttdmapDenseSlices {
         tile_types,
         heights,
@@ -150,6 +161,7 @@ fn ottdmap_dense_slices(data: &[u8], n: usize) -> Result<OttdmapDenseSlices<'_>,
         m2,
         m7,
         m3hi,
+        m2_hi,
     })
 }
 
@@ -191,7 +203,7 @@ fn ottd_tile_kind(ottd_type: u8, m5: u8) -> TileKind {
 }
 
 /// Mapa rectangular denso en memoria.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Map {
     width: u32,
     height: u32,
@@ -222,6 +234,7 @@ impl Map {
                     m8: 0,
                     m3: 0,
                     m2: 0,
+                    m2_hi: 0,
                     m7: 0,
                     m3hi: 0,
                 };
@@ -337,6 +350,7 @@ impl Map {
                 m8: ottd_m8_at(s.m8, i),
                 m3: ottd_byte_or(s.m3, i),
                 m2: ottd_byte_or(s.m2, i),
+                m2_hi: ottd_byte_or(s.m2_hi, i),
                 m7: ottd_byte_or(s.m7, i),
                 m3hi: ottd_byte_or(s.m3hi, i),
             });
@@ -347,6 +361,18 @@ impl Map {
             height,
             tiles,
         })
+    }
+
+    /// Igual que [`Self::from_ottd_binary`], pero devuelve también los footers parseados (`INDP`, etc.).
+    #[allow(clippy::missing_panics_doc)]
+    pub fn from_ottd_binary_with_extras(
+        data: &[u8],
+    ) -> Result<(Self, crate::ottdmap_extras::OttdmapExtras), MapError> {
+        let map = Self::from_ottd_binary(data)?;
+        let n = (map.width as usize).saturating_mul(map.height as usize);
+        let dense_end = crate::ottdmap_extras::dense_payload_end(data, n);
+        let extras = crate::ottdmap_extras::OttdmapExtras::parse_footers(data, dense_end);
+        Ok((map, extras))
     }
 }
 
@@ -427,6 +453,27 @@ mod ottdmap_binary_tests {
         assert_eq!(t0.m7, 0x22);
         assert_eq!(t0.m3hi, 0x33);
         assert_eq!(t0.m3, 0xAB);
+    }
+
+    #[test]
+    fn from_ottd_binary_with_extras_reads_indp() {
+        let bytes = minimal_ottdmap_v5_with_footer();
+        let (map, ex) = Map::from_ottd_binary_with_extras(&bytes).expect("mapa válido");
+        assert_eq!(map.dimensions(), (2, 2));
+        assert!(ex.industry_types.is_empty());
+    }
+
+    #[test]
+    fn from_ottd_binary_loads_m2_hi_plane() {
+        let mut v = minimal_ottdmap_v4();
+        v.extend_from_slice(&[0x11, 0, 0, 0]); // m2
+        v.extend_from_slice(&[0x22, 0, 0, 0]); // m7
+        v.extend_from_slice(&[0x33, 0, 0, 0]); // m3hi
+        v.extend_from_slice(&[0xAA, 0, 0, 0xBB]); // m2_hi (tesela 3 = 0xBB)
+        let map = Map::from_ottd_binary(&v).expect("mapa válido");
+        let t3 = map.get(TileCoord::new(1, 1)).expect("tile");
+        assert_eq!(t3.m2_hi, 0xBB);
+        assert_eq!(t3.m2, 0);
     }
 
     #[test]

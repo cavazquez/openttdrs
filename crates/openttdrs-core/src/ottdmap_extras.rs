@@ -1,0 +1,180 @@
+//! Footers opcionales tras los planos densos de `.ottdmap` v5 (`INDP`, `STNN`, `TNBP`).
+
+#[inline]
+fn looks_like_footer_magic(data: &[u8], off: usize) -> bool {
+    data.get(off..off + 4)
+        .is_some_and(|m| matches!(m, b"INDP" | b"STNN" | b"TNBP" | b"M2HI"))
+}
+
+/// Offset del primer byte **después** de los planos densos (MAPO…`m3hi` o …`m2_hi` en v5+12).
+///
+/// - Si en `12+11·n` empieza un magic de footer conocido → fin del bloque denso **v5** (11 planos).
+/// - Si no hay footer ahí pero el buffer alcanza `12+12·n` → incluye el plano `m2_hi` (MAP2 alto).
+/// - Si el archivo está truncado, devuelve el máximo prefijo denso coherente (≤ 11 planos).
+#[must_use]
+pub fn dense_payload_end(data: &[u8], n: usize) -> usize {
+    let end11 = 12usize.saturating_add(n.saturating_mul(11));
+    let end12 = 12usize.saturating_add(n.saturating_mul(12));
+    if data.len() >= end11 && looks_like_footer_magic(data, end11) {
+        return end11;
+    }
+    if data.len() >= end12 {
+        return end12;
+    }
+
+    let data_len = data.len();
+    if data_len < 12usize.saturating_add(n.saturating_mul(3)) {
+        return 12usize.saturating_add(n.saturating_mul(3));
+    }
+    let mut end = 12usize.saturating_add(n.saturating_mul(3));
+    if data_len >= 12 + n * 4 {
+        end = 12 + n * 4;
+    }
+    if data_len >= 12 + n * 5 {
+        end = 12 + n * 5;
+    }
+    if data_len >= 12 + n * 7 {
+        end = 12 + n * 7;
+    }
+    if data_len >= 12 + n * 8 {
+        end = 12 + n * 8;
+    }
+    if data_len >= 12 + n * 11 {
+        end = 12 + n * 11;
+    }
+    end.min(end11)
+}
+
+/// Datos parseados de footers (best-effort; se detiene ante magic desconocido).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OttdmapExtras {
+    /// Pares `(industry_index, industry_type)` del footer `INDP`.
+    pub industry_types: Vec<(u16, u8)>,
+    pub stnn_blob: Option<Vec<u8>>,
+    pub tnbp_blob: Option<Vec<u8>>,
+}
+
+impl OttdmapExtras {
+    /// Lee la cadena de footers a partir de `dense_end` (primer byte del primer magic).
+    #[must_use]
+    pub fn parse_footers(data: &[u8], dense_end: usize) -> Self {
+        let mut out = Self::default();
+        let mut off = dense_end;
+        while off + 8 <= data.len() {
+            let magic = &data[off..off + 4];
+            off += 4;
+            match magic {
+                b"INDP" => {
+                    if off + 4 > data.len() {
+                        break;
+                    }
+                    let count = usize::try_from(u32::from_le_bytes(
+                        data[off..off + 4].try_into().unwrap_or([0; 4]),
+                    ))
+                    .unwrap_or(0);
+                    off += 4;
+                    let need = count.saturating_mul(3);
+                    if off + need > data.len() {
+                        break;
+                    }
+                    out.industry_types.reserve(count.min(4096));
+                    for _ in 0..count {
+                        let idx = u16::from_le_bytes([data[off], data[off + 1]]);
+                        let typ = data[off + 2];
+                        out.industry_types.push((idx, typ));
+                        off += 3;
+                    }
+                }
+                b"STNN" | b"TNBP" => {
+                    if off + 4 > data.len() {
+                        break;
+                    }
+                    let bl = usize::try_from(u32::from_le_bytes(
+                        data[off..off + 4].try_into().unwrap_or([0; 4]),
+                    ))
+                    .unwrap_or(0);
+                    off += 4;
+                    if off + bl > data.len() {
+                        break;
+                    }
+                    let blob = data[off..off + bl].to_vec();
+                    off += bl;
+                    if magic == b"STNN" {
+                        out.stnn_blob = Some(blob);
+                    } else {
+                        out.tnbp_blob = Some(blob);
+                    }
+                }
+                _ => break,
+            }
+        }
+        out
+    }
+
+    /// Busca el tipo `OpenTTD` guardado para un índice de industria en tesela (`m1` bits 0–6).
+    #[must_use]
+    pub fn industry_type_for_tile_index(&self, m1: u8) -> Option<u8> {
+        let idx = u16::from(m1 & 0x7F);
+        self.industry_types
+            .iter()
+            .find(|(i, _)| *i == idx)
+            .map(|(_, t)| *t)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_indp_after_v5_dense() {
+        let w = 1u32;
+        let h = 1u32;
+        let n = 1usize;
+        let mut v = Vec::new();
+        v.extend_from_slice(b"MAPO");
+        v.extend_from_slice(&w.to_le_bytes());
+        v.extend_from_slice(&h.to_le_bytes());
+        v.push(0x80); // MAPT industry
+        v.push(0);
+        v.push(0);
+        v.push(0);
+        v.push(0);
+        v.extend_from_slice(&0u16.to_le_bytes()); // m6 + m8
+        v.push(0); // m3
+        v.extend_from_slice(&[0u8; 3]); // m2 m7 m3hi
+        v.extend_from_slice(b"INDP");
+        v.extend_from_slice(&2u32.to_le_bytes());
+        v.extend_from_slice(&5u16.to_le_bytes());
+        v.push(42);
+        v.extend_from_slice(&6u16.to_le_bytes());
+        v.push(7);
+        let end = dense_payload_end(&v, n);
+        let ex = OttdmapExtras::parse_footers(&v, end);
+        assert_eq!(ex.industry_types, vec![(5, 42), (6, 7)]);
+    }
+
+    #[test]
+    fn dense_end_12_planes_before_indp() {
+        let w = 1u32;
+        let h = 1u32;
+        let n = 1usize;
+        let mut v = Vec::new();
+        v.extend_from_slice(b"MAPO");
+        v.extend_from_slice(&w.to_le_bytes());
+        v.extend_from_slice(&h.to_le_bytes());
+        v.push(0x10);
+        v.push(0);
+        v.push(0);
+        v.extend_from_slice(&[0u8; 4]);
+        v.extend_from_slice(&0u16.to_le_bytes());
+        v.push(0);
+        v.extend_from_slice(&[0u8; 3]); // m2 m7 m3hi
+        v.push(0xCD); // m2_hi
+        v.extend_from_slice(b"INDP");
+        v.extend_from_slice(&0u32.to_le_bytes());
+        assert_eq!(dense_payload_end(&v, n), 24);
+        let ex = OttdmapExtras::parse_footers(&v, 24);
+        assert!(ex.industry_types.is_empty());
+    }
+}

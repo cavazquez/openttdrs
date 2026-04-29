@@ -1,6 +1,6 @@
 use crate::map::TileCoord;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Station {
     pub pos: TileCoord,
     /// Cargo acumulado en el almacén de la estación.

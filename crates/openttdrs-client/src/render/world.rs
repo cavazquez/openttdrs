@@ -9,7 +9,8 @@ use crate::iso::{
     ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, shore_png_index, shore_tileh_for_draw_shore,
 };
 use crate::render::{
-    MapSpriteBatches, MapVisualLayer, RenderGrid, TileRenderContext, WorldAssets,
+    IndustryPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, RenderGrid,
+    TileRenderContext, WorldAssets,
     flush_map_batches, push_forest_tree, push_water_tile, spawn_generic_land_tile,
     spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
 };
@@ -50,6 +51,7 @@ pub(crate) fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim:
 
     commands.spawn((
         Camera2d,
+        PrimaryGameCamera,
         Camera {
             clear_color: ClearColorConfig::Custom(Color::srgb(0.22, 0.38, 0.52)),
             ..default()
@@ -191,7 +193,10 @@ fn tile_kind_name(kind: TileKind) -> &'static str {
 }
 
 fn sync_camera_for_sim(
-    q_cam: &mut Query<(&mut Transform, &mut Projection), With<Camera2d>>,
+    q_cam: &mut Query<
+        (&mut Transform, &mut Projection),
+        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+    >,
     sim: &SimWorld,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
@@ -213,7 +218,10 @@ pub(crate) fn apply_remap_map_visuals(
     mut commands: Commands,
     mut pending: ResMut<RemapMapVisualsPending>,
     q_vis: Query<Entity, With<MapVisualLayer>>,
-    mut q_cam: Query<(&mut Transform, &mut Projection), With<Camera2d>>,
+    mut q_cam: Query<
+        (&mut Transform, &mut Projection),
+        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+    >,
     asset_server: Res<AssetServer>,
     sim: Res<SimWorld>,
 ) {

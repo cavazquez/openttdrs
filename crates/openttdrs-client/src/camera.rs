@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::bevy_app::UpdateSet;
+use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
 use crate::state::ClientScreen;
 
 /// Paneo con botón derecho: factor × `OrthographicProjection::scale` × delta en píxeles.
@@ -48,7 +49,10 @@ pub fn move_camera(
     motion: Res<AccumulatedMouseMotion>,
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    mut cam_q: Query<(&mut Transform, &mut Projection), With<Camera2d>>,
+    mut cam_q: Query<
+        (&mut Transform, &mut Projection),
+        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+    >,
     mut vel: ResMut<CameraVelocity>,
 ) {
     let Ok((mut transform, mut projection)) = cam_q.single_mut() else {

@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{Command, TileCoord, apply_command};
+use openttdrs_core::{Command, TileCoord, TileKind, apply_command};
 
 use crate::iso::world_pos_to_tile_coord;
+use crate::render::{IndustryPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending};
 use crate::state::SimWorld;
-use crate::render::RemapMapVisualsPending;
+use crate::ui::industry_panel::IndustryPanelState;
 
 use super::super::hud::SelectedTileInfo;
 use super::{
@@ -155,11 +156,15 @@ pub(crate) fn update_toolbar_tooltip(
 pub(crate) fn handle_tile_click(
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    cam_q: Query<(&Camera, &Transform), With<Camera2d>>,
+    cam_q: Query<
+        (&Camera, &Transform),
+        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+    >,
     mut selected: ResMut<SelectedTileInfo>,
     mut sim: ResMut<SimWorld>,
     tool_state: Res<UiToolState>,
     mut pending: ResMut<RemapMapVisualsPending>,
+    mut industry_panel: ResMut<IndustryPanelState>,
     menu_pointer: Query<&Interaction, With<BuildMenuUi>>,
 ) {
     if !mouse.just_pressed(MouseButton::Left) {
@@ -192,8 +197,13 @@ pub(crate) fn handle_tile_click(
     selected.pos = Some(pos);
 
     let Some(action) = tool_state.active_tool else {
+        if sim.state.map.get_kind(pos) == Some(TileKind::Industry) {
+            industry_panel.open = true;
+            industry_panel.focus_tile = Some(pos);
+        }
         return;
     };
+
     let cmd = match action {
         BuildMenuAction::Road => Command::PlaceRoad(pos),
         BuildMenuAction::Rail => Command::PlaceRail(pos),

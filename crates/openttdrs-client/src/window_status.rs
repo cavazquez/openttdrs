@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::bevy_app::UpdateSet;
+use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
 use crate::state::{ClientScreen, SimWorld};
 
 pub(crate) struct WindowStatusPlugin;
@@ -31,7 +32,10 @@ pub(crate) fn sync_window_title(
     sim: Res<SimWorld>,
     time: Res<Time>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
-    cam_q: Query<&Projection, With<Camera2d>>,
+    cam_q: Query<
+        &Projection,
+        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+    >,
     mut state: Local<WindowTitleSync>,
 ) {
     let scale = cam_q

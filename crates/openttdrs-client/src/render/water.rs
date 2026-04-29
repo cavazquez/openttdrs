@@ -5,7 +5,7 @@ use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::ISO_HW;
-use crate::render::WaterTile;
+use crate::render::{IndustryPreviewCamera, PrimaryGameCamera, WaterTile};
 use crate::state::ClientScreen;
 
 pub(crate) struct WaterAnimationPlugin;
@@ -31,7 +31,10 @@ impl Plugin for WaterAnimationPlugin {
 /// modulando brillo/tinte en pasos discretos sincronizados.
 pub(crate) fn animate_water(
     time: Res<Time>,
-    cam_q: Query<(&GlobalTransform, &Projection), With<Camera2d>>,
+    cam_q: Query<
+        (&GlobalTransform, &Projection),
+        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+    >,
     mut query: Query<(&WaterTile, &GlobalTransform, &mut Sprite)>,
 ) {
     const DARK_CYCLE: [f32; 5] = [0.92, 0.95, 0.98, 1.01, 1.04];

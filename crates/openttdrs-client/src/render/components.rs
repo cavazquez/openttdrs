@@ -13,6 +13,14 @@ pub(crate) struct WaterTile {
 #[derive(Component)]
 pub(crate) struct MapVisualLayer;
 
+/// Cámara isométrica principal (ventana). Distingue de [`IndustryPreviewCamera`].
+#[derive(Component)]
+pub(crate) struct PrimaryGameCamera;
+
+/// Cámara secundaria que renderiza el mapa a una textura (vista previa de industria).
+#[derive(Component)]
+pub(crate) struct IndustryPreviewCamera;
+
 #[derive(Default)]
 pub(crate) struct MapSpriteBatches {
     pub(super) water: Vec<(WaterTile, Sprite, Transform)>,

@@ -6,6 +6,7 @@ use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 
 mod hud;
+mod industry_panel;
 mod main_menu;
 mod toolbar;
 use hud::{
@@ -13,6 +14,9 @@ use hud::{
     setup_tile_info_ui, update_tile_info_text,
 };
 use main_menu::{main_menu_interaction, setup_main_menu, setup_main_menu_camera};
+use industry_panel::{
+    industry_panel_close_interaction, setup_industry_panel, sync_industry_panel, IndustryPanelState,
+};
 use toolbar::{
     ToolbarState, UiToolState, build_menu_interaction, handle_tile_click, setup_build_menu,
     setup_top_toolbar, toolbar_group_interaction, update_tool_button_visuals,
@@ -28,13 +32,20 @@ impl Plugin for ClientUiPlugin {
             .init_resource::<SimHudControls>()
             .init_resource::<UiToolState>()
             .init_resource::<ToolbarState>()
+            .init_resource::<IndustryPanelState>()
             .add_systems(
                 OnEnter(ClientScreen::MainMenu),
                 (setup_main_menu_camera, setup_main_menu),
             )
             .add_systems(
                 OnEnter(ClientScreen::InGame),
-                (setup_tile_info_ui, setup_top_toolbar, setup_build_menu).in_set(StartupSet::Ui),
+                (
+                    setup_tile_info_ui,
+                    setup_top_toolbar,
+                    setup_build_menu,
+                    setup_industry_panel,
+                )
+                    .in_set(StartupSet::Ui),
             )
             .add_systems(
                 Update,
@@ -59,7 +70,9 @@ impl Plugin for ClientUiPlugin {
                     update_toolbar_tool_visibility,
                     update_tool_button_visuals,
                     update_toolbar_tooltip,
+                    industry_panel_close_interaction,
                     handle_tile_click,
+                    sync_industry_panel,
                     update_tile_info_text,
                 )
                     .in_set(UpdateSet::Ui)

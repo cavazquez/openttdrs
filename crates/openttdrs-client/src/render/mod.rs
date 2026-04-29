@@ -9,7 +9,9 @@ mod water;
 mod world;
 
 pub(crate) use assets::WorldAssets;
-pub(crate) use components::{MapSpriteBatches, MapVisualLayer, WaterTile};
+pub(crate) use components::{
+    IndustryPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, WaterTile,
+};
 pub(crate) use grid::{RenderGrid, TileRenderContext};
 pub(crate) use tiles::{
     flush_map_batches, push_forest_tree, push_water_tile, spawn_generic_land_tile,

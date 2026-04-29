@@ -4,6 +4,7 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::TileKind;
 
 use crate::config;
+use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
 use crate::iso::{
     compute_tileh, shore_png_index, shore_tileh_for_draw_shore, slope_label,
     tile_slope_bits_from_heights,
@@ -40,8 +41,11 @@ pub(crate) fn update_tile_info_text(
     hud: Res<SimHudControls>,
     tool_state: Res<UiToolState>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    cam_q: Query<(&Transform, &Projection), With<Camera2d>>,
-    mut text_q: Query<(&mut Text2d, &mut Transform), (With<TileInfoText>, Without<Camera2d>)>,
+    cam_q: Query<
+        (&Transform, &Projection),
+        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+    >,
+    mut text_q: Query<(&mut Text2d, &mut Transform), (With<TileInfoText>, Without<PrimaryGameCamera>)>,
 ) {
     let Ok((mut text, mut text_transform)) = text_q.single_mut() else {
         return;

@@ -3,9 +3,21 @@
 use bevy::prelude::*;
 use openttdrs_core::IndustryKind;
 
+use crate::bevy_app::UpdateSet;
 use crate::config::env_flag;
 use crate::iso::{gizmo_diamond, iso};
 use crate::state::SimWorld;
+
+pub(crate) struct DebugGizmosPlugin;
+
+impl Plugin for DebugGizmosPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            Update,
+            (draw_industries, draw_stations).in_set(UpdateSet::Visuals),
+        );
+    }
+}
 
 pub(crate) fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
     if !env_flag("OPENTTDRS_GIZMOS") {

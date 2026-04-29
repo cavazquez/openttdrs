@@ -3,10 +3,22 @@
 use bevy::prelude::*;
 use openttdrs_core::save;
 
+use crate::bevy_app::UpdateSet;
 use crate::state::SimWorld;
 use crate::ui::SimHudControls;
 use crate::vehicle_render::VehicleIndex;
 use crate::world_render::RemapMapVisualsPending;
+
+pub(crate) struct PersistencePlugin;
+
+impl Plugin for PersistencePlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(
+            Update,
+            handle_sim_json_hotkeys.in_set(UpdateSet::Persistence),
+        );
+    }
+}
 
 pub(crate) fn handle_sim_json_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,

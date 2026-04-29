@@ -4,6 +4,8 @@ use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
+use crate::bevy_app::UpdateSet;
+
 /// Paneo con botón derecho: factor × `OrthographicProjection::scale` × delta en píxeles.
 const PAN_RMB_SCALE: f32 = 1.35;
 /// Zoom con teclado (+/-): fracción de `scale` por segundo al mantener pulsado.
@@ -21,6 +23,15 @@ const WASD_MAX_SPEED: f32 = 600.0;
 /// Velocidad de la cámara (inercia WASD).
 #[derive(Resource, Default)]
 pub struct CameraVelocity(pub Vec2);
+
+pub(crate) struct CameraControlPlugin;
+
+impl Plugin for CameraControlPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<CameraVelocity>()
+            .add_systems(Update, move_camera.in_set(UpdateSet::Camera));
+    }
+}
 
 /// Mueve la cámara con WASD (con inercia), arrastre con botón derecho y rueda del ratón.
 #[allow(clippy::too_many_arguments)] // firma dictada por el sistema ECS de Bevy

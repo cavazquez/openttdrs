@@ -3,20 +3,35 @@
 use bevy::image::ImageSamplerDescriptor;
 use bevy::prelude::*;
 
-use crate::camera::{CameraVelocity, move_camera};
-use crate::debug_gizmos::{draw_industries, draw_stations};
-use crate::persistence::handle_sim_json_hotkeys;
-use crate::render::animate_water;
-use crate::simulation::advance_sim;
+use crate::camera::CameraControlPlugin;
+use crate::debug_gizmos::DebugGizmosPlugin;
+use crate::persistence::PersistencePlugin;
+use crate::render::WaterAnimationPlugin;
+use crate::simulation::SimulationPlugin;
 use crate::state::SimWorld;
-use crate::ui::{
-    SelectedTileInfo, SimHudControls, build_menu_interaction, cycle_json_save_path_hotkey,
-    handle_pause_toggle, handle_tile_click, setup_build_menu, setup_tile_info_ui,
-    update_tile_info_text,
-};
-use crate::vehicle_render::{VehicleIndex, rebuild_vehicle_index, update_vehicles};
-use crate::window_status::sync_window_title;
-use crate::world_render::{RemapMapVisualsPending, apply_remap_map_visuals, setup};
+use crate::ui::ClientUiPlugin;
+use crate::vehicle_render::VehicleRenderPlugin;
+use crate::window_status::WindowStatusPlugin;
+use crate::world_render::WorldRenderPlugin;
+
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum StartupSet {
+    World,
+    Vehicles,
+    Ui,
+}
+
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum UpdateSet {
+    Input,
+    Sim,
+    Persistence,
+    RenderRefresh,
+    Status,
+    Visuals,
+    Camera,
+    Ui,
+}
 
 pub(crate) fn run(asset_root: &str) {
     App::new()
@@ -38,41 +53,35 @@ pub(crate) fn run(asset_root: &str) {
                     default_sampler: ImageSamplerDescriptor::nearest(),
                 }),
         )
-        .init_resource::<SimWorld>()
-        .init_resource::<SelectedTileInfo>()
-        .init_resource::<CameraVelocity>()
-        .init_resource::<VehicleIndex>()
-        .init_resource::<RemapMapVisualsPending>()
-        .init_resource::<SimHudControls>()
-        .add_systems(
+        .configure_sets(
             Startup,
-            (
-                setup,
-                rebuild_vehicle_index,
-                setup_tile_info_ui,
-                setup_build_menu,
-            )
-                .chain(),
+            (StartupSet::World, StartupSet::Vehicles, StartupSet::Ui).chain(),
         )
-        .add_systems(
+        .configure_sets(
             Update,
             (
-                handle_pause_toggle,
-                cycle_json_save_path_hotkey,
-                advance_sim,
-                handle_sim_json_hotkeys,
-                apply_remap_map_visuals,
-                sync_window_title,
-                update_vehicles,
-                animate_water,
-                draw_industries,
-                draw_stations,
-                move_camera,
-                build_menu_interaction,
-                handle_tile_click,
-                update_tile_info_text,
+                UpdateSet::Input,
+                UpdateSet::Sim,
+                UpdateSet::Persistence,
+                UpdateSet::RenderRefresh,
+                UpdateSet::Status,
+                UpdateSet::Visuals,
+                UpdateSet::Camera,
+                UpdateSet::Ui,
             )
                 .chain(),
         )
+        .init_resource::<SimWorld>()
+        .add_plugins((
+            WorldRenderPlugin,
+            VehicleRenderPlugin,
+            ClientUiPlugin,
+            SimulationPlugin,
+            PersistencePlugin,
+            WindowStatusPlugin,
+            WaterAnimationPlugin,
+            DebugGizmosPlugin,
+            CameraControlPlugin,
+        ))
         .run();
 }

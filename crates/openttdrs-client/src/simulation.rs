@@ -2,9 +2,18 @@
 
 use bevy::prelude::*;
 
+use crate::bevy_app::UpdateSet;
 use crate::state::SimWorld;
 use crate::ui::SimHudControls;
 use crate::vehicle_render::VehicleIndex;
+
+pub(crate) struct SimulationPlugin;
+
+impl Plugin for SimulationPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, advance_sim.in_set(UpdateSet::Sim));
+    }
+}
 
 pub(crate) fn advance_sim(
     time: Res<Time>,

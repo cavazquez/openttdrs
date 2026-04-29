@@ -6,6 +6,7 @@ use bevy::ui::FocusPolicy;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{Command, TileCoord, TileKind, apply_command};
 
+use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::config;
 use crate::iso::{
     compute_tileh, shore_png_index, shore_tileh_for_draw_shore, slope_label,
@@ -17,6 +18,32 @@ use crate::sprites::{
 };
 use crate::state::SimWorld;
 use crate::world_render::RemapMapVisualsPending;
+
+pub(crate) struct ClientUiPlugin;
+
+impl Plugin for ClientUiPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<SelectedTileInfo>()
+            .init_resource::<SimHudControls>()
+            .add_systems(
+                Startup,
+                (setup_tile_info_ui, setup_build_menu).in_set(StartupSet::Ui),
+            )
+            .add_systems(
+                Update,
+                (handle_pause_toggle, cycle_json_save_path_hotkey).in_set(UpdateSet::Input),
+            )
+            .add_systems(
+                Update,
+                (
+                    build_menu_interaction,
+                    handle_tile_click,
+                    update_tile_info_text,
+                )
+                    .in_set(UpdateSet::Ui),
+            );
+    }
+}
 
 /// Pausa simulación y ruta del JSON de **F5/F9** (alternativa a variable de entorno al arranque).
 #[derive(Resource)]

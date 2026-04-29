@@ -3,8 +3,17 @@
 use bevy::math::{Affine3A, Rect};
 use bevy::prelude::*;
 
+use crate::bevy_app::UpdateSet;
 use crate::iso::ISO_HW;
 use crate::render::WaterTile;
+
+pub(crate) struct WaterAnimationPlugin;
+
+impl Plugin for WaterAnimationPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, animate_water.in_set(UpdateSet::Visuals));
+    }
+}
 
 /// Anima agua con ciclos discretos para aproximar la paleta animada de OpenTTD.
 ///

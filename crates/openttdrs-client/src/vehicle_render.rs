@@ -3,12 +3,23 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 use openttdrs_core::Vehicle;
 
+use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::iso::{iso, overlay_pos, tile_min_z};
 use crate::render::MapVisualLayer;
 use crate::state::SimWorld;
 
 /// Factor de escala para los sprites de camiones (son 20×14 px nativo).
 const TRUCK_SCALE: f32 = 2.0;
+
+pub(crate) struct VehicleRenderPlugin;
+
+impl Plugin for VehicleRenderPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<VehicleIndex>()
+            .add_systems(Startup, rebuild_vehicle_index.in_set(StartupSet::Vehicles))
+            .add_systems(Update, update_vehicles.in_set(UpdateSet::Visuals));
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 enum VehicleDir {

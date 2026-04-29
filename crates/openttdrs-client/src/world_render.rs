@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 use openttdrs_core::TileKind;
 
+use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::config::env_flag;
 use crate::iso::{ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H};
 use crate::render::{
@@ -18,6 +19,19 @@ use crate::vehicle_render::{TruckHandles, spawn_initial_vehicles};
 pub(crate) struct RemapMapVisualsPending {
     pub(crate) pending: bool,
     pub(crate) sync_camera: bool,
+}
+
+pub(crate) struct WorldRenderPlugin;
+
+impl Plugin for WorldRenderPlugin {
+    fn build(&self, app: &mut App) {
+        app.init_resource::<RemapMapVisualsPending>()
+            .add_systems(Startup, setup.in_set(StartupSet::World))
+            .add_systems(
+                Update,
+                apply_remap_map_visuals.in_set(UpdateSet::RenderRefresh),
+            );
+    }
 }
 
 pub(crate) fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWorld>) {

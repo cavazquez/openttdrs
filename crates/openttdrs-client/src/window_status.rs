@@ -3,7 +3,16 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
+use crate::bevy_app::UpdateSet;
 use crate::state::SimWorld;
+
+pub(crate) struct WindowStatusPlugin;
+
+impl Plugin for WindowStatusPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(Update, sync_window_title.in_set(UpdateSet::Status));
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct WindowTitleSync {

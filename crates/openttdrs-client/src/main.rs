@@ -123,17 +123,9 @@ impl TruckHandles {
 }
 
 /// Índice `Vehicle.id` → posición en `GameState::vehicles` (evita `find` O(V) por sprite).
-#[derive(Resource)]
+#[derive(Resource, Default)]
 struct VehicleIndex {
     by_id: HashMap<u32, usize>,
-}
-
-impl Default for VehicleIndex {
-    fn default() -> Self {
-        Self {
-            by_id: HashMap::new(),
-        }
-    }
 }
 
 impl VehicleIndex {

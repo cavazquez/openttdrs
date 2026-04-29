@@ -1,3 +1,4 @@
+#![allow(clippy::expect_used)]
 //! Vuelca los datos crudos de teselas de un `.ottdmap` (mismo contenido que `Tile` en `map.rs`).
 //!
 //! Uso:
@@ -66,6 +67,10 @@ fn print_tile(t: &openttdrs_core::Tile) {
     println!("  m1:                  0x{:02x}", t.m1);
     println!("  m6:                  0x{:02x}", t.m6);
     println!("  m8:                  0x{:04x}", t.m8);
+    println!("  m3 (M3LO, v4+):      0x{:02x}", t.m3);
+    println!("  m2 (MAP2, v5+):     0x{:02x}", t.m2);
+    println!("  m7 (MAP7, v5+):     0x{:02x}", t.m7);
+    println!("  m3hi (M3HI, v5+):   0x{:02x}", t.m3hi);
     if matches!(t.kind, openttdrs_core::TileKind::Water) {
         let wtt = (t.m5 >> 4) & 0x0F;
         println!("  WaterTileType (m5>>4): {wtt} (0=Clear, 1=Coast, …)");

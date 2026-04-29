@@ -88,7 +88,9 @@ Si preferís scripts individuales:
 
 ## Savegames → `.ottdmap` (`scripts/parse_sav.py`)
 
-Convierte un save de OpenTTD (`.sav`) al binario que carga el cliente (`MAPO` / v3), incluyendo **HouseID** correcto en saves antiguos (`m8` desde M3HI/M3LO si la versión del save es &lt; 348).
+Convierte un save de OpenTTD (`.sav`) al binario que carga el cliente (`MAPO`). **v5** extiende v4 con un byte por tesela de **MAP2**, **MAP7** y **M3HI** (tras **M3LO**), footers opcionales **INDP** (índice de industria → tipo), **STNN** (blob del chunk de estaciones) y **TNBP** (blob de túnel/puente si el save trae TNBP/TBUS/TUNN). Sigue aplicando la reconstrucción de **HouseID** en saves antiguos (`m8` desde M3HI/M3LO si la versión del save es &lt; 348).
+
+Saves comprimidos con magic **OTTD** (LZO) requieren el paquete opcional `python-lzo` (`pip install python-lzo`); **OTTZ** (zlib) y **OTTX** (xz) no lo necesitan.
 
 ```bash
 python3 scripts/parse_sav.py ruta/al/mapa.sav salida.ottdmap
@@ -96,6 +98,8 @@ OTTDMAP_FILE=salida.ottdmap cargo run -p openttdrs-client
 ```
 
 **Nota:** la carpeta `assets/` está en `.gitignore`. Los gráficos se generan con los scripts de la sección anterior; los `.ottdmap` que generes en local **no se versionan** salvo que los pongas en otro path (por ejemplo `tests/fixtures/` para pruebas).
+
+Un “NewGRF completo” en el cliente no se reduce al `.ottdmap`: hacen falta los `.grf`, tablas de specs y lógica de dibujo; el export solo expone bytes de mapa y blobs de chunks (ver [docs/TILES_Y_SAVEGAMES_OPENTTD.md](docs/TILES_Y_SAVEGAMES_OPENTTD.md)).
 
 **Regenerar el golden usado en CI** (tras cambiar la lógica de `parse_sav.py`):
 

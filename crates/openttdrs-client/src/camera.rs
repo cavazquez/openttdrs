@@ -23,6 +23,7 @@ const WASD_MAX_SPEED: f32 = 600.0;
 pub struct CameraVelocity(pub Vec2);
 
 /// Mueve la cámara con WASD (con inercia), arrastre con botón derecho y rueda del ratón.
+#[allow(clippy::too_many_arguments)] // firma dictada por el sistema ECS de Bevy
 pub fn move_camera(
     time: Res<Time>,
     kbd: Res<ButtonInput<KeyCode>>,

@@ -3,7 +3,7 @@
 Convierte un savegame de OpenTTD (.sav) a un archivo binario simple
 que puede cargar openttdrs-client sin dependencias externas.
 
-Formato de salida (.ottdmap) v3:
+Formato de salida (.ottdmap) v5 (compatible v1–v4 al leer):
   4 bytes LE  – magic: 0x4D41504F ('MAPO')
   4 bytes LE  – width
   4 bytes LE  – height
@@ -12,9 +12,20 @@ Formato de salida (.ottdmap) v3:
   W*H bytes   – m5 (road bits, TrackBits 0-5, industry gfx bits 0-7, ObjectType en MP_OBJECT)
   W*H bytes   – m1 (industry index, owner, etc.) [v2+]
   W*H bytes   – m6 (bit 2 = bit 8 del gfx industria; StationType en MP_STATION) [v3+]
-  W*H*2 bytes – m8 LE (HouseID en MP_HOUSE; 12 bits bajos = tipo, ver town_map.h) [v3+]
-    En saves OpenTTD con versión < 348 el HouseID en disco está en M3HI/M3LO;
-    parse_sav.py lo copia a m8 como hace afterload.cpp al cargar.
+  W*H*2 bytes – m8 LE (HouseID en MP_HOUSE; en MP_ROAD bits altos incluyen RoadType tram) [v3+]
+  W*H bytes   – m3 (M3LO) [v4+]
+  W*H bytes   – m2 (MAP2) [v5+]
+  W*H bytes   – m7 (MAP7) [v5+]
+  W*H bytes   – m3hi (M3HI / byte alto de m3 en OpenTTD) [v5+]
+  Footers opcionales (magic ASCII + u32 LE length + payload):
+    INDP  – industrias: count × (u16 industry_index, u8 industry_type)
+    STNN  – blob crudo del chunk STNN (CH_TABLE o CH_ARRAY según versión del save)
+    TNBP  – blob de chunk TNBP / TBUS / TUNN si existe (pool túnel/puente según upstream)
+
+  NewGRF: exportar MAP7/m8/m3hi no sustituye GRFs ni lógica de specs; ver docs.
+
+  En saves OpenTTD con versión < 348 el HouseID en disco está en M3HI/M3LO;
+  parse_sav.py lo copia a m8 como hace afterload.cpp al cargar.
 
 Tipos de tesela OpenTTD (nibble alto de tile_type):
   0  MP_CLEAR       → prado/rough/rocks/fields/desert
@@ -33,6 +44,8 @@ Uso:
   python3 scripts/parse_sav.py <archivo.sav> [salida.ottdmap]
 """
 
+from __future__ import annotations
+
 import struct
 import sys
 import zlib
@@ -41,12 +54,11 @@ from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Gamma encoding (SlReadSimpleGamma del código C++)
-# Formato: 0xxxxxxx / 10xxxxxx xx / 110xxxxx xx xx / 1110xxxx xx xx xx /
-#          11110000 xx xx xx xx
 # ---------------------------------------------------------------------------
 
 def read_gamma(data: bytes, offset: int) -> tuple[int, int]:
-    b = data[offset]; offset += 1
+    b = data[offset]
+    offset += 1
     if not (b & 0x80):
         return b, offset
     b &= ~0x80
@@ -63,122 +75,104 @@ def read_gamma(data: bytes, offset: int) -> tuple[int, int]:
     b &= ~0x10
     if b & 0x08:
         raise ValueError(f"Gamma no soportado (offset={offset})")
-    # Caso 5 bytes: ignorar b, leer 4 bytes big-endian
-    v = struct.unpack_from('>I', data, offset)[0]
+    v = struct.unpack_from(">I", data, offset)[0]
     return v, offset + 4
 
-
-# ---------------------------------------------------------------------------
-# Saltar cualquier chunk de tipo array (CH_ARRAY, CH_TABLE,
-# CH_SPARSE_ARRAY, CH_SPARSE_TABLE).
-#
-# Todos tienen la misma estructura de stream: secuencia de elementos con
-# gamma(N)+N-1 bytes de datos, terminado por gamma=0.
-# Para CH_TABLE el primer elemento es el header, pero lo saltamos igual.
-# ---------------------------------------------------------------------------
 
 def skip_array(data: bytes, offset: int) -> int:
     while True:
         n, offset = read_gamma(data, offset)
         if n == 0:
             break
-        offset += n - 1  # n-1 bytes de datos (SlIterateArray hace --length)
+        offset += n - 1
     return offset
 
 
-# ---------------------------------------------------------------------------
-# Parser de chunk CH_RIFF
-# ---------------------------------------------------------------------------
+def slurp_array_payload(data: bytes, offset: int) -> tuple[bytes, int]:
+    """Consume un CH_ARRAY / CH_TABLE / sparse array y devuelve (bytes crudos, nuevo_offset)."""
+    start = offset
+    end = skip_array(data, offset)
+    return data[start:end], end
+
 
 def parse_riff(data: bytes, offset: int, m: int) -> tuple[bytes, int]:
-    """Devuelve (datos_del_chunk, nuevo_offset)."""
-    b2 = data[offset]; offset += 1
-    low16 = (data[offset] << 8) | data[offset + 1]; offset += 2
+    b2 = data[offset]
+    offset += 1
+    low16 = (data[offset] << 8) | data[offset + 1]
+    offset += 2
     size = (b2 << 16) | ((m >> 4) << 24) | low16
-    chunk_data = data[offset:offset + size]
+    chunk_data = data[offset : offset + size]
     return chunk_data, offset + size
 
 
-# ---------------------------------------------------------------------------
-# Parser de chunk CH_TABLE para MAPS (dim_x + dim_y)
-# Estructura en stream:
-#   gamma(header_bytes+1)  header_bytes de descriptores
-#   gamma(data_bytes+1)    data_bytes de datos de campos
-#   gamma(0)               fin del array
-# ---------------------------------------------------------------------------
-
 def parse_maps_table(data: bytes, offset: int) -> tuple[int, int, int]:
-    """Devuelve (dim_x, dim_y, nuevo_offset)."""
-    # 1. Elemento header
-    n, offset = read_gamma(data, offset)  # = header_bytes + 1
+    n, offset = read_gamma(data, offset)
     header_end = offset + n - 1
 
-    # Leer descriptores de campos (solo queremos saber los nombres)
     field_names = []
     while offset < header_end:
-        ftype = data[offset]; offset += 1
-        if ftype == 0:  # SLE_FILE_END
+        ftype = data[offset]
+        offset += 1
+        if ftype == 0:
             break
         name_len, offset = read_gamma(data, offset)
-        name = data[offset:offset + name_len].decode('utf-8', errors='replace')
+        name = data[offset : offset + name_len].decode("utf-8", errors="replace")
         offset += name_len
         field_names.append((name, ftype))
 
-    offset = header_end  # saltar cualquier padding del header
+    offset = header_end
 
-    # 2. Elemento de datos
-    n, offset = read_gamma(data, offset)  # = data_bytes + 1
+    n, offset = read_gamma(data, offset)
     if n == 0:
         raise ValueError("MAPS: chunk de datos vacío")
     data_end = offset + n - 1
 
-    # Los campos son SLE_FILE_U32 (4 bytes BE cada uno, en orden declarado)
-    values = {}
+    values: dict = {}
     for name, ftype in field_names:
-        ftype_base = ftype & 0x0F  # SLE_FILE_TYPE_MASK
-        if ftype_base == 6:  # SLE_FILE_U32
-            values[name] = struct.unpack_from('>I', data, offset)[0]
+        ftype_base = ftype & 0x0F
+        if ftype_base == 6:
+            values[name] = struct.unpack_from(">I", data, offset)[0]
             offset += 4
-        elif ftype_base == 1:  # SLE_FILE_I8
-            values[name] = data[offset]; offset += 1
-        elif ftype_base == 2:  # SLE_FILE_U8
-            values[name] = data[offset]; offset += 1
-        elif ftype_base == 3:  # SLE_FILE_I16
-            values[name] = struct.unpack_from('>H', data, offset)[0]; offset += 2
-        elif ftype_base == 4:  # SLE_FILE_U16
-            values[name] = struct.unpack_from('>H', data, offset)[0]; offset += 2
+        elif ftype_base == 1:
+            values[name] = data[offset]
+            offset += 1
+        elif ftype_base == 2:
+            values[name] = data[offset]
+            offset += 1
+        elif ftype_base == 3:
+            values[name] = struct.unpack_from(">H", data, offset)[0]
+            offset += 2
+        elif ftype_base == 4:
+            values[name] = struct.unpack_from(">H", data, offset)[0]
+            offset += 2
         else:
-            break  # no sabemos qué es, saltar
+            break
 
-    offset = data_end  # normalizar aunque hayamos leído de más
+    offset = data_end
+    offset = skip_array(data, offset)
 
-    # 3. Terminator
-    n, offset = read_gamma(data, offset)
-    if n != 0:
-        # Hay más elementos; saltar
-        offset = skip_array(data, offset - len(str(n)))
-
-    dim_x = values.get('dim_x', 0)
-    dim_y = values.get('dim_y', 0)
+    dim_x = values.get("dim_x", 0)
+    dim_y = values.get("dim_y", 0)
     return dim_x, dim_y, offset
 
 
-# ---------------------------------------------------------------------------
-# Descomprimir el savegame
-# ---------------------------------------------------------------------------
+MAGIC_OTTZ = b"OTTZ"
+MAGIC_OTTX = b"OTTX"
+MAGIC_OTTD = b"OTTD"
+MAGIC_NONE = b"OTTN"
 
-MAGIC_OTTZ = b'OTTZ'  # zlib
-MAGIC_OTTX = b'OTTX'  # lzma
-MAGIC_OTTD = b'OTTD'  # LZO (no soportado aquí)
-MAGIC_NONE = b'OTTN'  # sin compresión
-
-# saveload.h (OpenTTD): antes de esta versión el HouseID no está en MAP8/m8,
-# sino en M3HI (= m4) + un bit en M3LO (= m3); al cargar, afterload.cpp lo
-# copia a m8 (ver SLV_INCREASE_HOUSE_LIMIT / PR#12288).
 SLV_INCREASE_HOUSE_LIMIT = 348
 MP_HOUSE = 3
 
+# INDY (CH_ARRAY): offset del byte ``Industry.type`` dentro del objeto Industry
+# para saves recientes (p. ej. versión 211 del fixture); ver industry_sl.cpp.
+INDY_TYPE_BYTE_OFFSET = 9
 
+CH_RIFF = 0
+CH_ARRAY = 1
+CH_SPARSE_ARRAY = 2
+CH_TABLE = 3
+CH_SPARSE_TABLE = 4
 def build_m8_le_for_save(
     version: int,
     mapt: bytes,
@@ -187,11 +181,6 @@ def build_m8_le_for_save(
     m3hi_raw: bytes,
     expected: int,
 ) -> bytes:
-    """Construye el bloque m8 en little-endian (``expected * 2`` bytes).
-
-    Para saves con ``version < SLV_INCREASE_HOUSE_LIMIT``, el HouseID en teselas
-    ``MP_HOUSE`` se toma de M3HI/M3LO (equivalente a afterload.cpp).
-    """
     buf = bytearray(map8_raw[: expected * 2])
     if len(buf) < expected * 2:
         buf.extend(b"\x00" * (expected * 2 - len(buf)))
@@ -207,7 +196,6 @@ def build_m8_le_for_save(
 
 
 def dimensions_from_chunks(chunks: dict) -> tuple[int, int]:
-    """Devuelve ``(dim_x, dim_y)`` desde chunks MAPS/MAPT."""
     if "MAPS" in chunks and isinstance(chunks["MAPS"], tuple):
         dim_x, dim_y = chunks["MAPS"]
         return dim_x, dim_y
@@ -223,13 +211,89 @@ def dimensions_from_chunks(chunks: dict) -> tuple[int, int]:
     raise ValueError("Chunk MAPT no encontrado")
 
 
-def analyze_save(raw: bytes) -> dict:
-    """Estadísticas deterministas para golden JSON y tests (sin escribir disco).
+def parse_indy_ch_array(data: bytes, offset: int) -> tuple[list[tuple[int, int]], int]:
+    """Parsea INDY como CH_ARRAY: devuelve [(industry_index, type_u8), ...] y nuevo offset.
 
-    Devuelve un dict con ``save_version``, ``dimensions``, ``tile_type_counts`` y
-    ``house`` (Histograma de HouseID en teselas MP_HOUSE tras aplicar
-    :func:`build_m8_le_for_save`).
+    El índice sigue el orden de SlIterateArray (0..n-1) en CH_ARRAY de OpenTTD.
+    ``type`` se lee en byte fijo ``INDY_TYPE_BYTE_OFFSET`` (válido para saves ~200+).
     """
+    out: list[tuple[int, int]] = []
+    idx = 0
+    while True:
+        n, offset = read_gamma(data, offset)
+        if n == 0:
+            break
+        body = data[offset : offset + n - 1]
+        offset += n - 1
+        if len(body) > INDY_TYPE_BYTE_OFFSET:
+            out.append((idx, body[INDY_TYPE_BYTE_OFFSET]))
+        idx += 1
+    return out, offset
+
+
+def build_indp_footer(pairs: list[tuple[int, int]]) -> bytes:
+    parts = [b"INDP", struct.pack("<I", len(pairs))]
+    for i, t in pairs:
+        parts.append(struct.pack("<HB", i & 0xFFFF, t & 0xFF))
+    return b"".join(parts)
+
+
+def parse_objs_table(data: bytes, offset: int) -> tuple[dict[int, int], int]:
+    n, offset = read_gamma(data, offset)
+    header = data[offset : offset + n - 1]
+    offset += n - 1
+
+    fields: list[tuple[str, int]] = []
+    h = 0
+    while h < len(header):
+        ftype = header[h]
+        h += 1
+        if ftype == 0:
+            break
+        name_len, h = read_gamma(header, h)
+        fname = header[h : h + name_len].decode("utf-8", errors="replace")
+        h += name_len
+        fields.append((fname, ftype))
+
+    result: dict[int, int] = {}
+    while True:
+        n, offset = read_gamma(data, offset)
+        if n == 0:
+            break
+        elem = data[offset : offset + n - 1]
+        offset += n - 1
+
+        ep = 0
+        vals: dict[str, int] = {}
+        for fname, ftype in fields:
+            fb = ftype & 0x0F
+            if fb == 6:
+                vals[fname] = struct.unpack_from(">I", elem, ep)[0]
+                ep += 4
+            elif fb == 5:
+                vals[fname] = struct.unpack_from(">i", elem, ep)[0]
+                ep += 4
+            elif fb == 4:
+                vals[fname] = struct.unpack_from(">H", elem, ep)[0]
+                ep += 2
+            elif fb == 3:
+                vals[fname] = struct.unpack_from(">h", elem, ep)[0]
+                ep += 2
+            elif fb in (1, 2):
+                vals[fname] = elem[ep]
+                ep += 1
+            else:
+                break
+
+        tile = vals.get("location.tile")
+        obj_type = vals.get("type")
+        if tile is not None and obj_type is not None:
+            result[tile] = obj_type
+
+    return result, offset
+
+
+def analyze_save(raw: bytes) -> dict:
     data, version = decompress(raw)
     chunks = parse_chunks(data)
     dim_x, dim_y = dimensions_from_chunks(chunks)
@@ -265,6 +329,23 @@ def analyze_save(raw: bytes) -> dict:
         key = str(hid)
         hist[key] = hist.get(key, 0) + 1
 
+    map5 = chunks.get("MAP5", b"")
+    map5 = map5[:expected].ljust(expected, b"\x00")
+    road_normal = 0
+    road_normal_tram_bits = 0
+    for i in range(expected):
+        if ((mapt[i] >> 4) & 0xF) != 2:
+            continue
+        if (map5[i] >> 6) & 0x3 != 0:
+            continue
+        road_normal += 1
+        if m3lo[i] & 0x0F:
+            road_normal_tram_bits += 1
+
+    indp_pairs: list[tuple[int, int]] = []
+    if "INDY" in chunks and isinstance(chunks["INDY"], list):
+        indp_pairs = list(chunks["INDY"])  # type: ignore[assignment]
+
     return {
         "save_version": version,
         "dimensions": [dim_x, dim_y],
@@ -274,126 +355,76 @@ def analyze_save(raw: bytes) -> dict:
             "unique_m8": len(hist),
             "m8_histogram": {k: hist[k] for k in sorted(hist, key=int)},
         },
+        "road": {
+            "normal_tiles": road_normal,
+            "normal_with_tram_track_bits": road_normal_tram_bits,
+        },
+        "industry_pairs": len(indp_pairs),
     }
 
 
 def decompress(raw: bytes) -> tuple[bytes, int]:
-    """Descomprime el payload y devuelve (datos_descomprimidos, versión_del_savegame)."""
     magic = raw[:4]
-    version = struct.unpack('>H', raw[4:6])[0]
+    version = struct.unpack(">H", raw[4:6])[0]
 
     if magic == MAGIC_OTTZ:
         payload = zlib.decompress(raw[8:])
     elif magic == MAGIC_OTTX:
         try:
             import lzma
+
             payload = lzma.decompress(raw[8:])
         except ImportError:
             raise SystemExit("El módulo lzma no está disponible (instala python3-lzma)")
     elif magic == MAGIC_NONE:
         payload = raw[8:]
     elif magic == MAGIC_OTTD:
-        raise SystemExit(
-            "Este savegame usa compresión LZO (formato antiguo).\n"
-            "Ábrelo en OpenTTD moderno y guárdalo de nuevo para actualizar el formato."
-        )
+        payload = _decompress_lzo(raw[8:])
     else:
         raise SystemExit(f"Magic desconocido: {magic!r}")
 
     return payload, version
 
 
-# ---------------------------------------------------------------------------
-# Parsear chunks y extraer MAPS, MAPT, MAPH, MAP5, MAP2, OBJS
-# ---------------------------------------------------------------------------
-
-CH_RIFF          = 0
-CH_ARRAY         = 1
-CH_SPARSE_ARRAY  = 2
-CH_TABLE         = 3
-CH_SPARSE_TABLE  = 4
-
-
-def parse_objs_table(data: bytes, offset: int) -> tuple[dict[int, int], int]:
-    """Parsea el chunk OBJS (CH_TABLE) y devuelve {tile_index: object_type}.
-
-    El ObjectType de OpenTTD es:
-      0 = OBJECT_TRANSMITTER (antena)
-      1 = OBJECT_LIGHTHOUSE  (faro)
-    """
-    # 1. Header con descriptores de campos
-    n, offset = read_gamma(data, offset)
-    header = data[offset: offset + n - 1]
-    offset += n - 1
-
-    # Parsear nombres y tipos de campos del header
-    fields: list[tuple[str, int]] = []
-    h = 0
-    while h < len(header):
-        ftype = header[h]; h += 1
-        if ftype == 0:
-            break
-        name_len, h = read_gamma(header, h)
-        fname = header[h: h + name_len].decode('utf-8', errors='replace')
-        h += name_len
-        fields.append((fname, ftype))
-
-    # 2. Elementos de datos (uno por objeto)
-    result: dict[int, int] = {}
-    while True:
-        n, offset = read_gamma(data, offset)
-        if n == 0:
-            break
-        elem = data[offset: offset + n - 1]
-        offset += n - 1
-
-        ep = 0
-        vals: dict[str, int] = {}
-        for fname, ftype in fields:
-            fb = ftype & 0x0F  # SLE_FILE_TYPE bits
-            if fb == 6:        # U32
-                vals[fname] = struct.unpack_from('>I', elem, ep)[0]; ep += 4
-            elif fb == 5:      # I32
-                vals[fname] = struct.unpack_from('>i', elem, ep)[0]; ep += 4
-            elif fb == 4:      # U16
-                vals[fname] = struct.unpack_from('>H', elem, ep)[0]; ep += 2
-            elif fb == 3:      # I16
-                vals[fname] = struct.unpack_from('>h', elem, ep)[0]; ep += 2
-            elif fb in (1, 2): # I8 / U8
-                vals[fname] = elem[ep]; ep += 1
-            else:
-                break          # tipo desconocido, no seguimos
-
-        tile = vals.get('location.tile')
-        obj_type = vals.get('type')
-        if tile is not None and obj_type is not None:
-            result[tile] = obj_type
-
-    return result, offset
+def _decompress_lzo(payload: bytes) -> bytes:
+    try:
+        import lzo
+    except ImportError:
+        raise SystemExit(
+            "Este savegame usa compresión LZO (OTTD).\n"
+            "Instalá:  pip install python-lzo\n"
+            "O abrí el archivo en OpenTTD moderno y guardalo como OTTZ."
+        ) from None
+    return lzo.decompress(payload)
 
 
-def parse_chunks(data: bytes) -> dict[str, bytes | tuple]:
-    """Recorre el stream de chunks y devuelve los que necesitamos."""
+def parse_chunks(
+    data: bytes,
+    chunk_type_trace: list[tuple[str, int]] | None = None,
+) -> dict[str, bytes | tuple | list | dict]:
     chunks: dict = {}
     offset = 0
     total = len(data)
 
     while offset + 4 < total:
-        chunk_id = struct.unpack_from('>I', data, offset)[0]
+        chunk_id = struct.unpack_from(">I", data, offset)[0]
         offset += 4
         if chunk_id == 0:
             break
 
-        try:
-            chunk_name = struct.pack('>I', chunk_id).decode('ascii')
-        except Exception:
-            chunk_name = '????'
+        raw_name = struct.pack(">I", chunk_id)
+        chunk_name = raw_name.decode("ascii", errors="replace")
+        if len(chunk_name) != 4 or not all(32 <= ord(c) < 127 for c in chunk_name):
+            chunk_name = "????"
 
         if offset >= total:
             break
 
-        m = data[offset]; offset += 1
+        m = data[offset]
+        offset += 1
         chunk_type = m & 0x0F
+        if chunk_type_trace is not None:
+            chunk_type_trace.append((chunk_name, chunk_type))
 
         try:
             if chunk_type == CH_RIFF:
@@ -401,20 +432,45 @@ def parse_chunks(data: bytes) -> dict[str, bytes | tuple]:
                 chunks[chunk_name] = chunk_data
 
             elif chunk_type == CH_TABLE:
-                if chunk_name == 'MAPS':
+                if chunk_name == "MAPS":
                     dim_x, dim_y, offset = parse_maps_table(data, offset)
-                    chunks['MAPS'] = (dim_x, dim_y)
-                elif chunk_name == 'OBJS':
+                    chunks["MAPS"] = (dim_x, dim_y)
+                elif chunk_name == "OBJS":
                     obj_types, offset = parse_objs_table(data, offset)
-                    chunks['OBJS'] = obj_types
+                    chunks["OBJS"] = obj_types
+                elif chunk_name == "STNN":
+                    blob, offset = slurp_array_payload(data, offset)
+                    chunks["STNN"] = blob
                 else:
                     offset = skip_array(data, offset)
 
             elif chunk_type in (CH_ARRAY, CH_SPARSE_ARRAY, CH_SPARSE_TABLE):
-                offset = skip_array(data, offset)
+                if chunk_name == "INDY" and chunk_type == CH_ARRAY:
+                    pairs, offset = parse_indy_ch_array(data, offset)
+                    chunks["INDY"] = pairs
+                elif chunk_name == "STNN":
+                    blob, offset = slurp_array_payload(data, offset)
+                    chunks["STNN"] = blob
+                elif chunk_name in ("TNBP", "TBUS", "TUNN"):
+                    blob, offset = slurp_array_payload(data, offset)
+                    chunks[chunk_name] = blob
+                else:
+                    offset = skip_array(data, offset)
+
+            elif chunk_type == 5:
+                # CH_READONLY: sin formato de payload conocido en este parser.
+                print(
+                    f"  ⚠ CH_READONLY (5) en '{chunk_name}' offset={offset - 5}; se detiene el parseo",
+                    file=sys.stderr,
+                )
+                break
 
             else:
-                print(f"  ⚠ Tipo de chunk desconocido {chunk_type} en '{chunk_name}', deteniendo", file=sys.stderr)
+                print(
+                    f"  ⚠ Tipo de chunk desconocido {chunk_type} en '{chunk_name}' "
+                    f"(offset={offset - 5}), se omite el resto del stream",
+                    file=sys.stderr,
+                )
                 break
 
         except Exception as e:
@@ -424,17 +480,12 @@ def parse_chunks(data: bytes) -> dict[str, bytes | tuple]:
     return chunks
 
 
-# ---------------------------------------------------------------------------
-# Inferir dimensiones desde el tamaño de MAPT si MAPS no se parseó
-# ---------------------------------------------------------------------------
-
 def infer_dimensions(mapt_size: int) -> tuple[int, int] | None:
-    """Asume mapa cuadrado (potencia de 2). Devuelve (w, h) o None."""
     import math
+
     side = int(math.isqrt(mapt_size))
     if side * side == mapt_size and (side & (side - 1)) == 0 and 64 <= side <= 4096:
         return side, side
-    # Probar combinaciones no cuadradas (w = 2*h)
     for bits in range(6, 13):
         w = 1 << bits
         for bits2 in range(6, 13):
@@ -443,10 +494,6 @@ def infer_dimensions(mapt_size: int) -> tuple[int, int] | None:
                 return w, h
     return None
 
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 def main() -> None:
     if len(sys.argv) < 2:
@@ -457,7 +504,7 @@ def main() -> None:
     if not sav_path.exists():
         sys.exit(f"Archivo no encontrado: {sav_path}")
 
-    out_path = Path(sys.argv[2]) if len(sys.argv) > 2 else sav_path.with_suffix('.ottdmap')
+    out_path = Path(sys.argv[2]) if len(sys.argv) > 2 else sav_path.with_suffix(".ottdmap")
 
     print(f"Leyendo {sav_path} …")
     raw = sav_path.read_bytes()
@@ -470,7 +517,6 @@ def main() -> None:
     found = list(chunks.keys())
     print(f"  Chunks encontrados: {found}")
 
-    # Dimensiones
     if "MAPS" not in chunks and "MAPT" in chunks:
         mapt0 = chunks["MAPT"]
         inferred = infer_dimensions(len(mapt0))
@@ -482,51 +528,48 @@ def main() -> None:
         msg = str(e) if str(e) else "Chunk MAPT no encontrado. ¿Es un savegame válido?"
         sys.exit(msg)
 
-    print(f"  Mapa: {dim_x} × {dim_y} = {dim_x*dim_y:,} teselas")
+    print(f"  Mapa: {dim_x} × {dim_y} = {dim_x * dim_y:,} teselas")
 
-    # Datos de teselas.
-    # Nombres reales de chunks en el savegame (map_sl.cpp de OpenTTD):
-    #   MAPT = tile types, MAPH = heights, MAPO = MAP1 (owner),
-    #   MAP2 = m2, M3LO = byte bajo de m3, M3HI = m4, MAP5 = m5, MAPE = m6, MAP7, MAP8 = m8
-    mapt = chunks.get('MAPT', b'')
-    maph = chunks.get('MAPH', b'')
-    map5 = chunks.get('MAP5', b'')
-    map1 = chunks.get('MAPO', b'')  # MAPO = MAP1 (owner/datos de tesela 1)
-    map6 = chunks.get('MAPE', b'')  # MAPE = MAP6 (bit 2 = bit 8 del gfx industria)
-    map8 = chunks.get('MAP8', b'')  # MAP8 = m8 (HouseID en MP_HOUSE; 12 bits útiles)
-    m3lo = chunks.get('M3LO', b'')  # byte bajo de m3()
-    m3hi = chunks.get('M3HI', b'')  # m4() en OpenTTD (map_sl.cpp)
-    # OBJS: diccionario {tile_index → ObjectType}  (0=Transmisor, 1=Faro)
-    obj_types: dict[int, int] = chunks.get('OBJS', {})  # type: ignore[assignment]
+    mapt = chunks.get("MAPT", b"")
+    maph = chunks.get("MAPH", b"")
+    map5 = chunks.get("MAP5", b"")
+    map1 = chunks.get("MAPO", b"")
+    map6 = chunks.get("MAPE", b"")
+    map8 = chunks.get("MAP8", b"")
+    m3lo = chunks.get("M3LO", b"")
+    m3hi = chunks.get("M3HI", b"")
+    map2 = chunks.get("MAP2", b"")
+    map7 = chunks.get("MAP7", b"")
+    obj_types: dict[int, int] = chunks.get("OBJS", {})  # type: ignore[assignment]
 
     expected = dim_x * dim_y
     if len(mapt) < expected:
         sys.exit(f"MAPT demasiado corto: {len(mapt)} bytes, esperados {expected}")
 
-    # Padding de los chunks que falten
     if len(maph) < expected:
-        maph = maph + b'\x00' * (expected - len(maph))
+        maph = maph + b"\x00" * (expected - len(maph))
     if len(map5) < expected:
-        map5 = map5 + b'\x00' * (expected - len(map5))
+        map5 = map5 + b"\x00" * (expected - len(map5))
     if len(map1) < expected:
-        map1 = map1 + b'\x00' * (expected - len(map1))
+        map1 = map1 + b"\x00" * (expected - len(map1))
     if len(map6) < expected:
-        map6 = map6 + b'\x00' * (expected - len(map6))
+        map6 = map6 + b"\x00" * (expected - len(map6))
     if len(map8) < expected * 2:
-        map8 = map8 + b'\x00' * (expected * 2 - len(map8))
+        map8 = map8 + b"\x00" * (expected * 2 - len(map8))
     if len(m3lo) < expected:
-        m3lo = m3lo + b'\x00' * (expected - len(m3lo))
+        m3lo = m3lo + b"\x00" * (expected - len(m3lo))
     if len(m3hi) < expected:
-        m3hi = m3hi + b'\x00' * (expected - len(m3hi))
+        m3hi = m3hi + b"\x00" * (expected - len(m3hi))
+    if len(map2) < expected:
+        map2 = map2 + b"\x00" * (expected - len(map2))
+    if len(map7) < expected:
+        map7 = map7 + b"\x00" * (expected - len(map7))
 
-    # Para tiles MP_OBJECT, sobreescribir m5 con el ObjectType real (de OBJS).
-    # En OpenTTD moderno, MAP5 para MP_OBJECT guarda bits altos del ObjectID,
-    # no el tipo.  El tipo real se obtiene del array Object a través de OBJS.
     m5_list = bytearray(map5[:expected])
     if obj_types:
         n_fixed = 0
         for i in range(expected):
-            if (mapt[i] >> 4) & 0xF == 10:  # MP_OBJECT
+            if (mapt[i] >> 4) & 0xF == 10:
                 t = obj_types.get(i, 0xFF)
                 m5_list[i] = t if t != 0xFF else m5_list[i]
                 if t != 0xFF:
@@ -534,45 +577,89 @@ def main() -> None:
         print(f"  Objetos con tipo resuelto desde OBJS: {n_fixed}")
     m5_data = bytes(m5_list)
 
-    # m8 (HouseID): en saves antiguos (< SLV_INCREASE_HOUSE_LIMIT) el chunk MAP8
-    # suele ser todo ceros en disco; el tipo real está en m4 (M3HI) + bit 6 de m3 (M3LO).
     m8_data = build_m8_le_for_save(version, mapt[:expected], map8, m3lo, m3hi, expected)
+    m3_export = m3lo[:expected]
+    m2_export = map2[:expected]
+    m7_export = map7[:expected]
+    m3hi_export = m3hi[:expected]
+
     if version < SLV_INCREASE_HOUSE_LIMIT:
-        n_legacy = sum(
-            1 for i in range(expected) if ((mapt[i] >> 4) & 0xF) == MP_HOUSE
-        )
+        n_legacy = sum(1 for i in range(expected) if ((mapt[i] >> 4) & 0xF) == MP_HOUSE)
         print(
             f"  HouseID desde M3HI/M3LO (save < {SLV_INCREASE_HOUSE_LIMIT}): "
             f"{n_legacy:,} teselas MP_HOUSE"
         )
 
-    # Escribir archivo de salida (formato v3: + m6 + m8)
-    magic_out = b'MAPO'
-    header = struct.pack('<4sII', magic_out, dim_x, dim_y)
+    magic_out = b"MAPO"
+    header = struct.pack("<4sII", magic_out, dim_x, dim_y)
     tile_types = mapt[:expected]
-    heights    = maph[:expected]
-    m1_data    = map1[:expected]
-    m6_data    = map6[:expected]
-    out_path.write_bytes(header + tile_types + heights + m5_data + m1_data + m6_data + m8_data)
-    print(f"✓ Escrito: {out_path}  ({out_path.stat().st_size:,} bytes)")
+    heights = maph[:expected]
+    m1_data = map1[:expected]
+    m6_data = map6[:expected]
 
-    # Estadísticas de tipos de tesela
+    body = (
+        header
+        + tile_types
+        + heights
+        + m5_data
+        + m1_data
+        + m6_data
+        + m8_data
+        + m3_export
+        + m2_export
+        + m7_export
+        + m3hi_export
+    )
+
+    indp_pairs: list[tuple[int, int]] = []
+    if "INDY" in chunks and isinstance(chunks["INDY"], list):
+        indp_pairs = chunks["INDY"]  # type: ignore[assignment]
+    body += build_indp_footer(indp_pairs)
+    if indp_pairs:
+        print(f"  INDP: {len(indp_pairs)} industrias (índice → tipo)")
+
+    stnn_blob = chunks.get("STNN", b"")
+    if isinstance(stnn_blob, (bytes, bytearray)) and stnn_blob:
+        body += b"STNN" + struct.pack("<I", len(stnn_blob)) + bytes(stnn_blob)
+        print(f"  STNN: blob {len(stnn_blob):,} bytes")
+
+    tnbp_blob = b""
+    for _k in ("TNBP", "TBUS", "TUNN"):
+        b = chunks.get(_k, b"")
+        if isinstance(b, (bytes, bytearray)) and b:
+            tnbp_blob = bytes(b)
+            break
+    if tnbp_blob:
+        body += b"TNBP" + struct.pack("<I", len(tnbp_blob)) + tnbp_blob
+        print(f"  TNBP: blob {len(tnbp_blob):,} bytes")
+
+    out_path.write_bytes(body)
+    print(f"✓ Escrito: {out_path}  ({out_path.stat().st_size:,} bytes)  [v5 + footers]")
+
     type_counts: dict[int, int] = {}
     for b in tile_types:
         t = (b >> 4) & 0xF
         type_counts[t] = type_counts.get(t, 0) + 1
 
     type_names = {
-        0: 'Clear', 1: 'Railway', 2: 'Road', 3: 'House', 4: 'Trees',
-        5: 'Station', 6: 'Water', 7: 'Void', 8: 'Industry',
-        9: 'Tunnelbridge', 10: 'Object',
+        0: "Clear",
+        1: "Railway",
+        2: "Road",
+        3: "House",
+        4: "Trees",
+        5: "Station",
+        6: "Water",
+        7: "Void",
+        8: "Industry",
+        9: "Tunnelbridge",
+        10: "Object",
     }
     print("\nDistribución de tipos de tesela:")
     for t, count in sorted(type_counts.items()):
-        name = type_names.get(t, f'Unknown({t})')
+        name = type_names.get(t, f"Unknown({t})")
         pct = count / expected * 100
         print(f"  {t:2d}  {name:<14}  {count:>8,}  ({pct:.1f}%)")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -1,4 +1,5 @@
 //! Utilidades de proyección isométrica.
+#![allow(clippy::unwrap_used)] // tests de `compute_tileh` usan mapas mínimos fijos
 
 use bevy::prelude::*;
 use openttdrs_core::{Map, TileCoord, TileKind};
@@ -64,6 +65,7 @@ pub fn tile_pos(tx: i32, ty: i32, height: u8, layer: f32) -> Vec3 {
 }
 
 /// Calcula la posición del centro de un sprite overlay a partir del xrel/yrel del NFO.
+#[allow(clippy::too_many_arguments)]
 pub fn overlay_pos(
     ref_pos: Vec2,
     xrel: f32,

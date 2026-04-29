@@ -81,6 +81,28 @@ def main() -> int:
     raw = args.sav.read_bytes()
     actual_full = parse_sav.analyze_save(raw)
 
+    # Corpus: tipos de chunk en disco (nibble bajo del byte `m`) deben ser 0–4
+    # (CH_RIFF … CH_SPARSE_TABLE). CH_READONLY (5) y >5 no aparecen en saves normales.
+    data, _ver = parse_sav.decompress(raw)
+    trace: list[tuple[str, int]] = []
+    parse_sav.parse_chunks(data, chunk_type_trace=trace)
+    bad = [(n, t) for n, t in trace if t > 4]
+    if bad:
+        print(
+            "verify_parse_sav_reference: chunk_type fuera de rango 0–4:",
+            bad[:20],
+            file=sys.stderr,
+        )
+        return 1
+    readonly_hits = [n for n, t in trace if t == 5]
+    if readonly_hits:
+        print(
+            "verify_parse_sav_reference: CH_READONLY (5) en fixture (inesperado):",
+            readonly_hits[:20],
+            file=sys.stderr,
+        )
+        return 1
+
     golden_obj = json.loads(args.golden.read_text(encoding="utf-8"))
     expected = {
         "save_version": golden_obj["save_version"],

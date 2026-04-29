@@ -15,7 +15,7 @@ Código relevante:
 ## Índice
 
 1. [Byte MAPT (tipo de tesela)](#1-byte-mapt-tipo-de-tesela)
-2. [Formato .ottdmap v1→v2→v3](#2-formato-ottdmap-v1v2v3)
+2. [Formato .ottdmap v1→v5](#2-formato-ottdmap-v1v5)
    - [MP_WATER, MAP5 y costa en el cliente](#mp-water-map5-y-costa-en-el-cliente)
 3. [Nombres reales de chunks en OpenTTD](#3-nombres-reales-de-chunks-en-openttd)
 4. [Struct Tile en Rust](#4-struct-tile-en-rust)
@@ -70,7 +70,7 @@ gfx de industria, etc. son campos incompatibles según el tipo). Por eso `Tile` 
 
 ---
 
-## 2. Formato .ottdmap v1→v2→v3
+## 2. Formato .ottdmap v1→v5
 
 Binario producido por `scripts/parse_sav.py` y consumido por `Map::from_ottd_binary`.
 
@@ -95,6 +95,26 @@ Tras el header siguen secciones de `W×H` bytes/palabras en orden `i = y*width +
 | `m1`        | W×H bytes   | v2+     | Byte MAP1/MAPO: owner, índice de industria             |
 | `m6`        | W×H bytes   | v3+     | Byte MAP6/MAPE: bit 2 = bit 8 del gfx industria; StationType |
 | `m8`        | W×H×2 bytes | v3+     | Bytes MAP8 LE: HouseID en MP_HOUSE (u16)               |
+| `m3`        | W×H bytes   | v4+     | Byte M3LO del save (tram track bits 0–3 en MP_ROAD normal; ver `road_map.h`) |
+| `m2`        | W×H bytes   | v5+     | Byte MAP2 (índices town/station/industry según tipo de tesela) |
+| `m7`        | W×H bytes   | v5+     | Byte MAP7 (reservas, NewGRF en mapa, etc.) |
+| `m3hi`      | W×H bytes   | v5+     | Byte M3HI (alto de `m3` / “m4” en `map_sl.cpp`) |
+
+### Footers opcionales (v5+, tras los planos denses)
+
+Orden: **INDP** (si hay datos de industrias), **STNN** (si hay blob), **TNBP** (si hay blob de túnel/puente). Cada footer es: 4 bytes ASCII de magic + `u32` LE `len` + `len` bytes de payload.
+
+| Magic | Contenido |
+|-------|-----------|
+| `INDP` | `u32` count; luego `count` × (`u16` industry_index, `u8` industry_type) |
+| `STNN` | Blob crudo del chunk `STNN` (CH_TABLE o CH_ARRAY según versión del save) |
+| `TNBP` | Blob del primer chunk entre TNBP, TBUS o TUNN presente en el save |
+
+`Map::from_ottd_binary` en **openttdrs-core** solo lee los planos densos hasta v5; ignora cualquier byte extra (footers).
+
+### NewGRF y alcance del export
+
+Exponer MAP7, MAP8, M3HI/M3LO y blobs **no** sustituye un stack NewGRF completo: siguen siendo necesarios los archivos `.grf`, definiciones de acciones/sprites y la lógica del cliente para interpretar bits y tablas fuera del mapa denso.
 
 ### Evolución v1 → v2 → v3
 
@@ -109,6 +129,11 @@ porque no se exportaba — los que cargaban partidas veían cero en ese campo si
 pueden leer los gfx de industria de 9 bits correctamente. Con `m8` se obtiene el
 HouseID real de cada casa urbana.
 
+**v4**: añade `m3` (byte M3LO por tesela, chunk `M3LO` del save sin transformar).
+Sirve para tranvía en carretera (`GetRoadBits(..., Tram)` usa `GB(m3,0,4)` en OpenTTD).
+
+**v5**: añade `m2`, `m7`, `m3hi` (chunks `MAP2`, `MAP7`, `M3HI` del save, padding a W×H) y los footers anteriores.
+
 ### Detección de versión en el lector Rust
 
 ```rust
@@ -116,6 +141,8 @@ HouseID real de cada casa urbana.
 let has_m1 = data.len() >= 12 + n * 4;   // v2+
 let has_m6 = data.len() >= 12 + n * 5;   // v3+
 let has_m8 = data.len() >= 12 + n * 5 + n * 2; // v3+
+let has_m3 = data.len() >= 12 + n * 8;   // v4+ (hasta fin de sección M3LO inclusive)
+let has_v5_planes = data.len() >= 12 + n * 11; // v5+ (MAP2, MAP7, M3HI tras M3LO)
 ```
 
 ### MP_WATER, MAP5 y costa en el cliente
@@ -213,6 +240,10 @@ pub struct Tile {
     pub m1:     u8,   // byte MAPO (v2+)
     pub m6:     u8,   // byte MAPE (v3+)
     pub m8:     u16,  // bytes MAP8 LE (v3+)
+    pub m3:     u8,   // M3LO (v4+)
+    pub m2:     u8,   // MAP2 (v5+)
+    pub m7:     u8,   // MAP7 (v5+)
+    pub m3hi:   u8,   // M3HI (v5+)
 }
 ```
 

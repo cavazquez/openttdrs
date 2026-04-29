@@ -31,7 +31,7 @@ Guía única que enlaza el pipeline principal del repo. Para detalle binario de 
 ## 4. Qué simula el core hoy
 
 - Industrias: varios `IndustryKind` (mina, bosque, pozo de petróleo, fábrica con producción más lenta); vehículos **camión** y **tren** (misma lógica de movimiento; el tren conviene asociarlo a rutas con vía).
-- Footers **STNN** / **TNBP** se conservan en `OttdmapExtras` para round-trip; **TNBP** expone `tnbp_blob_len()` para diagnóstico; decode estructurado del pool queda pendiente.
+- Footers **STNN** / **TNBP** en `OttdmapExtras`; **TNBP**: decode Sl/gamma (`tnbp_decode`), JSON (`tnbp_blob_to_json_value` / `OttdmapExtras::tnbp_json_summary`), túneles JGR en `GameState::jgr_tunnels_from_footer`, cruce con mapa (`Map::jgr_tunnel_endpoint_match_stats`). Fixture `tests/fixtures/v5p12_tnbp.ottdmap`; regenerar con `scripts/gen_tnbp_fixture_ottdmap.py`. Saves reales: `parse_sav.py` + `OTTDMAP_FILE`; depuración `OTTDMAP_TNBP_JSON=1`. Validación CLI de un `.sav` → `.ottdmap` → resumen TNBP: `scripts/validate_sav_tnbp.sh partida.sav` (o `cargo run -p openttdrs-core --example validate_ottdmap_tnbp -- mapa.ottdmap`).
 
 ## 5. Enlaces rápidos
 

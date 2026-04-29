@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    GameState, Industry, IndustryKind, Map, OttdmapExtras, Station, TileCoord, TileKind, Vehicle,
-    VehicleKind, find_path,
+    GameState, Industry, IndustryKind, Map, OttdmapExtras, Station, TileCoord, TileKind, TnbpDecoded,
+    Vehicle, VehicleKind, find_path, jgr_tunnels_from_decoded,
 };
 use std::collections::{BTreeMap, HashSet};
 
@@ -46,6 +46,7 @@ impl Default for SimWorld {
                     Ok((map, extras)) => {
                         info!("Mapa cargado desde {path}");
                         let mut state = GameState::from_map(map);
+                        state.jgr_tunnels_from_footer = extras.jgr_tunnels_from_tnbp();
                         place_industries(&mut state, true, Some(&extras));
                         place_stations(&mut state);
                         place_stations_from_map_tiles(&mut state);
@@ -158,9 +159,50 @@ fn log_detection_summary(
         }
         let tnbp_len = ex.tnbp_blob_len();
         if tnbp_len > 0 {
-            info!(
-                "Footers .ottdmap: TNBP {tnbp_len} bytes (pool túnel/puente; sin decode — ver `OttdmapExtras::tnbp_blob_len`)"
-            );
+            match ex.decode_tnbp() {
+                Some(Err(e)) => {
+                    info!("Footers .ottdmap: TNBP {tnbp_len} bytes (decode falló: {e:?})");
+                }
+                Some(Ok(dec)) => {
+                    let jgr = jgr_tunnels_from_decoded(&dec);
+                    if !jgr.is_empty() {
+                        info!(
+                            "Footers .ottdmap: TNBP {tnbp_len} bytes → {} túnel(es) JGR (`tile_n`/`tile_s`)",
+                            jgr.len()
+                        );
+                    } else {
+                        match &dec {
+                            TnbpDecoded::ChTable { fields, rows } => {
+                                info!(
+                                    "Footers .ottdmap: TNBP {tnbp_len} bytes → tabla Sl ({} campos, {} filas)",
+                                    fields.len(),
+                                    rows.len()
+                                );
+                            }
+                            TnbpDecoded::RawGammaSegments { segments } => {
+                                info!(
+                                    "Footers .ottdmap: TNBP {tnbp_len} bytes → {} segmento(s) gamma (sin tabla Sl)",
+                                    segments.len()
+                                );
+                            }
+                        }
+                    }
+                }
+                None => {}
+            }
+            let tunnels = ex.jgr_tunnels_from_tnbp();
+            if !tunnels.is_empty() {
+                let (n_ok, s_ok, tot) = state.map.jgr_tunnel_endpoint_match_stats(&tunnels);
+                info!(
+                    "TNBP vs mapa: {tot} registro(s) JGR; extremos en teselas MP_TUNNELBRIDGE: norte {n_ok}/{tot}, sur {s_ok}/{tot}"
+                );
+            }
+            if let Ok(v) = std::env::var("OTTDMAP_TNBP_JSON")
+                && (v == "1" || v.eq_ignore_ascii_case("true"))
+                && let Some(j) = ex.tnbp_json_summary()
+            {
+                info!("TNBP JSON: {j}");
+            }
         }
     }
 

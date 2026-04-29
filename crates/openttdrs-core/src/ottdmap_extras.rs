@@ -1,4 +1,6 @@
 //! Footers opcionales tras los planos densos de `.ottdmap` v5 (`INDP`, `STNN`, `TNBP`).
+//!
+//! Ver [`crate::tnbp_decode`] para interpretar el blob `TNBP` (tabla Sl / segmentos gamma).
 
 #[inline]
 fn looks_like_footer_magic(data: &[u8], off: usize) -> bool {
@@ -134,10 +136,37 @@ impl OttdmapExtras {
         out
     }
 
-    /// Tamaño del blob **TNBP** (túneles/puentes) si el `.ottdmap` lo incluyó; el pool no se decodifica aún.
+    /// Tamaño del blob **TNBP** (túneles/puentes) si el `.ottdmap` lo incluyó.
     #[must_use]
     pub fn tnbp_blob_len(&self) -> usize {
         self.tnbp_blob.as_ref().map_or(0, Vec::len)
+    }
+
+    /// Intenta decodificar el footer **TNBP** (formato saveload gamma / tabla Sl).
+    #[must_use]
+    pub fn decode_tnbp(
+        &self,
+    ) -> Option<Result<crate::tnbp_decode::TnbpDecoded, crate::tnbp_decode::TnbpDecodeError>> {
+        self.tnbp_blob
+            .as_deref()
+            .map(crate::tnbp_decode::decode_tnbp_blob)
+    }
+
+    /// Túneles al estilo JGR (`tile_n` / `tile_s` en tabla) si el decode lo permite.
+    #[must_use]
+    pub fn jgr_tunnels_from_tnbp(&self) -> Vec<crate::tnbp_decode::JgrTunnelRecord> {
+        self.decode_tnbp()
+            .and_then(Result::ok)
+            .map(|d| crate::tnbp_decode::jgr_tunnels_from_decoded(&d))
+            .unwrap_or_default()
+    }
+
+    /// Resumen JSON del blob TNBP (decode + conteos); `None` si no hay footer.
+    #[must_use]
+    pub fn tnbp_json_summary(&self) -> Option<serde_json::Value> {
+        self.tnbp_blob
+            .as_deref()
+            .map(crate::tnbp_decode::tnbp_blob_to_json_value)
     }
 
     /// Busca el tipo `OpenTTD` guardado para un índice de industria en tesela (`m1` bits 0–6).

@@ -21,7 +21,7 @@ Formato de salida (.ottdmap) v5 (compatible v1–v4 al leer):
   Footers opcionales (magic ASCII + u32 LE length + payload):
     INDP  – industrias: count × (u16 industry_index, u8 industry_type)
     STNN  – blob crudo del chunk STNN (CH_TABLE o CH_ARRAY según versión del save)
-    TNBP  – blob de chunk TNBP / TBUS / TUNN si existe (pool túnel/puente según upstream)
+    TNBP  – blob de chunk TNBP / TBUS / TUNN si existe (CH_ARRAY o CH_TABLE; p. ej. JGR `TUNN` es tabla Sl)
     STXY  – teselas MP_STATION: u32 count + count × (u16 x, u16 y) en coordenadas de mapa
             (derivado del plano MAPT; no sustituye decodificar STNN para waypoints en vía)
 
@@ -457,6 +457,10 @@ def parse_chunks(
                 elif chunk_name == "STNN":
                     blob, offset = slurp_array_payload(data, offset)
                     chunks["STNN"] = blob
+                elif chunk_name in ("TNBP", "TBUS", "TUNN"):
+                    # JGRPP guarda túneles en `TUNN` como CH_TABLE (mismo envoltorio gamma que STNN).
+                    blob, offset = slurp_array_payload(data, offset)
+                    chunks[chunk_name] = blob
                 else:
                     offset = skip_array(data, offset)
 

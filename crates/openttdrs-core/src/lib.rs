@@ -8,14 +8,21 @@
 pub mod industry;
 pub mod map;
 pub mod ottdmap_extras;
+pub mod tnbp_decode;
 pub mod pathfinder;
 pub mod station;
 pub mod tick;
 pub mod vehicle;
 
 pub use industry::{INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, industry_produce_period_ticks};
-pub use map::{Map, MapError, Tile, TileCoord, TileKind};
+pub use map::{
+    Map, MapError, Tile, TileCoord, TileKind, OTTD_TILETYPE_TUNNELBRIDGE, openttd_tile_index_to_coord,
+};
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
+pub use tnbp_decode::{
+    JgrTunnelRecord, SlPrimitive, SlTableField, TnbpDecodeError, TnbpDecoded, decode_tnbp_blob,
+    jgr_tunnels_from_decoded, read_sl_gamma, split_sl_gamma_segments, tnbp_blob_to_json_value,
+};
 pub use pathfinder::find_path;
 pub use station::Station;
 pub use tick::GameTick;
@@ -45,6 +52,9 @@ pub struct GameState {
     pub vehicles: Vec<Vehicle>,
     pub stations: Vec<Station>,
     pub stats: SimStats,
+    /// Túneles JGR decodificados desde footer `TNBP` del `.ottdmap` (vacío si no hay o no aplica).
+    #[serde(default)]
+    pub jgr_tunnels_from_footer: Vec<JgrTunnelRecord>,
 }
 
 impl GameState {
@@ -57,6 +67,7 @@ impl GameState {
             vehicles: Vec::new(),
             stations: Vec::new(),
             stats: SimStats::default(),
+            jgr_tunnels_from_footer: Vec::new(),
         }
     }
 
@@ -70,6 +81,7 @@ impl GameState {
             vehicles: Vec::new(),
             stations: Vec::new(),
             stats: SimStats::default(),
+            jgr_tunnels_from_footer: Vec::new(),
         }
     }
 
@@ -334,13 +346,24 @@ mod tests {
             TileCoord::new(0, 1),
             TileCoord::new(2, 1),
         ));
+        s.jgr_tunnels_from_footer.push(JgrTunnelRecord {
+            tile_n: 0,
+            tile_s: 1,
+            height: 2,
+            is_chunnel: false,
+            style_n: None,
+            style_s: None,
+        });
         let j = s.save_json().expect("json");
+        assert!(j.contains("jgr_tunnels_from_footer"));
         let s2 = GameState::load_json(&j).expect("parse");
         assert_eq!(s2.map.dimensions(), (4, 4));
         assert_eq!(s2.industries.len(), 2);
         assert_eq!(s2.industries[0].kind, IndustryKind::Forest);
         assert_eq!(s2.industries[1].kind, IndustryKind::Factory);
         assert_eq!(s2.vehicles[0].kind, VehicleKind::Train);
+        assert_eq!(s2.jgr_tunnels_from_footer.len(), 1);
+        assert_eq!(s2.jgr_tunnels_from_footer[0].tile_n, 0);
     }
 
     #[test]

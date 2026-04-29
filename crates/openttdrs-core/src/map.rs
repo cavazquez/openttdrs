@@ -15,6 +15,27 @@ impl TileCoord {
     }
 }
 
+/// Nibble alto de `mapt` / MAPT: `TileType::TunnelBridge` en OpenTTD (= 9).
+pub const OTTD_TILETYPE_TUNNELBRIDGE: u8 = 9;
+
+/// Convierte un `TileIndex` de OpenTTD a coordenadas cuando el mapa es potencia de 2 en X e Y
+/// (misma convención que `TileXY`: `tile = x | (y << log2(map_w))`).
+#[must_use]
+pub fn openttd_tile_index_to_coord(tile: u32, map_w: u32, map_h: u32) -> Option<TileCoord> {
+    if !map_w.is_power_of_two() || !map_h.is_power_of_two() {
+        return None;
+    }
+    let log_w = map_w.trailing_zeros();
+    let x = tile & (map_w - 1);
+    let y = tile >> log_w;
+    if y >= map_h {
+        return None;
+    }
+    let xi = i32::try_from(x).ok()?;
+    let yi = i32::try_from(y).ok()?;
+    Some(TileCoord::new(xi, yi))
+}
+
 /// Tipo semántico de una tesela.
 ///
 /// Cubre los tipos de `TileType` de `OpenTTD` necesarios para el renderer.
@@ -77,6 +98,20 @@ pub struct Tile {
     pub m7: u8,
     /// Byte M3HI = **`m4()`** en OpenTTD (`.ottdmap` v5+).
     pub m3hi: u8,
+}
+
+impl Tile {
+    /// Nibble alto del tipo de tesela OpenTTD (`mapt >> 4`).
+    #[must_use]
+    pub fn ottd_type_nibble(self) -> u8 {
+        (self.mapt >> 4) & 0x0F
+    }
+
+    /// `true` si MAPT indica `MP_TUNNELBRIDGE`.
+    #[must_use]
+    pub fn is_tunnel_bridge_tile(self) -> bool {
+        self.ottd_type_nibble() == OTTD_TILETYPE_TUNNELBRIDGE
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,6 +279,33 @@ impl Map {
     #[must_use]
     pub const fn dimensions(&self) -> (u32, u32) {
         (self.width, self.height)
+    }
+
+    /// Cuenta extremos JGR (`tile_n` / `tile_s`) que caen en teselas `MP_TUNNELBRIDGE` del mapa.
+    ///
+    /// Devuelve `(coincidencias_norte, coincidencias_sur, total_registros)`.
+    #[must_use]
+    pub fn jgr_tunnel_endpoint_match_stats(
+        &self,
+        tunnels: &[crate::tnbp_decode::JgrTunnelRecord],
+    ) -> (usize, usize, usize) {
+        let w = self.width;
+        let h = self.height;
+        let mut n_ok = 0usize;
+        let mut s_ok = 0usize;
+        for t in tunnels {
+            if let Some(c) = openttd_tile_index_to_coord(t.tile_n, w, h)
+                && self.get(c).is_some_and(Tile::is_tunnel_bridge_tile)
+            {
+                n_ok += 1;
+            }
+            if let Some(c) = openttd_tile_index_to_coord(t.tile_s, w, h)
+                && self.get(c).is_some_and(Tile::is_tunnel_bridge_tile)
+            {
+                s_ok += 1;
+            }
+        }
+        (n_ok, s_ok, tunnels.len())
     }
 
     fn index(&self, c: TileCoord) -> Option<usize> {
@@ -417,6 +479,28 @@ mod ottdmap_binary_tests {
         v.extend_from_slice(b"INDP");
         v.extend_from_slice(&0_u32.to_le_bytes()); // count = 0
         v
+    }
+
+    #[test]
+    fn openttd_tile_index_roundtrip_2x2() {
+        assert_eq!(
+            openttd_tile_index_to_coord(0, 2, 2),
+            Some(TileCoord::new(0, 0))
+        );
+        assert_eq!(
+            openttd_tile_index_to_coord(1, 2, 2),
+            Some(TileCoord::new(1, 0))
+        );
+        assert_eq!(
+            openttd_tile_index_to_coord(2, 2, 2),
+            Some(TileCoord::new(0, 1))
+        );
+        assert_eq!(
+            openttd_tile_index_to_coord(3, 2, 2),
+            Some(TileCoord::new(1, 1))
+        );
+        assert_eq!(openttd_tile_index_to_coord(4, 2, 2), None);
+        assert_eq!(openttd_tile_index_to_coord(0, 3, 3), None);
     }
 
     #[test]

@@ -35,24 +35,14 @@ use bevy::math::{Affine3A, Rect};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::save;
-use openttdrs_core::{IndustryKind, Map, TileKind, Vehicle};
+use openttdrs_core::{IndustryKind, TileKind, Vehicle};
 
 use camera::{CameraVelocity, move_camera};
-use iso::{
-    ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, gizmo_diamond, iso, overlay_pos, shore_png_index,
-    shore_tileh_for_draw_shore, tile_min_z, tile_pos, tile_pos_half, tile_slope_bits_from_heights,
-    wang_hash,
-};
+use iso::{ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, gizmo_diamond, iso, overlay_pos, tile_min_z};
 use render::{
-    MapVisualLayer, RenderGrid, TileRenderContext, WaterTile, WorldAssets, push_water_sprite,
-    sloped_or_flat_image, spawn_coast_debug_label, spawn_ground_sprite,
-};
-use sprites::{
-    HOUSE_DRAW_DATA, ROAD_FLAT_HALF_H, collect_rail_sprites, collect_signal_sprite_ids,
-    house_draw_data_index_for_tile, is_road_level_crossing, level_crossing_has_rail_reservation,
-    level_crossing_rail_sprite_id, rail_tile_is_signals, rail_track_base_color,
-    rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
-    road_flat_sprite_index, road_tile_has_tram_track,
+    MapSpriteBatches, MapVisualLayer, RenderGrid, TileRenderContext, WaterTile, WorldAssets,
+    flush_map_batches, push_forest_tree, push_water_tile, spawn_generic_land_tile,
+    spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
 };
 use state::SimWorld;
 use ui::{
@@ -140,6 +130,12 @@ fn rebuild_vehicle_index(sim: Res<SimWorld>, mut idx: ResMut<VehicleIndex>) {
     idx.rebuild(&sim.state.vehicles);
 }
 
+fn env_flag(name: &str) -> bool {
+    std::env::var(name)
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+}
+
 fn spawn_initial_vehicles(commands: &mut Commands, sim: &SimWorld, trucks: &TruckHandles) {
     for vehicle in &sim.state.vehicles {
         let vh = tile_min_z(&sim.state.map, vehicle.pos);
@@ -164,173 +160,6 @@ fn spawn_initial_vehicles(commands: &mut Commands, sim: &SimWorld, trucks: &Truc
             },
             Transform::from_translation(pos3).with_scale(Vec3::splat(TRUCK_SCALE)),
         ));
-    }
-}
-
-fn spawn_road_tile(
-    commands: &mut Commands,
-    map: &Map,
-    mw: u32,
-    mh: u32,
-    assets: &WorldAssets,
-    ctx: &TileRenderContext,
-    slope_half_ground: f32,
-) {
-    let tileh = ctx.info.tileh;
-    let base_z = ctx.info.base_z;
-    let rb = road_bits_for_render(map, ctx.coord, mw, mh);
-    let fi = road_flat_sprite_index(tileh, rb);
-    let road_half_h = if tileh == 0 {
-        ROAD_FLAT_HALF_H[fi]
-    } else {
-        SLOPE_HALF_H[tileh as usize]
-    };
-    let road_paint = ctx.tile.map_or(Color::WHITE, |t| {
-        road_flat_sprite_color(t.mapt, ctx.kind, t.m7)
-    });
-    if tileh != 0 {
-        spawn_ground_sprite(
-            commands,
-            assets.grass_slopes[tileh as usize - 1].clone(),
-            Color::WHITE,
-            ctx,
-            slope_half_ground,
-        );
-    }
-    commands.spawn((
-        MapVisualLayer,
-        Sprite {
-            image: assets.road_flat[fi].clone(),
-            color: road_paint,
-            ..default()
-        },
-        Transform::from_translation(tile_pos_half(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            0.02,
-            road_half_h,
-        )),
-    ));
-
-    // Cruce a nivel: carretera + sprite de vía encima (`base_sprites.crossing + rail_axis`).
-    if ctx
-        .tile
-        .is_some_and(|t| is_road_level_crossing(t.mapt, t.m5, ctx.kind))
-    {
-        let sid = ctx
-            .tile
-            .map(|t| level_crossing_rail_sprite_id(t.m5))
-            .unwrap_or(1370);
-        if let Some(img) = assets.rail.get(&sid) {
-            let crossing_paint = ctx.tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
-                let mut c = rail_track_base_color(t.mapt, TileKind::Rail, t.m5, t.m3);
-                if level_crossing_has_rail_reservation(t.m5) {
-                    c = c.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26);
-                }
-                if road_tile_has_tram_track(t.m8) {
-                    c = c.mix(&Color::srgb(0.55, 0.88, 0.58), 0.12);
-                }
-                c
-            });
-            commands.spawn((
-                MapVisualLayer,
-                Sprite {
-                    image: img.clone(),
-                    color: crossing_paint,
-                    ..default()
-                },
-                Transform::from_translation(tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    0.045,
-                    road_half_h,
-                )),
-            ));
-        }
-    }
-}
-
-fn spawn_rail_tile(
-    commands: &mut Commands,
-    map: &Map,
-    map_dims: (u32, u32),
-    assets: &WorldAssets,
-    ctx: &TileRenderContext,
-    slope_half_ground: f32,
-    rail_layers: &mut Vec<u32>,
-) {
-    let tileh = ctx.info.tileh;
-    let base_z = ctx.info.base_z;
-    if tileh != 0 {
-        spawn_ground_sprite(
-            commands,
-            assets.grass_slopes[tileh as usize - 1].clone(),
-            Color::WHITE,
-            ctx,
-            slope_half_ground,
-        );
-    }
-    let rail_half_h = if tileh == 0 {
-        TILE_HALF_H
-    } else {
-        SLOPE_HALF_H[tileh as usize]
-    };
-    collect_rail_sprites(
-        rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1),
-        rail_layers,
-    );
-    let mut rail_paint = ctx.tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
-        rail_track_base_color(t.mapt, ctx.kind, t.m5, t.m3)
-    });
-    if ctx.tile.is_some_and(|t| rail_tile_is_signals(t.m5)) {
-        rail_paint = rail_paint.mix(&Color::srgb(0.95, 0.88, 0.55), 0.22);
-    }
-    for (i, sid) in rail_layers.iter().copied().enumerate() {
-        let Some(img) = assets.rail.get(&sid) else {
-            continue;
-        };
-        let z = 0.02 + i as f32 * 0.0004;
-        commands.spawn((
-            MapVisualLayer,
-            Sprite {
-                image: img.clone(),
-                color: rail_paint,
-                ..default()
-            },
-            Transform::from_translation(tile_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                z,
-                rail_half_h,
-            )),
-        ));
-    }
-    if let Some(t) = ctx.tile.filter(|t| rail_tile_is_signals(t.m5)) {
-        let sig_ids = collect_signal_sprite_ids(t.m2, t.m3, t.m3hi, t.m5);
-        for (si, sid) in sig_ids.iter().copied().enumerate() {
-            let Some(img) = assets.rail.get(&sid) else {
-                continue;
-            };
-            let z = 0.032 + si as f32 * 0.0015;
-            commands.spawn((
-                MapVisualLayer,
-                Sprite {
-                    image: img.clone(),
-                    color: Color::WHITE,
-                    ..default()
-                },
-                Transform::from_translation(tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    z,
-                    rail_half_h,
-                )),
-            ));
-        }
     }
 }
 
@@ -476,9 +305,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
 #[allow(clippy::too_many_lines)]
 fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &SimWorld) {
     let (mw, mh) = sim.state.map.dimensions();
-    let debug_coast = std::env::var("OPENTTDRS_DEBUG_COAST")
-        .ok()
-        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+    let debug_coast = env_flag("OPENTTDRS_DEBUG_COAST");
 
     let assets = WorldAssets::load(asset_server);
 
@@ -487,20 +314,15 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
     let map = &sim.state.map;
     let render_grid = RenderGrid::from_map(map, mw, mh);
 
-    let mut batch_water: Vec<(WaterTile, Sprite, Transform)> = Vec::new();
-    let mut batch_shore: Vec<(Sprite, Transform)> = Vec::new();
-    let mut batch_trees: Vec<(Sprite, Transform)> = Vec::new();
+    let mut batches = MapSpriteBatches::default();
 
     // ── Teselas de suelo ───────────────────────────────────────────────────────
     let mut rail_layers: Vec<u32> = Vec::with_capacity(8);
     for ty in 0..mh {
         for tx in 0..mw {
             let ctx = TileRenderContext::new(map, &render_grid, tx, ty);
-            let tile = ctx.tile;
             let kind = ctx.kind;
-            let base_z = ctx.info.base_z;
             let tileh = ctx.info.tileh;
-            let p = ctx.iso_pos;
 
             if kind == TileKind::Void {
                 continue;
@@ -508,267 +330,54 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
 
             let slope_half_ground = SLOPE_HALF_H[tileh as usize];
 
-            if kind == TileKind::Road {
-                spawn_road_tile(commands, map, mw, mh, &assets, &ctx, slope_half_ground);
-            } else if kind == TileKind::Rail {
-                spawn_rail_tile(
-                    commands,
-                    map,
-                    (mw, mh),
-                    &assets,
-                    &ctx,
-                    slope_half_ground,
-                    &mut rail_layers,
-                );
-            } else if kind == TileKind::House {
-                // GetCleanHouseType: GB(m8, 0, 12) — el resto es datos NewGRF
-                let clean_house_id = tile.map_or(0u16, |t| t.m8 & 0xFFF);
-                let house_base = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
-                spawn_ground_sprite(commands, house_base, Color::WHITE, &ctx, slope_half_ground);
-                let spec_idx = house_draw_data_index_for_tile(clean_house_id, tx as i32, ty as i32);
-                let spec = &HOUSE_DRAW_DATA[spec_idx];
-                if spec.s1 != 0
-                    && let Some(img) = assets.houses.get(&spec.s1)
-                {
-                    let pos3 = overlay_pos(
-                        p,
-                        spec.s1_xrel,
-                        spec.s1_yrel,
-                        spec.s1_w,
-                        spec.s1_h,
-                        base_z,
-                        0.4,
-                        tx as i32,
-                        ty as i32,
-                    );
-                    commands.spawn((
-                        MapVisualLayer,
-                        Sprite {
-                            image: img.clone(),
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                        Transform::from_translation(pos3),
-                    ));
+            match kind {
+                TileKind::Road => {
+                    spawn_road_tile(commands, map, mw, mh, &assets, &ctx, slope_half_ground);
                 }
-                if spec.s2 != 0
-                    && let Some(img) = assets.houses.get(&spec.s2)
-                {
-                    let pos3 = overlay_pos(
-                        p,
-                        spec.s2_xrel,
-                        spec.s2_yrel,
-                        spec.s2_w,
-                        spec.s2_h,
-                        base_z,
-                        0.5,
-                        tx as i32,
-                        ty as i32,
-                    );
-                    commands.spawn((
-                        MapVisualLayer,
-                        Sprite {
-                            image: img.clone(),
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                        Transform::from_translation(pos3),
-                    ));
-                }
-            } else if kind == TileKind::Station {
-                if tileh != 0 {
-                    spawn_ground_sprite(
+                TileKind::Rail => {
+                    spawn_rail_tile(
                         commands,
-                        assets.grass_slopes[tileh as usize - 1].clone(),
-                        Color::WHITE,
+                        map,
+                        (mw, mh),
+                        &assets,
                         &ctx,
                         slope_half_ground,
+                        &mut rail_layers,
                     );
                 }
-                let dir = wang_hash(tx, ty, 0xCAFE) as usize % assets.station_grounds.len();
-                commands.spawn((
-                    MapVisualLayer,
-                    Sprite {
-                        image: assets.station_grounds[dir].clone(),
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                    Transform::from_translation(tile_pos(tx as i32, ty as i32, base_z, 0.01)),
-                ));
-            } else if kind == TileKind::Industry {
-                // gfx de industria es de 9 bits: m5 (bits 0-7) | bit 2 de m6 (bit 8)
-                // Fuente: GetCleanIndustryGfx() en industry_map.h de OpenTTD
-                let gfx = tile.map_or(0u16, |t| {
-                    u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8)
-                });
-                let has_building = sprites::industry_sprite_for_gfx(gfx).is_some();
-                let (ground_img, ground_color) = if has_building {
-                    (
-                        sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes),
-                        Color::srgb(0.55, 0.50, 0.45),
-                    )
-                } else {
-                    (
-                        sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes),
-                        Color::WHITE,
-                    )
-                };
-                spawn_ground_sprite(commands, ground_img, ground_color, &ctx, slope_half_ground);
-                // Edificio de industria según gfx (m5)
-                if let Some(s) = sprites::industry_sprite_for_gfx(gfx)
-                    && let Some(img) = assets.industries.get(&s.sprite_id)
-                {
-                    let pos3 = overlay_pos(
-                        p, s.xrel, s.yrel, s.w, s.h, base_z, 0.5, tx as i32, ty as i32,
+                TileKind::House => {
+                    spawn_house_tile(commands, &assets, &ctx, slope_half_ground);
+                }
+                TileKind::Station => {
+                    spawn_station_tile(commands, &assets, &ctx, slope_half_ground);
+                }
+                TileKind::Industry => {
+                    spawn_industry_tile(commands, &assets, &ctx, slope_half_ground);
+                }
+                TileKind::Water => {
+                    push_water_tile(
+                        commands,
+                        map,
+                        (mw, mh),
+                        &assets,
+                        &ctx,
+                        debug_coast,
+                        &mut batches,
                     );
-                    commands.spawn((
-                        MapVisualLayer,
-                        Sprite {
-                            image: img.clone(),
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                        Transform::from_translation(pos3),
-                    ));
                 }
-            } else {
-                if kind == TileKind::Water {
-                    if ctx.info.use_shore {
-                        // `DrawShoreTile(tileh)` — igual que OpenTTD: pendiente real del 2×2
-                        // cuando no es plana; si no, vecinos de tierra (`infer_coast`).
-                        let th = shore_tileh_for_draw_shore(map, tx, ty, mw, mh);
-                        // Base de agua también en costa: los sprites `shore_*` tienen
-                        // transparencia y en OpenTTD se componen sobre agua.
-                        push_water_sprite(&mut batch_water, &assets.water, &ctx);
-                        if th == 0 {
-                            // Costa plana: solo base de agua (sin overlay adicional).
-                        } else {
-                            let si = shore_png_index(th);
-                            // Los sprites de costa `shore_*.png` son 64x31 (half_h fijo),
-                            // no usan el half_h de pendientes de terreno.
-                            let hh = TILE_HALF_H;
-                            batch_shore.push((
-                                Sprite {
-                                    image: assets.shore[si].clone(),
-                                    color: Color::WHITE,
-                                    ..default()
-                                },
-                                Transform::from_translation(tile_pos_half(
-                                    tx as i32, ty as i32, base_z, 0.0, hh,
-                                )),
-                            ));
-                            if debug_coast {
-                                let (raw, _) = tile_slope_bits_from_heights(map, tx, ty);
-                                spawn_coast_debug_label(commands, &ctx, raw, th, si);
-                            }
-                        }
-                    } else {
-                        // Agua libre (Clear, Lock, Depot en mapas típicos: Clear).
-                        push_water_sprite(&mut batch_water, &assets.water, &ctx);
-                    }
-                } else {
-                    let ottd_type = tile.map_or(0u8, |t| (t.mapt >> 4) & 0xF);
-                    let tile_m5 = tile.map_or(0u8, |t| t.m5);
-                    let _tile_m6 = tile.map_or(0u8, |t| t.m6);
-                    let _tile_m8 = tile.map_or(0u16, |t| t.m8);
-
-                    // MP_CLEAR (0): distinguir subtipo de suelo via m5 bits 2-4
-                    // MP_OBJECT (10): grass de base + overlay de objeto
-                    let grass_img =
-                        || sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
-                    let rough_img =
-                        || sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
-
-                    let (image, color) = match kind {
-                        TileKind::Grass if ottd_type == 0 => {
-                            // bits 2-4 de m5 = ClearGround
-                            // 0=grass, 1=rough, 2=rocky, 3=fields, 4=snow, 5=desert
-                            match (tile_m5 >> 2) & 0x7 {
-                                0 => (grass_img(), Color::WHITE),
-                                3 => (rough_img(), Color::srgb(0.82, 0.72, 0.45)), // campos
-                                _ => (rough_img(), Color::srgb(0.78, 0.73, 0.58)), // rough/rocky
-                            }
-                        }
-                        TileKind::Grass => (grass_img(), Color::WHITE), // MP_OBJECT u otros
-                        TileKind::Forest => (rough_img(), Color::srgb(0.6, 1.0, 0.45)),
-                        TileKind::CoalField => (rough_img(), Color::srgb(0.55, 0.50, 0.45)),
-                        TileKind::Unknown(_) => (grass_img(), Color::srgb(1.0, 0.0, 1.0)),
-                        TileKind::House
-                        | TileKind::Station
-                        | TileKind::Road
-                        | TileKind::Rail
-                        | TileKind::Industry
-                        | TileKind::Water
-                        | TileKind::Void => unreachable!(),
-                    };
-                    spawn_ground_sprite(commands, image, color, &ctx, slope_half_ground);
-
-                    // MP_OBJECT: renderizar faro o transmisor como overlay
-                    // ObjectType (m5): 0=Transmisor, 1=Faro
-                    if ottd_type == 10 {
-                        // ObjectType de OpenTTD: 0=Transmisor, 1=Faro
-                        // m5 contiene el ObjectType real (resuelto por parse_sav.py desde OBJS)
-                        let (obj_img, obj_xrel, obj_yrel, obj_w, obj_h) = match tile_m5 {
-                            // OBJECT_TRANSMITTER=0: sprite 2601, 55×77, xrel=-26, yrel=-71
-                            0 => (Some(assets.transmitter.clone()), -26.0, -71.0, 55.0, 77.0),
-                            // OBJECT_LIGHTHOUSE=1: sprite 2602, 41×61, xrel=-22, yrel=-48
-                            1 => (Some(assets.lighthouse.clone()), -22.0, -48.0, 41.0, 61.0),
-                            _ => (None, 0.0, 0.0, 0.0, 0.0),
-                        };
-                        if let Some(img) = obj_img {
-                            let pos3 = overlay_pos(
-                                p, obj_xrel, obj_yrel, obj_w, obj_h, base_z, 0.6, tx as i32,
-                                ty as i32,
-                            );
-                            commands.spawn((
-                                MapVisualLayer,
-                                Sprite {
-                                    image: img,
-                                    color: Color::WHITE,
-                                    ..default()
-                                },
-                                Transform::from_translation(pos3),
-                            ));
-                        }
-                    }
+                TileKind::Grass | TileKind::Forest | TileKind::CoalField | TileKind::Unknown(_) => {
+                    spawn_generic_land_tile(commands, &assets, &ctx, slope_half_ground);
                 }
+                TileKind::Void => unreachable!(),
             }
 
             if kind == TileKind::Forest {
-                let h = wang_hash(tx, ty, 0xCAFE);
-                let tree_idx = (h % 3) as usize;
-                let ox = ((h >> 2) % 17) as f32 - 8.0;
-                let pos3 = overlay_pos(
-                    Vec2::new(p.x + ox, p.y),
-                    -19.0,
-                    -36.0,
-                    35.0,
-                    43.0,
-                    base_z,
-                    0.3,
-                    tx as i32,
-                    ty as i32,
-                );
-                batch_trees.push((
-                    Sprite {
-                        image: assets.trees[tree_idx].clone(),
-                        ..default()
-                    },
-                    Transform::from_translation(pos3),
-                ));
+                push_forest_tree(&assets, &ctx, &mut batches);
             }
         }
     }
 
-    for (wt, sp, tr) in batch_water {
-        commands.spawn((MapVisualLayer, wt, sp, tr));
-    }
-    for (sp, tr) in batch_shore {
-        commands.spawn((MapVisualLayer, sp, tr));
-    }
-    for (sp, tr) in batch_trees {
-        commands.spawn((MapVisualLayer, sp, tr));
-    }
+    flush_map_batches(commands, batches);
 
     spawn_initial_vehicles(commands, sim, &truck_handles);
     commands.insert_resource(truck_handles);

@@ -1,5 +1,5 @@
 use openttdrs_core::{GameState, Industry, IndustryKind, OttdmapExtras, TileCoord, TileKind};
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 /// Mapea `IndustryType` de OpenTTD (footer `INDP`) a [`IndustryKind`] del core (best-effort).
 fn industry_kind_from_ottd_type(t: u8) -> IndustryKind {
@@ -16,11 +16,15 @@ pub(crate) fn place_industries(
     from_ottd_file: bool,
     ottd_extras: Option<&OttdmapExtras>,
 ) {
+    if from_ottd_file {
+        place_industries_from_map_components(state, ottd_extras);
+        return;
+    }
+
     let (mw, mh) = state.map.dimensions();
     let mut coal_n = 0u32;
     let mut forest_n = 0u32;
     let mut industry_n = 0u32;
-    let mut seen_ottd_industry_ids: HashSet<u8> = HashSet::new();
     let stride_proc = 4u32;
 
     for y in 0..mh {
@@ -43,26 +47,7 @@ pub(crate) fn place_industries(
                     forest_n += 1;
                 }
                 TileKind::Industry => {
-                    if from_ottd_file {
-                        let industry_id = tile.m1 & 0x7F;
-                        if !seen_ottd_industry_ids.insert(industry_id) {
-                            industry_n += 1;
-                            continue;
-                        }
-                        let kind = if let Some(ex) = ottd_extras {
-                            ex.industry_type_for_tile_index(tile.m1)
-                                .map(industry_kind_from_ottd_type)
-                                .unwrap_or_else(|| {
-                                    let gfx =
-                                        u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
-                                    classify_industry_kind_from_gfx(gfx)
-                                })
-                        } else {
-                            let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
-                            classify_industry_kind_from_gfx(gfx)
-                        };
-                        state.industries.push(Industry::new(c, kind));
-                    } else if industry_n.is_multiple_of(16) {
+                    if industry_n.is_multiple_of(16) {
                         let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
                         let kind = classify_industry_kind_from_gfx(gfx);
                         state.industries.push(Industry::new(c, kind));
@@ -73,6 +58,72 @@ pub(crate) fn place_industries(
             }
         }
     }
+}
+
+fn place_industries_from_map_components(state: &mut GameState, ottd_extras: Option<&OttdmapExtras>) {
+    for component in industry_components(state) {
+        let Some(&origin) = component.first() else {
+            continue;
+        };
+        let Some(tile) = state.map.get(origin) else {
+            continue;
+        };
+        let kind = if let Some(ex) = ottd_extras {
+            ex.industry_type_for_tile_index(tile.m1)
+                .map(industry_kind_from_ottd_type)
+                .unwrap_or_else(|| {
+                    let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
+                    classify_industry_kind_from_gfx(gfx)
+                })
+        } else {
+            let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
+            classify_industry_kind_from_gfx(gfx)
+        };
+        state.industries.push(Industry::new(origin, kind));
+    }
+}
+
+fn industry_components(state: &GameState) -> Vec<Vec<TileCoord>> {
+    let (mw, mh) = state.map.dimensions();
+    let mut visited: HashSet<(i32, i32)> = HashSet::new();
+    let mut out: Vec<Vec<TileCoord>> = Vec::new();
+
+    for y in 0..mh as i32 {
+        for x in 0..mw as i32 {
+            let start = TileCoord::new(x, y);
+            if state.map.get_kind(start) != Some(TileKind::Industry) {
+                continue;
+            }
+            if !visited.insert((x, y)) {
+                continue;
+            }
+
+            let mut queue = VecDeque::from([start]);
+            let mut component = Vec::new();
+            while let Some(cur) = queue.pop_front() {
+                component.push(cur);
+                for next in [
+                    TileCoord::new(cur.x - 1, cur.y),
+                    TileCoord::new(cur.x + 1, cur.y),
+                    TileCoord::new(cur.x, cur.y - 1),
+                    TileCoord::new(cur.x, cur.y + 1),
+                ] {
+                    if next.x < 0 || next.y < 0 || next.x >= mw as i32 || next.y >= mh as i32 {
+                        continue;
+                    }
+                    if state.map.get_kind(next) != Some(TileKind::Industry) {
+                        continue;
+                    }
+                    if visited.insert((next.x, next.y)) {
+                        queue.push_back(next);
+                    }
+                }
+            }
+            out.push(component);
+        }
+    }
+
+    out
 }
 
 fn classify_industry_kind_from_gfx(gfx: u16) -> IndustryKind {
@@ -142,7 +193,18 @@ mod tests {
 
         place_industries(&mut state, true, None);
 
-        // Ambos tiles tienen m1=0 por defecto, por lo tanto deben colapsar a una sola industria.
+        // Ambos tiles son adyacentes y forman un único componente de industria.
         assert_eq!(state.industries.len(), 1);
+    }
+
+    #[test]
+    fn place_industries_from_file_separates_disconnected_components() {
+        let mut state = GameState::new(3, 1);
+        let _ = state.map.set_kind(TileCoord::new(0, 0), TileKind::Industry);
+        let _ = state.map.set_kind(TileCoord::new(2, 0), TileKind::Industry);
+
+        place_industries(&mut state, true, None);
+
+        assert_eq!(state.industries.len(), 2);
     }
 }

@@ -1,11 +1,14 @@
 //! Constantes y lógica de sprites de `OpenGFX`.
 
-use std::sync::OnceLock;
-
 use bevy::prelude::Color;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
-use crate::config;
+#[path = "sprites/rail.rs"]
+mod rail;
+#[path = "sprites/road.rs"]
+mod road;
+#[path = "sprites/industry.rs"]
+mod industry;
 
 // ── Constantes de renderizado de carreteras y vías ───────────────────────────
 
@@ -16,11 +19,6 @@ pub const OTTD_MP_TUNNELBRIDGE: u8 = 9;
 
 /// `RailGroundType::SnowOrDesert` en los 4 bits bajos de `m4`/`m3` en vía normal (`rail_map.h`).
 pub const RAIL_GROUND_SNOW_OR_DESERT: u8 = 12;
-
-/// Subtipo de tesela ferroviaria en bits 6–7 de `m5` (`rail_map.h`).
-pub const RAIL_TILE_NORMAL: u8 = 0;
-pub const RAIL_TILE_SIGNALS: u8 = 1;
-pub const RAIL_TILE_DEPOT: u8 = 3;
 
 /// `IsOnSnowOrDesert` (`road_map.h`): bit 5 de **MAP7** en teselas `MP_ROAD`.
 #[must_use]
@@ -68,22 +66,16 @@ pub const ROAD_FLAT_HALF_H: [f32; 19] = [
     15.5, 15.5, 15.5,
 ];
 
-/// `TrackBits` en vía clásica (`track_type.h`).
-pub const RAIL_TB_X: u8 = 1;
-pub const RAIL_TB_Y: u8 = 2;
-pub const RAIL_TB_UPPER: u8 = 4;
-pub const RAIL_TB_LOWER: u8 = 8;
-pub const RAIL_TB_LEFT: u8 = 16;
-pub const RAIL_TB_RIGHT: u8 = 32;
-pub const RAIL_TB_CROSS: u8 = RAIL_TB_X | RAIL_TB_Y;
-pub const RAIL_TB_HORZ: u8 = RAIL_TB_UPPER | RAIL_TB_LOWER;
-pub const RAIL_TB_VERT: u8 = RAIL_TB_LEFT | RAIL_TB_RIGHT;
-
-/// Máscaras 3 vías por esquina.
-const RAIL_3WAY_NE: u8 = RAIL_TB_X | RAIL_TB_UPPER | RAIL_TB_RIGHT;
-const RAIL_3WAY_SW: u8 = RAIL_TB_X | RAIL_TB_LOWER | RAIL_TB_LEFT;
-const RAIL_3WAY_NW: u8 = RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LEFT;
-const RAIL_3WAY_SE: u8 = RAIL_TB_Y | RAIL_TB_LOWER | RAIL_TB_RIGHT;
+#[allow(unused_imports)]
+pub use rail::{
+    RAIL_SPRITE_IDS, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
+    RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, RAIL_TILE_DEPOT, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS,
+    collect_rail_sprites, collect_signal_sprite_ids, level_crossing_has_rail_reservation,
+    level_crossing_rail_sprite_id, rail_signal_present_mask, rail_signal_state_mask, rail_sprite_ids_for_preload,
+    rail_tile_is_signals, signal_sprite_bases,
+};
+#[allow(unused_imports)]
+pub use industry::{INDUSTRY_GFX_DATA, IndustryGfxSprite, industry_sprite_for_gfx};
 
 /// Especificación de dibujo de una casa (stage completado).
 ///
@@ -394,462 +386,16 @@ pub fn house_draw_data_index_for_tile(clean_house_id: u16, _tx: i32, _ty: i32) -
     hid % HOUSE_DRAW_DATA.len()
 }
 
-// ── Industrias: mapeo gfx → sprite ──────────────────────────────────────────
-// Basado en _industry_draw_tile_data de OpenTTD (table/industry_land.h).
-// El gfx es el valor del byte m5 para tiles de industria (construction_stage=3).
-// Cada entrada representa un tile de industria completada.
-//
-// Fórmula de sprite_id: s2 del M() macro en industry_land.h para stage 3.
-// Dimensiones (w, h, xrel, yrel): extraídas del NFO de OpenGFX.
-// Para tiles sin edificio (solo suelo), sprite_id = 0.
-
-/// Metadatos de un sprite de tile de industria.
-pub struct IndustryGfxSprite {
-    /// Sprite ID en OpenGFX (0 = solo suelo, sin overlay de edificio).
-    pub sprite_id: u32,
-    pub w: f32,
-    pub h: f32,
-    /// Offset horizontal desde el vértice superior del rombo (pantalla).
-    pub xrel: f32,
-    /// Offset vertical hacia arriba desde el vértice (positivo = más arriba en NFO = negativo yrel).
-    pub yrel: f32,
-}
-
-/// Default genérico para edificios cuyas dimensiones exactas no se han calibrado aún.
-/// Centra un sprite 64×48 sobre el tile.
-const fn gfx_building(sprite_id: u32) -> IndustryGfxSprite {
-    IndustryGfxSprite {
-        sprite_id,
-        w: 64.0,
-        h: 48.0,
-        xrel: -32.0,
-        yrel: -32.0,
-    }
-}
-
-const fn gfx_ground() -> IndustryGfxSprite {
-    IndustryGfxSprite {
-        sprite_id: 0,
-        w: 0.0,
-        h: 0.0,
-        xrel: 0.0,
-        yrel: 0.0,
-    }
-}
-
-/// Tabla gfx → sprite para todos los climas de OpenTTD.
-/// Índice = gfx (valor de m5 para tile de industria completada, stage 3).
-/// Derivado de `_industry_draw_tile_data` en `table/industry_land.h` de OpenTTD.
-///
-/// Rangos por industria:
-/// |   gfx   | Industria               |
-/// |---------|-------------------------|
-/// |   0-  6 | Coal Mine               |
-/// |   7- 10 | Power Station           |
-/// |  11- 15 | Sawmill                 |
-/// |  16- 23 | Oil Refinery            |
-/// |  24- 28 | Forest                  |
-/// |  29- 32 | Printing Works          |
-/// |  33- 38 | Oil Rig                 |
-/// |  39- 42 | Steel Mill              |
-/// |  43- 46 | Factory                 |
-/// |  47- 51 | Oil Wells               |
-/// |  52- 57 | Farm                    |
-/// |  58- 59 | Bank (Templado)         |
-/// |  60- 71 | Copper Ore Mine         |
-/// |  72- 88 | (Plantaciones/otros)    |
-/// |  89- 90 | Gold Mine               |
-/// |  91- 99 | Iron Ore Mine           |
-/// | 100-119 | (Otros climas)          |
-pub const INDUSTRY_GFX_DATA: [IndustryGfxSprite; 120] = [
-    // ── Coal Mine (gfx 0-6) ──────────────────────────────────────────────────
-    // Valores exactos del NFO de OpenGFX.
-    IndustryGfxSprite {
-        sprite_id: 2013,
-        w: 58.0,
-        h: 50.0,
-        xrel: -16.0,
-        yrel: -33.0,
-    }, // 0 headframe
-    IndustryGfxSprite {
-        sprite_id: 2015,
-        w: 46.0,
-        h: 53.0,
-        xrel: -14.0,
-        yrel: -38.0,
-    }, // 1 torre
-    IndustryGfxSprite {
-        sprite_id: 2018,
-        w: 64.0,
-        h: 39.0,
-        xrel: -31.0,
-        yrel: -8.0,
-    }, // 2 aux
-    IndustryGfxSprite {
-        sprite_id: 2021,
-        w: 44.0,
-        h: 38.0,
-        xrel: -13.0,
-        yrel: -21.0,
-    }, // 3 pequeño
-    gfx_ground(), // 4 suelo
-    gfx_ground(), // 5 suelo
-    gfx_ground(), // 6 suelo
-    // ── Power Station (gfx 7-10) ─────────────────────────────────────────────
-    gfx_building(2047), // 7  chimenea (sz=44 → edificio alto)
-    gfx_building(2050), // 8  generador
-    gfx_building(2053), // 9  transformador
-    gfx_building(2054), // 10 edificio principal (proc especial)
-    // ── Sawmill (gfx 11-15) ──────────────────────────────────────────────────
-    gfx_building(2063), // 11
-    gfx_building(2066), // 12
-    gfx_building(2069), // 13
-    gfx_building(2070), // 14
-    gfx_building(2071), // 15
-    // ── Oil Refinery (gfx 16-23) ─────────────────────────────────────────────
-    gfx_building(2075), // 16
-    gfx_building(2076), // 17
-    gfx_building(2080), // 18
-    gfx_building(2083), // 19
-    gfx_building(2086), // 20
-    gfx_building(2089), // 21
-    gfx_building(2092), // 22
-    gfx_building(2095), // 23
-    // ── Forest (gfx 24-28) ───────────────────────────────────────────────────
-    gfx_ground(),       // 24 suelo animado (sin overlay estático)
-    gfx_building(2099), // 25 árbol cluster 1
-    gfx_building(2100), // 26 árbol cluster 2
-    gfx_building(2101), // 27 árbol cluster 3
-    gfx_building(2102), // 28 árbol cluster 4
-    // ── Printing Works (gfx 29-32) ───────────────────────────────────────────
-    gfx_building(2174), // 29
-    gfx_building(2178), // 30
-    gfx_building(2177), // 31
-    gfx_building(2174), // 32
-    // ── Oil Rig (gfx 33-38) ──────────────────────────────────────────────────
-    gfx_building(2108), // 33
-    gfx_building(2109), // 34
-    gfx_building(2111), // 35
-    gfx_building(2113), // 36
-    gfx_building(2115), // 37
-    gfx_building(2117), // 38
-    // ── Steel Mill (gfx 39-42) ───────────────────────────────────────────────
-    gfx_building(2150), // 39
-    gfx_building(2151), // 40
-    gfx_building(2152), // 41
-    gfx_ground(),       // 42 suelo
-    // ── Factory (gfx 43-46) ──────────────────────────────────────────────────
-    gfx_building(2169), // 43
-    gfx_building(2170), // 44
-    gfx_building(2171), // 45
-    gfx_building(2172), // 46
-    // ── Oil Wells (gfx 47-51) ────────────────────────────────────────────────
-    gfx_building(2028), // 47
-    gfx_building(2030), // 48
-    gfx_building(2033), // 49
-    gfx_building(2036), // 50
-    gfx_building(2039), // 51
-    // ── Farm (gfx 52-57) ─────────────────────────────────────────────────────
-    gfx_building(2119), // 52
-    gfx_building(2121), // 53
-    gfx_building(2123), // 54
-    gfx_ground(),       // 55 campo (sin edificio)
-    gfx_building(2126), // 56
-    gfx_building(2128), // 57
-    // ── Bank Templado (gfx 58-59) ────────────────────────────────────────────
-    gfx_building(2180), // 58
-    gfx_building(2181), // 59
-    // ── Copper Ore Mine (gfx 60-65) ──────────────────────────────────────────
-    // Sprites 0x88C-0x8A6 (2188-2214), 6 tiles
-    gfx_building(2190), // 60 → 0x88E
-    gfx_building(2193), // 61 → 0x891
-    gfx_building(2196), // 62 → 0x894
-    gfx_building(2199), // 63 → 0x897
-    gfx_building(2202), // 64 → 0x89A
-    gfx_building(2214), // 65 → 0x8A6 (suelo especial)
-    // ── Copper Ore Mine (gfx 66-71) continuación ─────────────────────────────
-    gfx_building(2205), // 66 → 0x89D
-    gfx_building(2206), // 67 → 0x89E
-    gfx_building(2208), // 68 → 0x8A0
-    gfx_building(2209), // 69 → 0x8A1
-    gfx_building(2212), // 70 → 0x8A4
-    gfx_building(2213), // 71 → 0x8A5
-    // ── Plantaciones/otros (gfx 72-88) ───────────────────────────────────────
-    // Mayoría ground-only; algunos tiles tienen edificios animados.
-    gfx_building(2247), // 72 → 0x8C7
-    gfx_ground(),       // 73
-    gfx_building(2249), // 74 → 0x8C9
-    gfx_building(2250), // 75 → 0x8CA
-    gfx_ground(),       // 76
-    gfx_ground(),       // 77
-    gfx_ground(),       // 78
-    gfx_building(2263), // 79 → 0x8D7
-    gfx_ground(),       // 80
-    gfx_ground(),       // 81
-    gfx_ground(),       // 82
-    gfx_ground(),       // 83
-    gfx_ground(),       // 84
-    gfx_ground(),       // 85
-    gfx_ground(),       // 86
-    gfx_ground(),       // 87
-    gfx_building(2265), // 88 → 0x8D9
-    // ── Gold Mine (gfx 89-90) ────────────────────────────────────────────────
-    gfx_building(2186), // 89 → 0x88A
-    gfx_building(2187), // 90 → 0x88B
-    // ── Iron Ore Mine (gfx 91-99) ────────────────────────────────────────────
-    // Sprites 0x8EC-0x8F4 (2284-2292)
-    gfx_building(2284), // 91 → 0x8EC
-    gfx_building(2285), // 92 → 0x8ED
-    gfx_building(2286), // 93 → 0x8EE
-    gfx_building(2287), // 94 → 0x8EF
-    gfx_ground(),       // 95
-    gfx_ground(),       // 96
-    gfx_building(2290), // 97 → 0x8F2
-    gfx_ground(),       // 98
-    gfx_ground(),       // 99
-    // ── Otros climas (gfx 100-119) ───────────────────────────────────────────
-    // Todos ground-only en este rango (plantaciones, fábricas trópico, etc.)
-    gfx_ground(),       // 100
-    gfx_ground(),       // 101
-    gfx_ground(),       // 102
-    gfx_ground(),       // 103
-    gfx_ground(),       // 104
-    gfx_ground(),       // 105
-    gfx_ground(),       // 106
-    gfx_ground(),       // 107
-    gfx_ground(),       // 108
-    gfx_ground(),       // 109
-    gfx_ground(),       // 110
-    gfx_ground(),       // 111
-    gfx_ground(),       // 112
-    gfx_ground(),       // 113
-    gfx_ground(),       // 114
-    gfx_ground(),       // 115
-    gfx_building(2342), // 116 → 0x926
-    gfx_building(2343), // 117 → 0x927
-    gfx_building(2349), // 118 → 0x92D
-    gfx_building(2352), // 119 → 0x930
-];
-
-/// Devuelve los metadatos del sprite de industria para el gfx dado (byte m5).
-/// Retorna `None` si el gfx no tiene overlay de edificio (solo suelo) o está fuera del rango.
-/// Devuelve el sprite de industria para el índice gfx de 9 bits:
-/// `gfx = m5 | ((m6 >> 2) & 1) << 8`
-pub fn industry_sprite_for_gfx(gfx: u16) -> Option<&'static IndustryGfxSprite> {
-    let entry = INDUSTRY_GFX_DATA.get(usize::from(gfx))?;
-    if entry.sprite_id != 0 {
-        Some(entry)
-    } else {
-        None
-    }
-}
-
-/// IDs de sprites de vía férrea usados (cruce a nivel 1370–1373 con barreras, `road_cmd.cpp`).
-pub const RAIL_SPRITE_IDS: [u32; 24] = [
-    1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020,
-    1021, 1022, 1035, 1036, 1370, 1371, 1372, 1373,
-];
-
 /// `RoadTileType::Crossing` en bits 6–7 de `m5` (`road_map.h`).
 #[must_use]
 pub fn is_road_level_crossing(mapt: u8, m5: u8, kind: TileKind) -> bool {
-    kind == TileKind::Road && (mapt >> 4) & 0xF == OTTD_MP_ROAD && ((m5 >> 6) & 0x3) == 1
-}
-
-/// Sprite de raíl del cruce: `GetRailTypeInfo(...)->base_sprites.crossing + GetCrossingRailAxis(tile)` → 1370 + eje de **vía**.
-/// Si el cruce está barrado (`IsCrossingBarred`, bit 5 de `m5`), OpenTTD suma **+2** al sprite (`road_cmd.cpp`).
-#[must_use]
-pub fn level_crossing_rail_sprite_id(m5: u8) -> u32 {
-    const SPR_CROSSING_OFF_X_RAIL: u32 = 1370;
-    let road_axis = m5 & 1;
-    let rail_axis = 1 - road_axis;
-    let mut sid = SPR_CROSSING_OFF_X_RAIL + u32::from(rail_axis);
-    if (m5 >> 5) & 1 != 0 {
-        sid += 2;
-    }
-    sid
-}
-
-/// Reserva PBS en el cruce (bit 4 de `m5`, `HasCrossingReservation`).
-#[must_use]
-pub fn level_crossing_has_rail_reservation(m5: u8) -> bool {
-    (m5 >> 4) & 1 != 0
+    rail::is_road_level_crossing(mapt, m5, kind, OTTD_MP_ROAD)
 }
 
 /// Tranvía presente en la tesela de carretera (`GetRoadTypeTram` ≠ inválido; 6 bits altos de `m8`).
 #[must_use]
 pub fn road_tile_has_tram_track(m8: u16) -> bool {
-    let t = (m8 >> 6) & 0x3F;
-    t != 0 && t != 0x3F
-}
-
-/// Vía con señales (`RailTileType::Signals`, bits 6–7 de `m5`).
-#[must_use]
-pub fn rail_tile_is_signals(m5: u8) -> bool {
-    (m5 >> 6) & 0x3 == RAIL_TILE_SIGNALS
-}
-
-// OpenTTD `Track` / `TrackBits` (`track_type.h`, `rail_cmd.cpp::DrawSignals`).
-const OTTD_TRACK_X: u8 = 0;
-const OTTD_TRACK_Y: u8 = 1;
-const OTTD_TRACK_UPPER: u8 = 2;
-const OTTD_TRACK_LOWER: u8 = 3;
-const OTTD_TRACK_LEFT: u8 = 4;
-const OTTD_TRACK_RIGHT: u8 = 5;
-const TB_X: u8 = 1 << OTTD_TRACK_X;
-const TB_Y: u8 = 1 << OTTD_TRACK_Y;
-const TB_UPPER: u8 = 1 << OTTD_TRACK_UPPER;
-const TB_LOWER: u8 = 1 << OTTD_TRACK_LOWER;
-const TB_LEFT: u8 = 1 << OTTD_TRACK_LEFT;
-const TB_RIGHT: u8 = 1 << OTTD_TRACK_RIGHT;
-
-/// Sprite base OpenTTD para señales eléctricas clásicas (`SPR_ORIGINAL_SIGNALS_BASE`).
-const SPR_ORIGINAL_SIGNALS_BASE: u32 = 1275;
-/// Base por defecto OpenGFX 8bpp para señales no “clásicas eléctricas” (semáforo/PBS); +77 respecto a 1275 en el GRF base.
-const SPR_SIGNAL_ALT_BASE: u32 = 1352;
-
-/// Bases de sprite para señales (OpenGFX 8bpp por defecto). Sobrescribibles con `OPENTTDRS_SIGNAL_BASE` / `OPENTTDRS_SIGNAL_ALT_BASE` (valores 512–4096).
-#[must_use]
-pub fn signal_sprite_bases() -> (u32, u32) {
-    static MAIN: OnceLock<u32> = OnceLock::new();
-    static ALT: OnceLock<u32> = OnceLock::new();
-    let main = *MAIN.get_or_init(|| {
-        config::env_u32_in_range(
-            "OPENTTDRS_SIGNAL_BASE",
-            SPR_ORIGINAL_SIGNALS_BASE,
-            512..=4096,
-        )
-    });
-    let alt = *ALT.get_or_init(|| {
-        config::env_u32_in_range("OPENTTDRS_SIGNAL_ALT_BASE", SPR_SIGNAL_ALT_BASE, 512..=4096)
-    });
-    (main, alt)
-}
-const SIGTYPE_LAST_NOPBS: u8 = 3;
-
-#[inline]
-fn signal_type_from_m2(m2: u8, track: u8) -> u8 {
-    let base = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
-        4
-    } else {
-        0
-    };
-    (m2 >> base) & 7
-}
-
-#[inline]
-fn signal_variant_from_m2(m2: u8, track: u8) -> u8 {
-    let bit = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
-        7
-    } else {
-        3
-    };
-    (m2 >> bit) & 1
-}
-
-/// Offset de imagen en la hoja de señales (`SignalOffsets` en `rail_cmd.cpp`).
-#[inline]
-fn signal_sprite_id(sig_type: u8, variant: u8, image: u8, green: bool) -> u32 {
-    let (spr_main, spr_alt) = signal_sprite_bases();
-    let cond = u32::from(green);
-    let pbs_extra = if sig_type > SIGTYPE_LAST_NOPBS { 64 } else { 0 };
-    let base = if sig_type == 0 && variant == 0 {
-        spr_main
-    } else {
-        spr_alt
-    };
-    base + u32::from(sig_type) * 16
-        + u32::from(variant) * 64
-        + u32::from(image) * 2
-        + cond
-        + pbs_extra
-}
-
-/// Bits de señal presentes en el nibble alto de M3LO (`GetPresentSignals`, `rail_map.h`).
-#[must_use]
-pub fn rail_signal_present_mask(m3: u8) -> u8 {
-    (m3 >> 4) & 0x0F
-}
-
-/// Estados rojo/verde por bit de señal: nibble alto de **`m4()`** (`GetSignalStates`); el chunk save `M3HI` carga en `m4` (`map_sl.cpp`), exportado como `m3hi` en `.ottdmap`.
-#[must_use]
-pub fn rail_signal_state_mask(m3hi: u8) -> u8 {
-    (m3hi >> 4) & 0x0F
-}
-
-/// IDs de sprites (OpenGFX) para cada señal visible en la tesela, en orden de pintado.
-/// Replica la selección de `DrawSignals` + fórmula de `DrawSingleSignal` para el bloque clásico.
-#[must_use]
-pub fn collect_signal_sprite_ids(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<u32> {
-    if !rail_tile_is_signals(m5) {
-        return Vec::new();
-    }
-    let rails = m5 & 0x3F;
-    let present = rail_signal_present_mask(m3);
-    let states = rail_signal_state_mask(m3hi);
-    if present == 0 {
-        return Vec::new();
-    }
-
-    let mut out = Vec::with_capacity(4);
-    let mut push_if = |sig_bit: u8, image: u8, track: u8| {
-        if present & (1 << sig_bit) == 0 {
-            return;
-        }
-        let green = (states >> sig_bit) & 1 != 0;
-        let ty = signal_type_from_m2(m2, track);
-        let var = signal_variant_from_m2(m2, track);
-        out.push(signal_sprite_id(ty, var, image, green));
-    };
-
-    if rails & TB_Y == 0 {
-        if rails & TB_X == 0 {
-            if rails & TB_LEFT != 0 {
-                push_if(2, 7, OTTD_TRACK_LEFT); // NORTH
-                push_if(3, 6, OTTD_TRACK_LEFT); // SOUTH
-            }
-            if rails & TB_RIGHT != 0 {
-                push_if(0, 7, OTTD_TRACK_RIGHT);
-                push_if(1, 6, OTTD_TRACK_RIGHT);
-            }
-            if rails & TB_UPPER != 0 {
-                push_if(3, 5, OTTD_TRACK_UPPER); // WEST
-                push_if(2, 4, OTTD_TRACK_UPPER); // EAST
-            }
-            if rails & TB_LOWER != 0 {
-                push_if(1, 5, OTTD_TRACK_LOWER);
-                push_if(0, 4, OTTD_TRACK_LOWER);
-            }
-        } else {
-            push_if(3, 0, OTTD_TRACK_X); // SW
-            push_if(2, 1, OTTD_TRACK_X); // NE
-        }
-    } else {
-        push_if(3, 2, OTTD_TRACK_Y); // SE
-        push_if(2, 3, OTTD_TRACK_Y); // NW
-    }
-    out
-}
-
-/// IDs para precargar `opengfx/tiles/rail_<id>.png`: piezas de vía y **todas** las señales que
-/// puede devolver [`signal_sprite_id`] con las bases por defecto / env (`OPENTTDRS_SIGNAL_*`).
-///
-/// Evita `asset_server.load` sobre el rango entero `1275..1520` cuando OpenGFX no incluye cada
-/// fila del NFO (huecos sin PNG).
-#[must_use]
-pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
-    use std::collections::BTreeSet;
-    let mut set: BTreeSet<u32> = RAIL_SPRITE_IDS.iter().copied().collect();
-    for sig_type in 0u8..=7u8 {
-        for variant in 0u8..=1u8 {
-            for image in 0u8..=7u8 {
-                for green in [false, true] {
-                    set.insert(signal_sprite_id(sig_type, variant, image, green));
-                }
-            }
-        }
-    }
-    set.into_iter().collect()
+    road::road_tile_has_tram_track(m8)
 }
 
 // ── Lógica de road bits ─────────────────────────────────────────────────────
@@ -862,37 +408,12 @@ pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
 /// - SE (bit 2) = conexión hacia (x, y+1)  → visualmente abajo-derecha
 /// - NE (bit 3) = conexión hacia (x-1, y)  → visualmente arriba-derecha
 pub fn effective_road_bits(mapt: u8, m5: u8, kind: TileKind) -> Option<u8> {
-    let tt = (mapt >> 4) & 0xF;
-    match tt {
-        OTTD_MP_ROAD => {
-            let subtype = (m5 >> 6) & 0x3;
-            match subtype {
-                0 => {
-                    let rb = m5 & 0x0F;
-                    if rb == 0 { None } else { Some(rb) }
-                }
-                1 => {
-                    let axis = m5 & 1;
-                    Some(if axis == 0 { 0x0A } else { 0x05 })
-                }
-                2 => {
-                    let d = m5 & 0x3;
-                    Some((1u8 << (3 ^ d)) & 0x0F)
-                }
-                _ => None,
-            }
-        }
-        OTTD_MP_TUNNELBRIDGE if kind == TileKind::Road => {
-            let d = m5 & 0x3;
-            Some((1u8 << (3 ^ d)) & 0x0F)
-        }
-        _ => None,
-    }
+    road::effective_road_bits(mapt, m5, kind, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE)
 }
 
 #[inline]
 pub fn road_flat_index(road_bits: u8) -> usize {
-    usize::from(ROAD_FLAT_OFFSET_TBL[usize::from(road_bits & 0x0F)])
+    road::road_flat_index(road_bits, &ROAD_FLAT_OFFSET_TBL)
 }
 
 /// Índice del PNG `road_flat_{idx:02}.png` (0–18), alineado con `GetRoadSpriteOffset` en
@@ -903,15 +424,7 @@ pub fn road_flat_index(road_bits: u8) -> usize {
 /// Bitmask `tileh` igual que `Slope` (sin bit `STEEP`): `SLOPE_NE`=12, `SE`=6, `SW`=3, `NW`=9.
 #[must_use]
 pub fn road_flat_sprite_index(tileh: u8, road_bits: u8) -> usize {
-    match tileh.min(14) {
-        0 => road_flat_index(road_bits),
-        // Dos esquinas elevadas en diagonal visual → sprites específicos en OpenGFX.
-        12 => 11, // SLOPE_NE (N|E)
-        6 => 12,  // SLOPE_SE (S|E)
-        3 => 13,  // SLOPE_SW (S|W)
-        9 => 14,  // SLOPE_NW (N|W)
-        _ => road_flat_index(road_bits),
-    }
+    road::road_flat_sprite_index(tileh, road_bits, &ROAD_FLAT_OFFSET_TBL)
 }
 
 /// Road bits para dibujar: `m5` / vecinos (mapa procedural).
@@ -922,150 +435,17 @@ pub fn road_flat_sprite_index(tileh: u8, road_bits: u8) -> usize {
 /// - SW (bit 1 = 2): vecino en (x+1, y) → abajo-izquierda en pantalla
 /// - SE (bit 2 = 4): vecino en (x, y+1) → abajo-derecha en pantalla
 pub fn road_bits_for_render(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> u8 {
-    if let Some(t) = map.get(pos)
-        && let Some(rb) = effective_road_bits(t.mapt, t.m5, t.kind)
-        && rb != 0
-    {
-        return rb & 0x0F;
-    }
-    let is_road_or_station = |c: TileCoord| -> bool {
-        if c.x < 0 || c.y < 0 || c.x >= mw as i32 || c.y >= mh as i32 {
-            return false;
-        }
-        matches!(
-            map.get_kind(c),
-            Some(TileKind::Road | TileKind::Station | TileKind::Industry | TileKind::House)
-        )
-    };
-    let mut bits = 0u8;
-    if is_road_or_station(TileCoord::new(pos.x - 1, pos.y)) {
-        bits |= 8; // NE
-    }
-    if is_road_or_station(TileCoord::new(pos.x, pos.y - 1)) {
-        bits |= 1; // NW: y-1 → arriba-izquierda
-    }
-    if is_road_or_station(TileCoord::new(pos.x + 1, pos.y)) {
-        bits |= 2; // SW
-    }
-    if is_road_or_station(TileCoord::new(pos.x, pos.y + 1)) {
-        bits |= 4; // SE: y+1 → abajo-derecha
-    }
-    if bits == 0 {
-        bits = 0x05;
-    }
-    bits
+    road::road_bits_for_render(map, pos, mw, mh, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE)
 }
 
 // ── Lógica de rail bits ─────────────────────────────────────────────────────
 
 pub fn effective_rail_trackbits(mapt: u8, m5: u8, kind: TileKind) -> Option<u8> {
-    if kind != TileKind::Rail {
-        return None;
-    }
-    let tt = (mapt >> 4) & 0xF;
-    if tt != OTTD_MP_RAIL {
-        return None;
-    }
-    let subtype = (m5 >> 6) & 0x3;
-    match subtype {
-        RAIL_TILE_NORMAL | RAIL_TILE_SIGNALS => Some(m5 & 0x3F),
-        RAIL_TILE_DEPOT => {
-            let d = m5 & 0x3;
-            Some(if d == 1 || d == 3 {
-                RAIL_TB_X
-            } else {
-                RAIL_TB_Y
-            })
-        }
-        _ => None,
-    }
-}
-
-fn synthetic_rail_trackbits(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> u8 {
-    let rail_neighbor = |c: TileCoord| -> bool {
-        if c.x < 0 || c.y < 0 || c.x >= mw as i32 || c.y >= mh as i32 {
-            return false;
-        }
-        matches!(map.get_kind(c), Some(TileKind::Rail | TileKind::Station))
-    };
-    // Vecinos en eje x (dx=±1) forman la diagonal NE-SW → RAIL_TB_X
-    let has_tx = rail_neighbor(TileCoord::new(pos.x - 1, pos.y))
-        || rail_neighbor(TileCoord::new(pos.x + 1, pos.y));
-    // Vecinos en eje y (dy=±1) forman la diagonal NW-SE → RAIL_TB_Y
-    let has_ty = rail_neighbor(TileCoord::new(pos.x, pos.y - 1))
-        || rail_neighbor(TileCoord::new(pos.x, pos.y + 1));
-    match (has_tx, has_ty) {
-        (true, false) => RAIL_TB_X,
-        (false, true) => RAIL_TB_Y,
-        (true, true) => RAIL_TB_CROSS,
-        (false, false) => RAIL_TB_Y,
-    }
+    rail::effective_rail_trackbits(mapt, m5, kind, OTTD_MP_RAIL)
 }
 
 pub fn rail_trackbits_for_render(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> u8 {
-    if let Some(t) = map.get(pos)
-        && let Some(tb) = effective_rail_trackbits(t.mapt, t.m5, t.kind)
-        && tb != 0
-    {
-        return tb & 0x3F;
-    }
-    synthetic_rail_trackbits(map, pos, mw, mh)
-}
-
-#[inline]
-fn junction_ground_off(tb: u8) -> u8 {
-    let t = tb & 0x3F;
-    if t & RAIL_3WAY_NE == 0 {
-        return 0;
-    }
-    if t & RAIL_3WAY_SW == 0 {
-        return 1;
-    }
-    if t & RAIL_3WAY_NW == 0 {
-        return 2;
-    }
-    if t & RAIL_3WAY_SE == 0 {
-        return 3;
-    }
-    4
-}
-
-/// Lista de sprites `OpenGFX` en orden de pintado (suelo de cruce y superposiciones).
-pub fn collect_rail_sprites(tb: u8, out: &mut Vec<u32>) {
-    out.clear();
-    let t = tb & 0x3F;
-    match t {
-        RAIL_TB_Y => out.push(1011),
-        RAIL_TB_X => out.push(1012),
-        RAIL_TB_UPPER => out.push(1013),
-        RAIL_TB_LOWER => out.push(1014),
-        RAIL_TB_RIGHT => out.push(1015),
-        RAIL_TB_LEFT => out.push(1016),
-        RAIL_TB_CROSS => out.push(1017),
-        RAIL_TB_HORZ => out.push(1035),
-        RAIL_TB_VERT => out.push(1036),
-        _ => {
-            out.push(1018_u32 + u32::from(junction_ground_off(t)));
-            if t & RAIL_TB_X != 0 {
-                out.push(1005);
-            }
-            if t & RAIL_TB_Y != 0 {
-                out.push(1006);
-            }
-            if t & RAIL_TB_UPPER != 0 {
-                out.push(1007);
-            }
-            if t & RAIL_TB_LOWER != 0 {
-                out.push(1008);
-            }
-            if t & RAIL_TB_RIGHT != 0 {
-                out.push(1009);
-            }
-            if t & RAIL_TB_LEFT != 0 {
-                out.push(1010);
-            }
-        }
-    }
+    rail::rail_trackbits_for_render(map, pos, mw, mh, OTTD_MP_RAIL)
 }
 
 #[cfg(test)]

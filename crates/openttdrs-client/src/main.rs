@@ -30,6 +30,7 @@ mod render;
 mod simulation;
 mod sprites;
 mod state;
+mod state_bootstrap;
 mod ui;
 mod vehicle_render;
 mod window_status;

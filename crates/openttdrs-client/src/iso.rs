@@ -48,8 +48,7 @@ pub fn world_pos_to_tile_coord(world_pos: Vec2, map: &Map) -> Option<(i32, i32)>
     let mw_i = mw as i32;
     let mh_i = mh as i32;
 
-    let in_bounds =
-        |tx: i32, ty: i32| tx >= 0 && ty >= 0 && tx < mw_i && ty < mh_i;
+    let in_bounds = |tx: i32, ty: i32| tx >= 0 && ty >= 0 && tx < mw_i && ty < mh_i;
     // Estimación inicial rápida sin compensación.
     let mut guess = world_to_tile(world_pos);
     if !in_bounds(guess.0, guess.1) {
@@ -114,19 +113,6 @@ pub fn world_pos_to_tile_coord(world_pos: Vec2, map: &Map) -> Option<(i32, i32)>
     } else {
         None
     }
-}
-
-/// Dos bits bajos de `TileHash(x,y)` — `TileHash2Bit` en `tile_map.h` de OpenTTD.
-/// Sirve para la variante gráfica de casas (`house_id << 4 | … << 2 | stage`).
-#[inline]
-pub fn tile_hash_2bit(tx: i32, ty: i32) -> usize {
-    let x = tx as u32;
-    let y = ty as u32;
-    let mut hash = x >> 4;
-    hash ^= x >> 6;
-    hash ^= y >> 4;
-    hash = hash.wrapping_sub(y >> 6);
-    (hash & 3) as usize
 }
 
 /// Vec3 para teselas de suelo con soporte de altura isométrica.
@@ -265,8 +251,10 @@ pub fn shore_tileh_for_draw_shore(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32)
     if raw == 0 {
         return infer_coast_tileh_when_flat(map, tx, ty, mw, mh);
     }
-    // `water_cmd.cpp`: assert sin sprite costa para pendientes “todo el ancho”.
-    if raw == 5 || raw == 10 {
+    // Con sprites legacy (4062..4069) solo existen estas pendientes de costa.
+    // El resto (incl. WE/NS y 3 esquinas elevadas) en OpenTTD se resuelve con
+    // reemplazos adicionales; aquí caemos a inferencia para evitar artefactos.
+    if !matches!(raw, 1 | 2 | 3 | 4 | 6 | 8 | 9 | 12) {
         return infer_coast_tileh_when_flat(map, tx, ty, mw, mh);
     }
     raw
@@ -338,6 +326,12 @@ fn water_void_effective_height_for_slope(
     mh: u32,
     stored: u8,
 ) -> u8 {
+    // En exports normales, la altura de MP_WATER/MP_VOID suele ser válida.
+    // Solo inferimos cuando viene 0 (caso típico de `.ottdmap` que hunde costa).
+    if stored != 0 {
+        return stored;
+    }
+
     let x = ux as i32;
     let y = uy as i32;
     const NEIGH8: [(i32, i32); 8] = [
@@ -430,23 +424,58 @@ pub fn infer_coast_tileh_when_flat(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32
     };
     let x = tx as i32;
     let y = ty as i32;
-    // En el cuarteto de GetTileSlopeZ: hwest@(tx+1,ty), heast@(tx,ty+1), hsouth@(tx+1,ty+1).
-    if is_land(x + 1, y) {
+    // Vecinos del bloque 2x2 de GetTileSlopeZ.
+    let land_west_corner = is_land(x + 1, y); // hwest
+    let land_east_corner = is_land(x, y + 1); // heast
+    let land_south_corner = is_land(x + 1, y + 1); // hsouth
+    // Fuera del bloque (referencias para costa recta / orientación).
+    let land_north_side = is_land(x, y - 1);
+    let land_west_side = is_land(x - 1, y);
+
+    // Patrón típico de costa larga en diagonal (agua al SE, tierra al NO):
+    // priorizar familia NW (`t9/s7`) para evitar dientes alternando con W/E.
+    if land_north_side && (land_west_corner || land_east_corner || land_south_corner) {
+        return 9;
+    }
+
+    // Preferir pendientes diagonales cuando dos esquinas lindan con tierra.
+    if land_west_corner && land_south_corner {
+        return 3;
+    } // SW
+    if land_east_corner && land_south_corner {
+        return 6;
+    } // SE
+    if land_west_corner && land_north_side {
+        return 9;
+    } // NW
+    if land_east_corner && land_north_side {
+        return 12;
+    } // NE
+
+    if land_west_corner {
+        // En algunas diagonales largas de costa plana, el export deja un patrón donde
+        // solo `hwest` aparece como tierra en una celda sí y otra no. Si devolvemos W
+        // puro (1) en esos huecos, se generan "picos" serrados. Miramos un vecindario
+        // corto hacia el sur para mantener continuidad diagonal.
+        let south_diag_hint = is_land(x - 1, y + 1) || is_land(x, y + 2) || is_land(x + 1, y + 2);
+        if south_diag_hint {
+            return 3;
+        } // SW
         return 1;
-    } // SLOPE_W
-    if is_land(x, y + 1) {
-        return 4;
-    } // SLOPE_E
-    if is_land(x + 1, y + 1) {
+    } // W
+    if land_south_corner {
         return 2;
-    } // SLOPE_S
-    // Tierra fuera del bloque 2×2 (costa recta típica).
-    if is_land(x, y - 1) {
+    } // S
+    if land_east_corner {
+        let south_diag_hint = is_land(x + 1, y - 1) || is_land(x + 2, y) || is_land(x + 2, y + 1);
+        if south_diag_hint {
+            return 6;
+        } // SE
+        return 4;
+    } // E
+    if land_north_side || land_west_side {
         return 8;
-    } // SLOPE_N
-    if is_land(x - 1, y) {
-        return 8;
-    } // mismo síntoma plano; sprite costa “hacia tierra”
+    } // N
     8
 }
 
@@ -458,34 +487,17 @@ pub fn infer_coast_tileh_when_flat(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32
 /// `DupSprite` en `newgrf.cpp` (`ActivateOldShore`).
 #[must_use]
 pub fn shore_png_index(tileh: u8) -> usize {
-    const TILEH_TO_SHORE_DST: [u8; 16] = [0, 1, 2, 3, 4, 16, 6, 7, 8, 9, 17, 11, 12, 13, 14, 0];
-    let th = tileh.min(15) as usize;
-    let dst = TILEH_TO_SHORE_DST[th];
-    shore_dst_to_png(dst)
-}
-
-/// Convierte offset relativo a `SPR_SHORE_BASE` en índice `shore_{n}.png` (4062+n).
-fn shore_dst_to_png(dst: u8) -> usize {
-    match dst {
-        0 => 0,
-        1 => 1,
-        2 => 2,
-        3 => 6,
-        4 => 0,
-        5 => 5,
-        6 => 4,
-        7 => 7,
-        8 => 3,
-        9 => 7,
-        10 => 4,
-        11 => 6,
-        12 => 5,
-        13 => 4,
-        14 => 6,
-        15 => 0,
-        16 => 4,
-        17 => 3,
-        _ => (dst as usize).min(7),
+    // `ActivateOldShore` (OpenTTD/newgrf.cpp): mapea pendiente -> sprite original 4062..4069.
+    match tileh.min(14) {
+        1 => 1,  // W
+        2 => 2,  // S
+        3 => 6,  // SW
+        4 => 0,  // E
+        6 => 4,  // SE
+        8 => 3,  // N
+        9 => 7,  // NW
+        12 => 5, // NE
+        _ => 0,
     }
 }
 
@@ -611,7 +623,9 @@ mod compute_tileh_tests {
 mod water_coast_height_tests {
     //! Agua con `height` 0 en el export no debe hundir las esquinas de la costa.
 
-    use super::{shore_tileh_for_draw_shore, tile_slope_and_min_z};
+    use super::{
+        shore_tileh_for_draw_shore, tile_slope_and_min_z, water_void_effective_height_for_slope,
+    };
     use openttdrs_core::{Map, TileCoord, TileKind};
 
     #[test]
@@ -683,6 +697,36 @@ mod water_coast_height_tests {
         m.set_height(TileCoord::new(1, 1), 3).unwrap();
         assert_eq!(shore_tileh_for_draw_shore(&m, 0, 0, 2, 2), 3);
     }
+
+    #[test]
+    fn water_height_nonzero_is_preserved_for_slope_sampling() {
+        // Si MP_WATER ya trae altura válida, no debemos sustituirla por min(vecinos).
+        let mut m = Map::new_flat(3, 3, 0);
+        m.set_kind(TileCoord::new(1, 1), TileKind::Water).unwrap();
+        m.set_height(TileCoord::new(1, 1), 7).unwrap();
+        // Vecinos de tierra más bajos (si hubiese inferencia, bajaría).
+        for (x, y, h) in [(0, 1, 3), (2, 1, 4), (1, 0, 2), (1, 2, 5)] {
+            m.set_kind(TileCoord::new(x, y), TileKind::Grass).unwrap();
+            m.set_height(TileCoord::new(x, y), h).unwrap();
+        }
+        let got = water_void_effective_height_for_slope(&m, 1, 1, 3, 3, 7);
+        assert_eq!(got, 7);
+    }
+
+    #[test]
+    fn unsupported_raw_shore_slopes_fallback_to_infer() {
+        // raw=7 (WSE) no tiene sprite legacy directo; debe caer a inferencia.
+        let mut m = Map::new_flat(2, 2, 0);
+        m.set_kind(TileCoord::new(0, 0), TileKind::Water).unwrap();
+        m.set_height(TileCoord::new(0, 0), 0).unwrap(); // hnorth
+        m.set_kind(TileCoord::new(1, 0), TileKind::Grass).unwrap();
+        m.set_height(TileCoord::new(1, 0), 1).unwrap(); // hwest
+        m.set_kind(TileCoord::new(0, 1), TileKind::Grass).unwrap();
+        m.set_height(TileCoord::new(0, 1), 1).unwrap(); // heast
+        m.set_kind(TileCoord::new(1, 1), TileKind::Grass).unwrap();
+        m.set_height(TileCoord::new(1, 1), 1).unwrap(); // hsouth => raw 7
+        assert_eq!(shore_tileh_for_draw_shore(&m, 0, 0, 2, 2), 3);
+    }
 }
 
 #[cfg(test)]
@@ -724,6 +768,11 @@ mod infer_coast_tileh_tests {
     #[test]
     fn land_in_quartet_east_sample_prefers_w_slope() {
         let mut m = Map::new_flat(2, 2, 3);
+        for y in 0..2 {
+            for x in 0..2 {
+                m.set_kind(TileCoord::new(x, y), TileKind::Water).unwrap();
+            }
+        }
         m.set_kind(TileCoord::new(1, 0), TileKind::Grass).unwrap();
         assert_eq!(infer_coast_tileh_when_flat(&m, 0, 0, 2, 2), 1);
     }
@@ -739,6 +788,19 @@ mod infer_coast_tileh_tests {
         }
         assert_eq!(infer_coast_tileh_when_flat(&m, 0, 1, 2, 3), 8);
     }
+
+    #[test]
+    fn land_west_and_south_corners_prefers_sw_diagonal() {
+        let mut m = Map::new_flat(2, 2, 3);
+        for y in 0..2 {
+            for x in 0..2 {
+                m.set_kind(TileCoord::new(x, y), TileKind::Water).unwrap();
+            }
+        }
+        m.set_kind(TileCoord::new(1, 0), TileKind::Grass).unwrap(); // hwest
+        m.set_kind(TileCoord::new(1, 1), TileKind::Grass).unwrap(); // hsouth
+        assert_eq!(infer_coast_tileh_when_flat(&m, 0, 0, 2, 2), 3);
+    }
 }
 
 #[cfg(test)]
@@ -746,8 +808,8 @@ mod world_pos_to_tile_tests {
     use bevy::prelude::Vec2;
 
     use super::{
-        iso, world_pos_to_tile_coord, world_to_tile, Map, TileCoord, TileKind, HEIGHT_PX,
-        TILE_HALF_H,
+        HEIGHT_PX, Map, TILE_HALF_H, TileCoord, TileKind, iso, world_pos_to_tile_coord,
+        world_to_tile,
     };
 
     /// Mapa al mismo nivel: el centro del sprite (como en `tile_pos`) debe mapear a su tesela;

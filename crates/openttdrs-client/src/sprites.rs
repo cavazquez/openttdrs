@@ -380,22 +380,16 @@ pub fn house_sprite_filename(sprite_id: u32) -> String {
     format!("house_s{sprite_id}.png")
 }
 
-const TOWN_DRAW_COMPLETED_STAGE: usize = 3;
-
-/// Índice en [`HOUSE_DRAW_DATA`] para casa terminada, alineado con `DrawTile_Town` en
-/// `town_cmd.cpp`: `house_id * 16 + TileHash2Bit(x,y) * 4 + stage` con `stage = 3`.
+/// Índice en [`HOUSE_DRAW_DATA`] para una casa.
 ///
-/// Si el índice supera el tamaño de la tabla cargada, se usa **módulo** para no colapsar
-/// todos los `HouseID` altos en la misma fila.
+/// En este cliente la tabla tiene 128 entradas (una por `HouseID` base de OpenGFX),
+/// ya "aplanadas" para render de edificio terminado. Por eso indexamos por `HouseID`
+/// directo (con módulo para IDs extendidos/NewGRF), en vez de aplicar el stride de
+/// `_town_draw_tile_data` (`*16 + hash*4 + stage`) que aquí colapsa variedad.
 #[must_use]
-pub fn house_draw_data_index_for_tile(clean_house_id: u16, tx: i32, ty: i32) -> usize {
+pub fn house_draw_data_index_for_tile(clean_house_id: u16, _tx: i32, _ty: i32) -> usize {
     let hid = usize::from(clean_house_id);
-    let h = crate::iso::tile_hash_2bit(tx, ty);
-    let idx = hid
-        .saturating_mul(16)
-        .saturating_add(h.saturating_mul(4))
-        .saturating_add(TOWN_DRAW_COMPLETED_STAGE);
-    idx % HOUSE_DRAW_DATA.len()
+    hid % HOUSE_DRAW_DATA.len()
 }
 
 // ── Industrias: mapeo gfx → sprite ──────────────────────────────────────────
@@ -1079,17 +1073,17 @@ mod house_draw_index_tests {
     use super::house_draw_data_index_for_tile;
 
     #[test]
-    fn low_house_ids_match_openttd_stride_at_origin() {
-        assert_eq!(house_draw_data_index_for_tile(0, 0, 0), 3);
-        assert_eq!(house_draw_data_index_for_tile(1, 0, 0), 19);
-        assert_eq!(house_draw_data_index_for_tile(6, 0, 0), 99);
+    fn low_house_ids_map_directly_to_table_rows() {
+        assert_eq!(house_draw_data_index_for_tile(0, 0, 0), 0);
+        assert_eq!(house_draw_data_index_for_tile(1, 0, 0), 1);
+        assert_eq!(house_draw_data_index_for_tile(6, 0, 0), 6);
     }
 
     #[test]
-    fn high_house_id_uses_modulo_not_single_row() {
-        let i = house_draw_data_index_for_tile(24, 0, 0);
-        assert!(i < 128);
-        assert_ne!(i, 127);
+    fn high_house_id_uses_modulo() {
+        assert_eq!(house_draw_data_index_for_tile(127, 0, 0), 127);
+        assert_eq!(house_draw_data_index_for_tile(128, 0, 0), 0);
+        assert_eq!(house_draw_data_index_for_tile(129, 0, 0), 1);
     }
 }
 

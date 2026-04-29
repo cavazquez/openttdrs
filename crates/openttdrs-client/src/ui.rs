@@ -7,7 +7,10 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::{Command, TileCoord, TileKind, apply_command};
 
 use crate::RemapMapVisualsPending;
-use crate::iso::{compute_tileh, slope_label, world_pos_to_tile_coord};
+use crate::iso::{
+    compute_tileh, shore_png_index, shore_tileh_for_draw_shore, slope_label,
+    tile_slope_bits_from_heights, world_pos_to_tile_coord,
+};
 use crate::sprites::{
     is_road_level_crossing, level_crossing_rail_sprite_id, rail_tile_is_signals,
     road_bits_for_render,
@@ -134,10 +137,7 @@ pub fn setup_build_menu(mut commands: Commands) {
 /// Aplica comando según botón del menú (tile [`SelectedTileInfo::pos`]).
 #[allow(clippy::type_complexity)]
 pub(crate) fn build_menu_interaction(
-    mut q: Query<
-        (&Interaction, &BuildMenuAction),
-        (Changed<Interaction>, With<Button>),
-    >,
+    mut q: Query<(&Interaction, &BuildMenuAction), (Changed<Interaction>, With<Button>)>,
     selected: Res<SelectedTileInfo>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
@@ -172,10 +172,7 @@ pub fn handle_tile_click(
         return;
     }
 
-    if menu_pointer
-        .iter()
-        .any(|i| *i != Interaction::None)
-    {
+    if menu_pointer.iter().any(|i| *i != Interaction::None) {
         return;
     }
 
@@ -240,9 +237,8 @@ pub fn update_tile_info_text(
     let hud_footer = format!("{pause_l} | JSON: {} | F4 otra ruta", hud.json_save_path);
 
     let Some(pos) = selected.pos else {
-        **text = format!(
-            "{zoom_label}\n{hud_footer}\nClic mapa: elegir tile · panel Construir abajo"
-        );
+        **text =
+            format!("{zoom_label}\n{hud_footer}\nClic mapa: elegir tile · panel Construir abajo");
         return;
     };
 
@@ -309,9 +305,26 @@ pub fn update_tile_info_text(
         0
     };
     let slope_str = slope_label(tileh);
+    let coast_dbg = if std::env::var("OPENTTDRS_DEBUG_COAST")
+        .ok()
+        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        && tile.kind == TileKind::Water
+        && pos.x >= 0
+        && pos.y >= 0
+    {
+        let ux = pos.x as u32;
+        let uy = pos.y as u32;
+        let (mw, mh) = sim.state.map.dimensions();
+        let (raw, _) = tile_slope_bits_from_heights(&sim.state.map, ux, uy);
+        let th = shore_tileh_for_draw_shore(&sim.state.map, ux, uy, mw, mh);
+        let si = shore_png_index(th);
+        format!("\ncoast dbg raw:{raw} th:{th} si:{si}")
+    } else {
+        String::new()
+    };
 
     **text = format!(
-        "{zoom_label}\n{hud_footer}\nTile ({},{}) {}\nh:{} slope:{} ({}) mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X} m2:0x{:02X} m7:0x{:02X} m3:0x{:02X} m3hi:0x{:02X}{}",
+        "{zoom_label}\n{hud_footer}\nTile ({},{}) {}\nh:{} slope:{} ({}) mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X} m2:0x{:02X} m7:0x{:02X} m3:0x{:02X} m3hi:0x{:02X}{}{}",
         pos.x,
         pos.y,
         kind_str,
@@ -325,7 +338,8 @@ pub fn update_tile_info_text(
         tile.m7,
         tile.m3,
         tile.m3hi,
-        extra
+        extra,
+        coast_dbg
     );
 }
 

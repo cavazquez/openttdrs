@@ -334,9 +334,9 @@ pub fn place_industries(
     let mut coal_n = 0u32;
     let mut forest_n = 0u32;
     let mut industry_n = 0u32;
+    let mut seen_ottd_industry_ids: HashSet<u8> = HashSet::new();
 
     let stride_proc = 4u32;
-    let stride_ottd = 16u32;
 
     for y in 0..mh {
         for x in 0..mw {
@@ -362,7 +362,12 @@ pub fn place_industries(
                     forest_n += 1;
                 }
                 TileKind::Industry => {
-                    if industry_n.is_multiple_of(stride_ottd) {
+                    if from_ottd_file {
+                        let industry_id = tile.m1 & 0x7F;
+                        if !seen_ottd_industry_ids.insert(industry_id) {
+                            industry_n += 1;
+                            continue;
+                        }
                         let kind = if let Some(ex) = ottd_extras {
                             ex.industry_type_for_tile_index(tile.m1)
                                 .map(industry_kind_from_ottd_type)
@@ -375,6 +380,10 @@ pub fn place_industries(
                             let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
                             classify_industry_kind_from_gfx(gfx)
                         };
+                        state.industries.push(Industry::new(c, kind));
+                    } else if industry_n.is_multiple_of(16) {
+                        let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
+                        let kind = classify_industry_kind_from_gfx(gfx);
                         state.industries.push(Industry::new(c, kind));
                     }
                     industry_n += 1;

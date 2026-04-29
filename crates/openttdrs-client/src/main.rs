@@ -34,7 +34,8 @@ use iso::{
 };
 use sprites::{
     HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites,
-    rail_trackbits_for_render, road_bits_for_render, road_flat_index,
+    house_draw_data_index_for_tile, rail_trackbits_for_render, road_bits_for_render,
+    road_flat_sprite_index,
 };
 use state::SimWorld;
 use ui::{SelectedTileInfo, handle_tile_click, setup_tile_info_ui, update_tile_info_text};
@@ -405,9 +406,30 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
             let slope_half_ground = SLOPE_HALF_H[tileh as usize];
 
             if kind == TileKind::Road {
-                let fi = road_flat_index(road_bits_for_render(&sim.state.map, c, mw, mh));
-                let pos_road =
-                    tile_pos_half(tx as i32, ty as i32, base_z, 0.0, ROAD_FLAT_HALF_H[fi]);
+                let rb = road_bits_for_render(&sim.state.map, c, mw, mh);
+                let fi = road_flat_sprite_index(tileh, rb);
+                let road_half_h = if tileh == 0 {
+                    ROAD_FLAT_HALF_H[fi]
+                } else {
+                    SLOPE_HALF_H[tileh as usize]
+                };
+                if tileh != 0 {
+                    commands.spawn((
+                        Sprite {
+                            image: grass_slopes[tileh as usize - 1].clone(),
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                        Transform::from_translation(tile_pos_half(
+                            tx as i32,
+                            ty as i32,
+                            base_z,
+                            0.0,
+                            slope_half_ground,
+                        )),
+                    ));
+                }
+                let pos_road = tile_pos_half(tx as i32, ty as i32, base_z, 0.02, road_half_h);
                 commands.spawn((
                     Sprite {
                         image: road_flat[fi].clone(),
@@ -417,6 +439,27 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     Transform::from_translation(pos_road),
                 ));
             } else if kind == TileKind::Rail {
+                if tileh != 0 {
+                    commands.spawn((
+                        Sprite {
+                            image: grass_slopes[tileh as usize - 1].clone(),
+                            color: Color::WHITE,
+                            ..default()
+                        },
+                        Transform::from_translation(tile_pos_half(
+                            tx as i32,
+                            ty as i32,
+                            base_z,
+                            0.0,
+                            slope_half_ground,
+                        )),
+                    ));
+                }
+                let rail_half_h = if tileh == 0 {
+                    TILE_HALF_H
+                } else {
+                    SLOPE_HALF_H[tileh as usize]
+                };
                 collect_rail_sprites(
                     rail_trackbits_for_render(&sim.state.map, c, mw, mh),
                     &mut rail_layers,
@@ -425,19 +468,25 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     let Some(img) = rail_tex.get(&sid) else {
                         continue;
                     };
-                    let z = i as f32 * 0.0004;
+                    let z = 0.02 + i as f32 * 0.0004;
                     commands.spawn((
                         Sprite {
                             image: img.clone(),
                             color: Color::srgb(0.88, 0.88, 0.97),
                             ..default()
                         },
-                        Transform::from_translation(tile_pos(tx as i32, ty as i32, base_z, z)),
+                        Transform::from_translation(tile_pos_half(
+                            tx as i32,
+                            ty as i32,
+                            base_z,
+                            z,
+                            rail_half_h,
+                        )),
                     ));
                 }
             } else if kind == TileKind::House {
                 // GetCleanHouseType: GB(m8, 0, 12) — el resto es datos NewGRF
-                let house_id = tile.map_or(0u16, |t| t.m8 & 0xFFF) as usize;
+                let clean_house_id = tile.map_or(0u16, |t| t.m8 & 0xFFF);
                 let house_base = if tileh == 0 {
                     h_grass.clone()
                 } else {
@@ -457,8 +506,8 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         slope_half_ground,
                     )),
                 ));
-                // Para IDs >= 128 (climas ártico/tropical u otros) se reduce modulo
-                let spec_idx = house_id % HOUSE_DRAW_DATA.len();
+                let spec_idx =
+                    house_draw_data_index_for_tile(clean_house_id, tx as i32, ty as i32);
                 let spec = &HOUSE_DRAW_DATA[spec_idx];
                 if spec.s1 != 0
                     && let Some(img) = house_building_tex.get(&spec.s1)
@@ -916,6 +965,9 @@ fn update_vehicles(
 }
 
 fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
+    if std::env::var("OPENTTDRS_GIZMOS").ok().as_deref() != Some("1") {
+        return;
+    }
     for industry in &sim.state.industries {
         let center = iso(industry.pos.x, industry.pos.y);
         let color = match industry.kind {
@@ -992,6 +1044,9 @@ fn animate_water(
 }
 
 fn draw_stations(sim: Res<SimWorld>, mut gizmos: Gizmos) {
+    if std::env::var("OPENTTDRS_GIZMOS").ok().as_deref() != Some("1") {
+        return;
+    }
     for station in &sim.state.stations {
         let center = iso(station.pos.x, station.pos.y);
         gizmo_diamond(&mut gizmos, center, 26.0, 12.0, Color::srgb(0.0, 0.9, 0.9));

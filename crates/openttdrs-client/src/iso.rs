@@ -32,6 +32,19 @@ pub fn world_to_tile(world_pos: Vec2) -> (i32, i32) {
     (tx.floor() as i32, ty.floor() as i32)
 }
 
+/// Dos bits bajos de `TileHash(x,y)` — `TileHash2Bit` en `tile_map.h` de OpenTTD.
+/// Sirve para la variante gráfica de casas (`house_id << 4 | … << 2 | stage`).
+#[inline]
+pub fn tile_hash_2bit(tx: i32, ty: i32) -> usize {
+    let x = tx as u32;
+    let y = ty as u32;
+    let mut hash = x >> 4;
+    hash ^= x >> 6;
+    hash ^= y >> 4;
+    hash = hash.wrapping_sub(y >> 6);
+    (hash & 3) as usize
+}
+
 /// Vec3 para teselas de suelo con soporte de altura isométrica.
 #[inline]
 pub fn tile_pos_half(tx: i32, ty: i32, height: u8, layer: f32, half_h: f32) -> Vec3 {

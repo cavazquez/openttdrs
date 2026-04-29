@@ -84,10 +84,12 @@ const fn house_spec(
     }
 }
 
-/// Tabla de dibujo de casas para HouseIDs 0–127 (stage completado = stage 3).
+/// Primeras **128** filas de `_town_draw_tile_data` (`town_land.h`): **8** tipos de casa
+/// × **16** filas (4 variantes `TileHash2Bit` × 4 etapas de obra).
 ///
-/// Derivada de `_town_draw_tile_data` en `table/town_land.h` de OpenTTD.
-/// Cada entrada = índice `house_id * 4 + 3` de esa tabla.
+/// OpenTTD usa `house_id * 16 + TileHash2Bit(x,y) * 4 + GetHouseBuildingStage`. Con solo
+/// 128 filas cargadas, [`house_draw_data_index_for_tile`] aplica **módulo** para
+/// `HouseID` altos (variedad visual; para fidelidad total habría que ampliar la tabla).
 /// Dimensiones (w, h, xrel, yrel) extraídas del NFO de OpenGFX (ogfx1_base.nfo).
 ///
 /// `s1 = 0` significa "solo grass base" (SPR_FLAT_BARE_LAND o SPR_FLAT_GRASS_TILE).
@@ -333,6 +335,24 @@ pub const HOUSE_DRAW_DATA: [HouseDrawSpec; 128] = [
 /// Usa el naming genérico `house_s{id}.png` para todos los sprites extraídos.
 pub fn house_sprite_filename(sprite_id: u32) -> String {
     format!("house_s{sprite_id}.png")
+}
+
+const TOWN_DRAW_COMPLETED_STAGE: usize = 3;
+
+/// Índice en [`HOUSE_DRAW_DATA`] para casa terminada, alineado con `DrawTile_Town` en
+/// `town_cmd.cpp`: `house_id * 16 + TileHash2Bit(x,y) * 4 + stage` con `stage = 3`.
+///
+/// Si el índice supera el tamaño de la tabla cargada, se usa **módulo** para no colapsar
+/// todos los `HouseID` altos en la misma fila.
+#[must_use]
+pub fn house_draw_data_index_for_tile(clean_house_id: u16, tx: i32, ty: i32) -> usize {
+    let hid = usize::from(clean_house_id);
+    let h = crate::iso::tile_hash_2bit(tx, ty);
+    let idx = hid
+        .saturating_mul(16)
+        .saturating_add(h.saturating_mul(4))
+        .saturating_add(TOWN_DRAW_COMPLETED_STAGE);
+    idx % HOUSE_DRAW_DATA.len()
 }
 
 // ── Industrias: mapeo gfx → sprite ──────────────────────────────────────────
@@ -634,6 +654,25 @@ pub fn road_flat_index(road_bits: u8) -> usize {
     usize::from(ROAD_FLAT_OFFSET_TBL[usize::from(road_bits & 0x0F)])
 }
 
+/// Índice del PNG `road_flat_{idx:02}.png` (0–18), alineado con `GetRoadSpriteOffset` en
+/// `road_cmd.cpp` de OpenTTD: en las cuatro pendientes “de borde” (dos esquinas contiguas
+/// elevadas) el desplazamiento respecto a `SPR_ROAD_Y` (1332) es **11–14**; en terreno
+/// plano se usa la tabla de cruces (`road_flat_index`).
+///
+/// Bitmask `tileh` igual que `Slope` (sin bit `STEEP`): `SLOPE_NE`=12, `SE`=6, `SW`=3, `NW`=9.
+#[must_use]
+pub fn road_flat_sprite_index(tileh: u8, road_bits: u8) -> usize {
+    match tileh.min(14) {
+        0 => road_flat_index(road_bits),
+        // Dos esquinas elevadas en diagonal visual → sprites específicos en OpenGFX.
+        12 => 11, // SLOPE_NE (N|E)
+        6 => 12,  // SLOPE_SE (S|E)
+        3 => 13,  // SLOPE_SW (S|W)
+        9 => 14,  // SLOPE_NW (N|W)
+        _ => road_flat_index(road_bits),
+    }
+}
+
 /// Road bits para dibujar: `m5` / vecinos (mapa procedural).
 ///
 /// Asignación de bits conforme a OpenTTD (con iso correcta):
@@ -785,5 +824,48 @@ pub fn collect_rail_sprites(tb: u8, out: &mut Vec<u32>) {
                 out.push(1010);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod house_draw_index_tests {
+    use super::house_draw_data_index_for_tile;
+
+    #[test]
+    fn low_house_ids_match_openttd_stride_at_origin() {
+        assert_eq!(house_draw_data_index_for_tile(0, 0, 0), 3);
+        assert_eq!(house_draw_data_index_for_tile(1, 0, 0), 19);
+        assert_eq!(house_draw_data_index_for_tile(6, 0, 0), 99);
+    }
+
+    #[test]
+    fn high_house_id_uses_modulo_not_single_row() {
+        let i = house_draw_data_index_for_tile(24, 0, 0);
+        assert!(i < 128);
+        assert_ne!(i, 127);
+    }
+}
+
+#[cfg(test)]
+mod road_sprite_index_tests {
+    use super::{road_flat_index, road_flat_sprite_index};
+
+    #[test]
+    fn flat_tile_uses_road_bits_table() {
+        assert_eq!(road_flat_sprite_index(0, 0x05), road_flat_index(0x05));
+    }
+
+    #[test]
+    fn simple_diagonal_slopes_use_openttd_offsets_11_to_14() {
+        assert_eq!(road_flat_sprite_index(12, 0x0F), 11); // SLOPE_NE
+        assert_eq!(road_flat_sprite_index(6, 0x0F), 12); // SLOPE_SE
+        assert_eq!(road_flat_sprite_index(3, 0x0F), 13); // SLOPE_SW
+        assert_eq!(road_flat_sprite_index(9, 0x0F), 14); // SLOPE_NW
+    }
+
+    #[test]
+    fn other_slopes_keep_flat_road_variant_from_bits() {
+        let bits = 0x0A;
+        assert_eq!(road_flat_sprite_index(1, bits), road_flat_index(bits)); // SLOPE_W
     }
 }

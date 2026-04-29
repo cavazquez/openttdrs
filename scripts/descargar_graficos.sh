@@ -3,6 +3,7 @@
 #
 # Los archivos se extraen en assets/opengfx/ (carpeta ignorada por git).
 # Luego extrae los sprites de tesela a assets/opengfx/tiles/ para el renderer.
+# Cada ejecución limpia esa salida en assets (no la caché en .downloads/).
 # Modos:
 #   - --8bpp  : OpenGFX clásico.
 #   - --32bpp : OpenGFX2 High Def.
@@ -28,6 +29,8 @@ Notas:
   - Debés elegir exactamente una opción de modo.
   - OPENGFX_VERSION aplica solo a --8bpp.
   - OPENGFX2_TAG aplica solo a --32bpp.
+  - Si --32bpp falla con \"tar: Fin de archivo inesperada\", borrá el .tar en
+    .downloads/openttd/ y volvé a ejecutar (el script también detecta tars inválidos).
 EOF
 }
 
@@ -79,17 +82,35 @@ ZIP_CACHE_8BPP="${DOWNLOADS_DIR}/opengfx-${VERSION}-all.zip"
 TAR_CACHE_8BPP="${DOWNLOADS_DIR}/opengfx-${VERSION}.tar"
 TAR_CACHE_32BPP="${DOWNLOADS_DIR}/opengfx2-${OPENGFX2_TAG}-32ez.tar"
 
-if [[ ! -d "${DEST}" || -z "$(ls -A "${DEST}" 2>/dev/null)" ]]; then
-  mkdir -p "${DEST}"
-fi
+mkdir -p "${DEST}"
 mkdir -p "${DOWNLOADS_DIR}"
 
+echo "Limpiando salida gráfica en ${DEST}/ (tiles PNG y carpetas opengfx-*/opengfx2-*)…"
+rm -rf "${DEST}/tiles"
+shopt -s nullglob
+for d in "${DEST}"/opengfx-* "${DEST}"/opengfx2-*; do
+  rm -rf "$d"
+done
+shopt -u nullglob
+
 if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
-  if [[ -f "${TAR_CACHE_32BPP}" ]]; then
-    echo "OpenGFX2 32bpp ya descargado en ${TAR_CACHE_32BPP}"
-  else
+  # Descargas interrumpidas dejan un .tar truncado; tar falla al extraer.
+  if [[ -f "${TAR_CACHE_32BPP}" ]] && ! tar -tf "${TAR_CACHE_32BPP}" >/dev/null 2>&1; then
+    echo "Tar en caché inválido o incompleto, se elimina:" >&2
+    echo "  ${TAR_CACHE_32BPP}" >&2
+    rm -f "${TAR_CACHE_32BPP}"
+  fi
+  if [[ ! -f "${TAR_CACHE_32BPP}" ]]; then
     echo "Descargando OpenGFX2 High Def (${OPENGFX2_TAG}) desde ${CDN_32BPP} ..."
-    curl -fL "${CDN_32BPP}" -o "${TAR_CACHE_32BPP}"
+    curl -fL "${CDN_32BPP}" -o "${TAR_CACHE_32BPP}.part"
+    mv -f "${TAR_CACHE_32BPP}.part" "${TAR_CACHE_32BPP}"
+  else
+    echo "OpenGFX2 32bpp ya descargado en ${TAR_CACHE_32BPP}"
+  fi
+  if ! tar -tf "${TAR_CACHE_32BPP}" >/dev/null 2>&1; then
+    echo "ERROR: ${TAR_CACHE_32BPP} no es un tar válido tras la descarga." >&2
+    echo "Borralo manualmente y reintentá (o probá otra red / OPENGFX2_TAG)." >&2
+    exit 1
   fi
 else
   if [[ -f "${TAR_CACHE_8BPP}" ]]; then
@@ -146,7 +167,13 @@ if [[ ! -d "${BASE_DIR}" && -f "${BASE_TAR}" ]]; then
   echo "Extrayendo ${BASE_TAR} ..."
   if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
     mkdir -p "${BASE_DIR}"
-    tar -xf "${BASE_TAR}" -C "${BASE_DIR}"
+    if ! tar -xf "${BASE_TAR}" -C "${BASE_DIR}"; then
+      echo "ERROR: extracción del tar falló (¿archivo corrupto?)." >&2
+      echo "  rm -rf \"${BASE_DIR}\" \"${BASE_TAR}\"" >&2
+      echo "  y ejecutá de nuevo: ./scripts/descargar_graficos.sh --32bpp" >&2
+      rm -rf "${BASE_DIR}"
+      exit 1
+    fi
   else
     tar -xf "${BASE_TAR}" -C "${DEST}"
   fi
@@ -779,7 +806,7 @@ else
   echo "Para generarlas, instalá grfcodec y volvé a ejecutar este script:"
   echo "  Ubuntu/Debian: sudo apt update && sudo apt install -y grfcodec"
   echo "  Alternativa: https://github.com/OpenTTD/grfcodec"
-  echo "Los sprites ya extraídos en ${TILES_DIR}/ se usarán si existen."
+  echo "Sin hoja decodificada no se generaron tiles (esta ejecución ya vació ${TILES_DIR}/ al inicio)."
 fi
 
 echo ""

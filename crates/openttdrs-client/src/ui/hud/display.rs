@@ -127,7 +127,10 @@ pub(crate) fn update_tile_info_text(
             tile.m2
         )
     } else if tile.kind == TileKind::Industry {
-        format!(" gfx:{} ind:{}", tile.m5, tile.m1 & 0x7F)
+        // OpenTTD GetCleanIndustryGfx: 9 bits — no confundir con `m5` solo (HUD antes mostraba eso como "gfx").
+        let gfx9 =
+            u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
+        format!(" gfx9:{} m6:0x{:02X} ind:{}", gfx9, tile.m6, tile.m1 & 0x7F)
     } else {
         String::new()
     };

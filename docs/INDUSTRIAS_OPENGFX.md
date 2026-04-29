@@ -229,6 +229,14 @@ para todas las industrias excepto Coal Mine (que tiene valores exactos del NFO).
 
 2. **Método por gfx**: Inferir del rango de `gfx` (ver tabla arriba). No es 100% confiable con NewGRFs.
 
+## Cliente openttdrs (`industries.rs`)
+
+En `crates/openttdrs-client/src/state/bootstrap/industries.rs` hay una **tabla única de rangos** (`INDUSTRY_GFX_RANGES`): cada fila es un intervalo contiguo de `gfx` (el mismo de 9 bits que OpenTTD: `m5` con el bit 8 tomado del bit 2 de `m6`), más una **etiqueta de grupo** para depuración/UI (`industry_group_from_gfx`) y, cuando aplica, un **`IndustryKind`** para la simulación incremental del core.
+
+- Si el `.ottdmap` trae el footer **`INDP`** y el índice en `m1` encaja, el tipo de industria sale de `industry_kind_from_ottd_type` (OpenTTD `IndustryType`).
+- Si no, se usa `classify_industry_kind_from_gfx`: primero la tabla; si el `gfx` no cae en ningún rango, queda un **fallback** best-effort (par → `CoalMine`, impar → `Forest`).
+- Las etiquetas de minas de oro y hierro están separadas: `gfx` **89–90** → `"Gold Mine"`, **91–99** → `"Iron Ore Mine"`; ambas siguen mapeando a `CoalMine` en simulación por limitación de `IndustryKind` en el core.
+
 ## Referencias
 
 - `src/table/industry_land.h` — Tabla `_industry_draw_tile_data` con todos los sprites

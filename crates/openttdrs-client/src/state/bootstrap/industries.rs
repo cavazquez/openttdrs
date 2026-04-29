@@ -126,43 +126,53 @@ fn industry_components(state: &GameState) -> Vec<Vec<TileCoord>> {
     out
 }
 
+type IndustryGfxRange = (u16, u16, &'static str, Option<IndustryKind>);
+
+const INDUSTRY_GFX_RANGES: [IndustryGfxRange; 16] = [
+    (0, 6, "Coal Mine", Some(IndustryKind::CoalMine)),
+    (7, 10, "Power Station", None),
+    (11, 15, "Sawmill", None),
+    (16, 23, "Oil Refinery", Some(IndustryKind::OilWell)),
+    (24, 28, "Forest", Some(IndustryKind::Forest)),
+    (29, 32, "Printing Works", None),
+    (33, 38, "Oil Rig", Some(IndustryKind::OilWell)),
+    (39, 42, "Steel Mill", None),
+    (43, 46, "Factory", Some(IndustryKind::Factory)),
+    (47, 51, "Oil Wells", Some(IndustryKind::OilWell)),
+    (52, 57, "Farm", Some(IndustryKind::Forest)),
+    (58, 59, "Bank", None),
+    (60, 71, "Copper Ore Mine", Some(IndustryKind::CoalMine)),
+    (72, 88, "Plantations/Others", Some(IndustryKind::Forest)),
+    (89, 90, "Gold Mine", Some(IndustryKind::CoalMine)),
+    (91, 99, "Iron Ore Mine", Some(IndustryKind::CoalMine)),
+];
+
+fn gfx_range_info(gfx: u16) -> Option<IndustryGfxRange> {
+    INDUSTRY_GFX_RANGES
+        .iter()
+        .copied()
+        .find(|(start, end, _, _)| (*start..=*end).contains(&gfx))
+}
+
 fn classify_industry_kind_from_gfx(gfx: u16) -> IndustryKind {
-    match gfx {
-        43..=46 => IndustryKind::Factory,
-        47..=51 => IndustryKind::OilWell,
-        0..=6 | 60..=71 | 89..=90 | 91..=99 => IndustryKind::CoalMine,
-        24..=28 | 52..=57 | 72..=88 => IndustryKind::Forest,
-        _ => {
-            if gfx.is_multiple_of(2) {
-                IndustryKind::CoalMine
-            } else {
-                IndustryKind::Forest
-            }
-        }
+    if let Some((_, _, _, Some(kind))) = gfx_range_info(gfx) {
+        return kind;
+    }
+    if gfx.is_multiple_of(2) {
+        IndustryKind::CoalMine
+    } else {
+        IndustryKind::Forest
     }
 }
 
 pub(crate) fn industry_group_from_gfx(gfx: u16) -> &'static str {
-    match gfx {
-        0..=6 => "Coal Mine",
-        7..=10 => "Power Station",
-        11..=15 => "Sawmill",
-        16..=23 => "Oil Refinery",
-        24..=28 => "Forest",
-        29..=32 => "Printing Works",
-        33..=38 => "Oil Rig",
-        39..=42 => "Steel Mill",
-        43..=46 => "Factory",
-        47..=51 => "Oil Wells",
-        52..=57 => "Farm",
-        58..=59 => "Bank",
-        60..=71 => "Copper Ore Mine",
-        72..=88 => "Plantations/Others",
-        89..=90 => "Gold Mine",
-        91..=99 => "Iron Ore Mine",
-        100..=119 => "Other climates",
-        _ => "Unknown gfx",
+    if let Some((_, _, label, _)) = gfx_range_info(gfx) {
+        return label;
     }
+    if (100..=119).contains(&gfx) {
+        return "Other climates";
+    }
+    "Unknown gfx"
 }
 
 #[cfg(test)]
@@ -172,6 +182,8 @@ mod tests {
 
     #[test]
     fn classify_industry_kind_matches_known_ranges() {
+        assert_eq!(classify_industry_kind_from_gfx(18), IndustryKind::OilWell);
+        assert_eq!(classify_industry_kind_from_gfx(35), IndustryKind::OilWell);
         assert_eq!(classify_industry_kind_from_gfx(44), IndustryKind::Factory);
         assert_eq!(classify_industry_kind_from_gfx(48), IndustryKind::OilWell);
         assert_eq!(classify_industry_kind_from_gfx(61), IndustryKind::CoalMine);
@@ -183,6 +195,16 @@ mod tests {
         assert_eq!(industry_group_from_gfx(43), "Factory");
         assert_eq!(industry_group_from_gfx(7), "Power Station");
         assert_eq!(industry_group_from_gfx(255), "Unknown gfx");
+    }
+
+    #[test]
+    fn industry_group_gold_and_iron_mine_labels_match_ranges() {
+        assert_eq!(industry_group_from_gfx(89), "Gold Mine");
+        assert_eq!(industry_group_from_gfx(90), "Gold Mine");
+        assert_eq!(industry_group_from_gfx(91), "Iron Ore Mine");
+        assert_eq!(industry_group_from_gfx(99), "Iron Ore Mine");
+        assert_eq!(classify_industry_kind_from_gfx(89), IndustryKind::CoalMine);
+        assert_eq!(classify_industry_kind_from_gfx(99), IndustryKind::CoalMine);
     }
 
     #[test]

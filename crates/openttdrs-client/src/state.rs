@@ -11,6 +11,14 @@ use std::collections::{BTreeMap, HashSet};
 pub const MAP_W: u32 = 24;
 pub const MAP_H: u32 = 18;
 
+/// Pantalla actual del cliente.
+#[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum ClientScreen {
+    #[default]
+    MainMenu,
+    InGame,
+}
+
 /// Estado del mundo de simulación.
 #[derive(Resource)]
 pub struct SimWorld {

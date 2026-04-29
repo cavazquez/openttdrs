@@ -4,13 +4,18 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::bevy_app::UpdateSet;
-use crate::state::SimWorld;
+use crate::state::{ClientScreen, SimWorld};
 
 pub(crate) struct WindowStatusPlugin;
 
 impl Plugin for WindowStatusPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, sync_window_title.in_set(UpdateSet::Status));
+        app.add_systems(
+            Update,
+            sync_window_title
+                .in_set(UpdateSet::Status)
+                .run_if(in_state(ClientScreen::InGame)),
+        );
     }
 }
 

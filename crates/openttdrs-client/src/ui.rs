@@ -16,7 +16,7 @@ use crate::sprites::{
     is_road_level_crossing, level_crossing_rail_sprite_id, rail_tile_is_signals,
     road_bits_for_render,
 };
-use crate::state::SimWorld;
+use crate::state::{ClientScreen, SimWorld};
 use crate::world_render::RemapMapVisualsPending;
 
 pub(crate) struct ClientUiPlugin;
@@ -28,8 +28,16 @@ impl Plugin for ClientUiPlugin {
             .init_resource::<UiToolState>()
             .init_resource::<ToolbarState>()
             .add_systems(
-                Startup,
+                OnEnter(ClientScreen::MainMenu),
+                (setup_main_menu_camera, setup_main_menu),
+            )
+            .add_systems(
+                OnEnter(ClientScreen::InGame),
                 (setup_tile_info_ui, setup_top_toolbar, setup_build_menu).in_set(StartupSet::Ui),
+            )
+            .add_systems(
+                Update,
+                main_menu_interaction.run_if(in_state(ClientScreen::MainMenu)),
             )
             .add_systems(
                 Update,
@@ -38,7 +46,8 @@ impl Plugin for ClientUiPlugin {
                     cycle_json_save_path_hotkey,
                     handle_tool_hotkeys,
                 )
-                    .in_set(UpdateSet::Input),
+                    .in_set(UpdateSet::Input)
+                    .run_if(in_state(ClientScreen::InGame)),
             )
             .add_systems(
                 Update,
@@ -52,7 +61,8 @@ impl Plugin for ClientUiPlugin {
                     handle_tile_click,
                     update_tile_info_text,
                 )
-                    .in_set(UpdateSet::Ui),
+                    .in_set(UpdateSet::Ui)
+                    .run_if(in_state(ClientScreen::InGame)),
             );
     }
 }
@@ -86,6 +96,15 @@ pub struct TileInfoText;
 /// Marca nodos del menú “Construir” para ignorar clics en el mapa cuando el cursor está encima.
 #[derive(Component)]
 pub(crate) struct BuildMenuUi;
+
+#[derive(Component)]
+pub(crate) struct MainMenuUi;
+
+#[derive(Component)]
+pub(crate) struct MainMenuStartButton;
+
+#[derive(Component)]
+pub(crate) struct MainMenuCamera;
 
 /// Acción del botón del menú de construcción.
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
@@ -141,6 +160,89 @@ impl Default for ToolbarState {
     fn default() -> Self {
         Self {
             active_group: ToolbarGroup::Build,
+        }
+    }
+}
+
+pub fn setup_main_menu(mut commands: Commands) {
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.08, 0.12, 0.16, 0.92)),
+            GlobalZIndex(3000),
+            MainMenuUi,
+        ))
+        .with_children(|p| {
+            p.spawn((
+                Button,
+                MainMenuStartButton,
+                Node {
+                    width: Val::Px(240.0),
+                    height: Val::Px(58.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(2.0)),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.35, 0.33, 0.24)),
+                BorderColor::all(Color::srgb(0.7, 0.66, 0.5)),
+                Interaction::default(),
+            ))
+            .with_children(|b| {
+                b.spawn((
+                    Text::new("Iniciar"),
+                    TextFont {
+                        font_size: 22.0,
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.95, 0.92, 0.8)),
+                ));
+            });
+        });
+}
+
+pub fn setup_main_menu_camera(mut commands: Commands) {
+    commands.spawn((
+        Camera2d,
+        Camera {
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.16, 0.17, 0.2)),
+            ..default()
+        },
+        MainMenuCamera,
+    ));
+}
+
+pub fn main_menu_interaction(
+    mut next_screen: ResMut<NextState<ClientScreen>>,
+    q_menu: Query<Entity, With<MainMenuUi>>,
+    q_menu_cam: Query<Entity, With<MainMenuCamera>>,
+    mut q_button: Query<(&Interaction, &mut BackgroundColor), (Changed<Interaction>, With<MainMenuStartButton>)>,
+    mut commands: Commands,
+) {
+    for (interaction, mut bg) in &mut q_button {
+        match *interaction {
+            Interaction::Pressed => {
+                for e in &q_menu {
+                    commands.entity(e).despawn();
+                }
+                for cam in &q_menu_cam {
+                    commands.entity(cam).despawn();
+                }
+                next_screen.set(ClientScreen::InGame);
+            }
+            Interaction::Hovered => {
+                *bg = BackgroundColor(Color::srgb(0.46, 0.42, 0.3));
+            }
+            Interaction::None => {
+                *bg = BackgroundColor(Color::srgb(0.35, 0.33, 0.24));
+            }
         }
     }
 }

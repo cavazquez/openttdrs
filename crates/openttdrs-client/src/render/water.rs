@@ -6,12 +6,18 @@ use bevy::prelude::*;
 use crate::bevy_app::UpdateSet;
 use crate::iso::ISO_HW;
 use crate::render::WaterTile;
+use crate::state::ClientScreen;
 
 pub(crate) struct WaterAnimationPlugin;
 
 impl Plugin for WaterAnimationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, animate_water.in_set(UpdateSet::Visuals));
+        app.add_systems(
+            Update,
+            animate_water
+                .in_set(UpdateSet::Visuals)
+                .run_if(in_state(ClientScreen::InGame)),
+        );
     }
 }
 

@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use openttdrs_core::save;
 
 use crate::bevy_app::UpdateSet;
-use crate::state::SimWorld;
+use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
 use crate::vehicle_render::VehicleIndex;
 use crate::world_render::RemapMapVisualsPending;
@@ -15,7 +15,9 @@ impl Plugin for PersistencePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            handle_sim_json_hotkeys.in_set(UpdateSet::Persistence),
+            handle_sim_json_hotkeys
+                .in_set(UpdateSet::Persistence)
+                .run_if(in_state(ClientScreen::InGame)),
         );
     }
 }

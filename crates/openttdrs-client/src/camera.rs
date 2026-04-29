@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::bevy_app::UpdateSet;
+use crate::state::ClientScreen;
 
 /// Paneo con botón derecho: factor × `OrthographicProjection::scale` × delta en píxeles.
 const PAN_RMB_SCALE: f32 = 1.35;
@@ -29,7 +30,12 @@ pub(crate) struct CameraControlPlugin;
 impl Plugin for CameraControlPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CameraVelocity>()
-            .add_systems(Update, move_camera.in_set(UpdateSet::Camera));
+            .add_systems(
+                Update,
+                move_camera
+                    .in_set(UpdateSet::Camera)
+                    .run_if(in_state(ClientScreen::InGame)),
+            );
     }
 }
 

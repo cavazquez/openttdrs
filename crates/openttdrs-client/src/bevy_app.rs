@@ -8,7 +8,7 @@ use crate::debug_gizmos::DebugGizmosPlugin;
 use crate::persistence::PersistencePlugin;
 use crate::render::WaterAnimationPlugin;
 use crate::simulation::SimulationPlugin;
-use crate::state::SimWorld;
+use crate::state::{ClientScreen, SimWorld};
 use crate::ui::ClientUiPlugin;
 use crate::vehicle_render::VehicleRenderPlugin;
 use crate::window_status::WindowStatusPlugin;
@@ -71,6 +71,7 @@ pub(crate) fn run(asset_root: &str) {
             )
                 .chain(),
         )
+        .init_state::<ClientScreen>()
         .init_resource::<SimWorld>()
         .add_plugins((
             WorldRenderPlugin,

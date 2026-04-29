@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use openttdrs_core::TileKind;
 
-use crate::bevy_app::{StartupSet, UpdateSet};
+use crate::bevy_app::UpdateSet;
 use crate::config::env_flag;
 use crate::iso::{ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H};
 use crate::render::{
@@ -11,7 +11,7 @@ use crate::render::{
     flush_map_batches, push_forest_tree, push_water_tile, spawn_generic_land_tile,
     spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
 };
-use crate::state::SimWorld;
+use crate::state::{ClientScreen, SimWorld};
 use crate::vehicle_render::{TruckHandles, spawn_initial_vehicles};
 
 /// Petición de redibujo del mapa. `sync_camera`: solo tras F9 / cambio de tamaño.
@@ -26,10 +26,12 @@ pub(crate) struct WorldRenderPlugin;
 impl Plugin for WorldRenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RemapMapVisualsPending>()
-            .add_systems(Startup, setup.in_set(StartupSet::World))
+            .add_systems(OnEnter(ClientScreen::InGame), setup)
             .add_systems(
                 Update,
-                apply_remap_map_visuals.in_set(UpdateSet::RenderRefresh),
+                apply_remap_map_visuals
+                    .in_set(UpdateSet::RenderRefresh)
+                    .run_if(in_state(ClientScreen::InGame)),
             );
     }
 }

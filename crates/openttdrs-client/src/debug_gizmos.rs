@@ -6,7 +6,7 @@ use openttdrs_core::IndustryKind;
 use crate::bevy_app::UpdateSet;
 use crate::config::env_flag;
 use crate::iso::{gizmo_diamond, iso};
-use crate::state::SimWorld;
+use crate::state::{ClientScreen, SimWorld};
 
 pub(crate) struct DebugGizmosPlugin;
 
@@ -14,7 +14,9 @@ impl Plugin for DebugGizmosPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            (draw_industries, draw_stations).in_set(UpdateSet::Visuals),
+            (draw_industries, draw_stations)
+                .in_set(UpdateSet::Visuals)
+                .run_if(in_state(ClientScreen::InGame)),
         );
     }
 }

@@ -1,4 +1,4 @@
-//! Bootstrap del estado simulado: carga de archivos, generación procedural y resumen de detección.
+//! Bootstrap del estado simulado: carga de archivos, generacion procedural y resumen de deteccion.
 
 use bevy::prelude::*;
 use openttdrs_core::{
@@ -13,7 +13,7 @@ pub(crate) fn log_detection_summary(
     extras: Option<&OttdmapExtras>,
 ) {
     let (mw, mh) = state.map.dimensions();
-    info!("Resumen detección: mapa {mw}x{mh} ({} teselas)", mw * mh);
+    info!("Resumen deteccion: mapa {mw}x{mh} ({} teselas)", mw * mh);
 
     let mut tiles: BTreeMap<String, u32> = BTreeMap::new();
     for y in 0..mh {
@@ -69,7 +69,7 @@ pub(crate) fn log_detection_summary(
     if let Some(ex) = extras {
         if !ex.industry_types.is_empty() {
             info!(
-                "Footers .ottdmap: INDP con {} pares (índice industria → tipo OpenTTD)",
+                "Footers .ottdmap: INDP con {} pares (indice industria -> tipo OpenTTD)",
                 ex.industry_types.len()
             );
         }
@@ -89,27 +89,27 @@ pub(crate) fn log_detection_summary(
         if tnbp_len > 0 {
             match ex.decode_tnbp() {
                 Some(Err(e)) => {
-                    info!("Footers .ottdmap: TNBP {tnbp_len} bytes (decode falló: {e:?})");
+                    info!("Footers .ottdmap: TNBP {tnbp_len} bytes (decode fallo: {e:?})");
                 }
                 Some(Ok(dec)) => {
                     let jgr = jgr_tunnels_from_decoded(&dec);
                     if !jgr.is_empty() {
                         info!(
-                            "Footers .ottdmap: TNBP {tnbp_len} bytes → {} túnel(es) JGR (`tile_n`/`tile_s`)",
+                            "Footers .ottdmap: TNBP {tnbp_len} bytes -> {} tunel(es) JGR (`tile_n`/`tile_s`)",
                             jgr.len()
                         );
                     } else {
                         match &dec {
                             TnbpDecoded::ChTable { fields, rows } => {
                                 info!(
-                                    "Footers .ottdmap: TNBP {tnbp_len} bytes → tabla Sl ({} campos, {} filas)",
+                                    "Footers .ottdmap: TNBP {tnbp_len} bytes -> tabla Sl ({} campos, {} filas)",
                                     fields.len(),
                                     rows.len()
                                 );
                             }
                             TnbpDecoded::RawGammaSegments { segments } => {
                                 info!(
-                                    "Footers .ottdmap: TNBP {tnbp_len} bytes → {} segmento(s) gamma (sin tabla Sl)",
+                                    "Footers .ottdmap: TNBP {tnbp_len} bytes -> {} segmento(s) gamma (sin tabla Sl)",
                                     segments.len()
                                 );
                             }
@@ -162,18 +162,16 @@ pub(crate) fn log_detection_summary(
         };
         *vehicles.entry(key).or_insert(0) += 1;
     }
-    info!("Vehículos detectados: {}", state.vehicles.len());
+    info!("Vehiculos detectados: {}", state.vehicles.len());
     if loaded_from_file && state.vehicles.is_empty() {
-        info!("  - Nota: no hay vehículos (hace falta al menos una industria y una estación).");
+        info!("  - Nota: no hay vehiculos (hace falta al menos una industria y una estacion).");
     }
     for (kind, count) in vehicles {
-        info!("  - Vehículo {kind}: {count}");
+        info!("  - Vehiculo {kind}: {count}");
     }
 }
 
-pub(crate) use crate::state_stations::{
-    place_stations_from_footer_stxy, place_stations_from_map_tiles,
-};
+pub(crate) use super::stations::{place_stations_from_footer_stxy, place_stations_from_map_tiles};
 
 pub(crate) fn distribute_tile_kinds(state: &mut GameState, seed: u64) {
     let (mw, mh) = state.map.dimensions();
@@ -234,9 +232,7 @@ pub(crate) fn place_industries(
             match tile.kind {
                 TileKind::CoalField if !from_ottd_file => {
                     if coal_n.is_multiple_of(stride_proc) {
-                        state
-                            .industries
-                            .push(Industry::new(c, IndustryKind::CoalMine));
+                        state.industries.push(Industry::new(c, IndustryKind::CoalMine));
                     }
                     coal_n += 1;
                 }
@@ -257,8 +253,7 @@ pub(crate) fn place_industries(
                             ex.industry_type_for_tile_index(tile.m1)
                                 .map(industry_kind_from_ottd_type)
                                 .unwrap_or_else(|| {
-                                    let gfx =
-                                        u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
+                                    let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
                                     classify_industry_kind_from_gfx(gfx)
                                 })
                         } else {

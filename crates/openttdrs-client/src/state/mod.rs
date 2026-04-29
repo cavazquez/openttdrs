@@ -1,9 +1,12 @@
-//! Estado del mundo de simulación y generación procedural.
+//! Estado del mundo de simulacion y generacion procedural.
+
+pub(crate) mod bootstrap;
+pub(crate) mod stations;
 
 use bevy::prelude::*;
 use openttdrs_core::{GameState, Map, OttdmapExtras};
 
-use crate::state_bootstrap::{
+use crate::state::bootstrap::{
     distribute_tile_kinds, log_detection_summary, place_industries, place_roads, place_stations,
     place_stations_from_footer_stxy, place_stations_from_map_tiles, place_vehicles,
 };
@@ -20,13 +23,13 @@ pub enum ClientScreen {
     InGame,
 }
 
-/// Estado del mundo de simulación.
+/// Estado del mundo de simulacion.
 #[derive(Resource)]
 pub struct SimWorld {
     pub state: GameState,
-    /// Indica que el mapa se cargó desde un archivo .ottdmap externo.
+    /// Indica que el mapa se cargo desde un archivo .ottdmap externo.
     pub loaded_file: bool,
-    /// Footers `INDP` / blobs opcionales si el mapa se cargó con `from_ottd_binary_with_extras`.
+    /// Footers `INDP` / blobs opcionales si el mapa se cargo con `from_ottd_binary_with_extras`.
     pub ottdmap_extras: Option<OttdmapExtras>,
 }
 
@@ -36,7 +39,7 @@ impl Default for SimWorld {
             match std::fs::read_to_string(&path) {
                 Ok(text) => match openttdrs_core::save::load_from_str(&text) {
                     Ok(state) => {
-                        info!("Estado de simulación cargado desde JSON: {path}");
+                        info!("Estado de simulacion cargado desde JSON: {path}");
                         log_detection_summary(&state, true, None);
                         return Self {
                             state,
@@ -44,7 +47,7 @@ impl Default for SimWorld {
                             ottdmap_extras: None,
                         };
                     }
-                    Err(e) => error!("OTTDJSON_LOAD no es JSON válido ({path}): {e}"),
+                    Err(e) => error!("OTTDJSON_LOAD no es JSON valido ({path}): {e}"),
                 },
                 Err(e) => error!("No se pudo leer OTTDJSON_LOAD={path}: {e}"),
             }

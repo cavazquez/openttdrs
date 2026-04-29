@@ -3,7 +3,7 @@
 use openttdrs_core::{GameState, OttdmapExtras, Station, TileCoord, TileKind};
 use std::collections::HashSet;
 
-/// Añade [`Station`] en coordenadas del footer `STXY` (export `parse_sav.py`), deduplicando.
+/// Anade [`Station`] en coordenadas del footer `STXY` (export `parse_sav.py`), deduplicando.
 pub(crate) fn place_stations_from_footer_stxy(
     state: &mut GameState,
     extras: Option<&OttdmapExtras>,
@@ -30,7 +30,7 @@ pub(crate) fn place_stations_from_footer_stxy(
     }
 }
 
-/// Añade [`Station`] por teselas `MP_STATION` del mapa (deduplica con estaciones ya creadas).
+/// Anade [`Station`] por teselas `MP_STATION` del mapa (deduplica con estaciones ya creadas).
 pub(crate) fn place_stations_from_map_tiles(state: &mut GameState) {
     let (mw, mh) = state.map.dimensions();
     let mut seen: HashSet<(i32, i32)> = state.stations.iter().map(|s| (s.pos.x, s.pos.y)).collect();

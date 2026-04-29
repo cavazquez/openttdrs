@@ -21,6 +21,7 @@
 #![allow(clippy::default_constructed_unit_structs)]
 
 mod camera;
+mod config;
 mod iso;
 mod render;
 mod sprites;
@@ -38,6 +39,7 @@ use openttdrs_core::save;
 use openttdrs_core::{IndustryKind, TileKind};
 
 use camera::{CameraVelocity, move_camera};
+use config::env_flag;
 use iso::{ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, gizmo_diamond, iso};
 use render::{
     MapSpriteBatches, MapVisualLayer, RenderGrid, TileRenderContext, WaterTile, WorldAssets,
@@ -53,12 +55,6 @@ use ui::{
 use vehicle_render::{
     TruckHandles, VehicleIndex, rebuild_vehicle_index, spawn_initial_vehicles, update_vehicles,
 };
-
-fn env_flag(name: &str) -> bool {
-    std::env::var(name)
-        .ok()
-        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-}
 
 /// Petición de redibujo del mapa. `sync_camera`: solo tras F9 / cambio de tamaño (no al editar teselas con clic).
 #[derive(Resource, Default)]
@@ -462,7 +458,7 @@ fn sync_window_title(
 }
 
 fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
-    if std::env::var("OPENTTDRS_GIZMOS").ok().as_deref() != Some("1") {
+    if !env_flag("OPENTTDRS_GIZMOS") {
         return;
     }
     for industry in &sim.state.industries {
@@ -543,7 +539,7 @@ fn animate_water(
 }
 
 fn draw_stations(sim: Res<SimWorld>, mut gizmos: Gizmos) {
-    if std::env::var("OPENTTDRS_GIZMOS").ok().as_deref() != Some("1") {
+    if !env_flag("OPENTTDRS_GIZMOS") {
         return;
     }
     for station in &sim.state.stations {

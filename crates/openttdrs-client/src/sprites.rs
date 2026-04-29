@@ -5,6 +5,8 @@ use std::sync::OnceLock;
 use bevy::prelude::Color;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
+use crate::config;
+
 // ── Constantes de renderizado de carreteras y vías ───────────────────────────
 
 /// Tipos de tesela `OpenTTD` (nibble alto del byte MAPT).
@@ -706,23 +708,21 @@ const SPR_ORIGINAL_SIGNALS_BASE: u32 = 1275;
 /// Base por defecto OpenGFX 8bpp para señales no “clásicas eléctricas” (semáforo/PBS); +77 respecto a 1275 en el GRF base.
 const SPR_SIGNAL_ALT_BASE: u32 = 1352;
 
-#[inline]
-fn parse_u32_env(name: &str, default: u32) -> u32 {
-    std::env::var(name)
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .filter(|&v| (512..=4096).contains(&v))
-        .unwrap_or(default)
-}
-
 /// Bases de sprite para señales (OpenGFX 8bpp por defecto). Sobrescribibles con `OPENTTDRS_SIGNAL_BASE` / `OPENTTDRS_SIGNAL_ALT_BASE` (valores 512–4096).
 #[must_use]
 pub fn signal_sprite_bases() -> (u32, u32) {
     static MAIN: OnceLock<u32> = OnceLock::new();
     static ALT: OnceLock<u32> = OnceLock::new();
-    let main =
-        *MAIN.get_or_init(|| parse_u32_env("OPENTTDRS_SIGNAL_BASE", SPR_ORIGINAL_SIGNALS_BASE));
-    let alt = *ALT.get_or_init(|| parse_u32_env("OPENTTDRS_SIGNAL_ALT_BASE", SPR_SIGNAL_ALT_BASE));
+    let main = *MAIN.get_or_init(|| {
+        config::env_u32_in_range(
+            "OPENTTDRS_SIGNAL_BASE",
+            SPR_ORIGINAL_SIGNALS_BASE,
+            512..=4096,
+        )
+    });
+    let alt = *ALT.get_or_init(|| {
+        config::env_u32_in_range("OPENTTDRS_SIGNAL_ALT_BASE", SPR_SIGNAL_ALT_BASE, 512..=4096)
+    });
     (main, alt)
 }
 const SIGTYPE_LAST_NOPBS: u8 = 3;

@@ -7,6 +7,7 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::{Command, TileCoord, TileKind, apply_command};
 
 use crate::RemapMapVisualsPending;
+use crate::config;
 use crate::iso::{
     compute_tileh, shore_png_index, shore_tileh_for_draw_shore, slope_label,
     tile_slope_bits_from_heights, world_pos_to_tile_coord,
@@ -28,8 +29,7 @@ impl Default for SimHudControls {
     fn default() -> Self {
         Self {
             paused: false,
-            json_save_path: std::env::var("OPENTTDRS_JSON_SAVE")
-                .unwrap_or_else(|_| "openttdrs_sim.json".into()),
+            json_save_path: config::json_save_path(),
         }
     }
 }
@@ -305,9 +305,7 @@ pub fn update_tile_info_text(
         0
     };
     let slope_str = slope_label(tileh);
-    let coast_dbg = if std::env::var("OPENTTDRS_DEBUG_COAST")
-        .ok()
-        .is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+    let coast_dbg = if config::env_flag("OPENTTDRS_DEBUG_COAST")
         && tile.kind == TileKind::Water
         && pos.x >= 0
         && pos.y >= 0

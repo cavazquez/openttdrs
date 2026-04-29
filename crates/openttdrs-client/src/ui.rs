@@ -7,7 +7,7 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::{Command, TileCoord, TileKind, apply_command};
 
 use crate::RemapMapVisualsPending;
-use crate::iso::{compute_tileh, slope_label, world_to_tile};
+use crate::iso::{compute_tileh, slope_label, world_pos_to_tile_coord};
 use crate::sprites::{
     is_road_level_crossing, level_crossing_rail_sprite_id, rail_tile_is_signals,
     road_bits_for_render,
@@ -163,7 +163,7 @@ pub(crate) fn build_menu_interaction(
 pub fn handle_tile_click(
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    cam_q: Query<(&Transform, &Projection), With<Camera2d>>,
+    cam_q: Query<(&Camera, &Transform), With<Camera2d>>,
     mut selected: ResMut<SelectedTileInfo>,
     sim: Res<SimWorld>,
     menu_pointer: Query<&Interaction, With<BuildMenuUi>>,
@@ -185,27 +185,20 @@ pub fn handle_tile_click(
     let Some(cursor_pos) = window.cursor_position() else {
         return;
     };
-    let Ok((cam_transform, projection)) = cam_q.single() else {
+    let Ok((camera, cam_tf)) = cam_q.single() else {
         return;
     };
-    let Projection::Orthographic(proj) = projection else {
+    // Misma proyección que el renderer (el cálculo manual centro+scale*delta no coincide con Orthographic).
+    let cam_global = GlobalTransform::from(*cam_tf);
+    let Ok(world_pos) = camera.viewport_to_world_2d(&cam_global, cursor_pos) else {
         return;
     };
 
-    let window_size = Vec2::new(window.width(), window.height());
-    let cursor_offset = cursor_pos - window_size / 2.0;
-    let cursor_offset_world = Vec2::new(cursor_offset.x, -cursor_offset.y);
-    let world_pos = Vec2::new(cam_transform.translation.x, cam_transform.translation.y)
-        + cursor_offset_world * proj.scale;
-
-    let (tx, ty) = world_to_tile(world_pos);
-    let (mw, mh) = sim.state.map.dimensions();
-
-    if tx >= 0 && ty >= 0 && tx < mw as i32 && ty < mh as i32 {
-        selected.pos = Some(TileCoord::new(tx, ty));
-    } else {
+    let Some((tx, ty)) = world_pos_to_tile_coord(world_pos, &sim.state.map) else {
         selected.pos = None;
-    }
+        return;
+    };
+    selected.pos = Some(TileCoord::new(tx, ty));
 }
 
 /// Actualiza el texto de información del tile seleccionado.

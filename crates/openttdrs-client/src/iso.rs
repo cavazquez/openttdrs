@@ -33,6 +33,89 @@ pub fn world_to_tile(world_pos: Vec2) -> (i32, i32) {
     (tx.floor() as i32, ty.floor() as i32)
 }
 
+/// Convierte posición en mundo (p. ej. [`Camera::viewport_to_world_2d`]) a tesela del mapa.
+///
+/// El cálculo hace dos pasos:
+/// 1) estimación por inversión lineal de [`iso`] compensando elevación (`z*HEIGHT_PX`);
+/// 2) desambiguación geométrica entre candidatos vecinos usando la ecuación del rombo
+///    `abs(dx)/ISO_HW + abs(dy)/ISO_QH <= 1`.
+///
+/// Esto evita que el `floor` crudo de [`world_to_tile`] “parta” visualmente un rombo
+/// en dos teselas cuando hay elevación o redondeo cerca de diagonales.
+#[must_use]
+pub fn world_pos_to_tile_coord(world_pos: Vec2, map: &Map) -> Option<(i32, i32)> {
+    let (mw, mh) = map.dimensions();
+    let mw_i = mw as i32;
+    let mh_i = mh as i32;
+
+    let in_bounds =
+        |tx: i32, ty: i32| tx >= 0 && ty >= 0 && tx < mw_i && ty < mh_i;
+    // Estimación inicial rápida sin compensación.
+    let mut guess = world_to_tile(world_pos);
+    if !in_bounds(guess.0, guess.1) {
+        return None;
+    }
+
+    // Ajuste iterativo por elevación (tile_min_z): world_y = iso_y + elev.
+    for _ in 0..8 {
+        let (_, base_z) = tile_slope_and_min_z(map, guess.0 as u32, guess.1 as u32);
+        let elev = f32::from(base_z) * HEIGHT_PX;
+        let corrected = Vec2::new(world_pos.x, world_pos.y - elev);
+        let next = world_to_tile(corrected);
+        if next == guess || !in_bounds(next.0, next.1) {
+            break;
+        }
+        guess = next;
+    }
+
+    // Desambiguar cerca de bordes: buscar el rombo que realmente contiene el punto.
+    let mut best: Option<((i32, i32), f32)> = None;
+    for dty in -1..=1 {
+        for dtx in -1..=1 {
+            let tx = guess.0 + dtx;
+            let ty = guess.1 + dty;
+            if !in_bounds(tx, ty) {
+                continue;
+            }
+            let (tileh, base_z) = tile_slope_and_min_z(map, tx as u32, ty as u32);
+            let tile_kind = map
+                .get(TileCoord::new(tx, ty))
+                .map_or(TileKind::Grass, |t| t.kind);
+            let half_h_base = SLOPE_HALF_H[tileh.min(14) as usize];
+            // Carretera plana: algunos sprites (`road_flat_XX`) ocupan hasta 39 px de alto
+            // (half_h ~= 19.5). Si usamos 15.5, la zona baja visible “cae” en el tile inferior.
+            let half_h = if tileh == 0 && tile_kind == TileKind::Road {
+                half_h_base.max(19.5)
+            } else {
+                half_h_base
+            };
+            let elev = f32::from(base_z) * HEIGHT_PX;
+            let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - half_h + elev);
+            let dx = (world_pos.x - center.x).abs() / ISO_HW;
+            let dy = (world_pos.y - center.y).abs() / half_h.max(1.0);
+            let metric = dx + dy;
+
+            if metric <= 1.000_1 {
+                match best {
+                    None => best = Some(((tx, ty), metric)),
+                    Some((_, cur_metric)) if metric < cur_metric => {
+                        best = Some(((tx, ty), metric));
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    if let Some((coord, _)) = best {
+        Some(coord)
+    } else if in_bounds(guess.0, guess.1) {
+        Some(guess)
+    } else {
+        None
+    }
+}
+
 /// Dos bits bajos de `TileHash(x,y)` — `TileHash2Bit` en `tile_map.h` de OpenTTD.
 /// Sirve para la variante gráfica de casas (`house_id << 4 | … << 2 | stage`).
 #[inline]
@@ -655,5 +738,75 @@ mod infer_coast_tileh_tests {
             m.set_kind(TileCoord::new(x, 2), TileKind::Water).unwrap();
         }
         assert_eq!(infer_coast_tileh_when_flat(&m, 0, 1, 2, 3), 8);
+    }
+}
+
+#[cfg(test)]
+mod world_pos_to_tile_tests {
+    use bevy::prelude::Vec2;
+
+    use super::{
+        iso, world_pos_to_tile_coord, world_to_tile, Map, TileCoord, TileKind, HEIGHT_PX,
+        TILE_HALF_H,
+    };
+
+    /// Mapa al mismo nivel: el centro del sprite (como en `tile_pos`) debe mapear a su tesela;
+    /// [`world_to_tile`] daño con el desfase de elevación.
+    #[test]
+    fn corrects_height_offset_for_flat_tileh() {
+        let m = Map::new_flat(256, 256, 5);
+        let tx: i32 = 137;
+        let ty: i32 = 118;
+        let base_z = super::tile_min_corner_height(&m, tx as u32, ty as u32);
+        let elev = f32::from(base_z) * HEIGHT_PX;
+        let p = iso(tx, ty);
+        let center = Vec2::new(p.x, p.y - TILE_HALF_H + elev);
+        assert_eq!(world_pos_to_tile_coord(center, &m), Some((tx, ty)));
+        assert_ne!(world_to_tile(center), (tx, ty));
+    }
+
+    #[test]
+    fn keeps_same_tile_on_left_and_right_half_of_diamond() {
+        let m = Map::new_flat(256, 256, 5);
+        let tx: i32 = 149;
+        let ty: i32 = 122;
+        let base_z = super::tile_min_corner_height(&m, tx as u32, ty as u32);
+        let elev = f32::from(base_z) * HEIGHT_PX;
+        let top = iso(tx, ty) + Vec2::new(0.0, elev);
+        // Dos puntos bien dentro del mismo rombo (mitad izquierda y derecha).
+        let left_inside = top + Vec2::new(-8.0, -8.0);
+        let right_inside = top + Vec2::new(8.0, -8.0);
+
+        assert_eq!(world_pos_to_tile_coord(left_inside, &m), Some((tx, ty)));
+        assert_eq!(world_pos_to_tile_coord(right_inside, &m), Some((tx, ty)));
+    }
+
+    #[test]
+    fn keeps_same_tile_near_top_inside_of_diamond() {
+        let m = Map::new_flat(256, 256, 5);
+        let tx: i32 = 149;
+        let ty: i32 = 122;
+        let base_z = super::tile_min_corner_height(&m, tx as u32, ty as u32);
+        let elev = f32::from(base_z) * HEIGHT_PX;
+        let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - TILE_HALF_H + elev);
+        let near_top_inside = center + Vec2::new(0.0, TILE_HALF_H - 1.0);
+        assert_eq!(world_pos_to_tile_coord(near_top_inside, &m), Some((tx, ty)));
+    }
+
+    #[test]
+    fn road_flat_keeps_bottom_visible_area_in_same_tile() {
+        let mut m = Map::new_flat(256, 256, 5);
+        let tx: i32 = 149;
+        let ty: i32 = 122;
+        m.set_kind(TileCoord::new(tx, ty), TileKind::Road).unwrap();
+        let base_z = super::tile_min_corner_height(&m, tx as u32, ty as u32);
+        let elev = f32::from(base_z) * HEIGHT_PX;
+        // Carretera plana puede tener half_h visual mayor (~19.5).
+        let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - 19.5 + elev);
+        let near_bottom_inside = center + Vec2::new(0.0, 19.5 - 1.0);
+        assert_eq!(
+            world_pos_to_tile_coord(near_bottom_inside, &m),
+            Some((tx, ty))
+        );
     }
 }

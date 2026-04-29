@@ -6,7 +6,6 @@ use bevy::ui::FocusPolicy;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{Command, TileCoord, TileKind, apply_command};
 
-use crate::RemapMapVisualsPending;
 use crate::config;
 use crate::iso::{
     compute_tileh, shore_png_index, shore_tileh_for_draw_shore, slope_label,
@@ -17,6 +16,7 @@ use crate::sprites::{
     road_bits_for_render,
 };
 use crate::state::SimWorld;
+use crate::world_render::RemapMapVisualsPending;
 
 /// Pausa simulación y ruta del JSON de **F5/F9** (alternativa a variable de entorno al arranque).
 #[derive(Resource)]

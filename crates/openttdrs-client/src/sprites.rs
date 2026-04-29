@@ -75,7 +75,7 @@ pub use rail::{
     rail_tile_is_signals, signal_sprite_bases,
 };
 #[allow(unused_imports)]
-pub use industry::{INDUSTRY_GFX_DATA, IndustryGfxSprite, industry_sprite_for_gfx};
+pub use industry::{INDUSTRY_GFX_DATA, IndustryGfxSprite, industry_gfx_entry, industry_sprite_for_gfx};
 
 /// Especificación de dibujo de una casa (stage completado).
 ///

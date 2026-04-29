@@ -81,11 +81,12 @@ impl WorldAssets {
 
         let mut industries = HashMap::new();
         for entry in &INDUSTRY_GFX_DATA {
-            if entry.sprite_id != 0 {
-                industries.entry(entry.sprite_id).or_insert_with(|| {
-                    asset_server
-                        .load::<Image>(format!("opengfx/tiles/industry_{}.png", entry.sprite_id))
-                });
+            for &id in &[entry.sprite_id, entry.ground_sprite_id] {
+                if id != 0 {
+                    industries.entry(id).or_insert_with(|| {
+                        asset_server.load::<Image>(format!("opengfx/tiles/industry_{id}.png"))
+                    });
+                }
             }
         }
 

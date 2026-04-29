@@ -357,8 +357,9 @@ pub(crate) fn spawn_industry_tile(
     let gfx = ctx.tile.map_or(0u16, |t| {
         u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8)
     });
-    let has_building = crate::sprites::industry_sprite_for_gfx(gfx).is_some();
-    let (ground_img, ground_color) = if has_building {
+    let entry = crate::sprites::industry_gfx_entry(gfx);
+    let has_industry_art = entry.is_some_and(|e| e.sprite_id != 0 || e.ground_sprite_id != 0);
+    let (terrain_img, terrain_color) = if has_industry_art {
         (
             sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes),
             Color::srgb(0.55, 0.50, 0.45),
@@ -369,30 +370,56 @@ pub(crate) fn spawn_industry_tile(
             Color::WHITE,
         )
     };
-    spawn_ground_sprite(commands, ground_img, ground_color, ctx, slope_half_ground);
-    if let Some(s) = crate::sprites::industry_sprite_for_gfx(gfx)
-        && let Some(img) = assets.industries.get(&s.sprite_id)
-    {
-        let pos3 = overlay_pos(
-            ctx.iso_pos,
-            s.xrel,
-            s.yrel,
-            s.w,
-            s.h,
-            base_z,
-            0.5,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-        );
-        commands.spawn((
-            MapVisualLayer,
-            Sprite {
-                image: img.clone(),
-                color: Color::WHITE,
-                ..default()
-            },
-            Transform::from_translation(pos3),
-        ));
+    spawn_ground_sprite(commands, terrain_img, terrain_color, ctx, slope_half_ground);
+    if let Some(s) = entry {
+        if s.ground_sprite_id != 0
+            && let Some(img) = assets.industries.get(&s.ground_sprite_id)
+        {
+            let pos_g = overlay_pos(
+                ctx.iso_pos,
+                s.xrel,
+                s.yrel,
+                s.w,
+                s.h,
+                base_z,
+                0.45,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            );
+            commands.spawn((
+                MapVisualLayer,
+                Sprite {
+                    image: img.clone(),
+                    color: Color::WHITE,
+                    ..default()
+                },
+                Transform::from_translation(pos_g),
+            ));
+        }
+        if s.sprite_id != 0
+            && let Some(img) = assets.industries.get(&s.sprite_id)
+        {
+            let pos3 = overlay_pos(
+                ctx.iso_pos,
+                s.xrel,
+                s.yrel,
+                s.w,
+                s.h,
+                base_z,
+                0.5,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            );
+            commands.spawn((
+                MapVisualLayer,
+                Sprite {
+                    image: img.clone(),
+                    color: Color::WHITE,
+                    ..default()
+                },
+                Transform::from_translation(pos3),
+            ));
+        }
     }
 }
 

@@ -162,12 +162,14 @@ Dimensiones exactas del NFO (extraídas de `ogfx1_base.nfo`):
 
 ## Implementación en openttdrs
 
-### Formato `.ottdmap` v2
+### Formato `.ottdmap` (cabecera versionada `MAP1`)
 
 ```
-4 bytes LE  – magic: 'MAPO'
+4 bytes LE  – magic: 'MAP1'
 4 bytes LE  – width
 4 bytes LE  – height
+2 bytes LE  – format_version
+2 bytes LE  – flags
 W*H bytes   – tile_type (mapt)
 W*H bytes   – height
 W*H bytes   – m5 (gfx para industrias)

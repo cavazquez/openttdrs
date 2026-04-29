@@ -49,6 +49,18 @@ fn vehicle_dir(v: &Vehicle) -> VehicleDir {
     }
 }
 
+fn vehicle_sprite_bounds(dir: VehicleDir) -> (f32, f32, f32, f32) {
+    // Mantener una base visual estable evita “saltos” cuando cambia la orientación.
+    let w = 20.0;
+    let h = 15.0;
+    let yrel = -6.0;
+    let xrel = match dir {
+        VehicleDir::Ne | VehicleDir::Sw => -14.0,
+        VehicleDir::Se | VehicleDir::Nw => -6.0,
+    };
+    (xrel, yrel, w, h)
+}
+
 #[derive(Resource)]
 pub(crate) struct TruckHandles {
     ne: Handle<Image>,
@@ -104,14 +116,16 @@ pub(crate) fn spawn_initial_vehicles(
     trucks: &TruckHandles,
 ) {
     for vehicle in &sim.state.vehicles {
+        let dir = vehicle_dir(vehicle);
         let vh = tile_min_z(&sim.state.map, vehicle.pos);
         let p = iso(vehicle.pos.x, vehicle.pos.y);
+        let (xrel, yrel, w, h) = vehicle_sprite_bounds(dir);
         let pos3 = overlay_pos(
             p,
-            -14.0,
-            -5.0,
-            20.0,
-            14.0,
+            xrel,
+            yrel,
+            w,
+            h,
             vh,
             1.0,
             vehicle.pos.x,
@@ -121,7 +135,7 @@ pub(crate) fn spawn_initial_vehicles(
             MapVisualLayer,
             VehicleSprite(vehicle.id),
             Sprite {
-                image: trucks.for_dir(VehicleDir::default()),
+                image: trucks.for_dir(dir),
                 ..default()
             },
             Transform::from_translation(pos3).with_scale(Vec3::splat(TRUCK_SCALE)),
@@ -149,12 +163,7 @@ pub(crate) fn update_vehicles(
         let vh = tile_min_z(&sim.state.map, v.pos);
         let p = iso(v.pos.x, v.pos.y);
 
-        let (xrel, yrel, w, h) = match dir {
-            VehicleDir::Ne => (-14.0, -5.0, 20.0, 14.0),
-            VehicleDir::Se => (-6.0, -6.0, 20.0, 15.0),
-            VehicleDir::Sw => (-14.0, -6.0, 20.0, 15.0),
-            VehicleDir::Nw => (-6.0, -5.0, 20.0, 14.0),
-        };
+        let (xrel, yrel, w, h) = vehicle_sprite_bounds(dir);
         let pos3 = overlay_pos(p, xrel, yrel, w, h, vh, 1.0, v.pos.x, v.pos.y);
         transform.translation = pos3;
         sprite.image = trucks.for_dir(dir);

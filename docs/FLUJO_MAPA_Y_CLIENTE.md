@@ -9,7 +9,7 @@ Guía única que enlaza el pipeline principal del repo. Para detalle binario de 
    ```bash
    python3 scripts/parse_sav.py ruta/partida.sav salida.ottdmap
    ```
-3. El binario `MAPO` incluye planos densos v5/v5+12 y footers opcionales (**INDP**, **STNN**, **TNBP**, **STXY**). Ver doc de teselas para el layout exacto.
+3. El binario `MAP1` incluye planos densos v5/v5+12 y footers opcionales (**INDP**, **STNN**, **TNBP**, **STXY**). Ver doc de teselas para el layout exacto.
 
 **CI:** el golden se valida con `python3 scripts/verify_parse_sav_reference.py` (fixture en `tests/fixtures/`).
 

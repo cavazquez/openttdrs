@@ -1,50 +1,22 @@
 //! Footers opcionales tras los planos densos de `.ottdmap` v5 (`INDP`, `STNN`, `TNBP`).
 //!
 //! Ver [`crate::tnbp_decode`] para interpretar el blob `TNBP` (tabla Sl / segmentos gamma).
+use crate::map::{OTTDMAP_HEADER_LEN_VERSIONED, OTTDMAP_MAGIC_VERSIONED};
 
-#[inline]
-fn looks_like_footer_magic(data: &[u8], off: usize) -> bool {
-    data.get(off..off + 4)
-        .is_some_and(|m| matches!(m, b"INDP" | b"STNN" | b"TNBP" | b"M2HI" | b"STXY"))
-}
-
-/// Offset del primer byte **después** de los planos densos (MAPO…`m3hi` o …`m2_hi` en v5+12).
+/// Offset del primer byte **después** de los planos densos (`MAP1`).
 ///
-/// - Si en `12+11·n` empieza un magic de footer conocido → fin del bloque denso **v5** (11 planos).
-/// - Si no hay footer ahí pero el buffer alcanza `12+12·n` → incluye el plano `m2_hi` (MAP2 alto).
-/// - Si el archivo está truncado, devuelve el máximo prefijo denso coherente (≤ 11 planos).
+/// El layout actual usa 12 planos fijos por tesela.
 #[must_use]
 pub fn dense_payload_end(data: &[u8], n: usize) -> usize {
-    let end11 = 12usize.saturating_add(n.saturating_mul(11));
-    let end12 = 12usize.saturating_add(n.saturating_mul(12));
-    if data.len() >= end11 && looks_like_footer_magic(data, end11) {
-        return end11;
+    let header_len = OTTDMAP_HEADER_LEN_VERSIONED;
+    if data.len() < 4 || &data[0..4] != OTTDMAP_MAGIC_VERSIONED {
+        return header_len.saturating_add(n.saturating_mul(12));
     }
+    let end12 = header_len.saturating_add(n.saturating_mul(12));
     if data.len() >= end12 {
         return end12;
     }
-
-    let data_len = data.len();
-    if data_len < 12usize.saturating_add(n.saturating_mul(3)) {
-        return 12usize.saturating_add(n.saturating_mul(3));
-    }
-    let mut end = 12usize.saturating_add(n.saturating_mul(3));
-    if data_len >= 12 + n * 4 {
-        end = 12 + n * 4;
-    }
-    if data_len >= 12 + n * 5 {
-        end = 12 + n * 5;
-    }
-    if data_len >= 12 + n * 7 {
-        end = 12 + n * 7;
-    }
-    if data_len >= 12 + n * 8 {
-        end = 12 + n * 8;
-    }
-    if data_len >= 12 + n * 11 {
-        end = 12 + n * 11;
-    }
-    end.min(end11)
+    end12
 }
 
 /// Datos parseados de footers (best-effort; se detiene ante magic desconocido).
@@ -184,23 +156,32 @@ impl OttdmapExtras {
 mod tests {
     use super::*;
 
+    fn push_map1_header(v: &mut Vec<u8>, w: u32, h: u32) {
+        v.extend_from_slice(OTTDMAP_MAGIC_VERSIONED);
+        v.extend_from_slice(&w.to_le_bytes());
+        v.extend_from_slice(&h.to_le_bytes());
+        v.extend_from_slice(&1u16.to_le_bytes()); // format_version
+        v.extend_from_slice(&0u16.to_le_bytes()); // flags
+    }
+
     #[test]
     fn parses_indp_after_v5_dense() {
         let w = 1u32;
         let h = 1u32;
         let n = 1usize;
         let mut v = Vec::new();
-        v.extend_from_slice(b"MAPO");
-        v.extend_from_slice(&w.to_le_bytes());
-        v.extend_from_slice(&h.to_le_bytes());
+        push_map1_header(&mut v, w, h);
         v.push(0x80); // MAPT industry
-        v.push(0);
-        v.push(0);
-        v.push(0);
-        v.push(0);
-        v.extend_from_slice(&0u16.to_le_bytes()); // m6 + m8
+        v.push(0); // MAPH
+        v.push(0); // m1
+        v.push(0); // m2
+        v.push(0); // m2_hi
         v.push(0); // m3
-        v.extend_from_slice(&[0u8; 3]); // m2 m7 m3hi
+        v.push(0); // m3hi
+        v.push(0); // m5
+        v.push(0); // m6
+        v.push(0); // m7
+        v.extend_from_slice(&0u16.to_le_bytes()); // m8
         v.extend_from_slice(b"INDP");
         v.extend_from_slice(&2u32.to_le_bytes());
         v.extend_from_slice(&5u16.to_le_bytes());
@@ -224,26 +205,24 @@ mod tests {
         let h = 2u32;
         let n = 4usize;
         let mut v = Vec::new();
-        v.extend_from_slice(b"MAPO");
-        v.extend_from_slice(&w.to_le_bytes());
-        v.extend_from_slice(&h.to_le_bytes());
+        push_map1_header(&mut v, w, h);
         v.extend_from_slice(&[0x50, 0, 0, 0]); // MAPT: una MP_STATION en (0,0)
         v.extend_from_slice(&[1, 1, 1, 1]); // heights
-        v.extend_from_slice(&[0; 4]); // m5
         v.extend_from_slice(&[0; 4]); // m1
-        v.extend_from_slice(&[0; 4]); // m6
-        v.extend_from_slice(&[0u8; 8]); // m8 ×2
-        v.extend_from_slice(&[0; 4]); // m3
         v.extend_from_slice(&[0; 4]); // m2
-        v.extend_from_slice(&[0; 4]); // m7
+        v.extend_from_slice(&[0; 4]); // m2_hi
+        v.extend_from_slice(&[0; 4]); // m3
         v.extend_from_slice(&[0; 4]); // m3hi
-        v.extend_from_slice(&[0, 0, 0, 0]); // m2_hi v5+12
+        v.extend_from_slice(&[0; 4]); // m5
+        v.extend_from_slice(&[0; 4]); // m6
+        v.extend_from_slice(&[0; 4]); // m7
+        v.extend_from_slice(&[0u8; 8]); // m8 ×2
         v.extend_from_slice(b"STXY");
         v.extend_from_slice(&1u32.to_le_bytes());
         v.extend_from_slice(&0u16.to_le_bytes());
         v.extend_from_slice(&0u16.to_le_bytes());
         let end = dense_payload_end(&v, n);
-        assert_eq!(end, 12 + 12 * n);
+        assert_eq!(end, 16 + 12 * n);
         let ex = OttdmapExtras::parse_footers(&v, end);
         assert_eq!(ex.station_xy, vec![(0, 0)]);
     }
@@ -254,21 +233,22 @@ mod tests {
         let h = 1u32;
         let n = 1usize;
         let mut v = Vec::new();
-        v.extend_from_slice(b"MAPO");
-        v.extend_from_slice(&w.to_le_bytes());
-        v.extend_from_slice(&h.to_le_bytes());
+        push_map1_header(&mut v, w, h);
         v.push(0x10);
         v.push(0);
-        v.push(0);
-        v.extend_from_slice(&[0u8; 4]);
-        v.extend_from_slice(&0u16.to_le_bytes());
-        v.push(0);
-        v.extend_from_slice(&[0u8; 3]); // m2 m7 m3hi
+        v.push(0); // m1
+        v.push(0); // m2
         v.push(0xCD); // m2_hi
+        v.push(0); // m3
+        v.push(0); // m3hi
+        v.push(0); // m5
+        v.push(0); // m6
+        v.push(0); // m7
+        v.extend_from_slice(&0u16.to_le_bytes()); // m8
         v.extend_from_slice(b"INDP");
         v.extend_from_slice(&0u32.to_le_bytes());
-        assert_eq!(dense_payload_end(&v, n), 24);
-        let ex = OttdmapExtras::parse_footers(&v, 24);
+        assert_eq!(dense_payload_end(&v, n), 28);
+        let ex = OttdmapExtras::parse_footers(&v, 28);
         assert!(ex.industry_types.is_empty());
     }
 }

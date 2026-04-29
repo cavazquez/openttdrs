@@ -55,20 +55,20 @@ def main() -> None:
     w, h = 2, 2
     n = w * h
     body = bytearray()
-    body.extend(b"MAPO")
-    body.extend(struct.pack("<II", w, h))
-    # MAPT: (0,0) y (1,0) = MP_TUNNELBRIDGE (nibble 9)
-    body.extend([0x90, 0x90, 0x00, 0x00])
-    body.extend([1, 1, 1, 1])
-    body.extend([0] * n)  # m5
+    body.extend(b"MAP1")
+    body.extend(struct.pack("<IIHH", w, h, 1, 1))  # version, flags(HAS_M2_HI)
+    # Orden v1: MAPT, MAPH, M1, M2, M2_HI, M3, M3HI, M5, M6, M7, M8
+    body.extend([0x90, 0x90, 0x00, 0x00])  # MAPT
+    body.extend([1, 1, 1, 1])  # MAPH
     body.extend([0] * n)  # m1
-    body.extend([0] * n)  # m6
-    body.extend([0] * (2 * n))  # m8
-    body.extend([0] * n)  # m3
     body.extend([0] * n)  # m2
-    body.extend([0] * n)  # m7
-    body.extend([0] * n)  # m3hi
     body.extend([0] * n)  # m2_hi
+    body.extend([0] * n)  # m3
+    body.extend([0] * n)  # m3hi
+    body.extend([0] * n)  # m5
+    body.extend([0] * n)  # m6
+    body.extend([0] * n)  # m7
+    body.extend([0] * (2 * n))  # m8
     tnbp = tnbp_inner()
     body.extend(b"TNBP")
     body.extend(struct.pack("<I", len(tnbp)))

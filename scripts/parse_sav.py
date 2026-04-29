@@ -3,21 +3,25 @@
 Convierte un savegame de OpenTTD (.sav) a un archivo binario simple
 que puede cargar openttdrs-client sin dependencias externas.
 
-Formato de salida (.ottdmap) v5 (compatible v1–v4 al leer):
-  4 bytes LE  – magic: 0x4D41504F ('MAPO')
+Especificación detallada del binario: docs/OTTDMAP_FORMAT.md (raíz del repo).
+
+Formato de salida (.ottdmap) versionado:
+  4 bytes LE  – magic: 0x4D415031 ('MAP1')
   4 bytes LE  – width
   4 bytes LE  – height
+  2 bytes LE  – format_version (actual: 1)
+  2 bytes LE  – flags (actualmente reservado)
   W*H bytes   – tile_type (bits 7-4 = TileType OpenTTD, bits 3-0 = tropic/aux)
   W*H bytes   – height (0-255)
+  W*H bytes   – m1 (industry index, owner, etc.)
+  W*H bytes   – m2 bajo (MAP2 LE byte 0; en save OpenTTD `m2()` es u16)
+  W*H bytes   – m2_hi (byte alto MAP2; reserva PBS / bits altos de `m2()`)
+  W*H bytes   – m3 (M3LO)
+  W*H bytes   – m3hi (chunk M3HI = **`m4()`** en `map_sl.cpp`, p.ej. estados de señal)
   W*H bytes   – m5 (road bits, TrackBits 0-5, industry gfx bits 0-7, ObjectType en MP_OBJECT)
-  W*H bytes   – m1 (industry index, owner, etc.) [v2+]
-  W*H bytes   – m6 (bit 2 = bit 8 del gfx industria; StationType en MP_STATION) [v3+]
-  W*H*2 bytes – m8 LE (HouseID en MP_HOUSE; en MP_ROAD bits altos incluyen RoadType tram) [v3+]
-  W*H bytes   – m3 (M3LO) [v4+]
-  W*H bytes   – m2 bajo (MAP2 LE byte 0; en save OpenTTD `m2()` es u16) [v5+]
-  W*H bytes   – m7 (MAP7) [v5+]
-  W*H bytes   – m3hi (chunk M3HI = **`m4()`** en `map_sl.cpp`, p.ej. estados de señal) [v5+]
-  W*H bytes   – m2_hi (byte alto MAP2; reserva PBS / bits altos de `m2()`) [v5+12, si el .sav trae MAP2×2]
+  W*H bytes   – m6 (bit 2 = bit 8 del gfx industria; StationType en MP_STATION)
+  W*H bytes   – m7 (MAP7)
+  W*H*2 bytes – m8 LE (HouseID en MP_HOUSE; en MP_ROAD bits altos incluyen RoadType tram)
   Footers opcionales (magic ASCII + u32 LE length + payload):
     INDP  – industrias: count × (u16 industry_index, u8 industry_type)
     STNN  – blob crudo del chunk STNN (CH_TABLE o CH_ARRAY según versión del save)
@@ -616,8 +620,10 @@ def main() -> None:
             f"{n_legacy:,} teselas MP_HOUSE"
         )
 
-    magic_out = b"MAPO"
-    header = struct.pack("<4sII", magic_out, dim_x, dim_y)
+    magic_out = b"MAP1"
+    format_version = 1
+    flags = 1 << 0  # HAS_M2_HI (el plano se serializa siempre en v1)
+    header = struct.pack("<4sIIHH", magic_out, dim_x, dim_y, format_version, flags)
     tile_types = mapt[:expected]
     heights = maph[:expected]
     m1_data = map1[:expected]
@@ -627,15 +633,15 @@ def main() -> None:
         header
         + tile_types
         + heights
-        + m5_data
         + m1_data
-        + m6_data
-        + m8_data
-        + m3_export
         + m2_lo
-        + m7_export
-        + m3hi_export
         + m2_hi_plane
+        + m3_export
+        + m3hi_export
+        + m5_data
+        + m6_data
+        + m7_export
+        + m8_data
     )
 
     indp_pairs: list[tuple[int, int]] = []

@@ -19,7 +19,7 @@ fn main() {
     }
     let path = &args[0];
     let data = std::fs::read(path).unwrap_or_else(|e| panic!("leer {path}: {e}"));
-    let map = Map::from_ottd_binary(&data).expect("MAPO / formato válido");
+    let map = Map::from_ottd_binary(&data).expect("MAP1 / formato válido");
     let (mw, mh) = map.dimensions();
     println!("Archivo: {path}");
     println!(

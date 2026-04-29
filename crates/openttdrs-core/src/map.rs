@@ -1,4 +1,4 @@
-//! Estructura del mapa y carga de `.ottdmap` (v2–v5).
+//! Estructura del mapa y carga de `.ottdmap` versionado (`MAP1`).
 #![allow(clippy::doc_markdown, clippy::expect_used, clippy::unwrap_used)]
 
 /// Coordenada de tesela en el plano X/Y del mapa (análoga a índices de tesela en `OpenTTD`).
@@ -63,7 +63,7 @@ pub enum TileKind {
 /// | Campo | Fuente     | Uso principal |
 /// |-------|-----------|---------------|
 /// | `m5`  | MAP5 (`MAP5`)  | Road bits (0-3), TrackBits (0-5), gfx industria (0-7), ObjectType (MP_OBJECT) |
-/// | `m1`  | MAP1 (`MAPO`)  | Owner/índice de industria |
+/// | `m1`  | MAP1 (chunk `MAPO`)  | Owner/índice de industria |
 /// | `m6`  | MAP6 (`MAPE`)  | bit 2 = bit 8 del gfx de industria (9 bits totales); StationType en MP_STATION |
 /// | `m8`  | MAP8 (`MAP8`)  | HouseID en MP_HOUSE (12 bits); RoadType tram en bits 6–11 en MP_ROAD (`road_map.h`) |
 /// | `m3`  | M3LO (byte bajo de `m3`) | v4+: bits 0–3 = tram track bits en carretera normal; 4–7 = owner tranvía |
@@ -119,7 +119,57 @@ pub enum MapError {
     OutOfBounds,
 }
 
-/// Rebanadas de los planos densos `.ottdmap` (v1–v5); campos vacíos = versión anterior.
+pub(crate) const OTTDMAP_MAGIC_VERSIONED: &[u8; 4] = b"MAP1";
+pub(crate) const OTTDMAP_HEADER_LEN_VERSIONED: usize = 16;
+pub const OTTDMAP_FORMAT_VERSION_CURRENT: u16 = 1;
+pub const OTTDMAP_FLAG_HAS_M2_HI: u16 = 1 << 0;
+
+#[derive(Debug, Clone, Copy)]
+struct OttdmapHeader {
+    dense_offset: usize,
+    width: u32,
+    height: u32,
+    format_version: u16,
+    flags: u16,
+}
+
+fn parse_ottdmap_header(data: &[u8]) -> Result<OttdmapHeader, MapError> {
+    if data.len() < OTTDMAP_HEADER_LEN_VERSIONED || &data[0..4] != OTTDMAP_MAGIC_VERSIONED {
+        return Err(MapError::OutOfBounds);
+    }
+    let width = u32::from_le_bytes(
+        data[4..8]
+            .try_into()
+            .expect("checked versioned header length above"),
+    );
+    let height = u32::from_le_bytes(
+        data[8..12]
+            .try_into()
+            .expect("checked versioned header length above"),
+    );
+    let format_version = u16::from_le_bytes(
+        data[12..14]
+            .try_into()
+            .expect("checked versioned header length above"),
+    );
+    let flags = u16::from_le_bytes(
+        data[14..16]
+            .try_into()
+            .expect("checked versioned header length above"),
+    );
+    if format_version != OTTDMAP_FORMAT_VERSION_CURRENT {
+        return Err(MapError::OutOfBounds);
+    }
+    Ok(OttdmapHeader {
+        dense_offset: OTTDMAP_HEADER_LEN_VERSIONED,
+        width,
+        height,
+        format_version,
+        flags,
+    })
+}
+
+/// Rebanadas de los planos densos `.ottdmap` v1 (`MAP1`, cabecera versionada).
 #[derive(Debug, Clone, Copy)]
 struct OttdmapDenseSlices<'a> {
     tile_types: &'a [u8],
@@ -135,54 +185,37 @@ struct OttdmapDenseSlices<'a> {
     m2_hi: &'a [u8],
 }
 
-fn ottdmap_dense_slices(data: &[u8], n: usize) -> Result<OttdmapDenseSlices<'_>, MapError> {
-    if data.len() < 12 + n * 3 {
+fn ottdmap_dense_slices(
+    data: &[u8],
+    header: OttdmapHeader,
+    n: usize,
+) -> Result<OttdmapDenseSlices<'_>, MapError> {
+    let dense_offset = header.dense_offset;
+    let dense_len = if header.flags & OTTDMAP_FLAG_HAS_M2_HI != 0 {
+        n * 12
+    } else {
+        n * 11
+    };
+    if data.len() < dense_offset + dense_len {
         return Err(MapError::OutOfBounds);
     }
-    let tile_types = &data[12..12 + n];
-    let heights = &data[12 + n..12 + 2 * n];
-    let m5 = &data[12 + 2 * n..12 + 3 * n];
-    let has_m1 = data.len() >= 12 + n * 4;
-    let m1 = if has_m1 {
-        &data[12 + 3 * n..12 + 4 * n]
+
+    // Orden físico v1 en archivo: MAPT, MAPH, M1, M2, [M2_HI], M3, M3HI, M5, M6, M7, M8.
+    let tile_types = &data[dense_offset..dense_offset + n];
+    let heights = &data[dense_offset + n..dense_offset + 2 * n];
+    let m1 = &data[dense_offset + 2 * n..dense_offset + 3 * n];
+    let m2 = &data[dense_offset + 3 * n..dense_offset + 4 * n];
+    let (m2_hi, base_after_m2_hi) = if header.flags & OTTDMAP_FLAG_HAS_M2_HI != 0 {
+        (&data[dense_offset + 4 * n..dense_offset + 5 * n], dense_offset + 5 * n)
     } else {
-        &[]
+        (&[] as &[u8], dense_offset + 4 * n)
     };
-    let has_m6 = data.len() >= 12 + n * 5;
-    let m6 = if has_m6 {
-        &data[12 + 4 * n..12 + 5 * n]
-    } else {
-        &[]
-    };
-    let has_m8 = data.len() >= 12 + n * 5 + n * 2;
-    let m8 = if has_m8 {
-        &data[12 + 5 * n..12 + 5 * n + n * 2]
-    } else {
-        &[]
-    };
-    let m3_base = 12 + 7 * n;
-    let has_m3 = data.len() >= m3_base + n;
-    let m3 = if has_m3 {
-        &data[m3_base..m3_base + n]
-    } else {
-        &[]
-    };
-    let v5_base = 12 + 8 * n;
-    let has_v5_planes = data.len() >= v5_base + 3 * n;
-    let (m2, m7, m3hi) = if has_v5_planes {
-        (
-            &data[v5_base..v5_base + n],
-            &data[v5_base + n..v5_base + 2 * n],
-            &data[v5_base + 2 * n..v5_base + 3 * n],
-        )
-    } else {
-        (&[] as &[u8], &[] as &[u8], &[] as &[u8])
-    };
-    let m2_hi = if data.len() >= v5_base + 4 * n {
-        &data[v5_base + 3 * n..v5_base + 4 * n]
-    } else {
-        &[] as &[u8]
-    };
+    let m3 = &data[base_after_m2_hi..base_after_m2_hi + n];
+    let m3hi = &data[base_after_m2_hi + n..base_after_m2_hi + 2 * n];
+    let m5 = &data[base_after_m2_hi + 2 * n..base_after_m2_hi + 3 * n];
+    let m6 = &data[base_after_m2_hi + 3 * n..base_after_m2_hi + 4 * n];
+    let m7 = &data[base_after_m2_hi + 4 * n..base_after_m2_hi + 5 * n];
+    let m8 = &data[base_after_m2_hi + 5 * n..base_after_m2_hi + 7 * n];
     Ok(OttdmapDenseSlices {
         tile_types,
         heights,
@@ -347,21 +380,21 @@ impl Map {
     /// Carga un mapa desde un archivo `.ottdmap` generado por `scripts/parse_sav.py`.
     ///
     /// Formato:
-    /// Formato binario `.ottdmap` v5 (v2–v4 siguen siendo válidos):
+    /// Formato binario `.ottdmap`:
     ///
-    /// - 4 bytes: magic `MAPO`
-    /// - 4 bytes LE: width
-    /// - 4 bytes LE: height
+    /// - Cabecera versionada: `MAP1` + `width` + `height` + `format_version` + `flags` (16 bytes)
+    /// - Luego, el bloque de planos densos:
     /// - W×H bytes: `tile_type` (nibble alto = `TileType` `OpenTTD`)
     /// - W×H bytes: height por tesela
+    /// - W×H bytes: m1 (owner, índice de industria)
+    /// - W×H bytes: m2 (MAP2 byte bajo)
+    /// - W×H bytes: m2_hi (MAP2 byte alto)
+    /// - W×H bytes: m3 (M3LO; tram track bits 0–3 en carretera normal)
+    /// - W×H bytes: m3hi (M3HI)
     /// - W×H bytes: m5 (road bits, TrackBits, gfx industria bajo, ObjectType)
-    /// - W×H bytes: m1 (owner, índice de industria)  [v2+]
-    /// - W×H bytes: m6 (bit 2 = bit 8 del gfx industria; StationType)  [v3+]
-    /// - W×H×2 bytes: m8 LE (HouseID en MP_HOUSE; RoadType tram en bits 6–11 en MP_ROAD)  [v3+]
-    /// - W×H bytes: m3 (M3LO; tram track bits 0–3 en carretera normal)  [v4+]
-    /// - W×H bytes: m2 (MAP2)  [v5+]
-    /// - W×H bytes: m7 (MAP7)  [v5+]
-    /// - W×H bytes: m3hi (M3HI)  [v5+]
+    /// - W×H bytes: m6 (bit 2 = bit 8 del gfx industria; StationType)
+    /// - W×H bytes: m7 (MAP7)
+    /// - W×H×2 bytes: m8 LE (HouseID en MP_HOUSE; RoadType tram en bits 6–11 en MP_ROAD)
     ///
     /// Tras los planos denses pueden seguir footers (`INDP`, `STNN`, `TNBP`, `STXY`); `from_ottd_binary` los ignora.
     ///
@@ -383,17 +416,15 @@ impl Map {
     ///
     /// # Errors
     ///
-    /// Devuelve `Err` si el archivo no tiene el magic correcto o está truncado.
+    /// Devuelve `Err` si el archivo no usa cabecera `MAP1` o está truncado.
     #[allow(clippy::missing_panics_doc)]
     pub fn from_ottd_binary(data: &[u8]) -> Result<Self, MapError> {
-        if data.len() < 12 || &data[0..4] != b"MAPO" {
-            return Err(MapError::OutOfBounds);
-        }
-        // Safe: ya verificamos que data.len() >= 12
-        let width = u32::from_le_bytes(data[4..8].try_into().expect("checked above"));
-        let height = u32::from_le_bytes(data[8..12].try_into().expect("checked above"));
+        let header = parse_ottdmap_header(data)?;
+        let width = header.width;
+        let height = header.height;
         let n = (width as usize).saturating_mul(height as usize);
-        let s = ottdmap_dense_slices(data, n)?;
+        let _version = header.format_version;
+        let s = ottdmap_dense_slices(data, header, n)?;
 
         let mut tiles = Vec::with_capacity(n);
         for i in 0..n {
@@ -440,42 +471,93 @@ impl Map {
 mod ottdmap_binary_tests {
     use super::*;
 
-    /// Mapa binario v3 mínimo 2×2 con una tesela casa y `m8 = 42` en el origen.
-    fn minimal_ottdmap_v3() -> Vec<u8> {
-        let w = 2_u32;
-        let h = 2_u32;
-        let n = 4_usize;
-        let mut v = Vec::with_capacity(12 + n * 7);
-        v.extend_from_slice(b"MAPO");
+    fn push_map1_header(v: &mut Vec<u8>, w: u32, h: u32) {
+        v.extend_from_slice(OTTDMAP_MAGIC_VERSIONED);
         v.extend_from_slice(&w.to_le_bytes());
         v.extend_from_slice(&h.to_le_bytes());
-        // MAPT: tesela 0 = MP_HOUSE (nibble alto 3), resto Clear (0)
-        v.extend_from_slice(&[0x30, 0x00, 0x00, 0x00]);
-        v.extend_from_slice(&[1, 1, 1, 1]); // heights
-        v.extend_from_slice(&[0; 4]); // m5
-        v.extend_from_slice(&[0; 4]); // m1
-        v.extend_from_slice(&[0; 4]); // m6
-        // m8 LE por tesela; tesela 0 = 42
-        v.extend_from_slice(&42_u16.to_le_bytes());
-        v.extend_from_slice(&0_u16.to_le_bytes());
-        v.extend_from_slice(&0_u16.to_le_bytes());
-        v.extend_from_slice(&0_u16.to_le_bytes());
+        v.extend_from_slice(&OTTDMAP_FORMAT_VERSION_CURRENT.to_le_bytes());
+        v.extend_from_slice(&OTTDMAP_FLAG_HAS_M2_HI.to_le_bytes());
+    }
+
+    fn build_ottdmap_2x2(
+        mapt: [u8; 4],
+        heights: [u8; 4],
+        m1: [u8; 4],
+        m2: [u8; 4],
+        m2_hi: [u8; 4],
+        m3: [u8; 4],
+        m3hi: [u8; 4],
+        m5: [u8; 4],
+        m6: [u8; 4],
+        m7: [u8; 4],
+        m8: [u16; 4],
+    ) -> Vec<u8> {
+        let mut v = Vec::with_capacity(16 + 12 * 4);
+        push_map1_header(&mut v, 2, 2);
+        v.extend_from_slice(&mapt);
+        v.extend_from_slice(&heights);
+        v.extend_from_slice(&m1);
+        v.extend_from_slice(&m2);
+        v.extend_from_slice(&m2_hi);
+        v.extend_from_slice(&m3);
+        v.extend_from_slice(&m3hi);
+        v.extend_from_slice(&m5);
+        v.extend_from_slice(&m6);
+        v.extend_from_slice(&m7);
+        for x in m8 {
+            v.extend_from_slice(&x.to_le_bytes());
+        }
         v
     }
 
-    /// v4: igual que ``minimal_ottdmap_v3`` con trailing M3LO (tesela 0 = 0xab).
-    fn minimal_ottdmap_v4() -> Vec<u8> {
-        let mut v = minimal_ottdmap_v3();
-        v.extend_from_slice(&[0xAB, 0, 0, 0]); // M3LO por tesela 2×2
-        v
+    /// Mapa binario 2×2 con una tesela casa y `m8 = 42` en el origen.
+    fn minimal_ottdmap_v1() -> Vec<u8> {
+        build_ottdmap_2x2(
+            [0x30, 0x00, 0x00, 0x00], // MAPT: tesela 0 = MP_HOUSE
+            [1, 1, 1, 1],             // MAPH
+            [0; 4],                   // m1
+            [0; 4],                   // m2
+            [0; 4],                   // m2_hi
+            [0; 4],                   // m3
+            [0; 4],                   // m3hi
+            [0; 4],                   // m5
+            [0; 4],                   // m6
+            [0; 4],                   // m7
+            [42, 0, 0, 0],            // m8
+        )
     }
 
-    /// v5: v4 + MAP2 / MAP7 / M3HI (tesela 0 = 0x11, 0x22, 0x33) + footer INDP ficticio (ignorado).
+    fn minimal_ottdmap_with_m3() -> Vec<u8> {
+        build_ottdmap_2x2(
+            [0x30, 0x00, 0x00, 0x00],
+            [1, 1, 1, 1],
+            [0; 4],
+            [0; 4],
+            [0; 4],
+            [0xAB, 0, 0, 0], // m3
+            [0; 4],
+            [0; 4],
+            [0; 4],
+            [0; 4],
+            [42, 0, 0, 0],
+        )
+    }
+
+    /// Formato v1 completo + footer INDP ficticio (ignorado por `from_ottd_binary`).
     fn minimal_ottdmap_v5_with_footer() -> Vec<u8> {
-        let mut v = minimal_ottdmap_v4();
-        v.extend_from_slice(&[0x11, 0, 0, 0]); // m2
-        v.extend_from_slice(&[0x22, 0, 0, 0]); // m7
-        v.extend_from_slice(&[0x33, 0, 0, 0]); // m3hi
+        let mut v = build_ottdmap_2x2(
+            [0x30, 0x00, 0x00, 0x00],
+            [1, 1, 1, 1],
+            [0; 4],
+            [0x11, 0, 0, 0], // m2
+            [0; 4],          // m2_hi
+            [0xAB, 0, 0, 0], // m3
+            [0x33, 0, 0, 0], // m3hi
+            [0; 4],          // m5
+            [0; 4],          // m6
+            [0x22, 0, 0, 0], // m7
+            [42, 0, 0, 0],   // m8
+        );
         v.extend_from_slice(b"INDP");
         v.extend_from_slice(&0_u32.to_le_bytes()); // count = 0
         v
@@ -505,7 +587,7 @@ mod ottdmap_binary_tests {
 
     #[test]
     fn from_ottd_binary_loads_house_m8() {
-        let bytes = minimal_ottdmap_v3();
+        let bytes = minimal_ottdmap_v1();
         let map = Map::from_ottd_binary(&bytes).expect("mapa válido");
         assert_eq!(map.dimensions(), (2, 2));
         let t0 = map.get(TileCoord::new(0, 0)).expect("tile");
@@ -513,13 +595,13 @@ mod ottdmap_binary_tests {
         assert_eq!(t0.m8, 42);
         let t1 = map.get(TileCoord::new(1, 0)).expect("tile");
         assert_eq!(t1.kind, TileKind::Grass);
-        assert_eq!(t0.m3, 0, "v3 sin sección m3");
+        assert_eq!(t0.m3, 0);
         assert_eq!(t1.m3, 0);
     }
 
     #[test]
     fn from_ottd_binary_loads_m3_v4() {
-        let bytes = minimal_ottdmap_v4();
+        let bytes = minimal_ottdmap_with_m3();
         let map = Map::from_ottd_binary(&bytes).expect("mapa válido");
         let t0 = map.get(TileCoord::new(0, 0)).expect("tile");
         assert_eq!(t0.m3, 0xAB);
@@ -538,6 +620,15 @@ mod ottdmap_binary_tests {
     }
 
     #[test]
+    fn from_ottd_binary_loads_versioned_header() {
+        let map = Map::from_ottd_binary(&minimal_ottdmap_v5_with_footer()).expect("mapa válido");
+        let t0 = map.get(TileCoord::new(0, 0)).expect("tile");
+        assert_eq!(t0.m2, 0x11);
+        assert_eq!(t0.m7, 0x22);
+        assert_eq!(t0.m3hi, 0x33);
+    }
+
+    #[test]
     fn from_ottd_binary_with_extras_reads_indp() {
         let bytes = minimal_ottdmap_v5_with_footer();
         let (map, ex) = Map::from_ottd_binary_with_extras(&bytes).expect("mapa válido");
@@ -547,11 +638,19 @@ mod ottdmap_binary_tests {
 
     #[test]
     fn from_ottd_binary_loads_m2_hi_plane() {
-        let mut v = minimal_ottdmap_v4();
-        v.extend_from_slice(&[0x11, 0, 0, 0]); // m2
-        v.extend_from_slice(&[0x22, 0, 0, 0]); // m7
-        v.extend_from_slice(&[0x33, 0, 0, 0]); // m3hi
-        v.extend_from_slice(&[0xAA, 0, 0, 0xBB]); // m2_hi (tesela 3 = 0xBB)
+        let v = build_ottdmap_2x2(
+            [0x30, 0x00, 0x00, 0x00],
+            [1, 1, 1, 1],
+            [0; 4],
+            [0x11, 0, 0, 0],
+            [0xAA, 0, 0, 0xBB], // m2_hi (tesela 3 = 0xBB)
+            [0; 4],
+            [0; 4],
+            [0; 4],
+            [0; 4],
+            [0; 4],
+            [0; 4],
+        );
         let map = Map::from_ottd_binary(&v).expect("mapa válido");
         let t3 = map.get(TileCoord::new(1, 1)).expect("tile");
         assert_eq!(t3.m2_hi, 0xBB);
@@ -560,43 +659,51 @@ mod ottdmap_binary_tests {
 
     #[test]
     fn from_ottd_binary_rejects_bad_magic() {
-        let mut b = minimal_ottdmap_v3();
+        let mut b = minimal_ottdmap_v1();
         b[0] = b'X';
         assert!(Map::from_ottd_binary(&b).is_err());
     }
 
-    /// `.ottdmap` v1 mínimo (solo MAPT + heights + m5): una tesela `MP_WATER` Coast.
-    /// `m5 = 0x10` → bits 4–7 = `WaterTileType::Coast` (`water_map.h` en OpenTTD).
+    #[test]
+    fn from_ottd_binary_rejects_legacy_mapo_header() {
+        let mut b = minimal_ottdmap_v1();
+        b[0..4].copy_from_slice(b"MAPO");
+        assert!(Map::from_ottd_binary(&b).is_err());
+    }
+
+    /// `.ottdmap` v1: una tesela `MP_WATER` Coast (`m5 = 0x10` en bits 4–7).
     fn minimal_ottdmap_water_coast_v1() -> Vec<u8> {
-        let w = 1_u32;
-        let h = 1_u32;
-        let mut v = Vec::with_capacity(15);
-        v.extend_from_slice(b"MAPO");
-        v.extend_from_slice(&w.to_le_bytes());
-        v.extend_from_slice(&h.to_le_bytes());
-        v.push(0x60); // nibble alto 6 = MP_WATER
-        v.push(3); // altura
-        v.push(0x10); // Coast
+        let mut v = Vec::with_capacity(16 + 12);
+        push_map1_header(&mut v, 1, 1);
+        v.push(0x60); // MAPT nibble alto 6 = MP_WATER
+        v.push(3); // MAPH
+        v.push(0); // m1
+        v.push(0); // m2
+        v.push(0); // m2_hi
+        v.push(0); // m3
+        v.push(0); // m3hi
+        v.push(0x10); // m5: Coast
+        v.push(0); // m6
+        v.push(0); // m7
+        v.extend_from_slice(&0u16.to_le_bytes()); // m8
         v
     }
 
     /// 2×2 v1: hierba + agua Clear + agua Coast (comprueba que `m5` no se pierde por celda).
     fn minimal_ottdmap_mixed_water_v1() -> Vec<u8> {
-        let w = 2_u32;
-        let h = 2_u32;
-        let n = 4_usize;
-        let mut v = Vec::with_capacity(12 + n * 3);
-        v.extend_from_slice(b"MAPO");
-        v.extend_from_slice(&w.to_le_bytes());
-        v.extend_from_slice(&h.to_le_bytes());
-        // Orden i = y*width + x (x rápido): (0,0),(1,0),(0,1),(1,1)
-        v.extend_from_slice(&[
-            0x00, 0x60, // fila y=0: Clear, Water
-            0x60, 0x60, // fila y=1: Water, Water
-        ]);
-        v.extend_from_slice(&[4, 1, 1, 1]); // heights
-        v.extend_from_slice(&[0, 0, 0x10, 0]); // m5: Clear agua, Coast, Clear agua
-        v
+        build_ottdmap_2x2(
+            [0x00, 0x60, 0x60, 0x60], // MAPT
+            [4, 1, 1, 1],             // MAPH
+            [0; 4],
+            [0; 4],
+            [0; 4],
+            [0; 4],
+            [0; 4],
+            [0, 0, 0x10, 0], // m5: Clear agua, Coast, Clear agua
+            [0; 4],
+            [0; 4],
+            [0; 4],
+        )
     }
 
     #[test]

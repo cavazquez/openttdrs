@@ -63,7 +63,8 @@ impl Default for SimWorld {
                         place_stations(&mut state);
                         place_stations_from_map_tiles(&mut state);
                         place_stations_from_footer_stxy(&mut state, Some(&extras));
-                        place_vehicles(&mut state);
+                        // En mapas reales no inyectar vehículos de demo:
+                        // se renderizan solo los realmente presentes en datos cargados.
                         log_detection_summary(&state, true, Some(&extras));
                         return Self {
                             state,
@@ -71,9 +72,24 @@ impl Default for SimWorld {
                             ottdmap_extras: Some(extras),
                         };
                     }
-                    Err(e) => error!("Error al parsear {path}: {e:?}"),
+                    Err(e) => {
+                        let magic_hint = if data.len() >= 4 {
+                            let m = String::from_utf8_lossy(&data[0..4]);
+                            format!(
+                                " primeros 4 bytes: {m:?} (hex {:02x}{:02x}{:02x}{:02x})",
+                                data[0], data[1], data[2], data[3],
+                            )
+                        } else {
+                            String::new()
+                        };
+                        panic!(
+                            "Error al parsear OTTDMAP_FILE={path}: {e:?}.{magic_hint} \
+Se espera cabecera MAP1 + planos densos actuales; regenera con: \
+python3 scripts/parse_sav.py tu.sav {path}"
+                        );
+                    }
                 },
-                Err(e) => error!("No se pudo leer {path}: {e}"),
+                Err(e) => panic!("No se pudo leer OTTDMAP_FILE={path}: {e}"),
             }
         }
         let mut state = GameState::new(MAP_W, MAP_H);

@@ -4,8 +4,10 @@ use bevy::prelude::*;
 use openttdrs_core::TileKind;
 
 use crate::bevy_app::UpdateSet;
-use crate::config::env_flag;
-use crate::iso::{ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H};
+use crate::config::{env_flag, env_string};
+use crate::iso::{
+    ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, shore_png_index, shore_tileh_for_draw_shore,
+};
 use crate::render::{
     MapSpriteBatches, MapVisualLayer, RenderGrid, TileRenderContext, WorldAssets,
     flush_map_batches, push_forest_tree, push_water_tile, spawn_generic_land_tile,
@@ -66,6 +68,13 @@ pub(crate) fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim:
 fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &SimWorld) {
     let (mw, mh) = sim.state.map.dimensions();
     let debug_coast = env_flag("OPENTTDRS_DEBUG_COAST");
+    let trace_path = env_string("OPENTTDRS_RENDER_TRACE_OUT");
+    let mut trace_rows: Vec<String> = Vec::new();
+    if trace_path.is_some() {
+        trace_rows.push(
+            "x,y,kind,tileh,base_z,use_shore,shore_tileh,shore_png_index,mapt,m5".to_string(),
+        );
+    }
 
     let assets = WorldAssets::load(asset_server);
     let truck_handles = TruckHandles::load(asset_server);
@@ -85,6 +94,26 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
             }
 
             let slope_half_ground = SLOPE_HALF_H[tileh as usize];
+            if trace_path.is_some() {
+                let (mapt, m5) = ctx.tile.map_or((0u8, 0u8), |t| (t.mapt, t.m5));
+                let (shore_tileh, shore_png) = if kind == TileKind::Water && ctx.info.use_shore {
+                    let th = shore_tileh_for_draw_shore(map, tx, ty, mw, mh);
+                    (th as i32, shore_png_index(th) as i32)
+                } else {
+                    (-1, -1)
+                };
+                trace_rows.push(format!(
+                    "{tx},{ty},{},{},{},{},{},{},{},{}",
+                    tile_kind_name(kind),
+                    ctx.info.tileh,
+                    ctx.info.base_z,
+                    if ctx.info.use_shore { 1 } else { 0 },
+                    shore_tileh,
+                    shore_png,
+                    mapt,
+                    m5
+                ));
+            }
 
             match kind {
                 TileKind::Road => {
@@ -136,6 +165,29 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
     flush_map_batches(commands, batches);
     spawn_initial_vehicles(commands, sim, &truck_handles);
     commands.insert_resource(truck_handles);
+    if let Some(path) = trace_path {
+        if let Err(e) = std::fs::write(&path, trace_rows.join("\n")) {
+            error!("No se pudo escribir OPENTTDRS_RENDER_TRACE_OUT={path}: {e}");
+        } else {
+            info!("Render trace escrito en {path}");
+        }
+    }
+}
+
+fn tile_kind_name(kind: TileKind) -> &'static str {
+    match kind {
+        TileKind::Void => "Void",
+        TileKind::Grass => "Grass",
+        TileKind::Water => "Water",
+        TileKind::Road => "Road",
+        TileKind::Rail => "Rail",
+        TileKind::House => "House",
+        TileKind::Industry => "Industry",
+        TileKind::Station => "Station",
+        TileKind::Forest => "Forest",
+        TileKind::CoalField => "CoalField",
+        TileKind::Unknown(_) => "Unknown",
+    }
 }
 
 fn sync_camera_for_sim(

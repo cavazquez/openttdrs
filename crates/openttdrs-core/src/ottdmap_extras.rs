@@ -3,7 +3,7 @@
 #[inline]
 fn looks_like_footer_magic(data: &[u8], off: usize) -> bool {
     data.get(off..off + 4)
-        .is_some_and(|m| matches!(m, b"INDP" | b"STNN" | b"TNBP" | b"M2HI"))
+        .is_some_and(|m| matches!(m, b"INDP" | b"STNN" | b"TNBP" | b"M2HI" | b"STXY"))
 }
 
 /// Offset del primer byte **después** de los planos densos (MAPO…`m3hi` o …`m2_hi` en v5+12).
@@ -52,6 +52,8 @@ pub struct OttdmapExtras {
     pub industry_types: Vec<(u16, u8)>,
     pub stnn_blob: Option<Vec<u8>>,
     pub tnbp_blob: Option<Vec<u8>>,
+    /// Teselas `MP_STATION` listadas por `parse_sav.py` (footer `STXY`); consumible sin decodificar `STNN`.
+    pub station_xy: Vec<(u16, u16)>,
 }
 
 impl OttdmapExtras {
@@ -105,6 +107,27 @@ impl OttdmapExtras {
                         out.tnbp_blob = Some(blob);
                     }
                 }
+                b"STXY" => {
+                    if off + 4 > data.len() {
+                        break;
+                    }
+                    let count = usize::try_from(u32::from_le_bytes(
+                        data[off..off + 4].try_into().unwrap_or([0; 4]),
+                    ))
+                    .unwrap_or(0);
+                    off += 4;
+                    let need = count.saturating_mul(4);
+                    if off + need > data.len() {
+                        break;
+                    }
+                    out.station_xy.reserve(count.min(65536));
+                    for _ in 0..count {
+                        let x = u16::from_le_bytes([data[off], data[off + 1]]);
+                        let y = u16::from_le_bytes([data[off + 2], data[off + 3]]);
+                        off += 4;
+                        out.station_xy.push((x, y));
+                    }
+                }
                 _ => break,
             }
         }
@@ -152,6 +175,36 @@ mod tests {
         let end = dense_payload_end(&v, n);
         let ex = OttdmapExtras::parse_footers(&v, end);
         assert_eq!(ex.industry_types, vec![(5, 42), (6, 7)]);
+    }
+
+    #[test]
+    fn parses_stxy_footer() {
+        let w = 2u32;
+        let h = 2u32;
+        let n = 4usize;
+        let mut v = Vec::new();
+        v.extend_from_slice(b"MAPO");
+        v.extend_from_slice(&w.to_le_bytes());
+        v.extend_from_slice(&h.to_le_bytes());
+        v.extend_from_slice(&[0x50, 0, 0, 0]); // MAPT: una MP_STATION en (0,0)
+        v.extend_from_slice(&[1, 1, 1, 1]); // heights
+        v.extend_from_slice(&[0; 4]); // m5
+        v.extend_from_slice(&[0; 4]); // m1
+        v.extend_from_slice(&[0; 4]); // m6
+        v.extend_from_slice(&[0u8; 8]); // m8 ×2
+        v.extend_from_slice(&[0; 4]); // m3
+        v.extend_from_slice(&[0; 4]); // m2
+        v.extend_from_slice(&[0; 4]); // m7
+        v.extend_from_slice(&[0; 4]); // m3hi
+        v.extend_from_slice(&[0, 0, 0, 0]); // m2_hi v5+12
+        v.extend_from_slice(b"STXY");
+        v.extend_from_slice(&1u32.to_le_bytes());
+        v.extend_from_slice(&0u16.to_le_bytes());
+        v.extend_from_slice(&0u16.to_le_bytes());
+        let end = dense_payload_end(&v, n);
+        assert_eq!(end, 12 + 12 * n);
+        let ex = OttdmapExtras::parse_footers(&v, end);
+        assert_eq!(ex.station_xy, vec![(0, 0)]);
     }
 
     #[test]

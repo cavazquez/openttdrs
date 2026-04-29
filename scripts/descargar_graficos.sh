@@ -205,7 +205,7 @@ if [[ -f "${SPRITES_DIR}/${SHEET_PREFIX}00.png" || -f "${SPRITES_DIR}/${SHEET_PR
   echo "Extrayendo sprites de tesela a ${TILES_DIR}/..."
   export SPRITES_DIR TILES_DIR NFO_NAME SHEET_PREFIX GRAPHICS_MODE
   python3 - <<'PYEOF'
-import os, re
+import os, re, sys
 from collections import Counter
 from pathlib import Path
 from PIL import Image
@@ -313,11 +313,28 @@ def cleanup_speckles(img: Image.Image) -> Image.Image:
     return out
 
 # Cargar todos los sheets del prefijo en PNG o PCX (incluye .32.png).
+# grfcodec a veces deja `*.32.png` de 0 bytes; ignorarlos para no pisar atlas válidos.
 sheets: dict[str, Image.Image] = {}
 for p in sorted(sprites_dir.glob(f"{sheet_prefix}*.png")):
-    sheets[p.name] = load_sheet(p)
+    try:
+        if p.stat().st_size == 0:
+            continue
+        sheets[p.name] = load_sheet(p)
+    except OSError:
+        continue
+    except Exception as e:
+        print(f"  (omitido sheet {p.name}: {e})", file=sys.stderr)
+        continue
 for p in sorted(sprites_dir.glob(f"{sheet_prefix}*.pcx")):
-    sheets[p.name] = load_sheet(p)
+    try:
+        if p.stat().st_size == 0:
+            continue
+        sheets[p.name] = load_sheet(p)
+    except OSError:
+        continue
+    except Exception as e:
+        print(f"  (omitido sheet {p.name}: {e})", file=sys.stderr)
+        continue
 
 # Parsear NFO para todos los sheets del set.
 nfo_path = sprites_dir / nfo_name

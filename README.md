@@ -88,7 +88,7 @@ Si preferís scripts individuales:
 
 ## Savegames → `.ottdmap` (`scripts/parse_sav.py`)
 
-Convierte un save de OpenTTD (`.sav`) al binario que carga el cliente (`MAPO`). **v5** extiende v4 con un byte por tesela de **MAP2** (bajo), **MAP7** y **M3HI** —en el motor OpenTTD el chunk `M3HI` es el byte **`m4()`** del mapa, no el “alto” de `m3`— y **v5+12** añade un byte por tesela del **alto de MAP2** cuando el save trae `MAP2` como `u16` (reserva PBS en bits altos). Footers opcionales: **INDP**, **STNN** (blob estaciones), **TNBP** (túnel/puente). Sigue aplicando la reconstrucción de **HouseID** en saves antiguos (`m8` desde M3HI/M3LO si la versión del save es &lt; 348).
+Convierte un save de OpenTTD (`.sav`) al binario que carga el cliente (`MAPO`). **v5** extiende v4 con un byte por tesela de **MAP2** (bajo), **MAP7** y **M3HI** —en el motor OpenTTD el chunk `M3HI` es el byte **`m4()`** del mapa, no el “alto” de `m3`— y **v5+12** añade un byte por tesela del **alto de MAP2** cuando el save trae `MAP2` como `u16` (reserva PBS en bits altos). Footers opcionales: **INDP**, **STNN** (blob estaciones), **TNBP** (túnel/puente), **STXY** (lista explícita de teselas `MP_STATION` para el cliente sin decodificar `STNN`). Sigue aplicando la reconstrucción de **HouseID** en saves antiguos (`m8` desde M3HI/M3LO si la versión del save es &lt; 348).
 
 Saves comprimidos con magic **OTTD** (LZO) requieren el paquete opcional `python-lzo` (`pip install python-lzo`); **OTTZ** (zlib) y **OTTX** (xz) no lo necesitan.
 
@@ -96,6 +96,15 @@ Saves comprimidos con magic **OTTD** (LZO) requieren el paquete opcional `python
 python3 scripts/parse_sav.py ruta/al/mapa.sav salida.ottdmap
 OTTDMAP_FILE=salida.ottdmap cargo run -p openttdrs-client
 ```
+
+Persistencia de la simulación (JSON del core) y atajos en el cliente:
+
+```bash
+OTTDJSON_LOAD=partida.json cargo run -p openttdrs-client   # arranque desde JSON
+# En ventana: F5 guarda, F9 carga (por defecto openttdrs_sim.json; OPENTTDRS_JSON_SAVE para otra ruta)
+```
+
+Bases de sprites de señal (OpenGFX 8bpp por defecto): `OPENTTDRS_SIGNAL_BASE` y `OPENTTDRS_SIGNAL_ALT_BASE` (enteros 512–4096).
 
 **Nota:** la carpeta `assets/` está en `.gitignore`. Los gráficos se generan con los scripts de la sección anterior; los `.ottdmap` que generes en local **no se versionan** salvo que los pongas en otro path (por ejemplo `tests/fixtures/` para pruebas).
 

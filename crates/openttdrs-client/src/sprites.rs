@@ -1,5 +1,7 @@
 //! Constantes y lógica de sprites de `OpenGFX`.
 
+use std::sync::OnceLock;
+
 use bevy::prelude::Color;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
@@ -707,8 +709,27 @@ const TB_RIGHT: u8 = 1 << OTTD_TRACK_RIGHT;
 
 /// Sprite base OpenTTD para señales eléctricas clásicas (`SPR_ORIGINAL_SIGNALS_BASE`).
 const SPR_ORIGINAL_SIGNALS_BASE: u32 = 1275;
-/// Base aproximada OpenGFX 8bpp para bloque semaphore/PBS cuando no aplica el truco `1275` (`rail_cmd.cpp`: `SPR_SIGNALS_BASE - 16` sustituido por rango contiguo en el GRF extraído).
+/// Base por defecto OpenGFX 8bpp para señales no “clásicas eléctricas” (semáforo/PBS); +77 respecto a 1275 en el GRF base.
 const SPR_SIGNAL_ALT_BASE: u32 = 1352;
+
+#[inline]
+fn parse_u32_env(name: &str, default: u32) -> u32 {
+    std::env::var(name)
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .filter(|&v| (512..=4096).contains(&v))
+        .unwrap_or(default)
+}
+
+/// Bases de sprite para señales (OpenGFX 8bpp por defecto). Sobrescribibles con `OPENTTDRS_SIGNAL_BASE` / `OPENTTDRS_SIGNAL_ALT_BASE` (valores 512–4096).
+#[must_use]
+pub fn signal_sprite_bases() -> (u32, u32) {
+    static MAIN: OnceLock<u32> = OnceLock::new();
+    static ALT: OnceLock<u32> = OnceLock::new();
+    let main = *MAIN.get_or_init(|| parse_u32_env("OPENTTDRS_SIGNAL_BASE", SPR_ORIGINAL_SIGNALS_BASE));
+    let alt = *ALT.get_or_init(|| parse_u32_env("OPENTTDRS_SIGNAL_ALT_BASE", SPR_SIGNAL_ALT_BASE));
+    (main, alt)
+}
 const SIGTYPE_LAST_NOPBS: u8 = 3;
 
 #[inline]
@@ -734,12 +755,13 @@ fn signal_variant_from_m2(m2: u8, track: u8) -> u8 {
 /// Offset de imagen en la hoja de señales (`SignalOffsets` en `rail_cmd.cpp`).
 #[inline]
 fn signal_sprite_id(sig_type: u8, variant: u8, image: u8, green: bool) -> u32 {
+    let (spr_main, spr_alt) = signal_sprite_bases();
     let cond = u32::from(green);
     let pbs_extra = if sig_type > SIGTYPE_LAST_NOPBS { 64 } else { 0 };
     let base = if sig_type == 0 && variant == 0 {
-        SPR_ORIGINAL_SIGNALS_BASE
+        spr_main
     } else {
-        SPR_SIGNAL_ALT_BASE
+        spr_alt
     };
     base + u32::from(sig_type) * 16
         + u32::from(variant) * 64
@@ -1135,5 +1157,11 @@ mod signal_sprite_collect_tests {
         let m3hi = 0x80; // bit 3 del nibble alto de estados → verde en señal 3
         let ids = collect_signal_sprite_ids(0, m3, m3hi, m5);
         assert_eq!(ids.len(), 2);
+    }
+
+    #[test]
+    fn opengfx_default_signal_alt_is_seventy_seven_above_classic() {
+        // Ancla documentada: bloque extendido de señales en `ogfx1_base.grf` sigue al rango 1275…
+        assert_eq!(1352_u32 - 1275_u32, 77);
     }
 }

@@ -23,6 +23,23 @@ pub struct SimWorld {
 
 impl Default for SimWorld {
     fn default() -> Self {
+        if let Ok(path) = std::env::var("OTTDJSON_LOAD") {
+            match std::fs::read_to_string(&path) {
+                Ok(text) => match GameState::load_json(&text) {
+                    Ok(state) => {
+                        info!("Estado de simulación cargado desde JSON: {path}");
+                        log_detection_summary(&state, true, None);
+                        return Self {
+                            state,
+                            loaded_file: true,
+                            ottdmap_extras: None,
+                        };
+                    }
+                    Err(e) => error!("OTTDJSON_LOAD no es JSON válido ({path}): {e}"),
+                },
+                Err(e) => error!("No se pudo leer OTTDJSON_LOAD={path}: {e}"),
+            }
+        }
         if let Ok(path) = std::env::var("OTTDMAP_FILE") {
             match std::fs::read(&path) {
                 Ok(data) => match Map::from_ottd_binary_with_extras(&data) {
@@ -32,6 +49,7 @@ impl Default for SimWorld {
                         place_industries(&mut state, true, Some(&extras));
                         place_stations(&mut state);
                         place_stations_from_map_tiles(&mut state);
+                        place_stations_from_footer_stxy(&mut state, Some(&extras));
                         place_vehicles(&mut state);
                         log_detection_summary(&state, true, Some(&extras));
                         return Self {
@@ -128,8 +146,14 @@ fn log_detection_summary(
         }
         if let Some(b) = ex.stnn_blob.as_ref() {
             info!(
-                "Footers .ottdmap: STNN blob {} bytes (pool estaciones en save; no parseado aún)",
+                "Footers .ottdmap: STNN blob {} bytes (pool serializado OpenTTD; usar STXY o MP_STATION para sim)",
                 b.len()
+            );
+        }
+        if !ex.station_xy.is_empty() {
+            info!(
+                "Footers .ottdmap: STXY con {} teselas MP_STATION (x,y) desde export",
+                ex.station_xy.len()
             );
         }
         if let Some(b) = ex.tnbp_blob.as_ref() {
@@ -171,6 +195,34 @@ fn log_detection_summary(
     }
     for (kind, count) in vehicles {
         info!("  - Vehículo {kind}: {count}");
+    }
+}
+
+/// Añade [`Station`] en coordenadas del footer `STXY` (export `parse_sav.py`), deduplicando.
+pub fn place_stations_from_footer_stxy(state: &mut GameState, extras: Option<&OttdmapExtras>) {
+    let Some(ex) = extras else {
+        return;
+    };
+    if ex.station_xy.is_empty() {
+        return;
+    }
+    let (mw, mh) = state.map.dimensions();
+    let mut seen: HashSet<(i32, i32)> = state
+        .stations
+        .iter()
+        .map(|s| (s.pos.x, s.pos.y))
+        .collect();
+    for &(x, y) in &ex.station_xy {
+        let xi = i32::from(x);
+        let yi = i32::from(y);
+        if xi < 0 || yi < 0 || xi >= mw as i32 || yi >= mh as i32 {
+            continue;
+        }
+        let c = TileCoord::new(xi, yi);
+        let key = (c.x, c.y);
+        if seen.insert(key) {
+            state.stations.push(Station::new(c));
+        }
     }
 }
 

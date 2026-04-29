@@ -6,6 +6,11 @@
 //! ```
 //! OTTDMAP_FILE=/ruta/al/mapa.ottdmap cargo run -p openttdrs-client
 //! ```
+//!
+//! Estado de simulación JSON (mismo esquema que `GameState::save_json` en el core):
+//! `OTTDJSON_LOAD=/ruta/estado.json` al arranque, o **F5** para guardar y **F9** para
+//! cargar (archivo por defecto `openttdrs_sim.json`, o `OPENTTDRS_JSON_SAVE`).
+//! Bases de sprites de señal: `OPENTTDRS_SIGNAL_BASE` / `OPENTTDRS_SIGNAL_ALT_BASE` (512–4096).
 
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::cast_precision_loss)]
@@ -24,7 +29,7 @@ use bevy::image::ImageSamplerDescriptor;
 use bevy::math::{Affine3A, Rect};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{IndustryKind, Map, TileCoord, TileKind, Vehicle};
+use openttdrs_core::{GameState, IndustryKind, Map, TileCoord, TileKind, Vehicle};
 
 use camera::{CameraVelocity, move_camera};
 use iso::{
@@ -190,6 +195,7 @@ fn main() {
             Update,
             (
                 advance_sim,
+                handle_sim_json_hotkeys,
                 sync_window_title,
                 update_vehicles,
                 animate_water,
@@ -911,6 +917,47 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
 }
 
 // ── Sistemas de actualización ─────────────────────────────────────────────────
+
+fn handle_sim_json_hotkeys(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut sim: ResMut<SimWorld>,
+    mut vehicle_index: ResMut<VehicleIndex>,
+) {
+    let save_path =
+        std::env::var("OPENTTDRS_JSON_SAVE").unwrap_or_else(|_| "openttdrs_sim.json".into());
+    if keyboard.just_pressed(KeyCode::F5) {
+        match sim.state.save_json() {
+            Ok(json) => match std::fs::write(&save_path, json) {
+                Ok(()) => info!("F5: estado guardado en {save_path}"),
+                Err(e) => error!("F5: no se pudo escribir {save_path}: {e}"),
+            },
+            Err(e) => error!("F5: error al serializar JSON: {e}"),
+        }
+    }
+    if keyboard.just_pressed(KeyCode::F9) {
+        match std::fs::read_to_string(&save_path) {
+            Ok(text) => match GameState::load_json(&text) {
+                Ok(loaded) => {
+                    let cur = sim.state.map.dimensions();
+                    let nw = loaded.map.dimensions();
+                    if cur != nw {
+                        error!(
+                            "F9: el JSON tiene mapa {nw:?} pero la sesión actual es {cur:?}; usá OTTDJSON_LOAD al arranque o el mismo tamaño de mapa."
+                        );
+                    } else {
+                        sim.state = loaded;
+                        sim.ottdmap_extras = None;
+                        sim.loaded_file = true;
+                        vehicle_index.rebuild(&sim.state.vehicles);
+                        info!("F9: estado cargado desde {save_path} (teselas de suelo no se regeneran).");
+                    }
+                }
+                Err(e) => error!("F9: JSON inválido: {e}"),
+            },
+            Err(e) => error!("F9: no se pudo leer {save_path}: {e}"),
+        }
+    }
+}
 
 fn advance_sim(
     time: Res<Time>,

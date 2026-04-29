@@ -303,7 +303,7 @@ impl Map {
     /// - W×H bytes: m7 (MAP7)  [v5+]
     /// - W×H bytes: m3hi (M3HI)  [v5+]
     ///
-    /// Tras los planos denses pueden seguir footers (`INDP`, `STNN`, `TNBP`); `from_ottd_binary` los ignora.
+    /// Tras los planos denses pueden seguir footers (`INDP`, `STNN`, `TNBP`, `STXY`); `from_ottd_binary` los ignora.
     ///
     /// La correspondencia de tipos `OpenTTD` → `TileKind`:
     ///

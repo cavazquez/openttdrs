@@ -22,6 +22,8 @@ Formato de salida (.ottdmap) v5 (compatible v1–v4 al leer):
     INDP  – industrias: count × (u16 industry_index, u8 industry_type)
     STNN  – blob crudo del chunk STNN (CH_TABLE o CH_ARRAY según versión del save)
     TNBP  – blob de chunk TNBP / TBUS / TUNN si existe (pool túnel/puente según upstream)
+    STXY  – teselas MP_STATION: u32 count + count × (u16 x, u16 y) en coordenadas de mapa
+            (derivado del plano MAPT; no sustituye decodificar STNN para waypoints en vía)
 
   NewGRF: exportar MAP7/m8/m3hi no sustituye GRFs ni lógica de specs; ver docs.
 
@@ -236,6 +238,19 @@ def build_indp_footer(pairs: list[tuple[int, int]]) -> bytes:
     parts = [b"INDP", struct.pack("<I", len(pairs))]
     for i, t in pairs:
         parts.append(struct.pack("<HB", i & 0xFFFF, t & 0xFF))
+    return b"".join(parts)
+
+
+def build_stxy_footer(tile_types: bytes, dim_x: int, dim_y: int) -> bytes:
+    """Lista teselas con nibble alto MAPT = MP_STATION (5), orden i = y*dim_x + x."""
+    expected = dim_x * dim_y
+    coords: list[tuple[int, int]] = []
+    for i in range(min(len(tile_types), expected)):
+        if ((tile_types[i] >> 4) & 0xF) == 5:
+            coords.append((i % dim_x, i // dim_x))
+    parts = [b"STXY", struct.pack("<I", len(coords))]
+    for x, y in coords:
+        parts.append(struct.pack("<HH", x & 0xFFFF, y & 0xFFFF))
     return b"".join(parts)
 
 
@@ -640,6 +655,12 @@ def main() -> None:
     if tnbp_blob:
         body += b"TNBP" + struct.pack("<I", len(tnbp_blob)) + tnbp_blob
         print(f"  TNBP: blob {len(tnbp_blob):,} bytes")
+
+    stxy = build_stxy_footer(tile_types, dim_x, dim_y)
+    n_stxy = struct.unpack_from("<I", stxy, 4)[0]
+    body += stxy
+    if n_stxy:
+        print(f"  STXY: {n_stxy} teselas MP_STATION (x,y)")
 
     out_path.write_bytes(body)
     print(f"✓ Escrito: {out_path}  ({out_path.stat().st_size:,} bytes)  [v5+12 densidad + footers]")

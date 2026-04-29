@@ -102,13 +102,14 @@ Tras el header siguen secciones de `W×H` bytes/palabras en orden `i = y*width +
 
 ### Footers opcionales (v5+, tras los planos denses)
 
-Orden: **INDP** (si hay datos de industrias), **STNN** (si hay blob), **TNBP** (si hay blob de túnel/puente). Cada footer es: 4 bytes ASCII de magic + `u32` LE `len` + `len` bytes de payload.
+Orden: **INDP** (si hay datos de industrias), **STNN** (si hay blob), **TNBP** (si hay blob de túnel/puente), **STXY** (lista de teselas `MP_STATION` derivada del mapa en `parse_sav.py`). Cada footer es: 4 bytes ASCII de magic + `u32` LE `len` + `len` bytes de payload (excepto **STXY**, donde `len` es el número de pares y el cuerpo es `len` × 4 bytes: `u16` x, `u16` y).
 
 | Magic | Contenido |
 |-------|-----------|
 | `INDP` | `u32` count; luego `count` × (`u16` industry_index, `u8` industry_type) |
 | `STNN` | Blob crudo del chunk `STNN` (CH_TABLE o CH_ARRAY según versión del save) |
 | `TNBP` | Blob del primer chunk entre TNBP, TBUS o TUNN presente en el save |
+| `STXY` | `u32` count; luego `count` × (`u16` x, `u16` y) — teselas con tipo `MP_STATION` en MAPT |
 
 `Map::from_ottd_binary` en **openttdrs-core** solo lee los planos densos hasta v5; ignora cualquier byte extra (footers).
 

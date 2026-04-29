@@ -203,7 +203,8 @@ fi
 if [[ -f "${SPRITES_DIR}/${SHEET_PREFIX}00.png" || -f "${SPRITES_DIR}/${SHEET_PREFIX}00.pcx" || -f "${SPRITES_DIR}/${SHEET_PREFIX}00.32.png" ]]; then
   echo ""
   echo "Extrayendo sprites de tesela a ${TILES_DIR}/..."
-  export SPRITES_DIR TILES_DIR NFO_NAME SHEET_PREFIX GRAPHICS_MODE
+  OPENTTDRS_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  export SPRITES_DIR TILES_DIR NFO_NAME SHEET_PREFIX GRAPHICS_MODE OPENTTDRS_REPO_ROOT
   python3 - <<'PYEOF'
 import os, re, sys
 from collections import Counter
@@ -669,44 +670,21 @@ for i, sid in enumerate(tree_ids):
     crop_by_id(sid, f"tree_{i:02d}.png")
 
 # =============================================================================
-# INDUSTRIAS - alineado con src/sprites/industry.rs
+# INDUSTRIAS — IDs desde industry_gfx_data_generated.rs (suelo + edificio, estadio 3).
+# Regenerar tabla: scripts/gen_industry_gfx_data.py
+# Listar IDs: scripts/list_industry_sprite_ids.py
 # =============================================================================
-INDUSTRY_SPRITE_IDS = [
-    # gfx 0-3: Coal Mine
-    2013, 2015, 2018, 2021,
-    # gfx 7-10: Power Station
-    2047, 2050, 2053, 2054,
-    # gfx 11-15: Sawmill
-    2063, 2066, 2069, 2070, 2071,
-    # gfx 16-23: Oil Refinery
-    2075, 2076, 2080, 2083, 2086, 2089, 2092, 2095,
-    # gfx 25-28: Forest
-    2099, 2100, 2101, 2102,
-    # gfx 29-32: Printing Works
-    2174, 2177, 2178,
-    # gfx 33-38: Oil Rig
-    2108, 2109, 2111, 2113, 2115, 2117,
-    # gfx 39-41: Steel Mill
-    2150, 2151, 2152,
-    # gfx 43-46: Factory
-    2169, 2170, 2171, 2172,
-    # gfx 47-51: Oil Wells
-    2028, 2030, 2033, 2036, 2039,
-    # gfx 52-57: Farm
-    2119, 2121, 2123, 2126, 2128,
-    # gfx 58-59: Bank
-    2180, 2181,
-    # gfx 60-71: Copper Ore Mine
-    2190, 2193, 2196, 2199, 2202, 2205, 2206, 2208, 2209, 2212, 2213, 2214,
-    # gfx 72-88: Plantaciones/otros
-    2247, 2249, 2250, 2263, 2265,
-    # gfx 89-90: Gold Mine
-    2186, 2187,
-    # gfx 91-99: Iron Ore Mine
-    2284, 2285, 2286, 2287, 2290,
-    # gfx 116-119: Otros climas
-    2342, 2343, 2349, 2352,
-]
+def load_industry_sprite_ids() -> list[int]:
+    root = Path(os.environ["OPENTTDRS_REPO_ROOT"])
+    gen = root / "crates" / "openttdrs-client" / "src" / "sprites" / "industry_gfx_data_generated.rs"
+    text = gen.read_text(encoding="utf-8")
+    ids = set(int(x) for x in re.findall(r"ground_sprite_id:\s*(\d+)", text))
+    ids |= set(int(x) for x in re.findall(r"sprite_id:\s*(\d+)", text))
+    ids.discard(0)
+    return sorted(ids)
+
+
+INDUSTRY_SPRITE_IDS = load_industry_sprite_ids()
 
 # Nombres: industry_{sprite_id}.png
 # Nota: se imprimen xrel/yrel del NFO para calibrar INDUSTRY_GFX_DATA en sprites.rs

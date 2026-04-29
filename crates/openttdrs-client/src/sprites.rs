@@ -726,7 +726,8 @@ fn parse_u32_env(name: &str, default: u32) -> u32 {
 pub fn signal_sprite_bases() -> (u32, u32) {
     static MAIN: OnceLock<u32> = OnceLock::new();
     static ALT: OnceLock<u32> = OnceLock::new();
-    let main = *MAIN.get_or_init(|| parse_u32_env("OPENTTDRS_SIGNAL_BASE", SPR_ORIGINAL_SIGNALS_BASE));
+    let main =
+        *MAIN.get_or_init(|| parse_u32_env("OPENTTDRS_SIGNAL_BASE", SPR_ORIGINAL_SIGNALS_BASE));
     let alt = *ALT.get_or_init(|| parse_u32_env("OPENTTDRS_SIGNAL_ALT_BASE", SPR_SIGNAL_ALT_BASE));
     (main, alt)
 }
@@ -1132,9 +1133,7 @@ mod level_crossing_tests {
 
 #[cfg(test)]
 mod signal_sprite_collect_tests {
-    use super::{
-        collect_signal_sprite_ids, rail_tile_is_signals, RAIL_TILE_SIGNALS, RAIL_TB_Y,
-    };
+    use super::{RAIL_TB_Y, RAIL_TILE_SIGNALS, collect_signal_sprite_ids, rail_tile_is_signals};
 
     #[test]
     fn semaphore_variant_changes_sprite_id() {

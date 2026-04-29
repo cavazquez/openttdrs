@@ -1,5 +1,7 @@
 //! Fixture binario versionado en `tests/fixtures/v5p12_stxy.ottdmap` (v5+12 + footer STXY).
 
+#![allow(clippy::expect_used)]
+
 use openttdrs_core::{Map, TileCoord, TileKind};
 
 const FIXTURE: &[u8] = include_bytes!("fixtures/v5p12_stxy.ottdmap");

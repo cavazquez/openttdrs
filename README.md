@@ -6,6 +6,8 @@ Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.o
 
 **Roadmap:** hito [0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1) con **8 incrementos** (I1–I8, issues [#14](https://github.com/cavazquez/openttdrs/issues/14)–[#21](https://github.com/cavazquez/openttdrs/issues/21)). Spec detallada en [docs/DISENO_INCREMENTAL.md](docs/DISENO_INCREMENTAL.md); correspondencia con el código C++ del upstream en [docs/INFORME_ARQUITECTURA_OPENTTD.md](docs/INFORME_ARQUITECTURA_OPENTTD.md).
 
+**Flujo de trabajo** (save → mapa → cliente → JSON): [docs/FLUJO_MAPA_Y_CLIENTE.md](docs/FLUJO_MAPA_Y_CLIENTE.md).
+
 ---
 
 ## Stack tecnológico
@@ -17,7 +19,7 @@ Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.o
 | 🎮 [Bevy](https://bevyengine.org/) | Motor ECS, ventana, cámara 2D, gizmos de depuración (cliente). |
 | 🖼️ [wgpu](https://wgpu.rs/) (vía Bevy) | API gráfica usada por debajo del render de Bevy. |
 | 🧪 Tests + clippy | `cargo test` en el workspace; golden `parse_sav` en Python; CI en GitHub. |
-| ✅ [GitHub Actions](https://docs.github.com/en/actions) | Workflow `ci.yml`: `fmt`, `clippy`, `test`, golden `parse_sav`, `build`. |
+| ✅ [GitHub Actions](https://docs.github.com/en/actions) | Workflow `ci.yml`: `fmt`, `clippy`, `test`, golden `parse_sav`, `py_compile` scripts, `build`. |
 | 🤖 [Dependabot](https://docs.github.com/en/code-security/dependabot) | Actualizaciones **mensuales** de Cargo y Actions (`.github/dependabot.yml`). |
 | 📚 OpenTTD upstream | Solo referencia local; ver sección siguiente. |
 

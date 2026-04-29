@@ -13,6 +13,10 @@ pub const INDUSTRY_STOCK_CAPACITY: u32 = 500;
 pub enum IndustryKind {
     CoalMine,
     Forest,
+    /// Extracción liviana (pozos de petróleo, etc.): mismo ritmo de stock que mina.
+    OilWell,
+    /// Procesamiento: produce la mitad de frecuencia que mina/bosque.
+    Factory,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -21,6 +25,17 @@ pub struct Industry {
     pub kind: IndustryKind,
     pub stock: u32,
     pub capacity: u32,
+}
+
+#[inline]
+#[must_use]
+pub const fn industry_produce_period_ticks(kind: IndustryKind) -> u64 {
+    match kind {
+        IndustryKind::Factory => INDUSTRY_PRODUCE_TICKS * 2,
+        IndustryKind::CoalMine | IndustryKind::Forest | IndustryKind::OilWell => {
+            INDUSTRY_PRODUCE_TICKS
+        }
+    }
 }
 
 impl Industry {
@@ -34,9 +49,10 @@ impl Industry {
         }
     }
 
-    /// Produce cargo si el tick actual es múltiplo del período de producción.
+    /// Produce cargo si el tick actual es múltiplo del período de producción (las fábricas van más lento).
     pub fn produce(&mut self, tick: u64) {
-        if tick > 0 && tick.is_multiple_of(INDUSTRY_PRODUCE_TICKS) {
+        let period = industry_produce_period_ticks(self.kind);
+        if tick > 0 && tick.is_multiple_of(period) {
             self.stock = self
                 .stock
                 .saturating_add(INDUSTRY_PRODUCE_AMOUNT)

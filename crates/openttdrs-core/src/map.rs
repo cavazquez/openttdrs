@@ -2,9 +2,7 @@
 #![allow(clippy::doc_markdown, clippy::expect_used, clippy::unwrap_used)]
 
 /// Coordenada de tesela en el plano X/Y del mapa (análoga a índices de tesela en `OpenTTD`).
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct TileCoord {
     pub x: i32,
     pub y: i32,

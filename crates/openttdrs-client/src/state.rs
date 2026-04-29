@@ -156,10 +156,10 @@ fn log_detection_summary(
                 ex.station_xy.len()
             );
         }
-        if let Some(b) = ex.tnbp_blob.as_ref() {
+        let tnbp_len = ex.tnbp_blob_len();
+        if tnbp_len > 0 {
             info!(
-                "Footers .ottdmap: TNBP blob {} bytes (túneles/puentes en save)",
-                b.len()
+                "Footers .ottdmap: TNBP {tnbp_len} bytes (pool túnel/puente; sin decode — ver `OttdmapExtras::tnbp_blob_len`)"
             );
         }
     }
@@ -169,6 +169,8 @@ fn log_detection_summary(
         let key = match ind.kind {
             IndustryKind::CoalMine => "CoalMine",
             IndustryKind::Forest => "Forest",
+            IndustryKind::OilWell => "OilWell",
+            IndustryKind::Factory => "Factory",
         };
         *industries.entry(key).or_insert(0) += 1;
     }
@@ -186,6 +188,7 @@ fn log_detection_summary(
     for v in &state.vehicles {
         let key = match v.kind {
             VehicleKind::Truck => "Truck",
+            VehicleKind::Train => "Train",
         };
         *vehicles.entry(key).or_insert(0) += 1;
     }
@@ -207,11 +210,7 @@ pub fn place_stations_from_footer_stxy(state: &mut GameState, extras: Option<&Ot
         return;
     }
     let (mw, mh) = state.map.dimensions();
-    let mut seen: HashSet<(i32, i32)> = state
-        .stations
-        .iter()
-        .map(|s| (s.pos.x, s.pos.y))
-        .collect();
+    let mut seen: HashSet<(i32, i32)> = state.stations.iter().map(|s| (s.pos.x, s.pos.y)).collect();
     for &(x, y) in &ex.station_xy {
         let xi = i32::from(x);
         let yi = i32::from(y);
@@ -229,11 +228,7 @@ pub fn place_stations_from_footer_stxy(state: &mut GameState, extras: Option<&Ot
 /// Añade [`Station`] por teselas `MP_STATION` del mapa (deduplica con estaciones ya creadas).
 pub fn place_stations_from_map_tiles(state: &mut GameState) {
     let (mw, mh) = state.map.dimensions();
-    let mut seen: HashSet<(i32, i32)> = state
-        .stations
-        .iter()
-        .map(|s| (s.pos.x, s.pos.y))
-        .collect();
+    let mut seen: HashSet<(i32, i32)> = state.stations.iter().map(|s| (s.pos.x, s.pos.y)).collect();
     for y in 0..mh {
         for x in 0..mw {
             let c = TileCoord::new(x as i32, y as i32);
@@ -276,11 +271,14 @@ fn tile_kind_hash(x: u32, y: u32, seed: u64) -> TileKind {
     }
 }
 
-/// Mapea `IndustryType` de OpenTTD (footer `INDP`) a los dos tipos simulados del core.
+/// Mapea `IndustryType` de OpenTTD (footer `INDP`) a [`IndustryKind`] del core (best-effort).
 fn industry_kind_from_ottd_type(t: u8) -> IndustryKind {
     match t {
         // Bosques, granjas, plantaciones, aserradero / papel (cadena madera).
         2 | 3 | 9 | 14 | 19 | 20 | 24 | 25 => IndustryKind::Forest,
+        // Refinería / procesamiento ligero (valores típicos temperate; el gfx refina si hace falta).
+        11..=13 => IndustryKind::Factory,
+        16 | 17 | 33 => IndustryKind::OilWell,
         _ => IndustryKind::CoalMine,
     }
 }
@@ -327,13 +325,12 @@ pub fn place_industries(
                             ex.industry_type_for_tile_index(tile.m1)
                                 .map(industry_kind_from_ottd_type)
                                 .unwrap_or_else(|| {
-                                    let gfx = u16::from(tile.m5)
-                                        | (u16::from((tile.m6 >> 2) & 1) << 8);
+                                    let gfx =
+                                        u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
                                     classify_industry_kind_from_gfx(gfx)
                                 })
                         } else {
-                            let gfx = u16::from(tile.m5)
-                                | (u16::from((tile.m6 >> 2) & 1) << 8);
+                            let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
                             classify_industry_kind_from_gfx(gfx)
                         };
                         state.industries.push(Industry::new(c, kind));
@@ -347,14 +344,11 @@ pub fn place_industries(
 }
 
 fn classify_industry_kind_from_gfx(gfx: u16) -> IndustryKind {
-    // El core todavía modela dos tipos de industria (CoalMine / Forest).
-    // Mapeamos grupos OpenTTD reales a uno de esos dos para simulación.
     match gfx {
-        // Industrias de extracción/mina → CoalMine
-        0..=6 | 47..=51 | 60..=71 | 89..=90 | 91..=99 => IndustryKind::CoalMine,
-        // Industrias de bosque/campo/plantación → Forest
+        43..=46 => IndustryKind::Factory,
+        47..=51 => IndustryKind::OilWell,
+        0..=6 | 60..=71 | 89..=90 | 91..=99 => IndustryKind::CoalMine,
         24..=28 | 52..=57 | 72..=88 => IndustryKind::Forest,
-        // Industrias de procesamiento/servicios: fallback estable por gfx.
         _ => {
             if gfx.is_multiple_of(2) {
                 IndustryKind::CoalMine
@@ -441,7 +435,12 @@ fn place_vehicles(state: &mut GameState) {
         .collect();
 
     for (i, (a, b)) in routes.into_iter().enumerate() {
-        let mut v = Vehicle::new(i as u32, VehicleKind::Truck, a, b);
+        let kind = if i.is_multiple_of(2) {
+            VehicleKind::Train
+        } else {
+            VehicleKind::Truck
+        };
+        let mut v = Vehicle::new(i as u32, kind, a, b);
         if let Some(path) = find_path(&state.map, a, b) {
             v.path = path.into_iter().collect();
         }

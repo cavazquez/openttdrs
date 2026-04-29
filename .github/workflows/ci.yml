@@ -49,5 +49,11 @@ jobs:
       - name: Golden parse_sav (tests/fixtures)
         run: python3 scripts/verify_parse_sav_reference.py
 
+      - name: Sintaxis Python (scripts)
+        run: |
+          python3 -m py_compile scripts/parse_sav.py
+          python3 -m py_compile scripts/verify_parse_sav_reference.py
+          python3 -m py_compile scripts/emit_parse_sav_golden.py
+
       - name: build (incluye cliente Bevy)
         run: cargo build --workspace

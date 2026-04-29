@@ -13,7 +13,7 @@ pub mod station;
 pub mod tick;
 pub mod vehicle;
 
-pub use industry::{INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind};
+pub use industry::{INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, industry_produce_period_ticks};
 pub use map::{Map, MapError, Tile, TileCoord, TileKind};
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::find_path;
@@ -22,9 +22,7 @@ pub use tick::GameTick;
 pub use vehicle::{Vehicle, VehicleKind};
 
 /// Contadores acumulativos de la simulación (carga/descarga, producción).
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize,
-)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SimStats {
     /// Eventos de carga (vehículo tomó cargo en una industria).
     pub cargo_pickups: u64,
@@ -163,7 +161,7 @@ impl GameState {
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
-    use industry::INDUSTRY_PRODUCE_AMOUNT;
+    use industry::{INDUSTRY_PRODUCE_AMOUNT, industry_produce_period_ticks};
     use vehicle::VEHICLE_CAPACITY;
 
     use super::*;
@@ -328,11 +326,37 @@ mod tests {
         let mut s = GameState::new(4, 4);
         s.industries
             .push(Industry::new(TileCoord::new(0, 0), IndustryKind::Forest));
+        s.industries
+            .push(Industry::new(TileCoord::new(1, 0), IndustryKind::Factory));
+        s.vehicles.push(Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(0, 1),
+            TileCoord::new(2, 1),
+        ));
         let j = s.save_json().expect("json");
         let s2 = GameState::load_json(&j).expect("parse");
         assert_eq!(s2.map.dimensions(), (4, 4));
-        assert_eq!(s2.industries.len(), 1);
+        assert_eq!(s2.industries.len(), 2);
         assert_eq!(s2.industries[0].kind, IndustryKind::Forest);
+        assert_eq!(s2.industries[1].kind, IndustryKind::Factory);
+        assert_eq!(s2.vehicles[0].kind, VehicleKind::Train);
+    }
+
+    #[test]
+    fn factory_produces_half_as_often_as_mine() {
+        assert_eq!(
+            industry_produce_period_ticks(IndustryKind::Factory),
+            industry_produce_period_ticks(IndustryKind::CoalMine) * 2
+        );
+        let mut coal = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
+        let mut fact = Industry::new(TileCoord::new(1, 0), IndustryKind::Factory);
+        coal.produce(256);
+        fact.produce(256);
+        assert_eq!(coal.stock, INDUSTRY_PRODUCE_AMOUNT);
+        assert_eq!(fact.stock, 0);
+        fact.produce(512);
+        assert_eq!(fact.stock, INDUSTRY_PRODUCE_AMOUNT);
     }
 
     #[test]

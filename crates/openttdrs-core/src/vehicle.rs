@@ -8,6 +8,8 @@ pub const VEHICLE_CAPACITY: u32 = 20;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum VehicleKind {
     Truck,
+    /// Misma lógica de movimiento que camión; pensado para rutas sobre `TileKind::Rail`.
+    Train,
 }
 
 /// Vehículo que se desplaza tesela a tesela siguiendo un camino BFS.

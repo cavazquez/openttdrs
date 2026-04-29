@@ -11,6 +11,8 @@
 //! `OTTDJSON_LOAD=/ruta/estado.json` al arranque, o **F5** para guardar y **F9** para
 //! cargar (archivo por defecto `openttdrs_sim.json`, o `OPENTTDRS_JSON_SAVE`). Tras F9 se
 //! redibuja todo el mapa y se reajusta la cámara (también si cambia el tamaño del mapa en el JSON).
+//! **P** pausa el tick de simulación; **F4** alterna la ruta de guardado entre `openttdrs_sim.json` y
+//! `openttdrs_autosave.json` (visible en el HUD de la esquina).
 //! Bases de sprites de señal: `OPENTTDRS_SIGNAL_BASE` / `OPENTTDRS_SIGNAL_ALT_BASE` (512–4096).
 
 #![allow(clippy::needless_pass_by_value)]
@@ -46,7 +48,10 @@ use sprites::{
     road_flat_sprite_index, road_tile_has_tram_track,
 };
 use state::SimWorld;
-use ui::{SelectedTileInfo, handle_tile_click, setup_tile_info_ui, update_tile_info_text};
+use ui::{
+    SelectedTileInfo, SimHudControls, cycle_json_save_path_hotkey, handle_pause_toggle,
+    handle_tile_click, setup_tile_info_ui, update_tile_info_text,
+};
 
 /// Factor de escala para los sprites de camiones (son 20×14 px nativo).
 const TRUCK_SCALE: f32 = 2.0;
@@ -197,6 +202,7 @@ fn main() {
         .init_resource::<CameraVelocity>()
         .init_resource::<VehicleIndex>()
         .init_resource::<RemapMapVisualsPending>()
+        .init_resource::<SimHudControls>()
         .add_systems(
             Startup,
             (setup, rebuild_vehicle_index, setup_tile_info_ui).chain(),
@@ -204,6 +210,8 @@ fn main() {
         .add_systems(
             Update,
             (
+                handle_pause_toggle,
+                cycle_json_save_path_hotkey,
                 advance_sim,
                 handle_sim_json_hotkeys,
                 apply_remap_map_visuals,
@@ -437,7 +445,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                 let road_paint =
                     tile.map_or(Color::WHITE, |t| road_flat_sprite_color(t.mapt, kind, t.m7));
                 if tileh != 0 {
-                    commands.spawn((MapVisualLayer,
+                    commands.spawn((
+                        MapVisualLayer,
                         Sprite {
                             image: grass_slopes[tileh as usize - 1].clone(),
                             color: Color::WHITE,
@@ -453,7 +462,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                     ));
                 }
                 let pos_road = tile_pos_half(tx as i32, ty as i32, base_z, 0.02, road_half_h);
-                commands.spawn((MapVisualLayer,
+                commands.spawn((
+                    MapVisualLayer,
                     Sprite {
                         image: road_flat[fi].clone(),
                         color: road_paint,
@@ -468,8 +478,7 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                         .unwrap_or(1370);
                     if let Some(img) = rail_tex.get(&sid) {
                         let crossing_paint = tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
-                            let mut c =
-                                rail_track_base_color(t.mapt, TileKind::Rail, t.m5, t.m3);
+                            let mut c = rail_track_base_color(t.mapt, TileKind::Rail, t.m5, t.m3);
                             if level_crossing_has_rail_reservation(t.m5) {
                                 c = c.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26);
                             }
@@ -478,7 +487,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                             }
                             c
                         });
-                        commands.spawn((MapVisualLayer,
+                        commands.spawn((
+                            MapVisualLayer,
                             Sprite {
                                 image: img.clone(),
                                 color: crossing_paint,
@@ -496,7 +506,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                 }
             } else if kind == TileKind::Rail {
                 if tileh != 0 {
-                    commands.spawn((MapVisualLayer,
+                    commands.spawn((
+                        MapVisualLayer,
                         Sprite {
                             image: grass_slopes[tileh as usize - 1].clone(),
                             color: Color::WHITE,
@@ -531,7 +542,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                         continue;
                     };
                     let z = 0.02 + i as f32 * 0.0004;
-                    commands.spawn((MapVisualLayer,
+                    commands.spawn((
+                        MapVisualLayer,
                         Sprite {
                             image: img.clone(),
                             color: rail_paint,
@@ -553,7 +565,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                             continue;
                         };
                         let z = 0.032 + si as f32 * 0.0015;
-                        commands.spawn((MapVisualLayer,
+                        commands.spawn((
+                            MapVisualLayer,
                             Sprite {
                                 image: img.clone(),
                                 color: Color::WHITE,
@@ -577,7 +590,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                 } else {
                     grass_slopes[tileh as usize - 1].clone()
                 };
-                commands.spawn((MapVisualLayer,
+                commands.spawn((
+                    MapVisualLayer,
                     Sprite {
                         image: house_base,
                         color: Color::WHITE,
@@ -607,7 +621,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                         tx as i32,
                         ty as i32,
                     );
-                    commands.spawn((MapVisualLayer,
+                    commands.spawn((
+                        MapVisualLayer,
                         Sprite {
                             image: img.clone(),
                             color: Color::WHITE,
@@ -630,7 +645,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                         tx as i32,
                         ty as i32,
                     );
-                    commands.spawn((MapVisualLayer,
+                    commands.spawn((
+                        MapVisualLayer,
                         Sprite {
                             image: img.clone(),
                             color: Color::WHITE,
@@ -641,7 +657,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                 }
             } else if kind == TileKind::Station {
                 if tileh != 0 {
-                    commands.spawn((MapVisualLayer,
+                    commands.spawn((
+                        MapVisualLayer,
                         Sprite {
                             image: grass_slopes[tileh as usize - 1].clone(),
                             color: Color::WHITE,
@@ -657,7 +674,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                     ));
                 }
                 let dir = wang_hash(tx, ty, 0xCAFE) as usize % station_grounds.len();
-                commands.spawn((MapVisualLayer,
+                commands.spawn((
+                    MapVisualLayer,
                     Sprite {
                         image: station_grounds[dir].clone(),
                         color: Color::WHITE,
@@ -691,7 +709,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                         Color::WHITE,
                     )
                 };
-                commands.spawn((MapVisualLayer,
+                commands.spawn((
+                    MapVisualLayer,
                     Sprite {
                         image: ground_img,
                         color: ground_color,
@@ -712,7 +731,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                     let pos3 = overlay_pos(
                         p, s.xrel, s.yrel, s.w, s.h, base_z, 0.5, tx as i32, ty as i32,
                     );
-                    commands.spawn((MapVisualLayer,
+                    commands.spawn((
+                        MapVisualLayer,
                         Sprite {
                             image: img.clone(),
                             color: Color::WHITE,
@@ -831,7 +851,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                         | TileKind::Water
                         | TileKind::Void => unreachable!(),
                     };
-                    commands.spawn((MapVisualLayer,
+                    commands.spawn((
+                        MapVisualLayer,
                         Sprite {
                             image,
                             color,
@@ -863,7 +884,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                                 p, obj_xrel, obj_yrel, obj_w, obj_h, base_z, 0.6, tx as i32,
                                 ty as i32,
                             );
-                            commands.spawn((MapVisualLayer,
+                            commands.spawn((
+                                MapVisualLayer,
                                 Sprite {
                                     image: img,
                                     color: Color::WHITE,
@@ -928,7 +950,8 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
             vehicle.pos.x,
             vehicle.pos.y,
         );
-        commands.spawn((MapVisualLayer,
+        commands.spawn((
+            MapVisualLayer,
             VehicleSprite(vehicle.id),
             Sprite {
                 image: h_truck_ne_init.clone(),
@@ -985,9 +1008,9 @@ fn handle_sim_json_hotkeys(
     mut sim: ResMut<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
     mut remap: ResMut<RemapMapVisualsPending>,
+    hud: Res<SimHudControls>,
 ) {
-    let save_path =
-        std::env::var("OPENTTDRS_JSON_SAVE").unwrap_or_else(|_| "openttdrs_sim.json".into());
+    let save_path = hud.json_save_path.clone();
     if keyboard.just_pressed(KeyCode::F5) {
         match sim.state.save_json() {
             Ok(json) => match std::fs::write(&save_path, json) {
@@ -1023,10 +1046,14 @@ fn handle_sim_json_hotkeys(
 
 fn advance_sim(
     time: Res<Time>,
+    hud: Res<SimHudControls>,
     mut sim: ResMut<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
     mut acc: Local<f32>,
 ) {
+    if hud.paused {
+        return;
+    }
     const TICK_HZ: f32 = 15.0;
     *acc += time.delta_secs();
     let period = 1.0 / TICK_HZ;
@@ -1151,6 +1178,8 @@ fn draw_industries(sim: Res<SimWorld>, mut gizmos: Gizmos) {
         let color = match industry.kind {
             IndustryKind::CoalMine => Color::srgb(1.0, 0.9, 0.1),
             IndustryKind::Forest => Color::srgb(1.0, 0.5, 0.05),
+            IndustryKind::OilWell => Color::srgb(0.35, 0.55, 1.0),
+            IndustryKind::Factory => Color::srgb(0.85, 0.45, 0.95),
         };
         gizmo_diamond(&mut gizmos, center, 30.0, 14.0, color);
 

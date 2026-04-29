@@ -134,6 +134,12 @@ impl OttdmapExtras {
         out
     }
 
+    /// Tamaño del blob **TNBP** (túneles/puentes) si el `.ottdmap` lo incluyó; el pool no se decodifica aún.
+    #[must_use]
+    pub fn tnbp_blob_len(&self) -> usize {
+        self.tnbp_blob.as_ref().map_or(0, Vec::len)
+    }
+
     /// Busca el tipo `OpenTTD` guardado para un índice de industria en tesela (`m1` bits 0–6).
     #[must_use]
     pub fn industry_type_for_tile_index(&self, m1: u8) -> Option<u8> {
@@ -175,6 +181,12 @@ mod tests {
         let end = dense_payload_end(&v, n);
         let ex = OttdmapExtras::parse_footers(&v, end);
         assert_eq!(ex.industry_types, vec![(5, 42), (6, 7)]);
+    }
+
+    #[test]
+    fn tnbp_blob_len_default_zero() {
+        let ex = OttdmapExtras::default();
+        assert_eq!(ex.tnbp_blob_len(), 0);
     }
 
     #[test]

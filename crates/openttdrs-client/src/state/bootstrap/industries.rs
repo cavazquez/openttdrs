@@ -113,3 +113,36 @@ pub(crate) fn industry_group_from_gfx(gfx: u16) -> &'static str {
         _ => "Unknown gfx",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{classify_industry_kind_from_gfx, industry_group_from_gfx, place_industries};
+    use openttdrs_core::{GameState, IndustryKind, TileCoord, TileKind};
+
+    #[test]
+    fn classify_industry_kind_matches_known_ranges() {
+        assert_eq!(classify_industry_kind_from_gfx(44), IndustryKind::Factory);
+        assert_eq!(classify_industry_kind_from_gfx(48), IndustryKind::OilWell);
+        assert_eq!(classify_industry_kind_from_gfx(61), IndustryKind::CoalMine);
+        assert_eq!(classify_industry_kind_from_gfx(26), IndustryKind::Forest);
+    }
+
+    #[test]
+    fn industry_group_labels_known_and_unknown() {
+        assert_eq!(industry_group_from_gfx(43), "Factory");
+        assert_eq!(industry_group_from_gfx(7), "Power Station");
+        assert_eq!(industry_group_from_gfx(255), "Unknown gfx");
+    }
+
+    #[test]
+    fn place_industries_from_file_deduplicates_same_industry_id() {
+        let mut state = GameState::new(2, 1);
+        let _ = state.map.set_kind(TileCoord::new(0, 0), TileKind::Industry);
+        let _ = state.map.set_kind(TileCoord::new(1, 0), TileKind::Industry);
+
+        place_industries(&mut state, true, None);
+
+        // Ambos tiles tienen m1=0 por defecto, por lo tanto deben colapsar a una sola industria.
+        assert_eq!(state.industries.len(), 1);
+    }
+}

@@ -27,3 +27,46 @@ fn tile_kind_hash(x: u32, y: u32, seed: u64) -> TileKind {
         _ => TileKind::Grass,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::distribute_tile_kinds;
+    use openttdrs_core::{GameState, TileCoord, TileKind};
+
+    fn snapshot(state: &GameState) -> Vec<TileKind> {
+        let (mw, mh) = state.map.dimensions();
+        let mut out = Vec::with_capacity((mw * mh) as usize);
+        for y in 0..mh {
+            for x in 0..mw {
+                out.push(
+                    state
+                        .map
+                        .get_kind(TileCoord::new(x as i32, y as i32))
+                        .unwrap_or(TileKind::Void),
+                );
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn distribute_tile_kinds_is_deterministic_for_same_seed() {
+        let mut a = GameState::new(8, 8);
+        let mut b = GameState::new(8, 8);
+        distribute_tile_kinds(&mut a, 42);
+        distribute_tile_kinds(&mut b, 42);
+        assert_eq!(snapshot(&a), snapshot(&b));
+    }
+
+    #[test]
+    fn distribute_tile_kinds_only_generates_expected_kinds() {
+        let mut state = GameState::new(12, 12);
+        distribute_tile_kinds(&mut state, 1234);
+        for kind in snapshot(&state) {
+            assert!(matches!(
+                kind,
+                TileKind::Water | TileKind::Forest | TileKind::CoalField | TileKind::Grass
+            ));
+        }
+    }
+}

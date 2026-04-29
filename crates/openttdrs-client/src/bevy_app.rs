@@ -10,9 +10,8 @@ use crate::render::WaterAnimationPlugin;
 use crate::simulation::SimulationPlugin;
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::ClientUiPlugin;
-use crate::vehicle_render::VehicleRenderPlugin;
+use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
 use crate::window_status::WindowStatusPlugin;
-use crate::world_render::WorldRenderPlugin;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum StartupSet {

@@ -4,7 +4,7 @@ use openttdrs_core::{Command, TileCoord, apply_command};
 
 use crate::iso::world_pos_to_tile_coord;
 use crate::state::SimWorld;
-use crate::world_render::RemapMapVisualsPending;
+use crate::render::RemapMapVisualsPending;
 
 use super::super::hud::SelectedTileInfo;
 use super::{

@@ -31,9 +31,7 @@ mod simulation;
 mod sprites;
 mod state;
 mod ui;
-mod vehicle_render;
 mod window_status;
-mod world_render;
 
 use std::path::Path;
 

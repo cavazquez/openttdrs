@@ -12,7 +12,8 @@ use crate::render::{
     spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
 };
 use crate::state::{ClientScreen, SimWorld};
-use crate::vehicle_render::{TruckHandles, spawn_initial_vehicles};
+
+use super::vehicles::{TruckHandles, spawn_initial_vehicles};
 
 /// Petición de redibujo del mapa. `sync_camera`: solo tras F9 / cambio de tamaño.
 #[derive(Resource, Default)]

@@ -29,13 +29,13 @@ use openttdrs_core::{IndustryKind, Map, TileCoord, TileKind, Vehicle};
 use camera::{CameraVelocity, move_camera};
 use iso::{
     ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, gizmo_diamond, iso, overlay_pos, shore_png_index,
-    tile_min_z, tile_pos, tile_pos_half, shore_tileh_for_draw_shore, tile_slope_and_min_z,
+    shore_tileh_for_draw_shore, tile_min_z, tile_pos, tile_pos_half, tile_slope_and_min_z,
     wang_hash,
 };
 use sprites::{
     HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, RAIL_SPRITE_IDS, ROAD_FLAT_HALF_H, collect_rail_sprites,
-    house_draw_data_index_for_tile, rail_trackbits_for_render, road_bits_for_render,
-    road_flat_sprite_index,
+    house_draw_data_index_for_tile, rail_track_base_color, rail_trackbits_for_render,
+    road_bits_for_render, road_flat_sprite_color, road_flat_sprite_index,
 };
 use state::SimWorld;
 use ui::{SelectedTileInfo, handle_tile_click, setup_tile_info_ui, update_tile_info_text};
@@ -180,7 +180,10 @@ fn main() {
         .init_resource::<SelectedTileInfo>()
         .init_resource::<CameraVelocity>()
         .init_resource::<VehicleIndex>()
-        .add_systems(Startup, (setup, rebuild_vehicle_index, setup_tile_info_ui).chain())
+        .add_systems(
+            Startup,
+            (setup, rebuild_vehicle_index, setup_tile_info_ui).chain(),
+        )
         .add_systems(
             Update,
             (
@@ -405,6 +408,8 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                 } else {
                     SLOPE_HALF_H[tileh as usize]
                 };
+                let road_paint =
+                    tile.map_or(Color::WHITE, |t| road_flat_sprite_color(t.mapt, kind, t.m7));
                 if tileh != 0 {
                     commands.spawn((
                         Sprite {
@@ -425,7 +430,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                 commands.spawn((
                     Sprite {
                         image: road_flat[fi].clone(),
-                        color: Color::WHITE,
+                        color: road_paint,
                         ..default()
                     },
                     Transform::from_translation(pos_road),
@@ -456,6 +461,9 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     rail_trackbits_for_render(&sim.state.map, c, mw, mh),
                     &mut rail_layers,
                 );
+                let rail_paint = tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
+                    rail_track_base_color(t.mapt, kind, t.m5, t.m3)
+                });
                 for (i, sid) in rail_layers.iter().copied().enumerate() {
                     let Some(img) = rail_tex.get(&sid) else {
                         continue;
@@ -464,7 +472,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                     commands.spawn((
                         Sprite {
                             image: img.clone(),
-                            color: Color::srgb(0.88, 0.88, 0.97),
+                            color: rail_paint,
                             ..default()
                         },
                         Transform::from_translation(tile_pos_half(
@@ -498,8 +506,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                         slope_half_ground,
                     )),
                 ));
-                let spec_idx =
-                    house_draw_data_index_for_tile(clean_house_id, tx as i32, ty as i32);
+                let spec_idx = house_draw_data_index_for_tile(clean_house_id, tx as i32, ty as i32);
                 let spec = &HOUSE_DRAW_DATA[spec_idx];
                 if spec.s1 != 0
                     && let Some(img) = house_building_tex.get(&spec.s1)
@@ -665,11 +672,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWor
                                     ..default()
                                 },
                                 Transform::from_translation(tile_pos_half(
-                                    tx as i32,
-                                    ty as i32,
-                                    base_z,
-                                    0.0,
-                                    hh,
+                                    tx as i32, ty as i32, base_z, 0.0, hh,
                                 )),
                             ));
                         }
@@ -1004,11 +1007,11 @@ fn animate_water(
     let glitter_tick = (((time.elapsed_secs() * 3.0) as usize) * 3) % GLITTER_CYCLE.len();
 
     let cull: Option<(Affine3A, Rect)> = cam_q.iter().next().and_then(|(cam_gt, proj)| {
-            let Projection::Orthographic(ortho) = proj else {
-                return None;
-            };
-            Some((cam_gt.affine().inverse(), ortho.area))
-        });
+        let Projection::Orthographic(ortho) = proj else {
+            return None;
+        };
+        Some((cam_gt.affine().inverse(), ortho.area))
+    });
     let margin = ISO_HW * 4.0;
 
     for (water, wg, mut sprite) in &mut query {

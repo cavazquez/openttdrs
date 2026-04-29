@@ -164,11 +164,7 @@ fn ottd_m8_at(m8: &[u8], i: usize) -> u16 {
 
 #[inline]
 fn ottd_byte_or(plane: &[u8], i: usize) -> u8 {
-    if plane.is_empty() {
-        0
-    } else {
-        plane[i]
-    }
+    if plane.is_empty() { 0 } else { plane[i] }
 }
 
 #[inline]

@@ -157,7 +157,20 @@ pub fn update_tile_info_text(
     let slope_str = slope_label(tileh);
 
     **text = format!(
-        "{zoom_label}\nTile ({},{}) {}\nh:{} slope:{} ({}) mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X}{}",
-        pos.x, pos.y, kind_str, tile.height, tileh, slope_str, tile.mapt, tile.m5, tile.m1, extra
+        "{zoom_label}\nTile ({},{}) {}\nh:{} slope:{} ({}) mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X} m2:0x{:02X} m7:0x{:02X} m3:0x{:02X} m3hi:0x{:02X}{}",
+        pos.x,
+        pos.y,
+        kind_str,
+        tile.height,
+        tileh,
+        slope_str,
+        tile.mapt,
+        tile.m5,
+        tile.m1,
+        tile.m2,
+        tile.m7,
+        tile.m3,
+        tile.m3hi,
+        extra
     );
 }

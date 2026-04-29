@@ -1,5 +1,6 @@
 //! Constantes y lógica de sprites de `OpenGFX`.
 
+use bevy::prelude::Color;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
 // ── Constantes de renderizado de carreteras y vías ───────────────────────────
@@ -9,10 +10,50 @@ pub const OTTD_MP_RAIL: u8 = 1;
 pub const OTTD_MP_ROAD: u8 = 2;
 pub const OTTD_MP_TUNNELBRIDGE: u8 = 9;
 
+/// `RailGroundType::SnowOrDesert` en los 4 bits bajos de `m4`/`m3` en vía normal (`rail_map.h`).
+pub const RAIL_GROUND_SNOW_OR_DESERT: u8 = 12;
+
 /// Subtipo de tesela ferroviaria en bits 6–7 de `m5` (`rail_map.h`).
 pub const RAIL_TILE_NORMAL: u8 = 0;
 pub const RAIL_TILE_SIGNALS: u8 = 1;
 pub const RAIL_TILE_DEPOT: u8 = 3;
+
+/// `IsOnSnowOrDesert` (`road_map.h`): bit 5 de **MAP7** en teselas `MP_ROAD`.
+#[must_use]
+pub fn road_tile_snow_or_desert(mapt: u8, kind: TileKind, m7: u8) -> bool {
+    kind == TileKind::Road && (mapt >> 4) & 0xF == OTTD_MP_ROAD && (m7 & 0x20) != 0
+}
+
+/// Color del sprite `road_flat_*` (nieve/desierto vía MAP7).
+#[must_use]
+pub fn road_flat_sprite_color(mapt: u8, kind: TileKind, m7: u8) -> Color {
+    if road_tile_snow_or_desert(mapt, kind, m7) {
+        Color::srgb(0.82, 0.88, 0.98)
+    } else {
+        Color::WHITE
+    }
+}
+
+/// Color base de raíles (vía + nieve en suelo cuando `m3` bajo coincide con `RAIL_GROUND_SNOW_OR_DESERT`).
+#[must_use]
+pub fn rail_track_base_color(mapt: u8, kind: TileKind, m5: u8, m3: u8) -> Color {
+    const BASE: Color = Color::srgb(0.88, 0.88, 0.97);
+    if kind != TileKind::Rail {
+        return BASE;
+    }
+    if (mapt >> 4) & 0xF != OTTD_MP_RAIL {
+        return BASE;
+    }
+    let subtype = (m5 >> 6) & 0x3;
+    if subtype > RAIL_TILE_SIGNALS {
+        return BASE;
+    }
+    if (m3 & 0x0F) == RAIL_GROUND_SNOW_OR_DESERT {
+        Color::srgb(0.72, 0.80, 0.94)
+    } else {
+        BASE
+    }
+}
 
 /// Desplazamiento dentro del grupo `SPR_ROAD` para tesela plana.
 pub const ROAD_FLAT_OFFSET_TBL: [u8; 16] = [0, 18, 17, 7, 16, 0, 10, 5, 15, 8, 1, 4, 9, 3, 6, 2];

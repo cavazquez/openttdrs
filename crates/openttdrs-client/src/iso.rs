@@ -162,8 +162,7 @@ fn slope_bits_from_corner_vals(hnorth: u8, hwest: u8, heast: u8, hsouth: u8) -> 
 #[must_use]
 pub fn tile_slope_bits_from_heights(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
     let (mw, mh) = map.dimensions();
-    let get_h =
-        |dtx: i32, dty: i32| height_for_slope_corner_sample(map, dtx, dty, mw, mh);
+    let get_h = |dtx: i32, dty: i32| height_for_slope_corner_sample(map, dtx, dty, mw, mh);
     let hnorth = get_h(tx as i32, ty as i32);
     let hwest = get_h(tx as i32 + 1, ty as i32);
     let heast = get_h(tx as i32, ty as i32 + 1);
@@ -195,14 +194,12 @@ pub fn shore_tileh_for_draw_shore(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32)
 #[must_use]
 pub fn tile_slope_and_min_z(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
     let (mw, mh) = map.dimensions();
-    let get_h =
-        |dtx: i32, dty: i32| height_for_slope_corner_sample(map, dtx, dty, mw, mh);
+    let get_h = |dtx: i32, dty: i32| height_for_slope_corner_sample(map, dtx, dty, mw, mh);
     let hnorth = get_h(tx as i32, ty as i32);
     let hwest = get_h(tx as i32 + 1, ty as i32);
     let heast = get_h(tx as i32, ty as i32 + 1);
     let hsouth = get_h(tx as i32 + 1, ty as i32 + 1);
-    let (tileh_computed, min_h) =
-        slope_bits_from_corner_vals(hnorth, hwest, heast, hsouth);
+    let (tileh_computed, min_h) = slope_bits_from_corner_vals(hnorth, hwest, heast, hsouth);
     let center = map.get(TileCoord::new(tx as i32, ty as i32));
     let is_water = center.is_some_and(|t| t.kind == TileKind::Water);
     // MP_WATER se dibuja como superficie plana (Clear / costa); `tileh`≠0 aquí solo
@@ -378,9 +375,7 @@ pub fn infer_coast_tileh_when_flat(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32
 /// `DupSprite` en `newgrf.cpp` (`ActivateOldShore`).
 #[must_use]
 pub fn shore_png_index(tileh: u8) -> usize {
-    const TILEH_TO_SHORE_DST: [u8; 16] = [
-        0, 1, 2, 3, 4, 16, 6, 7, 8, 9, 17, 11, 12, 13, 14, 0,
-    ];
+    const TILEH_TO_SHORE_DST: [u8; 16] = [0, 1, 2, 3, 4, 16, 6, 7, 8, 9, 17, 11, 12, 13, 14, 0];
     let th = tileh.min(15) as usize;
     let dst = TILEH_TO_SHORE_DST[th];
     shore_dst_to_png(dst)

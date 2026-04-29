@@ -22,13 +22,19 @@ fn main() {
     let map = Map::from_ottd_binary(&data).expect("MAPO / formato válido");
     let (mw, mh) = map.dimensions();
     println!("Archivo: {path}");
-    println!("Dimensiones mapa: W={mw} H={mh} (teselas x ∈ 0..{}, y ∈ 0..{})\n", mw - 1, mh - 1);
+    println!(
+        "Dimensiones mapa: W={mw} H={mh} (teselas x ∈ 0..{}, y ∈ 0..{})\n",
+        mw - 1,
+        mh - 1
+    );
 
     println!("Rotación 180° en índices de tesela (como espejo respecto al centro del rectángulo):");
     println!("  (x', y') = ((W-1) - x, (H-1) - y)");
     let rx = mw - 1 - 145;
     let ry = mh - 1 - 213;
-    println!("  (145, 213) → ({rx}, {ry})   [coincide con (160,232) solo si el mapa es {mw}×{mh}]\n");
+    println!(
+        "  (145, 213) → ({rx}, {ry})   [coincide con (160,232) solo si el mapa es {mw}×{mh}]\n"
+    );
 
     let mut coords: Vec<(u32, u32)> = Vec::new();
     let mut i = 1;

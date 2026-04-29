@@ -108,3 +108,47 @@ impl TileRenderContext {
         self.ty as i32
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn coord(x: i32, y: i32) -> TileCoord {
+        TileCoord::new(x, y)
+    }
+
+    #[test]
+    fn flat_grass_tiles_keep_base_height_without_shore() {
+        let map = Map::new_flat(2, 2, 0);
+        let grid = RenderGrid::from_map(&map, 2, 2);
+
+        let info = grid.get(1, 1);
+
+        assert_eq!(info.base_z, 0);
+        assert!(!info.use_shore);
+    }
+
+    #[test]
+    fn water_with_default_m5_uses_shore_when_touching_land() {
+        let mut map = Map::new_flat(2, 1, 0);
+        assert!(map.set_kind(coord(0, 0), TileKind::Water).is_ok());
+
+        let grid = RenderGrid::from_map(&map, 2, 1);
+
+        assert!(grid.get(0, 0).use_shore);
+    }
+
+    #[test]
+    fn water_with_default_m5_stays_flat_when_surrounded_by_water() {
+        let mut map = Map::new_flat(3, 3, 0);
+        for y in 0..3 {
+            for x in 0..3 {
+                assert!(map.set_kind(coord(x, y), TileKind::Water).is_ok());
+            }
+        }
+
+        let grid = RenderGrid::from_map(&map, 3, 3);
+
+        assert!(!grid.get(1, 1).use_shore);
+    }
+}

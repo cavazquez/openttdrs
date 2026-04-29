@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{TileCoord, TileKind};
+use openttdrs_core::TileKind;
 
 use crate::config;
 use crate::iso::{
@@ -14,35 +14,10 @@ use crate::sprites::{
 };
 use crate::state::SimWorld;
 
-use super::{BuildMenuAction, UiToolState};
+use super::{SelectedTileInfo, SimHudControls, TileInfoText};
+use crate::ui::{BuildMenuAction, UiToolState};
 
-/// Pausa simulación y ruta del JSON de **F5/F9** (alternativa a variable de entorno al arranque).
-#[derive(Resource)]
-pub(crate) struct SimHudControls {
-    pub(crate) paused: bool,
-    pub(crate) json_save_path: String,
-}
-
-impl Default for SimHudControls {
-    fn default() -> Self {
-        Self {
-            paused: false,
-            json_save_path: config::json_save_path(),
-        }
-    }
-}
-
-/// Información del tile actualmente seleccionado (click izquierdo).
-#[derive(Resource, Default)]
-pub(crate) struct SelectedTileInfo {
-    pub(crate) pos: Option<TileCoord>,
-}
-
-/// Marcador para el texto de información del tile.
-#[derive(Component)]
-pub(crate) struct TileInfoText;
-
-/// Crea el texto de información del tile.
+/// Crea el texto de informacion del tile.
 pub(crate) fn setup_tile_info_ui(mut commands: Commands) {
     commands.spawn((
         TileInfoText,
@@ -57,7 +32,7 @@ pub(crate) fn setup_tile_info_ui(mut commands: Commands) {
     ));
 }
 
-/// Actualiza el texto de información del tile seleccionado.
+/// Actualiza el texto de informacion del tile seleccionado.
 #[allow(clippy::type_complexity)]
 pub(crate) fn update_tile_info_text(
     selected: Res<SelectedTileInfo>,
@@ -201,52 +176,4 @@ pub(crate) fn update_tile_info_text(
         extra,
         coast_dbg
     );
-}
-
-/// **P** alterna pausa del tick de simulación (`GameState::step`).
-pub(crate) fn handle_pause_toggle(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut hud: ResMut<SimHudControls>,
-) {
-    if keyboard.just_pressed(KeyCode::KeyP) {
-        hud.paused = !hud.paused;
-        if hud.paused {
-            info!("Pausa: ON");
-        } else {
-            info!("Pausa: OFF");
-        }
-    }
-}
-
-/// **F4** alterna entre dos rutas de archivo predefinidas para F5/F9.
-pub(crate) fn cycle_json_save_path_hotkey(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut hud: ResMut<SimHudControls>,
-) {
-    if keyboard.just_pressed(KeyCode::F4) {
-        hud.json_save_path = if hud.json_save_path.ends_with("autosave.json") {
-            "openttdrs_sim.json".into()
-        } else {
-            "openttdrs_autosave.json".into()
-        };
-        info!("Ruta JSON (F5/F9): {}", hud.json_save_path);
-    }
-}
-
-/// Hotkeys de herramienta: 1 carretera, 2 estación, C limpiar, Esc desactivar.
-pub(crate) fn handle_tool_hotkeys(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut tool_state: ResMut<UiToolState>,
-) {
-    if keyboard.just_pressed(KeyCode::Digit1) {
-        tool_state.active_tool = Some(BuildMenuAction::Road);
-    } else if keyboard.just_pressed(KeyCode::Digit2) {
-        tool_state.active_tool = Some(BuildMenuAction::Station);
-    } else if keyboard.just_pressed(KeyCode::Digit3) {
-        tool_state.active_tool = Some(BuildMenuAction::Rail);
-    } else if keyboard.just_pressed(KeyCode::KeyC) {
-        tool_state.active_tool = Some(BuildMenuAction::Clear);
-    } else if keyboard.just_pressed(KeyCode::Escape) {
-        tool_state.active_tool = None;
-    }
 }

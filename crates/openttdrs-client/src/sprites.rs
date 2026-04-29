@@ -407,11 +407,13 @@ pub fn road_tile_has_tram_track(m8: u16) -> bool {
 /// - SW (bit 1) = conexión hacia (x+1, y)  → visualmente abajo-izquierda
 /// - SE (bit 2) = conexión hacia (x, y+1)  → visualmente abajo-derecha
 /// - NE (bit 3) = conexión hacia (x-1, y)  → visualmente arriba-derecha
+#[allow(dead_code)] // Wrapper de compatibilidad pública tras split a sprites/road.rs.
 pub fn effective_road_bits(mapt: u8, m5: u8, kind: TileKind) -> Option<u8> {
     road::effective_road_bits(mapt, m5, kind, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE)
 }
 
 #[inline]
+#[allow(dead_code)] // Wrapper de compatibilidad pública tras split a sprites/road.rs.
 pub fn road_flat_index(road_bits: u8) -> usize {
     road::road_flat_index(road_bits, &ROAD_FLAT_OFFSET_TBL)
 }
@@ -440,6 +442,7 @@ pub fn road_bits_for_render(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> u8 {
 
 // ── Lógica de rail bits ─────────────────────────────────────────────────────
 
+#[allow(dead_code)] // Wrapper de compatibilidad pública tras split a sprites/rail.rs.
 pub fn effective_rail_trackbits(mapt: u8, m5: u8, kind: TileKind) -> Option<u8> {
     rail::effective_rail_trackbits(mapt, m5, kind, OTTD_MP_RAIL)
 }

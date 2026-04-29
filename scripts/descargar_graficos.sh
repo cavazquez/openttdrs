@@ -444,36 +444,47 @@ crop_by_id(4075, "ship_depot_sw_rear.png")
 crop_by_id(4076, "buoy.png")
 
 # =============================================================================
-# CARRETERAS (MP_ROAD)
+# CARRETERAS (MP_ROAD) - alineado con src/sprites/road.rs
 # =============================================================================
-# Carretera plana: SPR_ROAD_Y (1332) + offset → 19 variantes
-for sid in range(1332, 1351):
+ROAD_FLAT_RANGE = range(1332, 1351)
+ROAD_SNOW_IDS = [1351, 1352]
+ROAD_DEPOT_RANGE = range(1408, 1412)
+
+# Carretera plana: SPR_ROAD_Y (1332) + offset -> 19 variantes
+for sid in ROAD_FLAT_RANGE:
     crop_by_id(sid, f"road_flat_{sid - 1332:02d}.png")
 # Carretera con nieve
-crop_by_id(1351, "road_y_snow.png")
-crop_by_id(1352, "road_x_snow.png")
+crop_by_id(ROAD_SNOW_IDS[0], "road_y_snow.png")
+crop_by_id(ROAD_SNOW_IDS[1], "road_x_snow.png")
 # Depósito de carretera (4 direcciones)
-for i, sid in enumerate(range(1408, 1412)):
+for i, sid in enumerate(ROAD_DEPOT_RANGE):
     crop_by_id(sid, f"road_depot_{i}.png")
 
 # =============================================================================
-# VÍAS FÉRREAS (MP_RAILWAY)
+# VIAS FERREAS (MP_RAILWAY) - alineado con src/sprites/rail.rs
 # =============================================================================
+RAIL_SINGLE_RANGE = range(1005, 1011)
+RAIL_TRACK_RANGE = range(1011, 1023)
+RAIL_WRAPPER_ALIAS_IDS = [
+    1005, 1006, 1007, 1008, 1009, 1010,
+    1011, 1012, 1013, 1014, 1015, 1016,
+    1017, 1018, 1019, 1020, 1021, 1022,
+    1035, 1036,
+    1370, 1371, 1372, 1373,
+]
+RAIL_SIGNAL_EXPORT_RANGE = range(1275, 1700)
+
 # Piezas sueltas para overlays en junctions
-for sid in range(1005, 1011):
+for sid in RAIL_SINGLE_RANGE:
     crop_by_id(sid, f"rail_single_{sid - 1005}.png")
 # Vías combinadas (suelo + raíles)
-for sid in range(1011, 1023):
+for sid in RAIL_TRACK_RANGE:
     crop_by_id(sid, f"rail_track_{sid - 1011}.png")
 # Alias usados por el cliente Bevy actual (rail_<sprite_id>.png)
-for sid in [1005, 1006, 1007, 1008, 1009, 1010,
-            1011, 1012, 1013, 1014, 1015, 1016,
-            1017, 1018, 1019, 1020, 1021, 1022,
-            1035, 1036,
-            1370, 1371, 1372, 1373]:
+for sid in RAIL_WRAPPER_ALIAS_IDS:
     crop_by_id(sid, f"rail_{sid}.png")
 # Señales ferroviarias (bloque clásico + PBS: la fórmula del cliente puede superar 1519)
-for sid in range(1275, 1700):
+for sid in RAIL_SIGNAL_EXPORT_RANGE:
     crop_by_id(sid, f"rail_{sid}.png")
 # Vías HORZ/VERT
 crop_by_id(1035, "rail_track_ns.png")
@@ -658,60 +669,48 @@ for i, sid in enumerate(tree_ids):
     crop_by_id(sid, f"tree_{i:02d}.png")
 
 # =============================================================================
-# INDUSTRIAS — todos los sprites de edificios por sprite_id
+# INDUSTRIAS - alineado con src/sprites/industry.rs
+# =============================================================================
+INDUSTRY_SPRITE_IDS = [
+    # gfx 0-3: Coal Mine
+    2013, 2015, 2018, 2021,
+    # gfx 7-10: Power Station
+    2047, 2050, 2053, 2054,
+    # gfx 11-15: Sawmill
+    2063, 2066, 2069, 2070, 2071,
+    # gfx 16-23: Oil Refinery
+    2075, 2076, 2080, 2083, 2086, 2089, 2092, 2095,
+    # gfx 25-28: Forest
+    2099, 2100, 2101, 2102,
+    # gfx 29-32: Printing Works
+    2174, 2177, 2178,
+    # gfx 33-38: Oil Rig
+    2108, 2109, 2111, 2113, 2115, 2117,
+    # gfx 39-41: Steel Mill
+    2150, 2151, 2152,
+    # gfx 43-46: Factory
+    2169, 2170, 2171, 2172,
+    # gfx 47-51: Oil Wells
+    2028, 2030, 2033, 2036, 2039,
+    # gfx 52-57: Farm
+    2119, 2121, 2123, 2126, 2128,
+    # gfx 58-59: Bank
+    2180, 2181,
+    # gfx 60-71: Copper Ore Mine
+    2190, 2193, 2196, 2199, 2202, 2205, 2206, 2208, 2209, 2212, 2213, 2214,
+    # gfx 72-88: Plantaciones/otros
+    2247, 2249, 2250, 2263, 2265,
+    # gfx 89-90: Gold Mine
+    2186, 2187,
+    # gfx 91-99: Iron Ore Mine
+    2284, 2285, 2286, 2287, 2290,
+    # gfx 116-119: Otros climas
+    2342, 2343, 2349, 2352,
+]
+
 # Nombres: industry_{sprite_id}.png
 # Nota: se imprimen xrel/yrel del NFO para calibrar INDUSTRY_GFX_DATA en sprites.rs
-# =============================================================================
-# gfx 0-3: Coal Mine (headframe, torre, aux, pequeño)
-for sid in [2013, 2015, 2018, 2021]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 7-10: Power Station
-for sid in [2047, 2050, 2053, 2054]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 11-15: Sawmill
-for sid in [2063, 2066, 2069, 2070, 2071]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 16-23: Oil Refinery
-for sid in [2075, 2076, 2080, 2083, 2086, 2089, 2092, 2095]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 25-28: Forest (árboles industriales)
-for sid in [2099, 2100, 2101, 2102]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 29-32: Printing Works
-for sid in [2174, 2177, 2178]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 33-38: Oil Rig
-for sid in [2108, 2109, 2111, 2113, 2115, 2117]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 39-41: Steel Mill
-for sid in [2150, 2151, 2152]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 43-46: Factory
-for sid in [2169, 2170, 2171, 2172]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 47-51: Oil Wells
-for sid in [2028, 2030, 2033, 2036, 2039]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 52-57: Farm (edificios + granero)
-for sid in [2119, 2121, 2123, 2126, 2128]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 58-59: Bank (templado)
-for sid in [2180, 2181]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 60-71: Copper Ore Mine
-for sid in [2190, 2193, 2196, 2199, 2202, 2205, 2206, 2208, 2209, 2212, 2213, 2214]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 72-88: Plantaciones/otros climas (algunos tiles con edificio)
-for sid in [2247, 2249, 2250, 2263, 2265]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 89-90: Gold Mine
-for sid in [2186, 2187]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 91-99: Iron Ore Mine
-for sid in [2284, 2285, 2286, 2287, 2290]:
-    crop_by_id(sid, f"industry_{sid}.png")
-# gfx 116-119: Otros climas con edificio
-for sid in [2342, 2343, 2349, 2352]:
+for sid in INDUSTRY_SPRITE_IDS:
     crop_by_id(sid, f"industry_{sid}.png")
 
 # =============================================================================

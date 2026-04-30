@@ -340,6 +340,7 @@ mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::World;
+    use openttdrs_core::{Industry, IndustryKind, Tile};
 
     fn run_rotate(world: &mut World, tool: Option<BuildMenuAction>, drag_armed: bool) {
         let mut mouse = ButtonInput::<MouseButton>::default();
@@ -366,5 +367,90 @@ mod tests {
         run_rotate(&mut world, Some(BuildMenuAction::Rail), false);
         run_rotate(&mut world, None, false);
         run_rotate(&mut world, Some(BuildMenuAction::Station), true);
+    }
+
+    #[test]
+    fn preview_validators_cover_key_paths() {
+        let mut map = Map::new_flat(6, 6, 0);
+        let c = |x: i32, y: i32| TileCoord::new(x, y);
+        map.set_tile(
+            c(1, 1),
+            Tile {
+                kind: TileKind::Road,
+                height: 2,
+                ..tile_template()
+            },
+        )
+        .unwrap();
+        map.set_tile(
+            c(3, 1),
+            Tile {
+                kind: TileKind::Road,
+                height: 2,
+                ..tile_template()
+            },
+        )
+        .unwrap();
+        map.set_kind(c(4, 4), TileKind::Water).unwrap();
+
+        assert!(preview_target_is_valid(BuildMenuAction::Road, TileKind::Grass));
+        assert!(!preview_target_is_valid(BuildMenuAction::Road, TileKind::Water));
+        assert!(preview_target_is_valid(BuildMenuAction::Clear, TileKind::Water));
+        assert!(!preview_target_is_valid(BuildMenuAction::Orders, TileKind::Void));
+
+        assert!(action_is_tunnel(BuildMenuAction::RoadTunnel));
+        assert!(action_is_tunnel(BuildMenuAction::RailTunnel));
+        assert!(!action_is_tunnel(BuildMenuAction::Road));
+
+        assert!(!tunnel_preview_is_valid(
+            &map,
+            BuildMenuAction::RoadTunnel,
+            &[(1, 1), (2, 1)]
+        ));
+        assert!(tunnel_preview_is_valid(
+            &map,
+            BuildMenuAction::RoadTunnel,
+            &[(1, 1), (2, 1), (3, 1)]
+        ));
+        assert!(!tunnel_preview_is_valid(
+            &map,
+            BuildMenuAction::RoadTunnel,
+            &[(1, 1), (2, 1), (4, 4)]
+        ));
+        assert!(tunnel_preview_is_valid(
+            &map,
+            BuildMenuAction::Road,
+            &[(1, 1), (2, 1)]
+        ));
+    }
+
+    #[test]
+    fn station_coverage_preview_checks_industries() {
+        let map = Map::new_flat(8, 8, 0);
+        let industries = vec![Industry {
+            pos: TileCoord::new(3, 3),
+            kind: IndustryKind::Forest,
+            stock: 30,
+            capacity: 100,
+        }];
+        assert!(station_preview_has_coverage(&map, &industries, 3, 3));
+        assert!(!station_preview_has_coverage(&map, &[], 0, 0));
+    }
+
+    fn tile_template() -> Tile {
+        Tile {
+            height: 0,
+            kind: TileKind::Grass,
+            mapt: 0,
+            m5: 0,
+            m1: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        }
     }
 }

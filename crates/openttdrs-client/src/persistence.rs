@@ -65,3 +65,76 @@ pub(crate) fn handle_sim_json_hotkeys(
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::handle_sim_json_hotkeys;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::*;
+
+    use crate::render::{RemapMapVisualsPending, VehicleIndex};
+    use crate::state::SimWorld;
+    use crate::ui::SimHudControls;
+
+    #[test]
+    fn save_and_load_shortcuts_work() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let save_path = dir.path().join("sim.json");
+        let save_path_s = save_path.to_string_lossy().to_string();
+
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(VehicleIndex::default());
+        world.insert_resource(RemapMapVisualsPending::default());
+        world.insert_resource(SimHudControls {
+            paused: false,
+            json_save_path: save_path_s,
+            minimap_visible: true,
+        });
+
+        let mut save_keys = ButtonInput::<KeyCode>::default();
+        save_keys.press(KeyCode::F5);
+        world.insert_resource(save_keys);
+        world.run_system_once(handle_sim_json_hotkeys).unwrap();
+
+        let mut load_keys = ButtonInput::<KeyCode>::default();
+        load_keys.press(KeyCode::F9);
+        world.insert_resource(load_keys);
+        world.run_system_once(handle_sim_json_hotkeys).unwrap();
+
+        let remap = world.resource::<RemapMapVisualsPending>();
+        assert!(remap.pending);
+        assert!(remap.sync_camera);
+    }
+
+    #[test]
+    fn ctrl_shortcuts_and_invalid_json_paths_are_handled() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let save_path = dir.path().join("bad.json");
+        std::fs::write(&save_path, "{not-json").expect("write");
+        let save_path_s = save_path.to_string_lossy().to_string();
+
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(VehicleIndex::default());
+        world.insert_resource(RemapMapVisualsPending::default());
+        world.insert_resource(SimHudControls {
+            paused: false,
+            json_save_path: save_path_s,
+            minimap_visible: true,
+        });
+
+        let mut ctrl_save = ButtonInput::<KeyCode>::default();
+        ctrl_save.press(KeyCode::ControlLeft);
+        ctrl_save.press(KeyCode::KeyS);
+        world.insert_resource(ctrl_save);
+        world.run_system_once(handle_sim_json_hotkeys).unwrap();
+
+        let mut ctrl_load = ButtonInput::<KeyCode>::default();
+        ctrl_load.press(KeyCode::ControlLeft);
+        ctrl_load.press(KeyCode::KeyL);
+        world.insert_resource(ctrl_load);
+        world.run_system_once(handle_sim_json_hotkeys).unwrap();
+    }
+}

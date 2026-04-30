@@ -137,16 +137,9 @@ impl WorldAssets {
 
 #[cfg(test)]
 #[allow(clippy::expect_used)]
-mod world_assets_tests {
+pub(crate) fn stub_opengfx_tiles_for_tests(root: &std::path::Path) {
     use std::fs;
-    use std::path::Path;
 
-    use bevy::app::ScheduleRunnerPlugin;
-    use bevy::asset::AssetPlugin;
-    use bevy::image::ImagePlugin;
-    use bevy::prelude::*;
-
-    use super::WorldAssets;
     use crate::sprites::{
         HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, house_sprite_filename, rail_sprite_ids_for_preload,
     };
@@ -156,7 +149,7 @@ mod world_assets_tests {
         "/tests/fixtures/one_pixel.png"
     ));
 
-    fn write_png(root: &Path, rel: &str) {
+    fn write_png(root: &std::path::Path, rel: &str) {
         let p = root.join(rel);
         if let Some(dir) = p.parent() {
             fs::create_dir_all(dir).expect("mkdir");
@@ -164,66 +157,74 @@ mod world_assets_tests {
         fs::write(&p, ONE_PX_PNG).expect("write png");
     }
 
-    /// Crea un árbol `opengfx/tiles/` mínimo con el mismo conjunto de rutas que `WorldAssets::load`.
-    fn stub_opengfx_tiles(root: &Path) {
-        write_png(root, "opengfx/tiles/grass.png");
-        write_png(root, "opengfx/tiles/grass_rough.png");
-        for tileh in 1u8..=14 {
-            write_png(
-                root,
-                &format!("opengfx/tiles/terrain_grass_slope_{tileh:02}.png"),
-            );
-            write_png(
-                root,
-                &format!("opengfx/tiles/terrain_rough_slope_{tileh:02}.png"),
-            );
-        }
-        write_png(root, "opengfx/tiles/water.png");
-        for i in 0..8 {
-            write_png(root, &format!("opengfx/tiles/shore_{i}.png"));
-        }
-        write_png(root, "opengfx/tiles/object_lighthouse.png");
-        write_png(root, "opengfx/tiles/object_transmitter.png");
-        for i in 0..19 {
-            write_png(root, &format!("opengfx/tiles/road_flat_{i:02}.png"));
-            write_png(root, &format!("opengfx/tiles/tram_flat_{i:02}.png"));
-        }
-        for id in rail_sprite_ids_for_preload() {
-            write_png(root, &format!("opengfx/tiles/rail_{id}.png"));
-        }
-        for i in 0..4 {
-            write_png(root, &format!("opengfx/tiles/truck_stop_ground_{i}.png"));
-            write_png(root, &format!("opengfx/tiles/road_depot_{i}.png"));
-        }
-        write_png(root, "opengfx/tiles/rail_depot_ne.png");
-        write_png(root, "opengfx/tiles/tunnel_road_rear.png");
-        write_png(root, "opengfx/tiles/tunnel_rail_rear.png");
-        write_png(root, "opengfx/tiles/bridge_wood_road_x.png");
-        write_png(root, "opengfx/tiles/bridge_wood_rail_x.png");
-        for spec in &HOUSE_DRAW_DATA {
-            for &sid in &[spec.s1, spec.s2] {
-                if sid != 0 {
-                    let fname = house_sprite_filename(sid);
-                    write_png(root, &format!("opengfx/tiles/{fname}"));
-                }
-            }
-        }
-        for name in ["tree_00.png", "tree_07.png", "tree_14.png"] {
-            write_png(root, &format!("opengfx/tiles/{name}"));
-        }
-        for entry in &INDUSTRY_GFX_DATA {
-            for &id in &[entry.sprite_id, entry.ground_sprite_id] {
-                if id != 0 {
-                    write_png(root, &format!("opengfx/tiles/industry_{id}.png"));
-                }
+    write_png(root, "opengfx/tiles/grass.png");
+    write_png(root, "opengfx/tiles/grass_rough.png");
+    for tileh in 1u8..=14 {
+        write_png(
+            root,
+            &format!("opengfx/tiles/terrain_grass_slope_{tileh:02}.png"),
+        );
+        write_png(
+            root,
+            &format!("opengfx/tiles/terrain_rough_slope_{tileh:02}.png"),
+        );
+    }
+    write_png(root, "opengfx/tiles/water.png");
+    for i in 0..8 {
+        write_png(root, &format!("opengfx/tiles/shore_{i}.png"));
+    }
+    write_png(root, "opengfx/tiles/object_lighthouse.png");
+    write_png(root, "opengfx/tiles/object_transmitter.png");
+    for i in 0..19 {
+        write_png(root, &format!("opengfx/tiles/road_flat_{i:02}.png"));
+        write_png(root, &format!("opengfx/tiles/tram_flat_{i:02}.png"));
+    }
+    for id in rail_sprite_ids_for_preload() {
+        write_png(root, &format!("opengfx/tiles/rail_{id}.png"));
+    }
+    for i in 0..4 {
+        write_png(root, &format!("opengfx/tiles/truck_stop_ground_{i}.png"));
+        write_png(root, &format!("opengfx/tiles/road_depot_{i}.png"));
+    }
+    write_png(root, "opengfx/tiles/rail_depot_ne.png");
+    write_png(root, "opengfx/tiles/tunnel_road_rear.png");
+    write_png(root, "opengfx/tiles/tunnel_rail_rear.png");
+    write_png(root, "opengfx/tiles/bridge_wood_road_x.png");
+    write_png(root, "opengfx/tiles/bridge_wood_rail_x.png");
+    for spec in &HOUSE_DRAW_DATA {
+        for &sid in &[spec.s1, spec.s2] {
+            if sid != 0 {
+                let fname = house_sprite_filename(sid);
+                write_png(root, &format!("opengfx/tiles/{fname}"));
             }
         }
     }
+    for name in ["tree_00.png", "tree_07.png", "tree_14.png"] {
+        write_png(root, &format!("opengfx/tiles/{name}"));
+    }
+    for entry in &INDUSTRY_GFX_DATA {
+        for &id in &[entry.sprite_id, entry.ground_sprite_id] {
+            if id != 0 {
+                write_png(root, &format!("opengfx/tiles/industry_{id}.png"));
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod world_assets_tests {
+    use bevy::app::ScheduleRunnerPlugin;
+    use bevy::asset::AssetPlugin;
+    use bevy::image::ImagePlugin;
+    use bevy::prelude::*;
+
+    use super::{WorldAssets, stub_opengfx_tiles_for_tests};
 
     #[test]
     fn world_assets_load_hits_all_paths() {
         let dir = tempfile::tempdir().expect("tempdir");
-        stub_opengfx_tiles(dir.path());
+        stub_opengfx_tiles_for_tests(dir.path());
         let root = dir.path().to_str().expect("utf8");
 
         let mut app = App::new();

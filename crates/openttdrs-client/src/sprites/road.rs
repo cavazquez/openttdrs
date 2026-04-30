@@ -121,3 +121,56 @@ pub fn road_bits_for_render(
     }
     bits
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    const MP_ROAD: u8 = 2;
+    const MP_TB: u8 = 9;
+    const FLAT_TBL: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
+    #[test]
+    fn effective_road_bits_subtypes_and_tunnelbridge() {
+        assert_eq!(
+            effective_road_bits(0x20, 0x0F, TileKind::Road, MP_ROAD, MP_TB),
+            Some(0x0F)
+        );
+        assert_eq!(
+            effective_road_bits(0x20, 0x40, TileKind::Road, MP_ROAD, MP_TB),
+            Some(0x0A)
+        );
+        assert_eq!(
+            effective_road_bits(0x20, 0x41, TileKind::Road, MP_ROAD, MP_TB),
+            Some(0x05)
+        );
+        assert_eq!(
+            effective_road_bits(0x20, 0x80, TileKind::Road, MP_ROAD, MP_TB),
+            Some(0x08)
+        );
+        assert_eq!(
+            effective_road_bits(0x90, 0x01, TileKind::Road, MP_ROAD, MP_TB),
+            Some(0x04)
+        );
+    }
+
+    #[test]
+    fn fallback_neighbor_bits_and_indices_work() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let center = TileCoord::new(1, 1);
+        map.set_kind(center, TileKind::Road).unwrap();
+        map.set_mapt_m5(center, 0x20, 0).unwrap();
+        map.set_kind(TileCoord::new(0, 1), TileKind::Station).unwrap();
+        map.set_kind(TileCoord::new(1, 0), TileKind::Industry).unwrap();
+        map.set_kind(TileCoord::new(2, 1), TileKind::House).unwrap();
+        map.set_kind(TileCoord::new(1, 2), TileKind::Road).unwrap();
+
+        let bits = road_bits_for_render(&map, center, 3, 3, MP_ROAD, MP_TB);
+        assert_eq!(bits, 0x0F);
+        assert_eq!(road_flat_index(bits, &FLAT_TBL), 15);
+        assert!(tram_flat_sprite_index(0, 0x03, &FLAT_TBL).is_some());
+        assert_eq!(road_flat_sprite_index(12, bits, &FLAT_TBL), 11);
+        assert!(road_tile_has_tram_track(0x80));
+    }
+}

@@ -254,3 +254,139 @@ pub(crate) fn apply_remap_map_visuals(
         sync_camera_for_sim(&mut q_cam, &sim);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::app::ScheduleRunnerPlugin;
+    use bevy::asset::AssetPlugin;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::image::ImagePlugin;
+
+    use crate::render::assets::stub_opengfx_tiles_for_tests;
+
+    fn with_assets_app() -> App {
+        let dir = tempfile::tempdir().expect("tempdir");
+        stub_opengfx_tiles_for_tests(dir.path());
+        let root = dir.path().to_str().expect("utf8");
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_once()));
+        app.add_plugins(AssetPlugin {
+            file_path: root.into(),
+            ..default()
+        });
+        app.add_plugins(ImagePlugin::default());
+        app.update();
+        app.insert_resource(SimWorld::default());
+        app.insert_resource(RemapMapVisualsPending::default());
+        app
+    }
+
+    #[test]
+    fn setup_and_apply_remap_execute_main_paths() {
+        let mut app = with_assets_app();
+        let world = app.world_mut();
+
+        world.run_system_once(setup).unwrap();
+        {
+            let mut pending = world.resource_mut::<RemapMapVisualsPending>();
+            pending.pending = true;
+            pending.sync_camera = true;
+        }
+        world.run_system_once(apply_remap_map_visuals).unwrap();
+    }
+
+    #[test]
+    fn tile_kind_name_covers_all_variants() {
+        for kind in [
+            TileKind::Void,
+            TileKind::Grass,
+            TileKind::Water,
+            TileKind::Road,
+            TileKind::Rail,
+            TileKind::RoadDepot,
+            TileKind::RailDepot,
+            TileKind::RoadTunnel,
+            TileKind::RailTunnel,
+            TileKind::RoadBridge,
+            TileKind::RailBridge,
+            TileKind::House,
+            TileKind::Industry,
+            TileKind::Station,
+            TileKind::Forest,
+            TileKind::CoalField,
+            TileKind::Unknown(3),
+        ] {
+            assert!(!tile_kind_name(kind).is_empty());
+        }
+    }
+
+    #[test]
+    fn apply_remap_returns_early_when_pending_false() {
+        let mut app = with_assets_app();
+        let world = app.world_mut();
+        world.run_system_once(setup).unwrap();
+        world.run_system_once(apply_remap_map_visuals).unwrap();
+    }
+
+    #[test]
+    fn sync_camera_for_sim_handles_camera_query_variants() {
+        let mut world = World::new();
+        let sim = SimWorld {
+            loaded_file: true,
+            ..SimWorld::default()
+        };
+        world.insert_resource(sim);
+
+        // Sin cámara: no debe panicar.
+        world
+            .run_system_once(
+                |sim: Res<SimWorld>,
+                 mut q_cam: Query<
+                    (&mut Transform, &mut Projection),
+                    (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+                >| {
+                    sync_camera_for_sim(&mut q_cam, &sim);
+                },
+            )
+            .unwrap();
+
+        // Cámara ortográfica: debe ajustar escala/transform.
+        world.spawn((
+            PrimaryGameCamera,
+            Transform::default(),
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+        world
+            .run_system_once(
+                |sim: Res<SimWorld>,
+                 mut q_cam: Query<
+                    (&mut Transform, &mut Projection),
+                    (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+                >| {
+                    sync_camera_for_sim(&mut q_cam, &sim);
+                },
+            )
+            .unwrap();
+
+        // Cámara no ortográfica: sigue sin panicar (sale por early return).
+        world.spawn((
+            PrimaryGameCamera,
+            Transform::default(),
+            Projection::Perspective(PerspectiveProjection::default()),
+        ));
+        world
+            .run_system_once(
+                |sim: Res<SimWorld>,
+                 mut q_cam: Query<
+                    (&mut Transform, &mut Projection),
+                    (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+                >| {
+                    sync_camera_for_sim(&mut q_cam, &sim);
+                },
+            )
+            .unwrap();
+    }
+}

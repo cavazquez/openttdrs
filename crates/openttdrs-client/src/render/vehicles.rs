@@ -159,3 +159,68 @@ pub(crate) fn update_vehicles(
         sprite.image = trucks.for_dir(dir);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use std::collections::VecDeque;
+
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use openttdrs_core::{GameState, TileCoord, VehicleKind};
+
+    fn sample_vehicle(id: u32) -> Vehicle {
+        Vehicle {
+            id,
+            kind: VehicleKind::Truck,
+            pos: TileCoord::new(1, 1),
+            origin: TileCoord::new(1, 1),
+            dest: TileCoord::new(2, 1),
+            path: VecDeque::from([TileCoord::new(2, 1)]),
+            cargo: 0,
+            capacity: 30,
+            orders: Vec::new(),
+            current_order: 0,
+        }
+    }
+
+    #[test]
+    fn vehicle_index_and_direction_helpers_work() {
+        let mut idx = VehicleIndex::default();
+        let v = sample_vehicle(7);
+        idx.rebuild(std::slice::from_ref(&v));
+        assert_eq!(idx.by_id.get(&7), Some(&0));
+        assert!(matches!(vehicle_dir(&v), VehicleDir::Se));
+        assert_ne!(vehicle_sprite_bounds(VehicleDir::Ne), vehicle_sprite_bounds(VehicleDir::Se));
+    }
+
+    #[test]
+    fn rebuild_and_update_systems_run() {
+        let mut sim = SimWorld {
+            state: GameState::new(4, 4),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        sim.state.vehicles.push(sample_vehicle(11));
+
+        let mut world = World::new();
+        world.insert_resource(sim);
+        world.insert_resource(TruckHandles {
+            ne: Handle::default(),
+            se: Handle::default(),
+            sw: Handle::default(),
+            nw: Handle::default(),
+        });
+        world.insert_resource(VehicleIndex::default());
+
+        world.spawn((
+            VehicleSprite(11),
+            Transform::default(),
+            Sprite::default(),
+        ));
+        world.spawn((VehicleSprite(99), Transform::default(), Sprite::default()));
+
+        world.run_system_once(rebuild_vehicle_index).unwrap();
+        world.run_system_once(update_vehicles).unwrap();
+    }
+}

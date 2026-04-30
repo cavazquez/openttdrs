@@ -43,3 +43,49 @@ pub(crate) fn advance_sim(
         vehicle_index.rebuild(&sim.state.vehicles);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::advance_sim;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::*;
+
+    use crate::render::VehicleIndex;
+    use crate::state::SimWorld;
+    use crate::ui::SimHudControls;
+
+    #[test]
+    fn advance_sim_paused_does_not_step() {
+        let mut world = World::new();
+        world.insert_resource(Time::<()>::default());
+        world.insert_resource(SimHudControls {
+            paused: true,
+            ..default()
+        });
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(VehicleIndex::default());
+
+        let before = world.resource::<SimWorld>().state.tick.get();
+        world.run_system_once(advance_sim).unwrap();
+        let after = world.resource::<SimWorld>().state.tick.get();
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn advance_sim_steps_and_rebuilds_index() {
+        let mut world = World::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(std::time::Duration::from_millis(200));
+        world.insert_resource(time);
+        world.insert_resource(SimHudControls::default());
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(VehicleIndex::default());
+
+        let before = world.resource::<SimWorld>().state.tick.get();
+        world.run_system_once(advance_sim).unwrap();
+        let after = world.resource::<SimWorld>().state.tick.get();
+        assert!(after > before);
+
+    }
+}

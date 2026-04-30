@@ -73,3 +73,59 @@ pub(crate) fn animate_water(
         sprite.color = Color::srgb(v * 0.95, v * 0.99, v * 1.03);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    #[test]
+    fn animate_water_without_camera_still_updates_color() {
+        let mut world = World::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(std::time::Duration::from_millis(400));
+        world.insert_resource(time);
+        world.spawn((
+            WaterTile {
+                dark_phase: 1,
+                glitter_phase: 2,
+            },
+            GlobalTransform::IDENTITY,
+            Sprite::default(),
+        ));
+
+        world.run_system_once(animate_water).unwrap();
+
+        let mut q = world.query::<&Sprite>();
+        let color = q.single(&world).unwrap().color;
+        assert_ne!(color, Color::WHITE);
+    }
+
+    #[test]
+    fn animate_water_culls_far_entities_with_camera() {
+        let mut world = World::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(std::time::Duration::from_millis(600));
+        world.insert_resource(time);
+
+        world.spawn((
+            PrimaryGameCamera,
+            GlobalTransform::IDENTITY,
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+        world.spawn((
+            WaterTile {
+                dark_phase: 0,
+                glitter_phase: 0,
+            },
+            GlobalTransform::from_translation(Vec3::new(100_000.0, 100_000.0, 0.0)),
+            Sprite::default(),
+        ));
+
+        world.run_system_once(animate_water).unwrap();
+        let mut q = world.query::<&Sprite>();
+        let color = q.single(&world).unwrap().color;
+        assert_eq!(color, Color::WHITE);
+    }
+}

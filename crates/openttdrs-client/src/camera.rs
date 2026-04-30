@@ -139,3 +139,113 @@ pub fn move_camera(
         transform.translation.y = new_cam_pos.y;
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::window::{PrimaryWindow, WindowResolution};
+
+    #[test]
+    fn move_camera_without_camera_query_is_noop() {
+        let mut world = World::new();
+        world.insert_resource(Time::<()>::default());
+        world.insert_resource(ButtonInput::<KeyCode>::default());
+        world.insert_resource(ButtonInput::<MouseButton>::default());
+        world.insert_resource(AccumulatedMouseMotion::default());
+        world.insert_resource(AccumulatedMouseScroll::default());
+        world.insert_resource(CameraVelocity::default());
+        world.run_system_once(move_camera).unwrap();
+    }
+
+    #[test]
+    fn move_camera_handles_keyboard_drag_and_scroll() {
+        let mut world = World::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(std::time::Duration::from_millis(16));
+        world.insert_resource(time);
+
+        let mut kbd = ButtonInput::<KeyCode>::default();
+        kbd.press(KeyCode::KeyW);
+        kbd.press(KeyCode::Equal);
+        world.insert_resource(kbd);
+
+        let mut mouse = ButtonInput::<MouseButton>::default();
+        mouse.press(MouseButton::Right);
+        world.insert_resource(mouse);
+
+        world.insert_resource(AccumulatedMouseMotion {
+            delta: Vec2::new(8.0, -4.0),
+        });
+        world.insert_resource(AccumulatedMouseScroll {
+            delta: Vec2::new(0.0, 1.0),
+            ..default()
+        });
+        world.insert_resource(CameraVelocity::default());
+
+        world.spawn((
+            Window {
+                resolution: WindowResolution::new(1280, 720),
+                ..default()
+            },
+            PrimaryWindow,
+        ));
+        world.spawn((
+            PrimaryGameCamera,
+            Transform::default(),
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+
+        world.run_system_once(move_camera).unwrap();
+    }
+
+    #[test]
+    fn move_camera_handles_non_ortho_and_ctrl_s_combo() {
+        let mut world = World::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(std::time::Duration::from_millis(30));
+        world.insert_resource(time);
+
+        let mut kbd = ButtonInput::<KeyCode>::default();
+        kbd.press(KeyCode::ControlLeft);
+        kbd.press(KeyCode::KeyS);
+        kbd.press(KeyCode::Minus);
+        world.insert_resource(kbd);
+        world.insert_resource(ButtonInput::<MouseButton>::default());
+        world.insert_resource(AccumulatedMouseMotion::default());
+        world.insert_resource(AccumulatedMouseScroll::default());
+        world.insert_resource(CameraVelocity::default());
+
+        world.spawn((
+            PrimaryGameCamera,
+            Transform::default(),
+            Projection::Perspective(PerspectiveProjection::default()),
+        ));
+        world.run_system_once(move_camera).unwrap();
+    }
+
+    #[test]
+    fn move_camera_scroll_without_window_returns_after_zoom_branch() {
+        let mut world = World::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(std::time::Duration::from_millis(16));
+        world.insert_resource(time);
+        world.insert_resource(ButtonInput::<KeyCode>::default());
+        world.insert_resource(ButtonInput::<MouseButton>::default());
+        world.insert_resource(AccumulatedMouseMotion::default());
+        world.insert_resource(AccumulatedMouseScroll {
+            delta: Vec2::new(0.0, 1.0),
+            ..default()
+        });
+        world.insert_resource(CameraVelocity::default());
+
+        world.spawn((
+            PrimaryGameCamera,
+            Transform::default(),
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+
+        world.run_system_once(move_camera).unwrap();
+    }
+}

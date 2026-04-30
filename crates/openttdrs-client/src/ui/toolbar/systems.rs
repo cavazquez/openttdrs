@@ -1029,4 +1029,112 @@ mod tests {
         world.insert_resource(IndustryPanelState::default());
         world.run_system_once(handle_tile_click).unwrap();
     }
+
+    #[test]
+    fn pure_toolbar_helpers_cover_branches() {
+        assert!(matches!(
+            toolbar_group_for_action(BuildMenuAction::RailTunnel),
+            ToolbarGroup::Rail
+        ));
+        assert!(matches!(
+            toolbar_group_for_action(BuildMenuAction::BuildFactory),
+            ToolbarGroup::Economy
+        ));
+        assert!(matches!(
+            toolbar_group_for_action(BuildMenuAction::Orders),
+            ToolbarGroup::Info
+        ));
+
+        assert!(action_supports_drag(BuildMenuAction::RoadBridge));
+        assert!(action_supports_drag(BuildMenuAction::RailTunnel));
+        assert!(action_supports_drag(BuildMenuAction::Clear));
+        assert!(!action_supports_drag(BuildMenuAction::BuildHouse));
+        assert!(!action_supports_drag(BuildMenuAction::Station));
+
+        assert!(action_is_tunnel(BuildMenuAction::RoadTunnel));
+        assert!(action_is_tunnel(BuildMenuAction::RailTunnel));
+        assert!(!action_is_tunnel(BuildMenuAction::RoadBridge));
+
+        assert!(matches!(
+            command_for_action(
+                BuildMenuAction::Station,
+                TileCoord::new(1, 2),
+                &StationBuildState { orientation: 3 }
+            ),
+            Some(Command::PlaceStationDir(_, 3))
+        ));
+        assert!(matches!(
+            command_for_action(
+                BuildMenuAction::BuildCoalMine,
+                TileCoord::new(1, 2),
+                &StationBuildState::default()
+            ),
+            Some(Command::PlaceIndustryKind(_, openttdrs_core::IndustryKind::CoalMine))
+        ));
+        assert!(command_for_action(
+            BuildMenuAction::RoadTunnel,
+            TileCoord::new(1, 2),
+            &StationBuildState::default()
+        )
+        .is_none());
+
+        assert!(matches!(
+            command_for_line_action(BuildMenuAction::RoadTunnel, &[(1, 1), (3, 1)]),
+            Some(Command::PlaceRoadTunnel(_, _))
+        ));
+        assert!(matches!(
+            command_for_line_action(BuildMenuAction::RailBridge, &[(1, 1), (3, 1)]),
+            Some(Command::PlaceRailBridge(_, _))
+        ));
+        assert!(command_for_line_action(BuildMenuAction::RoadX, &[(1, 1), (3, 1)]).is_none());
+
+        assert_eq!(
+            drag_line_tiles(BuildMenuAction::RoadX, (1, 2), (4, 9)),
+            vec![(1, 2), (2, 2), (3, 2), (4, 2)]
+        );
+        assert_eq!(
+            drag_line_tiles(BuildMenuAction::RoadY, (3, 1), (0, 4)),
+            vec![(3, 1), (3, 2), (3, 3), (3, 4)]
+        );
+    }
+
+    #[test]
+    fn map_related_helpers_cover_color_and_tunnels() {
+        assert_eq!(minimap_color(TileKind::Water), Color::srgb(0.08, 0.25, 0.55));
+        assert_eq!(minimap_color(TileKind::Road), Color::srgb(0.48, 0.42, 0.32));
+        assert_eq!(
+            minimap_color(TileKind::Unknown(9)),
+            Color::srgb(0.38, 0.12, 0.45)
+        );
+
+        let mut map = Map::new_flat(6, 6, 0);
+        let c = |x: i32, y: i32| TileCoord::new(x, y);
+        map.set_height(c(1, 1), 2).unwrap();
+        map.set_height(c(3, 1), 2).unwrap();
+        map.set_kind(c(1, 1), TileKind::Road).unwrap();
+        map.set_kind(c(2, 1), TileKind::Road).unwrap();
+        map.set_kind(c(3, 1), TileKind::Road).unwrap();
+        map.set_kind(c(4, 1), TileKind::Water).unwrap();
+
+        assert!(!tunnel_placement_is_valid(
+            &map,
+            BuildMenuAction::RoadTunnel,
+            &[(1, 1), (2, 1)]
+        ));
+        assert!(tunnel_placement_is_valid(
+            &map,
+            BuildMenuAction::RoadTunnel,
+            &[(1, 1), (2, 1), (3, 1)]
+        ));
+        assert!(!tunnel_placement_is_valid(
+            &map,
+            BuildMenuAction::RoadTunnel,
+            &[(1, 1), (2, 1), (4, 1)]
+        ));
+        assert!(!tunnel_placement_is_valid(
+            &map,
+            BuildMenuAction::Road,
+            &[(1, 1), (2, 1)]
+        ));
+    }
 }

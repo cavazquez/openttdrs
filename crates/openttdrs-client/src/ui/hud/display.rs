@@ -266,13 +266,158 @@ pub(crate) fn update_tile_info_text(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::setup_tile_info_ui;
+    use super::{setup_tile_info_ui, update_tile_info_text, TileInfoText};
     use bevy::ecs::system::RunSystemOnce;
-    use bevy::prelude::World;
+    use bevy::prelude::*;
+    use bevy::sprite::Anchor;
+    use bevy::window::{PrimaryWindow, WindowResolution};
+    use openttdrs_core::{Tile, TileCoord, TileKind};
+
+    use crate::state::SimWorld;
+    use crate::ui::hud::{SelectedTileInfo, SimHudControls};
+    use crate::ui::{OrderEditState, UiToolState};
+    use crate::render::PrimaryGameCamera;
 
     #[test]
     fn setup_tile_info_ui_spawns_text() {
         let mut world = World::new();
         world.run_system_once(setup_tile_info_ui).unwrap();
+    }
+
+    #[test]
+    fn update_tile_info_text_without_ui_query_returns_early() {
+        let mut world = World::new();
+        world.insert_resource(SelectedTileInfo::default());
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(SimHudControls::default());
+        world.insert_resource(UiToolState::default());
+        world.insert_resource(OrderEditState::default());
+        world.run_system_once(update_tile_info_text).unwrap();
+    }
+
+    #[test]
+    fn update_tile_info_text_covers_road_rail_station_and_unknown() {
+        let mut world = World::new();
+        world.insert_resource(SelectedTileInfo {
+            pos: Some(TileCoord::new(1, 1)),
+        });
+        world.insert_resource(SimHudControls::default());
+        world.insert_resource(UiToolState::default());
+        world.insert_resource(OrderEditState::default());
+
+        world.spawn((
+            Window {
+                resolution: WindowResolution::new(1280, 720),
+                ..default()
+            },
+            PrimaryWindow,
+        ));
+        world.spawn((
+            PrimaryGameCamera,
+            Transform::default(),
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+        world.spawn((
+            TileInfoText,
+            Text2d::new(""),
+            Transform::default(),
+            Anchor::TOP_LEFT,
+        ));
+
+        let mut sim = SimWorld::default();
+        let c = TileCoord::new(1, 1);
+
+        // Road crossing path.
+        sim.state
+            .map
+            .set_tile(
+                c,
+                Tile {
+                    kind: TileKind::Road,
+                    mapt: 0x20,
+                    m5: 0x40,
+                    ..tile_template()
+                },
+            )
+            .unwrap();
+        world.insert_resource(sim);
+        world.run_system_once(update_tile_info_text).unwrap();
+        assert!(hud_text(&mut world).contains("Road"));
+
+        // Rail signals path.
+        {
+            let mut sim = world.resource_mut::<SimWorld>();
+            sim.state
+                .map
+                .set_tile(
+                    c,
+                    Tile {
+                        kind: TileKind::Rail,
+                        m5: 0x40 | 0x03,
+                        m3: 0xA0,
+                        m2: 0x2F,
+                        ..tile_template()
+                    },
+                )
+                .unwrap();
+        }
+        world.run_system_once(update_tile_info_text).unwrap();
+        assert!(hud_text(&mut world).contains("signals present"));
+
+        // Station coverage path.
+        {
+            let mut sim = world.resource_mut::<SimWorld>();
+            sim.state
+                .map
+                .set_tile(
+                    c,
+                    Tile {
+                        kind: TileKind::Station,
+                        ..tile_template()
+                    },
+                )
+                .unwrap();
+        }
+        world.run_system_once(update_tile_info_text).unwrap();
+        assert!(hud_text(&mut world).contains("cov r"));
+
+        // Unknown kind early-return path.
+        {
+            let mut sim = world.resource_mut::<SimWorld>();
+            sim.state
+                .map
+                .set_tile(
+                    c,
+                    Tile {
+                        kind: TileKind::Unknown(9),
+                        ..tile_template()
+                    },
+                )
+                .unwrap();
+        }
+        world.run_system_once(update_tile_info_text).unwrap();
+        assert!(hud_text(&mut world).contains("Unknown(9)"));
+    }
+
+    fn tile_template() -> Tile {
+        Tile {
+            height: 0,
+            kind: TileKind::Grass,
+            mapt: 0,
+            m5: 0,
+            m1: 0,
+            m6: 0,
+            m8: 0,
+            m3: 0,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        }
+    }
+
+    fn hud_text(world: &mut World) -> String {
+        let mut q = world.query_filtered::<&Text2d, With<TileInfoText>>();
+        q.single(world).unwrap().to_string()
     }
 }

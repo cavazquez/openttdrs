@@ -385,6 +385,13 @@ impl Map {
         Ok(())
     }
 
+    /// Sustituye la tesela en `c` (tests, fixtures y herramientas de edición).
+    pub fn set_tile(&mut self, c: TileCoord, tile: Tile) -> Result<(), MapError> {
+        let i = self.index(c).ok_or(MapError::OutOfBounds)?;
+        self.tiles[i] = tile;
+        Ok(())
+    }
+
     #[must_use]
     pub fn get_kind(&self, c: TileCoord) -> Option<TileKind> {
         let i = self.index(c)?;
@@ -751,5 +758,20 @@ mod ottdmap_binary_tests {
         let sea2 = map.get(TileCoord::new(1, 1)).expect("tile");
         assert_eq!(sea2.kind, TileKind::Water);
         assert_eq!(sea2.m5, 0);
+    }
+}
+
+#[cfg(test)]
+mod map_set_tile_tests {
+    use super::*;
+
+    #[test]
+    fn set_tile_replaces_cell() {
+        let mut m = Map::new_flat(2, 2, 0);
+        let c = TileCoord::new(0, 0);
+        let mut t = m.get(c).expect("t");
+        t.m5 = 0x2A;
+        m.set_tile(c, t).expect("ok");
+        assert_eq!(m.get(c).expect("t").m5, 0x2A);
     }
 }

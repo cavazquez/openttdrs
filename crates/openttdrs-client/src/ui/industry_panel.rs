@@ -279,6 +279,7 @@ mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::World;
+    use openttdrs_core::IndustryKind;
 
     #[test]
     fn setup_industry_panel_runs() {
@@ -302,5 +303,33 @@ mod tests {
         world.insert_resource(IndustryPanelState::default());
         world.insert_resource(SimWorld::default());
         world.run_system_once(sync_industry_panel).unwrap();
+    }
+
+    #[test]
+    fn industry_helper_functions_cover_paths() {
+        let mut map = Map::new_flat(5, 5, 0);
+        let c = |x: i32, y: i32| TileCoord::new(x, y);
+        map.set_kind(c(2, 2), TileKind::Industry).unwrap();
+        map.set_kind(c(2, 3), TileKind::Industry).unwrap();
+        map.set_kind(c(3, 3), TileKind::Industry).unwrap();
+
+        let mut sim = SimWorld::default();
+        sim.state.industries.clear();
+        sim.state.industries.push(openttdrs_core::Industry {
+            pos: c(2, 2),
+            kind: IndustryKind::Forest,
+            stock: 0,
+            capacity: 100,
+        });
+
+        let tiles = flood_industry_tiles(&map, c(2, 2));
+        assert!(tiles.len() >= 3);
+        assert!(flood_industry_tiles(&map, c(0, 0)).is_empty());
+        assert_eq!(
+            industry_kind_for_component(&map, &sim, c(2, 2)),
+            Some(IndustryKind::Forest)
+        );
+        assert_eq!(kind_label(IndustryKind::CoalMine), "Carbon");
+        assert!(format_panel_title(&map, &sim, c(2, 2)).contains("Industria"));
     }
 }

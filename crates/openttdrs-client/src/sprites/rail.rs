@@ -206,7 +206,7 @@ pub fn collect_signal_sprite_ids(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<u32> {
     out
 }
 
-/// IDs para precargar `opengfx/tiles/rail_<id>.png`: piezas de vía y **todas** las señales que
+/// IDs para precargar `assets/opengfx/tiles/rail_<id>.png`: piezas de vía y **todas** las señales que
 /// puede devolver [`signal_sprite_id`] con las bases por defecto / env (`OPENTTDRS_SIGNAL_*`).
 ///
 /// Evita `asset_server.load` sobre el rango entero `1275..1520` cuando OpenGFX no incluye cada

@@ -57,9 +57,12 @@ pub(crate) fn place_industries(
                         let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
                         let kind = classify_industry_kind_from_gfx(gfx);
                         if let Some(spec) = classify_industry_spec_from_gfx(gfx) {
-                            state
-                                .industries
-                                .push(Industry::with_tiles_spec(c, kind, spec, vec![c]));
+                            state.industries.push(Industry::with_tiles_spec(
+                                c,
+                                kind,
+                                spec,
+                                vec![c],
+                            ));
                         } else {
                             state.industries.push(Industry::new(c, kind));
                         }
@@ -169,23 +172,26 @@ fn industry_components(state: &GameState) -> Vec<Vec<TileCoord>> {
 
 type IndustryGfxRange = (u16, u16, &'static str, Option<IndustryKind>);
 
-const INDUSTRY_GFX_RANGES: [IndustryGfxRange; 16] = [
+const INDUSTRY_GFX_RANGES: [IndustryGfxRange; 19] = [
     (0, 6, "Coal Mine", Some(IndustryKind::CoalMine)),
     (7, 10, "Power Station", None),
     (11, 15, "Sawmill", None),
-    (16, 23, "Oil Refinery", Some(IndustryKind::OilWell)),
-    (24, 28, "Forest", Some(IndustryKind::Forest)),
-    (29, 32, "Printing Works", None),
-    (33, 38, "Oil Rig", Some(IndustryKind::OilWell)),
-    (39, 42, "Steel Mill", None),
-    (43, 46, "Factory", Some(IndustryKind::Factory)),
-    (47, 51, "Oil Wells", Some(IndustryKind::OilWell)),
-    (52, 57, "Farm", Some(IndustryKind::Forest)),
+    (16, 17, "Forest", Some(IndustryKind::Forest)),
+    (18, 23, "Oil Refinery", Some(IndustryKind::OilWell)),
+    (24, 28, "Oil Rig", Some(IndustryKind::OilWell)),
+    (29, 32, "Oil Wells", Some(IndustryKind::OilWell)),
+    (33, 38, "Farm", Some(IndustryKind::Forest)),
+    (39, 42, "Factory", Some(IndustryKind::Factory)),
+    (43, 46, "Printing Works", None),
+    (47, 51, "Copper Ore Mine", Some(IndustryKind::CoalMine)),
+    (52, 57, "Steel Mill", None),
     (58, 59, "Bank", None),
-    (60, 71, "Copper Ore Mine", Some(IndustryKind::CoalMine)),
-    (72, 88, "Plantations/Others", Some(IndustryKind::Forest)),
-    (89, 90, "Gold Mine", Some(IndustryKind::CoalMine)),
-    (91, 99, "Iron Ore Mine", Some(IndustryKind::CoalMine)),
+    (60, 67, "Food Processing Plant", Some(IndustryKind::Factory)),
+    (68, 75, "Paper Mill", Some(IndustryKind::Factory)),
+    (76, 88, "Gold Mine", Some(IndustryKind::CoalMine)),
+    (89, 90, "Bank", None),
+    (91, 99, "Diamond Mine", Some(IndustryKind::CoalMine)),
+    (100, 115, "Iron Ore Mine", Some(IndustryKind::CoalMine)),
 ];
 
 fn gfx_range_info(gfx: u16) -> Option<IndustryGfxRange> {
@@ -212,14 +218,14 @@ fn classify_industry_spec_from_gfx(gfx: u16) -> Option<IndustrySpec> {
     match gfx {
         0..=6 => Some(IndustrySpec::CoalMine),
         11..=15 => Some(IndustrySpec::Sawmill),
-        16..=23 => Some(IndustrySpec::OilRefinery),
-        24..=28 => Some(IndustrySpec::Forest),
-        43..=46 => Some(IndustrySpec::Factory),
-        47..=51 => Some(IndustrySpec::OilWells),
-        52..=57 => Some(IndustrySpec::Farm),
-        60..=88 => Some(IndustrySpec::CopperOreMine),
-        89..=90 => Some(IndustrySpec::GoldMine),
-        91..=99 => Some(IndustrySpec::IronOreMine),
+        16..=17 => Some(IndustrySpec::Forest),
+        18..=23 => Some(IndustrySpec::OilRefinery),
+        29..=32 => Some(IndustrySpec::OilWells),
+        33..=38 => Some(IndustrySpec::Farm),
+        39..=42 => Some(IndustrySpec::Factory),
+        47..=51 => Some(IndustrySpec::CopperOreMine),
+        72..=88 => Some(IndustrySpec::GoldMine),
+        100..=115 => Some(IndustrySpec::IronOreMine),
         _ => None,
     }
 }
@@ -245,33 +251,37 @@ mod tests {
     #[test]
     fn classify_industry_kind_matches_known_ranges() {
         assert_eq!(classify_industry_kind_from_gfx(18), IndustryKind::OilWell);
-        assert_eq!(classify_industry_kind_from_gfx(35), IndustryKind::OilWell);
-        assert_eq!(classify_industry_kind_from_gfx(44), IndustryKind::Factory);
-        assert_eq!(classify_industry_kind_from_gfx(48), IndustryKind::OilWell);
-        assert_eq!(classify_industry_kind_from_gfx(61), IndustryKind::CoalMine);
-        assert_eq!(classify_industry_kind_from_gfx(26), IndustryKind::Forest);
+        assert_eq!(classify_industry_kind_from_gfx(29), IndustryKind::OilWell);
+        assert_eq!(classify_industry_kind_from_gfx(40), IndustryKind::Factory);
+        assert_eq!(classify_industry_kind_from_gfx(48), IndustryKind::CoalMine);
+        assert_eq!(classify_industry_kind_from_gfx(61), IndustryKind::Factory);
+        assert_eq!(classify_industry_kind_from_gfx(16), IndustryKind::Forest);
     }
 
     #[test]
     fn industry_group_labels_known_and_unknown() {
-        assert_eq!(industry_group_from_gfx(43), "Factory");
+        assert_eq!(industry_group_from_gfx(40), "Factory");
         assert_eq!(industry_group_from_gfx(7), "Power Station");
         assert_eq!(industry_group_from_gfx(255), "Unknown gfx");
     }
 
     #[test]
     fn industry_group_gold_and_iron_mine_labels_match_ranges() {
-        assert_eq!(industry_group_from_gfx(89), "Gold Mine");
-        assert_eq!(industry_group_from_gfx(90), "Gold Mine");
-        assert_eq!(industry_group_from_gfx(91), "Iron Ore Mine");
-        assert_eq!(industry_group_from_gfx(99), "Iron Ore Mine");
-        assert_eq!(classify_industry_kind_from_gfx(89), IndustryKind::CoalMine);
+        assert_eq!(industry_group_from_gfx(76), "Gold Mine");
+        assert_eq!(industry_group_from_gfx(88), "Gold Mine");
+        assert_eq!(industry_group_from_gfx(89), "Bank");
+        assert_eq!(industry_group_from_gfx(99), "Diamond Mine");
+        assert_eq!(industry_group_from_gfx(100), "Iron Ore Mine");
+        assert_eq!(classify_industry_kind_from_gfx(76), IndustryKind::CoalMine);
         assert_eq!(classify_industry_kind_from_gfx(99), IndustryKind::CoalMine);
     }
 
     #[test]
     fn classify_industry_spec_matches_farm_range() {
-        assert_eq!(classify_industry_spec_from_gfx(52), Some(IndustrySpec::Farm));
+        assert_eq!(
+            classify_industry_spec_from_gfx(33),
+            Some(IndustrySpec::Farm)
+        );
     }
 
     #[test]
@@ -305,11 +315,11 @@ mod tests {
         let mut t0 = state.map.get(c0).expect("tile 0");
         t0.kind = TileKind::Industry;
         t0.m1 = 10;
-        t0.m5 = 24; // Forest
+        t0.m5 = 16; // Forest
         let mut t1 = state.map.get(c1).expect("tile 1");
         t1.kind = TileKind::Industry;
         t1.m1 = 11;
-        t1.m5 = 16; // Oil Refinery
+        t1.m5 = 18; // Oil Refinery
         let _ = state.map.set_tile(c0, t0);
         let _ = state.map.set_tile(c1, t1);
 
@@ -326,11 +336,11 @@ mod tests {
         let mut t0 = state.map.get(c0).expect("tile 0");
         t0.kind = TileKind::Industry;
         t0.m1 = 10;
-        t0.m5 = 16; // Oil Refinery
+        t0.m5 = 18; // Oil Refinery
         let mut t1 = state.map.get(c1).expect("tile 1");
         t1.kind = TileKind::Industry;
         t1.m1 = 10;
-        t1.m5 = 24; // Forest
+        t1.m5 = 16; // Forest
         let _ = state.map.set_tile(c0, t0);
         let _ = state.map.set_tile(c1, t1);
 

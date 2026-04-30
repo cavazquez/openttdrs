@@ -370,7 +370,7 @@ pub const HOUSE_DRAW_DATA: [HouseDrawSpec; 128] = [
     house_spec(1552, 64.0, 31.0, -31.0, 0.0, 1553, 54.0, 53.0, -25.0, -24.0),
 ];
 
-/// Devuelve el nombre de archivo (relativo a `opengfx/tiles/`) para un sprite de casa.
+/// Devuelve el nombre de archivo (relativo a `assets/opengfx/tiles/`) para un sprite de casa.
 /// Usa el naming genérico `house_s{id}.png` para todos los sprites extraídos.
 pub fn house_sprite_filename(sprite_id: u32) -> String {
     format!("house_s{sprite_id}.png")

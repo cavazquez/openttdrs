@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::save;
-use openttdrs_core::{Command, Map, TileCoord, TileKind, apply_command};
+use openttdrs_core::{Command, Map, TileCoord, TileKind, VehicleOrder, apply_command};
 #[cfg(not(test))]
 use std::path::Path;
 
@@ -592,7 +592,12 @@ pub(crate) fn sync_order_panel(
         out.push_str("\nSin ordenes");
     } else {
         for (i, order) in order_state.orders.iter().enumerate().take(8) {
-            out.push_str(&format!("\n{}. ({},{})", i + 1, order.x, order.y));
+            let pos = order.destination();
+            let prefix = match order {
+                VehicleOrder::Station { .. } => "S",
+                VehicleOrder::Tile(_) => "T",
+            };
+            out.push_str(&format!("\n{}. {prefix}({},{})", i + 1, pos.x, pos.y));
         }
         if order_state.orders.len() > 8 {
             out.push_str("\n...");
@@ -622,10 +627,7 @@ pub(crate) fn handle_order_panel_buttons(
                     continue;
                 };
                 order_state.orders.pop();
-                let _ = apply_command(
-                    &mut sim.state,
-                    &Command::SetVehicleOrders(vehicle_id, order_state.orders.clone()),
-                );
+                let _ = apply_order_edit(&mut sim.state, vehicle_id, &order_state.orders);
             }
             OrderPanelButton::ClearAll => {
                 let Some(vehicle_id) = order_state.vehicle_id else {
@@ -638,6 +640,26 @@ pub(crate) fn handle_order_panel_buttons(
                 );
             }
         }
+    }
+}
+
+fn apply_order_edit(
+    state: &mut openttdrs_core::GameState,
+    vehicle_id: u32,
+    orders: &[VehicleOrder],
+) -> Result<(), openttdrs_core::CommandError> {
+    if orders
+        .iter()
+        .all(|order| matches!(order, VehicleOrder::Station { .. }))
+    {
+        let stations = orders.iter().map(|order| order.destination()).collect();
+        apply_command(
+            state,
+            &Command::SetVehicleStationOrders(vehicle_id, stations),
+        )
+    } else {
+        let tiles = orders.iter().map(|order| order.destination()).collect();
+        apply_command(state, &Command::SetVehicleOrders(vehicle_id, tiles))
     }
 }
 
@@ -1066,9 +1088,13 @@ pub(crate) fn handle_tile_click(
         let Some(vehicle_id) = order_state.vehicle_id else {
             return;
         };
-        order_state.orders.push(pos);
-        let cmd = Command::SetVehicleOrders(vehicle_id, order_state.orders.clone());
-        if apply_command(&mut sim.state, &cmd).is_ok() {
+        let order = if sim.state.stations.iter().any(|station| station.pos == pos) {
+            VehicleOrder::station(pos)
+        } else {
+            VehicleOrder::tile(pos)
+        };
+        order_state.orders.push(order);
+        if apply_order_edit(&mut sim.state, vehicle_id, &order_state.orders).is_ok() {
             pending.pending = true;
         }
         return;
@@ -1303,7 +1329,8 @@ mod tests {
         world.spawn((Button, SaveMenuAction::Normalize, Interaction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
         assert_eq!(world.resource::<SimHudControls>().sim_speed, 1.0);
-        let mut q_norm = world.query_filtered::<(&Transform, &Projection), With<PrimaryGameCamera>>();
+        let mut q_norm =
+            world.query_filtered::<(&Transform, &Projection), With<PrimaryGameCamera>>();
         let (tf_norm, proj_norm) = q_norm.single(&world).unwrap();
         let Projection::Orthographic(o_norm) = proj_norm else {
             panic!("expected orthographic projection");

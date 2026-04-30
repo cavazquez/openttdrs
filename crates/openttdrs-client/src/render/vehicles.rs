@@ -71,7 +71,7 @@ pub(crate) struct TruckHandles {
 
 impl TruckHandles {
     pub(crate) fn load(asset_server: &AssetServer) -> Self {
-        let bus = asset_server.load::<Image>("opengfx/tiles/vehicle_bus_sw.png");
+        let bus = asset_server.load::<Image>("assets/opengfx/tiles/vehicle_bus_sw.png");
         Self {
             ne: bus.clone(),
             se: bus.clone(),
@@ -130,17 +130,56 @@ pub(crate) fn spawn_initial_vehicles(
             },
             Transform::from_translation(pos3).with_scale(Vec3::splat(TRUCK_SCALE)),
         ));
+        commands.spawn((
+            MapVisualLayer,
+            VehicleCargoLabel(vehicle.id),
+            Text2d::new(vehicle_cargo_label(vehicle)),
+            TextFont {
+                font_size: 8.0,
+                ..default()
+            },
+            TextColor(vehicle_cargo_color(vehicle)),
+            Transform::from_translation(vehicle_cargo_label_pos(pos3)),
+        ));
     }
 }
 
 #[derive(Component)]
 pub(crate) struct VehicleSprite(u32);
 
+#[derive(Component)]
+pub(crate) struct VehicleCargoLabel(u32);
+
+fn vehicle_cargo_label(v: &Vehicle) -> String {
+    format!("{}/{}", v.cargo, v.capacity)
+}
+
+fn vehicle_cargo_color(v: &Vehicle) -> Color {
+    if v.cargo > 0 {
+        Color::srgb(0.95, 0.9, 0.35)
+    } else {
+        Color::srgba(0.8, 0.85, 0.9, 0.72)
+    }
+}
+
+fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
+    Vec3::new(vehicle_pos.x, vehicle_pos.y + 21.0, vehicle_pos.z + 0.35)
+}
+
 pub(crate) fn update_vehicles(
     sim: Res<SimWorld>,
     trucks: Res<TruckHandles>,
     vehicle_index: Res<VehicleIndex>,
     mut q: Query<(&VehicleSprite, &mut Transform, &mut Sprite)>,
+    mut labels: Query<
+        (
+            &VehicleCargoLabel,
+            &mut Transform,
+            &mut Text2d,
+            &mut TextColor,
+        ),
+        Without<VehicleSprite>,
+    >,
 ) {
     for (vs, mut transform, mut sprite) in &mut q {
         let Some(&i) = vehicle_index.by_id.get(&vs.0) else {
@@ -157,6 +196,23 @@ pub(crate) fn update_vehicles(
         let pos3 = overlay_pos(p, xrel, yrel, w, h, vh, 1.0, v.pos.x, v.pos.y);
         transform.translation = pos3;
         sprite.image = trucks.for_dir(dir);
+    }
+
+    for (label, mut transform, mut text, mut color) in &mut labels {
+        let Some(&i) = vehicle_index.by_id.get(&label.0) else {
+            continue;
+        };
+        let Some(v) = sim.state.vehicles.get(i) else {
+            continue;
+        };
+        let dir = vehicle_dir(v);
+        let vh = tile_min_z(&sim.state.map, v.pos);
+        let p = iso(v.pos.x, v.pos.y);
+        let (xrel, yrel, w, h) = vehicle_sprite_bounds(dir);
+        let pos3 = overlay_pos(p, xrel, yrel, w, h, vh, 1.0, v.pos.x, v.pos.y);
+        transform.translation = vehicle_cargo_label_pos(pos3);
+        **text = vehicle_cargo_label(v);
+        color.0 = vehicle_cargo_color(v);
     }
 }
 
@@ -195,6 +251,11 @@ mod tests {
             vehicle_sprite_bounds(VehicleDir::Ne),
             vehicle_sprite_bounds(VehicleDir::Se)
         );
+        assert_eq!(vehicle_cargo_label(&v), "0/30");
+        assert_ne!(
+            vehicle_cargo_color(&v),
+            vehicle_cargo_color(&Vehicle { cargo: 5, ..v })
+        );
     }
 
     #[test]
@@ -217,9 +278,18 @@ mod tests {
         world.insert_resource(VehicleIndex::default());
 
         world.spawn((VehicleSprite(11), Transform::default(), Sprite::default()));
+        world.spawn((
+            VehicleCargoLabel(11),
+            Transform::default(),
+            Text2d::new(""),
+            TextColor(Color::WHITE),
+        ));
         world.spawn((VehicleSprite(99), Transform::default(), Sprite::default()));
 
         world.run_system_once(rebuild_vehicle_index).unwrap();
         world.run_system_once(update_vehicles).unwrap();
+
+        let mut labels = world.query_filtered::<&Text2d, With<VehicleCargoLabel>>();
+        assert_eq!(labels.single(&world).unwrap().to_string(), "0/30");
     }
 }

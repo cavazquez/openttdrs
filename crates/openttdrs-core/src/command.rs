@@ -23,6 +23,7 @@ pub enum Command {
     PlaceRoadBridge(TileCoord, TileCoord),
     PlaceRailBridge(TileCoord, TileCoord),
     SetVehicleOrders(u32, Vec<TileCoord>),
+    SetVehicleStationOrders(u32, Vec<TileCoord>),
     PlaceHouse(TileCoord),
     PlaceIndustry(TileCoord),
     PlaceIndustryKind(TileCoord, IndustryKind),
@@ -47,6 +48,7 @@ pub enum CommandError {
     CannotPlaceStationOnWater,
     CannotPlaceStationOnVoid,
     StationAlreadyExists,
+    StationNotFound,
     VehicleNotFound,
 }
 
@@ -113,6 +115,9 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
             BRIDGE_BUILD_COST_PER_TILE,
         ),
         Command::SetVehicleOrders(id, orders) => set_vehicle_orders(state, *id, orders.clone()),
+        Command::SetVehicleStationOrders(id, stations) => {
+            set_vehicle_station_orders(state, *id, stations.clone())
+        }
         Command::PlaceHouse(c) => {
             place_single_transport_tile(state, *c, TileKind::House, 0x30, 0x00, 50)
         }
@@ -335,7 +340,9 @@ fn clear_tile(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
         .set_mapt_m5(c, 0x00, 0x00)
         .map_err(|_| CommandError::OutOfBounds)?;
     state.stations.retain(|s| s.pos != c);
-    state.industries.retain(|industry| !industry.contains_tile(c));
+    state
+        .industries
+        .retain(|industry| !industry.contains_tile(c));
     state.economy.money -= CLEAR_TILE_COST;
     Ok(())
 }
@@ -352,6 +359,24 @@ fn set_vehicle_orders(
         return Err(CommandError::VehicleNotFound);
     };
     vehicle.set_orders(orders);
+    Ok(())
+}
+
+fn set_vehicle_station_orders(
+    state: &mut GameState,
+    id: u32,
+    stations: Vec<TileCoord>,
+) -> Result<(), CommandError> {
+    for station in &stations {
+        in_bounds(&state.map, *station)?;
+        if !state.stations.iter().any(|s| s.pos == *station) {
+            return Err(CommandError::StationNotFound);
+        }
+    }
+    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    vehicle.set_station_orders(stations);
     Ok(())
 }
 
@@ -407,58 +432,318 @@ fn place_industry_spec_sandbox(
     Ok(())
 }
 
-fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8)> {
-    const COAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
-        // Coal mine (0..=6): compacto 2x2.
-        &[(0, 0, 0), (1, 0, 1), (0, 1, 2), (1, 1, 3)],
-        // Variante con extensión lateral.
-        &[(0, 0, 0), (1, 0, 4), (2, 0, 5), (1, 1, 6)],
+#[must_use]
+pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8)> {
+    const COAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 4] = [
+        // OpenTTD _tile_table_coal_mine_0.
+        &[
+            (1, 1, 0),
+            (1, 2, 2),
+            (0, 0, 5),
+            (1, 0, 6),
+            (2, 0, 3),
+            (2, 2, 3),
+        ],
+        // OpenTTD _tile_table_coal_mine_1.
+        &[
+            (1, 1, 0),
+            (1, 2, 2),
+            (2, 0, 0),
+            (2, 1, 2),
+            (1, 0, 3),
+            (0, 0, 3),
+            (0, 1, 4),
+            (0, 2, 4),
+            (2, 2, 4),
+        ],
+        // OpenTTD _tile_table_coal_mine_2.
+        &[
+            (0, 0, 0),
+            (0, 1, 2),
+            (0, 2, 5),
+            (1, 0, 3),
+            (1, 1, 3),
+            (1, 2, 6),
+        ],
+        // OpenTTD _tile_table_coal_mine_3.
+        &[
+            (0, 1, 0),
+            (0, 2, 2),
+            (0, 3, 4),
+            (1, 0, 5),
+            (1, 1, 0),
+            (1, 2, 2),
+            (1, 3, 3),
+            (2, 0, 6),
+            (2, 1, 4),
+            (2, 2, 3),
+        ],
     ];
     const METAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
-        // Iron ore / copper ore mine (60..=71).
-        &[(0, 0, 60), (1, 0, 61), (0, 1, 62), (1, 1, 63), (2, 1, 64)],
-        &[(0, 0, 66), (1, 0, 67), (2, 0, 68), (1, 1, 69)],
+        // OpenTTD _tile_table_copper_mine_0.
+        &[
+            (0, 0, 47),
+            (0, 1, 49),
+            (0, 2, 51),
+            (1, 0, 47),
+            (1, 1, 49),
+            (1, 2, 50),
+            (2, 0, 51),
+            (2, 1, 51),
+        ],
+        // OpenTTD _tile_table_copper_mine_1.
+        &[
+            (0, 0, 50),
+            (0, 1, 47),
+            (0, 2, 49),
+            (1, 0, 47),
+            (1, 1, 49),
+            (1, 2, 51),
+            (2, 0, 51),
+            (2, 1, 47),
+            (2, 2, 49),
+        ],
     ];
     const GOLD_MINE_LAYOUTS: [&[(i32, i32, u8)]; 1] = [
-        // Gold mine (89..=90): pequeño.
-        &[(0, 0, 89), (1, 0, 90), (0, 1, 89)],
+        // OpenTTD _tile_table_gold_mine_0.
+        &[
+            (0, 0, 72),
+            (0, 1, 73),
+            (0, 2, 74),
+            (0, 3, 75),
+            (1, 0, 76),
+            (1, 1, 77),
+            (1, 2, 78),
+            (1, 3, 79),
+            (2, 0, 80),
+            (2, 1, 81),
+            (2, 2, 82),
+            (2, 3, 83),
+            (3, 0, 84),
+            (3, 1, 85),
+            (3, 2, 86),
+            (3, 3, 87),
+        ],
     ];
     const FOREST_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
-        // Forest (24..=28): mancha irregular.
-        &[(0, 0, 24), (1, 0, 25), (2, 0, 26), (0, 1, 27), (2, 1, 28)],
-        // Variante más compacta.
-        &[(0, 0, 24), (1, 0, 25), (0, 1, 26), (1, 1, 27), (2, 1, 28)],
+        // OpenTTD _tile_table_forest_0.
+        &[
+            (0, 0, 16),
+            (0, 1, 16),
+            (0, 2, 16),
+            (0, 3, 16),
+            (1, 0, 16),
+            (1, 1, 16),
+            (1, 2, 16),
+            (1, 3, 16),
+            (2, 0, 16),
+            (2, 1, 16),
+            (2, 2, 16),
+            (2, 3, 16),
+            (3, 0, 16),
+            (3, 1, 16),
+            (3, 2, 16),
+            (3, 3, 16),
+            (1, 4, 16),
+            (2, 4, 16),
+        ],
+        // OpenTTD _tile_table_forest_1.
+        &[
+            (0, 0, 16),
+            (1, 0, 16),
+            (2, 0, 16),
+            (3, 0, 16),
+            (4, 0, 16),
+            (0, 1, 16),
+            (1, 1, 16),
+            (2, 1, 16),
+            (3, 1, 16),
+            (4, 1, 16),
+            (0, 2, 16),
+            (1, 2, 16),
+            (2, 2, 16),
+            (3, 2, 16),
+            (4, 2, 16),
+            (0, 3, 16),
+            (1, 3, 16),
+            (2, 3, 16),
+            (3, 3, 16),
+            (4, 3, 16),
+            (1, 4, 16),
+            (2, 4, 16),
+            (3, 4, 16),
+        ],
     ];
-    const FARM_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
-        // Farm (52..=57): footprint más ancho.
-        &[(0, 0, 52), (1, 0, 53), (2, 0, 54), (0, 1, 55), (1, 1, 56), (2, 1, 57)],
-        &[(0, 0, 52), (1, 0, 53), (0, 1, 54), (1, 1, 55), (2, 1, 56)],
+    const FARM_LAYOUTS: [&[(i32, i32, u8)]; 3] = [
+        // OpenTTD _tile_table_farm_0.
+        &[
+            (1, 0, 33),
+            (1, 1, 34),
+            (1, 2, 36),
+            (0, 0, 37),
+            (0, 1, 37),
+            (0, 2, 36),
+            (2, 0, 35),
+            (2, 1, 38),
+            (2, 2, 38),
+        ],
+        // OpenTTD _tile_table_farm_1.
+        &[
+            (1, 1, 33),
+            (1, 2, 34),
+            (0, 0, 35),
+            (0, 1, 36),
+            (0, 2, 36),
+            (0, 3, 35),
+            (1, 0, 37),
+            (1, 3, 38),
+            (2, 0, 37),
+            (2, 1, 37),
+            (2, 2, 38),
+            (2, 3, 38),
+        ],
+        // OpenTTD _tile_table_farm_2.
+        &[
+            (2, 0, 33),
+            (2, 1, 34),
+            (0, 0, 36),
+            (0, 1, 36),
+            (0, 2, 37),
+            (0, 3, 37),
+            (1, 0, 35),
+            (1, 1, 38),
+            (1, 2, 38),
+            (1, 3, 37),
+            (2, 2, 37),
+            (2, 3, 35),
+        ],
     ];
     const OIL_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
-        // Oil wells (47..=51): pozo + equipos.
-        &[(0, 0, 47), (1, 0, 48), (0, 1, 49), (1, 1, 50)],
-        // Variante pequeña en L.
-        &[(0, 0, 47), (1, 0, 48), (0, 1, 51)],
+        // OpenTTD _tile_table_oil_well_0.
+        &[(0, 0, 29), (1, 0, 29), (2, 0, 29), (0, 1, 29), (0, 2, 29)],
+        // OpenTTD _tile_table_oil_well_1.
+        &[(0, 0, 29), (1, 0, 29), (1, 1, 29), (2, 2, 29), (2, 3, 29)],
     ];
     const REFINERY_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
-        // Oil refinery (16..=23): edificio industrial más grande.
-        &[(0, 0, 16), (1, 0, 17), (2, 0, 18), (0, 1, 19), (1, 1, 20), (2, 1, 21)],
-        &[(0, 0, 22), (1, 0, 23), (0, 1, 16), (1, 1, 17), (2, 1, 18)],
+        // OpenTTD _tile_table_oil_refinery_0.
+        &[
+            (0, 0, 20),
+            (0, 1, 21),
+            (0, 2, 22),
+            (0, 3, 21),
+            (1, 0, 20),
+            (1, 1, 19),
+            (1, 2, 22),
+            (1, 3, 20),
+            (2, 1, 18),
+            (2, 2, 18),
+            (2, 3, 18),
+            (3, 2, 18),
+            (3, 3, 18),
+            (2, 0, 23),
+            (3, 1, 23),
+        ],
+        // OpenTTD _tile_table_oil_refinery_1.
+        &[
+            (0, 0, 18),
+            (0, 1, 18),
+            (0, 2, 21),
+            (0, 3, 22),
+            (0, 4, 20),
+            (1, 0, 18),
+            (1, 1, 18),
+            (1, 2, 19),
+            (1, 3, 20),
+            (2, 0, 18),
+            (2, 1, 18),
+            (2, 2, 19),
+            (2, 3, 22),
+            (1, 4, 23),
+            (2, 4, 23),
+        ],
     ];
     const FACTORY_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
-        // Factory (43..=46): bloque principal.
-        &[(0, 0, 43), (1, 0, 44), (2, 0, 45), (0, 1, 46), (1, 1, 43), (2, 1, 44)],
-        // Variante escalonada.
-        &[(0, 0, 43), (1, 0, 44), (0, 1, 45), (1, 1, 46), (2, 1, 43)],
+        // OpenTTD _tile_table_factory_0.
+        &[
+            (0, 0, 39),
+            (0, 1, 40),
+            (1, 0, 41),
+            (1, 1, 42),
+            (0, 2, 39),
+            (0, 3, 40),
+            (1, 2, 41),
+            (1, 3, 42),
+            (2, 1, 39),
+            (2, 2, 40),
+            (3, 1, 41),
+            (3, 2, 42),
+        ],
+        // OpenTTD _tile_table_factory_1.
+        &[
+            (0, 0, 39),
+            (0, 1, 40),
+            (1, 0, 41),
+            (1, 1, 42),
+            (2, 0, 39),
+            (2, 1, 40),
+            (3, 0, 41),
+            (3, 1, 42),
+            (1, 2, 39),
+            (1, 3, 40),
+            (2, 2, 41),
+            (2, 3, 42),
+        ],
     ];
-    const SAWMILL_LAYOUTS: [&[(i32, i32, u8)]; 1] = [
-        // Sawmill (11..=15): mediano.
-        &[(0, 0, 11), (1, 0, 12), (0, 1, 13), (1, 1, 14), (2, 1, 15)],
+    const SAWMILL_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+        // OpenTTD _tile_table_sawmill_0.
+        &[
+            (1, 0, 14),
+            (1, 1, 12),
+            (1, 2, 11),
+            (2, 0, 14),
+            (2, 1, 13),
+            (0, 0, 15),
+            (0, 1, 15),
+            (0, 2, 12),
+        ],
+        // OpenTTD _tile_table_sawmill_1.
+        &[
+            (0, 0, 15),
+            (0, 1, 11),
+            (0, 2, 14),
+            (1, 0, 15),
+            (1, 1, 13),
+            (1, 2, 12),
+            (2, 0, 11),
+            (2, 1, 13),
+        ],
+    ];
+    const IRON_MINE_LAYOUTS: [&[(i32, i32, u8)]; 1] = [
+        // OpenTTD _tile_table_iron_mine_0.
+        &[
+            (0, 0, 100),
+            (0, 1, 101),
+            (0, 2, 102),
+            (0, 3, 103),
+            (1, 0, 104),
+            (1, 1, 105),
+            (1, 2, 106),
+            (1, 3, 107),
+            (2, 0, 108),
+            (2, 1, 109),
+            (2, 2, 110),
+            (2, 3, 111),
+            (3, 0, 112),
+            (3, 1, 113),
+            (3, 2, 114),
+            (3, 3, 115),
+        ],
     ];
 
     let offsets_and_gfx = match spec {
         IndustrySpec::CoalMine => choose_layout(c, &COAL_MINE_LAYOUTS),
-        IndustrySpec::IronOreMine | IndustrySpec::CopperOreMine => choose_layout(c, &METAL_MINE_LAYOUTS),
+        IndustrySpec::IronOreMine => choose_layout(c, &IRON_MINE_LAYOUTS),
+        IndustrySpec::CopperOreMine => choose_layout(c, &METAL_MINE_LAYOUTS),
         IndustrySpec::GoldMine => choose_layout(c, &GOLD_MINE_LAYOUTS),
         IndustrySpec::Forest => choose_layout(c, &FOREST_LAYOUTS),
         IndustrySpec::Farm => choose_layout(c, &FARM_LAYOUTS),
@@ -475,11 +760,12 @@ fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8)> {
 }
 
 fn choose_layout<'a>(c: TileCoord, layouts: &'a [&'a [(i32, i32, u8)]]) -> &'a [(i32, i32, u8)] {
-    let seed = (c.x as i64).wrapping_mul(31).wrapping_add((c.y as i64).wrapping_mul(17));
+    let seed = (c.x as i64)
+        .wrapping_mul(31)
+        .wrapping_add((c.y as i64).wrapping_mul(17));
     let idx = seed.unsigned_abs() as usize % layouts.len();
     layouts[idx]
 }
-
 
 fn in_bounds(map: &crate::map::Map, c: TileCoord) -> Result<(), CommandError> {
     if map.get(c).is_none() {
@@ -625,6 +911,35 @@ mod tests {
     }
 
     #[test]
+    fn set_vehicle_station_orders_requires_existing_stations() {
+        let mut s = GameState::new(8, 8);
+        s.vehicles.push(crate::Vehicle::new(
+            7,
+            crate::VehicleKind::Truck,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        ));
+        let missing = apply_command(
+            &mut s,
+            &Command::SetVehicleStationOrders(7, vec![TileCoord::new(2, 0)]),
+        )
+        .unwrap_err();
+        assert_eq!(missing, CommandError::StationNotFound);
+
+        s.stations.push(crate::Station::new(TileCoord::new(2, 0)));
+        apply_command(
+            &mut s,
+            &Command::SetVehicleStationOrders(7, vec![TileCoord::new(2, 0)]),
+        )
+        .unwrap();
+        assert!(matches!(
+            s.vehicles[0].orders[0],
+            crate::VehicleOrder::Station { .. }
+        ));
+        assert_eq!(s.vehicles[0].dest, TileCoord::new(2, 0));
+    }
+
+    #[test]
     fn sandbox_commands_place_visible_tile_kinds() {
         let mut s = GameState::new(8, 8);
         apply_command(&mut s, &Command::PlaceHouse(TileCoord::new(1, 1))).unwrap();
@@ -667,7 +982,11 @@ mod tests {
     fn clear_any_industry_tile_removes_whole_industry_footprint() {
         let mut s = GameState::new(10, 10);
         let origin = TileCoord::new(2, 2);
-        apply_command(&mut s, &Command::PlaceIndustryKind(origin, IndustryKind::Factory)).unwrap();
+        apply_command(
+            &mut s,
+            &Command::PlaceIndustryKind(origin, IndustryKind::Factory),
+        )
+        .unwrap();
         assert_eq!(s.industries.len(), 1);
         let target_inside = TileCoord::new(3, 2);
         apply_command(&mut s, &Command::ClearTile(target_inside)).unwrap();

@@ -182,22 +182,7 @@ pub(crate) fn update_tile_info_text(
         let gfx9 = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
         format!(" gfx9:{} m6:0x{:02X} ind:{}", gfx9, tile.m6, tile.m1 & 0x7F)
     } else if tile.kind == TileKind::Station {
-        let coverage = station_coverage_at(
-            &sim.state.map,
-            &sim.state.industries,
-            pos,
-            STATION_COVERAGE_RADIUS,
-        );
-        format!(
-            " cov r{} acc mail:{} goods:{} src coal:{} wood:{} oil:{} stock:{}",
-            STATION_COVERAGE_RADIUS,
-            coverage.accepts_mail,
-            coverage.accepts_goods,
-            coverage.supplies_coal,
-            coverage.supplies_wood,
-            coverage.supplies_oil,
-            coverage.supplied_stock
-        )
+        station_details_text(&sim, pos)
     } else {
         String::new()
     };
@@ -265,15 +250,41 @@ pub(crate) fn update_tile_info_text(
     );
 }
 
+fn station_details_text(sim: &SimWorld, pos: openttdrs_core::TileCoord) -> String {
+    let coverage = station_coverage_at(
+        &sim.state.map,
+        &sim.state.industries,
+        pos,
+        STATION_COVERAGE_RADIUS,
+    );
+    let station_line = sim
+        .state
+        .stations
+        .iter()
+        .find(|station| station.pos == pos)
+        .map(|station| format!("stock:{} income:{}", station.stock, station.income))
+        .unwrap_or_else(|| "stock:n/d income:n/d".to_string());
+    format!(
+        "\nStation {station_line}\nCoverage r{} accepts mail:{} goods:{}\nSupplies coal:{} wood:{} oil:{} source stock:{}",
+        STATION_COVERAGE_RADIUS,
+        coverage.accepts_mail,
+        coverage.accepts_goods,
+        coverage.supplies_coal,
+        coverage.supplies_wood,
+        coverage.supplies_oil,
+        coverage.supplied_stock
+    )
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::{TileInfoText, setup_tile_info_ui, update_tile_info_text};
+    use super::{TileInfoText, setup_tile_info_ui, station_details_text, update_tile_info_text};
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
     use bevy::sprite::Anchor;
     use bevy::window::{PrimaryWindow, WindowResolution};
-    use openttdrs_core::{Tile, TileCoord, TileKind};
+    use openttdrs_core::{Industry, IndustryKind, Station, Tile, TileCoord, TileKind};
 
     use crate::render::PrimaryGameCamera;
     use crate::state::SimWorld;
@@ -379,9 +390,16 @@ mod tests {
                     },
                 )
                 .unwrap();
+            sim.state.stations.push(Station {
+                pos: c,
+                stock: 12,
+                income: 144,
+            });
         }
         world.run_system_once(update_tile_info_text).unwrap();
-        assert!(hud_text(&mut world).contains("cov r"));
+        let station_text = hud_text(&mut world);
+        assert!(station_text.contains("Station stock:12 income:144"));
+        assert!(station_text.contains("Coverage r"));
 
         // Unknown kind early-return path.
         {
@@ -421,5 +439,38 @@ mod tests {
     fn hud_text(world: &mut World) -> String {
         let mut q = world.query_filtered::<&Text2d, With<TileInfoText>>();
         q.single(world).unwrap().to_string()
+    }
+
+    #[test]
+    fn station_details_text_includes_stock_income_and_sources() {
+        let mut sim = SimWorld::default();
+        let station_pos = TileCoord::new(2, 2);
+        let industry_pos = TileCoord::new(3, 2);
+        sim.state
+            .map
+            .set_kind(station_pos, TileKind::Station)
+            .unwrap();
+        sim.state
+            .map
+            .set_kind(industry_pos, TileKind::Industry)
+            .unwrap();
+        sim.state.stations.push(Station {
+            pos: station_pos,
+            stock: 7,
+            income: 84,
+        });
+        sim.state.industries.push(Industry {
+            pos: industry_pos,
+            tiles: vec![industry_pos],
+            spec: None,
+            kind: IndustryKind::CoalMine,
+            stock: 42,
+            capacity: 100,
+        });
+
+        let text = station_details_text(&sim, station_pos);
+        assert!(text.contains("stock:7 income:84"));
+        assert!(text.contains("coal:"));
+        assert!(text.contains("source stock:42"));
     }
 }

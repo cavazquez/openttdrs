@@ -46,6 +46,25 @@ impl StationCoverage {
 }
 
 #[must_use]
+pub const fn station_covers_tile(station_pos: TileCoord, tile: TileCoord, radius: i32) -> bool {
+    (tile.x - station_pos.x).abs() <= radius && (tile.y - station_pos.y).abs() <= radius
+}
+
+#[must_use]
+pub fn industry_in_station_coverage(
+    industry: &Industry,
+    station_pos: TileCoord,
+    radius: i32,
+) -> bool {
+    industry
+        .tiles
+        .iter()
+        .copied()
+        .chain(std::iter::once(industry.pos))
+        .any(|tile| station_covers_tile(station_pos, tile, radius))
+}
+
+#[must_use]
 pub fn station_coverage_at(
     map: &Map,
     industries: &[Industry],
@@ -68,13 +87,7 @@ pub fn station_coverage_at(
     }
 
     for industry in industries {
-        let in_range = industry
-            .tiles
-            .iter()
-            .copied()
-            .chain(std::iter::once(industry.pos))
-            .any(|tile| (tile.x - pos.x).abs() <= radius && (tile.y - pos.y).abs() <= radius);
-        if !in_range {
+        if !industry_in_station_coverage(industry, pos, radius) {
             continue;
         }
         coverage.supplied_stock = coverage.supplied_stock.saturating_add(industry.stock);

@@ -11,13 +11,14 @@ use openttdrs_core::{IndustryKind, IndustrySpec, Map, TileCoord, TileKind};
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
 use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
-use crate::state::bootstrap::industry_group_from_gfx;
 use crate::state::SimWorld;
+use crate::state::bootstrap::industry_group_from_gfx;
 use crate::ui::toolbar::BuildMenuUi;
 
 const PREVIEW_TEX_W: u32 = 320;
 const PREVIEW_TEX_H: u32 = 180;
 const PREVIEW_SCALE_MUL: f32 = 0.62;
+const UI_FONT: &str = "static/fonts/DejaVuSansMono.ttf";
 
 #[derive(Resource, Default)]
 pub(crate) struct IndustryPanelState {
@@ -76,7 +77,10 @@ fn flood_industry_tiles(map: &Map, start: TileCoord) -> Vec<TileCoord> {
     out
 }
 
-fn dominant_gfx_for_component(map: &Map, anchor: TileCoord) -> Option<(&'static str, TileCoord, u16)> {
+fn dominant_gfx_for_component(
+    map: &Map,
+    anchor: TileCoord,
+) -> Option<(&'static str, TileCoord, u16)> {
     let tiles = flood_industry_tiles(map, anchor);
     if tiles.is_empty() {
         return None;
@@ -149,28 +153,31 @@ fn format_panel_title(map: &Map, sim: &SimWorld, focus: TileCoord) -> String {
     if let Some((gfx_label, _coord, _gfx)) = dominant_gfx_for_component(map, focus)
         && gfx_label != "Unknown gfx"
     {
-        return format!("Industria — {} · GFX", gfx_label);
+        return format!("Industria - {} - GFX", gfx_label);
     }
     if let Some((kind, spec, _, _, origin)) = industry_stats_for_component(map, sim, focus) {
-        // Priorizamos la especie concreta de industria cuando está disponible.
         return if let Some(spec) = spec {
-            format!("Industria — {} · Sim", spec_label(spec))
+            format!("Industria - {} - Sim", spec_label(spec))
         } else if let Some(tile) = map.get(origin) {
             let gfx = industry_gfx(&tile);
             let gfx_label = industry_group_from_gfx(gfx);
             if gfx_label != "Unknown gfx" {
-                format!("Industria — {} · GFX", gfx_label)
+                format!("Industria - {} - GFX", gfx_label)
             } else {
-                format!("Industria — {} · Sim", kind_label(kind))
+                format!("Industria - {} - Sim", kind_label(kind))
             }
         } else {
-            format!("Industria — {} · Sim", kind_label(kind))
+            format!("Industria - {} - Sim", kind_label(kind))
         };
     }
-    format!("Industria — Sin datos de simulacion")
+    format!("Industria - Sin datos de simulacion")
 }
 
-pub(crate) fn setup_industry_panel(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+pub(crate) fn setup_industry_panel(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    asset_server: Res<AssetServer>,
+) {
     let image = Image::new_target_texture(
         PREVIEW_TEX_W,
         PREVIEW_TEX_H,
@@ -178,6 +185,7 @@ pub(crate) fn setup_industry_panel(mut commands: Commands, mut images: ResMut<As
         None,
     );
     let rt_handle = images.add(image);
+    let ui_font = asset_server.load::<Font>(UI_FONT);
 
     commands.spawn((
         Camera2d,
@@ -231,6 +239,7 @@ pub(crate) fn setup_industry_panel(mut commands: Commands, mut images: ResMut<As
                     IndustryPanelTitle,
                     Text::new("Industria"),
                     TextFont {
+                        font: ui_font.clone(),
                         font_size: 14.0,
                         ..default()
                     },
@@ -254,6 +263,7 @@ pub(crate) fn setup_industry_panel(mut commands: Commands, mut images: ResMut<As
                     b.spawn((
                         Text::new("✕"),
                         TextFont {
+                            font: ui_font.clone(),
                             font_size: 13.0,
                             ..default()
                         },
@@ -273,6 +283,7 @@ pub(crate) fn setup_industry_panel(mut commands: Commands, mut images: ResMut<As
                 IndustryPanelDetails,
                 Text::new("Stock: --"),
                 TextFont {
+                    font: ui_font,
                     font_size: 12.0,
                     ..default()
                 },
@@ -341,13 +352,8 @@ pub(crate) fn sync_industry_panel(
             industry_stats_for_component(&sim.state.map, &sim, focus)
         {
             let (focus_gfx_label, _preview_anchor, focus_gfx) =
-                dominant_gfx_for_component(&sim.state.map, focus)
-                    .unwrap_or(("n/d", focus, 0));
-            let industry_id = sim
-                .state
-                .map
-                .get(origin)
-                .map_or(0, |tile| tile.m1);
+                dominant_gfx_for_component(&sim.state.map, focus).unwrap_or(("n/d", focus, 0));
+            let industry_id = sim.state.map.get(origin).map_or(0, |tile| tile.m1);
             **details = format!(
                 "Tipo Sim: {} | Tipo GFX: {} | Stock: {stock}/{capacity}\nOrigen sim: ({}, {}) | Industry ID(m1): {} | Tiles conectadas: {tile_count} | gfx9(raw): {focus_gfx}",
                 spec.map_or_else(|| kind_label(kind), spec_label),
@@ -357,7 +363,11 @@ pub(crate) fn sync_industry_panel(
                 industry_id
             );
         } else {
-            let gfx9 = sim.state.map.get(focus).map_or(0, |tile| industry_gfx(&tile));
+            let gfx9 = sim
+                .state
+                .map
+                .get(focus)
+                .map_or(0, |tile| industry_gfx(&tile));
             **details = format!(
                 "Tipo: desconocido en sim | GFX: n/d | Stock: n/d\nTiles conectadas: {tile_count} | gfx9(raw): {gfx9}"
             );
@@ -397,15 +407,24 @@ pub(crate) fn sync_industry_panel(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use bevy::asset::AssetPlugin;
     use bevy::ecs::system::RunSystemOnce;
-    use bevy::prelude::World;
+    use bevy::prelude::{App, MinimalPlugins, World};
     use openttdrs_core::IndustryKind;
 
     #[test]
     fn setup_industry_panel_runs() {
-        let mut world = World::new();
-        world.init_resource::<Assets<Image>>();
-        world.run_system_once(setup_industry_panel).unwrap();
+        let asset_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins).add_plugins(AssetPlugin {
+            file_path: asset_root.into(),
+            ..default()
+        });
+        app.world_mut().init_resource::<Assets<Image>>();
+        app.init_asset::<Font>();
+        app.world_mut()
+            .run_system_once(setup_industry_panel)
+            .unwrap();
     }
 
     #[test]
@@ -484,11 +503,11 @@ mod tests {
         let mut t0 = map.get(c0).expect("tile 0");
         t0.kind = TileKind::Industry;
         t0.m1 = 7;
-        t0.m5 = 16; // Oil Refinery
+        t0.m5 = 18; // Oil Refinery
         let mut t1 = map.get(c1).expect("tile 1");
         t1.kind = TileKind::Industry;
         t1.m1 = 7;
-        t1.m5 = 24; // Forest
+        t1.m5 = 16; // Forest
         let _ = map.set_tile(c0, t0);
         let _ = map.set_tile(c1, t1);
 

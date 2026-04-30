@@ -130,6 +130,9 @@ Notas:
 - El modo de gráficos es obligatorio: `--8bpp` o `--32bpp`.
 - La cache de descargas se guarda en `/.downloads/openttd/` (ignorada por git).
 - Los assets finales quedan bajo `assets/`.
+- Fuente versionada: `static/fonts/DejaVuSansMono.ttf` se mantiene fuera de `assets/` para que la
+  UI de Bevy pueda mostrar texto UTF-8 con acentos (`Fábrica`, `Refinería`, etc.). `assets/`
+  sigue siendo generado/descargado y queda ignorado.
 
 Si preferís scripts individuales:
 

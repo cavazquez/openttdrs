@@ -16,7 +16,7 @@ pub mod tick;
 pub mod tnbp_decode;
 pub mod vehicle;
 
-pub use command::{Command, CommandError, apply_command};
+pub use command::{Command, CommandError, apply_command, industry_template};
 pub use industry::{
     INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, IndustrySpec, industry_produce_period_ticks,
 };
@@ -28,13 +28,16 @@ pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::find_path;
 pub use save::SaveError;
 pub use save::load_from_str;
-pub use station::{STATION_COVERAGE_RADIUS, Station, StationCoverage, station_coverage_at};
+pub use station::{
+    STATION_COVERAGE_RADIUS, Station, StationCoverage, industry_in_station_coverage,
+    station_coverage_at, station_covers_tile,
+};
 pub use tick::GameTick;
 pub use tnbp_decode::{
     JgrTunnelRecord, SlPrimitive, SlTableField, TnbpDecodeError, TnbpDecoded, decode_tnbp_blob,
     jgr_tunnels_from_decoded, read_sl_gamma, split_sl_gamma_segments, tnbp_blob_to_json_value,
 };
-pub use vehicle::{Vehicle, VehicleKind};
+pub use vehicle::{Vehicle, VehicleKind, VehicleOrder};
 
 /// Contadores acumulativos de la simulación (carga/descarga, producción).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -138,32 +141,49 @@ impl GameState {
                 u64::from(industry.stock.saturating_sub(before));
         }
 
-        // Carga: vehículo en posición de industria sin cargo → toma lo disponible.
+        let mut loaded_this_tick = vec![false; self.vehicles.len()];
+
+        // Carga: el vehículo toma cargo de industrias dentro de la cobertura de una estación cercana.
         for i in 0..self.vehicles.len() {
             let vpos = self.vehicles[i].pos;
             let vcap = self.vehicles[i].capacity;
-            if self.vehicles[i].cargo == 0
-                && let Some(ind) = self
-                    .industries
-                    .iter_mut()
-                    .find(|ind| ind.contains_tile(vpos))
-            {
+            let Some(station_pos) = self.station_covering_tile(vpos) else {
+                continue;
+            };
+            if self.vehicles[i].cargo != 0 {
+                continue;
+            }
+            if let Some(ind) = self.industries.iter_mut().find(|ind| {
+                ind.stock > 0
+                    && station::industry_in_station_coverage(
+                        ind,
+                        station_pos,
+                        STATION_COVERAGE_RADIUS,
+                    )
+            }) {
                 let load = ind.stock.min(vcap);
                 self.vehicles[i].cargo = load;
                 ind.stock -= load;
                 if load > 0 {
+                    loaded_this_tick[i] = true;
                     self.stats.cargo_pickups += 1;
                     self.stats.cargo_units_loaded += u64::from(load);
                 }
             }
         }
 
-        // Descarga: vehículo en posición de estación con cargo → entrega.
+        // Descarga: el vehículo entrega en la estación cuya cobertura pisa.
         for i in 0..self.vehicles.len() {
+            if loaded_this_tick[i] {
+                continue;
+            }
             let vpos = self.vehicles[i].pos;
             let vcargo = self.vehicles[i].cargo;
+            let Some(station_idx) = self.station_index_covering_tile(vpos) else {
+                continue;
+            };
             if vcargo > 0
-                && let Some(st) = self.stations.iter_mut().find(|st| st.pos == vpos)
+                && let Some(st) = self.stations.get_mut(station_idx)
             {
                 st.stock += vcargo;
                 st.income += u64::from(vcargo);
@@ -189,6 +209,24 @@ impl GameState {
         for vehicle in &mut self.vehicles {
             vehicle.step();
         }
+    }
+
+    fn station_covering_tile(&self, tile: TileCoord) -> Option<TileCoord> {
+        self.station_index_covering_tile(tile)
+            .and_then(|idx| self.stations.get(idx).map(|station| station.pos))
+    }
+
+    fn station_index_covering_tile(&self, tile: TileCoord) -> Option<usize> {
+        self.stations
+            .iter()
+            .enumerate()
+            .filter(|(_, station)| {
+                station::station_covers_tile(station.pos, tile, STATION_COVERAGE_RADIUS)
+            })
+            .min_by_key(|(_, station)| {
+                (station.pos.x - tile.x).abs() + (station.pos.y - tile.y).abs()
+            })
+            .map(|(idx, _)| idx)
     }
 
     /// Serializa el estado a JSON (UTF-8) para guardado o depuración.
@@ -330,6 +368,29 @@ mod tests {
     }
 
     #[test]
+    fn vehicle_loads_from_industry_covered_by_nearby_station() {
+        let mut s = GameState::new(12, 8);
+        let ipos = TileCoord::new(2, 2);
+        let station_pos = TileCoord::new(6, 2);
+        let vehicle_pos = TileCoord::new(5, 2);
+        let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
+        ind.stock = 50;
+        s.industries.push(ind);
+        s.stations.push(Station::new(station_pos));
+        s.vehicles.push(Vehicle::new(
+            0,
+            VehicleKind::Truck,
+            vehicle_pos,
+            station_pos,
+        ));
+
+        s.step();
+
+        assert_eq!(s.vehicles[0].cargo, VEHICLE_CAPACITY.min(50));
+        assert_eq!(s.industries[0].stock, 50 - VEHICLE_CAPACITY.min(50));
+    }
+
+    #[test]
     fn vehicle_delivers_to_station() {
         let mut s = GameState::new(8, 8);
         let ipos = TileCoord::new(0, 0);
@@ -351,6 +412,27 @@ mod tests {
         assert_eq!(s.vehicles[0].cargo, 0);
         assert!(s.stations[0].income > 0);
         assert!(s.economy.money > CompanyEconomy::default().money);
+    }
+
+    #[test]
+    fn vehicle_delivers_when_inside_station_coverage() {
+        let mut s = GameState::new(12, 8);
+        let station_pos = TileCoord::new(6, 2);
+        let vehicle_pos = TileCoord::new(3, 2);
+        s.stations.push(Station::new(station_pos));
+        s.vehicles.push(Vehicle::new(
+            0,
+            VehicleKind::Truck,
+            vehicle_pos,
+            station_pos,
+        ));
+        s.vehicles[0].cargo = 17;
+
+        s.step();
+
+        assert_eq!(s.vehicles[0].cargo, 0);
+        assert_eq!(s.stations[0].stock, 17);
+        assert_eq!(s.stations[0].income, 17);
     }
 
     #[test]
@@ -531,6 +613,42 @@ mod tests {
         v.step();
         assert_eq!(v.pos, TileCoord::new(1, 1));
         assert_eq!(v.dest, TileCoord::new(1, 0));
+    }
+
+    #[test]
+    fn vehicle_with_station_orders_cycles_station_destinations() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Truck,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.set_station_orders(vec![TileCoord::new(1, 0), TileCoord::new(1, 1)]);
+        assert!(matches!(v.orders[0], VehicleOrder::Station { .. }));
+        v.step();
+        assert_eq!(v.pos, TileCoord::new(1, 0));
+        assert_eq!(v.dest, TileCoord::new(1, 1));
+    }
+
+    #[test]
+    fn legacy_tile_orders_deserialize_as_tile_orders() {
+        let json = r#"{
+            "id": 1,
+            "kind": "Truck",
+            "pos": {"x": 0, "y": 0},
+            "origin": {"x": 0, "y": 0},
+            "dest": {"x": 1, "y": 0},
+            "cargo": 0,
+            "capacity": 20,
+            "path": [],
+            "orders": [{"x": 1, "y": 0}],
+            "current_order": 0
+        }"#;
+
+        let vehicle: Vehicle = serde_json::from_str(json).expect("legacy vehicle json");
+
+        assert!(matches!(vehicle.orders[0], VehicleOrder::Tile(_)));
+        assert_eq!(vehicle.orders[0].destination(), TileCoord::new(1, 0));
     }
 
     #[test]

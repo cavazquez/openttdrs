@@ -33,52 +33,61 @@ pub(crate) struct WorldAssets {
 
 impl WorldAssets {
     pub(crate) fn load(asset_server: &AssetServer) -> Self {
-        let grass = asset_server.load::<Image>("opengfx/tiles/grass.png");
-        let rough = asset_server.load::<Image>("opengfx/tiles/grass_rough.png");
+        let grass = asset_server.load::<Image>("assets/opengfx/tiles/grass.png");
+        let rough = asset_server.load::<Image>("assets/opengfx/tiles/grass_rough.png");
         let grass_slopes = (1u8..=14)
             .map(|tileh| {
-                asset_server
-                    .load::<Image>(format!("opengfx/tiles/terrain_grass_slope_{tileh:02}.png"))
+                asset_server.load::<Image>(format!(
+                    "assets/opengfx/tiles/terrain_grass_slope_{tileh:02}.png"
+                ))
             })
             .collect();
         let rough_slopes = (1u8..=14)
             .map(|tileh| {
-                asset_server
-                    .load::<Image>(format!("opengfx/tiles/terrain_rough_slope_{tileh:02}.png"))
+                asset_server.load::<Image>(format!(
+                    "assets/opengfx/tiles/terrain_rough_slope_{tileh:02}.png"
+                ))
             })
             .collect();
-        let water = asset_server.load::<Image>("opengfx/tiles/water.png");
+        let water = asset_server.load::<Image>("assets/opengfx/tiles/water.png");
         let shore = (0..8)
-            .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/shore_{i}.png")))
+            .map(|i| asset_server.load::<Image>(format!("assets/opengfx/tiles/shore_{i}.png")))
             .collect();
-        let lighthouse = asset_server.load::<Image>("opengfx/tiles/object_lighthouse.png");
-        let transmitter = asset_server.load::<Image>("opengfx/tiles/object_transmitter.png");
+        let lighthouse = asset_server.load::<Image>("assets/opengfx/tiles/object_lighthouse.png");
+        let transmitter = asset_server.load::<Image>("assets/opengfx/tiles/object_transmitter.png");
         let road_flat = (0..19)
-            .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/road_flat_{i:02}.png")))
+            .map(|i| {
+                asset_server.load::<Image>(format!("assets/opengfx/tiles/road_flat_{i:02}.png"))
+            })
             .collect();
         let tram_flat = (0..19)
-            .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/tram_flat_{i:02}.png")))
+            .map(|i| {
+                asset_server.load::<Image>(format!("assets/opengfx/tiles/tram_flat_{i:02}.png"))
+            })
             .collect();
         let rail = rail_sprite_ids_for_preload()
             .into_iter()
             .map(|id| {
                 (
                     id,
-                    asset_server.load::<Image>(format!("opengfx/tiles/rail_{id}.png")),
+                    asset_server.load::<Image>(format!("assets/opengfx/tiles/rail_{id}.png")),
                 )
             })
             .collect();
         let station_grounds = (0..4)
-            .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/truck_stop_ground_{i}.png")))
+            .map(|i| {
+                asset_server
+                    .load::<Image>(format!("assets/opengfx/tiles/truck_stop_ground_{i}.png"))
+            })
             .collect();
         let road_depots = (0..4)
-            .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/road_depot_{i}.png")))
+            .map(|i| asset_server.load::<Image>(format!("assets/opengfx/tiles/road_depot_{i}.png")))
             .collect();
-        let rail_depot = asset_server.load::<Image>("opengfx/tiles/rail_depot_ne.png");
-        let road_tunnel = asset_server.load::<Image>("opengfx/tiles/tunnel_road_rear.png");
-        let rail_tunnel = asset_server.load::<Image>("opengfx/tiles/tunnel_rail_rear.png");
-        let road_bridge = asset_server.load::<Image>("opengfx/tiles/bridge_wood_road_x.png");
-        let rail_bridge = asset_server.load::<Image>("opengfx/tiles/bridge_wood_rail_x.png");
+        let rail_depot = asset_server.load::<Image>("assets/opengfx/tiles/rail_depot_ne.png");
+        let road_tunnel = asset_server.load::<Image>("assets/opengfx/tiles/tunnel_road_rear.png");
+        let rail_tunnel = asset_server.load::<Image>("assets/opengfx/tiles/tunnel_rail_rear.png");
+        let road_bridge = asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_road_x.png");
+        let rail_bridge = asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_rail_x.png");
 
         let mut houses = HashMap::new();
         for spec in &HOUSE_DRAW_DATA {
@@ -86,16 +95,16 @@ impl WorldAssets {
                 if sid != 0 {
                     let fname = house_sprite_filename(sid);
                     houses.entry(sid).or_insert_with(|| {
-                        asset_server.load::<Image>(format!("opengfx/tiles/{fname}"))
+                        asset_server.load::<Image>(format!("assets/opengfx/tiles/{fname}"))
                     });
                 }
             }
         }
 
         let trees = [
-            asset_server.load::<Image>("opengfx/tiles/tree_00.png"),
-            asset_server.load::<Image>("opengfx/tiles/tree_07.png"),
-            asset_server.load::<Image>("opengfx/tiles/tree_14.png"),
+            asset_server.load::<Image>("assets/opengfx/tiles/tree_00.png"),
+            asset_server.load::<Image>("assets/opengfx/tiles/tree_07.png"),
+            asset_server.load::<Image>("assets/opengfx/tiles/tree_14.png"),
         ];
 
         let mut industries = HashMap::new();
@@ -103,7 +112,8 @@ impl WorldAssets {
             for &id in &[entry.sprite_id, entry.ground_sprite_id] {
                 if id != 0 {
                     industries.entry(id).or_insert_with(|| {
-                        asset_server.load::<Image>(format!("opengfx/tiles/industry_{id}.png"))
+                        asset_server
+                            .load::<Image>(format!("assets/opengfx/tiles/industry_{id}.png"))
                     });
                 }
             }
@@ -157,55 +167,58 @@ pub(crate) fn stub_opengfx_tiles_for_tests(root: &std::path::Path) {
         fs::write(&p, ONE_PX_PNG).expect("write png");
     }
 
-    write_png(root, "opengfx/tiles/grass.png");
-    write_png(root, "opengfx/tiles/grass_rough.png");
+    write_png(root, "assets/opengfx/tiles/grass.png");
+    write_png(root, "assets/opengfx/tiles/grass_rough.png");
     for tileh in 1u8..=14 {
         write_png(
             root,
-            &format!("opengfx/tiles/terrain_grass_slope_{tileh:02}.png"),
+            &format!("assets/opengfx/tiles/terrain_grass_slope_{tileh:02}.png"),
         );
         write_png(
             root,
-            &format!("opengfx/tiles/terrain_rough_slope_{tileh:02}.png"),
+            &format!("assets/opengfx/tiles/terrain_rough_slope_{tileh:02}.png"),
         );
     }
-    write_png(root, "opengfx/tiles/water.png");
+    write_png(root, "assets/opengfx/tiles/water.png");
     for i in 0..8 {
-        write_png(root, &format!("opengfx/tiles/shore_{i}.png"));
+        write_png(root, &format!("assets/opengfx/tiles/shore_{i}.png"));
     }
-    write_png(root, "opengfx/tiles/object_lighthouse.png");
-    write_png(root, "opengfx/tiles/object_transmitter.png");
+    write_png(root, "assets/opengfx/tiles/object_lighthouse.png");
+    write_png(root, "assets/opengfx/tiles/object_transmitter.png");
     for i in 0..19 {
-        write_png(root, &format!("opengfx/tiles/road_flat_{i:02}.png"));
-        write_png(root, &format!("opengfx/tiles/tram_flat_{i:02}.png"));
+        write_png(root, &format!("assets/opengfx/tiles/road_flat_{i:02}.png"));
+        write_png(root, &format!("assets/opengfx/tiles/tram_flat_{i:02}.png"));
     }
     for id in rail_sprite_ids_for_preload() {
-        write_png(root, &format!("opengfx/tiles/rail_{id}.png"));
+        write_png(root, &format!("assets/opengfx/tiles/rail_{id}.png"));
     }
     for i in 0..4 {
-        write_png(root, &format!("opengfx/tiles/truck_stop_ground_{i}.png"));
-        write_png(root, &format!("opengfx/tiles/road_depot_{i}.png"));
+        write_png(
+            root,
+            &format!("assets/opengfx/tiles/truck_stop_ground_{i}.png"),
+        );
+        write_png(root, &format!("assets/opengfx/tiles/road_depot_{i}.png"));
     }
-    write_png(root, "opengfx/tiles/rail_depot_ne.png");
-    write_png(root, "opengfx/tiles/tunnel_road_rear.png");
-    write_png(root, "opengfx/tiles/tunnel_rail_rear.png");
-    write_png(root, "opengfx/tiles/bridge_wood_road_x.png");
-    write_png(root, "opengfx/tiles/bridge_wood_rail_x.png");
+    write_png(root, "assets/opengfx/tiles/rail_depot_ne.png");
+    write_png(root, "assets/opengfx/tiles/tunnel_road_rear.png");
+    write_png(root, "assets/opengfx/tiles/tunnel_rail_rear.png");
+    write_png(root, "assets/opengfx/tiles/bridge_wood_road_x.png");
+    write_png(root, "assets/opengfx/tiles/bridge_wood_rail_x.png");
     for spec in &HOUSE_DRAW_DATA {
         for &sid in &[spec.s1, spec.s2] {
             if sid != 0 {
                 let fname = house_sprite_filename(sid);
-                write_png(root, &format!("opengfx/tiles/{fname}"));
+                write_png(root, &format!("assets/opengfx/tiles/{fname}"));
             }
         }
     }
     for name in ["tree_00.png", "tree_07.png", "tree_14.png"] {
-        write_png(root, &format!("opengfx/tiles/{name}"));
+        write_png(root, &format!("assets/opengfx/tiles/{name}"));
     }
     for entry in &INDUSTRY_GFX_DATA {
         for &id in &[entry.sprite_id, entry.ground_sprite_id] {
             if id != 0 {
-                write_png(root, &format!("opengfx/tiles/industry_{id}.png"));
+                write_png(root, &format!("assets/opengfx/tiles/industry_{id}.png"));
             }
         }
     }

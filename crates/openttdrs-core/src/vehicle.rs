@@ -12,6 +12,32 @@ pub enum VehicleKind {
     Train,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(untagged)]
+pub enum VehicleOrder {
+    Station { station: TileCoord },
+    Tile(TileCoord),
+}
+
+impl VehicleOrder {
+    #[must_use]
+    pub const fn destination(self) -> TileCoord {
+        match self {
+            Self::Station { station } | Self::Tile(station) => station,
+        }
+    }
+
+    #[must_use]
+    pub const fn station(station: TileCoord) -> Self {
+        Self::Station { station }
+    }
+
+    #[must_use]
+    pub const fn tile(tile: TileCoord) -> Self {
+        Self::Tile(tile)
+    }
+}
+
 /// Vehículo que se desplaza tesela a tesela siguiendo un camino BFS.
 ///
 /// Si no hay camino calculado (`path` vacío y `pos != dest`) usa movimiento Manhattan
@@ -31,7 +57,7 @@ pub struct Vehicle {
     pub path: VecDeque<TileCoord>,
     /// Lista circular de destinos asignados por el jugador.
     #[serde(default)]
-    pub orders: Vec<TileCoord>,
+    pub orders: Vec<VehicleOrder>,
     #[serde(default)]
     pub current_order: usize,
 }
@@ -84,12 +110,20 @@ impl Vehicle {
     }
 
     pub fn set_orders(&mut self, orders: Vec<TileCoord>) {
+        self.set_vehicle_orders(orders.into_iter().map(VehicleOrder::tile).collect());
+    }
+
+    pub fn set_station_orders(&mut self, stations: Vec<TileCoord>) {
+        self.set_vehicle_orders(stations.into_iter().map(VehicleOrder::station).collect());
+    }
+
+    pub fn set_vehicle_orders(&mut self, orders: Vec<VehicleOrder>) {
         self.orders = orders;
         self.current_order = 0;
         self.path.clear();
         if let Some(&first) = self.orders.first() {
             self.origin = self.pos;
-            self.dest = first;
+            self.dest = first.destination();
         }
     }
 
@@ -101,6 +135,6 @@ impl Vehicle {
         }
         self.current_order = (self.current_order + 1) % self.orders.len();
         self.origin = self.pos;
-        self.dest = self.orders[self.current_order];
+        self.dest = self.orders[self.current_order].destination();
     }
 }

@@ -1,9 +1,13 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{Map, STATION_COVERAGE_RADIUS, TileCoord, TileKind, station_coverage_at};
+use openttdrs_core::{
+    IndustrySpec, Map, STATION_COVERAGE_RADIUS, TileCoord, TileKind, industry_template,
+    station_coverage_at,
+};
 
-use crate::iso::{tile_pos, world_pos_to_tile_coord};
+use crate::iso::{iso, overlay_pos, tile_pos, tile_slope_and_min_z, world_pos_to_tile_coord};
 use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
+use crate::sprites::industry_gfx_entry;
 use crate::state::SimWorld;
 
 use super::{BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, UiToolState};
@@ -119,15 +123,28 @@ pub(crate) fn update_build_ghost_preview(
         let Some(tile) = sim.state.map.get(coord) else {
             continue;
         };
-        let Some(image) = preview_image_for_action(action, &asset_server, &station_state) else {
-            continue;
-        };
         let valid_target = preview_target_is_valid(action, tile.kind)
             && (!action_is_tunnel(action) || tunnel_valid);
         let tint = if valid_target {
             Color::srgba(1.0, 1.0, 1.0, 0.55)
         } else {
             Color::srgba(1.0, 0.25, 0.2, 0.55)
+        };
+
+        if let Some(spec) = industry_spec_for_action(action) {
+            spawn_industry_template_preview(
+                &mut commands,
+                &asset_server,
+                &sim.state.map,
+                coord,
+                spec,
+                tint,
+            );
+            continue;
+        }
+
+        let Some(image) = preview_image_for_action(action, &asset_server, &station_state) else {
+            continue;
         };
 
         commands.spawn((
@@ -143,6 +160,96 @@ pub(crate) fn update_build_ghost_preview(
     }
 }
 
+fn spawn_industry_template_preview(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    map: &Map,
+    origin: TileCoord,
+    spec: IndustrySpec,
+    tint: Color,
+) {
+    for (coord, m5) in industry_template(origin, spec) {
+        if map.get(coord).is_none() {
+            continue;
+        }
+        let (tileh, base_z) =
+            tile_slope_and_min_z(map, coord.x.max(0) as u32, coord.y.max(0) as u32);
+        let ground = if tileh == 0 {
+            asset_server.load::<Image>("assets/opengfx/tiles/grass_rough.png")
+        } else {
+            asset_server.load::<Image>(format!(
+                "assets/opengfx/tiles/terrain_rough_slope_{tileh:02}.png"
+            ))
+        };
+        commands.spawn((
+            BuildGhostPreview,
+            Sprite {
+                image: ground,
+                color: tint.with_alpha(tint.alpha() * 0.75),
+                ..default()
+            },
+            Transform::from_translation(tile_pos(coord.x, coord.y, base_z, 2.9))
+                .with_scale(Vec3::new(1.002, 1.002, 1.0)),
+        ));
+
+        let Some(entry) = industry_gfx_entry(u16::from(m5)) else {
+            continue;
+        };
+        let ref_pos = iso(coord.x, coord.y);
+        if entry.ground_sprite_id != 0 {
+            let img = asset_server.load::<Image>(format!(
+                "assets/opengfx/tiles/industry_{}.png",
+                entry.ground_sprite_id
+            ));
+            commands.spawn((
+                BuildGhostPreview,
+                Sprite {
+                    image: img,
+                    color: tint,
+                    ..default()
+                },
+                Transform::from_translation(overlay_pos(
+                    ref_pos, entry.xrel, entry.yrel, entry.w, entry.h, base_z, 3.2, coord.x,
+                    coord.y,
+                )),
+            ));
+        }
+        if entry.sprite_id != 0 {
+            let img = asset_server.load::<Image>(format!(
+                "assets/opengfx/tiles/industry_{}.png",
+                entry.sprite_id
+            ));
+            commands.spawn((
+                BuildGhostPreview,
+                Sprite {
+                    image: img,
+                    color: tint,
+                    ..default()
+                },
+                Transform::from_translation(overlay_pos(
+                    ref_pos, entry.xrel, entry.yrel, entry.w, entry.h, base_z, 3.3, coord.x,
+                    coord.y,
+                )),
+            ));
+        }
+    }
+}
+
+fn industry_spec_for_action(action: BuildMenuAction) -> Option<IndustrySpec> {
+    match action {
+        BuildMenuAction::BuildCoalMine => Some(IndustrySpec::CoalMine),
+        BuildMenuAction::BuildIronOreMine => Some(IndustrySpec::IronOreMine),
+        BuildMenuAction::BuildGoldMine => Some(IndustrySpec::GoldMine),
+        BuildMenuAction::BuildOilWell => Some(IndustrySpec::OilWells),
+        BuildMenuAction::BuildOilRefinery => Some(IndustrySpec::OilRefinery),
+        BuildMenuAction::BuildFactory => Some(IndustrySpec::Factory),
+        BuildMenuAction::BuildSawmill => Some(IndustrySpec::Sawmill),
+        BuildMenuAction::BuildForest => Some(IndustrySpec::Forest),
+        BuildMenuAction::BuildFarm => Some(IndustrySpec::Farm),
+        _ => None,
+    }
+}
+
 fn spawn_order_route_preview(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -152,9 +259,10 @@ fn spawn_order_route_preview(
     if order_state.vehicle_id.is_none() {
         return;
     }
-    let image = asset_server.load::<Image>("opengfx/tiles/grass_rough.png");
+    let image = asset_server.load::<Image>("assets/opengfx/tiles/grass_rough.png");
     for (i, order) in order_state.orders.iter().enumerate() {
-        let Some(tile) = map.get(*order) else {
+        let pos = order.destination();
+        let Some(tile) = map.get(pos) else {
             continue;
         };
         let color = if i == 0 {
@@ -169,7 +277,7 @@ fn spawn_order_route_preview(
                 color,
                 ..default()
             },
-            Transform::from_translation(tile_pos(order.x, order.y, tile.height, 4.0))
+            Transform::from_translation(tile_pos(pos.x, pos.y, tile.height, 4.0))
                 .with_scale(Vec3::new(1.01, 1.01, 1.0)),
         ));
     }
@@ -185,7 +293,7 @@ fn spawn_station_coverage_preview(
     let Some(&(tx, ty)) = preview_tiles.first() else {
         return;
     };
-    let image = asset_server.load::<Image>("opengfx/tiles/grass_rough.png");
+    let image = asset_server.load::<Image>("assets/opengfx/tiles/grass_rough.png");
     let tint = if has_coverage {
         Color::srgba(1.0, 0.95, 0.25, 0.22)
     } else {
@@ -232,66 +340,72 @@ fn preview_image_for_action(
 ) -> Option<Handle<Image>> {
     match action {
         BuildMenuAction::Station => Some(asset_server.load::<Image>(format!(
-            "opengfx/tiles/truck_stop_ground_{}.png",
+            "assets/opengfx/tiles/truck_stop_ground_{}.png",
             station_state.orientation
         ))),
-        BuildMenuAction::Road => Some(asset_server.load::<Image>("opengfx/tiles/road_flat_02.png")),
+        BuildMenuAction::Road => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/road_flat_02.png"))
+        }
         BuildMenuAction::RoadX => {
-            Some(asset_server.load::<Image>("opengfx/tiles/road_flat_01.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/road_flat_01.png"))
         }
         BuildMenuAction::RoadY => {
-            Some(asset_server.load::<Image>("opengfx/tiles/road_flat_00.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/road_flat_00.png"))
         }
         BuildMenuAction::RoadDepot => {
-            Some(asset_server.load::<Image>("opengfx/tiles/road_depot_0.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/road_depot_0.png"))
         }
         BuildMenuAction::RoadBridge => {
-            Some(asset_server.load::<Image>("opengfx/tiles/bridge_wood_road_x.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_road_x.png"))
         }
         BuildMenuAction::RoadTunnel => {
-            Some(asset_server.load::<Image>("opengfx/tiles/tunnel_road_rear.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/tunnel_road_rear.png"))
         }
-        BuildMenuAction::Rail => Some(asset_server.load::<Image>("opengfx/tiles/rail_1005.png")),
+        BuildMenuAction::Rail => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/rail_1005.png"))
+        }
         BuildMenuAction::RailDepot => {
-            Some(asset_server.load::<Image>("opengfx/tiles/rail_depot_ne.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/rail_depot_ne.png"))
         }
         BuildMenuAction::RailBridge => {
-            Some(asset_server.load::<Image>("opengfx/tiles/bridge_wood_rail_x.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_rail_x.png"))
         }
         BuildMenuAction::RailTunnel => {
-            Some(asset_server.load::<Image>("opengfx/tiles/tunnel_rail_rear.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/tunnel_rail_rear.png"))
         }
-        BuildMenuAction::Clear => Some(asset_server.load::<Image>("opengfx/tiles/grass_rough.png")),
+        BuildMenuAction::Clear => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/grass_rough.png"))
+        }
         BuildMenuAction::Orders => None,
         BuildMenuAction::BuildHouse => {
-            Some(asset_server.load::<Image>("opengfx/tiles/house_church_build.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/house_church_build.png"))
         }
         BuildMenuAction::BuildCoalMine => {
-            Some(asset_server.load::<Image>("opengfx/tiles/industry_2013.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2013.png"))
         }
         BuildMenuAction::BuildIronOreMine => {
-            Some(asset_server.load::<Image>("opengfx/tiles/industry_2092.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2092.png"))
         }
         BuildMenuAction::BuildGoldMine => {
-            Some(asset_server.load::<Image>("opengfx/tiles/industry_2247.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2247.png"))
         }
         BuildMenuAction::BuildOilWell => {
-            Some(asset_server.load::<Image>("opengfx/tiles/industry_2028.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2028.png"))
         }
         BuildMenuAction::BuildOilRefinery => {
-            Some(asset_server.load::<Image>("opengfx/tiles/industry_2047.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2047.png"))
         }
         BuildMenuAction::BuildFactory => {
-            Some(asset_server.load::<Image>("opengfx/tiles/industry_2169.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2169.png"))
         }
         BuildMenuAction::BuildSawmill => {
-            Some(asset_server.load::<Image>("opengfx/tiles/industry_2063.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2063.png"))
         }
         BuildMenuAction::BuildForest => {
-            Some(asset_server.load::<Image>("opengfx/tiles/tree_01.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/tree_01.png"))
         }
         BuildMenuAction::BuildFarm => {
-            Some(asset_server.load::<Image>("opengfx/tiles/industry_2190.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2190.png"))
         }
     }
 }
@@ -480,6 +594,16 @@ mod tests {
             BuildMenuAction::Orders,
             TileKind::Industry
         ));
+
+        assert_eq!(
+            industry_spec_for_action(BuildMenuAction::BuildFactory),
+            Some(IndustrySpec::Factory)
+        );
+        assert_eq!(industry_spec_for_action(BuildMenuAction::Road), None);
+        assert_eq!(
+            industry_template(TileCoord::new(2, 2), IndustrySpec::CoalMine).len(),
+            6
+        );
     }
 
     #[test]

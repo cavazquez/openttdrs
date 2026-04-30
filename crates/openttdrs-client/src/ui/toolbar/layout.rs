@@ -42,17 +42,29 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
         ))
         .with_children(|parent| {
             for (i, icon_path, group) in [
-                (0_u8, "opengfx/tiles/rail_1005.png", ToolbarGroup::Rail),
-                (1, "opengfx/tiles/road_flat_00.png", ToolbarGroup::Road),
+                (
+                    0_u8,
+                    "assets/opengfx/tiles/rail_1005.png",
+                    ToolbarGroup::Rail,
+                ),
+                (
+                    1,
+                    "assets/opengfx/tiles/road_flat_00.png",
+                    ToolbarGroup::Road,
+                ),
                 (
                     2,
-                    "opengfx/tiles/house_church_build.png",
+                    "assets/opengfx/tiles/house_church_build.png",
                     ToolbarGroup::Economy,
                 ),
-                (3, "opengfx/tiles/object_lighthouse.png", ToolbarGroup::Info),
+                (
+                    3,
+                    "assets/opengfx/tiles/object_lighthouse.png",
+                    ToolbarGroup::Info,
+                ),
                 (
                     4,
-                    "opengfx/tiles/object_transmitter.png",
+                    "assets/opengfx/tiles/object_transmitter.png",
                     ToolbarGroup::Settings,
                 ),
             ] {
@@ -144,38 +156,38 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                         &[
                             (
                                 "Carretera NW-SE",
-                                "opengfx/tiles/road_flat_00.png",
+                                "assets/opengfx/tiles/road_flat_00.png",
                                 BuildMenuAction::RoadY,
                             ),
                             (
                                 "Carretera NE-SW",
-                                "opengfx/tiles/road_flat_01.png",
+                                "assets/opengfx/tiles/road_flat_01.png",
                                 BuildMenuAction::RoadX,
                             ),
                             (
                                 "Cruce de carretera",
-                                "opengfx/tiles/road_flat_02.png",
+                                "assets/opengfx/tiles/road_flat_02.png",
                                 BuildMenuAction::Road,
                             ),
                             (
                                 "Deposito de carretera",
-                                "opengfx/tiles/road_depot_0.png",
+                                "assets/opengfx/tiles/road_depot_0.png",
                                 BuildMenuAction::RoadDepot,
                             ),
                             (
                                 "Puente de carretera",
-                                "opengfx/tiles/bridge_wood_road_x.png",
+                                "assets/opengfx/tiles/bridge_wood_road_x.png",
                                 BuildMenuAction::RoadBridge,
                             ),
                             (
                                 "Tunel de carretera",
-                                "opengfx/tiles/tunnel_road_rear.png",
+                                "assets/opengfx/tiles/tunnel_road_rear.png",
                                 BuildMenuAction::RoadTunnel,
                             ),
                             ("Demoler", "text:💣", BuildMenuAction::Clear),
                             (
                                 "Estacion",
-                                "opengfx/tiles/truck_stop_ground_0.png",
+                                "assets/opengfx/tiles/truck_stop_ground_0.png",
                                 BuildMenuAction::Station,
                             ),
                         ],
@@ -217,22 +229,22 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                         &[
                             (
                                 "Construir via",
-                                "opengfx/tiles/rail_1005.png",
+                                "assets/opengfx/tiles/rail_1005.png",
                                 BuildMenuAction::Rail,
                             ),
                             (
                                 "Deposito ferroviario",
-                                "opengfx/tiles/rail_depot_ne.png",
+                                "assets/opengfx/tiles/rail_depot_ne.png",
                                 BuildMenuAction::RailDepot,
                             ),
                             (
                                 "Puente ferroviario",
-                                "opengfx/tiles/bridge_wood_rail_x.png",
+                                "assets/opengfx/tiles/bridge_wood_rail_x.png",
                                 BuildMenuAction::RailBridge,
                             ),
                             (
                                 "Tunel ferroviario",
-                                "opengfx/tiles/tunnel_rail_rear.png",
+                                "assets/opengfx/tiles/tunnel_rail_rear.png",
                                 BuildMenuAction::RailTunnel,
                             ),
                         ],
@@ -268,52 +280,52 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                     &[
                         (
                             "Construir casa",
-                            "opengfx/tiles/house_church_build.png",
+                            "assets/opengfx/tiles/house_church_build.png",
                             BuildMenuAction::BuildHouse,
                         ),
                         (
                             "Mina de carbón",
-                            "opengfx/tiles/industry_2013.png",
+                            "assets/opengfx/tiles/industry_2013.png",
                             BuildMenuAction::BuildCoalMine,
                         ),
                         (
                             "Mina de hierro",
-                            "opengfx/tiles/industry_2092.png",
+                            "assets/opengfx/tiles/industry_2092.png",
                             BuildMenuAction::BuildIronOreMine,
                         ),
                         (
                             "Mina de oro",
-                            "opengfx/tiles/industry_2247.png",
+                            "assets/opengfx/tiles/industry_2247.png",
                             BuildMenuAction::BuildGoldMine,
                         ),
                         (
                             "Pozo petrolero",
-                            "opengfx/tiles/industry_2028.png",
+                            "assets/opengfx/tiles/industry_2028.png",
                             BuildMenuAction::BuildOilWell,
                         ),
                         (
                             "Refinería",
-                            "opengfx/tiles/industry_2047.png",
+                            "assets/opengfx/tiles/industry_2047.png",
                             BuildMenuAction::BuildOilRefinery,
                         ),
                         (
                             "Fábrica",
-                            "opengfx/tiles/industry_2169.png",
+                            "assets/opengfx/tiles/industry_2169.png",
                             BuildMenuAction::BuildFactory,
                         ),
                         (
                             "Aserradero",
-                            "opengfx/tiles/industry_2063.png",
+                            "assets/opengfx/tiles/industry_2063.png",
                             BuildMenuAction::BuildSawmill,
                         ),
                         (
                             "Plantar bosque",
-                            "opengfx/tiles/tree_01.png",
+                            "assets/opengfx/tiles/tree_01.png",
                             BuildMenuAction::BuildForest,
                         ),
                         (
                             "Granja",
-                            "opengfx/tiles/industry_2190.png",
+                            "assets/opengfx/tiles/industry_2190.png",
                             BuildMenuAction::BuildFarm,
                         ),
                     ],
@@ -323,7 +335,7 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                     &asset_server,
                     &[(
                         "Editar ordenes",
-                        "opengfx/tiles/object_lighthouse.png",
+                        "assets/opengfx/tiles/object_lighthouse.png",
                         BuildMenuAction::Orders,
                     )],
                 ),
@@ -585,24 +597,24 @@ mod tests {
 
     fn stub_toolbar_pngs(root: &Path) {
         for rel in [
-            "opengfx/tiles/rail_1005.png",
-            "opengfx/tiles/road_flat_00.png",
-            "opengfx/tiles/road_flat_01.png",
-            "opengfx/tiles/road_flat_02.png",
-            "opengfx/tiles/house_church_build.png",
-            "opengfx/tiles/object_lighthouse.png",
-            "opengfx/tiles/object_transmitter.png",
-            "opengfx/tiles/road_depot_0.png",
-            "opengfx/tiles/bridge_wood_road_x.png",
-            "opengfx/tiles/tunnel_road_rear.png",
-            "opengfx/tiles/truck_stop_ground_0.png",
-            "opengfx/tiles/rail_depot_ne.png",
-            "opengfx/tiles/bridge_wood_rail_x.png",
-            "opengfx/tiles/tunnel_rail_rear.png",
-            "opengfx/tiles/industry_2013.png",
-            "opengfx/tiles/industry_2028.png",
-            "opengfx/tiles/industry_2169.png",
-            "opengfx/tiles/tree_01.png",
+            "assets/opengfx/tiles/rail_1005.png",
+            "assets/opengfx/tiles/road_flat_00.png",
+            "assets/opengfx/tiles/road_flat_01.png",
+            "assets/opengfx/tiles/road_flat_02.png",
+            "assets/opengfx/tiles/house_church_build.png",
+            "assets/opengfx/tiles/object_lighthouse.png",
+            "assets/opengfx/tiles/object_transmitter.png",
+            "assets/opengfx/tiles/road_depot_0.png",
+            "assets/opengfx/tiles/bridge_wood_road_x.png",
+            "assets/opengfx/tiles/tunnel_road_rear.png",
+            "assets/opengfx/tiles/truck_stop_ground_0.png",
+            "assets/opengfx/tiles/rail_depot_ne.png",
+            "assets/opengfx/tiles/bridge_wood_rail_x.png",
+            "assets/opengfx/tiles/tunnel_rail_rear.png",
+            "assets/opengfx/tiles/industry_2013.png",
+            "assets/opengfx/tiles/industry_2028.png",
+            "assets/opengfx/tiles/industry_2169.png",
+            "assets/opengfx/tiles/tree_01.png",
         ] {
             write_png(root, rel);
         }

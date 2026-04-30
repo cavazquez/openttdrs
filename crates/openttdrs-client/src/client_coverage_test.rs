@@ -6,7 +6,7 @@
 use std::fs;
 
 fn seed_min_assets(root: &std::path::Path) {
-    let tiles = root.join("opengfx/tiles");
+    let tiles = root.join("assets/opengfx/tiles");
     fs::create_dir_all(&tiles).expect("mkdir tiles");
     let png = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),

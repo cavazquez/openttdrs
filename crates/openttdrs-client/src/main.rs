@@ -41,20 +41,22 @@ mod client_coverage_test;
 use std::path::Path;
 
 fn main() {
-    let asset_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
-    if !check_required_assets(asset_root) {
+    let repo_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+    if !check_required_assets(repo_root) {
         return;
     }
 
-    bevy_app::run(asset_root);
+    bevy_app::run(repo_root);
 }
 
-fn check_required_assets(asset_root: &str) -> bool {
-    let tiles_dir = Path::new(asset_root).join("opengfx/tiles");
+fn check_required_assets(repo_root: &str) -> bool {
+    let root = Path::new(repo_root);
+    let tiles_dir = root.join("assets/opengfx/tiles");
     let required = [
         tiles_dir.join("grass.png"),
         tiles_dir.join("water.png"),
         tiles_dir.join("vehicle_bus_sw.png"),
+        root.join("static/fonts/DejaVuSansMono.ttf"),
     ];
 
     let missing: Vec<String> = required
@@ -93,8 +95,10 @@ mod main_asset_checks {
     #[test]
     fn check_required_assets_ok_with_min_pngs() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let t = dir.path().join("opengfx/tiles");
+        let t = dir.path().join("assets/opengfx/tiles");
+        let f = dir.path().join("static/fonts");
         fs::create_dir_all(&t).expect("mkdir");
+        fs::create_dir_all(&f).expect("mkdir");
         let png = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/tests/fixtures/one_pixel.png"
@@ -102,6 +106,7 @@ mod main_asset_checks {
         for name in ["grass.png", "water.png", "vehicle_bus_sw.png"] {
             fs::write(t.join(name), png).expect("write");
         }
+        fs::write(f.join("DejaVuSansMono.ttf"), []).expect("write");
         assert!(check_required_assets(dir.path().to_str().unwrap()));
     }
 }

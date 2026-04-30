@@ -28,6 +28,15 @@ de I0–I5 y del renderer isométrico con mapas reales.
    con la isometría del cliente; **validado visualmente** en mapas `.ottdmap`.
 5. **Limitaciones actuales** — solo tres sprites de carretera (tramo X, Y, cruce): esquinas y
    T reales del original son aproximaciones; tranvía en `m3` no está en el `.ottdmap`.
+6. **Industrias sandbox** — `PlaceIndustrySpec` usa layouts base de OpenTTD para mina de carbón,
+   fábrica, granja, bosque, refinería, pozos, aserradero y minas. El ghost de construcción consume
+   la misma plantilla (`openttdrs_core::industry_template`), así que el footprint previsto y el
+   construido comparten una única fuente de verdad. Refinería quedó visualmente muy cercana al
+   original; `Farm`, `Factory` y `Coal Mine` son aceptables, pero podrían mejorar con calibración
+   fina de offsets/capas.
+7. **Fuente UI UTF-8** — `static/fonts/DejaVuSansMono.ttf` es un asset versionado separado de
+   `assets/`; se usa para que Bevy renderice acentos en paneles (`Fábrica`, `Refinería`,
+   `Petróleo`). `assets/` queda reservado para gráficos/sonidos generados por scripts e ignorados.
 
 ## Estado del refactor del cliente
 
@@ -51,6 +60,9 @@ Orden **no estricto**: depende de si querés **parecerse más al original**, **j
   ampliar `descargar_graficos.sh`.
 - **Vías**: sprites de rail por `trackbits` (similar a road bits).
 - **Casas / estaciones**: sustituir tintes planos por sprites o conjuntos mínimos.
+- **Industrias**: si se busca paridad visual más estricta, calibrar `w/h/xrel/yrel` en
+  `industry_gfx_data_generated.rs` para los sprites que aún usan el fallback genérico
+  `64x48/-32/-32`, y revisar el orden Z/capas de `Farm`, `Factory` y `Coal Mine`.
 - **Agua**: animación o variante de sprite si molesta el aspecto “plano”.
 - **`.ottdmap`**: el bloque denso MAP1 v1 **ya incluye** planos `m3`/`m3hi` (`parse_sav.py` los exporta). Lo pendiente suele ser **usar** `m3` en el render de carretera/tranvía y más fixtures de prueba; ver `docs/OTTDMAP_FORMAT.md` y `crates/openttdrs-core/tests/ottdmap_m3_road_fixture.rs`.
 - **Rendimiento**: culling por frustum o LOD en mapas 256×256+.
@@ -83,6 +95,10 @@ cargo run -p openttdrs-client
 
 # Tests core
 cargo test -p openttdrs-core
+
+# Validar panel/ghost de industrias
+cargo test -p openttdrs-client industry
+cargo test -p openttdrs-client preview
 ```
 
 ---

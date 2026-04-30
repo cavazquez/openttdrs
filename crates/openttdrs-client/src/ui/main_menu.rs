@@ -1,5 +1,5 @@
-use bevy::prelude::*;
 use bevy::app::AppExit;
+use bevy::prelude::*;
 
 use crate::state::ClientScreen;
 
@@ -38,7 +38,12 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
                     flex_direction: FlexDirection::Column,
                     justify_content: JustifyContent::SpaceBetween,
                     align_items: AlignItems::Center,
-                    padding: UiRect::new(Val::Px(18.0), Val::Px(18.0), Val::Px(18.0), Val::Px(14.0)),
+                    padding: UiRect::new(
+                        Val::Px(18.0),
+                        Val::Px(18.0),
+                        Val::Px(18.0),
+                        Val::Px(14.0),
+                    ),
                     border: UiRect::all(Val::Px(3.0)),
                     ..default()
                 },
@@ -64,66 +69,65 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
                     TextColor(Color::srgb(0.83, 0.79, 0.64)),
                 ));
 
-                panel.spawn((
-                    Node {
+                panel
+                    .spawn((Node {
                         flex_direction: FlexDirection::Column,
                         row_gap: Val::Px(8.0),
                         ..default()
-                    },
-                ))
-                .with_children(|menu| {
-                    menu.spawn((
-                        Button,
-                        MainMenuStartButton,
-                        Node {
-                            width: Val::Px(260.0),
-                            height: Val::Px(50.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            border: UiRect::all(Val::Px(2.0)),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(0.35, 0.33, 0.24)),
-                        BorderColor::all(Color::srgb(0.7, 0.66, 0.5)),
-                        Interaction::default(),
-                    ))
-                    .with_children(|b| {
-                        b.spawn((
-                            Text::new("Iniciar juego"),
-                            TextFont {
-                                font_size: 22.0,
+                    },))
+                    .with_children(|menu| {
+                        menu.spawn((
+                            Button,
+                            MainMenuStartButton,
+                            Node {
+                                width: Val::Px(260.0),
+                                height: Val::Px(50.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                border: UiRect::all(Val::Px(2.0)),
                                 ..default()
                             },
-                            TextColor(Color::srgb(0.95, 0.92, 0.8)),
-                        ));
-                    });
+                            BackgroundColor(Color::srgb(0.35, 0.33, 0.24)),
+                            BorderColor::all(Color::srgb(0.7, 0.66, 0.5)),
+                            Interaction::default(),
+                        ))
+                        .with_children(|b| {
+                            b.spawn((
+                                Text::new("Iniciar juego"),
+                                TextFont {
+                                    font_size: 22.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.95, 0.92, 0.8)),
+                            ));
+                        });
 
-                    menu.spawn((
-                        Button,
-                        MainMenuQuitButton,
-                        Node {
-                            width: Val::Px(260.0),
-                            height: Val::Px(42.0),
-                            justify_content: JustifyContent::Center,
-                            align_items: AlignItems::Center,
-                            border: UiRect::all(Val::Px(2.0)),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(0.24, 0.22, 0.16)),
-                        BorderColor::all(Color::srgb(0.58, 0.54, 0.4)),
-                        Interaction::default(),
-                    ))
-                    .with_children(|b| {
-                        b.spawn((
-                            Text::new("Salir"),
-                            TextFont {
-                                font_size: 18.0,
+                        menu.spawn((
+                            Button,
+                            MainMenuQuitButton,
+                            Node {
+                                width: Val::Px(260.0),
+                                height: Val::Px(42.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                border: UiRect::all(Val::Px(2.0)),
                                 ..default()
                             },
-                            TextColor(Color::srgb(0.91, 0.88, 0.76)),
-                        ));
+                            BackgroundColor(Color::srgb(0.24, 0.22, 0.16)),
+                            BorderColor::all(Color::srgb(0.58, 0.54, 0.4)),
+                            Interaction::default(),
+                        ))
+                        .with_children(|b| {
+                            b.spawn((
+                                Text::new("Salir"),
+                                TextFont {
+                                    font_size: 18.0,
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.91, 0.88, 0.76)),
+                            ));
+                        });
                     });
-                });
 
                 panel.spawn((
                     Text::new("v0.1.0 · Enter/Espacio iniciar · Esc salir"),

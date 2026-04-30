@@ -18,6 +18,12 @@ pub(crate) struct WorldAssets {
     pub(crate) road_flat: Vec<Handle<Image>>,
     pub(crate) rail: HashMap<u32, Handle<Image>>,
     pub(crate) station_grounds: Vec<Handle<Image>>,
+    pub(crate) road_depots: Vec<Handle<Image>>,
+    pub(crate) rail_depot: Handle<Image>,
+    pub(crate) road_tunnel: Handle<Image>,
+    pub(crate) rail_tunnel: Handle<Image>,
+    pub(crate) road_bridge: Handle<Image>,
+    pub(crate) rail_bridge: Handle<Image>,
     pub(crate) houses: HashMap<u32, Handle<Image>>,
     pub(crate) trees: [Handle<Image>; 3],
     pub(crate) industries: HashMap<u32, Handle<Image>>,
@@ -60,6 +66,14 @@ impl WorldAssets {
         let station_grounds = (0..4)
             .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/truck_stop_ground_{i}.png")))
             .collect();
+        let road_depots = (0..4)
+            .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/road_depot_{i}.png")))
+            .collect();
+        let rail_depot = asset_server.load::<Image>("opengfx/tiles/rail_depot_ne.png");
+        let road_tunnel = asset_server.load::<Image>("opengfx/tiles/tunnel_road_rear.png");
+        let rail_tunnel = asset_server.load::<Image>("opengfx/tiles/tunnel_rail_rear.png");
+        let road_bridge = asset_server.load::<Image>("opengfx/tiles/bridge_wood_road_x.png");
+        let rail_bridge = asset_server.load::<Image>("opengfx/tiles/bridge_wood_rail_x.png");
 
         let mut houses = HashMap::new();
         for spec in &HOUSE_DRAW_DATA {
@@ -102,6 +116,12 @@ impl WorldAssets {
             road_flat,
             rail,
             station_grounds,
+            road_depots,
+            rail_depot,
+            road_tunnel,
+            rail_tunnel,
+            road_bridge,
+            rail_bridge,
             houses,
             trees,
             industries,

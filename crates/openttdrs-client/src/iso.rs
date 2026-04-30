@@ -431,6 +431,11 @@ pub fn infer_coast_tileh_when_flat(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32
     // Fuera del bloque (referencias para costa recta / orientación).
     let land_north_side = is_land(x, y - 1);
     let land_west_side = is_land(x - 1, y);
+    // Contactos puramente diagonales alrededor del rombo. En pantalla son,
+    // respectivamente, arriba, izquierda y derecha del tile de agua.
+    let land_north_diag = is_land(x - 1, y - 1);
+    let land_west_diag = is_land(x + 1, y - 1);
+    let land_east_diag = is_land(x - 1, y + 1);
 
     // Patrón típico de costa larga en diagonal (agua al SE, tierra al NO):
     // priorizar familia NW (`t9/s7`) para evitar dientes alternando con W/E.
@@ -476,6 +481,15 @@ pub fn infer_coast_tileh_when_flat(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32
     if land_north_side || land_west_side {
         return 8;
     } // N
+    if land_west_diag {
+        return 1;
+    } // W
+    if land_east_diag {
+        return 4;
+    } // E
+    if land_north_diag {
+        return 8;
+    } // N
     8
 }
 
@@ -499,6 +513,16 @@ pub fn shore_png_index(tileh: u8) -> usize {
         12 => 5, // NE
         _ => 0,
     }
+}
+
+/// `half_h` visual para el sprite elegido por [`DrawShoreTile`].
+///
+/// Los `shore_*.png` heredados no miden todos 64x31: S/SW/SE son 64x23 y
+/// N/NW/NE son 64x39 con `yrel=-8`. En ambos casos el ancla NFO equivale al
+/// mismo centro que las pendientes de terreno (`SLOPE_HALF_H[tileh]`).
+#[must_use]
+pub fn shore_sprite_half_h(tileh: u8) -> f32 {
+    SLOPE_HALF_H[tileh.min(14) as usize]
 }
 
 /// Nombre corto del bitmask de pendiente OpenTTD (`Slope` / `tileh` 0–14).
@@ -624,7 +648,8 @@ mod water_coast_height_tests {
     //! Agua con `height` 0 en el export no debe hundir las esquinas de la costa.
 
     use super::{
-        shore_tileh_for_draw_shore, tile_slope_and_min_z, water_void_effective_height_for_slope,
+        TILE_HALF_H, shore_sprite_half_h, shore_tileh_for_draw_shore, tile_slope_and_min_z,
+        water_void_effective_height_for_slope,
     };
     use openttdrs_core::{Map, TileCoord, TileKind};
 
@@ -727,6 +752,16 @@ mod water_coast_height_tests {
         m.set_height(TileCoord::new(1, 1), 1).unwrap(); // hsouth => raw 7
         assert_eq!(shore_tileh_for_draw_shore(&m, 0, 0, 2, 2), 3);
     }
+
+    #[test]
+    fn shore_half_h_matches_effective_slope_anchor() {
+        assert_eq!(shore_sprite_half_h(1), TILE_HALF_H);
+        assert_eq!(shore_sprite_half_h(4), TILE_HALF_H);
+
+        for tileh in [2, 3, 6, 8, 9, 12] {
+            assert_eq!(shore_sprite_half_h(tileh), 11.5);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -800,6 +835,23 @@ mod infer_coast_tileh_tests {
         m.set_kind(TileCoord::new(1, 0), TileKind::Grass).unwrap(); // hwest
         m.set_kind(TileCoord::new(1, 1), TileKind::Grass).unwrap(); // hsouth
         assert_eq!(infer_coast_tileh_when_flat(&m, 0, 0, 2, 2), 3);
+    }
+
+    #[test]
+    fn diagonal_land_outside_quartet_keeps_screen_side_orientation() {
+        let mut m = Map::new_flat(3, 3, 3);
+        for y in 0..3 {
+            for x in 0..3 {
+                m.set_kind(TileCoord::new(x, y), TileKind::Water).unwrap();
+            }
+        }
+
+        m.set_kind(TileCoord::new(2, 0), TileKind::Grass).unwrap(); // screen-left
+        assert_eq!(infer_coast_tileh_when_flat(&m, 1, 1, 3, 3), 1);
+
+        m.set_kind(TileCoord::new(2, 0), TileKind::Water).unwrap();
+        m.set_kind(TileCoord::new(0, 2), TileKind::Grass).unwrap(); // screen-right
+        assert_eq!(infer_coast_tileh_when_flat(&m, 1, 1, 3, 3), 4);
     }
 }
 

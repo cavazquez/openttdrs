@@ -13,6 +13,7 @@ use crate::render::{
     TileRenderContext, WorldAssets,
     flush_map_batches, push_forest_tree, push_water_tile, spawn_generic_land_tile,
     spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
+    spawn_transport_object_tile,
 };
 use crate::state::{ClientScreen, SimWorld};
 
@@ -138,6 +139,14 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                 TileKind::Station => {
                     spawn_station_tile(commands, &assets, &ctx, slope_half_ground);
                 }
+                TileKind::RoadDepot
+                | TileKind::RailDepot
+                | TileKind::RoadTunnel
+                | TileKind::RailTunnel
+                | TileKind::RoadBridge
+                | TileKind::RailBridge => {
+                    spawn_transport_object_tile(commands, &assets, &ctx, slope_half_ground);
+                }
                 TileKind::Industry => {
                     spawn_industry_tile(commands, &assets, &ctx, slope_half_ground);
                 }
@@ -183,6 +192,12 @@ fn tile_kind_name(kind: TileKind) -> &'static str {
         TileKind::Water => "Water",
         TileKind::Road => "Road",
         TileKind::Rail => "Rail",
+        TileKind::RoadDepot => "RoadDepot",
+        TileKind::RailDepot => "RailDepot",
+        TileKind::RoadTunnel => "RoadTunnel",
+        TileKind::RailTunnel => "RailTunnel",
+        TileKind::RoadBridge => "RoadBridge",
+        TileKind::RailBridge => "RailBridge",
         TileKind::House => "House",
         TileKind::Industry => "Industry",
         TileKind::Station => "Station",

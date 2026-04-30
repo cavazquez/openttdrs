@@ -26,7 +26,7 @@ pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::find_path;
 pub use save::SaveError;
 pub use save::load_from_str;
-pub use station::Station;
+pub use station::{STATION_COVERAGE_RADIUS, Station, StationCoverage, station_coverage_at};
 pub use tick::GameTick;
 pub use tnbp_decode::{
     JgrTunnelRecord, SlPrimitive, SlTableField, TnbpDecodeError, TnbpDecoded, decode_tnbp_blob,
@@ -49,6 +49,30 @@ pub struct SimStats {
     pub industry_cargo_units_produced: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CompanyEconomy {
+    pub money: i64,
+    pub loan: i64,
+}
+
+impl Default for CompanyEconomy {
+    fn default() -> Self {
+        Self {
+            money: 100_000,
+            loan: 0,
+        }
+    }
+}
+
+pub const ROAD_BUILD_COST: i64 = 10;
+pub const RAIL_BUILD_COST: i64 = 25;
+pub const STATION_BUILD_COST: i64 = 200;
+pub const DEPOT_BUILD_COST: i64 = 150;
+pub const TUNNEL_BUILD_COST_PER_TILE: i64 = 90;
+pub const BRIDGE_BUILD_COST_PER_TILE: i64 = 70;
+pub const CLEAR_TILE_COST: i64 = 5;
+pub const CARGO_DELIVERY_PAYMENT: i64 = 12;
+
 /// Estado global mínimo del mundo simulado.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GameState {
@@ -58,6 +82,8 @@ pub struct GameState {
     pub vehicles: Vec<Vehicle>,
     pub stations: Vec<Station>,
     pub stats: SimStats,
+    #[serde(default)]
+    pub economy: CompanyEconomy,
     /// Túneles JGR decodificados desde footer `TNBP` del `.ottdmap` (vacío si no hay o no aplica).
     #[serde(default)]
     pub jgr_tunnels_from_footer: Vec<JgrTunnelRecord>,
@@ -73,6 +99,7 @@ impl GameState {
             vehicles: Vec::new(),
             stations: Vec::new(),
             stats: SimStats::default(),
+            economy: CompanyEconomy::default(),
             jgr_tunnels_from_footer: Vec::new(),
         }
     }
@@ -87,6 +114,7 @@ impl GameState {
             vehicles: Vec::new(),
             stations: Vec::new(),
             stats: SimStats::default(),
+            economy: CompanyEconomy::default(),
             jgr_tunnels_from_footer: Vec::new(),
         }
     }
@@ -134,6 +162,7 @@ impl GameState {
             {
                 st.stock += vcargo;
                 st.income += u64::from(vcargo);
+                self.economy.money += i64::from(vcargo) * CARGO_DELIVERY_PAYMENT;
                 self.stats.cargo_deliveries += 1;
                 self.stats.cargo_units_delivered += u64::from(vcargo);
                 self.vehicles[i].cargo = 0;
@@ -316,6 +345,7 @@ mod tests {
         assert_eq!(s.vehicles[0].pos, spos);
         assert_eq!(s.vehicles[0].cargo, 0);
         assert!(s.stations[0].income > 0);
+        assert!(s.economy.money > CompanyEconomy::default().money);
     }
 
     #[test]
@@ -415,6 +445,35 @@ mod tests {
     }
 
     #[test]
+    fn station_coverage_counts_nearby_cargo_sources_and_acceptors() {
+        let mut s = GameState::new(16, 16);
+        let station_pos = TileCoord::new(8, 8);
+        let coal_pos = TileCoord::new(10, 8);
+        let house_pos = TileCoord::new(7, 7);
+        let far_forest_pos = TileCoord::new(14, 8);
+
+        s.map.set_kind(coal_pos, TileKind::Industry).unwrap();
+        s.map.set_kind(house_pos, TileKind::House).unwrap();
+        s.map.set_kind(far_forest_pos, TileKind::Industry).unwrap();
+
+        let mut coal = Industry::new(coal_pos, IndustryKind::CoalMine);
+        coal.stock = 42;
+        s.industries.push(coal);
+        s.industries
+            .push(Industry::new(far_forest_pos, IndustryKind::Forest));
+
+        let coverage =
+            station_coverage_at(&s.map, &s.industries, station_pos, STATION_COVERAGE_RADIUS);
+        assert_eq!(coverage.accepts_mail, 1);
+        assert_eq!(coverage.accepts_goods, 1);
+        assert_eq!(coverage.supplies_coal, 1);
+        assert_eq!(coverage.supplies_wood, 0);
+        assert_eq!(coverage.supplied_stock, 42);
+        assert!(coverage.accepts_anything());
+        assert!(coverage.supplies_anything());
+    }
+
+    #[test]
     fn vehicle_moves_toward_dest() {
         let mut s = GameState::new(8, 8);
         let start = TileCoord::new(0, 0);
@@ -450,6 +509,23 @@ mod tests {
         }
         assert_eq!(s.vehicles[0].pos, start);
         assert_eq!(s.vehicles[0].dest, dest);
+    }
+
+    #[test]
+    fn vehicle_with_orders_cycles_destinations() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Truck,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.set_orders(vec![TileCoord::new(1, 0), TileCoord::new(1, 1)]);
+        v.step();
+        assert_eq!(v.pos, TileCoord::new(1, 0));
+        assert_eq!(v.dest, TileCoord::new(1, 1));
+        v.step();
+        assert_eq!(v.pos, TileCoord::new(1, 1));
+        assert_eq!(v.dest, TileCoord::new(1, 0));
     }
 
     #[test]

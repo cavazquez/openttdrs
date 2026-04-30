@@ -1,14 +1,14 @@
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::TileKind;
+use openttdrs_core::{STATION_COVERAGE_RADIUS, TileKind, station_coverage_at};
 
 use crate::config;
-use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
 use crate::iso::{
     compute_tileh, shore_png_index, shore_tileh_for_draw_shore, slope_label,
     tile_slope_bits_from_heights,
 };
+use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
 use crate::sprites::{
     is_road_level_crossing, level_crossing_rail_sprite_id, rail_tile_is_signals,
     road_bits_for_render,
@@ -16,7 +16,7 @@ use crate::sprites::{
 use crate::state::SimWorld;
 
 use super::{SelectedTileInfo, SimHudControls, TileInfoText};
-use crate::ui::{BuildMenuAction, UiToolState};
+use crate::ui::{BuildMenuAction, OrderEditState, UiToolState};
 
 /// Crea el texto de informacion del tile.
 pub(crate) fn setup_tile_info_ui(mut commands: Commands) {
@@ -40,12 +40,16 @@ pub(crate) fn update_tile_info_text(
     sim: Res<SimWorld>,
     hud: Res<SimHudControls>,
     tool_state: Res<UiToolState>,
+    order_state: Res<OrderEditState>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<
         (&Transform, &Projection),
         (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
     >,
-    mut text_q: Query<(&mut Text2d, &mut Transform), (With<TileInfoText>, Without<PrimaryGameCamera>)>,
+    mut text_q: Query<
+        (&mut Text2d, &mut Transform),
+        (With<TileInfoText>, Without<PrimaryGameCamera>),
+    >,
 ) {
     let Ok((mut text, mut text_transform)) = text_q.single_mut() else {
         return;
@@ -68,19 +72,51 @@ pub(crate) fn update_tile_info_text(
     text_transform.scale = Vec3::splat(proj.scale);
 
     let zoom_label = format!("Zoom {:.2}×", proj.scale);
-    let pause_l = if hud.paused { "Pausa ON (P)" } else { "Pausa off (P)" };
+    let pause_l = if hud.paused {
+        "Pausa ON (P)"
+    } else {
+        "Pausa off (P)"
+    };
     let tool_l = match tool_state.active_tool {
-        Some(BuildMenuAction::Road) => "Road",
+        Some(BuildMenuAction::Road) => "Road+",
+        Some(BuildMenuAction::RoadX) => "Road NE-SW",
+        Some(BuildMenuAction::RoadY) => "Road NW-SE",
+        Some(BuildMenuAction::RoadDepot) => "Road depot",
+        Some(BuildMenuAction::RoadBridge) => "Road bridge",
+        Some(BuildMenuAction::RoadTunnel) => "Road tunnel",
         Some(BuildMenuAction::Rail) => "Rail",
+        Some(BuildMenuAction::RailDepot) => "Rail depot",
+        Some(BuildMenuAction::RailBridge) => "Rail bridge",
+        Some(BuildMenuAction::RailTunnel) => "Rail tunnel",
         Some(BuildMenuAction::Station) => "Station",
         Some(BuildMenuAction::Clear) => "Clear",
+        Some(BuildMenuAction::Orders) => "Orders",
+        Some(BuildMenuAction::BuildHouse) => "Build house",
+        Some(BuildMenuAction::BuildCoalMine) => "Build coal mine",
+        Some(BuildMenuAction::BuildOilWell) => "Build oil well",
+        Some(BuildMenuAction::BuildFactory) => "Build factory",
+        Some(BuildMenuAction::BuildForest) => "Build forest",
         None => "None",
     };
-    let hud_footer = format!("{pause_l} | Tool: {tool_l} | JSON: {} | F4 ruta", hud.json_save_path);
+    let order_l = order_state
+        .vehicle_id
+        .map(|id| format!(" | ordenes veh #{id}:{}", order_state.orders.len()))
+        .unwrap_or_default();
+    let minimap_l = if hud.minimap_visible {
+        "mapa M:on"
+    } else {
+        "mapa M:off"
+    };
+    let hud_footer = format!(
+        "{pause_l} | Tool: {tool_l}{order_l} | ${} | cargas {}/{} | {minimap_l} | JSON: {} | F4 ruta",
+        sim.state.economy.money,
+        sim.state.stats.cargo_units_delivered,
+        sim.state.stats.cargo_units_loaded,
+        hud.json_save_path
+    );
 
     let Some(pos) = selected.pos else {
-        **text =
-            format!("{zoom_label}\n{hud_footer}\nClic mapa: elegir tile · tools 1/2/3/C/Esc");
+        **text = format!("{zoom_label}\n{hud_footer}\nClic mapa: elegir tile · tools 1/2/3/C/Esc");
         return;
     };
 
@@ -98,6 +134,12 @@ pub(crate) fn update_tile_info_text(
         TileKind::Water => "Water",
         TileKind::Road => "Road",
         TileKind::Rail => "Rail",
+        TileKind::RoadDepot => "RoadDepot",
+        TileKind::RailDepot => "RailDepot",
+        TileKind::RoadTunnel => "RoadTunnel",
+        TileKind::RailTunnel => "RailTunnel",
+        TileKind::RoadBridge => "RoadBridge",
+        TileKind::RailBridge => "RailBridge",
         TileKind::House => "House",
         TileKind::Industry => "Industry",
         TileKind::Station => "Station",
@@ -121,7 +163,10 @@ pub(crate) fn update_tile_info_text(
         );
         let mut s = format!(" rb:0x{rb:02X}");
         if is_road_level_crossing(tile.mapt, tile.m5, tile.kind) {
-            s.push_str(&format!(" Xing rail:{}", level_crossing_rail_sprite_id(tile.m5)));
+            s.push_str(&format!(
+                " Xing rail:{}",
+                level_crossing_rail_sprite_id(tile.m5)
+            ));
         }
         s
     } else if tile.kind == TileKind::Rail && rail_tile_is_signals(tile.m5) {
@@ -132,9 +177,25 @@ pub(crate) fn update_tile_info_text(
         )
     } else if tile.kind == TileKind::Industry {
         // OpenTTD GetCleanIndustryGfx: 9 bits — no confundir con `m5` solo (HUD antes mostraba eso como "gfx").
-        let gfx9 =
-            u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
+        let gfx9 = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
         format!(" gfx9:{} m6:0x{:02X} ind:{}", gfx9, tile.m6, tile.m1 & 0x7F)
+    } else if tile.kind == TileKind::Station {
+        let coverage = station_coverage_at(
+            &sim.state.map,
+            &sim.state.industries,
+            pos,
+            STATION_COVERAGE_RADIUS,
+        );
+        format!(
+            " cov r{} acc mail:{} goods:{} src coal:{} wood:{} oil:{} stock:{}",
+            STATION_COVERAGE_RADIUS,
+            coverage.accepts_mail,
+            coverage.accepts_goods,
+            coverage.supplies_coal,
+            coverage.supplies_wood,
+            coverage.supplies_oil,
+            coverage.supplied_stock
+        )
     } else {
         String::new()
     };
@@ -162,9 +223,27 @@ pub(crate) fn update_tile_info_text(
     } else {
         String::new()
     };
+    let vehicle_dbg = sim
+        .state
+        .vehicles
+        .iter()
+        .find(|vehicle| vehicle.pos == pos)
+        .map(|vehicle| {
+            format!(
+                "\nveh #{} {:?} cargo:{}/{} dest:({}, {}) orders:{}",
+                vehicle.id,
+                vehicle.kind,
+                vehicle.cargo,
+                vehicle.capacity,
+                vehicle.dest.x,
+                vehicle.dest.y,
+                vehicle.orders.len()
+            )
+        })
+        .unwrap_or_default();
 
     **text = format!(
-        "{zoom_label}\n{hud_footer}\nTile ({},{}) {}\nh:{} slope:{} ({}) mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X} m2:0x{:02X} m7:0x{:02X} m3:0x{:02X} m3hi:0x{:02X}{}{}",
+        "{zoom_label}\n{hud_footer}\nTile ({},{}) {}\nh:{} slope:{} ({}) mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X} m2:0x{:02X} m7:0x{:02X} m3:0x{:02X} m3hi:0x{:02X}{}{}{}",
         pos.x,
         pos.y,
         kind_str,
@@ -179,6 +258,7 @@ pub(crate) fn update_tile_info_text(
         tile.m3,
         tile.m3hi,
         extra,
-        coast_dbg
+        coast_dbg,
+        vehicle_dbg
     );
 }

@@ -11,6 +11,7 @@ pub(crate) use input::{cycle_json_save_path_hotkey, handle_pause_toggle, handle_
 pub(crate) struct SimHudControls {
     pub(crate) paused: bool,
     pub(crate) json_save_path: String,
+    pub(crate) minimap_visible: bool,
 }
 
 impl Default for SimHudControls {
@@ -18,6 +19,7 @@ impl Default for SimHudControls {
         Self {
             paused: false,
             json_save_path: crate::config::json_save_path(),
+            minimap_visible: true,
         }
     }
 }

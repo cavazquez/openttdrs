@@ -165,24 +165,24 @@ cual** a la sección `m5` del binario (salvo la sustitución de `MP_OBJECT` con 
 correctamente.
 
 **Cliente (`openttdrs-client`):** se dibujan sprites de costa (`shore_*.png` vía
-`compute_tileh` + `shore_png_index`) si:
+`shore_tileh_for_draw_shore` + `shore_png_index`) si:
 
 1. **`(m5 >> 4) & 0xF == 1`** (Coast explícito), **o**
 2. **`(m5 >> 4) & 0xF == 0`** (Clear) **y** la tesela de agua **linda con tierra** en
-   un vecino ortogonal (no `Water`, no `Void`) — función `water_tile_touches_land` en
-   `main.rs`.
+   el vecindario de 8 celdas (no `Water`, no `Void`) — función
+   `water_tile_touches_land` en `render/grid.rs`.
 
 El caso (2) cubre mapas o pipelines donde el agua en la orilla queda como **Clear**
 con `m5 = 0` pero el relieve sigue siendo válido: **no** se usa una máscara N/E/S/W
 para elegir el PNG de costa; solo decide *si* entramos en el modo costa; el índice
-del sprite sigue siendo el de la **pendiente** (`tileh`). El agua abierta sin tierra
-ortogonal adyacente sigue siendo solo agua animada.
+del sprite sigue siendo el de la **pendiente** (`tileh`). En modo costa se dibuja
+solo `DrawShoreTile`, sin agua animada debajo; el agua abierta sin tierra vecina
+sigue siendo solo agua animada.
 
-Si `compute_tileh` devuelve **0** en una tesela que igual debe dibujarse como costa (las
-cuatro alturas del bloque 2×2 son iguales — típico cuando la tierra solo está **fuera**
-de ese bloque, p. ej. costa recta con tierra al norte), OpenTTD no usa agua plana en
-Coast. El cliente aplica `infer_coast_tileh_when_flat` (`iso.rs`) antes de elegir
-`shore_*.png`.
+Si el `tileh` crudo del bloque 2×2 es **0** en una tesela que igual debe dibujarse como
+costa (típico cuando la tierra solo está **fuera** de ese bloque, p. ej. costa recta
+con tierra al norte), OpenTTD no usa agua plana en Coast. El cliente aplica
+`infer_coast_tileh_when_flat` (`iso.rs`) antes de elegir `shore_*.png`.
 
 Tests unitarios de `compute_tileh` (mapas 2×2, borde 1×1, franja 2×1): `iso.rs`,
 módulo `compute_tileh_tests`.

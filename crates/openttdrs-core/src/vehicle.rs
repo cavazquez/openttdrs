@@ -29,6 +29,11 @@ pub struct Vehicle {
     pub capacity: u32,
     /// Camino calculado por el pathfinder (siguiente tile en el frente).
     pub path: VecDeque<TileCoord>,
+    /// Lista circular de destinos asignados por el jugador.
+    #[serde(default)]
+    pub orders: Vec<TileCoord>,
+    #[serde(default)]
+    pub current_order: usize,
 }
 
 impl Vehicle {
@@ -43,6 +48,8 @@ impl Vehicle {
             cargo: 0,
             capacity: VEHICLE_CAPACITY,
             path: VecDeque::new(),
+            orders: Vec::new(),
+            current_order: 0,
         }
     }
 
@@ -52,12 +59,10 @@ impl Vehicle {
         if let Some(next) = self.path.pop_front() {
             self.pos = next;
             if self.pos == self.dest {
-                std::mem::swap(&mut self.dest, &mut self.origin);
-                // path ya está vacío; GameState recomputa el próximo tick
+                self.advance_destination_after_arrival();
             }
         } else if self.pos == self.dest {
-            // Llegada sin path (modo Manhattan): invertir
-            std::mem::swap(&mut self.dest, &mut self.origin);
+            self.advance_destination_after_arrival();
         } else {
             // Manhattan fallback: no hay vías en el mapa
             let dx = self.dest.x - self.pos.x;
@@ -67,11 +72,35 @@ impl Vehicle {
             } else if dy != 0 {
                 self.pos.y += dy.signum();
             }
+            if self.pos == self.dest && !self.orders.is_empty() {
+                self.advance_destination_after_arrival();
+            }
         }
     }
 
     #[must_use]
     pub fn manhattan_to_dest(&self) -> u32 {
         self.pos.x.abs_diff(self.dest.x) + self.pos.y.abs_diff(self.dest.y)
+    }
+
+    pub fn set_orders(&mut self, orders: Vec<TileCoord>) {
+        self.orders = orders;
+        self.current_order = 0;
+        self.path.clear();
+        if let Some(&first) = self.orders.first() {
+            self.origin = self.pos;
+            self.dest = first;
+        }
+    }
+
+    fn advance_destination_after_arrival(&mut self) {
+        self.path.clear();
+        if self.orders.is_empty() {
+            std::mem::swap(&mut self.dest, &mut self.origin);
+            return;
+        }
+        self.current_order = (self.current_order + 1) % self.orders.len();
+        self.origin = self.pos;
+        self.dest = self.orders[self.current_order];
     }
 }

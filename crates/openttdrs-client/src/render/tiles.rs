@@ -3,8 +3,8 @@ use openttdrs_core::{Map, TileKind};
 
 use super::{MapSpriteBatches, MapVisualLayer, TileRenderContext, WaterTile, WorldAssets};
 use crate::iso::{
-    SLOPE_HALF_H, TILE_HALF_H, overlay_pos, shore_png_index, shore_tileh_for_draw_shore, tile_pos,
-    tile_pos_half, tile_slope_bits_from_heights, wang_hash,
+    SLOPE_HALF_H, TILE_HALF_H, overlay_pos, shore_png_index, shore_sprite_half_h,
+    shore_tileh_for_draw_shore, tile_pos, tile_pos_half, tile_slope_bits_from_heights, wang_hash,
 };
 use crate::sprites::{
     HOUSE_DRAW_DATA, ROAD_FLAT_HALF_H, collect_rail_sprites, collect_signal_sprite_ids,
@@ -17,7 +17,10 @@ use crate::sprites::{
 /// Sesgo en la componente Z de **solo** el agua animada (sin sprite `shore_*`).
 /// El orden de dibujo usa `(tx+ty)`; el mar al **este/sur** tiene suma mayor y acaba
 /// encima del borde costero del vecino NO/NE → sierra y rectángulos azules oscuros.
-const FLAT_WATER_LAYER_FRAC: f32 = -0.014;
+const FLAT_WATER_LAYER_FRAC: f32 = -0.030;
+/// Costa entre tierra y agua: debe tapar agua vecina, pero no pintar su parte azul
+/// encima de la tierra que queda del lado interior de la orilla.
+const SHORE_LAYER_FRAC: f32 = -0.015;
 /// Solape mínimo para ocultar costuras finas entre tiles adyacentes.
 const TILE_OVERLAP_SCALE: f32 = 1.002;
 
@@ -439,7 +442,10 @@ pub(crate) fn spawn_station_tile(
             slope_half_ground,
         );
     }
-    let dir = wang_hash(ctx.tx, ctx.ty, 0xCAFE) as usize % assets.station_grounds.len();
+    let dir = ctx
+        .tile
+        .map_or(0, |t| (t.m5 & 0x03) as usize)
+        .min(assets.station_grounds.len().saturating_sub(1));
     commands.spawn((
         MapVisualLayer,
         Sprite {
@@ -448,6 +454,42 @@ pub(crate) fn spawn_station_tile(
             ..default()
         },
         Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), ctx.info.base_z, 0.01))
+            .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+    ));
+}
+
+pub(crate) fn spawn_transport_object_tile(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    slope_half_ground: f32,
+) {
+    let tileh = ctx.info.tileh;
+    let ground = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
+    spawn_ground_sprite(commands, ground, Color::WHITE, ctx, slope_half_ground);
+
+    let image = match ctx.kind {
+        TileKind::RoadDepot => assets
+            .road_depots
+            .get(ctx.tile.map_or(0, |t| (t.m5 & 0x03) as usize))
+            .cloned()
+            .unwrap_or_else(|| assets.road_depots[0].clone()),
+        TileKind::RailDepot => assets.rail_depot.clone(),
+        TileKind::RoadTunnel => assets.road_tunnel.clone(),
+        TileKind::RailTunnel => assets.rail_tunnel.clone(),
+        TileKind::RoadBridge => assets.road_bridge.clone(),
+        TileKind::RailBridge => assets.rail_bridge.clone(),
+        _ => unreachable!(),
+    };
+
+    commands.spawn((
+        MapVisualLayer,
+        Sprite {
+            image,
+            color: Color::WHITE,
+            ..default()
+        },
+        Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), ctx.info.base_z, 0.08))
             .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
     ));
 }
@@ -465,13 +507,10 @@ pub(crate) fn push_water_tile(
         // `DrawShoreTile(tileh)` — igual que OpenTTD: pendiente real del 2×2
         // cuando no es plana; si no, vecinos de tierra (`infer_coast`).
         let th = shore_tileh_for_draw_shore(map, ctx.tx, ctx.ty, map_dims.0, map_dims.1);
-        // Base de agua también en costa: los sprites `shore_*` tienen
-        // transparencia y en OpenTTD se componen sobre agua.
-        push_water_sprite(&mut batches.water, &assets.water, ctx);
         if th != 0 {
             let si = shore_png_index(th);
-            // Los sprites de costa `shore_*.png` son 64x31 (half_h fijo),
-            // no usan el half_h de pendientes de terreno.
+            // Coast en OpenTTD dibuja solo `DrawShoreTile`: el PNG heredado ya
+            // incluye agua/tierra del rombo, con transparencia solo fuera de él.
             batches.shore.push((
                 Sprite {
                     image: assets.shore[si].clone(),
@@ -482,14 +521,17 @@ pub(crate) fn push_water_tile(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     ctx.info.base_z,
-                    0.0,
-                    TILE_HALF_H,
+                    SHORE_LAYER_FRAC,
+                    shore_sprite_half_h(th),
                 )),
             ));
             if debug_coast {
                 let (raw, _) = tile_slope_bits_from_heights(map, ctx.tx, ctx.ty);
                 spawn_coast_debug_label(commands, ctx, raw, th, si);
             }
+        } else {
+            // Datos inválidos: OpenTTD asertea que Coast no es flat. Evitamos un hueco.
+            push_water_sprite(&mut batches.water, &assets.water, ctx);
         }
     } else {
         // Agua libre (Clear, Lock, Depot en mapas típicos: Clear).
@@ -530,6 +572,12 @@ pub(crate) fn spawn_generic_land_tile(
         | TileKind::Station
         | TileKind::Road
         | TileKind::Rail
+        | TileKind::RoadDepot
+        | TileKind::RailDepot
+        | TileKind::RoadTunnel
+        | TileKind::RailTunnel
+        | TileKind::RoadBridge
+        | TileKind::RailBridge
         | TileKind::Industry
         | TileKind::Water
         | TileKind::Void => unreachable!(),
@@ -610,5 +658,23 @@ pub(crate) fn flush_map_batches(commands: &mut Commands, batches: MapSpriteBatch
     }
     for (sp, tr) in batches.trees {
         commands.spawn((MapVisualLayer, sp, tr));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC};
+    use crate::iso::{TILE_HALF_H, tile_pos, tile_pos_half};
+
+    #[test]
+    fn shore_z_sits_between_neighbor_land_and_water() {
+        let tx = 10;
+        let ty = 10;
+        let shore = tile_pos_half(tx, ty, 0, SHORE_LAYER_FRAC, TILE_HALF_H).z;
+        let inner_land = tile_pos(tx - 1, ty, 0, 0.0).z;
+        let outer_water = tile_pos(tx + 1, ty, 0, FLAT_WATER_LAYER_FRAC).z;
+
+        assert!(shore < inner_land);
+        assert!(shore > outer_water);
     }
 }

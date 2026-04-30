@@ -16,6 +16,14 @@ pub(crate) fn handle_pause_toggle(
             info!("Pausa: OFF");
         }
     }
+    if keyboard.just_pressed(KeyCode::KeyM) {
+        hud.minimap_visible = !hud.minimap_visible;
+        if hud.minimap_visible {
+            info!("Minimapa: visible");
+        } else {
+            info!("Minimapa: oculto");
+        }
+    }
 }
 
 /// **F4** alterna entre dos rutas de archivo predefinidas para F5/F9.
@@ -33,16 +41,18 @@ pub(crate) fn cycle_json_save_path_hotkey(
     }
 }
 
-/// Hotkeys de herramienta: 1 carretera, 2 estacion, C limpiar, Esc desactivar.
+/// Hotkeys de herramienta: 1/2 carreteras, 3 estacion, C limpiar, Esc desactivar.
 pub(crate) fn handle_tool_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut tool_state: ResMut<UiToolState>,
 ) {
     if keyboard.just_pressed(KeyCode::Digit1) {
-        tool_state.active_tool = Some(BuildMenuAction::Road);
+        tool_state.active_tool = Some(BuildMenuAction::RoadY);
     } else if keyboard.just_pressed(KeyCode::Digit2) {
-        tool_state.active_tool = Some(BuildMenuAction::Station);
+        tool_state.active_tool = Some(BuildMenuAction::RoadX);
     } else if keyboard.just_pressed(KeyCode::Digit3) {
+        tool_state.active_tool = Some(BuildMenuAction::Station);
+    } else if keyboard.just_pressed(KeyCode::Digit4) {
         tool_state.active_tool = Some(BuildMenuAction::Rail);
     } else if keyboard.just_pressed(KeyCode::KeyC) {
         tool_state.active_tool = Some(BuildMenuAction::Clear);

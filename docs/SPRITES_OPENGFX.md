@@ -87,7 +87,9 @@ img_rgba.putdata(data)
 
 ## Sprites de tesela de suelo
 
-Todas las teselas de suelo miden **64×31 px** con `xrel=-31, yrel=0`.
+Las teselas planas miden **64×31 px** con `xrel=-31, yrel=0`; las pendientes y
+algunas costas conservan el `height/yrel` del NFO y por eso se posicionan con
+`SLOPE_HALF_H[tileh]` en vez de asumir siempre 15.5 px.
 
 | Archivo extraído | Sprite ID | Descripción |
 |-----------------|-----------|-------------|
@@ -110,15 +112,17 @@ mirando **vecinos** N/E/S/W sobre agua plana.
 En OpenTTD, las teselas **MP_WATER** con tipo **Coast** (`m5` bits 4–7 = 1, ver
 `water_map.h`) se dibujan con **`DrawShoreTile(tileh)`** (`water_cmd.cpp`): **un solo
 sprite** según la **pendiente** de la tesela (`Slope` / `tileh`), vía la tabla
-`tileh_to_shoresprite[]`. El agua “libre” (Clear) usa el sprite de agua animada, sin
-superponer costa por adyacencia a tierra.
+`tileh_to_shoresprite[]`. No se dibuja `DrawSeaWater` debajo de Coast; el sprite de
+costa ya es el ground sprite del rombo. El agua “libre” (Clear) usa el sprite de agua
+animada, sin superponer costa por adyacencia a tierra.
 
 En openttdrs, el renderer alinea con eso: si `water_tile_type == 1` (Coast), se elige
-`shore_{n}.png` con `shore_png_index(compute_tileh(...))` y posición
-`tile_pos_half(..., SLOPE_HALF_H[tileh])` (ver `crates/openttdrs-client/src/iso.rs`).
+`shore_{n}.png` con `shore_png_index(shore_tileh_for_draw_shore(...))` y posición
+`tile_pos_half(..., shore_sprite_half_h(tileh))` (ver `crates/openttdrs-client/src/iso.rs`).
 Si el `.ottdmap` no conserva el subtipo Coast en `m5` (todo agua como Clear), se aplica el
-mismo dibujo de costa cuando la tesela de agua **linda con tierra** (un solo criterio
-geométrico; el sprite sigue siendo el de `tileh`, no una máscara por vecinos).
+mismo dibujo de costa cuando la tesela de agua **linda con tierra** en su vecindario
+de 8 celdas (un solo criterio geométrico; el sprite sigue siendo el de `tileh`, no una
+máscara por vecinos).
 
 ### Atención: convención de nombres de SPR_ROAD_*
 

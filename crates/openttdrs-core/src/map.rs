@@ -49,6 +49,12 @@ pub enum TileKind {
     CoalField,
     Road,
     Rail,
+    RoadDepot,
+    RailDepot,
+    RoadTunnel,
+    RailTunnel,
+    RoadBridge,
+    RailBridge,
     House,       // MP_HOUSE  (3) – edificio urbano
     Station,     // MP_STATION (5)
     Industry,    // MP_INDUSTRY (8) – genérico (sin sub-tipo conocido)
@@ -206,7 +212,10 @@ fn ottdmap_dense_slices(
     let m1 = &data[dense_offset + 2 * n..dense_offset + 3 * n];
     let m2 = &data[dense_offset + 3 * n..dense_offset + 4 * n];
     let (m2_hi, base_after_m2_hi) = if header.flags & OTTDMAP_FLAG_HAS_M2_HI != 0 {
-        (&data[dense_offset + 4 * n..dense_offset + 5 * n], dense_offset + 5 * n)
+        (
+            &data[dense_offset + 4 * n..dense_offset + 5 * n],
+            dense_offset + 5 * n,
+        )
     } else {
         (&[] as &[u8], dense_offset + 4 * n)
     };
@@ -368,6 +377,13 @@ impl Map {
     pub fn set_kind(&mut self, c: TileCoord, kind: TileKind) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
         self.tiles[i].kind = kind;
+        Ok(())
+    }
+
+    pub fn set_mapt_m5(&mut self, c: TileCoord, mapt: u8, m5: u8) -> Result<(), MapError> {
+        let i = self.index(c).ok_or(MapError::OutOfBounds)?;
+        self.tiles[i].mapt = mapt;
+        self.tiles[i].m5 = m5;
         Ok(())
     }
 

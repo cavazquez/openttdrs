@@ -255,7 +255,16 @@ fn synthetic_rail_trackbits(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> u8 {
         if c.x < 0 || c.y < 0 || c.x >= mw as i32 || c.y >= mh as i32 {
             return false;
         }
-        matches!(map.get_kind(c), Some(TileKind::Rail | TileKind::Station))
+        matches!(
+            map.get_kind(c),
+            Some(
+                TileKind::Rail
+                    | TileKind::Station
+                    | TileKind::RailDepot
+                    | TileKind::RailTunnel
+                    | TileKind::RailBridge
+            )
+        )
     };
     // Vecinos en eje x (dx=±1) forman la diagonal NE-SW → RAIL_TB_X
     let has_tx = rail_neighbor(TileCoord::new(pos.x - 1, pos.y))

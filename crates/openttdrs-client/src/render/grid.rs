@@ -3,7 +3,7 @@ use openttdrs_core::{Map, Tile, TileCoord, TileKind};
 
 use crate::iso::{iso, tile_slope_and_min_z};
 
-/// `true` si algún vecino ortogonal no es agua ni vacío (borde mar/tierra o río).
+/// `true` si algún vecino del 8-neighborhood no es agua ni vacío (borde mar/tierra o río).
 ///
 /// Los exports `.ottdmap` a veces dejan `m5=0` en toda el agua y se pierde
 /// `WaterTileType::Coast` en bits 4–7; sin esto solo se pinta agua plana en la orilla.
@@ -17,7 +17,17 @@ fn water_tile_touches_land(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32) -> boo
     };
     let x = tx as i32;
     let y = ty as i32;
-    is_land(x - 1, y) || is_land(x + 1, y) || is_land(x, y - 1) || is_land(x, y + 1)
+    const NEIGH8: [(i32, i32); 8] = [
+        (-1, -1),
+        (0, -1),
+        (1, -1),
+        (-1, 0),
+        (1, 0),
+        (-1, 1),
+        (0, 1),
+        (1, 1),
+    ];
+    NEIGH8.iter().any(|(dx, dy)| is_land(x + dx, y + dy))
 }
 
 #[derive(Clone, Copy)]
@@ -150,5 +160,20 @@ mod tests {
         let grid = RenderGrid::from_map(&map, 3, 3);
 
         assert!(!grid.get(1, 1).use_shore);
+    }
+
+    #[test]
+    fn water_with_default_m5_uses_shore_when_touching_land_diagonally() {
+        let mut map = Map::new_flat(3, 3, 0);
+        for y in 0..3 {
+            for x in 0..3 {
+                assert!(map.set_kind(coord(x, y), TileKind::Water).is_ok());
+            }
+        }
+        assert!(map.set_kind(coord(2, 2), TileKind::Grass).is_ok());
+
+        let grid = RenderGrid::from_map(&map, 3, 3);
+
+        assert!(grid.get(1, 1).use_shore);
     }
 }

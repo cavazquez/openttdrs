@@ -11,8 +11,8 @@ use openttdrs_core::{IndustryKind, Map, TileCoord, TileKind};
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
 use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
-use crate::state::bootstrap::industry_group_from_gfx;
 use crate::state::SimWorld;
+use crate::state::bootstrap::industry_group_from_gfx;
 use crate::ui::toolbar::BuildMenuUi;
 
 const PREVIEW_TEX_W: u32 = 320;
@@ -61,7 +61,11 @@ fn flood_industry_tiles(map: &Map, start: TileCoord) -> Vec<TileCoord> {
     out
 }
 
-fn industry_kind_for_component(map: &Map, sim: &SimWorld, anchor: TileCoord) -> Option<IndustryKind> {
+fn industry_kind_for_component(
+    map: &Map,
+    sim: &SimWorld,
+    anchor: TileCoord,
+) -> Option<IndustryKind> {
     let tiles = flood_industry_tiles(map, anchor);
     let set: HashSet<TileCoord> = tiles.into_iter().collect();
     sim.state
@@ -90,10 +94,7 @@ fn format_panel_title(map: &Map, sim: &SimWorld, focus: TileCoord) -> String {
     format!("Industria — {gfx_label}{sim_part}")
 }
 
-pub(crate) fn setup_industry_panel(
-    mut commands: Commands,
-    mut images: ResMut<Assets<Image>>,
-) {
+pub(crate) fn setup_industry_panel(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let image = Image::new_target_texture(
         PREVIEW_TEX_W,
         PREVIEW_TEX_H,
@@ -198,10 +199,7 @@ pub(crate) fn setup_industry_panel(
 pub(crate) fn industry_panel_close_interaction(
     q: Query<&Interaction, (Changed<Interaction>, With<IndustryPanelCloseButton>)>,
     mut panel: ResMut<IndustryPanelState>,
-    mut preview_cam: Query<
-        &mut Camera,
-        (With<IndustryPreviewCamera>, Without<PrimaryGameCamera>),
-    >,
+    mut preview_cam: Query<&mut Camera, (With<IndustryPreviewCamera>, Without<PrimaryGameCamera>)>,
 ) {
     for interaction in &q {
         if *interaction != Interaction::Pressed {
@@ -224,10 +222,7 @@ pub(crate) fn sync_industry_panel(
         (&mut Transform, &mut Projection, &mut Camera),
         (With<IndustryPreviewCamera>, Without<PrimaryGameCamera>),
     >,
-    primary_proj: Query<
-        &Projection,
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
-    >,
+    primary_proj: Query<&Projection, (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>)>,
 ) {
     let Ok(mut root_vis) = root_q.single_mut() else {
         return;
@@ -255,11 +250,8 @@ pub(crate) fn sync_industry_panel(
         **text = format_panel_title(&sim.state.map, &sim, focus);
     }
 
-    let (_tileh, base_z) = tile_slope_and_min_z(
-        &sim.state.map,
-        focus.x.max(0) as u32,
-        focus.y.max(0) as u32,
-    );
+    let (_tileh, base_z) =
+        tile_slope_and_min_z(&sim.state.map, focus.x.max(0) as u32, focus.y.max(0) as u32);
     let pos = tile_pos(focus.x, focus.y, base_z, 0.0);
 
     let primary_scale = primary_proj

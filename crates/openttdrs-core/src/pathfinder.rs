@@ -3,7 +3,17 @@ use std::collections::{HashMap, VecDeque};
 use crate::map::{Map, TileCoord, TileKind};
 
 fn is_traversable(kind: TileKind) -> bool {
-    matches!(kind, TileKind::Road | TileKind::Rail)
+    matches!(
+        kind,
+        TileKind::Road
+            | TileKind::Rail
+            | TileKind::RoadDepot
+            | TileKind::RailDepot
+            | TileKind::RoadTunnel
+            | TileKind::RailTunnel
+            | TileKind::RoadBridge
+            | TileKind::RailBridge
+    )
 }
 
 /// Encuentra el camino más corto entre `from` y `to` usando BFS sobre teselas Road/Rail.

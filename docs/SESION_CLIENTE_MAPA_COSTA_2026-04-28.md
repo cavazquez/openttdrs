@@ -56,7 +56,7 @@ Resumen de **cambios de código**, **motivos**, **hallazgos** y **problemas** tr
 - **Corrección A:** **`min_z = min_h`** también para MP_WATER (igual que OpenTTD `GetTileZ`).
 
 - **Problema B:** la Z del sprite incluye `(tx + ty) * 0.01`; el mar **al este/sur** tiene suma mayor y se dibujaba **encima** del borde costero del vecino → rectángulos azules / sierra.
-- **Corrección B:** constante **`FLAT_WATER_LAYER_FRAC`** (valor negativo, p. ej. `-0.014`) solo en **`tile_pos` del agua animada** (no en `shore_*`).
+- **Corrección B:** constantes de capa negativas: **`FLAT_WATER_LAYER_FRAC`** para agua animada y **`SHORE_LAYER_FRAC`** para costa. La costa queda por debajo de la tierra interior vecina, pero por encima del agua exterior.
 
 ---
 
@@ -120,6 +120,6 @@ python3 scripts/parse_sav.py partida.sav salida.ottdmap
 
 ## 8. Riesgos / seguimiento
 
-- **`FLAT_WATER_LAYER_FRAC`:** si en mapas enormes o con muchas capas sigue habiendo solapamiento, puede afinarse (o plantear orden de dibujo tipo painter isométrico más estricto).
+- **`FLAT_WATER_LAYER_FRAC` / `SHORE_LAYER_FRAC`:** si en mapas enormes o con muchas capas sigue habiendo solapamiento, pueden afinarse (o plantear orden de dibujo tipo painter isométrico más estricto).
 - **Inferencia `min` en agua:** en escenarios raros (acantilado + agua entre dos tierras a alturas muy distintas) podría necesitar otra heurística; hoy prioriza coherencia de costa típica.
 - **Comparación `.sav` vs `.ottdmap`:** automatizar en script evita dudas de export para depuración futura.

@@ -269,14 +269,29 @@ fn preview_image_for_action(
         BuildMenuAction::BuildCoalMine => {
             Some(asset_server.load::<Image>("opengfx/tiles/industry_2013.png"))
         }
+        BuildMenuAction::BuildIronOreMine => {
+            Some(asset_server.load::<Image>("opengfx/tiles/industry_2092.png"))
+        }
+        BuildMenuAction::BuildGoldMine => {
+            Some(asset_server.load::<Image>("opengfx/tiles/industry_2247.png"))
+        }
         BuildMenuAction::BuildOilWell => {
             Some(asset_server.load::<Image>("opengfx/tiles/industry_2028.png"))
+        }
+        BuildMenuAction::BuildOilRefinery => {
+            Some(asset_server.load::<Image>("opengfx/tiles/industry_2047.png"))
         }
         BuildMenuAction::BuildFactory => {
             Some(asset_server.load::<Image>("opengfx/tiles/industry_2169.png"))
         }
+        BuildMenuAction::BuildSawmill => {
+            Some(asset_server.load::<Image>("opengfx/tiles/industry_2063.png"))
+        }
         BuildMenuAction::BuildForest => {
             Some(asset_server.load::<Image>("opengfx/tiles/tree_01.png"))
+        }
+        BuildMenuAction::BuildFarm => {
+            Some(asset_server.load::<Image>("opengfx/tiles/industry_2190.png"))
         }
     }
 }
@@ -296,9 +311,14 @@ fn preview_target_is_valid(action: BuildMenuAction, kind: TileKind) -> bool {
         | BuildMenuAction::Station
         | BuildMenuAction::BuildHouse
         | BuildMenuAction::BuildCoalMine
+        | BuildMenuAction::BuildIronOreMine
+        | BuildMenuAction::BuildGoldMine
         | BuildMenuAction::BuildOilWell
+        | BuildMenuAction::BuildOilRefinery
         | BuildMenuAction::BuildFactory
-        | BuildMenuAction::BuildForest => !matches!(kind, TileKind::Water | TileKind::Void),
+        | BuildMenuAction::BuildSawmill
+        | BuildMenuAction::BuildForest
+        | BuildMenuAction::BuildFarm => !matches!(kind, TileKind::Water | TileKind::Void),
         BuildMenuAction::Clear | BuildMenuAction::Orders => !matches!(kind, TileKind::Void),
     }
 }
@@ -467,6 +487,8 @@ mod tests {
         let map = Map::new_flat(8, 8, 0);
         let industries = vec![Industry {
             pos: TileCoord::new(3, 3),
+            tiles: vec![TileCoord::new(3, 3)],
+            spec: None,
             kind: IndustryKind::Forest,
             stock: 30,
             capacity: 100,

@@ -5,7 +5,7 @@ use openttdrs_core::{Command, Map, TileCoord, TileKind, apply_command};
 #[cfg(not(test))]
 use std::path::Path;
 
-use crate::iso::{tile_pos, world_pos_to_tile_coord};
+use crate::iso::{ISO_HW, ISO_QH, tile_pos, world_pos_to_tile_coord};
 use crate::render::{
     IndustryPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, VehicleIndex,
 };
@@ -159,9 +159,14 @@ fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup {
         BuildMenuAction::Orders => ToolbarGroup::Info,
         BuildMenuAction::BuildHouse
         | BuildMenuAction::BuildCoalMine
+        | BuildMenuAction::BuildIronOreMine
+        | BuildMenuAction::BuildGoldMine
         | BuildMenuAction::BuildOilWell
+        | BuildMenuAction::BuildOilRefinery
         | BuildMenuAction::BuildFactory
-        | BuildMenuAction::BuildForest => ToolbarGroup::Economy,
+        | BuildMenuAction::BuildSawmill
+        | BuildMenuAction::BuildForest
+        | BuildMenuAction::BuildFarm => ToolbarGroup::Economy,
     }
 }
 
@@ -348,7 +353,7 @@ pub(crate) fn sync_minimap(
         return;
     }
     for (cell, mut bg) in &mut cells {
-        let x = cell.col * mw / MINIMAP_COLS;
+        let x = (MINIMAP_COLS.saturating_sub(1).saturating_sub(cell.col)) * mw / MINIMAP_COLS;
         let y = cell.row * mh / MINIMAP_ROWS;
         let c = TileCoord::new(x as i32, y as i32);
         *bg = BackgroundColor(minimap_color(
@@ -365,8 +370,12 @@ pub(crate) fn handle_minimap_click(
     windows: Query<&Window, With<PrimaryWindow>>,
     sim: Res<SimWorld>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>)>,
+    menu_pointer: Query<&Interaction, With<BuildMenuUi>>,
 ) {
     if !hud.minimap_visible || !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+    if menu_pointer.iter().any(|i| *i != Interaction::None) {
         return;
     }
     let Ok(window) = windows.single() else {
@@ -400,22 +409,20 @@ fn cursor_to_minimap_tile(
     }
     let total_w = MINIMAP_COLS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
     let left = window.width() - MINIMAP_RIGHT - total_w;
-    let bottom = MINIMAP_BOTTOM;
+    let total_h = MINIMAP_ROWS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
+    let top = window.height() - MINIMAP_BOTTOM - total_h;
     let local_x = cursor.x - left - MINIMAP_PAD;
-    let local_y_from_bottom = cursor.y - bottom - MINIMAP_PAD;
+    let local_y_from_top = cursor.y - top - MINIMAP_PAD;
     if local_x < 0.0
-        || local_y_from_bottom < 0.0
+        || local_y_from_top < 0.0
         || local_x >= MINIMAP_COLS as f32 * MINIMAP_CELL
-        || local_y_from_bottom >= MINIMAP_ROWS as f32 * MINIMAP_CELL
+        || local_y_from_top >= MINIMAP_ROWS as f32 * MINIMAP_CELL
     {
         return None;
     }
     let col = (local_x / MINIMAP_CELL).floor() as u32;
-    let row_from_bottom = (local_y_from_bottom / MINIMAP_CELL).floor() as u32;
-    let row = MINIMAP_ROWS
-        .saturating_sub(1)
-        .saturating_sub(row_from_bottom);
-    let x = (col * mw / MINIMAP_COLS) as i32;
+    let row = (local_y_from_top / MINIMAP_CELL).floor() as u32;
+    let x = ((MINIMAP_COLS.saturating_sub(1).saturating_sub(col)) * mw / MINIMAP_COLS) as i32;
     let y = (row * mh / MINIMAP_ROWS) as i32;
     Some((x, y))
 }
@@ -442,45 +449,40 @@ fn update_minimap_viewport(
     if mw == 0 || mh == 0 {
         return;
     }
+    let center_world = Vec2::new(cam_tf.translation.x, cam_tf.translation.y);
+    let Some((cx, cy)) = world_pos_to_tile_coord(center_world, map) else {
+        return;
+    };
+
+    // Estimación estable del tamaño de viewport en tiles (evita saltos por esquinas en iso).
+    // Inversa aproximada de:
+    //   sx = (ty - tx) * ISO_HW
+    //   sy = (tx + ty) * -ISO_QH
+    // Para un rectángulo de pantalla, la cota en tiles queda:
+    //   dtx,dty ~= 0.5 * (|dx|/ISO_HW + |dy|/ISO_QH)
     let half_w = window.width() * proj.scale * 0.5;
     let half_h = window.height() * proj.scale * 0.5;
-    let center = Vec2::new(cam_tf.translation.x, cam_tf.translation.y);
-    let corners = [
-        center + Vec2::new(-half_w, -half_h),
-        center + Vec2::new(half_w, -half_h),
-        center + Vec2::new(-half_w, half_h),
-        center + Vec2::new(half_w, half_h),
-    ];
-    let mut min_x = i32::MAX;
-    let mut min_y = i32::MAX;
-    let mut max_x = i32::MIN;
-    let mut max_y = i32::MIN;
-    for corner in corners {
-        if let Some((x, y)) = world_pos_to_tile_coord(corner, map) {
-            min_x = min_x.min(x);
-            min_y = min_y.min(y);
-            max_x = max_x.max(x);
-            max_y = max_y.max(y);
-        }
-    }
-    if min_x == i32::MAX {
-        return;
-    }
-    let min_x = min_x.clamp(0, mw.saturating_sub(1) as i32) as f32;
-    let min_y = min_y.clamp(0, mh.saturating_sub(1) as i32) as f32;
-    let max_x = max_x.clamp(0, mw.saturating_sub(1) as i32) as f32;
-    let max_y = max_y.clamp(0, mh.saturating_sub(1) as i32) as f32;
-    let left = MINIMAP_PAD + min_x / mw as f32 * MINIMAP_COLS as f32 * MINIMAP_CELL;
-    let top = MINIMAP_PAD + min_y / mh as f32 * MINIMAP_ROWS as f32 * MINIMAP_CELL;
-    let width =
-        ((max_x - min_x).max(1.0) / mw as f32 * MINIMAP_COLS as f32 * MINIMAP_CELL).max(3.0);
-    let height =
-        ((max_y - min_y).max(1.0) / mh as f32 * MINIMAP_ROWS as f32 * MINIMAP_CELL).max(3.0);
+    let half_tiles = (0.5 * (half_w / ISO_HW + half_h / ISO_QH)).max(2.0);
+    let half_tiles_x = half_tiles.clamp(2.0, mw as f32);
+    let half_tiles_y = half_tiles.clamp(2.0, mh as f32);
+
+    let min_x = (cx as f32 - half_tiles_x).clamp(0.0, mw.saturating_sub(1) as f32);
+    let max_x = (cx as f32 + half_tiles_x).clamp(0.0, mw.saturating_sub(1) as f32);
+    let min_y = (cy as f32 - half_tiles_y).clamp(0.0, mh.saturating_sub(1) as f32);
+    let max_y = (cy as f32 + half_tiles_y).clamp(0.0, mh.saturating_sub(1) as f32);
+    let left_min = MINIMAP_PAD
+        + ((mw as f32 - 1.0 - max_x).max(0.0) / mw as f32 * MINIMAP_COLS as f32 * MINIMAP_CELL);
+    let left_max = MINIMAP_PAD
+        + ((mw as f32 - 1.0 - min_x).max(0.0) / mw as f32 * MINIMAP_COLS as f32 * MINIMAP_CELL);
+    let top_min = MINIMAP_PAD + (min_y / mh as f32 * MINIMAP_ROWS as f32 * MINIMAP_CELL);
+    let top_max = MINIMAP_PAD + (max_y / mh as f32 * MINIMAP_ROWS as f32 * MINIMAP_CELL);
+    let width = (left_max - left_min).max(3.0);
+    let height = (top_max - top_min).max(3.0);
     let Ok(mut node) = viewport_q.single_mut() else {
         return;
     };
-    node.left = Val::Px(left);
-    node.top = Val::Px(top);
+    node.left = Val::Px(left_min);
+    node.top = Val::Px(top_min);
     node.width = Val::Px(width);
     node.height = Val::Px(height);
 }
@@ -639,12 +641,16 @@ pub(crate) fn handle_order_panel_buttons(
     }
 }
 
-pub(crate) fn handle_save_menu_buttons(
+pub(crate) fn handle_settings_menu_buttons(
     mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
     mut hud: ResMut<SimHudControls>,
     mut sim: ResMut<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
     mut remap: ResMut<RemapMapVisualsPending>,
+    mut cam_q: Query<
+        (&mut Transform, &mut Projection),
+        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+    >,
 ) {
     for (interaction, action) in &mut q {
         if *interaction != Interaction::Pressed {
@@ -686,6 +692,46 @@ pub(crate) fn handle_save_menu_buttons(
                         Err(e) => error!("Carga: JSON invalido ({save_path}): {e}"),
                     },
                     Err(e) => error!("Carga: no se pudo leer {save_path}: {e}"),
+                }
+            }
+            SaveMenuAction::PauseResume => {
+                hud.paused = !hud.paused;
+                info!("Pausa: {}", if hud.paused { "ON" } else { "OFF" });
+            }
+            SaveMenuAction::SpeedUp => {
+                hud.sim_speed = if hud.sim_speed < 1.5 {
+                    2.0
+                } else if hud.sim_speed < 3.5 {
+                    4.0
+                } else {
+                    1.0
+                };
+                info!("Velocidad simulacion: {:.0}x", hud.sim_speed);
+            }
+            SaveMenuAction::Normalize => {
+                hud.sim_speed = 1.0;
+                if let Ok((mut cam_tf, mut projection)) = cam_q.single_mut()
+                    && let Projection::Orthographic(o) = &mut *projection
+                {
+                    let keep_pos = cam_tf.translation;
+                    o.scale = 1.0;
+                    // Normalizar NO debe recentrar: mantenemos posicion exacta.
+                    cam_tf.translation = keep_pos;
+                }
+                info!("Normalizado: velocidad 1x y zoom 1.0x");
+            }
+            SaveMenuAction::ZoomIn => {
+                if let Ok((_cam_tf, mut projection)) = cam_q.single_mut()
+                    && let Projection::Orthographic(o) = &mut *projection
+                {
+                    o.scale = (o.scale * 0.85).max(0.25);
+                }
+            }
+            SaveMenuAction::ZoomOut => {
+                if let Ok((_cam_tf, mut projection)) = cam_q.single_mut()
+                    && let Projection::Orthographic(o) = &mut *projection
+                {
+                    o.scale = (o.scale * 1.15).min(20.0);
                 }
             }
         }
@@ -857,19 +903,42 @@ fn command_for_action(
         | BuildMenuAction::RailTunnel
         | BuildMenuAction::Orders => None,
         BuildMenuAction::BuildHouse => Some(Command::PlaceHouse(pos)),
-        BuildMenuAction::BuildCoalMine => Some(Command::PlaceIndustryKind(
+        BuildMenuAction::BuildCoalMine => Some(Command::PlaceIndustrySpec(
             pos,
-            openttdrs_core::IndustryKind::CoalMine,
+            openttdrs_core::IndustrySpec::CoalMine,
         )),
-        BuildMenuAction::BuildOilWell => Some(Command::PlaceIndustryKind(
+        BuildMenuAction::BuildIronOreMine => Some(Command::PlaceIndustrySpec(
             pos,
-            openttdrs_core::IndustryKind::OilWell,
+            openttdrs_core::IndustrySpec::IronOreMine,
         )),
-        BuildMenuAction::BuildFactory => Some(Command::PlaceIndustryKind(
+        BuildMenuAction::BuildGoldMine => Some(Command::PlaceIndustrySpec(
             pos,
-            openttdrs_core::IndustryKind::Factory,
+            openttdrs_core::IndustrySpec::GoldMine,
         )),
-        BuildMenuAction::BuildForest => Some(Command::PlaceForest(pos)),
+        BuildMenuAction::BuildOilWell => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::OilWells,
+        )),
+        BuildMenuAction::BuildOilRefinery => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::OilRefinery,
+        )),
+        BuildMenuAction::BuildFactory => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::Factory,
+        )),
+        BuildMenuAction::BuildSawmill => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::Sawmill,
+        )),
+        BuildMenuAction::BuildForest => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::Forest,
+        )),
+        BuildMenuAction::BuildFarm => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::Farm,
+        )),
     }
 }
 
@@ -1110,6 +1179,34 @@ mod tests {
     }
 
     #[test]
+    fn handle_minimap_click_ignored_when_ui_is_interacting() {
+        let mut world = World::new();
+        let mut mouse = ButtonInput::<MouseButton>::default();
+        mouse.press(MouseButton::Left);
+        world.insert_resource(mouse);
+        world.insert_resource(SimHudControls::default());
+        world.insert_resource(SimWorld::default());
+        world.spawn((BuildMenuUi, Interaction::Pressed));
+        world.run_system_once(handle_minimap_click).unwrap();
+    }
+
+    #[test]
+    fn cursor_to_minimap_tile_top_left_maps_to_small_coords() {
+        let window = Window {
+            resolution: bevy::window::WindowResolution::new(1280, 720),
+            ..default()
+        };
+        let total_w = MINIMAP_COLS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
+        let total_h = MINIMAP_ROWS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
+        let left = window.width() - MINIMAP_RIGHT - total_w;
+        let top = window.height() - MINIMAP_BOTTOM - total_h;
+        let cursor = Vec2::new(left + MINIMAP_PAD + 1.0, top + MINIMAP_PAD + 1.0);
+        let (x, y) = cursor_to_minimap_tile(cursor, &window, (256, 256)).unwrap();
+        assert!(x >= 249);
+        assert_eq!(y, 0);
+    }
+
+    #[test]
     fn setup_order_panel_then_sync_order_panel() {
         let mut world = World::new();
         world.run_system_once(setup_order_panel).unwrap();
@@ -1157,7 +1254,7 @@ mod tests {
     }
 
     #[test]
-    fn handle_save_menu_buttons_save_load_with_file_dialog_abstraction() {
+    fn handle_settings_menu_buttons_save_load_with_file_dialog_abstraction() {
         let dir = tempfile::tempdir().unwrap();
         let save_path = dir.path().join("sim.json");
 
@@ -1167,18 +1264,93 @@ mod tests {
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(SimHudControls {
             paused: false,
+            sim_speed: 1.0,
             json_save_path: save_path.to_string_lossy().to_string(),
             minimap_visible: true,
         });
 
         world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));
-        world.run_system_once(handle_save_menu_buttons).unwrap();
+        world.run_system_once(handle_settings_menu_buttons).unwrap();
 
         world.spawn((Button, SaveMenuAction::LoadFrom, Interaction::Pressed));
-        world.run_system_once(handle_save_menu_buttons).unwrap();
+        world.run_system_once(handle_settings_menu_buttons).unwrap();
         let remap = world.resource::<RemapMapVisualsPending>();
         assert!(remap.pending);
         assert!(remap.sync_camera);
+    }
+
+    #[test]
+    fn handle_settings_menu_buttons_pause_speed_and_zoom() {
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(VehicleIndex::default());
+        world.insert_resource(RemapMapVisualsPending::default());
+        world.insert_resource(SimHudControls::default());
+        world.spawn((
+            PrimaryGameCamera,
+            Transform::from_xyz(123.0, -45.0, 0.0),
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+
+        world.spawn((Button, SaveMenuAction::PauseResume, Interaction::Pressed));
+        world.run_system_once(handle_settings_menu_buttons).unwrap();
+        assert!(world.resource::<SimHudControls>().paused);
+
+        world.spawn((Button, SaveMenuAction::SpeedUp, Interaction::Pressed));
+        world.run_system_once(handle_settings_menu_buttons).unwrap();
+        assert_eq!(world.resource::<SimHudControls>().sim_speed, 2.0);
+
+        world.spawn((Button, SaveMenuAction::Normalize, Interaction::Pressed));
+        world.run_system_once(handle_settings_menu_buttons).unwrap();
+        assert_eq!(world.resource::<SimHudControls>().sim_speed, 1.0);
+        let mut q_norm = world.query_filtered::<(&Transform, &Projection), With<PrimaryGameCamera>>();
+        let (tf_norm, proj_norm) = q_norm.single(&world).unwrap();
+        let Projection::Orthographic(o_norm) = proj_norm else {
+            panic!("expected orthographic projection");
+        };
+        assert_eq!(o_norm.scale, 1.0);
+        assert_eq!(tf_norm.translation.x, 123.0);
+        assert_eq!(tf_norm.translation.y, -45.0);
+
+        let mut world_zoom_in = World::new();
+        world_zoom_in.insert_resource(SimWorld::default());
+        world_zoom_in.insert_resource(VehicleIndex::default());
+        world_zoom_in.insert_resource(RemapMapVisualsPending::default());
+        world_zoom_in.insert_resource(SimHudControls::default());
+        world_zoom_in.spawn((
+            PrimaryGameCamera,
+            Transform::default(),
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+        world_zoom_in.spawn((Button, SaveMenuAction::ZoomIn, Interaction::Pressed));
+        world_zoom_in
+            .run_system_once(handle_settings_menu_buttons)
+            .unwrap();
+        let mut q_in = world_zoom_in.query_filtered::<&Projection, With<PrimaryGameCamera>>();
+        let Projection::Orthographic(o_in) = q_in.single(&world_zoom_in).unwrap() else {
+            panic!("expected orthographic projection");
+        };
+        assert!(o_in.scale < 1.0);
+
+        let mut world_zoom_out = World::new();
+        world_zoom_out.insert_resource(SimWorld::default());
+        world_zoom_out.insert_resource(VehicleIndex::default());
+        world_zoom_out.insert_resource(RemapMapVisualsPending::default());
+        world_zoom_out.insert_resource(SimHudControls::default());
+        world_zoom_out.spawn((
+            PrimaryGameCamera,
+            Transform::default(),
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+        world_zoom_out.spawn((Button, SaveMenuAction::ZoomOut, Interaction::Pressed));
+        world_zoom_out
+            .run_system_once(handle_settings_menu_buttons)
+            .unwrap();
+        let mut q_out = world_zoom_out.query_filtered::<&Projection, With<PrimaryGameCamera>>();
+        let Projection::Orthographic(o_out) = q_out.single(&world_zoom_out).unwrap() else {
+            panic!("expected orthographic projection");
+        };
+        assert!(o_out.scale > 1.0);
     }
 
     #[test]
@@ -1235,9 +1407,9 @@ mod tests {
                 TileCoord::new(1, 2),
                 &StationBuildState::default()
             ),
-            Some(Command::PlaceIndustryKind(
+            Some(Command::PlaceIndustrySpec(
                 _,
-                openttdrs_core::IndustryKind::CoalMine
+                openttdrs_core::IndustrySpec::CoalMine
             ))
         ));
         assert!(

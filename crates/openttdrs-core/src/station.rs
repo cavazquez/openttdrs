@@ -68,7 +68,13 @@ pub fn station_coverage_at(
     }
 
     for industry in industries {
-        if (industry.pos.x - pos.x).abs() > radius || (industry.pos.y - pos.y).abs() > radius {
+        let in_range = industry
+            .tiles
+            .iter()
+            .copied()
+            .chain(std::iter::once(industry.pos))
+            .any(|tile| (tile.x - pos.x).abs() <= radius && (tile.y - pos.y).abs() <= radius);
+        if !in_range {
             continue;
         }
         coverage.supplied_stock = coverage.supplied_stock.saturating_add(industry.stock);

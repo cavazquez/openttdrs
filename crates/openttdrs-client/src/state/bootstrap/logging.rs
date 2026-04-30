@@ -217,6 +217,8 @@ mod logging_coverage_tests {
 
         state.industries.push(Industry {
             pos: TileCoord::new(0, 0),
+            tiles: vec![TileCoord::new(0, 0)],
+            spec: None,
             kind: IndustryKind::OilWell,
             stock: 10,
             capacity: 100,

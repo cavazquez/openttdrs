@@ -272,9 +272,19 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                             BuildMenuAction::BuildHouse,
                         ),
                         (
-                            "Mina de carbon",
+                            "Mina de carbón",
                             "opengfx/tiles/industry_2013.png",
                             BuildMenuAction::BuildCoalMine,
+                        ),
+                        (
+                            "Mina de hierro",
+                            "opengfx/tiles/industry_2092.png",
+                            BuildMenuAction::BuildIronOreMine,
+                        ),
+                        (
+                            "Mina de oro",
+                            "opengfx/tiles/industry_2247.png",
+                            BuildMenuAction::BuildGoldMine,
                         ),
                         (
                             "Pozo petrolero",
@@ -282,14 +292,29 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                             BuildMenuAction::BuildOilWell,
                         ),
                         (
-                            "Fabrica",
+                            "Refinería",
+                            "opengfx/tiles/industry_2047.png",
+                            BuildMenuAction::BuildOilRefinery,
+                        ),
+                        (
+                            "Fábrica",
                             "opengfx/tiles/industry_2169.png",
                             BuildMenuAction::BuildFactory,
+                        ),
+                        (
+                            "Aserradero",
+                            "opengfx/tiles/industry_2063.png",
+                            BuildMenuAction::BuildSawmill,
                         ),
                         (
                             "Plantar bosque",
                             "opengfx/tiles/tree_01.png",
                             BuildMenuAction::BuildForest,
+                        ),
+                        (
+                            "Granja",
+                            "opengfx/tiles/industry_2190.png",
+                            BuildMenuAction::BuildFarm,
                         ),
                     ],
                 ),
@@ -435,6 +460,23 @@ fn spawn_icon_tool_buttons(
 
 fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
     for (label, tip, action) in [
+        (
+            "Pausa/Reanudar",
+            "Alternar pausa de simulacion",
+            SaveMenuAction::PauseResume,
+        ),
+        (
+            "Acelerar",
+            "Cicla velocidad: 1x / 2x / 4x",
+            SaveMenuAction::SpeedUp,
+        ),
+        (
+            "Normalizar",
+            "Vuelve a velocidad 1x y zoom 1.0x",
+            SaveMenuAction::Normalize,
+        ),
+        ("Zoom +", "Acercar camara", SaveMenuAction::ZoomIn),
+        ("Zoom -", "Alejar camara", SaveMenuAction::ZoomOut),
         (
             "Guardar...",
             "Elegir archivo y guardar simulacion JSON",

@@ -17,7 +17,9 @@ pub mod tnbp_decode;
 pub mod vehicle;
 
 pub use command::{Command, CommandError, apply_command};
-pub use industry::{INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, industry_produce_period_ticks};
+pub use industry::{
+    INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, IndustrySpec, industry_produce_period_ticks,
+};
 pub use map::{
     Map, MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind,
     openttd_tile_index_to_coord,
@@ -141,7 +143,10 @@ impl GameState {
             let vpos = self.vehicles[i].pos;
             let vcap = self.vehicles[i].capacity;
             if self.vehicles[i].cargo == 0
-                && let Some(ind) = self.industries.iter_mut().find(|ind| ind.pos == vpos)
+                && let Some(ind) = self
+                    .industries
+                    .iter_mut()
+                    .find(|ind| ind.contains_tile(vpos))
             {
                 let load = ind.stock.min(vcap);
                 self.vehicles[i].cargo = load;

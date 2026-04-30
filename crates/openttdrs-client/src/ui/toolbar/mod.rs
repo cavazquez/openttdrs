@@ -8,7 +8,7 @@ pub(crate) use layout::setup_top_toolbar;
 pub(crate) use preview::{rotate_station_with_right_click, update_build_ghost_preview};
 pub(crate) use systems::{
     build_menu_interaction, close_toolbar_button_interaction, close_toolbar_panel_on_escape,
-    handle_minimap_click, handle_order_panel_buttons, handle_save_menu_buttons, handle_tile_click,
+    handle_minimap_click, handle_order_panel_buttons, handle_settings_menu_buttons, handle_tile_click,
     hide_tool_when_panel_closed, setup_minimap, setup_order_panel, sync_minimap, sync_order_panel,
     toolbar_group_interaction, update_tool_button_visuals, update_toolbar_group_visuals,
     update_toolbar_tool_visibility, update_toolbar_tooltip,
@@ -36,9 +36,14 @@ pub(crate) enum BuildMenuAction {
     Orders,
     BuildHouse,
     BuildCoalMine,
+    BuildIronOreMine,
+    BuildGoldMine,
     BuildOilWell,
+    BuildOilRefinery,
     BuildFactory,
+    BuildSawmill,
     BuildForest,
+    BuildFarm,
 }
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
@@ -130,6 +135,11 @@ pub(crate) enum OrderPanelButton {
 pub(crate) enum SaveMenuAction {
     SaveAs,
     LoadFrom,
+    PauseResume,
+    SpeedUp,
+    Normalize,
+    ZoomIn,
+    ZoomOut,
 }
 
 #[derive(Resource)]

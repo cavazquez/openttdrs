@@ -72,11 +72,8 @@ pub(crate) fn update_tile_info_text(
     text_transform.scale = Vec3::splat(proj.scale);
 
     let zoom_label = format!("Zoom {:.2}×", proj.scale);
-    let pause_l = if hud.paused {
-        "Pausa ON (P)"
-    } else {
-        "Pausa off (P)"
-    };
+    let pause_l = if hud.paused { "Pausa ON" } else { "Pausa OFF" };
+    let speed_l = format!("Velocidad {:.0}x", hud.sim_speed);
     let tool_l = match tool_state.active_tool {
         Some(BuildMenuAction::Road) => "Road+",
         Some(BuildMenuAction::RoadX) => "Road NE-SW",
@@ -93,9 +90,14 @@ pub(crate) fn update_tile_info_text(
         Some(BuildMenuAction::Orders) => "Orders",
         Some(BuildMenuAction::BuildHouse) => "Build house",
         Some(BuildMenuAction::BuildCoalMine) => "Build coal mine",
+        Some(BuildMenuAction::BuildIronOreMine) => "Build iron mine",
+        Some(BuildMenuAction::BuildGoldMine) => "Build gold mine",
         Some(BuildMenuAction::BuildOilWell) => "Build oil well",
+        Some(BuildMenuAction::BuildOilRefinery) => "Build oil refinery",
         Some(BuildMenuAction::BuildFactory) => "Build factory",
+        Some(BuildMenuAction::BuildSawmill) => "Build sawmill",
         Some(BuildMenuAction::BuildForest) => "Build forest",
+        Some(BuildMenuAction::BuildFarm) => "Build farm",
         None => "None",
     };
     let order_l = order_state
@@ -108,7 +110,7 @@ pub(crate) fn update_tile_info_text(
         "mapa M:off"
     };
     let hud_footer = format!(
-        "{pause_l} | Tool: {tool_l}{order_l} | ${} | cargas {}/{} | {minimap_l} | JSON: {} | F4 ruta",
+        "{pause_l} | {speed_l} | Tool: {tool_l}{order_l} | ${} | cargas {}/{} | {minimap_l} | JSON: {} | F4 ruta",
         sim.state.economy.money,
         sim.state.stats.cargo_units_delivered,
         sim.state.stats.cargo_units_loaded,

@@ -3,7 +3,7 @@
 use crate::map::{TileCoord, TileKind};
 use crate::{
     BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, DEPOT_BUILD_COST, GameState, Industry,
-    IndustryKind, RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, Station,
+    IndustryKind, IndustrySpec, RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, Station,
     TUNNEL_BUILD_COST_PER_TILE,
 };
 
@@ -26,6 +26,7 @@ pub enum Command {
     PlaceHouse(TileCoord),
     PlaceIndustry(TileCoord),
     PlaceIndustryKind(TileCoord, IndustryKind),
+    PlaceIndustrySpec(TileCoord, IndustrySpec),
     PlaceForest(TileCoord),
     /// Añade una estación y marca la tesela como `TileKind::Station`.
     PlaceStation(TileCoord),
@@ -117,6 +118,7 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
         }
         Command::PlaceIndustry(c) => place_industry_sandbox(state, *c),
         Command::PlaceIndustryKind(c, kind) => place_industry_kind_sandbox(state, *c, *kind),
+        Command::PlaceIndustrySpec(c, spec) => place_industry_spec_sandbox(state, *c, *spec),
         Command::PlaceForest(c) => {
             place_single_transport_tile(state, *c, TileKind::Forest, 0x40, 0x00, 30)
         }
@@ -308,6 +310,22 @@ fn place_rail(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
 
 fn clear_tile(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
     in_bounds(&state.map, c)?;
+    if let Some(industry_idx) = state.industries.iter().position(|i| i.contains_tile(c)) {
+        let industry_tiles = state.industries[industry_idx].tiles.clone();
+        for tile in industry_tiles {
+            state
+                .map
+                .set_kind(tile, TileKind::Grass)
+                .map_err(|_| CommandError::OutOfBounds)?;
+            state
+                .map
+                .set_mapt_m5(tile, 0x00, 0x00)
+                .map_err(|_| CommandError::OutOfBounds)?;
+        }
+        state.industries.remove(industry_idx);
+        state.economy.money -= CLEAR_TILE_COST;
+        return Ok(());
+    }
     state
         .map
         .set_kind(c, TileKind::Grass)
@@ -317,7 +335,7 @@ fn clear_tile(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
         .set_mapt_m5(c, 0x00, 0x00)
         .map_err(|_| CommandError::OutOfBounds)?;
     state.stations.retain(|s| s.pos != c);
-    state.industries.retain(|industry| industry.pos != c);
+    state.industries.retain(|industry| !industry.contains_tile(c));
     state.economy.money -= CLEAR_TILE_COST;
     Ok(())
 }
@@ -338,7 +356,7 @@ fn set_vehicle_orders(
 }
 
 fn place_industry_sandbox(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
-    place_industry_kind_sandbox(state, c, IndustryKind::Factory)
+    place_industry_spec_sandbox(state, c, IndustrySpec::Factory)
 }
 
 fn place_industry_kind_sandbox(
@@ -346,17 +364,122 @@ fn place_industry_kind_sandbox(
     c: TileCoord,
     kind: IndustryKind,
 ) -> Result<(), CommandError> {
-    let m5 = match kind {
-        IndustryKind::CoalMine => 0x00,
-        IndustryKind::Forest => 0x20,
-        IndustryKind::OilWell => 0x2F,
-        IndustryKind::Factory => 0x2B,
+    let spec = match kind {
+        IndustryKind::CoalMine => IndustrySpec::CoalMine,
+        IndustryKind::Forest => IndustrySpec::Forest,
+        IndustryKind::OilWell => IndustrySpec::OilWells,
+        IndustryKind::Factory => IndustrySpec::Factory,
     };
-    place_single_transport_tile(state, c, TileKind::Industry, 0x80, m5, 250)?;
-    state.industries.retain(|industry| industry.pos != c);
-    state.industries.push(Industry::new(c, kind));
+    place_industry_spec_sandbox(state, c, spec)
+}
+
+fn place_industry_spec_sandbox(
+    state: &mut GameState,
+    c: TileCoord,
+    spec: IndustrySpec,
+) -> Result<(), CommandError> {
+    let template = industry_template(c, spec);
+    for (tile, _) in &template {
+        in_bounds(&state.map, *tile)?;
+        let existing_kind = state.map.get_kind(*tile).unwrap_or(TileKind::Grass);
+        if !transport_tile_is_buildable(existing_kind) {
+            return Err(build_error_for_kind(existing_kind));
+        }
+    }
+    let footprint: Vec<TileCoord> = template.iter().map(|(tile, _)| *tile).collect();
+    for (tile, m5) in &template {
+        state
+            .map
+            .set_kind(*tile, TileKind::Industry)
+            .map_err(|_| CommandError::OutOfBounds)?;
+        state
+            .map
+            .set_mapt_m5(*tile, 0x80, *m5)
+            .map_err(|_| CommandError::OutOfBounds)?;
+    }
+    state
+        .industries
+        .retain(|industry| !industry.contains_tile(c));
+    state
+        .industries
+        .push(Industry::with_tiles_spec(c, spec.kind(), spec, footprint));
+    state.economy.money -= 250;
     Ok(())
 }
+
+fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8)> {
+    const COAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+        // Coal mine (0..=6): compacto 2x2.
+        &[(0, 0, 0), (1, 0, 1), (0, 1, 2), (1, 1, 3)],
+        // Variante con extensión lateral.
+        &[(0, 0, 0), (1, 0, 4), (2, 0, 5), (1, 1, 6)],
+    ];
+    const METAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+        // Iron ore / copper ore mine (60..=71).
+        &[(0, 0, 60), (1, 0, 61), (0, 1, 62), (1, 1, 63), (2, 1, 64)],
+        &[(0, 0, 66), (1, 0, 67), (2, 0, 68), (1, 1, 69)],
+    ];
+    const GOLD_MINE_LAYOUTS: [&[(i32, i32, u8)]; 1] = [
+        // Gold mine (89..=90): pequeño.
+        &[(0, 0, 89), (1, 0, 90), (0, 1, 89)],
+    ];
+    const FOREST_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+        // Forest (24..=28): mancha irregular.
+        &[(0, 0, 24), (1, 0, 25), (2, 0, 26), (0, 1, 27), (2, 1, 28)],
+        // Variante más compacta.
+        &[(0, 0, 24), (1, 0, 25), (0, 1, 26), (1, 1, 27), (2, 1, 28)],
+    ];
+    const FARM_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+        // Farm (52..=57): footprint más ancho.
+        &[(0, 0, 52), (1, 0, 53), (2, 0, 54), (0, 1, 55), (1, 1, 56), (2, 1, 57)],
+        &[(0, 0, 52), (1, 0, 53), (0, 1, 54), (1, 1, 55), (2, 1, 56)],
+    ];
+    const OIL_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+        // Oil wells (47..=51): pozo + equipos.
+        &[(0, 0, 47), (1, 0, 48), (0, 1, 49), (1, 1, 50)],
+        // Variante pequeña en L.
+        &[(0, 0, 47), (1, 0, 48), (0, 1, 51)],
+    ];
+    const REFINERY_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+        // Oil refinery (16..=23): edificio industrial más grande.
+        &[(0, 0, 16), (1, 0, 17), (2, 0, 18), (0, 1, 19), (1, 1, 20), (2, 1, 21)],
+        &[(0, 0, 22), (1, 0, 23), (0, 1, 16), (1, 1, 17), (2, 1, 18)],
+    ];
+    const FACTORY_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+        // Factory (43..=46): bloque principal.
+        &[(0, 0, 43), (1, 0, 44), (2, 0, 45), (0, 1, 46), (1, 1, 43), (2, 1, 44)],
+        // Variante escalonada.
+        &[(0, 0, 43), (1, 0, 44), (0, 1, 45), (1, 1, 46), (2, 1, 43)],
+    ];
+    const SAWMILL_LAYOUTS: [&[(i32, i32, u8)]; 1] = [
+        // Sawmill (11..=15): mediano.
+        &[(0, 0, 11), (1, 0, 12), (0, 1, 13), (1, 1, 14), (2, 1, 15)],
+    ];
+
+    let offsets_and_gfx = match spec {
+        IndustrySpec::CoalMine => choose_layout(c, &COAL_MINE_LAYOUTS),
+        IndustrySpec::IronOreMine | IndustrySpec::CopperOreMine => choose_layout(c, &METAL_MINE_LAYOUTS),
+        IndustrySpec::GoldMine => choose_layout(c, &GOLD_MINE_LAYOUTS),
+        IndustrySpec::Forest => choose_layout(c, &FOREST_LAYOUTS),
+        IndustrySpec::Farm => choose_layout(c, &FARM_LAYOUTS),
+        IndustrySpec::OilWells => choose_layout(c, &OIL_LAYOUTS),
+        IndustrySpec::OilRefinery => choose_layout(c, &REFINERY_LAYOUTS),
+        IndustrySpec::Factory => choose_layout(c, &FACTORY_LAYOUTS),
+        IndustrySpec::Sawmill => choose_layout(c, &SAWMILL_LAYOUTS),
+    };
+
+    offsets_and_gfx
+        .iter()
+        .map(|(dx, dy, m5)| (TileCoord::new(c.x + dx, c.y + dy), *m5))
+        .collect()
+}
+
+fn choose_layout<'a>(c: TileCoord, layouts: &'a [&'a [(i32, i32, u8)]]) -> &'a [(i32, i32, u8)] {
+    let seed = (c.x as i64).wrapping_mul(31).wrapping_add((c.y as i64).wrapping_mul(17));
+    let idx = seed.unsigned_abs() as usize % layouts.len();
+    layouts[idx]
+}
+
 
 fn in_bounds(map: &crate::map::Map, c: TileCoord) -> Result<(), CommandError> {
     if map.get(c).is_none() {
@@ -522,8 +645,34 @@ mod tests {
             s.map.get_kind(TileCoord::new(4, 1)),
             Some(TileKind::Industry)
         );
+        // CoalMine ahora ocupa múltiples tiles (2x2).
+        assert_eq!(
+            s.map.get_kind(TileCoord::new(5, 1)),
+            Some(TileKind::Industry)
+        );
+        assert_eq!(
+            s.map.get_kind(TileCoord::new(4, 2)),
+            Some(TileKind::Industry)
+        );
+        assert_eq!(
+            s.map.get_kind(TileCoord::new(5, 2)),
+            Some(TileKind::Industry)
+        );
         assert!(s.industries.iter().any(|industry| {
             industry.pos == TileCoord::new(4, 1) && industry.kind == IndustryKind::CoalMine
         }));
+    }
+
+    #[test]
+    fn clear_any_industry_tile_removes_whole_industry_footprint() {
+        let mut s = GameState::new(10, 10);
+        let origin = TileCoord::new(2, 2);
+        apply_command(&mut s, &Command::PlaceIndustryKind(origin, IndustryKind::Factory)).unwrap();
+        assert_eq!(s.industries.len(), 1);
+        let target_inside = TileCoord::new(3, 2);
+        apply_command(&mut s, &Command::ClearTile(target_inside)).unwrap();
+        assert!(s.industries.is_empty());
+        // Factory template cubre también (4,3).
+        assert_eq!(s.map.get_kind(TileCoord::new(4, 3)), Some(TileKind::Grass));
     }
 }

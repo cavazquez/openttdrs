@@ -36,13 +36,17 @@ pub(crate) fn place_industries(
             match tile.kind {
                 TileKind::CoalField if !from_ottd_file => {
                     if coal_n.is_multiple_of(stride_proc) {
-                        state.industries.push(Industry::new(c, IndustryKind::CoalMine));
+                        state
+                            .industries
+                            .push(Industry::new(c, IndustryKind::CoalMine));
                     }
                     coal_n += 1;
                 }
                 TileKind::Forest if !from_ottd_file => {
                     if forest_n.is_multiple_of(stride_proc) {
-                        state.industries.push(Industry::new(c, IndustryKind::Forest));
+                        state
+                            .industries
+                            .push(Industry::new(c, IndustryKind::Forest));
                     }
                     forest_n += 1;
                 }
@@ -60,7 +64,10 @@ pub(crate) fn place_industries(
     }
 }
 
-fn place_industries_from_map_components(state: &mut GameState, ottd_extras: Option<&OttdmapExtras>) {
+fn place_industries_from_map_components(
+    state: &mut GameState,
+    ottd_extras: Option<&OttdmapExtras>,
+) {
     for component in industry_components(state) {
         let Some(&origin) = component.first() else {
             continue;

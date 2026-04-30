@@ -32,10 +32,7 @@ pub(crate) fn sync_window_title(
     sim: Res<SimWorld>,
     time: Res<Time>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
-    cam_q: Query<
-        &Projection,
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
-    >,
+    cam_q: Query<&Projection, (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>)>,
     mut state: Local<WindowTitleSync>,
 ) {
     let scale = cam_q

@@ -120,17 +120,7 @@ pub(crate) fn spawn_initial_vehicles(
         let vh = tile_min_z(&sim.state.map, vehicle.pos);
         let p = iso(vehicle.pos.x, vehicle.pos.y);
         let (xrel, yrel, w, h) = vehicle_sprite_bounds(dir);
-        let pos3 = overlay_pos(
-            p,
-            xrel,
-            yrel,
-            w,
-            h,
-            vh,
-            1.0,
-            vehicle.pos.x,
-            vehicle.pos.y,
-        );
+        let pos3 = overlay_pos(p, xrel, yrel, w, h, vh, 1.0, vehicle.pos.x, vehicle.pos.y);
         commands.spawn((
             MapVisualLayer,
             VehicleSprite(vehicle.id),

@@ -7,10 +7,10 @@ use crate::camera::CameraControlPlugin;
 use crate::debug_gizmos::DebugGizmosPlugin;
 use crate::persistence::PersistencePlugin;
 use crate::render::WaterAnimationPlugin;
+use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
 use crate::simulation::SimulationPlugin;
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::ClientUiPlugin;
-use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
 use crate::window_status::WindowStatusPlugin;
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone, Copy)]

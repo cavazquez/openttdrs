@@ -190,7 +190,9 @@ fn main() -> Result<(), String> {
     for y in 0..h {
         for x in 0..w {
             let c = TileCoord::new(x as i32, y as i32);
-            let t = map.get(c).ok_or_else(|| "tile fuera de rango".to_string())?;
+            let t = map
+                .get(c)
+                .ok_or_else(|| "tile fuera de rango".to_string())?;
             *counts.entry(tile_kind_name(t.kind)).or_insert(0) += 1;
             min_height = min_height.min(t.height);
             max_height = max_height.max(t.height);

@@ -30,13 +30,12 @@ pub(crate) struct CameraControlPlugin;
 
 impl Plugin for CameraControlPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CameraVelocity>()
-            .add_systems(
-                Update,
-                move_camera
-                    .in_set(UpdateSet::Camera)
-                    .run_if(in_state(ClientScreen::InGame)),
-            );
+        app.init_resource::<CameraVelocity>().add_systems(
+            Update,
+            move_camera
+                .in_set(UpdateSet::Camera)
+                .run_if(in_state(ClientScreen::InGame)),
+        );
     }
 }
 

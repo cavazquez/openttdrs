@@ -4,9 +4,9 @@ use bevy::prelude::*;
 use openttdrs_core::save;
 
 use crate::bevy_app::UpdateSet;
+use crate::render::{RemapMapVisualsPending, VehicleIndex};
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
-use crate::render::{RemapMapVisualsPending, VehicleIndex};
 
 pub(crate) struct PersistencePlugin;
 

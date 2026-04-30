@@ -1,5 +1,8 @@
 use bevy::prelude::*;
-use openttdrs_core::{GameState, IndustryKind, OttdmapExtras, TileCoord, TileKind, TnbpDecoded, VehicleKind, jgr_tunnels_from_decoded};
+use openttdrs_core::{
+    GameState, IndustryKind, OttdmapExtras, TileCoord, TileKind, TnbpDecoded, VehicleKind,
+    jgr_tunnels_from_decoded,
+};
 use std::collections::BTreeMap;
 
 use super::industries::industry_group_from_gfx;

@@ -77,9 +77,10 @@ mod tests {
         state
             .industries
             .push(Industry::new(TileCoord::new(2, 2), IndustryKind::Forest));
-        state
-            .industries
-            .push(Industry::new(TileCoord::new(10, 10), IndustryKind::CoalMine));
+        state.industries.push(Industry::new(
+            TileCoord::new(10, 10),
+            IndustryKind::CoalMine,
+        ));
 
         place_stations(&mut state);
         assert_eq!(state.stations.len(), 2);
@@ -91,15 +92,29 @@ mod tests {
         state
             .industries
             .push(Industry::new(TileCoord::new(1, 1), IndustryKind::Forest));
-        state.stations.push(openttdrs_core::Station::new(TileCoord::new(4, 1)));
+        state
+            .stations
+            .push(openttdrs_core::Station::new(TileCoord::new(4, 1)));
 
         place_roads(&mut state);
 
-        assert_eq!(state.map.get_kind(TileCoord::new(2, 1)), Some(TileKind::Road));
-        assert_eq!(state.map.get_kind(TileCoord::new(3, 1)), Some(TileKind::Road));
+        assert_eq!(
+            state.map.get_kind(TileCoord::new(2, 1)),
+            Some(TileKind::Road)
+        );
+        assert_eq!(
+            state.map.get_kind(TileCoord::new(3, 1)),
+            Some(TileKind::Road)
+        );
         // Endpoint industry/station no se fuerzan a Road.
-        assert_ne!(state.map.get_kind(TileCoord::new(1, 1)), Some(TileKind::Road));
-        assert_ne!(state.map.get_kind(TileCoord::new(4, 1)), Some(TileKind::Road));
+        assert_ne!(
+            state.map.get_kind(TileCoord::new(1, 1)),
+            Some(TileKind::Road)
+        );
+        assert_ne!(
+            state.map.get_kind(TileCoord::new(4, 1)),
+            Some(TileKind::Road)
+        );
     }
 
     #[test]
@@ -111,8 +126,12 @@ mod tests {
         state
             .industries
             .push(Industry::new(TileCoord::new(8, 8), IndustryKind::CoalMine));
-        state.stations.push(openttdrs_core::Station::new(TileCoord::new(4, 1)));
-        state.stations.push(openttdrs_core::Station::new(TileCoord::new(10, 8)));
+        state
+            .stations
+            .push(openttdrs_core::Station::new(TileCoord::new(4, 1)));
+        state
+            .stations
+            .push(openttdrs_core::Station::new(TileCoord::new(10, 8)));
 
         place_vehicles(&mut state);
         assert_eq!(state.vehicles.len(), 2);

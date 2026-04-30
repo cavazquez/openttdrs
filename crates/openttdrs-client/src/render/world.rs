@@ -10,10 +10,9 @@ use crate::iso::{
 };
 use crate::render::{
     IndustryPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, RenderGrid,
-    TileRenderContext, WorldAssets,
-    flush_map_batches, push_forest_tree, push_water_tile, spawn_generic_land_tile,
-    spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
-    spawn_transport_object_tile,
+    TileRenderContext, WorldAssets, flush_map_batches, push_forest_tree, push_water_tile,
+    spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
+    spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
 use crate::state::{ClientScreen, SimWorld};
 

@@ -3,9 +3,9 @@
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
+use crate::render::VehicleIndex;
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
-use crate::render::VehicleIndex;
 
 pub(crate) struct SimulationPlugin;
 

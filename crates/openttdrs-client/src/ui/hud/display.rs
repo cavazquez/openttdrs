@@ -34,7 +34,7 @@ pub(crate) fn setup_tile_info_ui(mut commands: Commands) {
 }
 
 /// Actualiza el texto de informacion del tile seleccionado.
-#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)] // firma dictada por el sistema ECS de Bevy
 pub(crate) fn update_tile_info_text(
     selected: Res<SelectedTileInfo>,
     sim: Res<SimWorld>,

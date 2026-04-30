@@ -50,6 +50,7 @@ pub(crate) fn rotate_station_with_right_click(
     drag_state.pending_tiles.clear();
 }
 
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn update_build_ghost_preview(
     mut commands: Commands,
     windows: Query<&Window, With<PrimaryWindow>>,

@@ -135,7 +135,6 @@ struct OttdmapHeader {
     dense_offset: usize,
     width: u32,
     height: u32,
-    format_version: u16,
     flags: u16,
 }
 
@@ -170,7 +169,6 @@ fn parse_ottdmap_header(data: &[u8]) -> Result<OttdmapHeader, MapError> {
         dense_offset: OTTDMAP_HEADER_LEN_VERSIONED,
         width,
         height,
-        format_version,
         flags,
     })
 }
@@ -439,7 +437,6 @@ impl Map {
         let width = header.width;
         let height = header.height;
         let n = (width as usize).saturating_mul(height as usize);
-        let _version = header.format_version;
         let s = ottdmap_dense_slices(data, header, n)?;
 
         let mut tiles = Vec::with_capacity(n);
@@ -495,6 +492,7 @@ mod ottdmap_binary_tests {
         v.extend_from_slice(&OTTDMAP_FLAG_HAS_M2_HI.to_le_bytes());
     }
 
+    #[allow(clippy::too_many_arguments)] // helper de test: un plano denso por argumento
     fn build_ottdmap_2x2(
         mapt: [u8; 4],
         heights: [u8; 4],

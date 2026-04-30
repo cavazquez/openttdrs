@@ -780,6 +780,7 @@ fn drag_line_tiles(action: BuildMenuAction, from: (i32, i32), to: (i32, i32)) ->
 }
 
 /// Dos clicks: el primero ancla el ghost, el segundo confirma. Click derecho cancela.
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_tile_click(
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -910,9 +911,9 @@ pub(crate) fn handle_tile_click(
         return;
     }
 
-    if let Some(cmd) = command_for_action(action, TileCoord::new(tx, ty), &station_state) {
-        if apply_command(&mut sim.state, &cmd).is_ok() {
-            pending.pending = true;
-        }
+    if let Some(cmd) = command_for_action(action, TileCoord::new(tx, ty), &station_state)
+        && apply_command(&mut sim.state, &cmd).is_ok()
+    {
+        pending.pending = true;
     }
 }

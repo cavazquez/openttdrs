@@ -19,6 +19,8 @@
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::cast_precision_loss)]
 #![allow(clippy::default_constructed_unit_structs)]
+// Queries Bevy con filtros (With/Without) suelen disparar type_complexity sin aportar claridad.
+#![allow(clippy::type_complexity)]
 
 mod bevy_app;
 mod camera;

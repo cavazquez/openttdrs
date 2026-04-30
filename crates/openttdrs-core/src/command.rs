@@ -12,7 +12,7 @@ use crate::{
 pub enum Command {
     /// Coloca carretera en la tesela (MVP: solo validación de terreno).
     PlaceRoad(TileCoord),
-    /// Coloca o combina una pieza de carretera OpenTTD (`RoadBits`, bits 0..3).
+    /// Coloca o combina una pieza de carretera `OpenTTD` (`RoadBits`, bits 0..3).
     PlaceRoadBits(TileCoord, u8),
     /// Coloca via de tren en la tesela (MVP: validacion de terreno).
     PlaceRail(TileCoord),

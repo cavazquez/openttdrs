@@ -5,6 +5,7 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
+pub mod cargo;
 pub mod command;
 pub mod industry;
 pub mod map;
@@ -16,6 +17,7 @@ pub mod tick;
 pub mod tnbp_decode;
 pub mod vehicle;
 
+pub use cargo::{CargoStock, CargoType};
 pub use command::{Command, CommandError, apply_command, industry_template};
 pub use industry::{
     INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, IndustrySpec, industry_produce_period_ticks,
@@ -29,7 +31,7 @@ pub use pathfinder::find_path;
 pub use save::SaveError;
 pub use save::load_from_str;
 pub use station::{
-    STATION_COVERAGE_RADIUS, Station, StationCoverage, industry_in_station_coverage,
+    STATION_COVERAGE_RADIUS, Station, StationCoverage, StopKind, industry_in_station_coverage,
     station_coverage_at, station_covers_tile,
 };
 pub use tick::GameTick;
@@ -143,18 +145,33 @@ impl GameState {
 
         let mut loaded_this_tick = vec![false; self.vehicles.len()];
 
-        // Carga: el vehículo toma cargo de industrias dentro de la cobertura de una estación cercana.
-        for i in 0..self.vehicles.len() {
+        // Carga: el vehículo toma cargo compatible dentro de la cobertura de una estación cercana.
+        for (i, loaded_flag) in loaded_this_tick
+            .iter_mut()
+            .enumerate()
+            .take(self.vehicles.len())
+        {
             let vpos = self.vehicles[i].pos;
             let vcap = self.vehicles[i].capacity;
-            let Some(station_pos) = self.station_covering_tile(vpos) else {
+            let vcargo_type = self.vehicles[i].cargo_type;
+            let Some(station_idx) = self.station_index_covering_tile(vpos) else {
                 continue;
             };
+            let Some(station) = self.stations.get(station_idx) else {
+                continue;
+            };
+            let station_pos = station.pos;
             if self.vehicles[i].cargo != 0 {
                 continue;
             }
+            if !station.can_service_vehicle(self.vehicles[i].kind) {
+                continue;
+            }
             if let Some(ind) = self.industries.iter_mut().find(|ind| {
+                let output = ind.output_cargo();
                 ind.stock > 0
+                    && vcargo_type.is_none_or(|c| c == output)
+                    && station.accepts_cargo(output)
                     && station::industry_in_station_coverage(
                         ind,
                         station_pos,
@@ -162,10 +179,11 @@ impl GameState {
                     )
             }) {
                 let load = ind.stock.min(vcap);
+                self.vehicles[i].cargo_type = Some(ind.output_cargo());
                 self.vehicles[i].cargo = load;
                 ind.stock -= load;
                 if load > 0 {
-                    loaded_this_tick[i] = true;
+                    *loaded_flag = true;
                     self.stats.cargo_pickups += 1;
                     self.stats.cargo_units_loaded += u64::from(load);
                 }
@@ -173,19 +191,30 @@ impl GameState {
         }
 
         // Descarga: el vehículo entrega en la estación cuya cobertura pisa.
-        for i in 0..self.vehicles.len() {
-            if loaded_this_tick[i] {
+        for (i, loaded_flag) in loaded_this_tick
+            .iter()
+            .enumerate()
+            .take(self.vehicles.len())
+        {
+            if *loaded_flag {
                 continue;
             }
             let vpos = self.vehicles[i].pos;
             let vcargo = self.vehicles[i].cargo;
+            let vcargo_type = self.vehicles[i].cargo_type;
             let Some(station_idx) = self.station_index_covering_tile(vpos) else {
                 continue;
             };
-            if vcargo > 0
-                && let Some(st) = self.stations.get_mut(station_idx)
-            {
+            if vcargo == 0 {
+                continue;
+            }
+            let cargo_type = vcargo_type.unwrap_or(CargoType::Goods);
+            if let Some(st) = self.stations.get_mut(station_idx) {
+                if !st.accepts_cargo(cargo_type) || !st.can_service_vehicle(self.vehicles[i].kind) {
+                    continue;
+                }
                 st.stock += vcargo;
+                st.cargo_stock.add(cargo_type, vcargo);
                 st.income += u64::from(vcargo);
                 self.economy.money += i64::from(vcargo) * CARGO_DELIVERY_PAYMENT;
                 self.stats.cargo_deliveries += 1;
@@ -209,11 +238,6 @@ impl GameState {
         for vehicle in &mut self.vehicles {
             vehicle.step();
         }
-    }
-
-    fn station_covering_tile(&self, tile: TileCoord) -> Option<TileCoord> {
-        self.station_index_covering_tile(tile)
-            .and_then(|idx| self.stations.get(idx).map(|station| station.pos))
     }
 
     fn station_index_covering_tile(&self, tile: TileCoord) -> Option<usize> {

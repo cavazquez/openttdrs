@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use openttdrs_core::Vehicle;
+use openttdrs_core::{CargoType, Vehicle, VehicleKind};
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::{iso, overlay_pos, tile_min_z};
@@ -126,6 +126,7 @@ pub(crate) fn spawn_initial_vehicles(
             VehicleSprite(vehicle.id),
             Sprite {
                 image: trucks.for_dir(dir),
+                color: vehicle_tint(vehicle),
                 ..default()
             },
             Transform::from_translation(pos3).with_scale(Vec3::splat(TRUCK_SCALE)),
@@ -151,7 +152,16 @@ pub(crate) struct VehicleSprite(u32);
 pub(crate) struct VehicleCargoLabel(u32);
 
 fn vehicle_cargo_label(v: &Vehicle) -> String {
-    format!("{}/{}", v.cargo, v.capacity)
+    let cargo = match v.cargo_type {
+        Some(CargoType::Passengers) => "PAX",
+        Some(CargoType::Mail) => "MAIL",
+        Some(CargoType::Goods) => "GOODS",
+        Some(CargoType::Coal) => "COAL",
+        Some(CargoType::Wood) => "WOOD",
+        Some(CargoType::Oil) => "OIL",
+        None => "ANY",
+    };
+    format!("{cargo} {}/{}", v.cargo, v.capacity)
 }
 
 fn vehicle_cargo_color(v: &Vehicle) -> Color {
@@ -164,6 +174,14 @@ fn vehicle_cargo_color(v: &Vehicle) -> Color {
 
 fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
     Vec3::new(vehicle_pos.x, vehicle_pos.y + 21.0, vehicle_pos.z + 0.35)
+}
+
+fn vehicle_tint(v: &Vehicle) -> Color {
+    match v.kind {
+        VehicleKind::Bus => Color::srgb(0.95, 0.95, 1.0),
+        VehicleKind::Truck => Color::srgb(1.0, 0.9, 0.8),
+        VehicleKind::Train => Color::srgb(0.86, 1.0, 0.86),
+    }
 }
 
 pub(crate) fn update_vehicles(
@@ -196,6 +214,7 @@ pub(crate) fn update_vehicles(
         let pos3 = overlay_pos(p, xrel, yrel, w, h, vh, 1.0, v.pos.x, v.pos.y);
         transform.translation = pos3;
         sprite.image = trucks.for_dir(dir);
+        sprite.color = vehicle_tint(v);
     }
 
     for (label, mut transform, mut text, mut color) in &mut labels {
@@ -234,7 +253,9 @@ mod tests {
             dest: TileCoord::new(2, 1),
             path: VecDeque::from([TileCoord::new(2, 1)]),
             cargo: 0,
+            cargo_type: None,
             capacity: 30,
+            running: true,
             orders: Vec::new(),
             current_order: 0,
         }
@@ -251,7 +272,7 @@ mod tests {
             vehicle_sprite_bounds(VehicleDir::Ne),
             vehicle_sprite_bounds(VehicleDir::Se)
         );
-        assert_eq!(vehicle_cargo_label(&v), "0/30");
+        assert_eq!(vehicle_cargo_label(&v), "ANY 0/30");
         assert_ne!(
             vehicle_cargo_color(&v),
             vehicle_cargo_color(&Vehicle { cargo: 5, ..v })
@@ -290,6 +311,6 @@ mod tests {
         world.run_system_once(update_vehicles).unwrap();
 
         let mut labels = world.query_filtered::<&Text2d, With<VehicleCargoLabel>>();
-        assert_eq!(labels.single(&world).unwrap().to_string(), "0/30");
+        assert_eq!(labels.single(&world).unwrap().to_string(), "ANY 0/30");
     }
 }

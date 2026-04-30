@@ -20,13 +20,16 @@ use industry_panel::{
 use main_menu::{main_menu_interaction, setup_main_menu, setup_main_menu_camera};
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState};
 use toolbar::{
-    DragBuildState, StationBuildState, ToolbarState, UiToolState, build_menu_interaction,
-    close_toolbar_button_interaction, close_toolbar_panel_on_escape, handle_minimap_click,
-    handle_order_panel_buttons, handle_settings_menu_buttons, handle_tile_click,
-    hide_tool_when_panel_closed, rotate_station_with_right_click, setup_build_menu, setup_minimap,
-    setup_order_panel, setup_top_toolbar, sync_minimap, sync_order_panel,
-    toolbar_group_interaction, update_build_ghost_preview, update_tool_button_visuals,
-    update_toolbar_group_visuals, update_toolbar_tool_visibility, update_toolbar_tooltip,
+    DepotPanelState, DragBuildState, StationBuildState, StationCargoPanelState, ToolbarState,
+    UiToolState, build_menu_interaction, close_toolbar_button_interaction,
+    close_toolbar_panel_on_escape, handle_depot_panel_buttons, handle_minimap_click,
+    handle_order_panel_buttons, handle_settings_menu_buttons, handle_station_cargo_panel_buttons,
+    handle_tile_click, hide_tool_when_panel_closed, rotate_station_with_right_click,
+    setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
+    setup_station_cargo_panel, setup_top_toolbar, sync_depot_panel, sync_minimap, sync_order_panel,
+    sync_station_cargo_panel, toolbar_group_interaction, update_build_ghost_preview,
+    update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
+    update_toolbar_tooltip,
 };
 pub(crate) struct ClientUiPlugin;
 
@@ -38,6 +41,8 @@ impl Plugin for ClientUiPlugin {
             .init_resource::<StationBuildState>()
             .init_resource::<DragBuildState>()
             .init_resource::<OrderEditState>()
+            .init_resource::<DepotPanelState>()
+            .init_resource::<StationCargoPanelState>()
             .init_resource::<ToolbarState>()
             .init_resource::<IndustryPanelState>()
             .add_systems(
@@ -52,6 +57,8 @@ impl Plugin for ClientUiPlugin {
                     setup_build_menu,
                     setup_minimap,
                     setup_order_panel,
+                    setup_depot_panel,
+                    setup_station_cargo_panel,
                     setup_industry_panel,
                 )
                     .in_set(StartupSet::Ui),
@@ -86,11 +93,22 @@ impl Plugin for ClientUiPlugin {
                     industry_panel_close_interaction,
                     handle_minimap_click,
                     handle_order_panel_buttons,
+                    handle_depot_panel_buttons,
+                    handle_station_cargo_panel_buttons,
                     handle_settings_menu_buttons,
                     handle_tile_click,
+                )
+                    .in_set(UpdateSet::Ui)
+                    .run_if(in_state(ClientScreen::InGame)),
+            )
+            .add_systems(
+                Update,
+                (
                     update_build_ghost_preview,
                     sync_minimap,
                     sync_order_panel,
+                    sync_depot_panel,
+                    sync_station_cargo_panel,
                     sync_industry_panel,
                     update_tile_info_text,
                 )

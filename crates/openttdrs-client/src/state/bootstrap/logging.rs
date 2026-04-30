@@ -164,6 +164,7 @@ pub(crate) fn log_detection_summary(
     for v in &state.vehicles {
         let key = match v.kind {
             VehicleKind::Truck => "Truck",
+            VehicleKind::Bus => "Bus",
             VehicleKind::Train => "Train",
         };
         *vehicles.entry(key).or_insert(0) += 1;

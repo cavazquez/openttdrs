@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use crate::cargo::CargoType;
 use crate::map::TileCoord;
 
 /// Capacidad de carga por defecto (unidades de cargo).
@@ -8,6 +9,7 @@ pub const VEHICLE_CAPACITY: u32 = 20;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum VehicleKind {
     Truck,
+    Bus,
     /// Misma lógica de movimiento que camión; pensado para rutas sobre `TileKind::Rail`.
     Train,
 }
@@ -52,7 +54,11 @@ pub struct Vehicle {
     pub origin: TileCoord,
     pub dest: TileCoord,
     pub cargo: u32,
+    #[serde(default)]
+    pub cargo_type: Option<CargoType>,
     pub capacity: u32,
+    #[serde(default = "default_running_true")]
+    pub running: bool,
     /// Camino calculado por el pathfinder (siguiente tile en el frente).
     pub path: VecDeque<TileCoord>,
     /// Lista circular de destinos asignados por el jugador.
@@ -65,6 +71,10 @@ pub struct Vehicle {
 impl Vehicle {
     #[must_use]
     pub fn new(id: u32, kind: VehicleKind, pos: TileCoord, dest: TileCoord) -> Self {
+        let cargo_type = match kind {
+            VehicleKind::Bus => Some(CargoType::Passengers),
+            VehicleKind::Truck | VehicleKind::Train => None,
+        };
         Self {
             id,
             kind,
@@ -72,7 +82,9 @@ impl Vehicle {
             origin: pos,
             dest,
             cargo: 0,
+            cargo_type,
             capacity: VEHICLE_CAPACITY,
+            running: true,
             path: VecDeque::new(),
             orders: Vec::new(),
             current_order: 0,
@@ -82,6 +94,9 @@ impl Vehicle {
     /// Avanza un paso: sigue el path BFS si está disponible; si no, Manhattan.
     /// Al llegar al destino invierte trayecto y vacía el path (se recomputa en `GameState`).
     pub fn step(&mut self) {
+        if !self.running {
+            return;
+        }
         if let Some(next) = self.path.pop_front() {
             self.pos = next;
             if self.pos == self.dest {
@@ -137,4 +152,8 @@ impl Vehicle {
         self.origin = self.pos;
         self.dest = self.orders[self.current_order].destination();
     }
+}
+
+const fn default_running_true() -> bool {
+    true
 }

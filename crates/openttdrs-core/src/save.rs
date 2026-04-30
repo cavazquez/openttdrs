@@ -164,4 +164,45 @@ mod tests {
         assert_eq!(again.map.dimensions(), s.map.dimensions());
         let _ = std::fs::remove_file(&tmp);
     }
+
+    #[test]
+    fn legacy_json_without_new_vehicle_station_fields_still_loads() {
+        let mut s = GameState::new(4, 4);
+        s.stations.push(crate::Station::new(TileCoord::new(1, 1)));
+        s.vehicles.push(crate::Vehicle::new(
+            1,
+            crate::VehicleKind::Truck,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 2),
+        ));
+        let mut v: serde_json::Value = serde_json::from_str(&s.save_json().unwrap()).unwrap();
+        if let Some(stations) = v
+            .get_mut("stations")
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for station in stations {
+                let _ = station.as_object_mut().map(|obj| {
+                    obj.remove("stop_kind");
+                    obj.remove("cargo_stock");
+                });
+            }
+        }
+        if let Some(vehicles) = v
+            .get_mut("vehicles")
+            .and_then(serde_json::Value::as_array_mut)
+        {
+            for vehicle in vehicles {
+                let _ = vehicle.as_object_mut().map(|obj| {
+                    obj.remove("cargo_type");
+                    obj.remove("running");
+                });
+            }
+        }
+        let legacy_text = serde_json::to_string(&v).unwrap();
+        let loaded = load_from_str(&legacy_text).unwrap();
+        assert_eq!(loaded.stations.len(), 1);
+        assert_eq!(loaded.vehicles.len(), 1);
+        assert!(loaded.vehicles[0].running);
+        assert_eq!(loaded.stations[0].cargo_stock, crate::CargoStock::default());
+    }
 }

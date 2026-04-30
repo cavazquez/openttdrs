@@ -190,6 +190,11 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                                 "assets/opengfx/tiles/truck_stop_ground_0.png",
                                 BuildMenuAction::Station,
                             ),
+                            (
+                                "Parada de bus",
+                                "assets/opengfx/tiles/bus_stop_ground_0.png",
+                                BuildMenuAction::BusStop,
+                            ),
                         ],
                     );
                 });
@@ -608,6 +613,7 @@ mod tests {
             "assets/opengfx/tiles/bridge_wood_road_x.png",
             "assets/opengfx/tiles/tunnel_road_rear.png",
             "assets/opengfx/tiles/truck_stop_ground_0.png",
+            "assets/opengfx/tiles/bus_stop_ground_0.png",
             "assets/opengfx/tiles/rail_depot_ne.png",
             "assets/opengfx/tiles/bridge_wood_rail_x.png",
             "assets/opengfx/tiles/tunnel_rail_rear.png",

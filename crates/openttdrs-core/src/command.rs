@@ -4,7 +4,7 @@ use crate::map::{TileCoord, TileKind};
 use crate::{
     BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, DEPOT_BUILD_COST, GameState, Industry,
     IndustryKind, IndustrySpec, RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, Station,
-    TUNNEL_BUILD_COST_PER_TILE,
+    StopKind, TUNNEL_BUILD_COST_PER_TILE, Vehicle, VehicleKind,
 };
 
 /// Acción del jugador reproducible (p. ej. log para red en I8).
@@ -33,6 +33,15 @@ pub enum Command {
     PlaceStation(TileCoord),
     /// Añade una estación de carretera con orientación visual `0..3`.
     PlaceStationDir(TileCoord, u8),
+    PlaceBusStop(TileCoord, u8),
+    PlaceTruckStop(TileCoord, u8),
+    BuildRoadVehicleAtDepot(TileCoord, VehicleKind),
+    SellVehicle(u32),
+    ToggleVehicleRunning(u32),
+    CloneVehicleOrders {
+        from_vehicle_id: u32,
+        to_vehicle_id: u32,
+    },
     /// Limpia la tesela y vuelve a `TileKind::Grass`.
     ClearTile(TileCoord),
 }
@@ -50,6 +59,9 @@ pub enum CommandError {
     StationAlreadyExists,
     StationNotFound,
     VehicleNotFound,
+    InvalidDepotTile,
+    VehicleKindNotAllowed,
+    IncompatibleStopForVehicle,
 }
 
 /// Aplica `cmd` a `state` o devuelve error sin mutar.
@@ -129,6 +141,15 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
         }
         Command::PlaceStation(c) => place_station(state, *c),
         Command::PlaceStationDir(c, dir) => place_station_dir(state, *c, *dir),
+        Command::PlaceBusStop(c, dir) => place_stop_kind(state, *c, *dir, StopKind::BusStop),
+        Command::PlaceTruckStop(c, dir) => place_stop_kind(state, *c, *dir, StopKind::TruckStop),
+        Command::BuildRoadVehicleAtDepot(c, kind) => build_road_vehicle_at_depot(state, *c, *kind),
+        Command::SellVehicle(id) => sell_vehicle(state, *id),
+        Command::ToggleVehicleRunning(id) => toggle_vehicle_running(state, *id),
+        Command::CloneVehicleOrders {
+            from_vehicle_id,
+            to_vehicle_id,
+        } => clone_vehicle_orders(state, *from_vehicle_id, *to_vehicle_id),
         Command::ClearTile(c) => clear_tile(state, *c),
     }
 }
@@ -268,10 +289,19 @@ fn place_road_bits(state: &mut GameState, c: TileCoord, bits: u8) -> Result<(), 
 }
 
 fn place_station(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
-    place_station_dir(state, c, 0)
+    place_stop_kind(state, c, 0, StopKind::TruckStop)
 }
 
 fn place_station_dir(state: &mut GameState, c: TileCoord, dir: u8) -> Result<(), CommandError> {
+    place_stop_kind(state, c, dir, StopKind::TruckStop)
+}
+
+fn place_stop_kind(
+    state: &mut GameState,
+    c: TileCoord,
+    dir: u8,
+    stop_kind: StopKind,
+) -> Result<(), CommandError> {
     in_bounds(&state.map, c)?;
     if state.stations.iter().any(|s| s.pos == c) {
         return Err(CommandError::StationAlreadyExists);
@@ -289,7 +319,7 @@ fn place_station_dir(state: &mut GameState, c: TileCoord, dir: u8) -> Result<(),
                 .map
                 .set_mapt_m5(c, 0x50, dir & 0x03)
                 .map_err(|_| CommandError::OutOfBounds)?;
-            state.stations.push(Station::new(c));
+            state.stations.push(Station::new_with_kind(c, stop_kind));
             state.economy.money -= STATION_BUILD_COST;
             Ok(())
         }
@@ -367,16 +397,80 @@ fn set_vehicle_station_orders(
     id: u32,
     stations: Vec<TileCoord>,
 ) -> Result<(), CommandError> {
-    for station in &stations {
-        in_bounds(&state.map, *station)?;
-        if !state.stations.iter().any(|s| s.pos == *station) {
-            return Err(CommandError::StationNotFound);
-        }
-    }
-    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == id) else {
+    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == id) else {
         return Err(CommandError::VehicleNotFound);
     };
+    let vehicle_kind = state.vehicles[vehicle_idx].kind;
+    for station in &stations {
+        in_bounds(&state.map, *station)?;
+        let Some(st) = state.stations.iter().find(|s| s.pos == *station) else {
+            return Err(CommandError::StationNotFound);
+        };
+        if !st.can_service_vehicle(vehicle_kind) {
+            return Err(CommandError::IncompatibleStopForVehicle);
+        }
+    }
+    let vehicle = &mut state.vehicles[vehicle_idx];
     vehicle.set_station_orders(stations);
+    Ok(())
+}
+
+fn build_road_vehicle_at_depot(
+    state: &mut GameState,
+    depot_pos: TileCoord,
+    kind: VehicleKind,
+) -> Result<(), CommandError> {
+    in_bounds(&state.map, depot_pos)?;
+    let Some(tile) = state.map.get(depot_pos) else {
+        return Err(CommandError::OutOfBounds);
+    };
+    if tile.kind != TileKind::RoadDepot {
+        return Err(CommandError::InvalidDepotTile);
+    }
+    if matches!(kind, VehicleKind::Train) {
+        return Err(CommandError::VehicleKindNotAllowed);
+    }
+    let next_id = state
+        .vehicles
+        .iter()
+        .map(|v| v.id)
+        .max()
+        .map_or(1, |v| v.saturating_add(1));
+    let mut vehicle = Vehicle::new(next_id, kind, depot_pos, depot_pos);
+    vehicle.running = false;
+    state.vehicles.push(vehicle);
+    Ok(())
+}
+
+fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(), CommandError> {
+    let Some(idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    state.vehicles.remove(idx);
+    Ok(())
+}
+
+fn toggle_vehicle_running(state: &mut GameState, vehicle_id: u32) -> Result<(), CommandError> {
+    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    vehicle.running = !vehicle.running;
+    Ok(())
+}
+
+fn clone_vehicle_orders(
+    state: &mut GameState,
+    from_vehicle_id: u32,
+    to_vehicle_id: u32,
+) -> Result<(), CommandError> {
+    let Some(src_idx) = state.vehicles.iter().position(|v| v.id == from_vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let Some(dst_idx) = state.vehicles.iter().position(|v| v.id == to_vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let src_orders = state.vehicles[src_idx].orders.clone();
+    state.vehicles[dst_idx].set_vehicle_orders(src_orders);
     Ok(())
 }
 
@@ -760,10 +854,10 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
 }
 
 fn choose_layout<'a>(c: TileCoord, layouts: &'a [&'a [(i32, i32, u8)]]) -> &'a [(i32, i32, u8)] {
-    let seed = (c.x as i64)
+    let seed = i64::from(c.x)
         .wrapping_mul(31)
-        .wrapping_add((c.y as i64).wrapping_mul(17));
-    let idx = seed.unsigned_abs() as usize % layouts.len();
+        .wrapping_add(i64::from(c.y).wrapping_mul(17));
+    let idx = usize::try_from(seed.unsigned_abs()).unwrap_or(0) % layouts.len();
     layouts[idx]
 }
 
@@ -854,6 +948,33 @@ mod tests {
         assert_eq!(tile.kind, TileKind::Station);
         assert_eq!((tile.mapt >> 4) & 0x0F, 5);
         assert_eq!(tile.m5 & 0x03, 2);
+    }
+
+    #[test]
+    fn build_road_vehicle_at_depot_creates_stopped_bus() {
+        let mut s = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        apply_command(&mut s, &Command::PlaceRoadDepot(depot)).unwrap();
+        apply_command(
+            &mut s,
+            &Command::BuildRoadVehicleAtDepot(depot, VehicleKind::Bus),
+        )
+        .unwrap();
+        assert_eq!(s.vehicles.len(), 1);
+        assert_eq!(s.vehicles[0].kind, VehicleKind::Bus);
+        assert!(!s.vehicles[0].running);
+    }
+
+    #[test]
+    fn set_vehicle_station_orders_rejects_incompatible_stop_kind() {
+        let mut s = GameState::new(8, 8);
+        let stop = TileCoord::new(1, 1);
+        apply_command(&mut s, &Command::PlaceBusStop(stop, 0)).unwrap();
+        s.vehicles
+            .push(Vehicle::new(10, VehicleKind::Truck, stop, stop));
+        let e =
+            apply_command(&mut s, &Command::SetVehicleStationOrders(10, vec![stop])).unwrap_err();
+        assert_eq!(e, CommandError::IncompatibleStopForVehicle);
     }
 
     #[test]

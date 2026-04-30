@@ -1,3 +1,4 @@
+use crate::CargoType;
 use crate::map::TileCoord;
 
 /// Ticks entre cada ciclo de producción (equivale a `INDUSTRY_PRODUCE_TICKS` del upstream).
@@ -43,6 +44,18 @@ impl IndustrySpec {
             Self::Forest | Self::Farm => IndustryKind::Forest,
             Self::OilWells | Self::OilRefinery => IndustryKind::OilWell,
             Self::Factory | Self::Sawmill => IndustryKind::Factory,
+        }
+    }
+
+    #[must_use]
+    pub const fn output_cargo(self) -> CargoType {
+        match self {
+            Self::CoalMine | Self::IronOreMine | Self::CopperOreMine | Self::GoldMine => {
+                CargoType::Coal
+            }
+            Self::Forest | Self::Farm | Self::Sawmill => CargoType::Wood,
+            Self::OilWells | Self::OilRefinery => CargoType::Oil,
+            Self::Factory => CargoType::Goods,
         }
     }
 }
@@ -129,6 +142,19 @@ impl Industry {
                 .stock
                 .saturating_add(INDUSTRY_PRODUCE_AMOUNT)
                 .min(self.capacity);
+        }
+    }
+
+    #[must_use]
+    pub fn output_cargo(&self) -> CargoType {
+        if let Some(spec) = self.spec {
+            return spec.output_cargo();
+        }
+        match self.kind {
+            IndustryKind::CoalMine => CargoType::Coal,
+            IndustryKind::Forest => CargoType::Wood,
+            IndustryKind::OilWell => CargoType::Oil,
+            IndustryKind::Factory => CargoType::Goods,
         }
     }
 }

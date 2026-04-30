@@ -86,6 +86,7 @@ pub(crate) fn update_tile_info_text(
         Some(BuildMenuAction::RailBridge) => "Rail bridge",
         Some(BuildMenuAction::RailTunnel) => "Rail tunnel",
         Some(BuildMenuAction::Station) => "Station",
+        Some(BuildMenuAction::BusStop) => "Bus stop",
         Some(BuildMenuAction::Clear) => "Clear",
         Some(BuildMenuAction::Orders) => "Orders",
         Some(BuildMenuAction::BuildHouse) => "Build house",
@@ -217,9 +218,11 @@ pub(crate) fn update_tile_info_text(
         .find(|vehicle| vehicle.pos == pos)
         .map(|vehicle| {
             format!(
-                "\nveh #{} {:?} cargo:{}/{} dest:({}, {}) orders:{}",
+                "\nveh #{} {:?} {} cargo:{:?} {}/{} dest:({}, {}) orders:{}",
                 vehicle.id,
                 vehicle.kind,
+                if vehicle.running { "RUN" } else { "STOP" },
+                vehicle.cargo_type,
                 vehicle.cargo,
                 vehicle.capacity,
                 vehicle.dest.x,
@@ -390,11 +393,10 @@ mod tests {
                     },
                 )
                 .unwrap();
-            sim.state.stations.push(Station {
-                pos: c,
-                stock: 12,
-                income: 144,
-            });
+            let mut station = Station::new(c);
+            station.stock = 12;
+            station.income = 144;
+            sim.state.stations.push(station);
         }
         world.run_system_once(update_tile_info_text).unwrap();
         let station_text = hud_text(&mut world);
@@ -454,11 +456,10 @@ mod tests {
             .map
             .set_kind(industry_pos, TileKind::Industry)
             .unwrap();
-        sim.state.stations.push(Station {
-            pos: station_pos,
-            stock: 7,
-            income: 84,
-        });
+        let mut station = Station::new(station_pos);
+        station.stock = 7;
+        station.income = 84;
+        sim.state.stations.push(station);
         sim.state.industries.push(Industry {
             pos: industry_pos,
             tiles: vec![industry_pos],

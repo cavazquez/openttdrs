@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::save;
-use openttdrs_core::{Command, Map, TileCoord, TileKind, VehicleOrder, apply_command};
+use openttdrs_core::{Command, Map, TileCoord, TileKind, VehicleKind, VehicleOrder, apply_command};
 #[cfg(not(test))]
 use std::path::Path;
 
@@ -27,6 +27,44 @@ const MINIMAP_CELL: f32 = 3.0;
 const MINIMAP_PAD: f32 = 6.0;
 const MINIMAP_RIGHT: f32 = 10.0;
 const MINIMAP_BOTTOM: f32 = 10.0;
+
+#[derive(Resource, Default)]
+pub(crate) struct DepotPanelState {
+    pub(crate) depot_pos: Option<TileCoord>,
+    pub(crate) selected_vehicle: Option<u32>,
+}
+
+#[derive(Component)]
+pub(crate) struct DepotPanelRoot;
+
+#[derive(Component)]
+pub(crate) struct DepotPanelText;
+
+#[derive(Component, Clone, Copy)]
+pub(crate) enum DepotPanelButton {
+    BuyBus,
+    BuyTruck,
+    ToggleRunning,
+    Sell,
+    CloneFromFirst,
+    Close,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct StationCargoPanelState {
+    pub(crate) station_pos: Option<TileCoord>,
+}
+
+#[derive(Component)]
+pub(crate) struct StationCargoPanelRoot;
+
+#[derive(Component)]
+pub(crate) struct StationCargoPanelText;
+
+#[derive(Component, Clone, Copy)]
+pub(crate) enum StationCargoPanelButton {
+    Close,
+}
 
 fn cancel_placement(drag_state: &mut DragBuildState) {
     drag_state.armed = false;
@@ -154,6 +192,7 @@ fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup {
         | BuildMenuAction::RoadDepot
         | BuildMenuAction::RoadBridge
         | BuildMenuAction::RoadTunnel
+        | BuildMenuAction::BusStop
         | BuildMenuAction::Station
         | BuildMenuAction::Clear => ToolbarGroup::Road,
         BuildMenuAction::Orders => ToolbarGroup::Info,
@@ -608,6 +647,235 @@ pub(crate) fn sync_order_panel(
     }
 }
 
+pub(crate) fn setup_depot_panel(mut commands: Commands) {
+    commands
+        .spawn((
+            DepotPanelRoot,
+            Node {
+                position_type: PositionType::Absolute,
+                right: Val::Px(12.0),
+                bottom: Val::Px(160.0),
+                width: Val::Px(360.0),
+                padding: UiRect::all(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(2.0)),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(6.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.1, 0.08, 0.06, 0.95)),
+            BorderColor::all(Color::srgb(0.75, 0.67, 0.45)),
+            Visibility::Hidden,
+            BuildMenuUi,
+        ))
+        .with_children(|panel| {
+            panel.spawn((
+                DepotPanelText,
+                Text::new("Depósito"),
+                TextFont {
+                    font_size: 13.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.94, 0.9, 0.76)),
+            ));
+            panel
+                .spawn(Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(4.0),
+                    flex_wrap: FlexWrap::Wrap,
+                    ..default()
+                })
+                .with_children(|row| {
+                    spawn_depot_button(row, DepotPanelButton::BuyBus, "Comprar bus");
+                    spawn_depot_button(row, DepotPanelButton::BuyTruck, "Comprar camión");
+                    spawn_depot_button(row, DepotPanelButton::ToggleRunning, "Iniciar/Detener");
+                    spawn_depot_button(row, DepotPanelButton::Sell, "Vender");
+                    spawn_depot_button(row, DepotPanelButton::CloneFromFirst, "Clonar órdenes");
+                    spawn_depot_button(row, DepotPanelButton::Close, "Cerrar");
+                });
+        });
+}
+
+fn spawn_depot_button(
+    parent: &mut ChildSpawnerCommands,
+    action: DepotPanelButton,
+    label: &'static str,
+) {
+    parent.spawn((
+        Button,
+        action,
+        Node {
+            width: Val::Px(110.0),
+            height: Val::Px(24.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(1.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
+        BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
+        Interaction::default(),
+        BuildMenuUi,
+        children![(
+            Text::new(label),
+            TextFont {
+                font_size: 11.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.92, 0.88, 0.72)),
+        )],
+    ));
+}
+
+pub(crate) fn sync_depot_panel(
+    depot_state: Res<DepotPanelState>,
+    sim: Res<SimWorld>,
+    mut root_q: Query<&mut Visibility, With<DepotPanelRoot>>,
+    mut text_q: Query<&mut Text, With<DepotPanelText>>,
+) {
+    let Ok(mut vis) = root_q.single_mut() else {
+        return;
+    };
+    let Some(depot_pos) = depot_state.depot_pos else {
+        *vis = Visibility::Hidden;
+        return;
+    };
+    *vis = Visibility::Visible;
+    let mut out = format!("Depósito en ({}, {})", depot_pos.x, depot_pos.y);
+    let vehicles_here: Vec<_> = sim
+        .state
+        .vehicles
+        .iter()
+        .filter(|vehicle| vehicle.pos == depot_pos)
+        .collect();
+    out.push_str(&format!("\nVehículos en depósito: {}", vehicles_here.len()));
+    for vehicle in vehicles_here.iter().take(6) {
+        out.push_str(&format!(
+            "\n#{} {:?} {} cargo:{}/{}",
+            vehicle.id,
+            vehicle.kind,
+            if vehicle.running { "RUN" } else { "STOP" },
+            vehicle.cargo,
+            vehicle.capacity
+        ));
+    }
+    if let Some(selected) = depot_state.selected_vehicle {
+        out.push_str(&format!("\nSeleccionado: #{selected}"));
+    }
+    if let Ok(mut text) = text_q.single_mut() {
+        **text = out;
+    }
+}
+
+pub(crate) fn setup_station_cargo_panel(mut commands: Commands) {
+    commands
+        .spawn((
+            StationCargoPanelRoot,
+            Node {
+                position_type: PositionType::Absolute,
+                right: Val::Px(12.0),
+                bottom: Val::Px(300.0),
+                width: Val::Px(360.0),
+                padding: UiRect::all(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(2.0)),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(6.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.1, 0.08, 0.06, 0.95)),
+            BorderColor::all(Color::srgb(0.75, 0.67, 0.45)),
+            Visibility::Hidden,
+            BuildMenuUi,
+        ))
+        .with_children(|panel| {
+            panel.spawn((
+                StationCargoPanelText,
+                Text::new("Estación"),
+                TextFont {
+                    font_size: 13.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.94, 0.9, 0.76)),
+            ));
+            panel
+                .spawn(Node {
+                    flex_direction: FlexDirection::Row,
+                    ..default()
+                })
+                .with_children(|row| {
+                    row.spawn((
+                        Button,
+                        StationCargoPanelButton::Close,
+                        Node {
+                            width: Val::Px(90.0),
+                            height: Val::Px(24.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
+                        BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
+                        Interaction::default(),
+                        BuildMenuUi,
+                        children![(
+                            Text::new("Cerrar"),
+                            TextFont {
+                                font_size: 11.0,
+                                ..default()
+                            },
+                            TextColor(Color::srgb(0.92, 0.88, 0.72)),
+                        )],
+                    ));
+                });
+        });
+}
+
+pub(crate) fn sync_station_cargo_panel(
+    station_panel: Res<StationCargoPanelState>,
+    sim: Res<SimWorld>,
+    mut root_q: Query<&mut Visibility, With<StationCargoPanelRoot>>,
+    mut text_q: Query<&mut Text, With<StationCargoPanelText>>,
+) {
+    let Ok(mut vis) = root_q.single_mut() else {
+        return;
+    };
+    let Some(station_pos) = station_panel.station_pos else {
+        *vis = Visibility::Hidden;
+        return;
+    };
+    *vis = Visibility::Visible;
+    let Some(station) = sim.state.stations.iter().find(|st| st.pos == station_pos) else {
+        return;
+    };
+    let mut out = format!(
+        "Estación ({}, {}) {:?}\nColas cargo: pax:{} mail:{} goods:{} coal:{} wood:{} oil:{}",
+        station_pos.x,
+        station_pos.y,
+        station.stop_kind,
+        station.cargo_stock.passengers,
+        station.cargo_stock.mail,
+        station.cargo_stock.goods,
+        station.cargo_stock.coal,
+        station.cargo_stock.wood,
+        station.cargo_stock.oil
+    );
+    let en_route = sim
+        .state
+        .vehicles
+        .iter()
+        .filter(|vehicle| {
+            vehicle
+                .orders
+                .iter()
+                .any(|order| matches!(order, VehicleOrder::Station { station } if *station == station_pos))
+        })
+        .count();
+    out.push_str(&format!("\nVehículos en ruta a esta estación: {en_route}"));
+    if let Ok(mut text) = text_q.single_mut() {
+        **text = out;
+    }
+}
+
 pub(crate) fn handle_order_panel_buttons(
     mut q: Query<(&Interaction, &OrderPanelButton), (Changed<Interaction>, With<Button>)>,
     mut order_state: ResMut<OrderEditState>,
@@ -639,6 +907,113 @@ pub(crate) fn handle_order_panel_buttons(
                     &Command::SetVehicleOrders(vehicle_id, Vec::new()),
                 );
             }
+        }
+    }
+}
+
+pub(crate) fn handle_depot_panel_buttons(
+    mut q: Query<(&Interaction, &DepotPanelButton), (Changed<Interaction>, With<Button>)>,
+    mut depot_state: ResMut<DepotPanelState>,
+    mut sim: ResMut<SimWorld>,
+    mut pending: ResMut<RemapMapVisualsPending>,
+) {
+    for (interaction, button) in &mut q {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let Some(depot_pos) = depot_state.depot_pos else {
+            continue;
+        };
+        match button {
+            DepotPanelButton::Close => {
+                depot_state.depot_pos = None;
+                depot_state.selected_vehicle = None;
+            }
+            DepotPanelButton::BuyBus => {
+                if apply_command(
+                    &mut sim.state,
+                    &Command::BuildRoadVehicleAtDepot(depot_pos, VehicleKind::Bus),
+                )
+                .is_ok()
+                {
+                    pending.pending = true;
+                }
+            }
+            DepotPanelButton::BuyTruck => {
+                if apply_command(
+                    &mut sim.state,
+                    &Command::BuildRoadVehicleAtDepot(depot_pos, VehicleKind::Truck),
+                )
+                .is_ok()
+                {
+                    pending.pending = true;
+                }
+            }
+            DepotPanelButton::ToggleRunning => {
+                let target_id = depot_state.selected_vehicle.or_else(|| {
+                    sim.state
+                        .vehicles
+                        .iter()
+                        .find(|vehicle| vehicle.pos == depot_pos)
+                        .map(|vehicle| vehicle.id)
+                });
+                if let Some(vehicle_id) = target_id
+                    && apply_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id))
+                        .is_ok()
+                {
+                    depot_state.selected_vehicle = Some(vehicle_id);
+                }
+            }
+            DepotPanelButton::Sell => {
+                let target_id = depot_state.selected_vehicle.or_else(|| {
+                    sim.state
+                        .vehicles
+                        .iter()
+                        .find(|vehicle| vehicle.pos == depot_pos)
+                        .map(|vehicle| vehicle.id)
+                });
+                if let Some(vehicle_id) = target_id
+                    && apply_command(&mut sim.state, &Command::SellVehicle(vehicle_id)).is_ok()
+                {
+                    pending.pending = true;
+                    depot_state.selected_vehicle = None;
+                }
+            }
+            DepotPanelButton::CloneFromFirst => {
+                let ids: Vec<u32> = sim
+                    .state
+                    .vehicles
+                    .iter()
+                    .filter(|vehicle| vehicle.pos == depot_pos)
+                    .map(|vehicle| vehicle.id)
+                    .collect();
+                if ids.len() >= 2
+                    && apply_command(
+                        &mut sim.state,
+                        &Command::CloneVehicleOrders {
+                            from_vehicle_id: ids[0],
+                            to_vehicle_id: ids[1],
+                        },
+                    )
+                    .is_ok()
+                {
+                    depot_state.selected_vehicle = Some(ids[1]);
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn handle_station_cargo_panel_buttons(
+    mut q: Query<(&Interaction, &StationCargoPanelButton), (Changed<Interaction>, With<Button>)>,
+    mut station_panel: ResMut<StationCargoPanelState>,
+) {
+    for (interaction, button) in &mut q {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        if matches!(button, StationCargoPanelButton::Close) {
+            station_panel.station_pos = None;
         }
     }
 }
@@ -916,6 +1291,7 @@ fn command_for_action(
         BuildMenuAction::RoadY => Some(Command::PlaceRoadBits(pos, 0x05)),
         BuildMenuAction::Rail => Some(Command::PlaceRail(pos)),
         BuildMenuAction::Station => Some(Command::PlaceStationDir(pos, station_state.orientation)),
+        BuildMenuAction::BusStop => Some(Command::PlaceBusStop(pos, station_state.orientation)),
         BuildMenuAction::Clear => Some(Command::ClearTile(pos)),
         BuildMenuAction::RoadDepot => Some(Command::PlaceRoadDepot(pos)),
         BuildMenuAction::RailDepot => Some(Command::PlaceRailDepot(pos)),
@@ -1023,6 +1399,8 @@ pub(crate) fn handle_tile_click(
     station_state: Res<StationBuildState>,
     mut drag_state: ResMut<DragBuildState>,
     mut order_state: ResMut<OrderEditState>,
+    mut depot_state: ResMut<DepotPanelState>,
+    mut station_panel: ResMut<StationCargoPanelState>,
     mut pending: ResMut<RemapMapVisualsPending>,
     mut industry_panel: ResMut<IndustryPanelState>,
     menu_pointer: Query<&Interaction, With<BuildMenuUi>>,
@@ -1060,11 +1438,33 @@ pub(crate) fn handle_tile_click(
 
     let Some(action) = tool_state.active_tool else {
         cancel_placement(&mut drag_state);
-        if mouse.just_pressed(MouseButton::Left)
-            && sim.state.map.get_kind(pos) == Some(TileKind::Industry)
-        {
-            industry_panel.open = true;
-            industry_panel.focus_tile = Some(pos);
+        if mouse.just_pressed(MouseButton::Left) {
+            match sim.state.map.get_kind(pos) {
+                Some(TileKind::Industry) => {
+                    industry_panel.open = true;
+                    industry_panel.focus_tile = Some(pos);
+                    depot_state.depot_pos = None;
+                    station_panel.station_pos = None;
+                }
+                Some(TileKind::RoadDepot) => {
+                    depot_state.depot_pos = Some(pos);
+                    depot_state.selected_vehicle = sim
+                        .state
+                        .vehicles
+                        .iter()
+                        .find(|vehicle| vehicle.pos == pos)
+                        .map(|vehicle| vehicle.id);
+                    station_panel.station_pos = None;
+                }
+                Some(TileKind::Station) => {
+                    station_panel.station_pos = Some(pos);
+                    depot_state.depot_pos = None;
+                }
+                _ => {
+                    depot_state.depot_pos = None;
+                    station_panel.station_pos = None;
+                }
+            }
         }
         return;
     };
@@ -1390,6 +1790,8 @@ mod tests {
         world.insert_resource(StationBuildState::default());
         world.insert_resource(DragBuildState::default());
         world.insert_resource(OrderEditState::default());
+        world.insert_resource(DepotPanelState::default());
+        world.insert_resource(StationCargoPanelState::default());
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(IndustryPanelState::default());
         world.run_system_once(handle_tile_click).unwrap();

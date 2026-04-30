@@ -33,7 +33,7 @@ pub(crate) fn rotate_station_with_right_click(
         return;
     }
     match tool_state.active_tool {
-        Some(BuildMenuAction::Station) => {
+        Some(BuildMenuAction::Station) | Some(BuildMenuAction::BusStop) => {
             station_state.orientation = (station_state.orientation + 1) % 4;
         }
         Some(BuildMenuAction::RoadX) => {
@@ -108,7 +108,7 @@ pub(crate) fn update_build_ghost_preview(
             vec![(tx, ty)]
         };
     let tunnel_valid = tunnel_preview_is_valid(&sim.state.map, action, &preview_tiles);
-    if action == BuildMenuAction::Station {
+    if action == BuildMenuAction::Station || action == BuildMenuAction::BusStop {
         spawn_station_coverage_preview(
             &mut commands,
             &asset_server,
@@ -343,6 +343,10 @@ fn preview_image_for_action(
             "assets/opengfx/tiles/truck_stop_ground_{}.png",
             station_state.orientation
         ))),
+        BuildMenuAction::BusStop => Some(asset_server.load::<Image>(format!(
+            "assets/opengfx/tiles/bus_stop_ground_{}.png",
+            station_state.orientation
+        ))),
         BuildMenuAction::Road => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/road_flat_02.png"))
         }
@@ -423,6 +427,7 @@ fn preview_target_is_valid(action: BuildMenuAction, kind: TileKind) -> bool {
         | BuildMenuAction::RailBridge
         | BuildMenuAction::RailTunnel
         | BuildMenuAction::Station
+        | BuildMenuAction::BusStop
         | BuildMenuAction::BuildHouse
         | BuildMenuAction::BuildCoalMine
         | BuildMenuAction::BuildIronOreMine

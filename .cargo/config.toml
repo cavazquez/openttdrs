@@ -4,10 +4,11 @@
 #   con inputs muy grandes). Da suficiente optimización para que Bevy corra bien.
 # - El código propio usa opt-level=1 también: compilación incremental rápida.
 #
-# mold: linker más rápido y robusto (sudo apt install mold)
-[target.x86_64-unknown-linux-gnu]
-linker = "clang"
-rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+# No fijar mold/clang aquí: en CI (ubuntu-latest) suele faltar mold y clang rechaza
+# -fuse-ld=mold. Opcional en tu máquina (~/.cargo/config.toml o override local):
+#   [target.x86_64-unknown-linux-gnu]
+#   linker = "clang"
+#   rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
 # Para producción: cargo run --release
 

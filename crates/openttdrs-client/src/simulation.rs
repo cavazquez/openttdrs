@@ -31,7 +31,7 @@ pub(crate) fn advance_sim(
         return;
     }
     const TICK_HZ: f32 = 15.0;
-    *acc += time.delta_secs();
+    *acc += time.delta_secs() * hud.sim_speed.max(0.1);
     let period = 1.0 / TICK_HZ;
     let mut stepped = false;
     while *acc >= period {
@@ -61,6 +61,7 @@ mod tests {
         world.insert_resource(Time::<()>::default());
         world.insert_resource(SimHudControls {
             paused: true,
+            sim_speed: 1.0,
             ..default()
         });
         world.insert_resource(SimWorld::default());

@@ -89,6 +89,7 @@ mod tests {
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(SimHudControls {
             paused: false,
+            sim_speed: 1.0,
             json_save_path: save_path_s,
             minimap_visible: true,
         });
@@ -121,6 +122,7 @@ mod tests {
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(SimHudControls {
             paused: false,
+            sim_speed: 1.0,
             json_save_path: save_path_s,
             minimap_visible: true,
         });

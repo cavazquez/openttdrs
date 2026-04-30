@@ -180,4 +180,19 @@ mod tests {
         let title = q.single(&world).unwrap().title.clone();
         assert!(title.contains("zoom 1.00x"));
     }
+
+    #[test]
+    fn sync_window_title_without_camera_query_uses_default_scale() {
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        let mut time = Time::<()>::default();
+        time.advance_by(std::time::Duration::from_secs_f32(1.1));
+        world.insert_resource(time);
+        world.spawn((Window::default(), PrimaryWindow));
+
+        world.run_system_once(sync_window_title).unwrap();
+        let mut q = world.query_filtered::<&Window, With<PrimaryWindow>>();
+        let title = q.single(&world).unwrap().title.clone();
+        assert!(title.contains("zoom 1.00x"));
+    }
 }

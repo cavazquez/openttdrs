@@ -86,6 +86,5 @@ mod tests {
         world.run_system_once(advance_sim).unwrap();
         let after = world.resource::<SimWorld>().state.tick.get();
         assert!(after > before);
-
     }
 }

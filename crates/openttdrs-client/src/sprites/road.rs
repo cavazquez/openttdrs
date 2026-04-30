@@ -161,8 +161,10 @@ mod tests {
         let center = TileCoord::new(1, 1);
         map.set_kind(center, TileKind::Road).unwrap();
         map.set_mapt_m5(center, 0x20, 0).unwrap();
-        map.set_kind(TileCoord::new(0, 1), TileKind::Station).unwrap();
-        map.set_kind(TileCoord::new(1, 0), TileKind::Industry).unwrap();
+        map.set_kind(TileCoord::new(0, 1), TileKind::Station)
+            .unwrap();
+        map.set_kind(TileCoord::new(1, 0), TileKind::Industry)
+            .unwrap();
         map.set_kind(TileCoord::new(2, 1), TileKind::House).unwrap();
         map.set_kind(TileCoord::new(1, 2), TileKind::Road).unwrap();
 

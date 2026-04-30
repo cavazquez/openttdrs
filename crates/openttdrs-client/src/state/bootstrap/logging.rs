@@ -181,7 +181,9 @@ pub(crate) fn log_detection_summary(
 #[allow(clippy::unwrap_used)]
 mod logging_coverage_tests {
     use super::log_detection_summary;
-    use openttdrs_core::{GameState, Industry, IndustryKind, OttdmapExtras, TileCoord, TileKind, Vehicle, VehicleKind};
+    use openttdrs_core::{
+        GameState, Industry, IndustryKind, OttdmapExtras, TileCoord, TileKind, Vehicle, VehicleKind,
+    };
 
     #[test]
     fn log_detection_summary_runs_on_tiny_map() {
@@ -192,11 +194,26 @@ mod logging_coverage_tests {
     #[test]
     fn log_detection_summary_loaded_file_with_extras_and_entities() {
         let mut state = GameState::new(4, 4);
-        state.map.set_kind(TileCoord::new(0, 0), TileKind::Industry).unwrap();
-        state.map.set_kind(TileCoord::new(1, 0), TileKind::Station).unwrap();
-        state.map.set_kind(TileCoord::new(2, 0), TileKind::Road).unwrap();
-        state.map.set_kind(TileCoord::new(3, 0), TileKind::Rail).unwrap();
-        state.map.set_kind(TileCoord::new(0, 1), TileKind::Unknown(7)).unwrap();
+        state
+            .map
+            .set_kind(TileCoord::new(0, 0), TileKind::Industry)
+            .unwrap();
+        state
+            .map
+            .set_kind(TileCoord::new(1, 0), TileKind::Station)
+            .unwrap();
+        state
+            .map
+            .set_kind(TileCoord::new(2, 0), TileKind::Road)
+            .unwrap();
+        state
+            .map
+            .set_kind(TileCoord::new(3, 0), TileKind::Rail)
+            .unwrap();
+        state
+            .map
+            .set_kind(TileCoord::new(0, 1), TileKind::Unknown(7))
+            .unwrap();
 
         state.industries.push(Industry {
             pos: TileCoord::new(0, 0),
@@ -204,7 +221,9 @@ mod logging_coverage_tests {
             stock: 10,
             capacity: 100,
         });
-        state.stations.push(openttdrs_core::Station::new(TileCoord::new(1, 0)));
+        state
+            .stations
+            .push(openttdrs_core::Station::new(TileCoord::new(1, 0)));
         state.vehicles.push(Vehicle::new(
             1,
             VehicleKind::Train,

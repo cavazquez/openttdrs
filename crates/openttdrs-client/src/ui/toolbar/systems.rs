@@ -1069,14 +1069,19 @@ mod tests {
                 TileCoord::new(1, 2),
                 &StationBuildState::default()
             ),
-            Some(Command::PlaceIndustryKind(_, openttdrs_core::IndustryKind::CoalMine))
+            Some(Command::PlaceIndustryKind(
+                _,
+                openttdrs_core::IndustryKind::CoalMine
+            ))
         ));
-        assert!(command_for_action(
-            BuildMenuAction::RoadTunnel,
-            TileCoord::new(1, 2),
-            &StationBuildState::default()
-        )
-        .is_none());
+        assert!(
+            command_for_action(
+                BuildMenuAction::RoadTunnel,
+                TileCoord::new(1, 2),
+                &StationBuildState::default()
+            )
+            .is_none()
+        );
 
         assert!(matches!(
             command_for_line_action(BuildMenuAction::RoadTunnel, &[(1, 1), (3, 1)]),
@@ -1096,12 +1101,29 @@ mod tests {
             drag_line_tiles(BuildMenuAction::RoadY, (3, 1), (0, 4)),
             vec![(3, 1), (3, 2), (3, 3), (3, 4)]
         );
+        assert_eq!(
+            drag_line_tiles(BuildMenuAction::Road, (5, 2), (2, 2)),
+            vec![(5, 2), (4, 2), (3, 2), (2, 2)]
+        );
+        assert_eq!(
+            drag_line_tiles(BuildMenuAction::Road, (2, 2), (3, 6)),
+            vec![(2, 2), (2, 3), (2, 4), (2, 5), (2, 6)]
+        );
     }
 
     #[test]
     fn map_related_helpers_cover_color_and_tunnels() {
-        assert_eq!(minimap_color(TileKind::Water), Color::srgb(0.08, 0.25, 0.55));
+        assert_eq!(
+            minimap_color(TileKind::Water),
+            Color::srgb(0.08, 0.25, 0.55)
+        );
         assert_eq!(minimap_color(TileKind::Road), Color::srgb(0.48, 0.42, 0.32));
+        assert_eq!(minimap_color(TileKind::Rail), Color::srgb(0.68, 0.68, 0.62));
+        assert_eq!(
+            minimap_color(TileKind::Station),
+            Color::srgb(0.95, 0.95, 0.86)
+        );
+        assert_eq!(minimap_color(TileKind::Void), Color::srgb(0.02, 0.02, 0.02));
         assert_eq!(
             minimap_color(TileKind::Unknown(9)),
             Color::srgb(0.38, 0.12, 0.45)

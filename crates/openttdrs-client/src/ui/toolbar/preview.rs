@@ -393,10 +393,22 @@ mod tests {
         .unwrap();
         map.set_kind(c(4, 4), TileKind::Water).unwrap();
 
-        assert!(preview_target_is_valid(BuildMenuAction::Road, TileKind::Grass));
-        assert!(!preview_target_is_valid(BuildMenuAction::Road, TileKind::Water));
-        assert!(preview_target_is_valid(BuildMenuAction::Clear, TileKind::Water));
-        assert!(!preview_target_is_valid(BuildMenuAction::Orders, TileKind::Void));
+        assert!(preview_target_is_valid(
+            BuildMenuAction::Road,
+            TileKind::Grass
+        ));
+        assert!(!preview_target_is_valid(
+            BuildMenuAction::Road,
+            TileKind::Water
+        ));
+        assert!(preview_target_is_valid(
+            BuildMenuAction::Clear,
+            TileKind::Water
+        ));
+        assert!(!preview_target_is_valid(
+            BuildMenuAction::Orders,
+            TileKind::Void
+        ));
 
         assert!(action_is_tunnel(BuildMenuAction::RoadTunnel));
         assert!(action_is_tunnel(BuildMenuAction::RailTunnel));
@@ -421,6 +433,32 @@ mod tests {
             &map,
             BuildMenuAction::Road,
             &[(1, 1), (2, 1)]
+        ));
+
+        map.set_height(c(3, 1), 1).unwrap();
+        assert!(!tunnel_preview_is_valid(
+            &map,
+            BuildMenuAction::RoadTunnel,
+            &[(1, 1), (2, 1), (3, 1)]
+        ));
+
+        assert!(!tunnel_preview_is_valid(
+            &map,
+            BuildMenuAction::RoadTunnel,
+            &[(-1, -1), (0, 0), (1, 1)]
+        ));
+
+        assert!(preview_target_is_valid(
+            BuildMenuAction::BuildFactory,
+            TileKind::Grass
+        ));
+        assert!(!preview_target_is_valid(
+            BuildMenuAction::BuildFactory,
+            TileKind::Void
+        ));
+        assert!(preview_target_is_valid(
+            BuildMenuAction::Orders,
+            TileKind::Industry
         ));
     }
 

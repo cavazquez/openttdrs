@@ -191,7 +191,10 @@ mod tests {
         idx.rebuild(std::slice::from_ref(&v));
         assert_eq!(idx.by_id.get(&7), Some(&0));
         assert!(matches!(vehicle_dir(&v), VehicleDir::Se));
-        assert_ne!(vehicle_sprite_bounds(VehicleDir::Ne), vehicle_sprite_bounds(VehicleDir::Se));
+        assert_ne!(
+            vehicle_sprite_bounds(VehicleDir::Ne),
+            vehicle_sprite_bounds(VehicleDir::Se)
+        );
     }
 
     #[test]
@@ -213,11 +216,7 @@ mod tests {
         });
         world.insert_resource(VehicleIndex::default());
 
-        world.spawn((
-            VehicleSprite(11),
-            Transform::default(),
-            Sprite::default(),
-        ));
+        world.spawn((VehicleSprite(11), Transform::default(), Sprite::default()));
         world.spawn((VehicleSprite(99), Transform::default(), Sprite::default()));
 
         world.run_system_once(rebuild_vehicle_index).unwrap();

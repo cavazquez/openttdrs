@@ -266,17 +266,17 @@ pub(crate) fn update_tile_info_text(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::{setup_tile_info_ui, update_tile_info_text, TileInfoText};
+    use super::{TileInfoText, setup_tile_info_ui, update_tile_info_text};
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
     use bevy::sprite::Anchor;
     use bevy::window::{PrimaryWindow, WindowResolution};
     use openttdrs_core::{Tile, TileCoord, TileKind};
 
+    use crate::render::PrimaryGameCamera;
     use crate::state::SimWorld;
     use crate::ui::hud::{SelectedTileInfo, SimHudControls};
     use crate::ui::{OrderEditState, UiToolState};
-    use crate::render::PrimaryGameCamera;
 
     #[test]
     fn setup_tile_info_ui_spawns_text() {

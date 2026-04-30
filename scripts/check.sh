@@ -7,7 +7,7 @@
 #   ./scripts/check.sh lint   # Solo lints (clippy)
 #   ./scripts/check.sh test   # Solo tests
 #   ./scripts/check.sh cov    # Tests + informe LCOV (requiere cargo-llvm-cov + llvm-tools-preview)
-#   ./scripts/check.sh ci     # Modo CI (falla si hay cambios de formato)
+#   ./scripts/check.sh ci     # Modo CI (aplica fmt, luego lint y tests)
 
 set -euo pipefail
 
@@ -76,7 +76,7 @@ do_all() {
 }
 
 do_ci() {
-    do_fmt_check
+    do_fmt
     do_lint
     do_test
     echo

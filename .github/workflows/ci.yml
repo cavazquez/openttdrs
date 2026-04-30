@@ -8,6 +8,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Menos ruido en el caché (artefactos incrementales); rust-cache guarda target/registry.
+  CARGO_INCREMENTAL: "0"
 
 jobs:
   rust:
@@ -22,6 +24,10 @@ jobs:
 
       - name: caché cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          # Misma clave que Coverage: un workflow calienta caché del otro (mismo Cargo.lock).
+          shared-key: openttdrs
+          add-job-id-key: false
 
       - name: Dependencias Linux (X11 / Vulkan software)
         run: |

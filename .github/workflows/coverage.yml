@@ -8,6 +8,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
 
 jobs:
   codecov:
@@ -22,6 +23,9 @@ jobs:
 
       - name: caché cargo
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: openttdrs
+          add-job-id-key: false
 
       - name: Dependencias Linux (X11 / Vulkan software)
         run: |

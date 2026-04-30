@@ -89,14 +89,18 @@ mod stations_coverage_tests {
     #[test]
     fn place_stations_from_map_tiles_adds_once_per_tile() {
         let mut state = GameState::new(4, 4);
-        state
-            .map
-            .set_kind(TileCoord::new(0, 0), TileKind::Station)
-            .unwrap();
-        state
-            .map
-            .set_kind(TileCoord::new(1, 0), TileKind::Station)
-            .unwrap();
+        assert!(
+            state
+                .map
+                .set_kind(TileCoord::new(0, 0), TileKind::Station)
+                .is_ok()
+        );
+        assert!(
+            state
+                .map
+                .set_kind(TileCoord::new(1, 0), TileKind::Station)
+                .is_ok()
+        );
         state.stations.push(Station::new(TileCoord::new(0, 0)));
 
         place_stations_from_map_tiles(&mut state);

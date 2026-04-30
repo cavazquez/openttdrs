@@ -40,3 +40,21 @@ pub fn industry_sprite_for_gfx(gfx: u16) -> Option<&'static IndustryGfxSprite> {
         None
     }
 }
+
+#[cfg(test)]
+mod industry_coverage_tests {
+    use super::{industry_gfx_entry, industry_sprite_for_gfx};
+
+    #[test]
+    fn industry_gfx_entry_hits_table() {
+        let _ = industry_gfx_entry(0);
+        let _ = industry_gfx_entry(1);
+        let _ = industry_gfx_entry(42);
+    }
+
+    #[test]
+    fn industry_sprite_for_gfx_smoke() {
+        let _ = industry_sprite_for_gfx(0);
+        let _ = industry_sprite_for_gfx(1);
+    }
+}

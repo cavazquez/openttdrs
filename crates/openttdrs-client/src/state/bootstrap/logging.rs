@@ -176,3 +176,15 @@ pub(crate) fn log_detection_summary(
         info!("  - Vehiculo {kind}: {count}");
     }
 }
+
+#[cfg(test)]
+mod logging_coverage_tests {
+    use super::log_detection_summary;
+    use openttdrs_core::GameState;
+
+    #[test]
+    fn log_detection_summary_runs_on_tiny_map() {
+        let state = GameState::new(4, 4);
+        log_detection_summary(&state, false, None);
+    }
+}

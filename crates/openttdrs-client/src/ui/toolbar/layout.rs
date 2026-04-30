@@ -469,3 +469,75 @@ fn spawn_button_icon(
         ));
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use std::fs;
+    use std::path::Path;
+
+    use bevy::app::ScheduleRunnerPlugin;
+    use bevy::asset::AssetPlugin;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::image::ImagePlugin;
+    use bevy::prelude::*;
+
+    use super::setup_top_toolbar;
+
+    const ONE_PX_PNG: &[u8] = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/one_pixel.png"
+    ));
+
+    fn write_png(root: &Path, rel: &str) {
+        let p = root.join(rel);
+        if let Some(dir) = p.parent() {
+            fs::create_dir_all(dir).expect("mkdir");
+        }
+        fs::write(&p, ONE_PX_PNG).expect("write png");
+    }
+
+    fn stub_toolbar_pngs(root: &Path) {
+        for rel in [
+            "opengfx/tiles/rail_1005.png",
+            "opengfx/tiles/road_flat_00.png",
+            "opengfx/tiles/road_flat_01.png",
+            "opengfx/tiles/road_flat_02.png",
+            "opengfx/tiles/house_church_build.png",
+            "opengfx/tiles/object_lighthouse.png",
+            "opengfx/tiles/object_transmitter.png",
+            "opengfx/tiles/road_depot_0.png",
+            "opengfx/tiles/bridge_wood_road_x.png",
+            "opengfx/tiles/tunnel_road_rear.png",
+            "opengfx/tiles/truck_stop_ground_0.png",
+            "opengfx/tiles/rail_depot_ne.png",
+            "opengfx/tiles/bridge_wood_rail_x.png",
+            "opengfx/tiles/tunnel_rail_rear.png",
+            "opengfx/tiles/industry_2013.png",
+            "opengfx/tiles/industry_2028.png",
+            "opengfx/tiles/industry_2169.png",
+            "opengfx/tiles/tree_01.png",
+        ] {
+            write_png(root, rel);
+        }
+    }
+
+    #[test]
+    fn setup_top_toolbar_loads_stub_icons() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        stub_toolbar_pngs(dir.path());
+        let root = dir.path().to_str().expect("utf8");
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins.set(ScheduleRunnerPlugin::run_once()));
+        app.add_plugins(AssetPlugin {
+            file_path: root.into(),
+            ..default()
+        });
+        app.add_plugins(ImagePlugin::default());
+        app.update();
+        app.world_mut()
+            .run_system_once(setup_top_toolbar)
+            .expect("toolbar");
+    }
+}

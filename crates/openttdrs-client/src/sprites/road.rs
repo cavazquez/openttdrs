@@ -18,11 +18,7 @@ pub fn tram_track_bits_m3(m3: u8) -> u8 {
 /// Índice del PNG `tram_flat_*` (y misma tabla de desplazamiento que carretera) cuando `m3`
 /// define geometría; los assets se generan desde SPR_TRAMWAY_OVERLAY (`descargar_graficos.sh`).
 #[must_use]
-pub fn tram_flat_sprite_index(
-    tileh: u8,
-    m3: u8,
-    flat_offset_tbl: &[u8; 16],
-) -> Option<usize> {
+pub fn tram_flat_sprite_index(tileh: u8, m3: u8, flat_offset_tbl: &[u8; 16]) -> Option<usize> {
     let tb = tram_track_bits_m3(m3);
     if tb == 0 {
         None

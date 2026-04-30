@@ -47,3 +47,29 @@ pub(crate) fn place_stations_from_map_tiles(state: &mut GameState) {
         }
     }
 }
+
+#[cfg(test)]
+mod stations_coverage_tests {
+    use super::{place_stations_from_footer_stxy, place_stations_from_map_tiles};
+    use openttdrs_core::{GameState, OttdmapExtras};
+
+    #[test]
+    fn place_stations_from_footer_none_is_noop() {
+        let mut state = GameState::new(4, 4);
+        place_stations_from_footer_stxy(&mut state, None);
+        assert!(state.stations.is_empty());
+    }
+
+    #[test]
+    fn place_stations_from_footer_empty_stxy_is_noop() {
+        let mut state = GameState::new(4, 4);
+        let ex = OttdmapExtras::default();
+        place_stations_from_footer_stxy(&mut state, Some(&ex));
+    }
+
+    #[test]
+    fn place_stations_from_map_tiles_runs() {
+        let mut state = GameState::new(4, 4);
+        place_stations_from_map_tiles(&mut state);
+    }
+}

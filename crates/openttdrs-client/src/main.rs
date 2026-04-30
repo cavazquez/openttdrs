@@ -35,6 +35,9 @@ mod state;
 mod ui;
 mod window_status;
 
+#[cfg(test)]
+mod client_coverage_test;
+
 use std::path::Path;
 
 fn main() {
@@ -73,4 +76,32 @@ fn check_required_assets(asset_root: &str) -> bool {
     }
     eprintln!("Genera los assets con: ./scripts/descargar_graficos.sh");
     false
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod main_asset_checks {
+    use super::check_required_assets;
+    use std::fs;
+
+    #[test]
+    fn check_required_assets_fails_when_missing() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        assert!(!check_required_assets(dir.path().to_str().unwrap()));
+    }
+
+    #[test]
+    fn check_required_assets_ok_with_min_pngs() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let t = dir.path().join("opengfx/tiles");
+        fs::create_dir_all(&t).expect("mkdir");
+        let png = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/one_pixel.png"
+        ));
+        for name in ["grass.png", "water.png", "vehicle_bus_sw.png"] {
+            fs::write(t.join(name), png).expect("write");
+        }
+        assert!(check_required_assets(dir.path().to_str().unwrap()));
+    }
 }

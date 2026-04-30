@@ -333,3 +333,38 @@ fn tunnel_preview_is_valid(map: &Map, action: BuildMenuAction, tiles: &[(i32, i3
         && !matches!(end.kind, TileKind::Water | TileKind::Void)
         && start.height == end.height
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::World;
+
+    fn run_rotate(world: &mut World, tool: Option<BuildMenuAction>, drag_armed: bool) {
+        let mut mouse = ButtonInput::<MouseButton>::default();
+        mouse.press(MouseButton::Right);
+        world.insert_resource(mouse);
+        world.insert_resource(UiToolState { active_tool: tool });
+        world.insert_resource(StationBuildState::default());
+        world.insert_resource(DragBuildState {
+            armed: drag_armed,
+            ..default()
+        });
+        world
+            .run_system_once(rotate_station_with_right_click)
+            .unwrap();
+    }
+
+    #[test]
+    fn rotate_station_right_click_covers_branches() {
+        let mut world = World::new();
+        run_rotate(&mut world, Some(BuildMenuAction::Station), false);
+        run_rotate(&mut world, Some(BuildMenuAction::RoadX), false);
+        run_rotate(&mut world, Some(BuildMenuAction::RoadY), false);
+        run_rotate(&mut world, Some(BuildMenuAction::Road), false);
+        run_rotate(&mut world, Some(BuildMenuAction::Rail), false);
+        run_rotate(&mut world, None, false);
+        run_rotate(&mut world, Some(BuildMenuAction::Station), true);
+    }
+}

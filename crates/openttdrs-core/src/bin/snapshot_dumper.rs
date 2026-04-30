@@ -271,3 +271,38 @@ fn main() -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod snapshot_dumper_coverage_tests {
+    use super::{Fnv1a64, count_components_by_kind, neighbors4, tile_kind_name};
+    use openttdrs_core::{Map, TileKind};
+
+    const M3_ROAD_TRAM: &[u8] = include_bytes!("../../tests/fixtures/m3_road_tram_2x2.ottdmap");
+
+    #[test]
+    fn tile_kind_name_variants() {
+        assert_eq!(tile_kind_name(TileKind::Grass), "Grass");
+        assert!(tile_kind_name(TileKind::Unknown(5)).contains('5'));
+    }
+
+    #[test]
+    fn fnv_smoke() {
+        let mut h = Fnv1a64::new();
+        h.write_u8(7);
+        h.write_u16(0x1234);
+        assert_eq!(h.finish_hex().len(), 16);
+    }
+
+    #[test]
+    fn neighbors4_smoke() {
+        let v: Vec<_> = neighbors4(1, 1, 4, 4).collect();
+        assert!(!v.is_empty());
+    }
+
+    #[test]
+    fn count_components_on_fixture() {
+        let (map, _) = Map::from_ottd_binary_with_extras(M3_ROAD_TRAM).expect("fixture");
+        let n = count_components_by_kind(&map, TileKind::Grass);
+        assert!(n >= 1);
+    }
+}

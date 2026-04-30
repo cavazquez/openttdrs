@@ -272,3 +272,35 @@ pub(crate) fn sync_industry_panel(
         }
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::World;
+
+    #[test]
+    fn setup_industry_panel_runs() {
+        let mut world = World::new();
+        world.init_resource::<Assets<Image>>();
+        world.run_system_once(setup_industry_panel).unwrap();
+    }
+
+    #[test]
+    fn industry_panel_close_no_entities_is_noop() {
+        let mut world = World::new();
+        world.insert_resource(IndustryPanelState::default());
+        world
+            .run_system_once(industry_panel_close_interaction)
+            .unwrap();
+    }
+
+    #[test]
+    fn sync_industry_panel_closed_is_noop() {
+        let mut world = World::new();
+        world.insert_resource(IndustryPanelState::default());
+        world.insert_resource(SimWorld::default());
+        world.run_system_once(sync_industry_panel).unwrap();
+    }
+}

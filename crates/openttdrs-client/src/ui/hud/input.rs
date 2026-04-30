@@ -60,3 +60,47 @@ pub(crate) fn handle_tool_hotkeys(
         tool_state.active_tool = None;
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::World;
+
+    fn press_keys(world: &mut World, keys: &[KeyCode]) {
+        let mut kb = ButtonInput::<KeyCode>::default();
+        for k in keys {
+            kb.press(*k);
+        }
+        world.insert_resource(kb);
+    }
+
+    #[test]
+    fn hud_hotkey_systems_cover_branches() {
+        let mut world = World::new();
+        world.insert_resource(SimHudControls::default());
+        world.insert_resource(UiToolState::default());
+
+        press_keys(&mut world, &[KeyCode::KeyP]);
+        world.run_system_once(handle_pause_toggle).unwrap();
+        press_keys(&mut world, &[KeyCode::KeyM]);
+        world.run_system_once(handle_pause_toggle).unwrap();
+        press_keys(&mut world, &[KeyCode::F4]);
+        world.run_system_once(cycle_json_save_path_hotkey).unwrap();
+        press_keys(&mut world, &[KeyCode::F4]);
+        world.run_system_once(cycle_json_save_path_hotkey).unwrap();
+
+        for k in [
+            KeyCode::Digit1,
+            KeyCode::Digit2,
+            KeyCode::Digit3,
+            KeyCode::Digit4,
+            KeyCode::KeyC,
+            KeyCode::Escape,
+        ] {
+            press_keys(&mut world, &[k]);
+            world.run_system_once(handle_tool_hotkeys).unwrap();
+        }
+    }
+}

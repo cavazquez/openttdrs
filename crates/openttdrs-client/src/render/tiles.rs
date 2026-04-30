@@ -10,7 +10,7 @@ use crate::sprites::{
     HOUSE_DRAW_DATA, ROAD_FLAT_HALF_H, collect_rail_sprites, collect_signal_sprite_ids,
     house_draw_data_index_for_tile, is_road_level_crossing, level_crossing_has_rail_reservation,
     level_crossing_rail_sprite_id, rail_tile_is_signals, rail_track_base_color,
-    rail_trackbits_for_render, road_bits_for_render,     road_flat_sprite_color,
+    rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
     road_flat_sprite_index, road_tile_tram_visual_active, tram_flat_sprite_index,
 };
 
@@ -163,10 +163,7 @@ pub(crate) fn spawn_road_tile(
         .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
     ));
 
-    if let Some(tfi) = ctx
-        .tile
-        .and_then(|t| tram_flat_sprite_index(tileh, t.m3))
-    {
+    if let Some(tfi) = ctx.tile.and_then(|t| tram_flat_sprite_index(tileh, t.m3)) {
         let tram_half_h = if tileh == 0 {
             ROAD_FLAT_HALF_H[tfi]
         } else {

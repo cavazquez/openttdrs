@@ -235,3 +235,18 @@ pub(crate) fn main_menu_interaction(
         exit.write(AppExit::Success);
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::World;
+
+    #[test]
+    fn setup_main_menu_and_camera_run() {
+        let mut world = World::new();
+        world.run_system_once(setup_main_menu).unwrap();
+        world.run_system_once(setup_main_menu_camera).unwrap();
+    }
+}

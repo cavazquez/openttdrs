@@ -917,3 +917,116 @@ pub(crate) fn handle_tile_click(
         pending.pending = true;
     }
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::World;
+
+    use crate::render::RemapMapVisualsPending;
+
+    #[test]
+    fn close_toolbar_escape_clears_state() {
+        let mut world = World::new();
+        let mut kb = ButtonInput::<KeyCode>::default();
+        kb.press(KeyCode::Escape);
+        world.insert_resource(kb);
+        world.insert_resource(ToolbarState::default());
+        world.insert_resource(UiToolState {
+            active_tool: Some(BuildMenuAction::RoadY),
+        });
+        world.insert_resource(DragBuildState {
+            armed: true,
+            ..default()
+        });
+        world
+            .run_system_once(close_toolbar_panel_on_escape)
+            .unwrap();
+    }
+
+    #[test]
+    fn hide_tool_mismatch_group_clears_tool() {
+        let mut world = World::new();
+        world.insert_resource(ToolbarState {
+            active_group: Some(ToolbarGroup::Road),
+        });
+        world.insert_resource(UiToolState {
+            active_tool: Some(BuildMenuAction::Rail),
+        });
+        world.insert_resource(DragBuildState::default());
+        world.run_system_once(hide_tool_when_panel_closed).unwrap();
+    }
+
+    #[test]
+    fn setup_minimap_then_sync_minimap() {
+        let mut world = World::new();
+        world.run_system_once(setup_minimap).unwrap();
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(SimHudControls::default());
+        world.run_system_once(sync_minimap).unwrap();
+    }
+
+    #[test]
+    fn setup_order_panel_then_sync_order_panel() {
+        let mut world = World::new();
+        world.run_system_once(setup_order_panel).unwrap();
+        world.insert_resource(OrderEditState::default());
+        world.insert_resource(SimWorld::default());
+        world.run_system_once(sync_order_panel).unwrap();
+    }
+
+    #[test]
+    fn toolbar_interaction_systems_run_with_empty_queries() {
+        let mut world = World::new();
+        world.insert_resource(ToolbarState::default());
+        world.insert_resource(UiToolState::default());
+        world.insert_resource(DragBuildState::default());
+        world.run_system_once(toolbar_group_interaction).unwrap();
+        world.run_system_once(update_toolbar_group_visuals).unwrap();
+        world
+            .run_system_once(update_toolbar_tool_visibility)
+            .unwrap();
+        world
+            .run_system_once(close_toolbar_button_interaction)
+            .unwrap();
+        world.run_system_once(build_menu_interaction).unwrap();
+    }
+
+    #[test]
+    fn update_tool_button_visuals_empty() {
+        let mut world = World::new();
+        world.insert_resource(UiToolState::default());
+        world.run_system_once(update_tool_button_visuals).unwrap();
+    }
+
+    #[test]
+    fn update_toolbar_tooltip_no_ui_returns_early() {
+        let mut world = World::new();
+        world.run_system_once(update_toolbar_tooltip).unwrap();
+    }
+
+    #[test]
+    fn handle_order_panel_buttons_empty() {
+        let mut world = World::new();
+        world.insert_resource(OrderEditState::default());
+        world.insert_resource(SimWorld::default());
+        world.run_system_once(handle_order_panel_buttons).unwrap();
+    }
+
+    #[test]
+    fn handle_tile_click_minimal_returns_early() {
+        let mut world = World::new();
+        world.insert_resource(ButtonInput::<MouseButton>::default());
+        world.insert_resource(SelectedTileInfo::default());
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(UiToolState::default());
+        world.insert_resource(StationBuildState::default());
+        world.insert_resource(DragBuildState::default());
+        world.insert_resource(OrderEditState::default());
+        world.insert_resource(RemapMapVisualsPending::default());
+        world.insert_resource(IndustryPanelState::default());
+        world.run_system_once(handle_tile_click).unwrap();
+    }
+}

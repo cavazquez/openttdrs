@@ -49,9 +49,10 @@ jobs:
       - name: Tests y cobertura (llvm-cov → LCOV)
         run: cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info
 
-      - name: Subir cobertura a Codecov
+      - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
           fail_ci_if_error: false
           verbose: true

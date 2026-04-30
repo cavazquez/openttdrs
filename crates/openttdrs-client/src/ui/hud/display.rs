@@ -262,3 +262,17 @@ pub(crate) fn update_tile_info_text(
         vehicle_dbg
     );
 }
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::setup_tile_info_ui;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::World;
+
+    #[test]
+    fn setup_tile_info_ui_spawns_text() {
+        let mut world = World::new();
+        world.run_system_once(setup_tile_info_ui).unwrap();
+    }
+}

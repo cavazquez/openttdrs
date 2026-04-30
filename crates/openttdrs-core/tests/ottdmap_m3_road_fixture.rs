@@ -12,7 +12,10 @@ fn loads_m3_on_road_tile_from_fixture() {
     assert_eq!(map.dimensions(), (2, 2));
     let road = map.get(TileCoord::new(0, 0)).expect("tile 0,0");
     assert_eq!(road.kind, TileKind::Road);
-    assert_eq!(road.m3, 0x0A, "M3LO persistido en .ottdmap (tranvía / m3 bajo)");
+    assert_eq!(
+        road.m3, 0x0A,
+        "M3LO persistido en .ottdmap (tranvía / m3 bajo)"
+    );
     assert_eq!(road.m5, 0x03);
     let grass = map.get(TileCoord::new(1, 0)).expect("tile 1,0");
     assert_eq!(grass.kind, TileKind::Grass);

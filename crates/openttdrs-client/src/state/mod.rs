@@ -106,3 +106,15 @@ python3 scripts/parse_sav.py tu.sav {path}"
         }
     }
 }
+
+#[cfg(test)]
+mod sim_world_coverage_tests {
+    use super::SimWorld;
+
+    #[test]
+    fn sim_world_default_runs_procedural_bootstrap() {
+        let w = SimWorld::default();
+        assert!(!w.loaded_file);
+        assert!(w.ottdmap_extras.is_none());
+    }
+}

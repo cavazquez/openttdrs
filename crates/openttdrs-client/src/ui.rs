@@ -22,11 +22,11 @@ pub(crate) use toolbar::{BuildMenuAction, OrderEditState};
 use toolbar::{
     DragBuildState, StationBuildState, ToolbarState, UiToolState, build_menu_interaction,
     close_toolbar_button_interaction, close_toolbar_panel_on_escape, handle_minimap_click,
-    handle_order_panel_buttons, handle_tile_click, hide_tool_when_panel_closed,
-    rotate_station_with_right_click, setup_build_menu, setup_minimap, setup_order_panel,
-    setup_top_toolbar, sync_minimap, sync_order_panel, toolbar_group_interaction,
-    update_build_ghost_preview, update_tool_button_visuals, update_toolbar_group_visuals,
-    update_toolbar_tool_visibility, update_toolbar_tooltip,
+    handle_order_panel_buttons, handle_save_menu_buttons, handle_tile_click,
+    hide_tool_when_panel_closed, rotate_station_with_right_click, setup_build_menu, setup_minimap,
+    setup_order_panel, setup_top_toolbar, sync_minimap, sync_order_panel,
+    toolbar_group_interaction, update_build_ghost_preview, update_tool_button_visuals,
+    update_toolbar_group_visuals, update_toolbar_tool_visibility, update_toolbar_tooltip,
 };
 pub(crate) struct ClientUiPlugin;
 
@@ -86,6 +86,7 @@ impl Plugin for ClientUiPlugin {
                     industry_panel_close_interaction,
                     handle_minimap_click,
                     handle_order_panel_buttons,
+                    handle_save_menu_buttons,
                     handle_tile_click,
                     update_build_ghost_preview,
                     sync_minimap,

@@ -2,8 +2,9 @@ use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
 
 use super::{
-    BuildMenuAction, BuildMenuUi, ToolButtonGroup, ToolSelectButton, ToolbarCloseButton,
-    ToolbarGroup, ToolbarGroupButton, ToolbarTooltipTarget, TooltipBox, TooltipText,
+    BuildMenuAction, BuildMenuUi, SaveMenuAction, ToolButtonGroup, ToolSelectButton,
+    ToolbarCloseButton, ToolbarGroup, ToolbarGroupButton, ToolbarTooltipTarget, TooltipBox,
+    TooltipText,
 };
 
 /// Barra superior compacta tipo toolbar para seleccion rapida de herramienta.
@@ -301,7 +302,9 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
                         BuildMenuAction::Orders,
                     )],
                 ),
-                ToolbarGroup::Settings => {}
+                ToolbarGroup::Settings => {
+                    spawn_settings_buttons(buttons);
+                }
                 ToolbarGroup::Rail | ToolbarGroup::Road => {}
             });
         }
@@ -427,6 +430,47 @@ fn spawn_icon_tool_buttons(
             .with_children(|p| {
                 spawn_button_icon(p, asset_server, icon_path, 42.0, 34.0, false);
             });
+    }
+}
+
+fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
+    for (label, tip, action) in [
+        (
+            "Guardar...",
+            "Elegir archivo y guardar simulacion JSON",
+            SaveMenuAction::SaveAs,
+        ),
+        (
+            "Cargar...",
+            "Elegir archivo y cargar simulacion JSON",
+            SaveMenuAction::LoadFrom,
+        ),
+    ] {
+        buttons.spawn((
+            Button,
+            action,
+            ToolbarTooltipTarget { text: tip },
+            BuildMenuUi,
+            Node {
+                width: Val::Px(120.0),
+                height: Val::Px(32.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.5, 0.63, 0.35)),
+            BorderColor::all(Color::srgb(0.18, 0.25, 0.12)),
+            Interaction::default(),
+            children![(
+                Text::new(label),
+                TextFont {
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.08, 0.07, 0.05)),
+            )],
+        ));
     }
 }
 

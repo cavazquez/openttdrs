@@ -6,13 +6,17 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   # Menos ruido en el caché (artefactos incrementales); rust-cache guarda target/registry.
   CARGO_INCREMENTAL: "0"
 
 jobs:
-  rust:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -49,8 +53,42 @@ jobs:
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: tests
-        run: cargo test --workspace
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: caché cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Misma clave que Coverage: un workflow calienta caché del otro (mismo Cargo.lock).
+          shared-key: openttdrs
+          add-job-id-key: false
+
+      - name: Dependencias Linux (X11 / Vulkan software)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            pkg-config \
+            libx11-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxkbcommon-dev \
+            libssl-dev \
+            libvulkan1 \
+            mesa-vulkan-drivers
+
+      - name: Instalar cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: tests (nextest)
+        run: cargo nextest run --workspace
 
       - name: Validar TNBP (fixture v5p12_tnbp.ottdmap)
         run: cargo run -q -p openttdrs-core --example validate_ottdmap_tnbp -- crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap
@@ -64,6 +102,3 @@ jobs:
           python3 -m py_compile scripts/verify_parse_sav_reference.py
           python3 -m py_compile scripts/emit_parse_sav_golden.py
           python3 -m py_compile scripts/gen_tnbp_fixture_ottdmap.py
-
-      - name: build (incluye cliente Bevy)
-        run: cargo build --workspace

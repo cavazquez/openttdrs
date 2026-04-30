@@ -1,9 +1,14 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use openttdrs_core::save;
 use openttdrs_core::{Command, Map, TileCoord, TileKind, apply_command};
+#[cfg(not(test))]
+use std::path::Path;
 
 use crate::iso::{tile_pos, world_pos_to_tile_coord};
-use crate::render::{IndustryPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending};
+use crate::render::{
+    IndustryPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, VehicleIndex,
+};
 use crate::state::SimWorld;
 use crate::ui::hud::SimHudControls;
 use crate::ui::industry_panel::IndustryPanelState;
@@ -11,9 +16,9 @@ use crate::ui::industry_panel::IndustryPanelState;
 use super::super::hud::SelectedTileInfo;
 use super::{
     BuildMenuAction, BuildMenuUi, DragBuildState, MinimapCell, MinimapRoot, MinimapViewport,
-    OrderEditState, OrderPanelButton, OrderPanelRoot, OrderPanelText, StationBuildState,
-    ToolButtonGroup, ToolSelectButton, ToolbarCloseButton, ToolbarGroup, ToolbarGroupButton,
-    ToolbarState, ToolbarTooltipTarget, TooltipBox, TooltipText, UiToolState,
+    OrderEditState, OrderPanelButton, OrderPanelRoot, OrderPanelText, SaveMenuAction,
+    StationBuildState, ToolButtonGroup, ToolSelectButton, ToolbarCloseButton, ToolbarGroup,
+    ToolbarGroupButton, ToolbarState, ToolbarTooltipTarget, TooltipBox, TooltipText, UiToolState,
 };
 
 const MINIMAP_COLS: u32 = 64;
@@ -634,6 +639,142 @@ pub(crate) fn handle_order_panel_buttons(
     }
 }
 
+pub(crate) fn handle_save_menu_buttons(
+    mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut hud: ResMut<SimHudControls>,
+    mut sim: ResMut<SimWorld>,
+    mut vehicle_index: ResMut<VehicleIndex>,
+    mut remap: ResMut<RemapMapVisualsPending>,
+) {
+    for (interaction, action) in &mut q {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        match action {
+            SaveMenuAction::SaveAs => {
+                let Some(save_path) = choose_save_path(&hud.json_save_path) else {
+                    continue;
+                };
+                hud.json_save_path = save_path.clone();
+                match save::save(&sim.state, std::path::Path::new(&save_path)) {
+                    Ok(()) => info!("Guardado en {save_path}"),
+                    Err(e) => error!("No se pudo guardar en {save_path}: {e}"),
+                }
+            }
+            SaveMenuAction::LoadFrom => {
+                let Some(save_path) = choose_load_path(&hud.json_save_path) else {
+                    continue;
+                };
+                hud.json_save_path = save_path.clone();
+                match std::fs::read_to_string(&save_path) {
+                    Ok(text) => match save::load_from_str(&text) {
+                        Ok(loaded) => {
+                            let prev = sim.state.map.dimensions();
+                            let nw = loaded.map.dimensions();
+                            sim.state = loaded;
+                            sim.ottdmap_extras = None;
+                            sim.loaded_file = true;
+                            vehicle_index.rebuild(&sim.state.vehicles);
+                            remap.pending = true;
+                            remap.sync_camera = true;
+                            if prev != nw {
+                                info!("Mapa {prev:?} -> {nw:?}; recarga visual y camara.");
+                            } else {
+                                info!("Estado cargado desde {save_path}; recarga visual.");
+                            }
+                        }
+                        Err(e) => error!("Carga: JSON invalido ({save_path}): {e}"),
+                    },
+                    Err(e) => error!("Carga: no se pudo leer {save_path}: {e}"),
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+fn choose_save_path(current: &str) -> Option<String> {
+    Some(current.to_string())
+}
+
+#[cfg(not(test))]
+fn choose_save_path(current: &str) -> Option<String> {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        let mut dialog = rfd::FileDialog::new().add_filter("JSON", &["json"]);
+        if let Some(parent) = Path::new(current).parent() {
+            dialog = dialog.set_directory(parent);
+        }
+        if let Some(name) = Path::new(current).file_name().and_then(|n| n.to_str()) {
+            dialog = dialog.set_file_name(name);
+        }
+        return dialog.save_file().map(|p| p.to_string_lossy().to_string());
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let mut cmd = std::process::Command::new("zenity");
+        cmd.arg("--file-selection")
+            .arg("--save")
+            .arg("--confirm-overwrite")
+            .arg("--title=Guardar simulacion JSON")
+            .arg("--file-filter=*.json");
+        if Path::new(current).exists() || Path::new(current).parent().is_some() {
+            cmd.arg("--filename").arg(current);
+        }
+        match cmd.output() {
+            Ok(out) if out.status.success() => {
+                let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if path.is_empty() { None } else { Some(path) }
+            }
+            Ok(_) => None,
+            Err(e) => {
+                error!("No se pudo abrir selector de archivo (zenity): {e}");
+                None
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+fn choose_load_path(current: &str) -> Option<String> {
+    Some(current.to_string())
+}
+
+#[cfg(not(test))]
+fn choose_load_path(current: &str) -> Option<String> {
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        let mut dialog = rfd::FileDialog::new().add_filter("JSON", &["json"]);
+        if let Some(parent) = Path::new(current).parent() {
+            dialog = dialog.set_directory(parent);
+        }
+        return dialog.pick_file().map(|p| p.to_string_lossy().to_string());
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    {
+        let mut cmd = std::process::Command::new("zenity");
+        cmd.arg("--file-selection")
+            .arg("--title=Cargar simulacion JSON")
+            .arg("--file-filter=*.json");
+        if Path::new(current).exists() || Path::new(current).parent().is_some() {
+            cmd.arg("--filename").arg(current);
+        }
+        match cmd.output() {
+            Ok(out) if out.status.success() => {
+                let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if path.is_empty() { None } else { Some(path) }
+            }
+            Ok(_) => None,
+            Err(e) => {
+                error!("No se pudo abrir selector de archivo (zenity): {e}");
+                None
+            }
+        }
+    }
+}
+
 fn minimap_color(kind: TileKind) -> Color {
     match kind {
         TileKind::Water => Color::srgb(0.08, 0.25, 0.55),
@@ -1013,6 +1154,31 @@ mod tests {
         world.insert_resource(OrderEditState::default());
         world.insert_resource(SimWorld::default());
         world.run_system_once(handle_order_panel_buttons).unwrap();
+    }
+
+    #[test]
+    fn handle_save_menu_buttons_save_load_with_file_dialog_abstraction() {
+        let dir = tempfile::tempdir().unwrap();
+        let save_path = dir.path().join("sim.json");
+
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(VehicleIndex::default());
+        world.insert_resource(RemapMapVisualsPending::default());
+        world.insert_resource(SimHudControls {
+            paused: false,
+            json_save_path: save_path.to_string_lossy().to_string(),
+            minimap_visible: true,
+        });
+
+        world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));
+        world.run_system_once(handle_save_menu_buttons).unwrap();
+
+        world.spawn((Button, SaveMenuAction::LoadFrom, Interaction::Pressed));
+        world.run_system_once(handle_save_menu_buttons).unwrap();
+        let remap = world.resource::<RemapMapVisualsPending>();
+        assert!(remap.pending);
+        assert!(remap.sync_camera);
     }
 
     #[test]

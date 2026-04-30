@@ -6,6 +6,7 @@
 #   ./scripts/check.sh fmt    # Solo formatear
 #   ./scripts/check.sh lint   # Solo lints (clippy)
 #   ./scripts/check.sh test   # Solo tests
+#   ./scripts/check.sh cov    # Tests + informe LCOV (requiere cargo-llvm-cov + llvm-tools-preview)
 #   ./scripts/check.sh ci     # Modo CI (falla si hay cambios de formato)
 
 set -euo pipefail
@@ -49,6 +50,17 @@ do_test() {
     info "Tests OK ✓"
 }
 
+do_coverage() {
+    if ! command -v cargo-llvm-cov &>/dev/null; then
+        error "Instalá cargo-llvm-cov: cargo install cargo-llvm-cov"
+        error "Y el componente: rustup component add llvm-tools-preview"
+        return 1
+    fi
+    info "Generando cobertura (workspace, LCOV en lcov.info)..."
+    cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info
+    info "Listo: lcov.info (subilo a Codecov o abrí con un visor LCOV) ✓"
+}
+
 do_build() {
     info "Verificando compilación..."
     cargo build --all
@@ -75,11 +87,12 @@ case "${1:-all}" in
     fmt)    do_fmt ;;
     lint)   do_lint ;;
     test)   do_test ;;
+    cov|coverage) do_coverage ;;
     build)  do_build ;;
     ci)     do_ci ;;
     all)    do_all ;;
     *)
-        echo "Uso: $0 {fmt|lint|test|build|ci|all}"
+        echo "Uso: $0 {fmt|lint|test|cov|build|ci|all}"
         exit 1
         ;;
 esac

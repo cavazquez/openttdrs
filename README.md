@@ -1,5 +1,12 @@
 # openttdrs
 
+[![CI](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml/badge.svg)](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/cavazquez/openttdrs/graph/badge.svg)](https://codecov.io/gh/cavazquez/openttdrs)
+[![Licencia GPL-2.0](https://img.shields.io/badge/licencia-GPL--2.0-blue.svg)](LICENSE)
+[![Rust MSRV](https://img.shields.io/badge/rust-1.89%2B-orange.svg)](https://doc.rust-lang.org/stable/releases.html)
+[![Bevy](https://img.shields.io/badge/Bevy-0.18.1-C659D4.svg)](https://bevyengine.org/)
+[![Inspiración OpenTTD](https://img.shields.io/badge/inspiración-OpenTTD-5a3.svg)](https://www.openttd.org/)
+
 Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.openttd.org/) hacia **Rust**, con motor gráfico [Bevy](https://bevyengine.org/). El objetivo a largo plazo es un simulador modular; la **paridad total** (NewGRF, red, saves idénticos) es un alcance opcional y costoso en tiempo.
 
 > **Rendimiento en tu máquina:** compilar Bevy y dependencias puede ser pesado. Si notas saturación de CPU o RAM, usa por ejemplo `cargo build -j 1` o deja que el flujo de [CI](.github/workflows/ci.yml) valide el build en GitHub Actions.
@@ -12,18 +19,64 @@ Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.o
 
 ## Stack tecnológico
 
-| Tecnología | Descripción |
-|------------|-------------|
-| 🦀 [Rust](https://www.rust-lang.org/) | Lenguaje y toolchain; edición **2024** en el workspace. |
-| 📦 [Cargo](https://doc.rust-lang.org/cargo/) | Workspace con crates `openttdrs-core` y `openttdrs-client`. |
-| 🎮 [Bevy](https://bevyengine.org/) | Motor ECS, ventana, cámara 2D, gizmos de depuración (cliente). |
-| 🖼️ [wgpu](https://wgpu.rs/) (vía Bevy) | API gráfica usada por debajo del render de Bevy. |
-| 🧪 Tests + clippy | `cargo test` en el workspace; golden `parse_sav` en Python; CI en GitHub. |
-| ✅ [GitHub Actions](https://docs.github.com/en/actions) | Workflow `ci.yml`: `fmt`, `clippy`, `test`, golden `parse_sav`, `py_compile` scripts, `build`. |
-| 🤖 [Dependabot](https://docs.github.com/en/code-security/dependabot) | Actualizaciones **mensuales** de Cargo y Actions (`.github/dependabot.yml`). |
-| 📚 OpenTTD upstream | Solo referencia local; ver sección siguiente. |
+| Icono | Tecnología | Descripción |
+|-------|------------|-------------|
+| 🦀 | [Rust](https://www.rust-lang.org/) | Lenguaje y toolchain; edición **2024** en el workspace. |
+| 📦 | [Cargo](https://doc.rust-lang.org/cargo/) | Workspace con crates `openttdrs-core` y `openttdrs-client`. |
+| 🎮 | [Bevy](https://bevyengine.org/) | ECS, ventana, cámara 2D / isométrica, UI, estados (cliente). |
+| 🖼️ | [wgpu](https://wgpu.rs/) (vía Bevy) | API gráfica bajo el render 2D; en CI se usa **Vulkan** por software (`mesa-vulkan-drivers`). |
+| 🪟 | [winit](https://github.com/rust-windowing/winit) | Ventanas y entrada (vía Bevy); el cliente se compila con **X11** (sin Wayland por defecto). |
+| 🧩 | [serde](https://serde.rs/) + [serde_json](https://docs.rs/serde_json) | Persistencia y carga de estado en `openttdrs-core`. |
+| 🐍 | [Python](https://www.python.org/) 3 | `parse_sav.py`, golden tests, generación de fixtures `.ottdmap`. |
+| 🖌️ | [Pillow](https://python-pillow.org/) (`PIL`) | Recorte de sprites OpenGFX/OpenGFX2 en `descargar_graficos.sh`. |
+| 🗺️ | Formato **`.ottdmap`** | Binario versionado (`MAP1`…); spec en [docs/OTTDMAP_FORMAT.md](docs/OTTDMAP_FORMAT.md) y [docs/TILES_Y_SAVEGAMES_OPENTTD.md](docs/TILES_Y_SAVEGAMES_OPENTTD.md). |
+| 🎨 | [OpenGFX](https://github.com/OpenTTD/OpenGFX) / OpenGFX2 | Assets 8bpp / 32bpp extraídos con **grfcodec** + scripts del repo. |
+| 🧪 | Tests + Clippy | `cargo test --workspace`; Clippy con **`-D warnings`** en CI. |
+| ✅ | [GitHub Actions](https://docs.github.com/en/actions) | Ver [CI y calidad](#ci-y-calidad). |
+| 🤖 | [Dependabot](https://docs.github.com/en/code-security/dependabot) | Actualizaciones **mensuales** de Cargo y Actions (`.github/dependabot.yml`). |
+| 📚 | OpenTTD upstream | Solo referencia local; ver sección [Código de referencia](#código-de-referencia-openttd-no-versionado). |
 
 **MSRV:** el workspace declara `rust-version` alineado con [Bevy 0.18.1](https://crates.io/crates/bevy) (consulta el `Cargo.toml` raíz). `rust-toolchain.toml` usa el canal `stable` con `rustfmt` y `clippy`.
+
+---
+
+## CI y calidad
+
+El workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) en cada push/PR a `main` ejecuta:
+
+| Paso | Qué valida |
+|------|----------------|
+| 🎨 `rustfmt` | `cargo fmt --all -- --check` |
+| 📎 `clippy` | `cargo clippy --workspace --all-targets -- -D warnings` |
+| 📊 `llvm-cov` | `cargo llvm-cov --workspace --all-targets --lcov` (misma corrida que los tests; genera `lcov.info`) |
+| ☁️ Codecov | Sube `lcov.info` (repo público; opcional `CODECOV_TOKEN` en *secrets* si Codecov lo pide) |
+| 📦 Artefacto | `coverage-lcov` con `lcov.info` descargable desde la ejecución del workflow |
+| 🗺️ TNBP | `cargo run -p openttdrs-core --example validate_ottdmap_tnbp` sobre fixture `v5p12_tnbp.ottdmap` |
+| 🐍 Golden `parse_sav` | `python3 scripts/verify_parse_sav_reference.py` |
+| ✔️ Python | `py_compile` de los scripts usados en el flujo de mapas |
+| 🔨 `build` | `cargo build --workspace` (incluye cliente Bevy) |
+
+En local, atajo equivalente (sin TNBP explícito salvo que lo añadas): `./scripts/check.sh ci`.
+
+---
+
+## Cobertura de tests
+
+En **CI** cada push/PR ejecuta [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) en lugar de un `cargo test` duplicado: compila con instrumentación, corre **todos** los tests del workspace y produce **`lcov.info`**. Ese archivo se sube a [Codecov](https://codecov.io/gh/cavazquez/openttdrs) y también queda como **artefacto** `coverage-lcov` en GitHub Actions.
+
+**Primera vez en Codecov:** entrá con GitHub a Codecov, activá el repo `cavazquez/openttdrs` si no aparece solo; el badge del README puede mostrar *unknown* hasta el primer informe exitoso.
+
+**En local** (una vez: `rustup component add llvm-tools-preview` y `cargo install cargo-llvm-cov`):
+
+```bash
+./scripts/check.sh cov
+# o HTML interactivo:
+cargo llvm-cov --workspace --all-targets --html --open
+```
+
+Alternativa clásica: [cargo-tarpaulin](https://github.com/xd0092/tarpaulin).
+
+**Siguientes refinamientos (opcionales):** umbral mínimo de cobertura en CI (`codecov.yml` o `cargo llvm-cov --fail-under-lines 50`), o ignorar crates generados en el informe.
 
 ---
 

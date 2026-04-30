@@ -102,6 +102,7 @@ algunas costas conservan el `height/yrel` del NFO y por eso se posicionan con
 | `road_cross.png` | 1338 | Cruce de carretera (tx + ty) |
 | `road_corner_a.png` | 1335 | Esquina NE-SW |
 | `road_corner_b.png` | 1337 | Esquina NW-SE |
+| `tram_flat_00.png` … `tram_flat_18.png` | 5990–6008 (`SPR_TRAMWAY_OVERLAY`) | Tranvía sobre asfalto; mismo índice lógico que `road_flat_*` (`GetRoadSpriteOffset`). Se generan con `scripts/descargar_graficos.sh`. |
 
 ### Costa (`shore_*.png`) y `WaterTileType::Coast`
 

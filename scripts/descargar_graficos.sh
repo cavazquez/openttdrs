@@ -206,7 +206,7 @@ if [[ -f "${SPRITES_DIR}/${SHEET_PREFIX}00.png" || -f "${SPRITES_DIR}/${SHEET_PR
   OPENTTDRS_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
   export SPRITES_DIR TILES_DIR NFO_NAME SHEET_PREFIX GRAPHICS_MODE OPENTTDRS_REPO_ROOT
   python3 - <<'PYEOF'
-import os, re, sys
+import os, re, shutil, sys
 from collections import Counter
 from pathlib import Path
 from PIL import Image
@@ -397,6 +397,7 @@ def crop_by_id(sid: int, out_name: str) -> None:
         or out_name.startswith("tree_")
         or out_name.startswith("rail_")
         or out_name.startswith("road_")
+        or out_name.startswith("tram_")
     ):
         crop = cleanup_speckles(crop)
     out = tiles_dir / out_name
@@ -454,6 +455,23 @@ ROAD_DEPOT_RANGE = range(1408, 1412)
 # Carretera plana: SPR_ROAD_Y (1332) + offset -> 19 variantes
 for sid in ROAD_FLAT_RANGE:
     crop_by_id(sid, f"road_flat_{sid - 1332:02d}.png")
+# Tranvía sobre asfalto: SPR_TRAMWAY_OVERLAY (OpenTTD table/sprites.h) = 5990;
+# mismas 19 piezas en el mismo orden que road_flat_00..18 (GetRoadSpriteOffset).
+TRAM_FLAT_BASE = 5990
+for i in range(19):
+    crop_by_id(TRAM_FLAT_BASE + i, f"tram_flat_{i:02d}.png")
+# OpenGFX2 (ogfx21) suele no declarar 5990–6008 en el NFO recortado: sin archivo, el cliente falla.
+for i in range(19):
+    dst = tiles_dir / f"tram_flat_{i:02d}.png"
+    if dst.is_file():
+        continue
+    src = tiles_dir / f"road_flat_{i:02d}.png"
+    if src.is_file():
+        shutil.copy2(src, dst)
+        print(
+            f"  tram_flat_{i:02d}.png (fallback: copia de road_flat; "
+            f"sprite {TRAM_FLAT_BASE + i} no en NFO o recorte omitido)"
+        )
 # Carretera con nieve
 crop_by_id(ROAD_SNOW_IDS[0], "road_y_snow.png")
 crop_by_id(ROAD_SNOW_IDS[1], "road_x_snow.png")

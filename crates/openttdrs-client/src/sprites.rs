@@ -431,6 +431,26 @@ pub fn road_flat_sprite_index(tileh: u8, road_bits: u8) -> usize {
     road::road_flat_sprite_index(tileh, road_bits, &ROAD_FLAT_OFFSET_TBL)
 }
 
+/// Bits de tranvía desde M3LO (0–3), alineados con `GetRoadBits` / track bits en OpenTTD.
+#[inline]
+#[must_use]
+pub fn tram_track_bits_m3(m3: u8) -> u8 {
+    road::tram_track_bits_m3(m3)
+}
+
+/// Índice `tram_flat_{idx:02}` (0–18); `None` si no hay trazado en `m3`.
+#[must_use]
+pub fn tram_flat_sprite_index(tileh: u8, m3: u8) -> Option<usize> {
+    road::tram_flat_sprite_index(tileh, m3, &ROAD_FLAT_OFFSET_TBL)
+}
+
+/// Tinte de cruce o overlay cuando hay tranvía por tipo (`m8`) o por geometría (`m3`).
+#[inline]
+#[must_use]
+pub fn road_tile_tram_visual_active(m3: u8, m8: u16) -> bool {
+    tram_track_bits_m3(m3) != 0 || road_tile_has_tram_track(m8)
+}
+
 /// Road bits para dibujar: `m5` / vecinos (mapa procedural).
 ///
 /// Asignación de bits conforme a OpenTTD (con iso correcta):
@@ -493,6 +513,30 @@ mod road_sprite_index_tests {
     fn other_slopes_keep_flat_road_variant_from_bits() {
         let bits = 0x0A;
         assert_eq!(road_flat_sprite_index(1, bits), road_flat_index(bits)); // SLOPE_W
+    }
+}
+
+#[cfg(test)]
+mod tram_road_overlay_tests {
+    use super::{road_flat_sprite_index, tram_flat_sprite_index, tram_track_bits_m3};
+
+    #[test]
+    fn tram_bits_zero_means_no_overlay_index() {
+        assert_eq!(tram_track_bits_m3(0xF0), 0);
+        assert!(tram_flat_sprite_index(0, 0).is_none());
+        assert!(tram_flat_sprite_index(0, 0xF0).is_none());
+    }
+
+    #[test]
+    fn tram_overlay_reuses_road_flat_table_for_same_track_mask() {
+        assert_eq!(
+            tram_flat_sprite_index(0, 0x05),
+            Some(road_flat_sprite_index(0, 0x05))
+        );
+        assert_eq!(
+            tram_flat_sprite_index(12, 0x0A),
+            Some(road_flat_sprite_index(12, 0x0A))
+        );
     }
 }
 

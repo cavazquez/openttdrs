@@ -52,8 +52,7 @@ Orden **no estricto**: depende de si querés **parecerse más al original**, **j
 - **Vías**: sprites de rail por `trackbits` (similar a road bits).
 - **Casas / estaciones**: sustituir tintes planos por sprites o conjuntos mínimos.
 - **Agua**: animación o variante de sprite si molesta el aspecto “plano”.
-- **`.ottdmap`**: añadir chunk opcional para **`m3`** (tranvía) o más bytes si hace falta
-  pintar tiles `MP_STATION` con paradas de bus.
+- **`.ottdmap`**: el bloque denso MAP1 v1 **ya incluye** planos `m3`/`m3hi` (`parse_sav.py` los exporta). Lo pendiente suele ser **usar** `m3` en el render de carretera/tranvía y más fixtures de prueba; ver `docs/OTTDMAP_FORMAT.md` y `crates/openttdrs-core/tests/ottdmap_m3_road_fixture.rs`.
 - **Rendimiento**: culling por frustum o LOD en mapas 256×256+.
 
 ### B. Cadena incremental formal (gameplay)

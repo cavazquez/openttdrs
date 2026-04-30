@@ -18,7 +18,7 @@ jobs:
       - name: Instalar Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: rustfmt, clippy, llvm-tools-preview
 
       - name: caché cargo
         uses: Swatinem/rust-cache@v2
@@ -43,8 +43,24 @@ jobs:
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: test
-        run: cargo test --workspace
+      - name: Instalar cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Tests y cobertura (llvm-cov → LCOV)
+        run: cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info
+
+      - name: Subir cobertura a Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: lcov.info
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Artefacto LCOV
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: lcov.info
 
       - name: Validar TNBP (fixture v5p12_tnbp.ottdmap)
         run: cargo run -q -p openttdrs-core --example validate_ottdmap_tnbp -- crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap

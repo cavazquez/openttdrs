@@ -8,6 +8,29 @@ pub fn road_tile_has_tram_track(m8: u16) -> bool {
     t != 0 && t != 0x3F
 }
 
+/// M3LO bits 0–3: trazado de tranvía en carretera normal (`road_map.h`), misma máscara que road bits.
+#[inline]
+#[must_use]
+pub fn tram_track_bits_m3(m3: u8) -> u8 {
+    m3 & 0x0F
+}
+
+/// Índice del PNG `tram_flat_*` (y misma tabla de desplazamiento que carretera) cuando `m3`
+/// define geometría; los assets se generan desde SPR_TRAMWAY_OVERLAY (`descargar_graficos.sh`).
+#[must_use]
+pub fn tram_flat_sprite_index(
+    tileh: u8,
+    m3: u8,
+    flat_offset_tbl: &[u8; 16],
+) -> Option<usize> {
+    let tb = tram_track_bits_m3(m3);
+    if tb == 0 {
+        None
+    } else {
+        Some(road_flat_sprite_index(tileh, tb, flat_offset_tbl))
+    }
+}
+
 /// Decodifica los road bits efectivos desde m5 segun el tipo de tesela.
 pub fn effective_road_bits(
     mapt: u8,

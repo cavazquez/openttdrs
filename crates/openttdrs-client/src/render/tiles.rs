@@ -10,8 +10,8 @@ use crate::sprites::{
     HOUSE_DRAW_DATA, ROAD_FLAT_HALF_H, collect_rail_sprites, collect_signal_sprite_ids,
     house_draw_data_index_for_tile, is_road_level_crossing, level_crossing_has_rail_reservation,
     level_crossing_rail_sprite_id, rail_tile_is_signals, rail_track_base_color,
-    rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
-    road_flat_sprite_index, road_tile_has_tram_track,
+    rail_trackbits_for_render, road_bits_for_render,     road_flat_sprite_color,
+    road_flat_sprite_index, road_tile_tram_visual_active, tram_flat_sprite_index,
 };
 
 /// Sesgo en la componente Z de **solo** el agua animada (sin sprite `shore_*`).
@@ -23,6 +23,8 @@ const FLAT_WATER_LAYER_FRAC: f32 = -0.030;
 const SHORE_LAYER_FRAC: f32 = -0.015;
 /// Solape mínimo para ocultar costuras finas entre tiles adyacentes.
 const TILE_OVERLAP_SCALE: f32 = 1.002;
+/// Capa de tranvía (`tram_flat_*`, SPR_TRAMWAY_OVERLAY) por encima del asfalto.
+const TRAM_OVERLAY_LAYER_FRAC: f32 = 0.028;
 
 fn sloped_or_flat_image(
     tileh: u8,
@@ -161,6 +163,33 @@ pub(crate) fn spawn_road_tile(
         .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
     ));
 
+    if let Some(tfi) = ctx
+        .tile
+        .and_then(|t| tram_flat_sprite_index(tileh, t.m3))
+    {
+        let tram_half_h = if tileh == 0 {
+            ROAD_FLAT_HALF_H[tfi]
+        } else {
+            SLOPE_HALF_H[tileh as usize]
+        };
+        commands.spawn((
+            MapVisualLayer,
+            Sprite {
+                image: assets.tram_flat[tfi].clone(),
+                color: Color::WHITE,
+                ..default()
+            },
+            Transform::from_translation(tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                TRAM_OVERLAY_LAYER_FRAC,
+                tram_half_h,
+            ))
+            .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+        ));
+    }
+
     // Cruce a nivel: carretera + sprite de vía encima (`base_sprites.crossing + rail_axis`).
     if ctx
         .tile
@@ -176,7 +205,7 @@ pub(crate) fn spawn_road_tile(
                 if level_crossing_has_rail_reservation(t.m5) {
                     c = c.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26);
                 }
-                if road_tile_has_tram_track(t.m8) {
+                if road_tile_tram_visual_active(t.m3, t.m8) {
                     c = c.mix(&Color::srgb(0.55, 0.88, 0.58), 0.12);
                 }
                 c

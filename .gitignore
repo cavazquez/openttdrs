@@ -33,3 +33,7 @@ target
 
 .codex
 *.json
+
+# Cobertura local (cargo llvm-cov / ./scripts/check.sh cov)
+/lcov.info
+/htmlcov/

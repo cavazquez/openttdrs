@@ -16,6 +16,8 @@ pub(crate) struct WorldAssets {
     pub(crate) lighthouse: Handle<Image>,
     pub(crate) transmitter: Handle<Image>,
     pub(crate) road_flat: Vec<Handle<Image>>,
+    /// OpenGFX `tram_flat_*` (SPR_TRAMWAY_OVERLAY+0..18); mismo índice que `road_flat_*`.
+    pub(crate) tram_flat: Vec<Handle<Image>>,
     pub(crate) rail: HashMap<u32, Handle<Image>>,
     pub(crate) station_grounds: Vec<Handle<Image>>,
     pub(crate) road_depots: Vec<Handle<Image>>,
@@ -53,6 +55,9 @@ impl WorldAssets {
         let transmitter = asset_server.load::<Image>("opengfx/tiles/object_transmitter.png");
         let road_flat = (0..19)
             .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/road_flat_{i:02}.png")))
+            .collect();
+        let tram_flat = (0..19)
+            .map(|i| asset_server.load::<Image>(format!("opengfx/tiles/tram_flat_{i:02}.png")))
             .collect();
         let rail = rail_sprite_ids_for_preload()
             .into_iter()
@@ -114,6 +119,7 @@ impl WorldAssets {
             lighthouse,
             transmitter,
             road_flat,
+            tram_flat,
             rail,
             station_grounds,
             road_depots,

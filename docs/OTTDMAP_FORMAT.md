@@ -33,8 +33,8 @@ Despues de la cabecera (`base = 16`) siguen los planos.
 | 3 | `N` | `m1` | `MAPO` chunk | Owner/indice de industria. |
 | 4 | `N` | `m2` | `MAP2` bajo | Byte bajo de `MAP2`. |
 | 5 | `N` | `m2_hi` | `MAP2` alto | Byte alto de `MAP2`. |
-| 6 | `N` | `m3` | `M3LO` | Byte bajo de `m3()`. |
-| 7 | `N` | `m3hi` | `M3HI` | Corresponde a `m4()` en OpenTTD. |
+| 6 | `N` | `m3` | `M3LO` | Byte bajo de `m3()` (siempre presente en v1). En `MP_ROAD` normal, bits 0–3 = **tranvía** (`TrackBits`), 4–7 = owner tranvía; ver `road_map.h` / `TILES_Y_SAVEGAMES_OPENTTD.md`. |
+| 7 | `N` | `m3hi` | `M3HI` | Corresponde a `m4()` en OpenTTD (señales, etc.). |
 | 8 | `N` | `m5` | `MAP5` | Vias/carretera/industria/object según tipo de tesela. |
 | 9 | `N` | `m6` | `MAPE` | Estacion/industria según tipo de tesela. |
 | 10 | `N` | `m7` | `MAP7` | Reserva/NewGRF en mapa. |
@@ -56,6 +56,12 @@ Formato de cada footer:
 - `STXY`: `magic(4)` + `count(u32)` + `count * (x(u16), y(u16))`
 
 Orden tipico de escritura en `parse_sav.py`: `INDP` (si hay), `STNN`, `TNBP`, `STXY`.
+
+## M3 y tranvía (fidelidad de datos)
+
+En **MAP1 `format_version = 1`** los planos `m3` y `m3hi` van **siempre** en el bloque denso (no hace falta un footer aparte). `scripts/parse_sav.py` rellena `M3LO` / `M3HI` desde el save cuando existen los chunks.
+
+Que el **cliente** use esos bits para dibujar tranvía encima de la carretera es independiente del formato: el dato ya viaja en cada `Tile` (`crates/openttdrs-core/src/map.rs`).
 
 ## Compatibilidad
 

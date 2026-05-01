@@ -146,15 +146,9 @@ pub(crate) enum SaveMenuAction {
     ZoomOut,
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub(crate) struct ToolbarState {
     pub(crate) active_group: Option<ToolbarGroup>,
-}
-
-impl Default for ToolbarState {
-    fn default() -> Self {
-        Self { active_group: None }
-    }
 }
 
 /// Conservado por compatibilidad del pipeline startup; la UI vive en la toolbar superior.

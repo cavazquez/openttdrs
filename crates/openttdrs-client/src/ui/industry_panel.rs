@@ -153,7 +153,7 @@ fn format_panel_title(map: &Map, sim: &SimWorld, focus: TileCoord) -> String {
     if let Some((gfx_label, _coord, _gfx)) = dominant_gfx_for_component(map, focus)
         && gfx_label != "Unknown gfx"
     {
-        return format!("Industria - {} - GFX", gfx_label);
+        return format!("Industria - {gfx_label} - GFX");
     }
     if let Some((kind, spec, _, _, origin)) = industry_stats_for_component(map, sim, focus) {
         return if let Some(spec) = spec {
@@ -162,7 +162,7 @@ fn format_panel_title(map: &Map, sim: &SimWorld, focus: TileCoord) -> String {
             let gfx = industry_gfx(&tile);
             let gfx_label = industry_group_from_gfx(gfx);
             if gfx_label != "Unknown gfx" {
-                format!("Industria - {} - GFX", gfx_label)
+                format!("Industria - {gfx_label} - GFX")
             } else {
                 format!("Industria - {} - Sim", kind_label(kind))
             }
@@ -170,7 +170,7 @@ fn format_panel_title(map: &Map, sim: &SimWorld, focus: TileCoord) -> String {
             format!("Industria - {} - Sim", kind_label(kind))
         };
     }
-    format!("Industria - Sin datos de simulacion")
+    "Industria - Sin datos de simulacion".to_string()
 }
 
 pub(crate) fn setup_industry_panel(

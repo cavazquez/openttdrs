@@ -1,7 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{
-    Command, TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder, apply_command,
-};
+use openttdrs_core::{Command, TileKind, Vehicle, VehicleKind, VehicleOrder, apply_command};
 
 use crate::state::SimWorld;
 
@@ -295,6 +293,7 @@ pub(crate) fn apply_order_edit(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use openttdrs_core::TileCoord;
 
     #[test]
     fn order_row_labels_depots() {

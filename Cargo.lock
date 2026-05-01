@@ -3502,9 +3502,11 @@ name = "openttdrs-client"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "image",
  "openttdrs-core",
  "rfd",
  "tempfile",
+ "winit",
 ]
 
 [[package]]

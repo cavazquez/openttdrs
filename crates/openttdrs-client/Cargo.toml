@@ -29,6 +29,8 @@ bevy = { version = "0.18.1", default-features = false, features = [
     "png",
 ] }
 openttdrs-core = { path = "../openttdrs-core" }
+image = { version = "0.25", default-features = false, features = ["png"] }
+winit = { version = "0.30", default-features = false }
 
 [target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
 rfd = "0.15"

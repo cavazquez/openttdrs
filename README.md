@@ -133,6 +133,9 @@ Notas:
 - Fuente versionada: `static/fonts/DejaVuSansMono.ttf` se mantiene fuera de `assets/` para que la
   UI de Bevy pueda mostrar texto UTF-8 con acentos (`Fábrica`, `Refinería`, etc.). `assets/`
   sigue siendo generado/descargado y queda ignorado.
+- Icono versionado de la aplicación: `static/app/openttdrs-icon.png`. El cliente lo carga al crear
+  la ventana para mostrarlo en la barra de título y en el dock/barra de Ubuntu; si lo cambiás,
+  cerrá y volvé a abrir la app.
 
 Si preferís scripts individuales:
 

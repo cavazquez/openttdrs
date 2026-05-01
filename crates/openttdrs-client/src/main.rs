@@ -22,6 +22,7 @@
 // Queries Bevy con filtros (With/Without) suelen disparar type_complexity sin aportar claridad.
 #![allow(clippy::type_complexity)]
 
+mod app_icon;
 mod bevy_app;
 mod camera;
 mod config;

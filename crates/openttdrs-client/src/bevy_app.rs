@@ -8,6 +8,7 @@ use bevy::prelude::*;
 use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 
+use crate::app_icon::AppIconPlugin;
 use crate::camera::CameraControlPlugin;
 use crate::debug_gizmos::DebugGizmosPlugin;
 use crate::persistence::PersistencePlugin;
@@ -51,6 +52,7 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
         WindowPlugin {
             primary_window: Some(Window {
                 title: "openttdrs".into(),
+                name: Some("openttdrs".into()),
                 resolution: (1280_u32, 720_u32).into(),
                 ..default()
             }),
@@ -110,6 +112,9 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
         DebugGizmosPlugin,
         CameraControlPlugin,
     ));
+    if !headless {
+        app.add_plugins(AppIconPlugin::new(asset_root));
+    }
     app
 }
 

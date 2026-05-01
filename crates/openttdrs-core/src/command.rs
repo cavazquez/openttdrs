@@ -1,6 +1,8 @@
 //! Comandos del jugador que mutan [`crate::GameState`] de forma validada e identificable.
 
-use crate::map::{TileCoord, TileKind};
+use std::collections::{HashSet, VecDeque};
+
+use crate::map::{Map, TileCoord, TileKind};
 use crate::{
     BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, DEPOT_BUILD_COST, GameState, Industry,
     IndustryKind, IndustrySpec, RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, Station,
@@ -14,9 +16,12 @@ pub enum Command {
     PlaceRoad(TileCoord),
     /// Coloca o combina una pieza de carretera `OpenTTD` (`RoadBits`, bits 0..3).
     PlaceRoadBits(TileCoord, u8),
+    /// Reemplaza la geometría de carretera de la tesela con `RoadBits` exactos.
+    SetRoadBits(TileCoord, u8),
     /// Coloca via de tren en la tesela (MVP: validacion de terreno).
     PlaceRail(TileCoord),
     PlaceRoadDepot(TileCoord),
+    PlaceRoadDepotDir(TileCoord, u8),
     PlaceRailDepot(TileCoord),
     PlaceRoadTunnel(TileCoord, TileCoord),
     PlaceRailTunnel(TileCoord, TileCoord),
@@ -73,15 +78,10 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
     match cmd {
         Command::PlaceRoad(c) => place_road(state, *c),
         Command::PlaceRoadBits(c, bits) => place_road_bits(state, *c, *bits),
+        Command::SetRoadBits(c, bits) => set_road_bits(state, *c, *bits),
         Command::PlaceRail(c) => place_rail(state, *c),
-        Command::PlaceRoadDepot(c) => place_single_transport_tile(
-            state,
-            *c,
-            TileKind::RoadDepot,
-            0x20,
-            0x20,
-            DEPOT_BUILD_COST,
-        ),
+        Command::PlaceRoadDepot(c) => place_road_depot_dir(state, *c, 0),
+        Command::PlaceRoadDepotDir(c, dir) => place_road_depot_dir(state, *c, *dir),
         Command::PlaceRailDepot(c) => place_single_transport_tile(
             state,
             *c,
@@ -195,6 +195,37 @@ fn place_single_transport_tile(
     Ok(())
 }
 
+fn place_road_depot_dir(state: &mut GameState, c: TileCoord, dir: u8) -> Result<(), CommandError> {
+    let dir = dir & 0x03;
+    place_single_transport_tile(
+        state,
+        c,
+        TileKind::RoadDepot,
+        0x20,
+        0x20 | dir,
+        DEPOT_BUILD_COST,
+    )?;
+    if let Some((exit, road_bits)) = road_depot_exit_for_dir(&state.map, c, dir) {
+        let _ = place_road_bits(state, exit, road_bits);
+    }
+    Ok(())
+}
+
+fn road_depot_exit_for_dir(map: &Map, depot_pos: TileCoord, dir: u8) -> Option<(TileCoord, u8)> {
+    let ((dx, dy), road_bits) = match dir & 0x03 {
+        0 => ((-1_i32, 0_i32), 0x02),
+        1 => ((0_i32, 1_i32), 0x01),
+        2 => ((1_i32, 0_i32), 0x08),
+        _ => ((0_i32, -1_i32), 0x04),
+    };
+    let c = TileCoord::new(depot_pos.x + dx, depot_pos.y + dy);
+    let (mw, mh) = map.dimensions();
+    if c.x < 0 || c.y < 0 || c.x >= mw as i32 || c.y >= mh as i32 {
+        return None;
+    }
+    Some((c, road_bits))
+}
+
 fn axis_line(a: TileCoord, b: TileCoord) -> Vec<TileCoord> {
     if (b.x - a.x).abs() >= (b.y - a.y).abs() {
         let step = if b.x >= a.x { 1 } else { -1 };
@@ -273,19 +304,50 @@ fn place_road_bits(state: &mut GameState, c: TileCoord, bits: u8) -> Result<(), 
                 }
             });
             let road_bits = (existing | (bits & 0x0F)).max(0x01);
-            state
-                .map
-                .set_kind(c, TileKind::Road)
-                .map_err(|_| CommandError::OutOfBounds)?;
-            // MP_ROAD normal tile: low nibble stores road bits, high bits subtype=0.
-            state
-                .map
-                .set_mapt_m5(c, 0x20, road_bits)
-                .map_err(|_| CommandError::OutOfBounds)?;
+            write_normal_road_tile(state, c, road_bits)?;
             state.economy.money -= ROAD_BUILD_COST;
             Ok(())
         }
     }
+}
+
+fn set_road_bits(state: &mut GameState, c: TileCoord, bits: u8) -> Result<(), CommandError> {
+    in_bounds(&state.map, c)?;
+    let kind = state.map.get_kind(c).unwrap_or(TileKind::Grass);
+    match kind {
+        TileKind::Water => Err(CommandError::CannotPlaceRoadOnWater),
+        TileKind::Void => Err(CommandError::CannotPlaceRoadOnVoid),
+        _ => {
+            let road_bits = (bits & 0x0F).max(0x01);
+            write_normal_road_tile(state, c, road_bits)?;
+            state.economy.money -= ROAD_BUILD_COST;
+            Ok(())
+        }
+    }
+}
+
+fn write_normal_road_tile(
+    state: &mut GameState,
+    c: TileCoord,
+    road_bits: u8,
+) -> Result<(), CommandError> {
+    let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    tile.kind = TileKind::Road;
+    // MP_ROAD normal tile: low nibble stores road bits, high bits subtype=0.
+    tile.mapt = 0x20;
+    tile.m5 = road_bits & 0x0F;
+    tile.m1 = 0;
+    tile.m2 = 0;
+    tile.m2_hi = 0;
+    tile.m3 = 0;
+    tile.m3hi = 0;
+    tile.m6 = 0;
+    tile.m7 = 0;
+    tile.m8 = 0;
+    state
+        .map
+        .set_tile(c, tile)
+        .map_err(|_| CommandError::OutOfBounds)
 }
 
 fn place_station(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
@@ -451,11 +513,88 @@ fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(), CommandErr
 }
 
 fn toggle_vehicle_running(state: &mut GameState, vehicle_id: u32) -> Result<(), CommandError> {
+    let road_dest = state
+        .vehicles
+        .iter()
+        .find(|v| v.id == vehicle_id)
+        .and_then(|v| road_depot_exit_tile(state, v.pos))
+        .and_then(|exit| farthest_reachable_road_tile(&state.map, exit).or(Some(exit)));
     let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
     vehicle.running = !vehicle.running;
+    if vehicle.running
+        && vehicle.pos == vehicle.dest
+        && let Some(dest) = road_dest
+    {
+        vehicle.dest = dest;
+        vehicle.path.clear();
+    }
     Ok(())
+}
+
+fn road_depot_exit_tile(state: &GameState, depot_pos: TileCoord) -> Option<TileCoord> {
+    let Some(tile) = state.map.get(depot_pos) else {
+        return None;
+    };
+    if tile.kind != TileKind::RoadDepot {
+        return None;
+    }
+    if let Some((exit, _)) = road_depot_exit_for_dir(&state.map, depot_pos, tile.m5 & 0x03)
+        && traversable_road_kind(state.map.get_kind(exit))
+    {
+        return Some(exit);
+    }
+    let (mw, mh) = state.map.dimensions();
+    [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)]
+        .into_iter()
+        .map(|(dx, dy)| TileCoord::new(depot_pos.x + dx, depot_pos.y + dy))
+        .find(|c| {
+            c.x >= 0
+                && c.y >= 0
+                && c.x < mw as i32
+                && c.y < mh as i32
+                && traversable_road_kind(state.map.get_kind(*c))
+        })
+}
+
+fn traversable_road_kind(kind: Option<TileKind>) -> bool {
+    matches!(
+        kind,
+        Some(TileKind::Road | TileKind::RoadBridge | TileKind::RoadTunnel)
+    )
+}
+
+fn farthest_reachable_road_tile(map: &Map, start: TileCoord) -> Option<TileCoord> {
+    let (mw, mh) = map.dimensions();
+    if !traversable_road_kind(map.get_kind(start)) {
+        return None;
+    }
+    let mut seen = HashSet::new();
+    let mut queue = VecDeque::from([start]);
+    let mut farthest = start;
+    seen.insert(start);
+
+    while let Some(cur) = queue.pop_front() {
+        if tile_distance(cur, start) > tile_distance(farthest, start) {
+            farthest = cur;
+        }
+        for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
+            let next = TileCoord::new(cur.x + dx, cur.y + dy);
+            if next.x < 0 || next.y < 0 || next.x >= mw as i32 || next.y >= mh as i32 {
+                continue;
+            }
+            if seen.insert(next) && traversable_road_kind(map.get_kind(next)) {
+                queue.push_back(next);
+            }
+        }
+    }
+
+    Some(farthest)
+}
+
+fn tile_distance(a: TileCoord, b: TileCoord) -> u32 {
+    a.x.abs_diff(b.x) + a.y.abs_diff(b.y)
 }
 
 fn clone_vehicle_orders(
@@ -898,6 +1037,39 @@ mod tests {
     }
 
     #[test]
+    fn set_road_bits_replaces_existing_directions() {
+        let mut s = GameState::new(8, 8);
+        let c = TileCoord::new(3, 4);
+        apply_command(&mut s, &Command::PlaceRoadBits(c, 0x0F)).unwrap();
+        apply_command(&mut s, &Command::SetRoadBits(c, 0x0A)).unwrap();
+        assert_eq!(s.map.get(c).unwrap().m5 & 0x0F, 0x0A);
+    }
+
+    #[test]
+    fn set_road_bits_clears_forest_auxiliary_planes() {
+        let mut s = GameState::new(8, 8);
+        let c = TileCoord::new(3, 4);
+        let mut tile = s.map.get(c).unwrap();
+        tile.kind = TileKind::Forest;
+        tile.mapt = 0x40;
+        tile.m5 = 0x83;
+        tile.m3 = 0x06;
+        tile.m7 = 0x20;
+        tile.m8 = 0x1234;
+        s.map.set_tile(c, tile).unwrap();
+
+        apply_command(&mut s, &Command::SetRoadBits(c, 0x0A)).unwrap();
+
+        let tile = s.map.get(c).unwrap();
+        assert_eq!(tile.kind, TileKind::Road);
+        assert_eq!(tile.mapt, 0x20);
+        assert_eq!(tile.m5, 0x0A);
+        assert_eq!(tile.m3, 0);
+        assert_eq!(tile.m7, 0);
+        assert_eq!(tile.m8, 0);
+    }
+
+    #[test]
     fn place_road_on_water_returns_error() {
         let mut s = GameState::new(8, 8);
         let c = TileCoord::new(1, 1);
@@ -963,6 +1135,57 @@ mod tests {
         assert_eq!(s.vehicles.len(), 1);
         assert_eq!(s.vehicles[0].kind, VehicleKind::Bus);
         assert!(!s.vehicles[0].running);
+    }
+
+    #[test]
+    fn place_road_depot_dir_preserves_orientation_in_m5() {
+        let mut s = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 3)).unwrap();
+        let tile = s.map.get(depot).unwrap();
+        assert_eq!(tile.kind, TileKind::RoadDepot);
+        assert_eq!(tile.m5 & 0x03, 3);
+        let exit = TileCoord::new(2, 1);
+        assert_eq!(s.map.get_kind(exit), Some(TileKind::Road));
+        assert_eq!(s.map.get(exit).unwrap().m5 & 0x0F, 0x04);
+    }
+
+    #[test]
+    fn toggle_road_vehicle_running_targets_depot_exit() {
+        let mut s = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        let exit = TileCoord::new(3, 2);
+        apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 2)).unwrap();
+        apply_command(&mut s, &Command::PlaceRoad(exit)).unwrap();
+        apply_command(
+            &mut s,
+            &Command::BuildRoadVehicleAtDepot(depot, VehicleKind::Truck),
+        )
+        .unwrap();
+
+        apply_command(&mut s, &Command::ToggleVehicleRunning(1)).unwrap();
+
+        assert!(s.vehicles[0].running);
+        assert_eq!(s.vehicles[0].dest, exit);
+    }
+
+    #[test]
+    fn toggle_road_vehicle_running_targets_reachable_road_not_depot_mouth() {
+        let mut s = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        let far = TileCoord::new(5, 2);
+        apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 2)).unwrap();
+        apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(4, 2), 0x0A)).unwrap();
+        apply_command(&mut s, &Command::PlaceRoadBits(far, 0x0A)).unwrap();
+        apply_command(
+            &mut s,
+            &Command::BuildRoadVehicleAtDepot(depot, VehicleKind::Truck),
+        )
+        .unwrap();
+
+        apply_command(&mut s, &Command::ToggleVehicleRunning(1)).unwrap();
+
+        assert_eq!(s.vehicles[0].dest, far);
     }
 
     #[test]

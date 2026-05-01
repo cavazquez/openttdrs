@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileKind};
+use openttdrs_core::{Map, Station, StopKind, TileKind};
 
 use super::{MapSpriteBatches, MapVisualLayer, TileRenderContext, WaterTile, WorldAssets};
 use crate::iso::{
@@ -456,6 +456,7 @@ pub(crate) fn spawn_station_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
+    stations: &[Station],
     slope_half_ground: f32,
 ) {
     let tileh = ctx.info.tileh;
@@ -472,10 +473,23 @@ pub(crate) fn spawn_station_tile(
         .tile
         .map_or(0, |t| (t.m5 & 0x03) as usize)
         .min(assets.station_grounds.len().saturating_sub(1));
+    let grounds = if stations
+        .iter()
+        .find(|station| station.pos == ctx.coord)
+        .is_some_and(|station| station.stop_kind == StopKind::BusStop)
+    {
+        &assets.bus_stop_grounds
+    } else {
+        &assets.station_grounds
+    };
+    let image = grounds
+        .get(dir)
+        .cloned()
+        .unwrap_or_else(|| assets.station_grounds[dir].clone());
     commands.spawn((
         MapVisualLayer,
         Sprite {
-            image: assets.station_grounds[dir].clone(),
+            image,
             color: Color::WHITE,
             ..default()
         },
@@ -862,6 +876,7 @@ mod spawn_coverage_tests {
                         &mut commands,
                         &a.0,
                         &TileRenderContext::new(&m.0, &g.0, 4, 2),
+                        &[],
                         4.0,
                     );
                     for (x, y) in [(5, 2), (5, 3), (5, 4), (5, 5), (5, 6), (5, 7)] {
@@ -1047,6 +1062,7 @@ mod spawn_coverage_tests {
                         &mut commands,
                         &a.0,
                         &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                        &[],
                         4.0,
                     );
                 },

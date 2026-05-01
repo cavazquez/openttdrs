@@ -1,7 +1,9 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::save;
-use openttdrs_core::{Command, Map, TileCoord, TileKind, VehicleKind, VehicleOrder, apply_command};
+use openttdrs_core::{
+    Command, Map, TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder, apply_command,
+};
 #[cfg(not(test))]
 use std::path::Path;
 
@@ -41,14 +43,38 @@ pub(crate) struct DepotPanelRoot;
 pub(crate) struct DepotPanelText;
 
 #[derive(Component, Clone, Copy)]
+pub(crate) struct OrderPanelRow {
+    slot: usize,
+}
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct OrderPanelRowText {
+    slot: usize,
+}
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct DepotVehicleRow {
+    slot: usize,
+}
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct DepotVehicleRowText {
+    slot: usize,
+}
+
+#[derive(Component, Clone, Copy)]
 pub(crate) enum DepotPanelButton {
     BuyBus,
     BuyTruck,
+    Orders,
     ToggleRunning,
     Sell,
     CloneFromFirst,
     Close,
 }
+
+const DEPOT_VEHICLE_ROWS: usize = 8;
+const ORDER_PANEL_ROWS: usize = 10;
 
 #[derive(Resource, Default)]
 pub(crate) struct StationCargoPanelState {
@@ -558,6 +584,17 @@ pub(crate) fn setup_order_panel(mut commands: Commands) {
             ));
             panel
                 .spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(2.0),
+                    ..default()
+                })
+                .with_children(|list| {
+                    for slot in 0..ORDER_PANEL_ROWS {
+                        spawn_order_panel_row(list, slot);
+                    }
+                });
+            panel
+                .spawn(Node {
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(4.0),
                     ..default()
@@ -568,6 +605,34 @@ pub(crate) fn setup_order_panel(mut commands: Commands) {
                     spawn_order_button(row, OrderPanelButton::Close, "Cerrar");
                 });
         });
+}
+
+fn spawn_order_panel_row(parent: &mut ChildSpawnerCommands, slot: usize) {
+    parent.spawn((
+        OrderPanelRow { slot },
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Px(22.0),
+            padding: UiRect::horizontal(Val::Px(6.0)),
+            justify_content: JustifyContent::FlexStart,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(1.0)),
+            display: Display::None,
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
+        BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
+        BuildMenuUi,
+        children![(
+            OrderPanelRowText { slot },
+            Text::new(""),
+            TextFont {
+                font_size: 11.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.92, 0.88, 0.72)),
+        )],
+    ));
 }
 
 fn spawn_order_button(
@@ -606,12 +671,22 @@ pub(crate) fn sync_order_panel(
     sim: Res<SimWorld>,
     mut root_q: Query<&mut Visibility, With<OrderPanelRoot>>,
     mut text_q: Query<&mut Text, With<OrderPanelText>>,
+    mut row_q: Query<(
+        &OrderPanelRow,
+        &mut Node,
+        &mut BackgroundColor,
+        &mut BorderColor,
+    )>,
+    mut row_text_q: Query<(&OrderPanelRowText, &mut Text), Without<OrderPanelText>>,
 ) {
     let Ok(mut vis) = root_q.single_mut() else {
         return;
     };
     let Some(vehicle_id) = order_state.vehicle_id else {
         *vis = Visibility::Hidden;
+        for (_, mut node, _, _) in &mut row_q {
+            node.display = Display::None;
+        }
         return;
     };
     *vis = Visibility::Visible;
@@ -623,28 +698,76 @@ pub(crate) fn sync_order_panel(
     else {
         return;
     };
-    let mut out = format!(
-        "Vehiculo #{} {:?}\ncargo {}/{} dest ({},{})",
-        vehicle.id, vehicle.kind, vehicle.cargo, vehicle.capacity, vehicle.dest.x, vehicle.dest.y
+    let out = format!(
+        "Vehículo #{} {} | carga {}/{} | dest ({},{})",
+        vehicle.id,
+        vehicle_kind_label(vehicle.kind),
+        vehicle.cargo,
+        vehicle.capacity,
+        vehicle.dest.x,
+        vehicle.dest.y
     );
-    if order_state.orders.is_empty() {
-        out.push_str("\nSin ordenes");
-    } else {
-        for (i, order) in order_state.orders.iter().enumerate().take(8) {
-            let pos = order.destination();
-            let prefix = match order {
-                VehicleOrder::Station { .. } => "S",
-                VehicleOrder::Tile(_) => "T",
-            };
-            out.push_str(&format!("\n{}. {prefix}({},{})", i + 1, pos.x, pos.y));
-        }
-        if order_state.orders.len() > 8 {
-            out.push_str("\n...");
-        }
-    }
     if let Ok(mut text) = text_q.single_mut() {
         **text = out;
     }
+    for (row, mut node, mut bg, mut border) in &mut row_q {
+        let has_content = row.slot == 0 && order_state.orders.is_empty()
+            || row.slot < order_state.orders.len().min(ORDER_PANEL_ROWS);
+        node.display = if has_content {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        let is_current = !order_state.orders.is_empty()
+            && row.slot
+                == vehicle
+                    .current_order
+                    .min(order_state.orders.len().saturating_sub(1));
+        *bg = if is_current {
+            BackgroundColor(Color::srgb(0.42, 0.35, 0.22))
+        } else {
+            BackgroundColor(Color::srgb(0.22, 0.18, 0.12))
+        };
+        *border = if is_current {
+            BorderColor::all(Color::srgb(0.88, 0.74, 0.46))
+        } else {
+            BorderColor::all(Color::srgb(0.45, 0.39, 0.27))
+        };
+    }
+    for (row_text, mut text) in &mut row_text_q {
+        **text = if order_state.orders.is_empty() && row_text.slot == 0 {
+            "Sin órdenes cargadas".to_string()
+        } else if let Some(order) = order_state.orders.get(row_text.slot) {
+            order_row_label(row_text.slot, *order, vehicle, &sim)
+        } else {
+            String::new()
+        };
+    }
+}
+
+fn vehicle_kind_label(kind: VehicleKind) -> &'static str {
+    match kind {
+        VehicleKind::Bus => "Bus",
+        VehicleKind::Truck => "Camión",
+        VehicleKind::Train => "Tren",
+    }
+}
+
+fn order_row_label(index: usize, order: VehicleOrder, vehicle: &Vehicle, sim: &SimWorld) -> String {
+    let pos = order.destination();
+    let current = if !vehicle.orders.is_empty() && vehicle.current_order == index {
+        ">"
+    } else {
+        " "
+    };
+    let label = match order {
+        VehicleOrder::Station { .. } => "Estación",
+        VehicleOrder::Tile(tile) if sim.state.map.get_kind(tile) == Some(TileKind::RoadDepot) => {
+            "Depósito"
+        }
+        VehicleOrder::Tile(_) => "Tile",
+    };
+    format!("{current} {:>2}. {label} ({}, {})", index + 1, pos.x, pos.y)
 }
 
 pub(crate) fn setup_depot_panel(mut commands: Commands) {
@@ -679,6 +802,17 @@ pub(crate) fn setup_depot_panel(mut commands: Commands) {
             ));
             panel
                 .spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(2.0),
+                    ..default()
+                })
+                .with_children(|list| {
+                    for slot in 0..DEPOT_VEHICLE_ROWS {
+                        spawn_depot_vehicle_row(list, slot);
+                    }
+                });
+            panel
+                .spawn(Node {
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(4.0),
                     flex_wrap: FlexWrap::Wrap,
@@ -687,12 +821,43 @@ pub(crate) fn setup_depot_panel(mut commands: Commands) {
                 .with_children(|row| {
                     spawn_depot_button(row, DepotPanelButton::BuyBus, "Comprar bus");
                     spawn_depot_button(row, DepotPanelButton::BuyTruck, "Comprar camión");
+                    spawn_depot_button(row, DepotPanelButton::Orders, "Órdenes");
                     spawn_depot_button(row, DepotPanelButton::ToggleRunning, "Iniciar/Detener");
                     spawn_depot_button(row, DepotPanelButton::Sell, "Vender");
                     spawn_depot_button(row, DepotPanelButton::CloneFromFirst, "Clonar órdenes");
                     spawn_depot_button(row, DepotPanelButton::Close, "Cerrar");
                 });
         });
+}
+
+fn spawn_depot_vehicle_row(parent: &mut ChildSpawnerCommands, slot: usize) {
+    parent.spawn((
+        Button,
+        DepotVehicleRow { slot },
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Px(22.0),
+            padding: UiRect::horizontal(Val::Px(6.0)),
+            justify_content: JustifyContent::FlexStart,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(1.0)),
+            display: Display::None,
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
+        BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
+        Interaction::default(),
+        BuildMenuUi,
+        children![(
+            DepotVehicleRowText { slot },
+            Text::new(""),
+            TextFont {
+                font_size: 11.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.92, 0.88, 0.72)),
+        )],
+    ));
 }
 
 fn spawn_depot_button(
@@ -731,39 +896,86 @@ pub(crate) fn sync_depot_panel(
     sim: Res<SimWorld>,
     mut root_q: Query<&mut Visibility, With<DepotPanelRoot>>,
     mut text_q: Query<&mut Text, With<DepotPanelText>>,
+    mut row_q: Query<
+        (
+            &DepotVehicleRow,
+            &Interaction,
+            &mut Node,
+            &mut BackgroundColor,
+            &mut BorderColor,
+        ),
+        With<Button>,
+    >,
+    mut row_text_q: Query<(&DepotVehicleRowText, &mut Text), Without<DepotPanelText>>,
 ) {
     let Ok(mut vis) = root_q.single_mut() else {
         return;
     };
     let Some(depot_pos) = depot_state.depot_pos else {
         *vis = Visibility::Hidden;
+        for (_, _, mut node, _, _) in &mut row_q {
+            node.display = Display::None;
+        }
         return;
     };
     *vis = Visibility::Visible;
     let mut out = format!("Depósito en ({}, {})", depot_pos.x, depot_pos.y);
-    let vehicles_here: Vec<_> = sim
+    let mut vehicles_here: Vec<_> = sim
         .state
         .vehicles
         .iter()
         .filter(|vehicle| vehicle.pos == depot_pos)
         .collect();
+    vehicles_here.sort_by_key(|vehicle| vehicle.id);
     out.push_str(&format!("\nVehículos en depósito: {}", vehicles_here.len()));
-    for vehicle in vehicles_here.iter().take(6) {
-        out.push_str(&format!(
-            "\n#{} {:?} {} cargo:{}/{}",
-            vehicle.id,
-            vehicle.kind,
-            if vehicle.running { "RUN" } else { "STOP" },
-            vehicle.cargo,
-            vehicle.capacity
-        ));
-    }
-    if let Some(selected) = depot_state.selected_vehicle {
-        out.push_str(&format!("\nSeleccionado: #{selected}"));
-    }
     if let Ok(mut text) = text_q.single_mut() {
         **text = out;
     }
+    for (row, interaction, mut node, mut bg, mut border) in &mut row_q {
+        let Some(vehicle) = vehicles_here.get(row.slot) else {
+            node.display = Display::None;
+            continue;
+        };
+        node.display = Display::Flex;
+        let selected = depot_state.selected_vehicle == Some(vehicle.id);
+        *bg = if selected && *interaction == Interaction::Pressed {
+            BackgroundColor(Color::srgb(0.62, 0.54, 0.34))
+        } else if selected {
+            BackgroundColor(Color::srgb(0.48, 0.41, 0.27))
+        } else if *interaction == Interaction::Hovered {
+            BackgroundColor(Color::srgb(0.34, 0.29, 0.2))
+        } else {
+            BackgroundColor(Color::srgb(0.22, 0.18, 0.12))
+        };
+        *border = if selected {
+            BorderColor::all(Color::srgb(0.9, 0.78, 0.48))
+        } else {
+            BorderColor::all(Color::srgb(0.45, 0.39, 0.27))
+        };
+    }
+    for (row_text, mut text) in &mut row_text_q {
+        if let Some(vehicle) = vehicles_here.get(row_text.slot) {
+            **text = depot_vehicle_row_label(vehicle);
+        } else {
+            **text = String::new();
+        }
+    }
+}
+
+fn depot_vehicle_row_label(vehicle: &openttdrs_core::Vehicle) -> String {
+    format!(
+        "#{:<3} {:<5} {:<4} carga {:>2}/{:<2} órdenes {}",
+        vehicle.id,
+        match vehicle.kind {
+            VehicleKind::Bus => "Bus",
+            VehicleKind::Truck => "Cam.",
+            VehicleKind::Train => "Tren",
+        },
+        if vehicle.running { "RUN" } else { "STOP" },
+        vehicle.cargo,
+        vehicle.capacity,
+        vehicle.orders.len()
+    )
 }
 
 pub(crate) fn setup_station_cargo_panel(mut commands: Commands) {
@@ -913,10 +1125,45 @@ pub(crate) fn handle_order_panel_buttons(
 
 pub(crate) fn handle_depot_panel_buttons(
     mut q: Query<(&Interaction, &DepotPanelButton), (Changed<Interaction>, With<Button>)>,
+    mut row_q: Query<
+        (&Interaction, &DepotVehicleRow),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<DepotPanelButton>,
+        ),
+    >,
     mut depot_state: ResMut<DepotPanelState>,
+    mut order_state: ResMut<OrderEditState>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
 ) {
+    for (interaction, row) in &mut row_q {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let Some(depot_pos) = depot_state.depot_pos else {
+            continue;
+        };
+        let mut ids: Vec<u32> = sim
+            .state
+            .vehicles
+            .iter()
+            .filter(|vehicle| vehicle.pos == depot_pos)
+            .map(|vehicle| vehicle.id)
+            .collect();
+        ids.sort_unstable();
+        let Some(vehicle_id) = ids.get(row.slot).copied() else {
+            continue;
+        };
+        let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
+            continue;
+        };
+        depot_state.selected_vehicle = Some(vehicle_id);
+        order_state.vehicle_id = Some(vehicle_id);
+        order_state.orders = vehicle.orders.clone();
+    }
+
     for (interaction, button) in &mut q {
         if *interaction != Interaction::Pressed {
             continue;
@@ -947,6 +1194,22 @@ pub(crate) fn handle_depot_panel_buttons(
                 .is_ok()
                 {
                     pending.pending = true;
+                }
+            }
+            DepotPanelButton::Orders => {
+                let target_id = depot_state.selected_vehicle.or_else(|| {
+                    sim.state
+                        .vehicles
+                        .iter()
+                        .find(|vehicle| vehicle.pos == depot_pos)
+                        .map(|vehicle| vehicle.id)
+                });
+                if let Some(vehicle_id) = target_id
+                    && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
+                {
+                    depot_state.selected_vehicle = Some(vehicle_id);
+                    order_state.vehicle_id = Some(vehicle_id);
+                    order_state.orders = vehicle.orders.clone();
                 }
             }
             DepotPanelButton::ToggleRunning => {
@@ -1036,6 +1299,21 @@ fn apply_order_edit(
         let tiles = orders.iter().map(|order| order.destination()).collect();
         apply_command(state, &Command::SetVehicleOrders(vehicle_id, tiles))
     }
+}
+
+fn order_for_clicked_tile(sim: &SimWorld, vehicle_id: u32, pos: TileCoord) -> Option<VehicleOrder> {
+    let vehicle = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)?;
+    if let Some(station) = sim.state.stations.iter().find(|station| station.pos == pos) {
+        return station
+            .can_service_vehicle(vehicle.kind)
+            .then_some(VehicleOrder::station(pos));
+    }
+    if sim.state.map.get_kind(pos) == Some(TileKind::RoadDepot)
+        && !matches!(vehicle.kind, VehicleKind::Train)
+    {
+        return Some(VehicleOrder::tile(pos));
+    }
+    Some(VehicleOrder::tile(pos))
 }
 
 pub(crate) fn handle_settings_menu_buttons(
@@ -1293,7 +1571,9 @@ fn command_for_action(
         BuildMenuAction::Station => Some(Command::PlaceStationDir(pos, station_state.orientation)),
         BuildMenuAction::BusStop => Some(Command::PlaceBusStop(pos, station_state.orientation)),
         BuildMenuAction::Clear => Some(Command::ClearTile(pos)),
-        BuildMenuAction::RoadDepot => Some(Command::PlaceRoadDepot(pos)),
+        BuildMenuAction::RoadDepot => {
+            Some(Command::PlaceRoadDepotDir(pos, station_state.orientation))
+        }
         BuildMenuAction::RailDepot => Some(Command::PlaceRailDepot(pos)),
         BuildMenuAction::RoadBridge
         | BuildMenuAction::RoadTunnel
@@ -1352,6 +1632,54 @@ fn command_for_line_action(action: BuildMenuAction, tiles: &[(i32, i32)]) -> Opt
         BuildMenuAction::RailBridge => Some(Command::PlaceRailBridge(a, b)),
         _ => None,
     }
+}
+
+fn road_bits_for_drag_action(action: BuildMenuAction, tiles: &[(i32, i32)]) -> Option<u8> {
+    match action {
+        BuildMenuAction::RoadX => Some(0x0A),
+        BuildMenuAction::RoadY => Some(0x05),
+        BuildMenuAction::Road => {
+            let &(sx, sy) = tiles.first()?;
+            let &(ex, ey) = tiles.last().unwrap_or(&(sx, sy));
+            Some(if (ex - sx).abs() >= (ey - sy).abs() {
+                0x0A
+            } else {
+                0x05
+            })
+        }
+        _ => None,
+    }
+}
+
+fn apply_drag_action(
+    sim: &mut SimWorld,
+    action: BuildMenuAction,
+    tiles: Vec<(i32, i32)>,
+    station_state: &StationBuildState,
+) -> bool {
+    if let Some(cmd) = command_for_line_action(action, &tiles) {
+        return apply_command(&mut sim.state, &cmd).is_ok();
+    }
+
+    if let Some(road_bits) = road_bits_for_drag_action(action, &tiles) {
+        let mut changed = false;
+        for (x, y) in tiles {
+            changed |= apply_command(
+                &mut sim.state,
+                &Command::SetRoadBits(TileCoord::new(x, y), road_bits),
+            )
+            .is_ok();
+        }
+        return changed;
+    }
+
+    let mut changed = false;
+    for (x, y) in tiles {
+        if let Some(cmd) = command_for_action(action, TileCoord::new(x, y), station_state) {
+            changed |= apply_command(&mut sim.state, &cmd).is_ok();
+        }
+    }
+    changed
 }
 
 fn drag_line_tiles(action: BuildMenuAction, from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
@@ -1439,12 +1767,16 @@ pub(crate) fn handle_tile_click(
     let Some(action) = tool_state.active_tool else {
         cancel_placement(&mut drag_state);
         if mouse.just_pressed(MouseButton::Left) {
-            match sim.state.map.get_kind(pos) {
+            let tile_kind = sim.state.map.get_kind(pos);
+            match tile_kind {
                 Some(TileKind::Industry) => {
                     industry_panel.open = true;
                     industry_panel.focus_tile = Some(pos);
                     depot_state.depot_pos = None;
+                    order_state.vehicle_id = None;
+                    order_state.orders.clear();
                     station_panel.station_pos = None;
+                    return;
                 }
                 Some(TileKind::RoadDepot) => {
                     depot_state.depot_pos = Some(pos);
@@ -1454,17 +1786,33 @@ pub(crate) fn handle_tile_click(
                         .iter()
                         .find(|vehicle| vehicle.pos == pos)
                         .map(|vehicle| vehicle.id);
+                    order_state.vehicle_id = None;
+                    order_state.orders.clear();
                     station_panel.station_pos = None;
+                    industry_panel.open = false;
+                    return;
                 }
                 Some(TileKind::Station) => {
                     station_panel.station_pos = Some(pos);
                     depot_state.depot_pos = None;
+                    order_state.vehicle_id = None;
+                    order_state.orders.clear();
+                    industry_panel.open = false;
+                    return;
                 }
-                _ => {
-                    depot_state.depot_pos = None;
-                    station_panel.station_pos = None;
-                }
+                _ => {}
             }
+            if let Some(vehicle) = sim.state.vehicles.iter().find(|vehicle| vehicle.pos == pos) {
+                order_state.vehicle_id = Some(vehicle.id);
+                order_state.orders = vehicle.orders.clone();
+                depot_state.depot_pos = None;
+                station_panel.station_pos = None;
+                industry_panel.open = false;
+                return;
+            }
+            depot_state.depot_pos = None;
+            station_panel.station_pos = None;
+            industry_panel.open = false;
         }
         return;
     };
@@ -1488,10 +1836,8 @@ pub(crate) fn handle_tile_click(
         let Some(vehicle_id) = order_state.vehicle_id else {
             return;
         };
-        let order = if sim.state.stations.iter().any(|station| station.pos == pos) {
-            VehicleOrder::station(pos)
-        } else {
-            VehicleOrder::tile(pos)
+        let Some(order) = order_for_clicked_tile(&sim, vehicle_id, pos) else {
+            return;
         };
         order_state.orders.push(order);
         if apply_order_edit(&mut sim.state, vehicle_id, &order_state.orders).is_ok() {
@@ -1523,18 +1869,14 @@ pub(crate) fn handle_tile_click(
                 return;
             }
             let tiles = std::mem::take(&mut drag_state.pending_tiles);
-            let mut changed = false;
-            if let Some(cmd) = command_for_line_action(action, &tiles) {
-                changed |= apply_command(&mut sim.state, &cmd).is_ok();
-            } else {
-                for (x, y) in tiles {
-                    if let Some(cmd) =
-                        command_for_action(action, TileCoord::new(x, y), &station_state)
-                    {
-                        changed |= apply_command(&mut sim.state, &cmd).is_ok();
-                    }
-                }
+            let changed = apply_drag_action(&mut sim, action, tiles, &station_state);
+            cancel_placement(&mut drag_state);
+            if changed {
+                pending.pending = true;
             }
+        } else if mouse.just_released(MouseButton::Left) && drag_state.pending_tiles.len() == 1 {
+            let tiles = std::mem::take(&mut drag_state.pending_tiles);
+            let changed = apply_drag_action(&mut sim, action, tiles, &station_state);
             cancel_placement(&mut drag_state);
             if changed {
                 pending.pending = true;
@@ -1832,6 +2174,14 @@ mod tests {
         ));
         assert!(matches!(
             command_for_action(
+                BuildMenuAction::RoadDepot,
+                TileCoord::new(1, 2),
+                &StationBuildState { orientation: 2 }
+            ),
+            Some(Command::PlaceRoadDepotDir(_, 2))
+        ));
+        assert!(matches!(
+            command_for_action(
                 BuildMenuAction::BuildCoalMine,
                 TileCoord::new(1, 2),
                 &StationBuildState::default()
@@ -1859,6 +2209,22 @@ mod tests {
             Some(Command::PlaceRailBridge(_, _))
         ));
         assert!(command_for_line_action(BuildMenuAction::RoadX, &[(1, 1), (3, 1)]).is_none());
+        assert_eq!(
+            road_bits_for_drag_action(BuildMenuAction::Road, &[(1, 1), (4, 1)]),
+            Some(0x0A)
+        );
+        assert_eq!(
+            road_bits_for_drag_action(BuildMenuAction::Road, &[(1, 1), (1, 4)]),
+            Some(0x05)
+        );
+        assert_eq!(
+            road_bits_for_drag_action(BuildMenuAction::RoadX, &[(1, 1), (1, 4)]),
+            Some(0x0A)
+        );
+        assert_eq!(
+            road_bits_for_drag_action(BuildMenuAction::Clear, &[(1, 1), (1, 4)]),
+            None
+        );
 
         assert_eq!(
             drag_line_tiles(BuildMenuAction::RoadX, (1, 2), (4, 9)),
@@ -1925,5 +2291,33 @@ mod tests {
             BuildMenuAction::Road,
             &[(1, 1), (2, 1)]
         ));
+    }
+
+    #[test]
+    fn order_for_clicked_tile_accepts_depot_and_rejects_incompatible_station() {
+        let mut sim = SimWorld::default();
+        sim.state.vehicles.clear();
+        sim.state.stations.clear();
+        let depot = TileCoord::new(2, 2);
+        let truck_stop = TileCoord::new(3, 2);
+        sim.state.map.set_kind(depot, TileKind::RoadDepot).unwrap();
+        sim.state
+            .stations
+            .push(openttdrs_core::Station::new_with_kind(
+                truck_stop,
+                openttdrs_core::StopKind::TruckStop,
+            ));
+        sim.state.vehicles.push(openttdrs_core::Vehicle::new(
+            42,
+            VehicleKind::Bus,
+            depot,
+            depot,
+        ));
+
+        assert!(matches!(
+            order_for_clicked_tile(&sim, 42, depot),
+            Some(VehicleOrder::Tile(_))
+        ));
+        assert!(order_for_clicked_tile(&sim, 42, truck_stop).is_none());
     }
 }

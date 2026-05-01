@@ -502,7 +502,7 @@ mod road_sprite_index_tests {
     }
 
     #[test]
-    fn simple_diagonal_slopes_use_openttd_offsets_11_to_14() {
+    fn full_road_diagonal_slopes_use_openttd_offsets_11_to_14() {
         assert_eq!(road_flat_sprite_index(12, 0x0F), 11); // SLOPE_NE
         assert_eq!(road_flat_sprite_index(6, 0x0F), 12); // SLOPE_SE
         assert_eq!(road_flat_sprite_index(3, 0x0F), 13); // SLOPE_SW
@@ -513,6 +513,7 @@ mod road_sprite_index_tests {
     fn other_slopes_keep_flat_road_variant_from_bits() {
         let bits = 0x0A;
         assert_eq!(road_flat_sprite_index(1, bits), road_flat_index(bits)); // SLOPE_W
+        assert_eq!(road_flat_sprite_index(12, bits), road_flat_index(bits)); // SLOPE_NE
     }
 }
 

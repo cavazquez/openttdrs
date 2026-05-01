@@ -16,7 +16,7 @@ use crate::render::{
 };
 use crate::state::{ClientScreen, SimWorld};
 
-use super::vehicles::{TruckHandles, spawn_initial_vehicles};
+use super::vehicles::{TruckHandles, VehicleIndex, spawn_initial_vehicles};
 
 /// Petición de redibujo del mapa. `sync_camera`: solo tras F9 / cambio de tamaño.
 #[derive(Resource, Default)]
@@ -136,7 +136,13 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
                     spawn_house_tile(commands, &assets, &ctx, slope_half_ground);
                 }
                 TileKind::Station => {
-                    spawn_station_tile(commands, &assets, &ctx, slope_half_ground);
+                    spawn_station_tile(
+                        commands,
+                        &assets,
+                        &ctx,
+                        &sim.state.stations,
+                        slope_half_ground,
+                    );
                 }
                 TileKind::RoadDepot
                 | TileKind::RailDepot
@@ -238,6 +244,7 @@ pub(crate) fn apply_remap_map_visuals(
     >,
     asset_server: Res<AssetServer>,
     sim: Res<SimWorld>,
+    mut vehicle_index: ResMut<VehicleIndex>,
 ) {
     if !pending.pending {
         return;
@@ -249,6 +256,7 @@ pub(crate) fn apply_remap_map_visuals(
     for e in to_remove {
         commands.entity(e).despawn();
     }
+    vehicle_index.rebuild(&sim.state.vehicles);
     spawn_world_layer(&mut commands, &asset_server, &sim);
     if do_sync_camera {
         sync_camera_for_sim(&mut q_cam, &sim);
@@ -281,6 +289,7 @@ mod tests {
         app.update();
         app.insert_resource(SimWorld::default());
         app.insert_resource(RemapMapVisualsPending::default());
+        app.insert_resource(VehicleIndex::default());
         app
     }
 

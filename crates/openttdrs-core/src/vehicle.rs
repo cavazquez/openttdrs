@@ -98,6 +98,9 @@ impl Vehicle {
             return;
         }
         if let Some(next) = self.path.pop_front() {
+            if self.orders.is_empty() {
+                self.origin = self.pos;
+            }
             self.pos = next;
             if self.pos == self.dest {
                 self.advance_destination_after_arrival();
@@ -108,10 +111,14 @@ impl Vehicle {
             // Manhattan fallback: no hay vías en el mapa
             let dx = self.dest.x - self.pos.x;
             let dy = self.dest.y - self.pos.y;
+            let previous = self.pos;
             if dx != 0 {
                 self.pos.x += dx.signum();
             } else if dy != 0 {
                 self.pos.y += dy.signum();
+            }
+            if self.orders.is_empty() && self.pos != previous {
+                self.origin = previous;
             }
             if self.pos == self.dest && !self.orders.is_empty() {
                 self.advance_destination_after_arrival();
@@ -145,7 +152,6 @@ impl Vehicle {
     fn advance_destination_after_arrival(&mut self) {
         self.path.clear();
         if self.orders.is_empty() {
-            std::mem::swap(&mut self.dest, &mut self.origin);
             return;
         }
         self.current_order = (self.current_order + 1) % self.orders.len();

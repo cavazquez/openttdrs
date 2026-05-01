@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use openttdrs_core::{CargoType, Vehicle, VehicleKind};
+use openttdrs_core::{CargoType, TileKind, Vehicle, VehicleKind};
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::{iso, overlay_pos, tile_min_z};
@@ -130,6 +130,7 @@ pub(crate) fn spawn_initial_vehicles(
                 ..default()
             },
             Transform::from_translation(pos3).with_scale(Vec3::splat(TRUCK_SCALE)),
+            Visibility::Visible,
         ));
         commands.spawn((
             MapVisualLayer,
@@ -141,6 +142,7 @@ pub(crate) fn spawn_initial_vehicles(
             },
             TextColor(vehicle_cargo_color(vehicle)),
             Transform::from_translation(vehicle_cargo_label_pos(pos3)),
+            Visibility::Visible,
         ));
     }
 }
@@ -184,28 +186,38 @@ fn vehicle_tint(v: &Vehicle) -> Color {
     }
 }
 
+fn vehicle_is_hidden_in_depot(sim: &SimWorld, v: &Vehicle) -> bool {
+    !v.running && sim.state.map.get_kind(v.pos) == Some(TileKind::RoadDepot)
+}
+
 pub(crate) fn update_vehicles(
     sim: Res<SimWorld>,
     trucks: Res<TruckHandles>,
     vehicle_index: Res<VehicleIndex>,
-    mut q: Query<(&VehicleSprite, &mut Transform, &mut Sprite)>,
+    mut q: Query<(&VehicleSprite, &mut Transform, &mut Sprite, &mut Visibility)>,
     mut labels: Query<
         (
             &VehicleCargoLabel,
             &mut Transform,
             &mut Text2d,
             &mut TextColor,
+            &mut Visibility,
         ),
         Without<VehicleSprite>,
     >,
 ) {
-    for (vs, mut transform, mut sprite) in &mut q {
+    for (vs, mut transform, mut sprite, mut visibility) in &mut q {
         let Some(&i) = vehicle_index.by_id.get(&vs.0) else {
             continue;
         };
         let Some(v) = sim.state.vehicles.get(i) else {
             continue;
         };
+        if vehicle_is_hidden_in_depot(&sim, v) {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
+        *visibility = Visibility::Visible;
         let dir = vehicle_dir(v);
         let vh = tile_min_z(&sim.state.map, v.pos);
         let p = iso(v.pos.x, v.pos.y);
@@ -217,13 +229,18 @@ pub(crate) fn update_vehicles(
         sprite.color = vehicle_tint(v);
     }
 
-    for (label, mut transform, mut text, mut color) in &mut labels {
+    for (label, mut transform, mut text, mut color, mut visibility) in &mut labels {
         let Some(&i) = vehicle_index.by_id.get(&label.0) else {
             continue;
         };
         let Some(v) = sim.state.vehicles.get(i) else {
             continue;
         };
+        if vehicle_is_hidden_in_depot(&sim, v) {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
+        *visibility = Visibility::Visible;
         let dir = vehicle_dir(v);
         let vh = tile_min_z(&sim.state.map, v.pos);
         let p = iso(v.pos.x, v.pos.y);
@@ -298,14 +315,25 @@ mod tests {
         });
         world.insert_resource(VehicleIndex::default());
 
-        world.spawn((VehicleSprite(11), Transform::default(), Sprite::default()));
+        world.spawn((
+            VehicleSprite(11),
+            Transform::default(),
+            Sprite::default(),
+            Visibility::Visible,
+        ));
         world.spawn((
             VehicleCargoLabel(11),
             Transform::default(),
             Text2d::new(""),
             TextColor(Color::WHITE),
+            Visibility::Visible,
         ));
-        world.spawn((VehicleSprite(99), Transform::default(), Sprite::default()));
+        world.spawn((
+            VehicleSprite(99),
+            Transform::default(),
+            Sprite::default(),
+            Visibility::Visible,
+        ));
 
         world.run_system_once(rebuild_vehicle_index).unwrap();
         world.run_system_once(update_vehicles).unwrap();

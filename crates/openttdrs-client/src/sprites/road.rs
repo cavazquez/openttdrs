@@ -70,13 +70,16 @@ pub fn road_flat_index(road_bits: u8, flat_offset_tbl: &[u8; 16]) -> usize {
 
 #[must_use]
 pub fn road_flat_sprite_index(tileh: u8, road_bits: u8, flat_offset_tbl: &[u8; 16]) -> usize {
+    let flat = road_flat_index(road_bits, flat_offset_tbl);
+    if road_bits & 0x0F != 0x0F {
+        return flat;
+    }
     match tileh.min(14) {
-        0 => road_flat_index(road_bits, flat_offset_tbl),
         12 => 11,
         6 => 12,
         3 => 13,
         9 => 14,
-        _ => road_flat_index(road_bits, flat_offset_tbl),
+        _ => flat,
     }
 }
 

@@ -223,6 +223,24 @@ impl GameState {
             }
         }
 
+        // Vehículos sin órdenes: pasean por la red en vez de rebotar entre origen/destino.
+        for i in 0..self.vehicles.len() {
+            if self.vehicles[i].running
+                && self.vehicles[i].orders.is_empty()
+                && self.vehicles[i].path.is_empty()
+                && self.vehicles[i].pos == self.vehicles[i].dest
+                && let Some(dest) = orderless_wander_destination(
+                    &self.map,
+                    self.vehicles[i].id,
+                    self.vehicles[i].pos,
+                    self.vehicles[i].origin,
+                    self.tick,
+                )
+            {
+                self.vehicles[i].dest = dest;
+            }
+        }
+
         // Recomputa el path BFS para vehículos que lo necesiten (path vacío y no en destino).
         for i in 0..self.vehicles.len() {
             if self.vehicles[i].path.is_empty()
@@ -270,6 +288,57 @@ impl GameState {
     pub fn load_json(s: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(s)
     }
+}
+
+fn orderless_wander_destination(
+    map: &Map,
+    vehicle_id: u32,
+    pos: TileCoord,
+    previous: TileCoord,
+    tick: GameTick,
+) -> Option<TileCoord> {
+    let (mw, mh) = map.dimensions();
+    let mut candidates = [None; 4];
+    let mut len = 0usize;
+    for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
+        let c = TileCoord::new(pos.x + dx, pos.y + dy);
+        if c.x < 0 || c.y < 0 || c.x >= mw as i32 || c.y >= mh as i32 {
+            continue;
+        }
+        if !road_vehicle_can_wander_on(map.get_kind(c)) {
+            continue;
+        }
+        candidates[len] = Some(c);
+        len += 1;
+    }
+    if len == 0 {
+        return None;
+    }
+    let usable_len = if len > 1 {
+        let mut write = 0usize;
+        for read in 0..len {
+            if candidates[read] != Some(previous) {
+                candidates[write] = candidates[read];
+                write += 1;
+            }
+        }
+        write.max(1)
+    } else {
+        len
+    };
+    let seed = tick
+        .get()
+        .wrapping_add(u64::from(vehicle_id) * 37)
+        .wrapping_add(pos.x.unsigned_abs() as u64 * 17)
+        .wrapping_add(pos.y.unsigned_abs() as u64 * 31);
+    candidates[(seed as usize) % usable_len]
+}
+
+fn road_vehicle_can_wander_on(kind: Option<TileKind>) -> bool {
+    matches!(
+        kind,
+        Some(TileKind::Road | TileKind::RoadDepot | TileKind::RoadBridge | TileKind::RoadTunnel)
+    )
 }
 
 #[cfg(test)]
@@ -599,7 +668,7 @@ mod tests {
     }
 
     #[test]
-    fn vehicle_inverts_on_arrival() {
+    fn vehicle_without_orders_waits_at_arrival_without_road_network() {
         let mut s = GameState::new(8, 8);
         let start = TileCoord::new(0, 0);
         let dest = TileCoord::new(3, 0);
@@ -611,15 +680,30 @@ mod tests {
             s.step();
         }
         assert_eq!(s.vehicles[0].pos, dest);
-        // Ahora el destino debe ser el origen original.
-        assert_eq!(s.vehicles[0].dest, start);
+        assert_eq!(s.vehicles[0].dest, dest);
 
-        // Avanzar de vuelta hasta el origen.
         for _ in 0..=3 {
             s.step();
         }
-        assert_eq!(s.vehicles[0].pos, start);
         assert_eq!(s.vehicles[0].dest, dest);
+    }
+
+    #[test]
+    fn vehicle_without_orders_wanders_on_road_network() {
+        let mut s = GameState::new(8, 8);
+        for x in 1..=3 {
+            s.map
+                .set_kind(TileCoord::new(x, 1), TileKind::Road)
+                .unwrap();
+        }
+        let start = TileCoord::new(1, 1);
+        s.vehicles
+            .push(Vehicle::new(7, VehicleKind::Truck, start, start));
+
+        s.step();
+
+        assert_ne!(s.vehicles[0].pos, start);
+        assert_eq!(s.map.get_kind(s.vehicles[0].pos), Some(TileKind::Road));
     }
 
     #[test]

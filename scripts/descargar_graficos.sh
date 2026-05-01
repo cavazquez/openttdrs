@@ -561,6 +561,9 @@ dirs = ["ne", "se", "sw", "nw"]
 # Bus stops
 for i, sid in enumerate([2692, 2693, 2694, 2695]):
     crop_by_id(sid, f"bus_stop_{dirs[i]}_ground.png")
+# Alias de suelo usados por algunas rutas antiguas del cliente (0..3 = ne,se,sw,nw)
+for i, sid in enumerate([2692, 2693, 2694, 2695]):
+    crop_by_id(sid, f"bus_stop_ground_{i}.png")
 for i, sid in enumerate([2696, 2697, 2698, 2699]):
     crop_by_id(sid, f"bus_stop_{dirs[i]}_build_a.png")
 for i, sid in enumerate([2700, 2701, 2702, 2703]):

@@ -30,7 +30,7 @@ pub(crate) fn advance_sim(
     if hud.paused {
         return;
     }
-    const TICK_HZ: f32 = 15.0;
+    const TICK_HZ: f32 = 5.0;
     *acc += time.delta_secs() * hud.sim_speed.max(0.1);
     let period = 1.0 / TICK_HZ;
     let mut stepped = false;

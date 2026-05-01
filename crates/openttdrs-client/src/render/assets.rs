@@ -20,6 +20,7 @@ pub(crate) struct WorldAssets {
     pub(crate) tram_flat: Vec<Handle<Image>>,
     pub(crate) rail: HashMap<u32, Handle<Image>>,
     pub(crate) station_grounds: Vec<Handle<Image>>,
+    pub(crate) bus_stop_grounds: Vec<Handle<Image>>,
     pub(crate) road_depots: Vec<Handle<Image>>,
     pub(crate) rail_depot: Handle<Image>,
     pub(crate) road_tunnel: Handle<Image>,
@@ -80,9 +81,24 @@ impl WorldAssets {
                     .load::<Image>(format!("assets/opengfx/tiles/truck_stop_ground_{i}.png"))
             })
             .collect();
-        let road_depots = (0..4)
-            .map(|i| asset_server.load::<Image>(format!("assets/opengfx/tiles/road_depot_{i}.png")))
-            .collect();
+        let bus_stop_grounds = [
+            "assets/opengfx/tiles/bus_stop_ne_ground.png",
+            "assets/opengfx/tiles/bus_stop_se_ground.png",
+            "assets/opengfx/tiles/bus_stop_sw_ground.png",
+            "assets/opengfx/tiles/bus_stop_nw_ground.png",
+        ]
+        .into_iter()
+        .map(|path| asset_server.load::<Image>(path))
+        .collect();
+        let road_depots = [
+            "assets/opengfx/tiles/rail_1412.png",
+            "assets/opengfx/tiles/road_depot_1.png",
+            "assets/opengfx/tiles/road_depot_3.png",
+            "assets/opengfx/tiles/rail_1413.png",
+        ]
+        .into_iter()
+        .map(|path| asset_server.load::<Image>(path))
+        .collect();
         let rail_depot = asset_server.load::<Image>("assets/opengfx/tiles/rail_depot_ne.png");
         let road_tunnel = asset_server.load::<Image>("assets/opengfx/tiles/tunnel_road_rear.png");
         let rail_tunnel = asset_server.load::<Image>("assets/opengfx/tiles/tunnel_rail_rear.png");
@@ -132,6 +148,7 @@ impl WorldAssets {
             tram_flat,
             rail,
             station_grounds,
+            bus_stop_grounds,
             road_depots,
             rail_depot,
             road_tunnel,
@@ -198,6 +215,12 @@ pub(crate) fn stub_opengfx_tiles_for_tests(root: &std::path::Path) {
             &format!("assets/opengfx/tiles/truck_stop_ground_{i}.png"),
         );
         write_png(root, &format!("assets/opengfx/tiles/road_depot_{i}.png"));
+    }
+    for dir in ["ne", "se", "sw", "nw"] {
+        write_png(
+            root,
+            &format!("assets/opengfx/tiles/bus_stop_{dir}_ground.png"),
+        );
     }
     write_png(root, "assets/opengfx/tiles/rail_depot_ne.png");
     write_png(root, "assets/opengfx/tiles/tunnel_road_rear.png");

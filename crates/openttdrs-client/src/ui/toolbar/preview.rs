@@ -33,7 +33,9 @@ pub(crate) fn rotate_station_with_right_click(
         return;
     }
     match tool_state.active_tool {
-        Some(BuildMenuAction::Station) | Some(BuildMenuAction::BusStop) => {
+        Some(BuildMenuAction::Station)
+        | Some(BuildMenuAction::BusStop)
+        | Some(BuildMenuAction::RoadDepot) => {
             station_state.orientation = (station_state.orientation + 1) % 4;
         }
         Some(BuildMenuAction::RoadX) => {
@@ -338,15 +340,28 @@ fn preview_image_for_action(
     asset_server: &AssetServer,
     station_state: &StationBuildState,
 ) -> Option<Handle<Image>> {
+    const BUS_STOP_GROUNDS: [&str; 4] = [
+        "assets/opengfx/tiles/bus_stop_ne_ground.png",
+        "assets/opengfx/tiles/bus_stop_se_ground.png",
+        "assets/opengfx/tiles/bus_stop_sw_ground.png",
+        "assets/opengfx/tiles/bus_stop_nw_ground.png",
+    ];
+    const ROAD_DEPOTS: [&str; 4] = [
+        "assets/opengfx/tiles/rail_1412.png",
+        "assets/opengfx/tiles/road_depot_1.png",
+        "assets/opengfx/tiles/road_depot_3.png",
+        "assets/opengfx/tiles/rail_1413.png",
+    ];
+
     match action {
         BuildMenuAction::Station => Some(asset_server.load::<Image>(format!(
             "assets/opengfx/tiles/truck_stop_ground_{}.png",
             station_state.orientation
         ))),
-        BuildMenuAction::BusStop => Some(asset_server.load::<Image>(format!(
-            "assets/opengfx/tiles/bus_stop_ground_{}.png",
-            station_state.orientation
-        ))),
+        BuildMenuAction::BusStop => Some(
+            asset_server
+                .load::<Image>(BUS_STOP_GROUNDS[usize::from(station_state.orientation.min(3))]),
+        ),
         BuildMenuAction::Road => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/road_flat_02.png"))
         }
@@ -356,9 +371,9 @@ fn preview_image_for_action(
         BuildMenuAction::RoadY => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/road_flat_00.png"))
         }
-        BuildMenuAction::RoadDepot => {
-            Some(asset_server.load::<Image>("assets/opengfx/tiles/road_depot_0.png"))
-        }
+        BuildMenuAction::RoadDepot => Some(
+            asset_server.load::<Image>(ROAD_DEPOTS[usize::from(station_state.orientation.min(3))]),
+        ),
         BuildMenuAction::RoadBridge => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_road_x.png"))
         }
@@ -503,6 +518,7 @@ mod tests {
         run_rotate(&mut world, Some(BuildMenuAction::RoadX), false);
         run_rotate(&mut world, Some(BuildMenuAction::RoadY), false);
         run_rotate(&mut world, Some(BuildMenuAction::Road), false);
+        run_rotate(&mut world, Some(BuildMenuAction::RoadDepot), false);
         run_rotate(&mut world, Some(BuildMenuAction::Rail), false);
         run_rotate(&mut world, None, false);
         run_rotate(&mut world, Some(BuildMenuAction::Station), true);

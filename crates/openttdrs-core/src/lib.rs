@@ -12,10 +12,12 @@ pub mod map;
 pub mod ottdmap_extras;
 pub mod pathfinder;
 pub mod save;
+mod sim_step;
 pub mod station;
 pub mod tick;
 pub mod tnbp_decode;
 pub mod vehicle;
+mod vehicle_ai;
 
 pub use cargo::{CargoStock, CargoType};
 pub use command::{Command, CommandError, apply_command, industry_template};
@@ -133,142 +135,7 @@ impl GameState {
     /// 2. Carga/descarga según posición actual del vehículo.
     /// 3. Movimiento del vehículo (vehicle.step).
     pub fn step(&mut self) {
-        self.tick.advance();
-        let t = self.tick.get();
-
-        for industry in &mut self.industries {
-            let before = industry.stock;
-            industry.produce(t);
-            self.stats.industry_cargo_units_produced +=
-                u64::from(industry.stock.saturating_sub(before));
-        }
-
-        let mut loaded_this_tick = vec![false; self.vehicles.len()];
-
-        // Carga: el vehículo toma cargo compatible dentro de la cobertura de una estación cercana.
-        for (i, loaded_flag) in loaded_this_tick
-            .iter_mut()
-            .enumerate()
-            .take(self.vehicles.len())
-        {
-            let vpos = self.vehicles[i].pos;
-            let vcap = self.vehicles[i].capacity;
-            let vcargo_type = self.vehicles[i].cargo_type;
-            let Some(station_idx) = self.station_index_covering_tile(vpos) else {
-                continue;
-            };
-            let Some(station) = self.stations.get(station_idx) else {
-                continue;
-            };
-            let station_pos = station.pos;
-            if self.vehicles[i].cargo != 0 {
-                continue;
-            }
-            if !station.can_service_vehicle(self.vehicles[i].kind) {
-                continue;
-            }
-            if let Some(ind) = self.industries.iter_mut().find(|ind| {
-                let output = ind.output_cargo();
-                ind.stock > 0
-                    && vcargo_type.is_none_or(|c| c == output)
-                    && station.accepts_cargo(output)
-                    && station::industry_in_station_coverage(
-                        ind,
-                        station_pos,
-                        STATION_COVERAGE_RADIUS,
-                    )
-            }) {
-                let load = ind.stock.min(vcap);
-                self.vehicles[i].cargo_type = Some(ind.output_cargo());
-                self.vehicles[i].cargo = load;
-                ind.stock -= load;
-                if load > 0 {
-                    *loaded_flag = true;
-                    self.stats.cargo_pickups += 1;
-                    self.stats.cargo_units_loaded += u64::from(load);
-                }
-            }
-        }
-
-        // Descarga: el vehículo entrega en la estación cuya cobertura pisa.
-        for (i, loaded_flag) in loaded_this_tick
-            .iter()
-            .enumerate()
-            .take(self.vehicles.len())
-        {
-            if *loaded_flag {
-                continue;
-            }
-            let vpos = self.vehicles[i].pos;
-            let vcargo = self.vehicles[i].cargo;
-            let vcargo_type = self.vehicles[i].cargo_type;
-            let Some(station_idx) = self.station_index_covering_tile(vpos) else {
-                continue;
-            };
-            if vcargo == 0 {
-                continue;
-            }
-            let cargo_type = vcargo_type.unwrap_or(CargoType::Goods);
-            if let Some(st) = self.stations.get_mut(station_idx) {
-                if !st.accepts_cargo(cargo_type) || !st.can_service_vehicle(self.vehicles[i].kind) {
-                    continue;
-                }
-                st.stock += vcargo;
-                st.cargo_stock.add(cargo_type, vcargo);
-                st.income += u64::from(vcargo);
-                self.economy.money += i64::from(vcargo) * CARGO_DELIVERY_PAYMENT;
-                self.stats.cargo_deliveries += 1;
-                self.stats.cargo_units_delivered += u64::from(vcargo);
-                self.vehicles[i].cargo = 0;
-            }
-        }
-
-        // Vehículos sin órdenes: pasean por la red en vez de rebotar entre origen/destino.
-        for i in 0..self.vehicles.len() {
-            if self.vehicles[i].running
-                && self.vehicles[i].orders.is_empty()
-                && self.vehicles[i].path.is_empty()
-                && self.vehicles[i].pos == self.vehicles[i].dest
-                && let Some(dest) = orderless_wander_destination(
-                    &self.map,
-                    self.vehicles[i].id,
-                    self.vehicles[i].pos,
-                    self.vehicles[i].origin,
-                    self.tick,
-                )
-            {
-                self.vehicles[i].dest = dest;
-            }
-        }
-
-        // Recomputa el path BFS para vehículos que lo necesiten (path vacío y no en destino).
-        for i in 0..self.vehicles.len() {
-            if self.vehicles[i].path.is_empty()
-                && self.vehicles[i].pos != self.vehicles[i].dest
-                && let Some(path) =
-                    pathfinder::find_path(&self.map, self.vehicles[i].pos, self.vehicles[i].dest)
-            {
-                self.vehicles[i].path = path.into_iter().collect();
-            }
-        }
-
-        // Movimiento: sigue el path BFS o Manhattan fallback.
-        for vehicle in &mut self.vehicles {
-            vehicle.step();
-        }
-    }
-
-    fn station_index_covering_tile(&self, tile: TileCoord) -> Option<usize> {
-        self.stations
-            .iter()
-            .enumerate()
-            .filter(|(_, station)| {
-                station::station_covers_tile(station.pos, tile, STATION_COVERAGE_RADIUS)
-            })
-            .min_by_key(|(_, station)| {
-                (station.pos.x - tile.x).abs() + (station.pos.y - tile.y).abs()
-            })
-            .map(|(idx, _)| idx)
+        sim_step::step(self);
     }
 
     /// Serializa el estado a JSON (UTF-8) para guardado o depuración.
@@ -288,57 +155,6 @@ impl GameState {
     pub fn load_json(s: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(s)
     }
-}
-
-fn orderless_wander_destination(
-    map: &Map,
-    vehicle_id: u32,
-    pos: TileCoord,
-    previous: TileCoord,
-    tick: GameTick,
-) -> Option<TileCoord> {
-    let (mw, mh) = map.dimensions();
-    let mut candidates = [None; 4];
-    let mut len = 0usize;
-    for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
-        let c = TileCoord::new(pos.x + dx, pos.y + dy);
-        if c.x < 0 || c.y < 0 || c.x >= mw as i32 || c.y >= mh as i32 {
-            continue;
-        }
-        if !road_vehicle_can_wander_on(map.get_kind(c)) {
-            continue;
-        }
-        candidates[len] = Some(c);
-        len += 1;
-    }
-    if len == 0 {
-        return None;
-    }
-    let usable_len = if len > 1 {
-        let mut write = 0usize;
-        for read in 0..len {
-            if candidates[read] != Some(previous) {
-                candidates[write] = candidates[read];
-                write += 1;
-            }
-        }
-        write.max(1)
-    } else {
-        len
-    };
-    let seed = tick
-        .get()
-        .wrapping_add(u64::from(vehicle_id) * 37)
-        .wrapping_add(pos.x.unsigned_abs() as u64 * 17)
-        .wrapping_add(pos.y.unsigned_abs() as u64 * 31);
-    candidates[(seed as usize) % usable_len]
-}
-
-fn road_vehicle_can_wander_on(kind: Option<TileKind>) -> bool {
-    matches!(
-        kind,
-        Some(TileKind::Road | TileKind::RoadDepot | TileKind::RoadBridge | TileKind::RoadTunnel)
-    )
 }
 
 #[cfg(test)]

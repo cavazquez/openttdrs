@@ -1,20 +1,32 @@
 use bevy::prelude::*;
 
+pub(crate) mod build_input;
+mod depot_panel;
 mod layout;
+mod minimap;
+mod order_panel;
 mod preview;
+mod settings;
+mod station_panel;
 mod systems;
 
+pub(crate) use build_input::handle_tile_click;
+pub(crate) use depot_panel::{
+    DepotPanelState, handle_depot_panel_buttons, setup_depot_panel, sync_depot_panel,
+};
 pub(crate) use layout::setup_top_toolbar;
+pub(crate) use minimap::{handle_minimap_click, setup_minimap, sync_minimap};
+pub(crate) use order_panel::{handle_order_panel_buttons, setup_order_panel, sync_order_panel};
 pub(crate) use preview::{rotate_station_with_right_click, update_build_ghost_preview};
+pub(crate) use settings::handle_settings_menu_buttons;
+pub(crate) use station_panel::{
+    StationCargoPanelState, handle_station_cargo_panel_buttons, setup_station_cargo_panel,
+    sync_station_cargo_panel,
+};
 pub(crate) use systems::{
-    DepotPanelState, StationCargoPanelState, build_menu_interaction,
-    close_toolbar_button_interaction, close_toolbar_panel_on_escape, handle_depot_panel_buttons,
-    handle_minimap_click, handle_order_panel_buttons, handle_settings_menu_buttons,
-    handle_station_cargo_panel_buttons, handle_tile_click, hide_tool_when_panel_closed,
-    setup_depot_panel, setup_minimap, setup_order_panel, setup_station_cargo_panel,
-    sync_depot_panel, sync_minimap, sync_order_panel, sync_station_cargo_panel,
-    toolbar_group_interaction, update_tool_button_visuals, update_toolbar_group_visuals,
-    update_toolbar_tool_visibility, update_toolbar_tooltip,
+    build_menu_interaction, close_toolbar_button_interaction, close_toolbar_panel_on_escape,
+    hide_tool_when_panel_closed, toolbar_group_interaction, update_tool_button_visuals,
+    update_toolbar_group_visuals, update_toolbar_tool_visibility, update_toolbar_tooltip,
 };
 
 /// Marca nodos del menu "Construir" para ignorar clics en el mapa cuando el cursor esta encima.
@@ -109,18 +121,6 @@ pub(crate) struct OrderEditState {
     pub(crate) vehicle_id: Option<u32>,
     pub(crate) orders: Vec<openttdrs_core::VehicleOrder>,
 }
-
-#[derive(Component)]
-pub(crate) struct MinimapRoot;
-
-#[derive(Component)]
-pub(crate) struct MinimapCell {
-    pub(crate) col: u32,
-    pub(crate) row: u32,
-}
-
-#[derive(Component)]
-pub(crate) struct MinimapViewport;
 
 #[derive(Component)]
 pub(crate) struct OrderPanelRoot;

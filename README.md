@@ -1,5 +1,9 @@
 # openttdrs
 
+<p align="center">
+  <img src="static/app/openttdrs-icon.png" alt="openttdrs" width="220">
+</p>
+
 [![CI](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml/badge.svg)](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/cavazquez/openttdrs/graph/badge.svg)](https://codecov.io/gh/cavazquez/openttdrs)
 [![Licencia GPL-2.0](https://img.shields.io/badge/licencia-GPL--2.0-blue.svg)](LICENSE)

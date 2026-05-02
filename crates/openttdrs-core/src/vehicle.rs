@@ -43,7 +43,8 @@ impl VehicleOrder {
 /// Vehículo que se desplaza tesela a tesela siguiendo un camino BFS.
 ///
 /// Si no hay camino calculado (`path` vacío y `pos != dest`) usa movimiento Manhattan
-/// como fallback para preservar compatibilidad con tests sin vías.
+/// como fallback solo cuando **no hay órdenes** (vehículo libre / tests unitarios sin `GameState`).
+/// Con órdenes activas, si no hay ruta por red (`no_network_route_to_order`) el vehículo no avanza.
 /// Al llegar invierte el trayecto (va y vuelve entre `origin` y `dest`).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Vehicle {
@@ -66,6 +67,9 @@ pub struct Vehicle {
     pub orders: Vec<VehicleOrder>,
     #[serde(default)]
     pub current_order: usize,
+    /// Último intento de `find_path` falló estando `orders` no vacío; no usar Manhattan (queda bloqueado).
+    #[serde(default)]
+    pub no_network_route_to_order: bool,
 }
 
 impl Vehicle {
@@ -88,6 +92,7 @@ impl Vehicle {
             path: VecDeque::new(),
             orders: Vec::new(),
             current_order: 0,
+            no_network_route_to_order: false,
         }
     }
 
@@ -108,7 +113,10 @@ impl Vehicle {
         } else if self.pos == self.dest {
             self.advance_destination_after_arrival();
         } else {
-            // Manhattan fallback: no hay vías en el mapa
+            if !self.orders.is_empty() && self.no_network_route_to_order {
+                return;
+            }
+            // Manhattan fallback: sin órdenes (p. ej. tests que llaman `step()` sin recomputar paths)
             let dx = self.dest.x - self.pos.x;
             let dy = self.dest.y - self.pos.y;
             let previous = self.pos;
@@ -143,6 +151,7 @@ impl Vehicle {
         self.orders = orders;
         self.current_order = 0;
         self.path.clear();
+        self.no_network_route_to_order = false;
         if let Some(&first) = self.orders.first() {
             self.origin = self.pos;
             self.dest = first.destination();

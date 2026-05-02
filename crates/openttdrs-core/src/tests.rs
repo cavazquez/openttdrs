@@ -1,0 +1,565 @@
+#![allow(clippy::expect_used, clippy::unwrap_used)]
+use crate::industry::{
+    INDUSTRY_PRODUCE_AMOUNT, INDUSTRY_PRODUCE_TICKS, industry_produce_period_ticks,
+};
+
+use crate::vehicle::VEHICLE_CAPACITY;
+
+use super::*;
+
+#[test]
+fn new_map_has_expected_dimensions() {
+    let s = GameState::new(8, 8);
+    assert_eq!(s.map.dimensions(), (8, 8));
+}
+
+#[test]
+fn step_increments_tick() {
+    let mut s = GameState::new(4, 4);
+    assert_eq!(s.tick.get(), 0);
+    s.step();
+    assert_eq!(s.tick.get(), 1);
+    s.step();
+    assert_eq!(s.tick.get(), 2);
+}
+
+#[test]
+fn tile_height_roundtrip() {
+    let mut s = GameState::new(3, 3);
+    let c = TileCoord::new(1, 1);
+    s.map.set_height(c, 5).unwrap();
+    assert_eq!(s.map.get(c).unwrap().height, 5);
+}
+
+#[test]
+fn tile_kind_default_is_grass() {
+    let s = GameState::new(4, 4);
+    for y in 0..4_i32 {
+        for x in 0..4_i32 {
+            let c = TileCoord::new(x, y);
+            assert_eq!(s.map.get_kind(c), Some(TileKind::Grass));
+        }
+    }
+}
+
+#[test]
+fn tile_kind_roundtrip() {
+    let mut s = GameState::new(4, 4);
+    let c = TileCoord::new(2, 1);
+    s.map.set_kind(c, TileKind::Water).unwrap();
+    assert_eq!(s.map.get_kind(c), Some(TileKind::Water));
+    s.map.set_kind(c, TileKind::Forest).unwrap();
+    assert_eq!(s.map.get_kind(c), Some(TileKind::Forest));
+    s.map.set_kind(c, TileKind::CoalField).unwrap();
+    assert_eq!(s.map.get_kind(c), Some(TileKind::CoalField));
+}
+
+#[test]
+fn bfs_finds_path_on_straight_road() {
+    let mut m = Map::new_flat(8, 8, 0);
+    for x in 0..=4_i32 {
+        m.set_kind(TileCoord::new(x, 0), TileKind::Road).unwrap();
+    }
+    let path = pathfinder::find_path(
+        &m,
+        TileCoord::new(0, 0),
+        TileCoord::new(4, 0),
+        pathfinder::PathNetwork::Road,
+    );
+    assert!(path.is_some());
+    let path = path.unwrap();
+    assert_eq!(*path.last().unwrap(), TileCoord::new(4, 0));
+    assert_eq!(path.len(), 4);
+}
+
+#[test]
+fn bfs_returns_none_when_blocked() {
+    let m = Map::new_flat(8, 8, 0); // todo Grass, sin carreteras
+    let path = pathfinder::find_path(
+        &m,
+        TileCoord::new(0, 0),
+        TileCoord::new(4, 0),
+        pathfinder::PathNetwork::Road,
+    );
+    assert!(path.is_none());
+}
+
+#[test]
+fn bfs_rail_network_ignores_road_only_corridor() {
+    let mut m = Map::new_flat(8, 8, 0);
+    for x in 0..=4_i32 {
+        m.set_kind(TileCoord::new(x, 0), TileKind::Road).unwrap();
+    }
+    let from = TileCoord::new(0, 0);
+    let to = TileCoord::new(4, 0);
+    assert!(pathfinder::find_path(&m, from, to, pathfinder::PathNetwork::Road).is_some());
+    assert!(pathfinder::find_path(&m, from, to, pathfinder::PathNetwork::Rail).is_none());
+}
+
+#[test]
+fn bfs_rail_finds_rail_line() {
+    let mut m = Map::new_flat(8, 8, 0);
+    for x in 0..=4_i32 {
+        m.set_kind(TileCoord::new(x, 1), TileKind::Rail).unwrap();
+    }
+    let path = pathfinder::find_path(
+        &m,
+        TileCoord::new(0, 1),
+        TileCoord::new(4, 1),
+        pathfinder::PathNetwork::Rail,
+    );
+    assert!(path.is_some());
+}
+
+#[test]
+fn vehicle_follows_path() {
+    let mut s = GameState::new(8, 8);
+    for x in 0..=4_i32 {
+        s.map
+            .set_kind(TileCoord::new(x, 0), TileKind::Road)
+            .unwrap();
+    }
+    let start = TileCoord::new(0, 0);
+    let dest = TileCoord::new(4, 0);
+    s.vehicles
+        .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+
+    let expected =
+        pathfinder::find_path(&s.map, start, dest, pathfinder::PathNetwork::Road).expect("hay carretera");
+
+    for (i, &tile) in expected.iter().enumerate() {
+        s.step();
+        assert_eq!(
+            s.vehicles[0].pos,
+            tile,
+            "tick {} posición incorrecta",
+            i + 1
+        );
+    }
+}
+
+#[test]
+fn vehicle_loads_from_industry() {
+    let mut s = GameState::new(8, 8);
+    let ipos = TileCoord::new(0, 0);
+    let spos = TileCoord::new(4, 0);
+    let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
+    ind.stock = 50;
+    s.industries.push(ind);
+    s.stations.push(Station::new(spos));
+    s.vehicles
+        .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
+
+    // Primer step: vehicle en ipos, cargo == 0 → carga.
+    s.step();
+    assert_eq!(s.vehicles[0].cargo, VEHICLE_CAPACITY.min(50));
+    assert_eq!(s.industries[0].stock, 50 - VEHICLE_CAPACITY.min(50));
+}
+
+#[test]
+fn vehicle_loads_from_industry_covered_by_nearby_station() {
+    let mut s = GameState::new(12, 8);
+    let ipos = TileCoord::new(2, 2);
+    let station_pos = TileCoord::new(6, 2);
+    let vehicle_pos = TileCoord::new(5, 2);
+    let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
+    ind.stock = 50;
+    s.industries.push(ind);
+    s.stations.push(Station::new(station_pos));
+    s.vehicles.push(Vehicle::new(
+        0,
+        VehicleKind::Truck,
+        vehicle_pos,
+        station_pos,
+    ));
+
+    s.step();
+
+    assert_eq!(s.vehicles[0].cargo, VEHICLE_CAPACITY.min(50));
+    assert_eq!(s.industries[0].stock, 50 - VEHICLE_CAPACITY.min(50));
+}
+
+#[test]
+fn vehicle_delivers_to_station() {
+    let mut s = GameState::new(8, 8);
+    let ipos = TileCoord::new(0, 0);
+    let spos = TileCoord::new(1, 0);
+    let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
+    ind.stock = 20;
+    s.industries.push(ind);
+    s.stations.push(Station::new(spos));
+    s.vehicles
+        .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
+
+    // Tick 1: carga en industria.
+    s.step();
+    assert!(s.vehicles[0].cargo > 0);
+
+    // Tick 2: vehicle.step() lo lleva a spos (dest a 1 tile); luego descarga.
+    s.step();
+    assert_eq!(s.vehicles[0].pos, spos);
+    assert_eq!(s.vehicles[0].cargo, 0);
+    assert!(s.stations[0].income > 0);
+    assert!(s.economy.money > CompanyEconomy::default().money);
+}
+
+#[test]
+fn vehicle_delivers_when_inside_station_coverage() {
+    let mut s = GameState::new(12, 8);
+    let station_pos = TileCoord::new(6, 2);
+    let vehicle_pos = TileCoord::new(3, 2);
+    s.stations.push(Station::new(station_pos));
+    s.vehicles.push(Vehicle::new(
+        0,
+        VehicleKind::Truck,
+        vehicle_pos,
+        station_pos,
+    ));
+    s.vehicles[0].cargo = 17;
+
+    s.step();
+
+    assert_eq!(s.vehicles[0].cargo, 0);
+    assert_eq!(s.stations[0].stock, 17);
+    assert_eq!(s.stations[0].income, 17);
+}
+
+#[test]
+fn sim_stats_count_pickup_and_delivery() {
+    let mut s = GameState::new(8, 8);
+    let ipos = TileCoord::new(0, 0);
+    let spos = TileCoord::new(1, 0);
+    let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
+    ind.stock = 20;
+    s.industries.push(ind);
+    s.stations.push(Station::new(spos));
+    s.vehicles
+        .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
+    assert_eq!(s.stats.cargo_pickups, 0);
+    assert_eq!(s.stats.cargo_deliveries, 0);
+    s.step();
+    assert_eq!(s.stats.cargo_pickups, 1);
+    assert!(s.stats.cargo_units_loaded > 0);
+    s.step();
+    assert_eq!(s.stats.cargo_deliveries, 1);
+    assert!(s.stats.cargo_units_delivered > 0);
+}
+
+#[test]
+fn game_state_json_roundtrip() {
+    let mut s = GameState::new(4, 4);
+    s.industries
+        .push(Industry::new(TileCoord::new(0, 0), IndustryKind::Forest));
+    s.industries
+        .push(Industry::new(TileCoord::new(1, 0), IndustryKind::Factory));
+    s.vehicles.push(Vehicle::new(
+        0,
+        VehicleKind::Train,
+        TileCoord::new(0, 1),
+        TileCoord::new(2, 1),
+    ));
+    s.jgr_tunnels_from_footer.push(JgrTunnelRecord {
+        tile_n: 0,
+        tile_s: 1,
+        height: 2,
+        is_chunnel: false,
+        style_n: None,
+        style_s: None,
+    });
+    let j = s.save_json().expect("json");
+    assert!(j.contains("jgr_tunnels_from_footer"));
+    let s2 = GameState::load_json(&j).expect("parse");
+    assert_eq!(s2.map.dimensions(), (4, 4));
+    assert_eq!(s2.industries.len(), 2);
+    assert_eq!(s2.industries[0].kind, IndustryKind::Forest);
+    assert_eq!(s2.industries[1].kind, IndustryKind::Factory);
+    assert_eq!(s2.vehicles[0].kind, VehicleKind::Train);
+    assert_eq!(s2.jgr_tunnels_from_footer.len(), 1);
+    assert_eq!(s2.jgr_tunnels_from_footer[0].tile_n, 0);
+}
+
+#[test]
+fn factory_produces_half_as_often_as_mine() {
+    assert_eq!(
+        industry_produce_period_ticks(IndustryKind::Factory),
+        industry_produce_period_ticks(IndustryKind::CoalMine) * 2
+    );
+    let mut coal = Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine);
+    let mut fact = Industry::new(TileCoord::new(1, 0), IndustryKind::Factory);
+    coal.produce(256);
+    fact.produce(256);
+    assert_eq!(coal.stock, INDUSTRY_PRODUCE_AMOUNT);
+    assert_eq!(fact.stock, 0);
+    fact.produce(512);
+    assert_eq!(fact.stock, INDUSTRY_PRODUCE_AMOUNT);
+}
+
+#[test]
+fn economic_cycle_roundtrip() {
+    let mut s = GameState::new(16, 16);
+    let ipos = TileCoord::new(0, 0);
+    let spos = TileCoord::new(2, 0); // 2 tiles de distancia
+
+    // Industria con stock suficiente para varios ciclos.
+    let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
+    ind.stock = 1000;
+    s.industries.push(ind);
+    s.stations.push(Station::new(spos));
+    s.vehicles
+        .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
+
+    // Un ciclo completo: carga (tick 1) + viaje 2 tiles (tick 2-3) +
+    // llegada/descarga (tick 3) + inversión (tick 3) + regreso 2 tiles (tick 4-5)
+    // + llegada (tick 5) + inversión (tick 5) → income > 0 después de pocos ticks.
+    for _ in 0..10 {
+        s.step();
+    }
+    assert!(
+        s.stations[0].income > 0,
+        "debe haber income tras varios ticks"
+    );
+}
+
+#[test]
+fn station_coverage_counts_nearby_cargo_sources_and_acceptors() {
+    let mut s = GameState::new(16, 16);
+    let station_pos = TileCoord::new(8, 8);
+    let coal_pos = TileCoord::new(10, 8);
+    let house_pos = TileCoord::new(7, 7);
+    let far_forest_pos = TileCoord::new(14, 8);
+
+    s.map.set_kind(coal_pos, TileKind::Industry).unwrap();
+    s.map.set_kind(house_pos, TileKind::House).unwrap();
+    s.map.set_kind(far_forest_pos, TileKind::Industry).unwrap();
+
+    let mut coal = Industry::new(coal_pos, IndustryKind::CoalMine);
+    coal.stock = 42;
+    s.industries.push(coal);
+    s.industries
+        .push(Industry::new(far_forest_pos, IndustryKind::Forest));
+
+    let coverage = station_coverage_at(&s.map, &s.industries, station_pos, STATION_COVERAGE_RADIUS);
+    assert_eq!(coverage.accepts_mail, 1);
+    assert_eq!(coverage.accepts_goods, 1);
+    assert_eq!(coverage.supplies_coal, 1);
+    assert_eq!(coverage.supplies_wood, 0);
+    assert_eq!(coverage.supplied_stock, 42);
+    assert!(coverage.accepts_anything());
+    assert!(coverage.supplies_anything());
+}
+
+#[test]
+fn vehicle_moves_toward_dest() {
+    let mut s = GameState::new(8, 8);
+    let start = TileCoord::new(0, 0);
+    let dest = TileCoord::new(5, 0);
+    s.vehicles
+        .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+
+    let dist_before = s.vehicles[0].manhattan_to_dest();
+    s.step();
+    let dist_after = s.vehicles[0].manhattan_to_dest();
+    assert!(dist_after < dist_before, "debe acercarse al destino");
+}
+
+#[test]
+fn vehicle_without_orders_waits_at_arrival_without_road_network() {
+    let mut s = GameState::new(8, 8);
+    let start = TileCoord::new(0, 0);
+    let dest = TileCoord::new(3, 0);
+    s.vehicles
+        .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+
+    // Avanzar hasta llegar al destino (3 pasos + 1 de inversión).
+    for _ in 0..=3 {
+        s.step();
+    }
+    assert_eq!(s.vehicles[0].pos, dest);
+    assert_eq!(s.vehicles[0].dest, dest);
+
+    for _ in 0..=3 {
+        s.step();
+    }
+    assert_eq!(s.vehicles[0].dest, dest);
+}
+
+#[test]
+fn vehicle_with_orders_does_not_use_manhattan_without_network() {
+    let mut s = GameState::new(8, 8);
+    let start = TileCoord::new(0, 0);
+    let far = TileCoord::new(5, 0);
+    let mut v = Vehicle::new(0, VehicleKind::Truck, start, start);
+    v.set_orders(vec![far]);
+    s.vehicles.push(v);
+
+    s.step();
+
+    assert!(s.vehicles[0].no_network_route_to_order);
+    assert_eq!(s.vehicles[0].pos, start);
+}
+
+#[test]
+fn vehicle_without_orders_wanders_on_road_network() {
+    let mut s = GameState::new(8, 8);
+    for x in 1..=3 {
+        s.map
+            .set_kind(TileCoord::new(x, 1), TileKind::Road)
+            .unwrap();
+    }
+    let start = TileCoord::new(1, 1);
+    s.vehicles
+        .push(Vehicle::new(7, VehicleKind::Truck, start, start));
+
+    s.step();
+
+    assert_ne!(s.vehicles[0].pos, start);
+    assert_eq!(s.map.get_kind(s.vehicles[0].pos), Some(TileKind::Road));
+}
+
+#[test]
+fn vehicle_with_orders_cycles_destinations() {
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Truck,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    v.set_orders(vec![TileCoord::new(1, 0), TileCoord::new(1, 1)]);
+    v.step();
+    assert_eq!(v.pos, TileCoord::new(1, 0));
+    assert_eq!(v.dest, TileCoord::new(1, 1));
+    v.step();
+    assert_eq!(v.pos, TileCoord::new(1, 1));
+    assert_eq!(v.dest, TileCoord::new(1, 0));
+}
+
+#[test]
+fn vehicle_with_station_orders_cycles_station_destinations() {
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Truck,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    v.set_station_orders(vec![TileCoord::new(1, 0), TileCoord::new(1, 1)]);
+    assert!(matches!(v.orders[0], VehicleOrder::Station { .. }));
+    v.step();
+    assert_eq!(v.pos, TileCoord::new(1, 0));
+    assert_eq!(v.dest, TileCoord::new(1, 1));
+}
+
+#[test]
+fn legacy_tile_orders_deserialize_as_tile_orders() {
+    let json = r#"{
+        "id": 1,
+        "kind": "Truck",
+        "pos": {"x": 0, "y": 0},
+        "origin": {"x": 0, "y": 0},
+        "dest": {"x": 1, "y": 0},
+        "cargo": 0,
+        "capacity": 20,
+        "path": [],
+        "orders": [{"x": 1, "y": 0}],
+        "current_order": 0
+    }"#;
+
+    let vehicle: Vehicle = serde_json::from_str(json).expect("legacy vehicle json");
+
+    assert!(matches!(vehicle.orders[0], VehicleOrder::Tile(_)));
+    assert_eq!(vehicle.orders[0].destination(), TileCoord::new(1, 0));
+}
+
+#[test]
+fn two_worlds_same_vehicles_same_position() {
+    let start = TileCoord::new(0, 0);
+    let dest = TileCoord::new(4, 3);
+    let mut a = GameState::new(8, 8);
+    let mut b = GameState::new(8, 8);
+    for s in [&mut a, &mut b] {
+        s.vehicles
+            .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
+    }
+    for _ in 0..50 {
+        a.step();
+        b.step();
+    }
+    assert_eq!(a.vehicles[0].pos, b.vehicles[0].pos);
+}
+
+#[test]
+fn industry_produces_on_schedule() {
+    let mut s = GameState::new(8, 8);
+    s.industries
+        .push(Industry::new(TileCoord::new(0, 0), IndustryKind::CoalMine));
+
+    // Sin ticks no hay producción.
+    assert_eq!(s.industries[0].stock, 0);
+
+    // Avanzar exactamente INDUSTRY_PRODUCE_TICKS ticks.
+    for _ in 0..INDUSTRY_PRODUCE_TICKS {
+        s.step();
+    }
+    assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT);
+
+    // Un segundo ciclo completo.
+    for _ in 0..INDUSTRY_PRODUCE_TICKS {
+        s.step();
+    }
+    assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT * 2);
+}
+
+#[test]
+fn industry_does_not_exceed_capacity() {
+    let mut s = GameState::new(8, 8);
+    let mut ind = Industry::new(TileCoord::new(0, 0), IndustryKind::Forest);
+    ind.capacity = INDUSTRY_PRODUCE_AMOUNT; // capacidad mínima: un ciclo
+    s.industries.push(ind);
+
+    // Primer ciclo llena hasta capacity.
+    for _ in 0..INDUSTRY_PRODUCE_TICKS {
+        s.step();
+    }
+    assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT);
+
+    // Segundo ciclo: stock saturado, no supera capacity.
+    for _ in 0..INDUSTRY_PRODUCE_TICKS {
+        s.step();
+    }
+    assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT);
+}
+
+#[test]
+fn two_worlds_same_industries_same_stock() {
+    let mut a = GameState::new(8, 8);
+    let mut b = GameState::new(8, 8);
+    for state in [&mut a, &mut b] {
+        state
+            .industries
+            .push(Industry::new(TileCoord::new(1, 2), IndustryKind::CoalMine));
+        state
+            .industries
+            .push(Industry::new(TileCoord::new(3, 4), IndustryKind::Forest));
+    }
+    for _ in 0..INDUSTRY_PRODUCE_TICKS * 3 {
+        a.step();
+        b.step();
+    }
+    assert_eq!(a.industries[0].stock, b.industries[0].stock);
+    assert_eq!(a.industries[1].stock, b.industries[1].stock);
+}
+
+#[test]
+fn tile_height_and_kind_are_independent() {
+    let mut s = GameState::new(4, 4);
+    let c = TileCoord::new(1, 2);
+    s.map.set_height(c, 7).unwrap();
+    s.map.set_kind(c, TileKind::Forest).unwrap();
+    assert_eq!(s.map.get(c).unwrap().height, 7);
+    assert_eq!(s.map.get_kind(c), Some(TileKind::Forest));
+    // Cambiar altura no afecta el tipo.
+    s.map.set_height(c, 3).unwrap();
+    assert_eq!(s.map.get_kind(c), Some(TileKind::Forest));
+    // Cambiar tipo no afecta la altura.
+    s.map.set_kind(c, TileKind::Water).unwrap();
+    assert_eq!(s.map.get(c).unwrap().height, 3);
+}

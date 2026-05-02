@@ -127,12 +127,26 @@ fn assign_orderless_wander_destinations(state: &mut GameState) {
 fn recompute_vehicle_paths(state: &mut GameState) {
     // Recomputa el path BFS para vehículos que lo necesiten (path vacío y no en destino).
     for i in 0..state.vehicles.len() {
-        if state.vehicles[i].path.is_empty()
-            && state.vehicles[i].pos != state.vehicles[i].dest
-            && let Some(path) =
-                pathfinder::find_path(&state.map, state.vehicles[i].pos, state.vehicles[i].dest)
-        {
-            state.vehicles[i].path = path.into_iter().collect();
+        if !state.vehicles[i].path.is_empty() {
+            state.vehicles[i].no_network_route_to_order = false;
+            continue;
+        }
+        if state.vehicles[i].pos == state.vehicles[i].dest {
+            state.vehicles[i].no_network_route_to_order = false;
+            continue;
+        }
+        let from = state.vehicles[i].pos;
+        let to = state.vehicles[i].dest;
+        let has_orders = !state.vehicles[i].orders.is_empty();
+        let net = pathfinder::path_network_for_vehicle(state.vehicles[i].kind);
+        match pathfinder::find_path(&state.map, from, to, net) {
+            Some(path) => {
+                state.vehicles[i].path = path.into_iter().collect();
+                state.vehicles[i].no_network_route_to_order = false;
+            }
+            None => {
+                state.vehicles[i].no_network_route_to_order = has_orders;
+            }
         }
     }
 }

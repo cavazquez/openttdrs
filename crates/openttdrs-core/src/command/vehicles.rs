@@ -104,9 +104,7 @@ pub(super) fn toggle_vehicle_running(
 }
 
 fn road_depot_exit_tile(state: &GameState, depot_pos: TileCoord) -> Option<TileCoord> {
-    let Some(tile) = state.map.get(depot_pos) else {
-        return None;
-    };
+    let tile = state.map.get(depot_pos)?;
     if tile.kind != TileKind::RoadDepot {
         return None;
     }
@@ -122,8 +120,8 @@ fn road_depot_exit_tile(state: &GameState, depot_pos: TileCoord) -> Option<TileC
         .find(|c| {
             c.x >= 0
                 && c.y >= 0
-                && c.x < mw as i32
-                && c.y < mh as i32
+                && c.x < mw.cast_signed()
+                && c.y < mh.cast_signed()
                 && traversable_road_kind(state.map.get_kind(*c))
         })
 }
@@ -151,7 +149,7 @@ fn farthest_reachable_road_tile(map: &Map, start: TileCoord) -> Option<TileCoord
         }
         for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
             let next = TileCoord::new(cur.x + dx, cur.y + dy);
-            if next.x < 0 || next.y < 0 || next.x >= mw as i32 || next.y >= mh as i32 {
+            if next.x < 0 || next.y < 0 || next.x >= mw.cast_signed() || next.y >= mh.cast_signed() {
                 continue;
             }
             if seen.insert(next) && traversable_road_kind(map.get_kind(next)) {

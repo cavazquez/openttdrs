@@ -1,67 +1,4 @@
-use crate::map::{TileCoord, TileKind};
-use crate::{GameState, Industry, IndustryKind, IndustrySpec};
-
-use super::transport::{build_error_for_kind, transport_tile_is_buildable};
-use super::{CommandError, in_bounds};
-
-pub(super) fn place_industry_sandbox(
-    state: &mut GameState,
-    c: TileCoord,
-) -> Result<(), CommandError> {
-    place_industry_spec_sandbox(state, c, IndustrySpec::Factory)
-}
-
-pub(super) fn place_industry_kind_sandbox(
-    state: &mut GameState,
-    c: TileCoord,
-    kind: IndustryKind,
-) -> Result<(), CommandError> {
-    let spec = match kind {
-        IndustryKind::CoalMine => IndustrySpec::CoalMine,
-        IndustryKind::Forest => IndustrySpec::Forest,
-        IndustryKind::OilWell => IndustrySpec::OilWells,
-        IndustryKind::Factory => IndustrySpec::Factory,
-    };
-    place_industry_spec_sandbox(state, c, spec)
-}
-
-pub(super) fn place_industry_spec_sandbox(
-    state: &mut GameState,
-    c: TileCoord,
-    spec: IndustrySpec,
-) -> Result<(), CommandError> {
-    let template = industry_template(c, spec);
-    for (tile, _) in &template {
-        in_bounds(&state.map, *tile)?;
-        let existing_kind = state.map.get_kind(*tile).unwrap_or(TileKind::Grass);
-        if !transport_tile_is_buildable(existing_kind) {
-            return Err(build_error_for_kind(existing_kind));
-        }
-    }
-    let footprint: Vec<TileCoord> = template.iter().map(|(tile, _)| *tile).collect();
-    for (tile, m5) in &template {
-        state
-            .map
-            .set_kind(*tile, TileKind::Industry)
-            .map_err(|_| CommandError::OutOfBounds)?;
-        state
-            .map
-            .set_mapt_m5(*tile, 0x80, *m5)
-            .map_err(|_| CommandError::OutOfBounds)?;
-    }
-    state
-        .industries
-        .retain(|industry| !industry.contains_tile(c));
-    state
-        .industries
-        .push(Industry::with_tiles_spec(c, spec.kind(), spec, footprint));
-    state.economy.money -= 250;
-    Ok(())
-}
-
-#[must_use]
-pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8)> {
-    const COAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 4] = [
+pub(super) const COAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 4] = [
         // OpenTTD _tile_table_coal_mine_0.
         &[
             (1, 1, 0),
@@ -106,7 +43,7 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
             (2, 2, 3),
         ],
     ];
-    const METAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+pub(super) const METAL_MINE_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
         // OpenTTD _tile_table_copper_mine_0.
         &[
             (0, 0, 47),
@@ -131,7 +68,7 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
             (2, 2, 49),
         ],
     ];
-    const GOLD_MINE_LAYOUTS: [&[(i32, i32, u8)]; 1] = [
+pub(super) const GOLD_MINE_LAYOUTS: [&[(i32, i32, u8)]; 1] = [
         // OpenTTD _tile_table_gold_mine_0.
         &[
             (0, 0, 72),
@@ -152,7 +89,7 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
             (3, 3, 87),
         ],
     ];
-    const FOREST_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+pub(super) const FOREST_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
         // OpenTTD _tile_table_forest_0.
         &[
             (0, 0, 16),
@@ -201,7 +138,7 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
             (3, 4, 16),
         ],
     ];
-    const FARM_LAYOUTS: [&[(i32, i32, u8)]; 3] = [
+pub(super) const FARM_LAYOUTS: [&[(i32, i32, u8)]; 3] = [
         // OpenTTD _tile_table_farm_0.
         &[
             (1, 0, 33),
@@ -245,13 +182,13 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
             (2, 3, 35),
         ],
     ];
-    const OIL_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+pub(super) const OIL_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
         // OpenTTD _tile_table_oil_well_0.
         &[(0, 0, 29), (1, 0, 29), (2, 0, 29), (0, 1, 29), (0, 2, 29)],
         // OpenTTD _tile_table_oil_well_1.
         &[(0, 0, 29), (1, 0, 29), (1, 1, 29), (2, 2, 29), (2, 3, 29)],
     ];
-    const REFINERY_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+pub(super) const REFINERY_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
         // OpenTTD _tile_table_oil_refinery_0.
         &[
             (0, 0, 20),
@@ -289,7 +226,7 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
             (2, 4, 23),
         ],
     ];
-    const FACTORY_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+pub(super) const FACTORY_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
         // OpenTTD _tile_table_factory_0.
         &[
             (0, 0, 39),
@@ -321,7 +258,7 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
             (2, 3, 42),
         ],
     ];
-    const SAWMILL_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
+pub(super) const SAWMILL_LAYOUTS: [&[(i32, i32, u8)]; 2] = [
         // OpenTTD _tile_table_sawmill_0.
         &[
             (1, 0, 14),
@@ -345,7 +282,7 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
             (2, 1, 13),
         ],
     ];
-    const IRON_MINE_LAYOUTS: [&[(i32, i32, u8)]; 1] = [
+pub(super) const IRON_MINE_LAYOUTS: [&[(i32, i32, u8)]; 1] = [
         // OpenTTD _tile_table_iron_mine_0.
         &[
             (0, 0, 100),
@@ -366,30 +303,3 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
             (3, 3, 115),
         ],
     ];
-
-    let offsets_and_gfx = match spec {
-        IndustrySpec::CoalMine => choose_layout(c, &COAL_MINE_LAYOUTS),
-        IndustrySpec::IronOreMine => choose_layout(c, &IRON_MINE_LAYOUTS),
-        IndustrySpec::CopperOreMine => choose_layout(c, &METAL_MINE_LAYOUTS),
-        IndustrySpec::GoldMine => choose_layout(c, &GOLD_MINE_LAYOUTS),
-        IndustrySpec::Forest => choose_layout(c, &FOREST_LAYOUTS),
-        IndustrySpec::Farm => choose_layout(c, &FARM_LAYOUTS),
-        IndustrySpec::OilWells => choose_layout(c, &OIL_LAYOUTS),
-        IndustrySpec::OilRefinery => choose_layout(c, &REFINERY_LAYOUTS),
-        IndustrySpec::Factory => choose_layout(c, &FACTORY_LAYOUTS),
-        IndustrySpec::Sawmill => choose_layout(c, &SAWMILL_LAYOUTS),
-    };
-
-    offsets_and_gfx
-        .iter()
-        .map(|(dx, dy, m5)| (TileCoord::new(c.x + dx, c.y + dy), *m5))
-        .collect()
-}
-
-fn choose_layout<'a>(c: TileCoord, layouts: &'a [&'a [(i32, i32, u8)]]) -> &'a [(i32, i32, u8)] {
-    let seed = i64::from(c.x)
-        .wrapping_mul(31)
-        .wrapping_add(i64::from(c.y).wrapping_mul(17));
-    let idx = usize::try_from(seed.unsigned_abs()).unwrap_or(0) % layouts.len();
-    layouts[idx]
-}

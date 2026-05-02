@@ -15,7 +15,7 @@ pub(crate) fn orderless_wander_destination(
     let mut len = 0usize;
     for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
         let c = TileCoord::new(pos.x + dx, pos.y + dy);
-        if c.x < 0 || c.y < 0 || c.x >= mw as i32 || c.y >= mh as i32 {
+        if c.x < 0 || c.y < 0 || c.x >= mw.cast_signed() || c.y >= mh.cast_signed() {
             continue;
         }
         if !road_vehicle_can_wander_on(map.get_kind(c)) {
@@ -42,9 +42,11 @@ pub(crate) fn orderless_wander_destination(
     let seed = tick
         .get()
         .wrapping_add(u64::from(vehicle_id) * 37)
-        .wrapping_add(pos.x.unsigned_abs() as u64 * 17)
-        .wrapping_add(pos.y.unsigned_abs() as u64 * 31);
-    candidates[(seed as usize) % usable_len]
+        .wrapping_add(u64::from(pos.x.unsigned_abs()) * 17)
+        .wrapping_add(u64::from(pos.y.unsigned_abs()) * 31);
+    let divisor = u64::try_from(usable_len).unwrap_or(1);
+    let idx = usize::try_from(seed % divisor).unwrap_or(0);
+    candidates[idx]
 }
 
 fn road_vehicle_can_wander_on(kind: Option<TileKind>) -> bool {

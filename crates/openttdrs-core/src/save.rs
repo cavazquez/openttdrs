@@ -66,6 +66,11 @@ impl From<serde_json::Error> for SaveError {
 ///
 /// Fallos de E/S o serialización.
 pub fn save(state: &GameState, path: &Path) -> Result<(), SaveError> {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
     let file = GameStateFile {
         version: SAVE_VERSION,
         state: state.clone(),
@@ -195,6 +200,7 @@ mod tests {
                 let _ = vehicle.as_object_mut().map(|obj| {
                     obj.remove("cargo_type");
                     obj.remove("running");
+                    obj.remove("no_network_route_to_order");
                 });
             }
         }
@@ -203,6 +209,7 @@ mod tests {
         assert_eq!(loaded.stations.len(), 1);
         assert_eq!(loaded.vehicles.len(), 1);
         assert!(loaded.vehicles[0].running);
+        assert!(!loaded.vehicles[0].no_network_route_to_order);
         assert_eq!(loaded.stations[0].cargo_stock, crate::CargoStock::default());
     }
 }

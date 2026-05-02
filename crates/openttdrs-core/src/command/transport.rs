@@ -1,4 +1,5 @@
 use crate::map::{Map, TileCoord, TileKind};
+use crate::pathfinder::station_site_adjacent_to_transport;
 use crate::{
     CLEAR_TILE_COST, DEPOT_BUILD_COST, GameState, RAIL_BUILD_COST, ROAD_BUILD_COST,
     STATION_BUILD_COST, Station, StopKind,
@@ -80,7 +81,7 @@ pub(super) fn road_depot_exit_for_dir(
     };
     let c = TileCoord::new(depot_pos.x + dx, depot_pos.y + dy);
     let (mw, mh) = map.dimensions();
-    if c.x < 0 || c.y < 0 || c.x >= mw as i32 || c.y >= mh as i32 {
+    if c.x < 0 || c.y < 0 || c.x >= mw.cast_signed() || c.y >= mh.cast_signed() {
         return None;
     }
     Some((c, road_bits))
@@ -245,6 +246,9 @@ pub(super) fn place_stop_kind(
         TileKind::Water => Err(CommandError::CannotPlaceStationOnWater),
         TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
         _ => {
+            if !station_site_adjacent_to_transport(&state.map, c) {
+                return Err(CommandError::StationNotAdjacentToTransport);
+            }
             state
                 .map
                 .set_kind(c, TileKind::Station)

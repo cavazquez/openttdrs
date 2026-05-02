@@ -3,6 +3,7 @@
 use std::time::Duration;
 
 use bevy::app::{ScheduleRunnerPlugin, TaskPoolPlugin};
+use bevy::audio::AudioPlugin;
 use bevy::image::ImageSamplerDescriptor;
 use bevy::prelude::*;
 use bevy::window::ExitCondition;
@@ -74,6 +75,7 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
         // desactive el plugin y se use un runner de schedules (igual que `MinimalPlugins`).
         default_plugins = default_plugins
             .disable::<WinitPlugin>()
+            .disable::<AudioPlugin>()
             .add_after::<TaskPoolPlugin>(ScheduleRunnerPlugin::run_loop(Duration::from_secs_f64(
                 1.0 / 60.0,
             )));

@@ -1,9 +1,12 @@
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{STATION_COVERAGE_RADIUS, TileKind, station_coverage_at};
+use openttdrs_core::TileKind;
 
-use crate::config;
+use crate::camera::zoom_display_magnification;
+use crate::config::{
+    self, SIM_DAYS_PER_YEAR, SIM_TICKS_PER_DAY, json_save_hud_label, truncate_hud_line,
+};
 use crate::iso::{
     compute_tileh, shore_png_index, shore_tileh_for_draw_shore, slope_label,
     tile_slope_bits_from_heights,
@@ -15,8 +18,12 @@ use crate::sprites::{
 };
 use crate::state::SimWorld;
 
-use super::{SelectedTileInfo, SimHudControls, TileInfoText};
+use super::{HudBuildFeedback, SelectedTileInfo, SimHudControls, TileInfoText};
 use crate::ui::{BuildMenuAction, OrderEditState, UiToolState};
+
+mod station_hud;
+
+pub(crate) use station_hud::station_details_text;
 
 /// Crea el texto de informacion del tile.
 pub(crate) fn setup_tile_info_ui(mut commands: Commands) {
@@ -39,6 +46,8 @@ pub(crate) fn update_tile_info_text(
     selected: Res<SelectedTileInfo>,
     sim: Res<SimWorld>,
     hud: Res<SimHudControls>,
+    mut feedback: ResMut<HudBuildFeedback>,
+    time: Res<Time>,
     tool_state: Res<UiToolState>,
     order_state: Res<OrderEditState>,
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -71,7 +80,7 @@ pub(crate) fn update_tile_info_text(
     text_transform.translation.y = cam_transform.translation.y + half_h - 74.0 * proj.scale;
     text_transform.scale = Vec3::splat(proj.scale);
 
-    let zoom_label = format!("Zoom {:.2}×", proj.scale);
+    let zoom_label = format!("Zoom {:.2}×", zoom_display_magnification(proj.scale));
     let pause_l = if hud.paused { "Pausa ON" } else { "Pausa OFF" };
     let speed_l = format!("Velocidad {:.0}x", hud.sim_speed);
     let tool_l = match tool_state.active_tool {
@@ -110,22 +119,75 @@ pub(crate) fn update_tile_info_text(
     } else {
         "mapa M:off"
     };
-    let hud_footer = format!(
-        "{pause_l} | {speed_l} | Tool: {tool_l}{order_l} | ${} | cargas {}/{} | {minimap_l} | JSON: {} | F4 ruta",
+    let tick_n = sim.state.tick.get();
+    if feedback.message.is_some() && time.elapsed_secs() >= feedback.expires_at_secs {
+        feedback.message = None;
+    }
+    let day_index = tick_n / SIM_TICKS_PER_DAY;
+    let sim_year = day_index / SIM_DAYS_PER_YEAR + 1;
+    let sim_doy = day_index % SIM_DAYS_PER_YEAR + 1;
+
+    let stuck_route = sim
+        .state
+        .vehicles
+        .iter()
+        .filter(|v| v.running && v.no_network_route_to_order)
+        .count();
+    let route_hint = if stuck_route == 0 {
+        String::new()
+    } else if stuck_route == 1 {
+        sim.state
+            .vehicles
+            .iter()
+            .find(|v| v.running && v.no_network_route_to_order)
+            .map(|v| {
+                format!(
+                    " | sin ruta por red: vehículo {} (orden {})",
+                    v.id,
+                    v.current_order.saturating_add(1)
+                )
+            })
+            .unwrap_or_default()
+    } else {
+        format!(" | sin ruta por red: {stuck_route} vehículos")
+    };
+    let feedback_append = feedback.message.as_ref().map(|m| {
+        let t = truncate_hud_line(m, 44);
+        format!(" | {t}")
+    });
+
+    let veh_n = sim.state.vehicles.len();
+    let veh_running = sim
+        .state
+        .vehicles
+        .iter()
+        .filter(|v| v.running)
+        .count();
+    let st_n = sim.state.stations.len();
+    let save_file = truncate_hud_line(&json_save_hud_label(&hud.json_save_path), 36);
+    // Dos líneas: la proyección ortográfica no ajusta texto; una sola línea larga se corta al borde.
+    let hud_line1 = format!(
+        "{pause_l} | {speed_l} | t{tick_n} sim Y{sim_year}·D{sim_doy}{route_hint}{} | ${} | cargas {}/{} | veh {} ({}) | est {st_n}",
+        feedback_append.as_deref().unwrap_or(""),
         sim.state.economy.money,
         sim.state.stats.cargo_units_delivered,
         sim.state.stats.cargo_units_loaded,
-        hud.json_save_path
+        veh_n,
+        veh_running,
     );
+    let hud_line2 = format!(
+        "Tool: {tool_l}{order_l} | {minimap_l} | {save_file} · F4",
+    );
+    let hud_status = format!("{hud_line1}\n{hud_line2}");
 
     let Some(pos) = selected.pos else {
-        **text = format!("{zoom_label}\n{hud_footer}\nClic mapa: elegir tile · tools 1/2/3/C/Esc");
+        **text = format!("{zoom_label}\n{hud_status}\nClic mapa: elegir tile · tools 1/2/3/C/Esc");
         return;
     };
 
     let Some(tile) = sim.state.map.get(pos) else {
         **text = format!(
-            "{zoom_label}\n{hud_footer}\n({}, {}): fuera del mapa",
+            "{zoom_label}\n{hud_status}\n({}, {}): fuera del mapa",
             pos.x, pos.y
         );
         return;
@@ -150,7 +212,7 @@ pub(crate) fn update_tile_info_text(
         TileKind::CoalField => "CoalField",
         TileKind::Unknown(n) => {
             **text = format!(
-                "{zoom_label}\n{hud_footer}\n({}, {}): Unknown({})",
+                "{zoom_label}\n{hud_status}\n({}, {}): Unknown({})",
                 pos.x, pos.y, n
             );
             return;
@@ -233,7 +295,7 @@ pub(crate) fn update_tile_info_text(
         .unwrap_or_default();
 
     **text = format!(
-        "{zoom_label}\n{hud_footer}\nTile ({},{}) {}\nh:{} slope:{} ({}) mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X} m2:0x{:02X} m7:0x{:02X} m3:0x{:02X} m3hi:0x{:02X}{}{}{}",
+        "{zoom_label}\n{hud_status}\nTile ({},{}) {}\nh:{} slope:{} ({}) mapt:0x{:02X} m5:0x{:02X} m1:0x{:02X} m2:0x{:02X} m7:0x{:02X} m3:0x{:02X} m3hi:0x{:02X}{}{}{}",
         pos.x,
         pos.y,
         kind_str,
@@ -253,32 +315,6 @@ pub(crate) fn update_tile_info_text(
     );
 }
 
-fn station_details_text(sim: &SimWorld, pos: openttdrs_core::TileCoord) -> String {
-    let coverage = station_coverage_at(
-        &sim.state.map,
-        &sim.state.industries,
-        pos,
-        STATION_COVERAGE_RADIUS,
-    );
-    let station_line = sim
-        .state
-        .stations
-        .iter()
-        .find(|station| station.pos == pos)
-        .map(|station| format!("stock:{} income:{}", station.stock, station.income))
-        .unwrap_or_else(|| "stock:n/d income:n/d".to_string());
-    format!(
-        "\nStation {station_line}\nCoverage r{} accepts mail:{} goods:{}\nSupplies coal:{} wood:{} oil:{} source stock:{}",
-        STATION_COVERAGE_RADIUS,
-        coverage.accepts_mail,
-        coverage.accepts_goods,
-        coverage.supplies_coal,
-        coverage.supplies_wood,
-        coverage.supplies_oil,
-        coverage.supplied_stock
-    )
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -291,7 +327,7 @@ mod tests {
 
     use crate::render::PrimaryGameCamera;
     use crate::state::SimWorld;
-    use crate::ui::hud::{SelectedTileInfo, SimHudControls};
+    use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, SimHudControls};
     use crate::ui::{OrderEditState, UiToolState};
 
     #[test]
@@ -306,6 +342,8 @@ mod tests {
         world.insert_resource(SelectedTileInfo::default());
         world.insert_resource(SimWorld::default());
         world.insert_resource(SimHudControls::default());
+        world.insert_resource(HudBuildFeedback::default());
+        world.insert_resource(Time::<()>::default());
         world.insert_resource(UiToolState::default());
         world.insert_resource(OrderEditState::default());
         world.run_system_once(update_tile_info_text).unwrap();
@@ -318,6 +356,8 @@ mod tests {
             pos: Some(TileCoord::new(1, 1)),
         });
         world.insert_resource(SimHudControls::default());
+        world.insert_resource(HudBuildFeedback::default());
+        world.insert_resource(Time::<()>::default());
         world.insert_resource(UiToolState::default());
         world.insert_resource(OrderEditState::default());
 

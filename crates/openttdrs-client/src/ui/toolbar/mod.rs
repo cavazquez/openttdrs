@@ -5,6 +5,7 @@ mod depot_panel;
 mod layout;
 mod minimap;
 mod order_panel;
+mod orders_cursor;
 mod preview;
 mod settings;
 mod station_panel;
@@ -23,6 +24,7 @@ pub(crate) use station_panel::{
     StationCargoPanelState, handle_station_cargo_panel_buttons, setup_station_cargo_panel,
     sync_station_cargo_panel,
 };
+pub(crate) use orders_cursor::sync_orders_pick_cursor;
 pub(crate) use systems::{
     build_menu_interaction, close_toolbar_button_interaction, close_toolbar_panel_on_escape,
     hide_tool_when_panel_closed, toolbar_group_interaction, update_tool_button_visuals,
@@ -133,6 +135,8 @@ pub(crate) enum OrderPanelButton {
     Close,
     ClearLast,
     ClearAll,
+    /// Activa herramienta Órdenes + cursor de puntería en mapa (misma acción que la toolbar).
+    PickDestOnMap,
 }
 
 #[derive(Component, Clone, Copy)]

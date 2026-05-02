@@ -2,8 +2,12 @@ use bevy::prelude::*;
 
 mod display;
 mod input;
+mod sound_ping;
 
 pub(crate) use display::{setup_tile_info_ui, update_tile_info_text};
+pub(crate) use sound_ping::{
+    HudSoftPingHandle, PlayHudSoftPing, flush_hud_soft_ping, load_hud_soft_ping, play_hud_soft_ping,
+};
 pub(crate) use input::{cycle_json_save_path_hotkey, handle_pause_toggle, handle_tool_hotkeys};
 
 /// Pausa simulacion y ruta del JSON de **F5/F9** (alternativa a variable de entorno al arranque).
@@ -35,3 +39,12 @@ pub(crate) struct SelectedTileInfo {
 /// Marcador para el texto de informacion del tile.
 #[derive(Component)]
 pub(crate) struct TileInfoText;
+
+/// Mensaje temporal tras errores de construcción (HUD superior).
+#[derive(Resource, Default)]
+pub(crate) struct HudBuildFeedback {
+    pub(crate) message: Option<String>,
+    pub(crate) expires_at_secs: f32,
+    /// Encola pitido suave (reduce parámetros en `handle_tile_click`; lo consume `flush_hud_soft_ping`).
+    pub(crate) pending_soft_ping: bool,
+}

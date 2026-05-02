@@ -140,6 +140,14 @@ pub fn move_camera(
     }
 }
 
+/// Valor para HUD / título: **aumento aparente** respecto a `orthographic_scale = 1`.
+/// En Bevy, [`OrthographicProjection::scale`] alto cubre más mundo en pantalla (sensación de alejado);
+/// su recíproco se comporta como un “×” de acercar en sentido coloquial (más grande = más cerca).
+#[must_use]
+pub(crate) fn zoom_display_magnification(orthographic_scale: f32) -> f32 {
+    orthographic_scale.recip()
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -223,6 +231,13 @@ mod tests {
             Projection::Perspective(PerspectiveProjection::default()),
         ));
         world.run_system_once(move_camera).unwrap();
+    }
+
+    #[test]
+    fn zoom_display_magnification_is_reciprocal_of_ortho_scale() {
+        assert!((zoom_display_magnification(1.0) - 1.0).abs() < 0.001);
+        assert!((zoom_display_magnification(0.25) - 4.0).abs() < 0.001);
+        assert!((zoom_display_magnification(20.0) - 0.05).abs() < 0.001);
     }
 
     #[test]

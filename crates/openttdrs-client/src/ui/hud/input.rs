@@ -33,9 +33,9 @@ pub(crate) fn cycle_json_save_path_hotkey(
 ) {
     if keyboard.just_pressed(KeyCode::F4) {
         hud.json_save_path = if hud.json_save_path.ends_with("autosave.json") {
-            "openttdrs_sim.json".into()
+            "save/openttdrs_sim.json".into()
         } else {
-            "openttdrs_autosave.json".into()
+            "save/openttdrs_autosave.json".into()
         };
         info!("Ruta JSON (F5/F9): {}", hud.json_save_path);
     }

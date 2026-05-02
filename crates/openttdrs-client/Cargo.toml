@@ -25,6 +25,8 @@ bevy = { version = "0.18.1", default-features = false, features = [
     "bevy_state",
     "bevy_ui",
     "bevy_ui_render",
+    "bevy_audio",
+    "wav",
     "scene",
     "png",
 ] }

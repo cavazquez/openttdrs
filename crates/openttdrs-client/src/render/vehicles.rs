@@ -275,6 +275,7 @@ mod tests {
             running: true,
             orders: Vec::new(),
             current_order: 0,
+            no_network_route_to_order: false,
         }
     }
 

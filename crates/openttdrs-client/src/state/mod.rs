@@ -118,3 +118,6 @@ mod sim_world_coverage_tests {
         assert!(w.ottdmap_extras.is_none());
     }
 }
+
+#[cfg(test)]
+mod ui_command_integration;

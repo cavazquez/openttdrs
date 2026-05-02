@@ -11,8 +11,9 @@ mod main_menu;
 mod toolbar;
 pub(crate) use hud::SimHudControls;
 use hud::{
-    SelectedTileInfo, cycle_json_save_path_hotkey, handle_pause_toggle, handle_tool_hotkeys,
-    setup_tile_info_ui, update_tile_info_text,
+    HudBuildFeedback, HudSoftPingHandle, PlayHudSoftPing, SelectedTileInfo,
+    cycle_json_save_path_hotkey, flush_hud_soft_ping, handle_pause_toggle, handle_tool_hotkeys,
+    load_hud_soft_ping, play_hud_soft_ping, setup_tile_info_ui, update_tile_info_text,
 };
 use industry_panel::{
     IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
@@ -27,7 +28,8 @@ use toolbar::{
     handle_tile_click, hide_tool_when_panel_closed, rotate_station_with_right_click,
     setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
     setup_station_cargo_panel, setup_top_toolbar, sync_depot_panel, sync_minimap, sync_order_panel,
-    sync_station_cargo_panel, toolbar_group_interaction, update_build_ghost_preview,
+    sync_orders_pick_cursor, sync_station_cargo_panel, toolbar_group_interaction,
+    update_build_ghost_preview,
     update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
     update_toolbar_tooltip,
 };
@@ -37,6 +39,9 @@ impl Plugin for ClientUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SelectedTileInfo>()
             .init_resource::<SimHudControls>()
+            .init_resource::<HudBuildFeedback>()
+            .init_resource::<HudSoftPingHandle>()
+            .add_message::<PlayHudSoftPing>()
             .init_resource::<UiToolState>()
             .init_resource::<StationBuildState>()
             .init_resource::<DragBuildState>()
@@ -60,6 +65,7 @@ impl Plugin for ClientUiPlugin {
                     setup_depot_panel,
                     setup_station_cargo_panel,
                     setup_industry_panel,
+                    load_hud_soft_ping,
                 )
                     .in_set(StartupSet::Ui),
             )
@@ -96,8 +102,17 @@ impl Plugin for ClientUiPlugin {
                     handle_depot_panel_buttons,
                     handle_station_cargo_panel_buttons,
                     handle_settings_menu_buttons,
-                    handle_tile_click,
                 )
+                    .in_set(UpdateSet::Ui)
+                    .run_if(in_state(ClientScreen::InGame)),
+            )
+            .add_systems(
+                Update,
+                (
+                    handle_tile_click,
+                    flush_hud_soft_ping,
+                )
+                    .chain()
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),
             )
@@ -107,9 +122,11 @@ impl Plugin for ClientUiPlugin {
                     update_build_ghost_preview,
                     sync_minimap,
                     sync_order_panel,
+                    sync_orders_pick_cursor,
                     sync_depot_panel,
                     sync_station_cargo_panel,
                     sync_industry_panel,
+                    play_hud_soft_ping,
                     update_tile_info_text,
                 )
                     .in_set(UpdateSet::Ui)

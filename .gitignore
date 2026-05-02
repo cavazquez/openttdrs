@@ -34,6 +34,9 @@ target
 .codex
 *.json
 
+# Partidas JSON (F5/F9); por defecto bajo save/
+/save/
+
 # Cobertura local (cargo llvm-cov / ./scripts/check.sh cov)
 /lcov.info
 /htmlcov/

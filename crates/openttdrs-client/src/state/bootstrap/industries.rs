@@ -312,11 +312,15 @@ mod tests {
         let mut state = GameState::new(2, 1);
         let c0 = TileCoord::new(0, 0);
         let c1 = TileCoord::new(1, 0);
-        let mut t0 = state.map.get(c0).expect("tile 0");
+        let Some(mut t0) = state.map.get(c0) else {
+            panic!("test fixture: tile missing at {c0:?}");
+        };
         t0.kind = TileKind::Industry;
         t0.m1 = 10;
         t0.m5 = 16; // Forest
-        let mut t1 = state.map.get(c1).expect("tile 1");
+        let Some(mut t1) = state.map.get(c1) else {
+            panic!("test fixture: tile missing at {c1:?}");
+        };
         t1.kind = TileKind::Industry;
         t1.m1 = 11;
         t1.m5 = 18; // Oil Refinery
@@ -333,11 +337,15 @@ mod tests {
         let mut state = GameState::new(2, 1);
         let c0 = TileCoord::new(0, 0);
         let c1 = TileCoord::new(1, 0);
-        let mut t0 = state.map.get(c0).expect("tile 0");
+        let Some(mut t0) = state.map.get(c0) else {
+            panic!("test fixture: tile missing at {c0:?}");
+        };
         t0.kind = TileKind::Industry;
         t0.m1 = 10;
         t0.m5 = 18; // Oil Refinery
-        let mut t1 = state.map.get(c1).expect("tile 1");
+        let Some(mut t1) = state.map.get(c1) else {
+            panic!("test fixture: tile missing at {c1:?}");
+        };
         t1.kind = TileKind::Industry;
         t1.m1 = 10;
         t1.m5 = 16; // Forest

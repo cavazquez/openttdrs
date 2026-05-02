@@ -1,4 +1,6 @@
-use openttdrs_core::{GameState, Station, TileCoord, TileKind, Vehicle, VehicleKind, find_path};
+use openttdrs_core::{
+    GameState, PathNetwork, Station, TileCoord, TileKind, Vehicle, VehicleKind, find_path,
+};
 
 pub(crate) fn place_stations(state: &mut GameState) {
     let (mw, mh) = state.map.dimensions();
@@ -54,12 +56,12 @@ pub(crate) fn place_vehicles(state: &mut GameState) {
 
     for (i, (a, b)) in routes.into_iter().enumerate() {
         let kind = if i.is_multiple_of(2) {
-            VehicleKind::Train
+            VehicleKind::Bus
         } else {
             VehicleKind::Truck
         };
         let mut v = Vehicle::new(i as u32, kind, a, b);
-        if let Some(path) = find_path(&state.map, a, b) {
+        if let Some(path) = find_path(&state.map, a, b, PathNetwork::Road) {
             v.path = path.into_iter().collect();
         }
         state.vehicles.push(v);
@@ -135,7 +137,7 @@ mod tests {
 
         place_vehicles(&mut state);
         assert_eq!(state.vehicles.len(), 2);
-        assert_eq!(state.vehicles[0].kind, VehicleKind::Train);
+        assert_eq!(state.vehicles[0].kind, VehicleKind::Bus);
         assert_eq!(state.vehicles[1].kind, VehicleKind::Truck);
     }
 }

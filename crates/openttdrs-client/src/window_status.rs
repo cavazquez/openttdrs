@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::bevy_app::UpdateSet;
+use crate::camera::zoom_display_magnification;
 use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
 use crate::state::{ClientScreen, SimWorld};
 
@@ -85,7 +86,7 @@ pub(crate) fn sync_window_title(
             sim.state.tick.get(),
             sim.state.stats.cargo_pickups,
             sim.state.stats.cargo_deliveries,
-            scale,
+            zoom_display_magnification(scale),
             fps
         );
     }

@@ -1,7 +1,8 @@
 # Siguientes pasos — openttdrs
 
-Documento vivo: **qué documentar**, **dónde está**, y **cómo seguir** el desarrollo después
-de I0–I5 y del renderer isométrico con mapas reales.
+Documento vivo: **qué documentar**, **dónde está**, y **cómo seguir** el desarrollo con
+prioridad en **juego en solitario** (hito 0.1). La fundación **I0–I7** ya está en `main`;
+**I8 (red / multijugador)** queda en backlog de mínima prioridad.
 
 ---
 
@@ -49,31 +50,57 @@ de I0–I5 y del renderer isométrico con mapas reales.
 
 ---
 
-## Cómo seguir (prioridades sugeridas)
+## Cómo seguir (prioridades)
 
-Orden **no estricto**: depende de si querés **parecerse más al original**, **jugabilidad**, o
-**ingeniería**.
+**Orden de producto:** cerrar **0.1 en solitario** (fases SP) antes de invertir en **I8 (red)**.
+Dentro de SP, visual (SP3) y gameplay (SP1–SP2) pueden avanzar en paralelo según lo que
+más moleste al jugar.
 
-### A. Visual y fidelidad al mapa (sin tocar I6)
+### SP1 — Ciclo jugable (prioridad alta)
+
+- Economía y estadísticas **legibles** en HUD (dinero, cargas, vehículos sin ruta).
+- Órdenes y estaciones: flujo claro desde toolbar → mapa → simulación.
+- Coherencia **estación en mapa** vs entradas en `state.stations` (el bootstrap demo aún puede
+  reservar posiciones en hierba sin `TileKind::Station`).
+- Tests de integración UI↔`apply_command` ampliados donde falten herramientas críticas.
+
+### SP2 — Construcción y herramientas (prioridad alta)
+
+- Mensajes de error de colocación (`CommandError` → feedback HUD / toolbar).
+- Preview/validación para industria, estación, túnel, puente, depósito.
+- Paneles de órdenes, depósito y carga de estación estables en mapas reales y procedurales.
+
+### SP3 — Presentación del mapa (prioridad media)
 
 - Extraer y usar **sprites de esquina / T** de OpenGFX (`GetRoadSpriteOffset` en upstream) o
   ampliar `descargar_graficos.sh`.
 - **Vías**: sprites de rail por `trackbits` (similar a road bits).
 - **Casas / estaciones**: sustituir tintes planos por sprites o conjuntos mínimos.
-- **Industrias**: si se busca paridad visual más estricta, calibrar `w/h/xrel/yrel` en
-  `industry_gfx_data_generated.rs` para los sprites que aún usan el fallback genérico
-  `64x48/-32/-32`, y revisar el orden Z/capas de `Farm`, `Factory` y `Coal Mine`.
+- **Industrias**: calibrar `w/h/xrel/yrel` en `industry_gfx_data_generated.rs` donde siga el
+  fallback `64x48/-32/-32`; revisar Z/capas de `Farm`, `Factory` y `Coal Mine`.
 - **Agua**: animación o variante de sprite si molesta el aspecto “plano”.
-- **`.ottdmap`**: el bloque denso MAP1 v1 **ya incluye** planos `m3`/`m3hi` (`parse_sav.py` los exporta). Lo pendiente suele ser **usar** `m3` en el render de carretera/tranvía y más fixtures de prueba; ver `docs/OTTDMAP_FORMAT.md` y `crates/openttdrs-core/tests/ottdmap_m3_road_fixture.rs`.
+- **`.ottdmap`**: usar `m3`/`m3hi` en render de carretera/tranvía; ver `docs/OTTDMAP_FORMAT.md`
+  y `crates/openttdrs-core/tests/ottdmap_m3_road_fixture.rs`.
 - **Rendimiento**: culling por frustum o LOD en mapas 256×256+.
 
-### B. Cadena incremental formal (gameplay)
+### SP4 — Pulido y deuda (prioridad media)
 
-- **I6 — Comandos del jugador** — hecho: `openttdrs_core::command`, clics en cliente.
-- **I7 — Save/load** — hecho: `openttdrs_core::save` (JSON con `version` + `state`, carga de legado plano); atajos F5/Ctrl+S, F9/Ctrl+L.
-- **I8 — Red** mínima con log de comandos (pendiente).
+- Alinear `./scripts/check.sh ci` con CI (fmt check, clippy `-D warnings`, TNBP, golden Python).
+- Migraciones de save si el esquema JSON cambia.
+- Mantener docs y tests al día con el refactor modular del cliente/core.
 
-### C. Higiene y referencia
+### Fundación incremental (referencia — hecho en `main`)
+
+- **I0–I5** — mapa, industria, vehículos, cargo, pathfinding.
+- **I6** — comandos del jugador (`openttdrs_core::command`, toolbar en cliente).
+- **I7** — save/load JSON (`save/`, F5/F9, `OPENTTDRS_JSON_SAVE`).
+
+### I8 — Red / multijugador (mínima prioridad, post-0.1)
+
+- Log de comandos, `apply_command_log`, transporte TCP, `--server` / `--client`.
+- Spec en [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) § Incremento 8; **no** bloquea el cierre del 0.1.
+
+### Higiene y referencia
 
 - Mantener `reference/openttd-upstream/` actualizado (`scripts/fetch-openttd-reference.sh`).
 - Tests que carguen un `.ottdmap` pequeño en memoria y comprueben `effective_road_bits` /

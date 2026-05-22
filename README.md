@@ -15,7 +15,7 @@ Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.o
 
 > **Rendimiento en tu máquina:** compilar Bevy y dependencias puede ser pesado. Si notas saturación de CPU o RAM, usa por ejemplo `cargo build -j 1` o deja que el flujo de [CI](.github/workflows/ci.yml) valide el build en GitHub Actions.
 
-**Roadmap:** hito [0.1 — vertical slice](https://github.com/cavazquez/openttdrs/milestone/1) con **8 incrementos** (I1–I8, issues [#14](https://github.com/cavazquez/openttdrs/issues/14)–[#21](https://github.com/cavazquez/openttdrs/issues/21)). Spec detallada en [docs/DISENO_INCREMENTAL.md](docs/DISENO_INCREMENTAL.md); correspondencia con el código C++ del upstream en [docs/INFORME_ARQUITECTURA_OPENTTD.md](docs/INFORME_ARQUITECTURA_OPENTTD.md).
+**Roadmap:** hito [0.1 — vertical slice en solitario](https://github.com/cavazquez/openttdrs/milestone/1): fundación **I0–I7** ya en `main`; el foco actual son las fases **SP1–SP4** (ciclo jugable, construcción, visual, pulido). **I8 (red / multijugador)** queda en backlog de **mínima prioridad** hasta cerrar el juego de un jugador. Spec: [docs/DISENO_INCREMENTAL.md](docs/DISENO_INCREMENTAL.md); prioridades operativas: [docs/SIGUIENTES_PASOS.md](docs/SIGUIENTES_PASOS.md); upstream: [docs/INFORME_ARQUITECTURA_OPENTTD.md](docs/INFORME_ARQUITECTURA_OPENTTD.md).
 
 **Flujo de trabajo** (save → mapa → cliente → JSON): [docs/FLUJO_MAPA_Y_CLIENTE.md](docs/FLUJO_MAPA_Y_CLIENTE.md).
 

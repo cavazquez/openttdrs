@@ -33,19 +33,19 @@ El [informe de arquitectura](INFORME_ARQUITECTURA_OPENTTD.md) resume el código 
 | YAPF (siguiente tramo, cachés, regiones agua) | `pathfinder/yapf/` | **I5:** BFS que devuelve **`Vec` de teselas** es deliberado y más simple; migrar a heurística tipo A* si el mapa crece. |
 | Registro masivo de comandos `*_cmd` | `command.cpp` | **I6:** mismo patrón abstracto (`Command` + `apply`), sin el árbol enorme del upstream. |
 | `SaveLoadVersion` (`SLV_*`) | `saveload/saveload.h` | **I7:** formato propio versionado; **parcial:** `scripts/parse_sav.py` lee `.sav` → `.ottdmap` (solo mapa, no economía). |
-| Red = replay de comandos + hash estado | `network/` | **I8:** misma idea lógica; protocolo y seguridad mínimos. |
+| Red = replay de comandos + hash estado | `network/` | **I8 (backlog):** misma idea lógica; solo después de cerrar solitario (0.1). |
 
 ---
 
-## Estado actual del código (abril 2026)
+## Estado actual del código (mayo 2026)
 
-Los incrementos **I0–I6** están implementados en `main`; **I7** está cubierto por `openttdrs_core::save` (JSON versionado + compatibilidad con guardados planos). **I8** sigue pendiente.
+Los incrementos de **fundación I0–I7** están implementados en `main` (mapa, simulación, comandos, save/load JSON en `save/`). El hito **0.1** se redefine como **partida en solitario jugable y coherente**, no como “cerrar I8”.
 
 | Capa | Qué hay hoy |
 |------|-------------|
-| `openttdrs-core` | `Tile { height, kind, mapt, m5 }`, `TileKind` ampliado, `Map`, `Map::from_ottd_binary`, TNBP/JGR decode, `command` (carretera/estación), `save`, industrias, estaciones, vehículos, BFS `find_path`, tests. |
-| `openttdrs-client` | Vista **isométrica**, sprites **OpenGFX**, clics **izq/der** (comandos I6), **F5/Ctrl+S** y **F9/Ctrl+L** persistencia, gizmos, cámara, `OTTDMAP_FILE` / `OTTDJSON_LOAD`. |
-| Scripts | `parse_sav.py` (`.sav` → `.ottdmap`), `descargar_graficos.sh` / `descargar_sonidos.sh`, validación TNBP en CI con fixture `v5p12_tnbp.ottdmap`. |
+| `openttdrs-core` | `Tile { height, kind, mapt, m5 }`, `TileKind` ampliado, `Map`, `Map::from_ottd_binary`, TNBP/JGR decode, `command` (carretera/estación/industria/vehículos), `save`, industrias, estaciones, vehículos, BFS por red carretera/vía, tests. |
+| `openttdrs-client` | Vista **isométrica**, sprites **OpenGFX**, toolbar y preview, órdenes, minimapa, HUD, **F5/Ctrl+S** y **F9/Ctrl+L**, `OTTDMAP_FILE` / `OTTDJSON_LOAD`. |
+| Scripts | `parse_sav.py` (`.sav` → `.ottdmap`), `descargar_graficos.sh` / `descargar_sonidos.sh`, validación TNBP en CI. |
 | Docs | [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md), [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md), [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md), [FLUJO_MAPA_Y_CLIENTE.md](FLUJO_MAPA_Y_CLIENTE.md). |
 
 **Carreteras en mapas reales:** orientación desde `mapt` + `m5` (normal, cruce a nivel,
@@ -53,7 +53,35 @@ depósito, túnel/puente carretera). Los PNG `road_tx` / `road_ty` se asignan **
 respecto a `RoadDir` para alinear la textura con la proyección del cliente (~90° respecto
 a “nombre de archivo = eje”); validado en pantalla.
 
-Lo **pendiente** principal es **I8** (red / log de comandos); migraciones de formato de save y refinamiento de UI son opcionales. Ver [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md).
+Lo **pendiente para cerrar 0.1** está en las fases **SP** (solitario) más abajo. **I8 (red / multijugador)** queda explícitamente **fuera del hito 0.1** y con **mínima prioridad** hasta que el juego de un jugador esté terminado. Detalle operativo: [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md).
+
+---
+
+## Roadmap y prioridades
+
+### Principio
+
+1. **Primero:** terminar el **juego en solitario** (construir, simular, guardar/cargar, entender qué pasa en pantalla).
+2. **Después (o mucho después):** **I8 — red** (replicar comandos entre instancias). Los comandos serializables de I6 ya preparan el terreno, pero **no obligan** a implementar multijugador para dar por cerrado el 0.1.
+
+### Hito 0.1 — vertical slice en solitario
+
+| Fase | Objetivo | Ejemplos de trabajo |
+|------|----------|---------------------|
+| **SP1 — Ciclo jugable** | Partida local con bucle claro: industria → estación → vehículo → carga/entrega → economía visible | Feedback HUD (sin ruta, dinero, órdenes), coherencia estación en mapa vs `state.stations`, pausa/velocidad, pruebas de integración comando↔sim |
+| **SP2 — Construcción y herramientas** | Toolbar completa y predecible en un mapa procedural y en `.ottdmap` | Validación/preview de colocación, mensajes de error de `CommandError`, túneles/puentes/depósitos, panel de órdenes y estaciones |
+| **SP3 — Presentación del mapa** | Que el mapa **se lea** como OpenTTD, sin exigir paridad total | Sprites esquina/T de carretera, vías por `trackbits`, industrias/casas menos “placeholder”, agua y costa, rendimiento en mapas grandes |
+| **SP4 — Pulido y deuda** | Estabilidad antes de abrir nuevas grandes features | Migraciones de save si hace falta, `check.sh` alineado con CI, bootstrap demo sin inconsistencias tile/estación, documentación al día |
+
+**Criterio de “0.1 hecho”:** una sesión en solitario de ~15–30 minutos donde se puede **construir red y estaciones**, **asignar órdenes**, **ver vehículos y economía evolucionar**, **guardar y reanudar** sin pasos manuales raros — sin necesidad de red ni segundo cliente.
+
+### Backlog — I8 Red (mínima prioridad)
+
+| Incremento | Cuándo | Notas |
+|------------|--------|--------|
+| **I8** | Post-0.1 / hito futuro (p. ej. 0.2) | Log de comandos, `apply_command_log`, TCP mínimo, `--server` / `--client`. Spec conservada en [§ Incremento 8](#incremento-8--dos-instancias-comparten-el-mundo-backlog) abajo. |
+
+Los issues históricos [#14](https://github.com/cavazquez/openttdrs/issues/14)–[#21](https://github.com/cavazquez/openttdrs/issues/21) del milestone 0.1 siguen describiendo la **cadena técnica I0–I8**; para planificación nueva, tratar **I0–I7 como hechos** y priorizar tareas **SP** en issues o checklist hasta cerrar solitario.
 
 ---
 
@@ -317,7 +345,9 @@ save.rs
 
 ---
 
-### Incremento 8 — "Dos instancias comparten el mundo"
+### Incremento 8 — "Dos instancias comparten el mundo" (backlog)
+
+> **Prioridad:** la más baja del proyecto hasta cerrar el hito **0.1 en solitario** (fases SP arriba). No bloquea guardados, construcción ni simulación local.
 
 **Objetivo**: multijugador mínimo basado en replicación de comandos.
 
@@ -349,21 +379,29 @@ clientes aplican el log y avanzan ticks sincrónicos.
 ## Resumen visual
 
 ```mermaid
-flowchart LR
-  I0["I0: Grid + tick\n(en main)"]
-  I1["I1: Tipos de tesela"]
-  I2["I2: Industria\nproducción"]
-  I3["I3: Vehículo\nmovimiento naive"]
-  I4["I4: Cargo\nciclo económico"]
-  I5["I5: Vías\nBFS path"]
-  I6["I6: Comandos\njugador"]
-  I7["I7: Save / Load"]
-  I8["I8: Red\n2 instancias"]
+flowchart TB
+  subgraph foundation ["Fundación I0–I7 (en main)"]
+    direction LR
+    I0["I0: Grid + tick"] --> I1["I1: Tipos"] --> I2["I2: Industria"]
+    I2 --> I3["I3: Vehículo"] --> I4["I4: Cargo"] --> I5["I5: Vías BFS"]
+    I5 --> I6["I6: Comandos"] --> I7["I7: Save"]
+  end
 
-  I0 --> I1 --> I2 --> I3 --> I4 --> I5 --> I6 --> I7 --> I8
+  subgraph solo ["0.1 — Solitario (prioridad actual)"]
+    direction LR
+    SP1["SP1: Ciclo jugable"] --> SP2["SP2: Construcción UI"]
+    SP2 --> SP3["SP3: Visual mapa"] --> SP4["SP4: Pulido"]
+  end
+
+  subgraph later ["Post-0.1 — baja prioridad"]
+    I8["I8: Red / multijugador"]
+  end
+
+  I7 --> SP1
+  SP4 -.->|"solo cuando 0.1 esté cerrado"| I8
 ```
 
-La cadena es lineal porque cada incremento **extiende** los tipos anteriores. No hay bloqueos opcionales: cada pieza construye sobre la anterior.
+La cadena **I0→I7** es la base técnica ya mergeada: cada incremento extiende los tipos anteriores. El trabajo **actual** avanza por **SP1→SP4** en paralelo donde tenga sentido (visual y gameplay no son estrictamente secuenciales). **I8** no forma parte del cierre del 0.1.
 
 ---
 

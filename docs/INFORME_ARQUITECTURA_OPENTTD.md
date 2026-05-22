@@ -3,7 +3,7 @@
 > Basado en análisis directo del código fuente en `reference/openttd-upstream/` (clon shallow, rama principal, abril 2026).  
 > Licencia upstream: GPL-2.0 (`COPYING.md`). Ver advertencias de licencia al final.
 
-El **plan de trabajo del port** (incrementos I0–I8, qué implementar en cada PR) está en [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md), enlazado con este informe por tabla y referencias por incremento.
+El **plan de trabajo del port** (incrementos I0–I8 y fases SP de solitario) está en [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md), enlazado con este informe por tabla y referencias por incremento. **Prioridad actual:** cerrar 0.1 en un jugador; **I8 (red)** solo después.
 
 ---
 
@@ -397,7 +397,7 @@ Los `blitter/` son implementaciones de composición de píxeles en distintos mod
 | Comandos | `command.cpp`, `*_cmd.*` | I6 | Media — patrón es directo |
 | Pathfinding (BFS) | `pathfinder/yapf/yapf_base.hpp` | I5 | Media — YAPF es A*, overkill para MVP |
 | Saveload | `saveload/saveload.h`, `*_sl.cpp` | I7 | Alta — versionado extenso |
-| Red | `network_*` | I8 | Muy alta — determinismo estricto |
+| Red | `network_*` | I8 (backlog) | Post-0.1 — determinismo estricto; no prioritaria frente a solitario |
 | NewGRF | `newgrf*.cpp` | Pospuesto | Muy alta — spec binaria 20+ años |
 | Render / viewport | `viewport.*`, `video/`, `blitter/` | No portar | — Bevy lo reemplaza |
 

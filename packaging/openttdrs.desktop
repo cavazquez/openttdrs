@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=OpenTTDRS
+GenericName=Transport tycoon sandbox
+Comment=Sandbox isométrico inspirado en OpenTTD
+Exec=openttdrs-client
+# Tras `scripts/install-desktop.sh` o copia manual a hicolor (ver static/app/README.md).
+Icon=openttdrs
+Terminal=false
+Categories=Game;Simulation;
+StartupWMClass=openttdrs
+Keywords=openttd;transport;simulation;

@@ -1,10 +1,18 @@
 use std::path::{Path, PathBuf};
 
+use bevy::window::PrimaryWindow;
 use bevy::winit::WINIT_WINDOWS;
-use bevy::{log::warn, prelude::*};
+use bevy::{
+    log::{info, warn},
+    prelude::*,
+};
+use image::imageops::FilterType;
 use winit::window::Icon;
 
 pub(crate) const APP_ICON_RELATIVE_PATH: &str = "static/app/openttdrs-icon.png";
+
+/// Tamaño que aceptan bien la mayoría de compositors (icono 1254×1254 suele ignorarse).
+const WINDOW_ICON_PX: u32 = 128;
 
 #[derive(Resource)]
 pub(crate) struct AppIconPath(PathBuf);
@@ -28,6 +36,7 @@ impl Plugin for AppIconPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(AppIconPath(self.icon_path.clone()))
             .init_resource::<AppIconApplied>()
+            .add_systems(PostStartup, apply_window_icon)
             .add_systems(Update, apply_window_icon);
     }
 }
@@ -35,15 +44,13 @@ impl Plugin for AppIconPlugin {
 fn apply_window_icon(
     mut applied: ResMut<AppIconApplied>,
     icon_path: Res<AppIconPath>,
-    windows: Query<Entity, With<Window>>,
+    primary: Query<Entity, With<PrimaryWindow>>,
+    all_windows: Query<Entity, With<Window>>,
 ) {
     if applied.0 {
         return;
     }
 
-    let Ok(window_entity) = windows.single() else {
-        return;
-    };
     let Some(icon) = load_window_icon(&icon_path.0) else {
         warn!(
             "No se pudo cargar el icono de la aplicación desde {}",
@@ -53,13 +60,31 @@ fn apply_window_icon(
         return;
     };
 
+    let mut set_any = false;
     WINIT_WINDOWS.with_borrow(|winit_windows| {
-        let Some(window) = winit_windows.get_window(window_entity) else {
-            return;
+        let targets: Vec<Entity> = if let Ok(p) = primary.single() {
+            vec![p]
+        } else {
+            all_windows.iter().collect()
         };
-        window.set_window_icon(Some(icon));
-        applied.0 = true;
+        for entity in targets {
+            let Some(window) = winit_windows.get_window(entity) else {
+                continue;
+            };
+            window.set_window_icon(Some(icon.clone()));
+            set_any = true;
+        }
     });
+
+    if set_any {
+        info!(
+            "Icono de ventana aplicado desde {} ({}×{} px)",
+            icon_path.0.display(),
+            WINDOW_ICON_PX,
+            WINDOW_ICON_PX
+        );
+        applied.0 = true;
+    }
 }
 
 fn load_window_icon(path: &Path) -> Option<Icon> {
@@ -68,6 +93,11 @@ fn load_window_icon(path: &Path) -> Option<Icon> {
         .decode()
         .ok()?
         .into_rgba8();
+    let image = if image.width() == WINDOW_ICON_PX && image.height() == WINDOW_ICON_PX {
+        image
+    } else {
+        image::imageops::resize(&image, WINDOW_ICON_PX, WINDOW_ICON_PX, FilterType::Lanczos3)
+    };
     let (width, height) = image.dimensions();
     Icon::from_rgba(image.into_raw(), width, height).ok()
 }
@@ -87,7 +117,7 @@ mod tests {
     }
 
     #[test]
-    fn bundled_icon_loads() {
+    fn bundled_icon_loads_at_window_size() {
         let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
             .join(APP_ICON_RELATIVE_PATH);

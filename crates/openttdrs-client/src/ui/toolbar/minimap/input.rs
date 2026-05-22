@@ -8,9 +8,7 @@ use crate::state::SimWorld;
 use crate::ui::hud::SimHudControls;
 use crate::ui::toolbar::BuildMenuUi;
 
-use super::{
-    MINIMAP_BOTTOM, MINIMAP_CELL, MINIMAP_COLS, MINIMAP_PAD, MINIMAP_RIGHT, MINIMAP_ROWS,
-};
+use super::{MINIMAP_BOTTOM, MINIMAP_CELL, MINIMAP_COLS, MINIMAP_PAD, MINIMAP_RIGHT, MINIMAP_ROWS};
 
 pub(crate) fn handle_minimap_click(
     mouse: Res<ButtonInput<MouseButton>>,
@@ -79,10 +77,10 @@ fn cursor_to_minimap_tile(
 mod tests {
     use bevy::prelude::*;
 
-    use super::cursor_to_minimap_tile;
     use super::super::{
         MINIMAP_BOTTOM, MINIMAP_CELL, MINIMAP_COLS, MINIMAP_PAD, MINIMAP_RIGHT, MINIMAP_ROWS,
     };
+    use super::cursor_to_minimap_tile;
 
     #[test]
     fn cursor_to_minimap_tile_top_left_maps_to_small_coords() {

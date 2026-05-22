@@ -1,5 +1,5 @@
-use crate::map::TileCoord;
 use crate::IndustrySpec;
+use crate::map::TileCoord;
 
 use super::layout_tables::{
     COAL_MINE_LAYOUTS, FACTORY_LAYOUTS, FARM_LAYOUTS, FOREST_LAYOUTS, GOLD_MINE_LAYOUTS,

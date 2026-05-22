@@ -9,8 +9,8 @@ use crate::ui::hud::SimHudControls;
 
 use super::palette::minimap_color;
 use super::{
-    MinimapCell, MinimapRoot, MinimapViewport, MINIMAP_CELL, MINIMAP_COLS, MINIMAP_PAD,
-    MINIMAP_ROWS,
+    MINIMAP_CELL, MINIMAP_COLS, MINIMAP_PAD, MINIMAP_ROWS, MinimapCell, MinimapRoot,
+    MinimapViewport,
 };
 
 pub(crate) fn sync_minimap(

@@ -89,7 +89,10 @@ fn station_after_adjacent_road_matches_toolbar_station_tool() {
     let Some((station_tile, road_tile)) = adjacent_grass_pair(&sim) else {
         panic!("se esperan dos hierbas adyacentes para carretera + estación");
     };
-    apply_command(&mut sim.state, &Command::PlaceRoad(road_tile)).unwrap();
+    assert!(
+        apply_command(&mut sim.state, &Command::PlaceRoad(road_tile)).is_ok(),
+        "carretera en tesela vecina para estación"
+    );
     assert!(
         apply_command(&mut sim.state, &Command::PlaceStationDir(station_tile, 2)).is_ok(),
         "PlaceStationDir tras carretera vecina (como Station en toolbar)"
@@ -110,10 +113,7 @@ fn road_depot_dir_on_grass_matches_toolbar_depot_tool() {
         apply_command(&mut sim.state, &Command::PlaceRoadDepotDir(c, 2)).is_ok(),
         "PlaceRoadDepotDir (Road depot + orientación)"
     );
-    assert_eq!(
-        sim.state.map.get_kind(c),
-        Some(TileKind::RoadDepot)
-    );
+    assert_eq!(sim.state.map.get_kind(c), Some(TileKind::RoadDepot));
 }
 
 #[test]

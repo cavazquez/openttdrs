@@ -29,9 +29,8 @@ use toolbar::{
     setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
     setup_station_cargo_panel, setup_top_toolbar, sync_depot_panel, sync_minimap, sync_order_panel,
     sync_orders_pick_cursor, sync_station_cargo_panel, toolbar_group_interaction,
-    update_build_ghost_preview,
-    update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
-    update_toolbar_tooltip,
+    update_build_ghost_preview, update_tool_button_visuals, update_toolbar_group_visuals,
+    update_toolbar_tool_visibility, update_toolbar_tooltip,
 };
 pub(crate) struct ClientUiPlugin;
 
@@ -108,10 +107,7 @@ impl Plugin for ClientUiPlugin {
             )
             .add_systems(
                 Update,
-                (
-                    handle_tile_click,
-                    flush_hud_soft_ping,
-                )
+                (handle_tile_click, flush_hud_soft_ping)
                     .chain()
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),

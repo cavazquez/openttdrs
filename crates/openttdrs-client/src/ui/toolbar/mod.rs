@@ -18,13 +18,13 @@ pub(crate) use depot_panel::{
 pub(crate) use layout::setup_top_toolbar;
 pub(crate) use minimap::{handle_minimap_click, setup_minimap, sync_minimap};
 pub(crate) use order_panel::{handle_order_panel_buttons, setup_order_panel, sync_order_panel};
+pub(crate) use orders_cursor::sync_orders_pick_cursor;
 pub(crate) use preview::{rotate_station_with_right_click, update_build_ghost_preview};
 pub(crate) use settings::handle_settings_menu_buttons;
 pub(crate) use station_panel::{
     StationCargoPanelState, handle_station_cargo_panel_buttons, setup_station_cargo_panel,
     sync_station_cargo_panel,
 };
-pub(crate) use orders_cursor::sync_orders_pick_cursor;
 pub(crate) use systems::{
     build_menu_interaction, close_toolbar_button_interaction, close_toolbar_panel_on_escape,
     hide_tool_when_panel_closed, toolbar_group_interaction, update_tool_button_visuals,

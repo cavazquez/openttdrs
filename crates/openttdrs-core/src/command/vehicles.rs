@@ -149,7 +149,8 @@ fn farthest_reachable_road_tile(map: &Map, start: TileCoord) -> Option<TileCoord
         }
         for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
             let next = TileCoord::new(cur.x + dx, cur.y + dy);
-            if next.x < 0 || next.y < 0 || next.x >= mw.cast_signed() || next.y >= mh.cast_signed() {
+            if next.x < 0 || next.y < 0 || next.x >= mw.cast_signed() || next.y >= mh.cast_signed()
+            {
                 continue;
             }
             if seen.insert(next) && traversable_road_kind(map.get_kind(next)) {

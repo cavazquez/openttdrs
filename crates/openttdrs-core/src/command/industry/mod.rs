@@ -4,8 +4,8 @@ use crate::{GameState, Industry, IndustryKind, IndustrySpec};
 use super::transport::{build_error_for_kind, transport_tile_is_buildable};
 use super::{CommandError, in_bounds};
 
-mod layout_tables;
 mod industry_template;
+mod layout_tables;
 pub use industry_template::industry_template;
 
 pub(super) fn place_industry_sandbox(

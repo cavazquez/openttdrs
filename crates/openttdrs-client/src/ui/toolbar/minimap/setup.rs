@@ -3,8 +3,8 @@ use bevy::prelude::*;
 use crate::ui::toolbar::BuildMenuUi;
 
 use super::{
-    MinimapCell, MinimapRoot, MinimapViewport, MINIMAP_BOTTOM, MINIMAP_CELL, MINIMAP_COLS,
-    MINIMAP_PAD, MINIMAP_RIGHT, MINIMAP_ROWS,
+    MINIMAP_BOTTOM, MINIMAP_CELL, MINIMAP_COLS, MINIMAP_PAD, MINIMAP_RIGHT, MINIMAP_ROWS,
+    MinimapCell, MinimapRoot, MinimapViewport,
 };
 
 pub(crate) fn setup_minimap(mut commands: Commands) {

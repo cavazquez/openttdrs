@@ -1,10 +1,8 @@
 use bevy::prelude::*;
 
-use crate::ui::toolbar::{
-    BuildMenuUi, OrderPanelButton, OrderPanelRoot, OrderPanelText,
-};
+use crate::ui::toolbar::{BuildMenuUi, OrderPanelButton, OrderPanelRoot, OrderPanelText};
 
-use super::{OrderPanelRow, OrderPanelRowText, ORDER_PANEL_ROWS};
+use super::{ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
 
 pub(crate) fn setup_order_panel(mut commands: Commands) {
     commands

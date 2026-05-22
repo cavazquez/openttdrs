@@ -124,8 +124,8 @@ fn vehicle_follows_path() {
     s.vehicles
         .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
 
-    let expected =
-        pathfinder::find_path(&s.map, start, dest, pathfinder::PathNetwork::Road).expect("hay carretera");
+    let expected = pathfinder::find_path(&s.map, start, dest, pathfinder::PathNetwork::Road)
+        .expect("hay carretera");
 
     for (i, &tile) in expected.iter().enumerate() {
         s.step();

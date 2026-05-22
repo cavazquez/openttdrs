@@ -24,6 +24,7 @@ jobs:
       - name: Instalar Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.95.0
           components: rustfmt, clippy
 
       - name: caché cargo
@@ -44,6 +45,7 @@ jobs:
             libxi-dev \
             libxkbcommon-dev \
             libssl-dev \
+            libasound2-dev \
             libvulkan1 \
             mesa-vulkan-drivers
 
@@ -61,6 +63,7 @@ jobs:
       - name: Instalar Rust
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.95.0
           components: rustfmt, clippy
 
       - name: caché cargo
@@ -81,6 +84,7 @@ jobs:
             libxi-dev \
             libxkbcommon-dev \
             libssl-dev \
+            libasound2-dev \
             libvulkan1 \
             mesa-vulkan-drivers
 

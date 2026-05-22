@@ -21,17 +21,11 @@ fn is_network_tile(kind: TileKind, network: PathNetwork) -> bool {
     match network {
         PathNetwork::Road => matches!(
             kind,
-            TileKind::Road
-                | TileKind::RoadDepot
-                | TileKind::RoadTunnel
-                | TileKind::RoadBridge
+            TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge
         ),
         PathNetwork::Rail => matches!(
             kind,
-            TileKind::Rail
-                | TileKind::RailDepot
-                | TileKind::RailTunnel
-                | TileKind::RailBridge
+            TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge
         ),
     }
 }

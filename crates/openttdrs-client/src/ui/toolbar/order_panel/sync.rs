@@ -4,7 +4,7 @@ use openttdrs_core::{Station, StopKind, TileKind, Vehicle, VehicleKind, VehicleO
 use crate::state::SimWorld;
 use crate::ui::toolbar::{OrderEditState, OrderPanelRoot, OrderPanelText};
 
-use super::{OrderPanelRow, OrderPanelRowText, ORDER_PANEL_ROWS};
+use super::{ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
 
 pub(crate) fn sync_order_panel(
     mut order_state: ResMut<OrderEditState>,
@@ -94,11 +94,9 @@ pub(crate) fn sync_order_panel(
     };
     for (row_text, mut text) in &mut row_text_q {
         **text = if order_state.orders.is_empty() && row_text.slot == 0 {
-            "Pendiente: clica el mapa para añadir paradas (estación o depósito)."
-                .to_string()
+            "Pendiente: clica el mapa para añadir paradas (estación o depósito).".to_string()
         } else if let Some(order) = order_state.orders.get(row_text.slot) {
-            let stuck_here =
-                vehicle.no_network_route_to_order && row_text.slot == current_slot;
+            let stuck_here = vehicle.no_network_route_to_order && row_text.slot == current_slot;
             order_row_label(row_text.slot, *order, vehicle, &sim, stuck_here)
         } else {
             String::new()
@@ -183,7 +181,8 @@ mod tests {
         let vehicle = Vehicle::new(1, VehicleKind::Bus, depot, depot);
 
         assert!(
-            order_row_label(0, VehicleOrder::tile(depot), &vehicle, &sim, false).contains("Depósito")
+            order_row_label(0, VehicleOrder::tile(depot), &vehicle, &sim, false)
+                .contains("Depósito")
         );
     }
 }

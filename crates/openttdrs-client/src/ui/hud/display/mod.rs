@@ -157,12 +157,7 @@ pub(crate) fn update_tile_info_text(
     });
 
     let veh_n = sim.state.vehicles.len();
-    let veh_running = sim
-        .state
-        .vehicles
-        .iter()
-        .filter(|v| v.running)
-        .count();
+    let veh_running = sim.state.vehicles.iter().filter(|v| v.running).count();
     let st_n = sim.state.stations.len();
     let save_file = truncate_hud_line(&json_save_hud_label(&hud.json_save_path), 36);
     // Dos líneas: la proyección ortográfica no ajusta texto; una sola línea larga se corta al borde.
@@ -175,9 +170,7 @@ pub(crate) fn update_tile_info_text(
         veh_n,
         veh_running,
     );
-    let hud_line2 = format!(
-        "Tool: {tool_l}{order_l} | {minimap_l} | {save_file} · F4",
-    );
+    let hud_line2 = format!("Tool: {tool_l}{order_l} | {minimap_l} | {save_file} · F4",);
     let hud_status = format!("{hud_line1}\n{hud_line2}");
 
     let Some(pos) = selected.pos else {

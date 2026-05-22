@@ -23,6 +23,7 @@ pub enum StopKind {
     #[default]
     TruckStop,
     BusStop,
+    RailStation,
 }
 
 impl Station {
@@ -53,7 +54,7 @@ impl Station {
         match vehicle_kind {
             VehicleKind::Bus => self.stop_kind == StopKind::BusStop,
             VehicleKind::Truck => self.stop_kind == StopKind::TruckStop,
-            VehicleKind::Train => true,
+            VehicleKind::Train => self.stop_kind == StopKind::RailStation,
         }
     }
 
@@ -61,7 +62,8 @@ impl Station {
     pub fn accepts_cargo(&self, cargo: CargoType) -> bool {
         match self.stop_kind {
             StopKind::BusStop => matches!(cargo, CargoType::Passengers | CargoType::Mail),
-            StopKind::TruckStop => !matches!(cargo, CargoType::Passengers),
+            StopKind::TruckStop => !matches!(cargo, CargoType::Passengers | CargoType::Mail),
+            StopKind::RailStation => !matches!(cargo, CargoType::Passengers | CargoType::Mail),
         }
     }
 }

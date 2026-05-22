@@ -45,6 +45,7 @@ pub(crate) enum BuildMenuAction {
     RoadBridge,
     RoadTunnel,
     BusStop,
+    RailStation,
     Rail,
     RailDepot,
     RailBridge,

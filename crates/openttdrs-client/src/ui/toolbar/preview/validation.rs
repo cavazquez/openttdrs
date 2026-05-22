@@ -1,4 +1,6 @@
-use openttdrs_core::{Map, TileCoord, TileKind, station_site_adjacent_to_transport};
+use openttdrs_core::{
+    Map, TileCoord, TileKind, station_site_adjacent_to_rail, station_site_adjacent_to_transport,
+};
 
 use crate::ui::toolbar::BuildMenuAction;
 
@@ -16,6 +18,7 @@ pub(crate) fn preview_target_is_valid(action: BuildMenuAction, kind: TileKind) -
         | BuildMenuAction::RailTunnel
         | BuildMenuAction::Station
         | BuildMenuAction::BusStop
+        | BuildMenuAction::RailStation
         | BuildMenuAction::BuildHouse
         | BuildMenuAction::BuildCoalMine
         | BuildMenuAction::BuildIronOreMine
@@ -38,8 +41,16 @@ pub(crate) fn action_is_tunnel(action: BuildMenuAction) -> bool {
 }
 
 #[must_use]
-pub(crate) fn preview_station_has_transport_neighbor(map: &Map, pos: TileCoord) -> bool {
-    station_site_adjacent_to_transport(map, pos)
+pub(crate) fn preview_station_has_transport_neighbor(
+    map: &Map,
+    pos: TileCoord,
+    action: BuildMenuAction,
+) -> bool {
+    if action == BuildMenuAction::RailStation {
+        station_site_adjacent_to_rail(map, pos)
+    } else {
+        station_site_adjacent_to_transport(map, pos)
+    }
 }
 
 pub(crate) fn tunnel_preview_is_valid(

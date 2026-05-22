@@ -336,7 +336,7 @@ mod world_pos_to_tile_tests {
     use bevy::prelude::Vec2;
 
     use super::{
-        HEIGHT_PX, Map, TILE_HALF_H, TileCoord, TileKind, iso, world_pos_to_tile_coord,
+        HEIGHT_PX, ISO_HW, Map, TILE_HALF_H, TileCoord, TileKind, iso, world_pos_to_tile_coord,
         world_to_tile,
     };
 
@@ -381,6 +381,60 @@ mod world_pos_to_tile_tests {
         let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - TILE_HALF_H + elev);
         let near_top_inside = center + Vec2::new(0.0, TILE_HALF_H - 1.0);
         assert_eq!(world_pos_to_tile_coord(near_top_inside, &m), Some((tx, ty)));
+    }
+
+    #[test]
+    fn diamond_top_vertex_still_resolves_tile() {
+        let m = Map::new_flat(12, 8, 4);
+        let tx = 1;
+        let ty = 5;
+        let base_z = super::tile_min_corner_height(&m, tx as u32, ty as u32);
+        let elev = f32::from(base_z) * HEIGHT_PX;
+        let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - TILE_HALF_H + elev);
+        let top_vertex = center + Vec2::new(0.0, TILE_HALF_H - 0.5);
+        assert_eq!(
+            world_pos_to_tile_coord(top_vertex, &m),
+            Some((tx, ty)),
+            "vértice superior del rombo debe seguir eligiendo la tesela"
+        );
+    }
+
+    #[test]
+    fn west_neighbor_of_column_zero_is_not_absorbed_by_zero() {
+        let mut m = Map::new_flat(12, 8, 4);
+        let house = TileCoord::new(0, 5);
+        let west = TileCoord::new(1, 5);
+        m.set_kind(house, TileKind::House).unwrap();
+        m.set_kind(west, TileKind::Road).unwrap();
+        m.set_mapt_m5(west, 0x20, 0x05).unwrap();
+
+        let center_west = {
+            let base_z = super::tile_min_corner_height(&m, 1, 5);
+            let elev = f32::from(base_z) * HEIGHT_PX;
+            let p = iso(1, 5);
+            Vec2::new(p.x, p.y - 19.5 + elev)
+        };
+        assert_eq!(
+            world_pos_to_tile_coord(center_west, &m),
+            Some((1, 5)),
+            "estacionamiento/vía en (1,5) no debe leerse como (0,5)"
+        );
+    }
+
+    #[test]
+    fn edge_column_zero_keeps_clicks_on_left_half_of_diamond() {
+        let m = Map::new_flat(12, 8, 4);
+        let tx = 0;
+        let ty = 5;
+        let base_z = super::tile_min_corner_height(&m, tx as u32, ty as u32);
+        let elev = f32::from(base_z) * HEIGHT_PX;
+        let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - TILE_HALF_H + elev);
+        let left_vertex = center + Vec2::new(-ISO_HW + 2.0, 0.0);
+        assert_eq!(
+            world_pos_to_tile_coord(left_vertex, &m),
+            Some((tx, ty)),
+            "clic en borde izquierdo de (0, ty) debe mapear a columna 0"
+        );
     }
 
     #[test]

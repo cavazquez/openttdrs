@@ -5,6 +5,7 @@ mod components;
 mod grid;
 mod tiles;
 mod vehicles;
+mod viewport;
 mod water;
 mod world;
 
@@ -19,5 +20,8 @@ pub(crate) use tiles::{
     spawn_transport_object_tile,
 };
 pub(crate) use vehicles::{VehicleIndex, VehicleRenderPlugin};
+pub(crate) use viewport::{
+    TileViewportBounds, large_map_viewport_cull_enabled, ortho_visible_tile_bounds,
+};
 pub(crate) use water::WaterAnimationPlugin;
 pub(crate) use world::{RemapMapVisualsPending, WorldRenderPlugin};

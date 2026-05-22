@@ -12,6 +12,9 @@ pub(crate) fn command_for_action(
         BuildMenuAction::RoadX => Some(Command::PlaceRoadBits(pos, 0x0A)),
         BuildMenuAction::RoadY => Some(Command::PlaceRoadBits(pos, 0x05)),
         BuildMenuAction::Rail => Some(Command::PlaceRail(pos)),
+        BuildMenuAction::RailStation => {
+            Some(Command::PlaceRailStation(pos, station_state.orientation))
+        }
         BuildMenuAction::Station => Some(Command::PlaceStationDir(pos, station_state.orientation)),
         BuildMenuAction::BusStop => Some(Command::PlaceBusStop(pos, station_state.orientation)),
         BuildMenuAction::Clear => Some(Command::ClearTile(pos)),

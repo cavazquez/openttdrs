@@ -26,11 +26,18 @@ const RAIL_3WAY_SW: u8 = RAIL_TB_X | RAIL_TB_LOWER | RAIL_TB_LEFT;
 const RAIL_3WAY_NW: u8 = RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LEFT;
 const RAIL_3WAY_SE: u8 = RAIL_TB_Y | RAIL_TB_LOWER | RAIL_TB_RIGHT;
 
-/// IDs de sprites de vía férrea usados (cruce a nivel 1370–1373 con barreras, `road_cmd.cpp`).
-pub const RAIL_SPRITE_IDS: [u32; 24] = [
+/// IDs de sprites de vía férrea usados (cruce a nivel 1370–1373; nieve 1037/1038, `rail_cmd.cpp`).
+pub const RAIL_SPRITE_IDS: [u32; 26] = [
     1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020,
-    1021, 1022, 1035, 1036, 1370, 1371, 1372, 1373,
+    1021, 1022, 1035, 1036, 1037, 1038, 1370, 1371, 1372, 1373,
 ];
+
+/// `SPR_RAIL_TRACK_Y_SNOW` / `SPR_RAIL_TRACK_X_SNOW` (OpenGFX).
+pub const RAIL_SPRITE_Y_SNOW: u32 = 1037;
+pub const RAIL_SPRITE_X_SNOW: u32 = 1038;
+
+/// Sprites de señal que la fórmula puede calcular pero el NFO recortado de OpenGFX no exporta (SP3.0 audit).
+pub const SIGNAL_SPRITE_OPENGFX_GAPS: &[u32] = &[1438, 1439, 1530, 1532, 1540, 1542, 1546, 1548];
 
 /// `RoadTileType::Crossing` en bits 6–7 de `m5` (`road_map.h`).
 #[must_use]
@@ -206,25 +213,66 @@ pub fn collect_signal_sprite_ids(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<u32> {
     out
 }
 
-/// IDs para precargar `assets/opengfx/tiles/rail_<id>.png`: piezas de vía y **todas** las señales que
-/// puede devolver [`signal_sprite_id`] con las bases por defecto / env (`OPENTTDRS_SIGNAL_*`).
-///
-/// Evita `asset_server.load` sobre el rango entero `1275..1520` cuando OpenGFX no incluye cada
-/// fila del NFO (huecos sin PNG).
+/// Construye un byte `m2` que produce `sig_type` / `variant` para el `track` dado (`DrawSignals`).
+#[inline]
+fn m2_for_signal_encoding(sig_type: u8, variant: u8, track: u8) -> u8 {
+    let base = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
+        4
+    } else {
+        0
+    };
+    let var_bit = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
+        7
+    } else {
+        3
+    };
+    ((sig_type & 7) << base) | ((variant & 1) << var_bit)
+}
+
+/// IDs de señal que [`collect_signal_sprite_ids`] puede emitir (no el producto cartesiano completo).
 #[must_use]
-pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
+pub fn signal_sprite_ids_for_preload() -> Vec<u32> {
     use std::collections::BTreeSet;
-    let mut set: BTreeSet<u32> = RAIL_SPRITE_IDS.iter().copied().collect();
-    for sig_type in 0u8..=7u8 {
-        for variant in 0u8..=1u8 {
-            for image in 0u8..=7u8 {
-                for green in [false, true] {
-                    set.insert(signal_sprite_id(sig_type, variant, image, green));
+    let mut set = BTreeSet::new();
+    for rails in 0u8..64 {
+        let m5 = (RAIL_TILE_SIGNALS << 6) | rails;
+        for present in 1u8..16 {
+            let m3 = present << 4;
+            for states in 0u8..16 {
+                let m3hi = states << 4;
+                for ty in 0u8..8 {
+                    for var in 0u8..2 {
+                        for track in 0u8..6 {
+                            let m2 = m2_for_signal_encoding(ty, var, track);
+                            for id in collect_signal_sprite_ids(m2, m3, m3hi, m5) {
+                                set.insert(id);
+                            }
+                        }
+                    }
                 }
             }
         }
     }
     set.into_iter().collect()
+}
+
+/// IDs para precargar `assets/opengfx/tiles/rail_<id>.png`: piezas de vía + señales alcanzables.
+#[must_use]
+pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
+    use std::collections::BTreeSet;
+    use std::sync::OnceLock;
+    static CACHE: OnceLock<Vec<u32>> = OnceLock::new();
+    CACHE
+        .get_or_init(|| {
+            let mut set: BTreeSet<u32> = RAIL_SPRITE_IDS.iter().copied().collect();
+            for id in signal_sprite_ids_for_preload() {
+                if !SIGNAL_SPRITE_OPENGFX_GAPS.contains(&id) {
+                    set.insert(id);
+                }
+            }
+            set.into_iter().collect()
+        })
+        .clone()
 }
 
 pub fn effective_rail_trackbits(mapt: u8, m5: u8, kind: TileKind, mp_rail: u8) -> Option<u8> {
@@ -281,11 +329,13 @@ fn synthetic_rail_trackbits(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> u8 {
 }
 
 pub fn rail_trackbits_for_render(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp_rail: u8) -> u8 {
-    if let Some(t) = map.get(pos)
-        && let Some(tb) = effective_rail_trackbits(t.mapt, t.m5, t.kind, mp_rail)
-        && tb != 0
-    {
-        return tb & 0x3F;
+    if let Some(t) = map.get(pos) {
+        if let Some(tb) = effective_rail_trackbits(t.mapt, t.m5, t.kind, mp_rail) {
+            return tb & 0x3F;
+        }
+        if t.kind == TileKind::Rail {
+            return 0;
+        }
     }
     synthetic_rail_trackbits(map, pos, mw, mh)
 }
@@ -309,12 +359,23 @@ fn junction_ground_off(tb: u8) -> u8 {
 }
 
 /// Lista de sprites `OpenGFX` en orden de pintado (suelo de cruce y superposiciones).
-pub fn collect_rail_sprites(tb: u8, out: &mut Vec<u32>) {
+/// Con `snow_ground`, tramos Y/X usan `1037`/`1038` (`RailGroundType::SnowOrDesert`).
+pub fn collect_rail_sprites(tb: u8, snow_ground: bool, out: &mut Vec<u32>) {
     out.clear();
     let t = tb & 0x3F;
+    let y_track = if snow_ground {
+        RAIL_SPRITE_Y_SNOW
+    } else {
+        1011
+    };
+    let x_track = if snow_ground {
+        RAIL_SPRITE_X_SNOW
+    } else {
+        1012
+    };
     match t {
-        RAIL_TB_Y => out.push(1011),
-        RAIL_TB_X => out.push(1012),
+        RAIL_TB_Y => out.push(y_track),
+        RAIL_TB_X => out.push(x_track),
         RAIL_TB_UPPER => out.push(1013),
         RAIL_TB_LOWER => out.push(1014),
         RAIL_TB_RIGHT => out.push(1015),
@@ -343,5 +404,45 @@ pub fn collect_rail_sprites(tb: u8, out: &mut Vec<u32>) {
                 out.push(1010);
             }
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use openttdrs_core::{Map, TileCoord, TileKind};
+
+    #[test]
+    fn collect_rail_sprites_uses_snow_track_ids() {
+        let mut out = Vec::new();
+        collect_rail_sprites(RAIL_TB_Y, true, &mut out);
+        assert_eq!(out, vec![RAIL_SPRITE_Y_SNOW]);
+        collect_rail_sprites(RAIL_TB_X, true, &mut out);
+        assert_eq!(out, vec![RAIL_SPRITE_X_SNOW]);
+    }
+
+    #[test]
+    fn rail_tile_with_zero_m5_does_not_use_synthetic_neighbors() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let c = TileCoord::new(1, 1);
+        map.set_kind(c, TileKind::Rail).unwrap();
+        map.set_mapt_m5(c, 0x10, 0).unwrap();
+        map.set_kind(TileCoord::new(0, 1), TileKind::Rail).unwrap();
+        map.set_mapt_m5(TileCoord::new(0, 1), 0x10, 0x02).unwrap();
+        assert_eq!(rail_trackbits_for_render(&map, c, 3, 3, 1), 0);
+    }
+
+    #[test]
+    fn signal_preload_excludes_known_opengfx_gaps() {
+        let ids: std::collections::BTreeSet<_> =
+            rail_sprite_ids_for_preload().into_iter().collect();
+        for gap in SIGNAL_SPRITE_OPENGFX_GAPS {
+            assert!(
+                !ids.contains(gap),
+                "hueco OpenGFX {gap} no debe precargarse"
+            );
+        }
+        assert!(ids.contains(&1279));
     }
 }

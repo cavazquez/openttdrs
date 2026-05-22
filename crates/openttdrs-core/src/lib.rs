@@ -36,8 +36,8 @@ pub use map::{
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
-    PathNetwork, find_path, path_network_for_vehicle, station_site_adjacent_to_transport,
-    tile_is_path_traversable,
+    PathNetwork, find_path, path_network_for_vehicle, station_site_adjacent_to_rail,
+    station_site_adjacent_to_transport, tile_is_path_traversable,
 };
 pub use save::SaveError;
 pub use save::load_from_str;

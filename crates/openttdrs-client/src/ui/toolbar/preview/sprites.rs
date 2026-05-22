@@ -50,6 +50,15 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::Rail => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/rail_1005.png"))
         }
+        BuildMenuAction::RailStation => {
+            let axis_y = station_state.orientation.is_multiple_of(2);
+            let path = if axis_y {
+                "assets/opengfx/tiles/rail_platform_y_front.png"
+            } else {
+                "assets/opengfx/tiles/rail_platform_x_front.png"
+            };
+            Some(asset_server.load::<Image>(path))
+        }
         BuildMenuAction::RailDepot => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/rail_depot_ne.png"))
         }

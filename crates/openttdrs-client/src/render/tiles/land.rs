@@ -84,6 +84,7 @@ pub(crate) fn spawn_industry_tile(
         u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8)
     });
     let entry = crate::sprites::industry_gfx_entry(gfx);
+    crate::sprites::debug_log_industry_gfx_once(gfx, entry);
     let has_industry_art = entry.is_some_and(|e| e.sprite_id != 0 || e.ground_sprite_id != 0);
     let (terrain_img, terrain_color) = if has_industry_art {
         (

@@ -23,6 +23,64 @@ pub fn world_to_tile(world_pos: Vec2) -> (i32, i32) {
     (tx.floor() as i32, ty.floor() as i32)
 }
 
+/// Límite estricto del rombo (`dx + dy <= 1`).
+const PICK_METRIC_STRICT: f32 = 1.000_1;
+/// Margen para vértices/bordes del rombo y solapes entre teselas vecinas.
+const PICK_METRIC_RELAXED: f32 = 1.10;
+
+fn pick_metric_raw(map: &Map, tx: i32, ty: i32, world_pos: Vec2) -> f32 {
+    let (tileh, base_z) = tile_slope_and_min_z(map, tx as u32, ty as u32);
+    let tile_kind = map
+        .get(TileCoord::new(tx, ty))
+        .map_or(TileKind::Grass, |t| t.kind);
+    let half_h_base = SLOPE_HALF_H[tileh.min(14) as usize];
+    let half_h = if tileh == 0 && tile_kind == TileKind::Road {
+        half_h_base.max(19.5)
+    } else {
+        half_h_base
+    };
+    let elev = f32::from(base_z) * HEIGHT_PX;
+    let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - half_h + elev);
+    let dx = (world_pos.x - center.x).abs() / ISO_HW;
+    let dy = (world_pos.y - center.y).abs() / half_h.max(1.0);
+    dx + dy
+}
+
+/// Busca la tesela más cercana en un vecindario cuadrado; `max_metric` acota el rombo.
+#[allow(clippy::too_many_arguments)]
+fn pick_tile_in_neighborhood(
+    map: &Map,
+    seed_tx: i32,
+    seed_ty: i32,
+    world_pos: Vec2,
+    mw_i: i32,
+    mh_i: i32,
+    radius: i32,
+    max_metric: f32,
+) -> Option<(i32, i32)> {
+    let in_bounds = |tx: i32, ty: i32| tx >= 0 && ty >= 0 && tx < mw_i && ty < mh_i;
+    let mut best: Option<((i32, i32), f32)> = None;
+    for dty in -radius..=radius {
+        for dtx in -radius..=radius {
+            let tx = seed_tx + dtx;
+            let ty = seed_ty + dty;
+            if !in_bounds(tx, ty) {
+                continue;
+            }
+            let metric = pick_metric_raw(map, tx, ty, world_pos);
+            if metric > max_metric {
+                continue;
+            }
+            match best {
+                None => best = Some(((tx, ty), metric)),
+                Some((_, cur)) if metric < cur => best = Some(((tx, ty), metric)),
+                _ => {}
+            }
+        }
+    }
+    best.map(|(c, _)| c)
+}
+
 /// Convierte posición en mundo (p. ej. [`Camera::viewport_to_world_2d`]) a tesela del mapa.
 ///
 /// El cálculo hace dos pasos:
@@ -39,70 +97,61 @@ pub fn world_pos_to_tile_coord(world_pos: Vec2, map: &Map) -> Option<(i32, i32)>
     let mh_i = mh as i32;
 
     let in_bounds = |tx: i32, ty: i32| tx >= 0 && ty >= 0 && tx < mw_i && ty < mh_i;
-    // Estimación inicial rápida sin compensación.
-    let mut guess = world_to_tile(world_pos);
-    if !in_bounds(guess.0, guess.1) {
-        return None;
-    }
+    let raw = world_to_tile(world_pos);
 
-    // Ajuste iterativo por elevación (tile_min_z): world_y = iso_y + elev.
+    let mut seed = if in_bounds(raw.0, raw.1) {
+        raw
+    } else {
+        let near_map = raw.0 >= -1 && raw.0 <= mw_i && raw.1 >= -1 && raw.1 <= mh_i;
+        if !near_map {
+            return None;
+        }
+        (raw.0.clamp(0, mw_i - 1), raw.1.clamp(0, mh_i - 1))
+    };
+
     for _ in 0..8 {
-        let (_, base_z) = tile_slope_and_min_z(map, guess.0 as u32, guess.1 as u32);
+        if !in_bounds(seed.0, seed.1) {
+            break;
+        }
+        let (_, base_z) = tile_slope_and_min_z(map, seed.0 as u32, seed.1 as u32);
         let elev = f32::from(base_z) * HEIGHT_PX;
         let corrected = Vec2::new(world_pos.x, world_pos.y - elev);
         let next = world_to_tile(corrected);
-        if next == guess || !in_bounds(next.0, next.1) {
+        if next == seed {
             break;
         }
-        guess = next;
-    }
-
-    // Desambiguar cerca de bordes: buscar el rombo que realmente contiene el punto.
-    let mut best: Option<((i32, i32), f32)> = None;
-    for dty in -1..=1 {
-        for dtx in -1..=1 {
-            let tx = guess.0 + dtx;
-            let ty = guess.1 + dty;
-            if !in_bounds(tx, ty) {
-                continue;
-            }
-            let (tileh, base_z) = tile_slope_and_min_z(map, tx as u32, ty as u32);
-            let tile_kind = map
-                .get(TileCoord::new(tx, ty))
-                .map_or(TileKind::Grass, |t| t.kind);
-            let half_h_base = SLOPE_HALF_H[tileh.min(14) as usize];
-            // Carretera plana: algunos sprites (`road_flat_XX`) ocupan hasta 39 px de alto
-            // (half_h ~= 19.5). Si usamos 15.5, la zona baja visible “cae” en el tile inferior.
-            let half_h = if tileh == 0 && tile_kind == TileKind::Road {
-                half_h_base.max(19.5)
-            } else {
-                half_h_base
-            };
-            let elev = f32::from(base_z) * HEIGHT_PX;
-            let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - half_h + elev);
-            let dx = (world_pos.x - center.x).abs() / ISO_HW;
-            let dy = (world_pos.y - center.y).abs() / half_h.max(1.0);
-            let metric = dx + dy;
-
-            if metric <= 1.000_1 {
-                match best {
-                    None => best = Some(((tx, ty), metric)),
-                    Some((_, cur_metric)) if metric < cur_metric => {
-                        best = Some(((tx, ty), metric));
-                    }
-                    _ => {}
-                }
-            }
+        if in_bounds(next.0, next.1) {
+            seed = next;
+        } else if next.0 >= -1 && next.0 <= mw_i && next.1 >= -1 && next.1 <= mh_i {
+            seed = (next.0.clamp(0, mw_i - 1), next.1.clamp(0, mh_i - 1));
+            break;
+        } else {
+            break;
         }
     }
 
-    if let Some((coord, _)) = best {
-        Some(coord)
-    } else if in_bounds(guess.0, guess.1) {
-        Some(guess)
-    } else {
-        None
+    if let Some(hit) = pick_tile_in_neighborhood(
+        map,
+        seed.0,
+        seed.1,
+        world_pos,
+        mw_i,
+        mh_i,
+        1,
+        PICK_METRIC_STRICT,
+    ) {
+        return Some(hit);
     }
+    pick_tile_in_neighborhood(
+        map,
+        seed.0,
+        seed.1,
+        world_pos,
+        mw_i,
+        mh_i,
+        2,
+        PICK_METRIC_RELAXED,
+    )
 }
 
 /// Vec3 para teselas de suelo con soporte de altura isométrica.

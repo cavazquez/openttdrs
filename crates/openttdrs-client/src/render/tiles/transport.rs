@@ -5,10 +5,11 @@ use super::{TILE_OVERLAP_SCALE, TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite};
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, tile_pos_half};
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
-    ROAD_FLAT_HALF_H, collect_rail_sprites, collect_signal_sprite_ids, is_road_level_crossing,
-    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_tile_is_signals,
-    rail_track_base_color, rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
-    road_flat_sprite_index, road_tile_tram_visual_active, tram_flat_sprite_index,
+    RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, collect_rail_sprites, collect_signal_sprite_ids,
+    is_road_level_crossing, level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
+    rail_tile_is_signals, rail_track_base_color, rail_trackbits_for_render, road_bits_for_render,
+    road_flat_sprite_color, road_flat_sprite_index, road_tile_tram_visual_active,
+    tram_flat_sprite_index,
 };
 
 pub(crate) fn spawn_road_tile(
@@ -146,8 +147,12 @@ pub(crate) fn spawn_rail_tile(
     } else {
         SLOPE_HALF_H[tileh as usize]
     };
+    let snow_ground = ctx
+        .tile
+        .is_some_and(|t| (t.m3 & 0x0F) == RAIL_GROUND_SNOW_OR_DESERT);
     collect_rail_sprites(
         rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1),
+        snow_ground,
         rail_layers,
     );
     let mut rail_paint = ctx.tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {

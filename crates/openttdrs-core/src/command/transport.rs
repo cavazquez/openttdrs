@@ -1,5 +1,5 @@
 use crate::map::{Map, TileCoord, TileKind};
-use crate::pathfinder::station_site_adjacent_to_transport;
+use crate::pathfinder::{station_site_adjacent_to_rail, station_site_adjacent_to_transport};
 use crate::{
     CLEAR_TILE_COST, DEPOT_BUILD_COST, GameState, RAIL_BUILD_COST, ROAD_BUILD_COST,
     STATION_BUILD_COST, Station, StopKind,
@@ -231,6 +231,66 @@ pub(super) fn place_station_dir(
     place_stop_kind(state, c, dir, StopKind::TruckStop)
 }
 
+#[inline]
+fn ottd_station_type_bits(stop_kind: StopKind) -> u8 {
+    match stop_kind {
+        StopKind::RailStation => 0,
+        StopKind::TruckStop => 2,
+        StopKind::BusStop => 3,
+    }
+}
+
+#[inline]
+fn apply_station_m6(m6: u8, stop_kind: StopKind) -> u8 {
+    (m6 & !0x78) | (ottd_station_type_bits(stop_kind) << 3)
+}
+
+#[inline]
+fn road_stop_m5(dir: u8) -> u8 {
+    dir & 0x03
+}
+
+/// `m5` gfx para estación de tren: bit 0 = eje Y (`GetRailStationAxis`).
+#[inline]
+fn rail_station_m5(dir: u8) -> u8 {
+    u8::from(dir.is_multiple_of(2))
+}
+
+pub(super) fn place_rail_station(
+    state: &mut GameState,
+    c: TileCoord,
+    dir: u8,
+) -> Result<(), CommandError> {
+    in_bounds(&state.map, c)?;
+    if state.stations.iter().any(|s| s.pos == c) {
+        return Err(CommandError::StationAlreadyExists);
+    }
+    let kind = state.map.get_kind(c).unwrap_or(TileKind::Grass);
+    match kind {
+        TileKind::Water => Err(CommandError::CannotPlaceStationOnWater),
+        TileKind::Void => Err(CommandError::CannotPlaceStationOnVoid),
+        _ => {
+            if !station_site_adjacent_to_rail(&state.map, c) {
+                return Err(CommandError::StationNotAdjacentToTransport);
+            }
+            let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+            tile.kind = TileKind::Station;
+            tile.mapt = 0x50;
+            tile.m5 = rail_station_m5(dir);
+            tile.m6 = apply_station_m6(tile.m6, StopKind::RailStation);
+            state
+                .map
+                .set_tile(c, tile)
+                .map_err(|_| CommandError::OutOfBounds)?;
+            state
+                .stations
+                .push(Station::new_with_kind(c, StopKind::RailStation));
+            state.economy.money -= STATION_BUILD_COST;
+            Ok(())
+        }
+    }
+}
+
 pub(super) fn place_stop_kind(
     state: &mut GameState,
     c: TileCoord,
@@ -249,13 +309,14 @@ pub(super) fn place_stop_kind(
             if !station_site_adjacent_to_transport(&state.map, c) {
                 return Err(CommandError::StationNotAdjacentToTransport);
             }
+            let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+            tile.kind = TileKind::Station;
+            tile.mapt = 0x50;
+            tile.m5 = road_stop_m5(dir);
+            tile.m6 = apply_station_m6(tile.m6, stop_kind);
             state
                 .map
-                .set_kind(c, TileKind::Station)
-                .map_err(|_| CommandError::OutOfBounds)?;
-            state
-                .map
-                .set_mapt_m5(c, 0x50, dir & 0x03)
+                .set_tile(c, tile)
                 .map_err(|_| CommandError::OutOfBounds)?;
             state.stations.push(Station::new_with_kind(c, stop_kind));
             state.economy.money -= STATION_BUILD_COST;

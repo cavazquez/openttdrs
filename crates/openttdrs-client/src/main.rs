@@ -5,6 +5,8 @@
 //!
 //! ```
 //! OTTDMAP_FILE=/ruta/al/mapa.ottdmap cargo run -p openttdrs-client
+//! Mapas ≥ 4096 teselas: culling por viewport (panear regenera solo la ventana visible).
+//! Desactivar: OTTDMAP_FILE=… OPENTTDRS_MAP_VIEWPORT_OFF=1 cargo run -p openttdrs-client
 //! ```
 //!
 //! Persistencia JSON (`openttdrs_core::save`, versión + `state` o legado plano):

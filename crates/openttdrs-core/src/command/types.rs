@@ -32,6 +32,8 @@ pub enum Command {
     PlaceStationDir(TileCoord, u8),
     PlaceBusStop(TileCoord, u8),
     PlaceTruckStop(TileCoord, u8),
+    /// Estación de tren 1×1 (`StationType::Rail`); `dir` 0..3 → eje vía en `m5`.
+    PlaceRailStation(TileCoord, u8),
     BuildRoadVehicleAtDepot(TileCoord, VehicleKind),
     SellVehicle(u32),
     ToggleVehicleRunning(u32),

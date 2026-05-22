@@ -3,6 +3,17 @@
 use openttdrs_core::{GameState, OttdmapExtras, Station, TileCoord, TileKind};
 use std::collections::HashSet;
 
+use crate::sprites::stop_kind_from_m6;
+
+fn push_station_from_tile(state: &mut GameState, c: TileCoord) {
+    let kind = state
+        .map
+        .get(c)
+        .map(|t| stop_kind_from_m6(t.m6))
+        .unwrap_or_default();
+    state.stations.push(Station::new_with_kind(c, kind));
+}
+
 /// Anade [`Station`] en coordenadas del footer `STXY` (export `parse_sav.py`), deduplicando.
 pub(crate) fn place_stations_from_footer_stxy(
     state: &mut GameState,
@@ -25,7 +36,7 @@ pub(crate) fn place_stations_from_footer_stxy(
         let c = TileCoord::new(xi, yi);
         let key = (c.x, c.y);
         if seen.insert(key) {
-            state.stations.push(Station::new(c));
+            push_station_from_tile(state, c);
         }
     }
 }
@@ -42,13 +53,14 @@ pub(crate) fn place_stations_from_map_tiles(state: &mut GameState) {
             }
             let key = (c.x, c.y);
             if seen.insert(key) {
-                state.stations.push(Station::new(c));
+                push_station_from_tile(state, c);
             }
         }
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod stations_coverage_tests {
     use super::{place_stations_from_footer_stxy, place_stations_from_map_tiles};
     use openttdrs_core::{GameState, OttdmapExtras, Station, TileCoord, TileKind};
@@ -106,5 +118,21 @@ mod stations_coverage_tests {
         place_stations_from_map_tiles(&mut state);
         assert_eq!(state.stations.len(), 2);
         assert!(state.stations.iter().any(|s| s.pos == TileCoord::new(1, 0)));
+    }
+
+    #[test]
+    fn place_stations_from_map_tiles_uses_m6_for_rail_station() {
+        let mut state = GameState::new(4, 4);
+        let c = TileCoord::new(2, 2);
+        state.map.set_kind(c, TileKind::Station).unwrap();
+        let mut t = state.map.get(c).unwrap();
+        t.m6 = 0;
+        state.map.set_tile(c, t).unwrap();
+        place_stations_from_map_tiles(&mut state);
+        assert_eq!(state.stations.len(), 1);
+        assert_eq!(
+            state.stations[0].stop_kind,
+            openttdrs_core::StopKind::RailStation
+        );
     }
 }

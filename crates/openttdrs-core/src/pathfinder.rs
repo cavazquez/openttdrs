@@ -53,6 +53,30 @@ pub fn tile_is_path_traversable(kind: TileKind) -> bool {
 
 /// Algún vecino ortogonal tiene red de transporte (la estación debe poder «engancharse»).
 #[must_use]
+#[inline]
+fn is_rail_network_tile(kind: TileKind) -> bool {
+    matches!(
+        kind,
+        TileKind::Rail | TileKind::RailDepot | TileKind::RailBridge | TileKind::RailTunnel
+    )
+}
+
+/// Tesela adyacente a vía férrea (para estaciones de tren).
+#[must_use]
+pub fn station_site_adjacent_to_rail(map: &Map, c: TileCoord) -> bool {
+    for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
+        let n = TileCoord::new(c.x + dx, c.y + dy);
+        if map
+            .get_kind(n)
+            .is_some_and(|k| is_rail_network_tile(k) || k == TileKind::Station)
+        {
+            return true;
+        }
+    }
+    false
+}
+
+#[must_use]
 pub fn station_site_adjacent_to_transport(map: &Map, c: TileCoord) -> bool {
     for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
         let n = TileCoord::new(c.x + dx, c.y + dy);

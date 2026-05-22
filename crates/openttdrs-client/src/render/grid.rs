@@ -163,6 +163,22 @@ mod tests {
     }
 
     #[test]
+    fn water_with_coast_m5_uses_shore_without_land_neighbors() {
+        let mut map = Map::new_flat(3, 3, 0);
+        for y in 0..3 {
+            for x in 0..3 {
+                assert!(map.set_kind(coord(x, y), TileKind::Water).is_ok());
+            }
+        }
+        assert!(map.set_mapt_m5(coord(1, 1), 0x60, 0x10).is_ok());
+
+        let grid = RenderGrid::from_map(&map, 3, 3);
+
+        assert!(grid.get(1, 1).use_shore);
+        assert!(!grid.get(0, 0).use_shore);
+    }
+
+    #[test]
     fn water_with_default_m5_uses_shore_when_touching_land_diagonally() {
         let mut map = Map::new_flat(3, 3, 0);
         for y in 0..3 {

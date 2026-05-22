@@ -1,6 +1,7 @@
 //! Sistemas Bevy que construyen y refrescan la capa visual del mundo.
 
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use openttdrs_core::TileKind;
 
 use crate::bevy_app::UpdateSet;
@@ -8,9 +9,11 @@ use crate::config::{env_flag, env_string};
 use crate::iso::{
     ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, shore_png_index, shore_tileh_for_draw_shore,
 };
+use crate::render::viewport::{VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES};
 use crate::render::{
     IndustryPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, RenderGrid,
-    TileRenderContext, WorldAssets, flush_map_batches, push_forest_tree, push_water_tile,
+    TileRenderContext, TileViewportBounds, WorldAssets, flush_map_batches,
+    large_map_viewport_cull_enabled, ortho_visible_tile_bounds, push_forest_tree, push_water_tile,
     spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
     spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
@@ -25,22 +28,107 @@ pub(crate) struct RemapMapVisualsPending {
     pub(crate) sync_camera: bool,
 }
 
+/// Rectángulo de teselas para las que se generaron sprites (`MapVisualLayer`).
+#[derive(Resource)]
+pub(crate) struct MapTileSpawnViewport {
+    pub(crate) bounds: TileViewportBounds,
+}
+
+impl Default for MapTileSpawnViewport {
+    fn default() -> Self {
+        Self {
+            bounds: TileViewportBounds::full(1, 1),
+        }
+    }
+}
+
 pub(crate) struct WorldRenderPlugin;
 
 impl Plugin for WorldRenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RemapMapVisualsPending>()
+            .init_resource::<MapTileSpawnViewport>()
             .add_systems(OnEnter(ClientScreen::InGame), setup)
             .add_systems(
                 Update,
-                apply_remap_map_visuals
-                    .in_set(UpdateSet::RenderRefresh)
+                (sync_map_tile_spawn_viewport, apply_remap_map_visuals)
+                    .chain()
+                    .in_set(UpdateSet::Camera)
+                    .after(crate::camera::move_camera)
                     .run_if(in_state(ClientScreen::InGame)),
             );
     }
 }
 
-pub(crate) fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim: Res<SimWorld>) {
+fn resolve_spawn_viewport(
+    sim: &SimWorld,
+    windows: &Query<&Window, With<PrimaryWindow>>,
+    cam_q: &Query<
+        (&mut Transform, &mut Projection),
+        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+    >,
+) -> TileViewportBounds {
+    let (mw, mh) = sim.state.map.dimensions();
+    if !large_map_viewport_cull_enabled(mw, mh) {
+        return TileViewportBounds::full(mw, mh);
+    }
+    let Ok((cam_tf, proj)) = cam_q.single() else {
+        return TileViewportBounds::full(mw, mh);
+    };
+    let Projection::Orthographic(ortho) = proj else {
+        return TileViewportBounds::full(mw, mh);
+    };
+    let (win_w, win_h) = windows
+        .iter()
+        .next()
+        .map(|w| (w.width(), w.height()))
+        .unwrap_or((1280.0, 720.0));
+    let visible = ortho_visible_tile_bounds(
+        cam_tf.translation.truncate(),
+        ortho.scale,
+        win_w,
+        win_h,
+        mw,
+        mh,
+        VIEWPORT_MARGIN_TILES,
+    );
+    visible.expand(VIEWPORT_REBUILD_LEAD_TILES, mw, mh)
+}
+
+/// En mapas grandes, regenera sprites si la cámara sale del bloque ya instanciado.
+pub(crate) fn sync_map_tile_spawn_viewport(
+    sim: Res<SimWorld>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    cam_q: Query<
+        (&mut Transform, &mut Projection),
+        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+    >,
+    mut pending: ResMut<RemapMapVisualsPending>,
+    mut viewport: ResMut<MapTileSpawnViewport>,
+) {
+    let (mw, mh) = sim.state.map.dimensions();
+    if !large_map_viewport_cull_enabled(mw, mh) {
+        viewport.bounds = TileViewportBounds::full(mw, mh);
+        return;
+    }
+    let needed = resolve_spawn_viewport(&sim, &windows, &cam_q);
+    if !viewport.bounds.contains(needed) {
+        viewport.bounds = needed;
+        pending.pending = true;
+        pending.sync_camera = false;
+    }
+}
+
+pub(crate) fn setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    sim: Res<SimWorld>,
+    windows: Query<&Window, With<PrimaryWindow>>,
+    cam_q: Query<
+        (&mut Transform, &mut Projection),
+        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+    >,
+) {
     let (mw, mh) = sim.state.map.dimensions();
 
     let cam_x = ((mh as i32 - 1) - (mw as i32 - 1)) as f32 / 2.0 * ISO_HW;
@@ -63,11 +151,20 @@ pub(crate) fn setup(mut commands: Commands, asset_server: Res<AssetServer>, sim:
         }),
     ));
 
-    spawn_world_layer(&mut commands, &asset_server, &sim);
+    let spawn_bounds = resolve_spawn_viewport(&sim, &windows, &cam_q);
+    commands.insert_resource(MapTileSpawnViewport {
+        bounds: spawn_bounds,
+    });
+    spawn_world_layer(&mut commands, &asset_server, &sim, spawn_bounds);
 }
 
 #[allow(clippy::too_many_lines)]
-fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &SimWorld) {
+fn spawn_world_layer(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    sim: &SimWorld,
+    spawn_bounds: TileViewportBounds,
+) {
     let (mw, mh) = sim.state.map.dimensions();
     let debug_coast = env_flag("OPENTTDRS_DEBUG_COAST");
     let trace_path = env_string("OPENTTDRS_RENDER_TRACE_OUT");
@@ -85,100 +182,108 @@ fn spawn_world_layer(commands: &mut Commands, asset_server: &AssetServer, sim: &
     let mut batches = MapSpriteBatches::default();
 
     let mut rail_layers: Vec<u32> = Vec::with_capacity(8);
-    for ty in 0..mh {
-        for tx in 0..mw {
-            let ctx = TileRenderContext::new(map, &render_grid, tx, ty);
-            let kind = ctx.kind;
-            let tileh = ctx.info.tileh;
+    let mut defer_overlay_tiles: Vec<(u32, u32)> = Vec::new();
+    for (tx, ty) in spawn_bounds.iter_coords() {
+        let ctx = TileRenderContext::new(map, &render_grid, tx, ty);
+        let kind = ctx.kind;
+        let tileh = ctx.info.tileh;
 
-            if kind == TileKind::Void {
-                continue;
-            }
+        if kind == TileKind::Void {
+            continue;
+        }
 
-            let slope_half_ground = SLOPE_HALF_H[tileh as usize];
-            if trace_path.is_some() {
-                let (mapt, m5) = ctx.tile.map_or((0u8, 0u8), |t| (t.mapt, t.m5));
-                let (shore_tileh, shore_png) = if kind == TileKind::Water && ctx.info.use_shore {
-                    let th = shore_tileh_for_draw_shore(map, tx, ty, mw, mh);
-                    (th as i32, shore_png_index(th) as i32)
-                } else {
-                    (-1, -1)
-                };
-                trace_rows.push(format!(
-                    "{tx},{ty},{},{},{},{},{},{},{},{}",
-                    tile_kind_name(kind),
-                    ctx.info.tileh,
-                    ctx.info.base_z,
-                    if ctx.info.use_shore { 1 } else { 0 },
-                    shore_tileh,
-                    shore_png,
-                    mapt,
-                    m5
-                ));
-            }
+        let slope_half_ground = SLOPE_HALF_H[tileh as usize];
+        if trace_path.is_some() {
+            let (mapt, m5) = ctx.tile.map_or((0u8, 0u8), |t| (t.mapt, t.m5));
+            let (shore_tileh, shore_png) = if kind == TileKind::Water && ctx.info.use_shore {
+                let th = shore_tileh_for_draw_shore(map, tx, ty, mw, mh);
+                (th as i32, shore_png_index(th) as i32)
+            } else {
+                (-1, -1)
+            };
+            trace_rows.push(format!(
+                "{tx},{ty},{},{},{},{},{},{},{},{}",
+                tile_kind_name(kind),
+                ctx.info.tileh,
+                ctx.info.base_z,
+                if ctx.info.use_shore { 1 } else { 0 },
+                shore_tileh,
+                shore_png,
+                mapt,
+                m5
+            ));
+        }
 
-            match kind {
-                TileKind::Road => {
-                    spawn_road_tile(commands, map, mw, mh, &assets, &ctx, slope_half_ground);
-                }
-                TileKind::Rail => {
-                    spawn_rail_tile(
-                        commands,
-                        map,
-                        (mw, mh),
-                        &assets,
-                        &ctx,
-                        slope_half_ground,
-                        &mut rail_layers,
-                    );
-                }
-                TileKind::House => {
-                    spawn_house_tile(commands, &assets, &ctx, slope_half_ground);
-                }
-                TileKind::Station => {
-                    spawn_station_tile(
-                        commands,
-                        &assets,
-                        &ctx,
-                        &sim.state.stations,
-                        slope_half_ground,
-                    );
-                }
-                TileKind::RoadDepot
-                | TileKind::RailDepot
-                | TileKind::RoadTunnel
-                | TileKind::RailTunnel
-                | TileKind::RoadBridge
-                | TileKind::RailBridge => {
-                    spawn_transport_object_tile(commands, &assets, &ctx, slope_half_ground);
-                }
-                TileKind::Industry => {
-                    spawn_industry_tile(commands, &assets, &ctx, slope_half_ground);
-                }
-                TileKind::Water => {
-                    push_water_tile(
-                        commands,
-                        map,
-                        (mw, mh),
-                        &assets,
-                        &ctx,
-                        debug_coast,
-                        &mut batches,
-                    );
-                }
-                TileKind::Grass | TileKind::Forest | TileKind::CoalField | TileKind::Unknown(_) => {
-                    spawn_generic_land_tile(commands, &assets, &ctx, slope_half_ground);
-                }
-                TileKind::Void => unreachable!(),
+        match kind {
+            TileKind::Road => {
+                spawn_road_tile(commands, map, mw, mh, &assets, &ctx, slope_half_ground);
             }
+            TileKind::Rail => {
+                spawn_rail_tile(
+                    commands,
+                    map,
+                    (mw, mh),
+                    &assets,
+                    &ctx,
+                    slope_half_ground,
+                    &mut rail_layers,
+                );
+            }
+            TileKind::House | TileKind::Station => {
+                defer_overlay_tiles.push((tx, ty));
+            }
+            TileKind::RoadDepot
+            | TileKind::RailDepot
+            | TileKind::RoadTunnel
+            | TileKind::RailTunnel
+            | TileKind::RoadBridge
+            | TileKind::RailBridge => {
+                spawn_transport_object_tile(commands, &assets, &ctx, slope_half_ground);
+            }
+            TileKind::Industry => {
+                defer_overlay_tiles.push((tx, ty));
+            }
+            TileKind::Water => {
+                push_water_tile(
+                    commands,
+                    map,
+                    (mw, mh),
+                    &assets,
+                    &ctx,
+                    debug_coast,
+                    &mut batches,
+                );
+            }
+            TileKind::Grass | TileKind::Forest | TileKind::CoalField | TileKind::Unknown(_) => {
+                spawn_generic_land_tile(commands, &assets, &ctx, slope_half_ground);
+            }
+            TileKind::Void => unreachable!(),
+        }
 
-            if kind == TileKind::Forest {
-                push_forest_tree(&assets, &ctx, &mut batches);
-            }
+        if kind == TileKind::Forest {
+            push_forest_tree(&assets, &ctx, &mut batches);
         }
     }
 
     flush_map_batches(commands, batches);
+    for (tx, ty) in defer_overlay_tiles {
+        let ctx = TileRenderContext::new(map, &render_grid, tx, ty);
+        let slope_half_ground = SLOPE_HALF_H[ctx.info.tileh as usize];
+        match ctx.kind {
+            TileKind::Station => spawn_station_tile(
+                commands,
+                &assets,
+                &ctx,
+                &sim.state.stations,
+                slope_half_ground,
+            ),
+            TileKind::House => spawn_house_tile(commands, &assets, &ctx, slope_half_ground),
+            TileKind::Industry => {
+                spawn_industry_tile(commands, &assets, &ctx, slope_half_ground);
+            }
+            _ => {}
+        }
+    }
     spawn_initial_vehicles(commands, sim, &truck_handles);
     commands.insert_resource(truck_handles);
     if let Some(path) = trace_path {
@@ -234,10 +339,12 @@ fn sync_camera_for_sim(
     o.scale = cam_scale;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn apply_remap_map_visuals(
     mut commands: Commands,
     mut pending: ResMut<RemapMapVisualsPending>,
     q_vis: Query<Entity, With<MapVisualLayer>>,
+    windows: Query<&Window, With<PrimaryWindow>>,
     mut q_cam: Query<
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
@@ -252,12 +359,23 @@ pub(crate) fn apply_remap_map_visuals(
     let do_sync_camera = pending.sync_camera;
     pending.pending = false;
     pending.sync_camera = false;
+    let spawn_bounds = resolve_spawn_viewport(&sim, &windows, &q_cam);
+    commands.insert_resource(MapTileSpawnViewport {
+        bounds: spawn_bounds,
+    });
     let to_remove: Vec<Entity> = q_vis.iter().collect();
     for e in to_remove {
         commands.entity(e).despawn();
     }
     vehicle_index.rebuild(&sim.state.vehicles);
-    spawn_world_layer(&mut commands, &asset_server, &sim);
+    if large_map_viewport_cull_enabled(sim.state.map.dimensions().0, sim.state.map.dimensions().1) {
+        info!(
+            "Mapa visual: {} teselas en viewport (de {})",
+            spawn_bounds.tile_count(),
+            u64::from(sim.state.map.dimensions().0) * u64::from(sim.state.map.dimensions().1)
+        );
+    }
+    spawn_world_layer(&mut commands, &asset_server, &sim, spawn_bounds);
     if do_sync_camera {
         sync_camera_for_sim(&mut q_cam, &sim);
     }
@@ -338,6 +456,22 @@ mod tests {
         let world = app.world_mut();
         world.run_system_once(setup).unwrap();
         world.run_system_once(apply_remap_map_visuals).unwrap();
+    }
+
+    #[test]
+    fn large_map_spawn_viewport_covers_fewer_tiles_than_full_map() {
+        let bounds = ortho_visible_tile_bounds(
+            Vec2::new(0.0, -200.0),
+            2.0,
+            1280.0,
+            720.0,
+            256,
+            256,
+            VIEWPORT_MARGIN_TILES,
+        )
+        .expand(VIEWPORT_REBUILD_LEAD_TILES, 256, 256);
+        assert!(bounds.tile_count() < 256 * 256);
+        assert!(bounds.tile_count() > 100);
     }
 
     #[test]

@@ -4,6 +4,7 @@ use bevy::prelude::*;
 
 use crate::sprites::{
     HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, house_sprite_filename, rail_sprite_ids_for_preload,
+    rail_station_draw_layers,
 };
 
 pub(crate) struct WorldAssets {
@@ -66,7 +67,15 @@ impl WorldAssets {
                 asset_server.load::<Image>(format!("assets/opengfx/tiles/tram_flat_{i:02}.png"))
             })
             .collect();
-        let rail = rail_sprite_ids_for_preload()
+        let mut rail_ids: std::collections::BTreeSet<_> =
+            rail_sprite_ids_for_preload().into_iter().collect();
+        for &(_, sid) in rail_station_draw_layers(true)
+            .iter()
+            .chain(rail_station_draw_layers(false).iter())
+        {
+            rail_ids.insert(sid);
+        }
+        let rail = rail_ids
             .into_iter()
             .map(|id| {
                 (

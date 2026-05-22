@@ -170,6 +170,7 @@ MAGIC_NONE = b"OTTN"
 
 SLV_INCREASE_HOUSE_LIMIT = 348
 MP_HOUSE = 3
+MP_WATER = 6
 
 # INDY (CH_ARRAY): offset del byte ``Industry.type`` dentro del objeto Industry
 # para saves recientes (p. ej. versión 211 del fixture); ver industry_sl.cpp.
@@ -351,6 +352,7 @@ def analyze_save(raw: bytes) -> dict:
 
     map5 = chunks.get("MAP5", b"")
     map5 = map5[:expected].ljust(expected, b"\x00")
+    water = water_tile_type_counts(mapt[:expected], map5)
     road_normal = 0
     road_normal_tram_bits = 0
     for i in range(expected):
@@ -379,8 +381,148 @@ def analyze_save(raw: bytes) -> dict:
             "normal_tiles": road_normal,
             "normal_with_tram_track_bits": road_normal_tram_bits,
         },
+        "water": water,
         "industry_pairs": len(indp_pairs),
     }
+
+
+def water_tile_type_counts(mapt: bytes, map5: bytes) -> dict[str, int]:
+    """Histograma de ``WaterTileType`` (bits 4–7 de MAP5) en teselas ``MP_WATER``."""
+    n = min(len(mapt), len(map5))
+    counts: dict[str, int] = {"tiles": 0, "clear": 0, "coast": 0, "other": 0}
+    for i in range(n):
+        if (mapt[i] >> 4) & 0xF != MP_WATER:
+            continue
+        counts["tiles"] += 1
+        wtt = (map5[i] >> 4) & 0x0F
+        if wtt == 0:
+            counts["clear"] += 1
+        elif wtt == 1:
+            counts["coast"] += 1
+        else:
+            counts["other"] += 1
+    return counts
+
+
+def export_ottdmap_from_chunks(chunks: dict, version: int) -> bytes:
+    """Construye el binario ``.ottdmap`` (MAP1 v1) a partir de chunks ya parseados."""
+    dim_x, dim_y = dimensions_from_chunks(chunks)
+    expected = dim_x * dim_y
+
+    mapt = chunks.get("MAPT", b"")
+    if len(mapt) < expected:
+        raise ValueError(f"MAPT demasiado corto: {len(mapt)} bytes, esperados {expected}")
+
+    maph = chunks.get("MAPH", b"")
+    map5 = chunks.get("MAP5", b"")
+    map1 = chunks.get("MAPO", b"")
+    map6 = chunks.get("MAPE", b"")
+    map8 = chunks.get("MAP8", b"")
+    m3lo = chunks.get("M3LO", b"")
+    m3hi = chunks.get("M3HI", b"")
+    map2 = chunks.get("MAP2", b"")
+    map7 = chunks.get("MAP7", b"")
+    obj_types: dict[int, int] = chunks.get("OBJS", {})  # type: ignore[assignment]
+
+    if len(maph) < expected:
+        maph = maph + b"\x00" * (expected - len(maph))
+    if len(map5) < expected:
+        map5 = map5 + b"\x00" * (expected - len(map5))
+    if len(map1) < expected:
+        map1 = map1 + b"\x00" * (expected - len(map1))
+    if len(map6) < expected:
+        map6 = map6 + b"\x00" * (expected - len(map6))
+    if len(map8) < expected * 2:
+        map8 = map8 + b"\x00" * (expected * 2 - len(map8))
+    if len(m3lo) < expected:
+        m3lo = m3lo + b"\x00" * (expected - len(m3lo))
+    if len(m3hi) < expected:
+        m3hi = m3hi + b"\x00" * (expected - len(m3hi))
+    if len(map2) < expected:
+        map2 = map2 + b"\x00" * (expected - len(map2))
+    if len(map7) < expected:
+        map7 = map7 + b"\x00" * (expected - len(map7))
+
+    m5_list = bytearray(map5[:expected])
+    if obj_types:
+        for i in range(expected):
+            if (mapt[i] >> 4) & 0xF == 10:
+                t = obj_types.get(i, 0xFF)
+                m5_list[i] = t if t != 0xFF else m5_list[i]
+    m5_data = bytes(m5_list)
+
+    m8_data = build_m8_le_for_save(version, mapt[:expected], map8, m3lo, m3hi, expected)
+    m3_export = m3lo[:expected]
+    if len(map2) >= 2 * expected:
+        m2_lo = bytes(map2[i * 2] for i in range(expected))
+        m2_hi_plane = bytes(map2[i * 2 + 1] for i in range(expected))
+    else:
+        m2_lo = (map2[:expected] if len(map2) >= expected else map2 + b"\x00" * expected)[:expected]
+        m2_hi_plane = b"\x00" * expected
+    m7_export = map7[:expected]
+    m3hi_export = m3hi[:expected]
+
+    magic_out = b"MAP1"
+    format_version = 1
+    flags = 1 << 0  # HAS_M2_HI
+    header = struct.pack("<4sIIHH", magic_out, dim_x, dim_y, format_version, flags)
+    tile_types = mapt[:expected]
+    heights = maph[:expected]
+    m1_data = map1[:expected]
+    m6_data = map6[:expected]
+
+    body = (
+        header
+        + tile_types
+        + heights
+        + m1_data
+        + m2_lo
+        + m2_hi_plane
+        + m3_export
+        + m3hi_export
+        + m5_data
+        + m6_data
+        + m7_export
+        + m8_data
+    )
+
+    indp_pairs: list[tuple[int, int]] = []
+    if "INDY" in chunks and isinstance(chunks["INDY"], list):
+        indp_pairs = chunks["INDY"]  # type: ignore[assignment]
+    body += build_indp_footer(indp_pairs)
+
+    stnn_blob = chunks.get("STNN", b"")
+    if isinstance(stnn_blob, (bytes, bytearray)) and stnn_blob:
+        body += b"STNN" + struct.pack("<I", len(stnn_blob)) + bytes(stnn_blob)
+
+    tnbp_blob = b""
+    for _k in ("TNBP", "TBUS", "TUNN"):
+        b = chunks.get(_k, b"")
+        if isinstance(b, (bytes, bytearray)) and b:
+            tnbp_blob = bytes(b)
+            break
+    if tnbp_blob:
+        body += b"TNBP" + struct.pack("<I", len(tnbp_blob)) + tnbp_blob
+
+    body += build_stxy_footer(tile_types, dim_x, dim_y)
+    return body
+
+
+def ottdmap_dense_m5_plane(data: bytes) -> tuple[int, int, bytes]:
+    """Devuelve ``(width, height, m5)`` del bloque denso MAP1 v1."""
+    if len(data) < 16 or data[0:4] != b"MAP1":
+        raise ValueError("cabecera MAP1 inválida")
+    dim_x, dim_y = struct.unpack_from("<II", data, 4)
+    fmt_ver, flags = struct.unpack_from("<HH", data, 12)
+    if fmt_ver != 1:
+        raise ValueError(f"format_version {fmt_ver} no soportado")
+    n = dim_x * dim_y
+    base = 16
+    dense = 12 * n if flags & 1 else 11 * n
+    if len(data) < base + dense:
+        raise ValueError("bloque denso incompleto")
+    off = base + 7 * n  # MAPT, MAPH, m1, m2, m2_hi, m3, m3hi
+    return dim_x, dim_y, data[off : off + n]
 
 
 def decompress(raw: bytes) -> tuple[bytes, int]:
@@ -552,66 +694,32 @@ def main() -> None:
         msg = str(e) if str(e) else "Chunk MAPT no encontrado. ¿Es un savegame válido?"
         sys.exit(msg)
 
-    print(f"  Mapa: {dim_x} × {dim_y} = {dim_x * dim_y:,} teselas")
+    expected = dim_x * dim_y
+    print(f"  Mapa: {dim_x} × {dim_y} = {expected:,} teselas")
 
     mapt = chunks.get("MAPT", b"")
-    maph = chunks.get("MAPH", b"")
     map5 = chunks.get("MAP5", b"")
-    map1 = chunks.get("MAPO", b"")
-    map6 = chunks.get("MAPE", b"")
-    map8 = chunks.get("MAP8", b"")
-    m3lo = chunks.get("M3LO", b"")
-    m3hi = chunks.get("M3HI", b"")
-    map2 = chunks.get("MAP2", b"")
-    map7 = chunks.get("MAP7", b"")
+    map5 = map5[:expected].ljust(expected, b"\x00")
+    water = water_tile_type_counts(mapt[:expected], map5)
+    if water["tiles"]:
+        print(
+            f"  Agua: {water['tiles']:,} teselas — Clear {water['clear']:,}, "
+            f"Coast {water['coast']:,}, otro {water['other']:,}"
+        )
+
     obj_types: dict[int, int] = chunks.get("OBJS", {})  # type: ignore[assignment]
-
-    expected = dim_x * dim_y
-    if len(mapt) < expected:
-        sys.exit(f"MAPT demasiado corto: {len(mapt)} bytes, esperados {expected}")
-
-    if len(maph) < expected:
-        maph = maph + b"\x00" * (expected - len(maph))
-    if len(map5) < expected:
-        map5 = map5 + b"\x00" * (expected - len(map5))
-    if len(map1) < expected:
-        map1 = map1 + b"\x00" * (expected - len(map1))
-    if len(map6) < expected:
-        map6 = map6 + b"\x00" * (expected - len(map6))
-    if len(map8) < expected * 2:
-        map8 = map8 + b"\x00" * (expected * 2 - len(map8))
-    if len(m3lo) < expected:
-        m3lo = m3lo + b"\x00" * (expected - len(m3lo))
-    if len(m3hi) < expected:
-        m3hi = m3hi + b"\x00" * (expected - len(m3hi))
-    if len(map2) < expected:
-        map2 = map2 + b"\x00" * (expected - len(map2))
-    if len(map7) < expected:
-        map7 = map7 + b"\x00" * (expected - len(map7))
-
-    m5_list = bytearray(map5[:expected])
     if obj_types:
-        n_fixed = 0
-        for i in range(expected):
-            if (mapt[i] >> 4) & 0xF == 10:
-                t = obj_types.get(i, 0xFF)
-                m5_list[i] = t if t != 0xFF else m5_list[i]
-                if t != 0xFF:
-                    n_fixed += 1
-        print(f"  Objetos con tipo resuelto desde OBJS: {n_fixed}")
-    m5_data = bytes(m5_list)
+        n_fixed = sum(
+            1
+            for i in range(expected)
+            if (mapt[i] >> 4) & 0xF == 10 and obj_types.get(i, 0xFF) != 0xFF
+        )
+        if n_fixed:
+            print(f"  Objetos con tipo resuelto desde OBJS: {n_fixed}")
 
-    m8_data = build_m8_le_for_save(version, mapt[:expected], map8, m3lo, m3hi, expected)
-    m3_export = m3lo[:expected]
+    map2 = chunks.get("MAP2", b"")
     if len(map2) >= 2 * expected:
-        m2_lo = bytes(map2[i * 2] for i in range(expected))
-        m2_hi_plane = bytes(map2[i * 2 + 1] for i in range(expected))
         print(f"  MAP2 u16: plano bajo+alto ({2 * expected:,} bytes en save → .ottdmap v5+12)")
-    else:
-        m2_lo = (map2[:expected] if len(map2) >= expected else map2 + b"\x00" * expected)[:expected]
-        m2_hi_plane = b"\x00" * expected
-    m7_export = map7[:expected]
-    m3hi_export = m3hi[:expected]
 
     if version < SLV_INCREASE_HOUSE_LIMIT:
         n_legacy = sum(1 for i in range(expected) if ((mapt[i] >> 4) & 0xF) == MP_HOUSE)
@@ -620,40 +728,17 @@ def main() -> None:
             f"{n_legacy:,} teselas MP_HOUSE"
         )
 
-    magic_out = b"MAP1"
-    format_version = 1
-    flags = 1 << 0  # HAS_M2_HI (el plano se serializa siempre en v1)
-    header = struct.pack("<4sIIHH", magic_out, dim_x, dim_y, format_version, flags)
+    body = export_ottdmap_from_chunks(chunks, version)
     tile_types = mapt[:expected]
-    heights = maph[:expected]
-    m1_data = map1[:expected]
-    m6_data = map6[:expected]
-
-    body = (
-        header
-        + tile_types
-        + heights
-        + m1_data
-        + m2_lo
-        + m2_hi_plane
-        + m3_export
-        + m3hi_export
-        + m5_data
-        + m6_data
-        + m7_export
-        + m8_data
-    )
 
     indp_pairs: list[tuple[int, int]] = []
     if "INDY" in chunks and isinstance(chunks["INDY"], list):
         indp_pairs = chunks["INDY"]  # type: ignore[assignment]
-    body += build_indp_footer(indp_pairs)
     if indp_pairs:
         print(f"  INDP: {len(indp_pairs)} industrias (índice → tipo)")
 
     stnn_blob = chunks.get("STNN", b"")
     if isinstance(stnn_blob, (bytes, bytearray)) and stnn_blob:
-        body += b"STNN" + struct.pack("<I", len(stnn_blob)) + bytes(stnn_blob)
         print(f"  STNN: blob {len(stnn_blob):,} bytes")
 
     tnbp_blob = b""
@@ -663,12 +748,10 @@ def main() -> None:
             tnbp_blob = bytes(b)
             break
     if tnbp_blob:
-        body += b"TNBP" + struct.pack("<I", len(tnbp_blob)) + tnbp_blob
         print(f"  TNBP: blob {len(tnbp_blob):,} bytes")
 
     stxy = build_stxy_footer(tile_types, dim_x, dim_y)
     n_stxy = struct.unpack_from("<I", stxy, 4)[0]
-    body += stxy
     if n_stxy:
         print(f"  STXY: {n_stxy} teselas MP_STATION (x,y)")
 

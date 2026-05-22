@@ -9,6 +9,8 @@ mod industry;
 mod rail;
 #[path = "sprites/road.rs"]
 mod road;
+#[path = "sprites/station.rs"]
+mod station;
 
 // ── Constantes de renderizado de carreteras y vías ───────────────────────────
 
@@ -57,8 +59,7 @@ pub fn rail_track_base_color(mapt: u8, kind: TileKind, m5: u8, m3: u8) -> Color 
     }
 }
 
-/// Desplazamiento dentro del grupo `SPR_ROAD` para tesela plana.
-pub const ROAD_FLAT_OFFSET_TBL: [u8; 16] = [0, 18, 17, 7, 16, 0, 10, 5, 15, 8, 1, 4, 9, 3, 6, 2];
+pub use road::ROAD_FLAT_OFFSET_TBL;
 
 /// Mitad de la altura en px de cada variante `road_flat_XX`.
 pub const ROAD_FLAT_HALF_H: [f32; 19] = [
@@ -68,7 +69,8 @@ pub const ROAD_FLAT_HALF_H: [f32; 19] = [
 
 #[allow(unused_imports)]
 pub use industry::{
-    INDUSTRY_GFX_DATA, IndustryGfxSprite, industry_gfx_entry, industry_sprite_for_gfx,
+    INDUSTRY_GFX_DATA, IndustryGfxSprite, debug_log_industry_gfx_once, industry_gfx_entry,
+    industry_gfx_uses_generic_fallback, industry_sprite_for_gfx,
 };
 #[allow(unused_imports)]
 pub use rail::{
@@ -77,6 +79,12 @@ pub use rail::{
     RAIL_TILE_SIGNALS, collect_rail_sprites, collect_signal_sprite_ids,
     level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_signal_present_mask,
     rail_signal_state_mask, rail_sprite_ids_for_preload, rail_tile_is_signals, signal_sprite_bases,
+    signal_sprite_ids_for_preload,
+};
+#[allow(unused_imports)]
+pub use station::{
+    StationTileClass, rail_station_axis_y, rail_station_draw_layers, rail_station_sprite_layers,
+    road_stop_ground_index, station_tile_class, station_type_from_m6, stop_kind_from_m6,
 };
 
 /// Especificación de dibujo de una casa (stage completado).
@@ -378,14 +386,25 @@ pub fn house_sprite_filename(sprite_id: u32) -> String {
 
 /// Índice en [`HOUSE_DRAW_DATA`] para una casa.
 ///
-/// En este cliente la tabla tiene 128 entradas (una por `HouseID` base de OpenGFX),
-/// ya "aplanadas" para render de edificio terminado. Por eso indexamos por `HouseID`
-/// directo (con módulo para IDs extendidos/NewGRF), en vez de aplicar el stride de
-/// `_town_draw_tile_data` (`*16 + hash*4 + stage`) que aquí colapsa variedad.
+/// OpenTTD: `house_id * 16 + TileHash2Bit(x,y) * 4 + building_stage`.
+/// La tabla local tiene **8** tipos × **16** filas (variante hash × etapa).
+/// Usamos etapa **3** (edificio terminado) y hash 2-bit desde coordenadas de tesela.
 #[must_use]
-pub fn house_draw_data_index_for_tile(clean_house_id: u16, _tx: i32, _ty: i32) -> usize {
-    let hid = usize::from(clean_house_id);
-    hid % HOUSE_DRAW_DATA.len()
+pub fn house_draw_data_index_for_tile(clean_house_id: u16, tx: i32, ty: i32) -> usize {
+    const ROWS_PER_TYPE: usize = 16;
+    const TYPE_COUNT: usize = HOUSE_DRAW_DATA.len() / ROWS_PER_TYPE; // 8
+    const FINISHED_STAGE: usize = 3;
+
+    let house_type = usize::from(clean_house_id) / ROWS_PER_TYPE;
+    let hash2 = tile_hash_2bit(tx, ty);
+    let idx = house_type.min(TYPE_COUNT - 1) * ROWS_PER_TYPE + hash2 * 4 + FINISHED_STAGE;
+    idx.min(HOUSE_DRAW_DATA.len() - 1)
+}
+
+/// Aproximación de `TileHash2Bit` (0..3) para variante visual por tesela.
+#[must_use]
+pub fn tile_hash_2bit(tx: i32, ty: i32) -> usize {
+    ((tx.wrapping_mul(5787) + ty.wrapping_mul(3781)) & 3) as usize
 }
 
 /// `RoadTileType::Crossing` en bits 6–7 de `m5` (`road_map.h`).
@@ -475,20 +494,26 @@ pub fn rail_trackbits_for_render(map: &Map, pos: TileCoord, mw: u32, mh: u32) ->
 
 #[cfg(test)]
 mod house_draw_index_tests {
-    use super::house_draw_data_index_for_tile;
+    use super::{house_draw_data_index_for_tile, tile_hash_2bit};
 
     #[test]
-    fn low_house_ids_map_directly_to_table_rows() {
-        assert_eq!(house_draw_data_index_for_tile(0, 0, 0), 0);
-        assert_eq!(house_draw_data_index_for_tile(1, 0, 0), 1);
-        assert_eq!(house_draw_data_index_for_tile(6, 0, 0), 6);
+    fn house_type_zero_uses_finished_stage_row() {
+        let h = tile_hash_2bit(0, 0);
+        assert_eq!(house_draw_data_index_for_tile(0, 0, 0), h * 4 + 3);
     }
 
     #[test]
-    fn high_house_id_uses_modulo() {
-        assert_eq!(house_draw_data_index_for_tile(127, 0, 0), 127);
-        assert_eq!(house_draw_data_index_for_tile(128, 0, 0), 0);
-        assert_eq!(house_draw_data_index_for_tile(129, 0, 0), 1);
+    fn house_type_one_offsets_by_sixteen_rows() {
+        let h = tile_hash_2bit(5, 2);
+        assert_eq!(house_draw_data_index_for_tile(16, 5, 2), 16 + h * 4 + 3);
+    }
+
+    #[test]
+    fn high_house_type_clamps_to_last_band() {
+        assert_eq!(
+            house_draw_data_index_for_tile(999, 1, 1),
+            house_draw_data_index_for_tile(112, 1, 1)
+        );
     }
 }
 
@@ -510,10 +535,34 @@ mod road_sprite_index_tests {
     }
 
     #[test]
-    fn other_slopes_keep_flat_road_variant_from_bits() {
+    fn non_diagonal_slopes_use_flat_road_variant_from_bits() {
         let bits = 0x0A;
         assert_eq!(road_flat_sprite_index(1, bits), road_flat_index(bits)); // SLOPE_W
-        assert_eq!(road_flat_sprite_index(12, bits), road_flat_index(bits)); // SLOPE_NE
+        assert_eq!(road_flat_sprite_index(12, bits), 11); // SLOPE_NE: upstream ignora bits
+    }
+
+    #[test]
+    fn flat_road_bits_1_to_15_match_openttd_table() {
+        let expected: [(u8, usize); 15] = [
+            (0x01, 18),
+            (0x02, 17),
+            (0x03, 7),
+            (0x04, 16),
+            (0x05, 0),
+            (0x06, 10),
+            (0x07, 5),
+            (0x08, 15),
+            (0x09, 8),
+            (0x0A, 1),
+            (0x0B, 4),
+            (0x0C, 9),
+            (0x0D, 3),
+            (0x0E, 6),
+            (0x0F, 2),
+        ];
+        for (bits, idx) in expected {
+            assert_eq!(road_flat_sprite_index(0, bits), idx, "bits 0x{bits:02X}");
+        }
     }
 }
 
@@ -594,17 +643,32 @@ mod signal_sprite_collect_tests {
     }
 
     #[test]
-    fn rail_preload_includes_crossings_and_signals_bounded() {
-        use super::rail_sprite_ids_for_preload;
+    fn rail_preload_includes_crossings_snow_and_signals_bounded() {
+        use super::{rail_sprite_ids_for_preload, signal_sprite_ids_for_preload};
         let ids = rail_sprite_ids_for_preload();
         assert!(!ids.is_empty());
         assert!(ids.contains(&1372));
+        assert!(ids.contains(&1037));
+        assert!(ids.contains(&1038));
         assert!(ids.contains(&1279));
         let mx = ids.iter().copied().max().unwrap_or(0);
         assert!(
             mx < 1700,
             "máx sprite id {mx}: ampliar range(1275,…) en descargar_graficos.sh si hace falta"
         );
+        let placeholders = [1438_u32, 1439, 1530, 1532, 1540, 1542, 1546, 1548];
+        for pid in placeholders {
+            assert!(
+                !ids.contains(&pid),
+                "preload no debe pedir placeholder {pid}"
+            );
+        }
+        for sid in signal_sprite_ids_for_preload() {
+            if super::rail::SIGNAL_SPRITE_OPENGFX_GAPS.contains(&sid) {
+                continue;
+            }
+            assert!(ids.contains(&sid), "falta señal {sid} en preload");
+        }
     }
 
     #[test]

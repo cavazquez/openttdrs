@@ -9,6 +9,7 @@
 #   ./scripts/check.sh test   # Tests del workspace
 #   ./scripts/check.sh cov    # Tests + informe LCOV (requiere cargo-llvm-cov + llvm-tools-preview)
 #   ./scripts/check.sh ci     # Paridad con .github/workflows/ci.yml (sin instalar APT)
+#   ./scripts/check.sh audit  # SP3.0: PNG OpenGFX requeridos vs assets/opengfx/tiles
 #   ./scripts/check.sh build  # cargo build --workspace
 
 set -euo pipefail
@@ -67,6 +68,7 @@ do_tnbp() {
 do_golden_parse_sav() {
     info "Golden parse_sav..."
     python3 scripts/verify_parse_sav_reference.py
+    python3 scripts/verify_parse_sav_water_m5.py
     info "Golden parse_sav OK ✓"
 }
 
@@ -75,8 +77,16 @@ do_py_compile() {
     python3 -m py_compile scripts/parse_sav.py
     python3 -m py_compile scripts/verify_parse_sav_reference.py
     python3 -m py_compile scripts/emit_parse_sav_golden.py
+    python3 -m py_compile scripts/verify_parse_sav_water_m5.py
     python3 -m py_compile scripts/gen_tnbp_fixture_ottdmap.py
+    python3 -m py_compile scripts/audit_sp3_assets.py
     info "Python OK ✓"
+}
+
+do_audit() {
+    info "Auditoría SP3.0 (assets OpenGFX)..."
+    python3 scripts/audit_sp3_assets.py
+    info "Auditoría SP3 OK ✓"
 }
 
 do_coverage() {
@@ -125,10 +135,11 @@ case "${1:-all}" in
     py)          do_py_compile ;;
     cov|coverage) do_coverage ;;
     build)       do_build ;;
+    audit)       do_audit ;;
     ci)          do_ci ;;
     all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|cov|build|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|audit|cov|build|ci|all}"
         exit 1
         ;;
 esac

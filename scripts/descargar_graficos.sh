@@ -318,6 +318,18 @@ def cleanup_speckles(img: Image.Image) -> Image.Image:
                 out_pix[x, y] = rep
     return out
 
+def dematte_cyan_transparency(img: Image.Image) -> Image.Image:
+    """Convierte cian opaco (índice de agua en paleta) a alpha 0 en edificios de estación."""
+    src = img.convert("RGBA")
+    data = []
+    for r, g, b, a in src.getdata():
+        if a > 0 and b >= 170 and g >= 140 and r <= 140:
+            data.append((0, 0, 0, 0))
+        else:
+            data.append((r, g, b, a))
+    src.putdata(data)
+    return src
+
 # Cargar todos los sheets del prefijo en PNG o PCX (incluye .32.png).
 # grfcodec a veces deja `*.32.png` de 0 bytes; ignorarlos para no pisar atlas válidos.
 sheets: dict[str, Image.Image] = {}
@@ -400,6 +412,8 @@ def crop_by_id(sid: int, out_name: str) -> None:
         or out_name.startswith("tram_")
     ):
         crop = cleanup_speckles(crop)
+    if out_name.startswith("rail_platform_"):
+        crop = dematte_cyan_transparency(crop)
     out = tiles_dir / out_name
     crop.save(out)
     print(f"  {out_name} ({w}×{h} xrel={xr} yrel={yr}) ← sprite {sid} [{sheet_key}]")
@@ -488,7 +502,7 @@ RAIL_WRAPPER_ALIAS_IDS = [
     1005, 1006, 1007, 1008, 1009, 1010,
     1011, 1012, 1013, 1014, 1015, 1016,
     1017, 1018, 1019, 1020, 1021, 1022,
-    1035, 1036,
+    1035, 1036, 1037, 1038,
     1370, 1371, 1372, 1373,
 ]
 RAIL_SIGNAL_EXPORT_RANGE = range(1275, 1700)
@@ -511,6 +525,14 @@ crop_by_id(1036, "rail_track_ns_1.png")
 # Nieve
 crop_by_id(1037, "rail_track_y_snow.png")
 crop_by_id(1038, "rail_track_x_snow.png")
+for sid, src_name in [(1037, "rail_track_y_snow.png"), (1038, "rail_track_x_snow.png")]:
+    dst = tiles_dir / f"rail_{sid}.png"
+    if dst.is_file():
+        continue
+    src = tiles_dir / src_name
+    if src.is_file():
+        shutil.copy2(src, dst)
+        print(f"  rail_{sid}.png (alias de {src_name} para preload Bevy)")
 # Depósitos de tren
 crop_by_id(1063, "rail_depot_se_1.png")
 crop_by_id(1064, "rail_depot_se_2.png")
@@ -529,6 +551,21 @@ crop_by_id(1075, "rail_platform_pillars_y_front.png")
 crop_by_id(1076, "rail_platform_pillars_x_rear.png")
 crop_by_id(1077, "rail_platform_pillars_y_rear.png")
 crop_by_id(1078, "rail_platform_pillars_x_front.png")
+for sid, src_name in [
+    (1069, "rail_platform_y_front.png"),
+    (1070, "rail_platform_x_rear.png"),
+    (1071, "rail_platform_y_rear.png"),
+    (1072, "rail_platform_x_front.png"),
+    (1073, "rail_platform_building_x.png"),
+    (1074, "rail_platform_building_y.png"),
+]:
+    dst = tiles_dir / f"rail_{sid}.png"
+    if dst.is_file():
+        continue
+    src = tiles_dir / src_name
+    if src.is_file():
+        shutil.copy2(src, dst)
+        print(f"  rail_{sid}.png (alias de {src_name})")
 # Techos
 for sid in range(1079, 1087):
     crop_by_id(sid, f"rail_roof_{sid - 1079}.png")

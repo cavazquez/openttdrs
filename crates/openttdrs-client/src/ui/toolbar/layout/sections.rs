@@ -178,6 +178,11 @@ pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             BuildMenuAction::Rail,
                         ),
                         (
+                            "Estacion de tren",
+                            "assets/opengfx/tiles/rail_platform_y_front.png",
+                            BuildMenuAction::RailStation,
+                        ),
+                        (
                             "Deposito ferroviario",
                             "assets/opengfx/tiles/rail_depot_ne.png",
                             BuildMenuAction::RailDepot,

@@ -88,7 +88,8 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         BuildMenuAction::Rail
         | BuildMenuAction::RailDepot
         | BuildMenuAction::RailBridge
-        | BuildMenuAction::RailTunnel => ToolbarGroup::Rail,
+        | BuildMenuAction::RailTunnel
+        | BuildMenuAction::RailStation => ToolbarGroup::Rail,
         BuildMenuAction::Road
         | BuildMenuAction::RoadX
         | BuildMenuAction::RoadY

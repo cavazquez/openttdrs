@@ -85,7 +85,10 @@ pub(crate) fn update_build_ghost_preview(
             vec![(tx, ty)]
         };
     let tunnel_valid = tunnel_preview_is_valid(&sim.state.map, action, &preview_tiles);
-    if action == BuildMenuAction::Station || action == BuildMenuAction::BusStop {
+    if matches!(
+        action,
+        BuildMenuAction::Station | BuildMenuAction::BusStop | BuildMenuAction::RailStation
+    ) {
         spawn_station_coverage_preview(
             &mut commands,
             &asset_server,
@@ -100,8 +103,11 @@ pub(crate) fn update_build_ghost_preview(
         let Some(tile) = sim.state.map.get(coord) else {
             continue;
         };
-        let station_ok = if matches!(action, BuildMenuAction::Station | BuildMenuAction::BusStop) {
-            preview_station_has_transport_neighbor(&sim.state.map, coord)
+        let station_ok = if matches!(
+            action,
+            BuildMenuAction::Station | BuildMenuAction::BusStop | BuildMenuAction::RailStation
+        ) {
+            preview_station_has_transport_neighbor(&sim.state.map, coord, action)
         } else {
             true
         };

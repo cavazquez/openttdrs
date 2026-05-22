@@ -2,6 +2,10 @@
 
 use openttdrs_core::{Map, TileCoord, TileKind};
 
+/// Tabla `offsets[]` de `GetRoadSpriteOffset` en `road_cmd.cpp` (tesela plana).
+/// Sprite final = `SPR_ROAD_Y` (1332) + entrada; índices 11–14 son variantes en pendiente NE/SE/SW/NW.
+pub const ROAD_FLAT_OFFSET_TBL: [u8; 16] = [0, 18, 17, 7, 16, 0, 10, 5, 15, 8, 1, 4, 9, 3, 6, 2];
+
 #[must_use]
 pub fn road_tile_has_tram_track(m8: u16) -> bool {
     let t = (m8 >> 6) & 0x3F;
@@ -68,18 +72,16 @@ pub fn road_flat_index(road_bits: u8, flat_offset_tbl: &[u8; 16]) -> usize {
     usize::from(flat_offset_tbl[usize::from(road_bits & 0x0F)])
 }
 
+/// Índice `road_flat_{idx:02}`; en pendientes diagonales OpenTTD ignora `road_bits`
+/// y usa siempre los offsets 11–14 (`SPR_ROAD_Y`+11..+14, mismo rango que `road_flat_11..14`).
 #[must_use]
 pub fn road_flat_sprite_index(tileh: u8, road_bits: u8, flat_offset_tbl: &[u8; 16]) -> usize {
-    let flat = road_flat_index(road_bits, flat_offset_tbl);
-    if road_bits & 0x0F != 0x0F {
-        return flat;
-    }
     match tileh.min(14) {
-        12 => 11,
-        6 => 12,
-        3 => 13,
-        9 => 14,
-        _ => flat,
+        12 => 11, // SLOPE_NE
+        6 => 12,  // SLOPE_SE
+        3 => 13,  // SLOPE_SW
+        9 => 14,  // SLOPE_NW
+        _ => road_flat_index(road_bits, flat_offset_tbl),
     }
 }
 
@@ -126,13 +128,91 @@ pub fn road_bits_for_render(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
     const MP_ROAD: u8 = 2;
     const MP_TB: u8 = 9;
-    const FLAT_TBL: [u8; 16] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+    const M3_FIXTURE: &[u8] =
+        include_bytes!("../../../openttdrs-core/tests/fixtures/m3_road_tram_2x2.ottdmap");
+    const SP3_VISUAL_FIXTURE: &[u8] =
+        include_bytes!("../../../openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap");
+
+    /// Golden: `GetRoadSpriteOffset(SLOPE_FLAT, bits)` → índice PNG `road_flat_*`.
+    const EXPECTED_FLAT_INDICES_1_TO_15: [(u8, usize); 15] = [
+        (0x01, 18),
+        (0x02, 17),
+        (0x03, 7),
+        (0x04, 16),
+        (0x05, 0),
+        (0x06, 10),
+        (0x07, 5),
+        (0x08, 15),
+        (0x09, 8),
+        (0x0A, 1),
+        (0x0B, 4),
+        (0x0C, 9),
+        (0x0D, 3),
+        (0x0E, 6),
+        (0x0F, 2),
+    ];
+
+    #[test]
+    fn flat_road_bits_1_to_15_match_openttd_offset_table() {
+        for (bits, expected) in EXPECTED_FLAT_INDICES_1_TO_15 {
+            assert_eq!(
+                road_flat_sprite_index(0, bits, &ROAD_FLAT_OFFSET_TBL),
+                expected,
+                "road_bits 0x{bits:02X}"
+            );
+            assert_eq!(
+                road_flat_index(bits, &ROAD_FLAT_OFFSET_TBL),
+                expected,
+                "road_flat_index 0x{bits:02X}"
+            );
+        }
+    }
+
+    #[test]
+    fn sloped_ne_se_sw_nw_ignore_road_bits() {
+        assert_eq!(road_flat_sprite_index(12, 0x05, &ROAD_FLAT_OFFSET_TBL), 11);
+        assert_eq!(road_flat_sprite_index(6, 0x0A, &ROAD_FLAT_OFFSET_TBL), 12);
+        assert_eq!(road_flat_sprite_index(3, 0x03, &ROAD_FLAT_OFFSET_TBL), 13);
+        assert_eq!(road_flat_sprite_index(9, 0x0F, &ROAD_FLAT_OFFSET_TBL), 14);
+    }
+
+    #[test]
+    fn m3_fixture_effective_bits_and_tram_overlay_index() {
+        let map = Map::from_ottd_binary(M3_FIXTURE).expect("fixture MAP1");
+        let t = map
+            .get(TileCoord::new(0, 0))
+            .expect("tesela carretera con tranvía");
+        assert_eq!(
+            effective_road_bits(t.mapt, t.m5, t.kind, MP_ROAD, MP_TB),
+            Some(0x03)
+        );
+        assert_eq!(t.m3, 0x0A);
+        assert_eq!(
+            tram_flat_sprite_index(0, t.m3, &ROAD_FLAT_OFFSET_TBL),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn sp3_visual_fixture_crossings_decode_road_axis() {
+        let map = Map::from_ottd_binary(SP3_VISUAL_FIXTURE).expect("checklist MAP1");
+        let cx = map.get(TileCoord::new(5, 2)).expect("cruce X");
+        let cy = map.get(TileCoord::new(6, 2)).expect("cruce Y");
+        assert_eq!(
+            effective_road_bits(cx.mapt, cx.m5, cx.kind, MP_ROAD, MP_TB),
+            Some(0x0A)
+        );
+        assert_eq!(
+            effective_road_bits(cy.mapt, cy.m5, cy.kind, MP_ROAD, MP_TB),
+            Some(0x05)
+        );
+    }
 
     #[test]
     fn effective_road_bits_subtypes_and_tunnelbridge() {
@@ -173,9 +253,9 @@ mod tests {
 
         let bits = road_bits_for_render(&map, center, 3, 3, MP_ROAD, MP_TB);
         assert_eq!(bits, 0x0F);
-        assert_eq!(road_flat_index(bits, &FLAT_TBL), 15);
-        assert!(tram_flat_sprite_index(0, 0x03, &FLAT_TBL).is_some());
-        assert_eq!(road_flat_sprite_index(12, bits, &FLAT_TBL), 11);
+        assert_eq!(road_flat_index(bits, &ROAD_FLAT_OFFSET_TBL), 2);
+        assert!(tram_flat_sprite_index(0, 0x03, &ROAD_FLAT_OFFSET_TBL).is_some());
+        assert_eq!(road_flat_sprite_index(12, bits, &ROAD_FLAT_OFFSET_TBL), 11);
         assert!(road_tile_has_tram_track(0x80));
     }
 }

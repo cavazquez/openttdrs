@@ -109,12 +109,14 @@ def main() -> int:
         "dimensions": golden_obj["dimensions"],
         "tile_type_counts": golden_obj["tile_type_counts"],
         "house": golden_obj["house"],
+        "water": golden_obj["water"],
     }
     actual = {
         "save_version": actual_full["save_version"],
         "dimensions": actual_full["dimensions"],
         "tile_type_counts": actual_full["tile_type_counts"],
         "house": actual_full["house"],
+        "water": actual_full["water"],
     }
 
     errs = _deep_diff(expected, actual)

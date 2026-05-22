@@ -16,7 +16,8 @@ fn loads_m3_on_road_tile_from_fixture() {
         road.m3, 0x0A,
         "M3LO persistido en .ottdmap (tranvía / m3 bajo)"
     );
-    assert_eq!(road.m5, 0x03);
+    assert_eq!(road.m5, 0x03, "road bits NW+NE en M5LO");
+    assert_eq!(road.m3 & 0x0F, 0x0A, "tram bits en M3LO");
     let grass = map.get(TileCoord::new(1, 0)).expect("tile 1,0");
     assert_eq!(grass.kind, TileKind::Grass);
     assert_eq!(grass.m3, 0);

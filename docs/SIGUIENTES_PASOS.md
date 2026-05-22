@@ -27,8 +27,9 @@ prioridad en **juego en solitario** (hito 0.1). La fundación **I0–I7** ya est
    frente a `MP_ROAD`.
 4. **Intercambio `road_tx` ↔ `road_ty`** — respecto a `RoadDir`, para alinear textura OpenGFX
    con la isometría del cliente; **validado visualmente** en mapas `.ottdmap`.
-5. **Limitaciones actuales** — solo tres sprites de carretera (tramo X, Y, cruce): esquinas y
-   T reales del original son aproximaciones; tranvía en `m3` no está en el `.ottdmap`.
+5. **Limitaciones actuales (visual)** — carretera **plana** usa `road_flat_00..18` (`GetRoadSpriteOffset`);
+   faltan sobre todo **pendientes**, **estaciones de tren** completas y calibración fina de industrias;
+   ver [PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md).
 6. **Industrias sandbox** — `PlaceIndustrySpec` usa layouts base de OpenTTD para mina de carbón,
    fábrica, granja, bosque, refinería, pozos, aserradero y minas. El ghost de construcción consume
    la misma plantilla (`openttdrs_core::industry_template`), así que el footprint previsto y el
@@ -72,16 +73,20 @@ más moleste al jugar.
 
 ### SP3 — Presentación del mapa (prioridad media)
 
-- Extraer y usar **sprites de esquina / T** de OpenGFX (`GetRoadSpriteOffset` en upstream) o
-  ampliar `descargar_graficos.sh`.
-- **Vías**: sprites de rail por `trackbits` (similar a road bits).
-- **Casas / estaciones**: sustituir tintes planos por sprites o conjuntos mínimos.
-- **Industrias**: calibrar `w/h/xrel/yrel` en `industry_gfx_data_generated.rs` donde siga el
-  fallback `64x48/-32/-32`; revisar Z/capas de `Farm`, `Factory` y `Coal Mine`.
-- **Agua**: animación o variante de sprite si molesta el aspecto “plano”.
-- **`.ottdmap`**: usar `m3`/`m3hi` en render de carretera/tranvía; ver `docs/OTTDMAP_FORMAT.md`
-  y `crates/openttdrs-core/tests/ottdmap_m3_road_fixture.rs`.
-- **Rendimiento**: culling por frustum o LOD en mapas 256×256+.
+Plan detallado (revisión upstream + estado del cliente): **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**.
+
+**Auditoría SP3.0:** `python3 scripts/audit_sp3_assets.py` — resultado en [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
+
+Resumen de huecos reales (mucho de lo “esquina/T + trackbits” **ya está** en `road_flat_*` / `collect_rail_sprites`):
+
+- **Pendientes** carretera/vía en teselas inclinadas (familias slope upstream).
+- **Estaciones** de tren: plataformas/edificios, no solo suelo bus/camión.
+- **Casas/industrias** en `.ottdmap`: ampliar tablas gfx y quitar fallbacks genéricos.
+- **Assets**: auditar `rail_*.png` (evitar placeholders del script).
+- **Rendimiento**: culling al dibujar el mapa (el agua ya culling; el resto del mapa no).
+- **Agua/costa**: validar Coast en saves reales; animación mar ya aproximada.
+
+Clon de referencia C++: `bash scripts/fetch-openttd-reference.sh`.
 
 ### SP4 — Pulido y deuda (prioridad media)
 

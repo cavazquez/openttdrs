@@ -90,6 +90,7 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
         Command::PlaceTruckStop(c, dir) => {
             transport::place_stop_kind(state, *c, *dir, StopKind::TruckStop)
         }
+        Command::PlaceRailStation(c, dir) => transport::place_rail_station(state, *c, *dir),
         Command::BuildRoadVehicleAtDepot(c, kind) => {
             vehicles::build_road_vehicle_at_depot(state, *c, *kind)
         }

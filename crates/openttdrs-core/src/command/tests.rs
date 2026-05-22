@@ -1,7 +1,7 @@
 use super::{Command, CommandError, apply_command};
 use crate::{
-    BRIDGE_BUILD_COST_PER_TILE, GameState, IndustryKind, ROAD_BUILD_COST, TileCoord, TileKind,
-    Vehicle, VehicleKind,
+    BRIDGE_BUILD_COST_PER_TILE, GameState, IndustryKind, ROAD_BUILD_COST, StopKind, TileCoord,
+    TileKind, Vehicle, VehicleKind,
 };
 
 #[test]
@@ -108,6 +108,19 @@ fn place_station_duplicate_errors() {
     let e = apply_command(&mut s, &Command::PlaceStation(c)).unwrap_err();
     assert_eq!(e, CommandError::StationAlreadyExists);
     assert_eq!(s.stations.len(), 1);
+}
+
+#[test]
+fn place_rail_station_sets_m6_and_axis_in_m5() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(2, 1))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailStation(c, 0)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert_eq!(tile.kind, TileKind::Station);
+    assert_eq!((tile.m6 >> 3) & 0x0F, 0);
+    assert_eq!(tile.m5 & 1, 1);
+    assert_eq!(s.stations[0].stop_kind, StopKind::RailStation);
 }
 
 #[test]

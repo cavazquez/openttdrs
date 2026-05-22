@@ -19,9 +19,17 @@ pub(crate) fn place_stations(state: &mut GameState) {
     for pos in positions {
         let kind = state.map.get_kind(pos).unwrap_or(TileKind::Grass);
         if kind != TileKind::Water && kind != TileKind::Void {
+            let _ = state.map.set_mapt_m5(pos, 0x50, 0);
             let _ = state.map.set_kind(pos, TileKind::Station);
+            if let Some(mut t) = state.map.get(pos) {
+                t.m6 = (t.m6 & !0x78) | (2 << 3); // StationType::Truck
+                let _ = state.map.set_tile(pos, t);
+            }
         }
-        state.stations.push(Station::new(pos));
+        state.stations.push(Station::new_with_kind(
+            pos,
+            openttdrs_core::StopKind::TruckStop,
+        ));
     }
 }
 

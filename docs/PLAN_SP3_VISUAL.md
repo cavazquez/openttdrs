@@ -33,7 +33,7 @@ Varios ítems de `SIGUIENTES_PASOS` (2026-04) ya están **hechos** en `main`:
 1. **Vías y carreteras en pendiente** — upstream usa familias `SPR_ROAD_SLOPE_*` / raíles en slope; aquí muchas teselas inclinadas siguen con suelo genérico + pieza plana o solo 4 variantes de cruce en `0x0F`.
 2. **Estaciones** — tren: plataformas 1069–1074 (SP2). Paradas bus/camión: suelo + `BUILD_A/B/C` (offsets `station_land.h`). Pendiente: ghost preview, multi-tesela tren. Ver [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md).
 3. **Cobertura de casas** — solo un subconjunto de `CleanHouseType`; el resto cae en specs repetidas o sin `s2`.
-4. **Industrias** — entradas con fallback `64×48/-32/-32`; calibración Z/offset en Farm, Factory, Coal Mine.
+4. **Industrias / casas en `.ottdmap`** — ver roadmap [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) (P1–P6).
 5. **Assets faltantes** — `descargar_graficos.sh` puede dejar `rail_*.png` como **placeholder** si el crop falla; conviene auditoría `assets/opengfx/tiles/`.
 6. **Culling del mapa completo** — el agua culling sí; el respawn de **todas** las teselas al mover cámara no (coste en 256×256+).
 7. **Túneles/puentes** — un sprite por tipo; upstream varía eje y material.
@@ -140,6 +140,9 @@ Upstream: `industry_land.h`, `house_land.h`.
 - [x] Z-order: casas, industrias y estaciones tras `flush_map_batches` (encima del agua).
 
 **Criterio:** cargar un `.ottdmap` con mina/fábrica/casa no trivial y que no parezcan “bloques de color”.
+
+**Seguimiento (pendiente en mapas reales):** [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md)
+— prioridad **P1** etapas de obra desde `m5`, luego HouseID ≥128, gfx≥120, calibración, etapas industria.
 
 ### SP3.5 — Agua y costa (0–1 PR)
 

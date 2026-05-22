@@ -17,6 +17,7 @@ prioridad en **juego en solitario** (hito 0.1). La fundación **I0–I7** ya est
 | [PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md) | Construcción y toolbar (SP2.6 manual pendiente). |
 | [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Paradas bus/camión/tren y sprites. |
 | [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md) | **`RemapCoords`**, BUILD paradas, roadmap de render. |
+| [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) | Casas/industrias en `.ottdmap` — prioridades P1–P6. |
 | [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | Checklist de regresión SP2. |
 
 ---
@@ -91,7 +92,7 @@ Resumen de huecos reales (mucho de lo “esquina/T + trackbits” **ya está** e
 
 - **Pendientes** carretera/vía en teselas inclinadas (familias slope upstream).
 - **Estaciones** de tren: plataformas/edificios, no solo suelo bus/camión.
-- **Casas/industrias** en `.ottdmap`: ampliar tablas gfx y quitar fallbacks genéricos.
+- **Casas/industrias** en `.ottdmap`: seguir [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) (P1 etapas casa → P6).
 - **Assets**: auditar `rail_*.png` (evitar placeholders del script).
 - **Rendimiento**: culling al dibujar el mapa (el agua ya culling; el resto del mapa no).
 - **Agua/costa**: validar Coast en saves reales; animación mar ya aproximada.

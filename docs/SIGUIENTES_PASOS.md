@@ -85,7 +85,7 @@ más moleste al jugar.
 
 ### SP4 — Pulido y deuda (prioridad media)
 
-- Alinear `./scripts/check.sh ci` con CI (fmt check, clippy `-D warnings`, TNBP, golden Python).
+- ~~Alinear `./scripts/check.sh ci` con CI~~ — hecho: `fmt-check`, clippy `-D warnings`, nextest/test, TNBP, golden, `py_compile`.
 - Migraciones de save si el esquema JSON cambia.
 - Mantener docs y tests al día con el refactor modular del cliente/core.
 

@@ -17,6 +17,10 @@ pub(crate) fn place_stations(state: &mut GameState) {
         })
         .collect();
     for pos in positions {
+        let kind = state.map.get_kind(pos).unwrap_or(TileKind::Grass);
+        if kind != TileKind::Water && kind != TileKind::Void {
+            let _ = state.map.set_kind(pos, TileKind::Station);
+        }
         state.stations.push(Station::new(pos));
     }
 }
@@ -86,6 +90,13 @@ mod tests {
 
         place_stations(&mut state);
         assert_eq!(state.stations.len(), 2);
+        for st in &state.stations {
+            assert_eq!(
+                state.map.get_kind(st.pos),
+                Some(TileKind::Station),
+                "demo: estación en mapa coincide con state.stations"
+            );
+        }
     }
 
     #[test]

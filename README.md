@@ -67,7 +67,7 @@ Pasos:
 | ✔️ Python | `py_compile` de los scripts usados en el flujo de mapas |
 | 🔨 `build` | `cargo build --workspace` (incluye cliente Bevy) |
 
-En local, atajo equivalente (sin TNBP explícito salvo que lo añadas): `./scripts/check.sh ci`.
+En local, paridad con el job de tests de CI: `./scripts/check.sh ci` (fmt check, clippy `-D warnings`, tests, TNBP, golden `parse_sav`, `py_compile`).
 
 ---
 

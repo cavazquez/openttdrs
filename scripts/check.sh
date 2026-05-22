@@ -2,12 +2,14 @@
 # check.sh - Formatea, verifica lints y ejecuta tests
 #
 # Uso:
-#   ./scripts/check.sh        # Todo (format, lint, test)
+#   ./scripts/check.sh        # Todo local (fmt, lint, test)
 #   ./scripts/check.sh fmt    # Solo formatear
-#   ./scripts/check.sh lint   # Solo lints (clippy)
-#   ./scripts/check.sh test   # Solo tests
+#   ./scripts/check.sh fmt-check  # Solo verificar formato (como CI)
+#   ./scripts/check.sh lint   # Clippy estricto (como CI)
+#   ./scripts/check.sh test   # Tests del workspace
 #   ./scripts/check.sh cov    # Tests + informe LCOV (requiere cargo-llvm-cov + llvm-tools-preview)
-#   ./scripts/check.sh ci     # Modo CI (aplica fmt, luego lint y tests)
+#   ./scripts/check.sh ci     # Paridad con .github/workflows/ci.yml (sin instalar APT)
+#   ./scripts/check.sh build  # cargo build --workspace
 
 set -euo pipefail
 
@@ -21,6 +23,8 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; }
 
 cd "$(dirname "$0")/.."
+
+TNBP_FIXTURE="crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap"
 
 do_fmt() {
     info "Formateando código..."
@@ -38,16 +42,41 @@ do_fmt_check() {
 }
 
 do_lint() {
-    info "Ejecutando Clippy..."
-    # Usamos -W clippy::all en lugar de -D warnings para evitar warnings excesivos
-    cargo clippy --all-targets --all-features
+    info "Ejecutando Clippy (workspace, -D warnings)..."
+    cargo clippy --workspace --all-targets -- -D warnings
     info "Clippy OK ✓"
 }
 
 do_test() {
-    info "Ejecutando tests..."
-    cargo test --all
+    info "Ejecutando tests (workspace)..."
+    if command -v cargo-nextest &>/dev/null; then
+        cargo nextest run --workspace
+    else
+        warn "cargo-nextest no instalado; usando cargo test --workspace"
+        cargo test --workspace
+    fi
     info "Tests OK ✓"
+}
+
+do_tnbp() {
+    info "Validando TNBP ($TNBP_FIXTURE)..."
+    cargo run -q -p openttdrs-core --example validate_ottdmap_tnbp -- "$TNBP_FIXTURE"
+    info "TNBP OK ✓"
+}
+
+do_golden_parse_sav() {
+    info "Golden parse_sav..."
+    python3 scripts/verify_parse_sav_reference.py
+    info "Golden parse_sav OK ✓"
+}
+
+do_py_compile() {
+    info "Sintaxis Python (scripts)..."
+    python3 -m py_compile scripts/parse_sav.py
+    python3 -m py_compile scripts/verify_parse_sav_reference.py
+    python3 -m py_compile scripts/emit_parse_sav_golden.py
+    python3 -m py_compile scripts/gen_tnbp_fixture_ottdmap.py
+    info "Python OK ✓"
 }
 
 do_coverage() {
@@ -63,7 +92,7 @@ do_coverage() {
 
 do_build() {
     info "Verificando compilación..."
-    cargo build --all
+    cargo build --workspace
     info "Build OK ✓"
 }
 
@@ -76,23 +105,30 @@ do_all() {
 }
 
 do_ci() {
-    do_fmt
+    do_fmt_check
     do_lint
     do_test
+    do_tnbp
+    do_golden_parse_sav
+    do_py_compile
     echo
-    info "=== CI OK ==="
+    info "=== CI OK (paridad con .github/workflows/ci.yml) ==="
 }
 
 case "${1:-all}" in
-    fmt)    do_fmt ;;
-    lint)   do_lint ;;
-    test)   do_test ;;
+    fmt)         do_fmt ;;
+    fmt-check)   do_fmt_check ;;
+    lint)        do_lint ;;
+    test)        do_test ;;
+    tnbp)        do_tnbp ;;
+    golden)      do_golden_parse_sav ;;
+    py)          do_py_compile ;;
     cov|coverage) do_coverage ;;
-    build)  do_build ;;
-    ci)     do_ci ;;
-    all)    do_all ;;
+    build)       do_build ;;
+    ci)          do_ci ;;
+    all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|lint|test|cov|build|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|cov|build|ci|all}"
         exit 1
         ;;
 esac

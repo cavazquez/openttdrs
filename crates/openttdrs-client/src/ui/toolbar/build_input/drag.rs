@@ -1,4 +1,6 @@
-use openttdrs_core::{Command, Map, TileCoord, TileKind, apply_command};
+use openttdrs_core::{
+    Command, CommandError, GameState, TileCoord, apply_command, resolve_tunnel_end,
+};
 
 use crate::state::SimWorld;
 
@@ -28,28 +30,26 @@ pub(crate) fn action_is_tunnel(action: BuildMenuAction) -> bool {
 }
 
 pub(crate) fn tunnel_placement_is_valid(
-    map: &Map,
+    state: &GameState,
     action: BuildMenuAction,
     tiles: &[(i32, i32)],
 ) -> bool {
-    if !action_is_tunnel(action) || tiles.len() < 3 {
+    if !action_is_tunnel(action) {
         return false;
     }
     let Some(&(sx, sy)) = tiles.first() else {
         return false;
     };
-    let Some(&(ex, ey)) = tiles.last() else {
+    let start = TileCoord::new(sx, sy);
+    let Some(end) = resolve_tunnel_end(&state.map, start) else {
         return false;
     };
-    let Some(start) = map.get(TileCoord::new(sx, sy)) else {
-        return false;
+    let cmd = match action {
+        BuildMenuAction::RoadTunnel => Command::PlaceRoadTunnel(start, end),
+        BuildMenuAction::RailTunnel => Command::PlaceRailTunnel(start, end),
+        _ => return false,
     };
-    let Some(end) = map.get(TileCoord::new(ex, ey)) else {
-        return false;
-    };
-    !matches!(start.kind, TileKind::Water | TileKind::Void)
-        && !matches!(end.kind, TileKind::Water | TileKind::Void)
-        && start.height == end.height
+    openttdrs_core::command_would_fail(state, &cmd).is_none()
 }
 
 pub(crate) fn road_bits_for_drag_action(
@@ -72,35 +72,69 @@ pub(crate) fn road_bits_for_drag_action(
     }
 }
 
+pub(crate) fn command_for_tunnel_action(
+    state: &GameState,
+    action: BuildMenuAction,
+    tiles: &[(i32, i32)],
+) -> Option<Command> {
+    let &(sx, sy) = tiles.first()?;
+    let start = TileCoord::new(sx, sy);
+    let end = resolve_tunnel_end(&state.map, start)?;
+    match action {
+        BuildMenuAction::RoadTunnel => Some(Command::PlaceRoadTunnel(start, end)),
+        BuildMenuAction::RailTunnel => Some(Command::PlaceRailTunnel(start, end)),
+        _ => None,
+    }
+}
+
 pub(crate) fn apply_drag_action(
     sim: &mut SimWorld,
     action: BuildMenuAction,
     tiles: Vec<(i32, i32)>,
     station_state: &StationBuildState,
-) -> bool {
+) -> (bool, Option<CommandError>) {
+    if action_is_tunnel(action) {
+        if let Some(cmd) = command_for_tunnel_action(&sim.state, action, &tiles) {
+            return match apply_command(&mut sim.state, &cmd) {
+                Ok(()) => (true, None),
+                Err(e) => (false, Some(e)),
+            };
+        }
+        return (false, Some(CommandError::InvalidTunnelEndpoints));
+    }
     if let Some(cmd) = command_for_line_action(action, &tiles) {
-        return apply_command(&mut sim.state, &cmd).is_ok();
+        return match apply_command(&mut sim.state, &cmd) {
+            Ok(()) => (true, None),
+            Err(e) => (false, Some(e)),
+        };
     }
 
     if let Some(road_bits) = road_bits_for_drag_action(action, &tiles) {
         let mut changed = false;
+        let mut last_err = None;
         for (x, y) in tiles {
-            changed |= apply_command(
+            match apply_command(
                 &mut sim.state,
                 &Command::SetRoadBits(TileCoord::new(x, y), road_bits),
-            )
-            .is_ok();
+            ) {
+                Ok(()) => changed = true,
+                Err(e) => last_err = Some(e),
+            }
         }
-        return changed;
+        return (changed, if changed { None } else { last_err });
     }
 
     let mut changed = false;
+    let mut last_err = None;
     for (x, y) in tiles {
         if let Some(cmd) = command_for_action(action, TileCoord::new(x, y), station_state) {
-            changed |= apply_command(&mut sim.state, &cmd).is_ok();
+            match apply_command(&mut sim.state, &cmd) {
+                Ok(()) => changed = true,
+                Err(e) => last_err = Some(e),
+            }
         }
     }
-    changed
+    (changed, if changed { None } else { last_err })
 }
 
 pub(crate) fn drag_line_tiles(

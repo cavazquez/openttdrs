@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use bevy::prelude::*;
 
 use crate::sprites::{
-    HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, house_sprite_filename, rail_sprite_ids_for_preload,
-    rail_station_draw_layers,
+    HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, StationTileClass, house_sprite_filename,
+    rail_sprite_ids_for_preload, rail_station_draw_layers, rail_station_ground_track_sprite,
+    road_stop_build_layers,
 };
 
 pub(crate) struct WorldAssets {
@@ -22,12 +23,16 @@ pub(crate) struct WorldAssets {
     pub(crate) rail: HashMap<u32, Handle<Image>>,
     pub(crate) station_grounds: Vec<Handle<Image>>,
     pub(crate) bus_stop_grounds: Vec<Handle<Image>>,
+    pub(crate) bus_stop_builds: [[Handle<Image>; 3]; 4],
+    pub(crate) truck_stop_builds: [[Handle<Image>; 3]; 4],
     pub(crate) road_depots: Vec<Handle<Image>>,
     pub(crate) rail_depot: Handle<Image>,
     pub(crate) road_tunnel: Handle<Image>,
     pub(crate) rail_tunnel: Handle<Image>,
     pub(crate) road_bridge: Handle<Image>,
+    pub(crate) road_bridge_y: Handle<Image>,
     pub(crate) rail_bridge: Handle<Image>,
+    pub(crate) rail_bridge_y: Handle<Image>,
     pub(crate) houses: HashMap<u32, Handle<Image>>,
     pub(crate) trees: [Handle<Image>; 3],
     pub(crate) industries: HashMap<u32, Handle<Image>>,
@@ -69,11 +74,11 @@ impl WorldAssets {
             .collect();
         let mut rail_ids: std::collections::BTreeSet<_> =
             rail_sprite_ids_for_preload().into_iter().collect();
-        for &(_, sid) in rail_station_draw_layers(true)
-            .iter()
-            .chain(rail_station_draw_layers(false).iter())
-        {
-            rail_ids.insert(sid);
+        for gfx in 0..=3 {
+            rail_ids.insert(rail_station_ground_track_sprite(gfx));
+            for layer in rail_station_draw_layers(gfx) {
+                rail_ids.insert(layer.sprite_id);
+            }
         }
         let rail = rail_ids
             .into_iter()
@@ -99,20 +104,31 @@ impl WorldAssets {
         .into_iter()
         .map(|path| asset_server.load::<Image>(path))
         .collect();
-        let road_depots = [
-            "assets/opengfx/tiles/rail_1412.png",
-            "assets/opengfx/tiles/road_depot_1.png",
-            "assets/opengfx/tiles/road_depot_3.png",
-            "assets/opengfx/tiles/rail_1413.png",
-        ]
-        .into_iter()
-        .map(|path| asset_server.load::<Image>(path))
-        .collect();
+        let bus_stop_builds = std::array::from_fn(|dir| {
+            std::array::from_fn(|layer| {
+                asset_server
+                    .load::<Image>(road_stop_build_layers(StationTileClass::Bus, dir)[layer].path)
+            })
+        });
+        let truck_stop_builds = std::array::from_fn(|dir| {
+            std::array::from_fn(|layer| {
+                asset_server
+                    .load::<Image>(road_stop_build_layers(StationTileClass::Truck, dir)[layer].path)
+            })
+        });
+        let road_depots = crate::sprites::ROAD_DEPOT_BUILDING_BY_DIR
+            .into_iter()
+            .map(|path| asset_server.load::<Image>(path))
+            .collect();
         let rail_depot = asset_server.load::<Image>("assets/opengfx/tiles/rail_depot_ne.png");
         let road_tunnel = asset_server.load::<Image>("assets/opengfx/tiles/tunnel_road_rear.png");
         let rail_tunnel = asset_server.load::<Image>("assets/opengfx/tiles/tunnel_rail_rear.png");
         let road_bridge = asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_road_x.png");
+        let road_bridge_y =
+            asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_road_y.png");
         let rail_bridge = asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_rail_x.png");
+        let rail_bridge_y =
+            asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_rail_y.png");
 
         let mut houses = HashMap::new();
         for spec in &HOUSE_DRAW_DATA {
@@ -158,12 +174,16 @@ impl WorldAssets {
             rail,
             station_grounds,
             bus_stop_grounds,
+            bus_stop_builds,
+            truck_stop_builds,
             road_depots,
             rail_depot,
             road_tunnel,
             rail_tunnel,
             road_bridge,
+            road_bridge_y,
             rail_bridge,
+            rail_bridge_y,
             houses,
             trees,
             industries,
@@ -230,12 +250,24 @@ pub(crate) fn stub_opengfx_tiles_for_tests(root: &std::path::Path) {
             root,
             &format!("assets/opengfx/tiles/bus_stop_{dir}_ground.png"),
         );
+        for layer in ["a", "b", "c"] {
+            write_png(
+                root,
+                &format!("assets/opengfx/tiles/bus_stop_{dir}_build_{layer}.png"),
+            );
+            write_png(
+                root,
+                &format!("assets/opengfx/tiles/truck_stop_{dir}_build_{layer}.png"),
+            );
+        }
     }
     write_png(root, "assets/opengfx/tiles/rail_depot_ne.png");
     write_png(root, "assets/opengfx/tiles/tunnel_road_rear.png");
     write_png(root, "assets/opengfx/tiles/tunnel_rail_rear.png");
     write_png(root, "assets/opengfx/tiles/bridge_wood_road_x.png");
+    write_png(root, "assets/opengfx/tiles/bridge_wood_road_y.png");
     write_png(root, "assets/opengfx/tiles/bridge_wood_rail_x.png");
+    write_png(root, "assets/opengfx/tiles/bridge_wood_rail_y.png");
     for spec in &HOUSE_DRAW_DATA {
         for &sid in &[spec.s1, spec.s2] {
             if sid != 0 {

@@ -23,7 +23,8 @@ pub(crate) fn rotate_station_with_right_click(
         Some(BuildMenuAction::Station)
         | Some(BuildMenuAction::BusStop)
         | Some(BuildMenuAction::RailStation)
-        | Some(BuildMenuAction::RoadDepot) => {
+        | Some(BuildMenuAction::RoadDepot)
+        | Some(BuildMenuAction::RailDepot) => {
             station_state.orientation = (station_state.orientation + 1) % 4;
         }
         Some(BuildMenuAction::RoadX) => {

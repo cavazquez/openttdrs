@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Genera el fixture MAP1 para capturas manuales SP3.0 (checklist visual denso).
+"""Genera el fixture MAP1 para capturas manuales SP3.0 / SP3.1.
 
 Salida: `crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap`
 
-Layout (12×8, origen arriba-izquierda):
+Cada escena va separada por **al menos 1 tesela de hierba** para distinguirlas en capturas.
+
+Layout (20×12, origen arriba-izquierda):
 
 ```
-y=2  hierba | carretera Y | X | T | cruce | cruce nivel X | cruce nivel Y | tranvía m3
-y=3  hierba | vía Y | X | T | cruce vía | …
-y=5  hierba | estación | … | industria (gfx 0) | …
-y=7  hierba | agua Clear | agua Coast | hierba | …
+y=3   · RY · RX · RT · cruce · cruce nivel X/Y · · tranvía X ·
+y=5   · vía Y · vía X · T · cruce · señales · nieve ·
+y=7   · carretera NE · SE · SW · NW · tranvía en pendiente NE (SP3.1) ·
+y=9   · casa · camión · bus · tren · industria ·
+y=11  · hierba · mar Clear · costa · hierba ·
 ```
 
 Regenerar: `python3 scripts/gen_sp3_visual_checklist_ottdmap.py`
@@ -18,10 +21,9 @@ Regenerar: `python3 scripts/gen_sp3_visual_checklist_ottdmap.py`
 from __future__ import annotations
 
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
-# Nibble alto MAPT (OpenTTD TileType)
 MP_CLEAR = 0
 MP_RAILWAY = 1
 MP_ROAD = 2
@@ -32,12 +34,16 @@ MP_INDUSTRY = 8
 
 FORMAT_VERSION = 1
 FLAG_HAS_M2_HI = 1
+# MAP1 v1: magic(4) + width(4) + height(4) + format_version(2) + flags(2) = 16 bytes antes del bloque denso.
+DENSE_OFFSET = 16
+
+DEFAULT_H = 4
 
 
 @dataclass
 class TileSpec:
     tt: int = MP_CLEAR
-    height: int = 4
+    height: int = DEFAULT_H
     m1: int = 0
     m2: int = 0
     m2_hi: int = 0
@@ -51,6 +57,47 @@ class TileSpec:
 
 def mapt_byte(tile_type: int) -> int:
     return (tile_type & 0xF) << 4
+
+
+def set_height(tiles: dict[tuple[int, int], TileSpec], x: int, y: int, h: int) -> None:
+    cur = tiles.get((x, y), TileSpec())
+    tiles[(x, y)] = replace(cur, height=h & 0xFF)
+
+
+def apply_ne_slope(tiles: dict[tuple[int, int], TileSpec], tx: int, ty: int, base: int = DEFAULT_H) -> None:
+    """`tileh` 12 (SLOPE_NE) en la tesela (tx, ty)."""
+    set_height(tiles, tx, ty, base + 1)
+    set_height(tiles, tx, ty + 1, base + 1)
+    set_height(tiles, tx + 1, ty, base)
+    set_height(tiles, tx + 1, ty + 1, base)
+
+
+def apply_se_slope(tiles: dict[tuple[int, int], TileSpec], tx: int, ty: int, base: int = DEFAULT_H) -> None:
+    """`tileh` 6 (SLOPE_SE): sur + este elevados."""
+    set_height(tiles, tx, ty, base)
+    set_height(tiles, tx, ty + 1, base + 1)
+    set_height(tiles, tx + 1, ty, base)
+    set_height(tiles, tx + 1, ty + 1, base + 1)
+
+
+def apply_sw_slope(tiles: dict[tuple[int, int], TileSpec], tx: int, ty: int, base: int = DEFAULT_H) -> None:
+    """`tileh` 3 (SLOPE_SW): oeste + sur elevados."""
+    set_height(tiles, tx, ty, base)
+    set_height(tiles, tx, ty + 1, base)
+    set_height(tiles, tx + 1, ty, base + 1)
+    set_height(tiles, tx + 1, ty + 1, base + 1)
+
+
+def apply_nw_slope(tiles: dict[tuple[int, int], TileSpec], tx: int, ty: int, base: int = DEFAULT_H) -> None:
+    """`tileh` 9 (SLOPE_NW)."""
+    set_height(tiles, tx, ty, base + 1)
+    set_height(tiles, tx, ty + 1, base)
+    set_height(tiles, tx + 1, ty, base + 1)
+    set_height(tiles, tx + 1, ty + 1, base)
+
+
+def put(tiles: dict[tuple[int, int], TileSpec], x: int, y: int, spec: TileSpec) -> None:
+    tiles[(x, y)] = spec
 
 
 def build_stxy_footer(tile_types: list[int], dim_x: int, dim_y: int) -> bytes:
@@ -69,7 +116,6 @@ def build_map1(
     height: int,
     tiles: dict[tuple[int, int], TileSpec],
 ) -> bytes:
-    n = width * height
     default = TileSpec()
     mapt: list[int] = []
     heights: list[int] = []
@@ -118,53 +164,58 @@ def build_map1(
 
 
 def main() -> None:
-    w, h = 12, 8
+    w, h = 20, 12
     tiles: dict[tuple[int, int], TileSpec] = {}
 
-    # --- Fila carretera (y=2) ---
-    road_y = TileSpec(tt=MP_ROAD, m5=0x05)  # ROAD_Y
-    road_x = TileSpec(tt=MP_ROAD, m5=0x0A)  # ROAD_X
-    road_t = TileSpec(tt=MP_ROAD, m5=0x07)  # T (NW+NE+SE)
-    road_cross = TileSpec(tt=MP_ROAD, m5=0x0F)
-    crossing_x = TileSpec(tt=MP_ROAD, m5=0x40)  # Cruce nivel, eje carretera X
-    crossing_y = TileSpec(tt=MP_ROAD, m5=0x41)  # Cruce nivel, eje carretera Y
-    road_tram = TileSpec(tt=MP_ROAD, m5=0x03, m3=0x0A)  # NW+NE + tranvía ROAD_X
+    # --- Fila carretera plana (y=3), paso 2 en x ---
+    put(tiles, 1, 3, TileSpec(tt=MP_ROAD, m5=0x05))  # ROAD_Y
+    put(tiles, 3, 3, TileSpec(tt=MP_ROAD, m5=0x0A))  # ROAD_X
+    put(tiles, 5, 3, TileSpec(tt=MP_ROAD, m5=0x07))  # T
+    put(tiles, 7, 3, TileSpec(tt=MP_ROAD, m5=0x0F))  # cruce
+    put(tiles, 9, 3, TileSpec(tt=MP_ROAD, m5=0x40))  # cruce nivel eje X
+    put(tiles, 11, 3, TileSpec(tt=MP_ROAD, m5=0x41))  # cruce nivel eje Y
+    # Tranvía: misma máscara en m5 (carretera) y m3 (vía tranvía) — eje X (0x0A).
+    put(tiles, 15, 3, TileSpec(tt=MP_ROAD, m5=0x0A, m3=0x0A))
 
-    for x, spec in enumerate(
-        [road_y, road_x, road_t, road_cross, crossing_x, crossing_y, road_tram],
-        start=1,
-    ):
-        tiles[(x, 2)] = spec
-
-    # --- Fila vía (y=3) ---
-    rail_y = TileSpec(tt=MP_RAILWAY, m5=0x02)  # TRACK_BIT_Y
-    rail_x = TileSpec(tt=MP_RAILWAY, m5=0x01)  # TRACK_BIT_X
-    rail_t = TileSpec(tt=MP_RAILWAY, m5=0x07)  # X+Y+UPPER (T)
-    rail_cross = TileSpec(tt=MP_RAILWAY, m5=0x03)  # X+Y
-
-    for x, spec in enumerate([rail_y, rail_x, rail_t, rail_cross], start=1):
-        tiles[(x, 3)] = spec
-
-    # Señales en vía Y
-    tiles[(8, 3)] = TileSpec(
-        tt=MP_RAILWAY,
-        m5=(1 << 6) | 0x02,
-        m3=0xC0,
-        m3hi=0x80,
+    # --- Fila vía plana (y=5) ---
+    put(tiles, 1, 5, TileSpec(tt=MP_RAILWAY, m5=0x02))
+    put(tiles, 3, 5, TileSpec(tt=MP_RAILWAY, m5=0x01))
+    put(tiles, 5, 5, TileSpec(tt=MP_RAILWAY, m5=0x07))
+    put(tiles, 7, 5, TileSpec(tt=MP_RAILWAY, m5=0x03))
+    put(
+        tiles,
+        9,
+        5,
+        TileSpec(tt=MP_RAILWAY, m5=(1 << 6) | 0x02, m3=0xC0, m3hi=0x80),
     )
-    # Vía nieve
-    tiles[(9, 3)] = TileSpec(tt=MP_RAILWAY, m5=0x02, m3=0x0C)
-    # Estación tren 1×1 junto al cruce de vía (lejos de la costa y=7)
-    tiles[(4, 4)] = TileSpec(tt=MP_STATION, m5=0x01, m6=0)  # Rail, eje Y
+    put(tiles, 11, 5, TileSpec(tt=MP_RAILWAY, m5=0x02, m3=0x0C))
 
-    # --- Casa + estación camión + industria (y=5) ---
-    tiles[(0, 5)] = TileSpec(tt=MP_HOUSE, m8=0)  # Tall Office (HouseID 0, etapa 3 vía hash)
-    tiles[(1, 5)] = TileSpec(tt=MP_STATION, m5=0x02, m6=2 << 3)  # Truck
-    tiles[(4, 5)] = TileSpec(tt=MP_INDUSTRY, m5=0, m6=0, m1=1)  # gfx 0 = coal mine
+    # --- SP3.1: carretera en pendiente (y=7), paso 3 en x (alturas antes del tipo) ---
+    for tx, ty, slope_fn, m5 in [
+        (1, 7, apply_ne_slope, 0x05),
+        (4, 7, apply_se_slope, 0x0A),
+        (7, 7, apply_sw_slope, 0x03),
+        (10, 7, apply_nw_slope, 0x0F),
+    ]:
+        slope_fn(tiles, tx, ty)
+        cur = tiles.get((tx, ty), TileSpec())
+        tiles[(tx, ty)] = replace(cur, tt=MP_ROAD, m5=m5)
 
-    # --- Costa (y=7): hierba | mar Clear | costa | hierba ---
-    tiles[(2, 7)] = TileSpec(tt=MP_WATER, height=1, m5=0x00)  # Clear
-    tiles[(3, 7)] = TileSpec(tt=MP_WATER, height=1, m5=0x10)  # Coast
+    # Tranvía en pendiente NE (mismo índice road_flat_11 / tram_flat_11; m5 y m3 alineados).
+    apply_ne_slope(tiles, 13, 7)
+    cur = tiles.get((13, 7), TileSpec())
+    tiles[(13, 7)] = replace(cur, tt=MP_ROAD, m5=0x05, m3=0x05)
+
+    # --- Objetos (y=9), paso 2 en x ---
+    put(tiles, 1, 9, TileSpec(tt=MP_HOUSE, m8=0))
+    put(tiles, 3, 9, TileSpec(tt=MP_STATION, m5=0x02, m6=2 << 3))  # Truck SE
+    put(tiles, 5, 9, TileSpec(tt=MP_STATION, m5=0x00, m6=3 << 3))  # Bus NE
+    put(tiles, 7, 9, TileSpec(tt=MP_STATION, m5=0x01, m6=0))  # Rail eje Y
+    put(tiles, 9, 9, TileSpec(tt=MP_INDUSTRY, m5=0, m6=0, m1=1))
+
+    # --- Costa (y=11) ---
+    put(tiles, 3, 11, TileSpec(tt=MP_WATER, height=1, m5=0x00))
+    put(tiles, 5, 11, TileSpec(tt=MP_WATER, height=1, m5=0x10))
 
     out = (
         Path(__file__).resolve().parents[1]
@@ -174,7 +225,10 @@ def main() -> None:
     data = build_map1(w, h, tiles)
     out.write_bytes(data)
     print(f"Escrito {out} ({len(data)} bytes, {w}×{h})")
-    print("Cargar: OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client")
+    print(
+        "Cargar: OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap "
+        "cargo run -p openttdrs-client"
+    )
 
 
 if __name__ == "__main__":

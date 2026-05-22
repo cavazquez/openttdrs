@@ -3,6 +3,7 @@ use openttdrs_core::{Command, TileCoord, VehicleKind, apply_command};
 
 use crate::render::RemapMapVisualsPending;
 use crate::state::SimWorld;
+use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 
 use super::{BuildMenuUi, OrderEditState};
 
@@ -35,8 +36,6 @@ pub(crate) enum DepotPanelButton {
     BuyBus,
     BuyTruck,
     Orders,
-    ToggleRunning,
-    Sell,
     CloneFromFirst,
     Close,
 }
@@ -93,8 +92,6 @@ pub(crate) fn setup_depot_panel(mut commands: Commands) {
                     spawn_depot_button(row, DepotPanelButton::BuyBus, "Comprar bus");
                     spawn_depot_button(row, DepotPanelButton::BuyTruck, "Comprar camión");
                     spawn_depot_button(row, DepotPanelButton::Orders, "Órdenes");
-                    spawn_depot_button(row, DepotPanelButton::ToggleRunning, "Iniciar/Detener");
-                    spawn_depot_button(row, DepotPanelButton::Sell, "Vender");
                     spawn_depot_button(row, DepotPanelButton::CloneFromFirst, "Clonar órdenes");
                     spawn_depot_button(row, DepotPanelButton::Close, "Cerrar");
                 });
@@ -249,6 +246,7 @@ fn depot_vehicle_row_label(vehicle: &openttdrs_core::Vehicle) -> String {
     )
 }
 
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_depot_panel_buttons(
     mut q: Query<(&Interaction, &DepotPanelButton), (Changed<Interaction>, With<Button>)>,
     mut row_q: Query<
@@ -263,6 +261,8 @@ pub(crate) fn handle_depot_panel_buttons(
     mut order_state: ResMut<OrderEditState>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
+    mut hud_feedback: ResMut<HudBuildFeedback>,
+    time: Res<Time>,
 ) {
     for (interaction, row) in &mut row_q {
         if *interaction != Interaction::Pressed {
@@ -302,26 +302,20 @@ pub(crate) fn handle_depot_panel_buttons(
                 depot_state.depot_pos = None;
                 depot_state.selected_vehicle = None;
             }
-            DepotPanelButton::BuyBus => {
-                if apply_command(
-                    &mut sim.state,
-                    &Command::BuildRoadVehicleAtDepot(depot_pos, VehicleKind::Bus),
-                )
-                .is_ok()
-                {
-                    pending.pending = true;
-                }
-            }
-            DepotPanelButton::BuyTruck => {
-                if apply_command(
-                    &mut sim.state,
-                    &Command::BuildRoadVehicleAtDepot(depot_pos, VehicleKind::Truck),
-                )
-                .is_ok()
-                {
-                    pending.pending = true;
-                }
-            }
+            DepotPanelButton::BuyBus => match apply_command(
+                &mut sim.state,
+                &Command::BuildRoadVehicleAtDepot(depot_pos, VehicleKind::Bus),
+            ) {
+                Ok(()) => pending.pending = true,
+                Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+            },
+            DepotPanelButton::BuyTruck => match apply_command(
+                &mut sim.state,
+                &Command::BuildRoadVehicleAtDepot(depot_pos, VehicleKind::Truck),
+            ) {
+                Ok(()) => pending.pending = true,
+                Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+            },
             DepotPanelButton::Orders => {
                 let target_id = depot_state.selected_vehicle.or_else(|| {
                     sim.state
@@ -336,36 +330,7 @@ pub(crate) fn handle_depot_panel_buttons(
                     depot_state.selected_vehicle = Some(vehicle_id);
                     order_state.vehicle_id = Some(vehicle_id);
                     order_state.orders = vehicle.orders.clone();
-                }
-            }
-            DepotPanelButton::ToggleRunning => {
-                let target_id = depot_state.selected_vehicle.or_else(|| {
-                    sim.state
-                        .vehicles
-                        .iter()
-                        .find(|vehicle| vehicle.pos == depot_pos)
-                        .map(|vehicle| vehicle.id)
-                });
-                if let Some(vehicle_id) = target_id
-                    && apply_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id))
-                        .is_ok()
-                {
-                    depot_state.selected_vehicle = Some(vehicle_id);
-                }
-            }
-            DepotPanelButton::Sell => {
-                let target_id = depot_state.selected_vehicle.or_else(|| {
-                    sim.state
-                        .vehicles
-                        .iter()
-                        .find(|vehicle| vehicle.pos == depot_pos)
-                        .map(|vehicle| vehicle.id)
-                });
-                if let Some(vehicle_id) = target_id
-                    && apply_command(&mut sim.state, &Command::SellVehicle(vehicle_id)).is_ok()
-                {
-                    pending.pending = true;
-                    depot_state.selected_vehicle = None;
+                    order_state.picking_destination = false;
                 }
             }
             DepotPanelButton::CloneFromFirst => {

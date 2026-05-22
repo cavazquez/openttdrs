@@ -2,6 +2,12 @@ use openttdrs_core::{TileCoord, TileKind, VehicleKind, VehicleOrder};
 
 use crate::state::SimWorld;
 
+/// Destino válido para el vehículo seleccionado (estación compatible o depósito carretera).
+#[must_use]
+pub(crate) fn order_pick_valid(sim: &SimWorld, vehicle_id: u32, pos: TileCoord) -> bool {
+    order_for_clicked_tile(sim, vehicle_id, pos).is_some()
+}
+
 pub(crate) fn order_for_clicked_tile(
     sim: &SimWorld,
     vehicle_id: u32,
@@ -18,5 +24,5 @@ pub(crate) fn order_for_clicked_tile(
     {
         return Some(VehicleOrder::tile(pos));
     }
-    Some(VehicleOrder::tile(pos))
+    None
 }

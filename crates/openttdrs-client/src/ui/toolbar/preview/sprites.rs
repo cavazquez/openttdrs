@@ -2,10 +2,21 @@ use bevy::prelude::*;
 
 use crate::ui::toolbar::{BuildMenuAction, StationBuildState};
 
+fn bridge_axis_y_from_tiles(tiles: &[(i32, i32)]) -> bool {
+    let Some(&(sx, sy)) = tiles.first() else {
+        return false;
+    };
+    let Some(&(ex, ey)) = tiles.last() else {
+        return false;
+    };
+    (ex - sx).abs() < (ey - sy).abs()
+}
+
 pub(crate) fn preview_image_for_action(
     action: BuildMenuAction,
     asset_server: &AssetServer,
     station_state: &StationBuildState,
+    preview_tiles: &[(i32, i32)],
 ) -> Option<Handle<Image>> {
     const BUS_STOP_GROUNDS: [&str; 4] = [
         "assets/opengfx/tiles/bus_stop_ne_ground.png",
@@ -13,12 +24,7 @@ pub(crate) fn preview_image_for_action(
         "assets/opengfx/tiles/bus_stop_sw_ground.png",
         "assets/opengfx/tiles/bus_stop_nw_ground.png",
     ];
-    const ROAD_DEPOTS: [&str; 4] = [
-        "assets/opengfx/tiles/rail_1412.png",
-        "assets/opengfx/tiles/road_depot_1.png",
-        "assets/opengfx/tiles/road_depot_3.png",
-        "assets/opengfx/tiles/rail_1413.png",
-    ];
+    use crate::sprites::ROAD_DEPOT_BUILDING_BY_DIR;
 
     match action {
         BuildMenuAction::Station => Some(asset_server.load::<Image>(format!(
@@ -38,11 +44,16 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::RoadY => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/road_flat_00.png"))
         }
-        BuildMenuAction::RoadDepot => Some(
-            asset_server.load::<Image>(ROAD_DEPOTS[usize::from(station_state.orientation.min(3))]),
-        ),
+        BuildMenuAction::RoadDepot => Some(asset_server.load::<Image>(
+            ROAD_DEPOT_BUILDING_BY_DIR[usize::from(station_state.orientation.min(3))],
+        )),
         BuildMenuAction::RoadBridge => {
-            Some(asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_road_x.png"))
+            let path = if bridge_axis_y_from_tiles(preview_tiles) {
+                "assets/opengfx/tiles/bridge_wood_road_y.png"
+            } else {
+                "assets/opengfx/tiles/bridge_wood_road_x.png"
+            };
+            Some(asset_server.load::<Image>(path))
         }
         BuildMenuAction::RoadTunnel => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/tunnel_road_rear.png"))
@@ -63,7 +74,12 @@ pub(crate) fn preview_image_for_action(
             Some(asset_server.load::<Image>("assets/opengfx/tiles/rail_depot_ne.png"))
         }
         BuildMenuAction::RailBridge => {
-            Some(asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_rail_x.png"))
+            let path = if bridge_axis_y_from_tiles(preview_tiles) {
+                "assets/opengfx/tiles/bridge_wood_rail_y.png"
+            } else {
+                "assets/opengfx/tiles/bridge_wood_rail_x.png"
+            };
+            Some(asset_server.load::<Image>(path))
         }
         BuildMenuAction::RailTunnel => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/tunnel_rail_rear.png"))

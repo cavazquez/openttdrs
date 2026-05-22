@@ -334,7 +334,7 @@ pub fn rail_trackbits_for_render(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp
             return tb & 0x3F;
         }
         if t.kind == TileKind::Rail {
-            return 0;
+            return synthetic_rail_trackbits(map, pos, mw, mh);
         }
     }
     synthetic_rail_trackbits(map, pos, mw, mh)

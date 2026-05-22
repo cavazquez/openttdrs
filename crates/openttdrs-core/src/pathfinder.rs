@@ -17,12 +17,9 @@ fn is_any_transport_tile(kind: TileKind) -> bool {
     )
 }
 
-fn is_network_tile(kind: TileKind, network: PathNetwork) -> bool {
+fn is_network_tile(map: &Map, c: TileCoord, kind: TileKind, network: PathNetwork) -> bool {
     match network {
-        PathNetwork::Road => matches!(
-            kind,
-            TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge
-        ),
+        PathNetwork::Road => is_road_network_tile(kind) || is_road_stop_station_tile(map, c),
         PathNetwork::Rail => matches!(
             kind,
             TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge
@@ -49,6 +46,40 @@ pub const fn path_network_for_vehicle(kind: VehicleKind) -> PathNetwork {
 #[must_use]
 pub fn tile_is_path_traversable(kind: TileKind) -> bool {
     is_any_transport_tile(kind)
+}
+
+/// Offset de tesela vecina hacia donde apunta la entrada (`OpenTTD` `TileOffsByDiagDir`).
+#[must_use]
+pub const fn diag_dir_offset(dir: u8) -> (i32, i32) {
+    const OFFSETS: [(i32, i32); 4] = [
+        (-1, 0), // DIAGDIR_NE
+        (0, 1),  // DIAGDIR_SE
+        (1, 0),  // DIAGDIR_SW
+        (0, -1), // DIAGDIR_NW
+    ];
+    OFFSETS[dir as usize & 3]
+}
+
+/// Algún vecino ortogonal tiene red de transporte (la estación debe poder «engancharse»).
+#[must_use]
+#[inline]
+fn is_road_network_tile(kind: TileKind) -> bool {
+    matches!(
+        kind,
+        TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge
+    )
+}
+
+/// Parada bus/camión con boca a carretera (`m3` = road bits de acceso).
+#[must_use]
+fn is_road_stop_station_tile(map: &Map, c: TileCoord) -> bool {
+    let Some(t) = map.get(c) else {
+        return false;
+    };
+    if t.kind != TileKind::Station {
+        return false;
+    }
+    matches!((t.m6 >> 3) & 0x0F, 2 | 3) && (t.m3 & 0x0F) != 0
 }
 
 /// Algún vecino ortogonal tiene red de transporte (la estación debe poder «engancharse»).
@@ -81,11 +112,40 @@ pub fn station_site_adjacent_to_transport(map: &Map, c: TileCoord) -> bool {
     for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
         let n = TileCoord::new(c.x + dx, c.y + dy);
         let k = map.get_kind(n).unwrap_or(TileKind::Grass);
-        if is_any_transport_tile(k) {
+        if is_road_network_tile(k) {
             return true;
         }
     }
     false
+}
+
+/// Tesela donde puede construirse la estación (hierba o bosque limpiable; no sobre la red).
+#[must_use]
+pub fn station_site_tile_allows_build(kind: TileKind) -> bool {
+    matches!(kind, TileKind::Grass | TileKind::Forest)
+}
+
+/// Como `OpenTTD` `LandscapeClear` antes de parada: bosque → hierba con coste extra.
+#[must_use]
+pub fn station_site_tile_needs_clear(kind: TileKind) -> bool {
+    matches!(kind, TileKind::Forest)
+}
+
+/// La entrada de la parada (carretera) mira hacia una tesela con red de carretera.
+#[must_use]
+pub fn station_entrance_faces_road(map: &Map, c: TileCoord, dir: u8) -> bool {
+    let (dx, dy) = diag_dir_offset(dir);
+    let n = TileCoord::new(c.x + dx, c.y + dy);
+    map.get_kind(n).is_some_and(is_road_network_tile)
+}
+
+/// La entrada de la estación de tren mira hacia vía férrea (o estación compatible).
+#[must_use]
+pub fn station_entrance_faces_rail(map: &Map, c: TileCoord, dir: u8) -> bool {
+    let (dx, dy) = diag_dir_offset(dir);
+    let n = TileCoord::new(c.x + dx, c.y + dy);
+    map.get_kind(n)
+        .is_some_and(|k| is_rail_network_tile(k) || k == TileKind::Station)
 }
 
 /// Encuentra el camino más corto entre `from` y `to` usando BFS sobre una sola red (`Road…` o `Rail…`).
@@ -135,10 +195,10 @@ pub fn find_path(
             // Un tile es alcanzable si:
             // - Pertenece a la red y es transitable, O
             // - Es el destino Y el tile actual (cur) ya está en la red (último paso desde red).
-            let reachable = if is_network_tile(next_kind, network) {
+            let reachable = if is_network_tile(map, next, next_kind, network) {
                 true
             } else if next == to {
-                is_network_tile(cur_kind, network)
+                is_network_tile(map, cur, cur_kind, network)
             } else {
                 false
             };

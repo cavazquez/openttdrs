@@ -49,8 +49,18 @@ pub(crate) fn sync_order_panel(
     } else {
         ""
     };
+    let run_label = if vehicle.running {
+        "en marcha"
+    } else {
+        "parado"
+    };
+    let pick_hint = if order_state.picking_destination {
+        "\nModo destino: clic en parada (cursor mano) · Esc cancela"
+    } else {
+        "\n«Agregar destino» y clic en una parada del mapa"
+    };
     let out = format!(
-        "Vehículo #{} ({}) · carga {}/{} · destino ({},{}){route_note}",
+        "Vehículo #{} ({}) · {run_label} · carga {}/{} · destino ({},{}){route_note}{pick_hint}",
         vehicle.id,
         vehicle_kind_label(vehicle.kind),
         vehicle.cargo,
@@ -94,7 +104,7 @@ pub(crate) fn sync_order_panel(
     };
     for (row_text, mut text) in &mut row_text_q {
         **text = if order_state.orders.is_empty() && row_text.slot == 0 {
-            "Pendiente: clica el mapa para añadir paradas (estación o depósito).".to_string()
+            "Sin órdenes: «Agregar destino» y clic en parada o depósito.".to_string()
         } else if let Some(order) = order_state.orders.get(row_text.slot) {
             let stuck_here = vehicle.no_network_route_to_order && row_text.slot == current_slot;
             order_row_label(row_text.slot, *order, vehicle, &sim, stuck_here)

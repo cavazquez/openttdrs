@@ -2,11 +2,17 @@
 #![allow(clippy::doc_markdown, clippy::expect_used, clippy::unwrap_used)]
 
 mod binary;
+pub mod slope;
 mod types;
 
 #[cfg(test)]
 use binary::{OTTDMAP_FLAG_HAS_M2_HI, OTTDMAP_FORMAT_VERSION_CURRENT};
 pub(crate) use binary::{OTTDMAP_HEADER_LEN_VERSIONED, OTTDMAP_MAGIC_VERSIONED};
+pub use slope::{
+    complement_slope, diag_dir_offset, inclined_slope_direction, is_tunnel_entrance_slope,
+    resolve_tunnel_end, tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles,
+    tunnel_preview_path,
+};
 pub use types::{
     MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind, openttd_tile_index_to_coord,
 };

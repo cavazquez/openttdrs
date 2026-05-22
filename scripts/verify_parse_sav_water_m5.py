@@ -97,11 +97,13 @@ def main() -> int:
     sp3 = repo / "crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap"
     if sp3.is_file():
         errs.extend(verify_sp3_fixture(parse_sav, sp3))
-        # Costa explícita en (3,7)
-        _, _, m5 = parse_sav.ottdmap_dense_m5_plane(sp3.read_bytes())
-        idx = 7 * 12 + 3
-        if m5[idx] != 0x10:
-            errs.append(f"sp3: (3,7) m5 esperado 0x10, obtuvo 0x{m5[idx]:02x}")
+        # Costa explícita en (5,11) — fixture 20×12
+        w, h, m5 = parse_sav.ottdmap_dense_m5_plane(sp3.read_bytes())
+        idx = 11 * w + 5
+        if h < 12 or w < 20:
+            errs.append(f"sp3: dimensiones inesperadas {w}×{h}")
+        elif m5[idx] != 0x10:
+            errs.append(f"sp3: (5,11) m5 esperado 0x10, obtuvo 0x{m5[idx]:02x}")
     else:
         print(f"AVISO: sin fixture {sp3}", file=sys.stderr)
 

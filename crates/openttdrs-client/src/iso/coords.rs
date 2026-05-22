@@ -172,6 +172,79 @@ pub fn tile_pos(tx: i32, ty: i32, height: u8, layer: f32) -> Vec3 {
     tile_pos_half(tx, ty, height, layer, TILE_HALF_H)
 }
 
+/// Delta de pantalla (Bevy) para un offset local `TILE_SEQ` dentro de la tesela.
+///
+/// Equivalente a `RemapCoords(dx,dy,dz) - RemapCoords(0,0,0)` en zoom Normal de OpenTTD,
+/// escalado al rombo ~64×31 px del cliente (`ISO_HW`/`ISO_QH`).
+///
+#[must_use]
+pub fn remap_tile_offset(dx: f32, dy: f32, dz: f32) -> Vec2 {
+    const PX_PER_X_UNIT: f32 = 4.0; // (dy - dx) * 2 * ZOOM_BASE * (ISO_HW / 64)
+    const PY_PER_Y_UNIT: f32 = 2.0; // (dx + dy - dz) * ZOOM_BASE * escala
+    Vec2::new((dy - dx) * PX_PER_X_UNIT, -(dx + dy - dz) * PY_PER_Y_UNIT)
+}
+
+/// Origen `TILE_SEQ` + offsets NFO de una pieza BUILD de parada.
+#[derive(Debug, Clone, Copy)]
+pub struct RoadStopSeqGfx {
+    pub dx: f32,
+    pub dy: f32,
+    pub dz: f32,
+    pub x_offs: f32,
+    pub y_offs: f32,
+    /// Ajuste extra de Δx en unidades TILE_SEQ (×4 px), por capa en datos generados.
+    pub remap_x_adj: f32,
+}
+
+/// Posición mundo (ancla **superior izquierda**, como OpenTTD) para una pieza de parada.
+#[must_use]
+#[allow(dead_code)]
+pub fn road_stop_sprite_pos(
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layer_z: f32,
+    seq: RoadStopSeqGfx,
+) -> Vec3 {
+    let anchor = iso(tx, ty);
+    let elev = f32::from(base_z) * HEIGHT_PX;
+    const PX_PER_X_UNIT: f32 = 4.0;
+    let off = remap_tile_offset(seq.dx, seq.dy, seq.dz);
+    Vec3::new(
+        anchor.x + off.x + seq.x_offs + seq.remap_x_adj * PX_PER_X_UNIT,
+        anchor.y + off.y - seq.y_offs + elev,
+        (tx + ty) as f32 * 0.01 + f32::from(base_z) * 0.001 + layer_z,
+    )
+}
+
+/// `xrel`/`yrel` para [`overlay_pos`] (ancla esquina norte + `RemapCoords` + offsets NFO).
+#[must_use]
+pub fn road_stop_overlay_rel(seq: RoadStopSeqGfx) -> (f32, f32) {
+    const PX_PER_X_UNIT: f32 = 4.0;
+    let off = remap_tile_offset(seq.dx, seq.dy, seq.dz);
+    (
+        off.x + seq.x_offs + seq.remap_x_adj * PX_PER_X_UNIT,
+        -off.y + seq.y_offs,
+    )
+}
+
+/// Centro Bevy de una capa BUILD (misma cadena que estaciones de tren).
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn road_stop_build_sprite_center(
+    ref_pos: Vec2,
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layer_z: f32,
+    seq: RoadStopSeqGfx,
+    w: f32,
+    h: f32,
+) -> Vec3 {
+    let (xrel, yrel) = road_stop_overlay_rel(seq);
+    overlay_pos(ref_pos, xrel, yrel, w, h, base_z, layer_z, tx, ty)
+}
+
 /// Calcula la posición del centro de un sprite overlay a partir del xrel/yrel del NFO.
 #[allow(clippy::too_many_arguments)]
 pub fn overlay_pos(

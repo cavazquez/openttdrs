@@ -1,5 +1,6 @@
-use openttdrs_core::{GameState, TileCoord, TileKind};
+use openttdrs_core::{GameState, Map, MapError, TileCoord, TileKind, tunnel_preview_path};
 
+#[allow(dead_code)] // mapa aleatorio legacy; el procedural usa fill_flat_grass
 pub(crate) fn distribute_tile_kinds(state: &mut GameState, seed: u64) {
     let (mw, mh) = state.map.dimensions();
     for y in 0..mh {
@@ -9,6 +10,52 @@ pub(crate) fn distribute_tile_kinds(state: &mut GameState, seed: u64) {
             let _ = state.map.set_kind(c, kind);
         }
     }
+}
+
+/// Cresta NE↔SW para probar túneles (lado derecho, lejos de carretera/vía de demo).
+pub(crate) fn place_tunnel_demo_ridge(state: &mut GameState) {
+    use super::demo_layout::DEMO_TUNNEL_NE;
+
+    const BASE: u8 = 1;
+    const NE_X: i32 = DEMO_TUNNEL_NE.x;
+    const NE_Y: i32 = DEMO_TUNNEL_NE.y;
+    const MID_X: i32 = NE_X - 1;
+    const SW_X: i32 = NE_X - 2;
+    const Y: i32 = NE_Y;
+
+    for dy in -1..=1 {
+        for x in (SW_X - 1)..=(NE_X + 1) {
+            let c = TileCoord::new(x, Y + dy);
+            if state.map.get(c).is_some() {
+                let _ = state.map.set_kind(c, TileKind::Grass);
+            }
+        }
+    }
+
+    let map = &mut state.map;
+    let _ = (
+        set_ne_slope(map, NE_X, Y, BASE),
+        set_sw_slope(map, SW_X, Y, BASE),
+        map.set_height(TileCoord::new(MID_X, Y), BASE + 1),
+        map.set_height(TileCoord::new(MID_X, Y + 1), BASE + 1),
+        map.set_height(TileCoord::new(NE_X, Y), BASE + 1),
+        map.set_height(TileCoord::new(NE_X, Y + 1), BASE + 1),
+    );
+    debug_assert!(tunnel_preview_path(map, TileCoord::new(NE_X, Y)).is_some());
+}
+
+fn set_ne_slope(map: &mut Map, tx: i32, ty: i32, base: u8) -> Result<(), MapError> {
+    map.set_height(TileCoord::new(tx, ty), base + 1)?;
+    map.set_height(TileCoord::new(tx, ty + 1), base + 1)?;
+    map.set_height(TileCoord::new(tx + 1, ty), base)?;
+    map.set_height(TileCoord::new(tx + 1, ty + 1), base)
+}
+
+fn set_sw_slope(map: &mut Map, tx: i32, ty: i32, base: u8) -> Result<(), MapError> {
+    map.set_height(TileCoord::new(tx, ty), base)?;
+    map.set_height(TileCoord::new(tx, ty + 1), base)?;
+    map.set_height(TileCoord::new(tx + 1, ty), base + 1)?;
+    map.set_height(TileCoord::new(tx + 1, ty + 1), base + 1)
 }
 
 fn tile_kind_hash(x: u32, y: u32, seed: u64) -> TileKind {
@@ -31,7 +78,8 @@ fn tile_kind_hash(x: u32, y: u32, seed: u64) -> TileKind {
 #[cfg(test)]
 mod tests {
     use super::distribute_tile_kinds;
-    use openttdrs_core::{GameState, TileCoord, TileKind};
+    use crate::state::{MAP_H, MAP_W};
+    use openttdrs_core::{GameState, TileCoord, TileKind, tunnel_preview_path};
 
     fn snapshot(state: &GameState) -> Vec<TileKind> {
         let (mw, mh) = state.map.dimensions();
@@ -56,6 +104,15 @@ mod tests {
         distribute_tile_kinds(&mut a, 42);
         distribute_tile_kinds(&mut b, 42);
         assert_eq!(snapshot(&a), snapshot(&b));
+    }
+
+    #[test]
+    fn tunnel_demo_ridge_allows_road_tunnel_preview() {
+        let mut state = GameState::new(MAP_W, MAP_H);
+        distribute_tile_kinds(&mut state, 0);
+        super::place_tunnel_demo_ridge(&mut state);
+        use crate::state::bootstrap::demo_layout::DEMO_TUNNEL_NE;
+        assert!(tunnel_preview_path(&state.map, DEMO_TUNNEL_NE).is_some());
     }
 
     #[test]

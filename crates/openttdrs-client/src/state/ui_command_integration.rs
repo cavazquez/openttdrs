@@ -2,9 +2,22 @@
 
 use std::collections::HashSet;
 
-use openttdrs_core::{Command, TileCoord, TileKind, apply_command};
+use openttdrs_core::{Command, TileCoord, TileKind, apply_command, diag_dir_offset};
 
 use super::SimWorld;
+
+/// `DiagDirection` cuya entrada apunta desde `station` hacia `transport`.
+fn entrance_dir_toward_neighbor(station: TileCoord, transport: TileCoord) -> u8 {
+    let dir = (0..4).find(|&dir| {
+        let (dx, dy) = diag_dir_offset(dir);
+        station.x + dx == transport.x && station.y + dy == transport.y
+    });
+    assert!(
+        dir.is_some(),
+        "teselas ortogonalmente adyacentes: {station:?} / {transport:?}"
+    );
+    dir.unwrap_or(0)
+}
 
 fn first_tile_with_kind(sim: &SimWorld, kind: TileKind) -> Option<TileCoord> {
     let (mw, mh) = sim.state.map.dimensions();
@@ -93,9 +106,14 @@ fn station_after_adjacent_road_matches_toolbar_station_tool() {
         apply_command(&mut sim.state, &Command::PlaceRoad(road_tile)).is_ok(),
         "carretera en tesela vecina para estación"
     );
+    let entrance_dir = entrance_dir_toward_neighbor(station_tile, road_tile);
     assert!(
-        apply_command(&mut sim.state, &Command::PlaceStationDir(station_tile, 2)).is_ok(),
-        "PlaceStationDir tras carretera vecina (como Station en toolbar)"
+        apply_command(
+            &mut sim.state,
+            &Command::PlaceStationDir(station_tile, entrance_dir)
+        )
+        .is_ok(),
+        "PlaceStationDir con entrada hacia la carretera"
     );
     assert_eq!(
         sim.state.map.get_kind(station_tile),
@@ -109,6 +127,11 @@ fn road_depot_dir_on_grass_matches_toolbar_depot_tool() {
     let Some(c) = first_tile_with_kind(&sim, TileKind::Grass) else {
         panic!("mapa procedural debe tener al menos una tesela de hierba");
     };
+    let exit = TileCoord::new(c.x + 1, c.y);
+    assert!(
+        apply_command(&mut sim.state, &Command::PlaceRoad(exit)).is_ok(),
+        "carretera en la boca del depósito"
+    );
     assert!(
         apply_command(&mut sim.state, &Command::PlaceRoadDepotDir(c, 2)).is_ok(),
         "PlaceRoadDepotDir (Road depot + orientación)"

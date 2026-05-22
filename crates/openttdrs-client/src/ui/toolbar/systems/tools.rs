@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 
 use crate::ui::toolbar::build_input::cancel_placement;
-use crate::ui::toolbar::{BuildMenuAction, DragBuildState, ToolSelectButton, UiToolState};
+use crate::ui::toolbar::order_panel::start_order_destination_pick;
+use crate::ui::toolbar::{
+    BuildMenuAction, DragBuildState, OrderEditState, ToolSelectButton, UiToolState,
+};
 
 /// El boton del menu selecciona la herramienta activa para aplicar en el mapa.
 #[allow(clippy::type_complexity)]
@@ -9,6 +12,7 @@ pub(crate) fn build_menu_interaction(
     mut q: Query<(&Interaction, &BuildMenuAction), (Changed<Interaction>, With<Button>)>,
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
+    mut order_state: ResMut<OrderEditState>,
 ) {
     for (interaction, action) in &mut q {
         if *interaction != Interaction::Pressed {
@@ -16,6 +20,11 @@ pub(crate) fn build_menu_interaction(
         }
         tool_state.active_tool = Some(*action);
         cancel_placement(&mut drag_state);
+        if *action == BuildMenuAction::Orders {
+            start_order_destination_pick(&mut order_state);
+        } else {
+            order_state.picking_destination = false;
+        }
     }
 }
 

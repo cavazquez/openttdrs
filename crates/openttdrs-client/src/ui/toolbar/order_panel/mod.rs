@@ -4,7 +4,10 @@ mod handlers;
 mod setup;
 mod sync;
 
-pub(crate) use handlers::{apply_order_edit, handle_order_panel_buttons};
+pub(crate) use handlers::{
+    apply_order_edit, handle_order_destination_click, handle_order_panel_buttons,
+    start_order_destination_pick,
+};
 pub(crate) use setup::setup_order_panel;
 pub(crate) use sync::sync_order_panel;
 

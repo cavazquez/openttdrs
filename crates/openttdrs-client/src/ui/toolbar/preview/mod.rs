@@ -2,6 +2,7 @@
 
 mod industry;
 mod orders;
+mod road_stop;
 mod rotate;
 mod sprites;
 mod station_coverage;
@@ -11,22 +12,28 @@ pub(crate) use rotate::rotate_station_with_right_click;
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::TileCoord;
+use openttdrs_core::{TileCoord, is_tunnel_entrance_slope, tile_slope_and_z};
 
-use crate::iso::{tile_pos, world_pos_to_tile_coord};
+use crate::iso::{
+    SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z, world_pos_to_tile_coord,
+};
 use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
+use crate::ui::hud::SelectedTileInfo;
 
 use super::{BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, UiToolState};
 
 use industry::{industry_spec_for_action, spawn_industry_template_preview};
-use orders::spawn_order_route_preview;
+use orders::{spawn_order_pick_target_preview, spawn_order_route_preview};
+use road_stop::{
+    RoadStopPreviewSpawn, bus_stop_ground_path, road_stop_preview_dir, spawn_road_stop_preview,
+    truck_stop_ground_path,
+};
 use sprites::preview_image_for_action;
 use station_coverage::{spawn_station_coverage_preview, station_preview_has_coverage};
-use validation::{
-    action_is_tunnel, preview_station_has_transport_neighbor, preview_target_is_valid,
-    tunnel_preview_is_valid,
-};
+use validation::{action_is_tunnel, preview_build_command_valid};
+
+use crate::sprites::StationTileClass;
 
 #[derive(Component)]
 pub(crate) struct BuildGhostPreview;
@@ -46,9 +53,27 @@ pub(crate) fn update_build_ghost_preview(
     station_state: Res<StationBuildState>,
     drag_state: Res<DragBuildState>,
     order_state: Res<OrderEditState>,
+    selected: Res<SelectedTileInfo>,
 ) {
     for entity in &existing {
         commands.entity(entity).despawn();
+    }
+
+    let orders_preview =
+        order_state.picking_destination || tool_state.active_tool == Some(BuildMenuAction::Orders);
+    if orders_preview && order_state.vehicle_id.is_some() {
+        spawn_order_route_preview(&mut commands, &asset_server, &sim.state.map, &order_state);
+        if order_state.picking_destination
+            && let Some(hover) = selected.pos
+        {
+            spawn_order_pick_target_preview(
+                &mut commands,
+                &asset_server,
+                &sim,
+                &order_state,
+                hover,
+            );
+        }
     }
 
     let Some(action) = tool_state.active_tool else {
@@ -56,7 +81,7 @@ pub(crate) fn update_build_ghost_preview(
     };
 
     if action == BuildMenuAction::Orders {
-        spawn_order_route_preview(&mut commands, &asset_server, &sim.state.map, &order_state);
+        return;
     }
 
     let Ok(window) = windows.single() else {
@@ -79,16 +104,20 @@ pub(crate) fn update_build_ghost_preview(
     }
 
     let preview_tiles: Vec<(i32, i32)> =
-        if drag_state.last_action == Some(action) && !drag_state.pending_tiles.is_empty() {
+        if matches!(action, BuildMenuAction::BusStop | BuildMenuAction::Station) {
+            // Parada bus / camión: siempre 1×1 en el cursor (no arrastre ni halo de cobertura).
+            vec![(tx, ty)]
+        } else if action_is_tunnel(action) {
+            let start = TileCoord::new(tx, ty);
+            openttdrs_core::tunnel_preview_path(&sim.state.map, start)
+                .map(|path| path.into_iter().map(|c| (c.x, c.y)).collect())
+                .unwrap_or_else(|| vec![(tx, ty)])
+        } else if drag_state.last_action == Some(action) && !drag_state.pending_tiles.is_empty() {
             drag_state.pending_tiles.clone()
         } else {
             vec![(tx, ty)]
         };
-    let tunnel_valid = tunnel_preview_is_valid(&sim.state.map, action, &preview_tiles);
-    if matches!(
-        action,
-        BuildMenuAction::Station | BuildMenuAction::BusStop | BuildMenuAction::RailStation
-    ) {
+    if action == BuildMenuAction::RailStation {
         spawn_station_coverage_preview(
             &mut commands,
             &asset_server,
@@ -98,22 +127,13 @@ pub(crate) fn update_build_ghost_preview(
         );
     }
 
-    for (px, py) in preview_tiles {
-        let coord = TileCoord::new(px, py);
-        let Some(tile) = sim.state.map.get(coord) else {
+    for (px, py) in &preview_tiles {
+        let coord = TileCoord::new(*px, *py);
+        if sim.state.map.get(coord).is_none() {
             continue;
-        };
-        let station_ok = if matches!(
-            action,
-            BuildMenuAction::Station | BuildMenuAction::BusStop | BuildMenuAction::RailStation
-        ) {
-            preview_station_has_transport_neighbor(&sim.state.map, coord, action)
-        } else {
-            true
-        };
-        let valid_target = preview_target_is_valid(action, tile.kind)
-            && (!action_is_tunnel(action) || tunnel_valid)
-            && station_ok;
+        }
+        let valid_target =
+            preview_build_command_valid(&sim.state, action, coord, &station_state, &preview_tiles);
         let tint = if valid_target {
             Color::srgba(1.0, 1.0, 1.0, 0.55)
         } else {
@@ -132,7 +152,49 @@ pub(crate) fn update_build_ghost_preview(
             continue;
         }
 
-        let Some(image) = preview_image_for_action(action, &asset_server, &station_state) else {
+        if action_is_tunnel(action) {
+            let Some((tileh, _)) = tile_slope_and_z(&sim.state.map, coord) else {
+                continue;
+            };
+            if !is_tunnel_entrance_slope(tileh) {
+                continue;
+            }
+        }
+
+        let (tileh, base_z) = tile_slope_and_min_z(&sim.state.map, *px as u32, *py as u32);
+        let half_h = if tileh == 0 {
+            TILE_HALF_H
+        } else {
+            SLOPE_HALF_H[tileh as usize]
+        };
+
+        if matches!(action, BuildMenuAction::BusStop | BuildMenuAction::Station) {
+            let dir = road_stop_preview_dir(station_state.orientation);
+            let (class, ground) = if action == BuildMenuAction::BusStop {
+                (StationTileClass::Bus, bus_stop_ground_path(dir))
+            } else {
+                (StationTileClass::Truck, truck_stop_ground_path(dir))
+            };
+            spawn_road_stop_preview(
+                &mut commands,
+                RoadStopPreviewSpawn {
+                    px: *px,
+                    py: *py,
+                    base_z,
+                    half_h,
+                    class,
+                    dir,
+                    ground_path: ground,
+                    tint,
+                    asset_server: &asset_server,
+                },
+            );
+            continue;
+        }
+
+        let Some(image) =
+            preview_image_for_action(action, &asset_server, &station_state, &preview_tiles)
+        else {
             continue;
         };
 
@@ -143,7 +205,7 @@ pub(crate) fn update_build_ghost_preview(
                 color: tint,
                 ..default()
             },
-            Transform::from_translation(tile_pos(px, py, tile.height, 3.0))
+            Transform::from_translation(tile_pos_half(*px, *py, base_z, 3.0, half_h))
                 .with_scale(Vec3::new(1.002, 1.002, 1.0)),
         ));
     }
@@ -164,7 +226,9 @@ mod tests {
 
     use super::industry::industry_spec_for_action;
     use super::station_coverage::station_preview_has_coverage;
-    use super::validation::{action_is_tunnel, preview_target_is_valid, tunnel_preview_is_valid};
+    use super::validation::{action_is_tunnel, preview_build_command_valid};
+    use crate::state::SimWorld;
+    use openttdrs_core::{Command, GameState, command_would_fail};
 
     fn run_rotate(world: &mut World, tool: Option<BuildMenuAction>, drag_armed: bool) {
         let mut mouse = ButtonInput::<MouseButton>::default();
@@ -196,95 +260,79 @@ mod tests {
 
     #[test]
     fn preview_validators_cover_key_paths() {
-        let mut map = Map::new_flat(6, 6, 0);
         let c = |x: i32, y: i32| TileCoord::new(x, y);
-        map.set_tile(
-            c(1, 1),
-            Tile {
-                kind: TileKind::Road,
-                height: 2,
-                ..tile_template()
-            },
-        )
-        .unwrap();
-        map.set_tile(
-            c(3, 1),
-            Tile {
-                kind: TileKind::Road,
-                height: 2,
-                ..tile_template()
-            },
-        )
-        .unwrap();
-        map.set_kind(c(4, 4), TileKind::Water).unwrap();
+        let mut state = GameState::new(6, 6);
+        for (x, y) in [(1, 1), (3, 1)] {
+            state
+                .map
+                .set_tile(
+                    c(x, y),
+                    Tile {
+                        kind: TileKind::Road,
+                        height: 2,
+                        ..tile_template()
+                    },
+                )
+                .unwrap();
+        }
+        state.map.set_kind(c(4, 4), TileKind::Water).unwrap();
+        let mut sim = SimWorld {
+            state,
+            ..SimWorld::default()
+        };
+        let station = StationBuildState::default();
 
-        assert!(preview_target_is_valid(
+        assert!(preview_build_command_valid(
+            &sim.state,
             BuildMenuAction::Road,
-            TileKind::Grass
+            c(0, 0),
+            &station,
+            &[(0, 0)],
         ));
-        assert!(!preview_target_is_valid(
+        assert!(!preview_build_command_valid(
+            &sim.state,
             BuildMenuAction::Road,
-            TileKind::Water
+            c(4, 4),
+            &station,
+            &[(4, 4)],
         ));
-        assert!(preview_target_is_valid(
+        assert!(preview_build_command_valid(
+            &sim.state,
             BuildMenuAction::Clear,
-            TileKind::Water
-        ));
-        assert!(!preview_target_is_valid(
-            BuildMenuAction::Orders,
-            TileKind::Void
+            c(4, 4),
+            &station,
+            &[(4, 4)],
         ));
 
         assert!(action_is_tunnel(BuildMenuAction::RoadTunnel));
-        assert!(action_is_tunnel(BuildMenuAction::RailTunnel));
         assert!(!action_is_tunnel(BuildMenuAction::Road));
 
-        assert!(!tunnel_preview_is_valid(
-            &map,
+        sim.state.map.set_height(c(2, 2), 2).unwrap();
+        sim.state.map.set_height(c(2, 3), 2).unwrap();
+        sim.state.map.set_height(c(3, 2), 1).unwrap();
+        sim.state.map.set_height(c(3, 3), 1).unwrap();
+        sim.state.map.set_height(c(0, 2), 1).unwrap();
+        sim.state.map.set_height(c(0, 3), 1).unwrap();
+        sim.state.map.set_height(c(1, 2), 2).unwrap();
+        sim.state.map.set_height(c(1, 3), 2).unwrap();
+        assert!(preview_build_command_valid(
+            &sim.state,
             BuildMenuAction::RoadTunnel,
-            &[(1, 1), (2, 1)]
+            c(2, 2),
+            &station,
+            &[(2, 2)],
         ));
-        assert!(tunnel_preview_is_valid(
-            &map,
+        assert!(!preview_build_command_valid(
+            &sim.state,
             BuildMenuAction::RoadTunnel,
-            &[(1, 1), (2, 1), (3, 1)]
+            c(0, 0),
+            &station,
+            &[(0, 0)],
         ));
-        assert!(!tunnel_preview_is_valid(
-            &map,
-            BuildMenuAction::RoadTunnel,
-            &[(1, 1), (2, 1), (4, 4)]
-        ));
-        assert!(tunnel_preview_is_valid(
-            &map,
-            BuildMenuAction::Road,
-            &[(1, 1), (2, 1)]
-        ));
-
-        map.set_height(c(3, 1), 1).unwrap();
-        assert!(!tunnel_preview_is_valid(
-            &map,
-            BuildMenuAction::RoadTunnel,
-            &[(1, 1), (2, 1), (3, 1)]
-        ));
-
-        assert!(!tunnel_preview_is_valid(
-            &map,
-            BuildMenuAction::RoadTunnel,
-            &[(-1, -1), (0, 0), (1, 1)]
-        ));
-
-        assert!(preview_target_is_valid(
-            BuildMenuAction::BuildFactory,
-            TileKind::Grass
-        ));
-        assert!(!preview_target_is_valid(
-            BuildMenuAction::BuildFactory,
-            TileKind::Void
-        ));
-        assert!(preview_target_is_valid(
-            BuildMenuAction::Orders,
-            TileKind::Industry
-        ));
+        assert_eq!(
+            command_would_fail(&sim.state, &Command::PlaceRoadTunnel(c(0, 0), c(2, 0))),
+            Some(openttdrs_core::CommandError::InvalidTunnelEndpoints)
+        );
 
         assert_eq!(
             industry_spec_for_action(BuildMenuAction::BuildFactory),

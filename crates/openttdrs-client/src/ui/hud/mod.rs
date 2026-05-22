@@ -1,8 +1,11 @@
 use bevy::prelude::*;
 
 mod display;
+mod feedback;
 mod input;
 mod sound_ping;
+
+pub(crate) use feedback::push_build_command_error;
 
 pub(crate) use display::{setup_tile_info_ui, update_tile_info_text};
 pub(crate) use input::{cycle_json_save_path_hotkey, handle_pause_toggle, handle_tool_hotkeys};

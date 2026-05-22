@@ -7,8 +7,9 @@ use bevy::prelude::*;
 use openttdrs_core::{GameState, Map, OttdmapExtras};
 
 use crate::state::bootstrap::{
-    distribute_tile_kinds, log_detection_summary, place_industries, place_roads, place_stations,
-    place_stations_from_footer_stxy, place_stations_from_map_tiles, place_vehicles,
+    fill_flat_grass, log_detection_summary, log_procedural_demo_zones, place_bridge_demo_gap,
+    place_clean_demo_transport, place_industries, place_stations, place_stations_from_footer_stxy,
+    place_stations_from_map_tiles, place_tunnel_demo_ridge,
 };
 
 /// Dimensiones del mapa generado proceduralmente (sin `OTTDMAP_FILE`).
@@ -93,11 +94,11 @@ python3 scripts/parse_sav.py tu.sav {path}"
             }
         }
         let mut state = GameState::new(MAP_W, MAP_H);
-        distribute_tile_kinds(&mut state, 0xDEAD_BEEF_CAFE_1234);
-        place_industries(&mut state, false, None);
-        place_stations(&mut state);
-        place_roads(&mut state);
-        place_vehicles(&mut state);
+        fill_flat_grass(&mut state);
+        place_clean_demo_transport(&mut state);
+        place_tunnel_demo_ridge(&mut state);
+        place_bridge_demo_gap(&mut state);
+        log_procedural_demo_zones();
         log_detection_summary(&state, false, None);
         Self {
             state,

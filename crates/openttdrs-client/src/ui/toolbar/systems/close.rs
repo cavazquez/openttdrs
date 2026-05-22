@@ -18,6 +18,7 @@ pub(crate) fn close_toolbar_panel_on_escape(
         cancel_placement(&mut drag_state);
         order_state.vehicle_id = None;
         order_state.orders.clear();
+        order_state.picking_destination = false;
     }
 }
 
@@ -37,5 +38,6 @@ pub(crate) fn close_toolbar_button_interaction(
         cancel_placement(&mut drag_state);
         order_state.vehicle_id = None;
         order_state.orders.clear();
+        order_state.picking_destination = false;
     }
 }

@@ -8,8 +8,9 @@ mod water;
 
 #[allow(unused_imports)]
 pub use coords::{
-    gizmo_diamond, iso, overlay_pos, tile_pos, tile_pos_half, world_pos_to_tile_coord,
-    world_to_tile,
+    RoadStopSeqGfx, gizmo_diamond, iso, overlay_pos, remap_tile_offset,
+    road_stop_build_sprite_center, road_stop_overlay_rel, road_stop_sprite_pos, tile_pos,
+    tile_pos_half, world_pos_to_tile_coord, world_to_tile,
 };
 #[allow(unused_imports)]
 pub use slope::{
@@ -381,6 +382,132 @@ mod world_pos_to_tile_tests {
         let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - TILE_HALF_H + elev);
         let near_top_inside = center + Vec2::new(0.0, TILE_HALF_H - 1.0);
         assert_eq!(world_pos_to_tile_coord(near_top_inside, &m), Some((tx, ty)));
+    }
+
+    #[test]
+    fn remap_tile_offset_matches_bus_stop_ne_build_a() {
+        let off = super::remap_tile_offset(2.0, 0.0, 0.0);
+        assert_eq!(off.x, -8.0);
+        assert_eq!(off.y, -4.0);
+    }
+
+    #[test]
+    fn remap_tile_offset_ne_build_c_is_standard_remap() {
+        let off = super::remap_tile_offset(0.0, 13.0, 0.0);
+        assert_eq!(off.x, 52.0);
+        assert_eq!(off.y, -26.0);
+    }
+
+    #[test]
+    fn road_stop_ne_build_c_center_stays_on_station_tile() {
+        let origin = iso(15, 2);
+        let ground = Vec2::new(origin.x, origin.y - super::TILE_HALF_H);
+        let seq = super::RoadStopSeqGfx {
+            dx: 0.0,
+            dy: 13.0,
+            dz: 0.0,
+            x_offs: -24.0,
+            y_offs: -8.0,
+            remap_x_adj: -13.0,
+        };
+        let c = super::road_stop_build_sprite_center(origin, 15, 2, 0, 0.07, seq, 24.0, 23.0);
+        let dist_station = (c.x - ground.x).hypot(c.y - ground.y);
+        let neighbor = iso(16, 2);
+        let ground16 = Vec2::new(neighbor.x, neighbor.y - super::TILE_HALF_H);
+        let dist_neighbor = (c.x - ground16.x).hypot(c.y - ground16.y);
+        assert!(
+            dist_station < dist_neighbor,
+            "build_c debe quedar más cerca del centro de (15,2) que de (16,2)"
+        );
+    }
+
+    #[test]
+    fn road_stop_build_center_matches_north_anchor_top_left() {
+        let seq = super::RoadStopSeqGfx {
+            dx: 2.0,
+            dy: 0.0,
+            dz: 0.0,
+            x_offs: -29.0,
+            y_offs: -2.0,
+            remap_x_adj: 0.0,
+        };
+        let w = 21.0;
+        let h = 13.0;
+        let origin = iso(2, 3);
+        let c = super::road_stop_build_sprite_center(origin, 2, 3, 0, 0.05, seq, w, h);
+        let north_tl = super::road_stop_sprite_pos(2, 3, 0, 0.05, seq);
+        assert_eq!(c.x - w * 0.5, north_tl.x);
+        assert_eq!(c.y + h * 0.5, north_tl.y);
+    }
+
+    #[test]
+    fn road_stop_overlay_rel_matches_rail_station_for_ne_build_a() {
+        let seq = super::RoadStopSeqGfx {
+            dx: 2.0,
+            dy: 0.0,
+            dz: 0.0,
+            x_offs: 0.0,
+            y_offs: 0.0,
+            remap_x_adj: 0.0,
+        };
+        let (xrel, yrel) = super::road_stop_overlay_rel(seq);
+        let rail = crate::sprites::rail_station_overlay_rel(2.0, 0.0);
+        assert_eq!(xrel, rail.0);
+        assert_eq!(yrel, rail.1);
+    }
+
+    #[test]
+    fn road_stop_overlay_rel_ne_build_c_adj() {
+        let seq = super::RoadStopSeqGfx {
+            dx: 0.0,
+            dy: 13.0,
+            dz: 0.0,
+            x_offs: 0.0,
+            y_offs: 0.0,
+            remap_x_adj: -13.0,
+        };
+        let (xrel, yrel) = super::road_stop_overlay_rel(seq);
+        let rail = crate::sprites::rail_station_overlay_rel(0.0, 13.0);
+        assert_eq!(yrel, rail.1);
+        assert_eq!(xrel, 0.0);
+        assert_eq!(rail.0, 52.0);
+    }
+
+    #[test]
+    fn road_stop_se_truck_build_a_center_stays_on_station_tile() {
+        let origin = iso(15, 4);
+        let ground = Vec2::new(origin.x, origin.y - super::TILE_HALF_H);
+        let seq = super::RoadStopSeqGfx {
+            dx: 15.0,
+            dy: 3.0,
+            dz: 0.0,
+            x_offs: -3.0,
+            y_offs: -23.0,
+            remap_x_adj: 4.0,
+        };
+        let c = super::road_stop_build_sprite_center(origin, 15, 4, 0, 0.05, seq, 28.0, 20.0);
+        let dist_station = (c.x - ground.x).hypot(c.y - ground.y);
+        let neighbor_xy = iso(16, 5);
+        let ground_xy = Vec2::new(neighbor_xy.x, neighbor_xy.y - super::TILE_HALF_H);
+        let dist_neighbor_xy = (c.x - ground_xy.x).hypot(c.y - ground_xy.y);
+        assert!(
+            dist_station < dist_neighbor_xy,
+            "truck SE build_a no debe caer en tesela (16,5)"
+        );
+    }
+
+    #[test]
+    fn road_stop_generated_adj_exceptions() {
+        let ne = crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Bus, 0);
+        assert_eq!(ne[0].remap_x_adj, 0.0);
+        assert_eq!(ne[1].remap_x_adj, 0.0);
+        assert_eq!(ne[2].remap_x_adj, -13.0);
+        let se_truck =
+            crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Truck, 1);
+        assert_eq!(se_truck[0].remap_x_adj, 4.0);
+        assert_eq!(se_truck[0].y_offs, -23.0);
+        assert_eq!(se_truck[1].remap_x_adj, 0.0);
+        assert_eq!(se_truck[2].remap_x_adj, 0.0);
     }
 
     #[test]

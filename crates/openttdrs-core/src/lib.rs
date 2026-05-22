@@ -21,7 +21,10 @@ pub mod vehicle;
 mod vehicle_ai;
 
 pub use cargo::{CargoStock, CargoType};
-pub use command::{Command, CommandError, apply_command, industry_template};
+pub use command::{
+    Command, CommandError, apply_command, command_error_message, command_would_fail,
+    industry_template,
+};
 pub use game_state::{
     BRIDGE_BUILD_COST_PER_TILE, CARGO_DELIVERY_PAYMENT, CLEAR_TILE_COST, CompanyEconomy,
     DEPOT_BUILD_COST, GameState, RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats,
@@ -31,13 +34,15 @@ pub use industry::{
     INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, IndustrySpec, industry_produce_period_ticks,
 };
 pub use map::{
-    Map, MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind,
-    openttd_tile_index_to_coord,
+    Map, MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind, inclined_slope_direction,
+    is_tunnel_entrance_slope, openttd_tile_index_to_coord, resolve_tunnel_end, tile_slope_and_z,
+    tunnel_entrance_m5, tunnel_preview_path,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
-    PathNetwork, find_path, path_network_for_vehicle, station_site_adjacent_to_rail,
-    station_site_adjacent_to_transport, tile_is_path_traversable,
+    PathNetwork, diag_dir_offset, find_path, path_network_for_vehicle, station_entrance_faces_rail,
+    station_entrance_faces_road, station_site_adjacent_to_rail, station_site_adjacent_to_transport,
+    station_site_tile_allows_build, station_site_tile_needs_clear, tile_is_path_traversable,
 };
 pub use save::SaveError;
 pub use save::load_from_str;

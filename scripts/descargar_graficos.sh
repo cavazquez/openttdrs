@@ -489,9 +489,12 @@ for i in range(19):
 # Carretera con nieve
 crop_by_id(ROAD_SNOW_IDS[0], "road_y_snow.png")
 crop_by_id(ROAD_SNOW_IDS[1], "road_x_snow.png")
-# Depósito de carretera (4 direcciones)
+# Depósito de carretera: 1408–1411 son piezas de boca (12×12) o edificio según orientación;
+# 1412/1413 son las otras dos vistas del edificio (NE/NW en el cliente).
 for i, sid in enumerate(ROAD_DEPOT_RANGE):
     crop_by_id(sid, f"road_depot_{i}.png")
+crop_by_id(1412, "rail_1412.png")
+crop_by_id(1413, "rail_1413.png")
 
 # =============================================================================
 # VIAS FERREAS (MP_RAILWAY) - alineado con src/sprites/rail.rs
@@ -729,7 +732,9 @@ for i, sid in enumerate(tree_ids):
 
 # =============================================================================
 # INDUSTRIAS — IDs desde industry_gfx_data_generated.rs (suelo + edificio, estadio 3).
-# Regenerar tabla: scripts/gen_industry_gfx_data.py
+# Regenerar tablas de offsets
+# scripts/gen_industry_gfx_data.py
+# scripts/gen_road_stop_gfx_data.py
 # Listar IDs: scripts/list_industry_sprite_ids.py
 # =============================================================================
 def load_industry_sprite_ids() -> list[int]:
@@ -871,6 +876,9 @@ else:
 
 print(f"Sprites listos en {tiles_dir}/")
 PYEOF
+
+echo "${GRAPHICS_MODE}" > "${DEST}/.graphics_mode"
+echo "Modo gráfico registrado en ${DEST}/.graphics_mode (${GRAPHICS_MODE})"
 else
   echo ""
   echo "Hoja de sprites no disponible (faltan ${SPRITES_DIR}/${SHEET_PREFIX}00.(png|pcx|32.png) y/o hojas relacionadas)."

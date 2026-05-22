@@ -69,7 +69,7 @@ Lo **pendiente para cerrar 0.1** está en las fases **SP** (solitario) más abaj
 | Fase | Objetivo | Ejemplos de trabajo |
 |------|----------|---------------------|
 | **SP1 — Ciclo jugable** | Partida local con bucle claro: industria → estación → vehículo → carga/entrega → economía visible | Feedback HUD (sin ruta, dinero, órdenes), coherencia estación en mapa vs `state.stations`, pausa/velocidad, pruebas de integración comando↔sim |
-| **SP2 — Construcción y herramientas** | Toolbar completa y predecible en un mapa procedural y en `.ottdmap` | Validación/preview de colocación, mensajes de error de `CommandError`, túneles/puentes/depósitos, panel de órdenes y estaciones |
+| **SP2 — Construcción y herramientas** | **SP2.1–SP2.5 hechos**; [SP2.6](SP2_CHECKLIST.md) validación manual pendiente — [PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md) | Mensajes HUD, preview, transporte, paradas, tren, industria, órdenes; gfx `BUILD_*` paradas → SP3 |
 | **SP3 — Presentación del mapa** | Que el mapa **se lea** como OpenTTD, sin exigir paridad total | Plan en [PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md): pendientes slope, estaciones completas, gfx casas/industrias, auditoría de assets, culling en mapas grandes (esquina/T plana y vías por `trackbits` ya portados) |
 | **SP4 — Pulido y deuda** | Estabilidad antes de abrir nuevas grandes features | Migraciones de save si hace falta, `check.sh` alineado con CI, bootstrap demo sin inconsistencias tile/estación, documentación al día |
 

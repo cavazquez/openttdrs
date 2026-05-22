@@ -1,8 +1,10 @@
 use bevy::prelude::*;
-use openttdrs_core::Map;
+use openttdrs_core::{Map, TileCoord};
 
 use crate::iso::tile_pos;
+use crate::state::SimWorld;
 use crate::ui::toolbar::OrderEditState;
+use crate::ui::toolbar::build_input::orders::order_pick_valid;
 
 use super::BuildGhostPreview;
 
@@ -37,4 +39,34 @@ pub(crate) fn spawn_order_route_preview(
                 .with_scale(Vec3::new(1.01, 1.01, 1.0)),
         ));
     }
+}
+
+/// Resalta la parada bajo el cursor cuando el destino es válido.
+pub(crate) fn spawn_order_pick_target_preview(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    sim: &SimWorld,
+    order_state: &OrderEditState,
+    hover: TileCoord,
+) {
+    let Some(vehicle_id) = order_state.vehicle_id else {
+        return;
+    };
+    if !order_pick_valid(sim, vehicle_id, hover) {
+        return;
+    };
+    let Some(tile) = sim.state.map.get(hover) else {
+        return;
+    };
+    let image = asset_server.load::<Image>("assets/opengfx/tiles/grass_rough.png");
+    commands.spawn((
+        BuildGhostPreview,
+        Sprite {
+            image,
+            color: Color::srgba(0.35, 1.0, 0.45, 0.55),
+            ..default()
+        },
+        Transform::from_translation(tile_pos(hover.x, hover.y, tile.height, 5.0))
+            .with_scale(Vec3::new(1.04, 1.04, 1.0)),
+    ));
 }

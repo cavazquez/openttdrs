@@ -179,10 +179,14 @@ def collect_required_paths() -> list[tuple[str, str]]:
         add(f"assets/opengfx/tiles/truck_stop_ground_{i}.png", "station")
     for d in ("ne", "se", "sw", "nw"):
         add(f"assets/opengfx/tiles/bus_stop_{d}_ground.png", "station")
+        for layer in ("a", "b", "c"):
+            add(f"assets/opengfx/tiles/bus_stop_{d}_build_{layer}.png", "station")
+            add(f"assets/opengfx/tiles/truck_stop_{d}_build_{layer}.png", "station")
     for p in (
         "assets/opengfx/tiles/rail_1412.png",
         "assets/opengfx/tiles/road_depot_1.png",
         "assets/opengfx/tiles/road_depot_3.png",
+        "assets/opengfx/tiles/rail_1413.png",
         "assets/opengfx/tiles/rail_1413.png",
         "assets/opengfx/tiles/rail_depot_ne.png",
         "assets/opengfx/tiles/tunnel_road_rear.png",

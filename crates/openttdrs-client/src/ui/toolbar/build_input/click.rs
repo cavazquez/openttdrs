@@ -1,11 +1,11 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{CommandError, TileCoord, TileKind, apply_command};
+use openttdrs_core::{TileCoord, TileKind, apply_command};
 
 use crate::iso::world_pos_to_tile_coord;
 use crate::render::{IndustryPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending};
 use crate::state::SimWorld;
-use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo};
+use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, push_build_command_error};
 use crate::ui::industry_panel::IndustryPanelState;
 
 use super::commands::command_for_action;
@@ -13,10 +13,11 @@ use super::drag::{
     action_is_tunnel, action_supports_drag, apply_drag_action, drag_line_tiles,
     tunnel_placement_is_valid,
 };
-use super::orders::order_for_clicked_tile;
 use super::placement::cancel_placement;
 use crate::ui::toolbar::depot_panel::DepotPanelState;
-use crate::ui::toolbar::order_panel::apply_order_edit;
+use crate::ui::toolbar::order_panel::{
+    handle_order_destination_click, start_order_destination_pick,
+};
 use crate::ui::toolbar::station_panel::StationCargoPanelState;
 use crate::ui::toolbar::{
     BuildMenuAction, BuildMenuUi, DragBuildState, OrderEditState, StationBuildState, UiToolState,
@@ -73,6 +74,34 @@ pub(crate) fn handle_tile_click(
     let pos = TileCoord::new(tx, ty);
     selected.pos = Some(pos);
 
+    let orders_mode =
+        order_state.picking_destination || tool_state.active_tool == Some(BuildMenuAction::Orders);
+    if orders_mode {
+        if order_state.vehicle_id.is_some()
+            && handle_order_destination_click(
+                &mouse,
+                pos,
+                &mut order_state,
+                &mut sim,
+                &mut pending,
+                &mut hud_feedback,
+                time.elapsed_secs(),
+            )
+        {
+            return;
+        }
+        if tool_state.active_tool == Some(BuildMenuAction::Orders)
+            && mouse.just_pressed(MouseButton::Left)
+            && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.pos == pos)
+        {
+            order_state.vehicle_id = Some(vehicle.id);
+            order_state.orders = vehicle.orders.clone();
+            start_order_destination_pick(&mut order_state);
+            return;
+        }
+        return;
+    }
+
     let Some(action) = tool_state.active_tool else {
         cancel_placement(&mut drag_state);
         if mouse.just_pressed(MouseButton::Left) {
@@ -84,10 +113,11 @@ pub(crate) fn handle_tile_click(
                     depot_state.depot_pos = None;
                     order_state.vehicle_id = None;
                     order_state.orders.clear();
+                    order_state.picking_destination = false;
                     station_panel.station_pos = None;
                     return;
                 }
-                Some(TileKind::RoadDepot) => {
+                Some(TileKind::RoadDepot) | Some(TileKind::RailDepot) => {
                     depot_state.depot_pos = Some(pos);
                     depot_state.selected_vehicle = sim
                         .state
@@ -97,6 +127,7 @@ pub(crate) fn handle_tile_click(
                         .map(|vehicle| vehicle.id);
                     order_state.vehicle_id = None;
                     order_state.orders.clear();
+                    order_state.picking_destination = false;
                     station_panel.station_pos = None;
                     industry_panel.open = false;
                     return;
@@ -106,6 +137,7 @@ pub(crate) fn handle_tile_click(
                     depot_state.depot_pos = None;
                     order_state.vehicle_id = None;
                     order_state.orders.clear();
+                    order_state.picking_destination = false;
                     industry_panel.open = false;
                     return;
                 }
@@ -114,6 +146,7 @@ pub(crate) fn handle_tile_click(
             if let Some(vehicle) = sim.state.vehicles.iter().find(|vehicle| vehicle.pos == pos) {
                 order_state.vehicle_id = Some(vehicle.id);
                 order_state.orders = vehicle.orders.clone();
+                order_state.picking_destination = false;
                 depot_state.depot_pos = None;
                 station_panel.station_pos = None;
                 industry_panel.open = false;
@@ -127,33 +160,6 @@ pub(crate) fn handle_tile_click(
     };
 
     let current = (tx, ty);
-
-    if action == BuildMenuAction::Orders {
-        if mouse.just_pressed(MouseButton::Right) {
-            order_state.vehicle_id = None;
-            order_state.orders.clear();
-            return;
-        }
-        if !mouse.just_pressed(MouseButton::Left) {
-            return;
-        }
-        if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.pos == pos) {
-            order_state.vehicle_id = Some(vehicle.id);
-            order_state.orders = vehicle.orders.clone();
-            return;
-        }
-        let Some(vehicle_id) = order_state.vehicle_id else {
-            return;
-        };
-        let Some(order) = order_for_clicked_tile(&sim, vehicle_id, pos) else {
-            return;
-        };
-        order_state.orders.push(order);
-        if apply_order_edit(&mut sim.state, vehicle_id, &order_state.orders).is_ok() {
-            pending.pending = true;
-        }
-        return;
-    }
 
     if action_supports_drag(action) {
         if !drag_state.armed || drag_state.last_action != Some(action) {
@@ -173,22 +179,26 @@ pub(crate) fn handle_tile_click(
 
         if mouse.just_pressed(MouseButton::Left) {
             if action_is_tunnel(action)
-                && !tunnel_placement_is_valid(&sim.state.map, action, &drag_state.pending_tiles)
+                && !tunnel_placement_is_valid(&sim.state, action, &drag_state.pending_tiles)
             {
                 return;
             }
             let tiles = std::mem::take(&mut drag_state.pending_tiles);
-            let changed = apply_drag_action(&mut sim, action, tiles, &station_state);
+            let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state);
             cancel_placement(&mut drag_state);
             if changed {
                 pending.pending = true;
+            } else if let Some(e) = err {
+                push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
             }
         } else if mouse.just_released(MouseButton::Left) && drag_state.pending_tiles.len() == 1 {
             let tiles = std::mem::take(&mut drag_state.pending_tiles);
-            let changed = apply_drag_action(&mut sim, action, tiles, &station_state);
+            let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state);
             cancel_placement(&mut drag_state);
             if changed {
                 pending.pending = true;
+            } else if let Some(e) = err {
+                push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
             }
         }
         return;
@@ -199,17 +209,10 @@ pub(crate) fn handle_tile_click(
     }
 
     if let Some(cmd) = command_for_action(action, TileCoord::new(tx, ty), &station_state) {
-        match apply_command(&mut sim.state, &cmd) {
-            Ok(()) => {
-                pending.pending = true;
-            }
-            Err(CommandError::StationNotAdjacentToTransport) => {
-                hud_feedback.message =
-                    Some("La parada necesita carretera o vía adyacente.".to_string());
-                hud_feedback.expires_at_secs = time.elapsed_secs() + 5.0;
-                hud_feedback.pending_soft_ping = true;
-            }
-            Err(_) => {}
+        if let Err(e) = apply_command(&mut sim.state, &cmd) {
+            push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+        } else {
+            pending.pending = true;
         }
     }
 }

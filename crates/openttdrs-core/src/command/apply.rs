@@ -1,7 +1,5 @@
 use crate::map::TileKind;
-use crate::{
-    BRIDGE_BUILD_COST_PER_TILE, DEPOT_BUILD_COST, GameState, StopKind, TUNNEL_BUILD_COST_PER_TILE,
-};
+use crate::{BRIDGE_BUILD_COST_PER_TILE, GameState, StopKind, TUNNEL_BUILD_COST_PER_TILE};
 
 use super::types::{Command, CommandError};
 use super::{industry, transport, vehicles};
@@ -19,14 +17,8 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
         Command::PlaceRail(c) => transport::place_rail(state, *c),
         Command::PlaceRoadDepot(c) => transport::place_road_depot_dir(state, *c, 0),
         Command::PlaceRoadDepotDir(c, dir) => transport::place_road_depot_dir(state, *c, *dir),
-        Command::PlaceRailDepot(c) => transport::place_single_transport_tile(
-            state,
-            *c,
-            TileKind::RailDepot,
-            0x10,
-            0xC0,
-            DEPOT_BUILD_COST,
-        ),
+        Command::PlaceRailDepot(c) => transport::place_rail_depot_dir(state, *c, 0),
+        Command::PlaceRailDepotDir(c, dir) => transport::place_rail_depot_dir(state, *c, *dir),
         Command::PlaceRoadTunnel(a, b) => transport::place_tunnel_or_bridge(
             state,
             *a,

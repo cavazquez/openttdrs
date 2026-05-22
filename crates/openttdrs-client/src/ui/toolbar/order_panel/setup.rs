@@ -27,7 +27,7 @@ pub(crate) fn setup_order_panel(mut commands: Commands) {
         .with_children(|panel| {
             panel.spawn((
                 OrderPanelText,
-                Text::new("Órdenes del vehículo"),
+                Text::new("Vehículo"),
                 TextFont {
                     font_size: 13.0,
                     ..default()
@@ -59,7 +59,9 @@ pub(crate) fn setup_order_panel(mut commands: Commands) {
                         ..default()
                     })
                     .with_children(|row| {
-                        spawn_order_button(row, OrderPanelButton::PickDestOnMap, "Elegir en mapa");
+                        spawn_order_button(row, OrderPanelButton::PickDestOnMap, "Agregar destino");
+                        spawn_order_button(row, OrderPanelButton::ToggleRunning, "Iniciar/Detener");
+                        spawn_order_button(row, OrderPanelButton::Sell, "Vender");
                         spawn_order_button(row, OrderPanelButton::ClearLast, "Quitar última");
                         spawn_order_button(row, OrderPanelButton::ClearAll, "Vaciar lista");
                         spawn_order_button(row, OrderPanelButton::Close, "Cerrar");

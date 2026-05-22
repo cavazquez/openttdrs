@@ -22,7 +22,7 @@ mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
-    use openttdrs_core::{Command, Map, TileCoord, TileKind, VehicleKind, VehicleOrder};
+    use openttdrs_core::{Command, GameState, TileCoord, TileKind, VehicleKind, VehicleOrder};
 
     use crate::render::{PrimaryGameCamera, RemapMapVisualsPending, VehicleIndex};
     use crate::state::SimWorld;
@@ -143,6 +143,9 @@ mod tests {
         world.insert_resource(SimWorld::default());
         world.insert_resource(UiToolState::default());
         world.insert_resource(DragBuildState::default());
+        world.insert_resource(RemapMapVisualsPending::default());
+        world.insert_resource(HudBuildFeedback::default());
+        world.insert_resource(Time::<()>::default());
         world.run_system_once(handle_order_panel_buttons).unwrap();
     }
 
@@ -373,34 +376,35 @@ mod tests {
 
     #[test]
     fn map_related_helpers_cover_tunnels() {
-        let mut map = Map::new_flat(6, 6, 0);
+        let mut sim = SimWorld {
+            state: GameState::new(6, 6),
+            ..SimWorld::default()
+        };
         let c = |x: i32, y: i32| TileCoord::new(x, y);
-        map.set_height(c(1, 1), 2).unwrap();
-        map.set_height(c(3, 1), 2).unwrap();
-        map.set_kind(c(1, 1), TileKind::Road).unwrap();
-        map.set_kind(c(2, 1), TileKind::Road).unwrap();
-        map.set_kind(c(3, 1), TileKind::Road).unwrap();
-        map.set_kind(c(4, 1), TileKind::Water).unwrap();
+        // Pendiente NE en (5,5) y salida SW en (3,5), mismo nivel.
+        sim.state.map.set_height(c(2, 2), 2).unwrap();
+        sim.state.map.set_height(c(2, 3), 2).unwrap();
+        sim.state.map.set_height(c(3, 2), 1).unwrap();
+        sim.state.map.set_height(c(3, 3), 1).unwrap();
+        sim.state.map.set_height(c(0, 2), 1).unwrap();
+        sim.state.map.set_height(c(0, 3), 1).unwrap();
+        sim.state.map.set_height(c(1, 2), 2).unwrap();
+        sim.state.map.set_height(c(1, 3), 2).unwrap();
 
-        assert!(!tunnel_placement_is_valid(
-            &map,
-            BuildMenuAction::RoadTunnel,
-            &[(1, 1), (2, 1)]
-        ));
         assert!(tunnel_placement_is_valid(
-            &map,
+            &sim.state,
             BuildMenuAction::RoadTunnel,
-            &[(1, 1), (2, 1), (3, 1)]
+            &[(2, 2)]
         ));
         assert!(!tunnel_placement_is_valid(
-            &map,
+            &sim.state,
             BuildMenuAction::RoadTunnel,
-            &[(1, 1), (2, 1), (4, 1)]
+            &[(0, 0)]
         ));
         assert!(!tunnel_placement_is_valid(
-            &map,
+            &sim.state,
             BuildMenuAction::Road,
-            &[(1, 1), (2, 1)]
+            &[(5, 5)]
         ));
     }
 

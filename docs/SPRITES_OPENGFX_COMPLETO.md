@@ -215,6 +215,20 @@ const ROAD_OFFSET: [u8; 16] = [
 | `SPR_TRUCK_STOP_*_BUILD_B` | 2716–2719 | Edificio B (4 dirs) |
 | `SPR_TRUCK_STOP_*_BUILD_C` | 2720–2723 | Edificio C (4 dirs) |
 
+### Uso en openttdrs (SP3 paradas)
+
+| Herramienta UI | PNG en cliente | IDs | Render actual |
+|----------------|----------------|-----|---------------|
+| Parada de bus | `bus_stop_*_ground.png` (+ `build_*` en disco) | 2692–2707 | GROUND + tramo `road_flat` en `m3` |
+| Estación (camión) | `truck_stop_ground_{0..3}.png` | 2708–2723 | Igual que bus |
+| Estación de tren | `rail_{1069..1074}.png` | 1069–1074 | Vía 1011/1012 + plataformas |
+
+Edificios `build_*`: en OpenTTD van con `TILE_SEQ_LINE` + `RemapCoords` (`station_land.h`); en openttdrs aún no se pintan. Roadmap: [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md).
+
+**No** comparten el mismo sprite bus y camión; pueden verse parecidos al dibujar solo la baldosa.
+
+Documentación: [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md).
+
 ---
 
 ## 7. Casas Urbanas (MP_HOUSE)

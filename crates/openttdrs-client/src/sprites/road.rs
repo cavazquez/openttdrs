@@ -2,6 +2,18 @@
 
 use openttdrs_core::{Map, TileCoord, TileKind};
 
+/// Edificio de depósito de carretera por `DiagDirection` (`m5 & 0x03`).
+///
+/// OpenTTD usa `SPR_ROAD_DEPOT` (1408) + piezas de boca; en OpenGFX los PNG
+/// `road_depot_0` / `road_depot_2` son recortes 12×12 (líneas de acceso), no el
+/// edificio. Los sprites 60×47 por orientación son 1412 (NE), 1409 (SE), 1411 (SW), 1413 (NW).
+pub const ROAD_DEPOT_BUILDING_BY_DIR: [&str; 4] = [
+    "assets/opengfx/tiles/rail_1412.png",
+    "assets/opengfx/tiles/road_depot_1.png",
+    "assets/opengfx/tiles/road_depot_3.png",
+    "assets/opengfx/tiles/rail_1413.png",
+];
+
 /// Tabla `offsets[]` de `GetRoadSpriteOffset` en `road_cmd.cpp` (tesela plana).
 /// Sprite final = `SPR_ROAD_Y` (1332) + entrada; índices 11–14 son variantes en pendiente NE/SE/SW/NW.
 pub const ROAD_FLAT_OFFSET_TBL: [u8; 16] = [0, 18, 17, 7, 16, 0, 10, 5, 15, 8, 1, 4, 9, 3, 6, 2];
@@ -200,10 +212,46 @@ mod tests {
     }
 
     #[test]
+    fn sp3_visual_fixture_tram_uses_aligned_track_mask() {
+        let map = Map::from_ottd_binary(SP3_VISUAL_FIXTURE).expect("checklist MAP1");
+        let t = map.get(TileCoord::new(15, 3)).expect("tranvía");
+        assert_eq!(
+            effective_road_bits(t.mapt, t.m5, t.kind, MP_ROAD, MP_TB),
+            Some(0x0A)
+        );
+        assert_eq!(t.m3 & 0x0F, 0x0A);
+        assert_eq!(
+            tram_flat_sprite_index(0, t.m3, &ROAD_FLAT_OFFSET_TBL),
+            Some(road_flat_sprite_index(0, 0x0A, &ROAD_FLAT_OFFSET_TBL))
+        );
+    }
+
+    #[test]
+    fn sp3_visual_fixture_tram_on_ne_slope_uses_slope_flat_index() {
+        let map = Map::from_ottd_binary(SP3_VISUAL_FIXTURE).expect("checklist MAP1");
+        let t = map
+            .get(TileCoord::new(13, 7))
+            .expect("tranvía pendiente NE");
+        let tileh = openttdrs_core::tile_slope_and_z(&map, TileCoord::new(13, 7))
+            .expect("slope")
+            .0;
+        assert_eq!(tileh, 12);
+        assert_eq!(t.m3, 0x05);
+        assert_eq!(
+            road_flat_sprite_index(tileh, t.m5, &ROAD_FLAT_OFFSET_TBL),
+            11
+        );
+        assert_eq!(
+            tram_flat_sprite_index(tileh, t.m3, &ROAD_FLAT_OFFSET_TBL),
+            Some(11)
+        );
+    }
+
+    #[test]
     fn sp3_visual_fixture_crossings_decode_road_axis() {
         let map = Map::from_ottd_binary(SP3_VISUAL_FIXTURE).expect("checklist MAP1");
-        let cx = map.get(TileCoord::new(5, 2)).expect("cruce X");
-        let cy = map.get(TileCoord::new(6, 2)).expect("cruce Y");
+        let cx = map.get(TileCoord::new(9, 3)).expect("cruce X");
+        let cy = map.get(TileCoord::new(11, 3)).expect("cruce Y");
         assert_eq!(
             effective_road_bits(cx.mapt, cx.m5, cx.kind, MP_ROAD, MP_TB),
             Some(0x0A)

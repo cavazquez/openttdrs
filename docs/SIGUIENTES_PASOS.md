@@ -14,6 +14,10 @@ prioridad en **juego en solitario** (hito 0.1). La fundación **I0–I7** ya est
 | [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) | NFO, transparencia 8bpp, IDs de sprite, proyección isométrica, tabla road_tx/ty. |
 | [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) | MAPT, `m5` (carretera normal / cruce / depósito), `.ottdmap`, relieve 8px, referencias upstream. |
 | [INFORME_ARQUITECTURA_OPENTTD.md](INFORME_ARQUITECTURA_OPENTTD.md) | Visión del código de referencia en `reference/openttd-upstream/`. |
+| [PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md) | Construcción y toolbar (SP2.6 manual pendiente). |
+| [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Paradas bus/camión/tren y sprites. |
+| [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md) | **`RemapCoords`**, BUILD paradas, roadmap de render. |
+| [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | Checklist de regresión SP2. |
 
 ---
 
@@ -65,17 +69,23 @@ más moleste al jugar.
   reservar posiciones en hierba sin `TileKind::Station`).
 - Tests de integración UI↔`apply_command` ampliados donde falten herramientas críticas.
 
-### SP2 — Construcción y herramientas (prioridad alta)
+### SP2 — Construcción y herramientas — **SP2.1–SP2.5 hechos; SP2.6 manual pendiente**
 
-- Mensajes de error de colocación (`CommandError` → feedback HUD / toolbar).
-- Preview/validación para industria, estación, túnel, puente, depósito.
-- Paneles de órdenes, depósito y carga de estación estables en mapas reales y procedurales.
+Plan: **[PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md)**. Validación: **[SP2_CHECKLIST.md](SP2_CHECKLIST.md)** (§ SP2.6 = sesión 15 min para cerrar SP2).
+
+| Doc | Uso |
+|-----|-----|
+| [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | CI ✓ + checklist manual (SP2.6 sin marcar) |
+| [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Bus vs camión vs tren, sprites, conexión carretera |
+| [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md) | Render BUILD paradas (`RemapCoords`) |
+
+En código: errores HUD, preview, transporte, paradas/tren, industria, órdenes, mapa demo. SP3 paradas: solo GROUND; edificios `BUILD_*` → [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md).
 
 ### SP3 — Presentación del mapa (prioridad media)
 
-Plan detallado (revisión upstream + estado del cliente): **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**.
+Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. **SP3.0 cerrado** (auditoría + fixture 20×12). **SP3.1** en curso: pendientes en checklist; validar en `.ottdmap` de partida real.
 
-**Auditoría SP3.0:** `python3 scripts/audit_sp3_assets.py` — resultado en [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
+**Checklist visual:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client` — [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
 
 Resumen de huecos reales (mucho de lo “esquina/T + trackbits” **ya está** en `road_flat_*` / `collect_rail_sprites`):
 

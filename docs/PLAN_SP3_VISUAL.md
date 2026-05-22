@@ -31,7 +31,7 @@ Varios ítems de `SIGUIENTES_PASOS` (2026-04) ya están **hechos** en `main`:
 **Huecos reales** (donde el mapa aún no “se lee” como OpenTTD):
 
 1. **Vías y carreteras en pendiente** — upstream usa familias `SPR_ROAD_SLOPE_*` / raíles en slope; aquí muchas teselas inclinadas siguen con suelo genérico + pieza plana o solo 4 variantes de cruce en `0x0F`.
-2. **Estaciones de tren** — paradas bus/camión con pocos PNG; faltan plataformas, techos y edificios (`SPR_RAIL_PLATFORM_*`, `1070–1086` en script, no cableados al render de `MP_STATION`).
+2. **Estaciones** — tren: plataformas 1069–1074 (SP2). Paradas bus/camión: suelo + `BUILD_A/B/C` (offsets `station_land.h`). Pendiente: ghost preview, multi-tesela tren. Ver [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md).
 3. **Cobertura de casas** — solo un subconjunto de `CleanHouseType`; el resto cae en specs repetidas o sin `s2`.
 4. **Industrias** — entradas con fallback `64×48/-32/-32`; calibración Z/offset en Farm, Factory, Coal Mine.
 5. **Assets faltantes** — `descargar_graficos.sh` puede dejar `rail_*.png` como **placeholder** si el crop falla; conviene auditoría `assets/opengfx/tiles/`.
@@ -89,9 +89,10 @@ Orden sugerido: primero **datos + mapas reales**, luego **estaciones/industrias*
 - [x] Inventario automatizado: `python3 scripts/audit_sp3_assets.py` o `./scripts/check.sh audit`.
 - [x] Informe: [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) (JSON local: `docs/SP3_AUDIT_REPORT.json`, ignorado por `*.json` en git).
 - [x] Partida de prueba **manual** con fixture TNBP: `v5p12_tnbp.ottdmap` — captura [sp3/manual-v5p12_tnbp-2026-05-22.png](sp3/manual-v5p12_tnbp-2026-05-22.png), detalle en [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
-- [ ] Capturas con fixture **denso** `sp3_visual_checklist.ottdmap` (generar: `scripts/gen_sp3_visual_checklist_ottdmap.py`) — layout en [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
+- [x] Fixture **denso** `sp3_visual_checklist.ottdmap` (20×12, **1 tesela de hierba** entre escenas) — `scripts/gen_sp3_visual_checklist_ottdmap.py`, layout en [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
+- [ ] Captura manual del checklist (una sesión con el comando de abajo).
 
-**Criterio:** documento de gaps con lista de sprite IDs — **cumplido**. Captura manual mínima TNBP — **cumplida**; escenarios ricos quedan para un `.ottdmap` de partida real.
+**Criterio:** documento de gaps con lista de sprite IDs — **cumplido**. Fixture checklist listo para captura — **cumplido**; captura PNG opcional en `docs/sp3/`.
 
 **Hallazgo SP3.0 (esta máquina):** 519 PNG requeridos presentes; **8 placeholders** `rail_1438`…`rail_1548` (señales PBS sin recorte en OpenGFX). Ver resumen.
 
@@ -103,8 +104,9 @@ Upstream: `GetRoadSpriteOffset`, `DrawRoadTile`.
 - [x] Pendientes diagonales NE/SE/SW/NW: `road_flat_sprite_index` alineado con `GetRoadSpriteOffset` (sprites 11–14 = `road_flat_11..14`, mismo grupo `SPR_ROAD_Y`).
 - [x] `effective_road_bits` en fixture `m3_road_tram_2x2.ottdmap` + subtipos cruce/depósito (tests unitarios).
 - [x] Tranvía: fixture core + índice overlay en cliente (`m3_fixture_effective_bits_and_tram_overlay_index`).
+- [x] Fixture checklist: carretera en pendientes NE/SE/SW/NW (fila y=7) + test `ottdmap_sp3_visual_fixture`.
 
-**Criterio:** trazado de carretera en save real coincide con OpenTTD en tramos rectos, T y cruce; tranvía visible donde el save lo tenga.
+**Criterio:** trazado de carretera en save real coincide con OpenTTD en tramos rectos, T y cruce; tranvía visible donde el save lo tenga; pendientes diagonales usan `road_flat_11..14` en checklist.
 
 ### SP3.2 — Vía férrea: suelo, pendiente, señales (1–2 PR)
 
@@ -124,8 +126,9 @@ Upstream: `station_cmd.cpp`, sprites 1069–1086, bus stops.
 - [x] Diferenciar `MP_STATION` tren / bus / truck (`station_tile_class`, suelos distintos).
 - [x] Estación tren 1×1: plataforma + edificio (`rail_platform_*` + `rail_station_sprite_layers`).
 - [x] Orientación en `m5` (eje Y = bit 0); herramienta **Estación de tren** en panel vía (`PlaceRailStation`).
+- [x] Paradas bus/camión: capas `BUILD_A/B/C` con `RemapCoords` (código; validar visual en checklist).
 
-**Criterio:** una estación de tren construida en sandbox se distingue claramente de un bus stop y de hierba.
+**Criterio:** paradas con edificio visible; tren 1×1 distinguible de hierba y de parada de carretera.
 
 ### SP3.4 — Casas e industrias en mapas reales (1–2 PR)
 
@@ -142,7 +145,7 @@ Upstream: `industry_land.h`, `house_land.h`.
 
 Upstream: `water_cmd.cpp`.
 
-- [x] Confirmar conservación de subtipo Coast en pipeline `parse_sav` → `.ottdmap` → cliente (`verify_parse_sav_water_m5.py`, `map.rs`, fixture SP3 `(3,7)`).
+- [x] Confirmar conservación de subtipo Coast en pipeline `parse_sav` → `.ottdmap` → cliente (`verify_parse_sav_water_m5.py`, `map.rs`, fixture SP3 `(5,11)` en checklist 20×12).
 - [x] Afinar animación mar (interpolación suave dark×5 + glitter×15, brillo/cian en picos).
 - [x] Costas: sin regresión en `shore_*` + `tileh` (tests en `iso`/`RenderGrid`; `water_with_coast_m5_uses_shore_without_land_neighbors`).
 

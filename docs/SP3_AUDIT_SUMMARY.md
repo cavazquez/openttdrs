@@ -12,8 +12,8 @@ Re-ejecutar tras `bash scripts/descargar_graficos.sh` o cambios en precarga de s
 
 | Métrica | Valor |
 |---------|------:|
-| PNG requeridos por `WorldAssets::load` | 519 |
-| Presentes | 519 |
+| PNG requeridos por `WorldAssets::load` | 538 |
+| Presentes | 538 |
 | Ausentes | 0 |
 | **Placeholder 1×1** (NFO sin sprite) | **8** |
 
@@ -37,7 +37,7 @@ Todos los placeholders están en categoría **rail** (sprites de señal del rang
 ## Categorías sin problemas
 
 - **road** / **tram** — `road_flat_00..18`, `tram_flat_00..18` presentes (tabla `GetRoadSpriteOffset` ya cableada).
-- **terrain** / **water** / **station** / **industry** / **house** — sin faltantes en esta máquina.
+- **terrain** / **water** / **station** (incl. `bus_stop_*_build_*`, `truck_stop_*_build_*`) / **industry** / **house** — sin faltantes en esta máquina.
 - **transport_object** — túneles, puentes, depósitos OK.
 
 ## Fixtures `.ottdmap` (pruebas de mapa real)
@@ -47,7 +47,7 @@ Todos los placeholders están en categoría **rail** (sprites de señal del rang
 | `crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap` | TNBP en CI |
 | `crates/openttdrs-core/tests/fixtures/m3_road_tram_2x2.ottdmap` | Tranvía `m3` |
 | `crates/openttdrs-core/tests/fixtures/v5p12_stxy.ottdmap` | Footer estaciones |
-| `crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap` | **Checklist visual denso** (12×8) |
+| `crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap` | **Checklist visual** (20×12, escenas separadas) |
 | `tests/fixtures/stationlist-test.ottdmap` | Lista estaciones |
 
 ## Referencia upstream
@@ -58,31 +58,15 @@ Si falta: `bash scripts/fetch-openttd-reference.sh`.
 
 ## Prueba manual (SP3.0)
 
-Comando:
+### Fixture mínimo TNBP
 
 ```bash
 OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap cargo run -p openttdrs-client
 ```
 
-### Resultado 2026-05-22 (fixture `v5p12_tnbp.ottdmap`)
+Captura: [sp3/manual-v5p12_tnbp-2026-05-22.png](sp3/manual-v5p12_tnbp-2026-05-22.png) — valida TNBP + pendiente NE en mapa 2×2.
 
-Captura: [sp3/manual-v5p12_tnbp-2026-05-22.png](sp3/manual-v5p12_tnbp-2026-05-22.png)
-
-| Comprobación | Resultado |
-|--------------|-----------|
-| Carga `.ottdmap` sin error | OK |
-| Mapa 2×2, minimapa coherente | OK (2 teselas verdes + 2 marrones en minimapa) |
-| Footer TNBP en log | OK — `1 túnel(es) JGR`, extremos norte/sur 1/1 |
-| Render isométrico (hierba + asfalto en pendiente) | OK — tesela `(1,0)` con `h:1`, `slope:12 (NE)` |
-| Sin crash al cerrar ventana | OK |
-
-**Consola (resumen):** `Grass: 2`, `Road: 2` (las dos teselas `MP_TUNNELBRIDGE` con `m5=0` se clasifican como `TileKind::Road` en `ottd_tile_kind`); TNBP vs mapa 1/1; 0 industrias/estaciones/vehículos (esperado en fixture mínimo).
-
-**HUD en `(1,0)`:** `mapt:0x90`, `m5:0x00`, `rb:0x08` — `road_bits_for_render` infiere bits por vecinos al no haber trazado en M5 (fixture vacío en carretera).
-
-**Alcance:** este fixture valida **TNBP + carga + dibujo básico en pendiente NE**; **no** sustituye revisión de cruces, T, estaciones, industrias ni costa. Para eso usar un `.ottdmap` exportado con `scripts/parse_sav.py` desde una partida real (o ampliar fixtures en `crates/openttdrs-core/tests/fixtures/`).
-
-### Fixture checklist denso (`sp3_visual_checklist.ottdmap`)
+### Fixture checklist denso (SP3.0 cerrado / SP3.1 visual)
 
 Regenerar: `python3 scripts/gen_sp3_visual_checklist_ottdmap.py`
 
@@ -90,34 +74,54 @@ Regenerar: `python3 scripts/gen_sp3_visual_checklist_ottdmap.py`
 OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client
 ```
 
+**Mapa 20×12** — cada escena va con **≥1 tesela de hierba** de separación. Pan/zoom para revisar fila a fila.
+
 | Zona (x,y) | Contenido |
 |------------|-----------|
-| (1–4, 2) | Carretera Y, X, T (`0x07`), cruce `0x0F` |
-| (5–6, 2) | Cruce a nivel eje X (`m5=0x40`) / Y (`0x41`) |
-| (7, 2) | Carretera + tranvía (`m3=0x0A`) |
-| (1–4, 3) | Vía Y, X, T, cruce (`m5` track bits 2/1/7/3) |
-| (8, 3) | Vía con señales (`m5` subtype 1, `m3=0xC0`) |
-| (9, 3) | Vía nieve (`m3` bajo = 12 / snow ground) |
-| (0, 5) | Casa (`MP_HOUSE`, `m8=0` Tall Office) |
-| (1, 5) | Parada camión (`m6` truck) |
-| (4, 4) | Estación tren (`m6` rail, plataforma+edificio; junto al cruce de vía) |
-| (4, 5) | `MP_INDUSTRY` gfx 0 (coal mine) |
-| (2–3, 7) | Agua Clear + Coast (`m5=0x10`), hierba en (1,7) y (4,7) |
+| (1,3) | Carretera Y |
+| (3,3) | Carretera X |
+| (5,3) | T (`0x07`) |
+| (7,3) | Cruce `0x0F` |
+| (9,3) | Cruce a nivel eje X (`m5=0x40`) |
+| (11,3) | Cruce a nivel eje Y (`0x41`) |
+| (15,3) | Carretera + tranvía eje X (`m5=0x0A`, `m3=0x0A`) |
+| (1,5) | Vía Y |
+| (3,5) | Vía X |
+| (5,5) | Vía T |
+| (7,5) | Cruce vía |
+| (9,5) | Vía con señales |
+| (11,5) | Vía nieve (`m3` bajo = 12) |
+| **(1,7)** | **Carretera en pendiente NE** (SP3.1) |
+| **(4,7)** | **Carretera pendiente SE** |
+| **(7,7)** | **Carretera pendiente SW** |
+| **(10,7)** | **Carretera pendiente NW** |
+| **(13,7)** | **Tranvía en pendiente NE** (`m5=0x05`, `m3=0x05` → `road_flat_11` / `tram_flat_11`) |
+| (1,9) | Casa Tall Office |
+| (3,9) | Parada camión + edificios |
+| (5,9) | Parada bus + edificios |
+| (7,9) | Estación tren 1×1 |
+| (9,9) | Industria coal mine |
+| (3,11) | Agua Clear |
+| (5,11) | Agua Coast (`m5=0x10`) |
 
 Tests: `cargo test -p openttdrs-core --test ottdmap_sp3_visual_fixture`
 
 ### Checklist visual (capturas manuales)
 
-- [ ] Cruce carretera/vía y T en carretera plana — filas y=2 y y=3
-- [ ] Casa — (0, 5)
-- [ ] Estación / parada — (1, 5) y tren — (4, 4)
-- [ ] Industria + gfx — (4, 5)
-- [ ] Costa / MP_WATER — (2–3, 7) *(automático: fixture + `verify_parse_sav_water_m5.py`)*
+Marcar tras cargar el fixture checklist:
+
+- [ ] Fila y=3: carretera plana (Y, X, T, cruce, cruces nivel, tranvía X en x=15)
+- [ ] Fila y=5: vía (Y, X, T, cruce, señales, nieve)
+- [ ] Fila y=7: carretera en 4 pendientes (`road_flat_11..14`) + tranvía NE en (13,7)
+- [ ] Fila y=9: casa, parada camión, parada bus, tren, industria
+- [ ] Fila y=11: mar + costa
+
+**Nota:** el mapa procedural por defecto (`cargo run -p openttdrs-client`) mezcla todo en la demo de transporte; para regresión visual usar el fixture checklist.
 
 ## SP3.5 — agua y costa
 
 - `parse_sav.py`: `export_ottdmap_from_chunks`, histograma `water` en `analyze_save`.
-- `scripts/verify_parse_sav_water_m5.py`: MAP5 agua == m5 `.ottdmap`; fixture SP3 con Coast `0x10` en (3,7).
+- `scripts/verify_parse_sav_water_m5.py`: MAP5 agua == m5 `.ottdmap`; fixture SP3 con Coast `0x10` en (5,11).
 - Cliente: `RenderGrid` usa `m5>>4==1` (Coast) sin depender de vecinos; tests `iso` + `grid.rs`.
 - Animación mar: `water_sprite_color` — ciclos dark×5 + glitter×15 con interpolación suave y destellos cian (solo teselas Clear, no `shore_*`).
 
@@ -130,6 +134,8 @@ Tests: `cargo test -p openttdrs-core --test ottdmap_sp3_visual_fixture`
 
 ## Siguiente fase
 
+**SP3.1 en saves reales** — exportar `.ottdmap` con `parse_sav.py` y comparar tramos en pendiente con OpenTTD.
+
 **SP4 / I8** — fuera de SP3 visual (multijugador, NewGRF completo, etc.).
 
-Detalle máquina-legible: [SP3_AUDIT_REPORT.json](SP3_AUDIT_REPORT.json) (no versionar si es ruidoso; está en `.gitignore` opcional — por ahora se puede commitear como snapshot).
+Detalle máquina-legible: [SP3_AUDIT_REPORT.json](SP3_AUDIT_REPORT.json) (regenerar con `audit_sp3_assets.py`).

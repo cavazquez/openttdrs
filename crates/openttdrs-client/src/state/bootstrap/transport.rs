@@ -33,6 +33,7 @@ pub(crate) fn place_stations(state: &mut GameState) {
     }
 }
 
+#[allow(dead_code)] // reservado para bootstrap alternativo / tests
 pub(crate) fn place_roads(state: &mut GameState) {
     let routes: Vec<(TileCoord, TileCoord)> = state
         .industries
@@ -58,6 +59,7 @@ pub(crate) fn place_roads(state: &mut GameState) {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) fn place_vehicles(state: &mut GameState) {
     let routes: Vec<(TileCoord, TileCoord)> = state
         .industries

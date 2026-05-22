@@ -21,7 +21,9 @@ pub(crate) fn command_for_action(
         BuildMenuAction::RoadDepot => {
             Some(Command::PlaceRoadDepotDir(pos, station_state.orientation))
         }
-        BuildMenuAction::RailDepot => Some(Command::PlaceRailDepot(pos)),
+        BuildMenuAction::RailDepot => {
+            Some(Command::PlaceRailDepotDir(pos, station_state.orientation))
+        }
         BuildMenuAction::RoadBridge
         | BuildMenuAction::RoadTunnel
         | BuildMenuAction::RailBridge

@@ -123,6 +123,8 @@ pub(crate) struct DragBuildState {
 pub(crate) struct OrderEditState {
     pub(crate) vehicle_id: Option<u32>,
     pub(crate) orders: Vec<openttdrs_core::VehicleOrder>,
+    /// Tras «Agregar destino»: el siguiente clic en mapa añade parada (Esc cancela).
+    pub(crate) picking_destination: bool,
 }
 
 #[derive(Component)]
@@ -136,8 +138,10 @@ pub(crate) enum OrderPanelButton {
     Close,
     ClearLast,
     ClearAll,
-    /// Activa herramienta Órdenes + cursor de puntería en mapa (misma acción que la toolbar).
+    /// Clic en mapa para añadir parada a la ruta.
     PickDestOnMap,
+    ToggleRunning,
+    Sell,
 }
 
 #[derive(Component, Clone, Copy)]

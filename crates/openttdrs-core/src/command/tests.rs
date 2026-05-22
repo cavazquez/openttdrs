@@ -1,7 +1,7 @@
-use super::{Command, CommandError, apply_command};
+use super::{Command, CommandError, apply_command, command_error_message, command_would_fail};
 use crate::{
-    BRIDGE_BUILD_COST_PER_TILE, GameState, IndustryKind, ROAD_BUILD_COST, StopKind, TileCoord,
-    TileKind, Vehicle, VehicleKind,
+    BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, GameState, IndustryKind, ROAD_BUILD_COST,
+    STATION_BUILD_COST, StopKind, TileCoord, TileKind, Vehicle, VehicleKind,
 };
 
 #[test]
@@ -114,12 +114,15 @@ fn place_station_duplicate_errors() {
 fn place_rail_station_sets_m6_and_axis_in_m5() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(2, 2);
-    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(2, 1))).unwrap();
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(1, 2))).unwrap();
     apply_command(&mut s, &Command::PlaceRailStation(c, 0)).unwrap();
     let tile = s.map.get(c).unwrap();
     assert_eq!(tile.kind, TileKind::Station);
     assert_eq!((tile.m6 >> 3) & 0x0F, 0);
-    assert_eq!(tile.m5 & 1, 1);
+    assert_eq!(
+        tile.m5, 3,
+        "vía vecina aislada es eje Y → gfx 3 con edificio"
+    );
     assert_eq!(s.stations[0].stop_kind, StopKind::RailStation);
 }
 
@@ -128,18 +131,78 @@ fn place_station_dir_preserves_orientation_in_m5() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(1, 1);
     apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 0))).unwrap();
-    apply_command(&mut s, &Command::PlaceStationDir(c, 2)).unwrap();
+    apply_command(&mut s, &Command::PlaceStationDir(c, 3)).unwrap();
     let tile = s.map.get(c).unwrap();
     assert_eq!(tile.kind, TileKind::Station);
     assert_eq!((tile.mapt >> 4) & 0x0F, 5);
-    assert_eq!(tile.m5 & 0x03, 2);
+    assert_eq!(tile.m5 & 0x03, 3);
+    assert_eq!(tile.m3 & 0x0F, 0x01, "boca de parada hacia la carretera");
+}
+
+#[test]
+fn place_bus_stop_links_adjacent_road() {
+    let mut s = GameState::new(8, 8);
+    let stop = TileCoord::new(1, 1);
+    let road = TileCoord::new(1, 0);
+    apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(stop, 3)).unwrap();
+    assert_eq!(s.map.get(stop).unwrap().m3 & 0x0F, 0x01);
+    assert!(
+        s.map.get(road).unwrap().m5 & 0x04 != 0,
+        "carretera con bit hacia la parada"
+    );
+}
+
+#[test]
+fn place_station_on_forest_clears_and_builds_when_entrance_faces_road() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(1, 1);
+    let money_before = s.economy.money;
+    apply_command(&mut s, &Command::PlaceForest(c)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 0))).unwrap();
+    apply_command(&mut s, &Command::PlaceStationDir(c, 3)).unwrap();
+    assert_eq!(s.map.get_kind(c), Some(TileKind::Station));
+    assert_eq!(
+        s.economy.money,
+        money_before - 30 - CLEAR_TILE_COST - ROAD_BUILD_COST - STATION_BUILD_COST
+    );
+}
+
+#[test]
+fn place_station_on_road_tile_fails() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(1, 1);
+    apply_command(&mut s, &Command::PlaceRoad(c)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 0))).unwrap();
+    let e = apply_command(&mut s, &Command::PlaceStationDir(c, 3)).unwrap_err();
+    assert_eq!(e, CommandError::CannotPlaceStationOnOccupiedTile);
+    assert_eq!(s.map.get_kind(c), Some(TileKind::Road));
+}
+
+#[test]
+fn place_station_dir_rejects_entrance_away_from_road() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(1, 1);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 0))).unwrap();
+    let e = apply_command(&mut s, &Command::PlaceStationDir(c, 1)).unwrap_err();
+    assert_eq!(e, CommandError::StationNotAdjacentToTransport);
+}
+
+#[test]
+fn place_rail_station_rejects_entrance_away_from_rail() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(1, 2))).unwrap();
+    let e = apply_command(&mut s, &Command::PlaceRailStation(c, 2)).unwrap_err();
+    assert_eq!(e, CommandError::StationNotAdjacentToTransport);
 }
 
 #[test]
 fn build_road_vehicle_at_depot_creates_stopped_bus() {
     let mut s = GameState::new(8, 8);
     let depot = TileCoord::new(2, 2);
-    apply_command(&mut s, &Command::PlaceRoadDepot(depot)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
     apply_command(
         &mut s,
         &Command::BuildRoadVehicleAtDepot(depot, VehicleKind::Bus),
@@ -154,13 +217,27 @@ fn build_road_vehicle_at_depot_creates_stopped_bus() {
 fn place_road_depot_dir_preserves_orientation_in_m5() {
     let mut s = GameState::new(8, 8);
     let depot = TileCoord::new(2, 2);
+    let exit = TileCoord::new(2, 1);
+    apply_command(&mut s, &Command::PlaceRoad(exit)).unwrap();
     apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 3)).unwrap();
     let tile = s.map.get(depot).unwrap();
     assert_eq!(tile.kind, TileKind::RoadDepot);
     assert_eq!(tile.m5 & 0x03, 3);
-    let exit = TileCoord::new(2, 1);
     assert_eq!(s.map.get_kind(exit), Some(TileKind::Road));
-    assert_eq!(s.map.get(exit).unwrap().m5 & 0x0F, 0x04);
+    assert_ne!(
+        s.map.get(exit).unwrap().m5 & 0x04,
+        0,
+        "boca NW hacia el depósito"
+    );
+}
+
+#[test]
+fn place_road_depot_dir_requires_road_at_entrance() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    let e = apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 3)).unwrap_err();
+    assert_eq!(e, CommandError::StationNotAdjacentToTransport);
+    assert_eq!(s.map.get_kind(depot), Some(TileKind::Grass));
 }
 
 #[test]
@@ -168,8 +245,8 @@ fn toggle_road_vehicle_running_targets_depot_exit() {
     let mut s = GameState::new(8, 8);
     let depot = TileCoord::new(2, 2);
     let exit = TileCoord::new(3, 2);
-    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 2)).unwrap();
     apply_command(&mut s, &Command::PlaceRoad(exit)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 2)).unwrap();
     apply_command(
         &mut s,
         &Command::BuildRoadVehicleAtDepot(depot, VehicleKind::Truck),
@@ -187,6 +264,7 @@ fn toggle_road_vehicle_running_targets_reachable_road_not_depot_mouth() {
     let mut s = GameState::new(8, 8);
     let depot = TileCoord::new(2, 2);
     let far = TileCoord::new(5, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(3, 2))).unwrap();
     apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 2)).unwrap();
     apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(4, 2), 0x0A)).unwrap();
     apply_command(&mut s, &Command::PlaceRoadBits(far, 0x0A)).unwrap();
@@ -206,7 +284,7 @@ fn set_vehicle_station_orders_rejects_incompatible_stop_kind() {
     let mut s = GameState::new(8, 8);
     let stop = TileCoord::new(1, 1);
     apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 0))).unwrap();
-    apply_command(&mut s, &Command::PlaceBusStop(stop, 0)).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(stop, 3)).unwrap();
     s.vehicles
         .push(Vehicle::new(10, VehicleKind::Truck, stop, stop));
     let e = apply_command(&mut s, &Command::SetVehicleStationOrders(10, vec![stop])).unwrap_err();
@@ -236,14 +314,26 @@ fn place_rail_mutates_tile_kind() {
 }
 
 #[test]
+fn place_rail_sets_mapt_and_trackbits_for_horizontal_line() {
+    let mut s = GameState::new(12, 8);
+    for x in 2..=5 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+    }
+    let mid = s.map.get(TileCoord::new(3, 4)).unwrap();
+    assert_eq!(mid.mapt, 0x10);
+    assert_eq!(mid.m5 & 0x3F, 0x01, "tramo horizontal: Track X");
+    assert_eq!((mid.m5 >> 6) & 0x3, 0);
+}
+
+#[test]
 fn bridge_cost_scales_with_line_length() {
     let mut s = GameState::new(8, 8);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    for x in 2..=3 {
+        s.map.set_kind(c(x, 1), TileKind::Water).unwrap();
+    }
     let money_before = s.economy.money;
-    apply_command(
-        &mut s,
-        &Command::PlaceRoadBridge(TileCoord::new(1, 1), TileCoord::new(4, 1)),
-    )
-    .unwrap();
+    apply_command(&mut s, &Command::PlaceRoadBridge(c(1, 1), c(4, 1))).unwrap();
     assert_eq!(
         s.economy.money,
         money_before - BRIDGE_BUILD_COST_PER_TILE * 4
@@ -351,4 +441,128 @@ fn clear_any_industry_tile_removes_whole_industry_footprint() {
     assert!(s.industries.is_empty());
     // Factory template cubre también (4,3).
     assert_eq!(s.map.get_kind(TileCoord::new(4, 3)), Some(TileKind::Grass));
+}
+
+#[test]
+fn command_would_fail_matches_apply_for_road_water_and_station() {
+    let mut s = GameState::new(8, 8);
+    let water = TileCoord::new(1, 1);
+    s.map.set_kind(water, TileKind::Water).unwrap();
+    assert_eq!(
+        command_would_fail(&s, &Command::PlaceRoadBits(water, 0x0F)),
+        Some(CommandError::CannotPlaceRoadOnWater)
+    );
+    assert_eq!(
+        apply_command(&mut s, &Command::PlaceRoadBits(water, 0x0F)).unwrap_err(),
+        CommandError::CannotPlaceRoadOnWater
+    );
+
+    let mut s2 = GameState::new(8, 8);
+    let road = TileCoord::new(2, 2);
+    apply_command(&mut s2, &Command::PlaceRoad(road)).unwrap();
+    assert_eq!(
+        command_would_fail(&s2, &Command::PlaceStationDir(road, 0)),
+        Some(CommandError::CannotPlaceStationOnOccupiedTile)
+    );
+
+    let mut s3 = GameState::new(8, 8);
+    let a = TileCoord::new(0, 0);
+    let b = TileCoord::new(2, 0);
+    s3.map.set_height(b, 2).unwrap();
+    assert_eq!(
+        command_would_fail(&s3, &Command::PlaceRoadTunnel(a, b)),
+        Some(CommandError::InvalidTunnelEndpoints)
+    );
+
+    let mut ridge = GameState::new(12, 12);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    ridge.map.set_height(c(5, 5), 2).unwrap();
+    ridge.map.set_height(c(5, 6), 2).unwrap();
+    ridge.map.set_height(c(6, 5), 1).unwrap();
+    ridge.map.set_height(c(6, 6), 1).unwrap();
+    ridge.map.set_height(c(3, 5), 1).unwrap();
+    ridge.map.set_height(c(3, 6), 1).unwrap();
+    ridge.map.set_height(c(4, 5), 2).unwrap();
+    ridge.map.set_height(c(4, 6), 2).unwrap();
+    assert!(
+        command_would_fail(&ridge, &Command::PlaceRoadTunnel(c(5, 5), c(3, 5))).is_none(),
+        "túnel NE→SW a mismo GetTileZ"
+    );
+    apply_command(&mut ridge, &Command::PlaceRoadTunnel(c(5, 5), c(3, 5))).unwrap();
+    assert_eq!(ridge.map.get(c(5, 5)).unwrap().m5 & 0x03, 0);
+    assert_eq!(ridge.map.get(c(3, 5)).unwrap().m5 & 0x03, 2);
+    assert_eq!(ridge.map.get(c(4, 5)).unwrap().m5, 0);
+}
+
+#[test]
+fn bridge_axis_y_sets_m5_flag() {
+    let mut s = GameState::new(8, 8);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    for y in 2..=4 {
+        s.map.set_kind(c(2, y), TileKind::Water).unwrap();
+    }
+    let a = TileCoord::new(2, 1);
+    let b = TileCoord::new(2, 5);
+    apply_command(&mut s, &Command::PlaceRoadBridge(a, b)).unwrap();
+    assert_eq!(s.map.get(a).unwrap().m5 & 0x10, 0x10);
+    let mut s2 = GameState::new(8, 8);
+    for x in 1..=5 {
+        s2.map.set_kind(c(x, 2), TileKind::Water).unwrap();
+    }
+    let a2 = TileCoord::new(0, 2);
+    let b2 = TileCoord::new(6, 2);
+    apply_command(&mut s2, &Command::PlaceRoadBridge(a2, b2)).unwrap();
+    assert_eq!(s2.map.get(a2).unwrap().m5 & 0x10, 0);
+}
+
+#[test]
+fn bridge_rejects_flat_grass_without_gap() {
+    let s = GameState::new(8, 8);
+    let a = TileCoord::new(1, 1);
+    let b = TileCoord::new(4, 1);
+    assert_eq!(
+        command_would_fail(&s, &Command::PlaceRoadBridge(a, b)),
+        Some(CommandError::InvalidBridgeSpan)
+    );
+}
+
+#[test]
+fn bridge_accepts_span_over_water() {
+    let mut s = GameState::new(16, 8);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    for x in 2..=5 {
+        s.map.set_kind(c(x, 4), TileKind::Water).unwrap();
+    }
+    assert!(command_would_fail(&s, &Command::PlaceRoadBridge(c(1, 4), c(6, 4))).is_none());
+}
+
+#[test]
+fn every_command_error_has_user_message() {
+    const ERRORS: [CommandError; 17] = [
+        CommandError::OutOfBounds,
+        CommandError::CannotPlaceRoadOnWater,
+        CommandError::CannotPlaceRoadOnVoid,
+        CommandError::CannotPlaceRailOnWater,
+        CommandError::CannotPlaceRailOnVoid,
+        CommandError::CannotPlaceStationOnWater,
+        CommandError::CannotPlaceStationOnVoid,
+        CommandError::CannotPlaceStationOnOccupiedTile,
+        CommandError::StationNotAdjacentToTransport,
+        CommandError::StationAlreadyExists,
+        CommandError::StationNotFound,
+        CommandError::VehicleNotFound,
+        CommandError::InvalidDepotTile,
+        CommandError::VehicleKindNotAllowed,
+        CommandError::IncompatibleStopForVehicle,
+        CommandError::InvalidTunnelEndpoints,
+        CommandError::InvalidBridgeSpan,
+    ];
+    for err in ERRORS {
+        let msg = command_error_message(err);
+        assert!(!msg.is_empty(), "{err:?}");
+        assert!(
+            msg.chars().any(char::is_alphabetic),
+            "mensaje sin letras para {err:?}: {msg}"
+        );
+    }
 }

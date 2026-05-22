@@ -36,7 +36,7 @@ Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.o
 | 🗺️ | Formato **`.ottdmap`** | Binario versionado (`MAP1`…); spec en [docs/OTTDMAP_FORMAT.md](docs/OTTDMAP_FORMAT.md) y [docs/TILES_Y_SAVEGAMES_OPENTTD.md](docs/TILES_Y_SAVEGAMES_OPENTTD.md). |
 | 🎨 | [OpenGFX](https://github.com/OpenTTD/OpenGFX) / OpenGFX2 | Assets 8bpp / 32bpp extraídos con **grfcodec** + scripts del repo. |
 | 🧪 | Tests + Clippy | `cargo test --workspace`; Clippy con **`-D warnings`** en CI. |
-| ✅ | [GitHub Actions](https://docs.github.com/en/actions) | Ver [CI y calidad](#ci-y-calidad). |
+| ✅ | [GitHub Actions](https://docs.github.com/en/actions) | Ver [CI y calidad](#ci-y-calidad). Caché: **rust-cache** (Cargo/registry/`target`) + **APT** (libs del sistema). |
 | 🤖 | [Dependabot](https://docs.github.com/en/code-security/dependabot) | Actualizaciones **mensuales** de Cargo y Actions (`.github/dependabot.yml`). |
 | 📚 | OpenTTD upstream | Solo referencia local; ver sección [Código de referencia](#código-de-referencia-openttd-no-versionado). |
 
@@ -46,7 +46,14 @@ Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.o
 
 ## CI y calidad
 
-El workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) en cada push/PR a `main` ejecuta:
+El workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) en cada push/PR a `main` ejecuta (con caché para no recompilar ni reinstalar todo desde cero):
+
+| Caché | Qué guarda |
+|-------|------------|
+| [Swatinem/rust-cache](https://github.com/Swatinem/rust-cache) | `~/.cargo/registry`, `target/` (clave compartida `openttdrs` entre jobs y el workflow Coverage) |
+| [actions/cache](https://github.com/actions/cache) + [.github/apt-packages.txt](.github/apt-packages.txt) | Paquetes APT (X11, Vulkan, ALSA, etc.) vía [.github/composite/linux-build-deps](.github/composite/linux-build-deps) |
+
+Pasos:
 
 | Paso | Qué valida |
 |------|----------------|

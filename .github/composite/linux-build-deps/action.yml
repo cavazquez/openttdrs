@@ -1,0 +1,21 @@
+name: Linux build dependencies
+description: Caché APT + librerías de sistema para Bevy (X11, Vulkan, ALSA)
+runs:
+  using: composite
+  steps:
+    - name: Cache APT
+      uses: actions/cache@v4
+      with:
+        path: |
+          /var/cache/apt/archives
+          /var/lib/apt/lists
+        key: ${{ runner.os }}-apt-${{ hashFiles('.github/apt-packages.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-apt-
+
+    - name: Instalar paquetes APT
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          $(grep -v '^#' .github/apt-packages.txt | grep -v '^[[:space:]]*$')

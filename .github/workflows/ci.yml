@@ -33,21 +33,10 @@ jobs:
           # Misma clave que Coverage: un workflow calienta caché del otro (mismo Cargo.lock).
           shared-key: openttdrs
           add-job-id-key: false
+          cache-on-failure: true
 
-      - name: Dependencias Linux (X11 / Vulkan software)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            pkg-config \
-            libx11-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxkbcommon-dev \
-            libssl-dev \
-            libasound2-dev \
-            libvulkan1 \
-            mesa-vulkan-drivers
+      - name: Dependencias Linux
+        uses: ./.github/composite/linux-build-deps
 
       - name: rustfmt
         run: cargo fmt --all -- --check
@@ -72,21 +61,10 @@ jobs:
           # Misma clave que Coverage: un workflow calienta caché del otro (mismo Cargo.lock).
           shared-key: openttdrs
           add-job-id-key: false
+          cache-on-failure: true
 
-      - name: Dependencias Linux (X11 / Vulkan software)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            pkg-config \
-            libx11-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxkbcommon-dev \
-            libssl-dev \
-            libasound2-dev \
-            libvulkan1 \
-            mesa-vulkan-drivers
+      - name: Dependencias Linux
+        uses: ./.github/composite/linux-build-deps
 
       - name: Instalar cargo-nextest
         uses: taiki-e/install-action@nextest

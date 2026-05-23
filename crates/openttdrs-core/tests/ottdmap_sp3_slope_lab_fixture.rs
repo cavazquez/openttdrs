@@ -1,4 +1,4 @@
-//! Fixture `fixtures/sp3_slope_lab.ottdmap` (16×16): laboratorio agua + vía en pendiente.
+//! Fixture `fixtures/sp3_slope_lab.ottdmap` (16×20): laboratorio agua + vía en pendiente.
 //!
 //! Regenerar: `python3 scripts/gen_sp3_slope_lab_ottdmap.py`
 
@@ -16,7 +16,7 @@ fn tile(map: &Map, x: i32, y: i32) -> openttdrs_core::Tile {
 #[test]
 fn loads_sp3_slope_lab_layout() {
     let (map, _ex) = Map::from_ottd_binary_with_extras(FIXTURE).expect("fixture MAP1");
-    assert_eq!(map.dimensions(), (16, 16));
+    assert_eq!(map.dimensions(), (16, 20));
 
     // Referencia plana (y=1)
     assert_eq!(tile(&map, 1, 1).kind, TileKind::Rail);
@@ -24,6 +24,8 @@ fn loads_sp3_slope_lab_layout() {
     assert_eq!(tile(&map, 4, 1).m5 & 0x3F, 0x01);
     assert_eq!(tile(&map, 7, 1).m5 & 0x3F, 0x07);
     assert_eq!(tile(&map, 10, 1).m5 & 0x3F, 0x03);
+    assert_eq!(tile(&map, 13, 1).m5 & 0x3F, 0x0C);
+    assert_eq!(tile(&map, 15, 1).m5 & 0x3F, 0x30);
 
     // Lago Clear 3×3 (centro sin vecinos de tierra → mar animado)
     for tx in 2..=4 {
@@ -73,9 +75,34 @@ fn loads_sp3_slope_lab_layout() {
         );
     }
 
+    // HORZ en pendiente (y=16)
+    for (x, tileh) in [(1, 12), (4, 6), (7, 3), (10, 9)] {
+        let r = tile(&map, x, 16);
+        assert_eq!(r.kind, TileKind::Rail);
+        assert_eq!(r.m5 & 0x3F, 0x0C);
+        assert_eq!(
+            tile_slope_and_z(&map, TileCoord::new(x, 16)).map(|(h, _)| h),
+            Some(tileh)
+        );
+    }
+
+    // VERT en pendiente (y=18)
+    for (x, tileh) in [(1, 12), (4, 6), (7, 3), (10, 9)] {
+        let r = tile(&map, x, 18);
+        assert_eq!(r.kind, TileKind::Rail);
+        assert_eq!(r.m5 & 0x3F, 0x30);
+        assert_eq!(
+            tile_slope_and_z(&map, TileCoord::new(x, 18)).map(|(h, _)| h),
+            Some(tileh)
+        );
+    }
+
     // Separación: hierba entre escenas
     assert_eq!(tile(&map, 2, 1).kind, TileKind::Grass);
+    assert_eq!(tile(&map, 14, 1).kind, TileKind::Grass);
     assert_eq!(tile(&map, 1, 7).kind, TileKind::Grass);
     assert_eq!(tile(&map, 1, 10).kind, TileKind::Grass);
     assert_eq!(tile(&map, 1, 13).kind, TileKind::Grass);
+    assert_eq!(tile(&map, 1, 15).kind, TileKind::Grass);
+    assert_eq!(tile(&map, 1, 17).kind, TileKind::Grass);
 }

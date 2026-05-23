@@ -491,6 +491,21 @@ mod tests {
     }
 
     #[test]
+    fn collect_rail_sprites_horz_vert_flat_and_sloped() {
+        let mut out = Vec::new();
+        collect_rail_sprites(RAIL_TB_HORZ, 0, false, &mut out);
+        assert_eq!(out, vec![1035]);
+        collect_rail_sprites(RAIL_TB_VERT, 0, false, &mut out);
+        assert_eq!(out, vec![1036]);
+        collect_rail_sprites(RAIL_TB_HORZ, 12, false, &mut out);
+        assert_eq!(out, vec![1031]);
+        collect_rail_sprites(RAIL_TB_VERT, 6, false, &mut out);
+        assert_eq!(out, vec![1032]);
+        collect_rail_sprites(RAIL_TB_HORZ, 3, true, &mut out);
+        assert_eq!(out, vec![1033 + RAIL_SPRITE_SNOW_OFFSET]);
+    }
+
+    #[test]
     fn collect_rail_sprites_sloped_junction_uses_sloped_base_only() {
         let mut out = Vec::new();
         collect_rail_sprites(0x07, 12, false, &mut out);

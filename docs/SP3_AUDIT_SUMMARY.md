@@ -48,7 +48,7 @@ Todos los placeholders están en categoría **rail** (sprites de señal del rang
 | `crates/openttdrs-core/tests/fixtures/m3_road_tram_2x2.ottdmap` | Tranvía `m3` |
 | `crates/openttdrs-core/tests/fixtures/v5p12_stxy.ottdmap` | Footer estaciones |
 | `crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap` | **Checklist visual** (20×17, escenas separadas) |
-| `crates/openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap` | **Laboratorio pendiente/agua** (16×16, mapa dedicado) |
+| `crates/openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap` | **Laboratorio pendiente/agua** (16×20, mapa dedicado) |
 | `tests/fixtures/stationlist-test.ottdmap` | Lista estaciones |
 
 ## Referencia upstream
@@ -135,16 +135,18 @@ Regenerar: `python3 scripts/gen_sp3_slope_lab_ottdmap.py`
 OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap cargo run -p openttdrs-client
 ```
 
-**Mapa 16×16** — solo referencias planas, lago 3×3, costa y vía en pendiente (recta / cruce / T). Sin casas, industrias ni climas.
+**Mapa 16×20** — referencias planas, lago 3×3, costa y vía en pendiente (recta / cruce / T / HORZ / VERT). Sin casas, industrias ni climas.
 
 | Fila y | Contenido |
 |--------|-----------|
-| **1** | Vía plana Y, X, T, cruce (x=1,4,7,10) |
+| **1** | Vía plana Y, X, T, cruce (x=1,4,7,10) + **HORZ** (13) / **VERT** (15) → **1035** / **1036** |
 | **3–5** | Lago Clear 3×3; centro **(3,4)** = mar animado sin tierra en 8-vecinos |
 | **(8,4)** | Costa explícita `m5=0x10` |
 | **8** | Recta Y en pendiente NE/SE/SW/NW (solo **1031–1034**) |
 | **11** | Cruce X\|Y en 4 pendientes (solo sprite inclinado) |
 | **14** | T en 4 pendientes (solo sprite inclinado; comparar T plano y=1) |
+| **16** | HORZ (`0x0C`) en 4 pendientes (solo sprite inclinado; comparar **1035** en y=1) |
+| **18** | VERT (`0x30`) en 4 pendientes (comparar **1036** en y=1; fila y=17 = buffer) |
 
 Tests: `cargo test -p openttdrs-core --test ottdmap_sp3_slope_lab_fixture`
 

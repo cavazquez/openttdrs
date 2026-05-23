@@ -88,11 +88,11 @@ Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. **SP3.0 cerrado** 
 
 **Checklist visual:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client` — [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
 
-**Laboratorio pendiente/agua:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap cargo run -p openttdrs-client` — mapa 16×16 dedicado (regenerar: `python3 scripts/gen_sp3_slope_lab_ottdmap.py`).
+**Laboratorio pendiente/agua:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap cargo run -p openttdrs-client` — mapa 16×20 dedicado (regenerar: `python3 scripts/gen_sp3_slope_lab_ottdmap.py`).
 
 Resumen de huecos reales (mucho de lo “esquina/T + trackbits” **ya está** en `road_flat_*` / `collect_rail_sprites`):
 
-- **Pendientes vía en junctions / cimientos** — tramos rectos, T y cruce en slope usan solo sprite inclinado (1031–1034); overlays 1005–1010 **solo en plano**. HORZ/VERT/cardinales en slope siguen sin portar.
+- **Pendientes vía en junctions / cimientos** — tramos rectos, T, cruce, **HORZ/VERT** en slope usan solo sprite inclinado (1031–1034); overlays 1005–1010 **solo en plano**. Piezas cardinales sueltas (1013–1016) igual. **Construcción** (`PlaceRail`) aún no genera HORZ/VERT ni cardinales (solo X/Y/cruce por vecinos).
 - **Estaciones** de tren: plataformas/edificios, no solo suelo bus/camión.
 - **Casas/industrias** en `.ottdmap`: seguir [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) (P1 etapas casa → P6).
 - **Assets**: auditar `rail_*.png` (evitar placeholders del script).

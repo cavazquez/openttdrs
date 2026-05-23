@@ -3,15 +3,19 @@
 
 Salida: `crates/openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap`
 
-Layout (16×16, origen arriba-izquierda; paso 3 en x para pendientes):
+Layout (16×20, origen arriba-izquierda; paso 3 en x para pendientes):
 
 ```
-y=1   · vía plana Y · X · T · cruce ·                    (referencia)
+y=1   · vía plana Y · X · T · cruce · HORZ · VERT ·          (referencia)
 y=3   · lago Clear 3×3 (x=2–4, y=3–5) ·                  (centro abierto en 3,4)
 y=4   · costa explícita (8,4) ·
 y=8   · recta Y en pendiente NE · SE · SW · NW ·
 y=11  · cruce X|Y en pendiente NE · SE · SW · NW ·
 y=14  · T (0x07) en pendiente NE · SE · SW · NW ·
+y=16  · HORZ (0x0C) en pendiente NE · SE · SW · NW ·
+y=17  · (buffer hierba; esquinas de la fila y=16) ·
+y=18  · VERT (0x30) en pendiente NE · SE · SW · NW ·
+y=19  · (buffer hierba) ·
 ```
 
 Todas las teselas de agua usan `height=DEFAULT_H` (4) para evitar hundir el rombo.
@@ -70,11 +74,11 @@ def place_rail_slope(
 
 
 def main() -> None:
-    w, h = 16, 16
+    w, h = 16, 20
     tiles: dict[tuple[int, int], TileSpec] = {}
 
     # --- y=1: referencia plana ---
-    for x, m5 in [(1, 0x02), (4, 0x01), (7, 0x07), (10, 0x03)]:
+    for x, m5 in [(1, 0x02), (4, 0x01), (7, 0x07), (10, 0x03), (13, 0x0C), (15, 0x30)]:
         put(tiles, x, 1, TileSpec(tt=MP_RAILWAY, m5=m5))
 
     # --- y=3–5: lago Clear 3×3 + costa explícita ---
@@ -94,6 +98,14 @@ def main() -> None:
     # --- y=14: T en 4 pendientes ---
     for tx, slope_fn in zip(SLOPE_X, SLOPE_FNS, strict=True):
         place_rail_slope(tiles, tx, 14, slope_fn, 0x07)
+
+    # --- y=16: HORZ (UPPER+LOWER) en 4 pendientes ---
+    for tx, slope_fn in zip(SLOPE_X, SLOPE_FNS, strict=True):
+        place_rail_slope(tiles, tx, 16, slope_fn, 0x0C)
+
+    # --- y=17: VERT (LEFT+RIGHT) en 4 pendientes (y=18 deja y=19 libre) ---
+    for tx, slope_fn in zip(SLOPE_X, SLOPE_FNS, strict=True):
+        place_rail_slope(tiles, tx, 18, slope_fn, 0x30)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     data = build_map1(w, h, tiles)

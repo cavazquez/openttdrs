@@ -209,12 +209,15 @@ fn loads_sp3_visual_checklist_layout() {
         );
     }
 
-    // Agua y costa (y=11, oeste)
+    // Agua y costa (y=11, oeste) — altura alineada con hierba (4), no hundida
+    assert_eq!(tile(&map, 2, 11).kind, TileKind::Water);
+    assert_eq!(tile(&map, 2, 11).height, 4);
     assert_eq!(tile(&map, 3, 11).kind, TileKind::Water);
     assert_eq!(tile(&map, 3, 11).m5, 0);
+    assert_eq!(tile(&map, 3, 11).height, 4);
     assert_eq!(tile(&map, 5, 11).kind, TileKind::Water);
     assert_eq!(tile(&map, 5, 11).m5, 0x10);
-    assert_eq!((tile(&map, 5, 11).m5 >> 4) & 0x0F, 1);
+    assert_eq!(tile(&map, 5, 11).height, 4);
 
     // Buffer hierba entre escenas (cruce vs vía)
     assert_eq!(tile(&map, 2, 3).kind, TileKind::Grass);

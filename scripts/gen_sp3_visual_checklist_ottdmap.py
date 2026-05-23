@@ -336,16 +336,17 @@ def main() -> None:
     cur = tiles.get((15, 9), TileSpec())
     put(tiles, 15, 9, replace(cur, tt=MP_STATION, m5=0, m6=3 << 3, m3=0x08))
 
-    # --- Costa (y=11) ---
-    put(tiles, 3, 11, TileSpec(tt=MP_WATER, height=1, m5=0x00))
-    put(tiles, 5, 11, TileSpec(tt=MP_WATER, height=1, m5=0x10))
+    # --- Costa (y=11): mismo nivel que hierba (DEFAULT_H); height=1 hundía el rombo ---
+    put(tiles, 2, 11, TileSpec(tt=MP_WATER, height=DEFAULT_H, m5=0x00))
+    put(tiles, 3, 11, TileSpec(tt=MP_WATER, height=DEFAULT_H, m5=0x00))
+    put(tiles, 5, 11, TileSpec(tt=MP_WATER, height=DEFAULT_H, m5=0x10))
 
     # --- SP3.1b: vía recta/cruce en pendiente (y=11, x≥9) ---
     for tx, ty, slope_fn, m5 in [
         (9, 11, apply_ne_slope, 0x02),  # recta Y (1031)
-        (12, 11, apply_se_slope, 0x03),  # cruce X|Y → 1032 + 1005 + 1006
-        (15, 11, apply_sw_slope, 0x03),  # cruce X|Y → 1033 + overlays
-        (18, 11, apply_nw_slope, 0x03),  # cruce X|Y → 1034 + overlays
+        (12, 11, apply_se_slope, 0x03),  # cruce X|Y → solo 1032 (DrawTrackBits vanilla)
+        (15, 11, apply_sw_slope, 0x03),  # cruce → 1033
+        (18, 11, apply_nw_slope, 0x03),  # cruce → 1034
     ]:
         slope_fn(tiles, tx, ty)
         cur = tiles.get((tx, ty), TileSpec())

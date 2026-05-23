@@ -84,13 +84,15 @@ En código: errores HUD, preview, transporte, paradas/tren, industria, órdenes,
 
 ### SP3 — Presentación del mapa (prioridad media)
 
-Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. **SP3.0 cerrado** (auditoría + fixture 20×13). **SP3.1** carretera en pendiente (y=7). **SP3.1b** vía en pendiente: checklist y=11 + `collect_rail_sprites(..., tileh)` con sprites 1023–1034. **SP3.2c:** cruce X\|Y en pendiente con overlays 1005–1006 (checklist y=11 x≥12 y fila y=15). **SP3.3:** estación tren y stub parada en pendiente (checklist (16,7) y (15,9)).
+Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. **SP3.0 cerrado** (auditoría + fixture 20×13). **SP3.1** carretera en pendiente (y=7). **SP3.1b** vía en pendiente: checklist y=11 + `collect_rail_sprites(..., tileh)` con sprites 1031–1034 (**solo** base inclinada, alineado con `DrawTrackBits` vanilla). **SP3.3:** estación tren y stub parada en pendiente (checklist (16,7) y (15,9)).
 
 **Checklist visual:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client` — [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
 
+**Laboratorio pendiente/agua:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap cargo run -p openttdrs-client` — mapa 16×16 dedicado (regenerar: `python3 scripts/gen_sp3_slope_lab_ottdmap.py`).
+
 Resumen de huecos reales (mucho de lo “esquina/T + trackbits” **ya está** en `road_flat_*` / `collect_rail_sprites`):
 
-- **Pendientes vía en junctions / cimientos** — tramos rectos en diagonal OK; cruces T y combinaciones complejas en slope siguen simplificados.
+- **Pendientes vía en junctions / cimientos** — tramos rectos, T y cruce en slope usan solo sprite inclinado (1031–1034); overlays 1005–1010 **solo en plano**. HORZ/VERT/cardinales en slope siguen sin portar.
 - **Estaciones** de tren: plataformas/edificios, no solo suelo bus/camión.
 - **Casas/industrias** en `.ottdmap`: seguir [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) (P1 etapas casa → P6).
 - **Assets**: auditar `rail_*.png` (evitar placeholders del script).

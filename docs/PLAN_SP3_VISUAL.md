@@ -57,20 +57,24 @@ Varios ítems de `SIGUIENTES_PASOS` (2026-04) ya están **hechos** en `main`:
 ### Vía (`rail_cmd.cpp`, `rail_map.h`, `track_type.h`)
 
 1. `trackbits = GetTrackBits()` (6 bits en `m5` para vía normal).
-2. Casos simples: un sprite compuesto (`1011` Y, `1012` X, `1017` cruce, `1035`/`1036` horz/vert).
-3. Junctions: `SPR_RAIL_TRACK_BASE + junction_off` + overlays `SPR_RAIL_SINGLE_*` por bit — **ya** `collect_rail_sprites`.
-4. Señales: capa extra desde `m2`/`m3`/`m3hi` — **ya** portado.
-5. Pendiente / nieve en suelo de vía: variantes `1037+` y `RailGroundType` en `m3` — **parcial** (`rail_track_base_color`).
+2. **Plano:** casos simples → sprite compuesto (`1011` Y, `1012` X, `1017` cruce, `1035`/`1036` horz/vert).
+3. **Plano — junctions:** suelo `1018+` + overlays `1005–1010` por bit (`DrawTrackBits`, rama `junction = true`).
+4. **Pendiente:** OpenTTD usa **solo** `_track_sloped_sprites[tileh-1] + track_y` (1031–1034); **sin** overlays ni 1018, para recta, T y cruce por igual (`rail_cmd.cpp`, `DrawTrackBits`).
+5. Señales: capa extra desde `m2`/`m3`/`m3hi` — **ya** portado.
+6. Pendiente / nieve en suelo de vía: variantes `1037+` y `RailGroundType` en `m3` — **parcial** (`rail_track_base_color`).
+
+### Agua (`water_cmd.cpp`, `water_map.h`)
+
+- **`Clear` (m5 bits 4–7 = 0):** mar/río/canal → `DrawSeaWater` → `SPR_FLAT_WATER_TILE` + animación de **paleta** (openttdrs emula con tinte RGB en `water_sprite_color`).
+- **`Coast` (bits 4–7 = 1):** solo `DrawShoreTile(tileh)`; `assert(tileh != flat)`; **no** hay mar animado debajo — el PNG `shore_*` ya incluye tierra+agua.
+- **Alturas:** mar Clear en saves reales es **plano** (4 esquinas iguales); costa hereda pendiente del MAPH. Fixtures `.ottdmap` deben usar la **misma altura** que la hierba lindera (no hundir agua a `height=1`).
+- **Extensión openttdrs:** si `Clear` linda con tierra pero el export no trae `Coast` en MAP5, el cliente infiere costa (`water_tile_touches_land`) — útil para `.ottdmap` incompletos; no es comportamiento de guardado vanilla.
+- **Fixtures:** checklist (escenas mixtas) + **`sp3_slope_lab.ottdmap`** (16×16, solo agua + vía en pendiente); regenerar con `gen_sp3_slope_lab_ottdmap.py`.
 
 ### Estación (`station_cmd.cpp`, `station_map.h`)
 
 - Tesela `MP_STATION`: estación de tren = varias capas (plataforma, techo, edificio) según tamaño y dirección.
 - Bus stop / truck stop: sprites dedicados (`SPR_BUS_STOP`, etc.) — openttdrs usa 4 orientaciones de suelo genérico.
-
-### Agua (`water_cmd.cpp`, `water_map.h`)
-
-- **Clear:** mar animado (paleta).
-- **Coast:** un sprite por **pendiente** (`DrawShoreTile`), no por vecinos — openttdrs alineado; verificar datos de entrada.
 
 ### Industria / casa
 
@@ -115,7 +119,7 @@ Upstream: `rail_cmd.cpp`, `DrawRailTile`.
 - [x] Placeholders: precarga acotada + denylist `SIGNAL_SPRITE_OPENGFX_GAPS` (no exige `rail_1438`… en audit).
 - [x] Precarga: `signal_sprite_ids_for_preload` + `RAIL_SPRITE_IDS` (incl. 1037/1038 y pendiente 1023–1034).
 - [x] Nieve en vía: plano `1037`/`1038`; pendiente `+ RAIL_SPRITE_SNOW_OFFSET` (26).
-- [x] Pendiente diagonal NE/SE/SW/NW: `_track_sloped_sprites` → `collect_rail_sprites(..., tileh)`.
+- [x] Pendiente diagonal NE/SE/SW/NW: `_track_sloped_sprites` → `collect_rail_sprites(..., tileh)` (**solo** sprite inclinado; alineado con `DrawTrackBits` vanilla).
 - [x] Pendiente + nieve: sprites **1049–1060** (`1023–1034` + 26); `descargar_graficos.sh` o `alias_rail_snow_slope_sprites.sh`.
 - [x] `rail_trackbits_for_render`: tesela `Rail` con `m5=0` no usa vecinos sintéticos.
 

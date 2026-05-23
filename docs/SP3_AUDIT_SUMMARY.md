@@ -48,6 +48,7 @@ Todos los placeholders están en categoría **rail** (sprites de señal del rang
 | `crates/openttdrs-core/tests/fixtures/m3_road_tram_2x2.ottdmap` | Tranvía `m3` |
 | `crates/openttdrs-core/tests/fixtures/v5p12_stxy.ottdmap` | Footer estaciones |
 | `crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap` | **Checklist visual** (20×17, escenas separadas) |
+| `crates/openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap` | **Laboratorio pendiente/agua** (16×16, mapa dedicado) |
 | `tests/fixtures/stationlist-test.ottdmap` | Lista estaciones |
 
 ## Referencia upstream
@@ -105,13 +106,13 @@ OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap c
 | (11,9) | Estación tren 1×1 |
 | **(15,9)** | **Parada bus NE en pendiente NE** (stub → `road_flat_11`) |
 | (13,9) | Casa Tall Office |
-| (3,11) | Agua Clear |
-| (5,11) | Agua Coast (`m5=0x10`) |
+| **(2,11)–(3,11)** | **Charco Clear** (`m5=0x00`, `h=4`; borde costero inferido vs hierba) |
+| **(5,11)** | **Costa explícita** (`m5=0x10`, `h=4`) |
 | **(9,11)** | **Vía recta Y en pendiente NE** (sprite **1031**) |
-| **(12,11)** | **Cruce X\|Y en pendiente SE** (`m5=0x03` → **1032** + **1005** + **1006**) |
-| **(15,11)** | **Cruce X\|Y en pendiente SW** (**1033** + overlays) |
-| **(18,11)** | **Cruce X\|Y en pendiente NW** (**1034** + overlays) |
-| **(1,13)** | **T vía en pendiente NE** (`m5=0x07` → **1031** + **1005–1007**) |
+| **(12,11)** | **Cruce X\|Y en pendiente SE** (`m5=0x03` → solo **1032**, como OpenTTD) |
+| **(15,11)** | **Cruce X\|Y en pendiente SW** (**1033**) |
+| **(18,11)** | **Cruce X\|Y en pendiente NW** (**1034**) |
+| **(1,13)** | **T vía en pendiente NE** (`m5=0x07` → solo **1031**; overlays solo en plano) |
 | **(4,13)** | **T vía pendiente SE** |
 | **(7,13)** | **T vía pendiente SW** |
 | **(10,13)** | **T vía pendiente NW** |
@@ -126,6 +127,27 @@ OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap c
 
 Tests: `cargo test -p openttdrs-core --test ottdmap_sp3_visual_fixture`
 
+### Laboratorio pendiente + agua (`sp3_slope_lab`)
+
+Regenerar: `python3 scripts/gen_sp3_slope_lab_ottdmap.py`
+
+```bash
+OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap cargo run -p openttdrs-client
+```
+
+**Mapa 16×16** — solo referencias planas, lago 3×3, costa y vía en pendiente (recta / cruce / T). Sin casas, industrias ni climas.
+
+| Fila y | Contenido |
+|--------|-----------|
+| **1** | Vía plana Y, X, T, cruce (x=1,4,7,10) |
+| **3–5** | Lago Clear 3×3; centro **(3,4)** = mar animado sin tierra en 8-vecinos |
+| **(8,4)** | Costa explícita `m5=0x10` |
+| **8** | Recta Y en pendiente NE/SE/SW/NW (solo **1031–1034**) |
+| **11** | Cruce X\|Y en 4 pendientes (solo sprite inclinado) |
+| **14** | T en 4 pendientes (solo sprite inclinado; comparar T plano y=1) |
+
+Tests: `cargo test -p openttdrs-core --test ottdmap_sp3_slope_lab_fixture`
+
 ### Checklist visual (capturas manuales)
 
 Marcar tras cargar el fixture checklist:
@@ -134,7 +156,7 @@ Marcar tras cargar el fixture checklist:
 - [ ] Fila y=5: vía (Y, X, T, cruce, señales, nieve)
 - [ ] Fila y=7: carretera en 4 pendientes (`road_flat_11..14`) + tranvía NE en (13,7) + estación tren NE en (16,7)
 - [x] Fila y=9: bus NE/SE/SW/NW (x=1,3,5,7) + camión + tren + casa + **bus NE en pendiente (15,9)**
-- [ ] Fila y=11: mar + costa (x=3,5) + recta Y NE (9,11) + **cruce X\|Y en pendiente** (12,15,18,11)
+- [ ] Fila y=11: charco Clear **(2–3,11)** + costa **(5,11)** + recta Y NE (9,11) + **cruce X\|Y en pendiente** (12,15,18,11)
 - [ ] Fila y=13: T vía en 4 pendientes (x=1,4,7,10) — comparar con T plano (5,5) y cruce plano (7,5)
 - [ ] Fila y=15: **cruce X\|Y en 4 pendientes** (x=1,4,7,10) — comparar con fila y=11 y cruce plano (7,5)
 

@@ -13,7 +13,8 @@ use openttdrs_core::vehicle_subtile;
 mod vehicle_gfx;
 
 use vehicle_gfx::{
-    BUS_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED,
+    BUS_VEHICLE_LAYERS, BUS_VEHICLE_LAYERS_LOADED, TRAIN_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS,
+    TRUCK_VEHICLE_LAYERS_LOADED,
 };
 
 pub(crate) struct VehicleRenderPlugin;
@@ -35,6 +36,7 @@ fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
     match v.kind {
         VehicleKind::Truck if v.uses_loaded_road_sprite() => &TRUCK_VEHICLE_LAYERS_LOADED,
         VehicleKind::Truck => &TRUCK_VEHICLE_LAYERS,
+        VehicleKind::Bus if v.uses_loaded_road_sprite() => &BUS_VEHICLE_LAYERS_LOADED,
         VehicleKind::Bus => &BUS_VEHICLE_LAYERS,
         VehicleKind::Train => &TRAIN_VEHICLE_LAYERS,
     }
@@ -73,6 +75,7 @@ type DirHandles = [Handle<Image>; 8];
 #[derive(Resource)]
 pub(crate) struct TruckHandles {
     bus: DirHandles,
+    bus_loaded: DirHandles,
     truck: DirHandles,
     truck_loaded: DirHandles,
     train: DirHandles,
@@ -97,6 +100,7 @@ impl TruckHandles {
         }
         Self {
             bus: load_set(asset_server, &BUS_VEHICLE_LAYERS),
+            bus_loaded: load_set(asset_server, &BUS_VEHICLE_LAYERS_LOADED),
             truck: load_set(asset_server, &TRUCK_VEHICLE_LAYERS),
             truck_loaded: load_set(asset_server, &TRUCK_VEHICLE_LAYERS_LOADED),
             train: load_set(asset_server, &TRAIN_VEHICLE_LAYERS),
@@ -108,6 +112,7 @@ impl TruckHandles {
         match v.kind {
             VehicleKind::Truck if v.uses_loaded_road_sprite() => self.truck_loaded[i].clone(),
             VehicleKind::Truck => self.truck[i].clone(),
+            VehicleKind::Bus if v.uses_loaded_road_sprite() => self.bus_loaded[i].clone(),
             VehicleKind::Bus => self.bus[i].clone(),
             VehicleKind::Train => self.train[i].clone(),
         }
@@ -284,6 +289,7 @@ mod tests {
             direction: DIR_SW,
             engine_id: Some(openttdrs_core::ENGINE_TRUCK_MPS),
             cur_speed: 96,
+            subspeed: 0,
             orders: Vec::new(),
             current_order: 0,
             no_network_route_to_order: false,
@@ -293,6 +299,7 @@ mod tests {
     fn default_handles() -> TruckHandles {
         TruckHandles {
             bus: Default::default(),
+            bus_loaded: Default::default(),
             truck: Default::default(),
             truck_loaded: Default::default(),
             train: Default::default(),
@@ -313,6 +320,20 @@ mod tests {
             ..sample_vehicle(1)
         };
         assert!(loaded.uses_loaded_road_sprite());
+        let empty_bus = Vehicle {
+            kind: VehicleKind::Bus,
+            ..sample_vehicle(2)
+        };
+        let loaded_bus = Vehicle {
+            kind: VehicleKind::Bus,
+            cargo: 15,
+            ..sample_vehicle(3)
+        };
+        assert!(loaded_bus.uses_loaded_road_sprite());
+        assert_ne!(
+            vehicle_layers(&empty_bus)[5].path,
+            vehicle_layers(&loaded_bus)[5].path
+        );
     }
 
     #[test]

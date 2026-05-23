@@ -1,7 +1,10 @@
 use std::collections::VecDeque;
 
 use crate::cargo::CargoType;
-use crate::engine::{default_engine_id, engine_for_vehicle, progress_step_for_speed};
+use crate::engine::{
+    ROAD_ACCEL_ORIGINAL, decelerate_road_speed, default_engine_id, engine_for_vehicle,
+    progress_step_for_speed, update_road_speed,
+};
 use crate::map::TileCoord;
 
 /// Capacidad de carga por defecto (unidades de cargo).
@@ -85,9 +88,12 @@ pub struct Vehicle {
     /// Motor `OpenGFX` (`None` en saves antiguos → default por [`VehicleKind`]).
     #[serde(default)]
     pub engine_id: Option<u16>,
-    /// Velocidad actual (0 = usar `max_speed` del motor).
+    /// Velocidad actual (unidades `OpenTTD`; 0 = parado).
     #[serde(default)]
     pub cur_speed: u16,
+    /// Fracción sub-unidad de velocidad (`Vehicle::subspeed`).
+    #[serde(default)]
+    pub subspeed: u8,
     /// Camino calculado por el pathfinder (siguiente tile en el frente).
     pub path: VecDeque<TileCoord>,
     /// Lista circular de destinos asignados por el jugador.
@@ -108,7 +114,6 @@ impl Vehicle {
             VehicleKind::Truck | VehicleKind::Train => None,
         };
         let engine_id = default_engine_id(kind);
-        let cur_speed = engine_for_vehicle(kind, engine_id).max_speed;
         Self {
             id,
             kind,
@@ -122,7 +127,8 @@ impl Vehicle {
             progress: 0,
             direction: DIR_NE,
             engine_id: Some(engine_id),
-            cur_speed,
+            cur_speed: 0,
+            subspeed: 0,
             path: VecDeque::new(),
             orders: Vec::new(),
             current_order: 0,
@@ -141,10 +147,25 @@ impl Vehicle {
 
     #[must_use]
     pub fn effective_speed(&self) -> u16 {
-        if self.cur_speed > 0 {
-            self.cur_speed
+        self.cur_speed
+    }
+
+    fn update_movement_speed(&mut self) {
+        let max_speed = self.effective_engine().max_speed;
+        if self.running && self.movement_target().is_some() {
+            let (cur, sub) = update_road_speed(
+                self.cur_speed,
+                self.subspeed,
+                ROAD_ACCEL_ORIGINAL,
+                0,
+                max_speed,
+            );
+            self.cur_speed = cur;
+            self.subspeed = sub;
         } else {
-            self.effective_engine().max_speed
+            let (cur, sub) = decelerate_road_speed(self.cur_speed, self.subspeed);
+            self.cur_speed = cur;
+            self.subspeed = sub;
         }
     }
 
@@ -170,10 +191,13 @@ impl Vehicle {
         255_u32.div_ceil(u32::from(step))
     }
 
-    /// Como `OpenTTD` `GetImage`: camión semi-lleno/lleno cambia sprite.
+    /// Como `OpenTTD` `GetImage`: semi-lleno/lleno cambia sprite en bus/camión.
     #[must_use]
     pub fn uses_loaded_road_sprite(&self) -> bool {
-        self.kind == VehicleKind::Truck && self.cargo >= self.capacity / 2
+        if self.cargo < self.capacity / 2 {
+            return false;
+        }
+        matches!(self.kind, VehicleKind::Bus | VehicleKind::Truck)
     }
 
     /// Dirección de sprite para render (8 vías; cardinales en la mitad de giros).
@@ -225,14 +249,24 @@ impl Vehicle {
     /// Avanza un tick de sim: sub-tile y, al completar 255, la tesela siguiente.
     pub fn step(&mut self) {
         if !self.running {
+            self.update_movement_speed();
+            self.progress = 0;
             return;
         }
 
+        self.update_movement_speed();
+
         if self.movement_target().is_none() {
-            self.progress = 0;
-            if self.pos == self.dest {
-                self.advance_destination_after_arrival();
+            if self.cur_speed == 0 {
+                self.progress = 0;
+                if self.pos == self.dest {
+                    self.advance_destination_after_arrival();
+                }
             }
+            return;
+        }
+
+        if self.cur_speed == 0 {
             return;
         }
 
@@ -326,6 +360,12 @@ impl Vehicle {
         }
     }
 
+    /// Velocidad de crucero inmediata (tests / saves legacy).
+    pub fn set_cruise_speed(&mut self) {
+        self.cur_speed = self.effective_engine().max_speed;
+        self.subspeed = 0;
+    }
+
     fn advance_destination_after_arrival(&mut self) {
         self.path.clear();
         self.progress = 0;
@@ -387,6 +427,7 @@ mod tests {
             TileCoord::new(1, 0),
         );
         v.path = VecDeque::from([TileCoord::new(1, 0)]);
+        v.set_cruise_speed();
         let ticks = v.ticks_per_tile();
         for tick in 1..ticks {
             v.step();
@@ -396,6 +437,63 @@ mod tests {
         v.step();
         assert_eq!(v.pos, TileCoord::new(1, 0));
         assert!(v.progress < v.progress_step());
+    }
+
+    #[test]
+    fn vehicle_accelerates_from_standstill_before_moving() {
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.path = VecDeque::from([TileCoord::new(1, 0)]);
+        assert_eq!(v.cur_speed, 0);
+        v.step();
+        assert_eq!(v.pos, TileCoord::new(0, 0));
+        assert!(v.cur_speed > 0);
+        assert_eq!(v.progress, 0);
+    }
+
+    #[test]
+    fn vehicle_decelerates_when_idle() {
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Truck,
+            TileCoord::new(2, 2),
+            TileCoord::new(2, 2),
+        );
+        v.cur_speed = 96;
+        v.subspeed = 0;
+        for _ in 0..160 {
+            v.step();
+            if v.cur_speed == 0 {
+                break;
+            }
+        }
+        assert_eq!(v.cur_speed, 0);
+        assert_eq!(v.subspeed, 0);
+    }
+
+    #[test]
+    fn loaded_sprite_for_bus_and_truck() {
+        let mut bus = Vehicle::new(
+            0,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        assert!(!bus.uses_loaded_road_sprite());
+        bus.cargo = VEHICLE_CAPACITY / 2;
+        assert!(bus.uses_loaded_road_sprite());
+        let mut truck = Vehicle::new(
+            1,
+            VehicleKind::Truck,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        truck.cargo = VEHICLE_CAPACITY / 2;
+        assert!(truck.uses_loaded_road_sprite());
     }
 
     #[test]
@@ -418,6 +516,8 @@ mod tests {
             TileCoord::new(3, 0),
         );
         train.path = bus.path.clone();
+        bus.set_cruise_speed();
+        train.set_cruise_speed();
 
         let bus_ticks = bus.ticks_per_tile();
         let train_ticks = train.ticks_per_tile();
@@ -458,6 +558,7 @@ mod tests {
             TileCoord::new(1, 0),
         );
         v.path = VecDeque::from([TileCoord::new(1, 0)]);
+        v.set_cruise_speed();
         for _ in 0..v.ticks_per_tile() {
             v.step();
         }

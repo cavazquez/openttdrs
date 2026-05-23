@@ -29,7 +29,8 @@ pub use command::{
 };
 pub use engine::{
     ENGINE_BUS_MPS, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineDef, REFERENCE_PROGRESS_STEP,
-    default_engine_id, engine_for_vehicle, progress_step_for_speed, tile_progress_length,
+    ROAD_ACCEL_ORIGINAL, decelerate_road_speed, default_engine_id, engine_for_vehicle,
+    progress_step_for_speed, tile_progress_length, update_road_speed,
 };
 pub use game_state::{
     BRIDGE_BUILD_COST_PER_TILE, CARGO_DELIVERY_PAYMENT, CLEAR_TILE_COST, CompanyEconomy,

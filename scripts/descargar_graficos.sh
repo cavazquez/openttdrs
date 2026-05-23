@@ -894,6 +894,18 @@ for sid, name in [
     (3099, "vehicle_bus_nw.png"),
 ]:
     crop_by_id(sid, name)
+# Bus MPS cargado (+88 → sprites 3180..3187).
+for sid, name in [
+    (3180, "vehicle_bus_n_loaded.png"),
+    (3181, "vehicle_bus_ne_loaded.png"),
+    (3182, "vehicle_bus_e_loaded.png"),
+    (3183, "vehicle_bus_se_loaded.png"),
+    (3184, "vehicle_bus_s_loaded.png"),
+    (3185, "vehicle_bus_sw_loaded.png"),
+    (3186, "vehicle_bus_w_loaded.png"),
+    (3187, "vehicle_bus_nw_loaded.png"),
+]:
+    crop_by_id(sid, name)
 # Camión MPS (spritenum 1): vacío 3100..3107, cargado +88 → 3188..3195.
 for sid, name in [
     (3100, "vehicle_truck_n.png"),

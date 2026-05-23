@@ -79,6 +79,73 @@ pub const BUS_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
     },
 ];
 
+pub const BUS_VEHICLE_LAYERS_LOADED: [VehicleLayerGfx; 8] = [
+    // N (sprite 3180)
+    VehicleLayerGfx {
+        w: 8.0,
+        h: 18.0,
+        x_offs: -3.0,
+        y_offs: -10.0,
+        path: "assets/opengfx/tiles/vehicle_bus_n_loaded.png",
+    },
+    // NE (sprite 3181)
+    VehicleLayerGfx {
+        w: 20.0,
+        h: 16.0,
+        x_offs: -14.0,
+        y_offs: -7.0,
+        path: "assets/opengfx/tiles/vehicle_bus_ne_loaded.png",
+    },
+    // E (sprite 3182)
+    VehicleLayerGfx {
+        w: 27.0,
+        h: 12.0,
+        x_offs: -13.0,
+        y_offs: -6.0,
+        path: "assets/opengfx/tiles/vehicle_bus_e_loaded.png",
+    },
+    // SE (sprite 3183)
+    VehicleLayerGfx {
+        w: 20.0,
+        h: 16.0,
+        x_offs: -6.0,
+        y_offs: -7.0,
+        path: "assets/opengfx/tiles/vehicle_bus_se_loaded.png",
+    },
+    // S (sprite 3184)
+    VehicleLayerGfx {
+        w: 8.0,
+        h: 17.0,
+        x_offs: -3.0,
+        y_offs: -9.0,
+        path: "assets/opengfx/tiles/vehicle_bus_s_loaded.png",
+    },
+    // SW (sprite 3185)
+    VehicleLayerGfx {
+        w: 20.0,
+        h: 16.0,
+        x_offs: -14.0,
+        y_offs: -7.0,
+        path: "assets/opengfx/tiles/vehicle_bus_sw_loaded.png",
+    },
+    // W (sprite 3186)
+    VehicleLayerGfx {
+        w: 27.0,
+        h: 12.0,
+        x_offs: -13.0,
+        y_offs: -6.0,
+        path: "assets/opengfx/tiles/vehicle_bus_w_loaded.png",
+    },
+    // NW (sprite 3187)
+    VehicleLayerGfx {
+        w: 20.0,
+        h: 16.0,
+        x_offs: -6.0,
+        y_offs: -7.0,
+        path: "assets/opengfx/tiles/vehicle_bus_nw_loaded.png",
+    },
+];
+
 pub const TRUCK_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
     // N (sprite 3100)
     VehicleLayerGfx {

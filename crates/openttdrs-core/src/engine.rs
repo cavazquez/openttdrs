@@ -19,6 +19,9 @@ pub const ENGINE_TRAIN_KIRBY: u16 = 100;
 /// Paso sub-tile del bus MPS en diagonal (~5 ticks/tesela con sim a 5 Hz).
 pub const REFERENCE_PROGRESS_STEP: u8 = 51;
 
+/// Aceleración carretera modelo original (`RoadVehicle::UpdateSpeed`, `AM_ORIGINAL`).
+pub const ROAD_ACCEL_ORIGINAL: u16 = 256;
+
 const REFERENCE_MAX_SPEED: u16 = 112;
 const TILE_AXIAL_DISTANCE: u32 = 192;
 const TILE_CORNER_DISTANCE: u32 = 256;
@@ -74,14 +77,59 @@ pub const fn tile_progress_length(direction: VehicleDirection) -> u32 {
     }
 }
 
+/// Actualiza `cur_speed`/`subspeed` (`GroundVehicleBase::DoUpdateSpeed`).
+#[must_use]
+#[allow(clippy::cast_possible_truncation)] // `subspeed = (uint8_t)spd` en upstream
+pub fn update_road_speed(
+    cur_speed: u16,
+    subspeed: u8,
+    accel: u16,
+    min_speed: u16,
+    max_speed: u16,
+) -> (u16, u8) {
+    let spd = u16::from(subspeed).saturating_add(accel);
+    let new_subspeed = spd as u8;
+    let cur = i32::from(cur_speed);
+    let max_i = i32::from(max_speed);
+    let tempmax = if cur > max_i {
+        std::cmp::max(cur - (cur / 10) - 1, max_i)
+    } else {
+        max_i
+    };
+    let new_cur = std::cmp::max(
+        std::cmp::min(cur + i32::from(spd >> 8), tempmax),
+        i32::from(min_speed),
+    );
+    (u16::try_from(new_cur).unwrap_or(0), new_subspeed)
+}
+
+/// Frenado simétrico al acelerador original (hacia velocidad 0).
+#[must_use]
+#[allow(clippy::cast_possible_truncation)] // `subspeed = (uint8_t)spd` en upstream
+pub fn decelerate_road_speed(cur_speed: u16, subspeed: u8) -> (u16, u8) {
+    let spd = u16::from(subspeed).saturating_add(ROAD_ACCEL_ORIGINAL);
+    let new_subspeed = spd as u8;
+    let dec = i32::from(spd >> 8);
+    let new_cur = i32::from(cur_speed).saturating_sub(dec);
+    let new_cur_u16 = u16::try_from(new_cur).unwrap_or(0);
+    let final_sub = if new_cur_u16 == 0 { 0 } else { new_subspeed };
+    (new_cur_u16, final_sub)
+}
+
 /// Avance sub-tile por tick (`GetAdvanceSpeed` × escala a `progress` 0–255).
 #[must_use]
 pub fn progress_step_for_speed(max_speed: u16, direction: VehicleDirection) -> u8 {
+    if max_speed == 0 {
+        return 0;
+    }
     let advance = u32::from(max_speed) * 3 / 4;
     let tile_len = tile_progress_length(direction);
     let reference_advance = u32::from(REFERENCE_MAX_SPEED) * 3 / 4;
     let step = advance * u32::from(REFERENCE_PROGRESS_STEP) * TILE_AXIAL_DISTANCE
         / (reference_advance * tile_len);
+    if step == 0 {
+        return 0;
+    }
     step.clamp(1, 255) as u8
 }
 
@@ -96,6 +144,38 @@ mod tests {
         let step = progress_step_for_speed(112, DIR_SW);
         assert_eq!(step, REFERENCE_PROGRESS_STEP);
         assert_eq!(255_u32.div_ceil(u32::from(step)), 5);
+    }
+
+    #[test]
+    fn standstill_yields_zero_progress_step() {
+        assert_eq!(progress_step_for_speed(0, DIR_SW), 0);
+    }
+
+    #[test]
+    fn original_accel_reaches_max_in_reasonable_ticks() {
+        let max = 112_u16;
+        let mut cur = 0_u16;
+        let mut sub = 0_u8;
+        let mut ticks = 0_u32;
+        while cur < max && ticks < 160 {
+            (cur, sub) = update_road_speed(cur, sub, ROAD_ACCEL_ORIGINAL, 0, max);
+            ticks += 1;
+        }
+        assert_eq!(cur, max);
+        assert!(ticks > 1);
+    }
+
+    #[test]
+    fn decelerate_from_cruise_stops_vehicle() {
+        let mut cur = 112_u16;
+        let mut sub = 0_u8;
+        let mut ticks = 0_u32;
+        while cur > 0 && ticks < 160 {
+            (cur, sub) = decelerate_road_speed(cur, sub);
+            ticks += 1;
+        }
+        assert_eq!(cur, 0);
+        assert_eq!(sub, 0);
     }
 
     #[test]

@@ -5,7 +5,7 @@ Salida: `crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap`
 
 Cada escena va separada por **al menos 1 tesela de hierba** para distinguirlas en capturas.
 
-Layout (20×13, origen arriba-izquierda):
+Layout (20×15, origen arriba-izquierda):
 
 ```
 y=0   · templado · ártico · trópico · toyland · NewGRF 128 ·   (climas, terminadas)
@@ -19,8 +19,10 @@ y=7   · carretera NE · SE · SW · NW · tranvía pendiente NE ·
 y=8   · obra h16 s0..s3 · terminada ·                       (Large Office)
 y=9   · bus NE · SE · SW · NW · camión · tren · casa ·
 y=10  · gfx0 · gfx42 · gfx116 · gfx119 · gfx120 · gfx256 ·  (industrias, paso 2 en x)
-y=11  · mar · costa · vía NE · SE · SW · NW en pendiente ·
+y=11  · mar · costa · vía recta NE · cruce SE · recta SW/NW en pendiente ·
 y=12  · (buffer hierba bajo pendientes y=11) ·
+y=13  · vía T (0x07) en pendiente NE · SE · SW · NW ·
+y=14  · (buffer hierba) ·
 ```
 
 Regenerar: `python3 scripts/gen_sp3_visual_checklist_ottdmap.py`
@@ -231,7 +233,7 @@ def build_map1(
 
 
 def main() -> None:
-    w, h = 20, 13
+    w, h = 20, 15
     tiles: dict[tuple[int, int], TileSpec] = {}
 
     # Posiciones x con TileHash2Bit=0 en (x, row): x ≡ 1 (mod 4) → 1, 5, 9, 13, 17
@@ -336,16 +338,27 @@ def main() -> None:
     put(tiles, 3, 11, TileSpec(tt=MP_WATER, height=1, m5=0x00))
     put(tiles, 5, 11, TileSpec(tt=MP_WATER, height=1, m5=0x10))
 
-    # --- SP3.1b: vía en pendiente (y=11, x≥9) — hoy riel plano sobre césped inclinado ---
+    # --- SP3.1b: vía recta/cruce en pendiente (y=11, x≥9) ---
     for tx, ty, slope_fn, m5 in [
-        (9, 11, apply_ne_slope, 0x02),
-        (12, 11, apply_se_slope, 0x01),
+        (9, 11, apply_ne_slope, 0x02),  # recta Y
+        (12, 11, apply_se_slope, 0x03),  # cruce X|Y (solo sprite inclinado; sin overlays)
         (15, 11, apply_sw_slope, 0x02),
         (18, 11, apply_nw_slope, 0x01),
     ]:
         slope_fn(tiles, tx, ty)
         cur = tiles.get((tx, ty), TileSpec())
         tiles[(tx, ty)] = replace(cur, tt=MP_RAILWAY, m5=m5)
+
+    # --- SP3.2b: T en pendiente (y=13, sin solapar esquinas y=11→y=12) ---
+    for tx, ty, slope_fn in [
+        (1, 13, apply_ne_slope),
+        (4, 13, apply_se_slope),
+        (7, 13, apply_sw_slope),
+        (10, 13, apply_nw_slope),
+    ]:
+        slope_fn(tiles, tx, ty)
+        cur = tiles.get((tx, ty), TileSpec())
+        put(tiles, tx, ty, replace(cur, tt=MP_RAILWAY, m5=0x07))
 
     out = (
         Path(__file__).resolve().parents[1]

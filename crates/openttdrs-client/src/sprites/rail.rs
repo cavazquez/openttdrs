@@ -508,6 +508,17 @@ mod tests {
     }
 
     #[test]
+    fn collect_rail_sprites_sloped_t_adds_junction_overlays() {
+        let mut out = Vec::new();
+        collect_rail_sprites(0x07, 12, false, &mut out);
+        assert_eq!(out.first(), Some(&1031));
+        assert!(out.contains(&1005));
+        assert!(out.contains(&1006));
+        assert!(out.contains(&1007));
+        assert_eq!(out.len(), 4);
+    }
+
+    #[test]
     fn rail_tile_with_zero_m5_does_not_use_synthetic_neighbors() {
         let mut map = Map::new_flat(3, 3, 0);
         let c = TileCoord::new(1, 1);

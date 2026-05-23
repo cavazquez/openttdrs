@@ -1,4 +1,4 @@
-//! Fixture `fixtures/sp3_visual_checklist.ottdmap` (20×13): escenas SP3.0/SP3.1 separadas.
+//! Fixture `fixtures/sp3_visual_checklist.ottdmap` (20×15): escenas SP3.0/SP3.1 separadas.
 //!
 //! Regenerar: `python3 scripts/gen_sp3_visual_checklist_ottdmap.py`
 
@@ -16,7 +16,7 @@ fn tile(map: &Map, x: i32, y: i32) -> openttdrs_core::Tile {
 #[test]
 fn loads_sp3_visual_checklist_layout() {
     let (map, ex) = Map::from_ottd_binary_with_extras(FIXTURE).expect("fixture MAP1");
-    assert_eq!(map.dimensions(), (20, 13));
+    assert_eq!(map.dimensions(), (20, 15));
     assert_eq!(ex.station_xy.len(), 8);
     for xy in [
         (1, 9),
@@ -176,13 +176,24 @@ fn loads_sp3_visual_checklist_layout() {
     assert_eq!(industry_gfx9(&tile(&map, 11, 10)), 256);
     assert_eq!(tile(&map, 2, 10).kind, TileKind::Grass);
 
-    // SP3.1b: vía en pendiente (y=11, x≥9)
-    for (x, tileh, m5) in [(9, 12, 0x02), (12, 6, 0x01), (15, 3, 0x02), (18, 9, 0x01)] {
+    // SP3.1b: vía recta/cruce en pendiente (y=11, x≥9)
+    for (x, tileh, m5) in [(9, 12, 0x02), (12, 6, 0x03), (15, 3, 0x02), (18, 9, 0x01)] {
         let r = tile(&map, x, 11);
         assert_eq!(r.kind, TileKind::Rail);
         assert_eq!(r.m5 & 0x3F, m5);
         assert_eq!(
             tile_slope_and_z(&map, TileCoord::new(x, 11)).map(|(h, _)| h),
+            Some(tileh)
+        );
+    }
+
+    // SP3.2b: T en pendiente (y=13) — mismo trackbits que T plano en (5,5)
+    for (x, tileh) in [(1, 12), (4, 6), (7, 3), (10, 9)] {
+        let r = tile(&map, x, 13);
+        assert_eq!(r.kind, TileKind::Rail);
+        assert_eq!(r.m5 & 0x3F, 0x07);
+        assert_eq!(
+            tile_slope_and_z(&map, TileCoord::new(x, 13)).map(|(h, _)| h),
             Some(tileh)
         );
     }

@@ -151,12 +151,33 @@ def compute_layer_corrections(
     layer_i: int,
 ) -> tuple[float, float]:
     """(remap_x_adj, y_offs_delta). Unidades TILE_SEQ en X (×4 px); y_offs_delta en px."""
-    # NE bus BUILD_C: valla en tesela vecina sin esto (validado visualmente).
-    if is_bus and dir_i == 0 and layer_i == 2 and dx == 0.0 and dy == 13.0:
-        return -13.0, 0.0
-    # SE truck BUILD_A: corrección tesela vecina + fino Y/X; +4 px Y tras ajuste de remap_x_adj.
-    if not is_bus and dir_i == 1 and layer_i == 0 and dx == 15.0 and dy == 3.0:
-        return 4.0, -(dx - dy) * 2.0 + 8.0
+    if is_bus:
+        # Checklist SP3 y=9: calibración por capa/dirección (RemapCoords + NFO).
+        if dir_i == 0 and layer_i == 2 and dx == 0.0 and dy == 13.0:
+            return -13.0, 0.0
+        if dir_i == 0 and layer_i == 1 and dx == 13.0 and dy == 0.0:
+            return 7.0, -6.0
+        if dir_i == 1 and layer_i == 0 and dx == 0.0 and dy == 3.0:
+            return -3.0, 0.0
+        if dir_i == 1 and layer_i == 2 and dx == 13.0 and dy == 3.0:
+            return 5.0, -9.0
+        if dir_i == 2 and layer_i == 0 and dx == 3.0 and dy == 15.0:
+            return -8.0, -11.0
+        if dir_i == 3 and layer_i == 0 and dx == 15.0 and dy == 2.0:
+            return 8.0, -(dx - dy) * 2.0 + 8.0
+        if dir_i == 3 and layer_i == 1 and dx == 0.0 and dy == 13.0:
+            return -7.0, -6.0
+        return 0.0, 0.0
+
+    # Camión: mismos patrones de esquina + capas con dy=3 / dy=15.
+    if dir_i == 1 and layer_i == 0 and dx == 15.0 and dy == 3.0:
+        return 8.0, -(dx - dy) * 2.0 + 8.0
+    if dir_i == 1 and layer_i == 2 and dx == 0.0 and dy == 3.0:
+        return -3.0, 0.0
+    if dir_i == 0 and layer_i == 0 and dx == 0.0 and dy == 15.0:
+        return -9.0, -8.0
+    if dir_i == 3 and layer_i == 2 and dx == 15.0 and dy == 2.0:
+        return 8.0, -(dx - dy) * 2.0 + 8.0
     return 0.0, 0.0
 
 

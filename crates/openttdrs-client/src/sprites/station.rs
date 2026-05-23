@@ -230,4 +230,22 @@ mod tests {
             15.0
         );
     }
+
+    #[test]
+    fn bus_stop_build_layers_use_distinct_sprites_per_direction() {
+        let mut paths = std::collections::HashSet::new();
+        for dir in 0..4 {
+            for layer in road_stop_build_layers(StationTileClass::Bus, dir) {
+                assert!(paths.insert(layer.path), "duplicate bus BUILD path");
+            }
+        }
+        assert_eq!(paths.len(), 12);
+        for dir in 0..4 {
+            assert!(
+                road_stop_build_layers(StationTileClass::Bus, dir)[0]
+                    .path
+                    .contains("bus_stop")
+            );
+        }
+    }
 }

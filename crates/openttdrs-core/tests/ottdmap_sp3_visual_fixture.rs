@@ -17,10 +17,10 @@ fn tile(map: &Map, x: i32, y: i32) -> openttdrs_core::Tile {
 fn loads_sp3_visual_checklist_layout() {
     let (map, ex) = Map::from_ottd_binary_with_extras(FIXTURE).expect("fixture MAP1");
     assert_eq!(map.dimensions(), (20, 12));
-    assert_eq!(ex.station_xy.len(), 3);
-    assert!(ex.station_xy.contains(&(3, 9)));
-    assert!(ex.station_xy.contains(&(5, 9)));
-    assert!(ex.station_xy.contains(&(7, 9)));
+    assert_eq!(ex.station_xy.len(), 6);
+    for xy in [(1, 9), (3, 9), (5, 9), (7, 9), (9, 9), (11, 9)] {
+        assert!(ex.station_xy.contains(&xy), "missing station at {xy:?}");
+    }
 
     // Carretera plana (y=3), separada 2 teselas en x
     assert_eq!(tile(&map, 1, 3).kind, TileKind::Road);
@@ -75,8 +75,23 @@ fn loads_sp3_visual_checklist_layout() {
         Some(12)
     );
 
-    // Objetos (y=9)
-    let house = tile(&map, 1, 9);
+    // Paradas bus 4 direcciones + camión + tren (y=9)
+    for (x, dir, stub) in [(1, 0, 0x08), (3, 1, 0x04), (5, 2, 0x02), (7, 3, 0x01)] {
+        let bus = tile(&map, x, 9);
+        assert_eq!(bus.kind, TileKind::Station);
+        assert_eq!(bus.m5 & 0x03, dir);
+        assert_eq!((bus.m6 >> 3) & 0x0F, 3);
+        assert_eq!(bus.m3 & 0x0F, stub);
+    }
+    let truck_st = tile(&map, 9, 9);
+    assert_eq!(truck_st.kind, TileKind::Station);
+    assert_eq!(truck_st.m5 & 0x03, 1);
+    assert_eq!((truck_st.m6 >> 3) & 0x0F, 2);
+    let rail_st = tile(&map, 11, 9);
+    assert_eq!(rail_st.kind, TileKind::Station);
+    assert_eq!((rail_st.m6 >> 3) & 0x0F, 0);
+    assert_eq!(rail_st.m5 & 1, 1);
+    let house = tile(&map, 13, 9);
     assert_eq!(house.kind, TileKind::House);
     assert_eq!(house.m8 & 0xFFF, 0);
     assert_eq!(house.m3, 0x80);
@@ -121,18 +136,6 @@ fn loads_sp3_visual_checklist_layout() {
     assert_eq!(tile(&map, 1, 8).m5 & 0x18, 0);
     assert_eq!(tile(&map, 13, 8).m5 & 0x18, 24);
     assert_eq!(tile(&map, 17, 8).m3, 0x80);
-
-    let truck_st = tile(&map, 3, 9);
-    assert_eq!(truck_st.kind, TileKind::Station);
-    assert_eq!((truck_st.m6 >> 3) & 0x0F, 2);
-    let bus_st = tile(&map, 5, 9);
-    assert_eq!(bus_st.kind, TileKind::Station);
-    assert_eq!((bus_st.m6 >> 3) & 0x0F, 3);
-    let rail_st = tile(&map, 7, 9);
-    assert_eq!(rail_st.kind, TileKind::Station);
-    assert_eq!((rail_st.m6 >> 3) & 0x0F, 0);
-    assert_eq!(rail_st.m5 & 1, 1);
-    assert_eq!(tile(&map, 9, 9).kind, TileKind::Industry);
 
     // Industrias P3 (y=10): paso 2 en x, gfx 9 bits
     fn industry_gfx9(t: &openttdrs_core::Tile) -> u16 {

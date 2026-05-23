@@ -475,7 +475,9 @@ mod world_pos_to_tile_tests {
 
     #[test]
     fn road_stop_se_truck_build_a_center_stays_on_station_tile() {
-        let origin = iso(15, 4);
+        let tx = 14;
+        let ty = 7;
+        let origin = iso(tx, ty);
         let ground = Vec2::new(origin.x, origin.y - super::TILE_HALF_H);
         let seq = super::RoadStopSeqGfx {
             dx: 15.0,
@@ -483,16 +485,28 @@ mod world_pos_to_tile_tests {
             dz: 0.0,
             x_offs: -3.0,
             y_offs: -23.0,
-            remap_x_adj: 4.0,
+            remap_x_adj: 8.0,
         };
-        let c = super::road_stop_build_sprite_center(origin, 15, 4, 0, 0.05, seq, 28.0, 20.0);
-        let dist_station = (c.x - ground.x).hypot(c.y - ground.y);
-        let neighbor_xy = iso(16, 5);
-        let ground_xy = Vec2::new(neighbor_xy.x, neighbor_xy.y - super::TILE_HALF_H);
-        let dist_neighbor_xy = (c.x - ground_xy.x).hypot(c.y - ground_xy.y);
+        let w = 28.0;
+        let h = 20.0;
+        let c = super::road_stop_build_sprite_center(origin, tx, ty, 0, 0.05, seq, w, h);
+        let top_left = super::road_stop_sprite_pos(tx, ty, 0, 0.05, seq);
+        let bottom_right = Vec2::new(top_left.x + w, top_left.y - h);
         assert!(
-            dist_station < dist_neighbor_xy,
-            "truck SE build_a no debe caer en tesela (16,5)"
+            top_left.x <= ground.x
+                && ground.x <= bottom_right.x
+                && bottom_right.y <= ground.y
+                && ground.y <= top_left.y,
+            "truck SE build_a debe cubrir el centro de la tesela de parada"
+        );
+        let south = iso(tx, ty + 1);
+        let ground_south = Vec2::new(south.x, south.y - super::TILE_HALF_H);
+        let dist_station = (c.x - ground.x).hypot(c.y - ground.y);
+        let dist_south = (c.x - ground_south.x).hypot(c.y - ground_south.y);
+        assert!(
+            dist_station < dist_south,
+            "truck SE build_a no debe caer en tesela ({tx},{ty_plus})",
+            ty_plus = ty + 1
         );
     }
 
@@ -500,14 +514,70 @@ mod world_pos_to_tile_tests {
     fn road_stop_generated_adj_exceptions() {
         let ne = crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Bus, 0);
         assert_eq!(ne[0].remap_x_adj, 0.0);
-        assert_eq!(ne[1].remap_x_adj, 0.0);
+        assert_eq!(ne[1].remap_x_adj, 7.0);
+        assert_eq!(ne[1].y_offs, -12.0);
         assert_eq!(ne[2].remap_x_adj, -13.0);
+        let se_bus =
+            crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Bus, 1);
+        assert_eq!(se_bus[0].remap_x_adj, -3.0);
+        assert_eq!(se_bus[2].remap_x_adj, 5.0);
+        assert_eq!(se_bus[2].y_offs, -18.0);
+        let sw_bus =
+            crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Bus, 2);
+        assert_eq!(sw_bus[0].remap_x_adj, -8.0);
+        assert_eq!(sw_bus[0].y_offs, -13.0);
+        let nw_bus =
+            crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Bus, 3);
+        assert_eq!(nw_bus[0].remap_x_adj, 8.0);
+        assert_eq!(nw_bus[0].y_offs, -19.0);
+        assert_eq!(nw_bus[1].remap_x_adj, -7.0);
+        assert_eq!(nw_bus[1].y_offs, -10.0);
         let se_truck =
             crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Truck, 1);
-        assert_eq!(se_truck[0].remap_x_adj, 4.0);
+        assert_eq!(se_truck[0].remap_x_adj, 8.0);
         assert_eq!(se_truck[0].y_offs, -23.0);
         assert_eq!(se_truck[1].remap_x_adj, 0.0);
-        assert_eq!(se_truck[2].remap_x_adj, 0.0);
+        assert_eq!(se_truck[2].remap_x_adj, -3.0);
+    }
+
+    #[test]
+    fn road_stop_checklist_bus_layers_prefer_station_over_road_neighbor() {
+        use crate::sprites::{StationTileClass, road_stop_build_layers, road_stop_seq_gfx};
+
+        const CASES: [(i32, i32, usize, i32, i32); 4] = [
+            (1, 9, 0, -1, 0),
+            (3, 9, 1, 0, 1),
+            (5, 9, 2, 1, 0),
+            (7, 9, 3, 0, -1),
+        ];
+
+        for (tx, ty, dir, rdx, rdy) in CASES {
+            let origin = iso(tx, ty);
+            let ground = Vec2::new(origin.x, origin.y - super::TILE_HALF_H);
+            let road = iso(tx + rdx, ty + rdy);
+            let ground_road = Vec2::new(road.x, road.y - super::TILE_HALF_H);
+            for spec in road_stop_build_layers(StationTileClass::Bus, dir) {
+                let center = super::road_stop_build_sprite_center(
+                    origin,
+                    tx,
+                    ty,
+                    0,
+                    spec.z,
+                    road_stop_seq_gfx(spec),
+                    spec.w,
+                    spec.h,
+                );
+                let dist_station = (center.x - ground.x).hypot(center.y - ground.y);
+                let dist_road = (center.x - ground_road.x).hypot(center.y - ground_road.y);
+                assert!(
+                    dist_station < dist_road,
+                    "bus dir {dir} capa z={} en ({tx},{ty}) no debe caer hacia ({}, {})",
+                    spec.z,
+                    tx + rdx,
+                    ty + rdy
+                );
+            }
+        }
     }
 
     #[test]

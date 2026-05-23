@@ -17,7 +17,7 @@ y=5   · vía Y · vía X · T · cruce · señales · nieve ·
 y=6   · ártico · trópico · toyland · iglú · h109 ·           (más climas)
 y=7   · carretera NE · SE · SW · NW · tranvía pendiente NE ·
 y=8   · obra h16 s0..s3 · terminada ·                       (Large Office)
-y=9   · casa · camión · bus · tren · (industria legacy) ·
+y=9   · bus NE · SE · SW · NW · camión · tren · casa ·
 y=10  · gfx0 · gfx42 · gfx116 · gfx119 · gfx120 · gfx256 ·  (industrias, paso 2 en x)
 y=11  · hierba · mar Clear · costa · hierba ·
 ```
@@ -151,6 +151,19 @@ def industry_under_construction(
         m1=stage & 0x03,
         m2=industry_index & 0xFF,
     )
+
+
+def bus_stop_tile(direction: int) -> TileSpec:
+    """Parada bus en `direction` 0=NE … 3=NW (`m5` bajo + stub en `m3`)."""
+    d = direction & 3
+    stub = (0x08, 0x04, 0x02, 0x01)[d]
+    return TileSpec(tt=MP_STATION, m5=d, m6=3 << 3, m3=stub)
+
+
+def truck_stop_tile(direction: int) -> TileSpec:
+    d = direction & 3
+    stub = (0x08, 0x04, 0x02, 0x01)[d]
+    return TileSpec(tt=MP_STATION, m5=d, m6=2 << 3, m3=stub)
 
 
 def build_stxy_footer(tile_types: list[int], dim_x: int, dim_y: int) -> bytes:
@@ -302,12 +315,12 @@ def main() -> None:
     ):
         put(tiles, x, 10, industry_tile(gfx))
 
-    # --- Objetos (y=9), paso 2 en x ---
-    put(tiles, 1, 9, house_completed(0))
-    put(tiles, 3, 9, TileSpec(tt=MP_STATION, m5=0x02, m6=2 << 3))  # Truck SE
-    put(tiles, 5, 9, TileSpec(tt=MP_STATION, m5=0x00, m6=3 << 3))  # Bus NE
-    put(tiles, 7, 9, TileSpec(tt=MP_STATION, m5=0x01, m6=0))  # Rail eje Y
-    put(tiles, 9, 9, industry_tile(0))  # mina carbón (legacy junto a estaciones)
+    # --- Paradas bus 4 direcciones + otros objetos (y=9), paso 2 en x ---
+    for x, direction in zip((1, 3, 5, 7), (0, 1, 2, 3), strict=True):
+        put(tiles, x, 9, bus_stop_tile(direction))
+    put(tiles, 9, 9, truck_stop_tile(1))  # camión SE
+    put(tiles, 11, 9, TileSpec(tt=MP_STATION, m5=0x01, m6=0))  # tren eje Y
+    put(tiles, 13, 9, house_completed(0))
 
     # --- Costa (y=11) ---
     put(tiles, 3, 11, TileSpec(tt=MP_WATER, height=1, m5=0x00))

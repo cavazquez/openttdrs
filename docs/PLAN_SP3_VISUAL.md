@@ -116,6 +116,7 @@ Upstream: `rail_cmd.cpp`, `DrawRailTile`.
 - [x] Precarga: `signal_sprite_ids_for_preload` + `RAIL_SPRITE_IDS` (incl. 1037/1038 y pendiente 1023–1034).
 - [x] Nieve en vía: plano `1037`/`1038`; pendiente `+ RAIL_SPRITE_SNOW_OFFSET` (26).
 - [x] Pendiente diagonal NE/SE/SW/NW: `_track_sloped_sprites` → `collect_rail_sprites(..., tileh)`.
+- [x] Pendiente + nieve: sprites **1049–1060** (`1023–1034` + 26); `descargar_graficos.sh` o `alias_rail_snow_slope_sprites.sh`.
 - [x] `rail_trackbits_for_render`: tesela `Rail` con `m5=0` no usa vecinos sintéticos.
 
 **Criterio:** T y cruce de vía en mapa real; señales visibles en tiles con `RailTileType::Signals`; sin PNG rosa/placeholder en IDs usados.
@@ -128,8 +129,10 @@ Upstream: `station_cmd.cpp`, sprites 1069–1086, bus stops.
 - [x] Estación tren 1×1: plataforma + edificio (`rail_platform_*` + `rail_station_sprite_layers`).
 - [x] Orientación en `m5` (eje Y = bit 0); herramienta **Estación de tren** en panel vía (`PlaceRailStation`).
 - [x] Paradas bus/camión: capas `BUILD_A/B/C` con `RemapCoords` (código; validar visual en checklist).
+- [x] Estación tren en pendiente: vía inclinada (`rail_station_ground_track_sprite(m5, tileh)`).
+- [x] Stub carretera en parada sobre slope: `road_flat_sprite_index(tileh, stub)`.
 
-**Criterio:** paradas con edificio visible; tren 1×1 distinguible de hierba y de parada de carretera.
+**Criterio:** paradas con edificio visible; tren 1×1 distinguible de hierba y de parada de carretera; estación tren en slope con riel inclinado, no plano flotante.
 
 ### SP3.4 — Casas e industrias en mapas reales (1–2 PR)
 

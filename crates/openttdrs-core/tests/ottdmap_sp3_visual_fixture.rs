@@ -17,8 +17,17 @@ fn tile(map: &Map, x: i32, y: i32) -> openttdrs_core::Tile {
 fn loads_sp3_visual_checklist_layout() {
     let (map, ex) = Map::from_ottd_binary_with_extras(FIXTURE).expect("fixture MAP1");
     assert_eq!(map.dimensions(), (20, 13));
-    assert_eq!(ex.station_xy.len(), 6);
-    for xy in [(1, 9), (3, 9), (5, 9), (7, 9), (9, 9), (11, 9)] {
+    assert_eq!(ex.station_xy.len(), 8);
+    for xy in [
+        (1, 9),
+        (3, 9),
+        (5, 9),
+        (7, 9),
+        (9, 9),
+        (11, 9),
+        (15, 9),
+        (16, 7),
+    ] {
         assert!(ex.station_xy.contains(&xy), "missing station at {xy:?}");
     }
 
@@ -74,6 +83,14 @@ fn loads_sp3_visual_checklist_layout() {
         tile_slope_and_z(&map, TileCoord::new(13, 7)).map(|(h, _)| h),
         Some(12)
     );
+    let rail_st_slope = tile(&map, 16, 7);
+    assert_eq!(rail_st_slope.kind, TileKind::Station);
+    assert_eq!((rail_st_slope.m6 >> 3) & 0x0F, 0);
+    assert_eq!(rail_st_slope.m5 & 1, 1);
+    assert_eq!(
+        tile_slope_and_z(&map, TileCoord::new(16, 7)).map(|(h, _)| h),
+        Some(12)
+    );
 
     // Paradas bus 4 direcciones + camión + tren (y=9)
     for (x, dir, stub) in [(1, 0, 0x08), (3, 1, 0x04), (5, 2, 0x02), (7, 3, 0x01)] {
@@ -95,6 +112,15 @@ fn loads_sp3_visual_checklist_layout() {
     assert_eq!(house.kind, TileKind::House);
     assert_eq!(house.m8 & 0xFFF, 0);
     assert_eq!(house.m3, 0x80);
+    let bus_slope = tile(&map, 15, 9);
+    assert_eq!(bus_slope.kind, TileKind::Station);
+    assert_eq!(bus_slope.m5 & 0x03, 0);
+    assert_eq!((bus_slope.m6 >> 3) & 0x0F, 3);
+    assert_eq!(bus_slope.m3 & 0x0F, 0x08);
+    assert_eq!(
+        tile_slope_and_z(&map, TileCoord::new(15, 9)).map(|(h, _)| h),
+        Some(12)
+    );
 
     // Climas / HouseID altos (y=0)
     assert_eq!(tile(&map, 1, 0).m8 & 0xFFF, 0);
@@ -150,7 +176,7 @@ fn loads_sp3_visual_checklist_layout() {
     assert_eq!(industry_gfx9(&tile(&map, 11, 10)), 256);
     assert_eq!(tile(&map, 2, 10).kind, TileKind::Grass);
 
-    // SP3.1b: vía en pendiente (y=11, x≥9) — regresión datos; render aún usa sprites planos
+    // SP3.1b: vía en pendiente (y=11, x≥9)
     for (x, tileh, m5) in [(9, 12, 0x02), (12, 6, 0x01), (15, 3, 0x02), (18, 9, 0x01)] {
         let r = tile(&map, x, 11);
         assert_eq!(r.kind, TileKind::Rail);

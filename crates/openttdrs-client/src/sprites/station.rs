@@ -2,6 +2,8 @@
 
 use openttdrs_core::StopKind;
 
+use super::rail::rail_sloped_track_sprite_id;
+
 /// `StationType` en bits 3–6 de `m6` (`GetStationType`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StationTileClass {
@@ -83,8 +85,16 @@ pub fn rail_station_axis_y(m5: u8) -> bool {
 }
 
 /// Vía de fondo (`SPR_RAIL_TRACK_X` / `SPR_RAIL_TRACK_Y`) antes de las plataformas.
+///
+/// En pendiente OpenTTD usa el sprite inclinado (`DrawRailTile` / `_track_sloped_sprites`), sin
+/// distinguir eje X/Y.
 #[must_use]
-pub fn rail_station_ground_track_sprite(m5: u8) -> u32 {
+pub fn rail_station_ground_track_sprite(m5: u8, tileh: u8) -> u32 {
+    if tileh != 0
+        && let Some(sid) = rail_sloped_track_sprite_id(tileh, false)
+    {
+        return sid;
+    }
     if rail_station_axis_y(m5) { 1011 } else { 1012 }
 }
 
@@ -210,8 +220,15 @@ mod tests {
     fn rail_layers_follow_gfx_and_include_building_variant() {
         assert_eq!(rail_station_draw_layers(0)[0].sprite_id, 1070);
         assert_eq!(rail_station_draw_layers(2)[0].sprite_id, 1073);
-        assert_eq!(rail_station_ground_track_sprite(2), 1012);
-        assert_eq!(rail_station_ground_track_sprite(3), 1011);
+        assert_eq!(rail_station_ground_track_sprite(2, 0), 1012);
+        assert_eq!(rail_station_ground_track_sprite(3, 0), 1011);
+    }
+
+    #[test]
+    fn rail_station_ground_track_uses_sloped_sprite_on_slope() {
+        assert_eq!(rail_station_ground_track_sprite(0, 12), 1031);
+        assert_eq!(rail_station_ground_track_sprite(1, 12), 1031);
+        assert_eq!(rail_station_ground_track_sprite(3, 6), 1032);
     }
 
     #[test]

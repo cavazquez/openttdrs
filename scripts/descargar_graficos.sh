@@ -540,6 +540,23 @@ for sid, src_name in [(1037, "rail_track_y_snow.png"), (1038, "rail_track_x_snow
     if src.is_file():
         shutil.copy2(src, dst)
         print(f"  rail_{sid}.png (alias de {src_name} para preload Bevy)")
+# Pendiente + nieve (offset +26 desde 1023–1034; precarga `rail_sprite_ids_for_preload`)
+RAIL_SNOW_OFFSET = 26
+for sid in RAIL_SLOPE_TRACK_RANGE:
+    snow_sid = sid + RAIL_SNOW_OFFSET
+    crop_by_id(snow_sid, f"rail_{snow_sid}.png")
+for sid in RAIL_SLOPE_TRACK_RANGE:
+    snow_sid = sid + RAIL_SNOW_OFFSET
+    dst = tiles_dir / f"rail_{snow_sid}.png"
+    if dst.is_file():
+        continue
+    src = tiles_dir / f"rail_{sid}.png"
+    if src.is_file():
+        shutil.copy2(src, dst)
+        print(
+            f"  rail_{snow_sid}.png (fallback: copia de rail_{sid}; "
+            f"sprite {snow_sid} no en NFO o recorte omitido)"
+        )
 # Depósitos de tren
 crop_by_id(1063, "rail_depot_se_1.png")
 crop_by_id(1064, "rail_depot_se_2.png")

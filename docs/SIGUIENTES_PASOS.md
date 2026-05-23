@@ -84,7 +84,7 @@ En código: errores HUD, preview, transporte, paradas/tren, industria, órdenes,
 
 ### SP3 — Presentación del mapa (prioridad media)
 
-Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. **SP3.0 cerrado** (auditoría + fixture 20×13). **SP3.1** carretera en pendiente (y=7). **SP3.1b** vía en pendiente: checklist y=11 + `collect_rail_sprites(..., tileh)` con sprites 1023–1034.
+Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. **SP3.0 cerrado** (auditoría + fixture 20×13). **SP3.1** carretera en pendiente (y=7). **SP3.1b** vía en pendiente: checklist y=11 + `collect_rail_sprites(..., tileh)` con sprites 1023–1034. **SP3.3:** estación tren y stub parada en pendiente (checklist (16,7) y (15,9)).
 
 **Checklist visual:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client` — [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
 

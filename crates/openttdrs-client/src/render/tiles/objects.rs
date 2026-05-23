@@ -52,7 +52,7 @@ pub(crate) fn spawn_station_tile(
                 let grass = sloped_or_flat_image(0, &assets.grass, &assets.grass_slopes);
                 spawn_ground_sprite(commands, grass, Color::WHITE, ctx, slope_half_ground);
             }
-            let track_sid = rail_station_ground_track_sprite(m5);
+            let track_sid = rail_station_ground_track_sprite(m5, tileh);
             if let Some(img) = assets.rail.get(&track_sid) {
                 commands.spawn((
                     MapVisualLayer,
@@ -113,7 +113,7 @@ pub(crate) fn spawn_station_tile(
             }
             let stub = ctx.tile.map_or(0, |t| t.m3 & 0x0F);
             if stub != 0 {
-                spawn_road_stop_link(commands, assets, ctx, base_z, rail_half_h, stub);
+                spawn_road_stop_link(commands, assets, ctx, base_z, rail_half_h, tileh, stub);
             }
             let dir = road_stop_ground_index(m5).min(3);
             let image = if class == StationTileClass::Bus {
@@ -150,9 +150,10 @@ fn spawn_road_stop_link(
     ctx: &TileRenderContext,
     base_z: u8,
     half_h: f32,
+    tileh: u8,
     road_bits: u8,
 ) {
-    let fi = road_flat_sprite_index(0, road_bits);
+    let fi = road_flat_sprite_index(tileh, road_bits);
     commands.spawn((
         MapVisualLayer,
         Sprite {

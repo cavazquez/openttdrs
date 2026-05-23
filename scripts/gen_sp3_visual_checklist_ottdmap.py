@@ -298,6 +298,11 @@ def main() -> None:
     cur = tiles.get((13, 7), TileSpec())
     tiles[(13, 7)] = replace(cur, tt=MP_ROAD, m5=0x05, m3=0x05)
 
+    # Estación tren eje Y en pendiente NE (vía inclinada 1031 bajo plataformas).
+    apply_ne_slope(tiles, 16, 7)
+    cur = tiles.get((16, 7), TileSpec())
+    put(tiles, 16, 7, replace(cur, tt=MP_STATION, m5=0x01, m6=0))
+
     # --- Obra industrial SP3 P5 (y=4): mina carbón gfx0, etapas 0–2 + terminada ---
     IND_OBRA_X = (1, 5, 9, 13)
     for x, stage in zip(IND_OBRA_X[:3], (0, 1, 2), strict=True):
@@ -322,6 +327,10 @@ def main() -> None:
     put(tiles, 9, 9, truck_stop_tile(1))  # camión SE
     put(tiles, 11, 9, TileSpec(tt=MP_STATION, m5=0x01, m6=0))  # tren eje Y
     put(tiles, 13, 9, house_completed(0))
+    # Parada bus NE en pendiente NE (stub → road_flat_11).
+    apply_ne_slope(tiles, 15, 9)
+    cur = tiles.get((15, 9), TileSpec())
+    put(tiles, 15, 9, replace(cur, tt=MP_STATION, m5=0, m6=3 << 3, m3=0x08))
 
     # --- Costa (y=11) ---
     put(tiles, 3, 11, TileSpec(tt=MP_WATER, height=1, m5=0x00))

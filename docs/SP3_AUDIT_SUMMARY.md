@@ -96,12 +96,14 @@ OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap c
 | **(7,7)** | **Carretera pendiente SW** |
 | **(10,7)** | **Carretera pendiente NW** |
 | **(13,7)** | **Tranvía en pendiente NE** (`m5=0x05`, `m3=0x05` → `road_flat_11` / `tram_flat_11`) |
+| **(16,7)** | **Estación tren eje Y en pendiente NE** (vía **1031** bajo plataformas) |
 | **(1,9)** | Parada bus **NE** |
 | **(3,9)** | Parada bus **SE** |
 | **(5,9)** | Parada bus **SW** |
 | **(7,9)** | Parada bus **NW** |
 | (9,9) | Parada camión SE |
 | (11,9) | Estación tren 1×1 |
+| **(15,9)** | **Parada bus NE en pendiente NE** (stub → `road_flat_11`) |
 | (13,9) | Casa Tall Office |
 | (3,11) | Agua Clear |
 | (5,11) | Agua Coast (`m5=0x10`) |
@@ -119,8 +121,8 @@ Marcar tras cargar el fixture checklist:
 
 - [ ] Fila y=3: carretera plana (Y, X, T, cruce, cruces nivel, tranvía X en x=15)
 - [ ] Fila y=5: vía (Y, X, T, cruce, señales, nieve)
-- [ ] Fila y=7: carretera en 4 pendientes (`road_flat_11..14`) + tranvía NE en (13,7)
-- [x] Fila y=9: bus NE/SE/SW/NW (x=1,3,5,7) + camión + tren + casa
+- [ ] Fila y=7: carretera en 4 pendientes (`road_flat_11..14`) + tranvía NE en (13,7) + estación tren NE en (16,7)
+- [x] Fila y=9: bus NE/SE/SW/NW (x=1,3,5,7) + camión + tren + casa + **bus NE en pendiente (15,9)**
 - [ ] Fila y=11: mar + costa (x=3,5) + vía en 4 pendientes (x=9,12,15,18)
 
 **Nota:** el mapa procedural por defecto (`cargo run -p openttdrs-client`) mezcla todo en la demo de transporte; para regresión visual usar el fixture checklist.

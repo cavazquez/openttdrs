@@ -75,7 +75,7 @@ impl WorldAssets {
         let mut rail_ids: std::collections::BTreeSet<_> =
             rail_sprite_ids_for_preload().into_iter().collect();
         for gfx in 0..=3 {
-            rail_ids.insert(rail_station_ground_track_sprite(gfx));
+            rail_ids.insert(rail_station_ground_track_sprite(gfx, 0));
             for layer in rail_station_draw_layers(gfx) {
                 rail_ids.insert(layer.sprite_id);
             }

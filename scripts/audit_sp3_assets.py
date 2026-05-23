@@ -111,6 +111,10 @@ def signal_sprite_ids_for_preload() -> set[int]:
     return ids
 
 
+RAIL_SPRITE_SNOW_OFFSET = 26
+RAIL_TRACK_SLOPED_OFFSETS = [14, 15, 22, 13, 0, 21, 17, 12, 23, 0, 18, 20, 19, 16]
+
+
 def rail_sprite_ids_for_preload() -> set[int]:
     m = re.search(
         r"pub const RAIL_SPRITE_IDS:\s*\[u32;\s*\d+\]\s*=\s*\[([^\]]+)\]",
@@ -120,6 +124,9 @@ def rail_sprite_ids_for_preload() -> set[int]:
     if not m:
         raise RuntimeError("no se encontró RAIL_SPRITE_IDS en rail.rs")
     ids = {int(x) for x in re.findall(r"\d+", m.group(1))}
+    for th in range(1, 15):
+        offset = RAIL_TRACK_SLOPED_OFFSETS[th - 1]
+        ids.add(1011 + offset + RAIL_SPRITE_SNOW_OFFSET)
     ids |= signal_sprite_ids_for_preload()
     gaps = {1438, 1439, 1530, 1532, 1540, 1542, 1546, 1548}
     return ids - gaps

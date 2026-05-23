@@ -393,8 +393,14 @@ mod world_pos_to_tile_tests {
 
     #[test]
     fn road_vehicle_anchor_matches_iso_at_tile_origin() {
-        assert_eq!(super::road_vehicle_tile_anchor(3, 6, 0.0, 0.0), iso(3, 6));
-        assert_eq!(super::road_vehicle_tile_anchor(0, 0, 0.0, 0.0), iso(0, 0));
+        assert_eq!(
+            super::road_vehicle_tile_anchor(3, 6, 0.0, 0.0, 0.0),
+            iso(3, 6)
+        );
+        assert_eq!(
+            super::road_vehicle_tile_anchor(0, 0, 0.0, 0.0, 0.0),
+            iso(0, 0)
+        );
     }
 
     #[test]
@@ -406,8 +412,8 @@ mod world_pos_to_tile_tests {
         let (x1, y1) = straight_subtile(DIR_SW, 255);
         assert_eq!((x1, y1), (15.0, 9.0));
 
-        let exit = super::road_vehicle_tile_anchor(5, 6, x1, y1);
-        let entry = super::road_vehicle_tile_anchor(6, 6, x0, y0);
+        let exit = super::road_vehicle_tile_anchor(5, 6, x1, y1, 0.0);
+        let entry = super::road_vehicle_tile_anchor(6, 6, x0, y0, 0.0);
         let delta = exit - entry;
         assert!(
             delta.length() < 4.0,
@@ -422,7 +428,7 @@ mod world_pos_to_tile_tests {
         let (sub_x, sub_y) = straight_subtile(DIR_SW, 128);
         assert!((sub_x - 7.5).abs() < 0.1);
         assert_eq!(sub_y, 9.0);
-        let lane = super::road_vehicle_tile_anchor(5, 6, sub_x, sub_y);
+        let lane = super::road_vehicle_tile_anchor(5, 6, sub_x, sub_y, 0.0);
         let ground = Vec2::new(iso(5, 6).x, iso(5, 6).y - super::TILE_HALF_H);
         let delta = lane - ground;
         assert!(
@@ -439,6 +445,20 @@ mod world_pos_to_tile_tests {
         let end = straight_subtile(DIR_NE, 255);
         assert_eq!(start, (15.0, 5.0));
         assert_eq!(end, (0.0, 5.0));
+    }
+
+    #[test]
+    fn road_vehicle_ne_slope_dz_shifts_anchor_downhill() {
+        use openttdrs_core::{SLOPE_NE, partial_pixel_z, slope_dz_at_subtile};
+
+        let flat = super::road_vehicle_tile_anchor(5, 6, 0.0, 9.0, 0.0);
+        let dz = slope_dz_at_subtile(0.0, 9.0, SLOPE_NE);
+        assert_eq!(dz, f32::from(partial_pixel_z(0.0, 9.0, SLOPE_NE)));
+        let raised = super::road_vehicle_tile_anchor(5, 6, 0.0, 9.0, dz);
+        assert!(
+            raised.y > flat.y,
+            "carril alto en pendiente NE sube en pantalla"
+        );
     }
 
     #[test]

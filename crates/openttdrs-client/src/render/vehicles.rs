@@ -4,10 +4,10 @@ use bevy::prelude::*;
 use openttdrs_core::{CargoType, Map, TileKind, Vehicle, VehicleKind};
 
 use crate::bevy_app::UpdateSet;
-use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z};
+use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_and_min_z};
 use crate::render::MapVisualLayer;
 use crate::state::{ClientScreen, SimWorld};
-use openttdrs_core::vehicle_subtile;
+use openttdrs_core::{slope_dz_at_subtile, vehicle_subtile};
 
 #[path = "../sprites/vehicle_gfx_data_generated.rs"]
 mod vehicle_gfx;
@@ -48,9 +48,11 @@ fn vehicle_layer(v: &Vehicle) -> &'static vehicle_gfx::VehicleLayerGfx {
 }
 
 fn vehicle_draw_anchor(v: &Vehicle, map: &Map) -> (Vec2, u8, i32, i32) {
+    let (tileh, _) = tile_slope_and_min_z(map, v.pos.x as u32, v.pos.y as u32);
     let base_z = tile_min_z(map, v.pos);
     let (sub_x, sub_y) = vehicle_subtile(v);
-    let anchor = road_vehicle_tile_anchor(v.pos.x, v.pos.y, sub_x, sub_y);
+    let sub_z = slope_dz_at_subtile(sub_x, sub_y, tileh);
+    let anchor = road_vehicle_tile_anchor(v.pos.x, v.pos.y, sub_x, sub_y, sub_z);
     (anchor, base_z, v.pos.x, v.pos.y)
 }
 

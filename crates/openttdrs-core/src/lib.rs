@@ -41,9 +41,10 @@ pub use industry::{
     INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind, IndustrySpec, industry_produce_period_ticks,
 };
 pub use map::{
-    Map, MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind, inclined_slope_direction,
-    is_tunnel_entrance_slope, openttd_tile_index_to_coord, resolve_tunnel_end, tile_slope_and_z,
-    tunnel_entrance_m5, tunnel_preview_path,
+    Map, MapError, OTTD_TILETYPE_TUNNELBRIDGE, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, Tile,
+    TileCoord, TileKind, inclined_slope_direction, is_tunnel_entrance_slope,
+    openttd_tile_index_to_coord, partial_pixel_z, resolve_tunnel_end, slope_dz_at_subtile,
+    slope_dz_on_tile, tile_slope_and_z, tunnel_entrance_m5, tunnel_preview_path,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{

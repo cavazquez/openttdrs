@@ -9,8 +9,9 @@ mod types;
 use binary::{OTTDMAP_FLAG_HAS_M2_HI, OTTDMAP_FORMAT_VERSION_CURRENT};
 pub(crate) use binary::{OTTDMAP_HEADER_LEN_VERSIONED, OTTDMAP_MAGIC_VERSIONED};
 pub use slope::{
-    complement_slope, diag_dir_offset, inclined_slope_direction, is_tunnel_entrance_slope,
-    resolve_tunnel_end, tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles,
+    SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, complement_slope, diag_dir_offset,
+    inclined_slope_direction, is_tunnel_entrance_slope, partial_pixel_z, resolve_tunnel_end,
+    slope_dz_at_subtile, slope_dz_on_tile, tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles,
     tunnel_preview_path,
 };
 pub use types::{

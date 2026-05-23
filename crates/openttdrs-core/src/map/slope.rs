@@ -83,6 +83,59 @@ pub const fn complement_slope(tileh: u8) -> u8 {
     }
 }
 
+const TILE_SIZE_SUB: i32 = 16;
+const TILE_HEIGHT_SUB: i32 = 8;
+
+/// Altura sub-tesela en unidades `TILE_HEIGHT` (`GetPartialPixelZ` / `landscape.cpp`).
+#[must_use]
+#[allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    clippy::collapsible_match,
+    clippy::match_same_arms
+)]
+pub fn partial_pixel_z(sub_x: f32, sub_y: f32, tileh: u8) -> u8 {
+    let x = sub_x.clamp(0.0, 15.0).round() as i32;
+    let y = sub_y.clamp(0.0, 15.0).round() as i32;
+    match tileh.min(14) {
+        1 if x >= y => ((x - y) >> 1) as u8,
+        2 if x + y >= TILE_SIZE_SUB => ((1 + x + y - TILE_SIZE_SUB) >> 1) as u8,
+        3 => ((x + 1) >> 1) as u8,
+        4 if y >= x => ((1 + y - x) >> 1) as u8,
+        5 if x >= y => ((x - y) >> 1) as u8,
+        5 => ((1 + y - x) >> 1) as u8,
+        6 => ((y + 1) >> 1) as u8,
+        7 if x < y => (TILE_HEIGHT_SUB - ((1 + y - x) >> 1)) as u8,
+        7 => TILE_HEIGHT_SUB as u8,
+        8 if x + y <= TILE_SIZE_SUB => ((TILE_SIZE_SUB - x - y) >> 1) as u8,
+        9 => ((TILE_SIZE_SUB - y) >> 1) as u8,
+        10 if x + y < TILE_SIZE_SUB => ((TILE_SIZE_SUB - x - y) >> 1) as u8,
+        10 => ((1 + x + y - TILE_SIZE_SUB) >> 1) as u8,
+        11 if y < x => (TILE_HEIGHT_SUB - ((x - y) >> 1)) as u8,
+        11 => TILE_HEIGHT_SUB as u8,
+        12 => ((TILE_SIZE_SUB - x) >> 1) as u8,
+        13 if x + y >= TILE_SIZE_SUB => {
+            (TILE_HEIGHT_SUB - ((1 + x + y - TILE_SIZE_SUB) >> 1)) as u8
+        }
+        13 => TILE_HEIGHT_SUB as u8,
+        14 if x + y <= TILE_SIZE_SUB => (TILE_HEIGHT_SUB - ((TILE_SIZE_SUB - x - y) >> 1)) as u8,
+        14 => TILE_HEIGHT_SUB as u8,
+        _ => 0,
+    }
+}
+
+/// Offset de altura (`dz`) para sub-tesela `(sub_x, sub_y)` sobre `tileh`.
+#[must_use]
+pub fn slope_dz_at_subtile(sub_x: f32, sub_y: f32, tileh: u8) -> f32 {
+    f32::from(partial_pixel_z(sub_x, sub_y, tileh))
+}
+
+/// `dz` en una tesela del mapa (pendiente inclinada diagonal, etc.).
+#[must_use]
+pub fn slope_dz_on_tile(map: &Map, c: TileCoord, sub_x: f32, sub_y: f32) -> f32 {
+    tile_slope_and_z(map, c).map_or(0.0, |(tileh, _)| slope_dz_at_subtile(sub_x, sub_y, tileh))
+}
+
 /// Offset de tesela en dirección diagonal (`TileOffsByDiagDir`).
 #[must_use]
 pub const fn diag_dir_offset(dir: u8) -> (i32, i32) {
@@ -189,6 +242,24 @@ mod tests {
     #[test]
     fn complement_ne_is_sw() {
         assert_eq!(complement_slope(SLOPE_NE), SLOPE_SW);
+    }
+
+    #[test]
+    fn inclined_ne_slope_partial_z_matches_openrtd() {
+        assert_eq!(partial_pixel_z(0.0, 9.0, SLOPE_NE), 8);
+        assert_eq!(partial_pixel_z(15.0, 9.0, SLOPE_NE), 0);
+        assert_eq!(partial_pixel_z(8.0, 9.0, SLOPE_NE), 4);
+    }
+
+    #[test]
+    fn inclined_sw_slope_partial_z_matches_openrtd() {
+        assert_eq!(partial_pixel_z(0.0, 9.0, SLOPE_SW), 0);
+        assert_eq!(partial_pixel_z(15.0, 9.0, SLOPE_SW), 8);
+    }
+
+    #[test]
+    fn flat_slope_has_zero_partial_z() {
+        assert_eq!(partial_pixel_z(7.5, 9.0, 0), 0);
     }
 
     #[test]

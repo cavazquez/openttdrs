@@ -177,8 +177,8 @@ pub fn tile_pos(tx: i32, ty: i32, height: u8, layer: f32) -> Vec3 {
 /// En este cliente `iso(tx, ty) == RemapCoords(16·tx, 16·ty) / 2`; los offsets
 /// sub-tesela deben usar la misma escala (no el `remap` entero de piezas BUILD).
 #[must_use]
-pub fn road_vehicle_tile_anchor(tx: i32, ty: i32, sub_x: f32, sub_y: f32) -> Vec2 {
-    remap_tile_offset(tx as f32 * 16.0 + sub_x, ty as f32 * 16.0 + sub_y, 0.0) * 0.5
+pub fn road_vehicle_tile_anchor(tx: i32, ty: i32, sub_x: f32, sub_y: f32, sub_z: f32) -> Vec2 {
+    remap_tile_offset(tx as f32 * 16.0 + sub_x, ty as f32 * 16.0 + sub_y, sub_z) * 0.5
 }
 
 /// Delta de pantalla (Bevy) para un offset local `TILE_SEQ` dentro de la tesela.

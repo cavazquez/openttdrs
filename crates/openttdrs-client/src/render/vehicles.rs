@@ -13,7 +13,9 @@ use crate::state::{ClientScreen, SimWorld};
 #[path = "../sprites/vehicle_gfx_data_generated.rs"]
 mod vehicle_gfx;
 
-use vehicle_gfx::{BUS_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED};
+use vehicle_gfx::{
+    BUS_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED,
+};
 
 pub(crate) struct VehicleRenderPlugin;
 
@@ -34,7 +36,8 @@ fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
     match v.kind {
         VehicleKind::Truck if v.uses_loaded_road_sprite() => &TRUCK_VEHICLE_LAYERS_LOADED,
         VehicleKind::Truck => &TRUCK_VEHICLE_LAYERS,
-        VehicleKind::Bus | VehicleKind::Train => &BUS_VEHICLE_LAYERS,
+        VehicleKind::Bus => &BUS_VEHICLE_LAYERS,
+        VehicleKind::Train => &TRAIN_VEHICLE_LAYERS,
     }
 }
 
@@ -97,6 +100,7 @@ pub(crate) struct TruckHandles {
     bus: DirHandles,
     truck: DirHandles,
     truck_loaded: DirHandles,
+    train: DirHandles,
 }
 
 impl TruckHandles {
@@ -120,6 +124,7 @@ impl TruckHandles {
             bus: load_set(asset_server, &BUS_VEHICLE_LAYERS),
             truck: load_set(asset_server, &TRUCK_VEHICLE_LAYERS),
             truck_loaded: load_set(asset_server, &TRUCK_VEHICLE_LAYERS_LOADED),
+            train: load_set(asset_server, &TRAIN_VEHICLE_LAYERS),
         }
     }
 
@@ -128,7 +133,8 @@ impl TruckHandles {
         match v.kind {
             VehicleKind::Truck if v.uses_loaded_road_sprite() => self.truck_loaded[i].clone(),
             VehicleKind::Truck => self.truck[i].clone(),
-            VehicleKind::Bus | VehicleKind::Train => self.bus[i].clone(),
+            VehicleKind::Bus => self.bus[i].clone(),
+            VehicleKind::Train => self.train[i].clone(),
         }
     }
 }
@@ -217,12 +223,8 @@ fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
     Vec3::new(vehicle_pos.x, vehicle_pos.y + 21.0, vehicle_pos.z + 0.35)
 }
 
-fn vehicle_tint(v: &Vehicle) -> Color {
-    if v.kind == VehicleKind::Train {
-        Color::srgb(0.86, 1.0, 0.86)
-    } else {
-        Color::WHITE
-    }
+fn vehicle_tint(_v: &Vehicle) -> Color {
+    Color::WHITE
 }
 
 fn vehicle_is_hidden_in_depot(sim: &SimWorld, v: &Vehicle) -> bool {
@@ -318,6 +320,7 @@ mod tests {
             bus: Default::default(),
             truck: Default::default(),
             truck_loaded: Default::default(),
+            train: Default::default(),
         }
     }
 
@@ -370,6 +373,14 @@ mod tests {
 
         let mut labels = world.query_filtered::<&Text2d, With<VehicleCargoLabel>>();
         assert_eq!(labels.single(&world).unwrap().to_string(), "ANY 0/30");
+    }
+
+    #[test]
+    fn train_layers_differ_from_bus() {
+        assert_ne!(
+            TRAIN_VEHICLE_LAYERS[DIR_SW as usize].path,
+            BUS_VEHICLE_LAYERS[DIR_SW as usize].path
+        );
     }
 
     #[test]

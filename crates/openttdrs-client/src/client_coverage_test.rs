@@ -27,6 +27,10 @@ fn seed_min_assets(root: &std::path::Path) {
         "vehicle_truck_se_loaded.png",
         "vehicle_truck_sw_loaded.png",
         "vehicle_truck_nw_loaded.png",
+        "vehicle_train_ne.png",
+        "vehicle_train_se.png",
+        "vehicle_train_sw.png",
+        "vehicle_train_nw.png",
     ] {
         fs::write(tiles.join(name), png).expect("write png");
     }

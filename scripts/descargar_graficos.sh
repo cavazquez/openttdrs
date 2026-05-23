@@ -914,6 +914,18 @@ for sid, name in [
     (3195, "vehicle_truck_nw_loaded.png"),
 ]:
     crop_by_id(sid, name)
+# Kirby Paul Tank (rail engine 0, image_index 2): sprites 2921..2928.
+for sid, name in [
+    (2921, "vehicle_train_n.png"),
+    (2922, "vehicle_train_ne.png"),
+    (2923, "vehicle_train_e.png"),
+    (2924, "vehicle_train_se.png"),
+    (2925, "vehicle_train_s.png"),
+    (2926, "vehicle_train_sw.png"),
+    (2927, "vehicle_train_w.png"),
+    (2928, "vehicle_train_nw.png"),
+]:
+    crop_by_id(sid, name)
 # Regenerar metadatos: python3 scripts/gen_vehicle_gfx_data.py
 
 # =============================================================================

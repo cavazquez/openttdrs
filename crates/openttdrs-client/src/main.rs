@@ -80,6 +80,14 @@ fn check_required_assets(repo_root: &str) -> bool {
         "vehicle_truck_sw_loaded.png",
         "vehicle_truck_w_loaded.png",
         "vehicle_truck_nw_loaded.png",
+        "vehicle_train_n.png",
+        "vehicle_train_ne.png",
+        "vehicle_train_e.png",
+        "vehicle_train_se.png",
+        "vehicle_train_s.png",
+        "vehicle_train_sw.png",
+        "vehicle_train_w.png",
+        "vehicle_train_nw.png",
     ];
     let mut required: Vec<_> = vec![
         tiles_dir.join("grass.png"),
@@ -159,6 +167,14 @@ mod main_asset_checks {
             "vehicle_truck_sw_loaded.png",
             "vehicle_truck_w_loaded.png",
             "vehicle_truck_nw_loaded.png",
+            "vehicle_train_n.png",
+            "vehicle_train_ne.png",
+            "vehicle_train_e.png",
+            "vehicle_train_se.png",
+            "vehicle_train_s.png",
+            "vehicle_train_sw.png",
+            "vehicle_train_w.png",
+            "vehicle_train_nw.png",
         ] {
             fs::write(t.join(name), png).expect("write");
         }

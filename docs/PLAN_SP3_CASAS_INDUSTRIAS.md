@@ -4,7 +4,8 @@ Documento de **seguimiento** para cerrar el hueco SP3.4 descrito en
 [PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md) y [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md).
 
 **Estado (2026-05):** P1–P6 completados (casas + industrias en checklist y tablas upstream).
-Validar en partidas reales grandes sigue siendo útil; NewGRF industria gfx≥120 queda fuera de alcance.
+Validar en partidas reales grandes sigue siendo útil; extensión **gfx 120–174** y NewGRF
+(`gfx ≥ 175`) siguen en [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md).
 
 **Relacionado:** [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) §8–10,
 [SPRITES_OPENGFX_COMPLETO.md](SPRITES_OPENGFX_COMPLETO.md), [INDUSTRIAS_OPENGFX.md](INDUSTRIAS_OPENGFX.md),

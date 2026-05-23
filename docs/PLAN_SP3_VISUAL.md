@@ -149,8 +149,9 @@ Upstream: `industry_land.h`, `house_land.h`.
 
 **Criterio:** cargar un `.ottdmap` con mina/fábrica/casa no trivial y que no parezcan “bloques de color”.
 
-**Seguimiento (pendiente en mapas reales):** [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md)
-— prioridad **P1** etapas de obra desde `m5`, luego HouseID ≥128, gfx≥120, calibración, etapas industria.
+**Seguimiento:** [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) (P1–P6 cerrados);
+paridad extendida industrias → [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md)
+(tabla 0–174, animación, NewGRF).
 
 ### SP3.5 — Agua y costa (0–1 PR)
 

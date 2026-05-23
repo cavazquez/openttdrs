@@ -8,8 +8,8 @@ use openttdrs_core::{GameState, Map, OttdmapExtras};
 
 use crate::state::bootstrap::{
     fill_flat_grass, log_detection_summary, log_procedural_demo_zones, place_bridge_demo_gap,
-    place_clean_demo_transport, place_industries, place_stations, place_stations_from_footer_stxy,
-    place_stations_from_map_tiles, place_tunnel_demo_ridge,
+    place_clean_demo_transport, place_demo_economy_loop, place_industries, place_stations,
+    place_stations_from_footer_stxy, place_stations_from_map_tiles, place_tunnel_demo_ridge,
 };
 
 /// Dimensiones del mapa generado proceduralmente (sin `OTTDMAP_FILE`).
@@ -96,6 +96,7 @@ python3 scripts/parse_sav.py tu.sav {path}"
         let mut state = GameState::new(MAP_W, MAP_H);
         fill_flat_grass(&mut state);
         place_clean_demo_transport(&mut state);
+        place_demo_economy_loop(&mut state);
         place_tunnel_demo_ridge(&mut state);
         place_bridge_demo_gap(&mut state);
         log_procedural_demo_zones();
@@ -109,6 +110,7 @@ python3 scripts/parse_sav.py tu.sav {path}"
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used)]
 mod sim_world_coverage_tests {
     use super::SimWorld;
 
@@ -117,6 +119,15 @@ mod sim_world_coverage_tests {
         let w = SimWorld::default();
         assert!(!w.loaded_file);
         assert!(w.ottdmap_extras.is_none());
+        assert_eq!(w.state.industries.len(), 1);
+        assert_eq!(w.state.stations.len(), 2);
+        let truck = w
+            .state
+            .vehicles
+            .iter()
+            .find(|v| v.id == 9010)
+            .expect("camión económico demo");
+        assert_eq!(truck.orders.len(), 2);
     }
 }
 

@@ -1,7 +1,10 @@
 //! Mapa procedural limpio: hierba plana + zonas de prueba separadas.
 
 use bevy::prelude::*;
-use openttdrs_core::{Command, GameState, TileCoord, TileKind, apply_command};
+use openttdrs_core::{
+    Command, GameState, Industry, IndustryKind, PathNetwork, Station, StopKind, TileCoord,
+    TileKind, Vehicle, VehicleKind, apply_command, find_path,
+};
 
 /// Carretera horizontal de demo (eje X).
 pub const DEMO_ROAD_Y: i32 = 6;
@@ -21,6 +24,12 @@ pub const DEMO_BRIDGE_BANK_N: i32 = 8;
 pub const DEMO_BRIDGE_BANK_S: i32 = 12;
 /// Entrada NE del túnel de demo (pendiente inclinada).
 pub const DEMO_TUNNEL_NE: TileCoord = TileCoord::new(18, 8);
+/// Mina de carbón del ciclo económico demo (cobertura desde estación de carga).
+pub const DEMO_ECONOMY_INDUSTRY: TileCoord = TileCoord::new(2, 3);
+/// Parada de camión junto a la mina (carga).
+pub const DEMO_ECONOMY_LOAD_STATION: TileCoord = TileCoord::new(3, DEMO_ROAD_Y);
+/// Parada de camión de entrega (descarga / ingresos).
+pub const DEMO_ECONOMY_DELIVER_STATION: TileCoord = TileCoord::new(10, DEMO_ROAD_Y);
 
 /// `WaterTileType::Coast` en bits 4–7 de `m5` (fuerza sprites `shore_*` en el borde).
 const WATER_COAST_M5: u8 = 0x10;
@@ -53,6 +62,54 @@ pub(crate) fn place_clean_demo_transport(state: &mut GameState) {
     }
     place_demo_road_vehicles(state);
     place_demo_rail_vehicle(state);
+}
+
+/// Industria + dos paradas de camión + ruta con órdenes para un ciclo jugable al arrancar.
+pub(crate) fn place_demo_economy_loop(state: &mut GameState) {
+    let _ = state
+        .map
+        .set_kind(DEMO_ECONOMY_INDUSTRY, TileKind::Industry);
+    let mut mine = Industry::new(DEMO_ECONOMY_INDUSTRY, IndustryKind::CoalMine);
+    mine.stock = 64;
+    state.industries.push(mine);
+
+    place_demo_truck_station_tile(state, DEMO_ECONOMY_LOAD_STATION);
+    place_demo_truck_station_tile(state, DEMO_ECONOMY_DELIVER_STATION);
+
+    let orders = vec![DEMO_ECONOMY_LOAD_STATION, DEMO_ECONOMY_DELIVER_STATION];
+    let mut truck = Vehicle::new(
+        9010,
+        VehicleKind::Truck,
+        DEMO_ECONOMY_LOAD_STATION,
+        DEMO_ECONOMY_DELIVER_STATION,
+    );
+    truck.running = true;
+    truck.set_station_orders(orders);
+    if let Some(path) = find_path(
+        &state.map,
+        DEMO_ECONOMY_LOAD_STATION,
+        DEMO_ECONOMY_DELIVER_STATION,
+        PathNetwork::Road,
+    ) {
+        truck.path = path.into();
+    }
+    state.vehicles.push(truck);
+}
+
+fn place_demo_truck_station_tile(state: &mut GameState, pos: TileCoord) {
+    let kind = state.map.get_kind(pos).unwrap_or(TileKind::Grass);
+    if kind == TileKind::Water || kind == TileKind::Void {
+        return;
+    }
+    let _ = state.map.set_mapt_m5(pos, 0x50, 0);
+    let _ = state.map.set_kind(pos, TileKind::Station);
+    if let Some(mut t) = state.map.get(pos) {
+        t.m6 = (t.m6 & !0x78) | (2 << 3); // StationType::Truck
+        let _ = state.map.set_tile(pos, t);
+    }
+    state
+        .stations
+        .push(Station::new_with_kind(pos, StopKind::TruckStop));
 }
 
 /// Bus + camión en la carretera demo (para probar sprites sin depósito).
@@ -139,19 +196,26 @@ pub(crate) fn log_procedural_demo_zones() {
     info!(
         "Mapa demo ({}×{}): carretera y={DEMO_ROAD_Y} x=2..12 (bus+camión) | \
          vía y={DEMO_RAIL_Y} x=2..12 (tren) | \
+         economía mina ({},{}) → est ({},{}) → ({},{}) (camión #9010) | \
          puente agua x={DEMO_BRIDGE_WATER_X0}..{DEMO_BRIDGE_WATER_X1} y={DEMO_BRIDGE_WATER_Y0}..{DEMO_BRIDGE_WATER_Y1} \
          orillas x={DEMO_BRIDGE_BANK_W},{DEMO_BRIDGE_BANK_E} y={DEMO_BRIDGE_BANK_N},{DEMO_BRIDGE_BANK_S} \
          (construir E–O entre ({DEMO_BRIDGE_BANK_W},{DEMO_BRIDGE_Y}) y ({DEMO_BRIDGE_BANK_E},{DEMO_BRIDGE_Y})) | \
          túnel NE ({}, {})",
         crate::state::MAP_W,
         crate::state::MAP_H,
+        DEMO_ECONOMY_INDUSTRY.x,
+        DEMO_ECONOMY_INDUSTRY.y,
+        DEMO_ECONOMY_LOAD_STATION.x,
+        DEMO_ECONOMY_LOAD_STATION.y,
+        DEMO_ECONOMY_DELIVER_STATION.x,
+        DEMO_ECONOMY_DELIVER_STATION.y,
         DEMO_TUNNEL_NE.x,
         DEMO_TUNNEL_NE.y
     );
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::render::RenderGrid;
@@ -196,6 +260,50 @@ mod tests {
                 .iter()
                 .any(|v| v.kind == openttdrs_core::VehicleKind::Train)
         );
+    }
+
+    #[test]
+    fn demo_economy_loop_has_industry_stations_and_ordered_truck() {
+        let mut state = GameState::new(MAP_W, MAP_H);
+        fill_flat_grass(&mut state);
+        place_clean_demo_transport(&mut state);
+        place_demo_economy_loop(&mut state);
+
+        assert_eq!(state.industries.len(), 1);
+        assert_eq!(state.stations.len(), 2);
+        assert_eq!(
+            state.map.get_kind(DEMO_ECONOMY_LOAD_STATION),
+            Some(TileKind::Station)
+        );
+        assert_eq!(
+            state.map.get_kind(DEMO_ECONOMY_DELIVER_STATION),
+            Some(TileKind::Station)
+        );
+        let truck = state
+            .vehicles
+            .iter()
+            .find(|v| v.id == 9010)
+            .expect("camión económico demo");
+        assert_eq!(truck.orders.len(), 2);
+        assert!(truck.running);
+    }
+
+    #[test]
+    fn demo_economy_loop_delivers_cargo_over_sim_steps() {
+        let mut state = GameState::new(MAP_W, MAP_H);
+        fill_flat_grass(&mut state);
+        place_clean_demo_transport(&mut state);
+        place_demo_economy_loop(&mut state);
+
+        for _ in 0..800 {
+            state.step();
+        }
+        assert!(state.stats.cargo_units_loaded > 0, "debe cargar en la mina");
+        assert!(
+            state.stats.cargo_units_delivered > 0,
+            "debe entregar en la estación lejana"
+        );
+        assert!(state.economy.money > 100_000, "entrega genera ingresos");
     }
 
     #[test]

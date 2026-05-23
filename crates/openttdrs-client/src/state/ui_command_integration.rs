@@ -1,5 +1,7 @@
 //! Integración ligera: mismos comandos del core que aplicaría la toolbar sobre [`SimWorld`].
 
+#![allow(clippy::expect_used)]
+
 use std::collections::HashSet;
 
 use openttdrs_core::{Command, TileCoord, TileKind, apply_command, diag_dir_offset};
@@ -137,6 +139,29 @@ fn road_depot_dir_on_grass_matches_toolbar_depot_tool() {
         "PlaceRoadDepotDir (Road depot + orientación)"
     );
     assert_eq!(sim.state.map.get_kind(c), Some(TileKind::RoadDepot));
+}
+
+#[test]
+fn set_vehicle_station_orders_on_demo_truck_matches_toolbar() {
+    let mut sim = SimWorld::default();
+    let truck_id = 9010;
+    let load = TileCoord::new(3, 6);
+    let deliver = TileCoord::new(10, 6);
+    assert!(
+        apply_command(
+            &mut sim.state,
+            &Command::SetVehicleStationOrders(truck_id, vec![load, deliver])
+        )
+        .is_ok(),
+        "SetVehicleStationOrders como el panel de órdenes"
+    );
+    let truck = sim
+        .state
+        .vehicles
+        .iter()
+        .find(|v| v.id == truck_id)
+        .expect("camión demo");
+    assert_eq!(truck.orders.len(), 2);
 }
 
 #[test]

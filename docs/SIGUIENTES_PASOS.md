@@ -18,6 +18,7 @@ prioridad en **juego en solitario** (hito 0.1). La fundación **I0–I7** ya est
 | [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Paradas bus/camión/tren y sprites. |
 | [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md) | **`RemapCoords`**, BUILD paradas, roadmap de render. |
 | [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) | Casas/industrias en `.ottdmap` — prioridades P1–P6. |
+| [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md) | Paridad 1:1 industrias vs OpenTTD (tabla 0–174, anim, NewGRF). |
 | [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | Checklist de regresión SP2. |
 
 ---

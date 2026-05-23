@@ -25,6 +25,44 @@ mod station_hud;
 
 pub(crate) use station_hud::station_details_text;
 
+/// Alertas breves de vehículos para la tercera línea del HUD (sin ruta / sin órdenes).
+#[must_use]
+pub(crate) fn vehicle_hud_alert_line(vehicles: &[openttdrs_core::Vehicle]) -> String {
+    let mut parts = Vec::new();
+    let stuck_route = vehicles
+        .iter()
+        .filter(|v| v.running && v.no_network_route_to_order)
+        .count();
+    if stuck_route == 1 {
+        if let Some(v) = vehicles
+            .iter()
+            .find(|v| v.running && v.no_network_route_to_order)
+        {
+            parts.push(format!(
+                "sin ruta por red: vehículo {} (orden {})",
+                v.id,
+                v.current_order.saturating_add(1)
+            ));
+        }
+    } else if stuck_route > 1 {
+        parts.push(format!("sin ruta por red: {stuck_route} vehículos"));
+    }
+
+    let no_orders = vehicles
+        .iter()
+        .filter(|v| v.running && v.orders.is_empty())
+        .count();
+    if no_orders == 1 {
+        if let Some(v) = vehicles.iter().find(|v| v.running && v.orders.is_empty()) {
+            parts.push(format!("sin órdenes: vehículo {}", v.id));
+        }
+    } else if no_orders > 1 {
+        parts.push(format!("sin órdenes: {no_orders} vehículos"));
+    }
+
+    parts.join(" | ")
+}
+
 /// Crea el texto de informacion del tile.
 pub(crate) fn setup_tile_info_ui(mut commands: Commands) {
     commands.spawn((
@@ -130,30 +168,7 @@ pub(crate) fn update_tile_info_text(
     let sim_year = day_index / SIM_DAYS_PER_YEAR + 1;
     let sim_doy = day_index % SIM_DAYS_PER_YEAR + 1;
 
-    let stuck_route = sim
-        .state
-        .vehicles
-        .iter()
-        .filter(|v| v.running && v.no_network_route_to_order)
-        .count();
-    let route_hint = if stuck_route == 0 {
-        String::new()
-    } else if stuck_route == 1 {
-        sim.state
-            .vehicles
-            .iter()
-            .find(|v| v.running && v.no_network_route_to_order)
-            .map(|v| {
-                format!(
-                    " | sin ruta por red: vehículo {} (orden {})",
-                    v.id,
-                    v.current_order.saturating_add(1)
-                )
-            })
-            .unwrap_or_default()
-    } else {
-        format!(" | sin ruta por red: {stuck_route} vehículos")
-    };
+    let vehicle_alert = vehicle_hud_alert_line(&sim.state.vehicles);
     let feedback_append = feedback.message.as_ref().map(|m| {
         let t = truncate_hud_line(m, 44);
         format!(" | {t}")
@@ -162,23 +177,25 @@ pub(crate) fn update_tile_info_text(
     let veh_n = sim.state.vehicles.len();
     let veh_running = sim.state.vehicles.iter().filter(|v| v.running).count();
     let st_n = sim.state.stations.len();
+    let stats = &sim.state.stats;
     let save_file = truncate_hud_line(&json_save_hud_label(&hud.json_save_path), 36);
     // Text2d no hace wrap: repartir el estado en líneas cortas evita recorte al borde derecho.
     let hud_line1 = format!("{pause_l} | {speed_l} | t{tick_n} sim Y{sim_year}·D{sim_doy}");
     let hud_line2 = format!(
-        "${} | cargas {}/{} | veh {} ({}) | est {st_n}",
+        "${} · préstamo ${} | u {}/{} · evt {}/{} · prod {} | veh {} ({}) | est {st_n}",
         sim.state.economy.money,
-        sim.state.stats.cargo_units_delivered,
-        sim.state.stats.cargo_units_loaded,
+        sim.state.economy.loan,
+        stats.cargo_units_delivered,
+        stats.cargo_units_loaded,
+        stats.cargo_deliveries,
+        stats.cargo_pickups,
+        stats.industry_cargo_units_produced,
         veh_n,
         veh_running,
     );
     let mut hud_lines = vec![hud_line1, hud_line2];
-    if !route_hint.is_empty() || feedback_append.is_some() {
-        let mut alert = String::new();
-        if !route_hint.is_empty() {
-            alert.push_str(route_hint.trim_start_matches(" | "));
-        }
+    if !vehicle_alert.is_empty() || feedback_append.is_some() {
+        let mut alert = vehicle_alert;
         if let Some(ref fb) = feedback_append {
             if !alert.is_empty() {
                 alert.push_str(" | ");
@@ -342,12 +359,16 @@ pub(crate) fn update_tile_info_text(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::{TileInfoText, setup_tile_info_ui, station_details_text, update_tile_info_text};
+    use super::{
+        TileInfoText, setup_tile_info_ui, station_details_text, update_tile_info_text,
+        vehicle_hud_alert_line,
+    };
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
     use bevy::sprite::Anchor;
     use bevy::window::{PrimaryWindow, WindowResolution};
-    use openttdrs_core::{Industry, IndustryKind, Station, Tile, TileCoord, TileKind};
+    use openttdrs_core::Vehicle;
+    use openttdrs_core::{GameState, Industry, IndustryKind, Station, Tile, TileCoord, TileKind};
 
     use crate::render::PrimaryGameCamera;
     use crate::state::SimWorld;
@@ -508,8 +529,27 @@ mod tests {
     }
 
     #[test]
+    fn vehicle_hud_alert_line_reports_route_and_missing_orders() {
+        let origin = TileCoord::new(0, 0);
+        let mut v1 = Vehicle::new(1, openttdrs_core::VehicleKind::Bus, origin, origin);
+        v1.running = true;
+        v1.set_orders(vec![TileCoord::new(1, 0)]);
+        v1.no_network_route_to_order = true;
+        let mut v2 = Vehicle::new(2, openttdrs_core::VehicleKind::Truck, origin, origin);
+        v2.running = true;
+        let alert = vehicle_hud_alert_line(&[v1, v2]);
+        assert!(alert.contains("sin ruta por red: vehículo 1"));
+        assert!(alert.contains("sin órdenes: vehículo 2"));
+    }
+
+    #[test]
     fn station_details_text_includes_stock_income_and_sources() {
-        let mut sim = SimWorld::default();
+        let sim = SimWorld {
+            state: GameState::new(8, 8),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let mut sim = sim;
         let station_pos = TileCoord::new(2, 2);
         let industry_pos = TileCoord::new(3, 2);
         sim.state

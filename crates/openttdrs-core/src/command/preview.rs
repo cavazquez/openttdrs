@@ -19,7 +19,9 @@ pub fn command_would_fail(state: &GameState, cmd: &Command) -> Option<CommandErr
         Command::PlaceRoad(c) | Command::PlaceRoadBits(c, _) | Command::SetRoadBits(c, _) => {
             check_place_road_bits(map, *c).err()
         }
-        Command::PlaceRail(c) => check_place_rail(map, *c).err(),
+        Command::PlaceRail(c) | Command::PlaceRailBits(c, _) | Command::SetRailBits(c, _) => {
+            check_place_rail(map, *c).err()
+        }
         Command::PlaceRoadDepot(c) => {
             if (0..4).any(|dir| check_road_depot_placement(map, *c, dir).is_ok()) {
                 None

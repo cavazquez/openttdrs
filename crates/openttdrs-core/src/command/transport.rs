@@ -715,14 +715,47 @@ pub(super) fn place_stop_kind(
     station_placement_on_tile(state, c, dir, stop_kind)
 }
 
-pub(super) fn place_rail(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
+fn merge_rail_trackbits(existing: u8, add: u8) -> u8 {
+    let merged = (existing | (add & 0x3F)) & 0x3F;
+    if merged == 0 { add & 0x3F } else { merged }
+}
+
+pub(super) fn place_rail_bits(
+    state: &mut GameState,
+    c: TileCoord,
+    bits: u8,
+) -> Result<(), CommandError> {
     check_place_rail(&state.map, c)?;
-    let tb = rail_trackbits_from_neighbors(&state.map, c);
+    let existing = state.map.get(c).map_or(0, |t| {
+        if t.kind == TileKind::Rail {
+            t.m5 & 0x3F
+        } else {
+            0
+        }
+    });
+    let tb = merge_rail_trackbits(existing, bits);
     write_normal_rail_tile(state, c, tb)?;
     refresh_rail_neighbors(state, c)?;
-    refresh_rail_trackbits(state, c)?;
     state.economy.money -= RAIL_BUILD_COST;
     Ok(())
+}
+
+pub(super) fn set_rail_bits(
+    state: &mut GameState,
+    c: TileCoord,
+    bits: u8,
+) -> Result<(), CommandError> {
+    check_place_rail(&state.map, c)?;
+    let tb = (bits & 0x3F).max(RAIL_TB_X);
+    write_normal_rail_tile(state, c, tb)?;
+    refresh_rail_neighbors(state, c)?;
+    state.economy.money -= RAIL_BUILD_COST;
+    Ok(())
+}
+
+pub(super) fn place_rail(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
+    let tb = rail_trackbits_from_neighbors(&state.map, c);
+    place_rail_bits(state, c, tb)
 }
 
 pub(super) fn clear_tile(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {

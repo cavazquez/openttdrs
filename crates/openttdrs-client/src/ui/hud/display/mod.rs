@@ -91,6 +91,8 @@ pub(crate) fn update_tile_info_text(
         Some(BuildMenuAction::RoadBridge) => "Road bridge",
         Some(BuildMenuAction::RoadTunnel) => "Road tunnel",
         Some(BuildMenuAction::Rail) => "Rail",
+        Some(BuildMenuAction::RailHorz) => "Rail HORZ",
+        Some(BuildMenuAction::RailVert) => "Rail VERT",
         Some(BuildMenuAction::RailStation) => "Rail station",
         Some(BuildMenuAction::RailDepot) => "Rail depot",
         Some(BuildMenuAction::RailBridge) => "Rail bridge",

@@ -16,6 +16,8 @@ pub(crate) fn action_supports_drag(action: BuildMenuAction) -> bool {
             | BuildMenuAction::RoadBridge
             | BuildMenuAction::RoadTunnel
             | BuildMenuAction::Rail
+            | BuildMenuAction::RailHorz
+            | BuildMenuAction::RailVert
             | BuildMenuAction::RailBridge
             | BuildMenuAction::RailTunnel
             | BuildMenuAction::Clear
@@ -50,6 +52,14 @@ pub(crate) fn tunnel_placement_is_valid(
         _ => return false,
     };
     openttdrs_core::command_would_fail(state, &cmd).is_none()
+}
+
+pub(crate) fn rail_bits_for_drag_action(action: BuildMenuAction) -> Option<u8> {
+    match action {
+        BuildMenuAction::RailHorz => Some(0x0C),
+        BuildMenuAction::RailVert => Some(0x30),
+        _ => None,
+    }
 }
 
 pub(crate) fn road_bits_for_drag_action(
@@ -116,6 +126,21 @@ pub(crate) fn apply_drag_action(
             match apply_command(
                 &mut sim.state,
                 &Command::SetRoadBits(TileCoord::new(x, y), road_bits),
+            ) {
+                Ok(()) => changed = true,
+                Err(e) => last_err = Some(e),
+            }
+        }
+        return (changed, if changed { None } else { last_err });
+    }
+
+    if let Some(rail_bits) = rail_bits_for_drag_action(action) {
+        let mut changed = false;
+        let mut last_err = None;
+        for (x, y) in tiles {
+            match apply_command(
+                &mut sim.state,
+                &Command::SetRailBits(TileCoord::new(x, y), rail_bits),
             ) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),

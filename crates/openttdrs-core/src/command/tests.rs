@@ -326,6 +326,24 @@ fn place_rail_sets_mapt_and_trackbits_for_horizontal_line() {
 }
 
 #[test]
+fn set_rail_bits_places_horz_and_vert() {
+    let mut s = GameState::new(8, 8);
+    apply_command(&mut s, &Command::SetRailBits(TileCoord::new(2, 2), 0x0C)).unwrap();
+    apply_command(&mut s, &Command::SetRailBits(TileCoord::new(4, 2), 0x30)).unwrap();
+    assert_eq!(s.map.get_kind(TileCoord::new(2, 2)), Some(TileKind::Rail));
+    assert_eq!(s.map.get(TileCoord::new(2, 2)).unwrap().m5 & 0x3F, 0x0C);
+    assert_eq!(s.map.get(TileCoord::new(4, 2)).unwrap().m5 & 0x3F, 0x30);
+}
+
+#[test]
+fn place_rail_bits_merges_trackbits_on_existing_rail() {
+    let mut s = GameState::new(8, 8);
+    apply_command(&mut s, &Command::SetRailBits(TileCoord::new(3, 3), 0x01)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailBits(TileCoord::new(3, 3), 0x02)).unwrap();
+    assert_eq!(s.map.get(TileCoord::new(3, 3)).unwrap().m5 & 0x3F, 0x03);
+}
+
+#[test]
 fn bridge_cost_scales_with_line_length() {
     let mut s = GameState::new(8, 8);
     let c = |x: i32, y: i32| TileCoord::new(x, y);

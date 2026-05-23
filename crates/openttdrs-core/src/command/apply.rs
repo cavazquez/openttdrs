@@ -15,6 +15,8 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
         Command::PlaceRoadBits(c, bits) => transport::place_road_bits(state, *c, *bits),
         Command::SetRoadBits(c, bits) => transport::set_road_bits(state, *c, *bits),
         Command::PlaceRail(c) => transport::place_rail(state, *c),
+        Command::PlaceRailBits(c, bits) => transport::place_rail_bits(state, *c, *bits),
+        Command::SetRailBits(c, bits) => transport::set_rail_bits(state, *c, *bits),
         Command::PlaceRoadDepot(c) => transport::place_road_depot_dir(state, *c, 0),
         Command::PlaceRoadDepotDir(c, dir) => transport::place_road_depot_dir(state, *c, *dir),
         Command::PlaceRailDepot(c) => transport::place_rail_depot_dir(state, *c, 0),

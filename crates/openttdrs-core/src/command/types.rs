@@ -12,6 +12,10 @@ pub enum Command {
     SetRoadBits(TileCoord, u8),
     /// Coloca via de tren en la tesela (MVP: validacion de terreno).
     PlaceRail(TileCoord),
+    /// Coloca o combina `TrackBits` de vía (`0x0C` HORZ, `0x30` VERT, etc.).
+    PlaceRailBits(TileCoord, u8),
+    /// Reemplaza la geometría de vía con `TrackBits` exactos (drag de herramientas HORZ/VERT).
+    SetRailBits(TileCoord, u8),
     PlaceRoadDepot(TileCoord),
     PlaceRoadDepotDir(TileCoord, u8),
     PlaceRailDepot(TileCoord),

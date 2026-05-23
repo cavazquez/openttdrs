@@ -166,16 +166,26 @@ pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &A
 pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
     root.spawn(tool_panel_node(ToolbarGroup::Rail, false))
         .with_children(|panel| {
-            spawn_panel_title(panel, "Construccion ferroviaria", 392.0);
+            spawn_panel_title(panel, "Construccion ferroviaria", 504.0);
             spawn_button_row(panel, |buttons| {
                 spawn_icon_tool_buttons(
                     buttons,
                     asset_server,
                     &[
                         (
-                            "Construir via",
-                            "assets/opengfx/tiles/rail_1005.png",
+                            "Via NE-SW",
+                            "assets/opengfx/tiles/rail_1012.png",
                             BuildMenuAction::Rail,
+                        ),
+                        (
+                            "Via doble N-S (HORZ)",
+                            "assets/opengfx/tiles/rail_1035.png",
+                            BuildMenuAction::RailHorz,
+                        ),
+                        (
+                            "Via doble E-O (VERT)",
+                            "assets/opengfx/tiles/rail_1036.png",
+                            BuildMenuAction::RailVert,
                         ),
                         (
                             "Estacion de tren",

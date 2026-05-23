@@ -33,6 +33,12 @@ impl Default for SimHudControls {
     }
 }
 
+/// Tesela bajo el cursor del ratón (hover); distinto de [`SelectedTileInfo`].
+#[derive(Resource, Default)]
+pub(crate) struct HoveredTileCoord {
+    pub(crate) pos: Option<openttdrs_core::TileCoord>,
+}
+
 /// Informacion del tile actualmente seleccionado (click izquierdo).
 #[derive(Resource, Default)]
 pub(crate) struct SelectedTileInfo {

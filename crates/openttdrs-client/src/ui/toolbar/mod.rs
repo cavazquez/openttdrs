@@ -11,7 +11,7 @@ mod settings;
 mod station_panel;
 mod systems;
 
-pub(crate) use build_input::handle_tile_click;
+pub(crate) use build_input::{handle_tile_click, update_cursor_tile};
 pub(crate) use depot_panel::{
     DepotPanelState, handle_depot_panel_buttons, setup_depot_panel, sync_depot_panel,
 };

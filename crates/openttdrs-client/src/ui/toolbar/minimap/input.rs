@@ -5,10 +5,38 @@ use openttdrs_core::TileCoord;
 use crate::iso::tile_pos;
 use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
-use crate::ui::hud::SimHudControls;
+use crate::ui::hud::{SelectedTileInfo, SimHudControls};
 use crate::ui::toolbar::BuildMenuUi;
 
-use super::{MINIMAP_BOTTOM, MINIMAP_CELL, MINIMAP_COLS, MINIMAP_PAD, MINIMAP_RIGHT, MINIMAP_ROWS};
+use super::{
+    MINIMAP_BOTTOM, MINIMAP_CELL, MINIMAP_COLS, MINIMAP_PAD, MINIMAP_RIGHT, MINIMAP_ROWS,
+    MinimapCell, MinimapRoot,
+};
+
+/// Rectángulo del minimapa en píxeles de ventana: `(left, top, width, height)`.
+#[must_use]
+pub(crate) fn minimap_pixel_rect(window: &Window) -> (f32, f32, f32, f32) {
+    let total_w = MINIMAP_COLS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
+    let left = window.width() - MINIMAP_RIGHT - total_w;
+    let total_h = MINIMAP_ROWS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
+    let top = window.height() - MINIMAP_BOTTOM - total_h;
+    (left, top, total_w, total_h)
+}
+
+#[must_use]
+pub(crate) fn minimap_contains_cursor(cursor: Vec2, window: &Window) -> bool {
+    let (left, top, w, h) = minimap_pixel_rect(window);
+    cursor.x >= left && cursor.y >= top && cursor.x < left + w && cursor.y < top + h
+}
+
+#[must_use]
+pub(crate) fn minimap_tile_at_cursor(
+    cursor: Vec2,
+    window: &Window,
+    dimensions: (u32, u32),
+) -> Option<TileCoord> {
+    cursor_to_minimap_tile(cursor, window, dimensions).map(|(x, y)| TileCoord::new(x, y))
+}
 
 pub(crate) fn handle_minimap_click(
     mouse: Res<ButtonInput<MouseButton>>,
@@ -16,12 +44,20 @@ pub(crate) fn handle_minimap_click(
     windows: Query<&Window, With<PrimaryWindow>>,
     sim: Res<SimWorld>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>)>,
-    menu_pointer: Query<&Interaction, With<BuildMenuUi>>,
+    mut selected: ResMut<SelectedTileInfo>,
+    toolbar_pointer: Query<
+        &Interaction,
+        (
+            With<BuildMenuUi>,
+            Without<MinimapRoot>,
+            Without<MinimapCell>,
+        ),
+    >,
 ) {
     if !hud.minimap_visible || !mouse.just_pressed(MouseButton::Left) {
         return;
     }
-    if menu_pointer.iter().any(|i| *i != Interaction::None) {
+    if toolbar_pointer.iter().any(|i| *i != Interaction::None) {
         return;
     }
     let Ok(window) = windows.single() else {
@@ -30,18 +66,17 @@ pub(crate) fn handle_minimap_click(
     let Some(cursor) = window.cursor_position() else {
         return;
     };
-    let Some((tile_x, tile_y)) = cursor_to_minimap_tile(cursor, window, sim.state.map.dimensions())
-    else {
+    let Some(coord) = minimap_tile_at_cursor(cursor, window, sim.state.map.dimensions()) else {
         return;
     };
-    let coord = TileCoord::new(tile_x, tile_y);
     let height = sim.state.map.get(coord).map_or(0, |tile| tile.height);
-    let pos = tile_pos(tile_x, tile_y, height, 0.0);
+    let pos = tile_pos(coord.x, coord.y, height, 0.0);
     let Ok(mut tf) = cam_q.single_mut() else {
         return;
     };
     tf.translation.x = pos.x;
     tf.translation.y = pos.y;
+    selected.pos = Some(coord);
 }
 
 fn cursor_to_minimap_tile(
@@ -53,10 +88,7 @@ fn cursor_to_minimap_tile(
     if mw == 0 || mh == 0 {
         return None;
     }
-    let total_w = MINIMAP_COLS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
-    let left = window.width() - MINIMAP_RIGHT - total_w;
-    let total_h = MINIMAP_ROWS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
-    let top = window.height() - MINIMAP_BOTTOM - total_h;
+    let (left, top, _, _) = minimap_pixel_rect(window);
     let local_x = cursor.x - left - MINIMAP_PAD;
     let local_y_from_top = cursor.y - top - MINIMAP_PAD;
     if local_x < 0.0
@@ -77,10 +109,8 @@ fn cursor_to_minimap_tile(
 mod tests {
     use bevy::prelude::*;
 
-    use super::super::{
-        MINIMAP_BOTTOM, MINIMAP_CELL, MINIMAP_COLS, MINIMAP_PAD, MINIMAP_RIGHT, MINIMAP_ROWS,
-    };
-    use super::cursor_to_minimap_tile;
+    use super::super::{MINIMAP_COLS, MINIMAP_PAD, MINIMAP_ROWS};
+    use super::{cursor_to_minimap_tile, minimap_contains_cursor, minimap_pixel_rect};
 
     #[test]
     fn cursor_to_minimap_tile_top_left_maps_to_small_coords() {
@@ -88,11 +118,31 @@ mod tests {
             resolution: (200_u32, 150_u32).into(),
             ..default()
         };
-        let total_w = MINIMAP_COLS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
-        let left = window.width() - MINIMAP_RIGHT - total_w;
-        let total_h = MINIMAP_ROWS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
-        let top = window.height() - MINIMAP_BOTTOM - total_h;
+        let (left, top, _, _) = minimap_pixel_rect(&window);
         let cursor = Vec2::new(left + MINIMAP_PAD + 1.0, top + MINIMAP_PAD + 1.0);
-        assert!(cursor_to_minimap_tile(cursor, &window, (64, 40)).is_some());
+        let Some((x, y)) = cursor_to_minimap_tile(cursor, &window, (64, 40)) else {
+            panic!("cursor inside minimap grid");
+        };
+        assert_eq!(x, 63);
+        assert_eq!(y, 0);
+        assert!(minimap_contains_cursor(cursor, &window));
+    }
+
+    #[test]
+    fn cursor_to_minimap_tile_maps_bottom_right_for_small_map() {
+        let window = Window {
+            resolution: (800_u32, 600_u32).into(),
+            ..default()
+        };
+        let (left, top, _, _) = minimap_pixel_rect(&window);
+        let cursor = Vec2::new(
+            left + MINIMAP_PAD + MINIMAP_COLS as f32 * 3.0 - 1.0,
+            top + MINIMAP_PAD + MINIMAP_ROWS as f32 * 3.0 - 1.0,
+        );
+        let Some((x, y)) = cursor_to_minimap_tile(cursor, &window, (20, 15)) else {
+            panic!("cursor inside minimap grid");
+        };
+        assert_eq!(x, 0);
+        assert_eq!(y, 14);
     }
 }

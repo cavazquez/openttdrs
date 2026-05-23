@@ -29,7 +29,7 @@ pub(crate) use station_hud::station_details_text;
 pub(crate) fn setup_tile_info_ui(mut commands: Commands) {
     commands.spawn((
         TileInfoText,
-        Text2d::new("Mapa: clic para seleccionar · Herramientas: 1/2/3/C · Esc cancela"),
+        Text2d::new("Mapa: clic izquierdo selecciona tile · Herramientas: 1/2/3/C · Esc cancela"),
         TextFont {
             font_size: 14.0,
             ..default()
@@ -191,7 +191,9 @@ pub(crate) fn update_tile_info_text(
     let hud_status = hud_lines.join("\n");
 
     let Some(pos) = selected.pos else {
-        **text = format!("{zoom_label}\n{hud_status}\nClic mapa: elegir tile · tools 1/2/3/C/Esc");
+        **text = format!(
+            "{zoom_label}\n{hud_status}\nClic mapa: elegir tile · minimapa: saltar · tools 1/2/3/C/Esc"
+        );
         return;
     };
 

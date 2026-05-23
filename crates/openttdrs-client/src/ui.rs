@@ -11,7 +11,7 @@ mod main_menu;
 mod toolbar;
 pub(crate) use hud::SimHudControls;
 use hud::{
-    HudBuildFeedback, HudSoftPingHandle, PlayHudSoftPing, SelectedTileInfo,
+    HoveredTileCoord, HudBuildFeedback, HudSoftPingHandle, PlayHudSoftPing, SelectedTileInfo,
     cycle_json_save_path_hotkey, flush_hud_soft_ping, handle_pause_toggle, handle_tool_hotkeys,
     load_hud_soft_ping, play_hud_soft_ping, setup_tile_info_ui, update_tile_info_text,
 };
@@ -29,14 +29,15 @@ use toolbar::{
     setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
     setup_station_cargo_panel, setup_top_toolbar, sync_depot_panel, sync_minimap, sync_order_panel,
     sync_orders_pick_cursor, sync_station_cargo_panel, toolbar_group_interaction,
-    update_build_ghost_preview, update_tool_button_visuals, update_toolbar_group_visuals,
-    update_toolbar_tool_visibility, update_toolbar_tooltip,
+    update_build_ghost_preview, update_cursor_tile, update_tool_button_visuals,
+    update_toolbar_group_visuals, update_toolbar_tool_visibility, update_toolbar_tooltip,
 };
 pub(crate) struct ClientUiPlugin;
 
 impl Plugin for ClientUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SelectedTileInfo>()
+            .init_resource::<HoveredTileCoord>()
             .init_resource::<SimHudControls>()
             .init_resource::<HudBuildFeedback>()
             .init_resource::<HudSoftPingHandle>()
@@ -107,7 +108,7 @@ impl Plugin for ClientUiPlugin {
             )
             .add_systems(
                 Update,
-                (handle_tile_click, flush_hud_soft_ping)
+                (update_cursor_tile, handle_tile_click, flush_hud_soft_ping)
                     .chain()
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),

@@ -3,7 +3,7 @@ mod palette;
 mod setup;
 mod sync;
 
-pub(crate) use input::handle_minimap_click;
+pub(crate) use input::{handle_minimap_click, minimap_contains_cursor};
 pub(crate) use setup::setup_minimap;
 pub(crate) use sync::sync_minimap;
 

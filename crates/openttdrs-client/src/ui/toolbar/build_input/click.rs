@@ -15,6 +15,8 @@ use super::drag::{
 };
 use super::placement::cancel_placement;
 use crate::ui::toolbar::depot_panel::DepotPanelState;
+use crate::ui::toolbar::minimap::minimap_contains_cursor;
+use crate::ui::toolbar::minimap::{MinimapCell, MinimapRoot};
 use crate::ui::toolbar::order_panel::{
     handle_order_destination_click, start_order_destination_pick,
 };
@@ -39,7 +41,14 @@ pub(crate) fn handle_tile_click(
     mut station_panel: ResMut<StationCargoPanelState>,
     mut pending: ResMut<RemapMapVisualsPending>,
     mut industry_panel: ResMut<IndustryPanelState>,
-    menu_pointer: Query<&Interaction, With<BuildMenuUi>>,
+    toolbar_pointer: Query<
+        &Interaction,
+        (
+            With<BuildMenuUi>,
+            Without<MinimapRoot>,
+            Without<MinimapCell>,
+        ),
+    >,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
 ) {
@@ -48,7 +57,8 @@ pub(crate) fn handle_tile_click(
         return;
     }
 
-    if menu_pointer.iter().any(|i| *i != Interaction::None) && mouse.just_pressed(MouseButton::Left)
+    if toolbar_pointer.iter().any(|i| *i != Interaction::None)
+        && mouse.just_pressed(MouseButton::Left)
     {
         return;
     }
@@ -59,6 +69,9 @@ pub(crate) fn handle_tile_click(
     let Some(cursor_pos) = window.cursor_position() else {
         return;
     };
+    if minimap_contains_cursor(cursor_pos, window) {
+        return;
+    }
     let Ok((camera, cam_tf)) = cam_q.single() else {
         return;
     };
@@ -68,11 +81,13 @@ pub(crate) fn handle_tile_click(
     };
 
     let Some((tx, ty)) = world_pos_to_tile_coord(world_pos, &sim.state.map) else {
-        selected.pos = None;
         return;
     };
     let pos = TileCoord::new(tx, ty);
-    selected.pos = Some(pos);
+
+    if mouse.just_pressed(MouseButton::Left) && tool_state.active_tool.is_none() {
+        selected.pos = Some(pos);
+    }
 
     let orders_mode =
         order_state.picking_destination || tool_state.active_tool == Some(BuildMenuAction::Orders);

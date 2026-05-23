@@ -19,7 +19,7 @@ use crate::iso::{
 };
 use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
-use crate::ui::hud::SelectedTileInfo;
+use crate::ui::hud::HoveredTileCoord;
 
 use super::{BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, UiToolState};
 
@@ -53,7 +53,7 @@ pub(crate) fn update_build_ghost_preview(
     station_state: Res<StationBuildState>,
     drag_state: Res<DragBuildState>,
     order_state: Res<OrderEditState>,
-    selected: Res<SelectedTileInfo>,
+    hovered: Res<HoveredTileCoord>,
 ) {
     for entity in &existing {
         commands.entity(entity).despawn();
@@ -64,7 +64,7 @@ pub(crate) fn update_build_ghost_preview(
     if orders_preview && order_state.vehicle_id.is_some() {
         spawn_order_route_preview(&mut commands, &asset_server, &sim.state.map, &order_state);
         if order_state.picking_destination
-            && let Some(hover) = selected.pos
+            && let Some(hover) = hovered.pos
         {
             spawn_order_pick_target_preview(
                 &mut commands,

@@ -26,7 +26,7 @@ mod tests {
 
     use crate::render::{PrimaryGameCamera, RemapMapVisualsPending, VehicleIndex};
     use crate::state::SimWorld;
-    use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, SimHudControls};
+    use crate::ui::hud::{HoveredTileCoord, HudBuildFeedback, SelectedTileInfo, SimHudControls};
     use crate::ui::industry_panel::IndustryPanelState;
     use crate::ui::toolbar::build_input::commands::{command_for_action, command_for_line_action};
     use crate::ui::toolbar::build_input::drag::{
@@ -85,13 +85,14 @@ mod tests {
     }
 
     #[test]
-    fn handle_minimap_click_ignored_when_ui_is_interacting() {
+    fn handle_minimap_click_ignored_when_toolbar_is_interacting() {
         let mut world = World::new();
         let mut mouse = ButtonInput::<MouseButton>::default();
         mouse.press(MouseButton::Left);
         world.insert_resource(mouse);
         world.insert_resource(SimHudControls::default());
         world.insert_resource(SimWorld::default());
+        world.insert_resource(SelectedTileInfo::default());
         world.spawn((BuildMenuUi, Interaction::Pressed));
         world.run_system_once(handle_minimap_click).unwrap();
     }
@@ -255,6 +256,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(ButtonInput::<MouseButton>::default());
         world.insert_resource(SelectedTileInfo::default());
+        world.insert_resource(HoveredTileCoord::default());
         world.insert_resource(SimWorld::default());
         world.insert_resource(UiToolState::default());
         world.insert_resource(StationBuildState::default());

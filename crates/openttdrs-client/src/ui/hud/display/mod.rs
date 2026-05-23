@@ -76,8 +76,8 @@ pub(crate) fn update_tile_info_text(
     let half_w = window.width() / 2.0 * proj.scale;
     let half_h = window.height() / 2.0 * proj.scale;
     text_transform.translation.x = cam_transform.translation.x - half_w + 14.0 * proj.scale;
-    // Deja espacio para barra/toolbar superior.
-    text_transform.translation.y = cam_transform.translation.y + half_h - 74.0 * proj.scale;
+    // Deja espacio para barra/toolbar superior (varias líneas de estado).
+    text_transform.translation.y = cam_transform.translation.y + half_h - 88.0 * proj.scale;
     text_transform.scale = Vec3::splat(proj.scale);
 
     let zoom_label = format!("Zoom {:.2}×", zoom_display_magnification(proj.scale));
@@ -161,18 +161,34 @@ pub(crate) fn update_tile_info_text(
     let veh_running = sim.state.vehicles.iter().filter(|v| v.running).count();
     let st_n = sim.state.stations.len();
     let save_file = truncate_hud_line(&json_save_hud_label(&hud.json_save_path), 36);
-    // Dos líneas: la proyección ortográfica no ajusta texto; una sola línea larga se corta al borde.
-    let hud_line1 = format!(
-        "{pause_l} | {speed_l} | t{tick_n} sim Y{sim_year}·D{sim_doy}{route_hint}{} | ${} | cargas {}/{} | veh {} ({}) | est {st_n}",
-        feedback_append.as_deref().unwrap_or(""),
+    // Text2d no hace wrap: repartir el estado en líneas cortas evita recorte al borde derecho.
+    let hud_line1 = format!("{pause_l} | {speed_l} | t{tick_n} sim Y{sim_year}·D{sim_doy}");
+    let hud_line2 = format!(
+        "${} | cargas {}/{} | veh {} ({}) | est {st_n}",
         sim.state.economy.money,
         sim.state.stats.cargo_units_delivered,
         sim.state.stats.cargo_units_loaded,
         veh_n,
         veh_running,
     );
-    let hud_line2 = format!("Tool: {tool_l}{order_l} | {minimap_l} | {save_file} · F4",);
-    let hud_status = format!("{hud_line1}\n{hud_line2}");
+    let mut hud_lines = vec![hud_line1, hud_line2];
+    if !route_hint.is_empty() || feedback_append.is_some() {
+        let mut alert = String::new();
+        if !route_hint.is_empty() {
+            alert.push_str(route_hint.trim_start_matches(" | "));
+        }
+        if let Some(ref fb) = feedback_append {
+            if !alert.is_empty() {
+                alert.push_str(" | ");
+            }
+            alert.push_str(fb.trim_start_matches(" | "));
+        }
+        hud_lines.push(truncate_hud_line(&alert, 72));
+    }
+    hud_lines.push(format!(
+        "Tool: {tool_l}{order_l} | {minimap_l} | {save_file} · F4",
+    ));
+    let hud_status = hud_lines.join("\n");
 
     let Some(pos) = selected.pos else {
         **text = format!("{zoom_label}\n{hud_status}\nClic mapa: elegir tile · tools 1/2/3/C/Esc");

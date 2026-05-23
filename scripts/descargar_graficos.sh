@@ -420,6 +420,11 @@ def crop_by_id(sid: int, out_name: str) -> None:
 
 
 # =============================================================================
+# UI toolbar (sprites de cursor OpenTTD)
+# =============================================================================
+crop_by_id(704, "ui_demolish.png")  # SPR_CURSOR_DEMOLISH_FIRST (dinamita)
+
+# =============================================================================
 # TERRENO BASE (MP_CLEAR)
 # =============================================================================
 crop_by_id(3924, "terrain_bare.png")           # SPR_FLAT_BARE_LAND
@@ -863,10 +868,39 @@ crop_by_id(4790, "object_bought_land.png")
 # =============================================================================
 # VEHÍCULOS (muestras para debug/overlay)
 # =============================================================================
-# Camiones básicos - usaremos coords fijas o buscar IDs específicos
-# Los vehículos están en rangos complejos, por ahora solo algunos ejemplos
-crop_by_id(3097, "vehicle_bus_sw.png")
-crop_by_id(3098, "vehicle_bus_side.png")
+# Bus MPS (engine 0): 8 direcciones OpenTTD (sprites 3092..3099).
+for sid, name in [
+    (3092, "vehicle_bus_n.png"),
+    (3093, "vehicle_bus_ne.png"),
+    (3094, "vehicle_bus_e.png"),
+    (3095, "vehicle_bus_se.png"),
+    (3096, "vehicle_bus_s.png"),
+    (3097, "vehicle_bus_sw.png"),
+    (3098, "vehicle_bus_w.png"),
+    (3099, "vehicle_bus_nw.png"),
+]:
+    crop_by_id(sid, name)
+# Camión MPS (spritenum 1): vacío 3100..3107, cargado +88 → 3188..3195.
+for sid, name in [
+    (3100, "vehicle_truck_n.png"),
+    (3101, "vehicle_truck_ne.png"),
+    (3102, "vehicle_truck_e.png"),
+    (3103, "vehicle_truck_se.png"),
+    (3104, "vehicle_truck_s.png"),
+    (3105, "vehicle_truck_sw.png"),
+    (3106, "vehicle_truck_w.png"),
+    (3107, "vehicle_truck_nw.png"),
+    (3188, "vehicle_truck_n_loaded.png"),
+    (3189, "vehicle_truck_ne_loaded.png"),
+    (3190, "vehicle_truck_e_loaded.png"),
+    (3191, "vehicle_truck_se_loaded.png"),
+    (3192, "vehicle_truck_s_loaded.png"),
+    (3193, "vehicle_truck_sw_loaded.png"),
+    (3194, "vehicle_truck_w_loaded.png"),
+    (3195, "vehicle_truck_nw_loaded.png"),
+]:
+    crop_by_id(sid, name)
+# Regenerar metadatos: python3 scripts/gen_vehicle_gfx_data.py
 
 # =============================================================================
 # LEGACY (alias del cliente ← sprites NFO; evita recortes fijos con artefactos cian)

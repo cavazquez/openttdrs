@@ -9,8 +9,9 @@ mod water;
 #[allow(unused_imports)]
 pub use coords::{
     RoadStopSeqGfx, gizmo_diamond, iso, overlay_pos, remap_tile_offset,
-    road_stop_build_sprite_center, road_stop_overlay_rel, road_stop_sprite_pos, tile_pos,
-    tile_pos_half, world_pos_to_tile_coord, world_to_tile,
+    road_stop_build_sprite_center, road_stop_overlay_rel, road_stop_sprite_pos,
+    road_vehicle_straight_subtile, road_vehicle_tile_anchor, tile_pos, tile_pos_half,
+    world_pos_to_tile_coord, world_to_tile,
 };
 #[allow(unused_imports)]
 pub use slope::{
@@ -389,6 +390,56 @@ mod world_pos_to_tile_tests {
         let off = super::remap_tile_offset(2.0, 0.0, 0.0);
         assert_eq!(off.x, -8.0);
         assert_eq!(off.y, -4.0);
+    }
+
+    #[test]
+    fn road_vehicle_anchor_matches_iso_at_tile_origin() {
+        assert_eq!(super::road_vehicle_tile_anchor(3, 6, 0.0, 0.0), iso(3, 6));
+        assert_eq!(super::road_vehicle_tile_anchor(0, 0, 0.0, 0.0), iso(0, 0));
+    }
+
+    #[test]
+    fn road_vehicle_sw_subtile_uses_openrtd_lane_y9() {
+        use openttdrs_core::DIR_SW;
+
+        let (x0, y0) = super::road_vehicle_straight_subtile(DIR_SW, 0);
+        assert_eq!((x0, y0), (0.0, 9.0));
+        let (x1, y1) = super::road_vehicle_straight_subtile(DIR_SW, 255);
+        assert_eq!((x1, y1), (15.0, 9.0));
+
+        let exit = super::road_vehicle_tile_anchor(5, 6, x1, y1);
+        let entry = super::road_vehicle_tile_anchor(6, 6, x0, y0);
+        let delta = exit - entry;
+        assert!(
+            delta.length() < 4.0,
+            "salida (5,6) y entrada (6,6) deben ser continuas: delta={delta:?}"
+        );
+    }
+
+    #[test]
+    fn road_vehicle_sw_lane_near_tile_center_mid_tile() {
+        use openttdrs_core::DIR_SW;
+
+        let (sub_x, sub_y) = super::road_vehicle_straight_subtile(DIR_SW, 128);
+        assert!((sub_x - 7.5).abs() < 0.1);
+        assert_eq!(sub_y, 9.0);
+        let lane = super::road_vehicle_tile_anchor(5, 6, sub_x, sub_y);
+        let ground = Vec2::new(iso(5, 6).x, iso(5, 6).y - super::TILE_HALF_H);
+        let delta = lane - ground;
+        assert!(
+            delta.length() < 12.0,
+            "mid-carril SW cerca del centro del rombo: delta={delta:?}"
+        );
+    }
+
+    #[test]
+    fn road_vehicle_ne_subtile_moves_along_y5() {
+        use openttdrs_core::DIR_NE;
+
+        let start = super::road_vehicle_straight_subtile(DIR_NE, 0);
+        let end = super::road_vehicle_straight_subtile(DIR_NE, 255);
+        assert_eq!(start, (15.0, 5.0));
+        assert_eq!(end, (0.0, 5.0));
     }
 
     #[test]

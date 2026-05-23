@@ -7,6 +7,22 @@ use crate::vehicle::VEHICLE_CAPACITY;
 
 use super::*;
 
+fn advance_sim(s: &mut GameState, ticks: u32) {
+    for _ in 0..ticks {
+        s.step();
+    }
+}
+
+fn advance_vehicle_tiles(s: &mut GameState, tiles: u32) {
+    advance_sim(s, tiles * Vehicle::ticks_per_tile());
+}
+
+fn advance_vehicle(v: &mut Vehicle, tiles: u32) {
+    for _ in 0..(tiles * Vehicle::ticks_per_tile()) {
+        v.step();
+    }
+}
+
 #[test]
 fn new_map_has_expected_dimensions() {
     let s = GameState::new(8, 8);
@@ -128,11 +144,11 @@ fn vehicle_follows_path() {
         .expect("hay carretera");
 
     for (i, &tile) in expected.iter().enumerate() {
-        s.step();
+        advance_vehicle_tiles(&mut s, 1);
         assert_eq!(
             s.vehicles[0].pos,
             tile,
-            "tick {} posición incorrecta",
+            "tesela {} posición incorrecta",
             i + 1
         );
     }
@@ -191,12 +207,11 @@ fn vehicle_delivers_to_station() {
     s.vehicles
         .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
 
-    // Tick 1: carga en industria.
+    // Carga en industria, luego un tile de viaje hasta la estación.
     s.step();
     assert!(s.vehicles[0].cargo > 0);
 
-    // Tick 2: vehicle.step() lo lleva a spos (dest a 1 tile); luego descarga.
-    s.step();
+    advance_vehicle_tiles(&mut s, 1);
     assert_eq!(s.vehicles[0].pos, spos);
     assert_eq!(s.vehicles[0].cargo, 0);
     assert!(s.stations[0].income > 0);
@@ -240,7 +255,7 @@ fn sim_stats_count_pickup_and_delivery() {
     s.step();
     assert_eq!(s.stats.cargo_pickups, 1);
     assert!(s.stats.cargo_units_loaded > 0);
-    s.step();
+    advance_vehicle_tiles(&mut s, 1);
     assert_eq!(s.stats.cargo_deliveries, 1);
     assert!(s.stats.cargo_units_delivered > 0);
 }
@@ -357,7 +372,7 @@ fn vehicle_moves_toward_dest() {
         .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
 
     let dist_before = s.vehicles[0].manhattan_to_dest();
-    s.step();
+    advance_vehicle_tiles(&mut s, 1);
     let dist_after = s.vehicles[0].manhattan_to_dest();
     assert!(dist_after < dist_before, "debe acercarse al destino");
 }
@@ -370,10 +385,8 @@ fn vehicle_without_orders_waits_at_arrival_without_road_network() {
     s.vehicles
         .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
 
-    // Avanzar hasta llegar al destino (3 pasos + 1 de inversión).
-    for _ in 0..=3 {
-        s.step();
-    }
+    // Avanzar hasta llegar al destino (3 tiles Manhattan sin red).
+    advance_vehicle_tiles(&mut s, 3);
     assert_eq!(s.vehicles[0].pos, dest);
     assert_eq!(s.vehicles[0].dest, dest);
 
@@ -410,7 +423,7 @@ fn vehicle_without_orders_wanders_on_road_network() {
     s.vehicles
         .push(Vehicle::new(7, VehicleKind::Truck, start, start));
 
-    s.step();
+    advance_vehicle_tiles(&mut s, 1);
 
     assert_ne!(s.vehicles[0].pos, start);
     assert_eq!(s.map.get_kind(s.vehicles[0].pos), Some(TileKind::Road));
@@ -425,10 +438,10 @@ fn vehicle_with_orders_cycles_destinations() {
         TileCoord::new(1, 0),
     );
     v.set_orders(vec![TileCoord::new(1, 0), TileCoord::new(1, 1)]);
-    v.step();
+    advance_vehicle(&mut v, 1);
     assert_eq!(v.pos, TileCoord::new(1, 0));
     assert_eq!(v.dest, TileCoord::new(1, 1));
-    v.step();
+    advance_vehicle(&mut v, 1);
     assert_eq!(v.pos, TileCoord::new(1, 1));
     assert_eq!(v.dest, TileCoord::new(1, 0));
 }
@@ -443,7 +456,7 @@ fn vehicle_with_station_orders_cycles_station_destinations() {
     );
     v.set_station_orders(vec![TileCoord::new(1, 0), TileCoord::new(1, 1)]);
     assert!(matches!(v.orders[0], VehicleOrder::Station { .. }));
-    v.step();
+    advance_vehicle(&mut v, 1);
     assert_eq!(v.pos, TileCoord::new(1, 0));
     assert_eq!(v.dest, TileCoord::new(1, 1));
 }

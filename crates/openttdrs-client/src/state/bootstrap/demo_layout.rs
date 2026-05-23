@@ -51,6 +51,33 @@ pub(crate) fn place_clean_demo_transport(state: &mut GameState) {
         );
         let _ = apply_command(state, &Command::PlaceRail(TileCoord::new(x, DEMO_RAIL_Y)));
     }
+    place_demo_road_vehicles(state);
+}
+
+/// Bus + camión en la carretera demo (para probar sprites sin depósito).
+fn place_demo_road_vehicles(state: &mut GameState) {
+    use openttdrs_core::{DIR_SW, PathNetwork, Vehicle, VehicleKind, find_path};
+
+    let start_bus = TileCoord::new(3, DEMO_ROAD_Y);
+    let start_truck = TileCoord::new(5, DEMO_ROAD_Y);
+    let end = TileCoord::new(11, DEMO_ROAD_Y);
+
+    if let Some(path) = find_path(&state.map, start_bus, end, PathNetwork::Road) {
+        let mut bus = Vehicle::new(9001, VehicleKind::Bus, start_bus, end);
+        bus.running = true;
+        bus.direction = DIR_SW;
+        bus.path = path.into();
+        state.vehicles.push(bus);
+    }
+
+    if let Some(path) = find_path(&state.map, start_truck, end, PathNetwork::Road) {
+        let mut truck = Vehicle::new(9002, VehicleKind::Truck, start_truck, end);
+        truck.running = true;
+        truck.cargo = truck.capacity / 2 + 1;
+        truck.direction = DIR_SW;
+        truck.path = path.into();
+        state.vehicles.push(truck);
+    }
 }
 
 /// Canal de agua con orillas costeras y bermas de hierba (zona de puente legible).

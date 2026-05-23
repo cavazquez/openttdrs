@@ -1,15 +1,19 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use openttdrs_core::{CargoType, TileKind, Vehicle, VehicleKind};
+use openttdrs_core::{CargoType, Map, TileKind, Vehicle, VehicleKind};
 
 use crate::bevy_app::UpdateSet;
-use crate::iso::{iso, overlay_pos, tile_min_z};
+use crate::iso::{
+    iso, overlay_pos, road_vehicle_straight_subtile, road_vehicle_tile_anchor, tile_min_z,
+};
 use crate::render::MapVisualLayer;
 use crate::state::{ClientScreen, SimWorld};
 
-/// Factor de escala para los sprites de camiones (son 20×14 px nativo).
-const TRUCK_SCALE: f32 = 2.0;
+#[path = "../sprites/vehicle_gfx_data_generated.rs"]
+mod vehicle_gfx;
+
+use vehicle_gfx::{BUS_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED};
 
 pub(crate) struct VehicleRenderPlugin;
 
@@ -26,66 +30,105 @@ impl Plugin for VehicleRenderPlugin {
     }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Default)]
-enum VehicleDir {
-    #[default]
-    Ne,
-    Se,
-    Sw,
-    Nw,
-}
-
-fn vehicle_dir(v: &Vehicle) -> VehicleDir {
-    let Some(next) = v.path.front() else {
-        return VehicleDir::default();
-    };
-    let dx = next.x - v.pos.x;
-    let dy = next.y - v.pos.y;
-    match (dx.signum(), dy.signum()) {
-        (1, _) => VehicleDir::Se,
-        (-1, _) => VehicleDir::Nw,
-        (_, 1) => VehicleDir::Sw,
-        _ => VehicleDir::Ne,
+fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+    match v.kind {
+        VehicleKind::Truck if v.uses_loaded_road_sprite() => &TRUCK_VEHICLE_LAYERS_LOADED,
+        VehicleKind::Truck => &TRUCK_VEHICLE_LAYERS,
+        VehicleKind::Bus | VehicleKind::Train => &BUS_VEHICLE_LAYERS,
     }
 }
 
-fn vehicle_sprite_bounds(dir: VehicleDir) -> (f32, f32, f32, f32) {
-    // Mantener una base visual estable evita “saltos” cuando cambia la orientación.
-    let w = 20.0;
-    let h = 15.0;
-    let yrel = -6.0;
-    let xrel = match dir {
-        VehicleDir::Ne | VehicleDir::Sw => -14.0,
-        VehicleDir::Se | VehicleDir::Nw => -6.0,
-    };
-    (xrel, yrel, w, h)
+fn vehicle_layer(v: &Vehicle) -> &'static vehicle_gfx::VehicleLayerGfx {
+    let dir = v.render_direction().min(7) as usize;
+    &vehicle_layers(v)[dir]
 }
+
+fn vehicle_draw_anchor(v: &Vehicle, map: &Map) -> (Vec2, u8, i32, i32) {
+    let base_z = tile_min_z(map, v.pos);
+    let dir = v.render_direction();
+
+    // Carretera recta: sub-tesela OpenTTD (eje del carril), no diagonal entre esquinas.
+    if dir & 1 == 1 {
+        let (sub_x, sub_y) = road_vehicle_straight_subtile(dir, v.progress);
+        let anchor = road_vehicle_tile_anchor(v.pos.x, v.pos.y, sub_x, sub_y);
+        return (anchor, base_z, v.pos.x, v.pos.y);
+    }
+
+    // Giros cardinales: interpolación entre teselas (hasta tener curvas de giro).
+    let base = iso(v.pos.x, v.pos.y);
+    let Some(next) = v.movement_target() else {
+        return (base, base_z, v.pos.x, v.pos.y);
+    };
+    if v.progress == 0 {
+        return (base, base_z, v.pos.x, v.pos.y);
+    }
+    let t = f32::from(v.progress) / 255.0;
+    let next_iso = iso(next.x, next.y);
+    let next_z = tile_min_z(map, next);
+    let pos = base.lerp(next_iso, t);
+    let z = f32::from(base_z)
+        .mul_add(1.0 - t, f32::from(next_z) * t)
+        .round() as u8;
+    let tx = (v.pos.x as f32).mul_add(1.0 - t, next.x as f32 * t).round() as i32;
+    let ty = (v.pos.y as f32).mul_add(1.0 - t, next.y as f32 * t).round() as i32;
+    (pos, z, tx, ty)
+}
+
+fn vehicle_sprite_pos(v: &Vehicle, map: &Map) -> Vec3 {
+    let layer = vehicle_layer(v);
+    let (anchor, height, tx, ty) = vehicle_draw_anchor(v, map);
+    overlay_pos(
+        anchor,
+        layer.x_offs,
+        layer.y_offs,
+        layer.w,
+        layer.h,
+        height,
+        1.0,
+        tx,
+        ty,
+    )
+}
+
+type DirHandles = [Handle<Image>; 8];
 
 #[derive(Resource)]
 pub(crate) struct TruckHandles {
-    ne: Handle<Image>,
-    se: Handle<Image>,
-    sw: Handle<Image>,
-    nw: Handle<Image>,
+    bus: DirHandles,
+    truck: DirHandles,
+    truck_loaded: DirHandles,
 }
 
 impl TruckHandles {
     pub(crate) fn load(asset_server: &AssetServer) -> Self {
-        let bus = asset_server.load::<Image>("assets/opengfx/tiles/vehicle_bus_sw.png");
+        fn load_set(
+            server: &AssetServer,
+            layers: &[vehicle_gfx::VehicleLayerGfx; 8],
+        ) -> DirHandles {
+            [
+                server.load(layers[0].path),
+                server.load(layers[1].path),
+                server.load(layers[2].path),
+                server.load(layers[3].path),
+                server.load(layers[4].path),
+                server.load(layers[5].path),
+                server.load(layers[6].path),
+                server.load(layers[7].path),
+            ]
+        }
         Self {
-            ne: bus.clone(),
-            se: bus.clone(),
-            sw: bus.clone(),
-            nw: bus,
+            bus: load_set(asset_server, &BUS_VEHICLE_LAYERS),
+            truck: load_set(asset_server, &TRUCK_VEHICLE_LAYERS),
+            truck_loaded: load_set(asset_server, &TRUCK_VEHICLE_LAYERS_LOADED),
         }
     }
 
-    fn for_dir(&self, dir: VehicleDir) -> Handle<Image> {
-        match dir {
-            VehicleDir::Ne => self.ne.clone(),
-            VehicleDir::Se => self.se.clone(),
-            VehicleDir::Sw => self.sw.clone(),
-            VehicleDir::Nw => self.nw.clone(),
+    fn for_vehicle(&self, v: &Vehicle) -> Handle<Image> {
+        let i = v.render_direction().min(7) as usize;
+        match v.kind {
+            VehicleKind::Truck if v.uses_loaded_road_sprite() => self.truck_loaded[i].clone(),
+            VehicleKind::Truck => self.truck[i].clone(),
+            VehicleKind::Bus | VehicleKind::Train => self.bus[i].clone(),
         }
     }
 }
@@ -116,20 +159,16 @@ pub(crate) fn spawn_initial_vehicles(
     trucks: &TruckHandles,
 ) {
     for vehicle in &sim.state.vehicles {
-        let dir = vehicle_dir(vehicle);
-        let vh = tile_min_z(&sim.state.map, vehicle.pos);
-        let p = iso(vehicle.pos.x, vehicle.pos.y);
-        let (xrel, yrel, w, h) = vehicle_sprite_bounds(dir);
-        let pos3 = overlay_pos(p, xrel, yrel, w, h, vh, 1.0, vehicle.pos.x, vehicle.pos.y);
+        let pos3 = vehicle_sprite_pos(vehicle, &sim.state.map);
         commands.spawn((
             MapVisualLayer,
             VehicleSprite(vehicle.id),
             Sprite {
-                image: trucks.for_dir(dir),
+                image: trucks.for_vehicle(vehicle),
                 color: vehicle_tint(vehicle),
                 ..default()
             },
-            Transform::from_translation(pos3).with_scale(Vec3::splat(TRUCK_SCALE)),
+            Transform::from_translation(pos3),
             Visibility::Visible,
         ));
         commands.spawn((
@@ -179,10 +218,10 @@ fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
 }
 
 fn vehicle_tint(v: &Vehicle) -> Color {
-    match v.kind {
-        VehicleKind::Bus => Color::srgb(0.95, 0.95, 1.0),
-        VehicleKind::Truck => Color::srgb(1.0, 0.9, 0.8),
-        VehicleKind::Train => Color::srgb(0.86, 1.0, 0.86),
+    if v.kind == VehicleKind::Train {
+        Color::srgb(0.86, 1.0, 0.86)
+    } else {
+        Color::WHITE
     }
 }
 
@@ -218,14 +257,9 @@ pub(crate) fn update_vehicles(
             continue;
         }
         *visibility = Visibility::Visible;
-        let dir = vehicle_dir(v);
-        let vh = tile_min_z(&sim.state.map, v.pos);
-        let p = iso(v.pos.x, v.pos.y);
-
-        let (xrel, yrel, w, h) = vehicle_sprite_bounds(dir);
-        let pos3 = overlay_pos(p, xrel, yrel, w, h, vh, 1.0, v.pos.x, v.pos.y);
+        let pos3 = vehicle_sprite_pos(v, &sim.state.map);
         transform.translation = pos3;
-        sprite.image = trucks.for_dir(dir);
+        sprite.image = trucks.for_vehicle(v);
         sprite.color = vehicle_tint(v);
     }
 
@@ -241,11 +275,7 @@ pub(crate) fn update_vehicles(
             continue;
         }
         *visibility = Visibility::Visible;
-        let dir = vehicle_dir(v);
-        let vh = tile_min_z(&sim.state.map, v.pos);
-        let p = iso(v.pos.x, v.pos.y);
-        let (xrel, yrel, w, h) = vehicle_sprite_bounds(dir);
-        let pos3 = overlay_pos(p, xrel, yrel, w, h, vh, 1.0, v.pos.x, v.pos.y);
+        let pos3 = vehicle_sprite_pos(v, &sim.state.map);
         transform.translation = vehicle_cargo_label_pos(pos3);
         **text = vehicle_cargo_label(v);
         color.0 = vehicle_cargo_color(v);
@@ -259,7 +289,7 @@ mod tests {
 
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
-    use openttdrs_core::{GameState, TileCoord, VehicleKind};
+    use openttdrs_core::{DIR_S, DIR_SW, GameState, TileCoord, VehicleKind};
 
     fn sample_vehicle(id: u32) -> Vehicle {
         Vehicle {
@@ -273,28 +303,36 @@ mod tests {
             cargo_type: None,
             capacity: 30,
             running: true,
+            progress: 0,
+            direction: DIR_SW,
             orders: Vec::new(),
             current_order: 0,
             no_network_route_to_order: false,
         }
     }
 
+    fn default_handles() -> TruckHandles {
+        TruckHandles {
+            bus: Default::default(),
+            truck: Default::default(),
+            truck_loaded: Default::default(),
+        }
+    }
+
     #[test]
-    fn vehicle_index_and_direction_helpers_work() {
+    fn vehicle_index_and_sprite_helpers_work() {
         let mut idx = VehicleIndex::default();
         let v = sample_vehicle(7);
         idx.rebuild(std::slice::from_ref(&v));
         assert_eq!(idx.by_id.get(&7), Some(&0));
-        assert!(matches!(vehicle_dir(&v), VehicleDir::Se));
-        assert_ne!(
-            vehicle_sprite_bounds(VehicleDir::Ne),
-            vehicle_sprite_bounds(VehicleDir::Se)
-        );
-        assert_eq!(vehicle_cargo_label(&v), "ANY 0/30");
-        assert_ne!(
-            vehicle_cargo_color(&v),
-            vehicle_cargo_color(&Vehicle { cargo: 5, ..v })
-        );
+        assert_eq!(v.render_direction(), DIR_SW);
+        assert_ne!(vehicle_layers(&v)[1].path, vehicle_layers(&v)[3].path);
+        assert!(!v.uses_loaded_road_sprite());
+        let loaded = Vehicle {
+            cargo: 15,
+            ..sample_vehicle(1)
+        };
+        assert!(loaded.uses_loaded_road_sprite());
     }
 
     #[test]
@@ -308,12 +346,7 @@ mod tests {
 
         let mut world = World::new();
         world.insert_resource(sim);
-        world.insert_resource(TruckHandles {
-            ne: Handle::default(),
-            se: Handle::default(),
-            sw: Handle::default(),
-            nw: Handle::default(),
-        });
+        world.insert_resource(default_handles());
         world.insert_resource(VehicleIndex::default());
 
         world.spawn((
@@ -329,17 +362,25 @@ mod tests {
             TextColor(Color::WHITE),
             Visibility::Visible,
         ));
-        world.spawn((
-            VehicleSprite(99),
-            Transform::default(),
-            Sprite::default(),
-            Visibility::Visible,
-        ));
 
         world.run_system_once(rebuild_vehicle_index).unwrap();
         world.run_system_once(update_vehicles).unwrap();
 
         let mut labels = world.query_filtered::<&Text2d, With<VehicleCargoLabel>>();
         assert_eq!(labels.single(&world).unwrap().to_string(), "ANY 0/30");
+    }
+
+    #[test]
+    fn render_direction_cardinal_layer_differs_from_diagonal() {
+        let mut v = sample_vehicle(1);
+        v.kind = VehicleKind::Bus;
+        v.pos = TileCoord::new(0, 0);
+        v.path = VecDeque::from([TileCoord::new(0, 1), TileCoord::new(1, 1)]);
+        v.progress = 200;
+        assert_eq!(v.render_direction(), DIR_S);
+        assert_ne!(
+            BUS_VEHICLE_LAYERS[DIR_S as usize].path,
+            BUS_VEHICLE_LAYERS[openttdrs_core::DIR_SE as usize].path
+        );
     }
 }

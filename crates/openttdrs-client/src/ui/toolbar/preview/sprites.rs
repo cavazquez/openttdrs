@@ -91,7 +91,7 @@ pub(crate) fn preview_image_for_action(
             Some(asset_server.load::<Image>("assets/opengfx/tiles/tunnel_rail_rear.png"))
         }
         BuildMenuAction::Clear => {
-            Some(asset_server.load::<Image>("assets/opengfx/tiles/grass_rough.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/ui_demolish.png"))
         }
         BuildMenuAction::Orders => None,
         BuildMenuAction::BuildHouse => {

@@ -55,7 +55,10 @@ pub use tnbp_decode::{
     JgrTunnelRecord, SlPrimitive, SlTableField, TnbpDecodeError, TnbpDecoded, decode_tnbp_blob,
     jgr_tunnels_from_decoded, read_sl_gamma, split_sl_gamma_segments, tnbp_blob_to_json_value,
 };
-pub use vehicle::{Vehicle, VehicleKind, VehicleOrder};
+pub use vehicle::{
+    DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, VEHICLE_PROGRESS_STEP, Vehicle,
+    VehicleDirection, VehicleKind, VehicleOrder, direction_from_tile_step,
+};
 
 #[cfg(test)]
 mod tests;

@@ -146,7 +146,11 @@ pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             "assets/opengfx/tiles/tunnel_road_rear.png",
                             BuildMenuAction::RoadTunnel,
                         ),
-                        ("Demoler", "text:💣", BuildMenuAction::Clear),
+                        (
+                            "Demoler",
+                            "assets/opengfx/tiles/ui_demolish.png",
+                            BuildMenuAction::Clear,
+                        ),
                         (
                             "Estacion",
                             "assets/opengfx/tiles/truck_stop_ground_0.png",

@@ -12,7 +12,22 @@ fn seed_min_assets(root: &std::path::Path) {
         env!("CARGO_MANIFEST_DIR"),
         "/tests/fixtures/one_pixel.png"
     ));
-    for name in ["grass.png", "water.png", "vehicle_bus_sw.png"] {
+    for name in [
+        "grass.png",
+        "water.png",
+        "vehicle_bus_ne.png",
+        "vehicle_bus_se.png",
+        "vehicle_bus_sw.png",
+        "vehicle_bus_nw.png",
+        "vehicle_truck_ne.png",
+        "vehicle_truck_se.png",
+        "vehicle_truck_sw.png",
+        "vehicle_truck_nw.png",
+        "vehicle_truck_ne_loaded.png",
+        "vehicle_truck_se_loaded.png",
+        "vehicle_truck_sw_loaded.png",
+        "vehicle_truck_nw_loaded.png",
+    ] {
         fs::write(tiles.join(name), png).expect("write png");
     }
 }

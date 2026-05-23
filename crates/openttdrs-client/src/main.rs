@@ -55,12 +55,38 @@ fn main() {
 fn check_required_assets(repo_root: &str) -> bool {
     let root = Path::new(repo_root);
     let tiles_dir = root.join("assets/opengfx/tiles");
-    let required = [
+    const VEHICLE_PNGS: &[&str] = &[
+        "vehicle_bus_n.png",
+        "vehicle_bus_ne.png",
+        "vehicle_bus_e.png",
+        "vehicle_bus_se.png",
+        "vehicle_bus_s.png",
+        "vehicle_bus_sw.png",
+        "vehicle_bus_w.png",
+        "vehicle_bus_nw.png",
+        "vehicle_truck_n.png",
+        "vehicle_truck_ne.png",
+        "vehicle_truck_e.png",
+        "vehicle_truck_se.png",
+        "vehicle_truck_s.png",
+        "vehicle_truck_sw.png",
+        "vehicle_truck_w.png",
+        "vehicle_truck_nw.png",
+        "vehicle_truck_n_loaded.png",
+        "vehicle_truck_ne_loaded.png",
+        "vehicle_truck_e_loaded.png",
+        "vehicle_truck_se_loaded.png",
+        "vehicle_truck_s_loaded.png",
+        "vehicle_truck_sw_loaded.png",
+        "vehicle_truck_w_loaded.png",
+        "vehicle_truck_nw_loaded.png",
+    ];
+    let mut required: Vec<_> = vec![
         tiles_dir.join("grass.png"),
         tiles_dir.join("water.png"),
-        tiles_dir.join("vehicle_bus_sw.png"),
         root.join("static/fonts/DejaVuSansMono.ttf"),
     ];
+    required.extend(VEHICLE_PNGS.iter().map(|name| tiles_dir.join(name)));
 
     let missing: Vec<String> = required
         .iter()
@@ -106,7 +132,34 @@ mod main_asset_checks {
             env!("CARGO_MANIFEST_DIR"),
             "/tests/fixtures/one_pixel.png"
         ));
-        for name in ["grass.png", "water.png", "vehicle_bus_sw.png"] {
+        for name in [
+            "grass.png",
+            "water.png",
+            "vehicle_bus_n.png",
+            "vehicle_bus_ne.png",
+            "vehicle_bus_e.png",
+            "vehicle_bus_se.png",
+            "vehicle_bus_s.png",
+            "vehicle_bus_sw.png",
+            "vehicle_bus_w.png",
+            "vehicle_bus_nw.png",
+            "vehicle_truck_n.png",
+            "vehicle_truck_ne.png",
+            "vehicle_truck_e.png",
+            "vehicle_truck_se.png",
+            "vehicle_truck_s.png",
+            "vehicle_truck_sw.png",
+            "vehicle_truck_w.png",
+            "vehicle_truck_nw.png",
+            "vehicle_truck_n_loaded.png",
+            "vehicle_truck_ne_loaded.png",
+            "vehicle_truck_e_loaded.png",
+            "vehicle_truck_se_loaded.png",
+            "vehicle_truck_s_loaded.png",
+            "vehicle_truck_sw_loaded.png",
+            "vehicle_truck_w_loaded.png",
+            "vehicle_truck_nw_loaded.png",
+        ] {
             fs::write(t.join(name), png).expect("write");
         }
         fs::write(f.join("DejaVuSansMono.ttf"), []).expect("write");

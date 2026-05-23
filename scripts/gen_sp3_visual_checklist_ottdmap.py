@@ -8,10 +8,17 @@ Cada escena va separada por **al menos 1 tesela de hierba** para distinguirlas e
 Layout (20×12, origen arriba-izquierda):
 
 ```
+y=0   · templado · ártico · trópico · toyland · NewGRF 128 ·   (climas, terminadas)
+y=1   · obra s0 · s1 · s2 · s3 · terminada ·                 (HouseID 0, hash 0)
+y=2   · h16 · h20 · h24 · h32 · h39 ·                       (templado variado)
 y=3   · RY · RX · RT · cruce · cruce nivel X/Y · · tranvía X ·
+y=4   · ind gfx0 s0 · s1 · s2 · terminada · estadio h20 · (P5/P6)
 y=5   · vía Y · vía X · T · cruce · señales · nieve ·
-y=7   · carretera NE · SE · SW · NW · tranvía en pendiente NE (SP3.1) ·
-y=9   · casa · camión · bus · tren · industria ·
+y=6   · ártico · trópico · toyland · iglú · h109 ·           (más climas)
+y=7   · carretera NE · SE · SW · NW · tranvía pendiente NE ·
+y=8   · obra h16 s0..s3 · terminada ·                       (Large Office)
+y=9   · casa · camión · bus · tren · (industria legacy) ·
+y=10  · gfx0 · gfx42 · gfx116 · gfx119 · gfx120 · gfx256 ·  (industrias, paso 2 en x)
 y=11  · hierba · mar Clear · costa · hierba ·
 ```
 
@@ -100,6 +107,52 @@ def put(tiles: dict[tuple[int, int], TileSpec], x: int, y: int, spec: TileSpec) 
     tiles[(x, y)] = spec
 
 
+def house_under_construction(stage: int, house_id: int = 0, counter: int = 0) -> TileSpec:
+    """MP_HOUSE en obra: `m3` bit 7 clear; etapa en bits 4..3 de `m5`."""
+    assert 0 <= stage <= 3
+    return TileSpec(
+        tt=MP_HOUSE,
+        m8=house_id & 0xFFF,
+        m3=0,
+        m5=((stage & 3) << 3) | (counter & 7),
+    )
+
+
+def house_completed(house_id: int = 0, age: int = 0) -> TileSpec:
+    return TileSpec(tt=MP_HOUSE, m8=house_id & 0xFFF, m3=0x80, m5=age & 0xFF)
+
+
+def industry_tile(gfx9: int, industry_index: int = 1) -> TileSpec:
+    """MP_INDUSTRY terminada: `m1` bit 7 (`IsIndustryCompleted`); índice en `m2`."""
+    gfx9 &= 0x1FF
+    m5 = gfx9 & 0xFF
+    m6 = ((gfx9 >> 8) & 1) << 2
+    return TileSpec(
+        tt=MP_INDUSTRY,
+        m5=m5,
+        m6=m6,
+        m1=0x80,
+        m2=industry_index & 0xFF,
+    )
+
+
+def industry_under_construction(
+    gfx9: int, stage: int, industry_index: int = 1
+) -> TileSpec:
+    """MP_INDUSTRY en obra: etapa 0–2 en bits 0–1 de `m1` (sin bit 7)."""
+    assert 0 <= stage <= 2
+    gfx9 &= 0x1FF
+    m5 = gfx9 & 0xFF
+    m6 = ((gfx9 >> 8) & 1) << 2
+    return TileSpec(
+        tt=MP_INDUSTRY,
+        m5=m5,
+        m6=m6,
+        m1=stage & 0x03,
+        m2=industry_index & 0xFF,
+    )
+
+
 def build_stxy_footer(tile_types: list[int], dim_x: int, dim_y: int) -> bytes:
     coords: list[tuple[int, int]] = []
     for i, mapt in enumerate(tile_types):
@@ -167,6 +220,31 @@ def main() -> None:
     w, h = 20, 12
     tiles: dict[tuple[int, int], TileSpec] = {}
 
+    # Posiciones x con TileHash2Bit=0 en (x, row): x ≡ 1 (mod 4) → 1, 5, 9, 13, 17
+    HOUSE_X = (1, 5, 9, 13, 17)
+
+    # --- Climas / HouseID altos (y=0), terminadas ---
+    for x, hid in zip(HOUSE_X, (0, 44, 88, 107, 128), strict=True):
+        put(tiles, x, 0, house_completed(hid))
+
+    # --- Obras HouseID 0 (y=1) ---
+    for x, stage in zip(HOUSE_X[:4], (0, 1, 2, 3), strict=True):
+        put(tiles, x, 1, house_under_construction(stage, house_id=0))
+    put(tiles, HOUSE_X[4], 1, house_completed(0))
+
+    # --- Templado variado (y=2): IDs frecuentes en saves reales ---
+    for x, hid in zip(HOUSE_X, (16, 20, 24, 32, 39), strict=True):
+        put(tiles, x, 2, house_completed(hid))
+
+    # --- Más climas (y=6) ---
+    for x, hid in zip(HOUSE_X, (70, 78, 82, 66, 109), strict=True):
+        put(tiles, x, 6, house_completed(hid))
+
+    # --- Obras HouseID 16 Large Office (y=8), hash 0 en HOUSE_X ---
+    for x, stage in zip(HOUSE_X[:4], (0, 1, 2, 3), strict=True):
+        put(tiles, x, 8, house_under_construction(stage, house_id=16))
+    put(tiles, HOUSE_X[4], 8, house_completed(16))
+
     # --- Fila carretera plana (y=3), paso 2 en x ---
     put(tiles, 1, 3, TileSpec(tt=MP_ROAD, m5=0x05))  # ROAD_Y
     put(tiles, 3, 3, TileSpec(tt=MP_ROAD, m5=0x0A))  # ROAD_X
@@ -206,12 +284,30 @@ def main() -> None:
     cur = tiles.get((13, 7), TileSpec())
     tiles[(13, 7)] = replace(cur, tt=MP_ROAD, m5=0x05, m3=0x05)
 
+    # --- Obra industrial SP3 P5 (y=4): mina carbón gfx0, etapas 0–2 + terminada ---
+    IND_OBRA_X = (1, 5, 9, 13)
+    for x, stage in zip(IND_OBRA_X[:3], (0, 1, 2), strict=True):
+        put(tiles, x, 4, industry_under_construction(0, stage))
+    put(tiles, IND_OBRA_X[3], 4, industry_tile(0))
+
+    # --- Estadio SP3 P6 (y=4 x=17): HouseID 20, terminado ---
+    put(tiles, 17, 4, house_completed(20))
+
+    # --- Industrias SP3 P3 (y=10): un caso cada 2 teselas en x (1 tile hierba entre medias) ---
+    IND_X = (1, 3, 5, 7, 9, 11)
+    for x, gfx in zip(
+        IND_X,
+        (0, 42, 116, 119, 120, 256),
+        strict=True,
+    ):
+        put(tiles, x, 10, industry_tile(gfx))
+
     # --- Objetos (y=9), paso 2 en x ---
-    put(tiles, 1, 9, TileSpec(tt=MP_HOUSE, m8=0))
+    put(tiles, 1, 9, house_completed(0))
     put(tiles, 3, 9, TileSpec(tt=MP_STATION, m5=0x02, m6=2 << 3))  # Truck SE
     put(tiles, 5, 9, TileSpec(tt=MP_STATION, m5=0x00, m6=3 << 3))  # Bus NE
     put(tiles, 7, 9, TileSpec(tt=MP_STATION, m5=0x01, m6=0))  # Rail eje Y
-    put(tiles, 9, 9, TileSpec(tt=MP_INDUSTRY, m5=0, m6=0, m1=1))
+    put(tiles, 9, 9, industry_tile(0))  # mina carbón (legacy junto a estaciones)
 
     # --- Costa (y=11) ---
     put(tiles, 3, 11, TileSpec(tt=MP_WATER, height=1, m5=0x00))

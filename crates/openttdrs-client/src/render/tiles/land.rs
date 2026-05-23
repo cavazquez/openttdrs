@@ -4,7 +4,9 @@ use openttdrs_core::TileKind;
 use super::{sloped_or_flat_image, spawn_ground_sprite};
 use crate::iso::{overlay_pos, wang_hash};
 use crate::render::{MapSpriteBatches, MapVisualLayer, TileRenderContext, WorldAssets};
-use crate::sprites::{HOUSE_DRAW_DATA, house_draw_data_index_for_tile};
+use crate::sprites::{
+    HOUSE_DRAW_DATA, house_building_stage_from_tile, house_draw_data_index_for_tile,
+};
 
 pub(crate) fn spawn_house_tile(
     commands: &mut Commands,
@@ -18,7 +20,10 @@ pub(crate) fn spawn_house_tile(
     let clean_house_id = ctx.tile.map_or(0u16, |t| t.m8 & 0xFFF);
     let house_base = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
     spawn_ground_sprite(commands, house_base, Color::WHITE, ctx, slope_half_ground);
-    let spec_idx = house_draw_data_index_for_tile(clean_house_id, ctx.tx_i32(), ctx.ty_i32());
+    let (m5, m3) = ctx.tile.map_or((0u8, 0x80u8), |t| (t.m5, t.m3));
+    let building_stage = house_building_stage_from_tile(m5, m3);
+    let spec_idx =
+        house_draw_data_index_for_tile(clean_house_id, ctx.tx_i32(), ctx.ty_i32(), building_stage);
     let spec = &HOUSE_DRAW_DATA[spec_idx];
     if spec.s1 != 0
         && let Some(img) = assets.houses.get(&spec.s1)
@@ -83,31 +88,25 @@ pub(crate) fn spawn_industry_tile(
     let gfx = ctx.tile.map_or(0u16, |t| {
         u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8)
     });
-    let entry = crate::sprites::industry_gfx_entry(gfx);
-    crate::sprites::debug_log_industry_gfx_once(gfx, entry);
-    let has_industry_art = entry.is_some_and(|e| e.sprite_id != 0 || e.ground_sprite_id != 0);
-    let (terrain_img, terrain_color) = if has_industry_art {
-        (
-            sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes),
-            Color::srgb(0.55, 0.50, 0.45),
-        )
-    } else {
-        (
-            sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes),
-            Color::WHITE,
-        )
-    };
+    let m1 = ctx.tile.map_or(0x80, |t| t.m1);
+    let entry = crate::sprites::industry_gfx_entry_for_tile(gfx, m1);
+    crate::sprites::log_industry_gfx_once(gfx, entry);
+    // MP_INDUSTRY siempre usa terreno rough (aunque falte arte o gfx≥120).
+    let terrain_img = sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
+    let terrain_color = Color::srgb(0.55, 0.50, 0.45);
     spawn_ground_sprite(commands, terrain_img, terrain_color, ctx, slope_half_ground);
     if let Some(s) = entry {
         if s.ground_sprite_id != 0
+            && s.ground_w > 0.0
+            && s.ground_h > 0.0
             && let Some(img) = assets.industries.get(&s.ground_sprite_id)
         {
             let pos_g = overlay_pos(
                 ctx.iso_pos,
-                s.xrel,
-                s.yrel,
-                s.w,
-                s.h,
+                s.ground_xrel,
+                s.ground_yrel,
+                s.ground_w,
+                s.ground_h,
                 base_z,
                 0.45,
                 ctx.tx_i32(),
@@ -124,6 +123,8 @@ pub(crate) fn spawn_industry_tile(
             ));
         }
         if s.sprite_id != 0
+            && s.w > 0.0
+            && s.h > 0.0
             && let Some(img) = assets.industries.get(&s.sprite_id)
         {
             let pos3 = overlay_pos(

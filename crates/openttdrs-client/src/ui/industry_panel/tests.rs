@@ -79,6 +79,32 @@ fn industry_helper_functions_cover_paths() {
 }
 
 #[test]
+fn format_panel_title_out_of_range_gfx_skips_sim_kind_label() {
+    let mut map = Map::new_flat(1, 1, 0);
+    let focus = TileCoord::new(0, 0);
+    let Some(mut tile) = map.get(focus) else {
+        panic!("test fixture: tile missing at {focus:?}");
+    };
+    tile.kind = TileKind::Industry;
+    tile.m5 = 0;
+    tile.m6 = 4; // gfx bit 8 → gfx9 = 256
+    map.set_tile(focus, tile).unwrap();
+
+    let mut sim = SimWorld::default();
+    sim.state.industries.push(openttdrs_core::Industry {
+        pos: focus,
+        tiles: vec![focus],
+        spec: Some(openttdrs_core::IndustrySpec::CoalMine),
+        kind: IndustryKind::CoalMine,
+        stock: 0,
+        capacity: 100,
+    });
+
+    let title = format_panel_title(&map, &sim, focus);
+    assert_eq!(title, "Industria - gfx 256 (sin sprite)");
+}
+
+#[test]
 fn flood_industry_tiles_respects_m1_components_when_present() {
     let mut map = Map::new_flat(3, 1, 0);
     let c = |x: i32| TileCoord::new(x, 0);

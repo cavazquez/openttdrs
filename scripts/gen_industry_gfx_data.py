@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 """Genera INDUSTRY_GFX_DATA para openttdrs desde OpenTTD src/table/industry_land.h.
 
-Usa la fila del estadio 3 por gfx (índice gfx*4+3), igual que GetIndustryGfx completado.
-s1 = suelo (temperate grass 0xF54 -> no duplicar como PNG extra).
-s2 = edificio (0 = sin overlay).
-
-Offsets w/h/xrel/yrel: PNG `assets/opengfx/tiles/industry_<id>.png` si existe;
-si no, extensión sx/sy del macro M() en unidades de 16px (OpenTTD).
+OpenTTD: `_industry_draw_tile_data[gfx * 4 + construction_stage]` (estadios 0–3).
+Offsets w/h/xrel/yrel por capa desde NFO + PNG (`industry_<id>.png`).
 """
 from __future__ import annotations
 
@@ -14,22 +10,15 @@ import re
 import sys
 from pathlib import Path
 
-try:
-    from PIL import Image
-except ImportError:
-    Image = None  # type: ignore[misc, assignment]
+from nfo_sprite_meta import (
+    detect_graphics_mode,
+    parse_sprite_offs,
+    sprite_dims_from_assets,
+)
 
 GRASS_S1 = 0xF54
-# Calibración manual (tiles mina de carbón, validados en cliente).
-CAL: dict[int, tuple[float, float, float, float]] = {
-    0: (58.0, 50.0, -16.0, -33.0),
-    1: (46.0, 53.0, -14.0, -38.0),
-    2: (64.0, 39.0, -31.0, -8.0),
-    3: (44.0, 38.0, -13.0, -21.0),
-}
-# Factores derivados de gfx 0 (mina) para auto-calibrar otros PNG.
-XREL_PER_W = -16.0 / 58.0
-YREL_PER_H = -33.0 / 50.0
+STAGES = 4
+GFX_COUNT = 120
 FALLBACK = (64.0, 48.0, -32.0, -32.0)
 
 
@@ -41,7 +30,7 @@ def parse_atom(a: str) -> int:
 def parse_macro_rows(path: Path) -> list[tuple[int, int, int, int, int, int]]:
     """s1, s2, dx, dy, sx, sy por cada fila M()."""
     pat = re.compile(
-        r"^\s*M\(\s*([^,]+),\s*PAL_NONE,\s*([^,]+),\s*PAL_NONE,\s*"
+        r"^\s*M\(\s*([^,]+),\s*[^,]+,\s*([^,]+),\s*[^,]+,\s*"
         r"(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*(-?\d+),"
     )
     out: list[tuple[int, int, int, int, int, int]] = []
@@ -65,37 +54,68 @@ def parse_macro_rows(path: Path) -> list[tuple[int, int, int, int, int, int]]:
     return out
 
 
-def png_size(tiles_dir: Path, sid: int) -> tuple[int, int] | None:
-    if sid == 0 or Image is None:
-        return None
-    p = tiles_dir / f"industry_{sid}.png"
-    if not p.is_file():
-        return None
-    with Image.open(p) as im:
-        return im.size
+def industry_row_line(
+    s2: int,
+    gid: int,
+    bw: float,
+    bh: float,
+    bx: float,
+    by: float,
+    gw: float,
+    gh: float,
+    gx: float,
+    gy: float,
+) -> str:
+    return (
+        f"    IndustryGfxSprite {{ sprite_id: {s2}, ground_sprite_id: {gid}, "
+        f"w: {bw:.1f}, h: {bh:.1f}, xrel: {bx:.1f}, yrel: {by:.1f}, "
+        f"ground_w: {gw:.1f}, ground_h: {gh:.1f}, "
+        f"ground_xrel: {gx:.1f}, ground_yrel: {gy:.1f} }},"
+    )
 
 
-def overlay_from_png(
-    tiles_dir: Path, sprite_id: int, ground_id: int, dx: int, dy: int, sx: int, sy: int
-) -> tuple[float, float, float, float]:
-    """w, h, xrel, yrel para overlay de edificio o solo suelo."""
-    bld = png_size(tiles_dir, sprite_id)
-    gnd = png_size(tiles_dir, ground_id)
-    if bld:
-        w, h = float(bld[0]), float(bld[1])
-        xrel = w * XREL_PER_W + float(dx) * 2.0
-        yrel = h * YREL_PER_H + float(dy) * 2.0
-        return (w, h, xrel, yrel)
-    if gnd:
-        w, h = float(gnd[0]), float(gnd[1])
-        xrel = w * XREL_PER_W + float(dx) * 2.0
-        yrel = h * YREL_PER_H + float(dy) * 2.0
-        return (w, h, xrel, yrel)
-    w = max(float(sx) * 8.0, 32.0)
-    h = max(float(sy) * 8.0, 24.0)
-    xrel = float(dx) * 8.0 - w * 0.5 + 8.0
-    yrel = float(dy) * 8.0 - h + 12.0
-    return (w, h, xrel, yrel)
+def dims_for_macro_row(
+    repo: Path,
+    tiles_dir: Path,
+    nfo: dict,
+    prefer_bpp: str | None,
+    s1: int,
+    s2: int,
+    dx: int,
+    dy: int,
+    sx: int,
+    sy: int,
+) -> tuple[tuple[float, float, float, float], tuple[float, float, float, float], str, str]:
+    gid = 0 if s1 == GRASS_S1 else s1
+    gw, gh, gx, gy, gnote = sprite_dims_from_assets(
+        repo,
+        tiles_dir,
+        nfo,
+        gid,
+        f"industry_{gid}.png",
+        prefer_bpp,
+        macro_dx=dx,
+        macro_dy=dy,
+        macro_sx=sx,
+        macro_sy=sy,
+        fallback=FALLBACK,
+    )
+    bw, bh, bx, by, bnote = sprite_dims_from_assets(
+        repo,
+        tiles_dir,
+        nfo,
+        s2,
+        f"industry_{s2}.png",
+        prefer_bpp,
+        macro_dx=dx,
+        macro_dy=dy,
+        macro_sx=sx,
+        macro_sy=sy,
+        fallback=FALLBACK,
+    )
+    if s2 == 0 and gid == 0:
+        bw, bh, bx, by = FALLBACK
+    return (gw, gh, gx, gy), (bw, bh, bx, by), gnote, bnote
 
 
 def main() -> int:
@@ -111,7 +131,7 @@ def main() -> int:
         return 1
 
     rows_macro = parse_macro_rows(upstream)
-    need = 120 * 4
+    need = GFX_COUNT * STAGES
     if len(rows_macro) < need:
         print(f"Entries insuficientes: {len(rows_macro)} < {need}", file=sys.stderr)
         return 1
@@ -120,45 +140,59 @@ def main() -> int:
     out_path = (
         repo / "crates" / "openttdrs-client" / "src" / "sprites" / "industry_gfx_data_generated.rs"
     )
+    nfo = parse_sprite_offs(repo)
+    prefer_bpp = detect_graphics_mode(repo)
 
     body_rows: list[str] = []
-    png_cal = 0
-    macro_cal = 0
-    fallback_cal = 0
-    for gfx in range(120):
-        idx = gfx * 4 + 3
-        s1, s2, dx, dy, sx, sy = rows_macro[idx]
-        gid = 0 if s1 == GRASS_S1 else s1
-        if gfx in CAL:
-            w, h, xr, yr = CAL[gfx]
-        else:
-            dims = overlay_from_png(tiles_dir, s2, gid, dx, dy, sx, sy)
-            if png_size(tiles_dir, s2) or (gid and png_size(tiles_dir, gid)):
-                png_cal += 1
-                w, h, xr, yr = dims
-            elif s2 != 0 or gid != 0:
-                macro_cal += 1
-                w, h, xr, yr = dims
-            else:
-                fallback_cal += 1
-                w, h, xr, yr = FALLBACK
-        body_rows.append(
-            f"    IndustryGfxSprite {{ sprite_id: {s2}, ground_sprite_id: {gid}, "
-            f"w: {w:.1f}, h: {h:.1f}, xrel: {xr:.1f}, yrel: {yr:.1f} }},"
-        )
+    nfo_bld = nfo_gnd = macro_cal = fallback_cal = 0
+    for gfx in range(GFX_COUNT):
+        for stage in range(STAGES):
+            idx = gfx * STAGES + stage
+            s1, s2, dx, dy, sx, sy = rows_macro[idx]
+            (gw, gh, gx, gy), (bw, bh, bx, by), gnote, bnote = dims_for_macro_row(
+                repo, tiles_dir, nfo, prefer_bpp, s1, s2, dx, dy, sx, sy
+            )
 
+            if s2 == 0 and (s1 == GRASS_S1 or s1 == 0):
+                fallback_cal += 1
+            elif s2 == 0:
+                if gnote.startswith("nfo"):
+                    nfo_gnd += 1
+                elif gnote == "macro":
+                    macro_cal += 1
+            elif s1 == GRASS_S1 or s1 == 0:
+                if bnote.startswith("nfo"):
+                    nfo_bld += 1
+                elif bnote == "macro":
+                    macro_cal += 1
+            else:
+                if bnote.startswith("nfo"):
+                    nfo_bld += 1
+                if gnote.startswith("nfo"):
+                    nfo_gnd += 1
+                if bnote == "macro" or gnote == "macro":
+                    macro_cal += 1
+
+            gid = 0 if s1 == GRASS_S1 else s1
+            body_rows.append(industry_row_line(s2, gid, bw, bh, bx, by, gw, gh, gx, gy))
+
+    total = GFX_COUNT * STAGES
     lines = [
         "// @generated by scripts/gen_industry_gfx_data.py — no editar a mano.",
-        "// Fuente: OpenTTD _industry_draw_tile_data, estadio 3 por gfx (gfx*4+3).",
-        "// Offsets: PNG industry_<id>.png o macro M(dx,dy,sx,sy).",
+        "// Fuente: OpenTTD _industry_draw_tile_data (gfx*4+stage, stage 0..3).",
+        "// Offsets: NFO + PNG por capa (suelo / edificio).",
         "",
-        f"pub const INDUSTRY_GFX_DATA: [IndustryGfxSprite; 120] = [\n"
+        f"#[allow(clippy::large_const_arrays)]\n"
+        f"pub const INDUSTRY_GFX_DATA: [IndustryGfxSprite; {total}] = [\n"
         + "\n".join(body_rows)
         + "\n];",
         "",
     ]
     out_path.write_text("\n".join(lines), encoding="utf-8")
-    print(f"Escrito {out_path} (png={png_cal} macro={macro_cal} fallback={fallback_cal})")
+    print(
+        f"Escrito {out_path} ({total} filas, nfo_bld={nfo_bld} nfo_gnd={nfo_gnd} "
+        f"macro={macro_cal} fallback={fallback_cal})"
+    )
     return 0
 
 

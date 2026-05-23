@@ -3,6 +3,8 @@
 use bevy::prelude::Color;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
+#[path = "sprites/house_draw_data_generated.rs"]
+mod house_draw_data_generated;
 #[path = "sprites/industry.rs"]
 mod industry;
 #[path = "sprites/rail.rs"]
@@ -69,8 +71,11 @@ pub const ROAD_FLAT_HALF_H: [f32; 19] = [
 
 #[allow(unused_imports)]
 pub use industry::{
-    INDUSTRY_GFX_DATA, IndustryGfxSprite, debug_log_industry_gfx_once, industry_gfx_entry,
-    industry_gfx_uses_generic_fallback, industry_sprite_for_gfx,
+    INDUSTRY_GFX_DATA, INDUSTRY_GFX_STAGES, INDUSTRY_GFX_TABLE_LEN, IndustryGfxSprite,
+    IndustryGfxStatus, debug_log_industry_gfx_once, industry_construction_stage_from_tile,
+    industry_gfx_draw_index, industry_gfx_entry, industry_gfx_entry_for_tile,
+    industry_gfx_entry_staged, industry_gfx_status, industry_gfx_status_label,
+    industry_gfx_uses_generic_fallback, industry_sprite_for_gfx, log_industry_gfx_once,
 };
 #[allow(unused_imports)]
 pub use rail::{
@@ -106,279 +111,13 @@ pub struct HouseDrawSpec {
     pub s2_yrel: f32,
 }
 
-#[allow(clippy::too_many_arguments)]
-const fn house_spec(
-    s1: u32,
-    s1_w: f32,
-    s1_h: f32,
-    s1_xrel: f32,
-    s1_yrel: f32,
-    s2: u32,
-    s2_w: f32,
-    s2_h: f32,
-    s2_xrel: f32,
-    s2_yrel: f32,
-) -> HouseDrawSpec {
-    HouseDrawSpec {
-        s1,
-        s1_w,
-        s1_h,
-        s1_xrel,
-        s1_yrel,
-        s2,
-        s2_w,
-        s2_h,
-        s2_xrel,
-        s2_yrel,
-    }
-}
-
-/// Primeras **128** filas de `_town_draw_tile_data` (`town_land.h`): **8** tipos de casa
-/// × **16** filas (4 variantes `TileHash2Bit` × 4 etapas de obra).
+/// Tabla `_town_draw_tile_data` (`town_land.h`): **110** casas originales × **16** filas.
 ///
-/// OpenTTD usa `house_id * 16 + TileHash2Bit(x,y) * 4 + GetHouseBuildingStage`. Con solo
-/// 128 filas cargadas, [`house_draw_data_index_for_tile`] aplica **módulo** para
-/// `HouseID` altos (variedad visual; para fidelidad total habría que ampliar la tabla).
-/// Dimensiones (w, h, xrel, yrel) extraídas del NFO de OpenGFX (ogfx1_base.nfo).
+/// OpenTTD: `house_id * 16 + TileHash2Bit(x,y) * 4 + GetHouseBuildingStage()`.
+/// Regenerar: `python3 scripts/gen_house_draw_data.py`.
 ///
-/// `s1 = 0` significa "solo grass base" (SPR_FLAT_BARE_LAND o SPR_FLAT_GRASS_TILE).
-/// `s2 = 0` significa "sin edificio overlay".
-/// Los sprites se cargan como `house_s{id}.png`.
-pub const HOUSE_DRAW_DATA: [HouseDrawSpec; 128] = [
-    // 0: Tall Office Block – s1=1424, s2=1423
-    house_spec(
-        1424, 64.0, 37.0, -31.0, -6.0, 1423, 65.0, 76.0, -32.0, -45.0,
-    ),
-    // 1-3: Office Block variants – s1=1424, s2=1425
-    house_spec(
-        1424, 64.0, 37.0, -31.0, -6.0, 1425, 65.0, 71.0, -31.0, -40.0,
-    ),
-    house_spec(
-        1424, 64.0, 37.0, -31.0, -6.0, 1425, 65.0, 71.0, -31.0, -40.0,
-    ),
-    house_spec(
-        1424, 64.0, 37.0, -31.0, -6.0, 1425, 65.0, 71.0, -31.0, -40.0,
-    ),
-    // 4-7: Large Office Block – s1=1429, s2=1428
-    house_spec(
-        1429, 64.0, 36.0, -31.0, -5.0, 1428, 66.0, 87.0, -32.0, -56.0,
-    ),
-    house_spec(
-        1429, 64.0, 36.0, -31.0, -5.0, 1428, 66.0, 87.0, -32.0, -56.0,
-    ),
-    house_spec(
-        1429, 64.0, 36.0, -31.0, -5.0, 1428, 66.0, 87.0, -32.0, -56.0,
-    ),
-    house_spec(
-        1429, 64.0, 36.0, -31.0, -5.0, 1428, 66.0, 87.0, -32.0, -56.0,
-    ),
-    // 8-11: Small Block of Flats – s1=1433, s2=1432
-    house_spec(
-        1433, 64.0, 35.0, -31.0, -4.0, 1432, 35.0, 37.0, -18.0, -15.0,
-    ),
-    house_spec(
-        1433, 64.0, 35.0, -31.0, -4.0, 1432, 35.0, 37.0, -18.0, -15.0,
-    ),
-    house_spec(
-        1433, 64.0, 35.0, -31.0, -4.0, 1432, 35.0, 37.0, -18.0, -15.0,
-    ),
-    house_spec(
-        1433, 64.0, 35.0, -31.0, -4.0, 1432, 35.0, 37.0, -18.0, -15.0,
-    ),
-    // 12-15: Church – s1=1437, s2=1436
-    house_spec(
-        1437, 64.0, 34.0, -31.0, -3.0, 1436, 38.0, 38.0, -19.0, -14.0,
-    ),
-    house_spec(
-        1437, 64.0, 34.0, -31.0, -3.0, 1436, 38.0, 38.0, -19.0, -14.0,
-    ),
-    house_spec(
-        1437, 64.0, 34.0, -31.0, -3.0, 1436, 38.0, 38.0, -19.0, -14.0,
-    ),
-    house_spec(
-        1437, 64.0, 34.0, -31.0, -3.0, 1436, 38.0, 38.0, -19.0, -14.0,
-    ),
-    // 16-19: Large Office (suelo concreto) – s1=1311, s2=1442
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1442, 60.0, 77.0, -30.0, -48.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1442, 60.0, 77.0, -30.0, -48.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1442, 60.0, 77.0, -30.0, -48.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1442, 60.0, 77.0, -30.0, -48.0),
-    // 20-23: Large Office v2 – s1=1311, s2=4569
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 4569, 60.0, 77.0, -30.0, -48.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 4569, 60.0, 77.0, -30.0, -48.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 4569, 60.0, 77.0, -30.0, -48.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 4569, 60.0, 77.0, -30.0, -48.0),
-    // 24-25: Townhouse V1 – s1=1447, s2=1446
-    house_spec(1447, 64.0, 34.0, -31.0, -3.0, 1446, 26.0, 29.0, -14.0, -5.0),
-    house_spec(1447, 64.0, 34.0, -31.0, -3.0, 1446, 26.0, 29.0, -14.0, -5.0),
-    // 26-27: Townhouse V2 – s1=1505, s2=1506
-    house_spec(1505, 64.0, 34.0, -31.0, -3.0, 1506, 38.0, 24.0, -16.0, -1.0),
-    house_spec(1505, 64.0, 34.0, -31.0, -3.0, 1506, 38.0, 24.0, -16.0, -1.0),
-    // 28-31: Hotel NW – s1=1311, s2=1450
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1450, 58.0, 74.0, -25.0, -43.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1450, 58.0, 74.0, -25.0, -43.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1450, 58.0, 74.0, -25.0, -43.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1450, 58.0, 74.0, -25.0, -43.0),
-    // 32-35: Hotel SE – s1=1311, s2=1453
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1453, 62.0, 71.0, -31.0, -43.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1453, 62.0, 71.0, -31.0, -43.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1453, 62.0, 71.0, -31.0, -43.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1453, 62.0, 71.0, -31.0, -43.0),
-    // 36-39: Estatua ecuestre – s1=1311, s2=1454
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1454, 19.0, 23.0, -7.0, -13.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1454, 19.0, 23.0, -7.0, -13.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1454, 19.0, 23.0, -7.0, -13.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1454, 19.0, 23.0, -7.0, -13.0),
-    // 40-43: Fuente – s1=1311, s2=1455
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1455, 30.0, 32.0, -15.0, -15.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1455, 30.0, 32.0, -15.0, -15.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1455, 30.0, 32.0, -15.0, -15.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1455, 30.0, 32.0, -15.0, -15.0),
-    // 44-47: Estatua parque – s1=0(grass), s2=1456
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1456, 64.0, 79.0, -31.0, -48.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1456, 64.0, 79.0, -31.0, -48.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1456, 64.0, 79.0, -31.0, -48.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1456, 64.0, 79.0, -31.0, -48.0),
-    // 48-51: Callejón parque – s1=0(grass), s2=1457
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1457, 64.0, 64.0, -31.0, -33.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1457, 64.0, 64.0, -31.0, -33.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1457, 64.0, 64.0, -31.0, -33.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1457, 64.0, 64.0, -31.0, -33.0),
-    // 52-55: Oficina 0D – s1=1311, s2=1460
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1460, 52.0, 61.0, -25.0, -33.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1460, 52.0, 61.0, -25.0, -33.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1460, 52.0, 61.0, -25.0, -33.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1460, 52.0, 61.0, -25.0, -33.0),
-    // 56-59: Tienda/Oficina 0E – s1=1311, s2=1463
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1463, 64.0, 68.0, -35.0, -41.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1463, 64.0, 68.0, -35.0, -41.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1463, 64.0, 68.0, -35.0, -41.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1463, 64.0, 68.0, -35.0, -41.0),
-    // 60-63: Tienda/Oficina 0F – s1=1311, s2=1466
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1466, 66.0, 68.0, -28.0, -41.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1466, 66.0, 68.0, -28.0, -41.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1466, 66.0, 68.0, -28.0, -41.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1466, 66.0, 68.0, -28.0, -41.0),
-    // 64-67: Torres altas – s1=1311, s2=1469
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1469, 66.0, 79.0, -28.0, -50.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1469, 66.0, 79.0, -28.0, -50.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1469, 66.0, 79.0, -28.0, -50.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1469, 66.0, 79.0, -28.0, -50.0),
-    // 68-71: Torres muy altas – s1=1311, s2=1472
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1472, 54.0, 115.0, -25.0, -88.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1472, 54.0, 115.0, -25.0, -88.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1472, 54.0, 115.0, -25.0, -88.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1472, 54.0, 115.0, -25.0, -88.0),
-    // 72-75: Torres NE – s1=1311, s2=1475
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1475, 48.0, 44.0, -23.0, -20.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1475, 48.0, 44.0, -23.0, -20.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1475, 48.0, 44.0, -23.0, -20.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1475, 48.0, 44.0, -23.0, -20.0),
-    // 76-79: Oficina alta v2 – s1=1311, s2=1478
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1478, 65.0, 76.0, -28.0, -47.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1478, 65.0, 76.0, -28.0, -47.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1478, 65.0, 76.0, -28.0, -47.0),
-    house_spec(1311, 27.0, 28.0, 0.0, 0.0, 1478, 65.0, 76.0, -28.0, -47.0),
-    // 80-83: Casa pequeña – s1=0(grass), s2=1483
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1483, 64.0, 23.0, -31.0, -2.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1483, 64.0, 23.0, -31.0, -2.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1483, 64.0, 23.0, -31.0, -2.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1483, 64.0, 23.0, -31.0, -2.0),
-    // 84-87: Cottage A – s1=0(grass), s2=1484
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1484, 38.0, 40.0, -17.0, -9.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1484, 38.0, 40.0, -17.0, -9.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1484, 38.0, 40.0, -17.0, -9.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1484, 38.0, 40.0, -17.0, -9.0),
-    // 88-91: Cottage B – s1=0(grass), s2=1485
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1485, 32.0, 40.0, -19.0, -9.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1485, 32.0, 40.0, -19.0, -9.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1485, 32.0, 40.0, -19.0, -9.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1485, 32.0, 40.0, -19.0, -9.0),
-    // 92-95: Cobertizo – s1=0(grass), s2=1486
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1486, 62.0, 18.0, -30.0, 7.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1486, 62.0, 18.0, -30.0, 7.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1486, 62.0, 18.0, -30.0, 7.0),
-    house_spec(0, 0.0, 0.0, 0.0, 0.0, 1486, 62.0, 18.0, -30.0, 7.0),
-    // 96: Casa pequeña tipo A – s1=1491, s2=1492
-    house_spec(1491, 64.0, 34.0, -31.0, -3.0, 1492, 30.0, 28.0, -17.0, -5.0),
-    // 97: Casa pequeña tipo B – s1=1493, s2=1494
-    house_spec(1493, 64.0, 34.0, -31.0, -3.0, 1494, 28.0, 27.0, -14.0, -7.0),
-    // 98: Casa pequeña tipo C – s1=1487, s2=1488
-    house_spec(1487, 64.0, 34.0, -31.0, -3.0, 1488, 26.0, 28.0, -18.0, -5.0),
-    // 99: Casa pequeña tipo D – s1=1489, s2=1490
-    house_spec(1489, 64.0, 34.0, -31.0, -3.0, 1490, 26.0, 28.0, -8.0, -4.0),
-    // 100-103: Cottage con camino – s1=1495, s2=1496
-    house_spec(
-        1495, 64.0, 34.0, -31.0, -3.0, 1496, 26.0, 29.0, -14.0, -10.0,
-    ),
-    house_spec(
-        1495, 64.0, 34.0, -31.0, -3.0, 1496, 26.0, 29.0, -14.0, -10.0,
-    ),
-    house_spec(
-        1495, 64.0, 34.0, -31.0, -3.0, 1496, 26.0, 29.0, -14.0, -10.0,
-    ),
-    house_spec(
-        1495, 64.0, 34.0, -31.0, -3.0, 1496, 26.0, 29.0, -14.0, -10.0,
-    ),
-    // 104: Casa con tienda – s1=1499, s2=1500
-    house_spec(1499, 64.0, 31.0, -31.0, 0.0, 1500, 36.0, 28.0, -12.0, -9.0),
-    // 105: Townhouse alta – s1=1574, s2=1575
-    house_spec(
-        1574, 64.0, 34.0, -31.0, -3.0, 1575, 32.0, 27.0, -17.0, -11.0,
-    ),
-    // 106: Tienda A – s1=1511, s2=1512
-    house_spec(1511, 64.0, 34.0, -31.0, -3.0, 1512, 36.0, 28.0, -18.0, -8.0),
-    // 107: Tienda B – s1=1517, s2=1518
-    house_spec(1517, 64.0, 34.0, -31.0, -3.0, 1518, 32.0, 27.0, -12.0, -9.0),
-    // 108-109: Tienda C – s1=1522, s2=1523
-    house_spec(
-        1522, 64.0, 34.0, -31.0, -3.0, 1523, 40.0, 38.0, -19.0, -18.0,
-    ),
-    house_spec(
-        1522, 64.0, 34.0, -31.0, -3.0, 1523, 40.0, 38.0, -19.0, -18.0,
-    ),
-    // 110-111: Casa con árboles – s1=1528, s2=1529
-    house_spec(
-        1528, 64.0, 35.0, -31.0, -4.0, 1529, 45.0, 46.0, -22.0, -20.0,
-    ),
-    house_spec(
-        1528, 64.0, 35.0, -31.0, -4.0, 1529, 45.0, 46.0, -22.0, -20.0,
-    ),
-    // 112-113: Casa con torre – s1=1534, s2=1535
-    house_spec(
-        1534, 64.0, 31.0, -31.0, 0.0, 1535, 53.0, 102.0, -27.0, -75.0,
-    ),
-    house_spec(
-        1534, 64.0, 31.0, -31.0, 0.0, 1535, 53.0, 102.0, -27.0, -75.0,
-    ),
-    // 114-115: Casa con aguja – s1=1550, s2=1551
-    house_spec(1550, 64.0, 31.0, -31.0, 0.0, 1551, 56.0, 97.0, -25.0, -69.0),
-    house_spec(1550, 64.0, 31.0, -31.0, 0.0, 1551, 56.0, 97.0, -25.0, -69.0),
-    // 116-117: Oficina moderna A – s1=1536, s2=1537
-    house_spec(
-        1536, 64.0, 38.0, -31.0, -7.0, 1537, 66.0, 71.0, -32.0, -40.0,
-    ),
-    house_spec(
-        1536, 64.0, 38.0, -31.0, -7.0, 1537, 66.0, 71.0, -32.0, -40.0,
-    ),
-    // 118-119: Oficina moderna B – s1=1538, s2=1539
-    house_spec(
-        1538, 64.0, 36.0, -31.0, -5.0, 1539, 66.0, 87.0, -32.0, -56.0,
-    ),
-    house_spec(
-        1538, 64.0, 36.0, -31.0, -5.0, 1539, 66.0, 87.0, -32.0, -56.0,
-    ),
-    // 120-123: Bloques curvos – s1=1544, s2=1545
-    house_spec(1544, 64.0, 31.0, -31.0, 0.0, 1545, 62.0, 83.0, -30.0, -55.0),
-    house_spec(1544, 64.0, 31.0, -31.0, 0.0, 1545, 62.0, 83.0, -30.0, -55.0),
-    house_spec(1544, 64.0, 31.0, -31.0, 0.0, 1545, 62.0, 83.0, -30.0, -55.0),
-    house_spec(1544, 64.0, 31.0, -31.0, 0.0, 1545, 62.0, 83.0, -30.0, -55.0),
-    // 124-127: Bloques modernos – s1=1552, s2=1553
-    house_spec(1552, 64.0, 31.0, -31.0, 0.0, 1553, 54.0, 53.0, -25.0, -24.0),
-    house_spec(1552, 64.0, 31.0, -31.0, 0.0, 1553, 54.0, 53.0, -25.0, -24.0),
-    house_spec(1552, 64.0, 31.0, -31.0, 0.0, 1553, 54.0, 53.0, -25.0, -24.0),
-    house_spec(1552, 64.0, 31.0, -31.0, 0.0, 1553, 54.0, 53.0, -25.0, -24.0),
-];
+/// `s1 = 0` → solo hierba base; sprites en `house_s{id}.png`.
+pub use house_draw_data_generated::HOUSE_DRAW_DATA;
 
 /// Devuelve el nombre de archivo (relativo a `assets/opengfx/tiles/`) para un sprite de casa.
 /// Usa el naming genérico `house_s{id}.png` para todos los sprites extraídos.
@@ -386,21 +125,54 @@ pub fn house_sprite_filename(sprite_id: u32) -> String {
     format!("house_s{sprite_id}.png")
 }
 
+/// Etapa de obra para dibujo (`GetHouseBuildingStage` en `town_map.h`).
+///
+/// - `m3` bit 7 set (`IsHouseCompleted`): etapa **3** (terminado; `m5` guarda edad).
+/// - Si no: bits 4..3 de `m5` (`GB(m5, 3, 2)`); bits 2..0 = contador de obra.
+#[must_use]
+pub fn house_building_stage_from_tile(m5: u8, m3: u8) -> usize {
+    const TOWN_HOUSE_COMPLETED: usize = 3;
+    if m3 & 0x80 != 0 {
+        TOWN_HOUSE_COMPLETED
+    } else {
+        usize::from((m5 >> 3) & 0x3).min(TOWN_HOUSE_COMPLETED)
+    }
+}
+
+/// HouseID ≥ este valor son casas NewGRF en OpenTTD (`house.h`).
+pub const NEW_HOUSE_OFFSET: u16 = 110;
+
+/// Casas originales con filas en `_town_draw_tile_data` (0..=109).
+pub const ORIGINAL_HOUSE_COUNT: usize = NEW_HOUSE_OFFSET as usize;
+
+/// HouseID efectivo para [`HOUSE_DRAW_DATA`] sin cargar NewGRF (sustituto `% 110`).
+#[must_use]
+pub fn house_id_for_draw_table(clean_house_id: u16) -> usize {
+    let id = usize::from(clean_house_id & 0xFFF);
+    if id >= ORIGINAL_HOUSE_COUNT {
+        id % ORIGINAL_HOUSE_COUNT
+    } else {
+        id
+    }
+}
+
 /// Índice en [`HOUSE_DRAW_DATA`] para una casa.
 ///
 /// OpenTTD: `house_id * 16 + TileHash2Bit(x,y) * 4 + building_stage`.
-/// La tabla local tiene **8** tipos × **16** filas (variante hash × etapa).
-/// Usamos etapa **3** (edificio terminado) y hash 2-bit desde coordenadas de tesela.
 #[must_use]
-pub fn house_draw_data_index_for_tile(clean_house_id: u16, tx: i32, ty: i32) -> usize {
-    const ROWS_PER_TYPE: usize = 16;
-    const TYPE_COUNT: usize = HOUSE_DRAW_DATA.len() / ROWS_PER_TYPE; // 8
-    const FINISHED_STAGE: usize = 3;
+pub fn house_draw_data_index_for_tile(
+    clean_house_id: u16,
+    tx: i32,
+    ty: i32,
+    building_stage: usize,
+) -> usize {
+    const ROWS_PER_HOUSE: usize = 16;
+    const MAX_STAGE: usize = 3;
 
-    let house_type = usize::from(clean_house_id) / ROWS_PER_TYPE;
+    let house_id = house_id_for_draw_table(clean_house_id);
     let hash2 = tile_hash_2bit(tx, ty);
-    let idx = house_type.min(TYPE_COUNT - 1) * ROWS_PER_TYPE + hash2 * 4 + FINISHED_STAGE;
-    idx.min(HOUSE_DRAW_DATA.len() - 1)
+    let stage = building_stage.min(MAX_STAGE);
+    house_id * ROWS_PER_HOUSE + hash2 * 4 + stage
 }
 
 /// Aproximación de `TileHash2Bit` (0..3) para variante visual por tesela.
@@ -496,26 +268,81 @@ pub fn rail_trackbits_for_render(map: &Map, pos: TileCoord, mw: u32, mh: u32) ->
 
 #[cfg(test)]
 mod house_draw_index_tests {
-    use super::{house_draw_data_index_for_tile, tile_hash_2bit};
+    use super::{
+        HOUSE_DRAW_DATA, ORIGINAL_HOUSE_COUNT, house_building_stage_from_tile,
+        house_draw_data_index_for_tile, tile_hash_2bit,
+    };
 
     #[test]
     fn house_type_zero_uses_finished_stage_row() {
         let h = tile_hash_2bit(0, 0);
-        assert_eq!(house_draw_data_index_for_tile(0, 0, 0), h * 4 + 3);
+        assert_eq!(house_draw_data_index_for_tile(0, 0, 0, 3), h * 4 + 3);
     }
 
     #[test]
-    fn house_type_one_offsets_by_sixteen_rows() {
+    fn house_id_sixteen_offsets_by_sixteen_times_sixteen() {
         let h = tile_hash_2bit(5, 2);
-        assert_eq!(house_draw_data_index_for_tile(16, 5, 2), 16 + h * 4 + 3);
+        assert_eq!(
+            house_draw_data_index_for_tile(16, 5, 2, 3),
+            16 * 16 + h * 4 + 3
+        );
     }
 
     #[test]
-    fn high_house_type_clamps_to_last_band() {
+    fn newgrf_house_id_uses_modulo_fallback() {
+        let h = tile_hash_2bit(1, 1);
         assert_eq!(
-            house_draw_data_index_for_tile(999, 1, 1),
-            house_draw_data_index_for_tile(112, 1, 1)
+            house_draw_data_index_for_tile(128, 1, 1, 3),
+            house_draw_data_index_for_tile(18, 1, 1, 3)
         );
+        assert_eq!(128 % ORIGINAL_HOUSE_COUNT, 18);
+        assert_eq!(
+            house_draw_data_index_for_tile(128, 1, 1, 3),
+            18 * 16 + h * 4 + 3
+        );
+    }
+
+    #[test]
+    fn stadium_draw_row_uses_stadium_ground_sprite() {
+        let spec = &HOUSE_DRAW_DATA[320];
+        assert_eq!(spec.s1, 1479, "HouseID 20 fila 0: suelo SPR_GRND_STADIUM_N");
+        assert_eq!(spec.s2, 0);
+    }
+
+    #[test]
+    fn park_row_may_use_grass_only_without_building_overlay() {
+        // Parques / suelo-only: s1=0 (hierba) y s2=0 es intencional en town_land.h, no un bug.
+        let spec = &HOUSE_DRAW_DATA[144];
+        assert_eq!(spec.s1, 0);
+        assert_eq!(spec.s2, 0);
+    }
+
+    #[test]
+    fn building_stages_shift_row_within_house_band() {
+        let tx = 7;
+        let ty = 11;
+        let h = tile_hash_2bit(tx, ty);
+        let base = h * 4;
+        for stage in 0..=3 {
+            assert_eq!(
+                house_draw_data_index_for_tile(0, tx, ty, stage),
+                base + stage
+            );
+        }
+    }
+
+    #[test]
+    fn house_building_stage_completed_via_m3_bit7() {
+        assert_eq!(house_building_stage_from_tile(0, 0x80), 3);
+        assert_eq!(house_building_stage_from_tile(200, 0x80), 3);
+    }
+
+    #[test]
+    fn house_building_stage_under_construction_from_m5() {
+        assert_eq!(house_building_stage_from_tile(0x00, 0), 0);
+        assert_eq!(house_building_stage_from_tile(0x08, 0), 1);
+        assert_eq!(house_building_stage_from_tile(0x10, 0), 2);
+        assert_eq!(house_building_stage_from_tile(0x18, 0), 3);
     }
 }
 

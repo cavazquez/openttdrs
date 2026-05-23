@@ -170,6 +170,7 @@ MAGIC_NONE = b"OTTN"
 
 SLV_INCREASE_HOUSE_LIMIT = 348
 MP_HOUSE = 3
+NEW_HOUSE_OFFSET = 110  # house.h — HouseID ≥110 son NewGRF
 MP_WATER = 6
 
 # INDY (CH_ARRAY): offset del byte ``Industry.type`` dentro del objeto Industry
@@ -342,11 +343,16 @@ def analyze_save(raw: bytes) -> dict:
 
     hist: dict[str, int] = {}
     n_house = 0
+    n_house_newgrf = 0
+    max_house_id = 0
     for i in range(expected):
         if ((mapt[i] >> 4) & 0xF) != MP_HOUSE:
             continue
         n_house += 1
-        hid = struct.unpack_from("<H", m8_data, i * 2)[0]
+        hid = struct.unpack_from("<H", m8_data, i * 2)[0] & 0xFFF
+        max_house_id = max(max_house_id, hid)
+        if hid >= NEW_HOUSE_OFFSET:
+            n_house_newgrf += 1
         key = str(hid)
         hist[key] = hist.get(key, 0) + 1
 
@@ -375,6 +381,8 @@ def analyze_save(raw: bytes) -> dict:
         "house": {
             "tiles": n_house,
             "unique_m8": len(hist),
+            "max_m8": max_house_id,
+            "newgrf_tiles": n_house_newgrf,
             "m8_histogram": {k: hist[k] for k in sorted(hist, key=int)},
         },
         "road": {

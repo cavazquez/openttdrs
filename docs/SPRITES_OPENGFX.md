@@ -93,8 +93,8 @@ algunas costas conservan el `height/yrel` del NFO y por eso se posicionan con
 
 | Archivo extraído | Sprite ID | Descripción |
 |-----------------|-----------|-------------|
-| `grass.png` | 3924 | Prado liso (suelo principal) |
-| `grass_rough.png` | 3925 | Prado rugoso (Forest, CoalField con tinte) |
+| `grass.png` | 3981 | Hierba plana (`terrain_grass.png`, alias tras `crop_by_id`) |
+| `grass_rough.png` | 4000 | Prado rugoso (`terrain_rough.png`; bosque, carbón, industria) |
 | `water.png` | ~3984 | Agua (azul) |
 | `shore_0.png` … `shore_7.png` | 4062–4069 (`SPR_SHORE_BASE`) | Costa: **un** sprite según pendiente en teselas Coast, no máscara por vecinos |
 | `road_ty.png` | 1332 (`SPR_ROAD_Y`) | Recorte “Y” en OpenGFX; en el cliente se usa para `RoadDir::Tx` |

@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TILES_DIR = REPO_ROOT / "assets" / "opengfx" / "tiles"
 CLIENT_SPRITES = REPO_ROOT / "crates" / "openttdrs-client" / "src" / "sprites"
 RAIL_RS = CLIENT_SPRITES / "rail.rs"
+HOUSE_GFX = REPO_ROOT / "crates" / "openttdrs-client" / "src" / "sprites" / "house_draw_data_generated.rs"
 SPRITES_RS = REPO_ROOT / "crates" / "openttdrs-client" / "src" / "sprites.rs"
 INDUSTRY_GFX = CLIENT_SPRITES / "industry_gfx_data_generated.rs"
 FIXTURES = [
@@ -125,11 +126,10 @@ def rail_sprite_ids_for_preload() -> set[int]:
 
 
 def house_sprite_ids() -> set[int]:
-    text = SPRITES_RS.read_text(encoding="utf-8")
-    # Bloque HOUSE_DRAW_DATA: campos s1 / s2 numéricos
+    text = HOUSE_GFX.read_text(encoding="utf-8")
     ids: set[int] = set()
     for key in ("s1", "s2"):
-        for m in re.finditer(rf"{key}:\s*(\d+)", text):
+        for m in re.finditer(rf"{key}: (\d+)", text):
             v = int(m.group(1))
             if v != 0:
                 ids.add(v)

@@ -506,11 +506,31 @@ HouseID = m8  (u16, little-endian)
 El byte `m5` en MP_HOUSE guarda otras cosas (etapa de construcción, etc.), **no** el
 HouseID.
 
+### Etapa de construcción (`m3` + `m5`)
+
+OpenTTD (`town_map.h`: `IsHouseCompleted`, `GetHouseBuildingStage`):
+
+| Campo | Uso en `MP_HOUSE` |
+|-------|-------------------|
+| `m3` bit 7 | **1** = edificio terminado; **0** = en obra |
+| `m5` (terminado) | Edad de la casa en años (0–255) |
+| `m5` bits 4..3 (en obra) | Etapa de construcción **0..3** para el sprite |
+| `m5` bits 2..0 (en obra) | Contador de obra (avance entre etapas) |
+
+Índice en `_town_draw_tile_data`:
+
+```text
+house_id * 16 + TileHash2Bit(x, y) * 4 + GetHouseBuildingStage()
+```
+
+En openttdrs: [`house_building_stage_from_tile`](../../crates/openttdrs-client/src/sprites.rs)
+decodifica la etapa; si `m3 & 0x80 != 0` devuelve **3** aunque `m5` sea la edad.
+
 ### Implementación en openttdrs
 
 El campo `m8: u16` en `Tile` se lee desde el formato `.ottdmap` v3. La tabla
-`HOUSE_DRAW_DATA` en `sprites.rs` cubre los **128 tipos de casa del clima temperate**,
-derivada directamente de `_town_draw_tile_data` en `table/town_land.h` de OpenTTD.
+`HOUSE_DRAW_DATA` (generada desde `town_land.h`) cubre las **110** casas originales
+(0..109) × **16** filas cada una (`scripts/gen_house_draw_data.py`).
 
 Cada entrada tiene dos componentes (stage 3 = edificio completado):
 - **`s1`**: sprite de suelo/base (`0` = usar grass por defecto)
@@ -519,14 +539,23 @@ Cada entrada tiene dos componentes (stage 3 = edificio completado):
 Los sprites se cargan como `house_s{sprite_id}.png` (67 sprites únicos, IDs 1311–1575 + 4569).
 
 ```rust
-// main.rs
-let spec_idx = house_id % HOUSE_DRAW_DATA.len();  // 128 entradas
-let spec = &HOUSE_DRAW_DATA[spec_idx];
-// s1 = ground overlay si != 0, s2 = building overlay
+// Índice OpenTTD (110 casas × 16 filas):
+let stage = house_building_stage_from_tile(tile.m5, tile.m3);
+let idx = house_draw_data_index_for_tile(tile.m8 & 0xFFF, tx, ty, stage);
+let spec = &HOUSE_DRAW_DATA[idx];
+// s1 = suelo/base (0 = hierba del mapa); s2 = edificio (0 = sin overlay)
 ```
 
-Para HouseIDs ≥ 128 (climas ártico/tropical o NewGRF) se aplica `house_id % 128`
-como fallback razonable hasta implementar esos climas.
+Los sprites se cargan como `house_s{sprite_id}.png`. Constantes `SPR_*` de `town_land.h`
+(estadio `1479–1482`, concreto `1420`, toyland `4675–4676`) se resuelven vía `sprites.h`
+en `scripts/gen_house_draw_data.py`.
+
+**Parques / suelo-only:** filas con `s1 == 0` y `s2 == 0` son intencionales (solo hierba).
+
+**Estadio:** HouseID **20–23** (climas); suelo N/E/W/S = sprites **1479–1482**.
+
+Para HouseIDs **≥ 110** (NewGRF) el cliente aplica `house_id % 110` como sustituto
+visual hasta cargar specs NewGRF (`subst_id` en OpenTTD).
 
 ### Tabla de tipos de casa temperate (stage 3)
 
@@ -831,7 +860,7 @@ Bajo `reference/openttd-upstream/src/`:
 | `track_type.h`       | Constantes `TRACK_BIT_*`                             |
 | `industry_map.h`     | `GetCleanIndustryGfx` (9 bits desde m5+m6)          |
 | `clear_map.h`        | `GetClearGround`, `GetClearDensity`                  |
-| `house_map.h`        | `GetHouseType` (HouseID desde m8)                    |
+| `town_map.h`         | `GetCleanHouseType`, `GetHouseBuildingStage`, `IsHouseCompleted` |
 | `object_map.h`       | `GetObjectType` (ObjectType desde array OBJS)        |
 | `tunnelbridge_map.h` | Dirección y tipo de transporte                       |
 | `table/town_land.h`  | `_town_draw_tile_data`: sprite por HouseID y stage   |

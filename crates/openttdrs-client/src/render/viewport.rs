@@ -67,6 +67,20 @@ pub fn large_map_viewport_cull_enabled(mw: u32, mh: u32) -> bool {
     mw.saturating_mul(mh) >= LARGE_MAP_TILE_THRESHOLD && !env_flag("OPENTTDRS_MAP_VIEWPORT_OFF")
 }
 
+/// Zoom ortográfico inicial: mapas cargados pequeños (p. ej. JSON 12×8) encuadran todo el mapa;
+/// `.ottdmap` grandes mantienen ~64 teselas visibles (culling por viewport).
+#[must_use]
+pub fn initial_camera_span_tiles(mw: u32, mh: u32, loaded_from_file: bool) -> f32 {
+    let span = mw.max(mh).max(1) as f32;
+    if loaded_from_file && large_map_viewport_cull_enabled(mw, mh) {
+        64.0
+    } else if loaded_from_file {
+        span
+    } else {
+        mw as f32
+    }
+}
+
 /// Estima el rectángulo de teselas bajo el viewport ortográfico 2D.
 #[must_use]
 pub fn ortho_visible_tile_bounds(
@@ -153,6 +167,16 @@ mod tests {
         assert!(b.tx1 <= 64);
         assert!(b.ty1 <= 64);
         assert!(b.tile_count() <= 64 * 64);
+    }
+
+    #[test]
+    fn initial_camera_span_small_loaded_map_fits_whole_map() {
+        assert_eq!(initial_camera_span_tiles(12, 8, true), 12.0);
+    }
+
+    #[test]
+    fn initial_camera_span_large_loaded_map_uses_default_window() {
+        assert_eq!(initial_camera_span_tiles(256, 256, true), 64.0);
     }
 
     #[test]

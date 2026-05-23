@@ -2,6 +2,7 @@ use std::collections::{HashSet, VecDeque};
 
 use openttdrs_core::{IndustryKind, IndustrySpec, Map, TileCoord, TileKind};
 
+use crate::sprites::{IndustryGfxStatus, industry_gfx_status};
 use crate::state::SimWorld;
 use crate::state::bootstrap::industry_group_from_gfx;
 
@@ -117,6 +118,12 @@ pub(crate) fn spec_label(spec: IndustrySpec) -> &'static str {
 }
 
 pub(crate) fn format_panel_title(map: &Map, sim: &SimWorld, focus: TileCoord) -> String {
+    if let Some(tile) = map.get(focus) {
+        let gfx = industry_gfx(&tile);
+        if industry_gfx_status(gfx) == IndustryGfxStatus::OutOfRange {
+            return format!("Industria - gfx {gfx} (sin sprite)");
+        }
+    }
     if let Some((gfx_label, _coord, _gfx)) = dominant_gfx_for_component(map, focus)
         && gfx_label != "Unknown gfx"
     {

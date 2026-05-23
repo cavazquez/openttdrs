@@ -79,6 +79,49 @@ fn loads_sp3_visual_checklist_layout() {
     let house = tile(&map, 1, 9);
     assert_eq!(house.kind, TileKind::House);
     assert_eq!(house.m8 & 0xFFF, 0);
+    assert_eq!(house.m3, 0x80);
+
+    // Climas / HouseID altos (y=0)
+    assert_eq!(tile(&map, 1, 0).m8 & 0xFFF, 0);
+    assert_eq!(tile(&map, 5, 0).m8 & 0xFFF, 44);
+    assert_eq!(tile(&map, 9, 0).m8 & 0xFFF, 88);
+    assert_eq!(tile(&map, 13, 0).m8 & 0xFFF, 107);
+    assert_eq!(tile(&map, 17, 0).m8 & 0xFFF, 128);
+
+    // Templado variado (y=2)
+    assert_eq!(tile(&map, 1, 2).m8 & 0xFFF, 16);
+    assert_eq!(tile(&map, 5, 2).m8 & 0xFFF, 20);
+    assert_eq!(tile(&map, 9, 2).m8 & 0xFFF, 24);
+    assert_eq!(tile(&map, 13, 2).m8 & 0xFFF, 32);
+    assert_eq!(tile(&map, 17, 2).m8 & 0xFFF, 39);
+
+    // Más climas (y=6)
+    assert_eq!(tile(&map, 1, 6).m8 & 0xFFF, 70);
+    assert_eq!(tile(&map, 5, 6).m8 & 0xFFF, 78);
+    assert_eq!(tile(&map, 9, 6).m8 & 0xFFF, 82);
+    assert_eq!(tile(&map, 13, 6).m8 & 0xFFF, 66);
+    assert_eq!(tile(&map, 17, 6).m8 & 0xFFF, 109);
+
+    // Etapas de obra (y=1): HouseID 0
+    let s0 = tile(&map, 1, 1);
+    assert_eq!(s0.kind, TileKind::House);
+    assert_eq!(s0.m3 & 0x80, 0);
+    assert_eq!(s0.m5 & 0x18, 0);
+    let s1 = tile(&map, 5, 1);
+    assert_eq!(s1.m5 & 0x18, 8);
+    let s2 = tile(&map, 9, 1);
+    assert_eq!(s2.m5 & 0x18, 16);
+    let s3 = tile(&map, 13, 1);
+    assert_eq!(s3.m5 & 0x18, 24);
+    let done = tile(&map, 17, 1);
+    assert_eq!(done.m3, 0x80);
+
+    // Obras HouseID 16 (y=8)
+    assert_eq!(tile(&map, 1, 8).m8 & 0xFFF, 16);
+    assert_eq!(tile(&map, 1, 8).m5 & 0x18, 0);
+    assert_eq!(tile(&map, 13, 8).m5 & 0x18, 24);
+    assert_eq!(tile(&map, 17, 8).m3, 0x80);
+
     let truck_st = tile(&map, 3, 9);
     assert_eq!(truck_st.kind, TileKind::Station);
     assert_eq!((truck_st.m6 >> 3) & 0x0F, 2);
@@ -90,6 +133,19 @@ fn loads_sp3_visual_checklist_layout() {
     assert_eq!((rail_st.m6 >> 3) & 0x0F, 0);
     assert_eq!(rail_st.m5 & 1, 1);
     assert_eq!(tile(&map, 9, 9).kind, TileKind::Industry);
+
+    // Industrias P3 (y=10): paso 2 en x, gfx 9 bits
+    fn industry_gfx9(t: &openttdrs_core::Tile) -> u16 {
+        u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8)
+    }
+    assert_eq!(tile(&map, 1, 10).kind, TileKind::Industry);
+    assert_eq!(industry_gfx9(&tile(&map, 1, 10)), 0);
+    assert_eq!(industry_gfx9(&tile(&map, 3, 10)), 42);
+    assert_eq!(industry_gfx9(&tile(&map, 5, 10)), 116);
+    assert_eq!(industry_gfx9(&tile(&map, 7, 10)), 119);
+    assert_eq!(industry_gfx9(&tile(&map, 9, 10)), 120);
+    assert_eq!(industry_gfx9(&tile(&map, 11, 10)), 256);
+    assert_eq!(tile(&map, 2, 10).kind, TileKind::Grass);
 
     // Agua y costa (y=11)
     assert_eq!(tile(&map, 3, 11).kind, TileKind::Water);

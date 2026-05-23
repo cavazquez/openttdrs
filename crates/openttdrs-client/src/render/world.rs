@@ -9,6 +9,7 @@ use crate::config::{env_flag, env_string};
 use crate::iso::{
     ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, shore_png_index, shore_tileh_for_draw_shore,
 };
+use crate::render::viewport::initial_camera_span_tiles;
 use crate::render::viewport::{VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES};
 use crate::render::{
     IndustryPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, RenderGrid,
@@ -134,7 +135,7 @@ pub(crate) fn setup(
     let cam_x = ((mh as i32 - 1) - (mw as i32 - 1)) as f32 / 2.0 * ISO_HW;
     let cam_y = -((mw as i32 - 1) + (mh as i32 - 1)) as f32 / 2.0 * ISO_QH - TILE_HALF_H;
 
-    let target_tiles_wide: f32 = if sim.loaded_file { 64.0 } else { mw as f32 };
+    let target_tiles_wide = initial_camera_span_tiles(mw, mh, sim.loaded_file);
     let cam_scale = (target_tiles_wide * ISO_HW * 2.0 / 1280.0).max(1.0);
 
     commands.spawn((
@@ -327,7 +328,7 @@ fn sync_camera_for_sim(
     let (mw, mh) = sim.state.map.dimensions();
     let cam_x = ((mh as i32 - 1) - (mw as i32 - 1)) as f32 / 2.0 * ISO_HW;
     let cam_y = -((mw as i32 - 1) + (mh as i32 - 1)) as f32 / 2.0 * ISO_QH - TILE_HALF_H;
-    let target_tiles_wide: f32 = if sim.loaded_file { 64.0 } else { mw as f32 };
+    let target_tiles_wide = initial_camera_span_tiles(mw, mh, sim.loaded_file);
     let cam_scale = (target_tiles_wide * ISO_HW * 2.0 / 1280.0).max(1.0);
     let Ok((mut tf, mut proj)) = q_cam.single_mut() else {
         return;

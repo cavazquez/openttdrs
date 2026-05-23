@@ -80,6 +80,7 @@ do_py_compile() {
     python3 -m py_compile scripts/verify_parse_sav_water_m5.py
     python3 -m py_compile scripts/gen_tnbp_fixture_ottdmap.py
     python3 -m py_compile scripts/audit_sp3_assets.py
+    python3 -m py_compile scripts/gen_house_draw_data.py
     info "Python OK ✓"
 }
 

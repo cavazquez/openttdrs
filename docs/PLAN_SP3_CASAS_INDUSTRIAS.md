@@ -3,9 +3,8 @@
 Documento de **seguimiento** para cerrar el hueco SP3.4 descrito en
 [PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md) y [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md).
 
-**Estado (2026-05):** tablas y PNG base listos (templado + 120 gfx industriales estadio 3).
-Queda **fidelidad en mapas reales**: etapas de obra, HouseID altos, gfx fuera de rango y
-calibración fina.
+**Estado (2026-05):** P1–P6 completados (casas + industrias en checklist y tablas upstream).
+Validar en partidas reales grandes sigue siendo útil; NewGRF industria gfx≥120 queda fuera de alcance.
 
 **Relacionado:** [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) §8–10,
 [SPRITES_OPENGFX_COMPLETO.md](SPRITES_OPENGFX_COMPLETO.md), [INDUSTRIAS_OPENGFX.md](INDUSTRIAS_OPENGFX.md),
@@ -20,7 +19,7 @@ En openttdrs **no** se dibuja un bloque de color sustituto. El comportamiento ac
 | Situación | Efecto visual |
 |-----------|----------------|
 | Capa con `sprite_id == 0` o PNG no cargado | Capa **omitida** (hierba/rough debajo) |
-| Industria `gfx ≥ 120` o sin fila en tabla | Solo **hierba** (sin overlay industrial) |
+| Industria `gfx ≥ 120` o sin fila en tabla | ~~Solo **hierba**~~ → **rough** + `warn!` + HUD `⚠gfx≥120` |
 | Fila industrial con dims `64×48/-32/-32` sin PNG | “Fallback genérico” lógico (**0 filas** así hoy en `INDUSTRY_GFX_DATA`) |
 | Casa: etapa ignorada (siempre 3) | Obras en construcción se ven **terminadas** |
 | Casa: `HouseID ≥ 128` | Tipo clamp al 7 → edificio **incorrecto** (no templado/árctico/NewGRF) |
@@ -39,7 +38,7 @@ Objetivo: que un `.ottdmap` exportado de un save real use el **mismo criterio** 
 
 Cliente (segunda pasada, tras agua — Z-order):
   spawn_house_tile     → HOUSE_DRAW_DATA[índice]
-  spawn_industry_tile  → INDUSTRY_GFX_DATA[gfx]
+  spawn_industry_tile  → INDUSTRY_GFX_DATA[gfx*4+stage(m1)]
 ```
 
 | Componente | Archivo |
@@ -73,95 +72,83 @@ Marcado en SP3.4 como base; **no** implica mapas reales perfectos:
 
 ## 4. Roadmap por prioridad (seguir en este orden)
 
-### P1 — Etapas de construcción de casas (mayor impacto / menor alcance)
+### P1 — Etapas de construcción de casas ✅
 
-**Problema:** `house_draw_data_index_for_tile` usa `FINISHED_STAGE = 3` siempre.
+**Problema:** `house_draw_data_index_for_tile` usaba etapa **3** fija.
 
-**OpenTTD:** `house_id * 16 + TileHash2Bit(x,y) * 4 + GetHouseBuildingStage()`.
-
-**Tareas:**
-
-1. Documentar en [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) §10 qué bits de `m5`
-   en `MP_HOUSE` codifican la etapa (consultar `house_map.h` en upstream).
-2. Pasar `m5` (o etapa extraída) a `house_draw_data_index_for_tile` desde `spawn_house_tile`
-   (`land.rs` tiene acceso a `ctx.tile`).
-3. Clamp etapa 0..3; mantener hash 2-bit y `house_type = house_id / 16`.
-4. Tests en `sprites.rs` (`house_draw_index_tests`): etapas 0, 1, 2, 3 distintas para mismo `(tx,ty)`.
-
-**Criterio de aceptación:** en ciudad con obras en save real, andamios / etapas intermedias visibles;
-edificios terminados siguen igual (etapa 3).
-
-**PR sugerido:** 1 PR pequeño solo cliente + doc + test.
+**Hecho:** `house_building_stage_from_tile(m5, m3)` + etapa en índice; fixture y=1/y=8; tests en `sprites.rs`.
 
 ---
 
-### P2 — HouseID fuera de 0–127 (climas y NewGRF)
+### P2 — HouseID fuera de 0–127 (climas y NewGRF) ✅
 
-**Problema:** `house_type.min(7)` → IDs ≥ 128 se dibujan como tipo 7 (Large Office moderno).
+**Problema:** `house_type.min(7)` colapsaba IDs altos.
 
-**Tareas:**
-
-1. Inventariar HouseIDs en saves de prueba (`parse_sav.py` + histograma `m8` en `MP_HOUSE`).
-2. Opción A: ampliar `HOUSE_DRAW_DATA` con filas ártico/tropical desde `town_land.h`.
-3. Opción B (interina): mapeo explícito `house_id % 128` por **clima** documentado (peor que A).
-4. Actualizar `descargar_graficos.sh` si faltan `house_s*.png` de otros climas.
-
-**Criterio:** save ártico/tropical no muestra solo rascacielos del tipo 7.
-
-**PR sugerido:** 1–2 PR (datos + script + tabla).
+**Hecho:** `house_id_for_draw_table` → `% 110`; fixture y=0/y=6 con HouseIDs por clima.
 
 ---
 
-### P3 — Industrias con `gfx ≥ 120` o sin entrada
+### P3 — Industrias con `gfx ≥ 120` o sin entrada ✅
 
 **Problema:** `industry_gfx_entry(gfx)` → `None` → tesela de hierba sin aviso en release.
 
-**Tareas:**
+**Hecho (2026-05):**
 
-1. Contar `gfx` en `.ottdmap` reales por encima de 119.
-2. Extender generador/tablas o documentar límite y degradar a `rough` + log HUD (no silencio).
-3. Revisar filas 116–119 (muchas solo `ground_sprite_id` en trópico — válido en footprint).
+1. `MP_INDUSTRY` siempre usa terreno **rough** (también gfx≥120 / sin PNG).
+2. `log_industry_gfx_once` → `warn!` once en release; HUD muestra `⚠gfx≥120` / `⚠sin sprite`.
+3. Fixture checklist **y=10**: gfx 0, 42, 116, 119, 120, 256 — paso **2** en x (1 tile hierba entre casos).
+4. Límite documentado: tabla **120** filas (`INDUSTRY_GFX_TABLE_LEN`); extensión NewGRF = trabajo futuro.
 
 **Criterio:** ninguna tesela `MP_INDUSTRY` en checklist/partida típica queda como hierba plana sin explicación.
 
 ---
 
-### P4 — Calibración offsets industriales
+### P4 — Calibración offsets industriales ✅
 
-**Problema:** filas con macro `M(dx,dy,sx,sy)` + PNG pueden estar desplazadas (Farm, Factory, Coal Mine).
+**Problema:** filas con macro `M(dx,dy,sx,sy)` + PNG podían estar desplazadas (heurística `XREL_PER_W`).
 
-**Tareas:**
+**Hecho (2026-05):**
 
-1. `bash scripts/descargar_graficos.sh` (OpenGFX actual).
-2. `python3 scripts/gen_industry_gfx_data.py` — revisar salida `fallback=0`.
-3. Validación visual en checklist SP3 y en `assets/maps/mapa.ottdmap` de partida real.
-4. Ajuste manual por industria si hace falta (como paradas: delta por fila en generador).
+1. `scripts/nfo_sprite_meta.py` — offsets desde NFO + escala PNG (como paradas).
+2. `gen_industry_gfx_data.py` / `gen_house_draw_data.py` regenerados (`macro=0`, `fallback=0`).
+3. `IndustryGfxSprite` con campos **`ground_*`** separados del edificio; render/preview usan capa correcta.
+4. Tests: mina gfx0 (-16/-33 + suelo -31/0), chimenea gfx7 (-21/-34).
 
-**Criterio:** mina/fábrica/granja alineadas al rombo; sin “flotar” en tesela vecina.
+**Criterio:** mina/fábrica/granja alineadas al rombo; validar visual en checklist y partida real.
 
----
-
-### P5 — Etapas de obra industrial (0–2)
-
-**Problema:** `INDUSTRY_GFX_DATA` solo estadio **3** por tile (`gfx * 4 + 3` en upstream).
-
-**Tareas:**
-
-1. Extender `gen_industry_gfx_data.py` para filas `gfx*4+0..2` (como `industry_land.h`).
-2. Leer etapa desde `m5`/`m6` en `spawn_industry_tile` (misma fuente que OpenTTD).
-3. Precarga de sprites de obra en `assets.rs`.
-
-**Criterio:** industria en construcción en save no aparece ya terminada.
+**Seguimiento manual:** ajustes finos por industria en `CAL` del generador si algún PNG difiere del NFO upstream.
 
 ---
 
-### P6 — Casas especiales y huecos menores
+### P5 — Etapas de obra industrial (0–2) ✅
 
-**Tareas:**
+**Problema:** `INDUSTRY_GFX_DATA` solo tenía estadio **3** por `gfx` (`gfx * 4 + 3` en upstream).
 
-- Estadio y sprites 1479–1482 (en `descargar_graficos.sh` pero no en `HOUSE_DRAW_DATA`).
-- Filas `s2 == 0` / `s1 == 0` intencionales (parques) — documentar, no “arreglar”.
-- Alinear doc obsoleta en §10 de `TILES_Y_SAVEGAMES_OPENTTD.md` (`house_id % 128` en main.rs ya no aplica).
+**Hecho:**
+
+1. `gen_industry_gfx_data.py` genera **480 filas** (`gfx * 4 + stage`, stages 0–3).
+2. `industry_construction_stage_from_tile(m1)` + `industry_gfx_entry_for_tile(gfx, m1)` en `spawn_industry_tile`.
+3. Precarga automática vía iteración de `INDUSTRY_GFX_DATA` en `assets.rs` (sprites de obra incluidos).
+4. Fixture checklist **y=4**: gfx0 etapas 0–2 + terminada (mina carbón).
+5. Tras regenerar la tabla: `python3 scripts/crop_missing_industry_pngs.py` (o `./scripts/descargar_graficos.sh --8bpp`).
+
+**Criterio:** industria en construcción en save ya no aparece terminada.
+
+---
+
+### P6 — Casas especiales y huecos menores ✅
+
+**Problema:** `SPR_GRND_STADIUM_*` y otras constantes `SPR_*` en `town_land.h` se parseaban como **0**.
+
+**Hecho:**
+
+1. `gen_house_draw_data.py` resuelve `SPR_*` desde `reference/.../sprites.h` (estadio **1479–1482**, concreto **1420**, toyland **4675–4676**).
+2. `descargar_graficos.sh`: alias `house_s1479..1482` + `house_s1420`; loop `house_s{id}` cubre el resto.
+3. Fixture **y=4 x=17**: estadio HouseID **20**.
+4. Tests: fila 320 suelo estadio; fila parque `s1=s2=0` intencional.
+5. §10 de [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) alineado (sin `house_id % 128` obsoleto).
+
+**Nota:** filas `s1==0 && s2==0` en parques siguen siendo correctas (solo hierba).
 
 ---
 

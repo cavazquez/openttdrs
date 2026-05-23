@@ -697,23 +697,34 @@ crop_by_id(1311, "house_concrete_ground.png")
 crop_by_id(4569, "house_largeoffice_v2.png")
 
 # =============================================================================
-# CASAS – sprites por ID numérico para HOUSE_DRAW_DATA (HouseIDs 0-127)
-# Nombrados house_s{sprite_id}.png para lookup directo.
-# Cubre ground (s1) y building (s2) de los 128 tipos de casa temperate.
+# CASAS – house_s{sprite_id}.png para HOUSE_DRAW_DATA (110×16 filas)
+# Regenerar tabla: python3 scripts/gen_house_draw_data.py
 # =============================================================================
-for sid in [
-    # Ground sprites (s1)
-    1311, 1424, 1429, 1433, 1437, 1447, 1487, 1489, 1491, 1493,
-    1495, 1499, 1505, 1511, 1517, 1522, 1528, 1534, 1536, 1538,
-    1544, 1550, 1552, 1574,
-    # Building sprites (s2)
-    1423, 1425, 1428, 1432, 1436, 1442, 1446, 1450, 1453, 1454,
-    1455, 1456, 1457, 1460, 1463, 1466, 1469, 1472, 1475, 1478,
-    1483, 1484, 1485, 1486, 1488, 1490, 1492, 1494, 1496, 1500,
-    1506, 1512, 1518, 1523, 1529, 1535, 1537, 1539, 1545, 1551,
-    1553, 1575, 4569,
-]:
+def load_house_sprite_ids() -> list[int]:
+    root = Path(os.environ["OPENTTDRS_REPO_ROOT"])
+    gen = root / "crates" / "openttdrs-client" / "src" / "sprites" / "house_draw_data_generated.rs"
+    text = gen.read_text(encoding="utf-8")
+    ids = set(int(x) for x in re.findall(r"s1: (\d+)", text))
+    ids |= set(int(x) for x in re.findall(r"s2: (\d+)", text))
+    ids.discard(0)
+    return sorted(ids)
+
+for sid in load_house_sprite_ids():
     crop_by_id(sid, f"house_s{sid}.png")
+
+# Alias / respaldo cuando el PNG tiene otro nombre histórico en el script.
+for sid, src_name in (
+    (1479, "house_stadium_n.png"),
+    (1480, "house_stadium_e.png"),
+    (1481, "house_stadium_w.png"),
+    (1482, "house_stadium_s.png"),
+    (1420, "object_concrete.png"),
+):
+    dst = tiles_dir / f"house_s{sid}.png"
+    src = tiles_dir / src_name
+    if src.is_file() and (not dst.is_file() or dst.stat().st_size == 0):
+        shutil.copy2(src, dst)
+        print(f"  house_s{sid}.png (alias de {src_name})")
 
 # =============================================================================
 # ÁRBOLES (MP_TREES)
@@ -731,7 +742,7 @@ for i, sid in enumerate(tree_ids):
     crop_by_id(sid, f"tree_{i:02d}.png")
 
 # =============================================================================
-# INDUSTRIAS — IDs desde industry_gfx_data_generated.rs (suelo + edificio, estadio 3).
+# INDUSTRIAS — IDs desde industry_gfx_data_generated.rs (suelo + edificio, 4 estadios).
 # Regenerar tablas de offsets
 # scripts/gen_industry_gfx_data.py
 # scripts/gen_road_stop_gfx_data.py
@@ -837,42 +848,39 @@ crop_by_id(3097, "vehicle_bus_sw.png")
 crop_by_id(3098, "vehicle_bus_side.png")
 
 # =============================================================================
-# LEGACY (coords fijas para compatibilidad con código existente)
+# LEGACY (alias del cliente ← sprites NFO; evita recortes fijos con artefactos cian)
 # =============================================================================
-legacy = {
-    "grass":       (610, 13496, 64, 31),
-    "grass_rough": (562, 13640, 64, 31),
-    "water":       (402, 14392, 64, 31),
-    "truck":       (594, 12408,  8, 16),
+legacy_coords = {
+    "truck": (594, 12408, 8, 16),
     # Fallback para el cliente actual (usa vehicle_bus_sw.png).
-    "vehicle_bus_sw": (594, 12408,  8, 16),
+    "vehicle_bus_sw": (594, 12408, 8, 16),
 }
 
 if graphics_mode != "32bpp":
     sheet00 = sheets.get("ogfx1_base00.png") or sheets.get("ogfx1_base00.pcx")
-    for name, (x, y, w, h) in legacy.items():
+    for name, (x, y, w, h) in legacy_coords.items():
         if sheet00 is None:
             print(f"  (omitido {name}: sheet ogfx1_base00.(png|pcx) no encontrado)")
             continue
         crop = sheet00.crop((x, y, x + w, y + h))
         crop.save(tiles_dir / f"{name}.png")
         print(f"  {name}.png ({w}×{h})")
-else:
-    # Alias requeridos por el cliente actual también en modo 32bpp.
-    aliases = {
-        "terrain_grass.png": "grass.png",
-        "terrain_rough.png": "grass_rough.png",
-        "water_flat.png": "water.png",
-    }
-    for src, dst in aliases.items():
-        src_p = tiles_dir / src
-        dst_p = tiles_dir / dst
-        if not src_p.exists():
-            print(f"  (omitido alias {dst}: no existe {src})")
-            continue
-        img = Image.open(src_p).convert("RGBA")
-        img.save(dst_p)
-        print(f"  {dst} (alias de {src})")
+
+# grass / grass_rough / water: siempre desde crop_by_id (terrain_* / water_flat) + cleanup_speckles.
+terrain_aliases = {
+    "terrain_grass.png": "grass.png",
+    "terrain_rough.png": "grass_rough.png",
+    "water_flat.png": "water.png",
+}
+for src, dst in terrain_aliases.items():
+    src_p = tiles_dir / src
+    dst_p = tiles_dir / dst
+    if not src_p.is_file():
+        print(f"  (omitido alias {dst}: no existe {src})")
+        continue
+    img = Image.open(src_p).convert("RGBA")
+    img.save(dst_p)
+    print(f"  {dst} ← {src}")
 
 print(f"Sprites listos en {tiles_dir}/")
 PYEOF

@@ -69,7 +69,7 @@ pub enum TileKind {
 /// | `m1`  | MAP1 (chunk `MAPO`)  | Owner/índice de industria |
 /// | `m6`  | MAP6 (`MAPE`)  | bit 2 = bit 8 del gfx de industria (9 bits totales); StationType en MP_STATION |
 /// | `m8`  | MAP8 (`MAP8`)  | HouseID en MP_HOUSE (12 bits); RoadType tram en bits 6–11 en MP_ROAD (`road_map.h`) |
-/// | `m3`  | M3LO (byte bajo de `m3`) | v4+: bits 0–3 = tram track bits en carretera normal; 4–7 = owner tranvía |
+/// | `m3`  | M3LO (byte bajo de `m3`) | v4+: MP_HOUSE bit 7 = casa terminada; MP_ROAD bits 0–3 = tram track, 4–7 = owner tranvía |
 /// | `m2`  | MAP2 | v5+: índice town/station/industry según tipo de tesela |
 /// | `m7`  | MAP7 | v5+: reserva cruces, NewGRF en mapa, etc. |
 /// | `m3hi` | M3HI | v5+: byte **`m4()`** del mapa OpenTTD (`M3HI` en `map_sl.cpp`; señales: `GetSignalStates` en nibble alto) |

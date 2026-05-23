@@ -58,7 +58,7 @@ pub(crate) fn spawn_industry_template_preview(
             continue;
         };
         let ref_pos = iso(coord.x, coord.y);
-        if entry.ground_sprite_id != 0 {
+        if entry.ground_sprite_id != 0 && entry.ground_w > 0.0 && entry.ground_h > 0.0 {
             let img = asset_server.load::<Image>(format!(
                 "assets/opengfx/tiles/industry_{}.png",
                 entry.ground_sprite_id
@@ -71,12 +71,19 @@ pub(crate) fn spawn_industry_template_preview(
                     ..default()
                 },
                 Transform::from_translation(overlay_pos(
-                    ref_pos, entry.xrel, entry.yrel, entry.w, entry.h, base_z, 3.2, coord.x,
+                    ref_pos,
+                    entry.ground_xrel,
+                    entry.ground_yrel,
+                    entry.ground_w,
+                    entry.ground_h,
+                    base_z,
+                    3.2,
+                    coord.x,
                     coord.y,
                 )),
             ));
         }
-        if entry.sprite_id != 0 {
+        if entry.sprite_id != 0 && entry.w > 0.0 && entry.h > 0.0 {
             let img = asset_server.load::<Image>(format!(
                 "assets/opengfx/tiles/industry_{}.png",
                 entry.sprite_id

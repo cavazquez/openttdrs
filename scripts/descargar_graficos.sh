@@ -330,6 +330,18 @@ def dematte_cyan_transparency(img: Image.Image) -> Image.Image:
     src.putdata(data)
     return src
 
+def dematte_cc_blue_mask(img: Image.Image) -> Image.Image:
+    """OpenTTD CC recolour (0,0,255) → transparente en vehículos 32bpp sin pre-tintar."""
+    src = img.convert("RGBA")
+    data = []
+    for r, g, b, a in src.getdata():
+        if a > 0 and r == 0 and g == 0 and b == 255:
+            data.append((0, 0, 0, 0))
+        else:
+            data.append((r, g, b, a))
+    src.putdata(data)
+    return src
+
 # Cargar todos los sheets del prefijo en PNG o PCX (incluye .32.png).
 # grfcodec a veces deja `*.32.png` de 0 bytes; ignorarlos para no pisar atlas válidos.
 sheets: dict[str, Image.Image] = {}
@@ -414,6 +426,8 @@ def crop_by_id(sid: int, out_name: str) -> None:
         crop = cleanup_speckles(crop)
     if out_name.startswith("rail_platform_"):
         crop = dematte_cyan_transparency(crop)
+    if out_name.startswith("vehicle_"):
+        crop = dematte_cc_blue_mask(crop)
     out = tiles_dir / out_name
     crop.save(out)
     print(f"  {out_name} ({w}×{h} xrel={xr} yrel={yr}) ← sprite {sid} [{sheet_key}]")

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileCoord, TileKind, VehicleDirection};
+use openttdrs_core::{Map, TileCoord, TileKind};
 
 use super::{HEIGHT_PX, ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, tile_slope_and_min_z};
 
@@ -170,29 +170,6 @@ pub fn tile_pos_half(tx: i32, ty: i32, height: u8, layer: f32, half_h: f32) -> V
 #[inline]
 pub fn tile_pos(tx: i32, ty: i32, height: u8, layer: f32) -> Vec3 {
     tile_pos_half(tx, ty, height, layer, TILE_HALF_H)
-}
-
-/// Sub-tesela de carretera recta (OpenTTD `table/roadveh_movement.h`, carril izquierdo).
-///
-/// Por dirección: `(x0, y0)` al entrar en la tesela, `(x1, y1)` al salir (`progress` 0→255).
-const ROAD_STRAIGHT_SUBTILE: [(f32, f32, f32, f32); 8] = [
-    (8.0, 8.0, 8.0, 8.0),  // N — cardinal / giro
-    (15.0, 5.0, 0.0, 5.0), // NE — `_roadveh_drive_data_0`
-    (8.0, 8.0, 8.0, 8.0),  // E
-    (5.0, 0.0, 5.0, 15.0), // SE — `_roadveh_drive_data_1`
-    (8.0, 8.0, 8.0, 8.0),  // S
-    (0.0, 9.0, 15.0, 9.0), // SW — `_roadveh_drive_data_8`
-    (8.0, 8.0, 8.0, 8.0),  // W
-    (9.0, 15.0, 9.0, 0.0), // NW — `_roadveh_drive_data_9`
-];
-
-/// Posición en carretera recta dentro de una tesela (`progress` 0 = entrada, 255 = salida).
-#[must_use]
-pub fn road_vehicle_straight_subtile(dir: VehicleDirection, progress: u8) -> (f32, f32) {
-    let i = dir.min(7) as usize;
-    let (x0, y0, x1, y1) = ROAD_STRAIGHT_SUBTILE[i];
-    let t = f32::from(progress) / 255.0;
-    (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
 }
 
 /// Posición en pantalla de `(x_pos, y_pos)` de un vehículo OpenTTD.

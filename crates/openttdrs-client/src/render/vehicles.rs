@@ -4,11 +4,10 @@ use bevy::prelude::*;
 use openttdrs_core::{CargoType, Map, TileKind, Vehicle, VehicleKind};
 
 use crate::bevy_app::UpdateSet;
-use crate::iso::{
-    iso, overlay_pos, road_vehicle_straight_subtile, road_vehicle_tile_anchor, tile_min_z,
-};
+use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z};
 use crate::render::MapVisualLayer;
 use crate::state::{ClientScreen, SimWorld};
+use openttdrs_core::vehicle_subtile;
 
 #[path = "../sprites/vehicle_gfx_data_generated.rs"]
 mod vehicle_gfx;
@@ -48,33 +47,9 @@ fn vehicle_layer(v: &Vehicle) -> &'static vehicle_gfx::VehicleLayerGfx {
 
 fn vehicle_draw_anchor(v: &Vehicle, map: &Map) -> (Vec2, u8, i32, i32) {
     let base_z = tile_min_z(map, v.pos);
-    let dir = v.render_direction();
-
-    // Carretera recta: sub-tesela OpenTTD (eje del carril), no diagonal entre esquinas.
-    if dir & 1 == 1 {
-        let (sub_x, sub_y) = road_vehicle_straight_subtile(dir, v.progress);
-        let anchor = road_vehicle_tile_anchor(v.pos.x, v.pos.y, sub_x, sub_y);
-        return (anchor, base_z, v.pos.x, v.pos.y);
-    }
-
-    // Giros cardinales: interpolación entre teselas (hasta tener curvas de giro).
-    let base = iso(v.pos.x, v.pos.y);
-    let Some(next) = v.movement_target() else {
-        return (base, base_z, v.pos.x, v.pos.y);
-    };
-    if v.progress == 0 {
-        return (base, base_z, v.pos.x, v.pos.y);
-    }
-    let t = f32::from(v.progress) / 255.0;
-    let next_iso = iso(next.x, next.y);
-    let next_z = tile_min_z(map, next);
-    let pos = base.lerp(next_iso, t);
-    let z = f32::from(base_z)
-        .mul_add(1.0 - t, f32::from(next_z) * t)
-        .round() as u8;
-    let tx = (v.pos.x as f32).mul_add(1.0 - t, next.x as f32 * t).round() as i32;
-    let ty = (v.pos.y as f32).mul_add(1.0 - t, next.y as f32 * t).round() as i32;
-    (pos, z, tx, ty)
+    let (sub_x, sub_y) = vehicle_subtile(v);
+    let anchor = road_vehicle_tile_anchor(v.pos.x, v.pos.y, sub_x, sub_y);
+    (anchor, base_z, v.pos.x, v.pos.y)
 }
 
 fn vehicle_sprite_pos(v: &Vehicle, map: &Map) -> Vec3 {

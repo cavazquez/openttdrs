@@ -13,6 +13,7 @@ pub mod industry;
 pub mod map;
 pub mod ottdmap_extras;
 pub mod pathfinder;
+pub mod road_movement;
 pub mod save;
 mod sim_step;
 pub mod station;
@@ -49,6 +50,7 @@ pub use pathfinder::{
     station_entrance_faces_road, station_site_adjacent_to_rail, station_site_adjacent_to_transport,
     station_site_tile_allows_build, station_site_tile_needs_clear, tile_is_path_traversable,
 };
+pub use road_movement::{road_turn_entry_exit, straight_subtile, vehicle_subtile};
 pub use save::SaveError;
 pub use save::load_from_str;
 pub use station::{

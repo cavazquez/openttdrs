@@ -1,13 +1,14 @@
 use std::collections::VecDeque;
 
 use crate::cargo::CargoType;
+use crate::engine::{default_engine_id, engine_for_vehicle, progress_step_for_speed};
 use crate::map::TileCoord;
 
 /// Capacidad de carga por defecto (unidades de cargo).
 pub const VEHICLE_CAPACITY: u32 = 20;
 
-/// Avance sub-tile por tick de sim (`OpenTTD` usa `progress` 0–255 por tesela).
-pub const VEHICLE_PROGRESS_STEP: u8 = 51;
+/// Paso sub-tile de referencia (bus MPS en diagonal). Ver [`crate::REFERENCE_PROGRESS_STEP`].
+pub const VEHICLE_PROGRESS_STEP: u8 = crate::engine::REFERENCE_PROGRESS_STEP;
 
 /// `OpenTTD` `Direction`: N=0, NE=1, E=2, SE=3, S=4, SW=5, W=6, NW=7.
 pub type VehicleDirection = u8;
@@ -81,6 +82,12 @@ pub struct Vehicle {
     /// Orientación gráfica (`OpenTTD` `Direction` 0..7).
     #[serde(default = "default_vehicle_direction")]
     pub direction: VehicleDirection,
+    /// Motor `OpenGFX` (`None` en saves antiguos → default por [`VehicleKind`]).
+    #[serde(default)]
+    pub engine_id: Option<u16>,
+    /// Velocidad actual (0 = usar `max_speed` del motor).
+    #[serde(default)]
+    pub cur_speed: u16,
     /// Camino calculado por el pathfinder (siguiente tile en el frente).
     pub path: VecDeque<TileCoord>,
     /// Lista circular de destinos asignados por el jugador.
@@ -100,6 +107,8 @@ impl Vehicle {
             VehicleKind::Bus => Some(CargoType::Passengers),
             VehicleKind::Truck | VehicleKind::Train => None,
         };
+        let engine_id = default_engine_id(kind);
+        let cur_speed = engine_for_vehicle(kind, engine_id).max_speed;
         Self {
             id,
             kind,
@@ -112,6 +121,8 @@ impl Vehicle {
             running: true,
             progress: 0,
             direction: DIR_NE,
+            engine_id: Some(engine_id),
+            cur_speed,
             path: VecDeque::new(),
             orders: Vec::new(),
             current_order: 0,
@@ -119,10 +130,44 @@ impl Vehicle {
         }
     }
 
-    /// Ticks de sim necesarios para cruzar una tesela con [`VEHICLE_PROGRESS_STEP`].
     #[must_use]
-    pub const fn ticks_per_tile() -> u32 {
-        255 / VEHICLE_PROGRESS_STEP as u32
+    pub fn effective_engine(&self) -> &'static crate::engine::EngineDef {
+        engine_for_vehicle(
+            self.kind,
+            self.engine_id
+                .unwrap_or_else(|| default_engine_id(self.kind)),
+        )
+    }
+
+    #[must_use]
+    pub fn effective_speed(&self) -> u16 {
+        if self.cur_speed > 0 {
+            self.cur_speed
+        } else {
+            self.effective_engine().max_speed
+        }
+    }
+
+    /// Dirección del paso en curso (eje del carril / vía).
+    #[must_use]
+    pub fn movement_direction(&self) -> VehicleDirection {
+        let Some(next) = self.movement_target() else {
+            return self.direction;
+        };
+        direction_from_tile_step(self.pos, next)
+    }
+
+    /// Avance sub-tile por tick según motor y dirección.
+    #[must_use]
+    pub fn progress_step(&self) -> u8 {
+        progress_step_for_speed(self.effective_speed(), self.movement_direction())
+    }
+
+    /// Ticks de sim estimados para cruzar una tesela en la dirección actual.
+    #[must_use]
+    pub fn ticks_per_tile(&self) -> u32 {
+        let step = self.progress_step().max(1);
+        255_u32.div_ceil(u32::from(step))
     }
 
     /// Como `OpenTTD` `GetImage`: camión semi-lleno/lleno cambia sprite.
@@ -191,12 +236,29 @@ impl Vehicle {
             return;
         }
 
-        self.progress = self.progress.saturating_add(VEHICLE_PROGRESS_STEP);
-        if self.progress < 255 {
+        let step = u16::from(self.progress_step());
+        let next = u16::from(self.progress) + step;
+        if next < 255 {
+            if let Ok(progress) = u8::try_from(next) {
+                self.progress = progress;
+            }
             return;
         }
-        self.progress = 0;
-        self.advance_one_tile();
+        let mut remaining = next;
+        loop {
+            remaining = remaining.saturating_sub(255);
+            self.progress = 0;
+            self.advance_one_tile();
+            if remaining < 255 {
+                if let Ok(progress) = u8::try_from(remaining) {
+                    self.progress = progress;
+                }
+                return;
+            }
+            if self.movement_target().is_none() {
+                return;
+            }
+        }
     }
 
     fn advance_one_tile(&mut self) {
@@ -325,14 +387,53 @@ mod tests {
             TileCoord::new(1, 0),
         );
         v.path = VecDeque::from([TileCoord::new(1, 0)]);
-        for tick in 1..Vehicle::ticks_per_tile() {
+        let ticks = v.ticks_per_tile();
+        for tick in 1..ticks {
             v.step();
             assert_eq!(v.pos, TileCoord::new(0, 0), "tick {tick}");
             assert!(v.progress > 0);
         }
         v.step();
         assert_eq!(v.pos, TileCoord::new(1, 0));
-        assert_eq!(v.progress, 0);
+        assert!(v.progress < v.progress_step());
+    }
+
+    #[test]
+    fn train_moves_slower_than_bus_on_same_path() {
+        let mut bus = Vehicle::new(
+            0,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(3, 0),
+        );
+        bus.path = VecDeque::from([
+            TileCoord::new(1, 0),
+            TileCoord::new(2, 0),
+            TileCoord::new(3, 0),
+        ]);
+        let mut train = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(0, 0),
+            TileCoord::new(3, 0),
+        );
+        train.path = bus.path.clone();
+
+        let bus_ticks = bus.ticks_per_tile();
+        let train_ticks = train.ticks_per_tile();
+        assert!(train_ticks > bus_ticks);
+
+        let mut bus_steps = 0;
+        while bus.pos.x < 1 {
+            bus.step();
+            bus_steps += 1;
+        }
+        let mut train_steps = 0;
+        while train.pos.x < 1 {
+            train.step();
+            train_steps += 1;
+        }
+        assert!(train_steps > bus_steps);
     }
 
     #[test]
@@ -357,7 +458,7 @@ mod tests {
             TileCoord::new(1, 0),
         );
         v.path = VecDeque::from([TileCoord::new(1, 0)]);
-        for _ in 0..Vehicle::ticks_per_tile() {
+        for _ in 0..v.ticks_per_tile() {
             v.step();
         }
         assert_eq!(v.direction, DIR_SW);

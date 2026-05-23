@@ -52,6 +52,7 @@ pub(crate) fn place_clean_demo_transport(state: &mut GameState) {
         let _ = apply_command(state, &Command::PlaceRail(TileCoord::new(x, DEMO_RAIL_Y)));
     }
     place_demo_road_vehicles(state);
+    place_demo_rail_vehicle(state);
 }
 
 /// Bus + camión en la carretera demo (para probar sprites sin depósito).
@@ -77,6 +78,22 @@ fn place_demo_road_vehicles(state: &mut GameState) {
         truck.direction = DIR_SW;
         truck.path = path.into();
         state.vehicles.push(truck);
+    }
+}
+
+/// Tren en la vía demo (Kirby Paul Tank, más lento que bus/camión).
+fn place_demo_rail_vehicle(state: &mut GameState) {
+    use openttdrs_core::{DIR_SW, PathNetwork, Vehicle, VehicleKind, find_path};
+
+    let start = TileCoord::new(4, DEMO_RAIL_Y);
+    let end = TileCoord::new(10, DEMO_RAIL_Y);
+
+    if let Some(path) = find_path(&state.map, start, end, PathNetwork::Rail) {
+        let mut train = Vehicle::new(9003, VehicleKind::Train, start, end);
+        train.running = true;
+        train.direction = DIR_SW;
+        train.path = path.into();
+        state.vehicles.push(train);
     }
 }
 
@@ -120,11 +137,12 @@ fn set_berm_cell(state: &mut GameState, c: TileCoord) {
 
 pub(crate) fn log_procedural_demo_zones() {
     info!(
-        "Mapa demo ({}×{}): carretera y={DEMO_ROAD_Y} x=2..12 | \
+        "Mapa demo ({}×{}): carretera y={DEMO_ROAD_Y} x=2..12 (bus+camión) | \
+         vía y={DEMO_RAIL_Y} x=2..12 (tren) | \
          puente agua x={DEMO_BRIDGE_WATER_X0}..{DEMO_BRIDGE_WATER_X1} y={DEMO_BRIDGE_WATER_Y0}..{DEMO_BRIDGE_WATER_Y1} \
          orillas x={DEMO_BRIDGE_BANK_W},{DEMO_BRIDGE_BANK_E} y={DEMO_BRIDGE_BANK_N},{DEMO_BRIDGE_BANK_S} \
          (construir E–O entre ({DEMO_BRIDGE_BANK_W},{DEMO_BRIDGE_Y}) y ({DEMO_BRIDGE_BANK_E},{DEMO_BRIDGE_Y})) | \
-         vía y={DEMO_RAIL_Y} x=2..12 | túnel NE ({}, {})",
+         túnel NE ({}, {})",
         crate::state::MAP_W,
         crate::state::MAP_H,
         DEMO_TUNNEL_NE.x,
@@ -171,6 +189,13 @@ mod tests {
             Some(TileKind::Grass)
         );
         assert!(tunnel_preview_path(&state.map, DEMO_TUNNEL_NE).is_some());
+        assert_eq!(state.vehicles.len(), 3);
+        assert!(
+            state
+                .vehicles
+                .iter()
+                .any(|v| v.kind == openttdrs_core::VehicleKind::Train)
+        );
     }
 
     #[test]

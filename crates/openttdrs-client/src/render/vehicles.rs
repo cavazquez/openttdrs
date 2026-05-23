@@ -305,6 +305,8 @@ mod tests {
             running: true,
             progress: 0,
             direction: DIR_SW,
+            engine_id: Some(openttdrs_core::ENGINE_TRUCK_MPS),
+            cur_speed: 96,
             orders: Vec::new(),
             current_order: 0,
             no_network_route_to_order: false,

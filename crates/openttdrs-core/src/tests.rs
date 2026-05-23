@@ -7,19 +7,41 @@ use crate::vehicle::VEHICLE_CAPACITY;
 
 use super::*;
 
-fn advance_sim(s: &mut GameState, ticks: u32) {
-    for _ in 0..ticks {
-        s.step();
+fn advance_vehicle_tiles(s: &mut GameState, tiles: u32) {
+    for _ in 0..tiles {
+        advance_vehicle_one_tile(s);
     }
 }
 
-fn advance_vehicle_tiles(s: &mut GameState, tiles: u32) {
-    advance_sim(s, tiles * Vehicle::ticks_per_tile());
+fn advance_vehicle_one_tile(s: &mut GameState) {
+    let max_ticks = s
+        .vehicles
+        .iter()
+        .map(Vehicle::ticks_per_tile)
+        .max()
+        .unwrap_or(5)
+        * 2;
+    for _ in 0..max_ticks {
+        let before: Vec<_> = s.vehicles.iter().map(|v| v.pos).collect();
+        s.step();
+        for (vehicle, prev) in s.vehicles.iter().zip(before) {
+            if vehicle.pos != prev {
+                return;
+            }
+        }
+    }
 }
 
 fn advance_vehicle(v: &mut Vehicle, tiles: u32) {
-    for _ in 0..(tiles * Vehicle::ticks_per_tile()) {
-        v.step();
+    for _ in 0..tiles {
+        let max_ticks = v.ticks_per_tile() * 2;
+        let start = v.pos;
+        for _ in 0..max_ticks {
+            v.step();
+            if v.pos != start {
+                break;
+            }
+        }
     }
 }
 

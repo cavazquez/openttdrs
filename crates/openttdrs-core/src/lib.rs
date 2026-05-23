@@ -7,6 +7,7 @@
 
 pub mod cargo;
 pub mod command;
+pub mod engine;
 mod game_state;
 pub mod industry;
 pub mod map;
@@ -24,6 +25,10 @@ pub use cargo::{CargoStock, CargoType};
 pub use command::{
     Command, CommandError, apply_command, command_error_message, command_would_fail,
     industry_template,
+};
+pub use engine::{
+    ENGINE_BUS_MPS, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineDef, REFERENCE_PROGRESS_STEP,
+    default_engine_id, engine_for_vehicle, progress_step_for_speed, tile_progress_length,
 };
 pub use game_state::{
     BRIDGE_BUILD_COST_PER_TILE, CARGO_DELIVERY_PAYMENT, CLEAR_TILE_COST, CompanyEconomy,

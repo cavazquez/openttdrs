@@ -26,10 +26,74 @@ const RAIL_3WAY_SW: u8 = RAIL_TB_X | RAIL_TB_LOWER | RAIL_TB_LEFT;
 const RAIL_3WAY_NW: u8 = RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LEFT;
 const RAIL_3WAY_SE: u8 = RAIL_TB_Y | RAIL_TB_LOWER | RAIL_TB_RIGHT;
 
-/// IDs de sprites de vía férrea usados (cruce a nivel 1370–1373; nieve 1037/1038, `rail_cmd.cpp`).
-pub const RAIL_SPRITE_IDS: [u32; 26] = [
+/// `SPR_RAIL_TRACK_Y` (`rail_cmd.cpp`).
+pub const RAIL_SPRITE_TRACK_Y: u32 = 1011;
+
+/// Delta de sprite en teselas con nieve/deserto (`SPR_RAIL_SNOW_OFFSET`).
+pub const RAIL_SPRITE_SNOW_OFFSET: u32 = 26;
+
+/// Offsets desde `SPR_RAIL_TRACK_Y` por `tileh` 1..14 (`_track_sloped_sprites`).
+pub const RAIL_TRACK_SLOPED_OFFSETS: [u8; 14] =
+    [14, 15, 22, 13, 0, 21, 17, 12, 23, 0, 18, 20, 19, 16];
+
+/// Sprite combinado suelo+riel en tesela inclinada (vía clásica sin overlay NewGRF).
+#[must_use]
+pub fn rail_sloped_track_sprite_id(tileh: u8, snow_ground: bool) -> Option<u32> {
+    let th = tileh.min(14);
+    if th == 0 {
+        return None;
+    }
+    let offset = u32::from(RAIL_TRACK_SLOPED_OFFSETS[(th - 1) as usize]);
+    let mut sid = RAIL_SPRITE_TRACK_Y + offset;
+    if snow_ground {
+        sid += RAIL_SPRITE_SNOW_OFFSET;
+    }
+    Some(sid)
+}
+
+#[inline]
+fn push_rail_junction_overlays(t: u8, out: &mut Vec<u32>) {
+    if t & RAIL_TB_X != 0 {
+        out.push(1005);
+    }
+    if t & RAIL_TB_Y != 0 {
+        out.push(1006);
+    }
+    if t & RAIL_TB_UPPER != 0 {
+        out.push(1007);
+    }
+    if t & RAIL_TB_LOWER != 0 {
+        out.push(1008);
+    }
+    if t & RAIL_TB_RIGHT != 0 {
+        out.push(1009);
+    }
+    if t & RAIL_TB_LEFT != 0 {
+        out.push(1010);
+    }
+}
+
+#[inline]
+fn is_rail_junction_trackbits(t: u8) -> bool {
+    !matches!(
+        t,
+        RAIL_TB_Y
+            | RAIL_TB_X
+            | RAIL_TB_UPPER
+            | RAIL_TB_LOWER
+            | RAIL_TB_RIGHT
+            | RAIL_TB_LEFT
+            | RAIL_TB_CROSS
+            | RAIL_TB_HORZ
+            | RAIL_TB_VERT
+    )
+}
+
+/// IDs de sprites de vía férrea usados (cruce a nivel 1370–1373; nieve 1037/1038; pendiente 1023–1034).
+pub const RAIL_SPRITE_IDS: [u32; 38] = [
     1005, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1013, 1014, 1015, 1016, 1017, 1018, 1019, 1020,
-    1021, 1022, 1035, 1036, 1037, 1038, 1370, 1371, 1372, 1373,
+    1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030, 1031, 1032, 1033, 1034, 1035, 1036,
+    1037, 1038, 1370, 1371, 1372, 1373,
 ];
 
 /// `SPR_RAIL_TRACK_Y_SNOW` / `SPR_RAIL_TRACK_X_SNOW` (OpenGFX).
@@ -265,6 +329,11 @@ pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
     CACHE
         .get_or_init(|| {
             let mut set: BTreeSet<u32> = RAIL_SPRITE_IDS.iter().copied().collect();
+            for th in 1..=14 {
+                if let Some(id) = rail_sloped_track_sprite_id(th, true) {
+                    set.insert(id);
+                }
+            }
             for id in signal_sprite_ids_for_preload() {
                 if !SIGNAL_SPRITE_OPENGFX_GAPS.contains(&id) {
                     set.insert(id);
@@ -359,14 +428,27 @@ fn junction_ground_off(tb: u8) -> u8 {
 }
 
 /// Lista de sprites `OpenGFX` en orden de pintado (suelo de cruce y superposiciones).
-/// Con `snow_ground`, tramos Y/X usan `1037`/`1038` (`RailGroundType::SnowOrDesert`).
-pub fn collect_rail_sprites(tb: u8, snow_ground: bool, out: &mut Vec<u32>) {
+/// Con `snow_ground`, tramos planos Y/X usan `1037`/`1038`; en pendiente se suma
+/// [`RAIL_SPRITE_SNOW_OFFSET`] al sprite inclinado (`rail_cmd.cpp`).
+pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<u32>) {
     out.clear();
     let t = tb & 0x3F;
+    if t == 0 {
+        return;
+    }
+    if tileh != 0 {
+        if let Some(sid) = rail_sloped_track_sprite_id(tileh, snow_ground) {
+            out.push(sid);
+        }
+        if is_rail_junction_trackbits(t) {
+            push_rail_junction_overlays(t, out);
+        }
+        return;
+    }
     let y_track = if snow_ground {
         RAIL_SPRITE_Y_SNOW
     } else {
-        1011
+        RAIL_SPRITE_TRACK_Y
     };
     let x_track = if snow_ground {
         RAIL_SPRITE_X_SNOW
@@ -385,24 +467,7 @@ pub fn collect_rail_sprites(tb: u8, snow_ground: bool, out: &mut Vec<u32>) {
         RAIL_TB_VERT => out.push(1036),
         _ => {
             out.push(1018_u32 + u32::from(junction_ground_off(t)));
-            if t & RAIL_TB_X != 0 {
-                out.push(1005);
-            }
-            if t & RAIL_TB_Y != 0 {
-                out.push(1006);
-            }
-            if t & RAIL_TB_UPPER != 0 {
-                out.push(1007);
-            }
-            if t & RAIL_TB_LOWER != 0 {
-                out.push(1008);
-            }
-            if t & RAIL_TB_RIGHT != 0 {
-                out.push(1009);
-            }
-            if t & RAIL_TB_LEFT != 0 {
-                out.push(1010);
-            }
+            push_rail_junction_overlays(t, out);
         }
     }
 }
@@ -416,10 +481,30 @@ mod tests {
     #[test]
     fn collect_rail_sprites_uses_snow_track_ids() {
         let mut out = Vec::new();
-        collect_rail_sprites(RAIL_TB_Y, true, &mut out);
+        collect_rail_sprites(RAIL_TB_Y, 0, true, &mut out);
         assert_eq!(out, vec![RAIL_SPRITE_Y_SNOW]);
-        collect_rail_sprites(RAIL_TB_X, true, &mut out);
+        collect_rail_sprites(RAIL_TB_X, 0, true, &mut out);
         assert_eq!(out, vec![RAIL_SPRITE_X_SNOW]);
+    }
+
+    #[test]
+    fn collect_rail_sprites_uses_sloped_track_on_diagonal_slopes() {
+        let mut out = Vec::new();
+        collect_rail_sprites(RAIL_TB_Y, 12, false, &mut out);
+        assert_eq!(out, vec![1031]);
+        collect_rail_sprites(RAIL_TB_X, 6, false, &mut out);
+        assert_eq!(out, vec![1032]);
+        collect_rail_sprites(RAIL_TB_Y, 3, false, &mut out);
+        assert_eq!(out, vec![1033]);
+        collect_rail_sprites(RAIL_TB_X, 9, false, &mut out);
+        assert_eq!(out, vec![1034]);
+    }
+
+    #[test]
+    fn collect_rail_sprites_sloped_snow_adds_offset() {
+        let mut out = Vec::new();
+        collect_rail_sprites(RAIL_TB_Y, 12, true, &mut out);
+        assert_eq!(out, vec![1031 + RAIL_SPRITE_SNOW_OFFSET]);
     }
 
     #[test]

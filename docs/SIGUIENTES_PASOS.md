@@ -84,13 +84,13 @@ En código: errores HUD, preview, transporte, paradas/tren, industria, órdenes,
 
 ### SP3 — Presentación del mapa (prioridad media)
 
-Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. **SP3.0 cerrado** (auditoría + fixture 20×13). **SP3.1** carretera en pendiente en checklist (y=7). **SP3.1b** vía en pendiente: fixture y=11 (x=9,12,15,18) + `collect_rail_sprites` con `tileh` (pendiente).
+Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. **SP3.0 cerrado** (auditoría + fixture 20×13). **SP3.1** carretera en pendiente (y=7). **SP3.1b** vía en pendiente: checklist y=11 + `collect_rail_sprites(..., tileh)` con sprites 1023–1034.
 
 **Checklist visual:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client` — [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
 
 Resumen de huecos reales (mucho de lo “esquina/T + trackbits” **ya está** en `road_flat_*` / `collect_rail_sprites`):
 
-- **Pendientes vía** — carretera diagonal OK (`road_flat_11..14`); vía sigue con sprites planos 1011/1012 sobre césped inclinado (checklist y=11 x=9,12,15,18).
+- **Pendientes vía en junctions / cimientos** — tramos rectos en diagonal OK; cruces T y combinaciones complejas en slope siguen simplificados.
 - **Estaciones** de tren: plataformas/edificios, no solo suelo bus/camión.
 - **Casas/industrias** en `.ottdmap`: seguir [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) (P1 etapas casa → P6).
 - **Assets**: auditar `rail_*.png` (evitar placeholders del script).

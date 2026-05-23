@@ -501,10 +501,12 @@ crop_by_id(1413, "rail_1413.png")
 # =============================================================================
 RAIL_SINGLE_RANGE = range(1005, 1011)
 RAIL_TRACK_RANGE = range(1011, 1023)
+RAIL_SLOPE_TRACK_RANGE = range(1023, 1035)
 RAIL_WRAPPER_ALIAS_IDS = [
     1005, 1006, 1007, 1008, 1009, 1010,
     1011, 1012, 1013, 1014, 1015, 1016,
     1017, 1018, 1019, 1020, 1021, 1022,
+    *range(1023, 1035),
     1035, 1036, 1037, 1038,
     1370, 1371, 1372, 1373,
 ]
@@ -516,6 +518,8 @@ for sid in RAIL_SINGLE_RANGE:
 # Vías combinadas (suelo + raíles)
 for sid in RAIL_TRACK_RANGE:
     crop_by_id(sid, f"rail_track_{sid - 1011}.png")
+for sid in RAIL_SLOPE_TRACK_RANGE:
+    crop_by_id(sid, f"rail_{sid}.png")
 # Alias usados por el cliente Bevy actual (rail_<sprite_id>.png)
 for sid in RAIL_WRAPPER_ALIAS_IDS:
     crop_by_id(sid, f"rail_{sid}.png")

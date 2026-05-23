@@ -105,10 +105,10 @@ OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap c
 | (13,9) | Casa Tall Office |
 | (3,11) | Agua Clear |
 | (5,11) | Agua Coast (`m5=0x10`) |
-| **(9,11)** | **Vía en pendiente NE** (eje Y; render: riel plano — SP3.1b) |
-| **(12,11)** | **Vía pendiente SE** (eje X) |
-| **(15,11)** | **Vía pendiente SW** (eje Y) |
-| **(18,11)** | **Vía pendiente NW** (eje X) |
+| **(9,11)** | **Vía en pendiente NE** (sprite **1031**) |
+| **(12,11)** | **Vía pendiente SE** (sprite **1032**) |
+| **(15,11)** | **Vía pendiente SW** (sprite **1033**) |
+| **(18,11)** | **Vía pendiente NW** (sprite **1034**) |
 | y=12 | Buffer hierba (borde sur del mapa) |
 
 Tests: `cargo test -p openttdrs-core --test ottdmap_sp3_visual_fixture`
@@ -121,7 +121,7 @@ Marcar tras cargar el fixture checklist:
 - [ ] Fila y=5: vía (Y, X, T, cruce, señales, nieve)
 - [ ] Fila y=7: carretera en 4 pendientes (`road_flat_11..14`) + tranvía NE en (13,7)
 - [x] Fila y=9: bus NE/SE/SW/NW (x=1,3,5,7) + camión + tren + casa
-- [ ] Fila y=11: mar + costa (x=3,5) + vía en 4 pendientes (x=9,12,15,18; deuda render)
+- [ ] Fila y=11: mar + costa (x=3,5) + vía en 4 pendientes (x=9,12,15,18)
 
 **Nota:** el mapa procedural por defecto (`cargo run -p openttdrs-client`) mezcla todo en la demo de transporte; para regresión visual usar el fixture checklist.
 

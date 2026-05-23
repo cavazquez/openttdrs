@@ -152,6 +152,7 @@ pub(crate) fn spawn_rail_tile(
         .is_some_and(|t| (t.m3 & 0x0F) == RAIL_GROUND_SNOW_OR_DESERT);
     collect_rail_sprites(
         rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1),
+        tileh,
         snow_ground,
         rail_layers,
     );

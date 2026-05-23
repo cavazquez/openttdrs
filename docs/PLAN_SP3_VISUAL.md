@@ -113,8 +113,9 @@ Upstream: `GetRoadSpriteOffset`, `DrawRoadTile`.
 Upstream: `rail_cmd.cpp`, `DrawRailTile`.
 
 - [x] Placeholders: precarga acotada + denylist `SIGNAL_SPRITE_OPENGFX_GAPS` (no exige `rail_1438`… en audit).
-- [x] Precarga: `signal_sprite_ids_for_preload` + `RAIL_SPRITE_IDS` (incl. 1037/1038).
-- [x] Nieve en vía: `collect_rail_sprites(..., snow_ground)` usa `1037`/`1038` cuando `m3` bajo = `RAIL_GROUND_SNOW_OR_DESERT`.
+- [x] Precarga: `signal_sprite_ids_for_preload` + `RAIL_SPRITE_IDS` (incl. 1037/1038 y pendiente 1023–1034).
+- [x] Nieve en vía: plano `1037`/`1038`; pendiente `+ RAIL_SPRITE_SNOW_OFFSET` (26).
+- [x] Pendiente diagonal NE/SE/SW/NW: `_track_sloped_sprites` → `collect_rail_sprites(..., tileh)`.
 - [x] `rail_trackbits_for_render`: tesela `Rail` con `m5=0` no usa vecinos sintéticos.
 
 **Criterio:** T y cruce de vía en mapa real; señales visibles en tiles con `RailTileType::Signals`; sin PNG rosa/placeholder en IDs usados.

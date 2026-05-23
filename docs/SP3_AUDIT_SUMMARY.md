@@ -150,6 +150,31 @@ OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap cargo ru
 
 Tests: `cargo test -p openttdrs-core --test ottdmap_sp3_slope_lab_fixture`
 
+### Validación HORZ/VERT en saves reales (P5)
+
+**CI automático**
+
+```bash
+python3 scripts/verify_parse_sav_rail_m5.py
+cargo test -p openttdrs-client sp3_slope_lab_horz_vert_from_fixture_map
+```
+
+- Roundtrip `parse_sav` → `.ottdmap`: conserva `m5` completo en teselas Railway (`stationlist-test.sav`).
+- Fixture `sp3_slope_lab`: referencia HORZ/VERT cuando el save no trae doble vía cardinal.
+
+**Partida propia con OpenTTD**
+
+1. Construir tramos con doble vía N-S (HORZ) y E-O (VERT) en el editor vanilla.
+2. Exportar:
+
+```bash
+python3 scripts/parse_sav.py mi_partida.sav /tmp/mi_partida.ottdmap
+python3 scripts/verify_parse_sav_rail_m5.py mi_partida.sav
+OTTDMAP_FILE=/tmp/mi_partida.ottdmap cargo run -p openttdrs-client
+```
+
+3. Comparar visualmente con OpenTTD; el script imprime histograma de `trackbits` (buscar `0x0c` / `0x30`).
+
 ### Checklist visual (capturas manuales)
 
 Marcar tras cargar el fixture checklist:
@@ -180,7 +205,7 @@ Marcar tras cargar el fixture checklist:
 
 ## Siguiente fase
 
-**SP3.1 en saves reales** — exportar `.ottdmap` con `parse_sav.py` y comparar tramos en pendiente con OpenTTD.
+**SP3.1 en saves reales** — exportar `.ottdmap` con `parse_sav.py` y comparar tramos en pendiente con OpenTTD. **HORZ/VERT:** `verify_parse_sav_rail_m5.py` + § P5 en este doc.
 
 **SP4 / I8** — fuera de SP3 visual (multijugador, NewGRF completo, etc.).
 

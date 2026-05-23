@@ -456,7 +456,7 @@ pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use openttdrs_core::{Map, TileCoord, TileKind};
@@ -514,6 +514,44 @@ mod tests {
         assert_eq!(out, vec![1032]);
         collect_rail_sprites(RAIL_TB_CROSS, 12, true, &mut out);
         assert_eq!(out, vec![1031 + RAIL_SPRITE_SNOW_OFFSET]);
+    }
+
+    const SP3_SLOPE_LAB: &[u8] =
+        include_bytes!("../../../openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap");
+
+    #[test]
+    fn sp3_slope_lab_horz_vert_from_fixture_map() {
+        use openttdrs_core::{Map, TileCoord, TileKind, tile_slope_and_z};
+
+        let map = Map::from_ottd_binary(SP3_SLOPE_LAB).expect("sp3_slope_lab MAP1");
+
+        let horz_flat = map.get(TileCoord::new(13, 1)).expect("(13,1)");
+        assert_eq!(horz_flat.kind, TileKind::Rail);
+        assert_eq!(horz_flat.m5 & 0x3F, RAIL_TB_HORZ);
+        let mut out = Vec::new();
+        collect_rail_sprites(horz_flat.m5 & 0x3F, 0, false, &mut out);
+        assert_eq!(out, vec![1035]);
+
+        let vert_flat = map.get(TileCoord::new(15, 1)).expect("(15,1)");
+        assert_eq!(vert_flat.m5 & 0x3F, RAIL_TB_VERT);
+        collect_rail_sprites(vert_flat.m5 & 0x3F, 0, false, &mut out);
+        assert_eq!(out, vec![1036]);
+
+        let horz_slope = map.get(TileCoord::new(1, 16)).expect("(1,16)");
+        assert_eq!(horz_slope.m5 & 0x3F, RAIL_TB_HORZ);
+        let tileh = tile_slope_and_z(&map, TileCoord::new(1, 16))
+            .map(|(h, _)| h)
+            .expect("slope");
+        collect_rail_sprites(horz_slope.m5 & 0x3F, tileh, false, &mut out);
+        assert_eq!(out, vec![1031]);
+
+        let vert_slope = map.get(TileCoord::new(1, 18)).expect("(1,18)");
+        assert_eq!(vert_slope.m5 & 0x3F, RAIL_TB_VERT);
+        let tileh = tile_slope_and_z(&map, TileCoord::new(1, 18))
+            .map(|(h, _)| h)
+            .expect("slope");
+        collect_rail_sprites(vert_slope.m5 & 0x3F, tileh, false, &mut out);
+        assert_eq!(out, vec![1031]);
     }
 
     #[test]

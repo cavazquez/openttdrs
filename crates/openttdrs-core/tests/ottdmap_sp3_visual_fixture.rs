@@ -1,4 +1,4 @@
-//! Fixture `fixtures/sp3_visual_checklist.ottdmap` (20×12): escenas SP3.0/SP3.1 separadas.
+//! Fixture `fixtures/sp3_visual_checklist.ottdmap` (20×13): escenas SP3.0/SP3.1 separadas.
 //!
 //! Regenerar: `python3 scripts/gen_sp3_visual_checklist_ottdmap.py`
 
@@ -16,7 +16,7 @@ fn tile(map: &Map, x: i32, y: i32) -> openttdrs_core::Tile {
 #[test]
 fn loads_sp3_visual_checklist_layout() {
     let (map, ex) = Map::from_ottd_binary_with_extras(FIXTURE).expect("fixture MAP1");
-    assert_eq!(map.dimensions(), (20, 12));
+    assert_eq!(map.dimensions(), (20, 13));
     assert_eq!(ex.station_xy.len(), 6);
     for xy in [(1, 9), (3, 9), (5, 9), (7, 9), (9, 9), (11, 9)] {
         assert!(ex.station_xy.contains(&xy), "missing station at {xy:?}");
@@ -150,7 +150,18 @@ fn loads_sp3_visual_checklist_layout() {
     assert_eq!(industry_gfx9(&tile(&map, 11, 10)), 256);
     assert_eq!(tile(&map, 2, 10).kind, TileKind::Grass);
 
-    // Agua y costa (y=11)
+    // SP3.1b: vía en pendiente (y=11, x≥9) — regresión datos; render aún usa sprites planos
+    for (x, tileh, m5) in [(9, 12, 0x02), (12, 6, 0x01), (15, 3, 0x02), (18, 9, 0x01)] {
+        let r = tile(&map, x, 11);
+        assert_eq!(r.kind, TileKind::Rail);
+        assert_eq!(r.m5 & 0x3F, m5);
+        assert_eq!(
+            tile_slope_and_z(&map, TileCoord::new(x, 11)).map(|(h, _)| h),
+            Some(tileh)
+        );
+    }
+
+    // Agua y costa (y=11, oeste)
     assert_eq!(tile(&map, 3, 11).kind, TileKind::Water);
     assert_eq!(tile(&map, 3, 11).m5, 0);
     assert_eq!(tile(&map, 5, 11).kind, TileKind::Water);

@@ -47,7 +47,7 @@ Todos los placeholders están en categoría **rail** (sprites de señal del rang
 | `crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap` | TNBP en CI |
 | `crates/openttdrs-core/tests/fixtures/m3_road_tram_2x2.ottdmap` | Tranvía `m3` |
 | `crates/openttdrs-core/tests/fixtures/v5p12_stxy.ottdmap` | Footer estaciones |
-| `crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap` | **Checklist visual** (20×12, escenas separadas) |
+| `crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap` | **Checklist visual** (20×13, escenas separadas) |
 | `tests/fixtures/stationlist-test.ottdmap` | Lista estaciones |
 
 ## Referencia upstream
@@ -74,7 +74,7 @@ Regenerar: `python3 scripts/gen_sp3_visual_checklist_ottdmap.py`
 OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client
 ```
 
-**Mapa 20×12** — cada escena va con **≥1 tesela de hierba** de separación. Pan/zoom para revisar fila a fila.
+**Mapa 20×13** — cada escena va con **≥1 tesela de hierba** de separación. Pan/zoom para revisar fila a fila.
 
 | Zona (x,y) | Contenido |
 |------------|-----------|
@@ -105,6 +105,11 @@ OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap c
 | (13,9) | Casa Tall Office |
 | (3,11) | Agua Clear |
 | (5,11) | Agua Coast (`m5=0x10`) |
+| **(9,11)** | **Vía en pendiente NE** (eje Y; render: riel plano — SP3.1b) |
+| **(12,11)** | **Vía pendiente SE** (eje X) |
+| **(15,11)** | **Vía pendiente SW** (eje Y) |
+| **(18,11)** | **Vía pendiente NW** (eje X) |
+| y=12 | Buffer hierba (borde sur del mapa) |
 
 Tests: `cargo test -p openttdrs-core --test ottdmap_sp3_visual_fixture`
 
@@ -115,8 +120,8 @@ Marcar tras cargar el fixture checklist:
 - [ ] Fila y=3: carretera plana (Y, X, T, cruce, cruces nivel, tranvía X en x=15)
 - [ ] Fila y=5: vía (Y, X, T, cruce, señales, nieve)
 - [ ] Fila y=7: carretera en 4 pendientes (`road_flat_11..14`) + tranvía NE en (13,7)
-- [ ] Fila y=9: bus NE/SE/SW/NW (x=1,3,5,7) + camión + tren + casa
-- [ ] Fila y=11: mar + costa
+- [x] Fila y=9: bus NE/SE/SW/NW (x=1,3,5,7) + camión + tren + casa
+- [ ] Fila y=11: mar + costa (x=3,5) + vía en 4 pendientes (x=9,12,15,18; deuda render)
 
 **Nota:** el mapa procedural por defecto (`cargo run -p openttdrs-client`) mezcla todo en la demo de transporte; para regresión visual usar el fixture checklist.
 

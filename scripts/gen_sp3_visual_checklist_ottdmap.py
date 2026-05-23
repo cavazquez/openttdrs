@@ -5,7 +5,7 @@ Salida: `crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap`
 
 Cada escena va separada por **al menos 1 tesela de hierba** para distinguirlas en capturas.
 
-Layout (20×12, origen arriba-izquierda):
+Layout (20×13, origen arriba-izquierda):
 
 ```
 y=0   · templado · ártico · trópico · toyland · NewGRF 128 ·   (climas, terminadas)
@@ -19,7 +19,8 @@ y=7   · carretera NE · SE · SW · NW · tranvía pendiente NE ·
 y=8   · obra h16 s0..s3 · terminada ·                       (Large Office)
 y=9   · bus NE · SE · SW · NW · camión · tren · casa ·
 y=10  · gfx0 · gfx42 · gfx116 · gfx119 · gfx120 · gfx256 ·  (industrias, paso 2 en x)
-y=11  · hierba · mar Clear · costa · hierba ·
+y=11  · mar · costa · vía NE · SE · SW · NW en pendiente ·
+y=12  · (buffer hierba bajo pendientes y=11) ·
 ```
 
 Regenerar: `python3 scripts/gen_sp3_visual_checklist_ottdmap.py`
@@ -230,7 +231,7 @@ def build_map1(
 
 
 def main() -> None:
-    w, h = 20, 12
+    w, h = 20, 13
     tiles: dict[tuple[int, int], TileSpec] = {}
 
     # Posiciones x con TileHash2Bit=0 en (x, row): x ≡ 1 (mod 4) → 1, 5, 9, 13, 17
@@ -325,6 +326,17 @@ def main() -> None:
     # --- Costa (y=11) ---
     put(tiles, 3, 11, TileSpec(tt=MP_WATER, height=1, m5=0x00))
     put(tiles, 5, 11, TileSpec(tt=MP_WATER, height=1, m5=0x10))
+
+    # --- SP3.1b: vía en pendiente (y=11, x≥9) — hoy riel plano sobre césped inclinado ---
+    for tx, ty, slope_fn, m5 in [
+        (9, 11, apply_ne_slope, 0x02),
+        (12, 11, apply_se_slope, 0x01),
+        (15, 11, apply_sw_slope, 0x02),
+        (18, 11, apply_nw_slope, 0x01),
+    ]:
+        slope_fn(tiles, tx, ty)
+        cur = tiles.get((tx, ty), TileSpec())
+        tiles[(tx, ty)] = replace(cur, tt=MP_RAILWAY, m5=m5)
 
     out = (
         Path(__file__).resolve().parents[1]

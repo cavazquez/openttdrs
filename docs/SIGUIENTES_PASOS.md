@@ -80,17 +80,17 @@ Plan: **[PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md)**. Validación: **[
 | [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Bus vs camión vs tren, sprites, conexión carretera |
 | [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md) | Render BUILD paradas (`RemapCoords`) |
 
-En código: errores HUD, preview, transporte, paradas/tren, industria, órdenes, mapa demo. SP3 paradas: solo GROUND; edificios `BUILD_*` → [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md).
+En código: errores HUD, preview, transporte, paradas/tren, industria, órdenes, mapa demo. Paradas bus/camión: GROUND + BUILD calibrados (`RemapCoords`, checklist y=9).
 
 ### SP3 — Presentación del mapa (prioridad media)
 
-Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. **SP3.0 cerrado** (auditoría + fixture 20×12). **SP3.1** en curso: pendientes en checklist; validar en `.ottdmap` de partida real.
+Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. **SP3.0 cerrado** (auditoría + fixture 20×13). **SP3.1** carretera en pendiente en checklist (y=7). **SP3.1b** vía en pendiente: fixture y=11 (x=9,12,15,18) + `collect_rail_sprites` con `tileh` (pendiente).
 
 **Checklist visual:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client` — [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
 
 Resumen de huecos reales (mucho de lo “esquina/T + trackbits” **ya está** en `road_flat_*` / `collect_rail_sprites`):
 
-- **Pendientes** carretera/vía en teselas inclinadas (familias slope upstream).
+- **Pendientes vía** — carretera diagonal OK (`road_flat_11..14`); vía sigue con sprites planos 1011/1012 sobre césped inclinado (checklist y=11 x=9,12,15,18).
 - **Estaciones** de tren: plataformas/edificios, no solo suelo bus/camión.
 - **Casas/industrias** en `.ottdmap`: seguir [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) (P1 etapas casa → P6).
 - **Assets**: auditar `rail_*.png` (evitar placeholders del script).

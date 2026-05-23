@@ -47,7 +47,7 @@ Todos los placeholders están en categoría **rail** (sprites de señal del rang
 | `crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap` | TNBP en CI |
 | `crates/openttdrs-core/tests/fixtures/m3_road_tram_2x2.ottdmap` | Tranvía `m3` |
 | `crates/openttdrs-core/tests/fixtures/v5p12_stxy.ottdmap` | Footer estaciones |
-| `crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap` | **Checklist visual** (20×15, escenas separadas) |
+| `crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap` | **Checklist visual** (20×17, escenas separadas) |
 | `tests/fixtures/stationlist-test.ottdmap` | Lista estaciones |
 
 ## Referencia upstream
@@ -74,7 +74,7 @@ Regenerar: `python3 scripts/gen_sp3_visual_checklist_ottdmap.py`
 OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client
 ```
 
-**Mapa 20×15** — cada escena va con **≥1 tesela de hierba** de separación. Pan/zoom para revisar fila a fila.
+**Mapa 20×17** — cada escena va con **≥1 tesela de hierba** de separación. Pan/zoom para revisar fila a fila.
 
 | Zona (x,y) | Contenido |
 |------------|-----------|
@@ -108,13 +108,17 @@ OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap c
 | (3,11) | Agua Clear |
 | (5,11) | Agua Coast (`m5=0x10`) |
 | **(9,11)** | **Vía recta Y en pendiente NE** (sprite **1031**) |
-| **(12,11)** | **Cruce X\|Y en pendiente SE** (`m5=0x03`; solo base **1032**, sin overlays) |
-| **(15,11)** | **Vía recta Y en pendiente SW** (sprite **1033**) |
-| **(18,11)** | **Vía recta X en pendiente NW** (sprite **1034**) |
+| **(12,11)** | **Cruce X\|Y en pendiente SE** (`m5=0x03` → **1032** + **1005** + **1006**) |
+| **(15,11)** | **Cruce X\|Y en pendiente SW** (**1033** + overlays) |
+| **(18,11)** | **Cruce X\|Y en pendiente NW** (**1034** + overlays) |
 | **(1,13)** | **T vía en pendiente NE** (`m5=0x07` → **1031** + **1005–1007**) |
 | **(4,13)** | **T vía pendiente SE** |
 | **(7,13)** | **T vía pendiente SW** |
 | **(10,13)** | **T vía pendiente NW** |
+| **(1,15)** | **Cruce X\|Y pendiente NE** (comparar con cruce plano **7,5**) |
+| **(4,15)** | **Cruce X\|Y pendiente SE** |
+| **(7,15)** | **Cruce X\|Y pendiente SW** |
+| **(10,15)** | **Cruce X\|Y pendiente NW** |
 | (5,5) | **T plano** (referencia: base **1018** + overlays) |
 | (7,5) | **Cruce plano** (`m5=0x03` → sprite **1017**) |
 | y=12 | Buffer hierba (bajo pendientes y=11) |
@@ -130,8 +134,9 @@ Marcar tras cargar el fixture checklist:
 - [ ] Fila y=5: vía (Y, X, T, cruce, señales, nieve)
 - [ ] Fila y=7: carretera en 4 pendientes (`road_flat_11..14`) + tranvía NE en (13,7) + estación tren NE en (16,7)
 - [x] Fila y=9: bus NE/SE/SW/NW (x=1,3,5,7) + camión + tren + casa + **bus NE en pendiente (15,9)**
-- [ ] Fila y=11: mar + costa (x=3,5) + vía recta/cruce en pendiente (x=9,12,15,18)
+- [ ] Fila y=11: mar + costa (x=3,5) + recta Y NE (9,11) + **cruce X\|Y en pendiente** (12,15,18,11)
 - [ ] Fila y=13: T vía en 4 pendientes (x=1,4,7,10) — comparar con T plano (5,5) y cruce plano (7,5)
+- [ ] Fila y=15: **cruce X\|Y en 4 pendientes** (x=1,4,7,10) — comparar con fila y=11 y cruce plano (7,5)
 
 **Nota:** el mapa procedural por defecto (`cargo run -p openttdrs-client`) mezcla todo en la demo de transporte; para regresión visual usar el fixture checklist.
 

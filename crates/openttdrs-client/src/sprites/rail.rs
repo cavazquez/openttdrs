@@ -440,7 +440,7 @@ pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<
         if let Some(sid) = rail_sloped_track_sprite_id(tileh, snow_ground) {
             out.push(sid);
         }
-        if is_rail_junction_trackbits(t) {
+        if t == RAIL_TB_CROSS || is_rail_junction_trackbits(t) {
             push_rail_junction_overlays(t, out);
         }
         return;
@@ -516,6 +516,15 @@ mod tests {
         assert!(out.contains(&1006));
         assert!(out.contains(&1007));
         assert_eq!(out.len(), 4);
+    }
+
+    #[test]
+    fn collect_rail_sprites_sloped_cross_adds_xy_overlays() {
+        let mut out = Vec::new();
+        collect_rail_sprites(RAIL_TB_CROSS, 6, false, &mut out);
+        assert_eq!(out, vec![1032, 1005, 1006]);
+        collect_rail_sprites(RAIL_TB_CROSS, 12, true, &mut out);
+        assert_eq!(out, vec![1031 + RAIL_SPRITE_SNOW_OFFSET, 1005, 1006,]);
     }
 
     #[test]

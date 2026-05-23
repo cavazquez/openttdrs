@@ -6,7 +6,7 @@ Documento de planificación tras revisar:
 - Core: `openttdrs_core::command` (`Command`, `CommandError`, `apply_command`).
 - Referencia OpenTTD (clon local): `bash scripts/fetch-openttd-reference.sh` → `reference/openttd-upstream/`.
 
-**Prioridad:** alta (hito 0.1 en solitario). **Estado:** **SP2.1–SP2.5 hechos en código/CI**; **SP2.6 pendiente de validación manual** (checklist escrito). Detalle visual de paradas → SP3.
+**Prioridad:** alta (hito 0.1 en solitario). **Estado:** **SP2 cerrado** (SP2.1–SP2.6, validación manual 2026-05-22). Detalle visual fino de paradas → SP3.
 
 **Documentación asociada**
 
@@ -91,7 +91,7 @@ flowchart TB
 | SP2.3 | Carretera, vía, depósito, túnel, puente, demo | Hecho |
 | SP2.4 | Paradas, tren, paneles, órdenes | Hecho |
 | SP2.5 | Industria preview + errores | Hecho (código + tests colocación) |
-| SP2.6 | Checklist + sesión 15 min | Doc hecho; **validación manual pendiente** |
+| SP2.6 | Checklist + sesión 15 min | ✅ Validación manual 2026-05-22 |
 
 ---
 
@@ -138,9 +138,9 @@ bash scripts/fetch-openttd-reference.sh
 - [x] `bash scripts/check.sh ci` verde.
 - [x] Documentación: [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md), este plan.
 
-**Pendiente para cerrar SP2.6 (no bloquea commits, sí el “SP2 cerrado” formal)**
+**SP2.6 — cerrado (2026-05-22)**
 
-- [ ] Sesión manual en [SP2_CHECKLIST.md](SP2_CHECKLIST.md) § SP2.6 (procedural + `stationlist-test.ottdmap` + F5/F9).
+- [x] Sesión manual en [SP2_CHECKLIST.md](SP2_CHECKLIST.md) § SP2.6 (procedural + `stationlist-test.ottdmap` + F5/F9).
 - [ ] (Opcional) Test de integración preview ↔ `command_would_fail` para industria y resto de herramientas.
 
-Hasta marcar SP2.6, considerar SP2 **casi cerrado**: jugable en desarrollo, falta regresión humana acordada en el plan original.
+**SP2 hecho:** construcción y herramientas validadas en solitario; siguiente foco producto: **SP1** (ciclo jugable) y **SP3** (visual en saves reales).

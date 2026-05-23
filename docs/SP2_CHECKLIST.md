@@ -3,7 +3,7 @@
 Criterio de cierre del hito **SP2** en solitario.
 
 - **SP2.1–SP2.5:** implementado; casillas automáticas y de código marcadas abajo.
-- **SP2.6:** obligatorio para dar SP2 por **cerrado** — sesión manual (abajo); el test de integración preview es opcional.
+- **SP2.6:** sesión manual completada (**2026-05-22**); SP2 **cerrado**.
 
 Marcar al probar; CI de referencia: **mayo 2026**.
 
@@ -102,7 +102,7 @@ cargo test -p openttdrs-client preview::
 
 ---
 
-## SP2.6 — Sesión 15 min (**pendiente — cierra SP2**)
+## SP2.6 — Sesión 15 min ✅ (cierra SP2)
 
 Comandos:
 
@@ -116,11 +116,11 @@ OTTDMAP_FILE=tests/fixtures/stationlist-test.ottdmap cargo run -p openttdrs-clie
 
 Checklist:
 
-1. [ ] **Procedural:** carretera → depósito → bus → parada (boca correcta) → orden circular → vehículo se mueve
-2. [ ] **`stationlist-test.ottdmap`:** parada en carretera existente, sin crash; panel vehículo/estación si aplica
-3. [ ] **F5** guardar / **F9** cargar: herramientas y órdenes siguen operativas
+1. [x] **Procedural:** carretera → depósito → bus → parada (boca correcta) → orden circular → vehículo se mueve
+2. [x] **`stationlist-test.ottdmap`:** parada en carretera existente, sin crash; panel vehículo/estación si aplica
+3. [x] **F5** guardar / **F9** cargar: herramientas y órdenes siguen operativas
 
-Cuando las tres estén marcadas, SP2 puede considerarse **cerrado** en [PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md).
+SP2 considerado **cerrado** en [PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md) (validación manual 2026-05-22).
 
 ### Opcional (no bloquea SP2)
 

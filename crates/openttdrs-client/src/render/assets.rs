@@ -37,6 +37,8 @@ pub(crate) struct WorldAssets {
     pub(crate) houses: HashMap<u32, Handle<Image>>,
     pub(crate) trees: [Handle<Image>; 3],
     pub(crate) industries: HashMap<u32, Handle<Image>>,
+    /// Cimientos nivelados (`foundation_01..14.png`, SPR_FOUNDATION_BASE + tileh).
+    pub(crate) foundations: Vec<Handle<Image>>,
 }
 
 impl WorldAssets {
@@ -55,6 +57,12 @@ impl WorldAssets {
                 asset_server.load::<Image>(format!(
                     "assets/opengfx/tiles/terrain_rough_slope_{tileh:02}.png"
                 ))
+            })
+            .collect();
+        let foundations = (1u8..=14)
+            .map(|tileh| {
+                asset_server
+                    .load::<Image>(format!("assets/opengfx/tiles/foundation_{tileh:02}.png"))
             })
             .collect();
         let water = asset_server.load::<Image>("assets/opengfx/tiles/water.png");
@@ -192,6 +200,7 @@ impl WorldAssets {
             houses,
             trees,
             industries,
+            foundations,
         }
     }
 }
@@ -228,6 +237,12 @@ pub(crate) fn stub_opengfx_tiles_for_tests(root: &std::path::Path) {
         write_png(
             root,
             &format!("assets/opengfx/tiles/terrain_rough_slope_{tileh:02}.png"),
+        );
+    }
+    for tileh in 1..=14 {
+        write_png(
+            root,
+            &format!("assets/opengfx/tiles/foundation_{tileh:02}.png"),
         );
     }
     write_png(root, "assets/opengfx/tiles/water.png");

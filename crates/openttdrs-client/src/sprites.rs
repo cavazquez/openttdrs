@@ -3,6 +3,8 @@
 use bevy::prelude::Color;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
+#[path = "sprites/foundation.rs"]
+mod foundation;
 #[path = "sprites/house_draw_data_generated.rs"]
 mod house_draw_data_generated;
 #[path = "sprites/industry.rs"]
@@ -72,6 +74,11 @@ pub const ROAD_FLAT_HALF_H: [f32; 19] = [
     15.5, 15.5, 15.5,
 ];
 
+#[allow(unused_imports)]
+pub use foundation::{
+    FOUNDATION_LEVELED_GFX, FOUNDATION_SPRITE_BASE, FoundationGfx, foundation_asset_path,
+    foundation_gfx_for_tileh, foundation_sprite_id, leveled_foundation_z_delta,
+};
 #[allow(unused_imports)]
 pub use industry::{
     INDUSTRY_GFX_DATA, INDUSTRY_GFX_STAGES, INDUSTRY_GFX_TABLE_LEN, IndustryGfxSprite,

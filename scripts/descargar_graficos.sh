@@ -465,6 +465,8 @@ crop_by_id(4550, "terrain_snow_full.png")
 # =============================================================================
 # AGUA (MP_WATER)
 # =============================================================================
+for tileh in range(1, 15):
+    crop_by_id(989 + tileh, f"foundation_{tileh:02d}.png")
 crop_by_id(4061, "water_flat.png")             # SPR_FLAT_WATER_TILE
 # Costas originales (4062-4069)
 for i, sid in enumerate(range(4062, 4070)):

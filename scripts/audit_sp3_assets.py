@@ -172,6 +172,7 @@ def collect_required_paths() -> list[tuple[str, str]]:
     for tileh in range(1, 15):
         add(f"assets/opengfx/tiles/terrain_grass_slope_{tileh:02}.png", "terrain_slope")
         add(f"assets/opengfx/tiles/terrain_rough_slope_{tileh:02}.png", "terrain_slope")
+        add(f"assets/opengfx/tiles/foundation_{tileh:02}.png", "foundation")
     add("assets/opengfx/tiles/water.png", "water")
     for i in range(8):
         add(f"assets/opengfx/tiles/shore_{i}.png", "water")

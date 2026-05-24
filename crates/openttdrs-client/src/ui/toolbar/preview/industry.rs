@@ -2,7 +2,8 @@ use bevy::prelude::*;
 use openttdrs_core::{IndustrySpec, Map, TileCoord, industry_template};
 
 use crate::iso::{iso, overlay_pos, tile_pos, tile_slope_and_min_z};
-use crate::sprites::industry_gfx_entry;
+use crate::render::leveled_foundation_overlay_pos;
+use crate::sprites::{foundation_asset_path, foundation_gfx_for_tileh, industry_gfx_entry};
 use crate::ui::toolbar::BuildMenuAction;
 
 use super::BuildGhostPreview;
@@ -54,10 +55,41 @@ pub(crate) fn spawn_industry_template_preview(
                 .with_scale(Vec3::new(1.002, 1.002, 1.0)),
         ));
 
+        let leveled = tileh != 0;
+        if leveled
+            && let (Some(path), Some(gfx)) = (
+                foundation_asset_path(tileh),
+                foundation_gfx_for_tileh(tileh),
+            )
+        {
+            let img = asset_server.load::<Image>(path);
+            let ref_pos = iso(coord.x, coord.y);
+            commands.spawn((
+                BuildGhostPreview,
+                Sprite {
+                    image: img,
+                    color: tint.with_alpha(tint.alpha() * 0.85),
+                    ..default()
+                },
+                Transform::from_translation(overlay_pos(
+                    ref_pos, gfx.xrel, gfx.yrel, gfx.w, gfx.h, base_z, 3.05, coord.x, coord.y,
+                )),
+            ));
+        }
+
         let Some(entry) = industry_gfx_entry(u16::from(m5)) else {
             continue;
         };
         let ref_pos = iso(coord.x, coord.y);
+        let overlay_at = |xrel, yrel, w, h, layer| {
+            if leveled {
+                leveled_foundation_overlay_pos(
+                    ref_pos, xrel, yrel, w, h, base_z, layer, coord.x, coord.y,
+                )
+            } else {
+                overlay_pos(ref_pos, xrel, yrel, w, h, base_z, layer, coord.x, coord.y)
+            }
+        };
         if entry.ground_sprite_id != 0 && entry.ground_w > 0.0 && entry.ground_h > 0.0 {
             let img = asset_server.load::<Image>(format!(
                 "assets/opengfx/tiles/industry_{}.png",
@@ -70,16 +102,12 @@ pub(crate) fn spawn_industry_template_preview(
                     color: tint,
                     ..default()
                 },
-                Transform::from_translation(overlay_pos(
-                    ref_pos,
+                Transform::from_translation(overlay_at(
                     entry.ground_xrel,
                     entry.ground_yrel,
                     entry.ground_w,
                     entry.ground_h,
-                    base_z,
                     3.2,
-                    coord.x,
-                    coord.y,
                 )),
             ));
         }
@@ -95,9 +123,8 @@ pub(crate) fn spawn_industry_template_preview(
                     color: tint,
                     ..default()
                 },
-                Transform::from_translation(overlay_pos(
-                    ref_pos, entry.xrel, entry.yrel, entry.w, entry.h, base_z, 3.3, coord.x,
-                    coord.y,
+                Transform::from_translation(overlay_at(
+                    entry.xrel, entry.yrel, entry.w, entry.h, 3.3,
                 )),
             ));
         }

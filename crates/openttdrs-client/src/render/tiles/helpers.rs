@@ -1,7 +1,8 @@
 use bevy::prelude::*;
 
-use crate::iso::{TILE_HALF_H, tile_pos, tile_pos_half, wang_hash};
-use crate::render::{MapVisualLayer, TileRenderContext, WaterTile};
+use crate::iso::{HEIGHT_PX, TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half, wang_hash};
+use crate::render::{MapVisualLayer, TileRenderContext, WaterTile, WorldAssets};
+use crate::sprites::foundation_gfx_for_tileh;
 
 /// Sesgo en la componente Z de **solo** el agua animada (sin sprite `shore_*`).
 /// El orden de dibujo usa `(tx+ty)`; el mar al **este/sur** tiene suma mayor y acaba
@@ -25,6 +26,72 @@ pub(crate) fn sloped_or_flat_image(
     } else {
         slopes[tileh as usize - 1].clone()
     }
+}
+
+/// Posición de overlay tras `DrawFoundation(FOUNDATION_LEVELED)` + `OffsetGroundSprite(0, -8)`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn leveled_foundation_overlay_pos(
+    ref_pos: Vec2,
+    xrel: f32,
+    yrel: f32,
+    w: f32,
+    h: f32,
+    base_z: u8,
+    layer: f32,
+    tx: i32,
+    ty: i32,
+) -> Vec3 {
+    let mut pos = overlay_pos(
+        ref_pos,
+        xrel,
+        yrel,
+        w,
+        h,
+        base_z.saturating_add(1),
+        layer,
+        tx,
+        ty,
+    );
+    pos.y -= HEIGHT_PX;
+    pos
+}
+
+pub(crate) fn spawn_leveled_foundation(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    tileh: u8,
+) {
+    let Some(gfx) = foundation_gfx_for_tileh(tileh) else {
+        return;
+    };
+    let Some(img) = assets.foundations.get((tileh - 1) as usize) else {
+        return;
+    };
+    let pos = overlay_pos(
+        ctx.iso_pos,
+        gfx.xrel,
+        gfx.yrel,
+        gfx.w,
+        gfx.h,
+        ctx.info.base_z,
+        0.36,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    commands.spawn((
+        MapVisualLayer,
+        Sprite {
+            image: img.clone(),
+            color: Color::WHITE,
+            ..default()
+        },
+        Transform::from_translation(pos).with_scale(Vec3::new(
+            TILE_OVERLAP_SCALE,
+            TILE_OVERLAP_SCALE,
+            1.0,
+        )),
+    ));
 }
 
 pub(crate) fn spawn_ground_sprite(
@@ -107,8 +174,18 @@ pub(crate) fn spawn_coast_debug_label(
 
 #[cfg(test)]
 mod tests {
-    use super::{FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC};
-    use crate::iso::{TILE_HALF_H, tile_pos, tile_pos_half};
+    use bevy::prelude::Vec2;
+
+    use super::{FLAT_WATER_LAYER_FRAC, SHORE_LAYER_FRAC, leveled_foundation_overlay_pos};
+    use crate::iso::{TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half};
+
+    #[test]
+    fn leveled_overlay_matches_flat_elevation() {
+        let flat = overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 40.0, 2, 0.5, 3, 4);
+        let leveled =
+            leveled_foundation_overlay_pos(Vec2::ZERO, 0.0, 0.0, 64.0, 40.0, 2, 0.5, 3, 4);
+        assert!((flat.y - leveled.y).abs() < 0.01);
+    }
 
     #[test]
     fn shore_z_sits_between_neighbor_land_and_water() {

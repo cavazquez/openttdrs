@@ -348,6 +348,45 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
         .expect("sloped");
 }
 
+#[test]
+fn spawn_industry_on_slope_spawns_foundation_layer() {
+    let assets = boot_assets_app();
+    let mut map = Map::new_flat(4, 4, 0);
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    map.set_height(c(1, 1), 7).expect("h");
+    for (x, y) in [(0, 0), (2, 0), (0, 2), (2, 2)] {
+        map.set_height(c(x, y), 4).expect("h");
+    }
+    let mut tile = tile_template();
+    tile.kind = TileKind::Industry;
+    tile.mapt = 0x80;
+    tile.m5 = 11;
+    tile.m1 = 0x80;
+    map.set_tile(c(1, 1), tile).expect("tile");
+
+    let grid = RenderGrid::from_map(&map, 4, 4);
+    let ctx = TileRenderContext::new(&map, &grid, 1, 1);
+    assert_ne!(ctx.info.tileh, 0);
+
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_industry_tile(
+                    &mut commands,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 1, 1),
+                    4.0,
+                );
+            },
+        )
+        .expect("industry slope");
+}
+
 fn tile_template() -> Tile {
     Tile {
         height: 0,

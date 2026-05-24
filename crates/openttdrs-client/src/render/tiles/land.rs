@@ -1,7 +1,10 @@
 use bevy::prelude::*;
 use openttdrs_core::TileKind;
 
-use super::{sloped_or_flat_image, spawn_ground_sprite};
+use super::{
+    leveled_foundation_overlay_pos, sloped_or_flat_image, spawn_ground_sprite,
+    spawn_leveled_foundation,
+};
 use crate::iso::{overlay_pos, wang_hash};
 use crate::render::{MapSpriteBatches, MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
@@ -91,27 +94,53 @@ pub(crate) fn spawn_industry_tile(
     let m1 = ctx.tile.map_or(0x80, |t| t.m1);
     let entry = crate::sprites::industry_gfx_entry_for_tile(gfx, m1);
     crate::sprites::log_industry_gfx_once(gfx, m1, entry);
-    // MP_INDUSTRY siempre usa terreno rough (aunque falte arte o gfx≥120).
+    // Terreno natural bajo la industria; en pendiente se añade cimiento nivelado (P4).
     let terrain_img = sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
     let terrain_color = Color::srgb(0.55, 0.50, 0.45);
     spawn_ground_sprite(commands, terrain_img, terrain_color, ctx, slope_half_ground);
+    let leveled = tileh != 0;
+    if leveled {
+        spawn_leveled_foundation(commands, assets, ctx, tileh);
+    }
+    let overlay_z = if leveled {
+        base_z.saturating_add(crate::sprites::leveled_foundation_z_delta(tileh))
+    } else {
+        base_z
+    };
+    let overlay_at = |xrel, yrel, w, h, layer| {
+        if leveled {
+            leveled_foundation_overlay_pos(
+                ctx.iso_pos,
+                xrel,
+                yrel,
+                w,
+                h,
+                base_z,
+                layer,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            )
+        } else {
+            crate::iso::overlay_pos(
+                ctx.iso_pos,
+                xrel,
+                yrel,
+                w,
+                h,
+                overlay_z,
+                layer,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            )
+        }
+    };
     if let Some(s) = entry {
         if s.ground_sprite_id != 0
             && s.ground_w > 0.0
             && s.ground_h > 0.0
             && let Some(img) = assets.industries.get(&s.ground_sprite_id)
         {
-            let pos_g = overlay_pos(
-                ctx.iso_pos,
-                s.ground_xrel,
-                s.ground_yrel,
-                s.ground_w,
-                s.ground_h,
-                base_z,
-                0.45,
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-            );
+            let pos_g = overlay_at(s.ground_xrel, s.ground_yrel, s.ground_w, s.ground_h, 0.45);
             commands.spawn((
                 MapVisualLayer,
                 Sprite {
@@ -127,17 +156,7 @@ pub(crate) fn spawn_industry_tile(
             && s.h > 0.0
             && let Some(img) = assets.industries.get(&s.sprite_id)
         {
-            let pos3 = overlay_pos(
-                ctx.iso_pos,
-                s.xrel,
-                s.yrel,
-                s.w,
-                s.h,
-                base_z,
-                0.5,
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-            );
+            let pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
             commands.spawn((
                 MapVisualLayer,
                 Sprite {

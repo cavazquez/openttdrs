@@ -168,6 +168,68 @@ fn set_vehicle_station_orders_on_demo_truck_matches_toolbar() {
 }
 
 #[test]
+fn place_bus_stop_matches_toolbar() {
+    let mut sim = SimWorld::default();
+    let Some((stop_tile, road_tile)) = adjacent_grass_pair(&sim) else {
+        panic!("se esperan dos hierbas adyacentes para carretera + parada bus");
+    };
+    assert!(apply_command(&mut sim.state, &Command::PlaceRoad(road_tile)).is_ok());
+    let entrance_dir = entrance_dir_toward_neighbor(stop_tile, road_tile);
+    assert!(
+        apply_command(
+            &mut sim.state,
+            &Command::PlaceBusStop(stop_tile, entrance_dir)
+        )
+        .is_ok(),
+        "PlaceBusStop con entrada hacia la carretera"
+    );
+    assert_eq!(sim.state.map.get_kind(stop_tile), Some(TileKind::Station));
+}
+
+#[test]
+fn place_rail_station_matches_toolbar() {
+    let mut sim = SimWorld::default();
+    let Some(c) = first_tile_with_kind(&sim, TileKind::Grass) else {
+        panic!("mapa procedural debe tener al menos una tesela de hierba");
+    };
+    let rail = TileCoord::new(c.x + 1, c.y);
+    assert!(
+        apply_command(&mut sim.state, &Command::PlaceRail(rail)).is_ok(),
+        "vía vecina para estación de tren"
+    );
+    assert!(
+        apply_command(&mut sim.state, &Command::PlaceRailStation(c, 2)).is_ok(),
+        "PlaceRailStation con entrada hacia la vía"
+    );
+    assert_eq!(sim.state.map.get_kind(c), Some(TileKind::Station));
+}
+
+#[test]
+fn build_road_vehicle_at_depot_matches_toolbar() {
+    let mut sim = SimWorld::default();
+    let Some(c) = first_tile_with_kind(&sim, TileKind::Grass) else {
+        panic!("mapa procedural debe tener al menos una tesela de hierba");
+    };
+    let exit = TileCoord::new(c.x + 1, c.y);
+    assert!(apply_command(&mut sim.state, &Command::PlaceRoad(exit)).is_ok());
+    assert!(
+        apply_command(&mut sim.state, &Command::PlaceRoadDepotDir(c, 2)).is_ok(),
+        "depósito con boca hacia carretera"
+    );
+    let before = sim.state.vehicles.len();
+    assert!(
+        apply_command(
+            &mut sim.state,
+            &Command::BuildRoadVehicleAtDepot(c, openttdrs_core::VehicleKind::Truck)
+        )
+        .is_ok(),
+        "BuildRoadVehicleAtDepot como panel depósito"
+    );
+    assert_eq!(sim.state.vehicles.len(), before + 1);
+    assert!(!sim.state.vehicles.last().expect("vehículo nuevo").running);
+}
+
+#[test]
 fn clear_tile_after_road_restores_grass() {
     let mut sim = SimWorld::default();
     let Some(c) = first_tile_with_kind(&sim, TileKind::Grass) else {

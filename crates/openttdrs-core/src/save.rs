@@ -9,7 +9,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::GameState;
 
-const SAVE_VERSION: u32 = 1;
+/// Versión de esquema del JSON en disco (`GameStateFile.version`).
+pub const CURRENT_SAVE_VERSION: u32 = 1;
+
+const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
 /// Contenedor en disco: una sola versión de esquema por ahora; migraciones futuras leen `version`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,12 +102,17 @@ pub fn load_from_str(text: &str) -> Result<GameState, SaveError> {
     let v: serde_json::Value = serde_json::from_str(text)?;
     if v.get("version").is_some() && v.get("state").is_some() {
         let file: GameStateFile = serde_json::from_value(v)?;
-        match file.version {
-            SAVE_VERSION => Ok(file.state),
-            n => Err(SaveError::UnsupportedVersion(n)),
-        }
+        migrate_loaded_state(file.version, file.state)
     } else {
         Ok(GameState::load_json(text)?)
+    }
+}
+
+/// Aplica migraciones encadenadas hasta [`CURRENT_SAVE_VERSION`].
+fn migrate_loaded_state(version: u32, state: GameState) -> Result<GameState, SaveError> {
+    match version {
+        CURRENT_SAVE_VERSION => Ok(state),
+        n => Err(SaveError::UnsupportedVersion(n)),
     }
 }
 
@@ -168,6 +176,18 @@ mod tests {
         let again = load_from_str(&text).unwrap();
         assert_eq!(again.map.dimensions(), s.map.dimensions());
         let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn unsupported_save_version_returns_error() {
+        let s = GameState::new(2, 2);
+        let file = GameStateFile {
+            version: CURRENT_SAVE_VERSION + 1,
+            state: s,
+        };
+        let text = serde_json::to_string(&file).unwrap();
+        let err = load_from_str(&text).unwrap_err();
+        assert!(matches!(err, SaveError::UnsupportedVersion(v) if v == CURRENT_SAVE_VERSION + 1));
     }
 
     #[test]

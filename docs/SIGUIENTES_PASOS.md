@@ -18,6 +18,7 @@ prioridad en **juego en solitario** (hito 0.1). La fundación **I0–I7** ya est
 | [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Paradas bus/camión/tren y sprites. |
 | [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md) | **`RemapCoords`**, BUILD paradas, roadmap de render. |
 | [PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md) | Depósito carretera: alineación, experimento revertido, roadmap retomada. |
+| [PLAN_SP4_PULIDO.md](PLAN_SP4_PULIDO.md) | Pulido/deuda (SP4): saves, modularización, orden SP4→SP3→SP1. |
 | [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) | Casas/industrias en `.ottdmap` — prioridades P1–P6. |
 | [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md) | Paridad 1:1 industrias vs OpenTTD (tabla 0–174, anim, NewGRF). |
 | [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | Checklist de regresión SP2. |
@@ -60,11 +61,24 @@ prioridad en **juego en solitario** (hito 0.1). La fundación **I0–I7** ya est
 
 ## Cómo seguir (prioridades)
 
+**Orden acordado (hito 0.1):** **SP4 → SP3 → SP1** — detalle en [PLAN_SP4_PULIDO.md](PLAN_SP4_PULIDO.md).
+
 **Orden de producto:** cerrar **0.1 en solitario** (fases SP) antes de invertir en **I8 (red)**.
 Dentro de SP, visual (SP3) y gameplay (SP1–SP2) pueden avanzar en paralelo según lo que
 más moleste al jugar.
 
-### SP1 — Ciclo jugable (prioridad alta)
+### SP4 — Pulido y deuda — **en curso**
+
+Plan: **[PLAN_SP4_PULIDO.md](PLAN_SP4_PULIDO.md)**.
+
+- [x] `check.sh ci` alineado con CI.
+- [x] Demo: paradas con `PlaceStationDir` (no sobre carretera).
+- [x] `startup/assets_check.rs` (extraído de `main.rs`).
+- [x] `CURRENT_SAVE_VERSION` + hook de migración en `save.rs`.
+- [ ] Migración real cuando cambie el esquema JSON (bump versión + test).
+- [ ] Test opcional `effective_road_bits` en fixture `.ottdmap` (core).
+
+### SP1 — Ciclo jugable (después de SP3)
 
 - Economía y estadísticas **legibles** en HUD (dinero, cargas, vehículos sin ruta).
 - Órdenes y estaciones: flujo claro desde toolbar → mapa → simulación.
@@ -85,9 +99,11 @@ Plan: **[PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md)**. Validación: **[
 
 En código: errores HUD, preview, transporte, paradas/tren, industria, órdenes, mapa demo. Paradas bus/camión: GROUND + BUILD calibrados (`RemapCoords`, checklist y=9).
 
-### SP3 — Presentación del mapa (prioridad media)
+### SP3 — Presentación del mapa (después de SP4)
 
-Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. **SP3.0 cerrado** (auditoría + fixture 20×13). **SP3.1** carretera en pendiente (y=7). **SP3.1b** vía en pendiente: checklist y=11 + `collect_rail_sprites(..., tileh)` con sprites 1031–1034 (**solo** base inclinada, alineado con `DrawTrackBits` vanilla). **SP3.3:** estación tren y stub parada en pendiente (checklist (16,7) y (15,9)).
+Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. Fases SP3.0–SP3.6 **cerradas** salvo
+**depósito carretera** ([PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md))
+e industrias extendidas ([PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md)).
 
 **Checklist visual:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client` — [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
 
@@ -106,10 +122,10 @@ Resumen de huecos reales (mucho de lo “esquina/T + trackbits” **ya está** e
 
 Clon de referencia C++: `bash scripts/fetch-openttd-reference.sh`.
 
-### SP4 — Pulido y deuda (prioridad media)
+### SP4 — Pulido y deuda — ver checklist arriba
 
-- ~~Alinear `./scripts/check.sh ci` con CI~~ — hecho: `fmt-check`, clippy `-D warnings`, nextest/test, TNBP, golden, `py_compile`.
-- Migraciones de save si el esquema JSON cambia.
+- ~~Alinear `./scripts/check.sh ci` con CI~~ — hecho.
+- Migraciones de save: hook listo; implementar al cambiar esquema.
 - Mantener docs y tests al día con el refactor modular del cliente/core.
 
 ### Fundación incremental (referencia — hecho en `main`)

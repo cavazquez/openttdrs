@@ -76,9 +76,10 @@ pub const ROAD_FLAT_HALF_H: [f32; 19] = [
 pub use industry::{
     INDUSTRY_GFX_DATA, INDUSTRY_GFX_STAGES, INDUSTRY_GFX_TABLE_LEN, IndustryGfxSprite,
     IndustryGfxStatus, debug_log_industry_gfx_once, industry_construction_stage_from_tile,
-    industry_gfx_draw_index, industry_gfx_entry, industry_gfx_entry_for_tile,
-    industry_gfx_entry_staged, industry_gfx_status, industry_gfx_status_label,
-    industry_gfx_uses_generic_fallback, industry_sprite_for_gfx, log_industry_gfx_once,
+    industry_gfx_draw_index, industry_gfx_empty_row_is_expected, industry_gfx_entry,
+    industry_gfx_entry_for_tile, industry_gfx_entry_staged, industry_gfx_status,
+    industry_gfx_status_label, industry_gfx_uses_generic_fallback, industry_sprite_for_gfx,
+    log_industry_gfx_once,
 };
 #[allow(unused_imports)]
 pub use rail::{

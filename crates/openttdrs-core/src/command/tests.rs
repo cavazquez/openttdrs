@@ -1,7 +1,8 @@
 use super::{Command, CommandError, apply_command, command_error_message, command_would_fail};
 use crate::{
-    BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, GameState, IndustryKind, ROAD_BUILD_COST,
-    STATION_BUILD_COST, StopKind, TileCoord, TileKind, Vehicle, VehicleKind,
+    BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, GameState, IndustryKind, IndustrySpec,
+    ROAD_BUILD_COST, STATION_BUILD_COST, StopKind, TileCoord, TileKind, Vehicle, VehicleKind,
+    industry_template,
 };
 
 #[test]
@@ -442,6 +443,24 @@ fn sandbox_commands_place_visible_tile_kinds() {
     assert!(s.industries.iter().any(|industry| {
         industry.pos == TileCoord::new(4, 1) && industry.kind == IndustryKind::CoalMine
     }));
+}
+
+#[test]
+fn place_industry_spec_marks_tiles_completed() {
+    let mut s = GameState::new(16, 16);
+    let origin = TileCoord::new(5, 5);
+    apply_command(
+        &mut s,
+        &Command::PlaceIndustrySpec(origin, IndustrySpec::Sawmill),
+    )
+    .unwrap();
+    for (coord, _) in industry_template(origin, IndustrySpec::Sawmill) {
+        let Some(tile) = s.map.get(coord) else {
+            panic!("tesela del footprint {coord:?}");
+        };
+        assert_eq!(tile.kind, TileKind::Industry);
+        assert_ne!(tile.m1 & 0x80, 0, "IsIndustryCompleted en {coord:?}");
+    }
 }
 
 #[test]

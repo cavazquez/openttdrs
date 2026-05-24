@@ -136,12 +136,32 @@ pub fn industry_gfx_uses_generic_fallback(entry: &IndustryGfxSprite) -> bool {
         && entry.yrel == -32.0
 }
 
+/// Fila vacía en etapa de obra cuando upstream también omite overlay (`s2 = 0`).
+#[must_use]
+pub fn industry_gfx_empty_row_is_expected(gfx: u16, stage: usize) -> bool {
+    if stage >= INDUSTRY_GFX_STAGES - 1 {
+        return false;
+    }
+    let Some(under) = industry_gfx_entry_staged(gfx, stage) else {
+        return false;
+    };
+    if under.sprite_id != 0 || under.ground_sprite_id != 0 {
+        return false;
+    }
+    let Some(done) = industry_gfx_entry_staged(gfx, 3) else {
+        return false;
+    };
+    done.sprite_id != 0 || done.ground_sprite_id != 0
+}
+
 /// Registra una vez por sesión los `gfx` problemáticos (debug + warn en release).
-pub fn log_industry_gfx_once(gfx: u16, entry: Option<&IndustryGfxSprite>) {
+pub fn log_industry_gfx_once(gfx: u16, m1: u8, entry: Option<&IndustryGfxSprite>) {
+    let stage = industry_construction_stage_from_tile(m1);
     let status = industry_gfx_status(gfx);
     if status == IndustryGfxStatus::Resolved {
         if cfg!(debug_assertions)
             && let Some(e) = entry
+            && !industry_gfx_empty_row_is_expected(gfx, stage)
         {
             if industry_gfx_uses_generic_fallback(e) {
                 log_industry_problem_once(gfx, "fallback genérico (sin PNG calibrado)");
@@ -163,8 +183,8 @@ pub fn log_industry_gfx_once(gfx: u16, entry: Option<&IndustryGfxSprite>) {
 
 /// Compat: alias debug histórico (reexportado en `crate::sprites`).
 #[allow(dead_code)]
-pub fn debug_log_industry_gfx_once(gfx: u16, entry: Option<&IndustryGfxSprite>) {
-    log_industry_gfx_once(gfx, entry);
+pub fn debug_log_industry_gfx_once(gfx: u16, m1: u8, entry: Option<&IndustryGfxSprite>) {
+    log_industry_gfx_once(gfx, m1, entry);
 }
 
 fn log_industry_problem_once(gfx: u16, reason: &str) {
@@ -186,9 +206,10 @@ fn log_industry_problem_once(gfx: u16, reason: &str) {
 mod industry_coverage_tests {
     use super::{
         INDUSTRY_GFX_DATA, INDUSTRY_GFX_STAGES, INDUSTRY_GFX_TABLE_LEN, IndustryGfxStatus,
-        industry_construction_stage_from_tile, industry_gfx_draw_index, industry_gfx_entry,
-        industry_gfx_entry_for_tile, industry_gfx_entry_staged, industry_gfx_status,
-        industry_gfx_uses_generic_fallback, industry_sprite_for_gfx,
+        industry_construction_stage_from_tile, industry_gfx_draw_index,
+        industry_gfx_empty_row_is_expected, industry_gfx_entry, industry_gfx_entry_for_tile,
+        industry_gfx_entry_staged, industry_gfx_status, industry_gfx_uses_generic_fallback,
+        industry_sprite_for_gfx,
     };
 
     #[test]
@@ -291,5 +312,20 @@ mod industry_coverage_tests {
             INDUSTRY_GFX_TABLE_LEN as usize * INDUSTRY_GFX_STAGES,
             INDUSTRY_GFX_DATA.len()
         );
+    }
+
+    #[test]
+    fn sawmill_gfx_14_15_empty_construction_rows_are_expected() {
+        for gfx in [14_u16, 15] {
+            for stage in 0..3 {
+                assert!(
+                    industry_gfx_empty_row_is_expected(gfx, stage),
+                    "gfx {gfx} stage {stage}"
+                );
+            }
+            assert!(!industry_gfx_empty_row_is_expected(gfx, 3));
+            let done = industry_gfx_entry_staged(gfx, 3).expect("terminada");
+            assert_ne!(done.sprite_id, 0);
+        }
     }
 }

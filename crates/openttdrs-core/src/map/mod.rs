@@ -128,6 +128,12 @@ impl Map {
         Ok(())
     }
 
+    pub fn set_m1(&mut self, c: TileCoord, m1: u8) -> Result<(), MapError> {
+        let i = self.index(c).ok_or(MapError::OutOfBounds)?;
+        self.tiles[i].m1 = m1;
+        Ok(())
+    }
+
     /// Sustituye la tesela en `c` (tests, fixtures y herramientas de edición).
     pub fn set_tile(&mut self, c: TileCoord, tile: Tile) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;

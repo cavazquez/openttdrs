@@ -90,7 +90,7 @@ pub(crate) fn spawn_industry_tile(
     });
     let m1 = ctx.tile.map_or(0x80, |t| t.m1);
     let entry = crate::sprites::industry_gfx_entry_for_tile(gfx, m1);
-    crate::sprites::log_industry_gfx_once(gfx, entry);
+    crate::sprites::log_industry_gfx_once(gfx, m1, entry);
     // MP_INDUSTRY siempre usa terreno rough (aunque falte arte o gfx≥120).
     let terrain_img = sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
     let terrain_color = Color::srgb(0.55, 0.50, 0.45);

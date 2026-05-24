@@ -62,6 +62,11 @@ pub(super) fn place_industry_spec_sandbox(
             .map
             .set_mapt_m5(*tile, 0x80, *m5)
             .map_err(|_| CommandError::OutOfBounds)?;
+        // Sandbox: construcción instantánea → `IsIndustryCompleted` (bit 7 de m1).
+        state
+            .map
+            .set_m1(*tile, 0x80)
+            .map_err(|_| CommandError::OutOfBounds)?;
     }
     state
         .industries

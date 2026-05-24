@@ -19,11 +19,15 @@ use crate::sprites::{
 use crate::state::SimWorld;
 
 use super::{HudBuildFeedback, SelectedTileInfo, SimHudControls, TileInfoText};
-use crate::ui::{BuildMenuAction, OrderEditState, UiToolState};
+use crate::ui::{OrderEditState, UiToolState};
 
+mod labels;
 mod station_hud;
 
-pub(crate) use station_hud::station_details_text;
+pub(crate) use labels::{tool_hud_hint, tool_hud_label};
+pub(crate) use station_hud::{
+    rail_depot_tile_details, road_depot_tile_details, station_details_text,
+};
 
 /// Alertas breves de vehículos para la tercera línea del HUD (sin ruta / sin órdenes).
 #[must_use]
@@ -67,7 +71,7 @@ pub(crate) fn vehicle_hud_alert_line(vehicles: &[openttdrs_core::Vehicle]) -> St
 pub(crate) fn setup_tile_info_ui(mut commands: Commands) {
     commands.spawn((
         TileInfoText,
-        Text2d::new("Mapa: clic izquierdo selecciona tile · Herramientas: 1/2/3/C · Esc cancela"),
+        Text2d::new("Mapa: clic selecciona tile · Depósito ≠ parada (carga) · Esc cancela"),
         TextFont {
             font_size: 14.0,
             ..default()
@@ -121,36 +125,11 @@ pub(crate) fn update_tile_info_text(
     let zoom_label = format!("Zoom {:.2}×", zoom_display_magnification(proj.scale));
     let pause_l = if hud.paused { "Pausa ON" } else { "Pausa OFF" };
     let speed_l = format!("Velocidad {:.0}x", hud.sim_speed);
-    let tool_l = match tool_state.active_tool {
-        Some(BuildMenuAction::Road) => "Road+",
-        Some(BuildMenuAction::RoadX) => "Road NE-SW",
-        Some(BuildMenuAction::RoadY) => "Road NW-SE",
-        Some(BuildMenuAction::RoadDepot) => "Road depot",
-        Some(BuildMenuAction::RoadBridge) => "Road bridge",
-        Some(BuildMenuAction::RoadTunnel) => "Road tunnel",
-        Some(BuildMenuAction::Rail) => "Rail",
-        Some(BuildMenuAction::RailHorz) => "Rail HORZ",
-        Some(BuildMenuAction::RailVert) => "Rail VERT",
-        Some(BuildMenuAction::RailStation) => "Rail station",
-        Some(BuildMenuAction::RailDepot) => "Rail depot",
-        Some(BuildMenuAction::RailBridge) => "Rail bridge",
-        Some(BuildMenuAction::RailTunnel) => "Rail tunnel",
-        Some(BuildMenuAction::Station) => "Station",
-        Some(BuildMenuAction::BusStop) => "Bus stop",
-        Some(BuildMenuAction::Clear) => "Clear",
-        Some(BuildMenuAction::Orders) => "Orders",
-        Some(BuildMenuAction::BuildHouse) => "Build house",
-        Some(BuildMenuAction::BuildCoalMine) => "Build coal mine",
-        Some(BuildMenuAction::BuildIronOreMine) => "Build iron mine",
-        Some(BuildMenuAction::BuildGoldMine) => "Build gold mine",
-        Some(BuildMenuAction::BuildOilWell) => "Build oil well",
-        Some(BuildMenuAction::BuildOilRefinery) => "Build oil refinery",
-        Some(BuildMenuAction::BuildFactory) => "Build factory",
-        Some(BuildMenuAction::BuildSawmill) => "Build sawmill",
-        Some(BuildMenuAction::BuildForest) => "Build forest",
-        Some(BuildMenuAction::BuildFarm) => "Build farm",
-        None => "None",
-    };
+    let tool_l = tool_state
+        .active_tool
+        .map(tool_hud_label)
+        .unwrap_or("Ninguna");
+    let tool_hint = tool_state.active_tool.and_then(tool_hud_hint);
     let order_l = order_state
         .vehicle_id
         .map(|id| format!(" | ordenes veh #{id}:{}", order_state.orders.len()))
@@ -205,13 +184,15 @@ pub(crate) fn update_tile_info_text(
         hud_lines.push(truncate_hud_line(&alert, 72));
     }
     hud_lines.push(format!(
-        "Tool: {tool_l}{order_l} | {minimap_l} | {save_file} · F4",
+        "Herramienta: {tool_l}{}{} | {minimap_l} | {save_file} · F4",
+        tool_hint.map_or(String::new(), |h| format!(" ({h})")),
+        order_l,
     ));
     let hud_status = hud_lines.join("\n");
 
     let Some(pos) = selected.pos else {
         **text = format!(
-            "{zoom_label}\n{hud_status}\nClic mapa: elegir tile · minimapa: saltar · tools 1/2/3/C/Esc"
+            "{zoom_label}\n{hud_status}\nClic mapa: tile · depósito: comprar vehículo · parada: carga"
         );
         return;
     };
@@ -286,7 +267,11 @@ pub(crate) fn update_tile_info_text(
             tile.m1, tile.m2
         )
     } else if tile.kind == TileKind::Station {
-        station_details_text(&sim, pos)
+        station_details_text(&sim, pos, &tile)
+    } else if tile.kind == TileKind::RoadDepot {
+        road_depot_tile_details(tile.m5)
+    } else if tile.kind == TileKind::RailDepot {
+        rail_depot_tile_details(tile.m5)
     } else {
         String::new()
     };
@@ -485,8 +470,8 @@ mod tests {
         }
         world.run_system_once(update_tile_info_text).unwrap();
         let station_text = hud_text(&mut world);
-        assert!(station_text.contains("Station stock:12 income:144"));
-        assert!(station_text.contains("Coverage r"));
+        assert!(station_text.contains("stock:12 income:144"));
+        assert!(station_text.contains("estación tren"));
 
         // Unknown kind early-return path.
         {
@@ -573,7 +558,8 @@ mod tests {
             capacity: 100,
         });
 
-        let text = station_details_text(&sim, station_pos);
+        let tile = sim.state.map.get(station_pos).unwrap();
+        let text = station_details_text(&sim, station_pos, &tile);
         assert!(text.contains("stock:7 income:84"));
         assert!(text.contains("coal:"));
         assert!(text.contains("source stock:42"));

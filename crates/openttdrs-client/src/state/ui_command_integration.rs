@@ -230,6 +230,114 @@ fn build_road_vehicle_at_depot_matches_toolbar() {
 }
 
 #[test]
+fn place_coal_mine_on_grass_matches_toolbar() {
+    use openttdrs_core::{IndustryKind, IndustrySpec};
+
+    let mut sim = SimWorld::default();
+    let before = sim.state.industries.len();
+    let Some(c) = first_tile_with_kind(&sim, TileKind::Grass) else {
+        panic!("mapa procedural debe tener al menos una tesela de hierba");
+    };
+    assert!(
+        apply_command(
+            &mut sim.state,
+            &Command::PlaceIndustrySpec(c, IndustrySpec::CoalMine)
+        )
+        .is_ok(),
+        "PlaceIndustrySpec mina carbón"
+    );
+    assert_eq!(sim.state.map.get_kind(c), Some(TileKind::Industry));
+    assert_eq!(sim.state.industries.len(), before + 1);
+    assert!(
+        sim.state
+            .industries
+            .iter()
+            .any(|i| i.pos == c && i.kind == IndustryKind::CoalMine),
+        "mina de carbón en la tesela colocada"
+    );
+}
+
+#[test]
+fn set_vehicle_tile_orders_matches_order_panel() {
+    let mut sim = SimWorld::default();
+    let truck_id = 9010;
+    let a = TileCoord::new(3, 6);
+    let b = TileCoord::new(10, 6);
+    assert!(
+        apply_command(
+            &mut sim.state,
+            &Command::SetVehicleOrders(truck_id, vec![a, b])
+        )
+        .is_ok(),
+        "SetVehicleOrders con teselas de carretera"
+    );
+    let truck = sim
+        .state
+        .vehicles
+        .iter()
+        .find(|v| v.id == truck_id)
+        .expect("camión demo");
+    assert_eq!(truck.orders.len(), 2);
+}
+
+#[test]
+fn clone_vehicle_orders_copies_demo_truck_route() {
+    let mut sim = SimWorld::default();
+    use crate::state::bootstrap::{DEMO_ECONOMY_DELIVER_STATION, DEMO_ECONOMY_LOAD_STATION};
+
+    let Some(c) = first_tile_with_kind(&sim, TileKind::Grass) else {
+        panic!("hierba para depósito");
+    };
+    let exit = TileCoord::new(c.x + 1, c.y);
+    assert!(apply_command(&mut sim.state, &Command::PlaceRoad(exit)).is_ok());
+    assert!(apply_command(&mut sim.state, &Command::PlaceRoadDepotDir(c, 2)).is_ok());
+    assert!(
+        apply_command(
+            &mut sim.state,
+            &Command::BuildRoadVehicleAtDepot(c, openttdrs_core::VehicleKind::Truck)
+        )
+        .is_ok()
+    );
+    assert!(
+        apply_command(
+            &mut sim.state,
+            &Command::BuildRoadVehicleAtDepot(c, openttdrs_core::VehicleKind::Truck)
+        )
+        .is_ok()
+    );
+    let ids: Vec<u32> = sim.state.vehicles.iter().map(|v| v.id).collect();
+    let src = ids[ids.len() - 2];
+    let dst = ids[ids.len() - 1];
+    assert!(
+        apply_command(
+            &mut sim.state,
+            &Command::SetVehicleStationOrders(
+                src,
+                vec![DEMO_ECONOMY_LOAD_STATION, DEMO_ECONOMY_DELIVER_STATION],
+            )
+        )
+        .is_ok()
+    );
+    assert!(
+        apply_command(
+            &mut sim.state,
+            &Command::CloneVehicleOrders {
+                from_vehicle_id: src,
+                to_vehicle_id: dst,
+            }
+        )
+        .is_ok()
+    );
+    let dst_truck = sim
+        .state
+        .vehicles
+        .iter()
+        .find(|v| v.id == dst)
+        .expect("segundo camión");
+    assert_eq!(dst_truck.orders.len(), 2);
+}
+
+#[test]
 fn clear_tile_after_road_restores_grass() {
     let mut sim = SimWorld::default();
     let Some(c) = first_tile_with_kind(&sim, TileKind::Grass) else {

@@ -78,14 +78,14 @@ Plan: **[PLAN_SP4_PULIDO.md](PLAN_SP4_PULIDO.md)**.
 - [ ] Migración real cuando cambie el esquema JSON (bump versión + test).
 - [ ] Test opcional `effective_road_bits` en fixture `.ottdmap` (core).
 
-### SP1 — Ciclo jugable (después de SP3)
+### SP1 — Ciclo jugable
 
-- Economía y estadísticas **legibles** en HUD (dinero, cargas, vehículos sin ruta).
-- Órdenes y estaciones: flujo claro desde toolbar → mapa → simulación.
-- Coherencia **estación en mapa** vs entradas en `state.stations` (paradas demo usan
-  `PlaceStationDir` en hierba adyacente a la carretera; ver
-  [PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md) §5).
-- Tests de integración UI↔`apply_command` ampliados donde falten herramientas críticas.
+- [x] HUD económico legible (dinero, préstamo, cargas, vehículos).
+- [x] Alertas vehículos sin ruta / sin órdenes.
+- [x] HUD distingue **depósito** vs **parada** (tooltips + tile seleccionado).
+- [x] Paradas demo coherentes (`PlaceStationDir` en hierba).
+- [x] Tests integración toolbar: carretera, vía, paradas, depósito, industria, órdenes, clonar.
+- [ ] Revisión manual flujo órdenes en partida nueva (checklist jugador).
 
 ### SP2 — Construcción y herramientas — **cerrado (2026-05-22)**
 

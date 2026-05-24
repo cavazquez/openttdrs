@@ -356,7 +356,7 @@ pub(super) fn place_road_depot_dir(
         c,
         TileKind::RoadDepot,
         0x20,
-        0x20 | dir,
+        (2 << 6) | dir,
         DEPOT_BUILD_COST,
     )?;
     if let Some((exit, road_bits)) = road_depot_exit_for_dir(&state.map, c, dir)
@@ -378,8 +378,8 @@ pub(super) fn place_rail_depot_dir(
         state,
         c,
         TileKind::RailDepot,
-        0x20,
-        0x20 | dir,
+        0x10,
+        (2 << 6) | dir,
         DEPOT_BUILD_COST,
     )
 }

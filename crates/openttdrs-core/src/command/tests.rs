@@ -224,6 +224,7 @@ fn place_road_depot_dir_preserves_orientation_in_m5() {
     let tile = s.map.get(depot).unwrap();
     assert_eq!(tile.kind, TileKind::RoadDepot);
     assert_eq!(tile.m5 & 0x03, 3);
+    assert_eq!((tile.m5 >> 6) & 0x03, 2, "RoadTileType::Depot en bits 6–7");
     assert_eq!(s.map.get_kind(exit), Some(TileKind::Road));
     assert_ne!(
         s.map.get(exit).unwrap().m5 & 0x04,

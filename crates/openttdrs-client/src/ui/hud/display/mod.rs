@@ -211,8 +211,8 @@ pub(crate) fn update_tile_info_text(
         TileKind::Water => "Water",
         TileKind::Road => "Road",
         TileKind::Rail => "Rail",
-        TileKind::RoadDepot => "RoadDepot",
-        TileKind::RailDepot => "RailDepot",
+        TileKind::RoadDepot => "Depósito carretera",
+        TileKind::RailDepot => "Depósito vía",
         TileKind::RoadTunnel => "RoadTunnel",
         TileKind::RailTunnel => "RailTunnel",
         TileKind::RoadBridge => "RoadBridge",
@@ -471,7 +471,28 @@ mod tests {
         world.run_system_once(update_tile_info_text).unwrap();
         let station_text = hud_text(&mut world);
         assert!(station_text.contains("stock:12 income:144"));
-        assert!(station_text.contains("estación tren"));
+        assert!(hud_text(&mut world).contains("estación tren"));
+
+        // Depósito carretera: etiqueta legible + aviso de no-parada.
+        {
+            let mut sim = world.resource_mut::<SimWorld>();
+            sim.state
+                .map
+                .set_tile(
+                    c,
+                    Tile {
+                        kind: TileKind::RoadDepot,
+                        mapt: 0x20,
+                        m5: 0x82,
+                        ..tile_template()
+                    },
+                )
+                .unwrap();
+        }
+        world.run_system_once(update_tile_info_text).unwrap();
+        let depot_text = hud_text(&mut world);
+        assert!(depot_text.contains("Depósito carretera"));
+        assert!(depot_text.contains("No es parada"));
 
         // Unknown kind early-return path.
         {

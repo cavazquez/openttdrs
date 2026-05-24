@@ -281,6 +281,21 @@ mod tests {
     }
 
     #[test]
+    fn sp3_visual_fixture_road_depots_on_row_y6() {
+        let map = Map::from_ottd_binary(SP3_VISUAL_FIXTURE).expect("checklist MAP1");
+        for (x, dir) in [(3, 0), (6, 1), (10, 2), (14, 3)] {
+            let t = map.get(TileCoord::new(x, 6)).expect("depot tile");
+            assert_eq!(t.kind, TileKind::RoadDepot, "({x},6)");
+            assert_eq!(t.m5 & 0x03, dir);
+            assert_eq!((t.m5 >> 6) & 0x03, 2);
+            assert_eq!(
+                effective_road_bits(t.mapt, t.m5, t.kind, MP_ROAD, MP_TB),
+                Some((1u8 << (3 ^ dir)) & 0x0F)
+            );
+        }
+    }
+
+    #[test]
     fn effective_road_bits_subtypes_and_tunnelbridge() {
         assert_eq!(
             effective_road_bits(0x20, 0x0F, TileKind::Road, MP_ROAD, MP_TB),

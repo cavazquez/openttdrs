@@ -110,12 +110,12 @@ toolbar del jugador.
 
 ### Fase A — Infraestructura (paridad paradas)
 
-- [ ] Añadir `third_party/openttd/road_land.h` (ya usado en sesión; volver a copiar).
-- [ ] `scripts/gen_road_depot_gfx_data.py` → `road_depot_gfx_data_generated.rs`.
-- [ ] `road_depot_build_layers`, `road_depot_ground_layer`, `road_depot_entrance_road_bits`.
-- [ ] `objects.rs`: suelo + road_flat + capas BUILD.
-- [ ] Preview alineado con mapa.
-- [ ] Tests: conteos de capas, `DiagDirToRoadBits`, centros vs losa (tolerancia px).
+- [x] Añadir `third_party/openttd/road_land.h`.
+- [x] `scripts/gen_road_depot_gfx_data.py` → `road_depot_gfx_data_generated.rs`.
+- [x] `road_depot_build_layers`, `ROAD_DEPOT_GROUND_PATH`, `road_depot_entrance_road_bits`.
+- [x] `objects.rs`: suelo + road_flat + capas BUILD.
+- [x] Preview alineado con mapa (`preview/road_depot.rs`).
+- [x] Tests: conteos de capas, `DiagDirToRoadBits`, centros vs losa (tolerancia px).
 
 ### Fase B — Calibración visual SP3
 

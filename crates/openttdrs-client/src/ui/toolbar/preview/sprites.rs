@@ -24,8 +24,6 @@ pub(crate) fn preview_image_for_action(
         "assets/opengfx/tiles/bus_stop_sw_ground.png",
         "assets/opengfx/tiles/bus_stop_nw_ground.png",
     ];
-    use crate::sprites::ROAD_DEPOT_BUILDING_BY_DIR;
-
     match action {
         BuildMenuAction::Station => Some(asset_server.load::<Image>(format!(
             "assets/opengfx/tiles/truck_stop_ground_{}.png",
@@ -44,9 +42,7 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::RoadY => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/road_flat_00.png"))
         }
-        BuildMenuAction::RoadDepot => Some(asset_server.load::<Image>(
-            ROAD_DEPOT_BUILDING_BY_DIR[usize::from(station_state.orientation.min(3))],
-        )),
+        BuildMenuAction::RoadDepot => None,
         BuildMenuAction::RoadBridge => {
             let path = if bridge_axis_y_from_tiles(preview_tiles) {
                 "assets/opengfx/tiles/bridge_wood_road_y.png"

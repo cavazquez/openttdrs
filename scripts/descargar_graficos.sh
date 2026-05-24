@@ -810,6 +810,7 @@ for sid in INDUSTRY_SPRITE_IDS:
 # =============================================================================
 crop_by_id(2633, "airport_heliport.png")
 crop_by_id(2634, "airport_apron.png")
+crop_by_id(2634, "road_depot_ground.png")
 crop_by_id(2635, "airport_stand.png")
 for i, sid in enumerate(range(2636, 2645)):
     crop_by_id(sid, f"airport_taxiway_{i}.png")

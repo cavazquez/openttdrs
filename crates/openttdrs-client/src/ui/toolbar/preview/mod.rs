@@ -2,6 +2,7 @@
 
 mod industry;
 mod orders;
+mod road_depot;
 mod road_stop;
 mod rotate;
 mod sprites;
@@ -25,6 +26,7 @@ use super::{BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, 
 
 use industry::{industry_spec_for_action, spawn_industry_template_preview};
 use orders::{spawn_order_pick_target_preview, spawn_order_route_preview};
+use road_depot::{RoadDepotPreviewSpawn, spawn_road_depot_preview};
 use road_stop::{
     RoadStopPreviewSpawn, bus_stop_ground_path, road_stop_preview_dir, spawn_road_stop_preview,
     truck_stop_ground_path,
@@ -185,6 +187,22 @@ pub(crate) fn update_build_ghost_preview(
                     class,
                     dir,
                     ground_path: ground,
+                    tint,
+                    asset_server: &asset_server,
+                },
+            );
+            continue;
+        }
+
+        if action == BuildMenuAction::RoadDepot {
+            spawn_road_depot_preview(
+                &mut commands,
+                RoadDepotPreviewSpawn {
+                    px: *px,
+                    py: *py,
+                    base_z,
+                    half_h,
+                    dir: road_stop_preview_dir(station_state.orientation),
                     tint,
                     asset_server: &asset_server,
                 },

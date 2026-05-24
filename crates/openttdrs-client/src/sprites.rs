@@ -61,7 +61,10 @@ pub fn rail_track_base_color(mapt: u8, kind: TileKind, m5: u8, m3: u8) -> Color 
     }
 }
 
-pub use road::{ROAD_DEPOT_BUILDING_BY_DIR, ROAD_FLAT_OFFSET_TBL};
+pub use road::{
+    ROAD_DEPOT_GROUND_PATH, ROAD_FLAT_OFFSET_TBL, road_depot_build_layers,
+    road_depot_entrance_road_bits, road_depot_seq_gfx,
+};
 
 /// Mitad de la altura en px de cada variante `road_flat_XX`.
 pub const ROAD_FLAT_HALF_H: [f32; 19] = [

@@ -113,8 +113,7 @@ Resumen de huecos reales (mucho de lo “esquina/T + trackbits” **ya está** e
 
 - **Pendientes vía en junctions / cimientos** — tramos rectos, T, cruce, **HORZ/VERT** en slope usan solo sprite inclinado (1031–1034); overlays 1005–1010 **solo en plano**. Piezas cardinales sueltas (1013–1016) igual. **Construcción** HORZ/VERT: herramientas en toolbar + `PlaceRailBits`/`SetRailBits`; vía diagonal sigue con `PlaceRail` por vecinos. **Saves reales (P5):** `python3 scripts/verify_parse_sav_rail_m5.py [partida.sav]` — ver [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) § P5.
 - **Estaciones** de tren: plataformas/edificios, no solo suelo bus/camión.
-- **Depósito carretera:** render legacy (PNG centrado); pipeline `RemapCoords` documentado en
-  [PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md) (experimento revertido).
+- **Depósito carretera:** pipeline `RemapCoords` fase A en código; calibración visual pendiente (fase B).
 - **Casas/industrias** en `.ottdmap`: seguir [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) (P1 etapas casa → P6).
 - **Assets**: auditar `rail_*.png` (evitar placeholders del script).
 - **Rendimiento**: culling al dibujar el mapa (el agua ya culling; el resto del mapa no).

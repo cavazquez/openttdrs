@@ -2,21 +2,39 @@
 
 use openttdrs_core::{Map, TileCoord, TileKind};
 
-/// Edificio de depósito de carretera por `DiagDirection` (`m5 & 0x03`).
-///
-/// OpenTTD usa `SPR_ROAD_DEPOT` (1408) + piezas de boca; en OpenGFX los PNG
-/// `road_depot_0` / `road_depot_2` son recortes 12×12 (líneas de acceso), no el
-/// edificio. Los sprites 60×47 por orientación son 1412 (NE), 1409 (SE), 1411 (SW), 1413 (NW).
-pub const ROAD_DEPOT_BUILDING_BY_DIR: [&str; 4] = [
-    "assets/opengfx/tiles/rail_1412.png",
-    "assets/opengfx/tiles/road_depot_1.png",
-    "assets/opengfx/tiles/road_depot_3.png",
-    "assets/opengfx/tiles/rail_1413.png",
-];
-
 /// Tabla `offsets[]` de `GetRoadSpriteOffset` en `road_cmd.cpp` (tesela plana).
 /// Sprite final = `SPR_ROAD_Y` (1332) + entrada; índices 11–14 son variantes en pendiente NE/SE/SW/NW.
 pub const ROAD_FLAT_OFFSET_TBL: [u8; 16] = [0, 18, 17, 7, 16, 0, 10, 5, 15, 8, 1, 4, 9, 3, 6, 2];
+
+#[path = "road_depot_gfx_data_generated.rs"]
+mod road_depot_gfx_data_generated;
+
+pub use road_depot_gfx_data_generated::{
+    ROAD_DEPOT_BUILD_LAYERS, ROAD_DEPOT_GROUND_PATH, RoadDepotLayerGfx,
+};
+
+/// Road bits en la tesela del depósito (`DiagDirToRoadBits` en `road_func.h`).
+#[must_use]
+pub fn road_depot_entrance_road_bits(dir: u8) -> u8 {
+    1u8 << (3 ^ (dir & 3))
+}
+
+#[must_use]
+pub fn road_depot_build_layers(dir: usize) -> &'static [RoadDepotLayerGfx] {
+    ROAD_DEPOT_BUILD_LAYERS[dir.min(3)]
+}
+
+#[must_use]
+pub fn road_depot_seq_gfx(layer: &RoadDepotLayerGfx) -> crate::iso::RoadStopSeqGfx {
+    crate::iso::RoadStopSeqGfx {
+        dx: layer.dx,
+        dy: layer.dy,
+        dz: layer.dz,
+        x_offs: layer.x_offs,
+        y_offs: layer.y_offs,
+        remap_x_adj: layer.remap_x_adj,
+    }
+}
 
 #[must_use]
 pub fn road_tile_has_tram_track(m8: u16) -> bool {
@@ -305,5 +323,21 @@ mod tests {
         assert!(tram_flat_sprite_index(0, 0x03, &ROAD_FLAT_OFFSET_TBL).is_some());
         assert_eq!(road_flat_sprite_index(12, bits, &ROAD_FLAT_OFFSET_TBL), 11);
         assert!(road_tile_has_tram_track(0x80));
+    }
+
+    #[test]
+    fn road_depot_entrance_road_bits_match_diag_dir() {
+        assert_eq!(road_depot_entrance_road_bits(0), 0x08);
+        assert_eq!(road_depot_entrance_road_bits(1), 0x04);
+        assert_eq!(road_depot_entrance_road_bits(2), 0x02);
+        assert_eq!(road_depot_entrance_road_bits(3), 0x01);
+    }
+
+    #[test]
+    fn road_depot_build_layer_counts_per_direction() {
+        assert_eq!(road_depot_build_layers(0).len(), 1);
+        assert_eq!(road_depot_build_layers(1).len(), 2);
+        assert_eq!(road_depot_build_layers(2).len(), 2);
+        assert_eq!(road_depot_build_layers(3).len(), 1);
     }
 }

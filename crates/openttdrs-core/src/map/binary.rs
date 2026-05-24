@@ -129,10 +129,23 @@ fn ottd_byte_or(plane: &[u8], i: usize) -> u8 {
 
 #[inline]
 fn ottd_tile_kind(ottd_type: u8, m5: u8) -> TileKind {
+    let transport_subtype = (m5 >> 6) & 0x3;
     match ottd_type {
         0 | 10 => TileKind::Grass,
-        1 => TileKind::Rail,
-        2 => TileKind::Road,
+        1 => {
+            if transport_subtype == 2 {
+                TileKind::RailDepot
+            } else {
+                TileKind::Rail
+            }
+        }
+        2 => {
+            if transport_subtype == 2 {
+                TileKind::RoadDepot
+            } else {
+                TileKind::Road
+            }
+        }
         3 => TileKind::House,
         4 => TileKind::Forest,
         5 => TileKind::Station,

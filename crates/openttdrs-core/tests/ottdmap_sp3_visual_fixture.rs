@@ -143,6 +143,22 @@ fn loads_sp3_visual_checklist_layout() {
     assert_eq!(tile(&map, 13, 6).m8 & 0xFFF, 66);
     assert_eq!(tile(&map, 17, 6).m8 & 0xFFF, 109);
 
+    // Depósito carretera 4 direcciones (y=6, SP3 fase B)
+    for (depot_x, dir, exit, road_m5) in [
+        (3, 0, (2, 6), 0x02),
+        (6, 1, (6, 7), 0x01),
+        (10, 2, (11, 6), 0x08),
+        (14, 3, (14, 5), 0x04),
+    ] {
+        let depot = tile(&map, depot_x, 6);
+        assert_eq!(depot.kind, TileKind::RoadDepot);
+        assert_eq!(depot.m5 & 0x03, dir);
+        assert_eq!(depot.m5 & 0xC0, 0x80);
+        let mouth = tile(&map, exit.0, exit.1);
+        assert_eq!(mouth.kind, TileKind::Road);
+        assert_eq!(mouth.m5 & 0x0F, road_m5);
+    }
+
     // Etapas de obra (y=1): HouseID 0
     let s0 = tile(&map, 1, 1);
     assert_eq!(s0.kind, TileKind::House);

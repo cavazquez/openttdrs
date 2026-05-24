@@ -408,6 +408,49 @@ mod ottdmap_binary_tests {
     }
 
     #[test]
+    fn mp_road_and_rail_depot_subtypes_map_to_depot_kinds() {
+        let base = ([1; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4]);
+        let road_depot = build_ottdmap_2x2(
+            [0x20, 0, 0, 0],
+            base.0,
+            base.1,
+            base.2,
+            base.3,
+            base.4,
+            base.5,
+            [0x82, 0, 0, 0],
+            base.7,
+            base.8,
+            [0; 4],
+        );
+        let map = Map::from_ottd_binary(&road_depot).expect("map");
+        assert_eq!(
+            map.get(TileCoord::new(0, 0)).expect("t").kind,
+            TileKind::RoadDepot
+        );
+        assert_eq!(map.get(TileCoord::new(0, 0)).expect("t").m5 & 0x03, 2);
+
+        let rail_depot = build_ottdmap_2x2(
+            [0x10, 0, 0, 0],
+            base.0,
+            base.1,
+            base.2,
+            base.3,
+            base.4,
+            base.5,
+            [0x81, 0, 0, 0],
+            base.7,
+            base.8,
+            [0; 4],
+        );
+        let map = Map::from_ottd_binary(&rail_depot).expect("map");
+        assert_eq!(
+            map.get(TileCoord::new(0, 0)).expect("t").kind,
+            TileKind::RailDepot
+        );
+    }
+
+    #[test]
     fn from_ottd_binary_rejects_legacy_mapo_header() {
         let mut b = minimal_ottdmap_v1();
         b[0..4].copy_from_slice(b"MAPO");

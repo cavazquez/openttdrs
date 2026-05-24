@@ -14,7 +14,7 @@ y=2   · h16 · h20 · h24 · h32 · h39 ·                       (templado vari
 y=3   · RY · RX · RT · cruce · cruce nivel X/Y · · tranvía X ·
 y=4   · ind gfx0 s0 · s1 · s2 · terminada · estadio h20 · (P5/P6)
 y=5   · vía Y · vía X · T · cruce · señales · nieve ·
-y=6   · ártico · trópico · toyland · iglú · h109 ·           (más climas)
+y=6   · depósito NE/SE/SW/NW + climas (x=1,5,9,13,17) ·
 y=7   · carretera NE · SE · SW · NW · tranvía pendiente NE ·
 y=8   · obra h16 s0..s3 · terminada ·                       (Large Office)
 y=9   · bus NE · SE · SW · NW · camión · tren · casa ·
@@ -158,6 +158,16 @@ def industry_under_construction(
     )
 
 
+def road_depot_tile(direction: int) -> TileSpec:
+    """MP_ROAD depósito: `RoadTileType::Depot` (bits 6–7 = 2) + `DiagDirection` en 0–1."""
+    d = direction & 3
+    return TileSpec(tt=MP_ROAD, m5=0x80 | d)
+
+
+def road_tile(stub_bits: int) -> TileSpec:
+    return TileSpec(tt=MP_ROAD, m5=stub_bits & 0x0F)
+
+
 def bus_stop_tile(direction: int) -> TileSpec:
     """Parada bus en `direction` 0=NE … 3=NW (`m5` bajo + stub en `m3`)."""
     d = direction & 3
@@ -257,6 +267,16 @@ def main() -> None:
     # --- Más climas (y=6) ---
     for x, hid in zip(HOUSE_X, (70, 78, 82, 66, 109), strict=True):
         put(tiles, x, 6, house_completed(hid))
+
+    # --- Depósito carretera 4 direcciones (y=6, SP3 fase B) ---
+    for depot_x, direction, exit_xy, road_m5 in [
+        (3, 0, (2, 6), 0x02),   # NE → boca oeste
+        (6, 1, (6, 7), 0x01),   # SE → boca sur (evita pendiente en x=7,y=7)
+        (10, 2, (11, 6), 0x08),  # SW → boca este
+        (14, 3, (14, 5), 0x04),  # NW → boca norte
+    ]:
+        put(tiles, depot_x, 6, road_depot_tile(direction))
+        put(tiles, exit_xy[0], exit_xy[1], road_tile(road_m5))
 
     # --- Obras HouseID 16 Large Office (y=8), hash 0 en HOUSE_X ---
     for x, stage in zip(HOUSE_X[:4], (0, 1, 2, 3), strict=True):

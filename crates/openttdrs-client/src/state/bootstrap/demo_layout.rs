@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    Command, GameState, Industry, IndustryKind, PathNetwork, Station, StopKind, TileCoord,
-    TileKind, Vehicle, VehicleKind, apply_command, find_path,
+    Command, GameState, Industry, IndustryKind, PathNetwork, TileCoord, TileKind, Vehicle,
+    VehicleKind, apply_command, find_path,
 };
 
 /// Carretera horizontal de demo (eje X).
@@ -26,10 +26,12 @@ pub const DEMO_BRIDGE_BANK_S: i32 = 12;
 pub const DEMO_TUNNEL_NE: TileCoord = TileCoord::new(18, 8);
 /// Mina de carbón del ciclo económico demo (cobertura desde estación de carga).
 pub const DEMO_ECONOMY_INDUSTRY: TileCoord = TileCoord::new(2, 3);
-/// Parada de camión junto a la mina (carga).
-pub const DEMO_ECONOMY_LOAD_STATION: TileCoord = TileCoord::new(3, DEMO_ROAD_Y);
-/// Parada de camión de entrega (descarga / ingresos).
-pub const DEMO_ECONOMY_DELIVER_STATION: TileCoord = TileCoord::new(10, DEMO_ROAD_Y);
+/// Parada de camión en hierba **al norte** de la carretera demo (carga).
+pub const DEMO_ECONOMY_LOAD_STATION: TileCoord = TileCoord::new(3, DEMO_ROAD_Y - 1);
+/// Parada de camión en hierba al norte de la carretera (descarga / ingresos).
+pub const DEMO_ECONOMY_DELIVER_STATION: TileCoord = TileCoord::new(10, DEMO_ROAD_Y - 1);
+/// Entrada de parada hacia la carretera en `y = DEMO_ROAD_Y` (tesela al sur → `DIAGDIR_SE`).
+const DEMO_ECONOMY_STATION_ENTRANCE_DIR: u8 = 1;
 
 /// `WaterTileType::Coast` en bits 4–7 de `m5` (fuerza sprites `shore_*` en el borde).
 const WATER_COAST_M5: u8 = 0x10;
@@ -73,8 +75,8 @@ pub(crate) fn place_demo_economy_loop(state: &mut GameState) {
     mine.stock = 64;
     state.industries.push(mine);
 
-    place_demo_truck_station_tile(state, DEMO_ECONOMY_LOAD_STATION);
-    place_demo_truck_station_tile(state, DEMO_ECONOMY_DELIVER_STATION);
+    place_demo_truck_station(state, DEMO_ECONOMY_LOAD_STATION);
+    place_demo_truck_station(state, DEMO_ECONOMY_DELIVER_STATION);
 
     let orders = vec![DEMO_ECONOMY_LOAD_STATION, DEMO_ECONOMY_DELIVER_STATION];
     let mut truck = Vehicle::new(
@@ -96,20 +98,11 @@ pub(crate) fn place_demo_economy_loop(state: &mut GameState) {
     state.vehicles.push(truck);
 }
 
-fn place_demo_truck_station_tile(state: &mut GameState, pos: TileCoord) {
-    let kind = state.map.get_kind(pos).unwrap_or(TileKind::Grass);
-    if kind == TileKind::Water || kind == TileKind::Void {
-        return;
-    }
-    let _ = state.map.set_mapt_m5(pos, 0x50, 0);
-    let _ = state.map.set_kind(pos, TileKind::Station);
-    if let Some(mut t) = state.map.get(pos) {
-        t.m6 = (t.m6 & !0x78) | (2 << 3); // StationType::Truck
-        let _ = state.map.set_tile(pos, t);
-    }
-    state
-        .stations
-        .push(Station::new_with_kind(pos, StopKind::TruckStop));
+fn place_demo_truck_station(state: &mut GameState, pos: TileCoord) {
+    let _ = apply_command(
+        state,
+        &Command::PlaceStationDir(pos, DEMO_ECONOMY_STATION_ENTRANCE_DIR),
+    );
 }
 
 /// Bus + camión en la carretera demo (para probar sprites sin depósito).
@@ -279,6 +272,18 @@ mod tests {
             state.map.get_kind(DEMO_ECONOMY_DELIVER_STATION),
             Some(TileKind::Station)
         );
+        assert_eq!(
+            state.map.get_kind(TileCoord::new(3, DEMO_ROAD_Y)),
+            Some(TileKind::Road),
+            "la carretera demo no debe quedar cubierta por la parada"
+        );
+        assert_eq!(
+            state.map.get_kind(TileCoord::new(10, DEMO_ROAD_Y)),
+            Some(TileKind::Road)
+        );
+        let load = state.map.get(DEMO_ECONOMY_LOAD_STATION).unwrap();
+        assert_ne!(load.m3 & 0x0F, 0, "boca de parada hacia la carretera");
+        assert_eq!(load.m5 & 0x03, DEMO_ECONOMY_STATION_ENTRANCE_DIR);
         let truck = state
             .vehicles
             .iter()

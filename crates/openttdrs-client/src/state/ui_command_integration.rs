@@ -143,14 +143,17 @@ fn road_depot_dir_on_grass_matches_toolbar_depot_tool() {
 
 #[test]
 fn set_vehicle_station_orders_on_demo_truck_matches_toolbar() {
+    use crate::state::bootstrap::{DEMO_ECONOMY_DELIVER_STATION, DEMO_ECONOMY_LOAD_STATION};
+
     let mut sim = SimWorld::default();
     let truck_id = 9010;
-    let load = TileCoord::new(3, 6);
-    let deliver = TileCoord::new(10, 6);
     assert!(
         apply_command(
             &mut sim.state,
-            &Command::SetVehicleStationOrders(truck_id, vec![load, deliver])
+            &Command::SetVehicleStationOrders(
+                truck_id,
+                vec![DEMO_ECONOMY_LOAD_STATION, DEMO_ECONOMY_DELIVER_STATION],
+            )
         )
         .is_ok(),
         "SetVehicleStationOrders como el panel de órdenes"

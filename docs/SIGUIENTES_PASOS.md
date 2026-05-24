@@ -17,6 +17,7 @@ prioridad en **juego en solitario** (hito 0.1). La fundación **I0–I7** ya est
 | [PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md) | Construcción y toolbar (**SP2 cerrado**, 2026-05-22). |
 | [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Paradas bus/camión/tren y sprites. |
 | [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md) | **`RemapCoords`**, BUILD paradas, roadmap de render. |
+| [PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md) | Depósito carretera: alineación, experimento revertido, roadmap retomada. |
 | [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) | Casas/industrias en `.ottdmap` — prioridades P1–P6. |
 | [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md) | Paridad 1:1 industrias vs OpenTTD (tabla 0–174, anim, NewGRF). |
 | [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | Checklist de regresión SP2. |
@@ -67,8 +68,9 @@ más moleste al jugar.
 
 - Economía y estadísticas **legibles** en HUD (dinero, cargas, vehículos sin ruta).
 - Órdenes y estaciones: flujo claro desde toolbar → mapa → simulación.
-- Coherencia **estación en mapa** vs entradas en `state.stations` (el bootstrap demo aún puede
-  reservar posiciones en hierba sin `TileKind::Station`).
+- Coherencia **estación en mapa** vs entradas en `state.stations` (paradas demo usan
+  `PlaceStationDir` en hierba adyacente a la carretera; ver
+  [PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md) §5).
 - Tests de integración UI↔`apply_command` ampliados donde falten herramientas críticas.
 
 ### SP2 — Construcción y herramientas — **cerrado (2026-05-22)**
@@ -95,6 +97,8 @@ Resumen de huecos reales (mucho de lo “esquina/T + trackbits” **ya está** e
 
 - **Pendientes vía en junctions / cimientos** — tramos rectos, T, cruce, **HORZ/VERT** en slope usan solo sprite inclinado (1031–1034); overlays 1005–1010 **solo en plano**. Piezas cardinales sueltas (1013–1016) igual. **Construcción** HORZ/VERT: herramientas en toolbar + `PlaceRailBits`/`SetRailBits`; vía diagonal sigue con `PlaceRail` por vecinos. **Saves reales (P5):** `python3 scripts/verify_parse_sav_rail_m5.py [partida.sav]` — ver [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) § P5.
 - **Estaciones** de tren: plataformas/edificios, no solo suelo bus/camión.
+- **Depósito carretera:** render legacy (PNG centrado); pipeline `RemapCoords` documentado en
+  [PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md) (experimento revertido).
 - **Casas/industrias** en `.ottdmap`: seguir [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) (P1 etapas casa → P6).
 - **Assets**: auditar `rail_*.png` (evitar placeholders del script).
 - **Rendimiento**: culling al dibujar el mapa (el agua ya culling; el resto del mapa no).

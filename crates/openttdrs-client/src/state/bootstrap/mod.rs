@@ -7,6 +7,8 @@ mod terrain;
 mod transport;
 
 pub(crate) use super::stations::{place_stations_from_footer_stxy, place_stations_from_map_tiles};
+#[cfg(test)]
+pub(crate) use demo_layout::{DEMO_ECONOMY_DELIVER_STATION, DEMO_ECONOMY_LOAD_STATION};
 pub(crate) use demo_layout::{
     fill_flat_grass, log_procedural_demo_zones, place_bridge_demo_gap, place_clean_demo_transport,
     place_demo_economy_loop,

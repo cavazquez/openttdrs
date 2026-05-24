@@ -504,10 +504,12 @@ def export_ottdmap_from_chunks(chunks: dict, version: int) -> bytes:
         body += b"STNN" + struct.pack("<I", len(stnn_blob)) + bytes(stnn_blob)
 
     tnbp_blob = b""
+    tnbp_source = ""
     for _k in ("TNBP", "TBUS", "TUNN"):
         b = chunks.get(_k, b"")
         if isinstance(b, (bytes, bytearray)) and b:
             tnbp_blob = bytes(b)
+            tnbp_source = _k
             break
     if tnbp_blob:
         body += b"TNBP" + struct.pack("<I", len(tnbp_blob)) + tnbp_blob
@@ -750,13 +752,15 @@ def main() -> None:
         print(f"  STNN: blob {len(stnn_blob):,} bytes")
 
     tnbp_blob = b""
+    tnbp_source = ""
     for _k in ("TNBP", "TBUS", "TUNN"):
         b = chunks.get(_k, b"")
         if isinstance(b, (bytes, bytearray)) and b:
             tnbp_blob = bytes(b)
+            tnbp_source = _k
             break
     if tnbp_blob:
-        print(f"  TNBP: blob {len(tnbp_blob):,} bytes")
+        print(f"  TNBP: blob {len(tnbp_blob):,} bytes (chunk save `{tnbp_source}` → footer TNBP)")
 
     stxy = build_stxy_footer(tile_types, dim_x, dim_y)
     n_stxy = struct.unpack_from("<I", stxy, 4)[0]

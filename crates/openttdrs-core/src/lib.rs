@@ -48,9 +48,10 @@ pub use map::{
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
-    PathNetwork, diag_dir_offset, find_path, path_network_for_vehicle, station_entrance_faces_rail,
-    station_entrance_faces_road, station_site_adjacent_to_rail, station_site_adjacent_to_transport,
-    station_site_tile_allows_build, station_site_tile_needs_clear, tile_is_path_traversable,
+    PathNetwork, TunnelWormholes, diag_dir_offset, find_path, find_path_with_wormholes,
+    path_network_for_vehicle, station_entrance_faces_rail, station_entrance_faces_road,
+    station_site_adjacent_to_rail, station_site_adjacent_to_transport, station_site_tile_allows_build,
+    station_site_tile_needs_clear, tile_is_path_traversable,
 };
 pub use road_movement::{road_turn_entry_exit, straight_subtile, vehicle_subtile};
 pub use save::SaveError;

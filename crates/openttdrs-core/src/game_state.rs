@@ -122,4 +122,13 @@ impl GameState {
     pub fn load_json(s: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(s)
     }
+
+    /// Enlaces wormhole JGR (`tile_n` ↔ `tile_s`) para pathfinding.
+    #[must_use]
+    pub fn jgr_tunnel_wormholes(&self) -> crate::pathfinder::TunnelWormholes {
+        crate::pathfinder::TunnelWormholes::from_jgr_records(
+            &self.map,
+            &self.jgr_tunnels_from_footer,
+        )
+    }
 }

@@ -1,6 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
-use crate::map::{Map, TileCoord, TileKind};
+use crate::map::{Map, TileCoord, TileKind, openttd_tile_index_to_coord};
+use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::VehicleKind;
 
 fn is_any_transport_tile(kind: TileKind) -> bool {
@@ -148,14 +149,42 @@ pub fn station_entrance_faces_rail(map: &Map, c: TileCoord, dir: u8) -> bool {
         .is_some_and(|k| is_rail_network_tile(k) || k == TileKind::Station)
 }
 
-/// Encuentra el camino más corto entre `from` y `to` usando BFS sobre una sola red (`Road…` o `Rail…`).
-///
-/// Los tiles `from` y `to` pueden ser de cualquier tipo (industria, estación, etc.);
-/// los tiles **intermedios** deben pertenecer a la red elegida.
-///
-/// Devuelve `Some(path)` donde `path` es la secuencia de teselas desde la primera adyacente
-/// a `from` hasta `to` inclusive. Si `from == to` devuelve `Some(vec![])`.
-/// Devuelve `None` si no existe camino.
+/// Enlaces «wormhole» entre entradas de túnel (p. ej. pool JGR `tile_n` ↔ `tile_s`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TunnelWormholes {
+    links: HashMap<TileCoord, TileCoord>,
+}
+
+impl TunnelWormholes {
+    /// Construye enlaces bidireccionales desde registros JGR y dimensiones del mapa.
+    #[must_use]
+    pub fn from_jgr_records(map: &Map, records: &[JgrTunnelRecord]) -> Self {
+        let (w, h) = map.dimensions();
+        let mut links = HashMap::new();
+        for r in records {
+            if let (Some(a), Some(b)) = (
+                openttd_tile_index_to_coord(r.tile_n, w, h),
+                openttd_tile_index_to_coord(r.tile_s, w, h),
+            ) {
+                links.insert(a, b);
+                links.insert(b, a);
+            }
+        }
+        Self { links }
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.links.is_empty()
+    }
+
+    #[must_use]
+    pub fn other_end(&self, c: TileCoord) -> Option<TileCoord> {
+        self.links.get(&c).copied()
+    }
+}
+
+/// Encuentra el camino más corto (BFS); ver [`find_path_with_wormholes`].
 #[must_use]
 #[allow(clippy::cast_possible_wrap)]
 pub fn find_path(
@@ -163,6 +192,28 @@ pub fn find_path(
     from: TileCoord,
     to: TileCoord,
     network: PathNetwork,
+) -> Option<Vec<TileCoord>> {
+    find_path_with_wormholes(map, from, to, network, None)
+}
+
+/// Encuentra el camino más corto entre `from` y `to` usando BFS sobre una sola red (`Road…` o `Rail…`).
+///
+/// Los tiles `from` y `to` pueden ser de cualquier tipo (industria, estación, etc.);
+/// los tiles **intermedios** deben pertenecer a la red elegida.
+///
+/// Con `wormholes`, una tesela en la red puede saltar a su pareja JGR en un paso (túnel real).
+///
+/// Devuelve `Some(path)` donde `path` es la secuencia de teselas desde la primera adyacente
+/// a `from` hasta `to` inclusive. Si `from == to` devuelve `Some(vec![])`.
+/// Devuelve `None` si no existe camino.
+#[must_use]
+#[allow(clippy::cast_possible_wrap)]
+pub fn find_path_with_wormholes(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    network: PathNetwork,
+    wormholes: Option<&TunnelWormholes>,
 ) -> Option<Vec<TileCoord>> {
     if from == to {
         return Some(vec![]);
@@ -207,6 +258,20 @@ pub fn find_path(
                 queue.push_back(next);
             }
         }
+        if let Some(wh) = wormholes {
+            let cur_kind = map.get_kind(cur).unwrap_or(TileKind::Grass);
+            if is_network_tile(map, cur, cur_kind, network)
+                && let Some(other) = wh.other_end(cur)
+                && !parent.contains_key(&other)
+            {
+                let other_kind = map.get_kind(other).unwrap_or(TileKind::Grass);
+                let reachable = is_network_tile(map, other, other_kind, network) || other == to;
+                if reachable {
+                    parent.insert(other, cur);
+                    queue.push_back(other);
+                }
+            }
+        }
     }
     None
 }
@@ -224,4 +289,39 @@ fn reconstruct(
     }
     path.reverse();
     path
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::tnbp_decode::JgrTunnelRecord;
+
+    #[test]
+    fn jgr_wormhole_connects_disconnected_rail_ends() {
+        // OpenTTD `TileIndex` asume ancho potencia de 2 (p. ej. 8).
+        let mut map = Map::new_flat(8, 1, 0);
+        for x in [0_i32, 4] {
+            map.set_kind(TileCoord::new(x, 0), TileKind::RailTunnel)
+                .unwrap();
+        }
+        let wh = TunnelWormholes::from_jgr_records(
+            &map,
+            &[JgrTunnelRecord {
+                tile_n: 0,
+                tile_s: 4,
+                height: 1,
+                is_chunnel: false,
+                style_n: None,
+                style_s: None,
+            }],
+        );
+        let from = TileCoord::new(0, 0);
+        let to = TileCoord::new(4, 0);
+        assert!(wh.other_end(from).is_some());
+        assert!(find_path(&map, from, to, PathNetwork::Rail).is_none());
+        let path = find_path_with_wormholes(&map, from, to, PathNetwork::Rail, Some(&wh))
+            .expect("wormhole");
+        assert_eq!(path.last(), Some(&to));
+    }
 }

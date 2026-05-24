@@ -139,7 +139,16 @@ fn recompute_vehicle_paths(state: &mut GameState) {
         let to = state.vehicles[i].dest;
         let has_orders = !state.vehicles[i].orders.is_empty();
         let net = pathfinder::path_network_for_vehicle(state.vehicles[i].kind);
-        match pathfinder::find_path(&state.map, from, to, net) {
+        let wormholes = pathfinder::TunnelWormholes::from_jgr_records(
+            &state.map,
+            &state.jgr_tunnels_from_footer,
+        );
+        let wh = if wormholes.is_empty() {
+            None
+        } else {
+            Some(&wormholes)
+        };
+        match pathfinder::find_path_with_wormholes(&state.map, from, to, net, wh) {
             Some(path) => {
                 state.vehicles[i].path = path.into_iter().collect();
                 state.vehicles[i].no_network_route_to_order = false;

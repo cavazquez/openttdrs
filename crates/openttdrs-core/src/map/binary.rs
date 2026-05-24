@@ -140,10 +140,18 @@ fn ottd_tile_kind(ottd_type: u8, m5: u8) -> TileKind {
         7 => TileKind::Void,
         8 => TileKind::Industry,
         9 => {
-            if m5 & 0x04 != 0 {
-                TileKind::Rail
+            let is_bridge = m5 & 0x80 != 0;
+            let transport = (m5 >> 2) & 0x3;
+            if is_bridge {
+                if transport == 1 {
+                    TileKind::RailBridge
+                } else {
+                    TileKind::RoadBridge
+                }
+            } else if transport == 1 {
+                TileKind::RailTunnel
             } else {
-                TileKind::Road
+                TileKind::RoadTunnel
             }
         }
         t => TileKind::Unknown(t),
@@ -184,7 +192,7 @@ impl Map {
     /// | 6        | `MP_WATER`       | Water            |
     /// | 7        | `MP_VOID`        | Void             |
     /// | 8        | `MP_INDUSTRY`    | Industry/Coal    |
-    /// | 9        | `MP_TUNNELBRIDGE`| Road/Rail        |
+    /// | 9        | `MP_TUNNELBRIDGE`| Road/Rail tunnel or bridge (m5) |
     /// | 10       | `MP_OBJECT`      | Grass            |
     ///
     /// # Errors

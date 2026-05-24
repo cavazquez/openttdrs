@@ -106,11 +106,16 @@ pub(crate) fn log_detection_summary(
                         );
                     } else {
                         match &dec {
-                            TnbpDecoded::ChTable { fields, rows } => {
+                            TnbpDecoded::ChTable {
+                                fields,
+                                rows,
+                                skipped_rows,
+                            } => {
                                 info!(
-                                    "Footers .ottdmap: TNBP {tnbp_len} bytes -> tabla Sl ({} campos, {} filas)",
+                                    "Footers .ottdmap: TNBP {tnbp_len} bytes -> tabla Sl ({} campos, {} filas, {} omitidas)",
                                     fields.len(),
-                                    rows.len()
+                                    rows.len(),
+                                    skipped_rows
                                 );
                             }
                             TnbpDecoded::RawGammaSegments { segments } => {

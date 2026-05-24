@@ -29,6 +29,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Túneles JGR: {tot} registro(s); extremos en MP_TUNNELBRIDGE: norte {n_ok}/{tot}, sur {s_ok}/{tot}"
             );
+            if let openttdrs_core::TnbpDecoded::ChTable { skipped_rows, .. } = &dec
+                && *skipped_rows > 0
+            {
+                println!("  (filas Sl omitidas por versión/campos: {skipped_rows})");
+            }
         }
         Err(e) => println!("Decode TNBP: Err({e:?})"),
     }

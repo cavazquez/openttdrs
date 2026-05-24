@@ -347,6 +347,67 @@ mod ottdmap_binary_tests {
     }
 
     #[test]
+    fn mp_tunnelbridge_maps_to_tunnel_and_bridge_kinds() {
+        let base = ([1; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4]);
+        let road_tunnel = build_ottdmap_2x2(
+            [0x90, 0, 0, 0],
+            base.0,
+            base.1,
+            base.2,
+            base.3,
+            base.4,
+            base.5,
+            [0, 0, 0, 0],
+            base.7,
+            base.8,
+            [0; 4],
+        );
+        let map = Map::from_ottd_binary(&road_tunnel).expect("map");
+        assert_eq!(
+            map.get(TileCoord::new(0, 0)).expect("t").kind,
+            TileKind::RoadTunnel
+        );
+
+        let rail_tunnel = build_ottdmap_2x2(
+            [0x90, 0, 0, 0],
+            base.0,
+            base.1,
+            base.2,
+            base.3,
+            base.4,
+            base.5,
+            [0x04, 0, 0, 0],
+            base.7,
+            base.8,
+            [0; 4],
+        );
+        let map = Map::from_ottd_binary(&rail_tunnel).expect("map");
+        assert_eq!(
+            map.get(TileCoord::new(0, 0)).expect("t").kind,
+            TileKind::RailTunnel
+        );
+
+        let rail_bridge = build_ottdmap_2x2(
+            [0x90, 0, 0, 0],
+            base.0,
+            base.1,
+            base.2,
+            base.3,
+            base.4,
+            base.5,
+            [0x84, 0, 0, 0],
+            base.7,
+            base.8,
+            [0; 4],
+        );
+        let map = Map::from_ottd_binary(&rail_bridge).expect("map");
+        assert_eq!(
+            map.get(TileCoord::new(0, 0)).expect("t").kind,
+            TileKind::RailBridge
+        );
+    }
+
+    #[test]
     fn from_ottd_binary_rejects_legacy_mapo_header() {
         let mut b = minimal_ottdmap_v1();
         b[0..4].copy_from_slice(b"MAPO");

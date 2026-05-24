@@ -56,6 +56,8 @@ pub enum TnbpDecoded {
     ChTable {
         fields: Vec<SlTableField>,
         rows: Vec<Vec<(String, SlPrimitive)>>,
+        /// Filas del blob que no encajaron con la cabecera (versión distinta / campos extra).
+        skipped_rows: usize,
     },
     /// No reconocido como tabla: segmentos gamma (como `skip_array` / `slurp_array_payload`).
     RawGammaSegments { segments: Vec<Vec<u8>> },
@@ -257,17 +259,25 @@ pub fn decode_tnbp_blob(blob: &[u8]) -> Result<TnbpDecoded, TnbpDecodeError> {
         }
     };
     let mut rows = Vec::new();
+    let mut skipped_rows = 0usize;
     for seg in segments.iter().skip(1) {
         match parse_row(&fields, seg) {
             Ok(r) => rows.push(r),
             Err(_) => {
-                return Ok(TnbpDecoded::RawGammaSegments {
-                    segments: segments.iter().map(|s| s.to_vec()).collect(),
-                });
+                skipped_rows += 1;
             }
         }
     }
-    Ok(TnbpDecoded::ChTable { fields, rows })
+    if rows.is_empty() {
+        return Ok(TnbpDecoded::RawGammaSegments {
+            segments: segments.iter().map(|s| s.to_vec()).collect(),
+        });
+    }
+    Ok(TnbpDecoded::ChTable {
+        fields,
+        rows,
+        skipped_rows,
+    })
 }
 
 fn u32_from_primitive(p: &SlPrimitive) -> Option<u32> {
@@ -345,11 +355,16 @@ pub fn tnbp_blob_to_json_value(blob: &[u8]) -> serde_json::Value {
         Ok(dec) => {
             let jgr = jgr_tunnels_from_decoded(&dec);
             match dec {
-                TnbpDecoded::ChTable { fields, rows } => serde_json::json!({
+                TnbpDecoded::ChTable {
+                    fields,
+                    rows,
+                    skipped_rows,
+                } => serde_json::json!({
                     "ok": true,
                     "kind": "ch_table",
                     "field_names": fields.iter().map(|f| &f.name).collect::<Vec<_>>(),
                     "row_count": rows.len(),
+                    "skipped_rows": skipped_rows,
                     "jgr_tunnel_count": jgr.len(),
                     "jgr_tunnels": jgr,
                 }),
@@ -423,9 +438,14 @@ mod tests {
 
         let dec = decode_tnbp_blob(&inner).expect("decode");
         match &dec {
-            TnbpDecoded::ChTable { fields, rows } => {
+            TnbpDecoded::ChTable {
+                fields,
+                rows,
+                skipped_rows,
+            } => {
                 assert_eq!(fields.len(), 4);
                 assert_eq!(rows.len(), 1);
+                assert_eq!(*skipped_rows, 0);
             }
             _ => panic!("expected ChTable"),
         }

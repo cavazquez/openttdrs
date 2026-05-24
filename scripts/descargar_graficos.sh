@@ -12,6 +12,7 @@
 #   ./scripts/descargar_graficos.sh --8bpp
 #   ./scripts/descargar_graficos.sh --32bpp
 #   OPENGFX_VERSION=7.1 ./scripts/descargar_graficos.sh --8bpp
+#   OPENGFX2_TAG=0.8.1 ./scripts/descargar_graficos.sh --32bpp
 set -euo pipefail
 
 usage() {
@@ -28,7 +29,7 @@ Opciones:
 Notas:
   - Debés elegir exactamente una opción de modo.
   - OPENGFX_VERSION aplica solo a --8bpp.
-  - OPENGFX2_TAG aplica solo a --32bpp.
+  - OPENGFX2_TAG aplica solo a --32bpp (release GitHub, p. ej. 0.8.1).
   - Si --32bpp falla con \"tar: Fin de archivo inesperada\", borrá el .tar en
     .downloads/openttd/ y volvé a ejecutar (el script también detecta tars inválidos).
 EOF
@@ -75,12 +76,17 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VERSION="${OPENGFX_VERSION:-8.0}"
 DEST="${ROOT}/assets/opengfx"
 DOWNLOADS_DIR="${ROOT}/.downloads/openttd"
-OPENGFX2_TAG="${OPENGFX2_TAG:-v0.1}"
+OPENGFX2_TAG="${OPENGFX2_TAG:-0.8.1}"
 CDN_8BPP="https://cdn.openttd.org/opengfx-releases/${VERSION}/opengfx-${VERSION}-all.zip"
-CDN_32BPP="https://github.com/OpenTTD/OpenGFX2/releases/download/${OPENGFX2_TAG}/opengfx2_32ez.tar"
+if [[ "${OPENGFX2_TAG}" == v0.1 ]]; then
+  CDN_32BPP="https://github.com/OpenTTD/OpenGFX2/releases/download/${OPENGFX2_TAG}/opengfx2_32ez.tar"
+  TAR_CACHE_32BPP="${DOWNLOADS_DIR}/opengfx2-${OPENGFX2_TAG}-32ez.tar"
+else
+  CDN_32BPP="https://github.com/OpenTTD/OpenGFX2/releases/download/${OPENGFX2_TAG}/OpenGFX2_HighDef-${OPENGFX2_TAG}.tar"
+  TAR_CACHE_32BPP="${DOWNLOADS_DIR}/opengfx2-${OPENGFX2_TAG}-highdef.tar"
+fi
 ZIP_CACHE_8BPP="${DOWNLOADS_DIR}/opengfx-${VERSION}-all.zip"
 TAR_CACHE_8BPP="${DOWNLOADS_DIR}/opengfx-${VERSION}.tar"
-TAR_CACHE_32BPP="${DOWNLOADS_DIR}/opengfx2-${OPENGFX2_TAG}-32ez.tar"
 
 mkdir -p "${DEST}"
 mkdir -p "${DOWNLOADS_DIR}"
@@ -167,13 +173,26 @@ if [[ ! -d "${BASE_DIR}" && -f "${BASE_TAR}" ]]; then
   echo "Extrayendo ${BASE_TAR} ..."
   if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
     mkdir -p "${BASE_DIR}"
-    if ! tar -xf "${BASE_TAR}" -C "${BASE_DIR}"; then
+    TMP_EXTRACT="$(mktemp -d)"
+    if ! tar -xf "${BASE_TAR}" -C "${TMP_EXTRACT}"; then
       echo "ERROR: extracción del tar falló (¿archivo corrupto?)." >&2
       echo "  rm -rf \"${BASE_DIR}\" \"${BASE_TAR}\"" >&2
       echo "  y ejecutá de nuevo: ./scripts/descargar_graficos.sh --32bpp" >&2
-      rm -rf "${BASE_DIR}"
+      rm -rf "${BASE_DIR}" "${TMP_EXTRACT}"
       exit 1
     fi
+    if [[ -f "${TMP_EXTRACT}/ogfx21_base_32ez.grf" ]]; then
+      cp -a "${TMP_EXTRACT}/." "${BASE_DIR}/"
+    else
+      INNER="$(find "${TMP_EXTRACT}" -name 'ogfx21_base_32ez.grf' -printf '%h\n' 2>/dev/null | head -1)"
+      if [[ -z "${INNER}" || ! -f "${INNER}/ogfx21_base_32ez.grf" ]]; then
+        echo "ERROR: no encontré ogfx21_base_32ez.grf dentro de ${BASE_TAR}" >&2
+        rm -rf "${BASE_DIR}" "${TMP_EXTRACT}"
+        exit 1
+      fi
+      cp -a "${INNER}/." "${BASE_DIR}/"
+    fi
+    rm -rf "${TMP_EXTRACT}"
   else
     tar -xf "${BASE_TAR}" -C "${DEST}"
   fi

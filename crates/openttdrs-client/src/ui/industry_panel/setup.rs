@@ -4,7 +4,7 @@ use bevy::render::render_resource::TextureFormat;
 use bevy::ui::widget::ImageNode;
 use bevy::ui::{FocusPolicy, GlobalZIndex};
 
-use crate::render::IndustryPreviewCamera;
+use crate::render::{IndustryPreviewCamera, MapPreviewCamera};
 use crate::ui::toolbar::BuildMenuUi;
 
 use super::{
@@ -31,6 +31,7 @@ pub(crate) fn setup_industry_panel(
 
     commands.spawn((
         Camera2d,
+        MapPreviewCamera,
         IndustryPreviewCamera,
         Camera {
             order: -1,

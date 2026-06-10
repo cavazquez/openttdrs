@@ -1,25 +1,18 @@
 use bevy::prelude::*;
-use openttdrs_core::save;
-#[cfg(not(test))]
-use std::path::Path;
 
-use crate::render::{
-    IndustryPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, VehicleIndex,
-};
-use crate::state::SimWorld;
+use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::ui::hud::SimHudControls;
+use crate::ui::save_window::{SaveWindowMode, SaveWindowState, save_dir_from};
 
 use super::SaveMenuAction;
 
 pub(crate) fn handle_settings_menu_buttons(
     mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
     mut hud: ResMut<SimHudControls>,
-    mut sim: ResMut<SimWorld>,
-    mut vehicle_index: ResMut<VehicleIndex>,
-    mut remap: ResMut<RemapMapVisualsPending>,
+    mut save_window: ResMut<SaveWindowState>,
     mut cam_q: Query<
         (&mut Transform, &mut Projection),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+        (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
 ) {
     for (interaction, action) in &mut q {
@@ -28,41 +21,10 @@ pub(crate) fn handle_settings_menu_buttons(
         }
         match action {
             SaveMenuAction::SaveAs => {
-                let Some(save_path) = choose_save_path(&hud.json_save_path) else {
-                    continue;
-                };
-                hud.json_save_path = save_path.clone();
-                match save::save(&sim.state, std::path::Path::new(&save_path)) {
-                    Ok(()) => info!("Guardado en {save_path}"),
-                    Err(e) => error!("No se pudo guardar en {save_path}: {e}"),
-                }
+                save_window.open_in_mode(SaveWindowMode::Save, &save_dir_from(&hud.json_save_path));
             }
             SaveMenuAction::LoadFrom => {
-                let Some(save_path) = choose_load_path(&hud.json_save_path) else {
-                    continue;
-                };
-                hud.json_save_path = save_path.clone();
-                match std::fs::read_to_string(&save_path) {
-                    Ok(text) => match save::load_from_str(&text) {
-                        Ok(loaded) => {
-                            let prev = sim.state.map.dimensions();
-                            let nw = loaded.map.dimensions();
-                            sim.state = loaded;
-                            sim.ottdmap_extras = None;
-                            sim.loaded_file = true;
-                            vehicle_index.rebuild(&sim.state.vehicles);
-                            remap.pending = true;
-                            remap.sync_camera = true;
-                            if prev != nw {
-                                info!("Mapa {prev:?} -> {nw:?}; recarga visual y camara.");
-                            } else {
-                                info!("Estado cargado desde {save_path}; recarga visual.");
-                            }
-                        }
-                        Err(e) => error!("Carga: JSON invalido ({save_path}): {e}"),
-                    },
-                    Err(e) => error!("Carga: no se pudo leer {save_path}: {e}"),
-                }
+                save_window.open_in_mode(SaveWindowMode::Load, &save_dir_from(&hud.json_save_path));
             }
             SaveMenuAction::PauseResume => {
                 hud.paused = !hud.paused;
@@ -108,84 +70,35 @@ pub(crate) fn handle_settings_menu_buttons(
 }
 
 #[cfg(test)]
-fn choose_save_path(current: &str) -> Option<String> {
-    Some(current.to_string())
-}
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::*;
 
-#[cfg(not(test))]
-fn choose_save_path(current: &str) -> Option<String> {
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    {
-        let mut dialog = rfd::FileDialog::new().add_filter("JSON", &["json"]);
-        if let Some(parent) = Path::new(current).parent() {
-            dialog = dialog.set_directory(parent);
-        }
-        if let Some(name) = Path::new(current).file_name().and_then(|n| n.to_str()) {
-            dialog = dialog.set_file_name(name);
-        }
-        return dialog.save_file().map(|p| p.to_string_lossy().to_string());
-    }
+    use crate::ui::hud::SimHudControls;
+    use crate::ui::save_window::{SaveWindowMode, SaveWindowState};
+    use crate::ui::toolbar::SaveMenuAction;
 
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        let mut cmd = std::process::Command::new("zenity");
-        cmd.arg("--file-selection")
-            .arg("--save")
-            .arg("--confirm-overwrite")
-            .arg("--title=Guardar simulacion JSON")
-            .arg("--file-filter=*.json");
-        if Path::new(current).exists() || Path::new(current).parent().is_some() {
-            cmd.arg("--filename").arg(current);
-        }
-        match cmd.output() {
-            Ok(out) if out.status.success() => {
-                let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if path.is_empty() { None } else { Some(path) }
-            }
-            Ok(_) => None,
-            Err(e) => {
-                error!("No se pudo abrir selector de archivo (zenity): {e}");
-                None
-            }
-        }
-    }
-}
+    use super::handle_settings_menu_buttons;
 
-#[cfg(test)]
-fn choose_load_path(current: &str) -> Option<String> {
-    Some(current.to_string())
-}
+    #[test]
+    fn save_and_load_buttons_open_save_window() {
+        let mut world = World::new();
+        world.insert_resource(SimHudControls::default());
+        world.insert_resource(SaveWindowState::default());
 
-#[cfg(not(test))]
-fn choose_load_path(current: &str) -> Option<String> {
-    #[cfg(any(target_os = "windows", target_os = "macos"))]
-    {
-        let mut dialog = rfd::FileDialog::new().add_filter("JSON", &["json"]);
-        if let Some(parent) = Path::new(current).parent() {
-            dialog = dialog.set_directory(parent);
+        world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));
+        world.run_system_once(handle_settings_menu_buttons).unwrap();
+        {
+            let w = world.resource::<SaveWindowState>();
+            assert!(w.open);
+            assert_eq!(w.mode, SaveWindowMode::Save);
         }
-        return dialog.pick_file().map(|p| p.to_string_lossy().to_string());
-    }
 
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-    {
-        let mut cmd = std::process::Command::new("zenity");
-        cmd.arg("--file-selection")
-            .arg("--title=Cargar simulacion JSON")
-            .arg("--file-filter=*.json");
-        if Path::new(current).exists() || Path::new(current).parent().is_some() {
-            cmd.arg("--filename").arg(current);
-        }
-        match cmd.output() {
-            Ok(out) if out.status.success() => {
-                let path = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                if path.is_empty() { None } else { Some(path) }
-            }
-            Ok(_) => None,
-            Err(e) => {
-                error!("No se pudo abrir selector de archivo (zenity): {e}");
-                None
-            }
-        }
+        world.spawn((Button, SaveMenuAction::LoadFrom, Interaction::Pressed));
+        world.run_system_once(handle_settings_menu_buttons).unwrap();
+        let w = world.resource::<SaveWindowState>();
+        assert!(w.open);
+        assert_eq!(w.mode, SaveWindowMode::Load);
     }
 }

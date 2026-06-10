@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use openttdrs_core::{Command, CommandError, TileCoord, VehicleOrder, apply_command};
 
-use crate::render::RemapMapVisualsPending;
+use crate::render::{RemapMapVisualsPending, VehiclePreviewCamera};
 use crate::state::SimWorld;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::toolbar::build_input::cancel_placement;
@@ -23,8 +23,15 @@ pub(crate) fn handle_order_panel_buttons(
     mut order_state: ResMut<OrderEditState>,
     mut sim: ResMut<SimWorld>,
     mut drag_state: ResMut<DragBuildState>,
-    mut pending: ResMut<RemapMapVisualsPending>,
+    _pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
+    mut preview_cam: Query<
+        &mut Camera,
+        (
+            With<VehiclePreviewCamera>,
+            Without<crate::render::PrimaryGameCamera>,
+        ),
+    >,
     time: Res<Time>,
 ) {
     for (interaction, button) in &mut q {
@@ -36,6 +43,9 @@ pub(crate) fn handle_order_panel_buttons(
                 order_state.vehicle_id = None;
                 order_state.orders.clear();
                 order_state.picking_destination = false;
+                if let Ok(mut cam) = preview_cam.single_mut() {
+                    cam.is_active = false;
+                }
             }
             OrderPanelButton::ClearLast => {
                 let Some(vehicle_id) = order_state.vehicle_id else {
@@ -64,22 +74,6 @@ pub(crate) fn handle_order_panel_buttons(
                 };
                 match apply_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id)) {
                     Ok(()) => {}
-                    Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
-                }
-            }
-            OrderPanelButton::Sell => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
-                    continue;
-                };
-                match apply_command(&mut sim.state, &Command::SellVehicle(vehicle_id)) {
-                    Ok(()) => {
-                        pending.pending = true;
-                        order_state.vehicle_id = None;
-                        order_state.orders.clear();
-                        order_state.picking_destination = false;
-                    }
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                     }

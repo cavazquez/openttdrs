@@ -2,12 +2,14 @@ use bevy::prelude::*;
 
 mod display;
 mod feedback;
+mod income_popup;
 mod input;
 mod sound_ping;
 
 pub(crate) use feedback::push_build_command_error;
 
 pub(crate) use display::{setup_tile_info_ui, update_tile_info_text};
+pub(crate) use income_popup::{animate_income_popups, spawn_income_popups};
 pub(crate) use input::{cycle_json_save_path_hotkey, handle_pause_toggle, handle_tool_hotkeys};
 pub(crate) use sound_ping::{
     HudSoftPingHandle, PlayHudSoftPing, flush_hud_soft_ping, load_hud_soft_ping, play_hud_soft_ping,

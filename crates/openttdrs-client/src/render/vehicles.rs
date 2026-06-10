@@ -7,7 +7,12 @@ use crate::bevy_app::UpdateSet;
 use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_and_min_z};
 use crate::render::MapVisualLayer;
 use crate::state::{ClientScreen, SimWorld};
-use openttdrs_core::{slope_dz_at_subtile, vehicle_subtile};
+use openttdrs_core::{
+    slope_dz_at_subtile, vehicle_render_direction, vehicle_render_progress,
+    vehicle_subtile_with_progress,
+};
+
+use crate::simulation::SimClock;
 
 #[path = "../sprites/vehicle_gfx_data_generated.rs"]
 mod vehicle_gfx;
@@ -42,23 +47,31 @@ fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
     }
 }
 
-fn vehicle_layer(v: &Vehicle) -> &'static vehicle_gfx::VehicleLayerGfx {
-    let dir = v.render_direction().min(7) as usize;
+fn vehicle_layer(v: &Vehicle, render_progress: u8) -> &'static vehicle_gfx::VehicleLayerGfx {
+    let dir = vehicle_render_direction(v, render_progress).min(7) as usize;
     &vehicle_layers(v)[dir]
 }
 
-fn vehicle_draw_anchor(v: &Vehicle, map: &Map) -> (Vec2, u8, i32, i32) {
+fn vehicle_draw_anchor(v: &Vehicle, map: &Map, tick_alpha: f32) -> (Vec2, u8, i32, i32) {
     let (tileh, _) = tile_slope_and_min_z(map, v.pos.x as u32, v.pos.y as u32);
     let base_z = tile_min_z(map, v.pos);
-    let (sub_x, sub_y) = vehicle_subtile(v);
+    let render_progress = vehicle_render_progress(v, tick_alpha);
+    let (sub_x, sub_y) = vehicle_subtile_with_progress(v, render_progress);
     let sub_z = slope_dz_at_subtile(sub_x, sub_y, tileh);
     let anchor = road_vehicle_tile_anchor(v.pos.x, v.pos.y, sub_x, sub_y, sub_z);
     (anchor, base_z, v.pos.x, v.pos.y)
 }
 
-fn vehicle_sprite_pos(v: &Vehicle, map: &Map) -> Vec3 {
-    let layer = vehicle_layer(v);
-    let (anchor, height, tx, ty) = vehicle_draw_anchor(v, map);
+/// Posición mundo del sprite del vehículo (para cámara de seguimiento).
+#[must_use]
+pub(crate) fn vehicle_world_position(v: &Vehicle, map: &Map) -> Vec3 {
+    vehicle_sprite_pos(v, map, 0.0)
+}
+
+fn vehicle_sprite_pos(v: &Vehicle, map: &Map, tick_alpha: f32) -> Vec3 {
+    let render_progress = vehicle_render_progress(v, tick_alpha);
+    let layer = vehicle_layer(v, render_progress);
+    let (anchor, height, tx, ty) = vehicle_draw_anchor(v, map, tick_alpha);
     overlay_pos(
         anchor,
         layer.x_offs,
@@ -147,7 +160,7 @@ pub(crate) fn spawn_initial_vehicles(
     trucks: &TruckHandles,
 ) {
     for vehicle in &sim.state.vehicles {
-        let pos3 = vehicle_sprite_pos(vehicle, &sim.state.map);
+        let pos3 = vehicle_sprite_pos(vehicle, &sim.state.map, 0.0);
         commands.spawn((
             MapVisualLayer,
             VehicleSprite(vehicle.id),
@@ -213,8 +226,28 @@ fn vehicle_is_hidden_in_depot(sim: &SimWorld, v: &Vehicle) -> bool {
     !v.running && sim.state.map.get_kind(v.pos) == Some(TileKind::RoadDepot)
 }
 
+/// Radio de picking en unidades mundo (clic sobre el sprite del vehículo).
+const VEHICLE_PICK_RADIUS_SQ: f32 = 34.0 * 34.0;
+
+/// Vehículo visible bajo el cursor (prioriza el sprite más cercano).
+#[must_use]
+pub(crate) fn pick_vehicle_id_at_world(world_pos: Vec2, sim: &SimWorld) -> Option<u32> {
+    sim.state
+        .vehicles
+        .iter()
+        .filter(|v| !vehicle_is_hidden_in_depot(sim, v))
+        .filter_map(|v| {
+            let sprite_xy = vehicle_sprite_pos(v, &sim.state.map, 0.0).truncate();
+            let dist_sq = sprite_xy.distance_squared(world_pos);
+            (dist_sq <= VEHICLE_PICK_RADIUS_SQ).then_some((dist_sq, v.id))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|(_, id)| id)
+}
+
 pub(crate) fn update_vehicles(
     sim: Res<SimWorld>,
+    sim_clock: Res<SimClock>,
     trucks: Res<TruckHandles>,
     vehicle_index: Res<VehicleIndex>,
     mut q: Query<(&VehicleSprite, &mut Transform, &mut Sprite, &mut Visibility)>,
@@ -241,7 +274,7 @@ pub(crate) fn update_vehicles(
             continue;
         }
         *visibility = Visibility::Visible;
-        let pos3 = vehicle_sprite_pos(v, &sim.state.map);
+        let pos3 = vehicle_sprite_pos(v, &sim.state.map, sim_clock.tick_alpha);
         transform.translation = pos3;
         sprite.image = trucks.for_vehicle(v);
         sprite.color = vehicle_tint(v);
@@ -259,7 +292,7 @@ pub(crate) fn update_vehicles(
             continue;
         }
         *visibility = Visibility::Visible;
-        let pos3 = vehicle_sprite_pos(v, &sim.state.map);
+        let pos3 = vehicle_sprite_pos(v, &sim.state.map, sim_clock.tick_alpha);
         transform.translation = vehicle_cargo_label_pos(pos3);
         **text = vehicle_cargo_label(v);
         color.0 = vehicle_cargo_color(v);
@@ -295,6 +328,9 @@ mod tests {
             orders: Vec::new(),
             current_order: 0,
             no_network_route_to_order: false,
+            cargo_source: None,
+            cargo_transit_ticks: 0,
+            depart_turn: 0,
         }
     }
 
@@ -306,6 +342,29 @@ mod tests {
             truck_loaded: Default::default(),
             train: Default::default(),
         }
+    }
+
+    #[test]
+    fn pick_vehicle_prefers_closest_sprite() {
+        let mut sim = SimWorld {
+            state: openttdrs_core::GameState::new(16, 16),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let on_road = TileCoord::new(4, 4);
+        sim.state
+            .map
+            .set_kind(on_road, TileKind::Road)
+            .expect("road tile");
+        sim.state
+            .vehicles
+            .push(Vehicle::new(42, VehicleKind::Bus, on_road, on_road));
+        let anchor = vehicle_sprite_pos(&sim.state.vehicles[0], &sim.state.map, 0.0).truncate();
+        assert_eq!(pick_vehicle_id_at_world(anchor, &sim), Some(42));
+        assert_eq!(
+            pick_vehicle_id_at_world(anchor + Vec2::new(200.0, 0.0), &sim),
+            None
+        );
     }
 
     #[test]
@@ -349,6 +408,7 @@ mod tests {
 
         let mut world = World::new();
         world.insert_resource(sim);
+        world.insert_resource(crate::simulation::SimClock::default());
         world.insert_resource(default_handles());
         world.insert_resource(VehicleIndex::default());
 

@@ -348,7 +348,9 @@ mod ottdmap_binary_tests {
 
     #[test]
     fn mp_tunnelbridge_maps_to_tunnel_and_bridge_kinds() {
-        let base = ([1; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4]);
+        let base = (
+            [1; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4],
+        );
         let road_tunnel = build_ottdmap_2x2(
             [0x90, 0, 0, 0],
             base.0,
@@ -409,7 +411,9 @@ mod ottdmap_binary_tests {
 
     #[test]
     fn mp_road_and_rail_depot_subtypes_map_to_depot_kinds() {
-        let base = ([1; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4]);
+        let base = (
+            [1; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4],
+        );
         let road_depot = build_ottdmap_2x2(
             [0x20, 0, 0, 0],
             base.0,

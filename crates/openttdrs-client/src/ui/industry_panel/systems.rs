@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
-use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
+use crate::render::{IndustryPreviewCamera, MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 
 use super::logic::{
@@ -42,7 +42,7 @@ pub(crate) fn sync_industry_panel(
         (&mut Transform, &mut Projection, &mut Camera),
         (With<IndustryPreviewCamera>, Without<PrimaryGameCamera>),
     >,
-    primary_proj: Query<&Projection, (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>)>,
+    primary_proj: Query<&Projection, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
     let Ok(mut root_vis) = root_q.single_mut() else {
         return;

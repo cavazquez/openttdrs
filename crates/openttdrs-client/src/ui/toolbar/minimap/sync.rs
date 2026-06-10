@@ -3,7 +3,7 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
 use crate::iso::{ISO_HW, ISO_QH, world_pos_to_tile_coord};
-use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
+use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 use crate::ui::hud::SimHudControls;
 
@@ -19,10 +19,7 @@ pub(crate) fn sync_minimap(
     mut root_q: Query<&mut Visibility, With<MinimapRoot>>,
     mut cells: Query<(&MinimapCell, &mut BackgroundColor)>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    cam_q: Query<
-        (&Transform, &Projection),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
-    >,
+    cam_q: Query<(&Transform, &Projection), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut viewport_q: Query<&mut Node, With<MinimapViewport>>,
 ) {
     if let Ok(mut vis) = root_q.single_mut() {
@@ -54,10 +51,7 @@ pub(crate) fn sync_minimap(
 fn update_minimap_viewport(
     map: &Map,
     windows: &Query<&Window, With<PrimaryWindow>>,
-    cam_q: &Query<
-        (&Transform, &Projection),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
-    >,
+    cam_q: &Query<(&Transform, &Projection), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     viewport_q: &mut Query<&mut Node, With<MinimapViewport>>,
 ) {
     let Ok(window) = windows.single() else {

@@ -7,11 +7,17 @@ use crate::render::VehicleIndex;
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
 
+/// Fracción del tick de simulación actual (0..1) para interpolar el render entre pasos.
+#[derive(Resource, Default)]
+pub(crate) struct SimClock {
+    pub(crate) tick_alpha: f32,
+}
+
 pub(crate) struct SimulationPlugin;
 
 impl Plugin for SimulationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.init_resource::<SimClock>().add_systems(
             Update,
             advance_sim
                 .in_set(UpdateSet::Sim)
@@ -25,9 +31,11 @@ pub(crate) fn advance_sim(
     hud: Res<SimHudControls>,
     mut sim: ResMut<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
+    mut sim_clock: ResMut<SimClock>,
     mut acc: Local<f32>,
 ) {
     if hud.paused {
+        sim_clock.tick_alpha = 0.0;
         return;
     }
     const TICK_HZ: f32 = 5.0;
@@ -39,6 +47,7 @@ pub(crate) fn advance_sim(
         sim.state.step();
         stepped = true;
     }
+    sim_clock.tick_alpha = (*acc / period).clamp(0.0, 1.0);
     if stepped {
         vehicle_index.rebuild(&sim.state.vehicles);
     }
@@ -47,7 +56,7 @@ pub(crate) fn advance_sim(
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::advance_sim;
+    use super::{SimClock, advance_sim};
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
 
@@ -64,6 +73,7 @@ mod tests {
             sim_speed: 1.0,
             ..default()
         });
+        world.insert_resource(SimClock::default());
         world.insert_resource(SimWorld::default());
         world.insert_resource(VehicleIndex::default());
 
@@ -80,6 +90,7 @@ mod tests {
         time.advance_by(std::time::Duration::from_millis(200));
         world.insert_resource(time);
         world.insert_resource(SimHudControls::default());
+        world.insert_resource(SimClock::default());
         world.insert_resource(SimWorld::default());
         world.insert_resource(VehicleIndex::default());
 
@@ -87,5 +98,6 @@ mod tests {
         world.run_system_once(advance_sim).unwrap();
         let after = world.resource::<SimWorld>().state.tick.get();
         assert!(after > before);
+        assert!(world.resource::<SimClock>().tick_alpha >= 0.0);
     }
 }

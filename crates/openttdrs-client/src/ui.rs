@@ -5,20 +5,28 @@ use bevy::prelude::*;
 use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 
+pub(crate) mod font;
 mod hud;
 mod industry_panel;
 mod main_menu;
+mod save_window;
 mod toolbar;
 pub(crate) use hud::SimHudControls;
 use hud::{
     HoveredTileCoord, HudBuildFeedback, HudSoftPingHandle, PlayHudSoftPing, SelectedTileInfo,
-    cycle_json_save_path_hotkey, flush_hud_soft_ping, handle_pause_toggle, handle_tool_hotkeys,
-    load_hud_soft_ping, play_hud_soft_ping, setup_tile_info_ui, update_tile_info_text,
+    animate_income_popups, cycle_json_save_path_hotkey, flush_hud_soft_ping, handle_pause_toggle,
+    handle_tool_hotkeys, load_hud_soft_ping, play_hud_soft_ping, setup_tile_info_ui,
+    spawn_income_popups, update_tile_info_text,
 };
 use industry_panel::{
     IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
 };
 use main_menu::{main_menu_interaction, setup_main_menu, setup_main_menu_camera};
+pub(crate) use save_window::SaveWindowState;
+use save_window::{
+    handle_save_load_toolbar_buttons, handle_save_window_buttons, save_window_keyboard,
+    setup_save_window, sync_save_window,
+};
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState};
 use toolbar::{
     DepotPanelState, DragBuildState, StationBuildState, StationCargoPanelState, ToolbarState,
@@ -50,6 +58,7 @@ impl Plugin for ClientUiPlugin {
             .init_resource::<StationCargoPanelState>()
             .init_resource::<ToolbarState>()
             .init_resource::<IndustryPanelState>()
+            .init_resource::<SaveWindowState>()
             .add_systems(
                 OnEnter(ClientScreen::MainMenu),
                 (setup_main_menu_camera, setup_main_menu),
@@ -65,6 +74,7 @@ impl Plugin for ClientUiPlugin {
                     setup_depot_panel,
                     setup_station_cargo_panel,
                     setup_industry_panel,
+                    setup_save_window,
                     load_hud_soft_ping,
                 )
                     .in_set(StartupSet::Ui),
@@ -76,6 +86,7 @@ impl Plugin for ClientUiPlugin {
             .add_systems(
                 Update,
                 (
+                    save_window_keyboard,
                     handle_pause_toggle,
                     cycle_json_save_path_hotkey,
                     handle_tool_hotkeys,
@@ -102,6 +113,9 @@ impl Plugin for ClientUiPlugin {
                     handle_depot_panel_buttons,
                     handle_station_cargo_panel_buttons,
                     handle_settings_menu_buttons,
+                    handle_save_load_toolbar_buttons,
+                    handle_save_window_buttons,
+                    sync_save_window,
                 )
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),
@@ -116,6 +130,8 @@ impl Plugin for ClientUiPlugin {
             .add_systems(
                 Update,
                 (
+                    spawn_income_popups,
+                    animate_income_popups,
                     update_build_ghost_preview,
                     sync_minimap,
                     sync_order_panel,

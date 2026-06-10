@@ -235,9 +235,13 @@ fn vehicle_delivers_to_station() {
 
     advance_vehicle_tiles(&mut s, 1);
     assert_eq!(s.vehicles[0].pos, spos);
+    s.step();
     assert_eq!(s.vehicles[0].cargo, 0);
     assert!(s.stations[0].income > 0);
-    assert!(s.economy.money > CompanyEconomy::default().money);
+    assert!(s.stats.cargo_income_earned > 0, "pago por entrega TTD");
+    assert_eq!(s.pending_income_popups.len(), 1);
+    assert!(s.pending_income_popups[0].amount > 0);
+    assert_eq!(s.pending_income_popups[0].at, spos);
 }
 
 #[test]
@@ -250,7 +254,7 @@ fn vehicle_delivers_when_inside_station_coverage() {
         0,
         VehicleKind::Truck,
         vehicle_pos,
-        station_pos,
+        vehicle_pos,
     ));
     s.vehicles[0].cargo = 17;
 
@@ -258,7 +262,10 @@ fn vehicle_delivers_when_inside_station_coverage() {
 
     assert_eq!(s.vehicles[0].cargo, 0);
     assert_eq!(s.stations[0].stock, 17);
-    assert_eq!(s.stations[0].income, 17);
+    assert!(
+        s.stations[0].income > 0,
+        "pago TTD por distancia y tipo de carga"
+    );
 }
 
 #[test]
@@ -278,6 +285,7 @@ fn sim_stats_count_pickup_and_delivery() {
     assert_eq!(s.stats.cargo_pickups, 1);
     assert!(s.stats.cargo_units_loaded > 0);
     advance_vehicle_tiles(&mut s, 1);
+    s.step();
     assert_eq!(s.stats.cargo_deliveries, 1);
     assert!(s.stats.cargo_units_delivered > 0);
 }
@@ -328,14 +336,164 @@ fn factory_produces_half_as_often_as_mine() {
     assert_eq!(coal.stock, INDUSTRY_PRODUCE_AMOUNT);
     assert_eq!(fact.stock, 0);
     fact.produce(512);
-    assert_eq!(fact.stock, INDUSTRY_PRODUCE_AMOUNT);
+    assert_eq!(fact.stock, 0, "fábrica sin insumos en estación no produce");
+}
+
+#[test]
+fn factory_chain_produces_goods_from_delivered_cargo() {
+    let mut s = GameState::new(16, 16);
+    let fact_pos = TileCoord::new(4, 4);
+    let stop_pos = TileCoord::new(5, 4);
+    s.industries.push(Industry::with_tiles_spec(
+        fact_pos,
+        IndustryKind::Factory,
+        IndustrySpec::Factory,
+        vec![fact_pos],
+    ));
+    s.stations
+        .push(Station::new_with_kind(stop_pos, StopKind::TruckStop));
+    s.stations[0].cargo_stock.wood = FACTORY_WOOD_INPUT;
+    s.stations[0].cargo_stock.coal = FACTORY_COAL_INPUT;
+
+    for _ in 0..512 {
+        s.step();
+    }
+
+    assert_eq!(s.industries[0].stock, INDUSTRY_PRODUCE_AMOUNT);
+    assert_eq!(s.stations[0].cargo_stock.wood, 0);
+    assert_eq!(s.stations[0].cargo_stock.coal, 0);
+}
+
+#[test]
+fn truck_loads_freight_waiting_at_station_hub() {
+    let mut s = GameState::new(12, 8);
+    let hub = TileCoord::new(4, 0);
+    s.stations.push(Station::new(hub));
+    s.stations[0].cargo_stock.coal = 14;
+    s.vehicles.push(Vehicle::new(
+        0,
+        VehicleKind::Truck,
+        hub,
+        TileCoord::new(8, 0),
+    ));
+
+    s.step();
+
+    assert_eq!(s.vehicles[0].cargo, 14);
+    assert_eq!(s.vehicles[0].cargo_type, Some(CargoType::Coal));
+    assert_eq!(s.stations[0].cargo_stock.coal, 0);
+}
+
+#[test]
+fn train_loads_freight_from_rail_station_waiting_cargo() {
+    let mut s = GameState::new(12, 8);
+    let hub = TileCoord::new(3, 2);
+    s.stations
+        .push(Station::new_with_kind(hub, StopKind::RailStation));
+    s.stations[0].cargo_stock.goods = 9;
+    s.vehicles.push(Vehicle::new(
+        0,
+        VehicleKind::Train,
+        hub,
+        TileCoord::new(7, 2),
+    ));
+
+    s.step();
+
+    assert_eq!(s.vehicles[0].cargo, 9);
+    assert_eq!(s.vehicles[0].cargo_type, Some(CargoType::Goods));
+}
+
+#[test]
+fn truck_prefers_industry_over_station_waiting_cargo() {
+    let mut s = GameState::new(12, 8);
+    let ipos = TileCoord::new(4, 0);
+    let hub = TileCoord::new(4, 0);
+    let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
+    ind.stock = 11;
+    s.industries.push(ind);
+    s.stations.push(Station::new(hub));
+    s.stations[0].cargo_stock.coal = 50;
+    s.vehicles.push(Vehicle::new(
+        0,
+        VehicleKind::Truck,
+        hub,
+        TileCoord::new(8, 0),
+    ));
+
+    s.step();
+
+    assert_eq!(s.vehicles[0].cargo, 11);
+    assert_eq!(s.industries[0].stock, 0);
+    assert_eq!(s.stations[0].cargo_stock.coal, 50);
+}
+
+#[test]
+fn two_truck_transfer_via_station_hub() {
+    let mut s = GameState::new(16, 8);
+    let hub = TileCoord::new(6, 0);
+    let dest = TileCoord::new(10, 0);
+    for x in 0..=10_i32 {
+        s.map
+            .set_kind(TileCoord::new(x, 0), TileKind::Road)
+            .unwrap();
+    }
+    s.stations.push(Station::new(hub));
+
+    let pickup = TileCoord::new(7, 0);
+    s.vehicles
+        .push(Vehicle::new(0, VehicleKind::Truck, pickup, pickup));
+    s.vehicles[0].cargo = 16;
+    s.vehicles[0].cargo_type = Some(CargoType::Wood);
+
+    s.step();
+    assert_eq!(s.vehicles[0].cargo, 0);
+    assert_eq!(s.stations[0].cargo_stock.wood, 16);
+    s.vehicles.clear();
+
+    s.vehicles
+        .push(Vehicle::new(0, VehicleKind::Truck, hub, dest));
+    s.step();
+    assert_eq!(s.vehicles[0].cargo, 16);
+    assert_eq!(s.stations[0].cargo_stock.wood, 0);
+}
+
+#[test]
+fn delivery_income_scales_with_haul_distance() {
+    let station = TileCoord::new(10, 0);
+    let cases = [(TileCoord::new(9, 0), 0_u64), (TileCoord::new(0, 0), 0_u64)];
+    let mut incomes = [0_u64; 2];
+
+    for (idx, (source, _)) in cases.iter().enumerate() {
+        let mut s = GameState::new(16, 8);
+        s.stations.push(Station::new(station));
+        let mut truck = Vehicle::new(1, VehicleKind::Truck, station, station);
+        truck.cargo = 10;
+        truck.cargo_type = Some(CargoType::Coal);
+        truck.mark_cargo_loaded(*source);
+        s.vehicles.push(truck);
+        s.step();
+        incomes[idx] = s.stations[0].income;
+    }
+
+    assert!(
+        incomes[1] > incomes[0],
+        "origen lejano {} vs cercano {}",
+        incomes[1],
+        incomes[0]
+    );
 }
 
 #[test]
 fn economic_cycle_roundtrip() {
     let mut s = GameState::new(16, 16);
     let ipos = TileCoord::new(0, 0);
-    let spos = TileCoord::new(2, 0); // 2 tiles de distancia
+    let spos = TileCoord::new(2, 0);
+    for x in 0..=2_i32 {
+        s.map
+            .set_kind(TileCoord::new(x, 0), TileKind::Road)
+            .unwrap();
+    }
 
     // Industria con stock suficiente para varios ciclos.
     let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
@@ -345,10 +503,8 @@ fn economic_cycle_roundtrip() {
     s.vehicles
         .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
 
-    // Un ciclo completo: carga (tick 1) + viaje 2 tiles (tick 2-3) +
-    // llegada/descarga (tick 3) + inversión (tick 3) + regreso 2 tiles (tick 4-5)
-    // + llegada (tick 5) + inversión (tick 5) → income > 0 después de pocos ticks.
-    for _ in 0..10 {
+    // Ciclo completo con descarga al llegar (manhattan_to_dest == 0).
+    for _ in 0..80 {
         s.step();
     }
     assert!(
@@ -376,6 +532,7 @@ fn station_coverage_counts_nearby_cargo_sources_and_acceptors() {
         .push(Industry::new(far_forest_pos, IndustryKind::Forest));
 
     let coverage = station_coverage_at(&s.map, &s.industries, station_pos, STATION_COVERAGE_RADIUS);
+    assert_eq!(coverage.house_tiles, 1);
     assert_eq!(coverage.accepts_mail, 1);
     assert_eq!(coverage.accepts_goods, 1);
     assert_eq!(coverage.supplies_coal, 1);
@@ -383,6 +540,63 @@ fn station_coverage_counts_nearby_cargo_sources_and_acceptors() {
     assert_eq!(coverage.supplied_stock, 42);
     assert!(coverage.accepts_anything());
     assert!(coverage.supplies_anything());
+}
+
+#[test]
+fn town_generates_passengers_at_bus_stop_near_houses() {
+    let mut s = GameState::new(16, 16);
+    let stop_pos = TileCoord::new(8, 8);
+    s.map
+        .set_kind(TileCoord::new(7, 8), TileKind::House)
+        .unwrap();
+    s.stations
+        .push(Station::new_with_kind(stop_pos, StopKind::BusStop));
+
+    for _ in 0..TOWN_PRODUCE_TICKS {
+        s.step();
+    }
+
+    assert!(
+        s.stations[0].cargo_stock.passengers > 0,
+        "debe haber pasajeros en la parada"
+    );
+    assert!(s.stats.town_passengers_generated > 0);
+}
+
+#[test]
+fn bus_loads_and_delivers_passengers_for_income() {
+    let mut s = GameState::new(16, 16);
+    let origin = TileCoord::new(4, 0);
+    let dest = TileCoord::new(8, 0);
+    for x in 0..=8_i32 {
+        s.map
+            .set_kind(TileCoord::new(x, 0), TileKind::Road)
+            .unwrap();
+    }
+    s.stations
+        .push(Station::new_with_kind(origin, StopKind::BusStop));
+    s.stations
+        .push(Station::new_with_kind(dest, StopKind::BusStop));
+    s.stations[0].cargo_stock.passengers = 15;
+    s.vehicles
+        .push(Vehicle::new(0, VehicleKind::Bus, origin, dest));
+
+    s.step();
+    assert_eq!(s.vehicles[0].cargo, 15);
+    assert_eq!(s.stations[0].cargo_stock.passengers, 0);
+
+    advance_vehicle_tiles(&mut s, 4);
+    assert_eq!(s.vehicles[0].pos, dest);
+    s.step();
+    assert_eq!(s.vehicles[0].cargo, 0);
+    assert!(
+        s.stats.cargo_income_earned > 0,
+        "entrega de pasajeros debe pagar"
+    );
+    assert_eq!(
+        s.stations[1].cargo_stock.passengers, 0,
+        "pasajeros entregados no quedan en cola de destino"
+    );
 }
 
 #[test]

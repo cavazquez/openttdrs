@@ -36,6 +36,7 @@ pub(crate) enum DepotPanelButton {
     BuyBus,
     BuyTruck,
     Orders,
+    Sell,
     CloneFromFirst,
     Close,
 }
@@ -92,6 +93,7 @@ pub(crate) fn setup_depot_panel(mut commands: Commands) {
                     spawn_depot_button(row, DepotPanelButton::BuyBus, "Comprar bus");
                     spawn_depot_button(row, DepotPanelButton::BuyTruck, "Comprar camión");
                     spawn_depot_button(row, DepotPanelButton::Orders, "Órdenes");
+                    spawn_depot_button(row, DepotPanelButton::Sell, "Vender");
                     spawn_depot_button(row, DepotPanelButton::CloneFromFirst, "Clonar órdenes");
                     spawn_depot_button(row, DepotPanelButton::Close, "Cerrar");
                 });
@@ -331,6 +333,32 @@ pub(crate) fn handle_depot_panel_buttons(
                     order_state.vehicle_id = Some(vehicle_id);
                     order_state.orders = vehicle.orders.clone();
                     order_state.picking_destination = false;
+                }
+            }
+            DepotPanelButton::Sell => {
+                let target_id = depot_state.selected_vehicle.or_else(|| {
+                    sim.state
+                        .vehicles
+                        .iter()
+                        .find(|vehicle| vehicle.pos == depot_pos)
+                        .map(|vehicle| vehicle.id)
+                });
+                let Some(vehicle_id) = target_id else {
+                    continue;
+                };
+                match apply_command(&mut sim.state, &Command::SellVehicle(vehicle_id)) {
+                    Ok(()) => {
+                        pending.pending = true;
+                        depot_state.selected_vehicle = None;
+                        if order_state.vehicle_id == Some(vehicle_id) {
+                            order_state.vehicle_id = None;
+                            order_state.orders.clear();
+                            order_state.picking_destination = false;
+                        }
+                    }
+                    Err(e) => {
+                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+                    }
                 }
             }
             DepotPanelButton::CloneFromFirst => {

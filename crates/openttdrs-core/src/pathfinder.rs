@@ -1,8 +1,12 @@
-use std::collections::{HashMap, VecDeque};
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap};
 
-use crate::map::{Map, TileCoord, TileKind, openttd_tile_index_to_coord};
+use crate::map::{Map, Tile, TileCoord, TileKind, openttd_tile_index_to_coord};
 use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::VehicleKind;
+
+const RAIL_TB_X: u8 = 0x01;
+const RAIL_TB_Y: u8 = 0x02;
 
 fn is_any_transport_tile(kind: TileKind) -> bool {
     matches!(
@@ -18,18 +22,24 @@ fn is_any_transport_tile(kind: TileKind) -> bool {
     )
 }
 
+fn is_road_stop_station(tile: &Tile) -> bool {
+    tile.kind == TileKind::Station && matches!((tile.m6 >> 3) & 0x0F, 2 | 3)
+}
+
+fn is_rail_station_tile(tile: &Tile) -> bool {
+    tile.kind == TileKind::Station && (tile.m6 >> 3) & 0x0F == 0
+}
+
 fn is_network_tile(map: &Map, c: TileCoord, kind: TileKind, network: PathNetwork) -> bool {
     match network {
         PathNetwork::Road => is_road_network_tile(kind) || is_road_stop_station_tile(map, c),
-        PathNetwork::Rail => matches!(
-            kind,
-            TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge
-        ),
+        // Trenes no circulan por la tesela de plataforma; paran en la vía adyacente.
+        PathNetwork::Rail => is_rail_network_tile(kind),
     }
 }
 
-/// Red de transporte para BFS: carretera (bus/camión) o vía (tren).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Red de transporte para pathfinding: carretera (bus/camión) o vía (tren).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PathNetwork {
     Road,
     Rail,
@@ -61,7 +71,6 @@ pub const fn diag_dir_offset(dir: u8) -> (i32, i32) {
     OFFSETS[dir as usize & 3]
 }
 
-/// Algún vecino ortogonal tiene red de transporte (la estación debe poder «engancharse»).
 #[must_use]
 #[inline]
 fn is_road_network_tile(kind: TileKind) -> bool {
@@ -74,26 +83,23 @@ fn is_road_network_tile(kind: TileKind) -> bool {
 /// Parada bus/camión con boca a carretera (`m3` = road bits de acceso).
 #[must_use]
 fn is_road_stop_station_tile(map: &Map, c: TileCoord) -> bool {
-    let Some(t) = map.get(c) else {
-        return false;
-    };
-    if t.kind != TileKind::Station {
-        return false;
-    }
-    matches!((t.m6 >> 3) & 0x0F, 2 | 3) && (t.m3 & 0x0F) != 0
+    map.get(c)
+        .is_some_and(|t| is_road_stop_station(&t) && (t.m3 & 0x0F) != 0)
 }
 
-/// Algún vecino ortogonal tiene red de transporte (la estación debe poder «engancharse»).
+fn is_rail_station_tile_at(map: &Map, c: TileCoord) -> bool {
+    map.get(c).is_some_and(|t| is_rail_station_tile(&t))
+}
+
 #[must_use]
 #[inline]
 fn is_rail_network_tile(kind: TileKind) -> bool {
     matches!(
         kind,
-        TileKind::Rail | TileKind::RailDepot | TileKind::RailBridge | TileKind::RailTunnel
+        TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge
     )
 }
 
-/// Tesela adyacente a vía férrea (para estaciones de tren).
 #[must_use]
 pub fn station_site_adjacent_to_rail(map: &Map, c: TileCoord) -> bool {
     for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
@@ -120,19 +126,16 @@ pub fn station_site_adjacent_to_transport(map: &Map, c: TileCoord) -> bool {
     false
 }
 
-/// Tesela donde puede construirse la estación (hierba o bosque limpiable; no sobre la red).
 #[must_use]
 pub fn station_site_tile_allows_build(kind: TileKind) -> bool {
     matches!(kind, TileKind::Grass | TileKind::Forest)
 }
 
-/// Como `OpenTTD` `LandscapeClear` antes de parada: bosque → hierba con coste extra.
 #[must_use]
 pub fn station_site_tile_needs_clear(kind: TileKind) -> bool {
     matches!(kind, TileKind::Forest)
 }
 
-/// La entrada de la parada (carretera) mira hacia una tesela con red de carretera.
 #[must_use]
 pub fn station_entrance_faces_road(map: &Map, c: TileCoord, dir: u8) -> bool {
     let (dx, dy) = diag_dir_offset(dir);
@@ -140,7 +143,6 @@ pub fn station_entrance_faces_road(map: &Map, c: TileCoord, dir: u8) -> bool {
     map.get_kind(n).is_some_and(is_road_network_tile)
 }
 
-/// La entrada de la estación de tren mira hacia vía férrea (o estación compatible).
 #[must_use]
 pub fn station_entrance_faces_rail(map: &Map, c: TileCoord, dir: u8) -> bool {
     let (dx, dy) = diag_dir_offset(dir);
@@ -184,7 +186,175 @@ impl TunnelWormholes {
     }
 }
 
-/// Encuentra el camino más corto (BFS); ver [`find_path_with_wormholes`].
+/// Bit de carretera que sale de `cur` hacia `next` (`road_bits_toward_neighbor` del cliente).
+#[must_use]
+const fn road_bits_toward_neighbor(dx: i32, dy: i32) -> u8 {
+    match (dx, dy) {
+        (-1, 0) => 0x08,
+        (0, -1) => 0x01,
+        (1, 0) => 0x02,
+        (0, 1) => 0x04,
+        _ => 0x0F,
+    }
+}
+
+#[must_use]
+fn effective_road_bits(map: &Map, c: TileCoord) -> u8 {
+    let Some(t) = map.get(c) else {
+        return 0;
+    };
+    match t.kind {
+        TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge => {
+            let bits = t.m5 & 0x0F;
+            if bits == 0 { 0x0F } else { bits }
+        }
+        TileKind::Station if is_road_stop_station(&t) => t.m3 & 0x0F,
+        _ => 0,
+    }
+}
+
+#[must_use]
+fn effective_rail_trackbits(map: &Map, c: TileCoord) -> u8 {
+    let Some(t) = map.get(c) else {
+        return 0;
+    };
+    match t.kind {
+        TileKind::Rail => {
+            let tb = t.m5 & 0x3F;
+            if tb == 0 { RAIL_TB_X } else { tb }
+        }
+        TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge => RAIL_TB_CROSS,
+        TileKind::Station if is_rail_station_tile(&t) => RAIL_TB_CROSS,
+        _ => 0,
+    }
+}
+
+const RAIL_TB_CROSS: u8 = RAIL_TB_X | RAIL_TB_Y;
+
+#[must_use]
+fn road_tiles_connected(map: &Map, cur: TileCoord, next: TileCoord) -> bool {
+    let dx = next.x - cur.x;
+    let dy = next.y - cur.y;
+    if dx.abs() + dy.abs() != 1 {
+        return false;
+    }
+    let exit = road_bits_toward_neighbor(dx, dy);
+    let entry = road_bits_toward_neighbor(-dx, -dy);
+    let cur_bits = effective_road_bits(map, cur);
+    let next_bits = effective_road_bits(map, next);
+    cur_bits & exit != 0 && next_bits & entry != 0
+}
+
+#[must_use]
+fn rail_station_entrance_links_track(map: &Map, station: TileCoord, track: TileCoord) -> bool {
+    let Some(tile) = map.get(station) else {
+        return false;
+    };
+    if !is_rail_station_tile(&tile) {
+        return false;
+    }
+    if !map
+        .get_kind(track)
+        .is_some_and(|k| is_rail_network_tile(k) || k == TileKind::Station)
+    {
+        return false;
+    }
+    if station.x.abs_diff(track.x) + station.y.abs_diff(track.y) != 1 {
+        return false;
+    }
+    (0..4).any(|dir| {
+        let (dx, dy) = diag_dir_offset(dir);
+        TileCoord::new(station.x + dx, station.y + dy) == track
+            && station_entrance_faces_rail(map, station, dir)
+    })
+}
+
+#[must_use]
+fn rail_tiles_connected(map: &Map, cur: TileCoord, next: TileCoord) -> bool {
+    let dx = next.x - cur.x;
+    let dy = next.y - cur.y;
+    if dx.abs() + dy.abs() != 1 {
+        return false;
+    }
+    if rail_station_entrance_links_track(map, cur, next)
+        || rail_station_entrance_links_track(map, next, cur)
+    {
+        return true;
+    }
+    let cur_tb = effective_rail_trackbits(map, cur);
+    let next_tb = effective_rail_trackbits(map, next);
+    if dx != 0 {
+        return cur_tb & RAIL_TB_X != 0 && next_tb & RAIL_TB_X != 0;
+    }
+    cur_tb & RAIL_TB_Y != 0 && next_tb & RAIL_TB_Y != 0
+}
+
+#[must_use]
+fn tiles_connected(map: &Map, cur: TileCoord, next: TileCoord, network: PathNetwork) -> bool {
+    match network {
+        PathNetwork::Road => road_tiles_connected(map, cur, next),
+        PathNetwork::Rail => rail_tiles_connected(map, cur, next),
+    }
+}
+
+/// Caché de rutas por tick (no se serializa; se invalida al avanzar la simulación).
+#[derive(Debug, Default, Clone)]
+pub struct PathCache {
+    tick: u64,
+    entries: HashMap<(i32, i32, i32, i32, u8), Vec<TileCoord>>,
+}
+
+impl PathCache {
+    const MAX_ENTRIES: usize = 256;
+
+    pub fn begin_tick(&mut self, tick: u64) {
+        if self.tick != tick {
+            self.entries.clear();
+            self.tick = tick;
+        }
+    }
+
+    #[must_use]
+    pub fn get(
+        &self,
+        from: TileCoord,
+        to: TileCoord,
+        network: PathNetwork,
+    ) -> Option<&Vec<TileCoord>> {
+        let key = cache_key(from, to, network);
+        self.entries.get(&key)
+    }
+
+    pub fn insert(
+        &mut self,
+        from: TileCoord,
+        to: TileCoord,
+        network: PathNetwork,
+        path: Vec<TileCoord>,
+    ) {
+        if self.entries.len() >= Self::MAX_ENTRIES {
+            self.entries.clear();
+        }
+        self.entries.insert(cache_key(from, to, network), path);
+    }
+}
+
+#[must_use]
+fn cache_key(from: TileCoord, to: TileCoord, network: PathNetwork) -> (i32, i32, i32, i32, u8) {
+    (
+        from.x,
+        from.y,
+        to.x,
+        to.y,
+        match network {
+            PathNetwork::Road => 0,
+            PathNetwork::Rail => 1,
+        },
+    )
+}
+
+/// Encuentra el camino más corto entre `from` y `to` (A* con conectividad por
+/// road/track bits); ver [`find_path_with_wormholes`].
 #[must_use]
 #[allow(clippy::cast_possible_wrap)]
 pub fn find_path(
@@ -196,7 +366,7 @@ pub fn find_path(
     find_path_with_wormholes(map, from, to, network, None)
 }
 
-/// Encuentra el camino más corto entre `from` y `to` usando BFS sobre una sola red (`Road…` o `Rail…`).
+/// Encuentra el camino más corto entre `from` y `to` usando A* sobre una sola red (`Road…` o `Rail…`).
 ///
 /// Los tiles `from` y `to` pueden ser de cualquier tipo (industria, estación, etc.);
 /// los tiles **intermedios** deben pertenecer a la red elegida.
@@ -220,60 +390,131 @@ pub fn find_path_with_wormholes(
     }
 
     let (mw, mh) = map.dimensions();
-    // parent[tile] = tile que lo descubrió
+    let mut g_score: HashMap<TileCoord, u32> = HashMap::new();
     let mut parent: HashMap<TileCoord, TileCoord> = HashMap::new();
-    let mut queue: VecDeque<TileCoord> = VecDeque::new();
+    let mut heap = BinaryHeap::new();
 
+    g_score.insert(from, 0);
     parent.insert(from, from);
-    queue.push_back(from);
+    heap.push(AstarNode {
+        est_total: manhattan(from, to),
+        pos: from,
+    });
 
     let dirs = [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)];
 
-    while let Some(cur) = queue.pop_front() {
+    while let Some(AstarNode {
+        est_total: _,
+        pos: cur,
+    }) = heap.pop()
+    {
         if cur == to {
             return Some(reconstruct(from, to, &parent));
         }
+
+        let cur_g = g_score[&cur];
         for (dx, dy) in dirs {
             let next = TileCoord::new(cur.x + dx, cur.y + dy);
-            if parent.contains_key(&next) {
-                continue;
-            }
             if next.x < 0 || next.y < 0 || next.x >= mw as i32 || next.y >= mh as i32 {
                 continue;
             }
             let next_kind = map.get_kind(next).unwrap_or(TileKind::Grass);
             let cur_kind = map.get_kind(cur).unwrap_or(TileKind::Grass);
-            // Un tile es alcanzable si:
-            // - Pertenece a la red y es transitable, O
-            // - Es el destino Y el tile actual (cur) ya está en la red (último paso desde red).
             let reachable = if is_network_tile(map, next, next_kind, network) {
-                true
-            } else if next == to {
+                tiles_connected(map, cur, next, network)
+            } else if network == PathNetwork::Road && next == to {
+                // Paradas bus/camión: la tesela de destino puede no ser carretera pura.
                 is_network_tile(map, cur, cur_kind, network)
             } else {
                 false
             };
-            if reachable {
-                parent.insert(next, cur);
-                queue.push_back(next);
+            if !reachable {
+                continue;
             }
+
+            let tentative = cur_g + step_cost(cur, next);
+            if g_score.get(&next).is_some_and(|&g| tentative >= g) {
+                continue;
+            }
+            g_score.insert(next, tentative);
+            parent.insert(next, cur);
+            let f = tentative + manhattan(next, to);
+            heap.push(AstarNode {
+                est_total: f,
+                pos: next,
+            });
         }
         if let Some(wh) = wormholes {
             let cur_kind = map.get_kind(cur).unwrap_or(TileKind::Grass);
             if is_network_tile(map, cur, cur_kind, network)
                 && let Some(other) = wh.other_end(cur)
-                && !parent.contains_key(&other)
             {
                 let other_kind = map.get_kind(other).unwrap_or(TileKind::Grass);
                 let reachable = is_network_tile(map, other, other_kind, network) || other == to;
-                if reachable {
+                let tentative = cur_g + step_cost(cur, other);
+                if reachable && !g_score.get(&other).is_some_and(|&g| tentative >= g) {
+                    g_score.insert(other, tentative);
                     parent.insert(other, cur);
-                    queue.push_back(other);
+                    heap.push(AstarNode {
+                        est_total: tentative + manhattan(other, to),
+                        pos: other,
+                    });
                 }
             }
         }
     }
     None
+}
+
+/// Variante con caché por tick de simulación (los wormholes son constantes
+/// por mapa, así que no forman parte de la clave de caché).
+#[must_use]
+pub fn find_path_cached(
+    map: &Map,
+    cache: &mut PathCache,
+    from: TileCoord,
+    to: TileCoord,
+    network: PathNetwork,
+    wormholes: Option<&TunnelWormholes>,
+) -> Option<Vec<TileCoord>> {
+    if let Some(path) = cache.get(from, to, network) {
+        return Some(path.clone());
+    }
+    let path = find_path_with_wormholes(map, from, to, network, wormholes)?;
+    cache.insert(from, to, network, path.clone());
+    Some(path)
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+struct AstarNode {
+    est_total: u32,
+    pos: TileCoord,
+}
+
+impl Ord for AstarNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .est_total
+            .cmp(&self.est_total)
+            .then_with(|| other.pos.x.cmp(&self.pos.x))
+            .then_with(|| other.pos.y.cmp(&self.pos.y))
+    }
+}
+
+impl PartialOrd for AstarNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[must_use]
+fn manhattan(a: TileCoord, b: TileCoord) -> u32 {
+    a.x.abs_diff(b.x) + a.y.abs_diff(b.y)
+}
+
+#[must_use]
+const fn step_cost(_from: TileCoord, _to: TileCoord) -> u32 {
+    1
 }
 
 fn reconstruct(
@@ -323,5 +564,158 @@ mod tests {
         let path = find_path_with_wormholes(&map, from, to, PathNetwork::Rail, Some(&wh))
             .expect("wormhole");
         assert_eq!(path.last(), Some(&to));
+    }
+
+    fn write_road(m: &mut Map, c: TileCoord, bits: u8) {
+        m.set_kind(c, TileKind::Road).unwrap();
+        let mut t = m.get(c).unwrap();
+        t.m5 = bits & 0x0F;
+        m.set_tile(c, t).unwrap();
+    }
+
+    fn write_rail(m: &mut Map, c: TileCoord, trackbits: u8) {
+        m.set_kind(c, TileKind::Rail).unwrap();
+        let mut t = m.get(c).unwrap();
+        t.m5 = trackbits & 0x3F;
+        m.set_tile(c, t).unwrap();
+    }
+
+    #[test]
+    fn astar_finds_path_on_straight_road() {
+        let mut m = Map::new_flat(8, 8, 0);
+        for x in 0..=4_i32 {
+            write_road(&mut m, TileCoord::new(x, 0), 0x0A);
+        }
+        let path = find_path(
+            &m,
+            TileCoord::new(0, 0),
+            TileCoord::new(4, 0),
+            PathNetwork::Road,
+        );
+        assert!(path.is_some());
+        assert_eq!(*path.unwrap().last().unwrap(), TileCoord::new(4, 0));
+    }
+
+    #[test]
+    fn astar_respects_road_bit_gap() {
+        let mut m = Map::new_flat(8, 8, 0);
+        write_road(&mut m, TileCoord::new(0, 0), 0x0A);
+        write_road(&mut m, TileCoord::new(1, 0), 0x0A);
+        write_road(&mut m, TileCoord::new(1, 1), 0x03);
+        assert!(
+            find_path(
+                &m,
+                TileCoord::new(0, 0),
+                TileCoord::new(1, 1),
+                PathNetwork::Road,
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn astar_finds_detour_when_direct_gap_blocked() {
+        let mut m = Map::new_flat(8, 8, 0);
+        write_road(&mut m, TileCoord::new(0, 0), 0x0A);
+        write_road(&mut m, TileCoord::new(1, 0), 0x0A);
+        write_road(&mut m, TileCoord::new(2, 0), 0x0F);
+        write_road(&mut m, TileCoord::new(2, 1), 0x0F);
+        write_road(&mut m, TileCoord::new(1, 1), 0x0A);
+        write_road(&mut m, TileCoord::new(0, 1), 0x0A);
+        let path = find_path(
+            &m,
+            TileCoord::new(0, 0),
+            TileCoord::new(0, 1),
+            PathNetwork::Road,
+        )
+        .expect("debe rodear por (2,0)");
+        assert_eq!(path.last().copied(), Some(TileCoord::new(0, 1)));
+        assert!(path.len() >= 4);
+    }
+
+    #[test]
+    fn astar_rail_requires_matching_axis() {
+        let mut m = Map::new_flat(6, 6, 0);
+        write_rail(&mut m, TileCoord::new(0, 0), RAIL_TB_X);
+        write_rail(&mut m, TileCoord::new(1, 0), RAIL_TB_Y);
+        assert!(
+            find_path(
+                &m,
+                TileCoord::new(0, 0),
+                TileCoord::new(1, 0),
+                PathNetwork::Rail,
+            )
+            .is_none()
+        );
+        write_rail(&mut m, TileCoord::new(1, 0), RAIL_TB_X);
+        assert!(
+            find_path(
+                &m,
+                TileCoord::new(0, 0),
+                TileCoord::new(1, 0),
+                PathNetwork::Rail,
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn astar_rail_station_reaches_track_below_entrance() {
+        let mut m = Map::new_flat(12, 12, 0);
+        let station = TileCoord::new(4, 4);
+        let track = TileCoord::new(4, 5);
+        m.set_kind(station, TileKind::Station).unwrap();
+        let mut st = m.get(station).unwrap();
+        st.m6 = (st.m6 & !0x78) | (0 << 3);
+        st.m5 = 2;
+        m.set_tile(station, st).unwrap();
+        write_rail(&mut m, track, RAIL_TB_X);
+        for x in 3..=6_i32 {
+            write_rail(&mut m, TileCoord::new(x, 5), RAIL_TB_X);
+        }
+        assert!(
+            find_path(&m, track, TileCoord::new(6, 5), PathNetwork::Rail).is_some(),
+            "vía horizontal → vía (sin entrar en plataforma)"
+        );
+        assert!(
+            find_path(&m, track, station, PathNetwork::Rail).is_none(),
+            "el tren no debe rutear hacia la tesela de estación"
+        );
+    }
+
+    #[test]
+    fn path_cache_reuses_result_within_tick() {
+        let mut m = Map::new_flat(8, 8, 0);
+        write_road(&mut m, TileCoord::new(0, 0), 0x0A);
+        write_road(&mut m, TileCoord::new(1, 0), 0x0A);
+        let mut cache = PathCache::default();
+        cache.begin_tick(1);
+        let a = find_path_cached(
+            &m,
+            &mut cache,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+            PathNetwork::Road,
+            None,
+        );
+        let b = find_path_cached(
+            &m,
+            &mut cache,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+            PathNetwork::Road,
+            None,
+        );
+        assert_eq!(a, b);
+        cache.begin_tick(2);
+        assert!(
+            cache
+                .get(
+                    TileCoord::new(0, 0),
+                    TileCoord::new(1, 0),
+                    PathNetwork::Road
+                )
+                .is_none()
+        );
     }
 }

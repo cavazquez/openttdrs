@@ -1,12 +1,12 @@
 //! Hotkeys de guardado/carga JSON del estado de simulación.
 
 use bevy::prelude::*;
-use openttdrs_core::save;
+use openttdrs_core::{GameState, save};
 
 use crate::bevy_app::UpdateSet;
 use crate::render::{RemapMapVisualsPending, VehicleIndex};
 use crate::state::{ClientScreen, SimWorld};
-use crate::ui::SimHudControls;
+use crate::ui::{SaveWindowState, SimHudControls};
 
 pub(crate) struct PersistencePlugin;
 
@@ -21,13 +21,38 @@ impl Plugin for PersistencePlugin {
     }
 }
 
+/// Reemplaza el estado de simulación en caliente y dispara la recarga visual.
+pub(crate) fn apply_loaded_state(
+    sim: &mut SimWorld,
+    vehicle_index: &mut VehicleIndex,
+    remap: &mut RemapMapVisualsPending,
+    loaded: GameState,
+) {
+    let prev = sim.state.map.dimensions();
+    let nw = loaded.map.dimensions();
+    sim.state = loaded;
+    sim.ottdmap_extras = None;
+    sim.loaded_file = true;
+    vehicle_index.rebuild(&sim.state.vehicles);
+    remap.pending = true;
+    remap.sync_camera = true;
+    if prev != nw {
+        info!("Mapa {prev:?} -> {nw:?}; recarga visual y camara.");
+    }
+}
+
 pub(crate) fn handle_sim_json_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut sim: ResMut<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
     mut remap: ResMut<RemapMapVisualsPending>,
     hud: Res<SimHudControls>,
+    save_window: Option<Res<SaveWindowState>>,
 ) {
+    // Con la ventana de partidas abierta el teclado edita el nombre del archivo.
+    if save_window.is_some_and(|w| w.open) {
+        return;
+    }
     let save_path = hud.json_save_path.clone();
     let ctrl = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
     let save_shortcut =
@@ -45,19 +70,8 @@ pub(crate) fn handle_sim_json_hotkeys(
         match std::fs::read_to_string(&save_path) {
             Ok(text) => match save::load_from_str(&text) {
                 Ok(loaded) => {
-                    let prev = sim.state.map.dimensions();
-                    let nw = loaded.map.dimensions();
-                    sim.state = loaded;
-                    sim.ottdmap_extras = None;
-                    sim.loaded_file = true;
-                    vehicle_index.rebuild(&sim.state.vehicles);
-                    remap.pending = true;
-                    remap.sync_camera = true;
-                    if prev != nw {
-                        info!("Mapa {prev:?} -> {nw:?}; recarga visual y camara.");
-                    } else {
-                        info!("Estado cargado desde {save_path}; recarga visual.");
-                    }
+                    apply_loaded_state(&mut sim, &mut vehicle_index, &mut remap, loaded);
+                    info!("Estado cargado desde {save_path}; recarga visual.");
                 }
                 Err(e) => error!("Carga: JSON invalido ({save_path}): {e}"),
             },

@@ -4,7 +4,7 @@ use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
 use crate::render::viewport::ortho_world_cull_margin;
-use crate::render::{IndustryPreviewCamera, PrimaryGameCamera, WaterTile};
+use crate::render::{MapPreviewCamera, PrimaryGameCamera, WaterTile};
 use crate::state::ClientScreen;
 
 pub(crate) struct WaterAnimationPlugin;
@@ -84,7 +84,7 @@ pub(crate) fn animate_water(
     time: Res<Time>,
     cam_q: Query<
         (&GlobalTransform, &Projection),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+        (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
     mut query: Query<(&WaterTile, &GlobalTransform, &mut Sprite)>,
 ) {

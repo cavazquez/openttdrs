@@ -1,13 +1,23 @@
 use bevy::prelude::*;
 
 use super::SimHudControls;
+use crate::ui::save_window::SaveWindowState;
 use crate::ui::{BuildMenuAction, UiToolState};
+
+/// Con la ventana de partidas abierta, el teclado edita el nombre del archivo.
+fn save_window_open(save_window: Option<&Res<SaveWindowState>>) -> bool {
+    save_window.is_some_and(|w| w.open)
+}
 
 /// **P** alterna pausa del tick de simulacion (`GameState::step`).
 pub(crate) fn handle_pause_toggle(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut hud: ResMut<SimHudControls>,
+    save_window: Option<Res<SaveWindowState>>,
 ) {
+    if save_window_open(save_window.as_ref()) {
+        return;
+    }
     if keyboard.just_pressed(KeyCode::KeyP) {
         hud.paused = !hud.paused;
         if hud.paused {
@@ -30,7 +40,11 @@ pub(crate) fn handle_pause_toggle(
 pub(crate) fn cycle_json_save_path_hotkey(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut hud: ResMut<SimHudControls>,
+    save_window: Option<Res<SaveWindowState>>,
 ) {
+    if save_window_open(save_window.as_ref()) {
+        return;
+    }
     if keyboard.just_pressed(KeyCode::F4) {
         hud.json_save_path = if hud.json_save_path.ends_with("autosave.json") {
             "save/openttdrs_sim.json".into()
@@ -45,7 +59,11 @@ pub(crate) fn cycle_json_save_path_hotkey(
 pub(crate) fn handle_tool_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut tool_state: ResMut<UiToolState>,
+    save_window: Option<Res<SaveWindowState>>,
 ) {
+    if save_window_open(save_window.as_ref()) {
+        return;
+    }
     if keyboard.just_pressed(KeyCode::Digit1) {
         tool_state.active_tool = Some(BuildMenuAction::RoadY);
     } else if keyboard.just_pressed(KeyCode::Digit2) {

@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::bevy_app::UpdateSet;
-use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
+use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::ClientScreen;
 
 /// Paneo con botón derecho: factor × `OrthographicProjection::scale` × delta en píxeles.
@@ -50,7 +50,7 @@ pub fn move_camera(
     windows: Query<&Window, With<PrimaryWindow>>,
     mut cam_q: Query<
         (&mut Transform, &mut Projection),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+        (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
     mut vel: ResMut<CameraVelocity>,
 ) {

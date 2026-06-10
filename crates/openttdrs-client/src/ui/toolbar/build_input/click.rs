@@ -3,7 +3,9 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::{TileCoord, TileKind, apply_command};
 
 use crate::iso::world_pos_to_tile_coord;
-use crate::render::{IndustryPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending};
+use crate::render::{
+    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, pick_vehicle_id_at_world,
+};
 use crate::state::SimWorld;
 use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, push_build_command_error};
 use crate::ui::industry_panel::IndustryPanelState;
@@ -25,12 +27,28 @@ use crate::ui::toolbar::{
     BuildMenuAction, BuildMenuUi, DragBuildState, OrderEditState, StationBuildState, UiToolState,
 };
 
+fn select_vehicle_on_map(
+    order_state: &mut OrderEditState,
+    depot_state: &mut DepotPanelState,
+    station_panel: &mut StationCargoPanelState,
+    industry_panel: &mut IndustryPanelState,
+    vehicle: &openttdrs_core::Vehicle,
+) {
+    order_state.vehicle_id = Some(vehicle.id);
+    order_state.orders = vehicle.orders.clone();
+    order_state.picking_destination = false;
+    depot_state.depot_pos = None;
+    depot_state.selected_vehicle = None;
+    station_panel.station_pos = None;
+    industry_panel.open = false;
+}
+
 /// Dos clicks: el primero ancla el ghost, el segundo confirma. Click derecho cancela.
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_tile_click(
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    cam_q: Query<(&Camera, &Transform), (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>)>,
+    cam_q: Query<(&Camera, &Transform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut selected: ResMut<SelectedTileInfo>,
     mut sim: ResMut<SimWorld>,
     tool_state: Res<UiToolState>,
@@ -92,6 +110,15 @@ pub(crate) fn handle_tile_click(
     let orders_mode =
         order_state.picking_destination || tool_state.active_tool == Some(BuildMenuAction::Orders);
     if orders_mode {
+        if mouse.just_pressed(MouseButton::Left)
+            && let Some(vehicle_id) = pick_vehicle_id_at_world(world_pos, &sim)
+            && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
+        {
+            order_state.vehicle_id = Some(vehicle.id);
+            order_state.orders = vehicle.orders.clone();
+            order_state.picking_destination = false;
+            return;
+        }
         if order_state.vehicle_id.is_some()
             && handle_order_destination_click(
                 &mouse,
@@ -107,7 +134,8 @@ pub(crate) fn handle_tile_click(
         }
         if tool_state.active_tool == Some(BuildMenuAction::Orders)
             && mouse.just_pressed(MouseButton::Left)
-            && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.pos == pos)
+            && let Some(vehicle_id) = pick_vehicle_id_at_world(world_pos, &sim)
+            && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
         {
             order_state.vehicle_id = Some(vehicle.id);
             order_state.orders = vehicle.orders.clone();
@@ -120,12 +148,26 @@ pub(crate) fn handle_tile_click(
     let Some(action) = tool_state.active_tool else {
         cancel_placement(&mut drag_state);
         if mouse.just_pressed(MouseButton::Left) {
+            if let Some(vehicle_id) = pick_vehicle_id_at_world(world_pos, &sim)
+                && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
+            {
+                select_vehicle_on_map(
+                    &mut order_state,
+                    &mut depot_state,
+                    &mut station_panel,
+                    &mut industry_panel,
+                    vehicle,
+                );
+                return;
+            }
+
             let tile_kind = sim.state.map.get_kind(pos);
             match tile_kind {
                 Some(TileKind::Industry) => {
                     industry_panel.open = true;
                     industry_panel.focus_tile = Some(pos);
                     depot_state.depot_pos = None;
+                    depot_state.selected_vehicle = None;
                     order_state.vehicle_id = None;
                     order_state.orders.clear();
                     order_state.picking_destination = false;
@@ -150,6 +192,7 @@ pub(crate) fn handle_tile_click(
                 Some(TileKind::Station) => {
                     station_panel.station_pos = Some(pos);
                     depot_state.depot_pos = None;
+                    depot_state.selected_vehicle = None;
                     order_state.vehicle_id = None;
                     order_state.orders.clear();
                     order_state.picking_destination = false;
@@ -158,18 +201,13 @@ pub(crate) fn handle_tile_click(
                 }
                 _ => {}
             }
-            if let Some(vehicle) = sim.state.vehicles.iter().find(|vehicle| vehicle.pos == pos) {
-                order_state.vehicle_id = Some(vehicle.id);
-                order_state.orders = vehicle.orders.clone();
-                order_state.picking_destination = false;
-                depot_state.depot_pos = None;
-                station_panel.station_pos = None;
-                industry_panel.open = false;
-                return;
-            }
             depot_state.depot_pos = None;
+            depot_state.selected_vehicle = None;
             station_panel.station_pos = None;
             industry_panel.open = false;
+            order_state.vehicle_id = None;
+            order_state.orders.clear();
+            order_state.picking_destination = false;
         }
         return;
     };

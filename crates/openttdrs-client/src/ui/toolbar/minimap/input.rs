@@ -3,7 +3,7 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::TileCoord;
 
 use crate::iso::tile_pos;
-use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
+use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 use crate::ui::hud::{SelectedTileInfo, SimHudControls};
 use crate::ui::toolbar::BuildMenuUi;
@@ -43,7 +43,7 @@ pub(crate) fn handle_minimap_click(
     hud: Res<SimHudControls>,
     windows: Query<&Window, With<PrimaryWindow>>,
     sim: Res<SimWorld>,
-    mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>)>,
+    mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut selected: ResMut<SelectedTileInfo>,
     toolbar_pointer: Query<
         &Interaction,

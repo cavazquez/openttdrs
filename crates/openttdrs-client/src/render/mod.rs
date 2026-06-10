@@ -11,7 +11,8 @@ mod world;
 
 pub(crate) use assets::WorldAssets;
 pub(crate) use components::{
-    IndustryPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, WaterTile,
+    IndustryPreviewCamera, MapPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera,
+    VehiclePreviewCamera, WaterTile,
 };
 pub(crate) use grid::{RenderGrid, TileRenderContext};
 pub(crate) use tiles::{
@@ -19,7 +20,9 @@ pub(crate) use tiles::{
     spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
     spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
-pub(crate) use vehicles::{VehicleIndex, VehicleRenderPlugin};
+pub(crate) use vehicles::{
+    VehicleIndex, VehicleRenderPlugin, pick_vehicle_id_at_world, vehicle_world_position,
+};
 pub(crate) use viewport::{
     TileViewportBounds, large_map_viewport_cull_enabled, ortho_visible_tile_bounds,
 };

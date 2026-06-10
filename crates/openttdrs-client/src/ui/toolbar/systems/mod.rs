@@ -28,6 +28,7 @@ mod tests {
     use crate::state::SimWorld;
     use crate::ui::hud::{HoveredTileCoord, HudBuildFeedback, SelectedTileInfo, SimHudControls};
     use crate::ui::industry_panel::IndustryPanelState;
+    use crate::ui::save_window::SaveWindowState;
     use crate::ui::toolbar::build_input::commands::{command_for_action, command_for_line_action};
     use crate::ui::toolbar::build_input::drag::{
         action_is_tunnel, action_supports_drag, drag_line_tiles, road_bits_for_drag_action,
@@ -99,11 +100,24 @@ mod tests {
 
     #[test]
     fn setup_order_panel_then_sync_order_panel() {
-        let mut world = World::new();
-        world.run_system_once(setup_order_panel).unwrap();
-        world.insert_resource(OrderEditState::default());
-        world.insert_resource(SimWorld::default());
-        world.run_system_once(sync_order_panel).unwrap();
+        use bevy::asset::AssetPlugin;
+
+        let asset_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins).add_plugins(AssetPlugin {
+            file_path: asset_root.into(),
+            ..default()
+        });
+        app.world_mut().init_resource::<Assets<Image>>();
+        app.init_asset::<Font>();
+        app.world_mut().run_system_once(setup_order_panel).unwrap();
+        app.world_mut().insert_resource(OrderEditState::default());
+        app.world_mut().insert_resource(SimWorld::default());
+        app.world_mut().spawn((
+            PrimaryGameCamera,
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+        app.world_mut().run_system_once(sync_order_panel).unwrap();
     }
 
     #[test]
@@ -151,14 +165,12 @@ mod tests {
     }
 
     #[test]
-    fn handle_settings_menu_buttons_save_load_with_file_dialog_abstraction() {
+    fn handle_settings_menu_buttons_save_load_open_save_window() {
         let dir = tempfile::tempdir().unwrap();
         let save_path = dir.path().join("sim.json");
 
         let mut world = World::new();
-        world.insert_resource(SimWorld::default());
-        world.insert_resource(VehicleIndex::default());
-        world.insert_resource(RemapMapVisualsPending::default());
+        world.insert_resource(SaveWindowState::default());
         world.insert_resource(SimHudControls {
             paused: false,
             sim_speed: 1.0,
@@ -168,12 +180,11 @@ mod tests {
 
         world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
+        assert!(world.resource::<SaveWindowState>().open);
 
         world.spawn((Button, SaveMenuAction::LoadFrom, Interaction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
-        let remap = world.resource::<RemapMapVisualsPending>();
-        assert!(remap.pending);
-        assert!(remap.sync_camera);
+        assert!(world.resource::<SaveWindowState>().open);
     }
 
     #[test]
@@ -182,6 +193,7 @@ mod tests {
         world.insert_resource(SimWorld::default());
         world.insert_resource(VehicleIndex::default());
         world.insert_resource(RemapMapVisualsPending::default());
+        world.insert_resource(SaveWindowState::default());
         world.insert_resource(SimHudControls::default());
         world.spawn((
             PrimaryGameCamera,
@@ -214,6 +226,7 @@ mod tests {
         world_zoom_in.insert_resource(SimWorld::default());
         world_zoom_in.insert_resource(VehicleIndex::default());
         world_zoom_in.insert_resource(RemapMapVisualsPending::default());
+        world_zoom_in.insert_resource(SaveWindowState::default());
         world_zoom_in.insert_resource(SimHudControls::default());
         world_zoom_in.spawn((
             PrimaryGameCamera,
@@ -234,6 +247,7 @@ mod tests {
         world_zoom_out.insert_resource(SimWorld::default());
         world_zoom_out.insert_resource(VehicleIndex::default());
         world_zoom_out.insert_resource(RemapMapVisualsPending::default());
+        world_zoom_out.insert_resource(SaveWindowState::default());
         world_zoom_out.insert_resource(SimHudControls::default());
         world_zoom_out.spawn((
             PrimaryGameCamera,

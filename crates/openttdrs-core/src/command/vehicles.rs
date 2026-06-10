@@ -18,6 +18,7 @@ pub(super) fn set_vehicle_orders(
         return Err(CommandError::VehicleNotFound);
     };
     vehicle.set_orders(orders);
+    vehicle.sync_order_destination(&state.map);
     Ok(())
 }
 
@@ -41,6 +42,7 @@ pub(super) fn set_vehicle_station_orders(
     }
     let vehicle = &mut state.vehicles[vehicle_idx];
     vehicle.set_station_orders(stations);
+    vehicle.sync_order_destination(&state.map);
     Ok(())
 }
 
@@ -65,17 +67,31 @@ pub(super) fn build_road_vehicle_at_depot(
         .map(|v| v.id)
         .max()
         .map_or(1, |v| v.saturating_add(1));
+    let cost = crate::economy::vehicle_purchase_cost(kind);
     let mut vehicle = Vehicle::new(next_id, kind, depot_pos, depot_pos);
     vehicle.running = false;
     state.vehicles.push(vehicle);
+    state.economy.money -= cost;
     Ok(())
 }
 
 pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(), CommandError> {
+    let Some(vehicle) = state.vehicles.iter().find(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let in_depot = matches!(
+        state.map.get_kind(vehicle.pos),
+        Some(TileKind::RoadDepot) | Some(TileKind::RailDepot)
+    );
+    if !in_depot {
+        return Err(CommandError::VehicleNotInDepot);
+    }
+    let refund = crate::economy::vehicle_sell_refund(vehicle);
     let Some(idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
     state.vehicles.remove(idx);
+    state.economy.money += refund;
     Ok(())
 }
 

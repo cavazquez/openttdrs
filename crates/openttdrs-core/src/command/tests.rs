@@ -204,6 +204,7 @@ fn build_road_vehicle_at_depot_creates_stopped_bus() {
     let depot = TileCoord::new(2, 2);
     apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
     apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    let money_before = s.economy.money;
     apply_command(
         &mut s,
         &Command::BuildRoadVehicleAtDepot(depot, VehicleKind::Bus),
@@ -212,6 +213,10 @@ fn build_road_vehicle_at_depot_creates_stopped_bus() {
     assert_eq!(s.vehicles.len(), 1);
     assert_eq!(s.vehicles[0].kind, VehicleKind::Bus);
     assert!(!s.vehicles[0].running);
+    assert_eq!(
+        s.economy.money,
+        money_before - crate::vehicle_purchase_cost(VehicleKind::Bus)
+    );
 }
 
 #[test]
@@ -575,8 +580,35 @@ fn bridge_accepts_span_over_water() {
 }
 
 #[test]
+fn sell_vehicle_requires_depot_tile() {
+    let mut s = GameState::new(8, 8);
+    let road = TileCoord::new(2, 2);
+    s.map.set_kind(road, TileKind::Road).unwrap();
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Truck, road, road));
+    assert_eq!(
+        apply_command(&mut s, &Command::SellVehicle(1)),
+        Err(CommandError::VehicleNotInDepot)
+    );
+}
+
+#[test]
+fn sell_vehicle_in_road_depot_succeeds() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(1, 1);
+    s.map.set_kind(depot, TileKind::RoadDepot).unwrap();
+    let vehicle = Vehicle::new(1, VehicleKind::Bus, depot, depot);
+    let refund = crate::vehicle_sell_refund(&vehicle);
+    s.vehicles.push(vehicle);
+    let money_before = s.economy.money;
+    apply_command(&mut s, &Command::SellVehicle(1)).unwrap();
+    assert!(s.vehicles.is_empty());
+    assert_eq!(s.economy.money, money_before + refund);
+}
+
+#[test]
 fn every_command_error_has_user_message() {
-    const ERRORS: [CommandError; 17] = [
+    const ERRORS: [CommandError; 18] = [
         CommandError::OutOfBounds,
         CommandError::CannotPlaceRoadOnWater,
         CommandError::CannotPlaceRoadOnVoid,
@@ -589,6 +621,7 @@ fn every_command_error_has_user_message() {
         CommandError::StationAlreadyExists,
         CommandError::StationNotFound,
         CommandError::VehicleNotFound,
+        CommandError::VehicleNotInDepot,
         CommandError::InvalidDepotTile,
         CommandError::VehicleKindNotAllowed,
         CommandError::IncompatibleStopForVehicle,

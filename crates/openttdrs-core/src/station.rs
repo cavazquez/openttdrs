@@ -1,7 +1,8 @@
 use crate::cargo::{CargoStock, CargoType};
 use crate::industry::{Industry, IndustryKind};
 use crate::map::{Map, TileCoord, TileKind};
-use crate::vehicle::VehicleKind;
+use crate::pathfinder::{diag_dir_offset, station_entrance_faces_rail};
+use crate::vehicle::{VehicleKind, VehicleOrder};
 
 pub const STATION_COVERAGE_RADIUS: i32 = 4;
 
@@ -10,6 +11,9 @@ pub struct Station {
     pub pos: TileCoord,
     #[serde(default)]
     pub stop_kind: StopKind,
+    /// Nombre de la estación (saves de `OpenTTD` con nombre custom).
+    #[serde(default)]
+    pub name: Option<String>,
     /// Cargo acumulado en el almacén de la estación.
     pub stock: u32,
     #[serde(default)]
@@ -29,13 +33,7 @@ pub enum StopKind {
 impl Station {
     #[must_use]
     pub fn new(pos: TileCoord) -> Self {
-        Self {
-            pos,
-            stop_kind: StopKind::TruckStop,
-            stock: 0,
-            cargo_stock: CargoStock::default(),
-            income: 0,
-        }
+        Self::new_with_kind(pos, StopKind::TruckStop)
     }
 
     #[must_use]
@@ -43,6 +41,7 @@ impl Station {
         Self {
             pos,
             stop_kind,
+            name: None,
             stock: 0,
             cargo_stock: CargoStock::default(),
             income: 0,
@@ -70,6 +69,8 @@ impl Station {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct StationCoverage {
+    /// Teselas `House` dentro del radio (origen de pasajeros/correo).
+    pub house_tiles: u32,
     pub accepts_mail: u32,
     pub accepts_goods: u32,
     pub supplies_coal: u32,
@@ -87,6 +88,41 @@ impl StationCoverage {
     #[must_use]
     pub const fn supplies_anything(self) -> bool {
         self.supplies_coal > 0 || self.supplies_wood > 0 || self.supplies_oil > 0
+    }
+}
+
+#[must_use]
+fn is_rail_track_kind(kind: TileKind) -> bool {
+    matches!(
+        kind,
+        TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge
+    )
+}
+
+/// Tesela de vía donde el tren debe detenerse junto a una estación de tren (no sobre la plataforma).
+#[must_use]
+pub fn rail_station_approach_tile(map: &Map, station_pos: TileCoord) -> Option<TileCoord> {
+    for dir in 0..4u8 {
+        if !station_entrance_faces_rail(map, station_pos, dir) {
+            continue;
+        }
+        let (dx, dy) = diag_dir_offset(dir);
+        let track = TileCoord::new(station_pos.x + dx, station_pos.y + dy);
+        if map.get_kind(track).is_some_and(is_rail_track_kind) {
+            return Some(track);
+        }
+    }
+    None
+}
+
+/// Destino de movimiento según tipo de vehículo y orden (trenes paran en la vía adyacente).
+#[must_use]
+pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrder) -> TileCoord {
+    match (kind, order) {
+        (VehicleKind::Train, VehicleOrder::Station { station }) => {
+            rail_station_approach_tile(map, station).unwrap_or(station)
+        }
+        (_, order) => order.destination(),
     }
 }
 
@@ -124,7 +160,10 @@ pub fn station_coverage_at(
                 continue;
             };
             match tile.kind {
-                TileKind::House => coverage.accepts_mail += 1,
+                TileKind::House => {
+                    coverage.house_tiles += 1;
+                    coverage.accepts_mail += 1;
+                }
                 TileKind::Industry => coverage.accepts_goods += 1,
                 _ => {}
             }

@@ -6,6 +6,7 @@ use super::super::{
     ToolbarTooltipTarget, TooltipBox, TooltipText,
 };
 use super::controls::{spawn_icon_tool_buttons, spawn_panel_title, spawn_settings_buttons};
+use crate::ui::save_window::{SaveLoadToolbarButton, SaveWindowMode};
 
 pub(super) fn spawn_toolbar_group_buttons(
     root: &mut ChildSpawnerCommands,
@@ -104,7 +105,62 @@ pub(super) fn spawn_toolbar_group_buttons(
                 ));
             }
         }
+        parent.spawn((
+            Node {
+                width: Val::Px(2.0),
+                height: Val::Px(40.0),
+                margin: UiRect::horizontal(Val::Px(2.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.62, 0.55, 0.38)),
+            BuildMenuUi,
+        ));
+        spawn_save_load_button(
+            parent,
+            SaveWindowMode::Save,
+            "Guardar",
+            "Guardar partida (ventana de partidas)",
+        );
+        spawn_save_load_button(
+            parent,
+            SaveWindowMode::Load,
+            "Cargar",
+            "Cargar partida (ventana de partidas)",
+        );
     });
+}
+
+fn spawn_save_load_button(
+    parent: &mut ChildSpawnerCommands,
+    mode: SaveWindowMode,
+    label: &'static str,
+    tip: &'static str,
+) {
+    parent.spawn((
+        Button,
+        SaveLoadToolbarButton(mode),
+        ToolbarTooltipTarget { text: tip },
+        BuildMenuUi,
+        Node {
+            width: Val::Px(72.0),
+            height: Val::Px(48.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(2.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
+        BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
+        Interaction::default(),
+        children![(
+            Text::new(label),
+            TextFont {
+                font_size: 13.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.95, 0.92, 0.78)),
+        )],
+    ));
 }
 
 pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &AssetServer) {

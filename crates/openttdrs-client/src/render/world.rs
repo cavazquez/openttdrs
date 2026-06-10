@@ -12,7 +12,7 @@ use crate::iso::{
 use crate::render::viewport::initial_camera_span_tiles;
 use crate::render::viewport::{VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES};
 use crate::render::{
-    IndustryPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, RenderGrid,
+    MapPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, RenderGrid,
     TileRenderContext, TileViewportBounds, WorldAssets, flush_map_batches,
     large_map_viewport_cull_enabled, ortho_visible_tile_bounds, push_forest_tree, push_water_tile,
     spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
@@ -66,7 +66,7 @@ fn resolve_spawn_viewport(
     windows: &Query<&Window, With<PrimaryWindow>>,
     cam_q: &Query<
         (&mut Transform, &mut Projection),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+        (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
 ) -> TileViewportBounds {
     let (mw, mh) = sim.state.map.dimensions();
@@ -102,7 +102,7 @@ pub(crate) fn sync_map_tile_spawn_viewport(
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<
         (&mut Transform, &mut Projection),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+        (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
     mut pending: ResMut<RemapMapVisualsPending>,
     mut viewport: ResMut<MapTileSpawnViewport>,
@@ -127,7 +127,7 @@ pub(crate) fn setup(
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<
         (&mut Transform, &mut Projection),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+        (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
@@ -321,7 +321,7 @@ fn tile_kind_name(kind: TileKind) -> &'static str {
 fn sync_camera_for_sim(
     q_cam: &mut Query<
         (&mut Transform, &mut Projection),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+        (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
     sim: &SimWorld,
 ) {
@@ -348,7 +348,7 @@ pub(crate) fn apply_remap_map_visuals(
     windows: Query<&Window, With<PrimaryWindow>>,
     mut q_cam: Query<
         (&mut Transform, &mut Projection),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+        (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
     asset_server: Res<AssetServer>,
     sim: Res<SimWorld>,
@@ -490,7 +490,7 @@ mod tests {
                 |sim: Res<SimWorld>,
                  mut q_cam: Query<
                     (&mut Transform, &mut Projection),
-                    (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+                    (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
                 >| {
                     sync_camera_for_sim(&mut q_cam, &sim);
                 },
@@ -508,7 +508,7 @@ mod tests {
                 |sim: Res<SimWorld>,
                  mut q_cam: Query<
                     (&mut Transform, &mut Projection),
-                    (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+                    (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
                 >| {
                     sync_camera_for_sim(&mut q_cam, &sim);
                 },
@@ -526,7 +526,7 @@ mod tests {
                 |sim: Res<SimWorld>,
                  mut q_cam: Query<
                     (&mut Transform, &mut Projection),
-                    (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
+                    (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
                 >| {
                     sync_camera_for_sim(&mut q_cam, &sim);
                 },

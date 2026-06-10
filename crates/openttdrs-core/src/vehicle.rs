@@ -104,6 +104,15 @@ pub struct Vehicle {
     /// Último intento de `find_path` falló estando `orders` no vacío; no usar Manhattan (queda bloqueado).
     #[serde(default)]
     pub no_network_route_to_order: bool,
+    /// Tesela donde se cargó el lote actual (origen para pago por distancia).
+    #[serde(default)]
+    pub cargo_source: Option<TileCoord>,
+    /// Ticks con carga a bordo (envejecimiento / penalización de pago).
+    #[serde(default)]
+    pub cargo_transit_ticks: u32,
+    /// Giro de salida en la tesela actual (0 = inactivo; 1..=255 anima el cambio de sentido).
+    #[serde(default)]
+    pub depart_turn: u8,
 }
 
 impl Vehicle {
@@ -133,7 +142,25 @@ impl Vehicle {
             orders: Vec::new(),
             current_order: 0,
             no_network_route_to_order: false,
+            cargo_source: None,
+            cargo_transit_ticks: 0,
+            depart_turn: 0,
         }
+    }
+
+    pub(crate) fn mark_cargo_loaded(&mut self, at: TileCoord) {
+        self.cargo_source = Some(at);
+        self.cargo_transit_ticks = 0;
+    }
+
+    pub(crate) fn clear_cargo(&mut self) {
+        self.cargo = 0;
+        self.cargo_type = match self.kind {
+            VehicleKind::Bus => Some(CargoType::Passengers),
+            VehicleKind::Truck | VehicleKind::Train => None,
+        };
+        self.cargo_source = None;
+        self.cargo_transit_ticks = 0;
     }
 
     #[must_use]
@@ -256,17 +283,40 @@ impl Vehicle {
 
         self.update_movement_speed();
 
+        if self.kind == VehicleKind::Train {
+            self.apply_immediate_train_turnaround();
+        }
+
         if self.movement_target().is_none() {
-            if self.cur_speed == 0 {
-                self.progress = 0;
-                if self.pos == self.dest {
-                    self.advance_destination_after_arrival();
-                }
+            if self.cur_speed == 0 && self.pos == self.dest {
+                self.advance_destination_after_arrival();
             }
             return;
         }
 
         if self.cur_speed == 0 {
+            return;
+        }
+
+        if self.depart_turn > 0 {
+            let step = u16::from(self.progress_step().max(1));
+            let next = u16::from(self.depart_turn) + step;
+            if next < 255 {
+                if let Ok(t) = u8::try_from(next) {
+                    self.depart_turn = t;
+                }
+            } else {
+                self.depart_turn = 0;
+                self.progress = 0;
+                if let Some(next) = self.movement_target() {
+                    self.direction = direction_from_tile_step(self.pos, next);
+                }
+            }
+            return;
+        }
+
+        if self.progress == 255 && self.needs_depart_turnaround() {
+            self.depart_turn = 1;
             return;
         }
 
@@ -284,8 +334,11 @@ impl Vehicle {
             self.progress = 0;
             self.advance_one_tile();
             if remaining < 255 {
-                if let Ok(progress) = u8::try_from(remaining) {
-                    self.progress = progress;
+                // Si `advance_destination_after_arrival` ancló en 255, no pisar con el resto.
+                if self.progress != 255 {
+                    if let Ok(progress) = u8::try_from(remaining) {
+                        self.progress = progress;
+                    }
                 }
                 return;
             }
@@ -353,10 +406,13 @@ impl Vehicle {
         self.current_order = 0;
         self.path.clear();
         self.progress = 0;
+        self.depart_turn = 0;
         self.no_network_route_to_order = false;
         if let Some(&first) = self.orders.first() {
             self.origin = self.pos;
-            self.dest = first.destination();
+            if self.kind != VehicleKind::Train {
+                self.dest = first.destination();
+            }
         }
     }
 
@@ -368,14 +424,70 @@ impl Vehicle {
 
     fn advance_destination_after_arrival(&mut self) {
         self.path.clear();
-        self.progress = 0;
+        self.depart_turn = 0;
+        if self.orders.is_empty() {
+            self.progress = 0;
+            return;
+        }
+        // Anclado al final del carril de entrada (evita salto visual al llegar a parada/estación).
+        self.progress = 255;
+        self.current_order = (self.current_order + 1) % self.orders.len();
+        self.origin = self.pos;
+        if self.kind != VehicleKind::Train {
+            self.dest = self.orders[self.current_order].destination();
+        }
+    }
+
+    /// Actualiza `dest` según la orden actual (vía adyacente para estaciones de tren).
+    pub fn sync_order_destination(&mut self, map: &crate::map::Map) {
         if self.orders.is_empty() {
             return;
         }
-        self.current_order = (self.current_order + 1) % self.orders.len();
-        self.origin = self.pos;
-        self.dest = self.orders[self.current_order].destination();
+        let order = self.orders[self.current_order];
+        self.dest = crate::station::resolve_order_destination(map, self.kind, order);
     }
+
+    /// Salida con sentido opuesto al de llegada (giro animado en parada bus/camión).
+    #[must_use]
+    pub(crate) fn needs_depart_turnaround(&self) -> bool {
+        if self.kind == VehicleKind::Train {
+            return false;
+        }
+        let Some(next) = self.movement_target() else {
+            return false;
+        };
+        let outbound = direction_from_tile_step(self.pos, next);
+        outbound == reverse_direction(self.direction)
+    }
+
+    /// Tren: invierte el rumbo en el acto si la siguiente tesela exige sentido opuesto.
+    fn apply_immediate_train_turnaround(&mut self) {
+        let Some(next) = self.movement_target() else {
+            return;
+        };
+        let outbound = direction_from_tile_step(self.pos, next);
+        if outbound != reverse_direction(self.direction) {
+            return;
+        }
+        self.direction = outbound;
+        self.depart_turn = 0;
+        if self.progress == 255 {
+            self.progress = 0;
+        }
+    }
+
+    /// Invierte el sentido de marcha (depósito / tests).
+    pub fn reverse_heading(&mut self) {
+        self.direction = reverse_direction(self.direction);
+        self.progress = 0;
+        self.depart_turn = 0;
+    }
+}
+
+/// Sentido opuesto en la rosa de 8 direcciones `OpenTTD`.
+#[must_use]
+pub const fn reverse_direction(d: VehicleDirection) -> VehicleDirection {
+    (d + 4) % 8
 }
 
 const fn default_running_true() -> bool {
@@ -437,6 +549,41 @@ mod tests {
         v.step();
         assert_eq!(v.pos, TileCoord::new(1, 0));
         assert!(v.progress < v.progress_step());
+    }
+
+    #[test]
+    fn train_reverses_immediately_when_next_tile_opposite() {
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(21, 15),
+            TileCoord::new(21, 15),
+        );
+        v.path = VecDeque::from([TileCoord::new(20, 15)]);
+        v.direction = DIR_SW;
+        v.progress = 255;
+        v.cur_speed = 0;
+        v.step();
+        assert_eq!(v.direction, DIR_NE, "giro inmediato al volver por la vía");
+        assert_eq!(v.progress, 0);
+    }
+
+    #[test]
+    fn arrival_at_order_keeps_progress_at_lane_end() {
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Bus,
+            TileCoord::new(15, 4),
+            TileCoord::new(15, 3),
+        );
+        v.set_station_orders(vec![TileCoord::new(15, 3), TileCoord::new(21, 3)]);
+        v.path = VecDeque::from([TileCoord::new(15, 3)]);
+        v.direction = DIR_NW;
+        v.set_cruise_speed();
+        v.progress = 250;
+        v.step();
+        assert_eq!(v.pos, TileCoord::new(15, 3));
+        assert_eq!(v.progress, 255, "anclado al final del carril al llegar");
     }
 
     #[test]

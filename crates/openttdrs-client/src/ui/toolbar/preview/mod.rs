@@ -18,7 +18,7 @@ use openttdrs_core::{TileCoord, is_tunnel_entrance_slope, tile_slope_and_z};
 use crate::iso::{
     SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z, world_pos_to_tile_coord,
 };
-use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
+use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 use crate::ui::hud::HoveredTileCoord;
 
@@ -44,10 +44,7 @@ pub(crate) struct BuildGhostPreview;
 pub(crate) fn update_build_ghost_preview(
     mut commands: Commands,
     windows: Query<&Window, With<PrimaryWindow>>,
-    cam_q: Query<
-        (&Camera, &GlobalTransform),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
-    >,
+    cam_q: Query<(&Camera, &GlobalTransform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     existing: Query<Entity, With<BuildGhostPreview>>,
     asset_server: Res<AssetServer>,
     sim: Res<SimWorld>,

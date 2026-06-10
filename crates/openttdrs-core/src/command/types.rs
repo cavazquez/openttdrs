@@ -68,6 +68,8 @@ pub enum CommandError {
     StationAlreadyExists,
     StationNotFound,
     VehicleNotFound,
+    /// Solo se puede vender un vehículo estacionado en un depósito.
+    VehicleNotInDepot,
     InvalidDepotTile,
     VehicleKindNotAllowed,
     IncompatibleStopForVehicle,
@@ -97,6 +99,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::StationAlreadyExists => "Ya hay una estación en esta tesela.",
         CommandError::StationNotFound => "No hay estación en esta tesela.",
         CommandError::VehicleNotFound => "Vehículo no encontrado.",
+        CommandError::VehicleNotInDepot => {
+            "Solo se puede vender un vehículo dentro de un depósito."
+        }
         CommandError::InvalidDepotTile => "Ubicación de depósito inválida.",
         CommandError::VehicleKindNotAllowed => "Tipo de vehículo no permitido aquí.",
         CommandError::IncompatibleStopForVehicle => "Parada incompatible con este vehículo.",

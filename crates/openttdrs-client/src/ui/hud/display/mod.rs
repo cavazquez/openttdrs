@@ -11,7 +11,7 @@ use crate::iso::{
     compute_tileh, shore_png_index, shore_tileh_for_draw_shore, slope_label,
     tile_slope_bits_from_heights,
 };
-use crate::render::{IndustryPreviewCamera, PrimaryGameCamera};
+use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::sprites::{
     is_road_level_crossing, level_crossing_rail_sprite_id, rail_tile_is_signals,
     road_bits_for_render,
@@ -68,11 +68,21 @@ pub(crate) fn vehicle_hud_alert_line(vehicles: &[openttdrs_core::Vehicle]) -> St
 }
 
 /// Crea el texto de informacion del tile.
-pub(crate) fn setup_tile_info_ui(mut commands: Commands) {
+pub(crate) fn setup_tile_info_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    existing_font: Option<Res<crate::ui::font::HudUiFont>>,
+) {
+    let font = if let Some(f) = existing_font {
+        f.0.clone()
+    } else {
+        crate::ui::font::load_hud_ui_font(&asset_server, &mut commands)
+    };
     commands.spawn((
         TileInfoText,
         Text2d::new("Mapa: clic selecciona tile · Depósito ≠ parada (carga) · Esc cancela"),
         TextFont {
+            font,
             font_size: 14.0,
             ..default()
         },
@@ -93,10 +103,7 @@ pub(crate) fn update_tile_info_text(
     tool_state: Res<UiToolState>,
     order_state: Res<OrderEditState>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    cam_q: Query<
-        (&Transform, &Projection),
-        (With<PrimaryGameCamera>, Without<IndustryPreviewCamera>),
-    >,
+    cam_q: Query<(&Transform, &Projection), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut text_q: Query<
         (&mut Text2d, &mut Transform),
         (With<TileInfoText>, Without<PrimaryGameCamera>),
@@ -161,9 +168,11 @@ pub(crate) fn update_tile_info_text(
     // Text2d no hace wrap: repartir el estado en líneas cortas evita recorte al borde derecho.
     let hud_line1 = format!("{pause_l} | {speed_l} | t{tick_n} sim Y{sim_year}·D{sim_doy}");
     let hud_line2 = format!(
-        "${} · préstamo ${} | u {}/{} · evt {}/{} · prod {} | veh {} ({}) | est {st_n}",
+        "${} · préstamo ${} | ingresos ${} · gastos veh ${} | u {}/{} · evt {}/{} · prod {} | veh {} ({}) | est {st_n}",
         sim.state.economy.money,
         sim.state.economy.loan,
+        stats.cargo_income_earned,
+        stats.vehicle_running_costs,
         stats.cargo_units_delivered,
         stats.cargo_units_loaded,
         stats.cargo_deliveries,
@@ -362,8 +371,29 @@ mod tests {
 
     #[test]
     fn setup_tile_info_ui_spawns_text() {
-        let mut world = World::new();
-        world.run_system_once(setup_tile_info_ui).unwrap();
+        use std::fs;
+        use std::path::PathBuf;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let font_dst = dir.path().join("static/fonts/DejaVuSansMono.ttf");
+        fs::create_dir_all(font_dst.parent().expect("parent")).expect("mkdir");
+        let font_src =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../static/fonts/DejaVuSansMono.ttf");
+        if font_src.exists() {
+            fs::copy(&font_src, &font_dst).expect("copy font");
+        } else {
+            fs::write(&font_dst, []).expect("touch font");
+        }
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_plugins(AssetPlugin {
+            file_path: dir.path().to_str().expect("utf8").into(),
+            ..default()
+        });
+        app.init_asset::<Font>();
+        app.update();
+        app.world_mut().run_system_once(setup_tile_info_ui).unwrap();
     }
 
     #[test]
@@ -470,8 +500,8 @@ mod tests {
         }
         world.run_system_once(update_tile_info_text).unwrap();
         let station_text = hud_text(&mut world);
-        assert!(station_text.contains("stock:12 income:144"));
-        assert!(hud_text(&mut world).contains("estación tren"));
+        assert!(station_text.contains("stock:12 ingresos:$144"));
+        assert!(station_text.contains("estación tren"));
 
         // Depósito carretera: etiqueta legible + aviso de no-parada.
         {
@@ -581,7 +611,7 @@ mod tests {
 
         let tile = sim.state.map.get(station_pos).unwrap();
         let text = station_details_text(&sim, station_pos, &tile);
-        assert!(text.contains("stock:7 income:84"));
+        assert!(text.contains("stock:7 ingresos:$84"));
         assert!(text.contains("coal:"));
         assert!(text.contains("source stock:42"));
     }

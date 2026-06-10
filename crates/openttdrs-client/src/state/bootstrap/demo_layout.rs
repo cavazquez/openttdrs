@@ -115,7 +115,7 @@ fn place_demo_road_vehicles(state: &mut GameState) {
 
     if let Some(path) = find_path(&state.map, start_bus, end, PathNetwork::Road) {
         let mut bus = Vehicle::new(9001, VehicleKind::Bus, start_bus, end);
-        bus.running = true;
+        bus.running = false;
         bus.direction = DIR_SW;
         bus.path = path.into();
         state.vehicles.push(bus);
@@ -123,7 +123,7 @@ fn place_demo_road_vehicles(state: &mut GameState) {
 
     if let Some(path) = find_path(&state.map, start_truck, end, PathNetwork::Road) {
         let mut truck = Vehicle::new(9002, VehicleKind::Truck, start_truck, end);
-        truck.running = true;
+        truck.running = false;
         truck.cargo = truck.capacity / 2 + 1;
         truck.direction = DIR_SW;
         truck.path = path.into();
@@ -140,7 +140,7 @@ fn place_demo_rail_vehicle(state: &mut GameState) {
 
     if let Some(path) = find_path(&state.map, start, end, PathNetwork::Rail) {
         let mut train = Vehicle::new(9003, VehicleKind::Train, start, end);
-        train.running = true;
+        train.running = false;
         train.direction = DIR_SW;
         train.path = path.into();
         state.vehicles.push(train);
@@ -308,7 +308,10 @@ mod tests {
             state.stats.cargo_units_delivered > 0,
             "debe entregar en la estación lejana"
         );
-        assert!(state.economy.money > 100_000, "entrega genera ingresos");
+        assert!(
+            state.stats.cargo_income_earned > 0,
+            "entrega genera ingresos TTD"
+        );
     }
 
     #[test]

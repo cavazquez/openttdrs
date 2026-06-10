@@ -30,7 +30,7 @@ pub(crate) fn station_details_text(
         .stations
         .iter()
         .find(|station| station.pos == pos)
-        .map(|station| format!("stock:{} income:{}", station.stock, station.income))
+        .map(|station| format!("stock:{} ingresos:${}", station.stock, station.income))
         .unwrap_or_else(|| "stock:n/d income:n/d".to_string());
     format!(
         "\n{} · {station_line}\nCarga/descarga junto a la vía · cobertura r{}\nAcepta mail:{} goods:{} · suministra coal:{} wood:{} oil:{} source stock:{}",

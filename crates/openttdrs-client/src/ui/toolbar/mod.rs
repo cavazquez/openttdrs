@@ -133,7 +133,7 @@ pub(crate) struct OrderEditState {
 pub(crate) struct OrderPanelRoot;
 
 #[derive(Component)]
-pub(crate) struct OrderPanelText;
+pub(crate) struct OrderPanelTitle;
 
 #[derive(Component, Clone, Copy)]
 pub(crate) enum OrderPanelButton {
@@ -143,7 +143,6 @@ pub(crate) enum OrderPanelButton {
     /// Clic en mapa para añadir parada a la ruta.
     PickDestOnMap,
     ToggleRunning,
-    Sell,
 }
 
 #[derive(Component, Clone, Copy)]

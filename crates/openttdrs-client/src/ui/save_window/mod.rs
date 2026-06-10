@@ -58,7 +58,7 @@ impl SaveWindowState {
         self.selected = None;
         self.page = 0;
         self.status = String::new();
-        self.entries = scan_save_dir(save_dir);
+        self.entries = list_save_entries(save_dir);
         if mode == SaveWindowMode::Save {
             self.filename = default_save_name();
         }
@@ -167,6 +167,30 @@ pub(crate) fn scan_save_dir(dir: &Path) -> Vec<SaveEntry> {
     }
     found.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.name.cmp(&b.0.name)));
     found.into_iter().map(|(e, _)| e).collect()
+}
+
+/// Partidas en `save/` más `.sav` de `.downloads/` (fixtures descargados).
+#[must_use]
+pub(crate) fn list_save_entries(primary_dir: &Path) -> Vec<SaveEntry> {
+    let mut entries = scan_save_dir(primary_dir);
+    let downloads = Path::new(".downloads");
+    if downloads.is_dir() {
+        for e in scan_save_dir(downloads) {
+            if e.kind != SaveFileKind::Sav {
+                continue;
+            }
+            if entries.iter().any(|x| x.name == e.name) {
+                continue;
+            }
+            entries.push(e);
+        }
+    }
+    entries.sort_by(|a, b| {
+        let ma = std::fs::metadata(&a.path).and_then(|m| m.modified()).ok();
+        let mb = std::fs::metadata(&b.path).and_then(|m| m.modified()).ok();
+        mb.cmp(&ma).then_with(|| a.name.cmp(&b.name))
+    });
+    entries
 }
 
 /// Nombre por defecto al guardar: `partida_YYYY-MM-DD_HHMM` (UTC).

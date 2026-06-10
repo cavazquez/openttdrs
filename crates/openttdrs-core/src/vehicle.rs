@@ -335,10 +335,10 @@ impl Vehicle {
             self.advance_one_tile();
             if remaining < 255 {
                 // Si `advance_destination_after_arrival` ancló en 255, no pisar con el resto.
-                if self.progress != 255 {
-                    if let Ok(progress) = u8::try_from(remaining) {
-                        self.progress = progress;
-                    }
+                if self.progress != 255
+                    && let Ok(progress) = u8::try_from(remaining)
+                {
+                    self.progress = progress;
                 }
                 return;
             }

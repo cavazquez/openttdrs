@@ -9,28 +9,36 @@ use openttdrs_core::{GameState, Map, OttdmapExtras};
 use crate::state::bootstrap::{
     fill_flat_grass, log_detection_summary, log_gameplay_showcase_zones, log_procedural_demo_zones,
     place_bridge_demo_gap, place_clean_demo_transport, place_demo_economy_loop,
-    place_gameplay_showcase, place_industries, place_stations, place_stations_from_footer_stxy,
-    place_stations_from_map_tiles, place_tunnel_demo_ridge,
+    place_gameplay_showcase, place_industries, place_industries_from_sav, place_stations,
+    place_stations_from_footer_stxy, place_stations_from_map_tiles, place_tunnel_demo_ridge,
 };
 
 /// Dimensiones del mapa generado proceduralmente (sin `OTTDMAP_FILE`).
 pub const MAP_W: u32 = 24;
 pub const MAP_H: u32 = 18;
 
-/// Carga un save de `OpenTTD` (`.sav`) y aplica el bootstrap de mapas reales
-/// (industrias por heurística + estaciones por teselas, deduplicadas con las
-/// del chunk `STNN`).
+/// Carga un save de `OpenTTD` (`.sav`) y aplica el bootstrap de mapas reales:
+/// industrias del chunk `INDY` (o heurística en saves sin tablas), estaciones
+/// por teselas deduplicadas con las del chunk `STNN`, vehículos y dinero.
 pub(crate) fn load_sav_state(bytes: &[u8]) -> Result<GameState, String> {
     let sav = openttdrs_core::sav::load(bytes).map_err(|e| e.to_string())?;
     let extras = sav.extras.clone();
+    let sav_industries = sav.industries.clone();
     let mut state = GameState::from_sav_game(sav);
-    place_industries(&mut state, true, Some(&extras));
+    if sav_industries.is_empty() {
+        place_industries(&mut state, true, Some(&extras));
+    } else {
+        place_industries_from_sav(&mut state, &sav_industries);
+    }
     place_stations_from_map_tiles(&mut state);
     place_stations_from_footer_stxy(&mut state, Some(&extras));
     info!(
-        "Save OpenTTD cargado: {} estaciones, {} ciudades",
+        "Save OpenTTD cargado: {} estaciones, {} ciudades, {} industrias, {} vehículos, ${}",
         state.stations.len(),
-        state.towns.len()
+        state.towns.len(),
+        state.industries.len(),
+        state.vehicles.len(),
+        state.economy.money,
     );
     log_detection_summary(&state, true, Some(&extras));
     Ok(state)

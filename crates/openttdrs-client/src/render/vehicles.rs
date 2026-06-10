@@ -300,7 +300,7 @@ pub(crate) fn update_vehicles(
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use std::collections::VecDeque;
 

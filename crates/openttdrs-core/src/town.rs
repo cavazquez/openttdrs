@@ -62,6 +62,7 @@ pub fn produce_town_cargo(
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::map::{TileCoord, TileKind};

@@ -1,12 +1,13 @@
 //! Pipeline completo `.sav` → `SavGame` → `GameState` con un save sintético
-//! (contenedor OTTN/OTTZ + chunks MAPS/MAPT/MAPH/STNN/CITY estilo CH_TABLE).
+//! (contenedor OTTN/OTTZ + chunks MAPS/MAPT/MAPH/STNN/CITY/INDY/PLYR/VEHS).
 
 #![allow(clippy::expect_used, clippy::cast_possible_truncation)]
 
-use openttdrs_core::{GameState, StopKind, TileCoord, TileKind, sav};
+use openttdrs_core::{GameState, SavVehicleKind, StopKind, TileCoord, TileKind, VehicleKind, sav};
 
 const CH_RIFF: u8 = 0;
 const CH_TABLE: u8 = 3;
+const CH_SPARSE_TABLE: u8 = 4;
 
 const MAP_W: u32 = 64;
 const MAP_H: u32 = 64;
@@ -110,6 +111,65 @@ fn synthetic_sav_payload() -> Vec<u8> {
         &[t1, t2],
     ));
 
+    // INDY: mina 2×2 en (30,30) (las teselas MP_INDUSTRY no hacen falta para
+    // el parser; el cliente las usa para refinar las teselas de render).
+    let mut ind = Vec::new();
+    ind.extend_from_slice(&((30u32 * MAP_W) + 30).to_be_bytes());
+    ind.push(2); // location.w
+    ind.push(2); // location.h
+    ind.push(0); // type 0 = coal mine
+    data.extend_from_slice(&table_chunk(
+        b"INDY",
+        &[
+            (6, "location.tile"),
+            (2, "location.w"),
+            (2, "location.h"),
+            (2, "type"),
+        ],
+        &[ind],
+    ));
+
+    // PLYR: dinero de la primera empresa.
+    let mut pl = Vec::new();
+    pl.extend_from_slice(&777_000i64.to_be_bytes());
+    data.extend_from_slice(&table_chunk(b"PLYR", &[(7, "money")], &[pl]));
+
+    // VEHS (sparse): un tren cabeza de convoy sobre la vía de (6,2).
+    let mut vehs_header = Vec::new();
+    vehs_header.push(2);
+    write_str("type", &mut vehs_header);
+    vehs_header.push(11 | 0x10);
+    write_str("train", &mut vehs_header);
+    vehs_header.push(0);
+    // Sub-lista de train: struct common con tile/subtype/cargo_type.
+    vehs_header.push(11 | 0x10);
+    write_str("common", &mut vehs_header);
+    vehs_header.push(0);
+    vehs_header.push(6);
+    write_str("tile", &mut vehs_header);
+    vehs_header.push(2);
+    write_str("subtype", &mut vehs_header);
+    vehs_header.push(2);
+    write_str("cargo_type", &mut vehs_header);
+    vehs_header.push(0);
+
+    let mut v0 = vec![0u8]; // índice sparse 0
+    v0.push(0); // type 0 = tren
+    v0.push(1); // train presente
+    v0.push(1); // common presente
+    v0.extend_from_slice(&((2u32 * MAP_W) + 6).to_be_bytes());
+    v0.push(0x01); // GVSF_FRONT
+    v0.push(1); // cargo carbón
+
+    let mut vehs = b"VEHS".to_vec();
+    vehs.push(CH_SPARSE_TABLE);
+    write_gamma(vehs_header.len() as u32 + 1, &mut vehs);
+    vehs.extend_from_slice(&vehs_header);
+    write_gamma(v0.len() as u32 + 1, &mut vehs);
+    vehs.extend_from_slice(&v0);
+    write_gamma(0, &mut vehs);
+    data.extend_from_slice(&vehs);
+
     // Terminador de stream de chunks.
     data.extend_from_slice(&[0, 0, 0, 0]);
     data
@@ -146,10 +206,25 @@ fn loads_synthetic_sav_with_map_stations_and_towns() {
     assert_eq!(sav.towns[0].population, 2500);
     assert_eq!(sav.towns[1].name, "Ciudad 2");
 
+    assert_eq!(sav.industries.len(), 1);
+    assert_eq!(sav.industries[0].pos, TileCoord::new(30, 30));
+    assert_eq!((sav.industries[0].width, sav.industries[0].height), (2, 2));
+    assert_eq!(sav.industries[0].industry_type, 0);
+
+    assert_eq!(sav.money, Some(777_000));
+
+    assert_eq!(sav.vehicles.len(), 1);
+    assert_eq!(sav.vehicles[0].kind, SavVehicleKind::Train);
+    assert_eq!(sav.vehicles[0].pos, TileCoord::new(6, 2));
+
     let state = GameState::from_sav_game(sav);
     assert_eq!(state.stations.len(), 1);
     assert_eq!(state.stations[0].stop_kind, StopKind::RailStation);
     assert_eq!(state.towns.len(), 2);
+    assert_eq!(state.economy.money, 777_000);
+    assert_eq!(state.vehicles.len(), 1);
+    assert_eq!(state.vehicles[0].kind, VehicleKind::Train);
+    assert_eq!(state.vehicles[0].pos, TileCoord::new(6, 2));
 }
 
 #[test]

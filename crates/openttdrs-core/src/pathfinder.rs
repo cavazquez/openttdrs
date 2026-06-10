@@ -27,7 +27,7 @@ fn is_road_stop_station(tile: &Tile) -> bool {
 }
 
 fn is_rail_station_tile(tile: &Tile) -> bool {
-    tile.kind == TileKind::Station && (tile.m6 >> 3) & 0x0F == 0
+    tile.kind == TileKind::Station && (tile.m6 >> 3).trailing_zeros() >= 4
 }
 
 fn is_network_tile(map: &Map, c: TileCoord, kind: TileKind, network: PathNetwork) -> bool {
@@ -85,10 +85,6 @@ fn is_road_network_tile(kind: TileKind) -> bool {
 fn is_road_stop_station_tile(map: &Map, c: TileCoord) -> bool {
     map.get(c)
         .is_some_and(|t| is_road_stop_station(&t) && (t.m3 & 0x0F) != 0)
-}
-
-fn is_rail_station_tile_at(map: &Map, c: TileCoord) -> bool {
-    map.get(c).is_some_and(|t| is_rail_station_tile(&t))
 }
 
 #[must_use]
@@ -452,7 +448,7 @@ pub fn find_path_with_wormholes(
                 let other_kind = map.get_kind(other).unwrap_or(TileKind::Grass);
                 let reachable = is_network_tile(map, other, other_kind, network) || other == to;
                 let tentative = cur_g + step_cost(cur, other);
-                if reachable && !g_score.get(&other).is_some_and(|&g| tentative >= g) {
+                if reachable && g_score.get(&other).is_none_or(|&g| tentative < g) {
                     g_score.insert(other, tentative);
                     parent.insert(other, cur);
                     heap.push(AstarNode {
@@ -666,7 +662,7 @@ mod tests {
         let track = TileCoord::new(4, 5);
         m.set_kind(station, TileKind::Station).unwrap();
         let mut st = m.get(station).unwrap();
-        st.m6 = (st.m6 & !0x78) | (0 << 3);
+        st.m6 &= !0x78;
         st.m5 = 2;
         m.set_tile(station, st).unwrap();
         write_rail(&mut m, track, RAIL_TB_X);

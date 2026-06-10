@@ -70,7 +70,7 @@ pub use road_movement::{
     vehicle_render_direction, vehicle_render_progress, vehicle_subtile,
     vehicle_subtile_with_progress,
 };
-pub use sav::{SavError, SavGame, SavStation};
+pub use sav::{SavError, SavGame, SavIndustry, SavStation, SavVehicle, SavVehicleKind};
 pub use save::SaveError;
 pub use save::load_from_str;
 pub use station::{

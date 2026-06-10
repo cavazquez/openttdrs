@@ -1,10 +1,11 @@
-//! Estaciones (chunk `STNN`) y ciudades (chunk `CITY`) desde tablas autodescriptivas.
+//! Estaciones (`STNN`), ciudades (`CITY`), industrias (`INDY`), vehículos
+//! (`VEHS`) y empresas (`PLYR`) desde tablas autodescriptivas.
 
 use crate::map::TileCoord;
 use crate::town::Town;
 
 use super::chunks::{CH_SPARSE_TABLE, CH_TABLE, RawChunk, find_chunk};
-use super::table::{SlValue, parse_table_chunk, record_get};
+use super::table::{SlRecord, SlValue, parse_table_chunk, record_get};
 
 /// Flag de waypoint en `BaseStation::facilities` (no es una estación jugable).
 const FACIL_WAYPOINT: u64 = 0x80;
@@ -122,6 +123,140 @@ pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32) -> Vec<Town> {
     out
 }
 
+/// Industria decodificada del chunk `INDY` (saves con tablas).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavIndustry {
+    /// Tesela de origen (`location.tile`).
+    pub pos: TileCoord,
+    /// Dimensiones del rectángulo (`location.w` × `location.h`).
+    pub width: u8,
+    pub height: u8,
+    /// `IndustryType` de `OpenTTD` (índice en la tabla de specs).
+    pub industry_type: u8,
+}
+
+/// Industrias del chunk `INDY` (solo saves con tablas); best-effort.
+#[must_use]
+pub(crate) fn industries_from_chunks(chunks: &[RawChunk], map_w: u32) -> Vec<SavIndustry> {
+    let Some(indy) = find_chunk(chunks, "INDY") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (_, record) in table_rows(indy) {
+        let Some(tile) = record_get(&record, "location.tile").and_then(SlValue::as_u64) else {
+            continue;
+        };
+        let Some(pos) = tile_to_coord(tile, map_w) else {
+            continue;
+        };
+        let width = record_get(&record, "location.w")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(1);
+        let height = record_get(&record, "location.h")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(1);
+        let industry_type = record_get(&record, "type")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        #[allow(clippy::cast_possible_truncation)]
+        out.push(SavIndustry {
+            pos,
+            width: width.min(255) as u8,
+            height: height.min(255) as u8,
+            industry_type: industry_type.min(255) as u8,
+        });
+    }
+    out
+}
+
+/// Dinero de la primera empresa del chunk `PLYR` (la del jugador en partidas locales).
+#[must_use]
+pub(crate) fn company_money_from_chunks(chunks: &[RawChunk]) -> Option<i64> {
+    let plyr = find_chunk(chunks, "PLYR")?;
+    let rows = table_rows(plyr);
+    let (_, record) = rows.iter().min_by_key(|(idx, _)| *idx)?;
+    match record_get(record, "money")? {
+        SlValue::Int(v) => Some(*v),
+        SlValue::Uint(v) => i64::try_from(*v).ok(),
+        _ => None,
+    }
+}
+
+/// Tipo de vehículo de `OpenTTD` (`VehicleType`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SavVehicleKind {
+    Train,
+    RoadVehicle,
+}
+
+/// Vehículo decodificado del chunk `VEHS` (solo cabezas de convoy).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SavVehicle {
+    pub kind: SavVehicleKind,
+    pub pos: TileCoord,
+    /// `CargoType` de `OpenTTD` (0 = pasajeros).
+    pub cargo_type: u8,
+}
+
+/// Primer (y único) registro de un campo struct de tabla.
+fn nested_struct<'a>(record: &'a SlRecord, name: &str) -> Option<&'a SlRecord> {
+    match record_get(record, name)? {
+        SlValue::Structs(items) => items.first(),
+        _ => None,
+    }
+}
+
+/// Bit `GVSF_FRONT` de `Vehicle::subtype` (cabeza de convoy en tren/camión).
+const GVSF_FRONT: u64 = 0x01;
+
+/// Vehículos del chunk `VEHS` (sparse table): trenes y vehículos de carretera
+/// cabeza de convoy; barcos, aviones y efectos se omiten.
+#[must_use]
+pub(crate) fn vehicles_from_chunks(chunks: &[RawChunk], map_w: u32) -> Vec<SavVehicle> {
+    let Some(vehs) = find_chunk(chunks, "VEHS") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for (_, record) in table_rows(vehs) {
+        let Some(vtype) = record_get(&record, "type").and_then(SlValue::as_u64) else {
+            continue;
+        };
+        let (kind, sub_name) = match vtype {
+            0 => (SavVehicleKind::Train, "train"),
+            1 => (SavVehicleKind::RoadVehicle, "roadveh"),
+            _ => continue,
+        };
+        let Some(sub) = nested_struct(&record, sub_name) else {
+            continue;
+        };
+        let Some(common) = nested_struct(sub, "common") else {
+            continue;
+        };
+        let subtype = record_get(common, "subtype")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        if subtype & GVSF_FRONT == 0 {
+            continue;
+        }
+        let Some(tile) = record_get(common, "tile").and_then(SlValue::as_u64) else {
+            continue;
+        };
+        let Some(pos) = tile_to_coord(tile, map_w) else {
+            continue;
+        };
+        let cargo_type = record_get(common, "cargo_type")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0xFF);
+        #[allow(clippy::cast_possible_truncation)]
+        out.push(SavVehicle {
+            kind,
+            pos,
+            cargo_type: cargo_type.min(255) as u8,
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::cast_possible_truncation)]
 mod tests {
@@ -231,5 +366,132 @@ mod tests {
     fn missing_chunks_yield_empty() {
         assert!(stations_from_chunks(&[], 64).is_empty());
         assert!(towns_from_chunks(&[], 64).is_empty());
+        assert!(industries_from_chunks(&[], 64).is_empty());
+        assert!(vehicles_from_chunks(&[], 64).is_empty());
+        assert!(company_money_from_chunks(&[]).is_none());
+    }
+
+    #[test]
+    fn decodes_industries_with_location_and_type() {
+        let mut i1 = Vec::new();
+        i1.extend_from_slice(&(5u32 * 64 + 10).to_be_bytes()); // location.tile
+        i1.push(2); // location.w
+        i1.push(3); // location.h
+        i1.push(7); // type
+        let chunk = RawChunk {
+            name: *b"INDY",
+            ch_type: CH_TABLE,
+            body: build_table_body(
+                &[
+                    (6, "location.tile"),
+                    (2, "location.w"),
+                    (2, "location.h"),
+                    (2, "type"),
+                ],
+                &[i1],
+            ),
+        };
+        let industries = industries_from_chunks(&[chunk], 64);
+        assert_eq!(industries.len(), 1);
+        assert_eq!(industries[0].pos, TileCoord::new(10, 5));
+        assert_eq!((industries[0].width, industries[0].height), (2, 3));
+        assert_eq!(industries[0].industry_type, 7);
+    }
+
+    #[test]
+    fn reads_money_from_first_company() {
+        let mut c0 = Vec::new();
+        c0.extend_from_slice(&500_000i64.to_be_bytes());
+        let mut c1 = Vec::new();
+        c1.extend_from_slice(&(-42i64).to_be_bytes());
+        let chunk = RawChunk {
+            name: *b"PLYR",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(7, "money")], &[c0, c1]),
+        };
+        assert_eq!(company_money_from_chunks(&[chunk]), Some(500_000));
+    }
+
+    /// Cuerpo VEHS (sparse) con un tren cabeza, un vagón y un bus.
+    fn vehs_chunk() -> RawChunk {
+        use super::super::table::tests::write_gamma;
+
+        // Struct presente (gamma 1) + struct `common` (gamma 1) + campos.
+        fn with_common(tile: u32, subtype: u8, cargo: u8, buf: &mut Vec<u8>) {
+            buf.push(1); // train/roadveh: 1 registro
+            buf.push(1); // common: 1 registro
+            buf.extend_from_slice(&tile.to_be_bytes());
+            buf.push(subtype);
+            buf.push(cargo);
+        }
+
+        // Header: type u8 + structs train/roadveh (cada uno con struct common).
+        let mut header = Vec::new();
+        header.push(2);
+        write_str("type", &mut header);
+        header.push(11);
+        write_str("train", &mut header);
+        header.push(11);
+        write_str("roadveh", &mut header);
+        header.push(0);
+        for _ in 0..2 {
+            // Sub-lista de train/roadveh: un struct `common`…
+            header.push(11);
+            write_str("common", &mut header);
+            header.push(0);
+            // …cuyos campos son tile/subtype/cargo_type.
+            header.push(6);
+            write_str("tile", &mut header);
+            header.push(2);
+            write_str("subtype", &mut header);
+            header.push(2);
+            write_str("cargo_type", &mut header);
+            header.push(0);
+        }
+
+        // Tren cabeza (subtype bit0), en (3,1) con w=64.
+        let mut v0 = vec![1u8]; // índice sparse 1
+        v0.push(0); // type 0 = tren
+        with_common(64 + 3, 0x01, 9, &mut v0);
+        v0.push(0); // roadveh ausente
+
+        // Vagón del mismo tren: se omite (sin GVSF_FRONT).
+        let mut v1 = vec![2u8];
+        v1.push(0);
+        with_common(64 + 4, 0x04, 9, &mut v1);
+        v1.push(0);
+
+        // Bus (roadveh con pasajeros) en (7,2).
+        let mut v2 = vec![3u8];
+        v2.push(1); // type 1 = carretera
+        v2.push(0); // train ausente
+        with_common(2 * 64 + 7, 0x01, 0, &mut v2);
+
+        let mut body = Vec::new();
+        write_gamma(header.len() as u32 + 1, &mut body);
+        body.extend_from_slice(&header);
+        for r in [&v0, &v1, &v2] {
+            write_gamma(r.len() as u32 + 1, &mut body);
+            body.extend_from_slice(r);
+        }
+        write_gamma(0, &mut body);
+
+        RawChunk {
+            name: *b"VEHS",
+            ch_type: CH_SPARSE_TABLE,
+            body,
+        }
+    }
+
+    #[test]
+    fn decodes_front_vehicles_and_skips_wagons() {
+        let vehicles = vehicles_from_chunks(&[vehs_chunk()], 64);
+        assert_eq!(vehicles.len(), 2);
+        assert_eq!(vehicles[0].kind, SavVehicleKind::Train);
+        assert_eq!(vehicles[0].pos, TileCoord::new(3, 1));
+        assert_eq!(vehicles[0].cargo_type, 9);
+        assert_eq!(vehicles[1].kind, SavVehicleKind::RoadVehicle);
+        assert_eq!(vehicles[1].pos, TileCoord::new(7, 2));
+        assert_eq!(vehicles[1].cargo_type, 0);
     }
 }

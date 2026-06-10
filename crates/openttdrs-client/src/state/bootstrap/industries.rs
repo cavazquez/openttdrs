@@ -1,5 +1,6 @@
 use openttdrs_core::{
-    GameState, Industry, IndustryKind, IndustrySpec, OttdmapExtras, TileCoord, TileKind,
+    GameState, Industry, IndustryKind, IndustrySpec, OttdmapExtras, SavIndustry, TileCoord,
+    TileKind,
 };
 use std::collections::{HashSet, VecDeque};
 
@@ -10,6 +11,42 @@ fn industry_kind_from_ottd_type(t: u8) -> IndustryKind {
         11..=13 => IndustryKind::Factory,
         16 | 17 | 33 => IndustryKind::OilWell,
         _ => IndustryKind::CoalMine,
+    }
+}
+
+/// Coloca industrias desde el chunk `INDY` del save (posición/tamaño/tipo
+/// reales): una industria por registro, con las teselas `Industry` dentro de
+/// su rectángulo. Más preciso que la heurística por componentes conexos
+/// (separa industrias adyacentes del mismo tipo).
+pub(crate) fn place_industries_from_sav(state: &mut GameState, sav_industries: &[SavIndustry]) {
+    for si in sav_industries {
+        let mut tiles = Vec::new();
+        for dy in 0..i32::from(si.height) {
+            for dx in 0..i32::from(si.width) {
+                let c = TileCoord::new(si.pos.x + dx, si.pos.y + dy);
+                if state.map.get_kind(c) == Some(TileKind::Industry) {
+                    tiles.push(c);
+                }
+            }
+        }
+        let origin = tiles.first().copied().unwrap_or(si.pos);
+        if tiles.is_empty() {
+            tiles.push(si.pos);
+        }
+        let kind = industry_kind_from_ottd_type(si.industry_type);
+        let gfx = state
+            .map
+            .get(origin)
+            .map(|t| u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8));
+        if let Some(spec) = gfx.and_then(classify_industry_spec_from_gfx) {
+            state
+                .industries
+                .push(Industry::with_tiles_spec(origin, kind, spec, tiles));
+        } else {
+            state
+                .industries
+                .push(Industry::with_tiles(origin, kind, tiles));
+        }
     }
 }
 
@@ -244,9 +281,9 @@ pub(crate) fn industry_group_from_gfx(gfx: u16) -> &'static str {
 mod tests {
     use super::{
         classify_industry_kind_from_gfx, classify_industry_spec_from_gfx, industry_group_from_gfx,
-        place_industries,
+        place_industries, place_industries_from_sav,
     };
-    use openttdrs_core::{GameState, IndustryKind, IndustrySpec, TileCoord, TileKind};
+    use openttdrs_core::{GameState, IndustryKind, IndustrySpec, SavIndustry, TileCoord, TileKind};
 
     #[test]
     fn classify_industry_kind_matches_known_ranges() {
@@ -355,5 +392,43 @@ mod tests {
         place_industries(&mut state, true, None);
 
         assert_eq!(state.industries.len(), 2);
+    }
+
+    #[test]
+    fn place_industries_from_sav_uses_real_rect_and_type() {
+        let mut state = GameState::new(8, 8);
+        // Dos minas 1×2 adyacentes: la heurística por componentes las uniría,
+        // los registros INDY las separan.
+        for (x, y, gfx) in [(2, 2, 0u8), (2, 3, 1), (3, 2, 2), (3, 3, 3)] {
+            let c = TileCoord::new(x, y);
+            let Some(mut t) = state.map.get(c) else {
+                panic!("test fixture: tile missing at {c:?}");
+            };
+            t.kind = TileKind::Industry;
+            t.m5 = gfx;
+            let _ = state.map.set_tile(c, t);
+        }
+        let sav_industries = [
+            SavIndustry {
+                pos: TileCoord::new(2, 2),
+                width: 1,
+                height: 2,
+                industry_type: 0, // coal mine
+            },
+            SavIndustry {
+                pos: TileCoord::new(3, 2),
+                width: 1,
+                height: 2,
+                industry_type: 0,
+            },
+        ];
+
+        place_industries_from_sav(&mut state, &sav_industries);
+
+        assert_eq!(state.industries.len(), 2);
+        assert_eq!(state.industries[0].kind, IndustryKind::CoalMine);
+        assert_eq!(state.industries[0].tiles.len(), 2);
+        assert_eq!(state.industries[1].pos, TileCoord::new(3, 2));
+        assert_eq!(state.industries[0].spec, Some(IndustrySpec::CoalMine));
     }
 }

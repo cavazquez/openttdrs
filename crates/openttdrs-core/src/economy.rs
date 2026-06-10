@@ -1,4 +1,4 @@
-//! Pagos de transporte inspirados en `GetTransportedGoodsIncome` de OpenTTD (Camino B).
+//! Pagos de transporte inspirados en `GetTransportedGoodsIncome` de `OpenTTD` (Camino B).
 
 use crate::cargo::CargoType;
 use crate::map::TileCoord;
@@ -9,7 +9,7 @@ pub const TICKS_PER_TRANSIT_DAY: u32 = 74;
 /// Año simulado en ticks (365 días).
 pub const TICKS_PER_YEAR: u64 = TICKS_PER_TRANSIT_DAY as u64 * 365;
 
-/// Tasas base del clima templado de OpenTTD (`cargo_const.h`), sin inflación.
+/// Tasas base del clima templado de `OpenTTD` (`cargo_const.h`), sin inflación.
 #[derive(Debug, Clone, Copy)]
 pub struct CargoPaymentSpec {
     /// `CargoSpec::initial_payment`.
@@ -64,6 +64,7 @@ pub const fn manhattan_distance(a: TileCoord, b: TileCoord) -> u32 {
 }
 
 #[must_use]
+#[allow(clippy::cast_possible_truncation)]
 pub const fn ticks_to_transit_days(ticks: u32) -> u16 {
     let days = ticks / TICKS_PER_TRANSIT_DAY;
     if days > u16::MAX as u32 {
@@ -77,7 +78,7 @@ pub const fn ticks_to_transit_days(ticks: u32) -> u16 {
 #[must_use]
 pub fn inflation_income_factor(tick: u64) -> u32 {
     let years = tick / TICKS_PER_YEAR;
-    1024 + (years as u32).saturating_mul(4)
+    1024 + u32::try_from(years).unwrap_or(u32::MAX).saturating_mul(4)
 }
 
 const MIN_TIME_FACTOR: i32 = 31;
@@ -93,7 +94,7 @@ pub fn cargo_time_factor(transit_days: u16, spec: CargoPaymentSpec) -> i32 {
     (MAX_TIME_FACTOR - over1 - over2).max(MIN_TIME_FACTOR)
 }
 
-/// Ingreso por entrega final (simplificación de OpenTTD `GetTransportedGoodsIncome`).
+/// Ingreso por entrega final (simplificación de `OpenTTD` `GetTransportedGoodsIncome`).
 #[must_use]
 pub fn transported_goods_income(
     count: u32,
@@ -132,7 +133,7 @@ pub fn vehicle_sell_refund(vehicle: &Vehicle) -> i64 {
     (base * 50) / 100
 }
 
-/// Coste de explotación por tick (solo en movimiento, como corrida en OpenTTD).
+/// Coste de explotación por tick (solo en movimiento, como corrida en `OpenTTD`).
 #[must_use]
 pub const fn vehicle_running_cost_per_tick(kind: VehicleKind, running: bool, moving: bool) -> i64 {
     if !running || !moving {

@@ -81,7 +81,7 @@ pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(),
     };
     let in_depot = matches!(
         state.map.get_kind(vehicle.pos),
-        Some(TileKind::RoadDepot) | Some(TileKind::RailDepot)
+        Some(TileKind::RoadDepot | TileKind::RailDepot)
     );
     if !in_depot {
         return Err(CommandError::VehicleNotInDepot);

@@ -16,7 +16,7 @@ pub(crate) fn step(state: &mut GameState) {
 
     let mut loaded_this_tick = vec![false; state.vehicles.len()];
     let mut unloaded_this_tick = vec![false; state.vehicles.len()];
-    unload_vehicles(state, t, &mut loaded_this_tick, &mut unloaded_this_tick);
+    unload_vehicles(state, t, &loaded_this_tick, &mut unloaded_this_tick);
     load_vehicles(state, &mut loaded_this_tick, &unloaded_this_tick);
     assign_orderless_wander_destinations(state);
     move_vehicles(state);
@@ -44,7 +44,7 @@ fn apply_vehicle_running_costs(state: &mut GameState) {
         let cost = economy::vehicle_running_cost_per_tick(vehicle.kind, vehicle.running, moving);
         if cost > 0 {
             state.economy.money -= cost;
-            state.stats.vehicle_running_costs += cost as u64;
+            state.stats.vehicle_running_costs += cost.cast_unsigned();
         }
     }
 }
@@ -226,9 +226,9 @@ fn unload_vehicles(
                 economy::ticks_to_transit_days(state.vehicles[i].cargo_transit_ticks);
             let payment =
                 economy::transported_goods_income(vcargo, distance, transit_days, cargo_type, tick);
-            st.income += payment as u64;
+            st.income += payment.cast_unsigned();
             state.economy.money += payment;
-            state.stats.cargo_income_earned += payment as u64;
+            state.stats.cargo_income_earned += payment.cast_unsigned();
             state.pending_income_popups.push(crate::IncomePopup {
                 amount: payment,
                 at: vpos,

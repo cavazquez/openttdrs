@@ -254,10 +254,8 @@ fn sample_curve(points: &[SubTile], progress: u8) -> (f32, f32) {
 
 fn depart_u_turn_curve(inbound: VehicleDirection) -> Option<&'static [SubTile]> {
     match inbound {
-        DIR_NW => Some(U_TURN_NW_SE),
-        DIR_SE => Some(U_TURN_NW_SE),
-        DIR_NE => Some(U_TURN_NE_SW),
-        DIR_SW => Some(U_TURN_NE_SW),
+        DIR_NW | DIR_SE => Some(U_TURN_NW_SE),
+        DIR_NE | DIR_SW => Some(U_TURN_NE_SW),
         _ => None,
     }
 }
@@ -275,6 +273,7 @@ pub fn vehicle_render_progress(v: &Vehicle, tick_alpha: f32) -> u8 {
     if step == 0 {
         return v.progress;
     }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let extra = (f32::from(step) * tick_alpha.clamp(0.0, 1.0)) as u16;
     u8::try_from((u16::from(v.progress).saturating_add(extra)).min(255)).unwrap_or(255)
 }
@@ -291,10 +290,10 @@ pub fn vehicle_subtile_with_progress(v: &Vehicle, progress: u8) -> (f32, f32) {
     if matches!(v.kind, VehicleKind::Train) {
         return train_straight_subtile(train_subtile_direction(v), progress);
     }
-    if v.depart_turn > 0 {
-        if let Some(curve) = depart_u_turn_curve(v.direction) {
-            return sample_curve(curve, v.depart_turn);
-        }
+    if v.depart_turn > 0
+        && let Some(curve) = depart_u_turn_curve(v.direction)
+    {
+        return sample_curve(curve, v.depart_turn);
     }
     if progress == 255 && v.movement_target().is_none() && v.pos == v.dest {
         return straight_subtile(v.direction, 255);
@@ -321,8 +320,7 @@ pub fn vehicle_render_direction(v: &Vehicle, progress: u8) -> VehicleDirection {
     if v.depart_turn > 0 {
         let outbound = v
             .movement_target()
-            .map(|next| direction_from_tile_step(v.pos, next))
-            .unwrap_or(v.direction);
+            .map_or(v.direction, |next| direction_from_tile_step(v.pos, next));
         if progress < 128 {
             return v.direction;
         }

@@ -11,6 +11,7 @@ use super::{ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
 
 const PREVIEW_SCALE_MUL: f32 = 0.55;
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_order_panel(
     order_state: Res<OrderEditState>,
     sim: Res<SimWorld>,

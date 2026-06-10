@@ -8,7 +8,9 @@ Contenido del mapa (64×64):
   - «Villa Demo»: cruce de carreteras, casas y una parada de bus
   - línea férrea horizontal con la estación «Central Demo»
   - «Puerto Sur»: caserío secundario
-  - chunks STNN (estaciones con nombre) y CITY (ciudades con población)
+  - mina de carbón 2×2 con su registro INDY
+  - chunks STNN (estaciones), CITY (ciudades), INDY (industrias),
+    PLYR (dinero de la empresa) y VEHS (un tren y un bus)
 
 Uso:
   python3 scripts/gen_demo_sav.py [salida.sav]   (default: save/demo_openttd.sav)
@@ -31,6 +33,7 @@ MP_ROAD = 2
 MP_HOUSE = 3
 MP_STATION = 5
 MP_WATER = 6
+MP_INDUSTRY = 8
 
 # RoadBits (m5 en MP_ROAD): NW=1, SW=2, SE=4, NE=8
 ROAD_X = 2 | 8
@@ -44,6 +47,7 @@ ST_BUS = 3 << 3
 
 CH_RIFF = 0
 CH_TABLE = 3
+CH_SPARSE_TABLE = 4
 
 
 def write_gamma(v: int, buf: bytearray) -> None:
@@ -78,9 +82,15 @@ def table_chunk(name: bytes, fields: list[tuple[int, str]], records: list[bytes]
         header.append(ftype)
         write_str(key, header)
     header.append(0)
+    return raw_table_chunk(name, bytes(header), records, CH_TABLE)
 
+
+def raw_table_chunk(
+    name: bytes, header: bytes, records: list[bytes], ch_type: int
+) -> bytes:
+    """Chunk de tabla con header arbitrario (permite structs anidados)."""
     out = bytearray(name)
-    out.append(CH_TABLE)
+    out.append(ch_type)
     write_gamma(len(header) + 1, out)
     out.extend(header)
     for rec in records:
@@ -146,6 +156,10 @@ def build_map_planes() -> tuple[bytearray, bytearray, bytearray, bytearray, byte
     for x in range(43, 48):
         set_tile(x, 48, MP_ROAD, m5v=ROAD_X)
 
+    # Mina de carbón 2×2 al norte de la vía (gfx 0..3 = coal mine).
+    for i, (x, y) in enumerate([(36, 20), (37, 20), (36, 21), (37, 21)]):
+        set_tile(x, y, MP_INDUSTRY, m5v=i)
+
     return mapt, maph, m5, m6, m8
 
 
@@ -204,6 +218,64 @@ def build_sav() -> bytes:
     t2.extend(struct.pack(">H", 0x20C0))  # SPECSTR_TOWNNAME_START: inglés original
     t2.extend(struct.pack(">I", 0x51E2A37C))  # seed → nombre generado estilo OpenTTD
     data.extend(table_chunk(b"CITY", city_fields, [bytes(t1), bytes(t2)]))
+
+    # INDY: mina de carbón 2×2 (type 0 = coal mine).
+    indy_fields = [(6, "location.tile"), (2, "location.w"), (2, "location.h"), (2, "type")]
+    ind = bytearray()
+    ind.extend(struct.pack(">I", idx(36, 20)))
+    ind.append(2)
+    ind.append(2)
+    ind.append(0)
+    data.extend(table_chunk(b"INDY", indy_fields, [bytes(ind)]))
+
+    # PLYR: dinero de la empresa del jugador.
+    pl = bytearray()
+    pl.extend(struct.pack(">q", 250_000))
+    data.extend(table_chunk(b"PLYR", [(7, "money")], [bytes(pl)]))
+
+    # VEHS (sparse): un tren en la vía y un bus en la carretera, ambos cabeza
+    # de convoy (subtype bit 0 = GVSF_FRONT). Header con structs anidados:
+    # type u8 + train/roadveh { common { tile, subtype, cargo_type } }.
+    vehs_header = bytearray()
+    vehs_header.append(2)
+    write_str("type", vehs_header)
+    vehs_header.append(11 | 0x10)
+    write_str("train", vehs_header)
+    vehs_header.append(11 | 0x10)
+    write_str("roadveh", vehs_header)
+    vehs_header.append(0)
+    for _ in range(2):  # sub-listas de train y roadveh (depth-first)
+        vehs_header.append(11 | 0x10)
+        write_str("common", vehs_header)
+        vehs_header.append(0)
+        vehs_header.append(6)
+        write_str("tile", vehs_header)
+        vehs_header.append(2)
+        write_str("subtype", vehs_header)
+        vehs_header.append(2)
+        write_str("cargo_type", vehs_header)
+        vehs_header.append(0)
+
+    def vehs_common(tile: int, subtype: int, cargo: int, buf: bytearray) -> None:
+        buf.append(1)  # train/roadveh presente
+        buf.append(1)  # common presente
+        buf.extend(struct.pack(">I", tile))
+        buf.append(subtype)
+        buf.append(cargo)
+
+    v_train = bytearray([0])  # índice sparse 0
+    v_train.append(0)  # type 0 = tren
+    vehs_common(idx(20, 40), 0x01, 1, v_train)  # cargo 1 = carbón
+    v_train.append(0)  # roadveh ausente
+
+    v_bus = bytearray([1])  # índice sparse 1
+    v_bus.append(1)  # type 1 = carretera
+    v_bus.append(0)  # train ausente
+    vehs_common(idx(13, 16), 0x01, 0, v_bus)  # cargo 0 = pasajeros
+
+    data.extend(
+        raw_table_chunk(b"VEHS", bytes(vehs_header), [bytes(v_train), bytes(v_bus)], CH_SPARSE_TABLE)
+    )
 
     data.extend(b"\x00\x00\x00\x00")  # terminador de stream
 

@@ -352,6 +352,7 @@ pub(crate) fn update_tile_info_text(
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
+#[allow(clippy::expect_used)]
 mod tests {
     use super::{
         TileInfoText, setup_tile_info_ui, station_details_text, update_tile_info_text,

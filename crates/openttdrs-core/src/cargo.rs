@@ -63,6 +63,12 @@ impl CargoStock {
     /// Mayor cantidad en espera entre tipos de carga (camión/tren).
     #[must_use]
     pub fn pick_freight_to_load(self, preferred: Option<CargoType>) -> Option<CargoType> {
+        const FREIGHT: [CargoType; 4] = [
+            CargoType::Coal,
+            CargoType::Wood,
+            CargoType::Oil,
+            CargoType::Goods,
+        ];
         if let Some(cargo) = preferred {
             if cargo.is_freight() && self.get(cargo) > 0 {
                 return Some(cargo);
@@ -70,12 +76,6 @@ impl CargoStock {
             return None;
         }
 
-        const FREIGHT: [CargoType; 4] = [
-            CargoType::Coal,
-            CargoType::Wood,
-            CargoType::Oil,
-            CargoType::Goods,
-        ];
         FREIGHT
             .iter()
             .copied()

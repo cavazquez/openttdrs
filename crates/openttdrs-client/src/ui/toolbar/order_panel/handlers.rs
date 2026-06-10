@@ -18,6 +18,7 @@ pub(crate) fn cancel_order_destination_pick(order_state: &mut OrderEditState) {
     order_state.picking_destination = false;
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_order_panel_buttons(
     mut q: Query<(&Interaction, &OrderPanelButton), (Changed<Interaction>, With<Button>)>,
     mut order_state: ResMut<OrderEditState>,

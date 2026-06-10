@@ -207,6 +207,7 @@ pub(crate) fn log_gameplay_showcase_zones() {
 }
 
 #[cfg(test)]
+#[allow(clippy::expect_used, clippy::assertions_on_constants)]
 mod tests {
     use super::*;
     use crate::state::{MAP_H, MAP_W};

@@ -14,8 +14,8 @@ use crate::ui::SimHudControls;
 use super::{
     SAVE_WINDOW_ROWS, SaveFileKind, SaveWindowButton, SaveWindowConfirmText, SaveWindowMode,
     SaveWindowNameRow, SaveWindowNameText, SaveWindowPageText, SaveWindowRoot, SaveWindowRow,
-    SaveWindowRowText, SaveWindowState, SaveWindowStatusText, SaveWindowTitle,
-    list_save_entries, sanitize_filename_char, save_dir_from,
+    SaveWindowRowText, SaveWindowState, SaveWindowStatusText, SaveWindowTitle, list_save_entries,
+    sanitize_filename_char, save_dir_from,
 };
 
 /// Largo máximo del nombre al guardar.
@@ -129,8 +129,7 @@ pub(crate) fn handle_save_window_buttons(
                         info!("Partida borrada: {}", entry.path.display());
                         state.status = format!("Borrada: {}", entry.name);
                         state.selected = None;
-                        state.entries =
-                            list_save_entries(&save_dir_from(&hud.json_save_path));
+                        state.entries = list_save_entries(&save_dir_from(&hud.json_save_path));
                         let last = state.page_count() - 1;
                         state.page = state.page.min(last);
                     }

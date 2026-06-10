@@ -1,6 +1,7 @@
 //! Render por tesela: land, agua, vías, objetos y batches.
 
 mod batches;
+mod bridge;
 mod helpers;
 mod land;
 mod objects;
@@ -12,6 +13,7 @@ mod water;
 mod spawn_coverage_tests;
 
 pub(crate) use batches::flush_map_batches;
+pub(crate) use bridge::spawn_bridge_middle;
 pub(crate) use helpers::{
     SHORE_LAYER_FRAC, TILE_OVERLAP_SCALE, TRAM_OVERLAY_LAYER_FRAC, leveled_foundation_overlay_pos,
     push_water_sprite, sloped_or_flat_image, spawn_coast_debug_label, spawn_ground_sprite,

@@ -9,8 +9,11 @@ use super::chunks::{CH_ARRAY, CH_TABLE, RawChunk, find_chunk};
 use super::table::{SlValue, parse_table_chunk, record_get};
 
 const SLV_INCREASE_HOUSE_LIMIT: u16 = 348;
+/// PR#13030: a partir de aquí `WaterTileType` vive directo en bits 4–7 de m5.
+const SLV_WATER_TILE_TYPE: u16 = 342;
 const MP_HOUSE: u8 = 3;
 const MP_STATION: u8 = 5;
+const MP_WATER: u8 = 6;
 const MP_OBJECT: u8 = 10;
 /// Offset del byte `Industry.type` en INDY `CH_ARRAY` (saves ~200+, ver `parse_sav.py`).
 const INDY_TYPE_BYTE_OFFSET: usize = 9;
@@ -165,6 +168,28 @@ fn first_tunnel_blob(chunks: &[RawChunk]) -> Option<&RawChunk> {
         .find_map(|name| find_chunk(chunks, name).filter(|c| !c.body.is_empty()))
 }
 
+/// Saves < `SLV_WATER_TILE_TYPE`: codificación vieja de agua en m5
+/// (tipo en bits 4–7: 0x0 normal + flag coast en bit 0, 0x1 lock, 0x8 depot).
+/// La convertimos a la enumeración nueva (Clear=0, Coast=1, Lock=2, Depot=3),
+/// igual que `afterload.cpp`, preservando los bits bajos.
+fn normalize_old_water_m5(version: u16, mapt: &[u8], plane5: &mut [u8]) {
+    if version >= SLV_WATER_TILE_TYPE {
+        return;
+    }
+    for (t, m5) in mapt.iter().zip(plane5.iter_mut()) {
+        if (t >> 4) & 0xF != MP_WATER {
+            continue;
+        }
+        let new_type = match (*m5 >> 4) & 0xF {
+            0x0 => u8::from(*m5 & 1 != 0), // flag coast
+            0x1 => 2,                      // lock
+            0x8 => 3,                      // depot
+            _ => 0,
+        };
+        *m5 = (*m5 & 0x0F) | (new_type << 4);
+    }
+}
+
 /// Cuerpo `.ottdmap` completo (cabecera MAP1 + planos densos + footers).
 #[allow(clippy::cast_possible_truncation, clippy::similar_names)]
 pub(crate) fn export_ottdmap(chunks: &[RawChunk], version: u16) -> Result<Vec<u8>, SavError> {
@@ -193,6 +218,8 @@ pub(crate) fn export_ottdmap(chunks: &[RawChunk], version: u16) -> Result<Vec<u8
     let map2_raw = find_chunk(chunks, "MAP2")
         .map(|c| c.body.clone())
         .unwrap_or_default();
+
+    normalize_old_water_m5(version, mapt, &mut map5);
 
     // ObjectType visible en m5 para MP_OBJECT (overlay del chunk OBJS).
     for (tile, ty) in objs_types(chunks) {
@@ -348,6 +375,42 @@ mod tests {
         let (map, _) = crate::Map::from_ottd_binary_with_extras(&body).expect("load");
         let tile = map.get(crate::TileCoord::new(0, 0)).expect("tile");
         assert_eq!(tile.m8, 0x012A);
+    }
+
+    #[test]
+    fn old_water_m5_encoding_is_normalized_before_slv_342() {
+        let w = 64u32;
+        let n = (w * w) as usize;
+        let mut mapt = vec![0u8; n];
+        let mut plane5 = vec![0u8; n];
+        // (0,0) mar, (1,0) costa, (2,0) esclusa, (3,0) depósito naval (codificación vieja).
+        mapt[..4].fill(MP_WATER << 4);
+        plane5[0] = 0x00;
+        plane5[1] = 0x01; // flag coast en bit 0
+        plane5[2] = 0x12; // lock con orientación en bits bajos
+        plane5[3] = 0x81; // depot con part/axis en bits bajos
+        let chunks = vec![
+            maps_table_chunk(w, w),
+            riff(*b"MAPT", mapt),
+            riff(*b"MAP5", plane5),
+        ];
+        let body = export_ottdmap(&chunks, 308).expect("export");
+        let (map, _) = crate::Map::from_ottd_binary_with_extras(&body).expect("load");
+        let m5_at = |x: i32| map.get(crate::TileCoord::new(x, 0)).expect("tile").m5;
+        assert_eq!(m5_at(0), 0x00, "Clear");
+        assert_eq!(m5_at(1), 0x11, "Coast (bits bajos preservados)");
+        assert_eq!(m5_at(2), 0x22, "Lock");
+        assert_eq!(m5_at(3), 0x31, "Depot");
+
+        // Con version ≥ 342 el m5 se respeta tal cual.
+        let chunks_new = vec![
+            maps_table_chunk(w, w),
+            riff(*b"MAPT", vec![MP_WATER << 4; n]),
+            riff(*b"MAP5", vec![0x11u8; n]),
+        ];
+        let body = export_ottdmap(&chunks_new, 342).expect("export");
+        let (map, _) = crate::Map::from_ottd_binary_with_extras(&body).expect("load");
+        assert_eq!(map.get(crate::TileCoord::new(0, 0)).expect("tile").m5, 0x11);
     }
 
     #[test]

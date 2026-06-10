@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
-use crate::iso::{HEIGHT_PX, TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half, wang_hash};
-use crate::render::{MapVisualLayer, TileRenderContext, WaterTile, WorldAssets};
+use crate::iso::{HEIGHT_PX, TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half};
+use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::foundation_gfx_for_tileh;
 
 /// Sesgo en la componente Z de **solo** el agua animada (sin sprite `shore_*`).
@@ -119,20 +119,12 @@ pub(crate) fn spawn_ground_sprite(
     ));
 }
 
-fn water_phases(tx: u32, ty: u32) -> WaterTile {
-    WaterTile {
-        dark_phase: ((tx + 2 * ty).rem_euclid(5)) as u8,
-        glitter_phase: (wang_hash(tx, ty, 0xA9FE) % 15) as u8,
-    }
-}
-
 pub(crate) fn push_water_sprite(
-    batch_water: &mut Vec<(WaterTile, Sprite, Transform)>,
+    batch_water: &mut Vec<(Sprite, Transform)>,
     h_water: &Handle<Image>,
     ctx: &TileRenderContext,
 ) {
     batch_water.push((
-        water_phases(ctx.tx, ctx.ty),
         Sprite {
             image: h_water.clone(),
             color: Color::WHITE,

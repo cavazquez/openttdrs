@@ -14,7 +14,12 @@ pub(crate) struct WorldAssets {
     pub(crate) grass_slopes: Vec<Handle<Image>>,
     pub(crate) rough_slopes: Vec<Handle<Image>>,
     pub(crate) water: Handle<Image>,
+    /// Set completo `SPR_SHORE_BASE + 0..17` (`shore_full_{i:02}.png`).
     pub(crate) shore: Vec<Handle<Image>>,
+    /// 15 frames del ciclo de paleta del agua (`water_anim_{f}.png`).
+    pub(crate) water_frames: Vec<Handle<Image>>,
+    /// 18 orillas × 15 frames (`shore_full_{i:02}_anim_{f}.png`).
+    pub(crate) shore_frames: Vec<Vec<Handle<Image>>>,
     pub(crate) lighthouse: Handle<Image>,
     pub(crate) transmitter: Handle<Image>,
     pub(crate) road_flat: Vec<Handle<Image>>,
@@ -34,8 +39,19 @@ pub(crate) struct WorldAssets {
     pub(crate) road_bridge_y: Handle<Image>,
     pub(crate) rail_bridge: Handle<Image>,
     pub(crate) rail_bridge_y: Handle<Image>,
+    /// Barandilla frontal del tramo intermedio de puente, por eje `[x, y]`.
+    pub(crate) bridge_front: [Handle<Image>; 2],
+    /// Pilar del tramo intermedio de puente, por eje `[x, y]`.
+    pub(crate) bridge_pillar: [Handle<Image>; 2],
     pub(crate) houses: HashMap<u32, Handle<Image>>,
-    pub(crate) trees: [Handle<Image>; 3],
+    /// `tree_{NN}.png` (NN = sprite − 1576): 19 especies × 7 etapas.
+    pub(crate) trees: Vec<Handle<Image>>,
+    /// `field_{estado}_{tileh:02}.png`: índice = estado × 15 + tileh (0..14).
+    pub(crate) fields: Vec<Handle<Image>>,
+    /// `fence_{tipo}_{var}.png`: índice = tipo (0..5) × 6 + variante (0..5).
+    pub(crate) fences: Vec<Handle<Image>>,
+    /// `chimney_smoke_{i}.png`: 8 frames del humo de la central eléctrica.
+    pub(crate) chimney_smoke: Vec<Handle<Image>>,
     pub(crate) industries: HashMap<u32, Handle<Image>>,
     /// Cimientos nivelados (`foundation_01..14.png`, SPR_FOUNDATION_BASE + tileh).
     pub(crate) foundations: Vec<Handle<Image>>,
@@ -66,8 +82,26 @@ impl WorldAssets {
             })
             .collect();
         let water = asset_server.load::<Image>("assets/opengfx/tiles/water.png");
-        let shore = (0..8)
-            .map(|i| asset_server.load::<Image>(format!("assets/opengfx/tiles/shore_{i}.png")))
+        let shore: Vec<Handle<Image>> = (0..crate::sprites::SHORE_SPRITE_COUNT)
+            .map(|i| {
+                asset_server.load::<Image>(format!("assets/opengfx/tiles/shore_full_{i:02}.png"))
+            })
+            .collect();
+        let water_frames = (0..15)
+            .map(|f| {
+                asset_server.load::<Image>(format!("assets/opengfx/tiles/water_anim_{f:02}.png"))
+            })
+            .collect();
+        let shore_frames = (0..crate::sprites::SHORE_SPRITE_COUNT)
+            .map(|i| {
+                (0..15)
+                    .map(|f| {
+                        asset_server.load::<Image>(format!(
+                            "assets/opengfx/tiles/shore_full_{i:02}_anim_{f:02}.png"
+                        ))
+                    })
+                    .collect()
+            })
             .collect();
         let lighthouse = asset_server.load::<Image>("assets/opengfx/tiles/object_lighthouse.png");
         let transmitter = asset_server.load::<Image>("assets/opengfx/tiles/object_transmitter.png");
@@ -141,6 +175,14 @@ impl WorldAssets {
         let rail_bridge = asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_rail_x.png");
         let rail_bridge_y =
             asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_rail_y.png");
+        let bridge_front = [
+            asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_x_front.png"),
+            asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_y_front.png"),
+        ];
+        let bridge_pillar = [
+            asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_x_pillar.png"),
+            asset_server.load::<Image>("assets/opengfx/tiles/bridge_wood_y_pillar.png"),
+        ];
 
         let mut houses = HashMap::new();
         for spec in &HOUSE_DRAW_DATA {
@@ -154,11 +196,33 @@ impl WorldAssets {
             }
         }
 
-        let trees = [
-            asset_server.load::<Image>("assets/opengfx/tiles/tree_00.png"),
-            asset_server.load::<Image>("assets/opengfx/tiles/tree_07.png"),
-            asset_server.load::<Image>("assets/opengfx/tiles/tree_14.png"),
-        ];
+        let trees = (0..crate::sprites::TREE_SPRITE_COUNT)
+            .map(|i| asset_server.load::<Image>(format!("assets/opengfx/tiles/tree_{i:02}.png")))
+            .collect();
+        let mut fields = Vec::with_capacity(crate::sprites::FIELD_STATES * 15);
+        for state in 0..crate::sprites::FIELD_STATES {
+            for tileh in 0..15 {
+                fields.push(
+                    asset_server.load::<Image>(format!(
+                        "assets/opengfx/tiles/field_{state}_{tileh:02}.png"
+                    )),
+                );
+            }
+        }
+        let mut fences = Vec::with_capacity(36);
+        for ftype in 0..6 {
+            for var in 0..6 {
+                fences.push(
+                    asset_server
+                        .load::<Image>(format!("assets/opengfx/tiles/fence_{ftype}_{var}.png")),
+                );
+            }
+        }
+        let chimney_smoke = (0..crate::sprites::CHIMNEY_SMOKE_FRAMES)
+            .map(|i| {
+                asset_server.load::<Image>(format!("assets/opengfx/tiles/chimney_smoke_{i}.png"))
+            })
+            .collect();
 
         let mut industries = HashMap::new();
         for entry in &INDUSTRY_GFX_DATA {
@@ -179,6 +243,8 @@ impl WorldAssets {
             rough_slopes,
             water,
             shore,
+            water_frames,
+            shore_frames,
             lighthouse,
             transmitter,
             road_flat,
@@ -197,8 +263,13 @@ impl WorldAssets {
             road_bridge_y,
             rail_bridge,
             rail_bridge_y,
+            bridge_front,
+            bridge_pillar,
             houses,
             trees,
+            fields,
+            fences,
+            chimney_smoke,
             industries,
             foundations,
         }
@@ -246,8 +317,17 @@ pub(crate) fn stub_opengfx_tiles_for_tests(root: &std::path::Path) {
         );
     }
     write_png(root, "assets/opengfx/tiles/water.png");
-    for i in 0..8 {
-        write_png(root, &format!("assets/opengfx/tiles/shore_{i}.png"));
+    for f in 0..15 {
+        write_png(root, &format!("assets/opengfx/tiles/water_anim_{f:02}.png"));
+        for i in 0..crate::sprites::SHORE_SPRITE_COUNT {
+            write_png(
+                root,
+                &format!("assets/opengfx/tiles/shore_full_{i:02}_anim_{f:02}.png"),
+            );
+        }
+    }
+    for i in 0..crate::sprites::SHORE_SPRITE_COUNT {
+        write_png(root, &format!("assets/opengfx/tiles/shore_full_{i:02}.png"));
     }
     write_png(root, "assets/opengfx/tiles/object_lighthouse.png");
     write_png(root, "assets/opengfx/tiles/object_transmitter.png");
@@ -291,6 +371,16 @@ pub(crate) fn stub_opengfx_tiles_for_tests(root: &std::path::Path) {
     write_png(root, "assets/opengfx/tiles/bridge_wood_road_y.png");
     write_png(root, "assets/opengfx/tiles/bridge_wood_rail_x.png");
     write_png(root, "assets/opengfx/tiles/bridge_wood_rail_y.png");
+    for axis in ["x", "y"] {
+        write_png(
+            root,
+            &format!("assets/opengfx/tiles/bridge_wood_{axis}_front.png"),
+        );
+        write_png(
+            root,
+            &format!("assets/opengfx/tiles/bridge_wood_{axis}_pillar.png"),
+        );
+    }
     for spec in &HOUSE_DRAW_DATA {
         for &sid in &[spec.s1, spec.s2] {
             if sid != 0 {
@@ -299,8 +389,27 @@ pub(crate) fn stub_opengfx_tiles_for_tests(root: &std::path::Path) {
             }
         }
     }
-    for name in ["tree_00.png", "tree_07.png", "tree_14.png"] {
-        write_png(root, &format!("assets/opengfx/tiles/{name}"));
+    for i in 0..crate::sprites::TREE_SPRITE_COUNT {
+        write_png(root, &format!("assets/opengfx/tiles/tree_{i:02}.png"));
+    }
+    for state in 0..crate::sprites::FIELD_STATES {
+        for tileh in 0..15 {
+            write_png(
+                root,
+                &format!("assets/opengfx/tiles/field_{state}_{tileh:02}.png"),
+            );
+        }
+    }
+    for ftype in 0..6 {
+        for var in 0..6 {
+            write_png(
+                root,
+                &format!("assets/opengfx/tiles/fence_{ftype}_{var}.png"),
+            );
+        }
+    }
+    for i in 0..crate::sprites::CHIMNEY_SMOKE_FRAMES {
+        write_png(root, &format!("assets/opengfx/tiles/chimney_smoke_{i}.png"));
     }
     for entry in &INDUSTRY_GFX_DATA {
         for &id in &[entry.sprite_id, entry.ground_sprite_id] {

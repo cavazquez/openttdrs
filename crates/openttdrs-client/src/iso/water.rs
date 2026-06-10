@@ -1,6 +1,6 @@
 use openttdrs_core::{Map, TileCoord, TileKind};
 
-use super::{SLOPE_HALF_H, tile_slope_bits_from_heights};
+use super::tile_slope_bits_from_heights;
 
 /// `tileh` para [`DrawShoreTile`] (`water_cmd.cpp`): la costa usa la pendiente **real**
 /// del MAPH cuando no es plana (SW, NE, …); si el 2×2 es uniforme se usa
@@ -14,12 +14,9 @@ pub fn shore_tileh_for_draw_shore(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32)
     if raw == 0 {
         return infer_coast_tileh_when_flat(map, tx, ty, mw, mh);
     }
-    // Con sprites legacy (4062..4069) solo existen estas pendientes de costa.
-    // El resto (incl. WE/NS y 3 esquinas elevadas) en OpenTTD se resuelve con
-    // reemplazos adicionales; aquí caemos a inferencia para evitar artefactos.
-    if !matches!(raw, 1 | 2 | 3 | 4 | 6 | 8 | 9 | 12) {
-        return infer_coast_tileh_when_flat(map, tx, ty, mw, mh);
-    }
+    // Con el set completo de orillas (SPR_SHORE_BASE + 0..17, Action5 0x0D del
+    // GRF extra) toda pendiente simple 1..14 tiene sprite, incluidas WE/NS y
+    // las de tres esquinas que antes caían a inferencia.
     raw
 }
 
@@ -110,34 +107,45 @@ pub fn infer_coast_tileh_when_flat(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32
     8
 }
 
-/// Índice `0..8` para `shore_{i}.png` (sprites OpenGFX 4062–4069).
+/// Slot `0..18` para `shore_full_{i:02}.png` (set `SPR_SHORE_BASE + 0..17`).
 ///
 /// OpenTTD dibuja costas con [`DrawShoreTile`] (`water_cmd.cpp`): un único sprite
 /// según la pendiente de la tesela, **no** máscara N/E/S/W sobre agua plana.
-/// Tabla `tileh_to_shoresprite` + conversión `SPR_SHORE_BASE+d` → PNG original vía
-/// `DupSprite` en `newgrf.cpp` (`ActivateOldShore`).
+/// Tabla `tileh_to_shoresprite` portada en `shore_draw_data_generated.rs`
+/// (WE→16, NS→17, el resto coincide con `tileh`).
 #[must_use]
 pub fn shore_png_index(tileh: u8) -> usize {
-    // `ActivateOldShore` (OpenTTD/newgrf.cpp): mapea pendiente -> sprite original 4062..4069.
-    match tileh.min(14) {
-        1 => 1,  // W
-        2 => 2,  // S
-        3 => 6,  // SW
-        4 => 0,  // E
-        6 => 4,  // SE
-        8 => 3,  // N
-        9 => 7,  // NW
-        12 => 5, // NE
-        _ => 0,
-    }
+    crate::sprites::TILEH_TO_SHORE_SPRITE[tileh.min(14) as usize] as usize
 }
 
 /// `half_h` visual para el sprite elegido por [`DrawShoreTile`].
 ///
-/// Los `shore_*.png` heredados no miden todos 64x31: S/SW/SE son 64x23 y
-/// N/NW/NE son 64x39 con `yrel=-8`. En ambos casos el ancla NFO equivale al
-/// mismo centro que las pendientes de terreno (`SLOPE_HALF_H[tileh]`).
+/// Los `shore_full_*.png` no miden todos 64x31 (hay 64x23, 64x39 con
+/// `yrel=-8`, …); el ancla se deriva de los offsets NFO como `h/2 + yrel`,
+/// que coincide con el centro de las pendientes de terreno (`SLOPE_HALF_H`)
+/// — verificado en `half_h_matches_slope_half_h`.
 #[must_use]
 pub fn shore_sprite_half_h(tileh: u8) -> f32 {
-    SLOPE_HALF_H[tileh.min(14) as usize]
+    let (_, h, _, yrel) = crate::sprites::SHORE_META[shore_png_index(tileh)];
+    h / 2.0 + yrel
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::iso::SLOPE_HALF_H;
+
+    /// El ancla derivada del NFO (`h/2 + yrel`) debe coincidir con el centro
+    /// de las pendientes de terreno (`SLOPE_HALF_H[tileh]`).
+    #[test]
+    fn half_h_matches_slope_half_h() {
+        for tileh in 1..15u8 {
+            assert_eq!(
+                shore_sprite_half_h(tileh),
+                SLOPE_HALF_H[tileh as usize],
+                "tileh {tileh} (slot {})",
+                shore_png_index(tileh)
+            );
+        }
+    }
 }

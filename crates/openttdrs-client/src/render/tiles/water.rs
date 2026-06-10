@@ -23,9 +23,11 @@ pub(crate) fn push_water_tile(
         let th = shore_tileh_for_draw_shore(map, ctx.tx, ctx.ty, map_dims.0, map_dims.1);
         if th != 0 {
             let si = shore_png_index(th);
-            // Coast en OpenTTD dibuja solo `DrawShoreTile`: el PNG heredado ya
-            // incluye agua/tierra del rombo, con transparencia solo fuera de él.
+            // Coast en OpenTTD dibuja solo `DrawShoreTile`: el PNG del set
+            // completo ya incluye agua/tierra del rombo, con transparencia
+            // solo fuera de él.
             batches.shore.push((
+                crate::render::ShoreTile(si as u8),
                 Sprite {
                     image: assets.shore[si].clone(),
                     color: Color::WHITE,

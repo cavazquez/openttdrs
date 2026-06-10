@@ -1,12 +1,19 @@
 use bevy::prelude::*;
 
-/// Marca los tiles de agua para la animación por ondas.
-/// Almacena fases discretas por tile para emular el ciclado de paleta
-/// (dark water 5 pasos + glitter 15 pasos).
+/// Marca los tiles de agua plana: ciclan los frames `water_anim_{f}.png`.
 #[derive(Component)]
-pub(crate) struct WaterTile {
-    pub(crate) dark_phase: u8,
-    pub(crate) glitter_phase: u8,
+pub(crate) struct WaterTile;
+
+/// Tesela de orilla: slot `i` de `shore_full_{i:02}.png` para ciclar sus frames.
+#[derive(Component)]
+pub(crate) struct ShoreTile(pub(crate) u8);
+
+/// Frames pre-horneados del ciclo de paleta del agua (dark + glitter water),
+/// generados por `scripts/gen_water_anim_frames.py`. Frame 0 = sprite base.
+#[derive(Resource)]
+pub(crate) struct WaterAnimFrames {
+    pub(crate) water: Vec<Handle<Image>>,
+    pub(crate) shore: Vec<Vec<Handle<Image>>>,
 }
 
 /// Teselas de suelo, vías, vehículos, etc.: se despawnan al recargar JSON (F9).
@@ -31,7 +38,7 @@ pub(crate) struct VehiclePreviewCamera;
 
 #[derive(Default)]
 pub(crate) struct MapSpriteBatches {
-    pub(super) water: Vec<(WaterTile, Sprite, Transform)>,
-    pub(super) shore: Vec<(Sprite, Transform)>,
+    pub(super) water: Vec<(Sprite, Transform)>,
+    pub(super) shore: Vec<(ShoreTile, Sprite, Transform)>,
     pub(super) trees: Vec<(Sprite, Transform)>,
 }

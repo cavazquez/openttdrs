@@ -15,8 +15,8 @@ use crate::render::{
     MapPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, RenderGrid,
     TileRenderContext, TileViewportBounds, WorldAssets, flush_map_batches,
     large_map_viewport_cull_enabled, ortho_visible_tile_bounds, push_forest_tree, push_water_tile,
-    spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
-    spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
+    spawn_bridge_middle, spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile,
+    spawn_rail_tile, spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
 use crate::state::{ClientScreen, SimWorld};
 
@@ -177,6 +177,11 @@ fn spawn_world_layer(
     }
 
     let assets = WorldAssets::load(asset_server);
+    commands.insert_resource(super::WaterAnimFrames {
+        water: assets.water_frames.clone(),
+        shore: assets.shore_frames.clone(),
+    });
+    commands.insert_resource(super::ChimneySmokeFrames(assets.chimney_smoke.clone()));
     let truck_handles = TruckHandles::load(asset_server);
     let map = &sim.state.map;
     let render_grid = RenderGrid::from_map(map, mw, mh);
@@ -262,8 +267,11 @@ fn spawn_world_layer(
         }
 
         if kind == TileKind::Forest {
-            push_forest_tree(&assets, &ctx, &mut batches);
+            push_forest_tree(&assets, &ctx, &mut batches, mw);
         }
+
+        // Tramos de puente que pasan por encima de esta tesela (IsBridgeAbove).
+        spawn_bridge_middle(commands, map, (mw, mh), &assets, &ctx);
     }
 
     flush_map_batches(commands, batches);
@@ -287,6 +295,8 @@ fn spawn_world_layer(
     }
     spawn_initial_vehicles(commands, sim, &truck_handles);
     commands.insert_resource(truck_handles);
+    let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
+    super::town_labels::spawn_town_labels(commands, sim, &label_font);
     if let Some(path) = trace_path {
         if let Err(e) = std::fs::write(&path, trace_rows.join("\n")) {
             error!("No se pudo escribir OPENTTDRS_RENDER_TRACE_OUT={path}: {e}");
@@ -405,6 +415,8 @@ mod tests {
             ..default()
         });
         app.add_plugins(ImagePlugin::default());
+        // Las etiquetas de ciudades cargan la fuente Text2d en spawn_world_layer.
+        app.init_asset::<Font>();
         app.update();
         app.insert_resource(SimWorld::default());
         app.insert_resource(RemapMapVisualsPending::default());

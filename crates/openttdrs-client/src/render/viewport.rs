@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 
 use crate::config::env_flag;
-use crate::iso::{ISO_HW, world_to_tile};
+use crate::iso::world_to_tile;
 
 /// Rectángulo de teselas `[tx0, tx1) × [ty0, ty1)` en coordenadas de mapa.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -136,12 +136,6 @@ pub fn ortho_visible_tile_bounds(
         tx1: tx1.max(tx0 + 1).min(mw),
         ty1: ty1.max(ty0 + 1).min(mh),
     }
-}
-
-/// Margen en mundo para culling de animación de agua (alineado con `ISO_HW`).
-#[must_use]
-pub fn ortho_world_cull_margin(ortho_scale: f32) -> f32 {
-    ISO_HW * 4.0 * ortho_scale.max(0.25)
 }
 
 #[cfg(test)]

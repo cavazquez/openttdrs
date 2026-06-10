@@ -13,7 +13,7 @@ use crate::app_icon::AppIconPlugin;
 use crate::camera::CameraControlPlugin;
 use crate::debug_gizmos::DebugGizmosPlugin;
 use crate::persistence::PersistencePlugin;
-use crate::render::WaterAnimationPlugin;
+use crate::render::{IndustrySmokePlugin, WaterAnimationPlugin};
 use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
 use crate::simulation::SimulationPlugin;
 use crate::state::{ClientScreen, SimWorld};
@@ -111,6 +111,7 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
         PersistencePlugin,
         WindowStatusPlugin,
         WaterAnimationPlugin,
+        IndustrySmokePlugin,
         DebugGizmosPlugin,
         CameraControlPlugin,
     ));

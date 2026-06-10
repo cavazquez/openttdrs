@@ -27,7 +27,7 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
             *b,
             TileKind::RoadTunnel,
             0x90,
-            0x00,
+            0x04,
             TUNNEL_BUILD_COST_PER_TILE,
         ),
         Command::PlaceRailTunnel(a, b) => transport::place_tunnel_or_bridge(
@@ -36,7 +36,7 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
             *b,
             TileKind::RailTunnel,
             0x90,
-            0x04,
+            0x00,
             TUNNEL_BUILD_COST_PER_TILE,
         ),
         Command::PlaceRoadBridge(a, b) => transport::place_tunnel_or_bridge(
@@ -45,7 +45,7 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
             *b,
             TileKind::RoadBridge,
             0x90,
-            0x80,
+            0x84,
             BRIDGE_BUILD_COST_PER_TILE,
         ),
         Command::PlaceRailBridge(a, b) => transport::place_tunnel_or_bridge(
@@ -54,7 +54,7 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
             *b,
             TileKind::RailBridge,
             0x90,
-            0x84,
+            0x80,
             BRIDGE_BUILD_COST_PER_TILE,
         ),
         Command::SetVehicleOrders(id, orders) => {

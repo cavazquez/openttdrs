@@ -53,11 +53,12 @@ pub const fn is_tunnel_entrance_slope(tileh: u8) -> bool {
     inclined_slope_direction(tileh).is_some()
 }
 
-/// `m5` de boca de túnel: dirección en bits 0–1 + tipo de transporte en bits 2–3.
+/// `m5` de boca de túnel: dirección en bits 0–1 + tipo de transporte en bits
+/// 2–3 (`TransportType` de OpenTTD: 0 = rail, 1 = road).
 #[must_use]
 pub fn tunnel_entrance_m5(tileh: u8, rail: bool) -> Option<u8> {
     let dir = inclined_slope_direction(tileh)?;
-    Some(dir | if rail { 0x04 } else { 0 })
+    Some(dir | if rail { 0 } else { 0x04 })
 }
 
 /// Dirección diagonal hacia arriba en una pendiente inclinada (`GetInclinedSlopeDirection`).

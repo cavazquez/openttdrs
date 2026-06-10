@@ -5,10 +5,12 @@ use super::{
     leveled_foundation_overlay_pos, sloped_or_flat_image, spawn_ground_sprite,
     spawn_leveled_foundation,
 };
-use crate::iso::{overlay_pos, wang_hash};
+use crate::iso::{overlay_pos, remap_tile_offset, wang_hash};
 use crate::render::{MapSpriteBatches, MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
-    HOUSE_DRAW_DATA, house_building_stage_from_tile, house_draw_data_index_for_tile,
+    FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE, FENCE_MOD_BY_TILEH_SW,
+    FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY,
+    TREE_SPRITE_META, house_building_stage_from_tile, house_draw_data_index_for_tile,
 };
 
 pub(crate) fn spawn_house_tile(
@@ -94,6 +96,10 @@ pub(crate) fn spawn_industry_tile(
     let m1 = ctx.tile.map_or(0x80, |t| t.m1);
     let entry = crate::sprites::industry_gfx_entry_for_tile(gfx, m1);
     crate::sprites::log_industry_gfx_once(gfx, m1, entry);
+    // Chimenea de la central terminada: penacho de humo animado encima.
+    if gfx == crate::render::GFX_POWERPLANT_CHIMNEY && m1 & 0x80 != 0 {
+        crate::render::spawn_chimney_smoke(commands, assets, ctx);
+    }
     // Terreno natural bajo la industria; en pendiente se añade cimiento nivelado (P4).
     let terrain_img = sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
     let terrain_color = Color::srgb(0.55, 0.50, 0.45);
@@ -191,12 +197,21 @@ pub(crate) fn spawn_generic_land_tile(
             // 0=grass, 1=rough, 2=rocky, 3=fields, 4=snow, 5=desert
             match (tile_m5 >> 2) & 0x7 {
                 0 => (grass_img(), Color::WHITE),
-                3 => (rough_img(), Color::srgb(0.82, 0.72, 0.45)), // campos
+                3 => {
+                    // `DrawTile_Clear` Fields: estado de cultivo en bits 0–3 de
+                    // m3 + offset de pendiente; cercas como overlay.
+                    let state =
+                        usize::from(ctx.tile.map_or(0, |t| t.m3 & 0x0F)).min(FIELD_STATES - 1);
+                    let img = assets.fields[state * 15 + usize::from(tileh.min(14))].clone();
+                    spawn_field_fences(commands, assets, ctx);
+                    (img, Color::WHITE)
+                }
                 _ => (rough_img(), Color::srgb(0.78, 0.73, 0.58)), // rough/rocky
             }
         }
         TileKind::Grass => (grass_img(), Color::WHITE), // MP_OBJECT u otros
-        TileKind::Forest => (rough_img(), Color::srgb(0.6, 1.0, 0.45)),
+        // MP_TREES con TreeGround::Grass: hierba normal (los árboles van encima).
+        TileKind::Forest => (grass_img(), Color::WHITE),
         TileKind::CoalField => (rough_img(), Color::srgb(0.55, 0.50, 0.45)),
         TileKind::Unknown(_) => (grass_img(), Color::srgb(1.0, 0.0, 1.0)),
         TileKind::House
@@ -250,30 +265,143 @@ pub(crate) fn spawn_generic_land_tile(
     }
 }
 
+/// Cercas de campos de cultivo, fiel a `DrawClearLandFence` (`clear_cmd.cpp`):
+/// tipo por lado en m4 (SE bits 2–4, SW 5–7), m3 (NE bits 5–7) y m6 (NW bits
+/// 2–4); variante de sprite por pendiente (`_fence_mod_by_tileh_*`).
+fn spawn_field_fences(commands: &mut Commands, assets: &WorldAssets, ctx: &TileRenderContext) {
+    let Some(t) = ctx.tile else {
+        return;
+    };
+    let tileh = usize::from(ctx.info.tileh & 0x1F);
+    // (tipo, tabla de variantes, dx, dy, bit de esquina para z, capa)
+    // NW usa CORNER_W (bit 1), NE CORNER_E (bit 4), SW/SE CORNER_S (bit 2).
+    let sides: [(u8, &[u8; 32], f32, f32, u8, f32); 4] = [
+        (
+            (t.m6 >> 2) & 0x7,
+            &FENCE_MOD_BY_TILEH_NW,
+            0.0,
+            -16.0,
+            0x1,
+            0.06,
+        ),
+        (
+            (t.m3 >> 5) & 0x7,
+            &FENCE_MOD_BY_TILEH_NE,
+            -16.0,
+            0.0,
+            0x4,
+            0.06,
+        ),
+        (
+            (t.m3hi >> 5) & 0x7,
+            &FENCE_MOD_BY_TILEH_SW,
+            0.0,
+            0.0,
+            0x2,
+            0.26,
+        ),
+        (
+            (t.m3hi >> 2) & 0x7,
+            &FENCE_MOD_BY_TILEH_SE,
+            0.0,
+            0.0,
+            0x2,
+            0.26,
+        ),
+    ];
+    for (fence, mods, dx, dy, corner_bit, layer) in sides {
+        if fence == 0 {
+            continue;
+        }
+        let ftype = usize::from(fence - 1).min(5);
+        let variant = usize::from(mods[tileh]).min(5);
+        let meta = FENCE_SPRITE_META[ftype][variant];
+        // `GetSlopePixelZInCorner`: esquina elevada = TILE_HEIGHT (8 unidades).
+        let dz = if ctx.info.tileh & corner_bit != 0 {
+            8.0
+        } else {
+            0.0
+        };
+        let off = remap_tile_offset(dx, dy, dz) * 0.5;
+        let pos3 = overlay_pos(
+            Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
+            meta.xrel,
+            meta.yrel,
+            meta.w,
+            meta.h,
+            ctx.info.base_z,
+            layer,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        );
+        commands.spawn((
+            MapVisualLayer,
+            Sprite {
+                image: assets.fences[ftype * 6 + variant].clone(),
+                color: Color::WHITE,
+                ..default()
+            },
+            Transform::from_translation(pos3),
+        ));
+    }
+}
+
+/// Árboles de una tesela `MP_TREES`, fiel a `DrawTile_Trees` (`tree_cmd.cpp`):
+/// 1–4 árboles según bits 6–7 de m5, posiciones de `_tree_layout_xy`, especie
+/// por árbol de `_tree_layout_sprite[tipo×4 + variante]` y etapa de
+/// crecimiento (bits 0–2 de m5) solo en el último árbol (el resto adulto +3).
 pub(crate) fn push_forest_tree(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     batches: &mut MapSpriteBatches,
+    map_w: u32,
 ) {
-    let h = wang_hash(ctx.tx, ctx.ty, 0xCAFE);
-    let tree_idx = (h % 3) as usize;
-    let ox = ((h >> 2) % 17) as f32 - 8.0;
-    let pos3 = overlay_pos(
-        Vec2::new(ctx.iso_pos.x + ox, ctx.iso_pos.y),
-        -19.0,
-        -36.0,
-        35.0,
-        43.0,
-        ctx.info.base_z,
-        0.3,
-        ctx.tx_i32(),
-        ctx.ty_i32(),
-    );
-    batches.trees.push((
-        Sprite {
-            image: assets.trees[tree_idx].clone(),
-            ..default()
-        },
-        Transform::from_translation(pos3),
-    ));
+    let (tree_type, count, growth) = match ctx.tile {
+        // MP_TREES real (nibble alto de mapt = 4): datos del save.
+        Some(t) if (t.mapt >> 4) & 0xF == 4 => (
+            u32::from(t.m3) % 12,
+            usize::from((t.m5 >> 6) & 0x3) + 1,
+            usize::from(t.m5 & 0x7).min(6),
+        ),
+        // Mapas generados sin datos: variedad determinista equivalente.
+        _ => {
+            let h = wang_hash(ctx.tx, ctx.ty, 0xCAFE);
+            (h % 12, (h >> 8) as usize % 2 + 1, 3)
+        }
+    };
+
+    // `tmp = CountBits(tile + x + y)` con x/y en unidades de mundo (×16).
+    let tile_index = ctx.ty * map_w + ctx.tx;
+    let tmp = (tile_index + ctx.tx * 16 + ctx.ty * 16).count_ones();
+    let variant = (tmp & 0x3) as usize;
+    let layout = ((tmp >> 2) & 0x3) as usize;
+
+    let row = &TREE_LAYOUT_SPRITE[tree_type as usize * 4 + variant];
+    for i in 0..count {
+        let stage = if i == count - 1 { growth } else { 3 };
+        let sprite_idx = row[i] as usize + stage;
+        let meta = &TREE_SPRITE_META[sprite_idx];
+        let (dx, dy) = TREE_LAYOUT_XY[layout][i];
+        // Offset sub-tesela en pantalla (misma escala que iso(): remap × 0.5).
+        let off = remap_tile_offset(f32::from(dx), f32::from(dy), 0.0) * 0.5;
+        let pos3 = overlay_pos(
+            Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
+            meta.xrel,
+            meta.yrel,
+            meta.w,
+            meta.h,
+            ctx.info.base_z,
+            // Orden dentro de la tesela: los árboles más al sur tapan.
+            0.3 + (f32::from(dx) + f32::from(dy)) * 1e-4,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        );
+        batches.trees.push((
+            Sprite {
+                image: assets.trees[sprite_idx].clone(),
+                ..default()
+            },
+            Transform::from_translation(pos3),
+        ));
+    }
 }

@@ -351,6 +351,7 @@ mod ottdmap_binary_tests {
         let base = (
             [1; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4], [0; 4],
         );
+        // TransportType de OpenTTD en bits 2–3 de m5: 0 = rail, 1 = road.
         let road_tunnel = build_ottdmap_2x2(
             [0x90, 0, 0, 0],
             base.0,
@@ -359,7 +360,7 @@ mod ottdmap_binary_tests {
             base.3,
             base.4,
             base.5,
-            [0, 0, 0, 0],
+            [0x04, 0, 0, 0],
             base.7,
             base.8,
             [0; 4],
@@ -378,7 +379,7 @@ mod ottdmap_binary_tests {
             base.3,
             base.4,
             base.5,
-            [0x04, 0, 0, 0],
+            [0, 0, 0, 0],
             base.7,
             base.8,
             [0; 4],
@@ -397,7 +398,7 @@ mod ottdmap_binary_tests {
             base.3,
             base.4,
             base.5,
-            [0x84, 0, 0, 0],
+            [0x80, 0, 0, 0],
             base.7,
             base.8,
             [0; 4],
@@ -406,6 +407,25 @@ mod ottdmap_binary_tests {
         assert_eq!(
             map.get(TileCoord::new(0, 0)).expect("t").kind,
             TileKind::RailBridge
+        );
+
+        let road_bridge = build_ottdmap_2x2(
+            [0x90, 0, 0, 0],
+            base.0,
+            base.1,
+            base.2,
+            base.3,
+            base.4,
+            base.5,
+            [0x84, 0, 0, 0],
+            base.7,
+            base.8,
+            [0; 4],
+        );
+        let map = Map::from_ottd_binary(&road_bridge).expect("map");
+        assert_eq!(
+            map.get(TileCoord::new(0, 0)).expect("t").kind,
+            TileKind::RoadBridge
         );
     }
 

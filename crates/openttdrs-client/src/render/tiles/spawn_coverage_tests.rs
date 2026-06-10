@@ -9,9 +9,9 @@ use openttdrs_core::{Map, Tile, TileCoord, TileKind};
 
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::tiles::{
-    flush_map_batches, push_forest_tree, push_water_tile, spawn_generic_land_tile,
-    spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
-    spawn_transport_object_tile,
+    flush_map_batches, push_forest_tree, push_water_tile, spawn_bridge_middle,
+    spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
+    spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
 use crate::render::{MapSpriteBatches, RenderGrid, TileRenderContext};
 use crate::sprites::{RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS};
@@ -298,6 +298,7 @@ fn spawn_land_house_industry_generics_and_batches() {
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 4, 4),
                     &mut batches,
+                    mw,
                 );
                 flush_map_batches(&mut commands, batches);
             },
@@ -385,6 +386,163 @@ fn spawn_industry_on_slope_spawns_foundation_layer() {
             },
         )
         .expect("industry slope");
+}
+
+#[test]
+fn spawn_bridge_middle_draws_deck_over_marked_water() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+
+    // Rampa SW en (1,1), vano sobre agua en (2,1) y (3,1), rampa NE en (4,1).
+    let mut ramp = tile_template();
+    ramp.kind = TileKind::RoadBridge;
+    ramp.mapt = 0x90;
+    ramp.m5 = 0x86; // puente + dir SW + TransportType road (1)
+    map.set_tile(c(1, 1), ramp).expect("ramp");
+    ramp.m5 = 0x84; // puente + dir NE + road
+    map.set_tile(c(4, 1), ramp).expect("ramp");
+    for x in 2..=3 {
+        let mut water = tile_template();
+        water.kind = TileKind::Water;
+        water.mapt = 0x64; // MP_WATER + bridge above eje X (bits 2–3 = 1)
+        map.set_tile(c(x, 1), water).expect("water");
+    }
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let dims = m.0.dimensions();
+                // Vano marcado: tablero + barandilla + pilar.
+                spawn_bridge_middle(
+                    &mut commands,
+                    &m.0,
+                    dims,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 1),
+                );
+                // Tesela sin puente encima: no debe agregar nada.
+                spawn_bridge_middle(
+                    &mut commands,
+                    &m.0,
+                    dims,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 6, 6),
+                );
+            },
+        )
+        .expect("bridge middle");
+
+    // Tablero + barandilla frontal + 1 pilar (deck_z 1, suelo 0).
+    let sprites = world.query::<&Sprite>().iter(&world).count();
+    assert_eq!(sprites, 3, "vano dibuja tablero, barandilla y pilar");
+}
+
+#[test]
+fn power_plant_chimney_spawns_animated_smoke() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+
+    // GFX_POWERPLANT_CHIMNEY (gfx 8) terminada y otra en obra (sin humo).
+    let mut chimney = tile_template();
+    chimney.kind = TileKind::Industry;
+    chimney.mapt = 0x80;
+    chimney.m5 = 8;
+    chimney.m1 = 0x80;
+    map.set_tile(c(2, 2), chimney).expect("chimenea");
+    chimney.m1 = 0x01;
+    map.set_tile(c(3, 2), chimney).expect("en obra");
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    let spawn_at = |world: &mut World, tx: u32| {
+        world
+            .run_system_once(
+                move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                    spawn_industry_tile(
+                        &mut commands,
+                        &a.0,
+                        &TileRenderContext::new(&m.0, &g.0, tx, 2),
+                        4.0,
+                    );
+                },
+            )
+            .expect("spawn industry");
+        world
+            .query_filtered::<(), With<crate::render::smoke::ChimneySmoke>>()
+            .iter(world)
+            .count()
+    };
+    assert_eq!(spawn_at(&mut world, 2), 1, "terminada: penacho de humo");
+    assert_eq!(spawn_at(&mut world, 3), 1, "en obra: sin humo nuevo");
+}
+
+#[test]
+fn spawn_field_tile_draws_crop_ground_and_fences() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+
+    // MP_CLEAR Fields (m5 bits 2-4 = 3), estado 4, cercas NE (m3 5-7),
+    // NW (m6 2-4), SW (m3hi 5-7) y SE (m3hi 2-4).
+    let mut field = tile_template();
+    field.m5 = 3 << 2;
+    field.m3 = 0x24; // NE = tipo 1 (bushes) + estado 4
+    field.m6 = 3 << 2; // NW = tipo 3 (fence)
+    field.m3hi = (6 << 5) | (2 << 2); // SW = tipo 6 (stone), SE = tipo 2
+    map.set_tile(c(2, 2), field).expect("field");
+
+    // Campo sin cercas: solo el suelo.
+    let mut bare = tile_template();
+    bare.m5 = 3 << 2;
+    map.set_tile(c(3, 2), bare).expect("bare field");
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_generic_land_tile(
+                    &mut commands,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                );
+            },
+        )
+        .expect("field tile");
+    let with_fences = world.query::<&Sprite>().iter(&world).count();
+    assert_eq!(with_fences, 5, "suelo de cultivo + 4 cercas");
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                spawn_generic_land_tile(
+                    &mut commands,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 3, 2),
+                    4.0,
+                );
+            },
+        )
+        .expect("bare field tile");
+    let total = world.query::<&Sprite>().iter(&world).count();
+    assert_eq!(total - with_fences, 1, "campo sin cercas solo dibuja suelo");
 }
 
 fn tile_template() -> Tile {

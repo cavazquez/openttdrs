@@ -3,6 +3,8 @@
 use bevy::prelude::Color;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
+#[path = "sprites/field_draw_data_generated.rs"]
+mod field_draw_data_generated;
 #[path = "sprites/foundation.rs"]
 mod foundation;
 #[path = "sprites/house_draw_data_generated.rs"]
@@ -13,8 +15,14 @@ mod industry;
 mod rail;
 #[path = "sprites/road.rs"]
 mod road;
+#[path = "sprites/shore_draw_data_generated.rs"]
+mod shore_draw_data_generated;
+#[path = "sprites/smoke_draw_data_generated.rs"]
+mod smoke_draw_data_generated;
 #[path = "sprites/station.rs"]
 pub(crate) mod station;
+#[path = "sprites/tree_draw_data_generated.rs"]
+mod tree_draw_data_generated;
 
 // ── Constantes de renderizado de carreteras y vías ───────────────────────────
 
@@ -130,6 +138,27 @@ pub struct HouseDrawSpec {
 /// `s1 = 0` → solo hierba base; sprites en `house_s{id}.png`.
 pub use house_draw_data_generated::HOUSE_DRAW_DATA;
 
+/// Árboles templados (`tree_land.h`): sprites, layout y metadatos NFO.
+/// Regenerar: `python3 scripts/gen_tree_draw_data.py`.
+pub use tree_draw_data_generated::{
+    TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY, TREE_SPRITE_COUNT, TREE_SPRITE_META,
+};
+
+/// Campos de cultivo y cercas (`clear_land.h`).
+/// Regenerar: `python3 scripts/gen_field_draw_data.py`.
+pub use field_draw_data_generated::{
+    FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE, FENCE_MOD_BY_TILEH_SW,
+    FENCE_SPRITE_META, FIELD_STATES,
+};
+
+/// Set completo de orillas (`SPR_SHORE_BASE + 0..17`, Action5 0x0D).
+/// Regenerar: `python3 scripts/gen_shore_full_set.py`.
+pub use shore_draw_data_generated::{SHORE_META, SHORE_SPRITE_COUNT, TILEH_TO_SHORE_SPRITE};
+
+/// Humo de chimenea de la central eléctrica (`SPR_CHIMNEY_SMOKE_0..7`).
+/// Regenerar: `python3 scripts/gen_chimney_smoke.py`.
+pub use smoke_draw_data_generated::{CHIMNEY_SMOKE_FRAMES, CHIMNEY_SMOKE_META};
+
 /// Devuelve el nombre de archivo (relativo a `assets/opengfx/tiles/`) para un sprite de casa.
 /// Usa el naming genérico `house_s{id}.png` para todos los sprites extraídos.
 pub fn house_sprite_filename(sprite_id: u32) -> String {
@@ -186,10 +215,14 @@ pub fn house_draw_data_index_for_tile(
     house_id * ROWS_PER_HOUSE + hash2 * 4 + stage
 }
 
-/// Aproximación de `TileHash2Bit` (0..3) para variante visual por tesela.
+/// `TileHash2Bit` de OpenTTD (`tile_map.h`) con coordenadas de mundo (×16):
+/// `hash = (x>>4) ^ (x>>6) ^ (y>>4) - (y>>6)` y se toman los 2 bits bajos.
+/// Con `x = 16·tx`: `hash = tx ^ (tx>>2) ^ ty − (ty>>2)`.
 #[must_use]
 pub fn tile_hash_2bit(tx: i32, ty: i32) -> usize {
-    ((tx.wrapping_mul(5787) + ty.wrapping_mul(3781)) & 3) as usize
+    let (x, y) = (tx.cast_unsigned(), ty.cast_unsigned());
+    let hash = (x ^ (x >> 2) ^ y).wrapping_sub(y >> 2);
+    (hash & 3) as usize
 }
 
 /// `RoadTileType::Crossing` en bits 6–7 de `m5` (`road_map.h`).
@@ -283,6 +316,15 @@ mod house_draw_index_tests {
         HOUSE_DRAW_DATA, ORIGINAL_HOUSE_COUNT, house_building_stage_from_tile,
         house_draw_data_index_for_tile, tile_hash_2bit,
     };
+
+    #[test]
+    fn tile_hash_2bit_matches_openttd_tilehash() {
+        // TileHash(16·tx, 16·ty) & 3 calculado a mano sobre la fórmula oficial.
+        assert_eq!(tile_hash_2bit(0, 0), 0);
+        assert_eq!(tile_hash_2bit(1, 0), 1);
+        assert_eq!(tile_hash_2bit(5, 2), 2); // (5 ^ 1 ^ 2) − 0 = 6 → 2
+        assert_eq!(tile_hash_2bit(7, 11), 3); // (7 ^ 1 ^ 11) − 2 = 11 → 3
+    }
 
     #[test]
     fn house_type_zero_uses_finished_stage_row() {

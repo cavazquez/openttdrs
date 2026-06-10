@@ -155,9 +155,8 @@ def industry_sprite_ids() -> set[int]:
 
 
 def house_sprite_filename(sprite_id: int) -> str:
-    if 0x4E4 <= sprite_id <= 0x93B:
-        return f"house_{sprite_id:04x}.png"
-    return f"house_{sprite_id}.png"
+    # Mismo naming que `house_sprite_filename` en crates/openttdrs-client/src/sprites.rs.
+    return f"house_s{sprite_id}.png"
 
 
 def collect_required_paths() -> list[tuple[str, str]]:
@@ -174,8 +173,8 @@ def collect_required_paths() -> list[tuple[str, str]]:
         add(f"assets/opengfx/tiles/terrain_rough_slope_{tileh:02}.png", "terrain_slope")
         add(f"assets/opengfx/tiles/foundation_{tileh:02}.png", "foundation")
     add("assets/opengfx/tiles/water.png", "water")
-    for i in range(8):
-        add(f"assets/opengfx/tiles/shore_{i}.png", "water")
+    for i in range(18):  # set completo SPR_SHORE_BASE (gen_shore_full_set.py)
+        add(f"assets/opengfx/tiles/shore_full_{i:02d}.png", "water")
     add("assets/opengfx/tiles/object_lighthouse.png", "object")
     add("assets/opengfx/tiles/object_transmitter.png", "object")
     for i in range(19):
@@ -205,8 +204,20 @@ def collect_required_paths() -> list[tuple[str, str]]:
         add(p, "transport_object")
     for sid in sorted(house_sprite_ids()):
         add(f"assets/opengfx/tiles/{house_sprite_filename(sid)}", "house")
-    for name in ("tree_00.png", "tree_07.png", "tree_14.png"):
-        add(f"assets/opengfx/tiles/{name}", "forest")
+    for i in range(133):  # 19 especies × 7 etapas (gen_tree_draw_data.py)
+        add(f"assets/opengfx/tiles/tree_{i:02d}.png", "forest")
+    for state in range(9):  # 9 estados × 19 pendientes (gen_field_draw_data.py)
+        for off in range(19):
+            add(f"assets/opengfx/tiles/field_{state}_{off:02d}.png", "fields")
+    for ftype in range(6):  # 6 tipos de cerca × 6 variantes
+        for var in range(6):
+            add(f"assets/opengfx/tiles/fence_{ftype}_{var}.png", "fields")
+    for f in range(15):  # frames del ciclo de paleta (gen_water_anim_frames.py)
+        add(f"assets/opengfx/tiles/water_anim_{f:02d}.png", "water")
+        for i in range(18):
+            add(f"assets/opengfx/tiles/shore_full_{i:02d}_anim_{f:02d}.png", "water")
+    for i in range(8):  # humo de chimenea (gen_chimney_smoke.py)
+        add(f"assets/opengfx/tiles/chimney_smoke_{i}.png", "industry")
     for iid in sorted(industry_sprite_ids()):
         add(f"assets/opengfx/tiles/industry_{iid}.png", "industry")
     return out

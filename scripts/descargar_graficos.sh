@@ -487,9 +487,8 @@ crop_by_id(4550, "terrain_snow_full.png")
 for tileh in range(1, 15):
     crop_by_id(989 + tileh, f"foundation_{tileh:02d}.png")
 crop_by_id(4061, "water_flat.png")             # SPR_FLAT_WATER_TILE
-# Costas originales (4062-4069)
-for i, sid in enumerate(range(4062, 4070)):
-    crop_by_id(sid, f"shore_{i}.png")
+# Costas: el set completo (SPR_SHORE_BASE + 0..17) vive en el GRF *extra*
+# (Action5 0x0D) y lo extrae scripts/gen_shore_full_set.py, no este NFO base.
 # Ship depot
 crop_by_id(4070, "ship_depot_se_front.png")
 crop_by_id(4071, "ship_depot_sw_front.png")
@@ -790,15 +789,9 @@ for sid, src_name in (
 # =============================================================================
 # ÁRBOLES (MP_TREES)
 # =============================================================================
-# Templado (muestras de diferentes tipos y etapas)
-tree_ids = [
-    1576, 1577, 1578, 1579, 1580, 1581, 1582, 1583,  # Tipo 1
-    1584, 1585, 1586, 1587, 1588, 1589,              # Tipo 2
-    1590, 1591, 1592, 1593, 1594, 1595, 1596,        # Tipo 3
-    1597, 1598, 1599, 1600, 1601, 1602, 1603,        # Tipo 4
-    1604, 1605, 1606, 1607, 1608, 1609, 1610,        # Tipo 5
-    1611, 1612, 1613, 1614, 1615, 1616, 1617,        # Tipo 6
-]
+# Templado completo: 19 especies × 7 etapas (SPR_TREES_BASE=1576..1708).
+# `_tree_layout_sprite` (tree_land.h) referencia las 19 especies.
+tree_ids = list(range(1576, 1709))
 for i, sid in enumerate(tree_ids):
     crop_by_id(sid, f"tree_{i:02d}.png")
 
@@ -882,6 +875,9 @@ crop_by_id(2552, "bridge_wood_x_pillar.png")
 # =============================================================================
 crop_by_id(2601, "object_transmitter.png")
 crop_by_id(2602, "object_lighthouse.png")
+# Humo de chimenea de la central eléctrica (SPR_CHIMNEY_SMOKE_0..7)
+for i, sid in enumerate(range(3701, 3709)):
+    crop_by_id(sid, f"chimney_smoke_{i}.png")
 # HQ Tiny
 for i, sid in enumerate(range(2603, 2607)):
     crop_by_id(sid, f"hq_tiny_{i}.png")

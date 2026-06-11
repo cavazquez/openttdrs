@@ -216,8 +216,9 @@ mod water_coast_height_tests {
     }
 
     #[test]
-    fn unsupported_raw_shore_slopes_fallback_to_infer() {
-        // raw=7 (WSE) no tiene sprite legacy directo; debe caer a inferencia.
+    fn three_corner_shore_slope_uses_its_own_sprite() {
+        // raw=7 (WSE) tiene sprite propio en el set completo (slot 7); no debe
+        // caer a inferencia ni alterarse por la altura efectiva (tierra a +1).
         let mut m = Map::new_flat(2, 2, 0);
         m.set_kind(TileCoord::new(0, 0), TileKind::Water).unwrap();
         m.set_height(TileCoord::new(0, 0), 0).unwrap(); // hnorth
@@ -227,7 +228,7 @@ mod water_coast_height_tests {
         m.set_height(TileCoord::new(0, 1), 1).unwrap(); // heast
         m.set_kind(TileCoord::new(1, 1), TileKind::Grass).unwrap();
         m.set_height(TileCoord::new(1, 1), 1).unwrap(); // hsouth => raw 7
-        assert_eq!(shore_tileh_for_draw_shore(&m, 0, 0, 2, 2), 3);
+        assert_eq!(shore_tileh_for_draw_shore(&m, 0, 0, 2, 2), 7);
     }
 
     #[test]

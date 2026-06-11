@@ -100,13 +100,16 @@ pub fn tile_slope_and_min_z(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
 /// Altura usada en una esquina del 2×2 de [`tile_slope_and_min_z`], análoga a
 /// [`GetTileSlopeZ`] / `TileHeight` en OpenTTD.
 ///
-/// Los exports `.ottdmap` a veces guardan **`height = 0`** en `MP_WATER` aunque el mar
-/// comparta nivel con la costa; si usamos ese valor literal, `min_h` cae y el suelo
-/// “cuelga” sobre el agua. Para **`Water`** y **`Void`** inferimos un nivel con el
-/// **mínimo** de `Tile.height` en teselas de **tierra** (no agua/void) en el
-/// vecindario de 8 celdas (incluye diagonales). Así en una **bahía** o esquina
-/// entrante las celdas de agua comparten el mismo “nivel de mar”; usar `max` daba
-/// alturas distintas por celda y pendientes/costas asimétricas con la hierba lindera.
+/// Algunos exports `.ottdmap` guardan **`height = 0`** en `MP_WATER` aunque la tierra
+/// lindera esté varios niveles más arriba ("costa hundida"); si usamos ese valor
+/// literal, `min_h` cae y el suelo “cuelga” sobre el agua. Para **`Water`** y
+/// **`Void`** inferimos un nivel con el **mínimo** de `Tile.height` en teselas de
+/// **tierra** en el vecindario de 8 celdas, pero **solo** si ese mínimo es ≥ 2:
+/// un escalón de 2+ niveles entre agua y toda la tierra vecina es imposible en un
+/// MAPH real (el mar comparte la esquina 0 con la costa), así que es la firma del
+/// export corrupto. En saves reales el mínimo vecino es 0 o 1 y se respeta el MAPH
+/// guardado — usar la inferencia ahí distorsionaba la pendiente de la mayoría de
+/// las teselas de costa (rombos dentados, orillas sin arena, sprites WE/NS espurios).
 #[inline]
 fn height_for_slope_corner_sample(map: &Map, cx: i32, cy: i32, mw: u32, mh: u32) -> u8 {
     if cx < 0 || cy < 0 {
@@ -181,7 +184,11 @@ pub(crate) fn water_void_effective_height_for_slope(
         }
         best = Some(best.map_or(nt.height, |b| b.min(nt.height)));
     }
-    best.unwrap_or(stored)
+    match best {
+        // Firma de export hundido: toda la tierra vecina ≥ 2 sobre el agua.
+        Some(b) if b >= 2 => b,
+        _ => stored,
+    }
 }
 
 #[must_use]

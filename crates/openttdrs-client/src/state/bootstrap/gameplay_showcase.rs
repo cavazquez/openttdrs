@@ -47,6 +47,13 @@ fn place_town_block(state: &mut GameState) {
         let _ = state.map.set_kind(c, TileKind::House);
         let _ = state.map.set_mapt_m5(c, 0x30, 0);
     }
+    // Entrada de ciudad: habilita el cartel y la ventana de pueblo del barrio.
+    state.towns.push(openttdrs_core::Town {
+        id: 1,
+        pos: TileCoord::new(17, 2),
+        name: "Villademo".to_string(),
+        population: 6 * 8,
+    });
     for x in 14..=22_i32 {
         let _ = apply_command(
             state,

@@ -10,6 +10,36 @@ use super::{industry, transport, vehicles};
 ///
 /// Ver variantes de [`CommandError`].
 pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), CommandError> {
+    let result = apply_command_inner(state, cmd);
+    // Editar el mapa invalida los caminos cacheados: un tren con ruta vieja
+    // seguiría cruzando vía recién desconectada. Se recalculan el próximo tick.
+    if result.is_ok() && command_modifies_map(cmd) {
+        invalidate_vehicle_paths(state);
+    }
+    result
+}
+
+const fn command_modifies_map(cmd: &Command) -> bool {
+    !matches!(
+        cmd,
+        Command::SetVehicleOrders(..)
+            | Command::SetVehicleStationOrders(..)
+            | Command::BuildRoadVehicleAtDepot(..)
+            | Command::BuildVehicleAtDepot(..)
+            | Command::SellVehicle(..)
+            | Command::ToggleVehicleRunning(..)
+            | Command::CloneVehicleOrders { .. }
+    )
+}
+
+fn invalidate_vehicle_paths(state: &mut GameState) {
+    for v in &mut state.vehicles {
+        v.path.clear();
+        v.no_network_route_to_order = false;
+    }
+}
+
+fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), CommandError> {
     match cmd {
         Command::PlaceRoad(c) => transport::place_road(state, *c),
         Command::PlaceRoadBits(c, bits) => transport::place_road_bits(state, *c, *bits),
@@ -85,8 +115,17 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
             transport::place_stop_kind(state, *c, *dir, StopKind::TruckStop)
         }
         Command::PlaceRailStation(c, dir) => transport::place_rail_station(state, *c, *dir),
+        Command::PlaceRailStationArea {
+            origin,
+            axis_y,
+            platforms,
+            length,
+        } => transport::place_rail_station_area(state, *origin, *axis_y, *platforms, *length),
         Command::BuildRoadVehicleAtDepot(c, kind) => {
             vehicles::build_road_vehicle_at_depot(state, *c, *kind)
+        }
+        Command::BuildVehicleAtDepot(c, engine_id) => {
+            vehicles::build_vehicle_at_depot(state, *c, *engine_id)
         }
         Command::SellVehicle(id) => vehicles::sell_vehicle(state, *id),
         Command::ToggleVehicleRunning(id) => vehicles::toggle_vehicle_running(state, *id),

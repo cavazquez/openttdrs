@@ -7,19 +7,25 @@ mod minimap;
 mod order_panel;
 mod orders_cursor;
 mod preview;
+mod rail_station_window;
 mod settings;
 mod station_panel;
 mod systems;
 
 pub(crate) use build_input::{handle_tile_click, update_cursor_tile};
 pub(crate) use depot_panel::{
-    DepotPanelState, handle_depot_panel_buttons, setup_depot_panel, sync_depot_panel,
+    DepotPanelState, depot_panel_on_closed, handle_depot_panel_buttons, setup_depot_panel,
+    sync_depot_panel,
 };
 pub(crate) use layout::setup_top_toolbar;
 pub(crate) use minimap::{handle_minimap_click, setup_minimap, sync_minimap};
 pub(crate) use order_panel::{handle_order_panel_buttons, setup_order_panel, sync_order_panel};
 pub(crate) use orders_cursor::sync_orders_pick_cursor;
 pub(crate) use preview::{rotate_station_with_right_click, update_build_ghost_preview};
+pub(crate) use rail_station_window::{
+    handle_rail_station_picker_buttons, rail_station_picker_on_closed, setup_rail_station_picker,
+    sync_rail_station_picker,
+};
 pub(crate) use settings::handle_settings_menu_buttons;
 pub(crate) use station_panel::{
     StationCargoPanelState, handle_station_cargo_panel_buttons, setup_station_cargo_panel,
@@ -114,9 +120,29 @@ pub(crate) struct UiToolState {
 }
 
 /// Estado especifico de la herramienta de estacion.
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub(crate) struct StationBuildState {
     pub(crate) orientation: u8,
+    /// Selección de estación de tren: eje de los andenes (ventana «Selección de estación»).
+    pub(crate) rail_axis_y: bool,
+    /// Número de andenes (1..=7).
+    pub(crate) rail_platforms: u8,
+    /// Longitud de andén (1..=7).
+    pub(crate) rail_length: u8,
+    /// Mostrar el halo de cobertura al previsualizar la estación de tren.
+    pub(crate) rail_show_coverage: bool,
+}
+
+impl Default for StationBuildState {
+    fn default() -> Self {
+        Self {
+            orientation: 0,
+            rail_axis_y: false,
+            rail_platforms: 1,
+            rail_length: 1,
+            rail_show_coverage: true,
+        }
+    }
 }
 
 #[derive(Resource, Default)]

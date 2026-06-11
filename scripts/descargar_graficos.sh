@@ -1012,6 +1012,12 @@ PYEOF
 
 echo "${GRAPHICS_MODE}" > "${DEST}/.graphics_mode"
 echo "Modo gráfico registrado en ${DEST}/.graphics_mode (${GRAPHICS_MODE})"
+
+# Rombo blanco de selección de teselas (fantasma de estaciones).
+python3 "$(dirname "$0")/gen_tile_select.py"
+
+# Texture atlas: empaqueta tiles/*.png en páginas + metadata Rust (batching).
+python3 "$(dirname "$0")/gen_tile_atlas.py"
 else
   echo ""
   echo "Hoja de sprites no disponible (faltan ${SPRITES_DIR}/${SHEET_PREFIX}00.(png|pcx|32.png) y/o hojas relacionadas)."

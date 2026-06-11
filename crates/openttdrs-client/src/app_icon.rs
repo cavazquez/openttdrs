@@ -42,7 +42,12 @@ impl Plugin for AppIconPlugin {
 }
 
 fn apply_window_icon(
+    // `WINIT_WINDOWS` es thread-local del hilo principal: sin este marker el
+    // sistema corre en el pool, ve la tabla vacía, nunca aplica el icono y
+    // re-decodifica el PNG (~50 ms) en *cada frame* (bug de 20 FPS).
+    _main_thread: bevy::ecs::system::NonSendMarker,
     mut applied: ResMut<AppIconApplied>,
+    mut cached_icon: Local<Option<Icon>>,
     icon_path: Res<AppIconPath>,
     primary: Query<Entity, With<PrimaryWindow>>,
     all_windows: Query<Entity, With<Window>>,
@@ -51,7 +56,10 @@ fn apply_window_icon(
         return;
     }
 
-    let Some(icon) = load_window_icon(&icon_path.0) else {
+    if cached_icon.is_none() {
+        *cached_icon = load_window_icon(&icon_path.0);
+    }
+    let Some(icon) = cached_icon.as_ref() else {
         warn!(
             "No se pudo cargar el icono de la aplicación desde {}",
             icon_path.0.display()

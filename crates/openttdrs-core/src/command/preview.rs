@@ -5,8 +5,8 @@ use crate::{GameState, IndustrySpec, StopKind};
 use super::industry::check_place_industry_spec;
 use super::transport::{
     check_bridge, check_clear_tile, check_place_rail, check_place_road_bits,
-    check_rail_depot_placement, check_road_depot_placement, check_single_transport_tile,
-    check_station_placement, check_tunnel,
+    check_rail_depot_placement, check_rail_station_area, check_road_depot_placement,
+    check_single_transport_tile, check_station_placement, check_tunnel, rail_station_footprint,
 };
 use super::types::{Command, CommandError};
 
@@ -68,6 +68,16 @@ pub fn command_would_fail(state: &GameState, cmd: &Command) -> Option<CommandErr
         Command::PlaceRailStation(c, dir) => {
             check_station_placement(map, stations, *c, *dir, StopKind::RailStation).err()
         }
+        Command::PlaceRailStationArea {
+            origin,
+            axis_y,
+            platforms,
+            length,
+        } => {
+            let (w, h) =
+                rail_station_footprint(*axis_y, (*platforms).clamp(1, 7), (*length).clamp(1, 7));
+            check_rail_station_area(state, *origin, w, h).err()
+        }
         Command::PlaceIndustry(c) => {
             check_place_industry_spec(map, *c, IndustrySpec::Factory).err()
         }
@@ -85,6 +95,7 @@ pub fn command_would_fail(state: &GameState, cmd: &Command) -> Option<CommandErr
         Command::SetVehicleOrders(..)
         | Command::SetVehicleStationOrders(..)
         | Command::BuildRoadVehicleAtDepot(..)
+        | Command::BuildVehicleAtDepot(..)
         | Command::SellVehicle(..)
         | Command::ToggleVehicleRunning(..)
         | Command::CloneVehicleOrders { .. } => None,

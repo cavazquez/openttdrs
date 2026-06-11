@@ -6,7 +6,7 @@ use crate::iso::overlay_pos;
 use crate::iso::{
     SLOPE_HALF_H, TILE_HALF_H, road_stop_build_sprite_center, tile_pos, tile_pos_half,
 };
-use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
+use crate::render::{AtlasSprite, MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     StationTileClass, rail_station_draw_layers, rail_station_ground_track_sprite,
     rail_station_overlay_rel, rail_station_sprite_meta, road_depot_build_layers,
@@ -26,7 +26,7 @@ pub(crate) fn spawn_station_tile(
     if tileh != 0 {
         spawn_ground_sprite(
             commands,
-            assets.grass_slopes[tileh as usize - 1].clone(),
+            &assets.grass_slopes[tileh as usize - 1],
             Color::WHITE,
             ctx,
             slope_half_ground,
@@ -51,17 +51,13 @@ pub(crate) fn spawn_station_tile(
         StationTileClass::Rail => {
             if tileh == 0 {
                 let grass = sloped_or_flat_image(0, &assets.grass, &assets.grass_slopes);
-                spawn_ground_sprite(commands, grass, Color::WHITE, ctx, slope_half_ground);
+                spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
             }
             let track_sid = rail_station_ground_track_sprite(m5, tileh);
             if let Some(img) = assets.rail.get(&track_sid) {
                 commands.spawn((
                     MapVisualLayer,
-                    Sprite {
-                        image: img.clone(),
-                        color: Color::srgb(0.88, 0.88, 0.97),
-                        ..default()
-                    },
+                    img.sprite_colored(Color::srgb(0.88, 0.88, 0.97)),
                     Transform::from_translation(tile_pos_half(
                         ctx.tx_i32(),
                         ctx.ty_i32(),
@@ -98,11 +94,7 @@ pub(crate) fn spawn_station_tile(
                 );
                 commands.spawn((
                     MapVisualLayer,
-                    Sprite {
-                        image: img.clone(),
-                        color: Color::WHITE,
-                        ..default()
-                    },
+                    img.sprite(),
                     Transform::from_translation(pos3),
                 ));
             }
@@ -110,7 +102,7 @@ pub(crate) fn spawn_station_tile(
         StationTileClass::Bus | StationTileClass::Truck => {
             if tileh == 0 {
                 let grass = sloped_or_flat_image(0, &assets.grass, &assets.grass_slopes);
-                spawn_ground_sprite(commands, grass, Color::WHITE, ctx, slope_half_ground);
+                spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
             }
             let stub = ctx.tile.map_or(0, |t| t.m3 & 0x0F);
             if stub != 0 {
@@ -130,7 +122,7 @@ pub(crate) fn spawn_station_tile(
                     .cloned()
                     .unwrap_or_else(|| assets.station_grounds[0].clone())
             };
-            spawn_stop_ground_sprite(commands, image, ctx, base_z, 0.04);
+            spawn_stop_ground_sprite(commands, &image, ctx, base_z, 0.04);
             spawn_road_stop_buildings(commands, assets, ctx, base_z, class, dir);
         }
         StationTileClass::Airport | StationTileClass::Other(_) => {
@@ -140,7 +132,7 @@ pub(crate) fn spawn_station_tile(
                 .get(dir)
                 .cloned()
                 .unwrap_or_else(|| assets.station_grounds[0].clone());
-            spawn_stop_ground_sprite(commands, image, ctx, base_z, 0.01);
+            spawn_stop_ground_sprite(commands, &image, ctx, base_z, 0.01);
         }
     }
 }
@@ -157,11 +149,7 @@ fn spawn_road_stop_link(
     let fi = road_flat_sprite_index(tileh, road_bits);
     commands.spawn((
         MapVisualLayer,
-        Sprite {
-            image: assets.road_flat[fi].clone(),
-            color: Color::WHITE,
-            ..default()
-        },
+        assets.road_flat[fi].sprite(),
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),
@@ -187,7 +175,7 @@ fn spawn_road_stop_buildings(
         _ => return,
     };
     for (layer_i, spec) in road_stop_build_layers(class, dir).iter().enumerate() {
-        let image = handles[dir][layer_i].clone();
+        let image = &handles[dir][layer_i];
         let scale = TILE_OVERLAP_SCALE;
         let center = road_stop_build_sprite_center(
             ctx.iso_pos,
@@ -201,11 +189,7 @@ fn spawn_road_stop_buildings(
         );
         commands.spawn((
             MapVisualLayer,
-            Sprite {
-                image,
-                color: Color::WHITE,
-                ..default()
-            },
+            image.sprite(),
             Transform::from_translation(center).with_scale(Vec3::new(scale, scale, 1.0)),
         ));
     }
@@ -213,18 +197,14 @@ fn spawn_road_stop_buildings(
 
 fn spawn_stop_ground_sprite(
     commands: &mut Commands,
-    image: Handle<Image>,
+    image: &AtlasSprite,
     ctx: &TileRenderContext,
     base_z: u8,
     layer: f32,
 ) {
     commands.spawn((
         MapVisualLayer,
-        Sprite {
-            image,
-            color: Color::WHITE,
-            ..default()
-        },
+        image.sprite(),
         Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), base_z, layer))
             .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
     ));
@@ -239,7 +219,7 @@ pub(crate) fn spawn_transport_object_tile(
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
     let ground = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
-    spawn_ground_sprite(commands, ground, Color::WHITE, ctx, slope_half_ground);
+    spawn_ground_sprite(commands, &ground, Color::WHITE, ctx, slope_half_ground);
 
     match ctx.kind {
         TileKind::RoadTunnel | TileKind::RailTunnel => {
@@ -258,11 +238,7 @@ pub(crate) fn spawn_transport_object_tile(
             };
             commands.spawn((
                 MapVisualLayer,
-                Sprite {
-                    image,
-                    color: Color::WHITE,
-                    ..default()
-                },
+                image.sprite(),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
@@ -281,29 +257,23 @@ pub(crate) fn spawn_transport_object_tile(
             spawn_road_depot_tile(commands, assets, ctx, base_z, TILE_HALF_H);
         }
         TileKind::RailDepot => {
-            spawn_object_sprite(
-                commands,
-                assets.rail_depot.clone(),
-                ctx,
-                base_z,
-                TILE_HALF_H,
-            );
+            spawn_rail_depot_tile(commands, assets, ctx, base_z, TILE_HALF_H);
         }
         TileKind::RoadBridge => {
             let axis_y = ctx.tile.is_some_and(|t| t.m5 & 0x10 != 0);
             let image = if axis_y {
-                assets.road_bridge_y.clone()
+                &assets.road_bridge_y
             } else {
-                assets.road_bridge.clone()
+                &assets.road_bridge
             };
             spawn_object_sprite(commands, image, ctx, base_z, TILE_HALF_H);
         }
         TileKind::RailBridge => {
             let axis_y = ctx.tile.is_some_and(|t| t.m5 & 0x10 != 0);
             let image = if axis_y {
-                assets.rail_bridge_y.clone()
+                &assets.rail_bridge_y
             } else {
-                assets.rail_bridge.clone()
+                &assets.rail_bridge
             };
             spawn_object_sprite(commands, image, ctx, base_z, TILE_HALF_H);
         }
@@ -321,11 +291,7 @@ fn spawn_road_depot_tile(
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
     commands.spawn((
         MapVisualLayer,
-        Sprite {
-            image: assets.road_depot_ground.clone(),
-            color: Color::WHITE,
-            ..default()
-        },
+        assets.road_depot_ground.sprite(),
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),
@@ -360,11 +326,62 @@ fn spawn_road_depot_tile(
         );
         commands.spawn((
             MapVisualLayer,
-            Sprite {
-                image: image.clone(),
-                color: Color::WHITE,
-                ..default()
-            },
+            image.sprite(),
+            Transform::from_translation(center).with_scale(Vec3::new(
+                TILE_OVERLAP_SCALE,
+                TILE_OVERLAP_SCALE,
+                1.0,
+            )),
+        ));
+    }
+}
+
+/// Depósito de vía según `_depot_gfx_table` (`track_land.h`): suelo de vía en
+/// SE/SW (la salida mira a cámara) y capas BUILD por dirección (`m5 & 3`).
+fn spawn_rail_depot_tile(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    half_h: f32,
+) {
+    let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
+    if let Some(track_id) = crate::sprites::RAIL_DEPOT_GROUND_TRACK[dir]
+        && let Some(image) = assets.rail.get(&track_id)
+    {
+        commands.spawn((
+            MapVisualLayer,
+            image.sprite(),
+            Transform::from_translation(tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                0.02,
+                half_h,
+            ))
+            .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+        ));
+    }
+    for (layer_i, spec) in crate::sprites::rail_depot_build_layers(dir)
+        .iter()
+        .enumerate()
+    {
+        let Some(image) = assets.rail_depot_builds[dir].get(layer_i) else {
+            continue;
+        };
+        let center = road_stop_build_sprite_center(
+            ctx.iso_pos,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            base_z,
+            spec.z,
+            road_depot_seq_gfx(spec),
+            spec.w,
+            spec.h,
+        );
+        commands.spawn((
+            MapVisualLayer,
+            image.sprite(),
             Transform::from_translation(center).with_scale(Vec3::new(
                 TILE_OVERLAP_SCALE,
                 TILE_OVERLAP_SCALE,
@@ -376,18 +393,14 @@ fn spawn_road_depot_tile(
 
 fn spawn_object_sprite(
     commands: &mut Commands,
-    image: Handle<Image>,
+    image: &AtlasSprite,
     ctx: &TileRenderContext,
     base_z: u8,
     half_h: f32,
 ) {
     commands.spawn((
         MapVisualLayer,
-        Sprite {
-            image,
-            color: Color::WHITE,
-            ..default()
-        },
+        image.sprite(),
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),

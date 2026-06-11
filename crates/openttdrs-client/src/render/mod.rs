@@ -1,6 +1,7 @@
 //! Tipos y helpers para construir la capa visual del mapa.
 
 mod assets;
+mod atlas;
 mod components;
 mod grid;
 mod smoke;
@@ -12,6 +13,7 @@ mod water;
 mod world;
 
 pub(crate) use assets::WorldAssets;
+pub(crate) use atlas::{AtlasSprite, TileAtlas};
 pub(crate) use components::{
     IndustryPreviewCamera, MapPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera,
     ShoreTile, VehiclePreviewCamera, WaterAnimFrames, WaterTile,
@@ -20,6 +22,8 @@ pub(crate) use grid::{RenderGrid, TileRenderContext};
 pub(crate) use smoke::{
     ChimneySmokeFrames, GFX_POWERPLANT_CHIMNEY, IndustrySmokePlugin, spawn_chimney_smoke,
 };
+pub(crate) use town_labels::town_id_at_label_pos;
+
 pub(crate) use tiles::{
     flush_map_batches, leveled_foundation_overlay_pos, push_forest_tree, push_water_tile,
     spawn_bridge_middle, spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile,

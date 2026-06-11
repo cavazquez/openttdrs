@@ -2,6 +2,7 @@ use std::sync::OnceLock;
 
 use openttdrs_core::{Map, TileCoord, TileKind};
 
+use super::road::RoadDepotLayerGfx;
 use crate::config;
 
 /// Subtipo de tesela ferroviaria en bits 6–7 de `m5` (`rail_map.h`).
@@ -83,6 +84,107 @@ pub const RAIL_SPRITE_IDS: [u32; 38] = [
 /// `SPR_RAIL_TRACK_Y_SNOW` / `SPR_RAIL_TRACK_X_SNOW` (OpenGFX).
 pub const RAIL_SPRITE_Y_SNOW: u32 = 1037;
 pub const RAIL_SPRITE_X_SNOW: u32 = 1038;
+
+/// Suelo del depósito de vía por dirección (`_depot_gfx_table`, `track_land.h`):
+/// NE/NW usan hierba (ya dibujada por el pase de terreno); SE usa `SPR_RAIL_TRACK_Y`
+/// (1011) y SW `SPR_RAIL_TRACK_X` (1012) para mostrar la vía de salida.
+pub const RAIL_DEPOT_GROUND_TRACK: [Option<u32>; 4] = [None, Some(1011), Some(1012), None];
+
+/// Capas BUILD del depósito de vía (`_depot_gfx_NE..NW` en `track_land.h`,
+/// sprites 1063–1068). Indexado por `m5 & 3`: 0=NE, 1=SE, 2=SW, 3=NW.
+///
+/// Los offsets ya vienen *horneados* respecto al vértice norte de la tesela:
+/// `x_offs = 2·(dy−dx) + x_offs_NFO` y `y_offs = (dx+dy) + y_offs_NFO`, con los
+/// `dx`/`dy` TILE_SEQ de `track_land.h` y los offsets del NFO de OpenGFX (la
+/// cadena `remap_tile_offset` del cliente usa el doble de escala que
+/// `RemapCoords`, así que se evita pasando `dx = dy = 0`).
+pub const RAIL_DEPOT_BUILD_LAYERS: [&[RoadDepotLayerGfx]; 4] = [
+    // NE: edificio único con la entrada hacia el noreste.
+    &[RoadDepotLayerGfx {
+        dx: 0.0,
+        dy: 0.0,
+        dz: 0.0,
+        z: 0.05,
+        w: 51.0,
+        h: 38.0,
+        x_offs: -22.0,
+        y_offs: -12.0,
+        remap_x_adj: 0.0,
+        path: "assets/opengfx/tiles/rail_depot_ne.png",
+    }],
+    // SE: tope del muro trasero + fachada frontal sobre la vía.
+    &[
+        RoadDepotLayerGfx {
+            dx: 0.0,
+            dy: 0.0,
+            dz: 0.0,
+            z: 0.05,
+            w: 10.0,
+            h: 9.0,
+            x_offs: 14.0,
+            y_offs: 8.0,
+            remap_x_adj: 0.0,
+            path: "assets/opengfx/tiles/rail_depot_se_1.png",
+        },
+        RoadDepotLayerGfx {
+            dx: 0.0,
+            dy: 0.0,
+            dz: 0.0,
+            z: 0.06,
+            w: 51.0,
+            h: 38.0,
+            x_offs: -23.0,
+            y_offs: -11.0,
+            remap_x_adj: 0.0,
+            path: "assets/opengfx/tiles/rail_depot_se_2.png",
+        },
+    ],
+    // SW: tope del muro trasero + fachada frontal sobre la vía.
+    &[
+        RoadDepotLayerGfx {
+            dx: 0.0,
+            dy: 0.0,
+            dz: 0.0,
+            z: 0.05,
+            w: 10.0,
+            h: 9.0,
+            x_offs: -20.0,
+            y_offs: 8.0,
+            remap_x_adj: 0.0,
+            path: "assets/opengfx/tiles/rail_depot_sw_1.png",
+        },
+        RoadDepotLayerGfx {
+            dx: 0.0,
+            dy: 0.0,
+            dz: 0.0,
+            z: 0.06,
+            w: 51.0,
+            h: 38.0,
+            x_offs: -24.0,
+            y_offs: -11.0,
+            remap_x_adj: 0.0,
+            path: "assets/opengfx/tiles/rail_depot_sw_2.png",
+        },
+    ],
+    // NW: edificio único con la entrada hacia el noroeste.
+    &[RoadDepotLayerGfx {
+        dx: 0.0,
+        dy: 0.0,
+        dz: 0.0,
+        z: 0.05,
+        w: 51.0,
+        h: 38.0,
+        x_offs: -25.0,
+        y_offs: -12.0,
+        remap_x_adj: 0.0,
+        path: "assets/opengfx/tiles/rail_depot_nw.png",
+    }],
+];
+
+#[must_use]
+pub fn rail_depot_build_layers(dir: usize) -> &'static [RoadDepotLayerGfx] {
+    RAIL_DEPOT_BUILD_LAYERS[dir.min(3)]
+}
 
 /// Sprites de señal que la fórmula puede calcular pero el NFO recortado de OpenGFX no exporta (SP3.0 audit).
 pub const SIGNAL_SPRITE_OPENGFX_GAPS: &[u32] = &[1438, 1439, 1530, 1532, 1540, 1542, 1546, 1548];
@@ -409,6 +511,24 @@ fn junction_ground_off(tb: u8) -> u8 {
         return 3;
     }
     4
+}
+
+/// Sprites para el realce blanco del autorraíl (fantasma de construcción):
+/// solo rieles (overlays 1005–1010, una pieza por trackbit), sin balasto ni
+/// suelo, como `SPR_AUTORAIL_*` de OpenTTD. En pendiente usa la pieza inclinada.
+pub fn collect_rail_ghost_sprites(tb: u8, tileh: u8, out: &mut Vec<u32>) {
+    out.clear();
+    let t = tb & 0x3F;
+    if t == 0 {
+        return;
+    }
+    if tileh != 0 {
+        if let Some(sid) = rail_sloped_track_sprite_id(tileh, false) {
+            out.push(sid);
+        }
+        return;
+    }
+    push_rail_junction_overlays(t, out);
 }
 
 /// Lista de sprites `OpenGFX` en orden de pintado (suelo de cruce y superposiciones).

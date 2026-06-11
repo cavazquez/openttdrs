@@ -23,8 +23,15 @@ mod shore_draw_data_generated;
 mod smoke_draw_data_generated;
 #[path = "sprites/station.rs"]
 pub(crate) mod station;
+#[path = "sprites/tile_atlas_generated.rs"]
+mod tile_atlas_generated;
 #[path = "sprites/tree_draw_data_generated.rs"]
 mod tree_draw_data_generated;
+
+pub(crate) use tile_atlas_generated::{
+    TILE_ATLAS_NAMES, TILE_ATLAS_PAGE_COUNT, TILE_ATLAS_PAGE_RANGES, TILE_ATLAS_PAGE_SIZES,
+    TILE_ATLAS_RECTS,
+};
 
 // ── Constantes de renderizado de carreteras y vías ───────────────────────────
 
@@ -101,10 +108,11 @@ pub use industry::{
 };
 #[allow(unused_imports)]
 pub use rail::{
-    RAIL_SPRITE_IDS, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT,
-    RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, RAIL_TILE_DEPOT, RAIL_TILE_NORMAL,
-    RAIL_TILE_SIGNALS, collect_rail_sprites, collect_signal_sprite_ids,
-    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_signal_present_mask,
+    RAIL_DEPOT_GROUND_TRACK, RAIL_SPRITE_IDS, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT,
+    RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y,
+    RAIL_TILE_DEPOT, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, collect_rail_ghost_sprites,
+    collect_rail_sprites, collect_signal_sprite_ids, level_crossing_has_rail_reservation,
+    level_crossing_rail_sprite_id, rail_depot_build_layers, rail_signal_present_mask,
     rail_signal_state_mask, rail_sprite_ids_for_preload, rail_tile_is_signals, signal_sprite_bases,
     signal_sprite_ids_for_preload,
 };

@@ -24,7 +24,7 @@ pub(crate) fn spawn_house_tile(
     // GetCleanHouseType: GB(m8, 0, 12) — el resto es datos NewGRF
     let clean_house_id = ctx.tile.map_or(0u16, |t| t.m8 & 0xFFF);
     let house_base = sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
-    spawn_ground_sprite(commands, house_base, Color::WHITE, ctx, slope_half_ground);
+    spawn_ground_sprite(commands, &house_base, Color::WHITE, ctx, slope_half_ground);
     let (m5, m3) = ctx.tile.map_or((0u8, 0x80u8), |t| (t.m5, t.m3));
     let building_stage = house_building_stage_from_tile(m5, m3);
     let spec_idx =
@@ -46,11 +46,7 @@ pub(crate) fn spawn_house_tile(
         );
         commands.spawn((
             MapVisualLayer,
-            Sprite {
-                image: img.clone(),
-                color: Color::WHITE,
-                ..default()
-            },
+            img.sprite(),
             Transform::from_translation(pos3),
         ));
     }
@@ -70,11 +66,7 @@ pub(crate) fn spawn_house_tile(
         );
         commands.spawn((
             MapVisualLayer,
-            Sprite {
-                image: img.clone(),
-                color: Color::WHITE,
-                ..default()
-            },
+            img.sprite(),
             Transform::from_translation(pos3),
         ));
     }
@@ -103,7 +95,13 @@ pub(crate) fn spawn_industry_tile(
     // Terreno natural bajo la industria; en pendiente se añade cimiento nivelado (P4).
     let terrain_img = sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
     let terrain_color = Color::srgb(0.55, 0.50, 0.45);
-    spawn_ground_sprite(commands, terrain_img, terrain_color, ctx, slope_half_ground);
+    spawn_ground_sprite(
+        commands,
+        &terrain_img,
+        terrain_color,
+        ctx,
+        slope_half_ground,
+    );
     let leveled = tileh != 0;
     if leveled {
         spawn_leveled_foundation(commands, assets, ctx, tileh);
@@ -149,11 +147,7 @@ pub(crate) fn spawn_industry_tile(
             let pos_g = overlay_at(s.ground_xrel, s.ground_yrel, s.ground_w, s.ground_h, 0.45);
             commands.spawn((
                 MapVisualLayer,
-                Sprite {
-                    image: img.clone(),
-                    color: Color::WHITE,
-                    ..default()
-                },
+                img.sprite(),
                 Transform::from_translation(pos_g),
             ));
         }
@@ -165,11 +159,7 @@ pub(crate) fn spawn_industry_tile(
             let pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
             commands.spawn((
                 MapVisualLayer,
-                Sprite {
-                    image: img.clone(),
-                    color: Color::WHITE,
-                    ..default()
-                },
+                img.sprite(),
                 Transform::from_translation(pos3),
             ));
         }
@@ -228,7 +218,7 @@ pub(crate) fn spawn_generic_land_tile(
         | TileKind::Water
         | TileKind::Void => unreachable!(),
     };
-    spawn_ground_sprite(commands, image, color, ctx, slope_half_ground);
+    spawn_ground_sprite(commands, &image, color, ctx, slope_half_ground);
 
     // MP_OBJECT: renderizar faro o transmisor como overlay.
     // ObjectType de OpenTTD: 0=Transmisor, 1=Faro.
@@ -254,11 +244,7 @@ pub(crate) fn spawn_generic_land_tile(
             );
             commands.spawn((
                 MapVisualLayer,
-                Sprite {
-                    image: img,
-                    color: Color::WHITE,
-                    ..default()
-                },
+                img.sprite(),
                 Transform::from_translation(pos3),
             ));
         }
@@ -336,11 +322,7 @@ fn spawn_field_fences(commands: &mut Commands, assets: &WorldAssets, ctx: &TileR
         );
         commands.spawn((
             MapVisualLayer,
-            Sprite {
-                image: assets.fences[ftype * 6 + variant].clone(),
-                color: Color::WHITE,
-                ..default()
-            },
+            assets.fences[ftype * 6 + variant].sprite(),
             Transform::from_translation(pos3),
         ));
     }
@@ -397,10 +379,7 @@ pub(crate) fn push_forest_tree(
             ctx.ty_i32(),
         );
         batches.trees.push((
-            Sprite {
-                image: assets.trees[sprite_idx].clone(),
-                ..default()
-            },
+            assets.trees[sprite_idx].sprite(),
             Transform::from_translation(pos3),
         ));
     }

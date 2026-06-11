@@ -280,6 +280,8 @@ mod tests {
         world.insert_resource(StationCargoPanelState::default());
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(IndustryPanelState::default());
+        world.insert_resource(crate::ui::town_window::TownWindowState::default());
+        world.insert_resource(crate::ui::vehicle_window::VehicleWindowState::default());
         world.insert_resource(HudBuildFeedback::default());
         world.insert_resource(Time::<()>::default());
         world.run_system_once(handle_tile_click).unwrap();
@@ -314,7 +316,10 @@ mod tests {
             command_for_action(
                 BuildMenuAction::Station,
                 TileCoord::new(1, 2),
-                &StationBuildState { orientation: 3 }
+                &StationBuildState {
+                    orientation: 3,
+                    ..Default::default()
+                }
             ),
             Some(Command::PlaceStationDir(_, 3))
         ));
@@ -322,7 +327,10 @@ mod tests {
             command_for_action(
                 BuildMenuAction::RoadDepot,
                 TileCoord::new(1, 2),
-                &StationBuildState { orientation: 2 }
+                &StationBuildState {
+                    orientation: 2,
+                    ..Default::default()
+                }
             ),
             Some(Command::PlaceRoadDepotDir(_, 2))
         ));

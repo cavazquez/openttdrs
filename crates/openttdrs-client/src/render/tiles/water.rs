@@ -28,11 +28,7 @@ pub(crate) fn push_water_tile(
             // solo fuera de él.
             batches.shore.push((
                 crate::render::ShoreTile(si as u8),
-                Sprite {
-                    image: assets.shore[si].clone(),
-                    color: Color::WHITE,
-                    ..default()
-                },
+                assets.shore[si].sprite(),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),

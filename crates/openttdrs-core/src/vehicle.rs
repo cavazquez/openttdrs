@@ -64,6 +64,7 @@ impl VehicleOrder {
 /// Si no hay camino calculado (`path` vacío y `pos != dest`) usa movimiento Manhattan
 /// como fallback solo cuando **no hay órdenes** (vehículo libre / tests unitarios sin `GameState`).
 /// Con órdenes activas, si no hay ruta por red (`no_network_route_to_order`) el vehículo no avanza.
+/// Los trenes nunca usan el fallback Manhattan: sin ruta por vía no se mueven.
 /// Al llegar invierte el trayecto (va y vuelve entre `origin` y `dest`).
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Vehicle {
@@ -258,6 +259,10 @@ impl Vehicle {
         if self.pos == self.dest {
             return None;
         }
+        // Un tren nunca avanza fuera de la vía: sin camino por red no se mueve.
+        if self.kind == VehicleKind::Train {
+            return None;
+        }
         if !self.orders.is_empty() && self.no_network_route_to_order {
             return None;
         }
@@ -361,7 +366,9 @@ impl Vehicle {
         } else if self.pos == self.dest {
             self.advance_destination_after_arrival();
         } else {
-            if !self.orders.is_empty() && self.no_network_route_to_order {
+            if self.kind == VehicleKind::Train
+                || (!self.orders.is_empty() && self.no_network_route_to_order)
+            {
                 return;
             }
             let dx = self.dest.x - self.pos.x;
@@ -641,6 +648,40 @@ mod tests {
         );
         truck.cargo = VEHICLE_CAPACITY / 2;
         assert!(truck.uses_loaded_road_sprite());
+    }
+
+    #[test]
+    fn train_without_path_never_walks_off_rail() {
+        // Tren sin órdenes con destino lejano y sin camino por red: no debe
+        // avanzar en Manhattan (caminar por el pasto hasta el depósito).
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(4, 14),
+            TileCoord::new(10, 14),
+        );
+        v.set_cruise_speed();
+        for _ in 0..200 {
+            v.step();
+        }
+        assert_eq!(
+            v.pos,
+            TileCoord::new(4, 14),
+            "el tren no debe salir de la vía"
+        );
+
+        // Un camión libre (sin órdenes) conserva el fallback Manhattan.
+        let mut truck = Vehicle::new(
+            1,
+            VehicleKind::Truck,
+            TileCoord::new(4, 14),
+            TileCoord::new(10, 14),
+        );
+        truck.set_cruise_speed();
+        for _ in 0..200 {
+            truck.step();
+        }
+        assert_ne!(truck.pos, TileCoord::new(4, 14));
     }
 
     #[test]

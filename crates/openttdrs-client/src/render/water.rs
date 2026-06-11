@@ -38,6 +38,8 @@ pub(crate) fn water_frame_index(elapsed_secs: f32) -> usize {
 
 /// Intercambia los sprites de agua/orilla al frame del ciclo actual.
 /// Solo escribe cuando el frame global cambia (~6–7 veces por segundo).
+/// Los frames viven en el mismo atlas, así que el cambio es de índice de
+/// rect (no de textura) y no rompe el batching.
 pub(crate) fn animate_water(
     time: Res<Time>,
     frames: Option<Res<WaterAnimFrames>>,
@@ -54,11 +56,11 @@ pub(crate) fn animate_water(
     }
     *last_frame = Some(idx);
     for mut sprite in &mut water_q {
-        sprite.image = frames.water[idx].clone();
+        frames.water[idx].apply_to(&mut sprite);
     }
     for (shore, mut sprite) in &mut shore_q {
         if let Some(shore_set) = frames.shore.get(usize::from(shore.0)) {
-            sprite.image = shore_set[idx].clone();
+            shore_set[idx].apply_to(&mut sprite);
         }
     }
 }
@@ -69,21 +71,31 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
 
     use super::*;
+    use crate::render::AtlasSprite;
 
-    fn weak_handle(n: u128) -> Handle<Image> {
-        Handle::Uuid(
-            bevy::asset::uuid::Uuid::from_u128(n),
-            std::marker::PhantomData,
-        )
+    fn weak_sprite(n: u128) -> AtlasSprite {
+        AtlasSprite {
+            image: Handle::Uuid(
+                bevy::asset::uuid::Uuid::from_u128(1),
+                std::marker::PhantomData,
+            ),
+            atlas: TextureAtlas {
+                layout: Handle::Uuid(
+                    bevy::asset::uuid::Uuid::from_u128(2),
+                    std::marker::PhantomData,
+                ),
+                index: n as usize,
+            },
+        }
     }
 
     fn frames_resource() -> WaterAnimFrames {
         WaterAnimFrames {
-            water: (0..WATER_FRAME_COUNT as u128).map(weak_handle).collect(),
+            water: (0..WATER_FRAME_COUNT as u128).map(weak_sprite).collect(),
             shore: (0..18u128)
                 .map(|i| {
                     (0..WATER_FRAME_COUNT as u128)
-                        .map(|f| weak_handle(2000 + i * 100 + f))
+                        .map(|f| weak_sprite(2000 + i * 100 + f))
                         .collect()
                 })
                 .collect(),
@@ -113,8 +125,8 @@ mod tests {
         let expected_idx = water_frame_index(0.4);
         let expected_water = frames.water[expected_idx].clone();
         let expected_shore = frames.shore[3][expected_idx].clone();
-        assert_eq!(world.get::<Sprite>(water).unwrap().image, expected_water);
-        assert_eq!(world.get::<Sprite>(shore).unwrap().image, expected_shore);
+        assert!(expected_water.matches(world.get::<Sprite>(water).unwrap()));
+        assert!(expected_shore.matches(world.get::<Sprite>(shore).unwrap()));
     }
 
     #[test]

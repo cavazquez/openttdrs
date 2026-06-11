@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use openttdrs_core::{Map, Tile, TileCoord, TileKind};
 
 use crate::iso::{HEIGHT_PX, remap_tile_offset, tile_slope_and_min_z};
-use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
+use crate::render::{AtlasSprite, MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     BRIDGE_WOOD_FRONT_META, BRIDGE_WOOD_PILLAR_META, BRIDGE_WOOD_REAR_RAIL_META,
     BRIDGE_WOOD_REAR_ROAD_META,
@@ -131,17 +131,17 @@ pub(crate) fn spawn_bridge_middle(
     };
 
     let deck_image = match (rail, axis) {
-        (false, 0) => assets.road_bridge.clone(),
-        (false, 1) => assets.road_bridge_y.clone(),
-        (true, 0) => assets.rail_bridge.clone(),
-        (true, 1) => assets.rail_bridge_y.clone(),
+        (false, 0) => &assets.road_bridge,
+        (false, 1) => &assets.road_bridge_y,
+        (true, 0) => &assets.rail_bridge,
+        (true, 1) => &assets.rail_bridge_y,
         _ => unreachable!(),
     };
 
     // Posición tipo `AddSortableSpriteToDraw`: esquina norte de la tesela +
     // desplazamiento de mundo + offsets NFO; `z_px` sube la pantalla 1:1.
     let spawn = |commands: &mut Commands,
-                 image: Handle<Image>,
+                 image: &AtlasSprite,
                  meta: (f32, f32, f32, f32),
                  shift: Vec2,
                  z_px: f32,
@@ -154,11 +154,7 @@ pub(crate) fn spawn_bridge_middle(
         );
         commands.spawn((
             MapVisualLayer,
-            Sprite {
-                image,
-                color: Color::WHITE,
-                ..default()
-            },
+            image.sprite(),
             Transform::from_translation(pos),
         ));
     };
@@ -193,7 +189,7 @@ pub(crate) fn spawn_bridge_middle(
     );
     spawn(
         commands,
-        assets.bridge_front[axis].clone(),
+        &assets.bridge_front[axis],
         BRIDGE_WOOD_FRONT_META[axis],
         front_shift,
         z_draw_px,
@@ -211,7 +207,7 @@ pub(crate) fn spawn_bridge_middle(
         while cur_z >= front_ground_px {
             spawn(
                 commands,
-                assets.bridge_pillar[axis].clone(),
+                &assets.bridge_pillar[axis],
                 pillar_meta,
                 front_shift,
                 cur_z,
@@ -225,7 +221,7 @@ pub(crate) fn spawn_bridge_middle(
             while cur_z >= back_ground_px {
                 spawn(
                     commands,
-                    assets.bridge_pillar[axis].clone(),
+                    &assets.bridge_pillar[axis],
                     pillar_meta,
                     back_shift,
                     cur_z,

@@ -46,20 +46,40 @@ pub(super) fn set_vehicle_station_orders(
     Ok(())
 }
 
+/// Comando viejo: compra el motor por defecto del tipo (solo depósito de carretera).
 pub(super) fn build_road_vehicle_at_depot(
     state: &mut GameState,
     depot_pos: TileCoord,
     kind: VehicleKind,
 ) -> Result<(), CommandError> {
+    if matches!(kind, VehicleKind::Train) {
+        return Err(CommandError::VehicleKindNotAllowed);
+    }
+    build_vehicle_at_depot(state, depot_pos, crate::engine::default_engine_id(kind))
+}
+
+/// Compra el modelo `engine_id` en un depósito compatible, validando fondos.
+pub(super) fn build_vehicle_at_depot(
+    state: &mut GameState,
+    depot_pos: TileCoord,
+    engine_id: u16,
+) -> Result<(), CommandError> {
     in_bounds(&state.map, depot_pos)?;
     let Some(tile) = state.map.get(depot_pos) else {
         return Err(CommandError::OutOfBounds);
     };
-    if tile.kind != TileKind::RoadDepot {
+    let Some(engine) = crate::engine::engine_by_id(engine_id) else {
+        return Err(CommandError::EngineNotFound);
+    };
+    let depot_ok = match engine.kind {
+        VehicleKind::Bus | VehicleKind::Truck => tile.kind == TileKind::RoadDepot,
+        VehicleKind::Train => tile.kind == TileKind::RailDepot,
+    };
+    if !depot_ok {
         return Err(CommandError::InvalidDepotTile);
     }
-    if matches!(kind, VehicleKind::Train) {
-        return Err(CommandError::VehicleKindNotAllowed);
+    if state.economy.money < engine.price {
+        return Err(CommandError::InsufficientFunds);
     }
     let next_id = state
         .vehicles
@@ -67,11 +87,16 @@ pub(super) fn build_road_vehicle_at_depot(
         .map(|v| v.id)
         .max()
         .map_or(1, |v| v.saturating_add(1));
-    let cost = crate::economy::vehicle_purchase_cost(kind);
-    let mut vehicle = Vehicle::new(next_id, kind, depot_pos, depot_pos);
+    let mut vehicle = Vehicle::new(next_id, engine.kind, depot_pos, depot_pos);
     vehicle.running = false;
+    vehicle.engine_id = Some(engine.id);
+    // Locomotoras sin capacidad propia: hasta que existan vagones, conservan
+    // la capacidad genérica para que el transporte siga funcionando.
+    if engine.capacity > 0 {
+        vehicle.capacity = engine.capacity;
+    }
     state.vehicles.push(vehicle);
-    state.economy.money -= cost;
+    state.economy.money -= engine.price;
     Ok(())
 }
 

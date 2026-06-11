@@ -190,6 +190,152 @@ fn place_station_dir_rejects_entrance_away_from_road() {
 }
 
 #[test]
+fn place_rail_station_area_writes_layout_and_anchors_center() {
+    let mut s = GameState::new(16, 16);
+    let origin = TileCoord::new(3, 4);
+    let money_before = s.economy.money;
+    // Eje X, 3 andenes, longitud 5 → huella 5×3.
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin,
+            axis_y: false,
+            platforms: 3,
+            length: 5,
+        },
+    )
+    .unwrap();
+    for dy in 0..3 {
+        for dx in 0..5 {
+            let t = s.map.get(TileCoord::new(3 + dx, 4 + dy)).unwrap();
+            assert_eq!(t.kind, TileKind::Station, "tesela ({dx},{dy}) de la huella");
+            assert_eq!((t.m6 >> 3) & 0x0F, 0, "tipo rail en m6");
+            assert!(t.m5.is_multiple_of(2), "eje X → gfx par");
+        }
+    }
+    // Layout estándar: andén impar primero (edificio al centro), luego par techado.
+    assert_eq!(s.map.get(TileCoord::new(5, 4)).unwrap().m5, 2, "edificio");
+    // Con longitud > 4 los extremos del andén techado quedan planos (gfx 0).
+    assert_eq!(s.map.get(TileCoord::new(3, 5)).unwrap().m5, 0, "extremo");
+    assert_eq!(s.map.get(TileCoord::new(4, 5)).unwrap().m5, 4, "techo NW");
+    assert_eq!(s.map.get(TileCoord::new(4, 6)).unwrap().m5, 6, "techo SE");
+    assert_eq!(s.stations.len(), 1, "una sola estación para toda la huella");
+    assert_eq!(s.stations[0].pos, TileCoord::new(5, 5), "ancla al centro");
+    assert_eq!(s.economy.money, money_before - 15 * STATION_BUILD_COST);
+}
+
+#[test]
+fn place_rail_station_area_axis_y_uses_odd_gfx() {
+    let mut s = GameState::new(16, 16);
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(2, 2),
+            axis_y: true,
+            platforms: 1,
+            length: 3,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.map.get(TileCoord::new(2, 2)).unwrap().m5, 1, "plano Y");
+    assert_eq!(s.map.get(TileCoord::new(2, 3)).unwrap().m5, 3, "edificio Y");
+    assert_eq!(s.map.get(TileCoord::new(2, 4)).unwrap().m5, 1);
+    assert_eq!(s.stations[0].pos, TileCoord::new(2, 3));
+}
+
+#[test]
+fn place_rail_station_area_rejects_occupied_and_out_of_bounds() {
+    let mut s = GameState::new(8, 8);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(4, 2))).unwrap();
+    let e = apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(2, 2),
+            axis_y: false,
+            platforms: 2,
+            length: 4,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(e, CommandError::CannotPlaceStationOnOccupiedTile);
+    assert!(s.stations.is_empty());
+
+    let e = apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(6, 6),
+            axis_y: false,
+            platforms: 2,
+            length: 4,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(e, CommandError::OutOfBounds);
+}
+
+#[test]
+fn train_paths_to_track_at_platform_end_of_long_station() {
+    use crate::{PathNetwork, find_path, rail_station_approach_tile};
+    let mut s = GameState::new(20, 20);
+    // Estación eje X de longitud 5 en y=5, andén único: x 4..=8.
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(4, 5),
+            axis_y: false,
+            platforms: 1,
+            length: 5,
+        },
+    )
+    .unwrap();
+    // Vía pegada al extremo SW del andén y tramo hasta (12,5).
+    for x in 9..=12 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 5))).unwrap();
+    }
+    let anchor = s.stations[0].pos;
+    assert_eq!(anchor, TileCoord::new(6, 5));
+    let approach = rail_station_approach_tile(&s.map, anchor).unwrap();
+    assert_eq!(approach, TileCoord::new(9, 5), "vía junto al extremo");
+    let path = find_path(&s.map, TileCoord::new(12, 5), approach, PathNetwork::Rail).unwrap();
+    assert_eq!(path.last(), Some(&approach));
+}
+
+#[test]
+fn rail_path_traverses_station_platform_along_axis() {
+    use crate::{PathNetwork, find_path};
+    let mut s = GameState::new(20, 20);
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(6, 5),
+            axis_y: false,
+            platforms: 1,
+            length: 3,
+        },
+    )
+    .unwrap();
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(5, 5))).unwrap();
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(9, 5))).unwrap();
+    // El andén actúa como vía X: se puede cruzar de un lado al otro.
+    let path = find_path(
+        &s.map,
+        TileCoord::new(5, 5),
+        TileCoord::new(9, 5),
+        PathNetwork::Rail,
+    )
+    .unwrap();
+    assert_eq!(
+        path,
+        vec![
+            TileCoord::new(6, 5),
+            TileCoord::new(7, 5),
+            TileCoord::new(8, 5),
+            TileCoord::new(9, 5)
+        ]
+    );
+}
+
+#[test]
 fn place_rail_station_rejects_entrance_away_from_rail() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(2, 2);
@@ -340,6 +486,48 @@ fn set_rail_bits_places_horz_and_vert() {
     assert_eq!(s.map.get_kind(TileCoord::new(2, 2)), Some(TileKind::Rail));
     assert_eq!(s.map.get(TileCoord::new(2, 2)).unwrap().m5 & 0x3F, 0x0C);
     assert_eq!(s.map.get(TileCoord::new(4, 2)).unwrap().m5 & 0x3F, 0x30);
+}
+
+#[test]
+fn autorail_crossing_two_lines_yields_clean_x_y_cross() {
+    use crate::{PathNetwork, find_path};
+
+    let mut s = GameState::new(9, 9);
+    // Recta X (y=4) y recta Y (x=4) que se cruzan en (4,4).
+    for x in 2..=6_i32 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+    }
+    for y in 2..=6_i32 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(4, y))).unwrap();
+    }
+    let mid = s.map.get(TileCoord::new(4, 4)).unwrap();
+    assert_eq!(
+        mid.m5 & 0x3F,
+        0x03,
+        "intersección de dos rectas = cruce X|Y sin curvas: m5={:#04x}",
+        mid.m5
+    );
+    // Sin pieza de giro: un tren que viene por X no puede doblar hacia Y.
+    assert!(
+        find_path(
+            &s.map,
+            TileCoord::new(2, 4),
+            TileCoord::new(6, 4),
+            PathNetwork::Rail
+        )
+        .is_some(),
+        "recta X pasa por la diagonal"
+    );
+    assert!(
+        find_path(
+            &s.map,
+            TileCoord::new(2, 4),
+            TileCoord::new(4, 6),
+            PathNetwork::Rail
+        )
+        .is_none(),
+        "sin curva no se puede doblar en el cruce"
+    );
 }
 
 #[test]
@@ -608,7 +796,7 @@ fn sell_vehicle_in_road_depot_succeeds() {
 
 #[test]
 fn every_command_error_has_user_message() {
-    const ERRORS: [CommandError; 18] = [
+    const ERRORS: [CommandError; 20] = [
         CommandError::OutOfBounds,
         CommandError::CannotPlaceRoadOnWater,
         CommandError::CannotPlaceRoadOnVoid,
@@ -624,6 +812,8 @@ fn every_command_error_has_user_message() {
         CommandError::VehicleNotInDepot,
         CommandError::InvalidDepotTile,
         CommandError::VehicleKindNotAllowed,
+        CommandError::EngineNotFound,
+        CommandError::InsufficientFunds,
         CommandError::IncompatibleStopForVehicle,
         CommandError::InvalidTunnelEndpoints,
         CommandError::InvalidBridgeSpan,
@@ -636,4 +826,184 @@ fn every_command_error_has_user_message() {
             "mensaje sin letras para {err:?}: {msg}"
         );
     }
+}
+
+#[test]
+fn rail_depot_beside_x_line_connects_exit_tile() {
+    use crate::pathfinder::{PathNetwork, find_path};
+
+    let mut s = GameState::new(12, 12);
+    // Línea recta en eje X (y=4) y depósito al sur con la boca hacia la vía (NW).
+    for x in 2..=8_i32 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+    }
+    let depot = TileCoord::new(5, 5);
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+
+    // La tesela de salida gana las curvas de empalme hacia la boca del depósito:
+    // X (recta NE↔SW) + LOWER (SE↔SW) + RIGHT (NE↔SE) = 0x29.
+    let exit = s.map.get(TileCoord::new(5, 4)).unwrap();
+    assert_eq!(
+        exit.m5 & 0x3F,
+        0x29,
+        "empalme esperado X|LOWER|RIGHT: m5={:#04x}",
+        exit.m5
+    );
+
+    // Un tren en la línea puede llegar al depósito y salir de él.
+    assert!(
+        find_path(&s.map, TileCoord::new(2, 4), depot, PathNetwork::Rail).is_some(),
+        "línea → depósito"
+    );
+    assert!(
+        find_path(&s.map, depot, TileCoord::new(8, 4), PathNetwork::Rail).is_some(),
+        "depósito → línea"
+    );
+}
+
+#[test]
+fn disconnecting_rail_stops_train_with_cached_path() {
+    let mut s = GameState::new(12, 12);
+    s.economy.money = 1_000_000;
+    for x in 2..=8_i32 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+    }
+    let depot = TileCoord::new(5, 5);
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_GINZU_A4),
+    )
+    .unwrap();
+    let id = s.vehicles[0].id;
+    apply_command(&mut s, &Command::ToggleVehicleRunning(id)).unwrap();
+    // Tren hacia el extremo de la línea y luego de vuelta al depósito.
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrders(id, vec![TileCoord::new(2, 4)]),
+    )
+    .unwrap();
+    for _ in 0..5_000 {
+        s.step();
+        if s.vehicles[0].pos == TileCoord::new(2, 4) {
+            break;
+        }
+    }
+    assert_eq!(
+        s.vehicles[0].pos,
+        TileCoord::new(2, 4),
+        "no llegó al extremo"
+    );
+    apply_command(&mut s, &Command::SetVehicleOrders(id, vec![depot])).unwrap();
+    // Avanza hasta tener camino cacheado rumbo al depósito, sin llegar aún.
+    for _ in 0..5_000 {
+        s.step();
+        if s.vehicles[0].pos == TileCoord::new(4, 4) {
+            break;
+        }
+    }
+    assert_eq!(s.vehicles[0].pos, TileCoord::new(4, 4), "no quedó en ruta");
+    assert!(
+        !s.vehicles[0].path.is_empty(),
+        "debería tener camino cacheado"
+    );
+
+    // Se desconecta el empalme: la tesela de salida pierde las curvas al depósito.
+    apply_command(&mut s, &Command::SetRailBits(TileCoord::new(5, 4), 0x01)).unwrap();
+    assert!(
+        s.vehicles[0].path.is_empty(),
+        "editar el mapa debe invalidar el camino cacheado"
+    );
+    for _ in 0..5_000 {
+        s.step();
+        assert_ne!(
+            s.vehicles[0].pos, depot,
+            "el tren no debe entrar al depósito desconectado"
+        );
+    }
+    assert!(
+        s.vehicles[0].no_network_route_to_order,
+        "debe marcar que no hay ruta por red"
+    );
+}
+
+#[test]
+fn build_vehicle_at_rail_depot_creates_train_with_engine() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
+    let money_before = s.economy.money;
+    let engine = crate::engine_by_id(crate::engine::ENGINE_TRAIN_GINZU_A4).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_GINZU_A4),
+    )
+    .unwrap();
+    assert_eq!(s.vehicles.len(), 1);
+    assert_eq!(s.vehicles[0].kind, VehicleKind::Train);
+    assert_eq!(
+        s.vehicles[0].engine_id,
+        Some(crate::engine::ENGINE_TRAIN_GINZU_A4)
+    );
+    assert!(!s.vehicles[0].running);
+    assert_eq!(s.economy.money, money_before - engine.price);
+}
+
+#[test]
+fn build_vehicle_at_depot_rejects_insufficient_funds() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    s.economy.money = 10;
+    let e = apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_BUS_MPS),
+    )
+    .unwrap_err();
+    assert_eq!(e, CommandError::InsufficientFunds);
+    assert!(s.vehicles.is_empty());
+    assert_eq!(s.economy.money, 10, "sin cobro al fallar");
+}
+
+#[test]
+fn build_vehicle_at_depot_charges_model_price() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    let money_before = s.economy.money;
+    let engine = crate::engine_by_id(crate::engine::ENGINE_BUS_FOSTER).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_BUS_FOSTER),
+    )
+    .unwrap();
+    assert_eq!(s.economy.money, money_before - engine.price);
+    assert_eq!(s.vehicles[0].capacity, engine.capacity);
+}
+
+#[test]
+fn build_vehicle_at_depot_rejects_train_in_road_depot() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    let e = apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_KIRBY),
+    )
+    .unwrap_err();
+    assert_eq!(e, CommandError::InvalidDepotTile);
+}
+
+#[test]
+fn build_vehicle_at_depot_rejects_unknown_engine() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    let e = apply_command(&mut s, &Command::BuildVehicleAtDepot(depot, 9_999)).unwrap_err();
+    assert_eq!(e, CommandError::EngineNotFound);
 }

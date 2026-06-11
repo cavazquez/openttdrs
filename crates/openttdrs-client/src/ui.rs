@@ -5,12 +5,21 @@ use bevy::prelude::*;
 use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 
+mod buy_window;
+mod floating_window;
 pub(crate) mod font;
 mod hud;
 mod industry_panel;
 mod main_menu;
 mod save_window;
 mod toolbar;
+mod town_window;
+mod vehicle_window;
+mod windows_shot;
+use buy_window::{
+    BuyVehicleWindowState, buy_window_on_closed, handle_buy_window_buttons, setup_buy_window,
+    sync_buy_window,
+};
 pub(crate) use hud::SimHudControls;
 use hud::{
     HoveredTileCoord, HudBuildFeedback, HudSoftPingHandle, PlayHudSoftPing, SelectedTileInfo,
@@ -27,123 +36,166 @@ use save_window::{
     handle_save_load_toolbar_buttons, handle_save_window_buttons, save_window_keyboard,
     setup_save_window, sync_save_window,
 };
+use toolbar::depot_panel_on_closed;
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState};
 use toolbar::{
     DepotPanelState, DragBuildState, StationBuildState, StationCargoPanelState, ToolbarState,
     UiToolState, build_menu_interaction, close_toolbar_button_interaction,
     close_toolbar_panel_on_escape, handle_depot_panel_buttons, handle_minimap_click,
-    handle_order_panel_buttons, handle_settings_menu_buttons, handle_station_cargo_panel_buttons,
-    handle_tile_click, hide_tool_when_panel_closed, rotate_station_with_right_click,
-    setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
+    handle_order_panel_buttons, handle_rail_station_picker_buttons, handle_settings_menu_buttons,
+    handle_station_cargo_panel_buttons, handle_tile_click, hide_tool_when_panel_closed,
+    rail_station_picker_on_closed, rotate_station_with_right_click, setup_build_menu,
+    setup_depot_panel, setup_minimap, setup_order_panel, setup_rail_station_picker,
     setup_station_cargo_panel, setup_top_toolbar, sync_depot_panel, sync_minimap, sync_order_panel,
-    sync_orders_pick_cursor, sync_station_cargo_panel, toolbar_group_interaction,
-    update_build_ghost_preview, update_cursor_tile, update_tool_button_visuals,
-    update_toolbar_group_visuals, update_toolbar_tool_visibility, update_toolbar_tooltip,
+    sync_orders_pick_cursor, sync_rail_station_picker, sync_station_cargo_panel,
+    toolbar_group_interaction, update_build_ghost_preview, update_cursor_tile,
+    update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
+    update_toolbar_tooltip,
+};
+use town_window::{
+    TownWindowState, handle_town_window_buttons, setup_town_window, sync_town_window,
+    town_window_on_closed,
+};
+use vehicle_window::{
+    VehicleWindowState, handle_vehicle_window_buttons, setup_vehicle_window, sync_vehicle_window,
+    vehicle_window_on_closed,
 };
 pub(crate) struct ClientUiPlugin;
 
 impl Plugin for ClientUiPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SelectedTileInfo>()
-            .init_resource::<HoveredTileCoord>()
-            .init_resource::<SimHudControls>()
-            .init_resource::<HudBuildFeedback>()
-            .init_resource::<HudSoftPingHandle>()
-            .add_message::<PlayHudSoftPing>()
-            .init_resource::<UiToolState>()
-            .init_resource::<StationBuildState>()
-            .init_resource::<DragBuildState>()
-            .init_resource::<OrderEditState>()
-            .init_resource::<DepotPanelState>()
-            .init_resource::<StationCargoPanelState>()
-            .init_resource::<ToolbarState>()
-            .init_resource::<IndustryPanelState>()
-            .init_resource::<SaveWindowState>()
-            .add_systems(
-                OnEnter(ClientScreen::MainMenu),
-                (setup_main_menu_camera, setup_main_menu),
+        app.add_plugins((
+            floating_window::FloatingWindowPlugin,
+            windows_shot::WindowsShotPlugin,
+        ))
+        .init_resource::<SelectedTileInfo>()
+        .init_resource::<HoveredTileCoord>()
+        .init_resource::<SimHudControls>()
+        .init_resource::<HudBuildFeedback>()
+        .init_resource::<HudSoftPingHandle>()
+        .add_message::<PlayHudSoftPing>()
+        .init_resource::<UiToolState>()
+        .init_resource::<StationBuildState>()
+        .init_resource::<DragBuildState>()
+        .init_resource::<OrderEditState>()
+        .init_resource::<DepotPanelState>()
+        .init_resource::<StationCargoPanelState>()
+        .init_resource::<ToolbarState>()
+        .init_resource::<IndustryPanelState>()
+        .init_resource::<SaveWindowState>()
+        .init_resource::<TownWindowState>()
+        .init_resource::<BuyVehicleWindowState>()
+        .init_resource::<VehicleWindowState>()
+        .add_systems(
+            OnEnter(ClientScreen::MainMenu),
+            (setup_main_menu_camera, setup_main_menu),
+        )
+        .add_systems(
+            OnEnter(ClientScreen::InGame),
+            (
+                setup_tile_info_ui,
+                setup_top_toolbar,
+                setup_build_menu,
+                setup_minimap,
+                setup_order_panel,
+                setup_depot_panel,
+                setup_station_cargo_panel,
+                setup_rail_station_picker,
+                setup_industry_panel,
+                setup_save_window,
+                setup_town_window,
+                setup_buy_window,
+                setup_vehicle_window,
+                setup_rail_station_picker,
+                load_hud_soft_ping,
             )
-            .add_systems(
-                OnEnter(ClientScreen::InGame),
-                (
-                    setup_tile_info_ui,
-                    setup_top_toolbar,
-                    setup_build_menu,
-                    setup_minimap,
-                    setup_order_panel,
-                    setup_depot_panel,
-                    setup_station_cargo_panel,
-                    setup_industry_panel,
-                    setup_save_window,
-                    load_hud_soft_ping,
-                )
-                    .in_set(StartupSet::Ui),
+                .in_set(StartupSet::Ui),
+        )
+        .add_systems(
+            Update,
+            main_menu_interaction.run_if(in_state(ClientScreen::MainMenu)),
+        )
+        .add_systems(
+            Update,
+            (
+                save_window_keyboard,
+                handle_pause_toggle,
+                cycle_json_save_path_hotkey,
+                handle_tool_hotkeys,
+                rotate_station_with_right_click,
+                close_toolbar_panel_on_escape,
             )
-            .add_systems(
-                Update,
-                main_menu_interaction.run_if(in_state(ClientScreen::MainMenu)),
+                .in_set(UpdateSet::Input)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                toolbar_group_interaction,
+                close_toolbar_button_interaction,
+                build_menu_interaction,
+                update_toolbar_group_visuals,
+                update_toolbar_tool_visibility,
+                hide_tool_when_panel_closed,
+                update_tool_button_visuals,
+                update_toolbar_tooltip,
+                industry_panel_close_interaction,
+                handle_minimap_click,
+                handle_order_panel_buttons,
+                handle_depot_panel_buttons,
+                handle_station_cargo_panel_buttons,
+                handle_settings_menu_buttons,
+                handle_save_load_toolbar_buttons,
+                handle_save_window_buttons,
+                sync_save_window,
             )
-            .add_systems(
-                Update,
-                (
-                    save_window_keyboard,
-                    handle_pause_toggle,
-                    cycle_json_save_path_hotkey,
-                    handle_tool_hotkeys,
-                    rotate_station_with_right_click,
-                    close_toolbar_panel_on_escape,
-                )
-                    .in_set(UpdateSet::Input)
-                    .run_if(in_state(ClientScreen::InGame)),
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                handle_town_window_buttons,
+                town_window_on_closed,
+                handle_buy_window_buttons,
+                buy_window_on_closed,
+                depot_panel_on_closed,
+                handle_vehicle_window_buttons,
+                vehicle_window_on_closed,
+                handle_rail_station_picker_buttons,
+                rail_station_picker_on_closed,
             )
-            .add_systems(
-                Update,
-                (
-                    toolbar_group_interaction,
-                    close_toolbar_button_interaction,
-                    build_menu_interaction,
-                    update_toolbar_group_visuals,
-                    update_toolbar_tool_visibility,
-                    hide_tool_when_panel_closed,
-                    update_tool_button_visuals,
-                    update_toolbar_tooltip,
-                    industry_panel_close_interaction,
-                    handle_minimap_click,
-                    handle_order_panel_buttons,
-                    handle_depot_panel_buttons,
-                    handle_station_cargo_panel_buttons,
-                    handle_settings_menu_buttons,
-                    handle_save_load_toolbar_buttons,
-                    handle_save_window_buttons,
-                    sync_save_window,
-                )
-                    .in_set(UpdateSet::Ui)
-                    .run_if(in_state(ClientScreen::InGame)),
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (update_cursor_tile, handle_tile_click, flush_hud_soft_ping)
+                .chain()
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                spawn_income_popups,
+                animate_income_popups,
+                update_build_ghost_preview,
+                sync_minimap,
+                sync_order_panel,
+                sync_orders_pick_cursor,
+                sync_depot_panel,
+                sync_station_cargo_panel,
+                sync_industry_panel,
+                sync_town_window,
+                sync_buy_window,
+                sync_rail_station_picker,
+                sync_vehicle_window,
+                play_hud_soft_ping,
+                update_tile_info_text,
             )
-            .add_systems(
-                Update,
-                (update_cursor_tile, handle_tile_click, flush_hud_soft_ping)
-                    .chain()
-                    .in_set(UpdateSet::Ui)
-                    .run_if(in_state(ClientScreen::InGame)),
-            )
-            .add_systems(
-                Update,
-                (
-                    spawn_income_popups,
-                    animate_income_popups,
-                    update_build_ghost_preview,
-                    sync_minimap,
-                    sync_order_panel,
-                    sync_orders_pick_cursor,
-                    sync_depot_panel,
-                    sync_station_cargo_panel,
-                    sync_industry_panel,
-                    play_hud_soft_ping,
-                    update_tile_info_text,
-                )
-                    .in_set(UpdateSet::Ui)
-                    .run_if(in_state(ClientScreen::InGame)),
-            );
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        );
     }
 }

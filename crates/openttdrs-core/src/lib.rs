@@ -29,7 +29,7 @@ mod vehicle_ai;
 pub use cargo::{CargoStock, CargoType};
 pub use command::{
     Command, CommandError, apply_command, command_error_message, command_would_fail,
-    industry_template,
+    industry_template, rail_station_footprint, rail_trackbits_from_neighbors,
 };
 pub use economy::{
     CargoPaymentSpec, TICKS_PER_TRANSIT_DAY, TICKS_PER_YEAR, cargo_time_factor,
@@ -38,8 +38,9 @@ pub use economy::{
 };
 pub use engine::{
     ENGINE_BUS_MPS, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineDef, REFERENCE_PROGRESS_STEP,
-    ROAD_ACCEL_ORIGINAL, decelerate_road_speed, default_engine_id, engine_for_vehicle,
-    progress_step_for_speed, tile_progress_length, update_road_speed,
+    ROAD_ACCEL_ORIGINAL, decelerate_road_speed, default_engine_id, engine_by_id, engine_catalog,
+    engine_for_vehicle, engines_of_kind, progress_step_for_speed, tile_progress_length,
+    update_road_speed,
 };
 #[allow(deprecated)]
 pub use game_state::CARGO_DELIVERY_PAYMENT;

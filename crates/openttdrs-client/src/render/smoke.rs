@@ -8,7 +8,7 @@ use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::{overlay_pos, remap_tile_offset, wang_hash};
-use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
+use crate::render::{AtlasSprite, MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{CHIMNEY_SMOKE_FRAMES, CHIMNEY_SMOKE_META};
 use crate::state::ClientScreen;
 
@@ -36,7 +36,7 @@ const SMOKE_LAYER_FRAC: f32 = 0.55;
 
 /// Frames del humo (`chimney_smoke_{i}.png`), insertado con la capa de mundo.
 #[derive(Resource)]
-pub(crate) struct ChimneySmokeFrames(pub(crate) Vec<Handle<Image>>);
+pub(crate) struct ChimneySmokeFrames(pub(crate) Vec<AtlasSprite>);
 
 /// Penacho anclado a una chimenea; recalcula posición por frame (los NFO
 /// offsets de cada sprite difieren unos píxeles).
@@ -78,11 +78,7 @@ pub(crate) fn spawn_chimney_smoke(
             tile: (ctx.tx_i32(), ctx.ty_i32()),
             phase,
         },
-        Sprite {
-            image: assets.chimney_smoke[phase].clone(),
-            color: Color::WHITE,
-            ..default()
-        },
+        assets.chimney_smoke[phase].sprite(),
         Transform::from_translation(pos3),
     ));
 }
@@ -103,10 +99,10 @@ pub(crate) fn animate_chimney_smoke(
     };
     for (smoke, mut sprite, mut transform) in &mut q {
         let idx = smoke_frame_index(time.elapsed_secs(), smoke.phase);
-        if sprite.image == frames.0[idx] {
+        if frames.0[idx].matches(&sprite) {
             continue;
         }
-        sprite.image = frames.0[idx].clone();
+        frames.0[idx].apply_to(&mut sprite);
         let (w, h, xrel, yrel) = CHIMNEY_SMOKE_META[idx];
         transform.translation = overlay_pos(
             smoke.anchor,
@@ -129,11 +125,20 @@ mod tests {
 
     use super::*;
 
-    fn weak_handle(n: u128) -> Handle<Image> {
-        Handle::Uuid(
-            bevy::asset::uuid::Uuid::from_u128(n),
-            std::marker::PhantomData,
-        )
+    fn weak_sprite(n: u128) -> AtlasSprite {
+        AtlasSprite {
+            image: Handle::Uuid(
+                bevy::asset::uuid::Uuid::from_u128(1),
+                std::marker::PhantomData,
+            ),
+            atlas: TextureAtlas {
+                layout: Handle::Uuid(
+                    bevy::asset::uuid::Uuid::from_u128(2),
+                    std::marker::PhantomData,
+                ),
+                index: n as usize,
+            },
+        }
     }
 
     #[test]
@@ -151,7 +156,7 @@ mod tests {
         time.advance_by(std::time::Duration::from_millis(500));
         world.insert_resource(time);
         world.insert_resource(ChimneySmokeFrames(
-            (0..CHIMNEY_SMOKE_FRAMES as u128).map(weak_handle).collect(),
+            (0..CHIMNEY_SMOKE_FRAMES as u128).map(weak_sprite).collect(),
         ));
         let e = world
             .spawn((
@@ -169,10 +174,7 @@ mod tests {
         world.run_system_once(animate_chimney_smoke).unwrap();
 
         let expected = smoke_frame_index(0.5, 0);
-        assert_eq!(
-            world.get::<Sprite>(e).unwrap().image,
-            weak_handle(expected as u128)
-        );
+        assert!(weak_sprite(expected as u128).matches(world.get::<Sprite>(e).unwrap()));
         assert_ne!(world.get::<Transform>(e).unwrap().translation, Vec3::ZERO);
     }
 }

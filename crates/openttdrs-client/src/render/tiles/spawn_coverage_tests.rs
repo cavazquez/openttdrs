@@ -36,8 +36,15 @@ fn boot_assets_app() -> WorldAssets {
         ..default()
     });
     app.add_plugins(ImagePlugin::default());
+    app.init_asset::<TextureAtlasLayout>();
     app.update();
-    WorldAssets::load(app.world().resource::<AssetServer>())
+    let atlas = {
+        let world = app.world_mut();
+        world.resource_scope(|world, mut layouts: Mut<Assets<TextureAtlasLayout>>| {
+            crate::render::TileAtlas::build(world.resource::<AssetServer>(), &mut layouts)
+        })
+    };
+    WorldAssets::load(&atlas)
 }
 
 fn fresh_map8() -> Map {
@@ -530,11 +537,7 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
             },
         )
         .expect("paved road tile");
-    let paved_sprites: Vec<_> = world
-        .query::<&Sprite>()
-        .iter(&world)
-        .map(|s| s.image.clone())
-        .collect();
+    let paved_sprites: Vec<Sprite> = world.query::<&Sprite>().iter(&world).cloned().collect();
     assert_eq!(
         paved_sprites.len(),
         1,
@@ -542,8 +545,8 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
     );
     let a = world.resource::<TsAssets>();
     let fi = crate::sprites::ROAD_FLAT_OFFSET_TBL[5] as usize;
-    assert_eq!(
-        paved_sprites[0], a.0.road_paved[fi],
+    assert!(
+        a.0.road_paved[fi].matches(&paved_sprites[0]),
         "debe usar el set pavimentado (1313..)"
     );
 

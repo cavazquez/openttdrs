@@ -116,20 +116,16 @@ pub fn transported_goods_income(
     income.max(1)
 }
 
-/// Precio de compra en depósito (orden de magnitud TTD original).
+/// Precio de compra del motor por defecto del tipo (catálogo del original).
 #[must_use]
-pub const fn vehicle_purchase_cost(kind: VehicleKind) -> i64 {
-    match kind {
-        VehicleKind::Bus => 8_192,
-        VehicleKind::Truck => 11_939,
-        VehicleKind::Train => 25_000,
-    }
+pub fn vehicle_purchase_cost(kind: VehicleKind) -> i64 {
+    crate::engine::engine_for_vehicle(kind, crate::engine::default_engine_id(kind)).price
 }
 
-/// Reembolso al vender en depósito (~50 % del precio de compra).
+/// Reembolso al vender en depósito (~50 % del precio del modelo del vehículo).
 #[must_use]
 pub fn vehicle_sell_refund(vehicle: &Vehicle) -> i64 {
-    let base = vehicle_purchase_cost(vehicle.kind);
+    let base = vehicle.effective_engine().price;
     (base * 50) / 100
 }
 

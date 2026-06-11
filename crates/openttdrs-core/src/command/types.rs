@@ -40,7 +40,20 @@ pub enum Command {
     PlaceTruckStop(TileCoord, u8),
     /// Estación de tren 1×1 (`StationType::Rail`); `dir` 0..3 → eje vía en `m5`.
     PlaceRailStation(TileCoord, u8),
+    /// Estación de tren multi-tesela (`CmdBuildRailStation`): `origin` es la esquina
+    /// norte, `axis_y` el eje de los andenes, `platforms`/`length` en 1..=7.
+    PlaceRailStationArea {
+        origin: TileCoord,
+        axis_y: bool,
+        platforms: u8,
+        length: u8,
+    },
+    /// Compra el motor por defecto del tipo en un depósito de carretera
+    /// (conservado por compatibilidad; usa [`Command::BuildVehicleAtDepot`]).
     BuildRoadVehicleAtDepot(TileCoord, VehicleKind),
+    /// Compra el modelo `engine_id` del catálogo en un depósito compatible
+    /// (carretera o vía según el tipo del motor), validando fondos.
+    BuildVehicleAtDepot(TileCoord, u16),
     SellVehicle(u32),
     ToggleVehicleRunning(u32),
     CloneVehicleOrders {
@@ -72,6 +85,10 @@ pub enum CommandError {
     VehicleNotInDepot,
     InvalidDepotTile,
     VehicleKindNotAllowed,
+    /// El motor pedido no existe en el catálogo.
+    EngineNotFound,
+    /// No hay dinero suficiente para pagar la compra.
+    InsufficientFunds,
     IncompatibleStopForVehicle,
     /// Extremos de túnel inválidos (pendiente, salida, etc.).
     InvalidTunnelEndpoints,
@@ -104,6 +121,8 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         }
         CommandError::InvalidDepotTile => "Ubicación de depósito inválida.",
         CommandError::VehicleKindNotAllowed => "Tipo de vehículo no permitido aquí.",
+        CommandError::EngineNotFound => "Modelo de vehículo desconocido.",
+        CommandError::InsufficientFunds => "No hay dinero suficiente.",
         CommandError::IncompatibleStopForVehicle => "Parada incompatible con este vehículo.",
         CommandError::InvalidTunnelEndpoints => {
             "Túnel inválido: entrada en pendiente inclinada (NE/SE/SW/NW) y salida al mismo nivel."

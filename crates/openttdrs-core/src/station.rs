@@ -1,7 +1,7 @@
 use crate::cargo::{CargoStock, CargoType};
 use crate::industry::{Industry, IndustryKind};
 use crate::map::{Map, TileCoord, TileKind};
-use crate::pathfinder::{diag_dir_offset, station_entrance_faces_rail};
+use crate::pathfinder::diag_dir_offset;
 use crate::vehicle::{VehicleKind, VehicleOrder};
 
 pub const STATION_COVERAGE_RADIUS: i32 = 4;
@@ -99,20 +99,47 @@ fn is_rail_track_kind(kind: TileKind) -> bool {
     )
 }
 
-/// Tesela de vía donde el tren debe detenerse junto a una estación de tren (no sobre la plataforma).
+/// Teselas `Station` contiguas al ancla (huella de una estación multi-tesela).
 #[must_use]
-pub fn rail_station_approach_tile(map: &Map, station_pos: TileCoord) -> Option<TileCoord> {
-    for dir in 0..4u8 {
-        if !station_entrance_faces_rail(map, station_pos, dir) {
-            continue;
-        }
-        let (dx, dy) = diag_dir_offset(dir);
-        let track = TileCoord::new(station_pos.x + dx, station_pos.y + dy);
-        if map.get_kind(track).is_some_and(is_rail_track_kind) {
-            return Some(track);
+fn station_footprint_tiles(map: &Map, anchor: TileCoord) -> Vec<TileCoord> {
+    const MAX_FOOTPRINT: usize = 64;
+    let mut tiles = vec![anchor];
+    let mut seen = std::collections::HashSet::from([anchor]);
+    let mut i = 0;
+    while i < tiles.len() && tiles.len() < MAX_FOOTPRINT {
+        let c = tiles[i];
+        i += 1;
+        for dir in 0..4u8 {
+            let (dx, dy) = diag_dir_offset(dir);
+            let n = TileCoord::new(c.x + dx, c.y + dy);
+            if map.get_kind(n) == Some(TileKind::Station) && seen.insert(n) {
+                tiles.push(n);
+            }
         }
     }
-    None
+    tiles
+}
+
+/// Tesela de vía donde el tren debe detenerse junto a una estación de tren (no
+/// sobre la plataforma). Busca en toda la huella contigua y devuelve la vía más
+/// cercana al ancla, para que quede dentro del radio de cobertura.
+#[must_use]
+pub fn rail_station_approach_tile(map: &Map, station_pos: TileCoord) -> Option<TileCoord> {
+    let mut best: Option<(i32, TileCoord)> = None;
+    for c in station_footprint_tiles(map, station_pos) {
+        for dir in 0..4u8 {
+            let (dx, dy) = diag_dir_offset(dir);
+            let track = TileCoord::new(c.x + dx, c.y + dy);
+            if !map.get_kind(track).is_some_and(is_rail_track_kind) {
+                continue;
+            }
+            let d = (track.x - station_pos.x).abs() + (track.y - station_pos.y).abs();
+            if best.is_none_or(|(bd, _)| d < bd) {
+                best = Some((d, track));
+            }
+        }
+    }
+    best.map(|(_, track)| track)
 }
 
 /// Destino de movimiento según tipo de vehículo y orden (trenes paran en la vía adyacente).

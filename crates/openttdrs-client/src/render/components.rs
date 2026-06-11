@@ -1,5 +1,7 @@
 use bevy::prelude::*;
 
+use crate::render::atlas::AtlasSprite;
+
 /// Marca los tiles de agua plana: ciclan los frames `water_anim_{f}.png`.
 #[derive(Component)]
 pub(crate) struct WaterTile;
@@ -12,8 +14,8 @@ pub(crate) struct ShoreTile(pub(crate) u8);
 /// generados por `scripts/gen_water_anim_frames.py`. Frame 0 = sprite base.
 #[derive(Resource)]
 pub(crate) struct WaterAnimFrames {
-    pub(crate) water: Vec<Handle<Image>>,
-    pub(crate) shore: Vec<Vec<Handle<Image>>>,
+    pub(crate) water: Vec<AtlasSprite>,
+    pub(crate) shore: Vec<Vec<AtlasSprite>>,
 }
 
 /// Teselas de suelo, vías, vehículos, etc.: se despawnan al recargar JSON (F9).

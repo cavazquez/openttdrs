@@ -12,7 +12,7 @@ use crate::iso::{
 use crate::render::viewport::initial_camera_span_tiles;
 use crate::render::viewport::{VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES};
 use crate::render::{
-    MapPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, RenderGrid,
+    MapPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, RenderGrid, TileAtlas,
     TileRenderContext, TileViewportBounds, WorldAssets, flush_map_batches,
     large_map_viewport_cull_enabled, ortho_visible_tile_bounds, push_forest_tree, push_water_tile,
     spawn_bridge_middle, spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile,
@@ -123,6 +123,7 @@ pub(crate) fn sync_map_tile_spawn_viewport(
 pub(crate) fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
+    mut layout_assets: ResMut<Assets<TextureAtlasLayout>>,
     sim: Res<SimWorld>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<
@@ -156,13 +157,16 @@ pub(crate) fn setup(
     commands.insert_resource(MapTileSpawnViewport {
         bounds: spawn_bounds,
     });
-    spawn_world_layer(&mut commands, &asset_server, &sim, spawn_bounds);
+    let atlas = TileAtlas::build(&asset_server, &mut layout_assets);
+    spawn_world_layer(&mut commands, &asset_server, &atlas, &sim, spawn_bounds);
+    commands.insert_resource(atlas);
 }
 
 #[allow(clippy::too_many_lines)]
 fn spawn_world_layer(
     commands: &mut Commands,
     asset_server: &AssetServer,
+    atlas: &TileAtlas,
     sim: &SimWorld,
     spawn_bounds: TileViewportBounds,
 ) {
@@ -176,7 +180,7 @@ fn spawn_world_layer(
         );
     }
 
-    let assets = WorldAssets::load(asset_server);
+    let assets = WorldAssets::load(atlas);
     commands.insert_resource(super::WaterAnimFrames {
         water: assets.water_frames.clone(),
         shore: assets.shore_frames.clone(),
@@ -361,12 +365,16 @@ pub(crate) fn apply_remap_map_visuals(
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
     asset_server: Res<AssetServer>,
+    atlas: Option<Res<TileAtlas>>,
     sim: Res<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
 ) {
     if !pending.pending {
         return;
     }
+    let Some(atlas) = atlas else {
+        return;
+    };
     let do_sync_camera = pending.sync_camera;
     pending.pending = false;
     pending.sync_camera = false;
@@ -386,7 +394,7 @@ pub(crate) fn apply_remap_map_visuals(
             u64::from(sim.state.map.dimensions().0) * u64::from(sim.state.map.dimensions().1)
         );
     }
-    spawn_world_layer(&mut commands, &asset_server, &sim, spawn_bounds);
+    spawn_world_layer(&mut commands, &asset_server, &atlas, &sim, spawn_bounds);
     if do_sync_camera {
         sync_camera_for_sim(&mut q_cam, &sim);
     }
@@ -417,6 +425,7 @@ mod tests {
         app.add_plugins(ImagePlugin::default());
         // Las etiquetas de ciudades cargan la fuente Text2d en spawn_world_layer.
         app.init_asset::<Font>();
+        app.init_asset::<TextureAtlasLayout>();
         app.update();
         app.insert_resource(SimWorld::default());
         app.insert_resource(RemapMapVisualsPending::default());

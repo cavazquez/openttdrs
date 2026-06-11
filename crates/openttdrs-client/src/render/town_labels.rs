@@ -19,28 +19,51 @@ const LABEL_RAISE: f32 = 18.0;
 #[derive(Component)]
 pub(crate) struct TownLabel;
 
+/// Centro y tamaño (mundo) del cartel de una ciudad; mismo cálculo que el spawn.
+pub(crate) fn town_label_rect(
+    map: &openttdrs_core::Map,
+    town: &openttdrs_core::Town,
+) -> (Vec2, Vec2) {
+    let (tx, ty) = (town.pos.x, town.pos.y);
+    let (tileh, base_z) = tile_slope_and_min_z(map, tx as u32, ty as u32);
+    let ground = tile_pos(tx, ty, base_z, 0.0);
+    let center = Vec2::new(
+        ground.x,
+        ground.y + LABEL_RAISE + f32::from(tileh & 0xF) * 2.0,
+    );
+    let label = format!("{} ({})", town.name, town.population);
+    let size = Vec2::new(
+        label.chars().count() as f32 * CHAR_ADVANCE + 6.0,
+        FONT_SIZE + 4.0,
+    );
+    (center, size)
+}
+
+/// Ciudad cuyo cartel contiene `world_pos`, si hay alguna.
+pub(crate) fn town_id_at_label_pos(sim: &SimWorld, world_pos: Vec2) -> Option<u32> {
+    sim.state.towns.iter().find_map(|town| {
+        let (center, size) = town_label_rect(&sim.state.map, town);
+        let half = size * 0.5;
+        ((world_pos.x - center.x).abs() <= half.x && (world_pos.y - center.y).abs() <= half.y)
+            .then_some(town.id)
+    })
+}
+
 /// Crea los carteles de todas las ciudades. Se llama al construir la capa de
 /// mundo, así se regeneran junto al resto de `MapVisualLayer` en los remaps.
 pub(crate) fn spawn_town_labels(commands: &mut Commands, sim: &SimWorld, font: &Handle<Font>) {
     let map = &sim.state.map;
     for town in &sim.state.towns {
-        let (tx, ty) = (town.pos.x, town.pos.y);
-        let (tileh, base_z) = tile_slope_and_min_z(map, tx as u32, ty as u32);
-        let ground = tile_pos(tx, ty, base_z, 0.0);
-        let center = Vec2::new(
-            ground.x,
-            ground.y + LABEL_RAISE + f32::from(tileh & 0xF) * 2.0,
-        );
+        let (center, bg_size) = town_label_rect(map, town);
         let label = format!("{} ({})", town.name, town.population);
 
         // Fondo translúcido oscuro (sign con fondo, como el cliente oficial).
-        let bg_w = label.chars().count() as f32 * CHAR_ADVANCE + 6.0;
         commands.spawn((
             MapVisualLayer,
             TownLabel,
             Sprite {
                 color: Color::srgba(0.08, 0.10, 0.14, 0.65),
-                custom_size: Some(Vec2::new(bg_w, FONT_SIZE + 4.0)),
+                custom_size: Some(bg_size),
                 ..default()
             },
             Transform::from_translation(center.extend(LABEL_Z)),

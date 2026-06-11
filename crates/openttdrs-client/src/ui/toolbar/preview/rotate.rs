@@ -22,10 +22,12 @@ pub(crate) fn rotate_station_with_right_click(
     match tool_state.active_tool {
         Some(BuildMenuAction::Station)
         | Some(BuildMenuAction::BusStop)
-        | Some(BuildMenuAction::RailStation)
         | Some(BuildMenuAction::RoadDepot)
         | Some(BuildMenuAction::RailDepot) => {
             station_state.orientation = (station_state.orientation + 1) % 4;
+        }
+        Some(BuildMenuAction::RailStation) => {
+            station_state.rail_axis_y = !station_state.rail_axis_y;
         }
         Some(BuildMenuAction::RoadX) => {
             tool_state.active_tool = Some(BuildMenuAction::RoadY);

@@ -1,8 +1,11 @@
 # Configuración recomendada por Bevy para desarrollo:
 #
-# - Las dependencias compilan con opt-level=1 (no 3, que causa OOM/bus-error en lld
-#   con inputs muy grandes). Da suficiente optimización para que Bevy corra bien.
-# - El código propio usa opt-level=1 también: compilación incremental rápida.
+# - Las dependencias compilan con opt-level=3 (recomendación oficial de Bevy):
+#   el hot path de render (bevy/wgpu) vive en dependencias y con 1 el cliente
+#   rinde notablemente peor. Se compilan una sola vez y quedan cacheadas.
+#   Sin debuginfo en dependencias (debug=false) para reducir la memoria que
+#   consume lld al enlazar (histórico OOM/bus-error con inputs muy grandes).
+# - El código propio usa opt-level=1: compilación incremental rápida.
 #
 # No fijar mold/clang aquí: en CI (ubuntu-latest) suele faltar mold y clang rechaza
 # -fuse-ld=mold. Opcional en tu máquina (~/.cargo/config.toml o override local):
@@ -16,4 +19,5 @@
 opt-level = 1
 
 [profile.dev.package."*"]
-opt-level = 1
+opt-level = 3
+debug = false

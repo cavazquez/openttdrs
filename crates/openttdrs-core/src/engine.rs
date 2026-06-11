@@ -1,20 +1,69 @@
 //! Motores base `OpenGFX` (velocidad máxima en unidades internas de `OpenTTD`).
+//!
+//! Catálogo con los vehículos originales del clima templado; los valores
+//! provienen de `_orig_rail_vehicle_info` / `_orig_road_vehicle_info` y
+//! `_orig_engine_info` (`src/table/engines.h` del upstream), con precios y
+//! costes de operación derivados de `src/table/pricebase.h` (`cost = base ×
+//! cost_factor >> 8`).
 
+use crate::cargo::CargoType;
 use crate::vehicle::{VehicleDirection, VehicleKind};
 
-/// Definición mínima de motor (paridad con `_orig_*_vehicle_info` del upstream).
+/// Definición de motor (paridad con `_orig_*_vehicle_info` del upstream).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EngineDef {
     pub id: u16,
     pub kind: VehicleKind,
     pub name: &'static str,
-    /// Unidades `OpenTTD` (`ROV`/`RVI`: ~0,5 km/h por unidad en pantalla).
+    /// Unidades `OpenTTD` (`RVI` ≈ 1 km/h por unidad; `ROV` ≈ 0,5 km/h).
     pub max_speed: u16,
+    /// Precio de compra (libras internas TTD: `base_price × cost_factor >> 8`).
+    pub price: i64,
+    /// Coste de explotación anual (libras internas TTD).
+    pub running_cost_year: i64,
+    /// Capacidad del modelo (pasajeros/sacas/cajas). 0 = solo locomotora.
+    pub capacity: u32,
+    /// Carga de diseño del modelo (`None` = locomotora sin carga propia).
+    pub cargo: Option<CargoType>,
+    pub power_hp: u32,
+    pub weight_t: u16,
+    pub intro_year: u16,
+    /// Fiabilidad inicial mostrada en la compra (aprox. por clase de motor).
+    pub reliability_pct: u8,
+}
+
+impl EngineDef {
+    /// Velocidad máxima en km/h para mostrar en UI (conversión por tipo).
+    #[must_use]
+    pub const fn speed_kmh(&self) -> u16 {
+        match self.kind {
+            VehicleKind::Train => self.max_speed,
+            VehicleKind::Bus | VehicleKind::Truck => self.max_speed / 2,
+        }
+    }
 }
 
 pub const ENGINE_BUS_MPS: u16 = 0;
+pub const ENGINE_BUS_HEREFORD: u16 = 1;
+pub const ENGINE_BUS_FOSTER: u16 = 2;
 pub const ENGINE_TRUCK_MPS: u16 = 10;
+pub const ENGINE_TRUCK_BALOGH_GOODS: u16 = 11;
+pub const ENGINE_TRUCK_CRAIGHEAD_GOODS: u16 = 12;
+pub const ENGINE_TRUCK_GOSS_GOODS: u16 = 13;
 pub const ENGINE_TRAIN_KIRBY: u16 = 100;
+pub const ENGINE_TRAIN_CHANEY_JUBILEE: u16 = 101;
+pub const ENGINE_TRAIN_GINZU_A4: u16 = 102;
+pub const ENGINE_TRAIN_SH_8P: u16 = 103;
+pub const ENGINE_TRAIN_MANLEY_MOREL: u16 = 104;
+pub const ENGINE_TRAIN_DASH: u16 = 105;
+pub const ENGINE_TRAIN_SH_HENDRY_25: u16 = 106;
+pub const ENGINE_TRAIN_UU_37: u16 = 107;
+pub const ENGINE_TRAIN_FLOSS_47: u16 = 108;
+pub const ENGINE_TRAIN_SH_125: u16 = 109;
+pub const ENGINE_TRAIN_SH_30: u16 = 110;
+pub const ENGINE_TRAIN_SH_40: u16 = 111;
+pub const ENGINE_TRAIN_TIM: u16 = 112;
+pub const ENGINE_TRAIN_ASIASTAR: u16 = 113;
 
 /// Paso sub-tile del bus MPS en diagonal (~5 ticks/tesela con sim a 5 Hz).
 pub const REFERENCE_PROGRESS_STEP: u8 = 51;
@@ -26,26 +75,363 @@ const REFERENCE_MAX_SPEED: u16 = 112;
 const TILE_AXIAL_DISTANCE: u32 = 192;
 const TILE_CORNER_DISTANCE: u32 = 256;
 
+/// Fiabilidad inicial aproximada por clase de motor del original.
+const RELIABILITY_STEAM: u8 = 75;
+const RELIABILITY_DIESEL: u8 = 85;
+const RELIABILITY_ELECTRIC: u8 = 90;
+const RELIABILITY_ROAD: u8 = 85;
+
+macro_rules! road {
+    ($id:expr, $kind:expr, $name:expr, $speed:expr, $cf:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr) => {
+        EngineDef {
+            id: $id,
+            kind: $kind,
+            name: $name,
+            max_speed: $speed,
+            price: (14_000 * $cf) >> 8,
+            running_cost_year: (1_600 * $rc) >> 8,
+            capacity: $cap,
+            cargo: $cargo,
+            power_hp: $hp,
+            weight_t: $wt,
+            intro_year: $year,
+            reliability_pct: RELIABILITY_ROAD,
+        }
+    };
+}
+
+macro_rules! train {
+    ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr) => {
+        EngineDef {
+            id: $id,
+            kind: VehicleKind::Train,
+            name: $name,
+            max_speed: $speed,
+            price: (400_000_i64 * $cf) >> 8,
+            running_cost_year: ($rc_base * $rc) >> 8,
+            capacity: $cap,
+            cargo: $cargo,
+            power_hp: $hp,
+            weight_t: $wt,
+            intro_year: $year,
+            reliability_pct: $rel,
+        }
+    };
+}
+
+const RC_STEAM: i64 = 5_600;
+const RC_DIESEL: i64 = 5_200;
+const RC_ELECTRIC: i64 = 4_800;
+
 const ENGINES: &[EngineDef] = &[
-    EngineDef {
-        id: ENGINE_BUS_MPS,
-        kind: VehicleKind::Bus,
-        name: "MPS Regal Bus",
-        max_speed: 112,
-    },
-    EngineDef {
-        id: ENGINE_TRUCK_MPS,
-        kind: VehicleKind::Truck,
-        name: "MPS Mail Truck",
-        max_speed: 96,
-    },
-    EngineDef {
-        id: ENGINE_TRAIN_KIRBY,
-        kind: VehicleKind::Train,
-        name: "Kirby Paul Tank",
-        max_speed: 64,
-    },
+    // Carretera: buses (pesos del upstream en cuartos de tonelada, redondeados).
+    road!(
+        ENGINE_BUS_MPS,
+        VehicleKind::Bus,
+        "MPS Regal Bus",
+        112,
+        120,
+        91,
+        31,
+        Some(CargoType::Passengers),
+        90,
+        11,
+        1929
+    ),
+    road!(
+        ENGINE_BUS_HEREFORD,
+        VehicleKind::Bus,
+        "Hereford Leopard Bus",
+        176,
+        140,
+        128,
+        35,
+        Some(CargoType::Passengers),
+        120,
+        15,
+        1964
+    ),
+    road!(
+        ENGINE_BUS_FOSTER,
+        VehicleKind::Bus,
+        "Foster Bus",
+        224,
+        150,
+        178,
+        37,
+        Some(CargoType::Passengers),
+        150,
+        18,
+        1986
+    ),
+    // Carretera: camiones.
+    road!(
+        ENGINE_TRUCK_MPS,
+        VehicleKind::Truck,
+        "MPS Mail Truck",
+        96,
+        115,
+        90,
+        22,
+        Some(CargoType::Mail),
+        120,
+        10,
+        1935
+    ),
+    road!(
+        ENGINE_TRUCK_BALOGH_GOODS,
+        VehicleKind::Truck,
+        "Balogh Goods Truck",
+        96,
+        107,
+        90,
+        14,
+        Some(CargoType::Goods),
+        120,
+        10,
+        1935
+    ),
+    road!(
+        ENGINE_TRUCK_CRAIGHEAD_GOODS,
+        VehicleKind::Truck,
+        "Craighead Goods Truck",
+        176,
+        130,
+        168,
+        16,
+        Some(CargoType::Goods),
+        220,
+        12,
+        1974
+    ),
+    road!(
+        ENGINE_TRUCK_GOSS_GOODS,
+        VehicleKind::Truck,
+        "Goss Goods Truck",
+        224,
+        140,
+        240,
+        18,
+        Some(CargoType::Goods),
+        450,
+        17,
+        2005
+    ),
+    // Trenes (clima templado del original).
+    train!(
+        ENGINE_TRAIN_KIRBY,
+        "Kirby Paul Tank (Vapor)",
+        64,
+        7,
+        RC_STEAM,
+        50,
+        0,
+        None,
+        300,
+        47,
+        1925,
+        RELIABILITY_STEAM
+    ),
+    train!(
+        ENGINE_TRAIN_CHANEY_JUBILEE,
+        "Chaney 'Jubilee' (Vapor)",
+        112,
+        13,
+        RC_STEAM,
+        120,
+        0,
+        None,
+        1_000,
+        131,
+        1934,
+        RELIABILITY_STEAM
+    ),
+    train!(
+        ENGINE_TRAIN_GINZU_A4,
+        "Ginzu 'A4' (Vapor)",
+        128,
+        19,
+        RC_STEAM,
+        140,
+        0,
+        None,
+        1_200,
+        162,
+        1935,
+        RELIABILITY_STEAM
+    ),
+    train!(
+        ENGINE_TRAIN_SH_8P,
+        "SH '8P' (Vapor)",
+        144,
+        22,
+        RC_STEAM,
+        130,
+        0,
+        None,
+        1_600,
+        170,
+        1954,
+        RELIABILITY_STEAM
+    ),
+    train!(
+        ENGINE_TRAIN_MANLEY_MOREL,
+        "Manley-Morel DMU (Diésel)",
+        112,
+        11,
+        RC_DIESEL,
+        85,
+        38,
+        Some(CargoType::Passengers),
+        600,
+        32,
+        1956,
+        RELIABILITY_DIESEL
+    ),
+    train!(
+        ENGINE_TRAIN_DASH,
+        "'Dash' (Diésel)",
+        120,
+        14,
+        RC_DIESEL,
+        70,
+        40,
+        Some(CargoType::Passengers),
+        700,
+        38,
+        1984,
+        RELIABILITY_DIESEL
+    ),
+    train!(
+        ENGINE_TRAIN_SH_HENDRY_25,
+        "SH/Hendry '25' (Diésel)",
+        128,
+        15,
+        RC_DIESEL,
+        95,
+        0,
+        None,
+        1_250,
+        72,
+        1961,
+        RELIABILITY_DIESEL
+    ),
+    train!(
+        ENGINE_TRAIN_UU_37,
+        "UU '37' (Diésel)",
+        144,
+        17,
+        RC_DIESEL,
+        120,
+        0,
+        None,
+        1_750,
+        101,
+        1959,
+        RELIABILITY_DIESEL
+    ),
+    train!(
+        ENGINE_TRAIN_FLOSS_47,
+        "Floss '47' (Diésel)",
+        160,
+        18,
+        RC_DIESEL,
+        140,
+        0,
+        None,
+        2_580,
+        112,
+        1962,
+        RELIABILITY_DIESEL
+    ),
+    train!(
+        ENGINE_TRAIN_SH_125,
+        "SH '125' (Diésel)",
+        200,
+        20,
+        RC_DIESEL,
+        190,
+        4,
+        Some(CargoType::Mail),
+        4_500,
+        70,
+        1977,
+        RELIABILITY_DIESEL
+    ),
+    train!(
+        ENGINE_TRAIN_SH_30,
+        "SH '30' (Eléctrico)",
+        160,
+        26,
+        RC_ELECTRIC,
+        180,
+        0,
+        None,
+        3_600,
+        84,
+        1965,
+        RELIABILITY_ELECTRIC
+    ),
+    train!(
+        ENGINE_TRAIN_SH_40,
+        "SH '40' (Eléctrico)",
+        176,
+        30,
+        RC_ELECTRIC,
+        205,
+        0,
+        None,
+        5_000,
+        82,
+        1973,
+        RELIABILITY_ELECTRIC
+    ),
+    train!(
+        ENGINE_TRAIN_TIM,
+        "'T.I.M.' (Eléctrico)",
+        240,
+        40,
+        RC_ELECTRIC,
+        240,
+        0,
+        None,
+        7_000,
+        90,
+        1984,
+        RELIABILITY_ELECTRIC
+    ),
+    train!(
+        ENGINE_TRAIN_ASIASTAR,
+        "'AsiaStar' (Eléctrico)",
+        264,
+        43,
+        RC_ELECTRIC,
+        250,
+        0,
+        None,
+        8_000,
+        95,
+        1992,
+        RELIABILITY_ELECTRIC
+    ),
 ];
+
+/// Catálogo completo de motores disponibles.
+#[must_use]
+pub const fn engine_catalog() -> &'static [EngineDef] {
+    ENGINES
+}
+
+/// Motores de un tipo de vehículo concreto (orden del catálogo).
+pub fn engines_of_kind(kind: VehicleKind) -> impl Iterator<Item = &'static EngineDef> {
+    ENGINES.iter().filter(move |e| e.kind == kind)
+}
+
+/// Busca un motor por id, sin importar el tipo.
+#[must_use]
+pub fn engine_by_id(id: u16) -> Option<&'static EngineDef> {
+    ENGINES.iter().find(|e| e.id == id)
+}
 
 #[must_use]
 pub const fn default_engine_id(kind: VehicleKind) -> u16 {

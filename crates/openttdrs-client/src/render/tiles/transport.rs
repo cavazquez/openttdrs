@@ -44,7 +44,7 @@ pub(crate) fn spawn_road_tile(
     if tileh != 0 {
         spawn_ground_sprite(
             commands,
-            assets.grass_slopes[tileh as usize - 1].clone(),
+            &assets.grass_slopes[tileh as usize - 1],
             Color::WHITE,
             ctx,
             slope_half_ground,
@@ -57,11 +57,7 @@ pub(crate) fn spawn_road_tile(
     };
     commands.spawn((
         MapVisualLayer,
-        Sprite {
-            image: road_set[fi].clone(),
-            color: road_paint,
-            ..default()
-        },
+        road_set[fi].sprite_colored(road_paint),
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),
@@ -80,11 +76,7 @@ pub(crate) fn spawn_road_tile(
         };
         commands.spawn((
             MapVisualLayer,
-            Sprite {
-                image: assets.tram_flat[tfi].clone(),
-                color: Color::WHITE,
-                ..default()
-            },
+            assets.tram_flat[tfi].sprite(),
             Transform::from_translation(tile_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
@@ -115,11 +107,7 @@ pub(crate) fn spawn_road_tile(
             );
             commands.spawn((
                 MapVisualLayer,
-                Sprite {
-                    image: assets.road_streetlights[lamp].clone(),
-                    color: Color::WHITE,
-                    ..default()
-                },
+                assets.road_streetlights[lamp].sprite(),
                 Transform::from_translation(pos3),
             ));
         }
@@ -147,11 +135,7 @@ pub(crate) fn spawn_road_tile(
             });
             commands.spawn((
                 MapVisualLayer,
-                Sprite {
-                    image: img.clone(),
-                    color: crossing_paint,
-                    ..default()
-                },
+                img.sprite_colored(crossing_paint),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
@@ -178,7 +162,7 @@ pub(crate) fn spawn_rail_tile(
     if tileh != 0 {
         spawn_ground_sprite(
             commands,
-            assets.grass_slopes[tileh as usize - 1].clone(),
+            &assets.grass_slopes[tileh as usize - 1],
             Color::WHITE,
             ctx,
             slope_half_ground,
@@ -211,11 +195,7 @@ pub(crate) fn spawn_rail_tile(
         let z = 0.02 + i as f32 * 0.0004;
         commands.spawn((
             MapVisualLayer,
-            Sprite {
-                image: img.clone(),
-                color: rail_paint,
-                ..default()
-            },
+            img.sprite_colored(rail_paint),
             Transform::from_translation(tile_pos_half(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
@@ -235,11 +215,7 @@ pub(crate) fn spawn_rail_tile(
             let z = 0.032 + si as f32 * 0.0015;
             commands.spawn((
                 MapVisualLayer,
-                Sprite {
-                    image: img.clone(),
-                    color: Color::WHITE,
-                    ..default()
-                },
+                img.sprite(),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),

@@ -209,8 +209,48 @@ fn effective_road_bits(map: &Map, c: TileCoord) -> u8 {
     }
 }
 
+const RAIL_TB_CROSS: u8 = RAIL_TB_X | RAIL_TB_Y;
+
+/// Trackbit que conecta dos lados (`DiagDir`) de una tesela (`track_type.h`):
+/// X = NE↔SW, Y = SE↔NW, UPPER = NE↔NW, LOWER = SE↔SW, LEFT = SW↔NW, RIGHT = NE↔SE.
 #[must_use]
-fn effective_rail_trackbits(map: &Map, c: TileCoord) -> u8 {
+pub(crate) const fn rail_bit_for_sides(a: u8, b: u8) -> u8 {
+    let (lo, hi) = if (a & 3) < (b & 3) {
+        (a & 3, b & 3)
+    } else {
+        (b & 3, a & 3)
+    };
+    match (lo, hi) {
+        (0, 2) => 0x01, // X
+        (1, 3) => 0x02, // Y
+        (0, 3) => 0x04, // UPPER
+        (1, 2) => 0x08, // LOWER
+        (2, 3) => 0x10, // LEFT
+        (0, 1) => 0x20, // RIGHT
+        _ => 0,
+    }
+}
+
+/// Máscara de trackbits que tocan un lado (`_track_bits_by_diagdir` de `OpenTTD`).
+#[must_use]
+const fn rail_bits_touching_side(side: u8) -> u8 {
+    match side & 3 {
+        0 => 0x25, // NE: X | UPPER | RIGHT
+        1 => 0x2A, // SE: Y | LOWER | RIGHT
+        2 => 0x19, // SW: X | LOWER | LEFT
+        _ => 0x16, // NW: Y | UPPER | LEFT
+    }
+}
+
+#[must_use]
+const fn opposite_dir(d: u8) -> u8 {
+    (d + 2) & 3
+}
+
+/// Trackbits transitables de una tesela de la red ferroviaria (sin depósitos,
+/// que se tratan aparte porque solo conectan por su boca).
+#[must_use]
+fn rail_traversal_bits(map: &Map, c: TileCoord) -> u8 {
     let Some(t) = map.get(c) else {
         return 0;
     };
@@ -219,13 +259,26 @@ fn effective_rail_trackbits(map: &Map, c: TileCoord) -> u8 {
             let tb = t.m5 & 0x3F;
             if tb == 0 { RAIL_TB_X } else { tb }
         }
-        TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge => RAIL_TB_CROSS,
-        TileKind::Station if is_rail_station_tile(&t) => RAIL_TB_CROSS,
+        TileKind::RailTunnel | TileKind::RailBridge => RAIL_TB_CROSS,
+        // Los andenes contienen vía a lo largo de su eje (gfx impar = eje Y).
+        TileKind::Station if is_rail_station_tile(&t) => {
+            if t.m5 & 1 != 0 {
+                RAIL_TB_Y
+            } else {
+                RAIL_TB_X
+            }
+        }
         _ => 0,
     }
 }
 
-const RAIL_TB_CROSS: u8 = RAIL_TB_X | RAIL_TB_Y;
+/// Boca del depósito de vía (`m5 & 3`) si la tesela es un depósito.
+#[must_use]
+fn rail_depot_mouth(map: &Map, c: TileCoord) -> Option<u8> {
+    map.get(c)
+        .filter(|t| t.kind == TileKind::RailDepot)
+        .map(|t| t.m5 & 0x03)
+}
 
 #[must_use]
 fn road_tiles_connected(map: &Map, cur: TileCoord, next: TileCoord) -> bool {
@@ -266,31 +319,10 @@ fn rail_station_entrance_links_track(map: &Map, station: TileCoord, track: TileC
 }
 
 #[must_use]
-fn rail_tiles_connected(map: &Map, cur: TileCoord, next: TileCoord) -> bool {
-    let dx = next.x - cur.x;
-    let dy = next.y - cur.y;
-    if dx.abs() + dy.abs() != 1 {
-        return false;
-    }
-    if rail_station_entrance_links_track(map, cur, next)
-        || rail_station_entrance_links_track(map, next, cur)
-    {
-        return true;
-    }
-    let cur_tb = effective_rail_trackbits(map, cur);
-    let next_tb = effective_rail_trackbits(map, next);
-    if dx != 0 {
-        return cur_tb & RAIL_TB_X != 0 && next_tb & RAIL_TB_X != 0;
-    }
-    cur_tb & RAIL_TB_Y != 0 && next_tb & RAIL_TB_Y != 0
-}
-
-#[must_use]
 fn tiles_connected(map: &Map, cur: TileCoord, next: TileCoord, network: PathNetwork) -> bool {
-    match network {
-        PathNetwork::Road => road_tiles_connected(map, cur, next),
-        PathNetwork::Rail => rail_tiles_connected(map, cur, next),
-    }
+    debug_assert_eq!(network, PathNetwork::Road, "rail usa A* direccional");
+    let _ = network;
+    road_tiles_connected(map, cur, next)
 }
 
 /// Caché de rutas por tick (no se serializa; se invalida al avanzar la simulación).
@@ -384,6 +416,9 @@ pub fn find_path_with_wormholes(
     if from == to {
         return Some(vec![]);
     }
+    if network == PathNetwork::Rail {
+        return find_rail_path(map, from, to, wormholes);
+    }
 
     let (mw, mh) = map.dimensions();
     let mut g_score: HashMap<TileCoord, u32> = HashMap::new();
@@ -460,6 +495,161 @@ pub fn find_path_with_wormholes(
         }
     }
     None
+}
+
+/// Lado de entrada «libre»: el tren parte (o se rematerializa) sin restricción de giro.
+const SIDE_ANY: u8 = 4;
+
+/// A* direccional para vía: estado = (tesela, lado de entrada). Un giro dentro
+/// de una tesela solo es válido si existe el trackbit que conecta el lado de
+/// entrada con el de salida (piezas X/Y/curvas de `OpenTTD`). Los depósitos solo
+/// conectan por su boca y las plataformas solo se usan como origen.
+fn find_rail_path(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    wormholes: Option<&TunnelWormholes>,
+) -> Option<Vec<TileCoord>> {
+    let mut g_score: HashMap<(TileCoord, u8), u32> = HashMap::new();
+    let mut parent: HashMap<(TileCoord, u8), (TileCoord, u8)> = HashMap::new();
+    let mut heap = BinaryHeap::new();
+
+    let start = (from, SIDE_ANY);
+    g_score.insert(start, 0);
+    parent.insert(start, start);
+    heap.push(RailAstarNode {
+        est_total: manhattan(from, to),
+        pos: from,
+        in_side: SIDE_ANY,
+    });
+
+    while let Some(RailAstarNode {
+        est_total: _,
+        pos: cur,
+        in_side,
+    }) = heap.pop()
+    {
+        if cur == to {
+            return Some(reconstruct_rail(from, (cur, in_side), &parent));
+        }
+        let cur_g = g_score[&(cur, in_side)];
+        let cur_is_start = cur == from && in_side == SIDE_ANY;
+
+        // Un tren que llega a un depósito termina ahí; solo se sale por la boca.
+        let depot_mouth = rail_depot_mouth(map, cur);
+        if depot_mouth.is_some() && !cur_is_start {
+            continue;
+        }
+        let station_start = cur_is_start && map.get(cur).is_some_and(|t| is_rail_station_tile(&t));
+        let cur_bits = rail_traversal_bits(map, cur);
+
+        for out in 0..4u8 {
+            let exit_allowed = if let Some(mouth) = depot_mouth {
+                out == mouth
+            } else if station_start {
+                let (dx, dy) = diag_dir_offset(out);
+                rail_station_entrance_links_track(map, cur, TileCoord::new(cur.x + dx, cur.y + dy))
+            } else if in_side == SIDE_ANY {
+                cur_bits & rail_bits_touching_side(out) != 0
+            } else {
+                cur_bits & rail_bit_for_sides(in_side, out) != 0
+            };
+            if !exit_allowed {
+                continue;
+            }
+            let (dx, dy) = diag_dir_offset(out);
+            let next = TileCoord::new(cur.x + dx, cur.y + dy);
+            if map.get_kind(next).is_none() {
+                continue;
+            }
+            let entry = opposite_dir(out);
+            let next_in = if let Some(mouth) = rail_depot_mouth(map, next) {
+                if entry != mouth {
+                    continue; // al depósito solo se entra por la boca
+                }
+                entry
+            } else if station_start {
+                // El enlace plataforma → vía deja al tren sobre la vía sin
+                // restricción de giro (abstracción de estación).
+                SIDE_ANY
+            } else if rail_traversal_bits(map, next) & rail_bits_touching_side(entry) != 0 {
+                entry
+            } else {
+                continue;
+            };
+            let tentative = cur_g + 1;
+            let key = (next, next_in);
+            if g_score.get(&key).is_some_and(|&g| tentative >= g) {
+                continue;
+            }
+            g_score.insert(key, tentative);
+            parent.insert(key, (cur, in_side));
+            heap.push(RailAstarNode {
+                est_total: tentative + manhattan(next, to),
+                pos: next,
+                in_side: next_in,
+            });
+        }
+
+        // Wormholes (túneles JGR): el túnel es recto, conserva el lado de entrada.
+        if let Some(wh) = wormholes
+            && map.get_kind(cur).is_some_and(is_rail_network_tile)
+            && let Some(other) = wh.other_end(cur)
+        {
+            let ok = map.get_kind(other).is_some_and(is_rail_network_tile) || other == to;
+            let tentative = cur_g + 1;
+            let key = (other, in_side);
+            if ok && g_score.get(&key).is_none_or(|&g| tentative < g) {
+                g_score.insert(key, tentative);
+                parent.insert(key, (cur, in_side));
+                heap.push(RailAstarNode {
+                    est_total: tentative + manhattan(other, to),
+                    pos: other,
+                    in_side,
+                });
+            }
+        }
+    }
+    None
+}
+
+fn reconstruct_rail(
+    from: TileCoord,
+    goal: (TileCoord, u8),
+    parent: &HashMap<(TileCoord, u8), (TileCoord, u8)>,
+) -> Vec<TileCoord> {
+    let mut path = Vec::new();
+    let mut cur = goal;
+    while cur.0 != from {
+        path.push(cur.0);
+        cur = parent[&cur];
+    }
+    path.reverse();
+    path
+}
+
+#[derive(Copy, Clone, Eq, PartialEq)]
+struct RailAstarNode {
+    est_total: u32,
+    pos: TileCoord,
+    in_side: u8,
+}
+
+impl Ord for RailAstarNode {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .est_total
+            .cmp(&self.est_total)
+            .then_with(|| other.pos.x.cmp(&self.pos.x))
+            .then_with(|| other.pos.y.cmp(&self.pos.y))
+            .then_with(|| other.in_side.cmp(&self.in_side))
+    }
+}
+
+impl PartialOrd for RailAstarNode {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 /// Variante con caché por tick de simulación (los wormholes son constantes
@@ -652,6 +842,53 @@ mod tests {
                 PathNetwork::Rail,
             )
             .is_some()
+        );
+    }
+
+    #[test]
+    fn astar_rail_no_turn_at_plain_crossing() {
+        let mut m = Map::new_flat(8, 8, 0);
+        // Línea X en y=2 y línea Y en x=2; (2,2) es cruce X|Y sin curvas.
+        for x in 0..=4_i32 {
+            write_rail(&mut m, TileCoord::new(x, 2), RAIL_TB_X);
+        }
+        for y in 0..=4_i32 {
+            if y != 2 {
+                write_rail(&mut m, TileCoord::new(2, y), RAIL_TB_Y);
+            }
+        }
+        write_rail(&mut m, TileCoord::new(2, 2), RAIL_TB_X | RAIL_TB_Y);
+        assert!(
+            find_path(
+                &m,
+                TileCoord::new(0, 2),
+                TileCoord::new(4, 2),
+                PathNetwork::Rail
+            )
+            .is_some(),
+            "recto a través del cruce"
+        );
+        assert!(
+            find_path(
+                &m,
+                TileCoord::new(0, 2),
+                TileCoord::new(2, 0),
+                PathNetwork::Rail
+            )
+            .is_none(),
+            "el tren no debe doblar en un cruce sin curva"
+        );
+        // Con la pieza UPPER (NE↔NW) el giro sí es válido.
+        write_rail(&mut m, TileCoord::new(2, 2), RAIL_TB_X | RAIL_TB_Y | 0x04);
+        assert!(
+            find_path(
+                &m,
+                TileCoord::new(0, 2),
+                TileCoord::new(2, 0),
+                PathNetwork::Rail
+            )
+            .is_some(),
+            "con curva el giro es válido"
         );
     }
 

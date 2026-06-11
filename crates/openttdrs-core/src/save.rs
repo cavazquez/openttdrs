@@ -10,7 +10,12 @@ use serde::{Deserialize, Serialize};
 use crate::GameState;
 
 /// Versión de esquema del JSON en disco (`GameStateFile.version`).
-pub const CURRENT_SAVE_VERSION: u32 = 1;
+///
+/// v2: los cruces de vía sintéticos `X|Y` pasan a ser empalmes con piezas
+/// reales (recta + curvas); v1 se migra al cargar.
+/// v3: las intersecciones de dos rectas vuelven a ser cruce X|Y (sin curvas),
+/// como `OpenTTD`; los empalmes `0x3F` de v2 se migran al cargar.
+pub const CURRENT_SAVE_VERSION: u32 = 3;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -104,13 +109,19 @@ pub fn load_from_str(text: &str) -> Result<GameState, SaveError> {
         let file: GameStateFile = serde_json::from_value(v)?;
         migrate_loaded_state(file.version, file.state)
     } else {
-        Ok(GameState::load_json(text)?)
+        let mut state = GameState::load_json(text)?;
+        crate::command::normalize_synthetic_rail_crossings(&mut state.map);
+        Ok(state)
     }
 }
 
 /// Aplica migraciones encadenadas hasta [`CURRENT_SAVE_VERSION`].
-fn migrate_loaded_state(version: u32, state: GameState) -> Result<GameState, SaveError> {
+fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState, SaveError> {
     match version {
+        1 | 2 => {
+            crate::command::normalize_synthetic_rail_crossings(&mut state.map);
+            Ok(state)
+        }
         CURRENT_SAVE_VERSION => Ok(state),
         n => Err(SaveError::UnsupportedVersion(n)),
     }
@@ -176,6 +187,63 @@ mod tests {
         let again = load_from_str(&text).unwrap();
         assert_eq!(again.map.dimensions(), s.map.dimensions());
         let _ = std::fs::remove_file(&tmp);
+    }
+
+    #[test]
+    fn v1_migrates_synthetic_crossing_to_curve_junction() {
+        use crate::{Command, TileKind, command::apply_command};
+
+        let mut s = GameState::new(8, 8);
+        // Línea X (y=3) con ramal Y hacia el sur en x=4 (codo en (4,3)).
+        for x in 2..=6_i32 {
+            apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 3))).unwrap();
+        }
+        for y in 4..=5_i32 {
+            apply_command(&mut s, &Command::PlaceRail(TileCoord::new(4, y))).unwrap();
+        }
+        // Simula el save viejo: el empalme guardado como cruce sintético X|Y.
+        let mut t = s.map.get(TileCoord::new(4, 3)).unwrap();
+        assert_eq!(t.kind, TileKind::Rail);
+        t.m5 = (t.m5 & 0xC0) | 0x03;
+        s.map.set_tile(TileCoord::new(4, 3), t).unwrap();
+
+        let file = GameStateFile {
+            version: 1,
+            state: s,
+        };
+        let text = serde_json::to_string(&file).unwrap();
+        let loaded = load_from_str(&text).unwrap();
+        let bits = loaded.map.get(TileCoord::new(4, 3)).unwrap().m5 & 0x3F;
+        // X (NE↔SW) + LOWER (SE↔SW) + RIGHT (NE↔SE): empalme en T hacia el sur.
+        assert_eq!(bits, 0x29, "cruce migrado a piezas reales: {bits:#04x}");
+    }
+
+    #[test]
+    fn v2_migrates_full_junction_to_clean_crossing() {
+        use crate::{Command, TileKind, command::apply_command};
+
+        let mut s = GameState::new(9, 9);
+        // Dos rectas que se cruzan en (4,4).
+        for x in 2..=6_i32 {
+            apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+        }
+        for y in 2..=6_i32 {
+            apply_command(&mut s, &Command::PlaceRail(TileCoord::new(4, y))).unwrap();
+        }
+        // Simula el save v2: la intersección guardada con las seis piezas.
+        let mut t = s.map.get(TileCoord::new(4, 4)).unwrap();
+        assert_eq!(t.kind, TileKind::Rail);
+        t.m5 = (t.m5 & 0xC0) | 0x3F;
+        s.map.set_tile(TileCoord::new(4, 4), t).unwrap();
+
+        let file = GameStateFile {
+            version: 2,
+            state: s,
+        };
+        let text = serde_json::to_string(&file).unwrap();
+        let loaded = load_from_str(&text).unwrap();
+        let bits = loaded.map.get(TileCoord::new(4, 4)).unwrap().m5 & 0x3F;
+        assert_eq!(bits, 0x03, "cruce limpio X|Y: {bits:#04x}");
     }
 
     #[test]

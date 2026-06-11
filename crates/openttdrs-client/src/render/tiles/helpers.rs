@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::iso::{HEIGHT_PX, TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half};
-use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
+use crate::render::{AtlasSprite, MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::foundation_gfx_for_tileh;
 
 /// Sesgo en la componente Z de **solo** el agua animada (sin sprite `shore_*`).
@@ -18,9 +18,9 @@ pub(crate) const TRAM_OVERLAY_LAYER_FRAC: f32 = 0.028;
 
 pub(crate) fn sloped_or_flat_image(
     tileh: u8,
-    flat: &Handle<Image>,
-    slopes: &[Handle<Image>],
-) -> Handle<Image> {
+    flat: &AtlasSprite,
+    slopes: &[AtlasSprite],
+) -> AtlasSprite {
     if tileh == 0 {
         flat.clone()
     } else {
@@ -81,11 +81,7 @@ pub(crate) fn spawn_leveled_foundation(
     );
     commands.spawn((
         MapVisualLayer,
-        Sprite {
-            image: img.clone(),
-            color: Color::WHITE,
-            ..default()
-        },
+        img.sprite(),
         Transform::from_translation(pos).with_scale(Vec3::new(
             TILE_OVERLAP_SCALE,
             TILE_OVERLAP_SCALE,
@@ -96,18 +92,14 @@ pub(crate) fn spawn_leveled_foundation(
 
 pub(crate) fn spawn_ground_sprite(
     commands: &mut Commands,
-    image: Handle<Image>,
+    image: &AtlasSprite,
     color: Color,
     ctx: &TileRenderContext,
     half_h: f32,
 ) {
     commands.spawn((
         MapVisualLayer,
-        Sprite {
-            image,
-            color,
-            ..default()
-        },
+        image.sprite_colored(color),
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),
             ctx.ty_i32(),
@@ -121,15 +113,11 @@ pub(crate) fn spawn_ground_sprite(
 
 pub(crate) fn push_water_sprite(
     batch_water: &mut Vec<(Sprite, Transform)>,
-    h_water: &Handle<Image>,
+    h_water: &AtlasSprite,
     ctx: &TileRenderContext,
 ) {
     batch_water.push((
-        Sprite {
-            image: h_water.clone(),
-            color: Color::WHITE,
-            ..default()
-        },
+        h_water.sprite(),
         Transform::from_translation(tile_pos(
             ctx.tx_i32(),
             ctx.ty_i32(),

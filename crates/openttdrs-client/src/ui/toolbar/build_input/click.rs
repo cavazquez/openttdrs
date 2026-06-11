@@ -5,10 +5,13 @@ use openttdrs_core::{TileCoord, TileKind, apply_command};
 use crate::iso::world_pos_to_tile_coord;
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, pick_vehicle_id_at_world,
+    town_id_at_label_pos,
 };
 use crate::state::SimWorld;
 use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, push_build_command_error};
 use crate::ui::industry_panel::IndustryPanelState;
+use crate::ui::town_window::{TownWindowState, town_for_house_tile};
+use crate::ui::vehicle_window::VehicleWindowState;
 
 use super::commands::command_for_action;
 use super::drag::{
@@ -27,20 +30,60 @@ use crate::ui::toolbar::{
     BuildMenuAction, BuildMenuUi, DragBuildState, OrderEditState, StationBuildState, UiToolState,
 };
 
+/// Estados de paneles/ventanas mutuamente excluyentes, agrupados para no
+/// exceder el límite de parámetros de sistema de Bevy.
+#[derive(bevy::ecs::system::SystemParam)]
+pub(crate) struct PanelStates<'w> {
+    order: ResMut<'w, OrderEditState>,
+    depot: ResMut<'w, DepotPanelState>,
+    station: ResMut<'w, StationCargoPanelState>,
+    industry: ResMut<'w, IndustryPanelState>,
+    town: ResMut<'w, TownWindowState>,
+    vehicle: ResMut<'w, VehicleWindowState>,
+}
+
+/// Clic en un vehículo del mapa: abre su ventana flotante (las órdenes se
+/// abren desde el botón «Órdenes» de esa ventana).
+#[allow(clippy::too_many_arguments)]
 fn select_vehicle_on_map(
     order_state: &mut OrderEditState,
     depot_state: &mut DepotPanelState,
     station_panel: &mut StationCargoPanelState,
     industry_panel: &mut IndustryPanelState,
+    town_window: &mut TownWindowState,
+    vehicle_window: &mut VehicleWindowState,
     vehicle: &openttdrs_core::Vehicle,
 ) {
-    order_state.vehicle_id = Some(vehicle.id);
-    order_state.orders = vehicle.orders.clone();
+    vehicle_window.vehicle_id = Some(vehicle.id);
+    order_state.vehicle_id = None;
+    order_state.orders.clear();
     order_state.picking_destination = false;
     depot_state.depot_pos = None;
     depot_state.selected_vehicle = None;
     station_panel.station_pos = None;
     industry_panel.open = false;
+    town_window.town_id = None;
+}
+
+#[allow(clippy::too_many_arguments)]
+fn open_town_window(
+    town_window: &mut TownWindowState,
+    depot_state: &mut DepotPanelState,
+    station_panel: &mut StationCargoPanelState,
+    industry_panel: &mut IndustryPanelState,
+    order_state: &mut OrderEditState,
+    vehicle_window: &mut VehicleWindowState,
+    town_id: u32,
+) {
+    town_window.town_id = Some(town_id);
+    depot_state.depot_pos = None;
+    depot_state.selected_vehicle = None;
+    station_panel.station_pos = None;
+    industry_panel.open = false;
+    order_state.vehicle_id = None;
+    order_state.orders.clear();
+    order_state.picking_destination = false;
+    vehicle_window.vehicle_id = None;
 }
 
 /// Dos clicks: el primero ancla el ghost, el segundo confirma. Click derecho cancela.
@@ -54,11 +97,8 @@ pub(crate) fn handle_tile_click(
     tool_state: Res<UiToolState>,
     station_state: Res<StationBuildState>,
     mut drag_state: ResMut<DragBuildState>,
-    mut order_state: ResMut<OrderEditState>,
-    mut depot_state: ResMut<DepotPanelState>,
-    mut station_panel: ResMut<StationCargoPanelState>,
+    mut panels: PanelStates,
     mut pending: ResMut<RemapMapVisualsPending>,
-    mut industry_panel: ResMut<IndustryPanelState>,
     toolbar_pointer: Query<
         &Interaction,
         (
@@ -70,6 +110,13 @@ pub(crate) fn handle_tile_click(
     mut hud_feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
 ) {
+    let order_state = &mut *panels.order;
+    let depot_state = &mut *panels.depot;
+    let station_panel = &mut *panels.station;
+    let industry_panel = &mut *panels.industry;
+    let town_window = &mut *panels.town;
+    let vehicle_window = &mut *panels.vehicle;
+
     if mouse.just_pressed(MouseButton::Right) && drag_state.armed {
         cancel_placement(&mut drag_state);
         return;
@@ -123,7 +170,7 @@ pub(crate) fn handle_tile_click(
             && handle_order_destination_click(
                 &mouse,
                 pos,
-                &mut order_state,
+                order_state,
                 &mut sim,
                 &mut pending,
                 &mut hud_feedback,
@@ -139,7 +186,7 @@ pub(crate) fn handle_tile_click(
         {
             order_state.vehicle_id = Some(vehicle.id);
             order_state.orders = vehicle.orders.clone();
-            start_order_destination_pick(&mut order_state);
+            start_order_destination_pick(order_state);
             return;
         }
         return;
@@ -152,11 +199,26 @@ pub(crate) fn handle_tile_click(
                 && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
             {
                 select_vehicle_on_map(
-                    &mut order_state,
-                    &mut depot_state,
-                    &mut station_panel,
-                    &mut industry_panel,
+                    order_state,
+                    depot_state,
+                    station_panel,
+                    industry_panel,
+                    town_window,
+                    vehicle_window,
                     vehicle,
+                );
+                return;
+            }
+
+            if let Some(town_id) = town_id_at_label_pos(&sim, world_pos) {
+                open_town_window(
+                    town_window,
+                    depot_state,
+                    station_panel,
+                    industry_panel,
+                    order_state,
+                    vehicle_window,
+                    town_id,
                 );
                 return;
             }
@@ -172,6 +234,8 @@ pub(crate) fn handle_tile_click(
                     order_state.orders.clear();
                     order_state.picking_destination = false;
                     station_panel.station_pos = None;
+                    town_window.town_id = None;
+                    vehicle_window.vehicle_id = None;
                     return;
                 }
                 Some(TileKind::RoadDepot) | Some(TileKind::RailDepot) => {
@@ -187,6 +251,8 @@ pub(crate) fn handle_tile_click(
                     order_state.picking_destination = false;
                     station_panel.station_pos = None;
                     industry_panel.open = false;
+                    town_window.town_id = None;
+                    vehicle_window.vehicle_id = None;
                     return;
                 }
                 Some(TileKind::Station) => {
@@ -197,7 +263,23 @@ pub(crate) fn handle_tile_click(
                     order_state.orders.clear();
                     order_state.picking_destination = false;
                     industry_panel.open = false;
+                    town_window.town_id = None;
+                    vehicle_window.vehicle_id = None;
                     return;
+                }
+                Some(TileKind::House) => {
+                    if let Some(town_id) = town_for_house_tile(&sim.state, pos) {
+                        open_town_window(
+                            town_window,
+                            depot_state,
+                            station_panel,
+                            industry_panel,
+                            order_state,
+                            vehicle_window,
+                            town_id,
+                        );
+                        return;
+                    }
                 }
                 _ => {}
             }
@@ -208,6 +290,8 @@ pub(crate) fn handle_tile_click(
             order_state.vehicle_id = None;
             order_state.orders.clear();
             order_state.picking_destination = false;
+            town_window.town_id = None;
+            vehicle_window.vehicle_id = None;
         }
         return;
     };

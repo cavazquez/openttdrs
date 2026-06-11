@@ -45,6 +45,8 @@ pub fn check_required_assets(repo_root: &str) -> bool {
     let mut required: Vec<_> = vec![
         tiles_dir.join("grass.png"),
         tiles_dir.join("water.png"),
+        // El mapa se dibuja desde el atlas (gen_tile_atlas.py).
+        root.join("assets/opengfx/atlas/tiles_atlas_0.png"),
         root.join("static/fonts/DejaVuSansMono.ttf"),
     ];
     required.extend(VEHICLE_PNGS.iter().map(|name| tiles_dir.join(name)));
@@ -86,8 +88,10 @@ mod tests {
     fn check_required_assets_ok_with_min_pngs() {
         let dir = tempfile::tempdir().expect("tempdir");
         let t = dir.path().join("assets/opengfx/tiles");
+        let a = dir.path().join("assets/opengfx/atlas");
         let f = dir.path().join("static/fonts");
         fs::create_dir_all(&t).expect("mkdir");
+        fs::create_dir_all(&a).expect("mkdir");
         fs::create_dir_all(&f).expect("mkdir");
         let png = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -131,6 +135,7 @@ mod tests {
         ] {
             fs::write(t.join(name), png).expect("write");
         }
+        fs::write(a.join("tiles_atlas_0.png"), png).expect("write");
         fs::write(f.join("DejaVuSansMono.ttf"), []).expect("write");
         assert!(check_required_assets(dir.path().to_str().unwrap()));
     }

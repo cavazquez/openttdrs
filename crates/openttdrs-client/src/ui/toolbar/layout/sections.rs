@@ -226,51 +226,108 @@ pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &A
 pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
     root.spawn(tool_panel_node(ToolbarGroup::Rail, false))
         .with_children(|panel| {
-            spawn_panel_title(panel, "Construccion ferroviaria", 504.0);
+            spawn_panel_title(panel, "Construccion de Ferrocarril", 770.0);
             spawn_button_row(panel, |buttons| {
+                // Mismo orden que `_nested_build_rail_widgets` (rail_gui.cpp):
+                // 4 direcciones + autorail | separador | resto de herramientas.
                 spawn_icon_tool_buttons(
                     buttons,
                     asset_server,
                     &[
                         (
-                            "Via NE-SW",
-                            "assets/opengfx/tiles/rail_1012.png",
-                            BuildMenuAction::Rail,
-                        ),
-                        (
-                            "Via doble N-S (HORZ)",
-                            "assets/opengfx/tiles/rail_1035.png",
-                            BuildMenuAction::RailHorz,
-                        ),
-                        (
-                            "Via doble E-O (VERT)",
-                            "assets/opengfx/tiles/rail_1036.png",
+                            "Construir via N-S",
+                            "assets/opengfx/tiles/toolbar_rail_rail_ns.png",
                             BuildMenuAction::RailVert,
                         ),
                         (
-                            "Estacion de tren",
-                            "assets/opengfx/tiles/rail_platform_y_front.png",
-                            BuildMenuAction::RailStation,
+                            "Construir via NE-SW",
+                            "assets/opengfx/tiles/toolbar_rail_rail_x.png",
+                            BuildMenuAction::RailX,
+                        ),
+                        (
+                            "Construir via E-O",
+                            "assets/opengfx/tiles/toolbar_rail_rail_ew.png",
+                            BuildMenuAction::RailHorz,
+                        ),
+                        (
+                            "Construir via NW-SE",
+                            "assets/opengfx/tiles/toolbar_rail_rail_y.png",
+                            BuildMenuAction::RailY,
+                        ),
+                        (
+                            "Autorail (direccion automatica)",
+                            "assets/opengfx/tiles/toolbar_rail_autorail.png",
+                            BuildMenuAction::Rail,
+                        ),
+                    ],
+                );
+                spawn_toolbar_spacer(buttons);
+                spawn_icon_tool_buttons(
+                    buttons,
+                    asset_server,
+                    &[
+                        (
+                            "Demoler",
+                            "assets/opengfx/tiles/toolbar_rail_demolish.png",
+                            BuildMenuAction::Clear,
                         ),
                         (
                             "Deposito ferroviario",
-                            "assets/opengfx/tiles/rail_depot_ne.png",
+                            "assets/opengfx/tiles/toolbar_rail_depot.png",
                             BuildMenuAction::RailDepot,
                         ),
                         (
+                            "Waypoint (no implementado)",
+                            "assets/opengfx/tiles/toolbar_rail_waypoint.png",
+                            BuildMenuAction::RailWaypoint,
+                        ),
+                        (
+                            "Estacion de tren",
+                            "assets/opengfx/tiles/toolbar_rail_station.png",
+                            BuildMenuAction::RailStation,
+                        ),
+                        (
+                            "Senales (no implementado)",
+                            "assets/opengfx/tiles/toolbar_rail_signals.png",
+                            BuildMenuAction::RailSignals,
+                        ),
+                        (
                             "Puente ferroviario",
-                            "assets/opengfx/tiles/bridge_wood_rail_x.png",
+                            "assets/opengfx/tiles/toolbar_rail_bridge.png",
                             BuildMenuAction::RailBridge,
                         ),
                         (
                             "Tunel ferroviario",
-                            "assets/opengfx/tiles/tunnel_rail_rear.png",
+                            "assets/opengfx/tiles/toolbar_rail_tunnel.png",
                             BuildMenuAction::RailTunnel,
+                        ),
+                        (
+                            "Quitar via (no implementado)",
+                            "assets/opengfx/tiles/toolbar_rail_remove.png",
+                            BuildMenuAction::RailRemove,
+                        ),
+                        (
+                            "Convertir via (no implementado)",
+                            "assets/opengfx/tiles/toolbar_rail_convert.png",
+                            BuildMenuAction::RailConvert,
                         ),
                     ],
                 );
             });
         });
+}
+
+/// Separador vertical entre grupos de botones (panel oscuro en upstream).
+fn spawn_toolbar_spacer(buttons: &mut ChildSpawnerCommands) {
+    buttons.spawn((
+        Node {
+            width: Val::Px(8.0),
+            height: Val::Px(48.0),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.36, 0.47, 0.26)),
+        BuildMenuUi,
+    ));
 }
 
 pub(super) fn spawn_secondary_tool_panels(

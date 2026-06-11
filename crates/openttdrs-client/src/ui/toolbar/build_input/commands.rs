@@ -12,6 +12,8 @@ pub(crate) fn command_for_action(
         BuildMenuAction::RoadX => Some(Command::PlaceRoadBits(pos, 0x0A)),
         BuildMenuAction::RoadY => Some(Command::PlaceRoadBits(pos, 0x05)),
         BuildMenuAction::Rail => Some(Command::PlaceRail(pos)),
+        BuildMenuAction::RailX => Some(Command::PlaceRailBits(pos, 0x01)),
+        BuildMenuAction::RailY => Some(Command::PlaceRailBits(pos, 0x02)),
         BuildMenuAction::RailHorz => Some(Command::PlaceRailBits(pos, 0x0C)),
         BuildMenuAction::RailVert => Some(Command::PlaceRailBits(pos, 0x30)),
         BuildMenuAction::RailStation => {
@@ -30,6 +32,10 @@ pub(crate) fn command_for_action(
         | BuildMenuAction::RoadTunnel
         | BuildMenuAction::RailBridge
         | BuildMenuAction::RailTunnel
+        | BuildMenuAction::RailWaypoint
+        | BuildMenuAction::RailSignals
+        | BuildMenuAction::RailRemove
+        | BuildMenuAction::RailConvert
         | BuildMenuAction::Orders => None,
         BuildMenuAction::BuildHouse => Some(Command::PlaceHouse(pos)),
         BuildMenuAction::BuildCoalMine => Some(Command::PlaceIndustrySpec(

@@ -16,6 +16,8 @@ pub(crate) fn action_supports_drag(action: BuildMenuAction) -> bool {
             | BuildMenuAction::RoadBridge
             | BuildMenuAction::RoadTunnel
             | BuildMenuAction::Rail
+            | BuildMenuAction::RailX
+            | BuildMenuAction::RailY
             | BuildMenuAction::RailHorz
             | BuildMenuAction::RailVert
             | BuildMenuAction::RailBridge
@@ -56,6 +58,8 @@ pub(crate) fn tunnel_placement_is_valid(
 
 pub(crate) fn rail_bits_for_drag_action(action: BuildMenuAction) -> Option<u8> {
     match action {
+        BuildMenuAction::RailX => Some(0x01),
+        BuildMenuAction::RailY => Some(0x02),
         BuildMenuAction::RailHorz => Some(0x0C),
         BuildMenuAction::RailVert => Some(0x30),
         _ => None,

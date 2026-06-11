@@ -147,9 +147,12 @@ fn build_m8_le(
     m3hi: &[u8],
     expected: usize,
 ) -> Vec<u8> {
-    let mut buf = map8.to_vec();
-    buf.truncate(expected * 2);
-    buf.resize(expected * 2, 0);
+    // MAP8 es `SLE_UINT16` big-endian en el save; el `.ottdmap` lo quiere LE.
+    let mut buf = vec![0u8; expected * 2];
+    for i in 0..expected {
+        buf[i * 2] = map8.get(i * 2 + 1).copied().unwrap_or(0);
+        buf[i * 2 + 1] = map8.get(i * 2).copied().unwrap_or(0);
+    }
     if version < SLV_INCREASE_HOUSE_LIMIT {
         for i in 0..expected {
             if (mapt[i] >> 4) & 0xF != MP_HOUSE {
@@ -232,9 +235,11 @@ pub(crate) fn export_ottdmap(chunks: &[RawChunk], version: u16) -> Result<Vec<u8
     let m8 = build_m8_le(version, mapt, &map8, &m3lo, &m3hi, expected);
 
     let (m2_lo, m2_hi): (Vec<u8>, Vec<u8>) = if map2_raw.len() >= 2 * expected {
+        // MAP2 es `SLE_UINT16` big-endian en el save (TownID en MP_HOUSE,
+        // tipo/variante de señal en MP_RAILWAY): byte alto primero.
         (
-            (0..expected).map(|i| map2_raw[i * 2]).collect(),
             (0..expected).map(|i| map2_raw[i * 2 + 1]).collect(),
+            (0..expected).map(|i| map2_raw[i * 2]).collect(),
         )
     } else {
         let mut lo = map2_raw.clone();

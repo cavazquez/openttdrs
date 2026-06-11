@@ -12,6 +12,14 @@ pairs=(
   "rail_platform_x_front.png:1072"
   "rail_platform_building_x.png:1073"
   "rail_platform_building_y.png:1074"
+  "rail_platform_pillars_y_front.png:1075"
+  "rail_platform_pillars_x_rear.png:1076"
+  "rail_platform_pillars_y_rear.png:1077"
+  "rail_platform_pillars_x_front.png:1078"
+  "rail_roof_0.png:1079"
+  "rail_roof_1.png:1080"
+  "rail_roof_2.png:1081"
+  "rail_roof_3.png:1082"
 )
 for pair in "${pairs[@]}"; do
   src="${pair%%:*}"

@@ -19,6 +19,57 @@ pub fn road_depot_entrance_road_bits(dir: u8) -> u8 {
     1u8 << (3 ^ (dir & 3))
 }
 
+// ── Roadside (decoración del borde: pasto / acera / faroles) ─────────────────
+
+/// `GetRoadside` (`road_map.h`): bits 3–5 de `m6` en carretera **normal**
+/// (`RoadTileType::Normal`, bits 6–7 de `m5` = 0). En cruces y depósitos no aplica.
+#[must_use]
+pub fn road_tile_roadside(m5: u8, m6: u8) -> Option<u8> {
+    if (m5 >> 6) & 0x3 == 0 {
+        Some((m6 >> 3) & 0x7)
+    } else {
+        None
+    }
+}
+
+/// `GetRoadGroundSprite` (`road_cmd.cpp`): Paved (2), StreetLights (3), Trees (5)
+/// y PavedRoadWorks (7) usan el set pavimentado (`SPR_ROAD_Y - 19` = 1313..1331).
+/// Barren (0), Grass (1) y GrassRoadWorks (6) usan el set sobre pasto.
+#[must_use]
+pub fn roadside_is_paved(roadside: u8) -> bool {
+    matches!(roadside, 2 | 3 | 5 | 7)
+}
+
+/// Farol de `_roadside_lamps` (`table/road_land.h`): índice de PNG
+/// (`road_streetlight_{i}.png`, 0 = 0x57E, 1 = 0x57F) y subcoordenadas de
+/// mundo (0..15) dentro de la tesela.
+pub type RoadsideLamp = (usize, f32, f32);
+
+/// `_roadside_lamps[road_bits]` (`table/road_land.h`): faroles a dibujar cuando
+/// `Roadside::StreetLights`. Indexado por los 4 road bits (NW=1, SW=2, SE=4, NE=8).
+pub static ROADSIDE_LAMPS: [&[RoadsideLamp]; 16] = [
+    &[],
+    &[],
+    &[],
+    &[(1, 1.0, 8.0)],
+    &[],
+    &[(1, 1.0, 8.0), (0, 14.0, 8.0)],
+    &[(0, 8.0, 1.0)],
+    &[(1, 1.0, 8.0)],
+    &[],
+    &[(1, 8.0, 14.0)],
+    &[(1, 8.0, 14.0), (0, 8.0, 1.0)],
+    &[(1, 8.0, 14.0)],
+    &[(0, 8.0, 1.0)],
+    &[(0, 14.0, 8.0)],
+    &[(0, 8.0, 1.0)],
+    &[],
+];
+
+/// (w, h, xrel, yrel) NFO de `road_streetlight_{0,1}.png` (sprites 0x57E/0x57F).
+pub static ROAD_STREETLIGHT_META: [(f32, f32, f32, f32); 2] =
+    [(4.0, 14.0, 2.0, -13.0), (4.0, 14.0, -2.0, -13.0)];
+
 #[must_use]
 pub fn road_depot_build_layers(dir: usize) -> &'static [RoadDepotLayerGfx] {
     ROAD_DEPOT_BUILD_LAYERS[dir.min(3)]

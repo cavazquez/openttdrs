@@ -57,12 +57,22 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::Rail => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/rail_1012.png"))
         }
+        BuildMenuAction::RailX => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/rail_1012.png"))
+        }
+        BuildMenuAction::RailY => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/rail_1011.png"))
+        }
         BuildMenuAction::RailHorz => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/rail_1035.png"))
         }
         BuildMenuAction::RailVert => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/rail_1036.png"))
         }
+        BuildMenuAction::RailWaypoint
+        | BuildMenuAction::RailSignals
+        | BuildMenuAction::RailRemove
+        | BuildMenuAction::RailConvert => None,
         BuildMenuAction::RailStation => {
             let axis_y = station_state.orientation.is_multiple_of(2);
             let path = if axis_y {

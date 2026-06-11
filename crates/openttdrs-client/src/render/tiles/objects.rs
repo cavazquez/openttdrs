@@ -9,9 +9,9 @@ use crate::iso::{
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     StationTileClass, rail_station_draw_layers, rail_station_ground_track_sprite,
-    rail_station_overlay_rel, road_depot_build_layers, road_depot_entrance_road_bits,
-    road_depot_seq_gfx, road_flat_sprite_index, road_stop_build_layers, road_stop_ground_index,
-    road_stop_seq_gfx, station_tile_class,
+    rail_station_overlay_rel, rail_station_sprite_meta, road_depot_build_layers,
+    road_depot_entrance_road_bits, road_depot_seq_gfx, road_flat_sprite_index,
+    road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,
 };
 
 pub(crate) fn spawn_station_tile(
@@ -80,13 +80,17 @@ pub(crate) fn spawn_station_tile(
                 let Some(img) = assets.rail.get(&layer.sprite_id) else {
                     continue;
                 };
-                let (xrel, yrel) = rail_station_overlay_rel(layer.dx, layer.dy);
+                let Some((w, h, nfo_xrel, nfo_yrel)) = rail_station_sprite_meta(layer.sprite_id)
+                else {
+                    continue;
+                };
+                let (xrel, yrel) = rail_station_overlay_rel(layer, nfo_xrel, nfo_yrel);
                 let pos3 = overlay_pos(
                     ctx.iso_pos,
                     xrel,
                     yrel,
-                    layer.w,
-                    layer.h,
+                    w,
+                    h,
                     base_z,
                     layer.z,
                     ctx.tx_i32(),
@@ -99,11 +103,7 @@ pub(crate) fn spawn_station_tile(
                         color: Color::WHITE,
                         ..default()
                     },
-                    Transform::from_translation(pos3).with_scale(Vec3::new(
-                        TILE_OVERLAP_SCALE,
-                        TILE_OVERLAP_SCALE,
-                        1.0,
-                    )),
+                    Transform::from_translation(pos3),
                 ));
             }
         }

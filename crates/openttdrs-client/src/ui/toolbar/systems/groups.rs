@@ -86,12 +86,18 @@ pub(crate) fn update_toolbar_tool_visibility(
 pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup {
     match action {
         BuildMenuAction::Rail
+        | BuildMenuAction::RailX
+        | BuildMenuAction::RailY
         | BuildMenuAction::RailHorz
         | BuildMenuAction::RailVert
         | BuildMenuAction::RailDepot
         | BuildMenuAction::RailBridge
         | BuildMenuAction::RailTunnel
-        | BuildMenuAction::RailStation => ToolbarGroup::Rail,
+        | BuildMenuAction::RailStation
+        | BuildMenuAction::RailWaypoint
+        | BuildMenuAction::RailSignals
+        | BuildMenuAction::RailRemove
+        | BuildMenuAction::RailConvert => ToolbarGroup::Rail,
         BuildMenuAction::Road
         | BuildMenuAction::RoadX
         | BuildMenuAction::RoadY

@@ -512,7 +512,7 @@ mod world_pos_to_tile_tests {
     }
 
     #[test]
-    fn road_stop_overlay_rel_matches_rail_station_for_ne_build_a() {
+    fn road_stop_overlay_rel_for_ne_build_a() {
         let seq = super::RoadStopSeqGfx {
             dx: 2.0,
             dy: 0.0,
@@ -522,9 +522,8 @@ mod world_pos_to_tile_tests {
             remap_x_adj: 0.0,
         };
         let (xrel, yrel) = super::road_stop_overlay_rel(seq);
-        let rail = crate::sprites::rail_station_overlay_rel(2.0, 0.0);
-        assert_eq!(xrel, rail.0);
-        assert_eq!(yrel, rail.1);
+        assert_eq!(xrel, -8.0);
+        assert_eq!(yrel, 4.0);
     }
 
     #[test]
@@ -538,10 +537,8 @@ mod world_pos_to_tile_tests {
             remap_x_adj: -13.0,
         };
         let (xrel, yrel) = super::road_stop_overlay_rel(seq);
-        let rail = crate::sprites::rail_station_overlay_rel(0.0, 13.0);
-        assert_eq!(yrel, rail.1);
         assert_eq!(xrel, 0.0);
-        assert_eq!(rail.0, 52.0);
+        assert_eq!(yrel, 26.0);
     }
 
     #[test]

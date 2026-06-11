@@ -489,6 +489,86 @@ fn power_plant_chimney_spawns_animated_smoke() {
 }
 
 #[test]
+fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+
+    // Carretera normal recta (bits NW|SE = 0x5) con acera (Roadside::Paved = 2).
+    let mut paved = Tile {
+        kind: TileKind::Road,
+        mapt: 0x20,
+        m5: 0x05,
+        m6: 2 << 3,
+        ..tile_template()
+    };
+    map.set_tile(c(2, 2), paved).expect("paved road");
+
+    // Misma carretera con faroles (Roadside::StreetLights = 3).
+    paved.m6 = 3 << 3;
+    map.set_tile(c(4, 4), paved).expect("street lights road");
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let (mw, mh) = m.0.dimensions();
+                spawn_road_tile(
+                    &mut commands,
+                    &m.0,
+                    mw,
+                    mh,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 2, 2),
+                    4.0,
+                );
+            },
+        )
+        .expect("paved road tile");
+    let paved_sprites: Vec<_> = world
+        .query::<&Sprite>()
+        .iter(&world)
+        .map(|s| s.image.clone())
+        .collect();
+    assert_eq!(
+        paved_sprites.len(),
+        1,
+        "carretera pavimentada: solo el suelo"
+    );
+    let a = world.resource::<TsAssets>();
+    let fi = crate::sprites::ROAD_FLAT_OFFSET_TBL[5] as usize;
+    assert_eq!(
+        paved_sprites[0], a.0.road_paved[fi],
+        "debe usar el set pavimentado (1313..)"
+    );
+
+    world
+        .run_system_once(
+            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                let (mw, mh) = m.0.dimensions();
+                spawn_road_tile(
+                    &mut commands,
+                    &m.0,
+                    mw,
+                    mh,
+                    &a.0,
+                    &TileRenderContext::new(&m.0, &g.0, 4, 4),
+                    4.0,
+                );
+            },
+        )
+        .expect("street lights road tile");
+    let total = world.query::<&Sprite>().iter(&world).count();
+    // `_roadside_lamps[5]`: dos faroles además del suelo pavimentado.
+    assert_eq!(total - 1, 3, "suelo pavimentado + 2 faroles");
+}
+
+#[test]
 fn spawn_field_tile_draws_crop_ground_and_fences() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

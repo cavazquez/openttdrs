@@ -89,6 +89,9 @@ fn generated_town_name(record: &super::table::SlRecord) -> Option<String> {
 
 /// Ciudades del chunk `CITY` (tabla); nombre custom, nombre generado con el
 /// generador nativo de `OpenTTD`, o «Ciudad N» como último recurso.
+///
+/// La población **no** viene en el save: `OpenTTD` la reconstruye al cargar
+/// (`RebuildTownCaches`); ver `sav::rebuild_town_populations`.
 #[must_use]
 pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32) -> Vec<Town> {
     let Some(city) = find_chunk(chunks, "CITY") else {
@@ -102,22 +105,17 @@ pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32) -> Vec<Town> {
         let Some(pos) = tile_to_coord(xy, map_w) else {
             continue;
         };
-        let population = record_get(&record, "cache.population")
-            .or_else(|| record_get(&record, "population"))
-            .and_then(SlValue::as_u64)
-            .unwrap_or(0);
         let name = record_get(&record, "name")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
             .map(str::to_string)
             .or_else(|| generated_town_name(&record))
             .unwrap_or_else(|| format!("Ciudad {}", idx + 1));
-        #[allow(clippy::cast_possible_truncation)]
         out.push(Town {
             id: idx,
             pos,
             name,
-            population: population as u32,
+            population: 0,
         });
     }
     out
@@ -296,32 +294,26 @@ mod tests {
     }
 
     #[test]
-    fn decodes_towns_with_population_and_fallback_name() {
+    fn decodes_towns_with_fallback_name() {
         let mut t1 = Vec::new();
         t1.extend_from_slice(&(3u32 * 64 + 3).to_be_bytes());
         write_str("Rosario", &mut t1);
-        t1.extend_from_slice(&1234u32.to_be_bytes());
 
         let mut t2 = Vec::new();
         t2.extend_from_slice(&(7u32 * 64 + 1).to_be_bytes());
         write_str("", &mut t2);
-        t2.extend_from_slice(&55u32.to_be_bytes());
 
         let chunk = RawChunk {
             name: *b"CITY",
             ch_type: CH_TABLE,
-            body: build_table_body(
-                &[(6, "xy"), (0x0A | 0x10, "name"), (6, "cache.population")],
-                &[t1, t2],
-            ),
+            body: build_table_body(&[(6, "xy"), (0x0A | 0x10, "name")], &[t1, t2]),
         };
         let towns = towns_from_chunks(&[chunk], 64);
         assert_eq!(towns.len(), 2);
         assert_eq!(towns[0].name, "Rosario");
-        assert_eq!(towns[0].population, 1234);
+        assert_eq!(towns[0].population, 0, "la población se reconstruye aparte");
         assert_eq!(towns[0].pos, TileCoord::new(3, 3));
         assert_eq!(towns[1].name, "Ciudad 2");
-        assert_eq!(towns[1].population, 55);
     }
 
     #[test]

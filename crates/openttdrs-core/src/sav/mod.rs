@@ -9,6 +9,7 @@ mod build;
 mod chunks;
 mod container;
 mod entities;
+mod house_population_generated;
 mod table;
 
 use crate::game_state::GameState;
@@ -83,7 +84,8 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         .map_err(|e| SavError::BadFormat(format!("mapa reconstruido inválido: {e:?}")))?;
     let (map_w, _) = map.dimensions();
     let stations = entities::stations_from_chunks(&chunk_list, map_w);
-    let towns = entities::towns_from_chunks(&chunk_list, map_w);
+    let mut towns = entities::towns_from_chunks(&chunk_list, map_w);
+    rebuild_town_populations(&map, &mut towns);
     let industries = entities::industries_from_chunks(&chunk_list, map_w);
     let vehicles = entities::vehicles_from_chunks(&chunk_list, map_w);
     let money = entities::company_money_from_chunks(&chunk_list);
@@ -97,6 +99,40 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         vehicles,
         money,
     })
+}
+
+/// Reconstruye `Town::population` como `RebuildTownCaches` (`town_sl.cpp`):
+/// `OpenTTD` no guarda la población en el save, la recalcula sumando
+/// `HouseSpec::population` de cada tesela `MP_HOUSE` completada (bit 7 de
+/// `m3`), atribuida a la ciudad indicada por `m2` (`GetTownIndex`).
+fn rebuild_town_populations(map: &Map, towns: &mut [Town]) {
+    use house_population_generated::HOUSE_POPULATION;
+    if towns.is_empty() {
+        return;
+    }
+    let mut pop_by_id: std::collections::HashMap<u32, u32> = std::collections::HashMap::new();
+    let (w, h) = map.dimensions();
+    for y in 0..h {
+        for x in 0..w {
+            #[allow(clippy::cast_possible_wrap)]
+            let Some(t) = map.get(crate::map::TileCoord::new(x as i32, y as i32)) else {
+                continue;
+            };
+            if t.kind != crate::map::TileKind::House || t.m3 & 0x80 == 0 {
+                continue;
+            }
+            let house_id = usize::from(t.m8 & 0x0FFF);
+            // HouseIDs NewGRF (≥ 110) no tienen spec original: se omiten.
+            let Some(&pop) = HOUSE_POPULATION.get(house_id) else {
+                continue;
+            };
+            let town_id = u32::from(t.m2) | (u32::from(t.m2_hi) << 8);
+            *pop_by_id.entry(town_id).or_insert(0) += u32::from(pop);
+        }
+    }
+    for town in towns {
+        town.population = pop_by_id.get(&town.id).copied().unwrap_or(0);
+    }
 }
 
 #[must_use]

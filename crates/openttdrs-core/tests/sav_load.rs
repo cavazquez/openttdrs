@@ -73,13 +73,42 @@ fn synthetic_sav_payload() -> Vec<u8> {
         &[dims],
     ));
 
-    // MAPT: pradera con una estación en (5,2) y una vía en (6,2).
+    // MAPT: pradera con una estación en (5,2), una vía en (6,2) y casas para
+    // reconstruir la población (OpenTTD no la guarda en el save).
     let mut mapt = vec![0u8; n];
     let station_tile = 2 * MAP_W as usize + 5;
     mapt[station_tile] = 5 << 4; // MP_STATION
     mapt[2 * MAP_W as usize + 6] = 1 << 4; // MP_RAILWAY
+    let house_a = 10 * MAP_W as usize + 10; // town 0, HouseID 0 (pop 187)
+    let house_b = 10 * MAP_W as usize + 11; // town 0, HouseID 1 (pop 85)
+    let house_c = 20 * MAP_W as usize + 20; // town 1, HouseID 3 (pop 5)
+    let house_d = 10 * MAP_W as usize + 12; // town 0, en construcción: no suma
+    for i in [house_a, house_b, house_c, house_d] {
+        mapt[i] = 3 << 4; // MP_HOUSE
+    }
     data.extend_from_slice(&riff_chunk(b"MAPT", &mapt));
     data.extend_from_slice(&riff_chunk(b"MAPH", &vec![1u8; n]));
+
+    // M3LO bit 7 = casa completada; M3HI = HouseID (encoding pre-348);
+    // MAP2 = TownID u16 big-endian.
+    let mut m3lo = vec![0u8; n];
+    let mut m3hi = vec![0u8; n];
+    let mut map2 = vec![0u8; n * 2];
+    for (i, hid, town) in [
+        (house_a, 0u8, 0u16),
+        (house_b, 1, 0),
+        (house_c, 3, 1),
+        (house_d, 0, 0),
+    ] {
+        if i != house_d {
+            m3lo[i] = 0x80;
+        }
+        m3hi[i] = hid;
+        map2[i * 2..i * 2 + 2].copy_from_slice(&town.to_be_bytes());
+    }
+    data.extend_from_slice(&riff_chunk(b"M3LO", &m3lo));
+    data.extend_from_slice(&riff_chunk(b"M3HI", &m3hi));
+    data.extend_from_slice(&riff_chunk(b"MAP2", &map2));
 
     // STNN: estación con nombre + un waypoint que debe ignorarse.
     let mut st = Vec::new();
@@ -96,18 +125,16 @@ fn synthetic_sav_payload() -> Vec<u8> {
         &[st, wp],
     ));
 
-    // CITY: una ciudad con nombre custom y otra con nombre generado.
+    // CITY: una ciudad con nombre custom y otra con nombre por defecto.
     let mut t1 = Vec::new();
     t1.extend_from_slice(&((10u32 * MAP_W) + 10).to_be_bytes());
     write_str("Bahía Blanca", &mut t1);
-    t1.extend_from_slice(&2500u32.to_be_bytes());
     let mut t2 = Vec::new();
     t2.extend_from_slice(&((20u32 * MAP_W) + 20).to_be_bytes());
     write_str("", &mut t2);
-    t2.extend_from_slice(&80u32.to_be_bytes());
     data.extend_from_slice(&table_chunk(
         b"CITY",
-        &[(6, "xy"), (0x0A | 0x10, "name"), (6, "cache.population")],
+        &[(6, "xy"), (0x0A | 0x10, "name")],
         &[t1, t2],
     ));
 
@@ -203,8 +230,13 @@ fn loads_synthetic_sav_with_map_stations_and_towns() {
 
     assert_eq!(sav.towns.len(), 2);
     assert_eq!(sav.towns[0].name, "Bahía Blanca");
-    assert_eq!(sav.towns[0].population, 2500);
+    assert_eq!(
+        sav.towns[0].population,
+        187 + 85,
+        "casas completas de la town 0 (la casa en construcción no suma)"
+    );
     assert_eq!(sav.towns[1].name, "Ciudad 2");
+    assert_eq!(sav.towns[1].population, 5);
 
     assert_eq!(sav.industries.len(), 1);
     assert_eq!(sav.industries[0].pos, TileCoord::new(30, 30));

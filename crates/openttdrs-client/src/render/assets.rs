@@ -23,6 +23,10 @@ pub(crate) struct WorldAssets {
     pub(crate) lighthouse: Handle<Image>,
     pub(crate) transmitter: Handle<Image>,
     pub(crate) road_flat: Vec<Handle<Image>>,
+    /// Set pavimentado (`SPR_ROAD_Y - 19` = 1313..1331), mismo orden que `road_flat`.
+    pub(crate) road_paved: Vec<Handle<Image>>,
+    /// Faroles de `Roadside::StreetLights` (sprites 0x57E/0x57F).
+    pub(crate) road_streetlights: [Handle<Image>; 2],
     /// OpenGFX `tram_flat_*` (SPR_TRAMWAY_OVERLAY+0..18); mismo índice que `road_flat_*`.
     pub(crate) tram_flat: Vec<Handle<Image>>,
     pub(crate) rail: HashMap<u32, Handle<Image>>,
@@ -110,6 +114,15 @@ impl WorldAssets {
                 asset_server.load::<Image>(format!("assets/opengfx/tiles/road_flat_{i:02}.png"))
             })
             .collect();
+        let road_paved = (0..19)
+            .map(|i| {
+                asset_server.load::<Image>(format!("assets/opengfx/tiles/road_paved_{i:02}.png"))
+            })
+            .collect();
+        let road_streetlights = [
+            asset_server.load::<Image>("assets/opengfx/tiles/road_streetlight_0.png"),
+            asset_server.load::<Image>("assets/opengfx/tiles/road_streetlight_1.png"),
+        ];
         let tram_flat = (0..19)
             .map(|i| {
                 asset_server.load::<Image>(format!("assets/opengfx/tiles/tram_flat_{i:02}.png"))
@@ -117,7 +130,7 @@ impl WorldAssets {
             .collect();
         let mut rail_ids: std::collections::BTreeSet<_> =
             rail_sprite_ids_for_preload().into_iter().collect();
-        for gfx in 0..=3 {
+        for gfx in 0..=7 {
             rail_ids.insert(rail_station_ground_track_sprite(gfx, 0));
             for layer in rail_station_draw_layers(gfx) {
                 rail_ids.insert(layer.sprite_id);
@@ -248,6 +261,8 @@ impl WorldAssets {
             lighthouse,
             transmitter,
             road_flat,
+            road_paved,
+            road_streetlights,
             tram_flat,
             rail,
             station_grounds,
@@ -333,7 +348,14 @@ pub(crate) fn stub_opengfx_tiles_for_tests(root: &std::path::Path) {
     write_png(root, "assets/opengfx/tiles/object_transmitter.png");
     for i in 0..19 {
         write_png(root, &format!("assets/opengfx/tiles/road_flat_{i:02}.png"));
+        write_png(root, &format!("assets/opengfx/tiles/road_paved_{i:02}.png"));
         write_png(root, &format!("assets/opengfx/tiles/tram_flat_{i:02}.png"));
+    }
+    for i in 0..2 {
+        write_png(
+            root,
+            &format!("assets/opengfx/tiles/road_streetlight_{i}.png"),
+        );
     }
     for id in rail_sprite_ids_for_preload() {
         write_png(root, &format!("assets/opengfx/tiles/rail_{id}.png"));

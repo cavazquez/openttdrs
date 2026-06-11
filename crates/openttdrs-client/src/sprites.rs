@@ -3,6 +3,8 @@
 use bevy::prelude::Color;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
+#[path = "sprites/bridge_draw_data_generated.rs"]
+mod bridge_draw_data_generated;
 #[path = "sprites/field_draw_data_generated.rs"]
 mod field_draw_data_generated;
 #[path = "sprites/foundation.rs"]
@@ -72,8 +74,9 @@ pub fn rail_track_base_color(mapt: u8, kind: TileKind, m5: u8, m3: u8) -> Color 
 }
 
 pub use road::{
-    ROAD_DEPOT_GROUND_PATH, ROAD_FLAT_OFFSET_TBL, road_depot_build_layers,
-    road_depot_entrance_road_bits, road_depot_seq_gfx,
+    ROAD_DEPOT_GROUND_PATH, ROAD_FLAT_OFFSET_TBL, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
+    road_depot_build_layers, road_depot_entrance_road_bits, road_depot_seq_gfx, road_tile_roadside,
+    roadside_is_paved,
 };
 
 /// Mitad de la altura en px de cada variante `road_flat_XX`.
@@ -109,8 +112,8 @@ pub use rail::{
 pub use station::{
     StationTileClass, rail_station_axis_y, rail_station_draw_layers,
     rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_sprite_layers,
-    road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,
-    station_type_from_m6, stop_kind_from_m6,
+    rail_station_sprite_meta, road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx,
+    station_tile_class, station_type_from_m6, stop_kind_from_m6,
 };
 
 /// Especificación de dibujo de una casa (stage completado).
@@ -153,6 +156,10 @@ pub use field_draw_data_generated::{
 
 /// Set completo de orillas (`SPR_SHORE_BASE + 0..17`, Action5 0x0D).
 /// Regenerar: `python3 scripts/gen_shore_full_set.py`.
+pub use bridge_draw_data_generated::{
+    BRIDGE_WOOD_FRONT_META, BRIDGE_WOOD_PILLAR_META, BRIDGE_WOOD_REAR_RAIL_META,
+    BRIDGE_WOOD_REAR_ROAD_META,
+};
 pub use shore_draw_data_generated::{SHORE_META, SHORE_SPRITE_COUNT, TILEH_TO_SHORE_SPRITE};
 
 /// Humo de chimenea de la central eléctrica (`SPR_CHIMNEY_SMOKE_0..7`).

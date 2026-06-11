@@ -2,14 +2,15 @@ use bevy::prelude::*;
 use openttdrs_core::{Map, TileKind};
 
 use super::{TILE_OVERLAP_SCALE, TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite};
-use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, tile_pos_half};
+use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
-    RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, collect_rail_sprites, collect_signal_sprite_ids,
-    is_road_level_crossing, level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
-    rail_tile_is_signals, rail_track_base_color, rail_trackbits_for_render, road_bits_for_render,
-    road_flat_sprite_color, road_flat_sprite_index, road_tile_tram_visual_active,
-    tram_flat_sprite_index,
+    RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
+    collect_rail_sprites, collect_signal_sprite_ids, is_road_level_crossing,
+    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_tile_is_signals,
+    rail_track_base_color, rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
+    road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
+    road_tile_tram_visual_active, roadside_is_paved, tram_flat_sprite_index,
 };
 
 pub(crate) fn spawn_road_tile(
@@ -33,6 +34,13 @@ pub(crate) fn spawn_road_tile(
     let road_paint = ctx.tile.map_or(Color::WHITE, |t| {
         road_flat_sprite_color(t.mapt, ctx.kind, t.m7)
     });
+    // `GetRoadGroundSprite`: acera pavimentada (Roadside >= Paved) usa el set
+    // 1313..1331 salvo nieve/desierto, que mantiene el set sobre pasto + tinte.
+    let roadside = ctx.tile.and_then(|t| road_tile_roadside(t.m5, t.m6));
+    let paved = roadside.is_some_and(roadside_is_paved)
+        && !ctx
+            .tile
+            .is_some_and(|t| road_tile_snow_or_desert(t.mapt, ctx.kind, t.m7));
     if tileh != 0 {
         spawn_ground_sprite(
             commands,
@@ -42,10 +50,15 @@ pub(crate) fn spawn_road_tile(
             slope_half_ground,
         );
     }
+    let road_set = if paved {
+        &assets.road_paved
+    } else {
+        &assets.road_flat
+    };
     commands.spawn((
         MapVisualLayer,
         Sprite {
-            image: assets.road_flat[fi].clone(),
+            image: road_set[fi].clone(),
             color: road_paint,
             ..default()
         },
@@ -81,6 +94,35 @@ pub(crate) fn spawn_road_tile(
             ))
             .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
         ));
+    }
+
+    // `Roadside::StreetLights` (3): faroles de `_roadside_lamps` en sus
+    // subcoordenadas de mundo. Igual que upstream, solo con 2+ road bits.
+    if roadside == Some(3) && rb.count_ones() > 1 {
+        for &(lamp, dx, dy) in ROADSIDE_LAMPS[usize::from(rb & 0xF)] {
+            let (w, h, xrel, yrel) = ROAD_STREETLIGHT_META[lamp];
+            let off = remap_tile_offset(dx, dy, 0.0) * 0.5;
+            let pos3 = overlay_pos(
+                Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
+                xrel,
+                yrel,
+                w,
+                h,
+                base_z,
+                0.2,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            );
+            commands.spawn((
+                MapVisualLayer,
+                Sprite {
+                    image: assets.road_streetlights[lamp].clone(),
+                    color: Color::WHITE,
+                    ..default()
+                },
+                Transform::from_translation(pos3),
+            ));
+        }
     }
 
     // Cruce a nivel: carretera + sprite de vía encima (`base_sprites.crossing + rail_axis`).

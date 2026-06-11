@@ -14,19 +14,19 @@ pub enum StationTileClass {
     Other(u8),
 }
 
-/// Capa de sprite de estación de tren (offsets de `station_land.h`, 1 u OTTD ≈ 2 px).
+/// Capa de sprite de estación de tren (`TILE_SEQ_LINE` de `station_land.h`).
+///
+/// `dx`/`dy`/`dz` son el origen del bounding box en unidades de mundo OTTD
+/// (16 por tesela); la posición en pantalla sale de `remap_tile_offset` × 0.5
+/// más los offsets NFO del sprite ([`rail_station_sprite_meta`]).
 #[derive(Debug, Clone, Copy)]
 pub struct RailStationLayer {
     pub sprite_id: u32,
     pub dx: f32,
     pub dy: f32,
-    pub w: f32,
-    pub h: f32,
+    pub dz: f32,
     pub z: f32,
 }
-
-/// Escala pantalla para `TILE_SEQ_*` (tesela OTTD 16×16 → rombo ~64×31).
-const STATION_SEQ_UNIT: f32 = 2.0;
 
 #[must_use]
 pub fn station_type_from_m6(m6: u8) -> StationTileClass {
@@ -99,52 +99,90 @@ pub fn rail_station_ground_track_sprite(m5: u8, tileh: u8) -> u32 {
 }
 
 #[inline]
-const fn layer(sprite_id: u32, dx: f32, dy: f32, w: f32, h: f32, z: f32) -> RailStationLayer {
+const fn layer(sprite_id: u32, dx: f32, dy: f32, dz: f32, z: f32) -> RailStationLayer {
     RailStationLayer {
         sprite_id,
         dx,
         dy,
-        w,
-        h,
+        dz,
         z,
     }
 }
 
-/// Convierte offsets `TILE_SEQ_LINE` de plataformas de tren a `xrel`/`yrel` para [`overlay_pos`].
+/// Metadata NFO (w, h, xrel, yrel) de un sprite de estación de tren.
 #[must_use]
-pub fn rail_station_overlay_rel(dx: f32, dy: f32) -> (f32, f32) {
-    let xrel = 2.0 * (dy - dx) * STATION_SEQ_UNIT;
-    let yrel = (dx + dy) * STATION_SEQ_UNIT;
-    (xrel, yrel)
+pub fn rail_station_sprite_meta(sprite_id: u32) -> Option<(f32, f32, f32, f32)> {
+    RAIL_STATION_SPRITE_META
+        .iter()
+        .find(|(sid, ..)| *sid == sprite_id)
+        .map(|&(_, w, h, xr, yr)| (w, h, xr, yr))
 }
 
-static RAIL_STATION_LAYERS_X: [RailStationLayer; 2] = [
-    layer(1070, 0.0, 0.0, 42.0, 23.0, 0.03),
-    layer(1072, 0.0, 11.0, 42.0, 23.0, 0.04),
+/// `xrel`/`yrel` para [`overlay_pos`]: origen `TILE_SEQ` remapeado + offsets NFO.
+#[must_use]
+pub fn rail_station_overlay_rel(
+    seq: &RailStationLayer,
+    nfo_xrel: f32,
+    nfo_yrel: f32,
+) -> (f32, f32) {
+    let off = crate::iso::remap_tile_offset(seq.dx, seq.dy, seq.dz) * 0.5;
+    (off.x + nfo_xrel, nfo_yrel - off.y)
+}
+
+// Secuencias de `_station_display_datas_rail` (gfx 0..7). Los childsprites de
+// vidrio del techo (1083–1086, PALETTE_TO_TRANSPARENT) se omiten: requieren
+// remapeo translúcido de paleta.
+static RAIL_STATION_SEQ_0: [RailStationLayer; 2] = [
+    layer(1070, 0.0, 0.0, 0.0, 0.03),
+    layer(1072, 0.0, 11.0, 0.0, 0.04),
 ];
-static RAIL_STATION_LAYERS_Y: [RailStationLayer; 2] = [
-    layer(1071, 0.0, 0.0, 42.0, 23.0, 0.03),
-    layer(1069, 11.0, 0.0, 42.0, 23.0, 0.04),
+static RAIL_STATION_SEQ_1: [RailStationLayer; 2] = [
+    layer(1071, 0.0, 0.0, 0.0, 0.03),
+    layer(1069, 11.0, 0.0, 0.0, 0.04),
 ];
-static RAIL_STATION_LAYERS_X_BUILD: [RailStationLayer; 2] = [
-    layer(1073, 0.0, 0.0, 42.0, 29.0, 0.03),
-    layer(1072, 0.0, 11.0, 42.0, 23.0, 0.05),
+static RAIL_STATION_SEQ_2: [RailStationLayer; 2] = [
+    layer(1073, 0.0, 0.0, 0.0, 0.03),
+    layer(1072, 0.0, 11.0, 0.0, 0.05),
 ];
-static RAIL_STATION_LAYERS_Y_BUILD: [RailStationLayer; 2] = [
-    layer(1074, 0.0, 0.0, 42.0, 29.0, 0.03),
-    layer(1069, 11.0, 0.0, 42.0, 23.0, 0.05),
+static RAIL_STATION_SEQ_3: [RailStationLayer; 2] = [
+    layer(1074, 0.0, 0.0, 0.0, 0.03),
+    layer(1069, 11.0, 0.0, 0.0, 0.05),
+];
+static RAIL_STATION_SEQ_4: [RailStationLayer; 3] = [
+    layer(1076, 0.0, 0.0, 0.0, 0.03),
+    layer(1072, 0.0, 11.0, 0.0, 0.04),
+    layer(1079, 0.0, 0.0, 16.0, 0.05),
+];
+static RAIL_STATION_SEQ_5: [RailStationLayer; 3] = [
+    layer(1077, 0.0, 0.0, 0.0, 0.03),
+    layer(1069, 11.0, 0.0, 0.0, 0.04),
+    layer(1080, 0.0, 0.0, 16.0, 0.05),
+];
+static RAIL_STATION_SEQ_6: [RailStationLayer; 3] = [
+    layer(1070, 0.0, 0.0, 0.0, 0.03),
+    layer(1078, 0.0, 11.0, 0.0, 0.04),
+    layer(1081, 0.0, 0.0, 16.0, 0.05),
+];
+static RAIL_STATION_SEQ_7: [RailStationLayer; 3] = [
+    layer(1071, 0.0, 0.0, 0.0, 0.03),
+    layer(1075, 11.0, 0.0, 0.0, 0.04),
+    layer(1082, 0.0, 0.0, 16.0, 0.05),
 ];
 
 /// Capas en orden de pintado (tras la vía de fondo), según `station_land.h`.
 #[must_use]
 pub fn rail_station_draw_layers(m5: u8) -> &'static [RailStationLayer] {
     match rail_station_gfx(m5) {
-        0 => &RAIL_STATION_LAYERS_X,
-        1 => &RAIL_STATION_LAYERS_Y,
-        2 => &RAIL_STATION_LAYERS_X_BUILD,
-        3 => &RAIL_STATION_LAYERS_Y_BUILD,
-        gfx if gfx & 1 != 0 => &RAIL_STATION_LAYERS_Y,
-        _ => &RAIL_STATION_LAYERS_X,
+        0 => &RAIL_STATION_SEQ_0,
+        1 => &RAIL_STATION_SEQ_1,
+        2 => &RAIL_STATION_SEQ_2,
+        3 => &RAIL_STATION_SEQ_3,
+        4 => &RAIL_STATION_SEQ_4,
+        5 => &RAIL_STATION_SEQ_5,
+        6 => &RAIL_STATION_SEQ_6,
+        7 => &RAIL_STATION_SEQ_7,
+        gfx if gfx & 1 != 0 => &RAIL_STATION_SEQ_1,
+        _ => &RAIL_STATION_SEQ_0,
     }
 }
 
@@ -164,6 +202,11 @@ pub fn road_stop_ground_index(m5: u8) -> usize {
 include!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/src/sprites/road_stop_gfx_data_generated.rs"
+));
+
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/sprites/rail_station_draw_data_generated.rs"
 ));
 
 /// Convierte metadatos NFO de una capa BUILD a [`RoadStopSeqGfx`].
@@ -225,6 +268,33 @@ mod tests {
     }
 
     #[test]
+    fn rail_layers_gfx_4_to_7_include_roof_halves() {
+        // `_station_display_datas_4..7`: pilares/plataforma + techo (dz = 16).
+        assert_eq!(rail_station_draw_layers(4)[0].sprite_id, 1076);
+        assert_eq!(rail_station_draw_layers(4)[2].sprite_id, 1079);
+        assert_eq!(rail_station_draw_layers(5)[2].sprite_id, 1080);
+        assert_eq!(rail_station_draw_layers(6)[1].sprite_id, 1078);
+        assert_eq!(rail_station_draw_layers(6)[2].sprite_id, 1081);
+        assert_eq!(rail_station_draw_layers(7)[2].sprite_id, 1082);
+        for gfx in 4..=7u8 {
+            assert_eq!(rail_station_draw_layers(gfx)[2].dz, 16.0);
+        }
+    }
+
+    #[test]
+    fn rail_station_meta_covers_all_layer_sprites() {
+        for gfx in 0..=7u8 {
+            for l in rail_station_draw_layers(gfx) {
+                assert!(
+                    rail_station_sprite_meta(l.sprite_id).is_some(),
+                    "sin meta NFO para sprite {}",
+                    l.sprite_id
+                );
+            }
+        }
+    }
+
+    #[test]
     fn rail_station_ground_track_uses_sloped_sprite_on_slope() {
         assert_eq!(rail_station_ground_track_sprite(0, 12), 1031);
         assert_eq!(rail_station_ground_track_sprite(1, 12), 1031);
@@ -233,9 +303,20 @@ mod tests {
 
     #[test]
     fn rail_front_platform_uses_ottd_dy_offset() {
-        let (xrel, yrel) = rail_station_overlay_rel(0.0, 11.0);
-        assert_eq!(xrel, 44.0);
-        assert_eq!(yrel, 22.0);
+        // dy = 11 → RemapCoords ×0.5: +22 px en x, +11 px hacia abajo.
+        let seq = layer(1072, 0.0, 11.0, 0.0, 0.04);
+        let (xrel, yrel) = rail_station_overlay_rel(&seq, -31.0, -3.0);
+        assert_eq!(xrel, -9.0);
+        assert_eq!(yrel, 8.0);
+    }
+
+    #[test]
+    fn rail_roof_uses_dz_to_raise_sprite() {
+        // dz = 16 levanta el techo 16 px (remap ×0.5).
+        let seq = layer(1079, 0.0, 0.0, 16.0, 0.05);
+        let (xrel, yrel) = rail_station_overlay_rel(&seq, -31.0, -5.0);
+        assert_eq!(xrel, -31.0);
+        assert_eq!(yrel, -21.0);
     }
 
     #[test]

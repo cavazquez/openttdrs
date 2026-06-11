@@ -508,6 +508,12 @@ ROAD_DEPOT_RANGE = range(1408, 1412)
 # Carretera plana: SPR_ROAD_Y (1332) + offset -> 19 variantes
 for sid in ROAD_FLAT_RANGE:
     crop_by_id(sid, f"road_flat_{sid - 1332:02d}.png")
+# Carretera con acera pavimentada: SPR_ROAD_Y - 19 (1313..1331), mismo orden.
+for i, sid in enumerate(range(1313, 1332)):
+    crop_by_id(sid, f"road_paved_{i:02d}.png")
+# Faroles de Roadside::StreetLights (table/road_land.h: 0x57E / 0x57F).
+crop_by_id(0x57E, "road_streetlight_0.png")
+crop_by_id(0x57F, "road_streetlight_1.png")
 # Tranvía sobre asfalto: SPR_TRAMWAY_OVERLAY (OpenTTD table/sprites.h) = 5990;
 # mismas 19 piezas en el mismo orden que road_flat_00..18 (GetRoadSpriteOffset).
 TRAM_FLAT_BASE = 5990
@@ -621,6 +627,14 @@ for sid, src_name in [
     (1072, "rail_platform_x_front.png"),
     (1073, "rail_platform_building_x.png"),
     (1074, "rail_platform_building_y.png"),
+    (1075, "rail_platform_pillars_y_front.png"),
+    (1076, "rail_platform_pillars_x_rear.png"),
+    (1077, "rail_platform_pillars_y_rear.png"),
+    (1078, "rail_platform_pillars_x_front.png"),
+    (1079, "rail_roof_0.png"),
+    (1080, "rail_roof_1.png"),
+    (1081, "rail_roof_2.png"),
+    (1082, "rail_roof_3.png"),
 ]:
     dst = tiles_dir / f"rail_{sid}.png"
     if dst.is_file():

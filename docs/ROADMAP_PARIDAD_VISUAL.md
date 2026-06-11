@@ -129,8 +129,137 @@ sprites** de `SPR_SHORE_BASE`, extraído del GRF *extra* de OpenGFX
 
 ## 9. Carreteras — textura y bordes
 
-- [ ] Pendiente
+- [x] Completado
 
-Diferencia menor: el pavimento oficial tiene otro tono y marcas claras de
-borde/acera en town roads. Revisar sprites de carretera OpenGFX (con y sin
-aceras según está dentro de ciudad).
+Se implementó `Roadside` (`m6` bits 3–5, `road_map.h`) para carreteras
+normales, replicando `GetRoadGroundSprite` (`road_cmd.cpp`):
+
+- **Acera pavimentada**: Paved (2), StreetLights (3), Trees (5) y
+  PavedRoadWorks (7) usan el set `SPR_ROAD_Y − 19` (sprites 1313..1331,
+  `road_paved_{i:02}.png`), con el mismo orden/offsets que `road_flat`.
+  Barren/Grass/GrassRoadWorks mantienen el set sobre pasto; nieve/desierto
+  conserva el tinte actual.
+- **Faroles**: `Roadside::StreetLights` dibuja los faroles de
+  `_roadside_lamps` (`table/road_land.h`, sprites 0x57E/0x57F) en sus
+  subcoordenadas de mundo, solo con 2+ road bits como upstream.
+- En el save real: 576 tiles Grass, 139 Paved y 31 StreetLights.
+
+## 10. Población de ciudades en las etiquetas
+
+- [x] Completado
+
+Las etiquetas mostraban «Nuntburg (0)» en vez de «Nuntburg (737)». Dos causas:
+
+- **OpenTTD no guarda la población en el save**: la reconstruye al cargar
+  (`RebuildTownCaches`, `town_sl.cpp`) sumando `HouseSpec::population` de
+  cada tesela `MP_HOUSE` completada (bit 7 de `m3`). Se replicó en
+  `sav::rebuild_town_populations` con la tabla `HOUSE_POPULATION`
+  (generada por `gen_house_population.py` desde `table/town_land.h`).
+- **Endianness de `MAP2`/`MAP8`**: ambos chunks son `SLE_UINT16`
+  big-endian en el save, pero `build.rs` los dividía/copiaba como
+  little-endian. El TownID (`m2`) quedaba con los bytes cruzados (todas
+  las casas parecían de la town 0, y los tipos de señal ferroviaria leían
+  el byte equivocado). Corregido en `export_ottdmap`/`build_m8_le`.
+
+Verificado contra el save real: las 28 ciudades coinciden con el oficial
+(p. ej. Nuntburg 737, Planfield 787).
+
+## 11. Puente de madera — altura del tablero, offsets y pilares
+
+- [x] Completado (pendiente verificación visual in-game)
+
+Réplica de `DrawBridgeMiddle` (`tunnelbridge_cmd.cpp`):
+
+- **Altura del tablero**: `bridge_deck_z` porta `GetBridgeHeight`
+  (`bridge_map.cpp`) con la fundación del cabezal (`GetBridgeFoundation` +
+  `ApplyFoundationToSlope`): rampa plana/inclinada según el eje → `z+1`;
+  una esquina elevada → fundación inclinada (`z+1`); resto → fundación
+  niveladora (`z+2`). Antes se usaba `min_z+1` a secas y el tablero quedaba
+  un nivel bajo cuando la rampa apoya en pendiente (p. ej. costa).
+- **Offsets NFO**: `gen_bridge_draw_data.py` genera
+  `bridge_draw_data_generated.rs` (rear/front/pillar por eje, sprites
+  2545–2552) y el render ancla cada sprite con su xrel/yrel a
+  `z = tablero − BRIDGE_Z_START (3 px)`, eliminando el centrado con
+  `TILE_OVERLAP_SCALE` que producía el efecto «empalizada».
+- **Front y pilares como upstream**: barandilla frontal a +12 unidades de
+  mundo perpendiculares; columna frontal de pilares cada `TILE_HEIGHT` px
+  hasta el suelo (máximo de las esquinas del borde, ~`GetSlopePixelZOnEdge`)
+  y columna trasera a −9 unidades saltando los dos tramos tapados.
+- El arte (madera OpenGFX vs TTD original) difiere por baseset: no es bug.
+
+## 12. Costa — cabo «desprendido» al oeste de Nuntburg
+
+- [x] Hecho (pendiente verificación visual)
+
+En el nuestro había un triángulo de césped con arena flotando en el agua,
+separado de la costa por una franja de agua; en el oficial esa tesela es
+agua plana.
+
+Causa: `use_shore` (`render/grid.rs`) dibujaba orilla en **cualquier**
+agua lisa (`WATER_TILE_CLEAR`) que tocara tierra en el vecindario 8.
+Para teselas que solo tocan tierra en diagonal (p. ej. (47,23) junto a
+Nuntburg), `infer_coast_tileh_when_flat` devolvía una pendiente de una
+esquina y aparecía el triángulo flotante. OpenTTD solo ejecuta
+`DrawShoreTile` en teselas marcadas `WATER_TILE_COAST` en `m5`
+(`water_cmd.cpp`), y el save trae esa marca (m5 = 0x1X).
+
+Arreglo: la heurística de vecinos queda restringida a mapas generados
+sin `MAPT` (demo); con save real manda `m5`. Esto también elimina la
+orilla espuria en ~70 teselas de agua lisa ortogonales a tierra que
+upstream dibuja como agua plana. Test de regresión:
+`sav_plain_water_near_land_does_not_use_shore`.
+
+## 13. Estación de tren — techos y plataformas (gfx 4–7)
+
+- [x] Hecho (pendiente verificación visual)
+
+En el save de Grinnway las teselas de estación usan `StationGfx` 0, 4 y 6;
+nosotros solo implementábamos 0–3, así que las variantes con techo (4–7,
+`_station_display_datas_rail` en `station_land.h`) caían al fallback de
+plataformas planas: faltaban los techos rojos y los muros con arcos que
+se ven en el oficial. Además `rail_station_overlay_rel` escalaba los
+offsets `TILE_SEQ` al doble (4 px por unidad en vez de 2) y no aplicaba
+los offsets NFO de cada sprite, separando las plataformas rear/front.
+
+Implementación:
+- `scripts/gen_rail_station_draw_data.py` genera metadata NFO
+  (`w/h/xrel/yrel`) de los sprites 1069–1082 en
+  `sprites/rail_station_draw_data_generated.rs`.
+- `station.rs`: secuencias completas gfx 0–7 con origen `TILE_SEQ`
+  (`dx/dy/dz`, techos con `dz = 16`) + `rail_station_overlay_rel` que
+  remapea a `remap_tile_offset × 0.5` y suma offsets NFO. Los childsprites
+  de vidrio del techo (1083–1086, `PALETTE_TO_TRANSPARENT`) se omiten.
+- `objects.rs`: dibuja cada capa con `overlay_pos` y metadata NFO, sin
+  `TILE_OVERLAP_SCALE`.
+- Aliases `rail_1075..1082.png` (pilares y techos) en
+  `descargar_graficos.sh` / `alias_rail_station_sprites.sh`.
+
+Diferencias restantes detectadas en la misma zona (no bugs nuestros):
+- Suelo marrón bajo los cruces de vía: OpenGFX dibuja los sprites de
+  suelo de cruce (1018–1022) mucho más áridos que el TTD original;
+  la lógica (1018 + offset de `GetJunctionGroundSpriteOffset`) coincide
+  con upstream.
+- Textura de campos/cercas y tono de árboles: arte del baseset.
+
+## 14. Toolbar de construcción ferroviaria — paridad con upstream
+
+- [x] Hecho (pendiente verificación visual)
+
+El panel tenía 7 botones con sprites de teselas como iconos; el oficial
+(`_nested_build_rail_widgets`, `rail_gui.cpp`) tiene 14 con iconos GUI
+propios: NS/NE-SW/EO/NW-SE, autorail | dinamita, depósito, waypoint,
+estación, señales, puente, túnel, quitar y convertir.
+
+Implementación:
+- `scripts/gen_toolbar_rail_icons.py` extrae los iconos de OpenGFX a
+  `assets/opengfx/tiles/toolbar_rail_*.png` (lienzo 63×51, fondo azul →
+  alfa, escala ×2 sin deformar). Los del set base (703, 714, 1251–1254,
+  1291, 1294, 1298, 2430, 2594) salen del NFO base; autorail (+53),
+  convertir (+55) y waypoint (+76, `SPR_OPENTTD_BASE + n`) se mapean
+  desde los bloques Action 5 tipo `95` del GRF extra de OpenGFX2.
+- Acciones nuevas: `RailX` (0x01) y `RailY` (0x02) en `PlaceRailBits` con
+  soporte de arrastre; el botón autorail usa el `Rail` autodireccional.
+- Waypoint, señales, quitar y convertir se muestran (mismo orden e icono
+  que upstream) pero aún sin comando en el simulador: tooltip
+  «(no implementado)».
+- Panel con separador entre grupos y título «Construccion de Ferrocarril».

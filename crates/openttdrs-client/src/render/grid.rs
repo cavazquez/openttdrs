@@ -62,9 +62,16 @@ impl RenderGrid {
                 let kind = tile.map_or(TileKind::Grass, |t| t.kind);
                 let use_shore = if kind == TileKind::Water {
                     let m5_w = tile.map_or(0u8, |t| t.m5);
+                    let mapt = tile.map_or(0u8, |t| t.mapt);
                     let water_tile_type = (m5_w >> 4) & 0x0F;
+                    // OpenTTD solo dibuja `DrawShoreTile` en `WATER_TILE_COAST`
+                    // (`water_cmd.cpp`); el agua lisa junto a tierra es agua plana.
+                    // La heurística de vecinos queda solo para mapas generados sin
+                    // MAPT (demo), donde `m5` no trae el tipo de agua.
                     water_tile_type == 1
-                        || (water_tile_type == 0 && water_tile_touches_land(map, tx, ty, mw, mh))
+                        || (mapt == 0
+                            && water_tile_type == 0
+                            && water_tile_touches_land(map, tx, ty, mw, mh))
                 } else {
                     false
                 };
@@ -191,5 +198,29 @@ mod tests {
         let grid = RenderGrid::from_map(&map, 3, 3);
 
         assert!(grid.get(1, 1).use_shore);
+    }
+
+    /// Regresión ítem 12: en saves reales (MAPT presente) el agua lisa
+    /// (`WATER_TILE_CLEAR`) junto a tierra NO dibuja orilla — solo las teselas
+    /// `WATER_TILE_COAST`. La heurística de vecinos es solo para mapas sin MAPT.
+    #[test]
+    fn sav_plain_water_near_land_does_not_use_shore() {
+        let mut map = Map::new_flat(3, 3, 0);
+        for y in 0..3 {
+            for x in 0..3 {
+                assert!(map.set_kind(coord(x, y), TileKind::Water).is_ok());
+                // MAPT con nibble alto MP_WATER, m5 = WATER_TILE_CLEAR.
+                assert!(map.set_mapt_m5(coord(x, y), 0x60, 0x00).is_ok());
+            }
+        }
+        assert!(map.set_kind(coord(2, 2), TileKind::Grass).is_ok());
+        assert!(map.set_mapt_m5(coord(2, 2), 0x00, 0x00).is_ok());
+        // La tesela (1,2) es costa real marcada en m5.
+        assert!(map.set_mapt_m5(coord(1, 2), 0x60, 0x10).is_ok());
+
+        let grid = RenderGrid::from_map(&map, 3, 3);
+
+        assert!(!grid.get(1, 1).use_shore, "agua lisa diagonal a tierra");
+        assert!(grid.get(1, 2).use_shore, "WATER_TILE_COAST marcada");
     }
 }

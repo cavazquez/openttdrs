@@ -50,9 +50,10 @@ fn sav_from_map(map: &Map) -> Vec<u8> {
             planes[5].1.push(t.m5);
             planes[6].1.push(t.m6);
             planes[7].1.push(t.m7);
-            map2.push(t.m2);
+            // MAP2/MAP8 son `SLE_UINT16` big-endian en el save real.
             map2.push(t.m2_hi);
-            map8.extend_from_slice(&t.m8.to_le_bytes());
+            map2.push(t.m2);
+            map8.extend_from_slice(&t.m8.to_be_bytes());
         }
     }
 

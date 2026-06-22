@@ -233,6 +233,53 @@ def build_sav() -> bytes:
     pl.extend(struct.pack(">q", 250_000))
     data.extend(table_chunk(b"PLYR", [(7, "money")], [bytes(pl)]))
 
+    # ORDL: listas de órdenes (tren → estación 0, bus → estación 1).
+    ordl_header = bytearray()
+    ordl_header.append(0x1B)
+    write_str("orders", ordl_header)
+    ordl_header.append(0)
+    ordl_header.append(2)
+    write_str("type", ordl_header)
+    ordl_header.append(2)
+    write_str("flags", ordl_header)
+    ordl_header.append(4)
+    write_str("dest", ordl_header)
+    ordl_header.append(2)
+    write_str("refit_cargo", ordl_header)
+    ordl_header.append(4)
+    write_str("wait_time", ordl_header)
+    ordl_header.append(4)
+    write_str("travel_time", ordl_header)
+    ordl_header.append(4)
+    write_str("max_speed", ordl_header)
+    ordl_header.append(0)
+
+    def goto_station_order(station_id: int) -> bytes:
+        o = bytearray()
+        o.append(1)  # OT_GOTO_STATION
+        o.append(0)
+        o.extend(struct.pack(">H", station_id))
+        o.append(0xFF)
+        o.extend(struct.pack(">H", 0))
+        o.extend(struct.pack(">H", 0))
+        o.extend(struct.pack(">H", 0))
+        return bytes(o)
+
+    def ordl_record(order: bytes) -> bytes:
+        rec = bytearray()
+        rec.append(1)  # orders ×1
+        rec.extend(order)
+        return bytes(rec)
+
+    data.extend(
+        raw_table_chunk(
+            b"ORDL",
+            bytes(ordl_header),
+            [ordl_record(goto_station_order(0)), ordl_record(goto_station_order(1))],
+            CH_TABLE,
+        )
+    )
+
     # VEHS (sparse): un tren en la vía y un bus en la carretera, ambos cabeza
     # de convoy (subtype bit 0 = GVSF_FRONT). Header con structs anidados:
     # type u8 + train/roadveh { common { tile, subtype, cargo_type } }.
@@ -254,24 +301,33 @@ def build_sav() -> bytes:
         write_str("subtype", vehs_header)
         vehs_header.append(2)
         write_str("cargo_type", vehs_header)
+        vehs_header.append(6)
+        write_str("orders", vehs_header)
+        vehs_header.append(2)
+        write_str("cur_real_order_index", vehs_header)
+        vehs_header.append(2)
+        write_str("vehstatus", vehs_header)
         vehs_header.append(0)
 
-    def vehs_common(tile: int, subtype: int, cargo: int, buf: bytearray) -> None:
+    def vehs_common(tile: int, subtype: int, cargo: int, order_list: int, buf: bytearray) -> None:
         buf.append(1)  # train/roadveh presente
         buf.append(1)  # common presente
         buf.extend(struct.pack(">I", tile))
         buf.append(subtype)
         buf.append(cargo)
+        buf.extend(struct.pack(">I", order_list))  # OrderList ref = índice + 1
+        buf.append(0)  # cur_real_order_index
+        buf.append(0)  # vehstatus: running
 
     v_train = bytearray([0])  # índice sparse 0
     v_train.append(0)  # type 0 = tren
-    vehs_common(idx(20, 40), 0x01, 1, v_train)  # cargo 1 = carbón
+    vehs_common(idx(20, 40), 0x01, 1, 1, v_train)  # lista 0 → ref 1; cargo carbón
     v_train.append(0)  # roadveh ausente
 
     v_bus = bytearray([1])  # índice sparse 1
     v_bus.append(1)  # type 1 = carretera
     v_bus.append(0)  # train ausente
-    vehs_common(idx(13, 16), 0x01, 0, v_bus)  # cargo 0 = pasajeros
+    vehs_common(idx(13, 16), 0x01, 0, 2, v_bus)  # lista 1 → ref 2; pasajeros
 
     data.extend(
         raw_table_chunk(b"VEHS", bytes(vehs_header), [bytes(v_train), bytes(v_bus)], CH_SPARSE_TABLE)

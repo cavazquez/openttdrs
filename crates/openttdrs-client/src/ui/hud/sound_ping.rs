@@ -35,12 +35,14 @@ pub(crate) fn play_hud_soft_ping(
     mut commands: Commands,
     mut reader: MessageReader<PlayHudSoftPing>,
     sound: Res<HudSoftPingHandle>,
+    hud: Res<super::SimHudControls>,
 ) {
     for _ in reader.read() {
         if let Some(h) = sound.0.as_ref() {
             commands.spawn((
                 AudioPlayer::new(h.clone()),
-                PlaybackSettings::ONCE.with_volume(bevy::audio::Volume::Linear(0.22)),
+                PlaybackSettings::ONCE
+                    .with_volume(bevy::audio::Volume::Linear(hud.sfx_volume.clamp(0.0, 1.0))),
             ));
         }
     }

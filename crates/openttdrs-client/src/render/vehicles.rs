@@ -5,7 +5,7 @@ use openttdrs_core::{CargoType, Map, TileKind, Vehicle, VehicleKind};
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_and_min_z};
-use crate::render::MapVisualLayer;
+use crate::render::{CompanyColoredSprites, MapVisualLayer};
 use crate::state::{ClientScreen, SimWorld};
 use openttdrs_core::{
     slope_dz_at_subtile, vehicle_render_direction, vehicle_render_progress,
@@ -122,8 +122,15 @@ impl TruckHandles {
         }
     }
 
-    fn for_vehicle(&self, v: &Vehicle) -> Handle<Image> {
-        let i = v.render_direction().min(7) as usize;
+    fn for_vehicle(&self, v: &Vehicle, company: Option<&CompanyColoredSprites>) -> Handle<Image> {
+        let dir = v.render_direction().min(7) as usize;
+        let layer = &vehicle_layers(v)[dir];
+        if let Some(c) = company
+            && let Some(handle) = c.vehicle_handle(layer.path)
+        {
+            return handle.clone();
+        }
+        let i = dir;
         match v.kind {
             VehicleKind::Truck if v.uses_loaded_road_sprite() => self.truck_loaded[i].clone(),
             VehicleKind::Truck => self.truck[i].clone(),
@@ -158,6 +165,7 @@ pub(crate) fn spawn_initial_vehicles(
     commands: &mut Commands,
     sim: &SimWorld,
     trucks: &TruckHandles,
+    company: &CompanyColoredSprites,
 ) {
     for vehicle in &sim.state.vehicles {
         let pos3 = vehicle_sprite_pos(vehicle, &sim.state.map, 0.0);
@@ -165,8 +173,8 @@ pub(crate) fn spawn_initial_vehicles(
             MapVisualLayer,
             VehicleSprite(vehicle.id),
             Sprite {
-                image: trucks.for_vehicle(vehicle),
-                color: vehicle_tint(vehicle),
+                image: trucks.for_vehicle(vehicle, Some(company)),
+                color: Color::WHITE,
                 ..default()
             },
             Transform::from_translation(pos3),
@@ -218,7 +226,7 @@ fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
     Vec3::new(vehicle_pos.x, vehicle_pos.y + 21.0, vehicle_pos.z + 0.35)
 }
 
-fn vehicle_tint(_v: &Vehicle) -> Color {
+fn vehicle_tint() -> Color {
     Color::WHITE
 }
 
@@ -249,6 +257,7 @@ pub(crate) fn update_vehicles(
     sim: Res<SimWorld>,
     sim_clock: Res<SimClock>,
     trucks: Res<TruckHandles>,
+    company: Res<CompanyColoredSprites>,
     vehicle_index: Res<VehicleIndex>,
     mut q: Query<(&VehicleSprite, &mut Transform, &mut Sprite, &mut Visibility)>,
     mut labels: Query<
@@ -276,8 +285,8 @@ pub(crate) fn update_vehicles(
         *visibility = Visibility::Visible;
         let pos3 = vehicle_sprite_pos(v, &sim.state.map, sim_clock.tick_alpha);
         transform.translation = pos3;
-        sprite.image = trucks.for_vehicle(v);
-        sprite.color = vehicle_tint(v);
+        sprite.image = trucks.for_vehicle(v, Some(&company));
+        sprite.color = vehicle_tint();
     }
 
     for (label, mut transform, mut text, mut color, mut visibility) in &mut labels {
@@ -410,6 +419,7 @@ mod tests {
         world.insert_resource(sim);
         world.insert_resource(crate::simulation::SimClock::default());
         world.insert_resource(default_handles());
+        world.insert_resource(crate::sprites::CompanyColoredSprites::default());
         world.insert_resource(VehicleIndex::default());
 
         world.spawn((

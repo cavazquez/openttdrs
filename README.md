@@ -174,6 +174,8 @@ Persistencia de la simulación (JSON del core) y atajos en el cliente:
 ```bash
 OTTDJSON_LOAD=partida.json cargo run -p openttdrs-client   # arranque desde JSON
 # En ventana: F5 guarda, F9 carga (por defecto save/openttdrs_sim.json; OPENTTDRS_JSON_SAVE para otra ruta).
+# Preferencias del cliente (ruta de guardado, minimapa, audio, debug): `~/.config/com.github.cavazquez.openttdrs/` (Linux).
+# `OPENTTDRS_DEBUG=1` overlay FPS; `OPENTTDRS_GIZMOS=1` etiquetas de debug en el mapa.
 # F9 redibuja suelo/vías/vehículos y mueve la cámara aunque el JSON cambie el tamaño del mapa.
 ```
 

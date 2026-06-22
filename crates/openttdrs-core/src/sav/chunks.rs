@@ -9,6 +9,8 @@ pub(crate) const CH_ARRAY: u8 = 1;
 pub(crate) const CH_SPARSE_ARRAY: u8 = 2;
 pub(crate) const CH_TABLE: u8 = 3;
 pub(crate) const CH_SPARSE_TABLE: u8 = 4;
+/// Chunks legacy (`ORDR`, etc.): mismo stream gamma que `CH_ARRAY`, no se reescriben al guardar.
+pub(crate) const CH_READONLY: u8 = 5;
 
 /// Chunk crudo: para `CH_RIFF` el payload binario; para arrays/tablas el stream
 /// gamma completo (registros + terminador), igual que `slurp_array_payload` de
@@ -74,10 +76,10 @@ pub(crate) fn parse_chunks(data: &[u8]) -> Result<Vec<RawChunk>, SavError> {
                 off += size;
                 body
             }
-            CH_ARRAY | CH_SPARSE_ARRAY | CH_TABLE | CH_SPARSE_TABLE => {
+            CH_ARRAY | CH_SPARSE_ARRAY | CH_TABLE | CH_SPARSE_TABLE | CH_READONLY => {
                 slurp_gamma_records(data, &mut off)?
             }
-            // CH_READONLY u otros: sin formato conocido, se detiene el parseo.
+            // Tipos desconocidos: se detiene el parseo (best-effort).
             _ => break,
         };
         out.push(RawChunk {
@@ -144,6 +146,22 @@ mod tests {
         assert_eq!(chunks[1].ch_type, CH_ARRAY);
         assert!(find_chunk(&chunks, "MAPT").is_some());
         assert!(find_chunk(&chunks, "ZZZZ").is_none());
+    }
+
+    #[test]
+    fn stationlist_fixture_has_entity_chunks() {
+        let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        path.pop();
+        path.pop();
+        path.push("tests/fixtures/stationlist-test.sav");
+        let raw = std::fs::read(path).expect("stationlist-test.sav");
+        let (data, version) = super::super::container::decompress(&raw).expect("decompress");
+        let chunks = parse_chunks(&data).expect("chunks");
+        assert_eq!(version, 211);
+        for want in ["STNN", "VEHS", "ORDL", "ORDR", "PLYR", "CITY", "DATE"] {
+            let c = find_chunk(&chunks, want).expect(want);
+            eprintln!("{want} type={} body={}", c.ch_type, c.body.len());
+        }
     }
 
     #[test]

@@ -10,6 +10,7 @@ use crate::render::{
 use crate::state::SimWorld;
 use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, push_build_command_error};
 use crate::ui::industry_panel::IndustryPanelState;
+use crate::ui::save_window::SaveWindowState;
 use crate::ui::town_window::{TownWindowState, town_for_house_tile};
 use crate::ui::vehicle_window::VehicleWindowState;
 
@@ -91,6 +92,7 @@ fn open_town_window(
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_tile_click(
     mouse: Res<ButtonInput<MouseButton>>,
+    save_window: Option<Res<SaveWindowState>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<(&Camera, &Transform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut selected: ResMut<SelectedTileInfo>,
@@ -117,6 +119,10 @@ pub(crate) fn handle_tile_click(
     let industry_panel = &mut *panels.industry;
     let town_window = &mut *panels.town;
     let vehicle_window = &mut *panels.vehicle;
+
+    if save_window.is_some_and(|w| w.open) {
+        return;
+    }
 
     if mouse.just_pressed(MouseButton::Right) && drag_state.armed {
         cancel_placement(&mut drag_state);

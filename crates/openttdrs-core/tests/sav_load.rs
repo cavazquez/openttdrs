@@ -3,7 +3,9 @@
 
 #![allow(clippy::expect_used, clippy::cast_possible_truncation)]
 
-use openttdrs_core::{GameState, SavVehicleKind, StopKind, TileCoord, TileKind, VehicleKind, sav};
+use openttdrs_core::{
+    GameState, SavVehicleKind, StopKind, TileCoord, TileKind, VehicleKind, VehicleOrder, sav,
+};
 
 const CH_RIFF: u8 = 0;
 const CH_TABLE: u8 = 3;
@@ -156,10 +158,66 @@ fn synthetic_sav_payload() -> Vec<u8> {
         &[ind],
     ));
 
-    // PLYR: dinero de la primera empresa.
+    // PLYR: dinero y color de la primera empresa.
     let mut pl = Vec::new();
     pl.extend_from_slice(&777_000i64.to_be_bytes());
-    data.extend_from_slice(&table_chunk(b"PLYR", &[(7, "money")], &[pl]));
+    pl.push(6);
+    data.extend_from_slice(&table_chunk(b"PLYR", &[(7, "money"), (2, "colour")], &[pl]));
+
+    // DATE: calendario + contador de ticks.
+    let mut date_rec = Vec::new();
+    date_rec.extend_from_slice(&737_790i32.to_be_bytes());
+    date_rec.extend_from_slice(&42_000u64.to_be_bytes());
+    data.extend_from_slice(&table_chunk(
+        b"DATE",
+        &[(5, "date"), (8, "tick_counter")],
+        &[date_rec],
+    ));
+
+    // ORDL: una orden «ir a estación 0» (Terminal Sur en STNN índice 0).
+    {
+        let mut header = Vec::new();
+        header.push(0x1B);
+        write_str("orders", &mut header);
+        header.push(0);
+        header.push(2);
+        write_str("type", &mut header);
+        header.push(2);
+        write_str("flags", &mut header);
+        header.push(4);
+        write_str("dest", &mut header);
+        header.push(2);
+        write_str("refit_cargo", &mut header);
+        header.push(4);
+        write_str("wait_time", &mut header);
+        header.push(4);
+        write_str("travel_time", &mut header);
+        header.push(4);
+        write_str("max_speed", &mut header);
+        header.push(0);
+
+        let mut order = Vec::new();
+        order.push(1); // OT_GOTO_STATION
+        order.push(0);
+        order.extend_from_slice(&0u16.to_be_bytes()); // StationID 0
+        order.push(0xFF);
+        order.extend_from_slice(&0u16.to_be_bytes());
+        order.extend_from_slice(&0u16.to_be_bytes());
+        order.extend_from_slice(&0u16.to_be_bytes());
+
+        let mut rec = Vec::new();
+        rec.push(1); // orders ×1
+        rec.extend_from_slice(&order);
+
+        let mut ordl = b"ORDL".to_vec();
+        ordl.push(CH_TABLE);
+        write_gamma(header.len() as u32 + 1, &mut ordl);
+        ordl.extend_from_slice(&header);
+        write_gamma(rec.len() as u32 + 1, &mut ordl);
+        ordl.extend_from_slice(&rec);
+        write_gamma(0, &mut ordl);
+        data.extend_from_slice(&ordl);
+    }
 
     // VEHS (sparse): un tren cabeza de convoy sobre la vía de (6,2).
     let mut vehs_header = Vec::new();
@@ -178,6 +236,12 @@ fn synthetic_sav_payload() -> Vec<u8> {
     write_str("subtype", &mut vehs_header);
     vehs_header.push(2);
     write_str("cargo_type", &mut vehs_header);
+    vehs_header.push(6);
+    write_str("orders", &mut vehs_header);
+    vehs_header.push(2);
+    write_str("cur_real_order_index", &mut vehs_header);
+    vehs_header.push(2);
+    write_str("vehstatus", &mut vehs_header);
     vehs_header.push(0);
 
     let mut v0 = vec![0u8]; // índice sparse 0
@@ -187,6 +251,9 @@ fn synthetic_sav_payload() -> Vec<u8> {
     v0.extend_from_slice(&((2u32 * MAP_W) + 6).to_be_bytes());
     v0.push(0x01); // GVSF_FRONT
     v0.push(1); // cargo carbón
+    v0.extend_from_slice(&1u32.to_be_bytes()); // OrderList ref (índice 0 + 1)
+    v0.push(0); // cur_real_order_index
+    v0.push(0); // vehstatus: running
 
     let mut vehs = b"VEHS".to_vec();
     vehs.push(CH_SPARSE_TABLE);
@@ -244,19 +311,50 @@ fn loads_synthetic_sav_with_map_stations_and_towns() {
     assert_eq!(sav.industries[0].industry_type, 0);
 
     assert_eq!(sav.money, Some(777_000));
+    assert_eq!(sav.company_colour, Some(6));
+    assert_eq!(sav.game_time.map(|t| t.tick), Some(42_000));
 
     assert_eq!(sav.vehicles.len(), 1);
     assert_eq!(sav.vehicles[0].kind, SavVehicleKind::Train);
     assert_eq!(sav.vehicles[0].pos, TileCoord::new(6, 2));
+    assert_eq!(sav.vehicles[0].orders.len(), 1);
+    assert!(sav.vehicles[0].running);
 
     let state = GameState::from_sav_game(sav);
     assert_eq!(state.stations.len(), 1);
     assert_eq!(state.stations[0].stop_kind, StopKind::RailStation);
     assert_eq!(state.towns.len(), 2);
     assert_eq!(state.economy.money, 777_000);
+    assert_eq!(state.company_colour, 6);
+    assert_eq!(state.tick.get(), 42_000);
     assert_eq!(state.vehicles.len(), 1);
     assert_eq!(state.vehicles[0].kind, VehicleKind::Train);
     assert_eq!(state.vehicles[0].pos, TileCoord::new(6, 2));
+    assert_eq!(state.vehicles[0].orders.len(), 1);
+    assert!(matches!(
+        state.vehicles[0].orders[0],
+        VehicleOrder::Station { .. }
+    ));
+}
+
+#[test]
+fn imported_train_moves_toward_station_order() {
+    let raw = wrap_ottn(&synthetic_sav_payload(), 354);
+    let mut state = GameState::from_sav_game(sav::load(&raw).expect("load"));
+    assert_eq!(state.vehicles.len(), 1);
+    assert!(!state.vehicles[0].orders.is_empty());
+    let start = state.vehicles[0].pos;
+    let progress0 = state.vehicles[0].progress;
+    for _ in 0..200 {
+        state.step();
+    }
+    let v = &state.vehicles[0];
+    assert!(
+        v.pos != start || v.progress != progress0,
+        "el tren debería avanzar con órdenes importadas (pos={:?} progress={})",
+        v.pos,
+        v.progress
+    );
 }
 
 #[test]

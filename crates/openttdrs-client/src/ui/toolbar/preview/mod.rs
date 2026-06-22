@@ -2,6 +2,7 @@
 
 mod industry;
 mod orders;
+mod rail_signal;
 mod rail_waypoint;
 mod road_depot;
 mod road_stop;
@@ -20,7 +21,7 @@ use crate::iso::{
     SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z, world_pos_to_tile_coord,
     world_pos_to_tile_fract,
 };
-use crate::render::{MapPreviewCamera, PrimaryGameCamera, TileAtlas};
+use crate::render::{CompanyColoredSprites, MapPreviewCamera, PrimaryGameCamera, TileAtlas};
 use crate::sprites::rail_ghost_overlay_offset;
 use crate::state::SimWorld;
 use crate::ui::hud::HoveredTileCoord;
@@ -29,6 +30,7 @@ use super::{BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, 
 
 use industry::{industry_spec_for_action, spawn_industry_template_preview};
 use orders::{spawn_order_pick_target_preview, spawn_order_route_preview};
+use rail_signal::spawn_rail_signal_preview;
 use rail_waypoint::spawn_rail_waypoint_preview;
 use road_depot::{RoadDepotPreviewSpawn, spawn_road_depot_preview};
 use road_stop::{
@@ -54,6 +56,7 @@ pub(crate) fn update_build_ghost_preview(
     existing: Query<Entity, With<BuildGhostPreview>>,
     asset_server: Res<AssetServer>,
     atlas: Option<Res<TileAtlas>>,
+    company: Option<Res<CompanyColoredSprites>>,
     sim: Res<SimWorld>,
     tool_state: Res<UiToolState>,
     station_state: Res<StationBuildState>,
@@ -158,8 +161,31 @@ pub(crate) fn update_build_ghost_preview(
             spawn_rail_waypoint_preview(
                 &mut commands,
                 atlas.as_deref(),
+                company.as_deref(),
                 &sim.state.map,
                 coord,
+                valid,
+            );
+        }
+        return;
+    }
+    if action == BuildMenuAction::RailSignals {
+        let coord = TileCoord::new(tx, ty);
+        if sim.state.map.get(coord).is_some() {
+            let valid = preview_build_command_valid(
+                &sim.state,
+                action,
+                coord,
+                &station_state,
+                &[(tx, ty)],
+                preview_rail_lane,
+            );
+            spawn_rail_signal_preview(
+                &mut commands,
+                atlas.as_deref(),
+                &sim.state.map,
+                coord,
+                station_state.orientation,
                 valid,
             );
         }
@@ -232,13 +258,13 @@ pub(crate) fn update_build_ghost_preview(
                     ground_path: ground,
                     tint,
                     asset_server: &asset_server,
+                    company: company.as_deref(),
                 },
             );
             continue;
         }
 
-        // Vía: realce blanco de la pieza que se colocaría (autorraíl de OpenTTD),
-        // en vez de un sprite de vía sólido flotando sobre la tesela.
+        // Vía / quitar vía: realce blanco de la pieza afectada.
         if let Some(bits) = rail_preview_bits(
             action,
             &sim.state.map,
@@ -274,6 +300,7 @@ pub(crate) fn update_build_ghost_preview(
                     dir: road_stop_preview_dir(station_state.orientation),
                     tint,
                     asset_server: &asset_server,
+                    company: company.as_deref(),
                 },
             );
             continue;
@@ -372,7 +399,9 @@ fn rail_preview_bits(
     match action {
         BuildMenuAction::RailX => Some(RAIL_TB_X),
         BuildMenuAction::RailY => Some(RAIL_TB_Y),
-        BuildMenuAction::RailHorz | BuildMenuAction::RailVert => rail_lane_bit,
+        BuildMenuAction::RailHorz | BuildMenuAction::RailVert | BuildMenuAction::RailRemove => {
+            rail_lane_bit
+        }
         BuildMenuAction::Rail => {
             if preview_tiles.len() >= 2 {
                 // Arrastre: recta a lo largo del eje dominante del tramo.

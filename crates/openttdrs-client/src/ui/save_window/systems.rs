@@ -2,7 +2,10 @@
 
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
+use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
+use bevy::text::{EditableText, TextEdit};
+use smol_str::SmolStr;
 
 use openttdrs_core::save;
 
@@ -14,8 +17,8 @@ use crate::ui::SimHudControls;
 use super::{
     SAVE_WINDOW_ROWS, SaveFileKind, SaveWindowButton, SaveWindowConfirmText, SaveWindowMode,
     SaveWindowNameRow, SaveWindowNameText, SaveWindowPageText, SaveWindowRoot, SaveWindowRow,
-    SaveWindowRowText, SaveWindowState, SaveWindowStatusText, SaveWindowTitle, list_save_entries,
-    sanitize_filename_char, save_dir_from,
+    SaveWindowRowText, SaveWindowState, SaveWindowStatusText, SaveWindowTitle, default_save_name,
+    list_save_entries, sanitize_filename_char, save_dir_from,
 };
 
 /// Largo máximo del nombre al guardar.
@@ -37,50 +40,102 @@ pub(crate) fn handle_save_load_toolbar_buttons(
     }
 }
 
-/// Escape cierra; en modo guardar el teclado edita el nombre del archivo.
+/// Escape cierra la ventana.
 pub(crate) fn save_window_keyboard(
     mut state: ResMut<SaveWindowState>,
     keys: Res<ButtonInput<KeyCode>>,
-    mut key_events: MessageReader<KeyboardInput>,
 ) {
-    if !state.open {
-        key_events.clear();
-        return;
-    }
-    if keys.just_pressed(KeyCode::Escape) {
+    if state.open && keys.just_pressed(KeyCode::Escape) {
         state.close();
+    }
+}
+
+/// Entrada de teclado al campo nombre (`EditableTextInputPlugin` no está en crates.io 0.19).
+pub(crate) fn save_window_editable_keyboard(
+    state: Res<SaveWindowState>,
+    mut key_events: MessageReader<KeyboardInput>,
+    mut name_q: Query<&mut EditableText, With<SaveWindowNameText>>,
+) {
+    if !state.open || state.mode != SaveWindowMode::Save {
         key_events.clear();
         return;
     }
-    if state.mode != SaveWindowMode::Save {
+    let Ok(mut editable) = name_q.single_mut() else {
         key_events.clear();
         return;
-    }
+    };
     for ev in key_events.read() {
         if ev.state != ButtonState::Pressed {
             continue;
         }
         if matches!(ev.logical_key, Key::Backspace) {
-            state.filename.pop();
+            editable.queue_edit(TextEdit::Backspace);
+            continue;
+        }
+        if matches!(ev.logical_key, Key::Delete) {
+            editable.queue_edit(TextEdit::Delete);
             continue;
         }
         let Some(text) = &ev.text else {
             continue;
         };
         for c in text.chars() {
-            if let Some(c) = sanitize_filename_char(c)
-                && state.filename.chars().count() < MAX_FILENAME_CHARS
+            if sanitize_filename_char(c).is_some()
+                && editable.value().chars().count() < MAX_FILENAME_CHARS
             {
-                state.filename.push(c);
+                editable.queue_edit(TextEdit::Insert(SmolStr::from(c.to_string())));
             }
         }
     }
 }
 
+/// Clic en el campo de nombre mueve el foco de entrada.
+pub(crate) fn save_window_name_click_focus(
+    state: Res<SaveWindowState>,
+    mut input_focus: ResMut<InputFocus>,
+    q: Query<(Entity, &Interaction), (With<SaveWindowNameText>, Changed<Interaction>)>,
+) {
+    if !state.open || state.mode != SaveWindowMode::Save {
+        return;
+    }
+    for (entity, interaction) in &q {
+        if *interaction == Interaction::Pressed {
+            input_focus.set(entity, FocusCause::Pressed);
+        }
+    }
+}
+
+/// Al abrir en modo guardar: foco en el campo de nombre y texto por defecto.
+pub(crate) fn prepare_save_window_name(
+    state: Res<SaveWindowState>,
+    mut input_focus: ResMut<InputFocus>,
+    mut name_q: Query<(Entity, &mut EditableText), With<SaveWindowNameText>>,
+    mut last_open: Local<bool>,
+) {
+    let just_opened = state.open && !*last_open;
+    *last_open = state.open;
+    if !just_opened || state.mode != SaveWindowMode::Save {
+        return;
+    }
+    let Ok((entity, mut editable)) = name_q.single_mut() else {
+        return;
+    };
+    let name = if state.filename.is_empty() {
+        default_save_name()
+    } else {
+        state.filename.clone()
+    };
+    editable.editor_mut().set_text(&name);
+    editable.queue_edit(TextEdit::SelectAll);
+    input_focus.set(entity, FocusCause::Navigated);
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_save_window_buttons(
     mut state: ResMut<SaveWindowState>,
     buttons: Query<(&Interaction, &SaveWindowButton), (Changed<Interaction>, With<Button>)>,
     rows: Query<(&Interaction, &SaveWindowRow), (Changed<Interaction>, With<Button>)>,
+    mut name_q: Query<&mut EditableText, With<SaveWindowNameText>>,
     mut hud: ResMut<SimHudControls>,
     mut sim: ResMut<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
@@ -101,7 +156,12 @@ pub(crate) fn handle_save_window_buttons(
         state.selected = Some(idx);
         if state.mode == SaveWindowMode::Save && state.entries[idx].kind == SaveFileKind::Json {
             let name = state.entries[idx].name.clone();
-            state.filename = name.trim_end_matches(".json").to_string();
+            let stem = name.trim_end_matches(".json");
+            state.filename = stem.to_string();
+            if let Ok(mut editable) = name_q.single_mut() {
+                editable.editor_mut().set_text(stem);
+                editable.queue_edit(TextEdit::SelectAll);
+            }
         }
     }
 
@@ -140,7 +200,12 @@ pub(crate) fn handle_save_window_buttons(
             }
             SaveWindowButton::Confirm => match state.mode {
                 SaveWindowMode::Save => {
-                    confirm_save(&mut state, &mut hud, &sim);
+                    let name_text = name_q
+                        .single()
+                        .ok()
+                        .map(|e| e.value().to_string())
+                        .unwrap_or_default();
+                    confirm_save(&mut state, &mut hud, &sim, &name_text);
                 }
                 SaveWindowMode::Load => {
                     confirm_load(
@@ -156,8 +221,8 @@ pub(crate) fn handle_save_window_buttons(
     }
 }
 
-fn confirm_save(state: &mut SaveWindowState, hud: &mut SimHudControls, sim: &SimWorld) {
-    let name = state.filename.trim();
+fn confirm_save(state: &mut SaveWindowState, hud: &mut SimHudControls, sim: &SimWorld, name: &str) {
+    let name = name.trim();
     if name.is_empty() {
         state.status = "Escribí un nombre para la partida.".into();
         return;
@@ -244,7 +309,6 @@ pub(crate) fn sync_save_window(
     mut texts: ParamSet<(
         Query<&mut Text, With<SaveWindowTitle>>,
         Query<(&SaveWindowRowText, &mut Text)>,
-        Query<&mut Text, With<SaveWindowNameText>>,
         Query<&mut Text, With<SaveWindowPageText>>,
         Query<&mut Text, With<SaveWindowStatusText>>,
         Query<&mut Text, With<SaveWindowConfirmText>>,
@@ -272,7 +336,7 @@ pub(crate) fn sync_save_window(
     for mut t in &mut texts.p0() {
         **t = title.to_string();
     }
-    for mut t in &mut texts.p5() {
+    for mut t in &mut texts.p4() {
         **t = confirm.to_string();
     }
 
@@ -307,12 +371,9 @@ pub(crate) fn sync_save_window(
         };
     }
     for mut t in &mut texts.p2() {
-        **t = format!("{}.json", state.filename);
-    }
-    for mut t in &mut texts.p3() {
         **t = format!("{}/{}", state.page + 1, state.page_count());
     }
-    for mut t in &mut texts.p4() {
+    for mut t in &mut texts.p3() {
         **t = state.status.clone();
     }
 }
@@ -322,13 +383,15 @@ pub(crate) fn sync_save_window(
 mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
+    use bevy::text::EditableText;
 
     use crate::render::{RemapMapVisualsPending, VehicleIndex};
     use crate::state::SimWorld;
     use crate::ui::SimHudControls;
 
     use super::super::{
-        SaveWindowButton, SaveWindowMode, SaveWindowRow, SaveWindowState, save_dir_from,
+        SaveWindowButton, SaveWindowMode, SaveWindowNameText, SaveWindowRow, SaveWindowState,
+        save_dir_from,
     };
     use super::handle_save_window_buttons;
 
@@ -343,7 +406,9 @@ mod tests {
             sim_speed: 1.0,
             json_save_path: save_path.to_string(),
             minimap_visible: true,
+            sfx_volume: 0.22,
         });
+        world.spawn((SaveWindowNameText, EditableText::new("mi_partida")));
         world
     }
 
@@ -360,14 +425,12 @@ mod tests {
         world
             .resource_mut::<SaveWindowState>()
             .open_in_mode(SaveWindowMode::Save, &save_dir_from(&save_path));
-        world.resource_mut::<SaveWindowState>().filename = "mi_partida".into();
         press(&mut world, SaveWindowButton::Confirm);
         world.run_system_once(handle_save_window_buttons).unwrap();
 
         assert!(dir.path().join("mi_partida.json").exists());
         assert!(!world.resource::<SaveWindowState>().open);
 
-        // Cargar: abrir, seleccionar fila 0 y confirmar.
         world
             .resource_mut::<SaveWindowState>()
             .open_in_mode(SaveWindowMode::Load, &save_dir_from(&save_path));
@@ -403,11 +466,14 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let save_path = dir.path().join("x.json").to_string_lossy().to_string();
         let mut world = base_world(&save_path);
+        {
+            let mut q = world.query::<&mut EditableText>();
+            q.single_mut(&mut world).unwrap().editor_mut().set_text("");
+        }
 
         world
             .resource_mut::<SaveWindowState>()
             .open_in_mode(SaveWindowMode::Save, &save_dir_from(&save_path));
-        world.resource_mut::<SaveWindowState>().filename = String::new();
         press(&mut world, SaveWindowButton::Confirm);
         world.run_system_once(handle_save_window_buttons).unwrap();
 

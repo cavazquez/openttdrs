@@ -33,7 +33,8 @@ use industry_panel::{
 use main_menu::{main_menu_interaction, setup_main_menu, setup_main_menu_camera};
 pub(crate) use save_window::SaveWindowState;
 use save_window::{
-    handle_save_load_toolbar_buttons, handle_save_window_buttons, save_window_keyboard,
+    handle_save_load_toolbar_buttons, handle_save_window_buttons, prepare_save_window_name,
+    save_window_editable_keyboard, save_window_keyboard, save_window_name_click_focus,
     setup_save_window, sync_save_window,
 };
 use toolbar::depot_panel_on_closed;
@@ -119,6 +120,8 @@ impl Plugin for ClientUiPlugin {
             Update,
             (
                 save_window_keyboard,
+                save_window_editable_keyboard,
+                save_window_name_click_focus,
                 handle_pause_toggle,
                 cycle_json_save_path_hotkey,
                 handle_tool_hotkeys,
@@ -148,6 +151,7 @@ impl Plugin for ClientUiPlugin {
                 handle_save_load_toolbar_buttons,
                 handle_save_window_buttons,
                 sync_save_window,
+                prepare_save_window_name,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

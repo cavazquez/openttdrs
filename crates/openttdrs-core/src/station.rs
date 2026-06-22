@@ -153,12 +153,23 @@ fn station_footprint_tiles(map: &Map, anchor: TileCoord) -> Vec<TileCoord> {
 }
 
 /// Tesela de vía donde el tren debe detenerse junto a una estación de tren (no
-/// sobre la plataforma). Busca en toda la huella contigua y devuelve la vía más
-/// cercana al ancla, para que quede dentro del radio de cobertura.
+/// sobre la plataforma). Usa la plataforma si ya es vía (`StationType::Rail`)
+/// o la vía adyacente más cercana. Prefiere vía adyacente; si no hay, plataforma rail.
 #[must_use]
 pub fn rail_station_approach_tile(map: &Map, station_pos: TileCoord) -> Option<TileCoord> {
-    let mut best: Option<(i32, TileCoord)> = None;
+    let is_rail_platform = |c: TileCoord| {
+        map.get(c)
+            .is_some_and(|t| t.kind == TileKind::Station && station_type_from_m6(t.m6) == 0)
+    };
+    let mut adjacent: Option<(i32, TileCoord)> = None;
+    let mut platform: Option<(i32, TileCoord)> = None;
     for c in station_footprint_tiles(map, station_pos) {
+        if is_rail_platform(c) {
+            let d = (c.x - station_pos.x).abs() + (c.y - station_pos.y).abs();
+            if platform.is_none_or(|(bd, _)| d < bd) {
+                platform = Some((d, c));
+            }
+        }
         for dir in 0..4u8 {
             let (dx, dy) = diag_dir_offset(dir);
             let track = TileCoord::new(c.x + dx, c.y + dy);
@@ -166,12 +177,12 @@ pub fn rail_station_approach_tile(map: &Map, station_pos: TileCoord) -> Option<T
                 continue;
             }
             let d = (track.x - station_pos.x).abs() + (track.y - station_pos.y).abs();
-            if best.is_none_or(|(bd, _)| d < bd) {
-                best = Some((d, track));
+            if adjacent.is_none_or(|(bd, _)| d < bd) {
+                adjacent = Some((d, track));
             }
         }
     }
-    best.map(|(_, track)| track)
+    adjacent.or(platform).map(|(_, track)| track)
 }
 
 /// Destino de movimiento según tipo de vehículo y orden (trenes paran en la vía adyacente).

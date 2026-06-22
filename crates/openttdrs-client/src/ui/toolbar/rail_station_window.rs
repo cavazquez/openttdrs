@@ -14,6 +14,7 @@ use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
     spawn_floating_window, window_text_font,
 };
+use crate::ui::font::UiFontRole;
 use crate::ui::hud::HoveredTileCoord;
 
 use super::{BuildMenuAction, BuildMenuUi, StationBuildState, UiToolState};
@@ -105,13 +106,13 @@ pub(crate) fn setup_rail_station_picker(mut commands: Commands, asset_server: Re
         panel.spawn((
             RailStationAcceptsText,
             Text::new("Acepta: Nada"),
-            window_text_font(asset_server, 11.0),
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.95, 0.9, 0.3)),
         ));
         panel.spawn((
             RailStationSuppliesText,
             Text::new("Suministra: Nada"),
-            window_text_font(asset_server, 11.0),
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.95, 0.9, 0.3)),
         ));
     });
@@ -129,7 +130,7 @@ fn spawn_section_label(
         },
         children![(
             Text::new(label),
-            window_text_font(asset_server, 11.0),
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
         )],
     ));
@@ -223,7 +224,7 @@ fn spawn_text_button(
         BuildMenuUi,
         children![(
             Text::new(label),
-            window_text_font(asset_server, 11.0),
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.92, 0.88, 0.72)),
         )],
     ));

@@ -17,6 +17,7 @@ use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CREAM,
     WINDOW_TEXT, spawn_floating_window, window_text_font,
 };
+use crate::ui::font::UiFontRole;
 use crate::ui::toolbar::BuildMenuUi;
 
 #[derive(Resource, Default)]
@@ -47,7 +48,7 @@ pub(crate) fn setup_town_window(mut commands: Commands, asset_server: Res<AssetS
         body.spawn((
             TownWindowBodyText,
             Text::new(""),
-            window_text_font(asset_server, 12.0),
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
         ));
         body.spawn((
@@ -67,7 +68,7 @@ pub(crate) fn setup_town_window(mut commands: Commands, asset_server: Res<AssetS
             BuildMenuUi,
             children![(
                 Text::new("Centrar vista en el pueblo"),
-                window_text_font(asset_server, 11.0),
+                window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(WINDOW_TEXT),
             )],
         ));

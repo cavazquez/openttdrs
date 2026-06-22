@@ -18,6 +18,12 @@ pub enum Command {
     SetRailBits(TileCoord, u8),
     /// Convierte vía recta (solo X o Y) en waypoint ferroviario.
     PlaceRailWaypoint(TileCoord),
+    /// Quita `TrackBits` de una tesela de vía (drag de «quitar vía»).
+    RemoveRailBits(TileCoord, u8),
+    /// Quita toda la vía de la tesela.
+    RemoveRail(TileCoord),
+    /// Coloca señal de bloque eléctrica en vía recta; `face` es `DiagDir` (0=NE..3=NW).
+    PlaceRailSignal(TileCoord, u8),
     PlaceRoadDepot(TileCoord),
     PlaceRoadDepotDir(TileCoord, u8),
     PlaceRailDepot(TileCoord),
@@ -102,6 +108,12 @@ pub enum CommandError {
     InvalidRailOnSlope,
     /// Solo vía recta (eje X o Y) admite waypoint.
     CannotPlaceWaypointOnTrack,
+    /// No hay vía que quitar en esta tesela.
+    NoRailToRemove,
+    /// Solo vía recta admite señales de bloque (v1).
+    CannotPlaceSignalOnTrack,
+    /// Ya hay una señal en esa dirección en esta tesela.
+    SignalAlreadyPresent,
 }
 
 /// Texto breve en español para mostrar al jugador cuando falla un comando.
@@ -144,5 +156,10 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::CannotPlaceWaypointOnTrack => {
             "El waypoint solo puede colocarse sobre vía recta (eje X o Y)."
         }
+        CommandError::NoRailToRemove => "No hay vía que quitar aquí.",
+        CommandError::CannotPlaceSignalOnTrack => {
+            "La señal solo puede colocarse sobre vía recta (eje X o Y)."
+        }
+        CommandError::SignalAlreadyPresent => "Ya hay una señal en esa dirección.",
     }
 }

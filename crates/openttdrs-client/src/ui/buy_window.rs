@@ -15,6 +15,7 @@ use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CRIMSON,
     WINDOW_TEXT, spawn_floating_window, window_text_font,
 };
+use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::toolbar::BuildMenuUi;
 
@@ -87,7 +88,7 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
                         children![(
                             BuyVehicleRowText { slot },
                             Text::new(""),
-                            window_text_font(asset_server, 11.0),
+                            window_text_font(asset_server, UiFontRole::Caption),
                             TextColor(Color::srgb(0.92, 0.88, 0.72)),
                         )],
                     ));
@@ -96,7 +97,7 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
         panel.spawn((
             BuyVehicleStatsText,
             Text::new(""),
-            window_text_font(asset_server, 11.0),
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
             Node {
                 margin: UiRect::top(Val::Px(4.0)),
@@ -120,7 +121,7 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
             BuildMenuUi,
             children![(
                 Text::new("Comprar vehículo"),
-                window_text_font(asset_server, 11.0),
+                window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(Color::srgb(0.92, 0.88, 0.72)),
             )],
         ));

@@ -14,13 +14,14 @@ use crate::iso::{
 use crate::render::viewport::initial_camera_span_tiles;
 use crate::render::viewport::{VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES};
 use crate::render::{
-    MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer, PrimaryGameCamera,
-    RenderGrid, TileAtlas, TileRenderContext, TileViewportBounds, WorldAssets, chunk_tile_bounds,
-    chunks_in_bounds, flush_map_batches, large_map_viewport_cull_enabled,
+    CompanyColoredSprites, MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer,
+    PrimaryGameCamera, RenderGrid, TileAtlas, TileRenderContext, TileViewportBounds, WorldAssets,
+    chunk_tile_bounds, chunks_in_bounds, flush_map_batches, large_map_viewport_cull_enabled,
     ortho_visible_tile_bounds, push_forest_tree, push_water_tile, spawn_bridge_middle,
     spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
     spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
+use crate::sprites::CompanyColour;
 use crate::state::{ClientScreen, SimWorld};
 
 use super::vehicles::{TruckHandles, VehicleIndex, spawn_initial_vehicles};
@@ -74,7 +75,11 @@ impl Plugin for WorldRenderPlugin {
             .add_systems(OnEnter(ClientScreen::InGame), setup)
             .add_systems(
                 Update,
-                (sync_map_tile_spawn_viewport, apply_remap_map_visuals)
+                (
+                    sync_map_tile_spawn_viewport,
+                    sync_company_colored_sprites,
+                    apply_remap_map_visuals,
+                )
                     .chain()
                     .in_set(UpdateSet::Camera)
                     .after(crate::camera::move_camera)
@@ -147,6 +152,7 @@ pub(crate) fn setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut layout_assets: ResMut<Assets<TextureAtlasLayout>>,
+    mut images: ResMut<Assets<Image>>,
     sim: Res<SimWorld>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<
@@ -188,10 +194,15 @@ pub(crate) fn setup(
         shore: assets.shore_frames.clone(),
     });
     commands.insert_resource(super::ChimneySmokeFrames(assets.chimney_smoke.clone()));
+    let company_colour = CompanyColour::from_u8(sim.state.company_colour);
+    let mut company_sprites = CompanyColoredSprites::new(company_colour);
+    company_sprites.build_all(&mut images);
+    commands.insert_resource(company_sprites.clone());
     spawn_world_layer(
         &mut commands,
         &asset_server,
         &assets,
+        &company_sprites,
         &sim,
         spawn_bounds,
         true,
@@ -206,6 +217,7 @@ pub(crate) fn setup(
 fn spawn_map_tiles_in_bounds(
     commands: &mut Commands,
     assets: &WorldAssets,
+    company: &CompanyColoredSprites,
     sim: &SimWorld,
     spawn_bounds: TileViewportBounds,
 ) {
@@ -280,7 +292,13 @@ fn spawn_map_tiles_in_bounds(
             | TileKind::RailTunnel
             | TileKind::RoadBridge
             | TileKind::RailBridge => {
-                spawn_transport_object_tile(commands, assets, &ctx, slope_half_ground);
+                spawn_transport_object_tile(
+                    commands,
+                    assets,
+                    Some(company),
+                    &ctx,
+                    slope_half_ground,
+                );
             }
             TileKind::Industry => {
                 defer_overlay_tiles.push((tx, ty));
@@ -318,6 +336,7 @@ fn spawn_map_tiles_in_bounds(
             TileKind::Station => spawn_station_tile(
                 commands,
                 assets,
+                Some(company),
                 &ctx,
                 &sim.state.stations,
                 slope_half_ground,
@@ -338,33 +357,58 @@ fn spawn_map_tiles_in_bounds(
     }
 }
 
+fn sync_company_colored_sprites(
+    sim: Res<SimWorld>,
+    mut company: ResMut<CompanyColoredSprites>,
+    mut images: ResMut<Assets<Image>>,
+    mut pending: ResMut<RemapMapVisualsPending>,
+) {
+    let colour = CompanyColour::from_u8(sim.state.company_colour);
+    if company.colour == colour {
+        return;
+    }
+    company.colour = colour;
+    company.build_all(&mut images);
+    pending.pending = true;
+    pending.full = true;
+    pending.sync_camera = false;
+}
+
 fn spawn_world_layer(
     commands: &mut Commands,
     asset_server: &AssetServer,
     assets: &WorldAssets,
+    company: &CompanyColoredSprites,
     sim: &SimWorld,
     spawn_bounds: TileViewportBounds,
     include_world_extras: bool,
 ) {
     if include_world_extras {
         let truck_handles = TruckHandles::load(asset_server);
-        spawn_initial_vehicles(commands, sim, &truck_handles);
+        spawn_initial_vehicles(commands, sim, &truck_handles, company);
         commands.insert_resource(truck_handles);
         let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
         super::town_labels::spawn_town_labels(commands, sim, &label_font);
     }
-    spawn_map_tiles_in_bounds(commands, assets, sim, spawn_bounds);
+    spawn_map_tiles_in_bounds(commands, assets, company, sim, spawn_bounds);
 }
 
 fn spawn_map_chunk(
     commands: &mut Commands,
     assets: &WorldAssets,
+    company: &CompanyColoredSprites,
     sim: &SimWorld,
     cx: u32,
     cy: u32,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
-    spawn_map_tiles_in_bounds(commands, assets, sim, chunk_tile_bounds(cx, cy, mw, mh));
+    spawn_map_tiles_in_bounds(
+        commands,
+        assets,
+        company,
+        sim,
+        chunk_tile_bounds(cx, cy, mw, mh),
+    );
 }
 
 fn tile_kind_name(kind: TileKind) -> &'static str {
@@ -424,6 +468,7 @@ pub(crate) fn apply_remap_map_visuals(
     >,
     asset_server: Res<AssetServer>,
     assets: Option<Res<WorldAssets>>,
+    company: Option<Res<CompanyColoredSprites>>,
     sim: Res<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
     mut loaded_chunks: ResMut<LoadedMapTileChunks>,
@@ -432,6 +477,9 @@ pub(crate) fn apply_remap_map_visuals(
         return;
     }
     let Some(assets) = assets else {
+        return;
+    };
+    let Some(company) = company else {
         return;
     };
     let do_sync_camera = pending.sync_camera;
@@ -461,7 +509,14 @@ pub(crate) fn apply_remap_map_visuals(
             }
         }
         for &(cx, cy) in &to_add {
-            spawn_map_chunk(&mut commands, assets.as_ref(), &sim, cx, cy);
+            spawn_map_chunk(
+                &mut commands,
+                assets.as_ref(),
+                company.as_ref(),
+                &sim,
+                cx,
+                cy,
+            );
         }
         loaded_chunks.chunks = needed;
         if !to_add.is_empty() || !to_remove.is_empty() {
@@ -489,6 +544,7 @@ pub(crate) fn apply_remap_map_visuals(
             &mut commands,
             &asset_server,
             assets.as_ref(),
+            company.as_ref(),
             &sim,
             spawn_bounds,
             true,

@@ -38,11 +38,12 @@ pub(crate) fn command_for_action(
         BuildMenuAction::RoadBridge
         | BuildMenuAction::RoadTunnel
         | BuildMenuAction::RailBridge
-        | BuildMenuAction::RailTunnel
-        | BuildMenuAction::RailSignals
-        | BuildMenuAction::RailRemove
-        | BuildMenuAction::RailConvert
-        | BuildMenuAction::Orders => None,
+        | BuildMenuAction::RailTunnel => None,
+        BuildMenuAction::RailRemove => Some(Command::RemoveRail(pos)),
+        BuildMenuAction::RailSignals => {
+            Some(Command::PlaceRailSignal(pos, station_state.orientation))
+        }
+        BuildMenuAction::RailConvert | BuildMenuAction::Orders => None,
         BuildMenuAction::RailWaypoint => Some(Command::PlaceRailWaypoint(pos)),
         BuildMenuAction::BuildHouse => Some(Command::PlaceHouse(pos)),
         BuildMenuAction::BuildCoalMine => Some(Command::PlaceIndustrySpec(

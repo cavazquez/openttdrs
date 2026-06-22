@@ -15,6 +15,7 @@ pub mod map;
 pub mod ottdmap_extras;
 pub mod pathfinder;
 pub mod rail_lane;
+pub mod rail_signals;
 pub mod road_movement;
 pub mod sav;
 pub mod save;
@@ -69,6 +70,11 @@ pub use pathfinder::{
     station_site_tile_allows_build, station_site_tile_needs_clear, tile_is_path_traversable,
 };
 pub use rail_lane::{rail_horz_lane_bit, rail_vert_lane_bit};
+pub use rail_signals::{
+    RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST,
+    cycle_signal_facing, rail_tile_is_signals, signal_facing_for_orientation,
+    signal_placement_for_facing, valid_signal_facings,
+};
 pub use road_movement::{
     road_turn_entry_exit, straight_subtile, train_straight_subtile, train_subtile_direction,
     vehicle_render_direction, vehicle_render_progress, vehicle_subtile,

@@ -1,20 +1,25 @@
 //! Parser nativo de savegames de `OpenTTD` (`.sav`): contenedor comprimido,
 //! chunks de mapa, estaciones (`STNN`), ciudades (`CITY`), industrias
-//! (`INDY`), vehículos (`VEHS`) y dinero de la empresa (`PLYR`).
+//! (`INDY`), vehículos (`VEHS`), órdenes (`ORDL`) y dinero de la empresa (`PLYR`).
 //!
 //! El mapa se reconstruye reutilizando el pipeline `.ottdmap` ya validado
 //! (`Map::from_ottd_binary_with_extras`), generando el bloque en memoria.
 
+mod array_legacy;
 mod build;
 mod chunks;
 mod container;
+mod date;
 mod entities;
 mod house_population_generated;
+mod orders;
 mod table;
 
+use crate::command::{bridge_collinear_rail_gaps, normalize_rail_trackbits_from_neighbors};
 use crate::game_state::GameState;
-use crate::map::Map;
+use crate::map::{Map, TileCoord, TileKind};
 use crate::ottdmap_extras::OttdmapExtras;
+use crate::pathfinder;
 use crate::station::{Station, StopKind};
 use crate::town::Town;
 use crate::vehicle::{Vehicle, VehicleKind};
@@ -67,6 +72,12 @@ pub struct SavGame {
     pub vehicles: Vec<SavVehicle>,
     /// Dinero de la primera empresa (`PLYR`), si está presente.
     pub money: Option<i64>,
+    /// Color de compañía (`Colours`) de la primera empresa (`PLYR`), si está presente.
+    pub company_colour: Option<u8>,
+    /// Índice `StationID` → tesela (incluye waypoints) para órdenes importadas.
+    pub(crate) station_index: std::collections::HashMap<u32, entities::SavStationIndex>,
+    /// Reloj de simulación del chunk `DATE`, si está presente.
+    pub game_time: Option<date::SavGameTime>,
 }
 
 /// Carga un savegame de `OpenTTD` desde sus bytes.
@@ -83,12 +94,16 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let (map, extras) = Map::from_ottd_binary_with_extras(&ottdmap)
         .map_err(|e| SavError::BadFormat(format!("mapa reconstruido inválido: {e:?}")))?;
     let (map_w, _) = map.dimensions();
-    let stations = entities::stations_from_chunks(&chunk_list, map_w);
-    let mut towns = entities::towns_from_chunks(&chunk_list, map_w);
+    let stations = entities::stations_from_chunks(&chunk_list, map_w, version);
+    let mut towns = entities::towns_from_chunks(&chunk_list, map_w, version);
     rebuild_town_populations(&map, &mut towns);
-    let industries = entities::industries_from_chunks(&chunk_list, map_w);
-    let vehicles = entities::vehicles_from_chunks(&chunk_list, map_w);
-    let money = entities::company_money_from_chunks(&chunk_list);
+    let industries = entities::industries_from_chunks(&chunk_list, map_w, version);
+    let order_import = orders::SavOrderImport::from_chunks(&chunk_list, version);
+    let station_index = entities::station_index_from_chunks(&chunk_list, map_w, version);
+    let vehicles = entities::vehicles_from_chunks(&chunk_list, map_w, &order_import, version);
+    let game_time = date::game_time_from_chunks(&chunk_list, version);
+    let money = entities::company_money_from_chunks(&chunk_list, version);
+    let company_colour = entities::company_colour_from_chunks(&chunk_list, version);
     Ok(SavGame {
         version,
         map,
@@ -98,6 +113,9 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         industries,
         vehicles,
         money,
+        company_colour,
+        station_index,
+        game_time,
     })
 }
 
@@ -135,7 +153,78 @@ fn rebuild_town_populations(map: &Map, towns: &mut [Town]) {
     }
 }
 
-#[must_use]
+fn nearest_network_tile(
+    map: &Map,
+    from: TileCoord,
+    kind: VehicleKind,
+    max_dist: i32,
+) -> Option<TileCoord> {
+    let mut best: Option<(i32, TileCoord)> = None;
+    for dy in -max_dist..=max_dist {
+        for dx in -max_dist..=max_dist {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            let c = TileCoord::new(from.x + dx, from.y + dy);
+            let Some(tile_kind) = map.get_kind(c) else {
+                continue;
+            };
+            let on_network = match kind {
+                VehicleKind::Train => match map.get(c) {
+                    Some(t)
+                        if matches!(
+                            t.kind,
+                            TileKind::Rail
+                                | TileKind::RailDepot
+                                | TileKind::RailTunnel
+                                | TileKind::RailBridge
+                        ) =>
+                    {
+                        true
+                    }
+                    Some(t) if t.kind == TileKind::Station => {
+                        let st = crate::station::station_type_from_m6(t.m6);
+                        st == 0 || st == crate::station::STATION_TYPE_RAIL_WAYPOINT
+                    }
+                    _ => false,
+                },
+                VehicleKind::Bus | VehicleKind::Truck => matches!(
+                    tile_kind,
+                    TileKind::Road | TileKind::RoadTunnel | TileKind::RoadBridge
+                ),
+            };
+            if !on_network {
+                continue;
+            }
+            let d = dx.abs() + dy.abs();
+            if best.is_none_or(|(bd, _)| d < bd) {
+                best = Some((d, c));
+            }
+        }
+    }
+    best.map(|(_, c)| c)
+}
+
+/// Si un vehículo importado no tiene ruta (p. ej. en depósito sin boca a la red),
+/// lo coloca en la tesela de red más cercana con ruta al destino de la orden.
+fn reconcile_imported_vehicle_position(map: &Map, vehicle: &mut Vehicle) {
+    if vehicle.orders.is_empty() {
+        return;
+    }
+    vehicle.sync_order_destination(map);
+    let net = pathfinder::path_network_for_vehicle(vehicle.kind);
+    if pathfinder::find_path(map, vehicle.pos, vehicle.dest, net).is_some() {
+        return;
+    }
+    let Some(net_tile) = nearest_network_tile(map, vehicle.pos, vehicle.kind, 12) else {
+        return;
+    };
+    if pathfinder::find_path(map, net_tile, vehicle.dest, net).is_some() {
+        vehicle.pos = net_tile;
+        vehicle.origin = net_tile;
+    }
+}
+
 fn stop_kind_from_facilities(facilities: u8) -> StopKind {
     if facilities & FACIL_TRAIN != 0 {
         StopKind::RailStation
@@ -157,11 +246,20 @@ impl GameState {
     /// de teselas con `SavGame::extras` en saves antiguos.
     #[must_use]
     pub fn from_sav_game(sav: SavGame) -> Self {
-        let mut state = Self::from_map(sav.map);
+        let mut map = sav.map;
+        normalize_rail_trackbits_from_neighbors(&mut map);
+        bridge_collinear_rail_gaps(&mut map);
+        let mut state = Self::from_map(map);
+        if let Some(time) = sav.game_time {
+            state.tick = date::game_tick_from_sav_time(time);
+        }
         state.jgr_tunnels_from_footer = sav.extras.jgr_tunnels_from_tnbp();
         state.towns = sav.towns;
         if let Some(money) = sav.money {
             state.economy.money = money;
+        }
+        if let Some(colour) = sav.company_colour {
+            state.company_colour = colour;
         }
         for st in sav.stations {
             let mut station =
@@ -177,9 +275,16 @@ impl GameState {
                 SavVehicleKind::RoadVehicle => VehicleKind::Truck,
             };
             #[allow(clippy::cast_possible_truncation)]
-            state
-                .vehicles
-                .push(Vehicle::new(i as u32, kind, v.pos, v.pos));
+            let mut vehicle = Vehicle::new(i as u32, kind, v.pos, v.pos);
+            let imported_orders = orders::vehicle_orders_from_sav(&v.orders, &sav.station_index);
+            if !imported_orders.is_empty() {
+                vehicle.set_vehicle_orders(imported_orders);
+                vehicle.current_order = v.current_order.min(vehicle.orders.len().saturating_sub(1));
+                // Saves reales suelen traer trenes parados en depósito; arrancar si hay órdenes.
+                vehicle.running = true;
+                reconcile_imported_vehicle_position(&state.map, &mut vehicle);
+            }
+            state.vehicles.push(vehicle);
         }
         state
     }
@@ -223,19 +328,31 @@ mod tests {
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
                     cargo_type: 9,
+                    orders: Vec::new(),
+                    current_order: 0,
+                    running: true,
                 },
                 SavVehicle {
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(6, 6),
                     cargo_type: 0,
+                    orders: Vec::new(),
+                    current_order: 0,
+                    running: true,
                 },
                 SavVehicle {
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(7, 7),
                     cargo_type: 5,
+                    orders: Vec::new(),
+                    current_order: 0,
+                    running: true,
                 },
             ],
             money: Some(123_456),
+            company_colour: Some(9),
+            station_index: std::collections::HashMap::new(),
+            game_time: None,
         };
         let state = GameState::from_sav_game(sav);
         assert_eq!(state.stations.len(), 1);
@@ -244,6 +361,7 @@ mod tests {
         assert_eq!(state.towns.len(), 1);
         assert_eq!(state.towns[0].name, "Springfield");
         assert_eq!(state.economy.money, 123_456);
+        assert_eq!(state.company_colour, 9);
         assert_eq!(state.vehicles.len(), 3);
         assert_eq!(state.vehicles[0].kind, VehicleKind::Train);
         assert_eq!(state.vehicles[1].kind, VehicleKind::Bus);

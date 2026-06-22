@@ -19,6 +19,7 @@ use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CRIMSON,
     WINDOW_TEXT, spawn_floating_window, window_text_font,
 };
+use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::toolbar::{BuildMenuUi, OrderEditState};
 
@@ -115,13 +116,13 @@ pub(crate) fn setup_vehicle_window(
         panel.spawn((
             VehicleWindowBodyText,
             Text::new(""),
-            window_text_font(asset_server, 11.0),
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
         ));
         panel.spawn((
             VehicleWindowStatusText,
             Text::new(""),
-            window_text_font(asset_server, 12.0),
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(STATUS_STOPPED),
         ));
         panel
@@ -192,7 +193,7 @@ fn spawn_vehicle_button(
         .with_children(|btn| {
             let mut text = btn.spawn((
                 Text::new(label),
-                window_text_font(asset_server, 10.0),
+                window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(Color::srgb(0.92, 0.88, 0.72)),
             ));
             if is_toggle {

@@ -22,6 +22,7 @@ pub(crate) struct SimHudControls {
     pub(crate) sim_speed: f32,
     pub(crate) json_save_path: String,
     pub(crate) minimap_visible: bool,
+    pub(crate) sfx_volume: f32,
 }
 
 impl Default for SimHudControls {
@@ -31,6 +32,7 @@ impl Default for SimHudControls {
             sim_speed: 1.0,
             json_save_path: crate::config::json_save_path(),
             minimap_visible: true,
+            sfx_volume: 0.22,
         }
     }
 }

@@ -176,6 +176,7 @@ mod tests {
             sim_speed: 1.0,
             json_save_path: save_path.to_string_lossy().to_string(),
             minimap_visible: true,
+            sfx_volume: 0.22,
         });
 
         world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));

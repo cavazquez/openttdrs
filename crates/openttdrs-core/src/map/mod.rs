@@ -464,7 +464,7 @@ mod ottdmap_binary_tests {
             base.3,
             base.4,
             base.5,
-            [0x81, 0, 0, 0],
+            [0xC0, 0, 0, 0],
             base.7,
             base.8,
             [0; 4],

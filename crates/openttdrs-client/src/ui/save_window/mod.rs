@@ -11,7 +11,8 @@ mod systems;
 pub(crate) use setup::setup_save_window;
 pub(crate) use systems::{
     SaveLoadToolbarButton, handle_save_load_toolbar_buttons, handle_save_window_buttons,
-    save_window_keyboard, sync_save_window,
+    prepare_save_window_name, save_window_editable_keyboard, save_window_keyboard,
+    save_window_name_click_focus, sync_save_window,
 };
 
 /// Filas visibles por página en la lista de partidas.
@@ -213,6 +214,12 @@ pub(crate) fn sanitize_filename_char(c: char) -> Option<char> {
     }
 }
 
+/// Filtro de caracteres para nombres de partida en [`EditableText`].
+#[must_use]
+pub(crate) fn filename_filter() -> bevy::text::EditableTextFilter {
+    bevy::text::EditableTextFilter::new(|c| sanitize_filename_char(c).is_some())
+}
+
 #[must_use]
 fn format_size(bytes: u64) -> String {
     if bytes >= 1024 * 1024 {
@@ -288,6 +295,13 @@ mod tests {
     #[test]
     fn default_save_name_has_prefix() {
         assert!(default_save_name().starts_with("partida_"));
+    }
+
+    #[test]
+    fn sanitize_filename_rejects_invalid_chars() {
+        assert!(sanitize_filename_char('a').is_some());
+        assert!(sanitize_filename_char('/').is_none());
+        assert!(sanitize_filename_char('ñ').is_some());
     }
 
     #[test]

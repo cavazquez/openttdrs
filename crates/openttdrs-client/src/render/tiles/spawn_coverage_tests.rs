@@ -160,6 +160,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                 spawn_station_tile(
                     &mut commands,
                     &a.0,
+                    None,
                     &TileRenderContext::new(&m.0, &g.0, 4, 2),
                     &[],
                     4.0,
@@ -168,6 +169,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     spawn_transport_object_tile(
                         &mut commands,
                         &a.0,
+                        None,
                         &TileRenderContext::new(&m.0, &g.0, x as u32, y as u32),
                         4.0,
                     );
@@ -347,6 +349,7 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                 spawn_station_tile(
                     &mut commands,
                     &a.0,
+                    None,
                     &TileRenderContext::new(&m.0, &g.0, 1, 1),
                     &[],
                     4.0,

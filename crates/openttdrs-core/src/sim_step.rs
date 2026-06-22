@@ -14,6 +14,16 @@ pub(crate) fn step(state: &mut GameState) {
 
     recompute_vehicle_paths(state);
 
+    crate::rail_signals::update_rail_signal_states(
+        &mut state.map,
+        &state
+            .vehicles
+            .iter()
+            .filter(|v| v.kind == VehicleKind::Train)
+            .map(|v| v.pos)
+            .collect::<Vec<_>>(),
+    );
+
     let mut loaded_this_tick = vec![false; state.vehicles.len()];
     let mut unloaded_this_tick = vec![false; state.vehicles.len()];
     unload_vehicles(state, t, &loaded_this_tick, &mut unloaded_this_tick);
@@ -296,7 +306,26 @@ fn recompute_vehicle_paths(state: &mut GameState) {
 }
 
 fn move_vehicles(state: &mut GameState) {
+    let train_positions: Vec<_> = state
+        .vehicles
+        .iter()
+        .filter(|v| v.kind == VehicleKind::Train)
+        .map(|v| v.pos)
+        .collect();
     for vehicle in &mut state.vehicles {
+        if vehicle.kind == VehicleKind::Train
+            && vehicle.running
+            && let Some(next) = vehicle.movement_target()
+            && crate::rail_signals::train_blocked_by_signal(
+                &state.map,
+                &train_positions,
+                vehicle.pos,
+                next,
+            )
+        {
+            vehicle.cur_speed = 0;
+            continue;
+        }
         vehicle.step();
     }
 }

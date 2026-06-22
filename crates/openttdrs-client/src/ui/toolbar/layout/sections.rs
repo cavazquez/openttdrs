@@ -155,7 +155,7 @@ fn spawn_save_load_button(
         children![(
             Text::new(label),
             TextFont {
-                font_size: FontSize::Px(13.0),
+                font_size: FontSize::Rem(0.85),
                 ..default()
             },
             TextColor(Color::srgb(0.95, 0.92, 0.78)),
@@ -287,7 +287,7 @@ pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             BuildMenuAction::RailStation,
                         ),
                         (
-                            "Senales (no implementado)",
+                            "Señales de bloque",
                             "assets/opengfx/tiles/toolbar_rail_signals.png",
                             BuildMenuAction::RailSignals,
                         ),
@@ -302,7 +302,7 @@ pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             BuildMenuAction::RailTunnel,
                         ),
                         (
-                            "Quitar via (no implementado)",
+                            "Quitar vía",
                             "assets/opengfx/tiles/toolbar_rail_remove.png",
                             BuildMenuAction::RailRemove,
                         ),
@@ -428,7 +428,7 @@ pub(super) fn spawn_toolbar_tooltip(root: &mut ChildSpawnerCommands) {
             TooltipText,
             Text::new(""),
             TextFont {
-                font_size: FontSize::Px(11.0),
+                font_size: FontSize::Rem(0.7),
                 ..default()
             },
             TextColor(Color::srgb(0.94, 0.9, 0.76)),

@@ -10,6 +10,7 @@ use bevy::window::PrimaryWindow;
 
 use crate::bevy_app::UpdateSet;
 use crate::state::ClientScreen;
+use crate::ui::font::UiFontRole;
 use crate::ui::toolbar::BuildMenuUi;
 
 /// Fondo marrón clásico de las ventanas de `OpenTTD`.
@@ -102,8 +103,8 @@ impl Plugin for FloatingWindowPlugin {
 }
 
 /// `TextFont` con la fuente UTF-8 del proyecto (tildes, eñes, símbolos).
-pub(crate) fn window_text_font(asset_server: &AssetServer, size: f32) -> TextFont {
-    crate::ui::font::text_font_loaded(asset_server, size)
+pub(crate) fn window_text_font(asset_server: &AssetServer, role: UiFontRole) -> TextFont {
+    crate::ui::font::ui_text_font_loaded(asset_server, role)
 }
 
 /// Crea el marco de una ventana flotante (oculta) y devuelve
@@ -172,7 +173,7 @@ pub(crate) fn spawn_floating_window(
                     BuildMenuUi,
                     children![(
                         Text::new("×"),
-                        window_text_font(asset_server, 12.0),
+                        window_text_font(asset_server, UiFontRole::Caption),
                         TextColor(WINDOW_TEXT),
                     )],
                 ));
@@ -185,7 +186,7 @@ pub(crate) fn spawn_floating_window(
                     children![(
                         FloatingWindowTitleText(id),
                         Text::new(title),
-                        window_text_font(asset_server, 12.0),
+                        window_text_font(asset_server, UiFontRole::Caption),
                         TextColor(WINDOW_TEXT),
                     )],
                 ));

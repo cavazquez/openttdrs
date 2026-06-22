@@ -40,6 +40,33 @@ fn invalidate_vehicle_paths(state: &mut GameState) {
     }
 }
 
+fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), CommandError> {
+    match cmd {
+        Command::SetVehicleOrders(id, orders) => {
+            vehicles::set_vehicle_orders(state, *id, orders.clone())
+        }
+        Command::SetVehicleStationOrders(id, stations) => {
+            vehicles::set_vehicle_station_orders(state, *id, stations.clone())
+        }
+        Command::SetVehicleOrderList(id, orders) => {
+            vehicles::set_vehicle_order_list(state, *id, orders.clone())
+        }
+        Command::BuildRoadVehicleAtDepot(c, kind) => {
+            vehicles::build_road_vehicle_at_depot(state, *c, *kind)
+        }
+        Command::BuildVehicleAtDepot(c, engine_id) => {
+            vehicles::build_vehicle_at_depot(state, *c, *engine_id)
+        }
+        Command::SellVehicle(id) => vehicles::sell_vehicle(state, *id),
+        Command::ToggleVehicleRunning(id) => vehicles::toggle_vehicle_running(state, *id),
+        Command::CloneVehicleOrders {
+            from_vehicle_id,
+            to_vehicle_id,
+        } => vehicles::clone_vehicle_orders(state, *from_vehicle_id, *to_vehicle_id),
+        _ => Err(CommandError::VehicleNotFound),
+    }
+}
+
 fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), CommandError> {
     match cmd {
         Command::PlaceRoad(c) => transport::place_road(state, *c),
@@ -49,6 +76,9 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::PlaceRailBits(c, bits) => transport::place_rail_bits(state, *c, *bits),
         Command::SetRailBits(c, bits) => transport::set_rail_bits(state, *c, *bits),
         Command::PlaceRailWaypoint(c) => transport::place_rail_waypoint(state, *c),
+        Command::RemoveRailBits(c, bits) => transport::remove_rail_bits(state, *c, *bits),
+        Command::RemoveRail(c) => transport::remove_rail(state, *c),
+        Command::PlaceRailSignal(c, face) => transport::place_rail_signal(state, *c, *face),
         Command::PlaceRoadDepot(c) => transport::place_road_depot_dir(state, *c, 0),
         Command::PlaceRoadDepotDir(c, dir) => transport::place_road_depot_dir(state, *c, *dir),
         Command::PlaceRailDepot(c) => transport::place_rail_depot_dir(state, *c, 0),
@@ -89,15 +119,6 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             0x80,
             BRIDGE_BUILD_COST_PER_TILE,
         ),
-        Command::SetVehicleOrders(id, orders) => {
-            vehicles::set_vehicle_orders(state, *id, orders.clone())
-        }
-        Command::SetVehicleStationOrders(id, stations) => {
-            vehicles::set_vehicle_station_orders(state, *id, stations.clone())
-        }
-        Command::SetVehicleOrderList(id, orders) => {
-            vehicles::set_vehicle_order_list(state, *id, orders.clone())
-        }
         Command::PlaceHouse(c) => {
             transport::place_single_transport_tile(state, *c, TileKind::House, 0x30, 0x00, 50)
         }
@@ -126,18 +147,14 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             platforms,
             length,
         } => transport::place_rail_station_area(state, *origin, *axis_y, *platforms, *length),
-        Command::BuildRoadVehicleAtDepot(c, kind) => {
-            vehicles::build_road_vehicle_at_depot(state, *c, *kind)
-        }
-        Command::BuildVehicleAtDepot(c, engine_id) => {
-            vehicles::build_vehicle_at_depot(state, *c, *engine_id)
-        }
-        Command::SellVehicle(id) => vehicles::sell_vehicle(state, *id),
-        Command::ToggleVehicleRunning(id) => vehicles::toggle_vehicle_running(state, *id),
-        Command::CloneVehicleOrders {
-            from_vehicle_id,
-            to_vehicle_id,
-        } => vehicles::clone_vehicle_orders(state, *from_vehicle_id, *to_vehicle_id),
+        Command::SetVehicleOrders(..)
+        | Command::SetVehicleStationOrders(..)
+        | Command::SetVehicleOrderList(..)
+        | Command::BuildRoadVehicleAtDepot(..)
+        | Command::BuildVehicleAtDepot(..)
+        | Command::SellVehicle(..)
+        | Command::ToggleVehicleRunning(..)
+        | Command::CloneVehicleOrders { .. } => apply_vehicle_command(state, cmd),
         Command::ClearTile(c) => transport::clear_tile(state, *c),
     }
 }

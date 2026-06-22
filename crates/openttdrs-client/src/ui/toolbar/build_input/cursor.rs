@@ -6,12 +6,14 @@ use crate::iso::world_pos_to_tile_coord;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 use crate::ui::hud::HoveredTileCoord;
+use crate::ui::save_window::SaveWindowState;
 use crate::ui::toolbar::BuildMenuUi;
 use crate::ui::toolbar::minimap::minimap_contains_cursor;
 use crate::ui::toolbar::minimap::{MinimapCell, MinimapRoot};
 
 /// Actualiza la tesela bajo el cursor (preview, órdenes). No modifica la selección por clic.
 pub(crate) fn update_cursor_tile(
+    save_window: Option<Res<SaveWindowState>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<(&Camera, &Transform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     sim: Res<SimWorld>,
@@ -26,6 +28,9 @@ pub(crate) fn update_cursor_tile(
     >,
 ) {
     hovered.pos = None;
+    if save_window.is_some_and(|w| w.open) {
+        return;
+    }
     if toolbar_pointer.iter().any(|i| *i != Interaction::None) {
         return;
     }

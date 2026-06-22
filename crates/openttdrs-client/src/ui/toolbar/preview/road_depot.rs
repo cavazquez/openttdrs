@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 
 use crate::iso::{iso, road_stop_build_sprite_center, tile_pos_half};
+use crate::render::{CompanyColoredSprites, sprite_from_company_or_asset};
 use crate::sprites::{
     ROAD_DEPOT_GROUND_PATH, road_depot_build_layers, road_depot_entrance_road_bits,
     road_depot_seq_gfx, road_flat_sprite_index,
@@ -20,6 +21,7 @@ pub(crate) struct RoadDepotPreviewSpawn<'a> {
     pub dir: usize,
     pub tint: Color,
     pub asset_server: &'a AssetServer,
+    pub company: Option<&'a CompanyColoredSprites>,
 }
 
 pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepotPreviewSpawn<'_>) {
@@ -31,6 +33,7 @@ pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepot
         dir,
         tint,
         asset_server,
+        company,
     } = spawn;
     let dir = dir.min(3);
 
@@ -79,11 +82,7 @@ pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepot
         );
         commands.spawn((
             BuildGhostPreview,
-            Sprite {
-                image: asset_server.load::<Image>(spec.path),
-                color: tint,
-                ..default()
-            },
+            sprite_from_company_or_asset(company, asset_server, spec.path, tint),
             Transform::from_translation(center).with_scale(Vec3::splat(PREVIEW_SCALE)),
         ));
     }

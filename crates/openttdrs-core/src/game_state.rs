@@ -82,6 +82,9 @@ pub struct GameState {
     pub stats: SimStats,
     #[serde(default)]
     pub economy: CompanyEconomy,
+    /// Color de compañía del jugador (`Colours` en `OpenTTD`; 0 = azul oscuro).
+    #[serde(default)]
+    pub company_colour: u8,
     /// Túneles JGR decodificados desde footer `TNBP` del `.ottdmap` (vacío si no hay o no aplica).
     #[serde(default)]
     pub jgr_tunnels_from_footer: Vec<JgrTunnelRecord>,
@@ -105,6 +108,7 @@ impl GameState {
             towns: Vec::new(),
             stats: SimStats::default(),
             economy: CompanyEconomy::default(),
+            company_colour: 0,
             jgr_tunnels_from_footer: Vec::new(),
             path_cache: crate::pathfinder::PathCache::default(),
             pending_income_popups: Vec::new(),
@@ -123,6 +127,7 @@ impl GameState {
             towns: Vec::new(),
             stats: SimStats::default(),
             economy: CompanyEconomy::default(),
+            company_colour: 0,
             jgr_tunnels_from_footer: Vec::new(),
             path_cache: crate::pathfinder::PathCache::default(),
             pending_income_popups: Vec::new(),

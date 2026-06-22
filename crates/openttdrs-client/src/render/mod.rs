@@ -2,6 +2,7 @@
 
 mod assets;
 mod atlas;
+mod company_recolor;
 mod components;
 mod grid;
 mod smoke;
@@ -14,6 +15,9 @@ mod world;
 
 pub(crate) use assets::WorldAssets;
 pub(crate) use atlas::{AtlasSprite, TileAtlas};
+pub(crate) use company_recolor::{
+    CompanyColoredSprites, sprite_from_atlas_or_company_white, sprite_from_company_or_asset,
+};
 pub(crate) use components::{
     IndustryPreviewCamera, MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer,
     PrimaryGameCamera, ShoreTile, VehiclePreviewCamera, WaterAnimFrames, WaterTile,

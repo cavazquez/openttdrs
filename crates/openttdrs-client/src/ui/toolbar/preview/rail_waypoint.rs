@@ -4,10 +4,10 @@ use bevy::prelude::*;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, iso, tile_pos_half, tile_slope_and_min_z};
-use crate::render::TileAtlas;
+use crate::render::{CompanyColoredSprites, TileAtlas};
 use crate::sprites::{
-    RAIL_TB_X, RAIL_TB_Y, RAIL_WAYPOINT_SPRITE_TINT, rail_station_ground_track_sprite,
-    rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_sprite_center,
+    RAIL_TB_X, RAIL_TB_Y, rail_station_ground_track_sprite, rail_station_sprite_meta,
+    rail_waypoint_draw_layers, rail_waypoint_sprite_center,
 };
 
 use super::BuildGhostPreview;
@@ -29,6 +29,7 @@ fn waypoint_m5_on_tile(map: &Map, coord: TileCoord) -> Option<u8> {
 pub(crate) fn spawn_rail_waypoint_preview(
     commands: &mut Commands,
     atlas: Option<&TileAtlas>,
+    company: Option<&CompanyColoredSprites>,
     map: &Map,
     coord: TileCoord,
     valid: bool,
@@ -46,7 +47,7 @@ pub(crate) fn spawn_rail_waypoint_preview(
         SLOPE_HALF_H[tileh as usize]
     };
     let tint = if valid {
-        RAIL_WAYPOINT_SPRITE_TINT.with_alpha(0.65)
+        Color::srgba(1.0, 1.0, 1.0, 0.65)
     } else {
         Color::srgba(1.0, 0.35, 0.3, 0.65)
     };
@@ -80,10 +81,14 @@ pub(crate) fn spawn_rail_waypoint_preview(
             w,
             h,
         );
-        commands.spawn((
-            BuildGhostPreview,
-            img.sprite_colored(tint),
-            Transform::from_translation(pos3),
-        ));
+        let sprite = company
+            .and_then(|c| c.rail_handle(layer.sprite_id))
+            .map(|handle| Sprite {
+                image: handle.clone(),
+                color: tint,
+                ..default()
+            })
+            .unwrap_or_else(|| img.sprite_colored(tint));
+        commands.spawn((BuildGhostPreview, sprite, Transform::from_translation(pos3)));
     }
 }

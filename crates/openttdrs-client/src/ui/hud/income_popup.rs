@@ -32,7 +32,7 @@ pub(crate) fn spawn_income_popups(
             Text2d::new(label),
             TextFont {
                 font: hud_font.0.clone().into(),
-                font_size: FontSize::Px(11.0),
+                font_size: FontSize::Rem(0.7),
                 ..default()
             },
             TextColor(Color::srgb(0.35, 0.92, 0.42)),

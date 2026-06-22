@@ -22,6 +22,7 @@ pub(crate) fn action_supports_drag(action: BuildMenuAction) -> bool {
             | BuildMenuAction::RailVert
             | BuildMenuAction::RailBridge
             | BuildMenuAction::RailTunnel
+            | BuildMenuAction::RailRemove
             | BuildMenuAction::Clear
     )
 }
@@ -147,11 +148,13 @@ pub(crate) fn apply_drag_action(
     if let Some(rail_bits) = rail_bits_for_drag_action(action, rail_lane_bit) {
         let mut changed = false;
         let mut last_err = None;
+        let cmd_fn = if action == BuildMenuAction::RailRemove {
+            |pos: TileCoord, bits: u8| Command::RemoveRailBits(pos, bits)
+        } else {
+            |pos: TileCoord, bits: u8| Command::PlaceRailBits(pos, bits)
+        };
         for (x, y) in tiles {
-            match apply_command(
-                &mut sim.state,
-                &Command::PlaceRailBits(TileCoord::new(x, y), rail_bits),
-            ) {
+            match apply_command(&mut sim.state, &cmd_fn(TileCoord::new(x, y), rail_bits)) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),
             }

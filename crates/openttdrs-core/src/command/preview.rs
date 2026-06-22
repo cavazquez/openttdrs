@@ -4,13 +4,21 @@ use crate::{GameState, IndustrySpec, StopKind};
 
 use super::industry::check_place_industry_spec;
 use super::transport::{
-    check_bridge, check_clear_tile, check_place_rail, check_place_rail_waypoint,
-    check_place_road_bits, check_rail_depot_placement, check_rail_station_area,
-    check_rail_trackbits_on_tile, check_road_depot_placement, check_single_transport_tile,
-    check_station_placement, check_tunnel, merged_rail_trackbits_on_tile, rail_station_footprint,
-    rail_trackbits_from_neighbors,
+    check_bridge, check_clear_tile, check_place_rail, check_place_rail_signal_oriented,
+    check_place_rail_waypoint, check_place_road_bits, check_rail_depot_placement,
+    check_rail_station_area, check_rail_trackbits_on_tile, check_remove_rail,
+    check_road_depot_placement, check_single_transport_tile, check_station_placement, check_tunnel,
+    merged_rail_trackbits_on_tile, rail_station_footprint, rail_trackbits_from_neighbors,
 };
 use super::types::{Command, CommandError};
+
+fn preview_industry_error(
+    map: &crate::map::Map,
+    c: crate::map::TileCoord,
+    spec: IndustrySpec,
+) -> Option<CommandError> {
+    check_place_industry_spec(map, c, spec).err()
+}
 
 /// Devuelve el error que obtendría `apply_command` sin mutar el estado.
 #[must_use]
@@ -33,6 +41,10 @@ pub fn command_would_fail(state: &GameState, cmd: &Command) -> Option<CommandErr
             .err()
             .or_else(|| check_rail_trackbits_on_tile(map, *c, bits & 0x3F).err()),
         Command::PlaceRailWaypoint(c) => check_place_rail_waypoint(map, *c, stations).err(),
+        Command::RemoveRailBits(c, _) | Command::RemoveRail(c) => check_remove_rail(map, *c).err(),
+        Command::PlaceRailSignal(c, orientation) => {
+            check_place_rail_signal_oriented(map, *c, *orientation).err()
+        }
         Command::PlaceRoadDepot(c) => {
             if (0..4).any(|dir| check_road_depot_placement(map, *c, dir).is_ok()) {
                 None
@@ -89,9 +101,7 @@ pub fn command_would_fail(state: &GameState, cmd: &Command) -> Option<CommandErr
                 rail_station_footprint(*axis_y, (*platforms).clamp(1, 7), (*length).clamp(1, 7));
             check_rail_station_area(state, *origin, w, h).err()
         }
-        Command::PlaceIndustry(c) => {
-            check_place_industry_spec(map, *c, IndustrySpec::Factory).err()
-        }
+        Command::PlaceIndustry(c) => preview_industry_error(map, *c, IndustrySpec::Factory),
         Command::PlaceIndustryKind(c, kind) => {
             let spec = match kind {
                 crate::IndustryKind::CoalMine => IndustrySpec::CoalMine,
@@ -99,9 +109,9 @@ pub fn command_would_fail(state: &GameState, cmd: &Command) -> Option<CommandErr
                 crate::IndustryKind::OilWell => IndustrySpec::OilWells,
                 crate::IndustryKind::Factory => IndustrySpec::Factory,
             };
-            check_place_industry_spec(map, *c, spec).err()
+            preview_industry_error(map, *c, spec)
         }
-        Command::PlaceIndustrySpec(c, spec) => check_place_industry_spec(map, *c, *spec).err(),
+        Command::PlaceIndustrySpec(c, spec) => preview_industry_error(map, *c, *spec),
         Command::ClearTile(c) => check_clear_tile(map, *c).err(),
         Command::SetVehicleOrders(..)
         | Command::SetVehicleStationOrders(..)

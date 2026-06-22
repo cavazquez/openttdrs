@@ -5,6 +5,8 @@ use openttdrs_core::{Map, TileCoord, TileKind};
 
 #[path = "sprites/bridge_draw_data_generated.rs"]
 mod bridge_draw_data_generated;
+#[path = "sprites/company_palette.rs"]
+pub(crate) mod company_palette;
 #[path = "sprites/field_draw_data_generated.rs"]
 mod field_draw_data_generated;
 #[path = "sprites/foundation.rs"]
@@ -92,6 +94,7 @@ pub const ROAD_FLAT_HALF_H: [f32; 19] = [
     15.5, 15.5, 15.5,
 ];
 
+pub(crate) use company_palette::{CompanyColoredSprites, CompanyColour, tile_filename};
 #[allow(unused_imports)]
 pub use foundation::{
     FOUNDATION_LEVELED_GFX, FOUNDATION_SPRITE_BASE, FoundationGfx, foundation_asset_path,
@@ -118,7 +121,7 @@ pub use rail::{
 };
 #[allow(unused_imports)]
 pub use station::{
-    RAIL_WAYPOINT_SPRITE_TINT, StationTileClass, rail_station_axis_y, rail_station_draw_layers,
+    StationTileClass, rail_station_axis_y, rail_station_draw_layers,
     rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_sprite_layers,
     rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_sprite_center,
     road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,

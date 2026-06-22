@@ -25,6 +25,21 @@ pub(crate) fn env_u32_in_range(
         .unwrap_or(default)
 }
 
+pub(crate) fn env_u8_in_range(name: &str, default: u8, range: std::ops::RangeInclusive<u8>) -> u8 {
+    env_string(name)
+        .and_then(|s| s.parse().ok())
+        .filter(|v| range.contains(v))
+        .unwrap_or(default)
+}
+
+/// Sobrescribe `GameState::company_colour` con `OPENTTDRS_COMPANY_COLOUR` (0–15) para QA.
+pub(crate) fn apply_test_company_colour(state: &mut openttdrs_core::GameState) {
+    let colour = env_u8_in_range("OPENTTDRS_COMPANY_COLOUR", state.company_colour, 0..=15);
+    if std::env::var_os("OPENTTDRS_COMPANY_COLOUR").is_some() {
+        state.company_colour = colour;
+    }
+}
+
 pub(crate) fn json_save_path() -> String {
     env_string("OPENTTDRS_JSON_SAVE").unwrap_or_else(|| DEFAULT_JSON_SAVE_PATH.into())
 }

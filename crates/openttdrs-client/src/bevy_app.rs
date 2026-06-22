@@ -5,7 +5,9 @@ use std::time::Duration;
 use bevy::app::{ScheduleRunnerPlugin, TaskPoolPlugin};
 use bevy::audio::AudioPlugin;
 use bevy::image::ImageSamplerDescriptor;
+use bevy::input_focus::tab_navigation::TabNavigationPlugin;
 use bevy::prelude::*;
+use bevy::text::RemSize;
 use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 
@@ -15,10 +17,15 @@ use crate::debug_gizmos::DebugGizmosPlugin;
 use crate::persistence::PersistencePlugin;
 use crate::render::{IndustrySmokePlugin, WaterAnimationPlugin};
 use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
+use crate::settings::{ClientSettingsPlugin, patch_window_plugin_for_settings};
 use crate::simulation::SimulationPlugin;
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::ClientUiPlugin;
+use crate::ui::font::sync_rem_size_from_window;
 use crate::window_status::WindowStatusPlugin;
+
+/// Identificador estable para `SettingsPlugin` (alineado con `repository` del workspace).
+pub(crate) const CLIENT_SETTINGS_APP_ID: &str = "com.github.cavazquez.openttdrs";
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum StartupSet {
@@ -50,7 +57,7 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
             close_when_requested: false,
         }
     } else {
-        WindowPlugin {
+        patch_window_plugin_for_settings(WindowPlugin {
             primary_window: Some(Window {
                 title: "openttdrs".into(),
                 name: Some("openttdrs".into()),
@@ -58,7 +65,7 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
                 ..default()
             }),
             ..default()
-        }
+        })
     };
 
     let mut default_plugins = DefaultPlugins
@@ -103,7 +110,10 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
     );
     app.init_state::<ClientScreen>();
     app.init_resource::<SimWorld>();
+    app.insert_resource(RemSize(14.0));
     app.add_plugins((
+        ClientSettingsPlugin,
+        TabNavigationPlugin,
         WorldRenderPlugin,
         VehicleRenderPlugin,
         ClientUiPlugin,
@@ -117,6 +127,7 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
     ));
     if !headless {
         app.add_plugins(AppIconPlugin::new(asset_root));
+        app.add_systems(Update, sync_rem_size_from_window.in_set(UpdateSet::Status));
     }
     app
 }

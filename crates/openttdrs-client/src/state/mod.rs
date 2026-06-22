@@ -6,6 +6,7 @@ pub(crate) mod stations;
 use bevy::prelude::*;
 use openttdrs_core::{GameState, Map, OttdmapExtras};
 
+use crate::config::apply_test_company_colour;
 use crate::state::bootstrap::{
     fill_flat_grass, log_detection_summary, log_gameplay_showcase_zones, log_procedural_demo_zones,
     place_bridge_demo_gap, place_clean_demo_transport, place_demo_economy_loop,
@@ -25,6 +26,7 @@ pub(crate) fn load_sav_state(bytes: &[u8]) -> Result<GameState, String> {
     let extras = sav.extras.clone();
     let sav_industries = sav.industries.clone();
     let mut state = GameState::from_sav_game(sav);
+    apply_test_company_colour(&mut state);
     if sav_industries.is_empty() {
         place_industries(&mut state, true, Some(&extras));
     } else {
@@ -67,7 +69,8 @@ impl Default for SimWorld {
         if let Ok(path) = std::env::var("OTTDJSON_LOAD") {
             match std::fs::read_to_string(&path) {
                 Ok(text) => match openttdrs_core::save::load_from_str(&text) {
-                    Ok(state) => {
+                    Ok(mut state) => {
+                        apply_test_company_colour(&mut state);
                         info!("Estado de simulacion cargado desde JSON: {path}");
                         log_detection_summary(&state, true, None);
                         return Self {
@@ -92,6 +95,7 @@ impl Default for SimWorld {
                         place_stations(&mut state);
                         place_stations_from_map_tiles(&mut state);
                         place_stations_from_footer_stxy(&mut state, Some(&extras));
+                        apply_test_company_colour(&mut state);
                         // En mapas reales no inyectar vehículos de demo:
                         // se renderizan solo los realmente presentes en datos cargados.
                         log_detection_summary(&state, true, Some(&extras));
@@ -131,6 +135,7 @@ python3 scripts/parse_sav.py tu.sav {path}"
         log_procedural_demo_zones();
         log_gameplay_showcase_zones();
         log_detection_summary(&state, false, None);
+        apply_test_company_colour(&mut state);
         Self {
             state,
             loaded_file: false,

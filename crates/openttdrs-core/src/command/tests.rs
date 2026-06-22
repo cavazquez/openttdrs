@@ -620,6 +620,36 @@ fn place_rail_waypoint_rejects_curved_track() {
 }
 
 #[test]
+fn remove_rail_clears_tile_and_refreshes_neighbors() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+    apply_command(&mut s, &Command::SetRailBits(TileCoord::new(4, 3), 0x01)).unwrap();
+    let money = s.economy.money;
+    apply_command(&mut s, &Command::RemoveRail(c)).unwrap();
+    assert_eq!(s.map.get_kind(c), Some(TileKind::Grass));
+    assert_eq!(
+        s.economy.money,
+        money + crate::rail_signals::RAIL_REMOVE_REFUND
+    );
+}
+
+#[test]
+fn place_rail_signal_on_straight_track() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+    let money = s.economy.money;
+    apply_command(&mut s, &Command::PlaceRailSignal(c, 0)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert!(crate::rail_signals::rail_tile_is_signals(tile.m5));
+    assert_eq!(
+        s.economy.money,
+        money - crate::rail_signals::SIGNAL_BUILD_COST
+    );
+}
+
+#[test]
 fn train_order_through_waypoint_advances_without_full_stop() {
     let mut s = GameState::new(12, 12);
     let wp = TileCoord::new(5, 5);
@@ -909,7 +939,7 @@ fn sell_vehicle_in_road_depot_succeeds() {
 
 #[test]
 fn every_command_error_has_user_message() {
-    const ERRORS: [CommandError; 22] = [
+    const ERRORS: [CommandError; 25] = [
         CommandError::OutOfBounds,
         CommandError::CannotPlaceRoadOnWater,
         CommandError::CannotPlaceRoadOnVoid,
@@ -932,6 +962,9 @@ fn every_command_error_has_user_message() {
         CommandError::InvalidBridgeSpan,
         CommandError::InvalidRailOnSlope,
         CommandError::CannotPlaceWaypointOnTrack,
+        CommandError::NoRailToRemove,
+        CommandError::CannotPlaceSignalOnTrack,
+        CommandError::SignalAlreadyPresent,
     ];
     for err in ERRORS {
         let msg = command_error_message(err);

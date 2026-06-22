@@ -1,21 +1,22 @@
 //! Spawn del modal de guardar/cargar partidas (oculto hasta abrirse).
+//!
+//! Estructura modular (`save_window_panel`, filas, acciones) lista para `bsn!`
+//! cuando `bevy_scene` 0.19 esté publicado en crates.io.
 
 use bevy::prelude::*;
+use bevy::text::{EditableText, TextCursorStyle};
 use bevy::ui::{FocusPolicy, GlobalZIndex};
 
+use crate::ui::font::{UiFontRole, ui_text_font_loaded};
 use crate::ui::toolbar::BuildMenuUi;
 
 use super::{
     SAVE_WINDOW_ROWS, SaveWindowButton, SaveWindowConfirmText, SaveWindowNameRow,
     SaveWindowNameText, SaveWindowPageText, SaveWindowRoot, SaveWindowRow, SaveWindowRowText,
-    SaveWindowStatusText, SaveWindowTitle,
+    SaveWindowStatusText, SaveWindowTitle, filename_filter,
 };
 
-const UI_FONT: &str = "static/fonts/DejaVuSansMono.ttf";
-
 pub(crate) fn setup_save_window(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let ui_font = asset_server.load::<Font>(UI_FONT);
-
     commands
         .spawn((
             SaveWindowRoot,
@@ -35,177 +36,167 @@ pub(crate) fn setup_save_window(mut commands: Commands, asset_server: Res<AssetS
             Interaction::default(),
         ))
         .with_children(|overlay| {
-            overlay
+            spawn_save_window_panel(overlay, &asset_server);
+        });
+}
+
+fn spawn_save_window_panel(parent: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
+    parent
+        .spawn((
+            Node {
+                width: Val::Px(560.0),
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Px(12.0)),
+                border: UiRect::all(Val::Px(3.0)),
+                row_gap: Val::Px(8.0),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.16, 0.13, 0.09, 0.98)),
+            BorderColor::all(Color::srgb(0.74, 0.66, 0.45)),
+            FocusPolicy::Block,
+            BuildMenuUi,
+        ))
+        .with_children(|panel| {
+            panel.spawn((
+                SaveWindowTitle,
+                Text::new("Cargar partida"),
+                ui_text_font_loaded(asset_server, UiFontRole::Title),
+                TextColor(Color::srgb(0.96, 0.91, 0.72)),
+                BuildMenuUi,
+            ));
+
+            panel
                 .spawn((
                     Node {
-                        width: Val::Px(560.0),
                         flex_direction: FlexDirection::Column,
-                        padding: UiRect::all(Val::Px(12.0)),
-                        border: UiRect::all(Val::Px(3.0)),
-                        row_gap: Val::Px(8.0),
+                        row_gap: Val::Px(2.0),
                         ..default()
                     },
-                    BackgroundColor(Color::srgba(0.16, 0.13, 0.09, 0.98)),
-                    BorderColor::all(Color::srgb(0.74, 0.66, 0.45)),
-                    FocusPolicy::Block,
                     BuildMenuUi,
                 ))
-                .with_children(|panel| {
-                    panel.spawn((
-                        SaveWindowTitle,
-                        Text::new("Cargar partida"),
-                        TextFont {
-                            font: ui_font.clone().into(),
-                            font_size: FontSize::Px(18.0),
-                            ..default()
-                        },
-                        TextColor(Color::srgb(0.96, 0.91, 0.72)),
+                .with_children(|list| {
+                    for slot in 0..SAVE_WINDOW_ROWS {
+                        spawn_save_row(list, asset_server, slot);
+                    }
+                });
+
+            panel
+                .spawn((
+                    Node {
+                        flex_direction: FlexDirection::Row,
+                        justify_content: JustifyContent::SpaceBetween,
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(6.0),
+                        ..default()
+                    },
+                    BuildMenuUi,
+                ))
+                .with_children(|row| {
+                    spawn_small_button(row, asset_server, SaveWindowButton::PrevPage, "<");
+                    row.spawn((
+                        SaveWindowPageText,
+                        Text::new("1/1"),
+                        ui_text_font_loaded(asset_server, UiFontRole::Caption),
+                        TextColor(Color::srgb(0.85, 0.81, 0.66)),
                         BuildMenuUi,
                     ));
+                    spawn_small_button(row, asset_server, SaveWindowButton::NextPage, ">");
+                });
 
-                    panel
-                        .spawn((
-                            Node {
-                                flex_direction: FlexDirection::Column,
-                                row_gap: Val::Px(2.0),
-                                ..default()
-                            },
-                            BuildMenuUi,
-                        ))
-                        .with_children(|list| {
-                            for slot in 0..SAVE_WINDOW_ROWS {
-                                spawn_save_row(list, &ui_font, slot);
-                            }
-                        });
-
-                    panel
-                        .spawn((
-                            Node {
-                                flex_direction: FlexDirection::Row,
-                                justify_content: JustifyContent::SpaceBetween,
-                                align_items: AlignItems::Center,
-                                column_gap: Val::Px(6.0),
-                                ..default()
-                            },
-                            BuildMenuUi,
-                        ))
-                        .with_children(|row| {
-                            spawn_small_button(row, &ui_font, SaveWindowButton::PrevPage, "<");
-                            row.spawn((
-                                SaveWindowPageText,
-                                Text::new("1/1"),
-                                TextFont {
-                                    font: ui_font.clone().into(),
-                                    font_size: FontSize::Px(12.0),
-                                    ..default()
-                                },
-                                TextColor(Color::srgb(0.85, 0.81, 0.66)),
-                                BuildMenuUi,
-                            ));
-                            spawn_small_button(row, &ui_font, SaveWindowButton::NextPage, ">");
-                        });
-
-                    panel
-                        .spawn((
-                            SaveWindowNameRow,
-                            Node {
-                                flex_direction: FlexDirection::Row,
-                                align_items: AlignItems::Center,
-                                column_gap: Val::Px(8.0),
-                                display: Display::None,
-                                ..default()
-                            },
-                            BuildMenuUi,
-                        ))
-                        .with_children(|row| {
-                            row.spawn((
-                                Text::new("Nombre:"),
-                                TextFont {
-                                    font: ui_font.clone().into(),
-                                    font_size: FontSize::Px(13.0),
-                                    ..default()
-                                },
-                                TextColor(Color::srgb(0.9, 0.86, 0.7)),
-                                BuildMenuUi,
-                            ));
-                            row.spawn((
-                                Node {
-                                    flex_grow: 1.0,
-                                    height: Val::Px(26.0),
-                                    padding: UiRect::horizontal(Val::Px(6.0)),
-                                    align_items: AlignItems::Center,
-                                    border: UiRect::all(Val::Px(1.0)),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgb(0.1, 0.08, 0.06)),
-                                BorderColor::all(Color::srgb(0.6, 0.53, 0.36)),
-                                BuildMenuUi,
-                                children![(
-                                    SaveWindowNameText,
-                                    Text::new(""),
-                                    TextFont {
-                                        font: ui_font.clone().into(),
-                                        font_size: FontSize::Px(13.0),
-                                        ..default()
-                                    },
-                                    TextColor(Color::srgb(0.95, 0.93, 0.8)),
-                                )],
-                            ));
-                        });
-
-                    panel.spawn((
-                        SaveWindowStatusText,
-                        Text::new(""),
-                        TextFont {
-                            font: ui_font.clone().into(),
-                            font_size: FontSize::Px(12.0),
-                            ..default()
-                        },
-                        TextColor(Color::srgb(0.93, 0.72, 0.5)),
+            panel
+                .spawn((
+                    SaveWindowNameRow,
+                    Node {
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(8.0),
+                        display: Display::None,
+                        ..default()
+                    },
+                    BuildMenuUi,
+                ))
+                .with_children(|row| {
+                    row.spawn((
+                        Text::new("Nombre:"),
+                        ui_text_font_loaded(asset_server, UiFontRole::Body),
+                        TextColor(Color::srgb(0.9, 0.86, 0.7)),
                         BuildMenuUi,
                     ));
+                    row.spawn((
+                        SaveWindowNameText,
+                        Node {
+                            flex_grow: 1.0,
+                            height: Val::Px(26.0),
+                            padding: UiRect::horizontal(Val::Px(6.0)),
+                            align_items: AlignItems::Center,
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.1, 0.08, 0.06)),
+                        BorderColor::all(Color::srgb(0.6, 0.53, 0.36)),
+                        BuildMenuUi,
+                        Interaction::default(),
+                        FocusPolicy::Block,
+                        EditableText {
+                            max_characters: Some(40),
+                            allow_newlines: false,
+                            ..default()
+                        },
+                        TextCursorStyle::default(),
+                        filename_filter(),
+                        ui_text_font_loaded(asset_server, UiFontRole::Body),
+                        TextColor(Color::srgb(0.95, 0.93, 0.8)),
+                    ));
+                });
 
-                    panel
-                        .spawn((
-                            Node {
-                                flex_direction: FlexDirection::Row,
-                                justify_content: JustifyContent::FlexEnd,
-                                column_gap: Val::Px(8.0),
-                                ..default()
-                            },
-                            BuildMenuUi,
-                        ))
-                        .with_children(|row| {
-                            spawn_action_button(
-                                row,
-                                &ui_font,
-                                SaveWindowButton::Delete,
-                                "Borrar",
-                                Color::srgb(0.45, 0.26, 0.2),
-                                None,
-                            );
-                            spawn_action_button(
-                                row,
-                                &ui_font,
-                                SaveWindowButton::Cancel,
-                                "Cancelar",
-                                Color::srgb(0.3, 0.27, 0.2),
-                                None,
-                            );
-                            spawn_action_button(
-                                row,
-                                &ui_font,
-                                SaveWindowButton::Confirm,
-                                "Cargar",
-                                Color::srgb(0.32, 0.42, 0.24),
-                                Some(SaveWindowConfirmText),
-                            );
-                        });
+            panel.spawn((
+                SaveWindowStatusText,
+                Text::new(""),
+                ui_text_font_loaded(asset_server, UiFontRole::Caption),
+                TextColor(Color::srgb(0.93, 0.72, 0.5)),
+                BuildMenuUi,
+            ));
+
+            panel
+                .spawn((
+                    Node {
+                        flex_direction: FlexDirection::Row,
+                        justify_content: JustifyContent::FlexEnd,
+                        column_gap: Val::Px(8.0),
+                        ..default()
+                    },
+                    BuildMenuUi,
+                ))
+                .with_children(|row| {
+                    spawn_action_button(
+                        row,
+                        asset_server,
+                        SaveWindowButton::Delete,
+                        "Borrar",
+                        Color::srgb(0.45, 0.26, 0.2),
+                        None,
+                    );
+                    spawn_action_button(
+                        row,
+                        asset_server,
+                        SaveWindowButton::Cancel,
+                        "Cancelar",
+                        Color::srgb(0.3, 0.27, 0.2),
+                        None,
+                    );
+                    spawn_action_button(
+                        row,
+                        asset_server,
+                        SaveWindowButton::Confirm,
+                        "Cargar",
+                        Color::srgb(0.32, 0.42, 0.24),
+                        Some(SaveWindowConfirmText),
+                    );
                 });
         });
 }
 
-fn spawn_save_row(parent: &mut ChildSpawnerCommands, ui_font: &Handle<Font>, slot: usize) {
+fn spawn_save_row(parent: &mut ChildSpawnerCommands, asset_server: &AssetServer, slot: usize) {
     parent.spawn((
         SaveWindowRow { slot },
         Button,
@@ -225,11 +216,7 @@ fn spawn_save_row(parent: &mut ChildSpawnerCommands, ui_font: &Handle<Font>, slo
         children![(
             SaveWindowRowText { slot },
             Text::new(""),
-            TextFont {
-                font: ui_font.clone().into(),
-                font_size: FontSize::Px(12.0),
-                ..default()
-            },
+            ui_text_font_loaded(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.92, 0.88, 0.72)),
         )],
     ));
@@ -237,7 +224,7 @@ fn spawn_save_row(parent: &mut ChildSpawnerCommands, ui_font: &Handle<Font>, slo
 
 fn spawn_small_button(
     parent: &mut ChildSpawnerCommands,
-    ui_font: &Handle<Font>,
+    asset_server: &AssetServer,
     action: SaveWindowButton,
     label: &'static str,
 ) {
@@ -258,11 +245,7 @@ fn spawn_small_button(
         BuildMenuUi,
         children![(
             Text::new(label),
-            TextFont {
-                font: ui_font.clone().into(),
-                font_size: FontSize::Px(13.0),
-                ..default()
-            },
+            ui_text_font_loaded(asset_server, UiFontRole::Body),
             TextColor(Color::srgb(0.92, 0.88, 0.72)),
         )],
     ));
@@ -270,7 +253,7 @@ fn spawn_small_button(
 
 fn spawn_action_button(
     parent: &mut ChildSpawnerCommands,
-    ui_font: &Handle<Font>,
+    asset_server: &AssetServer,
     action: SaveWindowButton,
     label: &'static str,
     bg: Color,
@@ -296,11 +279,7 @@ fn spawn_action_button(
     entity.with_children(|b| {
         let mut text = b.spawn((
             Text::new(label),
-            TextFont {
-                font: ui_font.clone().into(),
-                font_size: FontSize::Px(13.0),
-                ..default()
-            },
+            ui_text_font_loaded(asset_server, UiFontRole::Body),
             TextColor(Color::srgb(0.95, 0.93, 0.8)),
         ));
         if let Some(marker) = confirm_marker {

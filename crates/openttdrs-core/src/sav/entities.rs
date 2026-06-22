@@ -4,8 +4,8 @@
 use crate::map::TileCoord;
 use crate::town::Town;
 
-use super::chunks::{CH_SPARSE_TABLE, CH_TABLE, RawChunk, find_chunk};
-use super::table::{SlRecord, SlValue, parse_table_chunk, record_get};
+use super::chunks::{RawChunk, find_chunk};
+use super::table::{SlRecord, SlValue, record_get};
 
 /// Flag de waypoint en `BaseStation::facilities` (no es una estación jugable).
 const FACIL_WAYPOINT: u64 = 0x80;
@@ -20,6 +20,55 @@ pub struct SavStation {
     pub facilities: u8,
 }
 
+/// Entrada del índice de estación (`StationID`) en `STNN`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SavStationIndex {
+    pub pos: TileCoord,
+    pub is_waypoint: bool,
+    pub facilities: u8,
+    pub name: Option<String>,
+}
+
+/// Mapa `StationID` → tesela para resolver destinos de órdenes.
+#[must_use]
+pub(crate) fn station_index_from_chunks(
+    chunks: &[RawChunk],
+    map_w: u32,
+    save_version: u16,
+) -> std::collections::HashMap<u32, SavStationIndex> {
+    let Some(stnn) = find_chunk(chunks, "STNN") else {
+        return std::collections::HashMap::new();
+    };
+    let mut out = std::collections::HashMap::new();
+    for (idx, record) in table_rows(stnn, save_version) {
+        let Some(xy) = record_get(&record, "xy").and_then(SlValue::as_u64) else {
+            continue;
+        };
+        let Some(pos) = tile_to_coord(xy, map_w) else {
+            continue;
+        };
+        let facilities = record_get(&record, "facilities")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        let is_waypoint = facilities & FACIL_WAYPOINT != 0;
+        let name = record_get(&record, "name")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        #[allow(clippy::cast_possible_truncation)]
+        out.insert(
+            idx,
+            SavStationIndex {
+                pos,
+                is_waypoint,
+                facilities: facilities as u8,
+                name,
+            },
+        );
+    }
+    out
+}
+
 fn tile_to_coord(tile: u64, map_w: u32) -> Option<TileCoord> {
     if map_w == 0 {
         return None;
@@ -29,47 +78,26 @@ fn tile_to_coord(tile: u64, map_w: u32) -> Option<TileCoord> {
     Some(TileCoord::new(x, y))
 }
 
-fn table_rows(chunk: &RawChunk) -> Vec<(u32, super::table::SlRecord)> {
-    let sparse = match chunk.ch_type {
-        CH_TABLE => false,
-        CH_SPARSE_TABLE => true,
-        _ => return Vec::new(),
-    };
-    parse_table_chunk(&chunk.body, sparse).unwrap_or_default()
+fn table_rows(chunk: &RawChunk, save_version: u16) -> Vec<(u32, super::table::SlRecord)> {
+    super::array_legacy::chunk_rows(chunk, save_version)
 }
 
-/// Estaciones del chunk `STNN` (solo saves con tablas, SLV ≥ 295); best-effort.
+/// Estaciones del chunk `STNN`; best-effort (tabla o array legacy).
 #[must_use]
-pub(crate) fn stations_from_chunks(chunks: &[RawChunk], map_w: u32) -> Vec<SavStation> {
-    let Some(stnn) = find_chunk(chunks, "STNN") else {
-        return Vec::new();
-    };
-    let mut out = Vec::new();
-    for (_, record) in table_rows(stnn) {
-        let Some(facilities) = record_get(&record, "facilities").and_then(SlValue::as_u64) else {
-            continue;
-        };
-        if facilities & FACIL_WAYPOINT != 0 {
-            continue;
-        }
-        let Some(xy) = record_get(&record, "xy").and_then(SlValue::as_u64) else {
-            continue;
-        };
-        let Some(pos) = tile_to_coord(xy, map_w) else {
-            continue;
-        };
-        let name = record_get(&record, "name")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .map(str::to_string);
-        #[allow(clippy::cast_possible_truncation)]
-        out.push(SavStation {
-            pos,
-            name,
-            facilities: facilities as u8,
-        });
-    }
-    out
+pub(crate) fn stations_from_chunks(
+    chunks: &[RawChunk],
+    map_w: u32,
+    save_version: u16,
+) -> Vec<SavStation> {
+    station_index_from_chunks(chunks, map_w, save_version)
+        .into_values()
+        .filter(|st| !st.is_waypoint)
+        .map(|st| SavStation {
+            pos: st.pos,
+            name: st.name,
+            facilities: st.facilities,
+        })
+        .collect()
 }
 
 /// Nombre generado con el generador nativo de `OpenTTD` a partir de los
@@ -93,12 +121,12 @@ fn generated_town_name(record: &super::table::SlRecord) -> Option<String> {
 /// La población **no** viene en el save: `OpenTTD` la reconstruye al cargar
 /// (`RebuildTownCaches`); ver `sav::rebuild_town_populations`.
 #[must_use]
-pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32) -> Vec<Town> {
+pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32, save_version: u16) -> Vec<Town> {
     let Some(city) = find_chunk(chunks, "CITY") else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for (idx, record) in table_rows(city) {
+    for (idx, record) in table_rows(city, save_version) {
         let Some(xy) = record_get(&record, "xy").and_then(SlValue::as_u64) else {
             continue;
         };
@@ -135,49 +163,80 @@ pub struct SavIndustry {
 
 /// Industrias del chunk `INDY` (solo saves con tablas); best-effort.
 #[must_use]
-pub(crate) fn industries_from_chunks(chunks: &[RawChunk], map_w: u32) -> Vec<SavIndustry> {
+pub(crate) fn industries_from_chunks(
+    chunks: &[RawChunk],
+    map_w: u32,
+    save_version: u16,
+) -> Vec<SavIndustry> {
     let Some(indy) = find_chunk(chunks, "INDY") else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for (_, record) in table_rows(indy) {
-        let Some(tile) = record_get(&record, "location.tile").and_then(SlValue::as_u64) else {
-            continue;
-        };
-        let Some(pos) = tile_to_coord(tile, map_w) else {
-            continue;
-        };
-        let width = record_get(&record, "location.w")
-            .and_then(SlValue::as_u64)
-            .unwrap_or(1);
-        let height = record_get(&record, "location.h")
-            .and_then(SlValue::as_u64)
-            .unwrap_or(1);
-        let industry_type = record_get(&record, "type")
-            .and_then(SlValue::as_u64)
-            .unwrap_or(0);
-        #[allow(clippy::cast_possible_truncation)]
-        out.push(SavIndustry {
-            pos,
-            width: width.min(255) as u8,
-            height: height.min(255) as u8,
-            industry_type: industry_type.min(255) as u8,
-        });
+    for (_, record) in table_rows(indy, save_version) {
+        if let Some(ind) = sav_industry_from_record(&record, map_w) {
+            out.push(ind);
+        }
+    }
+    if out.is_empty() {
+        for &(index, industry_type) in &super::build::indy_pairs(chunks) {
+            if let Some(pos) = tile_to_coord(u64::from(index), map_w) {
+                out.push(SavIndustry {
+                    pos,
+                    width: 1,
+                    height: 1,
+                    industry_type,
+                });
+            }
+        }
     }
     out
 }
 
+fn sav_industry_from_record(record: &SlRecord, map_w: u32) -> Option<SavIndustry> {
+    let tile = record_get(record, "location.tile").and_then(SlValue::as_u64)?;
+    let pos = tile_to_coord(tile, map_w)?;
+    let width = record_get(record, "location.w")
+        .and_then(SlValue::as_u64)
+        .unwrap_or(1);
+    let height = record_get(record, "location.h")
+        .and_then(SlValue::as_u64)
+        .unwrap_or(1);
+    let industry_type = record_get(record, "type")
+        .and_then(SlValue::as_u64)
+        .unwrap_or(0);
+    #[allow(clippy::cast_possible_truncation)]
+    Some(SavIndustry {
+        pos,
+        width: width.min(255) as u8,
+        height: height.min(255) as u8,
+        industry_type: industry_type.min(255) as u8,
+    })
+}
+
 /// Dinero de la primera empresa del chunk `PLYR` (la del jugador en partidas locales).
 #[must_use]
-pub(crate) fn company_money_from_chunks(chunks: &[RawChunk]) -> Option<i64> {
-    let plyr = find_chunk(chunks, "PLYR")?;
-    let rows = table_rows(plyr);
-    let (_, record) = rows.iter().min_by_key(|(idx, _)| *idx)?;
-    match record_get(record, "money")? {
+pub(crate) fn company_money_from_chunks(chunks: &[RawChunk], save_version: u16) -> Option<i64> {
+    let record = first_company_record(chunks, save_version)?;
+    match record_get(&record, "money")? {
         SlValue::Int(v) => Some(*v),
         SlValue::Uint(v) => i64::try_from(*v).ok(),
         _ => None,
     }
+}
+
+/// Color de compañía (`Colours`) de la primera empresa en `PLYR`.
+#[must_use]
+pub(crate) fn company_colour_from_chunks(chunks: &[RawChunk], save_version: u16) -> Option<u8> {
+    let record = first_company_record(chunks, save_version)?;
+    let colour = record_get(&record, "colour")?.as_u64()?;
+    Some((colour % 16) as u8)
+}
+
+fn first_company_record(chunks: &[RawChunk], save_version: u16) -> Option<SlRecord> {
+    let plyr = find_chunk(chunks, "PLYR")?;
+    let rows = table_rows(plyr, save_version);
+    let (_, record) = rows.into_iter().min_by_key(|(idx, _)| *idx)?;
+    Some(record)
 }
 
 /// Tipo de vehículo de `OpenTTD` (`VehicleType`).
@@ -194,6 +253,12 @@ pub struct SavVehicle {
     pub pos: TileCoord,
     /// `CargoType` de `OpenTTD` (0 = pasajeros).
     pub cargo_type: u8,
+    /// Órdenes de la lista referenciada (`ORDL`).
+    pub orders: Vec<super::orders::SavOrder>,
+    /// Índice de orden actual (`cur_real_order_index`).
+    pub current_order: usize,
+    /// `false` si el jugador detuvo el vehículo (`VehState::Stopped`).
+    pub running: bool,
 }
 
 /// Primer (y único) registro de un campo struct de tabla.
@@ -210,12 +275,17 @@ const GVSF_FRONT: u64 = 0x01;
 /// Vehículos del chunk `VEHS` (sparse table): trenes y vehículos de carretera
 /// cabeza de convoy; barcos, aviones y efectos se omiten.
 #[must_use]
-pub(crate) fn vehicles_from_chunks(chunks: &[RawChunk], map_w: u32) -> Vec<SavVehicle> {
+pub(crate) fn vehicles_from_chunks(
+    chunks: &[RawChunk],
+    map_w: u32,
+    order_import: &super::orders::SavOrderImport,
+    save_version: u16,
+) -> Vec<SavVehicle> {
     let Some(vehs) = find_chunk(chunks, "VEHS") else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for (_, record) in table_rows(vehs) {
+    for (_, record) in table_rows(vehs, save_version) {
         let Some(vtype) = record_get(&record, "type").and_then(SlValue::as_u64) else {
             continue;
         };
@@ -245,11 +315,26 @@ pub(crate) fn vehicles_from_chunks(chunks: &[RawChunk], map_w: u32) -> Vec<SavVe
         let cargo_type = record_get(common, "cargo_type")
             .and_then(SlValue::as_u64)
             .unwrap_or(0xFF);
+        let order_list_ref = record_get(common, "orders")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        let orders = order_import.orders_for_vehicle_ref(order_list_ref);
+        let current_order = record_get(common, "cur_real_order_index")
+            .and_then(SlValue::as_u64)
+            .and_then(|v| usize::try_from(v).ok())
+            .unwrap_or(0);
+        let vehstatus = record_get(common, "vehstatus")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        let running = vehstatus & 1 == 0;
         #[allow(clippy::cast_possible_truncation)]
         out.push(SavVehicle {
             kind,
             pos,
             cargo_type: cargo_type.min(255) as u8,
+            orders,
+            current_order,
+            running,
         });
     }
     out
@@ -258,7 +343,7 @@ pub(crate) fn vehicles_from_chunks(chunks: &[RawChunk], map_w: u32) -> Vec<SavVe
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::cast_possible_truncation)]
 mod tests {
-    use super::super::chunks::RawChunk;
+    use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE, RawChunk};
     use super::super::table::tests::{build_table_body, write_str};
     use super::*;
 
@@ -286,7 +371,7 @@ mod tests {
         wp.push(0x80); // waypoint
 
         let chunks = vec![station_chunk(&[st, wp])];
-        let stations = stations_from_chunks(&chunks, 64);
+        let stations = stations_from_chunks(&chunks, 64, 300);
         assert_eq!(stations.len(), 1);
         assert_eq!(stations[0].pos, TileCoord::new(5, 2));
         assert_eq!(stations[0].name.as_deref(), Some("Mi Estación"));
@@ -308,7 +393,7 @@ mod tests {
             ch_type: CH_TABLE,
             body: build_table_body(&[(6, "xy"), (0x0A | 0x10, "name")], &[t1, t2]),
         };
-        let towns = towns_from_chunks(&[chunk], 64);
+        let towns = towns_from_chunks(&[chunk], 64, 300);
         assert_eq!(towns.len(), 2);
         assert_eq!(towns[0].name, "Rosario");
         assert_eq!(towns[0].population, 0, "la población se reconstruye aparte");
@@ -348,7 +433,7 @@ mod tests {
                 &[town_gen, grf],
             ),
         };
-        let towns = towns_from_chunks(&[chunk], 64);
+        let towns = towns_from_chunks(&[chunk], 64, 300);
         assert_eq!(towns.len(), 2);
         assert_eq!(towns[0].name, "Invenville");
         assert_eq!(towns[1].name, "Ciudad 2");
@@ -356,11 +441,19 @@ mod tests {
 
     #[test]
     fn missing_chunks_yield_empty() {
-        assert!(stations_from_chunks(&[], 64).is_empty());
-        assert!(towns_from_chunks(&[], 64).is_empty());
-        assert!(industries_from_chunks(&[], 64).is_empty());
-        assert!(vehicles_from_chunks(&[], 64).is_empty());
-        assert!(company_money_from_chunks(&[]).is_none());
+        assert!(stations_from_chunks(&[], 64, 300).is_empty());
+        assert!(towns_from_chunks(&[], 64, 300).is_empty());
+        assert!(industries_from_chunks(&[], 64, 300).is_empty());
+        assert!(
+            vehicles_from_chunks(
+                &[],
+                64,
+                &super::super::orders::SavOrderImport::from_chunks(&[], 300),
+                300,
+            )
+            .is_empty()
+        );
+        assert!(company_money_from_chunks(&[], 300).is_none());
     }
 
     #[test]
@@ -383,11 +476,24 @@ mod tests {
                 &[i1],
             ),
         };
-        let industries = industries_from_chunks(&[chunk], 64);
+        let industries = industries_from_chunks(&[chunk], 64, 300);
         assert_eq!(industries.len(), 1);
         assert_eq!(industries[0].pos, TileCoord::new(10, 5));
         assert_eq!((industries[0].width, industries[0].height), (2, 3));
         assert_eq!(industries[0].industry_type, 7);
+    }
+
+    #[test]
+    fn reads_colour_from_first_company() {
+        let mut c0 = Vec::new();
+        c0.extend_from_slice(&500_000i64.to_be_bytes());
+        c0.push(6);
+        let chunk = RawChunk {
+            name: *b"PLYR",
+            ch_type: CH_TABLE,
+            body: build_table_body(&[(7, "money"), (2, "colour")], &[c0]),
+        };
+        assert_eq!(company_colour_from_chunks(&[chunk], 300), Some(6));
     }
 
     #[test]
@@ -401,7 +507,7 @@ mod tests {
             ch_type: CH_TABLE,
             body: build_table_body(&[(7, "money")], &[c0, c1]),
         };
-        assert_eq!(company_money_from_chunks(&[chunk]), Some(500_000));
+        assert_eq!(company_money_from_chunks(&[chunk], 300), Some(500_000));
     }
 
     /// Cuerpo VEHS (sparse) con un tren cabeza, un vagón y un bus.
@@ -477,7 +583,12 @@ mod tests {
 
     #[test]
     fn decodes_front_vehicles_and_skips_wagons() {
-        let vehicles = vehicles_from_chunks(&[vehs_chunk()], 64);
+        let vehicles = vehicles_from_chunks(
+            &[vehs_chunk()],
+            64,
+            &super::super::orders::SavOrderImport::from_chunks(&[], 300),
+            300,
+        );
         assert_eq!(vehicles.len(), 2);
         assert_eq!(vehicles[0].kind, SavVehicleKind::Train);
         assert_eq!(vehicles[0].pos, TileCoord::new(3, 1));

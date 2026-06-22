@@ -133,7 +133,7 @@ fn ottd_tile_kind(ottd_type: u8, m5: u8) -> TileKind {
     match ottd_type {
         0 | 10 => TileKind::Grass,
         1 => {
-            if transport_subtype == 2 {
+            if transport_subtype == 3 {
                 TileKind::RailDepot
             } else {
                 TileKind::Rail

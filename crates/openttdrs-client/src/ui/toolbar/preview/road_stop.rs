@@ -3,11 +3,42 @@
 use bevy::prelude::*;
 
 use crate::iso::{iso, road_stop_build_sprite_center, tile_pos_half};
+use crate::render::{CompanyColoredSprites, sprite_from_company_or_asset};
 use crate::sprites::{StationTileClass, road_stop_build_layers, road_stop_seq_gfx};
 use crate::ui::toolbar::preview::BuildGhostPreview;
 
 const PREVIEW_Z_BASE: f32 = 3.0;
 const PREVIEW_SCALE: f32 = 1.002;
+
+const BUS_STOP_GROUND_PATHS: [&str; 4] = [
+    "assets/opengfx/tiles/bus_stop_ne_ground.png",
+    "assets/opengfx/tiles/bus_stop_se_ground.png",
+    "assets/opengfx/tiles/bus_stop_sw_ground.png",
+    "assets/opengfx/tiles/bus_stop_nw_ground.png",
+];
+
+const TRUCK_STOP_GROUND_PATHS: [&str; 4] = [
+    "assets/opengfx/tiles/truck_stop_ground_0.png",
+    "assets/opengfx/tiles/truck_stop_ground_1.png",
+    "assets/opengfx/tiles/truck_stop_ground_2.png",
+    "assets/opengfx/tiles/truck_stop_ground_3.png",
+];
+
+/// Orientación de construcción (0=NE … 3=NW) → índice de suelo/capas BUILD.
+#[must_use]
+pub(crate) fn road_stop_preview_dir(orientation: u8) -> usize {
+    usize::from(orientation.min(3))
+}
+
+#[must_use]
+pub(crate) fn bus_stop_ground_path(dir: usize) -> &'static str {
+    BUS_STOP_GROUND_PATHS[dir.min(3)]
+}
+
+#[must_use]
+pub(crate) fn truck_stop_ground_path(dir: usize) -> &'static str {
+    TRUCK_STOP_GROUND_PATHS[dir.min(3)]
+}
 
 pub(crate) struct RoadStopPreviewSpawn<'a> {
     pub px: i32,
@@ -19,6 +50,7 @@ pub(crate) struct RoadStopPreviewSpawn<'a> {
     pub ground_path: &'static str,
     pub tint: Color,
     pub asset_server: &'a AssetServer,
+    pub company: Option<&'a CompanyColoredSprites>,
 }
 
 pub(crate) fn spawn_road_stop_preview(commands: &mut Commands, spawn: RoadStopPreviewSpawn<'_>) {
@@ -32,6 +64,7 @@ pub(crate) fn spawn_road_stop_preview(commands: &mut Commands, spawn: RoadStopPr
         ground_path,
         tint,
         asset_server,
+        company,
     } = spawn;
     commands.spawn((
         BuildGhostPreview,
@@ -59,56 +92,8 @@ pub(crate) fn spawn_road_stop_preview(commands: &mut Commands, spawn: RoadStopPr
         );
         commands.spawn((
             BuildGhostPreview,
-            Sprite {
-                image: asset_server.load::<Image>(spec.path),
-                color: tint,
-                ..default()
-            },
+            sprite_from_company_or_asset(company, asset_server, spec.path, tint),
             Transform::from_translation(center).with_scale(Vec3::splat(PREVIEW_SCALE)),
         ));
-    }
-}
-
-#[must_use]
-pub(crate) fn road_stop_preview_dir(orientation: u8) -> usize {
-    usize::from(orientation.min(3))
-}
-
-#[must_use]
-pub(crate) fn bus_stop_ground_path(dir: usize) -> &'static str {
-    const PATHS: [&str; 4] = [
-        "assets/opengfx/tiles/bus_stop_ne_ground.png",
-        "assets/opengfx/tiles/bus_stop_se_ground.png",
-        "assets/opengfx/tiles/bus_stop_sw_ground.png",
-        "assets/opengfx/tiles/bus_stop_nw_ground.png",
-    ];
-    PATHS[dir.min(3)]
-}
-
-#[must_use]
-pub(crate) fn truck_stop_ground_path(dir: usize) -> &'static str {
-    const PATHS: [&str; 4] = [
-        "assets/opengfx/tiles/truck_stop_ground_0.png",
-        "assets/opengfx/tiles/truck_stop_ground_1.png",
-        "assets/opengfx/tiles/truck_stop_ground_2.png",
-        "assets/opengfx/tiles/truck_stop_ground_3.png",
-    ];
-    PATHS[dir.min(3)]
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn road_stop_preview_dir_clamps() {
-        assert_eq!(road_stop_preview_dir(9), 3);
-    }
-
-    #[test]
-    fn bus_stop_ground_paths_cover_four_dirs() {
-        for d in 0..4 {
-            assert!(bus_stop_ground_path(d).contains("bus_stop"));
-        }
     }
 }

@@ -32,6 +32,7 @@ mod debug_gizmos;
 mod iso;
 mod persistence;
 mod render;
+mod settings;
 mod simulation;
 mod sprites;
 mod startup;

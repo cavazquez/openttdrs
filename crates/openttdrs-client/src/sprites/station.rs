@@ -137,10 +137,6 @@ pub fn rail_station_overlay_rel(
     (off.x + nfo_xrel, nfo_yrel - off.y)
 }
 
-/// Tinte aproximado de `PALETTE_MODIFIER_COLOUR` hasta remapeo de paleta real.
-pub const RAIL_WAYPOINT_SPRITE_TINT: bevy::prelude::Color =
-    bevy::prelude::Color::srgb(0.48, 0.58, 0.86);
-
 /// Centro Bevy de un poste (`overlay_pos` + `TILE_SEQ` de `station_land.h`).
 #[must_use]
 #[allow(clippy::too_many_arguments)]

@@ -3,6 +3,10 @@ use crate::map::{
     rail_trackbits_valid_on_slope, resolve_tunnel_end, tile_slope_and_z, tunnel_entrance_m5,
     tunnel_path_tiles, tunnel_preview_path,
 };
+use crate::rail_signals::{
+    RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST,
+    rail_tile_is_signals,
+};
 use crate::station::is_rail_waypoint_tile;
 
 /// Bit 4 de `m5` en puentes: eje Y (si no, eje X).
@@ -68,8 +72,6 @@ pub(crate) fn merged_rail_trackbits_on_tile(map: &Map, c: TileCoord, add_bits: u
 
 /// `TileType::MP_RAILWAY` en el nibble alto de `mapt`.
 const MP_RAILWAY_MAPT: u8 = 0x10;
-/// `RailTileType::Normal` en bits 6–7 de `m5`.
-const RAIL_TILE_NORMAL: u8 = 0;
 /// `TrackBits` (`track_type.h`).
 const RAIL_TB_X: u8 = 1;
 const RAIL_TB_Y: u8 = 2;
@@ -139,10 +141,6 @@ pub fn rail_trackbits_from_neighbors(map: &Map, c: TileCoord) -> u8 {
     }
 }
 
-/// Migración de saves JSON: los cruces sintéticos `X|Y` heredados (v1) y los
-/// empalmes de seis piezas `0x3F` que generaba el autorraíl con cuatro vecinos
-/// (v2) se reescriben con las piezas que generaría hoy el autorraíl: cruce
-/// X|Y limpio en intersecciones de dos rectas, recta + curvas en empalmes en T.
 pub(crate) fn normalize_synthetic_rail_crossings(map: &mut Map) {
     const RAIL_TB_ALL: u8 = 0x3F;
     let (mw, mh) = map.dimensions();
@@ -161,6 +159,104 @@ pub(crate) fn normalize_synthetic_rail_crossings(map: &mut Map) {
                 t.m5 = (t.m5 & 0xC0) | bits;
                 let _ = map.set_tile(c, t);
             }
+        }
+    }
+}
+
+/// Rellena `TrackBits` vacíos (`m5 & 0x3F == 0`) inferidos de vecinos de vía.
+/// Saves antiguos y depósitos mal tipados pueden dejar piezas sin bits explícitos.
+pub(crate) fn normalize_rail_trackbits_from_neighbors(map: &mut Map) {
+    let (mw, mh) = map.dimensions();
+    for y in 0..mh.cast_signed() {
+        for x in 0..mw.cast_signed() {
+            let c = TileCoord::new(x, y);
+            let Some(mut t) = map.get(c) else {
+                continue;
+            };
+            if t.kind != TileKind::Rail || t.m5 & 0x3F != 0 {
+                continue;
+            }
+            let bits = rail_trackbits_from_neighbors(map, c);
+            if bits == 0 {
+                continue;
+            }
+            t.m5 = (t.m5 & 0xC0) | bits;
+            let _ = map.set_tile(c, t);
+        }
+    }
+}
+
+fn is_rail_path_endpoint(map: &Map, c: TileCoord) -> bool {
+    let Some(t) = map.get(c) else {
+        return false;
+    };
+    match t.kind {
+        TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge => true,
+        TileKind::Station => {
+            let st = crate::station::station_type_from_m6(t.m6);
+            st == 0 || st == crate::station::STATION_TYPE_RAIL_WAYPOINT
+        }
+        _ => false,
+    }
+}
+
+fn is_rail_gap_fill_kind(kind: TileKind) -> bool {
+    matches!(kind, TileKind::Grass | TileKind::Forest)
+}
+
+fn write_rail_gap_tile(map: &mut Map, c: TileCoord, axis_x: bool) {
+    let Some(mut t) = map.get(c) else {
+        return;
+    };
+    t.kind = TileKind::Rail;
+    t.mapt = MP_RAILWAY_MAPT;
+    let bits = if axis_x { RAIL_TB_X } else { RAIL_TB_Y };
+    t.m5 = (t.m5 & 0xC0) | bits;
+    let _ = map.set_tile(c, t);
+}
+
+/// Teselas `Clear`/`Forest` entre dos extremos de red ferroviaria en la misma fila
+/// o columna se convierten en vía recta. Saves reales (p. ej. `stationlist-test.sav`)
+/// suelen dejar huecos así entre depósito y línea.
+pub(crate) fn bridge_collinear_rail_gaps(map: &mut Map) {
+    let (mw, mh) = map.dimensions();
+    for y in 0..mh.cast_signed() {
+        bridge_line(map, true, y, mw.cast_signed());
+    }
+    for x in 0..mw.cast_signed() {
+        bridge_line(map, false, x, mh.cast_signed());
+    }
+}
+
+fn bridge_line(map: &mut Map, horizontal: bool, fixed: i32, len: i32) {
+    let coord = |i: i32| {
+        if horizontal {
+            TileCoord::new(i, fixed)
+        } else {
+            TileCoord::new(fixed, i)
+        }
+    };
+    let mut i = 0;
+    while i < len {
+        while i < len && !is_rail_path_endpoint(map, coord(i)) {
+            i += 1;
+        }
+        if i >= len {
+            break;
+        }
+        let start = i;
+        i += 1;
+        let gap_start = i;
+        while i < len && map.get_kind(coord(i)).is_some_and(is_rail_gap_fill_kind) {
+            i += 1;
+        }
+        if i < len && is_rail_path_endpoint(map, coord(i)) && gap_start < i {
+            for g in gap_start..i {
+                write_rail_gap_tile(map, coord(g), horizontal);
+            }
+        }
+        if i == start {
+            i += 1;
         }
     }
 }
@@ -1049,6 +1145,151 @@ pub(super) fn place_rail_waypoint(state: &mut GameState, c: TileCoord) -> Result
         .stations
         .push(Station::new_with_kind(c, StopKind::RailWaypoint));
     state.economy.money -= WAYPOINT_BUILD_COST;
+    Ok(())
+}
+
+pub(crate) fn check_remove_rail(map: &Map, c: TileCoord) -> Result<(), CommandError> {
+    check_in_bounds(map, c)?;
+    let Some(tile) = map.get(c) else {
+        return Err(CommandError::OutOfBounds);
+    };
+    if tile.kind != TileKind::Rail {
+        return Err(CommandError::NoRailToRemove);
+    }
+    let subtype = (tile.m5 >> 6) & 0x3;
+    if subtype != RAIL_TILE_NORMAL && subtype != RAIL_TILE_SIGNALS {
+        return Err(CommandError::NoRailToRemove);
+    }
+    Ok(())
+}
+
+pub(crate) fn check_place_rail_signal_oriented(
+    map: &Map,
+    c: TileCoord,
+    orientation: u8,
+) -> Result<(), CommandError> {
+    let tb = map
+        .get(c)
+        .filter(|t| t.kind == TileKind::Rail)
+        .map_or(0, |t| t.m5 & 0x3F);
+    let face = crate::rail_signals::signal_facing_for_orientation(tb, orientation);
+    check_place_rail_signal(map, c, face)
+}
+
+pub(crate) fn check_place_rail_signal(
+    map: &Map,
+    c: TileCoord,
+    face: u8,
+) -> Result<(), CommandError> {
+    check_in_bounds(map, c)?;
+    let Some(tile) = map.get(c) else {
+        return Err(CommandError::OutOfBounds);
+    };
+    if tile.kind != TileKind::Rail {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
+    let tb = tile.m5 & 0x3F;
+    let Some(placement) = crate::rail_signals::signal_placement_for_facing(tb, face) else {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    };
+    if rail_tile_is_signals(tile.m5) {
+        let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
+        if present & (1 << placement.sig_bit) != 0 {
+            return Err(CommandError::SignalAlreadyPresent);
+        }
+    }
+    Ok(())
+}
+
+fn clear_rail_tile_to_grass(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
+    state
+        .map
+        .set_kind(c, TileKind::Grass)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    state
+        .map
+        .set_mapt_m5(c, 0x00, 0x00)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    Ok(())
+}
+
+pub(super) fn remove_rail_bits(
+    state: &mut GameState,
+    c: TileCoord,
+    bits: u8,
+) -> Result<(), CommandError> {
+    check_remove_rail(&state.map, c)?;
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let existing = tile.m5 & 0x3F;
+    let remove = bits & 0x3F;
+    let new_tb = if remove == 0x3F {
+        0
+    } else {
+        existing & !remove
+    };
+    if new_tb == 0 {
+        clear_rail_tile_to_grass(state, c)?;
+    } else {
+        let subtype = (tile.m5 >> 6) & 0x3;
+        let mut out = tile;
+        out.m5 = new_tb | ((subtype & 0x3) << 6);
+        if rail_tile_is_signals(out.m5) {
+            let present = crate::rail_signals::rail_signal_present_mask(out.m3);
+            let kept = present & trackbits_to_signal_present(new_tb);
+            out.m3 = (out.m3 & 0x0F) | (kept << 4);
+            out.m3hi = (out.m3hi & 0x0F) | (kept << 4);
+        }
+        state
+            .map
+            .set_tile(c, out)
+            .map_err(|_| CommandError::OutOfBounds)?;
+    }
+    refresh_rail_neighbors(state, c)?;
+    state.economy.money += RAIL_REMOVE_REFUND;
+    Ok(())
+}
+
+/// Máscara aproximada de señales que siguen siendo válidas tras quitar `TrackBits`.
+fn trackbits_to_signal_present(tb: u8) -> u8 {
+    if tb == RAIL_TB_X || tb == RAIL_TB_Y {
+        0b1100
+    } else {
+        0x0F
+    }
+}
+
+pub(super) fn remove_rail(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
+    remove_rail_bits(state, c, 0x3F)
+}
+
+pub(super) fn place_rail_signal(
+    state: &mut GameState,
+    c: TileCoord,
+    orientation: u8,
+) -> Result<(), CommandError> {
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let tb = tile.m5 & 0x3F;
+    let face = crate::rail_signals::signal_facing_for_orientation(tb, orientation);
+    check_place_rail_signal(&state.map, c, face)?;
+    let placement = crate::rail_signals::signal_placement_for_facing(tb, face)
+        .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
+    let mut out = tile;
+    if rail_tile_is_signals(out.m5) {
+        let present = crate::rail_signals::rail_signal_present_mask(out.m3);
+        let merged = present | (1 << placement.sig_bit);
+        out.m3 = (out.m3 & 0x0F) | (merged << 4);
+        out.m3hi = (out.m3hi & 0x0F) | (merged << 4);
+    } else {
+        out.m5 = tb | (RAIL_TILE_SIGNALS << 6);
+        out.m2 = placement.m2;
+        out.m3 = placement.m3;
+        out.m3hi = placement.m3hi;
+    }
+    state
+        .map
+        .set_tile(c, out)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    state.economy.money -= SIGNAL_BUILD_COST;
     Ok(())
 }
 

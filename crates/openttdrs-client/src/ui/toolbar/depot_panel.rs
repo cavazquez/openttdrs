@@ -14,6 +14,7 @@ use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
     WINDOW_TEXT, spawn_floating_window, window_text_font,
 };
+use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 
 use super::{BuildMenuUi, OrderEditState};
@@ -88,7 +89,7 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
         panel.spawn((
             DepotPanelText,
             Text::new(""),
-            window_text_font(asset_server, 12.0),
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
         ));
         panel
@@ -163,7 +164,7 @@ fn spawn_depot_vehicle_row(
                 children![(
                     DepotVehicleRowText { slot },
                     Text::new(""),
-                    window_text_font(asset_server, 11.0),
+                    window_text_font(asset_server, UiFontRole::Caption),
                     TextColor(Color::srgb(0.92, 0.88, 0.72)),
                 )],
             ));
@@ -227,7 +228,7 @@ fn spawn_row_action(
         .with_children(|btn| {
             let mut text = btn.spawn((
                 Text::new(label),
-                window_text_font(asset_server, 10.0),
+                window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(Color::srgb(0.92, 0.88, 0.72)),
             ));
             if let Some(marker) = toggle_text {
@@ -259,7 +260,7 @@ fn spawn_depot_button(
         BuildMenuUi,
         children![(
             Text::new(label),
-            window_text_font(asset_server, 11.0),
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.92, 0.88, 0.72)),
         )],
     ));

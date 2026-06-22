@@ -54,7 +54,7 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
                 panel.spawn((
                     Text::new("OpenTTDRS"),
                     TextFont {
-                        font_size: 48.0,
+                        font_size: FontSize::Px(48.0),
                         ..default()
                     },
                     TextColor(Color::srgb(0.96, 0.91, 0.72)),
@@ -63,7 +63,7 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
                 panel.spawn((
                     Text::new("Sandbox isometrico inspirado en OpenTTD"),
                     TextFont {
-                        font_size: 14.0,
+                        font_size: FontSize::Px(14.0),
                         ..default()
                     },
                     TextColor(Color::srgb(0.83, 0.79, 0.64)),
@@ -95,7 +95,7 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
                             b.spawn((
                                 Text::new("Iniciar juego"),
                                 TextFont {
-                                    font_size: 22.0,
+                                    font_size: FontSize::Px(22.0),
                                     ..default()
                                 },
                                 TextColor(Color::srgb(0.95, 0.92, 0.8)),
@@ -121,7 +121,7 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
                             b.spawn((
                                 Text::new("Salir"),
                                 TextFont {
-                                    font_size: 18.0,
+                                    font_size: FontSize::Px(18.0),
                                     ..default()
                                 },
                                 TextColor(Color::srgb(0.91, 0.88, 0.76)),
@@ -132,7 +132,7 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
                 panel.spawn((
                     Text::new("v0.1.0 · Enter/Espacio iniciar · Esc salir"),
                     TextFont {
-                        font_size: 12.0,
+                        font_size: FontSize::Px(12.0),
                         ..default()
                     },
                     TextColor(Color::srgb(0.76, 0.72, 0.58)),
@@ -149,7 +149,7 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
                 children![(
                     Text::new("OpenTTDRS Preview"),
                     TextFont {
-                        font_size: 11.0,
+                        font_size: FontSize::Px(11.0),
                         ..default()
                     },
                     TextColor(Color::srgb(0.68, 0.74, 0.84)),

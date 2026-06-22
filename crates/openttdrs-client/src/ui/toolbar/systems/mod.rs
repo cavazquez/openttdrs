@@ -319,7 +319,8 @@ mod tests {
                 &StationBuildState {
                     orientation: 3,
                     ..Default::default()
-                }
+                },
+                None,
             ),
             Some(Command::PlaceStationDir(_, 3))
         ));
@@ -330,7 +331,8 @@ mod tests {
                 &StationBuildState {
                     orientation: 2,
                     ..Default::default()
-                }
+                },
+                None,
             ),
             Some(Command::PlaceRoadDepotDir(_, 2))
         ));
@@ -338,7 +340,8 @@ mod tests {
             command_for_action(
                 BuildMenuAction::BuildCoalMine,
                 TileCoord::new(1, 2),
-                &StationBuildState::default()
+                &StationBuildState::default(),
+                None,
             ),
             Some(Command::PlaceIndustrySpec(
                 _,
@@ -349,7 +352,8 @@ mod tests {
             command_for_action(
                 BuildMenuAction::RoadTunnel,
                 TileCoord::new(1, 2),
-                &StationBuildState::default()
+                &StationBuildState::default(),
+                None,
             )
             .is_none()
         );

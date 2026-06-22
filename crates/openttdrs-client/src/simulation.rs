@@ -7,6 +7,9 @@ use crate::render::VehicleIndex;
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
 
+/// Frecuencia del tick de simulación (debe coincidir con `Time<Fixed>`).
+pub(crate) const SIM_TICK_HZ: f64 = 5.0;
+
 /// Fracción del tick de simulación actual (0..1) para interpolar el render entre pasos.
 #[derive(Resource, Default)]
 pub(crate) struct SimClock {
@@ -17,46 +20,62 @@ pub(crate) struct SimulationPlugin;
 
 impl Plugin for SimulationPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<SimClock>().add_systems(
-            Update,
-            advance_sim
-                .in_set(UpdateSet::Sim)
-                .run_if(in_state(ClientScreen::InGame)),
-        );
+        app.init_resource::<SimClock>()
+            .add_systems(Startup, init_sim_fixed_timestep)
+            .add_systems(
+                PreUpdate,
+                sync_sim_time_controls.run_if(in_state(ClientScreen::InGame)),
+            )
+            .add_systems(FixedUpdate, step_sim.run_if(in_state(ClientScreen::InGame)))
+            .add_systems(
+                Update,
+                sync_tick_alpha
+                    .in_set(UpdateSet::Sim)
+                    .run_if(in_state(ClientScreen::InGame)),
+            );
     }
 }
 
-pub(crate) fn advance_sim(
-    time: Res<Time>,
-    hud: Res<SimHudControls>,
-    mut sim: ResMut<SimWorld>,
-    mut vehicle_index: ResMut<VehicleIndex>,
-    mut sim_clock: ResMut<SimClock>,
-    mut acc: Local<f32>,
-) {
+fn init_sim_fixed_timestep(mut fixed: ResMut<Time<Fixed>>) {
+    fixed.set_timestep_hz(SIM_TICK_HZ);
+}
+
+/// Pausa y velocidad de la simulación vía `Time<Virtual>` (antes del bucle FixedUpdate).
+fn sync_sim_time_controls(hud: Res<SimHudControls>, mut virtual_time: ResMut<Time<Virtual>>) {
     if hud.paused {
-        sim_clock.tick_alpha = 0.0;
-        return;
+        virtual_time.pause();
+    } else {
+        virtual_time.unpause();
     }
-    const TICK_HZ: f32 = 5.0;
-    *acc += time.delta_secs() * hud.sim_speed.max(0.1);
-    let period = 1.0 / TICK_HZ;
-    let mut stepped = false;
-    while *acc >= period {
-        *acc -= period;
-        sim.state.step();
-        stepped = true;
-    }
-    sim_clock.tick_alpha = (*acc / period).clamp(0.0, 1.0);
-    if stepped {
-        vehicle_index.rebuild(&sim.state.vehicles);
-    }
+    virtual_time.set_relative_speed(hud.sim_speed.max(0.1));
+}
+
+/// Un paso de simulación por tick fijo (5 Hz).
+fn step_sim(mut sim: ResMut<SimWorld>, mut vehicle_index: ResMut<VehicleIndex>) {
+    sim.state.step();
+    vehicle_index.rebuild(&sim.state.vehicles);
+}
+
+/// Interpolación render: fracción del siguiente tick fijo.
+fn sync_tick_alpha(
+    hud: Res<SimHudControls>,
+    fixed_time: Res<Time<Fixed>>,
+    mut sim_clock: ResMut<SimClock>,
+) {
+    sim_clock.tick_alpha = if hud.paused {
+        0.0
+    } else {
+        fixed_time.overstep_fraction()
+    };
 }
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use super::{SimClock, advance_sim};
+    use super::{
+        SIM_TICK_HZ, SimClock, init_sim_fixed_timestep, step_sim, sync_sim_time_controls,
+        sync_tick_alpha,
+    };
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
 
@@ -64,40 +83,67 @@ mod tests {
     use crate::state::SimWorld;
     use crate::ui::SimHudControls;
 
-    #[test]
-    fn advance_sim_paused_does_not_step() {
-        let mut world = World::new();
-        world.insert_resource(Time::<()>::default());
-        world.insert_resource(SimHudControls {
-            paused: true,
-            sim_speed: 1.0,
-            ..default()
-        });
-        world.insert_resource(SimClock::default());
-        world.insert_resource(SimWorld::default());
-        world.insert_resource(VehicleIndex::default());
+    fn sim_test_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<SimClock>();
+        app.insert_resource(SimWorld::default());
+        app.insert_resource(VehicleIndex::default());
+        app.insert_resource(SimHudControls::default());
+        app.add_systems(Startup, init_sim_fixed_timestep);
+        app.add_systems(PreUpdate, sync_sim_time_controls);
+        app.add_systems(FixedUpdate, step_sim);
+        app.add_systems(Update, sync_tick_alpha);
+        app
+    }
 
-        let before = world.resource::<SimWorld>().state.tick.get();
-        world.run_system_once(advance_sim).unwrap();
-        let after = world.resource::<SimWorld>().state.tick.get();
+    fn advance_app_time(app: &mut App, millis: u64) {
+        let delta = std::time::Duration::from_millis(millis);
+        let mut virtual_time = *app.world().resource::<Time<Virtual>>();
+        virtual_time.advance_by(delta);
+        app.world_mut().insert_resource(virtual_time);
+        let mut time = *app.world().resource::<Time<()>>();
+        time.advance_by(delta);
+        app.world_mut().insert_resource(time);
+        app.update();
+    }
+
+    #[test]
+    fn init_sim_fixed_timestep_sets_5hz() {
+        let mut app = sim_test_app();
+        app.update();
+        let hz = app
+            .world()
+            .resource::<Time<Fixed>>()
+            .timestep()
+            .as_secs_f64()
+            .recip();
+        assert!((hz - SIM_TICK_HZ).abs() < 0.01);
+    }
+
+    #[test]
+    fn step_sim_paused_does_not_step() {
+        let mut app = sim_test_app();
+        app.update();
+        {
+            let mut hud = app.world_mut().resource_mut::<SimHudControls>();
+            hud.paused = true;
+        }
+        let before = app.world().resource::<SimWorld>().state.tick.get();
+        advance_app_time(&mut app, 500);
+        let after = app.world().resource::<SimWorld>().state.tick.get();
         assert_eq!(before, after);
     }
 
     #[test]
-    fn advance_sim_steps_and_rebuilds_index() {
-        let mut world = World::new();
-        let mut time = Time::<()>::default();
-        time.advance_by(std::time::Duration::from_millis(200));
-        world.insert_resource(time);
-        world.insert_resource(SimHudControls::default());
-        world.insert_resource(SimClock::default());
-        world.insert_resource(SimWorld::default());
-        world.insert_resource(VehicleIndex::default());
-
-        let before = world.resource::<SimWorld>().state.tick.get();
-        world.run_system_once(advance_sim).unwrap();
-        let after = world.resource::<SimWorld>().state.tick.get();
+    fn step_sim_steps_and_syncs_tick_alpha() {
+        let mut app = sim_test_app();
+        app.update();
+        let before = app.world().resource::<SimWorld>().state.tick.get();
+        app.world_mut().run_system_once(step_sim).unwrap();
+        let after = app.world().resource::<SimWorld>().state.tick.get();
         assert!(after > before);
-        assert!(world.resource::<SimClock>().tick_alpha >= 0.0);
+        app.world_mut().run_system_once(sync_tick_alpha).unwrap();
+        assert!(app.world().resource::<SimClock>().tick_alpha >= 0.0);
     }
 }

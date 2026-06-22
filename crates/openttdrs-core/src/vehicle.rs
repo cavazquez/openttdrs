@@ -37,6 +37,7 @@ pub enum VehicleKind {
 #[serde(untagged)]
 pub enum VehicleOrder {
     Station { station: TileCoord },
+    Waypoint { waypoint: TileCoord },
     Tile(TileCoord),
 }
 
@@ -44,7 +45,9 @@ impl VehicleOrder {
     #[must_use]
     pub const fn destination(self) -> TileCoord {
         match self {
-            Self::Station { station } | Self::Tile(station) => station,
+            Self::Station { station } => station,
+            Self::Waypoint { waypoint } => waypoint,
+            Self::Tile(pos) => pos,
         }
     }
 
@@ -54,8 +57,18 @@ impl VehicleOrder {
     }
 
     #[must_use]
+    pub const fn waypoint(waypoint: TileCoord) -> Self {
+        Self::Waypoint { waypoint }
+    }
+
+    #[must_use]
     pub const fn tile(tile: TileCoord) -> Self {
         Self::Tile(tile)
+    }
+
+    #[must_use]
+    pub const fn is_pass_through(self) -> bool {
+        matches!(self, Self::Waypoint { .. })
     }
 }
 
@@ -436,8 +449,13 @@ impl Vehicle {
             self.progress = 0;
             return;
         }
+        let pass_through = self.orders[self.current_order].is_pass_through();
         // Anclado al final del carril de entrada (evita salto visual al llegar a parada/estación).
-        self.progress = 255;
+        if pass_through {
+            self.progress = 0;
+        } else {
+            self.progress = 255;
+        }
         self.current_order = (self.current_order + 1) % self.orders.len();
         self.origin = self.pos;
         if self.kind != VehicleKind::Train {

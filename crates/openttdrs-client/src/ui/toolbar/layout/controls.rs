@@ -45,7 +45,7 @@ pub(super) fn spawn_panel_title(
                 children![(
                     Text::new(title),
                     TextFont {
-                        font_size: 12.0,
+                        font_size: FontSize::Px(12.0),
                         ..default()
                     },
                     TextColor(Color::srgb(0.95, 0.96, 0.82)),
@@ -69,7 +69,7 @@ pub(super) fn spawn_panel_title(
                 children![(
                     Text::new("X"),
                     TextFont {
-                        font_size: 12.0,
+                        font_size: FontSize::Px(12.0),
                         ..default()
                     },
                     TextColor(Color::srgb(0.02, 0.03, 0.02)),
@@ -158,7 +158,7 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             children![(
                 Text::new(label),
                 TextFont {
-                    font_size: 12.0,
+                    font_size: FontSize::Px(12.0),
                     ..default()
                 },
                 TextColor(Color::srgb(0.08, 0.07, 0.05)),
@@ -184,7 +184,7 @@ fn spawn_button_icon(
         parent.spawn((
             Text::new(label),
             TextFont {
-                font_size: height + 4.0,
+                font_size: FontSize::Px(height + 4.0),
                 ..default()
             },
             TextColor(Color::srgb(0.08, 0.07, 0.05)),

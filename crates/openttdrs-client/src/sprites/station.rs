@@ -8,6 +8,7 @@ use super::rail::rail_sloped_track_sprite_id;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StationTileClass {
     Rail,
+    RailWaypoint,
     Airport,
     Truck,
     Bus,
@@ -35,6 +36,7 @@ pub fn station_type_from_m6(m6: u8) -> StationTileClass {
         1 => StationTileClass::Airport,
         2 => StationTileClass::Truck,
         3 => StationTileClass::Bus,
+        7 => StationTileClass::RailWaypoint,
         v => StationTileClass::Other(v),
     }
 }
@@ -45,24 +47,30 @@ pub fn stop_kind_from_m6(m6: u8) -> StopKind {
     match station_type_from_m6(m6) {
         StationTileClass::Bus => StopKind::BusStop,
         StationTileClass::Truck => StopKind::TruckStop,
+        StationTileClass::RailWaypoint => StopKind::RailWaypoint,
         StationTileClass::Rail | StationTileClass::Airport | StationTileClass::Other(_) => {
             StopKind::RailStation
         }
     }
 }
 
-/// Clase visual: prioriza tipo en `m6` del tile (fixture/save); si no, `StopKind` del simulador.
+/// Clase visual: prioriza `StopKind` del simulador y tipo en `m6` del tile.
 #[must_use]
 pub fn station_tile_class(m6: u8, stop_kind: Option<StopKind>) -> StationTileClass {
+    if stop_kind == Some(StopKind::RailWaypoint) {
+        return StationTileClass::RailWaypoint;
+    }
     match station_type_from_m6(m6) {
-        StationTileClass::Rail | StationTileClass::Bus | StationTileClass::Truck => {
-            station_type_from_m6(m6)
-        }
+        StationTileClass::Rail
+        | StationTileClass::RailWaypoint
+        | StationTileClass::Bus
+        | StationTileClass::Truck => station_type_from_m6(m6),
         StationTileClass::Airport | StationTileClass::Other(_) => {
             if let Some(sk) = stop_kind {
                 match sk {
                     StopKind::BusStop => StationTileClass::Bus,
                     StopKind::TruckStop => StationTileClass::Truck,
+                    StopKind::RailWaypoint => StationTileClass::RailWaypoint,
                     StopKind::RailStation => StationTileClass::Rail,
                 }
             } else {
@@ -129,6 +137,29 @@ pub fn rail_station_overlay_rel(
     (off.x + nfo_xrel, nfo_yrel - off.y)
 }
 
+/// Tinte aproximado de `PALETTE_MODIFIER_COLOUR` hasta remapeo de paleta real.
+pub const RAIL_WAYPOINT_SPRITE_TINT: bevy::prelude::Color =
+    bevy::prelude::Color::srgb(0.48, 0.58, 0.86);
+
+/// Centro Bevy de un poste (`overlay_pos` + `TILE_SEQ` de `station_land.h`).
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn rail_waypoint_sprite_center(
+    ref_pos: bevy::prelude::Vec2,
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layer_z: f32,
+    seq: &RailStationLayer,
+    nfo_xrel: f32,
+    nfo_yrel: f32,
+    w: f32,
+    h: f32,
+) -> bevy::prelude::Vec3 {
+    let (xrel, yrel) = rail_station_overlay_rel(seq, nfo_xrel, nfo_yrel);
+    crate::iso::overlay_pos(ref_pos, xrel, yrel, w, h, base_z, layer_z, tx, ty)
+}
+
 // Secuencias de `_station_display_datas_rail` (gfx 0..7). Los childsprites de
 // vidrio del techo (1083–1086, PALETTE_TO_TRANSPARENT) se omiten: requieren
 // remapeo translúcido de paleta.
@@ -168,6 +199,25 @@ static RAIL_STATION_SEQ_7: [RailStationLayer; 3] = [
     layer(1075, 11.0, 0.0, 0.0, 0.04),
     layer(1082, 0.0, 0.0, 16.0, 0.05),
 ];
+
+static RAIL_WAYPOINT_SEQ_X: [RailStationLayer; 2] = [
+    layer(4974, 0.0, 0.0, 0.0, 0.05),
+    layer(4975, 0.0, 11.0, 0.0, 0.06),
+];
+static RAIL_WAYPOINT_SEQ_Y: [RailStationLayer; 2] = [
+    layer(4976, 0.0, 0.0, 0.0, 0.05),
+    layer(4977, 11.0, 0.0, 0.0, 0.06),
+];
+
+/// Postes de waypoint (`_station_display_datas_waypoint_*` en `station_land.h`).
+#[must_use]
+pub fn rail_waypoint_draw_layers(m5: u8) -> &'static [RailStationLayer] {
+    if rail_station_axis_y(m5) {
+        &RAIL_WAYPOINT_SEQ_Y
+    } else {
+        &RAIL_WAYPOINT_SEQ_X
+    }
+}
 
 /// Capas en orden de pintado (tras la vía de fondo), según `station_land.h`.
 #[must_use]
@@ -229,7 +279,10 @@ pub fn road_stop_build_layers(class: StationTileClass, dir: usize) -> &'static [
     match class {
         StationTileClass::Bus => &BUS_STOP_BUILD_LAYERS[dir],
         StationTileClass::Truck => &TRUCK_STOP_BUILD_LAYERS[dir],
-        StationTileClass::Rail | StationTileClass::Airport | StationTileClass::Other(_) => &[],
+        StationTileClass::Rail
+        | StationTileClass::RailWaypoint
+        | StationTileClass::Airport
+        | StationTileClass::Other(_) => &[],
     }
 }
 
@@ -238,10 +291,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn m6_decodes_bus_truck_and_rail() {
+    fn m6_decodes_bus_truck_rail_and_waypoint() {
         assert_eq!(station_type_from_m6(3 << 3), StationTileClass::Bus);
         assert_eq!(station_type_from_m6(2 << 3), StationTileClass::Truck);
         assert_eq!(station_type_from_m6(0), StationTileClass::Rail);
+        assert_eq!(station_type_from_m6(7 << 3), StationTileClass::RailWaypoint);
     }
 
     #[test]
@@ -249,6 +303,7 @@ mod tests {
         assert_eq!(stop_kind_from_m6(2 << 3), StopKind::TruckStop);
         assert_eq!(stop_kind_from_m6(3 << 3), StopKind::BusStop);
         assert_eq!(stop_kind_from_m6(0), StopKind::RailStation);
+        assert_eq!(stop_kind_from_m6(7 << 3), StopKind::RailWaypoint);
     }
 
     #[test]
@@ -317,6 +372,59 @@ mod tests {
         let (xrel, yrel) = rail_station_overlay_rel(&seq, -31.0, -5.0);
         assert_eq!(xrel, -31.0);
         assert_eq!(yrel, -21.0);
+    }
+
+    #[test]
+    fn rail_waypoint_meta_covers_layer_sprites() {
+        for axis_y in [false, true] {
+            let m5 = u8::from(axis_y);
+            for l in rail_waypoint_draw_layers(m5) {
+                assert!(
+                    rail_station_sprite_meta(l.sprite_id).is_some(),
+                    "sin meta NFO para waypoint sprite {}",
+                    l.sprite_id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rail_waypoint_posts_offset_along_x_axis_track() {
+        let origin = crate::iso::iso(3, 4);
+        let p0 = rail_waypoint_sprite_center(
+            origin,
+            3,
+            4,
+            0,
+            0.05,
+            &layer(4974, 0.0, 0.0, 0.0, 0.05),
+            -31.0,
+            0.0,
+            64.0,
+            23.0,
+        );
+        let p1 = rail_waypoint_sprite_center(
+            origin,
+            3,
+            4,
+            0,
+            0.06,
+            &layer(4975, 0.0, 11.0, 0.0, 0.06),
+            -31.0,
+            -8.0,
+            64.0,
+            39.0,
+        );
+        assert!(p1.x > p0.x + 15.0, "segundo poste desplazado en X (dy=11)");
+        assert!(p1.y < p0.y - 5.0, "segundo poste desplazado en Y (dy=11)");
+    }
+
+    #[test]
+    fn station_tile_class_prefers_stop_kind_for_waypoint() {
+        assert_eq!(
+            station_tile_class(0, Some(StopKind::RailWaypoint)),
+            StationTileClass::RailWaypoint
+        );
     }
 
     #[test]

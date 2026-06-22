@@ -11,9 +11,13 @@ pub const SLOPE_SW: u8 = 3;
 /// Pendiente inclinada NW (`tileh` 9).
 pub const SLOPE_NW: u8 = 9;
 
+/// Bit de pendiente empinada (`SLOPE_STEEP` en `slope_type.h`).
+pub const SLOPE_STEEP: u8 = 0x10;
+
 #[inline]
 fn slope_bits_from_corner_vals(hnorth: u8, hwest: u8, heast: u8, hsouth: u8) -> (u8, u8) {
     let min_h = hnorth.min(hwest).min(heast).min(hsouth);
+    let max_h = hnorth.max(hwest).max(heast).max(hsouth);
     let mut tileh: u8 = 0;
     if hwest > min_h {
         tileh |= 1;
@@ -27,7 +31,11 @@ fn slope_bits_from_corner_vals(hnorth: u8, hwest: u8, heast: u8, hsouth: u8) -> 
     if hnorth > min_h {
         tileh |= 8;
     }
-    (tileh.min(14), min_h)
+    // `GetTileSlopeGivenHeight`: como máximo una esquina puede estar 2 unidades por encima del mínimo.
+    if max_h.saturating_sub(min_h) == 2 {
+        tileh |= SLOPE_STEEP;
+    }
+    (tileh, min_h)
 }
 
 #[inline]

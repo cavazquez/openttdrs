@@ -89,19 +89,10 @@ pub(crate) fn apply_order_edit(
     vehicle_id: u32,
     orders: &[VehicleOrder],
 ) -> Result<(), openttdrs_core::CommandError> {
-    if orders
-        .iter()
-        .all(|order| matches!(order, VehicleOrder::Station { .. }))
-    {
-        let stations = orders.iter().map(|order| order.destination()).collect();
-        apply_command(
-            state,
-            &Command::SetVehicleStationOrders(vehicle_id, stations),
-        )
-    } else {
-        let tiles = orders.iter().map(|order| order.destination()).collect();
-        apply_command(state, &Command::SetVehicleOrders(vehicle_id, tiles))
-    }
+    apply_command(
+        state,
+        &Command::SetVehicleOrderList(vehicle_id, orders.to_vec()),
+    )
 }
 
 pub(crate) fn try_append_order_at_tile(

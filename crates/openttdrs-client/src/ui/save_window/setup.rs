@@ -55,8 +55,8 @@ pub(crate) fn setup_save_window(mut commands: Commands, asset_server: Res<AssetS
                         SaveWindowTitle,
                         Text::new("Cargar partida"),
                         TextFont {
-                            font: ui_font.clone(),
-                            font_size: 18.0,
+                            font: ui_font.clone().into(),
+                            font_size: FontSize::Px(18.0),
                             ..default()
                         },
                         TextColor(Color::srgb(0.96, 0.91, 0.72)),
@@ -95,8 +95,8 @@ pub(crate) fn setup_save_window(mut commands: Commands, asset_server: Res<AssetS
                                 SaveWindowPageText,
                                 Text::new("1/1"),
                                 TextFont {
-                                    font: ui_font.clone(),
-                                    font_size: 12.0,
+                                    font: ui_font.clone().into(),
+                                    font_size: FontSize::Px(12.0),
                                     ..default()
                                 },
                                 TextColor(Color::srgb(0.85, 0.81, 0.66)),
@@ -121,8 +121,8 @@ pub(crate) fn setup_save_window(mut commands: Commands, asset_server: Res<AssetS
                             row.spawn((
                                 Text::new("Nombre:"),
                                 TextFont {
-                                    font: ui_font.clone(),
-                                    font_size: 13.0,
+                                    font: ui_font.clone().into(),
+                                    font_size: FontSize::Px(13.0),
                                     ..default()
                                 },
                                 TextColor(Color::srgb(0.9, 0.86, 0.7)),
@@ -144,8 +144,8 @@ pub(crate) fn setup_save_window(mut commands: Commands, asset_server: Res<AssetS
                                     SaveWindowNameText,
                                     Text::new(""),
                                     TextFont {
-                                        font: ui_font.clone(),
-                                        font_size: 13.0,
+                                        font: ui_font.clone().into(),
+                                        font_size: FontSize::Px(13.0),
                                         ..default()
                                     },
                                     TextColor(Color::srgb(0.95, 0.93, 0.8)),
@@ -157,8 +157,8 @@ pub(crate) fn setup_save_window(mut commands: Commands, asset_server: Res<AssetS
                         SaveWindowStatusText,
                         Text::new(""),
                         TextFont {
-                            font: ui_font.clone(),
-                            font_size: 12.0,
+                            font: ui_font.clone().into(),
+                            font_size: FontSize::Px(12.0),
                             ..default()
                         },
                         TextColor(Color::srgb(0.93, 0.72, 0.5)),
@@ -226,8 +226,8 @@ fn spawn_save_row(parent: &mut ChildSpawnerCommands, ui_font: &Handle<Font>, slo
             SaveWindowRowText { slot },
             Text::new(""),
             TextFont {
-                font: ui_font.clone(),
-                font_size: 12.0,
+                font: ui_font.clone().into(),
+                font_size: FontSize::Px(12.0),
                 ..default()
             },
             TextColor(Color::srgb(0.92, 0.88, 0.72)),
@@ -259,8 +259,8 @@ fn spawn_small_button(
         children![(
             Text::new(label),
             TextFont {
-                font: ui_font.clone(),
-                font_size: 13.0,
+                font: ui_font.clone().into(),
+                font_size: FontSize::Px(13.0),
                 ..default()
             },
             TextColor(Color::srgb(0.92, 0.88, 0.72)),
@@ -297,8 +297,8 @@ fn spawn_action_button(
         let mut text = b.spawn((
             Text::new(label),
             TextFont {
-                font: ui_font.clone(),
-                font_size: 13.0,
+                font: ui_font.clone().into(),
+                font_size: FontSize::Px(13.0),
                 ..default()
             },
             TextColor(Color::srgb(0.95, 0.93, 0.8)),

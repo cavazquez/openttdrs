@@ -73,8 +73,8 @@ pub(crate) fn spawn_town_labels(commands: &mut Commands, sim: &SimWorld, font: &
             TownLabel,
             Text2d::new(label),
             TextFont {
-                font: font.clone(),
-                font_size: FONT_SIZE,
+                font: font.clone().into(),
+                font_size: FontSize::Px(FONT_SIZE),
                 ..default()
             },
             TextColor(Color::WHITE),

@@ -1016,6 +1016,10 @@ echo "Modo gráfico registrado en ${DEST}/.graphics_mode (${GRAPHICS_MODE})"
 # Rombo blanco de selección de teselas (fantasma de estaciones).
 python3 "$(dirname "$0")/gen_tile_select.py"
 
+# Waypoints ferroviarios (SPR_WAYPOINT_* en GRF extra).
+python3 "$(dirname "$0")/gen_rail_waypoint_sprites.py" || true
+python3 "$(dirname "$0")/gen_rail_station_draw_data.py" || true
+
 # Texture atlas: empaqueta tiles/*.png en páginas + metadata Rust (batching).
 python3 "$(dirname "$0")/gen_tile_atlas.py"
 else

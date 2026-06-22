@@ -56,12 +56,17 @@ pub(crate) fn tunnel_placement_is_valid(
     openttdrs_core::command_would_fail(state, &cmd).is_none()
 }
 
-pub(crate) fn rail_bits_for_drag_action(action: BuildMenuAction) -> Option<u8> {
+pub(crate) fn rail_bits_for_drag_action(
+    action: BuildMenuAction,
+    lane_bit: Option<u8>,
+) -> Option<u8> {
     match action {
-        BuildMenuAction::RailX => Some(0x01),
-        BuildMenuAction::RailY => Some(0x02),
-        BuildMenuAction::RailHorz => Some(0x0C),
-        BuildMenuAction::RailVert => Some(0x30),
+        BuildMenuAction::RailX | BuildMenuAction::RailY => {
+            super::rail_lane::rail_lane_bits_for_action(action, None)
+        }
+        BuildMenuAction::RailHorz | BuildMenuAction::RailVert => {
+            lane_bit.or_else(|| super::rail_lane::rail_lane_bits_for_action(action, None))
+        }
         _ => None,
     }
 }
@@ -106,6 +111,7 @@ pub(crate) fn apply_drag_action(
     action: BuildMenuAction,
     tiles: Vec<(i32, i32)>,
     station_state: &StationBuildState,
+    rail_lane_bit: Option<u8>,
 ) -> (bool, Option<CommandError>) {
     if action_is_tunnel(action) {
         if let Some(cmd) = command_for_tunnel_action(&sim.state, action, &tiles) {
@@ -138,13 +144,13 @@ pub(crate) fn apply_drag_action(
         return (changed, if changed { None } else { last_err });
     }
 
-    if let Some(rail_bits) = rail_bits_for_drag_action(action) {
+    if let Some(rail_bits) = rail_bits_for_drag_action(action, rail_lane_bit) {
         let mut changed = false;
         let mut last_err = None;
         for (x, y) in tiles {
             match apply_command(
                 &mut sim.state,
-                &Command::SetRailBits(TileCoord::new(x, y), rail_bits),
+                &Command::PlaceRailBits(TileCoord::new(x, y), rail_bits),
             ) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),
@@ -156,7 +162,9 @@ pub(crate) fn apply_drag_action(
     let mut changed = false;
     let mut last_err = None;
     for (x, y) in tiles {
-        if let Some(cmd) = command_for_action(action, TileCoord::new(x, y), station_state) {
+        if let Some(cmd) =
+            command_for_action(action, TileCoord::new(x, y), station_state, rail_lane_bit)
+        {
             match apply_command(&mut sim.state, &cmd) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),

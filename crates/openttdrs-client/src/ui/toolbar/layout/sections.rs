@@ -155,7 +155,7 @@ fn spawn_save_load_button(
         children![(
             Text::new(label),
             TextFont {
-                font_size: 13.0,
+                font_size: FontSize::Px(13.0),
                 ..default()
             },
             TextColor(Color::srgb(0.95, 0.92, 0.78)),
@@ -277,7 +277,7 @@ pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             BuildMenuAction::RailDepot,
                         ),
                         (
-                            "Waypoint (no implementado)",
+                            "Waypoint",
                             "assets/opengfx/tiles/toolbar_rail_waypoint.png",
                             BuildMenuAction::RailWaypoint,
                         ),
@@ -428,7 +428,7 @@ pub(super) fn spawn_toolbar_tooltip(root: &mut ChildSpawnerCommands) {
             TooltipText,
             Text::new(""),
             TextFont {
-                font_size: 11.0,
+                font_size: FontSize::Px(11.0),
                 ..default()
             },
             TextColor(Color::srgb(0.94, 0.9, 0.76)),

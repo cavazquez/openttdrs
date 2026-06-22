@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 
 use crate::map::{Map, Tile, TileCoord, TileKind, openttd_tile_index_to_coord};
+use crate::station::is_rail_waypoint_tile;
 use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::VehicleKind;
 
@@ -260,13 +261,9 @@ fn rail_traversal_bits(map: &Map, c: TileCoord) -> u8 {
             if tb == 0 { RAIL_TB_X } else { tb }
         }
         TileKind::RailTunnel | TileKind::RailBridge => RAIL_TB_CROSS,
-        // Los andenes contienen vía a lo largo de su eje (gfx impar = eje Y).
-        TileKind::Station if is_rail_station_tile(&t) => {
-            if t.m5 & 1 != 0 {
-                RAIL_TB_Y
-            } else {
-                RAIL_TB_X
-            }
+        // Andenes y waypoints: vía a lo largo del eje en `m5` bit 0.
+        TileKind::Station if is_rail_station_tile(&t) || is_rail_waypoint_tile(&t) => {
+            if t.m5 & 1 != 0 { RAIL_TB_Y } else { RAIL_TB_X }
         }
         _ => 0,
     }

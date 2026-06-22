@@ -152,6 +152,8 @@ pub(crate) struct DragBuildState {
     pub(crate) last_tile: Option<(i32, i32)>,
     pub(crate) last_action: Option<BuildMenuAction>,
     pub(crate) pending_tiles: Vec<(i32, i32)>,
+    /// Carril paralelo elegido al iniciar el arrastre (`UPPER`/`LOWER`/`LEFT`/`RIGHT`).
+    pub(crate) rail_lane_bit: Option<u8>,
 }
 
 #[derive(Resource, Default)]

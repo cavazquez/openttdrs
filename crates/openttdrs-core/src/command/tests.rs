@@ -1,8 +1,9 @@
 use super::{Command, CommandError, apply_command, command_error_message, command_would_fail};
 use crate::{
     BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, GameState, IndustryKind, IndustrySpec,
-    ROAD_BUILD_COST, STATION_BUILD_COST, StopKind, TileCoord, TileKind, Vehicle, VehicleKind,
-    industry_template,
+    ROAD_BUILD_COST, STATION_BUILD_COST, STATION_TYPE_RAIL_WAYPOINT, StopKind, TileCoord, TileKind,
+    Vehicle, VehicleKind, VehicleOrder, WAYPOINT_BUILD_COST, industry_template, pathfinder,
+    station_type_from_m6, tile_slope_and_z,
 };
 
 #[test]
@@ -539,6 +540,118 @@ fn place_rail_bits_merges_trackbits_on_existing_rail() {
 }
 
 #[test]
+fn place_rail_parallel_lanes_merge_on_same_tile() {
+    use crate::rail_lane::{rail_horz_lane_bit, rail_vert_lane_bit};
+
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 3);
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBits(c, rail_vert_lane_bit(200, 100)),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBits(c, rail_vert_lane_bit(50, 150)),
+    )
+    .unwrap();
+    assert_eq!(s.map.get(c).unwrap().m5 & 0x3F, 0x30);
+
+    let h = TileCoord::new(4, 3);
+    apply_command(&mut s, &Command::PlaceRailBits(h, rail_horz_lane_bit(0, 0))).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBits(h, rail_horz_lane_bit(200, 100)),
+    )
+    .unwrap();
+    assert_eq!(s.map.get(h).unwrap().m5 & 0x3F, 0x0C);
+}
+
+fn set_w_only_slope(map: &mut crate::Map, tx: i32, ty: i32, base: u8) {
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    map.set_height(c(tx, ty), base).unwrap();
+    map.set_height(c(tx + 1, ty), base + 1).unwrap();
+    map.set_height(c(tx, ty + 1), base).unwrap();
+    map.set_height(c(tx + 1, ty + 1), base).unwrap();
+}
+
+#[test]
+fn place_rail_rejects_invalid_trackbits_on_slope() {
+    let mut s = GameState::new(8, 8);
+    set_w_only_slope(&mut s.map, 4, 4, 1);
+    let c = TileCoord::new(4, 4);
+    assert_eq!(tile_slope_and_z(&s.map, c).unwrap().0, 1);
+    assert_eq!(
+        apply_command(&mut s, &Command::SetRailBits(c, 0x0C)),
+        Err(CommandError::InvalidRailOnSlope)
+    );
+    assert_eq!(
+        command_would_fail(&s, &Command::SetRailBits(c, 0x0C)),
+        Some(CommandError::InvalidRailOnSlope)
+    );
+    apply_command(&mut s, &Command::SetRailBits(c, 0x20)).unwrap();
+    assert_eq!(s.map.get(c).unwrap().kind, TileKind::Rail);
+}
+
+#[test]
+fn place_rail_waypoint_on_straight_track() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+    let money = s.economy.money;
+    apply_command(&mut s, &Command::PlaceRailWaypoint(c)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert_eq!(tile.kind, TileKind::Station);
+    assert_eq!(station_type_from_m6(tile.m6), STATION_TYPE_RAIL_WAYPOINT);
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].stop_kind, StopKind::RailWaypoint);
+    assert_eq!(s.economy.money, money - WAYPOINT_BUILD_COST);
+}
+
+#[test]
+fn place_rail_waypoint_rejects_curved_track() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x03)).unwrap();
+    assert_eq!(
+        apply_command(&mut s, &Command::PlaceRailWaypoint(c)),
+        Err(CommandError::CannotPlaceWaypointOnTrack)
+    );
+}
+
+#[test]
+fn train_order_through_waypoint_advances_without_full_stop() {
+    let mut s = GameState::new(12, 12);
+    let wp = TileCoord::new(5, 5);
+    let end = TileCoord::new(8, 5);
+    for x in 4..=8 {
+        apply_command(&mut s, &Command::SetRailBits(TileCoord::new(x, 5), 0x01)).unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceRailWaypoint(wp)).unwrap();
+    s.vehicles.push(Vehicle::new(
+        1,
+        VehicleKind::Train,
+        TileCoord::new(4, 5),
+        TileCoord::new(4, 5),
+    ));
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(1, vec![VehicleOrder::waypoint(wp), VehicleOrder::tile(end)]),
+    )
+    .unwrap();
+    s.vehicles[0].set_cruise_speed();
+    s.vehicles[0].sync_order_destination(&s.map);
+    let path = pathfinder::find_path(
+        &s.map,
+        TileCoord::new(4, 5),
+        wp,
+        pathfinder::PathNetwork::Rail,
+    );
+    assert!(path.is_some());
+    assert!(path.unwrap().contains(&wp));
+}
+
+#[test]
 fn bridge_cost_scales_with_line_length() {
     let mut s = GameState::new(8, 8);
     let c = |x: i32, y: i32| TileCoord::new(x, y);
@@ -796,7 +909,7 @@ fn sell_vehicle_in_road_depot_succeeds() {
 
 #[test]
 fn every_command_error_has_user_message() {
-    const ERRORS: [CommandError; 20] = [
+    const ERRORS: [CommandError; 22] = [
         CommandError::OutOfBounds,
         CommandError::CannotPlaceRoadOnWater,
         CommandError::CannotPlaceRoadOnVoid,
@@ -817,6 +930,8 @@ fn every_command_error_has_user_message() {
         CommandError::IncompatibleStopForVehicle,
         CommandError::InvalidTunnelEndpoints,
         CommandError::InvalidBridgeSpan,
+        CommandError::InvalidRailOnSlope,
+        CommandError::CannotPlaceWaypointOnTrack,
     ];
     for err in ERRORS {
         let msg = command_error_message(err);

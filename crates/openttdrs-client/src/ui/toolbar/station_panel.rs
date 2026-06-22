@@ -51,7 +51,7 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands) {
                 StationCargoPanelText,
                 Text::new("Estación"),
                 TextFont {
-                    font_size: 13.0,
+                    font_size: FontSize::Px(13.0),
                     ..default()
                 },
                 TextColor(Color::srgb(0.94, 0.9, 0.76)),
@@ -98,7 +98,7 @@ fn spawn_station_button(
         children![(
             Text::new(label),
             TextFont {
-                font_size: 11.0,
+                font_size: FontSize::Px(11.0),
                 ..default()
             },
             TextColor(Color::srgb(0.92, 0.88, 0.72)),

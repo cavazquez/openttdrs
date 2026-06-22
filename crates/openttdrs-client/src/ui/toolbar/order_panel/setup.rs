@@ -84,8 +84,8 @@ pub(crate) fn setup_order_panel(
                         OrderPanelTitle,
                         Text::new("Vehículo"),
                         TextFont {
-                            font: ui_font.clone(),
-                            font_size: 14.0,
+                            font: ui_font.clone().into(),
+                            font_size: FontSize::Px(14.0),
                             ..default()
                         },
                         TextColor(Color::srgb(0.95, 0.92, 0.8)),
@@ -110,8 +110,8 @@ pub(crate) fn setup_order_panel(
                         b.spawn((
                             Text::new("✕"),
                             TextFont {
-                                font: ui_font.clone(),
-                                font_size: 13.0,
+                                font: ui_font.clone().into(),
+                                font_size: FontSize::Px(13.0),
                                 ..default()
                             },
                             TextColor(Color::srgb(0.92, 0.88, 0.78)),
@@ -181,7 +181,7 @@ fn spawn_order_panel_row(parent: &mut ChildSpawnerCommands, slot: usize) {
             OrderPanelRowText { slot },
             Text::new(""),
             TextFont {
-                font_size: 11.0,
+                font_size: FontSize::Px(11.0),
                 ..default()
             },
             TextColor(Color::srgb(0.92, 0.88, 0.72)),
@@ -213,7 +213,7 @@ fn spawn_order_button(
         children![(
             Text::new(label),
             TextFont {
-                font_size: 11.0,
+                font_size: FontSize::Px(11.0),
                 ..default()
             },
             TextColor(Color::srgb(0.92, 0.88, 0.72)),

@@ -194,7 +194,7 @@ fn stop_kind_mismatch_note(vehicle: &Vehicle, station: &Station) -> Option<&'sta
     Some(match station.stop_kind {
         StopKind::BusStop => " — incompatible: solo buses",
         StopKind::TruckStop => " — incompatible: solo camiones/carga",
-        StopKind::RailStation => " — incompatible: solo trenes",
+        StopKind::RailStation | StopKind::RailWaypoint => " — incompatible: solo trenes",
     })
 }
 
@@ -216,8 +216,10 @@ fn order_row_label(
             Some(StopKind::BusStop) => "Parada bus",
             Some(StopKind::TruckStop) => "Parada carga",
             Some(StopKind::RailStation) => "Estacion tren",
+            Some(StopKind::RailWaypoint) => "Waypoint",
             None => "Estación",
         },
+        VehicleOrder::Waypoint { .. } => "Waypoint",
         VehicleOrder::Tile(tile) if sim.state.map.get_kind(tile) == Some(TileKind::RoadDepot) => {
             "Depósito"
         }

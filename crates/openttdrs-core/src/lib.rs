@@ -14,6 +14,7 @@ pub mod industry;
 pub mod map;
 pub mod ottdmap_extras;
 pub mod pathfinder;
+pub mod rail_lane;
 pub mod road_movement;
 pub mod sav;
 pub mod save;
@@ -48,6 +49,7 @@ pub use game_state::IncomePopup;
 pub use game_state::{
     BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, CompanyEconomy, DEPOT_BUILD_COST, GameState,
     RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats, TUNNEL_BUILD_COST_PER_TILE,
+    WAYPOINT_BUILD_COST,
 };
 pub use industry::{
     FACTORY_COAL_INPUT, FACTORY_WOOD_INPUT, INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind,
@@ -66,6 +68,7 @@ pub use pathfinder::{
     station_entrance_faces_road, station_site_adjacent_to_rail, station_site_adjacent_to_transport,
     station_site_tile_allows_build, station_site_tile_needs_clear, tile_is_path_traversable,
 };
+pub use rail_lane::{rail_horz_lane_bit, rail_vert_lane_bit};
 pub use road_movement::{
     road_turn_entry_exit, straight_subtile, train_straight_subtile, train_subtile_direction,
     vehicle_render_direction, vehicle_render_progress, vehicle_subtile,
@@ -75,9 +78,10 @@ pub use sav::{SavError, SavGame, SavIndustry, SavStation, SavVehicle, SavVehicle
 pub use save::SaveError;
 pub use save::load_from_str;
 pub use station::{
-    STATION_COVERAGE_RADIUS, Station, StationCoverage, StopKind, industry_in_station_coverage,
+    STATION_COVERAGE_RADIUS, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage, StopKind,
+    industry_in_station_coverage, is_rail_waypoint_at, is_rail_waypoint_tile,
     rail_station_approach_tile, resolve_order_destination, station_coverage_at,
-    station_covers_tile,
+    station_covers_tile, station_type_from_m6,
 };
 pub use tick::GameTick;
 pub use tnbp_decode::{

@@ -57,6 +57,8 @@ impl Default for CompanyEconomy {
 pub const ROAD_BUILD_COST: i64 = 10;
 pub const RAIL_BUILD_COST: i64 = 25;
 pub const STATION_BUILD_COST: i64 = 200;
+/// Coste de waypoint ferroviario (`Price::BuildWaypointRail` en `OpenTTD`).
+pub const WAYPOINT_BUILD_COST: i64 = 100;
 pub const DEPOT_BUILD_COST: i64 = 150;
 pub const TUNNEL_BUILD_COST_PER_TILE: i64 = 90;
 pub const BRIDGE_BUILD_COST_PER_TILE: i64 = 70;

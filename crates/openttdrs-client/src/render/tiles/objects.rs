@@ -1,15 +1,15 @@
 use bevy::prelude::*;
 use openttdrs_core::{Station, TileKind, is_tunnel_entrance_slope};
 
-use super::{TILE_OVERLAP_SCALE, sloped_or_flat_image, spawn_ground_sprite};
-use crate::iso::overlay_pos;
+use super::{sloped_or_flat_image, spawn_ground_sprite};
 use crate::iso::{
     SLOPE_HALF_H, TILE_HALF_H, road_stop_build_sprite_center, tile_pos, tile_pos_half,
 };
 use crate::render::{AtlasSprite, MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
-    StationTileClass, rail_station_draw_layers, rail_station_ground_track_sprite,
-    rail_station_overlay_rel, rail_station_sprite_meta, road_depot_build_layers,
+    RAIL_WAYPOINT_SPRITE_TINT, StationTileClass, rail_station_draw_layers,
+    rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_sprite_meta,
+    rail_waypoint_draw_layers, rail_waypoint_sprite_center, road_depot_build_layers,
     road_depot_entrance_road_bits, road_depot_seq_gfx, road_flat_sprite_index,
     road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,
 };
@@ -48,8 +48,16 @@ pub(crate) fn spawn_station_tile(
     };
 
     match class {
-        StationTileClass::Rail => {
-            if tileh == 0 {
+        StationTileClass::Rail | StationTileClass::RailWaypoint => {
+            if tileh != 0 {
+                spawn_ground_sprite(
+                    commands,
+                    &assets.grass_slopes[tileh as usize - 1],
+                    Color::WHITE,
+                    ctx,
+                    slope_half_ground,
+                );
+            } else {
                 let grass = sloped_or_flat_image(0, &assets.grass, &assets.grass_slopes);
                 spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
             }
@@ -65,15 +73,15 @@ pub(crate) fn spawn_station_tile(
                         base_z,
                         0.02,
                         rail_half_h,
-                    ))
-                    .with_scale(Vec3::new(
-                        TILE_OVERLAP_SCALE,
-                        TILE_OVERLAP_SCALE,
-                        1.0,
                     )),
                 ));
             }
-            for layer in rail_station_draw_layers(m5) {
+            let overlay_layers = if class == StationTileClass::RailWaypoint {
+                rail_waypoint_draw_layers(m5)
+            } else {
+                rail_station_draw_layers(m5)
+            };
+            for layer in overlay_layers {
                 let Some(img) = assets.rail.get(&layer.sprite_id) else {
                     continue;
                 };
@@ -81,22 +89,42 @@ pub(crate) fn spawn_station_tile(
                 else {
                     continue;
                 };
-                let (xrel, yrel) = rail_station_overlay_rel(layer, nfo_xrel, nfo_yrel);
-                let pos3 = overlay_pos(
-                    ctx.iso_pos,
-                    xrel,
-                    yrel,
-                    w,
-                    h,
-                    base_z,
-                    layer.z,
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                );
+                let pos3 = if class == StationTileClass::RailWaypoint {
+                    rail_waypoint_sprite_center(
+                        ctx.iso_pos,
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        base_z,
+                        layer.z,
+                        layer,
+                        nfo_xrel,
+                        nfo_yrel,
+                        w,
+                        h,
+                    )
+                } else {
+                    let (xrel, yrel) = rail_station_overlay_rel(layer, nfo_xrel, nfo_yrel);
+                    crate::iso::overlay_pos(
+                        ctx.iso_pos,
+                        xrel,
+                        yrel,
+                        w,
+                        h,
+                        base_z,
+                        layer.z,
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                    )
+                };
+                let tint = if class == StationTileClass::RailWaypoint {
+                    RAIL_WAYPOINT_SPRITE_TINT
+                } else {
+                    Color::WHITE
+                };
                 commands.spawn((
                     MapVisualLayer,
                     ctx.map_tile_chunk(),
-                    img.sprite(),
+                    img.sprite_colored(tint),
                     Transform::from_translation(pos3),
                 ));
             }
@@ -159,8 +187,7 @@ fn spawn_road_stop_link(
             base_z,
             0.025,
             half_h,
-        ))
-        .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+        )),
     ));
 }
 
@@ -179,7 +206,6 @@ fn spawn_road_stop_buildings(
     };
     for (layer_i, spec) in road_stop_build_layers(class, dir).iter().enumerate() {
         let image = &handles[dir][layer_i];
-        let scale = TILE_OVERLAP_SCALE;
         let center = road_stop_build_sprite_center(
             ctx.iso_pos,
             ctx.tx_i32(),
@@ -194,7 +220,7 @@ fn spawn_road_stop_buildings(
             MapVisualLayer,
             ctx.map_tile_chunk(),
             image.sprite(),
-            Transform::from_translation(center).with_scale(Vec3::new(scale, scale, 1.0)),
+            Transform::from_translation(center),
         ));
     }
 }
@@ -210,8 +236,7 @@ fn spawn_stop_ground_sprite(
         MapVisualLayer,
         ctx.map_tile_chunk(),
         image.sprite(),
-        Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), base_z, layer))
-            .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+        Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), base_z, layer)),
     ));
 }
 
@@ -251,11 +276,6 @@ pub(crate) fn spawn_transport_object_tile(
                     base_z,
                     0.08,
                     portal_half_h,
-                ))
-                .with_scale(Vec3::new(
-                    TILE_OVERLAP_SCALE,
-                    TILE_OVERLAP_SCALE,
-                    1.0,
                 )),
             ));
         }
@@ -305,8 +325,7 @@ fn spawn_road_depot_tile(
             base_z,
             0.02,
             half_h,
-        ))
-        .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+        )),
     ));
     spawn_road_stop_link(
         commands,
@@ -335,11 +354,7 @@ fn spawn_road_depot_tile(
             MapVisualLayer,
             ctx.map_tile_chunk(),
             image.sprite(),
-            Transform::from_translation(center).with_scale(Vec3::new(
-                TILE_OVERLAP_SCALE,
-                TILE_OVERLAP_SCALE,
-                1.0,
-            )),
+            Transform::from_translation(center),
         ));
     }
 }
@@ -367,8 +382,7 @@ fn spawn_rail_depot_tile(
                 base_z,
                 0.02,
                 half_h,
-            ))
-            .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+            )),
         ));
     }
     for (layer_i, spec) in crate::sprites::rail_depot_build_layers(dir)
@@ -392,11 +406,7 @@ fn spawn_rail_depot_tile(
             MapVisualLayer,
             ctx.map_tile_chunk(),
             image.sprite(),
-            Transform::from_translation(center).with_scale(Vec3::new(
-                TILE_OVERLAP_SCALE,
-                TILE_OVERLAP_SCALE,
-                1.0,
-            )),
+            Transform::from_translation(center),
         ));
     }
 }
@@ -418,7 +428,6 @@ fn spawn_object_sprite(
             base_z,
             0.08,
             half_h,
-        ))
-        .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+        )),
     ));
 }

@@ -4,9 +4,11 @@ use crate::{GameState, IndustrySpec, StopKind};
 
 use super::industry::check_place_industry_spec;
 use super::transport::{
-    check_bridge, check_clear_tile, check_place_rail, check_place_road_bits,
-    check_rail_depot_placement, check_rail_station_area, check_road_depot_placement,
-    check_single_transport_tile, check_station_placement, check_tunnel, rail_station_footprint,
+    check_bridge, check_clear_tile, check_place_rail, check_place_rail_waypoint,
+    check_place_road_bits, check_rail_depot_placement, check_rail_station_area,
+    check_rail_trackbits_on_tile, check_road_depot_placement, check_single_transport_tile,
+    check_station_placement, check_tunnel, merged_rail_trackbits_on_tile, rail_station_footprint,
+    rail_trackbits_from_neighbors,
 };
 use super::types::{Command, CommandError};
 
@@ -19,9 +21,18 @@ pub fn command_would_fail(state: &GameState, cmd: &Command) -> Option<CommandErr
         Command::PlaceRoad(c) | Command::PlaceRoadBits(c, _) | Command::SetRoadBits(c, _) => {
             check_place_road_bits(map, *c).err()
         }
-        Command::PlaceRail(c) | Command::PlaceRailBits(c, _) | Command::SetRailBits(c, _) => {
-            check_place_rail(map, *c).err()
-        }
+        Command::PlaceRail(c) => check_place_rail(map, *c).err().or_else(|| {
+            let tb = rail_trackbits_from_neighbors(map, *c);
+            check_rail_trackbits_on_tile(map, *c, tb).err()
+        }),
+        Command::PlaceRailBits(c, bits) => check_place_rail(map, *c).err().or_else(|| {
+            let tb = merged_rail_trackbits_on_tile(map, *c, *bits);
+            check_rail_trackbits_on_tile(map, *c, tb).err()
+        }),
+        Command::SetRailBits(c, bits) => check_place_rail(map, *c)
+            .err()
+            .or_else(|| check_rail_trackbits_on_tile(map, *c, bits & 0x3F).err()),
+        Command::PlaceRailWaypoint(c) => check_place_rail_waypoint(map, *c, stations).err(),
         Command::PlaceRoadDepot(c) => {
             if (0..4).any(|dir| check_road_depot_placement(map, *c, dir).is_ok()) {
                 None
@@ -94,6 +105,7 @@ pub fn command_would_fail(state: &GameState, cmd: &Command) -> Option<CommandErr
         Command::ClearTile(c) => check_clear_tile(map, *c).err(),
         Command::SetVehicleOrders(..)
         | Command::SetVehicleStationOrders(..)
+        | Command::SetVehicleOrderList(..)
         | Command::BuildRoadVehicleAtDepot(..)
         | Command::BuildVehicleAtDepot(..)
         | Command::SellVehicle(..)

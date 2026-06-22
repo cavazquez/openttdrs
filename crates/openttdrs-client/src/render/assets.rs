@@ -6,8 +6,8 @@ use crate::render::atlas::{AtlasSprite, TileAtlas};
 use crate::sprites::{
     HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, ROAD_DEPOT_GROUND_PATH, StationTileClass,
     house_sprite_filename, rail_depot_build_layers, rail_sprite_ids_for_preload,
-    rail_station_draw_layers, rail_station_ground_track_sprite, road_depot_build_layers,
-    road_stop_build_layers,
+    rail_station_draw_layers, rail_station_ground_track_sprite, rail_waypoint_draw_layers,
+    road_depot_build_layers, road_stop_build_layers,
 };
 
 #[derive(Clone, Resource)]
@@ -114,6 +114,12 @@ impl WorldAssets {
         for gfx in 0..=7 {
             rail_ids.insert(rail_station_ground_track_sprite(gfx, 0));
             for layer in rail_station_draw_layers(gfx) {
+                rail_ids.insert(layer.sprite_id);
+            }
+        }
+        for axis_y in [false, true] {
+            let m5 = u8::from(axis_y);
+            for layer in rail_waypoint_draw_layers(m5) {
                 rail_ids.insert(layer.sprite_id);
             }
         }

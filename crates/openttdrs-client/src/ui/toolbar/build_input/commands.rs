@@ -1,11 +1,13 @@
 use openttdrs_core::{Command, TileCoord};
 
+use super::rail_lane::rail_lane_bits_for_action;
 use crate::ui::toolbar::{BuildMenuAction, StationBuildState};
 
 pub(crate) fn command_for_action(
     action: BuildMenuAction,
     pos: TileCoord,
     station_state: &StationBuildState,
+    rail_lane_bits: Option<u8>,
 ) -> Option<Command> {
     match action {
         BuildMenuAction::Road => Some(Command::PlaceRoadBits(pos, 0x0F)),
@@ -14,8 +16,10 @@ pub(crate) fn command_for_action(
         BuildMenuAction::Rail => Some(Command::PlaceRail(pos)),
         BuildMenuAction::RailX => Some(Command::PlaceRailBits(pos, 0x01)),
         BuildMenuAction::RailY => Some(Command::PlaceRailBits(pos, 0x02)),
-        BuildMenuAction::RailHorz => Some(Command::PlaceRailBits(pos, 0x0C)),
-        BuildMenuAction::RailVert => Some(Command::PlaceRailBits(pos, 0x30)),
+        BuildMenuAction::RailHorz | BuildMenuAction::RailVert => {
+            let bits = rail_lane_bits.or_else(|| rail_lane_bits_for_action(action, None))?;
+            Some(Command::PlaceRailBits(pos, bits))
+        }
         BuildMenuAction::RailStation => Some(Command::PlaceRailStationArea {
             origin: pos,
             axis_y: station_state.rail_axis_y,
@@ -35,11 +39,11 @@ pub(crate) fn command_for_action(
         | BuildMenuAction::RoadTunnel
         | BuildMenuAction::RailBridge
         | BuildMenuAction::RailTunnel
-        | BuildMenuAction::RailWaypoint
         | BuildMenuAction::RailSignals
         | BuildMenuAction::RailRemove
         | BuildMenuAction::RailConvert
         | BuildMenuAction::Orders => None,
+        BuildMenuAction::RailWaypoint => Some(Command::PlaceRailWaypoint(pos)),
         BuildMenuAction::BuildHouse => Some(Command::PlaceHouse(pos)),
         BuildMenuAction::BuildCoalMine => Some(Command::PlaceIndustrySpec(
             pos,

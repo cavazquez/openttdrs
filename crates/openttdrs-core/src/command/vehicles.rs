@@ -1,10 +1,50 @@
 use std::collections::{HashSet, VecDeque};
 
 use crate::map::{Map, TileCoord, TileKind};
-use crate::{GameState, Vehicle, VehicleKind};
+use crate::{GameState, Vehicle, VehicleKind, VehicleOrder};
 
 use super::transport::road_depot_exit_for_dir;
 use super::{CommandError, in_bounds};
+
+pub(super) fn set_vehicle_order_list(
+    state: &mut GameState,
+    id: u32,
+    orders: Vec<VehicleOrder>,
+) -> Result<(), CommandError> {
+    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let vehicle_kind = state.vehicles[vehicle_idx].kind;
+    for order in &orders {
+        in_bounds(&state.map, order.destination())?;
+        match order {
+            VehicleOrder::Station { station } => {
+                let Some(st) = state.stations.iter().find(|s| s.pos == *station) else {
+                    return Err(CommandError::StationNotFound);
+                };
+                if !st.can_service_vehicle(vehicle_kind) || st.is_waypoint() {
+                    return Err(CommandError::IncompatibleStopForVehicle);
+                }
+            }
+            VehicleOrder::Waypoint { waypoint } => {
+                if vehicle_kind != VehicleKind::Train {
+                    return Err(CommandError::IncompatibleStopForVehicle);
+                }
+                let Some(st) = state.stations.iter().find(|s| s.pos == *waypoint) else {
+                    return Err(CommandError::StationNotFound);
+                };
+                if !st.is_waypoint() {
+                    return Err(CommandError::IncompatibleStopForVehicle);
+                }
+            }
+            VehicleOrder::Tile(_) => {}
+        }
+    }
+    let vehicle = &mut state.vehicles[vehicle_idx];
+    vehicle.set_vehicle_orders(orders);
+    vehicle.sync_order_destination(&state.map);
+    Ok(())
+}
 
 pub(super) fn set_vehicle_orders(
     state: &mut GameState,
@@ -27,23 +67,11 @@ pub(super) fn set_vehicle_station_orders(
     id: u32,
     stations: Vec<TileCoord>,
 ) -> Result<(), CommandError> {
-    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == id) else {
-        return Err(CommandError::VehicleNotFound);
-    };
-    let vehicle_kind = state.vehicles[vehicle_idx].kind;
-    for station in &stations {
-        in_bounds(&state.map, *station)?;
-        let Some(st) = state.stations.iter().find(|s| s.pos == *station) else {
-            return Err(CommandError::StationNotFound);
-        };
-        if !st.can_service_vehicle(vehicle_kind) {
-            return Err(CommandError::IncompatibleStopForVehicle);
-        }
-    }
-    let vehicle = &mut state.vehicles[vehicle_idx];
-    vehicle.set_station_orders(stations);
-    vehicle.sync_order_destination(&state.map);
-    Ok(())
+    set_vehicle_order_list(
+        state,
+        id,
+        stations.into_iter().map(VehicleOrder::station).collect(),
+    )
 }
 
 /// Comando viejo: compra el motor por defecto del tipo (solo depósito de carretera).

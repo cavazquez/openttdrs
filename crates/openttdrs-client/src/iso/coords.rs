@@ -154,6 +154,36 @@ pub fn world_pos_to_tile_coord(world_pos: Vec2, map: &Map) -> Option<(i32, i32)>
     )
 }
 
+/// Fracción dentro de la tesela (0–255), como `_tile_fract_coords` de `OpenTTD`.
+///
+/// Convierte la posición del cursor respecto al centro del rombo a coordenadas
+/// `TILE_SEQ` (0–16) y las escala; alinea con `viewport.cpp` (`fract_x > fract_y`
+/// → carril izquierdo, etc.).
+#[must_use]
+pub fn world_pos_to_tile_fract(world_pos: Vec2, map: &Map, tx: i32, ty: i32) -> (u8, u8) {
+    let (tileh, base_z) = tile_slope_and_min_z(map, tx as u32, ty as u32);
+    let half_h = if tileh == 0 {
+        TILE_HALF_H
+    } else {
+        SLOPE_HALF_H[tileh.min(14) as usize]
+    };
+    let elev = f32::from(base_z) * HEIGHT_PX;
+    let top = iso(tx, ty);
+    let center = Vec2::new(top.x, top.y - half_h + elev);
+    let rel = world_pos - center;
+
+    // Inversa de `remap_tile_offset(dx, dy, 0)` con origen en el centro del rombo.
+    // dx,dy en 0..16 con (8,8) = centro de tesela.
+    let dy_minus_dx = rel.x / 4.0;
+    let dx_plus_dy = -rel.y / 2.0;
+    let dy = (dy_minus_dx + dx_plus_dy) * 0.5;
+    let dx = dx_plus_dy - dy;
+
+    let fx = ((dx + 8.0).clamp(0.0, 16.0) / 16.0 * 255.0).round() as u8;
+    let fy = ((dy + 8.0).clamp(0.0, 16.0) / 16.0 * 255.0).round() as u8;
+    (fx, fy)
+}
+
 /// Vec3 para teselas de suelo con soporte de altura isométrica.
 #[inline]
 pub fn tile_pos_half(tx: i32, ty: i32, height: u8, layer: f32, half_h: f32) -> Vec3 {

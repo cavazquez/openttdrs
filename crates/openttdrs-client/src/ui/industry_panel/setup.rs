@@ -85,8 +85,8 @@ pub(crate) fn setup_industry_panel(
                     IndustryPanelTitle,
                     Text::new("Industria"),
                     TextFont {
-                        font: ui_font.clone(),
-                        font_size: 14.0,
+                        font: ui_font.clone().into(),
+                        font_size: FontSize::Px(14.0),
                         ..default()
                     },
                     TextColor(Color::srgb(0.95, 0.92, 0.8)),
@@ -111,8 +111,8 @@ pub(crate) fn setup_industry_panel(
                     b.spawn((
                         Text::new("✕"),
                         TextFont {
-                            font: ui_font.clone(),
-                            font_size: 13.0,
+                            font: ui_font.clone().into(),
+                            font_size: FontSize::Px(13.0),
                             ..default()
                         },
                         TextColor(Color::srgb(0.92, 0.88, 0.78)),
@@ -132,8 +132,8 @@ pub(crate) fn setup_industry_panel(
                 IndustryPanelDetails,
                 Text::new("Stock: --"),
                 TextFont {
-                    font: ui_font,
-                    font_size: 12.0,
+                    font: ui_font.into(),
+                    font_size: FontSize::Px(12.0),
                     ..default()
                 },
                 TextColor(Color::srgb(0.92, 0.88, 0.76)),

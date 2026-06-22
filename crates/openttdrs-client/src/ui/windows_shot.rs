@@ -112,6 +112,7 @@ fn map_shot_driver(
                 action,
                 TileCoord::new(x, y),
                 &station_state,
+                None,
             ) else {
                 continue;
             };

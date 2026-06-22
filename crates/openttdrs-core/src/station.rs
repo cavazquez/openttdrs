@@ -28,6 +28,8 @@ pub enum StopKind {
     TruckStop,
     BusStop,
     RailStation,
+    /// Punto de paso ferroviario (`StationType::RailWaypoint`); sin carga ni parada.
+    RailWaypoint,
 }
 
 impl Station {
@@ -50,19 +52,31 @@ impl Station {
 
     #[must_use]
     pub fn can_service_vehicle(&self, vehicle_kind: VehicleKind) -> bool {
-        match vehicle_kind {
-            VehicleKind::Bus => self.stop_kind == StopKind::BusStop,
-            VehicleKind::Truck => self.stop_kind == StopKind::TruckStop,
-            VehicleKind::Train => self.stop_kind == StopKind::RailStation,
-        }
+        matches!(
+            (vehicle_kind, self.stop_kind),
+            (
+                VehicleKind::Train,
+                StopKind::RailStation | StopKind::RailWaypoint
+            ) | (VehicleKind::Bus, StopKind::BusStop)
+                | (VehicleKind::Truck, StopKind::TruckStop)
+        )
+    }
+
+    #[must_use]
+    pub fn is_waypoint(&self) -> bool {
+        self.stop_kind == StopKind::RailWaypoint
     }
 
     #[must_use]
     pub fn accepts_cargo(&self, cargo: CargoType) -> bool {
+        if self.stop_kind == StopKind::RailWaypoint {
+            return false;
+        }
         match self.stop_kind {
             StopKind::BusStop => matches!(cargo, CargoType::Passengers | CargoType::Mail),
             StopKind::TruckStop => !matches!(cargo, CargoType::Passengers | CargoType::Mail),
             StopKind::RailStation => !matches!(cargo, CargoType::Passengers | CargoType::Mail),
+            StopKind::RailWaypoint => false,
         }
     }
 }
@@ -89,6 +103,24 @@ impl StationCoverage {
     pub const fn supplies_anything(self) -> bool {
         self.supplies_coal > 0 || self.supplies_wood > 0 || self.supplies_oil > 0
     }
+}
+
+/// `StationType::RailWaypoint` en bits 3–6 de `m6` (`station_type.h`).
+pub const STATION_TYPE_RAIL_WAYPOINT: u8 = 7;
+
+#[must_use]
+pub fn station_type_from_m6(m6: u8) -> u8 {
+    (m6 >> 3) & 0x0F
+}
+
+#[must_use]
+pub fn is_rail_waypoint_tile(tile: &crate::map::Tile) -> bool {
+    tile.kind == TileKind::Station && station_type_from_m6(tile.m6) == STATION_TYPE_RAIL_WAYPOINT
+}
+
+#[must_use]
+pub fn is_rail_waypoint_at(map: &Map, c: TileCoord) -> bool {
+    map.get(c).is_some_and(|t| is_rail_waypoint_tile(&t))
 }
 
 #[must_use]
@@ -149,6 +181,7 @@ pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrd
         (VehicleKind::Train, VehicleOrder::Station { station }) => {
             rail_station_approach_tile(map, station).unwrap_or(station)
         }
+        (VehicleKind::Train, VehicleOrder::Waypoint { waypoint }) => waypoint,
         (_, order) => order.destination(),
     }
 }

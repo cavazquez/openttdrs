@@ -112,16 +112,17 @@ pub use rail::{
     RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y,
     RAIL_TILE_DEPOT, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, collect_rail_ghost_sprites,
     collect_rail_sprites, collect_signal_sprite_ids, level_crossing_has_rail_reservation,
-    level_crossing_rail_sprite_id, rail_depot_build_layers, rail_signal_present_mask,
-    rail_signal_state_mask, rail_sprite_ids_for_preload, rail_tile_is_signals, signal_sprite_bases,
-    signal_sprite_ids_for_preload,
+    level_crossing_rail_sprite_id, rail_depot_build_layers, rail_ghost_overlay_offset,
+    rail_signal_present_mask, rail_signal_state_mask, rail_sprite_ids_for_preload,
+    rail_tile_is_signals, signal_sprite_bases, signal_sprite_ids_for_preload,
 };
 #[allow(unused_imports)]
 pub use station::{
-    StationTileClass, rail_station_axis_y, rail_station_draw_layers,
+    RAIL_WAYPOINT_SPRITE_TINT, StationTileClass, rail_station_axis_y, rail_station_draw_layers,
     rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_sprite_layers,
-    rail_station_sprite_meta, road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx,
-    station_tile_class, station_type_from_m6, stop_kind_from_m6,
+    rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_sprite_center,
+    road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,
+    station_type_from_m6, stop_kind_from_m6,
 };
 
 /// Especificación de dibujo de una casa (stage completado).

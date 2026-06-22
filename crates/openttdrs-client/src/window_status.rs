@@ -1,5 +1,6 @@
 //! Sincronización del título de ventana con estado útil de debug.
 
+use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
@@ -12,6 +13,7 @@ pub(crate) struct WindowStatusPlugin;
 
 impl Plugin for WindowStatusPlugin {
     fn build(&self, app: &mut App) {
+        app.add_plugins(FrameTimeDiagnosticsPlugin::default());
         app.add_systems(
             Update,
             sync_window_title
@@ -24,14 +26,16 @@ impl Plugin for WindowStatusPlugin {
 #[derive(Default)]
 pub(crate) struct WindowTitleSync {
     last_scale: f32,
-    fps_dt: f32,
-    fps_frames: u32,
-    last_fps: f32,
+    last_tick: u64,
+    last_pickups: u64,
+    last_deliveries: u64,
+    last_indp_n: usize,
+    last_fps: u32,
 }
 
 pub(crate) fn sync_window_title(
     sim: Res<SimWorld>,
-    time: Res<Time>,
+    diagnostics: Res<DiagnosticsStore>,
     mut windows: Query<&mut Window, With<PrimaryWindow>>,
     cam_q: Query<&Projection, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut state: Local<WindowTitleSync>,
@@ -45,49 +49,48 @@ pub(crate) fn sync_window_title(
         })
         .unwrap_or(1.0);
 
-    state.fps_dt += time.delta_secs();
-    state.fps_frames += 1;
+    let fps = diagnostics
+        .get(&FrameTimeDiagnosticsPlugin::FPS)
+        .and_then(bevy::diagnostic::Diagnostic::smoothed)
+        .map(|f| f.round() as u32)
+        .unwrap_or(0);
+
+    let tick = sim.state.tick.get();
+    let pickups = sim.state.stats.cargo_pickups;
+    let deliveries = sim.state.stats.cargo_deliveries;
+    let indp_n = sim
+        .ottdmap_extras
+        .as_ref()
+        .map(|e| e.industry_types.len())
+        .unwrap_or(0);
 
     let scale_changed = (scale - state.last_scale).abs() > 0.000_5;
-    if scale_changed {
-        state.last_scale = scale;
-    }
+    let stats_changed = tick != state.last_tick
+        || pickups != state.last_pickups
+        || deliveries != state.last_deliveries
+        || indp_n != state.last_indp_n;
+    let fps_changed = fps != state.last_fps;
 
-    let fps_tick = state.fps_dt >= 1.0;
-    if fps_tick {
-        state.last_fps = state.fps_frames as f32 / state.fps_dt;
-        state.fps_dt = 0.0;
-        state.fps_frames = 0;
-    }
-
-    if !scale_changed && !fps_tick {
+    if !scale_changed && !stats_changed && !fps_changed {
         return;
     }
 
-    let fps = if state.last_fps > 0.0 {
-        state.last_fps
-    } else {
-        60.0
-    };
+    state.last_scale = scale;
+    state.last_tick = tick;
+    state.last_pickups = pickups;
+    state.last_deliveries = deliveries;
+    state.last_indp_n = indp_n;
+    state.last_fps = fps;
 
     if let Ok(mut window) = windows.single_mut() {
-        let indp_n = sim
-            .ottdmap_extras
-            .as_ref()
-            .map(|e| e.industry_types.len())
-            .unwrap_or(0);
         let indp_tag = if indp_n > 0 {
             format!(" - INDP {indp_n}")
         } else {
             String::new()
         };
         window.title = format!(
-            "openttdrs - tick {} - cargas {}/{}{indp_tag} - zoom {:.2}x - {:.0} FPS",
-            sim.state.tick.get(),
-            sim.state.stats.cargo_pickups,
-            sim.state.stats.cargo_deliveries,
+            "openttdrs - tick {tick} - cargas {pickups}/{deliveries}{indp_tag} - zoom {:.2}x - {fps} FPS",
             zoom_display_magnification(scale),
-            fps
         );
     }
 }
@@ -96,37 +99,42 @@ pub(crate) fn sync_window_title(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use bevy::ecs::system::RunSystemOnce;
     use bevy::window::PrimaryWindow;
     use openttdrs_core::OttdmapExtras;
 
+    fn window_title_test_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_plugins(FrameTimeDiagnosticsPlugin::default());
+        app.insert_resource(SimWorld::default());
+        app.add_systems(Update, sync_window_title);
+        app
+    }
+
     #[test]
     fn sync_window_title_no_primary_window_is_noop() {
-        let mut world = World::new();
-        world.insert_resource(SimWorld::default());
-        world.insert_resource(Time::<()>::default());
-        world.spawn((
+        let mut app = window_title_test_app();
+        app.world_mut().spawn((
             PrimaryGameCamera,
             Projection::Orthographic(OrthographicProjection::default_2d()),
         ));
-        world.run_system_once(sync_window_title).unwrap();
+        app.update();
     }
 
     #[test]
     fn sync_window_title_updates_title_with_camera() {
-        let mut world = World::new();
-        world.insert_resource(SimWorld::default());
-        world.insert_resource(Time::<()>::default());
-        world.spawn((Window::default(), PrimaryWindow));
-        world.spawn((
+        let mut app = window_title_test_app();
+        app.world_mut().spawn((Window::default(), PrimaryWindow));
+        app.world_mut().spawn((
             PrimaryGameCamera,
             Projection::Orthographic(OrthographicProjection::default_2d()),
         ));
 
-        world.run_system_once(sync_window_title).unwrap();
+        app.update();
 
+        let world = app.world_mut();
         let mut q = world.query_filtered::<&Window, With<PrimaryWindow>>();
-        let title = q.single(&world).unwrap().title.clone();
+        let title = q.single(world).unwrap().title.clone();
         assert!(title.contains("openttdrs - tick"));
     }
 
@@ -140,60 +148,60 @@ mod tests {
             ..SimWorld::default()
         };
 
-        let mut world = World::new();
-        world.insert_resource(sim);
-        let mut time = Time::<()>::default();
-        time.advance_by(std::time::Duration::from_secs_f32(1.1));
-        world.insert_resource(time);
-        world.spawn((Window::default(), PrimaryWindow));
-        world.spawn((
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_plugins(FrameTimeDiagnosticsPlugin::default());
+        app.insert_resource(sim);
+        app.add_systems(Update, sync_window_title);
+        app.world_mut().spawn((Window::default(), PrimaryWindow));
+        app.world_mut().spawn((
             PrimaryGameCamera,
             Projection::Orthographic(OrthographicProjection::default_2d()),
         ));
 
-        world.run_system_once(sync_window_title).unwrap();
-        let mut q = world.query_filtered::<&Window, With<PrimaryWindow>>();
-        let title1 = q.single(&world).unwrap().title.clone();
+        app.update();
+        let title1 = {
+            let world = app.world_mut();
+            let mut q = world.query_filtered::<&Window, With<PrimaryWindow>>();
+            q.single(world).unwrap().title.clone()
+        };
         assert!(title1.contains("INDP 2"));
 
-        // Segunda pasada sin tick de FPS ni cambio de escala: early return.
-        world.insert_resource(Time::<()>::default());
-        world.run_system_once(sync_window_title).unwrap();
-        let title2 = q.single(&world).unwrap().title.clone();
-        assert!(title2.contains("INDP 2"));
+        // Segunda pasada sin cambios: early return.
+        app.update();
+        let title2 = {
+            let world = app.world_mut();
+            let mut q = world.query_filtered::<&Window, With<PrimaryWindow>>();
+            q.single(world).unwrap().title.clone()
+        };
+        assert_eq!(title1, title2);
     }
 
     #[test]
     fn sync_window_title_non_orthographic_camera_uses_default_scale() {
-        let mut world = World::new();
-        world.insert_resource(SimWorld::default());
-        let mut time = Time::<()>::default();
-        time.advance_by(std::time::Duration::from_secs_f32(1.2));
-        world.insert_resource(time);
-        world.spawn((Window::default(), PrimaryWindow));
-        world.spawn((
+        let mut app = window_title_test_app();
+        app.world_mut().spawn((Window::default(), PrimaryWindow));
+        app.world_mut().spawn((
             PrimaryGameCamera,
             Projection::Perspective(PerspectiveProjection::default()),
         ));
 
-        world.run_system_once(sync_window_title).unwrap();
+        app.update();
+        let world = app.world_mut();
         let mut q = world.query_filtered::<&Window, With<PrimaryWindow>>();
-        let title = q.single(&world).unwrap().title.clone();
+        let title = q.single(world).unwrap().title.clone();
         assert!(title.contains("zoom 1.00x"));
     }
 
     #[test]
     fn sync_window_title_without_camera_query_uses_default_scale() {
-        let mut world = World::new();
-        world.insert_resource(SimWorld::default());
-        let mut time = Time::<()>::default();
-        time.advance_by(std::time::Duration::from_secs_f32(1.1));
-        world.insert_resource(time);
-        world.spawn((Window::default(), PrimaryWindow));
+        let mut app = window_title_test_app();
+        app.world_mut().spawn((Window::default(), PrimaryWindow));
 
-        world.run_system_once(sync_window_title).unwrap();
+        app.update();
+        let world = app.world_mut();
         let mut q = world.query_filtered::<&Window, With<PrimaryWindow>>();
-        let title = q.single(&world).unwrap().title.clone();
+        let title = q.single(world).unwrap().title.clone();
         assert!(title.contains("zoom 1.00x"));
     }
 }

@@ -6,6 +6,7 @@ pub(crate) mod cursor;
 pub(crate) mod drag;
 pub(crate) mod orders;
 mod placement;
+pub(crate) mod rail_lane;
 
 pub(crate) use click::handle_tile_click;
 pub(crate) use cursor::update_cursor_tile;

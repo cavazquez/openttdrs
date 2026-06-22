@@ -28,6 +28,7 @@ pub(crate) fn preview_build_command_valid(
     coord: TileCoord,
     station_state: &StationBuildState,
     preview_tiles: &[(i32, i32)],
+    rail_lane_bits: Option<u8>,
 ) -> bool {
     if action_is_tunnel(action) {
         let Some(&(sx, sy)) = preview_tiles.first() else {
@@ -50,7 +51,7 @@ pub(crate) fn preview_build_command_valid(
         };
         return command_would_fail(state, &cmd).is_none();
     }
-    let Some(cmd) = command_for_action(action, coord, station_state) else {
+    let Some(cmd) = command_for_action(action, coord, station_state, rail_lane_bits) else {
         return true;
     };
     command_would_fail(state, &cmd).is_none()

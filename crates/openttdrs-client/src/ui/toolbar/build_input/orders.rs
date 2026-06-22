@@ -15,6 +15,9 @@ pub(crate) fn order_for_clicked_tile(
 ) -> Option<VehicleOrder> {
     let vehicle = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)?;
     if let Some(station) = sim.state.stations.iter().find(|station| station.pos == pos) {
+        if station.is_waypoint() {
+            return (vehicle.kind == VehicleKind::Train).then_some(VehicleOrder::waypoint(pos));
+        }
         return station
             .can_service_vehicle(vehicle.kind)
             .then_some(VehicleOrder::station(pos));

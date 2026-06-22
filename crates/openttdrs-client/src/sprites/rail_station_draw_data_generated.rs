@@ -3,8 +3,8 @@
 // Offsets NFO (sprite_id, w, h, xrel, yrel) de las piezas de estación de
 // tren (`_station_display_datas_rail`, `table/station_land.h`).
 
-/// Metadata NFO de plataformas, edificios y techos (1069–1082).
-pub static RAIL_STATION_SPRITE_META: [(u32, f32, f32, f32, f32); 14] = [
+/// Metadata NFO de plataformas, edificios, techos (1069–1082) y waypoints (4974–4977).
+pub static RAIL_STATION_SPRITE_META: [(u32, f32, f32, f32, f32); 18] = [
     (1069, 42.0, 23.0, -9.0, -3.0), // rail_platform_y_front.png [nfo_8bpp_match]
     (1070, 42.0, 23.0, -31.0, -3.0), // rail_platform_x_rear.png [nfo_8bpp_match]
     (1071, 42.0, 23.0, -9.0, -3.0), // rail_platform_y_rear.png [nfo_8bpp_match]
@@ -19,4 +19,8 @@ pub static RAIL_STATION_SPRITE_META: [(u32, f32, f32, f32, f32); 14] = [
     (1080, 64.0, 39.0, -31.0, -5.0), // rail_roof_1.png [nfo_8bpp_match]
     (1081, 64.0, 50.0, -31.0, -17.0), // rail_roof_2.png [nfo_8bpp_match]
     (1082, 64.0, 50.0, -31.0, -17.0), // rail_roof_3.png [nfo_8bpp_match]
+    (4974, 64.0, 23.0, -31.0, 0.0), // rail_4974.png [nfo_8bpp_match]
+    (4975, 64.0, 39.0, -31.0, -8.0), // rail_4975.png [nfo_8bpp_match]
+    (4976, 64.0, 39.0, -31.0, -8.0), // rail_4976.png [nfo_8bpp_match]
+    (4977, 64.0, 31.0, -31.0, -8.0), // rail_4977.png [nfo_8bpp_match]
 ];

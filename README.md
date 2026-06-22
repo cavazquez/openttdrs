@@ -8,7 +8,7 @@
 [![codecov](https://codecov.io/gh/cavazquez/openttdrs/graph/badge.svg)](https://codecov.io/gh/cavazquez/openttdrs)
 [![Licencia GPL-2.0](https://img.shields.io/badge/licencia-GPL--2.0-blue.svg)](LICENSE)
 [![Rust MSRV](https://img.shields.io/badge/rust-1.95%2B-orange.svg)](https://doc.rust-lang.org/stable/releases.html)
-[![Bevy](https://img.shields.io/badge/Bevy-0.18.1-C659D4.svg)](https://bevyengine.org/)
+[![Bevy](https://img.shields.io/badge/Bevy-0.19.0-C659D4.svg)](https://bevyengine.org/)
 [![Inspiración OpenTTD](https://img.shields.io/badge/inspiración-OpenTTD-5a3.svg)](https://www.openttd.org/)
 
 Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.openttd.org/) hacia **Rust**, con motor gráfico [Bevy](https://bevyengine.org/). El objetivo a largo plazo es un simulador modular; la **paridad total** (NewGRF, red, saves idénticos) es un alcance opcional y costoso en tiempo.
@@ -40,7 +40,7 @@ Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.o
 | 🤖 | [Dependabot](https://docs.github.com/en/code-security/dependabot) | Actualizaciones **mensuales** de Cargo y Actions (`.github/dependabot.yml`). |
 | 📚 | OpenTTD upstream | Solo referencia local; ver sección [Código de referencia](#código-de-referencia-openttd-no-versionado). |
 
-**MSRV:** el workspace declara `rust-version = 1.95.0` (estable actual); [Bevy 0.18.1](https://crates.io/crates/bevy) exige como mínimo 1.89. `rust-toolchain.toml` fija **1.95.0** con `rustfmt` y `clippy`.
+**MSRV:** el workspace declara `rust-version = 1.95.0` (estable actual); [Bevy 0.19.0](https://crates.io/crates/bevy) exige como mínimo 1.95.0. `rust-toolchain.toml` fija **1.95.0** con `rustfmt` y `clippy`.
 
 ---
 

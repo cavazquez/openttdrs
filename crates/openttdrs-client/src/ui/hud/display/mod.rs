@@ -82,8 +82,8 @@ pub(crate) fn setup_tile_info_ui(
         TileInfoText,
         Text2d::new("Mapa: clic selecciona tile · Depósito ≠ parada (carga) · Esc cancela"),
         TextFont {
-            font,
-            font_size: 14.0,
+            font: font.into(),
+            font_size: FontSize::Px(14.0),
             ..default()
         },
         TextColor(Color::srgb(0.96, 0.94, 0.82)),

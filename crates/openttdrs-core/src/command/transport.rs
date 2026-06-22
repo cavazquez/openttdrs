@@ -1,7 +1,9 @@
 use crate::map::{
-    Map, TileCoord, TileKind, complement_slope, inclined_slope_direction, resolve_tunnel_end,
-    tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles, tunnel_preview_path,
+    Map, TileCoord, TileKind, complement_slope, inclined_slope_direction,
+    rail_trackbits_valid_on_slope, resolve_tunnel_end, tile_slope_and_z, tunnel_entrance_m5,
+    tunnel_path_tiles, tunnel_preview_path,
 };
+use crate::station::is_rail_waypoint_tile;
 
 /// Bit 4 de `m5` en puentes: eje Y (si no, eje X).
 pub const BRIDGE_AXIS_Y_M5: u8 = 0x10;
@@ -11,7 +13,7 @@ use crate::pathfinder::{
 };
 use crate::{
     CLEAR_TILE_COST, DEPOT_BUILD_COST, GameState, RAIL_BUILD_COST, ROAD_BUILD_COST,
-    STATION_BUILD_COST, Station, StopKind,
+    STATION_BUILD_COST, Station, StopKind, WAYPOINT_BUILD_COST,
 };
 
 use super::{CommandError, in_bounds};
@@ -36,6 +38,32 @@ pub(crate) fn check_place_rail(map: &Map, c: TileCoord) -> Result<(), CommandErr
         TileKind::Void => Err(CommandError::CannotPlaceRailOnVoid),
         _ => Ok(()),
     }
+}
+
+#[inline]
+fn existing_rail_trackbits(map: &Map, c: TileCoord) -> u8 {
+    map.get(c)
+        .filter(|t| t.kind == TileKind::Rail)
+        .map_or(0, |t| t.m5 & 0x3F)
+}
+
+/// Valida `TrackBits` finales tras colocar vía (`CheckRailSlope` / `GetRailFoundation`).
+pub(crate) fn check_rail_trackbits_on_tile(
+    map: &Map,
+    c: TileCoord,
+    final_bits: u8,
+) -> Result<(), CommandError> {
+    let (tileh, _) = tile_slope_and_z(map, c).ok_or(CommandError::OutOfBounds)?;
+    if !rail_trackbits_valid_on_slope(tileh, final_bits) {
+        return Err(CommandError::InvalidRailOnSlope);
+    }
+    Ok(())
+}
+
+/// `TrackBits` resultantes al combinar vía existente con piezas nuevas.
+#[must_use]
+pub(crate) fn merged_rail_trackbits_on_tile(map: &Map, c: TileCoord, add_bits: u8) -> u8 {
+    merge_rail_trackbits(existing_rail_trackbits(map, c), add_bits)
 }
 
 /// `TileType::MP_RAILWAY` en el nibble alto de `mapt`.
@@ -656,6 +684,7 @@ fn ottd_station_type_bits(stop_kind: StopKind) -> u8 {
         StopKind::RailStation => 0,
         StopKind::TruckStop => 2,
         StopKind::BusStop => 3,
+        StopKind::RailWaypoint => 7,
     }
 }
 
@@ -937,14 +966,8 @@ pub(super) fn place_rail_bits(
     bits: u8,
 ) -> Result<(), CommandError> {
     check_place_rail(&state.map, c)?;
-    let existing = state.map.get(c).map_or(0, |t| {
-        if t.kind == TileKind::Rail {
-            t.m5 & 0x3F
-        } else {
-            0
-        }
-    });
-    let tb = merge_rail_trackbits(existing, bits);
+    let tb = merged_rail_trackbits_on_tile(&state.map, c, bits);
+    check_rail_trackbits_on_tile(&state.map, c, tb)?;
     write_normal_rail_tile(state, c, tb)?;
     refresh_rail_neighbors(state, c)?;
     state.economy.money -= RAIL_BUILD_COST;
@@ -958,6 +981,7 @@ pub(super) fn set_rail_bits(
 ) -> Result<(), CommandError> {
     check_place_rail(&state.map, c)?;
     let tb = (bits & 0x3F).max(RAIL_TB_X);
+    check_rail_trackbits_on_tile(&state.map, c, tb)?;
     write_normal_rail_tile(state, c, tb)?;
     refresh_rail_neighbors(state, c)?;
     state.economy.money -= RAIL_BUILD_COST;
@@ -965,8 +989,67 @@ pub(super) fn set_rail_bits(
 }
 
 pub(super) fn place_rail(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
+    check_place_rail(&state.map, c)?;
     let tb = rail_trackbits_from_neighbors(&state.map, c);
-    place_rail_bits(state, c, tb)
+    check_rail_trackbits_on_tile(&state.map, c, tb)?;
+    write_normal_rail_tile(state, c, tb)?;
+    refresh_rail_neighbors(state, c)?;
+    state.economy.money -= RAIL_BUILD_COST;
+    Ok(())
+}
+
+/// Eje de waypoint: `false` = vía X, `true` = vía Y (`GetAxisForNewRailWaypoint`).
+fn rail_waypoint_axis_from_trackbits(tb: u8) -> Option<bool> {
+    match tb & 0x3F {
+        RAIL_TB_X => Some(false),
+        RAIL_TB_Y => Some(true),
+        _ => None,
+    }
+}
+
+pub(crate) fn check_place_rail_waypoint(
+    map: &Map,
+    c: TileCoord,
+    stations: &[Station],
+) -> Result<(), CommandError> {
+    check_in_bounds(map, c)?;
+    if stations.iter().any(|s| s.pos == c) {
+        return Err(CommandError::StationAlreadyExists);
+    }
+    let Some(tile) = map.get(c) else {
+        return Err(CommandError::OutOfBounds);
+    };
+    match tile.kind {
+        TileKind::Rail => {
+            rail_waypoint_axis_from_trackbits(tile.m5)
+                .ok_or(CommandError::CannotPlaceWaypointOnTrack)?;
+            Ok(())
+        }
+        TileKind::Station if is_rail_waypoint_tile(&tile) => {
+            Err(CommandError::StationAlreadyExists)
+        }
+        _ => Err(CommandError::CannotPlaceWaypointOnTrack),
+    }
+}
+
+pub(super) fn place_rail_waypoint(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
+    check_place_rail_waypoint(&state.map, c, &state.stations)?;
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let axis_y = rail_waypoint_axis_from_trackbits(tile.m5).unwrap_or(false);
+    let mut out = tile;
+    out.kind = TileKind::Station;
+    out.mapt = 0x50;
+    out.m5 = u8::from(axis_y);
+    out.m6 = apply_station_m6(out.m6, StopKind::RailWaypoint);
+    state
+        .map
+        .set_tile(c, out)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    state
+        .stations
+        .push(Station::new_with_kind(c, StopKind::RailWaypoint));
+    state.economy.money -= WAYPOINT_BUILD_COST;
+    Ok(())
 }
 
 pub(super) fn clear_tile(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {

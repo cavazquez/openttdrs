@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Sin `wayland` para compilar en sistemas donde falte `libwayland-client` (solo X11).
-bevy = { version = "0.18.1", default-features = false, features = [
+bevy = { version = "0.19.0", default-features = false, features = [
     "default_app",
     "std",
     "multi_threaded",
@@ -31,6 +31,11 @@ bevy = { version = "0.18.1", default-features = false, features = [
 openttdrs-core = { path = "../openttdrs-core" }
 image = { version = "0.25", default-features = false, features = ["png"] }
 winit = { version = "0.30", default-features = false }
+
+[features]
+# Iteración local más rápida: `cargo run -p openttdrs-client --features dynamic_linking`
+# (o el alias `cargo client` en `.cargo/config.toml`). No usar en CI/release.
+dynamic_linking = ["bevy/dynamic_linking"]
 
 [dev-dependencies]
 tempfile = "3"

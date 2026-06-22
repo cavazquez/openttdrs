@@ -24,6 +24,7 @@ const fn command_modifies_map(cmd: &Command) -> bool {
         cmd,
         Command::SetVehicleOrders(..)
             | Command::SetVehicleStationOrders(..)
+            | Command::SetVehicleOrderList(..)
             | Command::BuildRoadVehicleAtDepot(..)
             | Command::BuildVehicleAtDepot(..)
             | Command::SellVehicle(..)
@@ -47,6 +48,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::PlaceRail(c) => transport::place_rail(state, *c),
         Command::PlaceRailBits(c, bits) => transport::place_rail_bits(state, *c, *bits),
         Command::SetRailBits(c, bits) => transport::set_rail_bits(state, *c, *bits),
+        Command::PlaceRailWaypoint(c) => transport::place_rail_waypoint(state, *c),
         Command::PlaceRoadDepot(c) => transport::place_road_depot_dir(state, *c, 0),
         Command::PlaceRoadDepotDir(c, dir) => transport::place_road_depot_dir(state, *c, *dir),
         Command::PlaceRailDepot(c) => transport::place_rail_depot_dir(state, *c, 0),
@@ -92,6 +94,9 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         }
         Command::SetVehicleStationOrders(id, stations) => {
             vehicles::set_vehicle_station_orders(state, *id, stations.clone())
+        }
+        Command::SetVehicleOrderList(id, orders) => {
+            vehicles::set_vehicle_order_list(state, *id, orders.clone())
         }
         Command::PlaceHouse(c) => {
             transport::place_single_transport_tile(state, *c, TileKind::House, 0x30, 0x00, 50)

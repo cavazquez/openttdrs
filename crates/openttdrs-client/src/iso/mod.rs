@@ -10,7 +10,8 @@ mod water;
 pub use coords::{
     RoadStopSeqGfx, gizmo_diamond, iso, overlay_pos, remap_tile_offset,
     road_stop_build_sprite_center, road_stop_overlay_rel, road_stop_sprite_pos,
-    road_vehicle_tile_anchor, tile_pos, tile_pos_half, world_pos_to_tile_coord, world_to_tile,
+    road_vehicle_tile_anchor, tile_pos, tile_pos_half, world_pos_to_tile_coord,
+    world_pos_to_tile_fract, world_to_tile,
 };
 #[allow(unused_imports)]
 pub use slope::{
@@ -339,7 +340,7 @@ mod world_pos_to_tile_tests {
 
     use super::{
         HEIGHT_PX, ISO_HW, Map, TILE_HALF_H, TileCoord, TileKind, iso, world_pos_to_tile_coord,
-        world_to_tile,
+        world_pos_to_tile_fract, world_to_tile,
     };
 
     /// Mapa al mismo nivel: el centro del sprite (como en `tile_pos`) debe mapear a su tesela;
@@ -371,6 +372,44 @@ mod world_pos_to_tile_tests {
 
         assert_eq!(world_pos_to_tile_coord(left_inside, &m), Some((tx, ty)));
         assert_eq!(world_pos_to_tile_coord(right_inside, &m), Some((tx, ty)));
+    }
+
+    #[test]
+    fn tile_fract_picks_different_vert_lanes_on_left_and_right() {
+        use openttdrs_core::rail_vert_lane_bit;
+
+        let m = Map::new_flat(64, 64, 0);
+        let tx = 10;
+        let ty = 10;
+        let base_z = super::tile_min_corner_height(&m, tx as u32, ty as u32);
+        let elev = f32::from(base_z) * HEIGHT_PX;
+        let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - TILE_HALF_H + elev);
+        let left = center + Vec2::new(-ISO_HW * 0.35, 0.0);
+        let right = center + Vec2::new(ISO_HW * 0.35, 0.0);
+
+        let (lx, ly) = world_pos_to_tile_fract(left, &m, tx, ty);
+        let (rx, ry) = world_pos_to_tile_fract(right, &m, tx, ty);
+        assert_eq!(rail_vert_lane_bit(lx, ly), 0x10);
+        assert_eq!(rail_vert_lane_bit(rx, ry), 0x20);
+    }
+
+    #[test]
+    fn tile_fract_picks_different_horz_lanes_on_upper_and_lower() {
+        use openttdrs_core::rail_horz_lane_bit;
+
+        let m = Map::new_flat(64, 64, 0);
+        let tx = 12;
+        let ty = 8;
+        let base_z = super::tile_min_corner_height(&m, tx as u32, ty as u32);
+        let elev = f32::from(base_z) * HEIGHT_PX;
+        let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - TILE_HALF_H + elev);
+        let upper = center + Vec2::new(0.0, TILE_HALF_H * 0.35);
+        let lower = center + Vec2::new(0.0, -TILE_HALF_H * 0.35);
+
+        let (ux, uy) = world_pos_to_tile_fract(upper, &m, tx, ty);
+        let (lx, ly) = world_pos_to_tile_fract(lower, &m, tx, ty);
+        assert_eq!(rail_horz_lane_bit(ux, uy), 0x04);
+        assert_eq!(rail_horz_lane_bit(lx, ly), 0x08);
     }
 
     #[test]

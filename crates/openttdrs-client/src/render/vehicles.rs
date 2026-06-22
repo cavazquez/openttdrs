@@ -177,7 +177,7 @@ pub(crate) fn spawn_initial_vehicles(
             VehicleCargoLabel(vehicle.id),
             Text2d::new(vehicle_cargo_label(vehicle)),
             TextFont {
-                font_size: 8.0,
+                font_size: FontSize::Px(8.0),
                 ..default()
             },
             TextColor(vehicle_cargo_color(vehicle)),

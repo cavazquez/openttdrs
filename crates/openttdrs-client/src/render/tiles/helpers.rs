@@ -11,8 +11,6 @@ pub(crate) const FLAT_WATER_LAYER_FRAC: f32 = -0.030;
 /// Costa entre tierra y agua: debe tapar agua vecina, pero no pintar su parte azul
 /// encima de la tierra que queda del lado interior de la orilla.
 pub(crate) const SHORE_LAYER_FRAC: f32 = -0.015;
-/// Solape mínimo para ocultar costuras finas entre tiles adyacentes.
-pub(crate) const TILE_OVERLAP_SCALE: f32 = 1.002;
 /// Capa de tranvía (`tram_flat_*`, SPR_TRAMWAY_OVERLAY) por encima del asfalto.
 pub(crate) const TRAM_OVERLAY_LAYER_FRAC: f32 = 0.028;
 
@@ -83,11 +81,7 @@ pub(crate) fn spawn_leveled_foundation(
         MapVisualLayer,
         ctx.map_tile_chunk(),
         img.sprite(),
-        Transform::from_translation(pos).with_scale(Vec3::new(
-            TILE_OVERLAP_SCALE,
-            TILE_OVERLAP_SCALE,
-            1.0,
-        )),
+        Transform::from_translation(pos),
     ));
 }
 
@@ -108,8 +102,7 @@ pub(crate) fn spawn_ground_sprite(
             ctx.info.base_z,
             0.0,
             half_h,
-        ))
-        .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+        )),
     ));
 }
 
@@ -126,8 +119,7 @@ pub(crate) fn push_water_sprite(
             ctx.ty_i32(),
             ctx.info.base_z,
             FLAT_WATER_LAYER_FRAC,
-        ))
-        .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+        )),
     ));
 }
 
@@ -144,7 +136,7 @@ pub(crate) fn spawn_coast_debug_label(
         ctx.map_tile_chunk(),
         Text2d::new(label),
         TextFont {
-            font_size: 9.0,
+            font_size: FontSize::Px(9.0),
             ..default()
         },
         TextColor(Color::srgb(1.0, 0.95, 0.4)),

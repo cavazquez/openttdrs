@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{TileCoord, TileKind, apply_command};
 
-use crate::iso::world_pos_to_tile_coord;
+use crate::iso::{world_pos_to_tile_coord, world_pos_to_tile_fract};
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, pick_vehicle_id_at_world,
     town_id_at_label_pos,
@@ -19,6 +19,7 @@ use super::drag::{
     tunnel_placement_is_valid,
 };
 use super::placement::cancel_placement;
+use super::rail_lane::rail_lane_bits_for_action;
 use crate::ui::toolbar::depot_panel::DepotPanelState;
 use crate::ui::toolbar::minimap::minimap_contains_cursor;
 use crate::ui::toolbar::minimap::{MinimapCell, MinimapRoot};
@@ -297,6 +298,13 @@ pub(crate) fn handle_tile_click(
     };
 
     let current = (tx, ty);
+    let tile_fract = world_pos_to_tile_fract(world_pos, &sim.state.map, tx, ty);
+    let rail_lane_bit = match action {
+        BuildMenuAction::RailHorz | BuildMenuAction::RailVert => {
+            rail_lane_bits_for_action(action, Some(tile_fract))
+        }
+        _ => None,
+    };
 
     if action_supports_drag(action) {
         if !drag_state.armed || drag_state.last_action != Some(action) {
@@ -306,6 +314,7 @@ pub(crate) fn handle_tile_click(
                 drag_state.last_tile = Some(current);
                 drag_state.last_action = Some(action);
                 drag_state.pending_tiles = vec![current];
+                drag_state.rail_lane_bit = rail_lane_bit;
             }
             return;
         }
@@ -321,7 +330,8 @@ pub(crate) fn handle_tile_click(
                 return;
             }
             let tiles = std::mem::take(&mut drag_state.pending_tiles);
-            let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state);
+            let lane = drag_state.rail_lane_bit;
+            let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state, lane);
             cancel_placement(&mut drag_state);
             if changed {
                 pending.pending = true;
@@ -330,7 +340,8 @@ pub(crate) fn handle_tile_click(
             }
         } else if mouse.just_released(MouseButton::Left) && drag_state.pending_tiles.len() == 1 {
             let tiles = std::mem::take(&mut drag_state.pending_tiles);
-            let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state);
+            let lane = drag_state.rail_lane_bit;
+            let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state, lane);
             cancel_placement(&mut drag_state);
             if changed {
                 pending.pending = true;
@@ -345,7 +356,12 @@ pub(crate) fn handle_tile_click(
         return;
     }
 
-    if let Some(cmd) = command_for_action(action, TileCoord::new(tx, ty), &station_state) {
+    if let Some(cmd) = command_for_action(
+        action,
+        TileCoord::new(tx, ty),
+        &station_state,
+        rail_lane_bit,
+    ) {
         if let Err(e) = apply_command(&mut sim.state, &cmd) {
             push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
         } else {

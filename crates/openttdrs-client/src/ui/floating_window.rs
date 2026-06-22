@@ -103,11 +103,7 @@ impl Plugin for FloatingWindowPlugin {
 
 /// `TextFont` con la fuente UTF-8 del proyecto (tildes, eñes, símbolos).
 pub(crate) fn window_text_font(asset_server: &AssetServer, size: f32) -> TextFont {
-    TextFont {
-        font: asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH),
-        font_size: size,
-        ..default()
-    }
+    crate::ui::font::text_font_loaded(asset_server, size)
 }
 
 /// Crea el marco de una ventana flotante (oculta) y devuelve

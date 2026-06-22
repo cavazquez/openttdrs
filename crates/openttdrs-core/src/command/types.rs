@@ -16,6 +16,8 @@ pub enum Command {
     PlaceRailBits(TileCoord, u8),
     /// Reemplaza la geometría de vía con `TrackBits` exactos (drag de herramientas HORZ/VERT).
     SetRailBits(TileCoord, u8),
+    /// Convierte vía recta (solo X o Y) en waypoint ferroviario.
+    PlaceRailWaypoint(TileCoord),
     PlaceRoadDepot(TileCoord),
     PlaceRoadDepotDir(TileCoord, u8),
     PlaceRailDepot(TileCoord),
@@ -27,6 +29,8 @@ pub enum Command {
     PlaceRailBridge(TileCoord, TileCoord),
     SetVehicleOrders(u32, Vec<TileCoord>),
     SetVehicleStationOrders(u32, Vec<TileCoord>),
+    /// Lista completa de órdenes (estaciones, waypoints, teselas).
+    SetVehicleOrderList(u32, Vec<crate::vehicle::VehicleOrder>),
     PlaceHouse(TileCoord),
     PlaceIndustry(TileCoord),
     PlaceIndustryKind(TileCoord, IndustryKind),
@@ -94,6 +98,10 @@ pub enum CommandError {
     InvalidTunnelEndpoints,
     /// Puente sin hueco que salvar (agua o terreno más bajo bajo el tramo).
     InvalidBridgeSpan,
+    /// `TrackBits` incompatibles con la pendiente de la tesela (`GetRailFoundation`).
+    InvalidRailOnSlope,
+    /// Solo vía recta (eje X o Y) admite waypoint.
+    CannotPlaceWaypointOnTrack,
 }
 
 /// Texto breve en español para mostrar al jugador cuando falla un comando.
@@ -129,6 +137,12 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         }
         CommandError::InvalidBridgeSpan => {
             "Puente inválido: las orillas al mismo nivel y agua o terreno más bajo bajo el tramo."
+        }
+        CommandError::InvalidRailOnSlope => {
+            "La vía no puede construirse en esta pendiente con esa geometría."
+        }
+        CommandError::CannotPlaceWaypointOnTrack => {
+            "El waypoint solo puede colocarse sobre vía recta (eje X o Y)."
         }
     }
 }

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use openttdrs_core::{Map, TileKind};
 
-use super::{TILE_OVERLAP_SCALE, TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite};
+use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite};
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
@@ -65,8 +65,7 @@ pub(crate) fn spawn_road_tile(
             base_z,
             0.02,
             road_half_h,
-        ))
-        .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+        )),
     ));
 
     if let Some(tfi) = ctx.tile.and_then(|t| tram_flat_sprite_index(tileh, t.m3)) {
@@ -85,8 +84,7 @@ pub(crate) fn spawn_road_tile(
                 base_z,
                 TRAM_OVERLAY_LAYER_FRAC,
                 tram_half_h,
-            ))
-            .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+            )),
         ));
     }
 
@@ -207,8 +205,7 @@ pub(crate) fn spawn_rail_tile(
                 base_z,
                 z,
                 rail_half_h,
-            ))
-            .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
+            )),
         ));
     }
     if let Some(t) = ctx.tile.filter(|t| rail_tile_is_signals(t.m5)) {

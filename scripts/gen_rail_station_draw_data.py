@@ -41,6 +41,11 @@ SPRITES = [
     (1080, "rail_roof_1.png"),  # SPR_RAIL_ROOF_STRUCTURE_Y_TILE_A
     (1081, "rail_roof_2.png"),  # SPR_RAIL_ROOF_STRUCTURE_X_TILE_B
     (1082, "rail_roof_3.png"),  # SPR_RAIL_ROOF_STRUCTURE_Y_TILE_B
+    # Waypoints (`SPR_WAYPOINT_*`, GRF extra `ogfx2e_extra`; ver gen_rail_waypoint_sprites.py).
+    (4974, "rail_4974.png"),
+    (4975, "rail_4975.png"),
+    (4976, "rail_4976.png"),
+    (4977, "rail_4977.png"),
 ]
 
 
@@ -54,7 +59,7 @@ def main() -> None:
         "// Offsets NFO (sprite_id, w, h, xrel, yrel) de las piezas de estación de",
         "// tren (`_station_display_datas_rail`, `table/station_land.h`).",
         "",
-        "/// Metadata NFO de plataformas, edificios y techos (1069–1082).",
+        "/// Metadata NFO de plataformas, edificios, techos (1069–1082) y waypoints (4974–4977).",
         f"pub static RAIL_STATION_SPRITE_META: [(u32, f32, f32, f32, f32); {len(SPRITES)}] = [",
     ]
     for sid, png in SPRITES:

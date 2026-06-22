@@ -1,5 +1,6 @@
 use std::sync::OnceLock;
 
+use bevy::prelude::*;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
 use super::road::RoadDepotLayerGfx;
@@ -513,9 +514,22 @@ fn junction_ground_off(tb: u8) -> u8 {
     4
 }
 
-/// Sprites para el realce blanco del autorraíl (fantasma de construcción):
-/// solo rieles (overlays 1005–1010, una pieza por trackbit), sin balasto ni
-/// suelo, como `SPR_AUTORAIL_*` de OpenTTD. En pendiente usa la pieza inclinada.
+/// Desplazamiento en pantalla (px) del overlay de riel respecto al centro del rombo.
+/// Los PNG `1005`–`1010` son solo el riel; alineados con la posición en la tesela
+/// completa `1013`–`1016`.
+#[must_use]
+pub fn rail_ghost_overlay_offset(sprite_id: u32) -> Vec2 {
+    match sprite_id {
+        1007 => Vec2::new(0.0, 5.5),   // UPPER
+        1008 => Vec2::new(0.0, -5.5),  // LOWER
+        1009 => Vec2::new(11.0, 0.0),  // RIGHT
+        1010 => Vec2::new(-11.0, 0.0), // LEFT
+        _ => Vec2::ZERO,
+    }
+}
+
+/// Sprites para el fantasma: overlays solo riel en plano (sin teñir la hierba);
+/// en pendiente la pieza inclinada completa con tinte suave.
 pub fn collect_rail_ghost_sprites(tb: u8, tileh: u8, out: &mut Vec<u32>) {
     out.clear();
     let t = tb & 0x3F;
@@ -580,6 +594,29 @@ pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<
 mod tests {
     use super::*;
     use openttdrs_core::{Map, TileCoord, TileKind};
+
+    #[test]
+    fn collect_rail_ghost_sprites_uses_rail_only_overlays_on_flat() {
+        let mut out = Vec::new();
+        collect_rail_ghost_sprites(RAIL_TB_LEFT, 0, &mut out);
+        assert_eq!(out, vec![1010]);
+        collect_rail_ghost_sprites(RAIL_TB_RIGHT, 0, &mut out);
+        assert_eq!(out, vec![1009]);
+        collect_rail_ghost_sprites(RAIL_TB_UPPER, 0, &mut out);
+        assert_eq!(out, vec![1007]);
+        collect_rail_ghost_sprites(RAIL_TB_LOWER, 0, &mut out);
+        assert_eq!(out, vec![1008]);
+    }
+
+    #[test]
+    fn rail_ghost_overlay_offset_separates_parallel_lanes() {
+        assert!(rail_ghost_overlay_offset(1010).x < 0.0);
+        assert!(rail_ghost_overlay_offset(1009).x > 0.0);
+        assert_ne!(
+            rail_ghost_overlay_offset(1007).y,
+            rail_ghost_overlay_offset(1008).y
+        );
+    }
 
     #[test]
     fn collect_rail_sprites_uses_snow_track_ids() {

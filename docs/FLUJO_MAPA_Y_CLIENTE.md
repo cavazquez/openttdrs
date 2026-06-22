@@ -40,4 +40,4 @@ Guía única que enlaza el pipeline principal del repo. Para detalle binario de 
 |-----------|-----------|
 | [README.md](../README.md) | Cómo correr, CI, stack |
 | [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) | MAPT, planos, footers, OpenTTD vs export |
-| [SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md](SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md) | Notas de una sesión de implementación v5+12 / señales |
+| [archive/SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md](archive/SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md) | Notas de sesión v5+12 / señales (histórico) |

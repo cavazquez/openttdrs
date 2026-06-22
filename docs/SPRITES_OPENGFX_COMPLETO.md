@@ -223,7 +223,7 @@ const ROAD_OFFSET: [u8; 16] = [
 | Estación (camión) | `truck_stop_ground_{0..3}.png` | 2708–2723 | Igual que bus |
 | Estación de tren | `rail_{1069..1074}.png` | 1069–1074 | Vía 1011/1012 + plataformas |
 
-Edificios `build_*`: en OpenTTD van con `TILE_SEQ_LINE` + `RemapCoords` (`station_land.h`); en openttdrs aún no se pintan. Roadmap: [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md).
+Edificios `build_*`: en OpenTTD van con `TILE_SEQ_LINE` + `RemapCoords` (`station_land.h`); en openttdrs aún no se pintan. Detalle: [archive/PLAN_PARADAS_REMAPCOORDS.md](archive/PLAN_PARADAS_REMAPCOORDS.md).
 
 **No** comparten el mismo sprite bus y camión; pueden verse parecidos al dibujar solo la baldosa.
 

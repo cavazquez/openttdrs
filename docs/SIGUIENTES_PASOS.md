@@ -1,175 +1,77 @@
 # Siguientes pasos — openttdrs
 
-Documento vivo: **qué documentar**, **dónde está**, y **cómo seguir** el desarrollo con
-prioridad en **juego en solitario** (hito 0.1). La fundación **I0–I7** ya está en `main`;
-**I8 (red / multijugador)** queda en backlog de mínima prioridad.
+Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo está en
+[ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md); el inventario completo de paridad en
+[PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md). Índice general: [README.md](README.md).
+
+**Hito actual:** 0.1 solitario · **I0–I7** hechos · **I8 (red)** backlog post-0.1.
 
 ---
 
-## Índice de documentación técnica
+## Prioridad inmediata (Sprint 1)
 
-| Documento | Contenido |
-|-----------|-----------|
-| [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) | Filosofía por incrementos, spec I0–I8, **estado actual** del repo. |
-| [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) | NFO, transparencia 8bpp, IDs de sprite, proyección isométrica, tabla road_tx/ty. |
-| [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) | MAPT, `m5` (carretera normal / cruce / depósito), `.ottdmap`, relieve 8px, referencias upstream. |
-| [INFORME_ARQUITECTURA_OPENTTD.md](INFORME_ARQUITECTURA_OPENTTD.md) | Visión del código de referencia en `reference/openttd-upstream/`. |
-| [PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md) | Construcción y toolbar (**SP2 cerrado**, 2026-05-22). |
-| [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Paradas bus/camión/tren y sprites. |
-| [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md) | **`RemapCoords`**, BUILD paradas, roadmap de render. |
-| [PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md) | Depósito carretera: alineación, experimento revertido, roadmap retomada. |
-| [PLAN_SP4_PULIDO.md](PLAN_SP4_PULIDO.md) | Pulido/deuda (SP4): saves, modularización, orden SP4→SP3→SP1. |
-| [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) | Casas/industrias en `.ottdmap` — prioridades P1–P6. |
-| [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md) | Paridad 1:1 industrias vs OpenTTD (tabla 0–174, anim, NewGRF). |
-| [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | Checklist de regresión SP2. |
+Ver [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) § Sprint 1:
+
+- [ ] Migración save v3→v4 con test
+- [ ] Test `effective_road_bits` en fixture `.ottdmap`
+- [ ] Pasada manual SP2 checklist
 
 ---
 
-## Hallazgos ya fijados en código y docs
+## Estado de fases SP
 
-1. **Sprite “coal mine” equivocado** — el ID antiguo era de otra industria; headframe correcto
-   y proceso de verificación: `SPRITES_OPENGFX.md` + commits históricos.
-2. **Cruces a nivel** — no usar bits 0–3 de `m5` como road bits; el eje de la carretera va
-   en el bit 0. Detalle en `TILES_Y_SAVEGAMES_OPENTTD.md`.
-3. **MAPT + `m5`** — hace falta el byte MAPT crudo en `Tile` para decodificar túneles/puentes
-   frente a `MP_ROAD`.
-4. **Intercambio `road_tx` ↔ `road_ty`** — respecto a `RoadDir`, para alinear textura OpenGFX
-   con la isometría del cliente; **validado visualmente** en mapas `.ottdmap`.
-5. **Limitaciones actuales (visual)** — carretera **plana** usa `road_flat_00..18` (`GetRoadSpriteOffset`);
-   faltan sobre todo **pendientes**, **estaciones de tren** completas y calibración fina de industrias;
-   ver [PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md).
-6. **Industrias sandbox** — `PlaceIndustrySpec` usa layouts base de OpenTTD para mina de carbón,
-   fábrica, granja, bosque, refinería, pozos, aserradero y minas. El ghost de construcción consume
-   la misma plantilla (`openttdrs_core::industry_template`), así que el footprint previsto y el
-   construido comparten una única fuente de verdad. Refinería quedó visualmente muy cercana al
-   original; `Farm`, `Factory` y `Coal Mine` son aceptables, pero podrían mejorar con calibración
-   fina de offsets/capas.
-7. **Fuente UI UTF-8** — `static/fonts/DejaVuSansMono.ttf` es un asset versionado separado de
-   `assets/`; se usa para que Bevy renderice acentos en paneles (`Fábrica`, `Refinería`,
-   `Petróleo`). `assets/` queda reservado para gráficos/sonidos generados por scripts e ignorados.
+| Fase | Estado | Referencia |
+|------|--------|------------|
+| **SP2** Construcción | ✅ Cerrado 2026-05-22 | [SP2_CHECKLIST.md](SP2_CHECKLIST.md) |
+| **SP3** Visual | 🟡 ~90 % | [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md), [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) |
+| **SP4** Pulido | 🟡 En curso | ROADMAP_SPRINTS S1 |
+| **SP1** Ciclo jugable | 🟡 | ROADMAP_SPRINTS S4 |
 
-## Estado del refactor del cliente
+**Huecos visuales reales (SP3):** junctions vía en pendiente; depósito carretera; culling global; industrias gfx ≥ 120.
 
-- `main.rs` conserva el armado de la app y los sistemas principales, pero el render de mapa vive
-  en `crates/openttdrs-client/src/render/`.
-- El render/índice de vehículos quedó aislado en `vehicle_render.rs`, separando esa lógica de la
-  construcción de teselas.
-- Las variables de entorno del cliente se leen desde `config.rs` para evitar parsing duplicado.
-- `RenderGrid` tiene tests para la inferencia de costa en agua exportada con `m5=0`.
+**Toolbar rail sin comando:** waypoint, señales, quitar vía, convertir → ROADMAP_SPRINTS S2/S5.
 
 ---
 
-## Cómo seguir (prioridades)
+## Hallazgos fijos (no olvidar)
 
-**Orden acordado (hito 0.1):** **SP4 → SP3 → SP1** — detalle en [PLAN_SP4_PULIDO.md](PLAN_SP4_PULIDO.md).
-
-**Orden de producto:** cerrar **0.1 en solitario** (fases SP) antes de invertir en **I8 (red)**.
-Dentro de SP, visual (SP3) y gameplay (SP1–SP2) pueden avanzar en paralelo según lo que
-más moleste al jugar.
-
-### SP4 — Pulido y deuda — **en curso**
-
-Plan: **[PLAN_SP4_PULIDO.md](PLAN_SP4_PULIDO.md)**.
-
-- [x] `check.sh ci` alineado con CI.
-- [x] Demo: paradas con `PlaceStationDir` (no sobre carretera).
-- [x] `startup/assets_check.rs` (extraído de `main.rs`).
-- [x] `CURRENT_SAVE_VERSION` + hook de migración en `save.rs`.
-- [ ] Migración real cuando cambie el esquema JSON (bump versión + test).
-- [ ] Test opcional `effective_road_bits` en fixture `.ottdmap` (core).
-
-### SP1 — Ciclo jugable
-
-- [x] HUD económico legible (dinero, préstamo, cargas, vehículos).
-- [x] Alertas vehículos sin ruta / sin órdenes.
-- [x] HUD distingue **depósito** vs **parada** (tooltips + tile seleccionado).
-- [x] Paradas demo coherentes (`PlaceStationDir` en hierba).
-- [x] Tests integración toolbar: carretera, vía, paradas, depósito, industria, órdenes, clonar.
-- [ ] Revisión manual flujo órdenes en partida nueva (checklist jugador).
-
-### SP2 — Construcción y herramientas — **cerrado (2026-05-22)**
-
-Plan: **[PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md)**. Validación: **[SP2_CHECKLIST.md](SP2_CHECKLIST.md)** (§ SP2.6 completado).
-
-| Doc | Uso |
-|-----|-----|
-| [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | CI ✓ + checklist manual ✓ |
-| [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Bus vs camión vs tren, sprites, conexión carretera |
-| [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md) | Render BUILD paradas (`RemapCoords`) |
-
-En código: errores HUD, preview, transporte, paradas/tren, industria, órdenes, mapa demo. Paradas bus/camión: GROUND + BUILD calibrados (`RemapCoords`, checklist y=9).
-
-### SP3 — Presentación del mapa (después de SP4)
-
-Plan detallado: **[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md)**. Fases SP3.0–SP3.6 **cerradas** salvo
-**depósito carretera** ([PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md))
-e industrias extendidas ([PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md)).
-
-**Checklist visual:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client` — [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md).
-
-**Laboratorio pendiente/agua:** `OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap cargo run -p openttdrs-client` — mapa 16×20 dedicado (regenerar: `python3 scripts/gen_sp3_slope_lab_ottdmap.py`).
-
-Resumen de huecos reales (mucho de lo “esquina/T + trackbits” **ya está** en `road_flat_*` / `collect_rail_sprites`):
-
-- **Pendientes vía en junctions / cimientos** — tramos rectos, T, cruce, **HORZ/VERT** en slope usan solo sprite inclinado (1031–1034); overlays 1005–1010 **solo en plano**. Piezas cardinales sueltas (1013–1016) igual. **Construcción** HORZ/VERT: herramientas en toolbar + `PlaceRailBits`/`SetRailBits`; vía diagonal sigue con `PlaceRail` por vecinos. **Saves reales (P5):** `python3 scripts/verify_parse_sav_rail_m5.py [partida.sav]` — ver [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) § P5.
-- **Estaciones** de tren: plataformas/edificios, no solo suelo bus/camión.
-- **Depósito carretera:** pipeline `RemapCoords` fase A en código; calibración visual pendiente (fase B).
-- **Casas/industrias** en `.ottdmap`: seguir [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) (P1 etapas casa → P6).
-- **Assets**: auditar `rail_*.png` (evitar placeholders del script).
-- **Rendimiento**: culling al dibujar el mapa (el agua ya culling; el resto del mapa no).
-- **Agua/costa**: validar Coast en saves reales; animación mar ya aproximada.
-
-Clon de referencia C++: `bash scripts/fetch-openttd-reference.sh`.
-
-### SP4 — Pulido y deuda — ver checklist arriba
-
-- ~~Alinear `./scripts/check.sh ci` con CI~~ — hecho.
-- Migraciones de save: hook listo; implementar al cambiar esquema.
-- Mantener docs y tests al día con el refactor modular del cliente/core.
-
-### Fundación incremental (referencia — hecho en `main`)
-
-- **I0–I5** — mapa, industria, vehículos, cargo, pathfinding.
-- **I6** — comandos del jugador (`openttdrs_core::command`, toolbar en cliente).
-- **I7** — save/load JSON (`save/`, F5/F9, `OPENTTDRS_JSON_SAVE`).
-
-### I8 — Red / multijugador (mínima prioridad, post-0.1)
-
-- Log de comandos, `apply_command_log`, transporte TCP, `--server` / `--client`.
-- Spec en [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) § Incremento 8; **no** bloquea el cierre del 0.1.
-
-### Higiene y referencia
-
-- Mantener `reference/openttd-upstream/` actualizado (`scripts/fetch-openttd-reference.sh`).
-- Tests que carguen un `.ottdmap` pequeño en memoria y comprueben `effective_road_bits` /
-  dimensiones (opcional, sin Bevy).
-- Seguir achicando `main.rs`: buenos candidatos son hotkeys/save-load, debug gizmos y animación
-  de agua.
+1. **Cruces a nivel** — no usar bits 0–3 de `m5` como road bits; eje en bit 0. Ver [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md).
+2. **MAPT + `m5`** — byte MAPT crudo necesario para túneles/puentes vs `MP_ROAD`.
+3. **`road_tx` ↔ `road_ty`** — intercambio respecto a `RoadDir` para isometría del cliente (validado visualmente).
+4. **Sprite coal mine** — ID correcto 2013; verificación en [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md).
+5. **Fuente UI** — `static/fonts/DejaVuSansMono.ttf` (no en `assets/` ignorado).
+6. **Estación tren** — multi-tesela `PlaceRailStationArea`, ventana selección, cruce X\|Y en intersecciones (save v3).
 
 ---
 
 ## Comandos útiles
 
 ```bash
-# Mapa real
+# Mapa desde save OpenTTD
 python3 scripts/parse_sav.py partida.sav assets/maps/mapa.ottdmap
 OTTDMAP_FILE=assets/maps/mapa.ottdmap cargo run -p openttdrs-client
 
-# Solo demo procedural
+# Demo procedural
 cargo run -p openttdrs-client
 
-# Tests core
-cargo test -p openttdrs-core
+# CI local
+bash scripts/check.sh ci
 
-# Validar panel/ghost de industrias
-cargo test -p openttdrs-client industry
-cargo test -p openttdrs-client preview
+# Checklist visual SP3
+OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap cargo run -p openttdrs-client
+
+# Captura automatizada (ghost / herramientas)
+OPENTTDRS_MAP_SHOT=/tmp/shot.png OPENTTDRS_MAP_SHOT_TOOL=rail_station cargo run -p openttdrs-client
 ```
 
 ---
 
-## Si algo se pierde otra vez
+## Si algo se pierde
 
-1. Buscar en los cuatro MD de `docs/` anteriores.
-2. Mirar comentarios en `crates/openttdrs-client/src/main.rs` (`effective_road_bits`, sprites).
-3. Upstream: `road_map.h`, `road_func.h`, `tile_map.h`, `saveload/map_sl.cpp`.
+1. [docs/README.md](README.md) — índice completo
+2. Comentarios en `crates/openttdrs-core/src/command/` y `crates/openttdrs-client/src/ui/toolbar/`
+3. Upstream: `bash scripts/fetch-openttd-reference.sh` → `reference/openttd-upstream/`
+
+---
+
+*Última actualización: 2026-06-11*

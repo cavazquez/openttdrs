@@ -2,7 +2,7 @@
 
 Documento de cierre para construcción en solitario: qué significa cada herramienta, sprites OpenTTD originales y qué pinta **openttdrs** hoy.
 
-Relacionado: [PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md), [SPRITES_OPENGFX_COMPLETO.md](SPRITES_OPENGFX_COMPLETO.md) §6, [PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md), **[PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md)** (investigación `RemapCoords` + roadmap BUILD).
+Relacionado: [archive/PLAN_SP2_CONSTRUCCION.md](archive/PLAN_SP2_CONSTRUCCION.md), [SPRITES_OPENGFX_COMPLETO.md](SPRITES_OPENGFX_COMPLETO.md) §6, [archive/PLAN_PARADAS_REMAPCOORDS.md](archive/PLAN_PARADAS_REMAPCOORDS.md) (investigación `RemapCoords` + roadmap BUILD).
 
 ---
 
@@ -83,7 +83,7 @@ Si aún se ven parecidos, revisar orientación (`m5` bajo).
 
 **Preview construcción:** mismas capas en `ui/toolbar/preview/road_stop.rs` (1×1, sin halo 9×9).
 
-Regenerar metadatos: `python3 scripts/gen_road_stop_gfx_data.py` — ver [PLAN_PARADAS_REMAPCOORDS.md](PLAN_PARADAS_REMAPCOORDS.md).
+Regenerar metadatos: `python3 scripts/gen_road_stop_gfx_data.py` — ver [archive/PLAN_PARADAS_REMAPCOORDS.md](archive/PLAN_PARADAS_REMAPCOORDS.md).
 
 Código: `spawn_station_tile` → `spawn_stop_ground_sprite` + `spawn_road_stop_buildings`.
 

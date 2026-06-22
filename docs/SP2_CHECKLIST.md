@@ -7,7 +7,7 @@ Criterio de cierre del hito **SP2** en solitario.
 
 Marcar al probar; CI de referencia: **mayo 2026**.
 
-Plan maestro: [PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md)  
+Plan histórico: [archive/PLAN_SP2_CONSTRUCCION.md](archive/PLAN_SP2_CONSTRUCCION.md)  
 Paradas/sprites: [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md)
 
 ---
@@ -120,7 +120,7 @@ Checklist:
 2. [x] **`stationlist-test.ottdmap`:** parada en carretera existente, sin crash; panel vehículo/estación si aplica
 3. [x] **F5** guardar / **F9** cargar: herramientas y órdenes siguen operativas
 
-SP2 considerado **cerrado** en [PLAN_SP2_CONSTRUCCION.md](PLAN_SP2_CONSTRUCCION.md) (validación manual 2026-05-22).
+SP2 considerado **cerrado** (validación manual 2026-05-22); plan original en [archive/PLAN_SP2_CONSTRUCCION.md](archive/PLAN_SP2_CONSTRUCCION.md).
 
 ### Opcional (no bloquea SP2)
 

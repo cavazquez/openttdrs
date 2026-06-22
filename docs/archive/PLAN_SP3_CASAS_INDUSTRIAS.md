@@ -1,7 +1,7 @@
 # Plan SP3 — Casas e industrias en `.ottdmap` (sin fallbacks genéricos)
 
 Documento de **seguimiento** para cerrar el hueco SP3.4 descrito en
-[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md) y [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md).
+[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md) y [../SIGUIENTES_PASOS.md](../SIGUIENTES_PASOS.md).
 
 **Estado (2026-05):** P1–P6 completados (casas + industrias en checklist y tablas upstream).
 Validar en partidas reales grandes sigue siendo útil; extensión **gfx 120–174** y NewGRF

@@ -8,7 +8,7 @@ de carretera con la misma lógica que OpenTTD, sin artefactos en teselas vecinas
 Validación visual 4 direcciones (fase 4) y captura checklist SP3 pendientes en cliente.
 
 **Relacionado:** [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md),
-[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md), [SPRITES_OPENGFX_COMPLETO.md](SPRITES_OPENGFX_COMPLETO.md) §6,
+[PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md), [../SPRITES_OPENGFX_COMPLETO.md](../SPRITES_OPENGFX_COMPLETO.md) §6,
 [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) §15,
 [código `crates/openttdrs-client/src/iso/coords.rs`](../crates/openttdrs-client/src/iso/coords.rs).
 

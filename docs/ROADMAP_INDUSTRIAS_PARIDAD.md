@@ -10,10 +10,10 @@ Fuera de alcance inmediato: motor NewGRF completo (`gfx ≥ 175`).
 
 **Relacionado:**
 
-- [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) — P1–P6 cerrados (tabla 0–119, estadios obra).
+- [archive/PLAN_SP3_CASAS_INDUSTRIAS.md](archive/PLAN_SP3_CASAS_INDUSTRIAS.md) — P1–P6 cerrados (tabla 0–119, estadios obra).
 - [INDUSTRIAS_OPENGFX.md](INDUSTRIAS_OPENGFX.md) — rangos gfx y sprites OpenGFX.
 - [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) §8 — bytes `m1`–`m6` (revisar nota sobre `m2`).
-- [PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md) — contexto SP3 visual general.
+- [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md) — contexto SP3 visual general.
 - Upstream: `src/industry_cmd.cpp`, `src/industry_map.h`, `src/table/industry_land.h`
   (copia parcial en `third_party/openttd/industry_land.h`).
 

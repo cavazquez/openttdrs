@@ -1,5 +1,7 @@
 //! Sistemas Bevy que construyen y refrescan la capa visual del mundo.
 
+use std::collections::HashSet;
+
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::TileKind;
@@ -12,21 +14,40 @@ use crate::iso::{
 use crate::render::viewport::initial_camera_span_tiles;
 use crate::render::viewport::{VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES};
 use crate::render::{
-    MapPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera, RenderGrid, TileAtlas,
-    TileRenderContext, TileViewportBounds, WorldAssets, flush_map_batches,
-    large_map_viewport_cull_enabled, ortho_visible_tile_bounds, push_forest_tree, push_water_tile,
-    spawn_bridge_middle, spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile,
-    spawn_rail_tile, spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
+    MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer, PrimaryGameCamera,
+    RenderGrid, TileAtlas, TileRenderContext, TileViewportBounds, WorldAssets, chunk_tile_bounds,
+    chunks_in_bounds, flush_map_batches, large_map_viewport_cull_enabled,
+    ortho_visible_tile_bounds, push_forest_tree, push_water_tile, spawn_bridge_middle,
+    spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
+    spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
 use crate::state::{ClientScreen, SimWorld};
 
 use super::vehicles::{TruckHandles, VehicleIndex, spawn_initial_vehicles};
 
 /// Petición de redibujo del mapa. `sync_camera`: solo tras F9 / cambio de tamaño.
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub(crate) struct RemapMapVisualsPending {
     pub(crate) pending: bool,
     pub(crate) sync_camera: bool,
+    /// Rebuild completo (construcción, F9). Pan en mapas grandes usa `full = false`.
+    pub(crate) full: bool,
+}
+
+impl Default for RemapMapVisualsPending {
+    fn default() -> Self {
+        Self {
+            pending: false,
+            sync_camera: false,
+            full: true,
+        }
+    }
+}
+
+/// Bloques 16×16 ya instanciados (solo mapas con culling por viewport).
+#[derive(Resource, Default)]
+pub(crate) struct LoadedMapTileChunks {
+    pub chunks: HashSet<(u32, u32)>,
 }
 
 /// Rectángulo de teselas para las que se generaron sprites (`MapVisualLayer`).
@@ -49,6 +70,7 @@ impl Plugin for WorldRenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RemapMapVisualsPending>()
             .init_resource::<MapTileSpawnViewport>()
+            .init_resource::<LoadedMapTileChunks>()
             .add_systems(OnEnter(ClientScreen::InGame), setup)
             .add_systems(
                 Update,
@@ -117,6 +139,7 @@ pub(crate) fn sync_map_tile_spawn_viewport(
         viewport.bounds = needed;
         pending.pending = true;
         pending.sync_camera = false;
+        pending.full = false;
     }
 }
 
@@ -158,15 +181,31 @@ pub(crate) fn setup(
         bounds: spawn_bounds,
     });
     let atlas = TileAtlas::build(&asset_server, &mut layout_assets);
-    spawn_world_layer(&mut commands, &asset_server, &atlas, &sim, spawn_bounds);
+    let assets = WorldAssets::load(&atlas);
+    commands.insert_resource(assets.clone());
+    commands.insert_resource(super::WaterAnimFrames {
+        water: assets.water_frames.clone(),
+        shore: assets.shore_frames.clone(),
+    });
+    commands.insert_resource(super::ChimneySmokeFrames(assets.chimney_smoke.clone()));
+    spawn_world_layer(
+        &mut commands,
+        &asset_server,
+        &assets,
+        &sim,
+        spawn_bounds,
+        true,
+    );
     commands.insert_resource(atlas);
+    commands.insert_resource(LoadedMapTileChunks {
+        chunks: chunks_in_bounds(spawn_bounds),
+    });
 }
 
 #[allow(clippy::too_many_lines)]
-fn spawn_world_layer(
+fn spawn_map_tiles_in_bounds(
     commands: &mut Commands,
-    asset_server: &AssetServer,
-    atlas: &TileAtlas,
+    assets: &WorldAssets,
     sim: &SimWorld,
     spawn_bounds: TileViewportBounds,
 ) {
@@ -180,13 +219,6 @@ fn spawn_world_layer(
         );
     }
 
-    let assets = WorldAssets::load(atlas);
-    commands.insert_resource(super::WaterAnimFrames {
-        water: assets.water_frames.clone(),
-        shore: assets.shore_frames.clone(),
-    });
-    commands.insert_resource(super::ChimneySmokeFrames(assets.chimney_smoke.clone()));
-    let truck_handles = TruckHandles::load(asset_server);
     let map = &sim.state.map;
     let render_grid = RenderGrid::from_map(map, mw, mh);
     let mut batches = MapSpriteBatches::default();
@@ -226,14 +258,14 @@ fn spawn_world_layer(
 
         match kind {
             TileKind::Road => {
-                spawn_road_tile(commands, map, mw, mh, &assets, &ctx, slope_half_ground);
+                spawn_road_tile(commands, map, mw, mh, assets, &ctx, slope_half_ground);
             }
             TileKind::Rail => {
                 spawn_rail_tile(
                     commands,
                     map,
                     (mw, mh),
-                    &assets,
+                    assets,
                     &ctx,
                     slope_half_ground,
                     &mut rail_layers,
@@ -248,7 +280,7 @@ fn spawn_world_layer(
             | TileKind::RailTunnel
             | TileKind::RoadBridge
             | TileKind::RailBridge => {
-                spawn_transport_object_tile(commands, &assets, &ctx, slope_half_ground);
+                spawn_transport_object_tile(commands, assets, &ctx, slope_half_ground);
             }
             TileKind::Industry => {
                 defer_overlay_tiles.push((tx, ty));
@@ -258,24 +290,24 @@ fn spawn_world_layer(
                     commands,
                     map,
                     (mw, mh),
-                    &assets,
+                    assets,
                     &ctx,
                     debug_coast,
                     &mut batches,
                 );
             }
             TileKind::Grass | TileKind::Forest | TileKind::CoalField | TileKind::Unknown(_) => {
-                spawn_generic_land_tile(commands, &assets, &ctx, slope_half_ground);
+                spawn_generic_land_tile(commands, assets, &ctx, slope_half_ground);
             }
             TileKind::Void => unreachable!(),
         }
 
         if kind == TileKind::Forest {
-            push_forest_tree(&assets, &ctx, &mut batches, mw);
+            push_forest_tree(assets, &ctx, &mut batches, mw);
         }
 
         // Tramos de puente que pasan por encima de esta tesela (IsBridgeAbove).
-        spawn_bridge_middle(commands, map, (mw, mh), &assets, &ctx);
+        spawn_bridge_middle(commands, map, (mw, mh), assets, &ctx);
     }
 
     flush_map_batches(commands, batches);
@@ -285,22 +317,18 @@ fn spawn_world_layer(
         match ctx.kind {
             TileKind::Station => spawn_station_tile(
                 commands,
-                &assets,
+                assets,
                 &ctx,
                 &sim.state.stations,
                 slope_half_ground,
             ),
-            TileKind::House => spawn_house_tile(commands, &assets, &ctx, slope_half_ground),
+            TileKind::House => spawn_house_tile(commands, assets, &ctx, slope_half_ground),
             TileKind::Industry => {
-                spawn_industry_tile(commands, &assets, &ctx, slope_half_ground);
+                spawn_industry_tile(commands, assets, &ctx, slope_half_ground);
             }
             _ => {}
         }
     }
-    spawn_initial_vehicles(commands, sim, &truck_handles);
-    commands.insert_resource(truck_handles);
-    let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
-    super::town_labels::spawn_town_labels(commands, sim, &label_font);
     if let Some(path) = trace_path {
         if let Err(e) = std::fs::write(&path, trace_rows.join("\n")) {
             error!("No se pudo escribir OPENTTDRS_RENDER_TRACE_OUT={path}: {e}");
@@ -308,6 +336,35 @@ fn spawn_world_layer(
             info!("Render trace escrito en {path}");
         }
     }
+}
+
+fn spawn_world_layer(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    assets: &WorldAssets,
+    sim: &SimWorld,
+    spawn_bounds: TileViewportBounds,
+    include_world_extras: bool,
+) {
+    if include_world_extras {
+        let truck_handles = TruckHandles::load(asset_server);
+        spawn_initial_vehicles(commands, sim, &truck_handles);
+        commands.insert_resource(truck_handles);
+        let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
+        super::town_labels::spawn_town_labels(commands, sim, &label_font);
+    }
+    spawn_map_tiles_in_bounds(commands, assets, sim, spawn_bounds);
+}
+
+fn spawn_map_chunk(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    sim: &SimWorld,
+    cx: u32,
+    cy: u32,
+) {
+    let (mw, mh) = sim.state.map.dimensions();
+    spawn_map_tiles_in_bounds(commands, assets, sim, chunk_tile_bounds(cx, cy, mw, mh));
 }
 
 fn tile_kind_name(kind: TileKind) -> &'static str {
@@ -359,42 +416,86 @@ pub(crate) fn apply_remap_map_visuals(
     mut commands: Commands,
     mut pending: ResMut<RemapMapVisualsPending>,
     q_vis: Query<Entity, With<MapVisualLayer>>,
+    q_chunks: Query<(Entity, &MapTileChunk), With<MapVisualLayer>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut q_cam: Query<
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
     asset_server: Res<AssetServer>,
-    atlas: Option<Res<TileAtlas>>,
+    assets: Option<Res<WorldAssets>>,
     sim: Res<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
+    mut loaded_chunks: ResMut<LoadedMapTileChunks>,
 ) {
     if !pending.pending {
         return;
     }
-    let Some(atlas) = atlas else {
+    let Some(assets) = assets else {
         return;
     };
     let do_sync_camera = pending.sync_camera;
+    let full_rebuild = pending.full;
     pending.pending = false;
     pending.sync_camera = false;
+    pending.full = true;
+
+    let (mw, mh) = sim.state.map.dimensions();
     let spawn_bounds = resolve_spawn_viewport(&sim, &windows, &q_cam);
     commands.insert_resource(MapTileSpawnViewport {
         bounds: spawn_bounds,
     });
-    let to_remove: Vec<Entity> = q_vis.iter().collect();
-    for e in to_remove {
-        commands.entity(e).despawn();
-    }
-    vehicle_index.rebuild(&sim.state.vehicles);
-    if large_map_viewport_cull_enabled(sim.state.map.dimensions().0, sim.state.map.dimensions().1) {
-        info!(
-            "Mapa visual: {} teselas en viewport (de {})",
-            spawn_bounds.tile_count(),
-            u64::from(sim.state.map.dimensions().0) * u64::from(sim.state.map.dimensions().1)
+
+    let use_incremental = !full_rebuild
+        && large_map_viewport_cull_enabled(mw, mh)
+        && !loaded_chunks.chunks.is_empty();
+
+    if use_incremental {
+        let needed = chunks_in_bounds(spawn_bounds);
+        let to_remove: HashSet<_> = loaded_chunks.chunks.difference(&needed).copied().collect();
+        let to_add: HashSet<_> = needed.difference(&loaded_chunks.chunks).copied().collect();
+
+        for (entity, chunk) in &q_chunks {
+            if to_remove.contains(&(chunk.cx, chunk.cy)) {
+                commands.entity(entity).despawn();
+            }
+        }
+        for &(cx, cy) in &to_add {
+            spawn_map_chunk(&mut commands, assets.as_ref(), &sim, cx, cy);
+        }
+        loaded_chunks.chunks = needed;
+        if !to_add.is_empty() || !to_remove.is_empty() {
+            info!(
+                "Mapa visual incremental: +{} −{} chunks ({} teselas visibles)",
+                to_add.len(),
+                to_remove.len(),
+                spawn_bounds.tile_count()
+            );
+        }
+    } else {
+        let to_remove: Vec<Entity> = q_vis.iter().collect();
+        for e in to_remove {
+            commands.entity(e).despawn();
+        }
+        vehicle_index.rebuild(&sim.state.vehicles);
+        if large_map_viewport_cull_enabled(mw, mh) {
+            info!(
+                "Mapa visual: {} teselas en viewport (de {})",
+                spawn_bounds.tile_count(),
+                u64::from(mw) * u64::from(mh)
+            );
+        }
+        spawn_world_layer(
+            &mut commands,
+            &asset_server,
+            assets.as_ref(),
+            &sim,
+            spawn_bounds,
+            true,
         );
+        loaded_chunks.chunks = chunks_in_bounds(spawn_bounds);
     }
-    spawn_world_layer(&mut commands, &asset_server, &atlas, &sim, spawn_bounds);
+
     if do_sync_camera {
         sync_camera_for_sim(&mut q_cam, &sim);
     }
@@ -430,6 +531,7 @@ mod tests {
         app.insert_resource(SimWorld::default());
         app.insert_resource(RemapMapVisualsPending::default());
         app.insert_resource(VehicleIndex::default());
+        app.insert_resource(LoadedMapTileChunks::default());
         app
     }
 

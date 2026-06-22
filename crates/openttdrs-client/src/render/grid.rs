@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use openttdrs_core::{Map, Tile, TileCoord, TileKind};
 
 use crate::iso::{iso, tile_slope_and_min_z};
+use crate::render::MapTileChunk;
 
 /// `true` si algún vecino del 8-neighborhood no es agua ni vacío (borde mar/tierra o río).
 ///
@@ -123,6 +124,11 @@ impl TileRenderContext {
 
     pub(crate) fn ty_i32(&self) -> i32 {
         self.ty as i32
+    }
+
+    #[must_use]
+    pub(crate) fn map_tile_chunk(&self) -> MapTileChunk {
+        MapTileChunk::from_tile(self.tx, self.ty)
     }
 }
 

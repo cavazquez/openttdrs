@@ -27,6 +27,7 @@ pub(crate) fn push_water_tile(
             // completo ya incluye agua/tierra del rombo, con transparencia
             // solo fuera de él.
             batches.shore.push((
+                ctx.map_tile_chunk(),
                 crate::render::ShoreTile(si as u8),
                 assets.shore[si].sprite(),
                 Transform::from_translation(tile_pos_half(

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use bevy::prelude::*;
+
 use crate::render::atlas::{AtlasSprite, TileAtlas};
 use crate::sprites::{
     HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, ROAD_DEPOT_GROUND_PATH, StationTileClass,
@@ -8,6 +10,7 @@ use crate::sprites::{
     road_stop_build_layers,
 };
 
+#[derive(Clone, Resource)]
 pub(crate) struct WorldAssets {
     pub(crate) grass: AtlasSprite,
     pub(crate) rough: AtlasSprite,

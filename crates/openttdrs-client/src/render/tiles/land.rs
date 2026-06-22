@@ -46,6 +46,7 @@ pub(crate) fn spawn_house_tile(
         );
         commands.spawn((
             MapVisualLayer,
+            ctx.map_tile_chunk(),
             img.sprite(),
             Transform::from_translation(pos3),
         ));
@@ -66,6 +67,7 @@ pub(crate) fn spawn_house_tile(
         );
         commands.spawn((
             MapVisualLayer,
+            ctx.map_tile_chunk(),
             img.sprite(),
             Transform::from_translation(pos3),
         ));
@@ -147,6 +149,7 @@ pub(crate) fn spawn_industry_tile(
             let pos_g = overlay_at(s.ground_xrel, s.ground_yrel, s.ground_w, s.ground_h, 0.45);
             commands.spawn((
                 MapVisualLayer,
+                ctx.map_tile_chunk(),
                 img.sprite(),
                 Transform::from_translation(pos_g),
             ));
@@ -159,6 +162,7 @@ pub(crate) fn spawn_industry_tile(
             let pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
             commands.spawn((
                 MapVisualLayer,
+                ctx.map_tile_chunk(),
                 img.sprite(),
                 Transform::from_translation(pos3),
             ));
@@ -244,6 +248,7 @@ pub(crate) fn spawn_generic_land_tile(
             );
             commands.spawn((
                 MapVisualLayer,
+                ctx.map_tile_chunk(),
                 img.sprite(),
                 Transform::from_translation(pos3),
             ));
@@ -322,6 +327,7 @@ fn spawn_field_fences(commands: &mut Commands, assets: &WorldAssets, ctx: &TileR
         );
         commands.spawn((
             MapVisualLayer,
+            ctx.map_tile_chunk(),
             assets.fences[ftype * 6 + variant].sprite(),
             Transform::from_translation(pos3),
         ));
@@ -379,6 +385,7 @@ pub(crate) fn push_forest_tree(
             ctx.ty_i32(),
         );
         batches.trees.push((
+            ctx.map_tile_chunk(),
             assets.trees[sprite_idx].sprite(),
             Transform::from_translation(pos3),
         ));

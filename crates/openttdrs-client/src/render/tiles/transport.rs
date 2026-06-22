@@ -57,6 +57,7 @@ pub(crate) fn spawn_road_tile(
     };
     commands.spawn((
         MapVisualLayer,
+        ctx.map_tile_chunk(),
         road_set[fi].sprite_colored(road_paint),
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),
@@ -76,6 +77,7 @@ pub(crate) fn spawn_road_tile(
         };
         commands.spawn((
             MapVisualLayer,
+            ctx.map_tile_chunk(),
             assets.tram_flat[tfi].sprite(),
             Transform::from_translation(tile_pos_half(
                 ctx.tx_i32(),
@@ -107,6 +109,7 @@ pub(crate) fn spawn_road_tile(
             );
             commands.spawn((
                 MapVisualLayer,
+                ctx.map_tile_chunk(),
                 assets.road_streetlights[lamp].sprite(),
                 Transform::from_translation(pos3),
             ));
@@ -135,6 +138,7 @@ pub(crate) fn spawn_road_tile(
             });
             commands.spawn((
                 MapVisualLayer,
+                ctx.map_tile_chunk(),
                 img.sprite_colored(crossing_paint),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),
@@ -195,6 +199,7 @@ pub(crate) fn spawn_rail_tile(
         let z = 0.02 + i as f32 * 0.0004;
         commands.spawn((
             MapVisualLayer,
+            ctx.map_tile_chunk(),
             img.sprite_colored(rail_paint),
             Transform::from_translation(tile_pos_half(
                 ctx.tx_i32(),
@@ -215,6 +220,7 @@ pub(crate) fn spawn_rail_tile(
             let z = 0.032 + si as f32 * 0.0015;
             commands.spawn((
                 MapVisualLayer,
+                ctx.map_tile_chunk(),
                 img.sprite(),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),

@@ -15,8 +15,8 @@ mod world;
 pub(crate) use assets::WorldAssets;
 pub(crate) use atlas::{AtlasSprite, TileAtlas};
 pub(crate) use components::{
-    IndustryPreviewCamera, MapPreviewCamera, MapSpriteBatches, MapVisualLayer, PrimaryGameCamera,
-    ShoreTile, VehiclePreviewCamera, WaterAnimFrames, WaterTile,
+    IndustryPreviewCamera, MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer,
+    PrimaryGameCamera, ShoreTile, VehiclePreviewCamera, WaterAnimFrames, WaterTile,
 };
 pub(crate) use grid::{RenderGrid, TileRenderContext};
 pub(crate) use smoke::{
@@ -33,7 +33,8 @@ pub(crate) use vehicles::{
     VehicleIndex, VehicleRenderPlugin, pick_vehicle_id_at_world, vehicle_world_position,
 };
 pub(crate) use viewport::{
-    TileViewportBounds, large_map_viewport_cull_enabled, ortho_visible_tile_bounds,
+    TileViewportBounds, chunk_tile_bounds, chunks_in_bounds, large_map_viewport_cull_enabled,
+    ortho_visible_tile_bounds,
 };
 pub(crate) use water::WaterAnimationPlugin;
 pub(crate) use world::{RemapMapVisualsPending, WorldRenderPlugin};

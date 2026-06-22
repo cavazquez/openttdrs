@@ -57,6 +57,7 @@ pub(crate) fn spawn_station_tile(
             if let Some(img) = assets.rail.get(&track_sid) {
                 commands.spawn((
                     MapVisualLayer,
+                    ctx.map_tile_chunk(),
                     img.sprite_colored(Color::srgb(0.88, 0.88, 0.97)),
                     Transform::from_translation(tile_pos_half(
                         ctx.tx_i32(),
@@ -94,6 +95,7 @@ pub(crate) fn spawn_station_tile(
                 );
                 commands.spawn((
                     MapVisualLayer,
+                    ctx.map_tile_chunk(),
                     img.sprite(),
                     Transform::from_translation(pos3),
                 ));
@@ -149,6 +151,7 @@ fn spawn_road_stop_link(
     let fi = road_flat_sprite_index(tileh, road_bits);
     commands.spawn((
         MapVisualLayer,
+        ctx.map_tile_chunk(),
         assets.road_flat[fi].sprite(),
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),
@@ -189,6 +192,7 @@ fn spawn_road_stop_buildings(
         );
         commands.spawn((
             MapVisualLayer,
+            ctx.map_tile_chunk(),
             image.sprite(),
             Transform::from_translation(center).with_scale(Vec3::new(scale, scale, 1.0)),
         ));
@@ -204,6 +208,7 @@ fn spawn_stop_ground_sprite(
 ) {
     commands.spawn((
         MapVisualLayer,
+        ctx.map_tile_chunk(),
         image.sprite(),
         Transform::from_translation(tile_pos(ctx.tx_i32(), ctx.ty_i32(), base_z, layer))
             .with_scale(Vec3::new(TILE_OVERLAP_SCALE, TILE_OVERLAP_SCALE, 1.0)),
@@ -238,6 +243,7 @@ pub(crate) fn spawn_transport_object_tile(
             };
             commands.spawn((
                 MapVisualLayer,
+                ctx.map_tile_chunk(),
                 image.sprite(),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),
@@ -291,6 +297,7 @@ fn spawn_road_depot_tile(
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
     commands.spawn((
         MapVisualLayer,
+        ctx.map_tile_chunk(),
         assets.road_depot_ground.sprite(),
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),
@@ -326,6 +333,7 @@ fn spawn_road_depot_tile(
         );
         commands.spawn((
             MapVisualLayer,
+            ctx.map_tile_chunk(),
             image.sprite(),
             Transform::from_translation(center).with_scale(Vec3::new(
                 TILE_OVERLAP_SCALE,
@@ -351,6 +359,7 @@ fn spawn_rail_depot_tile(
     {
         commands.spawn((
             MapVisualLayer,
+            ctx.map_tile_chunk(),
             image.sprite(),
             Transform::from_translation(tile_pos_half(
                 ctx.tx_i32(),
@@ -381,6 +390,7 @@ fn spawn_rail_depot_tile(
         );
         commands.spawn((
             MapVisualLayer,
+            ctx.map_tile_chunk(),
             image.sprite(),
             Transform::from_translation(center).with_scale(Vec3::new(
                 TILE_OVERLAP_SCALE,
@@ -400,6 +410,7 @@ fn spawn_object_sprite(
 ) {
     commands.spawn((
         MapVisualLayer,
+        ctx.map_tile_chunk(),
         image.sprite(),
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),

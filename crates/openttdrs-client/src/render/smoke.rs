@@ -72,6 +72,7 @@ pub(crate) fn spawn_chimney_smoke(
     );
     commands.spawn((
         MapVisualLayer,
+        ctx.map_tile_chunk(),
         ChimneySmoke {
             anchor,
             base_z: ctx.info.base_z,

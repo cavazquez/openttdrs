@@ -19,7 +19,7 @@ use crate::sprites::{
 use crate::state::SimWorld;
 
 use super::{HudBuildFeedback, SelectedTileInfo, SimHudControls, TileInfoText};
-use crate::ui::{OrderEditState, UiToolState};
+use crate::ui::{BuildMenuAction, OrderEditState, UiToolState};
 
 mod labels;
 mod station_hud;
@@ -92,6 +92,44 @@ pub(crate) fn setup_tile_info_ui(
     ));
 }
 
+/// Campos que afectan el contenido del HUD de tesela (no la posición en pantalla).
+#[derive(PartialEq, Clone)]
+pub(crate) struct TileInfoHudKey {
+    selected: Option<(i32, i32)>,
+    tick: u64,
+    cam_scale_bits: u32,
+    paused: bool,
+    sim_speed_bits: u32,
+    minimap: bool,
+    tool: Option<BuildMenuAction>,
+    order_vehicle: Option<u32>,
+    order_len: usize,
+    feedback: Option<String>,
+    money: i64,
+    loan: i64,
+    cargo_income: u64,
+    vehicle_costs: u64,
+    cargo_delivered: u64,
+    cargo_loaded: u64,
+    deliveries: u64,
+    pickups: u64,
+    industry_prod: u64,
+    veh_n: usize,
+    veh_running: usize,
+    st_n: usize,
+    save_path: String,
+    tile_mapt: Option<u8>,
+    tile_m5: Option<u8>,
+    tile_m1: Option<u8>,
+    tile_m2: Option<u8>,
+    tile_m3: Option<u8>,
+    tile_m3hi: Option<u8>,
+    tile_m7: Option<u8>,
+    tile_kind: Option<TileKind>,
+    tile_height: Option<u8>,
+    vehicle_alert: String,
+}
+
 /// Actualiza el texto de informacion del tile seleccionado.
 #[allow(clippy::too_many_arguments)] // firma dictada por el sistema ECS de Bevy
 pub(crate) fn update_tile_info_text(
@@ -108,6 +146,7 @@ pub(crate) fn update_tile_info_text(
         (&mut Text2d, &mut Transform),
         (With<TileInfoText>, Without<PrimaryGameCamera>),
     >,
+    mut cache: Local<Option<TileInfoHudKey>>,
 ) {
     let Ok((mut text, mut text_transform)) = text_q.single_mut() else {
         return;
@@ -129,6 +168,66 @@ pub(crate) fn update_tile_info_text(
     text_transform.translation.y = cam_transform.translation.y + half_h - 88.0 * proj.scale;
     text_transform.scale = Vec3::splat(proj.scale);
 
+    if feedback.message.is_some() && time.elapsed_secs() >= feedback.expires_at_secs {
+        feedback.message = None;
+    }
+
+    let vehicle_alert = vehicle_hud_alert_line(&sim.state.vehicles);
+    let tile_snapshot = selected.pos.and_then(|pos| {
+        sim.state.map.get(pos).map(|tile| {
+            (
+                tile.mapt,
+                tile.m5,
+                tile.m1,
+                tile.m2,
+                tile.m3,
+                tile.m3hi,
+                tile.m7,
+                tile.kind,
+                tile.height,
+            )
+        })
+    });
+    let key = TileInfoHudKey {
+        selected: selected.pos.map(|p| (p.x, p.y)),
+        tick: sim.state.tick.get(),
+        cam_scale_bits: proj.scale.to_bits(),
+        paused: hud.paused,
+        sim_speed_bits: hud.sim_speed.to_bits(),
+        minimap: hud.minimap_visible,
+        tool: tool_state.active_tool,
+        order_vehicle: order_state.vehicle_id,
+        order_len: order_state.orders.len(),
+        feedback: feedback.message.clone(),
+        money: sim.state.economy.money,
+        loan: sim.state.economy.loan,
+        cargo_income: sim.state.stats.cargo_income_earned,
+        vehicle_costs: sim.state.stats.vehicle_running_costs,
+        cargo_delivered: sim.state.stats.cargo_units_delivered,
+        cargo_loaded: sim.state.stats.cargo_units_loaded,
+        deliveries: sim.state.stats.cargo_deliveries,
+        pickups: sim.state.stats.cargo_pickups,
+        industry_prod: sim.state.stats.industry_cargo_units_produced,
+        veh_n: sim.state.vehicles.len(),
+        veh_running: sim.state.vehicles.iter().filter(|v| v.running).count(),
+        st_n: sim.state.stations.len(),
+        save_path: hud.json_save_path.clone(),
+        tile_mapt: tile_snapshot.map(|t| t.0),
+        tile_m5: tile_snapshot.map(|t| t.1),
+        tile_m1: tile_snapshot.map(|t| t.2),
+        tile_m2: tile_snapshot.map(|t| t.3),
+        tile_m3: tile_snapshot.map(|t| t.4),
+        tile_m3hi: tile_snapshot.map(|t| t.5),
+        tile_m7: tile_snapshot.map(|t| t.6),
+        tile_kind: tile_snapshot.map(|t| t.7),
+        tile_height: tile_snapshot.map(|t| t.8),
+        vehicle_alert: vehicle_alert.clone(),
+    };
+    if cache.as_ref() == Some(&key) {
+        return;
+    }
+    *cache = Some(key);
+
     let zoom_label = format!("Zoom {:.2}×", zoom_display_magnification(proj.scale));
     let pause_l = if hud.paused { "Pausa ON" } else { "Pausa OFF" };
     let speed_l = format!("Velocidad {:.0}x", hud.sim_speed);
@@ -147,14 +246,10 @@ pub(crate) fn update_tile_info_text(
         "mapa M:off"
     };
     let tick_n = sim.state.tick.get();
-    if feedback.message.is_some() && time.elapsed_secs() >= feedback.expires_at_secs {
-        feedback.message = None;
-    }
     let day_index = tick_n / SIM_TICKS_PER_DAY;
     let sim_year = day_index / SIM_DAYS_PER_YEAR + 1;
     let sim_doy = day_index % SIM_DAYS_PER_YEAR + 1;
 
-    let vehicle_alert = vehicle_hud_alert_line(&sim.state.vehicles);
     let feedback_append = feedback.message.as_ref().map(|m| {
         let t = truncate_hud_line(m, 44);
         format!(" | {t}")

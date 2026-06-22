@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::iso::{HEIGHT_PX, TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half};
-use crate::render::{AtlasSprite, MapVisualLayer, TileRenderContext, WorldAssets};
+use crate::render::{AtlasSprite, MapTileChunk, MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::foundation_gfx_for_tileh;
 
 /// Sesgo en la componente Z de **solo** el agua animada (sin sprite `shore_*`).
@@ -81,6 +81,7 @@ pub(crate) fn spawn_leveled_foundation(
     );
     commands.spawn((
         MapVisualLayer,
+        ctx.map_tile_chunk(),
         img.sprite(),
         Transform::from_translation(pos).with_scale(Vec3::new(
             TILE_OVERLAP_SCALE,
@@ -99,6 +100,7 @@ pub(crate) fn spawn_ground_sprite(
 ) {
     commands.spawn((
         MapVisualLayer,
+        ctx.map_tile_chunk(),
         image.sprite_colored(color),
         Transform::from_translation(tile_pos_half(
             ctx.tx_i32(),
@@ -112,11 +114,12 @@ pub(crate) fn spawn_ground_sprite(
 }
 
 pub(crate) fn push_water_sprite(
-    batch_water: &mut Vec<(Sprite, Transform)>,
+    batch_water: &mut Vec<(MapTileChunk, Sprite, Transform)>,
     h_water: &AtlasSprite,
     ctx: &TileRenderContext,
 ) {
     batch_water.push((
+        ctx.map_tile_chunk(),
         h_water.sprite(),
         Transform::from_translation(tile_pos(
             ctx.tx_i32(),
@@ -138,6 +141,7 @@ pub(crate) fn spawn_coast_debug_label(
     let label = format!("r{raw}/t{tileh}/s{shore_index}");
     commands.spawn((
         MapVisualLayer,
+        ctx.map_tile_chunk(),
         Text2d::new(label),
         TextFont {
             font_size: 9.0,

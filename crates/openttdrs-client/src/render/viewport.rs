@@ -1,9 +1,12 @@
 //! Ventana de teselas visibles para culling al generar sprites del mapa.
 
+use std::collections::HashSet;
+
 use bevy::prelude::*;
 
 use crate::config::env_flag;
 use crate::iso::world_to_tile;
+use crate::render::components::MAP_TILE_CHUNK_SIZE;
 
 /// Rectángulo de teselas `[tx0, tx1) × [ty0, ty1)` en coordenadas de mapa.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -138,6 +141,36 @@ pub fn ortho_visible_tile_bounds(
     }
 }
 
+/// Rectángulo de teselas de un bloque `MAP_TILE_CHUNK_SIZE`×`MAP_TILE_CHUNK_SIZE`.
+#[must_use]
+pub fn chunk_tile_bounds(cx: u32, cy: u32, mw: u32, mh: u32) -> TileViewportBounds {
+    TileViewportBounds {
+        tx0: cx * MAP_TILE_CHUNK_SIZE,
+        ty0: cy * MAP_TILE_CHUNK_SIZE,
+        tx1: ((cx + 1) * MAP_TILE_CHUNK_SIZE).min(mw),
+        ty1: ((cy + 1) * MAP_TILE_CHUNK_SIZE).min(mh),
+    }
+}
+
+/// Conjunto de bloques que intersectan `bounds`.
+#[must_use]
+pub fn chunks_in_bounds(bounds: TileViewportBounds) -> HashSet<(u32, u32)> {
+    if bounds.tx1 <= bounds.tx0 || bounds.ty1 <= bounds.ty0 {
+        return HashSet::new();
+    }
+    let cx0 = bounds.tx0 / MAP_TILE_CHUNK_SIZE;
+    let cy0 = bounds.ty0 / MAP_TILE_CHUNK_SIZE;
+    let cx1 = bounds.tx1.saturating_sub(1) / MAP_TILE_CHUNK_SIZE;
+    let cy1 = bounds.ty1.saturating_sub(1) / MAP_TILE_CHUNK_SIZE;
+    let mut out = HashSet::new();
+    for cy in cy0..=cy1 {
+        for cx in cx0..=cx1 {
+            out.insert((cx, cy));
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,5 +210,28 @@ mod tests {
     fn large_map_threshold_at_256_squared() {
         assert!(large_map_viewport_cull_enabled(256, 256));
         assert!(!large_map_viewport_cull_enabled(63, 63));
+    }
+
+    #[test]
+    fn chunks_in_bounds_covers_viewport() {
+        let bounds = TileViewportBounds {
+            tx0: 10,
+            ty0: 20,
+            tx1: 50,
+            ty1: 40,
+        };
+        let chunks = chunks_in_bounds(bounds);
+        assert!(chunks.contains(&(0, 1)));
+        assert!(chunks.contains(&(3, 2)));
+        assert_eq!(chunks.len(), 4 * 2);
+    }
+
+    #[test]
+    fn chunk_tile_bounds_clamps_to_map() {
+        let b = chunk_tile_bounds(15, 15, 256, 256);
+        assert_eq!(b.tx0, 240);
+        assert_eq!(b.ty0, 240);
+        assert_eq!(b.tx1, 256);
+        assert_eq!(b.ty1, 256);
     }
 }

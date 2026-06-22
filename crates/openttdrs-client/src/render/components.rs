@@ -22,6 +22,25 @@ pub(crate) struct WaterAnimFrames {
 #[derive(Component)]
 pub(crate) struct MapVisualLayer;
 
+/// Bloque espacial del mapa (16×16 teselas) para culling incremental al hacer pan.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct MapTileChunk {
+    pub cx: u32,
+    pub cy: u32,
+}
+
+pub(crate) const MAP_TILE_CHUNK_SIZE: u32 = 16;
+
+impl MapTileChunk {
+    #[must_use]
+    pub fn from_tile(tx: u32, ty: u32) -> Self {
+        Self {
+            cx: tx / MAP_TILE_CHUNK_SIZE,
+            cy: ty / MAP_TILE_CHUNK_SIZE,
+        }
+    }
+}
+
 /// Cámara isométrica principal (ventana). Distingue de [`MapPreviewCamera`].
 #[derive(Component)]
 pub(crate) struct PrimaryGameCamera;
@@ -40,7 +59,7 @@ pub(crate) struct VehiclePreviewCamera;
 
 #[derive(Default)]
 pub(crate) struct MapSpriteBatches {
-    pub(super) water: Vec<(Sprite, Transform)>,
-    pub(super) shore: Vec<(ShoreTile, Sprite, Transform)>,
-    pub(super) trees: Vec<(Sprite, Transform)>,
+    pub(super) water: Vec<(MapTileChunk, Sprite, Transform)>,
+    pub(super) shore: Vec<(MapTileChunk, ShoreTile, Sprite, Transform)>,
+    pub(super) trees: Vec<(MapTileChunk, Sprite, Transform)>,
 }

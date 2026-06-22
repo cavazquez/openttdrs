@@ -154,6 +154,7 @@ pub(crate) fn spawn_bridge_middle(
         );
         commands.spawn((
             MapVisualLayer,
+            ctx.map_tile_chunk(),
             image.sprite(),
             Transform::from_translation(pos),
         ));

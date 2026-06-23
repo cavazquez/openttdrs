@@ -8,7 +8,9 @@ use crate::render::{
     town_id_at_label_pos,
 };
 use crate::state::SimWorld;
-use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, push_build_command_error};
+use crate::ui::hud::{
+    HudBuildFeedback, SelectedTileInfo, push_build_command_error, push_build_command_success,
+};
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::save_window::SaveWindowState;
 use crate::ui::town_window::{TownWindowState, town_for_house_tile};
@@ -341,6 +343,7 @@ pub(crate) fn handle_tile_click(
             cancel_placement(&mut drag_state);
             if changed {
                 pending.pending = true;
+                push_build_command_success(&mut hud_feedback);
             } else if let Some(e) = err {
                 push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
             }
@@ -351,6 +354,7 @@ pub(crate) fn handle_tile_click(
             cancel_placement(&mut drag_state);
             if changed {
                 pending.pending = true;
+                push_build_command_success(&mut hud_feedback);
             } else if let Some(e) = err {
                 push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
             }
@@ -372,6 +376,7 @@ pub(crate) fn handle_tile_click(
             push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
         } else {
             pending.pending = true;
+            push_build_command_success(&mut hud_feedback);
         }
     }
 }

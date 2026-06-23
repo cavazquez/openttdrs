@@ -198,6 +198,56 @@ pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrd
 }
 
 #[must_use]
+pub fn stop_kind_from_m6(m6: u8) -> StopKind {
+    match station_type_from_m6(m6) {
+        2 => StopKind::TruckStop,
+        3 => StopKind::BusStop,
+        STATION_TYPE_RAIL_WAYPOINT => StopKind::RailWaypoint,
+        _ => StopKind::RailStation,
+    }
+}
+
+/// Desajustes entre teselas `MP_STATION` y entradas en [`GameState::stations`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StationMapCoherenceReport {
+    pub tiles_without_station: Vec<TileCoord>,
+    pub stations_without_tile: Vec<TileCoord>,
+}
+
+/// Comprueba que cada tesela `Station` tenga entrada en `state.stations` y viceversa.
+#[must_use]
+pub fn station_map_coherence(state: &crate::GameState) -> StationMapCoherenceReport {
+    use std::collections::HashSet;
+
+    let mut report = StationMapCoherenceReport::default();
+    let state_positions: HashSet<(i32, i32)> =
+        state.stations.iter().map(|s| (s.pos.x, s.pos.y)).collect();
+
+    let (mw, mh) = state.map.dimensions();
+    let mut tile_positions = HashSet::new();
+    for y in 0..mh {
+        for x in 0..mw {
+            let c = TileCoord::new(x.cast_signed(), y.cast_signed());
+            if state.map.get_kind(c) == Some(TileKind::Station) {
+                tile_positions.insert((c.x, c.y));
+                if !state_positions.contains(&(c.x, c.y)) {
+                    report.tiles_without_station.push(c);
+                }
+            }
+        }
+    }
+
+    for station in &state.stations {
+        let key = (station.pos.x, station.pos.y);
+        if !tile_positions.contains(&key) {
+            report.stations_without_tile.push(station.pos);
+        }
+    }
+
+    report
+}
+
+#[must_use]
 pub const fn station_covers_tile(station_pos: TileCoord, tile: TileCoord, radius: i32) -> bool {
     (tile.x - station_pos.x).abs() <= radius && (tile.y - station_pos.y).abs() <= radius
 }
@@ -255,4 +305,47 @@ pub fn station_coverage_at(
     }
 
     coverage
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod coherence_tests {
+    use super::*;
+    use crate::{Command, GameState, command::apply_command};
+
+    #[test]
+    fn stop_kind_from_m6_maps_openttd_station_types() {
+        assert_eq!(stop_kind_from_m6(2 << 3), StopKind::TruckStop);
+        assert_eq!(stop_kind_from_m6(3 << 3), StopKind::BusStop);
+        assert_eq!(stop_kind_from_m6(0), StopKind::RailStation);
+        assert_eq!(stop_kind_from_m6(7 << 3), StopKind::RailWaypoint);
+    }
+
+    #[test]
+    fn station_map_coherence_flags_orphan_tile_and_state() {
+        let mut state = GameState::new(6, 6);
+        state
+            .map
+            .set_kind(TileCoord::new(1, 1), TileKind::Station)
+            .unwrap();
+        state.stations.push(Station::new(TileCoord::new(3, 3)));
+        let report = station_map_coherence(&state);
+        assert_eq!(report.tiles_without_station, vec![TileCoord::new(1, 1)]);
+        assert_eq!(report.stations_without_tile, vec![TileCoord::new(3, 3)]);
+    }
+
+    #[test]
+    fn place_station_dir_keeps_map_and_state_aligned() {
+        let mut state = GameState::new(8, 8);
+        let road = TileCoord::new(4, 5);
+        let stop = TileCoord::new(4, 4);
+        apply_command(&mut state, &Command::PlaceRoad(road)).unwrap();
+        apply_command(&mut state, &Command::PlaceStationDir(stop, 1)).unwrap();
+        let report = station_map_coherence(&state);
+        assert!(report.tiles_without_station.is_empty());
+        assert!(report.stations_without_tile.is_empty());
+        assert_eq!(state.map.get_kind(stop), Some(TileKind::Station));
+        assert_eq!(state.stations.len(), 1);
+        assert_eq!(state.stations[0].pos, stop);
+    }
 }

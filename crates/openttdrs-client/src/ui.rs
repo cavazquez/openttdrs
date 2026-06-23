@@ -22,10 +22,10 @@ use buy_window::{
 };
 pub(crate) use hud::SimHudControls;
 use hud::{
-    HoveredTileCoord, HudBuildFeedback, HudSoftPingHandle, PlayHudSoftPing, SelectedTileInfo,
-    animate_income_popups, cycle_json_save_path_hotkey, flush_hud_soft_ping, handle_pause_toggle,
-    handle_tool_hotkeys, load_hud_soft_ping, play_hud_soft_ping, setup_tile_info_ui,
-    spawn_income_popups, update_tile_info_text,
+    HoveredTileCoord, HudBuildFeedback, HudSfxHandles, PlayHudSfx, SelectedTileInfo,
+    animate_income_popups, cycle_json_save_path_hotkey, flush_hud_sfx, handle_pause_toggle,
+    handle_tool_hotkeys, load_hud_sfx, play_hud_sfx, setup_tile_info_ui, spawn_income_popups,
+    update_tile_info_text,
 };
 use industry_panel::{
     IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
@@ -73,8 +73,8 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<HoveredTileCoord>()
         .init_resource::<SimHudControls>()
         .init_resource::<HudBuildFeedback>()
-        .init_resource::<HudSoftPingHandle>()
-        .add_message::<PlayHudSoftPing>()
+        .init_resource::<HudSfxHandles>()
+        .add_message::<PlayHudSfx>()
         .init_resource::<UiToolState>()
         .init_resource::<StationBuildState>()
         .init_resource::<DragBuildState>()
@@ -108,7 +108,7 @@ impl Plugin for ClientUiPlugin {
                 setup_buy_window,
                 setup_vehicle_window,
                 setup_rail_station_picker,
-                load_hud_soft_ping,
+                load_hud_sfx,
             )
                 .in_set(StartupSet::Ui),
         )
@@ -174,7 +174,7 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             Update,
-            (update_cursor_tile, handle_tile_click, flush_hud_soft_ping)
+            (update_cursor_tile, handle_tile_click, flush_hud_sfx)
                 .chain()
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),
@@ -195,7 +195,7 @@ impl Plugin for ClientUiPlugin {
                 sync_buy_window,
                 sync_rail_station_picker,
                 sync_vehicle_window,
-                play_hud_soft_ping,
+                play_hud_sfx,
                 update_tile_info_text,
             )
                 .in_set(UpdateSet::Ui)

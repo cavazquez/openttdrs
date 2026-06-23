@@ -86,10 +86,11 @@ pub use save::CURRENT_SAVE_VERSION;
 pub use save::SaveError;
 pub use save::load_from_str;
 pub use station::{
-    STATION_COVERAGE_RADIUS, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage, StopKind,
-    industry_in_station_coverage, is_rail_waypoint_at, is_rail_waypoint_tile,
-    rail_station_approach_tile, resolve_order_destination, station_coverage_at,
-    station_covers_tile, station_type_from_m6,
+    STATION_COVERAGE_RADIUS, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage,
+    StationMapCoherenceReport, StopKind, industry_in_station_coverage, is_rail_waypoint_at,
+    is_rail_waypoint_tile, rail_station_approach_tile, resolve_order_destination,
+    station_coverage_at, station_covers_tile, station_map_coherence, station_type_from_m6,
+    stop_kind_from_m6,
 };
 pub use tick::GameTick;
 pub use tnbp_decode::{

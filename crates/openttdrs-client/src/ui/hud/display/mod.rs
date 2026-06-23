@@ -29,9 +29,10 @@ pub(crate) use station_hud::{
     rail_depot_tile_details, road_depot_tile_details, station_details_text,
 };
 
-/// Alertas breves de vehículos para la tercera línea del HUD (sin ruta / sin órdenes).
+/// Alertas breves de vehículos para la tercera línea del HUD.
 #[must_use]
-pub(crate) fn vehicle_hud_alert_line(vehicles: &[openttdrs_core::Vehicle]) -> String {
+pub(crate) fn vehicle_hud_alert_line(state: &openttdrs_core::GameState) -> String {
+    let vehicles = &state.vehicles;
     let mut parts = Vec::new();
     let stuck_route = vehicles
         .iter()
@@ -64,7 +65,97 @@ pub(crate) fn vehicle_hud_alert_line(vehicles: &[openttdrs_core::Vehicle]) -> St
         parts.push(format!("sin órdenes: {no_orders} vehículos"));
     }
 
+    let incompatible = vehicles
+        .iter()
+        .filter(|v| vehicle_has_incompatible_stop(state, v))
+        .count();
+    if incompatible == 1 {
+        if let Some(v) = vehicles
+            .iter()
+            .find(|v| vehicle_has_incompatible_stop(state, v))
+        {
+            parts.push(format!("parada incompatible: vehículo {}", v.id));
+        }
+    } else if incompatible > 1 {
+        parts.push(format!("parada incompatible: {incompatible} vehículos"));
+    }
+
+    let waiting_cargo = vehicles
+        .iter()
+        .filter(|v| vehicle_waiting_for_cargo(state, v))
+        .count();
+    if waiting_cargo == 1 {
+        if let Some(v) = vehicles
+            .iter()
+            .find(|v| vehicle_waiting_for_cargo(state, v))
+        {
+            parts.push(format!("sin carga disponible: vehículo {}", v.id));
+        }
+    } else if waiting_cargo > 1 {
+        parts.push(format!("sin carga disponible: {waiting_cargo} vehículos"));
+    }
+
     parts.join(" | ")
+}
+
+fn vehicle_has_incompatible_stop(
+    state: &openttdrs_core::GameState,
+    v: &openttdrs_core::Vehicle,
+) -> bool {
+    use openttdrs_core::VehicleOrder;
+
+    if !v.running || v.orders.is_empty() {
+        return false;
+    }
+    let Some(order) = v.orders.get(v.current_order) else {
+        return false;
+    };
+    match order {
+        VehicleOrder::Station { station, .. } => state
+            .stations
+            .iter()
+            .find(|s| s.pos == *station)
+            .is_some_and(|st| !st.can_service_vehicle(v.kind) || st.is_waypoint()),
+        VehicleOrder::Waypoint { .. } => v.kind != openttdrs_core::VehicleKind::Train,
+        VehicleOrder::Tile(_) => false,
+    }
+}
+
+fn vehicle_waiting_for_cargo(
+    state: &openttdrs_core::GameState,
+    v: &openttdrs_core::Vehicle,
+) -> bool {
+    use openttdrs_core::{STATION_COVERAGE_RADIUS, VehicleOrder, station_covers_tile};
+
+    if !v.running || v.cargo > 0 || v.no_network_route_to_order || v.orders.is_empty() {
+        return false;
+    }
+    let Some(VehicleOrder::Station { station, .. }) = v.orders.get(v.current_order).copied() else {
+        return false;
+    };
+    if !station_covers_tile(station, v.pos, 1) && v.pos != station {
+        return false;
+    }
+    let Some(st) = state.stations.iter().find(|s| s.pos == station) else {
+        return false;
+    };
+    if !st.can_service_vehicle(v.kind) {
+        return false;
+    }
+    let industry_has = state.industries.iter().any(|ind| {
+        ind.stock > 0
+            && openttdrs_core::industry_in_station_coverage(ind, station, STATION_COVERAGE_RADIUS)
+            && st.accepts_cargo(ind.output_cargo())
+    });
+    let station_has = match v.kind {
+        openttdrs_core::VehicleKind::Bus => {
+            st.cargo_stock.passengers > 0 || st.cargo_stock.mail > 0
+        }
+        openttdrs_core::VehicleKind::Truck | openttdrs_core::VehicleKind::Train => {
+            st.stock > 0 || st.cargo_stock.pick_freight_to_load(v.cargo_type).is_some()
+        }
+    };
+    !industry_has && !station_has
 }
 
 /// Crea el texto de informacion del tile.
@@ -168,7 +259,7 @@ pub(crate) fn update_tile_info_text(
         feedback.message = None;
     }
 
-    let vehicle_alert = vehicle_hud_alert_line(&sim.state.vehicles);
+    let vehicle_alert = vehicle_hud_alert_line(&sim.state);
     let tile_snapshot = selected.pos.and_then(|pos| {
         sim.state.map.get(pos).map(|tile| {
             (
@@ -454,7 +545,9 @@ mod tests {
     use bevy::sprite::Anchor;
     use bevy::window::{PrimaryWindow, WindowResolution};
     use openttdrs_core::Vehicle;
-    use openttdrs_core::{GameState, Industry, IndustryKind, Station, Tile, TileCoord, TileKind};
+    use openttdrs_core::{
+        GameState, Industry, IndustryKind, Station, StopKind, Tile, TileCoord, TileKind,
+    };
 
     use crate::render::PrimaryGameCamera;
     use crate::state::SimWorld;
@@ -665,9 +758,46 @@ mod tests {
         v1.no_network_route_to_order = true;
         let mut v2 = Vehicle::new(2, openttdrs_core::VehicleKind::Truck, origin, origin);
         v2.running = true;
-        let alert = vehicle_hud_alert_line(&[v1, v2]);
+        let mut state = GameState::new(4, 4);
+        state.vehicles = vec![v1, v2];
+        let alert = vehicle_hud_alert_line(&state);
         assert!(alert.contains("sin ruta por red: vehículo 1"));
         assert!(alert.contains("sin órdenes: vehículo 2"));
+    }
+
+    #[test]
+    fn vehicle_hud_alert_line_reports_incompatible_stop() {
+        let stop = TileCoord::new(2, 2);
+        let mut state = GameState::new(8, 8);
+        state
+            .stations
+            .push(Station::new_with_kind(stop, StopKind::BusStop));
+        let mut truck = Vehicle::new(3, openttdrs_core::VehicleKind::Truck, stop, stop);
+        truck.running = true;
+        truck.set_station_orders(vec![stop]);
+        state.vehicles.push(truck);
+
+        let alert = vehicle_hud_alert_line(&state);
+        assert!(alert.contains("parada incompatible: vehículo 3"));
+    }
+
+    #[test]
+    fn vehicle_hud_alert_line_reports_empty_cargo_at_load_stop() {
+        let stop = TileCoord::new(2, 2);
+        let mut state = GameState::new(8, 8);
+        state
+            .stations
+            .push(Station::new_with_kind(stop, StopKind::TruckStop));
+        state
+            .industries
+            .push(Industry::new(TileCoord::new(2, 4), IndustryKind::CoalMine));
+        let mut truck = Vehicle::new(4, openttdrs_core::VehicleKind::Truck, stop, stop);
+        truck.running = true;
+        truck.set_station_orders(vec![stop]);
+        state.vehicles.push(truck);
+
+        let alert = vehicle_hud_alert_line(&state);
+        assert!(alert.contains("sin carga disponible: vehículo 4"));
     }
 
     #[test]

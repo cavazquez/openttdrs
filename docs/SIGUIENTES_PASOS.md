@@ -15,7 +15,7 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 - [x] Pasada SP2: CI + tests `command` / `preview` (ver § S1 refresh en [SP2_CHECKLIST.md](SP2_CHECKLIST.md))
 - [x] `check.sh ci` documentado en [README.md](../README.md)
 
-**Siguiente foco recomendado:** [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) § Sprint 4 (SP1 ciclo jugable) o § Sprint 3 (visual).
+**Siguiente foco recomendado:** [SP1_CHECKLIST.md](SP1_CHECKLIST.md) (sesión manual) y [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) § Sprint 3 (visual).
 
 ---
 
@@ -26,7 +26,7 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 | **SP2** Construcción | ✅ Cerrado 2026-05-22 | [SP2_CHECKLIST.md](SP2_CHECKLIST.md) |
 | **SP3** Visual | 🟡 ~90 % | [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md), [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) |
 | **SP4** Pulido | ✅ Cerrado 2026-06-22 | ROADMAP_SPRINTS S1 |
-| **SP1** Ciclo jugable | 🟡 | ROADMAP_SPRINTS S4 |
+| **SP1** Ciclo jugable | 🟡 En curso | [SP1_CHECKLIST.md](SP1_CHECKLIST.md), ROADMAP S4 |
 
 **Huecos visuales reales (SP3):** junctions vía en pendiente; depósito carretera; culling global; industrias gfx ≥ 120.
 

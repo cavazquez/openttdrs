@@ -14,3 +14,8 @@ pub(crate) fn push_build_command_error(
     feedback.expires_at_secs = elapsed_secs + BUILD_ERROR_DISPLAY_SECS;
     feedback.pending_soft_ping = true;
 }
+
+/// Encola sonido breve tras un comando de construcción exitoso.
+pub(crate) fn push_build_command_success(feedback: &mut HudBuildFeedback) {
+    feedback.pending_build_ok_ping = true;
+}

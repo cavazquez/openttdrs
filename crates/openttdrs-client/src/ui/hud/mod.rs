@@ -6,14 +6,12 @@ mod income_popup;
 mod input;
 mod sound_ping;
 
-pub(crate) use feedback::push_build_command_error;
+pub(crate) use feedback::{push_build_command_error, push_build_command_success};
 
 pub(crate) use display::{setup_tile_info_ui, update_tile_info_text};
 pub(crate) use income_popup::{animate_income_popups, spawn_income_popups};
 pub(crate) use input::{cycle_json_save_path_hotkey, handle_pause_toggle, handle_tool_hotkeys};
-pub(crate) use sound_ping::{
-    HudSoftPingHandle, PlayHudSoftPing, flush_hud_soft_ping, load_hud_soft_ping, play_hud_soft_ping,
-};
+pub(crate) use sound_ping::{HudSfxHandles, PlayHudSfx, flush_hud_sfx, load_hud_sfx, play_hud_sfx};
 
 /// Pausa simulacion y ruta del JSON de **F5/F9** (alternativa a variable de entorno al arranque).
 #[derive(Resource)]
@@ -58,6 +56,10 @@ pub(crate) struct TileInfoText;
 pub(crate) struct HudBuildFeedback {
     pub(crate) message: Option<String>,
     pub(crate) expires_at_secs: f32,
-    /// Encola pitido suave (reduce parámetros en `handle_tile_click`; lo consume `flush_hud_soft_ping`).
+    /// Encola pitido de error (lo consume [`flush_hud_sfx`]).
     pub(crate) pending_soft_ping: bool,
+    /// Encola sonido breve tras construcción válida.
+    pub(crate) pending_build_ok_ping: bool,
+    /// Encola sonido breve al cobrar entrega de carga.
+    pub(crate) pending_income_ping: bool,
 }

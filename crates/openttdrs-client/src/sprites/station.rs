@@ -42,17 +42,7 @@ pub fn station_type_from_m6(m6: u8) -> StationTileClass {
 }
 
 /// `StopKind` del simulador a partir de `m6` (`GetStationType`).
-#[must_use]
-pub fn stop_kind_from_m6(m6: u8) -> StopKind {
-    match station_type_from_m6(m6) {
-        StationTileClass::Bus => StopKind::BusStop,
-        StationTileClass::Truck => StopKind::TruckStop,
-        StationTileClass::RailWaypoint => StopKind::RailWaypoint,
-        StationTileClass::Rail | StationTileClass::Airport | StationTileClass::Other(_) => {
-            StopKind::RailStation
-        }
-    }
-}
+pub use openttdrs_core::stop_kind_from_m6;
 
 /// Clase visual: prioriza `StopKind` del simulador y tipo en `m6` del tile.
 #[must_use]

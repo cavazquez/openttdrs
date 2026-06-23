@@ -3,7 +3,7 @@
 use openttdrs_core::{GameState, OttdmapExtras, Station, TileCoord, TileKind};
 use std::collections::HashSet;
 
-use crate::sprites::stop_kind_from_m6;
+use openttdrs_core::stop_kind_from_m6;
 
 fn push_station_from_tile(state: &mut GameState, c: TileCoord) {
     let kind = state

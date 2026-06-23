@@ -67,7 +67,23 @@ Pasos:
 | ✔️ Python | `py_compile` de los scripts usados en el flujo de mapas |
 | 🔨 `build` | `cargo build --workspace` (incluye cliente Bevy) |
 
-En local, paridad con el job de tests de CI: `./scripts/check.sh ci` (fmt check, clippy `-D warnings`, tests, TNBP, golden `parse_sav`, `py_compile`).
+En local, paridad con el job **tests** de CI (sin `cargo build` del workflow **build**):
+
+```bash
+./scripts/check.sh ci
+```
+
+| Modo | Uso |
+|------|-----|
+| `./scripts/check.sh` | Desarrollo: `fmt` + clippy + tests |
+| `./scripts/check.sh ci` | Igual que CI: `fmt-check`, clippy, tests, TNBP, golden `parse_sav`, `py_compile` |
+| `./scripts/check.sh fmt-check` | Solo formato (como el job `lint`) |
+| `./scripts/check.sh lint` | Solo clippy `-D warnings` |
+| `./scripts/check.sh test` | Solo tests del workspace |
+| `./scripts/check.sh cov` | Tests + `lcov.info` (requiere `cargo-llvm-cov`) |
+| `./scripts/check.sh build` | `cargo build --workspace` (cliente Bevy) |
+
+Regresión construcción (checklist SP2): `cargo test -p openttdrs-core --lib command` y `cargo test -p openttdrs-client preview::`.
 
 ---
 

@@ -27,6 +27,24 @@ cargo test -p openttdrs-client preview::
 
 ---
 
+## S1 refresh — re-validación automática (2026-06-22)
+
+Tras save v4, import S6 y señales S5; confirma que SP2 no regresó en CI.
+
+```bash
+bash scripts/check.sh ci
+cargo test -p openttdrs-core --lib command
+cargo test -p openttdrs-client preview::
+```
+
+- [x] `bash scripts/check.sh ci` verde
+- [x] 60 tests `command` en core
+- [x] 3 tests `preview` en cliente
+
+Los ítems **manual** de SP2.1–SP2.5 siguen válidos desde la sesión **2026-05-22**; no se repitió playtest visual en esta fecha.
+
+---
+
 ## SP2.1 — Errores HUD
 
 - [x] `command_error_message` en core

@@ -22,16 +22,16 @@ Objetivo: cerrar el **vertical slice en solitario** sin abrir multijugador, NewG
 
 ---
 
-## Sprint 1 — SP4: pulido y confianza
+## Sprint 1 — SP4: pulido y confianza ✅ (cerrado 2026-06-22)
 
 **Objetivo:** guardar/cargar y CI dan seguridad para iterar rápido.
 
 | Tarea | Costo | Entregable |
 |-------|-------|------------|
-| Migración save real al cambiar esquema (bump v4 + test roundtrip) | S | `save.rs` + test v3→v4 |
-| Test `effective_road_bits` en fixture `.ottdmap` | S | Regresión carreteras importadas |
-| Cerrar checklist SP2 manual pendiente (1 pasada) | S | `SP2_CHECKLIST.md` |
-| Documentar flujo `check.sh ci` en README si falta | S | README |
+| Migración save real al cambiar esquema (bump v4 + test roundtrip) | S | `save.rs` + test v3→v4 ✅ |
+| Test `effective_road_bits` en fixture `.ottdmap` | S | Regresión carreteras importadas ✅ |
+| Cerrar checklist SP2 manual pendiente (1 pasada) | S | `SP2_CHECKLIST.md` § S1 refresh ✅ |
+| Documentar flujo `check.sh ci` en README si falta | S | README ✅ |
 
 **Done:** `bash scripts/check.sh` verde; migración probada; golden `parse_sav` OK.
 
@@ -155,4 +155,4 @@ S2 y S3 pueden ir en paralelo.
 
 ---
 
-*Última actualización: 2026-06-11*
+*Última actualización: 2026-06-22*

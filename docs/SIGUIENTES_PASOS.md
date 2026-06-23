@@ -8,13 +8,14 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 
 ---
 
-## Prioridad inmediata (Sprint 1)
-
-Ver [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) § Sprint 1:
+## Prioridad inmediata (Sprint 1) — cerrado 2026-06-22
 
 - [x] Migración save v3→v4 con test
 - [x] Test `effective_road_bits` en fixture `.ottdmap`
-- [ ] Pasada manual SP2 checklist
+- [x] Pasada SP2: CI + tests `command` / `preview` (ver § S1 refresh en [SP2_CHECKLIST.md](SP2_CHECKLIST.md))
+- [x] `check.sh ci` documentado en [README.md](../README.md)
+
+**Siguiente foco recomendado:** [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) § Sprint 4 (SP1 ciclo jugable) o § Sprint 3 (visual).
 
 ---
 
@@ -24,12 +25,12 @@ Ver [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) § Sprint 1:
 |------|--------|------------|
 | **SP2** Construcción | ✅ Cerrado 2026-05-22 | [SP2_CHECKLIST.md](SP2_CHECKLIST.md) |
 | **SP3** Visual | 🟡 ~90 % | [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md), [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) |
-| **SP4** Pulido | 🟡 En curso | ROADMAP_SPRINTS S1 |
+| **SP4** Pulido | ✅ Cerrado 2026-06-22 | ROADMAP_SPRINTS S1 |
 | **SP1** Ciclo jugable | 🟡 | ROADMAP_SPRINTS S4 |
 
 **Huecos visuales reales (SP3):** junctions vía en pendiente; depósito carretera; culling global; industrias gfx ≥ 120.
 
-**Toolbar rail sin comando:** waypoint, señales, quitar vía, convertir → ROADMAP_SPRINTS S2/S5.
+**Toolbar rail sin comando:** `RailConvert`, quitar señal → ver ROADMAP_SPRINTS S2 resto.
 
 ---
 
@@ -74,4 +75,4 @@ OPENTTDRS_MAP_SHOT=/tmp/shot.png OPENTTDRS_MAP_SHOT_TOOL=rail_station cargo run 
 
 ---
 
-*Última actualización: 2026-06-11*
+*Última actualización: 2026-06-22*

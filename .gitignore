@@ -24,7 +24,10 @@ target
 /reference/openttd-upstream/
 
 # Assets descargados por los scripts (gráficos y sonidos)
-/assets/
+/assets/*
+!/assets/sounds/
+/assets/sounds/*
+!/assets/sounds/*.wav
 /assets/maps/*.ottdmap
 /.downloads/
 

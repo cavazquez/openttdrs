@@ -168,9 +168,11 @@ Si preferís scripts individuales:
 
 ```bash
 ./scripts/descargar_graficos.sh --32bpp
-./scripts/descargar_sonidos.sh --opensfx
+./scripts/descargar_sonidos.sh --opensfx   # OpenSFX + WAV del HUD (build_ok, income, hud_soft)
 ./scripts/descargar_musica.sh --openmsx
 ```
+
+Solo los efectos del HUD (sin música): `./scripts/preparar_sonidos_hud.sh` (requiere OpenSFX ya descargado).
 
 ---
 

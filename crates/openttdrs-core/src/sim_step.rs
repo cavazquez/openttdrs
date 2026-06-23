@@ -89,7 +89,14 @@ fn load_vehicles(
         .enumerate()
         .take(state.vehicles.len())
     {
-        if state.vehicles[i].cargo != 0 {
+        let allow_top_up = state.vehicles[i]
+            .orders
+            .get(state.vehicles[i].current_order)
+            .is_some_and(|o| o.full_load());
+        if state.vehicles[i].cargo != 0 && !allow_top_up {
+            continue;
+        }
+        if allow_top_up && state.vehicles[i].cargo >= state.vehicles[i].capacity {
             continue;
         }
         let vpos = state.vehicles[i].pos;
@@ -158,6 +165,10 @@ fn try_load_from_station_waiting_cargo(
 ) -> bool {
     let kind = state.vehicles[vehicle_idx].kind;
     let vcap = state.vehicles[vehicle_idx].capacity;
+    let room = vcap.saturating_sub(state.vehicles[vehicle_idx].cargo);
+    if room == 0 {
+        return false;
+    }
     let preferred = state.vehicles[vehicle_idx].cargo_type;
     let stock = state.stations[station_idx].cargo_stock;
 
@@ -176,7 +187,7 @@ fn try_load_from_station_waiting_cargo(
     }
 
     let available = stock.get(cargo);
-    let load = available.min(vcap);
+    let load = available.min(room);
     if load == 0 {
         return false;
     }
@@ -184,7 +195,7 @@ fn try_load_from_station_waiting_cargo(
     let _ = state.stations[station_idx].cargo_stock.take(cargo, load);
     let source = state.stations[station_idx].pos;
     state.vehicles[vehicle_idx].cargo_type = Some(cargo);
-    state.vehicles[vehicle_idx].cargo = load;
+    state.vehicles[vehicle_idx].cargo += load;
     state.vehicles[vehicle_idx].mark_cargo_loaded(source);
     *loaded_flag = true;
     state.stats.cargo_pickups += 1;
@@ -331,7 +342,13 @@ fn move_vehicles(state: &mut GameState) {
 }
 
 fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle) -> bool {
-    vehicle.cargo > 0 && vehicle.manhattan_to_dest() == 0
+    if vehicle.cargo == 0 || vehicle.manhattan_to_dest() != 0 {
+        return false;
+    }
+    !vehicle
+        .orders
+        .get(vehicle.current_order)
+        .is_some_and(|o| o.no_unload())
 }
 
 fn station_index_covering_tile(state: &GameState, tile: TileCoord) -> Option<usize> {

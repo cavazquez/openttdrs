@@ -226,6 +226,19 @@ fn order_row_label(
         VehicleOrder::Tile(_) => "Casilla",
     };
     let mut line = format!("{current} {:>2}. {label} ({}, {})", index + 1, pos.x, pos.y);
+    if let VehicleOrder::Station {
+        full_load,
+        no_unload,
+        ..
+    } = order
+    {
+        if full_load {
+            line.push_str(" · carga completa");
+        }
+        if no_unload {
+            line.push_str(" · no descargar");
+        }
+    }
     if let Some(st) = station_at_tile(sim, pos)
         && let Some(note) = stop_kind_mismatch_note(vehicle, st)
     {

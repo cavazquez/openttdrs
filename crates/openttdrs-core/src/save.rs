@@ -15,7 +15,9 @@ use crate::GameState;
 /// reales (recta + curvas); v1 se migra al cargar.
 /// v3: las intersecciones de dos rectas vuelven a ser cruce X|Y (sin curvas),
 /// como `OpenTTD`; los empalmes `0x3F` de v2 se migran al cargar.
-pub const CURRENT_SAVE_VERSION: u32 = 3;
+/// v4: órdenes `Tile` en paradas/waypoints pasan a variantes tipadas; flags
+/// `full_load` / `no_unload` explícitos en `VehicleOrder::Station`.
+pub const CURRENT_SAVE_VERSION: u32 = 4;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -117,13 +119,70 @@ pub fn load_from_str(text: &str) -> Result<GameState, SaveError> {
 
 /// Aplica migraciones encadenadas hasta [`CURRENT_SAVE_VERSION`].
 fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState, SaveError> {
-    match version {
-        1 | 2 => {
-            crate::command::normalize_synthetic_rail_crossings(&mut state.map);
-            Ok(state)
+    if version > CURRENT_SAVE_VERSION {
+        return Err(SaveError::UnsupportedVersion(version));
+    }
+    let mut v = version;
+    while v < CURRENT_SAVE_VERSION {
+        match v {
+            1 | 2 => {
+                crate::command::normalize_synthetic_rail_crossings(&mut state.map);
+            }
+            3 => migrate_state_v3_to_v4(&mut state),
+            _ => return Err(SaveError::UnsupportedVersion(version)),
         }
-        CURRENT_SAVE_VERSION => Ok(state),
-        n => Err(SaveError::UnsupportedVersion(n)),
+        v += 1;
+    }
+    Ok(state)
+}
+
+/// v4: tipar órdenes legacy y normalizar flags de parada.
+fn migrate_state_v3_to_v4(state: &mut GameState) {
+    use std::collections::HashMap;
+
+    use crate::TileCoord;
+    use crate::map::TileKind;
+    use crate::station::{StopKind, is_rail_waypoint_tile};
+    use crate::vehicle::VehicleOrder;
+
+    let station_kinds: HashMap<TileCoord, StopKind> = state
+        .stations
+        .iter()
+        .map(|s| (s.pos, s.stop_kind))
+        .collect();
+
+    for vehicle in &mut state.vehicles {
+        vehicle.orders = vehicle
+            .orders
+            .iter()
+            .map(|&order| match order {
+                VehicleOrder::Tile(pos) => {
+                    if station_kinds.get(&pos) == Some(&StopKind::RailWaypoint)
+                        || state
+                            .map
+                            .get(pos)
+                            .is_some_and(|t| is_rail_waypoint_tile(&t))
+                    {
+                        VehicleOrder::waypoint(pos)
+                    } else if station_kinds.contains_key(&pos)
+                        || state
+                            .map
+                            .get(pos)
+                            .is_some_and(|t| t.kind == TileKind::Station)
+                    {
+                        VehicleOrder::station(pos)
+                    } else {
+                        VehicleOrder::tile(pos)
+                    }
+                }
+                VehicleOrder::Station {
+                    station,
+                    full_load,
+                    no_unload,
+                } => VehicleOrder::station_with_flags(station, full_load, no_unload),
+                VehicleOrder::Waypoint { waypoint } => VehicleOrder::waypoint(waypoint),
+            })
+            .collect();
     }
 }
 
@@ -244,6 +303,70 @@ mod tests {
         let loaded = load_from_str(&text).unwrap();
         let bits = loaded.map.get(TileCoord::new(4, 4)).unwrap().m5 & 0x3F;
         assert_eq!(bits, 0x03, "cruce limpio X|Y: {bits:#04x}");
+    }
+
+    #[test]
+    fn v3_migrates_tile_orders_at_stations_to_station_variant() {
+        use crate::map::TileKind;
+        use crate::{Station, StopKind, Vehicle, VehicleKind, VehicleOrder};
+
+        let mut s = GameState::new(8, 8);
+        let stop = TileCoord::new(3, 3);
+        s.stations
+            .push(Station::new_with_kind(stop, StopKind::TruckStop));
+        let mut tile = s.map.get(stop).unwrap();
+        tile.kind = TileKind::Station;
+        s.map.set_tile(stop, tile).unwrap();
+        let mut v = Vehicle::new(1, VehicleKind::Truck, stop, TileCoord::new(0, 0));
+        v.orders = vec![VehicleOrder::tile(stop)];
+        s.vehicles.push(v);
+
+        let file = GameStateFile {
+            version: 3,
+            state: s,
+        };
+        let text = serde_json::to_string(&file).unwrap();
+        let loaded = load_from_str(&text).unwrap();
+        assert!(matches!(
+            loaded.vehicles[0].orders[0],
+            VehicleOrder::Station {
+                station,
+                full_load: false,
+                no_unload: false,
+            } if station == stop
+        ));
+    }
+
+    #[test]
+    fn v3_migrates_station_orders_without_flags_and_resaves_as_v4() {
+        use crate::{Station, StopKind, Vehicle, VehicleKind, VehicleOrder};
+
+        let mut s = GameState::new(4, 4);
+        s.stations.push(Station::new_with_kind(
+            TileCoord::new(1, 1),
+            StopKind::TruckStop,
+        ));
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Truck,
+            TileCoord::new(0, 0),
+            TileCoord::new(2, 2),
+        );
+        v.orders = vec![VehicleOrder::station(TileCoord::new(1, 1))];
+        s.vehicles.push(v);
+
+        let file = GameStateFile {
+            version: 3,
+            state: s,
+        };
+        let text = serde_json::to_string(&file).unwrap();
+        let loaded = load_from_str(&text).unwrap();
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("openttdrs_v3_migrate_{}.json", std::process::id()));
+        save(&loaded, &path).unwrap();
+        let saved_text = std::fs::read_to_string(&path).unwrap();
+        assert!(saved_text.contains("\"version\": 4"));
+        let _ = std::fs::remove_file(&path);
     }
 
     #[test]

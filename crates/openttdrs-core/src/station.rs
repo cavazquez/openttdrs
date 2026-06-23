@@ -189,7 +189,7 @@ pub fn rail_station_approach_tile(map: &Map, station_pos: TileCoord) -> Option<T
 #[must_use]
 pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrder) -> TileCoord {
     match (kind, order) {
-        (VehicleKind::Train, VehicleOrder::Station { station }) => {
+        (VehicleKind::Train, VehicleOrder::Station { station, .. }) => {
             rail_station_approach_tile(map, station).unwrap_or(station)
         }
         (VehicleKind::Train, VehicleOrder::Waypoint { waypoint }) => waypoint,

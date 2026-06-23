@@ -36,8 +36,18 @@ pub enum VehicleKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum VehicleOrder {
-    Station { station: TileCoord },
-    Waypoint { waypoint: TileCoord },
+    Station {
+        station: TileCoord,
+        /// Esperar carga completa antes de salir (`OrderLoadType::FullLoad` / `FullLoadAny`).
+        #[serde(default)]
+        full_load: bool,
+        /// No descargar en esta parada (`OrderUnloadType::NoUnload`).
+        #[serde(default)]
+        no_unload: bool,
+    },
+    Waypoint {
+        waypoint: TileCoord,
+    },
     Tile(TileCoord),
 }
 
@@ -45,7 +55,7 @@ impl VehicleOrder {
     #[must_use]
     pub const fn destination(self) -> TileCoord {
         match self {
-            Self::Station { station } => station,
+            Self::Station { station, .. } => station,
             Self::Waypoint { waypoint } => waypoint,
             Self::Tile(pos) => pos,
         }
@@ -53,7 +63,20 @@ impl VehicleOrder {
 
     #[must_use]
     pub const fn station(station: TileCoord) -> Self {
-        Self::Station { station }
+        Self::Station {
+            station,
+            full_load: false,
+            no_unload: false,
+        }
+    }
+
+    #[must_use]
+    pub const fn station_with_flags(station: TileCoord, full_load: bool, no_unload: bool) -> Self {
+        Self::Station {
+            station,
+            full_load,
+            no_unload,
+        }
     }
 
     #[must_use]
@@ -69,6 +92,28 @@ impl VehicleOrder {
     #[must_use]
     pub const fn is_pass_through(self) -> bool {
         matches!(self, Self::Waypoint { .. })
+    }
+
+    #[must_use]
+    pub const fn full_load(self) -> bool {
+        matches!(
+            self,
+            Self::Station {
+                full_load: true,
+                ..
+            }
+        )
+    }
+
+    #[must_use]
+    pub const fn no_unload(self) -> bool {
+        matches!(
+            self,
+            Self::Station {
+                no_unload: true,
+                ..
+            }
+        )
     }
 }
 
@@ -450,6 +495,10 @@ impl Vehicle {
             return;
         }
         let pass_through = self.orders[self.current_order].is_pass_through();
+        if self.orders[self.current_order].full_load() && self.cargo < self.capacity {
+            self.progress = 255;
+            return;
+        }
         // Anclado al final del carril de entrada (evita salto visual al llegar a parada/estación).
         if pass_through {
             self.progress = 0;

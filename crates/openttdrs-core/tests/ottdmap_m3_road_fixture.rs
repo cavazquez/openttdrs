@@ -2,7 +2,9 @@
 
 #![allow(clippy::expect_used)]
 
-use openttdrs_core::{Map, TileCoord, TileKind};
+use openttdrs_core::{
+    Map, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, TileCoord, TileKind, effective_road_bits,
+};
 
 const FIXTURE: &[u8] = include_bytes!("fixtures/m3_road_tram_2x2.ottdmap");
 
@@ -21,4 +23,21 @@ fn loads_m3_on_road_tile_from_fixture() {
     let grass = map.get(TileCoord::new(1, 0)).expect("tile 1,0");
     assert_eq!(grass.kind, TileKind::Grass);
     assert_eq!(grass.m3, 0);
+}
+
+#[test]
+fn effective_road_bits_on_m3_fixture_matches_imported_m5() {
+    let map = Map::from_ottd_binary(FIXTURE).expect("fixture MAP1 válido");
+    let road = map.get(TileCoord::new(0, 0)).expect("tile 0,0");
+    assert_eq!(
+        effective_road_bits(
+            road.mapt,
+            road.m5,
+            road.kind,
+            OTTD_MP_ROAD,
+            OTTD_MP_TUNNELBRIDGE
+        ),
+        Some(0x03),
+        "NW+NE desde subtipo Normal (m5 & 0x0F)"
+    );
 }

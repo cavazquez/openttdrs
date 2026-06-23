@@ -25,13 +25,13 @@ Ordenada de **más barato a más caro**.
 
 | # | Área | Feature | OTTD | openttdrs | Costo |
 |---|------|---------|------|-----------|-------|
-| 1 | Pulido | Migraciones save JSON | ✅ | 🟡 | S |
+| 1 | Pulido | Migraciones save JSON | ✅ | ✅ | S |
 | 2 | Audio | Música y SFX in-game | ✅ | 🟡 | S |
 | 3 | Render | Depósito carretera RemapCoords | ✅ | 🟡 | S |
 | 4 | Render | Junctions vía en pendiente | ✅ | 🟡 | S–M |
 | 5 | Construcción | Quitar vía (`RailRemove`) | ✅ | ❌ | S |
 | 6 | Construcción | Waypoint ferroviario | ✅ | ❌ | S–M |
-| 7 | Tests | `effective_road_bits` en fixture | ✅ | 🟡 | S |
+| 7 | Tests | `effective_road_bits` en fixture | ✅ | ✅ | S |
 | 8 | Render | Culling mapas grandes | ✅ | 🟡 | M |
 | 9 | Render | Industrias gfx 120–174 | ✅ | 🟡 0–119 | M |
 | 10 | Construcción | Señales bloque (sin PBS) | ✅ | 🟡 render | M |
@@ -64,7 +64,7 @@ Ordenada de **más barato a más caro**.
 | **Ciudades** | Demanda, etiquetas, ventana pueblo |
 | **Vehículos** | Bus, camión, tren; compra/venta; órdenes simples |
 | **Economía** | Dinero, costes, inflación, 6 cargos, pago transporte |
-| **Save** | JSON versionado (v3) |
+| **Save** | JSON versionado (v4) |
 | **Import** | `parse_sav.py`, parser Rust, golden CI |
 | **Render** | OpenGFX + atlas; terreno, agua, costa, casas, industrias 0–119, estaciones |
 | **UI** | Toolbar, minimapa, ventanas flotantes, ghost preview |

@@ -57,10 +57,11 @@ pub use industry::{
     IndustrySpec, industry_produce_period_ticks,
 };
 pub use map::{
-    Map, MapError, OTTD_TILETYPE_TUNNELBRIDGE, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, Tile,
-    TileCoord, TileKind, inclined_slope_direction, is_tunnel_entrance_slope,
-    openttd_tile_index_to_coord, partial_pixel_z, resolve_tunnel_end, slope_dz_at_subtile,
-    slope_dz_on_tile, tile_slope_and_z, tunnel_entrance_m5, tunnel_preview_path,
+    Map, MapError, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, OTTD_TILETYPE_TUNNELBRIDGE, SLOPE_NE,
+    SLOPE_NW, SLOPE_SE, SLOPE_SW, Tile, TileCoord, TileKind, effective_road_bits,
+    inclined_slope_direction, is_tunnel_entrance_slope, openttd_tile_index_to_coord,
+    partial_pixel_z, resolve_tunnel_end, slope_dz_at_subtile, slope_dz_on_tile, tile_slope_and_z,
+    tunnel_entrance_m5, tunnel_preview_path,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
@@ -81,6 +82,7 @@ pub use road_movement::{
     vehicle_subtile_with_progress,
 };
 pub use sav::{SavError, SavGame, SavIndustry, SavStation, SavVehicle, SavVehicleKind};
+pub use save::CURRENT_SAVE_VERSION;
 pub use save::SaveError;
 pub use save::load_from_str;
 pub use station::{

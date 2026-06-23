@@ -123,7 +123,7 @@ pub(crate) fn vehicle_id_for_station_panel(
         .iter()
         .find(|vehicle| {
             vehicle.orders.iter().any(|order| {
-                matches!(order, VehicleOrder::Station { station } if *station == station_pos)
+                matches!(order, VehicleOrder::Station { station, .. } if *station == station_pos)
             })
         })
         .map(|vehicle| vehicle.id)
@@ -184,7 +184,7 @@ pub(crate) fn sync_station_cargo_panel(
         .iter()
         .filter(|vehicle| {
             vehicle.orders.iter().any(|order| {
-                matches!(order, VehicleOrder::Station { station } if *station == station_pos)
+                matches!(order, VehicleOrder::Station { station, .. } if *station == station_pos)
             })
         })
         .count();

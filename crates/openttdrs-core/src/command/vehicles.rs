@@ -18,7 +18,7 @@ pub(super) fn set_vehicle_order_list(
     for order in &orders {
         in_bounds(&state.map, order.destination())?;
         match order {
-            VehicleOrder::Station { station } => {
+            VehicleOrder::Station { station, .. } => {
                 let Some(st) = state.stations.iter().find(|s| s.pos == *station) else {
                     return Err(CommandError::StationNotFound);
                 };

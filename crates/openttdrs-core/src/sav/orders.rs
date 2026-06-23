@@ -18,17 +18,35 @@ const SLV_105: u16 = 105;
 /// `SLV_ORDERS_OWNED_BY_ORDERLIST` — órdenes inline en `ORDL`.
 const SLV_ORDERS_OWNED_BY_ORDERLIST: u16 = 354;
 
-/// Orden cruda decodificada del save (`Order::type` + `dest`).
+/// Orden cruda decodificada del save (`Order::type` + `dest` + `flags`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SavOrder {
     pub order_type: u8,
     pub dest: u16,
+    /// Byte `Order::flags` (`order_base.h`: unload bits 0–2, load bits 4–6).
+    pub flags: u8,
+}
+
+/// `OrderUnloadType::NoUnload` en bits 0–2 de `flags`.
+const OTTD_UNLOAD_NO_UNLOAD: u8 = 4;
+/// `OrderLoadType::FullLoad` / `FullLoadAny` en bits 4–6 de `flags`.
+const OTTD_LOAD_FULL: u8 = 2;
+const OTTD_LOAD_FULL_ANY: u8 = 3;
+
+#[must_use]
+pub(crate) fn stop_flags_from_sav(flags: u8) -> (bool, bool) {
+    let unload = flags & 0x07;
+    let load = (flags >> 4) & 0x07;
+    let no_unload = unload == OTTD_UNLOAD_NO_UNLOAD;
+    let full_load = load == OTTD_LOAD_FULL || load == OTTD_LOAD_FULL_ANY;
+    (full_load, no_unload)
 }
 
 #[derive(Debug, Clone, Copy)]
 struct OrdrEntry {
     order_type: u8,
     dest: u16,
+    flags: u8,
     /// Índice 1-based del siguiente eslabón (`OldOrderSaveLoadItem::next`).
     next: u32,
 }
@@ -73,11 +91,15 @@ fn table_rows(chunk: &RawChunk, save_version: u16) -> Vec<(u32, SlRecord)> {
     super::array_legacy::chunk_rows(chunk, save_version)
 }
 
-fn sav_order_from_fields(order_type: u8, dest: u16) -> Option<SavOrder> {
+fn sav_order_from_fields(order_type: u8, dest: u16, flags: u8) -> Option<SavOrder> {
     if (order_type & 0x0F) == OT_NOTHING {
         None
     } else {
-        Some(SavOrder { order_type, dest })
+        Some(SavOrder {
+            order_type,
+            dest,
+            flags,
+        })
     }
 }
 
@@ -96,7 +118,11 @@ fn orders_from_record(record: &SlRecord) -> Vec<SavOrder> {
                 .and_then(SlValue::as_u64)
                 .and_then(|v| u16::try_from(v).ok())
                 .unwrap_or(0);
-            sav_order_from_fields(order_type, dest)
+            let flags = record_get(item, "flags")
+                .and_then(SlValue::as_u64)
+                .and_then(|v| u8::try_from(v).ok())
+                .unwrap_or(0);
+            sav_order_from_fields(order_type, dest, flags)
         })
         .collect()
 }
@@ -110,6 +136,10 @@ fn ordr_entry_from_record(record: &SlRecord) -> OrdrEntry {
         dest: record_get(record, "dest")
             .and_then(SlValue::as_u64)
             .and_then(|v| u16::try_from(v).ok())
+            .unwrap_or(0),
+        flags: record_get(record, "flags")
+            .and_then(SlValue::as_u64)
+            .and_then(|v| u8::try_from(v).ok())
             .unwrap_or(0),
         next: record_get(record, "next")
             .and_then(SlValue::as_u64)
@@ -141,7 +171,7 @@ fn chain_from_ordr_ref(start_ref: u32, pool: &HashMap<u32, OrdrEntry>) -> Vec<Sa
         let Some(entry) = pool.get(&key) else {
             break;
         };
-        if let Some(order) = sav_order_from_fields(entry.order_type, entry.dest) {
+        if let Some(order) = sav_order_from_fields(entry.order_type, entry.dest, entry.flags) {
             out.push(order);
         }
         if entry.next == 0 || entry.next == ref_idx {
@@ -202,10 +232,13 @@ pub(crate) fn vehicle_orders_from_sav(
         match ot {
             OT_GOTO_STATION => {
                 if let Some(st) = stations.get(&u32::from(order.dest)) {
+                    let (full_load, no_unload) = stop_flags_from_sav(order.flags);
                     if st.is_waypoint {
                         out.push(VehicleOrder::waypoint(st.pos));
                     } else {
-                        out.push(VehicleOrder::station(st.pos));
+                        out.push(VehicleOrder::station_with_flags(
+                            st.pos, full_load, no_unload,
+                        ));
                     }
                 }
             }
@@ -339,9 +372,44 @@ mod tests {
             &[SavOrder {
                 order_type: OT_GOTO_STATION,
                 dest: 0,
+                flags: 0,
             }],
             &stations,
         );
         assert_eq!(orders, vec![VehicleOrder::station(TileCoord::new(5, 2))]);
+    }
+
+    #[test]
+    fn maps_full_load_and_no_unload_flags() {
+        let mut stations = HashMap::new();
+        stations.insert(
+            1,
+            SavStationIndex {
+                pos: TileCoord::new(3, 4),
+                is_waypoint: false,
+                facilities: 1,
+                name: None,
+            },
+        );
+        let full = stop_flags_from_sav(OTTD_LOAD_FULL << 4);
+        assert!(full.0);
+        let no_unload = stop_flags_from_sav(OTTD_UNLOAD_NO_UNLOAD);
+        assert!(no_unload.1);
+        let orders = vehicle_orders_from_sav(
+            &[SavOrder {
+                order_type: OT_GOTO_STATION,
+                dest: 1,
+                flags: (OTTD_LOAD_FULL << 4) | OTTD_UNLOAD_NO_UNLOAD,
+            }],
+            &stations,
+        );
+        assert_eq!(
+            orders,
+            vec![VehicleOrder::station_with_flags(
+                TileCoord::new(3, 4),
+                true,
+                true
+            )]
+        );
     }
 }

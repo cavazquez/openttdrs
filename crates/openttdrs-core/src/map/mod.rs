@@ -3,6 +3,7 @@
 
 mod binary;
 pub mod rail_slope;
+pub mod road_bits;
 pub mod slope;
 mod types;
 
@@ -10,6 +11,7 @@ mod types;
 use binary::{OTTDMAP_FLAG_HAS_M2_HI, OTTDMAP_FORMAT_VERSION_CURRENT};
 pub(crate) use binary::{OTTDMAP_HEADER_LEN_VERSIONED, OTTDMAP_MAGIC_VERSIONED};
 pub use rail_slope::{rail_foundation_for_trackbits, rail_trackbits_valid_on_slope};
+pub use road_bits::{OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, effective_road_bits};
 pub use slope::{
     SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, complement_slope, diag_dir_offset,
     inclined_slope_direction, is_tunnel_entrance_slope, partial_pixel_z, resolve_tunnel_end,

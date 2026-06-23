@@ -31,8 +31,9 @@ Código relevante:
 14. [De road bits a sprites](#14-de-road-bits-a-sprites)
 15. [Relieve (altura) en pantalla](#15-relieve-altura-en-pantalla)
 16. [Carga de partidas (.sav)](#16-carga-de-partidas-sav)
-17. [Referencias en el código fuente de OpenTTD](#17-referencias-en-el-código-fuente-de-openttd)
-18. [Resumen de archivos del proyecto](#18-resumen-de-archivos-del-proyecto)
+17. [Import nativo en openttdrs (`openttdrs-core/src/sav/`)](#17-import-nativo-en-openttdrs)
+18. [Referencias en el código fuente de OpenTTD](#18-referencias-en-el-código-fuente-de-openttd)
+19. [Resumen de archivos del proyecto](#19-resumen-de-archivos-del-proyecto)
 
 ---
 
@@ -846,7 +847,64 @@ asumiendo mapa cuadrado de potencia de 2 desde el tamaño de `MAPT`.
 
 ---
 
-## 17. Referencias en el código fuente de OpenTTD
+## 17. Import nativo en openttdrs (`openttdrs-core/src/sav/`)
+
+Además de `parse_sav.py` → `.ottdmap`, el cliente puede cargar `.sav` directamente
+(`sav::load` → `GameState::from_sav_game`). Esto importa mapa, estaciones, industrias,
+ciudades, vehículos con órdenes y reloj (`DATE`).
+
+### Qué se importa hoy
+
+| Chunk / dato | Estado |
+|--------------|--------|
+| MAP* (mapa completo) | ✅ |
+| STNN (estaciones, waypoints) | ✅ |
+| CITY, INDY, PLYR, DATE | ✅ |
+| VEHS (tren/bus/camión cabeza) | ✅ |
+| ORDL / ORDR (órdenes goto estación/waypoint) | ✅ |
+| Flags **carga completa** / **no descargar** en órdenes | ✅ (bits `Order::flags`) |
+| Barcos, aviones, efectos | ❌ omitidos |
+| Señales PBS, pathfinding avanzado | ❌ no del save |
+| Condicionales, depósito en órdenes, refit | ❌ omitidos |
+| Dinero `PLYR` en saves muy antiguos (v211) | ⚠️ puede salir `0` |
+| Vehículos en depósito sin vía contigua | ⚠️ se fuerzan `running` y snap a red cercana |
+
+### Post-import (normalización)
+
+Tras cargar, `from_sav_game` puede:
+
+- Corregir `RailDepot` mal tipados en MAPT antiguo.
+- Normalizar `TrackBits` y puentear huecos colineales en vía.
+- Poner `running=true` en vehículos con órdenes (saves parados en depósito).
+- Reubicar (`snap`) vehículos a la red ferroviaria/carretera más cercana.
+
+### Órdenes y flags (`order_base.h`)
+
+En ORDL/ORDR cada orden tiene `type`, `dest` y `flags`:
+
+- **Unload** (bits 0–2): `NoUnload = 4` → el vehículo no descarga en esa parada.
+- **Load** (bits 4–6): `FullLoad = 2`, `FullLoadAny = 3` → espera llenar antes de ir a la siguiente orden.
+
+### Tests de regresión
+
+```bash
+cargo test -p openttdrs-core --test sav_load_stationlist
+cargo test -p openttdrs-core --test sav_load_rail_saves
+cargo test -p openttdrs-core sav::orders::
+```
+
+Fixtures: `tests/fixtures/stationlist-test.sav`, `save/demo_openttd.sav` (sintético con ORDL).
+
+### Limitaciones conocidas
+
+- Saves sin red conectada a destinos de órdenes: trenes no se mueven (esperado).
+- `stationlist-test.sav`: casi sin vía; sirve para buses/órdenes, no para trenes en vía.
+- Partidas con muchos vehículos no parseados (SLV reciente, tipos omitidos) pueden quedar vacías de tráfico.
+- El import no sustituye a `.ottdmap` para TNBP/JGR ni para render 100 % fiel; usar ambos pipelines según el caso.
+
+---
+
+## 18. Referencias en el código fuente de OpenTTD
 
 Bajo `reference/openttd-upstream/src/`:
 
@@ -879,7 +937,7 @@ Los sprite IDs están en hexadecimal (p.ej. `0x58d` = 1421). Los ground sprites 
 
 ---
 
-## 18. Resumen de archivos del proyecto
+## 19. Resumen de archivos del proyecto
 
 | Archivo | Rol |
 |---------|-----|

@@ -120,32 +120,7 @@ pub fn effective_road_bits(
     mp_road: u8,
     mp_tunnelbridge: u8,
 ) -> Option<u8> {
-    let tt = (mapt >> 4) & 0xF;
-    match tt {
-        t if t == mp_road => {
-            let subtype = (m5 >> 6) & 0x3;
-            match subtype {
-                0 => {
-                    let rb = m5 & 0x0F;
-                    if rb == 0 { None } else { Some(rb) }
-                }
-                1 => {
-                    let axis = m5 & 1;
-                    Some(if axis == 0 { 0x0A } else { 0x05 })
-                }
-                2 => {
-                    let d = m5 & 0x3;
-                    Some((1u8 << (3 ^ d)) & 0x0F)
-                }
-                _ => None,
-            }
-        }
-        t if t == mp_tunnelbridge && kind == TileKind::Road => {
-            let d = m5 & 0x3;
-            Some((1u8 << (3 ^ d)) & 0x0F)
-        }
-        _ => None,
-    }
+    openttdrs_core::effective_road_bits(mapt, m5, kind, mp_road, mp_tunnelbridge)
 }
 
 #[inline]

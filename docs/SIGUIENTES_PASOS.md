@@ -12,8 +12,8 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 
 Ver [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) § Sprint 1:
 
-- [ ] Migración save v3→v4 con test
-- [ ] Test `effective_road_bits` en fixture `.ottdmap`
+- [x] Migración save v3→v4 con test
+- [x] Test `effective_road_bits` en fixture `.ottdmap`
 - [ ] Pasada manual SP2 checklist
 
 ---

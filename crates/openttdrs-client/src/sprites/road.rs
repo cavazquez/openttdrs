@@ -381,4 +381,27 @@ mod tests {
         assert_eq!(road_depot_build_layers(2).len(), 2);
         assert_eq!(road_depot_build_layers(3).len(), 1);
     }
+
+    #[test]
+    fn road_depot_generated_offsets_from_nfo() {
+        let ne = road_depot_build_layers(0)[0];
+        assert_eq!(ne.path, "assets/opengfx/tiles/rail_1412.png");
+        assert!((ne.x_offs - (-59.0)).abs() < 0.1);
+        assert!((ne.y_offs - (-32.0)).abs() < 0.1);
+        assert!((ne.remap_x_adj - (-13.0)).abs() < 0.1);
+
+        let se_mouth = road_depot_build_layers(1)[0];
+        assert!((se_mouth.x_offs - 18.0).abs() < 0.1);
+        assert!((se_mouth.y_offs - 5.0).abs() < 0.1);
+        assert!((se_mouth.remap_x_adj - (-3.0)).abs() < 0.1);
+
+        let se_build = road_depot_build_layers(1)[1];
+        assert!((se_build.x_offs - 1.0).abs() < 0.1);
+        assert!((se_build.y_offs - (-38.0)).abs() < 0.1);
+
+        let nw = road_depot_build_layers(3)[0];
+        assert!((nw.x_offs - 1.0).abs() < 0.1);
+        assert!((nw.y_offs - (-38.0)).abs() < 0.1);
+        assert!((nw.remap_x_adj - 8.0).abs() < 0.1);
+    }
 }

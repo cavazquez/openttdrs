@@ -18,7 +18,7 @@ from nfo_sprite_meta import (
 
 GRASS_S1 = 0xF54
 STAGES = 4
-GFX_COUNT = 120
+GFX_COUNT = 131
 FALLBACK = (64.0, 48.0, -32.0, -32.0)
 
 

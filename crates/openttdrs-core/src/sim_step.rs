@@ -99,16 +99,24 @@ fn load_vehicles(
         if allow_top_up && state.vehicles[i].cargo >= state.vehicles[i].capacity {
             continue;
         }
-        let vpos = state.vehicles[i].pos;
-        let Some(station_idx) = station_index_covering_tile(state, vpos) else {
+        let vehicle_kind = state.vehicles[i].kind;
+        let Some(station_idx) = station_index_for_industry_load(state, &state.vehicles[i]) else {
+            if let Some(station_idx) = station_index_at_vehicle(state, &state.vehicles[i]) {
+                try_load_at_station(state, i, station_idx, loaded_flag, unloaded_this_tick[i]);
+            }
             continue;
         };
         let Some(station) = state.stations.get(station_idx) else {
             continue;
         };
-        if !station.can_service_vehicle(state.vehicles[i].kind) {
+        if !station.can_service_vehicle(vehicle_kind) {
             continue;
         }
+        if !station_matches_current_order(&state.vehicles[i], station.pos) {
+            continue;
+        }
+        let physically_at =
+            station_index_at_vehicle(state, &state.vehicles[i]) == Some(station_idx);
 
         if try_load_from_industry(state, i, station_idx, loaded_flag) {
             continue;
@@ -116,8 +124,36 @@ fn load_vehicles(
         if unloaded_this_tick[i] {
             continue;
         }
-        try_load_from_station_waiting_cargo(state, i, station_idx, loaded_flag);
+        if physically_at {
+            try_load_from_station_waiting_cargo(state, i, station_idx, loaded_flag);
+        }
     }
+}
+
+fn try_load_at_station(
+    state: &mut GameState,
+    vehicle_idx: usize,
+    station_idx: usize,
+    loaded_flag: &mut bool,
+    unloaded_this_tick: bool,
+) {
+    let vehicle = &state.vehicles[vehicle_idx];
+    let Some(station) = state.stations.get(station_idx) else {
+        return;
+    };
+    if !station.can_service_vehicle(vehicle.kind) {
+        return;
+    }
+    if !station_matches_current_order(vehicle, station.pos) {
+        return;
+    }
+    if try_load_from_industry(state, vehicle_idx, station_idx, loaded_flag) {
+        return;
+    }
+    if unloaded_this_tick {
+        return;
+    }
+    try_load_from_station_waiting_cargo(state, vehicle_idx, station_idx, loaded_flag);
 }
 
 fn try_load_from_industry(
@@ -154,6 +190,7 @@ fn try_load_from_industry(
     *loaded_flag = true;
     state.stats.cargo_pickups += 1;
     state.stats.cargo_units_loaded += u64::from(load);
+    state.vehicles[vehicle_idx].advance_after_loading();
     true
 }
 
@@ -172,12 +209,25 @@ fn try_load_from_station_waiting_cargo(
     let preferred = state.vehicles[vehicle_idx].cargo_type;
     let stock = state.stations[station_idx].cargo_stock;
 
+    let station_pos = state.stations[station_idx].pos;
     let cargo = match kind {
         VehicleKind::Bus => preferred.unwrap_or(CargoType::Passengers),
         VehicleKind::Truck | VehicleKind::Train => {
             let Some(cargo) = stock.pick_freight_to_load(preferred) else {
                 return false;
             };
+            if matches!(cargo, CargoType::Coal | CargoType::Wood | CargoType::Oil)
+                && !station::station_is_freight_pickup_stop(
+                    &state.map,
+                    &state.industries,
+                    station_pos,
+                    cargo,
+                )
+                && !state.vehicles[vehicle_idx].orders.is_empty()
+            {
+                // Con órdenes activas, carbón/madera/petróleo solo en paradas de carga (mina, bosque…).
+                return false;
+            }
             cargo
         }
     };
@@ -220,44 +270,52 @@ fn unload_vehicles(
         let vpos = state.vehicles[i].pos;
         let vcargo = state.vehicles[i].cargo;
         let vcargo_type = state.vehicles[i].cargo_type;
-        let Some(station_idx) = station_index_covering_tile(state, vpos) else {
+        let Some(station_idx) = station_index_at_vehicle(state, &state.vehicles[i]) else {
             continue;
         };
         if vcargo == 0 {
             continue;
         }
-        if !vehicle_should_unload_at_station(&state.vehicles[i]) {
+        if !vehicle_should_unload_at_station(&state.vehicles[i], state) {
             continue;
         }
         let cargo_type = vcargo_type.unwrap_or(CargoType::Goods);
-        if let Some(st) = state.stations.get_mut(station_idx) {
-            if !st.accepts_cargo(cargo_type) || !st.can_service_vehicle(state.vehicles[i].kind) {
-                continue;
-            }
-            let town_cargo = cargo_type.is_town_cargo();
-            if !town_cargo {
-                st.stock += vcargo;
-                st.cargo_stock.add(cargo_type, vcargo);
-            }
-            let source = state.vehicles[i]
-                .cargo_source
-                .unwrap_or(state.vehicles[i].pos);
-            let distance = economy::manhattan_distance(source, st.pos);
-            let transit_days =
-                economy::ticks_to_transit_days(state.vehicles[i].cargo_transit_ticks);
-            let payment =
-                economy::transported_goods_income(vcargo, distance, transit_days, cargo_type, tick);
-            st.income += payment.cast_unsigned();
-            state.economy.money += payment;
-            state.stats.cargo_income_earned += payment.cast_unsigned();
-            state.pending_income_popups.push(crate::IncomePopup {
-                amount: payment,
-                at: vpos,
-            });
-            state.stats.cargo_deliveries += 1;
-            state.stats.cargo_units_delivered += u64::from(vcargo);
-            state.vehicles[i].clear_cargo();
-            unloaded_this_tick[i] = true;
+        let Some(st) = state.stations.get(station_idx) else {
+            continue;
+        };
+        if !station_matches_current_order(&state.vehicles[i], st.pos) {
+            continue;
+        }
+        let st = &mut state.stations[station_idx];
+        if !st.accepts_cargo(cargo_type) || !st.can_service_vehicle(state.vehicles[i].kind) {
+            continue;
+        }
+        let town_cargo = cargo_type.is_town_cargo();
+        if !town_cargo {
+            st.stock += vcargo;
+            st.cargo_stock.add(cargo_type, vcargo);
+        }
+        let source = state.vehicles[i]
+            .cargo_source
+            .unwrap_or(state.vehicles[i].pos);
+        let distance = economy::manhattan_distance(source, st.pos);
+        let transit_days = economy::ticks_to_transit_days(state.vehicles[i].cargo_transit_ticks);
+        let payment =
+            economy::transported_goods_income(vcargo, distance, transit_days, cargo_type, tick);
+        st.income += payment.cast_unsigned();
+        state.economy.money += payment;
+        state.stats.cargo_income_earned += payment.cast_unsigned();
+        state.pending_income_popups.push(crate::IncomePopup {
+            amount: payment,
+            at: vpos,
+        });
+        state.stats.cargo_deliveries += 1;
+        state.stats.cargo_units_delivered += u64::from(vcargo);
+        state.vehicles[i].clear_cargo();
+        unloaded_this_tick[i] = true;
+        if station::vehicle_at_road_stop(&state.map, &state.vehicles[i]) {
+            state.vehicles[i].advance_after_unloading();
+            state.vehicles[i].sync_order_destination(&state.map);
         }
     }
 }
@@ -341,8 +399,19 @@ fn move_vehicles(state: &mut GameState) {
     }
 }
 
-fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle) -> bool {
-    if vehicle.cargo == 0 || vehicle.manhattan_to_dest() != 0 {
+fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle, state: &GameState) -> bool {
+    if vehicle.cargo == 0 {
+        return false;
+    }
+    if !station::vehicle_at_road_stop(&state.map, vehicle) {
+        return false;
+    }
+    if let Some(crate::VehicleOrder::Station { station, .. }) =
+        vehicle.orders.get(vehicle.current_order)
+        && let Some(cargo) = vehicle.cargo_type
+        && station::station_is_freight_pickup_stop(&state.map, &state.industries, *station, cargo)
+    {
+        // Parada de carga: no descargar el lote recién recogido aquí.
         return false;
     }
     !vehicle
@@ -351,14 +420,55 @@ fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle) -> bool {
         .is_some_and(|o| o.no_unload())
 }
 
-fn station_index_covering_tile(state: &GameState, tile: TileCoord) -> Option<usize> {
+fn station_matches_current_order(vehicle: &crate::Vehicle, station_pos: TileCoord) -> bool {
+    let Some(order) = vehicle.orders.get(vehicle.current_order) else {
+        return true;
+    };
+    if matches!(
+        order,
+        crate::VehicleOrder::Tile(_) | crate::VehicleOrder::Waypoint { .. }
+    ) {
+        return true;
+    }
+    matches!(
+        order,
+        crate::VehicleOrder::Station { station, .. } if *station == station_pos
+    )
+}
+
+fn station_index_at_vehicle(state: &GameState, vehicle: &crate::Vehicle) -> Option<usize> {
     state
         .stations
         .iter()
         .enumerate()
-        .filter(|(_, station)| {
-            station::station_covers_tile(station.pos, tile, STATION_COVERAGE_RADIUS)
+        .filter(|(_, station)| station::vehicle_physically_at_station(&state.map, vehicle, station))
+        .min_by_key(|(_, station)| {
+            (station.pos.x - vehicle.pos.x).abs() + (station.pos.y - vehicle.pos.y).abs()
         })
-        .min_by_key(|(_, station)| (station.pos.x - tile.x).abs() + (station.pos.y - tile.y).abs())
+        .map(|(idx, _)| idx)
+}
+
+/// Estación válida para cargar desde industria: en la parada o sobre la tesela de la industria.
+fn station_index_for_industry_load(state: &GameState, vehicle: &crate::Vehicle) -> Option<usize> {
+    if let Some(idx) = station_index_at_vehicle(state, vehicle) {
+        return Some(idx);
+    }
+    let vpos = vehicle.pos;
+    state
+        .stations
+        .iter()
+        .enumerate()
+        .filter(|(_, station)| station.can_service_vehicle(vehicle.kind))
+        .find(|(_, station)| {
+            state.industries.iter().any(|ind| {
+                ind.pos == vpos
+                    && ind.stock > 0
+                    && station::industry_in_station_coverage(
+                        ind,
+                        station.pos,
+                        STATION_COVERAGE_RADIUS,
+                    )
+            })
+        })
         .map(|(idx, _)| idx)
 }

@@ -3,12 +3,13 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use openttdrs_core::{
-    Command, GameState, Industry, IndustryKind, PathNetwork, TileCoord, Vehicle, VehicleKind,
-    apply_command, find_path,
+    Command, FACTORY_WOOD_INPUT, GameState, Industry, IndustryKind, IndustrySpec, PathNetwork,
+    TileCoord, Vehicle, VehicleKind, apply_command, find_path, road_stop_approach_tile,
 };
 
 const DEMO_ROAD_Y: i32 = 6;
 const DEMO_INDUSTRY: TileCoord = TileCoord::new(2, 3);
+const DEMO_FACTORY: TileCoord = TileCoord::new(8, 2);
 const DEMO_LOAD: TileCoord = TileCoord::new(3, DEMO_ROAD_Y - 1);
 const DEMO_DELIVER: TileCoord = TileCoord::new(10, DEMO_ROAD_Y - 1);
 const STATION_ENTRANCE_DIR: u8 = 1;
@@ -34,6 +35,12 @@ fn setup_demo_economy_via_commands(state: &mut GameState) {
 
     apply_command(
         state,
+        &Command::PlaceIndustrySpec(DEMO_FACTORY, IndustrySpec::Factory),
+    )
+    .expect("fábrica demo");
+
+    apply_command(
+        state,
         &Command::PlaceStationDir(DEMO_LOAD, STATION_ENTRANCE_DIR),
     )
     .expect("parada carga");
@@ -43,10 +50,19 @@ fn setup_demo_economy_via_commands(state: &mut GameState) {
     )
     .expect("parada descarga");
 
-    let mut truck = Vehicle::new(9010, VehicleKind::Truck, DEMO_LOAD, DEMO_DELIVER);
+    if let Some(station) = state.stations.iter_mut().find(|s| s.pos == DEMO_DELIVER) {
+        station.cargo_stock.wood = FACTORY_WOOD_INPUT * 8;
+    }
+
+    let mut truck = Vehicle::new(9010, VehicleKind::Truck, DEMO_LOAD, DEMO_LOAD);
     truck.running = true;
     truck.set_station_orders(vec![DEMO_LOAD, DEMO_DELIVER]);
-    if let Some(path) = find_path(&state.map, DEMO_LOAD, DEMO_DELIVER, PathNetwork::Road) {
+    let load_road = road_stop_approach_tile(&state.map, DEMO_LOAD).unwrap_or(DEMO_LOAD);
+    truck.pos = load_road;
+    truck.sync_order_destination(&state.map);
+    if truck.pos != truck.dest
+        && let Some(path) = find_path(&state.map, truck.pos, truck.dest, PathNetwork::Road)
+    {
         truck.path = path.into();
     }
     state.vehicles.push(truck);

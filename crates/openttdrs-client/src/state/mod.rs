@@ -156,8 +156,8 @@ mod sim_world_coverage_tests {
         assert!(w.ottdmap_extras.is_none());
         assert_eq!(
             w.state.industries.len(),
-            3,
-            "mina demo + bosque + fábrica showcase"
+            4,
+            "mina demo + fábrica demo + bosque + fábrica showcase"
         );
         assert_eq!(
             w.state.stations.len(),

@@ -36,8 +36,8 @@ include!(concat!(
 
 const FALLBACK_WH: (f32, f32) = (64.0, 48.0);
 
-/// Filas `gfx` en tabla (0..=119). Valores ≥120 no tienen entrada.
-pub const INDUSTRY_GFX_TABLE_LEN: u16 = 120;
+/// Filas `gfx` en tabla (0..=130). Valores ≥131 no tienen entrada.
+pub const INDUSTRY_GFX_TABLE_LEN: u16 = 131;
 
 /// Estadios por `gfx` (OpenTTD `_industry_draw_tile_data`: 0–3).
 pub const INDUSTRY_GFX_STAGES: usize = 4;
@@ -92,7 +92,7 @@ pub fn industry_gfx_status_label(status: IndustryGfxStatus) -> &'static str {
     match status {
         IndustryGfxStatus::Resolved => "ok",
         IndustryGfxStatus::EmptyRow => "sin sprite",
-        IndustryGfxStatus::OutOfRange => "gfx≥120",
+        IndustryGfxStatus::OutOfRange => "gfx≥131",
     }
 }
 
@@ -173,7 +173,7 @@ pub fn log_industry_gfx_once(gfx: u16, m1: u8, entry: Option<&IndustryGfxSprite>
     }
     let reason = match status {
         IndustryGfxStatus::OutOfRange => {
-            "sin entrada en INDUSTRY_GFX_DATA (gfx≥120 o fuera de tabla)"
+            "sin entrada en INDUSTRY_GFX_DATA (gfx≥131 o fuera de tabla)"
         }
         IndustryGfxStatus::EmptyRow => "fila vacía en INDUSTRY_GFX_DATA",
         IndustryGfxStatus::Resolved => return,
@@ -232,8 +232,8 @@ mod industry_coverage_tests {
         assert_eq!(e.ground_sprite_id, 2022);
         assert!((e.w - 58.0).abs() < 0.1);
         assert!((e.h - 50.0).abs() < 0.1);
-        assert!((e.xrel - (-16.0)).abs() < 0.1);
-        assert!((e.yrel - (-33.0)).abs() < 0.1);
+        assert!((e.xrel - (-14.0)).abs() < 0.1);
+        assert!((e.yrel - (-35.0)).abs() < 0.1);
         assert!((e.ground_w - 64.0).abs() < 0.1);
         assert!((e.ground_xrel - (-31.0)).abs() < 0.1);
         assert!(!industry_gfx_uses_generic_fallback(e));
@@ -244,7 +244,7 @@ mod industry_coverage_tests {
         let e = industry_gfx_entry(7).expect("gfx 7");
         assert_eq!(e.sprite_id, 2047);
         assert!((e.xrel - (-21.0)).abs() < 0.1);
-        assert!((e.yrel - (-34.0)).abs() < 0.1);
+        assert!((e.yrel - (-35.0)).abs() < 0.1);
     }
 
     #[test]
@@ -253,10 +253,21 @@ mod industry_coverage_tests {
     }
 
     #[test]
-    fn gfx_120_and_above_are_out_of_range() {
-        assert_eq!(industry_gfx_status(120), IndustryGfxStatus::OutOfRange);
+    fn gfx_120_through_130_in_table() {
+        for gfx in 120..=130 {
+            assert_ne!(
+                industry_gfx_status(gfx),
+                IndustryGfxStatus::OutOfRange,
+                "gfx {gfx} debe estar en tabla"
+            );
+        }
+    }
+
+    #[test]
+    fn gfx_131_and_above_are_out_of_range() {
+        assert_eq!(industry_gfx_status(131), IndustryGfxStatus::OutOfRange);
         assert_eq!(industry_gfx_status(256), IndustryGfxStatus::OutOfRange);
-        assert!(industry_gfx_entry(120).is_none());
+        assert!(industry_gfx_entry(131).is_none());
     }
 
     #[test]
@@ -303,7 +314,11 @@ mod industry_coverage_tests {
             industry_gfx_draw_index(7, 2),
             Some(7 * INDUSTRY_GFX_STAGES + 2)
         );
-        assert_eq!(industry_gfx_draw_index(120, 0), None);
+        assert_eq!(
+            industry_gfx_draw_index(120, 0),
+            Some(120 * INDUSTRY_GFX_STAGES)
+        );
+        assert_eq!(industry_gfx_draw_index(131, 0), None);
     }
 
     #[test]

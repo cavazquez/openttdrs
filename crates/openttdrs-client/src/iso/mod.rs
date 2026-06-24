@@ -688,6 +688,53 @@ mod world_pos_to_tile_tests {
     }
 
     #[test]
+    fn road_depot_checklist_layers_prefer_depot_over_exit_road() {
+        use crate::sprites::{road_depot_build_layers, road_depot_seq_gfx};
+
+        const CASES: [(i32, i32, usize, i32, i32); 4] = [
+            (3, 6, 0, -1, 0),  // NE → boca oeste en (2,6)
+            (6, 6, 1, 0, 1),   // SE → boca sur en (6,7)
+            (10, 6, 2, 1, 0),  // SW → boca este en (11,6)
+            (14, 6, 3, 0, -1), // NW → boca norte en (14,5)
+        ];
+
+        for (tx, ty, dir, rdx, rdy) in CASES {
+            let origin = iso(tx, ty);
+            let ground = Vec2::new(origin.x, origin.y - super::TILE_HALF_H);
+            let road = iso(tx + rdx, ty + rdy);
+            let ground_road = Vec2::new(road.x, road.y - super::TILE_HALF_H);
+            let layers = road_depot_build_layers(dir);
+            // La boca 12×12 puede acercarse a la calzada de salida; el edificio debe quedar en la tesela del depósito.
+            let layer_range = if dir == 1 || dir == 2 {
+                1..layers.len()
+            } else {
+                0..layers.len()
+            };
+            for spec in &layers[layer_range] {
+                let center = super::road_stop_build_sprite_center(
+                    origin,
+                    tx,
+                    ty,
+                    0,
+                    spec.z,
+                    road_depot_seq_gfx(spec),
+                    spec.w,
+                    spec.h,
+                );
+                let dist_depot = (center.x - ground.x).hypot(center.y - ground.y);
+                let dist_road = (center.x - ground_road.x).hypot(center.y - ground_road.y);
+                assert!(
+                    dist_depot < dist_road,
+                    "depot dir {dir} capa z={} en ({tx},{ty}) no debe caer hacia ({}, {})",
+                    spec.z,
+                    tx + rdx,
+                    ty + rdy
+                );
+            }
+        }
+    }
+
+    #[test]
     fn diamond_top_vertex_still_resolves_tile() {
         let m = Map::new_flat(12, 8, 4);
         let tx = 1;

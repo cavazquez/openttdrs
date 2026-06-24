@@ -77,8 +77,9 @@ pub use rail_signals::{
     signal_placement_for_facing, valid_signal_facings,
 };
 pub use road_movement::{
-    road_turn_entry_exit, straight_subtile, train_straight_subtile, train_subtile_direction,
-    vehicle_render_direction, vehicle_render_progress, vehicle_subtile,
+    VehiclePose, extrapolate_vehicle_pose, road_turn_entry_exit, straight_subtile,
+    train_straight_subtile, train_subtile_direction, vehicle_render_direction,
+    vehicle_render_direction_at, vehicle_render_progress, vehicle_subtile, vehicle_subtile_at,
     vehicle_subtile_with_progress,
 };
 pub use sav::{SavError, SavGame, SavIndustry, SavStation, SavVehicle, SavVehicleKind};
@@ -89,8 +90,8 @@ pub use station::{
     STATION_COVERAGE_RADIUS, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage,
     StationMapCoherenceReport, StopKind, industry_in_station_coverage, is_rail_waypoint_at,
     is_rail_waypoint_tile, rail_station_approach_tile, resolve_order_destination,
-    station_coverage_at, station_covers_tile, station_map_coherence, station_type_from_m6,
-    stop_kind_from_m6,
+    road_stop_approach_tile, station_coverage_at, station_covers_tile, station_map_coherence,
+    station_type_from_m6, stop_kind_from_m6, vehicle_at_road_stop, vehicle_physically_at_station,
 };
 pub use tick::GameTick;
 pub use tnbp_decode::{

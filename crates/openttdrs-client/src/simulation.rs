@@ -8,6 +8,7 @@ use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
 
 /// Frecuencia del tick de simulación (debe coincidir con `Time<Fixed>`).
+/// Calibrado con `REFERENCE_PROGRESS_STEP` (~5 ticks/tesela) y 74 ticks/día de OpenTTD.
 pub(crate) const SIM_TICK_HZ: f64 = 5.0;
 
 /// Fracción del tick de simulación actual (0..1) para interpolar el render entre pasos.

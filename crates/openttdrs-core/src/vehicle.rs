@@ -494,6 +494,16 @@ impl Vehicle {
             self.progress = 0;
             return;
         }
+        if self.cargo > 0
+            && !self
+                .orders
+                .get(self.current_order)
+                .is_some_and(|o| o.no_unload())
+        {
+            // Esperar a descargar en la parada actual antes de pasar a la siguiente orden.
+            self.progress = 255;
+            return;
+        }
         let pass_through = self.orders[self.current_order].is_pass_through();
         if self.orders[self.current_order].full_load() && self.cargo < self.capacity {
             self.progress = 255;
@@ -505,6 +515,39 @@ impl Vehicle {
         } else {
             self.progress = 255;
         }
+        self.current_order = (self.current_order + 1) % self.orders.len();
+        self.origin = self.pos;
+        if self.kind != VehicleKind::Train {
+            self.dest = self.orders[self.current_order].destination();
+        }
+    }
+
+    /// Tras descargar en la parada actual, pasar a la siguiente orden antes de la fase de carga.
+    pub(crate) fn advance_after_unloading(&mut self) {
+        if self.orders.is_empty() {
+            return;
+        }
+        self.path.clear();
+        self.depart_turn = 0;
+        self.progress = 255;
+        self.current_order = (self.current_order + 1) % self.orders.len();
+        self.origin = self.pos;
+        if self.kind != VehicleKind::Train {
+            self.dest = self.orders[self.current_order].destination();
+        }
+    }
+
+    /// Tras cargar en la parada actual, pasar a la siguiente orden aunque haya carga a bordo.
+    pub(crate) fn advance_after_loading(&mut self) {
+        if self.orders.is_empty() {
+            return;
+        }
+        if self.orders[self.current_order].full_load() && self.cargo < self.capacity {
+            return;
+        }
+        self.path.clear();
+        self.depart_turn = 0;
+        self.progress = 255;
         self.current_order = (self.current_order + 1) % self.orders.len();
         self.origin = self.pos;
         if self.kind != VehicleKind::Train {
@@ -644,19 +687,25 @@ mod tests {
 
     #[test]
     fn arrival_at_order_keeps_progress_at_lane_end() {
-        let mut v = Vehicle::new(
-            0,
-            VehicleKind::Bus,
-            TileCoord::new(15, 4),
-            TileCoord::new(15, 3),
-        );
-        v.set_station_orders(vec![TileCoord::new(15, 3), TileCoord::new(21, 3)]);
-        v.path = VecDeque::from([TileCoord::new(15, 3)]);
+        use crate::command::apply_command;
+        use crate::{Command, GameState};
+
+        let mut state = GameState::new(24, 18);
+        let stop = TileCoord::new(15, 3);
+        let road = TileCoord::new(15, 4);
+        apply_command(&mut state, &Command::SetRoadBits(road, 0x0A)).unwrap();
+        apply_command(&mut state, &Command::PlaceBusStop(stop, 1)).unwrap();
+
+        let mut v = Vehicle::new(0, VehicleKind::Bus, TileCoord::new(14, 4), stop);
+        v.set_station_orders(vec![stop, TileCoord::new(21, 3)]);
+        v.sync_order_destination(&state.map);
+        assert_eq!(v.dest, stop, "bus entra en tesela de parada");
+        v.path = VecDeque::from([stop]);
         v.direction = DIR_NW;
         v.set_cruise_speed();
         v.progress = 250;
         v.step();
-        assert_eq!(v.pos, TileCoord::new(15, 3));
+        assert_eq!(v.pos, stop);
         assert_eq!(v.progress, 255, "anclado al final del carril al llegar");
     }
 

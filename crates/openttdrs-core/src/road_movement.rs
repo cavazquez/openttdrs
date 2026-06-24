@@ -1,5 +1,6 @@
 //! Sub-tesela de vehículos en carretera/vía (`table/roadveh_movement.h`).
 
+use crate::map::TileCoord;
 use crate::vehicle::{
     DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, Vehicle, VehicleDirection,
     VehicleKind, direction_from_tile_step, reverse_direction,
@@ -260,22 +261,161 @@ fn depart_u_turn_curve(inbound: VehicleDirection) -> Option<&'static [SubTile]> 
     }
 }
 
+/// Posición sub-tesela usada para dibujo (puede diferir del estado de sim tras extrapolar).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VehiclePose {
+    pub pos: TileCoord,
+    pub progress: u8,
+    pub depart_turn: u8,
+    /// Índice en `Vehicle::path` del siguiente paso desde `pos`.
+    pub path_index: usize,
+}
+
+impl VehiclePose {
+    #[must_use]
+    pub fn from_vehicle(v: &Vehicle) -> Self {
+        Self {
+            pos: v.pos,
+            progress: v.progress,
+            depart_turn: v.depart_turn,
+            path_index: 0,
+        }
+    }
+}
+
+fn movement_target_at(v: &Vehicle, pos: TileCoord, path_index: usize) -> Option<TileCoord> {
+    if !v.running {
+        return None;
+    }
+    if let Some(&next) = v.path.get(path_index) {
+        return Some(next);
+    }
+    if pos == v.dest {
+        return None;
+    }
+    if v.kind == VehicleKind::Train {
+        return None;
+    }
+    if !v.orders.is_empty() && v.no_network_route_to_order {
+        return None;
+    }
+    let dx = v.dest.x - pos.x;
+    let dy = v.dest.y - pos.y;
+    if dx == 0 && dy == 0 {
+        return None;
+    }
+    Some(if dx != 0 {
+        TileCoord::new(pos.x + dx.signum(), pos.y)
+    } else {
+        TileCoord::new(pos.x, pos.y + dy.signum())
+    })
+}
+
+fn needs_depart_turnaround_at(v: &Vehicle, pos: TileCoord, path_index: usize) -> bool {
+    if v.kind == VehicleKind::Train {
+        return false;
+    }
+    let Some(next) = movement_target_at(v, pos, path_index) else {
+        return false;
+    };
+    let outbound = direction_from_tile_step(pos, next);
+    outbound == reverse_direction(v.direction)
+}
+
+fn virtual_advance_tile(
+    v: &Vehicle,
+    pos: TileCoord,
+    path_index: usize,
+) -> Option<(TileCoord, usize)> {
+    if let Some(&next) = v.path.get(path_index) {
+        return Some((next, path_index + 1));
+    }
+    if pos == v.dest {
+        return None;
+    }
+    let dx = v.dest.x - pos.x;
+    let dy = v.dest.y - pos.y;
+    if dx == 0 && dy == 0 {
+        return None;
+    }
+    Some((
+        if dx != 0 {
+            TileCoord::new(pos.x + dx.signum(), pos.y)
+        } else {
+            TileCoord::new(pos.x, pos.y + dy.signum())
+        },
+        path_index,
+    ))
+}
+
+/// Extrapola posición sub-tesela entre ticks de sim (atraviesa límites de tesela sin saltos).
+#[must_use]
+pub fn extrapolate_vehicle_pose(v: &Vehicle, alpha: f32) -> VehiclePose {
+    let mut pose = VehiclePose::from_vehicle(v);
+    if alpha <= 0.0 || !v.running || v.cur_speed == 0 {
+        return pose;
+    }
+    let step = v.progress_step();
+    if step == 0 {
+        return pose;
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let mut budget = (f32::from(step) * alpha.clamp(0.0, 1.0)) as u16;
+    if budget == 0 {
+        return pose;
+    }
+
+    let mut path_index = 0_usize;
+
+    if pose.depart_turn > 0 {
+        let next = u16::from(pose.depart_turn).saturating_add(budget);
+        if next < 255 {
+            pose.depart_turn = u8::try_from(next).unwrap_or(255);
+            pose.path_index = path_index;
+            return pose;
+        }
+        budget = next - 255;
+        pose.depart_turn = 0;
+        pose.progress = 0;
+    }
+
+    if pose.progress == 255 && needs_depart_turnaround_at(v, pose.pos, path_index) && budget > 0 {
+        pose.depart_turn = u8::try_from(budget.min(u16::from(u8::MAX))).unwrap_or(u8::MAX);
+        pose.path_index = path_index;
+        return pose;
+    }
+
+    let mut progress = u16::from(pose.progress);
+    loop {
+        progress = progress.saturating_add(budget);
+        if progress < 255 {
+            pose.progress = u8::try_from(progress).unwrap_or(254);
+            pose.path_index = path_index;
+            return pose;
+        }
+        progress -= 255;
+        let Some((next, next_index)) = virtual_advance_tile(v, pose.pos, path_index) else {
+            pose.progress = 255;
+            pose.path_index = path_index;
+            return pose;
+        };
+        pose.pos = next;
+        path_index = next_index;
+        pose.progress = 0;
+        if progress > 0 {
+            budget = progress;
+            progress = 0;
+            continue;
+        }
+        pose.path_index = path_index;
+        return pose;
+    }
+}
+
 /// Progreso sub-tesela para dibujo (permite extrapolación visual entre ticks de sim).
 #[must_use]
 pub fn vehicle_render_progress(v: &Vehicle, tick_alpha: f32) -> u8 {
-    if v.depart_turn > 0 {
-        return v.depart_turn;
-    }
-    if !v.running || v.cur_speed == 0 || tick_alpha <= 0.0 {
-        return v.progress;
-    }
-    let step = u16::from(v.progress_step());
-    if step == 0 {
-        return v.progress;
-    }
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let extra = (f32::from(step) * tick_alpha.clamp(0.0, 1.0)) as u16;
-    u8::try_from((u16::from(v.progress).saturating_add(extra)).min(255)).unwrap_or(255)
+    extrapolate_vehicle_pose(v, tick_alpha).progress
 }
 
 /// Sub-tesela `OpenTTD` para dibujo (recto, curva de giro o media vuelta en parada).
@@ -287,54 +427,112 @@ pub fn vehicle_subtile(v: &Vehicle) -> (f32, f32) {
 /// Como [`vehicle_subtile`] con progreso explícito (p. ej. interpolación de render).
 #[must_use]
 pub fn vehicle_subtile_with_progress(v: &Vehicle, progress: u8) -> (f32, f32) {
+    vehicle_subtile_at(
+        v,
+        VehiclePose {
+            pos: v.pos,
+            progress,
+            depart_turn: v.depart_turn,
+            path_index: 0,
+        },
+    )
+}
+
+/// Sub-tesela para una pose concreta (sim actual o extrapolada).
+#[must_use]
+pub fn vehicle_subtile_at(v: &Vehicle, pose: VehiclePose) -> (f32, f32) {
     if matches!(v.kind, VehicleKind::Train) {
-        return train_straight_subtile(train_subtile_direction(v), progress);
+        return train_straight_subtile(train_subtile_direction(v), pose.progress);
     }
-    if v.depart_turn > 0
+    if pose.depart_turn > 0
         && let Some(curve) = depart_u_turn_curve(v.direction)
     {
-        return sample_curve(curve, v.depart_turn);
+        return sample_curve(curve, pose.depart_turn);
     }
-    if progress == 255 && v.movement_target().is_none() && v.pos == v.dest {
+    if pose.progress == 255
+        && movement_target_at(v, pose.pos, pose.path_index).is_none()
+        && pose.pos == v.dest
+    {
         return straight_subtile(v.direction, 255);
     }
-    if let Some((entry, exit)) = road_turn_entry_exit(v)
+    if let Some((entry, exit)) = road_turn_entry_exit_at(v, pose.pos, pose.path_index)
         && let Some(curve) = turn_curve(entry, exit)
     {
-        return sample_curve(curve, progress);
+        return sample_curve(curve, pose.progress);
     }
-    let dir = if progress == 255 && v.movement_target().is_some() && v.needs_depart_turnaround() {
+    let dir = if pose.progress == 255
+        && movement_target_at(v, pose.pos, pose.path_index).is_some()
+        && needs_depart_turnaround_at(v, pose.pos, pose.path_index)
+    {
         v.direction
     } else {
-        v.movement_direction()
+        movement_direction_at(v, pose.pos, pose.path_index)
     };
-    straight_subtile(dir, progress)
+    straight_subtile(dir, pose.progress)
+}
+
+fn movement_direction_at(v: &Vehicle, pos: TileCoord, path_index: usize) -> VehicleDirection {
+    let Some(next) = movement_target_at(v, pos, path_index) else {
+        return v.direction;
+    };
+    direction_from_tile_step(pos, next)
+}
+
+fn road_turn_entry_exit_at(
+    v: &Vehicle,
+    pos: TileCoord,
+    path_index: usize,
+) -> Option<(VehicleDirection, VehicleDirection)> {
+    if !v.running {
+        return None;
+    }
+    let next = movement_target_at(v, pos, path_index)?;
+    let after = v.path.get(path_index + 1).copied()?;
+    let entry = direction_from_tile_step(pos, next);
+    let exit = direction_from_tile_step(next, after);
+    if entry == exit || entry & 1 == 0 || exit & 1 == 0 {
+        return None;
+    }
+    Some((entry, exit))
 }
 
 /// Dirección de sprite con progreso de render (giros suaves entre ticks).
 #[must_use]
 pub fn vehicle_render_direction(v: &Vehicle, progress: u8) -> VehicleDirection {
+    vehicle_render_direction_at(
+        v,
+        VehiclePose {
+            pos: v.pos,
+            progress,
+            depart_turn: v.depart_turn,
+            path_index: 0,
+        },
+    )
+}
+
+/// Dirección de sprite para una pose concreta.
+#[must_use]
+pub fn vehicle_render_direction_at(v: &Vehicle, pose: VehiclePose) -> VehicleDirection {
     if matches!(v.kind, VehicleKind::Train) {
         return train_subtile_direction(v);
     }
-    if v.depart_turn > 0 {
-        let outbound = v
-            .movement_target()
-            .map_or(v.direction, |next| direction_from_tile_step(v.pos, next));
-        if progress < 128 {
+    if pose.depart_turn > 0 {
+        let outbound = movement_target_at(v, pose.pos, pose.path_index)
+            .map_or(v.direction, |next| direction_from_tile_step(pose.pos, next));
+        if pose.progress < 128 {
             return v.direction;
         }
         return turn_cardinal_for_render(v.direction, outbound);
     }
-    let Some(next) = v.movement_target() else {
+    let Some(next) = movement_target_at(v, pose.pos, pose.path_index) else {
         return v.direction;
     };
-    let entry = direction_from_tile_step(v.pos, next);
-    if progress < 128 {
+    let entry = direction_from_tile_step(pose.pos, next);
+    if pose.progress < 128 {
         return entry;
     }
-    if let Some(&after) = v.path.get(1) {
-        let exit = direction_from_tile_step(next, after);
+    if let Some(after) = v.path.get(pose.path_index + 1) {
+        let exit = direction_from_tile_step(next, *after);
         if exit != entry {
             return turn_cardinal_for_render(entry, exit);
         }
@@ -441,6 +639,26 @@ mod tests {
         let parked = vehicle_subtile_with_progress(&v, 255);
         let inbound_end = straight_subtile(DIR_NW, 255);
         assert_eq!(parked, inbound_end);
+    }
+
+    #[test]
+    fn extrapolate_crosses_tile_between_sim_ticks() {
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Truck,
+            TileCoord::new(5, 6),
+            TileCoord::new(6, 6),
+        );
+        v.path = VecDeque::from([TileCoord::new(6, 6)]);
+        v.set_cruise_speed();
+        v.progress = 230;
+        let pose = extrapolate_vehicle_pose(&v, 1.0);
+        assert_eq!(
+            pose.pos,
+            TileCoord::new(6, 6),
+            "extrapolación debe cruzar la tesela como haría el siguiente tick"
+        );
+        assert!(pose.progress < v.progress_step());
     }
 
     #[test]

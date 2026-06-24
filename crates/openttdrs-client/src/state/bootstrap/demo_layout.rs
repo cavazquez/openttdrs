@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    Command, GameState, Industry, IndustryKind, PathNetwork, TileCoord, TileKind, Vehicle,
-    VehicleKind, apply_command, find_path,
+    Command, FACTORY_WOOD_INPUT, GameState, Industry, IndustryKind, IndustrySpec, PathNetwork,
+    TileCoord, TileKind, Vehicle, VehicleKind, apply_command, find_path, road_stop_approach_tile,
 };
 
 /// Carretera horizontal de demo (eje X).
@@ -30,6 +30,8 @@ pub const DEMO_ECONOMY_INDUSTRY: TileCoord = TileCoord::new(2, 3);
 pub const DEMO_ECONOMY_LOAD_STATION: TileCoord = TileCoord::new(3, DEMO_ROAD_Y - 1);
 /// Parada de camión en hierba al norte de la carretera (descarga / ingresos).
 pub const DEMO_ECONOMY_DELIVER_STATION: TileCoord = TileCoord::new(10, DEMO_ROAD_Y - 1);
+/// Fábrica que consume carbón (y madera) entregado en la parada de descarga.
+pub const DEMO_ECONOMY_FACTORY: TileCoord = TileCoord::new(8, 2);
 /// Entrada de parada hacia la carretera en `y = DEMO_ROAD_Y` (tesela al sur → `DIAGDIR_SE`).
 const DEMO_ECONOMY_STATION_ENTRANCE_DIR: u8 = 1;
 
@@ -75,27 +77,45 @@ pub(crate) fn place_demo_economy_loop(state: &mut GameState) {
     mine.stock = 64;
     state.industries.push(mine);
 
+    let _ = apply_command(
+        state,
+        &Command::PlaceIndustrySpec(DEMO_ECONOMY_FACTORY, IndustrySpec::Factory),
+    );
+
     place_demo_truck_station(state, DEMO_ECONOMY_LOAD_STATION);
     place_demo_truck_station(state, DEMO_ECONOMY_DELIVER_STATION);
+    seed_factory_inputs_at_deliver_station(state);
 
     let orders = vec![DEMO_ECONOMY_LOAD_STATION, DEMO_ECONOMY_DELIVER_STATION];
+    let load_road = road_stop_approach_tile(&state.map, DEMO_ECONOMY_LOAD_STATION)
+        .unwrap_or(DEMO_ECONOMY_LOAD_STATION);
     let mut truck = Vehicle::new(
         9010,
         VehicleKind::Truck,
+        load_road,
         DEMO_ECONOMY_LOAD_STATION,
-        DEMO_ECONOMY_DELIVER_STATION,
     );
     truck.running = true;
     truck.set_station_orders(orders);
-    if let Some(path) = find_path(
-        &state.map,
-        DEMO_ECONOMY_LOAD_STATION,
-        DEMO_ECONOMY_DELIVER_STATION,
-        PathNetwork::Road,
-    ) {
+    truck.sync_order_destination(&state.map);
+    if truck.pos != truck.dest
+        && let Some(path) = find_path(&state.map, truck.pos, truck.dest, PathNetwork::Road)
+    {
         truck.path = path.into();
     }
     state.vehicles.push(truck);
+}
+
+/// Madera y carbón inicial en la parada de descarga para que la fábrica procese
+/// en cuanto el camión demo entregue más carbón de la mina.
+fn seed_factory_inputs_at_deliver_station(state: &mut GameState) {
+    if let Some(station) = state
+        .stations
+        .iter_mut()
+        .find(|s| s.pos == DEMO_ECONOMY_DELIVER_STATION)
+    {
+        station.cargo_stock.wood = FACTORY_WOOD_INPUT * 8;
+    }
 }
 
 fn place_demo_truck_station(state: &mut GameState, pos: TileCoord) {
@@ -189,7 +209,7 @@ pub(crate) fn log_procedural_demo_zones() {
     info!(
         "Mapa demo ({}×{}): carretera y={DEMO_ROAD_Y} x=2..12 (bus+camión) | \
          vía y={DEMO_RAIL_Y} x=2..12 (tren) | \
-         economía mina ({},{}) → est ({},{}) → ({},{}) (camión #9010) | \
+         economía mina ({},{}) → fábrica ({},{}) vía est ({},{}) → ({},{}) (camión #9010) | \
          puente agua x={DEMO_BRIDGE_WATER_X0}..{DEMO_BRIDGE_WATER_X1} y={DEMO_BRIDGE_WATER_Y0}..{DEMO_BRIDGE_WATER_Y1} \
          orillas x={DEMO_BRIDGE_BANK_W},{DEMO_BRIDGE_BANK_E} y={DEMO_BRIDGE_BANK_N},{DEMO_BRIDGE_BANK_S} \
          (construir E–O entre ({DEMO_BRIDGE_BANK_W},{DEMO_BRIDGE_Y}) y ({DEMO_BRIDGE_BANK_E},{DEMO_BRIDGE_Y})) | \
@@ -198,6 +218,8 @@ pub(crate) fn log_procedural_demo_zones() {
         crate::state::MAP_H,
         DEMO_ECONOMY_INDUSTRY.x,
         DEMO_ECONOMY_INDUSTRY.y,
+        DEMO_ECONOMY_FACTORY.x,
+        DEMO_ECONOMY_FACTORY.y,
         DEMO_ECONOMY_LOAD_STATION.x,
         DEMO_ECONOMY_LOAD_STATION.y,
         DEMO_ECONOMY_DELIVER_STATION.x,
@@ -262,7 +284,14 @@ mod tests {
         place_clean_demo_transport(&mut state);
         place_demo_economy_loop(&mut state);
 
-        assert_eq!(state.industries.len(), 1);
+        assert_eq!(state.industries.len(), 2);
+        assert!(
+            state
+                .industries
+                .iter()
+                .any(|i| i.spec == Some(IndustrySpec::Factory)),
+            "fábrica consumidora junto a la parada de descarga"
+        );
         assert_eq!(state.stations.len(), 2);
         assert_eq!(
             state.map.get_kind(DEMO_ECONOMY_LOAD_STATION),
@@ -300,7 +329,7 @@ mod tests {
         place_clean_demo_transport(&mut state);
         place_demo_economy_loop(&mut state);
 
-        for _ in 0..800 {
+        for _ in 0..1200 {
             state.step();
         }
         assert!(state.stats.cargo_units_loaded > 0, "debe cargar en la mina");
@@ -311,6 +340,15 @@ mod tests {
         assert!(
             state.stats.cargo_income_earned > 0,
             "entrega genera ingresos TTD"
+        );
+        let deliver = state
+            .stations
+            .iter()
+            .find(|s| s.pos == DEMO_ECONOMY_DELIVER_STATION)
+            .expect("parada descarga");
+        assert!(
+            deliver.cargo_stock.coal > 0 || deliver.income > 0,
+            "carbón acumulado en parada de descarga tras entregas del camión"
         );
     }
 

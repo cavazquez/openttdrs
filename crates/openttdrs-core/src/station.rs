@@ -185,6 +185,80 @@ pub fn rail_station_approach_tile(map: &Map, station_pos: TileCoord) -> Option<T
     adjacent.or(platform).map(|(_, track)| track)
 }
 
+fn is_road_approach_kind(kind: TileKind) -> bool {
+    matches!(
+        kind,
+        TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge
+    )
+}
+
+/// Tesela de carretera donde bus/camión debe detenerse junto a la parada (no sobre la hierba).
+#[must_use]
+pub fn road_stop_approach_tile(map: &Map, station_pos: TileCoord) -> Option<TileCoord> {
+    let tile = map.get(station_pos)?;
+    if tile.kind != TileKind::Station {
+        return None;
+    }
+    match station_type_from_m6(tile.m6) {
+        2 | 3 => {}
+        _ => return None,
+    }
+    let dir = tile.m5 & 0x03;
+    let (dx, dy) = diag_dir_offset(dir);
+    let road = TileCoord::new(station_pos.x + dx, station_pos.y + dy);
+    if map.get_kind(road).is_some_and(is_road_approach_kind) {
+        return Some(road);
+    }
+    for d in 0..4u8 {
+        let (odx, ody) = diag_dir_offset(d);
+        let n = TileCoord::new(station_pos.x + odx, station_pos.y + ody);
+        if map.get_kind(n).is_some_and(is_road_approach_kind) {
+            return Some(n);
+        }
+    }
+    None
+}
+
+/// El vehículo está en la tesela de la parada o en su vía/carretera de acceso.
+#[must_use]
+pub fn vehicle_physically_at_station(
+    map: &Map,
+    vehicle: &crate::Vehicle,
+    station: &Station,
+) -> bool {
+    if !station.can_service_vehicle(vehicle.kind) {
+        return false;
+    }
+    let vpos = vehicle.pos;
+    if vpos == station.pos {
+        return true;
+    }
+    match vehicle.kind {
+        VehicleKind::Truck | VehicleKind::Bus => {
+            road_stop_approach_tile(map, station.pos).is_some_and(|approach| vpos == approach)
+        }
+        VehicleKind::Train => {
+            rail_station_approach_tile(map, station.pos).is_some_and(|approach| vpos == approach)
+        }
+    }
+}
+
+/// El vehículo llegó a la parada de la orden actual (tesela de estación o carretera de acceso).
+#[must_use]
+pub fn vehicle_at_road_stop(map: &Map, vehicle: &crate::Vehicle) -> bool {
+    if vehicle.manhattan_to_dest() == 0 {
+        return true;
+    }
+    let Some(VehicleOrder::Station { station, .. }) = vehicle.orders.get(vehicle.current_order)
+    else {
+        return false;
+    };
+    if vehicle.pos == *station {
+        return true;
+    }
+    road_stop_approach_tile(map, *station).is_some_and(|approach| vehicle.pos == approach)
+}
+
 /// Destino de movimiento según tipo de vehículo y orden (trenes paran en la vía adyacente).
 #[must_use]
 pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrder) -> TileCoord {
@@ -307,11 +381,31 @@ pub fn station_coverage_at(
     coverage
 }
 
+/// Parada donde el vehículo puede recoger mercancía primaria (mina, bosque, pozo).
+#[must_use]
+pub fn station_is_freight_pickup_stop(
+    map: &Map,
+    industries: &[Industry],
+    station_pos: TileCoord,
+    cargo: CargoType,
+) -> bool {
+    let coverage = station_coverage_at(map, industries, station_pos, STATION_COVERAGE_RADIUS);
+    match cargo {
+        CargoType::Coal => coverage.supplies_coal > 0,
+        CargoType::Wood => coverage.supplies_wood > 0,
+        CargoType::Oil => coverage.supplies_oil > 0,
+        _ => false,
+    }
+}
+
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod coherence_tests {
     use super::*;
-    use crate::{Command, GameState, command::apply_command};
+    use crate::{
+        CargoType, Command, GameState, Industry, IndustryKind, PathNetwork, Vehicle, VehicleKind,
+        command::apply_command, find_path,
+    };
 
     #[test]
     fn stop_kind_from_m6_maps_openttd_station_types() {
@@ -347,5 +441,167 @@ mod coherence_tests {
         assert_eq!(state.map.get_kind(stop), Some(TileKind::Station));
         assert_eq!(state.stations.len(), 1);
         assert_eq!(state.stations[0].pos, stop);
+    }
+
+    #[test]
+    fn truck_does_not_reload_coal_at_deliver_on_load_order() {
+        let mut state = GameState::new(16, 12);
+        let load_stop = TileCoord::new(3, 5);
+        let deliver_stop = TileCoord::new(10, 5);
+        let deliver_road = TileCoord::new(10, 6);
+        for x in 2..=12_i32 {
+            apply_command(
+                &mut state,
+                &Command::PlaceRoadBits(TileCoord::new(x, 6), 0x0A),
+            )
+            .unwrap();
+        }
+        apply_command(&mut state, &Command::PlaceStationDir(load_stop, 1)).unwrap();
+        apply_command(&mut state, &Command::PlaceStationDir(deliver_stop, 1)).unwrap();
+        let deliver_idx = state
+            .stations
+            .iter()
+            .position(|s| s.pos == deliver_stop)
+            .expect("parada descarga");
+        state.stations[deliver_idx].cargo_stock.coal = 20;
+
+        let mut truck = Vehicle::new(9010, VehicleKind::Truck, deliver_road, load_stop);
+        truck.running = true;
+        truck.set_station_orders(vec![load_stop, deliver_stop]);
+        truck.sync_order_destination(&state.map);
+        state.vehicles.push(truck);
+
+        state.step();
+        assert_eq!(
+            state.vehicles[0].cargo, 0,
+            "orden de carga en mina: no tomar carbón en parada de descarga"
+        );
+    }
+
+    #[test]
+    fn truck_unloads_from_road_tile_adjacent_to_stop() {
+        let mut state = GameState::new(16, 12);
+        let load_road = TileCoord::new(3, 6);
+        let load_stop = TileCoord::new(3, 5);
+        let deliver_road = TileCoord::new(10, 6);
+        let deliver_stop = TileCoord::new(10, 5);
+        for x in 2..=12_i32 {
+            apply_command(
+                &mut state,
+                &Command::PlaceRoadBits(TileCoord::new(x, 6), 0x0A),
+            )
+            .unwrap();
+        }
+        apply_command(&mut state, &Command::PlaceStationDir(load_stop, 1)).unwrap();
+        apply_command(&mut state, &Command::PlaceStationDir(deliver_stop, 1)).unwrap();
+        assert_eq!(
+            road_stop_approach_tile(&state.map, load_stop),
+            Some(load_road)
+        );
+        assert_eq!(
+            road_stop_approach_tile(&state.map, deliver_stop),
+            Some(deliver_road)
+        );
+
+        let mut mine = Industry::new(TileCoord::new(2, 3), IndustryKind::CoalMine);
+        mine.stock = 64;
+        state.industries.push(mine);
+
+        let mut truck = Vehicle::new(9010, VehicleKind::Truck, load_road, load_stop);
+        truck.running = true;
+        truck.set_station_orders(vec![load_stop, deliver_stop]);
+        truck.sync_order_destination(&state.map);
+        assert_eq!(truck.dest, load_stop, "entra en tesela de parada al cargar");
+        if let Some(path) = find_path(&state.map, load_road, truck.dest, PathNetwork::Road) {
+            truck.path = path.into();
+        }
+        state.vehicles.push(truck);
+
+        for t in 1..=400 {
+            state.step();
+            if state.stats.cargo_units_delivered > 0 {
+                assert_eq!(
+                    state.vehicles[0].cargo, 0,
+                    "sin recarga instantánea tras la primera entrega (t={t})"
+                );
+                return;
+            }
+        }
+        panic!("camión debe descargar en parada de destino");
+    }
+
+    #[test]
+    fn truck_does_not_pick_up_wood_at_deliver_stop_after_unload() {
+        let mut state = GameState::new(16, 12);
+        let load_stop = TileCoord::new(3, 5);
+        let deliver_stop = TileCoord::new(10, 5);
+        let deliver_road = TileCoord::new(10, 6);
+        for x in 2..=12_i32 {
+            apply_command(
+                &mut state,
+                &Command::PlaceRoadBits(TileCoord::new(x, 6), 0x0A),
+            )
+            .unwrap();
+        }
+        apply_command(&mut state, &Command::PlaceStationDir(load_stop, 1)).unwrap();
+        apply_command(&mut state, &Command::PlaceStationDir(deliver_stop, 1)).unwrap();
+        let deliver_idx = state
+            .stations
+            .iter()
+            .position(|s| s.pos == deliver_stop)
+            .expect("parada descarga");
+        state.stations[deliver_idx].cargo_stock.wood = 160;
+
+        let mut truck = Vehicle::new(9010, VehicleKind::Truck, deliver_road, deliver_stop);
+        truck.running = true;
+        truck.cargo_type = Some(CargoType::Coal);
+        truck.cargo = 20;
+        truck.mark_cargo_loaded(TileCoord::new(2, 3));
+        truck.set_station_orders(vec![load_stop, deliver_stop]);
+        truck.current_order = 1;
+        truck.sync_order_destination(&state.map);
+        state.vehicles.push(truck);
+
+        state.step();
+        assert_eq!(
+            state.vehicles[0].cargo, 0,
+            "debe descargar carbón en parada de entrega"
+        );
+        assert_eq!(
+            state.vehicles[0].cargo_type, None,
+            "sin recargar madera de stock de fábrica en el mismo tick"
+        );
+        assert_eq!(
+            state.vehicles[0].current_order, 0,
+            "tras entregar, la orden activa debe ser la de carga en mina"
+        );
+    }
+
+    #[test]
+    fn truck_unloads_wood_at_deliver_even_when_cargo_source_is_station() {
+        let mut state = GameState::new(16, 12);
+        let deliver_stop = TileCoord::new(10, 5);
+        let deliver_road = TileCoord::new(10, 6);
+        apply_command(
+            &mut state,
+            &Command::PlaceRoadBits(TileCoord::new(10, 6), 0x0A),
+        )
+        .unwrap();
+        apply_command(&mut state, &Command::PlaceStationDir(deliver_stop, 1)).unwrap();
+
+        let mut truck = Vehicle::new(9010, VehicleKind::Truck, deliver_road, deliver_stop);
+        truck.running = true;
+        truck.cargo_type = Some(CargoType::Wood);
+        truck.cargo = 20;
+        truck.mark_cargo_loaded(deliver_stop);
+        truck.set_station_orders(vec![deliver_stop]);
+        truck.sync_order_destination(&state.map);
+        state.vehicles.push(truck);
+
+        state.step();
+        assert_eq!(
+            state.vehicles[0].cargo, 0,
+            "parada de entrega debe aceptar descarga aunque cargo_source sea la misma tesela"
+        );
     }
 }

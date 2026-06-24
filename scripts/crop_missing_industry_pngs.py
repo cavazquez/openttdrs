@@ -206,6 +206,8 @@ def main() -> int:
             print(f"  (omitido industry_{sid}.png: sheet ausente)")
 
     print(f"Listo: {ok} creados, {no_nfo} sin NFO, {no_sheet} sin sheet")
+    if ok > 0:
+        print("Siguiente paso: python3 scripts/gen_tile_atlas.py  (incluir PNGs nuevos en el atlas)")
     still_missing = [
         i for i in ids if not (tiles_dir / f"industry_{i}.png").is_file()
     ]

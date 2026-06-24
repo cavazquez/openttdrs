@@ -199,7 +199,7 @@ fn vehicle_loads_from_industry_covered_by_nearby_station() {
     let mut s = GameState::new(12, 8);
     let ipos = TileCoord::new(2, 2);
     let station_pos = TileCoord::new(6, 2);
-    let vehicle_pos = TileCoord::new(5, 2);
+    let vehicle_pos = ipos;
     let mut ind = Industry::new(ipos, IndustryKind::CoalMine);
     ind.stock = 50;
     s.industries.push(ind);
@@ -248,13 +248,12 @@ fn vehicle_delivers_to_station() {
 fn vehicle_delivers_when_inside_station_coverage() {
     let mut s = GameState::new(12, 8);
     let station_pos = TileCoord::new(6, 2);
-    let vehicle_pos = TileCoord::new(3, 2);
     s.stations.push(Station::new(station_pos));
     s.vehicles.push(Vehicle::new(
         0,
         VehicleKind::Truck,
-        vehicle_pos,
-        vehicle_pos,
+        station_pos,
+        station_pos,
     ));
     s.vehicles[0].cargo = 17;
 
@@ -405,6 +404,47 @@ fn train_loads_freight_from_rail_station_waiting_cargo() {
 }
 
 #[test]
+fn truck_does_not_load_coal_from_station_while_passing_nearby() {
+    use crate::command::apply_command;
+
+    let mut s = GameState::new(16, 12);
+    let stop = TileCoord::new(10, 5);
+    let road_y = 6_i32;
+    for x in 5..=15 {
+        s.map
+            .set_kind(TileCoord::new(x, road_y), TileKind::Road)
+            .expect("road");
+    }
+    apply_command(&mut s, &Command::PlaceStationDir(stop, 1)).expect("station");
+    let stop_idx = s
+        .stations
+        .iter()
+        .position(|st| st.pos == stop)
+        .expect("stop");
+    s.stations[stop_idx].cargo_stock.coal = 20;
+
+    let far_road = TileCoord::new(5, road_y);
+    let mut truck = Vehicle::new(1, VehicleKind::Truck, far_road, TileCoord::new(15, road_y));
+    truck.running = true;
+    truck.set_station_orders(vec![stop]);
+    truck.sync_order_destination(&s.map);
+    s.vehicles.push(truck);
+
+    for _ in 0..80 {
+        s.step();
+        let v = &s.vehicles[0];
+        if v.cargo > 0 {
+            let at_stop = v.pos == stop || road_stop_approach_tile(&s.map, stop) == Some(v.pos);
+            assert!(
+                at_stop,
+                "no debe cargar carbón lejos de la parada (pos {:?}, cargo {})",
+                v.pos, v.cargo
+            );
+        }
+    }
+}
+
+#[test]
 fn truck_prefers_industry_over_station_waiting_cargo() {
     let mut s = GameState::new(12, 8);
     let ipos = TileCoord::new(4, 0);
@@ -440,9 +480,8 @@ fn two_truck_transfer_via_station_hub() {
     }
     s.stations.push(Station::new(hub));
 
-    let pickup = TileCoord::new(7, 0);
     s.vehicles
-        .push(Vehicle::new(0, VehicleKind::Truck, pickup, pickup));
+        .push(Vehicle::new(0, VehicleKind::Truck, hub, hub));
     s.vehicles[0].cargo = 16;
     s.vehicles[0].cargo_type = Some(CargoType::Wood);
 

@@ -8,8 +8,7 @@ use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_a
 use crate::render::{CompanyColoredSprites, MapVisualLayer};
 use crate::state::{ClientScreen, SimWorld};
 use openttdrs_core::{
-    slope_dz_at_subtile, vehicle_render_direction, vehicle_render_progress,
-    vehicle_subtile_with_progress,
+    extrapolate_vehicle_pose, slope_dz_at_subtile, vehicle_render_direction_at, vehicle_subtile_at,
 };
 
 use crate::simulation::SimClock;
@@ -47,19 +46,25 @@ fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
     }
 }
 
-fn vehicle_layer(v: &Vehicle, render_progress: u8) -> &'static vehicle_gfx::VehicleLayerGfx {
-    let dir = vehicle_render_direction(v, render_progress).min(7) as usize;
+fn vehicle_layer(
+    v: &Vehicle,
+    pose: openttdrs_core::VehiclePose,
+) -> &'static vehicle_gfx::VehicleLayerGfx {
+    let dir = vehicle_render_direction_at(v, pose).min(7) as usize;
     &vehicle_layers(v)[dir]
 }
 
-fn vehicle_draw_anchor(v: &Vehicle, map: &Map, tick_alpha: f32) -> (Vec2, u8, i32, i32) {
-    let (tileh, _) = tile_slope_and_min_z(map, v.pos.x as u32, v.pos.y as u32);
-    let base_z = tile_min_z(map, v.pos);
-    let render_progress = vehicle_render_progress(v, tick_alpha);
-    let (sub_x, sub_y) = vehicle_subtile_with_progress(v, render_progress);
+fn vehicle_draw_anchor_from_pose(
+    v: &Vehicle,
+    map: &Map,
+    pose: openttdrs_core::VehiclePose,
+) -> (Vec2, u8, i32, i32) {
+    let (tileh, _) = tile_slope_and_min_z(map, pose.pos.x as u32, pose.pos.y as u32);
+    let base_z = tile_min_z(map, pose.pos);
+    let (sub_x, sub_y) = vehicle_subtile_at(v, pose);
     let sub_z = slope_dz_at_subtile(sub_x, sub_y, tileh);
-    let anchor = road_vehicle_tile_anchor(v.pos.x, v.pos.y, sub_x, sub_y, sub_z);
-    (anchor, base_z, v.pos.x, v.pos.y)
+    let anchor = road_vehicle_tile_anchor(pose.pos.x, pose.pos.y, sub_x, sub_y, sub_z);
+    (anchor, base_z, pose.pos.x, pose.pos.y)
 }
 
 /// Posición mundo del sprite del vehículo (para cámara de seguimiento).
@@ -69,9 +74,9 @@ pub(crate) fn vehicle_world_position(v: &Vehicle, map: &Map) -> Vec3 {
 }
 
 fn vehicle_sprite_pos(v: &Vehicle, map: &Map, tick_alpha: f32) -> Vec3 {
-    let render_progress = vehicle_render_progress(v, tick_alpha);
-    let layer = vehicle_layer(v, render_progress);
-    let (anchor, height, tx, ty) = vehicle_draw_anchor(v, map, tick_alpha);
+    let pose = extrapolate_vehicle_pose(v, tick_alpha);
+    let layer = vehicle_layer(v, pose);
+    let (anchor, height, tx, ty) = vehicle_draw_anchor_from_pose(v, map, pose);
     overlay_pos(
         anchor,
         layer.x_offs,

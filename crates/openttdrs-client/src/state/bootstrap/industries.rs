@@ -209,7 +209,7 @@ fn industry_components(state: &GameState) -> Vec<Vec<TileCoord>> {
 
 type IndustryGfxRange = (u16, u16, &'static str, Option<IndustryKind>);
 
-const INDUSTRY_GFX_RANGES: [IndustryGfxRange; 19] = [
+const INDUSTRY_GFX_RANGES: [IndustryGfxRange; 22] = [
     (0, 6, "Coal Mine", Some(IndustryKind::CoalMine)),
     (7, 10, "Power Station", None),
     (11, 15, "Sawmill", None),
@@ -229,6 +229,9 @@ const INDUSTRY_GFX_RANGES: [IndustryGfxRange; 19] = [
     (89, 90, "Bank", None),
     (91, 99, "Diamond Mine", Some(IndustryKind::CoalMine)),
     (100, 115, "Iron Ore Mine", Some(IndustryKind::CoalMine)),
+    (116, 119, "Other climates", None),
+    (120, 124, "Candy Factory", None),
+    (125, 128, "Sweets Shop", None),
 ];
 
 fn gfx_range_info(gfx: u16) -> Option<IndustryGfxRange> {
@@ -271,7 +274,7 @@ pub(crate) fn industry_group_from_gfx(gfx: u16) -> &'static str {
     if let Some((_, _, label, _)) = gfx_range_info(gfx) {
         return label;
     }
-    if (100..=119).contains(&gfx) {
+    if (116..=130).contains(&gfx) {
         return "Other climates";
     }
     "Unknown gfx"

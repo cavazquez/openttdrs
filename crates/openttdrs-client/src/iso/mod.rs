@@ -618,6 +618,35 @@ mod world_pos_to_tile_tests {
     }
 
     #[test]
+    fn road_stop_ne_truck_build_b_center_stays_on_station_tile() {
+        let tx = 30;
+        let ty = 2;
+        let origin = iso(tx, ty);
+        let ground = Vec2::new(origin.x, origin.y - super::TILE_HALF_H);
+        let spec =
+            &crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Truck, 0)[1];
+        let center = super::road_stop_build_sprite_center(
+            origin,
+            tx,
+            ty,
+            0,
+            spec.z,
+            crate::sprites::road_stop_seq_gfx(spec),
+            spec.w,
+            spec.h,
+        );
+        let west = iso(tx - 1, ty);
+        let ground_west = Vec2::new(west.x, west.y - super::TILE_HALF_H);
+        let dist_station = (center.x - ground.x).hypot(center.y - ground.y);
+        let dist_west = (center.x - ground_west.x).hypot(center.y - ground_west.y);
+        assert!(
+            dist_station < dist_west,
+            "truck NE build_b (muro) debe quedar en tesela ({tx},{ty}), no en ({tx_w},{ty})",
+            tx_w = tx - 1
+        );
+    }
+
+    #[test]
     fn road_stop_generated_adj_exceptions() {
         let ne = crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Bus, 0);
         assert_eq!(ne[0].remap_x_adj, 0.0);
@@ -645,6 +674,14 @@ mod world_pos_to_tile_tests {
         assert_eq!(se_truck[0].y_offs, -23.0);
         assert_eq!(se_truck[1].remap_x_adj, 0.0);
         assert_eq!(se_truck[2].remap_x_adj, -3.0);
+        let ne_truck =
+            crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Truck, 0);
+        assert_eq!(ne_truck[1].remap_x_adj, 7.0);
+        assert_eq!(ne_truck[1].y_offs, -13.0);
+        let nw_truck =
+            crate::sprites::road_stop_build_layers(crate::sprites::StationTileClass::Truck, 3);
+        assert_eq!(nw_truck[1].remap_x_adj, -7.0);
+        assert_eq!(nw_truck[1].y_offs, -16.0);
     }
 
     #[test]

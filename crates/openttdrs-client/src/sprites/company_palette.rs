@@ -85,6 +85,67 @@ fn ramp_index(colour: usize, shade: usize) -> usize {
     colour * COMPANY_RAMP_SHADES + shade
 }
 
+/// Tono medio de la rampa OpenTTD, representativo en la UI.
+const SWATCH_SHADE: usize = 4;
+
+/// Color RGB para muestra en el selector de compañía (tono ~medio de la rampa).
+#[must_use]
+pub fn company_colour_swatch_color(colour: u8) -> Color {
+    let c = CompanyColour::from_u8(colour);
+    let idx = ramp_index(c.as_u8() as usize, SWATCH_SHADE);
+    let rgb = COMPANY_RAMP_RGB[idx];
+    Color::srgb_u8(rgb[0], rgb[1], rgb[2])
+}
+
+/// Nombre legible del color de compañía (16 colores OpenTTD).
+const COMPANY_COLOUR_NAMES: [&str; 16] = [
+    "Azul oscuro",
+    "Verde pálido",
+    "Rosa",
+    "Amarillo",
+    "Rojo",
+    "Celeste",
+    "Verde",
+    "Verde oscuro",
+    "Azul",
+    "Crema",
+    "Malva",
+    "Púrpura",
+    "Naranja",
+    "Marrón",
+    "Gris",
+    "Blanco",
+];
+
+const COMPANY_COLOUR_TOOLTIPS: [&str; 16] = [
+    "Color compañía: Azul oscuro (0)",
+    "Color compañía: Verde pálido (1)",
+    "Color compañía: Rosa (2)",
+    "Color compañía: Amarillo (3)",
+    "Color compañía: Rojo (4)",
+    "Color compañía: Celeste (5)",
+    "Color compañía: Verde (6)",
+    "Color compañía: Verde oscuro (7)",
+    "Color compañía: Azul (8)",
+    "Color compañía: Crema (9)",
+    "Color compañía: Malva (10)",
+    "Color compañía: Púrpura (11)",
+    "Color compañía: Naranja (12)",
+    "Color compañía: Marrón (13)",
+    "Color compañía: Gris (14)",
+    "Color compañía: Blanco (15)",
+];
+
+#[must_use]
+pub fn company_colour_name(colour: u8) -> &'static str {
+    COMPANY_COLOUR_NAMES[colour as usize % COMPANY_COLOUR_COUNT]
+}
+
+#[must_use]
+pub fn company_colour_tooltip(colour: u8) -> &'static str {
+    COMPANY_COLOUR_TOOLTIPS[colour as usize % COMPANY_COLOUR_COUNT]
+}
+
 /// Tabla RGB → RGB para remapear al color de compañía `target`.
 #[must_use]
 pub fn build_remap_table(target: CompanyColour) -> HashMap<[u8; 3], [u8; 3]> {
@@ -258,6 +319,26 @@ impl CompanyColoredSprites {
     #[must_use]
     pub fn vehicle_handle(&self, path: &str) -> Option<&Handle<Image>> {
         self.tile_handle_path(path)
+    }
+
+    /// Sprite de industria recoloreado (`PALETTE_MODIFIER_COLOUR` / `random_colour`).
+    pub fn industry_sprite_handle(
+        &mut self,
+        sprite_id: u32,
+        colour: CompanyColour,
+        images: &mut Assets<Image>,
+    ) -> Option<Handle<Image>> {
+        let key = format!("industry_{sprite_id}_c{}", colour.as_u8());
+        if let Some(h) = self.tiles.get(&key) {
+            return Some(h.clone());
+        }
+        if !colour.needs_recolor() {
+            return None;
+        }
+        let filename = format!("industry_{sprite_id}.png");
+        let handle = load_recolored_png(&filename, colour, images)?;
+        self.tiles.insert(key, handle.clone());
+        Some(handle)
     }
 }
 

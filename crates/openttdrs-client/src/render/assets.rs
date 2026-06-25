@@ -217,6 +217,11 @@ impl WorldAssets {
                 }
             }
         }
+        for id in crate::sprites::INDUSTRY_DRAW_PROC_SPRITE_IDS {
+            if let Some(img) = atlas.try_get(&format!("industry_{id}.png")) {
+                industries.entry(id).or_insert(img);
+            }
+        }
 
         Self {
             grass,

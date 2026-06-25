@@ -1,10 +1,12 @@
 use bevy::prelude::*;
 
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
+use crate::sprites::company_colour_name;
+use crate::state::SimWorld;
 use crate::ui::hud::SimHudControls;
 use crate::ui::save_window::{SaveWindowMode, SaveWindowState, save_dir_from};
 
-use super::SaveMenuAction;
+use super::{CompanyColourSwatch, SaveMenuAction};
 
 pub(crate) fn handle_settings_menu_buttons(
     mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
@@ -69,17 +71,55 @@ pub(crate) fn handle_settings_menu_buttons(
     }
 }
 
+pub(crate) fn handle_company_colour_swatches(
+    mut q: Query<(&Interaction, &CompanyColourSwatch), (Changed<Interaction>, With<Button>)>,
+    mut sim: ResMut<SimWorld>,
+) {
+    for (interaction, swatch) in &mut q {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let colour = swatch.0 % 16;
+        if sim.state.company_colour == colour {
+            continue;
+        }
+        sim.state.company_colour = colour;
+        info!("Color compañía: {} ({colour})", company_colour_name(colour));
+    }
+}
+
+pub(crate) fn sync_company_colour_swatch_visuals(
+    sim: Res<SimWorld>,
+    mut q: Query<
+        (&CompanyColourSwatch, &mut BorderColor, &Interaction),
+        (With<Button>, Without<SaveMenuAction>),
+    >,
+) {
+    let active = sim.state.company_colour % 16;
+    for (swatch, mut border, interaction) in &mut q {
+        let selected = swatch.0 == active;
+        *border = if selected {
+            BorderColor::all(Color::srgb(0.98, 0.92, 0.35))
+        } else if *interaction == Interaction::Hovered {
+            BorderColor::all(Color::srgb(0.86, 0.86, 0.72))
+        } else {
+            BorderColor::all(Color::srgb(0.18, 0.25, 0.12))
+        };
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
 
+    use crate::state::SimWorld;
     use crate::ui::hud::SimHudControls;
     use crate::ui::save_window::{SaveWindowMode, SaveWindowState};
-    use crate::ui::toolbar::SaveMenuAction;
+    use crate::ui::toolbar::{CompanyColourSwatch, SaveMenuAction};
 
-    use super::handle_settings_menu_buttons;
+    use super::{handle_company_colour_swatches, handle_settings_menu_buttons};
 
     #[test]
     fn save_and_load_buttons_open_save_window() {
@@ -100,5 +140,17 @@ mod tests {
         let w = world.resource::<SaveWindowState>();
         assert!(w.open);
         assert_eq!(w.mode, SaveWindowMode::Load);
+    }
+
+    #[test]
+    fn company_colour_swatch_updates_sim_state() {
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+
+        world.spawn((Button, CompanyColourSwatch(6), Interaction::Pressed));
+        world
+            .run_system_once(handle_company_colour_swatches)
+            .unwrap();
+        assert_eq!(world.resource::<SimWorld>().state.company_colour, 6);
     }
 }

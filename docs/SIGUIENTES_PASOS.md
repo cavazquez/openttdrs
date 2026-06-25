@@ -30,6 +30,8 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 
 **Huecos visuales reales (SP3):** junctions vía en pendiente; depósito carretera; culling global; industrias gfx ≥ 120.
 
+**Terraform (paisaje):** no implementado; plan T1–T3 en [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md).
+
 **Toolbar rail sin comando:** `RailConvert`, quitar señal → ver ROADMAP_SPRINTS S2 resto.
 
 ---

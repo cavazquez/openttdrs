@@ -447,6 +447,13 @@ def crop_by_id(sid: int, out_name: str) -> None:
         crop = dematte_cyan_transparency(crop)
     if out_name.startswith("vehicle_"):
         crop = dematte_cc_blue_mask(crop)
+    # Cimientos, industria y UI: el atlas 8bpp a veces deja el índice 0 (0,0,255) opaco.
+    if graphics_mode != "32bpp" and (
+        out_name.startswith("foundation_")
+        or out_name.startswith("industry_")
+        or out_name.startswith("ui_")
+    ):
+        crop = dematte_cc_blue_mask(crop)
     out = tiles_dir / out_name
     crop.save(out)
     print(f"  {out_name} ({w}×{h} xrel={xr} yrel={yr}) ← sprite {sid} [{sheet_key}]")

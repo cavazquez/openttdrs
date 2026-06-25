@@ -63,6 +63,7 @@ fn industry_helper_functions_cover_paths() {
         kind: IndustryKind::Forest,
         stock: 0,
         capacity: 100,
+        random_colour: 0,
     });
 
     let tiles = flood_industry_tiles(&map, c(2, 2));
@@ -98,6 +99,7 @@ fn format_panel_title_out_of_range_gfx_skips_sim_kind_label() {
         kind: IndustryKind::CoalMine,
         stock: 0,
         capacity: 100,
+        random_colour: 0,
     });
 
     let title = format_panel_title(&map, &sim, focus);
@@ -105,15 +107,15 @@ fn format_panel_title_out_of_range_gfx_skips_sim_kind_label() {
 }
 
 #[test]
-fn flood_industry_tiles_respects_m1_components_when_present() {
+fn flood_industry_tiles_respects_m2_components() {
     let mut map = Map::new_flat(3, 1, 0);
     let c = |x: i32| TileCoord::new(x, 0);
     let mut t0 = map.get(c(0)).expect("tile 0");
     t0.kind = TileKind::Industry;
-    t0.m1 = 5;
+    t0.m2 = 5;
     let mut t1 = map.get(c(1)).expect("tile 1");
     t1.kind = TileKind::Industry;
-    t1.m1 = 6;
+    t1.m2 = 6;
     let _ = map.set_tile(c(0), t0);
     let _ = map.set_tile(c(1), t1);
 
@@ -124,17 +126,39 @@ fn flood_industry_tiles_respects_m1_components_when_present() {
 }
 
 #[test]
-fn flood_industry_tiles_respects_gfx_group_when_m1_matches() {
+fn flood_industry_tiles_merges_same_m2_different_gfx() {
     let mut map = Map::new_flat(2, 1, 0);
     let c0 = TileCoord::new(0, 0);
     let c1 = TileCoord::new(1, 0);
     let mut t0 = map.get(c0).expect("tile 0");
     t0.kind = TileKind::Industry;
-    t0.m1 = 7;
+    t0.m2 = 7;
+    t0.m5 = 18;
+    let mut t1 = map.get(c1).expect("tile 1");
+    t1.kind = TileKind::Industry;
+    t1.m2 = 7;
+    t1.m5 = 16;
+    let _ = map.set_tile(c0, t0);
+    let _ = map.set_tile(c1, t1);
+
+    let from_left = flood_industry_tiles(&map, c0);
+    assert_eq!(from_left.len(), 2);
+}
+
+#[test]
+fn flood_industry_tiles_respects_gfx_group_when_anonymous() {
+    let mut map = Map::new_flat(2, 1, 0);
+    let c0 = TileCoord::new(0, 0);
+    let c1 = TileCoord::new(1, 0);
+    let mut t0 = map.get(c0).expect("tile 0");
+    t0.kind = TileKind::Industry;
+    t0.m1 = 0x80;
+    t0.m2 = 0;
     t0.m5 = 18; // Oil Refinery
     let mut t1 = map.get(c1).expect("tile 1");
     t1.kind = TileKind::Industry;
-    t1.m1 = 7;
+    t1.m1 = 0x80;
+    t1.m2 = 0;
     t1.m5 = 16; // Forest
     let _ = map.set_tile(c0, t0);
     let _ = map.set_tile(c1, t1);

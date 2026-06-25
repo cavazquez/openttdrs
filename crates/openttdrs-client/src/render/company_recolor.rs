@@ -37,6 +37,25 @@ pub fn sprite_from_atlas_or_company_white(
     sprite_from_atlas_or_company(company, atlas, asset_path, Color::WHITE)
 }
 
+/// Atlas o PNG recoloreado con la paleta `random_colour` de la industria (P4).
+#[must_use]
+pub fn sprite_from_atlas_or_industry_palette(
+    company: &mut CompanyColoredSprites,
+    images: &mut Assets<Image>,
+    atlas: &AtlasSprite,
+    sprite_id: u32,
+    industry_colour: crate::sprites::CompanyColour,
+) -> Sprite {
+    if let Some(handle) = company.industry_sprite_handle(sprite_id, industry_colour, images) {
+        return Sprite {
+            image: handle,
+            color: Color::WHITE,
+            ..default()
+        };
+    }
+    atlas.sprite_colored(Color::WHITE)
+}
+
 /// Sprite desde caché de compañía o carga directa del asset server (previews).
 #[must_use]
 pub fn sprite_from_company_or_asset(

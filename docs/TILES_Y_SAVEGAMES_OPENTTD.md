@@ -434,10 +434,13 @@ let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
 
 La tabla completa está en `crates/openttdrs-client/src/sprites.rs` (`INDUSTRY_GFX_DATA`).
 
-### m1 en MP_INDUSTRY
+### m1 y m2 en MP_INDUSTRY
 
-Bits 0–6 de m1 = índice de la industria en el array global (`IndustryID`), útil para
-agrupar tiles de la misma planta.
+- **`m2`** = `IndustryID` (`GetIndustryIndex` en OpenTTD): identifica la instancia de
+  planta; openttdrs agrupa teselas adyacentes con el mismo `m2`.
+- **`m1` bit 7** = industria terminada (`IsIndustryCompleted`); bits 0–1 = etapa de obra
+  si no está terminada.
+- Footer **`INDP`**: pares `(industry_index, industry_type)` indexados por **`m2`**, no por `m1`.
 
 ---
 

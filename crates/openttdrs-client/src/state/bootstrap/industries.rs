@@ -1,10 +1,9 @@
 use openttdrs_core::{
     GameState, Industry, IndustryKind, IndustrySpec, OttdmapExtras, SavIndustry, TileCoord,
-    TileKind,
+    TileKind, industry_tiles_mergeable,
 };
 use std::collections::{HashSet, VecDeque};
 
-/// Mapea `IndustryType` de OpenTTD (footer `INDP`) a [`IndustryKind`] del core (best-effort).
 fn industry_kind_from_ottd_type(t: u8) -> IndustryKind {
     match t {
         2 | 3 | 9 | 14 | 19 | 20 | 24 | 25 => IndustryKind::Forest,
@@ -12,6 +11,10 @@ fn industry_kind_from_ottd_type(t: u8) -> IndustryKind {
         16 | 17 | 33 => IndustryKind::OilWell,
         _ => IndustryKind::CoalMine,
     }
+}
+
+fn industry_random_colour(instance_id: u8) -> u8 {
+    instance_id.wrapping_mul(5) % 16
 }
 
 /// Coloca industrias desde el chunk `INDY` del save (posición/tamaño/tipo
@@ -39,9 +42,14 @@ pub(crate) fn place_industries_from_sav(state: &mut GameState, sav_industries: &
             .get(origin)
             .map(|t| u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8));
         if let Some(spec) = gfx.and_then(classify_industry_spec_from_gfx) {
+            let colour = state
+                .map
+                .get(origin)
+                .map(|t| industry_random_colour(t.m2))
+                .unwrap_or(0);
             state
                 .industries
-                .push(Industry::with_tiles_spec(origin, kind, spec, tiles));
+                .push(Industry::with_tiles_spec(origin, kind, spec, tiles, colour));
         } else {
             state
                 .industries
@@ -99,6 +107,7 @@ pub(crate) fn place_industries(
                                 kind,
                                 spec,
                                 vec![c],
+                                industry_random_colour(tile.m2),
                             ));
                         } else {
                             state.industries.push(Industry::new(c, kind));
@@ -125,16 +134,20 @@ fn place_industries_from_map_components(
         };
         let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
         let kind = if let Some(ex) = ottd_extras {
-            ex.industry_type_for_tile_index(tile.m1)
+            ex.industry_type_for_instance(tile.m2)
                 .map(industry_kind_from_ottd_type)
                 .unwrap_or_else(|| classify_industry_kind_from_gfx(gfx))
         } else {
             classify_industry_kind_from_gfx(gfx)
         };
         if let Some(spec) = classify_industry_spec_from_gfx(gfx) {
-            state
-                .industries
-                .push(Industry::with_tiles_spec(origin, kind, spec, component));
+            state.industries.push(Industry::with_tiles_spec(
+                origin,
+                kind,
+                spec,
+                component,
+                industry_random_colour(tile.m2),
+            ));
         } else {
             state
                 .industries
@@ -157,11 +170,8 @@ fn industry_components(state: &GameState) -> Vec<Vec<TileCoord>> {
             if start_tile.kind != TileKind::Industry {
                 continue;
             }
-            let start_industry_id = start_tile.m1;
-            let require_same_industry_id = start_industry_id != 0;
             let start_gfx = u16::from(start_tile.m5) | (u16::from((start_tile.m6 >> 2) & 1) << 8);
-            let start_gfx_group = industry_group_from_gfx(start_gfx);
-            let require_same_gfx_group = start_gfx_group != "Unknown gfx";
+            let _start_gfx_group = industry_group_from_gfx(start_gfx);
             if !visited.insert((x, y)) {
                 continue;
             }
@@ -170,6 +180,11 @@ fn industry_components(state: &GameState) -> Vec<Vec<TileCoord>> {
             let mut component = Vec::new();
             while let Some(cur) = queue.pop_front() {
                 component.push(cur);
+                let Some(cur_tile) = state.map.get(cur) else {
+                    continue;
+                };
+                let cur_gfx = u16::from(cur_tile.m5) | (u16::from((cur_tile.m6 >> 2) & 1) << 8);
+                let cur_gfx_group = industry_group_from_gfx(cur_gfx);
                 for next in [
                     TileCoord::new(cur.x - 1, cur.y),
                     TileCoord::new(cur.x + 1, cur.y),
@@ -185,15 +200,14 @@ fn industry_components(state: &GameState) -> Vec<Vec<TileCoord>> {
                     if next_tile.kind != TileKind::Industry {
                         continue;
                     }
-                    if require_same_industry_id && next_tile.m1 != start_industry_id {
+                    let next_gfx =
+                        u16::from(next_tile.m5) | (u16::from((next_tile.m6 >> 2) & 1) << 8);
+                    let next_group = industry_group_from_gfx(next_gfx);
+                    let anonymous_same = cur_gfx_group == "Unknown gfx"
+                        || next_group == "Unknown gfx"
+                        || cur_gfx_group == next_group;
+                    if !industry_tiles_mergeable(&cur_tile, &next_tile, anonymous_same) {
                         continue;
-                    }
-                    if require_same_gfx_group {
-                        let next_gfx =
-                            u16::from(next_tile.m5) | (u16::from((next_tile.m6 >> 2) & 1) << 8);
-                        if industry_group_from_gfx(next_gfx) != start_gfx_group {
-                            continue;
-                        }
                     }
                     if visited.insert((next.x, next.y)) {
                         queue.push_back(next);
@@ -348,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn place_industries_from_file_separates_adjacent_different_m1() {
+    fn place_industries_from_file_separates_adjacent_different_m2() {
         let mut state = GameState::new(2, 1);
         let c0 = TileCoord::new(0, 0);
         let c1 = TileCoord::new(1, 0);
@@ -356,13 +370,15 @@ mod tests {
             panic!("test fixture: tile missing at {c0:?}");
         };
         t0.kind = TileKind::Industry;
-        t0.m1 = 10;
+        t0.m1 = 0x80;
+        t0.m2 = 10;
         t0.m5 = 16; // Forest
         let Some(mut t1) = state.map.get(c1) else {
             panic!("test fixture: tile missing at {c1:?}");
         };
         t1.kind = TileKind::Industry;
-        t1.m1 = 11;
+        t1.m1 = 0x80;
+        t1.m2 = 11;
         t1.m5 = 18; // Oil Refinery
         let _ = state.map.set_tile(c0, t0);
         let _ = state.map.set_tile(c1, t1);
@@ -373,7 +389,7 @@ mod tests {
     }
 
     #[test]
-    fn place_industries_from_file_separates_adjacent_same_m1_different_gfx_group() {
+    fn place_industries_from_file_merges_adjacent_same_m2_different_gfx() {
         let mut state = GameState::new(2, 1);
         let c0 = TileCoord::new(0, 0);
         let c1 = TileCoord::new(1, 0);
@@ -381,14 +397,99 @@ mod tests {
             panic!("test fixture: tile missing at {c0:?}");
         };
         t0.kind = TileKind::Industry;
-        t0.m1 = 10;
-        t0.m5 = 18; // Oil Refinery
+        t0.m1 = 0x80;
+        t0.m2 = 10;
+        t0.m5 = 0; // Coal headframe
         let Some(mut t1) = state.map.get(c1) else {
             panic!("test fixture: tile missing at {c1:?}");
         };
         t1.kind = TileKind::Industry;
-        t1.m1 = 10;
-        t1.m5 = 16; // Forest
+        t1.m1 = 0x80;
+        t1.m2 = 10;
+        t1.m5 = 1; // Coal tower
+        let _ = state.map.set_tile(c0, t0);
+        let _ = state.map.set_tile(c1, t1);
+
+        place_industries(&mut state, true, None);
+
+        assert_eq!(state.industries.len(), 1);
+        assert_eq!(state.industries[0].tiles.len(), 2);
+    }
+
+    #[test]
+    fn place_industries_from_file_separates_adjacent_different_m1() {
+        let mut state = GameState::new(2, 1);
+        let c0 = TileCoord::new(0, 0);
+        let c1 = TileCoord::new(1, 0);
+        let Some(mut t0) = state.map.get(c0) else {
+            panic!("test fixture: tile missing at {c0:?}");
+        };
+        t0.kind = TileKind::Industry;
+        t0.m1 = 0x81;
+        t0.m2 = 0;
+        t0.m5 = 16; // Forest
+        let Some(mut t1) = state.map.get(c1) else {
+            panic!("test fixture: tile missing at {c1:?}");
+        };
+        t1.kind = TileKind::Industry;
+        t1.m1 = 0x82;
+        t1.m2 = 0;
+        t1.m5 = 18; // Oil Refinery
+        let _ = state.map.set_tile(c0, t0);
+        let _ = state.map.set_tile(c1, t1);
+
+        place_industries(&mut state, true, None);
+
+        assert_eq!(state.industries.len(), 2);
+    }
+
+    #[test]
+    fn place_industries_from_file_merges_adjacent_legacy_m1_same_id_different_gfx() {
+        let mut state = GameState::new(2, 1);
+        let c0 = TileCoord::new(0, 0);
+        let c1 = TileCoord::new(1, 0);
+        let Some(mut t0) = state.map.get(c0) else {
+            panic!("test fixture: tile missing at {c0:?}");
+        };
+        t0.kind = TileKind::Industry;
+        t0.m1 = 0x87;
+        t0.m2 = 0;
+        t0.m5 = 0;
+        let Some(mut t1) = state.map.get(c1) else {
+            panic!("test fixture: tile missing at {c1:?}");
+        };
+        t1.kind = TileKind::Industry;
+        t1.m1 = 0x87;
+        t1.m2 = 0;
+        t1.m5 = 1;
+        let _ = state.map.set_tile(c0, t0);
+        let _ = state.map.set_tile(c1, t1);
+
+        place_industries(&mut state, true, None);
+
+        assert_eq!(state.industries.len(), 1);
+        assert_eq!(state.industries[0].tiles.len(), 2);
+    }
+
+    #[test]
+    fn place_industries_from_file_separates_adjacent_legacy_m1_different_ids() {
+        let mut state = GameState::new(2, 1);
+        let c0 = TileCoord::new(0, 0);
+        let c1 = TileCoord::new(1, 0);
+        let Some(mut t0) = state.map.get(c0) else {
+            panic!("test fixture: tile missing at {c0:?}");
+        };
+        t0.kind = TileKind::Industry;
+        t0.m1 = 0x87;
+        t0.m2 = 0;
+        t0.m5 = 18;
+        let Some(mut t1) = state.map.get(c1) else {
+            panic!("test fixture: tile missing at {c1:?}");
+        };
+        t1.kind = TileKind::Industry;
+        t1.m1 = 0x88;
+        t1.m2 = 0;
+        t1.m5 = 16;
         let _ = state.map.set_tile(c0, t0);
         let _ = state.map.set_tile(c1, t1);
 

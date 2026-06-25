@@ -2,6 +2,10 @@
 #![allow(clippy::doc_markdown, clippy::expect_used, clippy::unwrap_used)]
 
 mod binary;
+pub mod industry_construction;
+pub mod industry_link;
+pub mod industry_terrain;
+pub mod industry_tile_anim;
 pub mod rail_slope;
 pub mod road_bits;
 pub mod slope;
@@ -10,6 +14,24 @@ mod types;
 #[cfg(test)]
 use binary::{OTTDMAP_FLAG_HAS_M2_HI, OTTDMAP_FORMAT_VERSION_CURRENT};
 pub(crate) use binary::{OTTDMAP_HEADER_LEN_VERSIONED, OTTDMAP_MAGIC_VERSIONED};
+pub use industry_construction::{
+    INDUSTRY_CONSTRUCTION_COMPLETED, advance_industry_construction, industry_construction_counter,
+    industry_construction_stage, is_industry_completed, make_industry_tile_bigger,
+    step_industry_tiles,
+};
+pub use industry_link::{
+    IndustryTileLink, industry_instance_id, industry_tile_link, industry_tiles_mergeable,
+};
+pub use industry_terrain::{
+    GFX_OILRIG_FIRST, GFX_OILRIG_LAST, SPR_FLAT_GRASS_TILE, industry_gfx_is_oil_rig,
+    industry_uses_water_ground, tile_adjacent_to_water,
+};
+pub use industry_tile_anim::{
+    GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED, GFX_GOLD_MINE_TOWER_ANIMATED,
+    GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2, GFX_OILWELL_ANIMATED_3,
+    advance_industry_tile_animations, industry_animation_frame, industry_gfx,
+    industry_tile_anim_state, set_industry_gfx,
+};
 pub use rail_slope::{rail_foundation_for_trackbits, rail_trackbits_valid_on_slope};
 pub use road_bits::{OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, effective_road_bits};
 pub use slope::{
@@ -135,6 +157,12 @@ impl Map {
     pub fn set_m1(&mut self, c: TileCoord, m1: u8) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
         self.tiles[i].m1 = m1;
+        Ok(())
+    }
+
+    pub fn set_m2(&mut self, c: TileCoord, m2: u8) -> Result<(), MapError> {
+        let i = self.index(c).ok_or(MapError::OutOfBounds)?;
+        self.tiles[i].m2 = m2;
         Ok(())
     }
 

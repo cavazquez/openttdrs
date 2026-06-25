@@ -1,10 +1,15 @@
 //! Mapeo de sprites de industria (OpenGFX).
 //!
 //! Los valores numéricos del array incluido salen de OpenTTD `src/table/industry_land.h`:
-//! por cada `gfx` hay **4 filas** (estadios 0–3), índice `gfx * 4 + GetIndustryConstructionStage()`.
-//! `sprite_id` = s2.
+//! por cada `gfx` hay **4 filas** (estadios 0–3 o frames de animación), índice
+//! `gfx * 4 + subíndice`. Con `anim_state`, el subíndice es `m4 & 3`; si no,
+//! etapa de obra desde `m1` (`GetIndustryConstructionStage`).
 
 use std::sync::{Mutex, OnceLock};
+
+#[path = "industry_anim_state_generated.rs"]
+mod anim_state_generated;
+use anim_state_generated::INDUSTRY_TILE_ANIM_STATE;
 
 fn logged_gfx() -> &'static Mutex<Vec<u16>> {
     static LOGGED: OnceLock<Mutex<Vec<u16>>> = OnceLock::new();
@@ -42,14 +47,106 @@ pub const INDUSTRY_GFX_TABLE_LEN: u16 = 131;
 /// Estadios por `gfx` (OpenTTD `_industry_draw_tile_data`: 0–3).
 pub const INDUSTRY_GFX_STAGES: usize = 4;
 
+/// Máscara de frame de animación (`GetAnimationFrame & INDUSTRY_COMPLETED` en OpenTTD).
+pub const INDUSTRY_ANIM_FRAME_MASK: u8 = 3;
+
 /// Etapa de obra desde `m1` (`GetIndustryConstructionStage` / `IsIndustryCompleted`).
 #[must_use]
 pub fn industry_construction_stage_from_tile(m1: u8) -> usize {
     if m1 & 0x80 != 0 {
         3
     } else {
-        usize::from(m1 & 0x03).min(3)
+        usize::from(m1 & INDUSTRY_ANIM_FRAME_MASK).min(3)
     }
+}
+
+/// `IndustryTileSpec.anim_state` para este gfx.
+#[must_use]
+pub fn industry_tile_anim_state(gfx: u16) -> bool {
+    INDUSTRY_TILE_ANIM_STATE
+        .get(usize::from(gfx))
+        .copied()
+        .unwrap_or(false)
+}
+
+/// Frame de animación desde `m4`/`m3hi` del mapa OpenTTD.
+#[must_use]
+pub fn industry_animation_frame_from_m4(m4: u8) -> usize {
+    usize::from(m4 & INDUSTRY_ANIM_FRAME_MASK)
+}
+
+/// Subíndice en `_industry_draw_tile_data` (`DrawTile_Industry` en `industry_cmd.cpp`).
+#[must_use]
+pub fn industry_gfx_table_subindex(gfx: u16, m1: u8, m4: u8) -> usize {
+    if industry_tile_anim_state(gfx) {
+        industry_animation_frame_from_m4(m4)
+    } else {
+        industry_construction_stage_from_tile(m1)
+    }
+}
+
+/// Tesela terminada con capas que ciclan por `anim_state`.
+#[must_use]
+pub fn industry_building_needs_client_anim(gfx: u16, m1: u8) -> bool {
+    industry_tile_anim_state(gfx) && m1 & 0x80 != 0
+}
+
+/// Edificios con `PALETTE_MODIFIER_COLOUR` en tabla vanilla (gfx ≥29, excl. torres/pozos).
+#[must_use]
+pub fn industry_gfx_uses_random_colour(gfx: u16) -> bool {
+    (29..=130).contains(&gfx)
+        && !matches!(
+            gfx,
+            GFX_OILWELL_ANIMATED_1 | GFX_OILWELL_ANIMATED_2 | GFX_OILWELL_ANIMATED_3 | 48 | 88
+        )
+}
+
+const GFX_OILWELL_ANIMATED_1: u16 = 30;
+const GFX_OILWELL_ANIMATED_2: u16 = 31;
+const GFX_OILWELL_ANIMATED_3: u16 = 32;
+
+/// Color de compañía OpenTTD para la instancia (`Industry.random_colour`).
+#[must_use]
+pub fn industry_palette_colour_for_instance(
+    instance_id: u8,
+    industries: &[openttdrs_core::Industry],
+) -> crate::sprites::CompanyColour {
+    if instance_id == 0 {
+        return crate::sprites::CompanyColour::DarkBlue;
+    }
+    let idx = usize::from(instance_id.saturating_sub(1));
+    crate::sprites::CompanyColour::from_u8(
+        industries.get(idx).map(|i| i.random_colour).unwrap_or(0),
+    )
+}
+
+/// Algún frame de animación dibuja esta capa (suelo o edificio).
+#[must_use]
+pub fn industry_anim_layer_used_in_any_frame(gfx: u16, ground: bool) -> bool {
+    if !industry_tile_anim_state(gfx) {
+        return false;
+    }
+    (0..INDUSTRY_GFX_STAGES).any(|frame| {
+        industry_gfx_entry_staged(gfx, frame).is_some_and(|e| {
+            if ground {
+                e.ground_sprite_id != 0 && e.ground_w > 0.0 && e.ground_h > 0.0
+            } else {
+                e.sprite_id != 0 && e.w > 0.0 && e.h > 0.0
+            }
+        })
+    })
+}
+
+/// `m4` efectivo al dibujar: frame en `m3hi` (P7 tile loop en sim).
+#[must_use]
+pub fn industry_effective_m4_for_draw(
+    _gfx: u16,
+    _m1: u8,
+    m4: u8,
+    _elapsed_secs: f32,
+    _phase: u8,
+) -> u8 {
+    m4
 }
 
 /// Índice en [`INDUSTRY_GFX_DATA`]: `gfx * 4 + stage`.
@@ -102,10 +199,10 @@ pub fn industry_gfx_entry_staged(gfx: u16, stage: usize) -> Option<&'static Indu
     industry_gfx_draw_index(gfx, stage).and_then(|i| INDUSTRY_GFX_DATA.get(i))
 }
 
-/// Fila según bytes de tesela (`m1` = etapa + terminada).
+/// Fila según bytes de tesela (`m1` etapa, `m4`/`m3hi` frame si `anim_state`).
 #[must_use]
-pub fn industry_gfx_entry_for_tile(gfx: u16, m1: u8) -> Option<&'static IndustryGfxSprite> {
-    industry_gfx_entry_staged(gfx, industry_construction_stage_from_tile(m1))
+pub fn industry_gfx_entry_for_tile(gfx: u16, m1: u8, m4: u8) -> Option<&'static IndustryGfxSprite> {
+    industry_gfx_entry_staged(gfx, industry_gfx_table_subindex(gfx, m1, m4))
 }
 
 /// Estadio **3** (industria terminada). Alias histórico.
@@ -155,8 +252,8 @@ pub fn industry_gfx_empty_row_is_expected(gfx: u16, stage: usize) -> bool {
 }
 
 /// Registra una vez por sesión los `gfx` problemáticos (debug + warn en release).
-pub fn log_industry_gfx_once(gfx: u16, m1: u8, entry: Option<&IndustryGfxSprite>) {
-    let stage = industry_construction_stage_from_tile(m1);
+pub fn log_industry_gfx_once(gfx: u16, m1: u8, m4: u8, entry: Option<&IndustryGfxSprite>) {
+    let stage = industry_gfx_table_subindex(gfx, m1, m4);
     let status = industry_gfx_status(gfx);
     if status == IndustryGfxStatus::Resolved {
         if cfg!(debug_assertions)
@@ -183,8 +280,8 @@ pub fn log_industry_gfx_once(gfx: u16, m1: u8, entry: Option<&IndustryGfxSprite>
 
 /// Compat: alias debug histórico (reexportado en `crate::sprites`).
 #[allow(dead_code)]
-pub fn debug_log_industry_gfx_once(gfx: u16, m1: u8, entry: Option<&IndustryGfxSprite>) {
-    log_industry_gfx_once(gfx, m1, entry);
+pub fn debug_log_industry_gfx_once(gfx: u16, m1: u8, m4: u8, entry: Option<&IndustryGfxSprite>) {
+    log_industry_gfx_once(gfx, m1, m4, entry);
 }
 
 fn log_industry_problem_once(gfx: u16, reason: &str) {
@@ -206,10 +303,11 @@ fn log_industry_problem_once(gfx: u16, reason: &str) {
 mod industry_coverage_tests {
     use super::{
         INDUSTRY_GFX_DATA, INDUSTRY_GFX_STAGES, INDUSTRY_GFX_TABLE_LEN, IndustryGfxStatus,
+        industry_animation_frame_from_m4, industry_building_needs_client_anim,
         industry_construction_stage_from_tile, industry_gfx_draw_index,
         industry_gfx_empty_row_is_expected, industry_gfx_entry, industry_gfx_entry_for_tile,
-        industry_gfx_entry_staged, industry_gfx_status, industry_gfx_uses_generic_fallback,
-        industry_sprite_for_gfx,
+        industry_gfx_entry_staged, industry_gfx_status, industry_gfx_table_subindex,
+        industry_gfx_uses_generic_fallback, industry_sprite_for_gfx, industry_tile_anim_state,
     };
 
     #[test]
@@ -302,10 +400,34 @@ mod industry_coverage_tests {
 
     #[test]
     fn entry_for_tile_uses_m1_stage() {
-        let under = industry_gfx_entry_for_tile(0, 1).expect("m1=1");
-        let done = industry_gfx_entry_for_tile(0, 0x80).expect("m1=0x80");
+        let under = industry_gfx_entry_for_tile(0, 1, 0).expect("m1=1");
+        let done = industry_gfx_entry_for_tile(0, 0x80, 0).expect("m1=0x80");
         assert_eq!(under.sprite_id, 2012);
         assert_eq!(done.ground_sprite_id, 2022);
+    }
+
+    #[test]
+    fn anim_state_gfx_uses_m4_subindex() {
+        assert!(industry_tile_anim_state(1));
+        assert!(!industry_tile_anim_state(0));
+        assert_eq!(industry_gfx_table_subindex(0, 0x80, 2), 3);
+        assert_eq!(industry_gfx_table_subindex(1, 0x80, 2), 2);
+        let e = industry_gfx_entry_for_tile(1, 0x80, 2).expect("gfx1 frame2");
+        assert_eq!(e.sprite_id, 2015);
+        let e0 = industry_gfx_entry_for_tile(1, 0x80, 0).expect("gfx1 frame0");
+        assert_eq!(e0.sprite_id, 2013);
+    }
+
+    #[test]
+    fn building_anim_frame_cycles() {
+        assert_eq!(industry_animation_frame_from_m4(0xC2), 2);
+    }
+
+    #[test]
+    fn coal_tower_needs_client_anim_when_complete() {
+        assert!(industry_building_needs_client_anim(1, 0x80));
+        assert!(!industry_building_needs_client_anim(1, 1));
+        assert!(!industry_building_needs_client_anim(0, 0x80));
     }
 
     #[test]

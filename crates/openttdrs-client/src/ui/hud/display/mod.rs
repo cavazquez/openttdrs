@@ -446,16 +446,26 @@ pub(crate) fn update_tile_info_text(
     } else if tile.kind == TileKind::Industry {
         // OpenTTD GetCleanIndustryGfx: 9 bits — no confundir con `m5` solo (HUD antes mostraba eso como "gfx").
         let gfx9 = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
-        let stage = crate::sprites::industry_construction_stage_from_tile(tile.m1);
         let status = crate::sprites::industry_gfx_status(gfx9);
         let flag = if status == crate::sprites::IndustryGfxStatus::Resolved {
             String::new()
         } else {
             format!(" ⚠{}", crate::sprites::industry_gfx_status_label(status))
         };
+        let stage = if crate::sprites::industry_tile_anim_state(gfx9) {
+            format!(
+                "frame:{}",
+                crate::sprites::industry_animation_frame_from_m4(tile.m3hi)
+            )
+        } else {
+            format!(
+                "stage:{}",
+                crate::sprites::industry_construction_stage_from_tile(tile.m1)
+            )
+        };
         format!(
-            " gfx9:{gfx9}{flag} stage:{stage} m1:0x{:02X} m2:0x{:02X}",
-            tile.m1, tile.m2
+            " gfx9:{gfx9}{flag} {stage} m1:0x{:02X} m2:{} m3hi:0x{:02X}",
+            tile.m1, tile.m2, tile.m3hi
         )
     } else if tile.kind == TileKind::Station {
         station_details_text(&sim, pos, &tile)
@@ -829,6 +839,7 @@ mod tests {
             kind: IndustryKind::CoalMine,
             stock: 42,
             capacity: 100,
+            random_colour: 0,
         });
 
         let tile = sim.state.map.get(station_pos).unwrap();

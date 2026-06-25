@@ -1,9 +1,10 @@
 use bevy::prelude::*;
 
 use super::super::{
-    BuildMenuAction, BuildMenuUi, SaveMenuAction, ToolSelectButton, ToolbarCloseButton,
-    ToolbarTooltipTarget,
+    BuildMenuAction, BuildMenuUi, CompanyColourSwatch, SaveMenuAction, ToolSelectButton,
+    ToolbarCloseButton, ToolbarTooltipTarget,
 };
+use crate::sprites::{company_colour_swatch_color, company_colour_tooltip};
 
 pub(super) fn spawn_panel_title(
     parent: &mut ChildSpawnerCommands,
@@ -165,6 +166,64 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             )],
         ));
     }
+    spawn_company_colour_picker(buttons);
+}
+
+fn spawn_company_colour_picker(buttons: &mut ChildSpawnerCommands) {
+    buttons
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(2.0),
+                padding: UiRect::horizontal(Val::Px(4.0)),
+                align_items: AlignItems::FlexStart,
+                align_self: AlignSelf::Center,
+                ..default()
+            },
+            BuildMenuUi,
+        ))
+        .with_children(|col| {
+            col.spawn((
+                Text::new("Color compañía"),
+                TextFont {
+                    font_size: FontSize::Rem(0.65),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.08, 0.07, 0.05)),
+                BuildMenuUi,
+            ));
+            for row in 0..2u8 {
+                col.spawn((
+                    Node {
+                        flex_direction: FlexDirection::Row,
+                        column_gap: Val::Px(2.0),
+                        ..default()
+                    },
+                    BuildMenuUi,
+                ))
+                .with_children(|row_node| {
+                    for i in (row * 8)..(row * 8 + 8) {
+                        row_node.spawn((
+                            Button,
+                            CompanyColourSwatch(i),
+                            ToolbarTooltipTarget {
+                                text: company_colour_tooltip(i),
+                            },
+                            BuildMenuUi,
+                            Node {
+                                width: Val::Px(16.0),
+                                height: Val::Px(16.0),
+                                border: UiRect::all(Val::Px(2.0)),
+                                ..default()
+                            },
+                            BackgroundColor(company_colour_swatch_color(i)),
+                            BorderColor::all(Color::srgb(0.18, 0.25, 0.12)),
+                            Interaction::default(),
+                        ));
+                    }
+                });
+            }
+        });
 }
 
 fn spawn_button_icon(

@@ -1,6 +1,8 @@
 use std::collections::{HashSet, VecDeque};
 
-use openttdrs_core::{IndustryKind, IndustrySpec, Map, TileCoord, TileKind};
+use openttdrs_core::{
+    IndustryKind, IndustrySpec, Map, TileCoord, TileKind, industry_tiles_mergeable,
+};
 
 use crate::sprites::{IndustryGfxStatus, industry_gfx_status};
 use crate::state::SimWorld;
@@ -10,6 +12,12 @@ pub(crate) fn industry_gfx(tile: &openttdrs_core::Tile) -> u16 {
     u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8)
 }
 
+fn anonymous_gfx_group_match(a_gfx: u16, b_gfx: u16) -> bool {
+    let ga = industry_group_from_gfx(a_gfx);
+    let gb = industry_group_from_gfx(b_gfx);
+    ga == "Unknown gfx" || gb == "Unknown gfx" || ga == gb
+}
+
 pub(crate) fn flood_industry_tiles(map: &Map, start: TileCoord) -> Vec<TileCoord> {
     let Some(start_tile) = map.get(start) else {
         return Vec::new();
@@ -17,10 +25,6 @@ pub(crate) fn flood_industry_tiles(map: &Map, start: TileCoord) -> Vec<TileCoord
     if start_tile.kind != TileKind::Industry {
         return Vec::new();
     }
-    let start_industry_id = start_tile.m1;
-    let require_same_industry_id = start_industry_id != 0;
-    let start_gfx_group = industry_group_from_gfx(industry_gfx(&start_tile));
-    let require_same_gfx_group = start_gfx_group != "Unknown gfx";
     let mut out = Vec::new();
     let mut seen = HashSet::new();
     let mut q = VecDeque::new();
@@ -30,14 +34,24 @@ pub(crate) fn flood_industry_tiles(map: &Map, start: TileCoord) -> Vec<TileCoord
             continue;
         }
         out.push(c);
+        let Some(cur_tile) = map.get(c) else {
+            continue;
+        };
+        let cur_gfx = industry_gfx(&cur_tile);
         for (dx, dy) in [(0i32, 1), (0, -1), (1, 0), (-1, 0)] {
             let n = TileCoord::new(c.x + dx, c.y + dy);
-            if let Some(tile) = map.get(n)
-                && tile.kind == TileKind::Industry
-                && (!require_same_industry_id || tile.m1 == start_industry_id)
-                && (!require_same_gfx_group
-                    || industry_group_from_gfx(industry_gfx(&tile)) == start_gfx_group)
-            {
+            let Some(tile) = map.get(n) else {
+                continue;
+            };
+            if tile.kind != TileKind::Industry {
+                continue;
+            }
+            let next_gfx = industry_gfx(&tile);
+            if industry_tiles_mergeable(
+                &cur_tile,
+                &tile,
+                anonymous_gfx_group_match(cur_gfx, next_gfx),
+            ) {
                 q.push_back(n);
             }
         }

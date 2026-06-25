@@ -94,6 +94,9 @@ pub struct GameState {
     /// Ingresos recién cobrados (drenados por el cliente para texto flotante).
     #[serde(skip)]
     pub pending_income_popups: Vec<IncomePopup>,
+    /// Teselas industriales con `m1` mutado este tick (obra P6 → remap cliente).
+    #[serde(skip)]
+    pub industry_tile_dirty: Vec<TileCoord>,
 }
 
 impl GameState {
@@ -112,6 +115,7 @@ impl GameState {
             jgr_tunnels_from_footer: Vec::new(),
             path_cache: crate::pathfinder::PathCache::default(),
             pending_income_popups: Vec::new(),
+            industry_tile_dirty: Vec::new(),
         }
     }
 
@@ -131,6 +135,7 @@ impl GameState {
             jgr_tunnels_from_footer: Vec::new(),
             path_cache: crate::pathfinder::PathCache::default(),
             pending_income_popups: Vec::new(),
+            industry_tile_dirty: Vec::new(),
         }
     }
 

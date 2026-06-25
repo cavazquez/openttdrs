@@ -170,12 +170,16 @@ def compute_layer_corrections(
         return 0.0, 0.0
 
     # Camión: mismos patrones de esquina + capas con dy=3 / dy=15.
+    if dir_i == 0 and layer_i == 1 and dx == 13.0 and dy == 0.0:
+        return 7.0, -6.0
     if dir_i == 1 and layer_i == 0 and dx == 15.0 and dy == 3.0:
         return 8.0, -(dx - dy) * 2.0 + 8.0
     if dir_i == 1 and layer_i == 2 and dx == 0.0 and dy == 3.0:
         return -3.0, 0.0
     if dir_i == 0 and layer_i == 0 and dx == 0.0 and dy == 15.0:
         return -9.0, -8.0
+    if dir_i == 3 and layer_i == 1 and dx == 0.0 and dy == 13.0:
+        return -7.0, -6.0
     if dir_i == 3 and layer_i == 2 and dx == 15.0 and dy == 2.0:
         return 8.0, -(dx - dy) * 2.0 + 8.0
     return 0.0, 0.0

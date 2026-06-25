@@ -228,6 +228,7 @@ mod logging_coverage_tests {
             kind: IndustryKind::OilWell,
             stock: 10,
             capacity: 100,
+            random_colour: 0,
         });
         state
             .stations

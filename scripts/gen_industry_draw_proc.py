@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""Genera tablas draw_proc (1–5) desde OpenTTD `table/industry_land.h`."""
+from __future__ import annotations
+
+import re
+import sys
+from pathlib import Path
+
+GFX_COUNT = 131
+STAGES = 4
+
+SPR = {
+    "SUGAR_SIEVE": 4775,
+    "SUGAR_CLOUDS": 4784,
+    "SUGAR_PILE": 4780,
+    "TOFFEE_TOFFEE": 4766,
+    "TOFFEE_SHOVEL": 4767,
+    "BUBBLE_SPRING": 4746,
+    "BUBBLE_BUBBLE": 4747,
+    "TOY_HOLDER": 4717,
+    "TOY_STAMP": 4718,
+    "TOY_CLAY": 4719,
+    "TOY_ROBOT": 4720,
+    "SPARKS_BASE": 2054,
+}
+
+
+def parse_macro_rows(text: str) -> list[tuple[int, int, int, int, int, int, int]]:
+    pat = re.compile(
+        r"^\s*M\(\s*([^,]+),\s*[^,]+,\s*([^,]+),\s*[^,]+,\s*"
+        r"(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*(-?\d+),\s*(\d+)\s*\)"
+    )
+    out: list[tuple[int, int, int, int, int, int, int]] = []
+    for line in text.splitlines():
+        m = pat.match(line)
+        if not m:
+            continue
+        s1 = int(m.group(1).split("|")[0].strip(), 16 if "0x" in m.group(1) else 10)
+        s2 = int(m.group(2).split("|")[0].strip(), 16 if "0x" in m.group(2) else 10)
+        out.append(
+            (
+                s1,
+                s2,
+                int(m.group(3)),
+                int(m.group(4)),
+                int(m.group(5)),
+                int(m.group(6)),
+                int(m.group(7)),
+                int(m.group(8)),
+            )
+        )
+    return out
+
+
+def parse_draw_industry_spec1(text: str) -> list[tuple[int, int, int, int]]:
+    block = re.search(
+        r"static const DrawIndustryAnimationStruct _draw_industry_spec1\[96\] = \{(.*?)\};",
+        text,
+        re.S,
+    )
+    if not block:
+        raise SystemExit("No _draw_industry_spec1")
+    rows: list[tuple[int, int, int, int]] = []
+    for line in block.group(1).splitlines():
+        m = re.match(r"\{\s*(-?\d+),\s*(\d+),\s*(\d+),\s*(\d+)\s*\}", line.strip())
+        if m:
+            rows.append(tuple(int(x) for x in m.groups()))
+    if len(rows) != 96:
+        raise SystemExit(f"spec1 expected 96 rows, got {len(rows)}")
+    return rows
+
+
+def parse_u8_array(text: str, name: str) -> list[int]:
+    block = re.search(rf"static const uint8_t {name}\[\] = \{{(.*?)\}};", text, re.S)
+    if not block:
+        raise SystemExit(f"No {name}")
+    vals = [int(x.strip()) for x in block.group(1).replace("\n", " ").split(",") if x.strip()]
+    return vals
+
+
+def parse_toys(text: str) -> list[tuple[int, int, int, int]]:
+    block = re.search(
+        r"static const DrawIndustryAnimationStruct _industry_anim_offs_toys\[\] = \{(.*?)\};",
+        text,
+        re.S,
+    )
+    if not block:
+        raise SystemExit("No toys table")
+    rows: list[tuple[int, int, int, int]] = []
+    for line in block.group(1).splitlines():
+        m = re.match(r"MD\(\s*(\d+),\s*(\d+),\s*(-?\d+)\s*\)", line.strip())
+        if m:
+            rows.append((50 - int(m.group(1)) * 2, int(m.group(1)), int(m.group(2)), int(m.group(3))))
+    if len(rows) != 50:
+        raise SystemExit(f"toys expected 50 rows, got {len(rows)}")
+    return rows
+
+
+def parse_coords(text: str, name: str) -> list[tuple[int, int]]:
+    block = re.search(
+        rf"static const (?:Coord2D<uint8_t>|DrawIndustryCoordinates) {re.escape(name)}\[\d*\] = \{{(.*?)\}};",
+        text,
+        re.S,
+    )
+    if not block:
+        raise SystemExit(f"No {name}")
+    rows: list[tuple[int, int]] = []
+    for line in block.group(1).splitlines():
+        m = re.match(r"\{\s*(\d+),\s*(\d+)\s*\}", line.strip())
+        if m:
+            rows.append((int(m.group(1)), int(m.group(2))))
+    return rows
+
+
+def rust_u8_list(vals: list[int], width: int = 12) -> list[str]:
+    lines: list[str] = []
+    for i in range(0, len(vals), width):
+        chunk = vals[i : i + width]
+        lines.append("    " + ", ".join(str(v) for v in chunk) + ",")
+    return lines
+
+
+def rust_anim_rows(rows: list[tuple[int, int, int, int]]) -> list[str]:
+    return [
+        f"    DrawProcAnimRow {{ x: {x}, image_1: {i1}, image_2: {i2}, image_3: {i3} }},"
+        for x, i1, i2, i3 in rows
+    ]
+
+
+def emit(
+    draw_proc: list[int],
+    spec1: list[tuple[int, int, int, int]],
+    pile_coords: list[tuple[int, int]],
+    toys: list[tuple[int, int, int, int]],
+    toffee: list[int],
+    bubbles: list[int],
+    sparks: list[tuple[int, int]],
+    out: Path,
+) -> None:
+    preload = sorted(
+        {
+            SPR["SUGAR_SIEVE"] + i
+            for i in range(8)
+        }
+        | {SPR["SUGAR_CLOUDS"] + i for i in range(8)}
+        | {SPR["SUGAR_PILE"] + i for i in range(8)}
+        | {
+            SPR["TOFFEE_TOFFEE"],
+            SPR["TOFFEE_SHOVEL"],
+            SPR["BUBBLE_SPRING"],
+            SPR["BUBBLE_BUBBLE"],
+            SPR["TOY_HOLDER"],
+            SPR["TOY_STAMP"],
+            SPR["TOY_CLAY"],
+            SPR["TOY_ROBOT"],
+        }
+        | {SPR["SPARKS_BASE"] + i for i in range(1, 7)}
+    )
+    lines = [
+        "// @generated by scripts/gen_industry_draw_proc.py — no editar a mano.",
+        "",
+        "/// Fila de `_draw_industry_spec1` / `_industry_anim_offs_toys`.",
+        "#[derive(Debug, Clone, Copy)]",
+        "pub struct DrawProcAnimRow {",
+        "    pub x: i32,",
+        "    pub image_1: u8,",
+        "    pub image_2: u8,",
+        "    pub image_3: u8,",
+        "}",
+        "",
+        "/// Coordenada NFO `(dx, dy)` para child sprites.",
+        "#[derive(Debug, Clone, Copy)]",
+        "pub struct DrawProcCoord {",
+        "    pub x: u8,",
+        "    pub y: u8,",
+        "}",
+        "",
+        f"pub const SPR_IT_SUGAR_MINE_SIEVE: u32 = {SPR['SUGAR_SIEVE']};",
+        f"pub const SPR_IT_SUGAR_MINE_CLOUDS: u32 = {SPR['SUGAR_CLOUDS']};",
+        f"pub const SPR_IT_SUGAR_MINE_PILE: u32 = {SPR['SUGAR_PILE']};",
+        f"pub const SPR_IT_TOFFEE_QUARRY_TOFFEE: u32 = {SPR['TOFFEE_TOFFEE']};",
+        f"pub const SPR_IT_TOFFEE_QUARRY_SHOVEL: u32 = {SPR['TOFFEE_SHOVEL']};",
+        f"pub const SPR_IT_BUBBLE_GENERATOR_SPRING: u32 = {SPR['BUBBLE_SPRING']};",
+        f"pub const SPR_IT_BUBBLE_GENERATOR_BUBBLE: u32 = {SPR['BUBBLE_BUBBLE']};",
+        f"pub const SPR_IT_TOY_FACTORY_STAMP_HOLDER: u32 = {SPR['TOY_HOLDER']};",
+        f"pub const SPR_IT_TOY_FACTORY_STAMP: u32 = {SPR['TOY_STAMP']};",
+        f"pub const SPR_IT_TOY_FACTORY_CLAY: u32 = {SPR['TOY_CLAY']};",
+        f"pub const SPR_IT_TOY_FACTORY_ROBOT: u32 = {SPR['TOY_ROBOT']};",
+        f"pub const SPR_IT_POWER_PLANT_TRANSFORMERS: u32 = {SPR['SPARKS_BASE']};",
+        "",
+        f"/// `draw_proc` por fila `gfx * {STAGES} + stage` (0 = ninguno).",
+        f"pub const INDUSTRY_DRAW_PROC: [u8; {GFX_COUNT * STAGES}] = [",
+        *rust_u8_list(draw_proc, 16),
+        "];",
+        "",
+        "pub const DRAW_INDUSTRY_SPEC1: [DrawProcAnimRow; 96] = [",
+        *rust_anim_rows(spec1),
+        "];",
+        "",
+        "pub const DRAW_TILE_PROC1: [DrawProcCoord; 5] = [",
+        *[f"    DrawProcCoord {{ x: {x}, y: {y} }}," for x, y in pile_coords],
+        "];",
+        "",
+        "pub const INDUSTRY_ANIM_OFFS_TOYS: [DrawProcAnimRow; 50] = [",
+        *rust_anim_rows(toys),
+        "];",
+        "",
+        f"pub const INDUSTRY_ANIM_OFFS_TOFFEE: [u8; {len(toffee)}] = [",
+        *rust_u8_list(toffee),
+        "];",
+        "",
+        f"pub const INDUSTRY_ANIM_OFFS_BUBBLES: [u8; {len(bubbles)}] = [",
+        *rust_u8_list(bubbles),
+        "];",
+        "",
+        "pub const COAL_PLANT_SPARKS: [DrawProcCoord; 6] = [",
+        *[f"    DrawProcCoord {{ x: {x}, y: {y} }}," for x, y in sparks],
+        "];",
+        "",
+        f"/// Sprites secundarios de draw_proc (precarga en `WorldAssets`).",
+        f"pub const INDUSTRY_DRAW_PROC_SPRITE_IDS: [u32; {len(preload)}] = [",
+        "    " + ", ".join(str(i) for i in preload) + ",",
+        "];",
+        "",
+    ]
+    out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def main() -> None:
+    repo = Path(__file__).resolve().parents[1]
+    src = repo / "third_party" / "openttd" / "industry_land.h"
+    if len(sys.argv) > 1:
+        src = Path(sys.argv[1])
+    if not src.is_file():
+        raise SystemExit(f"Falta {src}")
+    text = src.read_text(encoding="utf-8")
+    rows = parse_macro_rows(text)
+    need = GFX_COUNT * STAGES
+    if len(rows) < need:
+        raise SystemExit(f"Esperadas >={need} filas M(), got {len(rows)}")
+    draw_proc = [rows[i][7] for i in range(need)]
+    spec1 = parse_draw_industry_spec1(text)
+    pile_coords = parse_coords(text, "_drawtile_proc1")
+    toys = parse_toys(text)
+    toffee = parse_u8_array(text, "_industry_anim_offs_toffee")
+    bubbles = parse_u8_array(text, "_industry_anim_offs_bubbles")
+    sparks = parse_coords(text, "_coal_plant_sparks")
+    out = repo / "crates/openttdrs-client/src/sprites/industry_draw_proc_generated.rs"
+    emit(draw_proc, spec1, pile_coords, toys, toffee, bubbles, sparks, out)
+    procs = sorted({p for p in draw_proc if p})
+    print(f"Wrote {out} (procs={procs})")
+
+
+if __name__ == "__main__":
+    main()

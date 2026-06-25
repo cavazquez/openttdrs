@@ -608,6 +608,7 @@ mod tests {
             kind: IndustryKind::Forest,
             stock: 30,
             capacity: 100,
+            random_colour: 0,
         }];
         assert!(station_preview_has_coverage(&map, &industries, 3, 3));
         assert!(!station_preview_has_coverage(&map, &[], 0, 0));

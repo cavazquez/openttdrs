@@ -43,7 +43,7 @@ Ordenada de **más barato a más caro**.
 | 16 | Sim | Horarios (timetable) | ✅ | ❌ | M–L |
 | 17 | Carretera | Un solo sentido / drive-through | ✅ | 🟡 | M |
 | 18 | Mundo | Subvencios, autoridad local | ✅ | 🟡 | M–L |
-| 19 | Mundo | Terraform + 4 climas + gen mundo | ✅ | ❌ | L |
+| 19 | Mundo | Terraform + 4 climas + gen mundo | ✅ | ❌ | L — ver [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) (T1–T3) |
 | 20 | Ferrocarril | PBS + path signals | ✅ | ❌ | L–XL |
 | 21 | Economía | Cargo Dist (link graph) | ✅ | ❌ | XL |
 | 22 | Transporte | Barcos / aviones | ✅ | ❌ | L |

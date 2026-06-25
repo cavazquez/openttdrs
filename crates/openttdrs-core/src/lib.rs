@@ -57,11 +57,18 @@ pub use industry::{
     IndustrySpec, industry_produce_period_ticks,
 };
 pub use map::{
-    Map, MapError, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, OTTD_TILETYPE_TUNNELBRIDGE, SLOPE_NE,
-    SLOPE_NW, SLOPE_SE, SLOPE_SW, Tile, TileCoord, TileKind, effective_road_bits,
-    inclined_slope_direction, is_tunnel_entrance_slope, openttd_tile_index_to_coord,
-    partial_pixel_z, resolve_tunnel_end, slope_dz_at_subtile, slope_dz_on_tile, tile_slope_and_z,
-    tunnel_entrance_m5, tunnel_preview_path,
+    GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED, GFX_GOLD_MINE_TOWER_ANIMATED,
+    GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2, GFX_OILWELL_ANIMATED_3, IndustryTileLink, Map,
+    MapError, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, OTTD_TILETYPE_TUNNELBRIDGE, SLOPE_NE, SLOPE_NW,
+    SLOPE_SE, SLOPE_SW, Tile, TileCoord, TileKind, advance_industry_construction,
+    advance_industry_tile_animations, effective_road_bits, inclined_slope_direction,
+    industry_animation_frame, industry_construction_counter, industry_construction_stage,
+    industry_gfx, industry_instance_id, industry_tile_anim_state, industry_tile_link,
+    industry_tiles_mergeable, industry_uses_water_ground, is_industry_completed,
+    is_tunnel_entrance_slope, make_industry_tile_bigger, openttd_tile_index_to_coord,
+    partial_pixel_z, resolve_tunnel_end, set_industry_gfx, slope_dz_at_subtile, slope_dz_on_tile,
+    step_industry_tiles, tile_adjacent_to_water, tile_slope_and_z, tunnel_entrance_m5,
+    tunnel_preview_path,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{

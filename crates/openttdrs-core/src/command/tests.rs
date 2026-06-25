@@ -783,7 +783,7 @@ fn sandbox_commands_place_visible_tile_kinds() {
 }
 
 #[test]
-fn place_industry_spec_marks_tiles_completed() {
+fn place_industry_spec_starts_construction_in_progress() {
     let mut s = GameState::new(16, 16);
     let origin = TileCoord::new(5, 5);
     apply_command(
@@ -796,7 +796,28 @@ fn place_industry_spec_marks_tiles_completed() {
             panic!("tesela del footprint {coord:?}");
         };
         assert_eq!(tile.kind, TileKind::Industry);
-        assert_ne!(tile.m1 & 0x80, 0, "IsIndustryCompleted en {coord:?}");
+        assert_eq!(tile.m1 & 0x80, 0, "obra en curso en {coord:?}");
+        assert_eq!(tile.m2, 1);
+    }
+}
+
+#[test]
+fn industry_construction_completes_over_sim_ticks() {
+    let mut s = GameState::new(16, 16);
+    let origin = TileCoord::new(5, 5);
+    apply_command(
+        &mut s,
+        &Command::PlaceIndustrySpec(origin, IndustrySpec::Sawmill),
+    )
+    .unwrap();
+    for _ in 0..128 {
+        s.step();
+    }
+    for (coord, _) in industry_template(origin, IndustrySpec::Sawmill) {
+        let Some(tile) = s.map.get(coord) else {
+            panic!("footprint {coord:?}");
+        };
+        assert_ne!(tile.m1 & 0x80, 0, "terminada en {coord:?}");
     }
 }
 

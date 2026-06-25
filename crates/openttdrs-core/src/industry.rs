@@ -75,6 +75,9 @@ pub struct Industry {
     pub kind: IndustryKind,
     pub stock: u32,
     pub capacity: u32,
+    /// Color aleatorio de industria (`Colours` 0–15) para edificios con paleta.
+    #[serde(default)]
+    pub random_colour: u8,
 }
 
 fn default_industry_tiles() -> Vec<TileCoord> {
@@ -102,6 +105,7 @@ impl Industry {
             kind,
             stock: 0,
             capacity: INDUSTRY_STOCK_CAPACITY,
+            random_colour: 0,
         }
     }
 
@@ -114,6 +118,7 @@ impl Industry {
             kind,
             stock: 0,
             capacity: INDUSTRY_STOCK_CAPACITY,
+            random_colour: 0,
         }
     }
 
@@ -123,6 +128,7 @@ impl Industry {
         kind: IndustryKind,
         spec: IndustrySpec,
         tiles: Vec<TileCoord>,
+        random_colour: u8,
     ) -> Self {
         Self {
             pos,
@@ -131,6 +137,7 @@ impl Industry {
             kind,
             stock: 0,
             capacity: INDUSTRY_STOCK_CAPACITY,
+            random_colour,
         }
     }
 
@@ -272,6 +279,7 @@ mod tests {
             IndustryKind::Factory,
             IndustrySpec::Sawmill,
             vec![TileCoord::new(0, 0)],
+            0,
         );
         saw.produce(512);
         assert_eq!(saw.stock, INDUSTRY_PRODUCE_AMOUNT);
@@ -286,6 +294,7 @@ mod tests {
             IndustryKind::Factory,
             IndustrySpec::Factory,
             vec![fact_pos],
+            0,
         );
         let mut stations = vec![Station::new_with_kind(stop_pos, StopKind::TruckStop)];
         stations[0].cargo_stock.wood = 10;

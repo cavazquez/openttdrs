@@ -24,6 +24,8 @@ pub(crate) fn step(state: &mut GameState) {
             .collect::<Vec<_>>(),
     );
 
+    state.industry_tile_dirty = crate::map::step_industry_tiles(&mut state.map, t);
+
     let mut loaded_this_tick = vec![false; state.vehicles.len()];
     let mut unloaded_this_tick = vec![false; state.vehicles.len()];
     unload_vehicles(state, t, &loaded_this_tick, &mut unloaded_this_tick);

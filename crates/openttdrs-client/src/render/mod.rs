@@ -5,6 +5,8 @@ mod atlas;
 mod company_recolor;
 mod components;
 mod grid;
+mod industry_anim;
+mod industry_draw_proc;
 mod smoke;
 mod tiles;
 mod town_labels;
@@ -16,13 +18,19 @@ mod world;
 pub(crate) use assets::WorldAssets;
 pub(crate) use atlas::{AtlasSprite, TileAtlas};
 pub(crate) use company_recolor::{
-    CompanyColoredSprites, sprite_from_atlas_or_company_white, sprite_from_company_or_asset,
+    CompanyColoredSprites, sprite_from_atlas_or_company_white,
+    sprite_from_atlas_or_industry_palette, sprite_from_company_or_asset,
 };
 pub(crate) use components::{
     IndustryPreviewCamera, MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer,
     PrimaryGameCamera, ShoreTile, VehiclePreviewCamera, WaterAnimFrames, WaterTile,
 };
 pub(crate) use grid::{RenderGrid, TileRenderContext};
+pub(crate) use industry_anim::{
+    IndustryBuildingAnim, IndustryBuildingAnimPlugin, IndustryOverlayContext, industry_anim_phase,
+    spawn_industry_anim_layer,
+};
+pub(crate) use industry_draw_proc::{IndustryDrawProcPlugin, spawn_industry_draw_proc_overlays};
 pub(crate) use smoke::{
     ChimneySmokeFrames, GFX_POWERPLANT_CHIMNEY, IndustrySmokePlugin, spawn_chimney_smoke,
 };

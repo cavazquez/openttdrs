@@ -29,6 +29,12 @@ def industry_sprite_ids(repo: Path) -> list[int]:
     text = gen.read_text(encoding="utf-8")
     ids = set(int(x) for x in re.findall(r"ground_sprite_id:\s*(\d+)", text))
     ids |= set(int(x) for x in re.findall(r"sprite_id:\s*(\d+)", text))
+    proc = repo / "crates/openttdrs-client/src/sprites/industry_draw_proc_generated.rs"
+    if proc.is_file():
+        ptext = proc.read_text(encoding="utf-8")
+        block = re.search(r"INDUSTRY_DRAW_PROC_SPRITE_IDS: \[u32; \d+\] = \[(.*?)\];", ptext, re.S)
+        if block:
+            ids |= set(int(x) for x in re.findall(r"\d+", block.group(1)))
     ids.discard(0)
     return sorted(ids)
 
@@ -93,6 +99,17 @@ def load_sheet(png_path: Path, graphics_mode: str) -> Image.Image:
     return img_rgba
 
 
+def dematte_cc_blue_mask(img: Image.Image) -> Image.Image:
+    """OpenTTD índice 0 / CC mask (0,0,255) → alpha 0."""
+    src = img.convert("RGBA")
+    data = [
+        (0, 0, 0, 0) if a > 0 and r == 0 and g == 0 and b == 255 else (r, g, b, a)
+        for r, g, b, a in src.getdata()
+    ]
+    src.putdata(data)
+    return src
+
+
 def parse_sprite_rect(nfo_path: Path) -> dict[int, tuple[int, int, int, int, str]]:
     pat = re.compile(
         r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfx21_base_32ez)\d+\.(?:32\.png|png|pcx)))\s+(?:8bpp|32bpp)\s+"
@@ -138,6 +155,7 @@ def crop_sprite(
     out_path: Path,
     sprite_rect: dict[int, tuple[int, int, int, int, str]],
     sheets: dict[str, Image.Image],
+    graphics_mode: str,
 ) -> str:
     if sid not in sprite_rect:
         return "no_nfo"
@@ -150,6 +168,8 @@ def crop_sprite(
         else:
             return "no_sheet"
     crop = sheets[sheet_key].crop((x, y, x + w, y + h))
+    if graphics_mode != "32bpp":
+        crop = dematte_cc_blue_mask(crop)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     crop.save(out_path)
     return "ok"
@@ -195,7 +215,7 @@ def main() -> int:
     ok = no_nfo = no_sheet = 0
     for sid in todo:
         out = tiles_dir / f"industry_{sid}.png"
-        status = crop_sprite(sid, out, sprite_rect, sheets)
+        status = crop_sprite(sid, out, sprite_rect, sheets, graphics_mode)
         if status == "ok":
             ok += 1
         elif status == "no_nfo":

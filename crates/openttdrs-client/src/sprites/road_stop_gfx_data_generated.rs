@@ -44,7 +44,7 @@ pub const BUS_STOP_BUILD_LAYERS: [[RoadStopLayerGfx; 3]; 4] = [
 pub const TRUCK_STOP_BUILD_LAYERS: [[RoadStopLayerGfx; 3]; 4] = [
     [ // NE
         RoadStopLayerGfx { dx: 0.0, dy: 15.0, dz: 0.0, z: 0.05, w: 28.0, h: 20.0, x_offs: -25.0, y_offs: -14.0, remap_x_adj: -9.0, path: "assets/opengfx/tiles/truck_stop_ne_build_a.png" },
-        RoadStopLayerGfx { dx: 13.0, dy: 0.0, dz: 0.0, z: 0.06, w: 36.0, h: 25.0, x_offs: -5.0, y_offs: -7.0, remap_x_adj: 0.0, path: "assets/opengfx/tiles/truck_stop_ne_build_b.png" },
+        RoadStopLayerGfx { dx: 13.0, dy: 0.0, dz: 0.0, z: 0.06, w: 36.0, h: 25.0, x_offs: -5.0, y_offs: -13.0, remap_x_adj: 7.0, path: "assets/opengfx/tiles/truck_stop_ne_build_b.png" },
         RoadStopLayerGfx { dx: 2.0, dy: 0.0, dz: 0.0, z: 0.07, w: 28.0, h: 18.0, x_offs: -21.0, y_offs: -7.0, remap_x_adj: 0.0, path: "assets/opengfx/tiles/truck_stop_ne_build_c.png" },
     ],
     [ // SE
@@ -59,7 +59,7 @@ pub const TRUCK_STOP_BUILD_LAYERS: [[RoadStopLayerGfx; 3]; 4] = [
     ],
     [ // NW
         RoadStopLayerGfx { dx: 0.0, dy: 0.0, dz: 0.0, z: 0.05, w: 28.0, h: 20.0, x_offs: 5.0, y_offs: -4.0, remap_x_adj: 0.0, path: "assets/opengfx/tiles/truck_stop_nw_build_a.png" },
-        RoadStopLayerGfx { dx: 0.0, dy: 13.0, dz: 0.0, z: 0.06, w: 36.0, h: 28.0, x_offs: -29.0, y_offs: -10.0, remap_x_adj: 0.0, path: "assets/opengfx/tiles/truck_stop_nw_build_b.png" },
+        RoadStopLayerGfx { dx: 0.0, dy: 13.0, dz: 0.0, z: 0.06, w: 36.0, h: 28.0, x_offs: -29.0, y_offs: -16.0, remap_x_adj: -7.0, path: "assets/opengfx/tiles/truck_stop_nw_build_b.png" },
         RoadStopLayerGfx { dx: 15.0, dy: 2.0, dz: 0.0, z: 0.07, w: 25.0, h: 20.0, x_offs: -3.0, y_offs: -26.0, remap_x_adj: 8.0, path: "assets/opengfx/tiles/truck_stop_nw_build_c.png" },
     ],
 ];

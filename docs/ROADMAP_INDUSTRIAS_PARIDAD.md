@@ -150,7 +150,7 @@ sugar mine, plastic fountain, etc. El header upstream ya tiene **700** filas `M(
 
 ---
 
-### P2 — Subíndice `anim_state` + frame `m4` — **pendiente**
+### P2 — Subíndice `anim_state` + frame `m4` — **hecho**
 
 **Problema:** OpenTTD usa `GetAnimationFrame(tile) & 3` cuando `IndustryTileSpec.anim_state`
 es true (torres de mina, pozos, chimenea central, etc.). openttdrs siempre usa etapa de obra.
@@ -169,27 +169,19 @@ es true (torres de mina, pozos, chimenea central, etc.). openttdrs siempre usa e
 
 ---
 
-### P3 — Procedimientos `draw_proc` (1–5) — **pendiente**
+### P3 — Procedimientos `draw_proc` (1–5) — **hecho**
 
-**Problema:** filas con `p > 0` en `M()` llaman overlays que no están en `s2`:
+**Problema:** filas con `p > 0` en `M()` llaman overlays que no están en `s2`.
 
-| proc | Función upstream | Industria típica |
-|------|------------------|------------------|
-| 1 | `IndustryDrawSugarMine` | Sugar mine |
-| 2 | `IndustryDrawToffeeQuarry` | Toffee quarry |
-| 3 | `IndustryDrawBubbleGenerator` | Bubble generator |
-| 4 | `IndustryDrawToyFactory` | Toy factory |
-| 5 | `IndustryDrawCoalPlantSparks` | Central eléctrica |
+**Hecho:** `scripts/gen_industry_draw_proc.py` → tablas upstream; spawn +
+`IndustryDrawProcPlugin` lee `m3hi` de sim; precarga `INDUSTRY_DRAW_PROC_SPRITE_IDS`.
+Sim avanza frames en `advance_industry_tile_animations` (gfx 10/143/162/165/174).
 
-**Trabajo:**
+**Criterio:** central gfx 10 muestra chispas; burbujas/toy factory visibles cuando la
+tabla gfx ≥175 o tiles en mapa de QA.
 
-1. Portar tablas `_draw_industry_spec1`, `_industry_anim_offs_*` de `industry_land.h`.
-2. Spawn de child sprites en `spawn_industry_tile` según `draw_proc` y frame.
-3. Precarga de sprites secundarios (burbujas, chispas, tamiz).
-
-**Criterio:** checklist / partida con toy factory o central muestra overlays extra como upstream.
-
-**Esfuerzo:** alto (varios sprites + offsets por procedimiento).
+**Nota:** tabla `INDUSTRY_GFX` actual = 131 filas; solo gfx **10** tiene `draw_proc`
+in-table. Lookup extendido cubre 143/162/165/174.
 
 ---
 
@@ -212,7 +204,7 @@ industrial (`PALETTE_MODIFIER_COLOUR` en sprites gfx 120+).
 
 ---
 
-### P5 — Semántica `m2` = IndustryID — **pendiente**
+### P5 — Semántica `m2` = IndustryID — **hecho**
 
 **Problema:** `place_industries`, panel de industria y docs agrupan por **`m1`**; upstream
 usa **`m2`** para el índice de instancia.
@@ -242,16 +234,21 @@ sonidos y triggers; openttdrs solo **lee** el stage del save.
 
 ---
 
-### P7 — Tile loop y animación temporal — **pendiente**
+### P7 — Tile loop y animación temporal — **hecho (parcial)**
 
 **Problema:** `AnimateTile_Industry`, `TileLoop_Industry`, mutación de `gfx` en pozos /
 plastic fountain, sonidos.
 
-**Trabajo:** sistema de tiles animados (similar a agua) + actualización de `m4`/gfx por tick.
+**Hecho:** `advance_industry_tile_animations` en `sim_step` — torres `anim_state` (gfx
+1/48/88) ciclan `m3hi & 3`; pozos (gfx 30–32) avanzan frame y rotan gfx. El render lee
+`m3hi`/gfx vivo del mapa en `IndustryBuildingAnimPlugin`.
 
-**Criterio:** pozo de petróleo y fuente de plástico cambian frame sin intervención del jugador.
+**Pendiente:** `draw_proc` animaciones (P3), fuente plástico (gfx ≥148), sonidos,
+`MakeIndustryTileBigger` (P6), burbujas tile loop.
 
-**Esfuerzo:** alto.
+**Criterio:** pozo de petróleo y torre de mina cambian frame con sim en marcha.
+
+**Esfuerzo:** alto (resto en P3/P6).
 
 ---
 
@@ -289,11 +286,11 @@ esperada (sprite 0 en upstream para esa etapa).
 |----|------|--------|---------|
 | P1 | Tabla 0..174 | pendiente | WARN gfx 120–174, climas extendidos |
 | P2 | anim_state + m4 | pendiente | Torres/pozos congelados |
-| P3 | draw_proc 1–5 | pendiente | Toy factory, burbujas, chispas |
+| P3 | draw_proc 1–5 | hecho | gfx≥131: lookup extendido |
 | P4 | Fundación/agua/paleta | pendiente | Pendiente/costa |
 | P5 | m2 IndustryID | pendiente | Agrupación saves reales |
 | P6 | Obra simulada | pendiente | Construcción in-game |
-| P7 | Tile loop | pendiente | Animación continua |
+| P7 | Tile loop | parcial | Torres/pozos en sim; P3/P6 resto |
 | P8 | NewGRF ≥175 | backlog | GRF custom |
 | P9 | Logs obra vacía | opcional | Ruido debug |
 | — | Tabla 0..119 + estadios m1 | **hecho** (SP3 P5) | — |

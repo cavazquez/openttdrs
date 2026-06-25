@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
-use crate::render::VehicleIndex;
+use crate::render::{RemapMapVisualsPending, VehicleIndex};
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
 
@@ -27,7 +27,12 @@ impl Plugin for SimulationPlugin {
                 PreUpdate,
                 sync_sim_time_controls.run_if(in_state(ClientScreen::InGame)),
             )
-            .add_systems(FixedUpdate, step_sim.run_if(in_state(ClientScreen::InGame)))
+            .add_systems(
+                FixedUpdate,
+                (step_sim, flag_industry_construction_remap)
+                    .chain()
+                    .run_if(in_state(ClientScreen::InGame)),
+            )
             .add_systems(
                 Update,
                 sync_tick_alpha
@@ -55,6 +60,18 @@ fn sync_sim_time_controls(hud: Res<SimHudControls>, mut virtual_time: ResMut<Tim
 fn step_sim(mut sim: ResMut<SimWorld>, mut vehicle_index: ResMut<VehicleIndex>) {
     sim.state.step();
     vehicle_index.rebuild(&sim.state.vehicles);
+}
+
+fn flag_industry_construction_remap(
+    sim: Res<SimWorld>,
+    mut pending: ResMut<RemapMapVisualsPending>,
+) {
+    if sim.state.industry_tile_dirty.is_empty() {
+        return;
+    }
+    pending.pending = true;
+    pending.sync_camera = false;
+    pending.full = false;
 }
 
 /// Interpolación render: fracción del siguiente tick fijo.

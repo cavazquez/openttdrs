@@ -15,6 +15,8 @@ mod foundation;
 mod house_draw_data_generated;
 #[path = "sprites/industry.rs"]
 mod industry;
+#[path = "sprites/industry_draw_proc.rs"]
+mod industry_draw_proc;
 #[path = "sprites/rail.rs"]
 mod rail;
 #[path = "sprites/road.rs"]
@@ -94,7 +96,10 @@ pub const ROAD_FLAT_HALF_H: [f32; 19] = [
     15.5, 15.5, 15.5,
 ];
 
-pub(crate) use company_palette::{CompanyColoredSprites, CompanyColour, tile_filename};
+pub(crate) use company_palette::{
+    CompanyColoredSprites, CompanyColour, company_colour_name, company_colour_swatch_color,
+    company_colour_tooltip, tile_filename,
+};
 #[allow(unused_imports)]
 pub use foundation::{
     FOUNDATION_LEVELED_GFX, FOUNDATION_SPRITE_BASE, FoundationGfx, foundation_asset_path,
@@ -103,11 +108,20 @@ pub use foundation::{
 #[allow(unused_imports)]
 pub use industry::{
     INDUSTRY_GFX_DATA, INDUSTRY_GFX_STAGES, INDUSTRY_GFX_TABLE_LEN, IndustryGfxSprite,
-    IndustryGfxStatus, debug_log_industry_gfx_once, industry_construction_stage_from_tile,
-    industry_gfx_draw_index, industry_gfx_empty_row_is_expected, industry_gfx_entry,
-    industry_gfx_entry_for_tile, industry_gfx_entry_staged, industry_gfx_status,
-    industry_gfx_status_label, industry_gfx_uses_generic_fallback, industry_sprite_for_gfx,
-    log_industry_gfx_once,
+    IndustryGfxStatus, debug_log_industry_gfx_once, industry_anim_layer_used_in_any_frame,
+    industry_animation_frame_from_m4, industry_building_needs_client_anim,
+    industry_construction_stage_from_tile, industry_effective_m4_for_draw, industry_gfx_draw_index,
+    industry_gfx_empty_row_is_expected, industry_gfx_entry, industry_gfx_entry_for_tile,
+    industry_gfx_entry_staged, industry_gfx_status, industry_gfx_status_label,
+    industry_gfx_table_subindex, industry_gfx_uses_generic_fallback,
+    industry_gfx_uses_random_colour, industry_palette_colour_for_instance, industry_sprite_for_gfx,
+    industry_tile_anim_state, log_industry_gfx_once,
+};
+#[allow(unused_imports)]
+pub use industry_draw_proc::{
+    DrawProcLayer, INDUSTRY_DRAW_PROC_SPRITE_IDS, industry_draw_proc,
+    industry_draw_proc_anim_frame, industry_draw_proc_dynamic_layers, industry_draw_proc_extended,
+    industry_draw_proc_for_tile,
 };
 #[allow(unused_imports)]
 pub use rail::{

@@ -1,16 +1,22 @@
 use bevy::prelude::*;
-use openttdrs_core::TileKind;
+use openttdrs_core::{Map, TileKind, industry_uses_water_ground};
 
 use super::{
-    leveled_foundation_overlay_pos, sloped_or_flat_image, spawn_ground_sprite,
-    spawn_leveled_foundation,
+    helpers::FLAT_WATER_LAYER_FRAC, leveled_foundation_overlay_pos, sloped_or_flat_image,
+    spawn_ground_sprite, spawn_leveled_foundation,
 };
-use crate::iso::{overlay_pos, remap_tile_offset, wang_hash};
-use crate::render::{MapSpriteBatches, MapVisualLayer, TileRenderContext, WorldAssets};
+use crate::iso::{overlay_pos, remap_tile_offset, tile_pos, wang_hash};
+use crate::render::{
+    CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, TileRenderContext, WaterTile,
+    WorldAssets, sprite_from_atlas_or_industry_palette,
+};
 use crate::sprites::{
     FENCE_MOD_BY_TILEH_NE, FENCE_MOD_BY_TILEH_NW, FENCE_MOD_BY_TILEH_SE, FENCE_MOD_BY_TILEH_SW,
     FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY,
     TREE_SPRITE_META, house_building_stage_from_tile, house_draw_data_index_for_tile,
+    industry_anim_layer_used_in_any_frame, industry_building_needs_client_anim,
+    industry_effective_m4_for_draw, industry_gfx_entry_for_tile, industry_gfx_uses_random_colour,
+    industry_palette_colour_for_instance,
 };
 
 pub(crate) fn spawn_house_tile(
@@ -74,11 +80,16 @@ pub(crate) fn spawn_house_tile(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_industry_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
+    map: &Map,
     ctx: &TileRenderContext,
     slope_half_ground: f32,
+    industries: &[openttdrs_core::Industry],
+    company: &mut CompanyColoredSprites,
+    images: &mut Assets<Image>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -87,23 +98,47 @@ pub(crate) fn spawn_industry_tile(
     let gfx = ctx.tile.map_or(0u16, |t| {
         u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8)
     });
-    let m1 = ctx.tile.map_or(0x80, |t| t.m1);
-    let entry = crate::sprites::industry_gfx_entry_for_tile(gfx, m1);
-    crate::sprites::log_industry_gfx_once(gfx, m1, entry);
+    let m1 = ctx.tile.map_or(0, |t| t.m1);
+    let m2 = ctx.tile.map_or(0, |t| t.m2);
+    let m3hi = ctx.tile.map_or(0, |t| t.m3hi);
+    let palette_colour = industry_palette_colour_for_instance(m2, industries);
+    let client_anim = industry_building_needs_client_anim(gfx, m1);
+    let phase = crate::render::industry_anim_phase(ctx.tx_i32(), ctx.ty_i32(), m3hi);
+    let m4 = industry_effective_m4_for_draw(gfx, m1, m3hi, 0.0, phase);
+    let entry = industry_gfx_entry_for_tile(gfx, m1, m4);
+    crate::sprites::log_industry_gfx_once(gfx, m1, m3hi, entry);
     // Chimenea de la central terminada: penacho de humo animado encima.
     if gfx == crate::render::GFX_POWERPLANT_CHIMNEY && m1 & 0x80 != 0 {
         crate::render::spawn_chimney_smoke(commands, assets, ctx);
     }
-    // Terreno natural bajo la industria; en pendiente se añade cimiento nivelado (P4).
-    let terrain_img = sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
-    let terrain_color = Color::srgb(0.55, 0.50, 0.45);
-    spawn_ground_sprite(
-        commands,
-        &terrain_img,
-        terrain_color,
-        ctx,
-        slope_half_ground,
-    );
+    let ground_sid = entry.map(|e| e.ground_sprite_id).unwrap_or(0);
+    let use_water = industry_uses_water_ground(map, ctx.coord, gfx, ground_sid);
+    let chunk = ctx.map_tile_chunk();
+    if use_water {
+        commands.spawn((
+            MapVisualLayer,
+            chunk,
+            WaterTile,
+            assets.water.sprite(),
+            Transform::from_translation(tile_pos(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                FLAT_WATER_LAYER_FRAC,
+            )),
+        ));
+    } else {
+        // Terreno natural bajo la industria; en pendiente se añade cimiento nivelado (P4).
+        let terrain_img = sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
+        let terrain_color = Color::srgb(0.55, 0.50, 0.45);
+        spawn_ground_sprite(
+            commands,
+            &terrain_img,
+            terrain_color,
+            ctx,
+            slope_half_ground,
+        );
+    }
     let leveled = tileh != 0;
     if leveled {
         spawn_leveled_foundation(commands, assets, ctx, tileh);
@@ -127,7 +162,7 @@ pub(crate) fn spawn_industry_tile(
                 ctx.ty_i32(),
             )
         } else {
-            crate::iso::overlay_pos(
+            overlay_pos(
                 ctx.iso_pos,
                 xrel,
                 yrel,
@@ -140,34 +175,93 @@ pub(crate) fn spawn_industry_tile(
             )
         }
     };
+    let overlay_ctx =
+        crate::render::IndustryOverlayContext::from_tile_ctx(ctx, base_z, overlay_z, leveled);
     if let Some(s) = entry {
-        if s.ground_sprite_id != 0
-            && s.ground_w > 0.0
-            && s.ground_h > 0.0
-            && let Some(img) = assets.industries.get(&s.ground_sprite_id)
-        {
-            let pos_g = overlay_at(s.ground_xrel, s.ground_yrel, s.ground_w, s.ground_h, 0.45);
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                img.sprite(),
-                Transform::from_translation(pos_g),
-            ));
+        let anim_base = |ground: bool| {
+            crate::render::IndustryBuildingAnim::new(gfx, m1, phase, ground, overlay_ctx)
+        };
+        if s.ground_sprite_id != 0 && s.ground_w > 0.0 && s.ground_h > 0.0 {
+            if client_anim && industry_anim_layer_used_in_any_frame(gfx, true) {
+                crate::render::spawn_industry_anim_layer(
+                    commands,
+                    assets,
+                    chunk,
+                    anim_base(true),
+                    s.ground_sprite_id,
+                    s.ground_xrel,
+                    s.ground_yrel,
+                    s.ground_w,
+                    s.ground_h,
+                    0.45,
+                );
+            } else if let Some(img) = assets.industries.get(&s.ground_sprite_id) {
+                let sprite = if industry_gfx_uses_random_colour(gfx) {
+                    sprite_from_atlas_or_industry_palette(
+                        company,
+                        images,
+                        img,
+                        s.ground_sprite_id,
+                        palette_colour,
+                    )
+                } else {
+                    img.sprite()
+                };
+                let pos_g = overlay_at(s.ground_xrel, s.ground_yrel, s.ground_w, s.ground_h, 0.45);
+                commands.spawn((
+                    MapVisualLayer,
+                    chunk,
+                    sprite,
+                    Transform::from_translation(pos_g),
+                ));
+            }
         }
-        if s.sprite_id != 0
-            && s.w > 0.0
-            && s.h > 0.0
-            && let Some(img) = assets.industries.get(&s.sprite_id)
-        {
-            let pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                img.sprite(),
-                Transform::from_translation(pos3),
-            ));
+        if s.sprite_id != 0 && s.w > 0.0 && s.h > 0.0 {
+            if client_anim && industry_anim_layer_used_in_any_frame(gfx, false) {
+                crate::render::spawn_industry_anim_layer(
+                    commands,
+                    assets,
+                    chunk,
+                    anim_base(false),
+                    s.sprite_id,
+                    s.xrel,
+                    s.yrel,
+                    s.w,
+                    s.h,
+                    0.5,
+                );
+            } else if let Some(img) = assets.industries.get(&s.sprite_id) {
+                let sprite = if industry_gfx_uses_random_colour(gfx) {
+                    sprite_from_atlas_or_industry_palette(
+                        company,
+                        images,
+                        img,
+                        s.sprite_id,
+                        palette_colour,
+                    )
+                } else {
+                    img.sprite()
+                };
+                let pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
+                commands.spawn((
+                    MapVisualLayer,
+                    chunk,
+                    sprite,
+                    Transform::from_translation(pos3),
+                ));
+            }
         }
     }
+    crate::render::spawn_industry_draw_proc_overlays(
+        commands,
+        assets,
+        ctx,
+        gfx,
+        m1,
+        m3hi,
+        overlay_ctx,
+        chunk,
+    );
 }
 
 pub(crate) fn spawn_generic_land_tile(

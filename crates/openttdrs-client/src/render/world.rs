@@ -202,7 +202,8 @@ pub(crate) fn setup(
         &mut commands,
         &asset_server,
         &assets,
-        &company_sprites,
+        &mut company_sprites,
+        &mut images,
         &sim,
         spawn_bounds,
         true,
@@ -217,7 +218,8 @@ pub(crate) fn setup(
 fn spawn_map_tiles_in_bounds(
     commands: &mut Commands,
     assets: &WorldAssets,
-    company: &CompanyColoredSprites,
+    company: &mut CompanyColoredSprites,
+    images: &mut Assets<Image>,
     sim: &SimWorld,
     spawn_bounds: TileViewportBounds,
 ) {
@@ -343,7 +345,16 @@ fn spawn_map_tiles_in_bounds(
             ),
             TileKind::House => spawn_house_tile(commands, assets, &ctx, slope_half_ground),
             TileKind::Industry => {
-                spawn_industry_tile(commands, assets, &ctx, slope_half_ground);
+                spawn_industry_tile(
+                    commands,
+                    assets,
+                    map,
+                    &ctx,
+                    slope_half_ground,
+                    &sim.state.industries,
+                    company,
+                    images,
+                );
             }
             _ => {}
         }
@@ -374,11 +385,13 @@ fn sync_company_colored_sprites(
     pending.sync_camera = false;
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_world_layer(
     commands: &mut Commands,
     asset_server: &AssetServer,
     assets: &WorldAssets,
-    company: &CompanyColoredSprites,
+    company: &mut CompanyColoredSprites,
+    images: &mut Assets<Image>,
     sim: &SimWorld,
     spawn_bounds: TileViewportBounds,
     include_world_extras: bool,
@@ -390,13 +403,14 @@ fn spawn_world_layer(
         let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
         super::town_labels::spawn_town_labels(commands, sim, &label_font);
     }
-    spawn_map_tiles_in_bounds(commands, assets, company, sim, spawn_bounds);
+    spawn_map_tiles_in_bounds(commands, assets, company, images, sim, spawn_bounds);
 }
 
 fn spawn_map_chunk(
     commands: &mut Commands,
     assets: &WorldAssets,
-    company: &CompanyColoredSprites,
+    company: &mut CompanyColoredSprites,
+    images: &mut Assets<Image>,
     sim: &SimWorld,
     cx: u32,
     cy: u32,
@@ -406,6 +420,7 @@ fn spawn_map_chunk(
         commands,
         assets,
         company,
+        images,
         sim,
         chunk_tile_bounds(cx, cy, mw, mh),
     );
@@ -468,7 +483,8 @@ pub(crate) fn apply_remap_map_visuals(
     >,
     asset_server: Res<AssetServer>,
     assets: Option<Res<WorldAssets>>,
-    company: Option<Res<CompanyColoredSprites>>,
+    mut company: Option<ResMut<CompanyColoredSprites>>,
+    mut images: Option<ResMut<Assets<Image>>>,
     sim: Res<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
     mut loaded_chunks: ResMut<LoadedMapTileChunks>,
@@ -479,7 +495,10 @@ pub(crate) fn apply_remap_map_visuals(
     let Some(assets) = assets else {
         return;
     };
-    let Some(company) = company else {
+    let Some(company) = company.as_mut() else {
+        return;
+    };
+    let Some(images) = images.as_mut() else {
         return;
     };
     let do_sync_camera = pending.sync_camera;
@@ -512,7 +531,8 @@ pub(crate) fn apply_remap_map_visuals(
             spawn_map_chunk(
                 &mut commands,
                 assets.as_ref(),
-                company.as_ref(),
+                company.as_mut(),
+                images.as_mut(),
                 &sim,
                 cx,
                 cy,
@@ -544,7 +564,8 @@ pub(crate) fn apply_remap_map_visuals(
             &mut commands,
             &asset_server,
             assets.as_ref(),
-            company.as_ref(),
+            company.as_mut(),
+            images.as_mut(),
             &sim,
             spawn_bounds,
             true,

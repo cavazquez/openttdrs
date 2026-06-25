@@ -348,6 +348,7 @@ fn factory_chain_produces_goods_from_delivered_cargo() {
         IndustryKind::Factory,
         IndustrySpec::Factory,
         vec![fact_pos],
+        0,
     ));
     s.stations
         .push(Station::new_with_kind(stop_pos, StopKind::TruckStop));

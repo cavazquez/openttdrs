@@ -141,14 +141,20 @@ impl OttdmapExtras {
             .map(crate::tnbp_decode::tnbp_blob_to_json_value)
     }
 
-    /// Busca el tipo `OpenTTD` guardado para un índice de industria en tesela (`m1` bits 0–6).
+    /// Busca el tipo `OpenTTD` en footer `INDP` por `IndustryID` (`m2` en tesela `MP_INDUSTRY`).
     #[must_use]
-    pub fn industry_type_for_tile_index(&self, m1: u8) -> Option<u8> {
-        let idx = u16::from(m1 & 0x7F);
+    pub fn industry_type_for_instance(&self, instance: u8) -> Option<u8> {
+        let idx = u16::from(instance);
         self.industry_types
             .iter()
             .find(|(i, _)| *i == idx)
             .map(|(_, t)| *t)
+    }
+
+    /// Compat: antes se pasaba `m1`; ahora preferir [`Self::industry_type_for_instance`].
+    #[must_use]
+    pub fn industry_type_for_tile_index(&self, m1: u8) -> Option<u8> {
+        self.industry_type_for_instance(m1 & 0x7F)
     }
 }
 

@@ -53,6 +53,8 @@ pub(super) fn place_industry_spec_sandbox(
     check_place_industry_spec(&state.map, c, spec)?;
     let template = industry_template(c, spec);
     let footprint: Vec<TileCoord> = template.iter().map(|(tile, _)| *tile).collect();
+    let industry_id = u8::try_from(state.industries.len().saturating_add(1)).unwrap_or(255);
+    let random_colour = industry_id.wrapping_mul(5) % 16;
     for (tile, m5) in &template {
         state
             .map
@@ -62,18 +64,27 @@ pub(super) fn place_industry_spec_sandbox(
             .map
             .set_mapt_m5(*tile, 0x80, *m5)
             .map_err(|_| CommandError::OutOfBounds)?;
-        // Sandbox: construcción instantánea → `IsIndustryCompleted` (bit 7 de m1).
+        // Obra desde etapa 0; el tile loop (P6) avanza `m1` hasta `IsIndustryCompleted`.
         state
             .map
-            .set_m1(*tile, 0x80)
+            .set_m1(*tile, 0)
+            .map_err(|_| CommandError::OutOfBounds)?;
+        state
+            .map
+            .set_m2(*tile, industry_id)
             .map_err(|_| CommandError::OutOfBounds)?;
     }
+    state.industry_tile_dirty.extend(footprint.iter().copied());
     state
         .industries
         .retain(|industry| !industry.contains_tile(c));
-    state
-        .industries
-        .push(Industry::with_tiles_spec(c, spec.kind(), spec, footprint));
+    state.industries.push(Industry::with_tiles_spec(
+        c,
+        spec.kind(),
+        spec,
+        footprint,
+        random_colour,
+    ));
     state.economy.money -= 250;
     Ok(())
 }

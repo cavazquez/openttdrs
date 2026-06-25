@@ -76,9 +76,9 @@ pub(crate) fn sync_industry_panel(
         {
             let (focus_gfx_label, _preview_anchor, focus_gfx) =
                 dominant_gfx_for_component(&sim.state.map, focus).unwrap_or(("n/d", focus, 0));
-            let industry_id = sim.state.map.get(origin).map_or(0, |tile| tile.m1);
+            let industry_id = sim.state.map.get(origin).map_or(0, |tile| tile.m2);
             **details = format!(
-                "Tipo Sim: {} | Tipo GFX: {} | Stock: {stock}/{capacity}\nOrigen sim: ({}, {}) | Industry ID(m1): {} | Tiles conectadas: {tile_count} | gfx9(raw): {focus_gfx}",
+                "Tipo Sim: {} | Tipo GFX: {} | Stock: {stock}/{capacity}\nOrigen sim: ({}, {}) | Industry ID(m2): {} | Tiles conectadas: {tile_count} | gfx9(raw): {focus_gfx}",
                 spec.map_or_else(|| kind_label(kind), spec_label),
                 focus_gfx_label,
                 origin.x,

@@ -26,7 +26,10 @@ pub(crate) use rail_station_window::{
     handle_rail_station_picker_buttons, rail_station_picker_on_closed, setup_rail_station_picker,
     sync_rail_station_picker,
 };
-pub(crate) use settings::handle_settings_menu_buttons;
+pub(crate) use settings::{
+    handle_company_colour_swatches, handle_settings_menu_buttons,
+    sync_company_colour_swatch_visuals,
+};
 pub(crate) use station_panel::{
     StationCargoPanelState, handle_station_cargo_panel_buttons, setup_station_cargo_panel,
     sync_station_cargo_panel,
@@ -179,6 +182,10 @@ pub(crate) enum OrderPanelButton {
     PickDestOnMap,
     ToggleRunning,
 }
+
+/// Muestra de color de compañía en el panel Ajustes (`0..16`).
+#[derive(Component, Clone, Copy)]
+pub(crate) struct CompanyColourSwatch(pub u8);
 
 #[derive(Component, Clone, Copy)]
 pub(crate) enum SaveMenuAction {

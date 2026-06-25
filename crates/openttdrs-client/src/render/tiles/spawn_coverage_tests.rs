@@ -13,7 +13,7 @@ use crate::render::tiles::{
     spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile, spawn_rail_tile,
     spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
-use crate::render::{MapSpriteBatches, RenderGrid, TileRenderContext};
+use crate::render::{CompanyColoredSprites, MapSpriteBatches, RenderGrid, TileRenderContext};
 use crate::sprites::{RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS};
 
 #[derive(Resource)]
@@ -239,7 +239,12 @@ fn spawn_land_house_industry_generics_and_batches() {
 
     world
         .run_system_once(
-            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+            |mut commands: Commands,
+             m: Res<TsMap>,
+             g: Res<TsGrid>,
+             a: Res<TsAssets>,
+             mut company: Local<CompanyColoredSprites>,
+             mut images: Local<Assets<Image>>| {
                 let (mw, mh) = m.0.dimensions();
                 spawn_generic_land_tile(
                     &mut commands,
@@ -280,8 +285,12 @@ fn spawn_land_house_industry_generics_and_batches() {
                 spawn_industry_tile(
                     &mut commands,
                     &a.0,
+                    &m.0,
                     &TileRenderContext::new(&m.0, &g.0, 1, 1),
                     4.0,
+                    &[],
+                    &mut company,
+                    &mut images,
                 );
 
                 let mut batches = MapSpriteBatches::default();
@@ -386,12 +395,21 @@ fn spawn_industry_on_slope_spawns_foundation_layer() {
 
     world
         .run_system_once(
-            |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+            |mut commands: Commands,
+             m: Res<TsMap>,
+             g: Res<TsGrid>,
+             a: Res<TsAssets>,
+             mut company: Local<CompanyColoredSprites>,
+             mut images: Local<Assets<Image>>| {
                 spawn_industry_tile(
                     &mut commands,
                     &a.0,
+                    &m.0,
                     &TileRenderContext::new(&m.0, &g.0, 1, 1),
                     4.0,
+                    &[],
+                    &mut company,
+                    &mut images,
                 );
             },
         )
@@ -479,12 +497,21 @@ fn power_plant_chimney_spawns_animated_smoke() {
     let spawn_at = |world: &mut World, tx: u32| {
         world
             .run_system_once(
-                move |mut commands: Commands, m: Res<TsMap>, g: Res<TsGrid>, a: Res<TsAssets>| {
+                move |mut commands: Commands,
+                      m: Res<TsMap>,
+                      g: Res<TsGrid>,
+                      a: Res<TsAssets>,
+                      mut company: Local<CompanyColoredSprites>,
+                      mut images: Local<Assets<Image>>| {
                     spawn_industry_tile(
                         &mut commands,
                         &a.0,
+                        &m.0,
                         &TileRenderContext::new(&m.0, &g.0, tx, 2),
                         4.0,
+                        &[],
+                        &mut company,
+                        &mut images,
                     );
                 },
             )

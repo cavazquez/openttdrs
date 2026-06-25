@@ -124,6 +124,7 @@ Objetivo: cerrar el **vertical slice en solitario** sin abrir multijugador, NewG
 | PBS / path signals | Hito 0.2 ferro avanzado |
 | Barcos / aviones | Hito 0.3 transporte completo |
 | Terraform (elevar / bajar / nivelar) | [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) T1–T3; paralelo a S4 |
+| Barra de estado + noticias | [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) N1–N3; mejora SP1 |
 | Generación de mundo + 4 climas | Hito 0.2 |
 | Cargo Dist / link graph | Muy post-0.1 |
 | Multijugador I8 | Explícitamente post-0.1 |

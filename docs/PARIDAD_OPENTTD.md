@@ -49,6 +49,7 @@ Ordenada de **más barato a más caro**.
 | 22 | Transporte | Barcos / aviones | ✅ | ❌ | L |
 | 23 | Modding | NewGRF runtime | ✅ | ❌ | XXL |
 | 24 | Red | Multijugador I8 | ✅ | ❌ | XXL |
+| 25 | UI | Barra inferior + noticias (ticker, cartel) | ✅ | ❌ | M — [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) (N1–N5) |
 
 ---
 

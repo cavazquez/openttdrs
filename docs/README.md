@@ -19,6 +19,7 @@
 | [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) | Prioridades, hallazgos de tiles/sprites, comandos |
 | [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md) | Checklist visual vs OpenTTD 15.3 (mayoría [x]) |
 | [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) | Elevar / bajar / nivelar terreno (T1–T3) |
+| [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) | Barra inferior, ticker y cartel de noticias (N1–N5) |
 
 ---
 

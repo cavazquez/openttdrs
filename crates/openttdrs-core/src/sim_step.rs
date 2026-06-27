@@ -35,6 +35,7 @@ pub(crate) fn step(state: &mut GameState) {
     sync_vehicle_order_destinations(state);
     apply_vehicle_running_costs(state);
     crate::news::poll_vehicle_advice_news(state);
+    crate::news::maybe_purge_old_news(state);
 }
 
 fn sync_vehicle_order_destinations(state: &mut GameState) {

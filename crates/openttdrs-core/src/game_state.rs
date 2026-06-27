@@ -109,6 +109,9 @@ pub struct GameState {
     /// Claves `(vehículo, tipo de aviso)` ya notificadas mientras persiste la condición.
     #[serde(skip, default)]
     pub news_advice_sent: std::collections::HashSet<u64>,
+    /// Último día de calendario en que se ejecutó purga de noticias antiguas.
+    #[serde(skip, default)]
+    pub news_last_purge_day: u64,
 }
 
 impl GameState {
@@ -132,6 +135,7 @@ impl GameState {
             pending_news_events: Vec::new(),
             news_first_vehicle_running_sent: false,
             news_advice_sent: std::collections::HashSet::new(),
+            news_last_purge_day: 0,
         }
     }
 
@@ -156,6 +160,7 @@ impl GameState {
             pending_news_events: Vec::new(),
             news_first_vehicle_running_sent: false,
             news_advice_sent: std::collections::HashSet::new(),
+            news_last_purge_day: 0,
         }
     }
 

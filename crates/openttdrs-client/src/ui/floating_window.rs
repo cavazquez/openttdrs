@@ -42,6 +42,10 @@ pub(crate) enum FloatingWindowId {
     Vehicle,
     /// «Selección de estación» de tren (opciones de la herramienta).
     RailStationPicker,
+    /// Historial de noticias (Message history).
+    NewsHistory,
+    /// Finanzas de la compañía.
+    Finances,
 }
 
 /// Raíz de una ventana flotante.

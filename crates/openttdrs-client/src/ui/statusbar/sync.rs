@@ -352,7 +352,7 @@ fn spawn_news_popup(
     }
 }
 
-fn focus_news_reference(
+pub(crate) fn focus_news_reference(
     reference: NewsReference,
     sim: &SimWorld,
     focus: &mut CameraFocusRequest,

@@ -4,9 +4,8 @@ use crate::ui::font::UiFontRole;
 use crate::ui::toolbar::BuildMenuUi;
 
 use super::{
-    STATUS_BAR_HEIGHT, STATUS_BAR_Z, StatusBarCenterButton, StatusBarDateText,
-    StatusBarDefaultText, StatusBarMoneyText, StatusBarReminderDot, StatusBarRoot,
-    StatusBarTickerText,
+    STATUS_BAR_HEIGHT, STATUS_BAR_Z, StatusBarCenterButton, StatusBarDefaultText,
+    StatusBarReminderDot, StatusBarRoot, StatusBarTickerText,
 };
 
 const BAR_BG: Color = Color::srgb(0.38, 0.38, 0.38);
@@ -35,14 +34,7 @@ pub(crate) fn setup_status_bar(mut commands: Commands) {
             BorderColor::all(BAR_BORDER),
         ))
         .with_children(|bar| {
-            spawn_panel(
-                bar,
-                Val::Px(148.0),
-                StatusBarDateText,
-                "1 ene 1950",
-                TEXT_LIGHT,
-                false,
-            );
+            spawn_date_panel(bar, "1 ene 1950");
             bar.spawn((
                 Button,
                 StatusBarCenterButton,
@@ -99,56 +91,68 @@ pub(crate) fn setup_status_bar(mut commands: Commands) {
                     Visibility::Hidden,
                 ));
             });
-            spawn_panel(
-                bar,
-                Val::Px(148.0),
-                StatusBarMoneyText,
-                "$100000",
-                TEXT_LIGHT,
-                true,
-            );
+            spawn_money_panel(bar, "$100000");
         });
 }
 
-fn spawn_panel<M: Component>(
-    parent: &mut ChildSpawnerCommands,
-    width: Val,
-    marker: M,
-    label: &str,
-    color: Color,
-    right: bool,
-) {
+fn spawn_date_panel(parent: &mut ChildSpawnerCommands, label: &str) {
     parent
         .spawn((
+            Button,
+            super::StatusBarDateButton,
             BuildMenuUi,
             Node {
-                width,
-                justify_content: if right {
-                    JustifyContent::FlexEnd
-                } else {
-                    JustifyContent::FlexStart
-                },
+                width: Val::Px(148.0),
+                justify_content: JustifyContent::FlexStart,
                 align_items: AlignItems::Center,
                 padding: UiRect::horizontal(Val::Px(8.0)),
-                border: if right {
-                    UiRect::left(Val::Px(1.0))
-                } else {
-                    UiRect::right(Val::Px(1.0))
-                },
+                border: UiRect::right(Val::Px(1.0)),
                 ..default()
             },
             BackgroundColor(BAR_BG),
             BorderColor::all(BAR_BORDER),
+            Interaction::default(),
         ))
         .with_children(|panel| {
             panel.spawn((
-                marker,
+                super::StatusBarDateText,
                 Text::new(label),
                 TextFont {
                     font_size: FontSize::Rem(UiFontRole::Body.rem_size()),
                     ..default()
                 },
-                TextColor(color),
+                TextColor(TEXT_LIGHT),
+            ));
+        });
+}
+
+fn spawn_money_panel(parent: &mut ChildSpawnerCommands, label: &str) {
+    parent
+        .spawn((
+            Button,
+            super::StatusBarMoneyButton,
+            BuildMenuUi,
+            Node {
+                width: Val::Px(148.0),
+                justify_content: JustifyContent::FlexEnd,
+                align_items: AlignItems::Center,
+                padding: UiRect::horizontal(Val::Px(8.0)),
+                border: UiRect::left(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(BAR_BG),
+            BorderColor::all(BAR_BORDER),
+            Interaction::default(),
+        ))
+        .with_children(|panel| {
+            panel.spawn((
+                super::StatusBarMoneyText,
+                Text::new(label),
+                TextFont {
+                    font_size: FontSize::Rem(UiFontRole::Body.rem_size()),
+                    ..default()
+                },
+                TextColor(TEXT_LIGHT),
             ));
         });
 }

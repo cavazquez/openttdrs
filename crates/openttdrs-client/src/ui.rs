@@ -6,6 +6,7 @@ use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 
 mod buy_window;
+mod finances_window;
 mod floating_window;
 pub(crate) mod font;
 mod hud;
@@ -20,6 +21,10 @@ mod windows_shot;
 use buy_window::{
     BuyVehicleWindowState, buy_window_on_closed, handle_buy_window_buttons, setup_buy_window,
     sync_buy_window,
+};
+use finances_window::{
+    FinancesWindowState, finances_window_on_closed, handle_open_finances_window,
+    setup_finances_window, sync_finances_window,
 };
 pub(crate) use hud::SimHudControls;
 use hud::{
@@ -39,8 +44,10 @@ use save_window::{
     setup_save_window, sync_save_window,
 };
 use statusbar::{
-    NewsUiState, drain_news_events, handle_news_popup_close, handle_news_popup_focus,
-    handle_status_bar_center_click, setup_status_bar, sync_status_bar, update_news_playback,
+    NewsHistoryState, NewsUiState, drain_news_events, handle_news_history_row_click,
+    handle_news_popup_close, handle_news_popup_focus, handle_open_news_history,
+    handle_status_bar_center_click, news_history_on_closed, setup_news_history_window,
+    setup_status_bar, sync_news_history_window, sync_status_bar, update_news_playback,
 };
 use toolbar::depot_panel_on_closed;
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState};
@@ -76,6 +83,8 @@ impl Plugin for ClientUiPlugin {
             windows_shot::WindowsShotPlugin,
         ))
         .init_resource::<NewsUiState>()
+        .init_resource::<NewsHistoryState>()
+        .init_resource::<FinancesWindowState>()
         .init_resource::<SelectedTileInfo>()
         .init_resource::<HoveredTileCoord>()
         .init_resource::<SimHudControls>()
@@ -103,6 +112,8 @@ impl Plugin for ClientUiPlugin {
             (
                 setup_tile_info_ui,
                 setup_status_bar,
+                setup_news_history_window,
+                setup_finances_window,
                 setup_top_toolbar,
                 setup_build_menu,
                 setup_minimap,
@@ -198,6 +209,13 @@ impl Plugin for ClientUiPlugin {
                 handle_status_bar_center_click.after(sync_status_bar),
                 handle_news_popup_close.after(update_news_playback),
                 handle_news_popup_focus.after(update_news_playback),
+                handle_open_news_history,
+                handle_open_finances_window,
+                handle_news_history_row_click,
+                news_history_on_closed,
+                finances_window_on_closed,
+                sync_news_history_window,
+                sync_finances_window,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

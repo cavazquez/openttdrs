@@ -136,9 +136,10 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **UI** | Cartel noticias (sube desde abajo) | ✅ | N3 — entrega carga, primera entrega, primer vehículo |
 | **UI** | Ticker avisos vehículo (sin ruta, sin carga, …) | ✅ | `news.rs` — `VehicleAdvice` + `poll_vehicle_advice_news` |
 | **UI** | Clic noticia / ticker → centrar cámara | ✅ | `camera.rs`, `statusbar/sync.rs` |
-| **UI** | Historial noticias, edades, purga | ❌ | [ROADMAP_NEWS_STATUSBAR.md](docs/ROADMAP_NEWS_STATUSBAR.md) N4 |
+| **UI** | Historial noticias (lista scroll) | ✅ | Clic en fecha barra → `statusbar/history.rs` |
+| **UI** | Purga noticias antiguas (~2 años) | ✅ | `news.rs` — `maybe_purge_old_news` |
 | **UI** | Config noticias Off/Summary/Full por tipo | ❌ | N5 — `news_display_settings.ini` |
-| **UI** | Clic dinero → ventana finanzas | ❌ | Barra derecha stub |
+| **UI** | Clic dinero → ventana finanzas | ✅ | `finances_window.rs` — efectivo, préstamo, stats |
 | **UI** | Guardar F5 / cargar F9 JSON | ✅ | `state/json_persist.rs` |
 | **UI** | Preferencias cliente (`~/.config/...`) | ✅ | audio, minimapa, ruta save |
 | **Audio** | SFX construcción OK / error / ingreso | ✅ | `preparar_sonidos_hud.sh`, `sound_ping.rs` |

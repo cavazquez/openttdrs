@@ -3,10 +3,8 @@
 Documento de **seguimiento** para la **barra inferior** (fecha, dinero, ticker de noticias)
 y el **cartel de noticias** que sube desde abajo con sonido (periódico / ventana completa).
 
-**Estado (2026-06-22):** **N1–N3 implementados**; **N4 parcial** (clic→mapa, avisos de vehículo,
-primer vehículo en marcha). Pendiente: historial, edades/purga, estilos Thin/Vehicle, finanzas al
-clic en dinero. openttdrs tiene barra inferior Bevy UI, cola `NewsQueue`, ticker Summary, popup
-Full animado y hooks en sim (`cargo`, `ToggleVehicleRunning`, `poll_vehicle_advice_news`).
+**Estado (2026-06-22):** **N1–N4 implementados** (historial, purga, clic→mapa, finanzas).
+Pendiente **N5** (settings Off/Summary/Full, SFX dedicados, estilos Thin/Vehicle).
 
 **Relacionado:**
 
@@ -77,8 +75,10 @@ Cuando una noticia tiene display **Full** (`NewsDisplay::Full`):
 | Ventana periódico animada | ✅ | N3 — slide-up + auto-hide ~10 s |
 | `AddNewsItem` desde sim | ✅ | entrega carga, primer vehículo, avisos vehículo |
 | Clic noticia / ticker → centrar cámara | ✅ | `camera.rs`, `statusbar/sync.rs` |
-| Historial / «Message history» | ❌ | N4 |
-| Purga por edad / settings Off·Summary·Full | ❌ | N4–N5 |
+| Historial / «Message history» | ✅ | `statusbar/history.rs` — clic en fecha |
+| Purga por edad (~730 días) | ✅ | `maybe_purge_old_news` en sim |
+| Clic dinero → finanzas | ✅ | `finances_window.rs` |
+| Config Off·Summary·Full por tipo | ❌ | N5 |
 
 **Oportunidad:** reutilizar `PlayHudSfx` / `HudSfxHandles` y el calendario ya derivado del tick;
 mover **fecha + dinero** del bloque superior a la barra inferior y dejar arriba solo debug/tooling
@@ -101,8 +101,7 @@ Constantes de tiempo ya alineadas con OpenTTD:
 | **N4 — Paridad** | Tipos, edades, historial, clic→mapa | Comportamiento reconocible vs OpenTTD 15.x |
 | **N5 — Settings** | Off / Summary / Full por categoría | Equivalente a `news_display_settings.ini` |
 
-Hoy: **N1–N3 ✅**; **N4 🟡** (~40 %: clic→mapa, `VehicleAdvice`, `FirstVehicleRunning`);
-**N5 ❌**.
+Hoy: **N1–N4 ✅**; **N5 ❌**.
 
 ---
 

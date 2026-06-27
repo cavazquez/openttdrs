@@ -72,11 +72,11 @@ pub use map::{
     tunnel_preview_path,
 };
 pub use news::{
-    CALENDAR_BASE_YEAR, NewsDisplayMode, NewsItem, NewsQueue, NewsReference, NewsType,
-    PendingNewsEvent, VehicleAdviceKind, add_news_item, calendar_day_index, calendar_year_day,
-    cargo_display_name, format_calendar_date, format_money, poll_vehicle_advice_news,
-    push_cargo_delivery_news, push_first_vehicle_running_news, push_vehicle_advice_news,
-    vehicle_kind_label,
+    CALENDAR_BASE_YEAR, NEWS_MAX_AGE_DAYS, NewsDisplayMode, NewsItem, NewsQueue, NewsReference,
+    NewsType, PendingNewsEvent, VehicleAdviceKind, add_news_item, calendar_day_index,
+    calendar_year_day, cargo_display_name, format_calendar_date, format_money,
+    maybe_purge_old_news, poll_vehicle_advice_news, purge_old_news_items, push_cargo_delivery_news,
+    push_first_vehicle_running_news, push_vehicle_advice_news, vehicle_kind_label,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{

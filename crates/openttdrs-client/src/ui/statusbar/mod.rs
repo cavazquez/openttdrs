@@ -1,8 +1,13 @@
 //! Barra inferior (fecha, ticker, dinero) y cartel de noticias.
 
+mod history;
 mod setup;
 mod sync;
 
+pub(crate) use history::{
+    NewsHistoryState, handle_news_history_row_click, handle_open_news_history,
+    news_history_on_closed, setup_news_history_window, sync_news_history_window,
+};
 pub(crate) use setup::setup_status_bar;
 pub(crate) use sync::{
     drain_news_events, handle_news_popup_close, handle_news_popup_focus,
@@ -61,6 +66,9 @@ pub(crate) struct StatusBarRoot;
 pub(crate) struct StatusBarDateText;
 
 #[derive(Component)]
+pub(crate) struct StatusBarDateButton;
+
+#[derive(Component)]
 pub(crate) struct StatusBarCenterButton;
 
 #[derive(Component)]
@@ -71,6 +79,9 @@ pub(crate) struct StatusBarDefaultText;
 
 #[derive(Component)]
 pub(crate) struct StatusBarMoneyText;
+
+#[derive(Component)]
+pub(crate) struct StatusBarMoneyButton;
 
 #[derive(Component)]
 pub(crate) struct StatusBarReminderDot;

@@ -92,6 +92,9 @@ pub struct NewsQueue {
     pub next_id: u64,
 }
 
+/// Días de calendario que conserva el historial antes de purgar (mensual).
+pub const NEWS_MAX_AGE_DAYS: u64 = 730;
+
 impl NewsQueue {
     pub const MAX_ITEMS: usize = 256;
 
@@ -402,6 +405,28 @@ pub fn poll_vehicle_advice_news(state: &mut crate::GameState) {
     }
 }
 
+/// Elimina noticias más antiguas que [`NEWS_MAX_AGE_DAYS`].
+pub fn purge_old_news_items(state: &mut crate::GameState) {
+    let current_day = calendar_day_index(state.tick);
+    state
+        .news
+        .items
+        .retain(|item| current_day.saturating_sub(item.calendar_day) <= NEWS_MAX_AGE_DAYS);
+}
+
+/// Purga mensual (cada 30 días de calendario) al estilo `RemoveOldNewsItems`.
+pub fn maybe_purge_old_news(state: &mut crate::GameState) {
+    let day = calendar_day_index(state.tick);
+    if day == state.news_last_purge_day {
+        return;
+    }
+    if !day.is_multiple_of(30) {
+        return;
+    }
+    state.news_last_purge_day = day;
+    purge_old_news_items(state);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +509,40 @@ mod tests {
         state.vehicles[0].running = true;
         poll_vehicle_advice_news(&mut state);
         assert_eq!(state.news.items.len(), 2);
+    }
+
+    #[test]
+    fn purge_old_news_items_drops_ancient_entries() {
+        let mut state = GameState::new(4, 4);
+        let day_ticks =
+            |days: u64| GameTick::new(u64::from(crate::economy::TICKS_PER_TRANSIT_DAY) * days);
+        state.tick = day_ticks(900);
+        add_news_item(
+            &mut state,
+            NewsItem::new(
+                1,
+                "Antigua",
+                None,
+                NewsType::VehicleAdvice,
+                NewsDisplayMode::Summary,
+                day_ticks(100),
+                NewsReference::None,
+            ),
+        );
+        add_news_item(
+            &mut state,
+            NewsItem::new(
+                2,
+                "Reciente",
+                None,
+                NewsType::VehicleAdvice,
+                NewsDisplayMode::Summary,
+                day_ticks(880),
+                NewsReference::None,
+            ),
+        );
+        purge_old_news_items(&mut state);
+        assert_eq!(state.news.items.len(), 1);
+        assert_eq!(state.news.items[0].headline, "Reciente");
     }
 }

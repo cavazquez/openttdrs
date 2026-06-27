@@ -14,7 +14,7 @@ pub(crate) const MINIMAP_ROWS: u32 = 40;
 pub(crate) const MINIMAP_CELL: f32 = 3.0;
 pub(crate) const MINIMAP_PAD: f32 = 6.0;
 pub(crate) const MINIMAP_RIGHT: f32 = 10.0;
-pub(crate) const MINIMAP_BOTTOM: f32 = 10.0;
+pub(crate) const MINIMAP_BOTTOM: f32 = 44.0;
 
 #[derive(Component)]
 pub(crate) struct MinimapRoot;

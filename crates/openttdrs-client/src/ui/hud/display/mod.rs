@@ -4,9 +4,7 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::TileKind;
 
 use crate::camera::zoom_display_magnification;
-use crate::config::{
-    self, SIM_DAYS_PER_YEAR, SIM_TICKS_PER_DAY, json_save_hud_label, truncate_hud_line,
-};
+use crate::config::{self, json_save_hud_label, truncate_hud_line};
 use crate::iso::{
     compute_tileh, shore_png_index, shore_tileh_for_draw_shore, slope_label,
     tile_slope_bits_from_heights,
@@ -333,9 +331,6 @@ pub(crate) fn update_tile_info_text(
         "mapa M:off"
     };
     let tick_n = sim.state.tick.get();
-    let day_index = tick_n / SIM_TICKS_PER_DAY;
-    let sim_year = day_index / SIM_DAYS_PER_YEAR + 1;
-    let sim_doy = day_index % SIM_DAYS_PER_YEAR + 1;
 
     let feedback_append = feedback.message.as_ref().map(|m| {
         let t = truncate_hud_line(m, 44);
@@ -348,11 +343,9 @@ pub(crate) fn update_tile_info_text(
     let stats = &sim.state.stats;
     let save_file = truncate_hud_line(&json_save_hud_label(&hud.json_save_path), 36);
     // Text2d no hace wrap: repartir el estado en líneas cortas evita recorte al borde derecho.
-    let hud_line1 = format!("{pause_l} | {speed_l} | t{tick_n} sim Y{sim_year}·D{sim_doy}");
+    let hud_line1 = format!("{pause_l} | {speed_l} | t{tick_n}");
     let hud_line2 = format!(
-        "${} · préstamo ${} | ingresos ${} · gastos veh ${} | u {}/{} · evt {}/{} · prod {} | veh {} ({}) | est {st_n}",
-        sim.state.economy.money,
-        sim.state.economy.loan,
+        "ingresos ${} · gastos veh ${} | u {}/{} · evt {}/{} · prod {} | veh {} ({}) | est {st_n}",
         stats.cargo_income_earned,
         stats.vehicle_running_costs,
         stats.cargo_units_delivered,

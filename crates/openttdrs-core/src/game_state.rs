@@ -97,6 +97,12 @@ pub struct GameState {
     /// Teselas industriales con `m1` mutado este tick (obra P6 → remap cliente).
     #[serde(skip)]
     pub industry_tile_dirty: Vec<TileCoord>,
+    /// Historial de noticias (más reciente al frente).
+    #[serde(default)]
+    pub news: crate::news::NewsQueue,
+    /// Eventos de noticia recién creados (consumidos por el cliente).
+    #[serde(skip)]
+    pub pending_news_events: Vec<crate::news::PendingNewsEvent>,
 }
 
 impl GameState {
@@ -116,6 +122,8 @@ impl GameState {
             path_cache: crate::pathfinder::PathCache::default(),
             pending_income_popups: Vec::new(),
             industry_tile_dirty: Vec::new(),
+            news: crate::news::NewsQueue::default(),
+            pending_news_events: Vec::new(),
         }
     }
 
@@ -136,6 +144,8 @@ impl GameState {
             path_cache: crate::pathfinder::PathCache::default(),
             pending_income_popups: Vec::new(),
             industry_tile_dirty: Vec::new(),
+            news: crate::news::NewsQueue::default(),
+            pending_news_events: Vec::new(),
         }
     }
 

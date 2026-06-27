@@ -1,9 +1,5 @@
 //! Configuración del cliente leída desde variables de entorno.
 
-/// OpenTTD (~74 ticks/día a velocidad normal); solo etiqueta de HUD / fecha simulada.
-pub(crate) const SIM_TICKS_PER_DAY: u64 = 74;
-pub(crate) const SIM_DAYS_PER_YEAR: u64 = 365;
-
 pub(crate) const DEFAULT_JSON_SAVE_PATH: &str = "save/openttdrs_sim.json";
 
 pub(crate) fn env_string(name: &str) -> Option<String> {

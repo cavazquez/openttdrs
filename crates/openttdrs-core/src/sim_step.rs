@@ -288,6 +288,7 @@ fn unload_vehicles(
         if !station_matches_current_order(&state.vehicles[i], st.pos) {
             continue;
         }
+        let station_pos = st.pos;
         let st = &mut state.stations[station_idx];
         if !st.accepts_cargo(cargo_type) || !st.can_service_vehicle(state.vehicles[i].kind) {
             continue;
@@ -300,7 +301,7 @@ fn unload_vehicles(
         let source = state.vehicles[i]
             .cargo_source
             .unwrap_or(state.vehicles[i].pos);
-        let distance = economy::manhattan_distance(source, st.pos);
+        let distance = economy::manhattan_distance(source, station_pos);
         let transit_days = economy::ticks_to_transit_days(state.vehicles[i].cargo_transit_ticks);
         let payment =
             economy::transported_goods_income(vcargo, distance, transit_days, cargo_type, tick);
@@ -311,6 +312,15 @@ fn unload_vehicles(
             amount: payment,
             at: vpos,
         });
+        let first_delivery = state.stats.cargo_deliveries == 0;
+        crate::news::push_cargo_delivery_news(
+            state,
+            vcargo,
+            cargo_type,
+            payment,
+            station_pos,
+            first_delivery,
+        );
         state.stats.cargo_deliveries += 1;
         state.stats.cargo_units_delivered += u64::from(vcargo);
         state.vehicles[i].clear_cargo();

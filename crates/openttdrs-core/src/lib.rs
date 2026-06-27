@@ -12,6 +12,7 @@ pub mod engine;
 mod game_state;
 pub mod industry;
 pub mod map;
+pub mod news;
 pub mod ottdmap_extras;
 pub mod pathfinder;
 pub mod rail_lane;
@@ -69,6 +70,11 @@ pub use map::{
     partial_pixel_z, resolve_tunnel_end, set_industry_gfx, slope_dz_at_subtile, slope_dz_on_tile,
     step_industry_tiles, tile_adjacent_to_water, tile_slope_and_z, tunnel_entrance_m5,
     tunnel_preview_path,
+};
+pub use news::{
+    CALENDAR_BASE_YEAR, NewsDisplayMode, NewsItem, NewsQueue, NewsReference, NewsType,
+    PendingNewsEvent, add_news_item, calendar_day_index, calendar_year_day, cargo_display_name,
+    format_calendar_date, format_money, push_cargo_delivery_news,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{

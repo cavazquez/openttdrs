@@ -62,4 +62,10 @@ pub(crate) struct HudBuildFeedback {
     pub(crate) pending_build_ok_ping: bool,
     /// Encola sonido breve al cobrar entrega de carga.
     pub(crate) pending_income_ping: bool,
+    /// Ticker de noticias en la barra inferior.
+    pub(crate) pending_news_ticker: bool,
+    /// Aplausos (primera entrega / hito).
+    pub(crate) pending_news_applause: bool,
+    /// Sonido genérico de noticia completa.
+    pub(crate) pending_news_chime: bool,
 }

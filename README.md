@@ -21,6 +21,147 @@ Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.o
 
 ---
 
+## Mapa de características
+
+Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Actualizar esta sección** al cerrar una feature o cambiar su estado.
+
+**Leyenda:** ✅ Hecho · 🟡 Parcial / simplificado · ❌ Pendiente · 🔮 Backlog largo plazo (post-0.1)
+
+**Última actualización:** 2026-06-27
+
+### Resumen por bloque
+
+| Bloque | Estado |
+|--------|--------|
+| Fundación I0–I7 (core sin Bevy) | ✅ |
+| Construcción carretera + ferrocarril | ✅ alto |
+| Simulación, economía, 6 cargos | 🟡 |
+| Import `.sav` → mapa + entidades | 🟡 |
+| Render OpenGFX vanilla | 🟡 ~85–90 % |
+| UI, toolbar, ventanas, barra inferior | 🟡 |
+| Señales bloque v1 (sin PBS) | 🟡 |
+| Noticias / ticker / periódico | 🟡 N1–N3 |
+| Terraform / gen mundo / climas | ❌ |
+| Barcos, aviones, Cargo Dist, NewGRF, red I8 | 🔮 |
+
+### Guía rápida para continuar (IA / desarrolladores)
+
+1. **Validar cambios:** `bash scripts/check.sh` (local) o `bash scripts/check.sh ci` (paridad CI).
+2. **Crates:** lógica en `crates/openttdrs-core/`; Bevy/UI en `crates/openttdrs-client/`.
+3. **Comandos de juego:** `crates/openttdrs-core/src/command/` → `apply.rs`, `preview.rs`, `transport.rs`.
+4. **Simulación:** `sim_step.rs`, `pathfinder.rs`, `rail_signals.rs`, `news.rs`.
+5. **UI:** `crates/openttdrs-client/src/ui/` (toolbar, HUD, barra inferior en `ui/statusbar/`).
+6. **Render:** `crates/openttdrs-client/src/render/`, sprites en `sprites/`.
+7. **Import saves:** `scripts/parse_sav.py` (mapa) + `crates/openttdrs-core/src/sav/` (entidades).
+8. **Roadmaps detallados:** ver columna *Referencia* abajo; índice en [docs/README.md](docs/README.md).
+9. **OpenTTD upstream:** `./scripts/fetch-openttd-reference.sh` → `reference/openttd-upstream/`.
+
+### Tabla completa
+
+| Área | Característica | Estado | Referencia |
+|------|----------------|--------|------------|
+| **Fundación** | I0 — `GameTick`, calendario simulado | ✅ | `tick.rs`, `news.rs` (`format_calendar_date`) |
+| **Fundación** | I1 — Mapa, teselas `m1`–`m8`, pendientes | ✅ | `map/`, `map/slope.rs` |
+| **Fundación** | I2 — Industrias (producción 256 ticks) | ✅ | `industry.rs` |
+| **Fundación** | I3 — Vehículos (bus, camión, tren) | ✅ | `vehicle.rs` |
+| **Fundación** | I4 — Economía y 6 tipos de carga | 🟡 | `economy.rs`, `cargo.rs` — sin cargo packets |
+| **Fundación** | I5 — Pathfinding A* carretera + vía direccional | ✅ | `pathfinder.rs` — no YAPF |
+| **Fundación** | I6 — Comandos serializables `Command` | ✅ | `command/` |
+| **Fundación** | I7 — Save/load JSON versionado (v4 + migraciones) | ✅ | `save.rs` |
+| **Fundación** | I8 — Red / multijugador (replay comandos) | 🔮 | [DISENO_INCREMENTAL.md](docs/DISENO_INCREMENTAL.md) § I8 |
+| **Mapa** | Formato binario `.ottdmap` (MAP1…v5+12) | ✅ | [OTTDMAP_FORMAT.md](docs/OTTDMAP_FORMAT.md) |
+| **Mapa** | Carga mapa en cliente (`OTTDMAP_FILE`) | ✅ | `state/bootstrap/` |
+| **Mapa** | Mapa demo procedural con layout jugable | ✅ | `demo_layout.rs` |
+| **Mapa** | TNBP túneles/puentes JGR en import | ✅ | `map/tnbp.rs`, `TILES_Y_SAVEGAMES_OPENTTD.md` |
+| **Mapa** | Alturas / pendientes (solo lectura + render) | ✅ | `map/slope.rs`, `iso/slope.rs` |
+| **Import** | `parse_sav.py`: `.sav` → `.ottdmap` | ✅ | `scripts/parse_sav.py`, golden CI |
+| **Import** | Parser Rust chunks estaciones/industrias | ✅ | `sav/` |
+| **Import** | Entidades: vehículos, órdenes, dinero desde `.sav` | 🟡 | `sav/entities.rs`, `sav/orders.rs` — ver limitaciones en [TILES_Y_SAVEGAMES_OPENTTD.md](docs/TILES_Y_SAVEGAMES_OPENTTD.md) |
+| **Import** | Partida OpenTTD 100 % jugable sin JSON propio | ❌ | Sprint 6 en [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) |
+| **Construcción** | Autorail carretera (drag, vecinos) | ✅ | `command/transport.rs` |
+| **Construcción** | Depósito carretera | 🟡 | Alineación RemapCoords pendiente — [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) S2 |
+| **Construcción** | Paradas bus / camión (orientación RMB) | ✅ | `road_stop_gfx_data_generated.rs` |
+| **Construcción** | Túnel / puente carretera | ✅ | `command/transport.rs`, `render/tiles/bridge.rs` |
+| **Construcción** | Quitar carretera / limpiar tesela | ✅ | `Command::ClearTile`, `RemoveRoad*` |
+| **Construcción** | Un solo sentido / drive-through carretera | 🟡 | Paridad parcial vs OpenTTD |
+| **Construcción** | Autorail ferrocarril (curvas, cruce X\|Y) | ✅ | `command/transport.rs` |
+| **Construcción** | Depósito ferrocarril rotado | ✅ | `command/transport.rs` |
+| **Construcción** | Estación tren multi-tesela (1–7 × 1–7) | ✅ | `PlaceRailStationArea`, ventana picker |
+| **Construcción** | Túnel / puente ferrocarril | ✅ | TNBP + comandos rail |
+| **Construcción** | Quitar vía (`RailRemove`) | ✅ | `Command::RemoveRail` |
+| **Construcción** | Waypoint ferroviario + orden pasar | ✅ | `PlaceRailWaypoint`, `StopKind::RailWaypoint` |
+| **Construcción** | Colocar señal bloque (`PlaceRailSignal`) | ✅ | `rail_signals.rs`, toolbar rail |
+| **Construcción** | Convertir tipo de vía (`RailConvert`) | ❌ | Botón stub en toolbar |
+| **Construcción** | Terraform: elevar / bajar / nivelar | ❌ | [ROADMAP_TERRAFORM.md](docs/ROADMAP_TERRAFORM.md) T1–T3 |
+| **Construcción** | Autoslope al construir sobre pendiente | ❌ | Terraform T3 |
+| **Simulación** | Tick de juego, pausa, velocidad | ✅ | `simulation.rs`, `SimHudControls` |
+| **Simulación** | Producción industria (10 specs sandbox) | ✅ | `industry.rs`, panel industria |
+| **Simulación** | Carga / descarga en estaciones | ✅ | `sim_step.rs` |
+| **Simulación** | Entrega carga → ingreso + popup `+$N` | ✅ | `economy.rs`, `income_popup.rs` |
+| **Simulación** | Inflación y costes construcción | ✅ | `economy.rs` |
+| **Simulación** | Cargo packets, rating estación, transit time | ❌ | Balances `u32` simplificados |
+| **Simulación** | Servicio en depósito | ❌ | [PARIDAD_OPENTTD.md](docs/PARIDAD_OPENTTD.md) |
+| **Simulación** | Señales: reserva bloque, un tren/bloque | 🟡 | `rail_signals.rs`, `sim_step.rs` — sin PBS |
+| **Simulación** | PBS / path signals / presignals | ❌ | 🔮 Hito 0.2 |
+| **Vehículos** | Compra / venta bus, camión, tren | ✅ | ventana compra, `command/` |
+| **Vehículos** | Órdenes simples (ir a estación / tesela) | ✅ | `vehicle.rs`, panel órdenes |
+| **Vehículos** | Flags `full_load` / `no_unload` | ✅ | `VehicleOrder`, import ORDL/ORDR |
+| **Vehículos** | Órdenes condicionales / compartidas | ❌ | [PARIDAD_OPENTTD.md](docs/PARIDAD_OPENTTD.md) |
+| **Vehículos** | Horarios (timetable) | ❌ | — |
+| **Vehículos** | Barcos / aviones | 🔮 | Hito 0.3 |
+| **Mundo** | Ciudades: demanda, etiquetas, ventana | ✅ | `town.rs`, `render/town_labels.rs` |
+| **Mundo** | Panel industria (carga aceptada/producida) | ✅ | `ui/toolbar/industry_panel/` |
+| **Mundo** | Subvencios / autoridad local | ❌ | — |
+| **Mundo** | Generación procedural + 4 climas | 🔮 | [ROADMAP_TERRAFORM.md](docs/ROADMAP_TERRAFORM.md) T4 |
+| **Render** | Vista isométrica OpenGFX 8bpp/32bpp | ✅ | `iso/`, atlas PNG |
+| **Render** | Terreno, agua, costa, rough | ✅ | `render/tiles/land.rs` |
+| **Render** | Árboles multi-especie (1–4/tesela) | ✅ | [ROADMAP_PARIDAD_VISUAL.md](docs/ROADMAP_PARIDAD_VISUAL.md) §2 |
+| **Render** | Campos / cercas (farmland) | ✅ | `gen_field_draw_data.py` |
+| **Render** | Casas / edificios | ✅ | `sprites/house.rs` |
+| **Render** | Industrias gfx 0–130 (tabla estática) | 🟡 | `industry_gfx_data_generated.rs` — [ROADMAP_INDUSTRIAS_PARIDAD.md](docs/ROADMAP_INDUSTRIAS_PARIDAD.md) |
+| **Render** | Industrias gfx 131–174 + anim `draw_proc` | ❌ | Roadmap industrias P8+ |
+| **Render** | Fundaciones industria en pendiente | 🟡 | Parcial |
+| **Render** | Estaciones rail / road / waypoint | ✅ | `sprites/station.rs` |
+| **Render** | Puente tablero sobre agua (road/rail) | ✅ | `render/tiles/bridge.rs` |
+| **Render** | Junctions vía en pendiente | 🟡 | [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) S3 |
+| **Render** | Culling viewport mapas grandes | 🟡 | `render/world.rs` — solo mapas grandes |
+| **Render** | Paleta compañía (Remap) | ✅ | `company_colour` |
+| **UI** | Toolbar superior (construcción, sim) | ✅ | `ui/toolbar/` |
+| **UI** | Preview fantasma (ghost) | ✅ | `ui/toolbar/preview/` |
+| **UI** | Minimap | ✅ | `ui/toolbar/minimap/` |
+| **UI** | Ventanas: vehículo, órdenes, estación, industria, pueblo, compra | ✅ | `ui/toolbar/*_panel/`, `*_window/` |
+| **UI** | HUD alertas («sin ruta», «sin carga», incompatible) | ✅ | `ui/hud/display/` — [SP1_CHECKLIST.md](docs/SP1_CHECKLIST.md) |
+| **UI** | Barra inferior: fecha \| centro \| dinero | ✅ | `ui/statusbar/` — N1 |
+| **UI** | Ticker noticias (scroll headline) | ✅ | `ui/statusbar/sync.rs` — N2 |
+| **UI** | Cartel noticias (sube desde abajo) | ✅ | N3 — entrega carga / primera entrega |
+| **UI** | Historial noticias, clic→mapa, edades | ❌ | [ROADMAP_NEWS_STATUSBAR.md](docs/ROADMAP_NEWS_STATUSBAR.md) N4 |
+| **UI** | Config noticias Off/Summary/Full por tipo | ❌ | N5 — `news_display_settings.ini` |
+| **UI** | Clic dinero → ventana finanzas | ❌ | Barra derecha stub |
+| **UI** | Guardar F5 / cargar F9 JSON | ✅ | `state/json_persist.rs` |
+| **UI** | Preferencias cliente (`~/.config/...`) | ✅ | audio, minimapa, ruta save |
+| **Audio** | SFX construcción OK / error / ingreso | ✅ | `preparar_sonidos_hud.sh`, `sound_ping.rs` |
+| **Audio** | SFX noticias (ticker, aplauso, chime) | 🟡 | Fallbacks HUD; faltan `osfx_16`/`osfx_1D` dedicados |
+| **Audio** | Música ambiente in-game | ❌ | Sprint 5 en [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) |
+| **Calidad** | `check.sh` + CI (fmt, clippy, tests, TNBP, golden) | ✅ | `.github/workflows/ci.yml` |
+| **Calidad** | Tests integración ciclo jugable SP1 | ✅ | `tests/sp1_playable_cycle.rs` |
+| **Calidad** | Codecov / llvm-cov | ✅ | badge README |
+| **Backlog** | Cargo Dist (link graph) | 🔮 | [PARIDAD_OPENTTD.md](docs/PARIDAD_OPENTTD.md) |
+| **Backlog** | NewGRF runtime (gfx ≥ 175, props, callbacks) | 🔮 | [ROADMAP_INDUSTRIAS_PARIDAD.md](docs/ROADMAP_INDUSTRIAS_PARIDAD.md) §D |
+| **Backlog** | Multijugador I8 | 🔮 | [DISENO_INCREMENTAL.md](docs/DISENO_INCREMENTAL.md) |
+
+**Fases SP (hito 0.1):**
+
+| Fase | Estado | Doc |
+|------|--------|-----|
+| SP2 Construcción | ✅ Cerrado 2026-05-22 | [SP2_CHECKLIST.md](docs/SP2_CHECKLIST.md) |
+| SP4 Pulido / saves | ✅ Cerrado 2026-06-22 | [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) S1 |
+| SP3 Visual | 🟡 ~90 % | [ROADMAP_PARIDAD_VISUAL.md](docs/ROADMAP_PARIDAD_VISUAL.md) |
+| SP1 Ciclo jugable | 🟡 Auto ✅ / manual pendiente | [SP1_CHECKLIST.md](docs/SP1_CHECKLIST.md) |
+
+**Sprints operativos pendientes:** S2 resto (depósito carretera, `RailConvert`), S3 visual, S4 SP1 manual, S5 señales+audio, S6 import — ver [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md).
+
+---
+
 ## Stack tecnológico
 
 | Icono | Tecnología | Descripción |
@@ -122,10 +263,17 @@ Equivale a un `git clone --depth 1` bajo `reference/openttd-upstream/`. El anál
 ## Cómo ejecutar (cuando compiles en local)
 
 ```bash
+# Demo procedural (layout jugable incluido)
 cargo run -p openttdrs-client
+
+# Mapa desde fixture o save convertido
+OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/p6_p4_showcase.ottdmap cargo run -p openttdrs-client
+
+# Partida guardada JSON
+OTTDJSON_LOAD=save/openttdrs_sim.json cargo run -p openttdrs-client
 ```
 
-El cliente muestra una rejilla de depuración del mapa y el **tick** de simulación en el título de la ventana.
+El cliente abre ventana isométrica con toolbar, simulación en marcha, barra inferior (fecha / compañía / dinero) y HUD de alertas. Atajos: **F5** guardar, **F9** cargar JSON, pausa/velocidad en toolbar.
 
 ```bash
 cargo test -p openttdrs-core

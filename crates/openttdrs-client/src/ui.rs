@@ -12,6 +12,7 @@ mod hud;
 mod industry_panel;
 mod main_menu;
 mod save_window;
+mod statusbar;
 mod toolbar;
 mod town_window;
 mod vehicle_window;
@@ -36,6 +37,10 @@ use save_window::{
     handle_save_load_toolbar_buttons, handle_save_window_buttons, prepare_save_window_name,
     save_window_editable_keyboard, save_window_keyboard, save_window_name_click_focus,
     setup_save_window, sync_save_window,
+};
+use statusbar::{
+    NewsUiState, drain_news_events, handle_news_popup_close, handle_status_bar_center_click,
+    setup_status_bar, sync_status_bar, update_news_playback,
 };
 use toolbar::depot_panel_on_closed;
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState};
@@ -70,6 +75,7 @@ impl Plugin for ClientUiPlugin {
             floating_window::FloatingWindowPlugin,
             windows_shot::WindowsShotPlugin,
         ))
+        .init_resource::<NewsUiState>()
         .init_resource::<SelectedTileInfo>()
         .init_resource::<HoveredTileCoord>()
         .init_resource::<SimHudControls>()
@@ -96,6 +102,7 @@ impl Plugin for ClientUiPlugin {
             OnEnter(ClientScreen::InGame),
             (
                 setup_tile_info_ui,
+                setup_status_bar,
                 setup_top_toolbar,
                 setup_build_menu,
                 setup_minimap,
@@ -179,6 +186,18 @@ impl Plugin for ClientUiPlugin {
             Update,
             (update_cursor_tile, handle_tile_click, flush_hud_sfx)
                 .chain()
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                drain_news_events,
+                update_news_playback.after(drain_news_events),
+                sync_status_bar.after(update_news_playback),
+                handle_status_bar_center_click.after(sync_status_bar),
+                handle_news_popup_close.after(update_news_playback),
+            )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),
         )

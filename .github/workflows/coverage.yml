@@ -35,7 +35,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Tests y cobertura (llvm-cov → LCOV)
-        run: cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info --cargo-profile ci
+        run: cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info --profile ci
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v6

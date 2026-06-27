@@ -284,6 +284,56 @@ pub fn road_stop_build_sprite_center(
     overlay_pos(ref_pos, xrel, yrel, w, h, base_z, layer_z, tx, ty)
 }
 
+/// `xrel`/`yrel` para depósito de carretera (como [`rail_station_overlay_rel`]).
+///
+/// `iso(tx, ty)` ya incluye `RemapCoords(16·tx, 16·ty) / 4`; el delta TILE_SEQ local
+/// debe usar la misma escala (`remap_tile_offset` × 0.5), no la de paradas bus/camión.
+#[must_use]
+pub fn road_depot_overlay_rel(seq: RoadStopSeqGfx) -> (f32, f32) {
+    let off = remap_tile_offset(seq.dx, seq.dy, seq.dz) * 0.5;
+    (
+        off.x + seq.x_offs + seq.remap_x_adj * 2.0,
+        seq.y_offs - off.y,
+    )
+}
+
+/// Centro Bevy de una capa BUILD del depósito de carretera.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn road_depot_build_sprite_center(
+    ref_pos: Vec2,
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layer_z: f32,
+    seq: RoadStopSeqGfx,
+    w: f32,
+    h: f32,
+) -> Vec3 {
+    let (xrel, yrel) = road_depot_overlay_rel(seq);
+    overlay_pos(ref_pos, xrel, yrel, w, h, base_z, layer_z, tx, ty)
+}
+
+/// Posición mundo (ancla **superior izquierda**) para una pieza de depósito de carretera.
+#[must_use]
+#[allow(dead_code)] // usado en tests de alineación (`iso/mod.rs`)
+pub fn road_depot_sprite_pos(
+    tx: i32,
+    ty: i32,
+    base_z: u8,
+    layer_z: f32,
+    seq: RoadStopSeqGfx,
+) -> Vec3 {
+    let anchor = iso(tx, ty);
+    let elev = f32::from(base_z) * HEIGHT_PX;
+    let (xrel, yrel) = road_depot_overlay_rel(seq);
+    Vec3::new(
+        anchor.x + xrel,
+        anchor.y - yrel + elev,
+        (tx + ty) as f32 * 0.01 + f32::from(base_z) * 0.001 + layer_z,
+    )
+}
+
 /// Calcula la posición del centro de un sprite overlay a partir del xrel/yrel del NFO.
 #[allow(clippy::too_many_arguments)]
 pub fn overlay_pos(

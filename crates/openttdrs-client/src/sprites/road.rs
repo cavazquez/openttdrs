@@ -386,22 +386,27 @@ mod tests {
     fn road_depot_generated_offsets_from_nfo() {
         let ne = road_depot_build_layers(0)[0];
         assert_eq!(ne.path, "assets/opengfx/tiles/rail_1412.png");
+        assert_eq!(ne.dx, 0.0);
+        assert_eq!(ne.dy, 15.0);
         assert!((ne.x_offs - (-59.0)).abs() < 0.1);
         assert!((ne.y_offs - (-32.0)).abs() < 0.1);
-        assert!((ne.remap_x_adj - (-13.0)).abs() < 0.1);
+        assert_eq!(ne.remap_x_adj, 0.0);
 
         let se_mouth = road_depot_build_layers(1)[0];
         assert!((se_mouth.x_offs - 18.0).abs() < 0.1);
         assert!((se_mouth.y_offs - 5.0).abs() < 0.1);
-        assert!((se_mouth.remap_x_adj - (-3.0)).abs() < 0.1);
+        assert_eq!(se_mouth.remap_x_adj, 0.0);
 
         let se_build = road_depot_build_layers(1)[1];
+        assert_eq!(se_build.dx, 15.0);
         assert!((se_build.x_offs - 1.0).abs() < 0.1);
-        assert!((se_build.y_offs - (-38.0)).abs() < 0.1);
+        assert!((se_build.y_offs - (-32.0)).abs() < 0.1);
+        assert_eq!(se_build.remap_x_adj, 0.0);
 
         let nw = road_depot_build_layers(3)[0];
+        assert_eq!(nw.dx, 15.0);
         assert!((nw.x_offs - 1.0).abs() < 0.1);
-        assert!((nw.y_offs - (-38.0)).abs() < 0.1);
-        assert!((nw.remap_x_adj - 8.0).abs() < 0.1);
+        assert!((nw.y_offs - (-32.0)).abs() < 0.1);
+        assert_eq!(nw.remap_x_adj, 0.0);
     }
 }

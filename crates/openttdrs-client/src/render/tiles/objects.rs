@@ -3,7 +3,8 @@ use openttdrs_core::{Station, TileKind, is_tunnel_entrance_slope};
 
 use super::{sloped_or_flat_image, spawn_ground_sprite};
 use crate::iso::{
-    SLOPE_HALF_H, TILE_HALF_H, road_stop_build_sprite_center, tile_pos, tile_pos_half,
+    SLOPE_HALF_H, TILE_HALF_H, road_depot_build_sprite_center, road_stop_build_sprite_center,
+    tile_pos, tile_pos_half,
 };
 use crate::render::{
     AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext, WorldAssets,
@@ -347,7 +348,7 @@ fn spawn_road_depot_tile(
         let Some(image) = assets.road_depot_builds[dir].get(layer_i) else {
             continue;
         };
-        let center = road_stop_build_sprite_center(
+        let center = road_depot_build_sprite_center(
             ctx.iso_pos,
             ctx.tx_i32(),
             ctx.ty_i32(),

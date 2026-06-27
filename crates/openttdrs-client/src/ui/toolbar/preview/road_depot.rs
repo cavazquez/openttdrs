@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::iso::{iso, road_stop_build_sprite_center, tile_pos_half};
+use crate::iso::{iso, road_depot_build_sprite_center, tile_pos_half};
 use crate::render::{CompanyColoredSprites, sprite_from_company_or_asset};
 use crate::sprites::{
     ROAD_DEPOT_GROUND_PATH, road_depot_build_layers, road_depot_entrance_road_bits,
@@ -70,7 +70,7 @@ pub(crate) fn spawn_road_depot_preview(commands: &mut Commands, spawn: RoadDepot
 
     for spec in road_depot_build_layers(dir) {
         let layer_z = PREVIEW_Z_BASE + spec.z;
-        let center = road_stop_build_sprite_center(
+        let center = road_depot_build_sprite_center(
             iso(px, py),
             px,
             py,

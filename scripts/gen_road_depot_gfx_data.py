@@ -44,30 +44,6 @@ def sprite_png_name(sid: int) -> str:
     return f"rail_{sid}.png"
 
 
-def compute_depot_layer_corrections(
-    dx: float,
-    dy: float,
-    *,
-    dir_i: int,
-    layer_i: int,
-) -> tuple[float, float]:
-    """(remap_x_adj, y_offs_delta). Calibración fina SP3 checklist y=6."""
-    # Boca 12×12 en esquina: mismos patrones que paradas bus en esquina opuesta.
-    if dir_i == 1 and layer_i == 0 and dx == 0.0 and dy == 0.0:
-        return -3.0, 0.0
-    if dir_i == 2 and layer_i == 0 and dx == 0.0 and dy == 0.0:
-        return -8.0, -4.0
-    if dir_i == 1 and layer_i == 1 and dx == 15.0 and dy == 0.0:
-        return 5.0, -6.0
-    if dir_i == 2 and layer_i == 1 and dx == 0.0 and dy == 15.0:
-        return -7.0, -6.0
-    if dir_i == 3 and layer_i == 0 and dx == 15.0 and dy == 0.0:
-        return 8.0, -6.0
-    if dir_i == 0 and layer_i == 0 and dx == 0.0 and dy == 15.0:
-        return -13.0, 0.0
-    return 0.0, 0.0
-
-
 def write_layers(
     blocks: dict[str, list[tuple[int, int, int, int, int, int]]],
     tiles_dir: Path,
@@ -75,7 +51,7 @@ def write_layers(
     prefer_bpp: str | None,
 ) -> list[str]:
     lines: list[str] = []
-    for dir_i, dir_name in enumerate(DIRS):
+    for dir_name in DIRS:
         seq = blocks.get(dir_name, [])
         layer_lines: list[str] = []
         for layer_i, (sid, dx, dy, dz, sx, sy) in enumerate(seq):
@@ -84,15 +60,11 @@ def write_layers(
             w, h, xo, yo, _note = pick_sprite_meta(nfo.get(sid, []), wh, prefer_bpp)
             if w <= 0.0 or h <= 0.0:
                 w, h = (float(sx * 2), float(sy * 2)) if wh is None else (float(wh[0]), float(wh[1]))
-            adj, yo_delta = compute_depot_layer_corrections(
-                float(dx), float(dy), dir_i=dir_i, layer_i=layer_i
-            )
-            yo += yo_delta
             z = 0.05 + layer_i * 0.01
             layer_lines.append(
                 f"        RoadDepotLayerGfx {{ dx: {dx}.0, dy: {dy}.0, dz: {dz}.0, "
                 f"z: {z:.2f}, w: {w:.1f}, h: {h:.1f}, x_offs: {xo:.1f}, y_offs: {yo:.1f}, "
-                f"remap_x_adj: {adj:.1f}, "
+                f"remap_x_adj: 0.0, "
                 f'path: "assets/opengfx/tiles/{png}" }},'
             )
         lines.append(f"    &[ // {dir_name.upper()}")

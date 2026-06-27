@@ -9,6 +9,7 @@ mod water;
 #[allow(unused_imports)]
 pub use coords::{
     RoadStopSeqGfx, gizmo_diamond, iso, overlay_pos, remap_tile_offset,
+    road_depot_build_sprite_center, road_depot_overlay_rel, road_depot_sprite_pos,
     road_stop_build_sprite_center, road_stop_overlay_rel, road_stop_sprite_pos,
     road_vehicle_tile_anchor, tile_pos, tile_pos_half, world_pos_to_tile_coord,
     world_pos_to_tile_fract, world_to_tile,
@@ -725,6 +726,61 @@ mod world_pos_to_tile_tests {
     }
 
     #[test]
+    fn road_depot_se_building_aligns_with_mouth() {
+        use crate::sprites::{road_depot_build_layers, road_depot_seq_gfx};
+
+        let mouth = road_depot_seq_gfx(&road_depot_build_layers(1)[0]);
+        let build = road_depot_seq_gfx(&road_depot_build_layers(1)[1]);
+        let mouth_tl = super::road_depot_sprite_pos(6, 6, 0, 0.05, mouth);
+        let build_tl = super::road_depot_sprite_pos(6, 6, 0, 0.06, build);
+        let dx = build_tl.x - mouth_tl.x;
+        assert!(
+            (-55.0..=-35.0).contains(&dx),
+            "edificio SE debe anclarse al oeste de la boca, dx={dx}"
+        );
+    }
+
+    #[test]
+    fn road_depot_ne_building_stays_on_depot_tile() {
+        use crate::sprites::{road_depot_build_layers, road_depot_seq_gfx};
+
+        let spec = road_depot_seq_gfx(&road_depot_build_layers(0)[0]);
+        let origin = iso(3, 6);
+        let ground = Vec2::new(origin.x, origin.y - super::TILE_HALF_H);
+        let west_road = iso(2, 6);
+        let ground_west = Vec2::new(west_road.x, west_road.y - super::TILE_HALF_H);
+        let center = super::road_depot_build_sprite_center(origin, 3, 6, 0, 0.05, spec, 60.0, 47.0);
+        let dist_depot = (center.x - ground.x).hypot(center.y - ground.y);
+        let dist_road = (center.x - ground_west.x).hypot(center.y - ground_west.y);
+        assert!(
+            dist_depot < dist_road,
+            "depot NE en (3,6) debe quedar en su tesela, no desplazado hacia la calzada oeste"
+        );
+    }
+
+    #[test]
+    fn road_depot_sw_building_aligns_with_mouth() {
+        use crate::sprites::{road_depot_build_layers, road_depot_seq_gfx};
+
+        let mouth_spec = &road_depot_build_layers(2)[0];
+        let build_spec = &road_depot_build_layers(2)[1];
+        let mouth = road_depot_seq_gfx(mouth_spec);
+        let build = road_depot_seq_gfx(build_spec);
+        let mouth_tl = super::road_depot_sprite_pos(10, 6, 0, 0.05, mouth);
+        let build_tl = super::road_depot_sprite_pos(10, 6, 0, 0.06, build);
+        assert!(
+            (build_tl.x - mouth_tl.x).abs() < 12.0,
+            "edificio SW alineado con la boca en X, dx={}",
+            build_tl.x - mouth_tl.x
+        );
+        let sep = (build_tl.x - mouth_tl.x).hypot(build_tl.y - mouth_tl.y);
+        assert!(
+            sep < 40.0,
+            "boca y edificio SW deben quedar juntos en la tesela, sep={sep}"
+        );
+    }
+
+    #[test]
     fn road_depot_checklist_layers_prefer_depot_over_exit_road() {
         use crate::sprites::{road_depot_build_layers, road_depot_seq_gfx};
 
@@ -748,7 +804,7 @@ mod world_pos_to_tile_tests {
                 0..layers.len()
             };
             for spec in &layers[layer_range] {
-                let center = super::road_stop_build_sprite_center(
+                let center = super::road_depot_build_sprite_center(
                     origin,
                     tx,
                     ty,

@@ -32,7 +32,7 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 
 **Terraform (paisaje):** no implementado; plan T1–T3 en [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md).
 
-**Noticias / barra inferior:** N1–N4 implementados (historial, purga, finanzas); N5 settings pendiente — [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md).
+**Noticias / barra inferior:** N1–N5 implementados — [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md).
 
 **Toolbar rail sin comando:** `RailConvert`, quitar señal → ver ROADMAP_SPRINTS S2 resto.
 

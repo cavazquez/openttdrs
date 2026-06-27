@@ -30,6 +30,7 @@ mod camera;
 mod config;
 mod debug_gizmos;
 mod iso;
+mod news_prefs;
 mod persistence;
 mod render;
 mod settings;

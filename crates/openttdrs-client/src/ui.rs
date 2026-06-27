@@ -12,6 +12,7 @@ pub(crate) mod font;
 mod hud;
 mod industry_panel;
 mod main_menu;
+mod news_settings_window;
 mod save_window;
 mod statusbar;
 mod toolbar;
@@ -37,6 +38,10 @@ use industry_panel::{
     IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
 };
 use main_menu::{main_menu_interaction, setup_main_menu, setup_main_menu_camera};
+use news_settings_window::{
+    NewsSettingsWindowState, handle_news_settings_buttons, news_settings_on_closed,
+    setup_news_settings_window, sync_news_settings_window,
+};
 pub(crate) use save_window::SaveWindowState;
 use save_window::{
     handle_save_load_toolbar_buttons, handle_save_window_buttons, prepare_save_window_name,
@@ -85,6 +90,8 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<NewsUiState>()
         .init_resource::<NewsHistoryState>()
         .init_resource::<FinancesWindowState>()
+        .init_resource::<NewsSettingsWindowState>()
+        .init_resource::<crate::news_prefs::NewsDisplayPrefs>()
         .init_resource::<SelectedTileInfo>()
         .init_resource::<HoveredTileCoord>()
         .init_resource::<SimHudControls>()
@@ -114,6 +121,7 @@ impl Plugin for ClientUiPlugin {
                 setup_status_bar,
                 setup_news_history_window,
                 setup_finances_window,
+                setup_news_settings_window,
                 setup_top_toolbar,
                 setup_build_menu,
                 setup_minimap,
@@ -216,6 +224,9 @@ impl Plugin for ClientUiPlugin {
                 finances_window_on_closed,
                 sync_news_history_window,
                 sync_finances_window,
+                handle_news_settings_buttons,
+                news_settings_on_closed,
+                sync_news_settings_window,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

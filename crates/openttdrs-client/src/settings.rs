@@ -22,6 +22,11 @@ pub(crate) struct ClientPreferences {
     pub(crate) sfx_volume: f32,
     pub(crate) show_debug_gizmos: bool,
     pub(crate) show_diagnostics_overlay: bool,
+    /// 0=Off, 1=Summary, 2=Full — ver `news_prefs`.
+    pub(crate) news_cargo_delivered: u8,
+    pub(crate) news_first_cargo: u8,
+    pub(crate) news_first_vehicle: u8,
+    pub(crate) news_vehicle_advice: u8,
 }
 
 impl Default for ClientPreferences {
@@ -33,6 +38,10 @@ impl Default for ClientPreferences {
             sfx_volume: 0.22,
             show_debug_gizmos: false,
             show_diagnostics_overlay: false,
+            news_cargo_delivered: crate::news_prefs::DISPLAY_FULL,
+            news_first_cargo: crate::news_prefs::DISPLAY_FULL,
+            news_first_vehicle: crate::news_prefs::DISPLAY_FULL,
+            news_vehicle_advice: crate::news_prefs::DISPLAY_SUMMARY,
         }
     }
 }
@@ -60,12 +69,14 @@ impl Plugin for ClientSettingsPlugin {
         app.add_plugins(SettingsPlugin::new(CLIENT_SETTINGS_APP_ID));
         app.init_resource::<SettingsHydrated>();
         app.add_systems(Startup, hydrate_runtime_from_preferences);
+        app.add_systems(Startup, crate::news_prefs::hydrate_news_display_prefs);
         app.add_systems(
             Update,
             (
                 queue_save_preferences,
                 save_preferences_on_exit,
                 sync_preferences_from_hud,
+                crate::news_prefs::sync_news_display_prefs_to_client,
             )
                 .in_set(UpdateSet::Status),
         );

@@ -46,6 +46,8 @@ pub(crate) enum FloatingWindowId {
     NewsHistory,
     /// Finanzas de la compañía.
     Finances,
+    /// Configuración Off / Summary / Full por tipo de noticia.
+    NewsSettings,
 }
 
 /// Raíz de una ventana flotante.

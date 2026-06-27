@@ -12,6 +12,7 @@ pub(crate) fn handle_settings_menu_buttons(
     mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
     mut hud: ResMut<SimHudControls>,
     mut save_window: ResMut<SaveWindowState>,
+    mut news_settings: ResMut<crate::ui::news_settings_window::NewsSettingsWindowState>,
     mut cam_q: Query<
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
@@ -67,6 +68,9 @@ pub(crate) fn handle_settings_menu_buttons(
                     o.scale = (o.scale * 1.15).min(20.0);
                 }
             }
+            SaveMenuAction::NewsSettings => {
+                news_settings.open = true;
+            }
         }
     }
 }
@@ -116,6 +120,7 @@ mod tests {
 
     use crate::state::SimWorld;
     use crate::ui::hud::SimHudControls;
+    use crate::ui::news_settings_window::NewsSettingsWindowState;
     use crate::ui::save_window::{SaveWindowMode, SaveWindowState};
     use crate::ui::toolbar::{CompanyColourSwatch, SaveMenuAction};
 
@@ -126,6 +131,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(SimHudControls::default());
         world.insert_resource(SaveWindowState::default());
+        world.insert_resource(NewsSettingsWindowState::default());
 
         world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();

@@ -28,6 +28,7 @@ mod tests {
     use crate::state::SimWorld;
     use crate::ui::hud::{HoveredTileCoord, HudBuildFeedback, SelectedTileInfo, SimHudControls};
     use crate::ui::industry_panel::IndustryPanelState;
+    use crate::ui::news_settings_window::NewsSettingsWindowState;
     use crate::ui::save_window::SaveWindowState;
     use crate::ui::toolbar::build_input::commands::{command_for_action, command_for_line_action};
     use crate::ui::toolbar::build_input::drag::{
@@ -171,6 +172,7 @@ mod tests {
 
         let mut world = World::new();
         world.insert_resource(SaveWindowState::default());
+        world.insert_resource(NewsSettingsWindowState::default());
         world.insert_resource(SimHudControls {
             paused: false,
             sim_speed: 1.0,
@@ -195,6 +197,7 @@ mod tests {
         world.insert_resource(VehicleIndex::default());
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(SaveWindowState::default());
+        world.insert_resource(NewsSettingsWindowState::default());
         world.insert_resource(SimHudControls::default());
         world.spawn((
             PrimaryGameCamera,
@@ -228,6 +231,7 @@ mod tests {
         world_zoom_in.insert_resource(VehicleIndex::default());
         world_zoom_in.insert_resource(RemapMapVisualsPending::default());
         world_zoom_in.insert_resource(SaveWindowState::default());
+        world_zoom_in.insert_resource(NewsSettingsWindowState::default());
         world_zoom_in.insert_resource(SimHudControls::default());
         world_zoom_in.spawn((
             PrimaryGameCamera,
@@ -249,6 +253,7 @@ mod tests {
         world_zoom_out.insert_resource(VehicleIndex::default());
         world_zoom_out.insert_resource(RemapMapVisualsPending::default());
         world_zoom_out.insert_resource(SaveWindowState::default());
+        world_zoom_out.insert_resource(NewsSettingsWindowState::default());
         world_zoom_out.insert_resource(SimHudControls::default());
         world_zoom_out.spawn((
             PrimaryGameCamera,

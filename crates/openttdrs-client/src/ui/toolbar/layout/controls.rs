@@ -139,6 +139,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             "Elegir archivo y cargar simulacion JSON",
             SaveMenuAction::LoadFrom,
         ),
+        (
+            "Noticias...",
+            "Off / Summary / Full por tipo de noticia",
+            SaveMenuAction::NewsSettings,
+        ),
     ] {
         buttons.spawn((
             Button,

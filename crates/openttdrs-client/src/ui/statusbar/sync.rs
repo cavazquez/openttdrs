@@ -4,6 +4,7 @@ use openttdrs_core::{
 };
 
 use crate::camera::{CameraFocusRequest, tile_camera_world_pos};
+use crate::news_prefs::NewsDisplayPrefs;
 use crate::state::SimWorld;
 use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, SimHudControls};
 
@@ -111,15 +112,24 @@ pub(crate) fn drain_news_events(
     mut sim: ResMut<SimWorld>,
     mut news_ui: ResMut<NewsUiState>,
     mut feedback: ResMut<HudBuildFeedback>,
+    news_prefs: Res<NewsDisplayPrefs>,
     time: Res<Time>,
 ) {
     let events: Vec<_> = sim.state.pending_news_events.drain(..).collect();
     for event in events {
         let PendingNewsEvent::ItemAdded { id } = event;
-        let Some(item) = sim.state.news.get(id).cloned() else {
-            continue;
-        };
-        match item.display {
+        let display = sim
+            .state
+            .news
+            .items
+            .iter()
+            .find(|item| item.id == id)
+            .map(|item| news_prefs.0.display_for(item.news_type))
+            .unwrap_or(NewsDisplayMode::Full);
+        if let Some(item) = sim.state.news.items.iter_mut().find(|item| item.id == id) {
+            item.display = display;
+        }
+        match display {
             NewsDisplayMode::Full => {
                 if !news_ui.shown_full.contains(&id) {
                     news_ui.waiting_full.push_back(id);

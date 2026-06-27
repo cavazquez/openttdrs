@@ -3,8 +3,8 @@
 Documento de **seguimiento** para la **barra inferior** (fecha, dinero, ticker de noticias)
 y el **cartel de noticias** que sube desde abajo con sonido (periódico / ventana completa).
 
-**Estado (2026-06-22):** **N1–N4 implementados** (historial, purga, clic→mapa, finanzas).
-Pendiente **N5** (settings Off/Summary/Full, SFX dedicados, estilos Thin/Vehicle).
+**Estado (2026-06-22):** **N1–N5 implementados** (settings Off/Summary/Full por tipo en prefs TOML).
+Pendiente menor: estilos Thin/Vehicle, SFX dedicados, import chunk NEWS en saves.
 
 **Relacionado:**
 
@@ -78,7 +78,7 @@ Cuando una noticia tiene display **Full** (`NewsDisplay::Full`):
 | Historial / «Message history» | ✅ | `statusbar/history.rs` — clic en fecha |
 | Purga por edad (~730 días) | ✅ | `maybe_purge_old_news` en sim |
 | Clic dinero → finanzas | ✅ | `finances_window.rs` |
-| Config Off·Summary·Full por tipo | ❌ | N5 |
+| Config Off·Summary·Full por tipo | ✅ | Ajustes → «Noticias…», `ClientPreferences` TOML |
 
 **Oportunidad:** reutilizar `PlayHudSfx` / `HudSfxHandles` y el calendario ya derivado del tick;
 mover **fecha + dinero** del bloque superior a la barra inferior y dejar arriba solo debug/tooling
@@ -101,7 +101,7 @@ Constantes de tiempo ya alineadas con OpenTTD:
 | **N4 — Paridad** | Tipos, edades, historial, clic→mapa | Comportamiento reconocible vs OpenTTD 15.x |
 | **N5 — Settings** | Off / Summary / Full por categoría | Equivalente a `news_display_settings.ini` |
 
-Hoy: **N1–N4 ✅**; **N5 ❌**.
+Hoy: **N1–N5 ✅** (settings por tipo en prefs del cliente).
 
 ---
 

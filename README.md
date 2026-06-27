@@ -40,7 +40,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | Render OpenGFX vanilla | 🟡 ~85–90 % |
 | UI, toolbar, ventanas, barra inferior | 🟡 |
 | Señales bloque v1 (sin PBS) | 🟡 |
-| Noticias / ticker / periódico | 🟡 N1–N3 ✅, N4 parcial |
+| Noticias / ticker / periódico | ✅ N1–N5 |
 | Terraform / gen mundo / climas | ❌ |
 | Barcos, aviones, Cargo Dist, NewGRF, red I8 | 🔮 |
 
@@ -138,7 +138,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **UI** | Clic noticia / ticker → centrar cámara | ✅ | `camera.rs`, `statusbar/sync.rs` |
 | **UI** | Historial noticias (lista scroll) | ✅ | Clic en fecha barra → `statusbar/history.rs` |
 | **UI** | Purga noticias antiguas (~2 años) | ✅ | `news.rs` — `maybe_purge_old_news` |
-| **UI** | Config noticias Off/Summary/Full por tipo | ❌ | N5 — `news_display_settings.ini` |
+| **UI** | Config noticias Off/Summary/Full por tipo | ✅ | Ajustes → «Noticias…», prefs TOML |
 | **UI** | Clic dinero → ventana finanzas | ✅ | `finances_window.rs` — efectivo, préstamo, stats |
 | **UI** | Guardar F5 / cargar F9 JSON | ✅ | `state/json_persist.rs` |
 | **UI** | Preferencias cliente (`~/.config/...`) | ✅ | audio, minimapa, ruta save |

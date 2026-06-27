@@ -151,11 +151,71 @@ fn doy_to_month_day(doy: u64) -> (u64, &'static str) {
 
 #[must_use]
 pub fn default_display_for_type(news_type: NewsType) -> NewsDisplayMode {
+    NewsDisplaySettings::openttd_defaults().display_for(news_type)
+}
+
+/// Preferencias Off / Summary / Full por categoría (equivalente a `news_display_settings.ini`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NewsDisplaySettings {
+    pub cargo_delivered: NewsDisplayMode,
+    pub first_cargo_delivered: NewsDisplayMode,
+    pub first_vehicle_running: NewsDisplayMode,
+    pub vehicle_advice: NewsDisplayMode,
+}
+
+impl Default for NewsDisplaySettings {
+    fn default() -> Self {
+        Self::openttd_defaults()
+    }
+}
+
+impl NewsDisplaySettings {
+    #[must_use]
+    pub const fn openttd_defaults() -> Self {
+        Self {
+            cargo_delivered: NewsDisplayMode::Full,
+            first_cargo_delivered: NewsDisplayMode::Full,
+            first_vehicle_running: NewsDisplayMode::Full,
+            vehicle_advice: NewsDisplayMode::Summary,
+        }
+    }
+
+    #[must_use]
+    pub const fn display_for(self, news_type: NewsType) -> NewsDisplayMode {
+        match news_type {
+            NewsType::CargoDelivered => self.cargo_delivered,
+            NewsType::FirstCargoDelivered => self.first_cargo_delivered,
+            NewsType::FirstVehicleRunning => self.first_vehicle_running,
+            NewsType::VehicleAdvice => self.vehicle_advice,
+        }
+    }
+
+    pub fn set_display(&mut self, news_type: NewsType, mode: NewsDisplayMode) {
+        match news_type {
+            NewsType::CargoDelivered => self.cargo_delivered = mode,
+            NewsType::FirstCargoDelivered => self.first_cargo_delivered = mode,
+            NewsType::FirstVehicleRunning => self.first_vehicle_running = mode,
+            NewsType::VehicleAdvice => self.vehicle_advice = mode,
+        }
+    }
+}
+
+#[must_use]
+pub fn news_type_label(news_type: NewsType) -> &'static str {
     match news_type {
-        NewsType::CargoDelivered
-        | NewsType::FirstCargoDelivered
-        | NewsType::FirstVehicleRunning => NewsDisplayMode::Full,
-        NewsType::VehicleAdvice => NewsDisplayMode::Summary,
+        NewsType::CargoDelivered => "Entrega de carga",
+        NewsType::FirstCargoDelivered => "Primera entrega",
+        NewsType::FirstVehicleRunning => "Primer vehículo en marcha",
+        NewsType::VehicleAdvice => "Avisos de vehículo",
+    }
+}
+
+#[must_use]
+pub fn news_display_mode_label(mode: NewsDisplayMode) -> &'static str {
+    match mode {
+        NewsDisplayMode::Off => "Off",
+        NewsDisplayMode::Summary => "Summary",
+        NewsDisplayMode::Full => "Full",
     }
 }
 
@@ -486,6 +546,20 @@ mod tests {
         assert_eq!(item.news_type, NewsType::FirstVehicleRunning);
         assert_eq!(item.display, NewsDisplayMode::Full);
         assert!(item.headline.contains("autobús"));
+    }
+
+    #[test]
+    fn news_display_settings_override_per_type() {
+        let mut settings = NewsDisplaySettings::openttd_defaults();
+        settings.vehicle_advice = NewsDisplayMode::Off;
+        assert_eq!(
+            settings.display_for(NewsType::VehicleAdvice),
+            NewsDisplayMode::Off
+        );
+        assert_eq!(
+            settings.display_for(NewsType::CargoDelivered),
+            NewsDisplayMode::Full
+        );
     }
 
     #[test]

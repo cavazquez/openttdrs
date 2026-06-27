@@ -196,6 +196,7 @@ pub(crate) enum SaveMenuAction {
     Normalize,
     ZoomIn,
     ZoomOut,
+    NewsSettings,
 }
 
 #[derive(Resource, Default)]

@@ -5,8 +5,8 @@ mod sync;
 
 pub(crate) use setup::setup_status_bar;
 pub(crate) use sync::{
-    drain_news_events, handle_news_popup_close, handle_status_bar_center_click, sync_status_bar,
-    update_news_playback,
+    drain_news_events, handle_news_popup_close, handle_news_popup_focus,
+    handle_status_bar_center_click, sync_status_bar, update_news_playback,
 };
 
 use std::collections::{HashSet, VecDeque};
@@ -89,3 +89,6 @@ pub(crate) struct NewsPopupBodyText;
 
 #[derive(Component)]
 pub(crate) struct NewsPopupCloseButton;
+
+#[derive(Component)]
+pub(crate) struct NewsPopupFocusButton;

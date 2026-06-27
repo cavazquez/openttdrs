@@ -158,16 +158,27 @@ pub(super) fn toggle_vehicle_running(
         .find(|v| v.id == vehicle_id)
         .and_then(|v| road_depot_exit_tile(state, v.pos))
         .and_then(|exit| farthest_reachable_road_tile(&state.map, exit).or(Some(exit)));
-    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
-        return Err(CommandError::VehicleNotFound);
+    let (was_running, vehicle_pos, vehicle_kind, now_running) = {
+        let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
+            return Err(CommandError::VehicleNotFound);
+        };
+        let was_running = vehicle.running;
+        let vehicle_pos = vehicle.pos;
+        let vehicle_kind = vehicle.kind;
+        vehicle.running = !vehicle.running;
+        let now_running = vehicle.running;
+        if now_running
+            && vehicle.pos == vehicle.dest
+            && let Some(dest) = road_dest
+        {
+            vehicle.dest = dest;
+            vehicle.path.clear();
+        }
+        (was_running, vehicle_pos, vehicle_kind, now_running)
     };
-    vehicle.running = !vehicle.running;
-    if vehicle.running
-        && vehicle.pos == vehicle.dest
-        && let Some(dest) = road_dest
-    {
-        vehicle.dest = dest;
-        vehicle.path.clear();
+    if now_running && !was_running && !state.news_first_vehicle_running_sent {
+        state.news_first_vehicle_running_sent = true;
+        crate::news::push_first_vehicle_running_news(state, vehicle_id, vehicle_pos, vehicle_kind);
     }
     Ok(())
 }

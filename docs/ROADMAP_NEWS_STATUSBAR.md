@@ -3,8 +3,10 @@
 Documento de **seguimiento** para la **barra inferior** (fecha, dinero, ticker de noticias)
 y el **cartel de noticias** que sube desde abajo con sonido (periódico / ventana completa).
 
-**Estado (2026-06-22):** **no implementado**. openttdrs muestra fecha, economía y debug en
-un **HUD superior** (`Text2d`); no hay cola de noticias, ticker ni popup estilo periódico.
+**Estado (2026-06-22):** **N1–N3 implementados**; **N4 parcial** (clic→mapa, avisos de vehículo,
+primer vehículo en marcha). Pendiente: historial, edades/purga, estilos Thin/Vehicle, finanzas al
+clic en dinero. openttdrs tiene barra inferior Bevy UI, cola `NewsQueue`, ticker Summary, popup
+Full animado y hooks en sim (`cargo`, `ToggleVehicleRunning`, `poll_vehicle_advice_news`).
 
 **Relacionado:**
 
@@ -65,16 +67,18 @@ Cuando una noticia tiene display **Full** (`NewsDisplay::Full`):
 
 | Pieza | Estado | Ubicación |
 |-------|--------|-----------|
-| Fecha simulada `Y·D` desde tick | ✅ (HUD **superior**) | `ui/hud/display/mod.rs` |
-| Dinero / préstamo / stats | ✅ (HUD superior + título ventana) | `display/mod.rs`, `window_status.rs` |
-| SFX construcción / error / ingreso | ✅ | `ui/hud/sound_ping.rs` |
+| Fecha simulada (calendario legible) | ✅ barra inferior | `ui/statusbar/`, `news.rs` |
+| Dinero compañía | ✅ barra inferior | `ui/statusbar/sync.rs` |
+| SFX construcción / error / ingreso / noticias | 🟡 | `ui/hud/sound_ping.rs` (fallbacks; faltan `osfx_16`/`osfx_1D` dedicados) |
 | Popup «+$N» en mapa al entregar carga | ✅ | `ui/hud/income_popup.rs` |
-| Cola de noticias | ❌ | — |
-| Barra inferior UI | ❌ | toolbar solo **arriba** |
-| Ticker scroll | ❌ | — |
-| Ventana periódico animada | ❌ | — |
-| `AddNewsItem` desde sim | ❌ | — |
-| Historial / «última noticia» | ❌ | — |
+| Cola de noticias | ✅ | `core/news.rs` — `NewsQueue`, `add_news_item` |
+| Barra inferior UI | ✅ | `ui/statusbar/` |
+| Ticker scroll | ✅ | `ui/statusbar/sync.rs` — N2 |
+| Ventana periódico animada | ✅ | N3 — slide-up + auto-hide ~10 s |
+| `AddNewsItem` desde sim | ✅ | entrega carga, primer vehículo, avisos vehículo |
+| Clic noticia / ticker → centrar cámara | ✅ | `camera.rs`, `statusbar/sync.rs` |
+| Historial / «Message history» | ❌ | N4 |
+| Purga por edad / settings Off·Summary·Full | ❌ | N4–N5 |
 
 **Oportunidad:** reutilizar `PlayHudSfx` / `HudSfxHandles` y el calendario ya derivado del tick;
 mover **fecha + dinero** del bloque superior a la barra inferior y dejar arriba solo debug/tooling
@@ -97,7 +101,8 @@ Constantes de tiempo ya alineadas con OpenTTD:
 | **N4 — Paridad** | Tipos, edades, historial, clic→mapa | Comportamiento reconocible vs OpenTTD 15.x |
 | **N5 — Settings** | Off / Summary / Full por categoría | Equivalente a `news_display_settings.ini` |
 
-Hoy: **0 % de N1–N5**.
+Hoy: **N1–N3 ✅**; **N4 🟡** (~40 %: clic→mapa, `VehicleAdvice`, `FirstVehicleRunning`);
+**N5 ❌**.
 
 ---
 

@@ -3,8 +3,10 @@
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
+use openttdrs_core::{Map, TileCoord};
 
 use crate::bevy_app::UpdateSet;
+use crate::iso::tile_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::ClientScreen;
 
@@ -26,17 +28,52 @@ const WASD_MAX_SPEED: f32 = 600.0;
 #[derive(Resource, Default)]
 pub struct CameraVelocity(pub Vec2);
 
+/// Petición de salto instantáneo de cámara (p. ej. clic en noticia).
+#[derive(Resource, Default)]
+pub struct CameraFocusRequest {
+    pub target: Option<Vec2>,
+}
+
+#[must_use]
+pub fn tile_camera_world_pos(map: &Map, coord: TileCoord) -> Vec2 {
+    let height = map.get(coord).map_or(0, |tile| tile.height);
+    let pos = tile_pos(coord.x, coord.y, height, 0.0);
+    Vec2::new(pos.x, pos.y)
+}
+
 pub(crate) struct CameraControlPlugin;
 
 impl Plugin for CameraControlPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<CameraVelocity>().add_systems(
-            Update,
-            move_camera
-                .in_set(UpdateSet::Camera)
-                .run_if(in_state(ClientScreen::InGame)),
-        );
+        app.init_resource::<CameraVelocity>()
+            .init_resource::<CameraFocusRequest>()
+            .add_systems(
+                Update,
+                (
+                    apply_camera_focus_request,
+                    move_camera.after(apply_camera_focus_request),
+                )
+                    .chain()
+                    .in_set(UpdateSet::Camera)
+                    .run_if(in_state(ClientScreen::InGame)),
+            );
     }
+}
+
+fn apply_camera_focus_request(
+    mut request: ResMut<CameraFocusRequest>,
+    mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
+    mut vel: ResMut<CameraVelocity>,
+) {
+    let Some(target) = request.target.take() else {
+        return;
+    };
+    let Ok(mut transform) = cam_q.single_mut() else {
+        return;
+    };
+    transform.translation.x = target.x;
+    transform.translation.y = target.y;
+    vel.0 = Vec2::ZERO;
 }
 
 /// Mueve la cámara con WASD (con inercia), arrastre con botón derecho y rueda del ratón.

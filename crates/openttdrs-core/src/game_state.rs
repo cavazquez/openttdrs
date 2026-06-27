@@ -103,6 +103,12 @@ pub struct GameState {
     /// Eventos de noticia recién creados (consumidos por el cliente).
     #[serde(skip)]
     pub pending_news_events: Vec<crate::news::PendingNewsEvent>,
+    /// Noticia «primer vehículo en marcha» ya emitida.
+    #[serde(default)]
+    pub news_first_vehicle_running_sent: bool,
+    /// Claves `(vehículo, tipo de aviso)` ya notificadas mientras persiste la condición.
+    #[serde(skip, default)]
+    pub news_advice_sent: std::collections::HashSet<u64>,
 }
 
 impl GameState {
@@ -124,6 +130,8 @@ impl GameState {
             industry_tile_dirty: Vec::new(),
             news: crate::news::NewsQueue::default(),
             pending_news_events: Vec::new(),
+            news_first_vehicle_running_sent: false,
+            news_advice_sent: std::collections::HashSet::new(),
         }
     }
 
@@ -146,6 +154,8 @@ impl GameState {
             industry_tile_dirty: Vec::new(),
             news: crate::news::NewsQueue::default(),
             pending_news_events: Vec::new(),
+            news_first_vehicle_running_sent: false,
+            news_advice_sent: std::collections::HashSet::new(),
         }
     }
 

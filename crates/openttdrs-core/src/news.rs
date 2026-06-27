@@ -1,13 +1,15 @@
 //! Cola de noticias al estilo `OpenTTD` (`AddNewsItem`, ticker / periódico).
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 
 use serde::{Deserialize, Serialize};
 
 use crate::cargo::CargoType;
 use crate::economy::TICKS_PER_TRANSIT_DAY;
 use crate::map::TileCoord;
+use crate::station::{self, STATION_COVERAGE_RADIUS, station_covers_tile};
 use crate::tick::GameTick;
+use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
 
 /// Año base del calendario mostrado en la barra (Y1 del sim = 1950).
 pub const CALENDAR_BASE_YEAR: u32 = 1950;
@@ -17,7 +19,17 @@ pub const CALENDAR_DAYS_PER_YEAR: u64 = 365;
 pub enum NewsType {
     CargoDelivered,
     FirstCargoDelivered,
+    FirstVehicleRunning,
     VehicleAdvice,
+}
+
+/// Variante de aviso operativo de vehículo (deduplicación en sim).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum VehicleAdviceKind {
+    NoNetworkRoute,
+    NoOrders,
+    IncompatibleStop,
+    WaitingForCargo,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,8 +149,110 @@ fn doy_to_month_day(doy: u64) -> (u64, &'static str) {
 #[must_use]
 pub fn default_display_for_type(news_type: NewsType) -> NewsDisplayMode {
     match news_type {
-        NewsType::CargoDelivered | NewsType::FirstCargoDelivered => NewsDisplayMode::Full,
+        NewsType::CargoDelivered
+        | NewsType::FirstCargoDelivered
+        | NewsType::FirstVehicleRunning => NewsDisplayMode::Full,
         NewsType::VehicleAdvice => NewsDisplayMode::Summary,
+    }
+}
+
+#[must_use]
+pub fn vehicle_kind_label(kind: VehicleKind) -> &'static str {
+    match kind {
+        VehicleKind::Bus => "autobús",
+        VehicleKind::Truck => "camión",
+        VehicleKind::Train => "tren",
+    }
+}
+
+fn advice_key(vehicle_id: u32, kind: VehicleAdviceKind) -> u64 {
+    (u64::from(vehicle_id) << 8) | kind as u64
+}
+
+fn vehicle_has_incompatible_stop(state: &crate::GameState, v: &Vehicle) -> bool {
+    if !v.running || v.orders.is_empty() {
+        return false;
+    }
+    let Some(order) = v.orders.get(v.current_order) else {
+        return false;
+    };
+    match order {
+        VehicleOrder::Station { station, .. } => state
+            .stations
+            .iter()
+            .find(|s| s.pos == *station)
+            .is_some_and(|st| !st.can_service_vehicle(v.kind) || st.is_waypoint()),
+        VehicleOrder::Waypoint { .. } => v.kind != VehicleKind::Train,
+        VehicleOrder::Tile(_) => false,
+    }
+}
+
+fn vehicle_waiting_for_cargo(state: &crate::GameState, v: &Vehicle) -> bool {
+    if !v.running || v.cargo > 0 || v.no_network_route_to_order || v.orders.is_empty() {
+        return false;
+    }
+    let Some(VehicleOrder::Station { station, .. }) = v.orders.get(v.current_order).copied() else {
+        return false;
+    };
+    if !station_covers_tile(station, v.pos, 1) && v.pos != station {
+        return false;
+    }
+    let Some(st) = state.stations.iter().find(|s| s.pos == station) else {
+        return false;
+    };
+    if !st.can_service_vehicle(v.kind) {
+        return false;
+    }
+    let industry_has = state.industries.iter().any(|ind| {
+        ind.stock > 0
+            && station::industry_in_station_coverage(ind, station, STATION_COVERAGE_RADIUS)
+            && st.accepts_cargo(ind.output_cargo())
+    });
+    let station_has = match v.kind {
+        VehicleKind::Bus => st.cargo_stock.passengers > 0 || st.cargo_stock.mail > 0,
+        VehicleKind::Truck | VehicleKind::Train => {
+            st.stock > 0 || st.cargo_stock.pick_freight_to_load(v.cargo_type).is_some()
+        }
+    };
+    !industry_has && !station_has
+}
+
+fn vehicle_advice_kind(state: &crate::GameState, v: &Vehicle) -> Option<VehicleAdviceKind> {
+    if !v.running {
+        return None;
+    }
+    if v.no_network_route_to_order {
+        return Some(VehicleAdviceKind::NoNetworkRoute);
+    }
+    if v.orders.is_empty() {
+        return Some(VehicleAdviceKind::NoOrders);
+    }
+    if vehicle_has_incompatible_stop(state, v) {
+        return Some(VehicleAdviceKind::IncompatibleStop);
+    }
+    if vehicle_waiting_for_cargo(state, v) {
+        return Some(VehicleAdviceKind::WaitingForCargo);
+    }
+    None
+}
+
+fn vehicle_advice_headline(
+    vehicle_id: u32,
+    current_order: usize,
+    kind: VehicleAdviceKind,
+) -> String {
+    match kind {
+        VehicleAdviceKind::NoNetworkRoute => format!(
+            "Sin ruta por red: vehículo {vehicle_id} (orden {})",
+            current_order.saturating_add(1)
+        ),
+        VehicleAdviceKind::NoOrders => format!("Sin órdenes: vehículo {vehicle_id}"),
+        VehicleAdviceKind::IncompatibleStop => {
+            format!("Parada incompatible: vehículo {vehicle_id}")
+        }
+        VehicleAdviceKind::WaitingForCargo => {
+            format!("Sin carga disponible: vehículo {vehicle_id}")
+        }
     }
 }
 
@@ -219,10 +333,80 @@ pub fn push_cargo_delivery_news(
     add_news_item(state, item);
 }
 
+pub fn push_first_vehicle_running_news(
+    state: &mut crate::GameState,
+    vehicle_id: u32,
+    at: TileCoord,
+    kind: VehicleKind,
+) {
+    let kind_label = vehicle_kind_label(kind);
+    let headline = format!("¡Tu primer {kind_label} está en marcha!");
+    let body = Some(format!("El vehículo {vehicle_id} ha salido a operar."));
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        headline,
+        body,
+        NewsType::FirstVehicleRunning,
+        default_display_for_type(NewsType::FirstVehicleRunning),
+        state.tick,
+        NewsReference::Tile(at),
+    );
+    add_news_item(state, item);
+}
+
+pub fn push_vehicle_advice_news(
+    state: &mut crate::GameState,
+    vehicle_id: u32,
+    current_order: usize,
+    at: TileCoord,
+    advice: VehicleAdviceKind,
+) {
+    let headline = vehicle_advice_headline(vehicle_id, current_order, advice);
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        headline,
+        None,
+        NewsType::VehicleAdvice,
+        default_display_for_type(NewsType::VehicleAdvice),
+        state.tick,
+        NewsReference::Tile(at),
+    );
+    add_news_item(state, item);
+}
+
+/// Emite ticker de aviso la primera vez que un vehículo entra en cada condición.
+pub fn poll_vehicle_advice_news(state: &mut crate::GameState) {
+    let mut active_keys = HashSet::new();
+    let mut pending = Vec::new();
+    for v in &state.vehicles {
+        let Some(advice) = vehicle_advice_kind(state, v) else {
+            continue;
+        };
+        let key = advice_key(v.id, advice);
+        active_keys.insert(key);
+        if state.news_advice_sent.contains(&key) {
+            continue;
+        }
+        pending.push((v.id, v.current_order, v.pos, advice, key));
+    }
+    state
+        .news_advice_sent
+        .retain(|key| active_keys.contains(key));
+    for (vehicle_id, current_order, pos, advice, key) in pending {
+        push_vehicle_advice_news(state, vehicle_id, current_order, pos, advice);
+        state.news_advice_sent.insert(key);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::GameState;
+    use crate::vehicle::{Vehicle, VehicleKind};
 
     #[test]
     fn calendar_day_zero_is_first_jan_1950() {
@@ -266,5 +450,39 @@ mod tests {
         assert_eq!(item.news_type, NewsType::FirstCargoDelivered);
         assert_eq!(item.display, NewsDisplayMode::Full);
         assert!(item.headline.contains("Primera entrega"));
+    }
+
+    #[test]
+    fn push_first_vehicle_running_uses_full_display() {
+        let mut state = GameState::new(4, 4);
+        push_first_vehicle_running_news(&mut state, 1, TileCoord::new(1, 1), VehicleKind::Bus);
+        assert_eq!(state.news.items.len(), 1);
+        let item = &state.news.items[0];
+        assert_eq!(item.news_type, NewsType::FirstVehicleRunning);
+        assert_eq!(item.display, NewsDisplayMode::Full);
+        assert!(item.headline.contains("autobús"));
+    }
+
+    #[test]
+    fn poll_vehicle_advice_fires_once_until_cleared() {
+        let mut state = GameState::new(8, 8);
+        state.vehicles.push(Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(2, 2),
+            TileCoord::new(2, 2),
+        ));
+        state.vehicles[0].running = true;
+        poll_vehicle_advice_news(&mut state);
+        assert_eq!(state.news.items.len(), 1);
+        assert_eq!(state.news.items[0].news_type, NewsType::VehicleAdvice);
+        poll_vehicle_advice_news(&mut state);
+        assert_eq!(state.news.items.len(), 1);
+        state.vehicles[0].running = false;
+        poll_vehicle_advice_news(&mut state);
+        assert!(state.news_advice_sent.is_empty());
+        state.vehicles[0].running = true;
+        poll_vehicle_advice_news(&mut state);
+        assert_eq!(state.news.items.len(), 2);
     }
 }

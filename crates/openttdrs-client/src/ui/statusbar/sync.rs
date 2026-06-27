@@ -1,10 +1,11 @@
 use bevy::prelude::*;
 use openttdrs_core::{
-    NewsDisplayMode, NewsType, PendingNewsEvent, format_calendar_date, format_money,
+    NewsDisplayMode, NewsReference, NewsType, PendingNewsEvent, format_calendar_date, format_money,
 };
 
+use crate::camera::{CameraFocusRequest, tile_camera_world_pos};
 use crate::state::SimWorld;
-use crate::ui::hud::{HudBuildFeedback, SimHudControls};
+use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, SimHudControls};
 
 use super::{
     COMPANY_DISPLAY_NAME, NewsUiState, StatusBarDateText, StatusBarDefaultText, StatusBarMoneyText,
@@ -220,11 +221,8 @@ fn spawn_news_popup(
     let entity = commands
         .spawn((
             super::NewsPopupRoot,
-            super::NewsPopupCloseButton,
             crate::ui::toolbar::BuildMenuUi,
             GlobalZIndex(super::STATUS_BAR_Z + 5),
-            Button,
-            Interaction::default(),
             Node {
                 position_type: PositionType::Absolute,
                 left: Val::Percent(50.0),
@@ -245,6 +243,7 @@ fn spawn_news_popup(
                 Node {
                     flex_direction: FlexDirection::Row,
                     justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
                     width: Val::Percent(100.0),
                     ..default()
                 },
@@ -258,34 +257,80 @@ fn spawn_news_popup(
                         TextColor(Color::srgb(0.12, 0.12, 0.12)),
                     ),
                     (
-                        super::NewsPopupDateText,
-                        Text::new(date_label.clone()),
-                        TextFont {
-                            font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
+                        Node {
+                            flex_direction: FlexDirection::Row,
+                            align_items: AlignItems::Center,
+                            column_gap: Val::Px(8.0),
                             ..default()
                         },
-                        TextColor(Color::srgb(0.35, 0.35, 0.35)),
+                        children![
+                            (
+                                super::NewsPopupDateText,
+                                Text::new(date_label.clone()),
+                                TextFont {
+                                    font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
+                                    ..default()
+                                },
+                                TextColor(Color::srgb(0.35, 0.35, 0.35)),
+                            ),
+                            (
+                                super::NewsPopupCloseButton,
+                                Button,
+                                Node {
+                                    min_width: Val::Px(22.0),
+                                    min_height: Val::Px(22.0),
+                                    justify_content: JustifyContent::Center,
+                                    align_items: AlignItems::Center,
+                                    ..default()
+                                },
+                                BackgroundColor(Color::NONE),
+                                Interaction::default(),
+                                children![(
+                                    Text::new("×"),
+                                    TextFont {
+                                        font_size: FontSize::Rem(UiFontRole::Title.rem_size()),
+                                        ..default()
+                                    },
+                                    TextColor(Color::srgb(0.25, 0.25, 0.25)),
+                                )],
+                            ),
+                        ],
                     ),
                 ],
             ));
-            popup.spawn((
-                super::NewsPopupHeadlineText,
-                Text::new(item.headline.clone()),
-                TextFont {
-                    font_size: FontSize::Rem(UiFontRole::Hud.rem_size()),
-                    ..default()
-                },
-                TextColor(Color::srgb(0.05, 0.05, 0.05)),
-            ));
-            popup.spawn((
-                super::NewsPopupBodyText,
-                Text::new(body),
-                TextFont {
-                    font_size: FontSize::Rem(UiFontRole::Body.rem_size()),
-                    ..default()
-                },
-                TextColor(Color::srgb(0.15, 0.15, 0.15)),
-            ));
+            popup
+                .spawn((
+                    super::NewsPopupFocusButton,
+                    Button,
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: Val::Px(6.0),
+                        width: Val::Percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::NONE),
+                    Interaction::default(),
+                ))
+                .with_children(|focus| {
+                    focus.spawn((
+                        super::NewsPopupHeadlineText,
+                        Text::new(item.headline.clone()),
+                        TextFont {
+                            font_size: FontSize::Rem(UiFontRole::Hud.rem_size()),
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.05, 0.05, 0.05)),
+                    ));
+                    focus.spawn((
+                        super::NewsPopupBodyText,
+                        Text::new(body),
+                        TextFont {
+                            font_size: FontSize::Rem(UiFontRole::Body.rem_size()),
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.15, 0.15, 0.15)),
+                    ));
+                });
         })
         .id();
 
@@ -299,27 +344,64 @@ fn spawn_news_popup(
     });
 
     match item.news_type {
-        NewsType::FirstCargoDelivered => feedback.pending_news_applause = true,
+        NewsType::FirstCargoDelivered | NewsType::FirstVehicleRunning => {
+            feedback.pending_news_applause = true;
+        }
         NewsType::CargoDelivered => feedback.pending_news_chime = true,
         NewsType::VehicleAdvice => feedback.pending_news_ticker = true,
+    }
+}
+
+fn focus_news_reference(
+    reference: NewsReference,
+    sim: &SimWorld,
+    focus: &mut CameraFocusRequest,
+    selected: &mut SelectedTileInfo,
+) {
+    let NewsReference::Tile(coord) = reference else {
+        return;
+    };
+    focus.target = Some(tile_camera_world_pos(&sim.state.map, coord));
+    selected.pos = Some(coord);
+}
+
+pub(crate) fn handle_news_popup_focus(
+    news_ui: Res<NewsUiState>,
+    sim: Res<SimWorld>,
+    mut focus: ResMut<CameraFocusRequest>,
+    mut selected: ResMut<SelectedTileInfo>,
+    interaction_q: Query<&Interaction, (Changed<Interaction>, With<super::NewsPopupFocusButton>)>,
+) {
+    for interaction in &interaction_q {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let Some(popup) = news_ui.popup.as_ref() else {
+            continue;
+        };
+        let Some(item) = sim.state.news.get(popup.item_id) else {
+            continue;
+        };
+        focus_news_reference(item.reference, &sim, &mut focus, &mut selected);
     }
 }
 
 pub(crate) fn handle_news_popup_close(
     mut news_ui: ResMut<NewsUiState>,
     mut interaction_q: Query<
-        (&Interaction, Entity),
+        &Interaction,
         (Changed<Interaction>, With<super::NewsPopupCloseButton>),
     >,
     mut commands: Commands,
 ) {
-    for (interaction, entity) in &mut interaction_q {
-        if *interaction == Interaction::Pressed
-            && news_ui.popup.as_ref().is_some_and(|p| p.entity == entity)
-        {
-            commands.entity(entity).despawn();
-            news_ui.popup = None;
+    for interaction in &mut interaction_q {
+        if *interaction != Interaction::Pressed {
+            continue;
         }
+        let Some(popup) = news_ui.popup.take() else {
+            continue;
+        };
+        commands.entity(popup.entity).despawn();
     }
 }
 
@@ -331,9 +413,17 @@ pub(crate) fn handle_status_bar_center_click(
     >,
     sim: Res<SimWorld>,
     mut feedback: ResMut<HudBuildFeedback>,
+    mut focus: ResMut<CameraFocusRequest>,
+    mut selected: ResMut<SelectedTileInfo>,
 ) {
     for interaction in &mut interaction_q {
         if *interaction != Interaction::Pressed {
+            continue;
+        }
+        if let Some(ticker) = &news_ui.ticker
+            && let Some(item) = sim.state.news.get(ticker.item_id)
+        {
+            focus_news_reference(item.reference, &sim, &mut focus, &mut selected);
             continue;
         }
         let Some(item) = sim.state.news.items.front().cloned() else {
@@ -342,6 +432,7 @@ pub(crate) fn handle_status_bar_center_click(
         if item.display != NewsDisplayMode::Full {
             continue;
         }
+        focus_news_reference(item.reference, &sim, &mut focus, &mut selected);
         news_ui.shown_full.remove(&item.id);
         news_ui.waiting_full.push_front(item.id);
         feedback.pending_news_chime = true;

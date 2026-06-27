@@ -40,7 +40,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | Render OpenGFX vanilla | 🟡 ~85–90 % |
 | UI, toolbar, ventanas, barra inferior | 🟡 |
 | Señales bloque v1 (sin PBS) | 🟡 |
-| Noticias / ticker / periódico | 🟡 N1–N3 |
+| Noticias / ticker / periódico | 🟡 N1–N3 ✅, N4 parcial |
 | Terraform / gen mundo / climas | ❌ |
 | Barcos, aviones, Cargo Dist, NewGRF, red I8 | 🔮 |
 
@@ -133,8 +133,10 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **UI** | HUD alertas («sin ruta», «sin carga», incompatible) | ✅ | `ui/hud/display/` — [SP1_CHECKLIST.md](docs/SP1_CHECKLIST.md) |
 | **UI** | Barra inferior: fecha \| centro \| dinero | ✅ | `ui/statusbar/` — N1 |
 | **UI** | Ticker noticias (scroll headline) | ✅ | `ui/statusbar/sync.rs` — N2 |
-| **UI** | Cartel noticias (sube desde abajo) | ✅ | N3 — entrega carga / primera entrega |
-| **UI** | Historial noticias, clic→mapa, edades | ❌ | [ROADMAP_NEWS_STATUSBAR.md](docs/ROADMAP_NEWS_STATUSBAR.md) N4 |
+| **UI** | Cartel noticias (sube desde abajo) | ✅ | N3 — entrega carga, primera entrega, primer vehículo |
+| **UI** | Ticker avisos vehículo (sin ruta, sin carga, …) | ✅ | `news.rs` — `VehicleAdvice` + `poll_vehicle_advice_news` |
+| **UI** | Clic noticia / ticker → centrar cámara | ✅ | `camera.rs`, `statusbar/sync.rs` |
+| **UI** | Historial noticias, edades, purga | ❌ | [ROADMAP_NEWS_STATUSBAR.md](docs/ROADMAP_NEWS_STATUSBAR.md) N4 |
 | **UI** | Config noticias Off/Summary/Full por tipo | ❌ | N5 — `news_display_settings.ini` |
 | **UI** | Clic dinero → ventana finanzas | ❌ | Barra derecha stub |
 | **UI** | Guardar F5 / cargar F9 JSON | ✅ | `state/json_persist.rs` |

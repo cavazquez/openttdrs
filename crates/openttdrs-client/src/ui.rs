@@ -39,8 +39,8 @@ use save_window::{
     setup_save_window, sync_save_window,
 };
 use statusbar::{
-    NewsUiState, drain_news_events, handle_news_popup_close, handle_status_bar_center_click,
-    setup_status_bar, sync_status_bar, update_news_playback,
+    NewsUiState, drain_news_events, handle_news_popup_close, handle_news_popup_focus,
+    handle_status_bar_center_click, setup_status_bar, sync_status_bar, update_news_playback,
 };
 use toolbar::depot_panel_on_closed;
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState};
@@ -197,6 +197,7 @@ impl Plugin for ClientUiPlugin {
                 sync_status_bar.after(update_news_playback),
                 handle_status_bar_center_click.after(sync_status_bar),
                 handle_news_popup_close.after(update_news_playback),
+                handle_news_popup_focus.after(update_news_playback),
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

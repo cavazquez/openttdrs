@@ -1,10 +1,14 @@
 name: Coverage
 
 on:
+  # Cobertura solo en main: llvm-cov recompila todo el workspace otra vez; en PR basta CI.
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -13,6 +17,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE: ci
+  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
 
 jobs:
   codecov:
@@ -20,27 +26,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Instalar Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Entorno Rust
+        uses: ./.github/composite/rust-setup
         with:
-          toolchain: 1.95.0
           components: llvm-tools-preview
-
-      - name: caché cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: openttdrs
-          add-job-id-key: false
-          cache-on-failure: true
-
-      - name: Dependencias Linux
-        uses: ./.github/composite/linux-build-deps
 
       - name: Instalar cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Tests y cobertura (llvm-cov → LCOV)
-        run: cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info
+        run: cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info --cargo-profile ci
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v6

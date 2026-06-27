@@ -3,8 +3,16 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -12,68 +20,37 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  # Menos ruido en el caché (artefactos incrementales); rust-cache guarda target/registry.
   CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE: ci
+  # Enlazado más rápido (mold en .github/apt-packages.txt).
+  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
 
 jobs:
-  lint:
+  # Un solo job: evita compilar el workspace dos veces (lint ∥ tests duplicaba Bevy).
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
-      - name: Instalar Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Entorno Rust
+        uses: ./.github/composite/rust-setup
         with:
-          toolchain: 1.95.0
           components: rustfmt, clippy
 
-      - name: caché cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          # Misma clave que Coverage: un workflow calienta caché del otro (mismo Cargo.lock).
-          shared-key: openttdrs
-          add-job-id-key: false
-          cache-on-failure: true
-
-      - name: Dependencias Linux
-        uses: ./.github/composite/linux-build-deps
+      - name: Instalar cargo-nextest
+        uses: taiki-e/install-action@nextest
 
       - name: rustfmt
         run: cargo fmt --all -- --check
 
       - name: clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-  tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Instalar Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
-          components: rustfmt, clippy
-
-      - name: caché cargo
-        uses: Swatinem/rust-cache@v2
-        with:
-          # Misma clave que Coverage: un workflow calienta caché del otro (mismo Cargo.lock).
-          shared-key: openttdrs
-          add-job-id-key: false
-          cache-on-failure: true
-
-      - name: Dependencias Linux
-        uses: ./.github/composite/linux-build-deps
-
-      - name: Instalar cargo-nextest
-        uses: taiki-e/install-action@nextest
+        run: cargo clippy --workspace --all-targets --profile ci -- -D warnings
 
       - name: tests (nextest)
-        run: cargo nextest run --workspace
+        run: cargo nextest run --workspace --cargo-profile ci
 
       - name: Validar TNBP (fixture v5p12_tnbp.ottdmap)
-        run: cargo run -q -p openttdrs-core --example validate_ottdmap_tnbp -- crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap
+        run: cargo run -q -p openttdrs-core --profile ci --example validate_ottdmap_tnbp -- crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap
 
       - name: Golden parse_sav (tests/fixtures)
         run: |

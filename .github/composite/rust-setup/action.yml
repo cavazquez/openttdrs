@@ -1,0 +1,25 @@
+name: Rust toolchain + caché + deps Linux
+description: Rust 1.95, rust-cache compartido y paquetes APT para Bevy (X11/Vulkan/ALSA)
+inputs:
+  components:
+    description: Componentes rustup (p. ej. rustfmt, clippy)
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Instalar Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: 1.95.0
+        components: ${{ inputs.components }}
+
+    - name: caché cargo
+      uses: Swatinem/rust-cache@v2
+      with:
+        shared-key: openttdrs
+        add-job-id-key: false
+        cache-on-failure: true
+
+    - name: Dependencias Linux
+      uses: ./.github/composite/linux-build-deps

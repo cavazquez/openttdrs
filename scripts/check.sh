@@ -119,6 +119,7 @@ do_all() {
 }
 
 do_ci() {
+    export CARGO_PROFILE="${CARGO_PROFILE:-ci}"
     do_fmt_check
     do_lint
     do_test
@@ -126,7 +127,7 @@ do_ci() {
     do_golden_parse_sav
     do_py_compile
     echo
-    info "=== CI OK (paridad con .github/workflows/ci.yml) ==="
+    info "=== CI OK (paridad con .github/workflows/ci.yml, profile=${CARGO_PROFILE}) ==="
 }
 
 case "${1:-all}" in

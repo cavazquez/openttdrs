@@ -1,6 +1,7 @@
 # Paquetes APT para compilar openttdrs-client (Bevy/X11/audio). El hash de este archivo
 # invalida la caché de apt en CI cuando cambien las dependencias del sistema.
 build-essential
+mold
 pkg-config
 libx11-dev
 libxcursor-dev

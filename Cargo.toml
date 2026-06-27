@@ -25,3 +25,15 @@ redundant_closure_for_method_calls = "warn"
 uninlined_format_args = "warn"
 inefficient_to_string = "warn"
 semicolon_if_nothing_returned = "warn"
+
+# Perfil CI: compila más rápido que `dev` (deps en opt-level 1, sin debuginfo).
+# Uso: CARGO_PROFILE=ci en GitHub Actions; local: `CARGO_PROFILE=ci ./scripts/check.sh ci`
+[profile.ci]
+inherits = "dev"
+opt-level = 1
+debug = 0
+incremental = false
+
+[profile.ci.package."*"]
+opt-level = 1
+debug = 0

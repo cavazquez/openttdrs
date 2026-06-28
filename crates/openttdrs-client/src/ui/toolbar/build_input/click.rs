@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{TileCoord, TileKind, apply_command};
 
-use crate::iso::{world_pos_to_tile_coord, world_pos_to_tile_fract};
+use crate::iso::{world_pos_to_rail_signal_pick, world_pos_to_tile_coord, world_pos_to_tile_fract};
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, pick_vehicle_id_at_world,
     town_id_at_label_pos,
@@ -306,7 +306,18 @@ pub(crate) fn handle_tile_click(
     };
 
     let current = (tx, ty);
-    let tile_fract = world_pos_to_tile_fract(world_pos, &sim.state.map, tx, ty);
+    let (build_pos, tile_fract) = if action == BuildMenuAction::RailSignals {
+        let Some((px, py, fx, fy)) = world_pos_to_rail_signal_pick(world_pos, &sim.state.map)
+        else {
+            return;
+        };
+        (TileCoord::new(px, py), (fx, fy))
+    } else {
+        (
+            pos,
+            world_pos_to_tile_fract(world_pos, &sim.state.map, tx, ty),
+        )
+    };
     let rail_lane_bit = match action {
         BuildMenuAction::RailHorz | BuildMenuAction::RailVert => {
             rail_lane_bits_for_action(action, Some(tile_fract))
@@ -368,7 +379,7 @@ pub(crate) fn handle_tile_click(
 
     if let Some(cmd) = command_for_action(
         action,
-        TileCoord::new(tx, ty),
+        build_pos,
         &station_state,
         rail_lane_bit,
         Some(&sim.state.map),

@@ -21,8 +21,8 @@ use openttdrs_core::{
 };
 
 use crate::iso::{
-    SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z, world_pos_to_tile_coord,
-    world_pos_to_tile_fract,
+    SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z, world_pos_to_rail_signal_pick,
+    world_pos_to_tile_coord, world_pos_to_tile_fract,
 };
 use crate::render::{CompanyColoredSprites, MapPreviewCamera, PrimaryGameCamera, TileAtlas};
 use crate::sprites::rail_ghost_overlay_offset;
@@ -143,13 +143,24 @@ pub(crate) fn update_build_ghost_preview(
     let Ok(world) = camera.viewport_to_world_2d(camera_transform, cursor) else {
         return;
     };
-    let Some((tx, ty)) = world_pos_to_tile_coord(world, &sim.state.map) else {
-        return;
+    let (tx, ty, tile_fract) = if action == BuildMenuAction::RailSignals {
+        let Some((px, py, fx, fy)) = world_pos_to_rail_signal_pick(world, &sim.state.map) else {
+            return;
+        };
+        (px, py, (fx, fy))
+    } else {
+        let Some((px, py)) = world_pos_to_tile_coord(world, &sim.state.map) else {
+            return;
+        };
+        (
+            px,
+            py,
+            world_pos_to_tile_fract(world, &sim.state.map, px, py),
+        )
     };
     if tx < 0 || ty < 0 {
         return;
     }
-    let tile_fract = world_pos_to_tile_fract(world, &sim.state.map, tx, ty);
     let cursor_rail_lane = rail_lane_bits_for_action(action, Some(tile_fract));
     let preview_rail_lane = match action {
         BuildMenuAction::RailHorz | BuildMenuAction::RailVert if drag_state.armed => {
@@ -307,7 +318,7 @@ pub(crate) fn update_build_ghost_preview(
             continue;
         }
 
-        // Vía / quitar vía: realce blanco de la pieza afectada.
+        // Vía / quitar vía: realce blanco de la pieza afectada (tesela bajo el cursor).
         if let Some(bits) = rail_preview_bits(
             action,
             &sim.state.map,

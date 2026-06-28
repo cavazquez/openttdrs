@@ -5,7 +5,7 @@ use crate::map::{
 };
 use crate::rail_signals::{
     RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST,
-    SIGNAL_REMOVE_REFUND, rail_tile_is_signals,
+    SIGNAL_REMOVE_REFUND, rail_signal_present_mask, rail_signal_state_mask, rail_tile_is_signals,
 };
 use crate::station::is_rail_waypoint_tile;
 
@@ -97,10 +97,24 @@ const MP_RAILWAY_MAPT: u8 = 0x10;
 /// `TrackBits` (`track_type.h`).
 const RAIL_TB_X: u8 = 1;
 const RAIL_TB_Y: u8 = 2;
+const RAIL_TB_UPPER: u8 = 0x04;
+const RAIL_TB_LOWER: u8 = 0x08;
+const RAIL_TB_LEFT: u8 = 0x10;
+const RAIL_TB_RIGHT: u8 = 0x20;
 const RAIL_TB_CROSS: u8 = RAIL_TB_X | RAIL_TB_Y;
+const RAIL_TB_HORZ: u8 = RAIL_TB_UPPER | RAIL_TB_LOWER;
+const RAIL_TB_VERT: u8 = RAIL_TB_LEFT | RAIL_TB_RIGHT;
 /// Carril paralelo sin diagonal (`TrackBits` 2–5 en `track_type.h`).
 const RAIL_PARALLEL_MASK: u8 = 0x3C;
 const RAIL_DIAG_MASK: u8 = RAIL_TB_X | RAIL_TB_Y;
+
+fn offset_along_horz_rail(dx: i32, dy: i32) -> bool {
+    dy == 0 && dx != 0
+}
+
+fn offset_along_vert_rail(dx: i32, dy: i32) -> bool {
+    dx == 0 && dy != 0
+}
 
 #[inline]
 fn connects_rail_network(kind: TileKind) -> bool {
@@ -286,23 +300,61 @@ fn bridge_line(map: &mut Map, horizontal: bool, fixed: i32, len: i32) {
     }
 }
 
+/// Máscara de señales que siguen siendo válidas con estos `TrackBits` (`RemoveTrackBits`).
+fn trackbits_to_signal_present(tb: u8) -> u8 {
+    if tb == RAIL_TB_X || tb == RAIL_TB_Y {
+        0b1100
+    } else {
+        0x0F
+    }
+}
+
 fn write_normal_rail_tile(
     state: &mut GameState,
     c: TileCoord,
     trackbits: u8,
 ) -> Result<(), CommandError> {
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let tb = trackbits & 0x3F;
+    let had_signals = rail_tile_is_signals(tile.m5);
+    let old_present = if had_signals {
+        rail_signal_present_mask(tile.m3)
+    } else {
+        0
+    };
+    let old_states = if had_signals {
+        rail_signal_state_mask(tile.m3hi)
+    } else {
+        0
+    };
+    let old_m2 = tile.m2;
+
     tile.kind = TileKind::Rail;
     tile.mapt = MP_RAILWAY_MAPT;
-    tile.m5 = (trackbits & 0x3F) | (RAIL_TILE_NORMAL << 6);
     tile.m1 = 0;
-    tile.m2 = 0;
     tile.m2_hi = 0;
-    tile.m3 = 0;
-    tile.m3hi = 0;
     tile.m6 = 0;
     tile.m7 = 0;
     tile.m8 = 0;
+
+    if had_signals {
+        let kept = old_present & trackbits_to_signal_present(tb);
+        if kept != 0 {
+            tile.m5 = tb | (RAIL_TILE_SIGNALS << 6);
+            tile.m2 = old_m2;
+            tile.m3 = (tile.m3 & 0x0F) | (kept << 4);
+            tile.m3hi = (tile.m3hi & 0x0F) | ((old_states & kept) << 4);
+            return state
+                .map
+                .set_tile(c, tile)
+                .map_err(|_| CommandError::OutOfBounds);
+        }
+    }
+
+    tile.m5 = tb | (RAIL_TILE_NORMAL << 6);
+    tile.m2 = 0;
+    tile.m3 = 0;
+    tile.m3hi = 0;
     state
         .map
         .set_tile(c, tile)
@@ -315,8 +367,7 @@ fn refresh_rail_trackbits(state: &mut GameState, c: TileCoord) -> Result<(), Com
     }
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let current = tile.m5 & 0x3F;
-    // `rail_trackbits_from_neighbors` solo modela X/Y/cruces desde vecinos cardinales;
-    // no re-inferir carriles paralelos (E-O / N-S en pantalla) o se destruyen al arrastrar.
+    // Carriles paralelos sin diagonal: no re-inferir con `from_neighbors` (destruye líneas).
     if current != 0 && (current & RAIL_PARALLEL_MASK) != 0 && (current & RAIL_DIAG_MASK) == 0 {
         return Ok(());
     }
@@ -330,9 +381,68 @@ fn refresh_rail_trackbits(state: &mut GameState, c: TileCoord) -> Result<(), Com
         .map_err(|_| CommandError::OutOfBounds)
 }
 
-fn refresh_rail_neighbors(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
+/// ¿La tesela con vía existente debe ganar piezas de unión hacia un vecino perpendicular?
+fn junction_merge_for_neighbor(holder_tb: u8, neighbor_tb: u8, dx: i32, dy: i32) -> Option<u8> {
+    if neighbor_tb & RAIL_PARALLEL_MASK == 0 || neighbor_tb.count_ones() != 1 {
+        return None;
+    }
+    let neighbor_horz = neighbor_tb & RAIL_TB_HORZ != 0;
+    let neighbor_vert = neighbor_tb & RAIL_TB_VERT != 0;
+
+    let holder_diag_only = holder_tb & RAIL_DIAG_MASK != 0 && holder_tb & RAIL_PARALLEL_MASK == 0;
+    let holder_horz = holder_tb & RAIL_TB_HORZ != 0 && holder_tb & RAIL_TB_VERT == 0;
+    let holder_vert = holder_tb & RAIL_TB_VERT != 0 && holder_tb & RAIL_TB_HORZ == 0;
+
+    if (holder_diag_only || holder_horz) && neighbor_vert && offset_along_vert_rail(dx, dy) {
+        return Some(holder_tb | neighbor_tb);
+    }
+    if holder_vert && neighbor_horz && offset_along_horz_rail(dx, dy) {
+        return Some(holder_tb | neighbor_tb);
+    }
+    None
+}
+
+fn refresh_track_junction_from_neighbor(
+    state: &mut GameState,
+    holder: TileCoord,
+    neighbor: TileCoord,
+    neighbor_tb: u8,
+) -> Result<(), CommandError> {
+    let holder_tb = existing_rail_trackbits(&state.map, holder);
+    if holder_tb == 0 {
+        return Ok(());
+    }
+    let dx = neighbor.x - holder.x;
+    let dy = neighbor.y - holder.y;
+    let Some(merged) = junction_merge_for_neighbor(holder_tb, neighbor_tb, dx, dy) else {
+        return Ok(());
+    };
+    if merged == holder_tb {
+        return Ok(());
+    }
+    check_rail_trackbits_on_tile(&state.map, holder, merged)?;
+    write_normal_rail_tile(state, holder, merged)
+}
+
+fn refresh_rail_neighbors_after_place(
+    state: &mut GameState,
+    changed: TileCoord,
+) -> Result<(), CommandError> {
+    let changed_tb = existing_rail_trackbits(&state.map, changed);
+    if changed_tb == 0 {
+        return Ok(());
+    }
     for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
-        refresh_rail_trackbits(state, TileCoord::new(c.x + dx, c.y + dy))?;
+        let n = TileCoord::new(changed.x + dx, changed.y + dy);
+        refresh_track_junction_from_neighbor(state, n, changed, changed_tb)?;
+    }
+    Ok(())
+}
+
+fn refresh_rail_neighbors(state: &mut GameState, changed: TileCoord) -> Result<(), CommandError> {
+    refresh_rail_neighbors_after_place(state, changed)?;
+    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+        refresh_rail_trackbits(state, TileCoord::new(changed.x + dx, changed.y + dy))?;
     }
     Ok(())
 }
@@ -1401,43 +1511,10 @@ fn merge_rail_trackbits(existing: u8, add: u8) -> u8 {
     if merged == 0 { add & 0x3F } else { merged }
 }
 
-/// Si el clic cae en hierba junto a un solo tramo de vía, fusiona el carril paralelo
-/// en esa tesela (curva/T) en lugar de dejar un tramo suelto en la tesela vacía.
-fn prefer_parallel_junction_placement(map: &Map, c: TileCoord, add: u8) -> (TileCoord, u8) {
-    let add = add & 0x3F;
-    if add == 0 || add.count_ones() != 1 || add & RAIL_PARALLEL_MASK == 0 {
-        return (c, add);
-    }
-    if existing_rail_trackbits(map, c) != 0 {
-        return (c, add);
-    }
-    let mut sole: Option<(TileCoord, u8)> = None;
-    for d in 0..4u8 {
-        let (dx, dy) = diag_dir_offset(d);
-        let n = TileCoord::new(c.x + dx, c.y + dy);
-        let tb = existing_rail_trackbits(map, n);
-        if tb != 0 {
-            if sole.is_some() {
-                return (c, add);
-            }
-            sole = Some((n, tb));
-        }
-    }
-    let Some((n, tb)) = sole else {
-        return (c, add);
-    };
-    // Solo ramificar desde vía diagonal (X/Y); no robar colocaciones en línea paralela.
-    if tb & RAIL_DIAG_MASK == 0 {
-        return (c, add);
-    }
-    let merged = tb | add;
-    if merged == tb {
-        return (c, add);
-    }
-    if check_rail_trackbits_on_tile(map, n, merged).is_err() {
-        return (c, add);
-    }
-    (n, add)
+/// `TrackBits` finales en la tesela del cursor (sin redirigir a vecinos).
+#[must_use]
+pub fn rail_bits_placement_target(map: &Map, c: TileCoord, add_bits: u8) -> (TileCoord, u8) {
+    (c, merged_rail_trackbits_on_tile(map, c, add_bits))
 }
 
 pub(super) fn place_rail_bits(
@@ -1446,11 +1523,11 @@ pub(super) fn place_rail_bits(
     bits: u8,
 ) -> Result<(), CommandError> {
     check_place_rail(&state.map, c)?;
-    let (target, add) = prefer_parallel_junction_placement(&state.map, c, bits);
-    apply_autoslope_if_needed(state, target)?;
-    let tb = merged_rail_trackbits_on_tile(&state.map, target, add);
-    check_rail_trackbits_on_tile(&state.map, target, tb)?;
-    write_normal_rail_tile(state, target, tb)?;
+    let add = bits & 0x3F;
+    apply_autoslope_if_needed(state, c)?;
+    let tb = merged_rail_trackbits_on_tile(&state.map, c, add);
+    check_rail_trackbits_on_tile(&state.map, c, tb)?;
+    write_normal_rail_tile(state, c, tb)?;
     state.economy.money -= RAIL_BUILD_COST;
     Ok(())
 }
@@ -1644,15 +1721,6 @@ pub(super) fn remove_rail_bits(
     refresh_rail_neighbors(state, c)?;
     state.economy.money += RAIL_REMOVE_REFUND;
     Ok(())
-}
-
-/// Máscara aproximada de señales que siguen siendo válidas tras quitar `TrackBits`.
-fn trackbits_to_signal_present(tb: u8) -> u8 {
-    if tb == RAIL_TB_X || tb == RAIL_TB_Y {
-        0b1100
-    } else {
-        0x0F
-    }
 }
 
 pub(super) fn remove_rail(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {

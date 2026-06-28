@@ -49,6 +49,8 @@ dejarlo — ver [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md).
 4. **Sprite coal mine** — ID correcto 2013; verificación en [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md).
 5. **Fuente UI** — `static/fonts/DejaVuSansMono.ttf` (no en `assets/` ignorado).
 6. **Estación tren** — multi-tesela `PlaceRailStationArea`, ventana selección, cruce X\|Y en intersecciones (save v3).
+7. **Vía Horz/Vert/X/Y** — `PlaceRailBits` solo en tesela del cursor (fantasma = colocación); uniones automáticas solo con autoraíl. Ver [VIAS_FERROVIARIAS_COLOCACION.md](VIAS_FERROVIARIAS_COLOCACION.md).
+8. **Señales** — pick en vecindario + offset por carril; se conservan al cruzar diagonales en la misma tesela.
 
 ---
 

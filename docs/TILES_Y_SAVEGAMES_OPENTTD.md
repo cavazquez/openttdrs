@@ -404,6 +404,10 @@ Tipos (`SignalType` en `signal_type.h`): `0` block, `1` entry, `2` exit, `3` com
 
 En doble vía Horz/Vert, **cada clic coloca una señal en un solo carril**; la pieza
 se elige con `fract_x` / `fract_y` (`GenericPlaceSignals` / `resolve_signal_track`).
+El cliente usa `world_pos_to_rail_signal_pick` para snap al riel vecino y
+`rail_signal_track_offset` al dibujar (paridad overlays 1007–1010).
+
+**Colocación de vía** (Horz/Vert vs autoraíl, sin robar tesela vecina): [VIAS_FERROVIARIAS_COLOCACION.md](VIAS_FERROVIARIAS_COLOCACION.md).
 
 **Guía completa** (comportamiento jugable, presignals, PBS, plan de fases en openttdrs):
 [SENALES_FERROVIARIAS.md](SENALES_FERROVIARIAS.md).

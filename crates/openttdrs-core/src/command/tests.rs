@@ -795,7 +795,7 @@ fn place_rail_parallel_lanes_merge_on_same_tile() {
     .unwrap();
     assert_eq!(s.map.get(c).unwrap().m5 & 0x3F, 0x30);
 
-    let h = TileCoord::new(4, 3);
+    let h = TileCoord::new(6, 6);
     apply_command(&mut s, &Command::PlaceRailBits(h, rail_horz_lane_bit(0, 0))).unwrap();
     apply_command(
         &mut s,
@@ -827,7 +827,7 @@ fn parallel_horz_line_keeps_lane_bits_after_neighbor_refresh() {
 }
 
 #[test]
-fn parallel_lane_clicks_merge_junction_on_single_rail_neighbor() {
+fn parallel_lane_clicks_place_vert_on_clicked_tile_only() {
     use crate::rail_lane::rail_vert_lane_bit;
 
     let mut s = GameState::new(16, 16);
@@ -838,15 +838,105 @@ fn parallel_lane_clicks_merge_junction_on_single_rail_neighbor() {
     )
     .unwrap();
     assert_eq!(
+        s.map.get(TileCoord::new(5, 5)).unwrap().m5 & 0x3F,
+        0x10,
+        "LEFT en la tesela del clic"
+    );
+    assert_eq!(
         s.map.get(TileCoord::new(5, 4)).unwrap().m5 & 0x3F,
-        0x11,
-        "LEFT debe fusionarse en la tesela con X, no quedar suelta al sur"
+        0x01,
+        "la X existente no debe ganar piezas extra"
     );
-    assert_ne!(
-        s.map.get_kind(TileCoord::new(5, 5)),
-        Some(TileKind::Rail),
-        "no debe crearse vía huérfana en la tesela del clic"
+}
+
+#[test]
+fn parallel_vert_beside_y_track_stays_on_clicked_tile() {
+    use crate::rail_lane::rail_vert_lane_bit;
+
+    let mut s = GameState::new(16, 16);
+    apply_command(&mut s, &Command::SetRailBits(TileCoord::new(5, 5), 0x02)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBits(TileCoord::new(6, 5), rail_vert_lane_bit(200, 100)),
+    )
+    .unwrap();
+    assert_eq!(
+        s.map.get(TileCoord::new(6, 5)).unwrap().m5 & 0x3F,
+        0x10,
+        "carril en la tesela del clic (este de la Y)"
     );
+    assert_eq!(
+        s.map.get(TileCoord::new(5, 5)).unwrap().m5 & 0x3F,
+        0x02,
+        "la Y no debe absorber el carril paralelo"
+    );
+}
+
+#[test]
+fn parallel_horz_branch_places_vert_only_on_clicked_tile() {
+    use crate::rail_lane::{rail_horz_lane_bit, rail_vert_lane_bit};
+
+    let mut s = GameState::new(16, 16);
+    for x in 4..=6 {
+        apply_command(
+            &mut s,
+            &Command::PlaceRailBits(TileCoord::new(x, 5), rail_horz_lane_bit(64, 64)),
+        )
+        .unwrap();
+    }
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBits(TileCoord::new(5, 6), rail_vert_lane_bit(200, 100)),
+    )
+    .unwrap();
+    assert_eq!(
+        s.map.get(TileCoord::new(5, 6)).unwrap().m5 & 0x3F,
+        0x10,
+        "LEFT solo en la tesela del clic"
+    );
+    assert_eq!(
+        s.map.get(TileCoord::new(5, 5)).unwrap().m5 & 0x3F,
+        0x04,
+        "la vía E-O existente no debe ganar piezas extra"
+    );
+}
+
+#[test]
+fn parallel_horz_extension_stays_on_clicked_tile() {
+    use crate::rail_lane::rail_horz_lane_bit;
+
+    let mut s = GameState::new(16, 16);
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBits(TileCoord::new(5, 5), rail_horz_lane_bit(64, 64)),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBits(TileCoord::new(6, 5), rail_horz_lane_bit(64, 64)),
+    )
+    .unwrap();
+    assert_eq!(s.map.get(TileCoord::new(5, 5)).unwrap().m5 & 0x3F, 0x04);
+    assert_eq!(s.map.get(TileCoord::new(6, 5)).unwrap().m5 & 0x3F, 0x04);
+}
+
+#[test]
+fn parallel_horz_second_lane_extends_without_merging_neighbor() {
+    use crate::rail_lane::rail_horz_lane_bit;
+
+    let mut s = GameState::new(16, 16);
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBits(TileCoord::new(5, 5), rail_horz_lane_bit(64, 64)),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBits(TileCoord::new(6, 5), rail_horz_lane_bit(200, 100)),
+    )
+    .unwrap();
+    assert_eq!(s.map.get(TileCoord::new(5, 5)).unwrap().m5 & 0x3F, 0x04);
+    assert_eq!(s.map.get(TileCoord::new(6, 5)).unwrap().m5 & 0x3F, 0x08);
 }
 
 fn set_w_only_slope(map: &mut crate::Map, tx: i32, ty: i32, base: u8) {
@@ -952,6 +1042,24 @@ fn place_rail_signal_toggle_removes_same_facing() {
     assert_eq!(
         s.economy.money,
         money + crate::rail_signals::SIGNAL_REMOVE_REFUND
+    );
+}
+
+#[test]
+fn place_rail_bits_preserves_signal_when_merging_diagonals_to_cross() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRailBits(c, 0x02)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
+    let present_before = crate::rail_signals::rail_signal_present_mask(s.map.get(c).unwrap().m3);
+    assert_ne!(present_before, 0);
+    apply_command(&mut s, &Command::PlaceRailBits(c, 0x01)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert_eq!(tile.m5 & 0x3F, 0x03, "Y + X = cruce");
+    assert!(crate::rail_signals::rail_tile_is_signals(tile.m5));
+    assert_eq!(
+        crate::rail_signals::rail_signal_present_mask(tile.m3),
+        present_before
     );
 }
 

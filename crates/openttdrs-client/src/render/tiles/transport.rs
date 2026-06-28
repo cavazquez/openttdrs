@@ -6,10 +6,10 @@ use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    collect_rail_sprites, collect_signal_sprite_ids, is_road_level_crossing,
-    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_tile_is_signals,
-    rail_track_base_color, rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
-    road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
+    collect_rail_sprites, collect_signal_sprite_draws, is_road_level_crossing,
+    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_signal_track_offset,
+    rail_tile_is_signals, rail_track_base_color, rail_trackbits_for_render, road_bits_for_render,
+    road_flat_sprite_color, road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
     road_tile_tram_visual_active, roadside_is_paved, tram_flat_sprite_index,
 };
 
@@ -219,23 +219,19 @@ pub(crate) fn spawn_rail_tile(
         ));
     }
     if let Some(t) = ctx.tile.filter(|t| rail_tile_is_signals(t.m5)) {
-        let sig_ids = collect_signal_sprite_ids(t.m2, t.m3, t.m3hi, t.m5);
-        for (si, sid) in sig_ids.iter().copied().enumerate() {
-            let Some(img) = assets.rail.get(&sid) else {
+        let sig_draws = collect_signal_sprite_draws(t.m2, t.m3, t.m3hi, t.m5);
+        for (si, draw) in sig_draws.iter().copied().enumerate() {
+            let Some(img) = assets.rail.get(&draw.sprite_id) else {
                 continue;
             };
+            let offset = rail_signal_track_offset(draw.track);
             let z = 0.032 + si as f32 * 0.0015;
+            let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, z, rail_half_h);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 img.sprite(),
-                Transform::from_translation(tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    z,
-                    rail_half_h,
-                )),
+                Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
             ));
         }
     }

@@ -34,8 +34,9 @@ pub use cargo::{CargoStock, CargoType};
 pub use command::{
     Command, CommandError, LevelMode, ROAD_PLACE_FORCE_AXIS, apply_command, command_error_message,
     command_would_fail, finalize_road_drag_line, industry_template, infer_road_drag_axis,
-    preview_road_bits_at, rail_station_footprint, rail_trackbits_from_neighbors,
-    road_bits_for_autoroute, road_drag_line_tiles, road_locked_tool_axis,
+    preview_road_bits_at, rail_bits_placement_target, rail_station_footprint,
+    rail_trackbits_from_neighbors, road_bits_for_autoroute, road_drag_line_tiles,
+    road_locked_tool_axis,
 };
 pub use economy::{
     CargoPaymentSpec, TICKS_PER_TRANSIT_DAY, TICKS_PER_YEAR, buy_land_cost, cargo_time_factor,

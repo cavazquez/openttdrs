@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileCoord, TileKind};
+use openttdrs_core::{Map, TileCoord, TileKind, rail_signals::resolve_signal_track};
 
 use super::{HEIGHT_PX, ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, tile_slope_and_min_z};
 
@@ -182,6 +182,58 @@ pub fn world_pos_to_tile_fract(world_pos: Vec2, map: &Map, tx: i32, ty: i32) -> 
     let fx = ((dx + 8.0).clamp(0.0, 16.0) / 16.0 * 255.0).round() as u8;
     let fy = ((dy + 8.0).clamp(0.0, 16.0) / 16.0 * 255.0).round() as u8;
     (fx, fy)
+}
+
+/// Tesela ferroviaria bajo el cursor para colocar señales (`GenericPlaceSignals`).
+///
+/// Busca vía en un vecindario 5×5 alrededor del pick geométrico y elige la tesela
+/// con riel válido más cercana al cursor (métrica del rombo). El `fract` se calcula
+/// respecto al centro de esa tesela, no de la hierba adyacente.
+#[must_use]
+pub fn world_pos_to_rail_signal_pick(world_pos: Vec2, map: &Map) -> Option<(i32, i32, u8, u8)> {
+    let seed = world_pos_to_tile_coord(world_pos, map)?;
+    let (mw, mh) = map.dimensions();
+    let mw_i = mw as i32;
+    let mh_i = mh as i32;
+    let in_bounds = |tx: i32, ty: i32| tx >= 0 && ty >= 0 && tx < mw_i && ty < mh_i;
+
+    let mut best: Option<((i32, i32), f32, (u8, u8))> = None;
+
+    for dty in -2..=2 {
+        for dtx in -2..=2 {
+            let tx = seed.0 + dtx;
+            let ty = seed.1 + dty;
+            if !in_bounds(tx, ty) {
+                continue;
+            }
+            let coord = TileCoord::new(tx, ty);
+            let Some(tile) = map.get(coord) else {
+                continue;
+            };
+            if tile.kind != TileKind::Rail {
+                continue;
+            }
+            let tb = tile.m5 & 0x3F;
+            if tb == 0 {
+                continue;
+            }
+            let fract = world_pos_to_tile_fract(world_pos, map, tx, ty);
+            if resolve_signal_track(tb, fract.0, fract.1).is_none() {
+                continue;
+            }
+            let metric = pick_metric_raw(map, tx, ty, world_pos);
+            if metric > PICK_METRIC_RELAXED {
+                continue;
+            }
+            match &best {
+                None => best = Some(((tx, ty), metric, fract)),
+                Some((_, m, _)) if metric < *m => best = Some(((tx, ty), metric, fract)),
+                _ => {}
+            }
+        }
+    }
+
+    best.map(|((tx, ty), _, (fx, fy))| (tx, ty, fx, fy))
 }
 
 /// Vec3 para teselas de suelo con soporte de altura isométrica.

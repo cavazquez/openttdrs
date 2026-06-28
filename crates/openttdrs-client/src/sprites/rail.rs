@@ -310,10 +310,9 @@ pub fn rail_signal_state_mask(m3hi: u8) -> u8 {
     (m3hi >> 4) & 0x0F
 }
 
-/// IDs de sprites (OpenGFX) para cada señal visible en la tesela, en orden de pintado.
-/// Replica la selección de `DrawSignals` + fórmula de `DrawSingleSignal` para el bloque clásico.
+/// Sprites de señal visibles en la tesela, con carril para el offset de dibujo.
 #[must_use]
-pub fn collect_signal_sprite_ids(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<u32> {
+pub fn collect_signal_sprite_draws(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<SignalSpriteDraw> {
     if !rail_tile_is_signals(m5) {
         return Vec::new();
     }
@@ -332,7 +331,10 @@ pub fn collect_signal_sprite_ids(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<u32> {
         let green = (states >> sig_bit) & 1 != 0;
         let ty = signal_type_from_m2(m2, track);
         let var = signal_variant_from_m2(m2, track);
-        out.push(signal_sprite_id(ty, var, image, green));
+        out.push(SignalSpriteDraw {
+            sprite_id: signal_sprite_id(ty, var, image, green),
+            track,
+        });
     };
 
     if rails & TB_Y == 0 {
@@ -362,6 +364,16 @@ pub fn collect_signal_sprite_ids(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<u32> {
         push_if(2, 3, OTTD_TRACK_Y); // NW
     }
     out
+}
+
+/// IDs de sprites (OpenGFX) para cada señal visible en la tesela, en orden de pintado.
+/// Replica la selección de `DrawSignals` + fórmula de `DrawSingleSignal` para el bloque clásico.
+#[must_use]
+pub fn collect_signal_sprite_ids(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<u32> {
+    collect_signal_sprite_draws(m2, m3, m3hi, m5)
+        .into_iter()
+        .map(|d| d.sprite_id)
+        .collect()
 }
 
 /// Construye un byte `m2` que produce `sig_type` / `variant` para el `track` dado (`DrawSignals`).
@@ -528,6 +540,25 @@ pub fn rail_ghost_overlay_offset(sprite_id: u32) -> Vec2 {
     }
 }
 
+/// Desplazamiento de la señal respecto al centro del rombo según el carril (`DrawSingleSignal`).
+#[must_use]
+pub fn rail_signal_track_offset(ottd_track: u8) -> Vec2 {
+    match ottd_track {
+        OTTD_TRACK_UPPER => rail_ghost_overlay_offset(1007),
+        OTTD_TRACK_LOWER => rail_ghost_overlay_offset(1008),
+        OTTD_TRACK_RIGHT => rail_ghost_overlay_offset(1009),
+        OTTD_TRACK_LEFT => rail_ghost_overlay_offset(1010),
+        _ => Vec2::ZERO,
+    }
+}
+
+/// Sprite de señal + carril para posicionamiento en pantalla.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SignalSpriteDraw {
+    pub sprite_id: u32,
+    pub track: u8,
+}
+
 /// Sprites para el fantasma: mismos IDs que la vía colocada (`collect_rail_sprites`).
 pub fn collect_rail_ghost_sprites(tb: u8, tileh: u8, out: &mut Vec<u32>) {
     collect_rail_sprites(tb, tileh, false, out);
@@ -601,6 +632,18 @@ mod tests {
         assert_ne!(
             rail_ghost_overlay_offset(1007).y,
             rail_ghost_overlay_offset(1008).y
+        );
+    }
+
+    #[test]
+    fn rail_signal_track_offset_matches_parallel_lane_overlays() {
+        assert_eq!(
+            rail_signal_track_offset(OTTD_TRACK_UPPER),
+            rail_ghost_overlay_offset(1007)
+        );
+        assert_eq!(
+            rail_signal_track_offset(OTTD_TRACK_LEFT),
+            rail_ghost_overlay_offset(1010)
         );
     }
 

@@ -10,7 +10,7 @@ use openttdrs_core::{
 
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z};
 use crate::render::TileAtlas;
-use crate::sprites::{RAIL_TILE_SIGNALS, collect_signal_sprite_ids};
+use crate::sprites::{RAIL_TILE_SIGNALS, collect_signal_sprite_draws, rail_signal_track_offset};
 
 use super::BuildGhostPreview;
 
@@ -46,26 +46,22 @@ pub(crate) fn spawn_rail_signal_preview(
         SLOPE_HALF_H[tileh as usize]
     };
     let m5 = track.track_bit() | (RAIL_TILE_SIGNALS << 6);
-    let sig_ids = collect_signal_sprite_ids(placement.m2, placement.m3, placement.m3hi, m5);
+    let sig_draws = collect_signal_sprite_draws(placement.m2, placement.m3, placement.m3hi, m5);
+    let track_offset = rail_signal_track_offset(track as u8);
     let tint = if valid {
         Color::srgba(1.0, 1.0, 1.0, 0.75)
     } else {
         Color::srgba(1.0, 0.35, 0.3, 0.75)
     };
-    for (i, sid) in sig_ids.iter().copied().enumerate() {
-        let Some(img) = atlas.try_get(&format!("rail_{sid}.png")) else {
+    for (i, draw) in sig_draws.iter().copied().enumerate() {
+        let Some(img) = atlas.try_get(&format!("rail_{}.png", draw.sprite_id)) else {
             continue;
         };
+        let base = tile_pos_half(coord.x, coord.y, base_z, 0.04 + i as f32 * 0.001, half_h);
         commands.spawn((
             BuildGhostPreview,
             img.sprite_colored(tint),
-            Transform::from_translation(tile_pos_half(
-                coord.x,
-                coord.y,
-                base_z,
-                0.04 + i as f32 * 0.001,
-                half_h,
-            )),
+            Transform::from_translation(base + Vec3::new(track_offset.x, track_offset.y, 0.0)),
         ));
     }
 }

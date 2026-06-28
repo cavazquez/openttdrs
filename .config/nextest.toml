@@ -1,3 +1,8 @@
 [profile.default]
 retries = 0
 test-threads = "num-cpus"
+
+# Paridad con CI (.github/workflows/ci.yml, scripts/check.sh ci).
+[profile.ci]
+retries = 0
+test-threads = "num-cpus"

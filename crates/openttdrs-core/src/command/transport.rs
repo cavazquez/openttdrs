@@ -5,7 +5,7 @@ use crate::map::{
 };
 use crate::rail_signals::{
     RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST,
-    rail_tile_is_signals,
+    SIGNAL_REMOVE_REFUND, rail_tile_is_signals,
 };
 use crate::station::is_rail_waypoint_tile;
 
@@ -1505,18 +1505,24 @@ pub(crate) fn check_place_rail_signal_oriented(
     map: &Map,
     c: TileCoord,
     orientation: u8,
+    fract_x: u8,
+    fract_y: u8,
 ) -> Result<(), CommandError> {
     let tb = map
         .get(c)
         .filter(|t| t.kind == TileKind::Rail)
         .map_or(0, |t| t.m5 & 0x3F);
-    let face = crate::rail_signals::signal_facing_for_orientation(tb, orientation);
-    check_place_rail_signal(map, c, face)
+    let Some(track) = crate::rail_signals::resolve_signal_track(tb, fract_x, fract_y) else {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    };
+    let face = crate::rail_signals::signal_facing_for_orientation(track, orientation);
+    check_place_rail_signal(map, c, track, face)
 }
 
 pub(crate) fn check_place_rail_signal(
     map: &Map,
     c: TileCoord,
+    track: crate::rail_signals::SignalTrack,
     face: u8,
 ) -> Result<(), CommandError> {
     check_in_bounds(map, c)?;
@@ -1527,13 +1533,17 @@ pub(crate) fn check_place_rail_signal(
         return Err(CommandError::CannotPlaceSignalOnTrack);
     }
     let tb = tile.m5 & 0x3F;
-    let Some(placement) = crate::rail_signals::signal_placement_for_facing(tb, face) else {
+    if tb & track.track_bit() == 0 || crate::rail_signals::tracks_overlap(tb) {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
+    let Some(placement) = crate::rail_signals::signal_placement_for_track(track, face) else {
         return Err(CommandError::CannotPlaceSignalOnTrack);
     };
     if rail_tile_is_signals(tile.m5) {
         let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
         if present & (1 << placement.sig_bit) != 0 {
-            return Err(CommandError::SignalAlreadyPresent);
+            // Clic repetido en la misma dirección: quitar señal (OpenTTD).
+            return Ok(());
         }
     }
     Ok(())
@@ -1604,13 +1614,23 @@ pub(super) fn place_rail_signal(
     state: &mut GameState,
     c: TileCoord,
     orientation: u8,
+    fract_x: u8,
+    fract_y: u8,
 ) -> Result<(), CommandError> {
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let tb = tile.m5 & 0x3F;
-    let face = crate::rail_signals::signal_facing_for_orientation(tb, orientation);
-    check_place_rail_signal(&state.map, c, face)?;
-    let placement = crate::rail_signals::signal_placement_for_facing(tb, face)
+    let track = crate::rail_signals::resolve_signal_track(tb, fract_x, fract_y)
         .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
+    let face = crate::rail_signals::signal_facing_for_orientation(track, orientation);
+    check_place_rail_signal(&state.map, c, track, face)?;
+    let placement = crate::rail_signals::signal_placement_for_track(track, face)
+        .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
+    if rail_tile_is_signals(tile.m5) {
+        let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
+        if present & (1 << placement.sig_bit) != 0 {
+            return remove_rail_signal_bit(state, c, placement.sig_bit);
+        }
+    }
     let mut out = tile;
     if rail_tile_is_signals(out.m5) {
         let present = crate::rail_signals::rail_signal_present_mask(out.m3);
@@ -1628,6 +1648,39 @@ pub(super) fn place_rail_signal(
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
     state.economy.money -= SIGNAL_BUILD_COST;
+    Ok(())
+}
+
+fn remove_rail_signal_bit(
+    state: &mut GameState,
+    c: TileCoord,
+    sig_bit: u8,
+) -> Result<(), CommandError> {
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    if !rail_tile_is_signals(tile.m5) {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
+    let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
+    if present & (1 << sig_bit) == 0 {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
+    let mut out = tile;
+    let new_present = present & !(1 << sig_bit);
+    if new_present == 0 {
+        let tb = out.m5 & 0x3F;
+        out.m5 = tb | (RAIL_TILE_NORMAL << 6);
+        out.m2 = 0;
+        out.m3 &= 0x0F;
+        out.m3hi &= 0x0F;
+    } else {
+        out.m3 = (out.m3 & 0x0F) | (new_present << 4);
+        out.m3hi = (out.m3hi & 0x0F) | (new_present << 4);
+    }
+    state
+        .map
+        .set_tile(c, out)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    state.economy.money += SIGNAL_REMOVE_REFUND;
     Ok(())
 }
 

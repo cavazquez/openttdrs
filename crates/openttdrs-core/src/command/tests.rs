@@ -886,12 +886,28 @@ fn place_rail_signal_on_straight_track() {
     let c = TileCoord::new(2, 2);
     apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
     let money = s.economy.money;
-    apply_command(&mut s, &Command::PlaceRailSignal(c, 0)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
     let tile = s.map.get(c).unwrap();
     assert!(crate::rail_signals::rail_tile_is_signals(tile.m5));
     assert_eq!(
         s.economy.money,
         money - crate::rail_signals::SIGNAL_BUILD_COST
+    );
+}
+
+#[test]
+fn place_rail_signal_toggle_removes_same_facing() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
+    let money = s.economy.money;
+    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert!(!crate::rail_signals::rail_tile_is_signals(tile.m5));
+    assert_eq!(
+        s.economy.money,
+        money + crate::rail_signals::SIGNAL_REMOVE_REFUND
     );
 }
 

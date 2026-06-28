@@ -333,6 +333,7 @@ mod tests {
                 },
                 None,
                 None,
+                None,
             ),
             Some(Command::PlaceStationDir(_, 3))
         ));
@@ -346,6 +347,7 @@ mod tests {
                 },
                 None,
                 None,
+                None,
             ),
             Some(Command::PlaceRoadDepotDir(_, 2))
         ));
@@ -354,6 +356,7 @@ mod tests {
                 BuildMenuAction::BuildCoalMine,
                 TileCoord::new(1, 2),
                 &StationBuildState::default(),
+                None,
                 None,
                 None,
             ),
@@ -367,6 +370,7 @@ mod tests {
                 BuildMenuAction::RoadTunnel,
                 TileCoord::new(1, 2),
                 &StationBuildState::default(),
+                None,
                 None,
                 None,
             )

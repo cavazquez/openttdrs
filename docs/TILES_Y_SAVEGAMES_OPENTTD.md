@@ -383,6 +383,31 @@ Para tipos `Normal` y `Signals`, los **6 bits** bajos de m5 son el bitmask de v�
 
 Para tipo `Depot`, la dirección está en bits 0–1 (igual que depósito de carretera).
 
+### 7.1 MP_RAILWAY — teselas con señales
+
+Cuando `RailTileType = RAIL_TILE_SIGNALS` (`m5` bits 6–7 = `01`), la tesela puede
+albergar hasta **cuatro señales** (bits 0–3), cada una asociada a direcciones concretas
+según el `Track` presente en `m5 & 0x3F`.
+
+| Campo en `.ottdmap` | Equivalente OpenTTD | Uso en señales |
+|--------------------|---------------------|----------------|
+| `m3` bits 7–4 | `m3()` bits 7–4 | Máscara **presente** (bit = señal existe) |
+| `m3hi` bits 7–4 | `m4()` bits 7–4 | Máscara **estado** (bit 1 = verde) |
+| `m2` bits 2–0, 6–4 | `m2()` | **Tipo** (`SignalType` 0–5) por par de señales |
+| `m2` bits 3, 7 | `m2()` | **Variante** eléctrico (0) / semáforo (1) |
+| `m2` bits 8–11 | `m2()` | Reserva **PBS** (path signals) |
+| `m5` bit 4 | `m5()` bit 4 | Flag reserva PBS en tesela |
+
+Tipos (`SignalType` en `signal_type.h`): `0` block, `1` entry, `2` exit, `3` combo,
+`4` path, `5` path one-way. Valores en `m2` como enteros 3-bit (ver tabla en
+[landscape.html](https://github.com/OpenTTD/OpenTTD/blob/master/docs/landscape.html)).
+
+En doble vía Horz/Vert, **cada clic coloca una señal en un solo carril**; la pieza
+se elige con `fract_x` / `fract_y` (`GenericPlaceSignals` / `resolve_signal_track`).
+
+**Guía completa** (comportamiento jugable, presignals, PBS, plan de fases en openttdrs):
+[SENALES_FERROVIARIAS.md](SENALES_FERROVIARIAS.md).
+
 ---
 
 ## 8. MP_INDUSTRY: gfx de 9 bits

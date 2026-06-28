@@ -3,42 +3,40 @@
 use bevy::prelude::*;
 use openttdrs_core::{
     Map, TileCoord, TileKind,
-    rail_signals::{signal_facing_for_orientation, signal_placement_for_facing},
+    rail_signals::{
+        resolve_signal_track, signal_facing_for_orientation, signal_placement_for_track,
+    },
 };
 
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z};
 use crate::render::TileAtlas;
-use crate::sprites::{RAIL_TB_X, RAIL_TB_Y, RAIL_TILE_SIGNALS, collect_signal_sprite_ids};
+use crate::sprites::{RAIL_TILE_SIGNALS, collect_signal_sprite_ids};
 
 use super::BuildGhostPreview;
 
-fn straight_trackbits(map: &Map, coord: TileCoord) -> Option<u8> {
-    let tile = map.get(coord)?;
-    if tile.kind != TileKind::Rail {
-        return None;
-    }
-    match tile.m5 & 0x3F {
-        RAIL_TB_X | RAIL_TB_Y => Some(tile.m5 & 0x3F),
-        _ => None,
-    }
-}
-
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_rail_signal_preview(
     commands: &mut Commands,
     atlas: Option<&TileAtlas>,
     map: &Map,
     coord: TileCoord,
     orientation: u8,
+    fract_x: u8,
+    fract_y: u8,
     valid: bool,
 ) {
     let Some(atlas) = atlas else {
         return;
     };
-    let Some(tb) = straight_trackbits(map, coord) else {
+    let Some(tile) = map.get(coord).filter(|t| t.kind == TileKind::Rail) else {
         return;
     };
-    let face = signal_facing_for_orientation(tb, orientation);
-    let Some(placement) = signal_placement_for_facing(tb, face) else {
+    let tb = tile.m5 & 0x3F;
+    let Some(track) = resolve_signal_track(tb, fract_x, fract_y) else {
+        return;
+    };
+    let face = signal_facing_for_orientation(track, orientation);
+    let Some(placement) = signal_placement_for_track(track, face) else {
         return;
     };
     let (tileh, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
@@ -47,7 +45,7 @@ pub(crate) fn spawn_rail_signal_preview(
     } else {
         SLOPE_HALF_H[tileh as usize]
     };
-    let m5 = tb | (RAIL_TILE_SIGNALS << 6);
+    let m5 = track.track_bit() | (RAIL_TILE_SIGNALS << 6);
     let sig_ids = collect_signal_sprite_ids(placement.m2, placement.m3, placement.m3hi, m5);
     let tint = if valid {
         Color::srgba(1.0, 1.0, 1.0, 0.75)

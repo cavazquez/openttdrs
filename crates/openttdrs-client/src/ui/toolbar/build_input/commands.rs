@@ -9,6 +9,7 @@ pub(crate) fn command_for_action(
     station_state: &StationBuildState,
     rail_lane_bits: Option<u8>,
     map: Option<&Map>,
+    tile_fract: Option<(u8, u8)>,
 ) -> Option<Command> {
     match action {
         BuildMenuAction::Road => {
@@ -45,7 +46,13 @@ pub(crate) fn command_for_action(
         | BuildMenuAction::RailTunnel => None,
         BuildMenuAction::RailRemove => Some(Command::RemoveRail(pos)),
         BuildMenuAction::RailSignals => {
-            Some(Command::PlaceRailSignal(pos, station_state.orientation))
+            let (fx, fy) = tile_fract.unwrap_or((128, 128));
+            Some(Command::PlaceRailSignal(
+                pos,
+                station_state.orientation,
+                fx,
+                fy,
+            ))
         }
         BuildMenuAction::RailConvert | BuildMenuAction::Orders => None,
         BuildMenuAction::RailWaypoint => Some(Command::PlaceRailWaypoint(pos)),

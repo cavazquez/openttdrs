@@ -34,13 +34,26 @@ pub(crate) fn rotate_station_with_right_click(
             station_state.rail_axis_y = !station_state.rail_axis_y;
         }
         Some(BuildMenuAction::RailSignals) => {
-            if let (Some(sim), Some(coord)) = (sim.as_ref(), hovered.and_then(|h| h.pos)) {
-                if let Some(tile) = sim.state.map.get(coord) {
-                    let tb = tile.m5 & 0x3F;
-                    station_state.orientation = openttdrs_core::rail_signals::cycle_signal_facing(
-                        tb,
-                        station_state.orientation,
-                    );
+            if let (Some(sim), Some(hover)) = (sim.as_ref(), hovered.as_ref()) {
+                if let Some(coord) = hover.pos {
+                    if let Some(tile) = sim.state.map.get(coord) {
+                        let tb = tile.m5 & 0x3F;
+                        if let Some(track) = openttdrs_core::rail_signals::resolve_signal_track(
+                            tb,
+                            hover.fract_x,
+                            hover.fract_y,
+                        ) {
+                            station_state.orientation =
+                                openttdrs_core::rail_signals::cycle_signal_facing(
+                                    track,
+                                    station_state.orientation,
+                                );
+                        } else {
+                            station_state.orientation = (station_state.orientation + 1) % 4;
+                        }
+                    } else {
+                        station_state.orientation = (station_state.orientation + 1) % 4;
+                    }
                 } else {
                     station_state.orientation = (station_state.orientation + 1) % 4;
                 }

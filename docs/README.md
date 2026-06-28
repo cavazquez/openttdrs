@@ -31,6 +31,7 @@
 | [FLUJO_MAPA_Y_CLIENTE.md](FLUJO_MAPA_Y_CLIENTE.md) | Save → `.ottdmap` → cliente → JSON |
 | [OTTDMAP_FORMAT.md](OTTDMAP_FORMAT.md) | Especificación binaria `.ottdmap` |
 | [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) | MAPT, `m5`, semántica tiles OpenTTD |
+| [SENALES_FERROVIARIAS.md](SENALES_FERROVIARIAS.md) | Tipos de señal OpenTTD, codificación mapa, plan de implementación |
 | [SNAPSHOT_ORACLE_WORKFLOW.md](SNAPSHOT_ORACLE_WORKFLOW.md) | Comparación manual con fork OpenTTD oráculo |
 
 ---

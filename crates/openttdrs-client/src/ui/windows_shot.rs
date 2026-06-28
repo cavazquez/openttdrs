@@ -114,6 +114,7 @@ fn map_shot_driver(
                 &station_state,
                 None,
                 Some(&sim.state.map),
+                None,
             ) else {
                 continue;
             };

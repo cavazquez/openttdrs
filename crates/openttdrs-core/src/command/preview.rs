@@ -86,8 +86,8 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             .or_else(|| check_rail_trackbits_with_autoslope(map, *c, bits & 0x3F, tick).err()),
         Command::PlaceRailWaypoint(c) => check_place_rail_waypoint(map, *c, stations).err(),
         Command::RemoveRailBits(c, _) | Command::RemoveRail(c) => check_remove_rail(map, *c).err(),
-        Command::PlaceRailSignal(c, orientation) => {
-            check_place_rail_signal_oriented(map, *c, *orientation).err()
+        Command::PlaceRailSignal(c, orientation, fract_x, fract_y) => {
+            check_place_rail_signal_oriented(map, *c, *orientation, *fract_x, *fract_y).err()
         }
         Command::PlaceRoadDepot(c) => preview_depot_any(map, *c, check_road_depot_placement),
         Command::PlaceRoadDepotDir(c, dir) => check_road_depot_placement(map, *c, *dir).err(),

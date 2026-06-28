@@ -78,7 +78,9 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::PlaceRailWaypoint(c) => transport::place_rail_waypoint(state, *c),
         Command::RemoveRailBits(c, bits) => transport::remove_rail_bits(state, *c, *bits),
         Command::RemoveRail(c) => transport::remove_rail(state, *c),
-        Command::PlaceRailSignal(c, face) => transport::place_rail_signal(state, *c, *face),
+        Command::PlaceRailSignal(c, face, fx, fy) => {
+            transport::place_rail_signal(state, *c, *face, *fx, *fy)
+        }
         Command::PlaceRoadDepot(c) => transport::place_road_depot_dir(state, *c, 0),
         Command::PlaceRoadDepotDir(c, dir) => transport::place_road_depot_dir(state, *c, *dir),
         Command::PlaceRailDepot(c) => transport::place_rail_depot_dir(state, *c, 0),

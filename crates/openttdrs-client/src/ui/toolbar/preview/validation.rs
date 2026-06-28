@@ -32,6 +32,7 @@ pub(crate) fn preview_build_command_valid(
     station_state: &StationBuildState,
     preview_tiles: &[(i32, i32)],
     rail_lane_bits: Option<u8>,
+    tile_fract: Option<(u8, u8)>,
 ) -> bool {
     if action_is_tunnel(action) {
         let Some(&(sx, sy)) = preview_tiles.first() else {
@@ -75,6 +76,7 @@ pub(crate) fn preview_build_command_valid(
         station_state,
         rail_lane_bits,
         Some(&state.map),
+        tile_fract,
     ) else {
         return true;
     };

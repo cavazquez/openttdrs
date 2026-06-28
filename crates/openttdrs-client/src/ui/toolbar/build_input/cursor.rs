@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::TileCoord;
 
-use crate::iso::world_pos_to_tile_coord;
+use crate::iso::{world_pos_to_tile_coord, world_pos_to_tile_fract};
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 use crate::ui::hud::HoveredTileCoord;
@@ -28,6 +28,8 @@ pub(crate) fn update_cursor_tile(
     >,
 ) {
     hovered.pos = None;
+    hovered.fract_x = 128;
+    hovered.fract_y = 128;
     if save_window.is_some_and(|w| w.open) {
         return;
     }
@@ -52,4 +54,9 @@ pub(crate) fn update_cursor_tile(
     };
     hovered.pos =
         world_pos_to_tile_coord(world_pos, &sim.state.map).map(|(tx, ty)| TileCoord::new(tx, ty));
+    if let Some(pos) = hovered.pos {
+        let (fx, fy) = world_pos_to_tile_fract(world_pos, &sim.state.map, pos.x, pos.y);
+        hovered.fract_x = fx;
+        hovered.fract_y = fy;
+    }
 }

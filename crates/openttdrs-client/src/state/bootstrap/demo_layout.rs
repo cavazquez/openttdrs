@@ -112,6 +112,10 @@ pub(crate) fn place_clean_demo_transport(state: &mut GameState) {
         );
         let _ = apply_command(state, &Command::PlaceRail(TileCoord::new(x, DEMO_RAIL_Y)));
     }
+    let _ = apply_command(
+        state,
+        &Command::PlaceRailSignal(TileCoord::new(8, DEMO_RAIL_Y), 0, 128, 128),
+    );
     place_demo_road_vehicles(state);
     place_demo_rail_vehicle(state);
 }

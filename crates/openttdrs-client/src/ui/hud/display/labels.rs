@@ -48,6 +48,7 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
     match action {
         BuildMenuAction::RoadDepot => Some("comprar vehículo; no carga cargo"),
         BuildMenuAction::RailDepot => Some("comprar tren"),
+        BuildMenuAction::RailSignals => Some("clic quita si ya hay; RMB: dirección"),
         BuildMenuAction::Station | BuildMenuAction::BusStop => {
             Some("hierba junto a vía; carga/descarga")
         }

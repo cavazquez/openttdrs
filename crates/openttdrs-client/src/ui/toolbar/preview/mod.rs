@@ -195,6 +195,7 @@ pub(crate) fn update_build_ghost_preview(
                 &station_state,
                 &[(tx, ty)],
                 preview_rail_lane,
+                Some(tile_fract),
             );
             spawn_rail_waypoint_preview(
                 &mut commands,
@@ -217,6 +218,7 @@ pub(crate) fn update_build_ghost_preview(
                 &station_state,
                 &[(tx, ty)],
                 preview_rail_lane,
+                Some(tile_fract),
             );
             spawn_rail_signal_preview(
                 &mut commands,
@@ -224,6 +226,8 @@ pub(crate) fn update_build_ghost_preview(
                 &sim.state.map,
                 coord,
                 station_state.orientation,
+                tile_fract.0,
+                tile_fract.1,
                 valid,
             );
         }
@@ -242,6 +246,7 @@ pub(crate) fn update_build_ghost_preview(
             &station_state,
             &preview_tiles,
             preview_rail_lane,
+            Some(tile_fract),
         );
         let tint = if valid_target {
             Color::srgba(1.0, 1.0, 1.0, 0.55)
@@ -590,6 +595,7 @@ mod tests {
             &station,
             &[(0, 0)],
             None,
+            None,
         ));
         assert!(!preview_build_command_valid(
             &sim.state,
@@ -598,6 +604,7 @@ mod tests {
             &station,
             &[(4, 4)],
             None,
+            None,
         ));
         assert!(preview_build_command_valid(
             &sim.state,
@@ -605,6 +612,7 @@ mod tests {
             c(4, 4),
             &station,
             &[(4, 4)],
+            None,
             None,
         ));
 
@@ -626,6 +634,7 @@ mod tests {
             &station,
             &[(2, 2)],
             None,
+            None,
         ));
         assert!(!preview_build_command_valid(
             &sim.state,
@@ -633,6 +642,7 @@ mod tests {
             c(0, 0),
             &station,
             &[(0, 0)],
+            None,
             None,
         ));
         assert_eq!(

@@ -372,6 +372,7 @@ pub(crate) fn handle_tile_click(
         &station_state,
         rail_lane_bit,
         Some(&sim.state.map),
+        Some(tile_fract),
     ) {
         if let Err(e) = apply_command(&mut sim.state, &cmd) {
             push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());

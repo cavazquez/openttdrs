@@ -93,9 +93,10 @@ pub use pathfinder::{
 };
 pub use rail_lane::{rail_horz_lane_bit, rail_vert_lane_bit};
 pub use rail_signals::{
-    RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST,
-    cycle_signal_facing, rail_tile_is_signals, signal_facing_for_orientation,
-    signal_placement_for_facing, valid_signal_facings,
+    RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST, SignalTrack,
+    cycle_signal_facing, rail_tile_is_signals, resolve_signal_track, signal_facing_for_orientation,
+    signal_placement_for_facing, signal_placement_for_track, tracks_overlap,
+    valid_signal_facings_track,
 };
 pub use road_movement::{
     VehiclePose, extrapolate_vehicle_pose, road_turn_entry_exit, straight_subtile,

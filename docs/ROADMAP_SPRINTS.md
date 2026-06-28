@@ -101,6 +101,9 @@ Objetivo: cerrar el **vertical slice en solitario** sin abrir multijugador, NewG
 
 **Fuera de alcance S5:** presignals, path signals, PBS, YAPF.
 
+Referencia detallada (tipos oficiales, codificación `m2`/`m3`, fases A–E):
+[SENALES_FERROVIARIAS.md](SENALES_FERROVIARIAS.md).
+
 ---
 
 ## Sprint 6 — Import `.sav` jugable + órdenes básicas

@@ -39,6 +39,8 @@ impl Default for SimHudControls {
 #[derive(Resource, Default)]
 pub(crate) struct HoveredTileCoord {
     pub(crate) pos: Option<openttdrs_core::TileCoord>,
+    pub(crate) fract_x: u8,
+    pub(crate) fract_y: u8,
 }
 
 /// Informacion del tile actualmente seleccionado (click izquierdo).

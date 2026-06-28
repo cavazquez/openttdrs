@@ -1,0 +1,301 @@
+use bevy::prelude::*;
+use openttdrs_core::Climate;
+
+use crate::state::bootstrap::{
+    MapSizePreset, PopulationDensity, START_YEARS, STARTING_MONEY_OPTIONS,
+};
+use crate::state::new_game::NewGameSettingsResource;
+use crate::ui::font::UiFontRole;
+
+use super::labels::{dev_mode, option_section_label, panel_hints, panel_title, summary_text};
+use super::widgets::{
+    climate_button, density_button, map_size_button, primary_button, secondary_button,
+    seed_adjust_button, start_year_button, starting_money_button, toggle_button,
+};
+use super::{
+    MainMenuBackButton, MainMenuDemoButton, MainMenuDensityTarget, MainMenuHintsText,
+    MainMenuLoadButton, MainMenuNewGameButton, MainMenuPanel, MainMenuQuitButton,
+    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuSeedDecButton, MainMenuSeedIncButton,
+    MainMenuStartButton, MainMenuSubPanel, MainMenuSummaryText, MainMenuTitleText, MainMenuToggle,
+    MainMenuUi,
+};
+
+pub(crate) fn setup_main_menu(mut commands: Commands) {
+    commands.insert_resource(MainMenuPanel::default());
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.04, 0.06, 0.09, 0.42)),
+            GlobalZIndex(3000),
+            MainMenuUi,
+        ))
+        .with_children(|p| {
+            p.spawn((
+                Node {
+                    width: Val::Px(520.0),
+                    max_height: Val::Percent(90.0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::FlexStart,
+                    align_items: AlignItems::Center,
+                    padding: UiRect::new(
+                        Val::Px(18.0),
+                        Val::Px(18.0),
+                        Val::Px(18.0),
+                        Val::Px(14.0),
+                    ),
+                    border: UiRect::all(Val::Px(3.0)),
+                    row_gap: Val::Px(10.0),
+                    overflow: Overflow::clip(),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.18, 0.17, 0.12, 0.96)),
+                BorderColor::all(Color::srgb(0.74, 0.68, 0.5)),
+            ))
+            .with_children(|panel| {
+                panel.spawn((
+                    MainMenuTitleText,
+                    Text::new(panel_title(MainMenuPanel::Root)),
+                    TextFont {
+                        font_size: FontSize::Rem(UiFontRole::Title.rem_size()),
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.96, 0.91, 0.72)),
+                ));
+
+                spawn_root_panel(panel);
+                spawn_new_game_panel(panel);
+                spawn_quit_confirm_panel(panel);
+
+                panel.spawn((
+                    MainMenuHintsText,
+                    Text::new(panel_hints(MainMenuPanel::Root)),
+                    TextFont {
+                        font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.76, 0.72, 0.58)),
+                ));
+            });
+        });
+}
+
+fn hidden_subpanel_node(extra: Node) -> Node {
+    Node {
+        display: Display::None,
+        ..extra
+    }
+}
+
+fn spawn_root_panel(parent: &mut ChildSpawnerCommands) {
+    parent
+        .spawn((
+            MainMenuSubPanel(MainMenuPanel::Root),
+            Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(8.0),
+                ..default()
+            },
+        ))
+        .with_children(|menu| {
+            menu.spawn(primary_button(MainMenuNewGameButton, "Nueva partida", 50.0));
+            menu.spawn(primary_button(MainMenuLoadButton, "Cargar partida", 50.0));
+            menu.spawn(secondary_button(
+                MainMenuDemoButton,
+                "Demo clasica (mapa plano)",
+                42.0,
+            ));
+            menu.spawn(secondary_button(MainMenuQuitButton, "Salir", 42.0));
+        });
+}
+
+fn spawn_new_game_panel(parent: &mut ChildSpawnerCommands) {
+    parent
+        .spawn((
+            MainMenuSubPanel(MainMenuPanel::NewGame),
+            hidden_subpanel_node(Node {
+                width: Val::Percent(100.0),
+                max_height: Val::Px(520.0),
+                overflow: Overflow::scroll_y(),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(8.0),
+                ..default()
+            }),
+            Visibility::Hidden,
+        ))
+        .with_children(|panel| {
+            panel.spawn(option_section_label("Clima"));
+            panel
+                .spawn((Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(6.0),
+                    ..default()
+                },))
+                .with_children(|row| {
+                    for climate in [
+                        Climate::Temperate,
+                        Climate::SubArctic,
+                        Climate::SubTropical,
+                        Climate::Toyland,
+                    ] {
+                        row.spawn(climate_button(climate));
+                    }
+                });
+
+            panel.spawn(option_section_label("Tamano del mapa"));
+            panel
+                .spawn((Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(4.0),
+                    ..default()
+                },))
+                .with_children(|row| {
+                    for size in MapSizePreset::all() {
+                        row.spawn(map_size_button(size));
+                    }
+                });
+
+            panel.spawn(option_section_label("Ano de inicio"));
+            panel
+                .spawn((Node {
+                    flex_direction: FlexDirection::Row,
+                    flex_wrap: FlexWrap::Wrap,
+                    width: Val::Px(400.0),
+                    column_gap: Val::Px(4.0),
+                    row_gap: Val::Px(4.0),
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },))
+                .with_children(|row| {
+                    for year in START_YEARS {
+                        row.spawn(start_year_button(year));
+                    }
+                });
+
+            panel.spawn(option_section_label("Densidad de pueblos"));
+            panel
+                .spawn((Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(6.0),
+                    ..default()
+                },))
+                .with_children(|row| {
+                    for density in PopulationDensity::all() {
+                        row.spawn(density_button(density, MainMenuDensityTarget::Town));
+                    }
+                });
+
+            panel.spawn(option_section_label("Densidad de industrias"));
+            panel
+                .spawn((Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(6.0),
+                    ..default()
+                },))
+                .with_children(|row| {
+                    for density in PopulationDensity::all() {
+                        row.spawn(density_button(density, MainMenuDensityTarget::Industry));
+                    }
+                });
+
+            panel.spawn(option_section_label("Dinero inicial"));
+            panel
+                .spawn((Node {
+                    flex_direction: FlexDirection::Row,
+                    flex_wrap: FlexWrap::Wrap,
+                    width: Val::Px(400.0),
+                    column_gap: Val::Px(4.0),
+                    row_gap: Val::Px(4.0),
+                    justify_content: JustifyContent::Center,
+                    ..default()
+                },))
+                .with_children(|row| {
+                    for amount in STARTING_MONEY_OPTIONS {
+                        row.spawn(starting_money_button(amount));
+                    }
+                });
+
+            panel.spawn(option_section_label("Terreno"));
+            panel
+                .spawn((Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(4.0),
+                    ..default()
+                },))
+                .with_children(|toggles| {
+                    toggles.spawn(toggle_button(
+                        MainMenuToggle::WorldGen,
+                        "Terreno procedural",
+                    ));
+                    toggles.spawn(toggle_button(MainMenuToggle::Island, "Modo isla (costas)"));
+                    if dev_mode() {
+                        toggles.spawn(toggle_button(
+                            MainMenuToggle::PreserveDemo,
+                            "Incluir zona demo/tutorial (24×18)",
+                        ));
+                    }
+                });
+
+            panel
+                .spawn((Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(6.0),
+                    align_items: AlignItems::Center,
+                    ..default()
+                },))
+                .with_children(|row| {
+                    row.spawn(option_section_label("Semilla"));
+                    row.spawn(seed_adjust_button(MainMenuSeedDecButton, "−"));
+                    row.spawn(seed_adjust_button(MainMenuSeedIncButton, "+"));
+                });
+
+            panel.spawn((
+                MainMenuSummaryText,
+                Text::new(summary_text(NewGameSettingsResource::default().settings())),
+                TextFont {
+                    font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.78, 0.74, 0.58)),
+            ));
+
+            panel.spawn(primary_button(MainMenuStartButton, "Iniciar partida", 50.0));
+            panel.spawn(secondary_button(MainMenuBackButton, "Volver", 42.0));
+        });
+}
+
+fn spawn_quit_confirm_panel(parent: &mut ChildSpawnerCommands) {
+    parent
+        .spawn((
+            MainMenuSubPanel(MainMenuPanel::QuitConfirm),
+            hidden_subpanel_node(Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(10.0),
+                ..default()
+            }),
+            Visibility::Hidden,
+        ))
+        .with_children(|panel| {
+            panel.spawn((
+                Text::new("¿Salir de OpenTTDRS?"),
+                TextFont {
+                    font_size: FontSize::Rem(UiFontRole::Body.rem_size()),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.88, 0.84, 0.7)),
+            ));
+            panel.spawn(primary_button(MainMenuQuitConfirmYes, "Si, salir", 44.0));
+            panel.spawn(secondary_button(MainMenuQuitConfirmNo, "Cancelar", 42.0));
+        });
+}

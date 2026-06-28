@@ -17,6 +17,8 @@ Port **incremental** de ideas y mecánicas inspiradas en [OpenTTD](https://www.o
 
 **Roadmap:** hito [0.1 — vertical slice en solitario](https://github.com/cavazquez/openttdrs/milestone/1): fundación **I0–I7** ya en `main`; el foco actual son las fases **SP1–SP4** (ciclo jugable, construcción, visual, pulido). **I8 (red / multijugador)** queda en backlog de **mínima prioridad** hasta cerrar el juego de un jugador. Plan de sprints: [docs/ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md); paridad vs OpenTTD: [docs/PARIDAD_OPENTTD.md](docs/PARIDAD_OPENTTD.md); spec: [docs/DISENO_INCREMENTAL.md](docs/DISENO_INCREMENTAL.md); índice de docs: [docs/README.md](docs/README.md).
 
+**Reciente (jun 2026):** menú de inicio con **Nueva partida** (mapas 24×18…256², clima, año, semilla, densidad pueblos/industrias, capital inicial), fondo intro con isla procedural y tráfico decorativo, **población procedural** (pueblos con calles y casas, industrias) y **lagos/costas** en `world_gen`. Refactor de módulos grandes: `ui/main_menu/`, `bootstrap/procedural_population/`, `command/transport/`, `command/tests/`. Detalle menú: [docs/ROADMAP_MAIN_MENU.md](docs/ROADMAP_MAIN_MENU.md).
+
 **Flujo de trabajo** (save → mapa → cliente → JSON): [docs/FLUJO_MAPA_Y_CLIENTE.md](docs/FLUJO_MAPA_Y_CLIENTE.md).
 
 ---
@@ -27,7 +29,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 
 **Leyenda:** ✅ Hecho · 🟡 Parcial / simplificado · ❌ Pendiente · 🔮 Backlog largo plazo (post-0.1)
 
-**Última actualización:** 2026-06-27
+**Última actualización:** 2026-06-22
 
 ### Resumen por bloque
 
@@ -39,16 +41,17 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | Import `.sav` → mapa + entidades | 🟡 |
 | Render OpenGFX vanilla | 🟡 ~85–90 % |
 | UI, toolbar, ventanas, barra inferior | 🟡 |
+| Menú inicio + Nueva partida procedural | ✅ fase 2 |
 | Señales bloque v1 (sin PBS) | 🟡 |
 | Noticias / ticker / periódico | ✅ N1–N5 |
-| Terraform / gen mundo / climas | 🟡 (terraform T1–T3) |
+| Terraform / gen mundo / climas | 🟡 (terraform T1–T3; gen T4 MVP) |
 | Barcos, aviones, Cargo Dist, NewGRF, red I8 | 🔮 |
 
 ### Guía rápida para continuar (IA / desarrolladores)
 
 1. **Validar cambios:** `bash scripts/check.sh` (local) o `bash scripts/check.sh ci` (paridad CI).
 2. **Crates:** lógica en `crates/openttdrs-core/`; Bevy/UI en `crates/openttdrs-client/`.
-3. **Comandos de juego:** `crates/openttdrs-core/src/command/` → `apply.rs`, `preview.rs`, `transport.rs`.
+3. **Comandos de juego:** `crates/openttdrs-core/src/command/` → `apply.rs`, `preview.rs`, `transport/` (`road`, `rail`, `bridge`, `station`, `shared`), tests en `command/tests/`.
 4. **Simulación:** `sim_step.rs`, `pathfinder.rs`, `rail_signals.rs`, `news.rs`.
 5. **UI:** `crates/openttdrs-client/src/ui/` (toolbar, HUD, barra inferior en `ui/statusbar/`).
 6. **Render:** `crates/openttdrs-client/src/render/`, sprites en `sprites/`.
@@ -72,20 +75,22 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **Mapa** | Formato binario `.ottdmap` (MAP1…v5+12) | ✅ | [OTTDMAP_FORMAT.md](docs/OTTDMAP_FORMAT.md) |
 | **Mapa** | Carga mapa en cliente (`OTTDMAP_FILE`) | ✅ | `state/bootstrap/` |
 | **Mapa** | Mapa demo procedural con layout jugable | ✅ | `demo_layout.rs` |
+| **Mapa** | Nueva partida: tamaños 24×18…256², terreno procedural | ✅ | `state/bootstrap/world.rs`, `ui/main_menu/` |
+| **Mapa** | Población procedural (pueblos + industrias) | 🟡 | `bootstrap/procedural_population/` — mapas ≥ 64² |
 | **Mapa** | TNBP túneles/puentes JGR en import | ✅ | `map/tnbp.rs`, `TILES_Y_SAVEGAMES_OPENTTD.md` |
 | **Mapa** | Alturas / pendientes (solo lectura + render) | ✅ | `map/slope.rs`, `iso/slope.rs` |
 | **Import** | `parse_sav.py`: `.sav` → `.ottdmap` | ✅ | `scripts/parse_sav.py`, golden CI |
 | **Import** | Parser Rust chunks estaciones/industrias | ✅ | `sav/` |
 | **Import** | Entidades: vehículos, órdenes, dinero desde `.sav` | 🟡 | `sav/entities.rs`, `sav/orders.rs` — ver limitaciones en [TILES_Y_SAVEGAMES_OPENTTD.md](docs/TILES_Y_SAVEGAMES_OPENTTD.md) |
 | **Import** | Partida OpenTTD 100 % jugable sin JSON propio | ❌ | Sprint 6 en [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) |
-| **Construcción** | Autorail carretera (drag, vecinos) | ✅ | `command/transport.rs` |
+| **Construcción** | Autorail carretera (drag, vecinos) | ✅ | `command/transport/road.rs` |
 | **Construcción** | Depósito carretera | 🟡 | Alineación RemapCoords pendiente — [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) S2 |
 | **Construcción** | Paradas bus / camión (orientación RMB) | ✅ | `road_stop_gfx_data_generated.rs` |
-| **Construcción** | Túnel / puente carretera | ✅ | `command/transport.rs`, `render/tiles/bridge.rs` |
+| **Construcción** | Túnel / puente carretera | ✅ | `command/transport/bridge.rs`, `render/tiles/bridge.rs` |
 | **Construcción** | Quitar carretera / limpiar tesela | ✅ | `Command::ClearTile`, `RemoveRoad*` |
 | **Construcción** | Un solo sentido / drive-through carretera | 🟡 | Paridad parcial vs OpenTTD |
-| **Construcción** | Autorail ferrocarril (curvas, cruce X\|Y) | ✅ | `command/transport.rs` |
-| **Construcción** | Depósito ferrocarril rotado | ✅ | `command/transport.rs` |
+| **Construcción** | Autorail ferrocarril (curvas, cruce X\|Y) | ✅ | `command/transport/rail.rs` |
+| **Construcción** | Depósito ferrocarril rotado | ✅ | `command/transport/rail.rs` |
 | **Construcción** | Estación tren multi-tesela (1–7 × 1–7) | ✅ | `PlaceRailStationArea`, ventana picker |
 | **Construcción** | Túnel / puente ferrocarril | ✅ | TNBP + comandos rail |
 | **Construcción** | Quitar vía (`RailRemove`) | ✅ | `Command::RemoveRail` |
@@ -110,9 +115,11 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **Vehículos** | Horarios (timetable) | ❌ | — |
 | **Vehículos** | Barcos / aviones | 🔮 | Hito 0.3 |
 | **Mundo** | Ciudades: demanda, etiquetas, ventana | ✅ | `town.rs`, `render/town_labels.rs` |
+| **Mundo** | Pueblos generados con calles y casas terminadas | 🟡 | `procedural_population/towns.rs`, `Tile::completed_house` |
 | **Mundo** | Panel industria (carga aceptada/producida) | ✅ | `ui/toolbar/industry_panel/` |
 | **Mundo** | Subvencios / autoridad local | ❌ | — |
-| **Mundo** | Generación procedural + 4 climas | 🔮 | [ROADMAP_TERRAFORM.md](docs/ROADMAP_TERRAFORM.md) T4 |
+| **Mundo** | Generación procedural + 4 climas | 🟡 | `world_gen.rs` — colinas, bosques, **lagos**, modo isla |
+| **Mundo** | Densidad pueblos/industrias y capital inicial | ✅ | `NewGameSettings`, menú Nueva partida |
 | **Render** | Vista isométrica OpenGFX 8bpp/32bpp | ✅ | `iso/`, atlas PNG |
 | **Render** | Terreno, agua, costa, rough | ✅ | `render/tiles/land.rs` |
 | **Render** | Árboles multi-especie (1–4/tesela) | ✅ | [ROADMAP_PARIDAD_VISUAL.md](docs/ROADMAP_PARIDAD_VISUAL.md) §2 |
@@ -126,6 +133,8 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **Render** | Junctions vía en pendiente | 🟡 | [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) S3 |
 | **Render** | Culling viewport mapas grandes | 🟡 | `render/world.rs` — solo mapas grandes |
 | **Render** | Paleta compañía (Remap) | ✅ | `company_colour` |
+| **UI** | Menú principal (Nueva partida, Cargar, Demo, Salir) | ✅ | `ui/main_menu/`, [ROADMAP_MAIN_MENU.md](docs/ROADMAP_MAIN_MENU.md) |
+| **UI** | Fondo intro: isla procedural, paneo, agua animada, tráfico | ✅ | `ui/main_menu_intro.rs` |
 | **UI** | Toolbar superior (construcción, sim) | ✅ | `ui/toolbar/` |
 | **UI** | Preview fantasma (ghost) | ✅ | `ui/toolbar/preview/` |
 | **UI** | Minimap | ✅ | `ui/toolbar/minimap/` |
@@ -205,8 +214,8 @@ Pasos:
 |------|----------------|
 | 🎨 `rustfmt` | `cargo fmt --all -- --check` |
 | 📎 `clippy` | `cargo clippy --workspace --all-targets --profile ci -- -D warnings` |
-| 🧪 `nextest` | PR: `cargo nextest run --no-build` (reutiliza artefactos de clippy) |
-| 📊 `llvm-cov` | Push `main`: `cargo llvm-cov nextest run` → `lcov.info` + Codecov |
+| 🧪 `nextest` | PR: `cargo nextest run --profile ci --no-build` (perfil en `.config/nextest.toml`) |
+| 📊 `llvm-cov` | Push `main`: `cargo llvm-cov nextest --profile ci` → `lcov.info` + Codecov |
 | 🗺️ TNBP | `cargo run -p openttdrs-core --example validate_ottdmap_tnbp` |
 | 🐍 Golden / Python | scripts de mapas y `parse_sav` |
 
@@ -234,7 +243,7 @@ Regresión construcción (checklist SP2): `cargo test -p openttdrs-core --lib co
 
 ## Cobertura de tests
 
-En **CI**, la cobertura corre solo en **push a `main`** (mismo job `check`, tras clippy): [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) con `nextest run` genera **`lcov.info`** y lo sube a [Codecov](https://codecov.io/gh/cavazquez/openttdrs). En **PRs** no se repite esa compilación instrumentada: solo clippy + nextest `--no-build`.
+En **CI**, la cobertura corre solo en **push a `main`** (mismo job `check`, tras clippy): [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) con `cargo llvm-cov nextest` genera **`lcov.info`** y lo sube a [Codecov](https://codecov.io/gh/cavazquez/openttdrs). En **PRs** no se repite esa compilación instrumentada: solo clippy + nextest `--profile ci --no-build`.
 
 Relanzar cobertura a mano: workflow [.github/workflows/coverage.yml](.github/workflows/coverage.yml) (`workflow_dispatch`).
 
@@ -269,17 +278,20 @@ Equivale a un `git clone --depth 1` bajo `reference/openttd-upstream/`. El anál
 ## Cómo ejecutar (cuando compiles en local)
 
 ```bash
-# Demo procedural (layout jugable incluido)
+# Cliente con menú de inicio (Nueva partida por defecto: 64², isla + lagos)
 cargo run -p openttdrs-client
 
-# Mapa desde fixture o save convertido
+# Mapa desde fixture o save convertido (salta menú → juego directo)
 OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/p6_p4_showcase.ottdmap cargo run -p openttdrs-client
 
 # Partida guardada JSON
 OTTDJSON_LOAD=save/openttdrs_sim.json cargo run -p openttdrs-client
+
+# Headless / CI: opciones vía env (sin menú)
+OPENTTDRS_WORLD_GEN=1 OPENTTDRS_WORLD_ISLAND=1 OPENTTDRS_WORLD_SEED=42 cargo run -p openttdrs-client
 ```
 
-El cliente abre ventana isométrica con toolbar, simulación en marcha, barra inferior (fecha / compañía / dinero) y HUD de alertas. Atajos: **F5** guardar, **F9** cargar JSON, pausa/velocidad en toolbar.
+Al arrancar sin `OTTDMAP_FILE` ni `OTTDJSON_LOAD`, el **menú principal** ofrece **Nueva partida** (clima, tamaño, terreno procedural, densidad, capital), **Cargar partida**, **Demo clásica** (24×18 tutorial) y **Salir**. En juego: toolbar, barra inferior (fecha / compañía / dinero), HUD de alertas. Atajos: **F5** guardar, **F9** cargar JSON, pausa/velocidad en toolbar. En Nueva partida: **1–4** clima, **Z/X** densidad, **Enter** iniciar.
 
 ```bash
 cargo test -p openttdrs-core

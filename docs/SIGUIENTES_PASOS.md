@@ -30,7 +30,7 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 
 **Huecos visuales reales (SP3):** junctions vía en pendiente; depósito carretera; culling global; industrias gfx ≥ 120.
 
-**Terraform (paisaje):** no implementado; plan T1–T3 en [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md).
+**Terraform (paisaje):** T1–T3 implementados; gen procedural T4 MVP en `world_gen.rs` — [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md).
 
 **Noticias / barra inferior:** N1–N5 implementados — [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md).
 
@@ -40,8 +40,10 @@ dejarlo — ver [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md).
 **Señales — pick en diagonal (handoff):** fantasma OK, clic en tesela vecina — ver
 [SENALES_FERROVIARIAS.md §11](SENALES_FERROVIARIAS.md#11-bug-abierto-fantasma-vs-colocación-en-vía-diagonal-jun-2026).
 
-**Menú de inicio (handoff):** pantallas raíz/nueva partida, cargar desde menú — ver
-[ROADMAP_MAIN_MENU.md](ROADMAP_MAIN_MENU.md).
+**Menú de inicio:** pantallas raíz/nueva partida, cargar desde menú, población procedural y lagos — ver
+[ROADMAP_MAIN_MENU.md](ROADMAP_MAIN_MENU.md) (fase 2 cerrada; pendiente preferencias resolución/idioma).
+
+**Refactor módulos (jun 2026):** `ui/main_menu/`, `bootstrap/procedural_population/`, `command/transport/`, `command/tests/` — sin cambio de API pública; CI usa perfil nextest `ci` en `.config/nextest.toml`.
 
 **Toolbar rail sin comando:** `RailConvert`, quitar señal → ver ROADMAP_SPRINTS S2 resto.
 
@@ -85,9 +87,9 @@ OPENTTDRS_MAP_SHOT=/tmp/shot.png OPENTTDRS_MAP_SHOT_TOOL=rail_station cargo run 
 ## Si algo se pierde
 
 1. [docs/README.md](README.md) — índice completo
-2. Comentarios en `crates/openttdrs-core/src/command/` y `crates/openttdrs-client/src/ui/toolbar/`
+2. Comentarios y submódulos en `crates/openttdrs-core/src/command/` (`transport/`, `tests/`) y `crates/openttdrs-client/src/ui/` (`main_menu/`, `toolbar/`)
 3. Upstream: `bash scripts/fetch-openttd-reference.sh` → `reference/openttd-upstream/`
 
 ---
 
-*Última actualización: 2026-06-22 (menú inicio ROADMAP_MAIN_MENU)*
+*Última actualización: 2026-06-22 (refactor módulos, menú fase 2, lagos, población procedural)*

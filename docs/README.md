@@ -21,7 +21,20 @@
 | [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) | Elevar / bajar / nivelar terreno (T1–T3) |
 | [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) | Barra inferior, ticker y cartel de noticias (N1–N5) |
 | [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md) | **Handoff:** construcción carretera drag/orientación (bug abierto) |
-| [ROADMAP_MAIN_MENU.md](ROADMAP_MAIN_MENU.md) | **Handoff:** menú inicio — pantallas, cargar, salir (fase 1) |
+| [ROADMAP_MAIN_MENU.md](ROADMAP_MAIN_MENU.md) | Menú inicio — pantallas, Nueva partida procedural, cargar, intro animada (fase 2) |
+
+### Organización del código (jun 2026)
+
+Módulos grandes partidos siguiendo el patrón `ui/save_window/`:
+
+| Área | Ruta |
+|------|------|
+| Menú inicio | `crates/openttdrs-client/src/ui/main_menu/` |
+| Población procedural | `crates/openttdrs-client/src/state/bootstrap/procedural_population/` |
+| Comandos transporte | `crates/openttdrs-core/src/command/transport/` |
+| Tests de command | `crates/openttdrs-core/src/command/tests/` |
+
+Las APIs públicas (`ui.rs`, `command/mod.rs`, `bootstrap/world.rs`) no cambiaron de imports.
 
 ---
 
@@ -86,4 +99,4 @@ Ver [archive/README.md](archive/README.md).
 
 ---
 
-*Última actualización: 2026-06-22*
+*Última actualización: 2026-06-22 (refactor módulos, menú fase 2, CI nextest)*

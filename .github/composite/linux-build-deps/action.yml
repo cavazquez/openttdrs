@@ -1,21 +1,20 @@
 name: Linux build dependencies
-description: Caché APT + librerías de sistema para Bevy (X11, Vulkan, ALSA)
+description: Librerías de sistema para Bevy (X11, Vulkan, ALSA) con caché APT fiable
 runs:
   using: composite
   steps:
-    - name: Cache APT
-      uses: actions/cache@v4
-      with:
-        path: |
-          /var/cache/apt/archives
-          /var/lib/apt/lists
-        key: ${{ runner.os }}-apt-${{ hashFiles('.github/apt-packages.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-apt-
-
-    - name: Instalar paquetes APT
+    - name: Lista de paquetes
+      id: apt
       shell: bash
       run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
-          $(grep -v '^#' .github/apt-packages.txt | grep -v '^[[:space:]]*$')
+        pkgs=$(grep -v '^#' .github/apt-packages.txt | grep -v '^[[:space:]]*$' | xargs)
+        echo "packages=$pkgs" >> "$GITHUB_OUTPUT"
+
+    # actions/cache@v4 sobre /var/cache/apt falla (tar exit 2: permisos root).
+    # gerlero/apt-install cachea .deb en ruta escribible por el runner.
+    - name: Instalar paquetes APT
+      uses: gerlero/apt-install@v1
+      with:
+        packages: ${{ steps.apt.outputs.packages }}
+        install-recommends: false
+        install-suggests: false

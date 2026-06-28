@@ -15,7 +15,7 @@ runs:
         components: ${{ inputs.components }}
 
     - name: caché cargo
-      uses: Swatinem/rust-cache@v2
+      uses: Swatinem/rust-cache@v2.9.1
       with:
         shared-key: openttdrs
         add-job-id-key: false

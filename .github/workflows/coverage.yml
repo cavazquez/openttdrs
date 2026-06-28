@@ -1,13 +1,8 @@
-name: Coverage
+# Cobertura integrada en ci.yml (job `coverage` tras `check`, solo push a main).
+# Este workflow queda para relanzar cobertura manualmente sin repetir CI.
+name: Coverage (manual)
 
 on:
-  # Cobertura solo en main: llvm-cov recompila todo el workspace otra vez; en PR basta CI.
-  push:
-    branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
-      - "LICENSE"
   workflow_dispatch:
 
 concurrency:
@@ -43,7 +38,6 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
           fail_ci_if_error: false
-          verbose: true
 
       - name: Artefacto LCOV
         uses: actions/upload-artifact@v7

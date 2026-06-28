@@ -3,7 +3,8 @@
 use bevy::prelude::*;
 use openttdrs_core::{
     Command, FACTORY_WOOD_INPUT, GameState, Industry, IndustryKind, IndustrySpec, PathNetwork,
-    TileCoord, TileKind, Vehicle, VehicleKind, apply_command, find_path, road_stop_approach_tile,
+    PreserveRect, TileCoord, TileKind, Vehicle, VehicleKind, WorldGenConfig, apply_command,
+    apply_world_gen, find_path, road_stop_approach_tile,
 };
 
 /// Carretera horizontal de demo (eje X).
@@ -52,6 +53,53 @@ pub(crate) fn fill_flat_grass(state: &mut GameState) {
                 let _ = state.map.set_height(c, CHANNEL_Z);
             }
         }
+    }
+}
+
+/// Zonas del mapa demo que deben permanecer planas tras `apply_world_gen`.
+#[must_use]
+pub(crate) fn demo_preserve_rects() -> Vec<PreserveRect> {
+    vec![
+        PreserveRect {
+            x0: 0,
+            y0: 0,
+            x1: 13,
+            y1: 5,
+        },
+        PreserveRect {
+            x0: 1,
+            y0: DEMO_ROAD_Y - 1,
+            x1: 13,
+            y1: DEMO_ROAD_Y + 1,
+        },
+        PreserveRect {
+            x0: 1,
+            y0: DEMO_RAIL_Y - 1,
+            x1: 13,
+            y1: DEMO_RAIL_Y + 1,
+        },
+        PreserveRect {
+            x0: DEMO_BRIDGE_WATER_X0 - 1,
+            y0: DEMO_BRIDGE_BANK_N - 1,
+            x1: DEMO_BRIDGE_WATER_X1 + 1,
+            y1: DEMO_BRIDGE_BANK_S + 1,
+        },
+        PreserveRect {
+            x0: DEMO_TUNNEL_NE.x - 3,
+            y0: DEMO_TUNNEL_NE.y - 2,
+            x1: DEMO_TUNNEL_NE.x + 2,
+            y1: DEMO_TUNNEL_NE.y + 2,
+        },
+    ]
+}
+
+pub(crate) fn apply_optional_world_gen(
+    state: &mut GameState,
+    config: WorldGenConfig,
+    preserve: &[PreserveRect],
+) {
+    if let Err(e) = apply_world_gen(&mut state.map, &config, preserve) {
+        error!("Generación procedural fallida: {e:?}");
     }
 }
 

@@ -1,10 +1,10 @@
 use super::{Command, CommandError, apply_command, command_error_message, command_would_fail};
 use crate::{
-    BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, GameState, IndustryKind, IndustrySpec,
-    ROAD_BUILD_COST, ROAD_PLACE_FORCE_AXIS, STATION_BUILD_COST, STATION_TYPE_RAIL_WAYPOINT,
-    StopKind, TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder, WAYPOINT_BUILD_COST,
-    industry_template, infer_road_drag_axis, pathfinder, road_bits_for_autoroute,
-    station_type_from_m6, tile_slope_and_z,
+    BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, GameState, IndustryKind, IndustrySpec, LevelMode,
+    RAIL_BUILD_COST, ROAD_BUILD_COST, ROAD_PLACE_FORCE_AXIS, STATION_BUILD_COST,
+    STATION_TYPE_RAIL_WAYPOINT, StopKind, TERRAFORM_COST, TileCoord, TileKind, Vehicle,
+    VehicleKind, VehicleOrder, WAYPOINT_BUILD_COST, industry_template, infer_road_drag_axis,
+    pathfinder, road_bits_for_autoroute, station_type_from_m6, tile_slope_and_z,
 };
 
 #[test]
@@ -18,6 +18,26 @@ fn place_road_mutates_tile_kind() {
     assert_eq!(s.map.get(c).unwrap().m5 & 0x0F, 0x05);
     assert_eq!((s.map.get(c).unwrap().mapt >> 4) & 0x0F, 2);
     assert_eq!(s.economy.money, money_before - ROAD_BUILD_COST);
+}
+
+#[test]
+fn road_drag_line_on_row_below_network() {
+    let mut s = GameState::new(12, 12);
+    for x in 3..=6 {
+        apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(x, 5), 0x0A)).unwrap();
+    }
+    for x in 8..=11 {
+        apply_command(
+            &mut s,
+            &Command::PlaceRoadBits(TileCoord::new(x, 6), 0x0A | ROAD_PLACE_FORCE_AXIS),
+        )
+        .unwrap();
+        assert_eq!(
+            s.map.get(TileCoord::new(x, 6)).unwrap().m5 & 0x0F,
+            0x0A,
+            "x={x}"
+        );
+    }
 }
 
 #[test]
@@ -577,6 +597,93 @@ fn set_vehicle_station_orders_rejects_incompatible_stop_kind() {
 }
 
 #[test]
+fn level_land_drag_flattens_area() {
+    let mut s = GameState::new(8, 8);
+    for y in 0..8 {
+        for x in 0..8 {
+            s.map.set_height(TileCoord::new(x, y), 4).unwrap();
+        }
+    }
+    apply_command(&mut s, &Command::RaiseLand(TileCoord::new(3, 3))).unwrap();
+    apply_command(
+        &mut s,
+        &Command::LevelLand {
+            from: TileCoord::new(2, 2),
+            to: TileCoord::new(4, 4),
+            mode: LevelMode::Level,
+        },
+    )
+    .unwrap();
+    for y in 2..=4 {
+        for x in 2..=4 {
+            assert_eq!(s.map.get(TileCoord::new(x, y)).unwrap().height, 4);
+        }
+    }
+}
+
+#[test]
+fn raise_then_lower_restores_flat_grass() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 4);
+    for y in 0..8 {
+        for x in 0..8 {
+            s.map.set_height(TileCoord::new(x, y), 4).unwrap();
+        }
+    }
+    apply_command(&mut s, &Command::RaiseLand(c)).unwrap();
+    assert_ne!(tile_slope_and_z(&s.map, c).unwrap().0, 0);
+    apply_command(&mut s, &Command::LowerLand(c)).unwrap();
+    assert_eq!(tile_slope_and_z(&s.map, c).unwrap().0, 0);
+    assert_eq!(s.map.get(c).unwrap().height, 4);
+}
+
+#[test]
+fn lower_land_rejects_sea_level() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(1, 1);
+    s.map.set_height(c, 0).unwrap();
+    assert_eq!(
+        apply_command(&mut s, &Command::LowerLand(c)),
+        Err(CommandError::TerrainTooLow)
+    );
+}
+
+#[test]
+fn raise_land_on_grass_costs_and_creates_slope() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 4);
+    for y in 0..8 {
+        for x in 0..8 {
+            s.map.set_height(TileCoord::new(x, y), 4).unwrap();
+        }
+    }
+    let money_before = s.economy.money;
+    apply_command(&mut s, &Command::RaiseLand(c)).unwrap();
+    assert_eq!(s.economy.money, money_before - TERRAFORM_COST);
+    let (tileh, _) = tile_slope_and_z(&s.map, c).unwrap();
+    assert_ne!(tileh, 0);
+    assert_eq!(
+        command_error_message(CommandError::TileNotTerraformable),
+        "Solo se puede modificar el terreno en hierba o bosque libre."
+    );
+}
+
+#[test]
+fn raise_land_rejects_road() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(c)).unwrap();
+    assert_eq!(
+        apply_command(&mut s, &Command::RaiseLand(c)),
+        Err(CommandError::TileNotTerraformable)
+    );
+    assert_eq!(
+        command_would_fail(&s, &Command::RaiseLand(c)),
+        Some(CommandError::TileNotTerraformable)
+    );
+}
+
+#[test]
 fn clear_tile_sets_grass_and_removes_station() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(2, 2);
@@ -707,21 +814,29 @@ fn set_w_only_slope(map: &mut crate::Map, tx: i32, ty: i32, base: u8) {
 }
 
 #[test]
-fn place_rail_rejects_invalid_trackbits_on_slope() {
+fn place_rail_autoslopes_slope_before_invalid_trackbits() {
     let mut s = GameState::new(8, 8);
     set_w_only_slope(&mut s.map, 4, 4, 1);
     let c = TileCoord::new(4, 4);
     assert_eq!(tile_slope_and_z(&s.map, c).unwrap().0, 1);
-    assert_eq!(
-        apply_command(&mut s, &Command::SetRailBits(c, 0x0C)),
-        Err(CommandError::InvalidRailOnSlope)
-    );
-    assert_eq!(
-        command_would_fail(&s, &Command::SetRailBits(c, 0x0C)),
-        Some(CommandError::InvalidRailOnSlope)
-    );
-    apply_command(&mut s, &Command::SetRailBits(c, 0x20)).unwrap();
+    let money = s.economy.money;
+    apply_command(&mut s, &Command::SetRailBits(c, 0x0C)).unwrap();
+    assert_eq!(tile_slope_and_z(&s.map, c).unwrap().0, 0);
     assert_eq!(s.map.get(c).unwrap().kind, TileKind::Rail);
+    assert!(s.economy.money < money - RAIL_BUILD_COST);
+}
+
+#[test]
+fn place_road_autoslopes_grass_slope() {
+    let mut s = GameState::new(8, 8);
+    set_w_only_slope(&mut s.map, 2, 2, 1);
+    let c = TileCoord::new(2, 2);
+    assert_ne!(tile_slope_and_z(&s.map, c).unwrap().0, 0);
+    let money = s.economy.money;
+    apply_command(&mut s, &Command::PlaceRoadBits(c, 0x0A)).unwrap();
+    assert_eq!(tile_slope_and_z(&s.map, c).unwrap().0, 0);
+    assert_eq!(s.map.get_kind(c), Some(TileKind::Road));
+    assert!(s.economy.money < money - ROAD_BUILD_COST);
 }
 
 #[test]
@@ -1161,10 +1276,8 @@ fn rail_depot_beside_x_line_connects_exit_tile() {
     );
 }
 
-#[test]
-fn disconnecting_rail_stops_train_with_cached_path() {
-    let mut s = GameState::new(12, 12);
-    s.economy.money = 1_000_000;
+/// Tren en `(4, 4)` con camino cacheado hacia el depósito en `(5, 5)`.
+fn finish_train_with_cached_path_to_depot(mut s: GameState) -> GameState {
     for x in 2..=8_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }
@@ -1177,7 +1290,6 @@ fn disconnecting_rail_stops_train_with_cached_path() {
     .unwrap();
     let id = s.vehicles[0].id;
     apply_command(&mut s, &Command::ToggleVehicleRunning(id)).unwrap();
-    // Tren hacia el extremo de la línea y luego de vuelta al depósito.
     apply_command(
         &mut s,
         &Command::SetVehicleOrders(id, vec![TileCoord::new(2, 4)]),
@@ -1195,7 +1307,6 @@ fn disconnecting_rail_stops_train_with_cached_path() {
         "no llegó al extremo"
     );
     apply_command(&mut s, &Command::SetVehicleOrders(id, vec![depot])).unwrap();
-    // Avanza hasta tener camino cacheado rumbo al depósito, sin llegar aún.
     for _ in 0..5_000 {
         s.step();
         if s.vehicles[0].pos == TileCoord::new(4, 4) {
@@ -1207,7 +1318,34 @@ fn disconnecting_rail_stops_train_with_cached_path() {
         !s.vehicles[0].path.is_empty(),
         "debería tener camino cacheado"
     );
+    s
+}
 
+fn train_with_cached_path_to_depot() -> GameState {
+    let mut s = GameState::new(12, 12);
+    s.economy.money = 1_000_000;
+    for y in 0..12 {
+        for x in 0..12 {
+            s.map.set_height(TileCoord::new(x, y), 4).unwrap();
+        }
+    }
+    finish_train_with_cached_path_to_depot(s)
+}
+
+fn flat_map_for_terraform_tests() -> GameState {
+    let mut s = GameState::new(12, 12);
+    s.economy.money = 1_000_000;
+    for y in 0..12 {
+        for x in 0..12 {
+            s.map.set_height(TileCoord::new(x, y), 4).unwrap();
+        }
+    }
+    s
+}
+
+#[test]
+fn disconnecting_rail_stops_train_with_cached_path() {
+    let mut s = train_with_cached_path_to_depot();
     // Se desconecta el empalme: la tesela de salida pierde las curvas al depósito.
     apply_command(&mut s, &Command::SetRailBits(TileCoord::new(5, 4), 0x01)).unwrap();
     assert!(
@@ -1217,13 +1355,69 @@ fn disconnecting_rail_stops_train_with_cached_path() {
     for _ in 0..5_000 {
         s.step();
         assert_ne!(
-            s.vehicles[0].pos, depot,
+            s.vehicles[0].pos,
+            TileCoord::new(5, 5),
             "el tren no debe entrar al depósito desconectado"
         );
     }
     assert!(
         s.vehicles[0].no_network_route_to_order,
         "debe marcar que no hay ruta por red"
+    );
+}
+
+#[test]
+fn terraform_raise_clears_cached_train_path() {
+    let mut s = train_with_cached_path_to_depot();
+    apply_command(&mut s, &Command::RaiseLand(TileCoord::new(10, 10))).unwrap();
+    assert!(
+        s.vehicles[0].path.is_empty(),
+        "RaiseLand debe invalidar el camino cacheado"
+    );
+}
+
+#[test]
+fn terraform_lower_clears_cached_train_path() {
+    let mut s = flat_map_for_terraform_tests();
+    let hill = TileCoord::new(10, 10);
+    apply_command(&mut s, &Command::RaiseLand(hill)).unwrap();
+    s = finish_train_with_cached_path_to_depot(s);
+    apply_command(&mut s, &Command::LowerLand(hill)).unwrap();
+    assert!(
+        s.vehicles[0].path.is_empty(),
+        "LowerLand debe invalidar el camino cacheado"
+    );
+}
+
+#[test]
+fn terraform_level_clears_cached_train_path() {
+    let mut s = train_with_cached_path_to_depot();
+    apply_command(
+        &mut s,
+        &Command::LevelLand {
+            from: TileCoord::new(10, 10),
+            to: TileCoord::new(10, 10),
+            mode: LevelMode::Raise,
+        },
+    )
+    .unwrap();
+    assert!(
+        s.vehicles[0].path.is_empty(),
+        "LevelLand debe invalidar el camino cacheado"
+    );
+}
+
+#[test]
+fn failed_terraform_keeps_cached_train_path() {
+    let mut s = train_with_cached_path_to_depot();
+    let rail = TileCoord::new(4, 4);
+    assert_eq!(
+        apply_command(&mut s, &Command::RaiseLand(rail)),
+        Err(CommandError::TileNotTerraformable)
+    );
+    assert!(
+        !s.vehicles[0].path.is_empty(),
+        "terraform fallido no debe borrar el camino"
     );
 }
 

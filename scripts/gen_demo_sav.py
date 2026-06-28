@@ -14,6 +14,9 @@ Contenido del mapa (64×64):
 
 Uso:
   python3 scripts/gen_demo_sav.py [salida.sav]   (default: save/demo_openttd.sav)
+
+Fixture de CI/tests:
+  python3 scripts/gen_demo_sav.py crates/openttdrs-core/tests/fixtures/demo_openttd.sav
 """
 
 from __future__ import annotations

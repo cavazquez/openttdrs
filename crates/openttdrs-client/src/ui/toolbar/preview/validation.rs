@@ -1,6 +1,9 @@
 use openttdrs_core::{Command, GameState, TileCoord, command_would_fail, resolve_tunnel_end};
 
-use crate::ui::toolbar::build_input::commands::{command_for_action, command_for_line_action};
+use crate::ui::toolbar::build_input::commands::{
+    buy_land_command_for_tiles, command_for_action, command_for_line_action,
+    terraform_command_for_tiles,
+};
 use crate::ui::toolbar::{BuildMenuAction, StationBuildState};
 
 pub(crate) fn action_is_tunnel(action: BuildMenuAction) -> bool {
@@ -47,6 +50,21 @@ pub(crate) fn preview_build_command_valid(
     }
     if is_line_build_action(action) {
         let Some(cmd) = command_for_line_action(action, preview_tiles) else {
+            return false;
+        };
+        return command_would_fail(state, &cmd).is_none();
+    }
+    if matches!(action, BuildMenuAction::BuyLand) {
+        let Some(cmd) = buy_land_command_for_tiles(preview_tiles) else {
+            return false;
+        };
+        return command_would_fail(state, &cmd).is_none();
+    }
+    if matches!(
+        action,
+        BuildMenuAction::RaiseLand | BuildMenuAction::LowerLand | BuildMenuAction::LevelLand
+    ) {
+        let Some(cmd) = terraform_command_for_tiles(action, preview_tiles) else {
             return false;
         };
         return command_would_fail(state, &cmd).is_none();

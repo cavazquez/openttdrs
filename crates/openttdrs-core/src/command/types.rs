@@ -1,6 +1,17 @@
 use crate::map::TileCoord;
 use crate::{IndustryKind, IndustrySpec, VehicleKind};
 
+/// Modo de `LevelLand` (igual que `LevelMode` en `terraform_cmd.cpp`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum LevelMode {
+    /// Igualar al `TileHeight` de la tesela origen.
+    Level,
+    /// Subir el rectángulo un nivel respecto al origen.
+    Raise,
+    /// Bajar el rectángulo un nivel respecto al origen.
+    Lower,
+}
+
 /// Acción del jugador reproducible (p. ej. log para red en I8).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Command {
@@ -72,6 +83,23 @@ pub enum Command {
     },
     /// Limpia la tesela y vuelve a `TileKind::Grass`.
     ClearTile(TileCoord),
+    /// Eleva la esquina norte de la tesela (terraform manual).
+    RaiseLand(TileCoord),
+    /// Baja la esquina norte de la tesela (terraform manual).
+    LowerLand(TileCoord),
+    /// Nivela un rectángulo de teselas (`CmdLevelLand`).
+    LevelLand {
+        from: TileCoord,
+        to: TileCoord,
+        mode: LevelMode,
+    },
+    /// Marca tesela como terreno comprado (`OBJECT_OWNED_LAND`).
+    BuyLand(TileCoord),
+    /// Compra un rectángulo de teselas (arrastre en panel paisaje).
+    BuyLandArea {
+        from: TileCoord,
+        to: TileCoord,
+    },
 }
 
 /// Fallo al aplicar un comando (estado sin cambios).
@@ -114,6 +142,18 @@ pub enum CommandError {
     CannotPlaceSignalOnTrack,
     /// Ya hay una señal en esa dirección en esta tesela.
     SignalAlreadyPresent,
+    /// La tesela no admite terraform (solo hierba/bosque en T1).
+    TileNotTerraformable,
+    /// Altura de esquina por encima del límite del mapa.
+    TerrainTooHigh,
+    /// Altura de esquina por debajo del nivel mínimo.
+    TerrainTooLow,
+    /// Pendiente inválida tras el cambio de alturas.
+    InvalidTerrainSlope,
+    /// La tesela ya está marcada como terreno comprado.
+    LandAlreadyOwned,
+    /// Solo se puede comprar hierba o bosque libre.
+    CannotBuyLandHere,
 }
 
 /// Texto breve en español para mostrar al jugador cuando falla un comando.
@@ -161,5 +201,15 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
             "La señal solo puede colocarse sobre vía recta (eje X o Y)."
         }
         CommandError::SignalAlreadyPresent => "Ya hay una señal en esa dirección.",
+        CommandError::TileNotTerraformable => {
+            "Solo se puede modificar el terreno en hierba o bosque libre."
+        }
+        CommandError::TerrainTooHigh => "Demasiado alto: no se puede elevar más.",
+        CommandError::TerrainTooLow => "Demasiado bajo: ya está al nivel del mar.",
+        CommandError::InvalidTerrainSlope => "Pendiente inválida en el vecindario.",
+        CommandError::LandAlreadyOwned => "Esta tesela ya es terreno comprado.",
+        CommandError::CannotBuyLandHere => {
+            "Solo se puede comprar hierba o bosque libre (sin objetos ni infra)."
+        }
     }
 }

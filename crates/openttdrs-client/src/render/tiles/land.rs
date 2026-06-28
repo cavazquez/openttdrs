@@ -1,5 +1,9 @@
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileKind, industry_uses_water_ground};
+use openttdrs_core::{
+    CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW, Climate, Map,
+    OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_TRANSMITTER, TileKind,
+    effective_clear_ground, industry_uses_water_ground,
+};
 
 use super::{
     helpers::FLAT_WATER_LAYER_FRAC, leveled_foundation_overlay_pos, sloped_or_flat_image,
@@ -269,6 +273,8 @@ pub(crate) fn spawn_generic_land_tile(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     slope_half_ground: f32,
+    climate: Climate,
+    world_seed: u64,
 ) {
     let tileh = ctx.info.tileh;
     let ottd_type = ctx.tile.map_or(0u8, |t| (t.mapt >> 4) & 0xF);
@@ -278,28 +284,45 @@ pub(crate) fn spawn_generic_land_tile(
     // MP_OBJECT (10): grass de base + overlay de objeto
     let grass_img = || sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
     let rough_img = || sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
+    let snow_img = || {
+        if tileh == 0 {
+            assets.snow.clone()
+        } else {
+            sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes)
+        }
+    };
+    let snow_color = Color::srgb(0.94, 0.97, 1.0);
+    let desert_color = Color::srgb(0.92, 0.82, 0.62);
+
+    let clear_ground =
+        effective_clear_ground(climate, tile_m5, ctx.tx_i32(), ctx.ty_i32(), world_seed);
 
     let (image, color) = match ctx.kind {
-        TileKind::Grass if ottd_type == 0 => {
-            // bits 2-4 de m5 = ClearGround
-            // 0=grass, 1=rough, 2=rocky, 3=fields, 4=snow, 5=desert
-            match (tile_m5 >> 2) & 0x7 {
-                0 => (grass_img(), Color::WHITE),
-                3 => {
-                    // `DrawTile_Clear` Fields: estado de cultivo en bits 0–3 de
-                    // m3 + offset de pendiente; cercas como overlay.
-                    let state =
-                        usize::from(ctx.tile.map_or(0, |t| t.m3 & 0x0F)).min(FIELD_STATES - 1);
-                    let img = assets.fields[state * 15 + usize::from(tileh.min(14))].clone();
-                    spawn_field_fences(commands, assets, ctx);
-                    (img, Color::WHITE)
-                }
-                _ => (rough_img(), Color::srgb(0.78, 0.73, 0.58)), // rough/rocky
+        TileKind::Grass if ottd_type == 0 => match clear_ground {
+            CLEAR_GROUND_GRASS => (grass_img(), Color::WHITE),
+            CLEAR_GROUND_SNOW => (snow_img(), snow_color),
+            CLEAR_GROUND_DESERT => (rough_img(), desert_color),
+            3 => {
+                // `DrawTile_Clear` Fields: estado de cultivo en bits 0–3 de
+                // m3 + offset de pendiente; cercas como overlay.
+                let state = usize::from(ctx.tile.map_or(0, |t| t.m3 & 0x0F)).min(FIELD_STATES - 1);
+                let img = assets.fields[state * 15 + usize::from(tileh.min(14))].clone();
+                spawn_field_fences(commands, assets, ctx);
+                (img, Color::WHITE)
             }
-        }
-        TileKind::Grass => (grass_img(), Color::WHITE), // MP_OBJECT u otros
-        // MP_TREES con TreeGround::Grass: hierba normal (los árboles van encima).
-        TileKind::Forest => (grass_img(), Color::WHITE),
+            CLEAR_GROUND_ROUGH => (rough_img(), Color::srgb(0.78, 0.73, 0.58)),
+            _ => (rough_img(), Color::srgb(0.78, 0.73, 0.58)),
+        },
+        TileKind::Grass => match clear_ground {
+            CLEAR_GROUND_SNOW => (snow_img(), snow_color),
+            CLEAR_GROUND_DESERT => (rough_img(), desert_color),
+            _ => (grass_img(), Color::WHITE),
+        },
+        TileKind::Forest => match clear_ground {
+            CLEAR_GROUND_SNOW => (snow_img(), snow_color),
+            CLEAR_GROUND_DESERT => (rough_img(), desert_color),
+            _ => (grass_img(), Color::WHITE),
+        },
         TileKind::CoalField => (rough_img(), Color::srgb(0.55, 0.50, 0.45)),
         TileKind::Unknown(_) => (grass_img(), Color::srgb(1.0, 0.0, 1.0)),
         TileKind::House
@@ -322,10 +345,9 @@ pub(crate) fn spawn_generic_land_tile(
     // ObjectType de OpenTTD: 0=Transmisor, 1=Faro.
     if ottd_type == 10 {
         let (obj_img, obj_xrel, obj_yrel, obj_w, obj_h) = match tile_m5 {
-            // OBJECT_TRANSMITTER=0: sprite 2601, 55x77, xrel=-26, yrel=-71
-            0 => (Some(assets.transmitter.clone()), -26.0, -71.0, 55.0, 77.0),
-            // OBJECT_LIGHTHOUSE=1: sprite 2602, 41x61, xrel=-22, yrel=-48
-            1 => (Some(assets.lighthouse.clone()), -22.0, -48.0, 41.0, 61.0),
+            OBJECT_TYPE_TRANSMITTER => (Some(assets.transmitter.clone()), -26.0, -71.0, 55.0, 77.0),
+            OBJECT_TYPE_LIGHTHOUSE => (Some(assets.lighthouse.clone()), -22.0, -48.0, 41.0, 61.0),
+            OBJECT_TYPE_OWNED_LAND => (Some(assets.bought_land.clone()), -16.0, -40.0, 32.0, 48.0),
             _ => (None, 0.0, 0.0, 0.0, 0.0),
         };
         if let Some(img) = obj_img {

@@ -2,7 +2,7 @@ use crate::map::TileKind;
 use crate::{BRIDGE_BUILD_COST_PER_TILE, GameState, StopKind, TUNNEL_BUILD_COST_PER_TILE};
 
 use super::types::{Command, CommandError};
-use super::{industry, transport, vehicles};
+use super::{buy_land, industry, terraform, transport, vehicles};
 
 /// Aplica `cmd` a `state` o devuelve error sin mutar.
 ///
@@ -156,5 +156,10 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         | Command::ToggleVehicleRunning(..)
         | Command::CloneVehicleOrders { .. } => apply_vehicle_command(state, cmd),
         Command::ClearTile(c) => transport::clear_tile(state, *c),
+        Command::RaiseLand(c) => terraform::raise_land(state, *c),
+        Command::LowerLand(c) => terraform::lower_land(state, *c),
+        Command::LevelLand { from, to, mode } => terraform::level_land(state, *from, *to, *mode),
+        Command::BuyLand(c) => buy_land::buy_land(state, *c),
+        Command::BuyLandArea { from, to } => buy_land::buy_land_area(state, *from, *to),
     }
 }

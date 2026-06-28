@@ -139,5 +139,17 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::BuildFarm => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2190.png"))
         }
+        BuildMenuAction::RaiseLand => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/ui_terraform_up.png"))
+        }
+        BuildMenuAction::LowerLand => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/ui_terraform_down.png"))
+        }
+        BuildMenuAction::LevelLand => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/ui_terraform_level.png"))
+        }
+        BuildMenuAction::BuyLand => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/object_bought_land.png"))
+        }
     }
 }

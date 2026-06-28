@@ -6,7 +6,10 @@ use openttdrs_core::{
 
 use crate::state::SimWorld;
 
-use super::commands::{command_for_action, command_for_line_action};
+use super::commands::{
+    buy_land_command_for_tiles, command_for_action, command_for_line_action,
+    terraform_command_for_tiles,
+};
 use crate::ui::toolbar::{BuildMenuAction, StationBuildState};
 
 pub(crate) fn action_supports_drag(action: BuildMenuAction) -> bool {
@@ -26,6 +29,20 @@ pub(crate) fn action_supports_drag(action: BuildMenuAction) -> bool {
             | BuildMenuAction::RailTunnel
             | BuildMenuAction::RailRemove
             | BuildMenuAction::Clear
+            | BuildMenuAction::RaiseLand
+            | BuildMenuAction::LowerLand
+            | BuildMenuAction::LevelLand
+            | BuildMenuAction::BuyLand
+    )
+}
+
+pub(crate) fn action_supports_area_drag(action: BuildMenuAction) -> bool {
+    matches!(
+        action,
+        BuildMenuAction::RaiseLand
+            | BuildMenuAction::LowerLand
+            | BuildMenuAction::LevelLand
+            | BuildMenuAction::BuyLand
     )
 }
 
@@ -155,6 +172,22 @@ pub(crate) fn apply_drag_action(
         }
         return (false, Some(CommandError::InvalidTunnelEndpoints));
     }
+    if action == BuildMenuAction::BuyLand {
+        if let Some(cmd) = buy_land_command_for_tiles(&tiles) {
+            return match apply_command(&mut sim.state, &cmd) {
+                Ok(()) => (true, None),
+                Err(e) => (false, Some(e)),
+            };
+        }
+        return (false, Some(CommandError::CannotBuyLandHere));
+    }
+    if let Some(cmd) = terraform_command_for_tiles(action, &tiles) {
+        return match apply_command(&mut sim.state, &cmd) {
+            Ok(()) => (true, None),
+            Err(e) => (false, Some(e)),
+        };
+    }
+
     if let Some(cmd) = command_for_line_action(action, &tiles) {
         return match apply_command(&mut sim.state, &cmd) {
             Ok(()) => (true, None),
@@ -226,6 +259,10 @@ pub(crate) fn drag_line_tiles(
     from: (i32, i32),
     to: (i32, i32),
 ) -> Vec<(i32, i32)> {
+    if action_supports_area_drag(action) {
+        return rect_drag_tiles(from, to);
+    }
+
     if action == BuildMenuAction::Road
         && let Some(map) = map
     {
@@ -261,6 +298,20 @@ pub(crate) fn drag_line_tiles(
         }
     }
 
+    out
+}
+
+fn rect_drag_tiles(from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
+    let min_x = from.0.min(to.0);
+    let max_x = from.0.max(to.0);
+    let min_y = from.1.min(to.1);
+    let max_y = from.1.max(to.1);
+    let mut out = Vec::new();
+    for y in min_y..=max_y {
+        for x in min_x..=max_x {
+            out.push((x, y));
+        }
+    }
     out
 }
 

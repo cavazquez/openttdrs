@@ -4,6 +4,7 @@ use crate::station::Station;
 use crate::tick::GameTick;
 use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::Vehicle;
+use crate::world_gen::Climate;
 
 /// Evento efímero para animación «+$» en el cliente (no se serializa).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,6 +64,12 @@ pub const DEPOT_BUILD_COST: i64 = 150;
 pub const TUNNEL_BUILD_COST_PER_TILE: i64 = 90;
 pub const BRIDGE_BUILD_COST_PER_TILE: i64 = 70;
 pub const CLEAR_TILE_COST: i64 = 5;
+/// Precio base por esquina (`PriceBaseSpec` 250 → normalizado dificultad media ≈ 500).
+pub const TERRAFORM_BASE_PRICE: i64 = 500;
+/// Precio base por tesela de terreno comprado (`Price::BuildObject` / owned land).
+pub const BUY_LAND_BASE_PRICE: i64 = 50;
+/// Alias en tick 0 (sin inflación de precios); preferir [`crate::economy::terraform_cost_per_corner`].
+pub const TERRAFORM_COST: i64 = TERRAFORM_BASE_PRICE;
 
 /// Pago plano legado (sustituido por [`crate::economy::transported_goods_income`]).
 #[deprecated(note = "usar economy::transported_goods_income")]
@@ -85,6 +92,12 @@ pub struct GameState {
     /// Color de compañía del jugador (`Colours` en `OpenTTD`; 0 = azul oscuro).
     #[serde(default)]
     pub company_colour: u8,
+    /// Clima del paisaje (`LandscapeType` en `OpenTTD`).
+    #[serde(default)]
+    pub climate: Climate,
+    /// Semilla de generación procedural (0 = sin terreno aleatorio explícito).
+    #[serde(default)]
+    pub world_seed: u64,
     /// Túneles JGR decodificados desde footer `TNBP` del `.ottdmap` (vacío si no hay o no aplica).
     #[serde(default)]
     pub jgr_tunnels_from_footer: Vec<JgrTunnelRecord>,
@@ -127,6 +140,8 @@ impl GameState {
             stats: SimStats::default(),
             economy: CompanyEconomy::default(),
             company_colour: 0,
+            climate: Climate::default(),
+            world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
             path_cache: crate::pathfinder::PathCache::default(),
             pending_income_popups: Vec::new(),
@@ -152,6 +167,8 @@ impl GameState {
             stats: SimStats::default(),
             economy: CompanyEconomy::default(),
             company_colour: 0,
+            climate: Climate::default(),
+            world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
             path_cache: crate::pathfinder::PathCache::default(),
             pending_income_popups: Vec::new(),

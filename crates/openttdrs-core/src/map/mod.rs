@@ -6,6 +6,7 @@ pub mod industry_construction;
 pub mod industry_link;
 pub mod industry_terrain;
 pub mod industry_tile_anim;
+pub mod object;
 pub mod rail_slope;
 pub mod road_bits;
 pub mod slope;
@@ -31,6 +32,10 @@ pub use industry_tile_anim::{
     GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2, GFX_OILWELL_ANIMATED_3,
     advance_industry_tile_animations, industry_animation_frame, industry_gfx,
     industry_tile_anim_state, set_industry_gfx,
+};
+pub use object::{
+    MP_OBJECT_MAPT, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_TRANSMITTER,
+    OTTD_MP_OBJECT, is_map_object_tile, is_owned_land_tile, object_type_from_tile,
 };
 pub use rail_slope::{rail_foundation_for_trackbits, rail_trackbits_valid_on_slope};
 pub use road_bits::{OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, effective_road_bits};

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileKind};
+use openttdrs_core::{Climate, Map, TileKind};
 
 use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite};
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};
@@ -13,6 +13,7 @@ use crate::sprites::{
     road_tile_tram_visual_active, roadside_is_paved, tram_flat_sprite_index,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_road_tile(
     commands: &mut Commands,
     map: &Map,
@@ -21,6 +22,7 @@ pub(crate) fn spawn_road_tile(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     slope_half_ground: f32,
+    climate: Climate,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -32,15 +34,20 @@ pub(crate) fn spawn_road_tile(
         SLOPE_HALF_H[tileh as usize]
     };
     let road_paint = ctx.tile.map_or(Color::WHITE, |t| {
-        road_flat_sprite_color(t.mapt, ctx.kind, t.m7)
+        if climate.uses_snow_ground() {
+            Color::srgb(0.82, 0.88, 0.98)
+        } else {
+            road_flat_sprite_color(t.mapt, ctx.kind, t.m7)
+        }
     });
     // `GetRoadGroundSprite`: acera pavimentada (Roadside >= Paved) usa el set
     // 1313..1331 salvo nieve/desierto, que mantiene el set sobre pasto + tinte.
     let roadside = ctx.tile.and_then(|t| road_tile_roadside(t.m5, t.m6));
-    let paved = roadside.is_some_and(roadside_is_paved)
-        && !ctx
-            .tile
-            .is_some_and(|t| road_tile_snow_or_desert(t.mapt, ctx.kind, t.m7));
+    let snow_or_desert = ctx
+        .tile
+        .is_some_and(|t| road_tile_snow_or_desert(t.mapt, ctx.kind, t.m7))
+        || climate.uses_snow_ground();
+    let paved = roadside.is_some_and(roadside_is_paved) && !snow_or_desert;
     if tileh != 0 {
         spawn_ground_sprite(
             commands,
@@ -150,6 +157,7 @@ pub(crate) fn spawn_road_tile(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_rail_tile(
     commands: &mut Commands,
     map: &Map,
@@ -158,6 +166,7 @@ pub(crate) fn spawn_rail_tile(
     ctx: &TileRenderContext,
     slope_half_ground: f32,
     rail_layers: &mut Vec<u32>,
+    climate: Climate,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -177,7 +186,8 @@ pub(crate) fn spawn_rail_tile(
     };
     let snow_ground = ctx
         .tile
-        .is_some_and(|t| (t.m3 & 0x0F) == RAIL_GROUND_SNOW_OR_DESERT);
+        .is_some_and(|t| (t.m3 & 0x0F) == RAIL_GROUND_SNOW_OR_DESERT)
+        || climate.uses_snow_ground();
     collect_rail_sprites(
         rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1),
         tileh,

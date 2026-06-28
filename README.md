@@ -41,7 +41,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | UI, toolbar, ventanas, barra inferior | 🟡 |
 | Señales bloque v1 (sin PBS) | 🟡 |
 | Noticias / ticker / periódico | ✅ N1–N5 |
-| Terraform / gen mundo / climas | ❌ |
+| Terraform / gen mundo / climas | 🟡 (terraform T1–T3) |
 | Barcos, aviones, Cargo Dist, NewGRF, red I8 | 🔮 |
 
 ### Guía rápida para continuar (IA / desarrolladores)
@@ -92,8 +92,8 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **Construcción** | Waypoint ferroviario + orden pasar | ✅ | `PlaceRailWaypoint`, `StopKind::RailWaypoint` |
 | **Construcción** | Colocar señal bloque (`PlaceRailSignal`) | ✅ | `rail_signals.rs`, toolbar rail |
 | **Construcción** | Convertir tipo de vía (`RailConvert`) | ❌ | Botón stub en toolbar |
-| **Construcción** | Terraform: elevar / bajar / nivelar | ❌ | [ROADMAP_TERRAFORM.md](docs/ROADMAP_TERRAFORM.md) T1–T3 |
-| **Construcción** | Autoslope al construir sobre pendiente | ❌ | Terraform T3 |
+| **Construcción** | Terraform: elevar / bajar / nivelar | ✅ | [ROADMAP_TERRAFORM.md](docs/ROADMAP_TERRAFORM.md) T1–T3 |
+| **Construcción** | Autoslope al construir sobre pendiente | ✅ | Terraform T3 |
 | **Simulación** | Tick de juego, pausa, velocidad | ✅ | `simulation.rs`, `SimHudControls` |
 | **Simulación** | Producción industria (10 specs sandbox) | ✅ | `industry.rs`, panel industria |
 | **Simulación** | Carga / descarga en estaciones | ✅ | `sim_step.rs` |

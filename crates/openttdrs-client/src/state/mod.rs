@@ -1,17 +1,18 @@
 //! Estado del mundo de simulacion y generacion procedural.
 
 pub(crate) mod bootstrap;
+pub(crate) mod new_game;
 pub(crate) mod stations;
 
 use bevy::prelude::*;
 use openttdrs_core::{GameState, Map, OttdmapExtras};
 
-use crate::config::apply_test_company_colour;
+use crate::config::{apply_test_company_colour, climate_from_env, env_u64, world_gen_enabled};
 use crate::state::bootstrap::{
-    fill_flat_grass, log_detection_summary, log_gameplay_showcase_zones, log_procedural_demo_zones,
-    place_bridge_demo_gap, place_clean_demo_transport, place_demo_economy_loop,
-    place_gameplay_showcase, place_industries, place_industries_from_sav, place_stations,
-    place_stations_from_footer_stxy, place_stations_from_map_tiles, place_tunnel_demo_ridge,
+    NewGameSettings, build_procedural_demo_world, log_detection_summary,
+    log_gameplay_showcase_zones, log_procedural_demo_zones, place_industries,
+    place_industries_from_sav, place_stations, place_stations_from_footer_stxy,
+    place_stations_from_map_tiles,
 };
 
 /// Dimensiones del mapa generado proceduralmente (sin `OTTDMAP_FILE`).
@@ -46,6 +47,33 @@ pub(crate) fn load_sav_state(bytes: &[u8]) -> Result<GameState, String> {
     Ok(state)
 }
 
+fn settings_from_env() -> NewGameSettings {
+    NewGameSettings {
+        climate: climate_from_env(),
+        world_gen: world_gen_enabled(),
+        island: std::env::var_os("OPENTTDRS_WORLD_ISLAND").is_some(),
+        preserve_demo: !world_gen_enabled() || std::env::var_os("OPENTTDRS_WORLD_FULL").is_none(),
+        seed: env_u64("OPENTTDRS_WORLD_SEED", 0),
+    }
+}
+
+fn bootstrap_procedural_state(settings: &NewGameSettings) -> GameState {
+    let mut state = build_procedural_demo_world(settings);
+    if settings.preserve_demo {
+        log_procedural_demo_zones();
+        log_gameplay_showcase_zones();
+    }
+    log_detection_summary(&state, false, None);
+    apply_test_company_colour(&mut state);
+    if settings.world_gen {
+        info!(
+            "Mapa procedural: clima={:?}, seed={}, isla={}, demo={}",
+            settings.climate, state.world_seed, settings.island, settings.preserve_demo
+        );
+    }
+    state
+}
+
 /// Pantalla actual del cliente.
 #[derive(States, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum ClientScreen {
@@ -64,83 +92,53 @@ pub struct SimWorld {
     pub ottdmap_extras: Option<OttdmapExtras>,
 }
 
-impl Default for SimWorld {
-    fn default() -> Self {
-        if let Ok(path) = std::env::var("OTTDJSON_LOAD") {
-            match std::fs::read_to_string(&path) {
-                Ok(text) => match openttdrs_core::save::load_from_str(&text) {
-                    Ok(mut state) => {
-                        apply_test_company_colour(&mut state);
-                        info!("Estado de simulacion cargado desde JSON: {path}");
-                        log_detection_summary(&state, true, None);
-                        return Self {
-                            state,
-                            loaded_file: true,
-                            ottdmap_extras: None,
-                        };
-                    }
-                    Err(e) => error!("OTTDJSON_LOAD no es JSON valido ({path}): {e}"),
-                },
-                Err(e) => error!("No se pudo leer OTTDJSON_LOAD={path}: {e}"),
-            }
+impl SimWorld {
+    /// Crea el mundo según opciones del menú (o variables de entorno en CI).
+    #[must_use]
+    pub fn from_new_game(settings: &NewGameSettings) -> Self {
+        if let Ok(path) = std::env::var("OTTDJSON_LOAD")
+            && let Ok(text) = std::fs::read_to_string(&path)
+            && let Ok(mut state) = openttdrs_core::save::load_from_str(&text)
+        {
+            apply_test_company_colour(&mut state);
+            info!("Estado de simulacion cargado desde JSON: {path}");
+            log_detection_summary(&state, true, None);
+            return Self {
+                state,
+                loaded_file: true,
+                ottdmap_extras: None,
+            };
         }
-        if let Ok(path) = std::env::var("OTTDMAP_FILE") {
-            match std::fs::read(&path) {
-                Ok(data) => match Map::from_ottd_binary_with_extras(&data) {
-                    Ok((map, extras)) => {
-                        info!("Mapa cargado desde {path}");
-                        let mut state = GameState::from_map(map);
-                        state.jgr_tunnels_from_footer = extras.jgr_tunnels_from_tnbp();
-                        place_industries(&mut state, true, Some(&extras));
-                        place_stations(&mut state);
-                        place_stations_from_map_tiles(&mut state);
-                        place_stations_from_footer_stxy(&mut state, Some(&extras));
-                        apply_test_company_colour(&mut state);
-                        // En mapas reales no inyectar vehículos de demo:
-                        // se renderizan solo los realmente presentes en datos cargados.
-                        log_detection_summary(&state, true, Some(&extras));
-                        return Self {
-                            state,
-                            loaded_file: true,
-                            ottdmap_extras: Some(extras),
-                        };
-                    }
-                    Err(e) => {
-                        let magic_hint = if data.len() >= 4 {
-                            let m = String::from_utf8_lossy(&data[0..4]);
-                            format!(
-                                " primeros 4 bytes: {m:?} (hex {:02x}{:02x}{:02x}{:02x})",
-                                data[0], data[1], data[2], data[3],
-                            )
-                        } else {
-                            String::new()
-                        };
-                        panic!(
-                            "Error al parsear OTTDMAP_FILE={path}: {e:?}.{magic_hint} \
-Se espera cabecera MAP1 + planos densos actuales; regenera con: \
-python3 scripts/parse_sav.py tu.sav {path}"
-                        );
-                    }
-                },
-                Err(e) => panic!("No se pudo leer OTTDMAP_FILE={path}: {e}"),
-            }
+        if let Ok(path) = std::env::var("OTTDMAP_FILE")
+            && let Ok(data) = std::fs::read(&path)
+            && let Ok((map, extras)) = Map::from_ottd_binary_with_extras(&data)
+        {
+            info!("Mapa cargado desde {path}");
+            let mut state = GameState::from_map(map);
+            state.jgr_tunnels_from_footer = extras.jgr_tunnels_from_tnbp();
+            place_industries(&mut state, true, Some(&extras));
+            place_stations(&mut state);
+            place_stations_from_map_tiles(&mut state);
+            place_stations_from_footer_stxy(&mut state, Some(&extras));
+            apply_test_company_colour(&mut state);
+            log_detection_summary(&state, true, Some(&extras));
+            return Self {
+                state,
+                loaded_file: true,
+                ottdmap_extras: Some(extras),
+            };
         }
-        let mut state = GameState::new(MAP_W, MAP_H);
-        fill_flat_grass(&mut state);
-        place_clean_demo_transport(&mut state);
-        place_demo_economy_loop(&mut state);
-        place_gameplay_showcase(&mut state);
-        place_tunnel_demo_ridge(&mut state);
-        place_bridge_demo_gap(&mut state);
-        log_procedural_demo_zones();
-        log_gameplay_showcase_zones();
-        log_detection_summary(&state, false, None);
-        apply_test_company_colour(&mut state);
         Self {
-            state,
+            state: bootstrap_procedural_state(settings),
             loaded_file: false,
             ottdmap_extras: None,
         }
+    }
+}
+
+impl Default for SimWorld {
+    fn default() -> Self {
+        Self::from_new_game(&settings_from_env())
     }
 }
 
@@ -148,6 +146,7 @@ python3 scripts/parse_sav.py tu.sav {path}"
 #[allow(clippy::expect_used)]
 mod sim_world_coverage_tests {
     use super::SimWorld;
+    use crate::state::bootstrap::NewGameSettings;
 
     #[test]
     fn sim_world_default_runs_procedural_bootstrap() {
@@ -175,6 +174,17 @@ mod sim_world_coverage_tests {
             .find(|v| v.id == 9010)
             .expect("camión económico demo");
         assert_eq!(truck.orders.len(), 2);
+    }
+
+    #[test]
+    fn procedural_island_skips_demo_industries() {
+        let w = SimWorld::from_new_game(&NewGameSettings::procedural_island(
+            openttdrs_core::Climate::Temperate,
+            42,
+        ));
+        assert_eq!(w.state.industries.len(), 0);
+        assert_eq!(w.state.vehicles.len(), 0);
+        assert!(w.state.world_seed != 0);
     }
 }
 

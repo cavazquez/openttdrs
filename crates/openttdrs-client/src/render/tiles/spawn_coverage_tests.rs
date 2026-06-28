@@ -5,7 +5,10 @@ use bevy::asset::AssetPlugin;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::image::ImagePlugin;
 use bevy::prelude::*;
-use openttdrs_core::{Map, Tile, TileCoord, TileKind};
+use openttdrs_core::{Climate, Map, Tile, TileCoord, TileKind};
+
+const TEST_CLIMATE: Climate = Climate::Temperate;
+const TEST_WORLD_SEED: u64 = 0;
 
 use crate::render::assets::{WorldAssets, stub_opengfx_tiles_for_tests};
 use crate::render::tiles::{
@@ -128,6 +131,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 2, 2),
                     4.0,
+                    TEST_CLIMATE,
                 );
                 spawn_road_tile(
                     &mut commands,
@@ -137,6 +141,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 2, 3),
                     4.0,
+                    TEST_CLIMATE,
                 );
                 spawn_rail_tile(
                     &mut commands,
@@ -146,6 +151,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &TileRenderContext::new(&m.0, &g.0, 3, 2),
                     4.0,
                     &mut rails,
+                    TEST_CLIMATE,
                 );
                 rails.clear();
                 spawn_rail_tile(
@@ -156,6 +162,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &TileRenderContext::new(&m.0, &g.0, 3, 3),
                     4.0,
                     &mut rails,
+                    TEST_CLIMATE,
                 );
                 spawn_station_tile(
                     &mut commands,
@@ -251,30 +258,40 @@ fn spawn_land_house_industry_generics_and_batches() {
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 0, 0),
                     4.0,
+                    TEST_CLIMATE,
+                    TEST_WORLD_SEED,
                 );
                 spawn_generic_land_tile(
                     &mut commands,
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 1, 0),
                     4.0,
+                    TEST_CLIMATE,
+                    TEST_WORLD_SEED,
                 );
                 spawn_generic_land_tile(
                     &mut commands,
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 2, 0),
                     4.0,
+                    TEST_CLIMATE,
+                    TEST_WORLD_SEED,
                 );
                 spawn_generic_land_tile(
                     &mut commands,
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 3, 0),
                     4.0,
+                    TEST_CLIMATE,
+                    TEST_WORLD_SEED,
                 );
                 spawn_generic_land_tile(
                     &mut commands,
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 4, 0),
                     4.0,
+                    TEST_CLIMATE,
+                    TEST_WORLD_SEED,
                 );
                 spawn_house_tile(
                     &mut commands,
@@ -354,6 +371,7 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 1, 1),
                     4.0,
+                    TEST_CLIMATE,
                 );
                 spawn_station_tile(
                     &mut commands,
@@ -563,6 +581,7 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 2, 2),
                     4.0,
+                    TEST_CLIMATE,
                 );
             },
         )
@@ -592,6 +611,7 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 4, 4),
                     4.0,
+                    TEST_CLIMATE,
                 );
             },
         )
@@ -635,6 +655,8 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 2, 2),
                     4.0,
+                    TEST_CLIMATE,
+                    TEST_WORLD_SEED,
                 );
             },
         )
@@ -650,6 +672,8 @@ fn spawn_field_tile_draws_crop_ground_and_fences() {
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 3, 2),
                     4.0,
+                    TEST_CLIMATE,
+                    TEST_WORLD_SEED,
                 );
             },
         )

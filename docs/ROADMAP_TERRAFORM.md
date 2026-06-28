@@ -3,9 +3,8 @@
 Documento de **seguimiento** para implementar las herramientas de **elevar**, **bajar/cavar**
 y **nivelar** terreno al estilo del panel de paisaje de OpenTTD.
 
-**Estado (2026-06-22):** **no implementado** en simulador ni toolbar. El cliente ya
-renderiza pendientes y alturas correctamente; falta el pipeline de comandos, validación
-upstream y UI.
+**Estado (2026-06-22):** **T1–T3 implementados** (elevar/bajar/nivelar, precios, autoslope, toolbar Paisaje).
+**T4 (MVP):** climas en `GameState` + gen procedural opcional (`OPENTTDRS_WORLD_GEN=1`); ver §11.
 
 **Relacionado:**
 
@@ -25,9 +24,9 @@ upstream y UI.
 | **T1 — MVP** | Elevar + bajar en hierba/bosque, 1 tesela | Colina/valle manual en partida JSON; preview verde/rojo |
 | **T2 — Útil** | Nivelar, drag en área, agua ↔ tierra en costa | Misma jugabilidad básica que panel paisaje vanilla |
 | **T3 — Paridad** | Precios, infra encima, autoslope al construir | Comportamiento reconocible vs OpenTTD 15.x en saves |
-| **T4 — Mundo** | 4 climas + generación procedural | Fuera de este roadmap; ver PARIDAD §19 |
+| **T4 — Mundo** | 4 climas + generación procedural | MVP: `Climate` + `world_gen.rs` + env vars; industrias/ciudades por clima pendientes |
 
-Hoy openttdrs está en **0 % de T1–T3** (solo datos de altura en mapa importado o demo).
+Hoy openttdrs tiene **T1–T3 completos** y **T4 MVP** (climas + terreno procedural opcional).
 
 ---
 
@@ -204,7 +203,7 @@ MVP: **rechazar** con `CommandError::TileNotTerraformable` (nuevo) si `kind != G
 | T3.1 | Precio `PR_TERRAFORM` + inflación (tabla economía OpenTTD) | `economy` o constantes |
 | T3.2 | Terraform con vía/carretera: rechazar o cobrar + quitar overlay | Política documentada |
 | T3.3 | **Autoslope** al `PlaceRoad*` / `PlaceRail*` en tesela inclinada | `transport.rs` |
-| T3.4 | **Buy land** (`SPR_BOUGHT_LAND`) — opcional, baja prioridad | Comando + sprite |
+| T3.4 | **Buy land** (`SPR_BOUGHT_LAND`) | **hecho** — `command/buy_land.rs`, toolbar Paisaje |
 | T3.5 | Doc limitaciones en `TILES_Y_SAVEGAMES_OPENTTD.md` § terraform | § nuevo |
 
 **Criterio de cierre T3:**
@@ -327,17 +326,53 @@ Checklist sugerido (añadir a futuro `TERRAFORM_CHECKLIST.md` si T1 cierra):
 
 | ID | Tema | Estado | Bloquea |
 |----|------|--------|---------|
-| T1 | Elevar + bajar (Grass/Forest) | **pendiente** | Gameplay colinas |
-| T2 | Nivelar + drag + agua | **pendiente** | Costas jugables |
-| T3 | Precios + infra + autoslope | **pendiente** | Paridad §19 |
-| T4 | Buy land | **backlog** | — |
+| T1 | Elevar + bajar (Grass/Forest) | **hecho** | Toolbar Paisaje |
+| T2 | Nivelar + drag + agua | **hecho** | Costas jugables |
+| T3 | Precios + infra + autoslope | **hecho** | Paridad §19 |
+| T4 | Climas + gen procedural | **MVP+** | `world_gen.rs`, menú nueva partida, isla |
+| T4.1 | Buy land | **hecho** | `object_bought_land.png`, `BuyLand` / `BuyLandArea` |
 | — | Render `tileh` / slopes | **hecho** | — |
 | — | `Map::set_height` | **hecho** | — |
 | — | SFX terraform (script) | **hecho** (asset) | — |
 
 ---
 
-## 11. Encaje en hito 0.1
+## 11. T4 — Climas y generación procedural (MVP+)
+
+| Pieza | Ubicación |
+|-------|-----------|
+| `Climate` + `WorldGenConfig` | `crates/openttdrs-core/src/world_gen.rs` |
+| Campo `GameState::climate` + `world_seed` | serializable en JSON |
+| Gen colinas/agua/bosque + **modo isla** | `apply_world_gen` (`island: bool`, ruido en capas) |
+| Reservas demo | `PreserveRect` explícito; `preserve_demo` en `NewGameSettings` |
+| Render nieve/desierto | `render/tiles/land.rs`, sprite `terrain_snow_full.png` |
+| Menú **Nueva partida** | `ui/main_menu.rs`, `state/new_game.rs`, `bootstrap/world.rs` |
+| Arranque | `SimWorld::from_new_game(&settings)` (sustituye env vars en juego normal) |
+
+**Menú principal (cliente):**
+
+- Clima: botones + teclas **1–4** (temperate / arctic / tropic / toyland).
+- Toggles: generación procedural, **isla**, conservar zona demo (carretera/vía/puente).
+- **Iniciar partida** → `build_procedural_demo_world` con las opciones elegidas.
+- **Demo clásica** → mapa plano + transporte/industrias tutorial.
+
+**Variables de entorno (CI / headless, sin menú):**
+
+```bash
+OPENTTDRS_CLIMATE=arctic          # temperate | arctic | tropic | toyland
+OPENTTDRS_WORLD_GEN=1             # colinas + lagos fuera de zonas demo
+OPENTTDRS_WORLD_ISLAND=1          # más agua en bordes del mapa
+OPENTTDRS_WORLD_SEED=42           # opcional, determinista
+cargo run -p openttdrs-client
+```
+
+Sin `OPENTTDRS_WORLD_GEN`, el mapa demo sigue plano; el clima afecta solo sprites de suelo/vía.
+
+**Pendiente T4+:** industrias/ciudades por clima, tamaño de mapa configurable, NewGRF objetos.
+
+---
+
+## 12. Encaje en hito 0.1
 
 | Sprint | Relación |
 |--------|----------|
@@ -350,7 +385,7 @@ paralelo si bloquea pruebas de construcción en pendiente.
 
 ---
 
-## 12. Comandos útiles (desarrollo)
+## 13. Comandos útiles (desarrollo)
 
 ```bash
 # Regenerar fixture de pendientes

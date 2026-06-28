@@ -45,11 +45,16 @@ pub(super) fn spawn_toolbar_group_buttons(
             ),
             (
                 3,
+                "assets/opengfx/tiles/ui_terraform_up.png",
+                ToolbarGroup::Landscape,
+            ),
+            (
+                4,
                 "assets/opengfx/tiles/object_lighthouse.png",
                 ToolbarGroup::Info,
             ),
             (
-                4,
+                5,
                 "assets/opengfx/tiles/object_transmitter.png",
                 ToolbarGroup::Settings,
             ),
@@ -64,6 +69,7 @@ pub(super) fn spawn_toolbar_group_buttons(
                             ToolbarGroup::Rail => "Ferrocarriles",
                             ToolbarGroup::Road => "Carreteras",
                             ToolbarGroup::Economy => "Economia",
+                            ToolbarGroup::Landscape => "Paisaje",
                             ToolbarGroup::Info => "Informacion",
                             ToolbarGroup::Settings => "Ajustes",
                         },
@@ -92,7 +98,7 @@ pub(super) fn spawn_toolbar_group_buttons(
                         },
                     ));
                 });
-            if i < 4 {
+            if i < 5 {
                 parent.spawn((
                     Node {
                         width: Val::Px(2.0),
@@ -336,6 +342,7 @@ pub(super) fn spawn_secondary_tool_panels(
 ) {
     for group in [
         ToolbarGroup::Economy,
+        ToolbarGroup::Landscape,
         ToolbarGroup::Info,
         ToolbarGroup::Settings,
     ] {
@@ -394,6 +401,32 @@ pub(super) fn spawn_secondary_tool_panels(
                             "Granja",
                             "assets/opengfx/tiles/industry_2190.png",
                             BuildMenuAction::BuildFarm,
+                        ),
+                    ],
+                ),
+                ToolbarGroup::Landscape => spawn_icon_tool_buttons(
+                    buttons,
+                    asset_server,
+                    &[
+                        (
+                            "Elevar terreno",
+                            "assets/opengfx/tiles/ui_terraform_up.png",
+                            BuildMenuAction::RaiseLand,
+                        ),
+                        (
+                            "Bajar terreno",
+                            "assets/opengfx/tiles/ui_terraform_down.png",
+                            BuildMenuAction::LowerLand,
+                        ),
+                        (
+                            "Nivelar terreno",
+                            "assets/opengfx/tiles/ui_terraform_level.png",
+                            BuildMenuAction::LevelLand,
+                        ),
+                        (
+                            "Comprar terreno",
+                            "assets/opengfx/tiles/object_bought_land.png",
+                            BuildMenuAction::BuyLand,
                         ),
                     ],
                 ),

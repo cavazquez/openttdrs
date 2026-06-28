@@ -21,11 +21,29 @@ pub(crate) fn env_u32_in_range(
         .unwrap_or(default)
 }
 
+pub(crate) fn env_u64(name: &str, default: u64) -> u64 {
+    env_string(name)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(default)
+}
+
 pub(crate) fn env_u8_in_range(name: &str, default: u8, range: std::ops::RangeInclusive<u8>) -> u8 {
     env_string(name)
         .and_then(|s| s.parse().ok())
         .filter(|v| range.contains(v))
         .unwrap_or(default)
+}
+
+/// Clima desde `OPENTTDRS_CLIMATE` (`temperate`, `arctic`, `tropic`, `toyland`).
+pub(crate) fn climate_from_env() -> openttdrs_core::Climate {
+    env_string("OPENTTDRS_CLIMATE")
+        .and_then(|s| openttdrs_core::Climate::parse(&s))
+        .unwrap_or_default()
+}
+
+/// Generación procedural de colinas/agua (`OPENTTDRS_WORLD_GEN=1`).
+pub(crate) fn world_gen_enabled() -> bool {
+    env_flag("OPENTTDRS_WORLD_GEN")
 }
 
 /// Sobrescribe `GameState::company_colour` con `OPENTTDRS_COMPANY_COLOUR` (0–15) para QA.

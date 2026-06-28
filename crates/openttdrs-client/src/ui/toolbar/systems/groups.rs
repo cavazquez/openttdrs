@@ -72,11 +72,12 @@ pub(crate) fn update_toolbar_tool_visibility(
             Display::None
         };
         let offset = match toolbar_state.active_group {
-            Some(ToolbarGroup::Rail) => -112.0,
-            Some(ToolbarGroup::Road) => -56.0,
-            Some(ToolbarGroup::Economy) => 0.0,
-            Some(ToolbarGroup::Info) => 56.0,
-            Some(ToolbarGroup::Settings) => 112.0,
+            Some(ToolbarGroup::Rail) => -140.0,
+            Some(ToolbarGroup::Road) => -84.0,
+            Some(ToolbarGroup::Economy) => -28.0,
+            Some(ToolbarGroup::Landscape) => 28.0,
+            Some(ToolbarGroup::Info) => 84.0,
+            Some(ToolbarGroup::Settings) => 140.0,
             None => 0.0,
         };
         node.margin.left = Val::Px(offset);
@@ -118,6 +119,10 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         | BuildMenuAction::BuildSawmill
         | BuildMenuAction::BuildForest
         | BuildMenuAction::BuildFarm => ToolbarGroup::Economy,
+        BuildMenuAction::RaiseLand
+        | BuildMenuAction::LowerLand
+        | BuildMenuAction::LevelLand
+        | BuildMenuAction::BuyLand => ToolbarGroup::Landscape,
     }
 }
 

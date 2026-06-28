@@ -36,6 +36,10 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::BuildSawmill => "Aserradero",
         BuildMenuAction::BuildForest => "Bosque",
         BuildMenuAction::BuildFarm => "Granja",
+        BuildMenuAction::RaiseLand => "Elevar terreno",
+        BuildMenuAction::LowerLand => "Bajar terreno",
+        BuildMenuAction::LevelLand => "Nivelar terreno",
+        BuildMenuAction::BuyLand => "Comprar terreno",
     }
 }
 

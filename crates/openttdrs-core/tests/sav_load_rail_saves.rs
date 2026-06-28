@@ -1,17 +1,29 @@
-//! Prueba saves con más vía que `stationlist-test.sav` (sintético y partida real).
+//! Prueba saves con más vía que `stationlist-test.sav` (sintético y partida real opcional).
 
 #![allow(clippy::expect_used)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use openttdrs_core::{GameState, TileKind, VehicleKind, sav};
 
-fn sav_bytes(rel: &str) -> Vec<u8> {
+fn fixture_path(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join(name)
+}
+
+fn workspace_save_path(rel: &str) -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.pop();
     path.pop();
     path.push(rel);
-    std::fs::read(&path).unwrap_or_else(|e| panic!("no se encontró {}: {e}", path.display()))
+    path
+}
+
+fn read_bytes(path: &Path, label: &str) -> Vec<u8> {
+    std::fs::read(path)
+        .unwrap_or_else(|e| panic!("no se encontró {label} ({}): {e}", path.display()))
 }
 
 fn count_rail(map: &openttdrs_core::Map) -> usize {
@@ -36,9 +48,8 @@ fn count_rail(map: &openttdrs_core::Map) -> usize {
     n
 }
 
-fn simulate_movement(label: &str, rel: &str, min_rail: usize) {
-    let raw = sav_bytes(rel);
-    let sav = sav::load(&raw).unwrap_or_else(|e| panic!("{label}: load: {e:?}"));
+fn simulate_movement(label: &str, raw: &[u8], min_rail: usize) {
+    let sav = sav::load(raw).unwrap_or_else(|e| panic!("{label}: load: {e:?}"));
     let rail = count_rail(&sav.map);
     eprintln!(
         "{label}: SLV={} map={:?} rail_tiles={rail} veh={} stations={}",
@@ -103,13 +114,23 @@ fn simulate_movement(label: &str, rel: &str, min_rail: usize) {
 
 #[test]
 fn demo_openttd_sav_trains_move() {
-    simulate_movement("demo_openttd", "save/demo_openttd.sav", 30);
+    let path = fixture_path("demo_openttd.sav");
+    let raw = read_bytes(&path, "demo_openttd.sav");
+    simulate_movement("demo_openttd", &raw, 30);
 }
 
 #[test]
 fn grinnway_sav_has_rail_network() {
-    // Partida real: poca vía explícita en MAPT pero más que stationlist; puede no tener trenes con órdenes.
-    let raw = sav_bytes("save/Grinnway Transport, 1955-08-01.sav");
+    // Partida real opcional (solo en desarrollo local bajo save/, no versionada).
+    let path = workspace_save_path("save/Grinnway Transport, 1955-08-01.sav");
+    let Ok(raw) = std::fs::read(&path) else {
+        eprintln!(
+            "skip grinnway: {} no presente (partida local opcional)",
+            path.display()
+        );
+        return;
+    };
+
     let sav = sav::load(&raw).expect("grinnway load");
     let rail = count_rail(&sav.map);
     eprintln!(

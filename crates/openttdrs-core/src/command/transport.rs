@@ -20,6 +20,7 @@ use crate::{
     STATION_BUILD_COST, Station, StopKind, WAYPOINT_BUILD_COST,
 };
 
+use super::terraform::{apply_autoslope_if_needed, check_autoslope_flat};
 use super::{CommandError, in_bounds};
 
 pub(crate) fn check_in_bounds(map: &Map, c: TileCoord) -> Result<(), CommandError> {
@@ -49,6 +50,27 @@ fn existing_rail_trackbits(map: &Map, c: TileCoord) -> u8 {
     map.get(c)
         .filter(|t| t.kind == TileKind::Rail)
         .map_or(0, |t| t.m5 & 0x3F)
+}
+
+/// Valida `TrackBits` tras autoslope opcional (T3).
+pub(crate) fn check_rail_trackbits_with_autoslope(
+    map: &Map,
+    c: TileCoord,
+    final_bits: u8,
+    tick: u64,
+) -> Result<(), CommandError> {
+    if check_rail_trackbits_on_tile(map, c, final_bits).is_ok() {
+        return Ok(());
+    }
+    let (tileh, _) = tile_slope_and_z(map, c).ok_or(CommandError::OutOfBounds)?;
+    if tileh == 0 {
+        return Err(CommandError::InvalidRailOnSlope);
+    }
+    check_autoslope_flat(map, c, tick)?;
+    if !rail_trackbits_valid_on_slope(0, final_bits) {
+        return Err(CommandError::InvalidRailOnSlope);
+    }
+    Ok(())
 }
 
 /// Valida `TrackBits` finales tras colocar vía (`CheckRailSlope` / `GetRailFoundation`).
@@ -708,6 +730,7 @@ pub(super) fn place_road_bits(
     bits: u8,
 ) -> Result<(), CommandError> {
     check_place_road_bits(&state.map, c)?;
+    apply_autoslope_if_needed(state, c)?;
     let force_axis = bits & ROAD_PLACE_FORCE_AXIS != 0;
     let requested = bits & 0x0F;
     let existing = state.map.get(c).map_or(0, |t| {
@@ -1374,6 +1397,7 @@ pub(super) fn place_rail_bits(
     bits: u8,
 ) -> Result<(), CommandError> {
     check_place_rail(&state.map, c)?;
+    apply_autoslope_if_needed(state, c)?;
     let tb = merged_rail_trackbits_on_tile(&state.map, c, bits);
     check_rail_trackbits_on_tile(&state.map, c, tb)?;
     write_normal_rail_tile(state, c, tb)?;
@@ -1388,6 +1412,7 @@ pub(super) fn set_rail_bits(
     bits: u8,
 ) -> Result<(), CommandError> {
     check_place_rail(&state.map, c)?;
+    apply_autoslope_if_needed(state, c)?;
     let tb = (bits & 0x3F).max(RAIL_TB_X);
     check_rail_trackbits_on_tile(&state.map, c, tb)?;
     write_normal_rail_tile(state, c, tb)?;
@@ -1398,6 +1423,7 @@ pub(super) fn set_rail_bits(
 
 pub(super) fn place_rail(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
     check_place_rail(&state.map, c)?;
+    apply_autoslope_if_needed(state, c)?;
     let tb = rail_trackbits_from_neighbors(&state.map, c);
     check_rail_trackbits_on_tile(&state.map, c, tb)?;
     write_normal_rail_tile(state, c, tb)?;

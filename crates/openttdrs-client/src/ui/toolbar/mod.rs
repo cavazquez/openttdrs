@@ -81,6 +81,10 @@ pub(crate) enum BuildMenuAction {
     BuildSawmill,
     BuildForest,
     BuildFarm,
+    RaiseLand,
+    LowerLand,
+    LevelLand,
+    BuyLand,
 }
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
@@ -88,6 +92,7 @@ pub(crate) enum ToolbarGroup {
     Rail,
     Road,
     Economy,
+    Landscape,
     Info,
     Settings,
 }

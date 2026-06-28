@@ -37,7 +37,10 @@ use hud::{
 use industry_panel::{
     IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
 };
-use main_menu::{main_menu_interaction, setup_main_menu, setup_main_menu_camera};
+use main_menu::{
+    main_menu_interaction, main_menu_options_interaction, setup_main_menu, setup_main_menu_camera,
+    sync_main_menu_summary,
+};
 use news_settings_window::{
     NewsSettingsWindowState, handle_news_settings_buttons, news_settings_on_closed,
     setup_news_settings_window, sync_news_settings_window,
@@ -110,6 +113,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<TownWindowState>()
         .init_resource::<BuyVehicleWindowState>()
         .init_resource::<VehicleWindowState>()
+        .init_resource::<crate::state::new_game::NewGameSettingsResource>()
         .add_systems(
             OnEnter(ClientScreen::MainMenu),
             (setup_main_menu_camera, setup_main_menu),
@@ -141,7 +145,12 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             Update,
-            main_menu_interaction.run_if(in_state(ClientScreen::MainMenu)),
+            (
+                main_menu_interaction,
+                main_menu_options_interaction,
+                sync_main_menu_summary,
+            )
+                .run_if(in_state(ClientScreen::MainMenu)),
         )
         .add_systems(
             Update,

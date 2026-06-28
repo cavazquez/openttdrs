@@ -81,6 +81,30 @@ pub fn inflation_income_factor(tick: u64) -> u32 {
     1024 + u32::try_from(years).unwrap_or(u32::MAX).saturating_mul(4)
 }
 
+/// Factor de inflación de precios de construcción (/1024), al estilo `inflation_prices`.
+///
+/// `OpenTTD` usa `infl_amount_pr = max(0, initial_interest - 1)` (por defecto 1 %/año
+/// frente a ~2 % en ingresos). Aquí ~0,3 %/año (`+3` por 1024).
+#[must_use]
+pub fn inflation_prices_factor(tick: u64) -> u32 {
+    let years = tick / TICKS_PER_YEAR;
+    1024 + u32::try_from(years).unwrap_or(u32::MAX).saturating_mul(3)
+}
+
+/// Coste de terraform por esquina modificada (`Price::Terraform` normalizado × inflación).
+#[must_use]
+pub fn terraform_cost_per_corner(tick: u64) -> i64 {
+    use crate::game_state::TERRAFORM_BASE_PRICE;
+    TERRAFORM_BASE_PRICE.saturating_mul(i64::from(inflation_prices_factor(tick))) / 1024
+}
+
+/// Coste por tesela de terreno comprado.
+#[must_use]
+pub fn buy_land_cost(tick: u64) -> i64 {
+    use crate::game_state::BUY_LAND_BASE_PRICE;
+    BUY_LAND_BASE_PRICE.saturating_mul(i64::from(inflation_prices_factor(tick))) / 1024
+}
+
 const MIN_TIME_FACTOR: i32 = 31;
 const MAX_TIME_FACTOR: i32 = 255;
 
@@ -175,6 +199,20 @@ mod tests {
         let base = transported_goods_income(10, 8, 4, CargoType::Coal, 0);
         let later = transported_goods_income(10, 8, 4, CargoType::Coal, TICKS_PER_YEAR * 10);
         assert!(later > base);
+    }
+
+    #[test]
+    fn inflation_increases_terraform_cost_over_years() {
+        let base = terraform_cost_per_corner(0);
+        let later = terraform_cost_per_corner(TICKS_PER_YEAR * 20);
+        assert!(later > base);
+    }
+
+    #[test]
+    fn price_inflation_grows_slower_than_income_inflation() {
+        let income = inflation_income_factor(TICKS_PER_YEAR * 50);
+        let prices = inflation_prices_factor(TICKS_PER_YEAR * 50);
+        assert!(income > prices);
     }
 
     #[test]

@@ -14,6 +14,9 @@ use crate::sprites::{
 pub(crate) struct WorldAssets {
     pub(crate) grass: AtlasSprite,
     pub(crate) rough: AtlasSprite,
+    /// Suelo ártico plano (`terrain_snow_full.png`).
+    pub(crate) snow: AtlasSprite,
+    pub(crate) bought_land: AtlasSprite,
     pub(crate) grass_slopes: Vec<AtlasSprite>,
     pub(crate) rough_slopes: Vec<AtlasSprite>,
     pub(crate) water: AtlasSprite,
@@ -71,6 +74,8 @@ impl WorldAssets {
     pub(crate) fn load(atlas: &TileAtlas) -> Self {
         let grass = atlas.get("grass.png");
         let rough = atlas.get("grass_rough.png");
+        let snow = atlas.get("terrain_snow_full.png");
+        let bought_land = atlas.get("object_bought_land.png");
         let grass_slopes = (1u8..=14)
             .map(|tileh| atlas.get(&format!("terrain_grass_slope_{tileh:02}.png")))
             .collect();
@@ -226,6 +231,8 @@ impl WorldAssets {
         Self {
             grass,
             rough,
+            snow,
+            bought_land,
             grass_slopes,
             rough_slopes,
             water,

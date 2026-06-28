@@ -1,4 +1,4 @@
-use openttdrs_core::{Command, Map, TileCoord, road_bits_for_autoroute};
+use openttdrs_core::{Command, LevelMode, Map, TileCoord, road_bits_for_autoroute};
 
 use super::rail_lane::rail_lane_bits_for_action;
 use crate::ui::toolbar::{BuildMenuAction, StationBuildState};
@@ -86,7 +86,58 @@ pub(crate) fn command_for_action(
             pos,
             openttdrs_core::IndustrySpec::Farm,
         )),
+        BuildMenuAction::RaiseLand => Some(Command::RaiseLand(pos)),
+        BuildMenuAction::LowerLand => Some(Command::LowerLand(pos)),
+        BuildMenuAction::LevelLand => Some(Command::LevelLand {
+            from: pos,
+            to: pos,
+            mode: LevelMode::Level,
+        }),
+        BuildMenuAction::BuyLand => Some(Command::BuyLand(pos)),
     }
+}
+
+/// Comando de compra de terreno para clic o arrastre en área.
+pub(crate) fn buy_land_command_for_tiles(tiles: &[(i32, i32)]) -> Option<Command> {
+    let &(sx, sy) = tiles.first()?;
+    let &(ex, ey) = tiles.last()?;
+    let from = TileCoord::new(sx, sy);
+    let to = TileCoord::new(ex, ey);
+    if tiles.len() == 1 {
+        Some(Command::BuyLand(from))
+    } else {
+        Some(Command::BuyLandArea { from, to })
+    }
+}
+
+/// Comando de terraform para clic o arrastre (rectángulo en área).
+pub(crate) fn terraform_command_for_tiles(
+    action: BuildMenuAction,
+    tiles: &[(i32, i32)],
+) -> Option<Command> {
+    let &(sx, sy) = tiles.first()?;
+    let &(ex, ey) = tiles.last()?;
+    let from = TileCoord::new(sx, sy);
+    let to = TileCoord::new(ex, ey);
+    if tiles.len() == 1 {
+        return match action {
+            BuildMenuAction::RaiseLand => Some(Command::RaiseLand(from)),
+            BuildMenuAction::LowerLand => Some(Command::LowerLand(from)),
+            BuildMenuAction::LevelLand => Some(Command::LevelLand {
+                from,
+                to: from,
+                mode: LevelMode::Level,
+            }),
+            _ => None,
+        };
+    }
+    let mode = match action {
+        BuildMenuAction::RaiseLand => LevelMode::Raise,
+        BuildMenuAction::LowerLand => LevelMode::Lower,
+        BuildMenuAction::LevelLand => LevelMode::Level,
+        _ => return None,
+    };
+    Some(Command::LevelLand { from, to, mode })
 }
 
 pub(crate) fn command_for_line_action(

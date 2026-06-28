@@ -32,8 +32,8 @@ mod tests {
     use crate::ui::save_window::SaveWindowState;
     use crate::ui::toolbar::build_input::commands::{command_for_action, command_for_line_action};
     use crate::ui::toolbar::build_input::drag::{
-        action_is_tunnel, action_supports_drag, drag_line_tiles, road_bits_for_drag_action,
-        tunnel_placement_is_valid,
+        action_is_tunnel, action_supports_area_drag, action_supports_drag, drag_line_tiles,
+        road_bits_for_drag_action, tunnel_placement_is_valid,
     };
     use crate::ui::toolbar::build_input::orders::order_for_clicked_tile;
     use crate::ui::toolbar::{
@@ -307,10 +307,15 @@ mod tests {
             toolbar_group_for_action(BuildMenuAction::Orders),
             ToolbarGroup::Info
         ));
+        assert!(matches!(
+            toolbar_group_for_action(BuildMenuAction::LowerLand),
+            ToolbarGroup::Landscape
+        ));
 
         assert!(action_supports_drag(BuildMenuAction::RoadBridge));
         assert!(action_supports_drag(BuildMenuAction::RailTunnel));
-        assert!(action_supports_drag(BuildMenuAction::Clear));
+        assert!(action_supports_drag(BuildMenuAction::RaiseLand));
+        assert!(action_supports_area_drag(BuildMenuAction::LevelLand));
         assert!(!action_supports_drag(BuildMenuAction::BuildHouse));
         assert!(!action_supports_drag(BuildMenuAction::Station));
 

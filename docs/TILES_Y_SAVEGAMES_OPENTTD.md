@@ -34,6 +34,7 @@ Código relevante:
 17. [Import nativo en openttdrs (`openttdrs-core/src/sav/`)](#17-import-nativo-en-openttdrs)
 18. [Referencias en el código fuente de OpenTTD](#18-referencias-en-el-código-fuente-de-openttd)
 19. [Resumen de archivos del proyecto](#19-resumen-de-archivos-del-proyecto)
+20. [Terraform manual y autoslope (T1–T3)](#20-terraform-manual-y-autoslope-t1t3)
 
 ---
 
@@ -896,7 +897,8 @@ cargo test -p openttdrs-core --test sav_load_rail_saves
 cargo test -p openttdrs-core sav::orders::
 ```
 
-Fixtures: `tests/fixtures/stationlist-test.sav`, `save/demo_openttd.sav` (sintético con ORDL).
+Fixtures: `crates/openttdrs-core/tests/fixtures/demo_openttd.sav` (sintético con ORDL;
+regenerar con `scripts/gen_demo_sav.py`). Partidas reales bajo `save/` son opcionales en local.
 
 ### Limitaciones conocidas
 
@@ -937,6 +939,71 @@ Los sprite IDs están en hexadecimal (p.ej. `0x58d` = 1421). Los ground sprites 
 | `SPR_FLAT_BARE_LAND`  | 3924       | Hierba plana (grass)     |
 | `SPR_FLAT_GRASS_TILE` | 3943       | Hierba con flores        |
 | `SPR_CONCRETE_GROUND` | 1311       | Suelo de concreto        |
+
+---
+
+## 20. Terraform manual y autoslope (T1–T3)
+
+Implementación en `crates/openttdrs-core/src/command/terraform.rs` y toolbar **Paisaje**
+del cliente. Referencia upstream: `terraform_cmd.cpp`, `terraform_gui.cpp`.
+
+### Comandos
+
+| Comando | Efecto |
+|---------|--------|
+| `RaiseLand` | Sube la esquina norte de la tesela clicada (+ propagación diagonal) |
+| `LowerLand` | Baja la esquina; a `z=0` en hierba/bosque → `TileKind::Water` |
+| `LevelLand` | Rectángulo (`from`→`to`) con modo `Level` / `Raise` / `Lower` |
+
+### Coste
+
+- Base: `TERRAFORM_BASE_PRICE` (= `Price::Terraform` normalizado, **500** £/esquina en tick 0).
+- Inflación de construcción: [`terraform_cost_per_corner(tick)`](../crates/openttdrs-core/src/economy.rs)
+  con `inflation_prices_factor` (~0,3 %/año simulado).
+
+### Qué se puede terraformar (manual)
+
+| Tesela | Manual (herramienta paisaje) | Autoslope al construir |
+|--------|------------------------------|-------------------------|
+| Hierba / bosque | ✅ | ✅ (nivela a `GetTileZ`) |
+| Agua lisa (`z=0`, plana) | Elevar → hierba | ❌ |
+| Carretera / vía / estación / industria / casa | ❌ `TileNotTerraformable` | ❌ (no aplana encima de infra) |
+
+**Política T3.2:** el terraform manual **no** demuele vías ni carreteras; hay que usar
+dinamita / quitar vía antes. El **autoslope** solo actúa en hierba/bosque pendiente al
+colocar `PlaceRoad*` / `PlaceRail*`, cobrando el terraform antes del coste de la vía.
+
+### Autoslope (T3.3)
+
+Al colocar carretera o vía en tesela inclinada de hierba/bosque, el core:
+
+1. Iguala las cuatro esquinas al mínimo (`FOUNDATION_LEVELED` / `GetTileZ`).
+2. Cobra terraform por esquina modificada.
+3. Coloca la infraestructura en tesela plana.
+
+Preview HUD usa `check_rail_trackbits_with_autoslope` para vías que serían inválidas en
+pendiente pero válidas tras nivelar.
+
+### Buy land (T3.4 / T4.1)
+
+Comando **`BuyLand`** / **`BuyLandArea`** en `command/buy_land.rs`. Marca la tesela como
+objeto de mapa (`mapt = MP_OBJECT`, `m5 = OBJECT_TYPE_OWNED_LAND` = 2), sprite
+`object_bought_land.png` en el cliente.
+
+| Regla | Comportamiento |
+|-------|----------------|
+| Terreno válido | Hierba o bosque sin otro objeto |
+| Coste | `BUY_LAND_BASE_PRICE` (50 £) × inflación de construcción |
+| Área | Arrastre en toolbar **Paisaje → Comprar terreno**; solo compra teselas válidas |
+| Errores | `LandAlreadyOwned`, `CannotBuyLandHere`, `InsufficientFunds` |
+
+No impide construir encima (paridad parcial con OpenTTD; reserva de terreno completa pendiente).
+
+### Limitaciones conocidas
+
+- Climas / desierto / nieve: conversión de tipos MVP (hierba/agua); saves importados
+  conservan `mapt`/`m5` originales.
+- Túneles/puentes: terraform rechazado si la tesela es boca (validación transporte).
 
 ---
 

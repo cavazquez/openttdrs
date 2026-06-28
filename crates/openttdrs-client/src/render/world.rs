@@ -234,6 +234,8 @@ fn spawn_map_tiles_in_bounds(
     }
 
     let map = &sim.state.map;
+    let climate = sim.state.climate;
+    let world_seed = sim.state.world_seed;
     let render_grid = RenderGrid::from_map(map, mw, mh);
     let mut batches = MapSpriteBatches::default();
 
@@ -272,7 +274,16 @@ fn spawn_map_tiles_in_bounds(
 
         match kind {
             TileKind::Road => {
-                spawn_road_tile(commands, map, mw, mh, assets, &ctx, slope_half_ground);
+                spawn_road_tile(
+                    commands,
+                    map,
+                    mw,
+                    mh,
+                    assets,
+                    &ctx,
+                    slope_half_ground,
+                    climate,
+                );
             }
             TileKind::Rail => {
                 spawn_rail_tile(
@@ -283,6 +294,7 @@ fn spawn_map_tiles_in_bounds(
                     &ctx,
                     slope_half_ground,
                     &mut rail_layers,
+                    climate,
                 );
             }
             TileKind::House | TileKind::Station => {
@@ -317,7 +329,14 @@ fn spawn_map_tiles_in_bounds(
                 );
             }
             TileKind::Grass | TileKind::Forest | TileKind::CoalField | TileKind::Unknown(_) => {
-                spawn_generic_land_tile(commands, assets, &ctx, slope_half_ground);
+                spawn_generic_land_tile(
+                    commands,
+                    assets,
+                    &ctx,
+                    slope_half_ground,
+                    climate,
+                    world_seed,
+                );
             }
             TileKind::Void => unreachable!(),
         }

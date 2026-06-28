@@ -28,17 +28,19 @@ pub mod town;
 pub mod townname;
 pub mod vehicle;
 mod vehicle_ai;
+pub mod world_gen;
 
 pub use cargo::{CargoStock, CargoType};
 pub use command::{
-    Command, CommandError, ROAD_PLACE_FORCE_AXIS, apply_command, command_error_message,
+    Command, CommandError, LevelMode, ROAD_PLACE_FORCE_AXIS, apply_command, command_error_message,
     command_would_fail, finalize_road_drag_line, industry_template, infer_road_drag_axis,
     preview_road_bits_at, rail_station_footprint, rail_trackbits_from_neighbors,
     road_bits_for_autoroute, road_drag_line_tiles, road_locked_tool_axis,
 };
 pub use economy::{
-    CargoPaymentSpec, TICKS_PER_TRANSIT_DAY, TICKS_PER_YEAR, cargo_time_factor,
-    inflation_income_factor, manhattan_distance, ticks_to_transit_days, transported_goods_income,
+    CargoPaymentSpec, TICKS_PER_TRANSIT_DAY, TICKS_PER_YEAR, buy_land_cost, cargo_time_factor,
+    inflation_income_factor, inflation_prices_factor, manhattan_distance,
+    terraform_cost_per_corner, ticks_to_transit_days, transported_goods_income,
     vehicle_purchase_cost, vehicle_running_cost_per_tick, vehicle_sell_refund,
 };
 pub use engine::{
@@ -51,9 +53,9 @@ pub use engine::{
 pub use game_state::CARGO_DELIVERY_PAYMENT;
 pub use game_state::IncomePopup;
 pub use game_state::{
-    BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, CompanyEconomy, DEPOT_BUILD_COST, GameState,
-    RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats, TUNNEL_BUILD_COST_PER_TILE,
-    WAYPOINT_BUILD_COST,
+    BRIDGE_BUILD_COST_PER_TILE, BUY_LAND_BASE_PRICE, CLEAR_TILE_COST, CompanyEconomy,
+    DEPOT_BUILD_COST, GameState, RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats,
+    TERRAFORM_BASE_PRICE, TERRAFORM_COST, TUNNEL_BUILD_COST_PER_TILE, WAYPOINT_BUILD_COST,
 };
 pub use industry::{
     FACTORY_COAL_INPUT, FACTORY_WOOD_INPUT, INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind,
@@ -62,16 +64,17 @@ pub use industry::{
 pub use map::{
     GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED, GFX_GOLD_MINE_TOWER_ANIMATED,
     GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2, GFX_OILWELL_ANIMATED_3, IndustryTileLink, Map,
-    MapError, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, OTTD_TILETYPE_TUNNELBRIDGE, SLOPE_NE, SLOPE_NW,
-    SLOPE_SE, SLOPE_SW, Tile, TileCoord, TileKind, advance_industry_construction,
+    MapError, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_TRANSMITTER,
+    OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, OTTD_TILETYPE_TUNNELBRIDGE, SLOPE_NE, SLOPE_NW, SLOPE_SE,
+    SLOPE_SW, Tile, TileCoord, TileKind, advance_industry_construction,
     advance_industry_tile_animations, effective_road_bits, inclined_slope_direction,
     industry_animation_frame, industry_construction_counter, industry_construction_stage,
     industry_gfx, industry_instance_id, industry_tile_anim_state, industry_tile_link,
     industry_tiles_mergeable, industry_uses_water_ground, is_industry_completed,
-    is_tunnel_entrance_slope, make_industry_tile_bigger, openttd_tile_index_to_coord,
-    partial_pixel_z, resolve_tunnel_end, set_industry_gfx, slope_dz_at_subtile, slope_dz_on_tile,
-    step_industry_tiles, tile_adjacent_to_water, tile_slope_and_z, tunnel_entrance_m5,
-    tunnel_preview_path,
+    is_map_object_tile, is_owned_land_tile, is_tunnel_entrance_slope, make_industry_tile_bigger,
+    openttd_tile_index_to_coord, partial_pixel_z, resolve_tunnel_end, set_industry_gfx,
+    slope_dz_at_subtile, slope_dz_on_tile, step_industry_tiles, tile_adjacent_to_water,
+    tile_slope_and_z, tunnel_entrance_m5, tunnel_preview_path,
 };
 pub use news::{
     CALENDAR_BASE_YEAR, NEWS_MAX_AGE_DAYS, NewsDisplayMode, NewsDisplaySettings, NewsItem,
@@ -124,6 +127,10 @@ pub use vehicle::reverse_direction;
 pub use vehicle::{
     DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, VEHICLE_PROGRESS_STEP, Vehicle,
     VehicleDirection, VehicleKind, VehicleOrder, direction_from_tile_step,
+};
+pub use world_gen::{
+    CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW, Climate,
+    PreserveRect, WorldGenConfig, apply_world_gen, clear_ground_m5, effective_clear_ground,
 };
 
 #[cfg(test)]

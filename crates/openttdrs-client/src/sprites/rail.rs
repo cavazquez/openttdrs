@@ -510,36 +510,50 @@ pub fn rail_trackbits_for_render(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp
     synthetic_rail_trackbits(map, pos, mw, mh)
 }
 
+/// Índice del suelo de cruce (1018 + offset), igual que `GetJunctionGroundSpriteOffset`.
+/// Devuelve el sprite donde falta al menos un bit del patrón 3-vías NE/SW/NW/SE.
 #[inline]
 fn junction_ground_off(tb: u8) -> u8 {
     let t = tb & 0x3F;
-    if t & RAIL_3WAY_NE == 0 {
+    if (t & RAIL_3WAY_NE) != RAIL_3WAY_NE {
         return 0;
     }
-    if t & RAIL_3WAY_SW == 0 {
+    if (t & RAIL_3WAY_SW) != RAIL_3WAY_SW {
         return 1;
     }
-    if t & RAIL_3WAY_NW == 0 {
+    if (t & RAIL_3WAY_NW) != RAIL_3WAY_NW {
         return 2;
     }
-    if t & RAIL_3WAY_SE == 0 {
+    if (t & RAIL_3WAY_SE) != RAIL_3WAY_SE {
         return 3;
     }
     4
 }
 
-/// Desplazamiento en pantalla (px) del overlay de riel respecto al centro del rombo.
-/// Los PNG `1005`–`1010` son solo el riel; alineados con la posición en la tesela
-/// completa `1013`–`1016`.
+/// Desplazamiento del overlay de riel respecto al centro del sprite compuesto 64×31.
+/// Derivado de xrel/yrel OpenGFX (`ogfx21_base_32ez.nfo`) vs `1013` (UPPER, xrel=-31).
 #[must_use]
 pub fn rail_ghost_overlay_offset(sprite_id: u32) -> Vec2 {
-    match sprite_id {
-        1007 => Vec2::new(0.0, 5.5),   // UPPER
-        1008 => Vec2::new(0.0, -5.5),  // LOWER
-        1009 => Vec2::new(11.0, 0.0),  // RIGHT
-        1010 => Vec2::new(-11.0, 0.0), // LEFT
-        _ => Vec2::ZERO,
-    }
+    const FULL_XREL: f32 = -31.0;
+    const FULL_W: f32 = 64.0;
+    const FULL_YREL: f32 = 0.0;
+    const FULL_H: f32 = 31.0;
+    const FULL_CENTER_X: f32 = FULL_XREL + FULL_W / 2.0;
+    const FULL_CENTER_Y: f32 = FULL_YREL + FULL_H / 2.0;
+
+    let (xrel, yrel, w, h) = match sprite_id {
+        1005 => (-19.0, 5.0, 40.0, 21.0),
+        1006 => (-19.0, 5.0, 40.0, 21.0),
+        1007 => (-19.0, 5.0, 40.0, 7.0),
+        1008 => (-18.0, 21.0, 38.0, 7.0),
+        1009 => (11.0, 5.0, 12.0, 19.0),
+        1010 => (-21.0, 5.0, 12.0, 20.0),
+        _ => return Vec2::ZERO,
+    };
+    let cx = xrel + w / 2.0;
+    let cy = yrel + h / 2.0;
+    // Bevy: positivo en Y sube; el centro compuesto está en `-FULL_CENTER_Y` desde el vértice N.
+    Vec2::new(cx - FULL_CENTER_X, FULL_CENTER_Y - cy)
 }
 
 /// Índice `SignalPositions` para `(track, sig_bit)` — mismo orden que `DrawSignals`.
@@ -680,6 +694,28 @@ mod tests {
     use openttdrs_core::{Map, TileCoord, TileKind};
 
     #[test]
+    fn collect_rail_sprites_depot_junction_uses_sw_ground_and_spaced_overlays() {
+        let mut out = Vec::new();
+        // Empalme depósito ↔ línea X (test `rail_depot_beside_x_line_connects_exit_tile`).
+        collect_rail_sprites(0x29, 0, false, &mut out);
+        assert_eq!(out, vec![1018, 1005, 1008, 1009]);
+        // Salida depósito showcase (12,15): Y|LOWER|LEFT.
+        collect_rail_sprites(0x1A, 0, false, &mut out);
+        assert_eq!(out, vec![1018, 1006, 1008, 1010]);
+    }
+
+    #[test]
+    fn junction_ground_off_matches_openttd_get_junction_offset() {
+        assert_eq!(junction_ground_off(0x29), 0);
+        assert_eq!(junction_ground_off(0x1A), 0);
+        assert_eq!(junction_ground_off(RAIL_3WAY_NE), 1);
+        assert_eq!(junction_ground_off(RAIL_3WAY_SW), 0);
+        assert_eq!(junction_ground_off(RAIL_3WAY_NW), 0);
+        assert_eq!(junction_ground_off(RAIL_3WAY_SE), 0);
+        assert_eq!(junction_ground_off(0x3F), 4);
+    }
+
+    #[test]
     fn collect_rail_ghost_sprites_matches_flat_track_sprites() {
         let mut out = Vec::new();
         collect_rail_ghost_sprites(RAIL_TB_LEFT, 0, &mut out);
@@ -688,6 +724,16 @@ mod tests {
         assert_eq!(out, vec![1013]);
         collect_rail_ghost_sprites(RAIL_TB_HORZ, 0, &mut out);
         assert_eq!(out, vec![1035]);
+    }
+
+    #[test]
+    fn rail_ghost_overlay_offset_matches_opengfx_nfo() {
+        assert_eq!(rail_ghost_overlay_offset(1005), Vec2::ZERO);
+        assert_eq!(rail_ghost_overlay_offset(1006), Vec2::ZERO);
+        assert_eq!(rail_ghost_overlay_offset(1007), Vec2::new(0.0, 7.0));
+        assert_eq!(rail_ghost_overlay_offset(1008), Vec2::new(0.0, -9.0));
+        assert_eq!(rail_ghost_overlay_offset(1009), Vec2::new(16.0, 1.0));
+        assert_eq!(rail_ghost_overlay_offset(1010), Vec2::new(-16.0, 0.5));
     }
 
     #[test]

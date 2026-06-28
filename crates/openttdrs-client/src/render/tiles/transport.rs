@@ -7,9 +7,10 @@ use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
     collect_rail_sprites, collect_signal_sprite_draws, is_road_level_crossing,
-    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_signal_subtile_offset,
-    rail_tile_is_signals, rail_track_base_color, rail_trackbits_for_render, road_bits_for_render,
-    road_flat_sprite_color, road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
+    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_ghost_overlay_offset,
+    rail_signal_subtile_offset, rail_tile_is_signals, rail_track_base_color,
+    rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
+    road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
     road_tile_tram_visual_active, roadside_is_paved, tram_flat_sprite_index,
 };
 
@@ -205,17 +206,13 @@ pub(crate) fn spawn_rail_tile(
             continue;
         };
         let z = 0.02 + i as f32 * 0.0004;
+        let offset = rail_ghost_overlay_offset(sid);
+        let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, z, rail_half_h);
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
             img.sprite_colored(rail_paint),
-            Transform::from_translation(tile_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                z,
-                rail_half_h,
-            )),
+            Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
         ));
     }
     if let Some(t) = ctx.tile.filter(|t| rail_tile_is_signals(t.m5)) {

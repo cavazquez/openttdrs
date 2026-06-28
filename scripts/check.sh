@@ -121,8 +121,18 @@ do_all() {
 do_ci() {
     export CARGO_PROFILE="${CARGO_PROFILE:-ci}"
     do_fmt_check
-    do_lint
-    do_test
+    # Paridad con CI: clippy compila todo; nextest reutiliza binarios (--no-build).
+    if command -v cargo-nextest &>/dev/null; then
+        info "Ejecutando Clippy (profile ci)..."
+        cargo clippy --workspace --all-targets --profile ci -- -D warnings
+        info "Clippy OK ✓"
+        info "Ejecutando tests (nextest, --no-build)..."
+        cargo nextest run --workspace --profile ci --no-build
+        info "Tests OK ✓"
+    else
+        do_lint
+        do_test
+    fi
     do_tnbp
     do_golden_parse_sav
     do_py_compile

@@ -1,4 +1,4 @@
-# Cobertura integrada en ci.yml (job `coverage` tras `check`, solo push a main).
+# Cobertura automática en ci.yml (push a main, mismo job `check`).
 # Este workflow queda para relanzar cobertura manualmente sin repetir CI.
 name: Coverage (manual)
 

@@ -194,24 +194,25 @@ El workflow [.github/workflows/ci.yml](.github/workflows/ci.yml) en cada push/PR
 
 | Caché | Qué guarda |
 |-------|------------|
-| [Swatinem/rust-cache](https://github.com/Swatinem/rust-cache) | `~/.cargo/registry`, `target/` (clave compartida `openttdrs` entre jobs y el workflow Coverage) |
-| [actions/cache](https://github.com/actions/cache) + [.github/apt-packages.txt](.github/apt-packages.txt) | Paquetes APT (X11, Vulkan, ALSA, etc.) vía [.github/composite/linux-build-deps](.github/composite/linux-build-deps) |
+| [Swatinem/rust-cache](https://github.com/Swatinem/rust-cache) | `~/.cargo/registry`, `target/` (clave compartida `openttdrs`) |
+| [gerlero/apt-install](https://github.com/gerlero/apt-install) | Paquetes APT (X11, Vulkan, ALSA) vía [.github/composite/linux-build-deps](.github/composite/linux-build-deps) |
+
+**Rendimiento:** un solo job `check`. `clippy --all-targets` compila el workspace **una vez**; en PRs `nextest run --no-build` ejecuta tests sin recompilar. En push a `main`, `llvm-cov nextest` sustituye a nextest (2ª compilación instrumentada para LCOV, pero sin un segundo job). Tiempo típico: PR ~8–12 min, push a `main` ~12–16 min (antes ~20 min con dos jobs).
 
 Pasos:
 
 | Paso | Qué valida |
 |------|----------------|
 | 🎨 `rustfmt` | `cargo fmt --all -- --check` |
-| 📎 `clippy` | `cargo clippy --workspace --all-targets -- -D warnings` |
-| 📊 `llvm-cov` | `cargo llvm-cov --workspace --all-targets --lcov` (misma corrida que los tests; genera `lcov.info`) |
-| ☁️ Codecov | Sube `lcov.info` (repo público; opcional `CODECOV_TOKEN` en *secrets* si Codecov lo pide) |
-| 📦 Artefacto | `coverage-lcov` con `lcov.info` descargable desde la ejecución del workflow |
-| 🗺️ TNBP | `cargo run -p openttdrs-core --example validate_ottdmap_tnbp` sobre fixture `v5p12_tnbp.ottdmap` |
-| 🐍 Golden `parse_sav` | `python3 scripts/verify_parse_sav_reference.py` |
-| ✔️ Python | `py_compile` de los scripts usados en el flujo de mapas |
-| 🔨 `build` | `cargo build --workspace` (incluye cliente Bevy) |
+| 📎 `clippy` | `cargo clippy --workspace --all-targets --profile ci -- -D warnings` |
+| 🧪 `nextest` | PR: `cargo nextest run --no-build` (reutiliza artefactos de clippy) |
+| 📊 `llvm-cov` | Push `main`: `cargo llvm-cov nextest run` → `lcov.info` + Codecov |
+| 🗺️ TNBP | `cargo run -p openttdrs-core --example validate_ottdmap_tnbp` |
+| 🐍 Golden / Python | scripts de mapas y `parse_sav` |
 
-En local, paridad con el job **tests** de CI (sin `cargo build` del workflow **build**):
+Cobertura manual sin CI completo: [.github/workflows/coverage.yml](.github/workflows/coverage.yml) (`workflow_dispatch`).
+
+En local, paridad con el job **check** (sin Codecov):
 
 ```bash
 ./scripts/check.sh ci
@@ -233,7 +234,9 @@ Regresión construcción (checklist SP2): `cargo test -p openttdrs-core --lib co
 
 ## Cobertura de tests
 
-En **CI** cada push/PR ejecuta [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) en lugar de un `cargo test` duplicado: compila con instrumentación, corre **todos** los tests del workspace y produce **`lcov.info`**. Ese archivo se sube a [Codecov](https://codecov.io/gh/cavazquez/openttdrs) y también queda como **artefacto** `coverage-lcov` en GitHub Actions.
+En **CI**, la cobertura corre solo en **push a `main`** (mismo job `check`, tras clippy): [cargo-llvm-cov](https://github.com/taiki-e/cargo-llvm-cov) con `nextest run` genera **`lcov.info`** y lo sube a [Codecov](https://codecov.io/gh/cavazquez/openttdrs). En **PRs** no se repite esa compilación instrumentada: solo clippy + nextest `--no-build`.
+
+Relanzar cobertura a mano: workflow [.github/workflows/coverage.yml](.github/workflows/coverage.yml) (`workflow_dispatch`).
 
 **Primera vez en Codecov:** entrá con GitHub a Codecov, activá el repo `cavazquez/openttdrs` si no aparece solo; el badge del README puede mostrar *unknown* hasta el primer informe exitoso.
 

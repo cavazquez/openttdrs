@@ -22,11 +22,14 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   CARGO_PROFILE: ci
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
   # Enlazado más rápido (mold en .github/apt-packages.txt).
   CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
 
 jobs:
-  # Un solo job: evita compilar el workspace dos veces (lint ∥ tests duplicaba Bevy).
+  # Un solo job: clippy compila una vez; nextest reutiliza binarios (--no-build).
+  # En push a main, llvm-cov nextest sustituye a nextest (2ª compilación instrumentada,
+  # pero sin un segundo job ni checkout/caché/APT duplicados).
   check:
     runs-on: ubuntu-latest
     steps:
@@ -35,7 +38,7 @@ jobs:
       - name: Entorno Rust
         uses: ./.github/composite/rust-setup
         with:
-          components: rustfmt, clippy
+          components: rustfmt, clippy, llvm-tools-preview
 
       - name: Instalar cargo-nextest
         uses: taiki-e/install-action@nextest
@@ -43,11 +46,35 @@ jobs:
       - name: rustfmt
         run: cargo fmt --all -- --check
 
-      - name: clippy
+      - name: clippy (compila workspace + tests + examples)
         run: cargo clippy --workspace --all-targets --profile ci -- -D warnings
 
-      - name: tests (nextest)
-        run: cargo nextest run --workspace --cargo-profile ci
+      - name: Instalar cargo-llvm-cov
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: tests (nextest, sin recompilar)
+        if: github.event_name != 'push' || github.ref != 'refs/heads/main'
+        run: cargo nextest run --workspace --profile ci --no-build
+
+      - name: tests + cobertura (main, recompila con instrumentación)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: cargo llvm-cov nextest run --workspace --all-targets --profile ci --lcov --output-path lcov.info
+
+      - name: Upload coverage reports to Codecov
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: false
+
+      - name: Artefacto LCOV
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-lcov
+          path: lcov.info
 
       - name: Validar TNBP (fixture v5p12_tnbp.ottdmap)
         run: cargo run -q -p openttdrs-core --profile ci --example validate_ottdmap_tnbp -- crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap
@@ -65,36 +92,3 @@ jobs:
           python3 -m py_compile scripts/emit_parse_sav_golden.py
           python3 -m py_compile scripts/gen_tnbp_fixture_ottdmap.py
           python3 -m py_compile scripts/audit_sp3_assets.py
-
-  # Tras `check`: reutiliza caché cargo (shared-key) ya caliente; evita compilar Bevy
-  # en paralelo con CI en cada push a main (~5–8 min ahorrados).
-  coverage:
-    needs: check
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Entorno Rust
-        uses: ./.github/composite/rust-setup
-        with:
-          components: llvm-tools-preview
-
-      - name: Instalar cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Tests y cobertura (llvm-cov → LCOV)
-        run: cargo llvm-cov --workspace --all-targets --lcov --output-path lcov.info --profile ci
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v6
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: lcov.info
-          fail_ci_if_error: false
-
-      - name: Artefacto LCOV
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-lcov
-          path: lcov.info

@@ -805,6 +805,50 @@ fn place_rail_parallel_lanes_merge_on_same_tile() {
     assert_eq!(s.map.get(h).unwrap().m5 & 0x3F, 0x0C);
 }
 
+#[test]
+fn parallel_horz_line_keeps_lane_bits_after_neighbor_refresh() {
+    use crate::rail_lane::rail_horz_lane_bit;
+
+    let mut s = GameState::new(16, 16);
+    for x in 2..=6 {
+        apply_command(
+            &mut s,
+            &Command::PlaceRailBits(TileCoord::new(x, 4), rail_horz_lane_bit(64, 64)),
+        )
+        .unwrap();
+    }
+    for x in 2..=6 {
+        assert_eq!(
+            s.map.get(TileCoord::new(x, 4)).unwrap().m5 & 0x3F,
+            0x04,
+            "carril UPPER no debe convertirse a X/Y al refrescar vecinos"
+        );
+    }
+}
+
+#[test]
+fn parallel_lane_clicks_merge_junction_on_single_rail_neighbor() {
+    use crate::rail_lane::rail_vert_lane_bit;
+
+    let mut s = GameState::new(16, 16);
+    apply_command(&mut s, &Command::SetRailBits(TileCoord::new(5, 4), 0x01)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBits(TileCoord::new(5, 5), rail_vert_lane_bit(200, 100)),
+    )
+    .unwrap();
+    assert_eq!(
+        s.map.get(TileCoord::new(5, 4)).unwrap().m5 & 0x3F,
+        0x11,
+        "LEFT debe fusionarse en la tesela con X, no quedar suelta al sur"
+    );
+    assert_ne!(
+        s.map.get_kind(TileCoord::new(5, 5)),
+        Some(TileKind::Rail),
+        "no debe crearse vía huérfana en la tesela del clic"
+    );
+}
+
 fn set_w_only_slope(map: &mut crate::Map, tx: i32, ty: i32, base: u8) {
     let c = |x: i32, y: i32| TileCoord::new(x, y);
     map.set_height(c(tx, ty), base).unwrap();

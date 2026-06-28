@@ -271,8 +271,8 @@ pub(crate) fn drag_line_tiles(
     }
 
     let use_x_axis = match action {
-        BuildMenuAction::RoadX => true,
-        BuildMenuAction::RoadY => false,
+        BuildMenuAction::RoadX | BuildMenuAction::RailVert => true,
+        BuildMenuAction::RoadY | BuildMenuAction::RailHorz => false,
         _ => (to.0 - from.0).abs() >= (to.1 - from.1).abs(),
     };
     let mut out = Vec::new();

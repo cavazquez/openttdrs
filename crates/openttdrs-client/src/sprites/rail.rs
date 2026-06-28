@@ -528,21 +528,9 @@ pub fn rail_ghost_overlay_offset(sprite_id: u32) -> Vec2 {
     }
 }
 
-/// Sprites para el fantasma: overlays solo riel en plano (sin teñir la hierba);
-/// en pendiente la pieza inclinada completa con tinte suave.
+/// Sprites para el fantasma: mismos IDs que la vía colocada (`collect_rail_sprites`).
 pub fn collect_rail_ghost_sprites(tb: u8, tileh: u8, out: &mut Vec<u32>) {
-    out.clear();
-    let t = tb & 0x3F;
-    if t == 0 {
-        return;
-    }
-    if tileh != 0 {
-        if let Some(sid) = rail_sloped_track_sprite_id(tileh, false) {
-            out.push(sid);
-        }
-        return;
-    }
-    push_rail_junction_overlays(t, out);
+    collect_rail_sprites(tb, tileh, false, out);
 }
 
 /// Lista de sprites `OpenGFX` en orden de pintado (suelo de cruce y superposiciones).
@@ -596,16 +584,14 @@ mod tests {
     use openttdrs_core::{Map, TileCoord, TileKind};
 
     #[test]
-    fn collect_rail_ghost_sprites_uses_rail_only_overlays_on_flat() {
+    fn collect_rail_ghost_sprites_matches_flat_track_sprites() {
         let mut out = Vec::new();
         collect_rail_ghost_sprites(RAIL_TB_LEFT, 0, &mut out);
-        assert_eq!(out, vec![1010]);
-        collect_rail_ghost_sprites(RAIL_TB_RIGHT, 0, &mut out);
-        assert_eq!(out, vec![1009]);
+        assert_eq!(out, vec![1016]);
         collect_rail_ghost_sprites(RAIL_TB_UPPER, 0, &mut out);
-        assert_eq!(out, vec![1007]);
-        collect_rail_ghost_sprites(RAIL_TB_LOWER, 0, &mut out);
-        assert_eq!(out, vec![1008]);
+        assert_eq!(out, vec![1013]);
+        collect_rail_ghost_sprites(RAIL_TB_HORZ, 0, &mut out);
+        assert_eq!(out, vec![1035]);
     }
 
     #[test]

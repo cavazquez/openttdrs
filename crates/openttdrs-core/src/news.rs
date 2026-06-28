@@ -105,6 +105,12 @@ impl NewsQueue {
 }
 
 #[must_use]
+pub fn tick_for_calendar_year(year: u32) -> GameTick {
+    let years = u64::from(year.saturating_sub(CALENDAR_BASE_YEAR));
+    GameTick::new(years * crate::economy::TICKS_PER_YEAR)
+}
+
+#[must_use]
 pub fn calendar_day_index(tick: GameTick) -> u64 {
     tick.get() / u64::from(TICKS_PER_TRANSIT_DAY)
 }
@@ -492,6 +498,17 @@ mod tests {
     use super::*;
     use crate::GameState;
     use crate::vehicle::{Vehicle, VehicleKind};
+
+    #[test]
+    fn tick_for_calendar_year_offsets_from_base() {
+        use crate::economy::TICKS_PER_YEAR;
+        assert_eq!(tick_for_calendar_year(1950), GameTick::new(0));
+        assert_eq!(tick_for_calendar_year(1960).get(), 10 * TICKS_PER_YEAR);
+        assert_eq!(
+            format_calendar_date(tick_for_calendar_year(1980)),
+            "1 ene 1980"
+        );
+    }
 
     #[test]
     fn calendar_day_zero_is_first_jan_1950() {

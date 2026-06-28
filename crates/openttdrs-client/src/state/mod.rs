@@ -9,13 +9,13 @@ use openttdrs_core::{GameState, Map, OttdmapExtras};
 
 use crate::config::{apply_test_company_colour, climate_from_env, env_u64, world_gen_enabled};
 use crate::state::bootstrap::{
-    NewGameSettings, build_procedural_demo_world, log_detection_summary,
-    log_gameplay_showcase_zones, log_procedural_demo_zones, place_industries,
-    place_industries_from_sav, place_stations, place_stations_from_footer_stxy,
+    MapSizePreset, NewGameSettings, START_YEARS, build_procedural_demo_world,
+    log_detection_summary, log_gameplay_showcase_zones, log_procedural_demo_zones,
+    place_industries, place_industries_from_sav, place_stations, place_stations_from_footer_stxy,
     place_stations_from_map_tiles,
 };
 
-/// Dimensiones del mapa generado proceduralmente (sin `OTTDMAP_FILE`).
+/// Dimensiones del mapa demo compacto (24×18).
 pub const MAP_W: u32 = 24;
 pub const MAP_H: u32 = 18;
 
@@ -50,10 +50,13 @@ pub(crate) fn load_sav_state(bytes: &[u8]) -> Result<GameState, String> {
 fn settings_from_env() -> NewGameSettings {
     NewGameSettings {
         climate: climate_from_env(),
+        map_size: MapSizePreset::Compact,
+        start_year: START_YEARS[0],
         world_gen: world_gen_enabled(),
         island: std::env::var_os("OPENTTDRS_WORLD_ISLAND").is_some(),
         preserve_demo: !world_gen_enabled() || std::env::var_os("OPENTTDRS_WORLD_FULL").is_none(),
         seed: env_u64("OPENTTDRS_WORLD_SEED", 0),
+        ..NewGameSettings::default()
     }
 }
 
@@ -177,12 +180,13 @@ mod sim_world_coverage_tests {
     }
 
     #[test]
-    fn procedural_island_skips_demo_industries() {
+    fn procedural_island_has_towns_and_industries_without_demo_vehicles() {
         let w = SimWorld::from_new_game(&NewGameSettings::procedural_island(
             openttdrs_core::Climate::Temperate,
             42,
         ));
-        assert_eq!(w.state.industries.len(), 0);
+        assert!(!w.state.towns.is_empty());
+        assert!(!w.state.industries.is_empty());
         assert_eq!(w.state.vehicles.len(), 0);
         assert!(w.state.world_seed != 0);
     }

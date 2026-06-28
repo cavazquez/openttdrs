@@ -29,7 +29,7 @@ pub(super) fn place_industry_kind_sandbox(
     place_industry_spec_sandbox(state, c, spec)
 }
 
-pub(crate) fn check_place_industry_spec(
+pub fn check_place_industry_spec(
     map: &crate::map::Map,
     c: TileCoord,
     spec: IndustrySpec,

@@ -127,6 +127,15 @@ impl TruckHandles {
         }
     }
 
+    pub(crate) fn intro_sprite(&self, kind: VehicleKind, dir: usize) -> Handle<Image> {
+        let i = dir.min(7);
+        match kind {
+            VehicleKind::Bus => self.bus[i].clone(),
+            VehicleKind::Train => self.train[i].clone(),
+            VehicleKind::Truck => self.truck[i].clone(),
+        }
+    }
+
     fn for_vehicle(&self, v: &Vehicle, company: Option<&CompanyColoredSprites>) -> Handle<Image> {
         let dir = v.render_direction().min(7) as usize;
         let layer = &vehicle_layers(v)[dir];

@@ -12,6 +12,7 @@ pub(crate) mod font;
 mod hud;
 mod industry_panel;
 mod main_menu;
+mod main_menu_intro;
 mod news_settings_window;
 mod save_window;
 mod statusbar;
@@ -38,8 +39,11 @@ use industry_panel::{
     IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
 };
 use main_menu::{
-    main_menu_interaction, main_menu_options_interaction, setup_main_menu, setup_main_menu_camera,
-    sync_main_menu_summary,
+    main_menu_interaction, main_menu_options_interaction, setup_main_menu,
+    sync_main_menu_panel_visibility, sync_main_menu_summary,
+};
+use main_menu_intro::{
+    animate_main_menu_intro_traffic, pan_main_menu_intro_camera, setup_main_menu_intro,
 };
 use news_settings_window::{
     NewsSettingsWindowState, handle_news_settings_buttons, news_settings_on_closed,
@@ -116,7 +120,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<crate::state::new_game::NewGameSettingsResource>()
         .add_systems(
             OnEnter(ClientScreen::MainMenu),
-            (setup_main_menu_camera, setup_main_menu),
+            (setup_main_menu_intro, setup_main_menu, setup_save_window),
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
@@ -146,10 +150,26 @@ impl Plugin for ClientUiPlugin {
         .add_systems(
             Update,
             (
+                pan_main_menu_intro_camera,
+                animate_main_menu_intro_traffic,
                 main_menu_interaction,
                 main_menu_options_interaction,
+                sync_main_menu_panel_visibility,
                 sync_main_menu_summary,
             )
+                .run_if(in_state(ClientScreen::MainMenu)),
+        )
+        .add_systems(
+            Update,
+            (
+                save_window_keyboard,
+                save_window_editable_keyboard,
+                save_window_name_click_focus,
+                handle_save_window_buttons,
+                sync_save_window,
+                prepare_save_window_name,
+            )
+                .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::MainMenu)),
         )
         .add_systems(

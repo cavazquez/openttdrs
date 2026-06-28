@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use crate::state::bootstrap::NewGameSettings;
+use crate::state::bootstrap::{MapSizePreset, NewGameSettings, START_YEARS};
 
 /// Alias del recurso en el menú (evita colisión con `NewGameSettings` del bootstrap).
 #[derive(Resource, Clone, Copy, PartialEq, Eq)]
@@ -11,6 +11,8 @@ pub struct NewGameSettingsResource(pub NewGameSettings);
 impl Default for NewGameSettingsResource {
     fn default() -> Self {
         Self(NewGameSettings {
+            map_size: MapSizePreset::Small,
+            start_year: START_YEARS[0],
             world_gen: true,
             island: true,
             preserve_demo: false,

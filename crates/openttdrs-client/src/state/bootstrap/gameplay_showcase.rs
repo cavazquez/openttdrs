@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    Command, GameState, IndustryKind, IndustrySpec, PathNetwork, TileCoord, TileKind, Vehicle,
-    VehicleKind, VehicleOrder, apply_command, find_path,
+    Command, GameState, IndustryKind, IndustrySpec, PathNetwork, TileCoord, Vehicle, VehicleKind,
+    VehicleOrder, apply_command, find_path,
 };
 
 /// Carretera del barrio residencial (eje X).
@@ -42,10 +42,13 @@ pub(crate) fn place_gameplay_showcase(state: &mut GameState) {
 }
 
 fn place_town_block(state: &mut GameState) {
-    for (x, y) in [(15, 1), (17, 1), (19, 1), (16, 2), (18, 2), (20, 2)] {
+    for (i, (x, y)) in [(15, 1), (17, 1), (19, 1), (16, 2), (18, 2), (20, 2)]
+        .into_iter()
+        .enumerate()
+    {
         let c = TileCoord::new(x, y);
-        let _ = state.map.set_kind(c, TileKind::House);
-        let _ = state.map.set_mapt_m5(c, 0x30, 0);
+        let house_id = u16::try_from(8 + (i % 5)).unwrap_or(8);
+        let _ = state.map.set_completed_house(c, house_id, 40);
     }
     // Entrada de ciudad: habilita el cartel y la ventana de pueblo del barrio.
     state.towns.push(openttdrs_core::Town {
@@ -221,7 +224,7 @@ mod tests {
     use super::*;
     use crate::state::{MAP_H, MAP_W};
     use openttdrs_core::{
-        STATION_COVERAGE_RADIUS, StopKind, TOWN_PRODUCE_TICKS, station_coverage_at,
+        STATION_COVERAGE_RADIUS, StopKind, TOWN_PRODUCE_TICKS, TileKind, station_coverage_at,
     };
 
     fn showcase_state() -> GameState {

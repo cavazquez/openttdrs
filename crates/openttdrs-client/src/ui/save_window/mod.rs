@@ -18,6 +18,9 @@ pub(crate) use systems::{
 /// Filas visibles por página en la lista de partidas.
 pub(crate) const SAVE_WINDOW_ROWS: usize = 8;
 
+/// Por encima del menú de inicio (`GlobalZIndex(3000)`) para que el modal reciba clics.
+pub(crate) const SAVE_WINDOW_Z: i32 = 3100;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum SaveWindowMode {
     Save,

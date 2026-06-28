@@ -18,7 +18,7 @@ impl Plugin for WaterAnimationPlugin {
             Update,
             animate_water
                 .in_set(UpdateSet::Visuals)
-                .run_if(in_state(ClientScreen::InGame)),
+                .run_if(in_state(ClientScreen::MainMenu).or_else(in_state(ClientScreen::InGame))),
         );
     }
 }

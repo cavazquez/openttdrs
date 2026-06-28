@@ -11,12 +11,19 @@ use crate::ui::font::{UiFontRole, ui_text_font_loaded};
 use crate::ui::toolbar::BuildMenuUi;
 
 use super::{
-    SAVE_WINDOW_ROWS, SaveWindowButton, SaveWindowConfirmText, SaveWindowNameRow,
+    SAVE_WINDOW_ROWS, SAVE_WINDOW_Z, SaveWindowButton, SaveWindowConfirmText, SaveWindowNameRow,
     SaveWindowNameText, SaveWindowPageText, SaveWindowRoot, SaveWindowRow, SaveWindowRowText,
     SaveWindowStatusText, SaveWindowTitle, filename_filter,
 };
 
-pub(crate) fn setup_save_window(mut commands: Commands, asset_server: Res<AssetServer>) {
+pub(crate) fn setup_save_window(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    existing: Query<(), With<SaveWindowRoot>>,
+) {
+    if !existing.is_empty() {
+        return;
+    }
     commands
         .spawn((
             SaveWindowRoot,
@@ -29,7 +36,7 @@ pub(crate) fn setup_save_window(mut commands: Commands, asset_server: Res<AssetS
                 ..default()
             },
             BackgroundColor(Color::srgba(0.03, 0.04, 0.06, 0.55)),
-            GlobalZIndex(2900),
+            GlobalZIndex(SAVE_WINDOW_Z),
             Visibility::Hidden,
             FocusPolicy::Block,
             BuildMenuUi,

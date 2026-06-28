@@ -115,7 +115,29 @@ impl Tile {
     pub fn is_tunnel_bridge_tile(self) -> bool {
         self.ottd_type_nibble() == OTTD_TILETYPE_TUNNELBRIDGE
     }
+
+    /// Casa terminada (`IsHouseCompleted` en bit 7 de `m3`; HouseID en `m8`).
+    #[must_use]
+    pub fn completed_house(house_id: u16, age: u8, height: u8) -> Self {
+        Self {
+            height,
+            kind: TileKind::House,
+            mapt: OTTD_MAPT_HOUSE,
+            m5: age,
+            m1: 0,
+            m6: 0,
+            m8: house_id & 0xFFF,
+            m3: 0x80,
+            m2: 0,
+            m2_hi: 0,
+            m7: 0,
+            m3hi: 0,
+        }
+    }
 }
+
+/// MAPT para `MP_HOUSE` (`TileType` 3).
+pub const OTTD_MAPT_HOUSE: u8 = 0x30;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MapError {

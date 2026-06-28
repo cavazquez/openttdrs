@@ -140,7 +140,11 @@ pub fn apply_world_gen(
             if config.island {
                 n *= island_falloff(cx, cy, map_w, map_h);
             }
-            corners[(cy * corners_w + cx) as usize] = n;
+            let lake = lake_depression(cx, cy, config.seed);
+            if lake > 0.0 {
+                n *= 1.0 - lake;
+            }
+            corners[(cy * corners_w + cx) as usize] = n.clamp(0.0, 1.0);
         }
     }
 
@@ -216,8 +220,20 @@ fn mark_water_coasts(map: &mut Map, mw: i32, mh: i32, _sea_level: u8, preserve: 
 fn corner_height_from_grid(corners: &[f32], corners_w: i32, x: i32, y: i32, sea_level: u8) -> u8 {
     let idx = (y * corners_w + x) as usize;
     let n = corners.get(idx).copied().unwrap_or(0.5);
-    let base = f32::from(sea_level) + 1.0 + n * 5.0;
-    base.round().clamp(0.0, 12.0) as u8
+    // `n`≈0 → nivel del mar / lagos; `n`≈1 → colinas.
+    let base = f32::from(sea_level) + n * 6.0;
+    base.round().clamp(0.0, 15.0) as u8
+}
+
+/// Ruido grueso que marca cuencas de lagos interiores (0 = sin lago, 1 = depresión máxima).
+fn lake_depression(cx: i32, cy: i32, seed: u64) -> f32 {
+    const LAKE_SEED: u64 = 0xA11C_E000;
+    const THRESHOLD: f32 = 0.52;
+    let n = value_noise(cx / 6, cy / 6, seed.wrapping_add(LAKE_SEED));
+    if n <= THRESHOLD {
+        return 0.0;
+    }
+    ((n - THRESHOLD) / (1.0 - THRESHOLD)).min(1.0)
 }
 
 fn smooth_corners(corners: &mut [f32], w: i32, h: i32) {
@@ -383,6 +399,29 @@ mod tests {
         )
         .expect("gen");
         assert_eq!(map.get(center).expect("tile").height, before_h);
+    }
+
+    #[test]
+    fn world_gen_creates_interior_lakes() {
+        let mut map = Map::new_flat(64, 64, 2);
+        apply_world_gen(
+            &mut map,
+            &WorldGenConfig {
+                seed: 0xDEAD_BEEF,
+                island: true,
+                ..Default::default()
+            },
+            &[],
+        )
+        .expect("gen");
+        let interior_water = (8..56i32)
+            .flat_map(|y| (8..56).map(move |x| (x, y)))
+            .filter(|&(x, y)| map.get_kind(TileCoord::new(x, y)) == Some(TileKind::Water))
+            .count();
+        assert!(
+            interior_water >= 24,
+            "expected interior lakes, got {interior_water} water tiles away from borders"
+        );
     }
 
     #[test]

@@ -171,6 +171,17 @@ impl Map {
         Ok(())
     }
 
+    /// Coloca una casa terminada conservando la altura del terreno.
+    pub fn set_completed_house(
+        &mut self,
+        c: TileCoord,
+        house_id: u16,
+        age: u8,
+    ) -> Result<(), MapError> {
+        let height = self.get(c).map_or(0, |t| t.height);
+        self.set_tile(c, Tile::completed_house(house_id, age, height))
+    }
+
     /// Sustituye la tesela en `c` (tests, fixtures y herramientas de edición).
     pub fn set_tile(&mut self, c: TileCoord, tile: Tile) -> Result<(), MapError> {
         let i = self.index(c).ok_or(MapError::OutOfBounds)?;
@@ -302,6 +313,18 @@ mod ottdmap_binary_tests {
         );
         assert_eq!(openttd_tile_index_to_coord(4, 2, 2), None);
         assert_eq!(openttd_tile_index_to_coord(0, 3, 3), None);
+    }
+
+    #[test]
+    fn set_completed_house_marks_finished_and_sets_house_id() {
+        let mut map = Map::new_flat(4, 4, 0);
+        let c = TileCoord::new(1, 1);
+        map.set_completed_house(c, 42, 10).unwrap();
+        let t = map.get(c).expect("house tile");
+        assert_eq!(t.kind, TileKind::House);
+        assert_eq!(t.m8, 42);
+        assert_eq!(t.m3 & 0x80, 0x80);
+        assert_eq!(t.m5, 10);
     }
 
     #[test]

@@ -10,9 +10,10 @@ use smol_str::SmolStr;
 use openttdrs_core::save;
 
 use crate::persistence::apply_loaded_state;
-use crate::render::{RemapMapVisualsPending, VehicleIndex};
-use crate::state::SimWorld;
+use crate::render::{MapVisualLayer, RemapMapVisualsPending, ShoreTile, VehicleIndex, WaterTile};
+use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
+use crate::ui::main_menu::{MainMenuCamera, MainMenuUi, leave_main_menu};
 
 use super::{
     SAVE_WINDOW_ROWS, SaveFileKind, SaveWindowButton, SaveWindowConfirmText, SaveWindowMode,
@@ -140,10 +141,21 @@ pub(crate) fn handle_save_window_buttons(
     mut sim: ResMut<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
     mut remap: ResMut<RemapMapVisualsPending>,
+    screen: Option<Res<State<ClientScreen>>>,
+    mut next_screen: Option<ResMut<NextState<ClientScreen>>>,
+    q_menu: Query<Entity, With<MainMenuUi>>,
+    q_menu_cam: Query<Entity, With<MainMenuCamera>>,
+    intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
+    mut commands: Commands,
 ) {
     if !state.open {
         return;
     }
+
+    let from_main_menu = screen
+        .as_deref()
+        .is_some_and(|s| *s.get() == ClientScreen::MainMenu);
+    let mut loaded_from_menu = false;
 
     for (interaction, row) in &rows {
         if *interaction != Interaction::Pressed {
@@ -208,16 +220,29 @@ pub(crate) fn handle_save_window_buttons(
                     confirm_save(&mut state, &mut hud, &sim, &name_text);
                 }
                 SaveWindowMode::Load => {
-                    confirm_load(
+                    if confirm_load(
                         &mut state,
                         &mut hud,
                         &mut sim,
                         &mut vehicle_index,
                         &mut remap,
-                    );
+                    ) && from_main_menu
+                    {
+                        loaded_from_menu = true;
+                    }
                 }
             },
         }
+    }
+
+    if loaded_from_menu && let Some(next) = next_screen.as_mut() {
+        leave_main_menu(
+            &mut commands,
+            &q_menu,
+            &q_menu_cam,
+            &intro_layers,
+            next.as_mut(),
+        );
     }
 }
 
@@ -257,10 +282,10 @@ fn confirm_load(
     sim: &mut SimWorld,
     vehicle_index: &mut VehicleIndex,
     remap: &mut RemapMapVisualsPending,
-) {
+) -> bool {
     let Some(idx) = state.selected else {
         state.status = "Elegí una partida para cargar.".into();
-        return;
+        return false;
     };
     let entry = state.entries[idx].clone();
     let loaded = match entry.kind {
@@ -269,12 +294,12 @@ fn confirm_load(
                 Ok(loaded) => loaded,
                 Err(e) => {
                     state.status = format!("JSON inválido ({}): {e}", entry.name);
-                    return;
+                    return false;
                 }
             },
             Err(e) => {
                 state.status = format!("No se pudo leer {}: {e}", entry.name);
-                return;
+                return false;
             }
         },
         SaveFileKind::Sav => match std::fs::read(&entry.path) {
@@ -282,12 +307,12 @@ fn confirm_load(
                 Ok(loaded) => loaded,
                 Err(e) => {
                     state.status = format!("Save OpenTTD ({}): {e}", entry.name);
-                    return;
+                    return false;
                 }
             },
             Err(e) => {
                 state.status = format!("No se pudo leer {}: {e}", entry.name);
-                return;
+                return false;
             }
         },
     };
@@ -297,6 +322,7 @@ fn confirm_load(
     }
     info!("Partida cargada desde {}", entry.path.display());
     state.close();
+    true
 }
 
 /// Refleja `SaveWindowState` en los nodos del modal.

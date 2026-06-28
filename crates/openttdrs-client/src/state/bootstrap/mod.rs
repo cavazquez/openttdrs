@@ -4,11 +4,15 @@ mod demo_layout;
 mod gameplay_showcase;
 mod industries;
 mod logging;
+mod procedural_population;
 mod terrain;
 mod transport;
 pub(crate) mod world;
 
-pub(crate) use world::{NewGameSettings, build_procedural_demo_world};
+pub(crate) use world::{
+    MapSizePreset, NewGameSettings, PopulationDensity, START_YEARS, STARTING_MONEY_OPTIONS,
+    build_procedural_demo_world,
+};
 
 pub(crate) use super::stations::{place_stations_from_footer_stxy, place_stations_from_map_tiles};
 pub(crate) use demo_layout::log_procedural_demo_zones;

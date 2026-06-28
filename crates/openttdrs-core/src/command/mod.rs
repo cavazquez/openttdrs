@@ -11,7 +11,7 @@ mod util;
 mod vehicles;
 
 pub use apply::apply_command;
-pub use industry::industry_template;
+pub use industry::{check_place_industry_spec, industry_template};
 pub use preview::command_would_fail;
 pub use transport::{
     ROAD_PLACE_FORCE_AXIS, finalize_road_drag_line, infer_road_drag_axis, preview_road_bits_at,

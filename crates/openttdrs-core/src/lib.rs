@@ -32,11 +32,11 @@ pub mod world_gen;
 
 pub use cargo::{CargoStock, CargoType};
 pub use command::{
-    Command, CommandError, LevelMode, ROAD_PLACE_FORCE_AXIS, apply_command, command_error_message,
-    command_would_fail, finalize_road_drag_line, industry_template, infer_road_drag_axis,
-    preview_road_bits_at, rail_bits_placement_target, rail_station_footprint,
-    rail_trackbits_from_neighbors, road_bits_for_autoroute, road_drag_line_tiles,
-    road_locked_tool_axis,
+    Command, CommandError, LevelMode, ROAD_PLACE_FORCE_AXIS, apply_command,
+    check_place_industry_spec, command_error_message, command_would_fail, finalize_road_drag_line,
+    industry_template, infer_road_drag_axis, preview_road_bits_at, rail_bits_placement_target,
+    rail_station_footprint, rail_trackbits_from_neighbors, road_bits_for_autoroute,
+    road_drag_line_tiles, road_locked_tool_axis,
 };
 pub use economy::{
     CargoPaymentSpec, TICKS_PER_TRANSIT_DAY, TICKS_PER_YEAR, buy_land_cost, cargo_time_factor,
@@ -83,7 +83,8 @@ pub use news::{
     calendar_day_index, calendar_year_day, cargo_display_name, default_display_for_type,
     format_calendar_date, format_money, maybe_purge_old_news, news_display_mode_label,
     news_type_label, poll_vehicle_advice_news, purge_old_news_items, push_cargo_delivery_news,
-    push_first_vehicle_running_news, push_vehicle_advice_news, vehicle_kind_label,
+    push_first_vehicle_running_news, push_vehicle_advice_news, tick_for_calendar_year,
+    vehicle_kind_label,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
@@ -125,6 +126,7 @@ pub use town::{
     MAIL_PER_HOUSE, PASSENGERS_PER_HOUSE, STATION_TOWN_CARGO_CAPACITY, TOWN_PRODUCE_TICKS, Town,
     produce_town_cargo,
 };
+pub use townname::generate_town_name;
 pub use vehicle::reverse_direction;
 pub use vehicle::{
     DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, VEHICLE_PROGRESS_STEP, Vehicle,

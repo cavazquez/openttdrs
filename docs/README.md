@@ -21,6 +21,7 @@
 | [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) | Elevar / bajar / nivelar terreno (T1–T3) |
 | [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) | Barra inferior, ticker y cartel de noticias (N1–N5) |
 | [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md) | **Handoff:** construcción carretera drag/orientación (bug abierto) |
+| [ROADMAP_MAIN_MENU.md](ROADMAP_MAIN_MENU.md) | **Handoff:** menú inicio — pantallas, cargar, salir (fase 1) |
 
 ---
 

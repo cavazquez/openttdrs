@@ -40,6 +40,9 @@ dejarlo — ver [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md).
 **Señales — pick en diagonal (handoff):** fantasma OK, clic en tesela vecina — ver
 [SENALES_FERROVIARIAS.md §11](SENALES_FERROVIARIAS.md#11-bug-abierto-fantasma-vs-colocación-en-vía-diagonal-jun-2026).
 
+**Menú de inicio (handoff):** pantallas raíz/nueva partida, cargar desde menú — ver
+[ROADMAP_MAIN_MENU.md](ROADMAP_MAIN_MENU.md).
+
 **Toolbar rail sin comando:** `RailConvert`, quitar señal → ver ROADMAP_SPRINTS S2 resto.
 
 ---
@@ -87,4 +90,4 @@ OPENTTDRS_MAP_SHOT=/tmp/shot.png OPENTTDRS_MAP_SHOT_TOOL=rail_station cargo run 
 
 ---
 
-*Última actualización: 2026-06-22 (señales diagonal §11)*
+*Última actualización: 2026-06-22 (menú inicio ROADMAP_MAIN_MENU)*

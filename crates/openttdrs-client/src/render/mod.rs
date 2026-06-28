@@ -42,11 +42,14 @@ pub(crate) use tiles::{
     spawn_rail_tile, spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
 pub(crate) use vehicles::{
-    VehicleIndex, VehicleRenderPlugin, pick_vehicle_id_at_world, vehicle_world_position,
+    TruckHandles, VehicleIndex, VehicleRenderPlugin, pick_vehicle_id_at_world,
+    vehicle_world_position,
 };
 pub(crate) use viewport::{
     TileViewportBounds, chunk_tile_bounds, chunks_in_bounds, large_map_viewport_cull_enabled,
     ortho_visible_tile_bounds,
 };
 pub(crate) use water::WaterAnimationPlugin;
-pub(crate) use world::{RemapMapVisualsPending, WorldRenderPlugin};
+pub(crate) use world::{
+    RemapMapVisualsPending, WorldRenderPlugin, initial_map_camera_pose, spawn_intro_map_render,
+};

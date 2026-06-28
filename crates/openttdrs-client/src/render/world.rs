@@ -160,13 +160,7 @@ pub(crate) fn setup(
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
 ) {
-    let (mw, mh) = sim.state.map.dimensions();
-
-    let cam_x = ((mh as i32 - 1) - (mw as i32 - 1)) as f32 / 2.0 * ISO_HW;
-    let cam_y = -((mw as i32 - 1) + (mh as i32 - 1)) as f32 / 2.0 * ISO_QH - TILE_HALF_H;
-
-    let target_tiles_wide = initial_camera_span_tiles(mw, mh, sim.loaded_file);
-    let cam_scale = (target_tiles_wide * ISO_HW * 2.0 / 1280.0).max(1.0);
+    let (cam_pos, cam_scale) = initial_map_camera_pose(&sim);
 
     commands.spawn((
         Camera2d,
@@ -175,7 +169,7 @@ pub(crate) fn setup(
             clear_color: ClearColorConfig::Custom(Color::srgb(0.22, 0.38, 0.52)),
             ..default()
         },
-        Transform::from_translation(Vec3::new(cam_x, cam_y, 999.9)),
+        Transform::from_translation(cam_pos),
         Projection::Orthographic(OrthographicProjection {
             scale: cam_scale,
             ..OrthographicProjection::default_2d()
@@ -207,6 +201,55 @@ pub(crate) fn setup(
         &sim,
         spawn_bounds,
         true,
+    );
+    commands.insert_resource(atlas);
+    commands.insert_resource(LoadedMapTileChunks {
+        chunks: chunks_in_bounds(spawn_bounds),
+    });
+}
+
+/// Posición y escala ortho iniciales para un mapa (menú intro o partida).
+#[must_use]
+pub(crate) fn initial_map_camera_pose(sim: &SimWorld) -> (Vec3, f32) {
+    let (mw, mh) = sim.state.map.dimensions();
+    let cam_x = ((mh as i32 - 1) - (mw as i32 - 1)) as f32 / 2.0 * ISO_HW;
+    let cam_y = -((mw as i32 - 1) + (mh as i32 - 1)) as f32 / 2.0 * ISO_QH - TILE_HALF_H;
+    let target_tiles_wide = initial_camera_span_tiles(mw, mh, sim.loaded_file);
+    let cam_scale = (target_tiles_wide * ISO_HW * 2.0 / 1280.0).max(1.0);
+    (Vec3::new(cam_x, cam_y, 999.9), cam_scale)
+}
+
+/// Capa visual del mapa para el fondo del menú (sin vehículos ni etiquetas).
+pub(crate) fn spawn_intro_map_render(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    layout_assets: &mut Assets<TextureAtlasLayout>,
+    images: &mut Assets<Image>,
+    sim: &SimWorld,
+) {
+    let (mw, mh) = sim.state.map.dimensions();
+    let spawn_bounds = TileViewportBounds::full(mw, mh);
+    let atlas = TileAtlas::build(asset_server, layout_assets);
+    let assets = WorldAssets::load(&atlas);
+    commands.insert_resource(assets.clone());
+    commands.insert_resource(super::WaterAnimFrames {
+        water: assets.water_frames.clone(),
+        shore: assets.shore_frames.clone(),
+    });
+    commands.insert_resource(super::ChimneySmokeFrames(assets.chimney_smoke.clone()));
+    let company_colour = CompanyColour::from_u8(sim.state.company_colour);
+    let mut company_sprites = CompanyColoredSprites::new(company_colour);
+    company_sprites.build_all(images);
+    commands.insert_resource(company_sprites.clone());
+    spawn_world_layer(
+        commands,
+        asset_server,
+        &assets,
+        &mut company_sprites,
+        images,
+        sim,
+        spawn_bounds,
+        false,
     );
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {

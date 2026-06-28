@@ -328,7 +328,7 @@ pub(crate) fn handle_tile_click(
         }
 
         let start = drag_state.start_tile.unwrap_or(current);
-        drag_state.pending_tiles = drag_line_tiles(action, start, current);
+        drag_state.pending_tiles = drag_line_tiles(Some(&sim.state.map), action, start, current);
         drag_state.last_tile = Some(current);
 
         if mouse.just_pressed(MouseButton::Left) {
@@ -371,6 +371,7 @@ pub(crate) fn handle_tile_click(
         TileCoord::new(tx, ty),
         &station_state,
         rail_lane_bit,
+        Some(&sim.state.map),
     ) {
         if let Err(e) = apply_command(&mut sim.state, &cmd) {
             push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());

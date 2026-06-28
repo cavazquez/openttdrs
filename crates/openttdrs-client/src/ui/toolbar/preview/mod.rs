@@ -15,7 +15,10 @@ pub(crate) use rotate::rotate_station_with_right_click;
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{TileCoord, is_tunnel_entrance_slope, tile_slope_and_z};
+use openttdrs_core::{
+    Map, TileCoord, infer_road_drag_axis, is_tunnel_entrance_slope, preview_road_bits_at,
+    road_bits_for_autoroute, road_locked_tool_axis, tile_slope_and_z,
+};
 
 use crate::iso::{
     SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z, world_pos_to_tile_coord,
@@ -26,6 +29,7 @@ use crate::sprites::rail_ghost_overlay_offset;
 use crate::state::SimWorld;
 use crate::ui::hud::HoveredTileCoord;
 
+use super::build_input::drag::road_bits_for_drag_action;
 use super::{BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, UiToolState};
 
 use industry::{industry_spec_for_action, spawn_industry_template_preview};
@@ -43,10 +47,44 @@ use validation::{action_is_tunnel, preview_build_command_valid};
 
 use crate::ui::toolbar::build_input::rail_lane::rail_lane_bits_for_action;
 
-use crate::sprites::StationTileClass;
+use crate::sprites::{StationTileClass, road_flat_sprite_index};
 
 #[derive(Component)]
 pub(crate) struct BuildGhostPreview;
+
+/// Bits y PNG de preview de carretera (misma lógica que la colocación final).
+fn road_preview_at(
+    map: &Map,
+    action: BuildMenuAction,
+    pos: TileCoord,
+    preview_tiles: &[(i32, i32)],
+) -> Option<(u8, String)> {
+    let (requested, _force_axis) = match action {
+        BuildMenuAction::RoadX => (0x0A, true),
+        BuildMenuAction::RoadY => (0x05, true),
+        BuildMenuAction::Road => (road_bits_for_autoroute(map, pos), false),
+        _ => return None,
+    };
+    let tool_bits = road_bits_for_drag_action(action, preview_tiles).unwrap_or(requested);
+    let start = preview_tiles
+        .first()
+        .map(|&(x, y)| TileCoord::new(x, y))
+        .unwrap_or(pos);
+    let end = preview_tiles
+        .last()
+        .map(|&(x, y)| TileCoord::new(x, y))
+        .unwrap_or(pos);
+    let axis = match action {
+        BuildMenuAction::RoadX => road_locked_tool_axis(map, start, end, 0x0A),
+        BuildMenuAction::RoadY => road_locked_tool_axis(map, start, end, 0x05),
+        BuildMenuAction::Road => infer_road_drag_axis(map, start, end, tool_bits),
+        _ => tool_bits,
+    };
+    let bits = preview_road_bits_at(map, pos, axis, true);
+    let tileh = tile_slope_and_z(map, pos).map(|(h, _)| h).unwrap_or(0);
+    let idx = road_flat_sprite_index(tileh, bits);
+    Some((bits, format!("assets/opengfx/tiles/road_flat_{idx:02}.png")))
+}
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn update_build_ghost_preview(
@@ -303,6 +341,21 @@ pub(crate) fn update_build_ghost_preview(
                     company: company.as_deref(),
                 },
             );
+            continue;
+        }
+
+        if let Some((_bits, path)) = road_preview_at(&sim.state.map, action, coord, &preview_tiles)
+        {
+            commands.spawn((
+                BuildGhostPreview,
+                Sprite {
+                    image: asset_server.load::<Image>(path),
+                    color: tint,
+                    ..default()
+                },
+                Transform::from_translation(tile_pos_half(*px, *py, base_z, 3.0, half_h))
+                    .with_scale(Vec3::new(1.002, 1.002, 1.0)),
+            ));
             continue;
         }
 

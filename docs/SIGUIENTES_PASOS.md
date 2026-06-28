@@ -34,6 +34,9 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 
 **Noticias / barra inferior:** N1–N5 implementados — [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md).
 
+**Carreteras — drag / orientación (handoff IA):** fixes parciales junio 2026; usuario pidió
+dejarlo — ver [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md).
+
 **Toolbar rail sin comando:** `RailConvert`, quitar señal → ver ROADMAP_SPRINTS S2 resto.
 
 ---

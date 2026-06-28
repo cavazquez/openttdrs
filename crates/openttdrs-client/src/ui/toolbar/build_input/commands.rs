@@ -1,4 +1,4 @@
-use openttdrs_core::{Command, TileCoord};
+use openttdrs_core::{Command, Map, TileCoord, road_bits_for_autoroute};
 
 use super::rail_lane::rail_lane_bits_for_action;
 use crate::ui::toolbar::{BuildMenuAction, StationBuildState};
@@ -8,9 +8,13 @@ pub(crate) fn command_for_action(
     pos: TileCoord,
     station_state: &StationBuildState,
     rail_lane_bits: Option<u8>,
+    map: Option<&Map>,
 ) -> Option<Command> {
     match action {
-        BuildMenuAction::Road => Some(Command::PlaceRoadBits(pos, 0x0F)),
+        BuildMenuAction::Road => {
+            let bits = map.map(|m| road_bits_for_autoroute(m, pos)).unwrap_or(0x0A);
+            Some(Command::PlaceRoadBits(pos, bits))
+        }
         BuildMenuAction::RoadX => Some(Command::PlaceRoadBits(pos, 0x0A)),
         BuildMenuAction::RoadY => Some(Command::PlaceRoadBits(pos, 0x05)),
         BuildMenuAction::Rail => Some(Command::PlaceRail(pos)),

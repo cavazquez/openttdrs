@@ -51,7 +51,13 @@ pub(crate) fn preview_build_command_valid(
         };
         return command_would_fail(state, &cmd).is_none();
     }
-    let Some(cmd) = command_for_action(action, coord, station_state, rail_lane_bits) else {
+    let Some(cmd) = command_for_action(
+        action,
+        coord,
+        station_state,
+        rail_lane_bits,
+        Some(&state.map),
+    ) else {
         return true;
     };
     command_would_fail(state, &cmd).is_none()

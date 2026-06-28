@@ -82,7 +82,7 @@ Los ítems **manual** de SP2.1–SP2.5 siguen válidos desde la sesión **2026-0
 
 **Manual**
 
-- [ ] Drag carretera recta y esquina
+- [ ] Drag carretera recta y esquina — **handoff:** [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md)
 - [ ] Vía visible con sprites de raíl (no solo marrón)
 - [ ] Depósito + vehículo desde panel
 - [ ] Túnel 2 clics; RMB cancela

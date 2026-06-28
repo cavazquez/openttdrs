@@ -73,14 +73,20 @@ fn place_road_on_grass_matches_toolbar_command_stack() {
 }
 
 #[test]
-fn place_road_bits_full_cross_matches_toolbar_road_tool() {
+fn place_road_bits_autoroute_on_grass_uses_horizontal_axis() {
     let mut sim = SimWorld::default();
     let Some(c) = first_tile_with_kind(&sim, TileKind::Grass) else {
         panic!("mapa procedural debe tener al menos una tesela de hierba");
     };
+    let bits = openttdrs_core::road_bits_for_autoroute(&sim.state.map, c);
+    assert_eq!(bits, 0x0A);
     assert!(
-        apply_command(&mut sim.state, &Command::PlaceRoadBits(c, 0x0F)).is_ok(),
-        "PlaceRoadBits 0x0F es la herramienta Road de la toolbar"
+        apply_command(&mut sim.state, &Command::PlaceRoadBits(c, bits)).is_ok(),
+        "PlaceRoadBits con autoroute en hierba aislada"
+    );
+    assert_eq!(
+        sim.state.map.get(c).expect("tesela colocada").m5 & 0x0F,
+        0x0A
     );
     assert_eq!(sim.state.map.get_kind(c), Some(TileKind::Road));
 }

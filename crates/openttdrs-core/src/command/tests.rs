@@ -1,8 +1,9 @@
 use super::{Command, CommandError, apply_command, command_error_message, command_would_fail};
 use crate::{
     BRIDGE_BUILD_COST_PER_TILE, CLEAR_TILE_COST, GameState, IndustryKind, IndustrySpec,
-    ROAD_BUILD_COST, STATION_BUILD_COST, STATION_TYPE_RAIL_WAYPOINT, StopKind, TileCoord, TileKind,
-    Vehicle, VehicleKind, VehicleOrder, WAYPOINT_BUILD_COST, industry_template, pathfinder,
+    ROAD_BUILD_COST, ROAD_PLACE_FORCE_AXIS, STATION_BUILD_COST, STATION_TYPE_RAIL_WAYPOINT,
+    StopKind, TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder, WAYPOINT_BUILD_COST,
+    industry_template, infer_road_drag_axis, pathfinder, road_bits_for_autoroute,
     station_type_from_m6, tile_slope_and_z,
 };
 
@@ -26,6 +27,136 @@ fn place_road_bits_combines_directions() {
     apply_command(&mut s, &Command::PlaceRoadBits(c, 0x05)).unwrap();
     apply_command(&mut s, &Command::PlaceRoadBits(c, 0x0A)).unwrap();
     assert_eq!(s.map.get(c).unwrap().m5 & 0x0F, 0x0F);
+}
+
+#[test]
+fn place_road_bits_extends_horizontal_when_neighbor_west() {
+    let mut s = GameState::new(8, 8);
+    apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(3, 4), 0x0A)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(4, 4), 0x05)).unwrap();
+    assert_eq!(
+        s.map.get(TileCoord::new(4, 4)).unwrap().m5 & 0x0F,
+        0x0A,
+        "al continuar al este, ignorar tool Y y alinear eje horizontal"
+    );
+}
+
+#[test]
+fn place_road_bits_force_axis_on_isolated_tile() {
+    let mut s = GameState::new(8, 8);
+    apply_command(
+        &mut s,
+        &Command::PlaceRoadBits(TileCoord::new(2, 2), 0x05 | ROAD_PLACE_FORCE_AXIS),
+    )
+    .unwrap();
+    assert_eq!(
+        s.map.get(TileCoord::new(2, 2)).unwrap().m5 & 0x0F,
+        0x05,
+        "arrastre Y fuerza vertical aunque no haya vecinos"
+    );
+    apply_command(
+        &mut s,
+        &Command::PlaceRoadBits(TileCoord::new(5, 5), 0x0A | ROAD_PLACE_FORCE_AXIS),
+    )
+    .unwrap();
+    assert_eq!(s.map.get(TileCoord::new(5, 5)).unwrap().m5 & 0x0F, 0x0A);
+}
+
+#[test]
+fn road_bits_for_autoroute_follows_neighbors() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(4, 4);
+    assert_eq!(road_bits_for_autoroute(&s.map, c), 0x0A);
+    apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(3, 4), 0x0A)).unwrap();
+    assert_eq!(road_bits_for_autoroute(&s.map, c), 0x0A);
+    apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(4, 3), 0x05)).unwrap();
+    assert_eq!(road_bits_for_autoroute(&s.map, c), 0x0F);
+}
+
+#[test]
+fn place_road_bits_force_axis_ignores_single_cardinal_neighbor() {
+    let mut s = GameState::new(8, 8);
+    apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(4, 3), 0x05)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRoadBits(TileCoord::new(4, 4), 0x0A | ROAD_PLACE_FORCE_AXIS),
+    )
+    .unwrap();
+    assert_eq!(
+        s.map.get(TileCoord::new(4, 4)).unwrap().m5 & 0x0F,
+        0x0B,
+        "eje horizontal forzado + enlace al vecino norte"
+    );
+}
+
+#[test]
+fn infer_road_drag_axis_continues_colinear_network() {
+    let mut s = GameState::new(12, 12);
+    for x in 3..=6 {
+        apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(x, 5), 0x0A)).unwrap();
+    }
+    let start = TileCoord::new(8, 6);
+    let end = TileCoord::new(11, 8);
+    assert_eq!(
+        infer_road_drag_axis(&s.map, start, end, 0x05),
+        0x0A,
+        "cerca de línea horizontal: ignorar tool Y"
+    );
+}
+
+#[test]
+fn infer_road_drag_axis_branches_perpendicular_from_road_tile() {
+    let mut s = GameState::new(8, 8);
+    apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(4, 4), 0x0A)).unwrap();
+    assert_eq!(
+        infer_road_drag_axis(&s.map, TileCoord::new(4, 4), TileCoord::new(4, 7), 0x0A),
+        0x05,
+        "sobre recta horizontal, arrastre vertical → rama"
+    );
+}
+
+#[test]
+fn road_y_force_keeps_tool_axis_without_cardinal_neighbor() {
+    let mut s = GameState::new(8, 8);
+    for x in 3..=5 {
+        apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(x, 5), 0x0A)).unwrap();
+    }
+    apply_command(
+        &mut s,
+        &Command::PlaceRoadBits(TileCoord::new(6, 4), 0x05 | ROAD_PLACE_FORCE_AXIS),
+    )
+    .unwrap();
+    assert_eq!(s.map.get(TileCoord::new(6, 4)).unwrap().m5 & 0x0F, 0x05);
+}
+
+#[test]
+fn generic_inferred_axis_placed_on_colinear_row() {
+    let mut s = GameState::new(8, 8);
+    for x in 3..=5 {
+        apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(x, 5), 0x0A)).unwrap();
+    }
+    let c = TileCoord::new(6, 4);
+    let axis = infer_road_drag_axis(&s.map, c, TileCoord::new(8, 4), 0x05);
+    assert_eq!(axis, 0x0A);
+    apply_command(
+        &mut s,
+        &Command::PlaceRoadBits(c, axis | ROAD_PLACE_FORCE_AXIS),
+    )
+    .unwrap();
+    assert_eq!(s.map.get(c).unwrap().m5 & 0x0F, 0x0A);
+}
+
+#[test]
+fn place_road_bits_links_perpendicular_neighbor() {
+    let mut s = GameState::new(8, 8);
+    apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(3, 4), 0x0A)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(3, 3), 0x05)).unwrap();
+    assert_eq!(s.map.get(TileCoord::new(3, 3)).unwrap().m5 & 0x0F, 0x05);
+    assert_eq!(
+        s.map.get(TileCoord::new(3, 4)).unwrap().m5 & 0x0F,
+        0x0B,
+        "la horizontal recibe NW al unir rama vertical en tesela adyacente"
+    );
 }
 
 #[test]

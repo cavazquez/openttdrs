@@ -327,6 +327,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
+                None,
             ),
             Some(Command::PlaceStationDir(_, 3))
         ));
@@ -339,6 +340,7 @@ mod tests {
                     ..Default::default()
                 },
                 None,
+                None,
             ),
             Some(Command::PlaceRoadDepotDir(_, 2))
         ));
@@ -347,6 +349,7 @@ mod tests {
                 BuildMenuAction::BuildCoalMine,
                 TileCoord::new(1, 2),
                 &StationBuildState::default(),
+                None,
                 None,
             ),
             Some(Command::PlaceIndustrySpec(
@@ -359,6 +362,7 @@ mod tests {
                 BuildMenuAction::RoadTunnel,
                 TileCoord::new(1, 2),
                 &StationBuildState::default(),
+                None,
                 None,
             )
             .is_none()
@@ -391,19 +395,19 @@ mod tests {
         );
 
         assert_eq!(
-            drag_line_tiles(BuildMenuAction::RoadX, (1, 2), (4, 9)),
+            drag_line_tiles(None, BuildMenuAction::RoadX, (1, 2), (4, 9)),
             vec![(1, 2), (2, 2), (3, 2), (4, 2)]
         );
         assert_eq!(
-            drag_line_tiles(BuildMenuAction::RoadY, (3, 1), (0, 4)),
+            drag_line_tiles(None, BuildMenuAction::RoadY, (3, 1), (0, 4)),
             vec![(3, 1), (3, 2), (3, 3), (3, 4)]
         );
         assert_eq!(
-            drag_line_tiles(BuildMenuAction::Road, (5, 2), (2, 2)),
+            drag_line_tiles(None, BuildMenuAction::Road, (5, 2), (2, 2)),
             vec![(5, 2), (4, 2), (3, 2), (2, 2)]
         );
         assert_eq!(
-            drag_line_tiles(BuildMenuAction::Road, (2, 2), (3, 6)),
+            drag_line_tiles(None, BuildMenuAction::Road, (2, 2), (3, 6)),
             vec![(2, 2), (2, 3), (2, 4), (2, 5), (2, 6)]
         );
     }

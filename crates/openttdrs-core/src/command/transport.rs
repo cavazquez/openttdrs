@@ -698,12 +698,18 @@ pub(super) fn place_tunnel_or_bridge(
     Ok(())
 }
 
+/// Bit alto en el parámetro `bits` de [`Command::PlaceRoadBits`]: fuerza el eje del
+/// arrastre (0x0A / 0x05) aunque la tesela aún no tenga vecinos de carretera.
+pub const ROAD_PLACE_FORCE_AXIS: u8 = 0x10;
+
 pub(super) fn place_road_bits(
     state: &mut GameState,
     c: TileCoord,
     bits: u8,
 ) -> Result<(), CommandError> {
     check_place_road_bits(&state.map, c)?;
+    let force_axis = bits & ROAD_PLACE_FORCE_AXIS != 0;
+    let requested = bits & 0x0F;
     let existing = state.map.get(c).map_or(0, |t| {
         if t.kind == TileKind::Road {
             t.m5 & 0x0F
@@ -711,10 +717,227 @@ pub(super) fn place_road_bits(
             0
         }
     });
-    let road_bits = (existing | (bits & 0x0F)).max(0x01);
+    let road_bits = merge_road_bits_with_neighbors(&state.map, c, requested, existing, force_axis);
     write_normal_road_tile(state, c, road_bits)?;
+    propagate_road_bits_to_neighbors(state, c, road_bits)?;
     state.economy.money -= ROAD_BUILD_COST;
     Ok(())
+}
+
+/// Tras un arrastre de carretera, re-alinea todas las teselas colocadas y sus vecinos.
+pub fn finalize_road_drag_line(
+    state: &mut GameState,
+    tiles: &[TileCoord],
+    axis_bits: u8,
+) -> Result<(), CommandError> {
+    let axis = axis_bits & 0x0F;
+    for &c in tiles {
+        if state.map.get_kind(c) != Some(TileKind::Road) {
+            continue;
+        }
+        let existing = state.map.get(c).map_or(0, |t| t.m5 & 0x0F);
+        let merged = merge_road_bits_with_neighbors(&state.map, c, axis, existing, true);
+        write_normal_road_tile(state, c, merged)?;
+    }
+    for &c in tiles {
+        if state.map.get_kind(c) != Some(TileKind::Road) {
+            continue;
+        }
+        let bits = state.map.get(c).map_or(0, |t| t.m5 & 0x0F);
+        propagate_road_bits_to_neighbors(state, c, bits)?;
+    }
+    Ok(())
+}
+
+/// Eje para herramientas bloqueadas (`RoadX` / `RoadY`): respeta la tool salvo rama
+/// perpendicular al arrastrar **desde** una tesela de carretera recta.
+#[must_use]
+pub fn road_locked_tool_axis(map: &Map, start: TileCoord, end: TileCoord, tool_axis: u8) -> u8 {
+    if let Some(tile_axis) = road_axis_from_start_tile(map, start) {
+        let drag_horizontal = (end.x - start.x).abs() >= (end.y - start.y).abs();
+        if tile_axis == 0x0A && !drag_horizontal {
+            return 0x05;
+        }
+        if tile_axis == 0x05 && drag_horizontal {
+            return 0x0A;
+        }
+    }
+    tool_axis
+}
+
+/// Eje inferido solo para la herramienta «Cruce de carretera» (genérica).
+#[must_use]
+pub fn infer_road_drag_axis(map: &Map, start: TileCoord, end: TileCoord, tool_axis: u8) -> u8 {
+    if let Some(axis) = road_axis_from_start_tile(map, start) {
+        let drag_horizontal = (end.x - start.x).abs() >= (end.y - start.y).abs();
+        if axis == 0x0A && !drag_horizontal {
+            return 0x05;
+        }
+        if axis == 0x05 && drag_horizontal {
+            return 0x0A;
+        }
+        return axis;
+    }
+    if let Some(axis) = road_axis_from_cardinal_neighbors(map, start) {
+        return axis;
+    }
+    if let Some(axis) = road_axis_from_colinear_neighbor(map, start) {
+        return axis;
+    }
+    if start == end {
+        return tool_axis;
+    }
+    if (end.x - start.x).abs() >= (end.y - start.y).abs() {
+        0x0A
+    } else {
+        0x05
+    }
+}
+
+/// Línea recta de teselas para arrastrar carretera; devuelve teselas y eje efectivo.
+#[must_use]
+pub fn road_drag_line_tiles(
+    map: &Map,
+    from: (i32, i32),
+    to: (i32, i32),
+    tool_axis: u8,
+) -> (Vec<(i32, i32)>, u8) {
+    let start = TileCoord::new(from.0, from.1);
+    let end = TileCoord::new(to.0, to.1);
+    let axis = infer_road_drag_axis(map, start, end, tool_axis);
+    let use_x = axis == 0x0A;
+    let mut out = Vec::new();
+    if use_x {
+        let step = if to.0 >= from.0 { 1 } else { -1 };
+        let mut x = from.0;
+        loop {
+            out.push((x, from.1));
+            if x == to.0 {
+                break;
+            }
+            x += step;
+        }
+    } else {
+        let step = if to.1 >= from.1 { 1 } else { -1 };
+        let mut y = from.1;
+        loop {
+            out.push((from.0, y));
+            if y == to.1 {
+                break;
+            }
+            y += step;
+        }
+    }
+    (out, axis)
+}
+
+fn road_axis_from_start_tile(map: &Map, c: TileCoord) -> Option<u8> {
+    let t = map.get(c)?;
+    if t.kind != TileKind::Road {
+        return None;
+    }
+    let b = t.m5 & 0x0F;
+    if b & 0x0A != 0 && b & 0x05 == 0 {
+        Some(0x0A)
+    } else if b & 0x05 != 0 && b & 0x0A == 0 {
+        Some(0x05)
+    } else {
+        None
+    }
+}
+
+fn road_axis_from_cardinal_neighbors(map: &Map, c: TileCoord) -> Option<u8> {
+    let has_w = map.get_kind(TileCoord::new(c.x - 1, c.y)) == Some(TileKind::Road);
+    let has_e = map.get_kind(TileCoord::new(c.x + 1, c.y)) == Some(TileKind::Road);
+    let has_n = map.get_kind(TileCoord::new(c.x, c.y - 1)) == Some(TileKind::Road);
+    let has_s = map.get_kind(TileCoord::new(c.x, c.y + 1)) == Some(TileKind::Road);
+    match (has_w || has_e, has_n || has_s) {
+        (true, false) => Some(0x0A),
+        (false, true) => Some(0x05),
+        _ => None,
+    }
+}
+
+/// Road bits resultantes al colocar (preview / HUD); no muta el mapa.
+#[must_use]
+pub fn preview_road_bits_at(map: &Map, c: TileCoord, requested: u8, force_axis: bool) -> u8 {
+    let existing = map.get(c).map_or(0, |t| {
+        if t.kind == TileKind::Road {
+            t.m5 & 0x0F
+        } else {
+            0
+        }
+    });
+    merge_road_bits_with_neighbors(map, c, requested & 0x0F, existing, force_axis)
+}
+
+/// Carretera en la misma fila/columna (±1 tesela) a distancia ≤3.
+fn road_axis_from_colinear_neighbor(map: &Map, c: TileCoord) -> Option<u8> {
+    let mut axis_h = false;
+    let mut axis_v = false;
+    for dx in -3..=3_i32 {
+        for dy in -3..=3_i32 {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            let n = TileCoord::new(c.x + dx, c.y + dy);
+            if map.get_kind(n) != Some(TileKind::Road) {
+                continue;
+            }
+            if (n.y - c.y).abs() <= 1 && dx != 0 {
+                axis_h = true;
+            }
+            if (n.x - c.x).abs() <= 1 && dy != 0 {
+                axis_v = true;
+            }
+        }
+    }
+    match (axis_h, axis_v) {
+        (true, false) => Some(0x0A),
+        (false, true) => Some(0x05),
+        (true, true) => {
+            // Preferir continuar la línea más cercana en el eje dominante del arrastre.
+            let mut nearest_h = i32::MAX;
+            let mut nearest_v = i32::MAX;
+            for dx in -3..=3_i32 {
+                for dy in -3..=3_i32 {
+                    if dx == 0 && dy == 0 {
+                        continue;
+                    }
+                    let n = TileCoord::new(c.x + dx, c.y + dy);
+                    if map.get_kind(n) != Some(TileKind::Road) {
+                        continue;
+                    }
+                    if (n.y - c.y).abs() <= 1 && dx != 0 {
+                        nearest_h = nearest_h.min(dx.abs());
+                    }
+                    if (n.x - c.x).abs() <= 1 && dy != 0 {
+                        nearest_v = nearest_v.min(dy.abs());
+                    }
+                }
+            }
+            if nearest_h <= nearest_v {
+                Some(0x0A)
+            } else {
+                Some(0x05)
+            }
+        }
+        _ => None,
+    }
+}
+/// Road bits para la herramienta «Carretera» genérica (clic suelto): continúa el eje
+/// del vecino cardinal o usa recta X en terreno vacío (evita cruce 0x0F aislado).
+#[must_use]
+pub fn road_bits_for_autoroute(map: &Map, c: TileCoord) -> u8 {
+    let has_w = map.get_kind(TileCoord::new(c.x - 1, c.y)) == Some(TileKind::Road);
+    let has_e = map.get_kind(TileCoord::new(c.x + 1, c.y)) == Some(TileKind::Road);
+    let has_n = map.get_kind(TileCoord::new(c.x, c.y - 1)) == Some(TileKind::Road);
+    let has_s = map.get_kind(TileCoord::new(c.x, c.y + 1)) == Some(TileKind::Road);
+    match (has_w || has_e, has_n || has_s) {
+        (true, true) => 0x0F,
+        (false, true) => 0x05,
+        (_, false) => 0x0A,
+    }
 }
 
 pub(super) fn set_road_bits(
@@ -751,6 +974,95 @@ fn write_normal_road_tile(
         .map
         .set_tile(c, tile)
         .map_err(|_| CommandError::OutOfBounds)
+}
+
+/// Bits en `c` que apuntan a cada vecino con `TileKind::Road`.
+fn road_bits_from_road_neighbors(map: &Map, c: TileCoord) -> u8 {
+    let mut bits = 0u8;
+    if map.get_kind(TileCoord::new(c.x - 1, c.y)) == Some(TileKind::Road) {
+        bits |= 8;
+    }
+    if map.get_kind(TileCoord::new(c.x, c.y - 1)) == Some(TileKind::Road) {
+        bits |= 1;
+    }
+    if map.get_kind(TileCoord::new(c.x + 1, c.y)) == Some(TileKind::Road) {
+        bits |= 2;
+    }
+    if map.get_kind(TileCoord::new(c.x, c.y + 1)) == Some(TileKind::Road) {
+        bits |= 4;
+    }
+    bits
+}
+
+/// Alinea el eje con vecinos colineales (evita recta horizontal + tool Y → tesela transversal).
+fn merge_road_bits_with_neighbors(
+    map: &Map,
+    c: TileCoord,
+    requested: u8,
+    existing: u8,
+    force_axis: bool,
+) -> u8 {
+    let has_w = map.get_kind(TileCoord::new(c.x - 1, c.y)) == Some(TileKind::Road);
+    let has_e = map.get_kind(TileCoord::new(c.x + 1, c.y)) == Some(TileKind::Road);
+    let has_n = map.get_kind(TileCoord::new(c.x, c.y - 1)) == Some(TileKind::Road);
+    let has_s = map.get_kind(TileCoord::new(c.x, c.y + 1)) == Some(TileKind::Road);
+    let connect = road_bits_from_road_neighbors(map, c);
+    let axis_h = has_w || has_e;
+    let axis_v = has_n || has_s;
+    let straight = requested == 0x0A || requested == 0x05;
+
+    let bits = if axis_h && axis_v {
+        existing | requested | connect | 0x0A | 0x05
+    } else if force_axis && straight {
+        // Arrastre en línea: no girar 90° por un vecino cardinal suelto.
+        connect | requested
+    } else if axis_h && !axis_v {
+        if existing & 0x05 == 0x05 && existing & 0x0A == 0 {
+            connect | 0x05
+        } else {
+            connect | 0x0A
+        }
+    } else if axis_v && !axis_h {
+        if existing & 0x0A == 0x0A && existing & 0x05 == 0 {
+            connect | 0x0A
+        } else {
+            connect | 0x05
+        }
+    } else {
+        existing | requested | connect
+    };
+    bits.max(1)
+}
+
+/// Bit en la tesela vecina que cierra el enlace con `bit` en `c` (tabla `DiagDirToRoadBits`).
+const ROAD_LINK_TO_NEIGHBOR: [(u8, i32, i32, u8); 4] = [
+    (8, -1, 0, 2), // NE → oeste recibe SW
+    (1, 0, -1, 4), // NW → norte recibe SE
+    (2, 1, 0, 8),  // SW → este recibe NE
+    (4, 0, 1, 1),  // SE → sur recibe NW
+];
+
+/// Añade en vecinos con carretera el bit que apunta de vuelta a `c`.
+fn propagate_road_bits_to_neighbors(
+    state: &mut GameState,
+    c: TileCoord,
+    bits: u8,
+) -> Result<(), CommandError> {
+    for &(bit, dx, dy, reciproc) in &ROAD_LINK_TO_NEIGHBOR {
+        if bits & bit == 0 {
+            continue;
+        }
+        let n = TileCoord::new(c.x + dx, c.y + dy);
+        if state.map.get_kind(n) != Some(TileKind::Road) {
+            continue;
+        }
+        let existing = state.map.get(n).map_or(0, |t| t.m5 & 0x0F);
+        let merged = merge_road_bits_with_neighbors(&state.map, n, reciproc, existing, false);
+        if merged != existing {
+            write_normal_road_tile(state, n, merged)?;
+        }
+    }
+    Ok(())
 }
 
 pub(super) fn place_station(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {

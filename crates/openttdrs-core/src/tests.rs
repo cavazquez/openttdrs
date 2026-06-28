@@ -1,4 +1,6 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
+use std::collections::VecDeque;
+
 use crate::industry::{
     INDUSTRY_PRODUCE_AMOUNT, INDUSTRY_PRODUCE_TICKS, industry_produce_period_ticks,
 };
@@ -714,9 +716,12 @@ fn vehicle_with_orders_cycles_destinations() {
         TileCoord::new(1, 0),
     );
     v.set_orders(vec![TileCoord::new(1, 0), TileCoord::new(1, 1)]);
+    v.path = VecDeque::from([TileCoord::new(1, 0)]);
+    v.set_cruise_speed();
     advance_vehicle(&mut v, 1);
     assert_eq!(v.pos, TileCoord::new(1, 0));
     assert_eq!(v.dest, TileCoord::new(1, 1));
+    v.path = VecDeque::from([TileCoord::new(1, 1)]);
     advance_vehicle(&mut v, 1);
     assert_eq!(v.pos, TileCoord::new(1, 1));
     assert_eq!(v.dest, TileCoord::new(1, 0));
@@ -732,6 +737,8 @@ fn vehicle_with_station_orders_cycles_station_destinations() {
     );
     v.set_station_orders(vec![TileCoord::new(1, 0), TileCoord::new(1, 1)]);
     assert!(matches!(v.orders[0], VehicleOrder::Station { .. }));
+    v.path = VecDeque::from([TileCoord::new(1, 0)]);
+    v.set_cruise_speed();
     advance_vehicle(&mut v, 1);
     assert_eq!(v.pos, TileCoord::new(1, 0));
     assert_eq!(v.dest, TileCoord::new(1, 1));

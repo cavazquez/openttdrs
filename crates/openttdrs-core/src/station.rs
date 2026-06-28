@@ -259,7 +259,7 @@ pub fn vehicle_at_road_stop(map: &Map, vehicle: &crate::Vehicle) -> bool {
     road_stop_approach_tile(map, *station).is_some_and(|approach| vehicle.pos == approach)
 }
 
-/// Destino de movimiento según tipo de vehículo y orden (trenes paran en la vía adyacente).
+/// Destino de movimiento según tipo de vehículo y orden (vía/carretera adyacente, no la plataforma).
 #[must_use]
 pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrder) -> TileCoord {
     match (kind, order) {
@@ -267,6 +267,9 @@ pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrd
             rail_station_approach_tile(map, station).unwrap_or(station)
         }
         (VehicleKind::Train, VehicleOrder::Waypoint { waypoint }) => waypoint,
+        (VehicleKind::Truck | VehicleKind::Bus, VehicleOrder::Station { station, .. }) => {
+            road_stop_approach_tile(map, station).unwrap_or(station)
+        }
         (_, order) => order.destination(),
     }
 }
@@ -511,7 +514,10 @@ mod coherence_tests {
         truck.running = true;
         truck.set_station_orders(vec![load_stop, deliver_stop]);
         truck.sync_order_destination(&state.map);
-        assert_eq!(truck.dest, load_stop, "entra en tesela de parada al cargar");
+        assert_eq!(
+            truck.dest, load_road,
+            "para en carretera de acceso, no en la plataforma"
+        );
         if let Some(path) = find_path(&state.map, load_road, truck.dest, PathNetwork::Road) {
             truck.path = path.into();
         }

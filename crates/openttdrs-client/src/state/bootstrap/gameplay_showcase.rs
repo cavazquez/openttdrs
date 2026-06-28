@@ -88,11 +88,11 @@ fn place_factory_chain_block(state: &mut GameState) {
         &Command::PlaceIndustrySpec(SHOWCASE_FACTORY, IndustrySpec::Factory),
     );
 
-    for x in 15..=19_i32 {
+    for x in 14..=22_i32 {
         let _ = apply_command(state, &Command::SetRoadBits(TileCoord::new(x, 10), 0x0A));
     }
-    // Acceso al hub (18,9): carretera solo en (18,10), no sobre la tesela de la estación.
-    let _ = apply_command(state, &Command::SetRoadBits(TileCoord::new(18, 10), 0x03));
+    // Acceso al hub (18,9): cruce T en (18,10) sin romper el eje E–O.
+    let _ = apply_command(state, &Command::PlaceRoadBits(TileCoord::new(18, 10), 0x05));
 
     let _ = apply_command(
         state,
@@ -144,7 +144,8 @@ fn spawn_bus_line(state: &mut GameState) {
     let mut bus = Vehicle::new(9100, VehicleKind::Bus, road_start, SHOWCASE_BUS_B);
     bus.running = true;
     bus.set_station_orders(vec![SHOWCASE_BUS_A, SHOWCASE_BUS_B]);
-    if let Some(path) = find_path(&state.map, road_start, SHOWCASE_BUS_A, PathNetwork::Road) {
+    bus.sync_order_destination(&state.map);
+    if let Some(path) = find_path(&state.map, road_start, bus.dest, PathNetwork::Road) {
         bus.path = path.into();
     }
     state.vehicles.push(bus);
@@ -159,7 +160,8 @@ fn spawn_wood_to_hub_truck(state: &mut GameState) {
         SHOWCASE_FACTORY_HUB,
         SHOWCASE_WOOD_STATION,
     ]);
-    if let Some(path) = find_path(&state.map, start, SHOWCASE_WOOD_STATION, PathNetwork::Road) {
+    truck.sync_order_destination(&state.map);
+    if let Some(path) = find_path(&state.map, start, truck.dest, PathNetwork::Road) {
         truck.path = path.into();
     }
     state.vehicles.push(truck);
@@ -360,6 +362,82 @@ mod tests {
                 "el tren no debe subir a la plataforma en {pos:?}"
             );
         }
+    }
+
+    #[test]
+    fn showcase_town_bus_stays_on_road_network() {
+        let mut state = showcase_state();
+        let idx = state
+            .vehicles
+            .iter()
+            .position(|v| v.id == 9100)
+            .expect("bus showcase");
+        assert_eq!(
+            state.map.get_kind(state.vehicles[idx].pos),
+            Some(TileKind::Road),
+            "bus arranca en carretera del barrio"
+        );
+        for step in 0..1200 {
+            state.step();
+            let pos = state.vehicles[idx].pos;
+            let kind = state.map.get_kind(pos);
+            assert!(
+                matches!(
+                    kind,
+                    Some(TileKind::Road) | Some(TileKind::RoadBridge) | Some(TileKind::RoadTunnel)
+                ),
+                "bus #9100 fuera de red viaria en {pos:?} (tick {step})"
+            );
+        }
+    }
+
+    #[test]
+    fn showcase_wood_truck_stays_on_road_network() {
+        let mut state = showcase_state();
+        let idx = state
+            .vehicles
+            .iter()
+            .position(|v| v.id == 9101)
+            .expect("camión bosque→hub");
+        assert_eq!(
+            state.map.get_kind(state.vehicles[idx].pos),
+            Some(TileKind::Road),
+            "arranca sobre carretera"
+        );
+        assert_eq!(
+            state.vehicles[idx].dest,
+            TileCoord::new(15, 10),
+            "destino = carretera de acceso a la parada de madera"
+        );
+        for step in 0..1200 {
+            state.step();
+            let pos = state.vehicles[idx].pos;
+            let kind = state.map.get_kind(pos);
+            assert!(
+                matches!(
+                    kind,
+                    Some(TileKind::Road) | Some(TileKind::RoadBridge) | Some(TileKind::RoadTunnel)
+                ),
+                "camión #9101 en hierba en {pos:?} (tick {step})"
+            );
+        }
+    }
+
+    #[test]
+    fn showcase_factory_chain_moves_wood() {
+        let mut state = showcase_state();
+        for _ in 0..2400 {
+            state.step();
+        }
+        let hub = state
+            .stations
+            .iter()
+            .find(|s| s.pos == SHOWCASE_FACTORY_HUB)
+            .expect("hub");
+        assert!(
+            hub.cargo_stock.wood > 0 || state.stats.cargo_units_delivered > 0,
+            "el camión debe mover madera del bosque al hub"
+        );
     }
 
     #[test]

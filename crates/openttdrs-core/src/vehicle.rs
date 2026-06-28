@@ -321,7 +321,7 @@ impl Vehicle {
         if self.kind == VehicleKind::Train {
             return None;
         }
-        if !self.orders.is_empty() && self.no_network_route_to_order {
+        if !self.orders.is_empty() {
             return None;
         }
         let dx = self.dest.x - self.pos.x;
@@ -424,9 +424,7 @@ impl Vehicle {
         } else if self.pos == self.dest {
             self.advance_destination_after_arrival();
         } else {
-            if self.kind == VehicleKind::Train
-                || (!self.orders.is_empty() && self.no_network_route_to_order)
-            {
+            if self.kind == VehicleKind::Train || !self.orders.is_empty() {
                 return;
             }
             let dx = self.dest.x - self.pos.x;
@@ -699,13 +697,13 @@ mod tests {
         let mut v = Vehicle::new(0, VehicleKind::Bus, TileCoord::new(14, 4), stop);
         v.set_station_orders(vec![stop, TileCoord::new(21, 3)]);
         v.sync_order_destination(&state.map);
-        assert_eq!(v.dest, stop, "bus entra en tesela de parada");
-        v.path = VecDeque::from([stop]);
+        assert_eq!(v.dest, road, "bus para en carretera de acceso");
+        v.path = VecDeque::from([road]);
         v.direction = DIR_NW;
         v.set_cruise_speed();
         v.progress = 250;
         v.step();
-        assert_eq!(v.pos, stop);
+        assert_eq!(v.pos, road);
         assert_eq!(v.progress, 255, "anclado al final del carril al llegar");
     }
 

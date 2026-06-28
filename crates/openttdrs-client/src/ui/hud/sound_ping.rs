@@ -68,9 +68,9 @@ pub(crate) fn load_hud_sfx(
     handles.error = Some(asset_server.load("assets/sounds/hud_soft.wav"));
     handles.build_ok = Some(asset_server.load("assets/sounds/build_ok.wav"));
     handles.income = Some(asset_server.load("assets/sounds/income.wav"));
-    handles.news_ticker = Some(asset_server.load("assets/sounds/hud_soft.wav"));
-    handles.news_applause = Some(asset_server.load("assets/sounds/income.wav"));
-    handles.news_chime = Some(asset_server.load("assets/sounds/build_ok.wav"));
+    handles.news_ticker = Some(asset_server.load("assets/sounds/news_ticker.wav"));
+    handles.news_applause = Some(asset_server.load("assets/sounds/news_applause.wav"));
+    handles.news_chime = Some(asset_server.load("assets/sounds/news_chime.wav"));
     *done = true;
 }
 

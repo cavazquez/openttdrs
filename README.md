@@ -143,7 +143,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **UI** | Guardar F5 / cargar F9 JSON | ✅ | `state/json_persist.rs` |
 | **UI** | Preferencias cliente (`~/.config/...`) | ✅ | audio, minimapa, ruta save |
 | **Audio** | SFX construcción OK / error / ingreso | ✅ | `preparar_sonidos_hud.sh`, `sound_ping.rs` |
-| **Audio** | SFX noticias (ticker, aplauso, chime) | 🟡 | Fallbacks HUD; faltan `osfx_16`/`osfx_1D` dedicados |
+| **Audio** | SFX noticias (ticker, aplauso, chime) | ✅ | `news_*.wav` vía `preparar_sonidos_hud.sh` (OpenSFX) |
 | **Audio** | Música ambiente in-game | ❌ | Sprint 5 en [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) |
 | **Calidad** | `check.sh` + CI (fmt, clippy, tests, TNBP, golden) | ✅ | `.github/workflows/ci.yml` |
 | **Calidad** | Tests integración ciclo jugable SP1 | ✅ | `tests/sp1_playable_cycle.rs` |
@@ -319,7 +319,7 @@ Si preferís scripts individuales:
 
 ```bash
 ./scripts/descargar_graficos.sh --32bpp
-./scripts/descargar_sonidos.sh --opensfx   # OpenSFX + WAV del HUD (build_ok, income, hud_soft)
+./scripts/descargar_sonidos.sh --opensfx   # OpenSFX + WAV HUD y noticias
 ./scripts/descargar_musica.sh --openmsx
 ```
 

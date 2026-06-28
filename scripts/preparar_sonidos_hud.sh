@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Extrae los 3 WAV del HUD desde OpenSFX (requiere opensfx.cat decodificado).
+# Extrae WAV del HUD y noticias desde OpenSFX (requiere opensfx.cat decodificado).
 #
-# Mapeo (SoundIDs OpenTTD → archivo cliente):
-#   hud_soft.wav  ← osfx_21 "Beep" (error UI; si ya existe no se sobrescribe)
-#   build_ok.wav  ← osfx_31 "Splat (terraform/non-rail builds)"
-#   income.wav    ← osfx_20 "Cash till"
+# Mapeo (SoundFx OpenTTD → índice baseset vía _sound_idx → osfx_NN):
+#   hud_soft.wav      ← osfx_21  SND_15_BEEP (error UI; si ya existe no se sobrescribe)
+#   build_ok.wav      ← osfx_31  SND_31_BUBBLE_GENERATOR_SUCCESS
+#   income.wav        ← osfx_20  SND_14_CASHTILL
+#   news_ticker.wav   ← osfx_22  SND_16_NEWS_TICKER ("Morse")
+#   news_applause.wav ← osfx_29  SND_1D_APPLAUSE
+#   news_chime.wav    ← osfx_02  SND_BEGIN (noticias genéricas; mismo slot que agua)
 #
 # Uso:
 #   ./scripts/descargar_sonidos.sh --opensfx   # descarga + prepara
@@ -36,7 +39,9 @@ resolve_catcodec() {
 }
 
 ensure_wav_extracted() {
-  if [[ -f "${WAV_DIR}/osfx_20.wav" && -f "${WAV_DIR}/osfx_31.wav" ]]; then
+  if [[ -f "${WAV_DIR}/osfx_02.wav" && -f "${WAV_DIR}/osfx_20.wav" \
+      && -f "${WAV_DIR}/osfx_22.wav" && -f "${WAV_DIR}/osfx_29.wav" \
+      && -f "${WAV_DIR}/osfx_31.wav" ]]; then
     return
   fi
   if [[ ! -f "${CAT_FILE}" ]]; then
@@ -63,6 +68,9 @@ ensure_wav_extracted
 
 cp "${WAV_DIR}/osfx_31.wav" "${OUT_DIR}/build_ok.wav"
 cp "${WAV_DIR}/osfx_20.wav" "${OUT_DIR}/income.wav"
+cp "${WAV_DIR}/osfx_22.wav" "${OUT_DIR}/news_ticker.wav"
+cp "${WAV_DIR}/osfx_29.wav" "${OUT_DIR}/news_applause.wav"
+cp "${WAV_DIR}/osfx_02.wav" "${OUT_DIR}/news_chime.wav"
 if [[ ! -f "${OUT_DIR}/hud_soft.wav" ]]; then
   cp "${WAV_DIR}/osfx_21.wav" "${OUT_DIR}/hud_soft.wav"
   echo "hud_soft.wav creado desde osfx_21 (Beep)"

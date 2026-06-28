@@ -67,7 +67,7 @@ Cuando una noticia tiene display **Full** (`NewsDisplay::Full`):
 |-------|--------|-----------|
 | Fecha simulada (calendario legible) | ✅ barra inferior | `ui/statusbar/`, `news.rs` |
 | Dinero compañía | ✅ barra inferior | `ui/statusbar/sync.rs` |
-| SFX construcción / error / ingreso / noticias | 🟡 | `ui/hud/sound_ping.rs` (fallbacks; faltan `osfx_16`/`osfx_1D` dedicados) |
+| SFX construcción / error / ingreso / noticias | ✅ | `sound_ping.rs`, `preparar_sonidos_hud.sh` (`news_*.wav`) |
 | Popup «+$N» en mapa al entregar carga | ✅ | `ui/hud/income_popup.rs` |
 | Cola de noticias | ✅ | `core/news.rs` — `NewsQueue`, `add_news_item` |
 | Barra inferior UI | ✅ | `ui/statusbar/` |
@@ -211,7 +211,7 @@ pub fn news_loop(state: &mut GameState);  // llamar desde sim_step o cliente
 | N2.1 | `NewsQueue` + `add_news_item` en core | `news.rs` |
 | N2.2 | `news_loop`: avanzar ticker cuando scroll terminado | cliente o core |
 | N2.3 | Widget centro: texto + `ticker_scroll` (offset X decreciente) | inspirado en `TICKER_STOP=1640`, step 2 |
-| N2.4 | `HudSfxKind::NewsTicker` → `osfx_16` (mapear en `preparar_sonidos_hud.sh`) | audio |
+| N2.4 | `HudSfxKind::NewsTicker` → `osfx_22` Morse (`preparar_sonidos_hud.sh`) | audio ✅ |
 | N2.5 | Reminder: icono/dot cuando `NewsDisplayMode::Off` | sprite o círculo rojo UI |
 | N2.6 | Clic centro → mostrar última noticia (stub Full en N3) | input |
 | N2.7 | Tests: encolar 3 items, orden FIFO ticker | `core` tests |
@@ -231,7 +231,7 @@ pub fn news_loop(state: &mut GameState);  // llamar desde sim_step o cliente
 | N3.1 | `NewsPopupPlugin`: panel blanco + borde negro + caption «News» | Bevy UI |
 | N3.2 | Animación: `top` desde `100%` → `100% - height - statusbar` en ~1–2 s | `scroll_interval` equivalente |
 | N3.3 | Timer `duration_ms = 16_650` (como upstream) | auto-close |
-| N3.4 | `HudSfxKind::NewsApplause` → `osfx_1D` | audio |
+| N3.4 | `HudSfxKind::NewsApplause` → `osfx_29` | audio ✅ |
 | N3.5 | Estilo **Normal** primero (solo texto multilínea + fecha) | sin viewport |
 | N3.6 | Clic en cartel → centrar cámara en `NewsReference::Tile` | reutilizar `CameraControl` |
 | N3.7 | Una sola ventana activa; cola espera a `duration <= 0` | como `ReadyForNextNewsItem` |
@@ -318,11 +318,14 @@ if elapsed_ms >= 16_650 && !forced_open { despawn_or_slide_down(); }
 
 Extender `scripts/preparar_sonidos_hud.sh`:
 
-| Archivo cliente | OpenSFX | Uso |
-|-----------------|---------|-----|
-| `news_ticker.wav` | osfx_16 | Inicio ticker |
-| `news_applause.wav` | osfx_1D | Llegada vehículo / hitos |
-| `news_chime.wav` | osfx_00 «Begin» | Noticias genéricas |
+| Archivo cliente | OpenSFX | SoundFx OTTD | Uso |
+|-----------------|---------|--------------|-----|
+| `news_ticker.wav` | osfx_22 «Morse» | `SND_16_NEWS_TICKER` | Inicio ticker |
+| `news_applause.wav` | osfx_29 «Applause» | `SND_1D_APPLAUSE` | Llegada vehículo / hitos |
+| `news_chime.wav` | osfx_02 | `SND_BEGIN` | Noticias genéricas (popup Full) |
+
+Los índices `osfx_NN` siguen la tabla `_sound_idx[]` de `sound.cpp` (slot en el `.cat`),
+no el valor hex del enum (`SND_16` ≠ `osfx_16`).
 
 Reutilizar volumen `SimHudControls::sfx_volume`.
 
@@ -376,7 +379,7 @@ Hooks concretos en openttdrs:
 | N4 | Tipos / historial | pendiente |
 | N5 | Settings por categoría | backlog |
 | — | Calendario desde tick | **hecho** |
-| — | SFX HUD infra | **hecho** (parcial) |
+| — | SFX HUD + noticias | **hecho** |
 | — | Popup +$ en mapa | **hecho** (distinto sistema) |
 
 ---
@@ -405,7 +408,7 @@ cargo test -p openttdrs-core news
 
 # Extraer sonidos noticias (tras N3)
 ./scripts/descargar_sonidos.sh --opensfx
-./scripts/preparar_sonidos_hud.sh   # ampliar con osfx_16, osfx_1D
+./scripts/preparar_sonidos_hud.sh   # news_ticker/applause/chime + HUD
 ```
 
 ---

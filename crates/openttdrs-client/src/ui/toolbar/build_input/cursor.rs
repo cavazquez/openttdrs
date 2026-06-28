@@ -2,21 +2,22 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::TileCoord;
 
-use crate::iso::{world_pos_to_tile_coord, world_pos_to_tile_fract};
+use crate::iso::{world_pos_to_rail_signal_pick, world_pos_to_tile_coord, world_pos_to_tile_fract};
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 use crate::ui::hud::HoveredTileCoord;
 use crate::ui::save_window::SaveWindowState;
-use crate::ui::toolbar::BuildMenuUi;
 use crate::ui::toolbar::minimap::minimap_contains_cursor;
 use crate::ui::toolbar::minimap::{MinimapCell, MinimapRoot};
+use crate::ui::toolbar::{BuildMenuAction, BuildMenuUi, UiToolState};
 
 /// Actualiza la tesela bajo el cursor (preview, órdenes). No modifica la selección por clic.
 pub(crate) fn update_cursor_tile(
     save_window: Option<Res<SaveWindowState>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    cam_q: Query<(&Camera, &Transform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
+    cam_q: Query<(&Camera, &GlobalTransform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     sim: Res<SimWorld>,
+    tool_state: Res<UiToolState>,
     mut hovered: ResMut<HoveredTileCoord>,
     toolbar_pointer: Query<
         &Interaction,
@@ -48,10 +49,19 @@ pub(crate) fn update_cursor_tile(
     let Ok((camera, cam_tf)) = cam_q.single() else {
         return;
     };
-    let cam_global = GlobalTransform::from(*cam_tf);
-    let Ok(world_pos) = camera.viewport_to_world_2d(&cam_global, cursor_pos) else {
+    let Ok(world_pos) = camera.viewport_to_world_2d(cam_tf, cursor_pos) else {
         return;
     };
+
+    if tool_state.active_tool == Some(BuildMenuAction::RailSignals) {
+        if let Some((tx, ty, fx, fy)) = world_pos_to_rail_signal_pick(world_pos, &sim.state.map) {
+            hovered.pos = Some(TileCoord::new(tx, ty));
+            hovered.fract_x = fx;
+            hovered.fract_y = fy;
+        }
+        return;
+    }
+
     hovered.pos =
         world_pos_to_tile_coord(world_pos, &sim.state.map).map(|(tx, ty)| TileCoord::new(tx, ty));
     if let Some(pos) = hovered.pos {

@@ -2,14 +2,15 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{TileCoord, TileKind, apply_command};
 
-use crate::iso::{world_pos_to_rail_signal_pick, world_pos_to_tile_coord, world_pos_to_tile_fract};
+use crate::iso::{world_pos_to_tile_coord, world_pos_to_tile_fract};
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, pick_vehicle_id_at_world,
     town_id_at_label_pos,
 };
 use crate::state::SimWorld;
 use crate::ui::hud::{
-    HudBuildFeedback, SelectedTileInfo, push_build_command_error, push_build_command_success,
+    HoveredTileCoord, HudBuildFeedback, SelectedTileInfo, push_build_command_error,
+    push_build_command_success,
 };
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::save_window::SaveWindowState;
@@ -96,7 +97,7 @@ pub(crate) fn handle_tile_click(
     mouse: Res<ButtonInput<MouseButton>>,
     save_window: Option<Res<SaveWindowState>>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    cam_q: Query<(&Camera, &Transform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
+    cam_q: Query<(&Camera, &GlobalTransform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut selected: ResMut<SelectedTileInfo>,
     mut sim: ResMut<SimWorld>,
     tool_state: Res<UiToolState>,
@@ -113,6 +114,7 @@ pub(crate) fn handle_tile_click(
         ),
     >,
     mut hud_feedback: ResMut<HudBuildFeedback>,
+    hovered: Res<HoveredTileCoord>,
     time: Res<Time>,
 ) {
     let order_state = &mut *panels.order;
@@ -149,8 +151,7 @@ pub(crate) fn handle_tile_click(
     let Ok((camera, cam_tf)) = cam_q.single() else {
         return;
     };
-    let cam_global = GlobalTransform::from(*cam_tf);
-    let Ok(world_pos) = camera.viewport_to_world_2d(&cam_global, cursor_pos) else {
+    let Ok(world_pos) = camera.viewport_to_world_2d(cam_tf, cursor_pos) else {
         return;
     };
 
@@ -307,11 +308,10 @@ pub(crate) fn handle_tile_click(
 
     let current = (tx, ty);
     let (build_pos, tile_fract) = if action == BuildMenuAction::RailSignals {
-        let Some((px, py, fx, fy)) = world_pos_to_rail_signal_pick(world_pos, &sim.state.map)
-        else {
+        let Some(pos) = hovered.pos else {
             return;
         };
-        (TileCoord::new(px, py), (fx, fy))
+        (pos, (hovered.fract_x, hovered.fract_y))
     } else {
         (
             pos,

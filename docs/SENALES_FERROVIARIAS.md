@@ -201,7 +201,7 @@ Toolbar avanzada vs simplificada: la simplificada solo muestra path signals ([Bu
 | Capacidad | Estado | Módulo |
 |-----------|--------|--------|
 | Colocar / quitar señal **block eléctrica** unidireccional | ✅ | `command/transport.rs`, `PlaceRailSignal` |
-| Preview + toolbar + RMB dirección | ✅ | `preview/rail_signal.rs`, `rotate.rs` |
+| Preview + toolbar + RMB dirección | 🟡 | Pick/colocación en diagonal — ver §11 |
 | Carriles X/Y/Upper/Lower/Left/Right | ✅ | `resolve_signal_track`, `fract_x/y` |
 | Render presente + rojo/verde | ✅ | `sprites/rail.rs`, `collect_signal_sprite_ids` |
 | Sim block simple (bloque hasta siguiente señal, 1 ocupación) | 🟡 | `rail_signals.rs`, `sim_step.rs` — solo X/Y bien probado; Horz/Vert parcial |
@@ -298,7 +298,66 @@ Dependencias: pathfinder trenes más fiel (YAPF simplificado o extensión de `pa
 
 ---
 
-## 10. Enlaces internos
+## 11. Bug abierto: fantasma vs colocación en vía diagonal (jun 2026)
+
+**Estado:** reproducible · **prioridad:** S5 / SP3 · **dejar documentado hasta fix definitivo.**
+
+### Síntoma (reporte usuario)
+
+En vías **X/Y diagonales** (tesela plana):
+
+1. El **fantasma** (preview) aparece **sobre el riel**, donde el jugador espera colocar.
+2. Al **clic**, la señal queda en una **tesela vecina** (a menudo una casilla al este/sudeste en pantalla), a veces en hierba o con apariencia de “vía nueva”.
+3. En casos extremos parece colocarse **doble** (fantasma correcto + resultado en vecino).
+
+OpenTTD usa `GetTileBelowCursor()` + `GenericPlaceSignals` sobre **esa** tesela (`rail_gui.cpp`); no hay búsqueda 5×5.
+
+### Intentos ya en el repo (insuficientes)
+
+| Cambio | Archivos | Resultado |
+|--------|----------|-----------|
+| Snap al riel vecino | `world_pos_to_rail_signal_pick` (`iso/coords.rs`) | Mejor cerca del borde; sigue desalineado |
+| Offset sub-tesela OpenTTD | `rail_signal_subtile_offset`, `signal_draw_pos` (`sprites/rail.rs`) | Fantasma más alineado al riel; clic sigue en otra tesela |
+| Fuente única hover | `HoveredTileCoord` en cursor + preview + click | Misma tesela en teoría; usuario confirma bug persiste |
+| Orden ECS | `cursor → ghost → click` (`ui.rs`) | Evita frame distinto; no corrige pick erróneo |
+| Desempate vecinos | `rail_signal_pick_better` en pick 5×5 | Empates por métrica isométrica |
+
+### Hipótesis para la próxima sesión
+
+1. **Pick isométrico vs OpenTTD** — `world_pos_to_tile_coord` puede devolver tesela A mientras el riel visible está en B; el vecindario 5×5 elige B con métrica similar a C.
+2. **Fract en tesela equivocada** — `PlaceRailSignal(coord, …, fract_x, fract_y)` calculado respecto a tesela B pero el jugador apunta a A; el core escribe en B (datos) mientras el fantasma se dibuja bien por offset visual.
+3. **Paridad `GetTileFromScreenXY`** — portar lógica exacta de `viewport.cpp` (no solo inversa de `iso` + rombo relajado).
+4. **Proyección al carril** — tras elegir tesela, proyectar `world_pos` al segmento X/Y dentro del rombo antes de `resolve_signal_track` (como hace el cliente con `_tile_fract_coords` tras fijar tile).
+5. **Regresión visual** — captura `OPENTTDRS_MAP_SHOT` con herramienta señales + test que compare `HoveredTileCoord` vs tile bajo sprite fantasma.
+
+### Archivos clave
+
+| Rol | Ruta |
+|-----|------|
+| Pick | `crates/openttdrs-client/src/iso/coords.rs` — `world_pos_to_rail_signal_pick` |
+| Hover unificado | `crates/openttdrs-client/src/ui/toolbar/build_input/cursor.rs` |
+| Preview | `crates/openttdrs-client/src/ui/toolbar/preview/rail_signal.rs`, `preview/mod.rs` |
+| Clic | `crates/openttdrs-client/src/ui/toolbar/build_input/click.rs` |
+| Comando | `crates/openttdrs-core/src/command/transport.rs` — `place_rail_signal` |
+| Dibujo | `crates/openttdrs-client/src/sprites/rail.rs`, `render/tiles/transport.rs` |
+| Upstream | `OpenTTD/src/viewport.cpp` (`GetTileFromScreenXY`), `rail_gui.cpp` (`GenericPlaceSignals`) |
+
+### Criterio de cierre
+
+- Fantasma y señal colocada en la **misma tesela** y **misma posición en pantalla** al clicar sobre un tramo X o Y diagonal (caso GIF usuario jun 2026).
+- Test cliente: mapa 3×3 con una diagonal; simular `world_pos` en centro del riel → `HoveredTileCoord` == tile del comando `PlaceRailSignal`.
+
+### Repro local
+
+```bash
+cargo run -p openttdrs-client
+# Toolbar → Señales → vía X o Y en diagonal → hover sobre riel → clic
+# Comparar tesela del fantasma vs tesela donde aparece el sprite sólido
+```
+
+---
+
+## 12. Enlaces internos
 
 - Codificación tiles vía: [TILES_Y_SAVEGAMES_OPENTTD.md §7.1](TILES_Y_SAVEGAMES_OPENTTD.md#71-mp_railway--teselas-con-señales)  
 - Sprint plan: [ROADMAP_SPRINTS.md § S5](ROADMAP_SPRINTS.md)  

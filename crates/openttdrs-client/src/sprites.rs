@@ -131,8 +131,8 @@ pub use rail::{
     collect_rail_ghost_sprites, collect_rail_sprites, collect_signal_sprite_draws,
     collect_signal_sprite_ids, level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
     rail_depot_build_layers, rail_ghost_overlay_offset, rail_signal_present_mask,
-    rail_signal_state_mask, rail_signal_track_offset, rail_sprite_ids_for_preload,
-    rail_tile_is_signals, signal_sprite_bases, signal_sprite_ids_for_preload,
+    rail_signal_state_mask, rail_signal_subtile_offset, rail_sprite_ids_for_preload,
+    rail_tile_is_signals, signal_draw_pos, signal_sprite_bases, signal_sprite_ids_for_preload,
 };
 #[allow(unused_imports)]
 pub use station::{

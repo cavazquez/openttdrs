@@ -212,7 +212,12 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             Update,
-            (update_cursor_tile, handle_tile_click, flush_hud_sfx)
+            (
+                update_cursor_tile,
+                update_build_ghost_preview,
+                handle_tile_click,
+                flush_hud_sfx,
+            )
                 .chain()
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),
@@ -245,7 +250,6 @@ impl Plugin for ClientUiPlugin {
             (
                 spawn_income_popups,
                 animate_income_popups,
-                update_build_ghost_preview,
                 sync_minimap,
                 sync_order_panel,
                 sync_orders_pick_cursor,

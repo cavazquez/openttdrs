@@ -10,7 +10,9 @@ use openttdrs_core::{
 
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z};
 use crate::render::TileAtlas;
-use crate::sprites::{RAIL_TILE_SIGNALS, collect_signal_sprite_draws, rail_signal_track_offset};
+use crate::sprites::{
+    RAIL_TILE_SIGNALS, collect_signal_sprite_draws, rail_signal_subtile_offset, signal_draw_pos,
+};
 
 use super::BuildGhostPreview;
 
@@ -47,7 +49,8 @@ pub(crate) fn spawn_rail_signal_preview(
     };
     let m5 = track.track_bit() | (RAIL_TILE_SIGNALS << 6);
     let sig_draws = collect_signal_sprite_draws(placement.m2, placement.m3, placement.m3hi, m5);
-    let track_offset = rail_signal_track_offset(track as u8);
+    let preview_pos = signal_draw_pos(track as u8, placement.sig_bit);
+    let track_offset = rail_signal_subtile_offset(preview_pos);
     let tint = if valid {
         Color::srgba(1.0, 1.0, 1.0, 0.75)
     } else {

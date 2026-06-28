@@ -37,6 +37,9 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 **Carreteras — drag / orientación (handoff IA):** fixes parciales junio 2026; usuario pidió
 dejarlo — ver [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md).
 
+**Señales — pick en diagonal (handoff):** fantasma OK, clic en tesela vecina — ver
+[SENALES_FERROVIARIAS.md §11](SENALES_FERROVIARIAS.md#11-bug-abierto-fantasma-vs-colocación-en-vía-diagonal-jun-2026).
+
 **Toolbar rail sin comando:** `RailConvert`, quitar señal → ver ROADMAP_SPRINTS S2 resto.
 
 ---
@@ -50,7 +53,7 @@ dejarlo — ver [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md).
 5. **Fuente UI** — `static/fonts/DejaVuSansMono.ttf` (no en `assets/` ignorado).
 6. **Estación tren** — multi-tesela `PlaceRailStationArea`, ventana selección, cruce X\|Y en intersecciones (save v3).
 7. **Vía Horz/Vert/X/Y** — `PlaceRailBits` solo en tesela del cursor (fantasma = colocación); uniones automáticas solo con autoraíl. Ver [VIAS_FERROVIARIAS_COLOCACION.md](VIAS_FERROVIARIAS_COLOCACION.md).
-8. **Señales** — pick en vecindario + offset por carril; se conservan al cruzar diagonales en la misma tesela.
+8. **Señales** — pick en vecindario + offset sub-tesela; se conservan al cruzar diagonales. **Bug abierto:** fantasma vs clic en diagonal — [SENALES §11](SENALES_FERROVIARIAS.md#11-bug-abierto-fantasma-vs-colocación-en-vía-diagonal-jun-2026).
 
 ---
 
@@ -84,4 +87,4 @@ OPENTTDRS_MAP_SHOT=/tmp/shot.png OPENTTDRS_MAP_SHOT_TOOL=rail_station cargo run 
 
 ---
 
-*Última actualización: 2026-06-22*
+*Última actualización: 2026-06-22 (señales diagonal §11)*

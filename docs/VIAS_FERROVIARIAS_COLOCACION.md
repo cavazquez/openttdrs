@@ -43,9 +43,11 @@ Implementación: `place_rail_bits` en `crates/openttdrs-core/src/command/transpo
 
 | Aspecto | Detalle |
 |---------|---------|
-| Pick | `world_pos_to_rail_signal_pick` — busca vía en vecindario 5×5; `fract` respecto a esa tesela. |
-| Dibujo | `rail_signal_track_offset` — mismo desplazamiento que overlays 1007–1010 (carriles paralelos). |
-| Colocación en cruce | `write_normal_rail_tile` conserva señales al fusionar Y+X → cruce (`trackbits_to_signal_present`). |
+| Pick | `world_pos_to_rail_signal_pick` — vecindario 5×5; hover unificado en `HoveredTileCoord` |
+| Dibujo | `rail_signal_subtile_offset` — tabla `SignalPositions` (`DrawSingleSignal`, OpenTTD) |
+| Colocación en cruce | `write_normal_rail_tile` conserva señales al fusionar Y+X → cruce |
+
+**Bug abierto (jun 2026):** en diagonal X/Y el fantasma puede verse bien pero el clic coloca en tesela vecina — ver [SENALES_FERROVIARIAS.md §11](SENALES_FERROVIARIAS.md#11-bug-abierto-fantasma-vs-colocación-en-vía-diagonal-jun-2026).
 
 Ver [SENALES_FERROVIARIAS.md](SENALES_FERROVIARIAS.md).
 

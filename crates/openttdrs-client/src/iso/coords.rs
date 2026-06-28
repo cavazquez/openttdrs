@@ -197,6 +197,20 @@ pub fn world_pos_to_rail_signal_pick(world_pos: Vec2, map: &Map) -> Option<(i32,
     let mh_i = mh as i32;
     let in_bounds = |tx: i32, ty: i32| tx >= 0 && ty >= 0 && tx < mw_i && ty < mh_i;
 
+    // Tesela bajo el cursor con vía válida (paridad GetTileBelowCursor + GenericPlaceSignals).
+    if in_bounds(seed.0, seed.1) {
+        let coord = TileCoord::new(seed.0, seed.1);
+        if let Some(tile) = map.get(coord).filter(|t| t.kind == TileKind::Rail) {
+            let tb = tile.m5 & 0x3F;
+            if tb != 0 {
+                let fract = world_pos_to_tile_fract(world_pos, map, seed.0, seed.1);
+                if resolve_signal_track(tb, fract.0, fract.1).is_some() {
+                    return Some((seed.0, seed.1, fract.0, fract.1));
+                }
+            }
+        }
+    }
+
     let mut best: Option<((i32, i32), f32, (u8, u8))> = None;
 
     for dty in -2..=2 {
@@ -227,13 +241,71 @@ pub fn world_pos_to_rail_signal_pick(world_pos: Vec2, map: &Map) -> Option<(i32,
             }
             match &best {
                 None => best = Some(((tx, ty), metric, fract)),
-                Some((_, m, _)) if metric < *m => best = Some(((tx, ty), metric, fract)),
+                Some(((bx, by), bm, _))
+                    if rail_signal_pick_better(seed, (tx, ty), metric, (*bx, *by), *bm) =>
+                {
+                    best = Some(((tx, ty), metric, fract));
+                }
                 _ => {}
             }
         }
     }
 
     best.map(|((tx, ty), _, (fx, fy))| (tx, ty, fx, fy))
+}
+
+/// Desempate entre teselas ferroviarias con métrica similar (p. ej. vía diagonal en cadena).
+fn rail_signal_pick_better(
+    seed: (i32, i32),
+    cand: (i32, i32),
+    cand_metric: f32,
+    best: (i32, i32),
+    best_metric: f32,
+) -> bool {
+    const EPS: f32 = 0.001;
+    if cand_metric + EPS < best_metric {
+        return true;
+    }
+    if cand_metric > best_metric + EPS {
+        return false;
+    }
+    let cand_dist = (cand.0 - seed.0).abs() + (cand.1 - seed.1).abs();
+    let best_dist = (best.0 - seed.0).abs() + (best.1 - seed.1).abs();
+    if cand_dist != best_dist {
+        return cand_dist < best_dist;
+    }
+    // Estable: preferir la tesela del pick geométrico si empata.
+    cand == seed || (best != seed && (cand.0, cand.1) < best)
+}
+
+#[cfg(test)]
+mod rail_signal_pick_tests {
+    use super::rail_signal_pick_better;
+
+    #[test]
+    fn tie_break_prefers_rail_tile_closer_to_geometric_seed() {
+        let seed = (10, 10);
+        assert!(rail_signal_pick_better(
+            seed,
+            (11, 10),
+            0.55,
+            (12, 10),
+            0.55
+        ));
+        assert!(!rail_signal_pick_better(
+            seed,
+            (12, 10),
+            0.55,
+            (11, 10),
+            0.55
+        ));
+    }
+
+    #[test]
+    fn lower_metric_always_wins() {
+        let seed = (3, 3);
+        assert!(rail_signal_pick_better(seed, (4, 4), 0.4, (3, 4), 0.9));
+    }
 }
 
 /// Vec3 para teselas de suelo con soporte de altura isométrica.

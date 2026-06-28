@@ -5,6 +5,7 @@ use openttdrs_core::{Map, TileCoord, TileKind};
 
 use super::road::RoadDepotLayerGfx;
 use crate::config;
+use crate::iso::remap_tile_offset;
 
 /// Subtipo de tesela ferroviaria en bits 6–7 de `m5` (`rail_map.h`).
 pub const RAIL_TILE_NORMAL: u8 = 0;
@@ -324,7 +325,7 @@ pub fn collect_signal_sprite_draws(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<Sign
     }
 
     let mut out = Vec::with_capacity(4);
-    let mut push_if = |sig_bit: u8, image: u8, track: u8| {
+    let mut push_if = |sig_bit: u8, image: u8, track: u8, pos: u8| {
         if present & (1 << sig_bit) == 0 {
             return;
         }
@@ -334,34 +335,35 @@ pub fn collect_signal_sprite_draws(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<Sign
         out.push(SignalSpriteDraw {
             sprite_id: signal_sprite_id(ty, var, image, green),
             track,
+            pos,
         });
     };
 
     if rails & TB_Y == 0 {
         if rails & TB_X == 0 {
             if rails & TB_LEFT != 0 {
-                push_if(2, 7, OTTD_TRACK_LEFT); // NORTH
-                push_if(3, 6, OTTD_TRACK_LEFT); // SOUTH
+                push_if(2, 7, OTTD_TRACK_LEFT, 0); // NORTH
+                push_if(3, 6, OTTD_TRACK_LEFT, 1); // SOUTH
             }
             if rails & TB_RIGHT != 0 {
-                push_if(0, 7, OTTD_TRACK_RIGHT);
-                push_if(1, 6, OTTD_TRACK_RIGHT);
+                push_if(0, 7, OTTD_TRACK_RIGHT, 2);
+                push_if(1, 6, OTTD_TRACK_RIGHT, 3);
             }
             if rails & TB_UPPER != 0 {
-                push_if(3, 5, OTTD_TRACK_UPPER); // WEST
-                push_if(2, 4, OTTD_TRACK_UPPER); // EAST
+                push_if(3, 5, OTTD_TRACK_UPPER, 4); // WEST
+                push_if(2, 4, OTTD_TRACK_UPPER, 5); // EAST
             }
             if rails & TB_LOWER != 0 {
-                push_if(1, 5, OTTD_TRACK_LOWER);
-                push_if(0, 4, OTTD_TRACK_LOWER);
+                push_if(1, 5, OTTD_TRACK_LOWER, 6);
+                push_if(0, 4, OTTD_TRACK_LOWER, 7);
             }
         } else {
-            push_if(3, 0, OTTD_TRACK_X); // SW
-            push_if(2, 1, OTTD_TRACK_X); // NE
+            push_if(3, 0, OTTD_TRACK_X, 8); // SW
+            push_if(2, 1, OTTD_TRACK_X, 9); // NE
         }
     } else {
-        push_if(3, 2, OTTD_TRACK_Y); // SE
-        push_if(2, 3, OTTD_TRACK_Y); // NW
+        push_if(3, 2, OTTD_TRACK_Y, 10); // SE
+        push_if(2, 3, OTTD_TRACK_Y, 11); // NW
     }
     out
 }
@@ -540,16 +542,77 @@ pub fn rail_ghost_overlay_offset(sprite_id: u32) -> Vec2 {
     }
 }
 
-/// Desplazamiento de la señal respecto al centro del rombo según el carril (`DrawSingleSignal`).
+/// Índice `SignalPositions` para `(track, sig_bit)` — mismo orden que `DrawSignals`.
 #[must_use]
-pub fn rail_signal_track_offset(ottd_track: u8) -> Vec2 {
+pub fn signal_draw_pos(ottd_track: u8, sig_bit: u8) -> u8 {
     match ottd_track {
-        OTTD_TRACK_UPPER => rail_ghost_overlay_offset(1007),
-        OTTD_TRACK_LOWER => rail_ghost_overlay_offset(1008),
-        OTTD_TRACK_RIGHT => rail_ghost_overlay_offset(1009),
-        OTTD_TRACK_LEFT => rail_ghost_overlay_offset(1010),
-        _ => Vec2::ZERO,
+        OTTD_TRACK_LEFT => {
+            if sig_bit == 2 {
+                0
+            } else {
+                1
+            }
+        }
+        OTTD_TRACK_RIGHT => {
+            if sig_bit == 0 {
+                2
+            } else {
+                3
+            }
+        }
+        OTTD_TRACK_UPPER => {
+            if sig_bit == 3 {
+                4
+            } else {
+                5
+            }
+        }
+        OTTD_TRACK_LOWER => {
+            if sig_bit == 1 {
+                6
+            } else {
+                7
+            }
+        }
+        OTTD_TRACK_X => {
+            if sig_bit == 3 {
+                8
+            } else {
+                9
+            }
+        }
+        OTTD_TRACK_Y => {
+            if sig_bit == 3 {
+                10
+            } else {
+                11
+            }
+        }
+        _ => 0,
     }
+}
+
+/// Sub-tesela OpenTTD (0–16) → desplazamiento desde el centro del rombo (`DrawSingleSignal`).
+#[must_use]
+pub fn rail_signal_subtile_offset(pos: u8) -> Vec2 {
+    const SIGNAL_SUBTILE: [(i8, i8); 12] = [
+        (8, 5),
+        (14, 1),
+        (1, 14),
+        (9, 11),
+        (1, 0),
+        (3, 10),
+        (11, 4),
+        (14, 14),
+        (11, 3),
+        (4, 13),
+        (3, 4),
+        (11, 13),
+    ];
+    let (ox, oy) = SIGNAL_SUBTILE[pos.min(11) as usize];
+    let dx = f32::from(ox) - 8.0;
+    let dy = f32::from(oy) - 8.0;
+    remap_tile_offset(dx, dy, 0.0)
 }
 
 /// Sprite de señal + carril para posicionamiento en pantalla.
@@ -557,6 +620,8 @@ pub fn rail_signal_track_offset(ottd_track: u8) -> Vec2 {
 pub struct SignalSpriteDraw {
     pub sprite_id: u32,
     pub track: u8,
+    /// Índice en `SignalPositions` de OpenTTD (`DrawSingleSignal`, `rail_cmd.cpp`).
+    pub pos: u8,
 }
 
 /// Sprites para el fantasma: mismos IDs que la vía colocada (`collect_rail_sprites`).
@@ -636,15 +701,19 @@ mod tests {
     }
 
     #[test]
-    fn rail_signal_track_offset_matches_parallel_lane_overlays() {
-        assert_eq!(
-            rail_signal_track_offset(OTTD_TRACK_UPPER),
-            rail_ghost_overlay_offset(1007)
-        );
-        assert_eq!(
-            rail_signal_track_offset(OTTD_TRACK_LEFT),
-            rail_ghost_overlay_offset(1010)
-        );
+    fn rail_signal_subtile_offset_places_x_track_on_diagonal() {
+        let sw = rail_signal_subtile_offset(8); // X SW
+        let ne = rail_signal_subtile_offset(9); // X NE
+        assert_ne!(sw, Vec2::ZERO);
+        assert_ne!(ne, Vec2::ZERO);
+        assert_ne!(sw, ne);
+    }
+
+    #[test]
+    fn signal_draw_pos_matches_draw_signals_order() {
+        assert_eq!(signal_draw_pos(OTTD_TRACK_X, 3), 8);
+        assert_eq!(signal_draw_pos(OTTD_TRACK_Y, 2), 11);
+        assert_eq!(signal_draw_pos(OTTD_TRACK_UPPER, 3), 4);
     }
 
     #[test]

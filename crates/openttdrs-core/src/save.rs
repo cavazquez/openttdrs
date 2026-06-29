@@ -17,7 +17,13 @@ use crate::GameState;
 /// como `OpenTTD`; los empalmes `0x3F` de v2 se migran al cargar.
 /// v4: órdenes `Tile` en paradas/waypoints pasan a variantes tipadas; flags
 /// `full_load` / `no_unload` explícitos en `VehicleOrder::Station`.
-pub const CURRENT_SAVE_VERSION: u32 = 4;
+/// v5: campo opcional `Vehicle::name` (nombre personalizado).
+/// v6: órdenes `VehicleOrder::Depot` con flag `stop`; migración desde `Tile` en depósito.
+/// v7: horario MVP y autoreemplazo global.
+/// v8: edad, grupos, lateness, autofill display, reglas extendidas.
+/// v9: pools de órdenes compartidas.
+/// v10: órdenes condicionales.
+pub const CURRENT_SAVE_VERSION: u32 = 10;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -129,6 +135,8 @@ fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState,
                 crate::command::normalize_synthetic_rail_crossings(&mut state.map);
             }
             3 => migrate_state_v3_to_v4(&mut state),
+            4 | 6 | 7 | 8 | 9 => {}
+            5 => migrate_state_v5_to_v6(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
@@ -179,8 +187,41 @@ fn migrate_state_v3_to_v4(state: &mut GameState) {
                     station,
                     full_load,
                     no_unload,
+                    ..
                 } => VehicleOrder::station_with_flags(station, full_load, no_unload),
-                VehicleOrder::Waypoint { waypoint } => VehicleOrder::waypoint(waypoint),
+                VehicleOrder::Waypoint { waypoint, .. } => VehicleOrder::waypoint(waypoint),
+                VehicleOrder::Depot { depot, stop, .. } => VehicleOrder::Depot {
+                    depot,
+                    stop,
+                    wait_ticks: 0,
+                    travel_ticks: 0,
+                },
+                VehicleOrder::Conditional { .. } => order,
+            })
+            .collect();
+    }
+}
+
+/// v6: órdenes en teselas de depósito pasan a `VehicleOrder::Depot`.
+fn migrate_state_v5_to_v6(state: &mut GameState) {
+    use crate::map::TileKind;
+    use crate::vehicle::VehicleOrder;
+
+    for vehicle in &mut state.vehicles {
+        vehicle.orders = vehicle
+            .orders
+            .iter()
+            .map(|&order| {
+                if let VehicleOrder::Tile(pos) = order
+                    && matches!(
+                        state.map.get_kind(pos),
+                        Some(TileKind::RoadDepot | TileKind::RailDepot)
+                    )
+                {
+                    VehicleOrder::depot(pos)
+                } else {
+                    order
+                }
             })
             .collect();
     }
@@ -189,9 +230,31 @@ fn migrate_state_v3_to_v4(state: &mut GameState) {
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use crate::{Industry, IndustryKind, TileCoord};
+    use crate::{Command, Industry, IndustryKind, TileCoord, Vehicle, VehicleKind, VehicleOrder};
 
     use super::*;
+
+    #[test]
+    fn v5_migrates_depot_tile_orders_to_depot_variant() {
+        let mut s = GameState::new(8, 8);
+        let depot = TileCoord::new(2, 2);
+        crate::apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+        crate::apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+        let mut v = Vehicle::new(1, VehicleKind::Bus, depot, depot);
+        v.orders = vec![VehicleOrder::tile(depot)];
+        s.vehicles.push(v);
+
+        let file = GameStateFile {
+            version: 5,
+            state: s,
+        };
+        let text = serde_json::to_string(&file).unwrap();
+        let loaded = load_from_str(&text).unwrap();
+        assert!(matches!(
+            loaded.vehicles[0].orders[0],
+            VehicleOrder::Depot { stop: true, .. }
+        ));
+    }
 
     #[test]
     fn save_load_roundtrip_file() {
@@ -333,6 +396,7 @@ mod tests {
                 station,
                 full_load: false,
                 no_unload: false,
+                ..
             } if station == stop
         ));
     }
@@ -365,7 +429,7 @@ mod tests {
         let path = dir.join(format!("openttdrs_v3_migrate_{}.json", std::process::id()));
         save(&loaded, &path).unwrap();
         let saved_text = std::fs::read_to_string(&path).unwrap();
-        assert!(saved_text.contains("\"version\": 4"));
+        assert!(saved_text.contains(&format!("\"version\": {CURRENT_SAVE_VERSION}")));
         let _ = std::fs::remove_file(&path);
     }
 

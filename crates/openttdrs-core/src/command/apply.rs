@@ -1,5 +1,6 @@
+use crate::bridge_spec::BridgeType;
 use crate::map::TileKind;
-use crate::{BRIDGE_BUILD_COST_PER_TILE, GameState, StopKind, TUNNEL_BUILD_COST_PER_TILE};
+use crate::{GameState, StopKind};
 
 use super::types::{Command, CommandError};
 use super::{buy_land, industry, terraform, transport, vehicles};
@@ -30,6 +31,26 @@ const fn command_modifies_map(cmd: &Command) -> bool {
             | Command::SellVehicle(..)
             | Command::ToggleVehicleRunning(..)
             | Command::CloneVehicleOrders { .. }
+            | Command::CloneVehicleAtDepot { .. }
+            | Command::SellAllVehiclesAtDepot(..)
+            | Command::RemoveVehicleOrderAt { .. }
+            | Command::SkipVehicleOrder(..)
+            | Command::ToggleVehicleOrderFullLoad { .. }
+            | Command::ToggleVehicleOrderNoUnload { .. }
+            | Command::AppendGotoNearestDepot(..)
+            | Command::RenameVehicle { .. }
+            | Command::SetDepotVehiclesRunning { .. }
+            | Command::MoveVehicleOrder { .. }
+            | Command::ToggleVehicleOrderDepotStop { .. }
+            | Command::TurnAroundVehicle(..)
+            | Command::ForceVehicleProceed(..)
+            | Command::RefitVehicle { .. }
+            | Command::ToggleVehicleTimetable(..)
+            | Command::CycleVehicleOrderWait { .. }
+            | Command::CycleVehicleOrderTravel { .. }
+            | Command::SetAutoReplaceRule { .. }
+            | Command::ClearAutoReplaceRule { .. }
+            | Command::ToggleAutoReplaceRule { .. }
     )
 }
 
@@ -40,6 +61,7 @@ fn invalidate_vehicle_paths(state: &mut GameState) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), CommandError> {
     match cmd {
         Command::SetVehicleOrders(id, orders) => {
@@ -58,15 +80,164 @@ fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), Com
             vehicles::build_vehicle_at_depot(state, *c, *engine_id)
         }
         Command::SellVehicle(id) => vehicles::sell_vehicle(state, *id),
-        Command::ToggleVehicleRunning(id) => vehicles::toggle_vehicle_running(state, *id),
+        Command::ToggleVehicleRunning(id) => {
+            super::vehicle_fleet::toggle_vehicle_running_checked(state, *id)
+        }
         Command::CloneVehicleOrders {
             from_vehicle_id,
             to_vehicle_id,
         } => vehicles::clone_vehicle_orders(state, *from_vehicle_id, *to_vehicle_id),
+        Command::CloneVehicleAtDepot {
+            source_vehicle_id,
+            depot_pos,
+        } => vehicles::clone_vehicle_at_depot(state, *source_vehicle_id, *depot_pos),
+        Command::SellAllVehiclesAtDepot(depot_pos) => {
+            vehicles::sell_all_vehicles_at_depot(state, *depot_pos)
+        }
+        Command::RemoveVehicleOrderAt { vehicle_id, index } => {
+            vehicles::remove_vehicle_order_at(state, *vehicle_id, *index)
+        }
+        Command::SkipVehicleOrder(id) => vehicles::skip_vehicle_order(state, *id),
+        Command::ToggleVehicleOrderFullLoad { vehicle_id, index } => {
+            vehicles::toggle_vehicle_order_full_load(state, *vehicle_id, *index)
+        }
+        Command::ToggleVehicleOrderNoUnload { vehicle_id, index } => {
+            vehicles::toggle_vehicle_order_no_unload(state, *vehicle_id, *index)
+        }
+        Command::AppendGotoNearestDepot(id) => vehicles::append_goto_nearest_depot(state, *id),
+        Command::RenameVehicle { vehicle_id, name } => {
+            vehicles::rename_vehicle(state, *vehicle_id, name.clone())
+        }
+        Command::SetDepotVehiclesRunning { depot_pos, running } => {
+            vehicles::set_depot_vehicles_running(state, *depot_pos, *running)
+        }
+        Command::MoveVehicleOrder {
+            vehicle_id,
+            index,
+            direction,
+        } => vehicles::move_vehicle_order(state, *vehicle_id, *index, *direction),
+        Command::ToggleVehicleOrderDepotStop { vehicle_id, index } => {
+            vehicles::toggle_vehicle_order_depot_stop(state, *vehicle_id, *index)
+        }
+        Command::TurnAroundVehicle(id) => vehicles::turn_around_vehicle(state, *id),
+        Command::ForceVehicleProceed(id) => vehicles::force_vehicle_proceed(state, *id),
+        Command::RefitVehicle { vehicle_id, cargo } => {
+            vehicles::refit_vehicle(state, *vehicle_id, *cargo)
+        }
+        Command::ToggleVehicleTimetable(id) => vehicles::toggle_vehicle_timetable(state, *id),
+        Command::CycleVehicleOrderWait { vehicle_id, index } => {
+            vehicles::cycle_vehicle_order_wait(state, *vehicle_id, *index)
+        }
+        Command::CycleVehicleOrderTravel { vehicle_id, index } => {
+            vehicles::cycle_vehicle_order_travel(state, *vehicle_id, *index)
+        }
+        Command::SetAutoReplaceRule {
+            from_engine_id,
+            to_engine_id,
+        } => vehicles::set_autoreplace_rule(state, *from_engine_id, *to_engine_id),
+        Command::ClearAutoReplaceRule { from_engine_id } => {
+            vehicles::clear_autoreplace_rule(state, *from_engine_id)
+        }
+        Command::ToggleAutoReplaceRule { from_engine_id } => {
+            vehicles::toggle_autoreplace_rule(state, *from_engine_id)
+        }
+        Command::CreateVehicleGroup { name } => {
+            super::vehicle_fleet::create_vehicle_group(state, name)
+        }
+        Command::RenameVehicleGroup { group_id, name } => {
+            super::vehicle_fleet::rename_vehicle_group(state, *group_id, name)
+        }
+        Command::AssignVehicleToGroup {
+            vehicle_id,
+            group_id,
+        } => super::vehicle_fleet::assign_vehicle_to_group(state, *vehicle_id, *group_id),
+        Command::ClearVehicleTimetableLateness(id) => {
+            super::vehicle_fleet::clear_vehicle_timetable_lateness(state, *id)
+        }
+        Command::SetVehicleOrderWaitTicks {
+            vehicle_id,
+            index,
+            wait_ticks,
+        } => super::vehicle_fleet::set_vehicle_order_wait_ticks(
+            state,
+            *vehicle_id,
+            *index,
+            *wait_ticks,
+        ),
+        Command::SetVehicleOrderTravelTicks {
+            vehicle_id,
+            index,
+            travel_ticks,
+        } => super::vehicle_fleet::set_vehicle_order_travel_ticks(
+            state,
+            *vehicle_id,
+            *index,
+            *travel_ticks,
+        ),
+        Command::ToggleVehicleTimetableAutofill(id) => {
+            super::vehicle_fleet::toggle_vehicle_timetable_autofill(state, *id)
+        }
+        Command::ToggleAutoReplaceOnlyWhenOld { from_engine_id } => {
+            let only_when_old = state
+                .autoreplace_rules
+                .iter()
+                .find(|r| r.from_engine_id == *from_engine_id)
+                .map(|r| r.only_when_old)
+                .ok_or(CommandError::AutoReplaceRuleNotFound)?;
+            super::vehicle_fleet::set_autoreplace_only_when_old(
+                state,
+                *from_engine_id,
+                !only_when_old,
+            )
+        }
+        Command::SetAutoReplaceRuleGroup {
+            from_engine_id,
+            group_id,
+        } => super::vehicle_fleet::set_autoreplace_rule_group(state, *from_engine_id, *group_id),
+        Command::DepotMassAutoreplace { depot_pos } => {
+            super::vehicle_fleet::depot_mass_autoreplace(state, *depot_pos)
+        }
+        Command::CreateSharedOrdersFromVehicle(id) => {
+            super::vehicle_fleet::create_shared_orders_from_vehicle(state, *id)
+        }
+        Command::LinkVehicleToSharedOrders {
+            vehicle_id,
+            shared_id,
+        } => super::vehicle_fleet::link_vehicle_to_shared_orders(state, *vehicle_id, *shared_id),
+        Command::UnlinkVehicleSharedOrders(id) => {
+            super::vehicle_fleet::unlink_vehicle_shared_orders(state, *id)
+        }
+        Command::SetSharedOrderAt {
+            shared_id,
+            index,
+            order,
+        } => super::vehicle_fleet::set_shared_order_at(state, *shared_id, *index, *order),
+        Command::SetVehicleOrderConditional {
+            vehicle_id,
+            index,
+            condition,
+            value,
+            jump_to,
+        } => super::vehicle_fleet::set_vehicle_order_conditional(
+            state,
+            *vehicle_id,
+            *index,
+            *condition,
+            *value,
+            *jump_to,
+        ),
+        Command::DepotReorderVehicleSlot {
+            depot_pos,
+            from_slot,
+            to_slot,
+        } => super::vehicle_fleet::depot_reorder_vehicle_slot(
+            state, *depot_pos, *from_slot, *to_slot,
+        ),
         _ => Err(CommandError::VehicleNotFound),
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), CommandError> {
     match cmd {
         Command::PlaceRoad(c) => transport::place_road(state, *c),
@@ -92,7 +263,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             TileKind::RoadTunnel,
             0x90,
             0x04,
-            TUNNEL_BUILD_COST_PER_TILE,
+            BridgeType::Wooden,
         ),
         Command::PlaceRailTunnel(a, b) => transport::place_tunnel_or_bridge(
             state,
@@ -101,26 +272,14 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             TileKind::RailTunnel,
             0x90,
             0x00,
-            TUNNEL_BUILD_COST_PER_TILE,
+            BridgeType::Wooden,
         ),
-        Command::PlaceRoadBridge(a, b) => transport::place_tunnel_or_bridge(
-            state,
-            *a,
-            *b,
-            TileKind::RoadBridge,
-            0x90,
-            0x84,
-            BRIDGE_BUILD_COST_PER_TILE,
-        ),
-        Command::PlaceRailBridge(a, b) => transport::place_tunnel_or_bridge(
-            state,
-            *a,
-            *b,
-            TileKind::RailBridge,
-            0x90,
-            0x80,
-            BRIDGE_BUILD_COST_PER_TILE,
-        ),
+        Command::PlaceRoadBridge(a, b, bt) => {
+            transport::place_tunnel_or_bridge(state, *a, *b, TileKind::RoadBridge, 0x90, 0x84, *bt)
+        }
+        Command::PlaceRailBridge(a, b, bt) => {
+            transport::place_tunnel_or_bridge(state, *a, *b, TileKind::RailBridge, 0x90, 0x80, *bt)
+        }
         Command::PlaceHouse(c) => {
             transport::place_single_transport_tile(state, *c, TileKind::House, 0x30, 0x00, 50)
         }
@@ -156,7 +315,43 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         | Command::BuildVehicleAtDepot(..)
         | Command::SellVehicle(..)
         | Command::ToggleVehicleRunning(..)
-        | Command::CloneVehicleOrders { .. } => apply_vehicle_command(state, cmd),
+        | Command::CloneVehicleOrders { .. }
+        | Command::CloneVehicleAtDepot { .. }
+        | Command::SellAllVehiclesAtDepot(..)
+        | Command::RemoveVehicleOrderAt { .. }
+        | Command::SkipVehicleOrder(..)
+        | Command::ToggleVehicleOrderFullLoad { .. }
+        | Command::ToggleVehicleOrderNoUnload { .. }
+        | Command::AppendGotoNearestDepot(..)
+        | Command::RenameVehicle { .. }
+        | Command::SetDepotVehiclesRunning { .. }
+        | Command::MoveVehicleOrder { .. }
+        | Command::ToggleVehicleOrderDepotStop { .. }
+        | Command::TurnAroundVehicle(..)
+        | Command::ForceVehicleProceed(..)
+        | Command::RefitVehicle { .. }
+        | Command::ToggleVehicleTimetable(..)
+        | Command::CycleVehicleOrderWait { .. }
+        | Command::CycleVehicleOrderTravel { .. }
+        | Command::SetAutoReplaceRule { .. }
+        | Command::ClearAutoReplaceRule { .. }
+        | Command::ToggleAutoReplaceRule { .. }
+        | Command::CreateVehicleGroup { .. }
+        | Command::RenameVehicleGroup { .. }
+        | Command::AssignVehicleToGroup { .. }
+        | Command::ClearVehicleTimetableLateness(..)
+        | Command::SetVehicleOrderWaitTicks { .. }
+        | Command::SetVehicleOrderTravelTicks { .. }
+        | Command::ToggleVehicleTimetableAutofill(..)
+        | Command::ToggleAutoReplaceOnlyWhenOld { .. }
+        | Command::SetAutoReplaceRuleGroup { .. }
+        | Command::DepotMassAutoreplace { .. }
+        | Command::CreateSharedOrdersFromVehicle(..)
+        | Command::LinkVehicleToSharedOrders { .. }
+        | Command::UnlinkVehicleSharedOrders(..)
+        | Command::SetSharedOrderAt { .. }
+        | Command::SetVehicleOrderConditional { .. }
+        | Command::DepotReorderVehicleSlot { .. } => apply_vehicle_command(state, cmd),
         Command::ClearTile(c) => transport::clear_tile(state, *c),
         Command::RaiseLand(c) => terraform::raise_land(state, *c),
         Command::LowerLand(c) => terraform::lower_land(state, *c),

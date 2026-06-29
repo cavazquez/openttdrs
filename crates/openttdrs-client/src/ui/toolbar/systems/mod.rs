@@ -7,8 +7,8 @@ mod tooltip;
 
 pub(crate) use close::{close_toolbar_button_interaction, close_toolbar_panel_on_escape};
 pub(crate) use groups::{
-    hide_tool_when_panel_closed, toolbar_group_interaction, update_toolbar_group_visuals,
-    update_toolbar_tool_visibility,
+    hide_tool_when_panel_closed, sync_climate_industry_tools, toolbar_group_interaction,
+    update_toolbar_group_visuals, update_toolbar_tool_visibility,
 };
 pub(crate) use tools::{build_menu_interaction, update_tool_button_visuals};
 pub(crate) use tooltip::update_toolbar_tooltip;
@@ -30,6 +30,7 @@ mod tests {
     use crate::ui::industry_panel::IndustryPanelState;
     use crate::ui::news_settings_window::NewsSettingsWindowState;
     use crate::ui::save_window::SaveWindowState;
+    use crate::ui::timetable_window::TimetableWindowState;
     use crate::ui::toolbar::build_input::commands::{command_for_action, command_for_line_action};
     use crate::ui::toolbar::build_input::drag::{
         action_is_tunnel, action_supports_area_drag, action_supports_drag, drag_line_tiles,
@@ -37,12 +38,13 @@ mod tests {
     };
     use crate::ui::toolbar::build_input::orders::order_for_clicked_tile;
     use crate::ui::toolbar::{
-        BuildMenuAction, BuildMenuUi, DepotPanelState, DragBuildState, OrderEditState,
-        SaveMenuAction, StationBuildState, StationCargoPanelState, ToolbarGroup, ToolbarState,
-        UiToolState, handle_minimap_click, handle_order_panel_buttons,
+        BridgeBuildState, BuildMenuAction, BuildMenuUi, DepotPanelState, DragBuildState,
+        OrderEditState, SaveMenuAction, StationBuildState, StationCargoPanelState, ToolbarGroup,
+        ToolbarState, UiToolState, handle_minimap_click, handle_order_panel_buttons,
         handle_settings_menu_buttons, handle_tile_click, setup_minimap, setup_order_panel,
         sync_minimap, sync_order_panel,
     };
+    use openttdrs_core::BridgeType;
 
     #[test]
     fn close_toolbar_escape_clears_state() {
@@ -156,11 +158,13 @@ mod tests {
     fn handle_order_panel_buttons_empty() {
         let mut world = World::new();
         world.insert_resource(OrderEditState::default());
+        world.insert_resource(crate::ui::destination_window::DestinationPickerState::default());
         world.insert_resource(SimWorld::default());
         world.insert_resource(UiToolState::default());
         world.insert_resource(DragBuildState::default());
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(HudBuildFeedback::default());
+        world.insert_resource(TimetableWindowState::default());
         world.insert_resource(Time::<()>::default());
         world.run_system_once(handle_order_panel_buttons).unwrap();
     }
@@ -281,6 +285,7 @@ mod tests {
         world.insert_resource(UiToolState::default());
         world.insert_resource(StationBuildState::default());
         world.insert_resource(DragBuildState::default());
+        world.insert_resource(BridgeBuildState::default());
         world.insert_resource(OrderEditState::default());
         world.insert_resource(DepotPanelState::default());
         world.insert_resource(StationCargoPanelState::default());
@@ -378,14 +383,29 @@ mod tests {
         );
 
         assert!(matches!(
-            command_for_line_action(BuildMenuAction::RoadTunnel, &[(1, 1), (3, 1)]),
+            command_for_line_action(
+                BuildMenuAction::RoadTunnel,
+                &[(1, 1), (3, 1)],
+                BridgeType::Wooden
+            ),
             Some(Command::PlaceRoadTunnel(_, _))
         ));
         assert!(matches!(
-            command_for_line_action(BuildMenuAction::RailBridge, &[(1, 1), (3, 1)]),
-            Some(Command::PlaceRailBridge(_, _))
+            command_for_line_action(
+                BuildMenuAction::RailBridge,
+                &[(1, 1), (3, 1)],
+                BridgeType::Wooden
+            ),
+            Some(Command::PlaceRailBridge(_, _, _))
         ));
-        assert!(command_for_line_action(BuildMenuAction::RoadX, &[(1, 1), (3, 1)]).is_none());
+        assert!(
+            command_for_line_action(
+                BuildMenuAction::RoadX,
+                &[(1, 1), (3, 1)],
+                BridgeType::Wooden
+            )
+            .is_none()
+        );
         assert_eq!(
             road_bits_for_drag_action(BuildMenuAction::Road, &[(1, 1), (4, 1)]),
             Some(0x0A)
@@ -460,9 +480,17 @@ mod tests {
         let mut sim = SimWorld::default();
         sim.state.vehicles.clear();
         sim.state.stations.clear();
-        let depot = TileCoord::new(2, 2);
+        let road_depot = TileCoord::new(2, 2);
+        let rail_depot = TileCoord::new(4, 2);
         let truck_stop = TileCoord::new(3, 2);
-        sim.state.map.set_kind(depot, TileKind::RoadDepot).unwrap();
+        sim.state
+            .map
+            .set_kind(road_depot, TileKind::RoadDepot)
+            .unwrap();
+        sim.state
+            .map
+            .set_kind(rail_depot, TileKind::RailDepot)
+            .unwrap();
         sim.state
             .stations
             .push(openttdrs_core::Station::new_with_kind(
@@ -472,14 +500,25 @@ mod tests {
         sim.state.vehicles.push(openttdrs_core::Vehicle::new(
             42,
             VehicleKind::Bus,
-            depot,
-            depot,
+            road_depot,
+            road_depot,
+        ));
+        sim.state.vehicles.push(openttdrs_core::Vehicle::new(
+            7,
+            VehicleKind::Train,
+            rail_depot,
+            rail_depot,
         ));
 
         assert!(matches!(
-            order_for_clicked_tile(&sim, 42, depot),
-            Some(VehicleOrder::Tile(_))
+            order_for_clicked_tile(&sim, 42, road_depot),
+            Some(VehicleOrder::Depot { .. })
+        ));
+        assert!(matches!(
+            order_for_clicked_tile(&sim, 7, rail_depot),
+            Some(VehicleOrder::Depot { .. })
         ));
         assert!(order_for_clicked_tile(&sim, 42, truck_stop).is_none());
+        assert!(order_for_clicked_tile(&sim, 42, rail_depot).is_none());
     }
 }

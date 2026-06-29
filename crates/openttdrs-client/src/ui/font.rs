@@ -1,5 +1,11 @@
 //! Fuente UI con cobertura UTF-8 (tildes y eñes en `Text2d` / HUD).
+//!
+//! Bevy carga por defecto un subconjunto de Fira Mono (`default_font`) sin acentos
+//! españoles. Al arrancar sustituimos ese handle por [`UI_FONT_PATH`].
 
+use std::path::Path;
+
+use bevy::asset::AssetId;
 use bevy::prelude::*;
 use bevy::text::RemSize;
 use bevy::window::PrimaryWindow;
@@ -71,6 +77,24 @@ pub(crate) fn load_hud_ui_font(
     font
 }
 
+/// Sustituye la fuente por defecto de Bevy (FiraMono subset) por DejaVu UTF-8.
+pub(crate) fn install_utf8_default_font_into_assets(fonts: &mut Assets<Font>, asset_root: &Path) {
+    let path = asset_root.join(UI_FONT_PATH);
+    match std::fs::read(&path) {
+        Ok(bytes) => {
+            if let Err(err) = fonts.insert(AssetId::default(), Font::from_bytes(bytes)) {
+                warn!("No se pudo instalar DejaVu como fuente por defecto: {err}");
+            }
+        }
+        Err(err) => {
+            warn!(
+                "Fuente UTF-8 {} no cargada ({err}); tildes y eñes pueden verse mal",
+                path.display()
+            );
+        }
+    }
+}
+
 /// Escala `RemSize` desde la altura lógica de la ventana (base 720 px → 14 px).
 pub(crate) fn sync_rem_size_from_window(
     windows: Query<&Window, With<PrimaryWindow>>,
@@ -91,12 +115,21 @@ pub(crate) fn sync_rem_size_from_window(
 mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
+    use std::path::Path;
 
     #[test]
     fn ui_font_role_rem_sizes_ordered() {
         assert!(UiFontRole::Caption.rem_size() < UiFontRole::Body.rem_size());
         assert!(UiFontRole::Body.rem_size() < UiFontRole::Hud.rem_size());
         assert!(UiFontRole::Hud.rem_size() < UiFontRole::Title.rem_size());
+    }
+
+    #[test]
+    fn install_utf8_default_font_reads_dejavu_from_repo() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut fonts = Assets::<Font>::default();
+        install_utf8_default_font_into_assets(&mut fonts, &root);
+        assert!(fonts.get(AssetId::default()).is_some());
     }
 
     #[test]

@@ -1,4 +1,6 @@
-use openttdrs_core::{Command, GameState, TileCoord, command_would_fail, resolve_tunnel_end};
+use openttdrs_core::{
+    BridgeType, Command, CommandError, GameState, TileCoord, command_would_fail, resolve_tunnel_end,
+};
 
 use crate::ui::toolbar::build_input::commands::{
     buy_land_command_for_tiles, command_for_action, command_for_line_action,
@@ -21,6 +23,30 @@ fn is_line_build_action(action: BuildMenuAction) -> bool {
             | BuildMenuAction::RoadBridge
             | BuildMenuAction::RailBridge
     )
+}
+
+fn is_bridge_action(action: BuildMenuAction) -> bool {
+    matches!(
+        action,
+        BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge
+    )
+}
+
+/// Validez del tramo (geometría/agua); tipo y fondos se eligen en la ventana.
+#[must_use]
+pub(crate) fn preview_bridge_span_valid(
+    state: &GameState,
+    action: BuildMenuAction,
+    preview_tiles: &[(i32, i32)],
+) -> bool {
+    let Some(cmd) = command_for_line_action(action, preview_tiles, BridgeType::Wooden) else {
+        return false;
+    };
+    match command_would_fail(state, &cmd) {
+        None => true,
+        Some(CommandError::BridgeTypeNotAvailable) | Some(CommandError::InsufficientFunds) => true,
+        Some(_) => false,
+    }
 }
 
 /// Misma validación que `apply_command` para el preview (ghost verde/rojo).
@@ -50,7 +76,10 @@ pub(crate) fn preview_build_command_valid(
         return command_would_fail(state, &cmd).is_none();
     }
     if is_line_build_action(action) {
-        let Some(cmd) = command_for_line_action(action, preview_tiles) else {
+        if is_bridge_action(action) {
+            return preview_bridge_span_valid(state, action, preview_tiles);
+        }
+        let Some(cmd) = command_for_line_action(action, preview_tiles, BridgeType::Wooden) else {
             return false;
         };
         return command_would_fail(state, &cmd).is_none();

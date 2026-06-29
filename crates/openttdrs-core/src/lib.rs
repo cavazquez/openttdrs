@@ -5,8 +5,11 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
+pub mod autoreplace;
+pub mod bridge_spec;
 pub mod cargo;
 pub mod command;
+pub mod depot;
 pub mod economy;
 pub mod engine;
 mod game_state;
@@ -17,27 +20,38 @@ pub mod ottdmap_extras;
 pub mod pathfinder;
 pub mod rail_lane;
 pub mod rail_signals;
+pub mod refit;
 pub mod road_movement;
 pub mod sav;
 pub mod save;
+pub mod shared_orders;
 mod sim_step;
 pub mod station;
 pub mod tick;
+pub mod timetable;
 pub mod tnbp_decode;
 pub mod town;
 pub mod townname;
 pub mod vehicle;
 mod vehicle_ai;
+pub mod vehicle_group;
 pub mod world_gen;
 
+pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
+pub use bridge_spec::{
+    BRIDGE_SPECS, BridgeSpec, BridgeType, bridge_available, bridge_available_at_tick,
+    bridge_build_cost, bridge_line_tiles, bridge_middle_length, bridge_spec, bridge_total_length,
+    bridge_type_from_m6, set_bridge_type_m6,
+};
 pub use cargo::{CargoStock, CargoType};
 pub use command::{
-    Command, CommandError, LevelMode, ROAD_PLACE_FORCE_AXIS, apply_command,
+    Command, CommandError, LevelMode, OrderMoveDirection, ROAD_PLACE_FORCE_AXIS, apply_command,
     check_place_industry_spec, command_error_message, command_would_fail, finalize_road_drag_line,
     industry_template, infer_road_drag_axis, preview_road_bits_at, rail_bits_placement_target,
     rail_station_footprint, rail_trackbits_from_neighbors, road_bits_for_autoroute,
     road_drag_line_tiles, road_locked_tool_axis,
 };
+pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile};
 pub use economy::{
     CargoPaymentSpec, TICKS_PER_TRANSIT_DAY, TICKS_PER_YEAR, buy_land_cost, cargo_time_factor,
     inflation_income_factor, inflation_prices_factor, manhattan_distance,
@@ -45,10 +59,11 @@ pub use economy::{
     vehicle_purchase_cost, vehicle_running_cost_per_tick, vehicle_sell_refund,
 };
 pub use engine::{
-    ENGINE_BUS_MPS, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineDef, REFERENCE_PROGRESS_STEP,
-    ROAD_ACCEL_ORIGINAL, decelerate_road_speed, default_engine_id, engine_by_id, engine_catalog,
-    engine_for_vehicle, engines_of_kind, progress_step_for_speed, tile_progress_length,
-    update_road_speed,
+    ENGINE_BUS_MPS, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineCatalogSort, EngineDef,
+    REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter, decelerate_road_speed,
+    default_engine_id, engine_available_in_year, engine_by_id, engine_catalog, engine_for_vehicle,
+    engines_for_depot_purchase, engines_of_kind, progress_step_for_speed, tile_progress_length,
+    train_sprite_group, update_road_speed,
 };
 #[allow(deprecated)]
 pub use game_state::CARGO_DELIVERY_PAYMENT;
@@ -103,6 +118,7 @@ pub use rail_signals::{
     signal_on_track_mask, signal_placement_for_facing, signal_placement_for_track,
     signal_type_for_track, tracks_overlap, valid_signal_facings_track,
 };
+pub use refit::{next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_in_depot};
 pub use road_movement::{
     VehiclePose, extrapolate_vehicle_pose, road_turn_entry_exit, straight_subtile,
     train_straight_subtile, train_subtile_direction, vehicle_render_direction,
@@ -113,6 +129,7 @@ pub use sav::{SavError, SavGame, SavIndustry, SavStation, SavVehicle, SavVehicle
 pub use save::CURRENT_SAVE_VERSION;
 pub use save::SaveError;
 pub use save::load_from_str;
+pub use shared_orders::SharedOrderList;
 pub use station::{
     STATION_COVERAGE_RADIUS, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage,
     StationMapCoherenceReport, StopKind, industry_in_station_coverage, is_rail_waypoint_at,
@@ -121,6 +138,7 @@ pub use station::{
     station_type_from_m6, stop_kind_from_m6, vehicle_at_road_stop, vehicle_physically_at_station,
 };
 pub use tick::GameTick;
+pub use timetable::{TRAVEL_PRESETS, WAIT_PRESETS, cycle_travel_ticks, cycle_wait_ticks};
 pub use tnbp_decode::{
     JgrTunnelRecord, SlPrimitive, SlTableField, TnbpDecodeError, TnbpDecoded, decode_tnbp_blob,
     jgr_tunnels_from_decoded, read_sl_gamma, split_sl_gamma_segments, tnbp_blob_to_json_value,
@@ -132,9 +150,11 @@ pub use town::{
 pub use townname::generate_town_name;
 pub use vehicle::reverse_direction;
 pub use vehicle::{
-    DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, VEHICLE_PROGRESS_STEP, Vehicle,
-    VehicleDirection, VehicleKind, VehicleOrder, direction_from_tile_step,
+    DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionKind,
+    TimetableWaitKind, VEHICLE_PROGRESS_STEP, Vehicle, VehicleDirection, VehicleKind, VehicleOrder,
+    direction_from_tile_step,
 };
+pub use vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup};
 pub use world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW, Climate,
     PreserveRect, WorldGenConfig, apply_world_gen, clear_ground_m5, effective_clear_ground,

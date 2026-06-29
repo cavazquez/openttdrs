@@ -6,6 +6,7 @@ use super::transport::{build_error_for_kind, transport_tile_is_buildable};
 
 mod industry_template;
 mod layout_tables;
+mod toyland_layout_tables;
 pub use industry_template::industry_template;
 
 pub(super) fn place_industry_sandbox(
@@ -50,6 +51,9 @@ pub(super) fn place_industry_spec_sandbox(
     c: TileCoord,
     spec: IndustrySpec,
 ) -> Result<(), CommandError> {
+    if !spec.available_in(state.climate) {
+        return Err(CommandError::IndustryNotAvailableInClimate);
+    }
     check_place_industry_spec(&state.map, c, spec)?;
     let template = industry_template(c, spec);
     let footprint: Vec<TileCoord> = template.iter().map(|(tile, _)| *tile).collect();

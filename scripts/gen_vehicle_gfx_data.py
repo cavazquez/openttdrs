@@ -82,6 +82,70 @@ GFX_SETS: tuple[tuple[str, tuple[tuple[int, str], ...]], ...] = (
             (2928, "vehicle_train_nw.png"),
         ),
     ),
+    (
+        "TRAIN_VEHICLE_LAYERS_T0",
+        (
+            (2905, "vehicle_train_t0_n.png"),
+            (2906, "vehicle_train_t0_ne.png"),
+            (2907, "vehicle_train_t0_e.png"),
+            (2908, "vehicle_train_t0_se.png"),
+            (2909, "vehicle_train_t0_s.png"),
+            (2910, "vehicle_train_t0_sw.png"),
+            (2911, "vehicle_train_t0_w.png"),
+            (2912, "vehicle_train_t0_nw.png"),
+        ),
+    ),
+    (
+        "TRAIN_VEHICLE_LAYERS_T1",
+        (
+            (2913, "vehicle_train_t1_n.png"),
+            (2914, "vehicle_train_t1_ne.png"),
+            (2915, "vehicle_train_t1_e.png"),
+            (2916, "vehicle_train_t1_se.png"),
+            (2917, "vehicle_train_t1_s.png"),
+            (2918, "vehicle_train_t1_sw.png"),
+            (2919, "vehicle_train_t1_w.png"),
+            (2920, "vehicle_train_t1_nw.png"),
+        ),
+    ),
+    (
+        "TRAIN_VEHICLE_LAYERS_TDIESEL",
+        (
+            (2949, "vehicle_train_td_n.png"),
+            (2950, "vehicle_train_td_ne.png"),
+            (2951, "vehicle_train_td_e.png"),
+            (2952, "vehicle_train_td_se.png"),
+            (2953, "vehicle_train_td_s.png"),
+            (2954, "vehicle_train_td_sw.png"),
+            (2955, "vehicle_train_td_w.png"),
+            (2956, "vehicle_train_td_nw.png"),
+        ),
+    ),
+    (
+        "TRAIN_VEHICLE_LAYERS_TELECTRIC",
+        (
+            (2965, "vehicle_train_te_n.png"),
+            (2966, "vehicle_train_te_ne.png"),
+            (2967, "vehicle_train_te_e.png"),
+            (2968, "vehicle_train_te_se.png"),
+            (2969, "vehicle_train_te_s.png"),
+            (2970, "vehicle_train_te_sw.png"),
+            (2971, "vehicle_train_te_w.png"),
+            (2972, "vehicle_train_te_nw.png"),
+        ),
+    ),
+)
+
+
+KIRBY_FALLBACK = (
+    "vehicle_train_n.png",
+    "vehicle_train_ne.png",
+    "vehicle_train_e.png",
+    "vehicle_train_se.png",
+    "vehicle_train_s.png",
+    "vehicle_train_sw.png",
+    "vehicle_train_w.png",
+    "vehicle_train_nw.png",
 )
 
 
@@ -111,6 +175,7 @@ def emit_layers(
             nfo_ok += 1
         if not (tiles_dir / png).is_file():
             missing.append(png)
+            png = KIRBY_FALLBACK[DIR_NAMES.index(dir_name)]
         rows.append(f"    // {dir_name.upper()} (sprite {sid})")
         rows.append(
             f"    VehicleLayerGfx {{ w: {w:.1f}, h: {h:.1f}, "
@@ -161,8 +226,7 @@ def main() -> int:
     out_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"Escrito {out_path} (nfo={total_nfo}/{8 * len(GFX_SETS)})")
     if all_missing:
-        print(f"PNG ausentes: {all_missing}")
-        return 1
+        print(f"PNG ausentes (fallback Kirby): {sorted(set(all_missing))}")
     return 0
 
 

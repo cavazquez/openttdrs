@@ -19,8 +19,9 @@ use crate::sprites::{
     FENCE_SPRITE_META, FIELD_STATES, HOUSE_DRAW_DATA, TREE_LAYOUT_SPRITE, TREE_LAYOUT_XY,
     TREE_SPRITE_META, house_building_stage_from_tile, house_draw_data_index_for_tile,
     industry_anim_layer_used_in_any_frame, industry_building_needs_client_anim,
-    industry_effective_m4_for_draw, industry_gfx_entry_for_tile, industry_gfx_uses_random_colour,
-    industry_palette_colour_for_instance,
+    industry_effective_m4_for_draw, industry_gfx_entry_for_tile,
+    industry_gfx_uses_fizzy_drink_anim, industry_gfx_uses_random_colour,
+    industry_gfx_uses_refinery_fire_anim, industry_palette_colour_for_instance,
 };
 
 pub(crate) fn spawn_house_tile(
@@ -114,6 +115,10 @@ pub(crate) fn spawn_industry_tile(
     // Chimenea de la central terminada: penacho de humo animado encima.
     if gfx == crate::render::GFX_POWERPLANT_CHIMNEY && m1 & 0x80 != 0 {
         crate::render::spawn_chimney_smoke(commands, assets, ctx);
+    }
+    // Chimenea mina de cobre terminada: humo `EV_COPPER_MINE_SMOKE`.
+    if gfx == crate::render::GFX_COPPER_MINE_CHIMNEY && m1 & 0x80 != 0 {
+        crate::render::spawn_copper_mine_smoke(commands, assets, ctx);
     }
     let ground_sid = entry.map(|e| e.ground_sprite_id).unwrap_or(0);
     let use_water = industry_uses_water_ground(map, ctx.coord, gfx, ground_sid);
@@ -235,7 +240,15 @@ pub(crate) fn spawn_industry_tile(
                     0.5,
                 );
             } else if let Some(img) = assets.industries.get(&s.sprite_id) {
-                let sprite = if industry_gfx_uses_random_colour(gfx) {
+                let refinery_fire = industry_gfx_uses_refinery_fire_anim(gfx, m1)
+                    && assets.refinery_fire_frames.contains_key(&s.sprite_id);
+                let fizzy_drink = industry_gfx_uses_fizzy_drink_anim(gfx, m1)
+                    && assets.fizzy_drink_frames.contains_key(&s.sprite_id);
+                let sprite = if refinery_fire {
+                    assets.refinery_fire_frames[&s.sprite_id][0].sprite()
+                } else if fizzy_drink {
+                    assets.fizzy_drink_frames[&s.sprite_id][0].sprite()
+                } else if industry_gfx_uses_random_colour(gfx) {
                     sprite_from_atlas_or_industry_palette(
                         company,
                         images,
@@ -247,12 +260,21 @@ pub(crate) fn spawn_industry_tile(
                     img.sprite()
                 };
                 let pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
-                commands.spawn((
+                let mut entity = commands.spawn((
                     MapVisualLayer,
                     chunk,
                     sprite,
                     Transform::from_translation(pos3),
                 ));
+                if refinery_fire {
+                    entity.insert(crate::render::RefineryFireAnim {
+                        sprite_id: s.sprite_id,
+                    });
+                } else if fizzy_drink {
+                    entity.insert(crate::render::FizzyDrinkAnim {
+                        sprite_id: s.sprite_id,
+                    });
+                }
             }
         }
     }

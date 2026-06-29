@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use openttdrs_core::{CargoType, Map, TileKind, Vehicle, VehicleKind};
+use openttdrs_core::{CargoType, Map, Vehicle, VehicleKind};
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_and_min_z};
@@ -17,8 +17,9 @@ use crate::simulation::SimClock;
 mod vehicle_gfx;
 
 use vehicle_gfx::{
-    BUS_VEHICLE_LAYERS, BUS_VEHICLE_LAYERS_LOADED, TRAIN_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS,
-    TRUCK_VEHICLE_LAYERS_LOADED,
+    BUS_VEHICLE_LAYERS, BUS_VEHICLE_LAYERS_LOADED, TRAIN_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS_T0,
+    TRAIN_VEHICLE_LAYERS_T1, TRAIN_VEHICLE_LAYERS_TDIESEL, TRAIN_VEHICLE_LAYERS_TELECTRIC,
+    TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED,
 };
 
 pub(crate) struct VehicleRenderPlugin;
@@ -36,13 +37,27 @@ impl Plugin for VehicleRenderPlugin {
     }
 }
 
+fn train_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+    let engine_id = v
+        .engine_id
+        .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
+    let engine = openttdrs_core::engine_for_vehicle(v.kind, engine_id);
+    match openttdrs_core::train_sprite_group(engine.train_image_index) {
+        0 => &TRAIN_VEHICLE_LAYERS_T0,
+        1 => &TRAIN_VEHICLE_LAYERS_T1,
+        2 => &TRAIN_VEHICLE_LAYERS,
+        3 => &TRAIN_VEHICLE_LAYERS_TDIESEL,
+        _ => &TRAIN_VEHICLE_LAYERS_TELECTRIC,
+    }
+}
+
 fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
     match v.kind {
         VehicleKind::Truck if v.uses_loaded_road_sprite() => &TRUCK_VEHICLE_LAYERS_LOADED,
         VehicleKind::Truck => &TRUCK_VEHICLE_LAYERS,
         VehicleKind::Bus if v.uses_loaded_road_sprite() => &BUS_VEHICLE_LAYERS_LOADED,
         VehicleKind::Bus => &BUS_VEHICLE_LAYERS,
-        VehicleKind::Train => &TRAIN_VEHICLE_LAYERS,
+        VehicleKind::Train => train_layers_for(v),
     }
 }
 
@@ -98,7 +113,7 @@ pub(crate) struct TruckHandles {
     bus_loaded: DirHandles,
     truck: DirHandles,
     truck_loaded: DirHandles,
-    train: DirHandles,
+    train_groups: [DirHandles; 5],
 }
 
 impl TruckHandles {
@@ -123,7 +138,13 @@ impl TruckHandles {
             bus_loaded: load_set(asset_server, &BUS_VEHICLE_LAYERS_LOADED),
             truck: load_set(asset_server, &TRUCK_VEHICLE_LAYERS),
             truck_loaded: load_set(asset_server, &TRUCK_VEHICLE_LAYERS_LOADED),
-            train: load_set(asset_server, &TRAIN_VEHICLE_LAYERS),
+            train_groups: [
+                load_set(asset_server, &TRAIN_VEHICLE_LAYERS_T0),
+                load_set(asset_server, &TRAIN_VEHICLE_LAYERS_T1),
+                load_set(asset_server, &TRAIN_VEHICLE_LAYERS),
+                load_set(asset_server, &TRAIN_VEHICLE_LAYERS_TDIESEL),
+                load_set(asset_server, &TRAIN_VEHICLE_LAYERS_TELECTRIC),
+            ],
         }
     }
 
@@ -131,9 +152,14 @@ impl TruckHandles {
         let i = dir.min(7);
         match kind {
             VehicleKind::Bus => self.bus[i].clone(),
-            VehicleKind::Train => self.train[i].clone(),
+            VehicleKind::Train => self.train_groups[2][i].clone(),
             VehicleKind::Truck => self.truck[i].clone(),
         }
+    }
+
+    pub(crate) fn train_preview(&self, image_index: u8, dir: usize) -> Handle<Image> {
+        let group = openttdrs_core::train_sprite_group(image_index).min(4) as usize;
+        self.train_groups[group][dir.min(7)].clone()
     }
 
     fn for_vehicle(&self, v: &Vehicle, company: Option<&CompanyColoredSprites>) -> Handle<Image> {
@@ -150,7 +176,15 @@ impl TruckHandles {
             VehicleKind::Truck => self.truck[i].clone(),
             VehicleKind::Bus if v.uses_loaded_road_sprite() => self.bus_loaded[i].clone(),
             VehicleKind::Bus => self.bus[i].clone(),
-            VehicleKind::Train => self.train[i].clone(),
+            VehicleKind::Train => {
+                let engine_id = v
+                    .engine_id
+                    .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
+                let engine = openttdrs_core::engine_for_vehicle(v.kind, engine_id);
+                let group =
+                    openttdrs_core::train_sprite_group(engine.train_image_index).min(4) as usize;
+                self.train_groups[group][i].clone()
+            }
         }
     }
 }
@@ -183,6 +217,11 @@ pub(crate) fn spawn_initial_vehicles(
 ) {
     for vehicle in &sim.state.vehicles {
         let pos3 = vehicle_sprite_pos(vehicle, &sim.state.map, 0.0);
+        let vis = if vehicle_is_hidden_in_depot(sim, vehicle) {
+            Visibility::Hidden
+        } else {
+            Visibility::Visible
+        };
         commands.spawn((
             MapVisualLayer,
             VehicleSprite(vehicle.id),
@@ -192,7 +231,7 @@ pub(crate) fn spawn_initial_vehicles(
                 ..default()
             },
             Transform::from_translation(pos3),
-            Visibility::Visible,
+            vis,
         ));
         commands.spawn((
             MapVisualLayer,
@@ -204,7 +243,7 @@ pub(crate) fn spawn_initial_vehicles(
             },
             TextColor(vehicle_cargo_color(vehicle)),
             Transform::from_translation(vehicle_cargo_label_pos(pos3)),
-            Visibility::Visible,
+            vis,
         ));
     }
 }
@@ -245,7 +284,7 @@ fn vehicle_tint() -> Color {
 }
 
 fn vehicle_is_hidden_in_depot(sim: &SimWorld, v: &Vehicle) -> bool {
-    !v.running && sim.state.map.get_kind(v.pos) == Some(TileKind::RoadDepot)
+    !v.running && openttdrs_core::vehicle_in_depot(&sim.state.map, v.pos)
 }
 
 /// Radio de picking en unidades mundo (clic sobre el sprite del vehículo).
@@ -329,32 +368,16 @@ mod tests {
 
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
-    use openttdrs_core::{DIR_S, DIR_SW, GameState, TileCoord, VehicleKind};
+    use openttdrs_core::{DIR_S, DIR_SW, GameState, TileCoord, TileKind, VehicleKind};
 
     fn sample_vehicle(id: u32) -> Vehicle {
-        Vehicle {
-            id,
-            kind: VehicleKind::Truck,
-            pos: TileCoord::new(1, 1),
-            origin: TileCoord::new(1, 1),
-            dest: TileCoord::new(2, 1),
-            path: VecDeque::from([TileCoord::new(2, 1)]),
-            cargo: 0,
-            cargo_type: None,
-            capacity: 30,
-            running: true,
-            progress: 0,
-            direction: DIR_SW,
-            engine_id: Some(openttdrs_core::ENGINE_TRUCK_MPS),
-            cur_speed: 96,
-            subspeed: 0,
-            orders: Vec::new(),
-            current_order: 0,
-            no_network_route_to_order: false,
-            cargo_source: None,
-            cargo_transit_ticks: 0,
-            depart_turn: 0,
-        }
+        let dest = TileCoord::new(2, 1);
+        let mut v = Vehicle::new(id, VehicleKind::Truck, TileCoord::new(1, 1), dest);
+        v.path = VecDeque::from([dest]);
+        v.direction = DIR_SW;
+        v.engine_id = Some(openttdrs_core::ENGINE_TRUCK_MPS);
+        v.cur_speed = 96;
+        v
     }
 
     fn default_handles() -> TruckHandles {
@@ -363,7 +386,7 @@ mod tests {
             bus_loaded: Default::default(),
             truck: Default::default(),
             truck_loaded: Default::default(),
-            train: Default::default(),
+            train_groups: Default::default(),
         }
     }
 
@@ -399,25 +422,39 @@ mod tests {
         assert_eq!(v.render_direction(), DIR_SW);
         assert_ne!(vehicle_layers(&v)[1].path, vehicle_layers(&v)[3].path);
         assert!(!v.uses_loaded_road_sprite());
-        let loaded = Vehicle {
-            cargo: 15,
-            ..sample_vehicle(1)
-        };
+        let mut loaded = sample_vehicle(1);
+        loaded.cargo = 15;
         assert!(loaded.uses_loaded_road_sprite());
-        let empty_bus = Vehicle {
-            kind: VehicleKind::Bus,
-            ..sample_vehicle(2)
-        };
-        let loaded_bus = Vehicle {
-            kind: VehicleKind::Bus,
-            cargo: 15,
-            ..sample_vehicle(3)
-        };
+        let mut empty_bus = sample_vehicle(2);
+        empty_bus.kind = VehicleKind::Bus;
+        let mut loaded_bus = sample_vehicle(3);
+        loaded_bus.kind = VehicleKind::Bus;
+        loaded_bus.cargo = 15;
         assert!(loaded_bus.uses_loaded_road_sprite());
         assert_ne!(
             vehicle_layers(&empty_bus)[5].path,
             vehicle_layers(&loaded_bus)[5].path
         );
+    }
+
+    #[test]
+    fn stopped_train_in_rail_depot_is_hidden_from_pick() {
+        let mut sim = SimWorld {
+            state: openttdrs_core::GameState::new(16, 16),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let depot = TileCoord::new(5, 5);
+        sim.state
+            .map
+            .set_kind(depot, TileKind::RailDepot)
+            .expect("rail depot");
+        let mut train = Vehicle::new(9, VehicleKind::Train, depot, depot);
+        train.running = false;
+        sim.state.vehicles.push(train);
+        let anchor = vehicle_sprite_pos(&sim.state.vehicles[0], &sim.state.map, 0.0).truncate();
+        assert!(vehicle_is_hidden_in_depot(&sim, &sim.state.vehicles[0]));
+        assert_eq!(pick_vehicle_id_at_world(anchor, &sim), None);
     }
 
     #[test]
@@ -454,7 +491,7 @@ mod tests {
         world.run_system_once(update_vehicles).unwrap();
 
         let mut labels = world.query_filtered::<&Text2d, With<VehicleCargoLabel>>();
-        assert_eq!(labels.single(&world).unwrap().to_string(), "ANY 0/30");
+        assert_eq!(labels.single(&world).unwrap().to_string(), "ANY 0/20");
     }
 
     #[test]

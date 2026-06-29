@@ -40,6 +40,7 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
             p.spawn((
                 Node {
                     width: Val::Px(520.0),
+                    height: Val::Percent(90.0),
                     max_height: Val::Percent(90.0),
                     flex_direction: FlexDirection::Column,
                     justify_content: JustifyContent::FlexStart,
@@ -75,6 +76,10 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
 
                 panel.spawn((
                     MainMenuHintsText,
+                    Node {
+                        flex_shrink: 0.0,
+                        ..default()
+                    },
                     Text::new(panel_hints(MainMenuPanel::Root)),
                     TextFont {
                         font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
@@ -99,8 +104,10 @@ fn spawn_root_panel(parent: &mut ChildSpawnerCommands) {
             MainMenuSubPanel(MainMenuPanel::Root),
             Node {
                 width: Val::Percent(100.0),
+                flex_grow: 1.0,
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
                 row_gap: Val::Px(8.0),
                 ..default()
             },
@@ -123,8 +130,9 @@ fn spawn_new_game_panel(parent: &mut ChildSpawnerCommands) {
             MainMenuSubPanel(MainMenuPanel::NewGame),
             hidden_subpanel_node(Node {
                 width: Val::Percent(100.0),
-                max_height: Val::Px(520.0),
-                overflow: Overflow::scroll_y(),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                min_height: Val::Px(0.0),
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 row_gap: Val::Px(8.0),
@@ -133,129 +141,21 @@ fn spawn_new_game_panel(parent: &mut ChildSpawnerCommands) {
             Visibility::Hidden,
         ))
         .with_children(|panel| {
-            panel.spawn(option_section_label("Clima"));
             panel
-                .spawn((Node {
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(6.0),
-                    ..default()
-                },))
-                .with_children(|row| {
-                    for climate in [
-                        Climate::Temperate,
-                        Climate::SubArctic,
-                        Climate::SubTropical,
-                        Climate::Toyland,
-                    ] {
-                        row.spawn(climate_button(climate));
-                    }
-                });
-
-            panel.spawn(option_section_label("Tamano del mapa"));
-            panel
-                .spawn((Node {
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(4.0),
-                    ..default()
-                },))
-                .with_children(|row| {
-                    for size in MapSizePreset::all() {
-                        row.spawn(map_size_button(size));
-                    }
-                });
-
-            panel.spawn(option_section_label("Ano de inicio"));
-            panel
-                .spawn((Node {
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
-                    width: Val::Px(400.0),
-                    column_gap: Val::Px(4.0),
-                    row_gap: Val::Px(4.0),
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },))
-                .with_children(|row| {
-                    for year in START_YEARS {
-                        row.spawn(start_year_button(year));
-                    }
-                });
-
-            panel.spawn(option_section_label("Densidad de pueblos"));
-            panel
-                .spawn((Node {
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(6.0),
-                    ..default()
-                },))
-                .with_children(|row| {
-                    for density in PopulationDensity::all() {
-                        row.spawn(density_button(density, MainMenuDensityTarget::Town));
-                    }
-                });
-
-            panel.spawn(option_section_label("Densidad de industrias"));
-            panel
-                .spawn((Node {
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(6.0),
-                    ..default()
-                },))
-                .with_children(|row| {
-                    for density in PopulationDensity::all() {
-                        row.spawn(density_button(density, MainMenuDensityTarget::Industry));
-                    }
-                });
-
-            panel.spawn(option_section_label("Dinero inicial"));
-            panel
-                .spawn((Node {
-                    flex_direction: FlexDirection::Row,
-                    flex_wrap: FlexWrap::Wrap,
-                    width: Val::Px(400.0),
-                    column_gap: Val::Px(4.0),
-                    row_gap: Val::Px(4.0),
-                    justify_content: JustifyContent::Center,
-                    ..default()
-                },))
-                .with_children(|row| {
-                    for amount in STARTING_MONEY_OPTIONS {
-                        row.spawn(starting_money_button(amount));
-                    }
-                });
-
-            panel.spawn(option_section_label("Terreno"));
-            panel
-                .spawn((Node {
+                .spawn(Node {
+                    width: Val::Percent(100.0),
+                    flex_grow: 1.0,
+                    flex_shrink: 1.0,
+                    min_height: Val::Px(0.0),
+                    overflow: Overflow::scroll_y(),
                     flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(4.0),
-                    ..default()
-                },))
-                .with_children(|toggles| {
-                    toggles.spawn(toggle_button(
-                        MainMenuToggle::WorldGen,
-                        "Terreno procedural",
-                    ));
-                    toggles.spawn(toggle_button(MainMenuToggle::Island, "Modo isla (costas)"));
-                    if dev_mode() {
-                        toggles.spawn(toggle_button(
-                            MainMenuToggle::PreserveDemo,
-                            "Incluir zona demo/tutorial (24×18)",
-                        ));
-                    }
-                });
-
-            panel
-                .spawn((Node {
-                    flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(6.0),
                     align_items: AlignItems::Center,
+                    row_gap: Val::Px(8.0),
+                    padding: UiRect::bottom(Val::Px(4.0)),
                     ..default()
-                },))
-                .with_children(|row| {
-                    row.spawn(option_section_label("Semilla"));
-                    row.spawn(seed_adjust_button(MainMenuSeedDecButton, "−"));
-                    row.spawn(seed_adjust_button(MainMenuSeedIncButton, "+"));
+                })
+                .with_children(|scroll| {
+                    spawn_new_game_options(scroll);
                 });
 
             panel.spawn((
@@ -270,6 +170,133 @@ fn spawn_new_game_panel(parent: &mut ChildSpawnerCommands) {
 
             panel.spawn(primary_button(MainMenuStartButton, "Iniciar partida", 50.0));
             panel.spawn(secondary_button(MainMenuBackButton, "Volver", 42.0));
+        });
+}
+
+fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
+    panel.spawn(option_section_label("Clima"));
+    panel
+        .spawn((Node {
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(6.0),
+            ..default()
+        },))
+        .with_children(|row| {
+            for climate in [
+                Climate::Temperate,
+                Climate::SubArctic,
+                Climate::SubTropical,
+                Climate::Toyland,
+            ] {
+                row.spawn(climate_button(climate));
+            }
+        });
+
+    panel.spawn(option_section_label("Tamano del mapa"));
+    panel
+        .spawn((Node {
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(4.0),
+            ..default()
+        },))
+        .with_children(|row| {
+            for size in MapSizePreset::all() {
+                row.spawn(map_size_button(size));
+            }
+        });
+
+    panel.spawn(option_section_label("Ano de inicio"));
+    panel
+        .spawn((Node {
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::Wrap,
+            width: Val::Px(400.0),
+            column_gap: Val::Px(4.0),
+            row_gap: Val::Px(4.0),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },))
+        .with_children(|row| {
+            for year in START_YEARS {
+                row.spawn(start_year_button(year));
+            }
+        });
+
+    panel.spawn(option_section_label("Densidad de pueblos"));
+    panel
+        .spawn((Node {
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(6.0),
+            ..default()
+        },))
+        .with_children(|row| {
+            for density in PopulationDensity::all() {
+                row.spawn(density_button(density, MainMenuDensityTarget::Town));
+            }
+        });
+
+    panel.spawn(option_section_label("Densidad de industrias"));
+    panel
+        .spawn((Node {
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(6.0),
+            ..default()
+        },))
+        .with_children(|row| {
+            for density in PopulationDensity::all() {
+                row.spawn(density_button(density, MainMenuDensityTarget::Industry));
+            }
+        });
+
+    panel.spawn(option_section_label("Dinero inicial"));
+    panel
+        .spawn((Node {
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::Wrap,
+            width: Val::Px(400.0),
+            column_gap: Val::Px(4.0),
+            row_gap: Val::Px(4.0),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },))
+        .with_children(|row| {
+            for amount in STARTING_MONEY_OPTIONS {
+                row.spawn(starting_money_button(amount));
+            }
+        });
+
+    panel.spawn(option_section_label("Terreno"));
+    panel
+        .spawn((Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(4.0),
+            ..default()
+        },))
+        .with_children(|toggles| {
+            toggles.spawn(toggle_button(
+                MainMenuToggle::WorldGen,
+                "Terreno procedural",
+            ));
+            toggles.spawn(toggle_button(MainMenuToggle::Island, "Modo isla (costas)"));
+            if dev_mode() {
+                toggles.spawn(toggle_button(
+                    MainMenuToggle::PreserveDemo,
+                    "Incluir zona demo/tutorial (24×18)",
+                ));
+            }
+        });
+
+    panel
+        .spawn((Node {
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(6.0),
+            align_items: AlignItems::Center,
+            ..default()
+        },))
+        .with_children(|row| {
+            row.spawn(option_section_label("Semilla"));
+            row.spawn(seed_adjust_button(MainMenuSeedDecButton, "−"));
+            row.spawn(seed_adjust_button(MainMenuSeedIncButton, "+"));
         });
 }
 

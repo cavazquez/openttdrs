@@ -7,7 +7,7 @@ use bevy::ui::{FocusPolicy, GlobalZIndex};
 use crate::render::{MapPreviewCamera, VehiclePreviewCamera};
 use crate::ui::toolbar::{BuildMenuUi, OrderPanelButton, OrderPanelRoot, OrderPanelTitle};
 
-use super::{ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
+use super::{ORDER_PANEL_LIST_MAX_HEIGHT, ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
 
 const PREVIEW_TEX_W: u32 = 320;
 const PREVIEW_TEX_H: u32 = 180;
@@ -131,6 +131,8 @@ pub(crate) fn setup_order_panel(
                 .spawn(Node {
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(2.0),
+                    max_height: Val::Px(ORDER_PANEL_LIST_MAX_HEIGHT),
+                    overflow: Overflow::scroll_y(),
                     ..default()
                 })
                 .with_children(|list| {
@@ -152,8 +154,49 @@ pub(crate) fn setup_order_panel(
                         ..default()
                     })
                     .with_children(|row| {
+                        spawn_order_button(row, OrderPanelButton::MoveOrderUp, "Subir");
+                        spawn_order_button(row, OrderPanelButton::MoveOrderDown, "Bajar");
+                        spawn_order_button(row, OrderPanelButton::ToggleDepotStop, "Parar depós.");
+                    });
+                    col.spawn(Node {
+                        flex_direction: FlexDirection::Row,
+                        column_gap: Val::Px(4.0),
+                        flex_wrap: FlexWrap::Wrap,
+                        ..default()
+                    })
+                    .with_children(|row| {
                         spawn_order_button(row, OrderPanelButton::PickDestOnMap, "Agregar destino");
                         spawn_order_button(row, OrderPanelButton::ToggleRunning, "Iniciar/Detener");
+                        spawn_order_button(row, OrderPanelButton::SkipOrder, "Saltar");
+                        spawn_order_button(row, OrderPanelButton::DeleteSelected, "Borrar");
+                    });
+                    col.spawn(Node {
+                        flex_direction: FlexDirection::Row,
+                        column_gap: Val::Px(4.0),
+                        flex_wrap: FlexWrap::Wrap,
+                        ..default()
+                    })
+                    .with_children(|row| {
+                        spawn_order_button(row, OrderPanelButton::ToggleFullLoad, "Carga compl.");
+                        spawn_order_button(row, OrderPanelButton::ToggleNoUnload, "No descargar");
+                        spawn_order_button(row, OrderPanelButton::CycleOrderWait, "Espera");
+                        spawn_order_button(row, OrderPanelButton::CycleOrderTravel, "Viaje");
+                        spawn_order_button(row, OrderPanelButton::ToggleTimetable, "Horario");
+                        spawn_order_button(
+                            row,
+                            OrderPanelButton::OpenTimetableWindow,
+                            "Vent. horario",
+                        );
+                        spawn_order_button(
+                            row,
+                            OrderPanelButton::ClearTimetableLateness,
+                            "Poner en hora",
+                        );
+                        spawn_order_button(
+                            row,
+                            OrderPanelButton::SetConditionalOrder,
+                            "Condicional",
+                        );
                         spawn_order_button(row, OrderPanelButton::ClearLast, "Quitar última");
                         spawn_order_button(row, OrderPanelButton::ClearAll, "Vaciar lista");
                     });
@@ -163,6 +206,7 @@ pub(crate) fn setup_order_panel(
 
 fn spawn_order_panel_row(parent: &mut ChildSpawnerCommands, slot: usize) {
     parent.spawn((
+        Button,
         OrderPanelRow { slot },
         Node {
             width: Val::Percent(100.0),
@@ -176,6 +220,7 @@ fn spawn_order_panel_row(parent: &mut ChildSpawnerCommands, slot: usize) {
         },
         BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
         BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
+        Interaction::default(),
         BuildMenuUi,
         children![(
             OrderPanelRowText { slot },

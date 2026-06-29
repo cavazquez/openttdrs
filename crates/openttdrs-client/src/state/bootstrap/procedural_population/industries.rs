@@ -4,47 +4,13 @@ use openttdrs_core::{
 
 use super::{PopCtx, in_preserve, min_distance_sq};
 
-fn climate_industry_specs(climate: Climate) -> &'static [IndustrySpec] {
-    match climate {
-        Climate::Temperate => &[
-            IndustrySpec::CoalMine,
-            IndustrySpec::Forest,
-            IndustrySpec::Sawmill,
-            IndustrySpec::Factory,
-            IndustrySpec::Farm,
-            IndustrySpec::IronOreMine,
-        ],
-        Climate::SubArctic => &[
-            IndustrySpec::CoalMine,
-            IndustrySpec::Forest,
-            IndustrySpec::Sawmill,
-            IndustrySpec::Factory,
-            IndustrySpec::GoldMine,
-            IndustrySpec::IronOreMine,
-        ],
-        Climate::SubTropical => &[
-            IndustrySpec::OilWells,
-            IndustrySpec::OilRefinery,
-            IndustrySpec::Farm,
-            IndustrySpec::Factory,
-            IndustrySpec::CopperOreMine,
-        ],
-        Climate::Toyland => &[
-            IndustrySpec::Factory,
-            IndustrySpec::Farm,
-            IndustrySpec::Forest,
-            IndustrySpec::CoalMine,
-        ],
-    }
-}
-
 pub(super) fn place_industries(
     ctx: &mut PopCtx<'_>,
     climate: Climate,
     target: usize,
     town_centers: &[TileCoord],
 ) {
-    let specs = climate_industry_specs(climate);
+    let specs = IndustrySpec::specs_for_climate(climate);
     let margin = 3_u32;
     let span_w = ctx.mw.saturating_sub(margin * 2).max(1);
     let span_h = ctx.mh.saturating_sub(margin * 2).max(1);

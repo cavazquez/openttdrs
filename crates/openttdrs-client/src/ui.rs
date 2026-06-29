@@ -6,6 +6,7 @@ use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 
 mod buy_window;
+mod destination_window;
 mod finances_window;
 mod floating_window;
 pub(crate) mod font;
@@ -16,6 +17,7 @@ mod main_menu_intro;
 mod news_settings_window;
 mod save_window;
 mod statusbar;
+mod timetable_window;
 mod toolbar;
 mod town_window;
 mod vehicle_window;
@@ -23,6 +25,10 @@ mod windows_shot;
 use buy_window::{
     BuyVehicleWindowState, buy_window_on_closed, handle_buy_window_buttons, setup_buy_window,
     sync_buy_window,
+};
+use destination_window::{
+    DestinationPickerState, destination_picker_on_closed, handle_destination_picker_buttons,
+    setup_destination_picker, sync_destination_picker,
 };
 use finances_window::{
     FinancesWindowState, finances_window_on_closed, handle_open_finances_window,
@@ -61,30 +67,36 @@ use statusbar::{
     handle_status_bar_center_click, news_history_on_closed, setup_news_history_window,
     setup_status_bar, sync_news_history_window, sync_status_bar, update_news_playback,
 };
-use toolbar::depot_panel_on_closed;
-pub(crate) use toolbar::{BuildMenuAction, OrderEditState};
-use toolbar::{
-    DepotPanelState, DragBuildState, StationBuildState, StationCargoPanelState, ToolbarState,
-    UiToolState, build_menu_interaction, close_toolbar_button_interaction,
-    close_toolbar_panel_on_escape, handle_company_colour_swatches, handle_depot_panel_buttons,
-    handle_minimap_click, handle_order_panel_buttons, handle_rail_station_picker_buttons,
-    handle_settings_menu_buttons, handle_station_cargo_panel_buttons, handle_tile_click,
-    hide_tool_when_panel_closed, rail_station_picker_on_closed, rotate_station_with_right_click,
-    setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
-    setup_rail_station_picker, setup_station_cargo_panel, setup_top_toolbar,
-    sync_company_colour_swatch_visuals, sync_depot_panel, sync_minimap, sync_order_panel,
-    sync_orders_pick_cursor, sync_rail_station_picker, sync_station_cargo_panel,
-    toolbar_group_interaction, update_build_ghost_preview, update_cursor_tile,
-    update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
-    update_toolbar_tooltip,
+use timetable_window::{
+    TimetableWindowState, handle_timetable_window_buttons, setup_timetable_window,
+    sync_timetable_window, timetable_window_on_closed,
 };
+use toolbar::depot_panel_on_closed;
+use toolbar::{
+    BridgeBuildState, DepotPanelState, DragBuildState, StationBuildState, StationCargoPanelState,
+    ToolbarState, UiToolState, bridge_picker_on_closed, build_menu_interaction,
+    close_toolbar_button_interaction, close_toolbar_panel_on_escape, handle_bridge_picker_buttons,
+    handle_company_colour_swatches, handle_depot_panel_buttons, handle_minimap_click,
+    handle_order_panel_buttons, handle_rail_station_picker_buttons, handle_settings_menu_buttons,
+    handle_station_cargo_panel_buttons, handle_tile_click, hide_tool_when_panel_closed,
+    rail_station_picker_on_closed, rotate_station_with_right_click, setup_bridge_picker,
+    setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
+    setup_rail_station_picker, setup_station_cargo_panel, setup_top_toolbar, sync_bridge_picker,
+    sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_depot_panel,
+    sync_minimap, sync_order_panel, sync_orders_pick_cursor, sync_rail_station_picker,
+    sync_station_cargo_panel, toolbar_group_interaction, update_build_ghost_preview,
+    update_cursor_tile, update_tool_button_visuals, update_toolbar_group_visuals,
+    update_toolbar_tool_visibility, update_toolbar_tooltip,
+};
+pub(crate) use toolbar::{BuildMenuAction, OrderEditState};
 use town_window::{
     TownWindowState, handle_town_window_buttons, setup_town_window, sync_town_window,
     town_window_on_closed,
 };
 use vehicle_window::{
-    VehicleWindowState, handle_vehicle_window_buttons, setup_vehicle_window, sync_vehicle_window,
-    vehicle_window_on_closed,
+    VehicleWindowState, handle_vehicle_rename_buttons, handle_vehicle_window_buttons,
+    setup_vehicle_window, sync_vehicle_window, vehicle_window_on_closed,
+    vehicle_window_rename_editable_keyboard, vehicle_window_rename_keyboard,
 };
 pub(crate) struct ClientUiPlugin;
 
@@ -108,6 +120,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<UiToolState>()
         .init_resource::<StationBuildState>()
         .init_resource::<DragBuildState>()
+        .init_resource::<BridgeBuildState>()
         .init_resource::<OrderEditState>()
         .init_resource::<DepotPanelState>()
         .init_resource::<StationCargoPanelState>()
@@ -116,7 +129,9 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<SaveWindowState>()
         .init_resource::<TownWindowState>()
         .init_resource::<BuyVehicleWindowState>()
+        .init_resource::<DestinationPickerState>()
         .init_resource::<VehicleWindowState>()
+        .init_resource::<TimetableWindowState>()
         .init_resource::<crate::state::new_game::NewGameSettingsResource>()
         .add_systems(
             OnEnter(ClientScreen::MainMenu),
@@ -137,15 +152,19 @@ impl Plugin for ClientUiPlugin {
                 setup_depot_panel,
                 setup_station_cargo_panel,
                 setup_rail_station_picker,
+                setup_bridge_picker,
                 setup_industry_panel,
                 setup_save_window,
                 setup_town_window,
                 setup_buy_window,
-                setup_vehicle_window,
-                setup_rail_station_picker,
-                load_hud_sfx,
+                setup_destination_picker,
             )
+                .chain()
                 .in_set(StartupSet::Ui),
+        )
+        .add_systems(
+            OnEnter(ClientScreen::InGame),
+            (setup_vehicle_window, setup_timetable_window, load_hud_sfx).in_set(StartupSet::Ui),
         )
         .add_systems(
             Update,
@@ -216,16 +235,31 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             Update,
+            sync_climate_industry_tools
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
             (
                 handle_town_window_buttons,
                 town_window_on_closed,
                 handle_buy_window_buttons,
                 buy_window_on_closed,
+                handle_destination_picker_buttons,
+                destination_picker_on_closed,
                 depot_panel_on_closed,
                 handle_vehicle_window_buttons,
+                handle_vehicle_rename_buttons,
+                vehicle_window_rename_keyboard,
+                vehicle_window_rename_editable_keyboard,
                 vehicle_window_on_closed,
+                handle_timetable_window_buttons,
+                timetable_window_on_closed,
                 handle_rail_station_picker_buttons,
                 rail_station_picker_on_closed,
+                handle_bridge_picker_buttons,
+                bridge_picker_on_closed,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),
@@ -278,8 +312,11 @@ impl Plugin for ClientUiPlugin {
                 sync_industry_panel,
                 sync_town_window,
                 sync_buy_window,
+                sync_destination_picker,
                 sync_rail_station_picker,
+                sync_bridge_picker,
                 sync_vehicle_window,
+                sync_timetable_window,
                 play_hud_sfx,
                 update_tile_info_text,
             )

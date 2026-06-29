@@ -6,6 +6,7 @@ use crate::map::{Map, TileCoord, TileKind};
 use crate::news::{CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day};
 use crate::station::is_rail_waypoint_tile;
 use crate::tick::GameTick;
+use crate::vehicle::{Vehicle, VehicleKind};
 
 /// Subtipo de tesela ferroviaria en bits 6–7 de `m5` (`RailTileType`).
 pub const RAIL_TILE_NORMAL: u8 = 0;
@@ -335,6 +336,62 @@ pub fn train_blocked_by_signal(
         if !block_is_clear(train_positions, &block) {
             return true;
         }
+    }
+    false
+}
+
+/// `true` si otro tren ocupa la vía delante (misma dirección o frente a frente).
+#[must_use]
+pub fn train_blocked_by_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehicle) -> bool {
+    if vehicle.kind != VehicleKind::Train || !vehicle.running {
+        return false;
+    }
+    let Some(next) = vehicle.movement_target() else {
+        return false;
+    };
+    let self_id = vehicle.id;
+
+    if vehicles
+        .iter()
+        .any(|v| v.id != self_id && v.kind == VehicleKind::Train && v.pos == next)
+    {
+        return true;
+    }
+
+    if vehicles
+        .iter()
+        .any(|v| v.id != self_id && v.kind == VehicleKind::Train && v.pos == vehicle.pos)
+    {
+        return true;
+    }
+
+    let mut prev = vehicle.pos;
+    let mut cur = next;
+    for _ in 0..64 {
+        if let Some(other) = vehicles
+            .iter()
+            .find(|v| v.id != self_id && v.kind == VehicleKind::Train && v.pos == cur)
+        {
+            if !other.running {
+                return true;
+            }
+            if let Some(other_next) = other.movement_target() {
+                if other_next == prev || other_next == vehicle.pos {
+                    return true;
+                }
+            } else {
+                return true;
+            }
+            return true;
+        }
+
+        let neighbors = rail_neighbors(map, cur, Some(prev));
+        let continuations: Vec<_> = neighbors.into_iter().filter(|n| *n != prev).collect();
+        if continuations.len() != 1 {
+            break;
+        }
+        prev = cur;
+        cur = continuations[0];
     }
     false
 }
@@ -791,6 +848,49 @@ mod tests {
         assert_ne!(
             state.vehicles[0].pos, start,
             "al liberarse el bloque el tren debe avanzar"
+        );
+    }
+
+    #[test]
+    fn trains_block_head_on_without_signal() {
+        use std::collections::VecDeque;
+
+        use crate::vehicle::{Vehicle, VehicleKind};
+
+        let mut map = Map::new_flat(10, 10, 0);
+        for x in 0..5 {
+            write_rail(&mut map, TileCoord::new(x, 0), RAIL_TB_X);
+        }
+        let mut east = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(0, 0),
+            TileCoord::new(4, 0),
+        );
+        east.path = VecDeque::from([
+            TileCoord::new(1, 0),
+            TileCoord::new(2, 0),
+            TileCoord::new(3, 0),
+            TileCoord::new(4, 0),
+        ]);
+        east.running = true;
+        let mut west = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(4, 0),
+            TileCoord::new(0, 0),
+        );
+        west.path = VecDeque::from([
+            TileCoord::new(3, 0),
+            TileCoord::new(2, 0),
+            TileCoord::new(1, 0),
+            TileCoord::new(0, 0),
+        ]);
+        west.running = true;
+        let vehicles = vec![east.clone(), west];
+        assert!(
+            train_blocked_by_traffic(&map, &vehicles, &east),
+            "trenes frente a frente deben detenerse sin señales"
         );
     }
 }

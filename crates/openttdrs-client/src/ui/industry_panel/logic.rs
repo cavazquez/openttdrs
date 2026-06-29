@@ -128,6 +128,16 @@ pub(crate) fn spec_label(spec: IndustrySpec) -> &'static str {
         IndustrySpec::OilRefinery => "Refinería",
         IndustrySpec::Factory => "Fábrica",
         IndustrySpec::Sawmill => "Aserradero",
+        IndustrySpec::CottonCandy => "Algodón de azúcar",
+        IndustrySpec::CandyFactory => "Fábrica de caramelos",
+        IndustrySpec::BatteryFarm => "Granja de baterías",
+        IndustrySpec::ColaWells => "Pozo de cola",
+        IndustrySpec::ToyFactory => "Fábrica de juguetes",
+        IndustrySpec::PlasticFountain => "Fuente de plástico",
+        IndustrySpec::FizzyDrinkFactory => "Fábrica de bebidas gaseosas",
+        IndustrySpec::BubbleGenerator => "Generador de burbujas",
+        IndustrySpec::ToffeeQuarry => "Cantera de toffee",
+        IndustrySpec::SugarMine => "Mina de azúcar",
     }
 }
 

@@ -8,6 +8,7 @@ mod terraform;
 mod transport;
 mod types;
 mod util;
+mod vehicle_fleet;
 mod vehicles;
 
 pub use apply::apply_command;
@@ -24,7 +25,7 @@ pub(crate) use transport::{
 pub use transport::{
     rail_bits_placement_target, rail_station_footprint, rail_trackbits_from_neighbors,
 };
-pub use types::{Command, CommandError, LevelMode, command_error_message};
+pub use types::{Command, CommandError, LevelMode, OrderMoveDirection, command_error_message};
 
 pub(super) use util::in_bounds;
 

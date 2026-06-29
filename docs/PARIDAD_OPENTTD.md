@@ -34,13 +34,15 @@ Ordenada de **más barato a más caro**.
 | 7 | Tests | `effective_road_bits` en fixture | ✅ | ✅ | S |
 | 8 | Render | Culling mapas grandes | ✅ | 🟡 | M |
 | 9 | Render | Industrias gfx 120–174 | ✅ | 🟡 0–119 | M |
+| 9b | Render | Sprites locomotoras por grupo (5 sets OpenGFX) | ✅ | 🟡 lógica OK, PNG fallback Kirby | S — [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) § locomotoras |
 | 10 | Construcción | Señales bloque (sin PBS) | ✅ | 🟡 render | M |
 | 11 | Construcción | Convertir tipo de vía | ✅ | ❌ | M |
 | 12 | Import | `.sav` jugable (órdenes, dinero) | ✅ | 🟡 | M |
 | 13 | Sim | Servicio en depósito | ✅ | ❌ | M |
 | 14 | Sim | Rating estación / cargo packets | ✅ | 🟡 | M |
-| 15 | Sim | Órdenes condicionales | ✅ | ❌ | M–L |
-| 16 | Sim | Horarios (timetable) | ✅ | ❌ | M–L |
+| 15 | Sim | Órdenes condicionales | ✅ | ❌ | M–L — F6 en [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) |
+| 16 | Sim | Horarios (timetable) | ✅ | 🟡 | M–L — MVP E+; F1/F4/F5 |
+| 16b | Sim | Autoreemplazo | ✅ | 🟡 | M — MVP E+; F2/F3 |
 | 17 | Carretera | Un solo sentido / drive-through | ✅ | 🟡 | M |
 | 18 | Mundo | Subvencios, autoridad local | ✅ | 🟡 | M–L |
 | 19 | Mundo | Terraform + 4 climas + gen mundo | ✅ | 🟡 | T1–T3 + T4 MVP (clima/gen); industrias por clima L — [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) |
@@ -99,4 +101,4 @@ Ordenada de **más barato a más caro**.
 
 ---
 
-*Última actualización: 2026-06-11*
+*Última actualización: 2026-06-22*

@@ -154,6 +154,19 @@ fn sandbox_commands_place_visible_tile_kinds() {
 }
 
 #[test]
+fn toyland_industry_rejected_on_temperate_map() {
+    let mut s = GameState::new(16, 16);
+    assert_eq!(
+        apply_command(
+            &mut s,
+            &Command::PlaceIndustrySpec(TileCoord::new(5, 5), IndustrySpec::FizzyDrinkFactory),
+        )
+        .unwrap_err(),
+        CommandError::IndustryNotAvailableInClimate,
+    );
+}
+
+#[test]
 fn place_industry_spec_starts_construction_in_progress() {
     let mut s = GameState::new(16, 16);
     let origin = TileCoord::new(5, 5);

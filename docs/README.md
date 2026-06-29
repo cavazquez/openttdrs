@@ -3,9 +3,10 @@
 Índice de la carpeta `docs/`. Para empezar a desarrollar o planificar, leer en este orden:
 
 1. [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) — plan de trabajo actual (6 sprints, hito 0.1)
-2. [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) — qué tenemos vs OpenTTD y costo de cada gap
-3. [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) — hallazgos técnicos fijos y comandos útiles
-4. [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) — filosofía I0–I8 y estado del código
+2. [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) — **menús de flota** (órdenes, vehículo, depósito): handoff para IAs
+3. [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) — qué tenemos vs OpenTTD y costo de cada gap
+4. [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) — hallazgos técnicos fijos y comandos útiles
+5. [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) — filosofía I0–I8 y estado del código
 
 ---
 
@@ -14,6 +15,7 @@
 | Documento | Uso |
 |-----------|-----|
 | [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) | Sprints S1–S6, criterios de cierre 0.1 |
+| [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) | Menús flota (vehículo, órdenes, depósito), comandos, gaps OTTD, handoff IA |
 | [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) | Inventario features + mecánicas iguales/diferentes |
 | [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) | Spec incremental I0–I8, traducción upstream ↔ Rust |
 | [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) | Prioridades, hallazgos de tiles/sprites, comandos |
@@ -30,6 +32,7 @@ Módulos grandes partidos siguiendo el patrón `ui/save_window/`:
 | Área | Ruta |
 |------|------|
 | Menú inicio | `crates/openttdrs-client/src/ui/main_menu/` |
+| Flota (vehículo, órdenes, depósito) | `ui/vehicle_window.rs`, `ui/toolbar/order_panel/`, `ui/toolbar/depot_panel.rs` — ver [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) |
 | Población procedural | `crates/openttdrs-client/src/state/bootstrap/procedural_population/` |
 | Comandos transporte | `crates/openttdrs-core/src/command/transport/` |
 | Tests de command | `crates/openttdrs-core/src/command/tests/` |
@@ -55,7 +58,7 @@ Las APIs públicas (`ui.rs`, `command/mod.rs`, `bootstrap/world.rs`) no cambiaro
 
 | Documento | Uso |
 |-----------|-----|
-| [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) | Guía práctica: NFO, extracción, proyección isométrica |
+| [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) | Guía práctica: NFO, extracción, proyección isométrica; **§ locomotoras** (gap visual trenes) |
 | [SPRITES_OPENGFX_COMPLETO.md](SPRITES_OPENGFX_COMPLETO.md) | Catálogo de IDs de sprite (referencia) |
 | [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md) | Paridad industrias gfx 0–174 |
 | [INDUSTRIAS_OPENGFX.md](INDUSTRIAS_OPENGFX.md) | Tabla gfx → sprite_id por industria |

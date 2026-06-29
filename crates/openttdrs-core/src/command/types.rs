@@ -1,3 +1,4 @@
+use crate::bridge_spec::BridgeType;
 use crate::map::TileCoord;
 use crate::{IndustryKind, IndustrySpec, VehicleKind};
 
@@ -43,8 +44,8 @@ pub enum Command {
     PlaceRailDepotDir(TileCoord, u8),
     PlaceRoadTunnel(TileCoord, TileCoord),
     PlaceRailTunnel(TileCoord, TileCoord),
-    PlaceRoadBridge(TileCoord, TileCoord),
-    PlaceRailBridge(TileCoord, TileCoord),
+    PlaceRoadBridge(TileCoord, TileCoord, BridgeType),
+    PlaceRailBridge(TileCoord, TileCoord, BridgeType),
     SetVehicleOrders(u32, Vec<TileCoord>),
     SetVehicleStationOrders(u32, Vec<TileCoord>),
     /// Lista completa de órdenes (estaciones, waypoints, teselas).
@@ -82,6 +83,143 @@ pub enum Command {
         from_vehicle_id: u32,
         to_vehicle_id: u32,
     },
+    /// Compra un vehículo idéntico al origen (mismo motor y órdenes) en el depósito.
+    CloneVehicleAtDepot {
+        source_vehicle_id: u32,
+        depot_pos: TileCoord,
+    },
+    /// Vende todos los vehículos estacionados en el depósito.
+    SellAllVehiclesAtDepot(TileCoord),
+    /// Elimina la orden en `index` y ajusta `current_order`.
+    RemoveVehicleOrderAt {
+        vehicle_id: u32,
+        index: usize,
+    },
+    /// Salta la orden actual sin cumplirla (pasa a la siguiente).
+    SkipVehicleOrder(u32),
+    /// Alterna «carga completa» en la orden de estación `index`.
+    ToggleVehicleOrderFullLoad {
+        vehicle_id: u32,
+        index: usize,
+    },
+    /// Alterna «no descargar» en la orden de estación `index`.
+    ToggleVehicleOrderNoUnload {
+        vehicle_id: u32,
+        index: usize,
+    },
+    /// Añade orden al depósito compatible más cercano (Manhattan).
+    AppendGotoNearestDepot(u32),
+    /// Renombra un vehículo (`None` o cadena vacía → quitar nombre).
+    RenameVehicle {
+        vehicle_id: u32,
+        name: Option<String>,
+    },
+    /// Pone todos los vehículos en `depot_pos` en marcha o detenidos.
+    SetDepotVehiclesRunning {
+        depot_pos: TileCoord,
+        running: bool,
+    },
+    /// Intercambia la orden `index` con la anterior (`Up`) o siguiente (`Down`).
+    MoveVehicleOrder {
+        vehicle_id: u32,
+        index: usize,
+        direction: OrderMoveDirection,
+    },
+    /// Alterna «parar en depósito» en una orden [`VehicleOrder::Depot`].
+    ToggleVehicleOrderDepotStop {
+        vehicle_id: u32,
+        index: usize,
+    },
+    /// Invierte el sentido de marcha (solo trenes).
+    TurnAroundVehicle(u32),
+    /// Ignora la señal roja en el próximo tick de movimiento (solo trenes).
+    ForceVehicleProceed(u32),
+    /// Cambia el tipo de carga aceptado (solo en depósito, sin carga a bordo).
+    RefitVehicle {
+        vehicle_id: u32,
+        cargo: crate::cargo::CargoType,
+    },
+    /// Activa/desactiva el horario del vehículo.
+    ToggleVehicleTimetable(u32),
+    /// Cicla la espera en parada de la orden `index`.
+    CycleVehicleOrderWait {
+        vehicle_id: u32,
+        index: usize,
+    },
+    /// Cicla el tiempo mínimo de viaje hacia la orden `index`.
+    CycleVehicleOrderTravel {
+        vehicle_id: u32,
+        index: usize,
+    },
+    /// Define o actualiza una regla de autoreemplazo global.
+    SetAutoReplaceRule {
+        from_engine_id: u16,
+        to_engine_id: u16,
+    },
+    /// Elimina la regla de autoreemplazo para un motor origen.
+    ClearAutoReplaceRule {
+        from_engine_id: u16,
+    },
+    /// Activa/desactiva la regla existente para un motor origen.
+    ToggleAutoReplaceRule {
+        from_engine_id: u16,
+    },
+    CreateVehicleGroup {
+        name: String,
+    },
+    RenameVehicleGroup {
+        group_id: u32,
+        name: String,
+    },
+    AssignVehicleToGroup {
+        vehicle_id: u32,
+        group_id: Option<u32>,
+    },
+    ClearVehicleTimetableLateness(u32),
+    SetVehicleOrderWaitTicks {
+        vehicle_id: u32,
+        index: usize,
+        wait_ticks: u32,
+    },
+    SetVehicleOrderTravelTicks {
+        vehicle_id: u32,
+        index: usize,
+        travel_ticks: u32,
+    },
+    ToggleVehicleTimetableAutofill(u32),
+    ToggleAutoReplaceOnlyWhenOld {
+        from_engine_id: u16,
+    },
+    SetAutoReplaceRuleGroup {
+        from_engine_id: u16,
+        group_id: Option<u32>,
+    },
+    DepotMassAutoreplace {
+        depot_pos: TileCoord,
+    },
+    CreateSharedOrdersFromVehicle(u32),
+    LinkVehicleToSharedOrders {
+        vehicle_id: u32,
+        shared_id: u32,
+    },
+    UnlinkVehicleSharedOrders(u32),
+    SetSharedOrderAt {
+        shared_id: u32,
+        index: usize,
+        order: crate::vehicle::VehicleOrder,
+    },
+    SetVehicleOrderConditional {
+        vehicle_id: u32,
+        index: usize,
+        condition: crate::vehicle::OrderConditionKind,
+        value: u8,
+        jump_to: usize,
+    },
+    DepotReorderVehicleSlot {
+        depot_pos: TileCoord,
+        from_slot: usize,
+        to_slot: usize,
+    },
     /// Limpia la tesela y vuelve a `TileKind::Grass`.
     ClearTile(TileCoord),
     /// Eleva la esquina norte de la tesela (terraform manual).
@@ -101,6 +239,13 @@ pub enum Command {
         from: TileCoord,
         to: TileCoord,
     },
+}
+
+/// Dirección para reordenar órdenes en la lista del vehículo.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum OrderMoveDirection {
+    Up,
+    Down,
 }
 
 /// Fallo al aplicar un comando (estado sin cambios).
@@ -129,9 +274,34 @@ pub enum CommandError {
     /// No hay dinero suficiente para pagar la compra.
     InsufficientFunds,
     IncompatibleStopForVehicle,
+    /// Índice de orden fuera de rango o sin órdenes.
+    OrderIndexOutOfRange,
+    /// El flag solo aplica a órdenes de estación (no waypoints ni depósitos).
+    OrderFlagNotApplicable,
+    /// No hay depósito compatible en el mapa.
+    DepotNotFound,
+    /// Nombre de vehículo demasiado largo.
+    VehicleNameTooLong,
+    /// Refit no permitido (fuera de depósito, con carga o tipo inválido).
+    RefitNotAllowed,
+    /// Horario: el ajuste no aplica a este tipo de orden.
+    TimetableNotApplicable,
+    /// Autoreemplazo no permitido (motores distintos, fuera de depósito, etc.).
+    AutoreplaceNotAllowed,
+    /// No hay regla de autoreemplazo para ese motor.
+    AutoReplaceRuleNotFound,
+    /// Grupo de vehículos no encontrado.
+    VehicleGroupNotFound,
+    /// Nombre de grupo inválido.
+    VehicleGroupNameInvalid,
+    /// Pool de órdenes compartidas no encontrado.
+    SharedOrdersNotFound,
+    /// Horario: aún queda tiempo de espera en depósito.
+    TimetableWaitPending,
     /// Extremos de túnel inválidos (pendiente, salida, etc.).
     InvalidTunnelEndpoints,
     /// Puente sin hueco que salvar (agua o terreno más bajo bajo el tramo).
+    BridgeTypeNotAvailable,
     InvalidBridgeSpan,
     /// `TrackBits` incompatibles con la pendiente de la tesela (`GetRailFoundation`).
     InvalidRailOnSlope,
@@ -155,6 +325,8 @@ pub enum CommandError {
     LandAlreadyOwned,
     /// Solo se puede comprar hierba o bosque libre.
     CannotBuyLandHere,
+    /// Esta industria no está disponible en el clima actual del mapa.
+    IndustryNotAvailableInClimate,
 }
 
 /// Texto breve en español para mostrar al jugador cuando falla un comando.
@@ -185,8 +357,29 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::EngineNotFound => "Modelo de vehículo desconocido.",
         CommandError::InsufficientFunds => "No hay dinero suficiente.",
         CommandError::IncompatibleStopForVehicle => "Parada incompatible con este vehículo.",
+        CommandError::OrderIndexOutOfRange => "Índice de orden inválido.",
+        CommandError::OrderFlagNotApplicable => "Ese ajuste solo aplica a paradas de estación.",
+        CommandError::DepotNotFound => "No hay depósito compatible en el mapa.",
+        CommandError::VehicleNameTooLong => "El nombre del vehículo es demasiado largo.",
+        CommandError::RefitNotAllowed => {
+            "Solo se puede refit en depósito, sin carga y con un tipo compatible."
+        }
+        CommandError::TimetableNotApplicable => "Ese ajuste de horario no aplica a esta orden.",
+        CommandError::AutoreplaceNotAllowed => {
+            "Autoreemplazo no permitido para este vehículo o motor."
+        }
+        CommandError::AutoReplaceRuleNotFound => "No hay regla de autoreemplazo para ese motor.",
+        CommandError::VehicleGroupNotFound => "Grupo de vehículos no encontrado.",
+        CommandError::VehicleGroupNameInvalid => "Nombre de grupo inválido.",
+        CommandError::SharedOrdersNotFound => "Pool de órdenes compartidas no encontrado.",
+        CommandError::TimetableWaitPending => {
+            "El vehículo aún espera según el horario antes de salir del depósito."
+        }
         CommandError::InvalidTunnelEndpoints => {
             "Túnel inválido: entrada en pendiente inclinada (NE/SE/SW/NW) y salida al mismo nivel."
+        }
+        CommandError::BridgeTypeNotAvailable => {
+            "Este tipo de puente no está disponible (año, longitud o presupuesto)."
         }
         CommandError::InvalidBridgeSpan => {
             "Puente inválido: las orillas al mismo nivel y agua o terreno más bajo bajo el tramo."
@@ -211,6 +404,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::LandAlreadyOwned => "Esta tesela ya es terreno comprado.",
         CommandError::CannotBuyLandHere => {
             "Solo se puede comprar hierba o bosque libre (sin objetos ni infra)."
+        }
+        CommandError::IndustryNotAvailableInClimate => {
+            "Esta industria no está disponible en el clima de este mapa."
         }
     }
 }

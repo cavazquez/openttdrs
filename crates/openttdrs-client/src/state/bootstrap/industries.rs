@@ -223,7 +223,7 @@ fn industry_components(state: &GameState) -> Vec<Vec<TileCoord>> {
 
 type IndustryGfxRange = (u16, u16, &'static str, Option<IndustryKind>);
 
-const INDUSTRY_GFX_RANGES: [IndustryGfxRange; 22] = [
+const INDUSTRY_GFX_RANGES: [IndustryGfxRange; 32] = [
     (0, 6, "Coal Mine", Some(IndustryKind::CoalMine)),
     (7, 10, "Power Station", None),
     (11, 15, "Sawmill", None),
@@ -246,6 +246,16 @@ const INDUSTRY_GFX_RANGES: [IndustryGfxRange; 22] = [
     (116, 119, "Other climates", None),
     (120, 124, "Candy Factory", None),
     (125, 128, "Sweets Shop", None),
+    (129, 130, "Cotton Candy Forest", Some(IndustryKind::Forest)),
+    (131, 134, "Candy Factory", Some(IndustryKind::Factory)),
+    (135, 136, "Battery Farm", Some(IndustryKind::CoalMine)),
+    (137, 141, "Cola Wells", Some(IndustryKind::OilWell)),
+    (142, 147, "Toy Factory", Some(IndustryKind::Factory)),
+    (148, 154, "Plastic Fountain", Some(IndustryKind::CoalMine)),
+    (156, 159, "Fizzy Drink Factory", Some(IndustryKind::Factory)),
+    (160, 163, "Bubble Generator", Some(IndustryKind::Forest)),
+    (164, 166, "Toffee Quarry", Some(IndustryKind::CoalMine)),
+    (167, 174, "Sugar Mine", Some(IndustryKind::CoalMine)),
 ];
 
 fn gfx_range_info(gfx: u16) -> Option<IndustryGfxRange> {
@@ -280,6 +290,16 @@ fn classify_industry_spec_from_gfx(gfx: u16) -> Option<IndustrySpec> {
         47..=51 => Some(IndustrySpec::CopperOreMine),
         72..=88 => Some(IndustrySpec::GoldMine),
         100..=115 => Some(IndustrySpec::IronOreMine),
+        129..=130 => Some(IndustrySpec::CottonCandy),
+        131..=134 => Some(IndustrySpec::CandyFactory),
+        135..=136 => Some(IndustrySpec::BatteryFarm),
+        137..=141 => Some(IndustrySpec::ColaWells),
+        142..=147 => Some(IndustrySpec::ToyFactory),
+        148..=154 => Some(IndustrySpec::PlasticFountain),
+        156..=159 => Some(IndustrySpec::FizzyDrinkFactory),
+        160..=163 => Some(IndustrySpec::BubbleGenerator),
+        164..=166 => Some(IndustrySpec::ToffeeQuarry),
+        167..=174 => Some(IndustrySpec::SugarMine),
         _ => None,
     }
 }
@@ -287,9 +307,6 @@ fn classify_industry_spec_from_gfx(gfx: u16) -> Option<IndustrySpec> {
 pub(crate) fn industry_group_from_gfx(gfx: u16) -> &'static str {
     if let Some((_, _, label, _)) = gfx_range_info(gfx) {
         return label;
-    }
-    if (116..=130).contains(&gfx) {
-        return "Other climates";
     }
     "Unknown gfx"
 }
@@ -301,6 +318,19 @@ mod tests {
         place_industries, place_industries_from_sav,
     };
     use openttdrs_core::{GameState, IndustryKind, IndustrySpec, SavIndustry, TileCoord, TileKind};
+
+    #[test]
+    fn classify_toyland_industry_specs_from_gfx() {
+        assert_eq!(
+            classify_industry_spec_from_gfx(129),
+            Some(IndustrySpec::CottonCandy)
+        );
+        assert_eq!(
+            classify_industry_spec_from_gfx(156),
+            Some(IndustrySpec::FizzyDrinkFactory)
+        );
+        assert_eq!(industry_group_from_gfx(142), "Toy Factory");
+    }
 
     #[test]
     fn classify_industry_kind_matches_known_ranges() {

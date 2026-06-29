@@ -1,5 +1,6 @@
 //! Fantasma de construcción: preview de herramientas sobre el mapa.
 
+mod bridge;
 mod industry;
 mod orders;
 mod rail_signal;
@@ -11,6 +12,7 @@ mod sprites;
 mod station_coverage;
 mod validation;
 
+pub(crate) use industry::{economy_industry_tool_visible, industry_spec_for_action};
 pub(crate) use rotate::rotate_station_with_right_click;
 
 use bevy::prelude::*;
@@ -32,7 +34,8 @@ use crate::ui::hud::HoveredTileCoord;
 use super::build_input::drag::road_bits_for_drag_action;
 use super::{BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, UiToolState};
 
-use industry::{industry_spec_for_action, spawn_industry_template_preview};
+use bridge::spawn_bridge_span_preview;
+use industry::spawn_industry_template_preview;
 use orders::{spawn_order_pick_target_preview, spawn_order_route_preview};
 use rail_signal::spawn_rail_signal_preview;
 use rail_waypoint::spawn_rail_waypoint_preview;
@@ -43,7 +46,7 @@ use road_stop::{
 };
 use sprites::preview_image_for_action;
 use station_coverage::{spawn_station_coverage_preview, station_preview_has_coverage};
-use validation::{action_is_tunnel, preview_build_command_valid};
+use validation::{action_is_tunnel, preview_bridge_span_valid, preview_build_command_valid};
 
 use crate::ui::toolbar::build_input::rail_lane::rail_lane_bits_for_action;
 
@@ -243,6 +246,25 @@ pub(crate) fn update_build_ghost_preview(
                 sim.state.tick,
             );
         }
+        return;
+    }
+    if matches!(
+        action,
+        BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge
+    ) {
+        let valid = preview_tiles.len() >= 3
+            && preview_tiles
+                .iter()
+                .all(|&(px, py)| sim.state.map.get(TileCoord::new(px, py)).is_some())
+            && preview_bridge_span_valid(&sim.state, action, &preview_tiles);
+        spawn_bridge_span_preview(
+            &mut commands,
+            &asset_server,
+            action,
+            &preview_tiles,
+            &sim.state.map,
+            valid,
+        );
         return;
     }
 
@@ -667,6 +689,20 @@ mod tests {
             Some(IndustrySpec::Factory)
         );
         assert_eq!(industry_spec_for_action(BuildMenuAction::Road), None);
+        use super::industry::economy_industry_tool_visible;
+        use openttdrs_core::Climate;
+        assert!(economy_industry_tool_visible(
+            BuildMenuAction::BuildCoalMine,
+            Climate::Temperate
+        ));
+        assert!(!economy_industry_tool_visible(
+            BuildMenuAction::BuildCoalMine,
+            Climate::Toyland
+        ));
+        assert!(economy_industry_tool_visible(
+            BuildMenuAction::BuildFizzyDrinkFactory,
+            Climate::Toyland
+        ));
         assert_eq!(
             industry_template(TileCoord::new(2, 2), IndustrySpec::CoalMine).len(),
             6

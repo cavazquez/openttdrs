@@ -16,7 +16,8 @@ use crate::camera::CameraControlPlugin;
 use crate::debug_gizmos::DebugGizmosPlugin;
 use crate::persistence::PersistencePlugin;
 use crate::render::{
-    IndustryBuildingAnimPlugin, IndustryDrawProcPlugin, IndustrySmokePlugin, WaterAnimationPlugin,
+    FizzyDrinkAnimPlugin, IndustryBuildingAnimPlugin, IndustryDrawProcPlugin, IndustrySmokePlugin,
+    RefineryFireAnimPlugin, WaterAnimationPlugin,
 };
 use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
 use crate::settings::{ClientSettingsPlugin, patch_window_plugin_for_settings};
@@ -92,6 +93,12 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
 
     let mut app = App::new();
     app.add_plugins(default_plugins);
+    {
+        use std::path::Path;
+
+        let mut fonts = app.world_mut().resource_mut::<Assets<Font>>();
+        crate::ui::font::install_utf8_default_font_into_assets(&mut fonts, Path::new(asset_root));
+    }
     app.configure_sets(
         Startup,
         (StartupSet::World, StartupSet::Vehicles, StartupSet::Ui).chain(),
@@ -123,12 +130,13 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
         PersistencePlugin,
         WindowStatusPlugin,
         WaterAnimationPlugin,
+        RefineryFireAnimPlugin,
+        FizzyDrinkAnimPlugin,
         IndustrySmokePlugin,
         IndustryBuildingAnimPlugin,
         IndustryDrawProcPlugin,
-        DebugGizmosPlugin,
-        CameraControlPlugin,
     ));
+    app.add_plugins((DebugGizmosPlugin, CameraControlPlugin));
     if !headless {
         app.add_plugins(AppIconPlugin::new(asset_root));
         app.add_systems(Update, sync_rem_size_from_window.in_set(UpdateSet::Status));

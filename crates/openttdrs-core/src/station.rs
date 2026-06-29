@@ -266,7 +266,8 @@ pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrd
         (VehicleKind::Train, VehicleOrder::Station { station, .. }) => {
             rail_station_approach_tile(map, station).unwrap_or(station)
         }
-        (VehicleKind::Train, VehicleOrder::Waypoint { waypoint }) => waypoint,
+        (VehicleKind::Train, VehicleOrder::Waypoint { waypoint, .. }) => waypoint,
+        (_, VehicleOrder::Depot { depot, .. }) => depot,
         (VehicleKind::Truck | VehicleKind::Bus, VehicleOrder::Station { station, .. }) => {
             road_stop_approach_tile(map, station).unwrap_or(station)
         }

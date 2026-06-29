@@ -1,9 +1,11 @@
 use bevy::prelude::*;
 
+use crate::state::SimWorld;
 use crate::ui::toolbar::build_input::cancel_placement;
+use crate::ui::toolbar::preview::economy_industry_tool_visible;
 use crate::ui::toolbar::{
-    BuildMenuAction, DragBuildState, ToolButtonGroup, ToolbarGroup, ToolbarGroupButton,
-    ToolbarState, UiToolState,
+    BuildMenuAction, DragBuildState, ToolButtonGroup, ToolSelectButton, ToolbarGroup,
+    ToolbarGroupButton, ToolbarState, UiToolState,
 };
 
 pub(crate) fn toolbar_group_interaction(
@@ -118,7 +120,17 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         | BuildMenuAction::BuildFactory
         | BuildMenuAction::BuildSawmill
         | BuildMenuAction::BuildForest
-        | BuildMenuAction::BuildFarm => ToolbarGroup::Economy,
+        | BuildMenuAction::BuildFarm
+        | BuildMenuAction::BuildCottonCandy
+        | BuildMenuAction::BuildCandyFactory
+        | BuildMenuAction::BuildBatteryFarm
+        | BuildMenuAction::BuildColaWells
+        | BuildMenuAction::BuildToyFactory
+        | BuildMenuAction::BuildPlasticFountain
+        | BuildMenuAction::BuildFizzyDrinkFactory
+        | BuildMenuAction::BuildBubbleGenerator
+        | BuildMenuAction::BuildToffeeQuarry
+        | BuildMenuAction::BuildSugarMine => ToolbarGroup::Economy,
         BuildMenuAction::RaiseLand
         | BuildMenuAction::LowerLand
         | BuildMenuAction::LevelLand
@@ -137,5 +149,33 @@ pub(crate) fn hide_tool_when_panel_closed(
     if toolbar_state.active_group != Some(toolbar_group_for_action(action)) {
         tool_state.active_tool = None;
         cancel_placement(&mut drag_state);
+    }
+}
+
+pub(crate) fn sync_climate_industry_tools(
+    sim: Res<SimWorld>,
+    mut tool_state: ResMut<UiToolState>,
+    mut drag_state: ResMut<DragBuildState>,
+    mut q: Query<(&BuildMenuAction, &mut Node), With<ToolSelectButton>>,
+) {
+    let climate = sim.state.climate;
+    for (action, mut node) in &mut q {
+        if toolbar_group_for_action(*action) != ToolbarGroup::Economy {
+            continue;
+        }
+        let visible = economy_industry_tool_visible(*action, climate);
+        node.display = if visible {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        if !visible
+            && tool_state
+                .active_tool
+                .is_some_and(|active| active == *action)
+        {
+            tool_state.active_tool = None;
+            cancel_placement(&mut drag_state);
+        }
     }
 }

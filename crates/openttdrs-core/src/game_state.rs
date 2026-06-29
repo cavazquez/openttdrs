@@ -119,6 +119,15 @@ pub struct GameState {
     /// Noticia «primer vehículo en marcha» ya emitida.
     #[serde(default)]
     pub news_first_vehicle_running_sent: bool,
+    /// Reglas de autoreemplazo de motores en depósito.
+    #[serde(default)]
+    pub autoreplace_rules: Vec<crate::autoreplace::AutoReplaceRule>,
+    /// Grupos de vehículos.
+    #[serde(default)]
+    pub vehicle_groups: Vec<crate::vehicle_group::VehicleGroup>,
+    /// Pools de órdenes compartidas.
+    #[serde(default)]
+    pub shared_order_lists: Vec<crate::shared_orders::SharedOrderList>,
     /// Claves `(vehículo, tipo de aviso)` ya notificadas mientras persiste la condición.
     #[serde(skip, default)]
     pub news_advice_sent: std::collections::HashSet<u64>,
@@ -149,6 +158,9 @@ impl GameState {
             news: crate::news::NewsQueue::default(),
             pending_news_events: Vec::new(),
             news_first_vehicle_running_sent: false,
+            autoreplace_rules: Vec::new(),
+            vehicle_groups: Vec::new(),
+            shared_order_lists: Vec::new(),
             news_advice_sent: std::collections::HashSet::new(),
             news_last_purge_day: 0,
         }
@@ -176,6 +188,9 @@ impl GameState {
             news: crate::news::NewsQueue::default(),
             pending_news_events: Vec::new(),
             news_first_vehicle_running_sent: false,
+            autoreplace_rules: Vec::new(),
+            vehicle_groups: Vec::new(),
+            shared_order_lists: Vec::new(),
             news_advice_sent: std::collections::HashSet::new(),
             news_last_purge_day: 0,
         }

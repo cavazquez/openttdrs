@@ -5,6 +5,11 @@ use super::layout_tables::{
     COAL_MINE_LAYOUTS, FACTORY_LAYOUTS, FARM_LAYOUTS, FOREST_LAYOUTS, GOLD_MINE_LAYOUTS,
     IRON_MINE_LAYOUTS, METAL_MINE_LAYOUTS, OIL_LAYOUTS, REFINERY_LAYOUTS, SAWMILL_LAYOUTS,
 };
+use super::toyland_layout_tables::{
+    BATTERY_FARM_LAYOUTS, BUBBLE_GENERATOR_LAYOUTS, CANDY_FACTORY_LAYOUTS, COLA_WELLS_LAYOUTS,
+    COTTON_CANDY_LAYOUTS, FIZZY_DRINK_FACTORY_LAYOUTS, PLASTIC_FOUNTAIN_LAYOUTS,
+    SUGAR_MINE_LAYOUTS, TOFFEE_QUARRY_LAYOUTS, TOY_FACTORY_LAYOUTS,
+};
 
 #[must_use]
 pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8)> {
@@ -19,6 +24,16 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
         IndustrySpec::OilRefinery => choose_layout(c, &REFINERY_LAYOUTS),
         IndustrySpec::Factory => choose_layout(c, &FACTORY_LAYOUTS),
         IndustrySpec::Sawmill => choose_layout(c, &SAWMILL_LAYOUTS),
+        IndustrySpec::CottonCandy => choose_layout(c, &COTTON_CANDY_LAYOUTS),
+        IndustrySpec::CandyFactory => choose_layout(c, &CANDY_FACTORY_LAYOUTS),
+        IndustrySpec::BatteryFarm => choose_layout(c, &BATTERY_FARM_LAYOUTS),
+        IndustrySpec::ColaWells => choose_layout(c, &COLA_WELLS_LAYOUTS),
+        IndustrySpec::ToyFactory => choose_layout(c, &TOY_FACTORY_LAYOUTS),
+        IndustrySpec::PlasticFountain => choose_layout(c, &PLASTIC_FOUNTAIN_LAYOUTS),
+        IndustrySpec::FizzyDrinkFactory => choose_layout(c, &FIZZY_DRINK_FACTORY_LAYOUTS),
+        IndustrySpec::BubbleGenerator => choose_layout(c, &BUBBLE_GENERATOR_LAYOUTS),
+        IndustrySpec::ToffeeQuarry => choose_layout(c, &TOFFEE_QUARRY_LAYOUTS),
+        IndustrySpec::SugarMine => choose_layout(c, &SUGAR_MINE_LAYOUTS),
     };
 
     offsets_and_gfx

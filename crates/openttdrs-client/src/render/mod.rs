@@ -4,9 +4,11 @@ mod assets;
 mod atlas;
 mod company_recolor;
 mod components;
+mod fizzy_drink;
 mod grid;
 mod industry_anim;
 mod industry_draw_proc;
+mod refinery_fire;
 mod smoke;
 mod tiles;
 mod town_labels;
@@ -22,17 +24,21 @@ pub(crate) use company_recolor::{
     sprite_from_atlas_or_industry_palette, sprite_from_company_or_asset,
 };
 pub(crate) use components::{
-    IndustryPreviewCamera, MapPreviewCamera, MapSpriteBatches, MapTileChunk, MapVisualLayer,
-    PrimaryGameCamera, ShoreTile, VehiclePreviewCamera, WaterAnimFrames, WaterTile,
+    FizzyDrinkAnimFrames, IndustryPreviewCamera, MapPreviewCamera, MapSpriteBatches, MapTileChunk,
+    MapVisualLayer, PrimaryGameCamera, RefineryFireAnimFrames, ShoreTile, VehiclePreviewCamera,
+    WaterAnimFrames, WaterTile,
 };
+pub(crate) use fizzy_drink::{FizzyDrinkAnim, FizzyDrinkAnimPlugin};
 pub(crate) use grid::{RenderGrid, TileRenderContext};
 pub(crate) use industry_anim::{
     IndustryBuildingAnim, IndustryBuildingAnimPlugin, IndustryOverlayContext, industry_anim_phase,
     spawn_industry_anim_layer,
 };
 pub(crate) use industry_draw_proc::{IndustryDrawProcPlugin, spawn_industry_draw_proc_overlays};
+pub(crate) use refinery_fire::{RefineryFireAnim, RefineryFireAnimPlugin};
 pub(crate) use smoke::{
-    ChimneySmokeFrames, GFX_POWERPLANT_CHIMNEY, IndustrySmokePlugin, spawn_chimney_smoke,
+    ChimneySmokeFrames, CopperMineSmokeFrames, GFX_COPPER_MINE_CHIMNEY, GFX_POWERPLANT_CHIMNEY,
+    IndustrySmokePlugin, spawn_chimney_smoke, spawn_copper_mine_smoke,
 };
 pub(crate) use town_labels::town_id_at_label_pos;
 
@@ -51,5 +57,6 @@ pub(crate) use viewport::{
 };
 pub(crate) use water::WaterAnimationPlugin;
 pub(crate) use world::{
-    RemapMapVisualsPending, WorldRenderPlugin, initial_map_camera_pose, spawn_intro_map_render,
+    RemapMapVisualsPending, WorldRenderPlugin, initial_map_camera_pose, request_map_visual_remap,
+    spawn_intro_map_render,
 };

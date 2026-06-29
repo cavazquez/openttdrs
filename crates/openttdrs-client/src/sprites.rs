@@ -7,6 +7,8 @@ use openttdrs_core::{Map, TileCoord, TileKind};
 mod bridge_draw_data_generated;
 #[path = "sprites/company_palette.rs"]
 pub(crate) mod company_palette;
+#[path = "sprites/copper_smoke_draw_data_generated.rs"]
+mod copper_smoke_draw_data_generated;
 #[path = "sprites/field_draw_data_generated.rs"]
 mod field_draw_data_generated;
 #[path = "sprites/foundation.rs"]
@@ -107,15 +109,17 @@ pub use foundation::{
 };
 #[allow(unused_imports)]
 pub use industry::{
-    INDUSTRY_GFX_DATA, INDUSTRY_GFX_STAGES, INDUSTRY_GFX_TABLE_LEN, IndustryGfxSprite,
-    IndustryGfxStatus, debug_log_industry_gfx_once, industry_anim_layer_used_in_any_frame,
-    industry_animation_frame_from_m4, industry_building_needs_client_anim,
-    industry_construction_stage_from_tile, industry_effective_m4_for_draw, industry_gfx_draw_index,
-    industry_gfx_empty_row_is_expected, industry_gfx_entry, industry_gfx_entry_for_tile,
-    industry_gfx_entry_staged, industry_gfx_status, industry_gfx_status_label,
-    industry_gfx_table_subindex, industry_gfx_uses_generic_fallback,
-    industry_gfx_uses_random_colour, industry_palette_colour_for_instance, industry_sprite_for_gfx,
-    industry_tile_anim_state, log_industry_gfx_once,
+    FIZZY_DRINK_SPRITE_IDS, INDUSTRY_GFX_DATA, INDUSTRY_GFX_STAGES, INDUSTRY_GFX_TABLE_LEN,
+    IndustryGfxSprite, IndustryGfxStatus, REFINERY_FIRE_SPRITE_IDS, debug_log_industry_gfx_once,
+    industry_anim_layer_used_in_any_frame, industry_animation_frame_from_m4,
+    industry_building_needs_client_anim, industry_construction_stage_from_tile,
+    industry_effective_m4_for_draw, industry_gfx_draw_index, industry_gfx_empty_row_is_expected,
+    industry_gfx_entry, industry_gfx_entry_for_tile, industry_gfx_entry_staged,
+    industry_gfx_status, industry_gfx_status_label, industry_gfx_table_subindex,
+    industry_gfx_uses_fizzy_drink_anim, industry_gfx_uses_generic_fallback,
+    industry_gfx_uses_random_colour, industry_gfx_uses_refinery_fire_anim,
+    industry_palette_colour_for_instance, industry_sprite_for_gfx,
+    industry_sprite_uses_fizzy_drink_anim, industry_tile_anim_state, log_industry_gfx_once,
 };
 #[allow(unused_imports)]
 pub use industry_draw_proc::{
@@ -189,6 +193,8 @@ pub use bridge_draw_data_generated::{
 };
 pub use shore_draw_data_generated::{SHORE_META, SHORE_SPRITE_COUNT, TILEH_TO_SHORE_SPRITE};
 
+/// Humo mina de cobre (`SPR_SMOKE_0..4`). Regenerar: `python3 scripts/gen_copper_mine_smoke.py`.
+pub use copper_smoke_draw_data_generated::{COPPER_MINE_SMOKE_FRAMES, COPPER_MINE_SMOKE_META};
 /// Humo de chimenea de la central eléctrica (`SPR_CHIMNEY_SMOKE_0..7`).
 /// Regenerar: `python3 scripts/gen_chimney_smoke.py`.
 pub use smoke_draw_data_generated::{CHIMNEY_SMOKE_FRAMES, CHIMNEY_SMOKE_META};

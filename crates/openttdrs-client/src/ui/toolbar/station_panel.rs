@@ -6,7 +6,7 @@ use crate::state::SimWorld;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 
 use super::order_panel::apply_order_edit;
-use super::{BuildMenuUi, OrderEditState, UiToolState};
+use super::{BuildMenuUi, OrderEditState, UiToolState, open_order_edit_for_vehicle};
 
 #[derive(Resource, Default)]
 pub(crate) struct StationCargoPanelState {
@@ -234,9 +234,7 @@ pub(crate) fn handle_station_cargo_panel_buttons(
                     continue;
                 };
                 if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                    order_state.vehicle_id = Some(vehicle_id);
-                    order_state.orders = vehicle.orders.clone();
-                    order_state.picking_destination = false;
+                    open_order_edit_for_vehicle(&mut order_state, vehicle);
                     tool_state.active_tool = None;
                 }
             }
@@ -254,6 +252,11 @@ pub(crate) fn handle_station_cargo_panel_buttons(
                 order_state.vehicle_id = Some(vehicle_id);
                 if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
                     order_state.orders = vehicle.orders.clone();
+                    order_state.selected_slot = if vehicle.orders.is_empty() {
+                        None
+                    } else {
+                        Some(vehicle.current_order.min(vehicle.orders.len() - 1))
+                    };
                 }
                 match try_append_station_order(
                     &mut sim.state,
@@ -261,7 +264,10 @@ pub(crate) fn handle_station_cargo_panel_buttons(
                     station_pos,
                     &mut order_state.orders,
                 ) {
-                    Ok(()) => pending.pending = true,
+                    Ok(()) => {
+                        pending.pending = true;
+                        order_state.selected_slot = order_state.orders.len().checked_sub(1);
+                    }
                     Err(e) => {
                         order_state.orders.pop();
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());

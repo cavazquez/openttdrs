@@ -91,6 +91,39 @@ pub fn industry_building_needs_client_anim(gfx: u16, m1: u8) -> bool {
     industry_tile_anim_state(gfx) && m1 & 0x80 != 0
 }
 
+/// Torres de llama refinería (gfx 19–22): animación `oil_refinery` de paleta.
+pub const REFINERY_FIRE_GFX_MIN: u16 = 19;
+pub const REFINERY_FIRE_GFX_MAX: u16 = 22;
+
+/// Sprites OpenGFX con llama (`_industry_draw_tile_data` gfx 19–22).
+pub const REFINERY_FIRE_SPRITE_IDS: [u32; 12] = [
+    2081, 2082, 2083, 2084, 2085, 2086, 2087, 2088, 2089, 2090, 2091, 2092,
+];
+
+/// Tesela terminada con fuego animado por ciclo de paleta.
+#[must_use]
+pub fn industry_gfx_uses_refinery_fire_anim(gfx: u16, m1: u8) -> bool {
+    (REFINERY_FIRE_GFX_MIN..=REFINERY_FIRE_GFX_MAX).contains(&gfx) && m1 & 0x80 != 0
+}
+
+/// Fábrica de bebidas gaseosas Toyland (gfx 156–158).
+pub const FIZZY_DRINK_GFX_MIN: u16 = 156;
+pub const FIZZY_DRINK_GFX_MAX: u16 = 158;
+
+/// Sprites con ciclo `fizzy_drink` (edificio + draw proc burbujas).
+pub const FIZZY_DRINK_SPRITE_IDS: [u32; 5] = [4763, 4764, 4765, 4746, 4747];
+
+/// Tesela terminada con burbujas/líquido animado por paleta.
+#[must_use]
+pub fn industry_gfx_uses_fizzy_drink_anim(gfx: u16, m1: u8) -> bool {
+    (FIZZY_DRINK_GFX_MIN..=FIZZY_DRINK_GFX_MAX).contains(&gfx) && m1 & 0x80 != 0
+}
+
+#[must_use]
+pub fn industry_sprite_uses_fizzy_drink_anim(sprite_id: u32) -> bool {
+    FIZZY_DRINK_SPRITE_IDS.contains(&sprite_id)
+}
+
 /// Edificios con `PALETTE_MODIFIER_COLOUR` en tabla vanilla (gfx ≥29, excl. torres/pozos).
 #[must_use]
 pub fn industry_gfx_uses_random_colour(gfx: u16) -> bool {

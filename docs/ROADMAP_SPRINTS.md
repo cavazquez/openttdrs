@@ -132,6 +132,7 @@ Referencia detallada (tipos oficiales, codificación `m2`/`m3`, fases A–E):
 | Cargo Dist / link graph | Muy post-0.1 |
 | Multijugador I8 | Explícitamente post-0.1 |
 | NewGRF runtime | Opcional / largo plazo |
+| Flota F0–F8 (timetable, autoreemplazo, pool) | [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) §13 |
 
 ---
 

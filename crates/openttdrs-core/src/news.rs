@@ -252,7 +252,9 @@ fn vehicle_has_incompatible_stop(state: &crate::GameState, v: &Vehicle) -> bool 
             .find(|s| s.pos == *station)
             .is_some_and(|st| !st.can_service_vehicle(v.kind) || st.is_waypoint()),
         VehicleOrder::Waypoint { .. } => v.kind != VehicleKind::Train,
-        VehicleOrder::Tile(_) => false,
+        VehicleOrder::Depot { .. } | VehicleOrder::Tile(_) | VehicleOrder::Conditional { .. } => {
+            false
+        }
     }
 }
 
@@ -439,6 +441,32 @@ pub fn push_vehicle_advice_news(
         id,
         headline,
         None,
+        NewsType::VehicleAdvice,
+        default_display_for_type(NewsType::VehicleAdvice),
+        state.tick,
+        NewsReference::Tile(at),
+    );
+    add_news_item(state, item);
+}
+
+pub fn push_autoreplace_failed_news(
+    state: &mut crate::GameState,
+    vehicle_id: u32,
+    err: crate::CommandError,
+) {
+    let headline = format!("Autoreemplazo falló (vehículo {vehicle_id})");
+    let body = Some(crate::command_error_message(err).to_string());
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let at = state
+        .vehicles
+        .iter()
+        .find(|v| v.id == vehicle_id)
+        .map_or(TileCoord::new(0, 0), |v| v.pos);
+    let item = NewsItem::new(
+        id,
+        headline,
+        body,
         NewsType::VehicleAdvice,
         default_display_for_type(NewsType::VehicleAdvice),
         state.tick,

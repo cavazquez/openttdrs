@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{Station, StopKind, TileKind, Vehicle, VehicleKind, VehicleOrder};
+use openttdrs_core::{Station, StopKind, TileKind, Vehicle, VehicleOrder};
 
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, VehiclePreviewCamera, vehicle_world_position,
@@ -67,11 +67,26 @@ pub(crate) fn sync_order_panel(
     } else {
         ""
     };
+    let tt_hint = if vehicle.timetable_active {
+        if vehicle.timetable_wait_remaining > 0 {
+            format!(" · horario esp.{}", vehicle.timetable_wait_remaining)
+        } else {
+            " · horario ON".to_string()
+        }
+    } else {
+        String::new()
+    };
+    let late_hint = if vehicle.timetable_lateness > 0 {
+        format!(" · +{}t tarde", vehicle.timetable_lateness)
+    } else if vehicle.timetable_lateness < 0 {
+        format!(" · {}t adelantado", vehicle.timetable_lateness)
+    } else {
+        String::new()
+    };
     if let Ok(mut text) = title_q.single_mut() {
         **text = format!(
-            "#{} {} · {run_label} · {}/{}{route_note}{pick_hint}",
-            vehicle.id,
-            vehicle_kind_label(vehicle.kind),
+            "{} · {run_label} · {}/{}{route_note}{pick_hint}{tt_hint}{late_hint}",
+            vehicle.display_name(),
             vehicle.cargo,
             vehicle.capacity,
         );
@@ -92,12 +107,18 @@ pub(crate) fn sync_order_panel(
                 == vehicle
                     .current_order
                     .min(order_state.orders.len().saturating_sub(1));
-        *bg = if is_current {
+        let is_selected =
+            order_state.selected_slot == Some(row.slot) && row.slot < order_state.orders.len();
+        *bg = if is_selected {
+            BackgroundColor(Color::srgb(0.28, 0.32, 0.42))
+        } else if is_current {
             BackgroundColor(Color::srgb(0.42, 0.35, 0.22))
         } else {
             BackgroundColor(Color::srgb(0.22, 0.18, 0.12))
         };
-        *border = if is_current {
+        *border = if is_selected {
+            BorderColor::all(Color::srgb(0.55, 0.72, 0.95))
+        } else if is_current {
             BorderColor::all(Color::srgb(0.88, 0.74, 0.46))
         } else {
             BorderColor::all(Color::srgb(0.45, 0.39, 0.27))
@@ -175,14 +196,6 @@ fn sync_preview_camera(
     }
 }
 
-fn vehicle_kind_label(kind: VehicleKind) -> &'static str {
-    match kind {
-        VehicleKind::Bus => "Bus",
-        VehicleKind::Truck => "Camión",
-        VehicleKind::Train => "Tren",
-    }
-}
-
 fn station_at_tile(sim: &SimWorld, pos: openttdrs_core::TileCoord) -> Option<&Station> {
     sim.state.stations.iter().find(|s| s.pos == pos)
 }
@@ -220,15 +233,48 @@ fn order_row_label(
             None => "Estación",
         },
         VehicleOrder::Waypoint { .. } => "Waypoint",
+        VehicleOrder::Depot { depot, stop, .. } => {
+            if sim.state.map.get_kind(depot) == Some(TileKind::RailDepot) {
+                if stop {
+                    "Depósito vía"
+                } else {
+                    "Depósito vía (paso)"
+                }
+            } else if stop {
+                "Depósito"
+            } else {
+                "Depósito (paso)"
+            }
+        }
         VehicleOrder::Tile(tile) if sim.state.map.get_kind(tile) == Some(TileKind::RoadDepot) => {
             "Depósito"
         }
+        VehicleOrder::Tile(tile) if sim.state.map.get_kind(tile) == Some(TileKind::RailDepot) => {
+            "Depósito vía"
+        }
         VehicleOrder::Tile(_) => "Casilla",
+        VehicleOrder::Conditional {
+            condition,
+            value,
+            jump_to,
+        } => {
+            let cond = match condition {
+                openttdrs_core::OrderConditionKind::CargoLoadAbove => "carga>",
+                openttdrs_core::OrderConditionKind::CargoLoadBelow => "carga<",
+            };
+            return format!(
+                "{current} {:>2}. Cond. {cond}{value}% → ord.{}",
+                index + 1,
+                jump_to + 1
+            );
+        }
     };
     let mut line = format!("{current} {:>2}. {label} ({}, {})", index + 1, pos.x, pos.y);
     if let VehicleOrder::Station {
         full_load,
         no_unload,
+        wait_ticks,
+        travel_ticks,
         ..
     } = order
     {
@@ -238,6 +284,30 @@ fn order_row_label(
         if no_unload {
             line.push_str(" · no descargar");
         }
+        if wait_ticks > 0 {
+            line.push_str(&format!(" · esp.{wait_ticks}"));
+        }
+        if travel_ticks > 0 {
+            line.push_str(&format!(" · viaje {travel_ticks}"));
+        }
+    } else if let VehicleOrder::Depot {
+        stop,
+        wait_ticks,
+        travel_ticks,
+        ..
+    } = order
+    {
+        let _ = stop;
+        if wait_ticks > 0 {
+            line.push_str(&format!(" · esp.{wait_ticks}"));
+        }
+        if travel_ticks > 0 {
+            line.push_str(&format!(" · viaje {travel_ticks}"));
+        }
+    } else if let VehicleOrder::Waypoint { travel_ticks, .. } = order
+        && travel_ticks > 0
+    {
+        line.push_str(&format!(" · viaje {travel_ticks}"));
     }
     if let Some(st) = station_at_tile(sim, pos)
         && let Some(note) = stop_kind_mismatch_note(vehicle, st)
@@ -271,6 +341,20 @@ mod tests {
         assert!(
             order_row_label(0, VehicleOrder::tile(depot), &vehicle, &sim, false)
                 .contains("Depósito")
+        );
+
+        let rail_depot = TileCoord::new(2, 3);
+        assert!(
+            sim.state
+                .map
+                .set_kind(rail_depot, TileKind::RailDepot)
+                .is_ok(),
+            "rail depot tile should be valid in default map"
+        );
+        let train = Vehicle::new(2, VehicleKind::Train, rail_depot, rail_depot);
+        assert!(
+            order_row_label(0, VehicleOrder::tile(rail_depot), &train, &sim, false)
+                .contains("Depósito vía")
         );
     }
 }

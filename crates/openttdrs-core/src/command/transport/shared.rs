@@ -160,7 +160,7 @@ pub(in crate::command) fn place_single_transport_tile(
     Ok(())
 }
 
-pub(in crate::command::transport) fn axis_line(a: TileCoord, b: TileCoord) -> Vec<TileCoord> {
+pub(crate) fn axis_line(a: TileCoord, b: TileCoord) -> Vec<TileCoord> {
     if (b.x - a.x).abs() >= (b.y - a.y).abs() {
         let step = if b.x >= a.x { 1 } else { -1 };
         let mut out = Vec::new();

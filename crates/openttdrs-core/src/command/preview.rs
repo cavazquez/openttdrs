@@ -1,5 +1,6 @@
 //! Validación de solo lectura alineada con [`apply_command`] (preview / HUD).
 
+use crate::bridge_spec::{bridge_available_at_tick, bridge_build_cost};
 use crate::{GameState, IndustrySpec, StopKind};
 
 use super::buy_land::check_buy_land;
@@ -65,6 +66,7 @@ where
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
     let map = &state.map;
     let stations = &state.stations;
@@ -99,8 +101,23 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         Command::PlaceRoadTunnel(a, _) | Command::PlaceRailTunnel(a, _) => {
             check_tunnel(map, *a).err()
         }
-        Command::PlaceRoadBridge(a, b) | Command::PlaceRailBridge(a, b) => {
-            check_bridge(map, *a, *b).err()
+        Command::PlaceRoadBridge(a, b, bt) | Command::PlaceRailBridge(a, b, bt) => {
+            check_bridge(map, *a, *b)
+                .err()
+                .or_else(|| {
+                    if bridge_available_at_tick(*bt, state.tick, *a, *b) {
+                        None
+                    } else {
+                        Some(CommandError::BridgeTypeNotAvailable)
+                    }
+                })
+                .or_else(|| {
+                    if state.economy.money >= bridge_build_cost(*bt, *a, *b) {
+                        None
+                    } else {
+                        Some(CommandError::InsufficientFunds)
+                    }
+                })
         }
         Command::PlaceStation(c) => {
             if stations.iter().any(|s| s.pos == *c) {
@@ -153,7 +170,43 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::BuildVehicleAtDepot(..)
         | Command::SellVehicle(..)
         | Command::ToggleVehicleRunning(..)
-        | Command::CloneVehicleOrders { .. } => None,
+        | Command::CloneVehicleOrders { .. }
+        | Command::CloneVehicleAtDepot { .. }
+        | Command::SellAllVehiclesAtDepot(..)
+        | Command::RemoveVehicleOrderAt { .. }
+        | Command::SkipVehicleOrder(..)
+        | Command::ToggleVehicleOrderFullLoad { .. }
+        | Command::ToggleVehicleOrderNoUnload { .. }
+        | Command::AppendGotoNearestDepot(..)
+        | Command::RenameVehicle { .. }
+        | Command::SetDepotVehiclesRunning { .. }
+        | Command::MoveVehicleOrder { .. }
+        | Command::ToggleVehicleOrderDepotStop { .. }
+        | Command::TurnAroundVehicle(..)
+        | Command::ForceVehicleProceed(..)
+        | Command::RefitVehicle { .. }
+        | Command::ToggleVehicleTimetable(..)
+        | Command::CycleVehicleOrderWait { .. }
+        | Command::CycleVehicleOrderTravel { .. }
+        | Command::SetAutoReplaceRule { .. }
+        | Command::ClearAutoReplaceRule { .. }
+        | Command::ToggleAutoReplaceRule { .. }
+        | Command::CreateVehicleGroup { .. }
+        | Command::RenameVehicleGroup { .. }
+        | Command::AssignVehicleToGroup { .. }
+        | Command::ClearVehicleTimetableLateness(..)
+        | Command::SetVehicleOrderWaitTicks { .. }
+        | Command::SetVehicleOrderTravelTicks { .. }
+        | Command::ToggleVehicleTimetableAutofill(..)
+        | Command::ToggleAutoReplaceOnlyWhenOld { .. }
+        | Command::SetAutoReplaceRuleGroup { .. }
+        | Command::DepotMassAutoreplace { .. }
+        | Command::CreateSharedOrdersFromVehicle(..)
+        | Command::LinkVehicleToSharedOrders { .. }
+        | Command::UnlinkVehicleSharedOrders(..)
+        | Command::SetSharedOrderAt { .. }
+        | Command::SetVehicleOrderConditional { .. }
+        | Command::DepotReorderVehicleSlot { .. } => None,
     }
 }
 

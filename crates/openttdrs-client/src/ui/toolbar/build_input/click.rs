@@ -1,11 +1,14 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{TileCoord, TileKind, apply_command};
+use openttdrs_core::{
+    BridgeType, Command, CommandError, TileCoord, TileKind, apply_command, command_would_fail,
+    industry_template,
+};
 
 use crate::iso::{world_pos_to_tile_coord, world_pos_to_tile_fract};
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, pick_vehicle_id_at_world,
-    town_id_at_label_pos,
+    request_map_visual_remap, town_id_at_label_pos,
 };
 use crate::state::SimWorld;
 use crate::ui::hud::{
@@ -24,16 +27,39 @@ use super::drag::{
 };
 use super::placement::cancel_placement;
 use super::rail_lane::rail_lane_bits_for_action;
+use crate::ui::toolbar::bridge_window::{BridgeBuildState, PendingBridge};
 use crate::ui::toolbar::depot_panel::DepotPanelState;
 use crate::ui::toolbar::minimap::minimap_contains_cursor;
 use crate::ui::toolbar::minimap::{MinimapCell, MinimapRoot};
 use crate::ui::toolbar::order_panel::{
     handle_order_destination_click, start_order_destination_pick,
 };
+use crate::ui::toolbar::preview::industry_spec_for_action;
 use crate::ui::toolbar::station_panel::StationCargoPanelState;
 use crate::ui::toolbar::{
     BuildMenuAction, BuildMenuUi, DragBuildState, OrderEditState, StationBuildState, UiToolState,
+    open_order_edit_for_vehicle,
 };
+
+fn tiles_for_visual_remap(
+    action: BuildMenuAction,
+    origin: TileCoord,
+    drag_tiles: &[(i32, i32)],
+) -> Vec<(i32, i32)> {
+    if drag_tiles.len() > 1 {
+        return drag_tiles.to_vec();
+    }
+    if let Some(spec) = industry_spec_for_action(action) {
+        return industry_template(origin, spec)
+            .into_iter()
+            .map(|(c, _)| (c.x, c.y))
+            .collect();
+    }
+    if let Some(&(tx, ty)) = drag_tiles.first() {
+        return vec![(tx, ty)];
+    }
+    vec![(origin.x, origin.y)]
+}
 
 /// Estados de paneles/ventanas mutuamente excluyentes, agrupados para no
 /// exceder el límite de parámetros de sistema de Bevy.
@@ -60,9 +86,7 @@ fn select_vehicle_on_map(
     vehicle: &openttdrs_core::Vehicle,
 ) {
     vehicle_window.vehicle_id = Some(vehicle.id);
-    order_state.vehicle_id = None;
-    order_state.orders.clear();
-    order_state.picking_destination = false;
+    order_state.clear();
     depot_state.depot_pos = None;
     depot_state.selected_vehicle = None;
     station_panel.station_pos = None;
@@ -85,9 +109,7 @@ fn open_town_window(
     depot_state.selected_vehicle = None;
     station_panel.station_pos = None;
     industry_panel.open = false;
-    order_state.vehicle_id = None;
-    order_state.orders.clear();
-    order_state.picking_destination = false;
+    order_state.clear();
     vehicle_window.vehicle_id = None;
 }
 
@@ -103,6 +125,7 @@ pub(crate) fn handle_tile_click(
     tool_state: Res<UiToolState>,
     station_state: Res<StationBuildState>,
     mut drag_state: ResMut<DragBuildState>,
+    mut bridge_state: ResMut<BridgeBuildState>,
     mut panels: PanelStates,
     mut pending: ResMut<RemapMapVisualsPending>,
     toolbar_pointer: Query<
@@ -171,8 +194,7 @@ pub(crate) fn handle_tile_click(
             && let Some(vehicle_id) = pick_vehicle_id_at_world(world_pos, &sim)
             && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
         {
-            order_state.vehicle_id = Some(vehicle.id);
-            order_state.orders = vehicle.orders.clone();
+            open_order_edit_for_vehicle(order_state, vehicle);
             order_state.picking_destination = false;
             return;
         }
@@ -194,8 +216,7 @@ pub(crate) fn handle_tile_click(
             && let Some(vehicle_id) = pick_vehicle_id_at_world(world_pos, &sim)
             && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
         {
-            order_state.vehicle_id = Some(vehicle.id);
-            order_state.orders = vehicle.orders.clone();
+            open_order_edit_for_vehicle(order_state, vehicle);
             start_order_destination_pick(order_state);
             return;
         }
@@ -240,9 +261,7 @@ pub(crate) fn handle_tile_click(
                     industry_panel.focus_tile = Some(pos);
                     depot_state.depot_pos = None;
                     depot_state.selected_vehicle = None;
-                    order_state.vehicle_id = None;
-                    order_state.orders.clear();
-                    order_state.picking_destination = false;
+                    order_state.clear();
                     station_panel.station_pos = None;
                     town_window.town_id = None;
                     vehicle_window.vehicle_id = None;
@@ -256,9 +275,7 @@ pub(crate) fn handle_tile_click(
                         .iter()
                         .find(|vehicle| vehicle.pos == pos)
                         .map(|vehicle| vehicle.id);
-                    order_state.vehicle_id = None;
-                    order_state.orders.clear();
-                    order_state.picking_destination = false;
+                    order_state.clear();
                     station_panel.station_pos = None;
                     industry_panel.open = false;
                     town_window.town_id = None;
@@ -269,9 +286,7 @@ pub(crate) fn handle_tile_click(
                     station_panel.station_pos = Some(pos);
                     depot_state.depot_pos = None;
                     depot_state.selected_vehicle = None;
-                    order_state.vehicle_id = None;
-                    order_state.orders.clear();
-                    order_state.picking_destination = false;
+                    order_state.clear();
                     industry_panel.open = false;
                     town_window.town_id = None;
                     vehicle_window.vehicle_id = None;
@@ -297,9 +312,7 @@ pub(crate) fn handle_tile_click(
             depot_state.selected_vehicle = None;
             station_panel.station_pos = None;
             industry_panel.open = false;
-            order_state.vehicle_id = None;
-            order_state.orders.clear();
-            order_state.picking_destination = false;
+            order_state.clear();
             town_window.town_id = None;
             vehicle_window.vehicle_id = None;
         }
@@ -342,6 +355,49 @@ pub(crate) fn handle_tile_click(
         drag_state.pending_tiles = drag_line_tiles(Some(&sim.state.map), action, start, current);
         drag_state.last_tile = Some(current);
 
+        if matches!(
+            action,
+            BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge
+        ) {
+            if mouse.just_pressed(MouseButton::Left) {
+                let tiles = std::mem::take(&mut drag_state.pending_tiles);
+                cancel_placement(&mut drag_state);
+                if tiles.len() < 3 {
+                    push_build_command_error(
+                        &mut hud_feedback,
+                        CommandError::InvalidBridgeSpan,
+                        time.elapsed_secs(),
+                    );
+                    return;
+                }
+                let start = TileCoord::new(tiles[0].0, tiles[0].1);
+                let end = TileCoord::new(tiles[tiles.len() - 1].0, tiles[tiles.len() - 1].1);
+                let probe = if action == BuildMenuAction::RoadBridge {
+                    Command::PlaceRoadBridge(start, end, BridgeType::Wooden)
+                } else {
+                    Command::PlaceRailBridge(start, end, BridgeType::Wooden)
+                };
+                match command_would_fail(&sim.state, &probe) {
+                    None
+                    | Some(CommandError::BridgeTypeNotAvailable)
+                    | Some(CommandError::InsufficientFunds) => {
+                        bridge_state.pending = Some(PendingBridge {
+                            start,
+                            end,
+                            road: action == BuildMenuAction::RoadBridge,
+                        });
+                    }
+                    Some(e) => {
+                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+                    }
+                }
+            } else if mouse.just_released(MouseButton::Left) && drag_state.pending_tiles.len() == 1
+            {
+                cancel_placement(&mut drag_state);
+            }
+            return;
+        }
+
         if mouse.just_pressed(MouseButton::Left) {
             if action_is_tunnel(action)
                 && !tunnel_placement_is_valid(&sim.state, action, &drag_state.pending_tiles)
@@ -349,22 +405,26 @@ pub(crate) fn handle_tile_click(
                 return;
             }
             let tiles = std::mem::take(&mut drag_state.pending_tiles);
+            let remap_tiles = tiles_for_visual_remap(action, build_pos, &tiles);
             let lane = drag_state.rail_lane_bit;
             let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state, lane);
             cancel_placement(&mut drag_state);
             if changed {
-                pending.pending = true;
+                let (mw, mh) = sim.state.map.dimensions();
+                request_map_visual_remap(&mut pending, mw, mh, &remap_tiles);
                 push_build_command_success(&mut hud_feedback);
             } else if let Some(e) = err {
                 push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
             }
         } else if mouse.just_released(MouseButton::Left) && drag_state.pending_tiles.len() == 1 {
             let tiles = std::mem::take(&mut drag_state.pending_tiles);
+            let remap_tiles = tiles_for_visual_remap(action, build_pos, &tiles);
             let lane = drag_state.rail_lane_bit;
             let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state, lane);
             cancel_placement(&mut drag_state);
             if changed {
-                pending.pending = true;
+                let (mw, mh) = sim.state.map.dimensions();
+                request_map_visual_remap(&mut pending, mw, mh, &remap_tiles);
                 push_build_command_success(&mut hud_feedback);
             } else if let Some(e) = err {
                 push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
@@ -388,7 +448,9 @@ pub(crate) fn handle_tile_click(
         if let Err(e) = apply_command(&mut sim.state, &cmd) {
             push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
         } else {
-            pending.pending = true;
+            let (mw, mh) = sim.state.map.dimensions();
+            let tiles = tiles_for_visual_remap(action, build_pos, &[]);
+            request_map_visual_remap(&mut pending, mw, mh, &tiles);
             push_build_command_success(&mut hud_feedback);
         }
     }

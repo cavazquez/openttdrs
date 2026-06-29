@@ -263,3 +263,26 @@ Implementación:
   que upstream) pero aún sin comando en el simulador: tooltip
   «(no implementado)».
 - Panel con separador entre grupos y título «Construccion de Ferrocarril».
+
+## 14. Locomotoras — un sprite distinto por grupo
+
+- [ ] Pendiente (lógica en código; assets sin extraer)
+
+En OpenTTD cada familia de locomotora tiene su aspecto (vapor pequeño, A4, diésel,
+eléctrico de alta velocidad, etc.). En openttdrs la **simulación y la ventana de
+compra** ya distinguen cinco grupos vía `train_image_index` → `train_sprite_group`,
+pero **en mapa todos se dibujan como Kirby Paul Tank** mientras falten los PNG
+de los otros grupos: `gen_vehicle_gfx_data.py` cae al fallback Kirby si no
+encuentra `vehicle_train_t0_*.png`, `vehicle_train_t1_*.png`, etc.
+
+**Pasos para cerrar el gap (costo S):**
+
+1. `./scripts/descargar_graficos.sh` — recorta sprites 2905–2972 a
+   `assets/opengfx/tiles/`.
+2. `python3 scripts/gen_vehicle_gfx_data.py` — regenera
+   `vehicle_gfx_data_generated.rs` con paths únicos por grupo.
+3. Comparar lado a lado compra + mapa: Chaney (T0), Ginzu (T1), Kirby, diésel,
+   AsiaStar (eléctrico).
+
+Detalle de IDs, tablas y archivos: [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md)
+§ «Sprites de locomotoras».

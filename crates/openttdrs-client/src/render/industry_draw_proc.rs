@@ -9,7 +9,7 @@ use crate::render::tiles::leveled_foundation_overlay_pos;
 use crate::render::{IndustryOverlayContext, MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     DrawProcLayer, industry_draw_proc_anim_frame, industry_draw_proc_dynamic_layers,
-    industry_draw_proc_for_tile,
+    industry_draw_proc_for_tile, industry_sprite_uses_fizzy_drink_anim,
 };
 use crate::state::{ClientScreen, SimWorld};
 
@@ -87,7 +87,16 @@ pub(crate) fn spawn_industry_draw_proc_overlays(
     let frame = industry_draw_proc_anim_frame(m3hi);
     let layers = industry_draw_proc_dynamic_layers(proc, m1, frame);
     for (part, layer) in layers.iter().enumerate() {
-        let Some(img) = assets.industries.get(&layer.sprite_id) else {
+        let fizzy = industry_sprite_uses_fizzy_drink_anim(layer.sprite_id)
+            && assets.fizzy_drink_frames.contains_key(&layer.sprite_id);
+        let Some(img) = (if fizzy {
+            assets
+                .fizzy_drink_frames
+                .get(&layer.sprite_id)
+                .and_then(|f| f.first())
+        } else {
+            assets.industries.get(&layer.sprite_id)
+        }) else {
             continue;
         };
         let anim = IndustryDrawProcAnim {
@@ -96,7 +105,7 @@ pub(crate) fn spawn_industry_draw_proc_overlays(
             ctx: overlay_ctx,
         };
         let pos3 = anim.pos3(layer);
-        commands.spawn((
+        let mut entity = commands.spawn((
             MapVisualLayer,
             chunk,
             anim,
@@ -104,6 +113,11 @@ pub(crate) fn spawn_industry_draw_proc_overlays(
             Transform::from_translation(pos3),
             Visibility::Visible,
         ));
+        if fizzy {
+            entity.insert(crate::render::FizzyDrinkAnim {
+                sprite_id: layer.sprite_id,
+            });
+        }
     }
 }
 
@@ -115,12 +129,13 @@ pub(crate) fn animate_industry_draw_proc_layers(
         &mut Sprite,
         &mut Transform,
         &mut Visibility,
+        Option<&crate::render::FizzyDrinkAnim>,
     )>,
 ) {
     let Some(assets) = assets else {
         return;
     };
-    for (anim, mut sprite, mut transform, mut visibility) in &mut q {
+    for (anim, mut sprite, mut transform, mut visibility, fizzy) in &mut q {
         let coord = TileCoord::new(anim.ctx.tx, anim.ctx.ty);
         let Some(tile) = sim.state.map.get(coord) else {
             *visibility = Visibility::Hidden;
@@ -143,7 +158,7 @@ pub(crate) fn animate_industry_draw_proc_layers(
             continue;
         };
         *visibility = Visibility::Visible;
-        if !img.matches(&sprite) {
+        if fizzy.is_none() && !img.matches(&sprite) {
             img.apply_to(&mut sprite);
         }
         let pos3 = anim.pos3(layer);

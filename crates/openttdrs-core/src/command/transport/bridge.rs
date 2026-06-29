@@ -1,4 +1,5 @@
 use crate::GameState;
+use crate::bridge_spec::{BridgeType, bridge_build_cost, set_bridge_type_m6};
 use crate::map::{
     Map, TileCoord, TileKind, complement_slope, inclined_slope_direction, resolve_tunnel_end,
     tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles, tunnel_preview_path,
@@ -97,7 +98,7 @@ pub(in crate::command) fn place_tunnel_or_bridge(
     kind_to_place: TileKind,
     mapt: u8,
     m5: u8,
-    cost_per_tile: i64,
+    bridge_type: BridgeType,
 ) -> Result<(), CommandError> {
     let is_tunnel = matches!(kind_to_place, TileKind::RoadTunnel | TileKind::RailTunnel);
     check_tunnel_or_bridge(&state.map, a, b, is_tunnel)?;
@@ -116,9 +117,16 @@ pub(in crate::command) fn place_tunnel_or_bridge(
     };
     let is_rail = matches!(kind_to_place, TileKind::RailTunnel | TileKind::RailBridge);
     let bridge_axis_y = !is_tunnel && (b.x - a.x).abs() < (b.y - a.y).abs();
-    let cost = cost_per_tile * i64::try_from(line.len()).unwrap_or(i64::MAX);
+    let cost = if is_tunnel {
+        crate::TUNNEL_BUILD_COST_PER_TILE * i64::try_from(line.len()).unwrap_or(i64::MAX)
+    } else {
+        bridge_build_cost(bridge_type, a, b)
+    };
     for c in line {
-        let m5_tile = if is_tunnel {
+        let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+        tile.kind = kind_to_place;
+        tile.mapt = mapt;
+        tile.m5 = if is_tunnel {
             tile_slope_and_z(&state.map, c)
                 .and_then(|(h, _)| tunnel_entrance_m5(h, is_rail))
                 .unwrap_or(0)
@@ -127,13 +135,12 @@ pub(in crate::command) fn place_tunnel_or_bridge(
         } else {
             m5
         };
+        if !is_tunnel {
+            tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
+        }
         state
             .map
-            .set_kind(c, kind_to_place)
-            .map_err(|_| CommandError::OutOfBounds)?;
-        state
-            .map
-            .set_mapt_m5(c, mapt, m5_tile)
+            .set_tile(c, tile)
             .map_err(|_| CommandError::OutOfBounds)?;
     }
     state.economy.money -= cost;

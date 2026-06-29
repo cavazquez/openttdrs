@@ -197,9 +197,14 @@ fn windows_shot_driver(
         buy.depot_pos = depot_pos;
         buy.selected_engine = depot_pos
             .and_then(|pos| {
-                crate::ui::buy_window::engines_for_depot(&sim, pos)
-                    .first()
-                    .copied()
+                crate::ui::buy_window::engines_for_buy_window(
+                    &sim,
+                    pos,
+                    openttdrs_core::EngineCatalogSort::default(),
+                    openttdrs_core::RoadEngineFilter::default(),
+                )
+                .first()
+                .copied()
             })
             .map(|e| e.id);
         vehicle.vehicle_id = sim.state.vehicles.first().map(|v| v.id);

@@ -63,9 +63,25 @@ pub(crate) struct WorldAssets {
     pub(crate) fences: Vec<AtlasSprite>,
     /// `chimney_smoke_{i}.png`: 8 frames del humo de la central eléctrica.
     pub(crate) chimney_smoke: Vec<AtlasSprite>,
+    /// `mine_smoke_{i}.png`: 5 frames del humo de mina de cobre.
+    pub(crate) copper_mine_smoke: Vec<AtlasSprite>,
     pub(crate) industries: HashMap<u32, AtlasSprite>,
+    /// Llama refinería: `industry_{id}_fire_anim_{f}.png` (7 frames por sprite).
+    pub(crate) refinery_fire_frames: HashMap<u32, Vec<AtlasSprite>>,
+    /// Bebidas gaseosas: `industry_{id}_fizzy_anim_{f}.png` (5 frames por sprite).
+    pub(crate) fizzy_drink_frames: HashMap<u32, Vec<AtlasSprite>>,
     /// Cimientos nivelados (`foundation_01..14.png`, SPR_FOUNDATION_BASE + tileh).
     pub(crate) foundations: Vec<AtlasSprite>,
+}
+
+/// Nombre en el atlas para un sprite de industria o suelo vanilla (`SPR_FLAT_GRASS_TILE` = 3981).
+#[must_use]
+fn industry_sprite_atlas_name(id: u32) -> String {
+    match id {
+        3981 => "grass.png".into(),
+        3982..=3995 => format!("terrain_grass_slope_{:02}.png", id - 3981),
+        _ => format!("industry_{id}.png"),
+    }
 }
 
 impl WorldAssets {
@@ -211,20 +227,45 @@ impl WorldAssets {
         let chimney_smoke = (0..crate::sprites::CHIMNEY_SMOKE_FRAMES)
             .map(|i| atlas.get(&format!("chimney_smoke_{i}.png")))
             .collect();
+        let copper_mine_smoke = (0..crate::sprites::COPPER_MINE_SMOKE_FRAMES)
+            .map(|i| atlas.get(&format!("mine_smoke_{i}.png")))
+            .collect();
 
         let mut industries = HashMap::new();
         for entry in &INDUSTRY_GFX_DATA {
             for &id in &[entry.sprite_id, entry.ground_sprite_id] {
-                if id != 0 {
-                    industries
-                        .entry(id)
-                        .or_insert_with(|| atlas.get(&format!("industry_{id}.png")));
+                if id == 0 || industries.contains_key(&id) {
+                    continue;
+                }
+                let name = industry_sprite_atlas_name(id);
+                if let Some(sprite) = atlas.try_get(&name) {
+                    industries.insert(id, sprite);
                 }
             }
         }
         for id in crate::sprites::INDUSTRY_DRAW_PROC_SPRITE_IDS {
             if let Some(img) = atlas.try_get(&format!("industry_{id}.png")) {
                 industries.entry(id).or_insert(img);
+            }
+        }
+
+        let mut refinery_fire_frames = HashMap::new();
+        for &id in &crate::sprites::REFINERY_FIRE_SPRITE_IDS {
+            let frames: Vec<_> = (0..7)
+                .filter_map(|f| atlas.try_get(&format!("industry_{id}_fire_anim_{f:02}.png")))
+                .collect();
+            if frames.len() == 7 {
+                refinery_fire_frames.insert(id, frames);
+            }
+        }
+
+        let mut fizzy_drink_frames = HashMap::new();
+        for &id in &crate::sprites::FIZZY_DRINK_SPRITE_IDS {
+            let frames: Vec<_> = (0..5)
+                .filter_map(|f| atlas.try_get(&format!("industry_{id}_fizzy_anim_{f:02}.png")))
+                .collect();
+            if frames.len() == 5 {
+                fizzy_drink_frames.insert(id, frames);
             }
         }
 
@@ -266,7 +307,10 @@ impl WorldAssets {
             fields,
             fences,
             chimney_smoke,
+            copper_mine_smoke,
             industries,
+            refinery_fire_frames,
+            fizzy_drink_frames,
             foundations,
         }
     }

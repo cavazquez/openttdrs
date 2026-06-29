@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
-use crate::render::{RemapMapVisualsPending, VehicleIndex};
+use crate::render::{MapTileChunk, RemapMapVisualsPending, VehicleIndex};
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
 
@@ -72,6 +72,10 @@ fn flag_industry_construction_remap(
     pending.pending = true;
     pending.sync_camera = false;
     pending.full = false;
+    for coord in &sim.state.industry_tile_dirty {
+        let ch = MapTileChunk::from_tile(coord.x.max(0) as u32, coord.y.max(0) as u32);
+        pending.refresh_chunks.insert((ch.cx, ch.cy));
+    }
 }
 
 /// Interpolación render: fracción del siguiente tick fijo.

@@ -899,6 +899,9 @@ crop_by_id(2552, "bridge_wood_x_pillar.png")
 # =============================================================================
 crop_by_id(2601, "object_transmitter.png")
 crop_by_id(2602, "object_lighthouse.png")
+# Humo mina de cobre (SPR_SMOKE_0..4)
+for i, sid in enumerate(range(2040, 2045)):
+    crop_by_id(sid, f"mine_smoke_{i}.png")
 # Humo de chimenea de la central eléctrica (SPR_CHIMNEY_SMOKE_0..7)
 for i, sid in enumerate(range(3701, 3709)):
     crop_by_id(sid, f"chimney_smoke_{i}.png")
@@ -968,7 +971,7 @@ for sid, name in [
     (3195, "vehicle_truck_nw_loaded.png"),
 ]:
     crop_by_id(sid, name)
-# Kirby Paul Tank (rail engine 0, image_index 2): sprites 2921..2928.
+# Kirby Paul Tank (image_index 2): sprites 2921..2928.
 for sid, name in [
     (2921, "vehicle_train_n.png"),
     (2922, "vehicle_train_ne.png"),
@@ -978,6 +981,54 @@ for sid, name in [
     (2926, "vehicle_train_sw.png"),
     (2927, "vehicle_train_w.png"),
     (2928, "vehicle_train_nw.png"),
+]:
+    crop_by_id(sid, name)
+# Chaney Jubilee (image_index 0): sprites 2905..2912.
+for sid, name in [
+    (2905, "vehicle_train_t0_n.png"),
+    (2906, "vehicle_train_t0_ne.png"),
+    (2907, "vehicle_train_t0_e.png"),
+    (2908, "vehicle_train_t0_se.png"),
+    (2909, "vehicle_train_t0_s.png"),
+    (2910, "vehicle_train_t0_sw.png"),
+    (2911, "vehicle_train_t0_w.png"),
+    (2912, "vehicle_train_t0_nw.png"),
+]:
+    crop_by_id(sid, name)
+# Ginzu A4 (image_index 1): sprites 2913..2920.
+for sid, name in [
+    (2913, "vehicle_train_t1_n.png"),
+    (2914, "vehicle_train_t1_ne.png"),
+    (2915, "vehicle_train_t1_e.png"),
+    (2916, "vehicle_train_t1_se.png"),
+    (2917, "vehicle_train_t1_s.png"),
+    (2918, "vehicle_train_t1_sw.png"),
+    (2919, "vehicle_train_t1_w.png"),
+    (2920, "vehicle_train_t1_nw.png"),
+]:
+    crop_by_id(sid, name)
+# Diésel representativo (image_index 8): sprites 2949..2956.
+for sid, name in [
+    (2949, "vehicle_train_td_n.png"),
+    (2950, "vehicle_train_td_ne.png"),
+    (2951, "vehicle_train_td_e.png"),
+    (2952, "vehicle_train_td_se.png"),
+    (2953, "vehicle_train_td_s.png"),
+    (2954, "vehicle_train_td_sw.png"),
+    (2955, "vehicle_train_td_w.png"),
+    (2956, "vehicle_train_td_nw.png"),
+]:
+    crop_by_id(sid, name)
+# Eléctrico AsiaStar (image_index 23): sprites 2965..2972.
+for sid, name in [
+    (2965, "vehicle_train_te_n.png"),
+    (2966, "vehicle_train_te_ne.png"),
+    (2967, "vehicle_train_te_e.png"),
+    (2968, "vehicle_train_te_se.png"),
+    (2969, "vehicle_train_te_s.png"),
+    (2970, "vehicle_train_te_sw.png"),
+    (2971, "vehicle_train_te_w.png"),
+    (2972, "vehicle_train_te_nw.png"),
 ]:
     crop_by_id(sid, name)
 # Regenerar metadatos: python3 scripts/gen_vehicle_gfx_data.py
@@ -1028,6 +1079,8 @@ python3 "$(dirname "$0")/gen_tile_select.py"
 
 # Waypoints ferroviarios (SPR_WAYPOINT_* en GRF extra).
 python3 "$(dirname "$0")/gen_rail_waypoint_sprites.py" || true
+# Señales: reexporta 1275–1699 eligiendo el mejor recorte entre NFO base y extra.
+python3 "$(dirname "$0")/gen_rail_signal_sprites.py" || true
 python3 "$(dirname "$0")/gen_rail_station_draw_data.py" || true
 
 # Texture atlas: empaqueta tiles/*.png en páginas + metadata Rust (batching).

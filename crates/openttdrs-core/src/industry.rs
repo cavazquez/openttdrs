@@ -1,4 +1,5 @@
 use crate::CargoType;
+use crate::Climate;
 use crate::map::TileCoord;
 use crate::station::{self, STATION_COVERAGE_RADIUS, Station, StopKind};
 
@@ -37,30 +38,119 @@ pub enum IndustrySpec {
     OilRefinery,
     Factory,
     Sawmill,
+    /// Plantación de algodón de azúcar (Toyland).
+    CottonCandy,
+    /// Fábrica de caramelos (Toyland).
+    CandyFactory,
+    /// Granja de baterías (Toyland).
+    BatteryFarm,
+    /// Pozo de cola (Toyland).
+    ColaWells,
+    /// Fábrica de juguetes (Toyland).
+    ToyFactory,
+    /// Fuente de plástico (Toyland).
+    PlasticFountain,
+    /// Fábrica de bebidas gaseosas (Toyland).
+    FizzyDrinkFactory,
+    /// Generador de burbujas (Toyland).
+    BubbleGenerator,
+    /// Cantera de toffee (Toyland).
+    ToffeeQuarry,
+    /// Mina de azúcar (Toyland).
+    SugarMine,
 }
 
 impl IndustrySpec {
+    /// Industrias colocables en este clima (`LandscapeType` en `OpenTTD`).
+    #[must_use]
+    pub fn specs_for_climate(climate: Climate) -> &'static [IndustrySpec] {
+        match climate {
+            Climate::Temperate => &[
+                Self::CoalMine,
+                Self::Forest,
+                Self::Sawmill,
+                Self::Factory,
+                Self::Farm,
+                Self::IronOreMine,
+            ],
+            Climate::SubArctic => &[
+                Self::CoalMine,
+                Self::Forest,
+                Self::Sawmill,
+                Self::Factory,
+                Self::GoldMine,
+                Self::IronOreMine,
+            ],
+            Climate::SubTropical => &[
+                Self::OilWells,
+                Self::OilRefinery,
+                Self::Farm,
+                Self::Factory,
+                Self::CopperOreMine,
+            ],
+            Climate::Toyland => &[
+                Self::CottonCandy,
+                Self::CandyFactory,
+                Self::BatteryFarm,
+                Self::ColaWells,
+                Self::ToyFactory,
+                Self::PlasticFountain,
+                Self::FizzyDrinkFactory,
+                Self::BubbleGenerator,
+                Self::ToffeeQuarry,
+                Self::SugarMine,
+            ],
+        }
+    }
+
+    #[must_use]
+    pub fn available_in(self, climate: Climate) -> bool {
+        Self::specs_for_climate(climate).contains(&self)
+    }
+
     #[must_use]
     pub const fn kind(self) -> IndustryKind {
         match self {
-            Self::CoalMine | Self::IronOreMine | Self::CopperOreMine | Self::GoldMine => {
-                IndustryKind::CoalMine
+            Self::CoalMine
+            | Self::IronOreMine
+            | Self::CopperOreMine
+            | Self::GoldMine
+            | Self::BatteryFarm
+            | Self::PlasticFountain
+            | Self::SugarMine
+            | Self::ToffeeQuarry => IndustryKind::CoalMine,
+            Self::Forest | Self::Farm | Self::CottonCandy | Self::BubbleGenerator => {
+                IndustryKind::Forest
             }
-            Self::Forest | Self::Farm => IndustryKind::Forest,
-            Self::OilWells | Self::OilRefinery => IndustryKind::OilWell,
-            Self::Factory | Self::Sawmill => IndustryKind::Factory,
+            Self::OilWells | Self::OilRefinery | Self::ColaWells => IndustryKind::OilWell,
+            Self::Factory
+            | Self::Sawmill
+            | Self::CandyFactory
+            | Self::ToyFactory
+            | Self::FizzyDrinkFactory => IndustryKind::Factory,
         }
     }
 
     #[must_use]
     pub const fn output_cargo(self) -> CargoType {
         match self {
-            Self::CoalMine | Self::IronOreMine | Self::CopperOreMine | Self::GoldMine => {
-                CargoType::Coal
+            Self::Forest
+            | Self::Farm
+            | Self::Sawmill
+            | Self::CottonCandy
+            | Self::BubbleGenerator => CargoType::Wood,
+            Self::OilWells | Self::OilRefinery | Self::ColaWells => CargoType::Oil,
+            Self::Factory | Self::CandyFactory | Self::ToyFactory | Self::FizzyDrinkFactory => {
+                CargoType::Goods
             }
-            Self::Forest | Self::Farm | Self::Sawmill => CargoType::Wood,
-            Self::OilWells | Self::OilRefinery => CargoType::Oil,
-            Self::Factory => CargoType::Goods,
+            Self::CoalMine
+            | Self::IronOreMine
+            | Self::CopperOreMine
+            | Self::GoldMine
+            | Self::BatteryFarm
+            | Self::PlasticFountain
+            | Self::SugarMine
+            | Self::ToffeeQuarry => CargoType::Coal,
         }
     }
 }
@@ -264,6 +354,16 @@ fn covering_freight_station_indices(industry: &Industry, stations: &[Station]) -
 mod tests {
     use super::*;
     use crate::station::StopKind;
+
+    #[test]
+    fn toyland_specs_exclude_temperate_mines() {
+        use crate::Climate;
+
+        assert!(!IndustrySpec::CoalMine.available_in(Climate::Toyland));
+        assert!(IndustrySpec::FizzyDrinkFactory.available_in(Climate::Toyland));
+        assert!(!IndustrySpec::FizzyDrinkFactory.available_in(Climate::Temperate));
+        assert!(IndustrySpec::CoalMine.available_in(Climate::Temperate));
+    }
 
     #[test]
     fn factory_without_station_inputs_does_not_auto_produce() {

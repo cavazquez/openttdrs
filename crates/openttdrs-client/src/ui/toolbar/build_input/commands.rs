@@ -93,6 +93,46 @@ pub(crate) fn command_for_action(
             pos,
             openttdrs_core::IndustrySpec::Farm,
         )),
+        BuildMenuAction::BuildCottonCandy => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::CottonCandy,
+        )),
+        BuildMenuAction::BuildCandyFactory => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::CandyFactory,
+        )),
+        BuildMenuAction::BuildBatteryFarm => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::BatteryFarm,
+        )),
+        BuildMenuAction::BuildColaWells => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::ColaWells,
+        )),
+        BuildMenuAction::BuildToyFactory => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::ToyFactory,
+        )),
+        BuildMenuAction::BuildPlasticFountain => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::PlasticFountain,
+        )),
+        BuildMenuAction::BuildFizzyDrinkFactory => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::FizzyDrinkFactory,
+        )),
+        BuildMenuAction::BuildBubbleGenerator => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::BubbleGenerator,
+        )),
+        BuildMenuAction::BuildToffeeQuarry => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::ToffeeQuarry,
+        )),
+        BuildMenuAction::BuildSugarMine => Some(Command::PlaceIndustrySpec(
+            pos,
+            openttdrs_core::IndustrySpec::SugarMine,
+        )),
         BuildMenuAction::RaiseLand => Some(Command::RaiseLand(pos)),
         BuildMenuAction::LowerLand => Some(Command::LowerLand(pos)),
         BuildMenuAction::LevelLand => Some(Command::LevelLand {
@@ -150,6 +190,7 @@ pub(crate) fn terraform_command_for_tiles(
 pub(crate) fn command_for_line_action(
     action: BuildMenuAction,
     tiles: &[(i32, i32)],
+    bridge_type: openttdrs_core::BridgeType,
 ) -> Option<Command> {
     let &(sx, sy) = tiles.first()?;
     let &(ex, ey) = tiles.last()?;
@@ -158,8 +199,8 @@ pub(crate) fn command_for_line_action(
     match action {
         BuildMenuAction::RoadTunnel => Some(Command::PlaceRoadTunnel(a, b)),
         BuildMenuAction::RailTunnel => Some(Command::PlaceRailTunnel(a, b)),
-        BuildMenuAction::RoadBridge => Some(Command::PlaceRoadBridge(a, b)),
-        BuildMenuAction::RailBridge => Some(Command::PlaceRailBridge(a, b)),
+        BuildMenuAction::RoadBridge => Some(Command::PlaceRoadBridge(a, b, bridge_type)),
+        BuildMenuAction::RailBridge => Some(Command::PlaceRailBridge(a, b, bridge_type)),
         _ => None,
     }
 }

@@ -139,6 +139,36 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::BuildFarm => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2190.png"))
         }
+        BuildMenuAction::BuildCottonCandy => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2100.png"))
+        }
+        BuildMenuAction::BuildCandyFactory => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2111.png"))
+        }
+        BuildMenuAction::BuildBatteryFarm => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2130.png"))
+        }
+        BuildMenuAction::BuildColaWells => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2132.png"))
+        }
+        BuildMenuAction::BuildToyFactory => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2150.png"))
+        }
+        BuildMenuAction::BuildPlasticFountain => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2151.png"))
+        }
+        BuildMenuAction::BuildFizzyDrinkFactory => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2139.png"))
+        }
+        BuildMenuAction::BuildBubbleGenerator => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2128.png"))
+        }
+        BuildMenuAction::BuildToffeeQuarry => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2180.png"))
+        }
+        BuildMenuAction::BuildSugarMine => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/industry_2201.png"))
+        }
         BuildMenuAction::RaiseLand => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/ui_terraform_up.png"))
         }

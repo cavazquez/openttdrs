@@ -1,8 +1,8 @@
 use crate::command::{Command, CommandError, apply_command};
 use crate::{
-    GameState, LevelMode, RAIL_BUILD_COST, STATION_BUILD_COST, STATION_TYPE_RAIL_WAYPOINT,
-    StopKind, TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder, WAYPOINT_BUILD_COST,
-    pathfinder, station_type_from_m6, tile_slope_and_z,
+    CargoType, GameState, LevelMode, OrderConditionKind, RAIL_BUILD_COST, STATION_BUILD_COST,
+    STATION_TYPE_RAIL_WAYPOINT, StopKind, TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder,
+    WAYPOINT_BUILD_COST, pathfinder, station_type_from_m6, tile_slope_and_z,
 };
 
 use super::helpers::{
@@ -599,6 +599,150 @@ fn train_order_through_waypoint_advances_without_full_stop() {
 }
 
 #[test]
+fn remove_vehicle_order_at_adjusts_current_order() {
+    let mut s = GameState::new(8, 8);
+    let a = TileCoord::new(2, 2);
+    let b = TileCoord::new(4, 2);
+    let c = TileCoord::new(6, 2);
+    for x in 2..=6 {
+        apply_command(&mut s, &Command::SetRailBits(TileCoord::new(x, 2), 0x01)).unwrap();
+    }
+    s.vehicles.push(Vehicle::new(1, VehicleKind::Train, a, a));
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(
+            1,
+            vec![
+                VehicleOrder::tile(a),
+                VehicleOrder::tile(b),
+                VehicleOrder::tile(c),
+            ],
+        ),
+    )
+    .unwrap();
+    s.vehicles[0].current_order = 2;
+    apply_command(
+        &mut s,
+        &Command::RemoveVehicleOrderAt {
+            vehicle_id: 1,
+            index: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[0].orders.len(), 2);
+    assert_eq!(s.vehicles[0].current_order, 1);
+}
+
+#[test]
+fn skip_vehicle_order_advances_current() {
+    let mut s = GameState::new(8, 8);
+    let a = TileCoord::new(2, 2);
+    let b = TileCoord::new(4, 2);
+    s.vehicles.push(Vehicle::new(1, VehicleKind::Bus, a, a));
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(1, vec![VehicleOrder::tile(a), VehicleOrder::tile(b)]),
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[0].current_order, 0);
+    apply_command(&mut s, &Command::SkipVehicleOrder(1)).unwrap();
+    assert_eq!(s.vehicles[0].current_order, 1);
+}
+
+#[test]
+fn toggle_full_load_on_station_order() {
+    let mut s = GameState::new(8, 8);
+    let stop = TileCoord::new(3, 3);
+    let road = TileCoord::new(3, 2);
+    apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(stop, 3)).unwrap();
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Bus, stop, stop));
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(1, vec![VehicleOrder::station(stop)]),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::ToggleVehicleOrderFullLoad {
+            vehicle_id: 1,
+            index: 0,
+        },
+    )
+    .unwrap();
+    assert!(s.vehicles[0].orders[0].full_load());
+    apply_command(
+        &mut s,
+        &Command::ToggleVehicleOrderNoUnload {
+            vehicle_id: 1,
+            index: 0,
+        },
+    )
+    .unwrap();
+    assert!(s.vehicles[0].orders[0].no_unload());
+}
+
+#[test]
+fn append_goto_nearest_depot_adds_depot_order() {
+    let mut s = GameState::new(10, 10);
+    let depot = TileCoord::new(5, 5);
+    let bus_pos = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(bus_pos)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(5, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 3)).unwrap();
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Bus, bus_pos, bus_pos));
+    apply_command(&mut s, &Command::AppendGotoNearestDepot(1)).unwrap();
+    assert_eq!(s.vehicles[0].orders.len(), 1);
+    assert_eq!(s.vehicles[0].orders[0].destination(), depot);
+}
+
+#[test]
+fn rename_vehicle_stores_trimmed_name() {
+    let mut s = GameState::new(4, 4);
+    s.vehicles.push(Vehicle::new(
+        1,
+        VehicleKind::Bus,
+        TileCoord::new(1, 1),
+        TileCoord::new(1, 1),
+    ));
+    apply_command(
+        &mut s,
+        &Command::RenameVehicle {
+            vehicle_id: 1,
+            name: Some("  Ruta 42  ".to_string()),
+        },
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[0].name.as_deref(), Some("Ruta 42"));
+}
+
+#[test]
+fn set_depot_vehicles_running_toggles_all_in_tile() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(3, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 3)).unwrap();
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Bus, depot, depot));
+    s.vehicles[0].running = true;
+    s.vehicles
+        .push(Vehicle::new(2, VehicleKind::Truck, depot, depot));
+    s.vehicles[1].running = true;
+    apply_command(
+        &mut s,
+        &Command::SetDepotVehiclesRunning {
+            depot_pos: depot,
+            running: false,
+        },
+    )
+    .unwrap();
+    assert!(!s.vehicles[0].running);
+    assert!(!s.vehicles[1].running);
+}
+
+#[test]
 fn sell_vehicle_requires_depot_tile() {
     let mut s = GameState::new(8, 8);
     let road = TileCoord::new(2, 2);
@@ -787,4 +931,381 @@ fn build_vehicle_at_depot_rejects_unknown_engine() {
     apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
     let e = apply_command(&mut s, &Command::BuildVehicleAtDepot(depot, 9_999)).unwrap_err();
     assert_eq!(e, CommandError::EngineNotFound);
+}
+
+#[test]
+fn move_vehicle_order_swaps_and_tracks_current() {
+    use crate::command::OrderMoveDirection;
+
+    let mut s = GameState::new(8, 8);
+    let a = TileCoord::new(2, 2);
+    let b = TileCoord::new(4, 2);
+    let c = TileCoord::new(6, 2);
+    s.vehicles.push(Vehicle::new(1, VehicleKind::Bus, a, a));
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(
+            1,
+            vec![
+                VehicleOrder::tile(a),
+                VehicleOrder::tile(b),
+                VehicleOrder::tile(c),
+            ],
+        ),
+    )
+    .unwrap();
+    s.vehicles[0].current_order = 1;
+    apply_command(
+        &mut s,
+        &Command::MoveVehicleOrder {
+            vehicle_id: 1,
+            index: 1,
+            direction: OrderMoveDirection::Up,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[0].orders[0].destination(), b);
+    assert_eq!(s.vehicles[0].orders[1].destination(), a);
+    assert_eq!(s.vehicles[0].current_order, 0);
+}
+
+#[test]
+fn toggle_depot_stop_on_depot_order() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Bus, depot, depot));
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(1, vec![VehicleOrder::depot(depot)]),
+    )
+    .unwrap();
+    assert!(s.vehicles[0].orders[0].depot_stops());
+    apply_command(
+        &mut s,
+        &Command::ToggleVehicleOrderDepotStop {
+            vehicle_id: 1,
+            index: 0,
+        },
+    )
+    .unwrap();
+    assert!(!s.vehicles[0].orders[0].depot_stops());
+}
+
+#[test]
+fn turn_around_vehicle_reverses_train_heading() {
+    use crate::vehicle::{DIR_N, DIR_S};
+
+    let mut s = GameState::new(8, 8);
+    let pos = TileCoord::new(2, 2);
+    let mut train = Vehicle::new(1, VehicleKind::Train, pos, pos);
+    train.direction = DIR_N;
+    s.vehicles.push(train);
+    apply_command(&mut s, &Command::TurnAroundVehicle(1)).unwrap();
+    assert_eq!(s.vehicles[0].direction, DIR_S);
+}
+
+#[test]
+fn clone_vehicle_at_depot_copies_engine_and_orders() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_BUS_FOSTER),
+    )
+    .unwrap();
+    let source_id = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(source_id, vec![VehicleOrder::tile(TileCoord::new(3, 3))]),
+    )
+    .unwrap();
+    let money_before = s.economy.money;
+    apply_command(
+        &mut s,
+        &Command::CloneVehicleAtDepot {
+            source_vehicle_id: source_id,
+            depot_pos: depot,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.vehicles.len(), 2);
+    assert_eq!(
+        s.vehicles[1].engine_id,
+        Some(crate::engine::ENGINE_BUS_FOSTER)
+    );
+    assert_eq!(s.vehicles[1].orders, s.vehicles[0].orders);
+    assert!(s.economy.money < money_before);
+}
+
+#[test]
+fn sell_all_vehicles_at_depot_empties_depot() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_BUS_MPS),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_BUS_MPS),
+    )
+    .unwrap();
+    assert_eq!(s.vehicles.len(), 2);
+    apply_command(&mut s, &Command::SellAllVehiclesAtDepot(depot)).unwrap();
+    assert!(s.vehicles.is_empty());
+}
+
+#[test]
+fn refit_truck_in_depot_changes_cargo_type() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRUCK_MPS),
+    )
+    .unwrap();
+    let id = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::RefitVehicle {
+            vehicle_id: id,
+            cargo: CargoType::Coal,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[0].cargo_type, Some(CargoType::Coal));
+}
+
+#[test]
+fn refit_rejects_with_cargo_on_board() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRUCK_MPS),
+    )
+    .unwrap();
+    s.vehicles[0].cargo = 5;
+    let id = s.vehicles[0].id;
+    assert_eq!(
+        apply_command(
+            &mut s,
+            &Command::RefitVehicle {
+                vehicle_id: id,
+                cargo: CargoType::Coal,
+            },
+        ),
+        Err(CommandError::RefitNotAllowed)
+    );
+}
+
+#[test]
+fn force_vehicle_proceed_sets_flag_on_train() {
+    let mut s = GameState::new(8, 8);
+    let pos = TileCoord::new(2, 2);
+    s.vehicles
+        .push(Vehicle::new(1, VehicleKind::Train, pos, pos));
+    apply_command(&mut s, &Command::ForceVehicleProceed(1)).unwrap();
+    assert!(s.vehicles[0].force_proceed);
+    apply_command(&mut s, &Command::ForceVehicleProceed(2)).unwrap_err();
+}
+
+#[test]
+fn autoreplace_upgrades_truck_in_depot() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRUCK_MPS),
+    )
+    .unwrap();
+    let id = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::SetAutoReplaceRule {
+            from_engine_id: crate::engine::ENGINE_TRUCK_MPS,
+            to_engine_id: crate::engine::ENGINE_TRUCK_BALOGH_GOODS,
+        },
+    )
+    .unwrap();
+    assert!(crate::autoreplace::try_autoreplace_vehicle(&mut s, id).unwrap());
+    assert_eq!(
+        s.vehicles[0].engine_id,
+        Some(crate::engine::ENGINE_TRUCK_BALOGH_GOODS)
+    );
+}
+
+#[test]
+fn vehicle_group_assign_and_save_v8_fields() {
+    let mut s = GameState::new(8, 8);
+    apply_command(
+        &mut s,
+        &Command::CreateVehicleGroup {
+            name: "Buses centro".into(),
+        },
+    )
+    .unwrap();
+    let group_id = s.vehicle_groups[0].id;
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_BUS_MPS),
+    )
+    .unwrap();
+    let id = s.vehicles[0].id;
+    assert_eq!(s.vehicles[0].build_tick, s.tick.get());
+    apply_command(
+        &mut s,
+        &Command::AssignVehicleToGroup {
+            vehicle_id: id,
+            group_id: Some(group_id),
+        },
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[0].group_id, Some(group_id));
+    assert!(s.vehicles[0].vehicle_age_years(s.tick.get()) == 0);
+}
+
+#[test]
+fn timetable_lateness_clear_command() {
+    let mut s = GameState::new(4, 4);
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Bus,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 1),
+    );
+    v.timetable_lateness = 42;
+    s.vehicles.push(v);
+    apply_command(&mut s, &Command::ClearVehicleTimetableLateness(1)).unwrap();
+    assert_eq!(s.vehicles[0].timetable_lateness, 0);
+}
+
+#[test]
+fn autoreplace_only_when_old_skips_young_vehicle() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRUCK_MPS),
+    )
+    .unwrap();
+    let id = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::SetAutoReplaceRule {
+            from_engine_id: crate::engine::ENGINE_TRUCK_MPS,
+            to_engine_id: crate::engine::ENGINE_TRUCK_BALOGH_GOODS,
+        },
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::ToggleAutoReplaceOnlyWhenOld {
+            from_engine_id: crate::engine::ENGINE_TRUCK_MPS,
+        },
+    )
+    .unwrap();
+    assert!(!crate::autoreplace::try_autoreplace_vehicle(&mut s, id).unwrap());
+}
+
+#[test]
+fn shared_orders_sync_linked_vehicles() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_BUS_MPS),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_BUS_MPS),
+    )
+    .unwrap();
+    let a = s.vehicles[0].id;
+    let b = s.vehicles[1].id;
+    s.vehicles[0].orders = vec![VehicleOrder::tile(depot)];
+    apply_command(&mut s, &Command::CreateSharedOrdersFromVehicle(a)).unwrap();
+    let shared_id = s.vehicles[0].shared_order_id.unwrap();
+    apply_command(
+        &mut s,
+        &Command::LinkVehicleToSharedOrders {
+            vehicle_id: b,
+            shared_id,
+        },
+    )
+    .unwrap();
+    s.shared_order_lists[0].orders = vec![
+        VehicleOrder::tile(depot),
+        VehicleOrder::tile(TileCoord::new(3, 2)),
+    ];
+    crate::shared_orders::sync_shared_orders_to_vehicles(&mut s, shared_id);
+    assert_eq!(s.vehicles[0].orders.len(), 2);
+    assert_eq!(s.vehicles[1].orders.len(), 2);
+}
+
+#[test]
+fn conditional_order_jumps_when_cargo_above_threshold() {
+    let pos = TileCoord::new(1, 1);
+    let mut v = Vehicle::new(1, VehicleKind::Truck, pos, pos);
+    v.cargo = 60;
+    v.capacity = 100;
+    v.orders = vec![
+        VehicleOrder::conditional(OrderConditionKind::CargoLoadAbove, 50, 2),
+        VehicleOrder::tile(TileCoord::new(0, 0)),
+        VehicleOrder::tile(TileCoord::new(2, 2)),
+    ];
+    v.current_order = 0;
+    v.resolve_conditional_orders();
+    assert_eq!(v.current_order, 2);
+}
+
+#[test]
+fn depot_reorder_vehicle_slot_updates_display_order() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_BUS_MPS),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_BUS_MPS),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::DepotReorderVehicleSlot {
+            depot_pos: depot,
+            from_slot: 0,
+            to_slot: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[0].depot_display_slot, Some(1));
+    assert_eq!(s.vehicles[1].depot_display_slot, Some(0));
 }

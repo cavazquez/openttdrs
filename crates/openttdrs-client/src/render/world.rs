@@ -33,6 +33,19 @@ pub(crate) struct RemapMapVisualsPending {
     pub(crate) sync_camera: bool,
     /// Rebuild completo (construcción, F9). Pan en mapas grandes usa `full = false`.
     pub(crate) full: bool,
+    /// Chunks a regenerar in-place (construcción dentro del viewport ya cargado).
+    pub(crate) refresh_chunks: HashSet<(u32, u32)>,
+}
+
+impl RemapMapVisualsPending {
+    pub(crate) fn extend_refresh_chunks(&mut self, tiles: &[(i32, i32)]) {
+        for &(tx, ty) in tiles {
+            if tx >= 0 && ty >= 0 {
+                let ch = MapTileChunk::from_tile(tx as u32, ty as u32);
+                self.refresh_chunks.insert((ch.cx, ch.cy));
+            }
+        }
+    }
 }
 
 impl Default for RemapMapVisualsPending {
@@ -41,7 +54,25 @@ impl Default for RemapMapVisualsPending {
             pending: false,
             sync_camera: false,
             full: true,
+            refresh_chunks: HashSet::new(),
         }
+    }
+}
+
+/// Marca redibujo tras construcción/sim: en mapas con culling refresca solo los chunks tocados.
+pub(crate) fn request_map_visual_remap(
+    pending: &mut RemapMapVisualsPending,
+    mw: u32,
+    mh: u32,
+    tiles: &[(i32, i32)],
+) {
+    pending.pending = true;
+    pending.sync_camera = false;
+    if large_map_viewport_cull_enabled(mw, mh) {
+        pending.full = false;
+        pending.extend_refresh_chunks(tiles);
+    } else {
+        pending.full = true;
     }
 }
 
@@ -55,12 +86,15 @@ pub(crate) struct LoadedMapTileChunks {
 #[derive(Resource)]
 pub(crate) struct MapTileSpawnViewport {
     pub(crate) bounds: TileViewportBounds,
+    /// Último `OrthographicProjection::scale` usado para `bounds` (detectar zoom).
+    pub(crate) last_ortho_scale: f32,
 }
 
 impl Default for MapTileSpawnViewport {
     fn default() -> Self {
         Self {
             bounds: TileViewportBounds::full(1, 1),
+            last_ortho_scale: 1.0,
         }
     }
 }
@@ -140,8 +174,21 @@ pub(crate) fn sync_map_tile_spawn_viewport(
         return;
     }
     let needed = resolve_spawn_viewport(&sim, &windows, &cam_q);
-    if !viewport.bounds.contains(needed) {
+    let ortho_scale = cam_q
+        .single()
+        .ok()
+        .and_then(|(_, proj)| {
+            if let Projection::Orthographic(o) = proj {
+                Some(o.scale)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(viewport.last_ortho_scale);
+    let scale_changed = (ortho_scale - viewport.last_ortho_scale).abs() > f32::EPSILON;
+    if scale_changed || !viewport.bounds.contains(needed) {
         viewport.bounds = needed;
+        viewport.last_ortho_scale = ortho_scale;
         pending.pending = true;
         pending.sync_camera = false;
         pending.full = false;
@@ -179,6 +226,7 @@ pub(crate) fn setup(
     let spawn_bounds = resolve_spawn_viewport(&sim, &windows, &cam_q);
     commands.insert_resource(MapTileSpawnViewport {
         bounds: spawn_bounds,
+        last_ortho_scale: cam_scale,
     });
     let atlas = TileAtlas::build(&asset_server, &mut layout_assets);
     let assets = WorldAssets::load(&atlas);
@@ -187,7 +235,16 @@ pub(crate) fn setup(
         water: assets.water_frames.clone(),
         shore: assets.shore_frames.clone(),
     });
+    commands.insert_resource(super::RefineryFireAnimFrames {
+        by_sprite: assets.refinery_fire_frames.clone(),
+    });
+    commands.insert_resource(super::FizzyDrinkAnimFrames {
+        by_sprite: assets.fizzy_drink_frames.clone(),
+    });
     commands.insert_resource(super::ChimneySmokeFrames(assets.chimney_smoke.clone()));
+    commands.insert_resource(super::CopperMineSmokeFrames(
+        assets.copper_mine_smoke.clone(),
+    ));
     let company_colour = CompanyColour::from_u8(sim.state.company_colour);
     let mut company_sprites = CompanyColoredSprites::new(company_colour);
     company_sprites.build_all(&mut images);
@@ -236,7 +293,16 @@ pub(crate) fn spawn_intro_map_render(
         water: assets.water_frames.clone(),
         shore: assets.shore_frames.clone(),
     });
+    commands.insert_resource(super::RefineryFireAnimFrames {
+        by_sprite: assets.refinery_fire_frames.clone(),
+    });
+    commands.insert_resource(super::FizzyDrinkAnimFrames {
+        by_sprite: assets.fizzy_drink_frames.clone(),
+    });
     commands.insert_resource(super::ChimneySmokeFrames(assets.chimney_smoke.clone()));
+    commands.insert_resource(super::CopperMineSmokeFrames(
+        assets.copper_mine_smoke.clone(),
+    ));
     let company_colour = CompanyColour::from_u8(sim.state.company_colour);
     let mut company_sprites = CompanyColoredSprites::new(company_colour);
     company_sprites.build_all(images);
@@ -565,14 +631,27 @@ pub(crate) fn apply_remap_map_visuals(
     };
     let do_sync_camera = pending.sync_camera;
     let full_rebuild = pending.full;
+    let refresh_chunks = std::mem::take(&mut pending.refresh_chunks);
     pending.pending = false;
     pending.sync_camera = false;
     pending.full = true;
 
     let (mw, mh) = sim.state.map.dimensions();
     let spawn_bounds = resolve_spawn_viewport(&sim, &windows, &q_cam);
+    let ortho_scale = q_cam
+        .single()
+        .ok()
+        .and_then(|(_, proj)| {
+            if let Projection::Orthographic(o) = proj {
+                Some(o.scale)
+            } else {
+                None
+            }
+        })
+        .unwrap_or(1.0);
     commands.insert_resource(MapTileSpawnViewport {
         bounds: spawn_bounds,
+        last_ortho_scale: ortho_scale,
     });
 
     let use_incremental = !full_rebuild
@@ -600,12 +679,32 @@ pub(crate) fn apply_remap_map_visuals(
                 cy,
             );
         }
+        for &(cx, cy) in &refresh_chunks {
+            if !needed.contains(&(cx, cy)) {
+                continue;
+            }
+            for (entity, chunk) in &q_chunks {
+                if chunk.cx == cx && chunk.cy == cy {
+                    commands.entity(entity).despawn();
+                }
+            }
+            spawn_map_chunk(
+                &mut commands,
+                assets.as_ref(),
+                company.as_mut(),
+                images.as_mut(),
+                &sim,
+                cx,
+                cy,
+            );
+        }
         loaded_chunks.chunks = needed;
-        if !to_add.is_empty() || !to_remove.is_empty() {
+        if !to_add.is_empty() || !to_remove.is_empty() || !refresh_chunks.is_empty() {
             info!(
-                "Mapa visual incremental: +{} −{} chunks ({} teselas visibles)",
+                "Mapa visual incremental: +{} −{} ↻{} chunks ({} teselas visibles)",
                 to_add.len(),
                 to_remove.len(),
+                refresh_chunks.len(),
                 spawn_bounds.tile_count()
             );
         }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 
 use crate::render::atlas::AtlasSprite;
@@ -16,6 +18,18 @@ pub(crate) struct ShoreTile(pub(crate) u8);
 pub(crate) struct WaterAnimFrames {
     pub(crate) water: Vec<AtlasSprite>,
     pub(crate) shore: Vec<Vec<AtlasSprite>>,
+}
+
+/// Frames del fuego de refinería (`industry_{id}_fire_anim_{f}.png`), 7 pasos.
+#[derive(Resource)]
+pub(crate) struct RefineryFireAnimFrames {
+    pub(crate) by_sprite: HashMap<u32, Vec<AtlasSprite>>,
+}
+
+/// Frames bebidas gaseosas (`industry_{id}_fizzy_anim_{f}.png`), 5 pasos.
+#[derive(Resource)]
+pub(crate) struct FizzyDrinkAnimFrames {
+    pub(crate) by_sprite: HashMap<u32, Vec<AtlasSprite>>,
 }
 
 /// Teselas de suelo, vías, vehículos, etc.: se despawnan al recargar JSON (F9).

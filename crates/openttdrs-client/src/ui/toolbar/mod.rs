@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+mod bridge_window;
 pub(crate) mod build_input;
 mod depot_panel;
 mod layout;
@@ -12,6 +13,10 @@ mod settings;
 mod station_panel;
 mod systems;
 
+pub(crate) use bridge_window::{
+    BridgeBuildState, bridge_picker_on_closed, handle_bridge_picker_buttons, setup_bridge_picker,
+    sync_bridge_picker,
+};
 pub(crate) use build_input::{handle_tile_click, update_cursor_tile};
 pub(crate) use depot_panel::{
     DepotPanelState, depot_panel_on_closed, handle_depot_panel_buttons, setup_depot_panel,
@@ -19,7 +24,10 @@ pub(crate) use depot_panel::{
 };
 pub(crate) use layout::setup_top_toolbar;
 pub(crate) use minimap::{handle_minimap_click, setup_minimap, sync_minimap};
-pub(crate) use order_panel::{handle_order_panel_buttons, setup_order_panel, sync_order_panel};
+pub(crate) use order_panel::{
+    handle_order_panel_buttons, open_order_edit_for_vehicle, setup_order_panel,
+    start_order_destination_pick, sync_order_panel, try_append_order_at_tile,
+};
 pub(crate) use orders_cursor::sync_orders_pick_cursor;
 pub(crate) use preview::{rotate_station_with_right_click, update_build_ghost_preview};
 pub(crate) use rail_station_window::{
@@ -36,8 +44,9 @@ pub(crate) use station_panel::{
 };
 pub(crate) use systems::{
     build_menu_interaction, close_toolbar_button_interaction, close_toolbar_panel_on_escape,
-    hide_tool_when_panel_closed, toolbar_group_interaction, update_tool_button_visuals,
-    update_toolbar_group_visuals, update_toolbar_tool_visibility, update_toolbar_tooltip,
+    hide_tool_when_panel_closed, sync_climate_industry_tools, toolbar_group_interaction,
+    update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
+    update_toolbar_tooltip,
 };
 
 /// Marca nodos del menu "Construir" para ignorar clics en el mapa cuando el cursor esta encima.
@@ -83,6 +92,16 @@ pub(crate) enum BuildMenuAction {
     BuildSawmill,
     BuildForest,
     BuildFarm,
+    BuildCottonCandy,
+    BuildCandyFactory,
+    BuildBatteryFarm,
+    BuildColaWells,
+    BuildToyFactory,
+    BuildPlasticFountain,
+    BuildFizzyDrinkFactory,
+    BuildBubbleGenerator,
+    BuildToffeeQuarry,
+    BuildSugarMine,
     RaiseLand,
     LowerLand,
     LevelLand,
@@ -170,8 +189,19 @@ pub(crate) struct DragBuildState {
 pub(crate) struct OrderEditState {
     pub(crate) vehicle_id: Option<u32>,
     pub(crate) orders: Vec<openttdrs_core::VehicleOrder>,
+    /// Fila seleccionada en el panel (para borrar o editar flags).
+    pub(crate) selected_slot: Option<usize>,
     /// Tras «Agregar destino»: el siguiente clic en mapa añade parada (Esc cancela).
     pub(crate) picking_destination: bool,
+}
+
+impl OrderEditState {
+    pub(crate) fn clear(&mut self) {
+        self.vehicle_id = None;
+        self.orders.clear();
+        self.selected_slot = None;
+        self.picking_destination = false;
+    }
 }
 
 #[derive(Component)]
@@ -188,6 +218,32 @@ pub(crate) enum OrderPanelButton {
     /// Clic en mapa para añadir parada a la ruta.
     PickDestOnMap,
     ToggleRunning,
+    /// Borra la orden de la fila seleccionada.
+    DeleteSelected,
+    /// Salta la orden actual sin cumplirla.
+    SkipOrder,
+    /// Alterna «carga completa» en la fila seleccionada.
+    ToggleFullLoad,
+    /// Alterna «no descargar» en la fila seleccionada.
+    ToggleNoUnload,
+    /// Sube la orden seleccionada en la lista.
+    MoveOrderUp,
+    /// Baja la orden seleccionada en la lista.
+    MoveOrderDown,
+    /// Alterna «parar en depósito» en la fila seleccionada.
+    ToggleDepotStop,
+    /// Cicla espera en parada (horario).
+    CycleOrderWait,
+    /// Cicla tiempo mínimo de viaje (horario).
+    CycleOrderTravel,
+    /// Activa/desactiva horario del vehículo.
+    ToggleTimetable,
+    /// Abre ventana de horario detallado.
+    OpenTimetableWindow,
+    /// Pone en hora (limpia retraso acumulado).
+    ClearTimetableLateness,
+    /// Inserta orden condicional en la fila seleccionada.
+    SetConditionalOrder,
 }
 
 /// Muestra de color de compañía en el panel Ajustes (`0..16`).

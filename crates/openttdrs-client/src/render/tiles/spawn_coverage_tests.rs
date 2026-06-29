@@ -544,6 +544,58 @@ fn power_plant_chimney_spawns_animated_smoke() {
 }
 
 #[test]
+fn copper_mine_chimney_spawns_animated_smoke() {
+    let assets = boot_assets_app();
+    let mut map = fresh_map8();
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+
+    let mut chimney = tile_template();
+    chimney.kind = TileKind::Industry;
+    chimney.mapt = 0x80;
+    chimney.m5 = 49;
+    chimney.m1 = 0x80;
+    map.set_tile(c(2, 2), chimney).expect("chimenea cobre");
+    chimney.m1 = 0x01;
+    map.set_tile(c(3, 2), chimney).expect("en obra");
+
+    let grid = RenderGrid::from_map(&map, 8, 8);
+    let mut world = World::new();
+    world.insert_resource(TsMap(map));
+    world.insert_resource(TsGrid(grid));
+    world.insert_resource(TsAssets(assets));
+
+    let spawn_at = |world: &mut World, tx: u32| {
+        world
+            .run_system_once(
+                move |mut commands: Commands,
+                      m: Res<TsMap>,
+                      g: Res<TsGrid>,
+                      a: Res<TsAssets>,
+                      mut company: Local<CompanyColoredSprites>,
+                      mut images: Local<Assets<Image>>| {
+                    spawn_industry_tile(
+                        &mut commands,
+                        &a.0,
+                        &m.0,
+                        &TileRenderContext::new(&m.0, &g.0, tx, 2),
+                        4.0,
+                        &[],
+                        &mut company,
+                        &mut images,
+                    );
+                },
+            )
+            .expect("spawn industry");
+        world
+            .query_filtered::<(), With<crate::render::smoke::CopperMineSmoke>>()
+            .iter(world)
+            .count()
+    };
+    assert_eq!(spawn_at(&mut world, 2), 1, "terminada: humo mina cobre");
+    assert_eq!(spawn_at(&mut world, 3), 1, "en obra: sin humo nuevo");
+}
+
+#[test]
 fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
     let assets = boot_assets_app();
     let mut map = fresh_map8();

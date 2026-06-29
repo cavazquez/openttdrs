@@ -30,12 +30,54 @@ pub(crate) fn step(state: &mut GameState) {
     let mut unloaded_this_tick = vec![false; state.vehicles.len()];
     unload_vehicles(state, t, &loaded_this_tick, &mut unloaded_this_tick);
     load_vehicles(state, &mut loaded_this_tick, &unloaded_this_tick);
+    tick_vehicle_timetables(state);
+    sync_autoreplace_depot_flags(state);
+    run_autoreplace_in_depots(state);
     assign_orderless_wander_destinations(state);
     move_vehicles(state);
     sync_vehicle_order_destinations(state);
     apply_vehicle_running_costs(state);
     crate::news::poll_vehicle_advice_news(state);
     crate::news::maybe_purge_old_news(state);
+}
+
+fn tick_vehicle_timetables(state: &mut GameState) {
+    let tick = state.tick.get();
+    for vehicle in &mut state.vehicles {
+        vehicle.sim_tick = tick;
+        vehicle.tick_timetable_wait();
+    }
+}
+
+fn sync_autoreplace_depot_flags(state: &mut GameState) {
+    for vehicle in &mut state.vehicles {
+        if vehicle.running || !crate::refit::vehicle_in_depot(&state.map, vehicle.pos) {
+            vehicle.autoreplace_attempted_this_stop = false;
+        }
+    }
+}
+
+fn run_autoreplace_in_depots(state: &mut GameState) {
+    if state.autoreplace_rules.is_empty() {
+        return;
+    }
+    let candidates: Vec<u32> = state
+        .vehicles
+        .iter()
+        .filter(|v| {
+            !v.running
+                && v.cargo == 0
+                && !v.autoreplace_attempted_this_stop
+                && crate::refit::vehicle_in_depot(&state.map, v.pos)
+        })
+        .map(|v| v.id)
+        .collect();
+    for vehicle_id in candidates {
+        if let Some(idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) {
+            state.vehicles[idx].autoreplace_attempted_this_stop = true;
+        }
+        let _ = crate::autoreplace::try_autoreplace_vehicle(state, vehicle_id);
+    }
 }
 
 fn sync_vehicle_order_destinations(state: &mut GameState) {
@@ -389,27 +431,48 @@ fn recompute_vehicle_paths(state: &mut GameState) {
 }
 
 fn move_vehicles(state: &mut GameState) {
+    let tick = state.tick.get();
     let train_positions: Vec<_> = state
         .vehicles
         .iter()
         .filter(|v| v.kind == VehicleKind::Train)
         .map(|v| v.pos)
         .collect();
+    let vehicles_snapshot = state.vehicles.clone();
     for vehicle in &mut state.vehicles {
+        vehicle.sim_tick = tick;
         if vehicle.kind == VehicleKind::Train
             && vehicle.running
             && let Some(next) = vehicle.movement_target()
-            && crate::rail_signals::train_blocked_by_signal(
-                &state.map,
-                &train_positions,
-                vehicle.pos,
-                next,
-            )
         {
-            vehicle.cur_speed = 0;
-            continue;
+            let blocked = if vehicle.force_proceed {
+                crate::rail_signals::train_blocked_by_traffic(
+                    &state.map,
+                    &vehicles_snapshot,
+                    vehicle,
+                )
+            } else {
+                crate::rail_signals::train_blocked_by_signal(
+                    &state.map,
+                    &train_positions,
+                    vehicle.pos,
+                    next,
+                ) || crate::rail_signals::train_blocked_by_traffic(
+                    &state.map,
+                    &vehicles_snapshot,
+                    vehicle,
+                )
+            };
+            if blocked {
+                vehicle.cur_speed = 0;
+                continue;
+            }
         }
+        let had_force = vehicle.force_proceed;
         vehicle.step();
+        if had_force && vehicle.kind == VehicleKind::Train {
+            vehicle.force_proceed = false;
+        }
     }
 }
 
@@ -440,7 +503,9 @@ fn station_matches_current_order(vehicle: &crate::Vehicle, station_pos: TileCoor
     };
     if matches!(
         order,
-        crate::VehicleOrder::Tile(_) | crate::VehicleOrder::Waypoint { .. }
+        crate::VehicleOrder::Tile(_)
+            | crate::VehicleOrder::Waypoint { .. }
+            | crate::VehicleOrder::Depot { .. }
     ) {
         return true;
     }

@@ -30,6 +30,8 @@ pub struct EngineDef {
     pub intro_year: u16,
     /// Fiabilidad inicial mostrada en la compra (aprox. por clase de motor).
     pub reliability_pct: u8,
+    /// Índice de sprite de locomotora (`OpenTTD` `image_index`; 0 en carretera).
+    pub train_image_index: u8,
 }
 
 impl EngineDef {
@@ -96,12 +98,13 @@ macro_rules! road {
             weight_t: $wt,
             intro_year: $year,
             reliability_pct: RELIABILITY_ROAD,
+            train_image_index: 0,
         }
     };
 }
 
 macro_rules! train {
-    ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr) => {
+    ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr, $img:expr) => {
         EngineDef {
             id: $id,
             kind: VehicleKind::Train,
@@ -115,6 +118,7 @@ macro_rules! train {
             weight_t: $wt,
             intro_year: $year,
             reliability_pct: $rel,
+            train_image_index: $img,
         }
     };
 }
@@ -230,7 +234,8 @@ const ENGINES: &[EngineDef] = &[
         300,
         47,
         1925,
-        RELIABILITY_STEAM
+        RELIABILITY_STEAM,
+        2
     ),
     train!(
         ENGINE_TRAIN_CHANEY_JUBILEE,
@@ -244,7 +249,8 @@ const ENGINES: &[EngineDef] = &[
         1_000,
         131,
         1934,
-        RELIABILITY_STEAM
+        RELIABILITY_STEAM,
+        0
     ),
     train!(
         ENGINE_TRAIN_GINZU_A4,
@@ -258,7 +264,8 @@ const ENGINES: &[EngineDef] = &[
         1_200,
         162,
         1935,
-        RELIABILITY_STEAM
+        RELIABILITY_STEAM,
+        1
     ),
     train!(
         ENGINE_TRAIN_SH_8P,
@@ -272,7 +279,8 @@ const ENGINES: &[EngineDef] = &[
         1_600,
         170,
         1954,
-        RELIABILITY_STEAM
+        RELIABILITY_STEAM,
+        0
     ),
     train!(
         ENGINE_TRAIN_MANLEY_MOREL,
@@ -286,7 +294,8 @@ const ENGINES: &[EngineDef] = &[
         600,
         32,
         1956,
-        RELIABILITY_DIESEL
+        RELIABILITY_DIESEL,
+        8
     ),
     train!(
         ENGINE_TRAIN_DASH,
@@ -300,7 +309,8 @@ const ENGINES: &[EngineDef] = &[
         700,
         38,
         1984,
-        RELIABILITY_DIESEL
+        RELIABILITY_DIESEL,
+        10
     ),
     train!(
         ENGINE_TRAIN_SH_HENDRY_25,
@@ -314,7 +324,8 @@ const ENGINES: &[EngineDef] = &[
         1_250,
         72,
         1961,
-        RELIABILITY_DIESEL
+        RELIABILITY_DIESEL,
+        4
     ),
     train!(
         ENGINE_TRAIN_UU_37,
@@ -328,7 +339,8 @@ const ENGINES: &[EngineDef] = &[
         1_750,
         101,
         1959,
-        RELIABILITY_DIESEL
+        RELIABILITY_DIESEL,
+        5
     ),
     train!(
         ENGINE_TRAIN_FLOSS_47,
@@ -342,7 +354,8 @@ const ENGINES: &[EngineDef] = &[
         2_580,
         112,
         1962,
-        RELIABILITY_DIESEL
+        RELIABILITY_DIESEL,
+        4
     ),
     train!(
         ENGINE_TRAIN_SH_125,
@@ -356,7 +369,8 @@ const ENGINES: &[EngineDef] = &[
         4_500,
         70,
         1977,
-        RELIABILITY_DIESEL
+        RELIABILITY_DIESEL,
+        6
     ),
     train!(
         ENGINE_TRAIN_SH_30,
@@ -370,7 +384,8 @@ const ENGINES: &[EngineDef] = &[
         3_600,
         84,
         1965,
-        RELIABILITY_ELECTRIC
+        RELIABILITY_ELECTRIC,
+        20
     ),
     train!(
         ENGINE_TRAIN_SH_40,
@@ -384,7 +399,8 @@ const ENGINES: &[EngineDef] = &[
         5_000,
         82,
         1973,
-        RELIABILITY_ELECTRIC
+        RELIABILITY_ELECTRIC,
+        20
     ),
     train!(
         ENGINE_TRAIN_TIM,
@@ -398,7 +414,8 @@ const ENGINES: &[EngineDef] = &[
         7_000,
         90,
         1984,
-        RELIABILITY_ELECTRIC
+        RELIABILITY_ELECTRIC,
+        21
     ),
     train!(
         ENGINE_TRAIN_ASIASTAR,
@@ -412,7 +429,8 @@ const ENGINES: &[EngineDef] = &[
         8_000,
         95,
         1992,
-        RELIABILITY_ELECTRIC
+        RELIABILITY_ELECTRIC,
+        23
     ),
 ];
 
@@ -425,6 +443,76 @@ pub const fn engine_catalog() -> &'static [EngineDef] {
 /// Motores de un tipo de vehículo concreto (orden del catálogo).
 pub fn engines_of_kind(kind: VehicleKind) -> impl Iterator<Item = &'static EngineDef> {
     ENGINES.iter().filter(move |e| e.kind == kind)
+}
+
+/// Orden de la lista de compra en ventana de depósito.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum EngineCatalogSort {
+    #[default]
+    Catalog,
+    Name,
+    Price,
+    Speed,
+    IntroYear,
+}
+
+/// Filtro de carretera en ventana de compra (ignorado en depósito de vía).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum RoadEngineFilter {
+    #[default]
+    All,
+    BusOnly,
+    TruckOnly,
+}
+
+/// `true` si el modelo ya está disponible en el año calendario dado.
+#[must_use]
+pub fn engine_available_in_year(engine: &EngineDef, calendar_year: u32) -> bool {
+    calendar_year >= u32::from(engine.intro_year)
+}
+
+/// Motores visibles en la ventana de compra de un depósito, filtrados y ordenados.
+#[must_use]
+pub fn engines_for_depot_purchase(
+    depot_is_rail: bool,
+    calendar_year: u32,
+    sort: EngineCatalogSort,
+    road_filter: RoadEngineFilter,
+) -> Vec<&'static EngineDef> {
+    let mut list: Vec<&EngineDef> = ENGINES
+        .iter()
+        .filter(|engine| {
+            if !engine_available_in_year(engine, calendar_year) {
+                return false;
+            }
+            match (depot_is_rail, engine.kind) {
+                (true, VehicleKind::Train) => true,
+                (false, VehicleKind::Bus) => road_filter != RoadEngineFilter::TruckOnly,
+                (false, VehicleKind::Truck) => road_filter != RoadEngineFilter::BusOnly,
+                _ => false,
+            }
+        })
+        .collect();
+    match sort {
+        EngineCatalogSort::Catalog => {}
+        EngineCatalogSort::Name => list.sort_by_key(|e| e.name),
+        EngineCatalogSort::Price => list.sort_by_key(|e| e.price),
+        EngineCatalogSort::Speed => list.sort_by_key(|e| std::cmp::Reverse(e.max_speed)),
+        EngineCatalogSort::IntroYear => list.sort_by_key(|e| e.intro_year),
+    }
+    list
+}
+
+/// Agrupa `train_image_index` en uno de los conjuntos de sprites descargados.
+#[must_use]
+pub const fn train_sprite_group(image_index: u8) -> u8 {
+    match image_index {
+        0 | 3 | 7 | 10 => 0,
+        1 | 9 => 1,
+        4 | 5 | 6 | 8 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19 | 22 => 3,
+        20 | 21 | 23 => 4,
+        _ => 2,
+    }
 }
 
 /// Busca un motor por id, sin importar el tipo.
@@ -571,5 +659,31 @@ mod tests {
         let train = progress_step_for_speed(64, DIR_SW);
         assert!(bus > truck);
         assert!(truck > train);
+    }
+
+    #[test]
+    fn engines_for_depot_purchase_filters_by_year_and_kind() {
+        let list = engines_for_depot_purchase(
+            true,
+            1950,
+            EngineCatalogSort::Catalog,
+            RoadEngineFilter::All,
+        );
+        assert!(list.iter().any(|e| e.id == ENGINE_TRAIN_KIRBY));
+        assert!(!list.iter().any(|e| e.id == ENGINE_TRAIN_ASIASTAR));
+
+        let road = engines_for_depot_purchase(
+            false,
+            1950,
+            EngineCatalogSort::Catalog,
+            RoadEngineFilter::BusOnly,
+        );
+        assert!(road.iter().all(|e| e.kind == VehicleKind::Bus));
+    }
+
+    #[test]
+    fn train_sprite_group_maps_indices() {
+        assert_eq!(train_sprite_group(2), 2);
+        assert_eq!(train_sprite_group(23), 4);
     }
 }

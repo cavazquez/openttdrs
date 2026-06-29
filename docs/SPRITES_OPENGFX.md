@@ -189,6 +189,93 @@ dirección SE, y un movimiento en `-ty` (tile arriba-derecha) se visualiza en NE
 
 ---
 
+## Sprites de locomotoras (trenes)
+
+### Estado actual (jun 2026)
+
+| Capa | Implementado | Paridad visual OpenTTD |
+|------|--------------|------------------------|
+| Datos (`EngineDef.train_image_index`) | ✅ cada motor tiene su índice del original | ✅ |
+| Agrupación (`train_sprite_group`) | ✅ 5 conjuntos (vapor×2, Kirby, diésel, eléctrico) | 🟡 OpenTTD distingue más modelos |
+| Selección en cliente (`train_layers_for`) | ✅ elige el array según grupo | ✅ |
+| Ventana de compra (`train_preview`) | ✅ preview por `train_image_index` | ✅ |
+| **PNG + paths en `vehicle_gfx_data_generated.rs`** | 🟡 | ❌ |
+
+**Síntoma en juego:** todos los trenes se ven igual (sprite Kirby Paul Tank) aunque
+la ventana de compra ya elige el conjunto correcto por motor.
+
+**Causa:** `scripts/gen_vehicle_gfx_data.py` genera cinco arrays
+(`TRAIN_VEHICLE_LAYERS`, `T0`, `T1`, `TDIESEL`, `TELECTRIC`) con offsets NFO
+distintos, pero si falta el PNG del grupo apunta al fallback Kirby
+(`vehicle_train_*.png`). Sin assets extraídos, **los cinco arrays enlazan al mismo
+archivo**.
+
+### Cómo funciona en OpenTTD
+
+Upstream: `GetDefaultTrainSprite(image_index, direction)` (`train_sprites.h`).
+Cada `image_index` (0–23 en vanilla) mapea a 8 sprites consecutivos (N…NW).
+OpenGFX templado usa rangos como 2905–2928 (Kirby y variantes de vapor),
+2949–2956 (diésel), 2965–2972 (eléctrico), etc.
+
+En openttdrs simplificamos a **5 grupos visuales** vía `train_sprite_group()` en
+`openttdrs-core/src/engine.rs` — suficiente para distinguir familias (vapor
+temprano/tardío, Kirby, diésel, eléctrico) sin exportar los ~24 conjuntos del GRF.
+
+### Tabla grupo → sprites OpenGFX → PNG
+
+| Grupo | `train_sprite_group` | Motor representativo | `image_index` | Sprites OpenGFX | PNG esperado |
+|-------|----------------------|----------------------|---------------|-----------------|--------------|
+| T0 | 0 | Chaney Jubilee | 0 | 2905–2912 | `vehicle_train_t0_{n,ne,…,nw}.png` |
+| T1 | 1 | Ginzu A4 | 1 | 2913–2920 | `vehicle_train_t1_*.png` |
+| Kirby | 2 | Kirby Paul Tank | 2 | 2921–2928 | `vehicle_train_*.png` |
+| Diésel | 3 | UU 37, Floss 47, … | 4–19, 22 | 2949–2956 | `vehicle_train_td_*.png` |
+| Eléctrico | 4 | AsiaStar | 20–23 | 2965–2972 | `vehicle_train_te_*.png` |
+
+Índice de capa = `Vehicle::render_direction()` (0..7 = N, NE, E, SE, S, SW, W, NW).
+
+### Paridad visual — trabajo pendiente
+
+Para que cada grupo se vea distinto como en OpenTTD:
+
+1. **Extraer PNG** desde OpenGFX (ya listados en `scripts/descargar_graficos.sh`,
+   bloque «Kirby Paul Tank» y siguientes):
+   ```bash
+   ./scripts/descargar_graficos.sh --8bpp   # o --32bpp según el modo del cliente
+   ```
+2. **Regenerar metadatos** (offsets `x_offs`/`y_offs` desde NFO):
+   ```bash
+   python3 scripts/gen_vehicle_gfx_data.py
+   ```
+   Salida: `crates/openttdrs-client/src/sprites/vehicle_gfx_data_generated.rs`
+   (no editar a mano).
+3. **Verificar** que el script no imprime `PNG ausentes (fallback Kirby)` y que
+   cada `TRAIN_VEHICLE_LAYERS_*` apunta a su prefijo (`t0_`, `t1_`, `td_`, `te_`).
+4. **Comprobar en juego:** comprar Chaney vs Kirby vs AsiaStar — sprites distintos
+   en mapa y en ventana de compra.
+
+**Costo estimado:** S (1–2 días) si solo se ejecutan scripts existentes; M si hace
+falta ampliar grupos (más `image_index` → más recortes) o soportar 32bpp con
+recolor por compañía.
+
+**Ampliación opcional:** un PNG por cada `image_index` distinto (como NewGRF) —
+requiere ampliar `GFX_SETS` en `gen_vehicle_gfx_data.py`, `train_layers_for` y
+`descargar_graficos.sh`; no está planificado en el MVP.
+
+### Archivos relacionados
+
+| Archivo | Rol |
+|---------|-----|
+| `openttdrs-core/src/engine.rs` | `train_image_index`, `train_sprite_group()` |
+| `openttdrs-client/src/render/vehicles.rs` | `train_layers_for()`, dibujo en mapa |
+| `openttdrs-client/src/sprites/vehicle_gfx_data_generated.rs` | Arrays `TRAIN_VEHICLE_LAYERS_*` |
+| `scripts/gen_vehicle_gfx_data.py` | Generador Rust desde PNG + NFO |
+| `scripts/descargar_graficos.sh` | Recorte `crop_by_id` de sprites 2905–2972 |
+
+Ver también [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) § limitaciones y
+[ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md) § 14.
+
+---
+
 ## Sprites de industrias — clima templado
 
 ### ⚠️ Error frecuente: identificar sprites por posición Y en la hoja

@@ -44,11 +44,43 @@ pub enum VehicleOrder {
         /// No descargar en esta parada (`OrderUnloadType::NoUnload`).
         #[serde(default)]
         no_unload: bool,
+        /// Espera mínima en parada con horario activo (ticks de sim).
+        #[serde(default)]
+        wait_ticks: u32,
+        /// Tiempo mínimo de viaje hasta esta orden (ticks desde la anterior).
+        #[serde(default)]
+        travel_ticks: u32,
     },
     Waypoint {
         waypoint: TileCoord,
+        #[serde(default)]
+        travel_ticks: u32,
+    },
+    /// Parada en depósito (`stop`: detener al llegar; `false` = pasar sin parar).
+    Depot {
+        depot: TileCoord,
+        #[serde(default = "default_depot_stop")]
+        stop: bool,
+        #[serde(default)]
+        wait_ticks: u32,
+        #[serde(default)]
+        travel_ticks: u32,
     },
     Tile(TileCoord),
+    /// Salta a `jump_to` si la condición se cumple al llegar a esta «orden».
+    Conditional {
+        condition: OrderConditionKind,
+        value: u8,
+        jump_to: usize,
+    },
+}
+
+/// Condición de orden condicional (MVP).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OrderConditionKind {
+    CargoLoadAbove,
+    CargoLoadBelow,
 }
 
 impl VehicleOrder {
@@ -56,8 +88,53 @@ impl VehicleOrder {
     pub const fn destination(self) -> TileCoord {
         match self {
             Self::Station { station, .. } => station,
-            Self::Waypoint { waypoint } => waypoint,
+            Self::Waypoint { waypoint, .. } => waypoint,
+            Self::Depot { depot, .. } => depot,
             Self::Tile(pos) => pos,
+            Self::Conditional { .. } => TileCoord::new(0, 0),
+        }
+    }
+
+    #[must_use]
+    pub const fn conditional(condition: OrderConditionKind, value: u8, jump_to: usize) -> Self {
+        Self::Conditional {
+            condition,
+            value,
+            jump_to,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_conditional(self) -> bool {
+        matches!(self, Self::Conditional { .. })
+    }
+
+    #[must_use]
+    pub fn evaluate_conditional(self, vehicle: &Vehicle) -> usize {
+        let Self::Conditional {
+            condition,
+            value,
+            jump_to,
+        } = self
+        else {
+            return vehicle.current_order;
+        };
+        let pct = if vehicle.capacity == 0 {
+            0
+        } else {
+            u8::try_from((u64::from(vehicle.cargo) * 100 / u64::from(vehicle.capacity)).min(100))
+                .unwrap_or(100)
+        };
+        let ok = match condition {
+            OrderConditionKind::CargoLoadAbove => pct > value,
+            OrderConditionKind::CargoLoadBelow => pct < value,
+        };
+        if ok {
+            jump_to
+        } else if vehicle.orders.is_empty() {
+            0
+        } else {
+            (vehicle.current_order + 1) % vehicle.orders.len()
         }
     }
 
@@ -67,6 +144,8 @@ impl VehicleOrder {
             station,
             full_load: false,
             no_unload: false,
+            wait_ticks: 0,
+            travel_ticks: 0,
         }
     }
 
@@ -76,12 +155,37 @@ impl VehicleOrder {
             station,
             full_load,
             no_unload,
+            wait_ticks: 0,
+            travel_ticks: 0,
         }
     }
 
     #[must_use]
     pub const fn waypoint(waypoint: TileCoord) -> Self {
-        Self::Waypoint { waypoint }
+        Self::Waypoint {
+            waypoint,
+            travel_ticks: 0,
+        }
+    }
+
+    #[must_use]
+    pub const fn depot(depot: TileCoord) -> Self {
+        Self::Depot {
+            depot,
+            stop: true,
+            wait_ticks: 0,
+            travel_ticks: 0,
+        }
+    }
+
+    #[must_use]
+    pub const fn depot_pass_through(depot: TileCoord) -> Self {
+        Self::Depot {
+            depot,
+            stop: false,
+            wait_ticks: 0,
+            travel_ticks: 0,
+        }
     }
 
     #[must_use]
@@ -90,8 +194,21 @@ impl VehicleOrder {
     }
 
     #[must_use]
+    pub const fn is_depot(self) -> bool {
+        matches!(self, Self::Depot { .. })
+    }
+
+    #[must_use]
+    pub const fn depot_stops(self) -> bool {
+        matches!(self, Self::Depot { stop: true, .. })
+    }
+
+    #[must_use]
     pub const fn is_pass_through(self) -> bool {
-        matches!(self, Self::Waypoint { .. })
+        matches!(
+            self,
+            Self::Waypoint { .. } | Self::Depot { stop: false, .. }
+        )
     }
 
     #[must_use]
@@ -115,6 +232,245 @@ impl VehicleOrder {
             }
         )
     }
+
+    /// Alterna «carga completa» en una parada de estación.
+    #[must_use]
+    pub fn with_toggled_full_load(self) -> Option<Self> {
+        match self {
+            Self::Station {
+                station,
+                full_load,
+                no_unload,
+                wait_ticks,
+                travel_ticks,
+            } => Some(Self::Station {
+                station,
+                full_load: !full_load,
+                no_unload,
+                wait_ticks,
+                travel_ticks,
+            }),
+            _ => None,
+        }
+    }
+
+    /// Alterna «no descargar» en una parada de estación.
+    #[must_use]
+    pub fn with_toggled_no_unload(self) -> Option<Self> {
+        match self {
+            Self::Station {
+                station,
+                full_load,
+                no_unload,
+                wait_ticks,
+                travel_ticks,
+            } => Some(Self::Station {
+                station,
+                full_load,
+                no_unload: !no_unload,
+                wait_ticks,
+                travel_ticks,
+            }),
+            _ => None,
+        }
+    }
+
+    /// Alterna «parar en depósito» en una orden de depósito.
+    #[must_use]
+    pub fn with_toggled_depot_stop(self) -> Option<Self> {
+        match self {
+            Self::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks,
+            } => Some(Self::Depot {
+                depot,
+                stop: !stop,
+                wait_ticks,
+                travel_ticks,
+            }),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn wait_ticks(self) -> u32 {
+        match self {
+            Self::Station { wait_ticks, .. } | Self::Depot { wait_ticks, .. } => wait_ticks,
+            _ => 0,
+        }
+    }
+
+    #[must_use]
+    pub const fn travel_ticks(self) -> u32 {
+        match self {
+            Self::Station { travel_ticks, .. }
+            | Self::Waypoint { travel_ticks, .. }
+            | Self::Depot { travel_ticks, .. } => travel_ticks,
+            Self::Tile(_) | Self::Conditional { .. } => 0,
+        }
+    }
+
+    #[must_use]
+    pub fn with_cycled_wait(self) -> Option<Self> {
+        use crate::timetable::cycle_wait_ticks;
+        match self {
+            Self::Station {
+                station,
+                full_load,
+                no_unload,
+                wait_ticks,
+                travel_ticks,
+            } => Some(Self::Station {
+                station,
+                full_load,
+                no_unload,
+                wait_ticks: cycle_wait_ticks(wait_ticks),
+                travel_ticks,
+            }),
+            Self::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks,
+            } => Some(Self::Depot {
+                depot,
+                stop,
+                wait_ticks: cycle_wait_ticks(wait_ticks),
+                travel_ticks,
+            }),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_cycled_travel(self) -> Self {
+        use crate::timetable::cycle_travel_ticks;
+        match self {
+            Self::Station {
+                station,
+                full_load,
+                no_unload,
+                wait_ticks,
+                travel_ticks,
+            } => Self::Station {
+                station,
+                full_load,
+                no_unload,
+                wait_ticks,
+                travel_ticks: cycle_travel_ticks(travel_ticks),
+            },
+            Self::Waypoint {
+                waypoint,
+                travel_ticks,
+            } => Self::Waypoint {
+                waypoint,
+                travel_ticks: cycle_travel_ticks(travel_ticks),
+            },
+            Self::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks,
+            } => Self::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks: cycle_travel_ticks(travel_ticks),
+            },
+            Self::Tile(t) => Self::Tile(t),
+            Self::Conditional {
+                condition,
+                value,
+                jump_to,
+            } => Self::Conditional {
+                condition,
+                value,
+                jump_to,
+            },
+        }
+    }
+
+    #[must_use]
+    pub fn with_wait_ticks(self, wait_ticks: u32) -> Option<Self> {
+        match self {
+            Self::Station {
+                station,
+                full_load,
+                no_unload,
+                travel_ticks,
+                ..
+            } => Some(Self::Station {
+                station,
+                full_load,
+                no_unload,
+                wait_ticks,
+                travel_ticks,
+            }),
+            Self::Depot {
+                depot,
+                stop,
+                travel_ticks,
+                ..
+            } => Some(Self::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks,
+            }),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_travel_ticks(self, travel_ticks: u32) -> Self {
+        match self {
+            Self::Station {
+                station,
+                full_load,
+                no_unload,
+                wait_ticks,
+                ..
+            } => Self::Station {
+                station,
+                full_load,
+                no_unload,
+                wait_ticks,
+                travel_ticks,
+            },
+            Self::Waypoint { waypoint, .. } => Self::Waypoint {
+                waypoint,
+                travel_ticks,
+            },
+            Self::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                ..
+            } => Self::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks,
+            },
+            other => other,
+        }
+    }
+}
+
+/// Nombre personalizado del jugador (`OpenTTD` `MAX_LENGTH_VEHICLE_NAME_CHARS` = 32).
+pub const MAX_VEHICLE_NAME_CHARS: usize = 32;
+
+/// Motivo de una espera de horario en curso.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum TimetableWaitKind {
+    #[default]
+    None,
+    AfterArrival,
+    AfterUnload,
+    AfterLoad,
+    TravelEarly,
 }
 
 /// Vehículo que avanza sub-tile (`progress` 0–255) siguiendo un camino BFS.
@@ -124,6 +480,7 @@ impl VehicleOrder {
 /// Con órdenes activas, si no hay ruta por red (`no_network_route_to_order`) el vehículo no avanza.
 /// Los trenes nunca usan el fallback Manhattan: sin ruta por vía no se mueven.
 /// Al llegar invierte el trayecto (va y vuelve entre `origin` y `dest`).
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Vehicle {
     pub id: u32,
@@ -147,6 +504,9 @@ pub struct Vehicle {
     /// Motor `OpenGFX` (`None` en saves antiguos → default por [`VehicleKind`]).
     #[serde(default)]
     pub engine_id: Option<u16>,
+    /// Nombre personalizado; si falta, la UI usa modelo + id.
+    #[serde(default)]
+    pub name: Option<String>,
     /// Velocidad actual (unidades `OpenTTD`; 0 = parado).
     #[serde(default)]
     pub cur_speed: u16,
@@ -172,6 +532,50 @@ pub struct Vehicle {
     /// Giro de salida en la tesela actual (0 = inactivo; 1..=255 anima el cambio de sentido).
     #[serde(default)]
     pub depart_turn: u8,
+    /// Ignorar señal roja en el próximo paso de simulación (trenes).
+    #[serde(default)]
+    pub force_proceed: bool,
+    /// Horario activo para este vehículo.
+    #[serde(default)]
+    pub timetable_active: bool,
+    /// Ticks restantes de espera en la parada actual.
+    #[serde(default)]
+    pub timetable_wait_remaining: u32,
+    #[serde(default)]
+    pub timetable_wait_kind: TimetableWaitKind,
+    /// Tick de simulación al salir de la orden anterior (viaje mínimo).
+    #[serde(default)]
+    pub timetable_leg_start_tick: u64,
+    /// Autoreemplazo ya intentado en esta parada en depósito.
+    #[serde(default)]
+    pub autoreplace_attempted_this_stop: bool,
+    /// Tick de simulación en que se compró el vehículo.
+    #[serde(default)]
+    pub build_tick: u64,
+    /// Grupo de flota opcional.
+    #[serde(default)]
+    pub group_id: Option<u32>,
+    /// Pool de órdenes compartidas enlazado.
+    #[serde(default)]
+    pub shared_order_id: Option<u32>,
+    /// Retraso acumulado del horario (ticks; positivo = tarde).
+    #[serde(default)]
+    pub timetable_lateness: i32,
+    /// Autofill: medir ciclos y rellenar tiempos.
+    #[serde(default)]
+    pub timetable_autofill: bool,
+    /// Muestras de autofill por índice de orden `(wait, travel)`.
+    #[serde(default)]
+    pub timetable_autofill_samples: Vec<(u32, u32)>,
+    /// Orden visual en ventana de depósito.
+    #[serde(default)]
+    pub depot_display_slot: Option<u8>,
+    /// Modo de visualización del horario (persistido por partida).
+    #[serde(default)]
+    pub timetable_display_seconds: bool,
+    /// Tick actual (efímero; no se guarda).
+    #[serde(skip, default)]
+    pub(crate) sim_tick: u64,
 }
 
 impl Vehicle {
@@ -195,6 +599,7 @@ impl Vehicle {
             progress: 0,
             direction: DIR_NE,
             engine_id: Some(engine_id),
+            name: None,
             cur_speed: 0,
             subspeed: 0,
             path: VecDeque::new(),
@@ -204,7 +609,77 @@ impl Vehicle {
             cargo_source: None,
             cargo_transit_ticks: 0,
             depart_turn: 0,
+            force_proceed: false,
+            timetable_active: false,
+            timetable_wait_remaining: 0,
+            timetable_wait_kind: TimetableWaitKind::None,
+            timetable_leg_start_tick: 0,
+            autoreplace_attempted_this_stop: false,
+            build_tick: 0,
+            group_id: None,
+            shared_order_id: None,
+            timetable_lateness: 0,
+            timetable_autofill: false,
+            timetable_autofill_samples: Vec::new(),
+            depot_display_slot: None,
+            timetable_display_seconds: false,
+            sim_tick: 0,
         }
+    }
+
+    /// Edad del vehículo en años de calendario aproximados.
+    #[must_use]
+    pub fn vehicle_age_years(&self, current_tick: u64) -> u32 {
+        let age_ticks = current_tick.saturating_sub(self.build_tick);
+        u32::try_from(age_ticks / crate::economy::TICKS_PER_YEAR).unwrap_or(u32::MAX)
+    }
+
+    /// Umbral simplificado: últimos ~20 % de vida útil (25 años).
+    #[must_use]
+    pub fn needs_autorenewing(&self, current_tick: u64) -> bool {
+        self.vehicle_age_years(current_tick) >= 20
+    }
+
+    pub(crate) fn resolve_conditional_orders(&mut self) {
+        const MAX_STEPS: usize = 64;
+        for _ in 0..MAX_STEPS {
+            let Some(order) = self.orders.get(self.current_order).copied() else {
+                break;
+            };
+            if !order.is_conditional() {
+                break;
+            }
+            self.current_order = order.evaluate_conditional(self);
+            self.path.clear();
+            self.progress = 0;
+        }
+    }
+
+    fn record_timetable_autofill_sample(&mut self, wait: u32, travel: u32) {
+        if !self.timetable_autofill {
+            return;
+        }
+        let idx = self.current_order;
+        if self.timetable_autofill_samples.len() <= idx {
+            self.timetable_autofill_samples.resize(idx + 1, (0, 0));
+        }
+        let (w, t) = &mut self.timetable_autofill_samples[idx];
+        *w = u32::midpoint(*w, wait);
+        *t = u32::midpoint(*t, travel);
+        if let Some(order) = self.orders.get_mut(idx) {
+            *order = order.with_travel_ticks(*t);
+            if let Some(updated) = order.with_wait_ticks(*w) {
+                *order = updated;
+            }
+        }
+    }
+
+    fn update_timetable_lateness_on_wait_end(&mut self, planned_wait: u32) {
+        if !self.timetable_active {
+            return;
+        }
+        let delta = i32::try_from(planned_wait).unwrap_or(i32::MAX);
+        self.timetable_lateness = self.timetable_lateness.saturating_sub(delta);
     }
 
     pub(crate) fn mark_cargo_loaded(&mut self, at: TileCoord) {
@@ -229,6 +704,30 @@ impl Vehicle {
             self.engine_id
                 .unwrap_or_else(|| default_engine_id(self.kind)),
         )
+    }
+
+    /// Etiqueta para UI: nombre personalizado o «modelo #id».
+    #[must_use]
+    pub fn display_name(&self) -> String {
+        if let Some(name) = &self.name {
+            let trimmed = name.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+        format!("{} #{}", self.effective_engine().name, self.id)
+    }
+
+    /// Añade una orden al final sin reiniciar `current_order` (salvo lista vacía).
+    pub fn append_order(&mut self, order: VehicleOrder, map: &crate::map::Map) {
+        let was_empty = self.orders.is_empty();
+        self.orders.push(order);
+        if was_empty {
+            self.current_order = 0;
+            self.path.clear();
+            self.no_network_route_to_order = false;
+            self.sync_order_destination(map);
+        }
     }
 
     #[must_use]
@@ -341,6 +840,13 @@ impl Vehicle {
         if !self.running {
             self.update_movement_speed();
             self.progress = 0;
+            return;
+        }
+
+        self.resolve_conditional_orders();
+
+        if self.holding_for_timetable() {
+            self.update_movement_speed();
             return;
         }
 
@@ -492,32 +998,50 @@ impl Vehicle {
             self.progress = 0;
             return;
         }
+        let early = self.travel_early_wait_ticks();
+        if early > 0 {
+            self.timetable_wait_remaining = early.max(1);
+            self.timetable_wait_kind = TimetableWaitKind::TravelEarly;
+            self.progress = 255;
+            return;
+        }
+        self.finish_arrival_processing();
+    }
+
+    fn finish_arrival_processing(&mut self) {
         if self.cargo > 0
             && !self
                 .orders
                 .get(self.current_order)
                 .is_some_and(|o| o.no_unload())
         {
-            // Esperar a descargar en la parada actual antes de pasar a la siguiente orden.
             self.progress = 255;
             return;
         }
         let pass_through = self.orders[self.current_order].is_pass_through();
+        if self.orders[self.current_order].depot_stops() {
+            self.running = false;
+            self.progress = 255;
+            return;
+        }
         if self.orders[self.current_order].full_load() && self.cargo < self.capacity {
             self.progress = 255;
             return;
         }
-        // Anclado al final del carril de entrada (evita salto visual al llegar a parada/estación).
+        if self.schedule_timetable_wait(TimetableWaitKind::AfterArrival) {
+            self.progress = 255;
+            return;
+        }
+        self.do_advance_after_arrival(pass_through);
+    }
+
+    fn do_advance_after_arrival(&mut self, pass_through: bool) {
         if pass_through {
             self.progress = 0;
         } else {
             self.progress = 255;
         }
-        self.current_order = (self.current_order + 1) % self.orders.len();
-        self.origin = self.pos;
-        if self.kind != VehicleKind::Train {
-            self.dest = self.orders[self.current_order].destination();
-        }
+        self.advance_to_next_order();
     }
 
     /// Tras descargar en la parada actual, pasar a la siguiente orden antes de la fase de carga.
@@ -525,14 +1049,18 @@ impl Vehicle {
         if self.orders.is_empty() {
             return;
         }
+        if self.schedule_timetable_wait(TimetableWaitKind::AfterUnload) {
+            self.progress = 255;
+            return;
+        }
+        self.do_advance_after_unloading();
+    }
+
+    fn do_advance_after_unloading(&mut self) {
         self.path.clear();
         self.depart_turn = 0;
         self.progress = 255;
-        self.current_order = (self.current_order + 1) % self.orders.len();
-        self.origin = self.pos;
-        if self.kind != VehicleKind::Train {
-            self.dest = self.orders[self.current_order].destination();
-        }
+        self.advance_to_next_order();
     }
 
     /// Tras cargar en la parada actual, pasar a la siguiente orden aunque haya carga a bordo.
@@ -543,22 +1071,123 @@ impl Vehicle {
         if self.orders[self.current_order].full_load() && self.cargo < self.capacity {
             return;
         }
+        if self.schedule_timetable_wait(TimetableWaitKind::AfterLoad) {
+            self.progress = 255;
+            return;
+        }
+        self.do_advance_after_loading();
+    }
+
+    fn do_advance_after_loading(&mut self) {
         self.path.clear();
         self.depart_turn = 0;
         self.progress = 255;
+        self.advance_to_next_order();
+    }
+
+    fn advance_to_next_order(&mut self) {
+        if self.orders.is_empty() {
+            return;
+        }
         self.current_order = (self.current_order + 1) % self.orders.len();
         self.origin = self.pos;
+        self.timetable_leg_start_tick = self.sim_tick;
         if self.kind != VehicleKind::Train {
             self.dest = self.orders[self.current_order].destination();
         }
     }
 
+    fn holding_for_timetable(&self) -> bool {
+        self.timetable_active && self.timetable_wait_remaining > 0
+    }
+
+    fn schedule_timetable_wait(&mut self, kind: TimetableWaitKind) -> bool {
+        if !self.timetable_active {
+            return false;
+        }
+        let wait = self
+            .orders
+            .get(self.current_order)
+            .map_or(0, |o| o.wait_ticks());
+        if wait == 0 {
+            return false;
+        }
+        self.timetable_wait_remaining = wait;
+        self.timetable_wait_kind = kind;
+        true
+    }
+
+    fn travel_early_wait_ticks(&self) -> u32 {
+        if !self.timetable_active {
+            return 0;
+        }
+        let travel = self
+            .orders
+            .get(self.current_order)
+            .map_or(0, |o| o.travel_ticks());
+        if travel == 0 || self.timetable_leg_start_tick == 0 {
+            return 0;
+        }
+        let elapsed = self.sim_tick.saturating_sub(self.timetable_leg_start_tick);
+        if elapsed >= u64::from(travel) {
+            return 0;
+        }
+        u32::try_from(u64::from(travel).saturating_sub(elapsed)).unwrap_or(1)
+    }
+
+    pub(crate) fn complete_timetable_wait(&mut self) {
+        let kind = self.timetable_wait_kind;
+        let planned = self
+            .orders
+            .get(self.current_order)
+            .map_or(0, |o| o.wait_ticks());
+        self.timetable_wait_kind = TimetableWaitKind::None;
+        if kind != TimetableWaitKind::None && planned > 0 {
+            self.update_timetable_lateness_on_wait_end(planned);
+            let travel = self
+                .orders
+                .get(self.current_order)
+                .map_or(0, |o| o.travel_ticks());
+            self.record_timetable_autofill_sample(planned, travel);
+        }
+        match kind {
+            TimetableWaitKind::None => {}
+            TimetableWaitKind::TravelEarly => {
+                if self.timetable_active {
+                    self.timetable_lateness = self.timetable_lateness.saturating_add(1);
+                }
+                self.finish_arrival_processing();
+            }
+            TimetableWaitKind::AfterArrival => {
+                let pass_through = self.orders[self.current_order].is_pass_through();
+                self.do_advance_after_arrival(pass_through);
+            }
+            TimetableWaitKind::AfterUnload => self.do_advance_after_unloading(),
+            TimetableWaitKind::AfterLoad => self.do_advance_after_loading(),
+        }
+        self.resolve_conditional_orders();
+    }
+
+    pub(crate) fn tick_timetable_wait(&mut self) {
+        if self.timetable_wait_remaining == 0 {
+            return;
+        }
+        self.timetable_wait_remaining = self.timetable_wait_remaining.saturating_sub(1);
+        if self.timetable_wait_remaining == 0 {
+            self.complete_timetable_wait();
+        }
+    }
+
     /// Actualiza `dest` según la orden actual (vía adyacente para estaciones de tren).
     pub fn sync_order_destination(&mut self, map: &crate::map::Map) {
+        self.resolve_conditional_orders();
         if self.orders.is_empty() {
             return;
         }
         let order = self.orders[self.current_order];
+        if order.is_conditional() {
+            return;
+        }
         self.dest = crate::station::resolve_order_destination(map, self.kind, order);
     }
 
@@ -603,6 +1232,10 @@ impl Vehicle {
 #[must_use]
 pub const fn reverse_direction(d: VehicleDirection) -> VehicleDirection {
     (d + 4) % 8
+}
+
+const fn default_depot_stop() -> bool {
+    true
 }
 
 const fn default_running_true() -> bool {
@@ -865,5 +1498,25 @@ mod tests {
             v.step();
         }
         assert_eq!(v.direction, DIR_SW);
+    }
+
+    #[test]
+    fn timetable_wait_delays_order_advance() {
+        let pos = TileCoord::new(1, 1);
+        let mut v = Vehicle::new(1, VehicleKind::Bus, pos, pos);
+        v.timetable_active = true;
+        let wait_order = VehicleOrder::station(pos).with_cycled_wait().unwrap();
+        v.orders = vec![wait_order, VehicleOrder::station(TileCoord::new(3, 3))];
+        assert_eq!(v.orders[0].wait_ticks(), 30);
+        v.running = true;
+        v.progress = 255;
+        v.sim_tick = 100;
+        v.step();
+        assert_eq!(v.timetable_wait_remaining, 30);
+        assert_eq!(v.current_order, 0);
+        for _ in 0..30 {
+            v.tick_timetable_wait();
+        }
+        assert_eq!(v.current_order, 1);
     }
 }

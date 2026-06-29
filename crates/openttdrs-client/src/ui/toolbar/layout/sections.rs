@@ -397,6 +397,56 @@ pub(super) fn spawn_secondary_tool_panels(
                             "assets/opengfx/tiles/industry_2190.png",
                             BuildMenuAction::BuildFarm,
                         ),
+                        (
+                            "Algodón de azúcar",
+                            "assets/opengfx/tiles/industry_2100.png",
+                            BuildMenuAction::BuildCottonCandy,
+                        ),
+                        (
+                            "Fábrica de caramelos",
+                            "assets/opengfx/tiles/industry_2111.png",
+                            BuildMenuAction::BuildCandyFactory,
+                        ),
+                        (
+                            "Granja de baterías",
+                            "assets/opengfx/tiles/industry_2130.png",
+                            BuildMenuAction::BuildBatteryFarm,
+                        ),
+                        (
+                            "Pozo de cola",
+                            "assets/opengfx/tiles/industry_2132.png",
+                            BuildMenuAction::BuildColaWells,
+                        ),
+                        (
+                            "Fábrica de juguetes",
+                            "assets/opengfx/tiles/industry_2150.png",
+                            BuildMenuAction::BuildToyFactory,
+                        ),
+                        (
+                            "Fuente de plástico",
+                            "assets/opengfx/tiles/industry_2151.png",
+                            BuildMenuAction::BuildPlasticFountain,
+                        ),
+                        (
+                            "Fábrica de bebidas gaseosas",
+                            "assets/opengfx/tiles/industry_2139.png",
+                            BuildMenuAction::BuildFizzyDrinkFactory,
+                        ),
+                        (
+                            "Generador de burbujas",
+                            "assets/opengfx/tiles/industry_2128.png",
+                            BuildMenuAction::BuildBubbleGenerator,
+                        ),
+                        (
+                            "Cantera de toffee",
+                            "assets/opengfx/tiles/industry_2180.png",
+                            BuildMenuAction::BuildToffeeQuarry,
+                        ),
+                        (
+                            "Mina de azúcar",
+                            "assets/opengfx/tiles/industry_2201.png",
+                            BuildMenuAction::BuildSugarMine,
+                        ),
                     ],
                 ),
                 ToolbarGroup::Landscape => spawn_icon_tool_buttons(

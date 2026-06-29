@@ -188,7 +188,14 @@ pub(crate) fn apply_drag_action(
         };
     }
 
-    if let Some(cmd) = command_for_line_action(action, &tiles) {
+    if matches!(
+        action,
+        BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge
+    ) {
+        return (false, None);
+    }
+
+    if let Some(cmd) = command_for_line_action(action, &tiles, openttdrs_core::BridgeType::Wooden) {
         return match apply_command(&mut sim.state, &cmd) {
             Ok(()) => (true, None),
             Err(e) => (false, Some(e)),

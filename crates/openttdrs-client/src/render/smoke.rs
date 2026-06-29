@@ -9,7 +9,9 @@ use bevy::prelude::*;
 use crate::bevy_app::UpdateSet;
 use crate::iso::{overlay_pos, remap_tile_offset, wang_hash};
 use crate::render::{AtlasSprite, MapVisualLayer, TileRenderContext, WorldAssets};
-use crate::sprites::{CHIMNEY_SMOKE_FRAMES, CHIMNEY_SMOKE_META};
+use crate::sprites::{
+    CHIMNEY_SMOKE_FRAMES, CHIMNEY_SMOKE_META, COPPER_MINE_SMOKE_FRAMES, COPPER_MINE_SMOKE_META,
+};
 use crate::state::ClientScreen;
 
 pub(crate) struct IndustrySmokePlugin;
@@ -18,25 +20,38 @@ impl Plugin for IndustrySmokePlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            animate_chimney_smoke
+            (animate_chimney_smoke, animate_copper_mine_smoke)
                 .in_set(UpdateSet::Visuals)
                 .run_if(in_state(ClientScreen::InGame)),
         );
     }
 }
 
+/// `GetIndustryGfx` de la chimenea de mina de cobre (`industry_map.h`).
+pub(crate) const GFX_COPPER_MINE_CHIMNEY: u16 = 49;
+
 /// `GetIndustryGfx` de la tesela de chimenea de la central (`industry_map.h`).
 pub(crate) const GFX_POWERPLANT_CHIMNEY: u16 = 8;
 
-/// Duración de cada frame (8 ticks de juego de ~27 ms).
+/// Duración de cada frame del penacho de central (8 ticks de juego de ~27 ms).
 const SMOKE_FRAME_SECS: f32 = 0.22;
+
+/// Humo mina cobre: sprite cada ~16 ticks (`SmokeTick`, `progress & 0xF == 4`).
+const COPPER_SMOKE_FRAME_SECS: f32 = 0.43;
+
+/// Ascenso por frame (~4 ticks entre pasos de `z_pos`).
+const COPPER_SMOKE_RISE: f32 = 1.5;
 
 /// Capa por encima del edificio de la industria (overlays usan 0.4/0.5).
 const SMOKE_LAYER_FRAC: f32 = 0.55;
 
-/// Frames del humo (`chimney_smoke_{i}.png`), insertado con la capa de mundo.
+/// Frames del humo de chimenea (`chimney_smoke_{i}.png`).
 #[derive(Resource)]
 pub(crate) struct ChimneySmokeFrames(pub(crate) Vec<AtlasSprite>);
+
+/// Frames del humo de mina de cobre (`mine_smoke_{i}.png`).
+#[derive(Resource)]
+pub(crate) struct CopperMineSmokeFrames(pub(crate) Vec<AtlasSprite>);
 
 /// Penacho anclado a una chimenea; recalcula posición por frame (los NFO
 /// offsets de cada sprite difieren unos píxeles).
@@ -84,6 +99,51 @@ pub(crate) fn spawn_chimney_smoke(
     ));
 }
 
+/// Penacho de mina de cobre; ciclo `SPR_SMOKE_0..4` con ligero ascenso.
+#[derive(Component)]
+pub(crate) struct CopperMineSmoke {
+    anchor: Vec2,
+    base_z: u8,
+    tile: (i32, i32),
+    phase: usize,
+}
+
+/// Crea humo para tesela `GFX_COPPER_MINE_CHIMNEY` terminada.
+pub(crate) fn spawn_copper_mine_smoke(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+) {
+    let phase = wang_hash(ctx.tx, ctx.ty, 0xC0FF) as usize % COPPER_MINE_SMOKE_FRAMES;
+    // `CreateEffectVehicleAbove`: (+6, +6, z=43).
+    let off = remap_tile_offset(6.0, 6.0, 43.0) * 0.5;
+    let anchor = Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y);
+    let (w, h, xrel, yrel) = COPPER_MINE_SMOKE_META[phase];
+    let pos3 = overlay_pos(
+        anchor,
+        xrel,
+        yrel,
+        w,
+        h,
+        ctx.info.base_z,
+        SMOKE_LAYER_FRAC,
+        ctx.tx_i32(),
+        ctx.ty_i32(),
+    );
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        CopperMineSmoke {
+            anchor,
+            base_z: ctx.info.base_z,
+            tile: (ctx.tx_i32(), ctx.ty_i32()),
+            phase,
+        },
+        assets.copper_mine_smoke[phase].sprite(),
+        Transform::from_translation(pos3),
+    ));
+}
+
 /// Frame global del penacho para `elapsed_secs` y fase inicial (puro, testeable).
 #[must_use]
 pub(crate) fn smoke_frame_index(elapsed_secs: f32, phase: usize) -> usize {
@@ -116,6 +176,43 @@ pub(crate) fn animate_chimney_smoke(
             smoke.tile.0,
             smoke.tile.1,
         );
+    }
+}
+
+#[must_use]
+pub(crate) fn copper_smoke_frame_index(elapsed_secs: f32, phase: usize) -> usize {
+    ((elapsed_secs / COPPER_SMOKE_FRAME_SECS) as usize + phase) % COPPER_MINE_SMOKE_FRAMES
+}
+
+pub(crate) fn animate_copper_mine_smoke(
+    time: Res<Time>,
+    frames: Option<Res<CopperMineSmokeFrames>>,
+    mut q: Query<(&CopperMineSmoke, &mut Sprite, &mut Transform)>,
+) {
+    let Some(frames) = frames else {
+        return;
+    };
+    let elapsed = time.elapsed_secs();
+    for (smoke, mut sprite, mut transform) in &mut q {
+        let idx = copper_smoke_frame_index(elapsed, smoke.phase);
+        if !frames.0[idx].matches(&sprite) {
+            frames.0[idx].apply_to(&mut sprite);
+        }
+        let (w, h, xrel, yrel) = COPPER_MINE_SMOKE_META[idx];
+        let rise = idx as f32 * COPPER_SMOKE_RISE;
+        let mut pos3 = overlay_pos(
+            smoke.anchor,
+            xrel,
+            yrel - rise,
+            w,
+            h,
+            smoke.base_z,
+            SMOKE_LAYER_FRAC,
+            smoke.tile.0,
+            smoke.tile.1,
+        );
+        pos3.z += rise * 0.01;
+        transform.translation = pos3;
     }
 }
 

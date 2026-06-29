@@ -19,7 +19,29 @@ pub(crate) fn industry_spec_for_action(action: BuildMenuAction) -> Option<Indust
         BuildMenuAction::BuildSawmill => Some(IndustrySpec::Sawmill),
         BuildMenuAction::BuildForest => Some(IndustrySpec::Forest),
         BuildMenuAction::BuildFarm => Some(IndustrySpec::Farm),
+        BuildMenuAction::BuildCottonCandy => Some(IndustrySpec::CottonCandy),
+        BuildMenuAction::BuildCandyFactory => Some(IndustrySpec::CandyFactory),
+        BuildMenuAction::BuildBatteryFarm => Some(IndustrySpec::BatteryFarm),
+        BuildMenuAction::BuildColaWells => Some(IndustrySpec::ColaWells),
+        BuildMenuAction::BuildToyFactory => Some(IndustrySpec::ToyFactory),
+        BuildMenuAction::BuildPlasticFountain => Some(IndustrySpec::PlasticFountain),
+        BuildMenuAction::BuildFizzyDrinkFactory => Some(IndustrySpec::FizzyDrinkFactory),
+        BuildMenuAction::BuildBubbleGenerator => Some(IndustrySpec::BubbleGenerator),
+        BuildMenuAction::BuildToffeeQuarry => Some(IndustrySpec::ToffeeQuarry),
+        BuildMenuAction::BuildSugarMine => Some(IndustrySpec::SugarMine),
         _ => None,
+    }
+}
+
+/// Herramientas de industria del panel Economía visibles según el clima del mapa.
+#[must_use]
+pub(crate) fn economy_industry_tool_visible(
+    action: BuildMenuAction,
+    climate: openttdrs_core::Climate,
+) -> bool {
+    match industry_spec_for_action(action) {
+        Some(spec) => spec.available_in(climate),
+        None => true,
     }
 }
 

@@ -115,7 +115,9 @@ fn vehicle_has_incompatible_stop(
             .find(|s| s.pos == *station)
             .is_some_and(|st| !st.can_service_vehicle(v.kind) || st.is_waypoint()),
         VehicleOrder::Waypoint { .. } => v.kind != openttdrs_core::VehicleKind::Train,
-        VehicleOrder::Tile(_) => false,
+        VehicleOrder::Depot { .. } | VehicleOrder::Tile(_) | VehicleOrder::Conditional { .. } => {
+            false
+        }
     }
 }
 

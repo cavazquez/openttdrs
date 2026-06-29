@@ -1,9 +1,12 @@
 use std::collections::{HashSet, VecDeque};
 
+use crate::GameState;
+use crate::depot::nearest_depot_tile;
 use crate::map::{Map, TileCoord, TileKind};
-use crate::{GameState, Vehicle, VehicleKind, VehicleOrder};
+use crate::vehicle::{MAX_VEHICLE_NAME_CHARS, Vehicle, VehicleKind, VehicleOrder};
 
 use super::transport::road_depot_exit_for_dir;
+use super::types::OrderMoveDirection;
 use super::{CommandError, in_bounds};
 
 pub(super) fn set_vehicle_order_list(
@@ -26,7 +29,7 @@ pub(super) fn set_vehicle_order_list(
                     return Err(CommandError::IncompatibleStopForVehicle);
                 }
             }
-            VehicleOrder::Waypoint { waypoint } => {
+            VehicleOrder::Waypoint { waypoint, .. } => {
                 if vehicle_kind != VehicleKind::Train {
                     return Err(CommandError::IncompatibleStopForVehicle);
                 }
@@ -37,7 +40,18 @@ pub(super) fn set_vehicle_order_list(
                     return Err(CommandError::IncompatibleStopForVehicle);
                 }
             }
-            VehicleOrder::Tile(_) => {}
+            VehicleOrder::Depot { depot, .. } => {
+                in_bounds(&state.map, *depot)?;
+                let kind = state.map.get_kind(*depot);
+                let ok = match vehicle_kind {
+                    VehicleKind::Train => kind == Some(TileKind::RailDepot),
+                    VehicleKind::Bus | VehicleKind::Truck => kind == Some(TileKind::RoadDepot),
+                };
+                if !ok {
+                    return Err(CommandError::InvalidDepotTile);
+                }
+            }
+            VehicleOrder::Tile(_) | VehicleOrder::Conditional { .. } => {}
         }
     }
     let vehicle = &mut state.vehicles[vehicle_idx];
@@ -123,6 +137,7 @@ pub(super) fn build_vehicle_at_depot(
     if engine.capacity > 0 {
         vehicle.capacity = engine.capacity;
     }
+    vehicle.build_tick = state.tick.get();
     state.vehicles.push(vehicle);
     state.economy.money -= engine.price;
     Ok(())
@@ -259,5 +274,432 @@ pub(super) fn clone_vehicle_orders(
     };
     let src_orders = state.vehicles[src_idx].orders.clone();
     state.vehicles[dst_idx].set_vehicle_orders(src_orders);
+    Ok(())
+}
+
+/// Compra una copia del vehículo origen (motor + órdenes) en el mismo depósito.
+pub(super) fn clone_vehicle_at_depot(
+    state: &mut GameState,
+    source_vehicle_id: u32,
+    depot_pos: TileCoord,
+) -> Result<(), CommandError> {
+    let (engine_id, orders) = {
+        let Some(source) = state.vehicles.iter().find(|v| v.id == source_vehicle_id) else {
+            return Err(CommandError::VehicleNotFound);
+        };
+        if source.pos != depot_pos {
+            return Err(CommandError::VehicleNotInDepot);
+        }
+        (
+            source
+                .engine_id
+                .unwrap_or_else(|| crate::engine::default_engine_id(source.kind)),
+            source.orders.clone(),
+        )
+    };
+    build_vehicle_at_depot(state, depot_pos, engine_id)?;
+    let Some(new_vehicle) = state.vehicles.last_mut() else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    new_vehicle.set_vehicle_orders(orders);
+    Ok(())
+}
+
+/// Vende todos los vehículos en la tesela de depósito.
+pub(super) fn sell_all_vehicles_at_depot(
+    state: &mut GameState,
+    depot_pos: TileCoord,
+) -> Result<(), CommandError> {
+    let ids: Vec<u32> = state
+        .vehicles
+        .iter()
+        .filter(|v| v.pos == depot_pos)
+        .map(|v| v.id)
+        .collect();
+    for id in ids {
+        sell_vehicle(state, id)?;
+    }
+    Ok(())
+}
+
+pub(super) fn refit_vehicle(
+    state: &mut GameState,
+    vehicle_id: u32,
+    cargo: crate::cargo::CargoType,
+) -> Result<(), CommandError> {
+    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    if vehicle.cargo > 0 {
+        return Err(CommandError::RefitNotAllowed);
+    }
+    if !crate::refit::vehicle_in_depot(&state.map, vehicle.pos) {
+        return Err(CommandError::RefitNotAllowed);
+    }
+    if !crate::refit::refittable_cargo_types(vehicle).contains(&cargo) {
+        return Err(CommandError::RefitNotAllowed);
+    }
+    vehicle.cargo_type = Some(cargo);
+    Ok(())
+}
+
+pub(super) fn remove_vehicle_order_at(
+    state: &mut GameState,
+    vehicle_id: u32,
+    index: usize,
+) -> Result<(), CommandError> {
+    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let vehicle = &mut state.vehicles[vehicle_idx];
+    if index >= vehicle.orders.len() {
+        return Err(CommandError::OrderIndexOutOfRange);
+    }
+    vehicle.orders.remove(index);
+    if vehicle.orders.is_empty() {
+        vehicle.current_order = 0;
+        vehicle.path.clear();
+        vehicle.no_network_route_to_order = false;
+        return Ok(());
+    }
+    if vehicle.current_order > index {
+        vehicle.current_order -= 1;
+    } else if vehicle.current_order == index {
+        vehicle.current_order = vehicle.current_order.min(vehicle.orders.len() - 1);
+    }
+    vehicle.path.clear();
+    vehicle.depart_turn = 0;
+    vehicle.no_network_route_to_order = false;
+    vehicle.sync_order_destination(&state.map);
+    Ok(())
+}
+
+pub(super) fn skip_vehicle_order(
+    state: &mut GameState,
+    vehicle_id: u32,
+) -> Result<(), CommandError> {
+    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let vehicle = &mut state.vehicles[vehicle_idx];
+    if vehicle.orders.is_empty() {
+        return Ok(());
+    }
+    vehicle.path.clear();
+    vehicle.depart_turn = 0;
+    vehicle.no_network_route_to_order = false;
+    vehicle.progress = 0;
+    vehicle.current_order = (vehicle.current_order + 1) % vehicle.orders.len();
+    vehicle.origin = vehicle.pos;
+    vehicle.sync_order_destination(&state.map);
+    Ok(())
+}
+
+pub(super) fn toggle_vehicle_order_full_load(
+    state: &mut GameState,
+    vehicle_id: u32,
+    index: usize,
+) -> Result<(), CommandError> {
+    toggle_vehicle_order_flag(
+        state,
+        vehicle_id,
+        index,
+        VehicleOrder::with_toggled_full_load,
+    )
+}
+
+pub(super) fn toggle_vehicle_order_no_unload(
+    state: &mut GameState,
+    vehicle_id: u32,
+    index: usize,
+) -> Result<(), CommandError> {
+    toggle_vehicle_order_flag(
+        state,
+        vehicle_id,
+        index,
+        VehicleOrder::with_toggled_no_unload,
+    )
+}
+
+fn toggle_vehicle_order_flag(
+    state: &mut GameState,
+    vehicle_id: u32,
+    index: usize,
+    toggle: impl FnOnce(VehicleOrder) -> Option<VehicleOrder>,
+) -> Result<(), CommandError> {
+    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let vehicle = &mut state.vehicles[vehicle_idx];
+    if index >= vehicle.orders.len() {
+        return Err(CommandError::OrderIndexOutOfRange);
+    }
+    let Some(updated) = toggle(vehicle.orders[index]) else {
+        return Err(CommandError::OrderFlagNotApplicable);
+    };
+    vehicle.orders[index] = updated;
+    if index == vehicle.current_order {
+        vehicle.sync_order_destination(&state.map);
+    }
+    Ok(())
+}
+
+pub(super) fn append_goto_nearest_depot(
+    state: &mut GameState,
+    vehicle_id: u32,
+) -> Result<(), CommandError> {
+    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let (kind, pos) = {
+        let v = &state.vehicles[vehicle_idx];
+        (v.kind, v.pos)
+    };
+    let Some(depot) = nearest_depot_tile(&state.map, pos, kind) else {
+        return Err(CommandError::DepotNotFound);
+    };
+    in_bounds(&state.map, depot)?;
+    let vehicle = &mut state.vehicles[vehicle_idx];
+    vehicle.append_order(VehicleOrder::depot(depot), &state.map);
+    Ok(())
+}
+
+pub(super) fn rename_vehicle(
+    state: &mut GameState,
+    vehicle_id: u32,
+    name: Option<String>,
+) -> Result<(), CommandError> {
+    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let normalized = name.and_then(|n| {
+        let trimmed = n.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+    if normalized
+        .as_ref()
+        .is_some_and(|n| n.chars().count() > MAX_VEHICLE_NAME_CHARS)
+    {
+        return Err(CommandError::VehicleNameTooLong);
+    }
+    vehicle.name = normalized;
+    Ok(())
+}
+
+pub(super) fn set_depot_vehicles_running(
+    state: &mut GameState,
+    depot_pos: TileCoord,
+    running: bool,
+) -> Result<(), CommandError> {
+    in_bounds(&state.map, depot_pos)?;
+    let kind = state.map.get_kind(depot_pos);
+    if !matches!(kind, Some(TileKind::RoadDepot | TileKind::RailDepot)) {
+        return Err(CommandError::InvalidDepotTile);
+    }
+    let ids: Vec<u32> = state
+        .vehicles
+        .iter()
+        .filter(|v| v.pos == depot_pos)
+        .map(|v| v.id)
+        .collect();
+    for id in ids {
+        if running && super::vehicle_fleet::can_start_vehicle_from_depot(state, id).is_err() {
+            continue;
+        }
+        let Some(idx) = state.vehicles.iter().position(|v| v.id == id) else {
+            continue;
+        };
+        let vehicle_pos = state.vehicles[idx].pos;
+        let was_at_dest = state.vehicles[idx].pos == state.vehicles[idx].dest;
+        if state.vehicles[idx].running != running {
+            state.vehicles[idx].running = running;
+            if running
+                && was_at_dest
+                && let Some(dest) = road_depot_exit_tile(state, vehicle_pos)
+                    .and_then(|exit| farthest_reachable_road_tile(&state.map, exit).or(Some(exit)))
+            {
+                state.vehicles[idx].dest = dest;
+                state.vehicles[idx].path.clear();
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn move_vehicle_order(
+    state: &mut GameState,
+    vehicle_id: u32,
+    index: usize,
+    direction: OrderMoveDirection,
+) -> Result<(), CommandError> {
+    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let vehicle = &mut state.vehicles[vehicle_idx];
+    if index >= vehicle.orders.len() {
+        return Err(CommandError::OrderIndexOutOfRange);
+    }
+    let other = match direction {
+        OrderMoveDirection::Up if index > 0 => index - 1,
+        OrderMoveDirection::Down if index + 1 < vehicle.orders.len() => index + 1,
+        _ => return Err(CommandError::OrderIndexOutOfRange),
+    };
+    vehicle.orders.swap(index, other);
+    if vehicle.current_order == index {
+        vehicle.current_order = other;
+    } else if vehicle.current_order == other {
+        vehicle.current_order = index;
+    }
+    Ok(())
+}
+
+pub(super) fn toggle_vehicle_order_depot_stop(
+    state: &mut GameState,
+    vehicle_id: u32,
+    index: usize,
+) -> Result<(), CommandError> {
+    toggle_vehicle_order_flag(
+        state,
+        vehicle_id,
+        index,
+        VehicleOrder::with_toggled_depot_stop,
+    )
+}
+
+pub(super) fn turn_around_vehicle(
+    state: &mut GameState,
+    vehicle_id: u32,
+) -> Result<(), CommandError> {
+    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    if vehicle.kind != VehicleKind::Train {
+        return Err(CommandError::VehicleKindNotAllowed);
+    }
+    vehicle.reverse_heading();
+    vehicle.path.clear();
+    vehicle.no_network_route_to_order = false;
+    vehicle.sync_order_destination(&state.map);
+    Ok(())
+}
+
+pub(super) fn force_vehicle_proceed(
+    state: &mut GameState,
+    vehicle_id: u32,
+) -> Result<(), CommandError> {
+    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    if vehicle.kind != VehicleKind::Train {
+        return Err(CommandError::VehicleKindNotAllowed);
+    }
+    vehicle.force_proceed = true;
+    Ok(())
+}
+
+pub(super) fn toggle_vehicle_timetable(
+    state: &mut GameState,
+    vehicle_id: u32,
+) -> Result<(), CommandError> {
+    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    vehicle.timetable_active = !vehicle.timetable_active;
+    if !vehicle.timetable_active {
+        vehicle.timetable_wait_remaining = 0;
+        vehicle.timetable_wait_kind = crate::vehicle::TimetableWaitKind::None;
+    }
+    Ok(())
+}
+
+pub(super) fn cycle_vehicle_order_wait(
+    state: &mut GameState,
+    vehicle_id: u32,
+    index: usize,
+) -> Result<(), CommandError> {
+    toggle_vehicle_order_flag(state, vehicle_id, index, VehicleOrder::with_cycled_wait)
+}
+
+pub(super) fn cycle_vehicle_order_travel(
+    state: &mut GameState,
+    vehicle_id: u32,
+    index: usize,
+) -> Result<(), CommandError> {
+    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+        return Err(CommandError::VehicleNotFound);
+    };
+    let vehicle = &mut state.vehicles[vehicle_idx];
+    if index >= vehicle.orders.len() {
+        return Err(CommandError::OrderIndexOutOfRange);
+    }
+    vehicle.orders[index] = vehicle.orders[index].with_cycled_travel();
+    Ok(())
+}
+
+pub(super) fn set_autoreplace_rule(
+    state: &mut GameState,
+    from_engine_id: u16,
+    to_engine_id: u16,
+) -> Result<(), CommandError> {
+    if from_engine_id == to_engine_id {
+        return Err(CommandError::AutoreplaceNotAllowed);
+    }
+    let Some(from) = crate::engine::engine_by_id(from_engine_id) else {
+        return Err(CommandError::EngineNotFound);
+    };
+    let Some(to) = crate::engine::engine_by_id(to_engine_id) else {
+        return Err(CommandError::EngineNotFound);
+    };
+    if from.kind != to.kind {
+        return Err(CommandError::AutoreplaceNotAllowed);
+    }
+    if let Some(rule) = state
+        .autoreplace_rules
+        .iter_mut()
+        .find(|r| r.from_engine_id == from_engine_id)
+    {
+        rule.to_engine_id = to_engine_id;
+        rule.enabled = true;
+    } else {
+        state
+            .autoreplace_rules
+            .push(crate::autoreplace::AutoReplaceRule::new(
+                from_engine_id,
+                to_engine_id,
+            ));
+    }
+    Ok(())
+}
+
+pub(super) fn clear_autoreplace_rule(
+    state: &mut GameState,
+    from_engine_id: u16,
+) -> Result<(), CommandError> {
+    let len_before = state.autoreplace_rules.len();
+    state
+        .autoreplace_rules
+        .retain(|r| r.from_engine_id != from_engine_id);
+    if state.autoreplace_rules.len() == len_before {
+        return Err(CommandError::AutoReplaceRuleNotFound);
+    }
+    Ok(())
+}
+
+pub(super) fn toggle_autoreplace_rule(
+    state: &mut GameState,
+    from_engine_id: u16,
+) -> Result<(), CommandError> {
+    let Some(rule) = state
+        .autoreplace_rules
+        .iter_mut()
+        .find(|r| r.from_engine_id == from_engine_id)
+    else {
+        return Err(CommandError::AutoReplaceRuleNotFound);
+    };
+    rule.enabled = !rule.enabled;
     Ok(())
 }

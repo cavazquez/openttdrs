@@ -67,6 +67,8 @@ pub(crate) enum BuildMenuAction {
     RailWaypoint,
     RailSignals,
     RailRemove,
+    /// Reservado para `CmdConvertRail`; oculto en toolbar hasta tener railtypes.
+    #[allow(dead_code)]
     RailConvert,
     Station,
     Clear,

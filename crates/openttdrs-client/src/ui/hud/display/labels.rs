@@ -21,7 +21,7 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::RailWaypoint => "Waypoint",
         BuildMenuAction::RailSignals => "Señales (RMB: dirección)",
         BuildMenuAction::RailRemove => "Quitar vía",
-        BuildMenuAction::RailConvert => "Convertir vía (n/d)",
+        BuildMenuAction::RailConvert => "Convertir vía (pendiente railtypes)",
         BuildMenuAction::Station => "Parada camión",
         BuildMenuAction::BusStop => "Parada bus",
         BuildMenuAction::Clear => "Demoler",

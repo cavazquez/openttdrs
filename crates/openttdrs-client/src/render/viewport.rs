@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use bevy::prelude::*;
 
-use crate::config::env_flag;
+use crate::config::{env_flag, env_u32_in_range};
 use crate::iso::world_to_tile;
 use crate::render::components::MAP_TILE_CHUNK_SIZE;
 
@@ -56,8 +56,11 @@ impl TileViewportBounds {
     }
 }
 
-/// Umbral: mapas con al menos este número de teselas usan culling por viewport.
-pub const LARGE_MAP_TILE_THRESHOLD: u32 = 4_096;
+/// Umbral por defecto: mapas con al menos este número de teselas usan culling por viewport.
+pub const LARGE_MAP_TILE_THRESHOLD: u32 = 1_024;
+
+/// Ancho visible inicial (teselas) cuando el culling está activo.
+const DEFAULT_VIEWPORT_SPAN_TILES: f32 = 64.0;
 
 /// Margen extra (teselas) alrededor del rectángulo visible (rombos isométricos).
 pub const VIEWPORT_MARGIN_TILES: u32 = 10;
@@ -65,22 +68,29 @@ pub const VIEWPORT_MARGIN_TILES: u32 = 10;
 /// Si la vista sale más de N teselas del bloque ya generado, se vuelve a generar sprites.
 pub const VIEWPORT_REBUILD_LEAD_TILES: u32 = 6;
 
-#[must_use]
-pub fn large_map_viewport_cull_enabled(mw: u32, mh: u32) -> bool {
-    mw.saturating_mul(mh) >= LARGE_MAP_TILE_THRESHOLD && !env_flag("OPENTTDRS_MAP_VIEWPORT_OFF")
+fn map_viewport_tile_threshold() -> u32 {
+    env_u32_in_range(
+        "OPENTTDRS_MAP_VIEWPORT_THRESHOLD",
+        LARGE_MAP_TILE_THRESHOLD,
+        256..=65_536,
+    )
 }
 
-/// Zoom ortográfico inicial: mapas cargados pequeños (p. ej. JSON 12×8) encuadran todo el mapa;
-/// `.ottdmap` grandes mantienen ~64 teselas visibles (culling por viewport).
 #[must_use]
-pub fn initial_camera_span_tiles(mw: u32, mh: u32, loaded_from_file: bool) -> f32 {
+pub fn large_map_viewport_cull_enabled(mw: u32, mh: u32) -> bool {
+    mw.saturating_mul(mh) >= map_viewport_tile_threshold()
+        && !env_flag("OPENTTDRS_MAP_VIEWPORT_OFF")
+}
+
+/// Zoom ortográfico inicial: mapas pequeños encuadran todo el mapa; mapas grandes
+/// mantienen ~64 teselas visibles (culling por viewport), cargados o partida nueva.
+#[must_use]
+pub fn initial_camera_span_tiles(mw: u32, mh: u32, _loaded_from_file: bool) -> f32 {
     let span = mw.max(mh).max(1) as f32;
-    if loaded_from_file && large_map_viewport_cull_enabled(mw, mh) {
-        64.0
-    } else if loaded_from_file {
-        span
+    if large_map_viewport_cull_enabled(mw, mh) {
+        DEFAULT_VIEWPORT_SPAN_TILES
     } else {
-        mw as f32
+        span
     }
 }
 
@@ -197,19 +207,22 @@ mod tests {
     }
 
     #[test]
-    fn initial_camera_span_small_loaded_map_fits_whole_map() {
+    fn initial_camera_span_small_map_fits_whole_map() {
         assert_eq!(initial_camera_span_tiles(12, 8, true), 12.0);
+        assert_eq!(initial_camera_span_tiles(12, 8, false), 12.0);
     }
 
     #[test]
-    fn initial_camera_span_large_loaded_map_uses_default_window() {
+    fn initial_camera_span_large_map_uses_viewport_window() {
         assert_eq!(initial_camera_span_tiles(256, 256, true), 64.0);
+        assert_eq!(initial_camera_span_tiles(256, 256, false), 64.0);
     }
 
     #[test]
-    fn large_map_threshold_at_256_squared() {
+    fn large_map_threshold_at_32_squared() {
+        assert!(large_map_viewport_cull_enabled(32, 32));
+        assert!(!large_map_viewport_cull_enabled(31, 31));
         assert!(large_map_viewport_cull_enabled(256, 256));
-        assert!(!large_map_viewport_cull_enabled(63, 63));
     }
 
     #[test]

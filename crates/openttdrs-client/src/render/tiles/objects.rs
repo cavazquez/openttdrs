@@ -54,18 +54,11 @@ pub(crate) fn spawn_station_tile(
 
     match class {
         StationTileClass::Rail | StationTileClass::RailWaypoint => {
-            if tileh != 0 {
-                spawn_ground_sprite(
-                    commands,
-                    &assets.grass_slopes[tileh as usize - 1],
-                    Color::WHITE,
-                    ctx,
-                    slope_half_ground,
-                );
-            } else {
+            if tileh == 0 {
                 let grass = sloped_or_flat_image(0, &assets.grass, &assets.grass_slopes);
                 spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
             }
+            // En pendiente el suelo ya se pintó arriba (evita hierba duplicada).
             let track_sid = rail_station_ground_track_sprite(m5, tileh);
             if let Some(img) = assets.rail.get(&track_sid) {
                 commands.spawn((

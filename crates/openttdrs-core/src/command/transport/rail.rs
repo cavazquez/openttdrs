@@ -529,7 +529,11 @@ pub(crate) fn check_place_rail_signal(
     if tb & track.track_bit() == 0 || crate::rail_signals::tracks_overlap(tb) {
         return Err(CommandError::CannotPlaceSignalOnTrack);
     }
-    let Some(placement) = crate::rail_signals::signal_placement_for_track(track, face) else {
+    let Some(placement) = crate::rail_signals::signal_placement_for_track(
+        track,
+        face,
+        crate::rail_signals::default_signal_variant(crate::news::CALENDAR_BASE_YEAR),
+    ) else {
         return Err(CommandError::CannotPlaceSignalOnTrack);
     };
     if rail_tile_is_signals(tile.m5) {
@@ -613,7 +617,9 @@ pub(in crate::command) fn place_rail_signal(
         .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
     let face = crate::rail_signals::signal_facing_for_orientation(track, orientation);
     check_place_rail_signal(&state.map, c, track, face)?;
-    let placement = crate::rail_signals::signal_placement_for_track(track, face)
+    let year = crate::rail_signals::calendar_year_at_tick(state.tick);
+    let variant = crate::rail_signals::default_signal_variant(year);
+    let placement = crate::rail_signals::signal_placement_for_track(track, face, variant)
         .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
     if rail_tile_is_signals(tile.m5) {
         let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
@@ -627,6 +633,7 @@ pub(in crate::command) fn place_rail_signal(
         let merged = present | (1 << placement.sig_bit);
         out.m3 = (out.m3 & 0x0F) | (merged << 4);
         out.m3hi = (out.m3hi & 0x0F) | (merged << 4);
+        out.m2 |= placement.m2;
     } else {
         out.m5 = tb | (RAIL_TILE_SIGNALS << 6);
         out.m2 = placement.m2;

@@ -240,6 +240,7 @@ pub(crate) fn update_build_ghost_preview(
                 tile_fract.0,
                 tile_fract.1,
                 valid,
+                sim.state.tick,
             );
         }
         return;

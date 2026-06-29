@@ -3,7 +3,9 @@
 use std::collections::HashSet;
 
 use crate::map::{Map, TileCoord, TileKind};
+use crate::news::{CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day};
 use crate::station::is_rail_waypoint_tile;
+use crate::tick::GameTick;
 
 /// Subtipo de tesela ferroviaria en bits 6–7 de `m5` (`RailTileType`).
 pub const RAIL_TILE_NORMAL: u8 = 0;
@@ -120,6 +122,21 @@ pub const SIGNAL_BUILD_COST: i64 = 40;
 pub const RAIL_REMOVE_REFUND: i64 = 10;
 /// Reembolso al quitar una señal (mitad del coste de colocación).
 pub const SIGNAL_REMOVE_REFUND: i64 = 20;
+
+/// Año calendario a partir del cual se colocan señales eléctricas por defecto
+/// (`gui.semaphore_build_before` en `OpenTTD`).
+pub const SEMAPHORE_BUILD_BEFORE_YEAR: u32 = CALENDAR_BASE_YEAR;
+
+#[must_use]
+pub fn calendar_year_at_tick(tick: GameTick) -> u32 {
+    calendar_year_day(calendar_day_index(tick)).0
+}
+
+/// `0` = semáforo, `1` = eléctrica (`SignalVariant` en `OpenTTD`).
+#[must_use]
+pub fn default_signal_variant(year: u32) -> u8 {
+    u8::from(year >= SEMAPHORE_BUILD_BEFORE_YEAR)
+}
 
 #[must_use]
 pub fn rail_tile_is_signals(m5: u8) -> bool {
@@ -278,27 +295,9 @@ fn signal_bits_for_exit(map: &Map, from: TileCoord, to: TileCoord) -> Vec<u8> {
     let exit_dir = dir_from_to(from, to).unwrap_or(0);
     let rails = tile.m5 & 0x3F;
     let present = rail_signal_present_mask(tile.m3);
-    let mut bits = Vec::new();
-    let mut push_if = |bit: u8, dirs: &[u8]| {
-        if present & (1 << bit) != 0 && dirs.contains(&exit_dir) {
-            bits.push(bit);
-        }
-    };
-    if rails & RAIL_TB_Y == 0 {
-        if rails & RAIL_TB_X != 0 {
-            push_if(2, &[0]);
-            push_if(3, &[2]);
-        } else {
-            push_if(2, &[3]);
-            push_if(3, &[1]);
-            push_if(0, &[0]);
-            push_if(1, &[2]);
-        }
-    } else {
-        push_if(2, &[3]);
-        push_if(3, &[1]);
-    }
-    bits
+    (0..4u8)
+        .filter(|&bit| present & (1 << bit) != 0 && signal_exit_dir(rails, bit) == exit_dir)
+        .collect()
 }
 
 /// `true` si un tren no puede avanzar de `from` a `to` por señal en rojo.
@@ -374,19 +373,46 @@ pub fn update_rail_signal_states(map: &mut Map, train_positions: &[TileCoord]) {
 }
 
 #[must_use]
+fn signal_track_for_bit(rails: u8, sig_bit: u8) -> Option<SignalTrack> {
+    if tracks_overlap(rails) {
+        return None;
+    }
+    if rails == RAIL_TB_HORZ {
+        return Some(if sig_bit <= 1 {
+            SignalTrack::Lower
+        } else {
+            SignalTrack::Upper
+        });
+    }
+    if rails == RAIL_TB_VERT {
+        return Some(if sig_bit <= 1 {
+            SignalTrack::Right
+        } else {
+            SignalTrack::Left
+        });
+    }
+    SignalTrack::from_track_bit(rails)
+}
+
+#[must_use]
 fn signal_exit_dir(rails: u8, sig_bit: u8) -> u8 {
-    if rails & RAIL_TB_Y != 0 {
-        return if sig_bit == 2 { 3 } else { 1 };
-    }
-    if rails & RAIL_TB_X != 0 {
-        return if sig_bit == 2 { 0 } else { 2 };
-    }
-    match sig_bit {
-        0 => 0,
-        1 => 2,
-        2 => 3,
-        _ => 1,
-    }
+    let track = signal_track_for_bit(rails, sig_bit).or({
+        if rails & RAIL_TB_Y != 0 {
+            Some(SignalTrack::Y)
+        } else if rails & RAIL_TB_X != 0 {
+            Some(SignalTrack::X)
+        } else {
+            None
+        }
+    });
+    let Some(track) = track else {
+        return 0;
+    };
+    track
+        .facings()
+        .iter()
+        .find(|(_, bit)| *bit == sig_bit)
+        .map_or(0, |(face, _)| *face)
 }
 
 /// Datos de codificación de una señal de bloque en una tesela.
@@ -458,14 +484,18 @@ fn m2_for_signal(sig_type: u8, variant: u8, track: u8) -> u8 {
     ((sig_type & 7) << base) | ((variant & 1) << var_bit)
 }
 
-/// Codifica una señal de bloque eléctrica unidireccional (`SIGTYPE_BLOCK`, verde).
+/// Codifica una señal de bloque unidireccional (`SIGTYPE_BLOCK`, verde).
 #[must_use]
-pub fn signal_placement_for_track(track: SignalTrack, face: u8) -> Option<SignalPlacement> {
+pub fn signal_placement_for_track(
+    track: SignalTrack,
+    face: u8,
+    variant: u8,
+) -> Option<SignalPlacement> {
     let sig_bit = signal_bit_for_facing(track, face)?;
     let present = 1 << sig_bit;
     Some(SignalPlacement {
         sig_bit,
-        m2: m2_for_signal(0, 0, track.ottd_track()),
+        m2: m2_for_signal(0, variant, track.ottd_track()),
         m3: present << 4,
         m3hi: present << 4,
     })
@@ -473,21 +503,30 @@ pub fn signal_placement_for_track(track: SignalTrack, face: u8) -> Option<Signal
 
 /// Compatibilidad: resuelve la pieza con fracción centrada.
 #[must_use]
-pub fn signal_placement_for_facing(trackbits: u8, face: u8) -> Option<SignalPlacement> {
+pub fn signal_placement_for_facing(
+    trackbits: u8,
+    face: u8,
+    variant: u8,
+) -> Option<SignalPlacement> {
     let track = resolve_signal_track(trackbits, 128, 128)?;
-    signal_placement_for_track(track, face)
+    signal_placement_for_track(track, face, variant)
 }
 
 /// Compatibilidad con tests: señal por defecto en la primera dirección válida.
 #[must_use]
 pub fn encode_block_signal_on_track(trackbits: u8) -> (u8, u8, u8) {
+    encode_block_signal_on_track_with_variant(trackbits, default_signal_variant(CALENDAR_BASE_YEAR))
+}
+
+#[must_use]
+pub fn encode_block_signal_on_track_with_variant(trackbits: u8, variant: u8) -> (u8, u8, u8) {
     let track = resolve_signal_track(trackbits, 128, 128);
     let face = track
         .map(valid_signal_facings_track)
         .and_then(|f| f.first().copied())
         .unwrap_or(0);
     if let Some(t) = track
-        && let Some(p) = signal_placement_for_track(t, face)
+        && let Some(p) = signal_placement_for_track(t, face, variant)
     {
         (p.m2, p.m3, p.m3hi)
     } else {
@@ -510,22 +549,80 @@ mod tests {
     }
 
     fn write_signal(map: &mut Map, c: TileCoord, tb: u8) {
+        write_signal_facing(map, c, tb, None);
+    }
+
+    fn write_signal_facing(map: &mut Map, c: TileCoord, tb: u8, face: Option<u8>) {
         map.set_kind(c, TileKind::Rail).expect("kind");
-        let (m2, m3, m3hi) = encode_block_signal_on_track(tb);
+        let track = resolve_signal_track(tb, 128, 128).expect("track");
+        let face = face.unwrap_or_else(|| {
+            valid_signal_facings_track(track)
+                .first()
+                .copied()
+                .unwrap_or(0)
+        });
+        let placement = signal_placement_for_track(track, face, 1).expect("placement");
         let mut t = map.get(c).expect("tile");
         t.m5 = tb | (RAIL_TILE_SIGNALS << 6);
-        t.m2 = m2;
-        t.m3 = m3;
-        t.m3hi = m3hi;
+        t.m2 = placement.m2;
+        t.m3 = placement.m3;
+        t.m3hi = placement.m3hi;
         map.set_tile(c, t).expect("tile");
     }
 
     #[test]
     fn signal_placement_is_single_bit() {
-        let p = signal_placement_for_track(SignalTrack::X, 0).expect("NE on X");
+        let p = signal_placement_for_track(SignalTrack::X, 0, 1).expect("NE on X");
         assert_eq!(p.m3 >> 4, 0b0100);
-        let p2 = signal_placement_for_track(SignalTrack::X, 2).expect("SW on X");
+        let p2 = signal_placement_for_track(SignalTrack::X, 2, 1).expect("SW on X");
         assert_eq!(p2.m3 >> 4, 0b1000);
+    }
+
+    #[test]
+    fn signal_exit_dir_horz_upper_and_lower() {
+        assert_eq!(signal_exit_dir(RAIL_TB_HORZ, 2), 0);
+        assert_eq!(signal_exit_dir(RAIL_TB_HORZ, 3), 3);
+        assert_eq!(signal_exit_dir(RAIL_TB_HORZ, 0), 2);
+        assert_eq!(signal_exit_dir(RAIL_TB_HORZ, 1), 1);
+    }
+
+    #[test]
+    fn signal_bits_for_exit_horz_upper_lane() {
+        let mut map = Map::new_flat(8, 8, 0);
+        write_signal_facing(&mut map, TileCoord::new(1, 0), RAIL_TB_HORZ, Some(0));
+        let bits = signal_bits_for_exit(&map, TileCoord::new(1, 0), TileCoord::new(2, 0));
+        assert_eq!(bits, vec![2], "señal upper NE controla salida hacia NE");
+    }
+
+    #[test]
+    fn train_blocked_on_horz_signal_when_block_occupied() {
+        let mut state = GameState::new(8, 8);
+        for x in 0..=3 {
+            write_rail(&mut state.map, TileCoord::new(x, 0), RAIL_TB_HORZ);
+        }
+        write_signal_facing(&mut state.map, TileCoord::new(1, 0), RAIL_TB_HORZ, Some(0));
+        let train_pos = vec![TileCoord::new(2, 0)];
+        update_rail_signal_states(&mut state.map, &train_pos);
+        assert!(train_blocked_by_signal(
+            &state.map,
+            &train_pos,
+            TileCoord::new(1, 0),
+            TileCoord::new(2, 0)
+        ));
+    }
+
+    #[test]
+    fn default_signal_variant_before_and_after_semaphore_year() {
+        assert_eq!(default_signal_variant(1949), 0);
+        assert_eq!(default_signal_variant(1950), 1);
+    }
+
+    #[test]
+    fn m2_variant_bit_set_for_electric_on_x() {
+        let p = signal_placement_for_track(SignalTrack::X, 0, 1).expect("electric");
+        assert_eq!(p.m2 & 0x08, 0x08);
+        let s = signal_placement_for_track(SignalTrack::X, 0, 0).expect("semaphore");
+        assert_eq!(s.m2 & 0x08, 0);
     }
 
     #[test]

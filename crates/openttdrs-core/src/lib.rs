@@ -95,10 +95,11 @@ pub use pathfinder::{
 };
 pub use rail_lane::{rail_horz_lane_bit, rail_vert_lane_bit};
 pub use rail_signals::{
-    RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST, SignalTrack,
-    cycle_signal_facing, rail_tile_is_signals, resolve_signal_track, signal_facing_for_orientation,
-    signal_placement_for_facing, signal_placement_for_track, tracks_overlap,
-    valid_signal_facings_track,
+    RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SEMAPHORE_BUILD_BEFORE_YEAR,
+    SIGNAL_BUILD_COST, SignalTrack, calendar_year_at_tick, cycle_signal_facing,
+    default_signal_variant, rail_tile_is_signals, resolve_signal_track,
+    signal_facing_for_orientation, signal_placement_for_facing, signal_placement_for_track,
+    tracks_overlap, valid_signal_facings_track,
 };
 pub use road_movement::{
     VehiclePose, extrapolate_vehicle_pose, road_turn_entry_exit, straight_subtile,

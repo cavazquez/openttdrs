@@ -4,8 +4,10 @@ use bevy::prelude::*;
 use openttdrs_core::{
     Map, TileCoord, TileKind,
     rail_signals::{
-        resolve_signal_track, signal_facing_for_orientation, signal_placement_for_track,
+        calendar_year_at_tick, default_signal_variant, resolve_signal_track,
+        signal_facing_for_orientation, signal_placement_for_track,
     },
+    tick::GameTick,
 };
 
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z};
@@ -26,6 +28,7 @@ pub(crate) fn spawn_rail_signal_preview(
     fract_x: u8,
     fract_y: u8,
     valid: bool,
+    tick: GameTick,
 ) {
     let Some(atlas) = atlas else {
         return;
@@ -38,7 +41,8 @@ pub(crate) fn spawn_rail_signal_preview(
         return;
     };
     let face = signal_facing_for_orientation(track, orientation);
-    let Some(placement) = signal_placement_for_track(track, face) else {
+    let variant = default_signal_variant(calendar_year_at_tick(tick));
+    let Some(placement) = signal_placement_for_track(track, face, variant) else {
         return;
     };
     let (tileh, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);

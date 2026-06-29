@@ -510,6 +510,30 @@ fn place_rail_signal_toggle_removes_same_facing() {
 }
 
 #[test]
+fn place_second_signal_on_horz_merges_m2() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x0C)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 64, 64)).unwrap();
+    let m2_upper = s.map.get(c).unwrap().m2;
+    assert_ne!(m2_upper, 0);
+    apply_command(&mut s, &Command::PlaceRailSignal(c, 1, 200, 200)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert!(crate::rail_signals::rail_tile_is_signals(tile.m5));
+    assert_eq!(
+        tile.m2 & m2_upper,
+        m2_upper,
+        "m2 del carril superior conservado"
+    );
+    assert_ne!(tile.m2 & 0xF0, 0, "m2 del carril inferior codificado");
+    assert_eq!(
+        crate::rail_signals::rail_signal_present_mask(tile.m3),
+        0b0110,
+        "dos señales en carriles distintos de Horz"
+    );
+}
+
+#[test]
 fn place_rail_bits_preserves_signal_when_merging_diagonals_to_cross() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(3, 3);

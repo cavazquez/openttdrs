@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use openttdrs_core::{Station, TileKind, is_tunnel_entrance_slope};
 
-use super::{sloped_or_flat_image, spawn_ground_sprite};
+use super::{sloped_or_flat_image, spawn_ground_sprite, spawn_rail_foundation};
 use crate::iso::{
     SLOPE_HALF_H, TILE_HALF_H, road_depot_build_sprite_center, road_stop_build_sprite_center,
     tile_pos, tile_pos_half,
@@ -59,6 +59,8 @@ pub(crate) fn spawn_station_tile(
                 spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
             }
             // En pendiente el suelo ya se pintó arriba (evita hierba duplicada).
+            let station_tb = if m5 & 1 != 0 { 0x02 } else { 0x01 };
+            let rail_base_z = spawn_rail_foundation(commands, assets, ctx, tileh, station_tb);
             let track_sid = rail_station_ground_track_sprite(m5, tileh);
             if let Some(img) = assets.rail.get(&track_sid) {
                 commands.spawn((
@@ -68,7 +70,7 @@ pub(crate) fn spawn_station_tile(
                     Transform::from_translation(tile_pos_half(
                         ctx.tx_i32(),
                         ctx.ty_i32(),
-                        base_z,
+                        rail_base_z,
                         0.02,
                         rail_half_h,
                     )),
@@ -92,7 +94,7 @@ pub(crate) fn spawn_station_tile(
                         ctx.iso_pos,
                         ctx.tx_i32(),
                         ctx.ty_i32(),
-                        base_z,
+                        rail_base_z,
                         layer.z,
                         layer,
                         nfo_xrel,
@@ -108,7 +110,7 @@ pub(crate) fn spawn_station_tile(
                         yrel,
                         w,
                         h,
-                        base_z,
+                        rail_base_z,
                         layer.z,
                         ctx.tx_i32(),
                         ctx.ty_i32(),
@@ -280,10 +282,20 @@ pub(crate) fn spawn_transport_object_tile(
             ));
         }
         TileKind::RoadDepot => {
-            spawn_road_depot_tile(commands, assets, company, ctx, base_z, TILE_HALF_H);
+            let depot_half_h = if tileh == 0 {
+                TILE_HALF_H
+            } else {
+                SLOPE_HALF_H[tileh as usize]
+            };
+            spawn_road_depot_tile(commands, assets, company, ctx, base_z, depot_half_h, tileh);
         }
         TileKind::RailDepot => {
-            spawn_rail_depot_tile(commands, assets, company, ctx, base_z, TILE_HALF_H);
+            let depot_half_h = if tileh == 0 {
+                TILE_HALF_H
+            } else {
+                SLOPE_HALF_H[tileh as usize]
+            };
+            spawn_rail_depot_tile(commands, assets, company, ctx, base_z, depot_half_h);
         }
         TileKind::RoadBridge => {
             let axis_y = ctx.tile.is_some_and(|t| t.m5 & 0x10 != 0);
@@ -314,6 +326,7 @@ fn spawn_road_depot_tile(
     ctx: &TileRenderContext,
     base_z: u8,
     half_h: f32,
+    tileh: u8,
 ) {
     let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
     commands.spawn((
@@ -334,7 +347,7 @@ fn spawn_road_depot_tile(
         ctx,
         base_z,
         half_h,
-        ctx.info.tileh,
+        tileh,
         road_depot_entrance_road_bits(dir as u8),
     );
     for (layer_i, spec) in road_depot_build_layers(dir).iter().enumerate() {

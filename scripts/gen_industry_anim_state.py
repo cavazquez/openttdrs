@@ -11,7 +11,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-GFX_COUNT = 131
+GFX_COUNT = 175
 BUILD_INDUSTRY_URL = (
     "https://raw.githubusercontent.com/OpenTTD/OpenTTD/master/src/table/build_industry.h"
 )

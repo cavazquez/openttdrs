@@ -73,9 +73,10 @@ pub use map::{
     industry_gfx, industry_instance_id, industry_tile_anim_state, industry_tile_link,
     industry_tiles_mergeable, industry_uses_water_ground, is_industry_completed,
     is_map_object_tile, is_owned_land_tile, is_tunnel_entrance_slope, make_industry_tile_bigger,
-    openttd_tile_index_to_coord, partial_pixel_z, resolve_tunnel_end, set_industry_gfx,
-    slope_dz_at_subtile, slope_dz_on_tile, step_industry_tiles, tile_adjacent_to_water,
-    tile_slope_and_z, tunnel_entrance_m5, tunnel_preview_path,
+    openttd_tile_index_to_coord, partial_pixel_z, rail_foundation_for_trackbits,
+    rail_trackbits_valid_on_slope, resolve_tunnel_end, set_industry_gfx, slope_dz_at_subtile,
+    slope_dz_on_tile, step_industry_tiles, tile_adjacent_to_water, tile_slope_and_z,
+    tunnel_entrance_m5, tunnel_preview_path,
 };
 pub use news::{
     CALENDAR_BASE_YEAR, NEWS_MAX_AGE_DAYS, NewsDisplayMode, NewsDisplaySettings, NewsItem,

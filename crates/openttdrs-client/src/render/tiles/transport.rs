@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use openttdrs_core::{Climate, Map, TileKind};
 
-use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite};
+use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite, spawn_rail_foundation};
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
@@ -170,7 +170,6 @@ pub(crate) fn spawn_rail_tile(
     climate: Climate,
 ) {
     let tileh = ctx.info.tileh;
-    let base_z = ctx.info.base_z;
     if tileh != 0 {
         spawn_ground_sprite(
             commands,
@@ -180,6 +179,8 @@ pub(crate) fn spawn_rail_tile(
             slope_half_ground,
         );
     }
+    let tb = ctx.tile.map_or(0, |t| t.m5 & 0x3F);
+    let rail_base_z = spawn_rail_foundation(commands, assets, ctx, tileh, tb);
     let rail_half_h = if tileh == 0 {
         TILE_HALF_H
     } else {
@@ -207,7 +208,7 @@ pub(crate) fn spawn_rail_tile(
         };
         let z = 0.02 + i as f32 * 0.0004;
         let offset = rail_ghost_overlay_offset(sid);
-        let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, z, rail_half_h);
+        let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, z, rail_half_h);
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -223,7 +224,7 @@ pub(crate) fn spawn_rail_tile(
             };
             let offset = rail_signal_subtile_offset(draw.pos);
             let z = 0.032 + si as f32 * 0.0015;
-            let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, z, rail_half_h);
+            let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, z, rail_half_h);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),

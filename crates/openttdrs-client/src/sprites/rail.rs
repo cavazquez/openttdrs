@@ -643,23 +643,8 @@ pub fn collect_rail_ghost_sprites(tb: u8, tileh: u8, out: &mut Vec<u32>) {
     collect_rail_sprites(tb, tileh, false, out);
 }
 
-/// Lista de sprites `OpenGFX` en orden de pintado (suelo de cruce y superposiciones).
-/// Con `snow_ground`, tramos planos Y/X usan `1037`/`1038`; en pendiente se suma
-/// [`RAIL_SPRITE_SNOW_OFFSET`] al sprite inclinado (`rail_cmd.cpp`).
-pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<u32>) {
-    out.clear();
-    let t = tb & 0x3F;
-    if t == 0 {
-        return;
-    }
-    if tileh != 0 {
-        // OpenTTD `DrawTrackBits`: en pendiente solo `_track_sloped_sprites[tileh-1] + track_y`
-        // (sin overlays 1005–1010 ni suelo 1018; el PNG inclinado ya lleva el riel).
-        if let Some(sid) = rail_sloped_track_sprite_id(tileh, snow_ground) {
-            out.push(sid);
-        }
-        return;
-    }
+/// Lista de sprites planos (tesela nivelada o con cimiento nivelado).
+fn collect_rail_flat_sprites(t: u8, snow_ground: bool, out: &mut Vec<u32>) {
     let y_track = if snow_ground {
         RAIL_SPRITE_Y_SNOW
     } else {
@@ -687,11 +672,41 @@ pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<
     }
 }
 
+/// Lista de sprites `OpenGFX` en orden de pintado (suelo de cruce y superposiciones).
+/// Con `snow_ground`, tramos planos Y/X usan `1037`/`1038`; en pendiente se suma
+/// [`RAIL_SPRITE_SNOW_OFFSET`] al sprite inclinado salvo cimiento nivelado (`GetRailFoundation` = 1).
+pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<u32>) {
+    out.clear();
+    let t = tb & 0x3F;
+    if t == 0 {
+        return;
+    }
+    let foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, t);
+    if tileh != 0 && foundation != 1 {
+        // Inclinado / halftile / sin fundación: sprite inclinado único (`DrawTrackBits` pendiente).
+        if let Some(sid) = rail_sloped_track_sprite_id(tileh, snow_ground) {
+            out.push(sid);
+        }
+        return;
+    }
+    collect_rail_flat_sprites(t, snow_ground, out);
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use openttdrs_core::{Map, TileCoord, TileKind};
+
+    #[test]
+    fn collect_rail_on_leveled_foundation_uses_flat_track() {
+        let mut out = Vec::new();
+        // `SLOPE_EW` (5): vía X requiere cimiento nivelado → sprites planos.
+        collect_rail_sprites(RAIL_TB_X, 5, false, &mut out);
+        assert_eq!(out, vec![1012]);
+        collect_rail_sprites(0x29, 5, false, &mut out);
+        assert_eq!(out, vec![1018, 1005, 1008, 1009]);
+    }
 
     #[test]
     fn collect_rail_sprites_depot_junction_uses_sw_ground_and_spaced_overlays() {
@@ -772,23 +787,28 @@ mod tests {
     }
 
     #[test]
-    fn collect_rail_sprites_uses_sloped_track_on_diagonal_slopes() {
+    fn collect_rail_sprites_uses_sloped_track_when_inclined_foundation() {
         let mut out = Vec::new();
-        collect_rail_sprites(RAIL_TB_Y, 12, false, &mut out);
-        assert_eq!(out, vec![1031]);
-        collect_rail_sprites(RAIL_TB_X, 6, false, &mut out);
-        assert_eq!(out, vec![1032]);
-        collect_rail_sprites(RAIL_TB_Y, 3, false, &mut out);
+        collect_rail_sprites(RAIL_TB_X, openttdrs_core::SLOPE_SW, false, &mut out);
         assert_eq!(out, vec![1033]);
-        collect_rail_sprites(RAIL_TB_X, 9, false, &mut out);
-        assert_eq!(out, vec![1034]);
+        assert_ne!(
+            openttdrs_core::rail_foundation_for_trackbits(openttdrs_core::SLOPE_SW, RAIL_TB_X),
+            1
+        );
+    }
+
+    #[test]
+    fn collect_rail_sprites_uses_flat_on_leveled_foundation_slope() {
+        let mut out = Vec::new();
+        collect_rail_sprites(RAIL_TB_Y, openttdrs_core::SLOPE_NE, false, &mut out);
+        assert_eq!(out, vec![1011]);
     }
 
     #[test]
     fn collect_rail_sprites_sloped_snow_adds_offset() {
         let mut out = Vec::new();
-        collect_rail_sprites(RAIL_TB_Y, 12, true, &mut out);
-        assert_eq!(out, vec![1031 + RAIL_SPRITE_SNOW_OFFSET]);
+        collect_rail_sprites(RAIL_TB_X, openttdrs_core::SLOPE_SW, true, &mut out);
+        assert_eq!(out, vec![1033 + RAIL_SPRITE_SNOW_OFFSET]);
     }
 
     #[test]

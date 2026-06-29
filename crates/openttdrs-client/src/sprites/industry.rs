@@ -41,8 +41,8 @@ include!(concat!(
 
 const FALLBACK_WH: (f32, f32) = (64.0, 48.0);
 
-/// Filas `gfx` en tabla (0..=130). Valores ≥131 no tienen entrada.
-pub const INDUSTRY_GFX_TABLE_LEN: u16 = 131;
+/// Filas `gfx` en tabla (0..=174). Valores ≥175 no tienen entrada.
+pub const INDUSTRY_GFX_TABLE_LEN: u16 = 175;
 
 /// Estadios por `gfx` (OpenTTD `_industry_draw_tile_data`: 0–3).
 pub const INDUSTRY_GFX_STAGES: usize = 4;
@@ -189,7 +189,7 @@ pub fn industry_gfx_status_label(status: IndustryGfxStatus) -> &'static str {
     match status {
         IndustryGfxStatus::Resolved => "ok",
         IndustryGfxStatus::EmptyRow => "sin sprite",
-        IndustryGfxStatus::OutOfRange => "gfx≥131",
+        IndustryGfxStatus::OutOfRange => "gfx≥175",
     }
 }
 
@@ -270,7 +270,7 @@ pub fn log_industry_gfx_once(gfx: u16, m1: u8, m4: u8, entry: Option<&IndustryGf
     }
     let reason = match status {
         IndustryGfxStatus::OutOfRange => {
-            "sin entrada en INDUSTRY_GFX_DATA (gfx≥131 o fuera de tabla)"
+            "sin entrada en INDUSTRY_GFX_DATA (gfx≥175 o fuera de tabla)"
         }
         IndustryGfxStatus::EmptyRow => "fila vacía en INDUSTRY_GFX_DATA",
         IndustryGfxStatus::Resolved => return,
@@ -362,10 +362,11 @@ mod industry_coverage_tests {
     }
 
     #[test]
-    fn gfx_131_and_above_are_out_of_range() {
-        assert_eq!(industry_gfx_status(131), IndustryGfxStatus::OutOfRange);
-        assert_eq!(industry_gfx_status(256), IndustryGfxStatus::OutOfRange);
-        assert!(industry_gfx_entry(131).is_none());
+    fn gfx_131_and_above_in_range_until_174() {
+        assert_ne!(industry_gfx_status(131), IndustryGfxStatus::OutOfRange);
+        assert_ne!(industry_gfx_status(174), IndustryGfxStatus::OutOfRange);
+        assert_eq!(industry_gfx_status(175), IndustryGfxStatus::OutOfRange);
+        assert!(industry_gfx_entry(131).is_some());
     }
 
     #[test]
@@ -440,7 +441,9 @@ mod industry_coverage_tests {
             industry_gfx_draw_index(120, 0),
             Some(120 * INDUSTRY_GFX_STAGES)
         );
-        assert_eq!(industry_gfx_draw_index(131, 0), None);
+        assert_eq!(industry_gfx_draw_index(131, 0), Some(131 * 4));
+        assert_eq!(industry_gfx_draw_index(174, 0), Some(174 * 4));
+        assert_eq!(industry_gfx_draw_index(175, 0), None);
     }
 
     #[test]

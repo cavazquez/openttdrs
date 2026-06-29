@@ -2,7 +2,7 @@
 // gfx con anim_state=true (6): [1, 30, 31, 32, 48, 88]
 
 /// `IndustryTileSpec.anim_state` por gfx (OpenTTD `build_industry.h` MT macro).
-pub const INDUSTRY_TILE_ANIM_STATE: [bool; 131] = [
+pub const INDUSTRY_TILE_ANIM_STATE: [bool; 175] = [
     false, true, false, false, false, false, false, false, false, false, false, false, false,
     false, false, false, false, false, false, false, false, false, false, false, false, false,
     false, false, false, false, true, true, true, false, false, false, false, false, false, false,
@@ -13,4 +13,8 @@ pub const INDUSTRY_TILE_ANIM_STATE: [bool; 131] = [
     false, false, false, false, false, false, false, false, false, false, false, false, false,
     false, false, false, false, false, false, false, false, false, false, false, false, false,
     false, false, false, false, false, false, false, false, false, false, false, false, false,
+    false, false, false, false, false, false, false, false, false, false, false, false, false,
+    false, false, false, false, false, false, false, false, false, false, false, false, false,
+    false, false, false, false, false, false, false, false, false, false, false, false, false,
+    false, false, false, false, false,
 ];

@@ -3,6 +3,8 @@ use bevy::prelude::*;
 use crate::iso::{HEIGHT_PX, TILE_HALF_H, overlay_pos, tile_pos, tile_pos_half};
 use crate::render::{AtlasSprite, MapTileChunk, MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::foundation_gfx_for_tileh;
+use crate::sprites::leveled_foundation_z_delta;
+use openttdrs_core::rail_foundation_for_trackbits;
 
 /// Sesgo en la componente Z de **solo** el agua animada (sin sprite `shore_*`).
 /// El orden de dibujo usa `(tx+ty)`; el mar al **este/sur** tiene suma mayor y acaba
@@ -83,6 +85,25 @@ pub(crate) fn spawn_leveled_foundation(
         img.sprite(),
         Transform::from_translation(pos),
     ));
+}
+
+/// Cimiento nivelado bajo vía/estación en pendiente (`DrawFoundation` + `GetRailFoundation` = 1).
+/// Devuelve `base_z` efectivo para capas de riel encima del cimiento.
+#[must_use]
+pub(crate) fn spawn_rail_foundation(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    tileh: u8,
+    trackbits: u8,
+) -> u8 {
+    if tileh == 0 || rail_foundation_for_trackbits(tileh, trackbits) != 1 {
+        return ctx.info.base_z;
+    }
+    spawn_leveled_foundation(commands, assets, ctx, tileh);
+    ctx.info
+        .base_z
+        .saturating_add(leveled_foundation_z_delta(tileh))
 }
 
 pub(crate) fn spawn_ground_sprite(

@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-GFX_COUNT = 131
+GFX_COUNT = 175
 STAGES = 4
 
 SPR = {

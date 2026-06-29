@@ -494,19 +494,34 @@ fn place_rail_signal_on_straight_track() {
 }
 
 #[test]
-fn place_rail_signal_toggle_removes_same_facing() {
+fn place_rail_signal_cycles_side_on_same_track() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(2, 2);
     apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
     apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
+    let present_one = crate::rail_signals::rail_signal_present_mask(s.map.get(c).unwrap().m3);
+    assert_eq!(present_one.count_ones(), 1);
     let money = s.economy.money;
     apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
     let tile = s.map.get(c).unwrap();
-    assert!(!crate::rail_signals::rail_tile_is_signals(tile.m5));
+    assert!(crate::rail_signals::rail_tile_is_signals(tile.m5));
     assert_eq!(
-        s.economy.money,
-        money + crate::rail_signals::SIGNAL_REMOVE_REFUND
+        crate::rail_signals::rail_signal_present_mask(tile.m3).count_ones(),
+        2,
+        "CycleSignalSide añade la segunda dirección"
     );
+    assert_eq!(s.economy.money, money, "ciclar lado es gratis");
+}
+
+#[test]
+fn clear_tile_removes_rail_signal() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
+    apply_command(&mut s, &Command::ClearTile(c)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert!(!crate::rail_signals::rail_tile_is_signals(tile.m5));
 }
 
 #[test]

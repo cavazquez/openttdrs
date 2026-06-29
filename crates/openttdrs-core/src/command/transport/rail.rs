@@ -538,8 +538,9 @@ pub(crate) fn check_place_rail_signal(
     };
     if rail_tile_is_signals(tile.m5) {
         let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
-        if present & (1 << placement.sig_bit) != 0 {
-            // Clic repetido en la misma dirección: quitar señal (OpenTTD).
+        if present & (1 << placement.sig_bit) != 0
+            || present & crate::rail_signals::signal_on_track_mask(track) != 0
+        {
             return Ok(());
         }
     }
@@ -623,8 +624,8 @@ pub(in crate::command) fn place_rail_signal(
         .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
     if rail_tile_is_signals(tile.m5) {
         let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
-        if present & (1 << placement.sig_bit) != 0 {
-            return remove_rail_signal_bit(state, c, placement.sig_bit);
+        if present & crate::rail_signals::signal_on_track_mask(track) != 0 {
+            return cycle_rail_signal_side(state, c, track);
         }
     }
     let mut out = tile;
@@ -648,6 +649,38 @@ pub(in crate::command) fn place_rail_signal(
     Ok(())
 }
 
+pub(in crate::command) fn cycle_rail_signal_side(
+    state: &mut GameState,
+    c: TileCoord,
+    track: crate::rail_signals::SignalTrack,
+) -> Result<(), CommandError> {
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    if !rail_tile_is_signals(tile.m5) {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
+    let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
+    if present & crate::rail_signals::signal_on_track_mask(track) == 0 {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
+    let sig_type = crate::rail_signals::signal_type_for_track(tile.m2, track);
+    let mut out = tile;
+    let old_present = present;
+    out.m3 = crate::rail_signals::cycle_signal_side_m3(out.m3, track, sig_type);
+    let new_present = crate::rail_signals::rail_signal_present_mask(out.m3);
+    let added = new_present & !old_present;
+    let states = crate::rail_signals::rail_signal_state_mask(out.m3hi) | added;
+    out.m3hi = (out.m3hi & 0x0F) | (states << 4);
+    state
+        .map
+        .set_tile(c, out)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    Ok(())
+}
+
+#[expect(
+    dead_code,
+    reason = "reservado para quitar señal sin vía (bulldozer / CmdRemoveSignal)"
+)]
 pub(in crate::command::transport) fn remove_rail_signal_bit(
     state: &mut GameState,
     c: TileCoord,

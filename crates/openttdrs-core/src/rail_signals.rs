@@ -123,6 +123,12 @@ pub const RAIL_REMOVE_REFUND: i64 = 10;
 /// Reembolso al quitar una señal (mitad del coste de colocación).
 pub const SIGNAL_REMOVE_REFUND: i64 = 20;
 
+pub const SIGTYPE_BLOCK: u8 = 0;
+pub const SIGTYPE_ENTRY: u8 = 1;
+pub const SIGTYPE_EXIT: u8 = 2;
+pub const SIGTYPE_COMBO: u8 = 3;
+const SIGTYPE_LAST_NOPBS: u8 = 3;
+
 /// Año calendario a partir del cual se colocan señales eléctricas por defecto
 /// (`gui.semaphore_build_before` en `OpenTTD`).
 pub const SEMAPHORE_BUILD_BEFORE_YEAR: u32 = CALENDAR_BASE_YEAR;
@@ -315,6 +321,12 @@ pub fn train_blocked_by_signal(
         return false;
     }
     for bit in signal_bits_for_exit(map, from, to) {
+        let rails = tile.m5 & 0x3F;
+        if signal_track_for_bit(rails, bit)
+            .is_some_and(|track| signal_type_for_track(tile.m2, track) == SIGTYPE_ENTRY)
+        {
+            continue;
+        }
         if !signal_is_green(tile.m3hi, bit) {
             return true;
         }
@@ -345,7 +357,14 @@ fn refresh_signal_tile_states(
         if present & (1 << bit) == 0 {
             continue;
         }
-        let exit_dir = signal_exit_dir(tile.m5 & 0x3F, bit);
+        let rails = tile.m5 & 0x3F;
+        if signal_track_for_bit(rails, bit)
+            .is_some_and(|track| signal_type_for_track(tile.m2, track) == SIGTYPE_ENTRY)
+        {
+            states |= 1 << bit;
+            continue;
+        }
+        let exit_dir = signal_exit_dir(rails, bit);
         let block = rail_block_ahead(map, c, exit_dir);
         if block_is_clear(train_positions, &block) {
             states |= 1 << bit;
@@ -370,6 +389,38 @@ pub fn update_rail_signal_states(map: &mut Map, train_positions: &[TileCoord]) {
             }
         }
     }
+}
+
+#[must_use]
+pub fn signal_on_track_mask(track: SignalTrack) -> u8 {
+    const MASKS: [u8; 6] = [0xC, 0xC, 0xC, 0x3, 0xC, 0x3];
+    MASKS[track as usize]
+}
+
+#[must_use]
+pub fn signal_type_for_track(m2: u8, track: SignalTrack) -> u8 {
+    let base = if matches!(track, SignalTrack::Lower | SignalTrack::Right) {
+        4
+    } else {
+        0
+    };
+    (m2 >> base) & 7
+}
+
+/// Alterna one-way / two-way en el carril (`CycleSignalSide` en `rail_map.h`).
+#[must_use]
+pub fn cycle_signal_side_m3(m3: u8, track: SignalTrack, sig_type: u8) -> u8 {
+    let pos = if matches!(track, SignalTrack::Lower | SignalTrack::Right) {
+        4
+    } else {
+        6
+    };
+    let mut side = (m3 >> pos) & 3;
+    side = side.saturating_sub(1);
+    if side == 0 {
+        side = if sig_type > SIGTYPE_LAST_NOPBS { 2 } else { 3 };
+    }
+    (m3 & !(3 << pos)) | (side << pos)
 }
 
 #[must_use]
@@ -636,6 +687,29 @@ mod tests {
             Some(SignalTrack::Lower)
         );
         assert!(resolve_signal_track(RAIL_TB_X | RAIL_TB_Y, 128, 128).is_none());
+    }
+
+    #[test]
+    fn cycle_signal_side_m3_adds_second_direction_on_x() {
+        let m3 = 0x40; // solo bit 2
+        let out = cycle_signal_side_m3(m3, SignalTrack::X, SIGTYPE_BLOCK);
+        assert_eq!(out >> 4, 0x0C, "both bits 2 and 3");
+    }
+
+    #[test]
+    fn entry_signal_does_not_block_train() {
+        let mut map = Map::new_flat(8, 8, 0);
+        write_rail(&mut map, TileCoord::new(0, 0), RAIL_TB_X);
+        write_rail(&mut map, TileCoord::new(2, 0), RAIL_TB_X);
+        write_signal_facing(&mut map, TileCoord::new(1, 0), RAIL_TB_X, Some(0));
+        let mut t = map.get(TileCoord::new(1, 0)).expect("tile");
+        t.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
+        t.m3hi = 0x00;
+        map.set_tile(TileCoord::new(1, 0), t).expect("tile entry");
+        assert!(
+            !train_blocked_by_signal(&map, &[], TileCoord::new(1, 0), TileCoord::new(2, 0)),
+            "presignal entry no detiene trenes en sim simplificada"
+        );
     }
 
     #[test]

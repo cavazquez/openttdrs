@@ -1,5 +1,10 @@
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileCoord, TileKind, rail_signals::resolve_signal_track};
+use openttdrs_core::{
+    Map, TileCoord, TileKind,
+    rail_signals::{resolve_signal_track, signal_bit_for_facing, valid_signal_facings_track},
+};
+
+use crate::sprites::{rail_signal_subtile_offset, signal_draw_pos};
 
 use super::{HEIGHT_PX, ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, tile_slope_and_min_z};
 
@@ -184,74 +189,106 @@ pub fn world_pos_to_tile_fract(world_pos: Vec2, map: &Map, tx: i32, ty: i32) -> 
     (fx, fy)
 }
 
-/// Tesela ferroviaria bajo el cursor para colocar señales (`GenericPlaceSignals`).
-///
-/// Busca vía en un vecindario 5×5 alrededor del pick geométrico y elige la tesela
-/// con riel válido más cercana al cursor (métrica del rombo). El `fract` se calcula
-/// respecto al centro de esa tesela, no de la hierba adyacente.
+/// Distancia máxima (px pantalla) del cursor al ancla de señal para aceptar el pick.
+const RAIL_SIGNAL_PICK_MAX_DIST: f32 = 44.0;
+
 #[must_use]
-pub fn world_pos_to_rail_signal_pick(world_pos: Vec2, map: &Map) -> Option<(i32, i32, u8, u8)> {
-    let seed = world_pos_to_tile_coord(world_pos, map)?;
-    let (mw, mh) = map.dimensions();
-    let mw_i = mw as i32;
-    let mh_i = mh as i32;
-    let in_bounds = |tx: i32, ty: i32| tx >= 0 && ty >= 0 && tx < mw_i && ty < mh_i;
+fn rail_signal_anchor_world(map: &Map, tx: i32, ty: i32, draw_pos: u8) -> Vec2 {
+    let (tileh, base_z) = tile_slope_and_min_z(map, tx as u32, ty as u32);
+    let half_h = if tileh == 0 {
+        TILE_HALF_H
+    } else {
+        SLOPE_HALF_H[tileh.min(14) as usize]
+    };
+    let elev = f32::from(base_z) * HEIGHT_PX;
+    let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - half_h + elev);
+    center + rail_signal_subtile_offset(draw_pos)
+}
 
-    // Tesela bajo el cursor con vía válida (paridad GetTileBelowCursor + GenericPlaceSignals).
-    if in_bounds(seed.0, seed.1) {
-        let coord = TileCoord::new(seed.0, seed.1);
-        if let Some(tile) = map.get(coord).filter(|t| t.kind == TileKind::Rail) {
-            let tb = tile.m5 & 0x3F;
-            if tb != 0 {
-                let fract = world_pos_to_tile_fract(world_pos, map, seed.0, seed.1);
-                if resolve_signal_track(tb, fract.0, fract.1).is_some() {
-                    return Some((seed.0, seed.1, fract.0, fract.1));
-                }
-            }
-        }
+#[must_use]
+fn min_rail_signal_anchor_dist(
+    map: &Map,
+    tx: i32,
+    ty: i32,
+    world_pos: Vec2,
+    track: openttdrs_core::rail_signals::SignalTrack,
+) -> Option<f32> {
+    let track_u8 = track as u8;
+    let mut best = f32::MAX;
+    for &face in valid_signal_facings_track(track) {
+        let bit = signal_bit_for_facing(track, face)?;
+        let pos = signal_draw_pos(track_u8, bit);
+        best = best.min(world_pos.distance(rail_signal_anchor_world(map, tx, ty, pos)));
     }
+    (best < f32::MAX).then_some(best)
+}
 
-    let mut best: Option<((i32, i32), f32, (u8, u8))> = None;
+#[must_use]
+fn best_rail_signal_pick_in_neighborhood(
+    map: &Map,
+    seed_tx: i32,
+    seed_ty: i32,
+    world_pos: Vec2,
+    mw_i: i32,
+    mh_i: i32,
+) -> Option<(i32, i32, u8, u8)> {
+    let mut best: Option<(i32, i32, u8, u8, f32)> = None;
 
     for dty in -2..=2 {
         for dtx in -2..=2 {
-            let tx = seed.0 + dtx;
-            let ty = seed.1 + dty;
-            if !in_bounds(tx, ty) {
+            let tx = seed_tx + dtx;
+            let ty = seed_ty + dty;
+            if tx < 0 || ty < 0 || tx >= mw_i || ty >= mh_i {
                 continue;
             }
             let coord = TileCoord::new(tx, ty);
-            let Some(tile) = map.get(coord) else {
+            let Some(tile) = map.get(coord).filter(|t| t.kind == TileKind::Rail) else {
                 continue;
             };
-            if tile.kind != TileKind::Rail {
-                continue;
-            }
             let tb = tile.m5 & 0x3F;
             if tb == 0 {
                 continue;
             }
             let fract = world_pos_to_tile_fract(world_pos, map, tx, ty);
-            if resolve_signal_track(tb, fract.0, fract.1).is_none() {
+            let Some(track) = resolve_signal_track(tb, fract.0, fract.1) else {
+                continue;
+            };
+            let Some(dist) = min_rail_signal_anchor_dist(map, tx, ty, world_pos, track) else {
+                continue;
+            };
+            if dist > RAIL_SIGNAL_PICK_MAX_DIST {
                 continue;
             }
-            let metric = pick_metric_raw(map, tx, ty, world_pos);
-            if metric > PICK_METRIC_RELAXED {
-                continue;
-            }
-            match &best {
-                None => best = Some(((tx, ty), metric, fract)),
-                Some(((bx, by), bm, _))
-                    if rail_signal_pick_better(seed, (tx, ty), metric, (*bx, *by), *bm) =>
+            match best {
+                None => best = Some((tx, ty, fract.0, fract.1, dist)),
+                Some((btx, bty, _, _, bd))
+                    if rail_signal_pick_better(
+                        (seed_tx, seed_ty),
+                        (tx, ty),
+                        dist,
+                        (btx, bty),
+                        bd,
+                    ) =>
                 {
-                    best = Some(((tx, ty), metric, fract));
+                    best = Some((tx, ty, fract.0, fract.1, dist));
                 }
                 _ => {}
             }
         }
     }
 
-    best.map(|((tx, ty), _, (fx, fy))| (tx, ty, fx, fy))
+    best.map(|(tx, ty, fx, fy, _)| (tx, ty, fx, fy))
+}
+
+/// Tesela ferroviaria bajo el cursor para colocar señales (`GenericPlaceSignals`).
+///
+/// Elige la tesela cuyo ancla de señal (`DrawSingleSignal`) está más cerca del cursor
+/// en un vecindario 5×5, alineado con la posición del fantasma.
+#[must_use]
+pub fn world_pos_to_rail_signal_pick(world_pos: Vec2, map: &Map) -> Option<(i32, i32, u8, u8)> {
+    let seed = world_pos_to_tile_coord(world_pos, map)?;
+    let (mw, mh) = map.dimensions();
+    best_rail_signal_pick_in_neighborhood(map, seed.0, seed.1, world_pos, mw as i32, mh as i32)
 }
 
 /// Desempate entre teselas ferroviarias con métrica similar (p. ej. vía diagonal en cadena).
@@ -276,6 +313,49 @@ fn rail_signal_pick_better(
     }
     // Estable: preferir la tesela del pick geométrico si empata.
     cand == seed || (best != seed && (cand.0, cand.1) < best)
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod rail_signal_pick_map_tests {
+    use openttdrs_core::{
+        Map, TileCoord, TileKind,
+        rail_signals::{RAIL_TILE_NORMAL, resolve_signal_track},
+    };
+
+    use super::{rail_signal_anchor_world, world_pos_to_rail_signal_pick, world_pos_to_tile_fract};
+    use crate::sprites::signal_draw_pos;
+
+    const RAIL_TB_X: u8 = 0x01;
+
+    fn write_rail_x(map: &mut Map, tx: i32, ty: i32) {
+        let c = TileCoord::new(tx, ty);
+        map.set_kind(c, TileKind::Rail).expect("kind");
+        let mut t = map.get(c).expect("tile");
+        t.m5 = RAIL_TB_X | (RAIL_TILE_NORMAL << 6);
+        map.set_tile(c, t).expect("tile");
+    }
+
+    #[test]
+    fn pick_diagonal_rail_uses_track_tile_at_anchor() {
+        let mut map = Map::new_flat(5, 5, 0);
+        write_rail_x(&mut map, 2, 2);
+        let anchor = rail_signal_anchor_world(&map, 2, 2, signal_draw_pos(0, 2));
+        let (tx, ty, fx, fy) = world_pos_to_rail_signal_pick(anchor, &map).expect("pick");
+        assert_eq!((tx, ty), (2, 2));
+        assert!(resolve_signal_track(RAIL_TB_X, fx, fy).is_some());
+    }
+
+    #[test]
+    fn pick_near_diagonal_edge_still_resolves_fract() {
+        let mut map = Map::new_flat(5, 5, 0);
+        write_rail_x(&mut map, 2, 2);
+        let anchor = rail_signal_anchor_world(&map, 2, 2, signal_draw_pos(0, 3));
+        let (tx, ty, fx, fy) = world_pos_to_rail_signal_pick(anchor, &map).expect("pick");
+        assert_eq!((tx, ty), (2, 2));
+        let (fx2, fy2) = world_pos_to_tile_fract(anchor, &map, tx, ty);
+        assert_eq!((fx, fy), (fx2, fy2));
+    }
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@
 
 mod batches;
 mod bridge;
+mod bridge_draw;
 mod helpers;
 mod land;
 mod objects;

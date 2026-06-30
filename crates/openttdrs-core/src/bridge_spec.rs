@@ -293,6 +293,59 @@ pub fn set_bridge_type_m6(m6: u8, bt: BridgeType) -> u8 {
     (m6 & 0xC3) | ((bt.as_u8() & 0x0F) << 2)
 }
 
+/// Marca un vano de puente sobre la tesela (`SetBridgeMiddle` en `bridge_map.h`).
+#[must_use]
+pub fn set_bridge_middle_mapt(mapt: u8, axis_y: bool) -> u8 {
+    let above = if axis_y { 0x08 } else { 0x04 };
+    (mapt & !0x0C) | above
+}
+
+/// Eje del puente sobre la tesela (bits 2–3 de `mapt`): `None`, `Some(false)` = X, `Some(true)` = Y.
+#[must_use]
+pub fn bridge_above_axis_from_mapt(mapt: u8) -> Option<bool> {
+    match (mapt >> 2) & 0x3 {
+        1 => Some(false),
+        2 => Some(true),
+        _ => None,
+    }
+}
+
+/// Pieza de vano según distancia a cada rampa (`CalcBridgePiece` en `tunnelbridge_cmd.cpp`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BridgePiece {
+    North,
+    South,
+    InnerNorth,
+    InnerSouth,
+    MiddleOdd,
+    MiddleEven,
+}
+
+#[must_use]
+pub fn calc_bridge_piece(north_len: u32, south_len: u32) -> BridgePiece {
+    if north_len == 1 {
+        BridgePiece::North
+    } else if south_len == 1 {
+        BridgePiece::South
+    } else if north_len < south_len {
+        if north_len & 1 != 0 {
+            BridgePiece::InnerSouth
+        } else {
+            BridgePiece::InnerNorth
+        }
+    } else if north_len > south_len {
+        if south_len & 1 != 0 {
+            BridgePiece::InnerNorth
+        } else {
+            BridgePiece::InnerSouth
+        }
+    } else if north_len & 1 != 0 {
+        BridgePiece::MiddleEven
+    } else {
+        BridgePiece::MiddleOdd
+    }
+}
+
 /// Teselas del tramo completo (incluye rampas).
 #[must_use]
 pub fn bridge_line_tiles(start: TileCoord, end: TileCoord) -> Vec<TileCoord> {
@@ -300,8 +353,11 @@ pub fn bridge_line_tiles(start: TileCoord, end: TileCoord) -> Vec<TileCoord> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use crate::command::{Command, apply_command};
+    use crate::{GameState, TileKind};
 
     #[test]
     fn wooden_always_available() {
@@ -326,5 +382,26 @@ mod tests {
         let b = TileCoord::new(4, 0);
         assert_eq!(bridge_total_length(a, b), 5);
         assert_eq!(bridge_middle_length(a, b), 3);
+    }
+
+    #[test]
+    fn place_bridge_keeps_water_under_span() {
+        let mut s = GameState::new(10, 10);
+        let c = |x: i32, y: i32| TileCoord::new(x, y);
+        for x in 2..=4 {
+            s.map.set_kind(c(x, 2), TileKind::Water).unwrap();
+        }
+        apply_command(
+            &mut s,
+            &Command::PlaceRoadBridge(c(1, 2), c(5, 2), BridgeType::CantileverRed),
+        )
+        .unwrap();
+        assert_eq!(s.map.get_kind(c(3, 2)), Some(TileKind::Water));
+        assert!(bridge_above_axis_from_mapt(s.map.get(c(3, 2)).unwrap().mapt).is_some());
+        assert_eq!(s.map.get_kind(c(1, 2)), Some(TileKind::RoadBridge));
+        assert_eq!(
+            bridge_type_from_m6(s.map.get(c(1, 2)).unwrap().m6),
+            BridgeType::CantileverRed
+        );
     }
 }

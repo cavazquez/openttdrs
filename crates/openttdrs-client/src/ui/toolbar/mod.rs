@@ -29,7 +29,10 @@ pub(crate) use order_panel::{
     start_order_destination_pick, sync_order_panel, try_append_order_at_tile,
 };
 pub(crate) use orders_cursor::sync_orders_pick_cursor;
-pub(crate) use preview::{rotate_station_with_right_click, update_build_ghost_preview};
+pub(crate) use preview::{
+    RailSignalGhostState, lerp_ghost_previews, rotate_station_with_right_click,
+    update_build_ghost_preview,
+};
 pub(crate) use rail_station_window::{
     handle_rail_station_picker_buttons, rail_station_picker_on_closed, setup_rail_station_picker,
     sync_rail_station_picker,

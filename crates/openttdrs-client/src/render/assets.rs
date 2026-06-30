@@ -46,14 +46,8 @@ pub(crate) struct WorldAssets {
     pub(crate) rail_depot_builds: [Vec<AtlasSprite>; 4],
     pub(crate) road_tunnel: AtlasSprite,
     pub(crate) rail_tunnel: AtlasSprite,
-    pub(crate) road_bridge: AtlasSprite,
-    pub(crate) road_bridge_y: AtlasSprite,
-    pub(crate) rail_bridge: AtlasSprite,
-    pub(crate) rail_bridge_y: AtlasSprite,
-    /// Barandilla frontal del tramo intermedio de puente, por eje `[x, y]`.
-    pub(crate) bridge_front: [AtlasSprite; 2],
-    /// Pilar del tramo intermedio de puente, por eje `[x, y]`.
-    pub(crate) bridge_pillar: [AtlasSprite; 2],
+    /// Sprites de puente por id OpenGFX (`bridge_{id}.png` o alias madera).
+    pub(crate) bridge_by_id: std::collections::HashMap<u32, AtlasSprite>,
     pub(crate) houses: HashMap<u32, AtlasSprite>,
     /// `tree_{NN}.png` (NN = sprite − 1576): 19 especies × 7 etapas.
     pub(crate) trees: Vec<AtlasSprite>,
@@ -190,18 +184,42 @@ impl WorldAssets {
         });
         let road_tunnel = atlas.get("tunnel_road_rear.png");
         let rail_tunnel = atlas.get("tunnel_rail_rear.png");
-        let road_bridge = atlas.get("bridge_wood_road_x.png");
-        let road_bridge_y = atlas.get("bridge_wood_road_y.png");
-        let rail_bridge = atlas.get("bridge_wood_rail_x.png");
-        let rail_bridge_y = atlas.get("bridge_wood_rail_y.png");
-        let bridge_front = [
-            atlas.get("bridge_wood_x_front.png"),
-            atlas.get("bridge_wood_y_front.png"),
-        ];
-        let bridge_pillar = [
-            atlas.get("bridge_wood_x_pillar.png"),
-            atlas.get("bridge_wood_y_pillar.png"),
-        ];
+        let mut bridge_by_id = std::collections::HashMap::new();
+        use crate::sprites::{BridgeDeckSpriteIds, bridge_deck_sprite_ids};
+        use openttdrs_core::{BridgePiece, BridgeType};
+        for bt in 0..13u8 {
+            let Some(bridge_type) = BridgeType::from_u8(bt) else {
+                continue;
+            };
+            for (pi, piece) in [
+                (0, BridgePiece::North),
+                (1, BridgePiece::South),
+                (2, BridgePiece::InnerNorth),
+                (3, BridgePiece::InnerSouth),
+                (4, BridgePiece::MiddleOdd),
+                (5, BridgePiece::MiddleEven),
+            ] {
+                let _ = pi;
+                let ids = bridge_deck_sprite_ids(bridge_type, piece);
+                for sid in ids
+                    .rear_rail
+                    .iter()
+                    .chain(ids.rear_road.iter())
+                    .chain(ids.front.iter())
+                    .chain(ids.pillar.iter())
+                    .copied()
+                    .filter(|id| *id != 0)
+                {
+                    bridge_by_id.entry(sid).or_insert_with(|| {
+                        let name = BridgeDeckSpriteIds::atlas_name(sid);
+                        atlas.try_get(&name).unwrap_or_else(|| {
+                            error!("Sprite de puente no encontrado en atlas: {name}");
+                            atlas.get("bridge_wood_road_x.png")
+                        })
+                    });
+                }
+            }
+        }
 
         let mut houses = HashMap::new();
         for spec in &HOUSE_DRAW_DATA {
@@ -301,12 +319,7 @@ impl WorldAssets {
             rail_depot_builds,
             road_tunnel,
             rail_tunnel,
-            road_bridge,
-            road_bridge_y,
-            rail_bridge,
-            rail_bridge_y,
-            bridge_front,
-            bridge_pillar,
+            bridge_by_id,
             houses,
             trees,
             fields,
@@ -318,6 +331,11 @@ impl WorldAssets {
             fizzy_drink_frames,
             foundations,
         }
+    }
+
+    #[must_use]
+    pub(crate) fn bridge_sprite(&self, id: u32) -> Option<&AtlasSprite> {
+        self.bridge_by_id.get(&id)
     }
 }
 

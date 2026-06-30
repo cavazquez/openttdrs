@@ -39,9 +39,10 @@ pub mod world_gen;
 
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
 pub use bridge_spec::{
-    BRIDGE_SPECS, BridgeSpec, BridgeType, bridge_available, bridge_available_at_tick,
-    bridge_build_cost, bridge_line_tiles, bridge_middle_length, bridge_spec, bridge_total_length,
-    bridge_type_from_m6, set_bridge_type_m6,
+    BRIDGE_SPECS, BridgePiece, BridgeSpec, BridgeType, bridge_above_axis_from_mapt,
+    bridge_available, bridge_available_at_tick, bridge_build_cost, bridge_line_tiles,
+    bridge_middle_length, bridge_spec, bridge_total_length, bridge_type_from_m6, calc_bridge_piece,
+    set_bridge_middle_mapt, set_bridge_type_m6,
 };
 pub use cargo::{CargoStock, CargoType};
 pub use command::{

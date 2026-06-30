@@ -1,6 +1,7 @@
 //! Fantasma de construcción: preview de herramientas sobre el mapa.
 
 mod bridge;
+mod ghost_lerp;
 mod industry;
 mod orders;
 mod rail_depot;
@@ -13,9 +14,11 @@ mod sprites;
 mod station_coverage;
 mod validation;
 
+pub(crate) use ghost_lerp::{GhostLerp, lerp_ghost_previews};
 pub(crate) use industry::{economy_industry_tool_visible, industry_spec_for_action};
 pub(crate) use rotate::rotate_station_with_right_click;
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::{
@@ -39,7 +42,10 @@ use bridge::spawn_bridge_span_preview;
 use industry::spawn_industry_template_preview;
 use orders::{spawn_order_pick_target_preview, spawn_order_route_preview};
 use rail_depot::{RailDepotPreviewSpawn, spawn_rail_depot_preview};
-use rail_signal::spawn_rail_signal_preview;
+pub(crate) use rail_signal::{
+    RailSignalGhost, RailSignalGhostState, rail_signal_flash_position,
+    update_rail_signal_ghost_preview,
+};
 use rail_waypoint::spawn_rail_waypoint_preview;
 use road_depot::{RoadDepotPreviewSpawn, spawn_road_depot_preview};
 use road_stop::{
@@ -56,6 +62,14 @@ use crate::sprites::{StationTileClass, road_flat_sprite_index};
 
 #[derive(Component)]
 pub(crate) struct BuildGhostPreview;
+
+#[derive(SystemParam)]
+pub(crate) struct RailSignalGhostPreviewParams<'w, 's> {
+    pub ghosts: Query<'w, 's, Entity, With<RailSignalGhost>>,
+    pub state: ResMut<'w, RailSignalGhostState>,
+    pub sprites:
+        Query<'w, 's, (Entity, &'static mut GhostLerp, &'static mut Sprite), With<RailSignalGhost>>,
+}
 
 /// Bits y PNG de preview de carretera (misma lógica que la colocación final).
 fn road_preview_at(
@@ -96,7 +110,8 @@ pub(crate) fn update_build_ghost_preview(
     mut commands: Commands,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<(&Camera, &GlobalTransform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
-    existing: Query<Entity, With<BuildGhostPreview>>,
+    existing: Query<Entity, (With<BuildGhostPreview>, Without<RailSignalGhost>)>,
+    mut rail_ghost: RailSignalGhostPreviewParams,
     asset_server: Res<AssetServer>,
     atlas: Option<Res<TileAtlas>>,
     company: Option<Res<CompanyColoredSprites>>,
@@ -106,7 +121,15 @@ pub(crate) fn update_build_ghost_preview(
     drag_state: Res<DragBuildState>,
     order_state: Res<OrderEditState>,
     hovered: Res<HoveredTileCoord>,
+    time: Res<Time>,
 ) {
+    if tool_state.active_tool != Some(BuildMenuAction::RailSignals) {
+        for entity in &rail_ghost.ghosts {
+            commands.entity(entity).despawn();
+        }
+        rail_ghost.state.key = None;
+    }
+
     for entity in &existing {
         commands.entity(entity).despawn();
     }
@@ -240,10 +263,12 @@ pub(crate) fn update_build_ghost_preview(
                 preview_rail_lane,
                 Some(tile_fract),
             );
-            spawn_rail_signal_preview(
-                &mut commands,
-                &asset_server,
-                atlas.as_deref(),
+            update_rail_signal_ghost_preview(
+                commands,
+                time,
+                asset_server,
+                atlas,
+                rail_ghost.state,
                 &sim.state.map,
                 coord,
                 station_state.orientation,
@@ -251,6 +276,7 @@ pub(crate) fn update_build_ghost_preview(
                 tile_fract.1,
                 valid,
                 sim.state.tick,
+                rail_ghost.sprites,
             );
         }
         return;

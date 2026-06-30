@@ -421,6 +421,8 @@ fn spawn_map_tiles_in_bounds(
                     Some(company),
                     &ctx,
                     slope_half_ground,
+                    map,
+                    (mw, mh),
                 );
             }
             TileKind::Industry => {

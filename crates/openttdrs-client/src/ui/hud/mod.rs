@@ -4,6 +4,7 @@ mod display;
 mod feedback;
 mod income_popup;
 mod input;
+mod place_flash;
 mod sound_ping;
 
 pub(crate) use feedback::{push_build_command_error, push_build_command_success};
@@ -11,6 +12,9 @@ pub(crate) use feedback::{push_build_command_error, push_build_command_success};
 pub(crate) use display::{setup_tile_info_ui, update_tile_info_text};
 pub(crate) use income_popup::{animate_income_popups, spawn_income_popups};
 pub(crate) use input::{cycle_json_save_path_hotkey, handle_pause_toggle, handle_tool_hotkeys};
+pub(crate) use place_flash::{
+    animate_build_place_flash, enqueue_build_place_flash, spawn_build_place_flash,
+};
 pub(crate) use sound_ping::{HudSfxHandles, PlayHudSfx, flush_hud_sfx, load_hud_sfx, play_hud_sfx};
 
 /// Pausa simulacion y ruta del JSON de **F5/F9** (alternativa a variable de entorno al arranque).
@@ -70,4 +74,6 @@ pub(crate) struct HudBuildFeedback {
     pub(crate) pending_news_applause: bool,
     /// Sonido genérico de noticia completa.
     pub(crate) pending_news_chime: bool,
+    /// Destello visual breve tras colocar construcción (coordenadas mundo).
+    pub(crate) pending_place_flash: Option<Vec3>,
 }

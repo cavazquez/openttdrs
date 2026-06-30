@@ -4,7 +4,11 @@ use bevy::prelude::Color;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
 #[path = "sprites/bridge_draw_data_generated.rs"]
+#[allow(dead_code)]
 mod bridge_draw_data_generated;
+#[path = "sprites/bridge_sprites_generated.rs"]
+#[allow(dead_code)]
+mod bridge_sprites_generated;
 #[path = "sprites/company_palette.rs"]
 pub(crate) mod company_palette;
 #[path = "sprites/copper_smoke_draw_data_generated.rs"]
@@ -188,9 +192,8 @@ pub use field_draw_data_generated::{
 
 /// Set completo de orillas (`SPR_SHORE_BASE + 0..17`, Action5 0x0D).
 /// Regenerar: `python3 scripts/gen_shore_full_set.py`.
-pub use bridge_draw_data_generated::{
-    BRIDGE_WOOD_FRONT_META, BRIDGE_WOOD_PILLAR_META, BRIDGE_WOOD_REAR_RAIL_META,
-    BRIDGE_WOOD_REAR_ROAD_META,
+pub use bridge_sprites_generated::{
+    BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_sprite_meta,
 };
 pub use shore_draw_data_generated::{SHORE_META, SHORE_SPRITE_COUNT, TILEH_TO_SHORE_SPRITE};
 

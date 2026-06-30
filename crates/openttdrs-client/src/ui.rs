@@ -37,9 +37,9 @@ use finances_window::{
 pub(crate) use hud::SimHudControls;
 use hud::{
     HoveredTileCoord, HudBuildFeedback, HudSfxHandles, PlayHudSfx, SelectedTileInfo,
-    animate_income_popups, cycle_json_save_path_hotkey, flush_hud_sfx, handle_pause_toggle,
-    handle_tool_hotkeys, load_hud_sfx, play_hud_sfx, setup_tile_info_ui, spawn_income_popups,
-    update_tile_info_text,
+    animate_build_place_flash, animate_income_popups, cycle_json_save_path_hotkey, flush_hud_sfx,
+    handle_pause_toggle, handle_tool_hotkeys, load_hud_sfx, play_hud_sfx, setup_tile_info_ui,
+    spawn_build_place_flash, spawn_income_popups, update_tile_info_text,
 };
 use industry_panel::{
     IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
@@ -73,20 +73,21 @@ use timetable_window::{
 };
 use toolbar::depot_panel_on_closed;
 use toolbar::{
-    BridgeBuildState, DepotPanelState, DragBuildState, StationBuildState, StationCargoPanelState,
-    ToolbarState, UiToolState, bridge_picker_on_closed, build_menu_interaction,
-    close_toolbar_button_interaction, close_toolbar_panel_on_escape, handle_bridge_picker_buttons,
-    handle_company_colour_swatches, handle_depot_panel_buttons, handle_minimap_click,
-    handle_order_panel_buttons, handle_rail_station_picker_buttons, handle_settings_menu_buttons,
-    handle_station_cargo_panel_buttons, handle_tile_click, hide_tool_when_panel_closed,
-    rail_station_picker_on_closed, rotate_station_with_right_click, setup_bridge_picker,
-    setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
-    setup_rail_station_picker, setup_station_cargo_panel, setup_top_toolbar, sync_bridge_picker,
-    sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_depot_panel,
-    sync_minimap, sync_order_panel, sync_orders_pick_cursor, sync_rail_station_picker,
-    sync_station_cargo_panel, toolbar_group_interaction, update_build_ghost_preview,
-    update_cursor_tile, update_tool_button_visuals, update_toolbar_group_visuals,
-    update_toolbar_tool_visibility, update_toolbar_tooltip,
+    BridgeBuildState, DepotPanelState, DragBuildState, RailSignalGhostState, StationBuildState,
+    StationCargoPanelState, ToolbarState, UiToolState, bridge_picker_on_closed,
+    build_menu_interaction, close_toolbar_button_interaction, close_toolbar_panel_on_escape,
+    handle_bridge_picker_buttons, handle_company_colour_swatches, handle_depot_panel_buttons,
+    handle_minimap_click, handle_order_panel_buttons, handle_rail_station_picker_buttons,
+    handle_settings_menu_buttons, handle_station_cargo_panel_buttons, handle_tile_click,
+    hide_tool_when_panel_closed, lerp_ghost_previews, rail_station_picker_on_closed,
+    rotate_station_with_right_click, setup_bridge_picker, setup_build_menu, setup_depot_panel,
+    setup_minimap, setup_order_panel, setup_rail_station_picker, setup_station_cargo_panel,
+    setup_top_toolbar, sync_bridge_picker, sync_climate_industry_tools,
+    sync_company_colour_swatch_visuals, sync_depot_panel, sync_minimap, sync_order_panel,
+    sync_orders_pick_cursor, sync_rail_station_picker, sync_station_cargo_panel,
+    toolbar_group_interaction, update_build_ghost_preview, update_cursor_tile,
+    update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
+    update_toolbar_tooltip,
 };
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState};
 use town_window::{
@@ -116,6 +117,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<SimHudControls>()
         .init_resource::<HudBuildFeedback>()
         .init_resource::<HudSfxHandles>()
+        .init_resource::<RailSignalGhostState>()
         .add_message::<PlayHudSfx>()
         .init_resource::<UiToolState>()
         .init_resource::<StationBuildState>()
@@ -269,7 +271,9 @@ impl Plugin for ClientUiPlugin {
             (
                 update_cursor_tile,
                 update_build_ghost_preview,
+                lerp_ghost_previews,
                 handle_tile_click,
+                spawn_build_place_flash,
                 flush_hud_sfx,
             )
                 .chain()
@@ -306,6 +310,7 @@ impl Plugin for ClientUiPlugin {
             (
                 spawn_income_popups,
                 animate_income_popups,
+                animate_build_place_flash,
                 sync_minimap,
                 sync_order_panel,
                 sync_orders_pick_cursor,

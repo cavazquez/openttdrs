@@ -12,11 +12,12 @@ use crate::render::{
 };
 use crate::state::SimWorld;
 use crate::ui::hud::{
-    HoveredTileCoord, HudBuildFeedback, SelectedTileInfo, push_build_command_error,
-    push_build_command_success,
+    HoveredTileCoord, HudBuildFeedback, SelectedTileInfo, enqueue_build_place_flash,
+    push_build_command_error, push_build_command_success,
 };
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::save_window::SaveWindowState;
+use crate::ui::toolbar::preview::rail_signal_flash_position;
 use crate::ui::town_window::{TownWindowState, town_for_house_tile};
 use crate::ui::vehicle_window::VehicleWindowState;
 
@@ -452,6 +453,18 @@ pub(crate) fn handle_tile_click(
             let tiles = tiles_for_visual_remap(action, build_pos, &[]);
             request_map_visual_remap(&mut pending, mw, mh, &tiles);
             push_build_command_success(&mut hud_feedback);
+            if action == BuildMenuAction::RailSignals
+                && let Some(flash_pos) = rail_signal_flash_position(
+                    &sim.state.map,
+                    build_pos,
+                    station_state.orientation,
+                    tile_fract.0,
+                    tile_fract.1,
+                    sim.state.tick,
+                )
+            {
+                enqueue_build_place_flash(&mut hud_feedback, flash_pos);
+            }
         }
     }
 }

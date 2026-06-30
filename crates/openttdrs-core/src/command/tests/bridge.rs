@@ -29,7 +29,7 @@ fn bridge_axis_y_sets_m5_flag() {
     let a = TileCoord::new(2, 1);
     let b = TileCoord::new(2, 5);
     apply_command(&mut s, &Command::PlaceRoadBridge(a, b, BridgeType::Wooden)).unwrap();
-    assert_eq!(s.map.get(a).unwrap().m5 & 0x10, 0x10);
+    assert_eq!(s.map.get(a).unwrap().m5 & 0x03, 1); // SE en eje Y
     let mut s2 = GameState::new(8, 8);
     for x in 1..=5 {
         s2.map.set_kind(c(x, 2), TileKind::Water).unwrap();
@@ -41,7 +41,7 @@ fn bridge_axis_y_sets_m5_flag() {
         &Command::PlaceRoadBridge(a2, b2, BridgeType::Wooden),
     )
     .unwrap();
-    assert_eq!(s2.map.get(a2).unwrap().m5 & 0x10, 0);
+    assert_eq!(s2.map.get(a2).unwrap().m5 & 0x03, 2); // SW en eje X
 }
 
 #[test]

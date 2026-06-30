@@ -1,5 +1,7 @@
 use crate::GameState;
-use crate::bridge_spec::{BridgeType, bridge_build_cost, set_bridge_type_m6};
+use crate::bridge_spec::{
+    BridgeType, bridge_build_cost, set_bridge_middle_mapt, set_bridge_type_m6,
+};
 use crate::map::{
     Map, TileCoord, TileKind, complement_slope, inclined_slope_direction, resolve_tunnel_end,
     tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles, tunnel_preview_path,
@@ -12,7 +14,19 @@ use crate::command::transport::internal::{
     axis_line, build_error_for_kind, check_in_bounds, transport_tile_is_buildable,
 };
 
-pub const BRIDGE_AXIS_Y_M5: u8 = 0x10;
+/// Dirección diagonal «hacia el sur» del eje (`AxisToDiagDir` en `direction_func.h`).
+fn axis_to_diag_dir(axis_y: bool) -> u8 {
+    u8::from(!axis_y) + 1 // SE en eje Y, SW en eje X
+}
+
+fn reverse_diag_dir(dir: u8) -> u8 {
+    2 ^ (dir & 0x03)
+}
+
+fn bridge_ramp_m5(is_rail: bool, dir: u8) -> u8 {
+    let transport = u8::from(!is_rail);
+    0x80 | (transport << 2) | (dir & 0x03)
+}
 
 pub(crate) fn check_bridge(map: &Map, a: TileCoord, b: TileCoord) -> Result<(), CommandError> {
     let line = axis_line(a, b);
@@ -97,7 +111,7 @@ pub(in crate::command) fn place_tunnel_or_bridge(
     b: TileCoord,
     kind_to_place: TileKind,
     mapt: u8,
-    m5: u8,
+    _m5: u8,
     bridge_type: BridgeType,
 ) -> Result<(), CommandError> {
     let is_tunnel = matches!(kind_to_place, TileKind::RoadTunnel | TileKind::RailTunnel);
@@ -122,25 +136,35 @@ pub(in crate::command) fn place_tunnel_or_bridge(
     } else {
         bridge_build_cost(bridge_type, a, b)
     };
-    for c in line {
-        let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
-        tile.kind = kind_to_place;
-        tile.mapt = mapt;
-        tile.m5 = if is_tunnel {
-            tile_slope_and_z(&state.map, c)
+    for (i, c) in line.iter().enumerate() {
+        let mut tile = state.map.get(*c).ok_or(CommandError::OutOfBounds)?;
+        if is_tunnel {
+            tile.kind = kind_to_place;
+            tile.mapt = mapt;
+            tile.m5 = tile_slope_and_z(&state.map, *c)
                 .and_then(|(h, _)| tunnel_entrance_m5(h, is_rail))
-                .unwrap_or(0)
-        } else if bridge_axis_y {
-            m5 | BRIDGE_AXIS_Y_M5
+                .unwrap_or(0);
         } else {
-            m5
-        };
-        if !is_tunnel {
-            tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
+            let is_endpoint = i == 0 || i + 1 == line.len();
+            if is_endpoint {
+                tile.kind = kind_to_place;
+                tile.mapt = mapt;
+                let is_start = i == 0;
+                let dir = if is_start {
+                    axis_to_diag_dir(bridge_axis_y)
+                } else {
+                    reverse_diag_dir(axis_to_diag_dir(bridge_axis_y))
+                };
+                tile.m5 = bridge_ramp_m5(is_rail, dir);
+                tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
+            } else {
+                tile.mapt = set_bridge_middle_mapt(tile.mapt, bridge_axis_y);
+                tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
+            }
         }
         state
             .map
-            .set_tile(c, tile)
+            .set_tile(*c, tile)
             .map_err(|_| CommandError::OutOfBounds)?;
     }
     state.economy.money -= cost;

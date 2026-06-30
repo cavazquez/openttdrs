@@ -1,6 +1,7 @@
 use bevy::prelude::*;
-use openttdrs_core::{Station, TileKind, is_tunnel_entrance_slope};
+use openttdrs_core::{Map, Station, TileKind, is_tunnel_entrance_slope};
 
+use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
 use super::{sloped_or_flat_image, spawn_ground_sprite, spawn_rail_foundation};
 use crate::iso::{
     SLOPE_HALF_H, TILE_HALF_H, road_depot_build_sprite_center, road_stop_build_sprite_center,
@@ -247,6 +248,8 @@ pub(crate) fn spawn_transport_object_tile(
     company: Option<&CompanyColoredSprites>,
     ctx: &TileRenderContext,
     slope_half_ground: f32,
+    map: &Map,
+    dims: (u32, u32),
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -297,23 +300,10 @@ pub(crate) fn spawn_transport_object_tile(
             };
             spawn_rail_depot_tile(commands, assets, company, ctx, base_z, depot_half_h);
         }
-        TileKind::RoadBridge => {
-            let axis_y = ctx.tile.is_some_and(|t| t.m5 & 0x10 != 0);
-            let image = if axis_y {
-                &assets.road_bridge_y
-            } else {
-                &assets.road_bridge
-            };
-            spawn_object_sprite(commands, image, ctx, base_z, TILE_HALF_H);
-        }
-        TileKind::RailBridge => {
-            let axis_y = ctx.tile.is_some_and(|t| t.m5 & 0x10 != 0);
-            let image = if axis_y {
-                &assets.rail_bridge_y
-            } else {
-                &assets.rail_bridge
-            };
-            spawn_object_sprite(commands, image, ctx, base_z, TILE_HALF_H);
+        TileKind::RoadBridge | TileKind::RailBridge => {
+            if let Some(span) = bridge_span_at(map, ctx.coord, dims) {
+                spawn_bridge_deck(commands, assets, ctx, &span, false);
+            }
         }
         _ => unreachable!(),
     }
@@ -424,25 +414,4 @@ fn spawn_rail_depot_tile(
             Transform::from_translation(center),
         ));
     }
-}
-
-fn spawn_object_sprite(
-    commands: &mut Commands,
-    image: &AtlasSprite,
-    ctx: &TileRenderContext,
-    base_z: u8,
-    half_h: f32,
-) {
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        image.sprite(),
-        Transform::from_translation(tile_pos_half(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-            base_z,
-            0.08,
-            half_h,
-        )),
-    ));
 }

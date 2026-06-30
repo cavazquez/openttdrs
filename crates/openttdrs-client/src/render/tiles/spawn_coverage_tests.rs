@@ -179,6 +179,8 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                         None,
                         &TileRenderContext::new(&m.0, &g.0, x as u32, y as u32),
                         4.0,
+                        &m.0,
+                        (m.0.dimensions().0, m.0.dimensions().1),
                     );
                 }
             },

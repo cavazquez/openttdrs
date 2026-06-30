@@ -27,7 +27,7 @@ Ordenada de **más barato a más caro**.
 |---|------|---------|------|-----------|-------|
 | 1 | Pulido | Migraciones save JSON | ✅ | ✅ | S |
 | 2 | Audio | Música y SFX in-game | ✅ | 🟡 | S |
-| 3 | Render | Depósito carretera RemapCoords | ✅ | 🟡 | S |
+| 3 | Render | Depósito carretera RemapCoords | ✅ | ✅ | S — `gen_road_depot_gfx_data.py`, tests `iso/mod.rs` |
 | 4 | Render | Junctions vía en pendiente | ✅ | 🟡 | S–M |
 | 5 | Construcción | Quitar vía (`RailRemove`) | ✅ | ✅ | S |
 | 6 | Construcción | Waypoint ferroviario | ✅ | ✅ | S–M |
@@ -69,7 +69,7 @@ Ordenada de **más barato a más caro**.
 | **Economía** | Dinero, costes, inflación, 6 cargos, pago transporte |
 | **Save** | JSON versionado (v4) |
 | **Import** | `parse_sav.py`, parser Rust, golden CI |
-| **Render** | OpenGFX + atlas; terreno, agua, costa, casas, industrias 0–119, estaciones |
+| **Render** | OpenGFX + atlas; terreno, agua, costa, casas, industrias 0–119, estaciones, depósito carretera (RemapCoords) |
 | **UI** | Toolbar, minimapa, ventanas flotantes, ghost preview |
 
 ---

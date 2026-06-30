@@ -53,7 +53,7 @@ Prioridad visual según huecos reales en [PLAN_SP3_VISUAL.md](PLAN_SP3_VISUAL.md
 
 | PR | Tema | Doc |
 |----|------|-----|
-| **SP3-depot** | Depósito carretera `RemapCoords` (fase A–B) | [PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md) |
+| **SP3-depot** | Depósito carretera `RemapCoords` | ✅ Hecho — ver `gen_road_depot_gfx_data.py` |
 | SP3-industry | gfx ≥ 120, HUD aviso | [PLAN_SP3_CASAS_INDUSTRIAS.md](PLAN_SP3_CASAS_INDUSTRIAS.md) |
 | SP3-capture | Captura manual checklist (opcional) | [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) |
 

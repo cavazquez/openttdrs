@@ -102,7 +102,7 @@ En openttdrs (`connect_road_stop` en `command/transport.rs`):
 
 Convención de bits: misma que `road_bits_for_render` (vecino en x−1 → bit 8, etc.). No reutilizar los bits de la boca del depósito en la tesela de parada (van en sentido opuesto).
 
-**Depósito carretera:** sigue el patrón distinto de `road_depot_exit_for_dir` + `place_road_bits` en la tesela de salida.
+**Depósito carretera:** `RemapCoords` + capas BUILD (`gen_road_depot_gfx_data.py`), suelo 2634, boca + tramo `road_flat` en la tesela; salida lógica vía `road_depot_exit_for_dir`.
 
 ---
 

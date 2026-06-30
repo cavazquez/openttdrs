@@ -3,6 +3,7 @@
 mod bridge;
 mod industry;
 mod orders;
+mod rail_depot;
 mod rail_signal;
 mod rail_waypoint;
 mod road_depot;
@@ -37,6 +38,7 @@ use super::{BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, 
 use bridge::spawn_bridge_span_preview;
 use industry::spawn_industry_template_preview;
 use orders::{spawn_order_pick_target_preview, spawn_order_route_preview};
+use rail_depot::{RailDepotPreviewSpawn, spawn_rail_depot_preview};
 use rail_signal::spawn_rail_signal_preview;
 use rail_waypoint::spawn_rail_waypoint_preview;
 use road_depot::{RoadDepotPreviewSpawn, spawn_road_depot_preview};
@@ -370,6 +372,23 @@ pub(crate) fn update_build_ghost_preview(
             spawn_road_depot_preview(
                 &mut commands,
                 RoadDepotPreviewSpawn {
+                    px: *px,
+                    py: *py,
+                    base_z,
+                    half_h,
+                    dir: road_stop_preview_dir(station_state.orientation),
+                    tint,
+                    asset_server: &asset_server,
+                    company: company.as_deref(),
+                },
+            );
+            continue;
+        }
+
+        if action == BuildMenuAction::RailDepot {
+            spawn_rail_depot_preview(
+                &mut commands,
+                RailDepotPreviewSpawn {
                     px: *px,
                     py: *py,
                     base_z,

@@ -1,5 +1,10 @@
 # Plan: depósito de carretera y alineación visual
 
+> **Estado (jun 2026):** **Implementado** en `main`. Render multi-capa con
+> `gen_road_depot_gfx_data.py`, `spawn_road_depot_tile`, preview en
+> `preview/road_depot.rs` y tests en `iso/mod.rs`. El resto del documento
+> describe el problema original y el trabajo experimental previo al merge.
+
 Documento de **retomada** tras revertir el trabajo experimental en depósito (2026-05).
 Estado del código en `main` (commit `6641239`): render **legacy** — un PNG 60×47 centrado
 en el rombo (`spawn_object_sprite` + `ROAD_DEPOT_BUILDING_BY_DIR`).

@@ -84,7 +84,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **Import** | Entidades: vehículos, órdenes, dinero desde `.sav` | 🟡 | `sav/entities.rs`, `sav/orders.rs` — ver limitaciones en [TILES_Y_SAVEGAMES_OPENTTD.md](docs/TILES_Y_SAVEGAMES_OPENTTD.md) |
 | **Import** | Partida OpenTTD 100 % jugable sin JSON propio | ❌ | Sprint 6 en [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) |
 | **Construcción** | Autorail carretera (drag, vecinos) | ✅ | `command/transport/road.rs` |
-| **Construcción** | Depósito carretera | 🟡 | Alineación RemapCoords pendiente — [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) S2 |
+| **Construcción** | Depósito carretera | ✅ | `gen_road_depot_gfx_data.py`, `spawn_road_depot_tile`, preview multi-capa |
 | **Construcción** | Paradas bus / camión (orientación RMB) | ✅ | `road_stop_gfx_data_generated.rs` |
 | **Construcción** | Túnel / puente carretera | ✅ | `command/transport/bridge.rs`, `render/tiles/bridge.rs` |
 | **Construcción** | Quitar carretera / limpiar tesela | ✅ | `Command::ClearTile`, `RemoveRoad*` |
@@ -170,7 +170,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | SP3 Visual | 🟡 ~90 % | [ROADMAP_PARIDAD_VISUAL.md](docs/ROADMAP_PARIDAD_VISUAL.md) |
 | SP1 Ciclo jugable | 🟡 Auto ✅ / manual pendiente | [SP1_CHECKLIST.md](docs/SP1_CHECKLIST.md) |
 
-**Sprints operativos pendientes:** S2 resto (depósito carretera, `RailConvert`), S3 visual, S4 SP1 manual, S5 señales+audio, S6 import — ver [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md).
+**Sprints operativos pendientes:** S2 resto (`RailConvert`), S3 visual, S4 SP1 manual, S5 señales+audio, S6 import — ver [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md).
 
 ---
 
@@ -334,6 +334,8 @@ Si preferís scripts individuales:
 
 ```bash
 ./scripts/descargar_graficos.sh --32bpp
+python3 scripts/extract_train_vehicle_sprites.py   # locomotoras (5 grupos)
+python3 scripts/gen_vehicle_gfx_data.py
 ./scripts/descargar_sonidos.sh --opensfx   # OpenSFX + WAV HUD y noticias
 ./scripts/descargar_musica.sh --openmsx
 ```

@@ -94,7 +94,7 @@ Planes y notas de sesión **cerrados o absorbidos en código** — conservados p
 | [archive/PLAN_SP3_VISUAL.md](archive/PLAN_SP3_VISUAL.md) | Fases SP3.0–3.6 cerradas; huecos en ROADMAP_SPRINTS S3 |
 | [archive/PLAN_SP3_CASAS_INDUSTRIAS.md](archive/PLAN_SP3_CASAS_INDUSTRIAS.md) | P1–P6 cerrados |
 | [archive/PLAN_PARADAS_REMAPCOORDS.md](archive/PLAN_PARADAS_REMAPCOORDS.md) | Implementado en código |
-| [archive/PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](archive/PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md) | Pendiente visual → S2 |
+| [archive/PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](archive/PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md) | Implementado (jun 2026) — histórico |
 | [archive/SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md](archive/SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md) | Nota de sesión; integrado en core/cliente |
 | [archive/SESION_CLIENTE_MAPA_COSTA_2026-04-28.md](archive/SESION_CLIENTE_MAPA_COSTA_2026-04-28.md) | Nota de sesión costa/agua |
 

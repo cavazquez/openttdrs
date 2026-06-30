@@ -14,7 +14,7 @@ Planes y notas de sesión **históricos**. El contenido útil sigue vivo en cód
 | `PLAN_SP3_VISUAL.md` | SP3.0–3.6 cerradas | Huecos restantes en ROADMAP_SPRINTS S3 |
 | `PLAN_SP3_CASAS_INDUSTRIAS.md` | P1–P6 cerrados | Detalle en ROADMAP_INDUSTRIAS_PARIDAD |
 | `PLAN_PARADAS_REMAPCOORDS.md` | Implementado | RemapCoords en código |
-| `PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md` | Pendiente visual | Tarea en ROADMAP_SPRINTS S2 |
+| `PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md` | Implementado jun 2026 | Histórico; ver `gen_road_depot_gfx_data.py` |
 | `SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md` | Sesión 2026-04-28 | v5+12, señales render — integrado |
 | `SESION_CLIENTE_MAPA_COSTA_2026-04-28.md` | Sesión 2026-04-28 | Costa/agua — integrado en render |
 

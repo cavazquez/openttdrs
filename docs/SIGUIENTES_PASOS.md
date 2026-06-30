@@ -28,7 +28,7 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 | **SP4** Pulido | ✅ Cerrado 2026-06-22 | ROADMAP_SPRINTS S1 |
 | **SP1** Ciclo jugable | 🟡 En curso | [SP1_CHECKLIST.md](SP1_CHECKLIST.md), ROADMAP S4 |
 
-**Huecos visuales reales (SP3):** junctions vía en pendiente; depósito carretera; culling global; industrias gfx ≥ 120.
+**Huecos visuales reales (SP3):** junctions vía en pendiente; culling global; industrias gfx ≥ 120.
 
 **Terraform (paisaje):** T1–T3 implementados; gen procedural T4 MVP en `world_gen.rs` — [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md).
 

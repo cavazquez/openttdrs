@@ -82,18 +82,7 @@ pub(crate) fn preview_image_for_action(
             };
             Some(asset_server.load::<Image>(path))
         }
-        BuildMenuAction::RailDepot => {
-            const RAIL_DEPOT_MAIN: [&str; 4] = [
-                "assets/opengfx/tiles/rail_depot_ne.png",
-                "assets/opengfx/tiles/rail_depot_se_2.png",
-                "assets/opengfx/tiles/rail_depot_sw_2.png",
-                "assets/opengfx/tiles/rail_depot_nw.png",
-            ];
-            Some(
-                asset_server
-                    .load::<Image>(RAIL_DEPOT_MAIN[usize::from(station_state.orientation.min(3))]),
-            )
-        }
+        BuildMenuAction::RailDepot => None,
         BuildMenuAction::RailBridge => {
             let path = if bridge_axis_y_from_tiles(preview_tiles) {
                 "assets/opengfx/tiles/bridge_wood_rail_y.png"

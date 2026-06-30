@@ -4,7 +4,7 @@ use openttdrs_core::{
     rail_signals::{resolve_signal_track, signal_bit_for_facing, valid_signal_facings_track},
 };
 
-use crate::sprites::{rail_signal_subtile_offset, signal_draw_pos};
+use crate::sprites::{signal_draw_pos, signal_screen_position};
 
 use super::{HEIGHT_PX, ISO_HW, ISO_QH, SLOPE_HALF_H, TILE_HALF_H, tile_slope_and_min_z};
 
@@ -193,16 +193,14 @@ pub fn world_pos_to_tile_fract(world_pos: Vec2, map: &Map, tx: i32, ty: i32) -> 
 const RAIL_SIGNAL_PICK_MAX_DIST: f32 = 44.0;
 
 #[must_use]
-fn rail_signal_anchor_world(map: &Map, tx: i32, ty: i32, draw_pos: u8) -> Vec2 {
+fn rail_signal_anchor_world(map: &Map, tx: i32, ty: i32, draw_pos: u8, tex_id: u32) -> Vec2 {
     let (tileh, base_z) = tile_slope_and_min_z(map, tx as u32, ty as u32);
     let half_h = if tileh == 0 {
         TILE_HALF_H
     } else {
         SLOPE_HALF_H[tileh.min(14) as usize]
     };
-    let elev = f32::from(base_z) * HEIGHT_PX;
-    let center = Vec2::new(iso(tx, ty).x, iso(tx, ty).y - half_h + elev);
-    center + rail_signal_subtile_offset(draw_pos)
+    signal_screen_position(tx, ty, draw_pos, tex_id, half_h, base_z)
 }
 
 #[must_use]
@@ -218,7 +216,8 @@ fn min_rail_signal_anchor_dist(
     for &face in valid_signal_facings_track(track) {
         let bit = signal_bit_for_facing(track, face)?;
         let pos = signal_draw_pos(track_u8, bit);
-        best = best.min(world_pos.distance(rail_signal_anchor_world(map, tx, ty, pos)));
+        let tex_id = if bit == 3 { 1276 } else { 1278 };
+        best = best.min(world_pos.distance(rail_signal_anchor_world(map, tx, ty, pos, tex_id)));
     }
     (best < f32::MAX).then_some(best)
 }
@@ -324,7 +323,8 @@ mod rail_signal_pick_map_tests {
     };
 
     use super::{rail_signal_anchor_world, world_pos_to_rail_signal_pick, world_pos_to_tile_fract};
-    use crate::sprites::signal_draw_pos;
+    use crate::iso::TILE_HALF_H;
+    use crate::sprites::{signal_draw_pos, signal_screen_position};
 
     const RAIL_TB_X: u8 = 0x01;
 
@@ -340,17 +340,36 @@ mod rail_signal_pick_map_tests {
     fn pick_diagonal_rail_uses_track_tile_at_anchor() {
         let mut map = Map::new_flat(5, 5, 0);
         write_rail_x(&mut map, 2, 2);
-        let anchor = rail_signal_anchor_world(&map, 2, 2, signal_draw_pos(0, 2));
+        let anchor = rail_signal_anchor_world(&map, 2, 2, signal_draw_pos(0, 2), 1278);
         let (tx, ty, fx, fy) = world_pos_to_rail_signal_pick(anchor, &map).expect("pick");
         assert_eq!((tx, ty), (2, 2));
         assert!(resolve_signal_track(RAIL_TB_X, fx, fy).is_some());
     }
 
     #[test]
+    fn both_x_facings_pick_same_rail_tile_at_anchor() {
+        let mut map = Map::new_flat(5, 5, 0);
+        let c = TileCoord::new(2, 2);
+        map.set_kind(c, TileKind::Rail).expect("kind");
+        let mut t = map.get(c).expect("tile");
+        t.m5 = RAIL_TB_X | (RAIL_TILE_NORMAL << 6);
+        map.set_tile(c, t).expect("tile");
+        for (pos, tex) in [(8, 1276_u32), (9, 1278_u32)] {
+            let anchor = signal_screen_position(2, 2, pos, tex, TILE_HALF_H, 0);
+            let (tx, ty, _, _) = world_pos_to_rail_signal_pick(anchor, &map).expect("pick");
+            assert_eq!(
+                (tx, ty),
+                (2, 2),
+                "pos {pos} debe quedar en la tesela del riel"
+            );
+        }
+    }
+
+    #[test]
     fn pick_near_diagonal_edge_still_resolves_fract() {
         let mut map = Map::new_flat(5, 5, 0);
         write_rail_x(&mut map, 2, 2);
-        let anchor = rail_signal_anchor_world(&map, 2, 2, signal_draw_pos(0, 3));
+        let anchor = rail_signal_anchor_world(&map, 2, 2, signal_draw_pos(0, 3), 1276);
         let (tx, ty, fx, fy) = world_pos_to_rail_signal_pick(anchor, &map).expect("pick");
         assert_eq!((tx, ty), (2, 2));
         let (fx2, fy2) = world_pos_to_tile_fract(anchor, &map, tx, ty);

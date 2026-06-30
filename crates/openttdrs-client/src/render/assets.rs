@@ -7,7 +7,7 @@ use crate::sprites::{
     HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, ROAD_DEPOT_GROUND_PATH, StationTileClass,
     house_sprite_filename, rail_depot_build_layers, rail_sprite_ids_for_preload,
     rail_station_draw_layers, rail_station_ground_track_sprite, rail_waypoint_draw_layers,
-    road_depot_build_layers, road_stop_build_layers,
+    road_depot_build_layers, road_stop_build_layers, signal_sprite_texture_id,
 };
 
 #[derive(Clone, Resource)]
@@ -144,10 +144,15 @@ impl WorldAssets {
                 rail_ids.insert(layer.sprite_id);
             }
         }
-        let rail = rail_ids
-            .into_iter()
-            .map(|id| (id, atlas.get(&format!("rail_{id}.png"))))
-            .collect();
+        let mut rail = std::collections::HashMap::new();
+        for id in rail_ids {
+            let tex_id = signal_sprite_texture_id(id);
+            let sprite = atlas.get(&format!("rail_{tex_id}.png"));
+            rail.insert(tex_id, sprite.clone());
+            if tex_id != id {
+                rail.insert(id, sprite);
+            }
+        }
         let station_grounds = (0..4)
             .map(|i| atlas.get(&format!("truck_stop_ground_{i}.png")))
             .collect();

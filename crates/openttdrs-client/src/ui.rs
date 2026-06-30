@@ -273,6 +273,8 @@ impl Plugin for ClientUiPlugin {
                 flush_hud_sfx,
             )
                 .chain()
+                .after(build_menu_interaction)
+                .after(hide_tool_when_panel_closed)
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),
         )

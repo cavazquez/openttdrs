@@ -138,6 +138,17 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
     }
 }
 
+/// Demoler (`Clear`) comparte botón en paneles carretera y ferrocarril.
+fn tool_compatible_with_panel(action: BuildMenuAction, active: Option<ToolbarGroup>) -> bool {
+    let Some(active) = active else {
+        return false;
+    };
+    if action == BuildMenuAction::Clear {
+        return matches!(active, ToolbarGroup::Road | ToolbarGroup::Rail);
+    }
+    toolbar_group_for_action(action) == active
+}
+
 pub(crate) fn hide_tool_when_panel_closed(
     toolbar_state: Res<ToolbarState>,
     mut tool_state: ResMut<UiToolState>,
@@ -146,7 +157,7 @@ pub(crate) fn hide_tool_when_panel_closed(
     let Some(action) = tool_state.active_tool else {
         return;
     };
-    if toolbar_state.active_group != Some(toolbar_group_for_action(action)) {
+    if !tool_compatible_with_panel(action, toolbar_state.active_group) {
         tool_state.active_tool = None;
         cancel_placement(&mut drag_state);
     }
@@ -177,5 +188,44 @@ pub(crate) fn sync_climate_industry_tools(
             tool_state.active_tool = None;
             cancel_placement(&mut drag_state);
         }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::prelude::World;
+
+    #[test]
+    fn clear_tool_stays_active_on_rail_panel() {
+        let mut world = World::new();
+        world.insert_resource(ToolbarState {
+            active_group: Some(ToolbarGroup::Rail),
+        });
+        world.insert_resource(UiToolState {
+            active_tool: Some(BuildMenuAction::Clear),
+        });
+        world.insert_resource(DragBuildState::default());
+        world.run_system_once(hide_tool_when_panel_closed).unwrap();
+        assert_eq!(
+            world.resource::<UiToolState>().active_tool,
+            Some(BuildMenuAction::Clear)
+        );
+    }
+
+    #[test]
+    fn rail_tool_cleared_when_road_panel_open() {
+        let mut world = World::new();
+        world.insert_resource(ToolbarState {
+            active_group: Some(ToolbarGroup::Road),
+        });
+        world.insert_resource(UiToolState {
+            active_tool: Some(BuildMenuAction::RailSignals),
+        });
+        world.insert_resource(DragBuildState::default());
+        world.run_system_once(hide_tool_when_panel_closed).unwrap();
+        assert!(world.resource::<UiToolState>().active_tool.is_none());
     }
 }

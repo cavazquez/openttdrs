@@ -8,10 +8,10 @@ use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
     collect_rail_sprites, collect_signal_sprite_draws, is_road_level_crossing,
     level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_ghost_overlay_offset,
-    rail_signal_subtile_offset, rail_tile_is_signals, rail_track_base_color,
-    rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
-    road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
-    road_tile_tram_visual_active, roadside_is_paved, tram_flat_sprite_index,
+    rail_tile_is_signals, rail_track_base_color, rail_trackbits_for_render, road_bits_for_render,
+    road_flat_sprite_color, road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
+    road_tile_tram_visual_active, roadside_is_paved, signal_screen_position,
+    tram_flat_sprite_index,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -222,14 +222,20 @@ pub(crate) fn spawn_rail_tile(
             let Some(img) = assets.rail.get(&draw.sprite_id) else {
                 continue;
             };
-            let offset = rail_signal_subtile_offset(draw.pos);
+            let pos = signal_screen_position(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                draw.pos,
+                draw.sprite_id,
+                rail_half_h,
+                rail_base_z,
+            );
             let z = 0.032 + si as f32 * 0.0015;
-            let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, z, rail_half_h);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 img.sprite(),
-                Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
+                Transform::from_translation(Vec3::new(pos.x, pos.y, z)),
             ));
         }
     }

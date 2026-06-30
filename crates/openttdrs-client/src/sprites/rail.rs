@@ -299,6 +299,68 @@ fn signal_sprite_id(sig_type: u8, variant: u8, image: u8, green: bool) -> u32 {
         + pbs_extra
 }
 
+/// Coordenadas sub-tesela OpenTTD (`SignalPositions[side][pos]`, lado izquierdo).
+const SIGNAL_SUBTILE_XY: [(i8, i8); 12] = [
+    (8, 5),
+    (14, 1),
+    (1, 14),
+    (9, 11),
+    (1, 0),
+    (3, 10),
+    (11, 4),
+    (14, 14),
+    (11, 3),
+    (4, 13),
+    (3, 4),
+    (11, 13),
+];
+
+#[inline]
+fn signal_subtile_xy(pos: u8) -> (i8, i8) {
+    SIGNAL_SUBTILE_XY[pos.min(11) as usize]
+}
+
+/// PNG a cargar para un ID lógico de señal (`DrawSingleSignal` → atlas).
+/// OpenGFX2 reutiliza el NFO base en 1416–1419 (topadora u otro gráfico); el bloque
+/// eléctrico clásico exportado vive en 1275–1278 (`sid - 141`).
+#[must_use]
+pub fn signal_sprite_texture_id(sprite_id: u32) -> u32 {
+    if (1416..=1419).contains(&sprite_id) {
+        return sprite_id - 141;
+    }
+    sprite_id
+}
+
+/// Ajuste del centro del sprite 3×14 respecto al ancla `DrawSingleSignal`
+/// (xrel/yrel OpenGFX + mitad del bbox; Bevy ancla al centro del sprite).
+#[must_use]
+pub fn signal_sprite_center_offset(tex_id: u32) -> Vec2 {
+    match tex_id {
+        1275 | 1276 => Vec2::new(0.5, 5.0),
+        1277 | 1278 => Vec2::new(1.5, 5.0),
+        _ => Vec2::ZERO,
+    }
+}
+
+/// Posición en pantalla de una señal, alineada al mismo ancla que la vía (`tile_pos_half`).
+///
+/// OpenTTD usa `RemapCoords(16·tx + ox, 16·ty + oy)`; en este cliente el delta
+/// sub-tesela respecto al centro del rombo coincide con [`rail_signal_subtile_offset`].
+#[must_use]
+pub fn signal_screen_position(
+    tx: i32,
+    ty: i32,
+    pos: u8,
+    tex_id: u32,
+    half_h: f32,
+    base_z: u8,
+) -> Vec2 {
+    let p = crate::iso::iso(tx, ty);
+    let elev = f32::from(base_z) * crate::iso::HEIGHT_PX;
+    let track_base = Vec2::new(p.x, p.y - half_h + elev);
+    track_base + rail_signal_subtile_offset(pos) + signal_sprite_center_offset(tex_id)
+}
+
 /// Bits de señal presentes en el nibble alto de M3LO (`GetPresentSignals`, `rail_map.h`).
 #[must_use]
 pub fn rail_signal_present_mask(m3: u8) -> u8 {
@@ -333,7 +395,7 @@ pub fn collect_signal_sprite_draws(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<Sign
         let ty = signal_type_from_m2(m2, track);
         let var = signal_variant_from_m2(m2, track);
         out.push(SignalSpriteDraw {
-            sprite_id: signal_sprite_id(ty, var, image, green),
+            sprite_id: signal_sprite_texture_id(signal_sprite_id(ty, var, image, green)),
             track,
             pos,
         });
@@ -609,21 +671,7 @@ pub fn signal_draw_pos(ottd_track: u8, sig_bit: u8) -> u8 {
 /// Sub-tesela OpenTTD (0–16) → desplazamiento desde el centro del rombo (`DrawSingleSignal`).
 #[must_use]
 pub fn rail_signal_subtile_offset(pos: u8) -> Vec2 {
-    const SIGNAL_SUBTILE: [(i8, i8); 12] = [
-        (8, 5),
-        (14, 1),
-        (1, 14),
-        (9, 11),
-        (1, 0),
-        (3, 10),
-        (11, 4),
-        (14, 14),
-        (11, 3),
-        (4, 13),
-        (3, 4),
-        (11, 13),
-    ];
-    let (ox, oy) = SIGNAL_SUBTILE[pos.min(11) as usize];
+    let (ox, oy) = signal_subtile_xy(pos);
     let dx = f32::from(ox) - 8.0;
     let dy = f32::from(oy) - 8.0;
     remap_tile_offset(dx, dy, 0.0)
@@ -696,6 +744,7 @@ pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use crate::iso::{TILE_HALF_H, iso};
     use openttdrs_core::{Map, TileCoord, TileKind};
 
     #[test]
@@ -759,6 +808,28 @@ mod tests {
             rail_ghost_overlay_offset(1007).y,
             rail_ghost_overlay_offset(1008).y
         );
+    }
+
+    #[test]
+    fn collect_signal_draws_maps_electric_ids_to_classic_textures() {
+        let m5 = (RAIL_TILE_SIGNALS << 6) | RAIL_TB_X;
+        let m3 = 1 << (4 + 3); // SW present
+        let m3hi = m3;
+        let m2 = m2_for_signal_encoding(0, 1, OTTD_TRACK_X);
+        let draws = collect_signal_sprite_draws(m2, m3, m3hi, m5);
+        assert_eq!(draws.len(), 1);
+        assert_eq!(draws[0].sprite_id, 1276, "1417 eléctrica → PNG 1276");
+    }
+
+    #[test]
+    fn signal_screen_position_anchors_to_track_tile_center() {
+        let base = Vec2::new(iso(2, 2).x, iso(2, 2).y - TILE_HALF_H);
+        let sw = signal_screen_position(2, 2, 8, 1276, TILE_HALF_H, 0);
+        let ne = signal_screen_position(2, 2, 9, 1278, TILE_HALF_H, 0);
+        assert_ne!(sw, ne);
+        assert!(sw.distance(base) < 40.0);
+        assert!(ne.distance(base) < 40.0);
+        assert!((sw - ne).length() > 8.0, "lados opuestos del riel");
     }
 
     #[test]

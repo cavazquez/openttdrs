@@ -24,8 +24,8 @@ use openttdrs_core::{
 };
 
 use crate::iso::{
-    SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z, world_pos_to_tile_coord,
-    world_pos_to_tile_fract,
+    SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z, world_pos_to_rail_signal_pick,
+    world_pos_to_tile_coord, world_pos_to_tile_fract,
 };
 use crate::render::{CompanyColoredSprites, MapPreviewCamera, PrimaryGameCamera, TileAtlas};
 use crate::sprites::rail_ghost_overlay_offset;
@@ -149,10 +149,14 @@ pub(crate) fn update_build_ghost_preview(
         return;
     };
     let (tx, ty, tile_fract) = if action == BuildMenuAction::RailSignals {
-        let Some(pos) = hovered.pos else {
+        if let Some(pos) = hovered.pos {
+            (pos.x, pos.y, (hovered.fract_x, hovered.fract_y))
+        } else if let Some((px, py, fx, fy)) = world_pos_to_rail_signal_pick(world, &sim.state.map)
+        {
+            (px, py, (fx, fy))
+        } else {
             return;
-        };
-        (pos.x, pos.y, (hovered.fract_x, hovered.fract_y))
+        }
     } else {
         let Some((px, py)) = world_pos_to_tile_coord(world, &sim.state.map) else {
             return;
@@ -238,6 +242,7 @@ pub(crate) fn update_build_ghost_preview(
             );
             spawn_rail_signal_preview(
                 &mut commands,
+                &asset_server,
                 atlas.as_deref(),
                 &sim.state.map,
                 coord,

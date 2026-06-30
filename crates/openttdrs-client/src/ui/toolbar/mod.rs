@@ -54,7 +54,7 @@ pub(crate) use systems::{
 pub(crate) struct BuildMenuUi;
 
 /// Accion del boton del menu de construccion.
-#[derive(Component, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum BuildMenuAction {
     Road,
     RoadX,

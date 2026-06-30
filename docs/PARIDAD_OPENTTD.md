@@ -29,20 +29,20 @@ Ordenada de **más barato a más caro**.
 | 2 | Audio | Música y SFX in-game | ✅ | 🟡 | S |
 | 3 | Render | Depósito carretera RemapCoords | ✅ | 🟡 | S |
 | 4 | Render | Junctions vía en pendiente | ✅ | 🟡 | S–M |
-| 5 | Construcción | Quitar vía (`RailRemove`) | ✅ | ❌ | S |
-| 6 | Construcción | Waypoint ferroviario | ✅ | ❌ | S–M |
+| 5 | Construcción | Quitar vía (`RailRemove`) | ✅ | ✅ | S |
+| 6 | Construcción | Waypoint ferroviario | ✅ | ✅ | S–M |
 | 7 | Tests | `effective_road_bits` en fixture | ✅ | ✅ | S |
 | 8 | Render | Culling mapas grandes | ✅ | 🟡 | M |
 | 9 | Render | Industrias gfx 120–174 | ✅ | 🟡 0–119 | M |
-| 9b | Render | Sprites locomotoras por grupo (5 sets OpenGFX) | ✅ | 🟡 lógica OK, PNG fallback Kirby | S — [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) § locomotoras |
+| 9b | Render | Sprites locomotoras por grupo (5 sets OpenGFX) | ✅ | ✅ | S — [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) § locomotoras |
 | 10 | Construcción | Señales bloque (sin PBS) | ✅ | 🟡 render | M |
 | 11 | Construcción | Convertir tipo de vía | ✅ | ❌ | M |
 | 12 | Import | `.sav` jugable (órdenes, dinero) | ✅ | 🟡 | M |
 | 13 | Sim | Servicio en depósito | ✅ | ❌ | M |
 | 14 | Sim | Rating estación / cargo packets | ✅ | 🟡 | M |
-| 15 | Sim | Órdenes condicionales | ✅ | ❌ | M–L — F6 en [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) |
-| 16 | Sim | Horarios (timetable) | ✅ | 🟡 | M–L — MVP E+; F1/F4/F5 |
-| 16b | Sim | Autoreemplazo | ✅ | 🟡 | M — MVP E+; F2/F3 |
+| 15 | Sim | Órdenes condicionales | ✅ | ✅ | M–L — F6 |
+| 16 | Sim | Horarios (timetable) | ✅ | 🟡 | M–L — F1/F4/F5 MVP |
+| 16b | Sim | Autoreemplazo | ✅ | 🟡 | M — F2/F3 MVP |
 | 17 | Carretera | Un solo sentido / drive-through | ✅ | 🟡 | M |
 | 18 | Mundo | Subvencios, autoridad local | ✅ | 🟡 | M–L |
 | 19 | Mundo | Terraform + 4 climas + gen mundo | ✅ | 🟡 | T1–T3 + T4 MVP (clima/gen); industrias por clima L — [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) |
@@ -51,7 +51,7 @@ Ordenada de **más barato a más caro**.
 | 22 | Transporte | Barcos / aviones | ✅ | ❌ | L |
 | 23 | Modding | NewGRF runtime | ✅ | ❌ | XXL |
 | 24 | Red | Multijugador I8 | ✅ | ❌ | XXL |
-| 25 | UI | Barra inferior + noticias (ticker, cartel) | ✅ | ❌ | M — [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) (N1–N5) |
+| 25 | UI | Barra inferior + noticias (ticker, cartel) | ✅ | 🟡 | M — N1–N5 MVP |
 
 ---
 

@@ -199,7 +199,7 @@ dirección SE, y un movimiento en `-ty` (tile arriba-derecha) se visualiza en NE
 | Agrupación (`train_sprite_group`) | ✅ 5 conjuntos (vapor×2, Kirby, diésel, eléctrico) | 🟡 OpenTTD distingue más modelos |
 | Selección en cliente (`train_layers_for`) | ✅ elige el array según grupo | ✅ |
 | Ventana de compra (`train_preview`) | ✅ preview por `train_image_index` | ✅ |
-| **PNG + paths en `vehicle_gfx_data_generated.rs`** | 🟡 | ❌ |
+| **PNG + paths en `vehicle_gfx_data_generated.rs`** | ✅ | ✅ (jun 2026) |
 
 **Síntoma en juego:** todos los trenes se ven igual (sprite Kirby Paul Tank) aunque
 la ventana de compra ya elige el conjunto correcto por motor.
@@ -237,10 +237,11 @@ temprano/tardío, Kirby, diésel, eléctrico) sin exportar los ~24 conjuntos del
 
 Para que cada grupo se vea distinto como en OpenTTD:
 
-1. **Extraer PNG** desde OpenGFX (ya listados en `scripts/descargar_graficos.sh`,
-   bloque «Kirby Paul Tank» y siguientes):
+1. **Extraer PNG** desde OpenGFX:
    ```bash
-   ./scripts/descargar_graficos.sh --8bpp   # o --32bpp según el modo del cliente
+   python3 scripts/extract_train_vehicle_sprites.py   # solo trenes, sin borrar tiles
+   # o bien el flujo completo:
+   ./scripts/descargar_graficos.sh --32bpp
    ```
 2. **Regenerar metadatos** (offsets `x_offs`/`y_offs` desde NFO):
    ```bash
@@ -268,6 +269,7 @@ requiere ampliar `GFX_SETS` en `gen_vehicle_gfx_data.py`, `train_layers_for` y
 | `openttdrs-core/src/engine.rs` | `train_image_index`, `train_sprite_group()` |
 | `openttdrs-client/src/render/vehicles.rs` | `train_layers_for()`, dibujo en mapa |
 | `openttdrs-client/src/sprites/vehicle_gfx_data_generated.rs` | Arrays `TRAIN_VEHICLE_LAYERS_*` |
+| `scripts/extract_train_vehicle_sprites.py` | Recorte incremental de locomotoras (40 PNG) |
 | `scripts/gen_vehicle_gfx_data.py` | Generador Rust desde PNG + NFO |
 | `scripts/descargar_graficos.sh` | Recorte `crop_by_id` de sprites 2905–2972 |
 

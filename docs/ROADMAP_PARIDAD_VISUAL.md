@@ -266,7 +266,7 @@ Implementación:
 
 ## 14. Locomotoras — un sprite distinto por grupo
 
-- [ ] Pendiente (lógica en código; assets sin extraer)
+- [x] Hecho (`extract_train_vehicle_sprites.py` + `gen_vehicle_gfx_data.py`, jun 2026)
 
 En OpenTTD cada familia de locomotora tiene su aspecto (vapor pequeño, A4, diésel,
 eléctrico de alta velocidad, etc.). En openttdrs la **simulación y la ventana de

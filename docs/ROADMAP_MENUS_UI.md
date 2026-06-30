@@ -265,9 +265,7 @@ flowchart LR
 - [x] Vender todo en depósito (`SellAllVehiclesAtDepot`)
 - [x] Filtros y orden en ventana de compra
 - [x] Sprites de locomotora por `train_image_index` (lógica + 5 arrays en Rust)
-- [ ] **Paridad visual** locomotoras: extraer PNG por grupo OpenGFX y regenerar
-  `vehicle_gfx_data_generated.rs` — ver [SPRITES_OPENGFX.md](../SPRITES_OPENGFX.md)
-  § locomotoras
+- [x] **Paridad visual** locomotoras: extraer PNG por grupo OpenGFX (`extract_train_vehicle_sprites.py`)
 - [x] **Refit** de tipo de carga en depósito (`RefitVehicle`)
 - [x] **Horario** por orden (espera + viaje mínimo, `ToggleVehicleTimetable`)
 - [x] **Autoreemplazo** en depósito (`SetAutoReplaceRule` + sim automática)
@@ -377,7 +375,7 @@ Ejecutar: `cargo test -p openttdrs-core` y `cargo clippy -p openttdrs-core -p op
 | `SetVehicleOrderList` | Reinicia orden activa a 0 | Preserva contexto con edición fina |
 | Renombrar | Solo desde ventana vehículo | También depósito, lista global |
 | Clonar | Solo órdenes entre 1.º y 2.º (legacy `CloneVehicleOrders`) | Clon completo con UI dedicada |
-| Compra trenes | Lógica por grupo (`train_image_index` → 5 sets); **visual:** todos usan PNG Kirby si faltan assets | Un sprite distinto por familia / NewGRF |
+| Compra trenes | Sprites distintos por grupo (`train_image_index` → 5 sets OpenGFX) | Uno por engine NewGRF |
 | Órdenes máx | 32 visibles con scroll | ~64 |
 
 ---

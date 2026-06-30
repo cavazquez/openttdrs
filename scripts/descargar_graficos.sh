@@ -1032,6 +1032,7 @@ for sid, name in [
 ]:
     crop_by_id(sid, name)
 # Regenerar metadatos: python3 scripts/gen_vehicle_gfx_data.py
+# Solo locomotoras (sin borrar tiles): python3 scripts/extract_train_vehicle_sprites.py
 
 # =============================================================================
 # LEGACY (alias del cliente ← sprites NFO; evita recortes fijos con artefactos cian)

@@ -12,6 +12,7 @@ mod road_stop;
 mod rotate;
 mod sprites;
 mod station_coverage;
+mod tunnel;
 mod validation;
 
 pub(crate) use ghost_lerp::{GhostLerp, lerp_ghost_previews};
@@ -54,6 +55,7 @@ use road_stop::{
 };
 use sprites::preview_image_for_action;
 use station_coverage::{spawn_station_coverage_preview, station_preview_has_coverage};
+use tunnel::spawn_tunnel_entrance_preview;
 use validation::{action_is_tunnel, preview_bridge_span_valid, preview_build_command_valid};
 
 use crate::ui::toolbar::build_input::rail_lane::rail_lane_bits_for_action;
@@ -340,15 +342,6 @@ pub(crate) fn update_build_ghost_preview(
             continue;
         }
 
-        if action_is_tunnel(action) {
-            let Some((tileh, _)) = tile_slope_and_z(&sim.state.map, coord) else {
-                continue;
-            };
-            if !is_tunnel_entrance_slope(tileh) {
-                continue;
-            }
-        }
-
         let (tileh, base_z) = tile_slope_and_min_z(&sim.state.map, *px as u32, *py as u32);
         let half_h = if tileh == 0 {
             TILE_HALF_H
@@ -452,6 +445,21 @@ pub(crate) fn update_build_ghost_preview(
                 Transform::from_translation(tile_pos_half(*px, *py, base_z, 3.0, half_h))
                     .with_scale(Vec3::new(1.002, 1.002, 1.0)),
             ));
+            continue;
+        }
+
+        if action_is_tunnel(action) {
+            let coord = TileCoord::new(*px, *py);
+            if is_tunnel_entrance_slope(tileh) {
+                spawn_tunnel_entrance_preview(
+                    &mut commands,
+                    &asset_server,
+                    &sim.state.map,
+                    action,
+                    coord,
+                    valid_target,
+                );
+            }
             continue;
         }
 

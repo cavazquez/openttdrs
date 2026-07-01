@@ -39,6 +39,8 @@ pub(crate) mod station;
 mod tile_atlas_generated;
 #[path = "sprites/tree_draw_data_generated.rs"]
 mod tree_draw_data_generated;
+#[path = "sprites/tunnel.rs"]
+mod tunnel;
 
 pub(crate) use tile_atlas_generated::{
     TILE_ATLAS_NAMES, TILE_ATLAS_PAGE_COUNT, TILE_ATLAS_PAGE_RANGES, TILE_ATLAS_PAGE_SIZES,
@@ -200,6 +202,10 @@ pub use bridge_sprites_generated::{
 /// Regenerar: `python3 scripts/gen_shore_full_set.py`.
 pub(crate) use bridge_structure_palette::{BridgePaletteSprites, bridge_structure_palette};
 pub use shore_draw_data_generated::{SHORE_META, SHORE_SPRITE_COUNT, TILEH_TO_SHORE_SPRITE};
+pub use tunnel::{
+    tunnel_portal_translation, tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name,
+    tunnel_rear_sprite_id,
+};
 
 /// Humo mina de cobre (`SPR_SMOKE_0..4`). Regenerar: `python3 scripts/gen_copper_mine_smoke.py`.
 pub use copper_smoke_draw_data_generated::{COPPER_MINE_SMOKE_FRAMES, COPPER_MINE_SMOKE_META};

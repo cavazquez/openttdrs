@@ -880,9 +880,19 @@ crop_by_id(2732, "dock_flat_y.png")
 # =============================================================================
 # TÚNELES Y PUENTES
 # =============================================================================
+# Portales por dirección (`SPR_TUNNEL_ENTRY_REAR_* + DiagDirection * 2`).
+crop_by_id(2365, "tunnel_rail_rear_ne.png")
+crop_by_id(2367, "tunnel_rail_rear_se.png")
+crop_by_id(2369, "tunnel_rail_rear_sw.png")
+crop_by_id(2371, "tunnel_rail_rear_nw.png")
+# Alias histórico (= NE)
 crop_by_id(2365, "tunnel_rail_rear.png")
 crop_by_id(2373, "tunnel_mono_rear.png")
 crop_by_id(2381, "tunnel_mglv_rear.png")
+crop_by_id(2389, "tunnel_road_rear_ne.png")
+crop_by_id(2391, "tunnel_road_rear_se.png")
+crop_by_id(2393, "tunnel_road_rear_sw.png")
+crop_by_id(2395, "tunnel_road_rear_nw.png")
 crop_by_id(2389, "tunnel_road_rear.png")
 # Puente de madera
 crop_by_id(2545, "bridge_wood_rail_y.png")

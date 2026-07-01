@@ -44,8 +44,9 @@ pub(crate) struct WorldAssets {
     pub(crate) road_depot_builds: [Vec<AtlasSprite>; 4],
     /// Capas del depósito de vía por dirección (`m5 & 3`: NE/SE/SW/NW).
     pub(crate) rail_depot_builds: [Vec<AtlasSprite>; 4],
-    pub(crate) road_tunnel: AtlasSprite,
-    pub(crate) rail_tunnel: AtlasSprite,
+    /// Portales de túnel por dirección diagonal (0=NE … 3=NW).
+    pub(crate) road_tunnels: [AtlasSprite; 4],
+    pub(crate) rail_tunnels: [AtlasSprite; 4],
     /// Sprites de puente por id OpenGFX (`bridge_{id}.png` o alias madera).
     pub(crate) bridge_by_id: std::collections::HashMap<u32, AtlasSprite>,
     /// Variantes recoloreadas (`PALETTE_TO_STRUCT_*`) fuera del atlas.
@@ -184,8 +185,25 @@ impl WorldAssets {
                 .map(|layer| atlas.get_path(layer.path))
                 .collect()
         });
-        let road_tunnel = atlas.get("tunnel_road_rear.png");
-        let rail_tunnel = atlas.get("tunnel_rail_rear.png");
+        use crate::sprites::{tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name};
+        let road_tunnels = std::array::from_fn(|dir| {
+            atlas
+                .try_get(&tunnel_rear_atlas_name(false, dir as u8))
+                .or_else(|| atlas.try_get(tunnel_rear_legacy_atlas_name(false)))
+                .unwrap_or_else(|| {
+                    error!("Sprite de túnel carretera dir {dir} no encontrado");
+                    atlas.get("grass.png")
+                })
+        });
+        let rail_tunnels = std::array::from_fn(|dir| {
+            atlas
+                .try_get(&tunnel_rear_atlas_name(true, dir as u8))
+                .or_else(|| atlas.try_get(tunnel_rear_legacy_atlas_name(true)))
+                .unwrap_or_else(|| {
+                    error!("Sprite de túnel ferrocarril dir {dir} no encontrado");
+                    atlas.get("grass.png")
+                })
+        });
         let mut bridge_by_id = std::collections::HashMap::new();
         use crate::sprites::{BridgeDeckSpriteIds, bridge_deck_sprite_ids};
         use openttdrs_core::{BridgePiece, BridgeType};
@@ -322,8 +340,8 @@ impl WorldAssets {
             road_depot_ground,
             road_depot_builds,
             rail_depot_builds,
-            road_tunnel,
-            rail_tunnel,
+            road_tunnels,
+            rail_tunnels,
             bridge_by_id,
             bridge_palettes,
             houses,
@@ -342,6 +360,16 @@ impl WorldAssets {
     #[must_use]
     pub(crate) fn bridge_sprite(&self, id: u32) -> Option<&AtlasSprite> {
         self.bridge_by_id.get(&id)
+    }
+
+    #[must_use]
+    pub(crate) fn tunnel_portal_sprite(&self, rail: bool, dir: u8) -> &AtlasSprite {
+        let d = dir as usize & 3;
+        if rail {
+            &self.rail_tunnels[d]
+        } else {
+            &self.road_tunnels[d]
+        }
     }
 }
 

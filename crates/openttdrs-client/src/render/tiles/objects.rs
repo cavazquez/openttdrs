@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{Map, Station, TileKind, is_tunnel_entrance_slope};
+use openttdrs_core::{Map, Station, TileKind, inclined_slope_direction, is_tunnel_entrance_slope};
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
 use super::{sloped_or_flat_image, spawn_ground_sprite, spawn_rail_foundation};
@@ -261,26 +261,22 @@ pub(crate) fn spawn_transport_object_tile(
             if !is_tunnel_entrance_slope(tileh) {
                 return;
             }
-            let image = if ctx.kind == TileKind::RoadTunnel {
-                assets.road_tunnel.clone()
-            } else {
-                assets.rail_tunnel.clone()
-            };
-            let portal_half_h = if tileh == 0 {
-                TILE_HALF_H
-            } else {
-                SLOPE_HALF_H[tileh as usize]
-            };
+            let rail = ctx.kind == TileKind::RailTunnel;
+            let dir = inclined_slope_direction(tileh)
+                .or_else(|| ctx.tile.map(|t| t.m5 & 0x03))
+                .unwrap_or(0);
+            let image = assets.tunnel_portal_sprite(rail, dir);
+            let sprite_id = crate::sprites::tunnel_rear_sprite_id(rail, dir);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 image.sprite(),
-                Transform::from_translation(tile_pos_half(
+                Transform::from_translation(crate::sprites::tunnel_portal_translation(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
                     base_z,
+                    sprite_id,
                     0.08,
-                    portal_half_h,
                 )),
             ));
         }

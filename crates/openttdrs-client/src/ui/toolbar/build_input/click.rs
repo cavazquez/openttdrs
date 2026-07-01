@@ -24,7 +24,7 @@ use crate::ui::vehicle_window::VehicleWindowState;
 use super::commands::command_for_action;
 use super::drag::{
     action_is_tunnel, action_supports_drag, apply_drag_action, drag_line_tiles,
-    tunnel_placement_is_valid,
+    tunnel_placement_is_valid, tunnel_remap_tiles,
 };
 use super::placement::cancel_placement;
 use super::rail_lane::rail_lane_bits_for_action;
@@ -43,10 +43,18 @@ use crate::ui::toolbar::{
 };
 
 fn tiles_for_visual_remap(
+    map: Option<&openttdrs_core::Map>,
     action: BuildMenuAction,
     origin: TileCoord,
     drag_tiles: &[(i32, i32)],
 ) -> Vec<(i32, i32)> {
+    if action_is_tunnel(action) {
+        if let Some(map) = map {
+            return tunnel_remap_tiles(map, drag_tiles);
+        }
+        let start = drag_tiles.first().copied().unwrap_or((origin.x, origin.y));
+        return vec![start];
+    }
     if drag_tiles.len() > 1 {
         return drag_tiles.to_vec();
     }
@@ -406,7 +414,8 @@ pub(crate) fn handle_tile_click(
                 return;
             }
             let tiles = std::mem::take(&mut drag_state.pending_tiles);
-            let remap_tiles = tiles_for_visual_remap(action, build_pos, &tiles);
+            let remap_tiles =
+                tiles_for_visual_remap(Some(&sim.state.map), action, build_pos, &tiles);
             let lane = drag_state.rail_lane_bit;
             let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state, lane);
             cancel_placement(&mut drag_state);
@@ -419,7 +428,8 @@ pub(crate) fn handle_tile_click(
             }
         } else if mouse.just_released(MouseButton::Left) && drag_state.pending_tiles.len() == 1 {
             let tiles = std::mem::take(&mut drag_state.pending_tiles);
-            let remap_tiles = tiles_for_visual_remap(action, build_pos, &tiles);
+            let remap_tiles =
+                tiles_for_visual_remap(Some(&sim.state.map), action, build_pos, &tiles);
             let lane = drag_state.rail_lane_bit;
             let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state, lane);
             cancel_placement(&mut drag_state);
@@ -450,7 +460,7 @@ pub(crate) fn handle_tile_click(
             push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
         } else {
             let (mw, mh) = sim.state.map.dimensions();
-            let tiles = tiles_for_visual_remap(action, build_pos, &[]);
+            let tiles = tiles_for_visual_remap(Some(&sim.state.map), action, build_pos, &[]);
             request_map_visual_remap(&mut pending, mw, mh, &tiles);
             push_build_command_success(&mut hud_feedback);
             if action == BuildMenuAction::RailSignals

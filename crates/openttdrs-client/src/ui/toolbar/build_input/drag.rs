@@ -1,7 +1,7 @@
 use openttdrs_core::{
     Command, CommandError, GameState, Map, ROAD_PLACE_FORCE_AXIS, TileCoord, apply_command,
     finalize_road_drag_line, infer_road_drag_axis, resolve_tunnel_end, road_drag_line_tiles,
-    road_locked_tool_axis,
+    road_locked_tool_axis, tunnel_preview_path,
 };
 
 use crate::state::SimWorld;
@@ -139,6 +139,18 @@ fn road_drag_axis(
         BuildMenuAction::Road => infer_road_drag_axis(map, start, end, tool_axis),
         _ => tool_axis,
     }
+}
+
+/// Teselas a redibujar tras colocar un túnel (entrada, interior y salida).
+#[must_use]
+pub(crate) fn tunnel_remap_tiles(map: &Map, tiles: &[(i32, i32)]) -> Vec<(i32, i32)> {
+    let Some(&(sx, sy)) = tiles.first() else {
+        return Vec::new();
+    };
+    let start = TileCoord::new(sx, sy);
+    tunnel_preview_path(map, start)
+        .map(|path| path.into_iter().map(|c| (c.x, c.y)).collect())
+        .unwrap_or_else(|| vec![(sx, sy)])
 }
 
 pub(crate) fn command_for_tunnel_action(
@@ -329,6 +341,28 @@ mod tests {
     use super::*;
     use crate::state::SimWorld;
     use openttdrs_core::{GameState, TileCoord, TileKind, apply_command};
+
+    #[test]
+    fn tunnel_remap_tiles_includes_both_portals() {
+        let mut sim = SimWorld {
+            state: GameState::new(12, 12),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let c = |x: i32, y: i32| TileCoord::new(x, y);
+        sim.state.map.set_height(c(5, 5), 2).unwrap();
+        sim.state.map.set_height(c(5, 6), 2).unwrap();
+        sim.state.map.set_height(c(6, 5), 1).unwrap();
+        sim.state.map.set_height(c(6, 6), 1).unwrap();
+        sim.state.map.set_height(c(3, 5), 1).unwrap();
+        sim.state.map.set_height(c(3, 6), 1).unwrap();
+        sim.state.map.set_height(c(4, 5), 2).unwrap();
+        sim.state.map.set_height(c(4, 6), 2).unwrap();
+        let tiles = tunnel_remap_tiles(&sim.state.map, &[(5, 5)]);
+        assert_eq!(tiles.len(), 3);
+        assert_eq!(tiles.first().copied(), Some((5, 5)));
+        assert_eq!(tiles.last().copied(), Some((3, 5)));
+    }
 
     #[test]
     fn drag_road_merge_bits_at_perpendicular_intersection() {

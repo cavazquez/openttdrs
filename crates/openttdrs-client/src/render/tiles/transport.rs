@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{Climate, Map, TileKind};
+use openttdrs_core::{Climate, Map, TileKind, bridge_above_axis_from_mapt};
 
 use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite, spawn_rail_foundation};
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};
@@ -170,6 +170,13 @@ pub(crate) fn spawn_rail_tile(
     climate: Climate,
 ) {
     let tileh = ctx.info.tileh;
+    // Vano con puente encima: la vía la dibuja `spawn_bridge_deck` a la altura del tablero.
+    if ctx
+        .tile
+        .is_some_and(|t| bridge_above_axis_from_mapt(t.mapt).is_some())
+    {
+        return;
+    }
     if tileh != 0 {
         spawn_ground_sprite(
             commands,

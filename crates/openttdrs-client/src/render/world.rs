@@ -229,7 +229,7 @@ pub(crate) fn setup(
         last_ortho_scale: cam_scale,
     });
     let atlas = TileAtlas::build(&asset_server, &mut layout_assets);
-    let assets = WorldAssets::load(&atlas);
+    let assets = WorldAssets::load(&atlas, &mut images);
     commands.insert_resource(assets.clone());
     commands.insert_resource(super::WaterAnimFrames {
         water: assets.water_frames.clone(),
@@ -287,7 +287,7 @@ pub(crate) fn spawn_intro_map_render(
     let (mw, mh) = sim.state.map.dimensions();
     let spawn_bounds = TileViewportBounds::full(mw, mh);
     let atlas = TileAtlas::build(asset_server, layout_assets);
-    let assets = WorldAssets::load(&atlas);
+    let assets = WorldAssets::load(&atlas, images);
     commands.insert_resource(assets.clone());
     commands.insert_resource(super::WaterAnimFrames {
         water: assets.water_frames.clone(),

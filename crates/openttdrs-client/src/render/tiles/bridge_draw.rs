@@ -6,12 +6,17 @@ use openttdrs_core::{
     calc_bridge_piece,
 };
 
-use crate::iso::{HEIGHT_PX, remap_tile_offset, tile_slope_and_min_z};
+use crate::iso::{HEIGHT_PX, TILE_HALF_H, remap_tile_offset, tile_pos_half, tile_slope_and_min_z};
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
-use crate::sprites::{bridge_deck_sprite_ids, bridge_sprite_meta};
+use crate::sprites::{
+    RAIL_SPRITE_TRACK_X, RAIL_SPRITE_TRACK_Y, bridge_deck_sprite_ids, bridge_sprite_meta,
+    bridge_structure_palette,
+};
 
 const DECK_LAYER_FRAC: f32 = 0.08;
-const FRONT_LAYER_FRAC: f32 = 0.085;
+/// Vía sobre tablero (`DrawBridgeMiddle`: overlay entre psid[0] y psid[1]).
+const RAIL_ON_BRIDGE_LAYER_FRAC: f32 = 0.084;
+const FRONT_LAYER_FRAC: f32 = 0.088;
 const PILLAR_BACK_LAYER_FRAC: f32 = 0.074;
 const PILLAR_LAYER_FRAC: f32 = 0.075;
 const BRIDGE_Z_START: f32 = 3.0;
@@ -179,6 +184,43 @@ pub(crate) fn bridge_span_at(
     })
 }
 
+/// Puente de madera: riel integrado en el sprite rear. Resto: overlay aparte (upstream).
+fn bridge_draws_separate_rail_overlay(bridge_type: BridgeType) -> bool {
+    bridge_type != BridgeType::Wooden
+}
+
+fn bridge_rail_track_sprite(axis: usize) -> u32 {
+    if axis == 0 {
+        RAIL_SPRITE_TRACK_X
+    } else {
+        RAIL_SPRITE_TRACK_Y
+    }
+}
+
+fn spawn_bridge_rail_overlay(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    span: &BridgeSpanInfo,
+) {
+    let sid = bridge_rail_track_sprite(span.axis);
+    let Some(img) = assets.rail.get(&sid) else {
+        return;
+    };
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        img.sprite_colored(Color::srgb(0.88, 0.88, 0.97)),
+        Transform::from_translation(tile_pos_half(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            span.deck_z,
+            RAIL_ON_BRIDGE_LAYER_FRAC,
+            TILE_HALF_H,
+        )),
+    ));
+}
+
 fn pillar_ground_px(tileh: u8, base_z: u8, axis: usize) -> (f32, f32) {
     let corner = |bit: u8| f32::from(base_z) + f32::from((tileh >> bit) & 1);
     let (w, s, e, n) = (corner(0), corner(1), corner(2), corner(3));
@@ -199,11 +241,20 @@ fn spawn_layer(
     z_px: f32,
     layer: f32,
     deck_z: u8,
+    bridge_type: BridgeType,
 ) {
     if sprite_id == 0 {
         return;
     }
-    let Some(img) = assets.bridge_sprite(sprite_id) else {
+    let palette = bridge_structure_palette(bridge_type);
+    let sprite = if let Some(handle) = assets.bridge_palettes.handle(sprite_id, palette) {
+        Sprite {
+            image: handle.clone(),
+            ..default()
+        }
+    } else if let Some(img) = assets.bridge_sprite(sprite_id) {
+        img.sprite()
+    } else {
         return;
     };
     let (w, h, xrel, yrel) = bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
@@ -215,7 +266,7 @@ fn spawn_layer(
     commands.spawn((
         MapVisualLayer,
         ctx.map_tile_chunk(),
-        img.sprite(),
+        sprite,
         Transform::from_translation(pos),
     ));
 }
@@ -254,7 +305,11 @@ pub(crate) fn spawn_bridge_deck(
         z_draw_px,
         DECK_LAYER_FRAC,
         span.deck_z,
+        span.bridge_type,
     );
+    if span.rail && bridge_draws_separate_rail_overlay(span.bridge_type) {
+        spawn_bridge_rail_overlay(commands, assets, ctx, span);
+    }
     spawn_layer(
         commands,
         assets,
@@ -264,6 +319,7 @@ pub(crate) fn spawn_bridge_deck(
         z_draw_px,
         FRONT_LAYER_FRAC,
         span.deck_z,
+        span.bridge_type,
     );
 
     if !draw_pillars {
@@ -289,6 +345,7 @@ pub(crate) fn spawn_bridge_deck(
                 cur_z,
                 PILLAR_LAYER_FRAC,
                 span.deck_z,
+                span.bridge_type,
             );
             cur_z -= TILE_HEIGHT_PX;
         }
@@ -305,6 +362,7 @@ pub(crate) fn spawn_bridge_deck(
                     cur_z,
                     PILLAR_BACK_LAYER_FRAC,
                     span.deck_z,
+                    span.bridge_type,
                 );
                 cur_z -= TILE_HEIGHT_PX;
             }

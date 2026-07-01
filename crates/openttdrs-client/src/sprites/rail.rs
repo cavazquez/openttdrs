@@ -29,8 +29,9 @@ const RAIL_3WAY_SW: u8 = RAIL_TB_X | RAIL_TB_LOWER | RAIL_TB_LEFT;
 const RAIL_3WAY_NW: u8 = RAIL_TB_Y | RAIL_TB_UPPER | RAIL_TB_LEFT;
 const RAIL_3WAY_SE: u8 = RAIL_TB_Y | RAIL_TB_LOWER | RAIL_TB_RIGHT;
 
-/// `SPR_RAIL_TRACK_Y` (`rail_cmd.cpp`).
+/// `SPR_RAIL_TRACK_Y` / `SPR_RAIL_TRACK_X` (`rail_cmd.cpp`).
 pub const RAIL_SPRITE_TRACK_Y: u32 = 1011;
+pub const RAIL_SPRITE_TRACK_X: u32 = 1012;
 
 /// Delta de sprite en teselas con nieve/deserto (`SPR_RAIL_SNOW_OFFSET`).
 pub const RAIL_SPRITE_SNOW_OFFSET: u32 = 26;

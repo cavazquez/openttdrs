@@ -9,6 +9,8 @@ mod bridge_draw_data_generated;
 #[path = "sprites/bridge_sprites_generated.rs"]
 #[allow(dead_code)]
 mod bridge_sprites_generated;
+#[path = "sprites/bridge_structure_palette.rs"]
+pub(crate) mod bridge_structure_palette;
 #[path = "sprites/company_palette.rs"]
 pub(crate) mod company_palette;
 #[path = "sprites/copper_smoke_draw_data_generated.rs"]
@@ -133,15 +135,16 @@ pub use industry_draw_proc::{
 };
 #[allow(unused_imports)]
 pub use rail::{
-    RAIL_DEPOT_GROUND_TRACK, RAIL_SPRITE_IDS, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT,
-    RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y,
-    RAIL_TILE_DEPOT, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SignalSpriteDraw,
-    collect_rail_ghost_sprites, collect_rail_sprites, collect_signal_sprite_draws,
-    collect_signal_sprite_ids, level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
-    rail_depot_build_layers, rail_ghost_overlay_offset, rail_signal_present_mask,
-    rail_signal_state_mask, rail_signal_subtile_offset, rail_sprite_ids_for_preload,
-    rail_tile_is_signals, signal_draw_pos, signal_screen_position, signal_sprite_bases,
-    signal_sprite_center_offset, signal_sprite_ids_for_preload, signal_sprite_texture_id,
+    RAIL_DEPOT_GROUND_TRACK, RAIL_SPRITE_IDS, RAIL_SPRITE_TRACK_X, RAIL_SPRITE_TRACK_Y,
+    RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
+    RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, RAIL_TILE_DEPOT, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS,
+    SignalSpriteDraw, collect_rail_ghost_sprites, collect_rail_sprites,
+    collect_signal_sprite_draws, collect_signal_sprite_ids, level_crossing_has_rail_reservation,
+    level_crossing_rail_sprite_id, rail_depot_build_layers, rail_ghost_overlay_offset,
+    rail_signal_present_mask, rail_signal_state_mask, rail_signal_subtile_offset,
+    rail_sprite_ids_for_preload, rail_tile_is_signals, signal_draw_pos, signal_screen_position,
+    signal_sprite_bases, signal_sprite_center_offset, signal_sprite_ids_for_preload,
+    signal_sprite_texture_id,
 };
 #[allow(unused_imports)]
 pub use station::{
@@ -190,11 +193,12 @@ pub use field_draw_data_generated::{
     FENCE_SPRITE_META, FIELD_STATES,
 };
 
-/// Set completo de orillas (`SPR_SHORE_BASE + 0..17`, Action5 0x0D).
-/// Regenerar: `python3 scripts/gen_shore_full_set.py`.
 pub use bridge_sprites_generated::{
     BridgeDeckSpriteIds, bridge_deck_sprite_ids, bridge_sprite_meta,
 };
+/// Set completo de orillas (`SPR_SHORE_BASE + 0..17`, Action5 0x0D).
+/// Regenerar: `python3 scripts/gen_shore_full_set.py`.
+pub(crate) use bridge_structure_palette::{BridgePaletteSprites, bridge_structure_palette};
 pub use shore_draw_data_generated::{SHORE_META, SHORE_SPRITE_COUNT, TILEH_TO_SHORE_SPRITE};
 
 /// Humo mina de cobre (`SPR_SMOKE_0..4`). Regenerar: `python3 scripts/gen_copper_mine_smoke.py`.

@@ -1094,6 +1094,7 @@ python3 "$(dirname "$0")/gen_rail_signal_sprites.py" || true
 python3 "$(dirname "$0")/gen_rail_station_draw_data.py" || true
 # Sprites de puentes por tipo (tablero + pilares; ver gen_bridge_sprites.py).
 python3 "$(dirname "$0")/gen_bridge_sprites.py" || true
+python3 "$(dirname "$0")/gen_bridge_structure_palette.py" || true
 
 # Texture atlas: empaqueta tiles/*.png en páginas + metadata Rust (batching).
 python3 "$(dirname "$0")/gen_tile_atlas.py"

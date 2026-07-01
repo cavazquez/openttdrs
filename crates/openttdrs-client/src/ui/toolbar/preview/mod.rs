@@ -35,7 +35,7 @@ use crate::sprites::rail_ghost_overlay_offset;
 use crate::state::SimWorld;
 use crate::ui::hud::HoveredTileCoord;
 
-use super::build_input::drag::road_bits_for_drag_action;
+use super::build_input::drag::{drag_line_tiles, road_bits_for_drag_action};
 use super::{BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, UiToolState};
 
 use bridge::spawn_bridge_span_preview;
@@ -211,6 +211,13 @@ pub(crate) fn update_build_ghost_preview(
             openttdrs_core::tunnel_preview_path(&sim.state.map, start)
                 .map(|path| path.into_iter().map(|c| (c.x, c.y)).collect())
                 .unwrap_or_else(|| vec![(tx, ty)])
+        } else if matches!(
+            action,
+            BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge
+        ) && drag_state.armed
+            && let Some(start) = drag_state.start_tile
+        {
+            drag_line_tiles(Some(&sim.state.map), action, start, (tx, ty))
         } else if drag_state.last_action == Some(action) && !drag_state.pending_tiles.is_empty() {
             drag_state.pending_tiles.clone()
         } else {

@@ -8,9 +8,7 @@
 pub(crate) const TILE_ATLAS_PAGE_COUNT: usize = 1;
 
 /// Dimensiones `(ancho, alto)` de cada página del atlas.
-pub(crate) static TILE_ATLAS_PAGE_SIZES: &[(u32, u32)] = &[
-    (2048, 2059),
-];
+pub(crate) static TILE_ATLAS_PAGE_SIZES: &[(u32, u32)] = &[(2048, 2059)];
 
 /// Rects únicos `(página, x, y, w, h)`, agrupados por página.
 pub(crate) static TILE_ATLAS_RECTS: &[(u16, u16, u16, u16, u16)] = &[
@@ -2217,9 +2215,7 @@ pub(crate) static TILE_ATLAS_RECTS: &[(u16, u16, u16, u16, u16)] = &[
 ];
 
 /// Rango `[inicio, fin)` de `TILE_ATLAS_RECTS` por página.
-pub(crate) static TILE_ATLAS_PAGE_RANGES: &[(u32, u32)] = &[
-    (0, 2200),
-];
+pub(crate) static TILE_ATLAS_PAGE_RANGES: &[(u32, u32)] = &[(0, 2200)];
 
 /// `(archivo, índice en TILE_ATLAS_RECTS)`, ordenado por nombre
 /// (apto para búsqueda binaria). Incluye aliases: varios nombres

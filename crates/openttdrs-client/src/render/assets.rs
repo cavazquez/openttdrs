@@ -4,8 +4,8 @@ use bevy::prelude::*;
 
 use crate::render::atlas::{AtlasSprite, TileAtlas};
 use crate::sprites::{
-    HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, ROAD_DEPOT_GROUND_PATH, StationTileClass,
-    house_sprite_filename, rail_depot_build_layers, rail_sprite_ids_for_preload,
+    BridgePaletteSprites, HOUSE_DRAW_DATA, INDUSTRY_GFX_DATA, ROAD_DEPOT_GROUND_PATH,
+    StationTileClass, house_sprite_filename, rail_depot_build_layers, rail_sprite_ids_for_preload,
     rail_station_draw_layers, rail_station_ground_track_sprite, rail_waypoint_draw_layers,
     road_depot_build_layers, road_stop_build_layers, signal_sprite_texture_id,
 };
@@ -48,6 +48,8 @@ pub(crate) struct WorldAssets {
     pub(crate) rail_tunnel: AtlasSprite,
     /// Sprites de puente por id OpenGFX (`bridge_{id}.png` o alias madera).
     pub(crate) bridge_by_id: std::collections::HashMap<u32, AtlasSprite>,
+    /// Variantes recoloreadas (`PALETTE_TO_STRUCT_*`) fuera del atlas.
+    pub(crate) bridge_palettes: BridgePaletteSprites,
     pub(crate) houses: HashMap<u32, AtlasSprite>,
     /// `tree_{NN}.png` (NN = sprite − 1576): 19 especies × 7 etapas.
     pub(crate) trees: Vec<AtlasSprite>,
@@ -81,7 +83,7 @@ fn industry_sprite_atlas_name(id: u32) -> String {
 impl WorldAssets {
     /// Resuelve todos los sprites del mapa contra el [`TileAtlas`]; no toca
     /// el filesystem (la tabla de rects es metadata compilada).
-    pub(crate) fn load(atlas: &TileAtlas) -> Self {
+    pub(crate) fn load(atlas: &TileAtlas, images: &mut Assets<Image>) -> Self {
         let grass = atlas.get("grass.png");
         let rough = atlas.get("grass_rough.png");
         let snow = atlas.get("terrain_snow_full.png");
@@ -292,6 +294,9 @@ impl WorldAssets {
             }
         }
 
+        let mut bridge_palettes = BridgePaletteSprites::default();
+        bridge_palettes.build_all(images);
+
         Self {
             grass,
             rough,
@@ -320,6 +325,7 @@ impl WorldAssets {
             road_tunnel,
             rail_tunnel,
             bridge_by_id,
+            bridge_palettes,
             houses,
             trees,
             fields,
@@ -391,6 +397,7 @@ mod world_assets_tests {
                 TileAtlas::build(world.resource::<AssetServer>(), &mut layouts)
             })
         };
-        let _assets = WorldAssets::load(&atlas);
+        let mut images = app.world_mut().resource_mut::<Assets<Image>>();
+        let _assets = WorldAssets::load(&atlas, &mut images);
     }
 }

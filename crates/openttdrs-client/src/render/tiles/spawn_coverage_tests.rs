@@ -47,7 +47,8 @@ fn boot_assets_app() -> WorldAssets {
             crate::render::TileAtlas::build(world.resource::<AssetServer>(), &mut layouts)
         })
     };
-    WorldAssets::load(&atlas)
+    let mut images = app.world_mut().resource_mut::<Assets<Image>>();
+    WorldAssets::load(&atlas, &mut images)
 }
 
 fn fresh_map8() -> Map {

@@ -1078,11 +1078,22 @@ echo "Modo gráfico registrado en ${DEST}/.graphics_mode (${GRAPHICS_MODE})"
 # Rombo blanco de selección de teselas (fantasma de estaciones).
 python3 "$(dirname "$0")/gen_tile_select.py"
 
+# Orillas completas, animación de agua, campos/cercas e iconos de toolbar (GRF extra).
+python3 "$(dirname "$0")/gen_shore_full_set.py"
+python3 "$(dirname "$0")/gen_water_anim_frames.py"
+python3 "$(dirname "$0")/gen_field_draw_data.py"
+python3 "$(dirname "$0")/gen_toolbar_rail_icons.py"
+python3 "$(dirname "$0")/crop_ui_terraform_icons.py"
+
 # Waypoints ferroviarios (SPR_WAYPOINT_* en GRF extra).
 python3 "$(dirname "$0")/gen_rail_waypoint_sprites.py" || true
+# Alias rail_{1069..1082}.png para preload Bevy (desde rail_platform_* / rail_roof_*).
+bash "$(dirname "$0")/alias_rail_station_sprites.sh" || true
 # Señales: reexporta 1275–1699 eligiendo el mejor recorte entre NFO base y extra.
 python3 "$(dirname "$0")/gen_rail_signal_sprites.py" || true
 python3 "$(dirname "$0")/gen_rail_station_draw_data.py" || true
+# Sprites de puentes por tipo (tablero + pilares; ver gen_bridge_sprites.py).
+python3 "$(dirname "$0")/gen_bridge_sprites.py" || true
 
 # Texture atlas: empaqueta tiles/*.png en páginas + metadata Rust (batching).
 python3 "$(dirname "$0")/gen_tile_atlas.py"

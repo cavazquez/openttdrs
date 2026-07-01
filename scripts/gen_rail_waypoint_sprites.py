@@ -14,6 +14,7 @@ Uso: python3 scripts/gen_rail_waypoint_sprites.py
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -113,8 +114,19 @@ def crop(rows: dict[int, tuple[str, int, int, int, int]], sid: int, out_name: st
 def main() -> None:
     nfo = find_extra_nfo()
     rows = parse_rows(nfo)
+    last_real: Path | None = None
     for sid, _name in WAYPOINT_SPRITES:
-        crop(rows, sid, f"rail_{sid}.png")
+        if sid in rows:
+            crop(rows, sid, f"rail_{sid}.png")
+            last_real = TILES / f"rail_{sid}.png"
+            continue
+        # 4977 suele ser pseudo-sprite de recolor (`4977 * 8 …`) sin hoja propia.
+        if last_real is not None:
+            dst = TILES / f"rail_{sid}.png"
+            shutil.copy2(last_real, dst)
+            print(f"  rail_{sid}.png <- {last_real.name} (pseudo-sprite NFO, fallback)")
+            continue
+        raise SystemExit(f"sprite {sid} no encontrado en NFO extra")
     print(f"Waypoints listos en {TILES}/")
 
 

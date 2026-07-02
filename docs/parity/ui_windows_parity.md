@@ -1,0 +1,206 @@
+# Paridad de ventanas: depósito, trenes y órdenes
+
+Fecha: 2026-07-02 · Auditoría de UI (solo lectura, sin cambios de código).
+Compara las ventanas/paneles del cliente Bevy (`openttdrs-client/src/ui/`)
+contra las ventanas reales de OpenTTD (`depot_gui.cpp`, `vehicle_gui.cpp`,
+`train_gui.cpp`, `order_gui.cpp`, `timetable_gui.cpp`, `build_vehicle_gui.cpp`,
+`group_gui.cpp`).
+
+## Clasificación de cercanía alcanzable
+
+Para cada feature se indica qué tan cerca podemos llegar y qué lo limita:
+
+- **✔** — ya hay paridad funcional (la acción existe y hace lo mismo, aunque
+  el layout difiera).
+- **A (solo UI)** — alcanzable únicamente tocando el cliente; el comando o el
+  dato ya existen en `openttdrs-core`.
+- **B (comando chico)** — requiere agregar un comando o campo pequeño en la
+  sim, sin cambios estructurales.
+- **C (bloqueado por la sim)** — depende de una carencia estructural
+  (principalmente: **no hay consist** — el tren es un vehículo puntual —,
+  la entrada a plataforma es la Fase Rail 3C, y no existen averías,
+  intervalos de servicio ni beneficio por vehículo).
+
+Conclusión anticipada: **en comandos las ventanas están sorprendentemente
+cerca** (clonar, vender todo, autoreemplazo, órdenes compartidas, grupos,
+horarios ya existen); **en presentación y en todo lo que toca vagones/consist
+la distancia es estructural** y no se cierra desde la UI.
+
+## 1. Ventana de depósito
+
+OpenTTD: `DepotWindow` (`depot_gui.cpp:261-1166`). Cliente:
+`ui/toolbar/depot_panel.rs` (ventana flotante `FloatingWindowId::Depot`,
+abre con clic en tile `RoadDepot`/`RailDepot`).
+
+| Feature OpenTTD | Estado en cliente | Cercanía |
+|---|---|---|
+| Matriz de vehículos con sprites (`WID_D_MATRIX`, `DrawTrainImage`) | Filas de texto (8 slots): nombre, grupo, edad, carga | **A** — dibujar el sprite del vehículo en la fila es solo UI |
+| 1 fila = 1 consist (loco + vagones, scroll horizontal) | 1 fila = 1 vehículo puntual | **C** — sin consist no hay nada que dibujar en horizontal |
+| **Drag & drop de vagones** (`MoveRailVehicle`, formar/partir trenes, Ctrl = cadena) | No existe | **C** — el gap de UI más grande; requiere modelo de consist en core |
+| Ctrl+soltar sobre sí mismo = `ReverseTrainDirection` en depósito | Botón «Dar la vuelta» en ventana de vehículo | ✔ funcional (gesto distinto) |
+| Vender arrastrando a `WID_D_SELL` / vender cadena | Botón «Vender» por fila (`SellVehicle`) | ✔ (vender cadena es C) |
+| Vender todo (`DepotMassSell`) | Botón «Vender todo» (`SellAllVehiclesAtDepot`) | ✔ |
+| Comprar (`WID_D_BUILD` → `BuildVehicleWindow`) | Botón «Nuevos vehículos» → `buy_window` | ✔ |
+| Clonar (`CloneVehicle`, Ctrl = compartir órdenes) | Botones «Clonar» (`CloneVehicleAtDepot`) y «Compartir órdenes» separados | ✔ (la variante Ctrl es A) |
+| Parar/arrancar todos (`MassStartStop`) | Botones «Parar todos»/«Arrancar todos» (`SetDepotVehiclesRunning`) | ✔ |
+| Autoreemplazo masivo (`DepotMassAutoreplace`) | Botones autoreemplazo + regla + «solo viejos» | ✔ (el cliente incluso expone más que la ventana de depósito de OpenTTD) |
+| Bandera start/stop por celda | Botón «Iniciar/Detener» por fila | ✔ |
+| Renombrar depósito (`RenameDepot`) | No existe | **B** — falta nombre de depósito en core |
+| Tooltip de carga con clic derecho | No existe | A (bajo valor) |
+| Lista de vehículos del depósito (`WID_D_VEHICLE_LIST`) | Las 8 filas cumplen ese rol | ✔ parcial (sin scroll: >8 vehículos quedan ocultos → **A**) |
+| Ir al tile (`WID_D_LOCATION`) | Botón «Centrar» | ✔ |
+
+Extras del cliente sin equivalente en la ventana de OpenTTD: reordenar slots
+(↑/↓), «Copiar órdenes» por fila, ciclo de grupo. No son divergencias: son
+azúcar propio.
+
+## 2. Ventana de vehículo (vista)
+
+OpenTTD: `VehicleViewWindow` (`vehicle_gui.cpp:3007-3503`). Cliente:
+`ui/vehicle_window.rs` (flotante, abre con clic en el vehículo en el mapa).
+
+| Feature OpenTTD | Estado en cliente | Cercanía |
+|---|---|---|
+| Viewport siguiendo al vehículo (`WID_VV_VIEWPORT`, zoom) | Cámara render-target 280×120 (preview real del mundo) | ✔ esencial (seguir con doble clic es A) |
+| Barra de estado (`GetVehicleStatusString`): velocidad + destino + «parado» + averiado + atascado | «En marcha»/«Detenido» + velocidad y orden activa en el cuerpo | **A** para componer el string estado+destino; averías/atascado son **C** (no existen en la sim) |
+| Start/stop (`StartStopVehicle`) | «Iniciar/Detener» (`ToggleVehicleRunning`) | ✔ |
+| Ir a depósito (`SendVehicleToDepot`, Ctrl = servicio) | «Depósito» (`AppendGotoNearestDepot`) | ✔ funcional; la variante «servicio» es **C** (no hay intervalos de servicio) |
+| Refit (`ShowVehicleRefitWindow`) | Botón «Refit carga» que cicla el tipo (`RefitVehicle`) | ✔ para vehículo puntual; ventana con lista de cargas es A; refit parcial de consist es C |
+| Clonar desde la ventana | Solo desde el depósito | **A** |
+| Dar la vuelta (`ReverseTrainDirection`/`TurnRoadVehicle`) | «Dar la vuelta» (`TurnAroundVehicle`, solo tren) | ✔ tren; road es **B** |
+| Forzar paso (`ForceTrainProceed`) | «Forzar paso» (`ForceVehicleProceed`, solo tren) | ✔ |
+| Órdenes / horario (Ctrl) | Botones «Órdenes» y «Horario» separados | ✔ |
+| Detalles (`ShowVehicleDetailsWindow`) | No hay ventana de detalles separada (parte va en el cuerpo) | ver §3 |
+| Ir al destino de la orden (`WID_VV_ORDER_LOCATION`) | Botón «Ir a orden» | ✔ |
+| Renombrar (`RenameVehicle`) | Campo de renombrado inline | ✔ |
+
+## 3. Ventana de detalles del vehículo
+
+OpenTTD: `VehicleDetailsWindow` (`vehicle_gui.cpp:2436-3006`) +
+`DrawTrainDetails` (`train_gui.cpp:359-471`). Cliente: **no existe como
+ventana**; `vehicle_details_body` muestra modelo, carga, velocidad, coste/año,
+fiabilidad y orden activa dentro de la ventana de vehículo.
+
+| Feature OpenTTD | Estado en cliente | Cercanía |
+|---|---|---|
+| Edad + vida útil | Solo en filas del depósito | **A** — el dato existe |
+| Beneficio este año / anterior | No existe | **B/C** — la sim tiene ingresos globales, no beneficio por vehículo (campo + acumulación por tick) |
+| Peso/potencia/esfuerzo tractor (TE) | Potencia y peso están en `EngineDef` (sin TE) | **A** para peso/potencia; TE es **B** (dato del motor) |
+| Fiabilidad + nº de averías | Fiabilidad estática sí; averías no | Fiabilidad ✔; averías **C** |
+| Intervalo de servicio (`ChangeServiceInterval`, dropdown días/%/min) | No existe | **C** — no hay servicio en la sim |
+| **Lista de vagones con 4 pestañas** (cargo/info/capacidad/totales por vagón) | No existe | **C** — sin consist no hay vagones que listar |
+
+Con tren puntual, lo máximo alcanzable hoy es una ventana de detalles de
+«una unidad»: edad, peso/potencia, coste, fiabilidad, carga — todo A/B.
+
+## 4. Ventana de órdenes
+
+OpenTTD: `OrdersWindow` (`order_gui.cpp:499-1755`). Cliente:
+`ui/toolbar/order_panel/` (panel fijo a la derecha, no flotante; copia local
+editable + `SetVehicleOrderList`).
+
+| Feature OpenTTD | Estado en cliente | Cercanía |
+|---|---|---|
+| Lista de órdenes con orden activa | Sí (32 slots, resaltado, marcador `>`) | ✔ |
+| Insertar por clic en mapa (`GetOrderCmdFromTile`) | Sí: picker de destino + clic en mapa + `destination_window` | ✔ |
+| Skip / delete / reordenar (drag) | Saltar, Borrar, ↑/↓ (`MoveVehicleOrder`) | ✔ (drag en lista es A) |
+| Full load (variantes any/all) | Flag «Carga compl.» (una variante) | ✔ básico; variantes **B** |
+| Unload / **transfer** / no unload | Solo «No descargar» | unload forzado y transfer son **B** (transfer necesita feeder share en core → más bien **C**) |
+| **Non-stop / go via** | No existe | **C** hoy: la sim no tiene paradas intermedias implícitas (los vehículos no paran en estaciones de paso), así que non-stop es el único comportamiento; documentado como divergencia semántica, no como botón faltante. Cambia si se implementa `ShouldStopAtStation` |
+| Acción de depósito en orden (always/service/halt/unbunch) | «Parar depós.» (equivale a halt) | ✔ halt; service/unbunch **C** (no hay servicio) |
+| **Refit en orden** (`OrderRefit`) | No existe | **B** |
+| Condicionales (variable+comparador+valor) | Sí, limitado (carga >50 %, salto fijo) | **B** para más variables/comparadores (el core ya tiene `Conditional`) |
+| **Stop location de trenes (near/middle/far)** (`MOF_STOP_LOCATION`, doble clic) | No existe | **C** hasta la Fase Rail 3C: sin entrada a plataforma el punto de parada no significa nada. Portarlo junto con `GetTrainStopLocation` |
+| Órdenes compartidas (lista de vehículos, stop sharing) | Crear/desvincular desde depósito; sin lista de compartidos | **A** para la lista; la mecánica ya existe |
+| Ir a depósito más cercano (dropdown GOTO) | `AppendGotoNearestDepot` desde ventana vehículo | ✔ |
+| Waypoints en órdenes | Sí (solo trenes, sin parada completa) | ✔ |
+
+Extras del cliente: tiempos de espera/viaje editables inline, «Poner en
+hora», vaciar lista — equivalentes a piezas de la ventana de horarios de
+OpenTTD.
+
+## 5. Ventana de horarios (timetable)
+
+OpenTTD: `TimetableWindow` (`timetable_gui.cpp:174-863`). Cliente:
+`ui/timetable_window.rs` (**sí existe**, flotante).
+
+| Feature OpenTTD | Estado en cliente | Cercanía |
+|---|---|---|
+| Tiempos de espera/viaje por orden | Sí (8 filas) | ✔ |
+| Autofill | Sí | ✔ |
+| Reset de retraso (`SetVehicleOnTime`) | «Poner en hora» | ✔ |
+| Resumen retraso/adelanto | Sí | ✔ |
+| **Velocidad máxima por tramo** | No existe | **B** (campo por orden + clamp en `update_movement_speed`) |
+| Fecha de inicio (`SetTimetableStart`) | No existe | **B**, de bajo valor con tick a 5 Hz |
+| Llegada/salida esperadas por orden | No existe | **A** (derivable de los tiempos) |
+
+## 6. Ventana de refit
+
+OpenTTD: `RefitWindow` (`vehicle_gui.cpp:753-1358`) con selección parcial del
+consist por drag. Cliente: botón «Refit carga» en la ventana de vehículo.
+
+- Lista de cargas con coste/capacidad en vez del ciclo actual: **A**.
+- Refit de parte del consist: **C** (sin consist).
+- Refit como orden (`OrderRefit`): **B** (ver §4).
+
+## 7. Compra de vehículos
+
+OpenTTD: `BuildVehicleWindow` (`build_vehicle_gui.cpp:1216+`). Cliente:
+`ui/buy_window.rs`.
+
+| Feature OpenTTD | Estado en cliente | Cercanía |
+|---|---|---|
+| Lista con orden asc/desc y ~11 criterios | Orden por nombre/precio/velocidad/año | ✔ básico; más criterios **A** |
+| Filtro por cargo / texto / motores ocultos / badges | Filtro todos/buses/camiones (solo road) | **A** (filtros para rail hoy tienen poco sentido: no hay vagones que filtrar) |
+| Panel de detalle (coste, peso, velocidad, potencia, **TE**, running cost, refit) | Sí salvo TE | ✔ (TE es **B**) |
+| **Comprar vagones** (`CcBuildWagon` acopla a la loco) | No existe | **C** — sin consist |
+| Ocultar/renombrar motor (`SetVehicleVisibility`, `RenameEngine`) | No existe | **B**, bajo valor |
+
+## 8. Lista de vehículos y grupos
+
+OpenTTD: `VehicleListWindow` (`vehicle_gui.cpp:1923-2319`) y
+`VehicleGroupWindow` (`group_gui.cpp:208-1244`). Cliente: **no existen**;
+solo hay alertas de flota en el HUD y ciclo de grupo en el depósito.
+
+- Ventana de lista de flota con ordenamiento y acciones masivas
+  (`MassStartStop`, enviar todos a depósito): **A/B** — los comandos masivos
+  por depósito ya existen; falta la vista global y un `SendAllToDepot`.
+- Ventana de grupos (crear/renombrar/borrar, drag de vehículos): **B** — el
+  core ya tiene `CreateVehicleGroup`/`AssignVehicleToGroup`; faltan renombrar
+  y borrar grupo.
+
+## Resumen: qué tan cerca podemos llegar
+
+| Categoría | Ítems | Veredicto |
+|---|---|---|
+| Ya en paridad funcional (✔) | start/stop, vender, vender todo, clonar, autoreemplazo, comprar, órdenes básicas + condicionales + skip + reorden, waypoints, horarios con autofill, reversa/forzar paso de tren, centrar/ir a destino, renombrar vehículo | La mecánica de comandos está prácticamente completa para vehículos puntuales |
+| Alcanzable solo con UI (A) | sprites en filas de depósito, scroll >8 vehículos, string de estado con destino, edad/peso/potencia en detalles, ventana de refit con lista, lista de órdenes compartidas, drag para reordenar órdenes, llegada/salida esperadas, más criterios de orden en compra, clonar desde ventana de vehículo | Un paquete de trabajo de cliente sin tocar core |
+| Comando chico en core (B) | refit en orden, transfer/unload forzado, variantes de full load, más condicionales, velocidad máx. por tramo de horario, renombrar depósito/grupo, TE en `EngineDef`, dar la vuelta para road, ventana de flota/grupos completa | Cambios acotados, sin riesgo de paridad de sim |
+| Bloqueado por la sim (C) | **todo lo de vagones/consist** (drag & drop en depósito, vender cadena, lista de vagones con pestañas, refit parcial, comprar vagones), stop location near/middle/far (Fase Rail 3C), servicio/averías/unbunch, beneficio por vehículo, non-stop/paradas de paso | No tiene sentido construir la UI antes que el modelo |
+
+**El techo actual**: con trabajo A+B el cliente puede quedar funcionalmente
+equivalente a OpenTTD para **vehículos de una unidad** — que es exactamente lo
+que la sim modela hoy. El salto siguiente (matriz de depósito con drag & drop
+de vagones, detalles por vagón, refit parcial) está bloqueado por el ítem 6 de
+`rail_unknown_features.md` (consist), no por la UI: el framework de ventanas
+flotantes (drag, z-order, múltiples ventanas) ya soporta ese tipo de ventana.
+
+## Orden recomendado si se ataca la UI
+
+1. Paquete A de depósito + vehículo (sprites en filas, scroll, string de
+   estado, detalles con edad/peso/potencia) — máxima paridad visible sin
+   tocar core.
+2. Paquete B de órdenes (refit en orden, unload/transfer básico, variantes
+   full load) — cierra la ventana de órdenes casi por completo.
+3. Ventana de flota + grupos (A/B) — único subsistema de gestión ausente.
+4. Stop location y lo demás de trenes: después de la Fase Rail 3C.
+5. Consist: decisión estructural previa (fuera del alcance de UI).
+
+## Tests hoy y huecos
+
+Cubierto: labels de órdenes (`order_row_labels_depots`), sync del panel de
+órdenes, pick de destino, añadir estación a ruta, conversión km/h, drag de
+ventanas flotantes. Sin tests: `depot_panel`, `buy_window`,
+`destination_window`, `timetable_window` y los handlers de botones de la
+ventana de vehículo — si se encara el paquete A, agregar tests de sync/handler
+por ventana al estilo `setup_order_panel_then_sync_order_panel`.

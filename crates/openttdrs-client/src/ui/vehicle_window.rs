@@ -811,9 +811,9 @@ pub(crate) fn vehicle_window_rename_editable_keyboard(
         };
         for c in text.chars() {
             if !c.is_control() && editable.value().chars().count() < MAX_VEHICLE_NAME_CHARS {
-                editable.queue_edit(bevy::text::TextEdit::Insert(smol_str::SmolStr::from(
-                    c.to_string(),
-                )));
+                editable.queue_edit(bevy::text::TextEdit::Insert(
+                    winit::keyboard::SmolStr::from(c.to_string()),
+                ));
             }
         }
     }

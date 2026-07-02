@@ -5,7 +5,9 @@ use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::input_focus::{FocusCause, InputFocus};
 use bevy::prelude::*;
 use bevy::text::{EditableText, TextEdit};
-use smol_str::SmolStr;
+// `TextEdit::Insert` espera el `SmolStr` de winit; usar su re-export evita
+// depender de `smol_str` directo (y de que su versión coincida con la de winit).
+use winit::keyboard::SmolStr;
 
 use openttdrs_core::save;
 

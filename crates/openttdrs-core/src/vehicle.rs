@@ -532,6 +532,11 @@ pub struct Vehicle {
     /// Giro de salida en la tesela actual (0 = inactivo; 1..=255 anima el cambio de sentido).
     #[serde(default)]
     pub depart_turn: u8,
+    /// Llegó a una orden de estación y espera la ventana de carga/descarga del
+    /// siguiente tick (análogo a `OpenTTD` `Vehicle::BeginLoading`: la orden
+    /// no avanza hasta que la fase de carga tuvo oportunidad de actuar).
+    #[serde(default)]
+    pub awaiting_load_window: bool,
     /// Ignorar señal roja en el próximo paso de simulación (trenes).
     #[serde(default)]
     pub force_proceed: bool,
@@ -609,6 +614,7 @@ impl Vehicle {
             cargo_source: None,
             cargo_transit_ticks: 0,
             depart_turn: 0,
+            awaiting_load_window: false,
             force_proceed: false,
             timetable_active: false,
             timetable_wait_remaining: 0,
@@ -850,6 +856,13 @@ impl Vehicle {
             return;
         }
 
+        // Cierra la ventana de carga abierta en la llegada del tick anterior.
+        // En `sim_step` las fases de carga/descarga corren antes que el
+        // movimiento, así que a esta altura ya tuvieron su oportunidad: si
+        // actuaron, la orden avanzó y la bandera se limpió; si no, la salida
+        // de la parada se decide ahora.
+        self.complete_station_load_window();
+
         self.update_movement_speed();
 
         if self.kind == VehicleKind::Train {
@@ -878,7 +891,7 @@ impl Vehicle {
                 self.depart_turn = 0;
                 self.progress = 0;
                 if let Some(next) = self.movement_target() {
-                    self.direction = direction_from_tile_step(self.pos, next);
+                    self.set_direction_with_curve_penalty(direction_from_tile_step(self.pos, next));
                 }
             }
             return;
@@ -954,7 +967,19 @@ impl Vehicle {
     }
 
     fn update_direction_step(&mut self, from: TileCoord, to: TileCoord) {
-        self.direction = direction_from_tile_step(from, to);
+        self.set_direction_with_curve_penalty(direction_from_tile_step(from, to));
+    }
+
+    /// Cambia `direction` aplicando la penalización de curva del modelo
+    /// original de `OpenTTD`: `v->cur_speed -= v->cur_speed >> 2` (−25 %)
+    /// cada vez que un vehículo de carretera cambia de dirección
+    /// (`roadveh_cmd.cpp:1353`, `:1426` y `:1481`, `AM_ORIGINAL`).
+    /// Los trenes no tienen esta penalización.
+    fn set_direction_with_curve_penalty(&mut self, new_dir: VehicleDirection) {
+        if new_dir != self.direction && self.kind != VehicleKind::Train {
+            self.cur_speed -= self.cur_speed >> 2;
+        }
+        self.direction = new_dir;
     }
 
     #[must_use]
@@ -976,6 +1001,7 @@ impl Vehicle {
         self.path.clear();
         self.progress = 0;
         self.depart_turn = 0;
+        self.awaiting_load_window = false;
         self.no_network_route_to_order = false;
         if let Some(&first) = self.orders.first() {
             self.origin = self.pos;
@@ -1009,6 +1035,37 @@ impl Vehicle {
     }
 
     fn finish_arrival_processing(&mut self) {
+        // Llegada a una orden de estación: abre una «ventana de carga» de un
+        // tick (análogo a `Vehicle::BeginLoading` de OpenTTD) para que la fase
+        // de carga/descarga de `sim_step` actúe antes de avanzar la orden.
+        // `sim_step::finish_station_load_windows` la cierra tras esa fase.
+        if !self.awaiting_load_window
+            && matches!(
+                self.orders.get(self.current_order),
+                Some(VehicleOrder::Station { .. })
+            )
+        {
+            self.awaiting_load_window = true;
+            self.progress = 255;
+            return;
+        }
+        self.finish_arrival_after_load_window();
+    }
+
+    /// Cierra la ventana de carga abierta en la llegada (inicio del `step`
+    /// siguiente). Si las fases de carga/descarga actuaron, ya avanzaron la
+    /// orden (`advance_after_loading`/`_unloading`) y aquí no queda nada.
+    fn complete_station_load_window(&mut self) {
+        if !self.awaiting_load_window {
+            return;
+        }
+        self.awaiting_load_window = false;
+        if !self.orders.is_empty() && self.pos == self.dest && self.progress == 255 {
+            self.finish_arrival_after_load_window();
+        }
+    }
+
+    fn finish_arrival_after_load_window(&mut self) {
         if self.cargo > 0
             && !self
                 .orders
@@ -1086,6 +1143,7 @@ impl Vehicle {
     }
 
     fn advance_to_next_order(&mut self) {
+        self.awaiting_load_window = false;
         if self.orders.is_empty() {
             return;
         }
@@ -1330,14 +1388,17 @@ mod tests {
         let mut v = Vehicle::new(0, VehicleKind::Bus, TileCoord::new(14, 4), stop);
         v.set_station_orders(vec![stop, TileCoord::new(21, 3)]);
         v.sync_order_destination(&state.map);
-        assert_eq!(v.dest, road, "bus para en carretera de acceso");
-        v.path = VecDeque::from([road]);
+        assert_eq!(v.dest, stop, "bus entra a la tesela de la bahía (Fase 2)");
+        v.path = VecDeque::from([road, stop]);
         v.direction = DIR_NW;
         v.set_cruise_speed();
         v.progress = 250;
         v.step();
-        assert_eq!(v.pos, road);
-        assert_eq!(v.progress, 255, "anclado al final del carril al llegar");
+        assert_eq!(v.pos, road, "pasa por la carretera de acceso sin anclarse");
+        while v.pos != stop {
+            v.step();
+        }
+        assert_eq!(v.progress, 255, "anclado dentro de la bahía al llegar");
     }
 
     #[test]
@@ -1485,6 +1546,52 @@ mod tests {
     }
 
     #[test]
+    fn road_vehicle_loses_quarter_speed_on_turn() {
+        // OpenTTD AM_ORIGINAL: `v->cur_speed -= v->cur_speed >> 2` al cambiar
+        // de dirección (roadveh_cmd.cpp:1481).
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Truck,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 2),
+        );
+        v.direction = DIR_SE;
+        v.path = VecDeque::from([TileCoord::new(1, 2), TileCoord::new(2, 2)]);
+        v.set_cruise_speed();
+        let cruise = v.cur_speed;
+        while v.pos != TileCoord::new(1, 2) {
+            v.step();
+        }
+        assert_eq!(v.cur_speed, cruise, "tramo recto: sin penalización");
+        while v.pos != TileCoord::new(2, 2) {
+            v.step();
+        }
+        assert_eq!(
+            v.cur_speed,
+            cruise - (cruise >> 2),
+            "giro SE→SW: −25 % de velocidad"
+        );
+    }
+
+    #[test]
+    fn train_keeps_speed_on_direction_change() {
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(2, 2),
+        );
+        v.direction = DIR_SE;
+        v.path = VecDeque::from([TileCoord::new(1, 2), TileCoord::new(2, 2)]);
+        v.set_cruise_speed();
+        let cruise = v.cur_speed;
+        while v.pos != TileCoord::new(2, 2) {
+            v.step();
+        }
+        assert_eq!(v.cur_speed, cruise, "trenes sin penalización de curva");
+    }
+
+    #[test]
     fn direction_updates_when_tile_advances() {
         let mut v = Vehicle::new(
             0,
@@ -1511,6 +1618,8 @@ mod tests {
         v.running = true;
         v.progress = 255;
         v.sim_tick = 100;
+        v.step();
+        // Primer step: abre la ventana de carga; el segundo agenda la espera.
         v.step();
         assert_eq!(v.timetable_wait_remaining, 30);
         assert_eq!(v.current_order, 0);

@@ -186,6 +186,16 @@ const fn turn_curve(entry: VehicleDirection, exit: VehicleDirection) -> Option<&
     }
 }
 
+/// Puntos sub-tesela de la curva de giro (copias de `_roadveh_drive_data_*`;
+/// expuesto para los tests golden contra las tablas C++ upstream).
+#[must_use]
+pub const fn turn_curve_points(
+    entry: VehicleDirection,
+    exit: VehicleDirection,
+) -> Option<&'static [(f32, f32)]> {
+    turn_curve(entry, exit)
+}
+
 /// Giro de 90° en la tesela actual (`entry` → `exit` en el camino).
 #[must_use]
 pub fn road_turn_entry_exit(v: &Vehicle) -> Option<(VehicleDirection, VehicleDirection)> {
@@ -259,6 +269,26 @@ fn depart_u_turn_curve(inbound: VehicleDirection) -> Option<&'static [SubTile]> 
         DIR_NE | DIR_SW => Some(U_TURN_NE_SW),
         _ => None,
     }
+}
+
+/// Progreso visual del punto de detención dentro de una bahía.
+///
+/// Aproxima `_road_stop_stop_frame` (`roadveh_movement.h:1087-1093`): los
+/// frames de parada 11–20 dejan al vehículo cerca del fondo del lazo de las
+/// tablas `_rv_station_*` (≈ centro de la tesela sobre el carril de entrada,
+/// p. ej. `{9,9}` en `_rv_station_left_se_near[15]`). El carril recto del port
+/// pasa por ese punto en `progress` ≈ 128.
+pub const BAY_STOP_PROGRESS: u8 = 128;
+
+/// El vehículo está detenido dentro de una bahía de sus órdenes (ancló en la
+/// tesela de la estación tras entrar por la boca). Se comprueba contra todas
+/// las órdenes porque al terminar de cargar la orden actual ya avanzó a la
+/// siguiente parada mientras el vehículo sigue físicamente en la bahía.
+#[must_use]
+pub fn parked_inside_bay(v: &Vehicle, pos: TileCoord) -> bool {
+    v.orders.iter().any(
+        |o| matches!(o, crate::vehicle::VehicleOrder::Station { station, .. } if *station == pos),
+    )
 }
 
 /// Posición sub-tesela usada para dibujo (puede diferir del estado de sim tras extrapolar).
@@ -438,22 +468,40 @@ pub fn vehicle_subtile_with_progress(v: &Vehicle, progress: u8) -> (f32, f32) {
     )
 }
 
+/// Media vuelta dentro de la bahía: interpola entre el punto de parada del
+/// carril de entrada y el punto equivalente del carril de salida (aproxima el
+/// lazo de retorno de las tablas `_rv_station_*`).
+fn bay_turn_subtile(inbound: VehicleDirection, depart_turn: u8) -> (f32, f32) {
+    let (x0, y0) = straight_subtile(inbound, BAY_STOP_PROGRESS);
+    let (x1, y1) = straight_subtile(reverse_direction(inbound), 255 - BAY_STOP_PROGRESS);
+    let t = f32::from(depart_turn) / 255.0;
+    (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
+}
+
 /// Sub-tesela para una pose concreta (sim actual o extrapolada).
 #[must_use]
 pub fn vehicle_subtile_at(v: &Vehicle, pose: VehiclePose) -> (f32, f32) {
     if matches!(v.kind, VehicleKind::Train) {
         return train_straight_subtile(train_subtile_direction(v), pose.progress);
     }
-    if pose.depart_turn > 0
-        && let Some(curve) = depart_u_turn_curve(v.direction)
-    {
-        return sample_curve(curve, pose.depart_turn);
+    let in_bay = parked_inside_bay(v, pose.pos);
+    if pose.depart_turn > 0 {
+        if in_bay {
+            return bay_turn_subtile(v.direction, pose.depart_turn);
+        }
+        if let Some(curve) = depart_u_turn_curve(v.direction) {
+            return sample_curve(curve, pose.depart_turn);
+        }
     }
-    if pose.progress == 255
-        && movement_target_at(v, pose.pos, pose.path_index).is_none()
-        && pose.pos == v.dest
-    {
-        return straight_subtile(v.direction, 255);
+    if pose.progress == 255 && movement_target_at(v, pose.pos, pose.path_index).is_none() {
+        // Dentro de una bahía el vehículo se detiene en el punto del stop
+        // frame (`_road_stop_stop_frame`), no al final del carril.
+        if in_bay {
+            return straight_subtile(v.direction, BAY_STOP_PROGRESS);
+        }
+        if pose.pos == v.dest {
+            return straight_subtile(v.direction, 255);
+        }
     }
     if let Some((entry, exit)) = road_turn_entry_exit_at(v, pose.pos, pose.path_index)
         && let Some(curve) = turn_curve(entry, exit)
@@ -464,10 +512,21 @@ pub fn vehicle_subtile_at(v: &Vehicle, pose: VehiclePose) -> (f32, f32) {
         && movement_target_at(v, pose.pos, pose.path_index).is_some()
         && needs_depart_turnaround_at(v, pose.pos, pose.path_index)
     {
+        if in_bay {
+            // Esperando el giro de salida: sigue en el punto de parada.
+            return straight_subtile(v.direction, BAY_STOP_PROGRESS);
+        }
         v.direction
     } else {
         movement_direction_at(v, pose.pos, pose.path_index)
     };
+    if in_bay && pose.progress < 255 && movement_target_at(v, pose.pos, pose.path_index).is_some() {
+        // Saliendo de la bahía: recorre solo el tramo desde el punto de
+        // parada hasta la boca (no toda la tesela desde el borde trasero).
+        let span = 255 - u16::from(255 - BAY_STOP_PROGRESS);
+        let t = span + (u16::from(255 - BAY_STOP_PROGRESS) * u16::from(pose.progress)) / 255;
+        return straight_subtile(dir, u8::try_from(t).unwrap_or(255));
+    }
     straight_subtile(dir, pose.progress)
 }
 

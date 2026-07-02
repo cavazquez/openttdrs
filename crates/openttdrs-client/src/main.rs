@@ -34,6 +34,7 @@ mod iso;
 mod news_prefs;
 mod persistence;
 mod render;
+mod render_trace;
 mod settings;
 mod simulation;
 mod sprites;

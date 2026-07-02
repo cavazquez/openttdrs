@@ -17,6 +17,7 @@ pub mod industry;
 pub mod map;
 pub mod news;
 pub mod ottdmap_extras;
+pub mod parity;
 pub mod pathfinder;
 pub mod rail_lane;
 pub mod rail_signals;
@@ -122,7 +123,7 @@ pub use rail_signals::{
 pub use refit::{next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_in_depot};
 pub use road_movement::{
     VehiclePose, extrapolate_vehicle_pose, road_turn_entry_exit, straight_subtile,
-    train_straight_subtile, train_subtile_direction, vehicle_render_direction,
+    train_straight_subtile, train_subtile_direction, turn_curve_points, vehicle_render_direction,
     vehicle_render_direction_at, vehicle_render_progress, vehicle_subtile, vehicle_subtile_at,
     vehicle_subtile_with_progress,
 };

@@ -20,6 +20,7 @@ use crate::render::{
     RefineryFireAnimPlugin, WaterAnimationPlugin,
 };
 use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
+use crate::render_trace::RenderTracePlugin;
 use crate::settings::{ClientSettingsPlugin, patch_window_plugin_for_settings};
 use crate::simulation::SimulationPlugin;
 use crate::state::{ClientScreen, SimWorld};
@@ -135,6 +136,7 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
         IndustrySmokePlugin,
         IndustryBuildingAnimPlugin,
         IndustryDrawProcPlugin,
+        RenderTracePlugin,
     ));
     app.add_plugins((DebugGizmosPlugin, CameraControlPlugin));
     if !headless {

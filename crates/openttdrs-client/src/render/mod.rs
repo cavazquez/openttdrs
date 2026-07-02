@@ -49,7 +49,7 @@ pub(crate) use tiles::{
 };
 pub(crate) use vehicles::{
     TruckHandles, VehicleIndex, VehicleRenderPlugin, pick_vehicle_id_at_world,
-    vehicle_world_position,
+    vehicle_sprite_pos_at, vehicle_world_position,
 };
 pub(crate) use viewport::{
     TileViewportBounds, chunk_tile_bounds, chunks_in_bounds, large_map_viewport_cull_enabled,

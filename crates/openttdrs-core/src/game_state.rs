@@ -134,6 +134,9 @@ pub struct GameState {
     /// Último día de calendario en que se ejecutó purga de noticias antiguas.
     #[serde(skip, default)]
     pub news_last_purge_day: u64,
+    /// Tracer de paridad opcional (coste cero si es `None`; no se persiste).
+    #[serde(skip, default)]
+    pub parity: Option<crate::parity::ParityTracer>,
 }
 
 impl GameState {
@@ -163,6 +166,7 @@ impl GameState {
             shared_order_lists: Vec::new(),
             news_advice_sent: std::collections::HashSet::new(),
             news_last_purge_day: 0,
+            parity: None,
         }
     }
 
@@ -193,7 +197,25 @@ impl GameState {
             shared_order_lists: Vec::new(),
             news_advice_sent: std::collections::HashSet::new(),
             news_last_purge_day: 0,
+            parity: None,
         }
+    }
+
+    /// Activa la traza de paridad: cada `step()` añade un registro por tick.
+    ///
+    /// La línea base para derivar eventos es el estado actual. Coste cero
+    /// mientras esté desactivada (`self.parity == None`).
+    pub fn enable_parity_trace(&mut self) {
+        self.parity = Some(crate::parity::ParityTracer::with_baseline(self));
+    }
+
+    /// Extrae y vacía los registros de paridad acumulados (vacío si la traza
+    /// está desactivada).
+    pub fn take_parity_records(&mut self) -> Vec<crate::parity::TickRecord> {
+        self.parity
+            .as_mut()
+            .map(crate::parity::ParityTracer::drain_records)
+            .unwrap_or_default()
     }
 
     /// Avanza un tick de simulación (equivalente conceptual a un frame lógico del juego).

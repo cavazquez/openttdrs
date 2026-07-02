@@ -384,10 +384,14 @@ mod tests {
             state.step();
             let pos = state.vehicles[idx].pos;
             let kind = state.map.get_kind(pos);
+            // Fase 2: la tesela de la parada (bahía) es parte del recorrido.
             assert!(
                 matches!(
                     kind,
-                    Some(TileKind::Road) | Some(TileKind::RoadBridge) | Some(TileKind::RoadTunnel)
+                    Some(TileKind::Road)
+                        | Some(TileKind::RoadBridge)
+                        | Some(TileKind::RoadTunnel)
+                        | Some(TileKind::Station)
                 ),
                 "bus #9100 fuera de red viaria en {pos:?} (tick {step})"
             );
@@ -408,18 +412,21 @@ mod tests {
             "arranca sobre carretera"
         );
         assert_eq!(
-            state.vehicles[idx].dest,
-            TileCoord::new(15, 10),
-            "destino = carretera de acceso a la parada de madera"
+            state.vehicles[idx].dest, SHOWCASE_WOOD_STATION,
+            "destino = tesela de la bahía de madera (Fase 2: entra a la parada)"
         );
         for step in 0..1200 {
             state.step();
             let pos = state.vehicles[idx].pos;
             let kind = state.map.get_kind(pos);
+            // Fase 2: la tesela de la parada (bahía) es parte del recorrido.
             assert!(
                 matches!(
                     kind,
-                    Some(TileKind::Road) | Some(TileKind::RoadBridge) | Some(TileKind::RoadTunnel)
+                    Some(TileKind::Road)
+                        | Some(TileKind::RoadBridge)
+                        | Some(TileKind::RoadTunnel)
+                        | Some(TileKind::Station)
                 ),
                 "camión #9101 en hierba en {pos:?} (tick {step})"
             );

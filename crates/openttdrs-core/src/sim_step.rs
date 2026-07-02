@@ -39,6 +39,7 @@ pub(crate) fn step(state: &mut GameState) {
     apply_vehicle_running_costs(state);
     crate::news::poll_vehicle_advice_news(state);
     crate::news::maybe_purge_old_news(state);
+    crate::parity::record_tick(state);
 }
 
 fn tick_vehicle_timetables(state: &mut GameState) {

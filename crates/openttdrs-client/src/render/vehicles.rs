@@ -88,8 +88,11 @@ pub(crate) fn vehicle_world_position(v: &Vehicle, map: &Map) -> Vec3 {
     vehicle_sprite_pos(v, map, 0.0)
 }
 
-fn vehicle_sprite_pos(v: &Vehicle, map: &Map, tick_alpha: f32) -> Vec3 {
-    let pose = extrapolate_vehicle_pose(v, tick_alpha);
+pub(crate) fn vehicle_sprite_pos_at(
+    v: &Vehicle,
+    map: &Map,
+    pose: openttdrs_core::VehiclePose,
+) -> Vec3 {
     let layer = vehicle_layer(v, pose);
     let (anchor, height, tx, ty) = vehicle_draw_anchor_from_pose(v, map, pose);
     overlay_pos(
@@ -103,6 +106,10 @@ fn vehicle_sprite_pos(v: &Vehicle, map: &Map, tick_alpha: f32) -> Vec3 {
         tx,
         ty,
     )
+}
+
+pub(crate) fn vehicle_sprite_pos(v: &Vehicle, map: &Map, tick_alpha: f32) -> Vec3 {
+    vehicle_sprite_pos_at(v, map, extrapolate_vehicle_pose(v, tick_alpha))
 }
 
 type DirHandles = [Handle<Image>; 8];
@@ -162,8 +169,16 @@ impl TruckHandles {
         self.train_groups[group][dir.min(7)].clone()
     }
 
-    fn for_vehicle(&self, v: &Vehicle, company: Option<&CompanyColoredSprites>) -> Handle<Image> {
-        let dir = v.render_direction().min(7) as usize;
+    /// Textura del sprite según la pose de render (extrapolada entre ticks de
+    /// sim): la dirección del sprite acompaña la posición dibujada en curvas,
+    /// en vez de usar la dirección lógica del último tick.
+    fn for_vehicle(
+        &self,
+        v: &Vehicle,
+        pose: openttdrs_core::VehiclePose,
+        company: Option<&CompanyColoredSprites>,
+    ) -> Handle<Image> {
+        let dir = vehicle_render_direction_at(v, pose).min(7) as usize;
         let layer = &vehicle_layers(v)[dir];
         if let Some(c) = company
             && let Some(handle) = c.vehicle_handle(layer.path)
@@ -216,7 +231,8 @@ pub(crate) fn spawn_initial_vehicles(
     company: &CompanyColoredSprites,
 ) {
     for vehicle in &sim.state.vehicles {
-        let pos3 = vehicle_sprite_pos(vehicle, &sim.state.map, 0.0);
+        let pose = extrapolate_vehicle_pose(vehicle, 0.0);
+        let pos3 = vehicle_sprite_pos_at(vehicle, &sim.state.map, pose);
         let vis = if vehicle_is_hidden_in_depot(sim, vehicle) {
             Visibility::Hidden
         } else {
@@ -226,7 +242,7 @@ pub(crate) fn spawn_initial_vehicles(
             MapVisualLayer,
             VehicleSprite(vehicle.id),
             Sprite {
-                image: trucks.for_vehicle(vehicle, Some(company)),
+                image: trucks.for_vehicle(vehicle, pose, Some(company)),
                 color: Color::WHITE,
                 ..default()
             },
@@ -336,9 +352,10 @@ pub(crate) fn update_vehicles(
             continue;
         }
         *visibility = Visibility::Visible;
-        let pos3 = vehicle_sprite_pos(v, &sim.state.map, sim_clock.tick_alpha);
+        let pose = extrapolate_vehicle_pose(v, sim_clock.tick_alpha);
+        let pos3 = vehicle_sprite_pos_at(v, &sim.state.map, pose);
         transform.translation = pos3;
-        sprite.image = trucks.for_vehicle(v, Some(&company));
+        sprite.image = trucks.for_vehicle(v, pose, Some(&company));
         sprite.color = vehicle_tint();
     }
 
@@ -500,6 +517,46 @@ mod tests {
             TRAIN_VEHICLE_LAYERS[DIR_SW as usize].path,
             BUS_VEHICLE_LAYERS[DIR_SW as usize].path
         );
+    }
+
+    #[test]
+    fn sprite_selection_uses_extrapolated_pose_not_logical_direction() {
+        // Bus a mitad de una curva NE→SE: el estado lógico está antes del punto
+        // medio (sprite diagonal NE), pero la pose extrapolada al final del
+        // frame ya cruzó progress 128 (sprite cardinal E). El selector debe
+        // usar la pose extrapolada.
+        let mut v = sample_vehicle(1);
+        v.kind = VehicleKind::Bus;
+        v.pos = TileCoord::new(1, 1);
+        v.path = VecDeque::from([TileCoord::new(0, 1), TileCoord::new(0, 2)]);
+        v.set_cruise_speed();
+        v.progress = 100;
+
+        let logical_dir = v.render_direction().min(7) as usize;
+        assert_eq!(logical_dir, openttdrs_core::DIR_NE as usize);
+
+        let pose = extrapolate_vehicle_pose(&v, 1.0);
+        assert!(
+            pose.progress >= 128,
+            "la extrapolación cruza el punto medio"
+        );
+        let render_dir = vehicle_render_direction_at(&v, pose).min(7) as usize;
+        assert_eq!(render_dir, openttdrs_core::DIR_E as usize);
+
+        // `for_vehicle` y `vehicle_layer` seleccionan la textura del sprite
+        // cardinal (pose extrapolada), no la diagonal lógica.
+        assert_eq!(
+            vehicle_layer(&v, pose).path,
+            vehicle_layers(&v)[render_dir].path
+        );
+        assert_ne!(
+            vehicle_layer(&v, pose).path,
+            vehicle_layers(&v)[logical_dir].path
+        );
+
+        let handles = default_handles();
+        let selected = handles.for_vehicle(&v, pose, None);
+        assert_eq!(selected, handles.bus[render_dir]);
     }
 
     #[test]

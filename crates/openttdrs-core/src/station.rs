@@ -192,6 +192,35 @@ fn is_road_approach_kind(kind: TileKind) -> bool {
     )
 }
 
+/// Parada bahía bus/camión con boca conectada (`m3` con bits de acceso).
+/// Solo estas paradas son destino de movimiento «dentro de la tesela»
+/// (paridad con `OpenTTD`, donde el vehículo entra a la bahía).
+#[must_use]
+pub fn is_connected_bay_road_stop(map: &Map, station_pos: TileCoord) -> bool {
+    map.get(station_pos).is_some_and(|t| {
+        t.kind == TileKind::Station
+            && matches!(station_type_from_m6(t.m6), 2 | 3)
+            && (t.m3 & 0x0F) != 0
+    })
+}
+
+/// Dirección de marcha con la que un vehículo ENTRA a la bahía (desde la
+/// carretera frente a la boca hacia el interior de la tesela de estación).
+#[must_use]
+pub fn bay_entry_direction(map: &Map, station_pos: TileCoord) -> Option<crate::VehicleDirection> {
+    let tile = map.get(station_pos)?;
+    if tile.kind != TileKind::Station || !matches!(station_type_from_m6(tile.m6), 2 | 3) {
+        return None;
+    }
+    let mouth = tile.m5 & 0x03;
+    let (dx, dy) = diag_dir_offset(mouth);
+    let approach = TileCoord::new(station_pos.x + dx, station_pos.y + dy);
+    Some(crate::vehicle::direction_from_tile_step(
+        approach,
+        station_pos,
+    ))
+}
+
 /// Tesela de carretera donde bus/camión debe detenerse junto a la parada (no sobre la hierba).
 #[must_use]
 pub fn road_stop_approach_tile(map: &Map, station_pos: TileCoord) -> Option<TileCoord> {
@@ -219,7 +248,12 @@ pub fn road_stop_approach_tile(map: &Map, station_pos: TileCoord) -> Option<Tile
     None
 }
 
-/// El vehículo está en la tesela de la parada o en su vía/carretera de acceso.
+/// El vehículo está en su posición de servicio de la parada.
+///
+/// Bus/camión en bahía conectada: SOLO dentro de la tesela de la estación
+/// (paridad `OpenTTD`: la carga empieza al alcanzar el stop frame dentro de la
+/// bahía, no al pasar por la carretera de acceso). Bahía sin boca: carretera
+/// de acceso (fallback). Tren: vía adyacente a la plataforma.
 #[must_use]
 pub fn vehicle_physically_at_station(
     map: &Map,
@@ -235,7 +269,9 @@ pub fn vehicle_physically_at_station(
     }
     match vehicle.kind {
         VehicleKind::Truck | VehicleKind::Bus => {
-            road_stop_approach_tile(map, station.pos).is_some_and(|approach| vpos == approach)
+            !is_connected_bay_road_stop(map, station.pos)
+                && road_stop_approach_tile(map, station.pos)
+                    .is_some_and(|approach| vpos == approach)
         }
         VehicleKind::Train => {
             rail_station_approach_tile(map, station.pos).is_some_and(|approach| vpos == approach)
@@ -243,7 +279,8 @@ pub fn vehicle_physically_at_station(
     }
 }
 
-/// El vehículo llegó a la parada de la orden actual (tesela de estación o carretera de acceso).
+/// El vehículo llegó a la parada de la orden actual (dentro de la bahía; la
+/// carretera de acceso solo cuenta como fallback si la bahía no tiene boca).
 #[must_use]
 pub fn vehicle_at_road_stop(map: &Map, vehicle: &crate::Vehicle) -> bool {
     if vehicle.manhattan_to_dest() == 0 {
@@ -256,10 +293,16 @@ pub fn vehicle_at_road_stop(map: &Map, vehicle: &crate::Vehicle) -> bool {
     if vehicle.pos == *station {
         return true;
     }
-    road_stop_approach_tile(map, *station).is_some_and(|approach| vehicle.pos == approach)
+    !is_connected_bay_road_stop(map, *station)
+        && road_stop_approach_tile(map, *station).is_some_and(|approach| vehicle.pos == approach)
 }
 
-/// Destino de movimiento según tipo de vehículo y orden (vía/carretera adyacente, no la plataforma).
+/// Destino de movimiento según tipo de vehículo y orden.
+///
+/// Bus/camión: la tesela de la bahía misma — como `OpenTTD`, el vehículo ENTRA
+/// a la parada y se detiene dentro (`_rv_station_*` / `_road_stop_stop_frame`).
+/// Si la bahía no tiene boca conectada, cae a la carretera de acceso.
+/// Tren: la vía adyacente a la plataforma (no cambia en Fase 2).
 #[must_use]
 pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrder) -> TileCoord {
     match (kind, order) {
@@ -269,7 +312,11 @@ pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrd
         (VehicleKind::Train, VehicleOrder::Waypoint { waypoint, .. }) => waypoint,
         (_, VehicleOrder::Depot { depot, .. }) => depot,
         (VehicleKind::Truck | VehicleKind::Bus, VehicleOrder::Station { station, .. }) => {
-            road_stop_approach_tile(map, station).unwrap_or(station)
+            if is_connected_bay_road_stop(map, station) {
+                station
+            } else {
+                road_stop_approach_tile(map, station).unwrap_or(station)
+            }
         }
         (_, order) => order.destination(),
     }
@@ -516,8 +563,8 @@ mod coherence_tests {
         truck.set_station_orders(vec![load_stop, deliver_stop]);
         truck.sync_order_destination(&state.map);
         assert_eq!(
-            truck.dest, load_road,
-            "para en carretera de acceso, no en la plataforma"
+            truck.dest, load_stop,
+            "entra a la tesela de la bahía (Fase 2), no para en el acceso"
         );
         if let Some(path) = find_path(&state.map, load_road, truck.dest, PathNetwork::Road) {
             truck.path = path.into();
@@ -559,15 +606,19 @@ mod coherence_tests {
             .expect("parada descarga");
         state.stations[deliver_idx].cargo_stock.wood = 160;
 
-        let mut truck = Vehicle::new(9010, VehicleKind::Truck, deliver_road, deliver_stop);
+        // Fase 2: el camión descarga DENTRO de la bahía, no en el acceso.
+        let mut truck = Vehicle::new(9010, VehicleKind::Truck, deliver_stop, deliver_stop);
         truck.running = true;
+        truck.direction = crate::vehicle::DIR_NW;
         truck.cargo_type = Some(CargoType::Coal);
         truck.cargo = 20;
         truck.mark_cargo_loaded(TileCoord::new(2, 3));
         truck.set_station_orders(vec![load_stop, deliver_stop]);
         truck.current_order = 1;
         truck.sync_order_destination(&state.map);
+        truck.progress = 255;
         state.vehicles.push(truck);
+        let _ = deliver_road;
 
         state.step();
         assert_eq!(
@@ -596,14 +647,18 @@ mod coherence_tests {
         .unwrap();
         apply_command(&mut state, &Command::PlaceStationDir(deliver_stop, 1)).unwrap();
 
-        let mut truck = Vehicle::new(9010, VehicleKind::Truck, deliver_road, deliver_stop);
+        // Fase 2: el camión descarga DENTRO de la bahía, no en el acceso.
+        let mut truck = Vehicle::new(9010, VehicleKind::Truck, deliver_stop, deliver_stop);
         truck.running = true;
+        truck.direction = crate::vehicle::DIR_NW;
         truck.cargo_type = Some(CargoType::Wood);
         truck.cargo = 20;
         truck.mark_cargo_loaded(deliver_stop);
         truck.set_station_orders(vec![deliver_stop]);
         truck.sync_order_destination(&state.map);
+        truck.progress = 255;
         state.vehicles.push(truck);
+        let _ = deliver_road;
 
         state.step();
         assert_eq!(

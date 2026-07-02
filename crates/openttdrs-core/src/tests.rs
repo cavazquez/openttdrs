@@ -741,6 +741,8 @@ fn vehicle_with_station_orders_cycles_station_destinations() {
     v.set_cruise_speed();
     advance_vehicle(&mut v, 1);
     assert_eq!(v.pos, TileCoord::new(1, 0));
+    // La orden avanza en el tick siguiente a la llegada (ventana de carga).
+    v.step();
     assert_eq!(v.dest, TileCoord::new(1, 1));
 }
 

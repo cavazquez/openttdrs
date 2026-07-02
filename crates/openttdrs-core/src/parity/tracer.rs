@@ -7,12 +7,13 @@
 
 use std::collections::BTreeMap;
 
-use crate::GameState;
-use crate::map::TileCoord;
-use crate::station;
+use crate::map::{Map, TileCoord, TileKind};
+use crate::vehicle::VehicleKind;
+use crate::{GameState, rail_signals, refit, road_movement, station};
 
 use super::record::{
-    ParityEvent, SpeedTrend, TickRecord, VehicleRecord, derive_vehicle_state, order_kind_name,
+    ParityEvent, RailPartRecord, RailRecord, SpeedTrend, TickRecord, VehicleRecord,
+    derive_vehicle_state, order_kind_name,
 };
 
 /// Estado mínimo del tick anterior para derivar eventos por diff.
@@ -28,6 +29,9 @@ struct PrevVehicle {
     at_station: Option<TileCoord>,
     /// Última tendencia de velocidad observada (+1 acelera, −1 frena, 0 desconocida).
     trend: i8,
+    /// Solo trenes (Fase Rail 1): retención por señal e interior de depósito.
+    blocked_by_signal: bool,
+    in_depot: bool,
 }
 
 /// Acumulador de trazas de paridad (vive en `GameState` con `#[serde(skip)]`).
@@ -35,6 +39,9 @@ struct PrevVehicle {
 pub struct ParityTracer {
     records: Vec<TickRecord>,
     prev: BTreeMap<u32, PrevVehicle>,
+    /// Estado verde/rojo por señal (`state_mask & present_mask` de cada tesela
+    /// `Rail` con señales) para derivar `SignalStateChanged` por diff.
+    signal_states: BTreeMap<TileCoord, u8>,
 }
 
 impl ParityTracer {
@@ -45,6 +52,7 @@ impl ParityTracer {
         Self {
             records: Vec::new(),
             prev: capture_prev(state),
+            signal_states: capture_signal_states(&state.map),
         }
     }
 
@@ -68,7 +76,125 @@ fn vehicle_station_tile(state: &GameState, v: &crate::Vehicle) -> Option<TileCoo
         .map(|s| s.pos)
 }
 
+/// Track bits transitables bajo la tesela (misma convención que el pathfinder:
+/// túnel/puente ferroviario cuentan como `X|Y`; depósito/estación → 0).
+fn track_bits_under(map: &Map, pos: TileCoord) -> u8 {
+    match map.get(pos) {
+        Some(t) if t.kind == TileKind::Rail => t.m5 & 0x3F,
+        Some(t) if matches!(t.kind, TileKind::RailTunnel | TileKind::RailBridge) => 0x03,
+        _ => 0,
+    }
+}
+
+/// `true` si el tren está sobre una plataforma de estación ferroviaria
+/// (tipo rail = 0 en `m6`). Hoy la sim nunca lo produce: evidencia de la
+/// divergencia de entrada a plataforma (Fase Rail 3C).
+fn train_at_rail_platform(map: &Map, pos: TileCoord) -> bool {
+    map.get(pos)
+        .is_some_and(|t| t.kind == TileKind::Station && station::station_type_from_m6(t.m6) == 0)
+}
+
+/// Espeja la decisión de bloqueo por señal de `sim_step::move_vehicles` para
+/// el próximo avance (solo lectura, cero efectos sobre la sim). Con
+/// `force_proceed` la señal se ignora, igual que en la sim.
+fn rail_blocked_by_signal(
+    state: &GameState,
+    train_positions: &[TileCoord],
+    v: &crate::Vehicle,
+) -> bool {
+    if !v.running || v.force_proceed {
+        return false;
+    }
+    let Some(next) = v.movement_target() else {
+        return false;
+    };
+    rail_signals::train_blocked_by_signal(&state.map, train_positions, v.pos, next)
+}
+
+/// Bloque ferroviario del registro (solo trenes; `None` para el resto).
+fn rail_snapshot(
+    state: &GameState,
+    train_positions: &[TileCoord],
+    v: &crate::Vehicle,
+) -> Option<RailRecord> {
+    if v.kind != VehicleKind::Train {
+        return None;
+    }
+    let (subtile_x, subtile_y) = road_movement::vehicle_subtile(v);
+    Some(RailRecord {
+        parts: vec![RailPartRecord {
+            part_index: 0,
+            tile: v.pos,
+            subtile_x,
+            subtile_y,
+        }],
+        head_tile: v.pos,
+        tail_tile: v.pos,
+        track_bits_under: track_bits_under(&state.map, v.pos),
+        blocked_by_signal: rail_blocked_by_signal(state, train_positions, v),
+        blocked_by_traffic: rail_signals::train_blocked_by_traffic(&state.map, &state.vehicles, v),
+        in_depot: refit::vehicle_in_depot(&state.map, v.pos),
+        at_platform: train_at_rail_platform(&state.map, v.pos),
+    })
+}
+
+fn train_positions(state: &GameState) -> Vec<TileCoord> {
+    state
+        .vehicles
+        .iter()
+        .filter(|v| v.kind == VehicleKind::Train)
+        .map(|v| v.pos)
+        .collect()
+}
+
+/// Estado verde/rojo (`m3hi`, enmascarado por señales presentes) de cada
+/// tesela `Rail` con señales del mapa.
+fn capture_signal_states(map: &Map) -> BTreeMap<TileCoord, u8> {
+    let (w, h) = map.dimensions();
+    let mut out = BTreeMap::new();
+    for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
+        for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
+            let c = TileCoord::new(x, y);
+            let Some(t) = map.get(c) else {
+                continue;
+            };
+            if t.kind != TileKind::Rail || !rail_signals::rail_tile_is_signals(t.m5) {
+                continue;
+            }
+            let present = rail_signals::rail_signal_present_mask(t.m3);
+            if present == 0 {
+                continue;
+            }
+            out.insert(c, rail_signals::rail_signal_state_mask(t.m3hi) & present);
+        }
+    }
+    out
+}
+
+/// Deriva `SignalStateChanged` comparando el estado de señales con el tick
+/// anterior; actualiza `prev` con el estado actual.
+fn signal_state_events(map: &Map, prev: &mut BTreeMap<TileCoord, u8>) -> Vec<ParityEvent> {
+    let now = capture_signal_states(map);
+    let mut events = Vec::new();
+    for (&tile, &mask) in &now {
+        let old = prev.get(&tile).copied().unwrap_or(0);
+        let changed = old ^ mask;
+        for bit in 0..4u8 {
+            if changed & (1 << bit) != 0 {
+                events.push(ParityEvent::SignalStateChanged {
+                    tile,
+                    track_mask: 1 << bit,
+                    green: mask & (1 << bit) != 0,
+                });
+            }
+        }
+    }
+    *prev = now;
+    events
+}
+
 fn capture_prev(state: &GameState) -> BTreeMap<u32, PrevVehicle> {
+    let trains = train_positions(state);
     state
         .vehicles
         .iter()
@@ -85,6 +211,9 @@ fn capture_prev(state: &GameState) -> BTreeMap<u32, PrevVehicle> {
                     order_index: v.current_order,
                     at_station: vehicle_station_tile(state, v),
                     trend: 0,
+                    blocked_by_signal: rail_blocked_by_signal(state, &trains, v),
+                    in_depot: v.kind == VehicleKind::Train
+                        && refit::vehicle_in_depot(&state.map, v.pos),
                 },
             )
         })
@@ -190,10 +319,51 @@ fn push_cargo_and_order_events(
     }
 }
 
-fn diff_events(state: &GameState, prev: &mut BTreeMap<u32, PrevVehicle>) -> Vec<ParityEvent> {
+/// Transiciones ferroviarias: espera por señal y entrada/salida de depósito.
+fn push_rail_events(
+    events: &mut Vec<ParityEvent>,
+    v: &crate::Vehicle,
+    p: &PrevVehicle,
+    rail: Option<&RailRecord>,
+) {
+    let Some(r) = rail else {
+        return;
+    };
+    if !p.blocked_by_signal && r.blocked_by_signal {
+        events.push(ParityEvent::SignalWaitStarted {
+            vehicle: v.id,
+            tile: v.pos,
+        });
+    }
+    if p.blocked_by_signal && !r.blocked_by_signal {
+        events.push(ParityEvent::SignalWaitFinished {
+            vehicle: v.id,
+            tile: p.pos,
+        });
+    }
+    if !p.in_depot && r.in_depot {
+        events.push(ParityEvent::DepotEntry {
+            vehicle: v.id,
+            depot: v.pos,
+        });
+    }
+    if p.in_depot && !r.in_depot {
+        events.push(ParityEvent::DepotExit {
+            vehicle: v.id,
+            depot: p.pos,
+        });
+    }
+}
+
+fn diff_events(
+    state: &GameState,
+    prev: &mut BTreeMap<u32, PrevVehicle>,
+    rails: &BTreeMap<u32, RailRecord>,
+) -> Vec<ParityEvent> {
     let mut events = Vec::new();
     for v in &state.vehicles {
         let at_station = vehicle_station_tile(state, v);
+        let rail = rails.get(&v.id);
         let Some(p) = prev.get_mut(&v.id) else {
             prev.insert(
                 v.id,
@@ -207,6 +377,8 @@ fn diff_events(state: &GameState, prev: &mut BTreeMap<u32, PrevVehicle>) -> Vec<
                     order_index: v.current_order,
                     at_station,
                     trend: 0,
+                    blocked_by_signal: rail.is_some_and(|r| r.blocked_by_signal),
+                    in_depot: rail.is_some_and(|r| r.in_depot),
                 },
             );
             continue;
@@ -215,6 +387,7 @@ fn diff_events(state: &GameState, prev: &mut BTreeMap<u32, PrevVehicle>) -> Vec<
         push_movement_events(&mut events, v, p);
         push_speed_events(&mut events, v, p);
         push_cargo_and_order_events(&mut events, v, p, at_station);
+        push_rail_events(&mut events, v, p, rail);
 
         p.pos = v.pos;
         p.dir = v.direction;
@@ -224,11 +397,13 @@ fn diff_events(state: &GameState, prev: &mut BTreeMap<u32, PrevVehicle>) -> Vec<
         p.path_was_empty = v.path.is_empty();
         p.order_index = v.current_order;
         p.at_station = at_station;
+        p.blocked_by_signal = rail.is_some_and(|r| r.blocked_by_signal);
+        p.in_depot = rail.is_some_and(|r| r.in_depot);
     }
     events
 }
 
-fn vehicle_record(v: &crate::Vehicle) -> VehicleRecord {
+fn vehicle_record(v: &crate::Vehicle, rail: Option<RailRecord>) -> VehicleRecord {
     VehicleRecord {
         id: v.id,
         tile: v.pos,
@@ -246,6 +421,7 @@ fn vehicle_record(v: &crate::Vehicle) -> VehicleRecord {
         path_next: v.path.front().copied(),
         cargo: v.cargo,
         depart_turn: v.depart_turn,
+        rail,
     }
 }
 
@@ -256,8 +432,19 @@ pub(crate) fn record_tick(state: &mut GameState) {
     let Some(mut tracer) = state.parity.take() else {
         return;
     };
-    let events = diff_events(state, &mut tracer.prev);
-    let vehicles = state.vehicles.iter().map(vehicle_record).collect();
+    let trains = train_positions(state);
+    let rails: BTreeMap<u32, RailRecord> = state
+        .vehicles
+        .iter()
+        .filter_map(|v| rail_snapshot(state, &trains, v).map(|r| (v.id, r)))
+        .collect();
+    let mut events = diff_events(state, &mut tracer.prev, &rails);
+    events.extend(signal_state_events(&state.map, &mut tracer.signal_states));
+    let vehicles = state
+        .vehicles
+        .iter()
+        .map(|v| vehicle_record(v, rails.get(&v.id).cloned()))
+        .collect();
     tracer.records.push(TickRecord {
         tick: state.tick.get(),
         vehicles,

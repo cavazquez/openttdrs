@@ -133,7 +133,7 @@ fn field_diffs(a: &VehicleRecord, b: &VehicleRecord) -> Vec<(&'static str, Strin
 fn events_for_vehicle(events: &[ParityEvent], vehicle: Option<u32>) -> Vec<ParityEvent> {
     events
         .iter()
-        .filter(|e| vehicle.is_none_or(|id| e.vehicle() == id))
+        .filter(|e| vehicle.is_none_or(|id| e.vehicle() == Some(id)))
         .cloned()
         .collect()
 }
@@ -341,6 +341,7 @@ mod tests {
                 path_next: Some(TileCoord::new(3, 3)),
                 cargo: 0,
                 depart_turn: 0,
+                rail: None,
             }],
             events: Vec::new(),
         }

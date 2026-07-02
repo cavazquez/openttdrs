@@ -3,6 +3,10 @@
 //! `truck_bay` reproduce el caso de los videos `openttd.webm` / `opentddrs.webm`:
 //! un camión con órdenes de carga/descarga recorre una ruta con dos curvas de
 //! 90° y entra a una playa de carga (`StopKind::TruckStop`, bahía no drive-through).
+//!
+//! `train_line` es el escenario ferroviario mínimo de la Fase Rail 1: un tren
+//! sale de un depósito, recorre una L con una señal de bloque y una curva, y
+//! cicla entre dos estaciones (carga en A, viaja a B).
 
 use std::collections::VecDeque;
 
@@ -23,11 +27,25 @@ pub const TRUCK_BAY_DELIVER_ROAD: TileCoord = TileCoord::new(16, 12);
 /// Id del camión del escenario.
 pub const TRUCK_BAY_VEHICLE_ID: u32 = 1;
 
-/// Construye un escenario determinístico por nombre (`truck_bay`).
+/// Id del tren del escenario `train_line`.
+pub const TRAIN_LINE_VEHICLE_ID: u32 = 1;
+/// Plataforma de la estación A (carga; al oeste de la línea).
+pub const TRAIN_LINE_STATION_A: TileCoord = TileCoord::new(1, 6);
+/// Plataforma de la estación B (al final de la rama sur).
+pub const TRAIN_LINE_STATION_B: TileCoord = TileCoord::new(13, 10);
+/// Depósito ferroviario (boca hacia la línea, al sur).
+pub const TRAIN_LINE_DEPOT: TileCoord = TileCoord::new(4, 5);
+/// Tesela con la señal de bloque sobre la recta.
+pub const TRAIN_LINE_SIGNAL: TileCoord = TileCoord::new(7, 6);
+/// Esquina de la L (curva este→sur).
+pub const TRAIN_LINE_CORNER: TileCoord = TileCoord::new(12, 6);
+
+/// Construye un escenario determinístico por nombre.
 #[must_use]
 pub fn build_scenario(name: &str) -> Option<GameState> {
     match name {
         "truck_bay" => Some(build_truck_bay()),
+        "train_line" => Some(build_train_line()),
         _ => None,
     }
 }
@@ -35,7 +53,7 @@ pub fn build_scenario(name: &str) -> Option<GameState> {
 /// Nombres de escenarios disponibles.
 #[must_use]
 pub fn scenario_names() -> &'static [&'static str] {
-    &["truck_bay"]
+    &["truck_bay", "train_line"]
 }
 
 fn place_road_polyline(state: &mut GameState, waypoints: &[TileCoord]) -> Vec<TileCoord> {
@@ -136,6 +154,80 @@ pub fn build_truck_bay() -> GameState {
     state
 }
 
+/// Mapa chico y plano con una L ferroviaria:
+/// - vía de (2,6) a (12,6) por el eje X, esquina en (12,6) y rama sur hasta (12,10);
+/// - estación A (1×1) en (1,6), acceso (2,6), con goods en stock para cargar;
+/// - estación B (1×1) en (13,10), acceso (12,10);
+/// - depósito en (4,5) con la boca hacia la línea (salida (4,6));
+/// - señal de bloque en (7,6) sobre la recta;
+/// - un tren (id 1) que arranca dentro del depósito con órdenes A ↔ B.
+///
+/// # Panics
+///
+/// Si la construcción del escenario fijo falla (bug del propio escenario).
+#[must_use]
+#[allow(clippy::expect_used)] // escenario fijo: un fallo de construcción es un bug del escenario
+pub fn build_train_line() -> GameState {
+    let mut state = GameState::new(20, 14);
+    state.world_seed = 0;
+
+    // Recta X y rama sur (autorail: los track bits se infieren de los vecinos).
+    for x in 2..=12 {
+        apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, 6)))
+            .expect("vía recta train_line");
+    }
+    for y in 7..=10 {
+        apply_command(&mut state, &Command::PlaceRail(TileCoord::new(12, y)))
+            .expect("rama sur train_line");
+    }
+
+    // Direcciones diagonales OpenTTD: NE=0 (−x), SE=1 (+y), SW=2 (+x), NW=3 (−y).
+    apply_command(
+        &mut state,
+        &Command::PlaceRailStation(TRAIN_LINE_STATION_A, 2),
+    )
+    .expect("estación A train_line");
+    apply_command(
+        &mut state,
+        &Command::PlaceRailStation(TRAIN_LINE_STATION_B, 0),
+    )
+    .expect("estación B train_line");
+    // Boca hacia +y: la salida del depósito empalma con la línea en (4,6).
+    apply_command(&mut state, &Command::PlaceRailDepotDir(TRAIN_LINE_DEPOT, 1))
+        .expect("depósito train_line");
+    apply_command(
+        &mut state,
+        &Command::PlaceRailSignal(TRAIN_LINE_SIGNAL, 0, 128, 128),
+    )
+    .expect("señal train_line");
+
+    // Stock de goods en la estación A para que el tren cargue al llegar.
+    let station_a = state
+        .stations
+        .iter_mut()
+        .find(|s| s.pos == TRAIN_LINE_STATION_A)
+        .expect("estación A registrada");
+    station_a.cargo_stock.goods = 40;
+
+    let mut train = Vehicle::new(
+        TRAIN_LINE_VEHICLE_ID,
+        VehicleKind::Train,
+        TRAIN_LINE_DEPOT,
+        TRAIN_LINE_STATION_A,
+    );
+    train.set_vehicle_orders(vec![
+        VehicleOrder::station(TRAIN_LINE_STATION_A),
+        VehicleOrder::station(TRAIN_LINE_STATION_B),
+    ]);
+    train.sync_order_destination(&state.map);
+    if let Some(path) = find_path(&state.map, train.pos, train.dest, PathNetwork::Rail) {
+        train.path = VecDeque::from(path);
+    }
+    state.vehicles.push(train);
+
+    state
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -171,6 +263,54 @@ mod tests {
     fn unknown_scenario_returns_none() {
         assert!(build_scenario("nope").is_none());
         assert!(build_scenario("truck_bay").is_some());
-        assert_eq!(scenario_names(), &["truck_bay"]);
+        assert!(build_scenario("train_line").is_some());
+        assert_eq!(scenario_names(), &["truck_bay", "train_line"]);
+    }
+
+    #[test]
+    fn train_line_layout_is_consistent() {
+        use crate::station::rail_station_approach_tile;
+
+        let state = build_train_line();
+        assert_eq!(
+            rail_station_approach_tile(&state.map, TRAIN_LINE_STATION_A),
+            Some(TileCoord::new(2, 6)),
+            "acceso a la estación A"
+        );
+        assert_eq!(
+            rail_station_approach_tile(&state.map, TRAIN_LINE_STATION_B),
+            Some(TileCoord::new(12, 10)),
+            "acceso a la estación B"
+        );
+        assert_eq!(state.vehicles.len(), 1);
+        assert_eq!(state.stations.len(), 2);
+        assert_eq!(state.vehicles[0].kind, VehicleKind::Train);
+        assert!(
+            !state.vehicles[0].path.is_empty(),
+            "el tren arranca con ruta desde el depósito"
+        );
+        // La línea conecta depósito → acceso A → esquina → acceso B por vía.
+        let a_to_b = find_path(
+            &state.map,
+            TileCoord::new(2, 6),
+            TileCoord::new(12, 10),
+            PathNetwork::Rail,
+        )
+        .expect("ruta ferroviaria A → B");
+        assert!(a_to_b.contains(&TRAIN_LINE_SIGNAL), "pasa por la señal");
+        assert!(a_to_b.contains(&TRAIN_LINE_CORNER), "pasa por la esquina");
+        assert!(
+            find_path(
+                &state.map,
+                TRAIN_LINE_DEPOT,
+                TileCoord::new(2, 6),
+                PathNetwork::Rail
+            )
+            .is_some(),
+            "el depósito conecta con la línea"
+        );
+        // La señal quedó colocada sobre la recta.
+        let signal_tile = state.map.get(TRAIN_LINE_SIGNAL).unwrap();
+        assert!(crate::rail_signals::rail_tile_is_signals(signal_tile.m5));
     }
 }

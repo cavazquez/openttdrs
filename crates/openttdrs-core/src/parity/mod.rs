@@ -23,12 +23,14 @@ mod tracer;
 
 pub use diff::{DiffFilter, DiffReport, Divergence, Subsystem, compare_traces, render_report};
 pub use record::{
-    ParityEvent, SpeedTrend, TickRecord, TraceVehicleState, VehicleRecord, derive_vehicle_state,
-    order_kind_name,
+    ParityEvent, RailPartRecord, RailRecord, SpeedTrend, TickRecord, TraceVehicleState,
+    VehicleRecord, derive_vehicle_state, order_kind_name,
 };
 pub use scenario::{
-    TRUCK_BAY_DELIVER_ROAD, TRUCK_BAY_DELIVER_STOP, TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP,
-    TRUCK_BAY_VEHICLE_ID, build_scenario, build_truck_bay, scenario_names,
+    TRAIN_LINE_CORNER, TRAIN_LINE_DEPOT, TRAIN_LINE_SIGNAL, TRAIN_LINE_STATION_A,
+    TRAIN_LINE_STATION_B, TRAIN_LINE_VEHICLE_ID, TRUCK_BAY_DELIVER_ROAD, TRUCK_BAY_DELIVER_STOP,
+    TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP, TRUCK_BAY_VEHICLE_ID, build_scenario,
+    build_train_line, build_truck_bay, scenario_names,
 };
 pub use tracer::ParityTracer;
 

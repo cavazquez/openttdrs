@@ -28,6 +28,41 @@ pub enum TraceVehicleState {
     Idle,
 }
 
+/// Posición de una parte del tren (Fase Rail 1: siempre una sola parte porque
+/// el tren de la sim es puntual; el esquema admite consist futura).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct RailPartRecord {
+    pub part_index: usize,
+    pub tile: TileCoord,
+    /// Sub-tesela de render 0..16 (misma que `road_movement::vehicle_subtile`).
+    pub subtile_x: f32,
+    pub subtile_y: f32,
+}
+
+/// Bloque ferroviario de la traza (solo se emite para trenes; los registros de
+/// vehículos de carretera no cambian ni un byte).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[allow(clippy::struct_excessive_bools)] // esquema de traza JSONL: flags independientes, no estados
+pub struct RailRecord {
+    /// Partes del tren de cabeza a cola. Hoy: exactamente una.
+    pub parts: Vec<RailPartRecord>,
+    pub head_tile: TileCoord,
+    /// Igual a `head_tile` mientras no exista consist.
+    pub tail_tile: TileCoord,
+    /// Track bits (`m5 & 0x3F`) de la tesela actual; túnel/puente → `X|Y`;
+    /// otras teselas (depósito, estación) → 0.
+    pub track_bits_under: u8,
+    /// El tren no avanzaría este tick por señal en rojo (espeja la decisión de
+    /// `sim_step`: `false` si está parado o con `force_proceed`).
+    pub blocked_by_signal: bool,
+    /// El tren no avanzaría este tick por otro tren delante.
+    pub blocked_by_traffic: bool,
+    pub in_depot: bool,
+    /// Hoy siempre `false`: el tren para en la vía de acceso y no pisa la
+    /// plataforma (divergencia documentada; se corrige en la Fase Rail 3C).
+    pub at_platform: bool,
+}
+
 /// Instantánea de un vehículo al final de un tick de simulación.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct VehicleRecord {
@@ -46,6 +81,9 @@ pub struct VehicleRecord {
     pub path_next: Option<TileCoord>,
     pub cargo: u32,
     pub depart_turn: u8,
+    /// Bloque ferroviario (solo trenes; ausente en el JSONL para el resto).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rail: Option<RailRecord>,
 }
 
 /// Tendencia de velocidad (para detectar inicio de aceleración/frenado).
@@ -124,12 +162,42 @@ pub enum ParityEvent {
         from: usize,
         to: usize,
     },
+    /// Un tren empezó a esperar por señal en rojo (Fase Rail 1).
+    SignalWaitStarted {
+        vehicle: u32,
+        /// Tesela donde está la señal que lo retiene (la tesela del tren).
+        tile: TileCoord,
+    },
+    /// El tren dejó de estar retenido por la señal.
+    SignalWaitFinished {
+        vehicle: u32,
+        tile: TileCoord,
+    },
+    /// Un tren entró a una tesela de depósito.
+    DepotEntry {
+        vehicle: u32,
+        depot: TileCoord,
+    },
+    /// Un tren salió de una tesela de depósito.
+    DepotExit {
+        vehicle: u32,
+        depot: TileCoord,
+    },
+    /// Una señal del mapa cambió de estado (derivado del diff de `m3hi`).
+    /// Sin vehículo asociado: es un evento de infraestructura.
+    SignalStateChanged {
+        tile: TileCoord,
+        /// Bit de señal que cambió (`1 << sig_bit`, 0..4).
+        track_mask: u8,
+        green: bool,
+    },
 }
 
 impl ParityEvent {
-    /// Vehículo al que refiere el evento.
+    /// Vehículo al que refiere el evento (`None` para eventos de
+    /// infraestructura como [`ParityEvent::SignalStateChanged`]).
     #[must_use]
-    pub const fn vehicle(&self) -> u32 {
+    pub const fn vehicle(&self) -> Option<u32> {
         match self {
             Self::TileCrossed { vehicle, .. }
             | Self::DirectionChanged { vehicle, .. }
@@ -144,7 +212,12 @@ impl ParityEvent {
             | Self::DepartTurnStarted { vehicle }
             | Self::DepartTurnEnded { vehicle }
             | Self::PathRecomputed { vehicle, .. }
-            | Self::OrderAdvanced { vehicle, .. } => *vehicle,
+            | Self::OrderAdvanced { vehicle, .. }
+            | Self::SignalWaitStarted { vehicle, .. }
+            | Self::SignalWaitFinished { vehicle, .. }
+            | Self::DepotEntry { vehicle, .. }
+            | Self::DepotExit { vehicle, .. } => Some(*vehicle),
+            Self::SignalStateChanged { .. } => None,
         }
     }
 }

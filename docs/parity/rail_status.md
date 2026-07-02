@@ -57,8 +57,8 @@ verificable todavía» hasta que exista el modelo.
 
 | Herramienta | Estado |
 |---|---|
-| Traza por tick para trenes | **No existe** — `TickRecord`/`ParityEvent` (`parity/record.rs`) son genéricos por `vehicle.id` y sirven de base; falta el bloque rail (Fase Rail 1) |
-| Escenario headless de tren | **No existe** — el único escenario es `truck_bay` (`parity/scenario.rs`) |
+| Traza por tick para trenes | **Implementada (Fase Rail 1)** — bloque `rail` en `VehicleRecord` (partes, track bits, bloqueos, depósito, plataforma) + eventos `SignalWait*`, `DepotEntry/Exit`, `SignalStateChanged` |
+| Escenario headless de tren | **Implementado (Fase Rail 1)** — `train_line` en `parity/scenario.rs` (depósito, L con curva, señal de bloque, 2 estaciones, órdenes A↔B) |
 | Comparador con subsistemas rail | **No existe** — `parity_diff` funciona pero sin clasificación ferroviaria (Fase Rail 2) |
 | Golden de tablas C++ de tren | **No existe** — candidatos en `rail_unknown_features.md` y plan en `rail_debugging_plan.md` |
 | Chequeos de divergencia rail en `parity/report.rs` | **No existen** |

@@ -49,7 +49,7 @@ fn check_curve_speed_penalty(records: &[TickRecord]) -> KnownDivergence {
             let ParityEvent::DirectionChanged { from, to, .. } = e else {
                 continue;
             };
-            if e.vehicle() != vehicle || from % 2 == 0 || to % 2 == 0 {
+            if e.vehicle() != Some(vehicle) || from % 2 == 0 || to % 2 == 0 {
                 continue;
             }
             let before = speed_of(records, r.tick.saturating_sub(1), vehicle).unwrap_or(0);
@@ -99,7 +99,7 @@ fn check_bay_stop_position(records: &[TickRecord]) -> KnownDivergence {
             let ParityEvent::LoadingStarted { .. } = e else {
                 continue;
             };
-            if e.vehicle() != vehicle {
+            if e.vehicle() != Some(vehicle) {
                 continue;
             }
             let Some(v) = r.vehicles.iter().find(|v| v.id == vehicle) else {
@@ -136,14 +136,12 @@ fn check_instant_loading(records: &[TickRecord]) -> KnownDivergence {
     let mut evidence = String::new();
     let mut detected = false;
     for r in records {
-        let started = r
-            .events
-            .iter()
-            .any(|e| matches!(e, ParityEvent::LoadingStarted { .. }) && e.vehicle() == vehicle);
-        let finished = r
-            .events
-            .iter()
-            .any(|e| matches!(e, ParityEvent::LoadingFinished { .. }) && e.vehicle() == vehicle);
+        let started = r.events.iter().any(|e| {
+            matches!(e, ParityEvent::LoadingStarted { .. }) && e.vehicle() == Some(vehicle)
+        });
+        let finished = r.events.iter().any(|e| {
+            matches!(e, ParityEvent::LoadingFinished { .. }) && e.vehicle() == Some(vehicle)
+        });
         if started && finished {
             detected = true;
             let _ = writeln!(

@@ -13,7 +13,7 @@ Regla de orden: **no cambiar comportamiento antes de tener trazas**. Las fases
 3B/3C (primeros cambios de lógica) requieren la Fase Rail 1 terminada para
 medir antes/después.
 
-## Fase Rail 1 — Trazas ferroviarias mínimas
+## Fase Rail 1 — Trazas ferroviarias mínimas — ✅ IMPLEMENTADA
 
 - **Objetivo**: bloque `rail` opcional en la traza + eventos ferroviarios +
   escenario headless `train_line`.
@@ -53,6 +53,17 @@ medir antes/después.
   ```
 - **Terminado cuando**: check verde; JSONL con bloque `rail` y eventos nuevos;
   no-regresión en `truck_bay` (`parity_diff` contra traza previa → exit 0).
+- **Resultado**: implementada tal cual el alcance. La traza de `truck_bay`
+  quedó byte-idéntica a la previa (verificado con `diff` y `parity_diff` →
+  exit 0). El escenario `train_line` (600 ticks) emite `depot_exit`,
+  `station_entry`, `loading_started/finished`, `order_advanced`,
+  `direction_changed` (curva de la L) y `signal_state_changed` (la señal
+  pasa a rojo/verde cuando el tren ocupa/libera el bloque). `at_platform`
+  es siempre `false`: evidencia medible de la divergencia que corrige la
+  Fase Rail 3C. `SignalWaitStarted/Finished` se cubren con un test de dos
+  trenes (`signal_wait_events_emitted_with_two_trains`).
+  Nota de alcance: `ParityEvent::vehicle()` pasó a devolver `Option<u32>`
+  porque `SignalStateChanged` es un evento de infraestructura sin vehículo.
 
 ## Fase Rail 2 — Comparador ferroviario mínimo
 
@@ -158,18 +169,33 @@ medir antes/después.
 - **Terminado cuando**: `parity_runner --divergence-report` cubre `train_line`
   y la documentación queda consistente con `status.md`.
 
-## Uso previsto de la traza rail (referencia rápida)
+## Uso de la traza rail (referencia rápida)
 
-Ejemplo de línea JSONL esperada tras la Fase Rail 1:
-
-```json
-{"tick":42,"vehicles":[{"id":9102,"tile":{"x":10,"y":6},"progress":128,"dir":1,
- "speed":48,"rail":{"parts":[{"part_index":0,"tile":{"x":10,"y":6},
- "subtile_x":7.5,"subtile_y":8.0}],"head_tile":{"x":10,"y":6},
- "tail_tile":{"x":10,"y":6},"track_bits_under":1,"blocked_by_signal":false,
- "blocked_by_traffic":false,"in_depot":false,"at_platform":false}}],
- "events":[{"type":"signal_wait_started","vehicle":9102,"tile":{"x":11,"y":6}}]}
+```bash
+cargo run -p openttdrs-core --bin parity_runner -- \
+    --scenario train_line --ticks 600 --out /tmp/train_line.jsonl
 ```
 
+Línea real del JSONL (tick 35, el tren cruza al empalme y sale del depósito):
+
+```json
+{"tick":35,"vehicles":[{"id":1,"tile":{"x":4,"y":6},"progress":6,"dir":3,
+ "speed":35,"subspeed":0,"state":"moving","order_index":0,
+ "order_kind":"station","dest":{"x":2,"y":6},"path_next":{"x":3,"y":6},
+ "cargo":0,"depart_turn":0,"rail":{"parts":[{"part_index":0,
+ "tile":{"x":4,"y":6},"subtile_x":14.647,"subtile_y":8.0}],
+ "head_tile":{"x":4,"y":6},"tail_tile":{"x":4,"y":6},"track_bits_under":21,
+ "blocked_by_signal":false,"blocked_by_traffic":false,"in_depot":false,
+ "at_platform":false}}],"events":[
+ {"type":"tile_crossed","vehicle":1,"from":{"x":4,"y":5},"to":{"x":4,"y":6}},
+ {"type":"direction_changed","vehicle":1,"from":1,"to":3},
+ {"type":"depot_exit","vehicle":1,"depot":{"x":4,"y":5}}]}
+```
+
+Escenario `train_line` (`parity/scenario.rs`): L ferroviaria (2,6)→(12,6)→
+(12,10) con depósito en (4,5), señal de bloque en (7,6), estación A (1,6) con
+goods en stock y estación B (13,10); un tren cicla A ↔ B.
+
 Activación: igual que hoy, opt-in vía `enable_parity_trace()`/`parity_runner`;
-el modo normal no ejecuta nada del módulo de paridad.
+el modo normal no ejecuta nada del módulo de paridad. Los vehículos de
+carretera no llevan la clave `"rail"` (trazas previas siguen parseando).

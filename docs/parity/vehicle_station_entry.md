@@ -49,7 +49,7 @@ curvas de 90° y bahías `TruckStop` en ambos extremos.
 | Diferencia visual (videos) | Divergencia (`docs/parity/divergences_found.md`) | Estado |
 |---|---|---|
 | No frena en las curvas (48 km/h constantes vs 48→33→31) | `curve_speed_penalty` | **CORREGIDA en Fase 2**: `Vehicle::set_direction_with_curve_penalty` aplica −25 % en cada giro (ticks 90/130/238/277 de la traza: 96→72) |
-| Se detiene fuera de la dársena | `bay_stop_position` | **CORREGIDA en Fase 2**: el destino es la tesela de la bahía; carga con el camión en (4,5). El punto de parada visual aproxima el stop frame (`BAY_STOP_PROGRESS`); las trayectorias exactas `_rv_station_*` quedan pendientes |
+| Se detiene fuera de la dársena | `bay_stop_position` | **CORREGIDA en Fase 2**: el destino es la tesela de la bahía; carga con el camión en (4,5). El render sigue las tablas exactas `_rv_station_left_*` (entrada por la boca, lazo, parada en el stop frame 11–20 y salida), validadas punto a punto por el golden |
 | La pausa de carga parece un frenazo inmediato | `instant_loading` — carga 0→20 en un tick, sin fase de frenado dentro de la bahía | Pendiente (Fase 3) |
 | Tirones / baja fluidez general | `tick_rate` — sim a 5 Hz con ~51 unidades de progreso por tick; OpenTTD mueve píxeles a ~33 Hz | Pendiente — ver decisión en `docs/parity/tick_rate_decision.md` |
 | Sprite gira tarde en las curvas | corregido en Fase 1: el selector de textura ahora usa la pose extrapolada (`render/vehicles.rs::for_vehicle`); antes usaba `v.render_direction()` lógico | test `sprite_selection_uses_extrapolated_pose_not_logical_direction`; verificable con `OPENTTDRS_RENDER_TRACE` |

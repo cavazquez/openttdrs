@@ -271,14 +271,351 @@ fn depart_u_turn_curve(inbound: VehicleDirection) -> Option<&'static [SubTile]> 
     }
 }
 
-/// Progreso visual del punto de detención dentro de una bahía.
-///
-/// Aproxima `_road_stop_stop_frame` (`roadveh_movement.h:1087-1093`): los
-/// frames de parada 11–20 dejan al vehículo cerca del fondo del lazo de las
-/// tablas `_rv_station_*` (≈ centro de la tesela sobre el carril de entrada,
-/// p. ej. `{9,9}` en `_rv_station_left_se_near[15]`). El carril recto del port
-/// pasa por ese punto en `progress` ≈ 128.
-pub const BAY_STOP_PROGRESS: u8 = 128;
+/// Trayectoria dentro de una bahía (`_rv_station_left_*`, lado izquierdo —
+/// el mismo que las tablas rectas/curvas del port): entrada por la boca
+/// (frames `0..=stop`), detención en `stop` (`_road_stop_stop_frame`) y lazo
+/// de retorno hacia la boca (frames `stop..`).
+pub struct BayStationTable {
+    /// Puntos sub-tesela por frame (copia de `roadveh_movement.h:458-737`).
+    pub points: &'static [SubTile],
+    /// Índice del frame de parada (`_road_stop_stop_frame:1087-1093`).
+    pub stop: usize,
+}
+
+/// `_rv_station_left_sw_far` (stop frame 20).
+const BAY_LEFT_SW_FAR: BayStationTable = BayStationTable {
+    points: &[
+        (15.0, 5.0),
+        (14.0, 5.0),
+        (13.0, 6.0),
+        (13.0, 7.0),
+        (13.0, 8.0),
+        (13.0, 9.0),
+        (13.0, 10.0),
+        (13.0, 11.0),
+        (12.0, 12.0),
+        (11.0, 12.0),
+        (10.0, 12.0),
+        (9.0, 12.0),
+        (8.0, 12.0),
+        (7.0, 12.0),
+        (6.0, 12.0),
+        (5.0, 11.0),
+        (5.0, 10.0),
+        (5.0, 9.0),
+        (5.0, 8.0),
+        (5.0, 7.0),
+        (5.0, 6.0),
+        (5.0, 7.0),
+        (5.0, 8.0),
+        (5.0, 9.0),
+        (5.0, 10.0),
+        (5.0, 11.0),
+        (6.0, 12.0),
+        (7.0, 12.0),
+        (8.0, 12.0),
+        (9.0, 12.0),
+        (10.0, 12.0),
+        (11.0, 12.0),
+        (12.0, 12.0),
+        (13.0, 11.0),
+        (13.0, 10.0),
+        (14.0, 9.0),
+        (15.0, 9.0),
+    ],
+    stop: 20,
+};
+
+/// `_rv_station_left_nw_far` (stop frame 20).
+const BAY_LEFT_NW_FAR: BayStationTable = BayStationTable {
+    points: &[
+        (5.0, 0.0),
+        (5.0, 1.0),
+        (6.0, 2.0),
+        (7.0, 2.0),
+        (8.0, 2.0),
+        (9.0, 2.0),
+        (10.0, 2.0),
+        (11.0, 2.0),
+        (12.0, 3.0),
+        (12.0, 4.0),
+        (12.0, 5.0),
+        (12.0, 6.0),
+        (12.0, 7.0),
+        (12.0, 8.0),
+        (12.0, 9.0),
+        (11.0, 10.0),
+        (10.0, 10.0),
+        (9.0, 10.0),
+        (8.0, 10.0),
+        (7.0, 10.0),
+        (6.0, 10.0),
+        (7.0, 10.0),
+        (8.0, 10.0),
+        (9.0, 10.0),
+        (10.0, 10.0),
+        (11.0, 10.0),
+        (12.0, 9.0),
+        (12.0, 8.0),
+        (12.0, 7.0),
+        (12.0, 6.0),
+        (12.0, 5.0),
+        (12.0, 4.0),
+        (12.0, 3.0),
+        (11.0, 2.0),
+        (10.0, 2.0),
+        (9.0, 1.0),
+        (9.0, 0.0),
+    ],
+    stop: 20,
+};
+
+/// `_rv_station_left_sw_near` (stop frame 16).
+const BAY_LEFT_SW_NEAR: BayStationTable = BayStationTable {
+    points: &[
+        (15.0, 5.0),
+        (14.0, 5.0),
+        (13.0, 6.0),
+        (13.0, 7.0),
+        (13.0, 8.0),
+        (13.0, 9.0),
+        (13.0, 10.0),
+        (13.0, 11.0),
+        (12.0, 12.0),
+        (11.0, 12.0),
+        (10.0, 12.0),
+        (9.0, 11.0),
+        (9.0, 10.0),
+        (9.0, 9.0),
+        (9.0, 8.0),
+        (9.0, 7.0),
+        (9.0, 6.0),
+        (9.0, 7.0),
+        (9.0, 8.0),
+        (9.0, 9.0),
+        (9.0, 10.0),
+        (9.0, 11.0),
+        (10.0, 12.0),
+        (11.0, 12.0),
+        (12.0, 12.0),
+        (13.0, 11.0),
+        (13.0, 10.0),
+        (14.0, 9.0),
+        (15.0, 9.0),
+    ],
+    stop: 16,
+};
+
+/// `_rv_station_left_nw_near` (stop frame 16).
+const BAY_LEFT_NW_NEAR: BayStationTable = BayStationTable {
+    points: &[
+        (5.0, 0.0),
+        (5.0, 1.0),
+        (6.0, 2.0),
+        (7.0, 2.0),
+        (8.0, 2.0),
+        (9.0, 2.0),
+        (10.0, 2.0),
+        (11.0, 2.0),
+        (12.0, 3.0),
+        (12.0, 4.0),
+        (12.0, 5.0),
+        (11.0, 6.0),
+        (10.0, 6.0),
+        (9.0, 6.0),
+        (8.0, 6.0),
+        (7.0, 6.0),
+        (6.0, 6.0),
+        (7.0, 6.0),
+        (8.0, 6.0),
+        (9.0, 6.0),
+        (10.0, 6.0),
+        (11.0, 6.0),
+        (12.0, 5.0),
+        (12.0, 4.0),
+        (12.0, 3.0),
+        (11.0, 2.0),
+        (10.0, 2.0),
+        (9.0, 1.0),
+        (9.0, 0.0),
+    ],
+    stop: 16,
+};
+
+/// `_rv_station_left_ne_far` (stop frame 19).
+const BAY_LEFT_NE_FAR: BayStationTable = BayStationTable {
+    points: &[
+        (0.0, 9.0),
+        (1.0, 9.0),
+        (2.0, 8.0),
+        (2.0, 7.0),
+        (2.0, 6.0),
+        (2.0, 5.0),
+        (2.0, 4.0),
+        (3.0, 3.0),
+        (4.0, 3.0),
+        (5.0, 3.0),
+        (6.0, 3.0),
+        (7.0, 3.0),
+        (8.0, 3.0),
+        (9.0, 3.0),
+        (10.0, 4.0),
+        (10.0, 5.0),
+        (10.0, 6.0),
+        (10.0, 7.0),
+        (10.0, 8.0),
+        (10.0, 9.0),
+        (10.0, 8.0),
+        (10.0, 7.0),
+        (10.0, 6.0),
+        (10.0, 5.0),
+        (10.0, 4.0),
+        (9.0, 3.0),
+        (8.0, 3.0),
+        (7.0, 3.0),
+        (6.0, 3.0),
+        (5.0, 3.0),
+        (4.0, 3.0),
+        (3.0, 3.0),
+        (2.0, 4.0),
+        (1.0, 5.0),
+        (0.0, 5.0),
+    ],
+    stop: 19,
+};
+
+/// `_rv_station_left_se_far` (stop frame 19).
+const BAY_LEFT_SE_FAR: BayStationTable = BayStationTable {
+    points: &[
+        (9.0, 15.0),
+        (9.0, 14.0),
+        (8.0, 13.0),
+        (7.0, 13.0),
+        (6.0, 13.0),
+        (5.0, 13.0),
+        (4.0, 13.0),
+        (3.0, 12.0),
+        (3.0, 11.0),
+        (3.0, 10.0),
+        (3.0, 9.0),
+        (3.0, 8.0),
+        (3.0, 7.0),
+        (3.0, 6.0),
+        (4.0, 5.0),
+        (5.0, 5.0),
+        (6.0, 5.0),
+        (7.0, 5.0),
+        (8.0, 5.0),
+        (9.0, 5.0),
+        (8.0, 5.0),
+        (7.0, 5.0),
+        (6.0, 5.0),
+        (5.0, 5.0),
+        (4.0, 5.0),
+        (3.0, 6.0),
+        (3.0, 7.0),
+        (3.0, 8.0),
+        (3.0, 9.0),
+        (3.0, 10.0),
+        (3.0, 11.0),
+        (3.0, 12.0),
+        (4.0, 13.0),
+        (5.0, 14.0),
+        (5.0, 15.0),
+    ],
+    stop: 19,
+};
+
+/// `_rv_station_left_ne_near` (stop frame 15).
+const BAY_LEFT_NE_NEAR: BayStationTable = BayStationTable {
+    points: &[
+        (0.0, 9.0),
+        (1.0, 9.0),
+        (2.0, 8.0),
+        (2.0, 7.0),
+        (2.0, 6.0),
+        (2.0, 5.0),
+        (2.0, 4.0),
+        (3.0, 3.0),
+        (4.0, 3.0),
+        (5.0, 3.0),
+        (6.0, 4.0),
+        (6.0, 5.0),
+        (6.0, 6.0),
+        (6.0, 7.0),
+        (6.0, 8.0),
+        (6.0, 9.0),
+        (6.0, 8.0),
+        (6.0, 7.0),
+        (6.0, 6.0),
+        (6.0, 5.0),
+        (6.0, 4.0),
+        (5.0, 3.0),
+        (4.0, 3.0),
+        (3.0, 3.0),
+        (2.0, 4.0),
+        (1.0, 5.0),
+        (0.0, 5.0),
+    ],
+    stop: 15,
+};
+
+/// `_rv_station_left_se_near` (stop frame 15).
+const BAY_LEFT_SE_NEAR: BayStationTable = BayStationTable {
+    points: &[
+        (9.0, 15.0),
+        (9.0, 14.0),
+        (8.0, 13.0),
+        (7.0, 13.0),
+        (6.0, 13.0),
+        (5.0, 13.0),
+        (4.0, 13.0),
+        (3.0, 12.0),
+        (3.0, 11.0),
+        (3.0, 10.0),
+        (4.0, 9.0),
+        (5.0, 9.0),
+        (6.0, 9.0),
+        (7.0, 9.0),
+        (8.0, 9.0),
+        (9.0, 9.0),
+        (8.0, 9.0),
+        (7.0, 9.0),
+        (6.0, 9.0),
+        (5.0, 9.0),
+        (4.0, 9.0),
+        (3.0, 10.0),
+        (3.0, 11.0),
+        (3.0, 12.0),
+        (4.0, 13.0),
+        (5.0, 14.0),
+        (5.0, 15.0),
+    ],
+    stop: 15,
+};
+
+/// Tabla de bahía según la dirección con la que el vehículo ENTRA por la boca
+/// (opuesta a la orientación de la boca: boca SW → se entra rumbo NE) y la
+/// dársena (far/near). El nombre C++ es la orientación de la boca. Con una
+/// sola dársena por bahía en la sim, el render usa siempre la `far` (la
+/// primera que asigna `RoadStop::AllocateBay` en `OpenTTD` con la parada vacía).
+#[must_use]
+pub const fn bay_station_table(
+    inbound: VehicleDirection,
+    far: bool,
+) -> Option<&'static BayStationTable> {
+    match (inbound, far) {
+        (DIR_NE, true) => Some(&BAY_LEFT_SW_FAR),
+        (DIR_NE, false) => Some(&BAY_LEFT_SW_NEAR),
+        (DIR_SE, true) => Some(&BAY_LEFT_NW_FAR),
+        (DIR_SE, false) => Some(&BAY_LEFT_NW_NEAR),
+        (DIR_SW, true) => Some(&BAY_LEFT_NE_FAR),
+        (DIR_SW, false) => Some(&BAY_LEFT_NE_NEAR),
+        (DIR_NW, true) => Some(&BAY_LEFT_SE_FAR),
+        (DIR_NW, false) => Some(&BAY_LEFT_SE_NEAR),
+        _ => None,
+    }
+}
 
 /// El vehículo está detenido dentro de una bahía de sus órdenes (ancló en la
 /// tesela de la estación tras entrar por la boca). Se comprueba contra todas
@@ -468,14 +805,41 @@ pub fn vehicle_subtile_with_progress(v: &Vehicle, progress: u8) -> (f32, f32) {
     )
 }
 
-/// Media vuelta dentro de la bahía: interpola entre el punto de parada del
-/// carril de entrada y el punto equivalente del carril de salida (aproxima el
-/// lazo de retorno de las tablas `_rv_station_*`).
-fn bay_turn_subtile(inbound: VehicleDirection, depart_turn: u8) -> (f32, f32) {
-    let (x0, y0) = straight_subtile(inbound, BAY_STOP_PROGRESS);
-    let (x1, y1) = straight_subtile(reverse_direction(inbound), 255 - BAY_STOP_PROGRESS);
-    let t = f32::from(depart_turn) / 255.0;
-    (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
+/// Dirección con la que el vehículo entró por la boca de la bahía para una
+/// pose dada. Parado o esperando el giro: `v.direction` sigue siendo la de
+/// entrada. Pose extrapolada que acaba de cruzar a la bahía: el paso desde la
+/// tesela de sim. Saliendo (tras el giro): la inversa del rumbo de salida.
+fn bay_inbound_direction(v: &Vehicle, pose: VehiclePose, exiting: bool) -> VehicleDirection {
+    if exiting {
+        return reverse_direction(movement_direction_at(v, pose.pos, pose.path_index));
+    }
+    if pose.pos != v.pos {
+        return direction_from_tile_step(v.pos, pose.pos);
+    }
+    v.direction
+}
+
+/// Sub-tesela dentro de la bahía siguiendo `_rv_station_left_*`:
+/// entrada = frames `0..=stop`, parada = frame `stop`, salida = `stop..`.
+fn bay_subtile(v: &Vehicle, pose: VehiclePose) -> Option<SubTile> {
+    let has_target = movement_target_at(v, pose.pos, pose.path_index).is_some();
+    // Saliendo: hay objetivo y el rumbo ya no exige media vuelta (la dirección
+    // se invirtió al completar el giro). Antes/durante el giro sigue parado.
+    let exiting = has_target
+        && pose.depart_turn == 0
+        && !needs_depart_turnaround_at(v, pose.pos, pose.path_index);
+    let table = bay_station_table(bay_inbound_direction(v, pose, exiting), true)?;
+    if exiting {
+        // Lazo de retorno hacia la boca (retraza el carril con rumbo opuesto).
+        return Some(sample_curve(&table.points[table.stop..], pose.progress));
+    }
+    if pose.progress < 255 && !has_target {
+        // Entrando: de la boca al punto de parada.
+        return Some(sample_curve(&table.points[..=table.stop], pose.progress));
+    }
+    // Detenido en el stop frame: cargando, esperando o girando en el vértice
+    // del lazo (en OpenTTD el cambio de sentido en la dársena es instantáneo).
+    Some(table.points[table.stop])
 }
 
 /// Sub-tesela para una pose concreta (sim actual o extrapolada).
@@ -484,24 +848,21 @@ pub fn vehicle_subtile_at(v: &Vehicle, pose: VehiclePose) -> (f32, f32) {
     if matches!(v.kind, VehicleKind::Train) {
         return train_straight_subtile(train_subtile_direction(v), pose.progress);
     }
-    let in_bay = parked_inside_bay(v, pose.pos);
-    if pose.depart_turn > 0 {
-        if in_bay {
-            return bay_turn_subtile(v.direction, pose.depart_turn);
-        }
-        if let Some(curve) = depart_u_turn_curve(v.direction) {
-            return sample_curve(curve, pose.depart_turn);
-        }
+    if parked_inside_bay(v, pose.pos)
+        && let Some(subtile) = bay_subtile(v, pose)
+    {
+        return subtile;
     }
-    if pose.progress == 255 && movement_target_at(v, pose.pos, pose.path_index).is_none() {
-        // Dentro de una bahía el vehículo se detiene en el punto del stop
-        // frame (`_road_stop_stop_frame`), no al final del carril.
-        if in_bay {
-            return straight_subtile(v.direction, BAY_STOP_PROGRESS);
-        }
-        if pose.pos == v.dest {
-            return straight_subtile(v.direction, 255);
-        }
+    if pose.depart_turn > 0
+        && let Some(curve) = depart_u_turn_curve(v.direction)
+    {
+        return sample_curve(curve, pose.depart_turn);
+    }
+    if pose.progress == 255
+        && movement_target_at(v, pose.pos, pose.path_index).is_none()
+        && pose.pos == v.dest
+    {
+        return straight_subtile(v.direction, 255);
     }
     if let Some((entry, exit)) = road_turn_entry_exit_at(v, pose.pos, pose.path_index)
         && let Some(curve) = turn_curve(entry, exit)
@@ -512,21 +873,10 @@ pub fn vehicle_subtile_at(v: &Vehicle, pose: VehiclePose) -> (f32, f32) {
         && movement_target_at(v, pose.pos, pose.path_index).is_some()
         && needs_depart_turnaround_at(v, pose.pos, pose.path_index)
     {
-        if in_bay {
-            // Esperando el giro de salida: sigue en el punto de parada.
-            return straight_subtile(v.direction, BAY_STOP_PROGRESS);
-        }
         v.direction
     } else {
         movement_direction_at(v, pose.pos, pose.path_index)
     };
-    if in_bay && pose.progress < 255 && movement_target_at(v, pose.pos, pose.path_index).is_some() {
-        // Saliendo de la bahía: recorre solo el tramo desde el punto de
-        // parada hasta la boca (no toda la tesela desde el borde trasero).
-        let span = 255 - u16::from(255 - BAY_STOP_PROGRESS);
-        let t = span + (u16::from(255 - BAY_STOP_PROGRESS) * u16::from(pose.progress)) / 255;
-        return straight_subtile(dir, u8::try_from(t).unwrap_or(255));
-    }
     straight_subtile(dir, pose.progress)
 }
 
@@ -569,11 +919,66 @@ pub fn vehicle_render_direction(v: &Vehicle, progress: u8) -> VehicleDirection {
     )
 }
 
+/// Dirección 0–7 a partir del delta entre dos puntos sub-tesela (misma regla
+/// que `OpenTTD`, que orienta el sprite con `new_pos - old_pos`): en estas
+/// tablas el eje x crece hacia SW y el eje y hacia SE.
+fn direction_from_subtile_delta(dx: f32, dy: f32) -> Option<VehicleDirection> {
+    let sx = if dx.abs() < 0.25 {
+        0
+    } else if dx > 0.0 {
+        1
+    } else {
+        -1
+    };
+    let sy = if dy.abs() < 0.25 {
+        0
+    } else if dy > 0.0 {
+        1
+    } else {
+        -1
+    };
+    match (sx, sy) {
+        (-1, 0) => Some(DIR_NE),
+        (1, 0) => Some(DIR_SW),
+        (0, 1) => Some(DIR_SE),
+        (0, -1) => Some(DIR_NW),
+        (-1, -1) => Some(DIR_N),
+        (-1, 1) => Some(DIR_E),
+        (1, 1) => Some(DIR_S),
+        (1, -1) => Some(DIR_W),
+        _ => None,
+    }
+}
+
+/// Dirección del sprite dentro de la bahía: delta entre dos muestras cercanas
+/// de la trayectoria `_rv_station_*` (los lazos incluyen tramos en S que el
+/// rumbo lógico de entrada no captura).
+fn bay_render_direction(v: &Vehicle, pose: VehiclePose) -> Option<VehicleDirection> {
+    const PROBE: u8 = 16;
+    let (a, b) = if pose.progress >= 255 - PROBE {
+        let mut before = pose;
+        before.progress = pose.progress.saturating_sub(PROBE);
+        (bay_subtile(v, before)?, bay_subtile(v, pose)?)
+    } else {
+        let mut after = pose;
+        after.progress = pose.progress.saturating_add(PROBE);
+        (bay_subtile(v, pose)?, bay_subtile(v, after)?)
+    };
+    direction_from_subtile_delta(b.0 - a.0, b.1 - a.1)
+}
+
 /// Dirección de sprite para una pose concreta.
 #[must_use]
 pub fn vehicle_render_direction_at(v: &Vehicle, pose: VehiclePose) -> VehicleDirection {
     if matches!(v.kind, VehicleKind::Train) {
         return train_subtile_direction(v);
+    }
+    if parked_inside_bay(v, pose.pos)
+        && pose.depart_turn == 0
+        && pose.progress < 255
+        && let Some(dir) = bay_render_direction(v, pose)
+    {
+        return dir;
     }
     if pose.depart_turn > 0 {
         let outbound = movement_target_at(v, pose.pos, pose.path_index)
@@ -718,6 +1123,78 @@ mod tests {
             "extrapolación debe cruzar la tesela como haría el siguiente tick"
         );
         assert!(pose.progress < v.progress_step());
+    }
+
+    /// Camión con orden en la bahía donde está parado (entró rumbo NW).
+    fn parked_in_bay_vehicle() -> Vehicle {
+        let bay = TileCoord::new(4, 5);
+        let mut v = Vehicle::new(0, VehicleKind::Truck, bay, bay);
+        v.direction = crate::vehicle::DIR_NW;
+        v.progress = 255;
+        v.set_station_orders(vec![bay, TileCoord::new(10, 5)]);
+        v.progress = 255;
+        v
+    }
+
+    #[test]
+    fn parked_in_bay_sits_on_stop_frame_of_rv_station_table() {
+        let v = parked_in_bay_vehicle();
+        let table = bay_station_table(crate::vehicle::DIR_NW, true).unwrap();
+        assert_eq!(
+            vehicle_subtile(&v),
+            table.points[table.stop],
+            "detenido en el stop frame de `_rv_station_left_se_far` (9,5)"
+        );
+    }
+
+    #[test]
+    fn bay_entry_follows_rv_station_table_from_mouth_to_stop() {
+        let mut v = parked_in_bay_vehicle();
+        let table = bay_station_table(crate::vehicle::DIR_NW, true).unwrap();
+        v.progress = 0;
+        assert_eq!(vehicle_subtile(&v), table.points[0], "entra por la boca");
+        v.progress = 255;
+        assert_eq!(vehicle_subtile(&v), table.points[table.stop]);
+    }
+
+    #[test]
+    fn bay_exit_retraces_loop_back_to_mouth() {
+        let mut v = parked_in_bay_vehicle();
+        let table = bay_station_table(crate::vehicle::DIR_NW, true).unwrap();
+        // Tras el giro: rumbo de salida SE hacia la carretera de acceso.
+        v.direction = crate::vehicle::DIR_SE;
+        v.path = VecDeque::from([TileCoord::new(4, 6)]);
+        v.progress = 0;
+        assert_eq!(
+            vehicle_subtile(&v),
+            table.points[table.stop],
+            "la salida arranca en el punto de parada"
+        );
+        v.progress = 255;
+        assert_eq!(
+            vehicle_subtile(&v),
+            *table.points.last().unwrap(),
+            "y termina en la boca (5,15)"
+        );
+    }
+
+    #[test]
+    fn bay_sprite_direction_follows_loop_not_logical_heading() {
+        let mut v = parked_in_bay_vehicle();
+        // Mitad de la entrada SE-far: tramo transversal del lazo (x decrece →
+        // componente NE), distinto del rumbo lógico NW de entrada.
+        v.progress = 40;
+        let pose = VehiclePose::from_vehicle(&v);
+        let dir = vehicle_render_direction_at(&v, pose);
+        assert_ne!(
+            dir,
+            crate::vehicle::DIR_SE,
+            "no debe usar el rumbo de salida"
+        );
+        let table = bay_station_table(crate::vehicle::DIR_NW, true).unwrap();
+        let (x0, _) = table.points[0];
+        let (x1, _) = table.points[7];
+        assert!(x1 < x0, "el tramo inicial del lazo se mueve hacia -x (NE)");
     }
 
     #[test]

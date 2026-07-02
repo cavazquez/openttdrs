@@ -36,6 +36,8 @@ target
 
 .codex
 *.json
+# Fixtures golden versionados (CI los necesita; se regeneran con scripts/)
+!crates/*/tests/fixtures/**/*.json
 
 # Partidas JSON (F5/F9); por defecto bajo save/
 /save/

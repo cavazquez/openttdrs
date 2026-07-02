@@ -54,8 +54,10 @@ original) cuando se cumpla alguna de estas condiciones:
 
 1. Se quiera validar contra **trazas reales de OpenTTD** (nivel 5 de madurez en
    `status.md`): ahí el eje temporal debe coincidir.
-2. Se porten las trayectorias `_rv_station_*` exactas por frame: esas tablas
-   están indexadas por `frame` 0–15+ y encajan mal en `progress` 0–255 lineal.
+2. Se quiera que la **sim** avance las trayectorias `_rv_station_*` frame a
+   frame como el original. En el render ya están portadas exactas
+   (`road_movement.rs::bay_station_table`, remuestreadas sobre `progress`
+   0–255), pero la sim sigue tratando la bahía como una tesela lineal.
 3. La extrapolación de render deje de ser suficiente (p. ej. adelantamientos o
    seguimiento entre vehículos, que necesitan resolución temporal fina en la
    propia sim).

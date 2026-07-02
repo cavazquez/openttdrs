@@ -122,10 +122,10 @@ pub use rail_signals::{
 };
 pub use refit::{next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_in_depot};
 pub use road_movement::{
-    VehiclePose, extrapolate_vehicle_pose, road_turn_entry_exit, straight_subtile,
-    train_straight_subtile, train_subtile_direction, turn_curve_points, vehicle_render_direction,
-    vehicle_render_direction_at, vehicle_render_progress, vehicle_subtile, vehicle_subtile_at,
-    vehicle_subtile_with_progress,
+    BayStationTable, VehiclePose, bay_station_table, extrapolate_vehicle_pose,
+    road_turn_entry_exit, straight_subtile, train_straight_subtile, train_subtile_direction,
+    turn_curve_points, vehicle_render_direction, vehicle_render_direction_at,
+    vehicle_render_progress, vehicle_subtile, vehicle_subtile_at, vehicle_subtile_with_progress,
 };
 pub use sav::{SavError, SavGame, SavIndustry, SavStation, SavVehicle, SavVehicleKind};
 pub use save::CURRENT_SAVE_VERSION;

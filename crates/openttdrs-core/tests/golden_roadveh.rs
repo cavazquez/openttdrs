@@ -26,6 +26,7 @@ use openttdrs_core::{
 #[derive(serde::Deserialize)]
 struct Fixture {
     drive_data: HashMap<String, DriveTable>,
+    station_tables: HashMap<String, StationTable>,
     road_stop_stop_frame: Vec<u8>,
     constants: Constants,
 }
@@ -33,6 +34,13 @@ struct Fixture {
 #[derive(serde::Deserialize)]
 struct DriveTable {
     frames: Vec<(f32, f32)>,
+    end: EndMarker,
+}
+
+#[derive(serde::Deserialize)]
+struct StationTable {
+    frames: Vec<(f32, f32)>,
+    stop_frame: usize,
     end: EndMarker,
 }
 
@@ -138,6 +146,50 @@ fn advance_constants_match_upstream() {
             )),
             expected_card,
             "paso cardinal a velocidad {speed}"
+        );
+    }
+}
+
+/// Las 8 tablas `_rv_station_left_*` copiadas en `road_movement.rs`
+/// (`bay_station_table`) coinciden punto a punto con el upstream, incluido el
+/// stop frame de `_road_stop_stop_frame`.
+#[test]
+fn bay_station_tables_match_rust_copies() {
+    let fixture = load_fixture();
+    // Nombre C++ = orientación de la boca; la clave Rust es la dirección de
+    // ENTRADA del vehículo (opuesta a la boca) + dársena far/near.
+    let cases = [
+        ("_rv_station_left_sw_far", DIR_NE, true, "SW"),
+        ("_rv_station_left_sw_near", DIR_NE, false, "SW"),
+        ("_rv_station_left_nw_far", DIR_SE, true, "NW"),
+        ("_rv_station_left_nw_near", DIR_SE, false, "NW"),
+        ("_rv_station_left_ne_far", DIR_SW, true, "NE"),
+        ("_rv_station_left_ne_near", DIR_SW, false, "NE"),
+        ("_rv_station_left_se_far", DIR_NW, true, "SE"),
+        ("_rv_station_left_se_near", DIR_NW, false, "SE"),
+    ];
+    for (name, inbound, far, exit_diagdir) in cases {
+        let upstream = &fixture.station_tables[name];
+        let rust = openttdrs_core::bay_station_table(inbound, far)
+            .unwrap_or_else(|| panic!("{name}: sin tabla Rust para inbound {inbound}"));
+        assert_eq!(rust.points.len(), upstream.frames.len(), "{name}: longitud");
+        assert_eq!(rust.stop, upstream.stop_frame, "{name}: stop frame");
+        assert_eq!(upstream.end.flag, "RDE_NEXT_TILE", "{name}");
+        assert_eq!(
+            upstream.end.diagdir, exit_diagdir,
+            "{name}: sale por la boca"
+        );
+        for (i, (&(rx, ry), &(ux, uy))) in rust.points.iter().zip(&upstream.frames).enumerate() {
+            assert!(
+                (rx - ux).abs() < f32::EPSILON && (ry - uy).abs() < f32::EPSILON,
+                "{name} frame {i}: rust=({rx},{ry}) upstream=({ux},{uy})"
+            );
+        }
+        // El stop frame es el vértice del lazo: la trayectoria retrocede después.
+        assert_eq!(
+            upstream.frames[rust.stop + 1],
+            upstream.frames[rust.stop - 1],
+            "{name}: el lazo retrocede tras el stop frame"
         );
     }
 }

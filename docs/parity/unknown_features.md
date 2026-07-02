@@ -15,14 +15,15 @@ vehículos de carretera.
 2. ~~**Entrada a la tesela de la bahía**~~ — **IMPLEMENTADA en la Fase 2**:
    `resolve_order_destination` apunta a la bahía, el pathfinder entra por la
    boca (`m3`) y el vehículo carga dentro (`bay_stop_position` «no observada»).
-   PENDIENTE: las 32 tablas `_rv_station_*` exactas
-   (`roadveh_movement.h:1052-1083`, lado × boca × near/far); hoy la trayectoria
-   interna es el carril recto con parada en `BAY_STOP_PROGRESS`.
-3. **Frame de parada `_road_stop_stop_frame` exacto** —
-   `roadveh_movement.h:1087-1093` (valores 11–20) + chequeo en
-   `roadveh_cmd.cpp:1496-1502`. La Fase 2 aproxima el punto de detención con
-   `BAY_STOP_PROGRESS = 128` (centro del carril de entrada); falta derivarlo
-   por boca/lado desde el fixture ya extraído.
+   Las 8 tablas `_rv_station_left_*` (lado izquierdo, el que usa el port) están
+   copiadas en `road_movement.rs::bay_station_table` y validadas punto a punto
+   por el golden `bay_station_tables_match_rust_copies`. Sin portar: las 8
+   `_rv_station_right_*` (conducción por la derecha) y la dársena `near`
+   (la sim modela una dársena por bahía y usa siempre la `far`).
+3. ~~**Frame de parada `_road_stop_stop_frame` exacto**~~ — **IMPLEMENTADO en
+   la Fase 2**: cada tabla de bahía lleva su stop frame upstream (valores
+   11–20, `roadveh_movement.h:1087-1093`); el vehículo se dibuja detenido en
+   ese punto y el golden verifica que sea el vértice del lazo.
 4. **Retardo de un frame por dirección de giro** — `roadveh_cmd.cpp:1483-1487`:
    en curvas el vehículo «pierde» un frame extra por cada cambio de dirección
    (la curva corta de 8 frames pasa a 10). Afecta el timing en esquinas.

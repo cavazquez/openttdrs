@@ -5,6 +5,14 @@ inputs:
     description: Componentes rustup (p. ej. rustfmt, clippy)
     required: false
     default: ""
+  cache-key:
+    description: >-
+      shared-key de rust-cache. Las corridas que compilan con instrumentación
+      de cobertura (push a main) deben usar una clave propia: sus artefactos
+      (RUSTFLAGS distintos) no se guardan en la caché de los PRs, que ya
+      existe y queda «up-to-date», y cada push recompilaba todo desde cero.
+    required: false
+    default: openttdrs
 runs:
   using: composite
   steps:
@@ -17,7 +25,7 @@ runs:
     - name: caché cargo
       uses: Swatinem/rust-cache@v2.9.1
       with:
-        shared-key: openttdrs
+        shared-key: ${{ inputs.cache-key }}
         add-job-id-key: false
         cache-on-failure: true
 

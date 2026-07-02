@@ -39,6 +39,9 @@ jobs:
         uses: ./.github/composite/rust-setup
         with:
           components: rustfmt, clippy, llvm-tools-preview
+          # En main la compilación es instrumentada (llvm-cov): caché propia,
+          # si no cada push recompila los ~12 min de instrumentación de cero.
+          cache-key: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'openttdrs-cov' || 'openttdrs' }}
 
       - name: Instalar cargo-nextest
         uses: taiki-e/install-action@nextest

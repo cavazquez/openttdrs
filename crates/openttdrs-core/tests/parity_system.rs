@@ -84,7 +84,7 @@ fn diff_detects_artificial_mutation_at_exact_tick() {
     let mut mutated = records.clone();
     mutated[59].vehicles[0].progress = mutated[59].vehicles[0].progress.wrapping_add(7);
 
-    let report = compare_traces(&records, &mutated, DiffFilter::default());
+    let report = compare_traces(&records, &mutated, &DiffFilter::default());
     let first = report.first.expect("la mutación debe detectarse");
     assert_eq!(first.tick, records[59].tick);
     assert_eq!(first.vehicle, Some(parity::TRUCK_BAY_VEHICLE_ID));
@@ -98,7 +98,7 @@ fn same_scenario_twice_is_deterministic() {
     let trace_a = run_trace(&mut a, 300);
     let trace_b = run_trace(&mut b, 300);
     assert_eq!(trace_a, trace_b, "misma seed ⇒ trazas idénticas");
-    let report = compare_traces(&trace_a, &trace_b, DiffFilter::default());
+    let report = compare_traces(&trace_a, &trace_b, &DiffFilter::default());
     assert!(!report.has_divergence());
 }
 
@@ -325,7 +325,7 @@ fn save_json_roundtrip_mid_scenario_preserves_trace() {
 
     let trace_original = run_trace(&mut original, 180);
     let trace_restored = run_trace(&mut restored, 180);
-    let report = compare_traces(&trace_original, &trace_restored, DiffFilter::default());
+    let report = compare_traces(&trace_original, &trace_restored, &DiffFilter::default());
     assert!(
         !report.has_divergence(),
         "divergencia tras roundtrip: {:?}",

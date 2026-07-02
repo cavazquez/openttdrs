@@ -65,7 +65,7 @@ medir antes/después.
   Nota de alcance: `ParityEvent::vehicle()` pasó a devolver `Option<u32>`
   porque `SignalStateChanged` es un evento de infraestructura sin vehículo.
 
-## Fase Rail 2 — Comparador ferroviario mínimo
+## Fase Rail 2 — Comparador ferroviario mínimo — ✅ IMPLEMENTADA
 
 - **Objetivo**: que `parity_diff` responda «¿en qué tick/tren/tile dejó de
   coincidir?» con clasificación ferroviaria.
@@ -88,6 +88,19 @@ medir antes/después.
   correcto; epsilon respeta el umbral; exit codes.
 - **No tocar**: la sim; el esquema de traza (solo lectura).
 - **Terminado cuando**: fixtures verdes y `truck_bay` sigue comparando igual.
+- **Resultado**: implementada tal cual el alcance. Los campos `rail.*` se
+  clasifican por subsistema (`rail.track_bits_under` → `rail_infrastructure`,
+  `rail.parts[i].subtile_*` → `train_motion` con epsilon, `rail.blocked_by_*`
+  → `signaling`, `rail.in_depot` → `depot`, `rail.at_platform` →
+  `station_entry`, resto de partes/cabeza/cola → `consist_geometry`;
+  `path_next` pasó de `orders` a `pathfinding`). Las divergencias de eventos
+  ahora se reportan por evento faltante/sobrante con campo
+  `events.<tipo>` y el subsistema del evento (antes: un solo diff opaco
+  `events` por tick). Verificado sobre trazas reales: `truck_bay`
+  pre/post → exit 0; traza `train_line` mutada → primera divergencia
+  exacta (tick, campo, subsistema) y JSON con `first_divergence` +
+  `by_subsystem`; traza sin bloque rail vs con bloque → NOTA
+  `missing_field` y exit 0.
 
 ## Fase Rail 3A — Infraestructura ferroviaria básica
 

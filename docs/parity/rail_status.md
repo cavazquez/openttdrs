@@ -60,7 +60,7 @@ verificable todavía» hasta que exista el modelo.
 | Traza por tick para trenes | **Implementada (Fase Rail 1)** — bloque `rail` en `VehicleRecord` (partes, track bits, bloqueos, depósito, plataforma) + eventos `SignalWait*`, `DepotEntry/Exit`, `SignalStateChanged` |
 | Escenario headless de tren | **Implementado (Fase Rail 1)** — `train_line` en `parity/scenario.rs` (depósito, L con curva, señal de bloque, 2 estaciones, órdenes A↔B) |
 | Comparador con subsistemas rail | **Implementado (Fase Rail 2)** — subsistemas `rail_infrastructure`/`train_motion`/`consist_geometry`/`pathfinding`/`station_entry`/`loading`/`signaling`/`reservation`/`depot`, filtros `--tile`/`--event`, `--subtile-epsilon` (default 0.51) y `--json` |
-| Golden de tablas C++ de tren | **No existe** — candidatos en `rail_unknown_features.md` y plan en `rail_debugging_plan.md` |
+| Golden de tablas C++ de tren | **Implementado (Fase Rail 3A)** — `extract_train_movement.py` + `train_movement_golden.json` + `golden_rail.rs` (11 tests) |
 | Chequeos de divergencia rail en `parity/report.rs` | **No existen** |
 
 ## Top 5 divergencias ferroviarias detectadas en la auditoría

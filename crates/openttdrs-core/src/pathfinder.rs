@@ -215,7 +215,7 @@ const RAIL_TB_CROSS: u8 = RAIL_TB_X | RAIL_TB_Y;
 /// Trackbit que conecta dos lados (`DiagDir`) de una tesela (`track_type.h`):
 /// X = NE↔SW, Y = SE↔NW, UPPER = NE↔NW, LOWER = SE↔SW, LEFT = SW↔NW, RIGHT = NE↔SE.
 #[must_use]
-pub(crate) const fn rail_bit_for_sides(a: u8, b: u8) -> u8 {
+pub const fn rail_bit_for_sides(a: u8, b: u8) -> u8 {
     let (lo, hi) = if (a & 3) < (b & 3) {
         (a & 3, b & 3)
     } else {

@@ -1,0 +1,252 @@
+{
+  "source": {
+    "train_cmd": "OpenTTD/src/train_cmd.cpp",
+    "rail_cmd": "OpenTTD/src/rail_cmd.cpp",
+    "vehicle": "OpenTTD/src/vehicle.cpp",
+    "tunnelbridge_cmd": "OpenTTD/src/tunnelbridge_cmd.cpp"
+  },
+  "accel_slowdown": [
+    {
+      "small_turn": 64,
+      "large_turn": 128,
+      "z_up": 64,
+      "z_down": 2
+    },
+    {
+      "small_turn": 64,
+      "large_turn": 128,
+      "z_up": 64,
+      "z_down": 2
+    },
+    {
+      "small_turn": 0,
+      "large_turn": 128,
+      "z_up": 64,
+      "z_down": 2
+    }
+  ],
+  "vehicle_initial_x_fract": [
+    10,
+    8,
+    4,
+    8
+  ],
+  "vehicle_initial_y_fract": [
+    8,
+    4,
+    8,
+    10
+  ],
+  "fractcoords_enter": [
+    {
+      "x": 10,
+      "y": 8
+    },
+    {
+      "x": 8,
+      "y": 4
+    },
+    {
+      "x": 4,
+      "y": 8
+    },
+    {
+      "x": 8,
+      "y": 10
+    }
+  ],
+  "fractcoords_behind": [
+    {
+      "x": 15,
+      "y": 8
+    },
+    {
+      "x": 8,
+      "y": 0
+    },
+    {
+      "x": 0,
+      "y": 8
+    },
+    {
+      "x": 8,
+      "y": 15
+    }
+  ],
+  "deltacoord_leaveoffset": [
+    {
+      "x": -1,
+      "y": 0
+    },
+    {
+      "x": 0,
+      "y": 1
+    },
+    {
+      "x": 1,
+      "y": 0
+    },
+    {
+      "x": 0,
+      "y": -1
+    }
+  ],
+  "vehicle_subcoord": {
+    "NE": {
+      "TRACK_X": {
+        "x": 15,
+        "y": 8,
+        "dir": "NE"
+      },
+      "TRACK_Y": null,
+      "TRACK_UPPER": null,
+      "TRACK_LOWER": {
+        "x": 15,
+        "y": 8,
+        "dir": "E"
+      },
+      "TRACK_LEFT": {
+        "x": 15,
+        "y": 7,
+        "dir": "N"
+      },
+      "TRACK_RIGHT": null
+    },
+    "SE": {
+      "TRACK_X": null,
+      "TRACK_Y": {
+        "x": 8,
+        "y": 0,
+        "dir": "SE"
+      },
+      "TRACK_UPPER": {
+        "x": 7,
+        "y": 0,
+        "dir": "E"
+      },
+      "TRACK_LOWER": null,
+      "TRACK_LEFT": {
+        "x": 8,
+        "y": 0,
+        "dir": "S"
+      },
+      "TRACK_RIGHT": null
+    },
+    "SW": {
+      "TRACK_X": {
+        "x": 0,
+        "y": 8,
+        "dir": "SW"
+      },
+      "TRACK_Y": null,
+      "TRACK_UPPER": {
+        "x": 0,
+        "y": 7,
+        "dir": "W"
+      },
+      "TRACK_LOWER": null,
+      "TRACK_LEFT": null,
+      "TRACK_RIGHT": {
+        "x": 0,
+        "y": 8,
+        "dir": "S"
+      }
+    },
+    "NW": {
+      "TRACK_X": null,
+      "TRACK_Y": {
+        "x": 8,
+        "y": 15,
+        "dir": "NW"
+      },
+      "TRACK_UPPER": null,
+      "TRACK_LOWER": {
+        "x": 8,
+        "y": 15,
+        "dir": "W"
+      },
+      "TRACK_LEFT": null,
+      "TRACK_RIGHT": {
+        "x": 7,
+        "y": 15,
+        "dir": "N"
+      }
+    }
+  },
+  "tunnel_visibility_frame": [
+    12,
+    8,
+    8,
+    12
+  ],
+  "update_speed_am_original": {
+    "brake_multiplier": 4,
+    "accel_multiplier": 2
+  },
+  "connectivity": {
+    "track_bits": {
+      "X": 1,
+      "Y": 2,
+      "UPPER": 4,
+      "LOWER": 8,
+      "LEFT": 16,
+      "RIGHT": 32
+    },
+    "side_pairs": [
+      {
+        "sides": [
+          0,
+          2
+        ],
+        "bit": 1,
+        "track": "X"
+      },
+      {
+        "sides": [
+          1,
+          3
+        ],
+        "bit": 2,
+        "track": "Y"
+      },
+      {
+        "sides": [
+          0,
+          3
+        ],
+        "bit": 4,
+        "track": "UPPER"
+      },
+      {
+        "sides": [
+          1,
+          2
+        ],
+        "bit": 8,
+        "track": "LOWER"
+      },
+      {
+        "sides": [
+          2,
+          3
+        ],
+        "bit": 16,
+        "track": "LEFT"
+      },
+      {
+        "sides": [
+          0,
+          1
+        ],
+        "bit": 32,
+        "track": "RIGHT"
+      }
+    ],
+    "touching_side_masks": {
+      "NE": 37,
+      "SE": 42,
+      "SW": 25,
+      "NW": 22
+    }
+  }
+}

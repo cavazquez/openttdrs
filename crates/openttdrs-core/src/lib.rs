@@ -33,6 +33,7 @@ pub mod timetable;
 pub mod tnbp_decode;
 pub mod town;
 pub mod townname;
+pub mod train_movement;
 pub mod vehicle;
 mod vehicle_ai;
 pub mod vehicle_group;
@@ -107,9 +108,10 @@ pub use news::{
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
     PathCache, PathNetwork, TunnelWormholes, diag_dir_offset, find_path, find_path_cached,
-    find_path_with_wormholes, path_network_for_vehicle, station_entrance_faces_rail,
-    station_entrance_faces_road, station_site_adjacent_to_rail, station_site_adjacent_to_transport,
-    station_site_tile_allows_build, station_site_tile_needs_clear, tile_is_path_traversable,
+    find_path_with_wormholes, path_network_for_vehicle, rail_bit_for_sides,
+    station_entrance_faces_rail, station_entrance_faces_road, station_site_adjacent_to_rail,
+    station_site_adjacent_to_transport, station_site_tile_allows_build,
+    station_site_tile_needs_clear, tile_is_path_traversable,
 };
 pub use rail_lane::{rail_horz_lane_bit, rail_vert_lane_bit};
 pub use rail_signals::{
@@ -150,6 +152,13 @@ pub use town::{
     produce_town_cargo,
 };
 pub use townname::generate_town_name;
+pub use train_movement::{
+    ACCEL_SLOWDOWN, AccelSlowdownParams, DELTACOORD_LEAVE_OFFSET, FRACTCOORDS_BEHIND,
+    FRACTCOORDS_ENTER, RAIL_TOUCHING_SIDE_NE, RAIL_TOUCHING_SIDE_NW, RAIL_TOUCHING_SIDE_SE,
+    RAIL_TOUCHING_SIDE_SW, TRAIN_UPDATE_SPEED_ACCEL_MUL, TRAIN_UPDATE_SPEED_BRAKE_MUL,
+    TUNNEL_VISIBILITY_FRAME, VEHICLE_INITIAL_X_FRACT, VEHICLE_INITIAL_Y_FRACT, VEHICLE_SUBCOORD,
+    VehicleSubcoord,
+};
 pub use vehicle::reverse_direction;
 pub use vehicle::{
     DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionKind,

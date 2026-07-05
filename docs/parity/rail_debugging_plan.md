@@ -102,7 +102,7 @@ medir antes/después.
   `by_subsystem`; traza sin bloque rail vs con bloque → NOTA
   `missing_field` y exit 0.
 
-## Fase Rail 3A — Infraestructura ferroviaria básica
+## Fase Rail 3A — Infraestructura ferroviaria básica — ✅ IMPLEMENTADA
 
 - **Objetivo**: goldens de infraestructura y huecos de test cerrados.
 - **Alcance**:
@@ -122,6 +122,14 @@ medir antes/después.
 - **Comandos**: `python3 scripts/extract_train_movement.py && ./scripts/check.sh`.
 - **Terminado cuando**: golden verde y fixture versionado (recordar la
   excepción de `.gitignore` para `tests/fixtures/**/*.json`).
+- **Resultado**: implementada tal cual el alcance. `extract_train_movement.py`
+  genera `train_movement_golden.json` con `_accel_slowdown`, fractcoords de
+  depósito, `_vehicle_subcoord`, `_tunnel_visibility_frame` y constantes de
+  `UpdateSpeed` AM_ORIGINAL. Copias en `train_movement.rs`; `golden_rail.rs`
+  (11 tests) valida fixture ↔ Rust, conectividad `rail_bit_for_sides`,
+  encoding de señales y movimiento: tren atraviesa túnel completo; puente —
+  colocación + entrada a rampa (el vano central aún no lo cruza el
+  pathfinder; divergencia documentada en el test).
 
 ## Fase Rail 3B — Movimiento de trenes
 

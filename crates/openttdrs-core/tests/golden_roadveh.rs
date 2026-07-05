@@ -235,6 +235,14 @@ fn known_divergences_are_confirmed_by_trace() {
     assert_eq!(by_id.get("instant_loading"), Some(&true));
     assert_eq!(by_id.get("tick_rate"), Some(&true));
 
+    for d in &divergences {
+        assert!(
+            !d.id.starts_with("train_"),
+            "truck_bay no debe activar chequeos rail ({})",
+            d.id
+        );
+    }
+
     let markdown = parity::report::divergences_markdown(&divergences);
     for id in [
         "curve_speed_penalty",

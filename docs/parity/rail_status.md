@@ -1,7 +1,7 @@
 # Estado de paridad ferroviaria openttdrs ↔ OpenTTD
 
-Fecha: 2026-07-02 · Fase Rail 0 (auditoría y documentación, sin cambios de
-código). Usa los mismos niveles de madurez que `status.md`:
+Fecha: 2026-07-04 · Fases Rail 0–4 completadas. Usa los mismos niveles de
+madurez que `status.md`:
 
 1. **Implementado** — existe código que cubre la funcionalidad.
 2. **Probado** — tiene tests unitarios/integración propios.
@@ -61,7 +61,9 @@ verificable todavía» hasta que exista el modelo.
 | Escenario headless de tren | **Implementado (Fase Rail 1)** — `train_line` en `parity/scenario.rs` (depósito, L con curva, señal de bloque, 2 estaciones, órdenes A↔B) |
 | Comparador con subsistemas rail | **Implementado (Fase Rail 2)** — subsistemas `rail_infrastructure`/`train_motion`/`consist_geometry`/`pathfinding`/`station_entry`/`loading`/`signaling`/`reservation`/`depot`, filtros `--tile`/`--event`, `--subtile-epsilon` (default 0.51) y `--json` |
 | Golden de tablas C++ de tren | **Implementado (Fase Rail 3A)** — `extract_train_movement.py` + `train_movement_golden.json` + `golden_rail.rs` (11 tests) |
-| Chequeos de divergencia rail en `parity/report.rs` | **Implementados (Rail 3B–3C)** — `train_road_acceleration`, `train_no_curve_braking`, `train_platform_stop` |
+| Chequeos de divergencia rail en `parity/report.rs` | **Implementados (Rail 3B–3E)** — `train_road_acceleration`, `train_no_curve_braking`, `train_platform_stop`, `train_signal_wait`, `train_render_subtile_consistency`, `train_diagonal_subcoord_approximation` |
+| Reporte `train_line_divergences.md` | **Implementado (Rail 4)** — `parity_runner --scenario train_line --divergence-report` |
+| Escenarios headless | `truck_bay`, `train_line`, `train_signal` |
 
 ## Top 5 divergencias ferroviarias detectadas en la auditoría
 
@@ -79,10 +81,13 @@ verificable todavía» hasta que exista el modelo.
 
 ## Cómo regenerar la evidencia
 
-Hoy la evidencia ferroviaria es solo estática (tests + este documento). Las
-trazas y reportes automáticos llegan con las Fases Rail 1–2 (`rail_debugging_plan.md`).
-
 ```bash
-# Suite completa (incluye los ~70 tests ferroviarios listados arriba)
+# Suite completa (tests ferroviarios + carretera)
 ./scripts/check.sh
+
+# Reportes markdown de divergencias (carretera + ferrocarril)
+./scripts/regenerate_parity_reports.sh
 ```
+
+El reporte ferroviario queda en `docs/parity/train_line_divergences.md` (600
+ticks de `train_line`). El de carretera en `docs/parity/divergences_found.md`.

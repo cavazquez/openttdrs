@@ -201,7 +201,7 @@ fn check_tick_rate() -> KnownDivergence {
 fn trace_has_train(records: &[TickRecord]) -> bool {
     records
         .iter()
-        .any(|r| r.vehicles.iter().any(|v| v.id == TRAIN_LINE_VEHICLE_ID))
+        .any(|r| r.vehicles.iter().any(|v| v.rail.is_some()))
 }
 
 fn trace_has_train_signal(records: &[TickRecord]) -> bool {

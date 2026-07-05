@@ -39,7 +39,7 @@ Cada subsistema se clasifica en cinco niveles acumulativos:
 | Herramienta | Ruta | Estado |
 |---|---|---|
 | Traza por tick (JSONL) | `openttdrs-core/src/parity/` (`TickRecord`, `ParityTracer`) | Probado (`tests/parity_system.rs`) |
-| Runner headless | `openttdrs-core/src/bin/parity_runner.rs` (`--scenario truck_bay --ticks N --out f.jsonl [--divergence-report f.md]`) | Probado |
+| Runner headless | `openttdrs-core/src/bin/parity_runner.rs` (`--scenario truck_bay|train_line|train_signal`, `--divergence-report`) | Probado |
 | Comparador primera divergencia | `openttdrs-core/src/bin/parity_diff.rs` (`--vehicle`, `--subsystem`, exit code 1 si diverge) | Probado |
 | Golden tablas C++ | `scripts/extract_roadveh_movement.py` + `tests/golden_roadveh.rs` | Verde |
 | Traza de render | `openttdrs-client/src/render_trace.rs` (`OPENTTDRS_RENDER_TRACE=f.csv`) | Probado |
@@ -51,6 +51,9 @@ Cada subsistema se clasifica en cinco niveles acumulativos:
 cargo run -p openttdrs-core --bin parity_runner -- \
     --scenario truck_bay --ticks 500 --out /tmp/truck_bay.jsonl \
     --divergence-report docs/parity/divergences_found.md
+
+# Reporte ferroviario (escenario train_line, 600 ticks)
+./scripts/regenerate_parity_reports.sh
 
 # Comparar dos trazas (0 = idénticas, 1 = divergen)
 cargo run -p openttdrs-core --bin parity_diff -- /tmp/a.jsonl /tmp/b.jsonl --vehicle 1

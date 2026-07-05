@@ -60,12 +60,12 @@ cada pieza. Complementa `openttd_mapping.md` (vehículos de carretera).
 | Depósito solo por la boca | `train_cmd.cpp` + `depot_map.h` | `rail_depot_mouth` (`pathfinder.rs:274-278`) | `rail_depot_beside_x_line_connects_exit_tile` |
 | Estación no transitable salvo origen/destino | `yapf_rail.cpp` (penalización plataforma) | trenes no rutean a través de plataformas (`astar_rail_station_reaches_track_below_entrance`) | test citado |
 
-## Trazabilidad (pendiente, Fases Rail 1–2)
+## Trazabilidad (Fases Rail 1–4)
 
 | Pieza | Estado |
 |---|---|
-| Bloque `rail` en `VehicleRecord` + eventos ferroviarios | Diseñado en `rail_debugging_plan.md`, sin implementar |
-| Escenario `train_line` en `parity/scenario.rs` | Sin implementar (hoy solo `truck_bay`) |
-| Subsistemas rail en `parity_diff` | Sin implementar |
-| Golden `train_movement_golden.json` (`scripts/extract_train_movement.py`) | Sin implementar |
-| Chequeos rail en `parity/report.rs` → `divergences_found.md` | Sin implementar |
+| Bloque `rail` en `VehicleRecord` + eventos ferroviarios | **Implementado (Rail 1)** — `parity/tracer.rs`, `parity/record.rs` |
+| Escenarios `train_line` / `train_signal` en `parity/scenario.rs` | **Implementados (Rail 1, 3D)** |
+| Subsistemas rail en `parity_diff` | **Implementado (Rail 2)** |
+| Golden `train_movement_golden.json` | **Implementado (Rail 3A)** |
+| Chequeos rail en `parity/report.rs` | **Implementado (Rail 3B–3E)** → `train_line_divergences.md` vía `regenerate_parity_reports.sh` |

@@ -199,11 +199,13 @@ medir antes/después.
 - **Tests**: `train_render_subtile_consistency`, `train_line_extrapolation_subtile_is_monotonic`,
   `sprite_selection_uses_extrapolated_pose_for_train`, `tunnel_hides_train_matches_visibility_frame`.
 
-## Fase Rail 4 — Reportes y documentación final
+## Fase Rail 4 — Reportes y documentación final — ✅ IMPLEMENTADA
 
 - **Objetivo**: chequeos rail en `parity/report.rs` integrados a
-  `divergences_found.md`; actualizar los cuatro docs `rail_*.md` con el estado
-  final (corregidas vs pendientes).
+  `divergences_found.md` y `train_line_divergences.md`; actualizar los cuatro
+  docs `rail_*.md` con el estado final (corregidas vs pendientes).
+- **Resultado**: `scripts/regenerate_parity_reports.sh`; `trace_has_train` usa
+  bloque `rail` (sin falsos positivos en `truck_bay`); reportes regenerados.
 - **Terminado cuando**: `parity_runner --divergence-report` cubre `train_line`
   y la documentación queda consistente con `status.md`.
 

@@ -387,7 +387,7 @@ fn rail_bridge_placement_and_train_enters_ramp_from_land() {
     );
 }
 
-/// Divergencias rail conocidas: corregidas en Rail 3B → regresión (no detectadas).
+/// Divergencias rail conocidas en `train_line`: regresiones 3B–3E + divergencias documentadas.
 #[test]
 fn train_line_divergences_are_absent_after_rail_3b() {
     use std::collections::HashMap;
@@ -421,6 +421,11 @@ fn train_line_divergences_are_absent_after_rail_3b() {
         by_id.get("train_render_subtile_consistency"),
         Some(&false),
         "regresión: traza rail y render lógico deben coincidir (Rail 3E)"
+    );
+    assert_eq!(
+        by_id.get("train_diagonal_subcoord_approximation"),
+        Some(&true),
+        "divergencia cosmética documentada en piezas diagonales (Rail 3E/4)"
     );
 }
 

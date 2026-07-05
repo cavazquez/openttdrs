@@ -92,3 +92,53 @@ Evidencia medida:
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/station.rs (`resolve_order_destination` → `rail_station_stop_tile`)`
 - Fase 2: IMPLEMENTADA (Rail 3C): destino = plataforma; `at_platform: true` en la traza
 
+## La sub-tesela de la traza rail no coincide con la del render (`train_render_subtile_consistency`)
+
+Estado: **no observada en esta traza**
+
+Evidencia medida:
+
+- la traza rail y `vehicle_subtile` coinciden en todos los ticks
+
+- Referencia OpenTTD: `OpenTTD/src/vehicle.cpp:3359 (`_vehicle_subcoord` + progreso)`
+- Referencia Rust: `openttdrs/crates/openttdrs-core/src/parity/tracer.rs + `road_movement::vehicle_subtile``
+- Fase 2: IMPLEMENTADA (Rail 3E): regresión traza ↔ render lógico
+
+## Subcoordenadas por pieza: centro de vía en curvas diagonales (`train_diagonal_subcoord_approximation`)
+
+Estado: **CONFIRMADA en la traza**
+
+Evidencia medida:
+
+- tick 425: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 426: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 427: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 428: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 429: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 430: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 431: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 432: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 433: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 434: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 435: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 582: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 583: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 584: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 585: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 586: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 587: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 588: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 589: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 590: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 591: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 592: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 593: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 594: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 595: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 596: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 597: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+
+- Referencia OpenTTD: `OpenTTD/src/vehicle.cpp:3359-3392 (`_vehicle_subcoord` por enterdir×track)`
+- Referencia Rust: `openttdrs/crates/openttdrs-core/src/road_movement.rs (`train_straight_subtile`, `TRAIN_TRACK_CENTER = 8`)`
+- Fase 2: DECIDIDO (Rail 3E): divergencia cosmética documentada; X/Y usan el mismo eje que la entrada OpenTTD
+

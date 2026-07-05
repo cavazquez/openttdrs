@@ -138,9 +138,10 @@ pub use shared_orders::SharedOrderList;
 pub use station::{
     STATION_COVERAGE_RADIUS, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage,
     StationMapCoherenceReport, StopKind, industry_in_station_coverage, is_rail_waypoint_at,
-    is_rail_waypoint_tile, rail_station_approach_tile, resolve_order_destination,
-    road_stop_approach_tile, station_coverage_at, station_covers_tile, station_map_coherence,
-    station_type_from_m6, stop_kind_from_m6, vehicle_at_road_stop, vehicle_physically_at_station,
+    is_rail_waypoint_tile, rail_station_approach_tile, rail_station_platform_tiles,
+    rail_station_stop_tile, resolve_order_destination, road_stop_approach_tile,
+    station_coverage_at, station_covers_tile, station_map_coherence, station_type_from_m6,
+    stop_kind_from_m6, train_on_rail_platform, vehicle_at_road_stop, vehicle_physically_at_station,
 };
 pub use tick::GameTick;
 pub use timetable::{TRAVEL_PRESETS, WAIT_PRESETS, cycle_travel_ticks, cycle_wait_ticks};

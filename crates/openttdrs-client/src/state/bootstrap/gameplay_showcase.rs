@@ -22,11 +22,11 @@ pub const SHOWCASE_WOOD_STATION: TileCoord = TileCoord::new(15, 9);
 pub const SHOWCASE_FOREST: TileCoord = TileCoord::new(15, 11);
 /// Fábrica (consume madera+carbón del hub).
 pub const SHOWCASE_FACTORY: TileCoord = TileCoord::new(19, 11);
-/// Estación de tren «oeste».
-pub const SHOWCASE_RAIL_WEST: TileCoord = TileCoord::new(14, 14);
+/// Estación de tren «oeste» (sobre la vía y=SHOWCASE_RAIL_Y).
+pub const SHOWCASE_RAIL_WEST: TileCoord = TileCoord::new(14, SHOWCASE_RAIL_Y);
 /// Estación de tren «este».
-pub const SHOWCASE_RAIL_EAST: TileCoord = TileCoord::new(21, 14);
-/// Depósito de tren al sur de la vía (estaciones al norte en y=14).
+pub const SHOWCASE_RAIL_EAST: TileCoord = TileCoord::new(21, SHOWCASE_RAIL_Y);
+/// Depósito de tren al sur de la vía.
 pub const SHOWCASE_RAIL_DEPOT: TileCoord = TileCoord::new(12, 16);
 
 const STATION_ENTRANCE_SOUTH: u8 = 1;
@@ -109,20 +109,17 @@ fn place_factory_chain_block(state: &mut GameState) {
 
 fn place_rail_showcase(state: &mut GameState) {
     for x in 12..=22_i32 {
+        if x == SHOWCASE_RAIL_WEST.x || x == SHOWCASE_RAIL_EAST.x {
+            continue;
+        }
         let _ = apply_command(
             state,
             &Command::PlaceRail(TileCoord::new(x, SHOWCASE_RAIL_Y)),
         );
     }
+    let _ = apply_command(state, &Command::PlaceRailStation(SHOWCASE_RAIL_WEST, 2));
+    let _ = apply_command(state, &Command::PlaceRailStation(SHOWCASE_RAIL_EAST, 0));
     let _ = apply_command(state, &Command::PlaceRailDepotDir(SHOWCASE_RAIL_DEPOT, 3));
-    let _ = apply_command(
-        state,
-        &Command::PlaceRailStation(SHOWCASE_RAIL_WEST, STATION_ENTRANCE_SOUTH),
-    );
-    let _ = apply_command(
-        state,
-        &Command::PlaceRailStation(SHOWCASE_RAIL_EAST, STATION_ENTRANCE_SOUTH),
-    );
 }
 
 /// Dos tramos paralelos sin conexión directa; el camión debe usar el conector en x=22.
@@ -331,15 +328,15 @@ mod tests {
     #[test]
     fn showcase_train_finds_path_between_rail_stations() {
         let state = showcase_state();
-        let west = openttdrs_core::rail_station_approach_tile(&state.map, SHOWCASE_RAIL_WEST)
-            .expect("vía junto a estación oeste");
-        let east = openttdrs_core::rail_station_approach_tile(&state.map, SHOWCASE_RAIL_EAST)
-            .expect("vía junto a estación este");
+        let west = openttdrs_core::rail_station_stop_tile(&state.map, SHOWCASE_RAIL_WEST)
+            .expect("plataforma oeste");
+        let east = openttdrs_core::rail_station_stop_tile(&state.map, SHOWCASE_RAIL_EAST)
+            .expect("plataforma este");
         assert_eq!(west.y, SHOWCASE_RAIL_Y);
         assert_eq!(east.y, SHOWCASE_RAIL_Y);
         assert!(
             find_path(&state.map, west, east, PathNetwork::Rail).is_some(),
-            "parada oeste → este solo por vía y={SHOWCASE_RAIL_Y}"
+            "parada oeste → este por plataforma/vía y={SHOWCASE_RAIL_Y}"
         );
         assert!(
             find_path(&state.map, east, west, PathNetwork::Rail).is_some(),
@@ -348,23 +345,25 @@ mod tests {
     }
 
     #[test]
-    fn showcase_train_stays_on_rail_not_station_platform() {
+    fn showcase_train_enters_rail_station_platform() {
         let mut state = showcase_state();
         let train_idx = state
             .vehicles
             .iter()
             .position(|v| v.id == 9102)
             .expect("tren showcase");
-        for _ in 0..256 {
+        let mut on_platform = false;
+        for _ in 0..600 {
             state.step();
             let pos = state.vehicles[train_idx].pos;
-            let kind = state.map.get_kind(pos);
-            assert_ne!(
-                kind,
-                Some(TileKind::Station),
-                "el tren no debe subir a la plataforma en {pos:?}"
-            );
+            if state.map.get_kind(pos) == Some(TileKind::Station) {
+                on_platform = true;
+            }
         }
+        assert!(
+            on_platform,
+            "el tren debe entrar a la plataforma al menos una vez (Rail 3C)"
+        );
     }
 
     #[test]

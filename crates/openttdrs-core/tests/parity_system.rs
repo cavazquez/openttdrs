@@ -187,11 +187,18 @@ fn train_line_emits_rail_block_and_events() {
             "sin consist: cabeza == cola"
         );
         assert_eq!(rail.parts[0].tile, train.tile);
-        assert!(
-            !rail.at_platform,
-            "divergencia documentada: el tren nunca pisa la plataforma (Fase Rail 3C)"
-        );
     }
+
+    let visited_platform = records.iter().any(|r| {
+        r.vehicles
+            .first()
+            .and_then(|v| v.rail.as_ref())
+            .is_some_and(|rail| rail.at_platform)
+    });
+    assert!(
+        visited_platform,
+        "el tren debe pisar la plataforma al menos una vez (Rail 3C)"
+    );
 
     let has =
         |pred: &dyn Fn(&ParityEvent) -> bool| records.iter().flat_map(|r| &r.events).any(pred);

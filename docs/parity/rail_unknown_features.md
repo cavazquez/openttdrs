@@ -15,14 +15,8 @@ como tales.
    (Kirby: 300 HP / 47 t → `accel = 24`).
 2. ~~**Frenado por curva `_accel_slowdown`**~~ — **Resuelto (Rail 3B)**.
    `set_direction_with_curve_penalty` y `apply_immediate_train_turnaround`.
-3. **Entrada a la plataforma + punto de parada** — el tren de la sim para en
-   la vía de acceso (`rail_station_approach_tile`) y nunca pisa la plataforma
-   (el showcase lo asserta). OpenTTD entra a la estación
-   (`TrainEnterStation`, `train_cmd.cpp:3097-3123`), elige el punto según
-   `GetTrainStopLocation` (`:266-305`, `OrderStopLocation` near/middle/far) y
-   frena sub-tile con `cur_speed = max(0, (stop-x)·20 − 15)`
-   (`station_cmd.cpp:3874-3880`). Misma familia que la divergencia
-   `bay_stop_position` corregida en carretera. Plan: Fase Rail 3C.
+3. ~~**Entrada a la plataforma + punto de parada**~~ — **Resuelto (Rail 3C)**.
+   `rail_station_stop_tile` + `at_platform` en traza.
 4. **Carga/descarga gradual** — `economy.cpp:1609` (`LoadUnloadVehicle`):
    idéntica divergencia `instant_loading` ya documentada para carretera;
    aplica también a trenes.

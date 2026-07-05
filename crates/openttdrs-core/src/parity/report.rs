@@ -306,6 +306,46 @@ fn check_train_no_curve_braking(records: &[TickRecord]) -> KnownDivergence {
     }
 }
 
+fn check_train_platform_stop(records: &[TickRecord]) -> KnownDivergence {
+    let vehicle = TRAIN_LINE_VEHICLE_ID;
+    let mut evidence = String::new();
+    let mut detected = false;
+    for r in records {
+        for e in &r.events {
+            let ParityEvent::LoadingStarted { .. } = e else {
+                continue;
+            };
+            if e.vehicle() != Some(vehicle) {
+                continue;
+            }
+            let Some(v) = r.vehicles.iter().find(|v| v.id == vehicle) else {
+                continue;
+            };
+            let on_platform = v.rail.as_ref().is_some_and(|rail| rail.at_platform);
+            let _ = writeln!(
+                evidence,
+                "- tick {}: carga iniciada en {:?} (at_platform={on_platform})",
+                r.tick, v.tile
+            );
+            if !on_platform {
+                detected = true;
+            }
+        }
+    }
+    if evidence.is_empty() {
+        evidence.push_str("- la traza no contiene eventos de carga del tren\n");
+    }
+    KnownDivergence {
+        id: "train_platform_stop",
+        title: "El tren carga desde la vía de acceso, no desde la plataforma",
+        detected,
+        evidence,
+        openttd_ref: "OpenTTD/src/train_cmd.cpp:266-305 (`GetTrainStopLocation`) y :3097-3123 (`TrainEnterStation`)",
+        rust_ref: "openttdrs/crates/openttdrs-core/src/station.rs (`resolve_order_destination` → `rail_station_stop_tile`)",
+        fix_phase2: "IMPLEMENTADA (Rail 3C): destino = plataforma; `at_platform: true` en la traza",
+    }
+}
+
 /// Evalúa todas las divergencias conocidas sobre una traza de paridad.
 #[must_use]
 pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> {
@@ -318,6 +358,7 @@ pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> 
     if trace_has_train(records) {
         out.push(check_train_road_acceleration(records));
         out.push(check_train_no_curve_braking(records));
+        out.push(check_train_platform_stop(records));
     }
     out
 }

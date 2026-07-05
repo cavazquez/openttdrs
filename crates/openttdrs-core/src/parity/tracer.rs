@@ -87,11 +87,9 @@ fn track_bits_under(map: &Map, pos: TileCoord) -> u8 {
 }
 
 /// `true` si el tren está sobre una plataforma de estación ferroviaria
-/// (tipo rail = 0 en `m6`). Hoy la sim nunca lo produce: evidencia de la
-/// divergencia de entrada a plataforma (Fase Rail 3C).
+/// (tipo rail = 0 en `m6`).
 fn train_at_rail_platform(map: &Map, pos: TileCoord) -> bool {
-    map.get(pos)
-        .is_some_and(|t| t.kind == TileKind::Station && station::station_type_from_m6(t.m6) == 0)
+    station::train_on_rail_platform(map, pos)
 }
 
 /// Espeja la decisión de bloqueo por señal de `sim_step::move_vehicles` para

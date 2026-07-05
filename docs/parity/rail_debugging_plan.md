@@ -155,6 +155,8 @@ medir antes/después.
 
 ## Fase Rail 3C — Estaciones y carga/descarga
 
+- **Estado**: **Completada** — destino = plataforma (`rail_station_stop_tile`),
+  `at_platform: true` en traza, chequeo `train_platform_stop` en regresión.
 - **Objetivo**: el tren entra a la plataforma y para en el punto correcto.
 - **Alcance**: destino de orden = plataforma (análogo de
   `resolve_order_destination` → bahía de la Fase 2); punto de parada según

@@ -152,9 +152,45 @@ fn station_footprint_tiles(map: &Map, anchor: TileCoord) -> Vec<TileCoord> {
     tiles
 }
 
-/// Tesela de vía donde el tren debe detenerse junto a una estación de tren (no
-/// sobre la plataforma). Usa la plataforma si ya es vía (`StationType::Rail`)
-/// o la vía adyacente más cercana. Prefiere vía adyacente; si no hay, plataforma rail.
+#[must_use]
+fn is_rail_platform_tile(map: &Map, c: TileCoord) -> bool {
+    map.get(c)
+        .is_some_and(|t| t.kind == TileKind::Station && station_type_from_m6(t.m6) == 0)
+}
+
+/// Plataformas rail del footprint de una estación, ordenadas a lo largo del eje.
+#[must_use]
+pub fn rail_station_platform_tiles(map: &Map, station_anchor: TileCoord) -> Vec<TileCoord> {
+    let mut tiles: Vec<TileCoord> = station_footprint_tiles(map, station_anchor)
+        .into_iter()
+        .filter(|c| is_rail_platform_tile(map, *c))
+        .collect();
+    if let Some(&first) = tiles.first() {
+        let axis_y = map.get(first).is_some_and(|t| t.m5 & 1 != 0);
+        tiles.sort_by(|a, b| if axis_y { a.y.cmp(&b.y) } else { a.x.cmp(&b.x) });
+    }
+    tiles
+}
+
+/// Tesela de parada en plataforma (paridad simplificada con `GetTrainStopLocation`:
+/// tren puntual → `Middle`; una sola tesela → esa tesela).
+#[must_use]
+pub fn rail_station_stop_tile(map: &Map, station_anchor: TileCoord) -> Option<TileCoord> {
+    let platforms = rail_station_platform_tiles(map, station_anchor);
+    match platforms.len() {
+        0 => None,
+        1 => Some(platforms[0]),
+        n => Some(platforms[n / 2]),
+    }
+}
+
+/// `true` si el tren está sobre una plataforma rail de alguna estación del mapa.
+#[must_use]
+pub fn train_on_rail_platform(map: &Map, pos: TileCoord) -> bool {
+    is_rail_platform_tile(map, pos)
+}
+
+/// Tesela de vía de acceso junto a una estación (antes de subir a la plataforma).
 #[must_use]
 pub fn rail_station_approach_tile(map: &Map, station_pos: TileCoord) -> Option<TileCoord> {
     let is_rail_platform = |c: TileCoord| {
@@ -252,8 +288,7 @@ pub fn road_stop_approach_tile(map: &Map, station_pos: TileCoord) -> Option<Tile
 ///
 /// Bus/camión en bahía conectada: SOLO dentro de la tesela de la estación
 /// (paridad `OpenTTD`: la carga empieza al alcanzar el stop frame dentro de la
-/// bahía, no al pasar por la carretera de acceso). Bahía sin boca: carretera
-/// de acceso (fallback). Tren: vía adyacente a la plataforma.
+/// Bahía sin boca: carretera de acceso (fallback). Tren: sobre la plataforma rail.
 #[must_use]
 pub fn vehicle_physically_at_station(
     map: &Map,
@@ -274,7 +309,8 @@ pub fn vehicle_physically_at_station(
                     .is_some_and(|approach| vpos == approach)
         }
         VehicleKind::Train => {
-            rail_station_approach_tile(map, station.pos).is_some_and(|approach| vpos == approach)
+            station_footprint_tiles(map, station.pos).contains(&vpos)
+                && train_on_rail_platform(map, vpos)
         }
     }
 }
@@ -302,12 +338,14 @@ pub fn vehicle_at_road_stop(map: &Map, vehicle: &crate::Vehicle) -> bool {
 /// Bus/camión: la tesela de la bahía misma — como `OpenTTD`, el vehículo ENTRA
 /// a la parada y se detiene dentro (`_rv_station_*` / `_road_stop_stop_frame`).
 /// Si la bahía no tiene boca conectada, cae a la carretera de acceso.
-/// Tren: la vía adyacente a la plataforma (no cambia en Fase 2).
+/// Tren: la tesela de parada en la plataforma (`GetTrainStopLocation` simplificado).
 #[must_use]
 pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrder) -> TileCoord {
     match (kind, order) {
         (VehicleKind::Train, VehicleOrder::Station { station, .. }) => {
-            rail_station_approach_tile(map, station).unwrap_or(station)
+            rail_station_stop_tile(map, station)
+                .or_else(|| rail_station_approach_tile(map, station))
+                .unwrap_or(station)
         }
         (VehicleKind::Train, VehicleOrder::Waypoint { waypoint, .. }) => waypoint,
         (_, VehicleOrder::Depot { depot, .. }) => depot,
@@ -457,6 +495,34 @@ mod coherence_tests {
         CargoType, Command, GameState, Industry, IndustryKind, PathNetwork, Vehicle, VehicleKind,
         command::apply_command, find_path,
     };
+
+    #[test]
+    fn rail_station_stop_tile_targets_platform_not_approach() {
+        use crate::command::{Command, apply_command};
+        let mut state = GameState::new(16, 12);
+        for x in 2..=5 {
+            apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, 6))).unwrap();
+        }
+        let station = TileCoord::new(1, 6);
+        apply_command(&mut state, &Command::PlaceRailStation(station, 2)).unwrap();
+        assert_eq!(
+            rail_station_approach_tile(&state.map, station),
+            Some(TileCoord::new(2, 6))
+        );
+        assert_eq!(
+            rail_station_stop_tile(&state.map, station),
+            Some(station),
+            "destino de orden = plataforma"
+        );
+        assert_eq!(
+            resolve_order_destination(
+                &state.map,
+                VehicleKind::Train,
+                VehicleOrder::station(station)
+            ),
+            station
+        );
+    }
 
     #[test]
     fn stop_kind_from_m6_maps_openttd_station_types() {

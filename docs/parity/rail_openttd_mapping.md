@@ -44,7 +44,7 @@ cada pieza. Complementa `openttd_mapping.md` (vehículos de carretera).
 | Concepto OpenTTD | Referencia C++ | Equivalente Rust | Validación |
 |---|---|---|---|
 | `CmdBuildRailStation` (plataformas × longitud, layout gfx) | `station_cmd.cpp:1447` | `command/transport/station.rs` (`place_rail_station_area`, `rail_station_layout`, 1..=7) | `place_rail_station_area_*` |
-| Entrada del tren a plataforma + `GetTrainStopLocation` (OSL near/middle/far) | `train_cmd.cpp:266-305`, `order_type.h:97-102` | **Divergente**: el tren para en la vía de acceso (`station.rs::rail_station_approach_tile`), nunca pisa la plataforma | `showcase_train_stays_on_rail_not_station_platform` (asserta la divergencia) |
+| Entrada del tren a plataforma + `GetTrainStopLocation` (OSL near/middle/far) | `train_cmd.cpp:266-305`, `order_type.h:97-102` | **Paridad (Rail 3C)**: `rail_station_stop_tile` (Middle por defecto); `resolve_order_destination` → plataforma | `showcase_train_enters_rail_station_platform`, `train_platform_stop` |
 | Frenado sub-tile en plataforma `cur_speed = max(0, (stop-x)·20 − 15)` | `station_cmd.cpp:3874-3880` | **No implementado** | — |
 | Waypoints | `waypoint_cmd.cpp` | `place_rail_waypoint` (solo vía recta X/Y) + orden `Waypoint` sin parada completa | `train_order_through_waypoint_advances_without_full_stop` |
 | Depósito: dirección de boca, entrada/salida con frames | `rail_map.h:171-185`, `rail_cmd.cpp:2975-3064` (`_fractcoords_enter`, `TicksToLeaveDepot`) | `place_rail_depot_dir` + `rail_depot_exit_for_dir`; **sin frames ni timing** | `rail_depot_beside_x_line_connects_exit_tile` |

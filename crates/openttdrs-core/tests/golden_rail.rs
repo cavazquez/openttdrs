@@ -412,6 +412,11 @@ fn train_line_divergences_are_absent_after_rail_3b() {
         Some(&false),
         "regresión: el tren debe frenar en curva con _accel_slowdown (Rail 3B)"
     );
+    assert_eq!(
+        by_id.get("train_platform_stop"),
+        Some(&false),
+        "regresión: el tren debe cargar desde la plataforma (Rail 3C)"
+    );
 }
 
 #[test]

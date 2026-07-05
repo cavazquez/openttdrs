@@ -111,8 +111,8 @@ fn place_rail_station_area_rejects_occupied_and_out_of_bounds() {
 }
 
 #[test]
-fn train_paths_to_track_at_platform_end_of_long_station() {
-    use crate::{PathNetwork, find_path, rail_station_approach_tile};
+fn train_paths_to_platform_stop_tile_of_long_station() {
+    use crate::{PathNetwork, find_path, rail_station_approach_tile, rail_station_stop_tile};
     let mut s = GameState::new(20, 20);
     // Estación eje X de longitud 5 en y=5, andén único: x 4..=8.
     apply_command(
@@ -125,16 +125,26 @@ fn train_paths_to_track_at_platform_end_of_long_station() {
         },
     )
     .unwrap();
-    // Vía pegada al extremo SW del andén y tramo hasta (12,5).
+    // Vía pegada al extremo este del andén y tramo hasta (12,5).
     for x in 9..=12 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 5))).unwrap();
     }
     let anchor = s.stations[0].pos;
     assert_eq!(anchor, TileCoord::new(6, 5));
     let approach = rail_station_approach_tile(&s.map, anchor).unwrap();
-    assert_eq!(approach, TileCoord::new(9, 5), "vía junto al extremo");
-    let path = find_path(&s.map, TileCoord::new(12, 5), approach, PathNetwork::Rail).unwrap();
-    assert_eq!(path.last(), Some(&approach));
+    assert_eq!(approach, TileCoord::new(9, 5), "vía junto al extremo este");
+    let stop = rail_station_stop_tile(&s.map, anchor).unwrap();
+    assert_eq!(
+        stop,
+        TileCoord::new(6, 5),
+        "parada Middle en plataforma de 5"
+    );
+    let path = find_path(&s.map, TileCoord::new(12, 5), stop, PathNetwork::Rail).unwrap();
+    assert_eq!(path.last(), Some(&stop));
+    assert!(
+        s.map.get_kind(stop) == Some(TileKind::Station),
+        "el destino es la plataforma, no la vía de acceso"
+    );
 }
 
 #[test]

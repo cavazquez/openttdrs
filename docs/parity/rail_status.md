@@ -46,7 +46,7 @@ verificable todavía» hasta que exista el modelo.
 | Paso sub-tesela (`progress` 0–255) | compartido con carretera (`progress_step_for_speed`, 192/256) | `vehicle_base.h:439-454` | 3 · validado (heredado del golden de carretera) | `tests/golden_roadveh.rs` | Medio: escala absoluta distinta (5 Hz) |
 | Posición sub-tile / render | `road_movement.rs::train_straight_subtile` (siempre centro de vía, `TRAIN_TRACK_CENTER = 8`) | `vehicle.cpp:3359-3392` (`_vehicle_subcoord` por enterdir×track) | 2 · probado (`train_uses_center_track_not_road_lanes`) | test de `road_movement.rs` | Medio: sin subcoordenadas exactas por pieza de vía |
 | Reversa | `vehicle.rs::apply_immediate_train_turnaround` (instantánea) + comando `turn_around_vehicle` | `train_cmd.cpp` (`ReverseTrainDirection`, con chequeos y coste) | 2 · probado | `train_reverses_immediately_when_next_tile_opposite`, `turn_around_vehicle_reverses_train_heading` | Medio |
-| Entrada/salida de estación | `station.rs::rail_station_approach_tile` — **el tren para en la vía de acceso, no entra a la plataforma** | `train_cmd.cpp:266-305` (`GetTrainStopLocation`), `station_cmd.cpp:3846-3881` (frenado sub-tile `(stop-x)*20-15`) | 1 · implementado distinto (**divergencia confirmada**; el test showcase `showcase_train_stays_on_rail_not_station_platform` asserta hoy el comportamiento divergente) | tests de `station.rs` y showcase | Alto |
+| Entrada/salida de estación | `station.rs::rail_station_stop_tile` + `resolve_order_destination` → plataforma; `vehicle_physically_at_station` en plataforma | `train_cmd.cpp:266-305` (`GetTrainStopLocation`), `station_cmd.cpp:3846-3881` (frenado sub-tile) | 3 · validado (Rail 3C) | `train_line_emits_rail_block_and_events`, `showcase_train_enters_rail_station_platform`, chequeo `train_platform_stop` | Bajo |
 | Carga/descarga | `sim_step.rs` (instantánea, con ventana de carga de 1 tick) | `economy.cpp:1609` (`LoadUnloadVehicle`, gradual) | 2 · probado (misma divergencia `instant_loading` que carretera) | `train_loads_freight_from_rail_station_waiting_cargo` | Alto |
 | Entrada/salida de depósito | `refit.rs::vehicle_in_depot` + orden `Depot`; salida inmediata | `train_cmd.cpp:2354-2427` (`CheckTrainStayInDepot`, espera ~37 ticks), `rail_cmd.cpp:2975-2991` (`_fractcoords_enter`) | 2 · probado (sin timing OpenTTD) | tests de `command/tests/rail.rs` y showcase | Medio |
 | Órdenes (estación/waypoint/depósito/condicionales) | `vehicle.rs` (`VehicleOrder`), waypoint solo trenes | `order_*.cpp` | 2 · probado | `train_order_through_waypoint_advances_without_full_stop` | Medio |
@@ -61,7 +61,7 @@ verificable todavía» hasta que exista el modelo.
 | Escenario headless de tren | **Implementado (Fase Rail 1)** — `train_line` en `parity/scenario.rs` (depósito, L con curva, señal de bloque, 2 estaciones, órdenes A↔B) |
 | Comparador con subsistemas rail | **Implementado (Fase Rail 2)** — subsistemas `rail_infrastructure`/`train_motion`/`consist_geometry`/`pathfinding`/`station_entry`/`loading`/`signaling`/`reservation`/`depot`, filtros `--tile`/`--event`, `--subtile-epsilon` (default 0.51) y `--json` |
 | Golden de tablas C++ de tren | **Implementado (Fase Rail 3A)** — `extract_train_movement.py` + `train_movement_golden.json` + `golden_rail.rs` (11 tests) |
-| Chequeos de divergencia rail en `parity/report.rs` | **Implementados (Rail 3B)** — `train_road_acceleration` y `train_no_curve_braking` (regresión sobre `train_line`) |
+| Chequeos de divergencia rail en `parity/report.rs` | **Implementados (Rail 3B–3C)** — `train_road_acceleration`, `train_no_curve_braking`, `train_platform_stop` |
 
 ## Top 5 divergencias ferroviarias detectadas en la auditoría
 
@@ -69,10 +69,8 @@ verificable todavía» hasta que exista el modelo.
    `train_acceleration` + `accel·2` / freno `accel·4`.
 2. ~~**Sin frenado por curva**~~ **Corregida (Rail 3B)** — `_accel_slowdown` en
    giros y reversas inmediatas.
-3. **El tren no entra a la plataforma**: para en la vía de acceso
-   (`rail_station_approach_tile`); OpenTTD entra, elige punto de parada por
-   `GetTrainStopLocation` y frena sub-tile con `(stop-x)*20-15`. Misma familia
-   que la divergencia `bay_stop_position` ya corregida en carretera.
+3. ~~**El tren no entra a la plataforma**~~ **Corregida (Rail 3C)** —
+   `rail_station_stop_tile` + carga con `at_platform: true`.
 4. **Sin consist**: tren puntual sin vagones ni longitud; sin ocupación
    multi-tesela ni geometría de cola. Divergencia estructural, no medible
    hasta decidir el modelo.

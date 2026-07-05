@@ -21,7 +21,7 @@ Estado: **no observada en esta traza**
 
 Evidencia medida:
 
-- tick 184: carga iniciada con el camión en TileCoord { x: 2, y: 6 } (bahía = TileCoord { x: 4, y: 5 }, acceso = TileCoord { x: 4, y: 6 })
+- tick 213: carga iniciada con el camión en TileCoord { x: 1, y: 6 } (bahía = TileCoord { x: 4, y: 5 }, acceso = TileCoord { x: 4, y: 6 })
 
 - Referencia OpenTTD: `OpenTTD/src/table/roadveh_movement.h:1087-1093 (`_road_stop_stop_frame`, frames 11-20) y OpenTTD/src/roadveh_cmd.cpp:1496-1502 (chequeo del frame de parada)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/station.rs (`resolve_order_destination` → tesela de la bahía; `is_connected_bay_road_stop`)`
@@ -33,7 +33,7 @@ Estado: **CONFIRMADA en la traza**
 
 Evidencia medida:
 
-- tick 184: `loading_started` y `loading_finished` en el mismo tick (carga instantánea)
+- tick 213: `loading_started` y `loading_finished` en el mismo tick (carga instantánea)
 
 - Referencia OpenTTD: `OpenTTD/src/economy.cpp:1609 (`LoadUnloadVehicle`, transfiere por tick)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/sim_step.rs:205-241 (`try_load_from_industry` carga la capacidad completa en un tick)`
@@ -71,12 +71,24 @@ Evidencia medida:
 
 - tick 88: giro dir 1→3; velocidad 16→8 (OpenTTD esperaría ≤ 12)
 - tick 138: giro dir 3→1; velocidad 17→9 (OpenTTD esperaría ≤ 13)
-- tick 186: giro dir 1→5; velocidad 17→9 (OpenTTD esperaría ≤ 13)
-- tick 407: giro dir 5→3; velocidad 50→25 (OpenTTD esperaría ≤ 38)
-- tick 466: giro dir 3→7; velocidad 36→18 (OpenTTD esperaría ≤ 27)
-- tick 571: giro dir 7→1; velocidad 38→19 (OpenTTD esperaría ≤ 29)
+- tick 215: giro dir 1→5; velocidad 22→11 (OpenTTD esperaría ≤ 17)
+- tick 436: giro dir 5→3; velocidad 52→27 (OpenTTD esperaría ≤ 39)
+- tick 493: giro dir 3→7; velocidad 37→19 (OpenTTD esperaría ≤ 28)
+- tick 598: giro dir 7→1; velocidad 38→19 (OpenTTD esperaría ≤ 29)
 
 - Referencia OpenTTD: `OpenTTD/src/train_cmd.cpp:3147-3152 (`_accel_slowdown`), :3564-3568 (aplicación en locomotora)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/vehicle.rs (`set_direction_with_curve_penalty` para `VehicleKind::Train`)`
 - Fase 2: IMPLEMENTADA (Rail 3B): `cur_speed -= turn·cur_speed >> 8` con small_turn=64 / large_turn=128
+
+## El tren carga desde la vía de acceso, no desde la plataforma (`train_platform_stop`)
+
+Estado: **no observada en esta traza**
+
+Evidencia medida:
+
+- tick 213: carga iniciada en TileCoord { x: 1, y: 6 } (at_platform=true)
+
+- Referencia OpenTTD: `OpenTTD/src/train_cmd.cpp:266-305 (`GetTrainStopLocation`) y :3097-3123 (`TrainEnterStation`)`
+- Referencia Rust: `openttdrs/crates/openttdrs-core/src/station.rs (`resolve_order_destination` → `rail_station_stop_tile`)`
+- Fase 2: IMPLEMENTADA (Rail 3C): destino = plataforma; `at_platform: true` en la traza
 

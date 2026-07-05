@@ -31,8 +31,8 @@ pub const TRUCK_BAY_VEHICLE_ID: u32 = 1;
 pub const TRAIN_LINE_VEHICLE_ID: u32 = 1;
 /// Plataforma de la estación A (carga; al oeste de la línea).
 pub const TRAIN_LINE_STATION_A: TileCoord = TileCoord::new(1, 6);
-/// Plataforma de la estación B (al final de la rama sur).
-pub const TRAIN_LINE_STATION_B: TileCoord = TileCoord::new(13, 10);
+/// Plataforma de la estación B (al final de la rama sur; boca al norte).
+pub const TRAIN_LINE_STATION_B: TileCoord = TileCoord::new(12, 10);
 /// Depósito ferroviario (boca hacia la línea, al sur).
 pub const TRAIN_LINE_DEPOT: TileCoord = TileCoord::new(4, 5);
 /// Tesela con la señal de bloque sobre la recta.
@@ -176,7 +176,7 @@ pub fn build_train_line() -> GameState {
         apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, 6)))
             .expect("vía recta train_line");
     }
-    for y in 7..=10 {
+    for y in 7..=9 {
         apply_command(&mut state, &Command::PlaceRail(TileCoord::new(12, y)))
             .expect("rama sur train_line");
     }
@@ -189,7 +189,7 @@ pub fn build_train_line() -> GameState {
     .expect("estación A train_line");
     apply_command(
         &mut state,
-        &Command::PlaceRailStation(TRAIN_LINE_STATION_B, 0),
+        &Command::PlaceRailStation(TRAIN_LINE_STATION_B, 3),
     )
     .expect("estación B train_line");
     // Boca hacia +y: la salida del depósito empalma con la línea en (4,6).
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn train_line_layout_is_consistent() {
-        use crate::station::rail_station_approach_tile;
+        use crate::station::{rail_station_approach_tile, rail_station_stop_tile};
 
         let state = build_train_line();
         assert_eq!(
@@ -279,8 +279,8 @@ mod tests {
         );
         assert_eq!(
             rail_station_approach_tile(&state.map, TRAIN_LINE_STATION_B),
-            Some(TileCoord::new(12, 10)),
-            "acceso a la estación B"
+            Some(TileCoord::new(12, 9)),
+            "acceso a la estación B (boca al norte)"
         );
         assert_eq!(state.vehicles.len(), 1);
         assert_eq!(state.stations.len(), 2);
@@ -289,11 +289,21 @@ mod tests {
             !state.vehicles[0].path.is_empty(),
             "el tren arranca con ruta desde el depósito"
         );
-        // La línea conecta depósito → acceso A → esquina → acceso B por vía.
+        assert_eq!(
+            rail_station_stop_tile(&state.map, TRAIN_LINE_STATION_A),
+            Some(TRAIN_LINE_STATION_A),
+            "destino de parada A = plataforma"
+        );
+        assert_eq!(
+            rail_station_stop_tile(&state.map, TRAIN_LINE_STATION_B),
+            Some(TRAIN_LINE_STATION_B),
+            "destino de parada B = plataforma"
+        );
+        // La línea conecta depósito → plataforma A → esquina → plataforma B.
         let a_to_b = find_path(
             &state.map,
-            TileCoord::new(2, 6),
-            TileCoord::new(12, 10),
+            TRAIN_LINE_STATION_A,
+            TRAIN_LINE_STATION_B,
             PathNetwork::Rail,
         )
         .expect("ruta ferroviaria A → B");
@@ -303,11 +313,11 @@ mod tests {
             find_path(
                 &state.map,
                 TRAIN_LINE_DEPOT,
-                TileCoord::new(2, 6),
+                TRAIN_LINE_STATION_A,
                 PathNetwork::Rail
             )
             .is_some(),
-            "el depósito conecta con la línea"
+            "el depósito conecta con la estación A"
         );
         // La señal quedó colocada sobre la recta.
         let signal_tile = state.map.get(TRAIN_LINE_SIGNAL).unwrap();

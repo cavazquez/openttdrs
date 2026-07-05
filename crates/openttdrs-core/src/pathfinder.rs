@@ -890,10 +890,10 @@ mod tests {
     }
 
     #[test]
-    fn astar_rail_station_reaches_track_below_entrance() {
+    fn astar_rail_station_reaches_platform_along_axis() {
         let mut m = Map::new_flat(12, 12, 0);
-        let station = TileCoord::new(4, 4);
-        let track = TileCoord::new(4, 5);
+        let station = TileCoord::new(4, 5);
+        let track = TileCoord::new(5, 5);
         m.set_kind(station, TileKind::Station).unwrap();
         let mut st = m.get(station).unwrap();
         st.m6 &= !0x78;
@@ -908,8 +908,8 @@ mod tests {
             "vía horizontal → vía (sin entrar en plataforma)"
         );
         assert!(
-            find_path(&m, track, station, PathNetwork::Rail).is_none(),
-            "el tren no debe rutear hacia la tesela de estación"
+            find_path(&m, track, station, PathNetwork::Rail).is_some(),
+            "el tren debe poder rutear hacia la plataforma conectada por el eje"
         );
     }
 

@@ -60,8 +60,8 @@ medir antes/después.
   `direction_changed` (curva de la L) y `signal_state_changed` (la señal
   pasa a rojo/verde cuando el tren ocupa/libera el bloque). `at_platform`
   es siempre `false`: evidencia medible de la divergencia que corrige la
-  Fase Rail 3C. `SignalWaitStarted/Finished` se cubren con un test de dos
-  trenes (`signal_wait_events_emitted_with_two_trains`).
+  Fase Rail 3C. `SignalWaitStarted/Finished` se cubren con el escenario
+  `train_signal` y `signal_wait_events_emitted_with_two_trains` (Rail 3D).
   Nota de alcance: `ParityEvent::vehicle()` pasó a devolver `Option<u32>`
   porque `SignalStateChanged` es un evento de infraestructura sin vehículo.
 
@@ -170,14 +170,21 @@ medir antes/después.
 - **Terminado cuando**: traza muestra `station_entry` con `at_platform: true`
   y carga dentro; check verde.
 
-## Fase Rail 3D — Señales/reservas
+## Fase Rail 3D — Señales/reservas — ✅ IMPLEMENTADA
 
 - **Objetivo**: validar y cronometrar la semántica de bloqueo con 2 trenes;
   decidir y documentar si ENTRY/EXIT/COMBO ganan semántica o quedan como
   BLOCK. **PBS queda explícitamente fuera** (documentado en
   `rail_unknown_features.md`).
-- **Tests**: dos trenes + una señal: quién espera, cuántos ticks, eventos
-  `SignalWait*` correctos en la traza.
+- **Decisión**: ENTRY se ignora al bloquear; EXIT/COMBO sin propagación → BLOCK.
+- **Escenario**: `train_signal` en `parity/scenario.rs` (2 trenes + señal
+  bidireccional en línea recta).
+- **Tests**: `signal_wait_events_emitted_with_two_trains`,
+  `train_signal_wait_ticks_are_stable`,
+  `train_signal_divergences_are_absent_after_rail_3d`; chequeo
+  `train_signal_wait` en `parity/report.rs`.
+- **Terminado cuando**: traza muestra `SignalWaitStarted/Finished` con
+  `blocked_by_signal` estable; check verde.
 
 ## Fase Rail 3E — Render/interpolación
 
@@ -200,6 +207,11 @@ medir antes/después.
 ```bash
 cargo run -p openttdrs-core --bin parity_runner -- \
     --scenario train_line --ticks 600 --out /tmp/train_line.jsonl
+
+# Escenario Rail 3D (espera en señal; el bloqueador estático no libera el bloque
+# en corridas largas — usar los tests para la secuencia completa con liberación):
+cargo run -p openttdrs-core --bin parity_runner -- \
+    --scenario train_signal --ticks 50 --out /tmp/train_signal.jsonl
 ```
 
 Línea real del JSONL (tick 35, el tren cruza al empalme y sale del depósito):

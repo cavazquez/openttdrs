@@ -7,6 +7,9 @@
 //! `train_line` es el escenario ferroviario mínimo de la Fase Rail 1: un tren
 //! sale de un depósito, recorre una L con una señal de bloque y una curva, y
 //! cicla entre dos estaciones (carga en A, viaja a B).
+//!
+//! `train_signal` (Fase Rail 3D): dos trenes y una señal de bloque en línea
+//! recta; el tren líder espera hasta que el bloque se libera.
 
 use std::collections::VecDeque;
 
@@ -40,12 +43,22 @@ pub const TRAIN_LINE_SIGNAL: TileCoord = TileCoord::new(7, 6);
 /// Esquina de la L (curva este→sur).
 pub const TRAIN_LINE_CORNER: TileCoord = TileCoord::new(12, 6);
 
+/// Id del tren líder del escenario `train_signal`.
+pub const TRAIN_SIGNAL_LEAD_ID: u32 = 1;
+/// Id del tren que ocupa el bloque en `train_signal`.
+pub const TRAIN_SIGNAL_BLOCKER_ID: u32 = 2;
+/// Señal de bloque bidireccional en `train_signal`.
+pub const TRAIN_SIGNAL_TILE: TileCoord = TileCoord::new(2, 0);
+/// Tesela ocupada por el tren bloqueador.
+pub const TRAIN_SIGNAL_BLOCK_TILE: TileCoord = TileCoord::new(4, 0);
+
 /// Construye un escenario determinístico por nombre.
 #[must_use]
 pub fn build_scenario(name: &str) -> Option<GameState> {
     match name {
         "truck_bay" => Some(build_truck_bay()),
         "train_line" => Some(build_train_line()),
+        "train_signal" => Some(build_train_signal()),
         _ => None,
     }
 }
@@ -53,7 +66,7 @@ pub fn build_scenario(name: &str) -> Option<GameState> {
 /// Nombres de escenarios disponibles.
 #[must_use]
 pub fn scenario_names() -> &'static [&'static str] {
-    &["truck_bay", "train_line"]
+    &["truck_bay", "train_line", "train_signal"]
 }
 
 fn place_road_polyline(state: &mut GameState, waypoints: &[TileCoord]) -> Vec<TileCoord> {
@@ -228,6 +241,67 @@ pub fn build_train_line() -> GameState {
     state
 }
 
+/// Habilita salida bidireccional en una señal sobre carril X (bits 2 y 3).
+#[allow(clippy::expect_used)]
+fn make_signal_bidirectional_x(state: &mut GameState, signal: TileCoord) {
+    let mut tile = state.map.get(signal).expect("tesela de señal");
+    tile.m3 = (tile.m3 & 0x0F) | 0xC0;
+    tile.m3hi = (tile.m3hi & 0x0F) | 0xC0;
+    state
+        .map
+        .set_tile(signal, tile)
+        .expect("señal bidireccional");
+}
+
+/// Línea recta con señal en (2,0): tren 1 espera en la señal mientras el tren 2
+/// ocupa el bloque en (4,0); al retirarse el bloqueador, el líder continúa.
+///
+/// # Panics
+///
+/// Si la construcción del escenario fijo falla (bug del propio escenario).
+#[must_use]
+#[allow(clippy::expect_used)] // escenario fijo: un fallo de construcción es un bug del escenario
+pub fn build_train_signal() -> GameState {
+    let mut state = GameState::new(12, 4);
+    state.world_seed = 0;
+
+    for x in 0..=6_i32 {
+        apply_command(
+            &mut state,
+            &Command::SetRailBits(TileCoord::new(x, 0), 0x01),
+        )
+        .expect("vía train_signal");
+    }
+    apply_command(
+        &mut state,
+        &Command::PlaceRailSignal(TRAIN_SIGNAL_TILE, 0, 128, 128),
+    )
+    .expect("señal train_signal");
+    make_signal_bidirectional_x(&mut state, TRAIN_SIGNAL_TILE);
+
+    let goal = TileCoord::new(6, 0);
+    let mut lead = Vehicle::new(
+        TRAIN_SIGNAL_LEAD_ID,
+        VehicleKind::Train,
+        TRAIN_SIGNAL_TILE,
+        goal,
+    );
+    lead.path = VecDeque::from((3..=6).map(|x| TileCoord::new(x, 0)).collect::<Vec<_>>());
+    lead.set_cruise_speed();
+
+    let mut blocker = Vehicle::new(
+        TRAIN_SIGNAL_BLOCKER_ID,
+        VehicleKind::Train,
+        TRAIN_SIGNAL_BLOCK_TILE,
+        TRAIN_SIGNAL_BLOCK_TILE,
+    );
+    blocker.running = false;
+
+    state.vehicles.push(lead);
+    state.vehicles.push(blocker);
+    state
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
@@ -264,7 +338,24 @@ mod tests {
         assert!(build_scenario("nope").is_none());
         assert!(build_scenario("truck_bay").is_some());
         assert!(build_scenario("train_line").is_some());
-        assert_eq!(scenario_names(), &["truck_bay", "train_line"]);
+        assert!(build_scenario("train_signal").is_some());
+        assert_eq!(
+            scenario_names(),
+            &["truck_bay", "train_line", "train_signal"]
+        );
+    }
+
+    #[test]
+    fn train_signal_layout_is_consistent() {
+        let state = build_train_signal();
+        let signal_tile = state.map.get(TRAIN_SIGNAL_TILE).unwrap();
+        assert!(crate::rail_signals::rail_tile_is_signals(signal_tile.m5));
+        assert_eq!(state.vehicles.len(), 2);
+        assert_eq!(state.vehicles[0].id, TRAIN_SIGNAL_LEAD_ID);
+        assert_eq!(state.vehicles[0].pos, TRAIN_SIGNAL_TILE);
+        assert_eq!(state.vehicles[1].id, TRAIN_SIGNAL_BLOCKER_ID);
+        assert_eq!(state.vehicles[1].pos, TRAIN_SIGNAL_BLOCK_TILE);
+        assert!(!state.vehicles[1].running);
     }
 
     #[test]

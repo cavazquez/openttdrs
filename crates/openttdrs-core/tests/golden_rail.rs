@@ -419,6 +419,45 @@ fn train_line_divergences_are_absent_after_rail_3b() {
     );
 }
 
+/// Divergencias rail 3D: escenario `train_signal` con espera medida en la traza.
+#[test]
+fn train_signal_divergences_are_absent_after_rail_3d() {
+    use std::collections::HashMap;
+
+    use openttdrs_core::parity::{self, report::detect_known_divergences};
+
+    let mut state = parity::build_train_signal();
+    state
+        .vehicles
+        .retain(|v| v.id != parity::TRAIN_SIGNAL_BLOCKER_ID);
+    state.enable_parity_trace();
+    let mut blocker = openttdrs_core::Vehicle::new(
+        parity::TRAIN_SIGNAL_BLOCKER_ID,
+        openttdrs_core::VehicleKind::Train,
+        parity::TRAIN_SIGNAL_BLOCK_TILE,
+        parity::TRAIN_SIGNAL_BLOCK_TILE,
+    );
+    blocker.running = false;
+    state.vehicles.push(blocker);
+    for _ in 0..30 {
+        state.step();
+    }
+    state
+        .vehicles
+        .retain(|v| v.id != parity::TRAIN_SIGNAL_BLOCKER_ID);
+    for _ in 0..120 {
+        state.step();
+    }
+    let records = state.take_parity_records();
+    let divergences = detect_known_divergences(&records);
+    let by_id: HashMap<&str, bool> = divergences.iter().map(|d| (d.id, d.detected)).collect();
+    assert_eq!(
+        by_id.get("train_signal_wait"),
+        Some(&false),
+        "regresión: el líder debe emitir SignalWait* al liberarse el bloque (Rail 3D)"
+    );
+}
+
 #[test]
 fn dir_difference_matches_openttd_encoding() {
     assert_eq!(dir_difference(DIR_SE, DIR_SW), 6);

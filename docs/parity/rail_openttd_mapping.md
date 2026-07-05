@@ -34,8 +34,8 @@ cada pieza. Complementa `openttd_mapping.md` (vehículos de carretera).
 | Concepto OpenTTD | Referencia C++ | Equivalente Rust | Validación |
 |---|---|---|---|
 | Señales por track en `m2`/`m3`/`m3hi` (presencia, estado, tipo, variante) | `rail_map.h:287-526`, `signal_type.h` | `rail_signals.rs` (`signal_placement_for_track`, `signal_on_track_mask`, `signal_is_green`) — mismo encoding | tests de `rail_signals.rs` |
-| `UpdateSignalsOnSegment` (propagación por segmento) | `signal.cpp:280-660` | `update_rail_signal_states` + `rail_block_ahead` (modelo de bloque simplificado «v1») | `block_ahead_stops_at_next_signal`, `sim_train_waits_until_block_ahead_clears` |
-| Semántica ENTRY/EXIT/COMBO (presignals) | `signal_type.h`, `signal.cpp` | Solo encoding; **ENTRY no bloquea** en la sim | `entry_signal_does_not_block_train` |
+| `UpdateSignalsOnSegment` (propagación por segmento) | `signal.cpp:280-660` | `update_rail_signal_states` + `rail_block_ahead` (modelo de bloque simplificado «v1») | `block_ahead_stops_at_next_signal`, `sim_train_waits_until_block_ahead_clears`, `train_signal_divergences_are_absent_after_rail_3d` |
+| Semántica ENTRY/EXIT/COMBO (presignals) | `signal_type.h`, `signal.cpp` | **Decidido (Rail 3D)**: encoding en saves; ENTRY ignorado al bloquear; EXIT/COMBO sin propagación | `entry_signal_does_not_block_train`, escenario `train_signal` |
 | Señal roja detiene el tren (`cur_speed=0`, `progress=255`) | `train_cmd.cpp:3454-3456` | `sim_step.rs` (tren bloqueado → `cur_speed = 0`, no avanza) | tests de integración de `rail_signals.rs` |
 | PBS: `TryReserveRailTrack`, `FollowTrainReservation`, señales `Path` | `pbs.cpp/h` | **No implementado** (`m2_hi` se conserva sin lógica; anticolisión propia vía `train_blocked_by_traffic`) | `trains_block_head_on_without_signal` |
 

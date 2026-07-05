@@ -41,10 +41,11 @@ como tales.
    (`train_blocked_by_traffic`) y conserva `m2_hi` de los saves sin lógica.
    Excluido explícitamente del plan Rail 0–4 (Fase 3D solo valida el bloque
    simple).
-8. **Semántica de presignals ENTRY/EXIT/COMBO** — `signal.cpp` (propagación
-   por segmento con presignals). La sim codifica los tipos pero ENTRY no
-   bloquea (`entry_signal_does_not_block_train`). Decisión pendiente en la
-   Fase Rail 3D: darles semántica o degradarlos documentadamente a BLOCK.
+8. ~~**Semántica de presignals ENTRY/EXIT/COMBO**~~ — **Decidido (Rail 3D)**:
+   se codifican en saves pero **no tienen semántica de presignal** en la sim
+   v1. `SIGTYPE_ENTRY` se ignora al bloquear (`train_blocked_by_signal`);
+   EXIT y COMBO se tratan como BLOCK sin propagación por segmento
+   (`entry_signal_does_not_block_train`). PBS queda fuera de alcance (ítem 7).
 9. **Túneles/puentes en tránsito** — ocultamiento del tren
    (`_tunnel_visibility_frame` {12,8,8,12}, `tunnelbridge_cmd.cpp:1956`),
    límite de velocidad del puente (`cur_speed = min(cur_speed,

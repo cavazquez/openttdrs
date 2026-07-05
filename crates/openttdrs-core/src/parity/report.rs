@@ -7,7 +7,8 @@ use std::fmt::Write as _;
 
 use super::record::{ParityEvent, TickRecord};
 use super::scenario::{
-    TRAIN_LINE_VEHICLE_ID, TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP, TRUCK_BAY_VEHICLE_ID,
+    TRAIN_LINE_VEHICLE_ID, TRAIN_SIGNAL_BLOCKER_ID, TRAIN_SIGNAL_LEAD_ID, TRAIN_SIGNAL_TILE,
+    TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP, TRUCK_BAY_VEHICLE_ID,
 };
 
 /// Divergencia conocida detectada (o verificada) sobre una traza.
@@ -199,6 +200,13 @@ fn trace_has_train(records: &[TickRecord]) -> bool {
         .any(|r| r.vehicles.iter().any(|v| v.id == TRAIN_LINE_VEHICLE_ID))
 }
 
+fn trace_has_train_signal(records: &[TickRecord]) -> bool {
+    records.iter().any(|r| {
+        let ids: Vec<u32> = r.vehicles.iter().map(|v| v.id).collect();
+        ids.contains(&TRAIN_SIGNAL_LEAD_ID) && ids.contains(&TRAIN_SIGNAL_BLOCKER_ID)
+    })
+}
+
 /// Divergencia rail 1: tren reusa aceleración de carretera (`ROAD_ACCEL_ORIGINAL`)
 /// en lugar de `Clamp(power/weight·4, 1, 255)` con `accel·2`.
 /// Corregida en Rail 3B; el chequeo queda como regresión.
@@ -346,6 +354,66 @@ fn check_train_platform_stop(records: &[TickRecord]) -> KnownDivergence {
     }
 }
 
+/// Regresión Rail 3D: el tren líder del escenario `train_signal` debe emitir
+/// `SignalWaitStarted` y `SignalWaitFinished` en la señal al liberarse el bloque.
+fn check_train_signal_wait(records: &[TickRecord]) -> KnownDivergence {
+    let lead = TRAIN_SIGNAL_LEAD_ID;
+    let signal = TRAIN_SIGNAL_TILE;
+    let mut evidence = String::new();
+    let mut started_tick = None;
+    let mut finished_tick = None;
+    for r in records {
+        for e in &r.events {
+            match e {
+                ParityEvent::SignalWaitStarted { vehicle, tile }
+                    if *vehicle == lead && *tile == signal =>
+                {
+                    if started_tick.is_none() {
+                        started_tick = Some(r.tick);
+                    }
+                    let _ = writeln!(
+                        evidence,
+                        "- tick {}: SignalWaitStarted (vehículo {lead}, señal {signal:?})",
+                        r.tick
+                    );
+                }
+                ParityEvent::SignalWaitFinished { vehicle, tile }
+                    if *vehicle == lead && *tile == signal =>
+                {
+                    finished_tick = Some(r.tick);
+                    let _ = writeln!(
+                        evidence,
+                        "- tick {}: SignalWaitFinished (vehículo {lead}, señal {signal:?})",
+                        r.tick
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+    let detected =
+        started_tick.is_none() || finished_tick.is_none() || started_tick >= finished_tick;
+    if evidence.is_empty() {
+        evidence
+            .push_str("- la traza no contiene eventos SignalWait* del escenario train_signal\n");
+    } else if let (Some(s), Some(f)) = (started_tick, finished_tick) {
+        let _ = writeln!(
+            evidence,
+            "- duración de espera: {} ticks (tick {s} → {f})",
+            f - s
+        );
+    }
+    KnownDivergence {
+        id: "train_signal_wait",
+        title: "Espera en señal sin eventos SignalWait* o sin reanudación",
+        detected,
+        evidence,
+        openttd_ref: "OpenTTD/src/train_cmd.cpp (espera ante señal / bloque ocupado)",
+        rust_ref: "openttdrs/crates/openttdrs-core/src/parity/tracer.rs (`SignalWaitStarted` / `SignalWaitFinished`)",
+        fix_phase2: "IMPLEMENTADA (Rail 3D): escenario `train_signal` + chequeo de regresión",
+    }
+}
+
 /// Evalúa todas las divergencias conocidas sobre una traza de paridad.
 #[must_use]
 pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> {
@@ -359,6 +427,9 @@ pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> 
         out.push(check_train_road_acceleration(records));
         out.push(check_train_no_curve_braking(records));
         out.push(check_train_platform_stop(records));
+    }
+    if trace_has_train_signal(records) {
+        out.push(check_train_signal_wait(records));
     }
     out
 }

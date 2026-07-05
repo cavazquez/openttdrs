@@ -5,9 +5,11 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use openttdrs_core::parity::{
-    self, DiffFilter, ParityEvent, TickRecord, build_train_line, build_truck_bay, compare_traces,
+    self, DiffFilter, ParityEvent, TRAIN_SIGNAL_BLOCK_TILE, TRAIN_SIGNAL_BLOCKER_ID,
+    TRAIN_SIGNAL_LEAD_ID, TRAIN_SIGNAL_TILE, TickRecord, build_train_line, build_train_signal,
+    build_truck_bay, compare_traces,
 };
-use openttdrs_core::{GameState, TileCoord};
+use openttdrs_core::{GameState, TileCoord, Vehicle, VehicleKind};
 
 fn run_trace(state: &mut GameState, ticks: u64) -> Vec<TickRecord> {
     state.enable_parity_trace();
@@ -245,50 +247,26 @@ fn train_line_trace_is_deterministic() {
 
 #[test]
 fn signal_wait_events_emitted_with_two_trains() {
-    use openttdrs_core::command::{Command, apply_command};
-    use openttdrs_core::{Vehicle, VehicleKind};
-
-    // Línea recta X con señal (en ambos sentidos) en (2,0). El tren de cabeza
-    // arranca sobre la señal con vía libre; el que ocupa el bloque se agrega
-    // DESPUÉS de activar la traza, para capturar la transición libre → espera.
-    let mut state = GameState::new(12, 4);
-    for x in 0..=6 {
-        apply_command(
-            &mut state,
-            &Command::SetRailBits(TileCoord::new(x, 0), 0x01),
-        )
-        .unwrap();
-    }
-    let signal = TileCoord::new(2, 0);
-    apply_command(&mut state, &Command::PlaceRailSignal(signal, 0, 128, 128)).unwrap();
-    // Señal en ambos sentidos del carril X (bits 2 y 3), como `write_signal`
-    // de los tests unitarios: garantiza que la salida +x esté señalizada.
-    let mut tile = state.map.get(signal).unwrap();
-    tile.m3 = (tile.m3 & 0x0F) | 0xC0;
-    tile.m3hi = (tile.m3hi & 0x0F) | 0xC0;
-    state.map.set_tile(signal, tile).unwrap();
-
-    let mut lead = Vehicle::new(1, VehicleKind::Train, signal, TileCoord::new(6, 0));
-    lead.path = (3..=6).map(|x| TileCoord::new(x, 0)).collect();
-    lead.set_cruise_speed();
-    state.vehicles.push(lead);
-
+    let mut state = build_train_signal();
+    state.vehicles.retain(|v| v.id != TRAIN_SIGNAL_BLOCKER_ID);
     state.enable_parity_trace();
-    state.vehicles.push(Vehicle::new(
-        2,
+    let mut blocker = Vehicle::new(
+        TRAIN_SIGNAL_BLOCKER_ID,
         VehicleKind::Train,
-        TileCoord::new(4, 0),
-        TileCoord::new(4, 0),
-    ));
+        TRAIN_SIGNAL_BLOCK_TILE,
+        TRAIN_SIGNAL_BLOCK_TILE,
+    );
+    blocker.running = false;
+    state.vehicles.push(blocker);
     for _ in 0..30 {
         state.step();
     }
     assert_eq!(
-        state.vehicles[0].pos, signal,
+        state.vehicles[0].pos, TRAIN_SIGNAL_TILE,
         "el tren debe quedar esperando en la señal"
     );
     let blocker = state.vehicles.pop().expect("sacar el tren que bloquea");
-    assert_eq!(blocker.id, 2);
+    assert_eq!(blocker.id, TRAIN_SIGNAL_BLOCKER_ID);
     for _ in 0..120 {
         state.step();
     }
@@ -298,7 +276,11 @@ fn signal_wait_events_emitted_with_two_trains() {
         .iter()
         .find(|r| {
             r.events.iter().any(|e| {
-                matches!(e, ParityEvent::SignalWaitStarted { vehicle: 1, tile } if *tile == signal)
+                matches!(
+                    e,
+                    ParityEvent::SignalWaitStarted { vehicle, tile }
+                        if *vehicle == TRAIN_SIGNAL_LEAD_ID && *tile == TRAIN_SIGNAL_TILE
+                )
             })
         })
         .map(|r| r.tick)
@@ -307,15 +289,98 @@ fn signal_wait_events_emitted_with_two_trains() {
         .iter()
         .find(|r| {
             r.events.iter().any(|e| {
-                matches!(e, ParityEvent::SignalWaitFinished { vehicle: 1, tile } if *tile == signal)
+                matches!(
+                    e,
+                    ParityEvent::SignalWaitFinished { vehicle, tile }
+                        if *vehicle == TRAIN_SIGNAL_LEAD_ID && *tile == TRAIN_SIGNAL_TILE
+                )
             })
         })
         .map(|r| r.tick)
         .expect("debe emitirse signal_wait_finished al liberarse el bloque");
     assert!(started_tick < finished_tick, "espera antes de liberación");
     assert!(
-        state.vehicles[0].pos != signal || state.vehicles[0].progress > 0,
+        state.vehicles[0].pos != TRAIN_SIGNAL_TILE || state.vehicles[0].progress > 0,
         "el tren retoma la marcha tras liberarse el bloque"
+    );
+}
+
+fn run_train_signal_wait_trace() -> Vec<TickRecord> {
+    let mut state = build_train_signal();
+    state.vehicles.retain(|v| v.id != TRAIN_SIGNAL_BLOCKER_ID);
+    state.enable_parity_trace();
+    let mut blocker = Vehicle::new(
+        TRAIN_SIGNAL_BLOCKER_ID,
+        VehicleKind::Train,
+        TRAIN_SIGNAL_BLOCK_TILE,
+        TRAIN_SIGNAL_BLOCK_TILE,
+    );
+    blocker.running = false;
+    state.vehicles.push(blocker);
+    for _ in 0..30 {
+        state.step();
+    }
+    state.vehicles.retain(|v| v.id != TRAIN_SIGNAL_BLOCKER_ID);
+    for _ in 0..120 {
+        state.step();
+    }
+    state.take_parity_records()
+}
+
+#[test]
+fn train_signal_trace_is_deterministic() {
+    let trace_a = run_train_signal_wait_trace();
+    let trace_b = run_train_signal_wait_trace();
+    assert_eq!(trace_a, trace_b, "misma seed ⇒ trazas idénticas");
+}
+
+#[test]
+fn train_signal_wait_ticks_are_stable() {
+    let records = run_train_signal_wait_trace();
+    let started = records
+        .iter()
+        .find(|r| {
+            r.events.iter().any(|e| {
+                matches!(
+                    e,
+                    ParityEvent::SignalWaitStarted {
+                        vehicle: TRAIN_SIGNAL_LEAD_ID,
+                        tile
+                    } if *tile == TRAIN_SIGNAL_TILE
+                )
+            })
+        })
+        .map(|r| r.tick)
+        .expect("SignalWaitStarted");
+    let finished = records
+        .iter()
+        .find(|r| {
+            r.events.iter().any(|e| {
+                matches!(
+                    e,
+                    ParityEvent::SignalWaitFinished {
+                        vehicle: TRAIN_SIGNAL_LEAD_ID,
+                        tile
+                    } if *tile == TRAIN_SIGNAL_TILE
+                )
+            })
+        })
+        .map(|r| r.tick)
+        .expect("SignalWaitFinished");
+    assert!(finished > started, "espera medible");
+    assert_eq!(
+        finished - started,
+        records
+            .iter()
+            .filter(|r| (started..finished).contains(&r.tick))
+            .filter(|r| {
+                r.vehicles.iter().any(|v| {
+                    v.id == TRAIN_SIGNAL_LEAD_ID
+                        && v.rail.as_ref().is_some_and(|rail| rail.blocked_by_signal)
+                })
+            })
+            .count() as u64,
+        "ticks con blocked_by_signal deben coincidir con la ventana de espera"
     );
 }
 

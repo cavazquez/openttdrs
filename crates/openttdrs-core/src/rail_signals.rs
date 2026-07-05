@@ -326,6 +326,8 @@ pub fn train_blocked_by_signal(
         if signal_track_for_bit(rails, bit)
             .is_some_and(|track| signal_type_for_track(tile.m2, track) == SIGTYPE_ENTRY)
         {
+            // Decisión Rail 3D: ENTRY/EXIT/COMBO no tienen semántica de presignal;
+            // ENTRY se ignora al bloquear (degradado documentado a BLOCK).
             continue;
         }
         if !signal_is_green(tile.m3hi, bit) {

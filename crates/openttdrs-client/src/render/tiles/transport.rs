@@ -229,7 +229,7 @@ pub(crate) fn spawn_rail_tile(
             let Some(img) = assets.rail.get(&draw.sprite_id) else {
                 continue;
             };
-            let pos = signal_screen_position(
+            let signal_xy = signal_screen_position(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
                 draw.pos,
@@ -237,12 +237,14 @@ pub(crate) fn spawn_rail_tile(
                 rail_half_h,
                 rail_base_z,
             );
-            let z = 0.032 + si as f32 * 0.0015;
+            // Misma profundidad que el fantasma de colocación (`tile_pos_half`), no z≈0.
+            let layer = 0.04 + si as f32 * 0.0015;
+            let depth = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, layer, rail_half_h);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 img.sprite(),
-                Transform::from_translation(Vec3::new(pos.x, pos.y, z)),
+                Transform::from_translation(Vec3::new(signal_xy.x, signal_xy.y, depth.z)),
             ));
         }
     }

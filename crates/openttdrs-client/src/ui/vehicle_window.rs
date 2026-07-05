@@ -40,6 +40,7 @@ const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
 const STATUS_STOPPED: Color = Color::srgb(0.92, 0.35, 0.3);
 const STATUS_RUNNING: Color = Color::srgb(0.45, 0.85, 0.4);
+const STATUS_NO_ROUTE: Color = Color::srgb(0.95, 0.75, 0.25);
 
 #[derive(Resource, Default)]
 pub(crate) struct VehicleWindowState {
@@ -550,8 +551,13 @@ pub(crate) fn sync_vehicle_window(
     }
     if let Ok((mut status, mut color)) = status_q.single_mut() {
         if vehicle.running {
-            **status = "En marcha".to_string();
-            *color = TextColor(STATUS_RUNNING);
+            if vehicle.no_network_route_to_order {
+                **status = "Sin ruta".to_string();
+                *color = TextColor(STATUS_NO_ROUTE);
+            } else {
+                **status = "En marcha".to_string();
+                *color = TextColor(STATUS_RUNNING);
+            }
         } else {
             **status = "Detenido".to_string();
             *color = TextColor(STATUS_STOPPED);

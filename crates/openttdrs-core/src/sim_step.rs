@@ -16,12 +16,9 @@ pub(crate) fn step(state: &mut GameState) {
 
     crate::rail_signals::update_rail_signal_states(
         &mut state.map,
-        &state
-            .vehicles
-            .iter()
-            .filter(|v| v.kind == VehicleKind::Train)
-            .map(|v| v.pos)
-            .collect::<Vec<_>>(),
+        &state.vehicles,
+        &mut state.signal_tile_dirty,
+        true,
     );
 
     state.industry_tile_dirty = crate::map::step_industry_tiles(&mut state.map, t);
@@ -35,6 +32,14 @@ pub(crate) fn step(state: &mut GameState) {
     run_autoreplace_in_depots(state);
     assign_orderless_wander_destinations(state);
     move_vehicles(state);
+
+    crate::rail_signals::update_rail_signal_states(
+        &mut state.map,
+        &state.vehicles,
+        &mut state.signal_tile_dirty,
+        false,
+    );
+
     sync_vehicle_order_destinations(state);
     apply_vehicle_running_costs(state);
     crate::news::poll_vehicle_advice_news(state);
@@ -433,18 +438,12 @@ fn recompute_vehicle_paths(state: &mut GameState) {
 
 fn move_vehicles(state: &mut GameState) {
     let tick = state.tick.get();
-    let train_positions: Vec<_> = state
-        .vehicles
-        .iter()
-        .filter(|v| v.kind == VehicleKind::Train)
-        .map(|v| v.pos)
-        .collect();
     let vehicles_snapshot = state.vehicles.clone();
     for vehicle in &mut state.vehicles {
         vehicle.sim_tick = tick;
         if vehicle.kind == VehicleKind::Train
             && vehicle.running
-            && let Some(next) = vehicle.movement_target()
+            && vehicle.movement_target().is_some()
         {
             let blocked = if vehicle.force_proceed {
                 crate::rail_signals::train_blocked_by_traffic(
@@ -455,9 +454,8 @@ fn move_vehicles(state: &mut GameState) {
             } else {
                 crate::rail_signals::train_blocked_by_signal(
                     &state.map,
-                    &train_positions,
-                    vehicle.pos,
-                    next,
+                    &vehicles_snapshot,
+                    vehicle,
                 ) || crate::rail_signals::train_blocked_by_traffic(
                     &state.map,
                     &vehicles_snapshot,

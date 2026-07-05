@@ -3,7 +3,9 @@
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
-use crate::render::{MapTileChunk, RemapMapVisualsPending, VehicleIndex};
+use crate::render::{
+    MapTileChunk, RemapMapVisualsPending, VehicleIndex, large_map_viewport_cull_enabled,
+};
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
 
@@ -29,7 +31,7 @@ impl Plugin for SimulationPlugin {
             )
             .add_systems(
                 FixedUpdate,
-                (step_sim, flag_industry_construction_remap)
+                (step_sim, flag_map_tile_dirty_remap)
                     .chain()
                     .run_if(in_state(ClientScreen::InGame)),
             )
@@ -62,17 +64,21 @@ fn step_sim(mut sim: ResMut<SimWorld>, mut vehicle_index: ResMut<VehicleIndex>) 
     vehicle_index.rebuild(&sim.state.vehicles);
 }
 
-fn flag_industry_construction_remap(
-    sim: Res<SimWorld>,
-    mut pending: ResMut<RemapMapVisualsPending>,
-) {
-    if sim.state.industry_tile_dirty.is_empty() {
+fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVisualsPending>) {
+    if sim.state.industry_tile_dirty.is_empty() && sim.state.signal_tile_dirty.is_empty() {
         return;
     }
+    let (mw, mh) = sim.state.map.dimensions();
     pending.pending = true;
     pending.sync_camera = false;
-    pending.full = false;
-    for coord in &sim.state.industry_tile_dirty {
+    pending.full =
+        !sim.state.signal_tile_dirty.is_empty() && !large_map_viewport_cull_enabled(mw, mh);
+    for coord in sim
+        .state
+        .industry_tile_dirty
+        .iter()
+        .chain(sim.state.signal_tile_dirty.iter())
+    {
         let ch = MapTileChunk::from_tile(coord.x.max(0) as u32, coord.y.max(0) as u32);
         pending.refresh_chunks.insert((ch.cx, ch.cy));
     }

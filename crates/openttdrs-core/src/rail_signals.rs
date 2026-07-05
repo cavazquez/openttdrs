@@ -246,6 +246,27 @@ fn dir_from_to(from: TileCoord, to: TileCoord) -> Option<u8> {
     }
 }
 
+/// Posiciones de trenes para actualizar señales: tesela actual + siguiente paso
+/// (reserva el bloque antes de que el tren entre, como en `OpenTTD`).
+#[must_use]
+pub fn train_positions_for_signal_update(state: &crate::GameState) -> Vec<TileCoord> {
+    use crate::vehicle::VehicleKind;
+
+    let mut out = Vec::new();
+    for v in &state.vehicles {
+        if v.kind != VehicleKind::Train {
+            continue;
+        }
+        out.push(v.pos);
+        if v.running
+            && let Some(next) = v.movement_target()
+        {
+            out.push(next);
+        }
+    }
+    out
+}
+
 /// Teselas del bloque protegido al salir de `signal_tile` hacia `exit_dir`.
 #[must_use]
 pub fn rail_block_ahead(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> Vec<TileCoord> {
@@ -284,10 +305,42 @@ fn is_rail_station_tile_kind(tile: &crate::map::Tile) -> bool {
     tile.kind == TileKind::Station && (tile.m6 >> 3).trailing_zeros() >= 4
 }
 
+/// `true` si algún tren ocupa el bloque (tesela actual o siguiente paso).
+///
+/// Si un tren está en `signal_tile`, su `movement_target` no reserva el bloque
+/// protegido por esa señal (evita deadlock al salir de la tesela con señal).
 #[must_use]
-fn block_is_clear(train_positions: &[TileCoord], block: &[TileCoord]) -> bool {
-    let set: HashSet<_> = block.iter().copied().collect();
-    !train_positions.iter().any(|p| set.contains(p))
+fn block_is_occupied_by_trains(
+    vehicles: &[Vehicle],
+    signal_tile: TileCoord,
+    block: &[TileCoord],
+    exclude_vehicle_id: Option<u32>,
+) -> bool {
+    let block_set: HashSet<TileCoord> = block.iter().copied().collect();
+    for v in vehicles {
+        if v.kind != VehicleKind::Train {
+            continue;
+        }
+        if block_set.contains(&v.pos) {
+            return true;
+        }
+        if !v.running {
+            continue;
+        }
+        let Some(next) = v.movement_target() else {
+            continue;
+        };
+        if v.pos == signal_tile {
+            if exclude_vehicle_id == Some(v.id) {
+                continue;
+            }
+            continue;
+        }
+        if block_set.contains(&next) {
+            return true;
+        }
+    }
+    false
 }
 
 /// Bits de señal presentes que controlan la salida `from` → `to`.
@@ -307,14 +360,16 @@ fn signal_bits_for_exit(map: &Map, from: TileCoord, to: TileCoord) -> Vec<u8> {
         .collect()
 }
 
-/// `true` si un tren no puede avanzar de `from` a `to` por señal en rojo.
+/// `true` si el tren no puede avanzar al siguiente paso por señal en rojo.
 #[must_use]
-pub fn train_blocked_by_signal(
-    map: &Map,
-    train_positions: &[TileCoord],
-    from: TileCoord,
-    to: TileCoord,
-) -> bool {
+pub fn train_blocked_by_signal(map: &Map, vehicles: &[Vehicle], vehicle: &Vehicle) -> bool {
+    if vehicle.kind != VehicleKind::Train || !vehicle.running {
+        return false;
+    }
+    let from = vehicle.pos;
+    let Some(to) = vehicle.movement_target() else {
+        return false;
+    };
     let Some(tile) = map.get(from) else {
         return false;
     };
@@ -335,7 +390,7 @@ pub fn train_blocked_by_signal(
         }
         let exit_dir = dir_from_to(from, to).unwrap_or(0);
         let block = rail_block_ahead(map, from, exit_dir);
-        if !block_is_clear(train_positions, &block) {
+        if block_is_occupied_by_trains(vehicles, from, &block, Some(vehicle.id)) {
             return true;
         }
     }
@@ -360,9 +415,11 @@ pub fn train_blocked_by_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehic
         return true;
     }
 
-    if vehicles
-        .iter()
-        .any(|v| v.id != self_id && v.kind == VehicleKind::Train && v.pos == vehicle.pos)
+    // Varios trenes pueden compartir la misma tesela de depósito (OpenTTD).
+    if map.get_kind(vehicle.pos) != Some(crate::map::TileKind::RailDepot)
+        && vehicles
+            .iter()
+            .any(|v| v.id != self_id && v.kind == VehicleKind::Train && v.pos == vehicle.pos)
     {
         return true;
     }
@@ -400,7 +457,7 @@ pub fn train_blocked_by_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehic
 
 fn refresh_signal_tile_states(
     map: &Map,
-    train_positions: &[TileCoord],
+    vehicles: &[Vehicle],
     c: TileCoord,
     tile: crate::map::Tile,
 ) -> Option<crate::map::Tile> {
@@ -425,7 +482,7 @@ fn refresh_signal_tile_states(
         }
         let exit_dir = signal_exit_dir(rails, bit);
         let block = rail_block_ahead(map, c, exit_dir);
-        if block_is_clear(train_positions, &block) {
+        if !block_is_occupied_by_trains(vehicles, c, &block, None) {
             states |= 1 << bit;
         }
     }
@@ -435,7 +492,18 @@ fn refresh_signal_tile_states(
 }
 
 /// Recalcula verde/rojo en todas las teselas con señales.
-pub fn update_rail_signal_states(map: &mut Map, train_positions: &[TileCoord]) {
+///
+/// Las teselas cuyo `m3hi` cambia se añaden a `dirty` (para remap visual en el cliente).
+/// Si `clear_dirty` es `true`, vacía `dirty` al inicio; si no, solo añade entradas nuevas.
+pub fn update_rail_signal_states(
+    map: &mut Map,
+    vehicles: &[Vehicle],
+    dirty: &mut Vec<TileCoord>,
+    clear_dirty: bool,
+) {
+    if clear_dirty {
+        dirty.clear();
+    }
     let (w, h) = map.dimensions();
     for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
         for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
@@ -443,8 +511,11 @@ pub fn update_rail_signal_states(map: &mut Map, train_positions: &[TileCoord]) {
             let Some(tile) = map.get(c) else {
                 continue;
             };
-            if let Some(out) = refresh_signal_tile_states(map, train_positions, c, tile) {
+            if let Some(out) = refresh_signal_tile_states(map, vehicles, c, tile)
+                && out.m3hi != tile.m3hi
+            {
                 let _ = map.set_tile(c, out);
+                dirty.push(c);
             }
         }
     }
@@ -705,20 +776,68 @@ mod tests {
     }
 
     #[test]
+    fn train_positions_for_signal_update_includes_next_tile() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
+        let mut state = GameState::new(8, 8);
+        let mut train = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 0),
+            TileCoord::new(5, 0),
+        );
+        train.running = true;
+        train.path = std::collections::VecDeque::from([TileCoord::new(2, 0)]);
+        state.vehicles.push(train);
+        let pos = train_positions_for_signal_update(&state);
+        assert!(pos.contains(&TileCoord::new(1, 0)));
+        assert!(pos.contains(&TileCoord::new(2, 0)));
+    }
+
+    #[test]
     fn train_blocked_on_horz_signal_when_block_occupied() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
         let mut state = GameState::new(8, 8);
         for x in 0..=3 {
             write_rail(&mut state.map, TileCoord::new(x, 0), RAIL_TB_HORZ);
         }
         write_signal_facing(&mut state.map, TileCoord::new(1, 0), RAIL_TB_HORZ, Some(0));
-        let train_pos = vec![TileCoord::new(2, 0)];
-        update_rail_signal_states(&mut state.map, &train_pos);
+        let blocker = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(2, 0),
+            TileCoord::new(2, 0),
+        );
+        let mut on_signal = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 0),
+            TileCoord::new(5, 0),
+        );
+        on_signal.running = true;
+        on_signal.path = std::collections::VecDeque::from([TileCoord::new(2, 0)]);
+        state.vehicles.push(on_signal);
+        state.vehicles.push(blocker);
+        let mut dirty = Vec::new();
+        update_rail_signal_states(&mut state.map, &state.vehicles, &mut dirty, true);
         assert!(train_blocked_by_signal(
             &state.map,
-            &train_pos,
-            TileCoord::new(1, 0),
-            TileCoord::new(2, 0)
+            &state.vehicles,
+            &state.vehicles[0]
         ));
+        assert!(
+            !dirty.is_empty(),
+            "el estado visual de la señal debe marcarse como sucio"
+        );
+        let tile = state.map.get(TileCoord::new(1, 0)).expect("signal tile");
+        assert_eq!(
+            rail_signal_state_mask(tile.m3hi) & 0b0100,
+            0,
+            "señal en rojo cuando el bloque está ocupado"
+        );
     }
 
     #[test]
@@ -757,6 +876,9 @@ mod tests {
 
     #[test]
     fn entry_signal_does_not_block_train() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
         let mut map = Map::new_flat(8, 8, 0);
         write_rail(&mut map, TileCoord::new(0, 0), RAIL_TB_X);
         write_rail(&mut map, TileCoord::new(2, 0), RAIL_TB_X);
@@ -765,8 +887,17 @@ mod tests {
         t.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
         t.m3hi = 0x00;
         map.set_tile(TileCoord::new(1, 0), t).expect("tile entry");
+        let mut train = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 0),
+            TileCoord::new(2, 0),
+        );
+        train.running = true;
+        train.path = std::collections::VecDeque::from([TileCoord::new(2, 0)]);
+        let vehicles = vec![train];
         assert!(
-            !train_blocked_by_signal(&map, &[], TileCoord::new(1, 0), TileCoord::new(2, 0)),
+            !train_blocked_by_signal(&map, &vehicles, &vehicles[0]),
             "presignal entry no detiene trenes en sim simplificada"
         );
     }
@@ -788,18 +919,37 @@ mod tests {
 
     #[test]
     fn train_blocked_when_block_occupied() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
         let mut state = GameState::new(8, 8);
         write_rail(&mut state.map, TileCoord::new(0, 0), RAIL_TB_X);
         write_signal(&mut state.map, TileCoord::new(1, 0), RAIL_TB_X);
         write_rail(&mut state.map, TileCoord::new(2, 0), RAIL_TB_X);
-        let train_pos = vec![TileCoord::new(2, 0)];
-        update_rail_signal_states(&mut state.map, &train_pos);
+        let blocker = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(2, 0),
+            TileCoord::new(2, 0),
+        );
+        let mut on_signal = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 0),
+            TileCoord::new(5, 0),
+        );
+        on_signal.running = true;
+        on_signal.path = std::collections::VecDeque::from([TileCoord::new(2, 0)]);
+        state.vehicles.push(on_signal);
+        state.vehicles.push(blocker);
+        let mut dirty = Vec::new();
+        update_rail_signal_states(&mut state.map, &state.vehicles, &mut dirty, true);
         assert!(train_blocked_by_signal(
             &state.map,
-            &train_pos,
-            TileCoord::new(1, 0),
-            TileCoord::new(2, 0)
+            &state.vehicles,
+            &state.vehicles[0]
         ));
+        assert!(!dirty.is_empty());
     }
 
     #[test]
@@ -850,6 +1000,29 @@ mod tests {
         assert_ne!(
             state.vehicles[0].pos, start,
             "al liberarse el bloque el tren debe avanzar"
+        );
+    }
+
+    #[test]
+    fn multiple_trains_in_rail_depot_do_not_block_each_other() {
+        use std::collections::VecDeque;
+
+        use crate::vehicle::{Vehicle, VehicleKind};
+
+        let mut map = Map::new_flat(6, 6, 0);
+        let depot = TileCoord::new(2, 2);
+        map.set_kind(depot, crate::map::TileKind::RailDepot)
+            .expect("depot tile");
+        write_rail(&mut map, TileCoord::new(2, 1), RAIL_TB_Y);
+
+        let mut lead = Vehicle::new(1, VehicleKind::Train, depot, TileCoord::new(2, 1));
+        lead.path = VecDeque::from([TileCoord::new(2, 1)]);
+        lead.running = true;
+        let follower = Vehicle::new(2, VehicleKind::Train, depot, TileCoord::new(2, 1));
+        let vehicles = vec![lead.clone(), follower];
+        assert!(
+            !train_blocked_by_traffic(&map, &vehicles, &lead),
+            "varios trenes en el mismo depósito no deben bloquearse entre sí"
         );
     }
 

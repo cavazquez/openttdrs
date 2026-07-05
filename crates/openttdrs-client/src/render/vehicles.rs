@@ -8,7 +8,8 @@ use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_a
 use crate::render::{CompanyColoredSprites, MapVisualLayer};
 use crate::state::{ClientScreen, SimWorld};
 use openttdrs_core::{
-    extrapolate_vehicle_pose, slope_dz_at_subtile, vehicle_render_direction_at, vehicle_subtile_at,
+    extrapolate_vehicle_pose, slope_dz_at_subtile, vehicle_render_direction_at,
+    vehicle_render_direction_at_with_map, vehicle_subtile_at_with_map,
 };
 
 use crate::simulation::SimClock;
@@ -63,9 +64,10 @@ fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
 
 fn vehicle_layer(
     v: &Vehicle,
+    map: Option<&Map>,
     pose: openttdrs_core::VehiclePose,
 ) -> &'static vehicle_gfx::VehicleLayerGfx {
-    let dir = vehicle_render_direction_at(v, pose).min(7) as usize;
+    let dir = vehicle_render_direction_at_with_map(v, pose, map).min(7) as usize;
     &vehicle_layers(v)[dir]
 }
 
@@ -76,7 +78,7 @@ fn vehicle_draw_anchor_from_pose(
 ) -> (Vec2, u8, i32, i32) {
     let (tileh, _) = tile_slope_and_min_z(map, pose.pos.x as u32, pose.pos.y as u32);
     let base_z = tile_min_z(map, pose.pos);
-    let (sub_x, sub_y) = vehicle_subtile_at(v, pose);
+    let (sub_x, sub_y) = vehicle_subtile_at_with_map(v, pose, Some(map));
     let sub_z = slope_dz_at_subtile(sub_x, sub_y, tileh);
     let anchor = road_vehicle_tile_anchor(pose.pos.x, pose.pos.y, sub_x, sub_y, sub_z);
     (anchor, base_z, pose.pos.x, pose.pos.y)
@@ -93,7 +95,7 @@ pub(crate) fn vehicle_sprite_pos_at(
     map: &Map,
     pose: openttdrs_core::VehiclePose,
 ) -> Vec3 {
-    let layer = vehicle_layer(v, pose);
+    let layer = vehicle_layer(v, Some(map), pose);
     let (anchor, height, tx, ty) = vehicle_draw_anchor_from_pose(v, map, pose);
     overlay_pos(
         anchor,
@@ -546,11 +548,11 @@ mod tests {
         // `for_vehicle` y `vehicle_layer` seleccionan la textura del sprite
         // cardinal (pose extrapolada), no la diagonal lógica.
         assert_eq!(
-            vehicle_layer(&v, pose).path,
+            vehicle_layer(&v, None, pose).path,
             vehicle_layers(&v)[render_dir].path
         );
         assert_ne!(
-            vehicle_layer(&v, pose).path,
+            vehicle_layer(&v, None, pose).path,
             vehicle_layers(&v)[logical_dir].path
         );
 
@@ -584,7 +586,7 @@ mod tests {
             "sub-tesela extrapolada distinta de la lógica"
         );
         assert_eq!(
-            vehicle_layer(&v, extrap_pose).path,
+            vehicle_layer(&v, None, extrap_pose).path,
             vehicle_layers(&v)[vehicle_render_direction_at(&v, extrap_pose).min(7) as usize].path
         );
     }

@@ -32,6 +32,14 @@ pub fn nearest_depot_tile(map: &Map, from: TileCoord, kind: VehicleKind) -> Opti
     best.map(|(_, c)| c)
 }
 
+/// Boca del depósito de vía (`m5 & 3`) si la tesela es un depósito ferroviario.
+#[must_use]
+pub fn rail_depot_mouth_dir(map: &Map, pos: TileCoord) -> Option<u8> {
+    map.get(pos)
+        .filter(|t| t.kind == TileKind::RailDepot)
+        .map(|t| t.m5 & 0x03)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {

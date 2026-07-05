@@ -1,6 +1,11 @@
 //! Sub-tesela de vehículos en carretera/vía (`table/roadveh_movement.h`).
 
-use crate::map::TileCoord;
+use crate::depot::rail_depot_mouth_dir;
+use crate::map::{Map, TileCoord, TileKind};
+use crate::refit::vehicle_in_depot;
+use crate::train_movement::{
+    train_depot_facing, train_depot_subtile, train_render_dir_on_rail, train_subtile_on_rail,
+};
 use crate::vehicle::{
     DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, Vehicle, VehicleDirection,
     VehicleKind, direction_from_tile_step, reverse_direction,
@@ -221,6 +226,41 @@ pub fn train_subtile_direction(v: &Vehicle) -> VehicleDirection {
         return v.movement_direction();
     }
     v.direction
+}
+
+fn train_rail_subtile(map: &Map, v: &Vehicle, pose: VehiclePose) -> (f32, f32) {
+    let enter = train_subtile_direction(v);
+    if let Some(tile) = map.get(pose.pos)
+        && tile.kind == TileKind::Rail
+        && let Some(sub) = train_subtile_on_rail(enter, tile.m5, pose.progress)
+    {
+        return sub;
+    }
+    train_straight_subtile(enter, pose.progress)
+}
+
+fn train_render_direction_with_map(map: &Map, v: &Vehicle, pose: VehiclePose) -> VehicleDirection {
+    let enter = train_subtile_direction(v);
+    if let Some(tile) = map.get(pose.pos)
+        && tile.kind == TileKind::Rail
+        && let Some(dir) = train_render_dir_on_rail(enter, tile.m5, pose.progress)
+    {
+        return dir;
+    }
+    enter
+}
+
+fn train_subtile_with_map(v: &Vehicle, pose: VehiclePose, map: Option<&Map>) -> (f32, f32) {
+    if let Some(map) = map
+        && vehicle_in_depot(map, pose.pos)
+        && let Some(mouth) = rail_depot_mouth_dir(map, pose.pos)
+    {
+        return train_depot_subtile(mouth, pose.progress);
+    }
+    if let Some(map) = map {
+        return train_rail_subtile(map, v, pose);
+    }
+    train_straight_subtile(train_subtile_direction(v), pose.progress)
 }
 
 #[must_use]
@@ -845,8 +885,18 @@ fn bay_subtile(v: &Vehicle, pose: VehiclePose) -> Option<SubTile> {
 /// Sub-tesela para una pose concreta (sim actual o extrapolada).
 #[must_use]
 pub fn vehicle_subtile_at(v: &Vehicle, pose: VehiclePose) -> (f32, f32) {
+    vehicle_subtile_at_with_map(v, pose, None)
+}
+
+/// Como [`vehicle_subtile_at`] con mapa para depósito y entrada a vía.
+#[must_use]
+pub fn vehicle_subtile_at_with_map(
+    v: &Vehicle,
+    pose: VehiclePose,
+    map: Option<&Map>,
+) -> (f32, f32) {
     if matches!(v.kind, VehicleKind::Train) {
-        return train_straight_subtile(train_subtile_direction(v), pose.progress);
+        return train_subtile_with_map(v, pose, map);
     }
     if parked_inside_bay(v, pose.pos)
         && let Some(subtile) = bay_subtile(v, pose)
@@ -970,7 +1020,27 @@ fn bay_render_direction(v: &Vehicle, pose: VehiclePose) -> Option<VehicleDirecti
 /// Dirección de sprite para una pose concreta.
 #[must_use]
 pub fn vehicle_render_direction_at(v: &Vehicle, pose: VehiclePose) -> VehicleDirection {
+    vehicle_render_direction_at_with_map(v, pose, None)
+}
+
+/// Como [`vehicle_render_direction_at`] con mapa (orientación en depósito).
+#[must_use]
+pub fn vehicle_render_direction_at_with_map(
+    v: &Vehicle,
+    pose: VehiclePose,
+    map: Option<&Map>,
+) -> VehicleDirection {
+    if matches!(v.kind, VehicleKind::Train)
+        && let Some(map) = map
+        && vehicle_in_depot(map, pose.pos)
+        && let Some(mouth) = rail_depot_mouth_dir(map, pose.pos)
+    {
+        return train_depot_facing(mouth);
+    }
     if matches!(v.kind, VehicleKind::Train) {
+        if let Some(map) = map {
+            return train_render_direction_with_map(map, v, pose);
+        }
         return train_subtile_direction(v);
     }
     if parked_inside_bay(v, pose.pos)

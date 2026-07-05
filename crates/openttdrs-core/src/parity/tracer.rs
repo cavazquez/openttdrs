@@ -97,16 +97,16 @@ fn train_at_rail_platform(map: &Map, pos: TileCoord) -> bool {
 /// `force_proceed` la señal se ignora, igual que en la sim.
 fn rail_blocked_by_signal(
     state: &GameState,
-    train_positions: &[TileCoord],
+    _train_positions: &[TileCoord],
     v: &crate::Vehicle,
 ) -> bool {
     if !v.running || v.force_proceed {
         return false;
     }
-    let Some(next) = v.movement_target() else {
+    if v.movement_target().is_none() {
         return false;
-    };
-    rail_signals::train_blocked_by_signal(&state.map, train_positions, v.pos, next)
+    }
+    rail_signals::train_blocked_by_signal(&state.map, &state.vehicles, v)
 }
 
 /// Bloque ferroviario del registro (solo trenes; `None` para el resto).

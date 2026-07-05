@@ -54,7 +54,7 @@ pub use command::{
     rail_station_footprint, rail_trackbits_from_neighbors, road_bits_for_autoroute,
     road_drag_line_tiles, road_locked_tool_axis,
 };
-pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile};
+pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
 pub use economy::{
     CargoPaymentSpec, TICKS_PER_TRANSIT_DAY, TICKS_PER_YEAR, buy_land_cost, cargo_time_factor,
     inflation_income_factor, inflation_prices_factor, manhattan_distance,
@@ -121,14 +121,16 @@ pub use rail_signals::{
     calendar_year_at_tick, cycle_signal_facing, cycle_signal_side_m3, default_signal_variant,
     rail_tile_is_signals, resolve_signal_track, signal_facing_for_orientation,
     signal_on_track_mask, signal_placement_for_facing, signal_placement_for_track,
-    signal_type_for_track, tracks_overlap, valid_signal_facings_track,
+    signal_type_for_track, tracks_overlap, train_positions_for_signal_update,
+    valid_signal_facings_track,
 };
 pub use refit::{next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_in_depot};
 pub use road_movement::{
     BayStationTable, VehiclePose, bay_station_table, extrapolate_vehicle_pose,
     road_turn_entry_exit, straight_subtile, train_straight_subtile, train_subtile_direction,
     turn_curve_points, vehicle_render_direction, vehicle_render_direction_at,
-    vehicle_render_progress, vehicle_subtile, vehicle_subtile_at, vehicle_subtile_with_progress,
+    vehicle_render_direction_at_with_map, vehicle_render_progress, vehicle_subtile,
+    vehicle_subtile_at, vehicle_subtile_at_with_map, vehicle_subtile_with_progress,
 };
 pub use sav::{SavError, SavGame, SavIndustry, SavStation, SavVehicle, SavVehicleKind};
 pub use save::CURRENT_SAVE_VERSION;
@@ -160,7 +162,9 @@ pub use train_movement::{
     RAIL_TOUCHING_SIDE_SW, TRAIN_UPDATE_SPEED_ACCEL_MUL, TRAIN_UPDATE_SPEED_BRAKE_MUL,
     TUNNEL_VISIBILITY_FRAME, VEHICLE_INITIAL_X_FRACT, VEHICLE_INITIAL_Y_FRACT, VEHICLE_SUBCOORD,
     VehicleSubcoord, diag_dir_index, dir_difference, is_45_degree_turn, is_diagonal_rail_piece,
-    openttd_subcoord_at_entry, rail_track_index, tunnel_hides_train_at_progress,
+    openttd_subcoord_at_entry, rail_track_index, track_bit_for_movement, train_depot_facing,
+    train_depot_subtile, train_render_dir_on_rail, train_subtile_on_rail,
+    tunnel_hides_train_at_progress,
 };
 pub use vehicle::reverse_direction;
 pub use vehicle::{

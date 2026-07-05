@@ -138,6 +138,12 @@ pub(super) fn build_vehicle_at_depot(
         vehicle.capacity = engine.capacity;
     }
     vehicle.build_tick = state.tick.get();
+    if engine.kind == VehicleKind::Train
+        && let Some(mouth) = crate::depot::rail_depot_mouth_dir(&state.map, depot_pos)
+    {
+        vehicle.direction = crate::train_movement::train_depot_facing(mouth);
+        vehicle.progress = 0;
+    }
     state.vehicles.push(vehicle);
     state.economy.money -= engine.price;
     Ok(())
@@ -173,6 +179,12 @@ pub(super) fn toggle_vehicle_running(
         .find(|v| v.id == vehicle_id)
         .and_then(|v| road_depot_exit_tile(state, v.pos))
         .and_then(|exit| farthest_reachable_road_tile(&state.map, exit).or(Some(exit)));
+    let depot_mouth = state
+        .vehicles
+        .iter()
+        .find(|v| v.id == vehicle_id)
+        .filter(|v| v.kind == VehicleKind::Train)
+        .and_then(|v| crate::depot::rail_depot_mouth_dir(&state.map, v.pos));
     let (was_running, vehicle_pos, vehicle_kind, now_running) = {
         let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
             return Err(CommandError::VehicleNotFound);
@@ -182,6 +194,11 @@ pub(super) fn toggle_vehicle_running(
         let vehicle_kind = vehicle.kind;
         vehicle.running = !vehicle.running;
         let now_running = vehicle.running;
+        if now_running && let Some(mouth) = depot_mouth {
+            vehicle.direction = crate::train_movement::train_depot_facing(mouth);
+            vehicle.progress = 0;
+            vehicle.depart_turn = 0;
+        }
         if now_running
             && vehicle.pos == vehicle.dest
             && let Some(dest) = road_dest
@@ -515,7 +532,17 @@ pub(super) fn set_depot_vehicles_running(
         };
         let vehicle_pos = state.vehicles[idx].pos;
         let was_at_dest = state.vehicles[idx].pos == state.vehicles[idx].dest;
+        let depot_mouth = if running && state.vehicles[idx].kind == VehicleKind::Train {
+            crate::depot::rail_depot_mouth_dir(&state.map, vehicle_pos)
+        } else {
+            None
+        };
         if state.vehicles[idx].running != running {
+            if running && let Some(mouth) = depot_mouth {
+                state.vehicles[idx].direction = crate::train_movement::train_depot_facing(mouth);
+                state.vehicles[idx].progress = 0;
+                state.vehicles[idx].depart_turn = 0;
+            }
             state.vehicles[idx].running = running;
             if running
                 && was_at_dest

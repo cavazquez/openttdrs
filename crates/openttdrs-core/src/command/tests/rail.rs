@@ -799,6 +799,49 @@ fn rail_depot_beside_x_line_connects_exit_tile() {
 }
 
 #[test]
+fn two_trains_can_leave_same_rail_depot() {
+    let mut s = GameState::new(12, 12);
+    s.economy.money = 1_000_000;
+    for x in 2..=8_i32 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+    }
+    let depot = TileCoord::new(5, 5);
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_GINZU_A4),
+    )
+    .unwrap();
+    let id1 = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_GINZU_A4),
+    )
+    .unwrap();
+    let id2 = s.vehicles[1].id;
+
+    let orders = vec![TileCoord::new(8, 4)];
+    apply_command(&mut s, &Command::SetVehicleOrders(id1, orders.clone())).unwrap();
+    apply_command(&mut s, &Command::SetVehicleOrders(id2, orders)).unwrap();
+    apply_command(&mut s, &Command::ToggleVehicleRunning(id1)).unwrap();
+    apply_command(&mut s, &Command::ToggleVehicleRunning(id2)).unwrap();
+
+    let mut any_left = false;
+    for _ in 0..10_000 {
+        s.step();
+        if s.vehicles[0].pos != depot || s.vehicles[1].pos != depot {
+            any_left = true;
+            break;
+        }
+    }
+    assert!(
+        any_left,
+        "al menos un tren debe salir del depósito compartido"
+    );
+}
+
+#[test]
 fn disconnecting_rail_stops_train_with_cached_path() {
     let mut s = train_with_cached_path_to_depot();
     // Se desconecta el empalme: la tesela de salida pierde las curvas al depósito.
@@ -896,6 +939,7 @@ fn build_vehicle_at_rail_depot_creates_train_with_engine() {
         Some(crate::engine::ENGINE_TRAIN_GINZU_A4)
     );
     assert!(!s.vehicles[0].running);
+    assert_eq!(s.vehicles[0].direction, crate::DIR_NE);
     assert_eq!(s.economy.money, money_before - engine.price);
 }
 

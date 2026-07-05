@@ -10,19 +10,11 @@ como tales.
 
 ## Prioridad alta (afectan movimiento y estaciones)
 
-1. **Aceleración de tren AM_ORIGINAL** — `train_cmd.cpp:3080-3090`
-   (`UpdateSpeed`: avance `acceleration·2`, freno `acceleration·−4`) con
-   `acceleration = Clamp(power/(weight·4), 1, 255)` (`:444-452`,
-   `UpdateAcceleration`). Hoy los trenes reusan la fórmula de carretera con
-   `ROAD_ACCEL_ORIGINAL = 256` fijo; `EngineDef::power_hp`/`weight_t` existen
-   pero no se usan (Kirby: 300 HP / 47 t → `accel = 1`). Plan: Fase Rail 3B.
-2. **Frenado por curva `_accel_slowdown`** — `train_cmd.cpp:3147-3152`
-   (tabla `{small_turn: 64, large_turn: 128, z_up: 64, z_down: 2}`) aplicada en
-   `:3564-3568` como `cur_speed -= (x · cur_speed) >> 8` (−25 % / −50 %).
-   Hoy `set_direction_with_curve_penalty` excluye trenes a propósito y el test
-   `train_keeps_speed_on_direction_change` fija la divergencia. Análogo exacto
-   de la penalización de curva ya corregida para camiones en la Fase 2.
-   Plan: Fase Rail 3B.
+1. ~~**Aceleración de tren `AM_ORIGINAL`**~~ — **Resuelto (Rail 3B)**.
+   `engine.rs::train_acceleration` + `accelerate_train_speed` / `decelerate_train_speed`
+   (Kirby: 300 HP / 47 t → `accel = 24`).
+2. ~~**Frenado por curva `_accel_slowdown`**~~ — **Resuelto (Rail 3B)**.
+   `set_direction_with_curve_penalty` y `apply_immediate_train_turnaround`.
 3. **Entrada a la plataforma + punto de parada** — el tren de la sim para en
    la vía de acceso (`rail_station_approach_tile`) y nunca pisa la plataforma
    (el showcase lo asserta). OpenTTD entra a la estación

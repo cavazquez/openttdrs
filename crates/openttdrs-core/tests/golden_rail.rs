@@ -19,8 +19,9 @@ use openttdrs_core::{
     RAIL_TOUCHING_SIDE_SW, SIGTYPE_BLOCK, SignalTrack, TRAIN_UPDATE_SPEED_ACCEL_MUL,
     TRAIN_UPDATE_SPEED_BRAKE_MUL, TUNNEL_VISIBILITY_FRAME, TileCoord, TileKind,
     VEHICLE_INITIAL_X_FRACT, VEHICLE_INITIAL_Y_FRACT, VEHICLE_SUBCOORD, Vehicle, VehicleKind,
-    apply_command, find_path, rail_bit_for_sides, resolve_signal_track, signal_on_track_mask,
-    signal_type_for_track, tracks_overlap,
+    accelerate_train_speed, apply_command, dir_difference, find_path, is_45_degree_turn,
+    rail_bit_for_sides, resolve_signal_track, signal_on_track_mask, signal_type_for_track,
+    tracks_overlap, train_acceleration,
 };
 
 const TRACKS: [&str; 6] = [
@@ -176,6 +177,20 @@ fn depot_fractcoords_match_rust_copy() {
 fn tunnel_visibility_frame_matches_rust_copy() {
     let f = load_fixture();
     assert_eq!(f.tunnel_visibility_frame, TUNNEL_VISIBILITY_FRAME.to_vec());
+}
+
+#[test]
+fn kirby_acceleration_formula_matches_golden() {
+    assert_eq!(train_acceleration(300, 47), 24);
+    let mut cur = 0_u16;
+    let mut sub = 0_u8;
+    let mut ticks = 0_u32;
+    while cur < 1 && ticks < 20 {
+        (cur, sub) = accelerate_train_speed(cur, sub, 300, 47, 64);
+        ticks += 1;
+    }
+    assert_eq!(cur, 1);
+    assert_eq!(ticks, 6, "48·6 = 288 → subspeed overflow + cur_speed +1");
 }
 
 #[test]
@@ -370,4 +385,38 @@ fn rail_bridge_placement_and_train_enters_ramp_from_land() {
         find_path(&s.map, west_ramp, east_ramp, PathNetwork::Rail).is_none(),
         "cruzar el vano completo aún no está soportado por el pathfinder"
     );
+}
+
+/// Divergencias rail conocidas: corregidas en Rail 3B → regresión (no detectadas).
+#[test]
+fn train_line_divergences_are_absent_after_rail_3b() {
+    use std::collections::HashMap;
+
+    use openttdrs_core::parity::{self, report::detect_known_divergences};
+
+    let mut state = parity::build_train_line();
+    state.enable_parity_trace();
+    for _ in 0..600 {
+        state.step();
+    }
+    let records = state.take_parity_records();
+    let divergences = detect_known_divergences(&records);
+    let by_id: HashMap<&str, bool> = divergences.iter().map(|d| (d.id, d.detected)).collect();
+    assert_eq!(
+        by_id.get("train_road_acceleration"),
+        Some(&false),
+        "regresión: el tren debe usar aceleración AM_ORIGINAL (Rail 3B)"
+    );
+    assert_eq!(
+        by_id.get("train_no_curve_braking"),
+        Some(&false),
+        "regresión: el tren debe frenar en curva con _accel_slowdown (Rail 3B)"
+    );
+}
+
+#[test]
+fn dir_difference_matches_openttd_encoding() {
+    assert_eq!(dir_difference(DIR_SE, DIR_SW), 6);
+    assert!(is_45_degree_turn(DIR_NE, DIR_E));
+    assert!(!is_45_degree_turn(DIR_SE, DIR_SW));
 }

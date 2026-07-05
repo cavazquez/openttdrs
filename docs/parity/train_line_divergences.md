@@ -9,21 +9,7 @@ Estado: **no observada en esta traza**
 
 Evidencia medida:
 
-- tick 90: giro dir 1→7; velocidad 89→68 (OpenTTD esperaría ≤ 68)
-- tick 130: giro dir 7→1; velocidad 96→72 (OpenTTD esperaría ≤ 73)
-- tick 168: giro dir 1→7; velocidad 96→72 (OpenTTD esperaría ≤ 73)
-- tick 178: giro dir 7→3; velocidad 79→60 (OpenTTD esperaría ≤ 60)
-- tick 195: giro dir 3→5; velocidad 76→58 (OpenTTD esperaría ≤ 58)
-- tick 238: giro dir 5→3; velocidad 96→72 (OpenTTD esperaría ≤ 73)
-- tick 277: giro dir 3→5; velocidad 96→72 (OpenTTD esperaría ≤ 73)
-- tick 315: giro dir 5→7; velocidad 96→72 (OpenTTD esperaría ≤ 73)
-- tick 325: giro dir 7→3; velocidad 79→60 (OpenTTD esperaría ≤ 60)
-- tick 342: giro dir 3→1; velocidad 76→58 (OpenTTD esperaría ≤ 58)
-- tick 385: giro dir 1→7; velocidad 96→72 (OpenTTD esperaría ≤ 73)
-- tick 424: giro dir 7→1; velocidad 96→72 (OpenTTD esperaría ≤ 73)
-- tick 462: giro dir 1→7; velocidad 96→72 (OpenTTD esperaría ≤ 73)
-- tick 472: giro dir 7→3; velocidad 79→60 (OpenTTD esperaría ≤ 60)
-- tick 489: giro dir 3→5; velocidad 76→58 (OpenTTD esperaría ≤ 58)
+- la traza no contiene giros diagonales del camión
 
 - Referencia OpenTTD: `OpenTTD/src/roadveh_cmd.cpp:1481 (`v->cur_speed -= v->cur_speed >> 2`, AM_ORIGINAL; también :1353 y :1426)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/vehicle.rs (`Vehicle::set_direction_with_curve_penalty`)`
@@ -35,8 +21,7 @@ Estado: **no observada en esta traza**
 
 Evidencia medida:
 
-- tick 169: carga iniciada con el camión en TileCoord { x: 4, y: 5 } (bahía = TileCoord { x: 4, y: 5 }, acceso = TileCoord { x: 4, y: 6 })
-- tick 463: carga iniciada con el camión en TileCoord { x: 4, y: 5 } (bahía = TileCoord { x: 4, y: 5 }, acceso = TileCoord { x: 4, y: 6 })
+- tick 184: carga iniciada con el camión en TileCoord { x: 2, y: 6 } (bahía = TileCoord { x: 4, y: 5 }, acceso = TileCoord { x: 4, y: 6 })
 
 - Referencia OpenTTD: `OpenTTD/src/table/roadveh_movement.h:1087-1093 (`_road_stop_stop_frame`, frames 11-20) y OpenTTD/src/roadveh_cmd.cpp:1496-1502 (chequeo del frame de parada)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/station.rs (`resolve_order_destination` → tesela de la bahía; `is_connected_bay_road_stop`)`
@@ -48,8 +33,7 @@ Estado: **CONFIRMADA en la traza**
 
 Evidencia medida:
 
-- tick 169: `loading_started` y `loading_finished` en el mismo tick (carga instantánea)
-- tick 463: `loading_started` y `loading_finished` en el mismo tick (carga instantánea)
+- tick 184: `loading_started` y `loading_finished` en el mismo tick (carga instantánea)
 
 - Referencia OpenTTD: `OpenTTD/src/economy.cpp:1609 (`LoadUnloadVehicle`, transfiere por tick)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/sim_step.rs:205-241 (`try_load_from_industry` carga la capacidad completa en un tick)`
@@ -69,11 +53,11 @@ Evidencia medida:
 
 ## El tren acelera con la fórmula de carretera (ROAD_ACCEL_ORIGINAL) en lugar de power/weight·4 (`train_road_acceleration`)
 
-Estado: **CONFIRMADA en la traza**
+Estado: **no observada en esta traza**
 
 Evidencia medida:
 
-- tick 2: speed≥2 tras 2 ticks desde parado (carretera ≈1–2; Kirby AM_ORIGINAL ≫2)
+- tick 11: speed≥2 tras 6 ticks desde parado (carretera ≈1–2; Kirby AM_ORIGINAL ≫2)
 
 - Referencia OpenTTD: `OpenTTD/src/train_cmd.cpp:444-452 (`UpdateAcceleration`) y :3080-3090 (`UpdateSpeed` AM_ORIGINAL, `accel·2`)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/vehicle.rs (`update_movement_speed` → `accelerate_train_speed`)`
@@ -85,7 +69,12 @@ Estado: **no observada en esta traza**
 
 Evidencia medida:
 
-- la traza no contiene giros del tren
+- tick 88: giro dir 1→3; velocidad 16→8 (OpenTTD esperaría ≤ 12)
+- tick 138: giro dir 3→1; velocidad 17→9 (OpenTTD esperaría ≤ 13)
+- tick 186: giro dir 1→5; velocidad 17→9 (OpenTTD esperaría ≤ 13)
+- tick 407: giro dir 5→3; velocidad 50→25 (OpenTTD esperaría ≤ 38)
+- tick 466: giro dir 3→7; velocidad 36→18 (OpenTTD esperaría ≤ 27)
+- tick 571: giro dir 7→1; velocidad 38→19 (OpenTTD esperaría ≤ 29)
 
 - Referencia OpenTTD: `OpenTTD/src/train_cmd.cpp:3147-3152 (`_accel_slowdown`), :3564-3568 (aplicación en locomotora)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/vehicle.rs (`set_direction_with_curve_penalty` para `VehicleKind::Train`)`

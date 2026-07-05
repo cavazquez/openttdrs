@@ -19,9 +19,9 @@ cada pieza. Complementa `openttd_mapping.md` (vehículos de carretera).
 
 | Concepto OpenTTD | Referencia C++ | Equivalente Rust | Validación |
 |---|---|---|---|
-| `Train::UpdateSpeed` AM_ORIGINAL (`accel·2`, freno `accel·−4`) | `train_cmd.cpp:3080-3090` | **Divergente**: `vehicle.rs::update_movement_speed` reusa `engine.rs::update_road_speed` con `ROAD_ACCEL_ORIGINAL = 256` | test relativo `train_moves_slower_than_bus_on_same_path`; falta golden de fórmula |
-| `Train::UpdateAcceleration` = `Clamp(power/(weight·4), 1, 255)` | `train_cmd.cpp:444-452` | **No implementado** (`EngineDef::power_hp`/`weight_t` existen sin usar) | — |
-| Frenado por curva `_accel_slowdown` {64, 128, 64, 2} (`cur_speed -= x·cur_speed >> 8`) | `train_cmd.cpp:3147-3152` (tabla), `:3564-3568` (aplicación) | **No implementado** — `set_direction_with_curve_penalty` excluye trenes a propósito | test `train_keeps_speed_on_direction_change` (fija hoy la divergencia) |
+| `Train::UpdateSpeed` `AM_ORIGINAL` (`accel·2`, freno `accel·−4`) | `train_cmd.cpp:3080-3090` | **Paridad (Rail 3B)**: `engine.rs::accelerate_train_speed` / `decelerate_train_speed`; `vehicle.rs::update_movement_speed` rama `Train` | `kirby_acceleration_formula_matches_golden`, `train_line_divergences_are_absent_after_rail_3b` |
+| `Train::UpdateAcceleration` = `Clamp(power/weight·4, 1, 255)` | `train_cmd.cpp:444-452` | **Paridad (Rail 3B)**: `engine.rs::train_acceleration` | `kirby_train_acceleration_matches_upstream` |
+| Frenado por curva `_accel_slowdown` {64, 128, 64, 2} (`cur_speed -= x·cur_speed >> 8`) | `train_cmd.cpp:3147-3152` (tabla), `:3564-3568` (aplicación) | **Paridad (Rail 3B)**: `set_direction_with_curve_penalty` + `apply_immediate_train_turnaround` | `train_loses_speed_on_direction_change`, chequeo `train_no_curve_braking` |
 | `GetCurveSpeedLimit` (61 / 88 / `232-(13-n)²`; solo AM_REALISTIC) | `train_cmd.cpp:312-381` | **No implementado** (aplicaría si se adopta AM_REALISTIC) | — |
 | `GetAdvanceSpeed = speed·3/4`, distancias 192/256 | `vehicle_base.h:439-454` | `engine.rs::progress_step_for_speed` + `tile_progress_length` (compartido con carretera) | golden `advance_constants_match_upstream` |
 | Subcoordenadas por pieza `_vehicle_subcoord[enterdir][track]` | `vehicle.cpp:3359-3392` | **Aproximado**: `road_movement.rs::train_straight_subtile` (siempre centro de vía, `TRAIN_TRACK_CENTER = 8`) | `train_uses_center_track_not_road_lanes`; falta golden |

@@ -133,6 +133,9 @@ medir antes/después.
 
 ## Fase Rail 3B — Movimiento de trenes
 
+- **Estado**: **Completada** — aceleración `AM_ORIGINAL` y frenado por curva
+  portados; chequeos `train_road_acceleration` y `train_no_curve_braking` en
+  `parity/report.rs` (regresión sobre `train_line`).
 - **Objetivo**: corregir las dos divergencias de movimiento medidas.
 - **Alcance** (primer cambio de lógica; trazas de Rail 1 como antes/después):
   1. aceleración AM_ORIGINAL de tren: `acceleration = Clamp(power_hp /

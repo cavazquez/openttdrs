@@ -577,6 +577,41 @@ pub fn update_road_speed(
     (u16::try_from(new_cur).unwrap_or(0), new_subspeed)
 }
 
+/// Aceleración `AM_ORIGINAL` de tren (`Train::UpdateAcceleration`, `train_cmd.cpp:451`).
+#[must_use]
+pub fn train_acceleration(power_hp: u32, weight_t: u16) -> u8 {
+    let weight = u32::from(weight_t.max(1));
+    ((power_hp / weight) * 4).clamp(1, 255) as u8
+}
+
+/// Avance de velocidad de tren `AM_ORIGINAL` (`Train::UpdateSpeed`, `accel·2`).
+#[must_use]
+pub fn accelerate_train_speed(
+    cur_speed: u16,
+    subspeed: u8,
+    power_hp: u32,
+    weight_t: u16,
+    max_speed: u16,
+) -> (u16, u8) {
+    let accel = u16::from(train_acceleration(power_hp, weight_t));
+    let delta = accel.saturating_mul(2);
+    update_road_speed(cur_speed, subspeed, delta, 0, max_speed)
+}
+
+/// Frenado de tren `AM_ORIGINAL` (`Train::UpdateSpeed`, `accel·4` hacia 0).
+#[must_use]
+#[allow(clippy::cast_possible_truncation)] // `subspeed = (uint8_t)spd` en upstream
+pub fn decelerate_train_speed(cur_speed: u16, subspeed: u8, accel: u8) -> (u16, u8) {
+    let delta = u16::from(accel).saturating_mul(4);
+    let spd = u16::from(subspeed).saturating_add(delta);
+    let new_subspeed = spd as u8;
+    let dec = i32::from(spd >> 8);
+    let new_cur = i32::from(cur_speed).saturating_sub(dec);
+    let new_cur_u16 = u16::try_from(new_cur).unwrap_or(0);
+    let final_sub = if new_cur_u16 == 0 { 0 } else { new_subspeed };
+    (new_cur_u16, final_sub)
+}
+
 /// Frenado simétrico al acelerador original (hacia velocidad 0).
 #[must_use]
 #[allow(clippy::cast_possible_truncation)] // `subspeed = (uint8_t)spd` en upstream
@@ -650,6 +685,33 @@ mod tests {
         }
         assert_eq!(cur, 0);
         assert_eq!(sub, 0);
+    }
+
+    #[test]
+    fn kirby_train_acceleration_matches_upstream() {
+        assert_eq!(train_acceleration(300, 47), 24);
+    }
+
+    #[test]
+    fn train_accel_slower_than_road_at_standstill() {
+        let mut road_cur = 0_u16;
+        let road_sub;
+        (road_cur, road_sub) = update_road_speed(road_cur, 0, ROAD_ACCEL_ORIGINAL, 0, 64);
+        let _ = road_sub;
+        assert_eq!(road_cur, 1, "carretera: +1 en el primer tick");
+
+        let mut train_cur = 0_u16;
+        let mut train_sub = 0_u8;
+        let mut ticks = 0_u32;
+        while train_cur < 1 && ticks < 20 {
+            (train_cur, train_sub) = accelerate_train_speed(train_cur, train_sub, 300, 47, 64);
+            ticks += 1;
+        }
+        assert_eq!(train_cur, 1);
+        assert!(
+            ticks > 1,
+            "Kirby AM_ORIGINAL tarda más que carretera en el primer +1"
+        );
     }
 
     #[test]

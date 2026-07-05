@@ -41,8 +41,8 @@ verificable todavía» hasta que exista el modelo.
 |---|---|---|---|---|---|
 | Consist (loco + vagones, longitud) | — no existe (tren puntual; la importación de `.sav` descarta vagones) | `train.h` (`Next()`, `tcache`), `train_cmd.cpp:110-254` (`ConsistChanged`) | 0 · no implementado | test `decodes_front_vehicles_and_skips_wagons` (`sav/entities.rs`) | Alto (estructural) |
 | Velocidad máxima por motor | `engine.rs` (`EngineDef::max_speed`, `speed_kmh` sin ÷2 para trenes) | `rail_vehicles` (engine info) | 2 · probado | tests de `engine.rs` | Bajo |
-| Aceleración | `vehicle.rs::update_movement_speed` → **reusa `update_road_speed` con `ROAD_ACCEL_ORIGINAL = 256`**; `power_hp`/`weight_t` existen pero no se usan | `train_cmd.cpp:3080-3090` (`UpdateSpeed` AM_ORIGINAL: `accel·2` / freno `accel·−4`), `:444-452` (`UpdateAcceleration`: `Clamp(power/(weight·4), 1, 255)`) | 1 · implementado con la fórmula de carretera (**divergencia estructural medible**) | test relativo `train_moves_slower_than_bus_on_same_path` | Alto |
-| Frenado por curva | — **excluido a propósito** en `set_direction_with_curve_penalty` (`kind != Train`) | `train_cmd.cpp:3147-3152` (`_accel_slowdown`: `small_turn=64` → −25 %, `large_turn=128` → −50 %, aplicado `cur_speed -= x·cur_speed >> 8` en `:3564-3568`) | 0 · no implementado (el test `train_keeps_speed_on_direction_change` fija hoy la divergencia) | test que asserta el comportamiento divergente | Alto |
+| Aceleración | `engine.rs::train_acceleration` + `accelerate_train_speed` / `decelerate_train_speed`; `vehicle.rs::update_movement_speed` rama `Train` | `train_cmd.cpp:3080-3090` (`UpdateSpeed` `AM_ORIGINAL`: `accel·2` / freno `accel·−4`), `:444-452` (`UpdateAcceleration`: `Clamp(power/weight·4, 1, 255)`) | 3 · validado (Rail 3B) | `kirby_train_acceleration_matches_upstream`, `train_line_divergences_are_absent_after_rail_3b` | Bajo |
+| Frenado por curva | `vehicle.rs::set_direction_with_curve_penalty` + `apply_immediate_train_turnaround` (`ACCEL_SLOWDOWN`, `small_turn=64` / `large_turn=128`) | `train_cmd.cpp:3147-3152` (`_accel_slowdown`), `:3564-3568` (`cur_speed -= x·cur_speed >> 8` en locomotora) | 3 · validado (Rail 3B) | `train_loses_speed_on_direction_change`, chequeo `train_no_curve_braking` | Bajo |
 | Paso sub-tesela (`progress` 0–255) | compartido con carretera (`progress_step_for_speed`, 192/256) | `vehicle_base.h:439-454` | 3 · validado (heredado del golden de carretera) | `tests/golden_roadveh.rs` | Medio: escala absoluta distinta (5 Hz) |
 | Posición sub-tile / render | `road_movement.rs::train_straight_subtile` (siempre centro de vía, `TRAIN_TRACK_CENTER = 8`) | `vehicle.cpp:3359-3392` (`_vehicle_subcoord` por enterdir×track) | 2 · probado (`train_uses_center_track_not_road_lanes`) | test de `road_movement.rs` | Medio: sin subcoordenadas exactas por pieza de vía |
 | Reversa | `vehicle.rs::apply_immediate_train_turnaround` (instantánea) + comando `turn_around_vehicle` | `train_cmd.cpp` (`ReverseTrainDirection`, con chequeos y coste) | 2 · probado | `train_reverses_immediately_when_next_tile_opposite`, `turn_around_vehicle_reverses_train_heading` | Medio |
@@ -61,18 +61,14 @@ verificable todavía» hasta que exista el modelo.
 | Escenario headless de tren | **Implementado (Fase Rail 1)** — `train_line` en `parity/scenario.rs` (depósito, L con curva, señal de bloque, 2 estaciones, órdenes A↔B) |
 | Comparador con subsistemas rail | **Implementado (Fase Rail 2)** — subsistemas `rail_infrastructure`/`train_motion`/`consist_geometry`/`pathfinding`/`station_entry`/`loading`/`signaling`/`reservation`/`depot`, filtros `--tile`/`--event`, `--subtile-epsilon` (default 0.51) y `--json` |
 | Golden de tablas C++ de tren | **Implementado (Fase Rail 3A)** — `extract_train_movement.py` + `train_movement_golden.json` + `golden_rail.rs` (11 tests) |
-| Chequeos de divergencia rail en `parity/report.rs` | **No existen** |
+| Chequeos de divergencia rail en `parity/report.rs` | **Implementados (Rail 3B)** — `train_road_acceleration` y `train_no_curve_braking` (regresión sobre `train_line`) |
 
 ## Top 5 divergencias ferroviarias detectadas en la auditoría
 
-1. **Aceleración de tren usa la fórmula de carretera** (`ROAD_ACCEL_ORIGINAL=256`
-   fijo) en lugar de `Clamp(power/(weight·4), 1, 255)` con `accel·2` / freno
-   `accel·−4` (`train_cmd.cpp:3080-3090`, `:444-452`). `power_hp`/`weight_t` ya
-   están en `EngineDef` sin usar.
-2. **Sin frenado por curva**: OpenTTD AM_ORIGINAL aplica `_accel_slowdown`
-   (−25 % curva corta, −50 % curva larga, `>>8`) en cada giro; la sim lo excluye
-   explícitamente para trenes. Análogo exacto de la penalización de curva ya
-   corregida para camiones en la Fase 2.
+1. ~~**Aceleración de tren usa la fórmula de carretera**~~ **Corregida (Rail 3B)** —
+   `train_acceleration` + `accel·2` / freno `accel·4`.
+2. ~~**Sin frenado por curva**~~ **Corregida (Rail 3B)** — `_accel_slowdown` en
+   giros y reversas inmediatas.
 3. **El tren no entra a la plataforma**: para en la vía de acceso
    (`rail_station_approach_tile`); OpenTTD entra, elige punto de parada por
    `GetTrainStopLocation` y frena sub-tile con `(stop-x)*20-15`. Misma familia

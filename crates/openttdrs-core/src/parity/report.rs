@@ -6,7 +6,9 @@
 use std::fmt::Write as _;
 
 use super::record::{ParityEvent, TickRecord};
-use super::scenario::{TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP, TRUCK_BAY_VEHICLE_ID};
+use super::scenario::{
+    TRAIN_LINE_VEHICLE_ID, TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP, TRUCK_BAY_VEHICLE_ID,
+};
 
 /// Divergencia conocida detectada (o verificada) sobre una traza.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +38,14 @@ fn speed_of(records: &[TickRecord], tick: u64, vehicle: u32) -> Option<u16> {
         .map(|v| v.speed)
 }
 
+fn is_road_vehicle(records: &[TickRecord], tick: u64, vehicle: u32) -> bool {
+    records
+        .iter()
+        .find(|r| r.tick == tick)
+        .and_then(|r| r.vehicles.iter().find(|v| v.id == vehicle))
+        .is_some_and(|v| v.rail.is_none())
+}
+
 /// Divergencia 1: en `OpenTTD` (modelo original) todo cambio de dirección
 /// reduce la velocidad un 25 % (`cur_speed -= cur_speed >> 2`). Implementada
 /// en la Fase 2 (`Vehicle::set_direction_with_curve_penalty`); el chequeo
@@ -50,6 +60,9 @@ fn check_curve_speed_penalty(records: &[TickRecord]) -> KnownDivergence {
                 continue;
             };
             if e.vehicle() != Some(vehicle) || from % 2 == 0 || to % 2 == 0 {
+                continue;
+            }
+            if !is_road_vehicle(records, r.tick, vehicle) {
                 continue;
             }
             let before = speed_of(records, r.tick.saturating_sub(1), vehicle).unwrap_or(0);
@@ -165,7 +178,7 @@ fn check_instant_loading(records: &[TickRecord]) -> KnownDivergence {
     }
 }
 
-/// Divergencia 4: frecuencia del tick lógico. `OpenTTD` corre 74 ticks/día
+/// Divergencia estructural: frecuencia del tick lógico. `OpenTTD` corre 74 ticks/día
 /// (~33,3 ticks/s a velocidad normal); la sim Rust corre a 5 Hz con pasos
 /// sub-tesela reescalados. Divergencia estructural, no medible en la traza.
 fn check_tick_rate() -> KnownDivergence {
@@ -180,15 +193,133 @@ fn check_tick_rate() -> KnownDivergence {
     }
 }
 
-/// Evalúa todas las divergencias conocidas sobre una traza de `truck_bay`.
+fn trace_has_train(records: &[TickRecord]) -> bool {
+    records
+        .iter()
+        .any(|r| r.vehicles.iter().any(|v| v.id == TRAIN_LINE_VEHICLE_ID))
+}
+
+/// Divergencia rail 1: tren reusa aceleración de carretera (`ROAD_ACCEL_ORIGINAL`)
+/// en lugar de `Clamp(power/weight·4, 1, 255)` con `accel·2`.
+/// Corregida en Rail 3B; el chequeo queda como regresión.
+fn check_train_road_acceleration(records: &[TickRecord]) -> KnownDivergence {
+    let vehicle = TRAIN_LINE_VEHICLE_ID;
+    let mut evidence = String::new();
+    let mut detected = false;
+
+    // Tras salir del depósito, la carretera alcanza speed≥2 en ~2 ticks desde 0;
+    // Kirby (accel=24) necesita varios ticks más.
+    let mut ticks_to_two = None;
+    let mut prev_speed = 0_u16;
+    for r in records {
+        let Some(speed) = speed_of(records, r.tick, vehicle) else {
+            continue;
+        };
+        if speed >= 2 && prev_speed < 2 && ticks_to_two.is_none() {
+            // Cuenta ticks consecutivos en movimiento desde el primer speed>0.
+            let mut last_zero = r.tick;
+            for back in (0..=r.tick).rev() {
+                let s = speed_of(records, back, vehicle).unwrap_or(0);
+                if s == 0 {
+                    last_zero = back;
+                    break;
+                }
+            }
+            let accel_ticks = r.tick.saturating_sub(last_zero);
+            let _ = ticks_to_two.insert(accel_ticks);
+            let _ = writeln!(
+                evidence,
+                "- tick {}: speed≥2 tras {} ticks desde parado (carretera ≈1–2; Kirby AM_ORIGINAL ≫2)",
+                r.tick, accel_ticks
+            );
+            if accel_ticks <= 2 {
+                detected = true;
+            }
+        }
+        prev_speed = speed;
+    }
+
+    if evidence.is_empty() {
+        evidence.push_str("- la traza no contiene aceleración del tren desde parado\n");
+    }
+    KnownDivergence {
+        id: "train_road_acceleration",
+        title: "El tren acelera con la fórmula de carretera (ROAD_ACCEL_ORIGINAL) en lugar de power/weight·4",
+        detected,
+        evidence,
+        openttd_ref: "OpenTTD/src/train_cmd.cpp:444-452 (`UpdateAcceleration`) y :3080-3090 (`UpdateSpeed` AM_ORIGINAL, `accel·2`)",
+        rust_ref: "openttdrs/crates/openttdrs-core/src/vehicle.rs (`update_movement_speed` → `accelerate_train_speed`)",
+        fix_phase2: "IMPLEMENTADA (Rail 3B): `train_acceleration` + `accel·2` / freno `accel·4`",
+    }
+}
+
+/// Divergencia rail 2: sin frenado por curva `_accel_slowdown` en trenes.
+/// Corregida en Rail 3B; el chequeo queda como regresión.
+fn check_train_no_curve_braking(records: &[TickRecord]) -> KnownDivergence {
+    let vehicle = TRAIN_LINE_VEHICLE_ID;
+    let mut evidence = String::new();
+    let mut detected = false;
+    for r in records {
+        for e in &r.events {
+            let ParityEvent::DirectionChanged { from, to, .. } = e else {
+                continue;
+            };
+            if e.vehicle() != Some(vehicle) {
+                continue;
+            }
+            if records
+                .iter()
+                .find(|rec| rec.tick == r.tick)
+                .and_then(|rec| rec.vehicles.iter().find(|v| v.id == vehicle))
+                .is_none_or(|v| v.rail.is_none())
+            {
+                continue;
+            }
+            let before = speed_of(records, r.tick.saturating_sub(1), vehicle).unwrap_or(0);
+            let after = speed_of(records, r.tick, vehicle).unwrap_or(0);
+            if before == 0 {
+                continue;
+            }
+            // Penalización mínima esperada: al menos 25 % (giro 45°) o 50 % (90°).
+            let min_expected = before - (before >> 2);
+            let _ = writeln!(
+                evidence,
+                "- tick {}: giro dir {from}→{to}; velocidad {before}→{after} (OpenTTD esperaría ≤ {min_expected})",
+                r.tick
+            );
+            if after > min_expected {
+                detected = true;
+            }
+        }
+    }
+    if evidence.is_empty() {
+        evidence.push_str("- la traza no contiene giros del tren\n");
+    }
+    KnownDivergence {
+        id: "train_no_curve_braking",
+        title: "Falta el frenado por curva del tren (`_accel_slowdown`)",
+        detected,
+        evidence,
+        openttd_ref: "OpenTTD/src/train_cmd.cpp:3147-3152 (`_accel_slowdown`), :3564-3568 (aplicación en locomotora)",
+        rust_ref: "openttdrs/crates/openttdrs-core/src/vehicle.rs (`set_direction_with_curve_penalty` para `VehicleKind::Train`)",
+        fix_phase2: "IMPLEMENTADA (Rail 3B): `cur_speed -= turn·cur_speed >> 8` con small_turn=64 / large_turn=128",
+    }
+}
+
+/// Evalúa todas las divergencias conocidas sobre una traza de paridad.
 #[must_use]
 pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> {
-    vec![
+    let mut out = vec![
         check_curve_speed_penalty(records),
         check_bay_stop_position(records),
         check_instant_loading(records),
         check_tick_rate(),
-    ]
+    ];
+    if trace_has_train(records) {
+        out.push(check_train_road_acceleration(records));
+        out.push(check_train_no_curve_braking(records));
+    }
+    out
 }
 
 /// Markdown para `docs/parity/divergences_found.md`.
@@ -196,9 +327,9 @@ pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> 
 pub fn divergences_markdown(divergences: &[KnownDivergence]) -> String {
     let mut out = String::new();
     out.push_str("# Divergencias conocidas openttdrs ↔ OpenTTD\n\n");
-    out.push_str("Archivo generado por `parity_runner --divergence-report` sobre el escenario `truck_bay`.\n");
+    out.push_str("Archivo generado por `parity_runner --divergence-report`.\n");
     out.push_str(
-        "Estas divergencias son conocidas y NO rompen CI; su corrección es parte de la Fase 2.\n\n",
+        "Estas divergencias son conocidas y NO rompen CI; su corrección es parte de las fases de paridad.\n\n",
     );
     for d in divergences {
         let status = if d.detected {

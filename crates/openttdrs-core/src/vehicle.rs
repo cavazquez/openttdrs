@@ -2,10 +2,12 @@ use std::collections::VecDeque;
 
 use crate::cargo::CargoType;
 use crate::engine::{
-    ROAD_ACCEL_ORIGINAL, decelerate_road_speed, default_engine_id, engine_for_vehicle,
-    progress_step_for_speed, update_road_speed,
+    ROAD_ACCEL_ORIGINAL, accelerate_train_speed, decelerate_road_speed, decelerate_train_speed,
+    default_engine_id, engine_for_vehicle, progress_step_for_speed, train_acceleration,
+    update_road_speed,
 };
 use crate::map::TileCoord;
+use crate::train_movement::{ACCEL_SLOWDOWN, is_45_degree_turn};
 
 /// Capacidad de carga por defecto (unidades de cargo).
 pub const VEHICLE_CAPACITY: u32 = 20;
@@ -742,19 +744,35 @@ impl Vehicle {
     }
 
     fn update_movement_speed(&mut self) {
-        let max_speed = self.effective_engine().max_speed;
+        let engine = self.effective_engine();
+        let max_speed = engine.max_speed;
         if self.running && self.movement_target().is_some() {
-            let (cur, sub) = update_road_speed(
-                self.cur_speed,
-                self.subspeed,
-                ROAD_ACCEL_ORIGINAL,
-                0,
-                max_speed,
-            );
+            let (cur, sub) = if self.kind == VehicleKind::Train {
+                accelerate_train_speed(
+                    self.cur_speed,
+                    self.subspeed,
+                    engine.power_hp,
+                    engine.weight_t,
+                    max_speed,
+                )
+            } else {
+                update_road_speed(
+                    self.cur_speed,
+                    self.subspeed,
+                    ROAD_ACCEL_ORIGINAL,
+                    0,
+                    max_speed,
+                )
+            };
             self.cur_speed = cur;
             self.subspeed = sub;
         } else {
-            let (cur, sub) = decelerate_road_speed(self.cur_speed, self.subspeed);
+            let (cur, sub) = if self.kind == VehicleKind::Train {
+                let accel = train_acceleration(engine.power_hp, engine.weight_t);
+                decelerate_train_speed(self.cur_speed, self.subspeed, accel)
+            } else {
+                decelerate_road_speed(self.cur_speed, self.subspeed)
+            };
             self.cur_speed = cur;
             self.subspeed = sub;
         }
@@ -970,14 +988,28 @@ impl Vehicle {
         self.set_direction_with_curve_penalty(direction_from_tile_step(from, to));
     }
 
-    /// Cambia `direction` aplicando la penalización de curva del modelo
-    /// original de `OpenTTD`: `v->cur_speed -= v->cur_speed >> 2` (−25 %)
-    /// cada vez que un vehículo de carretera cambia de dirección
-    /// (`roadveh_cmd.cpp:1353`, `:1426` y `:1481`, `AM_ORIGINAL`).
-    /// Los trenes no tienen esta penalización.
+    /// Cambia `direction` aplicando penalización de curva del modelo original:
+    /// carretera `v->cur_speed -= v->cur_speed >> 2` (`roadveh_cmd.cpp:1481`);
+    /// tren `_accel_slowdown` (`train_cmd.cpp:3564-3568`, locomotora).
     fn set_direction_with_curve_penalty(&mut self, new_dir: VehicleDirection) {
-        if new_dir != self.direction && self.kind != VehicleKind::Train {
-            self.cur_speed -= self.cur_speed >> 2;
+        if new_dir != self.direction {
+            match self.kind {
+                VehicleKind::Train => {
+                    let params = &ACCEL_SLOWDOWN[0];
+                    let turn = if is_45_degree_turn(self.direction, new_dir) {
+                        params.small_turn
+                    } else {
+                        params.large_turn
+                    };
+                    let penalty = (u32::from(turn) * u32::from(self.cur_speed)) >> 8;
+                    self.cur_speed = self
+                        .cur_speed
+                        .saturating_sub(u16::try_from(penalty).unwrap_or(0));
+                }
+                VehicleKind::Bus | VehicleKind::Truck => {
+                    self.cur_speed -= self.cur_speed >> 2;
+                }
+            }
         }
         self.direction = new_dir;
     }
@@ -1271,7 +1303,7 @@ impl Vehicle {
         if outbound != reverse_direction(self.direction) {
             return;
         }
-        self.direction = outbound;
+        self.set_direction_with_curve_penalty(outbound);
         self.depart_turn = 0;
         if self.progress == 255 {
             self.progress = 0;
@@ -1574,7 +1606,9 @@ mod tests {
     }
 
     #[test]
-    fn train_keeps_speed_on_direction_change() {
+    fn train_loses_speed_on_direction_change() {
+        // OpenTTD AM_ORIGINAL: `_accel_slowdown` al cambiar dirección en la
+        // locomotora (train_cmd.cpp:3564-3568). Giro SE→SW = 90° → large_turn.
         let mut v = Vehicle::new(
             0,
             VehicleKind::Train,
@@ -1585,10 +1619,18 @@ mod tests {
         v.path = VecDeque::from([TileCoord::new(1, 2), TileCoord::new(2, 2)]);
         v.set_cruise_speed();
         let cruise = v.cur_speed;
+        while v.pos != TileCoord::new(1, 2) {
+            v.step();
+        }
+        assert_eq!(v.cur_speed, cruise, "tramo recto: sin penalización");
         while v.pos != TileCoord::new(2, 2) {
             v.step();
         }
-        assert_eq!(v.cur_speed, cruise, "trenes sin penalización de curva");
+        assert_eq!(
+            v.cur_speed,
+            cruise - ((cruise * 128) >> 8),
+            "giro SE→SW: −50 % de velocidad"
+        );
     }
 
     #[test]

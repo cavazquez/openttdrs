@@ -63,10 +63,11 @@ pub use economy::{
 };
 pub use engine::{
     ENGINE_BUS_MPS, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineCatalogSort, EngineDef,
-    REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter, decelerate_road_speed,
-    default_engine_id, engine_available_in_year, engine_by_id, engine_catalog, engine_for_vehicle,
-    engines_for_depot_purchase, engines_of_kind, progress_step_for_speed, tile_progress_length,
-    train_sprite_group, update_road_speed,
+    REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter, accelerate_train_speed,
+    decelerate_road_speed, decelerate_train_speed, default_engine_id, engine_available_in_year,
+    engine_by_id, engine_catalog, engine_for_vehicle, engines_for_depot_purchase, engines_of_kind,
+    progress_step_for_speed, tile_progress_length, train_acceleration, train_sprite_group,
+    update_road_speed,
 };
 #[allow(deprecated)]
 pub use game_state::CARGO_DELIVERY_PAYMENT;
@@ -157,7 +158,7 @@ pub use train_movement::{
     FRACTCOORDS_ENTER, RAIL_TOUCHING_SIDE_NE, RAIL_TOUCHING_SIDE_NW, RAIL_TOUCHING_SIDE_SE,
     RAIL_TOUCHING_SIDE_SW, TRAIN_UPDATE_SPEED_ACCEL_MUL, TRAIN_UPDATE_SPEED_BRAKE_MUL,
     TUNNEL_VISIBILITY_FRAME, VEHICLE_INITIAL_X_FRACT, VEHICLE_INITIAL_Y_FRACT, VEHICLE_SUBCOORD,
-    VehicleSubcoord,
+    VehicleSubcoord, dir_difference, is_45_degree_turn,
 };
 pub use vehicle::reverse_direction;
 pub use vehicle::{

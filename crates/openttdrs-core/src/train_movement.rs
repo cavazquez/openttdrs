@@ -55,6 +55,18 @@ pub const TUNNEL_VISIBILITY_FRAME: [u8; 4] = [12, 8, 8, 12];
 pub const TRAIN_UPDATE_SPEED_ACCEL_MUL: i32 = 2;
 pub const TRAIN_UPDATE_SPEED_BRAKE_MUL: i32 = 4;
 
+/// Diferencia angular entre dos direcciones (`DirDifference`, `direction_func.h:68`).
+#[must_use]
+pub const fn dir_difference(d0: u8, d1: u8) -> u8 {
+    d0.wrapping_sub(d1) % 8
+}
+
+/// Giro de 45° (`DirDiff::Right45` / `DirDiff::Left45`).
+#[must_use]
+pub const fn is_45_degree_turn(d0: u8, d1: u8) -> bool {
+    matches!(dir_difference(d0, d1), 1 | 7)
+}
+
 /// Sub-tesela y dirección al entrar a una tesela (`vehicle.cpp:3359`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VehicleSubcoord {

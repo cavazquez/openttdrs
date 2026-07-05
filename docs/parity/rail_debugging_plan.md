@@ -209,6 +209,15 @@ medir antes/después.
 - **Terminado cuando**: `parity_runner --divergence-report` cubre `train_line`
   y la documentación queda consistente con `status.md`.
 
+## Revisión pendiente — IA avanzada
+
+Las fases Rail 0–4 están **implementadas**, pero el mantenedor solicita una
+**auditoría independiente por una IA avanzada** antes de cerrar el tema o abrir
+Rail 5+ (consist, PBS, saves reales, etc.).
+
+**Handoff obligatorio:** [`RAIL_REVIEW_HANDOFF.md`](RAIL_REVIEW_HANDOFF.md) —
+comandos de verificación, mapa de archivos, checklist y criterios de salida.
+
 ## Uso de la traza rail (referencia rápida)
 
 ```bash

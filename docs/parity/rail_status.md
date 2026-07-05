@@ -91,3 +91,10 @@ verificable todavía» hasta que exista el modelo.
 
 El reporte ferroviario queda en `docs/parity/train_line_divergences.md` (600
 ticks de `train_line`). El de carretera en `docs/parity/divergences_found.md`.
+
+## Revisión por IA avanzada (pendiente)
+
+El plan Rail 0–4 está cerrado en código y tests, pero **debe revisarse** por
+una IA avanzada con el checklist de
+[`RAIL_REVIEW_HANDOFF.md`](RAIL_REVIEW_HANDOFF.md) antes de considerar la
+paridad ferroviaria «auditada».

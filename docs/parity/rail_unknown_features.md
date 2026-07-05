@@ -96,3 +96,6 @@ como tales.
   invertir esos tests, como se hizo con los de bahía en la Fase 2.
 - El plan de fases con criterios de terminado está en
   `rail_debugging_plan.md`; el estado por subsistema en `rail_status.md`.
+- Tras Rail 4, una **IA avanzada debe auditar** el trabajo según
+  [`RAIL_REVIEW_HANDOFF.md`](RAIL_REVIEW_HANDOFF.md) antes de abrir la siguiente
+  oleada ferroviaria.

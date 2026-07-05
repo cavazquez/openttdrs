@@ -61,3 +61,12 @@ cargo run -p openttdrs-core --bin parity_diff -- /tmp/a.jsonl /tmp/b.jsonl --veh
 # Regenerar fixture golden desde el C++ (solo lectura de OpenTTD/)
 python3 scripts/extract_roadveh_movement.py
 ```
+
+## Paridad ferroviaria (Rail 0–4)
+
+| Documento | Uso |
+|-----------|-----|
+| [parity/RAIL_REVIEW_HANDOFF.md](parity/RAIL_REVIEW_HANDOFF.md) | **Handoff para IA avanzada** — revisión obligatoria post Rail 4 |
+| [parity/rail_debugging_plan.md](parity/rail_debugging_plan.md) | Plan por fases (0–4 implementadas) |
+| [parity/rail_status.md](parity/rail_status.md) | Estado por subsistema |
+| [parity/train_line_divergences.md](parity/train_line_divergences.md) | Reporte generado (`regenerate_parity_reports.sh`) |

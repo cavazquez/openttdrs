@@ -69,3 +69,4 @@ cada pieza. Complementa `openttd_mapping.md` (vehículos de carretera).
 | Subsistemas rail en `parity_diff` | **Implementado (Rail 2)** |
 | Golden `train_movement_golden.json` | **Implementado (Rail 3A)** |
 | Chequeos rail en `parity/report.rs` | **Implementado (Rail 3B–3E)** → `train_line_divergences.md` vía `regenerate_parity_reports.sh` |
+| Revisión independiente | **Pendiente** — ver [`RAIL_REVIEW_HANDOFF.md`](RAIL_REVIEW_HANDOFF.md) (IA avanzada) |

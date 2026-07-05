@@ -186,13 +186,18 @@ medir antes/después.
 - **Terminado cuando**: traza muestra `SignalWaitStarted/Finished` con
   `blocked_by_signal` estable; check verde.
 
-## Fase Rail 3E — Render/interpolación
+## Fase Rail 3E — Render/interpolación — ✅ IMPLEMENTADA
 
 - **Objetivo**: comparar posición lógica (traza Rail 1) vs posición visual
   (`OPENTTDRS_RENDER_TRACE`, ya existente) para trenes; detectar stutter o
   saltos; evaluar subcoordenadas `_vehicle_subcoord` por pieza y ocultamiento
   en túnel (`_tunnel_visibility_frame`).
 - **Precondición**: 3B terminada (no medir render sobre física divergente).
+- **Resultado**: traza y render lógico alineados; extrapolación monotónica en
+  `train_line`; CSV de render con sub-teselas; divergencia diagonal documentada;
+  túnel sin ocultar (pendiente). Ver `rail_render_evaluation.md`.
+- **Tests**: `train_render_subtile_consistency`, `train_line_extrapolation_subtile_is_monotonic`,
+  `sprite_selection_uses_extrapolated_pose_for_train`, `tunnel_hides_train_matches_visibility_frame`.
 
 ## Fase Rail 4 — Reportes y documentación final
 

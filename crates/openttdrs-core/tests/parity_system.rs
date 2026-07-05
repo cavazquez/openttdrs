@@ -385,6 +385,56 @@ fn train_signal_wait_ticks_are_stable() {
 }
 
 #[test]
+fn train_line_extrapolation_subtile_is_monotonic() {
+    use openttdrs_core::{
+        DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, VehicleKind,
+        extrapolate_vehicle_pose, parity::build_train_line, train_subtile_direction,
+        vehicle_subtile_at,
+    };
+
+    fn travel_along_track(sub: (f32, f32), dir: u8) -> f32 {
+        match dir {
+            DIR_NE | DIR_W => 15.0 - sub.0,
+            DIR_SW | DIR_E => sub.0,
+            DIR_SE | DIR_S => sub.1,
+            DIR_NW | DIR_N => 15.0 - sub.1,
+            _ => sub.0 + sub.1,
+        }
+    }
+
+    let mut state = build_train_line();
+    for _ in 0..120 {
+        state.step();
+    }
+    let train = state
+        .vehicles
+        .iter()
+        .find(|v| v.kind == VehicleKind::Train && v.cur_speed > 0)
+        .expect("tren en movimiento");
+    let dir = train_subtile_direction(train);
+    let mut prev = vehicle_subtile_at(train, extrapolate_vehicle_pose(train, 0.0));
+    let mut prev_travel = travel_along_track(prev, dir);
+    for step in 1..=8_u32 {
+        let alpha = f32::from(step as u16) / 8.0;
+        let pose = extrapolate_vehicle_pose(train, alpha);
+        let cur = vehicle_subtile_at(train, pose);
+        let dx = cur.0 - prev.0;
+        let dy = cur.1 - prev.1;
+        assert!(
+            dx * dx + dy * dy <= 25.0,
+            "salto de subtile >5 px entre alphas {prev:?} → {cur:?} (alpha={alpha})"
+        );
+        let cur_travel = travel_along_track(cur, dir);
+        assert!(
+            cur_travel + 0.01 >= prev_travel || pose.pos != train.pos,
+            "retroceso a lo largo de la vía: {prev_travel} → {cur_travel}"
+        );
+        prev = cur;
+        prev_travel = cur_travel;
+    }
+}
+
+#[test]
 fn save_json_roundtrip_mid_scenario_preserves_trace() {
     // Corre 120 ticks, guarda, y compara los 180 ticks siguientes del estado
     // original contra los del estado recargado desde JSON.

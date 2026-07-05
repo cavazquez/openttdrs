@@ -53,9 +53,9 @@ como tales.
    se atraviesa como vía normal y el tren queda visible.
 10. **Subcoordenadas por pieza `_vehicle_subcoord`** —
     `vehicle.cpp:3359-3392`: posición (x, y) y dirección exactas al entrar a
-    cada track. La sim usa siempre el centro de vía
-    (`train_straight_subtile`, `TRAIN_TRACK_CENTER = 8`); afecta solo render.
-    Plan: golden en 3A, evaluación en 3E.
+    cada track. La sim usa eje central en rectas (`train_straight_subtile`);
+    **evaluado en Rail 3E** (`rail_render_evaluation.md`): alineado en X/Y,
+    divergencia cosmética documentada en piezas diagonales puras.
 11. **Pathfinder YAPF con penalizaciones y reserva** —
     `yapf_rail.cpp` (penaliza curvas, señales rojas, plataformas ocupadas;
     reserva el camino elegido). El A* propio no replica desempates ni costes.

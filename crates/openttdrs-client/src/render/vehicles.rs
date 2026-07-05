@@ -560,6 +560,36 @@ mod tests {
     }
 
     #[test]
+    fn sprite_selection_uses_extrapolated_pose_for_train() {
+        use openttdrs_core::vehicle_subtile_at;
+
+        let mut v = sample_vehicle(1);
+        v.kind = VehicleKind::Train;
+        v.pos = TileCoord::new(5, 6);
+        v.path = VecDeque::from([TileCoord::new(6, 6)]);
+        v.direction = openttdrs_core::DIR_NE;
+        v.set_cruise_speed();
+        v.progress = 40;
+
+        let logical_pose = extrapolate_vehicle_pose(&v, 0.0);
+        let extrap_pose = extrapolate_vehicle_pose(&v, 1.0);
+        assert!(
+            extrap_pose.progress > logical_pose.progress || extrap_pose.pos != logical_pose.pos,
+            "la extrapolación avanza el tren entre ticks"
+        );
+        let logical_sub = vehicle_subtile_at(&v, logical_pose);
+        let extrap_sub = vehicle_subtile_at(&v, extrap_pose);
+        assert_ne!(
+            logical_sub, extrap_sub,
+            "sub-tesela extrapolada distinta de la lógica"
+        );
+        assert_eq!(
+            vehicle_layer(&v, extrap_pose).path,
+            vehicle_layers(&v)[vehicle_render_direction_at(&v, extrap_pose).min(7) as usize].path
+        );
+    }
+
+    #[test]
     fn render_direction_cardinal_layer_differs_from_diagonal() {
         let mut v = sample_vehicle(1);
         v.kind = VehicleKind::Bus;

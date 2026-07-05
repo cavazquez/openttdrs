@@ -159,7 +159,8 @@ pub use train_movement::{
     FRACTCOORDS_ENTER, RAIL_TOUCHING_SIDE_NE, RAIL_TOUCHING_SIDE_NW, RAIL_TOUCHING_SIDE_SE,
     RAIL_TOUCHING_SIDE_SW, TRAIN_UPDATE_SPEED_ACCEL_MUL, TRAIN_UPDATE_SPEED_BRAKE_MUL,
     TUNNEL_VISIBILITY_FRAME, VEHICLE_INITIAL_X_FRACT, VEHICLE_INITIAL_Y_FRACT, VEHICLE_SUBCOORD,
-    VehicleSubcoord, dir_difference, is_45_degree_turn,
+    VehicleSubcoord, diag_dir_index, dir_difference, is_45_degree_turn, is_diagonal_rail_piece,
+    openttd_subcoord_at_entry, rail_track_index, tunnel_hides_train_at_progress,
 };
 pub use vehicle::reverse_direction;
 pub use vehicle::{

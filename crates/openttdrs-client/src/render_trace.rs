@@ -11,7 +11,7 @@ use std::io::{BufWriter, Write};
 use std::sync::Mutex;
 
 use bevy::prelude::*;
-use openttdrs_core::{extrapolate_vehicle_pose, vehicle_render_direction_at};
+use openttdrs_core::{extrapolate_vehicle_pose, vehicle_render_direction_at, vehicle_subtile_at};
 
 use crate::bevy_app::UpdateSet;
 use crate::simulation::SimClock;
@@ -22,6 +22,7 @@ pub(crate) const RENDER_TRACE_ENV: &str = "OPENTTDRS_RENDER_TRACE";
 
 const CSV_HEADER: &str = "frame,tick,tick_alpha,vehicle,logical_tile_x,logical_tile_y,\
 logical_progress,logical_dir,extrap_tile_x,extrap_tile_y,extrap_progress,sprite_dir,\
+logical_subtile_x,logical_subtile_y,extrap_subtile_x,extrap_subtile_y,\
 logical_world_x,logical_world_y,extrap_world_x,extrap_world_y";
 
 #[derive(Resource, Default)]
@@ -84,15 +85,14 @@ fn record_render_trace(
     for v in &sim.state.vehicles {
         let pose = extrapolate_vehicle_pose(v, alpha);
         let sprite_dir = vehicle_render_direction_at(v, pose);
-        let logical_world = crate::render::vehicle_sprite_pos_at(
-            v,
-            &sim.state.map,
-            extrapolate_vehicle_pose(v, 0.0),
-        );
+        let logical_pose = extrapolate_vehicle_pose(v, 0.0);
+        let logical_world = crate::render::vehicle_sprite_pos_at(v, &sim.state.map, logical_pose);
         let extrap_world = crate::render::vehicle_sprite_pos_at(v, &sim.state.map, pose);
+        let (logical_sub_x, logical_sub_y) = vehicle_subtile_at(v, logical_pose);
+        let (extrap_sub_x, extrap_sub_y) = vehicle_subtile_at(v, pose);
         let _ = writeln!(
             writer,
-            "{},{},{:.4},{},{},{},{},{},{},{},{},{},{:.2},{:.2},{:.2},{:.2}",
+            "{},{},{:.4},{},{},{},{},{},{},{},{},{},{:.3},{:.3},{:.3},{:.3},{:.2},{:.2},{:.2},{:.2}",
             *frame,
             tick,
             alpha,
@@ -105,6 +105,10 @@ fn record_render_trace(
             pose.pos.y,
             pose.progress,
             sprite_dir,
+            logical_sub_x,
+            logical_sub_y,
+            extrap_sub_x,
+            extrap_sub_y,
             logical_world.x,
             logical_world.y,
             extrap_world.x,
@@ -163,10 +167,12 @@ mod tests {
         let lines: Vec<&str> = contents.lines().collect();
         assert_eq!(lines.len(), 3, "cabecera + 2 filas: {contents}");
         assert!(lines[0].starts_with("frame,tick,tick_alpha"));
+        assert!(lines[0].contains("logical_subtile_x"));
         // Con tick_alpha=0.5 la pose extrapolada difiere de la lógica.
         let cols: Vec<&str> = lines[1].split(',').collect();
         assert_eq!(cols[3], "7", "id del vehículo");
         assert_ne!(cols[6], cols[10], "progress extrapolado ≠ lógico");
+        assert_ne!(cols[12], cols[14], "subtile_x extrapolado ≠ lógico");
         let _ = std::fs::remove_file(&dir);
     }
 }

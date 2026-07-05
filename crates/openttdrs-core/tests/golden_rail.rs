@@ -417,6 +417,11 @@ fn train_line_divergences_are_absent_after_rail_3b() {
         Some(&false),
         "regresión: el tren debe cargar desde la plataforma (Rail 3C)"
     );
+    assert_eq!(
+        by_id.get("train_render_subtile_consistency"),
+        Some(&false),
+        "regresión: traza rail y render lógico deben coincidir (Rail 3E)"
+    );
 }
 
 /// Divergencias rail 3D: escenario `train_signal` con espera medida en la traza.

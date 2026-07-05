@@ -3,13 +3,17 @@
 //! divergencias detectadas NO rompen CI: se documentan en
 //! `docs/parity/divergences_found.md` y quedan pendientes para la Fase 2.
 
+use std::collections::VecDeque;
 use std::fmt::Write as _;
 
-use super::record::{ParityEvent, TickRecord};
+use super::record::{ParityEvent, TickRecord, TraceVehicleState, VehicleRecord};
 use super::scenario::{
     TRAIN_LINE_VEHICLE_ID, TRAIN_SIGNAL_BLOCKER_ID, TRAIN_SIGNAL_LEAD_ID, TRAIN_SIGNAL_TILE,
     TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP, TRUCK_BAY_VEHICLE_ID,
 };
+use crate::road_movement;
+use crate::train_movement::is_diagonal_rail_piece;
+use crate::vehicle::{Vehicle, VehicleKind};
 
 /// Divergencia conocida detectada (o verificada) sobre una traza.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -414,6 +418,96 @@ fn check_train_signal_wait(records: &[TickRecord]) -> KnownDivergence {
     }
 }
 
+fn subtile_from_train_record(v: &VehicleRecord) -> Option<(f32, f32)> {
+    v.rail.as_ref()?;
+    let mut train = Vehicle::new(v.id, VehicleKind::Train, v.tile, v.dest);
+    train.progress = v.progress;
+    train.direction = v.dir;
+    train.cur_speed = v.speed;
+    train.depart_turn = v.depart_turn;
+    train.running = !matches!(v.state, TraceVehicleState::Stopped);
+    if let Some(next) = v.path_next {
+        train.path = VecDeque::from([next]);
+    }
+    Some(road_movement::vehicle_subtile(&train))
+}
+
+/// Regresión Rail 3E: la sub-tesela en la traza debe coincidir con
+/// `vehicle_subtile` (misma función que usa el render a `tick_alpha = 0`).
+fn check_train_render_subtile_consistency(records: &[TickRecord]) -> KnownDivergence {
+    let mut evidence = String::new();
+    let mut detected = false;
+    for r in records {
+        for v in &r.vehicles {
+            let Some(rail) = &v.rail else {
+                continue;
+            };
+            let Some(part) = rail.parts.first() else {
+                continue;
+            };
+            let Some((sx, sy)) = subtile_from_train_record(v) else {
+                continue;
+            };
+            if (part.subtile_x - sx).abs() > 0.01 || (part.subtile_y - sy).abs() > 0.01 {
+                detected = true;
+                let _ = writeln!(
+                    evidence,
+                    "- tick {}: traza ({:.3},{:.3}) ≠ render ({sx:.3},{sy:.3}) en {:?}",
+                    r.tick, part.subtile_x, part.subtile_y, v.tile
+                );
+            }
+        }
+    }
+    if evidence.is_empty() {
+        evidence.push_str("- la traza rail y `vehicle_subtile` coinciden en todos los ticks\n");
+    }
+    KnownDivergence {
+        id: "train_render_subtile_consistency",
+        title: "La sub-tesela de la traza rail no coincide con la del render",
+        detected,
+        evidence,
+        openttd_ref: "OpenTTD/src/vehicle.cpp:3359 (`_vehicle_subcoord` + progreso)",
+        rust_ref: "openttdrs/crates/openttdrs-core/src/parity/tracer.rs + `road_movement::vehicle_subtile`",
+        fix_phase2: "IMPLEMENTADA (Rail 3E): regresión traza ↔ render lógico",
+    }
+}
+
+/// Divergencia conocida Rail 3E: en piezas diagonales puras el render usa
+/// `train_straight_subtile` (centro de vía) en lugar de `_vehicle_subcoord`.
+fn check_train_diagonal_subcoord_approximation(records: &[TickRecord]) -> KnownDivergence {
+    let mut evidence = String::new();
+    let mut detected = false;
+    for r in records {
+        for v in &r.vehicles {
+            let Some(rail) = &v.rail else {
+                continue;
+            };
+            if !is_diagonal_rail_piece(rail.track_bits_under) {
+                continue;
+            }
+            detected = true;
+            let _ = writeln!(
+                evidence,
+                "- tick {}: pieza diagonal track_bits={:#04x} en {:?} (render ≈ centro de vía)",
+                r.tick, rail.track_bits_under, v.tile
+            );
+        }
+    }
+    if evidence.is_empty() {
+        evidence
+            .push_str("- la traza no recorre piezas diagonales puras (UPPER/LOWER/LEFT/RIGHT)\n");
+    }
+    KnownDivergence {
+        id: "train_diagonal_subcoord_approximation",
+        title: "Subcoordenadas por pieza: centro de vía en curvas diagonales",
+        detected,
+        evidence,
+        openttd_ref: "OpenTTD/src/vehicle.cpp:3359-3392 (`_vehicle_subcoord` por enterdir×track)",
+        rust_ref: "openttdrs/crates/openttdrs-core/src/road_movement.rs (`train_straight_subtile`, `TRAIN_TRACK_CENTER = 8`)",
+        fix_phase2: "DECIDIDO (Rail 3E): divergencia cosmética documentada; X/Y usan el mismo eje que la entrada OpenTTD",
+    }
+}
+
 /// Evalúa todas las divergencias conocidas sobre una traza de paridad.
 #[must_use]
 pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> {
@@ -427,6 +521,8 @@ pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> 
         out.push(check_train_road_acceleration(records));
         out.push(check_train_no_curve_braking(records));
         out.push(check_train_platform_stop(records));
+        out.push(check_train_render_subtile_consistency(records));
+        out.push(check_train_diagonal_subcoord_approximation(records));
     }
     if trace_has_train_signal(records) {
         out.push(check_train_signal_wait(records));

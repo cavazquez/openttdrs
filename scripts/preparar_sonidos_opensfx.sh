@@ -54,7 +54,7 @@ ensure_wav_extracted() {
 copy_osfx() {
   local osfx_idx="$1"
   local dest_name="$2"
-  local src="${WAV_DIR}/osfx_${osfx_idx}.wav"
+  local src="${WAV_DIR}/osfx_$(printf '%02d' "${osfx_idx}").wav"
   if [[ ! -f "${src}" ]]; then
     echo "Aviso: falta ${src}; omito ${dest_name}" >&2
     return
@@ -78,9 +78,9 @@ copy_osfx 10 departure_train.wav     # SND_0A_DEPARTURE_TRAIN (8)
 copy_osfx 14 level_crossing.wav      # SND_0E_LEVEL_CROSSING (12)
 copy_osfx 18 explosion.wav           # SND_12_EXPLOSION (16)
 copy_osfx 19 train_collision.wav     # SND_13_TRAIN_COLLISION (17)
-copy_osfx 23 departure_road.wav      # SND_19_DEPARTURE_OLD_RV_1 (23)
-copy_osfx 24 takeoff_heli.wav        # SND_18_TAKEOFF_HELICOPTER (22)
-copy_osfx 23 skid_plane.wav          # SND_17_SKID_PLANE (21)
+copy_osfx 23 skid_plane.wav          # SND_17_SKID_PLANE (21) → osfx_23
+copy_osfx 25 departure_road.wav      # SND_19_DEPARTURE_OLD_RV_1 (23) → osfx_25
+copy_osfx 24 takeoff_heli.wav        # SND_18_TAKEOFF_HELICOPTER (22) → osfx_24
 copy_osfx 32 construction_rail.wav     # SND_20_CONSTRUCTION_RAIL (30)
 copy_osfx 33 road_works.wav          # SND_21_ROAD_WORKS (31)
 copy_osfx 39 construction_bridge.wav # SND_27_CONSTRUCTION_BRIDGE (37)

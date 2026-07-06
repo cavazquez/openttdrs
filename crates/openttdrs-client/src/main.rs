@@ -47,6 +47,7 @@ mod window_status;
 #[cfg(test)]
 mod client_coverage_test;
 
+use audio::warn_missing_optional_assets;
 use startup::check_required_assets;
 
 fn main() {
@@ -54,6 +55,7 @@ fn main() {
     if !check_required_assets(repo_root) {
         return;
     }
+    warn_missing_optional_assets(std::path::Path::new(repo_root));
 
     bevy_app::run(repo_root);
 }

@@ -122,6 +122,7 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
     );
     app.init_state::<ClientScreen>();
     app.init_resource::<SimWorld>();
+    crate::audio::insert_asset_root(&mut app, asset_root);
     app.insert_resource(RemSize(14.0));
     app.add_plugins((
         (

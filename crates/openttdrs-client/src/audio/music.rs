@@ -2,6 +2,7 @@
 
 use bevy::prelude::*;
 
+use crate::audio::ClientAssetRoot;
 use crate::bevy_app::UpdateSet;
 use crate::state::ClientScreen;
 use crate::ui::SimHudControls;
@@ -11,6 +12,7 @@ pub(crate) struct MusicState {
     pub playing: bool,
     pub track_index: usize,
     handles: Vec<Handle<AudioSource>>,
+    theme: Option<Handle<AudioSource>>,
 }
 
 impl Default for MusicState {
@@ -19,6 +21,7 @@ impl Default for MusicState {
             playing: true,
             track_index: 0,
             handles: Vec::new(),
+            theme: None,
         }
     }
 }
@@ -44,27 +47,41 @@ const PLAYLIST: &[&str] = &[
     "assets/music/ezy_01.ogg",
 ];
 
-fn load_music_tracks(mut music: ResMut<MusicState>, asset_server: Res<AssetServer>) {
-    if !music.handles.is_empty() {
+fn load_music_tracks(
+    root: Res<ClientAssetRoot>,
+    mut music: ResMut<MusicState>,
+    asset_server: Res<AssetServer>,
+) {
+    if music.theme.is_some() || !music.handles.is_empty() {
         return;
     }
-    music.handles = PLAYLIST.iter().map(|p| asset_server.load(*p)).collect();
+    if root.asset_file_exists(MENU_THEME) {
+        music.theme = Some(asset_server.load(MENU_THEME));
+    }
+    music.handles = PLAYLIST
+        .iter()
+        .filter(|path| root.asset_file_exists(path))
+        .map(|path| asset_server.load(*path))
+        .collect();
 }
 
 fn play_menu_theme(
     mut commands: Commands,
     screen: Res<State<ClientScreen>>,
     mut played: Local<bool>,
-    asset_server: Res<AssetServer>,
     hud: Res<SimHudControls>,
+    music: Res<MusicState>,
 ) {
     if *played || *screen.get() != ClientScreen::MainMenu {
         return;
     }
+    let Some(theme) = music.theme.as_ref() else {
+        return;
+    };
     *played = true;
     let vol = hud.music_volume.clamp(0.0, 1.0);
     commands.spawn((
-        AudioPlayer::new(asset_server.load(MENU_THEME)),
+        AudioPlayer::new(theme.clone()),
         PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(vol)),
     ));
 }

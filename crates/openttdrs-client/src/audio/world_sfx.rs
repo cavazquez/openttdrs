@@ -4,6 +4,7 @@ use bevy::prelude::*;
 
 use openttdrs_core::{SoundId, TileCoord};
 
+use crate::audio::ClientAssetRoot;
 use crate::bevy_app::UpdateSet;
 use crate::iso::tile_pos;
 use crate::render::{MapTileSpawnViewport, PrimaryGameCamera, TileViewportBounds};
@@ -39,7 +40,11 @@ impl Plugin for WorldSfxPlugin {
     }
 }
 
-fn load_world_sfx(mut handles: ResMut<WorldSfxHandles>, asset_server: Res<AssetServer>) {
+fn load_world_sfx(
+    root: Res<ClientAssetRoot>,
+    mut handles: ResMut<WorldSfxHandles>,
+    asset_server: Res<AssetServer>,
+) {
     if !handles.handles.is_empty() {
         return;
     }
@@ -60,9 +65,11 @@ fn load_world_sfx(mut handles: ResMut<WorldSfxHandles>, asset_server: Res<AssetS
         SoundId::RoadWorks,
         SoundId::TrainCollision,
     ] {
-        handles
-            .handles
-            .insert(sound, asset_server.load(sound.asset_path()));
+        let path = sound.asset_path();
+        if !root.asset_file_exists(path) {
+            continue;
+        }
+        handles.handles.insert(sound, asset_server.load(path));
     }
 }
 

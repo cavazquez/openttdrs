@@ -16,7 +16,7 @@ use crate::ui::floating_window::{
     spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
-use crate::ui::hud::{HudBuildFeedback, push_build_command_error, push_build_command_success};
+use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::toolbar::BuildMenuUi;
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
@@ -192,7 +192,6 @@ pub(crate) fn handle_bridge_picker_buttons(
                         .map(|c| (c.x, c.y))
                         .collect();
                 crate::render::request_map_visual_remap(&mut pending_remap, mw, mh, &tiles);
-                push_build_command_success(&mut hud_feedback);
                 bridge_state.pending = None;
             }
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),

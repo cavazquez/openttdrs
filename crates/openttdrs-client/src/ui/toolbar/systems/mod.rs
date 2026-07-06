@@ -1,10 +1,12 @@
 //! Sistemas ECS de la toolbar (grupos, cierre, herramientas, tooltip).
 
+mod click_beep;
 mod close;
 mod groups;
 mod tools;
 mod tooltip;
 
+pub(crate) use click_beep::toolbar_click_beep;
 pub(crate) use close::{close_toolbar_button_interaction, close_toolbar_panel_on_escape};
 pub(crate) use groups::{
     hide_tool_when_panel_closed, sync_climate_industry_tools, toolbar_group_interaction,

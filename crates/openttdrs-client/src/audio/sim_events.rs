@@ -55,7 +55,8 @@ fn dispatch_sim_events(
                 }
             }
             SimEvent::Construction { kind, at } => {
-                if hud.sound_ambient {
+                // OpenTTD reproduce el SFX de construcción con `sound.confirm`.
+                if hud.sound_confirm {
                     let sound = match kind {
                         ConstructionKind::Rail => SoundId::ConstructionRail,
                         ConstructionKind::Bridge => SoundId::ConstructionBridge,
@@ -75,7 +76,7 @@ fn dispatch_sim_events(
                 }
             }
             SimEvent::Demolition { at } => {
-                if hud.sound_ambient {
+                if hud.sound_confirm {
                     sfx.write(PlayWorldSfx {
                         sound: SoundId::Explosion,
                         at,

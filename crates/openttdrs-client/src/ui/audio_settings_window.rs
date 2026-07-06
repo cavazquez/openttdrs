@@ -29,6 +29,7 @@ pub(crate) enum AudioSettingsButton {
     Ambient,
     Disaster,
     Confirm,
+    ClickBeep,
 }
 
 #[derive(Component, Clone, Copy)]
@@ -102,7 +103,7 @@ pub(crate) fn setup_audio_settings_window(mut commands: Commands, asset_server: 
         FloatingWindowId::AudioSettings,
         "Audio",
         TITLE_BROWN,
-        Vec2::new(280.0, 200.0),
+        Vec2::new(280.0, 225.0),
         300.0,
     );
     commands.entity(content).with_children(|body| {
@@ -118,6 +119,7 @@ pub(crate) fn setup_audio_settings_window(mut commands: Commands, asset_server: 
             ("Ambiente", AudioSettingsButton::Ambient),
             ("Desastres", AudioSettingsButton::Disaster),
             ("Confirmación", AudioSettingsButton::Confirm),
+            ("Clic toolbar", AudioSettingsButton::ClickBeep),
         ] {
             body.spawn((
                 Button,
@@ -194,6 +196,7 @@ pub(crate) fn sync_audio_settings_window(
             AudioSettingsButton::Ambient => hud.sound_ambient,
             AudioSettingsButton::Disaster => hud.sound_disaster,
             AudioSettingsButton::Confirm => hud.sound_confirm,
+            AudioSettingsButton::ClickBeep => hud.sound_click_beep,
         };
         *border = if on {
             BorderColor::all(BTN_ACTIVE)
@@ -239,6 +242,7 @@ pub(crate) fn handle_audio_settings_buttons(
             AudioSettingsButton::Ambient => hud.sound_ambient = !hud.sound_ambient,
             AudioSettingsButton::Disaster => hud.sound_disaster = !hud.sound_disaster,
             AudioSettingsButton::Confirm => hud.sound_confirm = !hud.sound_confirm,
+            AudioSettingsButton::ClickBeep => hud.sound_click_beep = !hud.sound_click_beep,
         }
     }
 }

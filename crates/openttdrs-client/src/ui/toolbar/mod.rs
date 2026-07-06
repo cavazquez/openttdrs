@@ -47,9 +47,9 @@ pub(crate) use station_panel::{
 };
 pub(crate) use systems::{
     build_menu_interaction, close_toolbar_button_interaction, close_toolbar_panel_on_escape,
-    hide_tool_when_panel_closed, sync_climate_industry_tools, toolbar_group_interaction,
-    update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
-    update_toolbar_tooltip,
+    hide_tool_when_panel_closed, sync_climate_industry_tools, toolbar_click_beep,
+    toolbar_group_interaction, update_tool_button_visuals, update_toolbar_group_visuals,
+    update_toolbar_tool_visibility, update_toolbar_tooltip,
 };
 
 /// Marca nodos del menu "Construir" para ignorar clics en el mapa cuando el cursor esta encima.

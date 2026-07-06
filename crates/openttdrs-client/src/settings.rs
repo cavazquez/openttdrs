@@ -25,6 +25,7 @@ pub(crate) struct ClientPreferences {
     pub(crate) sound_ambient: bool,
     pub(crate) sound_disaster: bool,
     pub(crate) sound_confirm: bool,
+    pub(crate) sound_click_beep: bool,
     pub(crate) show_debug_gizmos: bool,
     pub(crate) show_diagnostics_overlay: bool,
     /// 0=Off, 1=Summary, 2=Full — ver `news_prefs`.
@@ -46,6 +47,7 @@ impl Default for ClientPreferences {
             sound_ambient: true,
             sound_disaster: true,
             sound_confirm: true,
+            sound_click_beep: true,
             show_debug_gizmos: false,
             show_diagnostics_overlay: false,
             news_cargo_delivered: crate::news_prefs::DISPLAY_FULL,
@@ -112,6 +114,7 @@ fn hydrate_runtime_from_preferences(
     hud.sound_ambient = effective.sound_ambient;
     hud.sound_disaster = effective.sound_disaster;
     hud.sound_confirm = effective.sound_confirm;
+    hud.sound_click_beep = effective.sound_click_beep;
     hydrated.0 = true;
 }
 
@@ -159,6 +162,10 @@ fn sync_preferences_from_hud(
     }
     if prefs.sound_confirm != hud.sound_confirm {
         prefs.sound_confirm = hud.sound_confirm;
+        changed = true;
+    }
+    if prefs.sound_click_beep != hud.sound_click_beep {
+        prefs.sound_click_beep = hud.sound_click_beep;
         changed = true;
     }
     if changed {

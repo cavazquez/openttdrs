@@ -13,7 +13,7 @@ use crate::render::{
 use crate::state::SimWorld;
 use crate::ui::hud::{
     HoveredTileCoord, HudBuildFeedback, SelectedTileInfo, enqueue_build_place_flash,
-    push_build_command_error, push_build_command_success,
+    push_build_command_error,
 };
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::save_window::SaveWindowState;
@@ -417,7 +417,6 @@ pub(crate) fn handle_tile_click(
             if changed {
                 let (mw, mh) = sim.state.map.dimensions();
                 request_map_visual_remap(&mut pending, mw, mh, &remap_tiles);
-                push_build_command_success(&mut hud_feedback);
             } else if let Some(e) = err {
                 push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
             }
@@ -431,7 +430,6 @@ pub(crate) fn handle_tile_click(
             if changed {
                 let (mw, mh) = sim.state.map.dimensions();
                 request_map_visual_remap(&mut pending, mw, mh, &remap_tiles);
-                push_build_command_success(&mut hud_feedback);
             } else if let Some(e) = err {
                 push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
             }
@@ -457,7 +455,6 @@ pub(crate) fn handle_tile_click(
             let (mw, mh) = sim.state.map.dimensions();
             let tiles = tiles_for_visual_remap(Some(&sim.state.map), action, build_pos, &[]);
             request_map_visual_remap(&mut pending, mw, mh, &tiles);
-            push_build_command_success(&mut hud_feedback);
             if action == BuildMenuAction::RailSignals
                 && let Some(flash_pos) = rail_signal_flash_position(
                     &sim.state.map,

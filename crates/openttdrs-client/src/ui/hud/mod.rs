@@ -7,7 +7,7 @@ mod input;
 mod place_flash;
 mod sound_ping;
 
-pub(crate) use feedback::{push_build_command_error, push_build_command_success};
+pub(crate) use feedback::push_build_command_error;
 
 pub(crate) use display::{setup_tile_info_ui, update_tile_info_text};
 pub(crate) use income_popup::{animate_income_popups, spawn_income_popups};
@@ -15,7 +15,9 @@ pub(crate) use input::{cycle_json_save_path_hotkey, handle_pause_toggle, handle_
 pub(crate) use place_flash::{
     animate_build_place_flash, enqueue_build_place_flash, spawn_build_place_flash,
 };
-pub(crate) use sound_ping::{HudSfxHandles, PlayHudSfx, flush_hud_sfx, load_hud_sfx, play_hud_sfx};
+pub(crate) use sound_ping::{
+    HudSfxHandles, HudSfxKind, PlayHudSfx, flush_hud_sfx, load_hud_sfx, play_hud_sfx,
+};
 
 /// Pausa simulacion y ruta del JSON de **F5/F9** (alternativa a variable de entorno al arranque).
 #[derive(Resource)]
@@ -30,6 +32,8 @@ pub(crate) struct SimHudControls {
     pub(crate) sound_ambient: bool,
     pub(crate) sound_disaster: bool,
     pub(crate) sound_confirm: bool,
+    /// Beep al pulsar botones del toolbar (`sound.click_beep` en OpenTTD).
+    pub(crate) sound_click_beep: bool,
 }
 
 impl Default for SimHudControls {
@@ -45,6 +49,7 @@ impl Default for SimHudControls {
             sound_ambient: true,
             sound_disaster: true,
             sound_confirm: true,
+            sound_click_beep: true,
         }
     }
 }
@@ -74,8 +79,6 @@ pub(crate) struct HudBuildFeedback {
     pub(crate) expires_at_secs: f32,
     /// Encola pitido de error (lo consume [`flush_hud_sfx`]).
     pub(crate) pending_soft_ping: bool,
-    /// Encola sonido breve tras construcción válida.
-    pub(crate) pending_build_ok_ping: bool,
     /// Encola sonido breve al cobrar entrega de carga.
     pub(crate) pending_income_ping: bool,
     /// Ticker de noticias en la barra inferior.

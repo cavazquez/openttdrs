@@ -5,8 +5,9 @@ use bevy::prelude::*;
 /// Tipo de efecto corto del HUD.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HudSfxKind {
+    /// Clic en botones del toolbar (`SND_15_BEEP`, `sound.click_beep`).
+    ClickBeep,
     Error,
-    BuildOk,
     Income,
     NewsTicker,
     NewsApplause,
@@ -34,10 +35,6 @@ pub(crate) fn flush_hud_sfx(
     if hud.pending_soft_ping {
         hud.pending_soft_ping = false;
         writer.write(PlayHudSfx(HudSfxKind::Error));
-    }
-    if hud.pending_build_ok_ping {
-        hud.pending_build_ok_ping = false;
-        writer.write(PlayHudSfx(HudSfxKind::BuildOk));
     }
     if hud.pending_income_ping {
         hud.pending_income_ping = false;
@@ -93,8 +90,7 @@ pub(crate) fn play_hud_sfx(
     let volume = hud.sfx_volume.clamp(0.0, 1.0);
     for PlayHudSfx(kind) in reader.read() {
         let handle = match kind {
-            HudSfxKind::Error => sound.error.as_ref(),
-            HudSfxKind::BuildOk => sound.build_ok.as_ref().or(sound.error.as_ref()),
+            HudSfxKind::ClickBeep | HudSfxKind::Error => sound.error.as_ref(),
             HudSfxKind::Income => sound.income.as_ref().or(sound.error.as_ref()),
             HudSfxKind::NewsTicker => sound.news_ticker.as_ref().or(sound.error.as_ref()),
             HudSfxKind::NewsApplause => sound

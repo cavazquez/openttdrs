@@ -89,9 +89,9 @@ use toolbar::{
     setup_rail_station_picker, setup_station_cargo_panel, setup_top_toolbar, sync_bridge_picker,
     sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_depot_panel,
     sync_minimap, sync_order_panel, sync_orders_pick_cursor, sync_rail_station_picker,
-    sync_station_cargo_panel, toolbar_group_interaction, update_build_ghost_preview,
-    update_cursor_tile, update_tool_button_visuals, update_toolbar_group_visuals,
-    update_toolbar_tool_visibility, update_toolbar_tooltip,
+    sync_station_cargo_panel, toolbar_click_beep, toolbar_group_interaction,
+    update_build_ghost_preview, update_cursor_tile, update_tool_button_visuals,
+    update_toolbar_group_visuals, update_toolbar_tool_visibility, update_toolbar_tooltip,
 };
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState, ToolbarState};
 use town_window::{
@@ -342,6 +342,7 @@ impl Plugin for ClientUiPlugin {
                 sync_bridge_picker,
                 sync_vehicle_window,
                 sync_timetable_window,
+                toolbar_click_beep,
                 play_hud_sfx,
                 update_tile_info_text,
             )

@@ -60,18 +60,29 @@ fn construction_event_for(
         | Command::PlaceTruckStop(c, _)
         | Command::PlaceRoadTunnel(c, _) => Some((ConstructionKind::Road, *c)),
         Command::PlaceRailStationArea { origin, .. } => Some((ConstructionKind::Rail, *origin)),
-        Command::PlaceIndustry(c)
+        // Quitar vía suena al SFX de rail (como en OpenTTD), no a explosión.
+        Command::RemoveRail(c) | Command::RemoveRailBits(c, _) => {
+            Some((ConstructionKind::Rail, *c))
+        }
+        Command::BuyLand(c)
+        | Command::RaiseLand(c)
+        | Command::LowerLand(c)
+        | Command::PlaceIndustry(c)
         | Command::PlaceIndustryKind(c, _)
         | Command::PlaceIndustrySpec(c, _)
         | Command::PlaceHouse(c)
         | Command::PlaceForest(c) => Some((ConstructionKind::Other, *c)),
+        Command::BuyLandArea { from, .. } | Command::LevelLand { from, .. } => {
+            Some((ConstructionKind::Other, *from))
+        }
         _ => None,
     }
 }
 
 fn demolition_event_for(cmd: &Command) -> Option<crate::map::TileCoord> {
     match cmd {
-        Command::RemoveRail(c) | Command::RemoveRailBits(c, _) | Command::ClearTile(c) => Some(*c),
+        // Solo la dinamita/limpieza de tesela suena a explosión.
+        Command::ClearTile(c) => Some(*c),
         _ => None,
     }
 }

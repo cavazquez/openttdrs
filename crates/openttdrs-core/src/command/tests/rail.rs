@@ -391,8 +391,21 @@ fn parallel_horz_branch_places_vert_only_on_clicked_tile() {
     );
     assert_eq!(
         s.map.get(TileCoord::new(5, 5)).unwrap().m5 & 0x3F,
-        0x04,
-        "la vía E-O existente no debe ganar piezas extra"
+        0x14,
+        "empalme T: carril paralelo une la vía E-O existente"
+    );
+}
+
+#[test]
+fn place_rail_bits_links_perpendicular_neighbor() {
+    let mut s = GameState::new(8, 8);
+    apply_command(&mut s, &Command::PlaceRailBits(TileCoord::new(3, 4), 0x01)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailBits(TileCoord::new(3, 3), 0x02)).unwrap();
+    assert_eq!(s.map.get(TileCoord::new(3, 3)).unwrap().m5 & 0x3F, 0x02);
+    assert_eq!(
+        s.map.get(TileCoord::new(3, 4)).unwrap().m5 & 0x3F,
+        0x03,
+        "la X existente forma cruce al colocar Y perpendicular en vecino"
     );
 }
 

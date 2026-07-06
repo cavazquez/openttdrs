@@ -310,7 +310,7 @@ El cliente necesita **Rust** y los assets que el repo ya versiona o que generás
 | Asset | ¿En el repo? | ¿Necesitás `apt`/scripts? |
 |-------|----------------|---------------------------|
 | **Sonidos** (`assets/sounds/*.wav`) | Sí (~22 WAV OpenSFX) | No para jugar |
-| **Música** (`assets/music/*.ogg`) | Sí (theme + 4 pistas) | No para jugar |
+| **Música** (`assets/music/*.ogg`) | Sí (theme + 27 pistas OpenMSX) | No para jugar |
 | **Gráficos** (`assets/opengfx/`) | No (muy grande) | Sí, una vez: ver abajo |
 | **Fuente UI** (`static/fonts/`) | Sí | No |
 
@@ -336,7 +336,7 @@ Scripts de regeneración:
 
 ```bash
 ./scripts/preparar_sonidos_opensfx.sh   # sonidos mundo + HUD
-./scripts/preparar_musica_ogg.sh        # subset música (5 OGG)
+./scripts/preparar_musica_ogg.sh        # playlist OpenMSX (28 OGG)
 ./scripts/descargar_assets.sh graficos --32bpp
 ```
 

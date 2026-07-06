@@ -11,7 +11,7 @@ use super::super::terraform::{apply_autoslope_if_needed, check_autoslope_flat};
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
-    bridge_line, check_in_bounds, place_single_transport_tile,
+    bridge_line, check_in_bounds, place_single_transport_tile, propagate_rail_diag_to_neighbors,
     refresh_track_junction_from_neighbor, trackbits_to_signal_present,
 };
 
@@ -446,6 +446,11 @@ pub(in crate::command) fn place_rail_bits(
     let tb = merged_rail_trackbits_on_tile(&state.map, c, add);
     check_rail_trackbits_on_tile(&state.map, c, tb)?;
     write_normal_rail_tile(state, c, tb)?;
+    if (add & RAIL_DIAG_MASK) != 0 {
+        propagate_rail_diag_to_neighbors(state, c, add)?;
+    } else if (add & RAIL_PARALLEL_MASK) != 0 {
+        refresh_rail_neighbors_after_place(state, c)?;
+    }
     state.economy.money -= RAIL_BUILD_COST;
     Ok(())
 }

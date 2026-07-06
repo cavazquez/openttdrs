@@ -22,11 +22,13 @@ Fuentes OpenTTD: `rail_gui.cpp` (`GenericPlaceSignals`, `GenericPlaceSignals`), 
 **La vía se escribe solo en la tesela bajo el cursor** — la misma que muestra el fantasma.
 
 - **No** se redirige el clic a teselas vecinas con vía existente.
-- **No** se añaden piezas de unión automáticas en vecinos al colocar (`PlaceRailBits` no llama a `refresh_rail_neighbors`).
+- **Sí** se actualizan uniones en vecinos al colocar:
+  - **X / Y** (`PlaceRailBits` con diagonal): cruce perpendicular en la tesela vecinal (`propagate_rail_diag_to_neighbors`).
+  - **Horz / Vert** (carril paralelo): empalme T en la vía E–O / N–S vecina (`refresh_rail_neighbors_after_place` + `junction_merge_for_neighbor`).
 
-Las curvas/T visuales al **ramificar** requieren hoy **autorraíl** o colocar en la tesela que ya tiene vía. Unir dos tramos paralelos perpendicularmente deja dos teselas independientes hasta que el jugador conecte explícitamente (paridad parcial respecto a OpenTTD; ver backlog S3).
+Las curvas en la **misma tesela** siguen siendo por fusión de bits al clic; ramificar con **autorraíl** infiere la pieza completa.
 
-Implementación: `place_rail_bits` en `crates/openttdrs-core/src/command/transport.rs`.
+Implementación: `place_rail_bits` en `crates/openttdrs-core/src/command/transport/rail.rs`, `propagate_rail_diag_to_neighbors` en `shared.rs`.
 
 ---
 
@@ -66,6 +68,5 @@ Casos cubiertos: extensión Horz en línea; segundo carril en tesela vacía; Ver
 
 ## Backlog
 
-- Uniones automáticas con Horz/Vert sin usar autoraíl (opcional, paridad OpenTTD).
 - Junctions en pendiente (Sprint 3 — `ROADMAP_SPRINTS.md` § S3).
 - Sim de señales en carriles paralelos (hoy probada sobre todo en X/Y).

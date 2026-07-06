@@ -61,6 +61,35 @@ pub(in crate::command::transport) fn trackbits_to_signal_present(tb: u8) -> u8 {
     }
 }
 
+pub(in crate::command::transport) fn propagate_rail_diag_to_neighbors(
+    state: &mut GameState,
+    c: TileCoord,
+    add: u8,
+) -> Result<(), CommandError> {
+    let add = add & RAIL_DIAG_MASK;
+    if add == 0 {
+        return Ok(());
+    }
+    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+        let n = TileCoord::new(c.x + dx, c.y + dy);
+        if state.map.get_kind(n) != Some(TileKind::Rail) {
+            continue;
+        }
+        let existing = existing_rail_trackbits(&state.map, n);
+        let existing_diag = existing & RAIL_DIAG_MASK;
+        if existing_diag == 0 || existing_diag == add {
+            continue;
+        }
+        let merged = existing | add;
+        if merged == existing {
+            continue;
+        }
+        check_rail_trackbits_on_tile(&state.map, n, merged)?;
+        write_normal_rail_tile(state, n, merged)?;
+    }
+    Ok(())
+}
+
 pub(in crate::command::transport) fn junction_merge_for_neighbor(
     holder_tb: u8,
     neighbor_tb: u8,
@@ -73,11 +102,10 @@ pub(in crate::command::transport) fn junction_merge_for_neighbor(
     let neighbor_horz = neighbor_tb & RAIL_TB_HORZ != 0;
     let neighbor_vert = neighbor_tb & RAIL_TB_VERT != 0;
 
-    let holder_diag_only = holder_tb & RAIL_DIAG_MASK != 0 && holder_tb & RAIL_PARALLEL_MASK == 0;
     let holder_horz = holder_tb & RAIL_TB_HORZ != 0 && holder_tb & RAIL_TB_VERT == 0;
     let holder_vert = holder_tb & RAIL_TB_VERT != 0 && holder_tb & RAIL_TB_HORZ == 0;
 
-    if (holder_diag_only || holder_horz) && neighbor_vert && offset_along_vert_rail(dx, dy) {
+    if holder_horz && neighbor_vert && offset_along_vert_rail(dx, dy) {
         return Some(holder_tb | neighbor_tb);
     }
     if holder_vert && neighbor_horz && offset_along_horz_rail(dx, dy) {

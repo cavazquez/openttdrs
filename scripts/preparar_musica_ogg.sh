@@ -1,12 +1,7 @@
 #!/usr/bin/env bash
-# Pre-decodifica subset OpenMSX → OGG para el cliente Bevy (Camino A: commitear en git).
+# Pre-decodifica OpenMSX → OGG para el cliente Bevy (Camino A: commitear en git).
 #
-# Mapeo de slots del cliente → MIDIs reales en openmsx.obm (v0.4.2):
-#   theme.ogg   ← tttheme2.mid
-#   old_01.ogg  ← ttsong_iv_imuh3.mid
-#   old_02.ogg  ← modern_motion.mid
-#   new_01.ogg  ← midnight_snow_run.mid
-#   ezy_01.ogg  ← 5432gone_redfarn.mid
+# Mapeo según openmsx.obm (v0.4.2): theme + old_0..9 + new_0..9 + ezy_0..6.
 #
 # Requiere: OpenMSX extraído, fluidsynth, ffmpeg y un SoundFont GM (.sf2).
 # Uso:
@@ -85,12 +80,39 @@ if [[ -z "${SF2}" ]]; then
 fi
 
 mkdir -p "${OUT_DIR}"
-echo "Convirtiendo subset MIDI → OGG en ${OUT_DIR} (SoundFont: ${SF2}) ..."
+echo "Convirtiendo OpenMSX → OGG en ${OUT_DIR} (SoundFont: ${SF2}) ..."
+
 convert_track theme.ogg tttheme2.mid "${SF2}"
+
+convert_track old_00.ogg keep_on_rolling.mid "${SF2}"
 convert_track old_01.ogg ttsong_iv_imuh3.mid "${SF2}"
 convert_track old_02.ogg modern_motion.mid "${SF2}"
+convert_track old_03.ogg busy_schedule.mid "${SF2}"
+convert_track old_04.ogg the_fast_route.mid "${SF2}"
+convert_track old_05.ogg ttsong_iii_imuh3.mid "${SF2}"
+convert_track old_06.ogg train_filled_with_cash.mid "${SF2}"
+convert_track old_07.ogg flying_scotsman.mid "${SF2}"
+convert_track old_08.ogg chuggachugga.mid "${SF2}"
+convert_track old_09.ogg the_hobo_redfarn.mid "${SF2}"
+
+convert_track new_00.ogg ultimate_run.mid "${SF2}"
 convert_track new_01.ogg midnight_snow_run.mid "${SF2}"
+convert_track new_02.ogg run_for_your_life.mid "${SF2}"
+convert_track new_03.ogg coconut_run2.mid "${SF2}"
+convert_track new_04.ogg harp_harmony.mid "${SF2}"
+convert_track new_05.ogg mighty_giant_run.mid "${SF2}"
+convert_track new_06.ogg wood_whistles.mid "${SF2}"
+convert_track new_07.ogg linns_basket.mid "${SF2}"
+convert_track new_08.ogg relax_song.mid "${SF2}"
+convert_track new_09.ogg chemistry_lab.mid "${SF2}"
+
+convert_track ezy_00.ogg boogi_marabi_redfarn.mid "${SF2}"
 convert_track ezy_01.ogg 5432gone_redfarn.mid "${SF2}"
+convert_track ezy_02.ogg moo_redfarn.mid "${SF2}"
+convert_track ezy_03.ogg say_what_redfarn.mid "${SF2}"
+convert_track ezy_04.ogg be_sharp_bw_redfarn.mid "${SF2}"
+convert_track ezy_05.ogg careless_perc_redfarn.mid "${SF2}"
+convert_track ezy_06.ogg mosey_along_redfarn.mid "${SF2}"
 
 echo ""
 echo "Música en ${OUT_DIR}/:"

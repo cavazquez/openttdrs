@@ -144,7 +144,15 @@ fn road_drag_axis(
 /// Herramientas cuya sim actualiza piezas de vía en teselas vecinas (`refresh_rail_neighbors`).
 #[inline]
 pub(crate) fn rail_action_refreshes_neighbors(action: BuildMenuAction) -> bool {
-    matches!(action, BuildMenuAction::Rail | BuildMenuAction::RailRemove)
+    matches!(
+        action,
+        BuildMenuAction::Rail
+            | BuildMenuAction::RailRemove
+            | BuildMenuAction::RailX
+            | BuildMenuAction::RailY
+            | BuildMenuAction::RailHorz
+            | BuildMenuAction::RailVert
+    )
 }
 
 /// Teselas a redibujar tras colocar/quitar vía con refresco de vecinos (autorraíl / quitar).

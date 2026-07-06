@@ -40,11 +40,36 @@ impl Plugin for MusicPlugin {
 }
 
 const MENU_THEME: &str = "assets/music/theme.ogg";
+
+/// Playlist en partida: slots `openmsx.obm` (v0.4.2), orden old → new → ezy.
 const PLAYLIST: &[&str] = &[
+    "assets/music/old_00.ogg",
     "assets/music/old_01.ogg",
     "assets/music/old_02.ogg",
+    "assets/music/old_03.ogg",
+    "assets/music/old_04.ogg",
+    "assets/music/old_05.ogg",
+    "assets/music/old_06.ogg",
+    "assets/music/old_07.ogg",
+    "assets/music/old_08.ogg",
+    "assets/music/old_09.ogg",
+    "assets/music/new_00.ogg",
     "assets/music/new_01.ogg",
+    "assets/music/new_02.ogg",
+    "assets/music/new_03.ogg",
+    "assets/music/new_04.ogg",
+    "assets/music/new_05.ogg",
+    "assets/music/new_06.ogg",
+    "assets/music/new_07.ogg",
+    "assets/music/new_08.ogg",
+    "assets/music/new_09.ogg",
+    "assets/music/ezy_00.ogg",
     "assets/music/ezy_01.ogg",
+    "assets/music/ezy_02.ogg",
+    "assets/music/ezy_03.ogg",
+    "assets/music/ezy_04.ogg",
+    "assets/music/ezy_05.ogg",
+    "assets/music/ezy_06.ogg",
 ];
 
 fn load_music_tracks(
@@ -90,17 +115,21 @@ fn play_menu_theme(
 fn advance_playlist(
     mut commands: Commands,
     screen: Res<State<ClientScreen>>,
-    music: Res<MusicState>,
+    mut music: ResMut<MusicState>,
     hud: Res<SimHudControls>,
-    players: Query<&AudioPlayer>,
+    players: Query<Entity, With<AudioPlayer>>,
 ) {
-    if *screen.get() != ClientScreen::InGame || !music.playing || music.handles.is_empty() {
+    if *screen.get() != ClientScreen::InGame || !music.playing {
         return;
     }
     if !players.is_empty() {
         return;
     }
+    if music.handles.is_empty() {
+        return;
+    }
     let idx = music.track_index % music.handles.len();
+    music.track_index = music.track_index.wrapping_add(1);
     let vol = hud.music_volume.clamp(0.0, 1.0);
     commands.spawn((
         AudioPlayer::new(music.handles[idx].clone()),

@@ -540,7 +540,28 @@ fn move_vehicles(state: &mut GameState) {
         if vehicle.breakdown_ticks_remaining > 0 {
             continue;
         }
+        let prev_speed = vehicle.cur_speed;
+        let prev_pos = vehicle.pos;
         vehicle.step();
+        if vehicle.running {
+            if prev_speed == 0 && vehicle.cur_speed > 0 {
+                state
+                    .pending_sim_events
+                    .push(crate::sim_events::SimEvent::VehicleDepart {
+                        vehicle_id: vehicle.id,
+                        at: vehicle.pos,
+                    });
+            }
+            if vehicle.kind == VehicleKind::Train
+                && vehicle.pos != prev_pos
+                && let Some(tile) = state.map.get(vehicle.pos)
+                && crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind)
+            {
+                state
+                    .pending_sim_events
+                    .push(crate::sim_events::SimEvent::LevelCrossing { at: vehicle.pos });
+            }
+        }
         if had_force && vehicle.kind == VehicleKind::Train {
             vehicle.force_proceed = false;
         }

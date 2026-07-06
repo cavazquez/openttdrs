@@ -52,6 +52,8 @@ pub(crate) enum FloatingWindowId {
     Finances,
     /// Configuración Off / Summary / Full por tipo de noticia.
     NewsSettings,
+    /// Volumen música/SFX y flags de categorías de sonido.
+    AudioSettings,
     /// Horario detallado del vehículo (F4).
     Timetable,
 }

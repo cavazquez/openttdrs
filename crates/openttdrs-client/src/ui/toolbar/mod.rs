@@ -263,13 +263,13 @@ pub(crate) enum SaveMenuAction {
     ZoomIn,
     ZoomOut,
     NewsSettings,
+    AudioSettings,
 }
 
 /// Barra superior de herramientas (visibilidad, tooltip).
 #[derive(Resource, Default)]
 pub(crate) struct ToolbarState {
-    /// Frame de cursor animado (`table/animcursors.h`); avanza con el reloj de UI.
-    #[allow(dead_code)]
+    /// Frame de cursor animado (`table/animcursors.h`); sincronizado con `TileAnimClock`.
     pub(crate) anim_cursor_frame: u8,
     pub(crate) active_group: Option<ToolbarGroup>,
 }

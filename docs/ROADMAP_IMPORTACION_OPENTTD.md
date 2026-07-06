@@ -35,7 +35,7 @@ Sorprendentemente, esta es el área **más avanzada** del port. Ya está portado
 | **Ascensor de edificios de ciudad** | `town_cmd.cpp:346-368` | Baja | **Parcial** (clock m7) |
 | **Árboles creciendo / cultivos** | `tree_cmd.cpp:679` | Baja–Media | **Hecho** (sim + render) |
 | **Scroll suave del viewport** | `viewport.cpp:1947` | Media | **Hecho** (lerp 300 ms) |
-| **Cursores animados** | `table/animcursors.h` | Baja | **Parcial** (`ToolbarState.anim_cursor_frame`) |
+| **Cursores animados** | `table/animcursors.h` | Baja | **Parcial** (`TileAnimClock` + `anim_cursor_frame`) |
 
 ### 1.2 Ya implementado en el cliente
 
@@ -77,7 +77,7 @@ Sorprendentemente, esta es el área **más avanzada** del port. Ya está portado
 
 ## 2. Sonido
 
-Estado actual: **prototipo mínimo** — 6 SFX de HUD (`ui/hud/sound_ping.rs`) vía `bevy_audio`, sin mixer ni paneo espacial.
+Estado actual: **~20 SFX** vía `SimEvent` + audio espacial (`audio/world_sfx.rs`); 6 WAV HUD heredados; script `preparar_sonidos_opensfx.sh` para el subset prioritario.
 
 ### 2.1 Arquitectura del original
 
@@ -122,12 +122,16 @@ Estado actual: **prototipo mínimo** — 6 SFX de HUD (`ui/hud/sound_ping.rs`) v
 |---------|--------|-----------|
 | Dependencia audio | `bevy` + `bevy_audio` + `wav` | `openttdrs-client/Cargo.toml` |
 | SFX HUD (6 tipos) | Implementado | `ui/hud/sound_ping.rs` |
-| Volumen SFX | `sfx_volume` 0.0–1.0 | `settings.rs` |
+| SFX mundo (~20 `SoundId`) | Implementado | `sound_id.rs`, `audio/sim_events.rs` |
+| Audio espacial (paneo por cámara) | Implementado | `audio/world_sfx.rs` |
+| Volumen SFX / música | `sfx_volume`, `music_volume` | `settings.rs`, ventana **Audio...** |
+| Flags granulares | `sound_vehicle/ambient/disaster/confirm` | `settings.rs`, `audio_settings_window.rs` |
 | OpenSFX metadatos | En repo | `assets/opensfx/opensfx-1.0.3/` |
-| WAV runtime | Generados por script | `assets/sounds/*.wav` |
-| Mixer / paneo / 8 canales | **Falta** | — |
-| Sonidos vehículos / ambiente / desastres | **Falta** | — |
-| Flags granulares (`vehicle`, `ambient`, `disaster`) | **Falta** | — |
+| WAV runtime | Scripts HUD + OpenSFX | `preparar_sonidos_hud.sh`, `preparar_sonidos_opensfx.sh` |
+| Eventos cruce / salida tren | `LevelCrossing`, `VehicleDepart` | `sim_step.rs`, `map/level_crossing.rs` |
+| Mixer 8 canales estilo original | **Falta** | — |
+| Catálogo 73 SFX completo | **Parcial** (~20) | — |
+| Motores en marcha por tick | **Falta** | — |
 
 ### 2.5 Mapeo HUD actual → OpenTTD
 
@@ -146,7 +150,7 @@ Estado actual: **prototipo mínimo** — 6 SFX de HUD (`ui/hud/sound_ping.rs`) v
 
 ## 3. Música
 
-**Estado:** no implementada (roadmap Sprint 5). Script de descarga preparado pero el cliente no reproduce.
+**Estado:** `MusicPlugin` reproduce OGG pre-decodificado (OpenMSX vía `descargar_musica.sh` + `fluidsynth`/`ffmpeg`). Volumen `music_volume` separado de SFX; sin UI play/pause/skip ni playlists completas.
 
 ### 3.1 Sistema del original
 
@@ -174,11 +178,12 @@ Estado actual: **prototipo mínimo** — 6 SFX de HUD (`ui/hud/sound_ping.rs`) v
 
 | Aspecto | Estado |
 |---------|--------|
-| Reproducción MIDI | **Falta** |
-| Playlists / shuffle | **Falta** |
-| Volumen música separado de SFX | **Falta** (solo `sfx_volume`) |
+| Reproducción OGG en juego | **Hecho** (`audio/music.rs`) |
+| Playlists / shuffle OpenMSX | **Falta** |
+| Volumen música separado de SFX | **Hecho** (`music_volume` + ventana Audio) |
 | Script descarga OpenMSX | Existe | `scripts/descargar_musica.sh` |
-| Assets OpenMSX en repo | **Falta** (gitignored / no descargado) |
+| Assets OpenMSX en repo | Gitignored; generar con script |
+| Controles play/pause/skip en UI | **Falta** |
 
 ### 3.4 Atajo pragmático para Bevy
 
@@ -200,15 +205,15 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 
 | Dinámica | Referencia OpenTTD | Estado port | Prioridad sugerida |
 |----------|-------------------|-------------|-------------------|
-| **Crecimiento de ciudades + autoridad local** | `town_cmd.cpp:890-4190` | Falta (solo demanda fija) | ⭐ Alta — desbloquea progresión |
-| **Préstamos, intereses, quiebra** | `economy.cpp:799`, `misc_cmd.cpp:41` | Falta (campo `loan` solo lectura) | ⭐ Alta — cierra ciclo económico |
-| **Averías + fiabilidad + servicio** | `vehicle.cpp:1303-1492` | Parcial (solo autoreplace) | ⭐ Alta — loop de mantenimiento |
-| **Subsidios** | `subsidy.cpp` | Falta | Media — objetivos y competencia |
-| **Decaimiento carga en estación + ratings** | `station_cmd.cpp:3959` | Falta | Media — presión logística |
-| **Desastres** (UFO, accidentes, submarinos) | `disaster_vehicle.cpp` | Falta | Media — flavor característico |
-| **Árboles** (crecer / talar / plantar) | `tree_cmd.cpp` | Falta | Baja–Media |
-| **IA de compañías rivales** | `ai/` (Squirrel) | Falta | Baja (esfuerzo enorme) |
-| **Barcos y aviones** | `ship_cmd.cpp`, `aircraft_cmd.cpp` | Falta | Media (nuevo tipo vehículo) |
+| **Crecimiento de ciudades + autoridad local** | `town_cmd.cpp:890-4190` | Parcial (rating, publicidad, fondos UI) | ⭐ Alta |
+| **Préstamos, intereses, quiebra** | `economy.cpp:799`, `misc_cmd.cpp:41` | Parcial (comandos + UI finanzas) | ⭐ Alta |
+| **Averías + fiabilidad + servicio** | `vehicle.cpp:1303-1492` | Parcial (averías sim + servicio depósito) | ⭐ Alta |
+| **Subsidios** | `subsidy.cpp` | Parcial (`subsidy.rs`) | Media |
+| **Decaimiento carga en estación + ratings** | `station_cmd.cpp:3959` | Parcial (edad carga; rating ciudad sí) | Media |
+| **Desastres** (UFO, accidentes, submarinos) | `disaster_vehicle.cpp` | Parcial (`disaster.rs`) | Media |
+| **Árboles** (crecer / talar / plantar) | `tree_cmd.cpp` | Parcial (`tree_tile_loop.rs`) | Baja–Media |
+| **IA de compañías rivales** | `ai/` (Squirrel) | Falta (doc `epics/ai_rivals.md`) | Baja |
+| **Barcos y aviones** | `ship_cmd.cpp`, `aircraft_cmd.cpp` | Parcial (movimiento básico) | Media |
 | **NewGRF (mods)** | `newgrf.cpp` + ecosistema | Falta | Fuera de alcance actual |
 
 ### 4.2 Detalle por bloque
@@ -220,20 +225,20 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Pago por distancia/tránsito | `economy.cpp:952` | **EXISTE** (`economy.rs`) |
 | Inflación ingresos/precios | `economy.cpp:695` | **PARCIAL** |
 | Costes operativos | `economy.cpp:644` | **EXISTE** (`sim_step.rs`) |
-| Préstamos pedir/devolver | `misc_cmd.cpp:41` | **FALTA** |
-| Intereses mensuales | `economy.cpp:799` | **FALTA** |
-| Quiebra / compra rivales | `company_cmd.cpp:546` | **FALTA** |
-| Subsidios en pagos | `subsidy.cpp` | **FALTA** |
+| Préstamos pedir/devolver | `misc_cmd.cpp:41` | **PARCIAL** (`command/economy.rs`, `finances_window.rs`) |
+| Intereses mensuales | `economy.cpp:799` | **PARCIAL** (`sim_step.rs`) |
+| Quiebra / compra rivales | `company_cmd.cpp:546` | **PARCIAL** (aviso quiebra) |
+| Subsidios en pagos | `subsidy.cpp` | **PARCIAL** (`subsidy.rs`) |
 | Valoración trimestral compañía | `economy.cpp:637` | **FALTA** |
 
 #### Desastres y averías
 
 | Mecánica | Original | Port |
 |----------|----------|------|
-| Desastres ambientales (UFO, zeppelin, etc.) | `disaster_vehicle.cpp:939` | **FALTA** |
-| Breakdowns vehículos | `vehicle.cpp:1303` | **FALTA** |
+| Desastres ambientales (UFO, zeppelin, etc.) | `disaster_vehicle.cpp:939` | **PARCIAL** (`disaster.rs`) |
+| Breakdowns vehículos | `vehicle.cpp:1303` | **PARCIAL** (`vehicle.rs`, `sim_step.rs`) |
 | Choques de trenes | `train_cmd.cpp:3205` | **FALTA** |
-| Servicio en depósito vs fiabilidad | `vehicle.cpp:187` | **FALTA** |
+| Servicio en depósito vs fiabilidad | `vehicle.cpp:187` | **PARCIAL** (`service_at_depot`) |
 
 #### Ciudades
 
@@ -241,8 +246,8 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 |----------|----------|------|
 | Demanda pasajeros/correo | `town_cmd.cpp:522` | **PARCIAL** (`town.rs`) |
 | Expansión física (casas, calles) | `town_cmd.cpp:1184` | **FALTA** |
-| Rating autoridad local | `town_cmd.cpp:3257` | **FALTA** |
-| Acciones de ciudad (publicidad, fondos, vías) | `town_cmd.cpp:3421` | **FALTA** |
+| Rating autoridad local | `town_cmd.cpp:3257` | **PARCIAL** (`town.rs`, estaciones) |
+| Acciones de ciudad (publicidad, fondos, vías) | `town_cmd.cpp:3421` | **PARCIAL** (publicidad/fondos UI) |
 | Metas de carga para crecer | `town_cmd.cpp:3916` | **FALTA** |
 
 #### Vehículos (envejecimiento)
@@ -251,7 +256,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 |----------|----------|------|
 | Autoreemplazo en depósito | `vehicle.cpp:695` | **PARCIAL** (`autoreplace.rs`) |
 | Edad calendario | `vehicle.cpp:1440` | **PARCIAL** (`vehicle_age_years`) |
-| Fiabilidad dinámica | `vehicle.cpp:1318` | **FALTA** |
+| Fiabilidad dinámica | `vehicle.cpp:1318` | **PARCIAL** (`check_breakdown`) |
 | Órdenes de servicio / revisión | `vehicle.cpp:210` | **FALTA** |
 
 #### Clima
@@ -300,12 +305,12 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Noticias | ✅ | `news.rs` |
 | Save JSON + import `.sav` | ✅ | `save.rs`, `sav/` |
 | Paridad headless (trazas) | ✅ | `parity/` |
-| Ciudades (crecimiento) | ❌ | `town.rs` mínimo |
-| Subsidios | ❌ | — |
-| Desastres | ❌ | — |
-| Préstamos activos | ❌ | — |
-| IA rivales | ❌ | — |
-| Barcos / aviones | ❌ | — |
+| Ciudades (crecimiento, rating, acciones) | ✅ Parcial | `town.rs`, `command/town.rs` |
+| Subsidios | ✅ Parcial | `subsidy.rs` |
+| Desastres | ✅ Parcial | `disaster.rs` |
+| Préstamos activos | ✅ Parcial | `economy.rs`, `command/economy.rs` |
+| IA rivales | ❌ | `docs/epics/ai_rivals.md` |
+| Barcos / aviones | ✅ Parcial | `ship_movement.rs`, `aircraft_movement.rs` |
 
 ### 5.2 Cliente (`openttdrs-client`)
 
@@ -313,8 +318,11 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 |---------|-------|--------|
 | Render isométrico + atlas | ✅ | `render/`, `sprites/` |
 | Animaciones agua/industria/humo | ✅ | `render/water.rs`, `smoke.rs`, etc. |
-| SFX HUD (6 samples) | ✅ Parcial | `ui/hud/sound_ping.rs` |
-| Música | ❌ | — |
+| SFX HUD + mundo (~20) | ✅ Parcial | `ui/hud/sound_ping.rs`, `audio/` |
+| Música OGG | ✅ Parcial | `audio/music.rs` |
+| Ventana audio (volúmenes/flags) | ✅ | `ui/audio_settings_window.rs` |
+| Finanzas + préstamo UI | ✅ Parcial | `ui/finances_window.rs` |
+| Pueblo (publicidad/fondos) | ✅ Parcial | `ui/town_window.rs` |
 | Vehículos sub-tesela + extrapolación | ✅ | `render/vehicles.rs` |
 | UI toolbar / ventanas flota | ✅ Parcial | `ui/toolbar/`, `vehicle_window.rs` |
 
@@ -395,7 +403,7 @@ Combinando impacto en el “feel” del juego y esfuerzo de desarrollo:
 
 ### 8.1 Próximo paso concreto (recomendado)
 
-**Fase A1 — Humo de locomotoras:** reutilizar el patrón de `IndustrySmokePlugin` (`render/smoke.rs`) con spawn ligado a `VehicleKind::Train` en movimiento, tipos vapor/diésel/eléctrico según `engine.rs`. Sin cambios en sim headless obligatorios (solo cliente).
+**Completar catálogo SFX** (resto de los 73 sonidos) y **playlists OpenMSX** con controles en UI. Dinámicas pendientes de mayor impacto: expansión física de ciudades, decaimiento de carga en estación, IA rivales (épica aparte).
 
 ---
 
@@ -422,7 +430,7 @@ Combinando impacto en el “feel” del juego y esfuerzo de desarrollo:
 | Economía | `crates/openttdrs-core/src/economy.rs` |
 | Audio HUD | `crates/openttdrs-client/src/ui/hud/sound_ping.rs` |
 | Animaciones | `crates/openttdrs-client/src/render/*.rs` |
-| Assets scripts | `scripts/descargar_assets.sh`, `preparar_sonidos_hud.sh`, `descargar_musica.sh` |
+| Assets scripts | `scripts/descargar_assets.sh`, `preparar_sonidos_hud.sh`, `preparar_sonidos_opensfx.sh`, `descargar_musica.sh` |
 | Paridad rail | `docs/parity/rail_status.md` |
 
 ---

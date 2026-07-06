@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 
+mod audio_settings_window;
 mod buy_window;
 mod destination_window;
 mod finances_window;
@@ -22,6 +23,10 @@ mod toolbar;
 mod town_window;
 mod vehicle_window;
 mod windows_shot;
+use audio_settings_window::{
+    AudioSettingsWindowState, audio_settings_on_closed, handle_audio_settings_buttons,
+    setup_audio_settings_window, sync_audio_settings_window,
+};
 use buy_window::{
     BuyVehicleWindowState, buy_window_on_closed, handle_buy_window_buttons, setup_buy_window,
     sync_buy_window,
@@ -31,8 +36,8 @@ use destination_window::{
     setup_destination_picker, sync_destination_picker,
 };
 use finances_window::{
-    FinancesWindowState, finances_window_on_closed, handle_open_finances_window,
-    setup_finances_window, sync_finances_window,
+    FinancesWindowState, finances_window_on_closed, handle_finances_window_buttons,
+    handle_open_finances_window, setup_finances_window, sync_finances_window,
 };
 pub(crate) use hud::SimHudControls;
 use hud::{
@@ -74,22 +79,21 @@ use timetable_window::{
 use toolbar::depot_panel_on_closed;
 use toolbar::{
     BridgeBuildState, DepotPanelState, DragBuildState, RailSignalGhostState, StationBuildState,
-    StationCargoPanelState, ToolbarState, UiToolState, bridge_picker_on_closed,
-    build_menu_interaction, close_toolbar_button_interaction, close_toolbar_panel_on_escape,
-    handle_bridge_picker_buttons, handle_company_colour_swatches, handle_depot_panel_buttons,
-    handle_minimap_click, handle_order_panel_buttons, handle_rail_station_picker_buttons,
-    handle_settings_menu_buttons, handle_station_cargo_panel_buttons, handle_tile_click,
-    hide_tool_when_panel_closed, lerp_ghost_previews, rail_station_picker_on_closed,
-    rotate_station_with_right_click, setup_bridge_picker, setup_build_menu, setup_depot_panel,
-    setup_minimap, setup_order_panel, setup_rail_station_picker, setup_station_cargo_panel,
-    setup_top_toolbar, sync_bridge_picker, sync_climate_industry_tools,
-    sync_company_colour_swatch_visuals, sync_depot_panel, sync_minimap, sync_order_panel,
-    sync_orders_pick_cursor, sync_rail_station_picker, sync_station_cargo_panel,
-    toolbar_group_interaction, update_build_ghost_preview, update_cursor_tile,
-    update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
-    update_toolbar_tooltip,
+    StationCargoPanelState, UiToolState, bridge_picker_on_closed, build_menu_interaction,
+    close_toolbar_button_interaction, close_toolbar_panel_on_escape, handle_bridge_picker_buttons,
+    handle_company_colour_swatches, handle_depot_panel_buttons, handle_minimap_click,
+    handle_order_panel_buttons, handle_rail_station_picker_buttons, handle_settings_menu_buttons,
+    handle_station_cargo_panel_buttons, handle_tile_click, hide_tool_when_panel_closed,
+    lerp_ghost_previews, rail_station_picker_on_closed, rotate_station_with_right_click,
+    setup_bridge_picker, setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
+    setup_rail_station_picker, setup_station_cargo_panel, setup_top_toolbar, sync_bridge_picker,
+    sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_depot_panel,
+    sync_minimap, sync_order_panel, sync_orders_pick_cursor, sync_rail_station_picker,
+    sync_station_cargo_panel, toolbar_group_interaction, update_build_ghost_preview,
+    update_cursor_tile, update_tool_button_visuals, update_toolbar_group_visuals,
+    update_toolbar_tool_visibility, update_toolbar_tooltip,
 };
-pub(crate) use toolbar::{BuildMenuAction, OrderEditState};
+pub(crate) use toolbar::{BuildMenuAction, OrderEditState, ToolbarState};
 use town_window::{
     TownWindowState, handle_town_window_buttons, setup_town_window, sync_town_window,
     town_window_on_closed,
@@ -111,6 +115,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<NewsHistoryState>()
         .init_resource::<FinancesWindowState>()
         .init_resource::<NewsSettingsWindowState>()
+        .init_resource::<AudioSettingsWindowState>()
         .init_resource::<crate::news_prefs::NewsDisplayPrefs>()
         .init_resource::<SelectedTileInfo>()
         .init_resource::<HoveredTileCoord>()
@@ -147,6 +152,7 @@ impl Plugin for ClientUiPlugin {
                 setup_news_history_window,
                 setup_finances_window,
                 setup_news_settings_window,
+                setup_audio_settings_window,
                 setup_top_toolbar,
                 setup_build_menu,
                 setup_minimap,
@@ -298,9 +304,13 @@ impl Plugin for ClientUiPlugin {
                 finances_window_on_closed,
                 sync_news_history_window,
                 sync_finances_window,
+                handle_finances_window_buttons,
                 handle_news_settings_buttons,
                 news_settings_on_closed,
                 sync_news_settings_window,
+                handle_audio_settings_buttons,
+                audio_settings_on_closed,
+                sync_audio_settings_window,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

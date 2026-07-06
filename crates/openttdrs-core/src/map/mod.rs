@@ -6,6 +6,7 @@ pub mod industry_construction;
 pub mod industry_link;
 pub mod industry_terrain;
 pub mod industry_tile_anim;
+pub mod level_crossing;
 pub mod object;
 pub mod rail_slope;
 pub mod road_bits;
@@ -34,6 +35,7 @@ pub use industry_tile_anim::{
     advance_industry_tile_animations, industry_animation_frame, industry_gfx,
     industry_tile_anim_state, set_industry_gfx,
 };
+pub use level_crossing::is_road_level_crossing;
 pub use object::{
     MP_OBJECT_MAPT, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_TRANSMITTER,
     OTTD_MP_OBJECT, is_map_object_tile, is_owned_land_tile, object_type_from_tile,

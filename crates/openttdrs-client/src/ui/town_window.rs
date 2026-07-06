@@ -6,8 +6,8 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    GameState, TileCoord, TileKind,
-    town::{MAIL_PER_HOUSE, PASSENGERS_PER_HOUSE},
+    Command, GameState, TileCoord, TileKind, apply_command, format_money,
+    town::{FUND_BUILDINGS_COST, MAIL_PER_HOUSE, PASSENGERS_PER_HOUSE, TOWN_ADVERTISE_COST},
 };
 
 use crate::iso::tile_pos;
@@ -18,6 +18,7 @@ use crate::ui::floating_window::{
     WINDOW_TEXT, spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
+use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::toolbar::BuildMenuUi;
 
 #[derive(Resource, Default)]
@@ -31,6 +32,8 @@ pub(crate) struct TownWindowBodyText;
 #[derive(Component, Clone, Copy)]
 pub(crate) enum TownWindowButton {
     CenterCamera,
+    Advertise,
+    FundBuildings,
 }
 
 pub(crate) fn setup_town_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -42,7 +45,7 @@ pub(crate) fn setup_town_window(mut commands: Commands, asset_server: Res<AssetS
         "Pueblo",
         TITLE_CREAM,
         Vec2::new(60.0, 90.0),
-        260.0,
+        340.0,
     );
     commands.entity(content).with_children(|body| {
         body.spawn((
@@ -51,28 +54,58 @@ pub(crate) fn setup_town_window(mut commands: Commands, asset_server: Res<AssetS
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
         ));
-        body.spawn((
-            Button,
+        spawn_town_action_button(
+            body,
+            asset_server,
+            "Centrar vista en el pueblo",
             TownWindowButton::CenterCamera,
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Px(22.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
-            BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
-            Interaction::default(),
-            BuildMenuUi,
-            children![(
-                Text::new("Centrar vista en el pueblo"),
-                window_text_font(asset_server, UiFontRole::Caption),
-                TextColor(WINDOW_TEXT),
-            )],
-        ));
+        );
+        spawn_town_action_button(
+            body,
+            asset_server,
+            &format!("Publicidad ({})", format_money(TOWN_ADVERTISE_COST)),
+            TownWindowButton::Advertise,
+        );
+        spawn_town_action_button(
+            body,
+            asset_server,
+            &format!(
+                "Financiar edificios ({})",
+                format_money(FUND_BUILDINGS_COST)
+            ),
+            TownWindowButton::FundBuildings,
+        );
     });
+}
+
+fn spawn_town_action_button(
+    parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    label: &str,
+    button: TownWindowButton,
+) {
+    parent.spawn((
+        Button,
+        button,
+        Node {
+            width: Val::Percent(100.0),
+            height: Val::Px(22.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(1.0)),
+            margin: UiRect::top(Val::Px(4.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
+        BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
+        Interaction::default(),
+        BuildMenuUi,
+        children![(
+            Text::new(label),
+            window_text_font(asset_server, UiFontRole::Caption),
+            TextColor(WINDOW_TEXT),
+        )],
+    ));
 }
 
 /// Casas del pueblo: por `town_id` en `m2` (saves de `OpenTTD`) o, si el mapa
@@ -175,7 +208,9 @@ pub(crate) fn sync_town_window(
 pub(crate) fn handle_town_window_buttons(
     buttons: Query<(&Interaction, &TownWindowButton), (Changed<Interaction>, With<Button>)>,
     town_state: Res<TownWindowState>,
-    sim: Res<SimWorld>,
+    mut sim: ResMut<SimWorld>,
+    mut hud_feedback: ResMut<HudBuildFeedback>,
+    time: Res<Time>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
     for (interaction, button) in &buttons {
@@ -195,6 +230,23 @@ pub(crate) fn handle_town_window_buttons(
                 if let Ok(mut transform) = cam_q.single_mut() {
                     transform.translation.x = center.x;
                     transform.translation.y = center.y;
+                }
+            }
+            TownWindowButton::Advertise => {
+                let Some(town_id) = town_state.town_id else {
+                    continue;
+                };
+                if let Err(e) = apply_command(&mut sim.state, &Command::TownAdvertise(town_id)) {
+                    push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+                }
+            }
+            TownWindowButton::FundBuildings => {
+                let Some(town_id) = town_state.town_id else {
+                    continue;
+                };
+                if let Err(e) = apply_command(&mut sim.state, &Command::TownFundBuildings(town_id))
+                {
+                    push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                 }
             }
         }

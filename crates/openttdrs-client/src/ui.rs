@@ -25,7 +25,7 @@ mod vehicle_window;
 mod windows_shot;
 use audio_settings_window::{
     AudioSettingsWindowState, audio_settings_on_closed, handle_audio_settings_buttons,
-    setup_audio_settings_window, sync_audio_settings_window,
+    handle_volume_sliders, setup_audio_settings_window, sync_audio_settings_window,
 };
 use buy_window::{
     BuyVehicleWindowState, buy_window_on_closed, handle_buy_window_buttons, setup_buy_window,
@@ -308,7 +308,15 @@ impl Plugin for ClientUiPlugin {
                 handle_news_settings_buttons,
                 news_settings_on_closed,
                 sync_news_settings_window,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
                 handle_audio_settings_buttons,
+                handle_volume_sliders,
                 audio_settings_on_closed,
                 sync_audio_settings_window,
             )

@@ -246,27 +246,6 @@ fn dir_from_to(from: TileCoord, to: TileCoord) -> Option<u8> {
     }
 }
 
-/// Posiciones de trenes para actualizar señales: tesela actual + siguiente paso
-/// (reserva el bloque antes de que el tren entre, como en `OpenTTD`).
-#[must_use]
-pub fn train_positions_for_signal_update(state: &crate::GameState) -> Vec<TileCoord> {
-    use crate::vehicle::VehicleKind;
-
-    let mut out = Vec::new();
-    for v in &state.vehicles {
-        if v.kind != VehicleKind::Train {
-            continue;
-        }
-        out.push(v.pos);
-        if v.running
-            && let Some(next) = v.movement_target()
-        {
-            out.push(next);
-        }
-    }
-    out
-}
-
 /// Teselas del bloque protegido al salir de `signal_tile` hacia `exit_dir`.
 #[must_use]
 pub fn rail_block_ahead(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> Vec<TileCoord> {
@@ -305,16 +284,16 @@ fn is_rail_station_tile_kind(tile: &crate::map::Tile) -> bool {
     tile.kind == TileKind::Station && (tile.m6 >> 3).trailing_zeros() >= 4
 }
 
-/// `true` si algún tren ocupa el bloque (tesela actual o siguiente paso).
+/// `true` si algún tren ocupa el bloque protegido por la señal en `signal_tile`.
 ///
-/// Si un tren está en `signal_tile`, su `movement_target` no reserva el bloque
-/// protegido por esa señal (evita deadlock al salir de la tesela con señal).
+/// Un tren que está sobre `signal_tile` aún no entró al bloque, así que su
+/// `movement_target` no lo reserva: de lo contrario un tren detenido sobre su
+/// propia señal la pondría en rojo y no podría salir (deadlock).
 #[must_use]
 fn block_is_occupied_by_trains(
     vehicles: &[Vehicle],
     signal_tile: TileCoord,
     block: &[TileCoord],
-    exclude_vehicle_id: Option<u32>,
 ) -> bool {
     let block_set: HashSet<TileCoord> = block.iter().copied().collect();
     for v in vehicles {
@@ -324,19 +303,12 @@ fn block_is_occupied_by_trains(
         if block_set.contains(&v.pos) {
             return true;
         }
-        if !v.running {
+        if !v.running || v.pos == signal_tile {
             continue;
         }
-        let Some(next) = v.movement_target() else {
-            continue;
-        };
-        if v.pos == signal_tile {
-            if exclude_vehicle_id == Some(v.id) {
-                continue;
-            }
-            continue;
-        }
-        if block_set.contains(&next) {
+        if let Some(next) = v.movement_target()
+            && block_set.contains(&next)
+        {
             return true;
         }
     }
@@ -390,7 +362,7 @@ pub fn train_blocked_by_signal(map: &Map, vehicles: &[Vehicle], vehicle: &Vehicl
         }
         let exit_dir = dir_from_to(from, to).unwrap_or(0);
         let block = rail_block_ahead(map, from, exit_dir);
-        if block_is_occupied_by_trains(vehicles, from, &block, Some(vehicle.id)) {
+        if block_is_occupied_by_trains(vehicles, from, &block) {
             return true;
         }
     }
@@ -482,7 +454,7 @@ fn refresh_signal_tile_states(
         }
         let exit_dir = signal_exit_dir(rails, bit);
         let block = rail_block_ahead(map, c, exit_dir);
-        if !block_is_occupied_by_trains(vehicles, c, &block, None) {
+        if !block_is_occupied_by_trains(vehicles, c, &block) {
             states |= 1 << bit;
         }
     }
@@ -773,26 +745,6 @@ mod tests {
         write_signal_facing(&mut map, TileCoord::new(1, 0), RAIL_TB_HORZ, Some(0));
         let bits = signal_bits_for_exit(&map, TileCoord::new(1, 0), TileCoord::new(2, 0));
         assert_eq!(bits, vec![2], "señal upper NE controla salida hacia NE");
-    }
-
-    #[test]
-    fn train_positions_for_signal_update_includes_next_tile() {
-        use crate::Vehicle;
-        use crate::vehicle::VehicleKind;
-
-        let mut state = GameState::new(8, 8);
-        let mut train = Vehicle::new(
-            1,
-            VehicleKind::Train,
-            TileCoord::new(1, 0),
-            TileCoord::new(5, 0),
-        );
-        train.running = true;
-        train.path = std::collections::VecDeque::from([TileCoord::new(2, 0)]);
-        state.vehicles.push(train);
-        let pos = train_positions_for_signal_update(&state);
-        assert!(pos.contains(&TileCoord::new(1, 0)));
-        assert!(pos.contains(&TileCoord::new(2, 0)));
     }
 
     #[test]

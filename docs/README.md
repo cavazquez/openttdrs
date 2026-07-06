@@ -15,6 +15,7 @@
 | Documento | Uso |
 |-----------|-----|
 | [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) | Sprints S1–S6, criterios de cierre 0.1 |
+| [ROADMAP_IMPORTACION_OPENTTD.md](ROADMAP_IMPORTACION_OPENTTD.md) | **Importación desde original:** animaciones, sonido, música, dinámicas (tablas + orden sugerido) |
 | [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) | Menús flota (vehículo, órdenes, depósito), comandos, gaps OTTD, handoff IA |
 | [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) | Inventario features + mecánicas iguales/diferentes |
 | [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) | Spec incremental I0–I8, traducción upstream ↔ Rust |

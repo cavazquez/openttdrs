@@ -121,8 +121,7 @@ pub use rail_signals::{
     calendar_year_at_tick, cycle_signal_facing, cycle_signal_side_m3, default_signal_variant,
     rail_tile_is_signals, resolve_signal_track, signal_facing_for_orientation,
     signal_on_track_mask, signal_placement_for_facing, signal_placement_for_track,
-    signal_type_for_track, tracks_overlap, train_positions_for_signal_update,
-    valid_signal_facings_track,
+    signal_type_for_track, tracks_overlap, valid_signal_facings_track,
 };
 pub use refit::{next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_in_depot};
 pub use road_movement::{

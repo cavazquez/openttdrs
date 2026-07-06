@@ -24,7 +24,8 @@ use crate::ui::vehicle_window::VehicleWindowState;
 use super::commands::command_for_action;
 use super::drag::{
     action_is_tunnel, action_supports_drag, apply_drag_action, drag_line_tiles,
-    tunnel_placement_is_valid, tunnel_remap_tiles,
+    rail_action_refreshes_neighbors, rail_remap_neighbor_tiles, tunnel_placement_is_valid,
+    tunnel_remap_tiles,
 };
 use super::placement::cancel_placement;
 use super::rail_lane::rail_lane_bits_for_action;
@@ -48,26 +49,30 @@ fn tiles_for_visual_remap(
     origin: TileCoord,
     drag_tiles: &[(i32, i32)],
 ) -> Vec<(i32, i32)> {
-    if action_is_tunnel(action) {
+    let base = if action_is_tunnel(action) {
         if let Some(map) = map {
             return tunnel_remap_tiles(map, drag_tiles);
         }
         let start = drag_tiles.first().copied().unwrap_or((origin.x, origin.y));
-        return vec![start];
-    }
-    if drag_tiles.len() > 1 {
-        return drag_tiles.to_vec();
-    }
-    if let Some(spec) = industry_spec_for_action(action) {
-        return industry_template(origin, spec)
+        vec![start]
+    } else if drag_tiles.len() > 1 {
+        drag_tiles.to_vec()
+    } else if let Some(spec) = industry_spec_for_action(action) {
+        industry_template(origin, spec)
             .into_iter()
             .map(|(c, _)| (c.x, c.y))
-            .collect();
+            .collect()
+    } else if let Some(&(tx, ty)) = drag_tiles.first() {
+        vec![(tx, ty)]
+    } else {
+        vec![(origin.x, origin.y)]
+    };
+    if rail_action_refreshes_neighbors(action)
+        && let Some(map) = map
+    {
+        return rail_remap_neighbor_tiles(map, &base);
     }
-    if let Some(&(tx, ty)) = drag_tiles.first() {
-        return vec![(tx, ty)];
-    }
-    vec![(origin.x, origin.y)]
+    base
 }
 
 /// Estados de paneles/ventanas mutuamente excluyentes, agrupados para no

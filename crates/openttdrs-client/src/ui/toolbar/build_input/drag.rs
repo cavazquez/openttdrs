@@ -141,6 +141,33 @@ fn road_drag_axis(
     }
 }
 
+/// Herramientas cuya sim actualiza piezas de vía en teselas vecinas (`refresh_rail_neighbors`).
+#[inline]
+pub(crate) fn rail_action_refreshes_neighbors(action: BuildMenuAction) -> bool {
+    matches!(action, BuildMenuAction::Rail | BuildMenuAction::RailRemove)
+}
+
+/// Teselas a redibujar tras colocar/quitar vía con refresco de vecinos (autorraíl / quitar).
+#[must_use]
+pub(crate) fn rail_remap_neighbor_tiles(map: &Map, tiles: &[(i32, i32)]) -> Vec<(i32, i32)> {
+    use std::collections::BTreeSet;
+    let (mw, mh) = map.dimensions();
+    let mw_i = mw as i32;
+    let mh_i = mh as i32;
+    let mut set = BTreeSet::new();
+    for &(x, y) in tiles {
+        set.insert((x, y));
+        for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+            let nx = x + dx;
+            let ny = y + dy;
+            if nx >= 0 && ny >= 0 && nx < mw_i && ny < mh_i {
+                set.insert((nx, ny));
+            }
+        }
+    }
+    set.into_iter().collect()
+}
+
 /// Teselas a redibujar tras colocar un túnel (entrada, interior y salida).
 #[must_use]
 pub(crate) fn tunnel_remap_tiles(map: &Map, tiles: &[(i32, i32)]) -> Vec<(i32, i32)> {
@@ -341,6 +368,25 @@ mod tests {
     use super::*;
     use crate::state::SimWorld;
     use openttdrs_core::{GameState, TileCoord, TileKind, apply_command};
+
+    #[test]
+    fn rail_remap_neighbor_tiles_includes_orthogonal_neighbors() {
+        let sim = SimWorld {
+            state: GameState::new(8, 8),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let tiles = rail_remap_neighbor_tiles(&sim.state.map, &[(3, 3), (4, 3)]);
+        assert!(tiles.contains(&(3, 3)));
+        assert!(tiles.contains(&(4, 3)));
+        assert!(tiles.contains(&(2, 3)));
+        assert!(tiles.contains(&(5, 3)));
+        assert!(tiles.contains(&(3, 2)));
+        assert!(tiles.contains(&(3, 4)));
+        assert!(tiles.contains(&(4, 2)));
+        assert!(tiles.contains(&(4, 4)));
+        assert!(!tiles.contains(&(2, 2)));
+    }
 
     #[test]
     fn tunnel_remap_tiles_includes_both_portals() {

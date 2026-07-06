@@ -692,8 +692,19 @@ pub fn collect_rail_ghost_sprites(tb: u8, tileh: u8, out: &mut Vec<u32>) {
     collect_rail_sprites(tb, tileh, false, out);
 }
 
+/// Piezas planas que se dibujan sobre el suelo del mapa (hierba/nieve) en lugar del
+/// sprite compuesto con suelo propio (`1011`/`1012`/…).
+#[inline]
+pub fn rail_flat_draws_separate_clear_ground(tb: u8) -> bool {
+    let t = tb & 0x3F;
+    matches!(
+        t,
+        RAIL_TB_Y | RAIL_TB_X | RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_RIGHT | RAIL_TB_LEFT
+    )
+}
+
 /// Lista de sprites planos (tesela nivelada o con cimiento nivelado).
-fn collect_rail_flat_sprites(t: u8, snow_ground: bool, out: &mut Vec<u32>) {
+fn collect_rail_flat_sprites(t: u8, snow_ground: bool, on_clear_ground: bool, out: &mut Vec<u32>) {
     let y_track = if snow_ground {
         RAIL_SPRITE_Y_SNOW
     } else {
@@ -704,13 +715,14 @@ fn collect_rail_flat_sprites(t: u8, snow_ground: bool, out: &mut Vec<u32>) {
     } else {
         1012
     };
+    let overlay = on_clear_ground && !snow_ground;
     match t {
-        RAIL_TB_Y => out.push(y_track),
-        RAIL_TB_X => out.push(x_track),
-        RAIL_TB_UPPER => out.push(1013),
-        RAIL_TB_LOWER => out.push(1014),
-        RAIL_TB_RIGHT => out.push(1015),
-        RAIL_TB_LEFT => out.push(1016),
+        RAIL_TB_Y => out.push(if overlay { 1006 } else { y_track }),
+        RAIL_TB_X => out.push(if overlay { 1005 } else { x_track }),
+        RAIL_TB_UPPER => out.push(if overlay { 1007 } else { 1013 }),
+        RAIL_TB_LOWER => out.push(if overlay { 1008 } else { 1014 }),
+        RAIL_TB_RIGHT => out.push(if overlay { 1009 } else { 1015 }),
+        RAIL_TB_LEFT => out.push(if overlay { 1010 } else { 1016 }),
         RAIL_TB_CROSS => out.push(1017),
         RAIL_TB_HORZ => out.push(1035),
         RAIL_TB_VERT => out.push(1036),
@@ -738,7 +750,7 @@ pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<
         }
         return;
     }
-    collect_rail_flat_sprites(t, snow_ground, out);
+    collect_rail_flat_sprites(t, snow_ground, tileh == 0, out);
 }
 
 #[cfg(test)]
@@ -784,11 +796,15 @@ mod tests {
     fn collect_rail_ghost_sprites_matches_flat_track_sprites() {
         let mut out = Vec::new();
         collect_rail_ghost_sprites(RAIL_TB_LEFT, 0, &mut out);
-        assert_eq!(out, vec![1016]);
+        assert_eq!(out, vec![1010]);
         collect_rail_ghost_sprites(RAIL_TB_UPPER, 0, &mut out);
-        assert_eq!(out, vec![1013]);
+        assert_eq!(out, vec![1007]);
         collect_rail_ghost_sprites(RAIL_TB_HORZ, 0, &mut out);
         assert_eq!(out, vec![1035]);
+        collect_rail_ghost_sprites(RAIL_TB_X, 0, &mut out);
+        assert_eq!(out, vec![1005]);
+        collect_rail_ghost_sprites(RAIL_TB_Y, 0, &mut out);
+        assert_eq!(out, vec![1006]);
     }
 
     #[test]

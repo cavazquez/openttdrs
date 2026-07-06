@@ -1,15 +1,10 @@
 use bevy::prelude::*;
 use openttdrs_core::{Station, StopKind, TileKind, Vehicle, VehicleOrder};
 
-use crate::render::{
-    MapPreviewCamera, PrimaryGameCamera, VehiclePreviewCamera, vehicle_world_position,
-};
 use crate::state::SimWorld;
 use crate::ui::toolbar::{OrderEditState, OrderPanelRoot, OrderPanelTitle};
 
 use super::{ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
-
-const PREVIEW_SCALE_MUL: f32 = 0.55;
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_order_panel(
@@ -24,18 +19,12 @@ pub(crate) fn sync_order_panel(
         &mut BorderColor,
     )>,
     mut row_text_q: Query<(&OrderPanelRowText, &mut Text), Without<OrderPanelTitle>>,
-    mut preview: Query<
-        (&mut Transform, &mut Projection, &mut Camera),
-        (With<VehiclePreviewCamera>, Without<PrimaryGameCamera>),
-    >,
-    primary_proj: Query<&Projection, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
     let Ok(mut vis) = root_q.single_mut() else {
         return;
     };
     let Some(vehicle_id) = order_state.vehicle_id else {
         *vis = Visibility::Hidden;
-        deactivate_preview(&mut preview);
         hide_order_rows(&mut row_q);
         return;
     };
@@ -46,53 +35,19 @@ pub(crate) fn sync_order_panel(
         .find(|vehicle| vehicle.id == vehicle_id)
     else {
         *vis = Visibility::Hidden;
-        deactivate_preview(&mut preview);
         hide_order_rows(&mut row_q);
         return;
     };
 
     *vis = Visibility::Visible;
-    let route_note = if vehicle.no_network_route_to_order {
-        " · sin ruta"
-    } else {
-        ""
-    };
-    let run_label = if vehicle.running {
-        "en marcha"
-    } else {
-        "parado"
-    };
     let pick_hint = if order_state.picking_destination {
-        " · clic en parada para añadir destino"
+        " · clic en parada"
     } else {
         ""
-    };
-    let tt_hint = if vehicle.timetable_active {
-        if vehicle.timetable_wait_remaining > 0 {
-            format!(" · horario esp.{}", vehicle.timetable_wait_remaining)
-        } else {
-            " · horario ON".to_string()
-        }
-    } else {
-        String::new()
-    };
-    let late_hint = if vehicle.timetable_lateness > 0 {
-        format!(" · +{}t tarde", vehicle.timetable_lateness)
-    } else if vehicle.timetable_lateness < 0 {
-        format!(" · {}t adelantado", vehicle.timetable_lateness)
-    } else {
-        String::new()
     };
     if let Ok(mut text) = title_q.single_mut() {
-        **text = format!(
-            "{} · {run_label} · {}/{}{route_note}{pick_hint}{tt_hint}{late_hint}",
-            vehicle.display_name(),
-            vehicle.cargo,
-            vehicle.capacity,
-        );
+        **text = format!("{} (Órdenes){pick_hint}", vehicle.display_name());
     }
-
-    sync_preview_camera(vehicle, &sim, &primary_proj, &mut preview);
 
     for (row, mut node, mut bg, mut border) in &mut row_q {
         let has_content = row.slot == 0 && order_state.orders.is_empty()
@@ -133,24 +88,13 @@ pub(crate) fn sync_order_panel(
     };
     for (row_text, mut text) in &mut row_text_q {
         **text = if order_state.orders.is_empty() && row_text.slot == 0 {
-            "Sin órdenes — «Agregar destino» y clic en parada.".to_string()
+            "Sin órdenes — «Ir a» y clic en una parada del mapa.".to_string()
         } else if let Some(order) = order_state.orders.get(row_text.slot) {
             let stuck_here = vehicle.no_network_route_to_order && row_text.slot == current_slot;
             order_row_label(row_text.slot, *order, vehicle, &sim, stuck_here)
         } else {
             String::new()
         };
-    }
-}
-
-fn deactivate_preview(
-    preview: &mut Query<
-        (&mut Transform, &mut Projection, &mut Camera),
-        (With<VehiclePreviewCamera>, Without<PrimaryGameCamera>),
-    >,
-) {
-    if let Ok((_tf, _proj, mut cam)) = preview.single_mut() {
-        cam.is_active = false;
     }
 }
 
@@ -164,35 +108,6 @@ fn hide_order_rows(
 ) {
     for (_, mut node, _, _) in row_q {
         node.display = Display::None;
-    }
-}
-
-fn sync_preview_camera(
-    vehicle: &Vehicle,
-    sim: &SimWorld,
-    primary_proj: &Query<&Projection, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
-    preview: &mut Query<
-        (&mut Transform, &mut Projection, &mut Camera),
-        (With<VehiclePreviewCamera>, Without<PrimaryGameCamera>),
-    >,
-) {
-    let world_pos = vehicle_world_position(vehicle, &sim.state.map);
-    let primary_scale = primary_proj
-        .single()
-        .ok()
-        .and_then(|p| match p {
-            Projection::Orthographic(o) => Some(o.scale),
-            _ => None,
-        })
-        .unwrap_or(1.0);
-    let preview_scale = (primary_scale * PREVIEW_SCALE_MUL).max(0.35);
-
-    if let Ok((mut tf, mut proj, mut cam)) = preview.single_mut() {
-        cam.is_active = true;
-        tf.translation = Vec3::new(world_pos.x, world_pos.y, 999.0);
-        if let Projection::Orthographic(ref mut o) = *proj {
-            o.scale = preview_scale;
-        }
     }
 }
 

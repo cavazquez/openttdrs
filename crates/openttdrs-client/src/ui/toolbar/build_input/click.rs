@@ -204,29 +204,26 @@ pub(crate) fn handle_tile_click(
     let orders_mode =
         order_state.picking_destination || tool_state.active_tool == Some(BuildMenuAction::Orders);
     if orders_mode {
+        // Modo selección de destino: el clic añade la parada clicada. Se procesa
+        // primero para que un depósito con el tren dentro se añada como destino
+        // en vez de reabrir las órdenes de ese vehículo.
+        if order_state.picking_destination {
+            if order_state.vehicle_id.is_some() {
+                handle_order_destination_click(
+                    &mouse,
+                    pos,
+                    order_state,
+                    &mut sim,
+                    &mut pending,
+                    &mut hud_feedback,
+                    time.elapsed_secs(),
+                );
+            }
+            return;
+        }
+        // Herramienta «Órdenes» (sin selección activa): clic en un vehículo abre
+        // sus órdenes y arma la selección de destino.
         if mouse.just_pressed(MouseButton::Left)
-            && let Some(vehicle_id) = pick_vehicle_id_at_world(world_pos, &sim)
-            && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
-        {
-            open_order_edit_for_vehicle(order_state, vehicle);
-            order_state.picking_destination = false;
-            return;
-        }
-        if order_state.vehicle_id.is_some()
-            && handle_order_destination_click(
-                &mouse,
-                pos,
-                order_state,
-                &mut sim,
-                &mut pending,
-                &mut hud_feedback,
-                time.elapsed_secs(),
-            )
-        {
-            return;
-        }
-        if tool_state.active_tool == Some(BuildMenuAction::Orders)
-            && mouse.just_pressed(MouseButton::Left)
             && let Some(vehicle_id) = pick_vehicle_id_at_world(world_pos, &sim)
             && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
         {
@@ -322,13 +319,6 @@ pub(crate) fn handle_tile_click(
                 }
                 _ => {}
             }
-            depot_state.depot_pos = None;
-            depot_state.selected_vehicle = None;
-            station_panel.station_pos = None;
-            industry_panel.open = false;
-            order_state.clear();
-            town_window.town_id = None;
-            vehicle_window.vehicle_id = None;
         }
         return;
     };

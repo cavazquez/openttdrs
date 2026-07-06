@@ -3,7 +3,8 @@
 //! Se abre al hacer clic en un vehículo del mapa: vista previa en vivo
 //! (cámara a render-target sobre el vehículo), modelo, velocidad actual y
 //! máxima, carga, estado («Detenido» en rojo / «En marcha» en verde) y
-//! acciones Iniciar/Detener, Órdenes, Centrar vista y Vender.
+//! acciones Iniciar/Detener, Órdenes, Enviar al depósito y Centrar vista.
+//! La venta es una acción del depósito, no de esta ventana.
 
 use bevy::camera::RenderTarget;
 use bevy::input::ButtonState;
@@ -29,7 +30,6 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
-use crate::ui::timetable_window::{TimetableWindowState, open_timetable_for_vehicle};
 use crate::ui::toolbar::{BuildMenuUi, OrderEditState, open_order_edit_for_vehicle};
 
 const PREVIEW_TEX_W: u32 = 280;
@@ -80,15 +80,12 @@ pub(crate) enum VehicleWindowButton {
     CenterOrder,
     CenterCamera,
     Rename,
-    Sell,
     /// Solo trenes: invierte el sentido de marcha.
     TurnAround,
     /// Solo trenes: forzar paso en señal roja.
     ForceProceed,
     /// Cambia el tipo de carga (solo en depósito, vacío).
     Refit,
-    /// Abre ventana de horario detallado.
-    Timetable,
 }
 
 /// Botones visibles solo para trenes.
@@ -234,13 +231,6 @@ pub(crate) fn setup_vehicle_window(
                 spawn_vehicle_button(
                     row,
                     asset_server,
-                    VehicleWindowButton::Timetable,
-                    "Horario",
-                    false,
-                );
-                spawn_vehicle_button(
-                    row,
-                    asset_server,
                     VehicleWindowButton::GotoDepot,
                     "Depósito",
                     false,
@@ -264,13 +254,6 @@ pub(crate) fn setup_vehicle_window(
                     asset_server,
                     VehicleWindowButton::Rename,
                     "Renombrar",
-                    false,
-                );
-                spawn_vehicle_button(
-                    row,
-                    asset_server,
-                    VehicleWindowButton::Sell,
-                    "Vender",
                     false,
                 );
             });
@@ -587,7 +570,6 @@ pub(crate) fn handle_vehicle_window_buttons(
     mut hud_feedback: ResMut<HudBuildFeedback>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut rename_input_q: Query<&mut EditableText, With<VehicleWindowRenameInput>>,
-    mut tt_state: ResMut<TimetableWindowState>,
     time: Res<Time>,
 ) {
     for (interaction, button) in &mut buttons {
@@ -609,19 +591,9 @@ pub(crate) fn handle_vehicle_window_buttons(
                     open_order_edit_for_vehicle(&mut order_state, vehicle);
                 }
             }
-            VehicleWindowButton::Timetable => {
-                open_timetable_for_vehicle(&mut tt_state, vehicle_id);
-            }
             VehicleWindowButton::GotoDepot => {
                 match apply_command(&mut sim.state, &Command::AppendGotoNearestDepot(vehicle_id)) {
-                    Ok(()) => {
-                        pending.pending = true;
-                        if let Some(vehicle) =
-                            sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
-                        {
-                            open_order_edit_for_vehicle(&mut order_state, vehicle);
-                        }
-                    }
+                    Ok(()) => pending.pending = true,
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                     }
@@ -687,20 +659,6 @@ pub(crate) fn handle_vehicle_window_buttons(
                 };
                 match apply_command(&mut sim.state, &Command::RefitVehicle { vehicle_id, cargo }) {
                     Ok(()) => {}
-                    Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
-                }
-            }
-            VehicleWindowButton::Sell => {
-                match apply_command(&mut sim.state, &Command::SellVehicle(vehicle_id)) {
-                    Ok(()) => {
-                        pending.pending = true;
-                        window_state.vehicle_id = None;
-                        if order_state.vehicle_id == Some(vehicle_id) {
-                            order_state.clear();
-                        }
-                    }
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                     }

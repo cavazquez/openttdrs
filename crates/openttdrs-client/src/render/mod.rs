@@ -28,8 +28,8 @@ pub(crate) use company_recolor::{
 };
 pub(crate) use components::{
     FizzyDrinkAnimFrames, IndustryPreviewCamera, MapPreviewCamera, MapSpriteBatches, MapTileChunk,
-    MapVisualLayer, PrimaryGameCamera, RefineryFireAnimFrames, ShoreTile, VehiclePreviewCamera,
-    WaterAnimFrames, WaterTile,
+    MapVisualLayer, PrimaryGameCamera, RefineryFireAnimFrames, ShoreTile, WaterAnimFrames,
+    WaterTile,
 };
 pub(crate) use effect_fx::EffectVehiclePlugin;
 pub(crate) use fizzy_drink::{FizzyDrinkAnim, FizzyDrinkAnimPlugin};

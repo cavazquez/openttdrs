@@ -1,18 +1,15 @@
 use bevy::prelude::*;
 use openttdrs_core::{Climate, Map, TileKind, bridge_above_axis_from_mapt};
 
-use super::{
-    TRAM_OVERLAY_LAYER_FRAC, sloped_or_flat_image, spawn_ground_sprite, spawn_rail_foundation,
-};
+use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite, spawn_rail_foundation};
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
     collect_rail_sprites, collect_signal_sprite_draws, is_road_level_crossing,
-    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
-    rail_flat_draws_separate_clear_ground, rail_ghost_overlay_offset, rail_tile_is_signals,
-    rail_track_base_color, rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
-    road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
+    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_ghost_overlay_offset,
+    rail_tile_is_signals, rail_track_base_color, rail_trackbits_for_render, road_bits_for_render,
+    road_flat_sprite_color, road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
     road_tile_tram_visual_active, roadside_is_paved, signal_screen_position,
     tram_flat_sprite_index,
 };
@@ -194,19 +191,6 @@ pub(crate) fn spawn_rail_tile(
         .tile
         .is_some_and(|t| (t.m3 & 0x0F) == RAIL_GROUND_SNOW_OR_DESERT)
         || climate.uses_snow_ground();
-    if tileh == 0 && rail_flat_draws_separate_clear_ground(tb) {
-        let ground = if snow_ground {
-            assets.snow.clone()
-        } else {
-            sloped_or_flat_image(0, &assets.grass, &assets.grass_slopes)
-        };
-        let ground_color = if snow_ground {
-            Color::srgb(0.94, 0.97, 1.0)
-        } else {
-            Color::WHITE
-        };
-        spawn_ground_sprite(commands, &ground, ground_color, ctx, TILE_HALF_H);
-    }
     let rail_base_z = spawn_rail_foundation(commands, assets, ctx, tileh, tb);
     let rail_half_h = if tileh == 0 {
         TILE_HALF_H

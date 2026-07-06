@@ -1,12 +1,8 @@
 use bevy::prelude::*;
-use openttdrs_core::{
-    Command, CommandError, OrderConditionKind, OrderMoveDirection, TileCoord, Vehicle,
-    VehicleOrder, apply_command,
-};
+use openttdrs_core::{Command, CommandError, TileCoord, Vehicle, VehicleOrder, apply_command};
 
-use crate::render::{RemapMapVisualsPending, VehiclePreviewCamera};
+use crate::render::RemapMapVisualsPending;
 use crate::state::SimWorld;
-use crate::ui::destination_window::DestinationPickerState;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::timetable_window::{TimetableWindowState, open_timetable_for_vehicle};
 use crate::ui::toolbar::build_input::cancel_placement;
@@ -90,19 +86,11 @@ pub(crate) fn handle_order_panel_buttons(
         (Changed<Interaction>, With<Button>, Without<OrderPanelRow>),
     >,
     mut order_state: ResMut<OrderEditState>,
-    mut destination_state: ResMut<DestinationPickerState>,
     mut sim: ResMut<SimWorld>,
     mut drag_state: ResMut<DragBuildState>,
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     mut tt_state: ResMut<TimetableWindowState>,
-    mut preview_cam: Query<
-        &mut Camera,
-        (
-            With<VehiclePreviewCamera>,
-            Without<crate::render::PrimaryGameCamera>,
-        ),
-    >,
     time: Res<Time>,
 ) {
     for (interaction, row) in &mut row_q {
@@ -121,24 +109,6 @@ pub(crate) fn handle_order_panel_buttons(
         match button {
             OrderPanelButton::Close => {
                 order_state.clear();
-                if let Ok(mut cam) = preview_cam.single_mut() {
-                    cam.is_active = false;
-                }
-            }
-            OrderPanelButton::ClearLast => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
-                    continue;
-                };
-                if order_state.orders.is_empty() {
-                    continue;
-                }
-                let removed = order_state.orders.len() - 1;
-                order_state.orders.pop();
-                clamp_selected_after_remove(&mut order_state, removed);
-                match apply_order_edit(&mut sim.state, vehicle_id, &order_state.orders) {
-                    Ok(()) => pending.pending = true,
-                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
-                }
             }
             OrderPanelButton::DeleteSelected => {
                 let Some(vehicle_id) = order_state.vehicle_id else {
@@ -196,193 +166,19 @@ pub(crate) fn handle_order_panel_buttons(
                     |vehicle_id, index| Command::ToggleVehicleOrderNoUnload { vehicle_id, index },
                 );
             }
-            OrderPanelButton::MoveOrderUp => {
-                move_selected_order(
-                    &mut order_state,
-                    &mut sim,
-                    &mut pending,
-                    &mut hud_feedback,
-                    time.elapsed_secs(),
-                    OrderMoveDirection::Up,
-                );
-            }
-            OrderPanelButton::MoveOrderDown => {
-                move_selected_order(
-                    &mut order_state,
-                    &mut sim,
-                    &mut pending,
-                    &mut hud_feedback,
-                    time.elapsed_secs(),
-                    OrderMoveDirection::Down,
-                );
-            }
-            OrderPanelButton::ToggleDepotStop => {
-                toggle_order_flag(
-                    &mut order_state,
-                    &mut sim,
-                    &mut pending,
-                    &mut hud_feedback,
-                    time.elapsed_secs(),
-                    |vehicle_id, index| Command::ToggleVehicleOrderDepotStop { vehicle_id, index },
-                );
-            }
-            OrderPanelButton::CycleOrderWait => {
-                toggle_order_flag(
-                    &mut order_state,
-                    &mut sim,
-                    &mut pending,
-                    &mut hud_feedback,
-                    time.elapsed_secs(),
-                    |vehicle_id, index| Command::CycleVehicleOrderWait { vehicle_id, index },
-                );
-            }
-            OrderPanelButton::CycleOrderTravel => {
-                toggle_order_flag(
-                    &mut order_state,
-                    &mut sim,
-                    &mut pending,
-                    &mut hud_feedback,
-                    time.elapsed_secs(),
-                    |vehicle_id, index| Command::CycleVehicleOrderTravel { vehicle_id, index },
-                );
-            }
-            OrderPanelButton::ToggleTimetable => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
-                    continue;
-                };
-                match apply_command(&mut sim.state, &Command::ToggleVehicleTimetable(vehicle_id)) {
-                    Ok(()) => pending.pending = true,
-                    Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
-                }
-            }
             OrderPanelButton::OpenTimetableWindow => {
                 let Some(vehicle_id) = order_state.vehicle_id else {
                     continue;
                 };
                 open_timetable_for_vehicle(&mut tt_state, vehicle_id);
             }
-            OrderPanelButton::ClearTimetableLateness => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
-                    continue;
-                };
-                match apply_command(
-                    &mut sim.state,
-                    &Command::ClearVehicleTimetableLateness(vehicle_id),
-                ) {
-                    Ok(()) => pending.pending = true,
-                    Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
-                }
-            }
-            OrderPanelButton::SetConditionalOrder => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
-                    continue;
-                };
-                let Some(index) = order_state.selected_slot else {
-                    push_build_command_error(
-                        &mut hud_feedback,
-                        CommandError::OrderIndexOutOfRange,
-                        time.elapsed_secs(),
-                    );
-                    continue;
-                };
-                if order_state.orders.len() < 2 {
-                    continue;
-                }
-                let jump_to = (index + 1).min(order_state.orders.len() - 1);
-                match apply_command(
-                    &mut sim.state,
-                    &Command::SetVehicleOrderConditional {
-                        vehicle_id,
-                        index,
-                        condition: OrderConditionKind::CargoLoadAbove,
-                        value: 50,
-                        jump_to,
-                    },
-                ) {
-                    Ok(()) => {
-                        pending.pending = true;
-                        refresh_orders_from_sim(&mut order_state, &sim);
-                    }
-                    Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
-                }
-            }
-            OrderPanelButton::ClearAll => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
-                    continue;
-                };
-                order_state.orders.clear();
-                order_state.selected_slot = None;
-                match apply_command(
-                    &mut sim.state,
-                    &Command::SetVehicleOrders(vehicle_id, Vec::new()),
-                ) {
-                    Ok(()) => pending.pending = true,
-                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
-                }
-            }
             OrderPanelButton::PickDestOnMap => {
-                destination_state.open = true;
-                order_state.picking_destination = false;
+                // «Ir a» estilo OpenTTD: activa el modo selección; el siguiente
+                // clic en una estación/depósito del mapa añade la orden.
+                start_order_destination_pick(&mut order_state);
                 cancel_placement(&mut drag_state);
             }
-            OrderPanelButton::ToggleRunning => {
-                let Some(vehicle_id) = order_state.vehicle_id else {
-                    continue;
-                };
-                match apply_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id)) {
-                    Ok(()) => {}
-                    Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
-                }
-            }
         }
-    }
-}
-
-fn move_selected_order(
-    order_state: &mut OrderEditState,
-    sim: &mut SimWorld,
-    pending: &mut RemapMapVisualsPending,
-    hud_feedback: &mut HudBuildFeedback,
-    elapsed_secs: f32,
-    direction: OrderMoveDirection,
-) {
-    let Some(vehicle_id) = order_state.vehicle_id else {
-        return;
-    };
-    let Some(index) = order_state.selected_slot else {
-        push_build_command_error(
-            hud_feedback,
-            CommandError::OrderIndexOutOfRange,
-            elapsed_secs,
-        );
-        return;
-    };
-    match apply_command(
-        &mut sim.state,
-        &Command::MoveVehicleOrder {
-            vehicle_id,
-            index,
-            direction,
-        },
-    ) {
-        Ok(()) => {
-            pending.pending = true;
-            refresh_orders_from_sim(order_state, sim);
-            order_state.selected_slot = match direction {
-                OrderMoveDirection::Up if index > 0 => Some(index - 1),
-                OrderMoveDirection::Down => Some(index + 1),
-                _ => Some(index),
-            };
-        }
-        Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
     }
 }
 
@@ -473,42 +269,48 @@ pub(crate) fn handle_order_destination_click(
     if !mouse.just_pressed(MouseButton::Left) {
         return false;
     }
+    let Some(vehicle_id) = order_state.vehicle_id else {
+        return false;
+    };
+    // Prioridad 1: añadir la parada válida (estación/waypoint/depósito) de la
+    // tesela clicada, aunque haya un vehículo parado ahí (p.ej. el propio tren
+    // dentro del depósito).
+    if order_pick_valid(sim, vehicle_id, pos) {
+        match try_append_order_at_tile(sim, vehicle_id, pos, &mut order_state.orders) {
+            Ok(()) => {
+                pending.pending = true;
+                order_state.selected_slot = order_state.orders.len().checked_sub(1);
+            }
+            Err(e) => {
+                order_state.orders.pop();
+                push_build_command_error(hud_feedback, e, elapsed_secs);
+            }
+        }
+        return true;
+    }
+    // Prioridad 2: clic sobre otro vehículo (fuera de un destino) → editar sus
+    // órdenes.
     if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.pos == pos) {
         open_order_edit_for_vehicle(order_state, vehicle);
         return true;
     }
-    let Some(vehicle_id) = order_state.vehicle_id else {
-        return false;
-    };
-    if !order_pick_valid(sim, vehicle_id, pos) {
-        if sim.state.stations.iter().any(|s| s.pos == pos) {
-            let err = sim
-                .state
-                .vehicles
-                .iter()
-                .find(|v| v.id == vehicle_id)
-                .and_then(|v| {
-                    sim.state
-                        .stations
-                        .iter()
-                        .find(|s| s.pos == pos)
-                        .filter(|s| !s.can_service_vehicle(v.kind))
-                        .map(|_| CommandError::IncompatibleStopForVehicle)
-                })
-                .unwrap_or(CommandError::StationNotFound);
-            push_build_command_error(hud_feedback, err, elapsed_secs);
-        }
-        return true;
-    }
-    match try_append_order_at_tile(sim, vehicle_id, pos, &mut order_state.orders) {
-        Ok(()) => {
-            pending.pending = true;
-            order_state.selected_slot = order_state.orders.len().checked_sub(1);
-        }
-        Err(e) => {
-            order_state.orders.pop();
-            push_build_command_error(hud_feedback, e, elapsed_secs);
-        }
+    // Estación presente pero incompatible con este vehículo → feedback.
+    if sim.state.stations.iter().any(|s| s.pos == pos) {
+        let err = sim
+            .state
+            .vehicles
+            .iter()
+            .find(|v| v.id == vehicle_id)
+            .and_then(|v| {
+                sim.state
+                    .stations
+                    .iter()
+                    .find(|s| s.pos == pos)
+                    .filter(|s| !s.can_service_vehicle(v.kind))
+                    .map(|_| CommandError::IncompatibleStopForVehicle)
+            })
+            .unwrap_or(CommandError::StationNotFound);
+        push_build_command_error(hud_feedback, err, elapsed_secs);
     }
     true
 }

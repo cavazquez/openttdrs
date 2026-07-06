@@ -67,10 +67,6 @@ pub(crate) struct MapPreviewCamera;
 #[derive(Component)]
 pub(crate) struct IndustryPreviewCamera;
 
-/// Vista previa del vehículo seleccionado en el panel lateral.
-#[derive(Component)]
-pub(crate) struct VehiclePreviewCamera;
-
 #[derive(Default)]
 pub(crate) struct MapSpriteBatches {
     pub(super) water: Vec<(MapTileChunk, Sprite, Transform)>,

@@ -216,11 +216,8 @@ pub(crate) struct OrderPanelTitle;
 #[derive(Component, Clone, Copy)]
 pub(crate) enum OrderPanelButton {
     Close,
-    ClearLast,
-    ClearAll,
-    /// Clic en mapa para añadir parada a la ruta.
+    /// «Ir a»: empieza a elegir el destino de una nueva orden.
     PickDestOnMap,
-    ToggleRunning,
     /// Borra la orden de la fila seleccionada.
     DeleteSelected,
     /// Salta la orden actual sin cumplirla.
@@ -229,24 +226,8 @@ pub(crate) enum OrderPanelButton {
     ToggleFullLoad,
     /// Alterna «no descargar» en la fila seleccionada.
     ToggleNoUnload,
-    /// Sube la orden seleccionada en la lista.
-    MoveOrderUp,
-    /// Baja la orden seleccionada en la lista.
-    MoveOrderDown,
-    /// Alterna «parar en depósito» en la fila seleccionada.
-    ToggleDepotStop,
-    /// Cicla espera en parada (horario).
-    CycleOrderWait,
-    /// Cicla tiempo mínimo de viaje (horario).
-    CycleOrderTravel,
-    /// Activa/desactiva horario del vehículo.
-    ToggleTimetable,
-    /// Abre ventana de horario detallado.
+    /// Abre la ventana de horario (los ajustes de horario viven ahí).
     OpenTimetableWindow,
-    /// Pone en hora (limpia retraso acumulado).
-    ClearTimetableLateness,
-    /// Inserta orden condicional en la fila seleccionada.
-    SetConditionalOrder,
 }
 
 /// Muestra de color de compañía en el panel Ajustes (`0..16`).

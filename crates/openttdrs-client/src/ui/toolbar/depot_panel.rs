@@ -1,32 +1,44 @@
 //! Ventana flotante de depósito (carretera y vía), estilo `OpenTTD`.
 //!
-//! Lista los vehículos estacionados con acciones por fila (Órdenes, Vender,
-//! Iniciar/Detener) y el botón «Nuevos vehículos» que abre la ventana de
-//! compra con el catálogo del tipo de depósito.
+//! Muestra la lista de vehículos estacionados con su sprite lateral y un
+//! botón de venta por fila; al hacer clic en un vehículo se abren sus órdenes.
+//! La barra inferior replica el original: «Nuevos vehículos» y «Clonar», más
+//! un botón de localización del depósito.
 
 use bevy::prelude::*;
+use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
-    Command, EngineCatalogSort, RoadEngineFilter, TileCoord, TileKind, apply_command,
-    calendar_year_at_tick, default_engine_id, engine_by_id, engines_for_depot_purchase,
+    Command, TileCoord, TileKind, VehicleKind, apply_command, default_engine_id, engine_for_vehicle,
 };
 
 use crate::camera::tile_camera_world_pos;
-use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending};
+use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles};
 use crate::state::SimWorld;
 use crate::ui::buy_window::BuyVehicleWindowState;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
-    WINDOW_TEXT, spawn_floating_window, window_text_font,
+    spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::vehicle_window::VehicleWindowState;
 
-use super::{BuildMenuUi, OrderEditState, open_order_edit_for_vehicle};
+use super::{BuildMenuUi, OrderEditState};
 
 const DEPOT_VEHICLE_ROWS: usize = 8;
+const ROW_HEIGHT: f32 = 30.0;
+const SPRITE_W: f32 = 64.0;
+const SPRITE_H: f32 = 24.0;
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
+const LIST_BG: Color = Color::srgb(0.16, 0.13, 0.09);
+const ROW_BG: Color = Color::srgb(0.22, 0.18, 0.12);
+const ROW_BORDER: Color = Color::srgb(0.45, 0.39, 0.27);
+const SELL_BG: Color = Color::srgb(0.58, 0.16, 0.13);
+const SELL_BORDER: Color = Color::srgb(0.82, 0.34, 0.28);
+const TEXT_COLOR: Color = Color::srgb(0.92, 0.88, 0.72);
+const PLACEHOLDER_SPRITE: &str = "assets/opengfx/tiles/vehicle_train_e.png";
 
 #[derive(Resource, Default)]
 pub(crate) struct DepotPanelState {
@@ -36,9 +48,13 @@ pub(crate) struct DepotPanelState {
     pub(crate) reorder_from_slot: Option<usize>,
 }
 
-#[derive(Component)]
-pub(crate) struct DepotPanelText;
+/// Contenedor de una fila (sprite + nombre + vender) para mostrar/ocultar junta.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct DepotRowContainer {
+    slot: usize,
+}
 
+/// Zona clicable de la fila (sprite + texto) que abre las órdenes del vehículo.
 #[derive(Component, Clone, Copy)]
 pub(crate) struct DepotVehicleRow {
     slot: usize,
@@ -49,31 +65,14 @@ pub(crate) struct DepotVehicleRowText {
     slot: usize,
 }
 
-/// Contenedor de una fila (vehículo + acciones) para mostrar/ocultar junta.
 #[derive(Component, Clone, Copy)]
-pub(crate) struct DepotRowContainer {
+pub(crate) struct DepotVehicleSprite {
     slot: usize,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DepotRowKind {
-    Orders,
-    ToggleRunning,
-    CopyOrders,
-    Sell,
-    MoveUp,
-    MoveDown,
-}
-
+/// Botón de venta por fila (icono ✕ rojo, estilo original).
 #[derive(Component, Clone, Copy)]
-pub(crate) struct DepotRowAction {
-    slot: usize,
-    kind: DepotRowKind,
-}
-
-/// Texto del botón Iniciar/Detener de la fila (cambia según estado).
-#[derive(Component, Clone, Copy)]
-pub(crate) struct DepotRowToggleText {
+pub(crate) struct DepotSellButton {
     slot: usize,
 }
 
@@ -82,21 +81,12 @@ pub(crate) enum DepotPanelButton {
     NewVehicles,
     /// Compra una copia del vehículo seleccionado (motor + órdenes).
     CloneVehicle,
-    SellAll,
     CenterDepot,
-    StopAll,
-    StartAll,
-    /// Regla de autoreemplazo para el motor del vehículo seleccionado.
-    Autoreplace,
-    /// Reemplaza todos los vehículos del depósito según reglas activas.
-    MassAutoreplace,
-    /// Crea/enlaza pool de órdenes compartidas.
-    ShareOrders,
-    /// Cicla asignación de grupo del vehículo seleccionado.
-    CycleGroup,
-    /// Alterna «solo viejos» en la regla del motor seleccionado.
-    ToggleOnlyWhenOld,
 }
+
+/// Texto del botón «Clonar» (cambia entre tren / vehículo según depósito).
+#[derive(Component)]
+pub(crate) struct DepotCloneLabel;
 
 pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -106,22 +96,23 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
         FloatingWindowId::Depot,
         "Depósito",
         TITLE_BROWN,
-        Vec2::new(460.0, 188.0),
-        460.0,
+        Vec2::new(360.0, 300.0),
+        360.0,
     );
     commands.entity(content).with_children(|panel| {
-        panel.spawn((
-            DepotPanelText,
-            Text::new(""),
-            window_text_font(asset_server, UiFontRole::Caption),
-            TextColor(WINDOW_TEXT),
-        ));
         panel
-            .spawn(Node {
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(2.0),
-                ..default()
-            })
+            .spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(1.0),
+                    padding: UiRect::all(Val::Px(2.0)),
+                    margin: UiRect::bottom(Val::Px(4.0)),
+                    ..default()
+                },
+                BackgroundColor(LIST_BG),
+                BuildMenuUi,
+            ))
             .with_children(|list| {
                 for slot in 0..DEPOT_VEHICLE_ROWS {
                     spawn_depot_vehicle_row(list, asset_server, slot);
@@ -129,9 +120,9 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
             });
         panel
             .spawn(Node {
+                width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
                 column_gap: Val::Px(4.0),
-                flex_wrap: FlexWrap::Wrap,
                 ..default()
             })
             .with_children(|row| {
@@ -140,41 +131,24 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
                     asset_server,
                     DepotPanelButton::NewVehicles,
                     "Nuevos vehículos",
-                );
-                spawn_depot_button(row, asset_server, DepotPanelButton::CloneVehicle, "Clonar");
-                spawn_depot_button(row, asset_server, DepotPanelButton::SellAll, "Vender todo");
-                spawn_depot_button(row, asset_server, DepotPanelButton::CenterDepot, "Centrar");
-                spawn_depot_button(row, asset_server, DepotPanelButton::StopAll, "Parar todos");
-                spawn_depot_button(
-                    row,
-                    asset_server,
-                    DepotPanelButton::StartAll,
-                    "Arrancar todos",
+                    true,
+                    false,
                 );
                 spawn_depot_button(
                     row,
                     asset_server,
-                    DepotPanelButton::Autoreplace,
-                    "Auto-reempl.",
+                    DepotPanelButton::CloneVehicle,
+                    "Clonar tren",
+                    true,
+                    true,
                 );
                 spawn_depot_button(
                     row,
                     asset_server,
-                    DepotPanelButton::MassAutoreplace,
-                    "Auto-reempl. todo",
-                );
-                spawn_depot_button(
-                    row,
-                    asset_server,
-                    DepotPanelButton::ShareOrders,
-                    "Compartir órdenes",
-                );
-                spawn_depot_button(row, asset_server, DepotPanelButton::CycleGroup, "Grupo");
-                spawn_depot_button(
-                    row,
-                    asset_server,
-                    DepotPanelButton::ToggleOnlyWhenOld,
-                    "Solo viejos",
+                    DepotPanelButton::CenterDepot,
+                    "Centrar",
+                    false,
+                    false,
                 );
             });
     });
@@ -190,8 +164,10 @@ fn spawn_depot_vehicle_row(
             DepotRowContainer { slot },
             Node {
                 width: Val::Percent(100.0),
+                height: Val::Px(ROW_HEIGHT),
                 flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(3.0),
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(4.0),
                 display: Display::None,
                 ..default()
             },
@@ -203,103 +179,85 @@ fn spawn_depot_vehicle_row(
                 DepotVehicleRow { slot },
                 Node {
                     flex_grow: 1.0,
-                    height: Val::Px(22.0),
-                    padding: UiRect::horizontal(Val::Px(6.0)),
-                    justify_content: JustifyContent::FlexStart,
+                    height: Val::Px(ROW_HEIGHT - 2.0),
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(6.0),
+                    padding: UiRect::horizontal(Val::Px(4.0)),
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(ROW_BG),
+                BorderColor::all(ROW_BORDER),
+                Interaction::default(),
+                BuildMenuUi,
+            ))
+            .with_children(|inner| {
+                inner.spawn((
+                    DepotVehicleSprite { slot },
+                    ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
+                    Node {
+                        width: Val::Px(SPRITE_W),
+                        height: Val::Px(SPRITE_H),
+                        ..default()
+                    },
+                ));
+                inner.spawn((
+                    DepotVehicleRowText { slot },
+                    Text::new(""),
+                    window_text_font(asset_server, UiFontRole::Caption),
+                    TextColor(TEXT_COLOR),
+                ));
+            });
+            row.spawn((
+                Button,
+                DepotSellButton { slot },
+                Node {
+                    width: Val::Px(26.0),
+                    height: Val::Px(ROW_HEIGHT - 2.0),
+                    justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     border: UiRect::all(Val::Px(1.0)),
                     ..default()
                 },
-                BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
-                BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
+                BackgroundColor(SELL_BG),
+                BorderColor::all(SELL_BORDER),
                 Interaction::default(),
                 BuildMenuUi,
                 children![(
-                    DepotVehicleRowText { slot },
-                    Text::new(""),
+                    Text::new("✕"),
                     window_text_font(asset_server, UiFontRole::Caption),
-                    TextColor(Color::srgb(0.92, 0.88, 0.72)),
+                    TextColor(Color::srgb(0.98, 0.92, 0.9)),
                 )],
             ));
-            spawn_row_action(
-                row,
-                asset_server,
-                slot,
-                DepotRowKind::Orders,
-                "Órdenes",
-                58.0,
-                None,
-            );
-            spawn_row_action(
-                row,
-                asset_server,
-                slot,
-                DepotRowKind::ToggleRunning,
-                "",
-                62.0,
-                Some(DepotRowToggleText { slot }),
-            );
-            spawn_row_action(
-                row,
-                asset_server,
-                slot,
-                DepotRowKind::CopyOrders,
-                "Copiar ord.",
-                72.0,
-                None,
-            );
-            spawn_row_action(
-                row,
-                asset_server,
-                slot,
-                DepotRowKind::MoveUp,
-                "↑",
-                28.0,
-                None,
-            );
-            spawn_row_action(
-                row,
-                asset_server,
-                slot,
-                DepotRowKind::MoveDown,
-                "↓",
-                28.0,
-                None,
-            );
-            spawn_row_action(
-                row,
-                asset_server,
-                slot,
-                DepotRowKind::Sell,
-                "Vender",
-                52.0,
-                None,
-            );
         });
 }
 
-#[allow(clippy::too_many_arguments)]
-fn spawn_row_action(
+fn spawn_depot_button(
     parent: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
-    slot: usize,
-    kind: DepotRowKind,
+    action: DepotPanelButton,
     label: &'static str,
-    width: f32,
-    toggle_text: Option<DepotRowToggleText>,
+    grow: bool,
+    clone_label: bool,
 ) {
+    let mut node = Node {
+        height: Val::Px(24.0),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        border: UiRect::all(Val::Px(1.0)),
+        ..default()
+    };
+    if grow {
+        node.flex_grow = 1.0;
+    } else {
+        node.width = Val::Px(70.0);
+    }
     parent
         .spawn((
             Button,
-            DepotRowAction { slot, kind },
-            Node {
-                width: Val::Px(width),
-                height: Val::Px(22.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
+            action,
+            node,
             BackgroundColor(BTN_BG),
             BorderColor::all(BTN_BORDER),
             Interaction::default(),
@@ -309,46 +267,20 @@ fn spawn_row_action(
             let mut text = btn.spawn((
                 Text::new(label),
                 window_text_font(asset_server, UiFontRole::Caption),
-                TextColor(Color::srgb(0.92, 0.88, 0.72)),
+                TextColor(TEXT_COLOR),
             ));
-            if let Some(marker) = toggle_text {
-                text.insert(marker);
+            if clone_label {
+                text.insert(DepotCloneLabel);
             }
         });
 }
 
-fn spawn_depot_button(
-    parent: &mut ChildSpawnerCommands,
-    asset_server: &AssetServer,
-    action: DepotPanelButton,
-    label: &'static str,
-) {
-    parent.spawn((
-        Button,
-        action,
-        Node {
-            width: Val::Px(130.0),
-            height: Val::Px(24.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: UiRect::all(Val::Px(1.0)),
-            ..default()
-        },
-        BackgroundColor(BTN_BG),
-        BorderColor::all(BTN_BORDER),
-        Interaction::default(),
-        BuildMenuUi,
-        children![(
-            Text::new(label),
-            window_text_font(asset_server, UiFontRole::Caption),
-            TextColor(Color::srgb(0.92, 0.88, 0.72)),
-        )],
-    ));
+fn depot_is_rail(sim: &SimWorld, depot_pos: TileCoord) -> bool {
+    sim.state.map.get_kind(depot_pos) == Some(TileKind::RailDepot)
 }
 
 fn depot_title(sim: &SimWorld, depot_pos: TileCoord) -> String {
-    let kind = sim.state.map.get_kind(depot_pos);
-    let nombre = if kind == Some(TileKind::RailDepot) {
+    let nombre = if depot_is_rail(sim, depot_pos) {
         "Depósito de Trenes"
     } else {
         "Depósito de Carretera"
@@ -374,26 +306,34 @@ fn vehicles_at_depot(sim: &SimWorld, depot_pos: TileCoord) -> Vec<&openttdrs_cor
 
 fn depot_vehicle_row_label(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) -> String {
     let age = vehicle.vehicle_age_years(sim.state.tick.get());
-    let group = vehicle
-        .group_id
-        .and_then(|gid| sim.state.vehicle_groups.iter().find(|g| g.id == gid))
-        .map(|g| format!(" [{}]", g.name))
-        .unwrap_or_default();
     format!(
-        "{:<24}{group} ed.{age}a carga {:>2}/{}",
+        "{}  ({}a)  {}/{}",
         vehicle.display_name(),
+        age,
         vehicle.cargo,
         vehicle.capacity
     )
+}
+
+fn vehicle_side_sprite(trucks: &TruckHandles, vehicle: &openttdrs_core::Vehicle) -> Handle<Image> {
+    let engine_id = vehicle
+        .engine_id
+        .unwrap_or_else(|| default_engine_id(vehicle.kind));
+    if vehicle.kind == VehicleKind::Train {
+        let engine = engine_for_vehicle(vehicle.kind, engine_id);
+        trucks.train_preview(engine.train_image_index, 2)
+    } else {
+        trucks.intro_sprite(vehicle.kind, 2)
+    }
 }
 
 #[allow(clippy::too_many_arguments, clippy::type_complexity)] // sistema ECS Bevy
 pub(crate) fn sync_depot_panel(
     depot_state: Res<DepotPanelState>,
     sim: Res<SimWorld>,
+    trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
-    mut text_q: Query<&mut Text, (With<DepotPanelText>, Without<FloatingWindowTitleText>)>,
     mut container_q: Query<(&DepotRowContainer, &mut Node)>,
     mut row_q: Query<
         (
@@ -404,16 +344,14 @@ pub(crate) fn sync_depot_panel(
         ),
         With<Button>,
     >,
-    mut row_text_q: Query<
-        (&DepotVehicleRowText, &mut Text),
-        (Without<DepotPanelText>, Without<FloatingWindowTitleText>),
-    >,
-    mut toggle_text_q: Query<
-        (&DepotRowToggleText, &mut Text),
+    mut row_text_q: Query<(&DepotVehicleRowText, &mut Text), Without<FloatingWindowTitleText>>,
+    mut sprite_q: Query<(&DepotVehicleSprite, &mut ImageNode)>,
+    mut clone_label_q: Query<
+        &mut Text,
         (
-            Without<DepotPanelText>,
-            Without<FloatingWindowTitleText>,
+            With<DepotCloneLabel>,
             Without<DepotVehicleRowText>,
+            Without<FloatingWindowTitleText>,
         ),
     >,
 ) {
@@ -437,10 +375,15 @@ pub(crate) fn sync_depot_panel(
     {
         **title = depot_title(&sim, depot_pos);
     }
-    let vehicles_here = vehicles_at_depot(&sim, depot_pos);
-    if let Ok(mut text) = text_q.single_mut() {
-        **text = format!("Vehículos en depósito: {}", vehicles_here.len());
+    let is_rail = depot_is_rail(&sim, depot_pos);
+    if let Ok(mut label) = clone_label_q.single_mut() {
+        **label = if is_rail {
+            "Clonar tren".to_string()
+        } else {
+            "Clonar vehículo".to_string()
+        };
     }
+    let vehicles_here = vehicles_at_depot(&sim, depot_pos);
     for (container, mut node) in &mut container_q {
         node.display = if vehicles_here.get(container.slot).is_some() {
             Display::Flex
@@ -460,12 +403,12 @@ pub(crate) fn sync_depot_panel(
         } else if *interaction == Interaction::Hovered {
             BackgroundColor(Color::srgb(0.34, 0.29, 0.2))
         } else {
-            BackgroundColor(Color::srgb(0.22, 0.18, 0.12))
+            BackgroundColor(ROW_BG)
         };
         *border = if selected {
             BorderColor::all(Color::srgb(0.9, 0.78, 0.48))
         } else {
-            BorderColor::all(Color::srgb(0.45, 0.39, 0.27))
+            BorderColor::all(ROW_BORDER)
         };
     }
     for (row_text, mut text) in &mut row_text_q {
@@ -475,13 +418,11 @@ pub(crate) fn sync_depot_panel(
             **text = String::new();
         }
     }
-    for (toggle, mut text) in &mut toggle_text_q {
-        if let Some(vehicle) = vehicles_here.get(toggle.slot) {
-            **text = if vehicle.running {
-                "Detener".to_string()
-            } else {
-                "Iniciar".to_string()
-            };
+    if let Some(trucks) = trucks.as_ref() {
+        for (sprite, mut image) in &mut sprite_q {
+            if let Some(vehicle) = vehicles_here.get(sprite.slot) {
+                image.image = vehicle_side_sprite(trucks, vehicle);
+            }
         }
     }
 }
@@ -511,8 +452,8 @@ pub(crate) fn handle_depot_panel_buttons(
             Without<DepotPanelButton>,
         ),
     >,
-    mut action_q: Query<
-        (&Interaction, &DepotRowAction),
+    mut sell_q: Query<
+        (&Interaction, &DepotSellButton),
         (
             Changed<Interaction>,
             With<Button>,
@@ -522,6 +463,7 @@ pub(crate) fn handle_depot_panel_buttons(
     >,
     mut depot_state: ResMut<DepotPanelState>,
     mut order_state: ResMut<OrderEditState>,
+    mut vehicle_window: ResMut<VehicleWindowState>,
     mut buy_state: ResMut<BuyVehicleWindowState>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
@@ -542,14 +484,12 @@ pub(crate) fn handle_depot_panel_buttons(
         else {
             continue;
         };
-        let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) else {
-            continue;
-        };
         depot_state.selected_vehicle = Some(vehicle_id);
-        open_order_edit_for_vehicle(&mut order_state, vehicle);
+        vehicle_window.vehicle_id = Some(vehicle_id);
+        order_state.clear();
     }
 
-    for (interaction, action) in &mut action_q {
+    for (interaction, sell) in &mut sell_q {
         if *interaction != Interaction::Pressed {
             continue;
         }
@@ -557,82 +497,22 @@ pub(crate) fn handle_depot_panel_buttons(
             continue;
         };
         let Some(vehicle_id) = vehicles_at_depot(&sim, depot_pos)
-            .get(action.slot)
+            .get(sell.slot)
             .map(|v| v.id)
         else {
             continue;
         };
-        match action.kind {
-            DepotRowKind::Orders => {
-                if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                    depot_state.selected_vehicle = Some(vehicle_id);
-                    open_order_edit_for_vehicle(&mut order_state, vehicle);
+        match apply_command(&mut sim.state, &Command::SellVehicle(vehicle_id)) {
+            Ok(()) => {
+                pending.pending = true;
+                if depot_state.selected_vehicle == Some(vehicle_id) {
+                    depot_state.selected_vehicle = None;
+                }
+                if order_state.vehicle_id == Some(vehicle_id) {
+                    order_state.clear();
                 }
             }
-            DepotRowKind::ToggleRunning => {
-                if apply_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id)).is_ok()
-                {
-                    pending.pending = true;
-                }
-            }
-            DepotRowKind::CopyOrders => {
-                let Some(from_id) = depot_state.selected_vehicle else {
-                    continue;
-                };
-                if from_id == vehicle_id {
-                    continue;
-                }
-                match apply_command(
-                    &mut sim.state,
-                    &Command::CloneVehicleOrders {
-                        from_vehicle_id: from_id,
-                        to_vehicle_id: vehicle_id,
-                    },
-                ) {
-                    Ok(()) => {
-                        pending.pending = true;
-                        depot_state.selected_vehicle = Some(vehicle_id);
-                    }
-                    Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
-                }
-            }
-            DepotRowKind::Sell => {
-                match apply_command(&mut sim.state, &Command::SellVehicle(vehicle_id)) {
-                    Ok(()) => {
-                        pending.pending = true;
-                        if depot_state.selected_vehicle == Some(vehicle_id) {
-                            depot_state.selected_vehicle = None;
-                        }
-                        if order_state.vehicle_id == Some(vehicle_id) {
-                            order_state.clear();
-                        }
-                    }
-                    Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
-                }
-            }
-            DepotRowKind::MoveUp | DepotRowKind::MoveDown => {
-                let to_slot = match action.kind {
-                    DepotRowKind::MoveUp if action.slot > 0 => action.slot - 1,
-                    DepotRowKind::MoveDown => action.slot + 1,
-                    _ => continue,
-                };
-                if apply_command(
-                    &mut sim.state,
-                    &Command::DepotReorderVehicleSlot {
-                        depot_pos,
-                        from_slot: action.slot,
-                        to_slot,
-                    },
-                )
-                .is_ok()
-                {
-                    pending.pending = true;
-                }
-            }
+            Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
         }
     }
 
@@ -668,24 +548,7 @@ pub(crate) fn handle_depot_panel_buttons(
                             depot_state.selected_vehicle = Some(new_id);
                         }
                     }
-                    Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
-                }
-            }
-            DepotPanelButton::SellAll => {
-                let selected = depot_state.selected_vehicle;
-                match apply_command(&mut sim.state, &Command::SellAllVehiclesAtDepot(depot_pos)) {
-                    Ok(()) => {
-                        pending.pending = true;
-                        depot_state.selected_vehicle = None;
-                        if selected.is_some_and(|id| order_state.vehicle_id == Some(id)) {
-                            order_state.clear();
-                        }
-                    }
-                    Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
+                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
                 }
             }
             DepotPanelButton::CenterDepot => {
@@ -695,220 +558,6 @@ pub(crate) fn handle_depot_panel_buttons(
                     transform.translation.y = world.y;
                 }
             }
-            DepotPanelButton::StopAll => {
-                if apply_command(
-                    &mut sim.state,
-                    &Command::SetDepotVehiclesRunning {
-                        depot_pos,
-                        running: false,
-                    },
-                )
-                .is_ok()
-                {
-                    pending.pending = true;
-                }
-            }
-            DepotPanelButton::StartAll => {
-                if apply_command(
-                    &mut sim.state,
-                    &Command::SetDepotVehiclesRunning {
-                        depot_pos,
-                        running: true,
-                    },
-                )
-                .is_ok()
-                {
-                    pending.pending = true;
-                }
-            }
-            DepotPanelButton::Autoreplace => {
-                let Some(from_vehicle_id) = depot_state.selected_vehicle else {
-                    continue;
-                };
-                let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == from_vehicle_id)
-                else {
-                    continue;
-                };
-                let from_engine = vehicle
-                    .engine_id
-                    .unwrap_or_else(|| default_engine_id(vehicle.kind));
-                let Some(to_engine) =
-                    next_autoreplace_target(&sim, depot_pos, from_engine, vehicle.kind)
-                else {
-                    continue;
-                };
-                let cmd = if sim
-                    .state
-                    .autoreplace_rules
-                    .iter()
-                    .any(|r| r.from_engine_id == from_engine)
-                {
-                    Command::ToggleAutoReplaceRule {
-                        from_engine_id: from_engine,
-                    }
-                } else {
-                    Command::SetAutoReplaceRule {
-                        from_engine_id: from_engine,
-                        to_engine_id: to_engine,
-                    }
-                };
-                match apply_command(&mut sim.state, &cmd) {
-                    Ok(()) => {
-                        pending.pending = true;
-                        let group_id = sim
-                            .state
-                            .vehicles
-                            .iter()
-                            .find(|v| v.id == from_vehicle_id)
-                            .and_then(|v| v.group_id);
-                        if sim
-                            .state
-                            .autoreplace_rules
-                            .iter()
-                            .any(|r| r.from_engine_id == from_engine)
-                        {
-                            let _ = apply_command(
-                                &mut sim.state,
-                                &Command::SetAutoReplaceRuleGroup {
-                                    from_engine_id: from_engine,
-                                    group_id,
-                                },
-                            );
-                        }
-                    }
-                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
-                }
-            }
-            DepotPanelButton::MassAutoreplace => {
-                match apply_command(&mut sim.state, &Command::DepotMassAutoreplace { depot_pos }) {
-                    Ok(()) => pending.pending = true,
-                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
-                }
-            }
-            DepotPanelButton::ShareOrders => {
-                let Some(from_vehicle_id) = depot_state.selected_vehicle else {
-                    continue;
-                };
-                let cmd = if sim
-                    .state
-                    .vehicles
-                    .iter()
-                    .any(|v| v.id == from_vehicle_id && v.shared_order_id.is_some())
-                {
-                    Command::UnlinkVehicleSharedOrders(from_vehicle_id)
-                } else {
-                    Command::CreateSharedOrdersFromVehicle(from_vehicle_id)
-                };
-                match apply_command(&mut sim.state, &cmd) {
-                    Ok(()) => pending.pending = true,
-                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
-                }
-            }
-            DepotPanelButton::CycleGroup => {
-                let Some(vehicle_id) = depot_state.selected_vehicle else {
-                    continue;
-                };
-                let current_group = sim
-                    .state
-                    .vehicles
-                    .iter()
-                    .find(|v| v.id == vehicle_id)
-                    .and_then(|v| v.group_id);
-                if sim.state.vehicle_groups.is_empty()
-                    && apply_command(
-                        &mut sim.state,
-                        &Command::CreateVehicleGroup {
-                            name: "Grupo 1".into(),
-                        },
-                    )
-                    .is_err()
-                {
-                    continue;
-                }
-                let next_group = if sim.state.vehicle_groups.is_empty() {
-                    None
-                } else if current_group.is_none() {
-                    Some(sim.state.vehicle_groups[0].id)
-                } else {
-                    let Some(current) = current_group else {
-                        continue;
-                    };
-                    match sim
-                        .state
-                        .vehicle_groups
-                        .iter()
-                        .position(|g| g.id == current)
-                    {
-                        Some(i) if i + 1 < sim.state.vehicle_groups.len() => {
-                            Some(sim.state.vehicle_groups[i + 1].id)
-                        }
-                        Some(_) => None,
-                        None => Some(sim.state.vehicle_groups[0].id),
-                    }
-                };
-                match apply_command(
-                    &mut sim.state,
-                    &Command::AssignVehicleToGroup {
-                        vehicle_id,
-                        group_id: next_group,
-                    },
-                ) {
-                    Ok(()) => pending.pending = true,
-                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
-                }
-            }
-            DepotPanelButton::ToggleOnlyWhenOld => {
-                let Some(from_vehicle_id) = depot_state.selected_vehicle else {
-                    continue;
-                };
-                let Some(from_engine) = sim
-                    .state
-                    .vehicles
-                    .iter()
-                    .find(|v| v.id == from_vehicle_id)
-                    .and_then(|v| v.engine_id)
-                else {
-                    continue;
-                };
-                match apply_command(
-                    &mut sim.state,
-                    &Command::ToggleAutoReplaceOnlyWhenOld {
-                        from_engine_id: from_engine,
-                    },
-                ) {
-                    Ok(()) => pending.pending = true,
-                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
-                }
-            }
         }
     }
-}
-
-fn next_autoreplace_target(
-    sim: &SimWorld,
-    depot_pos: TileCoord,
-    from_engine: u16,
-    kind: openttdrs_core::VehicleKind,
-) -> Option<u16> {
-    let is_rail = sim.state.map.get_kind(depot_pos) == Some(TileKind::RailDepot);
-    let road_filter = match kind {
-        openttdrs_core::VehicleKind::Bus => RoadEngineFilter::BusOnly,
-        openttdrs_core::VehicleKind::Truck => RoadEngineFilter::TruckOnly,
-        openttdrs_core::VehicleKind::Train
-        | openttdrs_core::VehicleKind::Ship
-        | openttdrs_core::VehicleKind::Aircraft => RoadEngineFilter::All,
-    };
-    let year = calendar_year_at_tick(sim.state.tick);
-    let list = engines_for_depot_purchase(is_rail, year, EngineCatalogSort::Catalog, road_filter);
-    if list.is_empty() {
-        return None;
-    }
-    let idx = list.iter().position(|e| e.id == from_engine)?;
-    if idx + 1 < list.len() {
-        return Some(list[idx + 1].id);
-    }
-    list.iter()
-        .find(|e| e.id != from_engine)
-        .map(|e| e.id)
-        .or_else(|| engine_by_id(from_engine).map(|e| e.id))
 }

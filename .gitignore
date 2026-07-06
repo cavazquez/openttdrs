@@ -28,6 +28,9 @@ target
 !/assets/sounds/
 /assets/sounds/*
 !/assets/sounds/*.wav
+!/assets/music/
+/assets/music/*
+!/assets/music/*.ogg
 /assets/maps/*.ottdmap
 /.downloads/
 

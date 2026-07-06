@@ -430,7 +430,7 @@ Combinando impacto en el “feel” del juego y esfuerzo de desarrollo:
 | Economía | `crates/openttdrs-core/src/economy.rs` |
 | Audio HUD | `crates/openttdrs-client/src/ui/hud/sound_ping.rs` |
 | Animaciones | `crates/openttdrs-client/src/render/*.rs` |
-| Assets scripts | `scripts/descargar_assets.sh`, `preparar_sonidos_hud.sh`, `preparar_sonidos_opensfx.sh`, `descargar_musica.sh` |
+| Assets scripts | `scripts/descargar_assets.sh`, `preparar_sonidos_hud.sh`, `preparar_sonidos_opensfx.sh`, `preparar_musica_ogg.sh`, `descargar_musica.sh` |
 | Paridad rail | `docs/parity/rail_status.md` |
 
 ---

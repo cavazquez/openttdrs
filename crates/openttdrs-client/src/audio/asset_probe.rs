@@ -28,13 +28,16 @@ pub(crate) fn warn_missing_optional_assets(root: &Path) {
     if !need_sfx && !need_music {
         return;
     }
-    eprintln!("Aviso: faltan assets de audio opcionales.");
+    eprintln!(
+        "Aviso: faltan assets de audio (el repo los incluye tras clone; ¿working tree incompleto?)."
+    );
     if need_sfx {
         eprintln!("  Sonidos: ./scripts/preparar_sonidos_opensfx.sh");
-        eprintln!("  (o ./scripts/descargar_assets.sh sonidos)");
     }
     if need_music {
-        eprintln!("  Música: ./scripts/descargar_musica.sh --openmsx");
-        eprintln!("  (requiere fluidsynth + SoundFont para generar assets/music/*.ogg)");
+        eprintln!("  Música: ./scripts/preparar_musica_ogg.sh");
+        eprintln!(
+            "  (requiere OpenMSX + fluidsynth + ffmpeg; ver README § Dependencias opcionales)"
+        );
     }
 }

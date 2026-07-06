@@ -303,14 +303,53 @@ Tras tocar `scripts/parse_sav.py`, conviene ejecutar `python3 scripts/verify_par
 
 ---
 
-## Descarga de assets (gráficos, sonidos, música)
+## Jugar tras `git clone` (sin `apt` extra)
 
-Para simplificar, usá el wrapper:
+El cliente necesita **Rust** y los assets que el repo ya versiona o que generás una vez:
+
+| Asset | ¿En el repo? | ¿Necesitás `apt`/scripts? |
+|-------|----------------|---------------------------|
+| **Sonidos** (`assets/sounds/*.wav`) | Sí (~22 WAV OpenSFX) | No para jugar |
+| **Música** (`assets/music/*.ogg`) | Sí (theme + 4 pistas) | No para jugar |
+| **Gráficos** (`assets/opengfx/`) | No (muy grande) | Sí, una vez: ver abajo |
+| **Fuente UI** (`static/fonts/`) | Sí | No |
 
 ```bash
+# Primera vez (solo gráficos; audio ya viene en git)
 ./scripts/descargar_assets.sh graficos --32bpp
-./scripts/descargar_assets.sh sonidos
-./scripts/descargar_assets.sh musica
+
+cargo run -p openttdrs-client
+```
+
+No hace falta instalar `fluidsynth`, `catcodec` ni `ffmpeg` **solo para jugar**: esas herramientas sirven para **regenerar** audio o gráficos (mantenedores).
+
+### Dependencias opcionales (solo regenerar assets)
+
+| Herramienta | Para qué | Ubuntu/Debian |
+|-------------|----------|----------------|
+| **grfcodec** | Sprites OpenGFX desde `.grf` | `sudo apt install grfcodec` |
+| **catcodec** | WAV desde `opensfx.cat` | compilar desde [OpenTTD/catcodec](https://github.com/OpenTTD/catcodec) o usar `.downloads/catcodec/build/` |
+| **fluidsynth** + **fluid-soundfont-gm** | MIDI OpenMSX → WAV | `sudo apt install fluidsynth fluid-soundfont-gm` |
+| **ffmpeg** | WAV → OGG | `sudo apt install ffmpeg` |
+
+Scripts de regeneración:
+
+```bash
+./scripts/preparar_sonidos_opensfx.sh   # sonidos mundo + HUD
+./scripts/preparar_musica_ogg.sh        # subset música (5 OGG)
+./scripts/descargar_assets.sh graficos --32bpp
+```
+
+---
+
+## Descarga de assets (gráficos, sonidos, música)
+
+Para simplificar, usá el wrapper (útil si querés **regenerar** o actualizar basesets; el audio ya está en git):
+
+```bash
+./scripts/descargar_assets.sh graficos --32bpp   # obligatorio la primera vez
+./scripts/descargar_assets.sh sonidos            # opcional si ya tenés assets/sounds/*.wav
+./scripts/descargar_assets.sh musica             # opcional si ya tenés assets/music/*.ogg
 ```
 
 También podés ejecutar todo junto:
@@ -336,11 +375,11 @@ Si preferís scripts individuales:
 ./scripts/descargar_graficos.sh --32bpp
 python3 scripts/extract_train_vehicle_sprites.py   # locomotoras (5 grupos)
 python3 scripts/gen_vehicle_gfx_data.py
-./scripts/descargar_sonidos.sh --opensfx   # OpenSFX + WAV HUD y noticias
-./scripts/descargar_musica.sh --openmsx
+./scripts/descargar_sonidos.sh --opensfx   # OpenSFX + WAV (o usar preparar_sonidos_opensfx.sh)
+./scripts/descargar_musica.sh --openmsx     # OpenMSX + OGG (o usar preparar_musica_ogg.sh)
 ```
 
-Solo los efectos del HUD (sin música): `./scripts/preparar_sonidos_hud.sh` (requiere OpenSFX ya descargado).
+Solo copiar sonidos/música ya descargados: `./scripts/preparar_sonidos_opensfx.sh` y `./scripts/preparar_musica_ogg.sh`.
 
 ---
 

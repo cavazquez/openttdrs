@@ -357,6 +357,8 @@ pub(crate) fn spawn_generic_land_tile(
         | TileKind::RailTunnel
         | TileKind::RoadBridge
         | TileKind::RailBridge
+        | TileKind::ShipDepot
+        | TileKind::Airport
         | TileKind::Industry
         | TileKind::Water
         | TileKind::Void => unreachable!(),

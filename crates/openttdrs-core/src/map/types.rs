@@ -50,6 +50,10 @@ pub enum TileKind {
     Rail,
     RoadDepot,
     RailDepot,
+    /// Depósito de barcos (MVP simplificado).
+    ShipDepot,
+    /// Aeropuerto / hangar (MVP simplificado).
+    Airport,
     RoadTunnel,
     RailTunnel,
     RoadBridge,

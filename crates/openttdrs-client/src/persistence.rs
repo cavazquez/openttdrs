@@ -107,6 +107,7 @@ mod tests {
             json_save_path: save_path_s,
             minimap_visible: true,
             sfx_volume: 0.22,
+            ..Default::default()
         });
 
         let mut save_keys = ButtonInput::<KeyCode>::default();
@@ -141,6 +142,7 @@ mod tests {
             json_save_path: save_path_s,
             minimap_visible: true,
             sfx_volume: 0.22,
+            ..Default::default()
         });
 
         let mut ctrl_save = ButtonInput::<KeyCode>::default();

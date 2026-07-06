@@ -166,7 +166,10 @@ pub(super) fn depot_mass_autoreplace(
 ) -> Result<(), CommandError> {
     in_bounds(&state.map, depot_pos)?;
     let kind = state.map.get_kind(depot_pos);
-    if !matches!(kind, Some(TileKind::RoadDepot | TileKind::RailDepot)) {
+    if !matches!(
+        kind,
+        Some(TileKind::RoadDepot | TileKind::RailDepot | TileKind::ShipDepot | TileKind::Airport)
+    ) {
         return Err(CommandError::InvalidDepotTile);
     }
     let ids: Vec<u32> = state

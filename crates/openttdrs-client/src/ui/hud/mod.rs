@@ -25,6 +25,11 @@ pub(crate) struct SimHudControls {
     pub(crate) json_save_path: String,
     pub(crate) minimap_visible: bool,
     pub(crate) sfx_volume: f32,
+    pub(crate) music_volume: f32,
+    pub(crate) sound_vehicle: bool,
+    pub(crate) sound_ambient: bool,
+    pub(crate) sound_disaster: bool,
+    pub(crate) sound_confirm: bool,
 }
 
 impl Default for SimHudControls {
@@ -35,6 +40,11 @@ impl Default for SimHudControls {
             json_save_path: crate::config::json_save_path(),
             minimap_visible: true,
             sfx_volume: 0.22,
+            music_volume: 0.35,
+            sound_vehicle: true,
+            sound_ambient: true,
+            sound_disaster: true,
+            sound_confirm: true,
         }
     }
 }

@@ -28,10 +28,12 @@ const WASD_MAX_SPEED: f32 = 600.0;
 #[derive(Resource, Default)]
 pub struct CameraVelocity(pub Vec2);
 
-/// Petición de salto instantáneo de cámara (p. ej. clic en noticia).
+/// Petición de salto de cámara (p. ej. clic en noticia); scroll suave ~300 ms.
 #[derive(Resource, Default)]
 pub struct CameraFocusRequest {
     pub target: Option<Vec2>,
+    /// Destino activo del lerp (viewport.cpp `ClampSmoothScroll`).
+    smooth_target: Option<Vec2>,
 }
 
 #[must_use]
@@ -61,19 +63,30 @@ impl Plugin for CameraControlPlugin {
 }
 
 fn apply_camera_focus_request(
+    time: Res<Time>,
     mut request: ResMut<CameraFocusRequest>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut vel: ResMut<CameraVelocity>,
 ) {
-    let Some(target) = request.target.take() else {
+    if let Some(target) = request.target.take() {
+        request.smooth_target = Some(target);
+    }
+    let Some(target) = request.smooth_target else {
         return;
     };
     let Ok(mut transform) = cam_q.single_mut() else {
         return;
     };
-    transform.translation.x = target.x;
-    transform.translation.y = target.y;
+    let current = Vec2::new(transform.translation.x, transform.translation.y);
+    let dt = time.delta_secs();
+    let lerp = (dt / 0.3).clamp(0.0, 1.0);
+    let next = current.lerp(target, lerp);
+    transform.translation.x = next.x;
+    transform.translation.y = next.y;
     vel.0 = Vec2::ZERO;
+    if next.distance_squared(target) < 4.0 {
+        request.smooth_target = None;
+    }
 }
 
 /// Mueve la cámara con WASD (con inercia), arrastre con botón derecho y rueda del ratón.

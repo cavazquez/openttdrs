@@ -9,6 +9,19 @@ use crate::engine::{
 use crate::map::TileCoord;
 use crate::train_movement::{ACCEL_SLOWDOWN, is_45_degree_turn};
 
+/// Umbral de fiabilidad bajo el cual conviene servicio en depósito.
+pub const SERVICING_RELIABILITY_THRESHOLD: u16 = 5_000;
+/// Duración de una avería (~3 días de calendario).
+pub const BREAKDOWN_DURATION_TICKS: u32 = crate::economy::TICKS_PER_TRANSIT_DAY * 3;
+
+const fn default_vehicle_reliability() -> u16 {
+    8_500
+}
+
+fn initial_reliability_for_engine(engine_id: u16, kind: VehicleKind) -> u16 {
+    u16::from(crate::engine::engine_for_vehicle(kind, engine_id).reliability_pct) * 100
+}
+
 /// Capacidad de carga por defecto (unidades de cargo).
 pub const VEHICLE_CAPACITY: u32 = 20;
 
@@ -33,6 +46,10 @@ pub enum VehicleKind {
     Bus,
     /// Misma lógica de movimiento que camión; pensado para rutas sobre `TileKind::Rail`.
     Train,
+    /// Navega por teselas de agua (`TileKind::Water`).
+    Ship,
+    /// Vuela en línea recta entre origen y destino (ignora terreno).
+    Aircraft,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -583,16 +600,26 @@ pub struct Vehicle {
     /// Tick actual (efímero; no se guarda).
     #[serde(skip, default)]
     pub(crate) sim_tick: u64,
+    /// Fiabilidad actual (0..=10 000 ≈ porcentaje × 100; desde motor al comprar).
+    #[serde(default = "default_vehicle_reliability")]
+    pub reliability: u16,
+    /// Fiabilidad por debajo del umbral de servicio recomendado.
+    #[serde(default)]
+    pub needs_servicing: bool,
+    /// Ticks restantes de avería (vehículo parado).
+    #[serde(default)]
+    pub breakdown_ticks_remaining: u32,
 }
 
 impl Vehicle {
     #[must_use]
     pub fn new(id: u32, kind: VehicleKind, pos: TileCoord, dest: TileCoord) -> Self {
         let cargo_type = match kind {
-            VehicleKind::Bus => Some(CargoType::Passengers),
-            VehicleKind::Truck | VehicleKind::Train => None,
+            VehicleKind::Bus | VehicleKind::Aircraft => Some(CargoType::Passengers),
+            VehicleKind::Truck | VehicleKind::Train | VehicleKind::Ship => None,
         };
         let engine_id = default_engine_id(kind);
+        let reliability = initial_reliability_for_engine(engine_id, kind);
         Self {
             id,
             kind,
@@ -632,7 +659,46 @@ impl Vehicle {
             depot_display_slot: None,
             timetable_display_seconds: false,
             sim_tick: 0,
+            reliability,
+            needs_servicing: false,
+            breakdown_ticks_remaining: 0,
         }
+    }
+
+    /// Restaura fiabilidad tras servicio en depósito.
+    pub fn service_at_depot(&mut self) {
+        let engine_id = self
+            .engine_id
+            .unwrap_or_else(|| default_engine_id(self.kind));
+        self.reliability = initial_reliability_for_engine(engine_id, self.kind);
+        self.needs_servicing = false;
+        self.breakdown_ticks_remaining = 0;
+    }
+
+    /// Comprueba avería durante el movimiento; devuelve `true` si acaba de averiarse.
+    pub fn check_breakdown(&mut self, tick: u64) -> bool {
+        if self.breakdown_ticks_remaining > 0 {
+            self.breakdown_ticks_remaining = self.breakdown_ticks_remaining.saturating_sub(1);
+            self.cur_speed = 0;
+            return false;
+        }
+        if !self.running || self.cur_speed == 0 {
+            return false;
+        }
+        if tick.is_multiple_of(256) {
+            self.reliability = self.reliability.saturating_sub(10);
+            self.needs_servicing = self.reliability < SERVICING_RELIABILITY_THRESHOLD;
+        }
+        if self.reliability >= 4_000 {
+            return false;
+        }
+        let chance = (tick.wrapping_mul(u64::from(self.id.wrapping_add(1))) % 256) as u32;
+        if chance != 0 {
+            return false;
+        }
+        self.breakdown_ticks_remaining = BREAKDOWN_DURATION_TICKS;
+        self.cur_speed = 0;
+        true
     }
 
     /// Edad del vehículo en años de calendario aproximados.
@@ -698,8 +764,8 @@ impl Vehicle {
     pub(crate) fn clear_cargo(&mut self) {
         self.cargo = 0;
         self.cargo_type = match self.kind {
-            VehicleKind::Bus => Some(CargoType::Passengers),
-            VehicleKind::Truck | VehicleKind::Train => None,
+            VehicleKind::Bus | VehicleKind::Aircraft => Some(CargoType::Passengers),
+            VehicleKind::Truck | VehicleKind::Train | VehicleKind::Ship => None,
         };
         self.cargo_source = None;
         self.cargo_transit_ticks = 0;
@@ -806,7 +872,10 @@ impl Vehicle {
         if self.cargo < self.capacity / 2 {
             return false;
         }
-        matches!(self.kind, VehicleKind::Bus | VehicleKind::Truck)
+        matches!(
+            self.kind,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Ship | VehicleKind::Aircraft
+        )
     }
 
     /// Dirección de sprite para render (8 vías; cardinales en la mitad de giros).
@@ -840,8 +909,11 @@ impl Vehicle {
         if self.pos == self.dest {
             return None;
         }
-        // Un tren nunca avanza fuera de la vía: sin camino por red no se mueve.
-        if self.kind == VehicleKind::Train {
+        // Un tren o barco nunca avanza fuera de la red: sin camino no se mueve.
+        if matches!(
+            self.kind,
+            VehicleKind::Train | VehicleKind::Ship | VehicleKind::Aircraft
+        ) {
             return None;
         }
         if !self.orders.is_empty() {
@@ -961,7 +1033,11 @@ impl Vehicle {
         } else if self.pos == self.dest {
             self.advance_destination_after_arrival();
         } else {
-            if self.kind == VehicleKind::Train || !self.orders.is_empty() {
+            if matches!(
+                self.kind,
+                VehicleKind::Train | VehicleKind::Ship | VehicleKind::Aircraft
+            ) || !self.orders.is_empty()
+            {
                 return;
             }
             let dx = self.dest.x - self.pos.x;
@@ -1006,7 +1082,10 @@ impl Vehicle {
                         .cur_speed
                         .saturating_sub(u16::try_from(penalty).unwrap_or(0));
                 }
-                VehicleKind::Bus | VehicleKind::Truck => {
+                VehicleKind::Bus
+                | VehicleKind::Truck
+                | VehicleKind::Ship
+                | VehicleKind::Aircraft => {
                     self.cur_speed -= self.cur_speed >> 2;
                 }
             }
@@ -1037,7 +1116,10 @@ impl Vehicle {
         self.no_network_route_to_order = false;
         if let Some(&first) = self.orders.first() {
             self.origin = self.pos;
-            if self.kind != VehicleKind::Train {
+            if !matches!(
+                self.kind,
+                VehicleKind::Train | VehicleKind::Ship | VehicleKind::Aircraft
+            ) {
                 self.dest = first.destination();
             }
         }
@@ -1109,6 +1191,7 @@ impl Vehicle {
         }
         let pass_through = self.orders[self.current_order].is_pass_through();
         if self.orders[self.current_order].depot_stops() {
+            self.service_at_depot();
             self.running = false;
             self.progress = 255;
             return;
@@ -1284,7 +1367,10 @@ impl Vehicle {
     /// Salida con sentido opuesto al de llegada (giro animado en parada bus/camión).
     #[must_use]
     pub(crate) fn needs_depart_turnaround(&self) -> bool {
-        if self.kind == VehicleKind::Train {
+        if matches!(
+            self.kind,
+            VehicleKind::Train | VehicleKind::Ship | VehicleKind::Aircraft
+        ) {
             return false;
         }
         let Some(next) = self.movement_target() else {
@@ -1669,5 +1755,39 @@ mod tests {
             v.tick_timetable_wait();
         }
         assert_eq!(v.current_order, 1);
+    }
+
+    #[test]
+    fn service_at_depot_restores_reliability() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.reliability = 2_000;
+        v.needs_servicing = true;
+        v.breakdown_ticks_remaining = 50;
+        v.service_at_depot();
+        assert!(v.reliability >= 8_000);
+        assert!(!v.needs_servicing);
+        assert_eq!(v.breakdown_ticks_remaining, 0);
+    }
+
+    #[test]
+    fn check_breakdown_triggers_when_unreliable() {
+        let mut v = Vehicle::new(
+            7,
+            VehicleKind::Truck,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.reliability = 3_000;
+        v.running = true;
+        v.cur_speed = 50;
+        let tick = 7_u64 * 256;
+        assert!(v.check_breakdown(tick));
+        assert!(v.breakdown_ticks_remaining > 0);
+        assert_eq!(v.cur_speed, 0);
     }
 }

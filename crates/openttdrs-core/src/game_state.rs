@@ -44,6 +44,13 @@ pub struct SimStats {
 pub struct CompanyEconomy {
     pub money: i64,
     pub loan: i64,
+    /// Tope de préstamo (`economy.cpp` `max_loan`; por defecto 300 000).
+    #[serde(default = "default_max_loan")]
+    pub max_loan: i64,
+}
+
+const fn default_max_loan() -> i64 {
+    crate::economy::DEFAULT_MAX_LOAN
 }
 
 impl Default for CompanyEconomy {
@@ -51,6 +58,7 @@ impl Default for CompanyEconomy {
         Self {
             money: 100_000,
             loan: 0,
+            max_loan: crate::economy::DEFAULT_MAX_LOAN,
         }
     }
 }
@@ -107,6 +115,9 @@ pub struct GameState {
     /// Ingresos recién cobrados (drenados por el cliente para texto flotante).
     #[serde(skip)]
     pub pending_income_popups: Vec<IncomePopup>,
+    /// Eventos del tick para audio/FX/UI en el cliente.
+    #[serde(skip)]
+    pub pending_sim_events: crate::sim_events::SimEventQueue,
     /// Teselas industriales con `m1` mutado este tick (obra P6 → remap cliente).
     #[serde(skip)]
     pub industry_tile_dirty: Vec<TileCoord>,
@@ -140,6 +151,26 @@ pub struct GameState {
     /// Tracer de paridad opcional (coste cero si es `None`; no se persiste).
     #[serde(skip, default)]
     pub parity: Option<crate::parity::ParityTracer>,
+    /// Subsidios activos u ofrecidos.
+    #[serde(default)]
+    pub subsidies: Vec<crate::subsidy::Subsidy>,
+    /// Contador para IDs de subsidio.
+    #[serde(default)]
+    pub next_subsidy_id: u32,
+    /// Desastres ambientales habilitados.
+    #[serde(default = "default_true")]
+    pub disasters_enabled: bool,
+    /// Ticks hasta la próxima comprobación de desastre.
+    #[serde(default = "default_disaster_timer")]
+    pub disaster_timer: u64,
+}
+
+const fn default_true() -> bool {
+    true
+}
+
+const fn default_disaster_timer() -> u64 {
+    crate::disaster::DISASTER_CHECK_INTERVAL
 }
 
 impl GameState {
@@ -160,6 +191,7 @@ impl GameState {
             jgr_tunnels_from_footer: Vec::new(),
             path_cache: crate::pathfinder::PathCache::default(),
             pending_income_popups: Vec::new(),
+            pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
             signal_tile_dirty: Vec::new(),
             news: crate::news::NewsQueue::default(),
@@ -171,6 +203,10 @@ impl GameState {
             news_advice_sent: std::collections::HashSet::new(),
             news_last_purge_day: 0,
             parity: None,
+            subsidies: Vec::new(),
+            next_subsidy_id: 1,
+            disasters_enabled: true,
+            disaster_timer: default_disaster_timer(),
         }
     }
 
@@ -192,6 +228,7 @@ impl GameState {
             jgr_tunnels_from_footer: Vec::new(),
             path_cache: crate::pathfinder::PathCache::default(),
             pending_income_popups: Vec::new(),
+            pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
             signal_tile_dirty: Vec::new(),
             news: crate::news::NewsQueue::default(),
@@ -203,6 +240,10 @@ impl GameState {
             news_advice_sent: std::collections::HashSet::new(),
             news_last_purge_day: 0,
             parity: None,
+            subsidies: Vec::new(),
+            next_subsidy_id: 1,
+            disasters_enabled: true,
+            disaster_timer: default_disaster_timer(),
         }
     }
 

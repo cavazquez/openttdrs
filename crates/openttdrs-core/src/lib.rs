@@ -5,11 +5,13 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
+pub mod aircraft_movement;
 pub mod autoreplace;
 pub mod bridge_spec;
 pub mod cargo;
 pub mod command;
 pub mod depot;
+pub mod disaster;
 pub mod economy;
 pub mod engine;
 mod game_state;
@@ -26,8 +28,12 @@ pub mod road_movement;
 pub mod sav;
 pub mod save;
 pub mod shared_orders;
+pub mod ship_movement;
+mod sim_events;
 mod sim_step;
+pub mod sound_id;
 pub mod station;
+pub mod subsidy;
 pub mod tick;
 pub mod timetable;
 pub mod tnbp_decode;
@@ -39,6 +45,7 @@ mod vehicle_ai;
 pub mod vehicle_group;
 pub mod world_gen;
 
+pub use aircraft_movement::{aircraft_requires_path, straight_line_path};
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
 pub use bridge_spec::{
     BRIDGE_SPECS, BridgePiece, BridgeSpec, BridgeType, bridge_above_axis_from_mapt,
@@ -55,19 +62,22 @@ pub use command::{
     road_drag_line_tiles, road_locked_tool_axis,
 };
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
+pub use disaster::{DISASTER_CHECK_INTERVAL, force_disaster, tick_disasters, trigger_disaster_at};
 pub use economy::{
-    CargoPaymentSpec, TICKS_PER_TRANSIT_DAY, TICKS_PER_YEAR, buy_land_cost, cargo_time_factor,
-    inflation_income_factor, inflation_prices_factor, manhattan_distance,
-    terraform_cost_per_corner, ticks_to_transit_days, transported_goods_income,
-    vehicle_purchase_cost, vehicle_running_cost_per_tick, vehicle_sell_refund,
+    ANNUAL_INTEREST_RATE_PCT, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL, TICKS_PER_MONTH,
+    TICKS_PER_TRANSIT_DAY, TICKS_PER_YEAR, buy_land_cost, cargo_time_factor, check_bankruptcy,
+    decrease_loan, increase_loan, inflation_income_factor, inflation_prices_factor,
+    manhattan_distance, monthly_loan_interest, terraform_cost_per_corner, ticks_to_transit_days,
+    transported_goods_income, vehicle_purchase_cost, vehicle_running_cost_per_tick,
+    vehicle_sell_refund,
 };
 pub use engine::{
-    ENGINE_BUS_MPS, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineCatalogSort, EngineDef,
-    REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter, accelerate_train_speed,
-    decelerate_road_speed, decelerate_train_speed, default_engine_id, engine_available_in_year,
-    engine_by_id, engine_catalog, engine_for_vehicle, engines_for_depot_purchase, engines_of_kind,
-    progress_step_for_speed, tile_progress_length, train_acceleration, train_sprite_group,
-    update_road_speed,
+    ENGINE_BUS_MPS, ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineCatalogSort,
+    EngineDef, REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter,
+    accelerate_train_speed, decelerate_road_speed, decelerate_train_speed, default_engine_id,
+    engine_available_in_year, engine_by_id, engine_catalog, engine_for_vehicle,
+    engines_for_depot_purchase, engines_of_kind, progress_step_for_speed, tile_progress_length,
+    train_acceleration, train_smoke_kind, train_sprite_group, update_road_speed,
 };
 #[allow(deprecated)]
 pub use game_state::CARGO_DELIVERY_PAYMENT;
@@ -83,19 +93,20 @@ pub use industry::{
 };
 pub use map::{
     GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED, GFX_GOLD_MINE_TOWER_ANIMATED,
-    GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2, GFX_OILWELL_ANIMATED_3, IndustryTileLink, Map,
-    MapError, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_TRANSMITTER,
-    OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, OTTD_TILETYPE_TUNNELBRIDGE, SLOPE_NE, SLOPE_NW, SLOPE_SE,
-    SLOPE_SW, Tile, TileCoord, TileKind, advance_industry_construction,
-    advance_industry_tile_animations, effective_road_bits, inclined_slope_direction,
-    industry_animation_frame, industry_construction_counter, industry_construction_stage,
-    industry_gfx, industry_instance_id, industry_tile_anim_state, industry_tile_link,
-    industry_tiles_mergeable, industry_uses_water_ground, is_industry_completed,
-    is_map_object_tile, is_owned_land_tile, is_tunnel_entrance_slope, make_industry_tile_bigger,
-    openttd_tile_index_to_coord, partial_pixel_z, rail_foundation_for_trackbits,
-    rail_trackbits_valid_on_slope, resolve_tunnel_end, set_industry_gfx, slope_dz_at_subtile,
-    slope_dz_on_tile, step_industry_tiles, tile_adjacent_to_water, tile_slope_and_z,
-    tunnel_entrance_m5, tunnel_preview_path,
+    GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2, GFX_OILWELL_ANIMATED_3, IndustryTileLink,
+    MAX_TREE_OR_FIELD_STAGE, Map, MapError, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
+    OBJECT_TYPE_TRANSMITTER, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, OTTD_TILETYPE_TUNNELBRIDGE,
+    SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, TREE_GROWTH_TICK_INTERVAL, Tile, TileCoord, TileKind,
+    advance_industry_construction, advance_industry_tile_animations, apply_seasonal_snow,
+    clear_tree, effective_road_bits, inclined_slope_direction, industry_animation_frame,
+    industry_construction_counter, industry_construction_stage, industry_gfx, industry_instance_id,
+    industry_tile_anim_state, industry_tile_link, industry_tiles_mergeable,
+    industry_uses_water_ground, is_industry_completed, is_map_object_tile, is_owned_land_tile,
+    is_tunnel_entrance_slope, make_industry_tile_bigger, openttd_tile_index_to_coord,
+    partial_pixel_z, plant_tree, rail_foundation_for_trackbits, rail_trackbits_valid_on_slope,
+    resolve_tunnel_end, set_industry_gfx, slope_dz_at_subtile, slope_dz_on_tile,
+    step_industry_tiles, step_tree_and_field_growth, tick_tree_tile_loop, tile_adjacent_to_water,
+    tile_slope_and_z, tree_or_field_stage, tunnel_entrance_m5, tunnel_preview_path,
 };
 pub use news::{
     CALENDAR_BASE_YEAR, NEWS_MAX_AGE_DAYS, NewsDisplayMode, NewsDisplaySettings, NewsItem,
@@ -136,13 +147,23 @@ pub use save::CURRENT_SAVE_VERSION;
 pub use save::SaveError;
 pub use save::load_from_str;
 pub use shared_orders::SharedOrderList;
+pub use ship_movement::{is_water_network_tile, ship_requires_path, water_tiles_connected};
+pub use sim_events::{ConstructionKind, DisasterKind, SimEvent, SimEventQueue, TrainSmokeKind};
+pub use sound_id::SoundId;
 pub use station::{
-    STATION_COVERAGE_RADIUS, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage,
-    StationMapCoherenceReport, StopKind, industry_in_station_coverage, is_rail_waypoint_at,
-    is_rail_waypoint_tile, rail_station_approach_tile, rail_station_platform_tiles,
-    rail_station_stop_tile, resolve_order_destination, road_stop_approach_tile,
-    station_coverage_at, station_covers_tile, station_map_coherence, station_type_from_m6,
-    stop_kind_from_m6, train_on_rail_platform, vehicle_at_road_stop, vehicle_physically_at_station,
+    CargoTimeSincePickup, MAX_TIME_SINCE_PICKUP_DAYS, STATION_COVERAGE_RADIUS,
+    STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage, StationMapCoherenceReport, StopKind,
+    industry_in_station_coverage, is_rail_waypoint_at, is_rail_waypoint_tile,
+    load_amount_for_rating, on_station_cargo_pickup, rail_station_approach_tile,
+    rail_station_platform_tiles, rail_station_stop_tile, recompute_station_rating,
+    resolve_order_destination, road_stop_approach_tile, station_coverage_at, station_covers_tile,
+    station_map_coherence, station_rating_for_cargo, station_type_from_m6, stop_kind_from_m6,
+    tick_station_cargo_age, train_on_rail_platform, vehicle_at_road_stop,
+    vehicle_physically_at_station,
+};
+pub use subsidy::{
+    SUBSIDY_AWARDED_YEARS, SUBSIDY_OFFER_MONTHS, SUBSIDY_PAYMENT_MULTIPLIER, Subsidy,
+    delivery_income_multiplier, tick_subsidies, try_award_subsidy, try_create_subsidy,
 };
 pub use tick::GameTick;
 pub use timetable::{TRAVEL_PRESETS, WAIT_PRESETS, cycle_travel_ticks, cycle_wait_ticks};
@@ -151,7 +172,9 @@ pub use tnbp_decode::{
     jgr_tunnels_from_decoded, read_sl_gamma, split_sl_gamma_segments, tnbp_blob_to_json_value,
 };
 pub use town::{
-    MAIL_PER_HOUSE, PASSENGERS_PER_HOUSE, STATION_TOWN_CARGO_CAPACITY, TOWN_PRODUCE_TICKS, Town,
+    AUTHORITY_MIN_STATION, FUND_BUILDINGS_COST, MAIL_PER_HOUSE, PASSENGERS_PER_HOUSE,
+    STATION_TOWN_CARGO_CAPACITY, TOWN_ADVERTISE_COST, TOWN_AUTHORITY_RADIUS, TOWN_GROWTH_TICKS,
+    TOWN_PRODUCE_TICKS, Town, authority_allows_new_station, grow_town_if_served,
     produce_town_cargo,
 };
 pub use townname::generate_town_name;
@@ -167,9 +190,9 @@ pub use train_movement::{
 };
 pub use vehicle::reverse_direction;
 pub use vehicle::{
-    DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionKind,
-    TimetableWaitKind, VEHICLE_PROGRESS_STEP, Vehicle, VehicleDirection, VehicleKind, VehicleOrder,
-    direction_from_tile_step,
+    BREAKDOWN_DURATION_TICKS, DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W,
+    OrderConditionKind, SERVICING_RELIABILITY_THRESHOLD, TimetableWaitKind, VEHICLE_PROGRESS_STEP,
+    Vehicle, VehicleDirection, VehicleKind, VehicleOrder, direction_from_tile_step,
 };
 pub use vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup};
 pub use world_gen::{

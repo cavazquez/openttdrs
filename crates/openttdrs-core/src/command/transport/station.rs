@@ -9,6 +9,7 @@ use crate::{
 };
 
 use super::super::CommandError;
+use crate::town::{self, authority_allows_new_station};
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
@@ -190,6 +191,10 @@ pub(in crate::command) fn place_rail_station_area(
     let length = length.clamp(1, 7);
     let (w, h) = rail_station_footprint(axis_y, platforms, length);
     check_rail_station_area(state, origin, w, h)?;
+    let anchor = TileCoord::new(origin.x + (w - 1) / 2, origin.y + (h - 1) / 2);
+    if !authority_allows_new_station(&state.towns, anchor) {
+        return Err(CommandError::AuthorityRatingTooLow);
+    }
 
     let layout = rail_station_layout(usize::from(platforms), usize::from(length));
     for n in 0..platforms {
@@ -221,6 +226,13 @@ pub(in crate::command) fn place_rail_station_area(
     state
         .stations
         .push(Station::new_with_kind(anchor, StopKind::RailStation));
+    if let Some((town_id, delta)) =
+        town::apply_station_build_rating_penalty(&mut state.towns, anchor)
+    {
+        state
+            .pending_sim_events
+            .push(crate::sim_events::SimEvent::TownRatingChanged { town_id, delta });
+    }
     Ok(())
 }
 
@@ -246,6 +258,9 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     dir: u8,
     stop_kind: StopKind,
 ) -> Result<(), CommandError> {
+    if !authority_allows_new_station(&state.towns, c) {
+        return Err(CommandError::AuthorityRatingTooLow);
+    }
     let kind = state.map.get_kind(c).unwrap_or(TileKind::Grass);
     if station_site_tile_needs_clear(kind) {
         clear_station_site_tile(state, c)?;
@@ -268,6 +283,11 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     }
     state.stations.push(Station::new_with_kind(c, stop_kind));
     state.economy.money -= STATION_BUILD_COST;
+    if let Some((town_id, delta)) = town::apply_station_build_rating_penalty(&mut state.towns, c) {
+        state
+            .pending_sim_events
+            .push(crate::sim_events::SimEvent::TownRatingChanged { town_id, delta });
+    }
     Ok(())
 }
 

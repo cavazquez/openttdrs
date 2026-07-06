@@ -15,6 +15,8 @@ pub(super) fn minimap_color(kind: TileKind) -> Color {
         TileKind::Station => Color::srgb(0.95, 0.95, 0.86),
         TileKind::Forest => Color::srgb(0.05, 0.34, 0.1),
         TileKind::Grass => Color::srgb(0.16, 0.48, 0.12),
+        TileKind::ShipDepot => Color::srgb(0.06, 0.22, 0.48),
+        TileKind::Airport => Color::srgb(0.55, 0.55, 0.5),
         TileKind::Void => Color::srgb(0.02, 0.02, 0.02),
         TileKind::Unknown(_) => Color::srgb(0.38, 0.12, 0.45),
     }

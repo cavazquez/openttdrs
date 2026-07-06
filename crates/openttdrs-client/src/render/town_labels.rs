@@ -99,6 +99,7 @@ mod tests {
             pos: TileCoord::new(3, 3),
             name: "Nuntburg".to_string(),
             population: 738,
+            ..Default::default()
         });
         let sim = SimWorld {
             state,

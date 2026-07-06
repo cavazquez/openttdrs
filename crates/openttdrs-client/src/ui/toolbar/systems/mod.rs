@@ -71,6 +71,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(ToolbarState {
             active_group: Some(ToolbarGroup::Road),
+            ..Default::default()
         });
         world.insert_resource(UiToolState {
             active_tool: Some(BuildMenuAction::Rail),
@@ -183,6 +184,7 @@ mod tests {
             json_save_path: save_path.to_string_lossy().to_string(),
             minimap_visible: true,
             sfx_volume: 0.22,
+            ..Default::default()
         });
 
         world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));

@@ -20,6 +20,11 @@ pub(crate) struct ClientPreferences {
     pub(crate) minimap_visible: bool,
     pub(crate) default_sim_speed: f32,
     pub(crate) sfx_volume: f32,
+    pub(crate) music_volume: f32,
+    pub(crate) sound_vehicle: bool,
+    pub(crate) sound_ambient: bool,
+    pub(crate) sound_disaster: bool,
+    pub(crate) sound_confirm: bool,
     pub(crate) show_debug_gizmos: bool,
     pub(crate) show_diagnostics_overlay: bool,
     /// 0=Off, 1=Summary, 2=Full — ver `news_prefs`.
@@ -36,6 +41,11 @@ impl Default for ClientPreferences {
             minimap_visible: true,
             default_sim_speed: 1.0,
             sfx_volume: 0.22,
+            music_volume: 0.35,
+            sound_vehicle: true,
+            sound_ambient: true,
+            sound_disaster: true,
+            sound_confirm: true,
             show_debug_gizmos: false,
             show_diagnostics_overlay: false,
             news_cargo_delivered: crate::news_prefs::DISPLAY_FULL,
@@ -97,6 +107,11 @@ fn hydrate_runtime_from_preferences(
     hud.minimap_visible = effective.minimap_visible;
     hud.sim_speed = effective.default_sim_speed.clamp(0.25, 8.0);
     hud.sfx_volume = effective.sfx_volume.clamp(0.0, 1.0);
+    hud.music_volume = effective.music_volume.clamp(0.0, 1.0);
+    hud.sound_vehicle = effective.sound_vehicle;
+    hud.sound_ambient = effective.sound_ambient;
+    hud.sound_disaster = effective.sound_disaster;
+    hud.sound_confirm = effective.sound_confirm;
     hydrated.0 = true;
 }
 
@@ -124,6 +139,26 @@ fn sync_preferences_from_hud(
     }
     if (prefs.sfx_volume - hud.sfx_volume).abs() > f32::EPSILON {
         prefs.sfx_volume = hud.sfx_volume;
+        changed = true;
+    }
+    if (prefs.music_volume - hud.music_volume).abs() > f32::EPSILON {
+        prefs.music_volume = hud.music_volume;
+        changed = true;
+    }
+    if prefs.sound_vehicle != hud.sound_vehicle {
+        prefs.sound_vehicle = hud.sound_vehicle;
+        changed = true;
+    }
+    if prefs.sound_ambient != hud.sound_ambient {
+        prefs.sound_ambient = hud.sound_ambient;
+        changed = true;
+    }
+    if prefs.sound_disaster != hud.sound_disaster {
+        prefs.sound_disaster = hud.sound_disaster;
+        changed = true;
+    }
+    if prefs.sound_confirm != hud.sound_confirm {
+        prefs.sound_confirm = hud.sound_confirm;
         changed = true;
     }
     if changed {

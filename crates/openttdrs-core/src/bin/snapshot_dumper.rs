@@ -93,6 +93,8 @@ fn tile_kind_name(kind: TileKind) -> String {
         TileKind::Station => "Station".to_string(),
         TileKind::Forest => "Forest".to_string(),
         TileKind::CoalField => "CoalField".to_string(),
+        TileKind::ShipDepot => "ShipDepot".to_string(),
+        TileKind::Airport => "Airport".to_string(),
         TileKind::Unknown(n) => format!("Unknown({n})"),
     }
 }
@@ -214,6 +216,8 @@ fn main() -> Result<(), String> {
                 TileKind::Station => 7,
                 TileKind::Forest => 8,
                 TileKind::CoalField => 9,
+                TileKind::ShipDepot => 16,
+                TileKind::Airport => 17,
                 TileKind::Unknown(n) => 128_u8.wrapping_add(n),
             });
             h_mapt.write_u8(t.mapt);

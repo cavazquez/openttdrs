@@ -225,12 +225,14 @@ mod tests {
             pos: TileCoord::new(5, 5),
             name: "Oeste".into(),
             population: 100,
+            ..Default::default()
         });
         state.towns.push(openttdrs_core::Town {
             id: 2,
             pos: TileCoord::new(25, 25),
             name: "Este".into(),
             population: 200,
+            ..Default::default()
         });
         state
     }

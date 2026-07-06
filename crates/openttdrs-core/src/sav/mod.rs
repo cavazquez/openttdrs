@@ -192,6 +192,8 @@ fn nearest_network_tile(
                     tile_kind,
                     TileKind::Road | TileKind::RoadTunnel | TileKind::RoadBridge
                 ),
+                VehicleKind::Ship => matches!(tile_kind, TileKind::Water | TileKind::ShipDepot),
+                VehicleKind::Aircraft => true,
             };
             if !on_network {
                 continue;
@@ -321,6 +323,10 @@ mod tests {
                 pos: crate::TileCoord::new(10, 10),
                 name: "Springfield".into(),
                 population: 500,
+                local_authority_rating: 0,
+                passengers_served: 0,
+                mail_served: 0,
+                growth_funded: 0,
             }],
             industries: Vec::new(),
             vehicles: vec![

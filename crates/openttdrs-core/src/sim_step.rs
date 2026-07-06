@@ -8,9 +8,19 @@ pub(crate) fn step(state: &mut GameState) {
     state.tick.advance();
     let t = state.tick.get();
 
+    process_monthly_economy(state, t);
     produce_industries(state, t);
     produce_town_demand(state, t);
+    grow_towns(state, t);
     age_vehicle_cargo(state);
+
+    if t > 0 && t.is_multiple_of(u64::from(economy::TICKS_PER_TRANSIT_DAY)) {
+        station::tick_station_cargo_age(&mut state.stations);
+    }
+
+    crate::subsidy::tick_subsidies(state);
+    crate::map::tree_tile_loop::tick_tree_tile_loop(state);
+    crate::disaster::tick_disasters(state);
 
     recompute_vehicle_paths(state);
 
@@ -129,6 +139,34 @@ fn produce_town_demand(state: &mut GameState, tick: u64) {
         town::produce_town_cargo(&state.map, &state.industries, &mut state.stations, tick);
     state.stats.town_passengers_generated += passengers;
     state.stats.town_mail_generated += mail;
+}
+
+fn grow_towns(state: &mut GameState, tick: u64) {
+    town::grow_town_if_served(
+        &state.map,
+        &state.industries,
+        &state.stations,
+        &mut state.towns,
+        tick,
+    );
+}
+
+fn process_monthly_economy(state: &mut GameState, tick: u64) {
+    if tick == 0 || !tick.is_multiple_of(economy::TICKS_PER_MONTH) {
+        return;
+    }
+    let interest = economy::monthly_loan_interest(state.economy.loan);
+    if interest > 0 {
+        state.economy.money -= interest;
+        state
+            .pending_sim_events
+            .push(crate::sim_events::SimEvent::LoanInterestPaid { amount: interest });
+    }
+    if economy::check_bankruptcy(state.economy.money, state.economy.max_loan) {
+        state
+            .pending_sim_events
+            .push(crate::sim_events::SimEvent::BankruptcyWarning);
+    }
 }
 
 fn load_vehicles(
@@ -264,7 +302,7 @@ fn try_load_from_station_waiting_cargo(
     let station_pos = state.stations[station_idx].pos;
     let cargo = match kind {
         VehicleKind::Bus => preferred.unwrap_or(CargoType::Passengers),
-        VehicleKind::Truck | VehicleKind::Train => {
+        VehicleKind::Truck | VehicleKind::Train | VehicleKind::Ship => {
             let Some(cargo) = stock.pick_freight_to_load(preferred) else {
                 return false;
             };
@@ -282,6 +320,7 @@ fn try_load_from_station_waiting_cargo(
             }
             cargo
         }
+        VehicleKind::Aircraft => return false,
     };
 
     if !state.stations[station_idx].accepts_cargo(cargo) {
@@ -289,7 +328,11 @@ fn try_load_from_station_waiting_cargo(
     }
 
     let available = stock.get(cargo);
-    let load = available.min(room);
+    let rating = station::station_rating_for_cargo(&state.stations[station_idx], cargo);
+    let mut load = station::load_amount_for_rating(available.min(room), rating);
+    if load == 0 && available > 0 && rating > 0 {
+        load = 1;
+    }
     if load == 0 {
         return false;
     }
@@ -299,6 +342,7 @@ fn try_load_from_station_waiting_cargo(
     state.vehicles[vehicle_idx].cargo_type = Some(cargo);
     state.vehicles[vehicle_idx].cargo += load;
     state.vehicles[vehicle_idx].mark_cargo_loaded(source);
+    station::on_station_cargo_pickup(&mut state.stations[station_idx], cargo);
     *loaded_flag = true;
     state.stats.cargo_pickups += 1;
     state.stats.cargo_units_loaded += u64::from(load);
@@ -339,22 +383,32 @@ fn unload_vehicles(
             continue;
         }
         let station_pos = st.pos;
-        let st = &mut state.stations[station_idx];
         if !st.accepts_cargo(cargo_type) || !st.can_service_vehicle(state.vehicles[i].kind) {
             continue;
-        }
-        let town_cargo = cargo_type.is_town_cargo();
-        if !town_cargo {
-            st.stock += vcargo;
-            st.cargo_stock.add(cargo_type, vcargo);
         }
         let source = state.vehicles[i]
             .cargo_source
             .unwrap_or(state.vehicles[i].pos);
         let distance = economy::manhattan_distance(source, station_pos);
         let transit_days = economy::ticks_to_transit_days(state.vehicles[i].cargo_transit_ticks);
-        let payment =
+        let mut payment =
             economy::transported_goods_income(vcargo, distance, transit_days, cargo_type, tick);
+        let _ = crate::subsidy::try_award_subsidy(state, station_pos, cargo_type, source);
+        payment = payment.saturating_mul(crate::subsidy::delivery_income_multiplier(
+            state,
+            station_pos,
+            cargo_type,
+            source,
+        ));
+        let st = &mut state.stations[station_idx];
+        let town_cargo = cargo_type.is_town_cargo();
+        if town_cargo {
+            town::record_delivery_near_town(&mut state.towns, station_pos, cargo_type, vcargo);
+        }
+        if !town_cargo {
+            st.stock += vcargo;
+            st.cargo_stock.add(cargo_type, vcargo);
+        }
         st.income += payment.cast_unsigned();
         state.economy.money += payment;
         state.stats.cargo_income_earned += payment.cast_unsigned();
@@ -362,6 +416,12 @@ fn unload_vehicles(
             amount: payment,
             at: vpos,
         });
+        state
+            .pending_sim_events
+            .push(crate::sim_events::SimEvent::Income {
+                amount: payment,
+                at: vpos,
+            });
         let first_delivery = state.stats.cargo_deliveries == 0;
         crate::news::push_cargo_delivery_news(
             state,
@@ -468,6 +528,18 @@ fn move_vehicles(state: &mut GameState) {
             }
         }
         let had_force = vehicle.force_proceed;
+        let broke_down = vehicle.check_breakdown(tick);
+        if broke_down {
+            state
+                .pending_sim_events
+                .push(crate::sim_events::SimEvent::Breakdown {
+                    vehicle_id: vehicle.id,
+                    at: vehicle.pos,
+                });
+        }
+        if vehicle.breakdown_ticks_remaining > 0 {
+            continue;
+        }
         vehicle.step();
         if had_force && vehicle.kind == VehicleKind::Train {
             vehicle.force_proceed = false;

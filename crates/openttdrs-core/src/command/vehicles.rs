@@ -46,6 +46,8 @@ pub(super) fn set_vehicle_order_list(
                 let ok = match vehicle_kind {
                     VehicleKind::Train => kind == Some(TileKind::RailDepot),
                     VehicleKind::Bus | VehicleKind::Truck => kind == Some(TileKind::RoadDepot),
+                    VehicleKind::Ship => kind == Some(TileKind::ShipDepot),
+                    VehicleKind::Aircraft => kind == Some(TileKind::Airport),
                 };
                 if !ok {
                     return Err(CommandError::InvalidDepotTile);
@@ -94,7 +96,10 @@ pub(super) fn build_road_vehicle_at_depot(
     depot_pos: TileCoord,
     kind: VehicleKind,
 ) -> Result<(), CommandError> {
-    if matches!(kind, VehicleKind::Train) {
+    if matches!(
+        kind,
+        VehicleKind::Train | VehicleKind::Ship | VehicleKind::Aircraft
+    ) {
         return Err(CommandError::VehicleKindNotAllowed);
     }
     build_vehicle_at_depot(state, depot_pos, crate::engine::default_engine_id(kind))
@@ -116,6 +121,8 @@ pub(super) fn build_vehicle_at_depot(
     let depot_ok = match engine.kind {
         VehicleKind::Bus | VehicleKind::Truck => tile.kind == TileKind::RoadDepot,
         VehicleKind::Train => tile.kind == TileKind::RailDepot,
+        VehicleKind::Ship => tile.kind == TileKind::ShipDepot,
+        VehicleKind::Aircraft => tile.kind == TileKind::Airport,
     };
     if !depot_ok {
         return Err(CommandError::InvalidDepotTile);
@@ -155,7 +162,7 @@ pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(),
     };
     let in_depot = matches!(
         state.map.get_kind(vehicle.pos),
-        Some(TileKind::RoadDepot | TileKind::RailDepot)
+        Some(TileKind::RoadDepot | TileKind::RailDepot | TileKind::ShipDepot | TileKind::Airport)
     );
     if !in_depot {
         return Err(CommandError::VehicleNotInDepot);
@@ -514,7 +521,10 @@ pub(super) fn set_depot_vehicles_running(
 ) -> Result<(), CommandError> {
     in_bounds(&state.map, depot_pos)?;
     let kind = state.map.get_kind(depot_pos);
-    if !matches!(kind, Some(TileKind::RoadDepot | TileKind::RailDepot)) {
+    if !matches!(
+        kind,
+        Some(TileKind::RoadDepot | TileKind::RailDepot | TileKind::ShipDepot | TileKind::Airport)
+    ) {
         return Err(CommandError::InvalidDepotTile);
     }
     let ids: Vec<u32> = state

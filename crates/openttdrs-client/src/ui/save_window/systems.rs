@@ -435,6 +435,7 @@ mod tests {
             json_save_path: save_path.to_string(),
             minimap_visible: true,
             sfx_volume: 0.22,
+            ..Default::default()
         });
         world.spawn((SaveWindowNameText, EditableText::new("mi_partida")));
         world

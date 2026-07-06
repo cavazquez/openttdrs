@@ -4,14 +4,17 @@ mod assets;
 mod atlas;
 mod company_recolor;
 mod components;
+pub(crate) mod effect_fx;
 mod fizzy_drink;
 mod grid;
 mod industry_anim;
 mod industry_draw_proc;
 mod refinery_fire;
 mod smoke;
+mod tile_anims;
 mod tiles;
 mod town_labels;
+mod train_smoke;
 mod vehicles;
 mod viewport;
 mod water;
@@ -28,6 +31,7 @@ pub(crate) use components::{
     MapVisualLayer, PrimaryGameCamera, RefineryFireAnimFrames, ShoreTile, VehiclePreviewCamera,
     WaterAnimFrames, WaterTile,
 };
+pub(crate) use effect_fx::EffectVehiclePlugin;
 pub(crate) use fizzy_drink::{FizzyDrinkAnim, FizzyDrinkAnimPlugin};
 pub(crate) use grid::{RenderGrid, TileRenderContext};
 pub(crate) use industry_anim::{
@@ -40,7 +44,9 @@ pub(crate) use smoke::{
     ChimneySmokeFrames, CopperMineSmokeFrames, GFX_COPPER_MINE_CHIMNEY, GFX_POWERPLANT_CHIMNEY,
     IndustrySmokePlugin, spawn_chimney_smoke, spawn_copper_mine_smoke,
 };
+pub(crate) use tile_anims::TileAnimPlugin;
 pub(crate) use town_labels::town_id_at_label_pos;
+pub(crate) use train_smoke::TrainSmokePlugin;
 
 pub(crate) use tiles::{
     flush_map_batches, leveled_foundation_overlay_pos, push_forest_tree, push_water_tile,
@@ -57,6 +63,6 @@ pub(crate) use viewport::{
 };
 pub(crate) use water::WaterAnimationPlugin;
 pub(crate) use world::{
-    RemapMapVisualsPending, WorldRenderPlugin, initial_map_camera_pose, request_map_visual_remap,
-    spawn_intro_map_render,
+    MapTileSpawnViewport, RemapMapVisualsPending, WorldRenderPlugin, initial_map_camera_pose,
+    request_map_visual_remap, spawn_intro_map_render,
 };

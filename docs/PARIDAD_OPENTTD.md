@@ -13,9 +13,12 @@ Comparación **openttdrs** (hito 0.1) vs **OpenTTD oficial**. Para el plan de tr
 |--------|--------|
 | Carretera + ferrocarril (construcción, sim básica) | ✅ alto |
 | Paridad visual OpenGFX vanilla | 🟡 ~85–90 % |
-| Economía / cargo simplificada | 🟡 |
+| Audio espacial + música OGG (subset) | 🟡 |
+| Economía (préstamos, subsidios, averías) | 🟡 |
+| Ciudades (rating, crecimiento) | 🟡 |
 | Órdenes y operación de flota | 🟡 |
-| Agua, aire, multijugador, NewGRF, Cargo Dist | ❌ |
+| Barcos / aviones (MVP) | 🟡 |
+| Multijugador, NewGRF, Cargo Dist, IA rivales | ❌ |
 
 ---
 
@@ -26,7 +29,7 @@ Ordenada de **más barato a más caro**.
 | # | Área | Feature | OTTD | openttdrs | Costo |
 |---|------|---------|------|-----------|-------|
 | 1 | Pulido | Migraciones save JSON | ✅ | ✅ | S |
-| 2 | Audio | Música y SFX in-game | ✅ | 🟡 | S |
+| 2 | Audio | Música y SFX in-game (`SimEvent`, ~20 SFX, OGG) | ✅ | 🟡 | S |
 | 3 | Render | Depósito carretera RemapCoords | ✅ | ✅ | S — `gen_road_depot_gfx_data.py`, tests `iso/mod.rs` |
 | 4 | Render | Junctions vía en pendiente | ✅ | 🟡 | S–M |
 | 5 | Construcción | Quitar vía (`RailRemove`) | ✅ | ✅ | S |

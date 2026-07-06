@@ -13,10 +13,10 @@ El port tiene un **core jugable** (transporte carretera/rail, industrias, econom
 
 | Área | Nivel actual | Gap principal |
 |------|--------------|---------------|
-| Animaciones visuales | Avanzado (agua, industria, humo) | Humo de trenes, partículas, árboles/campos |
-| Sonido | Prototipo HUD (6 SFX) | 73 SFX, paneo espacial, vehículos |
-| Música | No implementada | OpenMSX, playlists, volumen dual |
-| Dinámicas de juego | Parcial (transporte, industrias) | Ciudades, préstamos, averías, subsidios, desastres |
+| Animaciones visuales | Avanzado + humo trenes/FX | NewGRF tile callbacks completos |
+| Sonido | SFX espacial + SimEvent (~20 SFX) | 73 SFX completos |
+| Música | MusicPlugin + script OGG | Playlist completa OpenMSX |
+| Dinámicas de juego | Préstamos, ciudades, averías, subsidios, desastres | IA rival (epic futuro) |
 
 ---
 
@@ -28,14 +28,14 @@ Sorprendentemente, esta es el área **más avanzada** del port. Ya está portado
 
 | Efecto | Sistema en C++ | Complejidad | Estado port |
 |--------|----------------|-------------|-------------|
-| **Humo de locomotoras** (vapor/diésel/chispas eléctricas) | `effectvehicle.cpp` (`EV_STEAM_SMOKE`, `EV_DIESEL_SMOKE`, `EV_ELECTRIC_SPARK`) | Media | **Falta** (solo humo de industria) |
-| **Explosiones / humo de avería** | `effectvehicle.cpp:152-253` | Media | Falta |
-| **Bulldozer en obras** | `effectvehicle.cpp:255-325` | Baja | Falta |
-| **Animación de estaciones/aeropuertos** (radar, windsock) | `newgrf_station.cpp`, `table/airporttiles.h` | Media | Falta |
-| **Ascensor de edificios de ciudad** | `town_cmd.cpp:346-368` (`SPR_LIFT`) | Baja | Falta |
-| **Árboles creciendo / cultivos de granja** | `tree_cmd.cpp:679`, `clear_cmd.cpp:153` (8 etapas) | Baja–Media | Falta |
-| **Scroll suave del viewport** | `viewport.cpp:1947` (`ClampSmoothScroll`) | Media | Parcial (tween de sprites) |
-| **Cursores animados** (demoler, señales) | `table/animcursors.h` | Baja | Falta |
+| **Humo de locomotoras** (vapor/diésel/chispas eléctricas) | `effectvehicle.cpp` | Media | **Hecho** (`render/train_smoke.rs`) |
+| **Explosiones / humo de avería** | `effectvehicle.cpp:152-253` | Media | **Hecho** (`render/effect_fx.rs`) |
+| **Bulldozer en obras** | `effectvehicle.cpp:255-325` | Baja | **Hecho** (road works FX) |
+| **Animación de estaciones/aeropuertos** | `newgrf_station.cpp` | Media | **Parcial** (`tile_anims.rs`) |
+| **Ascensor de edificios de ciudad** | `town_cmd.cpp:346-368` | Baja | **Parcial** (clock m7) |
+| **Árboles creciendo / cultivos** | `tree_cmd.cpp:679` | Baja–Media | **Hecho** (sim + render) |
+| **Scroll suave del viewport** | `viewport.cpp:1947` | Media | **Hecho** (lerp 300 ms) |
+| **Cursores animados** | `table/animcursors.h` | Baja | **Parcial** (`ToolbarState.anim_cursor_frame`) |
 
 ### 1.2 Ya implementado en el cliente
 

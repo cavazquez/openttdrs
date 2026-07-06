@@ -26,6 +26,8 @@ pub fn refittable_cargo_types(vehicle: &Vehicle) -> &'static [CargoType] {
     match vehicle.kind {
         VehicleKind::Bus => &[CargoType::Passengers],
         VehicleKind::Truck => &TRUCK_FREIGHT,
+        VehicleKind::Ship => &[CargoType::Goods],
+        VehicleKind::Aircraft => &[CargoType::Passengers, CargoType::Mail],
         VehicleKind::Train => match engine.cargo {
             Some(CargoType::Passengers) => &[CargoType::Passengers],
             Some(CargoType::Mail) => &[CargoType::Mail],
@@ -42,7 +44,7 @@ pub fn refittable_cargo_types(vehicle: &Vehicle) -> &'static [CargoType] {
 pub fn vehicle_in_depot(map: &Map, pos: crate::TileCoord) -> bool {
     matches!(
         map.get_kind(pos),
-        Some(TileKind::RoadDepot | TileKind::RailDepot)
+        Some(TileKind::RoadDepot | TileKind::RailDepot | TileKind::ShipDepot | TileKind::Airport)
     )
 }
 

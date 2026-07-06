@@ -39,8 +39,8 @@ impl EngineDef {
     #[must_use]
     pub const fn speed_kmh(&self) -> u16 {
         match self.kind {
-            VehicleKind::Train => self.max_speed,
-            VehicleKind::Bus | VehicleKind::Truck => self.max_speed / 2,
+            VehicleKind::Train | VehicleKind::Aircraft => self.max_speed,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Ship => self.max_speed / 2,
         }
     }
 }
@@ -66,6 +66,8 @@ pub const ENGINE_TRAIN_SH_30: u16 = 110;
 pub const ENGINE_TRAIN_SH_40: u16 = 111;
 pub const ENGINE_TRAIN_TIM: u16 = 112;
 pub const ENGINE_TRAIN_ASIASTAR: u16 = 113;
+pub const ENGINE_SHIP_MPS: u16 = 200;
+pub const ENGINE_AIRCRAFT_DAKOTA: u16 = 300;
 
 /// Paso sub-tile del bus MPS en diagonal (~5 ticks/tesela con sim a 5 Hz).
 pub const REFERENCE_PROGRESS_STEP: u8 = 51;
@@ -432,6 +434,32 @@ const ENGINES: &[EngineDef] = &[
         RELIABILITY_ELECTRIC,
         23
     ),
+    road!(
+        ENGINE_SHIP_MPS,
+        VehicleKind::Ship,
+        "MPS Channel Ferry",
+        96,
+        120,
+        95,
+        60,
+        Some(CargoType::Goods),
+        400,
+        80,
+        1920
+    ),
+    road!(
+        ENGINE_AIRCRAFT_DAKOTA,
+        VehicleKind::Aircraft,
+        "Dakota",
+        320,
+        200,
+        180,
+        25,
+        Some(CargoType::Passengers),
+        1_200,
+        20,
+        1944
+    ),
 ];
 
 /// Catálogo completo de motores disponibles.
@@ -521,12 +549,27 @@ pub fn engine_by_id(id: u16) -> Option<&'static EngineDef> {
     ENGINES.iter().find(|e| e.id == id)
 }
 
+/// Tipo de humo/chispas de locomotora según fiabilidad/clase del motor.
+#[must_use]
+pub fn train_smoke_kind(engine_id: u16) -> crate::sim_events::TrainSmokeKind {
+    let engine = engine_by_id(engine_id).unwrap_or_else(|| {
+        engine_for_vehicle(VehicleKind::Train, default_engine_id(VehicleKind::Train))
+    });
+    match engine.reliability_pct {
+        RELIABILITY_STEAM => crate::sim_events::TrainSmokeKind::Steam,
+        RELIABILITY_ELECTRIC => crate::sim_events::TrainSmokeKind::Electric,
+        _ => crate::sim_events::TrainSmokeKind::Diesel,
+    }
+}
+
 #[must_use]
 pub const fn default_engine_id(kind: VehicleKind) -> u16 {
     match kind {
         VehicleKind::Bus => ENGINE_BUS_MPS,
         VehicleKind::Truck => ENGINE_TRUCK_MPS,
         VehicleKind::Train => ENGINE_TRAIN_KIRBY,
+        VehicleKind::Ship => ENGINE_SHIP_MPS,
+        VehicleKind::Aircraft => ENGINE_AIRCRAFT_DAKOTA,
     }
 }
 

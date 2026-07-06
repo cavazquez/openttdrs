@@ -151,9 +151,12 @@ fn vehicle_waiting_for_cargo(
         openttdrs_core::VehicleKind::Bus => {
             st.cargo_stock.passengers > 0 || st.cargo_stock.mail > 0
         }
-        openttdrs_core::VehicleKind::Truck | openttdrs_core::VehicleKind::Train => {
+        openttdrs_core::VehicleKind::Truck
+        | openttdrs_core::VehicleKind::Train
+        | openttdrs_core::VehicleKind::Ship => {
             st.stock > 0 || st.cargo_stock.pick_freight_to_load(v.cargo_type).is_some()
         }
+        openttdrs_core::VehicleKind::Aircraft => false,
     };
     !industry_has && !station_has
 }
@@ -408,6 +411,8 @@ pub(crate) fn update_tile_info_text(
         TileKind::Station => "Station",
         TileKind::Forest => "Forest",
         TileKind::CoalField => "CoalField",
+        TileKind::ShipDepot => "Depósito barcos",
+        TileKind::Airport => "Aeropuerto",
         TileKind::Unknown(n) => {
             **text = format!(
                 "{zoom_label}\n{hud_status}\n({}, {}): Unknown({})",

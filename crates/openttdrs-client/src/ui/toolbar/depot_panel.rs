@@ -894,7 +894,9 @@ fn next_autoreplace_target(
     let road_filter = match kind {
         openttdrs_core::VehicleKind::Bus => RoadEngineFilter::BusOnly,
         openttdrs_core::VehicleKind::Truck => RoadEngineFilter::TruckOnly,
-        openttdrs_core::VehicleKind::Train => RoadEngineFilter::All,
+        openttdrs_core::VehicleKind::Train
+        | openttdrs_core::VehicleKind::Ship
+        | openttdrs_core::VehicleKind::Aircraft => RoadEngineFilter::All,
     };
     let year = calendar_year_at_tick(sim.state.tick);
     let list = engines_for_depot_purchase(is_rail, year, EngineCatalogSort::Catalog, road_filter);

@@ -12,12 +12,14 @@ use bevy::window::ExitCondition;
 use bevy::winit::WinitPlugin;
 
 use crate::app_icon::AppIconPlugin;
+use crate::audio::{MusicPlugin, SimEventsPlugin, WorldSfxPlugin};
 use crate::camera::CameraControlPlugin;
 use crate::debug_gizmos::DebugGizmosPlugin;
 use crate::persistence::PersistencePlugin;
 use crate::render::{
-    FizzyDrinkAnimPlugin, IndustryBuildingAnimPlugin, IndustryDrawProcPlugin, IndustrySmokePlugin,
-    RefineryFireAnimPlugin, WaterAnimationPlugin,
+    EffectVehiclePlugin, FizzyDrinkAnimPlugin, IndustryBuildingAnimPlugin, IndustryDrawProcPlugin,
+    IndustrySmokePlugin, RefineryFireAnimPlugin, TileAnimPlugin, TrainSmokePlugin,
+    WaterAnimationPlugin,
 };
 use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
 use crate::render_trace::RenderTracePlugin;
@@ -122,21 +124,33 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
     app.init_resource::<SimWorld>();
     app.insert_resource(RemSize(14.0));
     app.add_plugins((
-        ClientSettingsPlugin,
-        TabNavigationPlugin,
-        WorldRenderPlugin,
-        VehicleRenderPlugin,
-        ClientUiPlugin,
-        SimulationPlugin,
-        PersistencePlugin,
-        WindowStatusPlugin,
-        WaterAnimationPlugin,
-        RefineryFireAnimPlugin,
-        FizzyDrinkAnimPlugin,
-        IndustrySmokePlugin,
-        IndustryBuildingAnimPlugin,
-        IndustryDrawProcPlugin,
-        RenderTracePlugin,
+        (
+            ClientSettingsPlugin,
+            TabNavigationPlugin,
+            WorldRenderPlugin,
+            VehicleRenderPlugin,
+            ClientUiPlugin,
+            SimulationPlugin,
+            SimEventsPlugin,
+            WorldSfxPlugin,
+        ),
+        (
+            MusicPlugin,
+            PersistencePlugin,
+            WindowStatusPlugin,
+            WaterAnimationPlugin,
+            RefineryFireAnimPlugin,
+            FizzyDrinkAnimPlugin,
+            IndustrySmokePlugin,
+            IndustryBuildingAnimPlugin,
+        ),
+        (
+            IndustryDrawProcPlugin,
+            TrainSmokePlugin,
+            EffectVehiclePlugin,
+            TileAnimPlugin,
+            RenderTracePlugin,
+        ),
     ));
     app.add_plugins((DebugGizmosPlugin, CameraControlPlugin));
     if !headless {

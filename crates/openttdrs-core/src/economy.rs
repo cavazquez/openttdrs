@@ -8,6 +8,15 @@ use crate::vehicle::{Vehicle, VehicleKind};
 pub const TICKS_PER_TRANSIT_DAY: u32 = 74;
 /// Año simulado en ticks (365 días).
 pub const TICKS_PER_YEAR: u64 = TICKS_PER_TRANSIT_DAY as u64 * 365;
+/// Mes aproximado de calendario (30 días) para intereses de préstamo.
+pub const TICKS_PER_MONTH: u64 = TICKS_PER_TRANSIT_DAY as u64 * 30;
+
+/// Préstamo máximo por defecto (`_settings_game.economy.max_loan`).
+pub const DEFAULT_MAX_LOAN: i64 = 300_000;
+/// Incremento/decremento por comando de préstamo (`LOAN_INTERVAL`).
+pub const LOAN_INTERVAL: i64 = 10_000;
+/// Tasa de interés anual aproximada (~10 % en dificultad media).
+pub const ANNUAL_INTEREST_RATE_PCT: i64 = 10;
 
 /// Tasas base del clima templado de `OpenTTD` (`cargo_const.h`), sin inflación.
 #[derive(Debug, Clone, Copy)]
@@ -153,6 +162,49 @@ pub fn vehicle_sell_refund(vehicle: &Vehicle) -> i64 {
     (base * 50) / 100
 }
 
+/// Interés mensual sobre el préstamo actual (~10 % anual / 12).
+#[must_use]
+pub fn monthly_loan_interest(loan: i64) -> i64 {
+    if loan <= 0 {
+        return 0;
+    }
+    loan.saturating_mul(ANNUAL_INTEREST_RATE_PCT) / 100 / 12
+}
+
+/// `true` si la compañía superó el límite de deuda (`CheckForBankruptcy`).
+#[must_use]
+pub const fn check_bankruptcy(money: i64, max_loan: i64) -> bool {
+    money < -max_loan
+}
+
+/// Solicita más préstamo hasta `max_loan`. Devuelve el importe añadido.
+pub fn increase_loan(
+    economy: &mut crate::game_state::CompanyEconomy,
+) -> Result<i64, crate::command::CommandError> {
+    let room = economy.max_loan.saturating_sub(economy.loan);
+    if room < LOAN_INTERVAL {
+        return Err(crate::command::CommandError::LoanAtMaximum);
+    }
+    economy.loan += LOAN_INTERVAL;
+    economy.money += LOAN_INTERVAL;
+    Ok(LOAN_INTERVAL)
+}
+
+/// Devuelve parte del préstamo si hay fondos.
+pub fn decrease_loan(
+    economy: &mut crate::game_state::CompanyEconomy,
+) -> Result<i64, crate::command::CommandError> {
+    if economy.loan < LOAN_INTERVAL {
+        return Err(crate::command::CommandError::NoLoanToRepay);
+    }
+    if economy.money < LOAN_INTERVAL {
+        return Err(crate::command::CommandError::InsufficientFunds);
+    }
+    economy.loan -= LOAN_INTERVAL;
+    economy.money -= LOAN_INTERVAL;
+    Ok(LOAN_INTERVAL)
+}
+
 /// Coste de explotación por tick (solo en movimiento, como corrida en `OpenTTD`).
 #[must_use]
 pub const fn vehicle_running_cost_per_tick(kind: VehicleKind, running: bool, moving: bool) -> i64 {
@@ -163,10 +215,13 @@ pub const fn vehicle_running_cost_per_tick(kind: VehicleKind, running: bool, mov
         VehicleKind::Bus => 2,
         VehicleKind::Truck => 3,
         VehicleKind::Train => 8,
+        VehicleKind::Ship => 5,
+        VehicleKind::Aircraft => 10,
     }
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
 
@@ -220,5 +275,46 @@ mod tests {
         let a = TileCoord::new(3, 2);
         let b = TileCoord::new(6, 2);
         assert_eq!(manhattan_distance(a, b), 3);
+    }
+
+    #[test]
+    fn monthly_interest_on_100k_loan() {
+        let interest = monthly_loan_interest(100_000);
+        assert_eq!(interest, 833);
+    }
+
+    #[test]
+    fn bankruptcy_when_debt_exceeds_max_loan() {
+        assert!(!check_bankruptcy(-200_000, 300_000));
+        assert!(check_bankruptcy(-300_001, 300_000));
+    }
+
+    #[test]
+    fn increase_and_decrease_loan() {
+        let mut economy = crate::game_state::CompanyEconomy {
+            money: 50_000,
+            loan: 0,
+            max_loan: DEFAULT_MAX_LOAN,
+        };
+        let added = increase_loan(&mut economy).expect("increase loan");
+        assert_eq!(added, LOAN_INTERVAL);
+        assert_eq!(economy.loan, LOAN_INTERVAL);
+        assert_eq!(economy.money, 50_000 + LOAN_INTERVAL);
+        decrease_loan(&mut economy).expect("decrease loan");
+        assert_eq!(economy.loan, 0);
+        assert_eq!(economy.money, 50_000);
+    }
+
+    #[test]
+    fn increase_loan_fails_at_maximum() {
+        let mut economy = crate::game_state::CompanyEconomy {
+            money: 0,
+            loan: DEFAULT_MAX_LOAN - 5_000,
+            max_loan: DEFAULT_MAX_LOAN,
+        };
+        assert!(matches!(
+            increase_loan(&mut economy),
+            Err(crate::command::CommandError::LoanAtMaximum)
+        ));
     }
 }

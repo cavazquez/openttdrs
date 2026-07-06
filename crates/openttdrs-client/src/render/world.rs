@@ -411,6 +411,8 @@ fn spawn_map_tiles_in_bounds(
             }
             TileKind::RoadDepot
             | TileKind::RailDepot
+            | TileKind::ShipDepot
+            | TileKind::Airport
             | TileKind::RoadTunnel
             | TileKind::RailTunnel
             | TileKind::RoadBridge
@@ -574,6 +576,8 @@ fn tile_kind_name(kind: TileKind) -> &'static str {
         TileKind::Station => "Station",
         TileKind::Forest => "Forest",
         TileKind::CoalField => "CoalField",
+        TileKind::ShipDepot => "ShipDepot",
+        TileKind::Airport => "Airport",
         TileKind::Unknown(_) => "Unknown",
     }
 }

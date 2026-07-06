@@ -2,9 +2,11 @@
 
 mod apply;
 mod buy_land;
+mod economy;
 mod industry;
 mod preview;
 mod terraform;
+mod town;
 mod transport;
 mod types;
 mod util;

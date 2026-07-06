@@ -24,7 +24,9 @@ pub(crate) fn order_for_clicked_tile(
     }
     match (vehicle.kind, sim.state.map.get_kind(pos)) {
         (VehicleKind::Train, Some(TileKind::RailDepot)) => Some(VehicleOrder::depot(pos)),
-        (kind, Some(TileKind::RoadDepot)) if kind != VehicleKind::Train => {
+        (VehicleKind::Ship, Some(TileKind::ShipDepot)) => Some(VehicleOrder::depot(pos)),
+        (VehicleKind::Aircraft, Some(TileKind::Airport)) => Some(VehicleOrder::depot(pos)),
+        (VehicleKind::Bus | VehicleKind::Truck, Some(TileKind::RoadDepot)) => {
             Some(VehicleOrder::depot(pos))
         }
         _ => None,

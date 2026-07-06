@@ -38,6 +38,8 @@ pub(crate) fn log_detection_summary(
                 TileKind::House => "House".to_string(),
                 TileKind::Station => "Station".to_string(),
                 TileKind::Industry => "Industry".to_string(),
+                TileKind::ShipDepot => "ShipDepot".to_string(),
+                TileKind::Airport => "Airport".to_string(),
                 TileKind::Void => "Void".to_string(),
                 TileKind::Unknown(v) => format!("Unknown({v})"),
             };
@@ -171,6 +173,8 @@ pub(crate) fn log_detection_summary(
             VehicleKind::Truck => "Truck",
             VehicleKind::Bus => "Bus",
             VehicleKind::Train => "Train",
+            VehicleKind::Ship => "Ship",
+            VehicleKind::Aircraft => "Aircraft",
         };
         *vehicles.entry(key).or_insert(0) += 1;
     }

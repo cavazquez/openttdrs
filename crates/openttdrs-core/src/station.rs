@@ -5,6 +5,57 @@ use crate::pathfinder::diag_dir_offset;
 use crate::vehicle::{VehicleKind, VehicleOrder};
 
 pub const STATION_COVERAGE_RADIUS: i32 = 4;
+/// Máximo de días sin recogida antes de truncar (`station_cmd.cpp`).
+pub const MAX_TIME_SINCE_PICKUP_DAYS: u8 = 255;
+
+/// Días desde la última recogida por tipo de carga (0 = reciente).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct CargoTimeSincePickup {
+    pub passengers: u8,
+    pub mail: u8,
+    pub goods: u8,
+    pub coal: u8,
+    pub wood: u8,
+    pub oil: u8,
+}
+
+impl CargoTimeSincePickup {
+    #[must_use]
+    pub const fn get(self, cargo: CargoType) -> u8 {
+        match cargo {
+            CargoType::Passengers => self.passengers,
+            CargoType::Mail => self.mail,
+            CargoType::Goods => self.goods,
+            CargoType::Coal => self.coal,
+            CargoType::Wood => self.wood,
+            CargoType::Oil => self.oil,
+        }
+    }
+
+    pub fn set(&mut self, cargo: CargoType, days: u8) {
+        let slot = match cargo {
+            CargoType::Passengers => &mut self.passengers,
+            CargoType::Mail => &mut self.mail,
+            CargoType::Goods => &mut self.goods,
+            CargoType::Coal => &mut self.coal,
+            CargoType::Wood => &mut self.wood,
+            CargoType::Oil => &mut self.oil,
+        };
+        *slot = days;
+    }
+
+    pub fn increment_waiting(&mut self, cargo: CargoType) {
+        let slot = match cargo {
+            CargoType::Passengers => &mut self.passengers,
+            CargoType::Mail => &mut self.mail,
+            CargoType::Goods => &mut self.goods,
+            CargoType::Coal => &mut self.coal,
+            CargoType::Wood => &mut self.wood,
+            CargoType::Oil => &mut self.oil,
+        };
+        *slot = slot.saturating_add(1);
+    }
+}
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Station {
@@ -20,6 +71,16 @@ pub struct Station {
     pub cargo_stock: CargoStock,
     /// Contador histórico total de unidades entregadas (análogo a `income` simplificado).
     pub income: u64,
+    /// Días sin recogida por tipo de carga en espera.
+    #[serde(default)]
+    pub time_since_pickup: CargoTimeSincePickup,
+    /// Rating global simplificado (0–255; mayor = mejor servicio).
+    #[serde(default = "default_station_rating")]
+    pub rating: u8,
+}
+
+const fn default_station_rating() -> u8 {
+    255
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
@@ -47,6 +108,8 @@ impl Station {
             stock: 0,
             cargo_stock: CargoStock::default(),
             income: 0,
+            time_since_pickup: CargoTimeSincePickup::default(),
+            rating: default_station_rating(),
         }
     }
 
@@ -312,6 +375,7 @@ pub fn vehicle_physically_at_station(
             station_footprint_tiles(map, station.pos).contains(&vpos)
                 && train_on_rail_platform(map, vpos)
         }
+        VehicleKind::Ship | VehicleKind::Aircraft => false,
     }
 }
 
@@ -427,6 +491,79 @@ pub fn industry_in_station_coverage(
         .copied()
         .chain(std::iter::once(industry.pos))
         .any(|tile| station_covers_tile(station_pos, tile, radius))
+}
+
+#[must_use]
+pub fn industry_in_station_coverage_by_pos(
+    industry_pos: TileCoord,
+    station_or_source: TileCoord,
+    radius: i32,
+) -> bool {
+    station_covers_tile(station_or_source, industry_pos, radius)
+}
+
+/// Rating 0–255 para un tipo de carga (255 = recién servido).
+#[must_use]
+pub fn station_rating_for_cargo(station: &Station, cargo: CargoType) -> u8 {
+    255u8.saturating_sub(station.time_since_pickup.get(cargo))
+}
+
+/// Recalcula el rating global como mínimo entre cargas con stock en espera.
+pub fn recompute_station_rating(station: &mut Station) {
+    const CARGO_TYPES: [CargoType; 6] = [
+        CargoType::Passengers,
+        CargoType::Mail,
+        CargoType::Goods,
+        CargoType::Coal,
+        CargoType::Wood,
+        CargoType::Oil,
+    ];
+    let mut min_rating = 255u8;
+    let mut any_waiting = false;
+    for cargo in CARGO_TYPES {
+        if station.cargo_stock.get(cargo) == 0 {
+            continue;
+        }
+        any_waiting = true;
+        min_rating = min_rating.min(station_rating_for_cargo(station, cargo));
+    }
+    station.rating = if any_waiting { min_rating } else { 255 };
+}
+
+/// Incrementa antigüedad de carga en espera (una vez por día simulado).
+pub fn tick_station_cargo_age(stations: &mut [Station]) {
+    const CARGO_TYPES: [CargoType; 6] = [
+        CargoType::Passengers,
+        CargoType::Mail,
+        CargoType::Goods,
+        CargoType::Coal,
+        CargoType::Wood,
+        CargoType::Oil,
+    ];
+    for station in stations {
+        for cargo in CARGO_TYPES {
+            if station.cargo_stock.get(cargo) > 0 {
+                station.time_since_pickup.increment_waiting(cargo);
+            }
+        }
+        recompute_station_rating(station);
+    }
+}
+
+/// Marca recogida reciente de un tipo de carga.
+pub fn on_station_cargo_pickup(station: &mut Station, cargo: CargoType) {
+    station.time_since_pickup.set(cargo, 0);
+    recompute_station_rating(station);
+}
+
+/// Factor 0–255 para limitar cantidad cargable según rating.
+#[must_use]
+pub fn load_amount_for_rating(requested: u32, rating: u8) -> u32 {
+    if requested == 0 {
+        return 0;
+    }
+    let scaled = (u64::from(requested) * u64::from(rating)) / 255;
+    u32::try_from(scaled).unwrap_or(u32::MAX)
 }
 
 #[must_use]
@@ -731,5 +868,28 @@ mod coherence_tests {
             state.vehicles[0].cargo, 0,
             "parada de entrega debe aceptar descarga aunque cargo_source sea la misma tesela"
         );
+    }
+
+    #[test]
+    fn station_rating_decays_with_waiting_cargo() {
+        let mut station = Station::new(TileCoord::new(0, 0));
+        station.cargo_stock.coal = 50;
+        tick_station_cargo_age(std::slice::from_mut(&mut station));
+        assert_eq!(station.time_since_pickup.coal, 1);
+        for _ in 0..300 {
+            tick_station_cargo_age(std::slice::from_mut(&mut station));
+        }
+        assert_eq!(station.time_since_pickup.coal, MAX_TIME_SINCE_PICKUP_DAYS);
+        assert!(station.rating < 255);
+        on_station_cargo_pickup(&mut station, CargoType::Coal);
+        assert_eq!(station.time_since_pickup.coal, 0);
+        assert_eq!(station.rating, 255);
+    }
+
+    #[test]
+    fn load_amount_for_rating_scales_down() {
+        assert_eq!(load_amount_for_rating(100, 255), 100);
+        assert_eq!(load_amount_for_rating(100, 128), 50);
+        assert_eq!(load_amount_for_rating(100, 0), 0);
     }
 }

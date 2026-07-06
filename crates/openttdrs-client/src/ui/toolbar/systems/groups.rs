@@ -203,6 +203,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(ToolbarState {
             active_group: Some(ToolbarGroup::Rail),
+            ..Default::default()
         });
         world.insert_resource(UiToolState {
             active_tool: Some(BuildMenuAction::Clear),
@@ -220,6 +221,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(ToolbarState {
             active_group: Some(ToolbarGroup::Road),
+            ..Default::default()
         });
         world.insert_resource(UiToolState {
             active_tool: Some(BuildMenuAction::RailSignals),

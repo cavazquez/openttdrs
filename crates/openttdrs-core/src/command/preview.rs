@@ -123,18 +123,21 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             if stations.iter().any(|s| s.pos == *c) {
                 return Some(CommandError::StationAlreadyExists);
             }
+            if !crate::town::authority_allows_new_station(&state.towns, *c) {
+                return Some(CommandError::AuthorityRatingTooLow);
+            }
             preview_depot_any(map, *c, |m, tile, dir| {
                 check_station_placement(m, stations, tile, dir, StopKind::TruckStop)
             })
         }
         Command::PlaceStationDir(c, dir) | Command::PlaceTruckStop(c, dir) => {
-            check_station_placement(map, stations, *c, *dir, StopKind::TruckStop).err()
+            preview_station_with_authority(state, *c, *dir, StopKind::TruckStop)
         }
         Command::PlaceBusStop(c, dir) => {
-            check_station_placement(map, stations, *c, *dir, StopKind::BusStop).err()
+            preview_station_with_authority(state, *c, *dir, StopKind::BusStop)
         }
         Command::PlaceRailStation(c, dir) => {
-            check_station_placement(map, stations, *c, *dir, StopKind::RailStation).err()
+            preview_station_with_authority(state, *c, *dir, StopKind::RailStation)
         }
         Command::PlaceRailStationArea {
             origin,
@@ -206,8 +209,26 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::UnlinkVehicleSharedOrders(..)
         | Command::SetSharedOrderAt { .. }
         | Command::SetVehicleOrderConditional { .. }
-        | Command::DepotReorderVehicleSlot { .. } => None,
+        | Command::DepotReorderVehicleSlot { .. }
+        | Command::IncreaseLoan
+        | Command::DecreaseLoan
+        | Command::TownAdvertise(_)
+        | Command::TownFundBuildings(_)
+        | Command::PlantTree(_)
+        | Command::ClearTree(_) => None,
     }
+}
+
+fn preview_station_with_authority(
+    state: &GameState,
+    c: crate::map::TileCoord,
+    dir: u8,
+    stop_kind: StopKind,
+) -> Option<CommandError> {
+    if !crate::town::authority_allows_new_station(&state.towns, c) {
+        return Some(CommandError::AuthorityRatingTooLow);
+    }
+    check_station_placement(&state.map, &state.stations, c, dir, stop_kind).err()
 }
 
 /// Devuelve el error que obtendría `apply_command` sin mutar el estado.

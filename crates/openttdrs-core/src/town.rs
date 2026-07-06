@@ -2,7 +2,7 @@
 
 use crate::cargo::CargoType;
 use crate::industry::Industry;
-use crate::map::Map;
+use crate::map::{Map, TileCoord};
 use crate::station::{self, STATION_COVERAGE_RADIUS, Station, StopKind};
 
 /// Ciudad (importada de saves de `OpenTTD` o creada por el juego).
@@ -12,16 +12,81 @@ pub struct Town {
     pub pos: crate::map::TileCoord,
     pub name: String,
     pub population: u32,
+    /// Valoración de la autoridad local (-1000..=1000; 0 = neutral).
+    #[serde(default)]
+    pub local_authority_rating: i16,
+    /// Pasajeros entregados cerca de la ciudad (contador de crecimiento).
+    #[serde(default)]
+    pub passengers_served: u32,
+    /// Correo entregado cerca de la ciudad.
+    #[serde(default)]
+    pub mail_served: u32,
+    /// Veces que la compañía financió edificios (`TownFundBuildings`).
+    #[serde(default)]
+    pub growth_funded: u32,
+}
+
+impl Default for Town {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            pos: TileCoord::new(0, 0),
+            name: String::new(),
+            population: 0,
+            local_authority_rating: 0,
+            passengers_served: 0,
+            mail_served: 0,
+            growth_funded: 0,
+        }
+    }
+}
+
+impl Town {
+    /// Ajusta la valoración y devuelve el delta aplicado (clamp -1000..=1000).
+    pub fn adjust_rating(&mut self, delta: i8) -> i8 {
+        let before = self.local_authority_rating;
+        let next = i32::from(before) + i32::from(delta);
+        self.local_authority_rating = i16::try_from(next.clamp(-1000, 1000)).unwrap_or(0);
+        i8::try_from(self.local_authority_rating - before).unwrap_or(delta)
+    }
+
+    /// Registra entrega de carga urbana que impulsa el crecimiento.
+    pub fn record_town_cargo_delivery(&mut self, cargo: CargoType, amount: u32) {
+        match cargo {
+            CargoType::Passengers => {
+                self.passengers_served = self.passengers_served.saturating_add(amount);
+            }
+            CargoType::Mail => self.mail_served = self.mail_served.saturating_add(amount),
+            _ => {}
+        }
+    }
 }
 
 /// Periodo de generación (mismo orden de magnitud que [`crate::INDUSTRY_PRODUCE_TICKS`]).
 pub const TOWN_PRODUCE_TICKS: u64 = 256;
+/// Revisión de crecimiento urbano.
+pub const TOWN_GROWTH_TICKS: u64 = 512;
+/// Población añadida por ciclo de crecimiento cuando hay servicio.
+pub const TOWN_GROWTH_POPULATION_STEP: u32 = 10;
 
 pub const PASSENGERS_PER_HOUSE: u32 = 2;
 pub const MAIL_PER_HOUSE: u32 = 1;
 
 /// Tope de espera en parada bus (análogo al stock de industria).
 pub const STATION_TOWN_CARGO_CAPACITY: u32 = 500;
+
+/// Radio de influencia de la autoridad local sobre nuevas estaciones.
+pub const TOWN_AUTHORITY_RADIUS: u32 = 20;
+/// Valoración mínima para construir estación cerca de una ciudad.
+pub const AUTHORITY_MIN_STATION: i16 = -200;
+
+pub const TOWN_ADVERTISE_COST: i64 = 1_000;
+pub const TOWN_ADVERTISE_RATING_BOOST: i8 = 25;
+pub const FUND_BUILDINGS_COST: i64 = 5_000;
+pub const FUND_BUILDINGS_RATING_BOOST: i8 = 50;
+
+/// Penalización al construir estación cerca de una ciudad.
+pub const STATION_BUILD_RATING_PENALTY: i8 = -15;
 
 /// Añade pasajeros/correo en paradas bus según casas dentro del radio de cobertura.
 pub fn produce_town_cargo(
@@ -61,6 +126,87 @@ pub fn produce_town_cargo(
     (passengers, mail)
 }
 
+/// Crece la población si hay estación en cobertura y demanda atendida recientemente.
+pub fn grow_town_if_served(
+    map: &Map,
+    industries: &[Industry],
+    stations: &[Station],
+    towns: &mut [Town],
+    tick: u64,
+) {
+    if tick == 0 || !tick.is_multiple_of(TOWN_GROWTH_TICKS) {
+        return;
+    }
+    for town in towns {
+        let served = town.passengers_served + town.mail_served + town.growth_funded;
+        if served == 0 {
+            continue;
+        }
+        let has_station = stations.iter().any(|st| {
+            st.stop_kind != StopKind::RailWaypoint
+                && crate::economy::manhattan_distance(st.pos, town.pos) <= TOWN_AUTHORITY_RADIUS
+        });
+        if !has_station {
+            continue;
+        }
+        let coverage =
+            station::station_coverage_at(map, industries, town.pos, STATION_COVERAGE_RADIUS);
+        if coverage.house_tiles > 0 || town.growth_funded > 0 {
+            town.population = town
+                .population
+                .saturating_add(TOWN_GROWTH_POPULATION_STEP + town.growth_funded.min(3));
+        }
+    }
+}
+
+#[must_use]
+pub fn nearest_town_index(towns: &[Town], pos: TileCoord) -> Option<(usize, u32)> {
+    towns
+        .iter()
+        .enumerate()
+        .map(|(i, t)| (i, crate::economy::manhattan_distance(t.pos, pos)))
+        .min_by_key(|(_, d)| *d)
+}
+
+/// Comprueba si la autoridad local permite una nueva estación en `pos`.
+#[must_use]
+pub fn authority_allows_new_station(towns: &[Town], pos: TileCoord) -> bool {
+    let Some((idx, dist)) = nearest_town_index(towns, pos) else {
+        return true;
+    };
+    if dist > TOWN_AUTHORITY_RADIUS {
+        return true;
+    }
+    towns[idx].local_authority_rating >= AUTHORITY_MIN_STATION
+}
+
+/// Aplica penalización de autoridad al construir estación cerca de una ciudad.
+pub fn apply_station_build_rating_penalty(towns: &mut [Town], pos: TileCoord) -> Option<(u32, i8)> {
+    let (idx, dist) = nearest_town_index(towns, pos)?;
+    if dist > TOWN_AUTHORITY_RADIUS {
+        return None;
+    }
+    let town_id = towns[idx].id;
+    let delta = towns[idx].adjust_rating(STATION_BUILD_RATING_PENALTY);
+    Some((town_id, delta))
+}
+
+/// Registra entrega de carga urbana en la ciudad más cercana dentro del radio.
+pub fn record_delivery_near_town(
+    towns: &mut [Town],
+    station_pos: TileCoord,
+    cargo: CargoType,
+    amount: u32,
+) {
+    let Some((idx, dist)) = nearest_town_index(towns, station_pos) else {
+        return;
+    };
+    if dist > TOWN_AUTHORITY_RADIUS {
+        return;
+    }
+    towns[idx].record_town_cargo_delivery(cargo, amount);
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -93,5 +239,60 @@ mod tests {
         let (pax, mail) = produce_town_cargo(&map, &[], &mut stations, TOWN_PRODUCE_TICKS);
         assert_eq!(pax, 0);
         assert_eq!(mail, 0);
+    }
+
+    #[test]
+    fn authority_blocks_station_when_rating_too_low() {
+        let towns = vec![Town {
+            id: 1,
+            pos: TileCoord::new(5, 5),
+            name: "Test".into(),
+            population: 100,
+            local_authority_rating: -500,
+            passengers_served: 0,
+            mail_served: 0,
+            growth_funded: 0,
+        }];
+        assert!(!authority_allows_new_station(&towns, TileCoord::new(6, 5)));
+        assert!(authority_allows_new_station(&towns, TileCoord::new(30, 30)));
+    }
+
+    #[test]
+    fn town_grows_when_served() {
+        let mut map = Map::new_flat(16, 16, 0);
+        let town_pos = TileCoord::new(8, 8);
+        map.set_kind(TileCoord::new(7, 8), TileKind::House).unwrap();
+        let mut towns = vec![Town {
+            id: 0,
+            pos: town_pos,
+            name: "Grow".into(),
+            population: 100,
+            local_authority_rating: 0,
+            passengers_served: 10,
+            mail_served: 0,
+            growth_funded: 0,
+        }];
+        let stations = vec![Station::new_with_kind(
+            TileCoord::new(8, 9),
+            StopKind::BusStop,
+        )];
+        grow_town_if_served(&map, &[], &stations, &mut towns, TOWN_GROWTH_TICKS);
+        assert!(towns[0].population > 100);
+    }
+
+    #[test]
+    fn adjust_rating_clamps() {
+        let mut town = Town {
+            id: 0,
+            pos: TileCoord::new(0, 0),
+            name: "X".into(),
+            population: 0,
+            local_authority_rating: 990,
+            passengers_served: 0,
+            mail_served: 0,
+            growth_funded: 0,
+        };
+        town.adjust_rating(50);
+        assert_eq!(town.local_authority_rating, 1000);
     }
 }

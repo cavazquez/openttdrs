@@ -265,8 +265,12 @@ pub(crate) enum SaveMenuAction {
     NewsSettings,
 }
 
+/// Barra superior de herramientas (visibilidad, tooltip).
 #[derive(Resource, Default)]
 pub(crate) struct ToolbarState {
+    /// Frame de cursor animado (`table/animcursors.h`); avanza con el reloj de UI.
+    #[allow(dead_code)]
+    pub(crate) anim_cursor_frame: u8,
     pub(crate) active_group: Option<ToolbarGroup>,
 }
 

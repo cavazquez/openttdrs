@@ -26,6 +26,7 @@
 #![allow(clippy::type_complexity)]
 
 mod app_icon;
+mod audio;
 mod bevy_app;
 mod camera;
 mod config;

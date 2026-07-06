@@ -3,7 +3,7 @@ use crate::map::TileKind;
 use crate::{GameState, StopKind};
 
 use super::types::{Command, CommandError};
-use super::{buy_land, industry, terraform, transport, vehicles};
+use super::{buy_land, economy, industry, terraform, town, transport, vehicles};
 
 /// Aplica `cmd` a `state` o devuelve error sin mutar.
 ///
@@ -17,7 +17,63 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
     if result.is_ok() && command_modifies_map(cmd) {
         invalidate_vehicle_paths(state);
     }
+    if result.is_ok() {
+        if let Some((kind, at)) = construction_event_for(cmd) {
+            state
+                .pending_sim_events
+                .push(crate::sim_events::SimEvent::Construction { kind, at });
+        }
+        if let Some(at) = demolition_event_for(cmd) {
+            state
+                .pending_sim_events
+                .push(crate::sim_events::SimEvent::Demolition { at });
+        }
+    }
     result
+}
+
+fn construction_event_for(
+    cmd: &Command,
+) -> Option<(crate::sim_events::ConstructionKind, crate::map::TileCoord)> {
+    use crate::sim_events::ConstructionKind;
+    match cmd {
+        Command::PlaceRail(c)
+        | Command::PlaceRailBits(c, _)
+        | Command::SetRailBits(c, _)
+        | Command::PlaceRailWaypoint(c)
+        | Command::PlaceRailDepot(c)
+        | Command::PlaceRailDepotDir(c, _)
+        | Command::PlaceRailSignal(c, _, _, _)
+        | Command::PlaceRailStation(c, _)
+        | Command::PlaceRailTunnel(c, _) => Some((ConstructionKind::Rail, *c)),
+        Command::PlaceRailBridge(c, _, _) | Command::PlaceRoadBridge(c, _, _) => {
+            Some((ConstructionKind::Bridge, *c))
+        }
+        Command::PlaceRoad(c)
+        | Command::PlaceRoadBits(c, _)
+        | Command::SetRoadBits(c, _)
+        | Command::PlaceRoadDepot(c)
+        | Command::PlaceRoadDepotDir(c, _)
+        | Command::PlaceStation(c)
+        | Command::PlaceStationDir(c, _)
+        | Command::PlaceBusStop(c, _)
+        | Command::PlaceTruckStop(c, _)
+        | Command::PlaceRoadTunnel(c, _) => Some((ConstructionKind::Road, *c)),
+        Command::PlaceRailStationArea { origin, .. } => Some((ConstructionKind::Rail, *origin)),
+        Command::PlaceIndustry(c)
+        | Command::PlaceIndustryKind(c, _)
+        | Command::PlaceIndustrySpec(c, _)
+        | Command::PlaceHouse(c)
+        | Command::PlaceForest(c) => Some((ConstructionKind::Other, *c)),
+        _ => None,
+    }
+}
+
+fn demolition_event_for(cmd: &Command) -> Option<crate::map::TileCoord> {
+    match cmd {
+        Command::RemoveRail(c) | Command::RemoveRailBits(c, _) | Command::ClearTile(c) => Some(*c),
+        _ => None,
+    }
 }
 
 const fn command_modifies_map(cmd: &Command) -> bool {
@@ -51,6 +107,26 @@ const fn command_modifies_map(cmd: &Command) -> bool {
             | Command::SetAutoReplaceRule { .. }
             | Command::ClearAutoReplaceRule { .. }
             | Command::ToggleAutoReplaceRule { .. }
+            | Command::CreateVehicleGroup { .. }
+            | Command::RenameVehicleGroup { .. }
+            | Command::AssignVehicleToGroup { .. }
+            | Command::ClearVehicleTimetableLateness(..)
+            | Command::SetVehicleOrderWaitTicks { .. }
+            | Command::SetVehicleOrderTravelTicks { .. }
+            | Command::ToggleVehicleTimetableAutofill(..)
+            | Command::ToggleAutoReplaceOnlyWhenOld { .. }
+            | Command::SetAutoReplaceRuleGroup { .. }
+            | Command::DepotMassAutoreplace { .. }
+            | Command::CreateSharedOrdersFromVehicle(..)
+            | Command::LinkVehicleToSharedOrders { .. }
+            | Command::UnlinkVehicleSharedOrders(..)
+            | Command::SetSharedOrderAt { .. }
+            | Command::SetVehicleOrderConditional { .. }
+            | Command::DepotReorderVehicleSlot { .. }
+            | Command::IncreaseLoan
+            | Command::DecreaseLoan
+            | Command::TownAdvertise(..)
+            | Command::TownFundBuildings(..)
     )
 }
 
@@ -358,5 +434,11 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::LevelLand { from, to, mode } => terraform::level_land(state, *from, *to, *mode),
         Command::BuyLand(c) => buy_land::buy_land(state, *c),
         Command::BuyLandArea { from, to } => buy_land::buy_land_area(state, *from, *to),
+        Command::IncreaseLoan => economy::increase_company_loan(state),
+        Command::DecreaseLoan => economy::decrease_company_loan(state),
+        Command::TownAdvertise(town_id) => town::town_advertise(state, *town_id),
+        Command::TownFundBuildings(town_id) => town::town_fund_buildings(state, *town_id),
+        Command::PlantTree(c) => crate::map::tree_tile_loop::plant_tree(state, *c),
+        Command::ClearTree(c) => crate::map::tree_tile_loop::clear_tree(state, *c),
     }
 }

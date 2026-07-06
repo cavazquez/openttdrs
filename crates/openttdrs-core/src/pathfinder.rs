@@ -1,7 +1,9 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 
+use crate::aircraft_movement::straight_line_path;
 use crate::map::{Map, Tile, TileCoord, TileKind, openttd_tile_index_to_coord};
+use crate::ship_movement::{is_water_network_tile, water_tiles_connected};
 use crate::station::is_rail_waypoint_tile;
 use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::VehicleKind;
@@ -36,14 +38,18 @@ fn is_network_tile(map: &Map, c: TileCoord, kind: TileKind, network: PathNetwork
         PathNetwork::Road => is_road_network_tile(kind) || is_road_stop_station_tile(map, c),
         // Trenes no circulan por la tesela de plataforma; paran en la vía adyacente.
         PathNetwork::Rail => is_rail_network_tile(kind),
+        PathNetwork::Water => is_water_network_tile(kind),
+        PathNetwork::Air => true,
     }
 }
 
-/// Red de transporte para pathfinding: carretera (bus/camión) o vía (tren).
+/// Red de transporte para pathfinding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PathNetwork {
     Road,
     Rail,
+    Water,
+    Air,
 }
 
 #[must_use]
@@ -51,6 +57,8 @@ pub const fn path_network_for_vehicle(kind: VehicleKind) -> PathNetwork {
     match kind {
         VehicleKind::Train => PathNetwork::Rail,
         VehicleKind::Truck | VehicleKind::Bus => PathNetwork::Road,
+        VehicleKind::Ship => PathNetwork::Water,
+        VehicleKind::Aircraft => PathNetwork::Air,
     }
 }
 
@@ -317,9 +325,14 @@ fn rail_station_entrance_links_track(map: &Map, station: TileCoord, track: TileC
 
 #[must_use]
 fn tiles_connected(map: &Map, cur: TileCoord, next: TileCoord, network: PathNetwork) -> bool {
-    debug_assert_eq!(network, PathNetwork::Road, "rail usa A* direccional");
-    let _ = network;
-    road_tiles_connected(map, cur, next)
+    match network {
+        PathNetwork::Road => road_tiles_connected(map, cur, next),
+        PathNetwork::Water => water_tiles_connected(map, cur, next),
+        PathNetwork::Rail | PathNetwork::Air => {
+            debug_assert!(false, "rail/air no usan tiles_connected genérico");
+            false
+        }
+    }
 }
 
 /// Caché de rutas por tick (no se serializa; se invalida al avanzar la simulación).
@@ -374,6 +387,8 @@ fn cache_key(from: TileCoord, to: TileCoord, network: PathNetwork) -> (i32, i32,
         match network {
             PathNetwork::Road => 0,
             PathNetwork::Rail => 1,
+            PathNetwork::Water => 2,
+            PathNetwork::Air => 3,
         },
     )
 }
@@ -415,6 +430,12 @@ pub fn find_path_with_wormholes(
     }
     if network == PathNetwork::Rail {
         return find_rail_path(map, from, to, wormholes);
+    }
+    if network == PathNetwork::Air {
+        return Some(straight_line_path(from, to));
+    }
+    if network == PathNetwork::Water {
+        return find_water_path(map, from, to);
     }
 
     let (mw, mh) = map.dimensions();
@@ -496,6 +517,67 @@ pub fn find_path_with_wormholes(
 
 /// Lado de entrada «libre»: el tren parte (o se rematerializa) sin restricción de giro.
 const SIDE_ANY: u8 = 4;
+
+/// A* sobre teselas de agua (vecinos ortogonales conectados).
+#[must_use]
+#[allow(clippy::cast_possible_wrap)]
+fn find_water_path(map: &Map, from: TileCoord, to: TileCoord) -> Option<Vec<TileCoord>> {
+    let (mw, mh) = map.dimensions();
+    let mut g_score: HashMap<TileCoord, u32> = HashMap::new();
+    let mut parent: HashMap<TileCoord, TileCoord> = HashMap::new();
+    let mut heap = BinaryHeap::new();
+
+    g_score.insert(from, 0);
+    parent.insert(from, from);
+    heap.push(AstarNode {
+        est_total: manhattan(from, to),
+        pos: from,
+    });
+
+    let dirs = [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)];
+
+    while let Some(AstarNode {
+        est_total: _,
+        pos: cur,
+    }) = heap.pop()
+    {
+        if cur == to {
+            return Some(reconstruct(from, to, &parent));
+        }
+
+        let cur_g = g_score[&cur];
+        for (dx, dy) in dirs {
+            let next = TileCoord::new(cur.x + dx, cur.y + dy);
+            if next.x < 0 || next.y < 0 || next.x >= mw as i32 || next.y >= mh as i32 {
+                continue;
+            }
+            let next_kind = map.get_kind(next).unwrap_or(TileKind::Grass);
+            let cur_kind = map.get_kind(cur).unwrap_or(TileKind::Grass);
+            let reachable = if is_network_tile(map, next, next_kind, PathNetwork::Water) {
+                water_tiles_connected(map, cur, next)
+            } else if next == to {
+                is_network_tile(map, cur, cur_kind, PathNetwork::Water)
+            } else {
+                false
+            };
+            if !reachable {
+                continue;
+            }
+
+            let tentative = cur_g + step_cost(cur, next);
+            if g_score.get(&next).is_some_and(|&g| tentative >= g) {
+                continue;
+            }
+            g_score.insert(next, tentative);
+            parent.insert(next, cur);
+            heap.push(AstarNode {
+                est_total: tentative + manhattan(next, to),
+                pos: next,
+            });
+        }
+    }
+    None
+}
 
 /// A* direccional para vía: estado = (tesela, lado de entrada). Un giro dentro
 /// de una tesela solo es válido si existe el trackbit que conecta el lado de

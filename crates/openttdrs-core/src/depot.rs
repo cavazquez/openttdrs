@@ -9,6 +9,8 @@ pub fn depot_tile_kind_for_vehicle(kind: VehicleKind) -> TileKind {
     match kind {
         VehicleKind::Train => TileKind::RailDepot,
         VehicleKind::Bus | VehicleKind::Truck => TileKind::RoadDepot,
+        VehicleKind::Ship => TileKind::ShipDepot,
+        VehicleKind::Aircraft => TileKind::Airport,
     }
 }
 

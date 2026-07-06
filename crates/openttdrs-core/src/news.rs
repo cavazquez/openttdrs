@@ -231,6 +231,8 @@ pub fn vehicle_kind_label(kind: VehicleKind) -> &'static str {
         VehicleKind::Bus => "autobús",
         VehicleKind::Truck => "camión",
         VehicleKind::Train => "tren",
+        VehicleKind::Ship => "barco",
+        VehicleKind::Aircraft => "avión",
     }
 }
 
@@ -284,6 +286,7 @@ fn vehicle_waiting_for_cargo(state: &crate::GameState, v: &Vehicle) -> bool {
         VehicleKind::Truck | VehicleKind::Train => {
             st.stock > 0 || st.cargo_stock.pick_freight_to_load(v.cargo_type).is_some()
         }
+        VehicleKind::Ship | VehicleKind::Aircraft => false,
     };
     !industry_has && !station_has
 }
@@ -401,6 +404,11 @@ pub fn push_cargo_delivery_news(
         state.tick,
         NewsReference::Tile(at),
     );
+    if first_delivery {
+        state
+            .pending_sim_events
+            .push(crate::sim_events::SimEvent::NewsApplause);
+    }
     add_news_item(state, item);
 }
 

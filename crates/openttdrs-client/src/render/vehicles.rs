@@ -54,10 +54,14 @@ fn train_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
 
 fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
     match v.kind {
-        VehicleKind::Truck if v.uses_loaded_road_sprite() => &TRUCK_VEHICLE_LAYERS_LOADED,
-        VehicleKind::Truck => &TRUCK_VEHICLE_LAYERS,
-        VehicleKind::Bus if v.uses_loaded_road_sprite() => &BUS_VEHICLE_LAYERS_LOADED,
-        VehicleKind::Bus => &BUS_VEHICLE_LAYERS,
+        VehicleKind::Truck | VehicleKind::Ship if v.uses_loaded_road_sprite() => {
+            &TRUCK_VEHICLE_LAYERS_LOADED
+        }
+        VehicleKind::Truck | VehicleKind::Ship => &TRUCK_VEHICLE_LAYERS,
+        VehicleKind::Bus | VehicleKind::Aircraft if v.uses_loaded_road_sprite() => {
+            &BUS_VEHICLE_LAYERS_LOADED
+        }
+        VehicleKind::Bus | VehicleKind::Aircraft => &BUS_VEHICLE_LAYERS,
         VehicleKind::Train => train_layers_for(v),
     }
 }
@@ -160,9 +164,9 @@ impl TruckHandles {
     pub(crate) fn intro_sprite(&self, kind: VehicleKind, dir: usize) -> Handle<Image> {
         let i = dir.min(7);
         match kind {
-            VehicleKind::Bus => self.bus[i].clone(),
+            VehicleKind::Bus | VehicleKind::Aircraft => self.bus[i].clone(),
             VehicleKind::Train => self.train_groups[2][i].clone(),
-            VehicleKind::Truck => self.truck[i].clone(),
+            VehicleKind::Truck | VehicleKind::Ship => self.truck[i].clone(),
         }
     }
 
@@ -189,10 +193,14 @@ impl TruckHandles {
         }
         let i = dir;
         match v.kind {
-            VehicleKind::Truck if v.uses_loaded_road_sprite() => self.truck_loaded[i].clone(),
-            VehicleKind::Truck => self.truck[i].clone(),
-            VehicleKind::Bus if v.uses_loaded_road_sprite() => self.bus_loaded[i].clone(),
-            VehicleKind::Bus => self.bus[i].clone(),
+            VehicleKind::Truck | VehicleKind::Ship if v.uses_loaded_road_sprite() => {
+                self.truck_loaded[i].clone()
+            }
+            VehicleKind::Truck | VehicleKind::Ship => self.truck[i].clone(),
+            VehicleKind::Bus | VehicleKind::Aircraft if v.uses_loaded_road_sprite() => {
+                self.bus_loaded[i].clone()
+            }
+            VehicleKind::Bus | VehicleKind::Aircraft => self.bus[i].clone(),
             VehicleKind::Train => {
                 let engine_id = v
                     .engine_id

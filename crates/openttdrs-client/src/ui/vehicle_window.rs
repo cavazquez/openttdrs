@@ -395,8 +395,8 @@ fn spawn_vehicle_button(
 
 fn speed_to_kmh(kind: VehicleKind, units: u16) -> u16 {
     match kind {
-        VehicleKind::Train => units,
-        VehicleKind::Bus | VehicleKind::Truck => units / 2,
+        VehicleKind::Train | VehicleKind::Aircraft => units,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Ship => units / 2,
     }
 }
 

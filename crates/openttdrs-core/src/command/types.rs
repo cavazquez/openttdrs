@@ -239,6 +239,18 @@ pub enum Command {
         from: TileCoord,
         to: TileCoord,
     },
+    /// Solicita más préstamo bancario (`CmdIncreaseLoan`).
+    IncreaseLoan,
+    /// Devuelve parte del préstamo (`CmdDecreaseLoan`).
+    DecreaseLoan,
+    /// Campaña publicitaria en una ciudad (`CmdTownAction::Advertise`).
+    TownAdvertise(u32),
+    /// Financia edificios en una ciudad (`CmdTownAction::FundBuildings`).
+    TownFundBuildings(u32),
+    /// Planta un árbol en hierba o incrementa densidad en bosque.
+    PlantTree(TileCoord),
+    /// Quita árbol o reduce etapa de cultivo.
+    ClearTree(TileCoord),
 }
 
 /// Dirección para reordenar órdenes en la lista del vehículo.
@@ -327,6 +339,18 @@ pub enum CommandError {
     CannotBuyLandHere,
     /// Esta industria no está disponible en el clima actual del mapa.
     IndustryNotAvailableInClimate,
+    /// Préstamo ya al máximo permitido.
+    LoanAtMaximum,
+    /// No hay préstamo suficiente para devolver.
+    NoLoanToRepay,
+    /// Ciudad no encontrada.
+    TownNotFound,
+    /// La autoridad local no permite construir aquí.
+    AuthorityRatingTooLow,
+    /// No se puede plantar un árbol aquí.
+    CannotPlantTreeHere,
+    /// No hay árbol ni cultivo que quitar.
+    NoTreeHere,
 }
 
 /// Texto breve en español para mostrar al jugador cuando falla un comando.
@@ -408,5 +432,13 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::IndustryNotAvailableInClimate => {
             "Esta industria no está disponible en el clima de este mapa."
         }
+        CommandError::LoanAtMaximum => "El préstamo ya está al máximo permitido.",
+        CommandError::NoLoanToRepay => "No hay préstamo suficiente para devolver.",
+        CommandError::TownNotFound => "Ciudad no encontrada.",
+        CommandError::AuthorityRatingTooLow => {
+            "La autoridad local no permite construir una estación aquí."
+        }
+        CommandError::CannotPlantTreeHere => "No se puede plantar un árbol aquí.",
+        CommandError::NoTreeHere => "No hay árbol ni cultivo en esta tesela.",
     }
 }

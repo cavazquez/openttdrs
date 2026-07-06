@@ -10,6 +10,7 @@ pub mod object;
 pub mod rail_slope;
 pub mod road_bits;
 pub mod slope;
+pub mod tree_tile_loop;
 mod types;
 
 #[cfg(test)]
@@ -44,6 +45,11 @@ pub use slope::{
     inclined_slope_direction, is_tunnel_entrance_slope, partial_pixel_z, resolve_tunnel_end,
     slope_dz_at_subtile, slope_dz_on_tile, tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles,
     tunnel_preview_path,
+};
+pub use tree_tile_loop::{
+    MAX_TREE_OR_FIELD_STAGE, TREE_GROWTH_TICK_INTERVAL, apply_seasonal_snow, clear_tree,
+    plant_tree, step_tree_and_field_growth, tick_tree_tile_loop, tree_or_field_stage,
+    with_tree_or_field_stage,
 };
 pub use types::{
     MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind, openttd_tile_index_to_coord,

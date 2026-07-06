@@ -15,14 +15,11 @@ pub(crate) struct IncomePopupText {
 /// Drena [`GameState::pending_income_popups`] y crea etiquetas en el mapa.
 pub(crate) fn spawn_income_popups(
     mut sim: ResMut<SimWorld>,
-    mut hud_feedback: ResMut<crate::ui::hud::HudBuildFeedback>,
     hud_font: Res<HudUiFont>,
     mut commands: Commands,
 ) {
     let popups: Vec<_> = sim.state.pending_income_popups.drain(..).collect();
-    if !popups.is_empty() {
-        hud_feedback.pending_income_ping = true;
-    }
+    // SFX de ingreso vía SimEvent::Income (SimEventsPlugin), no pending_income_ping.
     let map = &sim.state.map;
     for popup in popups {
         let (tileh, base_z) = tile_slope_and_min_z(map, popup.at.x as u32, popup.at.y as u32);

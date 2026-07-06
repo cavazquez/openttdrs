@@ -114,7 +114,7 @@ fn play_world_sfx(
         if let Some(handle) = handles.handles.get(&msg.sound) {
             commands.spawn((
                 AudioPlayer::new(handle.clone()),
-                PlaybackSettings::ONCE.with_volume(bevy::audio::Volume::Linear(vol)),
+                PlaybackSettings::DESPAWN.with_volume(bevy::audio::Volume::Linear(vol)),
             ));
         }
     }

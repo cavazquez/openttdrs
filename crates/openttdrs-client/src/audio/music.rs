@@ -7,6 +7,11 @@ use crate::bevy_app::UpdateSet;
 use crate::state::ClientScreen;
 use crate::ui::SimHudControls;
 
+/// Marca la entidad de audio de música (theme o playlist) para distinguirla
+/// de los SFX, que comparten el componente `AudioPlayer`.
+#[derive(Component)]
+pub(crate) struct MusicPlayer;
+
 #[derive(Resource)]
 pub(crate) struct MusicState {
     pub playing: bool,
@@ -32,6 +37,7 @@ impl Plugin for MusicPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<MusicState>()
             .add_systems(Startup, load_music_tracks)
+            .add_systems(OnExit(ClientScreen::MainMenu), stop_menu_theme)
             .add_systems(
                 Update,
                 (play_menu_theme, advance_playlist.in_set(UpdateSet::Status)),
@@ -93,31 +99,38 @@ fn load_music_tracks(
 fn play_menu_theme(
     mut commands: Commands,
     screen: Res<State<ClientScreen>>,
-    mut played: Local<bool>,
     hud: Res<SimHudControls>,
     music: Res<MusicState>,
+    music_players: Query<(), With<MusicPlayer>>,
 ) {
-    if *played || *screen.get() != ClientScreen::MainMenu {
+    if *screen.get() != ClientScreen::MainMenu || !music_players.is_empty() {
         return;
     }
     let Some(theme) = music.theme.as_ref() else {
         return;
     };
-    *played = true;
     let vol = hud.music_volume.clamp(0.0, 1.0);
     commands.spawn((
+        MusicPlayer,
         AudioPlayer::new(theme.clone()),
         PlaybackSettings::LOOP.with_volume(bevy::audio::Volume::Linear(vol)),
     ));
 }
 
-/// Avanza playlist en partida cuando no hay entidad de música activa.
+/// Detiene el theme del menú al entrar en partida para que no bloquee la playlist.
+fn stop_menu_theme(mut commands: Commands, players: Query<Entity, With<MusicPlayer>>) {
+    for entity in &players {
+        commands.entity(entity).despawn();
+    }
+}
+
+/// Avanza playlist en partida cuando no hay pista de música activa.
 fn advance_playlist(
     mut commands: Commands,
     screen: Res<State<ClientScreen>>,
     mut music: ResMut<MusicState>,
     hud: Res<SimHudControls>,
-    players: Query<Entity, With<AudioPlayer>>,
+    players: Query<(), With<MusicPlayer>>,
 ) {
     if *screen.get() != ClientScreen::InGame || !music.playing {
         return;
@@ -132,7 +145,8 @@ fn advance_playlist(
     music.track_index = music.track_index.wrapping_add(1);
     let vol = hud.music_volume.clamp(0.0, 1.0);
     commands.spawn((
+        MusicPlayer,
         AudioPlayer::new(music.handles[idx].clone()),
-        PlaybackSettings::ONCE.with_volume(bevy::audio::Volume::Linear(vol)),
+        PlaybackSettings::DESPAWN.with_volume(bevy::audio::Volume::Linear(vol)),
     ));
 }

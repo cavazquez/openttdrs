@@ -78,7 +78,8 @@ fn play_handle(commands: &mut Commands, handle: Option<&Handle<AudioSource>>, vo
     if let Some(h) = handle {
         commands.spawn((
             AudioPlayer::new(h.clone()),
-            PlaybackSettings::ONCE.with_volume(bevy::audio::Volume::Linear(volume.clamp(0.0, 1.0))),
+            PlaybackSettings::DESPAWN
+                .with_volume(bevy::audio::Volume::Linear(volume.clamp(0.0, 1.0))),
         ));
     }
 }

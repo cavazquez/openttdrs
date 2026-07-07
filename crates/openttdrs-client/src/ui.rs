@@ -143,7 +143,12 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<crate::state::new_game::NewGameSettingsResource>()
         .add_systems(
             OnEnter(ClientScreen::MainMenu),
-            (setup_main_menu_intro, setup_main_menu, setup_save_window),
+            (
+                setup_main_menu_intro,
+                setup_main_menu,
+                setup_save_window,
+                load_hud_sfx,
+            ),
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
@@ -184,6 +189,8 @@ impl Plugin for ClientUiPlugin {
                 main_menu_options_interaction,
                 sync_main_menu_panel_visibility,
                 sync_main_menu_summary,
+                toolbar_click_beep,
+                play_hud_sfx,
             )
                 .run_if(in_state(ClientScreen::MainMenu)),
         )

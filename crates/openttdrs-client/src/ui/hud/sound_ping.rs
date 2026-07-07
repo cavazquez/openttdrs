@@ -17,6 +17,10 @@ pub(crate) enum HudSfxKind {
 #[derive(Message)]
 pub(crate) struct PlayHudSfx(pub HudSfxKind);
 
+/// Botón de UI que debe reproducir el beep de clic (`SND_15_BEEP`).
+#[derive(Component, Default)]
+pub(crate) struct UiClickBeep;
+
 #[derive(Resource, Default)]
 pub(crate) struct HudSfxHandles {
     pub error: Option<Handle<AudioSource>>,

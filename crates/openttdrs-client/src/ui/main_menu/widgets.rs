@@ -3,6 +3,7 @@ use openttdrs_core::Climate;
 
 use crate::state::bootstrap::{MapSizePreset, PopulationDensity};
 use crate::ui::font::UiFontRole;
+use crate::ui::hud::UiClickBeep;
 
 use super::labels::climate_label;
 use super::{
@@ -16,6 +17,7 @@ pub(super) fn density_button(
 ) -> impl Bundle {
     (
         Button,
+        UiClickBeep,
         MainMenuDensityButton(density, target),
         Node {
             width: Val::Px(88.0),
@@ -49,6 +51,7 @@ pub(super) fn starting_money_button(amount: i64) -> impl Bundle {
     };
     (
         Button,
+        UiClickBeep,
         MainMenuStartingMoneyButton(amount),
         Node {
             width: Val::Px(72.0),
@@ -75,6 +78,7 @@ pub(super) fn starting_money_button(amount: i64) -> impl Bundle {
 pub(super) fn map_size_button(size: MapSizePreset) -> impl Bundle {
     (
         Button,
+        UiClickBeep,
         MainMenuMapSizeButton(size),
         Node {
             width: Val::Px(92.0),
@@ -101,6 +105,7 @@ pub(super) fn map_size_button(size: MapSizePreset) -> impl Bundle {
 pub(super) fn start_year_button(year: u32) -> impl Bundle {
     (
         Button,
+        UiClickBeep,
         MainMenuStartYearButton(year),
         Node {
             width: Val::Px(46.0),
@@ -127,6 +132,7 @@ pub(super) fn start_year_button(year: u32) -> impl Bundle {
 pub(super) fn seed_adjust_button(marker: impl Component, label: &str) -> impl Bundle {
     (
         Button,
+        UiClickBeep,
         marker,
         Node {
             width: Val::Px(36.0),
@@ -153,6 +159,7 @@ pub(super) fn seed_adjust_button(marker: impl Component, label: &str) -> impl Bu
 pub(super) fn climate_button(climate: Climate) -> impl Bundle {
     (
         Button,
+        UiClickBeep,
         MainMenuClimateButton(climate),
         Node {
             width: Val::Px(100.0),
@@ -179,6 +186,7 @@ pub(super) fn climate_button(climate: Climate) -> impl Bundle {
 pub(super) fn toggle_button(toggle: MainMenuToggle, label: &'static str) -> impl Bundle {
     (
         Button,
+        UiClickBeep,
         toggle,
         Node {
             width: Val::Px(360.0),
@@ -205,6 +213,7 @@ pub(super) fn toggle_button(toggle: MainMenuToggle, label: &'static str) -> impl
 pub(super) fn primary_button(marker: impl Component, label: &str, height: f32) -> impl Bundle {
     (
         Button,
+        UiClickBeep,
         marker,
         Node {
             width: Val::Px(320.0),
@@ -231,6 +240,7 @@ pub(super) fn primary_button(marker: impl Component, label: &str, height: f32) -
 pub(super) fn secondary_button(marker: impl Component, label: &str, height: f32) -> impl Bundle {
     (
         Button,
+        UiClickBeep,
         marker,
         Node {
             width: Val::Px(320.0),

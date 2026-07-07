@@ -16,7 +16,7 @@ pub(crate) use place_flash::{
     animate_build_place_flash, enqueue_build_place_flash, spawn_build_place_flash,
 };
 pub(crate) use sound_ping::{
-    HudSfxHandles, HudSfxKind, PlayHudSfx, flush_hud_sfx, load_hud_sfx, play_hud_sfx,
+    HudSfxHandles, HudSfxKind, PlayHudSfx, UiClickBeep, flush_hud_sfx, load_hud_sfx, play_hud_sfx,
 };
 
 /// Pausa simulacion y ruta del JSON de **F5/F9** (alternativa a variable de entorno al arranque).

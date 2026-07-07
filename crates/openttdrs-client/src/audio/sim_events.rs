@@ -21,6 +21,10 @@ impl Plugin for SimEventsPlugin {
         app.init_resource::<PendingSimEvents>()
             .init_resource::<FxSpawnQueue>()
             .add_systems(
+                OnEnter(ClientScreen::InGame),
+                discard_bootstrap_sim_events_on_enter,
+            )
+            .add_systems(
                 FixedUpdate,
                 drain_sim_events_from_core.run_if(in_state(ClientScreen::InGame)),
             )
@@ -31,6 +35,14 @@ impl Plugin for SimEventsPlugin {
                     .run_if(in_state(ClientScreen::InGame)),
             );
     }
+}
+
+fn discard_bootstrap_sim_events_on_enter(
+    mut sim: ResMut<SimWorld>,
+    mut pending: ResMut<PendingSimEvents>,
+) {
+    sim.state.pending_sim_events.discard_all();
+    pending.0.clear();
 }
 
 fn drain_sim_events_from_core(mut sim: ResMut<SimWorld>, mut pending: ResMut<PendingSimEvents>) {

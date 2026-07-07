@@ -103,6 +103,11 @@ impl SimEventQueue {
         std::mem::take(&mut self.events)
     }
 
+    /// Descarta eventos sin reproducirlos (p. ej. `apply_command` del bootstrap del mapa).
+    pub fn discard_all(&mut self) {
+        self.events.clear();
+    }
+
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()

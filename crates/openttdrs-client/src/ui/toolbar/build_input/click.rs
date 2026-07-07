@@ -134,7 +134,73 @@ fn open_town_window(
     vehicle_window.vehicle_id = None;
 }
 
-/// Dos clicks: el primero ancla el ghost, el segundo confirma. Click derecho cancela.
+/// Arrastrar: clic para anclar, mover el ratón y soltar para confirmar. Clic derecho cancela.
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
+fn confirm_drag_placement(
+    action: BuildMenuAction,
+    drag_state: &mut DragBuildState,
+    sim: &mut SimWorld,
+    station_state: &StationBuildState,
+    build_pos: TileCoord,
+    bridge_state: &mut BridgeBuildState,
+    pending: &mut RemapMapVisualsPending,
+    hud_feedback: &mut HudBuildFeedback,
+    time_secs: f32,
+) {
+    if matches!(
+        action,
+        BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge
+    ) {
+        let tiles = std::mem::take(&mut drag_state.pending_tiles);
+        cancel_placement(drag_state);
+        if tiles.len() < 3 {
+            push_build_command_error(hud_feedback, CommandError::InvalidBridgeSpan, time_secs);
+            return;
+        }
+        let start = TileCoord::new(tiles[0].0, tiles[0].1);
+        let end = TileCoord::new(tiles[tiles.len() - 1].0, tiles[tiles.len() - 1].1);
+        let probe = if action == BuildMenuAction::RoadBridge {
+            Command::PlaceRoadBridge(start, end, BridgeType::Wooden)
+        } else {
+            Command::PlaceRailBridge(start, end, BridgeType::Wooden)
+        };
+        match command_would_fail(&sim.state, &probe) {
+            None
+            | Some(CommandError::BridgeTypeNotAvailable)
+            | Some(CommandError::InsufficientFunds) => {
+                bridge_state.pending = Some(PendingBridge {
+                    start,
+                    end,
+                    road: action == BuildMenuAction::RoadBridge,
+                });
+            }
+            Some(e) => {
+                push_build_command_error(hud_feedback, e, time_secs);
+            }
+        }
+        return;
+    }
+
+    if action_is_tunnel(action)
+        && !tunnel_placement_is_valid(&sim.state, action, &drag_state.pending_tiles)
+    {
+        cancel_placement(drag_state);
+        return;
+    }
+
+    let tiles = std::mem::take(&mut drag_state.pending_tiles);
+    let remap_tiles = tiles_for_visual_remap(Some(&sim.state.map), action, build_pos, &tiles);
+    let lane = drag_state.rail_lane_bit;
+    let (changed, err) = apply_drag_action(sim, action, tiles, station_state, lane);
+    cancel_placement(drag_state);
+    if changed {
+        let (mw, mh) = sim.state.map.dimensions();
+        request_map_visual_remap(pending, mw, mh, &remap_tiles);
+    } else if let Some(e) = err {
+        push_build_command_error(hud_feedback, e, time_secs);
+    }
+}
+
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_tile_click(
     mouse: Res<ButtonInput<MouseButton>>,
@@ -199,7 +265,33 @@ pub(crate) fn handle_tile_click(
         return;
     };
 
-    let Some((tx, ty)) = world_pos_to_tile_coord(world_pos, &sim.state.map) else {
+    let tile_on_map = world_pos_to_tile_coord(world_pos, &sim.state.map);
+    if tile_on_map.is_none() {
+        if drag_state.armed
+            && mouse.just_released(MouseButton::Left)
+            && let Some(action) = tool_state.active_tool
+            && action_supports_drag(action)
+            && drag_state.last_action == Some(action)
+        {
+            let build_pos = drag_state
+                .start_tile
+                .map(|(x, y)| TileCoord::new(x, y))
+                .unwrap_or(TileCoord::new(0, 0));
+            confirm_drag_placement(
+                action,
+                &mut drag_state,
+                &mut sim,
+                &station_state,
+                build_pos,
+                &mut bridge_state,
+                &mut pending,
+                &mut hud_feedback,
+                time.elapsed_secs(),
+            );
+        }
+        return;
+    }
+    let Some((tx, ty)) = tile_on_map else {
         return;
     };
     let pos = TileCoord::new(tx, ty);
@@ -366,80 +458,18 @@ pub(crate) fn handle_tile_click(
         drag_state.pending_tiles = drag_line_tiles(Some(&sim.state.map), action, start, current);
         drag_state.last_tile = Some(current);
 
-        if matches!(
-            action,
-            BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge
-        ) {
-            if mouse.just_pressed(MouseButton::Left) {
-                let tiles = std::mem::take(&mut drag_state.pending_tiles);
-                cancel_placement(&mut drag_state);
-                if tiles.len() < 3 {
-                    push_build_command_error(
-                        &mut hud_feedback,
-                        CommandError::InvalidBridgeSpan,
-                        time.elapsed_secs(),
-                    );
-                    return;
-                }
-                let start = TileCoord::new(tiles[0].0, tiles[0].1);
-                let end = TileCoord::new(tiles[tiles.len() - 1].0, tiles[tiles.len() - 1].1);
-                let probe = if action == BuildMenuAction::RoadBridge {
-                    Command::PlaceRoadBridge(start, end, BridgeType::Wooden)
-                } else {
-                    Command::PlaceRailBridge(start, end, BridgeType::Wooden)
-                };
-                match command_would_fail(&sim.state, &probe) {
-                    None
-                    | Some(CommandError::BridgeTypeNotAvailable)
-                    | Some(CommandError::InsufficientFunds) => {
-                        bridge_state.pending = Some(PendingBridge {
-                            start,
-                            end,
-                            road: action == BuildMenuAction::RoadBridge,
-                        });
-                    }
-                    Some(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
-                }
-            } else if mouse.just_released(MouseButton::Left) && drag_state.pending_tiles.len() == 1
-            {
-                cancel_placement(&mut drag_state);
-            }
-            return;
-        }
-
-        if mouse.just_pressed(MouseButton::Left) {
-            if action_is_tunnel(action)
-                && !tunnel_placement_is_valid(&sim.state, action, &drag_state.pending_tiles)
-            {
-                return;
-            }
-            let tiles = std::mem::take(&mut drag_state.pending_tiles);
-            let remap_tiles =
-                tiles_for_visual_remap(Some(&sim.state.map), action, build_pos, &tiles);
-            let lane = drag_state.rail_lane_bit;
-            let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state, lane);
-            cancel_placement(&mut drag_state);
-            if changed {
-                let (mw, mh) = sim.state.map.dimensions();
-                request_map_visual_remap(&mut pending, mw, mh, &remap_tiles);
-            } else if let Some(e) = err {
-                push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-            }
-        } else if mouse.just_released(MouseButton::Left) && drag_state.pending_tiles.len() == 1 {
-            let tiles = std::mem::take(&mut drag_state.pending_tiles);
-            let remap_tiles =
-                tiles_for_visual_remap(Some(&sim.state.map), action, build_pos, &tiles);
-            let lane = drag_state.rail_lane_bit;
-            let (changed, err) = apply_drag_action(&mut sim, action, tiles, &station_state, lane);
-            cancel_placement(&mut drag_state);
-            if changed {
-                let (mw, mh) = sim.state.map.dimensions();
-                request_map_visual_remap(&mut pending, mw, mh, &remap_tiles);
-            } else if let Some(e) = err {
-                push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-            }
+        if mouse.just_released(MouseButton::Left) {
+            confirm_drag_placement(
+                action,
+                &mut drag_state,
+                &mut sim,
+                &station_state,
+                build_pos,
+                &mut bridge_state,
+                &mut pending,
+                &mut hud_feedback,
+                time.elapsed_secs(),
+            );
         }
         return;
     }

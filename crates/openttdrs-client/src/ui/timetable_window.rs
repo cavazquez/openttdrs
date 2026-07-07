@@ -229,7 +229,10 @@ fn spawn_tt_button(
 
 fn format_ticks(ticks: u32, seconds_mode: bool) -> String {
     if seconds_mode {
-        format!("{:.0}s", ticks as f32 / 5.0)
+        format!(
+            "{:.0}s",
+            ticks as f32 / openttdrs_core::SIM_TICKS_PER_SECOND as f32
+        )
     } else {
         format!("{ticks}t")
     }

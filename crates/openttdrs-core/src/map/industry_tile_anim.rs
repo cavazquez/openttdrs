@@ -54,8 +54,8 @@ const MINE_TOWER_GFX_PAIRS: [(u16, u16); 3] = [
     ),
 ];
 
-/// Escala tick de sim (~5 Hz) al contador de animación ~30 Hz de OpenTTD.
-const OTTD_ANIM_SCALE: u64 = 6;
+/// Escala tick de sim (≈37 Hz) al contador de animación por tick de OpenTTD.
+const OTTD_ANIM_SCALE: u64 = 1;
 const MINE_TOWER_QUIET_MASK: u64 = 0x400;
 
 /// gfx de industria de 9 bits (`GetCleanIndustryGfx`).
@@ -395,7 +395,8 @@ mod tests {
         let mut saw_change = false;
         let mut prev = map.get(TileCoord::new(0, 0)).unwrap().m3hi & 3;
         // Ventana activa (`counter & 0x7FF >= 0x400`) sin demote a gfx 0.
-        for tick in 171..=250 {
+        // Con sim a ~37 Hz, `OTTD_ANIM_SCALE = 1` → counter ≈ tick (activo desde tick 1024).
+        for tick in 1024..=1100 {
             advance_industry_tile_animations(&mut map, tick);
             let tile = map.get(TileCoord::new(0, 0)).unwrap();
             assert_eq!(industry_gfx(&tile), GFX_COAL_MINE_TOWER_ANIMATED);

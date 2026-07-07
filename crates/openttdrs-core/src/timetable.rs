@@ -1,6 +1,6 @@
 //! Horarios por orden (paridad reducida con `OpenTTD` timetable).
 
-/// Presets de espera en parada (ticks de simulación; ~5 Hz → 30 ≈ 6 s).
+/// Presets de espera en parada (ticks de simulación; ~37 Hz → 30 ≈ 0,8 s).
 pub const WAIT_PRESETS: [u32; 5] = [0, 30, 60, 120, 300];
 
 /// Presets de tiempo mínimo de viaje entre órdenes.

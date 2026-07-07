@@ -69,8 +69,9 @@ pub const ENGINE_TRAIN_ASIASTAR: u16 = 113;
 pub const ENGINE_SHIP_MPS: u16 = 200;
 pub const ENGINE_AIRCRAFT_DAKOTA: u16 = 300;
 
-/// Paso sub-tile del bus MPS en diagonal (~5 ticks/tesela con sim a 5 Hz).
-pub const REFERENCE_PROGRESS_STEP: u8 = 51;
+/// Paso sub-tile del bus MPS en diagonal a velocidad de crucero (`GetAdvanceSpeed` ×
+/// `255/192` sobre `GetAdvanceDistance` diagonal — `vehicle_base.h:439-455`).
+pub const REFERENCE_PROGRESS_STEP: u8 = 112;
 
 /// Aceleración carretera modelo original (`RoadVehicle::UpdateSpeed`, `AM_ORIGINAL`).
 pub const ROAD_ACCEL_ORIGINAL: u16 = 256;
@@ -692,10 +693,12 @@ mod tests {
     use crate::vehicle::DIR_SW;
 
     #[test]
-    fn reference_bus_keeps_five_ticks_per_diagonal_tile() {
+    fn reference_bus_diagonal_tile_matches_openttd_advance_speed() {
         let step = progress_step_for_speed(112, DIR_SW);
         assert_eq!(step, REFERENCE_PROGRESS_STEP);
-        assert_eq!(255_u32.div_ceil(u32::from(step)), 5);
+        let ticks = 255_u32.div_ceil(u32::from(step));
+        // OpenTTD: 192 / (112*3/4) ≈ 2,3 ticks/tesela a crucero.
+        assert_eq!(ticks, 3);
     }
 
     #[test]

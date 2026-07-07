@@ -183,18 +183,17 @@ fn check_instant_loading(records: &[TickRecord]) -> KnownDivergence {
     }
 }
 
-/// Divergencia estructural: frecuencia del tick lógico. `OpenTTD` corre 74 ticks/día
-/// (~33,3 ticks/s a velocidad normal); la sim Rust corre a 5 Hz con pasos
-/// sub-tesela reescalados. Divergencia estructural, no medible en la traza.
+/// Frecuencia del tick lógico alineada con `OpenTTD` (~37 Hz, `timer_game_tick.h`).
+/// Divergencia estructural resuelta; no medible en la traza de paridad.
 fn check_tick_rate() -> KnownDivergence {
     KnownDivergence {
         id: "tick_rate",
-        title: "Tick de simulación a 5 Hz frente a ~33,3 Hz de OpenTTD",
-        detected: true,
-        evidence: "- constante: `SIM_TICK_HZ = 5.0` con `REFERENCE_PROGRESS_STEP = 51` (5 ticks/tesela); OpenTTD avanza `frame` cada tick a 74 ticks/día\n".to_string(),
-        openttd_ref: "OpenTTD/src/timer/timer_game_tick.h:77 (`DAY_TICKS = 74`)",
-        rust_ref: "openttdrs/crates/openttdrs-client/src/simulation.rs:12 (`SIM_TICK_HZ = 5.0`) y openttdrs/crates/openttdrs-core/src/engine.rs:71 (`REFERENCE_PROGRESS_STEP = 51`)",
-        fix_phase2: "DECIDIDO (Fase 2): se mantiene 5 Hz y la paridad se valida en unidades relativas; criterios de revisión en docs/parity/tick_rate_decision.md",
+        title: "Tick de simulación alineado con OpenTTD (~37 Hz)",
+        detected: false,
+        evidence: "- `SIM_TICKS_PER_SECOND` = 1000/27 (`timer_game_tick.h`); `REFERENCE_PROGRESS_STEP` = 112 (`GetAdvanceSpeed`)\n".to_string(),
+        openttd_ref: "OpenTTD/src/timer/timer_game_tick.h:77 (`DAY_TICKS = 74`, ~27 ms/tick)",
+        rust_ref: "openttdrs/crates/openttdrs-core/src/economy.rs (`SIM_TICKS_PER_SECOND`) y engine.rs (`REFERENCE_PROGRESS_STEP`)",
+        fix_phase2: "IMPLEMENTADO: sim a ~37 Hz y paso sub-tesela según `GetAdvanceSpeed`/`GetAdvanceDistance`.",
     }
 }
 

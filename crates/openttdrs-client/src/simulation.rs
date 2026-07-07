@@ -2,6 +2,8 @@
 
 use bevy::prelude::*;
 
+use openttdrs_core::SIM_TICKS_PER_SECOND;
+
 use crate::bevy_app::UpdateSet;
 use crate::render::{
     MapTileChunk, RemapMapVisualsPending, VehicleIndex, large_map_viewport_cull_enabled,
@@ -10,8 +12,8 @@ use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
 
 /// Frecuencia del tick de simulación (debe coincidir con `Time<Fixed>`).
-/// Calibrado con `REFERENCE_PROGRESS_STEP` (~5 ticks/tesela) y 74 ticks/día de OpenTTD.
-pub(crate) const SIM_TICK_HZ: f64 = 5.0;
+/// OpenTTD: `1000 / MILLISECONDS_PER_TICK` (~37 Hz, `timer_game_tick.h`).
+pub(crate) const SIM_TICK_HZ: f64 = SIM_TICKS_PER_SECOND;
 
 /// Fracción del tick de simulación actual (0..1) para interpolar el render entre pasos.
 #[derive(Resource, Default)]
@@ -58,7 +60,7 @@ fn sync_sim_time_controls(hud: Res<SimHudControls>, mut virtual_time: ResMut<Tim
     virtual_time.set_relative_speed(hud.sim_speed.max(0.1));
 }
 
-/// Un paso de simulación por tick fijo (5 Hz).
+/// Un paso de simulación por tick fijo (~37 Hz, paridad OpenTTD).
 fn step_sim(mut sim: ResMut<SimWorld>, mut vehicle_index: ResMut<VehicleIndex>) {
     sim.state.step();
     vehicle_index.rebuild(&sim.state.vehicles);
@@ -137,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn init_sim_fixed_timestep_sets_5hz() {
+    fn init_sim_fixed_timestep_sets_openttd_tick_rate() {
         let mut app = sim_test_app();
         app.update();
         let hz = app

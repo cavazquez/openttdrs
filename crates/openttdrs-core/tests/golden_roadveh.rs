@@ -129,7 +129,7 @@ fn advance_constants_match_upstream() {
     let step_for = |speed: u32, tile_len: u32| -> u32 {
         let advance = speed * c.advance_speed_numerator / c.advance_speed_denominator;
         let reference_advance = 112 * c.advance_speed_numerator / c.advance_speed_denominator;
-        advance * 51 * c.tile_axial_distance / (reference_advance * tile_len)
+        advance * 112 * c.tile_axial_distance / (reference_advance * tile_len)
     };
     for speed in [32_u16, 64, 96, 112] {
         let expected_diag = step_for(u32::from(speed), c.tile_axial_distance).clamp(1, 255);
@@ -233,7 +233,11 @@ fn known_divergences_are_confirmed_by_trace() {
         "regresión: el camión debe entrar a la tesela de la bahía (Fase 2)"
     );
     assert_eq!(by_id.get("instant_loading"), Some(&true));
-    assert_eq!(by_id.get("tick_rate"), Some(&true));
+    assert_eq!(
+        by_id.get("tick_rate"),
+        Some(&false),
+        "regresión: la sim debe correr a ~37 Hz con paso sub-tesela OpenTTD"
+    );
 
     for d in &divergences {
         assert!(

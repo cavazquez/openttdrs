@@ -413,11 +413,39 @@ El mapa isométrico ocupa aproximadamente 1280×671 px, encajando bien en 1280×
 
 ---
 
+## Texture atlas (batching Bevy)
+
+Tras extraer PNGs en `tiles/`, `scripts/gen_tile_atlas.py` empaqueta las imágenes
+únicas en páginas bajo `assets/opengfx/atlas/tiles_atlas_{p}.png` y genera la tabla
+compilada:
+
+- **En el repo (sí):** `crates/openttdrs-client/src/sprites/tile_atlas_generated.rs`
+- **En el repo (sí):** metadatos de draw (`*_draw_data_generated.rs`, p. ej. `effect_vehicle_draw_data_generated.rs`)
+- **Gitignored (no):** `assets/opengfx/tiles/*.png` (~11 MB)
+- **En el repo (sí):** `assets/opengfx/atlas/tiles_atlas_*.png` (~2–3 MB por página)
+
+### Atlas PNG en el repositorio
+
+Los PNG del atlas **sí se versionan** (excepción en `.gitignore`). Tras cambiar sprites en
+`tiles/`, regenerar **ambos**:
+
+```bash
+python3 scripts/gen_tile_atlas.py
+git add assets/opengfx/atlas/ crates/openttdrs-client/src/sprites/tile_atlas_generated.rs
+```
+
+Los PNG sueltos en `tiles/` siguen ignorados; hace falta `descargar_graficos.sh` solo para
+regenerar el atlas o añadir sprites nuevos.
+
+---
+
 ## Scripts de utilidad
 
 | Script | Descripción |
 |--------|-------------|
 | `scripts/descargar_graficos.sh` | Descarga OpenGFX y extrae sprites a `assets/opengfx/tiles/` |
+| `scripts/gen_effect_vehicle_sprites.py` | Humo tren, chispas, explosión, avería → `effect_vehicle_draw_data_generated.rs` |
+| `scripts/gen_tile_atlas.py` | Empaqueta `tiles/` en atlas + `tile_atlas_generated.rs` |
 | `scripts/descargar_sonidos.sh` | Descarga OpenSFX a `assets/opensfx/` |
 | `scripts/fetch-openttd-reference.sh` | Clona el código fuente de OpenTTD en `reference/` |
 

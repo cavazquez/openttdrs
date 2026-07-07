@@ -31,6 +31,12 @@ target
 !/assets/music/
 /assets/music/*
 !/assets/music/*.ogg
+# Texture atlas empaquetado (gen_tile_atlas.py); PNGs versionados para jugar sin descargar tiles/
+!/assets/opengfx/
+/assets/opengfx/*
+!/assets/opengfx/atlas/
+/assets/opengfx/atlas/*
+!/assets/opengfx/atlas/*.png
 /assets/maps/*.ottdmap
 /.downloads/
 

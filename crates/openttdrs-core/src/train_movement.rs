@@ -265,12 +265,12 @@ pub fn track_bit_for_movement(enter_diag: u8, track_bits: u8) -> Option<u8> {
 
 /// Sub-tesela en vía según `_vehicle_subcoord` + `_fractcoords_behind`.
 #[must_use]
-pub fn train_subtile_on_rail(enter_diag: u8, track_bits: u8, progress: u8) -> Option<(f32, f32)> {
+pub fn train_subtile_on_rail(enter_diag: u8, track_bits: u8, progress: f32) -> Option<(f32, f32)> {
     let bit = track_bit_for_movement(enter_diag, track_bits)?;
     let ti = rail_track_index(bit)?;
     let sub = VEHICLE_SUBCOORD[diag_dir_index(enter_diag)][ti]?;
     let (bx, by) = FRACTCOORDS_BEHIND[diag_dir_index(enter_diag)];
-    let t = f32::from(progress) / 255.0;
+    let t = (progress / 255.0).clamp(0.0, 1.0);
     let x0 = f32::from(sub.x);
     let y0 = f32::from(sub.y);
     Some((x0 + (f32::from(bx) - x0) * t, y0 + (f32::from(by) - y0) * t))
@@ -278,11 +278,11 @@ pub fn train_subtile_on_rail(enter_diag: u8, track_bits: u8, progress: u8) -> Op
 
 /// Dirección de sprite en vía (entrada en curva vs salida recta).
 #[must_use]
-pub fn train_render_dir_on_rail(enter_diag: u8, track_bits: u8, progress: u8) -> Option<u8> {
+pub fn train_render_dir_on_rail(enter_diag: u8, track_bits: u8, progress: f32) -> Option<u8> {
     let bit = track_bit_for_movement(enter_diag, track_bits)?;
     let ti = rail_track_index(bit)?;
     let sub = VEHICLE_SUBCOORD[diag_dir_index(enter_diag)][ti]?;
-    if progress < 128 {
+    if progress < 128.0 {
         Some(sub.dir)
     } else {
         Some(enter_diag)
@@ -302,11 +302,11 @@ pub const fn train_depot_facing(mouth: u8) -> u8 {
 
 /// Sub-tesela dentro del depósito: de `_fractcoords_behind` a `_fractcoords_enter`.
 #[must_use]
-pub fn train_depot_subtile(mouth: u8, progress: u8) -> (f32, f32) {
+pub fn train_depot_subtile(mouth: u8, progress: f32) -> (f32, f32) {
     let idx = diag_dir_index(train_depot_facing(mouth));
     let (bx, by) = FRACTCOORDS_BEHIND[idx];
     let (ex, ey) = FRACTCOORDS_ENTER[idx];
-    let t = f32::from(progress) / 255.0;
+    let t = (progress / 255.0).clamp(0.0, 1.0);
     (
         f32::from(bx) + (f32::from(ex) - f32::from(bx)) * t,
         f32::from(by) + (f32::from(ey) - f32::from(by)) * t,
@@ -330,8 +330,8 @@ mod tests {
     fn train_subtile_on_upper_curve_moves_diagonally() {
         use super::train_subtile_on_rail;
         // NE + LEFT: entrada válida en `_vehicle_subcoord` (15,7) → (15,8).
-        let (x0, y0) = train_subtile_on_rail(DIR_NE, 0x10, 0).expect("NE left");
-        let (_x1, y1) = train_subtile_on_rail(DIR_NE, 0x10, 255).expect("NE left end");
+        let (x0, y0) = train_subtile_on_rail(DIR_NE, 0x10, 0.0).expect("NE left");
+        let (_x1, y1) = train_subtile_on_rail(DIR_NE, 0x10, 255.0).expect("NE left end");
         assert!((x0 - 15.0).abs() < 0.1 && (y0 - 7.0).abs() < 0.1);
         assert!((y1 - y0).abs() > 0.5, "debe avanzar en Y por la curva");
     }
@@ -340,7 +340,7 @@ mod tests {
     fn track_bit_on_depot_junction_picks_valid_subcoord() {
         use crate::DIR_SW;
         assert_eq!(track_bit_for_movement(DIR_SW, 0x29), Some(0x01));
-        let sub = train_subtile_on_rail(DIR_SW, 0x29, 128).expect("SW on X|LOWER|RIGHT");
+        let sub = train_subtile_on_rail(DIR_SW, 0x29, 128.0).expect("SW on X|LOWER|RIGHT");
         assert!((sub.0 - 0.0).abs() < 0.1);
     }
 
@@ -348,7 +348,7 @@ mod tests {
     fn train_depot_subtile_ends_at_enter_fractcoord() {
         use super::{FRACTCOORDS_ENTER, train_depot_subtile};
         let mouth = 3; // NW
-        let (x, y) = train_depot_subtile(mouth, 255);
+        let (x, y) = train_depot_subtile(mouth, 255.0);
         assert_eq!(
             (x, y),
             (
@@ -356,7 +356,7 @@ mod tests {
                 f32::from(FRACTCOORDS_ENTER[3].1)
             )
         );
-        let (x0, y0) = train_depot_subtile(mouth, 0);
+        let (x0, y0) = train_depot_subtile(mouth, 0.0);
         assert_eq!((x0, y0), (8.0, 15.0));
     }
 

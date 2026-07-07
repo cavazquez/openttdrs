@@ -81,8 +81,8 @@ fn drive_data_0_matches_rust_straight_ne_lane() {
         assert!((y - 5.0).abs() < f32::EPSILON, "frame {i}");
     }
     // La recta NE del render Rust interpola exactamente esos extremos.
-    assert_eq!(straight_subtile(DIR_NE, 0), (15.0, 5.0));
-    assert_eq!(straight_subtile(DIR_NE, 255), (0.0, 5.0));
+    assert_eq!(straight_subtile(DIR_NE, 0.0), (15.0, 5.0));
+    assert_eq!(straight_subtile(DIR_NE, 255.0), (0.0, 5.0));
 }
 
 #[test]

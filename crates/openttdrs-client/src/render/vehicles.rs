@@ -31,7 +31,8 @@ impl Plugin for VehicleRenderPlugin {
             .add_systems(OnEnter(ClientScreen::InGame), rebuild_vehicle_index)
             .add_systems(
                 Update,
-                update_vehicles
+                (crate::simulation::sync_tick_alpha, update_vehicles)
+                    .chain()
                     .in_set(UpdateSet::Visuals)
                     .run_if(in_state(ClientScreen::InGame)),
             );

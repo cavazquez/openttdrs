@@ -448,9 +448,9 @@ mod world_pos_to_tile_tests {
     fn road_vehicle_sw_subtile_uses_openrtd_lane_y9() {
         use openttdrs_core::{DIR_SW, straight_subtile};
 
-        let (x0, y0) = straight_subtile(DIR_SW, 0);
+        let (x0, y0) = straight_subtile(DIR_SW, 0.0);
         assert_eq!((x0, y0), (0.0, 9.0));
-        let (x1, y1) = straight_subtile(DIR_SW, 255);
+        let (x1, y1) = straight_subtile(DIR_SW, 255.0);
         assert_eq!((x1, y1), (15.0, 9.0));
 
         let exit = super::road_vehicle_tile_anchor(5, 6, x1, y1, 0.0);
@@ -466,7 +466,7 @@ mod world_pos_to_tile_tests {
     fn road_vehicle_sw_lane_near_tile_center_mid_tile() {
         use openttdrs_core::{DIR_SW, straight_subtile};
 
-        let (sub_x, sub_y) = straight_subtile(DIR_SW, 128);
+        let (sub_x, sub_y) = straight_subtile(DIR_SW, 128.0);
         assert!((sub_x - 7.5).abs() < 0.1);
         assert_eq!(sub_y, 9.0);
         let lane = super::road_vehicle_tile_anchor(5, 6, sub_x, sub_y, 0.0);
@@ -482,8 +482,8 @@ mod world_pos_to_tile_tests {
     fn road_vehicle_ne_subtile_moves_along_y5() {
         use openttdrs_core::{DIR_NE, straight_subtile};
 
-        let start = straight_subtile(DIR_NE, 0);
-        let end = straight_subtile(DIR_NE, 255);
+        let start = straight_subtile(DIR_NE, 0.0);
+        let end = straight_subtile(DIR_NE, 255.0);
         assert_eq!(start, (15.0, 5.0));
         assert_eq!(end, (0.0, 5.0));
     }

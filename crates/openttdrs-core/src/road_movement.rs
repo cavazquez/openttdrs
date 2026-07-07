@@ -230,20 +230,22 @@ pub fn train_subtile_direction(v: &Vehicle) -> VehicleDirection {
 
 fn train_rail_subtile(map: &Map, v: &Vehicle, pose: VehiclePose) -> (f32, f32) {
     let enter = train_subtile_direction(v);
+    let progress = pose.movement_progress_f();
     if let Some(tile) = map.get(pose.pos)
         && tile.kind == TileKind::Rail
-        && let Some(sub) = train_subtile_on_rail(enter, tile.m5, pose.progress)
+        && let Some(sub) = train_subtile_on_rail(enter, tile.m5, progress)
     {
         return sub;
     }
-    train_straight_subtile(enter, pose.progress)
+    train_straight_subtile(enter, progress)
 }
 
 fn train_render_direction_with_map(map: &Map, v: &Vehicle, pose: VehiclePose) -> VehicleDirection {
     let enter = train_subtile_direction(v);
+    let progress = pose.movement_progress_f();
     if let Some(tile) = map.get(pose.pos)
         && tile.kind == TileKind::Rail
-        && let Some(dir) = train_render_dir_on_rail(enter, tile.m5, pose.progress)
+        && let Some(dir) = train_render_dir_on_rail(enter, tile.m5, progress)
     {
         return dir;
     }
@@ -255,17 +257,17 @@ fn train_subtile_with_map(v: &Vehicle, pose: VehiclePose, map: Option<&Map>) -> 
         && vehicle_in_depot(map, pose.pos)
         && let Some(mouth) = rail_depot_mouth_dir(map, pose.pos)
     {
-        return train_depot_subtile(mouth, pose.progress);
+        return train_depot_subtile(mouth, pose.movement_progress_f());
     }
     if let Some(map) = map {
         return train_rail_subtile(map, v, pose);
     }
-    train_straight_subtile(train_subtile_direction(v), pose.progress)
+    train_straight_subtile(train_subtile_direction(v), pose.movement_progress_f())
 }
 
 #[must_use]
-pub fn train_straight_subtile(dir: VehicleDirection, progress: u8) -> (f32, f32) {
-    let t = f32::from(progress) / 255.0;
+pub fn train_straight_subtile(dir: VehicleDirection, progress: f32) -> (f32, f32) {
+    let t = (progress / 255.0).clamp(0.0, 1.0);
     match dir {
         DIR_SW | DIR_E => (15.0 * t, TRAIN_TRACK_CENTER),
         DIR_NE | DIR_W => (15.0 * (1.0 - t), TRAIN_TRACK_CENTER),
@@ -276,15 +278,20 @@ pub fn train_straight_subtile(dir: VehicleDirection, progress: u8) -> (f32, f32)
 }
 
 #[must_use]
-pub fn straight_subtile(dir: VehicleDirection, progress: u8) -> (f32, f32) {
+pub fn straight_subtile(dir: VehicleDirection, progress: f32) -> (f32, f32) {
     let i = dir.min(7) as usize;
     let (x0, y0, x1, y1) = STRAIGHT[i];
-    let t = f32::from(progress) / 255.0;
+    let t = (progress / 255.0).clamp(0.0, 1.0);
     (x0 + (x1 - x0) * t, y0 + (y1 - y0) * t)
 }
 
 #[must_use]
-fn sample_curve(points: &[SubTile], progress: u8) -> (f32, f32) {
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn sample_curve(points: &[SubTile], progress: f32) -> (f32, f32) {
     let n = points.len();
     if n == 0 {
         return (8.0, 8.0);
@@ -292,14 +299,15 @@ fn sample_curve(points: &[SubTile], progress: u8) -> (f32, f32) {
     if n == 1 {
         return points[0];
     }
-    // Curvas OpenTTD: ≤16 puntos; `progress` 0..=255 recorre índice 0..=n-1.
-    let last = u8::try_from(n - 1).unwrap_or(u8::MAX);
-    let scaled = u16::from(progress) * u16::from(last);
-    let i = (scaled / 255).min(u16::from(last));
-    let j = i.saturating_add(1).min(u16::from(last));
-    let frac = f32::from(scaled % 255) / 255.0;
-    let (x0, y0) = points[usize::from(i)];
-    let (x1, y1) = points[usize::from(j)];
+    // Curvas OpenTTD: ≤16 puntos; `progress` 0–255 recorre índice 0..=n-1.
+    let prog = progress.clamp(0.0, 255.0);
+    let last = (n - 1) as f32;
+    let scaled = prog / 255.0 * last;
+    let i = scaled.floor() as usize;
+    let j = (i + 1).min(n - 1);
+    let frac = scaled - i as f32;
+    let (x0, y0) = points[i];
+    let (x1, y1) = points[j];
     (x0 + (x1 - x0) * frac, y0 + (y1 - y0) * frac)
 }
 
@@ -669,11 +677,14 @@ pub fn parked_inside_bay(v: &Vehicle, pos: TileCoord) -> bool {
 }
 
 /// Posición sub-tesela usada para dibujo (puede diferir del estado de sim tras extrapolar).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct VehiclePose {
     pub pos: TileCoord,
     pub progress: u8,
+    /// Progreso sub-tesela continuo (0–255) para interpolación de render.
+    pub progress_f: f32,
     pub depart_turn: u8,
+    pub depart_turn_f: f32,
     /// Índice en `Vehicle::path` del siguiente paso desde `pos`.
     pub path_index: usize,
 }
@@ -684,9 +695,28 @@ impl VehiclePose {
         Self {
             pos: v.pos,
             progress: v.progress,
+            progress_f: f32::from(v.progress),
             depart_turn: v.depart_turn,
+            depart_turn_f: f32::from(v.depart_turn),
             path_index: 0,
         }
+    }
+
+    #[must_use]
+    fn movement_progress_f(self) -> f32 {
+        if self.depart_turn_f > 0.0 {
+            self.depart_turn_f
+        } else {
+            self.progress_f
+        }
+    }
+
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    fn sync_discrete_fields(&mut self) {
+        self.progress_f = self.progress_f.clamp(0.0, 255.0);
+        self.depart_turn_f = self.depart_turn_f.clamp(0.0, 255.0);
+        self.progress = self.progress_f.round() as u8;
+        self.depart_turn = self.depart_turn_f.round() as u8;
     }
 }
 
@@ -758,20 +788,23 @@ fn virtual_advance_tile(
 /// Pose un poco detrás del vehículo para emitir humo/chispas (cola en la vía).
 #[must_use]
 pub fn retreat_vehicle_pose(v: &Vehicle, pose: VehiclePose, back: u8) -> VehiclePose {
-    if back == 0 || pose.depart_turn > 0 {
+    if back == 0 || pose.depart_turn_f > 0.0 {
         return pose;
     }
+    let back_f = f32::from(back);
     let mut p = pose;
-    if p.progress >= back {
-        p.progress -= back;
+    if p.progress_f >= back_f {
+        p.progress_f -= back_f;
+        p.sync_discrete_fields();
         return p;
     }
-    let deficit = back - p.progress;
-    p.progress = 0;
+    let deficit = back_f - p.progress_f;
+    p.progress_f = 0.0;
     if let Some((prev, idx)) = previous_tile_on_route(v, p.pos, p.path_index) {
         p.pos = prev;
         p.path_index = idx;
-        p.progress = 255u8.saturating_sub(deficit);
+        p.progress_f = 255.0 - deficit;
+        p.sync_discrete_fields();
     }
     p
 }
@@ -806,64 +839,55 @@ fn previous_tile_on_route(
 #[must_use]
 pub fn extrapolate_vehicle_pose(v: &Vehicle, alpha: f32) -> VehiclePose {
     let mut pose = VehiclePose::from_vehicle(v);
+    let alpha = alpha.clamp(0.0, 1.0);
     if alpha <= 0.0 || !v.running || v.cur_speed == 0 {
         return pose;
     }
-    let step = v.progress_step();
-    if step == 0 {
+    let step = f32::from(v.progress_step());
+    if step <= f32::EPSILON {
         return pose;
     }
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let mut budget = (f32::from(step) * alpha.clamp(0.0, 1.0)) as u16;
-    if budget == 0 {
+    let mut delta = step * alpha;
+    if delta <= f32::EPSILON {
         return pose;
     }
 
-    let mut path_index = 0_usize;
+    let mut path_index = pose.path_index;
 
-    if pose.depart_turn > 0 {
-        let next = u16::from(pose.depart_turn).saturating_add(budget);
-        if next < 255 {
-            pose.depart_turn = u8::try_from(next).unwrap_or(255);
+    if pose.depart_turn_f > 0.0 {
+        pose.depart_turn_f += delta;
+        if pose.depart_turn_f < 255.0 {
+            pose.sync_discrete_fields();
             pose.path_index = path_index;
             return pose;
         }
-        budget = next - 255;
-        pose.depart_turn = 0;
+        delta = pose.depart_turn_f - 255.0;
+        pose.depart_turn_f = 0.0;
+        pose.progress_f = 0.0;
         pose.progress = 0;
     }
 
-    if pose.progress == 255 && needs_depart_turnaround_at(v, pose.pos, path_index) && budget > 0 {
-        pose.depart_turn = u8::try_from(budget.min(u16::from(u8::MAX))).unwrap_or(u8::MAX);
+    if pose.progress_f >= 255.0 && needs_depart_turnaround_at(v, pose.pos, path_index) {
+        pose.depart_turn_f = delta;
         pose.path_index = path_index;
+        pose.sync_discrete_fields();
         return pose;
     }
 
-    let mut progress = u16::from(pose.progress);
-    loop {
-        progress = progress.saturating_add(budget);
-        if progress < 255 {
-            pose.progress = u8::try_from(progress).unwrap_or(254);
-            pose.path_index = path_index;
-            return pose;
-        }
-        progress -= 255;
+    pose.progress_f += delta;
+    while pose.progress_f >= 255.0 {
+        pose.progress_f -= 255.0;
         let Some((next, next_index)) = virtual_advance_tile(v, pose.pos, path_index) else {
-            pose.progress = 255;
-            pose.path_index = path_index;
-            return pose;
+            pose.progress_f = 255.0;
+            break;
         };
         pose.pos = next;
         path_index = next_index;
-        pose.progress = 0;
-        if progress > 0 {
-            budget = progress;
-            progress = 0;
-            continue;
-        }
-        pose.path_index = path_index;
-        return pose;
     }
+
+    pose.path_index = path_index;
+    pose.sync_discrete_fields();
+    pose
 }
 
 /// Progreso sub-tesela para dibujo (permite extrapolación visual entre ticks de sim).
@@ -886,7 +910,9 @@ pub fn vehicle_subtile_with_progress(v: &Vehicle, progress: u8) -> (f32, f32) {
         VehiclePose {
             pos: v.pos,
             progress,
+            progress_f: f32::from(progress),
             depart_turn: v.depart_turn,
+            depart_turn_f: f32::from(v.depart_turn),
             path_index: 0,
         },
     )
@@ -913,16 +939,16 @@ fn bay_subtile(v: &Vehicle, pose: VehiclePose) -> Option<SubTile> {
     // Saliendo: hay objetivo y el rumbo ya no exige media vuelta (la dirección
     // se invirtió al completar el giro). Antes/durante el giro sigue parado.
     let exiting = has_target
-        && pose.depart_turn == 0
+        && pose.depart_turn_f <= 0.0
         && !needs_depart_turnaround_at(v, pose.pos, pose.path_index);
     let table = bay_station_table(bay_inbound_direction(v, pose, exiting), true)?;
     if exiting {
         // Lazo de retorno hacia la boca (retraza el carril con rumbo opuesto).
-        return Some(sample_curve(&table.points[table.stop..], pose.progress));
+        return Some(sample_curve(&table.points[table.stop..], pose.progress_f));
     }
-    if pose.progress < 255 && !has_target {
+    if pose.progress_f < 255.0 && !has_target {
         // Entrando: de la boca al punto de parada.
-        return Some(sample_curve(&table.points[..=table.stop], pose.progress));
+        return Some(sample_curve(&table.points[..=table.stop], pose.progress_f));
     }
     // Detenido en el stop frame: cargando, esperando o girando en el vértice
     // del lazo (en OpenTTD el cambio de sentido en la dársena es instantáneo).
@@ -950,23 +976,23 @@ pub fn vehicle_subtile_at_with_map(
     {
         return subtile;
     }
-    if pose.depart_turn > 0
+    if pose.depart_turn_f > 0.0
         && let Some(curve) = depart_u_turn_curve(v.direction)
     {
-        return sample_curve(curve, pose.depart_turn);
+        return sample_curve(curve, pose.depart_turn_f);
     }
-    if pose.progress == 255
+    if pose.progress_f >= 255.0
         && movement_target_at(v, pose.pos, pose.path_index).is_none()
         && pose.pos == v.dest
     {
-        return straight_subtile(v.direction, 255);
+        return straight_subtile(v.direction, 255.0);
     }
     if let Some((entry, exit)) = road_turn_entry_exit_at(v, pose.pos, pose.path_index)
         && let Some(curve) = turn_curve(entry, exit)
     {
-        return sample_curve(curve, pose.progress);
+        return sample_curve(curve, pose.progress_f);
     }
-    let dir = if pose.progress == 255
+    let dir = if pose.progress_f >= 255.0
         && movement_target_at(v, pose.pos, pose.path_index).is_some()
         && needs_depart_turnaround_at(v, pose.pos, pose.path_index)
     {
@@ -974,7 +1000,7 @@ pub fn vehicle_subtile_at_with_map(
     } else {
         movement_direction_at(v, pose.pos, pose.path_index)
     };
-    straight_subtile(dir, pose.progress)
+    straight_subtile(dir, pose.progress_f)
 }
 
 fn movement_direction_at(v: &Vehicle, pos: TileCoord, path_index: usize) -> VehicleDirection {
@@ -1010,7 +1036,9 @@ pub fn vehicle_render_direction(v: &Vehicle, progress: u8) -> VehicleDirection {
         VehiclePose {
             pos: v.pos,
             progress,
+            progress_f: f32::from(progress),
             depart_turn: v.depart_turn,
+            depart_turn_f: f32::from(v.depart_turn),
             path_index: 0,
         },
     )
@@ -1051,14 +1079,16 @@ fn direction_from_subtile_delta(dx: f32, dy: f32) -> Option<VehicleDirection> {
 /// de la trayectoria `_rv_station_*` (los lazos incluyen tramos en S que el
 /// rumbo lógico de entrada no captura).
 fn bay_render_direction(v: &Vehicle, pose: VehiclePose) -> Option<VehicleDirection> {
-    const PROBE: u8 = 16;
-    let (a, b) = if pose.progress >= 255 - PROBE {
+    const PROBE: f32 = 16.0;
+    let (a, b) = if pose.progress_f >= 255.0 - PROBE {
         let mut before = pose;
-        before.progress = pose.progress.saturating_sub(PROBE);
+        before.progress_f = (pose.progress_f - PROBE).max(0.0);
+        before.sync_discrete_fields();
         (bay_subtile(v, before)?, bay_subtile(v, pose)?)
     } else {
         let mut after = pose;
-        after.progress = pose.progress.saturating_add(PROBE);
+        after.progress_f = (pose.progress_f + PROBE).min(255.0);
+        after.sync_discrete_fields();
         (bay_subtile(v, pose)?, bay_subtile(v, after)?)
     };
     direction_from_subtile_delta(b.0 - a.0, b.1 - a.1)
@@ -1091,16 +1121,16 @@ pub fn vehicle_render_direction_at_with_map(
         return train_subtile_direction(v);
     }
     if parked_inside_bay(v, pose.pos)
-        && pose.depart_turn == 0
-        && pose.progress < 255
+        && pose.depart_turn_f <= 0.0
+        && pose.progress_f < 255.0
         && let Some(dir) = bay_render_direction(v, pose)
     {
         return dir;
     }
-    if pose.depart_turn > 0 {
+    if pose.depart_turn_f > 0.0 {
         let outbound = movement_target_at(v, pose.pos, pose.path_index)
             .map_or(v.direction, |next| direction_from_tile_step(pose.pos, next));
-        if pose.progress < 128 {
+        if pose.depart_turn_f < 128.0 {
             return v.direction;
         }
         return turn_cardinal_for_render(v.direction, outbound);
@@ -1109,7 +1139,7 @@ pub fn vehicle_render_direction_at_with_map(
         return v.direction;
     };
     let entry = direction_from_tile_step(pose.pos, next);
-    if pose.progress < 128 {
+    if pose.progress_f < 128.0 {
         return entry;
     }
     if let Some(after) = v.path.get(pose.path_index + 1) {
@@ -1168,8 +1198,8 @@ mod tests {
         let v = ne_to_se_turn_vehicle();
         let (entry, exit) = road_turn_entry_exit(&v).unwrap();
         let curve = turn_curve(entry, exit).unwrap();
-        let start = sample_curve(curve, 0);
-        let end = sample_curve(curve, 255);
+        let start = sample_curve(curve, 0.0);
+        let end = sample_curve(curve, 255.0);
         assert_eq!(start, curve[0]);
         assert_eq!(end, curve[curve.len() - 1]);
     }
@@ -1190,14 +1220,14 @@ mod tests {
         v.progress = 200;
         assert!(road_turn_entry_exit(&v).is_none());
         let (x, y) = vehicle_subtile(&v);
-        let (sx, sy) = straight_subtile(DIR_SW, 200);
+        let (sx, sy) = straight_subtile(DIR_SW, 200.0);
         assert_eq!((x, y), (sx, sy));
     }
 
     #[test]
     fn train_uses_center_track_not_road_lanes() {
-        let (tx, ty) = train_straight_subtile(DIR_SW, 128);
-        let (rx, ry) = straight_subtile(DIR_SW, 128);
+        let (tx, ty) = train_straight_subtile(DIR_SW, 128.0);
+        let (rx, ry) = straight_subtile(DIR_SW, 128.0);
         assert!(
             (ty - TRAIN_TRACK_CENTER).abs() < 0.1,
             "eje horizontal por el centro de la vía"
@@ -1218,7 +1248,7 @@ mod tests {
         v.direction = DIR_NW;
         v.progress = 255;
         let parked = vehicle_subtile_with_progress(&v, 255);
-        let inbound_end = straight_subtile(DIR_NW, 255);
+        let inbound_end = straight_subtile(DIR_NW, 255.0);
         assert_eq!(parked, inbound_end);
     }
 

@@ -4,7 +4,6 @@ use bevy::prelude::*;
 
 use openttdrs_core::SIM_TICKS_PER_SECOND;
 
-use crate::bevy_app::UpdateSet;
 use crate::render::{
     MapTileChunk, RemapMapVisualsPending, VehicleIndex, large_map_viewport_cull_enabled,
 };
@@ -35,12 +34,6 @@ impl Plugin for SimulationPlugin {
                 FixedUpdate,
                 (step_sim, flag_map_tile_dirty_remap)
                     .chain()
-                    .run_if(in_state(ClientScreen::InGame)),
-            )
-            .add_systems(
-                Update,
-                sync_tick_alpha
-                    .in_set(UpdateSet::Sim)
                     .run_if(in_state(ClientScreen::InGame)),
             );
     }
@@ -87,7 +80,7 @@ fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVis
 }
 
 /// Interpolación render: fracción del siguiente tick fijo.
-fn sync_tick_alpha(
+pub(crate) fn sync_tick_alpha(
     hud: Res<SimHudControls>,
     fixed_time: Res<Time<Fixed>>,
     mut sim_clock: ResMut<SimClock>,

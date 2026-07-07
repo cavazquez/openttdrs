@@ -310,7 +310,7 @@ fn vehicle_tint() -> Color {
 }
 
 fn vehicle_is_hidden_in_depot(sim: &SimWorld, v: &Vehicle) -> bool {
-    !v.running && openttdrs_core::vehicle_in_depot(&sim.state.map, v.pos)
+    openttdrs_core::vehicle_hidden_on_map(&sim.state.map, v)
 }
 
 /// Radio de picking en unidades mundo (clic sobre el sprite del vehículo).

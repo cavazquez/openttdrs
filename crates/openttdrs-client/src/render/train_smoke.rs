@@ -1,8 +1,13 @@
 //! Humo/chispas de locomotoras (`EV_STEAM_SMOKE`, `EV_DIESEL_SMOKE`, `EV_ELECTRIC_SPARK`).
 
+use std::collections::HashMap;
+
 use bevy::prelude::*;
 
-use openttdrs_core::{VehicleKind, default_engine_id, extrapolate_vehicle_pose, train_smoke_kind};
+use openttdrs_core::{
+    VehicleKind, default_engine_id, extrapolate_vehicle_pose, retreat_vehicle_pose,
+    train_smoke_kind,
+};
 
 use crate::bevy_app::UpdateSet;
 use crate::render::effect_vehicle::{
@@ -13,13 +18,18 @@ use crate::render::{MapVisualLayer, vehicles::vehicle_draw_anchor_from_pose};
 use crate::simulation::SimClock;
 use crate::state::{ClientScreen, SimWorld};
 
+/// Intervalo entre partículas de humo (segundos de reloj visual).
+const TRAIN_SMOKE_SPAWN_INTERVAL_SECS: f32 = 0.11;
+/// Desplazamiento sub-tesela hacia atrás respecto a la locomotora (cola de humo).
+const TRAIN_SMOKE_EMIT_BACK_PROGRESS: u8 = 28;
+
 pub(crate) struct TrainSmokePlugin;
 
 impl Plugin for TrainSmokePlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.init_resource::<TrainSmokeSpawnClock>().add_systems(
             Update,
-            (spawn_train_smoke, animate_train_smoke)
+            (spawn_train_smoke, cull_train_smoke, animate_train_smoke)
                 .chain()
                 .in_set(UpdateSet::Visuals)
                 .run_if(in_state(ClientScreen::InGame)),
@@ -27,8 +37,14 @@ impl Plugin for TrainSmokePlugin {
     }
 }
 
+#[derive(Resource, Default)]
+struct TrainSmokeSpawnClock {
+    last_spawn: HashMap<u32, f32>,
+}
+
 #[derive(Component)]
 pub(crate) struct TrainSmokeEffect {
+    vehicle_id: u32,
     started: f32,
     phase: usize,
     rise: f32,
@@ -58,6 +74,7 @@ fn spawn_train_smoke(
     sim_clock: Res<SimClock>,
     frames: Res<EffectVehicleFrames>,
     time: Res<Time>,
+    mut spawn_clock: ResMut<TrainSmokeSpawnClock>,
     mut commands: Commands,
     existing: Query<&TrainSmokeEffect>,
 ) {
@@ -71,10 +88,15 @@ fn spawn_train_smoke(
     let tick_alpha = sim_clock.tick_alpha;
     let elapsed = time.elapsed_secs();
     for v in &sim.state.vehicles {
-        if v.kind != VehicleKind::Train || !v.running || v.cur_speed == 0 {
+        if v.kind != VehicleKind::Train
+            || openttdrs_core::vehicle_hidden_on_map(map, v)
+            || !v.running
+            || v.cur_speed == 0
+        {
             continue;
         }
-        if !(u64::from(v.id) + sim.state.tick.get()).is_multiple_of(3) {
+        let last = spawn_clock.last_spawn.get(&v.id).copied().unwrap_or(-1.0);
+        if elapsed - last < TRAIN_SMOKE_SPAWN_INTERVAL_SECS {
             continue;
         }
         let engine_id = v
@@ -90,7 +112,11 @@ fn spawn_train_smoke(
         if effect_set.frames.is_empty() {
             continue;
         }
-        let pose = extrapolate_vehicle_pose(v, tick_alpha);
+        let pose = retreat_vehicle_pose(
+            v,
+            extrapolate_vehicle_pose(v, tick_alpha),
+            TRAIN_SMOKE_EMIT_BACK_PROGRESS,
+        );
         let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(v, map, pose);
         let rise = match set_kind {
             TrainSmokeSet::Steam => 6.0,
@@ -107,9 +133,11 @@ fn spawn_train_smoke(
             sprite.color = Color::srgb(0.85, 0.92, 1.0);
         }
         let pos = effect_overlay_pos(anchor, frame, &effect_set, base_z, (tx, ty), 0.38, 0.0);
+        spawn_clock.last_spawn.insert(v.id, elapsed);
         commands.spawn((
             MapVisualLayer,
             TrainSmokeEffect {
+                vehicle_id: v.id,
                 started: elapsed,
                 phase,
                 rise,
@@ -122,6 +150,29 @@ fn spawn_train_smoke(
             Transform::from_translation(pos),
             Visibility::Visible,
         ));
+    }
+}
+
+fn cull_train_smoke(
+    sim: Res<SimWorld>,
+    mut spawn_clock: ResMut<TrainSmokeSpawnClock>,
+    q: Query<(Entity, &TrainSmokeEffect)>,
+    mut commands: Commands,
+) {
+    let map = &sim.state.map;
+    for (entity, smoke) in &q {
+        let hide = sim
+            .state
+            .vehicles
+            .iter()
+            .find(|v| v.id == smoke.vehicle_id)
+            .is_none_or(|v| {
+                openttdrs_core::vehicle_hidden_on_map(map, v) || !v.running || v.cur_speed == 0
+            });
+        if hide {
+            spawn_clock.last_spawn.remove(&smoke.vehicle_id);
+            commands.entity(entity).despawn();
+        }
     }
 }
 

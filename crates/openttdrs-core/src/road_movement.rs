@@ -755,6 +755,53 @@ fn virtual_advance_tile(
     ))
 }
 
+/// Pose un poco detrás del vehículo para emitir humo/chispas (cola en la vía).
+#[must_use]
+pub fn retreat_vehicle_pose(v: &Vehicle, pose: VehiclePose, back: u8) -> VehiclePose {
+    if back == 0 || pose.depart_turn > 0 {
+        return pose;
+    }
+    let mut p = pose;
+    if p.progress >= back {
+        p.progress -= back;
+        return p;
+    }
+    let deficit = back - p.progress;
+    p.progress = 0;
+    if let Some((prev, idx)) = previous_tile_on_route(v, p.pos, p.path_index) {
+        p.pos = prev;
+        p.path_index = idx;
+        p.progress = 255u8.saturating_sub(deficit);
+    }
+    p
+}
+
+fn previous_tile_on_route(
+    v: &Vehicle,
+    pos: TileCoord,
+    path_index: usize,
+) -> Option<(TileCoord, usize)> {
+    if path_index > 0 {
+        return v.path.get(path_index - 1).map(|&c| (c, path_index - 1));
+    }
+    for (dx, dy) in [
+        (-1_i32, 0),
+        (1, 0),
+        (0, -1),
+        (0, 1),
+        (-1, -1),
+        (1, 1),
+        (-1, 1),
+        (1, -1),
+    ] {
+        let prev = TileCoord::new(pos.x - dx, pos.y - dy);
+        if movement_target_at(v, prev, path_index) == Some(pos) {
+            return Some((prev, path_index));
+        }
+    }
+    None
+}
+
 /// Extrapola posición sub-tesela entre ticks de sim (atraviesa límites de tesela sin saltos).
 #[must_use]
 pub fn extrapolate_vehicle_pose(v: &Vehicle, alpha: f32) -> VehiclePose {

@@ -134,13 +134,17 @@ pub use rail_signals::{
     signal_on_track_mask, signal_placement_for_facing, signal_placement_for_track,
     signal_type_for_track, tracks_overlap, valid_signal_facings_track,
 };
-pub use refit::{next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_in_depot};
+pub use refit::{
+    next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_hidden_on_map,
+    vehicle_in_depot,
+};
 pub use road_movement::{
     BayStationTable, VehiclePose, bay_station_table, extrapolate_vehicle_pose,
-    road_turn_entry_exit, straight_subtile, train_straight_subtile, train_subtile_direction,
-    turn_curve_points, vehicle_render_direction, vehicle_render_direction_at,
-    vehicle_render_direction_at_with_map, vehicle_render_progress, vehicle_subtile,
-    vehicle_subtile_at, vehicle_subtile_at_with_map, vehicle_subtile_with_progress,
+    retreat_vehicle_pose, road_turn_entry_exit, straight_subtile, train_straight_subtile,
+    train_subtile_direction, turn_curve_points, vehicle_render_direction,
+    vehicle_render_direction_at, vehicle_render_direction_at_with_map, vehicle_render_progress,
+    vehicle_subtile, vehicle_subtile_at, vehicle_subtile_at_with_map,
+    vehicle_subtile_with_progress,
 };
 pub use sav::{SavError, SavGame, SavIndustry, SavStation, SavVehicle, SavVehicleKind};
 pub use save::CURRENT_SAVE_VERSION;

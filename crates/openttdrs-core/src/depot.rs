@@ -42,6 +42,38 @@ pub fn rail_depot_mouth_dir(map: &Map, pos: TileCoord) -> Option<u8> {
         .map(|t| t.m5 & 0x03)
 }
 
+/// Tesela de vía contigua a la boca del depósito (entrada/salida).
+#[must_use]
+pub fn rail_depot_entrance_tile(map: &Map, depot_pos: TileCoord) -> Option<TileCoord> {
+    let mouth = rail_depot_mouth_dir(map, depot_pos)?;
+    let ((dx, dy), _) = match mouth & 0x03 {
+        0 => ((-1_i32, 0_i32), 0x01_u8),
+        1 => ((0_i32, 1_i32), 0x02_u8),
+        2 => ((1_i32, 0_i32), 0x01_u8),
+        _ => ((0_i32, -1_i32), 0x02_u8),
+    };
+    let c = TileCoord::new(depot_pos.x + dx, depot_pos.y + dy);
+    let (mw, mh) = map.dimensions();
+    if c.x < 0 || c.y < 0 || c.x >= mw.cast_signed() || c.y >= mh.cast_signed() {
+        return None;
+    }
+    Some(c)
+}
+
+/// Depósito ferroviario cuya boca es `entrance` (tesela de vía vecina).
+#[must_use]
+pub fn rail_depot_for_entrance_tile(map: &Map, entrance: TileCoord) -> Option<TileCoord> {
+    for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
+        let depot = TileCoord::new(entrance.x + dx, entrance.y + dy);
+        if map.get_kind(depot) == Some(TileKind::RailDepot)
+            && rail_depot_entrance_tile(map, depot) == Some(entrance)
+        {
+            return Some(depot);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {

@@ -1,0 +1,70 @@
+// Generado por scripts/gen_effect_vehicle_sprites.py — NO EDITAR A MANO.
+//
+// EffectVehicle: humo vapor/diésel, chispas eléctricas, explosión, avería.
+
+pub const DIESEL_SMOKE_FRAMES: usize = 6;
+
+/// (w, h, xrel, yrel) de `diesel_smoke_{i}.png`.
+pub static DIESEL_SMOKE_META: [(f32, f32, f32, f32); 6] = [
+    (4.0, 4.0, -2.0, -2.0),
+    (6.0, 6.0, -3.0, -3.0),
+    (8.0, 8.0, -4.0, -4.0),
+    (10.0, 10.0, -5.0, -5.0),
+    (12.0, 12.0, -6.0, -6.0),
+    (14.0, 14.0, -7.0, -7.0),
+];
+
+pub const STEAM_SMOKE_FRAMES: usize = 5;
+
+/// (w, h, xrel, yrel) de `steam_smoke_{i}.png`.
+pub static STEAM_SMOKE_META: [(f32, f32, f32, f32); 5] = [
+    (8.0, 8.0, -4.0, -4.0),
+    (10.0, 10.0, -5.0, -5.0),
+    (12.0, 12.0, -6.0, -6.0),
+    (14.0, 14.0, -7.0, -7.0),
+    (16.0, 16.0, -8.0, -8.0),
+];
+
+pub const ELECTRIC_SPARK_FRAMES: usize = 6;
+
+/// (w, h, xrel, yrel) de `electric_spark_{i}.png`.
+pub static ELECTRIC_SPARK_META: [(f32, f32, f32, f32); 6] = [
+    (3.0, 3.0, -1.0, -1.0),
+    (10.0, 8.0, -5.0, -4.0),
+    (17.0, 8.0, -9.0, -4.0),
+    (23.0, 12.0, -12.0, -5.0),
+    (27.0, 15.0, -14.0, -5.0),
+    (27.0, 15.0, -14.0, -5.0),
+];
+
+pub const EXPLOSION_LARGE_FRAMES: usize = 16;
+
+/// (w, h, xrel, yrel) de `explosion_large_{i}.png`.
+pub static EXPLOSION_LARGE_META: [(f32, f32, f32, f32); 16] = [
+    (23.0, 15.0, -12.0, -9.0),
+    (52.0, 27.0, -27.0, -20.0),
+    (58.0, 30.0, -29.0, -23.0),
+    (58.0, 31.0, -29.0, -23.0),
+    (50.0, 31.0, -25.0, -23.0),
+    (56.0, 39.0, -28.0, -32.0),
+    (55.0, 45.0, -27.0, -39.0),
+    (60.0, 55.0, -29.0, -49.0),
+    (59.0, 56.0, -29.0, -55.0),
+    (59.0, 60.0, -29.0, -65.0),
+    (62.0, 64.0, -30.0, -73.0),
+    (58.0, 61.0, -28.0, -76.0),
+    (61.0, 63.0, -29.0, -80.0),
+    (62.0, 61.0, -30.0, -82.0),
+    (63.0, 32.0, -31.0, -84.0),
+    (63.0, 30.0, -30.0, -85.0),
+];
+
+pub const BREAKDOWN_SMOKE_FRAMES: usize = 4;
+
+/// (w, h, xrel, yrel) de `breakdown_smoke_{i}.png`.
+pub static BREAKDOWN_SMOKE_META: [(f32, f32, f32, f32); 4] = [
+    (32.0, 32.0, 0.0, -31.0),
+    (31.0, 30.0, 0.0, -31.0),
+    (32.0, 32.0, 0.0, -31.0),
+    (30.0, 30.0, 0.0, -31.0),
+];

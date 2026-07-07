@@ -75,7 +75,7 @@ fn vehicle_layer(
     &vehicle_layers(v)[dir]
 }
 
-fn vehicle_draw_anchor_from_pose(
+pub(crate) fn vehicle_draw_anchor_from_pose(
     v: &Vehicle,
     map: &Map,
     pose: openttdrs_core::VehiclePose,

@@ -103,6 +103,17 @@ impl Map {
         (self.width, self.height)
     }
 
+    /// Teselas `MP_CLEAR` con `m5 == 0` eran el valor por defecto de [`Self::new_flat`],
+    /// no suelo desnudo explícito. Las pasa a hierba completa (`m5 = 3`).
+    pub fn migrate_legacy_clear_grass_m5(&mut self) {
+        const FULL_GRASS_M5: u8 = 3;
+        for tile in &mut self.tiles {
+            if tile.kind == TileKind::Grass && tile.mapt == 0 && tile.m5 == 0 {
+                tile.m5 = FULL_GRASS_M5;
+            }
+        }
+    }
+
     /// Cuenta extremos JGR (`tile_n` / `tile_s`) que caen en teselas `MP_TUNNELBRIDGE` del mapa.
     ///
     /// Devuelve `(coincidencias_norte, coincidencias_sur, total_registros)`.

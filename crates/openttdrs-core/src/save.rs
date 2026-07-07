@@ -23,7 +23,8 @@ use crate::GameState;
 /// v8: edad, grupos, lateness, autofill display, reglas extendidas.
 /// v9: pools de órdenes compartidas.
 /// v10: órdenes condicionales.
-pub const CURRENT_SAVE_VERSION: u32 = 10;
+/// v11: teselas `MP_CLEAR` con `m5 == 0` (valor por defecto) → hierba completa.
+pub const CURRENT_SAVE_VERSION: u32 = 11;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -119,6 +120,7 @@ pub fn load_from_str(text: &str) -> Result<GameState, SaveError> {
     } else {
         let mut state = GameState::load_json(text)?;
         crate::command::normalize_synthetic_rail_crossings(&mut state.map);
+        state.map.migrate_legacy_clear_grass_m5();
         Ok(state)
     }
 }
@@ -137,6 +139,7 @@ fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState,
             3 => migrate_state_v3_to_v4(&mut state),
             4 | 6 | 7 | 8 | 9 => {}
             5 => migrate_state_v5_to_v6(&mut state),
+            10 => migrate_state_v10_to_v11(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
@@ -225,6 +228,11 @@ fn migrate_state_v5_to_v6(state: &mut GameState) {
             })
             .collect();
     }
+}
+
+/// v11: `m5 == 0` en hierba `MP_CLEAR` era el default de `new_flat`, no suelo desnudo.
+fn migrate_state_v10_to_v11(state: &mut GameState) {
+    state.map.migrate_legacy_clear_grass_m5();
 }
 
 #[cfg(test)]

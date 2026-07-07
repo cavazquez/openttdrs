@@ -13,7 +13,15 @@ use crate::sprites::{
 #[derive(Clone, Resource)]
 pub(crate) struct WorldAssets {
     pub(crate) grass: AtlasSprite,
+    /// Hierba parcial (`terrain_grass_1_3.png`, densidad m5 & 0x3 == 1).
+    pub(crate) grass_one_third: AtlasSprite,
+    /// Hierba parcial (`terrain_grass_2_3.png`, densidad m5 & 0x3 == 2).
+    pub(crate) grass_two_third: AtlasSprite,
+    /// Suelo desnudo (`terrain_bare.png`, densidad m5 & 0x3 == 0).
+    pub(crate) bare: AtlasSprite,
     pub(crate) rough: AtlasSprite,
+    /// Variantes planas de suelo rocoso (`terrain_rocky_1/2.png`).
+    pub(crate) rocky: [AtlasSprite; 2],
     /// Suelo ártico plano (`terrain_snow_full.png`).
     pub(crate) snow: AtlasSprite,
     pub(crate) bought_land: AtlasSprite,
@@ -62,6 +70,16 @@ pub(crate) struct WorldAssets {
     pub(crate) chimney_smoke: Vec<AtlasSprite>,
     /// `mine_smoke_{i}.png`: 5 frames del humo de mina de cobre.
     pub(crate) copper_mine_smoke: Vec<AtlasSprite>,
+    /// `steam_smoke_{i}.png`: humo locomotoras vapor (SPR_STEAM_SMOKE_0..4).
+    pub(crate) steam_smoke: Vec<AtlasSprite>,
+    /// `diesel_smoke_{i}.png`: humo diésel (SPR_DIESEL_SMOKE_0..5).
+    pub(crate) diesel_smoke: Vec<AtlasSprite>,
+    /// `electric_spark_{i}.png`: chispas eléctricas (SPR_ELECTRIC_SPARK_0..5).
+    pub(crate) electric_spark: Vec<AtlasSprite>,
+    /// `explosion_large_{i}.png`: explosión grande (SPR_EXPLOSION_LARGE_0..F).
+    pub(crate) explosion_large: Vec<AtlasSprite>,
+    /// `breakdown_smoke_{i}.png`: humo de avería (SPR_BREAKDOWN_SMOKE_0..3).
+    pub(crate) breakdown_smoke: Vec<AtlasSprite>,
     pub(crate) industries: HashMap<u32, AtlasSprite>,
     /// Llama refinería: `industry_{id}_fire_anim_{f}.png` (7 frames por sprite).
     pub(crate) refinery_fire_frames: HashMap<u32, Vec<AtlasSprite>>,
@@ -86,7 +104,14 @@ impl WorldAssets {
     /// el filesystem (la tabla de rects es metadata compilada).
     pub(crate) fn load(atlas: &TileAtlas, images: &mut Assets<Image>) -> Self {
         let grass = atlas.get("grass.png");
+        let grass_one_third = atlas.get("terrain_grass_1_3.png");
+        let grass_two_third = atlas.get("terrain_grass_2_3.png");
+        let bare = atlas.get("terrain_bare.png");
         let rough = atlas.get("grass_rough.png");
+        let rocky = [
+            atlas.get("terrain_rocky_1.png"),
+            atlas.get("terrain_rocky_2.png"),
+        ];
         let snow = atlas.get("terrain_snow_full.png");
         let bought_land = atlas.get("object_bought_land.png");
         let grass_slopes = (1u8..=14)
@@ -273,6 +298,21 @@ impl WorldAssets {
         let copper_mine_smoke = (0..crate::sprites::COPPER_MINE_SMOKE_FRAMES)
             .map(|i| atlas.get(&format!("mine_smoke_{i}.png")))
             .collect();
+        let steam_smoke = (0..crate::sprites::STEAM_SMOKE_FRAMES)
+            .map(|i| atlas.get(&format!("steam_smoke_{i}.png")))
+            .collect();
+        let diesel_smoke = (0..crate::sprites::DIESEL_SMOKE_FRAMES)
+            .map(|i| atlas.get(&format!("diesel_smoke_{i}.png")))
+            .collect();
+        let electric_spark = (0..crate::sprites::ELECTRIC_SPARK_FRAMES)
+            .map(|i| atlas.get(&format!("electric_spark_{i}.png")))
+            .collect();
+        let explosion_large = (0..crate::sprites::EXPLOSION_LARGE_FRAMES)
+            .map(|i| atlas.get(&format!("explosion_large_{i}.png")))
+            .collect();
+        let breakdown_smoke = (0..crate::sprites::BREAKDOWN_SMOKE_FRAMES)
+            .map(|i| atlas.get(&format!("breakdown_smoke_{i}.png")))
+            .collect();
 
         let mut industries = HashMap::new();
         for entry in &INDUSTRY_GFX_DATA {
@@ -317,7 +357,11 @@ impl WorldAssets {
 
         Self {
             grass,
+            grass_one_third,
+            grass_two_third,
+            bare,
             rough,
+            rocky,
             snow,
             bought_land,
             grass_slopes,
@@ -350,6 +394,11 @@ impl WorldAssets {
             fences,
             chimney_smoke,
             copper_mine_smoke,
+            steam_smoke,
+            diesel_smoke,
+            electric_spark,
+            explosion_large,
+            breakdown_smoke,
             industries,
             refinery_fire_frames,
             fizzy_drink_frames,

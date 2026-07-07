@@ -92,6 +92,7 @@ fn dispatch_sim_events(
                         volume: 0.5,
                     });
                 }
+                fx.push_explosion(at);
             }
             SimEvent::VehicleDepart { at, .. } => {
                 if hud.sound_vehicle {

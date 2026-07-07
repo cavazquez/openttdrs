@@ -5,6 +5,7 @@ mod atlas;
 mod company_recolor;
 mod components;
 pub(crate) mod effect_fx;
+mod effect_vehicle;
 mod fizzy_drink;
 mod grid;
 mod industry_anim;
@@ -32,6 +33,7 @@ pub(crate) use components::{
     WaterTile,
 };
 pub(crate) use effect_fx::EffectVehiclePlugin;
+pub(crate) use effect_vehicle::EffectVehicleFrames;
 pub(crate) use fizzy_drink::{FizzyDrinkAnim, FizzyDrinkAnimPlugin};
 pub(crate) use grid::{RenderGrid, TileRenderContext};
 pub(crate) use industry_anim::{

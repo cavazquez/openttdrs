@@ -130,24 +130,36 @@ fn resolve_spawn_viewport(
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
 ) -> TileViewportBounds {
+    if let Ok((cam_tf, proj)) = cam_q.single() {
+        let ortho_scale = if let Projection::Orthographic(o) = proj {
+            o.scale
+        } else {
+            1.0
+        };
+        return resolve_spawn_viewport_at(sim, windows, cam_tf.translation.truncate(), ortho_scale);
+    }
+    let (cam_pos, ortho_scale) = initial_map_camera_pose(sim);
+    resolve_spawn_viewport_at(sim, windows, cam_pos.truncate(), ortho_scale)
+}
+
+fn resolve_spawn_viewport_at(
+    sim: &SimWorld,
+    windows: &Query<&Window, With<PrimaryWindow>>,
+    cam_translation: Vec2,
+    ortho_scale: f32,
+) -> TileViewportBounds {
     let (mw, mh) = sim.state.map.dimensions();
     if !large_map_viewport_cull_enabled(mw, mh) {
         return TileViewportBounds::full(mw, mh);
     }
-    let Ok((cam_tf, proj)) = cam_q.single() else {
-        return TileViewportBounds::full(mw, mh);
-    };
-    let Projection::Orthographic(ortho) = proj else {
-        return TileViewportBounds::full(mw, mh);
-    };
     let (win_w, win_h) = windows
         .iter()
         .next()
         .map(|w| (w.width(), w.height()))
         .unwrap_or((1280.0, 720.0));
     let visible = ortho_visible_tile_bounds(
-        cam_tf.translation.truncate(),
-        ortho.scale,
+        cam_translation,
+        ortho_scale,
         win_w,
         win_h,
         mw,
@@ -202,10 +214,6 @@ pub(crate) fn setup(
     mut images: ResMut<Assets<Image>>,
     sim: Res<SimWorld>,
     windows: Query<&Window, With<PrimaryWindow>>,
-    cam_q: Query<
-        (&mut Transform, &mut Projection),
-        (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
-    >,
 ) {
     let (cam_pos, cam_scale) = initial_map_camera_pose(&sim);
 
@@ -223,7 +231,7 @@ pub(crate) fn setup(
         }),
     ));
 
-    let spawn_bounds = resolve_spawn_viewport(&sim, &windows, &cam_q);
+    let spawn_bounds = resolve_spawn_viewport_at(&sim, &windows, cam_pos.truncate(), cam_scale);
     commands.insert_resource(MapTileSpawnViewport {
         bounds: spawn_bounds,
         last_ortho_scale: cam_scale,
@@ -245,6 +253,7 @@ pub(crate) fn setup(
     commands.insert_resource(super::CopperMineSmokeFrames(
         assets.copper_mine_smoke.clone(),
     ));
+    commands.insert_resource(super::EffectVehicleFrames::from_world_assets(&assets));
     let company_colour = CompanyColour::from_u8(sim.state.company_colour);
     let mut company_sprites = CompanyColoredSprites::new(company_colour);
     company_sprites.build_all(&mut images);
@@ -303,6 +312,7 @@ pub(crate) fn spawn_intro_map_render(
     commands.insert_resource(super::CopperMineSmokeFrames(
         assets.copper_mine_smoke.clone(),
     ));
+    commands.insert_resource(super::EffectVehicleFrames::from_world_assets(&assets));
     let company_colour = CompanyColour::from_u8(sim.state.company_colour);
     let mut company_sprites = CompanyColoredSprites::new(company_colour);
     company_sprites.build_all(images);
@@ -637,7 +647,7 @@ pub(crate) fn apply_remap_map_visuals(
     };
     let do_sync_camera = pending.sync_camera;
     let full_rebuild = pending.full;
-    let refresh_chunks = std::mem::take(&mut pending.refresh_chunks);
+    let mut refresh_chunks = std::mem::take(&mut pending.refresh_chunks);
     pending.pending = false;
     pending.sync_camera = false;
     pending.full = true;
@@ -666,6 +676,11 @@ pub(crate) fn apply_remap_map_visuals(
 
     if use_incremental {
         let needed = chunks_in_bounds(spawn_bounds);
+        // Construcción: regenerar todo el viewport visible para evitar capas
+        // de hierba superpuestas (teselas oscuras en rombo).
+        if !refresh_chunks.is_empty() {
+            refresh_chunks = needed.clone();
+        }
         let to_remove: HashSet<_> = loaded_chunks.chunks.difference(&needed).copied().collect();
         let to_add: HashSet<_> = needed.difference(&loaded_chunks.chunks).copied().collect();
 
@@ -675,6 +690,9 @@ pub(crate) fn apply_remap_map_visuals(
             }
         }
         for &(cx, cy) in &to_add {
+            if refresh_chunks.contains(&(cx, cy)) {
+                continue;
+            }
             spawn_map_chunk(
                 &mut commands,
                 assets.as_ref(),
@@ -685,14 +703,18 @@ pub(crate) fn apply_remap_map_visuals(
                 cy,
             );
         }
+        let mut refresh_despawn = Vec::new();
+        for (entity, chunk) in &q_chunks {
+            if refresh_chunks.contains(&(chunk.cx, chunk.cy)) {
+                refresh_despawn.push(entity);
+            }
+        }
+        for entity in refresh_despawn {
+            commands.entity(entity).despawn();
+        }
         for &(cx, cy) in &refresh_chunks {
             if !needed.contains(&(cx, cy)) {
                 continue;
-            }
-            for (entity, chunk) in &q_chunks {
-                if chunk.cx == cx && chunk.cy == cy {
-                    commands.entity(entity).despawn();
-                }
             }
             spawn_map_chunk(
                 &mut commands,

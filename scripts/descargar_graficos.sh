@@ -915,6 +915,17 @@ for i, sid in enumerate(range(2040, 2045)):
 # Humo de chimenea de la central eléctrica (SPR_CHIMNEY_SMOKE_0..7)
 for i, sid in enumerate(range(3701, 3709)):
     crop_by_id(sid, f"chimney_smoke_{i}.png")
+# EffectVehicle: humo tren, chispas, explosión, avería (ver gen_effect_vehicle_sprites.py)
+for i, sid in enumerate(range(3073, 3079)):
+    crop_by_id(sid, f"diesel_smoke_{i - 3073}.png")
+for i, sid in enumerate(range(3079, 3084)):
+    crop_by_id(sid, f"steam_smoke_{i - 3079}.png")
+for i, sid in enumerate(range(3084, 3090)):
+    crop_by_id(sid, f"electric_spark_{i - 3084}.png")
+for i, sid in enumerate(range(3709, 3725)):
+    crop_by_id(sid, f"explosion_large_{i - 3709}.png")
+for i, sid in enumerate(range(3737, 3741)):
+    crop_by_id(sid, f"breakdown_smoke_{i - 3737}.png")
 # HQ Tiny
 for i, sid in enumerate(range(2603, 2607)):
     crop_by_id(sid, f"hq_tiny_{i}.png")
@@ -1105,6 +1116,7 @@ python3 "$(dirname "$0")/gen_rail_station_draw_data.py" || true
 # Sprites de puentes por tipo (tablero + pilares; ver gen_bridge_sprites.py).
 python3 "$(dirname "$0")/gen_bridge_sprites.py" || true
 python3 "$(dirname "$0")/gen_bridge_structure_palette.py" || true
+python3 "$(dirname "$0")/gen_effect_vehicle_sprites.py" || true
 
 # Texture atlas: empaqueta tiles/*.png en páginas + metadata Rust (batching).
 python3 "$(dirname "$0")/gen_tile_atlas.py"

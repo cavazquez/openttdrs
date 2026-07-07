@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use openttdrs_core::{
-    CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROUGH, CLEAR_GROUND_SNOW, Climate, Map,
-    OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_TRANSMITTER, TileKind,
-    effective_clear_ground, industry_uses_water_ground,
+    CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
+    CLEAR_GROUND_SNOW, Climate, Map, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
+    OBJECT_TYPE_TRANSMITTER, TileKind, effective_clear_ground, industry_uses_water_ground,
 };
 
 use super::{
@@ -10,6 +10,7 @@ use super::{
     spawn_ground_sprite, spawn_leveled_foundation,
 };
 use crate::iso::{overlay_pos, remap_tile_offset, tile_pos, wang_hash};
+use crate::render::atlas::AtlasSprite;
 use crate::render::{
     CompanyColoredSprites, MapSpriteBatches, MapVisualLayer, TileRenderContext, WaterTile,
     WorldAssets, sprite_from_atlas_or_industry_palette,
@@ -23,6 +24,18 @@ use crate::sprites::{
     industry_gfx_uses_fizzy_drink_anim, industry_gfx_uses_random_colour,
     industry_gfx_uses_refinery_fire_anim, industry_palette_colour_for_instance,
 };
+
+/// Sprite plano de hierba según densidad (`m5 & 0x3`) en teselas `MP_CLEAR`.
+/// `m5 == 0` se trata como hierba completa (valor por defecto histórico de `new_flat`).
+fn grass_flat_for_clear(assets: &WorldAssets, tile_m5: u8) -> &AtlasSprite {
+    let density = if tile_m5 == 0 { 3 } else { tile_m5 & 0x03 };
+    match density {
+        0 => &assets.bare,
+        1 => &assets.grass_one_third,
+        2 => &assets.grass_two_third,
+        _ => &assets.grass,
+    }
+}
 
 pub(crate) fn spawn_house_tile(
     commands: &mut Commands,
@@ -304,8 +317,20 @@ pub(crate) fn spawn_generic_land_tile(
 
     // MP_CLEAR (0): distinguir subtipo de suelo via m5 bits 2-4
     // MP_OBJECT (10): grass de base + overlay de objeto
-    let grass_img = || sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
+    let grass_img = || {
+        sloped_or_flat_image(
+            tileh,
+            grass_flat_for_clear(assets, tile_m5),
+            &assets.grass_slopes,
+        )
+    };
+    let full_grass_img = || sloped_or_flat_image(tileh, &assets.grass, &assets.grass_slopes);
     let rough_img = || sloped_or_flat_image(tileh, &assets.rough, &assets.rough_slopes);
+    let rocky_variant = wang_hash(ctx.tx, ctx.ty, world_seed.wrapping_add(0xB0C0_5EED) as u32)
+        as usize
+        % assets.rocky.len();
+    let rocky_img =
+        || sloped_or_flat_image(tileh, &assets.rocky[rocky_variant], &assets.rough_slopes);
     let snow_img = || {
         if tileh == 0 {
             assets.snow.clone()
@@ -333,17 +358,18 @@ pub(crate) fn spawn_generic_land_tile(
                 (img, Color::WHITE)
             }
             CLEAR_GROUND_ROUGH => (rough_img(), Color::srgb(0.78, 0.73, 0.58)),
+            CLEAR_GROUND_ROCKY => (rocky_img(), Color::WHITE),
             _ => (rough_img(), Color::srgb(0.78, 0.73, 0.58)),
         },
         TileKind::Grass => match clear_ground {
             CLEAR_GROUND_SNOW => (snow_img(), snow_color),
             CLEAR_GROUND_DESERT => (rough_img(), desert_color),
-            _ => (grass_img(), Color::WHITE),
+            _ => (full_grass_img(), Color::WHITE),
         },
         TileKind::Forest => match clear_ground {
             CLEAR_GROUND_SNOW => (snow_img(), snow_color),
             CLEAR_GROUND_DESERT => (rough_img(), desert_color),
-            _ => (grass_img(), Color::WHITE),
+            _ => (full_grass_img(), Color::WHITE),
         },
         TileKind::CoalField => (rough_img(), Color::srgb(0.55, 0.50, 0.45)),
         TileKind::Unknown(_) => (grass_img(), Color::srgb(1.0, 0.0, 1.0)),

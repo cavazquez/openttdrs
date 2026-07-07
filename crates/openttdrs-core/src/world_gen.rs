@@ -52,6 +52,7 @@ impl Climate {
 /// Subtipo de suelo en teselas `MP_CLEAR` (bits 2–4 de `m5`).
 pub const CLEAR_GROUND_GRASS: u8 = 0;
 pub const CLEAR_GROUND_ROUGH: u8 = 1;
+pub const CLEAR_GROUND_ROCKY: u8 = 2;
 pub const CLEAR_GROUND_SNOW: u8 = 4;
 pub const CLEAR_GROUND_DESERT: u8 = 5;
 
@@ -295,7 +296,13 @@ fn i64_pair_hash(x: i32, y: i32) -> u64 {
 }
 
 fn grass_density(x: i32, y: i32, seed: u64) -> u8 {
-    (hash_u64(seed.wrapping_add(i64_pair_hash(x.wrapping_mul(3), y.wrapping_mul(5)))) % 4) as u8
+    let n = hash_u64(seed.wrapping_add(i64_pair_hash(x.wrapping_mul(3), y.wrapping_mul(5))));
+    // Variación suave: mayoría hierba completa; sin `bare` (m5==0) para no confundir con default.
+    match n % 10 {
+        0..=1 => 1,
+        2..=4 => 2,
+        _ => 3,
+    }
 }
 
 fn forest_patch(x: i32, y: i32, seed: u64, climate: Climate) -> bool {

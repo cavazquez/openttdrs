@@ -2,12 +2,14 @@
 
 use bevy::prelude::*;
 
-use openttdrs_core::{VehicleKind, default_engine_id, train_smoke_kind};
+use openttdrs_core::{VehicleKind, default_engine_id, extrapolate_vehicle_pose, train_smoke_kind};
 
 use crate::bevy_app::UpdateSet;
-use crate::render::{
-    ChimneySmokeFrames, MapVisualLayer, smoke::smoke_frame_index, vehicles::vehicle_sprite_pos,
+use crate::render::effect_vehicle::{
+    EffectSpriteSet, EffectVehicleFrames, apply_effect_frame, effect_frame_index,
+    effect_lifetime_secs, effect_overlay_pos,
 };
+use crate::render::{MapVisualLayer, vehicles::vehicle_draw_anchor_from_pose};
 use crate::simulation::SimClock;
 use crate::state::{ClientScreen, SimWorld};
 
@@ -27,26 +29,47 @@ impl Plugin for TrainSmokePlugin {
 
 #[derive(Component)]
 pub(crate) struct TrainSmokeEffect {
-    lifetime: Timer,
+    started: f32,
     phase: usize,
     rise: f32,
+    anchor: Vec2,
+    base_z: u8,
+    tile: (i32, i32),
+    set: TrainSmokeSet,
+}
+
+#[derive(Clone, Copy)]
+enum TrainSmokeSet {
+    Steam,
+    Diesel,
+    Electric,
+}
+
+fn sprite_set<'a>(frames: &'a EffectVehicleFrames, kind: TrainSmokeSet) -> EffectSpriteSet<'a> {
+    match kind {
+        TrainSmokeSet::Steam => frames.steam_set(),
+        TrainSmokeSet::Diesel => frames.diesel_set(),
+        TrainSmokeSet::Electric => frames.electric_set(),
+    }
 }
 
 fn spawn_train_smoke(
     sim: Res<SimWorld>,
     sim_clock: Res<SimClock>,
-    smoke_frames: Res<ChimneySmokeFrames>,
+    frames: Res<EffectVehicleFrames>,
+    time: Res<Time>,
     mut commands: Commands,
     existing: Query<&TrainSmokeEffect>,
 ) {
-    if smoke_frames.0.is_empty() {
+    if !frames.is_loaded() {
         return;
     }
-    if !existing.is_empty() && existing.iter().count() > 48 {
+    if existing.iter().count() > 48 {
         return;
     }
     let map = &sim.state.map;
     let tick_alpha = sim_clock.tick_alpha;
+    let elapsed = time.elapsed_secs();
     for v in &sim.state.vehicles {
         if v.kind != VehicleKind::Train || !v.running || v.cur_speed == 0 {
             continue;
@@ -57,24 +80,46 @@ fn spawn_train_smoke(
         let engine_id = v
             .engine_id
             .unwrap_or_else(|| default_engine_id(VehicleKind::Train));
-        let kind = train_smoke_kind(engine_id);
-        let pos = vehicle_sprite_pos(v, map, tick_alpha);
-        let phase = usize::from(v.id as u8).wrapping_mul(7) % smoke_frames.0.len();
-        let rise = match kind {
-            openttdrs_core::TrainSmokeKind::Steam => 1.2,
-            openttdrs_core::TrainSmokeKind::Diesel => 0.9,
-            openttdrs_core::TrainSmokeKind::Electric => 0.4,
+        let smoke_kind = train_smoke_kind(engine_id);
+        let set_kind = match smoke_kind {
+            openttdrs_core::TrainSmokeKind::Steam => TrainSmokeSet::Steam,
+            openttdrs_core::TrainSmokeKind::Diesel => TrainSmokeSet::Diesel,
+            openttdrs_core::TrainSmokeKind::Electric => TrainSmokeSet::Electric,
         };
-        let sprite = smoke_frames.0[phase].sprite();
+        let effect_set = sprite_set(&frames, set_kind);
+        if effect_set.frames.is_empty() {
+            continue;
+        }
+        let pose = extrapolate_vehicle_pose(v, tick_alpha);
+        let (anchor, base_z, tx, ty) = vehicle_draw_anchor_from_pose(v, map, pose);
+        let rise = match set_kind {
+            TrainSmokeSet::Steam => 6.0,
+            TrainSmokeSet::Diesel => 4.0,
+            TrainSmokeSet::Electric => 0.0,
+        };
+        let phase = usize::from(v.id as u8).wrapping_mul(7) % effect_set.frames.len().max(1);
+        let frame = effect_frame_index(0.0, phase, &effect_set);
+        let Some(atlas) = effect_set.frames.get(frame) else {
+            continue;
+        };
+        let mut sprite = atlas.sprite();
+        if matches!(set_kind, TrainSmokeSet::Electric) {
+            sprite.color = Color::srgb(0.85, 0.92, 1.0);
+        }
+        let pos = effect_overlay_pos(anchor, frame, &effect_set, base_z, (tx, ty), 0.38, 0.0);
         commands.spawn((
             MapVisualLayer,
             TrainSmokeEffect {
-                lifetime: Timer::from_seconds(1.4, TimerMode::Once),
+                started: elapsed,
                 phase,
                 rise,
+                anchor,
+                base_z,
+                tile: (tx, ty),
+                set: set_kind,
             },
             sprite,
-            Transform::from_translation(pos + Vec3::new(0.0, 8.0, 0.3)),
+            Transform::from_translation(pos),
             Visibility::Visible,
         ));
     }
@@ -82,24 +127,41 @@ fn spawn_train_smoke(
 
 fn animate_train_smoke(
     time: Res<Time>,
-    smoke_frames: Res<ChimneySmokeFrames>,
+    frames: Res<EffectVehicleFrames>,
     mut q: Query<(Entity, &mut Transform, &mut TrainSmokeEffect, &mut Sprite)>,
     mut commands: Commands,
 ) {
-    if smoke_frames.0.is_empty() {
+    if !frames.is_loaded() {
         return;
     }
+    let elapsed = time.elapsed_secs();
+    let dt = time.delta_secs();
     for (entity, mut transform, mut smoke, mut sprite) in &mut q {
-        smoke.lifetime.tick(time.delta());
-        transform.translation.y += smoke.rise * 40.0 * time.delta_secs();
-        transform.translation.z += 0.02;
-        let idx = smoke_frame_index(time.elapsed_secs(), smoke.phase);
-        if let Some(frame) = smoke_frames.0.get(idx) {
-            frame.apply_to(&mut sprite);
-        }
-        if smoke.lifetime.is_finished() {
+        let effect_set = sprite_set(&frames, smoke.set);
+        let age = elapsed - smoke.started;
+        if age >= effect_lifetime_secs(&effect_set) {
             commands.entity(entity).despawn();
+            continue;
         }
+        smoke.rise += match smoke.set {
+            TrainSmokeSet::Steam => 28.0 * dt,
+            TrainSmokeSet::Diesel => 22.0 * dt,
+            TrainSmokeSet::Electric => 0.0,
+        };
+        let frame = effect_frame_index(age, smoke.phase, &effect_set);
+        apply_effect_frame(&mut sprite, &effect_set, frame);
+        if matches!(smoke.set, TrainSmokeSet::Electric) {
+            sprite.color = Color::srgb(0.85, 0.92, 1.0);
+        }
+        transform.translation = effect_overlay_pos(
+            smoke.anchor,
+            frame,
+            &effect_set,
+            smoke.base_z,
+            smoke.tile,
+            0.38,
+            smoke.rise,
+        );
     }
 }
 

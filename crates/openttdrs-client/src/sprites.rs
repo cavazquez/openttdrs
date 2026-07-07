@@ -15,6 +15,8 @@ pub(crate) mod bridge_structure_palette;
 pub(crate) mod company_palette;
 #[path = "sprites/copper_smoke_draw_data_generated.rs"]
 mod copper_smoke_draw_data_generated;
+#[path = "sprites/effect_vehicle_draw_data_generated.rs"]
+mod effect_vehicle_draw_data_generated;
 #[path = "sprites/field_draw_data_generated.rs"]
 mod field_draw_data_generated;
 #[path = "sprites/foundation.rs"]
@@ -212,6 +214,13 @@ pub use copper_smoke_draw_data_generated::{COPPER_MINE_SMOKE_FRAMES, COPPER_MINE
 /// Humo de chimenea de la central eléctrica (`SPR_CHIMNEY_SMOKE_0..7`).
 /// Regenerar: `python3 scripts/gen_chimney_smoke.py`.
 pub use smoke_draw_data_generated::{CHIMNEY_SMOKE_FRAMES, CHIMNEY_SMOKE_META};
+
+/// EffectVehicle tren / explosión. Regenerar: `python3 scripts/gen_effect_vehicle_sprites.py`.
+pub use effect_vehicle_draw_data_generated::{
+    BREAKDOWN_SMOKE_FRAMES, BREAKDOWN_SMOKE_META, DIESEL_SMOKE_FRAMES, DIESEL_SMOKE_META,
+    ELECTRIC_SPARK_FRAMES, ELECTRIC_SPARK_META, EXPLOSION_LARGE_FRAMES, EXPLOSION_LARGE_META,
+    STEAM_SMOKE_FRAMES, STEAM_SMOKE_META,
+};
 
 /// Devuelve el nombre de archivo (relativo a `assets/opengfx/tiles/`) para un sprite de casa.
 /// Usa el naming genérico `house_s{id}.png` para todos los sprites extraídos.

@@ -43,6 +43,13 @@ use crate::ui::toolbar::{
     open_order_edit_for_vehicle,
 };
 
+fn road_action_refreshes_neighbors(action: BuildMenuAction) -> bool {
+    matches!(
+        action,
+        BuildMenuAction::Road | BuildMenuAction::RoadX | BuildMenuAction::RoadY
+    )
+}
+
 fn tiles_for_visual_remap(
     map: Option<&openttdrs_core::Map>,
     action: BuildMenuAction,
@@ -67,7 +74,7 @@ fn tiles_for_visual_remap(
     } else {
         vec![(origin.x, origin.y)]
     };
-    if rail_action_refreshes_neighbors(action)
+    if (rail_action_refreshes_neighbors(action) || road_action_refreshes_neighbors(action))
         && let Some(map) = map
     {
         return rail_remap_neighbor_tiles(map, &base);

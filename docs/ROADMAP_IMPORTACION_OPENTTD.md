@@ -28,8 +28,8 @@ Sorprendentemente, esta es el área **más avanzada** del port. Ya está portado
 
 | Efecto | Sistema en C++ | Complejidad | Estado port |
 |--------|----------------|-------------|-------------|
-| **Humo de locomotoras** (vapor/diésel/chispas eléctricas) | `effectvehicle.cpp` | Media | **Hecho** (`render/train_smoke.rs`) |
-| **Explosiones / humo de avería** | `effectvehicle.cpp:152-253` | Media | **Hecho** (`render/effect_fx.rs`) |
+| **Humo de locomotoras** (vapor/diésel/chispas eléctricas) | `effectvehicle.cpp` | Media | **Hecho** — sprites `3073–3089` (`gen_effect_vehicle_sprites.py`, `render/train_smoke.rs`) |
+| **Explosiones / humo de avería** | `effectvehicle.cpp:152-253` | Media | **Hecho** — sprites `3709–3724` / `3737–3740` (`render/effect_fx.rs`) |
 | **Bulldozer en obras** | `effectvehicle.cpp:255-325` | Baja | **Hecho** (road works FX) |
 | **Animación de estaciones/aeropuertos** | `newgrf_station.cpp` | Media | **Parcial** (`tile_anims.rs`) |
 | **Ascensor de edificios de ciudad** | `town_cmd.cpp:346-368` | Baja | **Parcial** (clock m7) |

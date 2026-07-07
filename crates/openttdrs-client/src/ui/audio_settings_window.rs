@@ -1,16 +1,20 @@
-//! Ventana de volumen y flags de sonido/música (fase A3).
+//! Ventana unificada de sonido: volúmenes, flags SFX y jukebox OpenMSX.
 
 use bevy::input::mouse::MouseButton;
 use bevy::prelude::*;
 use bevy::ui::RelativeCursorPosition;
 
+use crate::audio::{
+    MusicPlayer, MusicPlaylist, MusicState, music_apply_playlist, music_skip, music_toggle_playback,
+};
+use crate::state::ClientScreen;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
     spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::SimHudControls;
-use crate::ui::toolbar::BuildMenuUi;
+use crate::ui::toolbar::{BuildMenuUi, SoundMusicToolbarButton};
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
@@ -19,7 +23,7 @@ const SLIDER_TRACK: Color = Color::srgb(0.18, 0.14, 0.10);
 const SLIDER_FILL: Color = Color::srgb(0.52, 0.68, 0.38);
 
 #[derive(Resource, Default)]
-pub(crate) struct AudioSettingsWindowState {
+pub(crate) struct SoundMusicWindowState {
     pub(crate) open: bool,
 }
 
@@ -30,6 +34,14 @@ pub(crate) enum AudioSettingsButton {
     Disaster,
     Confirm,
     ClickBeep,
+}
+
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MusicWindowButton {
+    PlayStop,
+    Prev,
+    Next,
+    Playlist(MusicPlaylist),
 }
 
 #[derive(Component, Clone, Copy)]
@@ -43,6 +55,12 @@ pub(crate) struct VolumeSliderLabel(pub(crate) VolumeSliderKind);
 
 #[derive(Component)]
 pub(crate) struct VolumeSliderFill(pub(crate) VolumeSliderKind);
+
+#[derive(Component)]
+pub(crate) struct MusicTrackStatusText;
+
+#[derive(Component)]
+pub(crate) struct MusicTrackTitleText;
 
 fn spawn_volume_slider(
     parent: &mut ChildSpawnerCommands,
@@ -95,16 +113,116 @@ fn spawn_volume_slider(
         });
 }
 
-pub(crate) fn setup_audio_settings_window(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn spawn_jukebox_section(parent: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
+    parent
+        .spawn((Node {
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Column,
+            margin: UiRect::top(Val::Px(10.0)),
+            row_gap: Val::Px(4.0),
+            ..default()
+        },))
+        .with_children(|section| {
+            section.spawn((
+                Text::new("— Música —"),
+                window_text_font(asset_server, UiFontRole::Caption),
+                TextColor(WINDOW_TEXT),
+            ));
+            section.spawn((
+                MusicTrackStatusText,
+                Text::new("Detenido · 0 / 0"),
+                window_text_font(asset_server, UiFontRole::Caption),
+                TextColor(WINDOW_TEXT),
+            ));
+            section.spawn((
+                MusicTrackTitleText,
+                Text::new("(sin pistas)"),
+                window_text_font(asset_server, UiFontRole::Body),
+                TextColor(WINDOW_TEXT),
+            ));
+            section
+                .spawn((Node {
+                    width: Val::Percent(100.0),
+                    flex_wrap: FlexWrap::Wrap,
+                    column_gap: Val::Px(3.0),
+                    row_gap: Val::Px(3.0),
+                    ..default()
+                },))
+                .with_children(|row| {
+                    for playlist in MusicPlaylist::CHOICES {
+                        row.spawn((
+                            Button,
+                            MusicWindowButton::Playlist(playlist),
+                            Node {
+                                min_width: Val::Px(52.0),
+                                height: Val::Px(22.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                border: UiRect::all(Val::Px(1.0)),
+                                padding: UiRect::horizontal(Val::Px(4.0)),
+                                ..default()
+                            },
+                            BackgroundColor(BTN_BG),
+                            BorderColor::all(BTN_BORDER),
+                            Interaction::default(),
+                            BuildMenuUi,
+                            children![(
+                                Text::new(playlist.label()),
+                                window_text_font(asset_server, UiFontRole::Caption),
+                                TextColor(WINDOW_TEXT),
+                            )],
+                        ));
+                    }
+                });
+            section
+                .spawn((Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(4.0),
+                    ..default()
+                },))
+                .with_children(|row| {
+                    for (label, button) in [
+                        ("◀ Ant.", MusicWindowButton::Prev),
+                        ("Reproducir", MusicWindowButton::PlayStop),
+                        ("Sig. ▶", MusicWindowButton::Next),
+                    ] {
+                        row.spawn((
+                            Button,
+                            button,
+                            Node {
+                                flex_grow: 1.0,
+                                height: Val::Px(26.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                border: UiRect::all(Val::Px(1.0)),
+                                ..default()
+                            },
+                            BackgroundColor(BTN_BG),
+                            BorderColor::all(BTN_BORDER),
+                            Interaction::default(),
+                            BuildMenuUi,
+                            children![(
+                                Text::new(label),
+                                window_text_font(asset_server, UiFontRole::Caption),
+                                TextColor(WINDOW_TEXT),
+                            )],
+                        ));
+                    }
+                });
+        });
+}
+
+pub(crate) fn setup_sound_music_window(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
     let (_root, content) = spawn_floating_window(
         &mut commands,
         asset_server,
-        FloatingWindowId::AudioSettings,
-        "Audio",
+        FloatingWindowId::SoundMusic,
+        "Sonido y música",
         TITLE_BROWN,
-        Vec2::new(280.0, 225.0),
-        300.0,
+        Vec2::new(300.0, 400.0),
+        320.0,
     );
     commands.entity(content).with_children(|body| {
         spawn_volume_slider(
@@ -144,6 +262,7 @@ pub(crate) fn setup_audio_settings_window(mut commands: Commands, asset_server: 
                 )],
             ));
         }
+        spawn_jukebox_section(body, asset_server);
     });
 }
 
@@ -152,17 +271,67 @@ fn volume_from_cursor(rel: &RelativeCursorPosition) -> Option<f32> {
     Some((pos.x + 0.5).clamp(0.0, 1.0))
 }
 
-pub(crate) fn sync_audio_settings_window(
-    state: Res<AudioSettingsWindowState>,
+pub(crate) fn handle_sound_music_toolbar_button(
+    q: Query<&Interaction, (Changed<Interaction>, With<SoundMusicToolbarButton>)>,
+    mut state: ResMut<SoundMusicWindowState>,
+) {
+    for interaction in &q {
+        if *interaction == Interaction::Pressed {
+            state.open = true;
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
+pub(crate) fn sync_sound_music_window(
+    state: Res<SoundMusicWindowState>,
     hud: Res<SimHudControls>,
+    music: Res<MusicState>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut labels: Query<(&VolumeSliderLabel, &mut Text)>,
     mut fills: Query<(&VolumeSliderFill, &mut Node)>,
-    mut toggles: Query<(&AudioSettingsButton, &mut BorderColor), Without<FloatingWindow>>,
+    mut toggles: Query<
+        (&AudioSettingsButton, &mut BorderColor),
+        (Without<FloatingWindow>, Without<MusicWindowButton>),
+    >,
+    mut status_q: Query<
+        &mut Text,
+        (
+            With<MusicTrackStatusText>,
+            Without<MusicTrackTitleText>,
+            Without<VolumeSliderLabel>,
+        ),
+    >,
+    mut title_q: Query<
+        &mut Text,
+        (
+            With<MusicTrackTitleText>,
+            Without<MusicTrackStatusText>,
+            Without<VolumeSliderLabel>,
+            Without<Button>,
+        ),
+    >,
+    mut playlist_btns: Query<
+        (&MusicWindowButton, &mut BorderColor),
+        (
+            With<Button>,
+            Without<FloatingWindow>,
+            Without<AudioSettingsButton>,
+        ),
+    >,
+    mut play_btn: Query<
+        (&MusicWindowButton, &mut Text),
+        (
+            With<Button>,
+            Without<MusicTrackStatusText>,
+            Without<MusicTrackTitleText>,
+            Without<VolumeSliderLabel>,
+        ),
+    >,
 ) {
     let Some((_, mut vis)) = root_q
         .iter_mut()
-        .find(|(w, _)| w.id == FloatingWindowId::AudioSettings)
+        .find(|(w, _)| w.id == FloatingWindowId::SoundMusic)
     else {
         return;
     };
@@ -204,6 +373,37 @@ pub(crate) fn sync_audio_settings_window(
             BorderColor::all(BTN_BORDER)
         };
     }
+
+    let status = if music.playing {
+        "Reproduciendo"
+    } else {
+        "Detenido"
+    };
+    for mut text in &mut status_q {
+        **text = format!("{status} · {}", music.track_position_label());
+    }
+    for mut text in &mut title_q {
+        **text = music.current_track_title().to_string();
+    }
+    for (button, mut border) in &mut playlist_btns {
+        if let MusicWindowButton::Playlist(pl) = button {
+            *border = if *pl == music.playlist {
+                BorderColor::all(BTN_ACTIVE)
+            } else {
+                BorderColor::all(BTN_BORDER)
+            };
+        }
+    }
+    for (button, mut text) in &mut play_btn {
+        if *button == MusicWindowButton::PlayStop {
+            **text = if music.playing {
+                "Detener"
+            } else {
+                "Reproducir"
+            }
+            .to_string();
+        }
+    }
 }
 
 pub(crate) fn handle_volume_sliders(
@@ -231,7 +431,14 @@ pub(crate) fn handle_volume_sliders(
 
 pub(crate) fn handle_audio_settings_buttons(
     mut hud: ResMut<SimHudControls>,
-    buttons: Query<(&Interaction, &AudioSettingsButton), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&Interaction, &AudioSettingsButton),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<MusicWindowButton>,
+        ),
+    >,
 ) {
     for (interaction, button) in &buttons {
         if *interaction != Interaction::Pressed {
@@ -247,12 +454,49 @@ pub(crate) fn handle_audio_settings_buttons(
     }
 }
 
-pub(crate) fn audio_settings_on_closed(
+pub(crate) fn handle_music_window_buttons(
+    mut commands: Commands,
+    screen: Res<State<ClientScreen>>,
+    hud: Res<SimHudControls>,
+    mut music: ResMut<MusicState>,
+    players: Query<Entity, With<MusicPlayer>>,
+    buttons: Query<
+        (&Interaction, &MusicWindowButton),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<AudioSettingsButton>,
+        ),
+    >,
+) {
+    let screen = *screen.get();
+    for (interaction, button) in &buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        match button {
+            MusicWindowButton::PlayStop => {
+                music_toggle_playback(&mut commands, players, &mut music, &hud, screen);
+            }
+            MusicWindowButton::Prev => {
+                music_skip(&mut commands, players, &mut music, &hud, screen, -1);
+            }
+            MusicWindowButton::Next => {
+                music_skip(&mut commands, players, &mut music, &hud, screen, 1);
+            }
+            MusicWindowButton::Playlist(playlist) => {
+                music_apply_playlist(&mut commands, players, &mut music, &hud, screen, *playlist);
+            }
+        }
+    }
+}
+
+pub(crate) fn sound_music_window_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
-    mut state: ResMut<AudioSettingsWindowState>,
+    mut state: ResMut<SoundMusicWindowState>,
 ) {
     for msg in closed.read() {
-        if msg.0 == FloatingWindowId::AudioSettings {
+        if msg.0 == FloatingWindowId::SoundMusic {
             state.open = false;
         }
     }

@@ -28,7 +28,7 @@ mod tests {
 
     use crate::render::{PrimaryGameCamera, RemapMapVisualsPending, VehicleIndex};
     use crate::state::SimWorld;
-    use crate::ui::audio_settings_window::AudioSettingsWindowState;
+    use crate::ui::audio_settings_window::SoundMusicWindowState;
     use crate::ui::hud::{HoveredTileCoord, HudBuildFeedback, SelectedTileInfo, SimHudControls};
     use crate::ui::industry_panel::IndustryPanelState;
     use crate::ui::news_settings_window::NewsSettingsWindowState;
@@ -181,7 +181,7 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(SaveWindowState::default());
         world.insert_resource(NewsSettingsWindowState::default());
-        world.insert_resource(AudioSettingsWindowState::default());
+        world.insert_resource(SoundMusicWindowState::default());
         world.insert_resource(SimHudControls {
             paused: false,
             sim_speed: 1.0,
@@ -208,7 +208,7 @@ mod tests {
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(SaveWindowState::default());
         world.insert_resource(NewsSettingsWindowState::default());
-        world.insert_resource(AudioSettingsWindowState::default());
+        world.insert_resource(SoundMusicWindowState::default());
         world.insert_resource(SimHudControls::default());
         world.spawn((
             PrimaryGameCamera,
@@ -243,7 +243,7 @@ mod tests {
         world_zoom_in.insert_resource(RemapMapVisualsPending::default());
         world_zoom_in.insert_resource(SaveWindowState::default());
         world_zoom_in.insert_resource(NewsSettingsWindowState::default());
-        world_zoom_in.insert_resource(AudioSettingsWindowState::default());
+        world_zoom_in.insert_resource(SoundMusicWindowState::default());
         world_zoom_in.insert_resource(SimHudControls::default());
         world_zoom_in.spawn((
             PrimaryGameCamera,
@@ -266,7 +266,7 @@ mod tests {
         world_zoom_out.insert_resource(RemapMapVisualsPending::default());
         world_zoom_out.insert_resource(SaveWindowState::default());
         world_zoom_out.insert_resource(NewsSettingsWindowState::default());
-        world_zoom_out.insert_resource(AudioSettingsWindowState::default());
+        world_zoom_out.insert_resource(SoundMusicWindowState::default());
         world_zoom_out.insert_resource(SimHudControls::default());
         world_zoom_out.spawn((
             PrimaryGameCamera,

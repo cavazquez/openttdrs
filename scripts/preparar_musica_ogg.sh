@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Pre-decodifica OpenMSX → OGG para el cliente Bevy (Camino A: commitear en git).
 #
-# Mapeo según openmsx.obm (v0.4.2): theme + old_0..9 + new_0..9 + ezy_0..6.
+# Mapeo según openmsx.obm (v0.4.2): theme + old_0..9 + new_0..9 + ezy_0..9.
 #
 # Requiere: OpenMSX extraído, fluidsynth, ffmpeg y un SoundFont GM (.sf2).
 # Uso:
@@ -113,6 +113,9 @@ convert_track ezy_03.ogg say_what_redfarn.mid "${SF2}"
 convert_track ezy_04.ogg be_sharp_bw_redfarn.mid "${SF2}"
 convert_track ezy_05.ogg careless_perc_redfarn.mid "${SF2}"
 convert_track ezy_06.ogg mosey_along_redfarn.mid "${SF2}"
+convert_track ezy_07.ogg city_blues_redfarn.mid "${SF2}"
+convert_track ezy_08.ogg no_work_song_redfarn.mid "${SF2}"
+convert_track ezy_09.ogg slow_neasy_redfarn.mid "${SF2}"
 
 echo ""
 echo "Música en ${OUT_DIR}/:"

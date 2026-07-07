@@ -24,8 +24,9 @@ mod town_window;
 mod vehicle_window;
 mod windows_shot;
 use audio_settings_window::{
-    AudioSettingsWindowState, audio_settings_on_closed, handle_audio_settings_buttons,
-    handle_volume_sliders, setup_audio_settings_window, sync_audio_settings_window,
+    SoundMusicWindowState, handle_audio_settings_buttons, handle_music_window_buttons,
+    handle_sound_music_toolbar_button, handle_volume_sliders, setup_sound_music_window,
+    sound_music_window_on_closed, sync_sound_music_window,
 };
 use buy_window::{
     BuyVehicleWindowState, buy_window_on_closed, handle_buy_window_buttons, setup_buy_window,
@@ -115,7 +116,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<NewsHistoryState>()
         .init_resource::<FinancesWindowState>()
         .init_resource::<NewsSettingsWindowState>()
-        .init_resource::<AudioSettingsWindowState>()
+        .init_resource::<SoundMusicWindowState>()
         .init_resource::<crate::news_prefs::NewsDisplayPrefs>()
         .init_resource::<SelectedTileInfo>()
         .init_resource::<HoveredTileCoord>()
@@ -152,7 +153,7 @@ impl Plugin for ClientUiPlugin {
                 setup_news_history_window,
                 setup_finances_window,
                 setup_news_settings_window,
-                setup_audio_settings_window,
+                setup_sound_music_window,
                 setup_top_toolbar,
                 setup_build_menu,
                 setup_minimap,
@@ -315,10 +316,12 @@ impl Plugin for ClientUiPlugin {
         .add_systems(
             Update,
             (
+                handle_sound_music_toolbar_button,
                 handle_audio_settings_buttons,
                 handle_volume_sliders,
-                audio_settings_on_closed,
-                sync_audio_settings_window,
+                handle_music_window_buttons,
+                sound_music_window_on_closed,
+                sync_sound_music_window,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

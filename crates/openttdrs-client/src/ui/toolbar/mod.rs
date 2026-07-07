@@ -244,8 +244,11 @@ pub(crate) enum SaveMenuAction {
     ZoomIn,
     ZoomOut,
     NewsSettings,
-    AudioSettings,
 }
+
+/// Botón directo en la barra superior: abre la ventana unificada de sonido y música.
+#[derive(Component)]
+pub(crate) struct SoundMusicToolbarButton;
 
 /// Barra superior de herramientas (visibilidad, tooltip).
 #[derive(Resource, Default)]

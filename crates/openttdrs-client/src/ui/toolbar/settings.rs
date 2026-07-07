@@ -13,7 +13,6 @@ pub(crate) fn handle_settings_menu_buttons(
     mut hud: ResMut<SimHudControls>,
     mut save_window: ResMut<SaveWindowState>,
     mut news_settings: ResMut<crate::ui::news_settings_window::NewsSettingsWindowState>,
-    mut audio_settings: ResMut<crate::ui::audio_settings_window::AudioSettingsWindowState>,
     mut cam_q: Query<
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
@@ -72,9 +71,6 @@ pub(crate) fn handle_settings_menu_buttons(
             SaveMenuAction::NewsSettings => {
                 news_settings.open = true;
             }
-            SaveMenuAction::AudioSettings => {
-                audio_settings.open = true;
-            }
         }
     }
 }
@@ -123,7 +119,6 @@ mod tests {
     use bevy::prelude::*;
 
     use crate::state::SimWorld;
-    use crate::ui::audio_settings_window::AudioSettingsWindowState;
     use crate::ui::hud::SimHudControls;
     use crate::ui::news_settings_window::NewsSettingsWindowState;
     use crate::ui::save_window::{SaveWindowMode, SaveWindowState};
@@ -137,7 +132,6 @@ mod tests {
         world.insert_resource(SimHudControls::default());
         world.insert_resource(SaveWindowState::default());
         world.insert_resource(NewsSettingsWindowState::default());
-        world.insert_resource(AudioSettingsWindowState::default());
 
         world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();

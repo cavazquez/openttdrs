@@ -2,8 +2,8 @@ use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
 
 use super::super::{
-    BuildMenuAction, BuildMenuUi, ToolButtonGroup, ToolbarGroup, ToolbarGroupButton,
-    ToolbarTooltipTarget, TooltipBox, TooltipText,
+    BuildMenuAction, BuildMenuUi, SoundMusicToolbarButton, ToolButtonGroup, ToolbarGroup,
+    ToolbarGroupButton, ToolbarTooltipTarget, TooltipBox, TooltipText,
 };
 use super::controls::{spawn_icon_tool_buttons, spawn_panel_title, spawn_settings_buttons};
 use crate::ui::save_window::{SaveLoadToolbarButton, SaveWindowMode};
@@ -121,6 +121,17 @@ pub(super) fn spawn_toolbar_group_buttons(
             BackgroundColor(Color::srgb(0.62, 0.55, 0.38)),
             BuildMenuUi,
         ));
+        spawn_sound_music_toolbar_button(parent);
+        parent.spawn((
+            Node {
+                width: Val::Px(2.0),
+                height: Val::Px(40.0),
+                margin: UiRect::horizontal(Val::Px(2.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.62, 0.55, 0.38)),
+            BuildMenuUi,
+        ));
         spawn_save_load_button(
             parent,
             SaveWindowMode::Save,
@@ -134,6 +145,36 @@ pub(super) fn spawn_toolbar_group_buttons(
             "Cargar partida (ventana de partidas)",
         );
     });
+}
+
+fn spawn_sound_music_toolbar_button(parent: &mut ChildSpawnerCommands) {
+    parent.spawn((
+        Button,
+        SoundMusicToolbarButton,
+        ToolbarTooltipTarget {
+            text: "Sonido y música (volúmenes, efectos, jukebox)",
+        },
+        BuildMenuUi,
+        Node {
+            width: Val::Px(72.0),
+            height: Val::Px(48.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(2.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
+        BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
+        Interaction::default(),
+        children![(
+            Text::new("Sonido"),
+            TextFont {
+                font_size: FontSize::Rem(0.85),
+                ..default()
+            },
+            TextColor(Color::srgb(0.95, 0.92, 0.78)),
+        )],
+    ));
 }
 
 fn spawn_save_load_button(

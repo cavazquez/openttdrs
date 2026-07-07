@@ -150,9 +150,6 @@ pub fn company_colour_tooltip(colour: u8) -> &'static str {
 #[must_use]
 pub fn build_remap_table(target: CompanyColour) -> HashMap<[u8; 3], [u8; 3]> {
     let mut map = HashMap::new();
-    if !target.needs_recolor() {
-        return map;
-    }
     let dst = target.as_u8() as usize;
     for shade in 0..COMPANY_RAMP_SHADES {
         let out = COMPANY_RAMP_RGB[ramp_index(dst, shade)];
@@ -166,9 +163,6 @@ pub fn build_remap_table(target: CompanyColour) -> HashMap<[u8; 3], [u8; 3]> {
 
 /// Recolorea un buffer RGBA8 in-place.
 pub fn recolor_rgba8(buf: &mut [u8], target: CompanyColour) {
-    if !target.needs_recolor() {
-        return;
-    }
     let table = remap_table_cached(target);
     for px in buf.chunks_exact_mut(4) {
         if px[3] == 0 {
@@ -210,9 +204,7 @@ pub fn load_recolored_png_path(
     images: &mut Assets<Image>,
 ) -> Option<Handle<Image>> {
     let mut img = image::open(path).ok()?.into_rgba8();
-    if target.needs_recolor() {
-        recolor_rgba8(img.as_mut(), target);
-    }
+    recolor_rgba8(img.as_mut(), target);
     Some(images.add(rgba_to_bevy_image(img)))
 }
 
@@ -291,9 +283,6 @@ impl CompanyColoredSprites {
 
     pub fn build_all(&mut self, images: &mut Assets<Image>) {
         self.tiles.clear();
-        if !self.colour.needs_recolor() {
-            return;
-        }
         for filename in company_palette_tile_filenames() {
             if let Some(handle) = load_recolored_png(&filename, self.colour, images) {
                 self.tiles.insert(filename, handle);
@@ -347,7 +336,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn dark_blue_is_identity() {
+    fn dark_blue_remaps_foreign_company_ramp_to_baked_default() {
+        let src = COMPANY_RAMP_RGB[ramp_index(CompanyColour::Purple.as_u8() as usize, 2)];
+        let mut px = [src[0], src[1], src[2], 255];
+        recolor_rgba8(&mut px, CompanyColour::DarkBlue);
+        let expected = COMPANY_RAMP_RGB[ramp_index(CompanyColour::DarkBlue.as_u8() as usize, 2)];
+        assert_eq!(&px[..3], expected);
+    }
+
+    #[test]
+    fn dark_blue_is_identity_for_baked_shades() {
         let mut px = [40u8, 92, 164, 255];
         recolor_rgba8(&mut px, CompanyColour::DarkBlue);
         assert_eq!(px, [40, 92, 164, 255]);

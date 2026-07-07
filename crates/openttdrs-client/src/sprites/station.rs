@@ -188,11 +188,12 @@ static RAIL_STATION_SEQ_7: [RailStationLayer; 3] = [
 
 static RAIL_WAYPOINT_SEQ_X: [RailStationLayer; 2] = [
     layer(4974, 0.0, 0.0, 0.0, 0.05),
-    layer(4975, 0.0, 11.0, 0.0, 0.06),
+    // ogfx2_stations: xrel/yrel del NFO ya separan oeste/este; sin TILE_SEQ dy=11.
+    layer(4975, 0.0, 0.0, 0.0, 0.06),
 ];
 static RAIL_WAYPOINT_SEQ_Y: [RailStationLayer; 2] = [
     layer(4976, 0.0, 0.0, 0.0, 0.05),
-    layer(4977, 11.0, 0.0, 0.0, 0.06),
+    layer(4977, 0.0, 0.0, 0.0, 0.06),
 ];
 
 /// Postes de waypoint (`_station_display_datas_waypoint_*` en `station_land.h`).
@@ -375,7 +376,19 @@ mod tests {
     }
 
     #[test]
-    fn rail_waypoint_posts_offset_along_x_axis_track() {
+    fn rail_waypoint_ogfx2_uses_zero_tile_seq_offsets() {
+        // ogfx2_stations (sprites 19–24): el desplazamiento oeste/este va en xrel del NFO.
+        // TILE_SEQ dy=11 / dx=11 era para toldos vanilla y produce forma en L con ogfx2.
+        let x = rail_waypoint_draw_layers(0);
+        let y = rail_waypoint_draw_layers(1);
+        assert_eq!((x[0].dx, x[0].dy), (0.0, 0.0));
+        assert_eq!((x[1].dx, x[1].dy), (0.0, 0.0));
+        assert_eq!((y[0].dx, y[0].dy), (0.0, 0.0));
+        assert_eq!((y[1].dx, y[1].dy), (0.0, 0.0));
+    }
+
+    #[test]
+    fn rail_waypoint_halves_offset_by_nfo_xrel() {
         let origin = crate::iso::iso(3, 4);
         let p0 = rail_waypoint_sprite_center(
             origin,
@@ -384,10 +397,10 @@ mod tests {
             0,
             0.05,
             &layer(4974, 0.0, 0.0, 0.0, 0.05),
-            -31.0,
-            0.0,
-            64.0,
-            23.0,
+            -30.0,
+            -9.0,
+            40.0,
+            29.0,
         );
         let p1 = rail_waypoint_sprite_center(
             origin,
@@ -395,14 +408,53 @@ mod tests {
             4,
             0,
             0.06,
-            &layer(4975, 0.0, 11.0, 0.0, 0.06),
-            -31.0,
+            &layer(4975, 0.0, 0.0, 0.0, 0.06),
             -8.0,
-            64.0,
-            39.0,
+            -9.0,
+            40.0,
+            29.0,
         );
-        assert!(p1.x > p0.x + 15.0, "segundo poste desplazado en X (dy=11)");
-        assert!(p1.y < p0.y - 5.0, "segundo poste desplazado en Y (dy=11)");
+        assert!(p1.x > p0.x + 15.0, "mitad este desplazada en X (xrel NFO)");
+        assert!(
+            (p1.y - p0.y).abs() < 2.0,
+            "mitades alineadas en Y sin TILE_SEQ dy=11 (Δy={})",
+            p1.y - p0.y
+        );
+    }
+
+    #[test]
+    fn rail_waypoint_y_halves_share_screen_row() {
+        let origin = crate::iso::iso(3, 4);
+        let p0 = rail_waypoint_sprite_center(
+            origin,
+            3,
+            4,
+            0,
+            0.05,
+            &layer(4976, 0.0, 0.0, 0.0, 0.05),
+            -28.0,
+            -8.0,
+            38.0,
+            28.0,
+        );
+        let p1 = rail_waypoint_sprite_center(
+            origin,
+            3,
+            4,
+            0,
+            0.06,
+            &layer(4977, 0.0, 0.0, 0.0, 0.06),
+            -8.0,
+            -8.0,
+            38.0,
+            28.0,
+        );
+        assert!(p1.x > p0.x + 15.0, "mitad este desplazada en X (xrel NFO)");
+        assert!(
+            (p1.y - p0.y).abs() < 2.0,
+            "eje Y: mitades en la misma fila sin TILE_SEQ dx=11 (Δy={})",
+            p1.y - p0.y
+        );
     }
 
     #[test]

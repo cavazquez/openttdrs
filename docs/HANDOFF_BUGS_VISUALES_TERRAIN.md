@@ -4,6 +4,9 @@
 **Estado:** trabajo **sin commit** en `main` (2 commits previos de audio sin push).  
 **Última captura del usuario:** `save/partida_2026-06-22_0942.json`, mapa procedural grande, clima templado.
 
+> **Waypoints ferroviarios (render incorrecto, abierto):** ver handoff dedicado  
+> [`docs/HANDOFF_WAYPOINTS_RAIL.md`](HANDOFF_WAYPOINTS_RAIL.md) — el usuario confirma que sigue viéndose mal tras intentos de posicionamiento ogfx2.
+
 ---
 
 ## 1. Resumen ejecutivo

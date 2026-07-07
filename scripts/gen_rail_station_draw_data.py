@@ -48,6 +48,14 @@ SPRITES = [
     (4977, "rail_4977.png"),
 ]
 
+# Metadata NFO de ogfx2_stations (casetas con ballast; paridad OpenTTD+OpenGFX2).
+STATIONS_WAYPOINT_NFO_META: dict[int, tuple[float, float, float, float]] = {
+    4974: (40.0, 29.0, -30.0, -9.0),
+    4975: (40.0, 29.0, -8.0, -9.0),
+    4976: (38.0, 28.0, -28.0, -8.0),
+    4977: (38.0, 28.0, -8.0, -8.0),
+}
+
 
 def main() -> None:
     nfo = parse_sprite_offs(REPO)
@@ -63,11 +71,20 @@ def main() -> None:
         f"pub static RAIL_STATION_SPRITE_META: [(u32, f32, f32, f32, f32); {len(SPRITES)}] = [",
     ]
     for sid, png in SPRITES:
-        w, h, xr, yr, note = sprite_dims_from_assets(
-            REPO, TILES_DIR, nfo, sid, png, prefer
-        )
-        if note in ("sin_nfo", "macro"):
-            raise SystemExit(f"sin metadata NFO para sprite {sid} ({png})")
+        if sid in STATIONS_WAYPOINT_NFO_META:
+            w, h, xr, yr = STATIONS_WAYPOINT_NFO_META[sid]
+            note = "ogfx2_stations"
+        else:
+            w, h, xr, yr, note = sprite_dims_from_assets(
+                REPO, TILES_DIR, nfo, sid, png, prefer
+            )
+            if note == "sin_nfo" and sid == 4977 and (TILES_DIR / "rail_4976.png").is_file():
+                w, h, xr, yr, note = sprite_dims_from_assets(
+                    REPO, TILES_DIR, nfo, 4976, "rail_4976.png", prefer
+                )
+                note = f"{note}_from_4976"
+            if note in ("sin_nfo", "macro"):
+                raise SystemExit(f"sin metadata NFO para sprite {sid} ({png})")
         lines.append(
             f"    ({sid}, {w:.1f}, {h:.1f}, {xr:.1f}, {yr:.1f}), // {png} [{note}]"
         )

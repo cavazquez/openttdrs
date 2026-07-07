@@ -71,9 +71,6 @@ fn dispatch_sim_events(
                         volume: 0.85,
                     });
                 }
-                if matches!(kind, ConstructionKind::Road) {
-                    fx.push_road_works(at);
-                }
             }
             SimEvent::Demolition { at } => {
                 if hud.sound_confirm {

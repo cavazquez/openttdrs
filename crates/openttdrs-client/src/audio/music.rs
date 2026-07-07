@@ -40,7 +40,9 @@ impl Plugin for MusicPlugin {
             .add_systems(OnExit(ClientScreen::MainMenu), stop_menu_theme)
             .add_systems(
                 Update,
-                (play_menu_theme, advance_playlist.in_set(UpdateSet::Status)),
+                (play_menu_theme, sync_music_volume, advance_playlist)
+                    .chain()
+                    .in_set(UpdateSet::Status),
             );
     }
 }
@@ -121,6 +123,24 @@ fn play_menu_theme(
 fn stop_menu_theme(mut commands: Commands, players: Query<Entity, With<MusicPlayer>>) {
     for entity in &players {
         commands.entity(entity).despawn();
+    }
+}
+
+/// Aplica el volumen de música en caliente a la pista activa.
+///
+/// Bevy no propaga cambios en [`PlaybackSettings`] a un sink ya creado; hay que
+/// usar [`AudioSink::set_volume`].
+fn sync_music_volume(
+    hud: Res<SimHudControls>,
+    global_volume: Res<GlobalVolume>,
+    mut players: Query<&mut AudioSink, With<MusicPlayer>>,
+) {
+    let target =
+        bevy::audio::Volume::Linear(hud.music_volume.clamp(0.0, 1.0)) * global_volume.volume;
+    for mut sink in &mut players {
+        if sink.volume() != target {
+            sink.set_volume(target);
+        }
     }
 }
 

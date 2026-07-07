@@ -121,11 +121,11 @@ Estado actual: **~20 SFX** vía `SimEvent` + audio espacial (`audio/world_sfx.rs
 | Aspecto | Estado | Ubicación |
 |---------|--------|-----------|
 | Dependencia audio | `bevy` + `bevy_audio` + `wav` | `openttdrs-client/Cargo.toml` |
-| SFX HUD (6 tipos) | Implementado | `ui/hud/sound_ping.rs` |
+| SFX HUD (5 tipos) | Implementado | `ui/hud/sound_ping.rs` |
 | SFX mundo (~20 `SoundId`) | Implementado | `sound_id.rs`, `audio/sim_events.rs` |
 | Audio espacial (paneo por cámara) | Implementado | `audio/world_sfx.rs` |
 | Volumen SFX / música | `sfx_volume`, `music_volume` | `settings.rs`, ventana **Audio...** |
-| Flags granulares | `sound_vehicle/ambient/disaster/confirm` | `settings.rs`, `audio_settings_window.rs` |
+| Flags granulares | `sound_vehicle/ambient/disaster/confirm/click_beep` | `settings.rs`, `audio_settings_window.rs` |
 | OpenSFX metadatos | En repo | `assets/opensfx/opensfx-1.0.3/` |
 | WAV runtime | Scripts HUD + OpenSFX | `preparar_sonidos_hud.sh`, `preparar_sonidos_opensfx.sh` |
 | Eventos cruce / salida tren | `LevelCrossing`, `VehicleDepart` | `sim_step.rs`, `map/level_crossing.rs` |
@@ -137,12 +137,13 @@ Estado actual: **~20 SFX** vía `SimEvent` + audio espacial (`audio/world_sfx.rs
 
 | `HudSfxKind` (port) | Analogía OpenTTD |
 |---------------------|------------------|
-| `Error` | — (no directo) |
-| `BuildOk` | `SND_15_BEEP` / confirm |
-| `Income` | `SND_14_CASHTILL` |
+| `ClickBeep` | `SND_15_BEEP` / `sound.click_beep` |
+| `Error` | — (no directo; beep extra del port) |
 | `NewsTicker` | `SND_16_NEWS_TICKER` |
 | `NewsApplause` | `SND_1D_APPLAUSE` |
 | `NewsChime` | `SND_1E_NEW_ENGINE` |
+
+Ingreso de carga (`SND_14_CASHTILL`) y construcción en mapa van por `SimEvent` → `PlayWorldSfx`, no por HUD.
 
 **Complejidad de portado:** Media. **Assets:** OpenSFX (GPL, libre) — ya parcialmente en `assets/opensfx/`.
 
@@ -180,7 +181,7 @@ Estado actual: **~20 SFX** vía `SimEvent` + audio espacial (`audio/world_sfx.rs
 |---------|--------|
 | Reproducción OGG en juego | **Hecho** (`audio/music.rs`) |
 | Playlists / shuffle OpenMSX | **Falta** |
-| Volumen música separado de SFX | **Hecho** (`music_volume` + ventana Audio) |
+| Volumen música separado de SFX | **Hecho** (`music_volume` + ventana Audio; sync en caliente en `music.rs`) |
 | Script descarga OpenMSX | Existe | `scripts/descargar_musica.sh` |
 | Assets OpenMSX en repo | Gitignored; generar con script |
 | Controles play/pause/skip en UI | **Falta** |

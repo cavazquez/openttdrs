@@ -81,9 +81,9 @@ copy_osfx 19 train_collision.wav     # SND_13_TRAIN_COLLISION (17)
 copy_osfx 23 skid_plane.wav          # SND_17_SKID_PLANE (21) → osfx_23
 copy_osfx 25 departure_road.wav      # SND_19_DEPARTURE_OLD_RV_1 (23) → osfx_25
 copy_osfx 24 takeoff_heli.wav        # SND_18_TAKEOFF_HELICOPTER (22) → osfx_24
-copy_osfx 30 construction_other.wav  # SND_1F_CONSTRUCTION_OTHER (29)
+copy_osfx 31 construction_other.wav  # SND_1F_CONSTRUCTION_OTHER (29) — splat no-rail
 copy_osfx 32 construction_rail.wav     # SND_20_CONSTRUCTION_RAIL (30)
-copy_osfx 33 road_works.wav          # SND_21_ROAD_WORKS (31)
+copy_osfx 33 road_works.wav          # SND_21_ROAD_WORKS (31) — jackhammer
 copy_osfx 39 construction_bridge.wav # SND_27_CONSTRUCTION_BRIDGE (37)
 
 echo ""

@@ -79,8 +79,6 @@ pub(crate) struct HudBuildFeedback {
     pub(crate) expires_at_secs: f32,
     /// Encola pitido de error (lo consume [`flush_hud_sfx`]).
     pub(crate) pending_soft_ping: bool,
-    /// Encola sonido breve al cobrar entrega de carga.
-    pub(crate) pending_income_ping: bool,
     /// Ticker de noticias en la barra inferior.
     pub(crate) pending_news_ticker: bool,
     /// Aplausos (primera entrega / hito).

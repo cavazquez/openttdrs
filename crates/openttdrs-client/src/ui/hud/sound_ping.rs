@@ -1,4 +1,4 @@
-//! SFX del HUD: error de construcción, colocación OK e ingreso de carga.
+//! SFX del HUD: error de construcción y noticias.
 
 use bevy::prelude::*;
 
@@ -8,7 +8,6 @@ pub(crate) enum HudSfxKind {
     /// Clic en botones del toolbar (`SND_15_BEEP`, `sound.click_beep`).
     ClickBeep,
     Error,
-    Income,
     NewsTicker,
     NewsApplause,
     NewsChime,
@@ -21,8 +20,6 @@ pub(crate) struct PlayHudSfx(pub HudSfxKind);
 #[derive(Resource, Default)]
 pub(crate) struct HudSfxHandles {
     pub error: Option<Handle<AudioSource>>,
-    pub build_ok: Option<Handle<AudioSource>>,
-    pub income: Option<Handle<AudioSource>>,
     pub news_ticker: Option<Handle<AudioSource>>,
     pub news_applause: Option<Handle<AudioSource>>,
     pub news_chime: Option<Handle<AudioSource>>,
@@ -35,10 +32,6 @@ pub(crate) fn flush_hud_sfx(
     if hud.pending_soft_ping {
         hud.pending_soft_ping = false;
         writer.write(PlayHudSfx(HudSfxKind::Error));
-    }
-    if hud.pending_income_ping {
-        hud.pending_income_ping = false;
-        writer.write(PlayHudSfx(HudSfxKind::Income));
     }
     if hud.pending_news_ticker {
         hud.pending_news_ticker = false;
@@ -63,8 +56,6 @@ pub(crate) fn load_hud_sfx(
         return;
     }
     handles.error = Some(asset_server.load("assets/sounds/hud_soft.wav"));
-    handles.build_ok = Some(asset_server.load("assets/sounds/build_ok.wav"));
-    handles.income = Some(asset_server.load("assets/sounds/income.wav"));
     handles.news_ticker = Some(asset_server.load("assets/sounds/news_ticker.wav"));
     handles.news_applause = Some(asset_server.load("assets/sounds/news_applause.wav"));
     handles.news_chime = Some(asset_server.load("assets/sounds/news_chime.wav"));
@@ -91,18 +82,9 @@ pub(crate) fn play_hud_sfx(
     for PlayHudSfx(kind) in reader.read() {
         let handle = match kind {
             HudSfxKind::ClickBeep | HudSfxKind::Error => sound.error.as_ref(),
-            HudSfxKind::Income => sound.income.as_ref().or(sound.error.as_ref()),
             HudSfxKind::NewsTicker => sound.news_ticker.as_ref().or(sound.error.as_ref()),
-            HudSfxKind::NewsApplause => sound
-                .news_applause
-                .as_ref()
-                .or(sound.income.as_ref())
-                .or(sound.error.as_ref()),
-            HudSfxKind::NewsChime => sound
-                .news_chime
-                .as_ref()
-                .or(sound.build_ok.as_ref())
-                .or(sound.error.as_ref()),
+            HudSfxKind::NewsApplause => sound.news_applause.as_ref().or(sound.error.as_ref()),
+            HudSfxKind::NewsChime => sound.news_chime.as_ref().or(sound.error.as_ref()),
         };
         play_handle(&mut commands, handle, volume);
     }

@@ -13,7 +13,6 @@ use crate::state::ClientScreen;
 pub(crate) enum FxSpawnKind {
     BreakdownSmoke,
     Explosion,
-    RoadWorks,
 }
 
 /// Cola de FX a crear tras procesar [`PendingSimEvents`](crate::audio::PendingSimEvents).
@@ -27,10 +26,6 @@ impl FxSpawnQueue {
 
     pub(crate) fn push_explosion(&mut self, at: TileCoord) {
         self.0.push((at, FxSpawnKind::Explosion));
-    }
-
-    pub(crate) fn push_road_works(&mut self, at: TileCoord) {
-        self.0.push((at, FxSpawnKind::RoadWorks));
     }
 }
 
@@ -69,7 +64,6 @@ fn spawn_queued_fx(
         let duration = match kind {
             FxSpawnKind::BreakdownSmoke => 2.5,
             FxSpawnKind::Explosion => 1.2,
-            FxSpawnKind::RoadWorks => 3.0,
         };
         let phase = (at.x as usize).wrapping_mul(3) % smoke_frames.0.len();
         let mut sprite = smoke_frames.0[phase].sprite();
@@ -100,7 +94,7 @@ fn animate_ephemeral_fx(
         fx.lifetime.tick(time.delta());
         let rise = match fx.kind {
             FxSpawnKind::BreakdownSmoke => 28.0,
-            FxSpawnKind::Explosion | FxSpawnKind::RoadWorks => 0.0,
+            FxSpawnKind::Explosion => 0.0,
         };
         transform.translation.y += rise * time.delta_secs();
         if !frames.0.is_empty() {

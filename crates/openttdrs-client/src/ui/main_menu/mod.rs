@@ -10,8 +10,8 @@ mod tests;
 
 pub(crate) use setup::setup_main_menu;
 pub(crate) use systems::{
-    leave_main_menu, main_menu_interaction, main_menu_options_interaction,
-    sync_main_menu_panel_visibility, sync_main_menu_summary,
+    auto_start_preloaded_json, leave_main_menu, main_menu_interaction,
+    main_menu_options_interaction, sync_main_menu_panel_visibility, sync_main_menu_summary,
 };
 
 use bevy::prelude::*;

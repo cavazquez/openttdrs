@@ -80,6 +80,12 @@ OTTDMAP_FILE=crates/openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap c
 
 # Captura automatizada (ghost / herramientas)
 OPENTTDRS_MAP_SHOT=/tmp/shot.png OPENTTDRS_MAP_SHOT_TOOL=rail_station cargo run -p openttdrs-client
+
+# DevBot — ¿cargó, descargó, cuánto ganó? (headless, sin UI)
+cargo run -p openttdrs-core --bin dev_bot -- \
+  --scenario train_line --vehicle 1 --ticks 12000 --require-delivery
+cargo test -p openttdrs-core dev_metrics
+# Referencia completa: docs/DEV_BOT.md
 ```
 
 ---
@@ -92,4 +98,4 @@ OPENTTDRS_MAP_SHOT=/tmp/shot.png OPENTTDRS_MAP_SHOT_TOOL=rail_station cargo run 
 
 ---
 
-*Última actualización: 2026-06-22 (refactor módulos, menú fase 2, lagos, población procedural)*
+*Última actualización: jul 2026 (DevBot / `dev_metrics`; refactor módulos, menú fase 2)*

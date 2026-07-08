@@ -5,12 +5,14 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
 
+pub mod ai;
 pub mod aircraft_movement;
 pub mod autoreplace;
 pub mod bridge_spec;
 pub mod cargo;
 pub mod command;
 pub mod depot;
+pub mod dev_metrics;
 pub mod disaster;
 pub mod economy;
 pub mod engine;
@@ -62,6 +64,7 @@ pub use command::{
     road_drag_line_tiles, road_locked_tool_axis,
 };
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
+pub use dev_metrics::{CargoProbeOptions, VehicleCargoReport, probe_vehicle_cargo_cycle};
 pub use disaster::{DISASTER_CHECK_INTERVAL, force_disaster, tick_disasters, trigger_disaster_at};
 pub use economy::{
     ANNUAL_INTEREST_RATE_PCT, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL,

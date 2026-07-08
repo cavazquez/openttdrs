@@ -226,6 +226,29 @@ pub(crate) fn leave_main_menu(
     next_screen.set(ClientScreen::InGame);
 }
 
+/// Salta el menú si el arranque cargó un JSON vía `OTTDJSON_LOAD` (escenarios `dev_bot`).
+pub(crate) fn auto_start_preloaded_json(
+    sim: Res<SimWorld>,
+    mut commands: Commands,
+    q_menu: Query<Entity, With<MainMenuUi>>,
+    q_menu_cam: Query<Entity, With<MainMenuCamera>>,
+    intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
+    mut next_screen: ResMut<NextState<ClientScreen>>,
+    mut done: Local<bool>,
+) {
+    if *done || !sim.loaded_file || std::env::var_os("OTTDJSON_LOAD").is_none() {
+        return;
+    }
+    *done = true;
+    leave_main_menu(
+        &mut commands,
+        &q_menu,
+        &q_menu_cam,
+        &intro_layers,
+        &mut next_screen,
+    );
+}
+
 fn enter_new_game(
     commands: &mut Commands,
     q_menu: &Query<Entity, With<MainMenuUi>>,

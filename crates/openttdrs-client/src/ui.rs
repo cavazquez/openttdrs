@@ -51,8 +51,8 @@ use industry_panel::{
     IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
 };
 use main_menu::{
-    main_menu_interaction, main_menu_options_interaction, setup_main_menu,
-    sync_main_menu_panel_visibility, sync_main_menu_summary,
+    auto_start_preloaded_json, main_menu_interaction, main_menu_options_interaction,
+    setup_main_menu, sync_main_menu_panel_visibility, sync_main_menu_summary,
 };
 use main_menu_intro::{
     animate_main_menu_intro_traffic, pan_main_menu_intro_camera, setup_main_menu_intro,
@@ -185,6 +185,7 @@ impl Plugin for ClientUiPlugin {
             (
                 pan_main_menu_intro_camera,
                 animate_main_menu_intro_traffic,
+                auto_start_preloaded_json,
                 main_menu_interaction,
                 main_menu_options_interaction,
                 sync_main_menu_panel_visibility,

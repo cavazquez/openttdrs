@@ -40,6 +40,20 @@ OpenTTD original ejecuta scripts Squirrel (`ai/`, `game/`) para competidores CPU
 - Compite por un subsidio activo (`subsidy.rs`).
 - `check.sh` verde con escenario headless `ai_rival_line`.
 
+## DevBot / métricas (implementado, jul 2026)
+
+Módulo opcional `dev_metrics` + binario `dev_bot` para medir carga → descarga → ingresos
+sin UI. Eliminar: borrar `dev_metrics/`, `bin/dev_bot.rs`, exports en `lib.rs`.
+
+```bash
+cargo run -p openttdrs-core --bin dev_bot -- \
+  --scenario train_line --vehicle 1 --ticks 12000 --require-delivery
+```
+
+Trait vacío `ai::CompanyAi` listo para políticas futuras (rival / fuzzer).
+
+**Comandos y guía completa:** [DEV_BOT.md](../DEV_BOT.md)
+
 ## Referencias OpenTTD
 
 - `src/ai/ai_core.cpp` — orquestación

@@ -14,7 +14,7 @@ use crate::sprites::{
     is_road_level_crossing, level_crossing_rail_sprite_id, rail_tile_is_signals,
     road_bits_for_render,
 };
-use crate::state::SimWorld;
+use crate::state::{SimRunState, SimWorld, sim_is_paused};
 
 use super::{HudBuildFeedback, SelectedTileInfo, SimHudControls, TileInfoText};
 use crate::ui::{BuildMenuAction, OrderEditState, UiToolState};
@@ -174,7 +174,9 @@ pub(crate) fn setup_tile_info_ui(
     };
     commands.spawn((
         TileInfoText,
-        Text2d::new("Mapa: clic selecciona tile · Depósito ≠ parada (carga) · Esc cancela"),
+        Text2d::new(
+            "Mapa: clic selecciona tile · Esc menú (sin herramienta) · Depósito ≠ parada (carga)",
+        ),
         crate::ui::font::ui_text_font(font, crate::ui::font::UiFontRole::Body),
         TextColor(Color::srgb(0.96, 0.94, 0.82)),
         Transform::from_xyz(0.0, 0.0, 1000.0),
@@ -230,6 +232,7 @@ pub(crate) fn update_tile_info_text(
     time: Res<Time>,
     tool_state: Res<UiToolState>,
     order_state: Res<OrderEditState>,
+    run_state: Res<State<SimRunState>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<(&Transform, &Projection), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut text_q: Query<
@@ -282,7 +285,7 @@ pub(crate) fn update_tile_info_text(
         selected: selected.pos.map(|p| (p.x, p.y)),
         tick: sim.state.tick.get(),
         cam_scale_bits: proj.scale.to_bits(),
-        paused: hud.paused,
+        paused: sim_is_paused(&run_state),
         sim_speed_bits: hud.sim_speed.to_bits(),
         minimap: hud.minimap_visible,
         tool: tool_state.active_tool,
@@ -319,7 +322,11 @@ pub(crate) fn update_tile_info_text(
     *cache = Some(key);
 
     let zoom_label = format!("Zoom {:.2}×", zoom_display_magnification(proj.scale));
-    let pause_l = if hud.paused { "Pausa ON" } else { "Pausa OFF" };
+    let pause_l = if sim_is_paused(&run_state) {
+        "Pausa ON"
+    } else {
+        "Pausa OFF"
+    };
     let speed_l = format!("Velocidad {:.0}x", hud.sim_speed);
     let tool_l = tool_state
         .active_tool
@@ -601,6 +608,7 @@ mod tests {
         world.insert_resource(Time::<()>::default());
         world.insert_resource(UiToolState::default());
         world.insert_resource(OrderEditState::default());
+        crate::state::insert_test_sim_run_state(&mut world);
         world.run_system_once(update_tile_info_text).unwrap();
     }
 
@@ -615,6 +623,7 @@ mod tests {
         world.insert_resource(Time::<()>::default());
         world.insert_resource(UiToolState::default());
         world.insert_resource(OrderEditState::default());
+        crate::state::insert_test_sim_run_state(&mut world);
 
         world.spawn((
             Window {

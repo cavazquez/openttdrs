@@ -22,7 +22,6 @@ pub(crate) use sound_ping::{
 /// Pausa simulacion y ruta del JSON de **F5/F9** (alternativa a variable de entorno al arranque).
 #[derive(Resource)]
 pub(crate) struct SimHudControls {
-    pub(crate) paused: bool,
     pub(crate) sim_speed: f32,
     pub(crate) json_save_path: String,
     pub(crate) minimap_visible: bool,
@@ -39,7 +38,6 @@ pub(crate) struct SimHudControls {
 impl Default for SimHudControls {
     fn default() -> Self {
         Self {
-            paused: false,
             sim_speed: 1.0,
             json_save_path: crate::config::json_save_path(),
             minimap_visible: true,

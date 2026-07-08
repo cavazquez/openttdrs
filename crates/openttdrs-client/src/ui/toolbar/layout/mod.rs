@@ -9,11 +9,13 @@ use sections::{
 };
 
 use super::BuildMenuUi;
+use crate::state::ingame_lifecycle::InGameUi;
 
 /// Barra superior compacta tipo toolbar para seleccion rapida de herramienta.
 pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetServer>) {
     let root = commands
         .spawn((
+            InGameUi,
             Node {
                 position_type: PositionType::Absolute,
                 top: Val::Px(10.0),

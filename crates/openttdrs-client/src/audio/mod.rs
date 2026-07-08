@@ -11,5 +11,5 @@ pub(crate) use music::MusicPlugin;
 pub(crate) use music::{
     MusicPlayer, MusicPlaylist, MusicState, music_apply_playlist, music_skip, music_toggle_playback,
 };
-pub(crate) use sim_events::SimEventsPlugin;
+pub(crate) use sim_events::{PendingSimEvents, SimEventsPlugin};
 pub(crate) use world_sfx::{PlayWorldSfx, WorldSfxPlugin};

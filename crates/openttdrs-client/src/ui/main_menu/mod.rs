@@ -10,8 +10,9 @@ mod tests;
 
 pub(crate) use setup::setup_main_menu;
 pub(crate) use systems::{
-    auto_start_preloaded_json, leave_main_menu, main_menu_interaction,
-    main_menu_options_interaction, sync_main_menu_panel_visibility, sync_main_menu_summary,
+    auto_start_preloaded_json, leave_main_menu, main_menu_continue_interaction,
+    main_menu_interaction, main_menu_options_interaction, return_to_main_menu,
+    sync_main_menu_continue_button, sync_main_menu_panel_visibility, sync_main_menu_summary,
 };
 
 use bevy::prelude::*;
@@ -44,6 +45,12 @@ pub(crate) struct MainMenuHintsText;
 
 #[derive(Component)]
 pub(crate) struct MainMenuNewGameButton;
+
+#[derive(Component)]
+pub(crate) struct MainMenuContinueButton;
+
+#[derive(Component)]
+pub(crate) struct MainMenuContinueWrap;
 
 #[derive(Component)]
 pub(crate) struct MainMenuLoadButton;

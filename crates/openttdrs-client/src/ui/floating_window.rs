@@ -328,6 +328,33 @@ fn close_window_buttons(
     }
 }
 
+/// Cierra la ventana flotante visible con mayor `GlobalZIndex` (p. ej. con **Esc**).
+pub(crate) fn close_top_visible_floating_window(
+    windows_q: &mut Query<(&FloatingWindow, &GlobalZIndex, &mut Visibility)>,
+    closed: &mut MessageWriter<FloatingWindowClosed>,
+) -> bool {
+    let mut best: Option<(FloatingWindowId, i32)> = None;
+    for (win, z, vis) in windows_q.iter() {
+        if *vis != Visibility::Visible {
+            continue;
+        }
+        if best.map(|(_, bz)| z.0 > bz).unwrap_or(true) {
+            best = Some((win.id, z.0));
+        }
+    }
+    let Some((id, _)) = best else {
+        return false;
+    };
+    for (win, _, mut vis) in windows_q.iter_mut() {
+        if win.id == id {
+            *vis = Visibility::Hidden;
+            closed.write(FloatingWindowClosed(id));
+            return true;
+        }
+    }
+    false
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use openttdrs_core::{Station, StopKind, TileKind, Vehicle, VehicleOrder};
 
-use crate::state::SimWorld;
+use crate::state::{OrderPickState, SimWorld, order_pick_active};
 use crate::ui::toolbar::{OrderEditState, OrderPanelRoot, OrderPanelTitle};
 
 use super::{ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
@@ -9,6 +9,8 @@ use super::{ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_order_panel(
     order_state: Res<OrderEditState>,
+    pick_state: Res<State<OrderPickState>>,
+    mut next_pick: ResMut<NextState<OrderPickState>>,
     sim: Res<SimWorld>,
     mut root_q: Query<&mut Visibility, With<OrderPanelRoot>>,
     mut title_q: Query<&mut Text, With<OrderPanelTitle>>,
@@ -24,6 +26,9 @@ pub(crate) fn sync_order_panel(
         return;
     };
     let Some(vehicle_id) = order_state.vehicle_id else {
+        if order_pick_active(&pick_state) {
+            next_pick.set(OrderPickState::Idle);
+        }
         *vis = Visibility::Hidden;
         hide_order_rows(&mut row_q);
         return;
@@ -40,7 +45,7 @@ pub(crate) fn sync_order_panel(
     };
 
     *vis = Visibility::Visible;
-    let pick_hint = if order_state.picking_destination {
+    let pick_hint = if order_pick_active(&pick_state) {
         " · clic en parada"
     } else {
         ""

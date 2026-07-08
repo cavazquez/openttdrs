@@ -34,7 +34,7 @@ impl Plugin for DebugGizmosPlugin {
 }
 
 #[derive(Component)]
-struct DiagnosticsOverlayRoot;
+pub(crate) struct DiagnosticsOverlayRoot;
 
 #[derive(Component)]
 struct DiagnosticsOverlayText;

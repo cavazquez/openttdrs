@@ -3,16 +3,25 @@ use bevy::prelude::*;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::sprites::company_colour_name;
 use crate::state::SimWorld;
+use crate::state::{
+    ClientScreen, SimRunState, SuspendedGameSession, sim_is_paused, toggle_sim_run_state,
+};
 use crate::ui::hud::SimHudControls;
+use crate::ui::main_menu::return_to_main_menu;
 use crate::ui::save_window::{SaveWindowMode, SaveWindowState, save_dir_from};
 
 use super::{CompanyColourSwatch, SaveMenuAction};
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_settings_menu_buttons(
     mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
     mut hud: ResMut<SimHudControls>,
     mut save_window: ResMut<SaveWindowState>,
     mut news_settings: ResMut<crate::ui::news_settings_window::NewsSettingsWindowState>,
+    run_state: Res<State<SimRunState>>,
+    mut next_run: ResMut<NextState<SimRunState>>,
+    mut next_screen: ResMut<NextState<ClientScreen>>,
+    mut suspended: ResMut<SuspendedGameSession>,
     mut cam_q: Query<
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
@@ -30,8 +39,9 @@ pub(crate) fn handle_settings_menu_buttons(
                 save_window.open_in_mode(SaveWindowMode::Load, &save_dir_from(&hud.json_save_path));
             }
             SaveMenuAction::PauseResume => {
-                hud.paused = !hud.paused;
-                info!("Pausa: {}", if hud.paused { "ON" } else { "OFF" });
+                let will_pause = !sim_is_paused(&run_state);
+                toggle_sim_run_state(&run_state, &mut next_run);
+                info!("Pausa: {}", if will_pause { "ON" } else { "OFF" });
             }
             SaveMenuAction::SpeedUp => {
                 hud.sim_speed = if hud.sim_speed < 1.5 {
@@ -70,6 +80,9 @@ pub(crate) fn handle_settings_menu_buttons(
             }
             SaveMenuAction::NewsSettings => {
                 news_settings.open = true;
+            }
+            SaveMenuAction::ReturnToMainMenu => {
+                return_to_main_menu(&mut next_screen, &mut suspended);
             }
         }
     }
@@ -118,7 +131,7 @@ mod tests {
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
 
-    use crate::state::SimWorld;
+    use crate::state::{ClientScreen, SimWorld, SuspendedGameSession};
     use crate::ui::hud::SimHudControls;
     use crate::ui::news_settings_window::NewsSettingsWindowState;
     use crate::ui::save_window::{SaveWindowMode, SaveWindowState};
@@ -132,6 +145,9 @@ mod tests {
         world.insert_resource(SimHudControls::default());
         world.insert_resource(SaveWindowState::default());
         world.insert_resource(NewsSettingsWindowState::default());
+        crate::state::insert_test_sim_run_state(&mut world);
+        world.insert_resource(NextState::<ClientScreen>::default());
+        world.insert_resource(SuspendedGameSession::default());
 
         world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
@@ -146,6 +162,31 @@ mod tests {
         let w = world.resource::<SaveWindowState>();
         assert!(w.open);
         assert_eq!(w.mode, SaveWindowMode::Load);
+    }
+
+    #[test]
+    fn return_to_main_menu_button_sets_next_screen() {
+        use crate::state::ClientScreen;
+
+        let mut world = World::new();
+        world.insert_resource(SimHudControls::default());
+        world.insert_resource(SaveWindowState::default());
+        world.insert_resource(NewsSettingsWindowState::default());
+        world.insert_resource(NextState::<ClientScreen>::default());
+        world.insert_resource(SuspendedGameSession::default());
+        crate::state::insert_test_sim_run_state(&mut world);
+
+        world.spawn((
+            Button,
+            SaveMenuAction::ReturnToMainMenu,
+            Interaction::Pressed,
+        ));
+        world.run_system_once(handle_settings_menu_buttons).unwrap();
+        assert!(matches!(
+            world.resource::<NextState<ClientScreen>>(),
+            NextState::Pending(ClientScreen::MainMenu)
+                | NextState::PendingIfNeq(ClientScreen::MainMenu)
+        ));
     }
 
     #[test]

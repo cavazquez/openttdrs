@@ -23,7 +23,7 @@ use crate::camera::tile_camera_world_pos;
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, vehicle_world_position,
 };
-use crate::state::SimWorld;
+use crate::state::{OrderPickState, SimWorld};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CRIMSON,
     WINDOW_TEXT, spawn_floating_window, window_text_font,
@@ -565,6 +565,7 @@ pub(crate) fn handle_vehicle_window_buttons(
     mut buttons: Query<(&Interaction, &VehicleWindowButton), (Changed<Interaction>, With<Button>)>,
     mut window_state: ResMut<VehicleWindowState>,
     mut order_state: ResMut<OrderEditState>,
+    mut next_pick: ResMut<NextState<OrderPickState>>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
@@ -588,7 +589,7 @@ pub(crate) fn handle_vehicle_window_buttons(
             }
             VehicleWindowButton::Orders => {
                 if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                    open_order_edit_for_vehicle(&mut order_state, vehicle);
+                    open_order_edit_for_vehicle(&mut order_state, vehicle, &mut next_pick);
                 }
             }
             VehicleWindowButton::GotoDepot => {

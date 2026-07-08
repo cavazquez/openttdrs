@@ -144,6 +144,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             "Off / Summary / Full por tipo de noticia",
             SaveMenuAction::NewsSettings,
         ),
+        (
+            "Menu principal",
+            "Volver al menu de inicio",
+            SaveMenuAction::ReturnToMainMenu,
+        ),
     ] {
         buttons.spawn((
             Button,

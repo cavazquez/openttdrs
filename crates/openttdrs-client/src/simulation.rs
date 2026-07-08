@@ -9,7 +9,7 @@ use openttdrs_core::SIM_TICKS_PER_SECOND;
 use crate::render::{
     MapTileChunk, RemapMapVisualsPending, VehicleIndex, large_map_viewport_cull_enabled,
 };
-use crate::state::{ClientScreen, SimWorld};
+use crate::state::{ClientScreen, SimRunState, SimWorld, sim_is_paused};
 use crate::ui::SimHudControls;
 
 /// Frecuencia del tick de simulación (debe coincidir con `Time<Fixed>`).
@@ -28,15 +28,17 @@ impl Plugin for SimulationPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<SimClock>()
             .add_systems(Startup, init_sim_fixed_timestep)
+            .add_systems(OnEnter(SimRunState::Paused), pause_virtual_time)
+            .add_systems(OnEnter(SimRunState::Running), unpause_virtual_time)
             .add_systems(
                 PreUpdate,
                 sync_sim_time_controls.run_if(in_state(ClientScreen::InGame)),
             )
             .add_systems(
                 FixedUpdate,
-                (step_sim, flag_map_tile_dirty_remap)
-                    .chain()
-                    .run_if(in_state(ClientScreen::InGame)),
+                (step_sim, flag_map_tile_dirty_remap).chain().run_if(
+                    in_state(ClientScreen::InGame).and_then(in_state(SimRunState::Running)),
+                ),
             );
     }
 }
@@ -50,13 +52,16 @@ fn init_sim_fixed_timestep(
     virtual_time.set_max_delta(Duration::from_secs_f64(1.0 / SIM_TICK_HZ));
 }
 
-/// Pausa y velocidad de la simulación vía `Time<Virtual>` (antes del bucle FixedUpdate).
+fn pause_virtual_time(mut virtual_time: ResMut<Time<Virtual>>) {
+    virtual_time.pause();
+}
+
+fn unpause_virtual_time(mut virtual_time: ResMut<Time<Virtual>>) {
+    virtual_time.unpause();
+}
+
+/// Velocidad de la simulación vía `Time<Virtual>` (antes del bucle FixedUpdate).
 fn sync_sim_time_controls(hud: Res<SimHudControls>, mut virtual_time: ResMut<Time<Virtual>>) {
-    if hud.paused {
-        virtual_time.pause();
-    } else {
-        virtual_time.unpause();
-    }
     virtual_time.set_relative_speed(hud.sim_speed.max(0.1));
 }
 
@@ -93,11 +98,11 @@ fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVis
 
 /// Interpolación render: fracción del siguiente tick fijo.
 pub(crate) fn sync_tick_alpha(
-    hud: Res<SimHudControls>,
+    run_state: Res<State<SimRunState>>,
     fixed_time: Res<Time<Fixed>>,
     mut sim_clock: ResMut<SimClock>,
 ) {
-    sim_clock.tick_alpha = if hud.paused {
+    sim_clock.tick_alpha = if sim_is_paused(&run_state) {
         0.0
     } else {
         fixed_time.overstep_fraction()
@@ -113,22 +118,30 @@ mod tests {
     };
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
+    use bevy::state::app::StatesPlugin;
 
     use crate::render::VehicleIndex;
-    use crate::state::SimWorld;
+    use crate::state::{ClientScreen, SimRunState, SimWorld};
     use crate::ui::SimHudControls;
 
     fn sim_test_app() -> App {
         let mut app = App::new();
-        app.add_plugins(MinimalPlugins);
+        app.add_plugins((MinimalPlugins, StatesPlugin));
+        app.init_state::<ClientScreen>();
+        app.add_sub_state::<SimRunState>();
         app.init_resource::<SimClock>();
         app.insert_resource(SimWorld::default());
         app.insert_resource(VehicleIndex::default());
         app.insert_resource(SimHudControls::default());
         app.add_systems(Startup, init_sim_fixed_timestep);
+        app.add_systems(OnEnter(SimRunState::Paused), super::pause_virtual_time);
+        app.add_systems(OnEnter(SimRunState::Running), super::unpause_virtual_time);
         app.add_systems(PreUpdate, sync_sim_time_controls);
-        app.add_systems(FixedUpdate, step_sim);
+        app.add_systems(FixedUpdate, step_sim.run_if(in_state(SimRunState::Running)));
         app.add_systems(Update, sync_tick_alpha);
+        app.world_mut()
+            .resource_mut::<NextState<ClientScreen>>()
+            .set(ClientScreen::InGame);
         app
     }
 
@@ -160,10 +173,10 @@ mod tests {
     fn step_sim_paused_does_not_step() {
         let mut app = sim_test_app();
         app.update();
-        {
-            let mut hud = app.world_mut().resource_mut::<SimHudControls>();
-            hud.paused = true;
-        }
+        app.world_mut()
+            .resource_mut::<NextState<SimRunState>>()
+            .set(SimRunState::Paused);
+        app.update();
         let before = app.world().resource::<SimWorld>().state.tick.get();
         advance_app_time(&mut app, 500);
         let after = app.world().resource::<SimWorld>().state.tick.get();

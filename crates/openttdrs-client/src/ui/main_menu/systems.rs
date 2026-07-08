@@ -6,9 +6,11 @@ use crate::render::{MapVisualLayer, ShoreTile, WaterTile};
 use crate::state::bootstrap::{
     MapSizePreset, NewGameSettings, PopulationDensity, START_YEARS, STARTING_MONEY_OPTIONS,
 };
-use crate::state::{ClientScreen, SimWorld, new_game::NewGameSettingsResource};
+use crate::state::{
+    ClientScreen, SimWorld, SuspendedGameSession, new_game::NewGameSettingsResource,
+};
 use crate::ui::SimHudControls;
-use crate::ui::main_menu_intro::cleanup_main_menu_intro;
+use crate::ui::main_menu_intro::despawn_main_menu_intro_layers;
 use crate::ui::save_window::{SaveWindowMode, SaveWindowState, save_dir_from};
 
 use super::labels::{adjust_seed, cycle_density, panel_hints, panel_title, summary_text};
@@ -16,12 +18,13 @@ use super::widgets::{
     hover_primary, hover_secondary, option_button_bg, seed_button_bg, toggle_button_bg,
 };
 use super::{
-    MainMenuBackButton, MainMenuCamera, MainMenuClimateButton, MainMenuDemoButton,
-    MainMenuDensityButton, MainMenuDensityTarget, MainMenuHintsText, MainMenuLoadButton,
-    MainMenuMapSizeButton, MainMenuNewGameButton, MainMenuPanel, MainMenuQuitButton,
-    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuSeedDecButton, MainMenuSeedIncButton,
-    MainMenuStartButton, MainMenuStartYearButton, MainMenuStartingMoneyButton, MainMenuSubPanel,
-    MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
+    MainMenuBackButton, MainMenuCamera, MainMenuClimateButton, MainMenuContinueButton,
+    MainMenuContinueWrap, MainMenuDemoButton, MainMenuDensityButton, MainMenuDensityTarget,
+    MainMenuHintsText, MainMenuLoadButton, MainMenuMapSizeButton, MainMenuNewGameButton,
+    MainMenuPanel, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
+    MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuStartButton, MainMenuStartYearButton,
+    MainMenuStartingMoneyButton, MainMenuSubPanel, MainMenuSummaryText, MainMenuTitleText,
+    MainMenuToggle, MainMenuUi,
 };
 
 pub(crate) fn sync_main_menu_panel_visibility(
@@ -215,15 +218,38 @@ pub(crate) fn leave_main_menu(
     intro_layers: &Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
     next_screen: &mut NextState<ClientScreen>,
 ) {
-    cleanup_main_menu_intro(commands, intro_layers);
+    despawn_main_menu_intro_layers(commands, intro_layers);
     for e in q_menu {
         commands.entity(e).despawn();
     }
     for cam in q_menu_cam {
         commands.entity(cam).despawn();
     }
-    commands.remove_resource::<MainMenuPanel>();
     next_screen.set(ClientScreen::InGame);
+}
+
+/// Vuelve al menú principal; `OnExit(InGame)` desmonta la sesión en curso.
+pub(crate) fn return_to_main_menu(
+    next_screen: &mut NextState<ClientScreen>,
+    suspended: &mut SuspendedGameSession,
+) {
+    suspended.active = true;
+    info!("Volviendo al menu principal (partida suspendida)");
+    next_screen.set(ClientScreen::MainMenu);
+}
+
+/// Reanuda la partida suspendida sin reemplazar `SimWorld`.
+pub(crate) fn resume_suspended_game(
+    commands: &mut Commands,
+    q_menu: &Query<Entity, With<MainMenuUi>>,
+    q_menu_cam: &Query<Entity, With<MainMenuCamera>>,
+    intro_layers: &Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
+    next_screen: &mut NextState<ClientScreen>,
+    suspended: &mut SuspendedGameSession,
+) {
+    suspended.active = false;
+    info!("Continuando partida suspendida");
+    leave_main_menu(commands, q_menu, q_menu_cam, intro_layers, next_screen);
 }
 
 /// Salta el menú si el arranque cargó un JSON vía `OTTDJSON_LOAD` (escenarios `dev_bot`).
@@ -256,9 +282,69 @@ fn enter_new_game(
     intro_layers: &Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
     settings: NewGameSettings,
     next_screen: &mut NextState<ClientScreen>,
+    suspended: &mut SuspendedGameSession,
 ) {
+    suspended.active = false;
     commands.insert_resource(SimWorld::from_new_game(&settings.sanitized()));
     leave_main_menu(commands, q_menu, q_menu_cam, intro_layers, next_screen);
+}
+
+pub(crate) fn sync_main_menu_continue_button(
+    suspended: Res<SuspendedGameSession>,
+    panel: Res<MainMenuPanel>,
+    mut q: Query<(&mut Node, &mut Visibility), With<MainMenuContinueWrap>>,
+) {
+    if !suspended.is_changed() && !panel.is_changed() {
+        return;
+    }
+    let show = suspended.active && *panel == MainMenuPanel::Root;
+    for (mut node, mut vis) in &mut q {
+        node.display = if show {
+            Display::DEFAULT
+        } else {
+            Display::None
+        };
+        *vis = if show {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+    }
+}
+
+/// Botón «Continuar partida» en sistema aparte (evita B0001 con el `ParamSet` del menú).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn main_menu_continue_interaction(
+    panel: Res<MainMenuPanel>,
+    save_window: Res<SaveWindowState>,
+    mut next_screen: ResMut<NextState<ClientScreen>>,
+    mut suspended: ResMut<SuspendedGameSession>,
+    q_menu: Query<Entity, With<MainMenuUi>>,
+    q_menu_cam: Query<Entity, With<MainMenuCamera>>,
+    intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
+    mut buttons: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<MainMenuContinueButton>),
+    >,
+    mut commands: Commands,
+) {
+    if save_window.open || !suspended.active || *panel != MainMenuPanel::Root {
+        return;
+    }
+    for (interaction, mut bg) in &mut buttons {
+        if *interaction == Interaction::Pressed {
+            resume_suspended_game(
+                &mut commands,
+                &q_menu,
+                &q_menu_cam,
+                &intro_layers,
+                &mut next_screen,
+                &mut suspended,
+            );
+            return;
+        }
+        hover_primary(interaction, &mut bg);
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -267,6 +353,7 @@ pub(crate) fn main_menu_interaction(
     mut next_screen: ResMut<NextState<ClientScreen>>,
     mut settings: ResMut<NewGameSettingsResource>,
     mut save_window: ResMut<SaveWindowState>,
+    mut suspended: ResMut<SuspendedGameSession>,
     hud: Res<SimHudControls>,
     q_menu: Query<Entity, With<MainMenuUi>>,
     q_menu_cam: Query<Entity, With<MainMenuCamera>>,
@@ -368,6 +455,7 @@ pub(crate) fn main_menu_interaction(
                         &intro_layers,
                         settings.settings(),
                         &mut next_screen,
+                        &mut suspended,
                     );
                     return;
                 }
@@ -399,6 +487,7 @@ pub(crate) fn main_menu_interaction(
                     &intro_layers,
                     settings.settings(),
                     &mut next_screen,
+                    &mut suspended,
                 );
                 return;
             }

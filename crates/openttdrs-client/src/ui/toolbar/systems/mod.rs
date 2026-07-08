@@ -7,7 +7,7 @@ mod tools;
 mod tooltip;
 
 pub(crate) use click_beep::toolbar_click_beep;
-pub(crate) use close::{close_toolbar_button_interaction, close_toolbar_panel_on_escape};
+pub(crate) use close::{close_toolbar_button_interaction, handle_ingame_escape};
 pub(crate) use groups::{
     hide_tool_when_panel_closed, sync_climate_industry_tools, toolbar_group_interaction,
     update_toolbar_group_visuals, update_toolbar_tool_visibility,
@@ -27,7 +27,7 @@ mod tests {
     use openttdrs_core::{Command, GameState, TileCoord, TileKind, VehicleKind, VehicleOrder};
 
     use crate::render::{PrimaryGameCamera, RemapMapVisualsPending, VehicleIndex};
-    use crate::state::SimWorld;
+    use crate::state::{ClientScreen, SimWorld};
     use crate::ui::audio_settings_window::SoundMusicWindowState;
     use crate::ui::hud::{HoveredTileCoord, HudBuildFeedback, SelectedTileInfo, SimHudControls};
     use crate::ui::industry_panel::IndustryPanelState;
@@ -49,12 +49,22 @@ mod tests {
     };
     use openttdrs_core::BridgeType;
 
+    fn insert_order_pick_test_resources(world: &mut World) {
+        crate::state::insert_test_order_pick_state(world);
+    }
+
     #[test]
     fn close_toolbar_escape_clears_state() {
+        use crate::state::{ClientScreen, SuspendedGameSession};
+        use crate::ui::floating_window::FloatingWindowClosed;
+        use crate::ui::industry_panel::IndustryPanelState;
+        use crate::ui::save_window::SaveWindowState;
+
         let mut world = World::new();
         let mut kb = ButtonInput::<KeyCode>::default();
         kb.press(KeyCode::Escape);
         world.insert_resource(kb);
+        world.insert_resource(SaveWindowState::default());
         world.insert_resource(ToolbarState::default());
         world.insert_resource(UiToolState {
             active_tool: Some(BuildMenuAction::RoadY),
@@ -64,9 +74,13 @@ mod tests {
             ..default()
         });
         world.insert_resource(OrderEditState::default());
-        world
-            .run_system_once(close_toolbar_panel_on_escape)
-            .unwrap();
+        world.insert_resource(IndustryPanelState::default());
+        world.insert_resource(SuspendedGameSession::default());
+        world.insert_resource(NextState::<ClientScreen>::default());
+        world.init_resource::<Messages<FloatingWindowClosed>>();
+        insert_order_pick_test_resources(&mut world);
+        world.run_system_once(handle_ingame_escape).unwrap();
+        assert!(world.resource::<UiToolState>().active_tool.is_none());
     }
 
     #[test]
@@ -120,6 +134,7 @@ mod tests {
         app.world_mut().run_system_once(setup_order_panel).unwrap();
         app.world_mut().insert_resource(OrderEditState::default());
         app.world_mut().insert_resource(SimWorld::default());
+        insert_order_pick_test_resources(app.world_mut());
         app.world_mut().spawn((
             PrimaryGameCamera,
             Projection::Orthographic(OrthographicProjection::default_2d()),
@@ -134,6 +149,8 @@ mod tests {
         world.insert_resource(UiToolState::default());
         world.insert_resource(DragBuildState::default());
         world.insert_resource(OrderEditState::default());
+        world.insert_resource(IndustryPanelState::default());
+        insert_order_pick_test_resources(&mut world);
         world.run_system_once(toolbar_group_interaction).unwrap();
         world.run_system_once(update_toolbar_group_visuals).unwrap();
         world
@@ -170,6 +187,7 @@ mod tests {
         world.insert_resource(HudBuildFeedback::default());
         world.insert_resource(TimetableWindowState::default());
         world.insert_resource(Time::<()>::default());
+        insert_order_pick_test_resources(&mut world);
         world.run_system_once(handle_order_panel_buttons).unwrap();
     }
 
@@ -183,13 +201,15 @@ mod tests {
         world.insert_resource(NewsSettingsWindowState::default());
         world.insert_resource(SoundMusicWindowState::default());
         world.insert_resource(SimHudControls {
-            paused: false,
             sim_speed: 1.0,
             json_save_path: save_path.to_string_lossy().to_string(),
             minimap_visible: true,
             sfx_volume: 0.22,
             ..Default::default()
         });
+        world.insert_resource(NextState::<ClientScreen>::default());
+        world.insert_resource(crate::state::SuspendedGameSession::default());
+        crate::state::insert_test_sim_run_state(&mut world);
 
         world.spawn((Button, SaveMenuAction::SaveAs, Interaction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
@@ -202,6 +222,8 @@ mod tests {
 
     #[test]
     fn handle_settings_menu_buttons_pause_speed_and_zoom() {
+        use crate::state::SimRunState;
+
         let mut world = World::new();
         world.insert_resource(SimWorld::default());
         world.insert_resource(VehicleIndex::default());
@@ -210,6 +232,10 @@ mod tests {
         world.insert_resource(NewsSettingsWindowState::default());
         world.insert_resource(SoundMusicWindowState::default());
         world.insert_resource(SimHudControls::default());
+        world.insert_resource(State::new(SimRunState::Running));
+        world.insert_resource(NextState::<SimRunState>::default());
+        world.insert_resource(NextState::<ClientScreen>::default());
+        world.insert_resource(crate::state::SuspendedGameSession::default());
         world.spawn((
             PrimaryGameCamera,
             Transform::from_xyz(123.0, -45.0, 0.0),
@@ -218,7 +244,10 @@ mod tests {
 
         world.spawn((Button, SaveMenuAction::PauseResume, Interaction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
-        assert!(world.resource::<SimHudControls>().paused);
+        assert!(matches!(
+            world.resource::<NextState<SimRunState>>(),
+            NextState::Pending(SimRunState::Paused) | NextState::PendingIfNeq(SimRunState::Paused)
+        ));
 
         world.spawn((Button, SaveMenuAction::SpeedUp, Interaction::Pressed));
         world.run_system_once(handle_settings_menu_buttons).unwrap();
@@ -245,6 +274,9 @@ mod tests {
         world_zoom_in.insert_resource(NewsSettingsWindowState::default());
         world_zoom_in.insert_resource(SoundMusicWindowState::default());
         world_zoom_in.insert_resource(SimHudControls::default());
+        crate::state::insert_test_sim_run_state(&mut world_zoom_in);
+        world_zoom_in.insert_resource(NextState::<ClientScreen>::default());
+        world_zoom_in.insert_resource(crate::state::SuspendedGameSession::default());
         world_zoom_in.spawn((
             PrimaryGameCamera,
             Transform::default(),
@@ -268,6 +300,9 @@ mod tests {
         world_zoom_out.insert_resource(NewsSettingsWindowState::default());
         world_zoom_out.insert_resource(SoundMusicWindowState::default());
         world_zoom_out.insert_resource(SimHudControls::default());
+        crate::state::insert_test_sim_run_state(&mut world_zoom_out);
+        world_zoom_out.insert_resource(NextState::<ClientScreen>::default());
+        world_zoom_out.insert_resource(crate::state::SuspendedGameSession::default());
         world_zoom_out.spawn((
             PrimaryGameCamera,
             Transform::default(),
@@ -304,7 +339,7 @@ mod tests {
         world.insert_resource(crate::ui::vehicle_window::VehicleWindowState::default());
         world.insert_resource(HudBuildFeedback::default());
         world.insert_resource(Time::<()>::default());
-        world.insert_resource(StationBuildState::default());
+        insert_order_pick_test_resources(&mut world);
         world.run_system_once(handle_tile_click).unwrap();
     }
 

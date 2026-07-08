@@ -13,6 +13,7 @@ use openttdrs_core::save;
 
 use crate::persistence::apply_loaded_state;
 use crate::render::{MapVisualLayer, RemapMapVisualsPending, ShoreTile, VehicleIndex, WaterTile};
+use crate::state::SuspendedGameSession;
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
 use crate::ui::main_menu::{MainMenuCamera, MainMenuUi, leave_main_menu};
@@ -145,6 +146,7 @@ pub(crate) fn handle_save_window_buttons(
     mut remap: ResMut<RemapMapVisualsPending>,
     screen: Option<Res<State<ClientScreen>>>,
     mut next_screen: Option<ResMut<NextState<ClientScreen>>>,
+    mut suspended: Option<ResMut<SuspendedGameSession>>,
     q_menu: Query<Entity, With<MainMenuUi>>,
     q_menu_cam: Query<Entity, With<MainMenuCamera>>,
     intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
@@ -238,6 +240,9 @@ pub(crate) fn handle_save_window_buttons(
     }
 
     if loaded_from_menu && let Some(next) = next_screen.as_mut() {
+        if let Some(suspended) = suspended.as_mut() {
+            suspended.active = false;
+        }
         leave_main_menu(
             &mut commands,
             &q_menu,
@@ -430,7 +435,6 @@ mod tests {
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(SaveWindowState::default());
         world.insert_resource(SimHudControls {
-            paused: false,
             sim_speed: 1.0,
             json_save_path: save_path.to_string(),
             minimap_visible: true,

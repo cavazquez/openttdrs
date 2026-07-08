@@ -33,7 +33,7 @@ use crate::iso::{
 };
 use crate::render::{CompanyColoredSprites, MapPreviewCamera, PrimaryGameCamera, TileAtlas};
 use crate::sprites::rail_ghost_overlay_offset;
-use crate::state::SimWorld;
+use crate::state::{OrderPickState, SimWorld, order_pick_active};
 use crate::ui::hud::HoveredTileCoord;
 
 use super::build_input::drag::{drag_line_tiles, road_bits_for_drag_action};
@@ -122,6 +122,7 @@ pub(crate) fn update_build_ghost_preview(
     station_state: Res<StationBuildState>,
     drag_state: Res<DragBuildState>,
     order_state: Res<OrderEditState>,
+    pick_state: Res<State<OrderPickState>>,
     hovered: Res<HoveredTileCoord>,
     time: Res<Time>,
 ) {
@@ -137,10 +138,10 @@ pub(crate) fn update_build_ghost_preview(
     }
 
     let orders_preview =
-        order_state.picking_destination || tool_state.active_tool == Some(BuildMenuAction::Orders);
+        order_pick_active(&pick_state) || tool_state.active_tool == Some(BuildMenuAction::Orders);
     if orders_preview && order_state.vehicle_id.is_some() {
         spawn_order_route_preview(&mut commands, &asset_server, &sim.state.map, &order_state);
-        if order_state.picking_destination
+        if order_pick_active(&pick_state)
             && let Some(hover) = hovered.pos
         {
             spawn_order_pick_target_preview(

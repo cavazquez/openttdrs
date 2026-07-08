@@ -65,6 +65,6 @@ pub(crate) use viewport::{
 };
 pub(crate) use water::WaterAnimationPlugin;
 pub(crate) use world::{
-    MapTileSpawnViewport, RemapMapVisualsPending, WorldRenderPlugin, initial_map_camera_pose,
-    request_map_visual_remap, spawn_intro_map_render,
+    LoadedMapTileChunks, MapTileSpawnViewport, RemapMapVisualsPending, WorldRenderPlugin,
+    initial_map_camera_pose, request_map_visual_remap, spawn_intro_map_render,
 };

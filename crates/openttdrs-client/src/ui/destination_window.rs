@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use openttdrs_core::{StopKind, TileCoord, TileKind, VehicleKind};
 
 use crate::render::RemapMapVisualsPending;
-use crate::state::SimWorld;
+use crate::state::{OrderPickState, SimWorld};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
     spawn_floating_window, window_text_font,
@@ -244,6 +244,7 @@ pub(crate) fn sync_destination_picker(
 pub(crate) fn handle_destination_picker_buttons(
     mut picker_state: ResMut<DestinationPickerState>,
     mut order_state: ResMut<OrderEditState>,
+    mut next_pick: ResMut<NextState<OrderPickState>>,
     mut button_q: ParamSet<(
         Query<
             (&Interaction, &DestinationPickerRow),
@@ -293,7 +294,7 @@ pub(crate) fn handle_destination_picker_buttons(
             continue;
         }
         picker_state.open = false;
-        start_order_destination_pick(&mut order_state);
+        start_order_destination_pick(&order_state, &mut next_pick);
         drag_state.armed = false;
         drag_state.pending_tiles.clear();
     }

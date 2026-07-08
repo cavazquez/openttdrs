@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::state::OrderPickState;
 use crate::ui::toolbar::build_input::cancel_placement;
 use crate::ui::toolbar::order_panel::start_order_destination_pick;
 use crate::ui::toolbar::{
@@ -12,7 +13,8 @@ pub(crate) fn build_menu_interaction(
     mut q: Query<(&Interaction, &BuildMenuAction), (Changed<Interaction>, With<Button>)>,
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
-    mut order_state: ResMut<OrderEditState>,
+    order_state: Res<OrderEditState>,
+    mut next_pick: ResMut<NextState<OrderPickState>>,
 ) {
     for (interaction, action) in &mut q {
         if *interaction != Interaction::Pressed {
@@ -21,9 +23,9 @@ pub(crate) fn build_menu_interaction(
         tool_state.active_tool = Some(*action);
         cancel_placement(&mut drag_state);
         if *action == BuildMenuAction::Orders {
-            start_order_destination_pick(&mut order_state);
+            start_order_destination_pick(&order_state, &mut next_pick);
         } else {
-            order_state.picking_destination = false;
+            next_pick.set(OrderPickState::Idle);
         }
     }
 }

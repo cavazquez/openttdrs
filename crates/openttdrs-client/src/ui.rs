@@ -1,5 +1,8 @@
 //! UI de información de tile seleccionado y menú de construcción (I6).
 
+#[path = "ui_ingame_lifecycle.rs"]
+mod ingame_lifecycle;
+
 use bevy::prelude::*;
 
 use crate::bevy_app::{StartupSet, UpdateSet};
@@ -51,11 +54,13 @@ use industry_panel::{
     IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
 };
 use main_menu::{
-    auto_start_preloaded_json, main_menu_interaction, main_menu_options_interaction,
-    setup_main_menu, sync_main_menu_panel_visibility, sync_main_menu_summary,
+    auto_start_preloaded_json, main_menu_continue_interaction, main_menu_interaction,
+    main_menu_options_interaction, setup_main_menu, sync_main_menu_continue_button,
+    sync_main_menu_panel_visibility, sync_main_menu_summary,
 };
 use main_menu_intro::{
-    animate_main_menu_intro_traffic, pan_main_menu_intro_camera, setup_main_menu_intro,
+    animate_main_menu_intro_traffic, cleanup_main_menu_on_exit, pan_main_menu_intro_camera,
+    setup_main_menu_intro,
 };
 use news_settings_window::{
     NewsSettingsWindowState, handle_news_settings_buttons, news_settings_on_closed,
@@ -81,8 +86,8 @@ use toolbar::depot_panel_on_closed;
 use toolbar::{
     BridgeBuildState, DepotPanelState, DragBuildState, RailSignalGhostState, StationBuildState,
     StationCargoPanelState, UiToolState, bridge_picker_on_closed, build_menu_interaction,
-    close_toolbar_button_interaction, close_toolbar_panel_on_escape, handle_bridge_picker_buttons,
-    handle_company_colour_swatches, handle_depot_panel_buttons, handle_minimap_click,
+    close_toolbar_button_interaction, handle_bridge_picker_buttons, handle_company_colour_swatches,
+    handle_depot_panel_buttons, handle_ingame_escape, handle_minimap_click,
     handle_order_panel_buttons, handle_rail_station_picker_buttons, handle_settings_menu_buttons,
     handle_station_cargo_panel_buttons, handle_tile_click, hide_tool_when_panel_closed,
     lerp_ghost_previews, rail_station_picker_on_closed, rotate_station_with_right_click,
@@ -112,6 +117,7 @@ impl Plugin for ClientUiPlugin {
         app.add_plugins((
             floating_window::FloatingWindowPlugin,
             windows_shot::WindowsShotPlugin,
+            ingame_lifecycle::InGameLifecyclePlugin,
         ))
         .init_resource::<NewsUiState>()
         .init_resource::<NewsHistoryState>()
@@ -142,6 +148,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<VehicleWindowState>()
         .init_resource::<TimetableWindowState>()
         .init_resource::<crate::state::new_game::NewGameSettingsResource>()
+        .add_systems(OnExit(ClientScreen::MainMenu), cleanup_main_menu_on_exit)
         .add_systems(
             OnEnter(ClientScreen::MainMenu),
             (
@@ -187,10 +194,11 @@ impl Plugin for ClientUiPlugin {
                 pan_main_menu_intro_camera,
                 animate_main_menu_intro_traffic,
                 auto_start_preloaded_json,
-                main_menu_interaction,
+                (main_menu_interaction, main_menu_continue_interaction).chain(),
                 main_menu_options_interaction,
                 sync_main_menu_panel_visibility,
                 sync_main_menu_summary,
+                sync_main_menu_continue_button,
                 toolbar_click_beep,
                 play_hud_sfx,
             )
@@ -219,7 +227,7 @@ impl Plugin for ClientUiPlugin {
                 cycle_json_save_path_hotkey,
                 handle_tool_hotkeys,
                 rotate_station_with_right_click,
-                close_toolbar_panel_on_escape,
+                handle_ingame_escape,
             )
                 .in_set(UpdateSet::Input)
                 .run_if(in_state(ClientScreen::InGame)),

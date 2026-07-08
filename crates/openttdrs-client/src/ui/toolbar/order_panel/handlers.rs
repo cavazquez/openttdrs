@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use openttdrs_core::{Command, CommandError, TileCoord, Vehicle, VehicleOrder, apply_command};
 
 use crate::render::RemapMapVisualsPending;
-use crate::state::SimWorld;
+use crate::state::{OrderPickState, SimWorld};
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::timetable_window::{TimetableWindowState, open_timetable_for_vehicle};
 use crate::ui::toolbar::build_input::cancel_placement;
@@ -12,11 +12,15 @@ use crate::ui::toolbar::{DragBuildState, OrderEditState, OrderPanelButton};
 use super::OrderPanelRow;
 
 /// Carga el vehículo en el panel de órdenes (lista + selección en la orden actual).
-pub(crate) fn open_order_edit_for_vehicle(order_state: &mut OrderEditState, vehicle: &Vehicle) {
+pub(crate) fn open_order_edit_for_vehicle(
+    order_state: &mut OrderEditState,
+    vehicle: &Vehicle,
+    next_pick: &mut NextState<OrderPickState>,
+) {
     order_state.vehicle_id = Some(vehicle.id);
     order_state.orders = vehicle.orders.clone();
     order_state.selected_slot = selected_slot_for_vehicle(vehicle);
-    order_state.picking_destination = false;
+    next_pick.set(OrderPickState::Idle);
 }
 
 fn selected_slot_for_vehicle(vehicle: &Vehicle) -> Option<usize> {
@@ -68,14 +72,17 @@ fn clamp_selected_after_remove(order_state: &mut OrderEditState, removed_index: 
     }
 }
 
-pub(crate) fn start_order_destination_pick(order_state: &mut OrderEditState) {
+pub(crate) fn start_order_destination_pick(
+    order_state: &OrderEditState,
+    next_pick: &mut NextState<OrderPickState>,
+) {
     if order_state.vehicle_id.is_some() {
-        order_state.picking_destination = true;
+        next_pick.set(OrderPickState::Picking);
     }
 }
 
-pub(crate) fn cancel_order_destination_pick(order_state: &mut OrderEditState) {
-    order_state.picking_destination = false;
+pub(crate) fn cancel_order_destination_pick(next_pick: &mut NextState<OrderPickState>) {
+    next_pick.set(OrderPickState::Idle);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -86,6 +93,7 @@ pub(crate) fn handle_order_panel_buttons(
         (Changed<Interaction>, With<Button>, Without<OrderPanelRow>),
     >,
     mut order_state: ResMut<OrderEditState>,
+    mut next_pick: ResMut<NextState<OrderPickState>>,
     mut sim: ResMut<SimWorld>,
     mut drag_state: ResMut<DragBuildState>,
     mut pending: ResMut<RemapMapVisualsPending>,
@@ -175,7 +183,7 @@ pub(crate) fn handle_order_panel_buttons(
             OrderPanelButton::PickDestOnMap => {
                 // «Ir a» estilo OpenTTD: activa el modo selección; el siguiente
                 // clic en una estación/depósito del mapa añade la orden.
-                start_order_destination_pick(&mut order_state);
+                start_order_destination_pick(&order_state, &mut next_pick);
                 cancel_placement(&mut drag_state);
             }
         }
@@ -257,13 +265,14 @@ pub(crate) fn handle_order_destination_click(
     mouse: &ButtonInput<MouseButton>,
     pos: TileCoord,
     order_state: &mut OrderEditState,
+    next_pick: &mut NextState<OrderPickState>,
     sim: &mut SimWorld,
     pending: &mut RemapMapVisualsPending,
     hud_feedback: &mut HudBuildFeedback,
     elapsed_secs: f32,
 ) -> bool {
     if mouse.just_pressed(MouseButton::Right) {
-        cancel_order_destination_pick(order_state);
+        cancel_order_destination_pick(next_pick);
         return true;
     }
     if !mouse.just_pressed(MouseButton::Left) {
@@ -291,7 +300,7 @@ pub(crate) fn handle_order_destination_click(
     // Prioridad 2: clic sobre otro vehículo (fuera de un destino) → editar sus
     // órdenes.
     if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.pos == pos) {
-        open_order_edit_for_vehicle(order_state, vehicle);
+        open_order_edit_for_vehicle(order_state, vehicle, next_pick);
         return true;
     }
     // Estación presente pero incompatible con este vehículo → feedback.

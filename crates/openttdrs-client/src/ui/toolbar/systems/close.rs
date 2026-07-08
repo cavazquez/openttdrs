@@ -1,23 +1,93 @@
 use bevy::prelude::*;
 
+use crate::state::{ClientScreen, OrderPickState, SuspendedGameSession, order_pick_active};
+use crate::ui::floating_window::{
+    FloatingWindow, FloatingWindowClosed, close_top_visible_floating_window,
+};
+use crate::ui::industry_panel::IndustryPanelState;
+use crate::ui::main_menu::return_to_main_menu;
+use crate::ui::save_window::SaveWindowState;
 use crate::ui::toolbar::build_input::cancel_placement;
 use crate::ui::toolbar::{
     DragBuildState, OrderEditState, ToolbarCloseButton, ToolbarState, UiToolState,
 };
 
-pub(crate) fn close_toolbar_panel_on_escape(
+/// Hay herramienta, panel o modo de colocación activo que Esc debe cancelar primero.
+fn ingame_placement_busy(
+    save_window: &SaveWindowState,
+    tool_state: &UiToolState,
+    toolbar_state: &ToolbarState,
+    pick_state: &State<OrderPickState>,
+    order_state: &OrderEditState,
+    industry_panel: &IndustryPanelState,
+) -> bool {
+    save_window.open
+        || tool_state.active_tool.is_some()
+        || toolbar_state.active_group.is_some()
+        || order_pick_active(pick_state)
+        || order_state.vehicle_id.is_some()
+        || industry_panel.open
+}
+
+fn cancel_ingame_placement(
+    toolbar_state: &mut ToolbarState,
+    tool_state: &mut UiToolState,
+    drag_state: &mut DragBuildState,
+    order_state: &mut OrderEditState,
+    next_pick: &mut NextState<OrderPickState>,
+    industry_panel: &mut IndustryPanelState,
+) {
+    toolbar_state.active_group = None;
+    tool_state.active_tool = None;
+    cancel_placement(drag_state);
+    order_state.clear();
+    next_pick.set(OrderPickState::Idle);
+    industry_panel.open = false;
+    industry_panel.focus_tile = None;
+}
+
+/// **Esc** cancela herramienta/panel activo; cierra ventanas flotantes; si no hay ninguno, vuelve al menú.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn handle_ingame_escape(
     keyboard: Res<ButtonInput<KeyCode>>,
+    save_window: Res<SaveWindowState>,
+    pick_state: Res<State<OrderPickState>>,
     mut toolbar_state: ResMut<ToolbarState>,
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
     mut order_state: ResMut<OrderEditState>,
+    mut next_pick: ResMut<NextState<OrderPickState>>,
+    mut industry_panel: ResMut<IndustryPanelState>,
+    mut windows_q: Query<(&FloatingWindow, &GlobalZIndex, &mut Visibility)>,
+    mut closed: MessageWriter<FloatingWindowClosed>,
+    mut next_screen: ResMut<NextState<ClientScreen>>,
+    mut suspended: ResMut<SuspendedGameSession>,
 ) {
-    if keyboard.just_pressed(KeyCode::Escape) {
-        toolbar_state.active_group = None;
-        tool_state.active_tool = None;
-        cancel_placement(&mut drag_state);
-        order_state.clear();
+    if !keyboard.just_pressed(KeyCode::Escape) {
+        return;
     }
+    if ingame_placement_busy(
+        &save_window,
+        &tool_state,
+        &toolbar_state,
+        &pick_state,
+        &order_state,
+        &industry_panel,
+    ) {
+        cancel_ingame_placement(
+            &mut toolbar_state,
+            &mut tool_state,
+            &mut drag_state,
+            &mut order_state,
+            &mut next_pick,
+            &mut industry_panel,
+        );
+        return;
+    }
+    if close_top_visible_floating_window(&mut windows_q, &mut closed) {
+        return;
+    }
+    return_to_main_menu(&mut next_screen, &mut suspended);
 }
 
 pub(crate) fn close_toolbar_button_interaction(
@@ -26,14 +96,76 @@ pub(crate) fn close_toolbar_button_interaction(
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
     mut order_state: ResMut<OrderEditState>,
+    mut next_pick: ResMut<NextState<OrderPickState>>,
+    mut industry_panel: ResMut<IndustryPanelState>,
 ) {
     for interaction in &q {
         if *interaction != Interaction::Pressed {
             continue;
         }
-        toolbar_state.active_group = None;
-        tool_state.active_tool = None;
-        cancel_placement(&mut drag_state);
-        order_state.clear();
+        cancel_ingame_placement(
+            &mut toolbar_state,
+            &mut tool_state,
+            &mut drag_state,
+            &mut order_state,
+            &mut next_pick,
+            &mut industry_panel,
+        );
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+
+    use crate::state::{ClientScreen, insert_test_order_pick_state};
+
+    fn escape_test_world() -> World {
+        let mut world = World::new();
+        world.insert_resource(ButtonInput::<KeyCode>::default());
+        world.insert_resource(SaveWindowState::default());
+        world.insert_resource(ToolbarState::default());
+        world.insert_resource(UiToolState::default());
+        world.insert_resource(DragBuildState::default());
+        world.insert_resource(OrderEditState::default());
+        world.insert_resource(IndustryPanelState::default());
+        world.insert_resource(SuspendedGameSession::default());
+        world.insert_resource(NextState::<ClientScreen>::default());
+        world.insert_resource(State::new(ClientScreen::InGame));
+        insert_test_order_pick_state(&mut world);
+        world.init_resource::<Messages<FloatingWindowClosed>>();
+        world
+    }
+
+    #[test]
+    fn escape_with_active_tool_clears_tool_without_leaving_game() {
+        let mut world = escape_test_world();
+        world.resource_mut::<UiToolState>().active_tool = Some(crate::ui::BuildMenuAction::Rail);
+        let mut keys = ButtonInput::<KeyCode>::default();
+        keys.press(KeyCode::Escape);
+        world.insert_resource(keys);
+        world.run_system_once(handle_ingame_escape).unwrap();
+        assert!(world.resource::<UiToolState>().active_tool.is_none());
+        assert!(matches!(
+            world.resource::<NextState<ClientScreen>>(),
+            NextState::Unchanged
+        ));
+    }
+
+    #[test]
+    fn escape_without_active_tool_returns_to_main_menu() {
+        let mut world = escape_test_world();
+        let mut keys = ButtonInput::<KeyCode>::default();
+        keys.press(KeyCode::Escape);
+        world.insert_resource(keys);
+        world.run_system_once(handle_ingame_escape).unwrap();
+        assert!(matches!(
+            world.resource::<NextState<ClientScreen>>(),
+            NextState::Pending(ClientScreen::MainMenu)
+                | NextState::PendingIfNeq(ClientScreen::MainMenu)
+        ));
+        assert!(world.resource::<SuspendedGameSession>().active);
     }
 }

@@ -14,6 +14,7 @@ use crate::state::bootstrap::{
 };
 
 use super::main_menu::MainMenuCamera;
+use super::main_menu::MainMenuPanel;
 
 /// Cámara del fondo intro (también lleva [`MainMenuCamera`] para limpieza al salir).
 #[derive(Component)]
@@ -243,14 +244,19 @@ pub(crate) fn pan_main_menu_intro_camera(
     transform.translation.y = state.base_pos.y + (phase * 0.7 + 1.1).cos() * INTRO_PAN_AMPLITUDE_Y;
 }
 
-pub(crate) fn cleanup_main_menu_intro(
+pub(crate) fn despawn_main_menu_intro_layers(
     commands: &mut Commands,
     intro_layers: &Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
 ) {
-    commands.remove_resource::<MainMenuIntroState>();
-    commands.remove_resource::<MainMenuIntroMap>();
-    commands.remove_resource::<TruckHandles>();
     for entity in intro_layers {
         commands.entity(entity).despawn();
     }
+}
+
+/// Recursos del intro/menú; se ejecuta en `OnExit(MainMenu)` tras los sistemas del frame.
+pub(crate) fn cleanup_main_menu_on_exit(mut commands: Commands) {
+    commands.remove_resource::<MainMenuPanel>();
+    commands.remove_resource::<MainMenuIntroState>();
+    commands.remove_resource::<MainMenuIntroMap>();
+    commands.remove_resource::<TruckHandles>();
 }

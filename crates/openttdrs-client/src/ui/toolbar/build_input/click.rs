@@ -10,7 +10,7 @@ use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, pick_vehicle_id_at_world,
     request_map_visual_remap, town_id_at_label_pos,
 };
-use crate::state::SimWorld;
+use crate::state::{OrderPickState, SimWorld, order_pick_active};
 use crate::ui::hud::{
     HoveredTileCoord, HudBuildFeedback, SelectedTileInfo, enqueue_build_place_flash,
     push_build_command_error,
@@ -87,6 +87,8 @@ fn tiles_for_visual_remap(
 #[derive(bevy::ecs::system::SystemParam)]
 pub(crate) struct PanelStates<'w> {
     order: ResMut<'w, OrderEditState>,
+    pick_state: Res<'w, State<OrderPickState>>,
+    pick_next: ResMut<'w, NextState<OrderPickState>>,
     depot: ResMut<'w, DepotPanelState>,
     station: ResMut<'w, StationCargoPanelState>,
     industry: ResMut<'w, IndustryPanelState>,
@@ -300,18 +302,19 @@ pub(crate) fn handle_tile_click(
         selected.pos = Some(pos);
     }
 
-    let orders_mode =
-        order_state.picking_destination || tool_state.active_tool == Some(BuildMenuAction::Orders);
+    let orders_mode = order_pick_active(&panels.pick_state)
+        || tool_state.active_tool == Some(BuildMenuAction::Orders);
     if orders_mode {
         // Modo selección de destino: el clic añade la parada clicada. Se procesa
         // primero para que un depósito con el tren dentro se añada como destino
         // en vez de reabrir las órdenes de ese vehículo.
-        if order_state.picking_destination {
+        if order_pick_active(&panels.pick_state) {
             if order_state.vehicle_id.is_some() {
                 handle_order_destination_click(
                     &mouse,
                     pos,
                     order_state,
+                    &mut panels.pick_next,
                     &mut sim,
                     &mut pending,
                     &mut hud_feedback,
@@ -326,8 +329,8 @@ pub(crate) fn handle_tile_click(
             && let Some(vehicle_id) = pick_vehicle_id_at_world(world_pos, &sim)
             && let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id)
         {
-            open_order_edit_for_vehicle(order_state, vehicle);
-            start_order_destination_pick(order_state);
+            open_order_edit_for_vehicle(order_state, vehicle, &mut panels.pick_next);
+            start_order_destination_pick(order_state, &mut panels.pick_next);
             return;
         }
         return;

@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use super::SimHudControls;
 use crate::render::RemapMapVisualsPending;
 use crate::settings::ClientPreferences;
+use crate::state::{SimRunState, sim_is_paused, toggle_sim_run_state};
 use crate::ui::save_window::SaveWindowState;
 use crate::ui::{BuildMenuAction, UiToolState};
 
@@ -18,17 +19,16 @@ pub(crate) fn handle_pause_toggle(
     mut prefs: ResMut<ClientPreferences>,
     mut pending_remap: ResMut<RemapMapVisualsPending>,
     save_window: Option<Res<SaveWindowState>>,
+    run_state: Res<State<SimRunState>>,
+    mut next_run: ResMut<NextState<SimRunState>>,
 ) {
     if save_window_open(save_window.as_ref()) {
         return;
     }
     if keyboard.just_pressed(KeyCode::KeyP) {
-        hud.paused = !hud.paused;
-        if hud.paused {
-            info!("Pausa: ON");
-        } else {
-            info!("Pausa: OFF");
-        }
+        let will_pause = !sim_is_paused(&run_state);
+        toggle_sim_run_state(&run_state, &mut next_run);
+        info!("Pausa: {}", if will_pause { "ON" } else { "OFF" });
     }
     if keyboard.just_pressed(KeyCode::KeyM) {
         hud.minimap_visible = !hud.minimap_visible;
@@ -91,8 +91,6 @@ pub(crate) fn handle_tool_hotkeys(
         tool_state.active_tool = Some(BuildMenuAction::Rail);
     } else if keyboard.just_pressed(KeyCode::KeyC) {
         tool_state.active_tool = Some(BuildMenuAction::Clear);
-    } else if keyboard.just_pressed(KeyCode::Escape) {
-        tool_state.active_tool = None;
     }
 }
 
@@ -119,6 +117,7 @@ mod tests {
         world.insert_resource(crate::render::RemapMapVisualsPending::default());
         world.insert_resource(UiToolState::default());
 
+        crate::state::insert_test_sim_run_state(&mut world);
         press_keys(&mut world, &[KeyCode::KeyP]);
         world.run_system_once(handle_pause_toggle).unwrap();
         press_keys(&mut world, &[KeyCode::KeyM]);
@@ -134,7 +133,6 @@ mod tests {
             KeyCode::Digit3,
             KeyCode::Digit4,
             KeyCode::KeyC,
-            KeyCode::Escape,
         ] {
             press_keys(&mut world, &[k]);
             world.run_system_once(handle_tool_hotkeys).unwrap();

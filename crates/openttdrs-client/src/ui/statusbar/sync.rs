@@ -5,8 +5,8 @@ use openttdrs_core::{
 
 use crate::camera::{CameraFocusRequest, tile_camera_world_pos};
 use crate::news_prefs::NewsDisplayPrefs;
-use crate::state::SimWorld;
-use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, SimHudControls};
+use crate::state::{SimRunState, SimWorld, sim_is_paused};
+use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo};
 
 use super::{
     COMPANY_DISPLAY_NAME, NewsUiState, StatusBarDateText, StatusBarDefaultText, StatusBarMoneyText,
@@ -26,8 +26,8 @@ pub(crate) struct StatusBarCache {
 
 pub(crate) fn sync_status_bar(
     sim: Res<SimWorld>,
-    hud: Res<SimHudControls>,
     news_ui: Res<NewsUiState>,
+    run_state: Res<State<SimRunState>>,
     mut queries: ParamSet<(
         Query<&mut Text, With<StatusBarDateText>>,
         Query<&mut Text, With<StatusBarMoneyText>>,
@@ -40,7 +40,7 @@ pub(crate) fn sync_status_bar(
 ) {
     let date = format_calendar_date(sim.state.tick);
     let money = format_money(sim.state.economy.money);
-    let paused_label = hud.paused.then(|| "Pausado".to_string());
+    let paused_label = sim_is_paused(&run_state).then(|| "Pausado".to_string());
     let ticker_key = news_ui.ticker.as_ref().map(|t| (t.item_id, t.scroll));
     let default_visible = news_ui.ticker.is_none() && paused_label.is_none();
     let ticker_visible = news_ui.ticker.is_some() && paused_label.is_none();
@@ -149,14 +149,14 @@ pub(crate) fn drain_news_events(
 pub(crate) fn update_news_playback(
     mut commands: Commands,
     time: Res<Time>,
-    hud: Res<SimHudControls>,
+    run_state: Res<State<SimRunState>>,
     sim: Res<SimWorld>,
     mut news_ui: ResMut<NewsUiState>,
     mut feedback: ResMut<HudBuildFeedback>,
     mut popup_nodes: Query<&mut Node, With<super::NewsPopupRoot>>,
 ) {
     let dt = time.delta_secs();
-    if hud.paused {
+    if sim_is_paused(&run_state) {
         return;
     }
 

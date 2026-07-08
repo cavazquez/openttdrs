@@ -13,11 +13,11 @@ use super::widgets::{
     seed_adjust_button, start_year_button, starting_money_button, toggle_button,
 };
 use super::{
-    MainMenuBackButton, MainMenuDemoButton, MainMenuDensityTarget, MainMenuHintsText,
-    MainMenuLoadButton, MainMenuNewGameButton, MainMenuPanel, MainMenuQuitButton,
-    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuSeedDecButton, MainMenuSeedIncButton,
-    MainMenuStartButton, MainMenuSubPanel, MainMenuSummaryText, MainMenuTitleText, MainMenuToggle,
-    MainMenuUi,
+    MainMenuBackButton, MainMenuContinueButton, MainMenuContinueWrap, MainMenuDemoButton,
+    MainMenuDensityTarget, MainMenuHintsText, MainMenuLoadButton, MainMenuNewGameButton,
+    MainMenuPanel, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
+    MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuStartButton, MainMenuSubPanel,
+    MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
 };
 
 pub(crate) fn setup_main_menu(mut commands: Commands) {
@@ -113,6 +113,23 @@ fn spawn_root_panel(parent: &mut ChildSpawnerCommands) {
             },
         ))
         .with_children(|menu| {
+            menu.spawn((
+                MainMenuContinueWrap,
+                hidden_subpanel_node(Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    align_items: AlignItems::Center,
+                    ..default()
+                }),
+                Visibility::Hidden,
+            ))
+            .with_children(|wrap| {
+                wrap.spawn(primary_button(
+                    MainMenuContinueButton,
+                    "Continuar partida",
+                    50.0,
+                ));
+            });
             menu.spawn(primary_button(MainMenuNewGameButton, "Nueva partida", 50.0));
             menu.spawn(primary_button(MainMenuLoadButton, "Cargar partida", 50.0));
             menu.spawn(secondary_button(

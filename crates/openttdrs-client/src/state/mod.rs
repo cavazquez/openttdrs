@@ -1,6 +1,7 @@
 //! Estado del mundo de simulacion y generacion procedural.
 
 pub(crate) mod bootstrap;
+pub(crate) mod ingame_lifecycle;
 pub(crate) mod new_game;
 pub(crate) mod stations;
 
@@ -85,6 +86,71 @@ pub enum ClientScreen {
     #[default]
     MainMenu,
     InGame,
+}
+
+/// Sub-estado de simulación: solo existe mientras `ClientScreen::InGame`.
+#[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[source(ClientScreen = ClientScreen::InGame)]
+pub enum SimRunState {
+    #[default]
+    Running,
+    Paused,
+}
+
+/// Sub-estado al elegir destino de orden en el mapa (`InGame` únicamente).
+#[derive(SubStates, Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[source(ClientScreen = ClientScreen::InGame)]
+pub enum OrderPickState {
+    #[default]
+    Idle,
+    Picking,
+}
+
+/// Partida suspendida al volver al menú (el `SimWorld` sigue en memoria).
+#[derive(Resource, Default, Debug)]
+pub struct SuspendedGameSession {
+    pub active: bool,
+}
+
+/// Alterna entre ejecución y pausa de la simulación.
+pub(crate) fn toggle_sim_run_state(
+    current: &State<SimRunState>,
+    next: &mut NextState<SimRunState>,
+) {
+    next.set(match current.get() {
+        SimRunState::Running => SimRunState::Paused,
+        SimRunState::Paused => SimRunState::Running,
+    });
+}
+
+pub(crate) fn sim_is_paused(run: &State<SimRunState>) -> bool {
+    *run.get() == SimRunState::Paused
+}
+
+pub(crate) fn order_pick_active(pick: &State<OrderPickState>) -> bool {
+    *pick.get() == OrderPickState::Picking
+}
+
+/// Estado de simulación para tests unitarios que ejecutan sistemas de partida.
+#[cfg(test)]
+pub(crate) fn insert_test_sim_run_state(world: &mut World) {
+    if !world.contains_resource::<State<SimRunState>>() {
+        world.insert_resource(State::new(SimRunState::Running));
+    }
+    if !world.contains_resource::<NextState<SimRunState>>() {
+        world.insert_resource(NextState::<SimRunState>::default());
+    }
+}
+
+/// Sub-estado de órdenes para tests unitarios que ejecutan sistemas de partida.
+#[cfg(test)]
+pub(crate) fn insert_test_order_pick_state(world: &mut World) {
+    if !world.contains_resource::<State<OrderPickState>>() {
+        world.insert_resource(State::new(OrderPickState::Idle));
+    }
+    if !world.contains_resource::<NextState<OrderPickState>>() {
+        world.insert_resource(NextState::<OrderPickState>::default());
+    }
 }
 
 /// Estado del mundo de simulacion.

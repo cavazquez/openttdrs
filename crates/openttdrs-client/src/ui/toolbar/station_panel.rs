@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use openttdrs_core::{CommandError, TileCoord, VehicleOrder};
 
 use crate::render::RemapMapVisualsPending;
-use crate::state::SimWorld;
+use crate::state::{OrderPickState, SimWorld};
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 
 use super::order_panel::apply_order_edit;
@@ -205,6 +205,7 @@ pub(crate) fn handle_station_cargo_panel_buttons(
     mut q: Query<(&Interaction, &StationCargoPanelButton), (Changed<Interaction>, With<Button>)>,
     mut station_panel: ResMut<StationCargoPanelState>,
     mut order_state: ResMut<OrderEditState>,
+    mut next_pick: ResMut<NextState<OrderPickState>>,
     mut tool_state: ResMut<UiToolState>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
@@ -234,7 +235,7 @@ pub(crate) fn handle_station_cargo_panel_buttons(
                     continue;
                 };
                 if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-                    open_order_edit_for_vehicle(&mut order_state, vehicle);
+                    open_order_edit_for_vehicle(&mut order_state, vehicle, &mut next_pick);
                     tool_state.active_tool = None;
                 }
             }

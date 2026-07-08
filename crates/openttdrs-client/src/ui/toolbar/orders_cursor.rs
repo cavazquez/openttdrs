@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy::window::{CursorIcon, PrimaryWindow, SystemCursorIcon};
 
-use crate::state::SimWorld;
+use crate::state::{OrderPickState, SimWorld, order_pick_active};
 use crate::ui::hud::HoveredTileCoord;
 use crate::ui::toolbar::build_input::orders::order_pick_valid;
 use crate::ui::toolbar::{BuildMenuAction, BuildMenuUi, OrderEditState, UiToolState};
@@ -12,6 +12,7 @@ use crate::ui::toolbar::{BuildMenuAction, BuildMenuUi, OrderEditState, UiToolSta
 pub(crate) fn sync_orders_pick_cursor(
     tool_state: Res<UiToolState>,
     order_state: Res<OrderEditState>,
+    pick_state: Res<State<OrderPickState>>,
     hovered: Res<HoveredTileCoord>,
     sim: Res<SimWorld>,
     menu_pointer: Query<&Interaction, With<BuildMenuUi>>,
@@ -21,7 +22,7 @@ pub(crate) fn sync_orders_pick_cursor(
 ) {
     let over_menu = menu_pointer.iter().any(|i| *i != Interaction::None);
     let picking =
-        order_state.picking_destination || tool_state.active_tool == Some(BuildMenuAction::Orders);
+        order_pick_active(&pick_state) || tool_state.active_tool == Some(BuildMenuAction::Orders);
     let active = picking && order_state.vehicle_id.is_some() && !over_menu;
     let hover_valid = active
         && order_state.vehicle_id.is_some_and(|vehicle_id| {

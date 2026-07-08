@@ -80,9 +80,6 @@ pub const TRAIN_DUAL_TRACK_RET_Y: i32 = 4;
 pub const TRAIN_DUAL_STATION_A: TileCoord = TileCoord::new(1, 6);
 pub const TRAIN_DUAL_STATION_B: TileCoord = TileCoord::new(13, 6);
 pub const TRAIN_DUAL_START: TileCoord = TileCoord::new(2, 6);
-/// Waypoints en y=4 hasta que el pathfinder respete sentido único.
-pub const TRAIN_DUAL_WP_RETURN_EAST: TileCoord = TileCoord::new(10, 4);
-pub const TRAIN_DUAL_WP_RETURN_WEST: TileCoord = TileCoord::new(3, 4);
 /// Fábrica junto a la estación B en la recta.
 pub const TRAIN_DUAL_FACTORY: TileCoord = TileCoord::new(15, 6);
 pub const TRAIN_DUAL_VEHICLE_ID: u32 = 1;
@@ -458,8 +455,6 @@ pub fn build_train_supply_dual() -> GameState {
     train.set_vehicle_orders(vec![
         VehicleOrder::station_with_flags(TRAIN_DUAL_STATION_A, true, false),
         VehicleOrder::station(TRAIN_DUAL_STATION_B),
-        VehicleOrder::waypoint(TRAIN_DUAL_WP_RETURN_EAST),
-        VehicleOrder::waypoint(TRAIN_DUAL_WP_RETURN_WEST),
         VehicleOrder::station(TRAIN_DUAL_STATION_A),
     ]);
     train.sync_order_destination(&state.map);

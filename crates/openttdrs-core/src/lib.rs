@@ -133,10 +133,11 @@ pub use rail_lane::{rail_horz_lane_bit, rail_vert_lane_bit};
 pub use rail_signals::{
     RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SEMAPHORE_BUILD_BEFORE_YEAR,
     SIGNAL_BUILD_COST, SIGTYPE_BLOCK, SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SignalTrack,
-    calendar_year_at_tick, cycle_signal_facing, cycle_signal_side_m3, default_signal_variant,
-    rail_tile_is_signals, resolve_signal_track, signal_facing_for_orientation,
-    signal_on_track_mask, signal_placement_for_facing, signal_placement_for_track,
-    signal_type_for_track, tracks_overlap, valid_signal_facings_track,
+    YAPF_RED_SIGNAL_PENALTY, YapfSignalRouting, calendar_year_at_tick, cycle_signal_facing,
+    cycle_signal_side_m3, default_signal_variant, rail_tile_is_signals, resolve_signal_track,
+    signal_facing_for_orientation, signal_on_track_mask, signal_placement_for_facing,
+    signal_placement_for_track, signal_type_for_track, tracks_overlap, valid_signal_facings_track,
+    yapf_routing_signal,
 };
 pub use refit::{
     next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_hidden_on_map,

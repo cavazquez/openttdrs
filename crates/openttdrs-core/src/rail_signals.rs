@@ -315,6 +315,72 @@ fn block_is_occupied_by_trains(
     false
 }
 
+/// Resultado de evaluar señales al planificar ruta (YAPF `SignalCost` simplificado).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum YapfSignalRouting {
+    /// Sin señal relevante en la dirección de marcha.
+    Clear,
+    /// Penalización por señal roja (el camino sigue siendo válido).
+    Penalty(u32),
+    /// Sentido único en contra: rama inválida (`EndSegmentReason::DeadEnd`).
+    DeadEnd,
+}
+
+/// Penalización YAPF por señal de bloque roja (aprox. `rail_firstred_penalty`).
+pub const YAPF_RED_SIGNAL_PENALTY: u32 = 100;
+
+/// Evalúa señales al planificar salida de `tile` en `exit_dir` (convención `OpenTTD` / `rail_signals`).
+///
+/// Replica la regla central de `CYapfCostRailT::SignalCost`: señal unidireccional solo en
+/// sentido contrario → callejón sin salida; roja a favor → penalización.
+#[must_use]
+pub fn yapf_routing_signal(map: &Map, tile: TileCoord, exit_dir: u8) -> YapfSignalRouting {
+    let Some(t) = map.get(tile) else {
+        return YapfSignalRouting::Clear;
+    };
+    if t.kind != TileKind::Rail || !rail_tile_is_signals(t.m5) {
+        return YapfSignalRouting::Clear;
+    }
+    let rails = t.m5 & 0x3F;
+    let present = rail_signal_present_mask(t.m3);
+    if present == 0 {
+        return YapfSignalRouting::Clear;
+    }
+
+    let mut along = false;
+    let mut against = false;
+    let mut red_penalty = 0u32;
+    for bit in 0..4u8 {
+        if present & (1 << bit) == 0 {
+            continue;
+        }
+        let sig_exit = signal_exit_dir(rails, bit);
+        if sig_exit == exit_dir {
+            along = true;
+            if signal_track_for_bit(rails, bit)
+                .is_some_and(|track| signal_type_for_track(t.m2, track) == SIGTYPE_ENTRY)
+            {
+                continue;
+            }
+            if !signal_is_green(t.m3hi, bit) {
+                red_penalty = red_penalty.saturating_add(YAPF_RED_SIGNAL_PENALTY);
+            }
+        } else if sig_exit == opposite_dir(exit_dir) {
+            against = true;
+        }
+    }
+
+    let is_oneway = present.is_power_of_two();
+    if against && !along && is_oneway {
+        return YapfSignalRouting::DeadEnd;
+    }
+    if red_penalty > 0 {
+        YapfSignalRouting::Penalty(red_penalty)
+    } else {
+        YapfSignalRouting::Clear
+    }
+}
+
 /// Bits de señal presentes que controlan la salida `from` → `to`.
 #[must_use]
 fn signal_bits_for_exit(map: &Map, from: TileCoord, to: TileCoord) -> Vec<u8> {

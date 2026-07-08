@@ -58,7 +58,10 @@ como tales.
     divergencia cosmética documentada en piezas diagonales puras.
 11. **Pathfinder YAPF con penalizaciones y reserva** —
     `yapf_rail.cpp` (penaliza curvas, señales rojas, plataformas ocupadas;
-    reserva el camino elegido). El A* propio no replica desempates ni costes.
+    reserva el camino elegido). **Parcial (openttdrs):** `pathfinder/yapf.rs`
+    reemplaza el A* ferroviario con estado `(tesela, trackbit, exit_dir)`,
+    `yapf_routing_signal` (sentido único en contra → dead end, roja → penalización).
+    Falta: segmentos con caché, PBS/reserva, penalizaciones de plataforma/curva 90°.
 12. **Reversa con coste/chequeos** — `ReverseTrainDirection` (news, PBS,
     `reverse_ctr`). Hoy la reversa automática y manual son instantáneas.
 

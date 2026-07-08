@@ -8,6 +8,8 @@ use crate::station::is_rail_waypoint_tile;
 use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::VehicleKind;
 
+mod yapf;
+
 const RAIL_TB_X: u8 = 0x01;
 const RAIL_TB_Y: u8 = 0x02;
 
@@ -98,7 +100,7 @@ fn is_road_stop_station_tile(map: &Map, c: TileCoord) -> bool {
 
 #[must_use]
 #[inline]
-fn is_rail_network_tile(kind: TileKind) -> bool {
+pub(crate) fn is_rail_network_tile(kind: TileKind) -> bool {
     matches!(
         kind,
         TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge
@@ -584,6 +586,16 @@ fn find_water_path(map: &Map, from: TileCoord, to: TileCoord) -> Option<Vec<Tile
 /// entrada con el de salida (piezas X/Y/curvas de `OpenTTD`). Los depósitos solo
 /// conectan por su boca y las plataformas solo se usan como origen.
 fn find_rail_path(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    wormholes: Option<&TunnelWormholes>,
+) -> Option<Vec<TileCoord>> {
+    yapf::find_rail_path_yapf(map, from, to, wormholes)
+}
+
+#[allow(dead_code)]
+fn find_rail_path_legacy_astar(
     map: &Map,
     from: TileCoord,
     to: TileCoord,

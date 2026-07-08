@@ -58,7 +58,7 @@ cargo run -p openttdrs-core --bin dev_bot -- \
 OTTDJSON_LOAD=save/scenarios/train_supply_dual.json cargo run -p openttdrs-client
 ```
 
-En el mapa: vía de arriba (y=6) solo hacia la derecha; vía de abajo (y=4) solo hacia la izquierda.
+En el mapa: vía de arriba (y=6) solo hacia la derecha; vía de abajo (y=4) solo hacia la izquierda. El pathfinder **YAPF** (`pathfinder/yapf.rs`) elige la vuelta por y=4 sin waypoints artificiales: las señales unidireccionales en contra son callejón sin salida al planificar.
 
 ### Probar que las señales funcionan (espera en rojo)
 

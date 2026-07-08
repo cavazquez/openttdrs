@@ -84,6 +84,7 @@ do_py_compile() {
     python3 -m py_compile scripts/audit_sp3_assets.py
     python3 -m py_compile scripts/gen_house_draw_data.py
     python3 -m py_compile scripts/gen_vehicle_gfx_data.py
+    python3 -m py_compile scripts/gen_rail_signals_sav.py
     python3 -m py_compile scripts/extract_roadveh_movement.py
     info "Python OK ✓"
 }

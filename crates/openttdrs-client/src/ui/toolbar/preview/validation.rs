@@ -106,6 +106,8 @@ pub(crate) fn preview_build_command_valid(
         rail_lane_bits,
         Some(&state.map),
         tile_fract,
+        station_state.signal_type,
+        false,
     ) else {
         return true;
     };

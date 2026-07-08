@@ -24,6 +24,7 @@
 | [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) | Elevar / bajar / nivelar terreno (T1–T3) |
 | [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) | Barra inferior, ticker y cartel de noticias (N1–N5) |
 | [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md) | **Handoff:** construcción carretera drag/orientación (bug abierto) |
+| [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md) | **Cruces ferroviarios:** catálogo completo [Junctionary OTTD](https://wiki.openttd.org/en/Community/Junctionary/) (J0–J5) |
 | [HANDOFF_BUGS_VISUALES_TERRAIN.md](HANDOFF_BUGS_VISUALES_TERRAIN.md) | **Handoff:** teselas oscuras, ghost al iniciar, casas Toyland, densidad hierba (jul 2026) |
 | [DEV_BOT.md](DEV_BOT.md) | **DevBot:** sonda headless carga/descarga/ingresos — comandos listos |
 | [epics/ai_rivals.md](epics/ai_rivals.md) | Épica futura: IA rivales CPU |

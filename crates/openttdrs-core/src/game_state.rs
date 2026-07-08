@@ -124,6 +124,12 @@ pub struct GameState {
     /// Teselas con señales cuyo estado verde/rojo cambió este tick (remap cliente).
     #[serde(skip)]
     pub signal_tile_dirty: Vec<TileCoord>,
+    /// Teselas con reserva PBS activa cuyo `m2_hi` cambió (remap cliente).
+    #[serde(skip)]
+    pub reservation_tile_dirty: Vec<TileCoord>,
+    /// Conjunto de teselas con reserva PBS del tick anterior (sincronización mapa).
+    #[serde(skip, default)]
+    pub reservation_tiles_active: std::collections::HashSet<TileCoord>,
     /// Historial de noticias (más reciente al frente).
     #[serde(default)]
     pub news: crate::news::NewsQueue,
@@ -194,6 +200,8 @@ impl GameState {
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
             signal_tile_dirty: Vec::new(),
+            reservation_tile_dirty: Vec::new(),
+            reservation_tiles_active: std::collections::HashSet::new(),
             news: crate::news::NewsQueue::default(),
             pending_news_events: Vec::new(),
             news_first_vehicle_running_sent: false,
@@ -231,6 +239,8 @@ impl GameState {
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
             signal_tile_dirty: Vec::new(),
+            reservation_tile_dirty: Vec::new(),
+            reservation_tiles_active: std::collections::HashSet::new(),
             news: crate::news::NewsQueue::default(),
             pending_news_events: Vec::new(),
             news_first_vehicle_running_sent: false,

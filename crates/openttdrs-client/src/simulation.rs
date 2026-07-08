@@ -1,5 +1,7 @@
 //! Sistemas de avance de simulación independiente del render.
 
+use std::time::Duration;
+
 use bevy::prelude::*;
 
 use openttdrs_core::SIM_TICKS_PER_SECOND;
@@ -39,8 +41,13 @@ impl Plugin for SimulationPlugin {
     }
 }
 
-fn init_sim_fixed_timestep(mut fixed: ResMut<Time<Fixed>>) {
+fn init_sim_fixed_timestep(
+    mut fixed: ResMut<Time<Fixed>>,
+    mut virtual_time: ResMut<Time<Virtual>>,
+) {
     fixed.set_timestep_hz(SIM_TICK_HZ);
+    // Como máximo un tick de sim por frame render: evita saltos de varias teselas tras lag.
+    virtual_time.set_max_delta(Duration::from_secs_f64(1.0 / SIM_TICK_HZ));
 }
 
 /// Pausa y velocidad de la simulación vía `Time<Virtual>` (antes del bucle FixedUpdate).
@@ -60,19 +67,24 @@ fn step_sim(mut sim: ResMut<SimWorld>, mut vehicle_index: ResMut<VehicleIndex>) 
 }
 
 fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVisualsPending>) {
-    if sim.state.industry_tile_dirty.is_empty() && sim.state.signal_tile_dirty.is_empty() {
+    if sim.state.industry_tile_dirty.is_empty()
+        && sim.state.signal_tile_dirty.is_empty()
+        && sim.state.reservation_tile_dirty.is_empty()
+    {
         return;
     }
     let (mw, mh) = sim.state.map.dimensions();
     pending.pending = true;
     pending.sync_camera = false;
-    pending.full =
-        !sim.state.signal_tile_dirty.is_empty() && !large_map_viewport_cull_enabled(mw, mh);
+    pending.full = (!sim.state.signal_tile_dirty.is_empty()
+        || !sim.state.reservation_tile_dirty.is_empty())
+        && !large_map_viewport_cull_enabled(mw, mh);
     for coord in sim
         .state
         .industry_tile_dirty
         .iter()
         .chain(sim.state.signal_tile_dirty.iter())
+        .chain(sim.state.reservation_tile_dirty.iter())
     {
         let ch = MapTileChunk::from_tile(coord.x.max(0) as u32, coord.y.max(0) as u32);
         pending.refresh_chunks.insert((ch.cx, ch.cy));

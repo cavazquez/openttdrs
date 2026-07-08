@@ -6,6 +6,7 @@ use crate::ui::toolbar::{BuildMenuAction, DragBuildState, StationBuildState, UiT
 
 pub(crate) fn rotate_station_with_right_click(
     mouse: Res<ButtonInput<MouseButton>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut tool_state: ResMut<UiToolState>,
     mut station_state: ResMut<StationBuildState>,
     mut drag_state: ResMut<DragBuildState>,
@@ -34,7 +35,12 @@ pub(crate) fn rotate_station_with_right_click(
             station_state.rail_axis_y = !station_state.rail_axis_y;
         }
         Some(BuildMenuAction::RailSignals) => {
-            if let (Some(sim), Some(hover)) = (sim.as_ref(), hovered.as_ref()) {
+            let ctrl =
+                keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
+            if ctrl {
+                station_state.signal_type =
+                    openttdrs_core::next_placeable_signal_type(station_state.signal_type);
+            } else if let (Some(sim), Some(hover)) = (sim.as_ref(), hovered.as_ref()) {
                 if let Some(coord) = hover.pos {
                     if let Some(tile) = sim.state.map.get(coord) {
                         let tb = tile.m5 & 0x3F;

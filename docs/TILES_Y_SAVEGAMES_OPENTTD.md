@@ -897,7 +897,9 @@ ciudades, vehículos con órdenes y reloj (`DATE`).
 | ORDL / ORDR (órdenes goto estación/waypoint) | ✅ |
 | Flags **carga completa** / **no descargar** en órdenes | ✅ (bits `Order::flags`) |
 | Barcos, aviones, efectos | ❌ omitidos |
-| Señales PBS, pathfinding avanzado | ❌ no del save |
+| Tipos de señal en MAP* (`m2`, `m3`, `m3hi`, `RAIL_TILE_SIGNALS`) | ✅ block/entry/exit/combo/path/oneway |
+| Reservas PBS en runtime tras import | ❌ no se reconstruyen (solo bits en mapa) |
+| Lógica presignal completa (`UpdateSignalsOnSegment`) | ❌ parcial |
 | Condicionales, depósito en órdenes, refit | ❌ omitidos |
 | Dinero `PLYR` en saves muy antiguos (v211) | ⚠️ puede salir `0` |
 | Vehículos en depósito sin vía contigua | ⚠️ se fuerzan `running` y snap a red cercana |
@@ -923,13 +925,21 @@ En ORDL/ORDR cada orden tiene `type`, `dest` y `flags`:
 ```bash
 cargo test -p openttdrs-core --test sav_load_stationlist
 cargo test -p openttdrs-core --test sav_load_rail_saves
+cargo test -p openttdrs-core --test golden_rail_signals
 cargo test -p openttdrs-core sav::orders::
 ```
 
 Fixtures: `crates/openttdrs-core/tests/fixtures/demo_openttd.sav` (sintético con ORDL;
-regenerar con `scripts/gen_demo_sav.py`). Partidas reales bajo `save/` son opcionales en local.
+regenerar con `scripts/gen_demo_sav.py`). `rail_signals_mixed.sav` (señales 0–5 en vía;
+regenerar con `scripts/gen_rail_signals_sav.py`). Golden de encoding/sprites:
+`crates/openttdrs-core/tests/fixtures/parity/rail_signals_golden.json`. Partidas reales bajo `save/` son opcionales en local.
 
-### Limitaciones conocidas
+### Limitaciones conocidas (señales al importar)
+
+- Los **tipos** (`SignalType` 0–5) y máscaras presente/estado se leen del mapa; el **render** del cliente los respeta.
+- Las **reservas PBS** guardadas en `m2_hi` (bits 8–11 del `m2()` de 16 bits) **no** se aplican como estado de simulación al cargar; `update_train_reservations` las recalcula en juego.
+- **Presignals** (entry/exit/combo): el tipo se importa, pero la lógica de segmento upstream no replica aún `UpdateSignalsOnSegment` de OpenTTD.
+- Colocación vía `PlaceRailSignal` solo expone block/path/path oneway; entry/exit/combo en saves vienen del `.sav`, no del menú de construcción.
 
 - Saves sin red conectada a destinos de órdenes: trenes no se mueven (esperado).
 - `stationlist-test.sav`: casi sin vía; sirve para buses/órdenes, no para trenes en vía.

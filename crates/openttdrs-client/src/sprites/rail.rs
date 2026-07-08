@@ -218,6 +218,8 @@ pub fn level_crossing_has_rail_reservation(m5: u8) -> bool {
     (m5 >> 4) & 1 != 0
 }
 
+pub use openttdrs_core::rail_tile_has_pbs_reservation;
+
 /// Vía con señales (`RailTileType::Signals`, bits 6–7 de `m5`).
 #[must_use]
 pub fn rail_tile_is_signals(m5: u8) -> bool {
@@ -964,6 +966,25 @@ mod tests {
         map.set_kind(TileCoord::new(0, 1), TileKind::Rail).unwrap();
         map.set_mapt_m5(TileCoord::new(0, 1), 0x10, 0x02).unwrap();
         assert_eq!(rail_trackbits_for_render(&map, c, 3, 3, 1), 0);
+    }
+
+    #[test]
+    fn golden_rail_signal_sprite_texture_ids() {
+        // Paridad con `crates/openttdrs-core/tests/fixtures/parity/rail_signals_golden.json`
+        // (TRACK_X, cara NE, eléctrica, verde).
+        const ROWS: &[(u8, u8, u8, u8, u32, &str)] = &[
+            (8, 64, 64, 65, 1278, "block"),
+            (9, 64, 64, 65, 1435, "entry"),
+            (10, 64, 64, 65, 1451, "exit"),
+            (11, 64, 64, 65, 1467, "combo"),
+            (12, 64, 64, 65, 1547, "path"),
+            (13, 64, 64, 65, 1563, "path_oneway"),
+        ];
+        for &(m2, m3, m3hi, m5, tex_id, label) in ROWS {
+            let ids = collect_signal_sprite_ids(m2, m3, m3hi, m5);
+            assert_eq!(ids.len(), 1, "{label}");
+            assert_eq!(ids[0], tex_id, "{label}");
+        }
     }
 
     #[test]

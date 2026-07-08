@@ -27,20 +27,22 @@ pub use record::{
     VehicleRecord, derive_vehicle_state, order_kind_name,
 };
 pub use scenario::{
-    TRAIN_DUAL_FACTORY, TRAIN_DUAL_START, TRAIN_DUAL_STATION_A, TRAIN_DUAL_STATION_B,
-    TRAIN_DUAL_TRACK_OUT_Y, TRAIN_DUAL_TRACK_RET_Y, TRAIN_DUAL_VEHICLE_ID,
+    RAIL_SIGNALS_MIXED_TYPES, RAIL_SIGNALS_MIXED_Y, TRAIN_DUAL_COAL_MINE, TRAIN_DUAL_DEPOT,
+    TRAIN_DUAL_DEPOT_EXIT, TRAIN_DUAL_FACTORY, TRAIN_DUAL_STATION_A, TRAIN_DUAL_STATION_B,
+    TRAIN_DUAL_TRACK_OUT_Y, TRAIN_DUAL_TRACK_RET_Y, TRAIN_DUAL_VEHICLE_2_ID, TRAIN_DUAL_VEHICLE_ID,
     TRAIN_DUAL_VEHICLE_OUT_ID, TRAIN_LINE_CORNER, TRAIN_LINE_DEPOT, TRAIN_LINE_SIGNAL,
     TRAIN_LINE_STATION_A, TRAIN_LINE_STATION_B, TRAIN_LINE_VEHICLE_ID, TRAIN_SIGNAL_BLOCK_TILE,
     TRAIN_SIGNAL_BLOCKER_ID, TRAIN_SIGNAL_LEAD_ID, TRAIN_SIGNAL_TILE, TRAIN_SUPPLY_BLOCK_TILE,
     TRAIN_SUPPLY_BLOCKER_ID, TRAIN_SUPPLY_FACTORY, TRAIN_SUPPLY_MINE, TRAIN_SUPPLY_SIGNAL_EAST,
     TRAIN_SUPPLY_SIGNAL_SOUTH, TRAIN_SUPPLY_SIGNAL_WEST, TRAIN_SUPPLY_VEHICLE_ID,
     TRAIN_SUPPLY_WAIT_SIGNAL, TRUCK_BAY_DELIVER_ROAD, TRUCK_BAY_DELIVER_STOP, TRUCK_BAY_LOAD_ROAD,
-    TRUCK_BAY_LOAD_STOP, TRUCK_BAY_VEHICLE_ID, build_scenario, build_train_line,
-    build_train_signal, build_train_supply, build_train_supply_dual,
-    build_train_supply_signal_snapshot, build_truck_bay, scenario_names,
+    TRUCK_BAY_LOAD_STOP, TRUCK_BAY_VEHICLE_ID, build_rail_signals_mixed, build_scenario,
+    build_train_line, build_train_signal, build_train_supply, build_train_supply_dual,
+    build_train_supply_signal_snapshot, build_truck_bay, rail_signals_mixed_coord, scenario_names,
 };
 pub use tracer::ParityTracer;
 
+pub(crate) use scenario::release_staged_depot_trains;
 pub(crate) use tracer::record_tick;
 
 use std::io::{BufRead, Write};

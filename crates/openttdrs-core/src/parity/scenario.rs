@@ -21,6 +21,10 @@ use crate::cargo::CargoType;
 use crate::command::{Command, apply_command};
 use crate::industry::{Industry, IndustryKind};
 use crate::map::TileCoord;
+use crate::rail_signals::{
+    SIGTYPE_BLOCK, SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SIGTYPE_PATH, SIGTYPE_PATH_ONEWAY,
+    SignalTrack,
+};
 use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
 use crate::{GameState, PathNetwork, find_path};
 
@@ -79,11 +83,17 @@ pub const TRAIN_DUAL_TRACK_OUT_Y: i32 = 6;
 pub const TRAIN_DUAL_TRACK_RET_Y: i32 = 4;
 pub const TRAIN_DUAL_STATION_A: TileCoord = TileCoord::new(1, 6);
 pub const TRAIN_DUAL_STATION_B: TileCoord = TileCoord::new(13, 6);
-pub const TRAIN_DUAL_START: TileCoord = TileCoord::new(2, 6);
-/// Fábrica junto a la estación B en la recta.
-pub const TRAIN_DUAL_FACTORY: TileCoord = TileCoord::new(15, 6);
+/// Depósito al sur de la vía de ida; boca hacia el norte (empalme en (4,6)).
+pub const TRAIN_DUAL_DEPOT: TileCoord = TileCoord::new(4, 7);
+/// Boca del depósito hacia la vía de ida (y=6).
+pub const TRAIN_DUAL_DEPOT_EXIT: TileCoord = TileCoord::new(4, 6);
+/// Mina de carbón visible al noroeste de la estación A.
+pub const TRAIN_DUAL_COAL_MINE: TileCoord = TileCoord::new(0, 1);
+/// Fábrica visible al noreste de la estación B.
+pub const TRAIN_DUAL_FACTORY: TileCoord = TileCoord::new(14, 4);
 pub const TRAIN_DUAL_VEHICLE_ID: u32 = 1;
-/// Alias del único tren del escenario dual.
+pub const TRAIN_DUAL_VEHICLE_2_ID: u32 = 2;
+/// Alias del tren líder del escenario dual (sonda `DevBot`).
 pub const TRAIN_DUAL_VEHICLE_OUT_ID: u32 = TRAIN_DUAL_VEHICLE_ID;
 
 /// Construye un escenario determinístico por nombre.
@@ -96,6 +106,7 @@ pub fn build_scenario(name: &str) -> Option<GameState> {
         "train_supply_dual" => Some(build_train_supply_dual()),
         "train_supply_signal" => Some(build_train_supply_signal_snapshot()),
         "train_signal" => Some(build_train_signal()),
+        "rail_signals_mixed" => Some(build_rail_signals_mixed()),
         "loan_interest" => Some(build_loan_interest()),
         "town_growth" => Some(build_town_growth()),
         "breakdown" => Some(build_breakdown()),
@@ -113,6 +124,7 @@ pub fn scenario_names() -> &'static [&'static str] {
         "train_supply_dual",
         "train_supply_signal",
         "train_signal",
+        "rail_signals_mixed",
         "loan_interest",
         "town_growth",
         "breakdown",
@@ -260,7 +272,7 @@ pub fn build_train_line() -> GameState {
         .expect("depósito train_line");
     apply_command(
         &mut state,
-        &Command::PlaceRailSignal(TRAIN_LINE_SIGNAL, 0, 128, 128),
+        &Command::PlaceRailSignal(TRAIN_LINE_SIGNAL, 0, 128, 128, SIGTYPE_BLOCK),
     )
     .expect("señal train_line");
 
@@ -396,7 +408,8 @@ fn build_train_supply_core() -> GameState {
 
 /// Mina → estación A → **vía de ida** (y=6, solo →este) → estación B;
 /// el mismo tren vuelve por **vía de vuelta** (y=4, solo ←oeste).
-/// Dos rieles físicos separados, señales unidireccionales (sin bidireccional).
+/// Dos rieles físicos separados, señales unidireccionales, mina y fábrica visibles,
+/// dos locomotoras que salen del depósito en (4,7).
 ///
 /// # Panics
 ///
@@ -404,7 +417,7 @@ fn build_train_supply_core() -> GameState {
 #[must_use]
 #[allow(clippy::expect_used)]
 pub fn build_train_supply_dual() -> GameState {
-    let mut state = GameState::new(20, 12);
+    let mut state = GameState::new(24, 14);
     state.world_seed = 0;
     state.disasters_enabled = false;
 
@@ -436,34 +449,97 @@ pub fn build_train_supply_dual() -> GameState {
     )
     .expect("estación B");
 
+    apply_command(
+        &mut state,
+        &Command::PlaceIndustryKind(TRAIN_DUAL_COAL_MINE, IndustryKind::CoalMine),
+    )
+    .expect("mina train_supply_dual");
+    apply_command(
+        &mut state,
+        &Command::PlaceIndustryKind(TRAIN_DUAL_FACTORY, IndustryKind::Factory),
+    )
+    .expect("fábrica train_supply_dual");
+    complete_industry_construction(&mut state, TRAIN_DUAL_COAL_MINE);
+    complete_industry_construction(&mut state, TRAIN_DUAL_FACTORY);
+    if let Some(mine) = state
+        .industries
+        .iter_mut()
+        .find(|i| i.pos == TRAIN_DUAL_COAL_MINE)
+    {
+        mine.stock = 120;
+    }
+
+    // Boca hacia la vía de ida: salida del depósito en (4,6).
+    apply_command(&mut state, &Command::PlaceRailDepotDir(TRAIN_DUAL_DEPOT, 3))
+        .expect("depósito train_supply_dual");
+
     place_one_way_signals_on_row(&mut state, TRAIN_DUAL_TRACK_OUT_Y, &[5, 7, 9], 0);
     place_one_way_signals_on_row(&mut state, TRAIN_DUAL_TRACK_RET_Y, &[9, 7, 5], 2);
 
-    let mut mine = Industry::new(TRAIN_SUPPLY_MINE, IndustryKind::CoalMine);
-    mine.stock = 120;
-    state.industries.push(mine);
-
-    let factory = Industry::new(TRAIN_DUAL_FACTORY, IndustryKind::Factory);
-    state.industries.push(factory);
-
-    let mut train = Vehicle::new(
-        TRAIN_DUAL_VEHICLE_ID,
-        VehicleKind::Train,
-        TRAIN_DUAL_START,
-        TRAIN_DUAL_STATION_A,
-    );
-    train.set_vehicle_orders(vec![
+    let orders = vec![
         VehicleOrder::station_with_flags(TRAIN_DUAL_STATION_A, true, false),
         VehicleOrder::station(TRAIN_DUAL_STATION_B),
         VehicleOrder::station(TRAIN_DUAL_STATION_A),
-    ]);
+    ];
+    push_dual_train(&mut state, TRAIN_DUAL_VEHICLE_ID, orders.clone(), true);
+    // El segundo arranca detenido para no bloquear la salida del depósito.
+    push_dual_train(&mut state, TRAIN_DUAL_VEHICLE_2_ID, orders, false);
+
+    state
+}
+
+/// Pone en marcha el tren 2 del escenario dual cuando el 1 ya cargó en A
+/// (`current_order > 0`) y puede usar la vía de ida sin cruzarse de frente.
+pub(crate) fn release_staged_depot_trains(state: &mut GameState) {
+    let leader_ready = state
+        .vehicles
+        .iter()
+        .find(|v| v.id == TRAIN_DUAL_VEHICLE_ID)
+        .is_some_and(|v| v.current_order > 0);
+    if !leader_ready {
+        return;
+    }
+    let Some(train2) = state
+        .vehicles
+        .iter_mut()
+        .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID && !v.running && v.pos == TRAIN_DUAL_DEPOT)
+    else {
+        return;
+    };
+    train2.running = true;
+    train2.sync_order_destination(&state.map);
+}
+
+fn complete_industry_construction(state: &mut GameState, origin: TileCoord) {
+    let tiles: Vec<TileCoord> = state
+        .industries
+        .iter()
+        .find(|i| i.pos == origin)
+        .map(|i| i.tiles.clone())
+        .unwrap_or_default();
+    for c in tiles {
+        let Some(mut tile) = state.map.get(c) else {
+            continue;
+        };
+        tile.m1 |= 0x80;
+        let _ = state.map.set_tile(c, tile);
+    }
+}
+
+fn push_dual_train(state: &mut GameState, id: u32, orders: Vec<VehicleOrder>, running: bool) {
+    let mut train = Vehicle::new(
+        id,
+        VehicleKind::Train,
+        TRAIN_DUAL_DEPOT,
+        TRAIN_DUAL_STATION_A,
+    );
+    train.running = running;
+    train.set_vehicle_orders(orders);
     train.sync_order_destination(&state.map);
     if let Some(path) = find_path(&state.map, train.pos, train.dest, PathNetwork::Rail) {
         train.path = VecDeque::from(path);
     }
     state.vehicles.push(train);
-
-    state
 }
 
 /// Señales de un solo sentido en un carril recto (sin `make_signal_bidirectional_x`).
@@ -473,7 +549,7 @@ fn place_one_way_signals_on_row(state: &mut GameState, y: i32, xs: &[i32], orien
         let tile = TileCoord::new(x, y);
         apply_command(
             state,
-            &Command::PlaceRailSignal(tile, orientation, 128, 128),
+            &Command::PlaceRailSignal(tile, orientation, 128, 128, SIGTYPE_BLOCK),
         )
         .expect("señal unidireccional train_supply_dual");
     }
@@ -483,8 +559,11 @@ fn place_one_way_signals_on_row(state: &mut GameState, y: i32, xs: &[i32], orien
 fn place_signals_on_row(state: &mut GameState, y: i32, xs: &[i32]) {
     for &x in xs {
         let tile = TileCoord::new(x, y);
-        apply_command(state, &Command::PlaceRailSignal(tile, 0, 128, 128))
-            .expect("señal train_supply");
+        apply_command(
+            state,
+            &Command::PlaceRailSignal(tile, 0, 128, 128, SIGTYPE_BLOCK),
+        )
+        .expect("señal train_supply");
         make_signal_bidirectional_x(state, tile);
     }
 }
@@ -494,7 +573,7 @@ fn place_train_supply_signals(state: &mut GameState) {
     place_signals_on_row(state, 6, &[5, 7, 10]);
     apply_command(
         state,
-        &Command::PlaceRailSignal(TRAIN_SUPPLY_SIGNAL_SOUTH, 2, 128, 128),
+        &Command::PlaceRailSignal(TRAIN_SUPPLY_SIGNAL_SOUTH, 2, 128, 128, SIGTYPE_BLOCK),
     )
     .expect("señal sur train_supply");
     make_signal_bidirectional_x(state, TRAIN_SUPPLY_SIGNAL_SOUTH);
@@ -533,7 +612,7 @@ pub fn build_train_signal() -> GameState {
     }
     apply_command(
         &mut state,
-        &Command::PlaceRailSignal(TRAIN_SIGNAL_TILE, 0, 128, 128),
+        &Command::PlaceRailSignal(TRAIN_SIGNAL_TILE, 0, 128, 128, SIGTYPE_BLOCK),
     )
     .expect("señal train_signal");
     make_signal_bidirectional_x(&mut state, TRAIN_SIGNAL_TILE);
@@ -559,6 +638,259 @@ pub fn build_train_signal() -> GameState {
     state.vehicles.push(lead);
     state.vehicles.push(blocker);
     state
+}
+
+/// Fila Y de la tira de regresión encoding (esquina inferior del mapa demo).
+pub const RAIL_SIGNALS_MIXED_Y: i32 = 18;
+
+/// Línea principal del demo (aproximación + estación presignal).
+pub const RAIL_SIGNALS_DEMO_MAIN_Y: i32 = 12;
+pub const RAIL_SIGNALS_DEMO_PLAT1_Y: i32 = 10;
+pub const RAIL_SIGNALS_DEMO_PLAT2_Y: i32 = 14;
+pub const RAIL_SIGNALS_DEMO_ENTRY: TileCoord = TileCoord::new(21, 11);
+pub const RAIL_SIGNALS_DEMO_EXIT1: TileCoord = TileCoord::new(24, 10);
+pub const RAIL_SIGNALS_DEMO_EXIT2: TileCoord = TileCoord::new(24, 14);
+pub const RAIL_SIGNALS_DEMO_TWO_WAY_WEST: TileCoord = TileCoord::new(6, 12);
+pub const RAIL_SIGNALS_DEMO_TWO_WAY_EAST: TileCoord = TileCoord::new(9, 12);
+pub const RAIL_SIGNALS_DEMO_MINE: TileCoord = TileCoord::new(2, 7);
+pub const RAIL_SIGNALS_DEMO_FACTORY: TileCoord = TileCoord::new(30, 14);
+pub const RAIL_SIGNALS_DEMO_LOAD_STATION: TileCoord = TileCoord::new(5, 12);
+pub const RAIL_SIGNALS_DEMO_UNLOAD_STATION: TileCoord = TileCoord::new(32, 12);
+pub const RAIL_SIGNALS_DEMO_DEPOT: TileCoord = TileCoord::new(2, 13);
+pub const RAIL_SIGNALS_DEMO_LEAD_ID: u32 = 701;
+pub const RAIL_SIGNALS_DEMO_BLOCKER2_ID: u32 = 703;
+
+/// Teselas con señal y tipo esperado en la tira de regresión (`SignalType` en `signal_type.h`).
+pub const RAIL_SIGNALS_MIXED_TYPES: &[(i32, u8)] = &[
+    (1, SIGTYPE_BLOCK),
+    (2, SIGTYPE_ENTRY),
+    (3, SIGTYPE_EXIT),
+    (4, SIGTYPE_COMBO),
+    (5, SIGTYPE_PATH),
+    (6, SIGTYPE_PATH_ONEWAY),
+];
+
+#[must_use]
+pub fn rail_signals_mixed_coord(x: i32) -> TileCoord {
+    TileCoord::new(x, RAIL_SIGNALS_MIXED_Y)
+}
+
+/// Demo jugable: mina → carga → presignals/two-way → descarga en fábrica.
+///
+/// - **Economía:** mina de carbón (NO) y fábrica (SE); estaciones de carga/descarga.
+/// - **Two-way:** señales bidireccionales en el terminal oeste (x=6 y x=9).
+/// - **Presignals:** entry en ramificación (21,11); exits en plataformas; un bloqueador en vía 2 (entry verde).
+/// - **Encoding:** tira x=1..6 en y=18 para golden/regresión.
+///
+/// # Panics
+///
+/// Si la construcción del escenario fijo falla (bug del propio escenario).
+#[must_use]
+#[allow(clippy::expect_used, clippy::too_many_lines)]
+pub fn build_rail_signals_mixed() -> GameState {
+    let mut state = GameState::new(36, 22);
+    state.world_seed = 0;
+    state.disasters_enabled = false;
+    state.economy.money = 500_000;
+
+    build_rail_signals_demo_track(&mut state);
+    build_rail_signals_encoding_strip(&mut state);
+    state
+}
+
+#[allow(clippy::expect_used, clippy::too_many_lines)]
+fn build_rail_signals_demo_track(state: &mut GameState) {
+    apply_command(
+        state,
+        &Command::PlaceIndustryKind(RAIL_SIGNALS_DEMO_MINE, IndustryKind::CoalMine),
+    )
+    .expect("mina demo");
+    apply_command(
+        state,
+        &Command::PlaceIndustryKind(RAIL_SIGNALS_DEMO_FACTORY, IndustryKind::Factory),
+    )
+    .expect("fábrica demo");
+    complete_industry_construction(state, RAIL_SIGNALS_DEMO_MINE);
+    complete_industry_construction(state, RAIL_SIGNALS_DEMO_FACTORY);
+    if let Some(mine) = state
+        .industries
+        .iter_mut()
+        .find(|i| i.pos == RAIL_SIGNALS_DEMO_MINE)
+    {
+        mine.stock = 120;
+    }
+
+    for x in 2..=34 {
+        if x == 5 || x == 32 {
+            continue;
+        }
+        apply_command(
+            state,
+            &Command::PlaceRail(TileCoord::new(x, RAIL_SIGNALS_DEMO_MAIN_Y)),
+        )
+        .expect("vía principal demo");
+    }
+    for c in [
+        TileCoord::new(2, 9),
+        TileCoord::new(3, 10),
+        TileCoord::new(33, 12),
+    ] {
+        apply_command(state, &Command::PlaceRail(c)).expect("acceso mina");
+    }
+
+    apply_command(
+        state,
+        &Command::PlaceRailStation(RAIL_SIGNALS_DEMO_LOAD_STATION, 0),
+    )
+    .expect("estación carga");
+    apply_command(
+        state,
+        &Command::PlaceRailStation(RAIL_SIGNALS_DEMO_UNLOAD_STATION, 0),
+    )
+    .expect("estación descarga");
+    for x in 22..=28 {
+        apply_command(
+            state,
+            &Command::PlaceRail(TileCoord::new(x, RAIL_SIGNALS_DEMO_PLAT1_Y)),
+        )
+        .expect("plataforma 1");
+        apply_command(
+            state,
+            &Command::PlaceRail(TileCoord::new(x, RAIL_SIGNALS_DEMO_PLAT2_Y)),
+        )
+        .expect("plataforma 2");
+    }
+    for c in [
+        TileCoord::new(20, 11),
+        TileCoord::new(20, 13),
+        TileCoord::new(21, 11),
+        TileCoord::new(21, 13),
+        TileCoord::new(22, 11),
+        TileCoord::new(22, 13),
+        TileCoord::new(23, 11),
+        TileCoord::new(23, 13),
+        TileCoord::new(26, 11),
+        TileCoord::new(26, 13),
+        // Vuelta plataforma 2 → throat (sin cruzar exit en sentido prohibido).
+        TileCoord::new(27, 13),
+        TileCoord::new(28, 13),
+    ] {
+        apply_command(state, &Command::PlaceRail(c)).expect("conector presignal");
+    }
+
+    apply_command(
+        state,
+        &Command::PlaceRailDepotDir(RAIL_SIGNALS_DEMO_DEPOT, 3),
+    )
+    .expect("depósito demo");
+
+    place_two_way_block_signal(state, RAIL_SIGNALS_DEMO_TWO_WAY_WEST);
+    place_two_way_block_signal(state, RAIL_SIGNALS_DEMO_TWO_WAY_EAST);
+    place_oriented_presignal(state, RAIL_SIGNALS_DEMO_ENTRY, SIGTYPE_ENTRY, 0);
+    place_oriented_presignal(state, RAIL_SIGNALS_DEMO_EXIT1, SIGTYPE_EXIT, 0);
+    place_oriented_presignal(state, RAIL_SIGNALS_DEMO_EXIT2, SIGTYPE_EXIT, 0);
+
+    let mut lead = Vehicle::new(
+        RAIL_SIGNALS_DEMO_LEAD_ID,
+        VehicleKind::Train,
+        RAIL_SIGNALS_DEMO_DEPOT,
+        RAIL_SIGNALS_DEMO_LOAD_STATION,
+    );
+    lead.running = true;
+    lead.set_vehicle_orders(vec![
+        VehicleOrder::station_with_flags(RAIL_SIGNALS_DEMO_LOAD_STATION, true, false),
+        VehicleOrder::station(RAIL_SIGNALS_DEMO_UNLOAD_STATION),
+    ]);
+    lead.sync_order_destination(&state.map);
+    lead.set_cruise_speed();
+    if let Some(path) = find_path(&state.map, lead.pos, lead.dest, PathNetwork::Rail) {
+        lead.path = VecDeque::from(path);
+    }
+
+    let mut blocker2 = Vehicle::new(
+        RAIL_SIGNALS_DEMO_BLOCKER2_ID,
+        VehicleKind::Train,
+        TileCoord::new(27, RAIL_SIGNALS_DEMO_PLAT2_Y),
+        TileCoord::new(27, RAIL_SIGNALS_DEMO_PLAT2_Y),
+    );
+    blocker2.running = false;
+
+    state.vehicles.push(lead);
+    state.vehicles.push(blocker2);
+}
+
+#[allow(clippy::expect_used)]
+fn build_rail_signals_encoding_strip(state: &mut GameState) {
+    for x in 0..=7_i32 {
+        apply_command(
+            state,
+            &Command::SetRailBits(TileCoord::new(x, RAIL_SIGNALS_MIXED_Y), 0x01),
+        )
+        .expect("tira encoding");
+    }
+    for &(x, sig_type) in RAIL_SIGNALS_MIXED_TYPES {
+        place_mixed_signal_on_x(state, x, sig_type);
+    }
+}
+
+#[allow(clippy::expect_used)]
+fn place_two_way_block_signal(state: &mut GameState, c: TileCoord) {
+    apply_command(
+        state,
+        &Command::PlaceRailSignal(c, 0, 128, 128, SIGTYPE_BLOCK),
+    )
+    .expect("two-way block");
+    make_signal_bidirectional_x(state, c);
+}
+
+#[allow(clippy::expect_used)]
+fn place_oriented_presignal(state: &mut GameState, c: TileCoord, sig_type: u8, orientation: u8) {
+    let cmd_type = match sig_type {
+        SIGTYPE_PATH | SIGTYPE_PATH_ONEWAY => sig_type,
+        _ => SIGTYPE_BLOCK,
+    };
+    apply_command(
+        state,
+        &Command::PlaceRailSignal(c, orientation, 128, 128, cmd_type),
+    )
+    .expect("colocar presignal demo");
+    if sig_type <= SIGTYPE_COMBO && sig_type != SIGTYPE_BLOCK {
+        patch_signal_type_on_track(state, c, SignalTrack::X, sig_type);
+    }
+}
+
+#[allow(clippy::expect_used)]
+fn place_mixed_signal_on_x(state: &mut GameState, x: i32, sig_type: u8) {
+    let c = rail_signals_mixed_coord(x);
+    let cmd_type = match sig_type {
+        SIGTYPE_PATH | SIGTYPE_PATH_ONEWAY => sig_type,
+        _ => SIGTYPE_BLOCK,
+    };
+    apply_command(state, &Command::PlaceRailSignal(c, 0, 128, 128, cmd_type))
+        .expect("colocar señal rail_signals_mixed");
+    if sig_type <= SIGTYPE_COMBO && sig_type != SIGTYPE_BLOCK {
+        patch_signal_type_on_track(state, c, SignalTrack::X, sig_type);
+    }
+}
+
+#[allow(clippy::expect_used)]
+fn patch_signal_type_on_track(
+    state: &mut GameState,
+    c: TileCoord,
+    track: SignalTrack,
+    sig_type: u8,
+) {
+    let mut tile = state.map.get(c).expect("tesela señal");
+    let base = if matches!(track, SignalTrack::Lower | SignalTrack::Right) {
+        4
+    } else {
+        0
+    };
+    tile.m2 = (tile.m2 & !(7 << base)) | ((sig_type & 7) << base);
+    state
+        .map
+        .set_tile(c, tile)
+        .expect("actualizar tipo de señal");
 }
 
 /// Compañía con préstamo para verificar interés mensual.
@@ -660,6 +992,7 @@ mod tests {
         assert!(build_scenario("train_supply_signal").is_some());
         assert!(build_scenario("train_signal").is_some());
         assert!(build_scenario("train_supply_dual").is_some());
+        assert!(build_scenario("rail_signals_mixed").is_some());
         assert_eq!(
             scenario_names(),
             &[
@@ -669,6 +1002,7 @@ mod tests {
                 "train_supply_dual",
                 "train_supply_signal",
                 "train_signal",
+                "rail_signals_mixed",
                 "loan_interest",
                 "town_growth",
                 "breakdown",
@@ -796,12 +1130,74 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn train_supply_dual_has_two_tracks_signals_and_paths() {
-        use crate::station::rail_station_stop_tile;
+        use crate::map::TileKind;
+        use crate::station::{self, rail_station_stop_tile};
 
         let state = build_train_supply_dual();
-        assert_eq!(state.vehicles.len(), 1);
+        assert_eq!(state.vehicles.len(), 2);
         assert_eq!(state.stations.len(), 2);
+        assert_eq!(
+            state.map.get_kind(TRAIN_DUAL_DEPOT),
+            Some(TileKind::RailDepot)
+        );
+        assert!(
+            state
+                .map
+                .get_kind(TRAIN_DUAL_COAL_MINE)
+                .is_some_and(|k| k == TileKind::Industry),
+            "mina visible en el mapa"
+        );
+        assert!(
+            state
+                .map
+                .get_kind(TRAIN_DUAL_FACTORY)
+                .is_some_and(|k| k == TileKind::Industry),
+            "fábrica visible en el mapa"
+        );
+        assert!(
+            state
+                .vehicles
+                .iter()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_ID)
+                .is_some_and(|v| v.pos == TRAIN_DUAL_DEPOT),
+            "tren 1 arranca en el depósito"
+        );
+        assert!(
+            state
+                .vehicles
+                .iter()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+                .is_some_and(|v| v.pos == TRAIN_DUAL_DEPOT && !v.running),
+            "tren 2 espera en el depósito hasta que el 1 libere la salida"
+        );
+        let mine = state
+            .industries
+            .iter()
+            .find(|i| i.pos == TRAIN_DUAL_COAL_MINE)
+            .expect("mina");
+        let factory = state
+            .industries
+            .iter()
+            .find(|i| i.pos == TRAIN_DUAL_FACTORY)
+            .expect("fábrica");
+        assert!(
+            station::industry_in_station_coverage(
+                mine,
+                TRAIN_DUAL_STATION_A,
+                station::STATION_COVERAGE_RADIUS,
+            ),
+            "mina en cobertura de estación A"
+        );
+        assert!(
+            station::industry_in_station_coverage(
+                factory,
+                TRAIN_DUAL_STATION_B,
+                station::STATION_COVERAGE_RADIUS,
+            ),
+            "fábrica en cobertura de estación B"
+        );
         for &y in &[TRAIN_DUAL_TRACK_OUT_Y, TRAIN_DUAL_TRACK_RET_Y] {
             for &x in &[5, 7, 9] {
                 let tile = state.map.get(TileCoord::new(x, y)).unwrap();
@@ -832,6 +1228,16 @@ mod tests {
         );
         assert_eq!(out_mask, 0b0100, "señales ida miran hacia +x");
         assert_eq!(ret_mask, 0b1000, "señales vuelta miran hacia -x");
+        assert!(
+            find_path(
+                &state.map,
+                TRAIN_DUAL_DEPOT,
+                TRAIN_DUAL_STATION_A,
+                PathNetwork::Rail,
+            )
+            .is_some(),
+            "ruta depósito → A"
+        );
         assert!(
             find_path(
                 &state.map,
@@ -884,6 +1290,198 @@ mod tests {
     }
 
     #[test]
+    fn train_supply_dual_second_train_never_passes_closed_signal() {
+        use crate::rail_signals::train_blocked_by_signal;
+
+        let mut state = build_train_supply_dual();
+        for _ in 0..8_000 {
+            let blocked = state
+                .vehicles
+                .iter()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+                .filter(|v| v.running && v.movement_target().is_some())
+                .is_some_and(|v| train_blocked_by_signal(&state.map, &state.vehicles, v));
+            let pos_before = state
+                .vehicles
+                .iter()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+                .map(|v| v.pos);
+            state.step();
+            if blocked {
+                let pos_after = state
+                    .vehicles
+                    .iter()
+                    .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+                    .map(|v| v.pos);
+                assert_eq!(
+                    pos_before, pos_after,
+                    "tren 2 no debe avanzar con señal/bloque cerrado"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn train_supply_dual_follower_waits_before_last_signal() {
+        use crate::rail_signals::train_blocked_by_signal;
+        use std::collections::VecDeque;
+
+        let mut state = build_train_supply_dual();
+        let signal_pos = TileCoord::new(9, TRAIN_DUAL_TRACK_OUT_Y);
+        let leader_pos = TileCoord::new(11, TRAIN_DUAL_TRACK_OUT_Y);
+        let follower_pos = TileCoord::new(8, TRAIN_DUAL_TRACK_OUT_Y);
+
+        {
+            let leader = state
+                .vehicles
+                .iter_mut()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_ID)
+                .expect("tren 1");
+            leader.pos = leader_pos;
+            leader.dest = TRAIN_DUAL_STATION_B;
+            leader.current_order = 1;
+            leader.path.clear();
+            leader.running = false;
+        }
+        {
+            let follower = state
+                .vehicles
+                .iter_mut()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+                .expect("tren 2");
+            follower.pos = follower_pos;
+            follower.dest = TRAIN_DUAL_STATION_B;
+            follower.current_order = 1;
+            follower.path = VecDeque::from([
+                TileCoord::new(9, TRAIN_DUAL_TRACK_OUT_Y),
+                TileCoord::new(10, TRAIN_DUAL_TRACK_OUT_Y),
+                TileCoord::new(11, TRAIN_DUAL_TRACK_OUT_Y),
+                TRAIN_DUAL_STATION_B,
+            ]);
+            follower.running = true;
+            follower.set_cruise_speed();
+            follower.progress = 200;
+        }
+
+        let mut dirty = Vec::new();
+        crate::rail_signals::update_rail_signal_states(
+            &mut state.map,
+            &state.vehicles,
+            &mut dirty,
+            true,
+        );
+        let follower = state
+            .vehicles
+            .iter()
+            .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+            .expect("tren 2");
+        assert!(
+            train_blocked_by_signal(&state.map, &state.vehicles, follower),
+            "seguidor debe frenar al completar la tesela previa a la última señal"
+        );
+
+        for _ in 0..500 {
+            state.step();
+            let f = state
+                .vehicles
+                .iter()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+                .expect("tren 2");
+            assert!(
+                f.pos.x < signal_pos.x,
+                "no debe entrar al bloque tras la señal {signal_pos:?}: pos={:?}",
+                f.pos
+            );
+        }
+    }
+
+    #[test]
+    fn train_supply_dual_follower_waits_at_signal_behind_leader() {
+        use crate::rail_signals::train_blocked_by_signal;
+        use std::collections::VecDeque;
+
+        let mut state = build_train_supply_dual();
+        let leader_pos = TileCoord::new(8, TRAIN_DUAL_TRACK_OUT_Y);
+        let signal_pos = TileCoord::new(7, TRAIN_DUAL_TRACK_OUT_Y);
+        let follower_pos = TileCoord::new(6, TRAIN_DUAL_TRACK_OUT_Y);
+
+        {
+            let leader = state
+                .vehicles
+                .iter_mut()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_ID)
+                .expect("tren 1");
+            leader.pos = leader_pos;
+            leader.dest = TRAIN_DUAL_STATION_B;
+            leader.current_order = 1;
+            leader.cargo = 20;
+            leader.cargo_type = Some(crate::CargoType::Coal);
+            leader.path.clear();
+            leader.running = false;
+        }
+        {
+            let follower = state
+                .vehicles
+                .iter_mut()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+                .expect("tren 2");
+            follower.pos = follower_pos;
+            follower.dest = TRAIN_DUAL_STATION_B;
+            follower.current_order = 1;
+            follower.path = VecDeque::from([
+                TileCoord::new(7, TRAIN_DUAL_TRACK_OUT_Y),
+                TileCoord::new(8, TRAIN_DUAL_TRACK_OUT_Y),
+                TileCoord::new(9, TRAIN_DUAL_TRACK_OUT_Y),
+                TRAIN_DUAL_STATION_B,
+            ]);
+            follower.running = true;
+            follower.set_cruise_speed();
+            follower.progress = 200;
+        }
+
+        let mut dirty = Vec::new();
+        crate::rail_signals::update_rail_signal_states(
+            &mut state.map,
+            &state.vehicles,
+            &mut dirty,
+            true,
+        );
+        let follower = state
+            .vehicles
+            .iter()
+            .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+            .expect("tren 2");
+        assert!(
+            train_blocked_by_signal(&state.map, &state.vehicles, follower),
+            "seguidor debe frenar al completar la tesela previa a la señal"
+        );
+
+        for _ in 0..500 {
+            state.step();
+            let f = state
+                .vehicles
+                .iter()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+                .expect("tren 2");
+            assert!(
+                f.pos.x <= signal_pos.x,
+                "el seguidor no debe entrar al bloque protegido por {signal_pos:?}: pos={:?}",
+                f.pos
+            );
+        }
+        let f = state
+            .vehicles
+            .iter()
+            .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+            .expect("tren 2");
+        assert!(
+            f.pos.x <= signal_pos.x,
+            "debe esperar en o antes de la señal: pos={:?}",
+            f.pos
+        );
+    }
+
+    #[test]
     fn train_supply_dual_round_trip_returns_to_a() {
         let mut state = build_train_supply_dual();
         let mut used_return_track = false;
@@ -905,7 +1503,10 @@ mod tests {
             .expect("tren dual");
         assert!(
             state.stats.cargo_deliveries > 0,
-            "debe haber descargado carbón en B"
+            "debe haber descargado carbón en B (pos={:?} order={} cargo={})",
+            train.pos,
+            train.current_order,
+            train.cargo,
         );
         assert!(
             used_return_track,
@@ -916,5 +1517,234 @@ mod tests {
             "tras el ciclo debe volver a estación A: {:?}",
             train.pos
         );
+    }
+
+    #[test]
+    fn train_supply_dual_tick_698_no_signal_violation() {
+        use crate::rail_signals::train_blocked_by_signal;
+
+        let mut state = build_train_supply_dual();
+        for tick in 1..=698 {
+            state.step();
+            let vehicles = state.vehicles.clone();
+            for v in &vehicles {
+                if v.id != TRAIN_DUAL_VEHICLE_2_ID || !v.running {
+                    continue;
+                }
+                if !train_blocked_by_signal(&state.map, &vehicles, v) {
+                    continue;
+                }
+                let after = state
+                    .vehicles
+                    .iter()
+                    .find(|t| t.id == TRAIN_DUAL_VEHICLE_2_ID)
+                    .expect("tren 2");
+                assert_eq!(
+                    v.pos, after.pos,
+                    "tick {tick}: tren 2 avanzó con señal/bloque cerrado {:?}→{:?}",
+                    v.pos, after.pos
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn rail_signals_mixed_demo_has_presignal_station_and_two_way() {
+        use crate::rail_signals::{
+            rail_signal_present_mask, rail_signal_state_mask, signal_type_for_track,
+            update_rail_signal_states,
+        };
+        use crate::station;
+        let mut state = build_rail_signals_mixed();
+        update_rail_signal_states(&mut state.map, &state.vehicles, &mut Vec::new(), true);
+        assert_eq!(state.map.dimensions(), (36, 22));
+        assert_eq!(state.stations.len(), 2);
+        assert_eq!(
+            state.vehicles.len(),
+            2,
+            "líder activo + bloqueador en plataforma 2"
+        );
+        assert_eq!(state.industries.len(), 2);
+        assert!(
+            station::industry_in_station_coverage(
+                state
+                    .industries
+                    .iter()
+                    .find(|i| i.pos == RAIL_SIGNALS_DEMO_MINE)
+                    .expect("mina"),
+                RAIL_SIGNALS_DEMO_LOAD_STATION,
+                station::STATION_COVERAGE_RADIUS,
+            ),
+            "mina en cobertura de estación de carga"
+        );
+        assert!(
+            station::industry_in_station_coverage(
+                state
+                    .industries
+                    .iter()
+                    .find(|i| i.pos == RAIL_SIGNALS_DEMO_FACTORY)
+                    .expect("fábrica"),
+                RAIL_SIGNALS_DEMO_UNLOAD_STATION,
+                station::STATION_COVERAGE_RADIUS,
+            ),
+            "fábrica en cobertura de estación de descarga"
+        );
+        let lead = state
+            .vehicles
+            .iter()
+            .find(|v| v.id == RAIL_SIGNALS_DEMO_LEAD_ID)
+            .expect("tren líder");
+        assert!(lead.running);
+        assert_eq!(lead.pos, RAIL_SIGNALS_DEMO_DEPOT);
+        assert_eq!(lead.orders.len(), 2);
+        let load_approach =
+            crate::station::rail_station_approach_tile(&state.map, RAIL_SIGNALS_DEMO_LOAD_STATION)
+                .or_else(|| {
+                    crate::station::rail_station_stop_tile(
+                        &state.map,
+                        RAIL_SIGNALS_DEMO_LOAD_STATION,
+                    )
+                })
+                .expect("acceso estación carga");
+        assert!(
+            find_path(
+                &state.map,
+                TileCoord::new(2, RAIL_SIGNALS_DEMO_MAIN_Y),
+                load_approach,
+                PathNetwork::Rail,
+            )
+            .is_some(),
+            "red ferroviaria depósito → carga"
+        );
+
+        let entry = state.map.get(RAIL_SIGNALS_DEMO_ENTRY).unwrap();
+        assert_eq!(
+            signal_type_for_track(entry.m2, SignalTrack::X),
+            SIGTYPE_ENTRY,
+            "entry en ramificación presignal, no en línea principal"
+        );
+        for exit in [RAIL_SIGNALS_DEMO_EXIT1, RAIL_SIGNALS_DEMO_EXIT2] {
+            let tile = state.map.get(exit).unwrap();
+            assert_eq!(signal_type_for_track(tile.m2, SignalTrack::X), SIGTYPE_EXIT);
+        }
+        for two_way in [
+            RAIL_SIGNALS_DEMO_TWO_WAY_WEST,
+            RAIL_SIGNALS_DEMO_TWO_WAY_EAST,
+        ] {
+            let tile = state.map.get(two_way).unwrap();
+            assert_eq!(
+                rail_signal_present_mask(tile.m3) & 0x0C,
+                0x0C,
+                "two-way en {two_way:?}"
+            );
+        }
+        let entry_state = rail_signal_state_mask(entry.m3hi);
+        let entry_present = rail_signal_present_mask(entry.m3);
+        assert_eq!(
+            entry_state & entry_present,
+            entry_present,
+            "entry verde: plataforma 1 libre aunque la 2 esté bloqueada"
+        );
+    }
+
+    #[test]
+    fn rail_signals_mixed_train_cycles_orders_after_delivery() {
+        let mut state = build_rail_signals_mixed();
+        let mut saw_delivery = false;
+        for _ in 0..1200 {
+            let before = state.stats.cargo_deliveries;
+            state.step();
+            let v = state
+                .vehicles
+                .iter()
+                .find(|veh| veh.id == RAIL_SIGNALS_DEMO_LEAD_ID)
+                .expect("tren líder");
+            if state.stats.cargo_deliveries > before {
+                saw_delivery = true;
+            }
+            assert!(
+                !(saw_delivery && v.no_network_route_to_order),
+                "sin ruta tras primera entrega: orden {} pos {:?} dest {:?}",
+                v.current_order + 1,
+                v.pos,
+                v.dest
+            );
+        }
+        let v = state
+            .vehicles
+            .iter()
+            .find(|veh| veh.id == RAIL_SIGNALS_DEMO_LEAD_ID)
+            .expect("tren líder");
+        assert!(
+            state.stats.cargo_deliveries >= 2,
+            "debe completar al menos dos entregas (ciclos): got {} entregas, orden {}, cargo {}",
+            state.stats.cargo_deliveries,
+            v.current_order + 1,
+            v.cargo
+        );
+    }
+
+    #[test]
+    fn rail_signals_mixed_path_from_plat2_to_load_station() {
+        use crate::parity::scenario::{RAIL_SIGNALS_DEMO_LOAD_STATION, build_rail_signals_mixed};
+        let state = build_rail_signals_mixed();
+        let from = TileCoord::new(25, 14);
+        let dest = crate::station::resolve_order_destination(
+            &state.map,
+            VehicleKind::Train,
+            VehicleOrder::station(RAIL_SIGNALS_DEMO_LOAD_STATION),
+        );
+        let path = find_path(&state.map, from, dest, PathNetwork::Rail);
+        assert!(
+            path.is_some(),
+            "debe haber ruta plataforma 2 → carga (conector de vuelta): from {from:?} dest {dest:?}"
+        );
+    }
+
+    #[test]
+    fn rail_signals_mixed_has_all_signal_types() {
+        use crate::rail_signals::{
+            default_signal_variant, rail_tile_is_signals, signal_placement_for_track,
+            signal_type_for_track,
+        };
+        let state = build_rail_signals_mixed();
+        let variant = default_signal_variant(crate::news::CALENDAR_BASE_YEAR);
+        for &(x, expected_type) in RAIL_SIGNALS_MIXED_TYPES {
+            let c = rail_signals_mixed_coord(x);
+            let tile = state.map.get(c).expect("tesela señal");
+            assert!(
+                rail_tile_is_signals(tile.m5),
+                "tesela ({x},{RAIL_SIGNALS_MIXED_Y}) debe ser RAIL_TILE_SIGNALS"
+            );
+            assert_eq!(
+                signal_type_for_track(tile.m2, SignalTrack::X),
+                expected_type,
+                "tipo en x={x}"
+            );
+            let placement = signal_placement_for_track(SignalTrack::X, 0, variant, expected_type)
+                .expect("encoding");
+            assert_eq!(tile.m2 & 0x0F, placement.m2 & 0x0F, "m2 tipo en x={x}");
+            assert_eq!(tile.m3 & 0xF0, placement.m3 & 0xF0, "m3 presente en x={x}");
+        }
+    }
+
+    #[test]
+    fn rail_signals_mixed_json_roundtrip_preserves_encoding() {
+        use crate::rail_signals::signal_type_for_track;
+        let state = build_rail_signals_mixed();
+        let json = state.save_json().expect("guardar");
+        let restored = GameState::load_json(&json).expect("cargar");
+        for &(x, expected_type) in RAIL_SIGNALS_MIXED_TYPES {
+            let before = state.map.get(rail_signals_mixed_coord(x)).unwrap();
+            let after = restored.map.get(rail_signals_mixed_coord(x)).unwrap();
+            assert_eq!(before.m2, after.m2, "m2 x={x}");
+            assert_eq!(before.m3, after.m3, "m3 x={x}");
+            assert_eq!(before.m3hi, after.m3hi, "m3hi x={x}");
+            assert_eq!(before.m5, after.m5, "m5 x={x}");
+            assert_eq!(
+                signal_type_for_track(after.m2, SignalTrack::X),
+                expected_type
+            );
+        }
     }
 }

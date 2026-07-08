@@ -1,6 +1,6 @@
 //! Señales ferroviarias de bloque (v1): colocación, bloques y simulación simple.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::map::{Map, TileCoord, TileKind};
 use crate::news::{CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day};
@@ -128,7 +128,25 @@ pub const SIGTYPE_BLOCK: u8 = 0;
 pub const SIGTYPE_ENTRY: u8 = 1;
 pub const SIGTYPE_EXIT: u8 = 2;
 pub const SIGTYPE_COMBO: u8 = 3;
-const SIGTYPE_LAST_NOPBS: u8 = 3;
+pub const SIGTYPE_PATH: u8 = 4;
+pub const SIGTYPE_PATH_ONEWAY: u8 = 5;
+pub const SIGTYPE_LAST_NOPBS: u8 = 3;
+
+/// `true` si el tipo usa lógica PBS (`IsPbsSignal` en `OpenTTD`).
+#[must_use]
+pub const fn is_pbs_signal_type(sig_type: u8) -> bool {
+    sig_type >= SIGTYPE_PATH
+}
+
+/// Siguiente tipo al ciclar con Ctrl (`CycleSignalType` en `rail_cmd.cpp`).
+#[must_use]
+pub const fn next_placeable_signal_type(current: u8) -> u8 {
+    match current {
+        SIGTYPE_BLOCK => SIGTYPE_PATH,
+        SIGTYPE_PATH => SIGTYPE_PATH_ONEWAY,
+        _ => SIGTYPE_BLOCK,
+    }
+}
 
 /// Año calendario a partir del cual se colocan señales eléctricas por defecto
 /// (`gui.semaphore_build_before` en `OpenTTD`).
@@ -167,7 +185,7 @@ pub fn signal_is_green(m3hi: u8, sig_bit: u8) -> bool {
 
 /// Trackbits transitables (misma lógica que el pathfinder).
 #[must_use]
-fn rail_traversal_bits(map: &Map, c: TileCoord) -> u8 {
+pub(crate) fn rail_traversal_bits(map: &Map, c: TileCoord) -> u8 {
     let Some(t) = map.get(c) else {
         return 0;
     };
@@ -210,7 +228,7 @@ const fn rail_bits_touching_side(side: u8) -> u8 {
 }
 
 #[must_use]
-fn rail_neighbors(map: &Map, cur: TileCoord, prev: Option<TileCoord>) -> Vec<TileCoord> {
+pub(crate) fn rail_neighbors(map: &Map, cur: TileCoord, prev: Option<TileCoord>) -> Vec<TileCoord> {
     let tb = rail_traversal_bits(map, cur);
     if tb == 0 {
         return Vec::new();
@@ -234,7 +252,7 @@ fn rail_neighbors(map: &Map, cur: TileCoord, prev: Option<TileCoord>) -> Vec<Til
 }
 
 #[must_use]
-fn dir_from_to(from: TileCoord, to: TileCoord) -> Option<u8> {
+pub(crate) fn dir_from_to(from: TileCoord, to: TileCoord) -> Option<u8> {
     let dx = to.x - from.x;
     let dy = to.y - from.y;
     match (dx, dy) {
@@ -244,6 +262,58 @@ fn dir_from_to(from: TileCoord, to: TileCoord) -> Option<u8> {
         (0, -1) => Some(3),
         _ => None,
     }
+}
+
+#[must_use]
+fn rail_continuation_along(
+    map: &Map,
+    cur: TileCoord,
+    prev: TileCoord,
+    preferred_dir: u8,
+) -> Option<TileCoord> {
+    let neighbors: Vec<_> = rail_neighbors(map, cur, Some(prev))
+        .into_iter()
+        .filter(|n| *n != prev)
+        .collect();
+    match neighbors.len() {
+        0 => None,
+        1 => Some(neighbors[0]),
+        _ => neighbors
+            .into_iter()
+            .find(|n| dir_from_to(cur, *n) == Some(preferred_dir)),
+    }
+}
+
+/// Teselas de conector en un cruce: ramas perpendiculares a la vía del bloque.
+///
+/// Sin esto, un tren que gira a la vía perpendicular (p. ej. `(10,5)` en el escenario
+/// dual) deja de contar como ocupación y la señal pasa a verde con el bloque aún en uso.
+fn junction_spur_tiles(map: &Map, block: &[TileCoord], exit_dir: u8) -> Vec<TileCoord> {
+    if block.is_empty() {
+        return Vec::new();
+    }
+    let block_set: HashSet<TileCoord> = block.iter().copied().collect();
+    let mut spurs = Vec::new();
+    for (i, &tile) in block.iter().enumerate() {
+        let forward = if i == 0 {
+            exit_dir
+        } else {
+            dir_from_to(block[i - 1], tile).unwrap_or(exit_dir)
+        };
+        let back = opposite_dir(forward);
+        for n in rail_neighbors(map, tile, None) {
+            if block_set.contains(&n) || spurs.contains(&n) {
+                continue;
+            }
+            let Some(d) = dir_from_to(tile, n) else {
+                continue;
+            };
+            if d != forward && d != back {
+                spurs.push(n);
+            }
+        }
+    }
+    spurs
 }
 
 /// Teselas del bloque protegido al salir de `signal_tile` hacia `exit_dir`.
@@ -257,15 +327,8 @@ pub fn rail_block_ahead(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> Vec<
     let mut block = vec![start];
     let mut cur = start;
     let mut prev = signal_tile;
-    loop {
-        let neighbors: Vec<_> = rail_neighbors(map, cur, Some(prev))
-            .into_iter()
-            .filter(|n| *n != prev)
-            .collect();
-        if neighbors.len() != 1 {
-            break;
-        }
-        let next = neighbors[0];
+    let mut forward = exit_dir;
+    while let Some(next) = rail_continuation_along(map, cur, prev, forward) {
         if map
             .get(next)
             .is_some_and(|t| t.kind == TileKind::Rail && rail_tile_is_signals(t.m5))
@@ -273,9 +336,13 @@ pub fn rail_block_ahead(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> Vec<
             break;
         }
         block.push(next);
+        if let Some(dir) = dir_from_to(cur, next) {
+            forward = dir;
+        }
         prev = cur;
         cur = next;
     }
+    block.extend(junction_spur_tiles(map, &block, exit_dir));
     block
 }
 
@@ -328,6 +395,8 @@ pub enum YapfSignalRouting {
 
 /// Penalización YAPF por señal de bloque roja (aprox. `rail_firstred_penalty`).
 pub const YAPF_RED_SIGNAL_PENALTY: u32 = 100;
+/// Penalización YAPF por cruzar una señal path por detrás (`yapf_costrail.hpp`).
+pub const YAPF_PBS_BEHIND_PENALTY: u32 = 100;
 
 /// Evalúa señales al planificar salida de `tile` en `exit_dir` (convención `OpenTTD` / `rail_signals`).
 ///
@@ -354,6 +423,8 @@ pub fn yapf_routing_signal(map: &Map, tile: TileCoord, exit_dir: u8) -> YapfSign
         if present & (1 << bit) == 0 {
             continue;
         }
+        let sig_type = signal_track_for_bit(rails, bit)
+            .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(t.m2, track));
         let sig_exit = signal_exit_dir(rails, bit);
         if sig_exit == exit_dir {
             along = true;
@@ -362,15 +433,30 @@ pub fn yapf_routing_signal(map: &Map, tile: TileCoord, exit_dir: u8) -> YapfSign
             {
                 continue;
             }
+            if is_pbs_signal_type(sig_type) {
+                if !signal_is_green(t.m3hi, bit) {
+                    red_penalty = red_penalty.saturating_add(YAPF_RED_SIGNAL_PENALTY);
+                }
+                continue;
+            }
             if !signal_is_green(t.m3hi, bit) {
                 red_penalty = red_penalty.saturating_add(YAPF_RED_SIGNAL_PENALTY);
             }
         } else if sig_exit == opposite_dir(exit_dir) {
             against = true;
+            if sig_type == SIGTYPE_PATH {
+                red_penalty = red_penalty.saturating_add(YAPF_PBS_BEHIND_PENALTY);
+            }
         }
     }
 
-    let is_oneway = present.is_power_of_two();
+    let is_oneway = present.is_power_of_two()
+        || (0..4).any(|bit| {
+            present & (1 << bit) != 0
+                && signal_track_for_bit(rails, bit)
+                    .map(|track| signal_type_for_track(t.m2, track))
+                    .is_some_and(|ty| ty == SIGTYPE_PATH_ONEWAY)
+        });
     if against && !along && is_oneway {
         return YapfSignalRouting::DeadEnd;
     }
@@ -398,6 +484,137 @@ fn signal_bits_for_exit(map: &Map, from: TileCoord, to: TileCoord) -> Vec<u8> {
         .collect()
 }
 
+/// Siguiente tesela tras `via` según el path del tren (o `dest` si es el último salto).
+#[must_use]
+fn path_continuation_after(vehicle: &Vehicle, via: TileCoord) -> Option<TileCoord> {
+    if vehicle.path.front() != Some(&via) {
+        return None;
+    }
+    if let Some(&next) = vehicle.path.get(1) {
+        return Some(next);
+    }
+    if vehicle.dest != via {
+        return Some(vehicle.dest);
+    }
+    None
+}
+
+/// `true` si la salida `signal_tile` → `beyond` está prohibida (rojo u ocupado).
+#[must_use]
+fn signal_exit_denied(
+    map: &Map,
+    vehicles: &[Vehicle],
+    signal_tile: TileCoord,
+    beyond: TileCoord,
+    tile: &crate::map::Tile,
+) -> bool {
+    let exit_dir = dir_from_to(signal_tile, beyond).unwrap_or(0);
+    if matches!(
+        yapf_routing_signal(map, signal_tile, exit_dir),
+        YapfSignalRouting::DeadEnd
+    ) {
+        return true;
+    }
+    let mut checked = false;
+    for bit in signal_bits_for_exit(map, signal_tile, beyond) {
+        checked = true;
+        let rails = tile.m5 & 0x3F;
+        if signal_track_for_bit(rails, bit)
+            .is_some_and(|track| signal_type_for_track(tile.m2, track) == SIGTYPE_ENTRY)
+        {
+            if !signal_is_green(tile.m3hi, bit) {
+                return true;
+            }
+            continue;
+        }
+        if !signal_is_green(tile.m3hi, bit) {
+            return true;
+        }
+        let block = rail_block_ahead(map, signal_tile, exit_dir);
+        if block_is_occupied_by_trains(vehicles, signal_tile, &block) {
+            return true;
+        }
+    }
+    // Señal unidireccional en la tesela: si ningún bit controla esta salida pero
+    // YAPF penaliza el sentido, ya devolvimos arriba; si hay bits pero todos ENTRY,
+    // comprobar ocupación del bloque igualmente.
+    if !checked && tile.kind == TileKind::Rail && rail_tile_is_signals(tile.m5) {
+        let block = rail_block_ahead(map, signal_tile, exit_dir);
+        if block_is_occupied_by_trains(vehicles, signal_tile, &block) {
+            return true;
+        }
+    }
+    false
+}
+
+/// `true` si un paso `from` → `to` puede incluirse en una reserva PBS.
+#[must_use]
+pub(crate) fn rail_step_signal_allows(
+    map: &Map,
+    vehicles: &[Vehicle],
+    from: TileCoord,
+    to: TileCoord,
+    beyond: Option<TileCoord>,
+) -> bool {
+    if let Some(sig_tile) = map.get(to)
+        && sig_tile.kind == TileKind::Rail
+        && rail_tile_is_signals(sig_tile.m5)
+        && let Some(beyond) = beyond
+        && signal_exit_denied(map, vehicles, to, beyond, &sig_tile)
+    {
+        return false;
+    }
+    let Some(from_tile) = map.get(from) else {
+        return true;
+    };
+    if from_tile.kind != TileKind::Rail || !rail_tile_is_signals(from_tile.m5) {
+        return true;
+    }
+    !signal_exit_denied(map, vehicles, from, to, &from_tile)
+}
+
+/// `true` si el avance sub-tesela de este tick completaría la tesela actual.
+#[must_use]
+fn train_would_complete_current_tile(vehicle: &Vehicle) -> bool {
+    if vehicle.depart_turn > 0 {
+        let step = u16::from(vehicle.progress_step().max(1));
+        return u16::from(vehicle.depart_turn).saturating_add(step) >= 255;
+    }
+    if vehicle.progress == 255 && vehicle.needs_depart_turnaround() {
+        return true;
+    }
+    let step = u16::from(vehicle.progress_step());
+    if step == 0 {
+        return false;
+    }
+    u16::from(vehicle.progress).saturating_add(step) >= 255
+}
+
+/// `true` si el tren debe esperar ante la tesela de señal `to` (sin entrar al bloque).
+#[must_use]
+fn train_held_before_signal_tile(
+    map: &Map,
+    vehicles: &[Vehicle],
+    vehicle: &Vehicle,
+    to: TileCoord,
+    signal_tile: &crate::map::Tile,
+) -> bool {
+    let Some(beyond) = path_continuation_after(vehicle, to) else {
+        return false;
+    };
+    if !signal_exit_denied(map, vehicles, to, beyond, signal_tile) {
+        return false;
+    }
+    if vehicle.pos == to {
+        return true;
+    }
+    // Detenido en la tesela de aproximación: mantener espera aunque `progress_step` sea 0.
+    if vehicle.cur_speed == 0 && vehicle.progress > 0 {
+        return true;
+    }
+    train_would_complete_current_tile(vehicle)
+}
+
 /// `true` si el tren no puede avanzar al siguiente paso por señal en rojo.
 #[must_use]
 pub fn train_blocked_by_signal(map: &Map, vehicles: &[Vehicle], vehicle: &Vehicle) -> bool {
@@ -408,31 +625,22 @@ pub fn train_blocked_by_signal(map: &Map, vehicles: &[Vehicle], vehicle: &Vehicl
     let Some(to) = vehicle.movement_target() else {
         return false;
     };
+
+    if let Some(signal_tile) = map.get(to)
+        && signal_tile.kind == TileKind::Rail
+        && rail_tile_is_signals(signal_tile.m5)
+        && train_held_before_signal_tile(map, vehicles, vehicle, to, &signal_tile)
+    {
+        return true;
+    }
+
     let Some(tile) = map.get(from) else {
         return false;
     };
     if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
         return false;
     }
-    for bit in signal_bits_for_exit(map, from, to) {
-        let rails = tile.m5 & 0x3F;
-        if signal_track_for_bit(rails, bit)
-            .is_some_and(|track| signal_type_for_track(tile.m2, track) == SIGTYPE_ENTRY)
-        {
-            // Decisión Rail 3D: ENTRY/EXIT/COMBO no tienen semántica de presignal;
-            // ENTRY se ignora al bloquear (degradado documentado a BLOCK).
-            continue;
-        }
-        if !signal_is_green(tile.m3hi, bit) {
-            return true;
-        }
-        let exit_dir = dir_from_to(from, to).unwrap_or(0);
-        let block = rail_block_ahead(map, from, exit_dir);
-        if block_is_occupied_by_trains(vehicles, from, &block) {
-            return true;
-        }
-    }
-    false
+    signal_exit_denied(map, vehicles, from, to, &tile)
 }
 
 /// `true` si otro tren ocupa la vía delante (misma dirección o frente a frente).
@@ -493,11 +701,111 @@ pub fn train_blocked_by_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehic
     false
 }
 
+fn presignal_exit_targets_ahead(
+    map: &Map,
+    signal_tile: TileCoord,
+    exit_dir: u8,
+) -> Vec<(TileCoord, u8)> {
+    let (dx, dy) = diag_dir_offset(exit_dir);
+    let start = TileCoord::new(signal_tile.x + dx, signal_tile.y + dy);
+    let mut found = Vec::new();
+    let mut queue = vec![start];
+    let mut visited = HashSet::from([signal_tile]);
+
+    while let Some(cur) = queue.pop() {
+        if !visited.insert(cur) {
+            continue;
+        }
+        let Some(tile) = map.get(cur) else {
+            continue;
+        };
+        if tile.kind != TileKind::Rail {
+            continue;
+        }
+        if rail_tile_is_signals(tile.m5) {
+            let present = rail_signal_present_mask(tile.m3);
+            let rails = tile.m5 & 0x3F;
+            let mut is_exit = false;
+            for bit in 0..4u8 {
+                if present & (1 << bit) == 0 {
+                    continue;
+                }
+                let sig_type = signal_track_for_bit(rails, bit)
+                    .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
+                if sig_type == SIGTYPE_EXIT || sig_type == SIGTYPE_COMBO {
+                    found.push((cur, bit));
+                    is_exit = true;
+                }
+            }
+            if is_exit {
+                continue;
+            }
+        }
+        for n in rail_neighbors(map, cur, None) {
+            if !visited.contains(&n) {
+                queue.push(n);
+            }
+        }
+    }
+    found
+}
+
+fn signal_bit_block_green(
+    map: &Map,
+    vehicles: &[Vehicle],
+    c: TileCoord,
+    tile: &crate::map::Tile,
+    bit: u8,
+    sig_type: u8,
+) -> bool {
+    let exit_dir = signal_exit_dir(tile.m5 & 0x3F, bit);
+    let block = rail_block_ahead(map, c, exit_dir);
+    if is_pbs_signal_type(sig_type) {
+        crate::rail_pbs::pbs_block_has_reservation(vehicles, &block)
+    } else {
+        !block_is_occupied_by_trains(vehicles, c, &block)
+    }
+}
+
+fn compute_exit_signal_greens(map: &Map, vehicles: &[Vehicle]) -> HashMap<(TileCoord, u8), bool> {
+    let (w, h) = map.dimensions();
+    let mut exit_green = HashMap::new();
+    for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
+        for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
+            let c = TileCoord::new(x, y);
+            let Some(tile) = map.get(c) else {
+                continue;
+            };
+            if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
+                continue;
+            }
+            let present = rail_signal_present_mask(tile.m3);
+            let rails = tile.m5 & 0x3F;
+            for bit in 0..4u8 {
+                if present & (1 << bit) == 0 {
+                    continue;
+                }
+                let sig_type = signal_track_for_bit(rails, bit)
+                    .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
+                if sig_type == SIGTYPE_ENTRY {
+                    continue;
+                }
+                exit_green.insert(
+                    (c, bit),
+                    signal_bit_block_green(map, vehicles, c, &tile, bit, sig_type),
+                );
+            }
+        }
+    }
+    exit_green
+}
+
 fn refresh_signal_tile_states(
     map: &Map,
     vehicles: &[Vehicle],
     c: TileCoord,
     tile: crate::map::Tile,
+    exit_green: &HashMap<(TileCoord, u8), bool>,
 ) -> Option<crate::map::Tile> {
     if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
         return None;
@@ -506,21 +814,45 @@ fn refresh_signal_tile_states(
     if present == 0 {
         return None;
     }
+    let rails = tile.m5 & 0x3F;
     let mut states = 0u8;
     for bit in 0..4u8 {
         if present & (1 << bit) == 0 {
             continue;
         }
-        let rails = tile.m5 & 0x3F;
-        if signal_track_for_bit(rails, bit)
-            .is_some_and(|track| signal_type_for_track(tile.m2, track) == SIGTYPE_ENTRY)
-        {
-            states |= 1 << bit;
-            continue;
-        }
-        let exit_dir = signal_exit_dir(rails, bit);
-        let block = rail_block_ahead(map, c, exit_dir);
-        if !block_is_occupied_by_trains(vehicles, c, &block) {
+        let sig_type = signal_track_for_bit(rails, bit)
+            .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
+        let green =
+            if sig_type == SIGTYPE_ENTRY {
+                let exit_dir = signal_exit_dir(rails, bit);
+                let targets = presignal_exit_targets_ahead(map, c, exit_dir);
+                if targets.is_empty() {
+                    signal_bit_block_green(map, vehicles, c, &tile, bit, SIGTYPE_BLOCK)
+                } else {
+                    targets
+                        .iter()
+                        .any(|key| exit_green.get(key).copied().unwrap_or(false))
+                }
+            } else if sig_type == SIGTYPE_COMBO {
+                let exit_dir = signal_exit_dir(rails, bit);
+                let exit_ok = exit_green.get(&(c, bit)).copied().unwrap_or_else(|| {
+                    signal_bit_block_green(map, vehicles, c, &tile, bit, sig_type)
+                });
+                let targets = presignal_exit_targets_ahead(map, c, exit_dir);
+                let entry_ok = if targets.is_empty() {
+                    true
+                } else {
+                    targets
+                        .iter()
+                        .any(|key| exit_green.get(key).copied().unwrap_or(false))
+                };
+                exit_ok && entry_ok
+            } else {
+                exit_green.get(&(c, bit)).copied().unwrap_or_else(|| {
+                    signal_bit_block_green(map, vehicles, c, &tile, bit, sig_type)
+                })
+            };
+        if green {
             states |= 1 << bit;
         }
     }
@@ -542,6 +874,7 @@ pub fn update_rail_signal_states(
     if clear_dirty {
         dirty.clear();
     }
+    let exit_green = compute_exit_signal_greens(map, vehicles);
     let (w, h) = map.dimensions();
     for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
         for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
@@ -549,7 +882,7 @@ pub fn update_rail_signal_states(
             let Some(tile) = map.get(c) else {
                 continue;
             };
-            if let Some(out) = refresh_signal_tile_states(map, vehicles, c, tile)
+            if let Some(out) = refresh_signal_tile_states(map, vehicles, c, tile, &exit_green)
                 && out.m3hi != tile.m3hi
             {
                 let _ = map.set_tile(c, out);
@@ -573,6 +906,19 @@ pub fn signal_type_for_track(m2: u8, track: SignalTrack) -> u8 {
         0
     };
     (m2 >> base) & 7
+}
+
+/// Reemplaza el tipo PBS/block de una señal en `m2` (`SetSignalType` en `rail_map.h`).
+#[must_use]
+pub fn cycle_signal_type_m2(m2: u8, track: SignalTrack) -> u8 {
+    let base = if matches!(track, SignalTrack::Lower | SignalTrack::Right) {
+        4
+    } else {
+        0
+    };
+    let current = signal_type_for_track(m2, track);
+    let new_type = next_placeable_signal_type(current);
+    (m2 & !(7 << base)) | ((new_type & 7) << base)
 }
 
 /// Alterna one-way / two-way en el carril (`CycleSignalSide` en `rail_map.h`).
@@ -703,18 +1049,19 @@ fn m2_for_signal(sig_type: u8, variant: u8, track: u8) -> u8 {
     ((sig_type & 7) << base) | ((variant & 1) << var_bit)
 }
 
-/// Codifica una señal de bloque unidireccional (`SIGTYPE_BLOCK`, verde).
+/// Codifica una señal unidireccional (`sig_type`: block, path, path oneway).
 #[must_use]
 pub fn signal_placement_for_track(
     track: SignalTrack,
     face: u8,
     variant: u8,
+    sig_type: u8,
 ) -> Option<SignalPlacement> {
     let sig_bit = signal_bit_for_facing(track, face)?;
     let present = 1 << sig_bit;
     Some(SignalPlacement {
         sig_bit,
-        m2: m2_for_signal(0, variant, track.ottd_track()),
+        m2: m2_for_signal(sig_type, variant, track.ottd_track()),
         m3: present << 4,
         m3hi: present << 4,
     })
@@ -728,7 +1075,7 @@ pub fn signal_placement_for_facing(
     variant: u8,
 ) -> Option<SignalPlacement> {
     let track = resolve_signal_track(trackbits, 128, 128)?;
-    signal_placement_for_track(track, face, variant)
+    signal_placement_for_track(track, face, variant, SIGTYPE_BLOCK)
 }
 
 /// Compatibilidad con tests: señal por defecto en la primera dirección válida.
@@ -745,7 +1092,7 @@ pub fn encode_block_signal_on_track_with_variant(trackbits: u8, variant: u8) -> 
         .and_then(|f| f.first().copied())
         .unwrap_or(0);
     if let Some(t) = track
-        && let Some(p) = signal_placement_for_track(t, face, variant)
+        && let Some(p) = signal_placement_for_track(t, face, variant, SIGTYPE_BLOCK)
     {
         (p.m2, p.m3, p.m3hi)
     } else {
@@ -780,7 +1127,8 @@ mod tests {
                 .copied()
                 .unwrap_or(0)
         });
-        let placement = signal_placement_for_track(track, face, 1).expect("placement");
+        let placement =
+            signal_placement_for_track(track, face, 1, SIGTYPE_BLOCK).expect("placement");
         let mut t = map.get(c).expect("tile");
         t.m5 = tb | (RAIL_TILE_SIGNALS << 6);
         t.m2 = placement.m2;
@@ -791,9 +1139,9 @@ mod tests {
 
     #[test]
     fn signal_placement_is_single_bit() {
-        let p = signal_placement_for_track(SignalTrack::X, 0, 1).expect("NE on X");
+        let p = signal_placement_for_track(SignalTrack::X, 0, 1, SIGTYPE_BLOCK).expect("NE on X");
         assert_eq!(p.m3 >> 4, 0b0100);
-        let p2 = signal_placement_for_track(SignalTrack::X, 2, 1).expect("SW on X");
+        let p2 = signal_placement_for_track(SignalTrack::X, 2, 1, SIGTYPE_BLOCK).expect("SW on X");
         assert_eq!(p2.m3 >> 4, 0b1000);
     }
 
@@ -866,9 +1214,9 @@ mod tests {
 
     #[test]
     fn m2_variant_bit_set_for_electric_on_x() {
-        let p = signal_placement_for_track(SignalTrack::X, 0, 1).expect("electric");
+        let p = signal_placement_for_track(SignalTrack::X, 0, 1, SIGTYPE_BLOCK).expect("electric");
         assert_eq!(p.m2 & 0x08, 0x08);
-        let s = signal_placement_for_track(SignalTrack::X, 0, 0).expect("semaphore");
+        let s = signal_placement_for_track(SignalTrack::X, 0, 0, SIGTYPE_BLOCK).expect("semaphore");
         assert_eq!(s.m2 & 0x08, 0);
     }
 
@@ -893,30 +1241,49 @@ mod tests {
     }
 
     #[test]
-    fn entry_signal_does_not_block_train() {
+    fn entry_presignal_blocks_when_no_exit_is_green() {
         use crate::Vehicle;
         use crate::vehicle::VehicleKind;
 
-        let mut map = Map::new_flat(8, 8, 0);
-        write_rail(&mut map, TileCoord::new(0, 0), RAIL_TB_X);
-        write_rail(&mut map, TileCoord::new(2, 0), RAIL_TB_X);
-        write_signal_facing(&mut map, TileCoord::new(1, 0), RAIL_TB_X, Some(0));
-        let mut t = map.get(TileCoord::new(1, 0)).expect("tile");
-        t.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
-        t.m3hi = 0x00;
-        map.set_tile(TileCoord::new(1, 0), t).expect("tile entry");
+        let mut map = Map::new_flat(12, 8, 0);
+        for x in 0..=5 {
+            write_rail(&mut map, TileCoord::new(x, 2), RAIL_TB_X);
+        }
+        write_signal_facing(&mut map, TileCoord::new(1, 2), RAIL_TB_X, Some(0));
+        let mut entry = map.get(TileCoord::new(1, 2)).expect("entry");
+        entry.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(1, 2), entry).expect("entry");
+        write_signal_facing(&mut map, TileCoord::new(4, 2), RAIL_TB_X, Some(0));
+        let mut exit = map.get(TileCoord::new(4, 2)).expect("exit");
+        exit.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(4, 2), exit).expect("exit");
+        let blocker = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(5, 2),
+            TileCoord::new(5, 2),
+        );
         let mut train = Vehicle::new(
             1,
             VehicleKind::Train,
-            TileCoord::new(1, 0),
-            TileCoord::new(2, 0),
+            TileCoord::new(1, 2),
+            TileCoord::new(5, 2),
         );
         train.running = true;
-        train.path = std::collections::VecDeque::from([TileCoord::new(2, 0)]);
-        let vehicles = vec![train];
+        train.cur_speed = 0;
+        train.progress = 200;
+        train.path = std::collections::VecDeque::from([TileCoord::new(2, 2)]);
+        let vehicles = vec![train.clone(), blocker];
+        update_rail_signal_states(&mut map, &vehicles, &mut Vec::new(), true);
+        let entry_tile = map.get(TileCoord::new(1, 2)).expect("entry");
+        assert_eq!(
+            rail_signal_state_mask(entry_tile.m3hi) & 0b0100,
+            0,
+            "entry roja si ninguna exit verde"
+        );
         assert!(
-            !train_blocked_by_signal(&map, &vehicles, &vehicles[0]),
-            "presignal entry no detiene trenes en sim simplificada"
+            train_blocked_by_signal(&map, &vehicles, &train),
+            "entry roja debe detener el tren"
         );
     }
 
@@ -968,6 +1335,177 @@ mod tests {
             &state.vehicles[0]
         ));
         assert!(!dirty.is_empty());
+    }
+
+    #[test]
+    fn dual_scenario_signal_9_controls_eastbound_exit() {
+        use crate::parity::{
+            TRAIN_DUAL_TRACK_OUT_Y, TRAIN_DUAL_VEHICLE_2_ID, build_train_supply_dual,
+        };
+        use std::collections::VecDeque;
+
+        let mut state = build_train_supply_dual();
+        let sig = TileCoord::new(9, TRAIN_DUAL_TRACK_OUT_Y);
+        let tile = state.map.get(sig).expect("señal 9");
+        assert!(rail_tile_is_signals(tile.m5), "m5={:#x}", tile.m5);
+        let bits =
+            signal_bits_for_exit(&state.map, sig, TileCoord::new(10, TRAIN_DUAL_TRACK_OUT_Y));
+        assert_eq!(
+            bits,
+            vec![2],
+            "m5={:#x} m3={:#x} m2={:#x}",
+            tile.m5,
+            tile.m3,
+            tile.m2
+        );
+
+        let leader_pos = TileCoord::new(11, TRAIN_DUAL_TRACK_OUT_Y);
+        let follower_pos = TileCoord::new(8, TRAIN_DUAL_TRACK_OUT_Y);
+        {
+            let leader = state
+                .vehicles
+                .iter_mut()
+                .find(|v| v.id == 1)
+                .expect("tren 1");
+            leader.pos = leader_pos;
+            leader.running = true;
+        }
+        {
+            let follower = state
+                .vehicles
+                .iter_mut()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+                .expect("tren 2");
+            follower.pos = follower_pos;
+            follower.path = VecDeque::from([
+                TileCoord::new(9, TRAIN_DUAL_TRACK_OUT_Y),
+                TileCoord::new(10, TRAIN_DUAL_TRACK_OUT_Y),
+                leader_pos,
+            ]);
+            follower.running = true;
+            follower.set_cruise_speed();
+            follower.progress = 200;
+        }
+        let mut dirty = Vec::new();
+        update_rail_signal_states(&mut state.map, &state.vehicles, &mut dirty, true);
+        let follower = state.vehicles.iter().find(|v| v.id == 2).expect("tren 2");
+        assert_eq!(follower.movement_target(), Some(sig));
+        let sig_tile = state.map.get(sig).expect("señal 9");
+        assert!(
+            train_blocked_by_signal(&state.map, &state.vehicles, follower),
+            "m3hi={:#x} block={:?}",
+            sig_tile.m3hi,
+            rail_block_ahead(&state.map, sig, 0)
+        );
+        let block = rail_block_ahead(&state.map, sig, 0);
+        assert!(
+            block.contains(&leader_pos),
+            "el bloque tras la señal 9 debe incluir al líder: {block:?}"
+        );
+    }
+
+    #[test]
+    fn dual_scenario_signal_stays_red_when_leader_on_perpendicular_connector() {
+        use crate::parity::{
+            TRAIN_DUAL_TRACK_OUT_Y, TRAIN_DUAL_VEHICLE_2_ID, build_train_supply_dual,
+        };
+        use std::collections::VecDeque;
+
+        let mut state = build_train_supply_dual();
+        let sig = TileCoord::new(9, TRAIN_DUAL_TRACK_OUT_Y);
+        let connector = TileCoord::new(10, 5);
+        let follower_pos = TileCoord::new(8, TRAIN_DUAL_TRACK_OUT_Y);
+
+        {
+            let leader = state
+                .vehicles
+                .iter_mut()
+                .find(|v| v.id == 1)
+                .expect("tren 1");
+            leader.pos = connector;
+            leader.path = VecDeque::from([TileCoord::new(10, TRAIN_DUAL_TRACK_OUT_Y - 2)]);
+            leader.running = true;
+        }
+        {
+            let follower = state
+                .vehicles
+                .iter_mut()
+                .find(|v| v.id == TRAIN_DUAL_VEHICLE_2_ID)
+                .expect("tren 2");
+            follower.pos = follower_pos;
+            follower.path = VecDeque::from([
+                TileCoord::new(9, TRAIN_DUAL_TRACK_OUT_Y),
+                TileCoord::new(10, TRAIN_DUAL_TRACK_OUT_Y),
+            ]);
+            follower.running = true;
+            follower.set_cruise_speed();
+            follower.progress = 200;
+        }
+
+        let block = rail_block_ahead(&state.map, sig, 0);
+        assert!(
+            block.contains(&connector),
+            "el conector perpendicular debe formar parte del bloque: {block:?}"
+        );
+
+        let mut dirty = Vec::new();
+        update_rail_signal_states(&mut state.map, &state.vehicles, &mut dirty, true);
+        let sig_tile = state.map.get(sig).expect("señal 9");
+        assert_eq!(
+            rail_signal_state_mask(sig_tile.m3hi) & 0b0100,
+            0,
+            "señal debe seguir en rojo con tren en conector perpendicular"
+        );
+        assert!(
+            train_blocked_by_signal(
+                &state.map,
+                &state.vehicles,
+                state.vehicles.iter().find(|v| v.id == 2).expect("tren 2")
+            ),
+            "seguidor no debe avanzar"
+        );
+    }
+
+    #[test]
+    fn train_blocked_before_entering_signal_tile() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
+        let mut state = GameState::new(8, 8);
+        for x in 0..=4 {
+            write_rail(&mut state.map, TileCoord::new(x, 0), RAIL_TB_X);
+        }
+        write_signal(&mut state.map, TileCoord::new(2, 0), RAIL_TB_X);
+        let blocker = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(3, 0),
+            TileCoord::new(3, 0),
+        );
+        let mut approaching = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 0),
+            TileCoord::new(4, 0),
+        );
+        approaching.running = true;
+        approaching.path = (2..=4)
+            .map(|x| TileCoord::new(x, 0))
+            .collect::<std::collections::VecDeque<_>>();
+        state.vehicles.push(approaching);
+        state.vehicles.push(blocker);
+        let mut dirty = Vec::new();
+        update_rail_signal_states(&mut state.map, &state.vehicles, &mut dirty, true);
+        assert!(
+            !train_blocked_by_signal(&state.map, &state.vehicles, &state.vehicles[0]),
+            "puede avanzar sub-tesela dentro de la tesela de aproximación"
+        );
+        state.vehicles[0].progress = 200;
+        state.vehicles[0].set_cruise_speed();
+        assert!(
+            train_blocked_by_signal(&state.map, &state.vehicles, &state.vehicles[0]),
+            "debe frenar al completar la tesela previa a la señal"
+        );
     }
 
     #[test]
@@ -1084,6 +1622,37 @@ mod tests {
         assert!(
             train_blocked_by_traffic(&map, &vehicles, &east),
             "trenes frente a frente deben detenerse sin señales"
+        );
+    }
+
+    #[test]
+    fn path_oneway_blocks_reverse_through_signal_tile() {
+        use crate::Vehicle;
+        use crate::command::{Command, apply_command};
+        use crate::vehicle::VehicleKind;
+
+        let mut state = GameState::new(8, 4);
+        for x in 0..=4 {
+            write_rail(&mut state.map, TileCoord::new(x, 0), RAIL_TB_X);
+        }
+        apply_command(
+            &mut state,
+            &Command::PlaceRailSignal(TileCoord::new(2, 0), 0, 128, 128, SIGTYPE_PATH_ONEWAY),
+        )
+        .expect("path oneway");
+        let mut train = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(2, 0),
+            TileCoord::new(0, 0),
+        );
+        train.running = true;
+        train.path = std::collections::VecDeque::from([TileCoord::new(1, 0)]);
+        let mut dirty = Vec::new();
+        update_rail_signal_states(&mut state.map, &[train.clone()], &mut dirty, true);
+        assert!(
+            train_blocked_by_signal(&state.map, &[train.clone()], &train),
+            "PathOneWay debe bloquear el sentido contrario a la señal"
         );
     }
 }

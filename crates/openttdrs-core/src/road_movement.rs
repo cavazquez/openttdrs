@@ -840,12 +840,15 @@ fn previous_tile_on_route(
 pub fn extrapolate_vehicle_pose(v: &Vehicle, alpha: f32) -> VehiclePose {
     let mut pose = VehiclePose::from_vehicle(v);
     let alpha = alpha.clamp(0.0, 1.0);
-    if alpha <= 0.0 || !v.running || v.cur_speed == 0 {
+    if alpha <= 0.0 || !v.running {
         return pose;
     }
-    let step = f32::from(v.progress_step());
+    let mut step = f32::from(v.progress_step());
     if step <= f32::EPSILON {
-        return pose;
+        if v.cur_speed == 0 {
+            return pose;
+        }
+        step = 1.0;
     }
     let mut delta = step * alpha;
     if delta <= f32::EPSILON {

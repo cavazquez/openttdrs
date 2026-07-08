@@ -507,7 +507,11 @@ fn place_rail_signal_on_straight_track() {
     let c = TileCoord::new(2, 2);
     apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
     let money = s.economy.money;
-    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
     let tile = s.map.get(c).unwrap();
     assert!(crate::rail_signals::rail_tile_is_signals(tile.m5));
     assert_eq!(
@@ -521,11 +525,19 @@ fn place_rail_signal_cycles_side_on_same_track() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(2, 2);
     apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
-    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
     let present_one = crate::rail_signals::rail_signal_present_mask(s.map.get(c).unwrap().m3);
     assert_eq!(present_one.count_ones(), 1);
     let money = s.economy.money;
-    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
     let tile = s.map.get(c).unwrap();
     assert!(crate::rail_signals::rail_tile_is_signals(tile.m5));
     assert_eq!(
@@ -537,11 +549,69 @@ fn place_rail_signal_cycles_side_on_same_track() {
 }
 
 #[test]
+fn cycle_rail_signal_type_block_path_oneway() {
+    use crate::rail_signals::{
+        SIGTYPE_BLOCK, SIGTYPE_PATH, SIGTYPE_PATH_ONEWAY, SignalTrack, signal_type_for_track,
+    };
+
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, SIGTYPE_BLOCK),
+    )
+    .unwrap();
+    let track = SignalTrack::X;
+    assert_eq!(
+        signal_type_for_track(s.map.get(c).unwrap().m2, track),
+        SIGTYPE_BLOCK
+    );
+    apply_command(&mut s, &Command::CycleRailSignalType(c, 128, 128)).unwrap();
+    assert_eq!(
+        signal_type_for_track(s.map.get(c).unwrap().m2, track),
+        SIGTYPE_PATH
+    );
+    apply_command(&mut s, &Command::CycleRailSignalType(c, 128, 128)).unwrap();
+    assert_eq!(
+        signal_type_for_track(s.map.get(c).unwrap().m2, track),
+        SIGTYPE_PATH_ONEWAY
+    );
+    apply_command(&mut s, &Command::CycleRailSignalType(c, 128, 128)).unwrap();
+    assert_eq!(
+        signal_type_for_track(s.map.get(c).unwrap().m2, track),
+        SIGTYPE_BLOCK
+    );
+}
+
+#[test]
+fn place_path_signal_with_explicit_type() {
+    use crate::rail_signals::{SIGTYPE_PATH, SignalTrack, signal_type_for_track};
+
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, SIGTYPE_PATH),
+    )
+    .unwrap();
+    assert_eq!(
+        signal_type_for_track(s.map.get(c).unwrap().m2, SignalTrack::X),
+        SIGTYPE_PATH
+    );
+}
+
+#[test]
 fn clear_tile_removes_rail_signal() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(2, 2);
     apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
-    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
     apply_command(&mut s, &Command::ClearTile(c)).unwrap();
     let tile = s.map.get(c).unwrap();
     assert!(!crate::rail_signals::rail_tile_is_signals(tile.m5));
@@ -552,10 +622,18 @@ fn place_second_signal_on_horz_merges_m2() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(2, 2);
     apply_command(&mut s, &Command::SetRailBits(c, 0x0C)).unwrap();
-    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 64, 64)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 64, 64, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
     let m2_upper = s.map.get(c).unwrap().m2;
     assert_ne!(m2_upper, 0);
-    apply_command(&mut s, &Command::PlaceRailSignal(c, 1, 200, 200)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 1, 200, 200, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
     let tile = s.map.get(c).unwrap();
     assert!(crate::rail_signals::rail_tile_is_signals(tile.m5));
     assert_eq!(
@@ -576,7 +654,11 @@ fn place_rail_bits_preserves_signal_when_merging_diagonals_to_cross() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(3, 3);
     apply_command(&mut s, &Command::PlaceRailBits(c, 0x02)).unwrap();
-    apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
     let present_before = crate::rail_signals::rail_signal_present_mask(s.map.get(c).unwrap().m3);
     assert_ne!(present_before, 0);
     apply_command(&mut s, &Command::PlaceRailBits(c, 0x01)).unwrap();

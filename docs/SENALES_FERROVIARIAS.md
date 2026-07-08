@@ -212,7 +212,7 @@ Toolbar avanzada vs simplificada: la simplificada solo muestra path signals ([Bu
 | Presignal `UpdateSignalsOnSegment` | ❌ | Requiere port de `signal.cpp` |
 | Arrastre línea + densidad | ❌ | |
 | Signal convert + Ctrl ciclo tipos | ❌ | |
-| Import `.sav` con PBS/presignals | 🟡 | Render si bits correctos; sim ignora tipo |
+| Import `.sav` con PBS/presignals | 🟡 | Tipos y render OK; reservas PBS runtime se recalculan; presignal logic parcial |
 
 ---
 
@@ -265,11 +265,12 @@ Orden sugerido alineado con [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) y [PARIDAD_
 
 Dependencias: pathfinder trenes más fiel (YAPF simplificado o extensión de `pathfinder.rs`).
 
-### Fase E — Import y regresión
+### Fase E — Import y regresión ✅ (jul 2026)
 
-1. Fixture save OpenTTD con mezcla block + path + presignals.  
-2. Golden render señales (`tests/fixtures/`).  
-3. Documentar limitaciones en § import de [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md).
+1. Fixture save OpenTTD con mezcla block + path + presignals → `rail_signals_mixed.sav` (`scripts/gen_rail_signals_sav.py`).  
+2. Golden render/encoding señales → `tests/fixtures/parity/rail_signals_golden.json` + `golden_rail_signals.rs` + test cliente `golden_rail_signal_sprite_texture_ids`.  
+3. Limitaciones § import documentadas en [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) (§17).  
+4. Escenario parity `rail_signals_mixed` + roundtrip JSON en `parity/scenario.rs`.
 
 ---
 

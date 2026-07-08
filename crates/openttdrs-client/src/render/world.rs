@@ -267,6 +267,7 @@ pub(crate) fn setup(
         &sim,
         spawn_bounds,
         true,
+        true,
     );
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
@@ -326,6 +327,7 @@ pub(crate) fn spawn_intro_map_render(
         sim,
         spawn_bounds,
         false,
+        true,
     );
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
@@ -341,6 +343,7 @@ fn spawn_map_tiles_in_bounds(
     images: &mut Assets<Image>,
     sim: &SimWorld,
     spawn_bounds: TileViewportBounds,
+    show_pbs_reservations: bool,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
     let debug_coast = env_flag("OPENTTDRS_DEBUG_COAST");
@@ -414,6 +417,7 @@ fn spawn_map_tiles_in_bounds(
                     slope_half_ground,
                     &mut rail_layers,
                     climate,
+                    show_pbs_reservations,
                 );
             }
             TileKind::House | TileKind::Station => {
@@ -537,6 +541,7 @@ fn spawn_world_layer(
     sim: &SimWorld,
     spawn_bounds: TileViewportBounds,
     include_world_extras: bool,
+    show_pbs_reservations: bool,
 ) {
     if include_world_extras {
         let truck_handles = TruckHandles::load(asset_server);
@@ -545,9 +550,18 @@ fn spawn_world_layer(
         let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
         super::town_labels::spawn_town_labels(commands, sim, &label_font);
     }
-    spawn_map_tiles_in_bounds(commands, assets, company, images, sim, spawn_bounds);
+    spawn_map_tiles_in_bounds(
+        commands,
+        assets,
+        company,
+        images,
+        sim,
+        spawn_bounds,
+        show_pbs_reservations,
+    );
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_map_chunk(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -556,6 +570,7 @@ fn spawn_map_chunk(
     sim: &SimWorld,
     cx: u32,
     cy: u32,
+    show_pbs_reservations: bool,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
     spawn_map_tiles_in_bounds(
@@ -565,6 +580,7 @@ fn spawn_map_chunk(
         images,
         sim,
         chunk_tile_bounds(cx, cy, mw, mh),
+        show_pbs_reservations,
     );
 }
 
@@ -632,6 +648,7 @@ pub(crate) fn apply_remap_map_visuals(
     sim: Res<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
     mut loaded_chunks: ResMut<LoadedMapTileChunks>,
+    prefs: Res<crate::settings::ClientPreferences>,
 ) {
     if !pending.pending {
         return;
@@ -674,6 +691,8 @@ pub(crate) fn apply_remap_map_visuals(
         && large_map_viewport_cull_enabled(mw, mh)
         && !loaded_chunks.chunks.is_empty();
 
+    let show_pbs = prefs.show_pbs_reservations;
+
     if use_incremental {
         let needed = chunks_in_bounds(spawn_bounds);
         // Construcción: regenerar todo el viewport visible para evitar capas
@@ -701,6 +720,7 @@ pub(crate) fn apply_remap_map_visuals(
                 &sim,
                 cx,
                 cy,
+                show_pbs,
             );
         }
         let mut refresh_despawn = Vec::new();
@@ -724,6 +744,7 @@ pub(crate) fn apply_remap_map_visuals(
                 &sim,
                 cx,
                 cy,
+                show_pbs,
             );
         }
         loaded_chunks.chunks = needed;
@@ -758,6 +779,7 @@ pub(crate) fn apply_remap_map_visuals(
             &sim,
             spawn_bounds,
             true,
+            show_pbs,
         );
         loaded_chunks.chunks = chunks_in_bounds(spawn_bounds);
     }
@@ -795,6 +817,7 @@ mod tests {
         app.init_asset::<TextureAtlasLayout>();
         app.update();
         app.insert_resource(SimWorld::default());
+        app.insert_resource(crate::settings::ClientPreferences::default());
         app.insert_resource(RemapMapVisualsPending::default());
         app.insert_resource(VehicleIndex::default());
         app.insert_resource(LoadedMapTileChunks::default());

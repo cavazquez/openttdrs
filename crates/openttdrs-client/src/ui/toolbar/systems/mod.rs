@@ -304,6 +304,7 @@ mod tests {
         world.insert_resource(crate::ui::vehicle_window::VehicleWindowState::default());
         world.insert_resource(HudBuildFeedback::default());
         world.insert_resource(Time::<()>::default());
+        world.insert_resource(StationBuildState::default());
         world.run_system_once(handle_tile_click).unwrap();
     }
 
@@ -348,6 +349,8 @@ mod tests {
                 None,
                 None,
                 None,
+                openttdrs_core::SIGTYPE_BLOCK,
+                false,
             ),
             Some(Command::PlaceStationDir(_, 3))
         ));
@@ -362,6 +365,8 @@ mod tests {
                 None,
                 None,
                 None,
+                openttdrs_core::SIGTYPE_BLOCK,
+                false,
             ),
             Some(Command::PlaceRoadDepotDir(_, 2))
         ));
@@ -373,6 +378,8 @@ mod tests {
                 None,
                 None,
                 None,
+                openttdrs_core::SIGTYPE_BLOCK,
+                false,
             ),
             Some(Command::PlaceIndustrySpec(
                 _,
@@ -387,6 +394,8 @@ mod tests {
                 None,
                 None,
                 None,
+                openttdrs_core::SIGTYPE_BLOCK,
+                false,
             )
             .is_none()
         );

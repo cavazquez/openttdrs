@@ -210,7 +210,7 @@ pub(crate) fn handle_tile_click(
     mut selected: ResMut<SelectedTileInfo>,
     mut sim: ResMut<SimWorld>,
     tool_state: Res<UiToolState>,
-    station_state: Res<StationBuildState>,
+    mut station_state: ResMut<StationBuildState>,
     mut drag_state: ResMut<DragBuildState>,
     mut bridge_state: ResMut<BridgeBuildState>,
     mut panels: PanelStates,
@@ -478,6 +478,29 @@ pub(crate) fn handle_tile_click(
         return;
     }
 
+    let ctrl = station_state.ctrl_held;
+    let mut sig_type = station_state.signal_type;
+    let mut cycle_existing_signal_type = false;
+    if ctrl && action == BuildMenuAction::RailSignals {
+        let (fx, fy) = tile_fract;
+        if let Some(tile) = sim.state.map.get(build_pos)
+            && tile.kind == TileKind::Rail
+            && openttdrs_core::rail_signals::rail_tile_is_signals(tile.m5)
+        {
+            let tb = tile.m5 & 0x3F;
+            if let Some(track) = openttdrs_core::rail_signals::resolve_signal_track(tb, fx, fy)
+                && openttdrs_core::rail_signals::rail_signal_present_mask(tile.m3)
+                    & openttdrs_core::rail_signals::signal_on_track_mask(track)
+                    != 0
+            {
+                cycle_existing_signal_type = true;
+            }
+        }
+        if !cycle_existing_signal_type {
+            sig_type = openttdrs_core::next_placeable_signal_type(sig_type);
+        }
+    }
+
     if let Some(cmd) = command_for_action(
         action,
         build_pos,
@@ -485,10 +508,15 @@ pub(crate) fn handle_tile_click(
         rail_lane_bit,
         Some(&sim.state.map),
         Some(tile_fract),
+        sig_type,
+        cycle_existing_signal_type,
     ) {
         if let Err(e) = apply_command(&mut sim.state, &cmd) {
             push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
         } else {
+            if ctrl && action == BuildMenuAction::RailSignals && !cycle_existing_signal_type {
+                station_state.signal_type = sig_type;
+            }
             let (mw, mh) = sim.state.map.dimensions();
             let tiles = tiles_for_visual_remap(Some(&sim.state.map), action, build_pos, &[]);
             request_map_visual_remap(&mut pending, mw, mh, &tiles);
@@ -506,4 +534,12 @@ pub(crate) fn handle_tile_click(
             }
         }
     }
+}
+
+pub(crate) fn sync_build_pointer_modifiers(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut station_state: ResMut<crate::ui::toolbar::StationBuildState>,
+) {
+    station_state.ctrl_held =
+        keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
 }

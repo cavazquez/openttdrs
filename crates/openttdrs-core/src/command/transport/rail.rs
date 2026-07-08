@@ -538,6 +538,7 @@ pub(crate) fn check_place_rail_signal(
         track,
         face,
         crate::rail_signals::default_signal_variant(crate::news::CALENDAR_BASE_YEAR),
+        crate::rail_signals::SIGTYPE_BLOCK,
     ) else {
         return Err(CommandError::CannotPlaceSignalOnTrack);
     };
@@ -616,6 +617,7 @@ pub(in crate::command) fn place_rail_signal(
     orientation: u8,
     fract_x: u8,
     fract_y: u8,
+    sig_type: u8,
 ) -> Result<(), CommandError> {
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let tb = tile.m5 & 0x3F;
@@ -625,8 +627,15 @@ pub(in crate::command) fn place_rail_signal(
     check_place_rail_signal(&state.map, c, track, face)?;
     let year = crate::rail_signals::calendar_year_at_tick(state.tick);
     let variant = crate::rail_signals::default_signal_variant(year);
-    let placement = crate::rail_signals::signal_placement_for_track(track, face, variant)
-        .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
+    let placement_sig_type = match sig_type {
+        crate::rail_signals::SIGTYPE_BLOCK
+        | crate::rail_signals::SIGTYPE_PATH
+        | crate::rail_signals::SIGTYPE_PATH_ONEWAY => sig_type,
+        _ => crate::rail_signals::SIGTYPE_BLOCK,
+    };
+    let placement =
+        crate::rail_signals::signal_placement_for_track(track, face, variant, placement_sig_type)
+            .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
     if rail_tile_is_signals(tile.m5) {
         let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
         if present & crate::rail_signals::signal_on_track_mask(track) != 0 {
@@ -651,6 +660,55 @@ pub(in crate::command) fn place_rail_signal(
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
     state.economy.money -= SIGNAL_BUILD_COST;
+    Ok(())
+}
+
+pub(in crate::command) fn cycle_rail_signal_type(
+    state: &mut GameState,
+    c: TileCoord,
+    fract_x: u8,
+    fract_y: u8,
+) -> Result<(), CommandError> {
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    if !rail_tile_is_signals(tile.m5) {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
+    let tb = tile.m5 & 0x3F;
+    let track = crate::rail_signals::resolve_signal_track(tb, fract_x, fract_y)
+        .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
+    let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
+    if present & crate::rail_signals::signal_on_track_mask(track) == 0 {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
+    let mut out = tile;
+    out.m2 = crate::rail_signals::cycle_signal_type_m2(out.m2, track);
+    state
+        .map
+        .set_tile(c, out)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    Ok(())
+}
+
+pub(crate) fn check_cycle_rail_signal_type(
+    map: &Map,
+    c: TileCoord,
+    fract_x: u8,
+    fract_y: u8,
+) -> Result<(), CommandError> {
+    check_in_bounds(map, c)?;
+    let Some(tile) = map.get(c) else {
+        return Err(CommandError::OutOfBounds);
+    };
+    if !rail_tile_is_signals(tile.m5) {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
+    let tb = tile.m5 & 0x3F;
+    let track = crate::rail_signals::resolve_signal_track(tb, fract_x, fract_y)
+        .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
+    let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
+    if present & crate::rail_signals::signal_on_track_mask(track) == 0 {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
     Ok(())
 }
 

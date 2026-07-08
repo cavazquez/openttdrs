@@ -17,7 +17,7 @@ pub(crate) use bridge_window::{
     BridgeBuildState, bridge_picker_on_closed, handle_bridge_picker_buttons, setup_bridge_picker,
     sync_bridge_picker,
 };
-pub(crate) use build_input::{handle_tile_click, update_cursor_tile};
+pub(crate) use build_input::{handle_tile_click, sync_build_pointer_modifiers, update_cursor_tile};
 pub(crate) use depot_panel::{
     DepotPanelState, depot_panel_on_closed, handle_depot_panel_buttons, setup_depot_panel,
     sync_depot_panel,
@@ -163,6 +163,10 @@ pub(crate) struct StationBuildState {
     pub(crate) rail_length: u8,
     /// Mostrar el halo de cobertura al previsualizar la estación de tren.
     pub(crate) rail_show_coverage: bool,
+    /// Tipo de señal a colocar (`SIGTYPE_BLOCK`, `SIGTYPE_PATH`, `SIGTYPE_PATH_ONEWAY`).
+    pub(crate) signal_type: u8,
+    /// Ctrl pulsado (actualizado cada frame para colocación PBS).
+    pub(crate) ctrl_held: bool,
 }
 
 impl Default for StationBuildState {
@@ -173,6 +177,8 @@ impl Default for StationBuildState {
             rail_platforms: 1,
             rail_length: 1,
             rail_show_coverage: true,
+            signal_type: openttdrs_core::SIGTYPE_BLOCK,
+            ctrl_held: false,
         }
     }
 }

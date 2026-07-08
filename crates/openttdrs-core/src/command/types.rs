@@ -34,9 +34,12 @@ pub enum Command {
     RemoveRailBits(TileCoord, u8),
     /// Quita toda la vía de la tesela.
     RemoveRail(TileCoord),
-    /// Coloca señal de bloque eléctrica; `face` es `DiagDir` (0=NE..3=NW).
+    /// Coloca señal ferroviaria; `face` es `DiagDir` (0=NE..3=NW).
     /// `fract_x`/`fract_y` (0–255) eligen carril en teselas HORZ/VERT como en `OpenTTD`.
-    PlaceRailSignal(TileCoord, u8, u8, u8),
+    /// `sig_type`: `SIGTYPE_BLOCK`, `SIGTYPE_PATH` o `SIGTYPE_PATH_ONEWAY`.
+    PlaceRailSignal(TileCoord, u8, u8, u8, u8),
+    /// Cicla el tipo de señal existente (Ctrl+clic en `OpenTTD`).
+    CycleRailSignalType(TileCoord, u8, u8),
     PlaceRoadDepot(TileCoord),
     PlaceRoadDepotDir(TileCoord, u8),
     PlaceRailDepot(TileCoord),

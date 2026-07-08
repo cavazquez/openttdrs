@@ -133,6 +133,7 @@ Referencia detallada (tipos oficiales, codificación `m2`/`m3`, fases A–E):
 | Multijugador I8 | Explícitamente post-0.1 |
 | NewGRF runtime | Opcional / largo plazo |
 | Flota F0–F8 (timetable, autoreemplazo, pool) | [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) §13 |
+| **Junctionary completo** (cruces comunidad OTTD) | [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md) J0–J5 |
 
 ---
 

@@ -88,6 +88,29 @@ mod tests {
     }
 
     #[test]
+    fn ship_without_orders_moves_on_water() {
+        let mut s = GameState::new(12, 6);
+        for x in 0..6 {
+            s.map
+                .set_kind(TileCoord::new(x, 2), TileKind::Water)
+                .unwrap();
+        }
+        let start = TileCoord::new(1, 2);
+        let mut v = Vehicle::new(1, VehicleKind::Ship, start, start);
+        v.running = true;
+        v.set_cruise_speed();
+        s.vehicles.push(v);
+        for _ in 0..400 {
+            s.step();
+            if s.vehicles[0].pos != start {
+                break;
+            }
+        }
+        assert_ne!(s.vehicles[0].pos, start);
+        assert_eq!(s.map.get_kind(s.vehicles[0].pos), Some(TileKind::Water));
+    }
+
+    #[test]
     fn ship_does_not_wander_off_water_without_path() {
         let mut v = Vehicle::new(
             1,

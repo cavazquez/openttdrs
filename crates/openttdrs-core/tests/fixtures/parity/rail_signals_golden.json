@@ -1,0 +1,76 @@
+{
+  "source": {
+    "scenario": "build_rail_signals_mixed",
+    "sav_fixture": "rail_signals_mixed.sav",
+    "encoding": "OpenTTD signal_type.h + rail_map.h (TRACK_X, face NE, electric)"
+  },
+  "encodings": [
+    {
+      "label": "block",
+      "sig_type": 0,
+      "m2": 8,
+      "m3": 64,
+      "m3hi": 64,
+      "m5": 65,
+      "sprite_texture_id": 1278
+    },
+    {
+      "label": "entry",
+      "sig_type": 1,
+      "m2": 9,
+      "m3": 64,
+      "m3hi": 64,
+      "m5": 65,
+      "sprite_texture_id": 1435
+    },
+    {
+      "label": "exit",
+      "sig_type": 2,
+      "m2": 10,
+      "m3": 64,
+      "m3hi": 64,
+      "m5": 65,
+      "sprite_texture_id": 1451
+    },
+    {
+      "label": "combo",
+      "sig_type": 3,
+      "m2": 11,
+      "m3": 64,
+      "m3hi": 64,
+      "m5": 65,
+      "sprite_texture_id": 1467
+    },
+    {
+      "label": "path",
+      "sig_type": 4,
+      "m2": 12,
+      "m3": 64,
+      "m3hi": 64,
+      "m5": 65,
+      "sprite_texture_id": 1547
+    },
+    {
+      "label": "path_oneway",
+      "sig_type": 5,
+      "m2": 13,
+      "m3": 64,
+      "m3hi": 64,
+      "m5": 65,
+      "sprite_texture_id": 1563
+    }
+  ],
+  "pbs_reservation": {
+    "track_bits": 1,
+    "m2_hi": 1,
+    "comment": "reserva TRACK_X en m2_hi bits 0–3 (equiv. m2 bits 8–11)"
+  },
+  "sav_tiles": [
+    { "x": 1, "y": 8, "sig_type": 0 },
+    { "x": 2, "y": 8, "sig_type": 1 },
+    { "x": 3, "y": 8, "sig_type": 2 },
+    { "x": 4, "y": 8, "sig_type": 3 },
+    { "x": 5, "y": 8, "sig_type": 4 },
+    { "x": 6, "y": 8, "sig_type": 5 }
+  ]
+}

@@ -88,11 +88,12 @@ use toolbar::{
     lerp_ghost_previews, rail_station_picker_on_closed, rotate_station_with_right_click,
     setup_bridge_picker, setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
     setup_rail_station_picker, setup_station_cargo_panel, setup_top_toolbar, sync_bridge_picker,
-    sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_depot_panel,
-    sync_minimap, sync_order_panel, sync_orders_pick_cursor, sync_rail_station_picker,
-    sync_station_cargo_panel, toolbar_click_beep, toolbar_group_interaction,
-    update_build_ghost_preview, update_cursor_tile, update_tool_button_visuals,
-    update_toolbar_group_visuals, update_toolbar_tool_visibility, update_toolbar_tooltip,
+    sync_build_pointer_modifiers, sync_climate_industry_tools, sync_company_colour_swatch_visuals,
+    sync_depot_panel, sync_minimap, sync_order_panel, sync_orders_pick_cursor,
+    sync_rail_station_picker, sync_station_cargo_panel, toolbar_click_beep,
+    toolbar_group_interaction, update_build_ghost_preview, update_cursor_tile,
+    update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
+    update_toolbar_tooltip,
 };
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState, ToolbarState};
 use town_window::{
@@ -283,6 +284,14 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             Update,
+            sync_build_pointer_modifiers
+                .after(build_menu_interaction)
+                .after(hide_tool_when_panel_closed)
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
             (
                 update_cursor_tile,
                 update_build_ghost_preview,
@@ -292,8 +301,7 @@ impl Plugin for ClientUiPlugin {
                 flush_hud_sfx,
             )
                 .chain()
-                .after(build_menu_interaction)
-                .after(hide_tool_when_panel_closed)
+                .after(sync_build_pointer_modifiers)
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),
         )

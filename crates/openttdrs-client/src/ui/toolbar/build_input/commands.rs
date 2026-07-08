@@ -1,8 +1,15 @@
-use openttdrs_core::{Command, LevelMode, Map, TileCoord, road_bits_for_autoroute};
+use openttdrs_core::{
+    Command, LevelMode, Map, TileCoord,
+    rail_signals::{
+        rail_signal_present_mask, rail_tile_is_signals, resolve_signal_track, signal_on_track_mask,
+    },
+    road_bits_for_autoroute,
+};
 
 use super::rail_lane::rail_lane_bits_for_action;
 use crate::ui::toolbar::{BuildMenuAction, StationBuildState};
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn command_for_action(
     action: BuildMenuAction,
     pos: TileCoord,
@@ -10,6 +17,8 @@ pub(crate) fn command_for_action(
     rail_lane_bits: Option<u8>,
     map: Option<&Map>,
     tile_fract: Option<(u8, u8)>,
+    sig_type: u8,
+    cycle_existing_signal_type: bool,
 ) -> Option<Command> {
     match action {
         BuildMenuAction::Road => {
@@ -47,11 +56,25 @@ pub(crate) fn command_for_action(
         BuildMenuAction::RailRemove => Some(Command::RemoveRail(pos)),
         BuildMenuAction::RailSignals => {
             let (fx, fy) = tile_fract.unwrap_or((128, 128));
+            if cycle_existing_signal_type
+                && let Some(map) = map
+                && let Some(tile) = map.get(pos)
+                && rail_tile_is_signals(tile.m5)
+            {
+                let tb = tile.m5 & 0x3F;
+                if let Some(track) = resolve_signal_track(tb, fx, fy) {
+                    let present = rail_signal_present_mask(tile.m3);
+                    if present & signal_on_track_mask(track) != 0 {
+                        return Some(Command::CycleRailSignalType(pos, fx, fy));
+                    }
+                }
+            }
             Some(Command::PlaceRailSignal(
                 pos,
                 station_state.orientation,
                 fx,
                 fy,
+                sig_type,
             ))
         }
         BuildMenuAction::RailConvert | BuildMenuAction::Orders => None,

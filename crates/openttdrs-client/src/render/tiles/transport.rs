@@ -8,8 +8,9 @@ use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
     collect_rail_sprites, collect_signal_sprite_draws, is_road_level_crossing,
     level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_ghost_overlay_offset,
-    rail_tile_is_signals, rail_track_base_color, rail_trackbits_for_render, road_bits_for_render,
-    road_flat_sprite_color, road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
+    rail_tile_has_pbs_reservation, rail_tile_is_signals, rail_track_base_color,
+    rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
+    road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
     road_tile_tram_visual_active, roadside_is_paved, signal_screen_position,
     tram_flat_sprite_index,
 };
@@ -168,6 +169,7 @@ pub(crate) fn spawn_rail_tile(
     slope_half_ground: f32,
     rail_layers: &mut Vec<u32>,
     climate: Climate,
+    show_pbs_reservations: bool,
 ) {
     let tileh = ctx.info.tileh;
     // Vano con puente encima: la vía la dibuja `spawn_bridge_deck` a la altura del tablero.
@@ -204,7 +206,11 @@ pub(crate) fn spawn_rail_tile(
         rail_layers,
     );
     let mut rail_paint = ctx.tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
-        rail_track_base_color(t.mapt, ctx.kind, t.m5, t.m3)
+        let mut c = rail_track_base_color(t.mapt, ctx.kind, t.m5, t.m3);
+        if show_pbs_reservations && rail_tile_has_pbs_reservation(t.m2_hi) {
+            c = c.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26);
+        }
+        c
     });
     if ctx.tile.is_some_and(|t| rail_tile_is_signals(t.m5)) {
         rail_paint = rail_paint.mix(&Color::srgb(0.95, 0.88, 0.55), 0.22);

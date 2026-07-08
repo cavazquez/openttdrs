@@ -7,11 +7,12 @@ use super::buy_land::check_buy_land;
 use super::industry::check_place_industry_spec;
 use super::terraform::{check_level_land, check_lower_land, check_raise_land};
 use super::transport::{
-    check_bridge, check_clear_tile, check_place_rail, check_place_rail_signal_oriented,
-    check_place_rail_waypoint, check_place_road_bits, check_rail_depot_placement,
-    check_rail_station_area, check_rail_trackbits_with_autoslope, check_remove_rail,
-    check_road_depot_placement, check_single_transport_tile, check_station_placement, check_tunnel,
-    merged_rail_trackbits_on_tile, rail_station_footprint, rail_trackbits_from_neighbors,
+    check_bridge, check_clear_tile, check_cycle_rail_signal_type, check_place_rail,
+    check_place_rail_signal_oriented, check_place_rail_waypoint, check_place_road_bits,
+    check_rail_depot_placement, check_rail_station_area, check_rail_trackbits_with_autoslope,
+    check_remove_rail, check_road_depot_placement, check_single_transport_tile,
+    check_station_placement, check_tunnel, merged_rail_trackbits_on_tile, rail_station_footprint,
+    rail_trackbits_from_neighbors,
 };
 use super::types::{Command, CommandError};
 
@@ -88,8 +89,11 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             .or_else(|| check_rail_trackbits_with_autoslope(map, *c, bits & 0x3F, tick).err()),
         Command::PlaceRailWaypoint(c) => check_place_rail_waypoint(map, *c, stations).err(),
         Command::RemoveRailBits(c, _) | Command::RemoveRail(c) => check_remove_rail(map, *c).err(),
-        Command::PlaceRailSignal(c, orientation, fract_x, fract_y) => {
+        Command::PlaceRailSignal(c, orientation, fract_x, fract_y, _) => {
             check_place_rail_signal_oriented(map, *c, *orientation, *fract_x, *fract_y).err()
+        }
+        Command::CycleRailSignalType(c, fract_x, fract_y) => {
+            check_cycle_rail_signal_type(map, *c, *fract_x, *fract_y).err()
         }
         Command::PlaceRoadDepot(c) => preview_depot_any(map, *c, check_road_depot_placement),
         Command::PlaceRoadDepotDir(c, dir) => check_road_depot_placement(map, *c, *dir).err(),

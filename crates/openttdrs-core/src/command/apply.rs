@@ -43,7 +43,8 @@ fn construction_event_for(
         | Command::PlaceRailWaypoint(c)
         | Command::PlaceRailDepot(c)
         | Command::PlaceRailDepotDir(c, _)
-        | Command::PlaceRailSignal(c, _, _, _)
+        | Command::PlaceRailSignal(c, _, _, _, _)
+        | Command::CycleRailSignalType(c, _, _)
         | Command::PlaceRailStation(c, _)
         | Command::PlaceRailTunnel(c, _) => Some((ConstructionKind::Rail, *c)),
         Command::PlaceRailBridge(c, _, _) | Command::PlaceRoadBridge(c, _, _) => {
@@ -336,8 +337,11 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::PlaceRailWaypoint(c) => transport::place_rail_waypoint(state, *c),
         Command::RemoveRailBits(c, bits) => transport::remove_rail_bits(state, *c, *bits),
         Command::RemoveRail(c) => transport::remove_rail(state, *c),
-        Command::PlaceRailSignal(c, face, fx, fy) => {
-            transport::place_rail_signal(state, *c, *face, *fx, *fy)
+        Command::PlaceRailSignal(c, face, fx, fy, sig_type) => {
+            transport::place_rail_signal(state, *c, *face, *fx, *fy, *sig_type)
+        }
+        Command::CycleRailSignalType(c, fx, fy) => {
+            transport::cycle_rail_signal_type(state, *c, *fx, *fy)
         }
         Command::PlaceRoadDepot(c) => transport::place_road_depot_dir(state, *c, 0),
         Command::PlaceRoadDepotDir(c, dir) => transport::place_road_depot_dir(state, *c, *dir),

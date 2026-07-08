@@ -153,6 +153,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     4.0,
                     &mut rails,
                     TEST_CLIMATE,
+                    true,
                 );
                 rails.clear();
                 spawn_rail_tile(
@@ -164,6 +165,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     4.0,
                     &mut rails,
                     TEST_CLIMATE,
+                    true,
                 );
                 spawn_station_tile(
                     &mut commands,

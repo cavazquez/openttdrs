@@ -34,6 +34,7 @@ pub(crate) struct RailSignalGhostKey {
     fract_x: u8,
     fract_y: u8,
     orientation: u8,
+    signal_type: u8,
 }
 
 #[derive(Resource, Default)]
@@ -64,6 +65,7 @@ fn build_rail_signal_ghost_plan(
     orientation: u8,
     fract_x: u8,
     fract_y: u8,
+    signal_type: u8,
     valid: bool,
     tick: GameTick,
 ) -> Option<RailSignalGhostPlan> {
@@ -72,7 +74,7 @@ fn build_rail_signal_ghost_plan(
     let track = resolve_signal_track(tb, fract_x, fract_y)?;
     let face = signal_facing_for_orientation(track, orientation);
     let variant = default_signal_variant(calendar_year_at_tick(tick));
-    let placement = signal_placement_for_track(track, face, variant)?;
+    let placement = signal_placement_for_track(track, face, variant, signal_type)?;
     let (tileh, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
     let half_h = if tileh == 0 {
         TILE_HALF_H
@@ -149,6 +151,7 @@ fn build_rail_signal_ghost_plan(
             fract_x,
             fract_y,
             orientation,
+            signal_type,
         },
         valid,
         layers,
@@ -215,7 +218,8 @@ pub(crate) fn rail_signal_flash_position(
     let track = resolve_signal_track(tb, fract_x, fract_y)?;
     let face = signal_facing_for_orientation(track, orientation);
     let variant = default_signal_variant(calendar_year_at_tick(tick));
-    let placement = signal_placement_for_track(track, face, variant)?;
+    let placement =
+        signal_placement_for_track(track, face, variant, openttdrs_core::SIGTYPE_BLOCK)?;
     let (tileh, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
     let half_h = if tileh == 0 {
         TILE_HALF_H
@@ -253,6 +257,7 @@ pub(crate) fn update_rail_signal_ghost_preview(
     orientation: u8,
     fract_x: u8,
     fract_y: u8,
+    signal_type: u8,
     valid: bool,
     tick: GameTick,
     mut existing: Query<(Entity, &mut GhostLerp, &mut Sprite), With<RailSignalGhost>>,
@@ -265,6 +270,7 @@ pub(crate) fn update_rail_signal_ghost_preview(
         orientation,
         fract_x,
         fract_y,
+        signal_type,
         valid,
         tick,
     ) else {
@@ -321,7 +327,9 @@ mod tests {
         let tb = map.get(TileCoord::new(2, 2)).expect("tile").m5 & 0x3F;
         let track = resolve_signal_track(tb, 128, 128).expect("track");
         let variant = default_signal_variant(1950);
-        let placement = signal_placement_for_track(track, face, variant).expect("placement");
+        let placement =
+            signal_placement_for_track(track, face, variant, openttdrs_core::SIGTYPE_BLOCK)
+                .expect("placement");
         let m5 = track.track_bit() | (RAIL_TILE_SIGNALS << 6);
         collect_signal_sprite_draws(placement.m2, placement.m3, placement.m3hi, m5)
     }

@@ -382,6 +382,7 @@ pub(super) fn remove_vehicle_order_at(
     vehicle.orders.remove(index);
     if vehicle.orders.is_empty() {
         vehicle.current_order = 0;
+        vehicle.dest = vehicle.pos;
         vehicle.path.clear();
         vehicle.no_network_route_to_order = false;
         return Ok(());

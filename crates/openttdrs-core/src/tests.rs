@@ -690,6 +690,26 @@ fn vehicle_with_orders_does_not_use_manhattan_without_network() {
 }
 
 #[test]
+fn train_without_orders_keeps_moving_on_rail() {
+    let mut s = GameState::new(16, 8);
+    for x in 0..10 {
+        s.map
+            .set_kind(TileCoord::new(x, 3), TileKind::Rail)
+            .unwrap();
+    }
+    let start = TileCoord::new(1, 3);
+    let mut v = Vehicle::new(11, VehicleKind::Train, start, start);
+    v.running = true;
+    v.set_cruise_speed();
+    s.vehicles.push(v);
+
+    advance_vehicle_tiles(&mut s, 2);
+
+    assert_ne!(s.vehicles[0].pos, start);
+    assert_eq!(s.map.get_kind(s.vehicles[0].pos), Some(TileKind::Rail));
+}
+
+#[test]
 fn vehicle_without_orders_wanders_on_road_network() {
     let mut s = GameState::new(8, 8);
     for x in 1..=3 {

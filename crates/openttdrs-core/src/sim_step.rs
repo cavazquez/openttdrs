@@ -22,6 +22,7 @@ pub(crate) fn step(state: &mut GameState) {
     crate::map::tree_tile_loop::tick_tree_tile_loop(state);
     crate::disaster::tick_disasters(state);
 
+    crate::parity::release_staged_depot_trains(state);
     recompute_vehicle_paths(state);
 
     crate::rail_signals::update_rail_signal_states(
@@ -29,6 +30,14 @@ pub(crate) fn step(state: &mut GameState) {
         &state.vehicles,
         &mut state.signal_tile_dirty,
         true,
+    );
+
+    crate::rail_pbs::update_train_reservations(&state.map, &mut state.vehicles);
+    crate::rail_pbs::sync_reservations_to_map(
+        &mut state.map,
+        &state.vehicles,
+        &mut state.reservation_tiles_active,
+        &mut state.reservation_tile_dirty,
     );
 
     state.industry_tile_dirty = crate::map::step_industry_tiles(&mut state.map, t);
@@ -40,6 +49,7 @@ pub(crate) fn step(state: &mut GameState) {
     tick_vehicle_timetables(state);
     sync_autoreplace_depot_flags(state);
     run_autoreplace_in_depots(state);
+    extend_orderless_vehicle_paths(state);
     assign_orderless_wander_destinations(state);
     move_vehicles(state);
 
@@ -443,11 +453,30 @@ fn unload_vehicles(
 }
 
 fn assign_orderless_wander_destinations(state: &mut GameState) {
+    // Compat: camiones sin red de carretera siguen usando Manhattan hacia `dest`.
     for i in 0..state.vehicles.len() {
+        if !matches!(
+            state.vehicles[i].kind,
+            VehicleKind::Bus | VehicleKind::Truck
+        ) {
+            continue;
+        }
         if state.vehicles[i].running
             && state.vehicles[i].orders.is_empty()
             && state.vehicles[i].path.is_empty()
             && state.vehicles[i].pos == state.vehicles[i].dest
+            && vehicle_ai::orderless_road_next(
+                &state.map,
+                state.vehicles[i].pos,
+                if state.vehicles[i].origin == state.vehicles[i].pos {
+                    None
+                } else {
+                    Some(state.vehicles[i].origin)
+                },
+                state.vehicles[i].id,
+                state.tick,
+            )
+            .is_none()
             && let Some(dest) = vehicle_ai::orderless_wander_destination(
                 &state.map,
                 state.vehicles[i].id,
@@ -461,6 +490,89 @@ fn assign_orderless_wander_destinations(state: &mut GameState) {
     }
 }
 
+/// Extiende el camino de vehículos sin órdenes (paridad `OpenTTD`: trenes/barcos
+/// siguen la red; carretera elige ramas al azar; aviones van al hangar).
+fn extend_orderless_vehicle_paths(state: &mut GameState) {
+    let wormholes =
+        pathfinder::TunnelWormholes::from_jgr_records(&state.map, &state.jgr_tunnels_from_footer);
+    let wh = if wormholes.is_empty() {
+        None
+    } else {
+        Some(&wormholes)
+    };
+    for i in 0..state.vehicles.len() {
+        if !state.vehicles[i].running || !state.vehicles[i].orders.is_empty() {
+            continue;
+        }
+        if !state.vehicles[i].path.is_empty() {
+            continue;
+        }
+        let pos = state.vehicles[i].pos;
+        let prev = if state.vehicles[i].origin == pos {
+            None
+        } else {
+            Some(state.vehicles[i].origin)
+        };
+        let preferred = dir_from_vehicle(&state.vehicles[i], prev);
+        let id = state.vehicles[i].id;
+        let tick = state.tick;
+
+        match state.vehicles[i].kind {
+            VehicleKind::Train => {
+                if let Some(next) =
+                    vehicle_ai::orderless_rail_next(&state.map, pos, prev, preferred, id, tick)
+                {
+                    state.vehicles[i].path.push_back(next);
+                }
+            }
+            VehicleKind::Ship => {
+                if let Some(next) =
+                    vehicle_ai::orderless_water_next(&state.map, pos, prev, preferred, id, tick)
+                {
+                    state.vehicles[i].path.push_back(next);
+                }
+            }
+            VehicleKind::Bus | VehicleKind::Truck => {
+                if let Some(next) = vehicle_ai::orderless_road_next(&state.map, pos, prev, id, tick)
+                {
+                    state.vehicles[i].path.push_back(next);
+                }
+            }
+            VehicleKind::Aircraft => {
+                if pos != state.vehicles[i].dest {
+                    continue;
+                }
+                let Some(hangar) = vehicle_ai::orderless_aircraft_hangar(&state.map, pos) else {
+                    continue;
+                };
+                if hangar == pos {
+                    continue;
+                }
+                state.vehicles[i].dest = hangar;
+                if let Some(path) = pathfinder::find_path_cached(
+                    &state.map,
+                    &mut state.path_cache,
+                    pos,
+                    hangar,
+                    pathfinder::PathNetwork::Air,
+                    wh,
+                ) {
+                    state.vehicles[i].path = path.into_iter().collect();
+                }
+            }
+        }
+    }
+}
+
+fn dir_from_vehicle(vehicle: &crate::Vehicle, prev: Option<TileCoord>) -> u8 {
+    if let Some(previous) = prev
+        && let Some(dir) = crate::rail_signals::dir_from_to(previous, vehicle.pos)
+    {
+        return dir;
+    }
+    vehicle_ai::vehicle_direction_to_diag(vehicle.direction)
+}
+
 fn recompute_vehicle_paths(state: &mut GameState) {
     state.path_cache.begin_tick(state.tick.get());
     let wormholes =
@@ -472,6 +584,10 @@ fn recompute_vehicle_paths(state: &mut GameState) {
     };
     for i in 0..state.vehicles.len() {
         state.vehicles[i].sync_order_destination(&state.map);
+        if state.vehicles[i].orders.is_empty() {
+            state.vehicles[i].no_network_route_to_order = false;
+            continue;
+        }
         if !state.vehicles[i].path.is_empty() {
             state.vehicles[i].no_network_route_to_order = false;
             continue;
@@ -498,72 +614,78 @@ fn recompute_vehicle_paths(state: &mut GameState) {
 
 fn move_vehicles(state: &mut GameState) {
     let tick = state.tick.get();
-    let vehicles_snapshot = state.vehicles.clone();
-    for vehicle in &mut state.vehicles {
-        vehicle.sim_tick = tick;
-        if vehicle.kind == VehicleKind::Train
-            && vehicle.running
-            && vehicle.movement_target().is_some()
-        {
-            let blocked = if vehicle.force_proceed {
-                crate::rail_signals::train_blocked_by_traffic(
-                    &state.map,
-                    &vehicles_snapshot,
-                    vehicle,
-                )
+    let vehicle_count = state.vehicles.len();
+    for i in 0..vehicle_count {
+        state.vehicles[i].sim_tick = tick;
+        let blocked = {
+            let vehicles = &state.vehicles;
+            let vehicle = &vehicles[i];
+            if vehicle.kind == VehicleKind::Train
+                && vehicle.running
+                && vehicle.movement_target().is_some()
+            {
+                if vehicle.force_proceed {
+                    crate::rail_signals::train_blocked_by_traffic(&state.map, vehicles, vehicle)
+                } else {
+                    // PBS fase 2: reserva por pista; bloqueo solo si el paso no está reservado.
+                    crate::rail_pbs::train_blocked_by_reservation(&state.map, vehicle)
+                        || crate::rail_signals::train_blocked_by_signal(
+                            &state.map, vehicles, vehicle,
+                        )
+                        || crate::rail_signals::train_blocked_by_traffic(
+                            &state.map, vehicles, vehicle,
+                        )
+                }
             } else {
-                crate::rail_signals::train_blocked_by_signal(
-                    &state.map,
-                    &vehicles_snapshot,
-                    vehicle,
-                ) || crate::rail_signals::train_blocked_by_traffic(
-                    &state.map,
-                    &vehicles_snapshot,
-                    vehicle,
-                )
-            };
-            if blocked {
-                vehicle.cur_speed = 0;
-                continue;
+                false
             }
+        };
+        if blocked {
+            state.vehicles[i].cur_speed = 0;
+            continue;
         }
-        let had_force = vehicle.force_proceed;
-        let broke_down = vehicle.check_breakdown(tick);
+        let had_force = state.vehicles[i].force_proceed;
+        let broke_down = state.vehicles[i].check_breakdown(tick);
         if broke_down {
             state
                 .pending_sim_events
                 .push(crate::sim_events::SimEvent::Breakdown {
-                    vehicle_id: vehicle.id,
-                    at: vehicle.pos,
+                    vehicle_id: state.vehicles[i].id,
+                    at: state.vehicles[i].pos,
                 });
         }
-        if vehicle.breakdown_ticks_remaining > 0 {
+        if state.vehicles[i].breakdown_ticks_remaining > 0 {
             continue;
         }
-        let prev_speed = vehicle.cur_speed;
-        let prev_pos = vehicle.pos;
-        vehicle.step();
-        if vehicle.running {
-            if prev_speed == 0 && vehicle.cur_speed > 0 {
+        let prev_speed = state.vehicles[i].cur_speed;
+        let prev_pos = state.vehicles[i].pos;
+        let vehicle_id = state.vehicles[i].id;
+        let vehicle_kind = state.vehicles[i].kind;
+        let vehicle_running = state.vehicles[i].running;
+        state.vehicles[i].step();
+        if vehicle_running {
+            if prev_speed == 0 && state.vehicles[i].cur_speed > 0 {
                 state
                     .pending_sim_events
                     .push(crate::sim_events::SimEvent::VehicleDepart {
-                        vehicle_id: vehicle.id,
-                        at: vehicle.pos,
+                        vehicle_id,
+                        at: state.vehicles[i].pos,
                     });
             }
-            if vehicle.kind == VehicleKind::Train
-                && vehicle.pos != prev_pos
-                && let Some(tile) = state.map.get(vehicle.pos)
+            if vehicle_kind == VehicleKind::Train
+                && state.vehicles[i].pos != prev_pos
+                && let Some(tile) = state.map.get(state.vehicles[i].pos)
                 && crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind)
             {
                 state
                     .pending_sim_events
-                    .push(crate::sim_events::SimEvent::LevelCrossing { at: vehicle.pos });
+                    .push(crate::sim_events::SimEvent::LevelCrossing {
+                        at: state.vehicles[i].pos,
+                    });
             }
         }
-        if had_force && vehicle.kind == VehicleKind::Train {
-            vehicle.force_proceed = false;
+        if had_force && vehicle_kind == VehicleKind::Train {
+            state.vehicles[i].force_proceed = false;
         }
     }
 }

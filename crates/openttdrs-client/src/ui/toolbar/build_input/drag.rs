@@ -298,6 +298,8 @@ pub(crate) fn apply_drag_action(
             rail_lane_bit,
             None,
             None,
+            station_state.signal_type,
+            false,
         ) {
             match apply_command(&mut sim.state, &cmd) {
                 Ok(()) => changed = true,

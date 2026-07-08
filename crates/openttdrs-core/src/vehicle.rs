@@ -532,6 +532,9 @@ pub struct Vehicle {
     /// Fracción sub-unidad de velocidad (`Vehicle::subspeed`).
     #[serde(default)]
     pub subspeed: u8,
+    /// Pasos de vía reservados por PBS (`tesela` + `TrackBit`).
+    #[serde(default)]
+    pub reserved_steps: Vec<crate::rail_pbs::ReservedRailStep>,
     /// Camino calculado por el pathfinder (siguiente tile en el frente).
     pub path: VecDeque<TileCoord>,
     /// Lista circular de destinos asignados por el jugador.
@@ -637,6 +640,7 @@ impl Vehicle {
             cur_speed: 0,
             subspeed: 0,
             path: VecDeque::new(),
+            reserved_steps: Vec::new(),
             orders: Vec::new(),
             current_order: 0,
             no_network_route_to_order: false,
@@ -1114,6 +1118,10 @@ impl Vehicle {
         self.depart_turn = 0;
         self.awaiting_load_window = false;
         self.no_network_route_to_order = false;
+        if self.orders.is_empty() {
+            self.dest = self.pos;
+            return;
+        }
         if let Some(&first) = self.orders.first() {
             self.origin = self.pos;
             if !matches!(

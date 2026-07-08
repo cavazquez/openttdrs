@@ -28,6 +28,8 @@ pub(crate) struct ClientPreferences {
     pub(crate) sound_click_beep: bool,
     pub(crate) show_debug_gizmos: bool,
     pub(crate) show_diagnostics_overlay: bool,
+    /// Tinte naranja en vías con reserva PBS activa.
+    pub(crate) show_pbs_reservations: bool,
     /// 0=Off, 1=Summary, 2=Full — ver `news_prefs`.
     pub(crate) news_cargo_delivered: u8,
     pub(crate) news_first_cargo: u8,
@@ -50,6 +52,7 @@ impl Default for ClientPreferences {
             sound_click_beep: true,
             show_debug_gizmos: false,
             show_diagnostics_overlay: false,
+            show_pbs_reservations: true,
             news_cargo_delivered: crate::news_prefs::DISPLAY_FULL,
             news_first_cargo: crate::news_prefs::DISPLAY_FULL,
             news_first_vehicle: crate::news_prefs::DISPLAY_FULL,

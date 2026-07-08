@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 
 use super::SimHudControls;
+use crate::render::RemapMapVisualsPending;
+use crate::settings::ClientPreferences;
 use crate::ui::save_window::SaveWindowState;
 use crate::ui::{BuildMenuAction, UiToolState};
 
@@ -13,6 +15,8 @@ fn save_window_open(save_window: Option<&Res<SaveWindowState>>) -> bool {
 pub(crate) fn handle_pause_toggle(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut hud: ResMut<SimHudControls>,
+    mut prefs: ResMut<ClientPreferences>,
+    mut pending_remap: ResMut<RemapMapVisualsPending>,
     save_window: Option<Res<SaveWindowState>>,
 ) {
     if save_window_open(save_window.as_ref()) {
@@ -33,6 +37,19 @@ pub(crate) fn handle_pause_toggle(
         } else {
             info!("Minimapa: oculto");
         }
+    }
+    if keyboard.just_pressed(KeyCode::KeyR) {
+        prefs.show_pbs_reservations = !prefs.show_pbs_reservations;
+        pending_remap.pending = true;
+        pending_remap.full = true;
+        info!(
+            "Reservas PBS: {}",
+            if prefs.show_pbs_reservations {
+                "visibles"
+            } else {
+                "ocultas"
+            }
+        );
     }
 }
 
@@ -98,6 +115,8 @@ mod tests {
     fn hud_hotkey_systems_cover_branches() {
         let mut world = World::new();
         world.insert_resource(SimHudControls::default());
+        world.insert_resource(crate::settings::ClientPreferences::default());
+        world.insert_resource(crate::render::RemapMapVisualsPending::default());
         world.insert_resource(UiToolState::default());
 
         press_keys(&mut world, &[KeyCode::KeyP]);

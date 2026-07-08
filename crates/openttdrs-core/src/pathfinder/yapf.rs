@@ -7,6 +7,7 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use crate::map::{Map, TileCoord, TileKind};
+use crate::rail_pbs::{YAPF_RESERVATION_CROSS_PENALTY, tile_track_reserved_by_map};
 use crate::rail_signals::{YapfSignalRouting, yapf_routing_signal};
 use crate::station::is_rail_waypoint_tile;
 
@@ -215,11 +216,22 @@ fn rail_station_entrance_links_track(map: &Map, station: TileCoord, track: TileC
 }
 
 #[must_use]
+fn reservation_step_penalty(map: &Map, tile: TileCoord, track: u8) -> u32 {
+    if tile_track_reserved_by_map(map, tile, track) {
+        YAPF_RESERVATION_CROSS_PENALTY
+    } else {
+        0
+    }
+}
+
+#[must_use]
 fn signal_step_cost(map: &Map, tile: TileCoord, td: RailTrackdir) -> Option<u32> {
     match yapf_routing_signal(map, tile, td.exit_dir) {
         YapfSignalRouting::DeadEnd => None,
-        YapfSignalRouting::Clear => Some(TILE_COST),
-        YapfSignalRouting::Penalty(p) => Some(TILE_COST + p),
+        YapfSignalRouting::Clear => Some(TILE_COST + reservation_step_penalty(map, tile, td.track)),
+        YapfSignalRouting::Penalty(p) => {
+            Some(TILE_COST + p + reservation_step_penalty(map, tile, td.track))
+        }
     }
 }
 

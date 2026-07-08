@@ -283,6 +283,7 @@ pub(crate) fn update_build_ghost_preview(
                 station_state.orientation,
                 tile_fract.0,
                 tile_fract.1,
+                station_state.signal_type,
                 valid,
                 sim.state.tick,
                 rail_ghost.sprites,
@@ -639,6 +640,7 @@ mod tests {
         let mut mouse = ButtonInput::<MouseButton>::default();
         mouse.press(MouseButton::Right);
         world.insert_resource(mouse);
+        world.insert_resource(ButtonInput::<KeyCode>::default());
         world.insert_resource(UiToolState { active_tool: tool });
         world.insert_resource(StationBuildState::default());
         world.insert_resource(DragBuildState {

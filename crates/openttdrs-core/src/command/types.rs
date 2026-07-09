@@ -363,6 +363,10 @@ pub enum CommandError {
     TrainIncompatibleWithRailType,
     /// El motor requiere vía electrificada.
     EngineRequiresElectricRail,
+    /// El motor requiere vía monorail.
+    EngineRequiresMonorail,
+    /// El motor requiere vía maglev.
+    EngineRequiresMaglev,
     /// Solo vía recta admite señales de bloque (v1).
     CannotPlaceSignalOnTrack,
     /// Ya hay una señal en esa dirección en esta tesela.
@@ -463,6 +467,12 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         }
         CommandError::EngineRequiresElectricRail => {
             "Este motor requiere vía electrificada (convertí la vía o el depósito)."
+        }
+        CommandError::EngineRequiresMonorail => {
+            "Este motor requiere vía monorail (convertí la vía adyacente)."
+        }
+        CommandError::EngineRequiresMaglev => {
+            "Este motor requiere vía maglev (convertí la vía adyacente)."
         }
         CommandError::CannotPlaceSignalOnTrack => {
             "La señal solo puede colocarse sobre vía recta (eje X o Y)."

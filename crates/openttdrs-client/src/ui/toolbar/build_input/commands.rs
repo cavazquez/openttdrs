@@ -105,15 +105,12 @@ pub(crate) fn command_for_action(
             ))
         }
         BuildMenuAction::RailConvert => {
-            // Alterna a eléctrica (MVP); si ya es eléctrica, vuelve a normal.
+            // Ciclo Rail → Electric → Monorail → Maglev → Rail.
             let to = map
                 .and_then(|m| m.get(pos))
                 .map(|t| {
-                    use openttdrs_core::{RailType, rail_type_from_tile};
-                    match rail_type_from_tile(t) {
-                        RailType::Electric => RailType::Rail.as_u8(),
-                        RailType::Rail => RailType::Electric.as_u8(),
-                    }
+                    use openttdrs_core::rail_type_from_tile;
+                    rail_type_from_tile(t).next().as_u8()
                 })
                 .unwrap_or(1);
             Some(Command::ConvertRail(pos, to))

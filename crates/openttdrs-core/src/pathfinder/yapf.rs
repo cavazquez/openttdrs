@@ -286,16 +286,32 @@ struct SearchCtx<'a> {
     from: TileCoord,
     to: TileCoord,
     wormholes: Option<&'a TunnelWormholes>,
+    /// Si `Some`, solo expandir a teselas compatibles con este tipo.
+    required: Option<crate::rail_type::RailType>,
     g_score: &'a mut HashMap<NodeKey, u32>,
     parent: &'a mut HashMap<NodeKey, NodeKey>,
     heap: &'a mut BinaryHeap<AstarNode>,
 }
 
+fn tile_ok_for_required(
+    map: &Map,
+    tile: TileCoord,
+    required: Option<crate::rail_type::RailType>,
+) -> bool {
+    let Some(req) = required else {
+        return true;
+    };
+    map.get(tile)
+        .is_some_and(|t| crate::rail_type::tile_usable_by_rail_type(t, req))
+}
+
+#[allow(clippy::too_many_lines)]
 fn expand_neighbors(ctx: &mut SearchCtx<'_>, key: NodeKey, cur_g: u32, cur_td: RailTrackdir) {
     let map = ctx.map;
     let from = ctx.from;
     let to = ctx.to;
     let wormholes = ctx.wormholes;
+    let required = ctx.required;
     if rail_depot_mouth_pf(map, key.tile).is_some() && key.tile != from {
         return;
     }
@@ -303,6 +319,9 @@ fn expand_neighbors(ctx: &mut SearchCtx<'_>, key: NodeKey, cur_g: u32, cur_td: R
     let (dx, dy) = rail_diag_dir_offset(cur_td.exit_dir);
     let next_tile = TileCoord::new(key.tile.x + dx, key.tile.y + dy);
     if map.get_kind(next_tile).is_some() {
+        if !tile_ok_for_required(map, next_tile, required) && next_tile != to {
+            return;
+        }
         let entry = opposite_dir(cur_td.exit_dir);
         let pf_entry = yapf_dir_to_pathfinder(entry);
         let mut entered_depot_goal = false;
@@ -366,7 +385,9 @@ fn expand_neighbors(ctx: &mut SearchCtx<'_>, key: NodeKey, cur_g: u32, cur_td: R
         && map.get_kind(key.tile).is_some_and(is_rail_network_tile)
         && let Some(other) = wh.other_end(key.tile)
     {
-        let ok = map.get_kind(other).is_some_and(is_rail_network_tile) || other == to;
+        let ok = other == to
+            || (map.get_kind(other).is_some_and(is_rail_network_tile)
+                && tile_ok_for_required(map, other, required));
         if ok {
             let wh_tb = yapf_traversal_bits(map, other);
             for next_td in possible_trackdirs(wh_tb, ENTRY_ANY) {
@@ -445,6 +466,18 @@ pub fn find_rail_path_yapf(
     to: TileCoord,
     wormholes: Option<&TunnelWormholes>,
 ) -> Option<Vec<TileCoord>> {
+    find_rail_path_yapf_for_type(map, from, to, wormholes, None)
+}
+
+/// Como [`find_rail_path_yapf`], restringiendo aristas al `RailType` del motor.
+#[must_use]
+pub fn find_rail_path_yapf_for_type(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    wormholes: Option<&TunnelWormholes>,
+    required: Option<crate::rail_type::RailType>,
+) -> Option<Vec<TileCoord>> {
     if from == to {
         return Some(vec![]);
     }
@@ -457,6 +490,7 @@ pub fn find_rail_path_yapf(
         from,
         to,
         wormholes,
+        required,
         g_score: &mut g_score,
         parent: &mut parent,
         heap: &mut heap,
@@ -465,6 +499,9 @@ pub fn find_rail_path_yapf(
     let mut closed: HashSet<NodeKey> = HashSet::new();
 
     for (tile, td) in start_states(map, from) {
+        if !tile_ok_for_required(map, tile, required) && tile != from && tile != to {
+            continue;
+        }
         let key = NodeKey {
             tile,
             track: td.track,

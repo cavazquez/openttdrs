@@ -78,6 +78,10 @@ pub const ENGINE_TRAIN_SH_30: u16 = 110;
 pub const ENGINE_TRAIN_SH_40: u16 = 111;
 pub const ENGINE_TRAIN_TIM: u16 = 112;
 pub const ENGINE_TRAIN_ASIASTAR: u16 = 113;
+/// Monorail X2001 (`OpenTTD` id 54 → +100).
+pub const ENGINE_TRAIN_X2001: u16 = 154;
+/// Maglev Lev1 (`OpenTTD` id 84 → +100).
+pub const ENGINE_TRAIN_LEV1: u16 = 184;
 /// Vagón de pasajeros (`OpenGFX` temperate, catálogo sandbox).
 pub const ENGINE_WAGON_PASSENGER: u16 = 150;
 /// Vagón de correo.
@@ -155,6 +159,10 @@ macro_rules! train {
 const RC_STEAM: i64 = 5_600;
 const RC_DIESEL: i64 = 5_200;
 const RC_ELECTRIC: i64 = 4_800;
+const RC_MONORAIL: i64 = 4_400;
+const RC_MAGLEV: i64 = 4_000;
+const RELIABILITY_MONORAIL: u8 = 92;
+const RELIABILITY_MAGLEV: u8 = 95;
 
 const ENGINES: &[EngineDef] = &[
     // Carretera: buses (pesos del upstream en cuartos de tonelada, redondeados).
@@ -521,6 +529,37 @@ const ENGINES: &[EngineDef] = &[
         1920,
         RELIABILITY_STEAM,
         2
+    ),
+    // Monorail / Maglev (Fase 6; ids OpenTTD +100).
+    train!(
+        ENGINE_TRAIN_X2001,
+        "X2001 (Monorail)",
+        240,
+        40,
+        RC_MONORAIL,
+        200,
+        0,
+        None,
+        5_000,
+        70,
+        1990,
+        RELIABILITY_MONORAIL,
+        24
+    ),
+    train!(
+        ENGINE_TRAIN_LEV1,
+        "Lev1 (Maglev)",
+        320,
+        50,
+        RC_MAGLEV,
+        220,
+        0,
+        None,
+        6_000,
+        65,
+        2000,
+        RELIABILITY_MAGLEV,
+        25
     ),
     road!(
         ENGINE_SHIP_MPS,

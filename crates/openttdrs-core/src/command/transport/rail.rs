@@ -636,15 +636,14 @@ pub(in crate::command) fn convert_rail(
     if current == to_type {
         return Ok(());
     }
-    // No convertir si hay tren eléctrico que quedaría sin catenaria.
-    if current == crate::rail_type::RailType::Electric
-        && to_type == crate::rail_type::RailType::Rail
-        && state.vehicles.iter().any(|v| {
-            v.pos == c
-                && v.engine_id
-                    .is_some_and(crate::rail_type::engine_requires_electric)
-        })
-    {
+    // No convertir si un tren en la tesela quedaría incompatible con el nuevo tipo.
+    if state.vehicles.iter().any(|v| {
+        v.pos == c
+            && v.engine_id.is_some_and(|eid| {
+                let req = crate::rail_type::required_rail_type_for_engine(eid);
+                !(req == to_type || crate::rail_type::rail_types_compatible(req, to_type))
+            })
+    }) {
         return Err(CommandError::TrainIncompatibleWithRailType);
     }
     if state.economy.money < crate::rail_type::RAIL_CONVERT_COST {

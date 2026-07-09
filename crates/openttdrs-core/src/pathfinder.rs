@@ -594,6 +594,19 @@ fn find_rail_path(
     yapf::find_rail_path_yapf(map, from, to, wormholes)
 }
 
+/// Path ferroviario filtrado por tipo de vía del motor (Fase 6).
+#[must_use]
+pub fn find_rail_path_for_engine(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    wormholes: Option<&TunnelWormholes>,
+    engine_id: Option<u16>,
+) -> Option<Vec<TileCoord>> {
+    let required = engine_id.map(crate::rail_type::required_rail_type_for_engine);
+    yapf::find_rail_path_yapf_for_type(map, from, to, wormholes, required)
+}
+
 #[allow(dead_code)]
 fn find_rail_path_legacy_astar(
     map: &Map,

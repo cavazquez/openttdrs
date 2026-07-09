@@ -275,7 +275,7 @@ pub(crate) fn apply_drag_action(
     }
 
     if action == BuildMenuAction::RailConvert {
-        use openttdrs_core::{RailType, rail_type_from_tile};
+        use openttdrs_core::rail_type_from_tile;
         let mut changed = false;
         let mut last_err = None;
         for (x, y) in tiles {
@@ -284,10 +284,7 @@ pub(crate) fn apply_drag_action(
                 .state
                 .map
                 .get(pos)
-                .map(|t| match rail_type_from_tile(t) {
-                    RailType::Electric => RailType::Rail.as_u8(),
-                    RailType::Rail => RailType::Electric.as_u8(),
-                })
+                .map(|t| rail_type_from_tile(t).next().as_u8())
                 .unwrap_or(1);
             match apply_command(&mut sim.state, &Command::ConvertRail(pos, to)) {
                 Ok(()) => changed = true,

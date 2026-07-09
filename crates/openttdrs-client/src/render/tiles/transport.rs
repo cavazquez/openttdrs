@@ -208,6 +208,19 @@ pub(crate) fn spawn_rail_tile(
     );
     let mut rail_paint = ctx.tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
         let mut c = rail_track_base_color(t.mapt, ctx.kind, t.m5, t.m3);
+        // Distinción MVP por railtype (sprites mono/maglev OpenGFX → Fase 6+).
+        match openttdrs_core::rail_type_from_tile(t) {
+            openttdrs_core::RailType::Electric => {
+                c = c.mix(&Color::srgb(0.55, 0.75, 0.95), 0.18);
+            }
+            openttdrs_core::RailType::Monorail => {
+                c = c.mix(&Color::srgb(0.75, 0.55, 0.90), 0.22);
+            }
+            openttdrs_core::RailType::Maglev => {
+                c = c.mix(&Color::srgb(0.45, 0.90, 0.85), 0.22);
+            }
+            openttdrs_core::RailType::Rail => {}
+        }
         if show_pbs_reservations && rail_tile_has_pbs_reservation(t.m2_hi) {
             c = c.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26);
         }

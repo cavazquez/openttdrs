@@ -92,14 +92,14 @@ pub use economy::{
 pub use engine::{
     DepotPurchaseKind, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_FOKKER, ENGINE_AIRCRAFT_TRICARIO,
     ENGINE_BUS_MPS, ENGINE_SHIP_COAL, ENGINE_SHIP_FERRY, ENGINE_SHIP_MPS, ENGINE_SHIP_OIL,
-    ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, ENGINE_WAGON_COAL,
-    ENGINE_WAGON_GOODS, ENGINE_WAGON_MAIL, ENGINE_WAGON_PASSENGER, EngineCatalogSort, EngineDef,
-    REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter, accelerate_train_speed,
-    aircraft_is_helicopter, decelerate_road_speed, decelerate_train_speed, default_engine_id,
-    engine_available_in_year, engine_by_id, engine_catalog, engine_for_vehicle,
-    engines_for_depot_kind, engines_for_depot_purchase, engines_of_kind, progress_step_for_speed,
-    tile_progress_length, train_acceleration, train_smoke_kind, train_sprite_group,
-    update_road_speed,
+    ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY, ENGINE_TRAIN_LEV1, ENGINE_TRAIN_X2001,
+    ENGINE_TRUCK_MPS, ENGINE_WAGON_COAL, ENGINE_WAGON_GOODS, ENGINE_WAGON_MAIL,
+    ENGINE_WAGON_PASSENGER, EngineCatalogSort, EngineDef, REFERENCE_PROGRESS_STEP,
+    ROAD_ACCEL_ORIGINAL, RoadEngineFilter, accelerate_train_speed, aircraft_is_helicopter,
+    decelerate_road_speed, decelerate_train_speed, default_engine_id, engine_available_in_year,
+    engine_by_id, engine_catalog, engine_for_vehicle, engines_for_depot_kind,
+    engines_for_depot_purchase, engines_of_kind, progress_step_for_speed, tile_progress_length,
+    train_acceleration, train_smoke_kind, train_sprite_group, update_road_speed,
 };
 #[allow(deprecated)]
 pub use game_state::CARGO_DELIVERY_PAYMENT;
@@ -142,10 +142,10 @@ pub use news::{
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
     PathCache, PathNetwork, TunnelWormholes, diag_dir_offset, find_path, find_path_cached,
-    find_path_with_wormholes, path_network_for_vehicle, rail_bit_for_sides,
-    station_entrance_faces_rail, station_entrance_faces_road, station_site_adjacent_to_rail,
-    station_site_adjacent_to_transport, station_site_tile_allows_build,
-    station_site_tile_needs_clear, tile_is_path_traversable,
+    find_path_with_wormholes, find_rail_path_for_engine, path_network_for_vehicle,
+    rail_bit_for_sides, station_entrance_faces_rail, station_entrance_faces_road,
+    station_site_adjacent_to_rail, station_site_adjacent_to_transport,
+    station_site_tile_allows_build, station_site_tile_needs_clear, tile_is_path_traversable,
 };
 pub use pathfinding_settings::{
     DEFAULT_PATH_BACKOFF_INTERVAL, DEFAULT_WAIT_FOR_PBS_PATH_DAYS, PBS_WAIT_FOREVER,
@@ -173,7 +173,8 @@ pub use rail_signals::{
 };
 pub use rail_type::{
     RAIL_CONVERT_COST, RailType, engine_compatible_with_rail, engine_requires_electric,
-    rail_type_from_tile, required_rail_type_for_engine, set_rail_type_on_tile,
+    engine_requires_maglev, engine_requires_monorail, rail_type_from_tile, rail_types_compatible,
+    required_rail_type_for_engine, set_rail_type_on_tile, tile_usable_by_rail_type,
 };
 pub use refit::{
     next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_hidden_on_map,

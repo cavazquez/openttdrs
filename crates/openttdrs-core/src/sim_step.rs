@@ -810,7 +810,18 @@ fn recompute_vehicle_paths(state: &mut GameState) {
         let to = state.vehicles[i].dest;
         let has_orders = !state.vehicles[i].orders.is_empty();
         let net = pathfinder::path_network_for_vehicle(state.vehicles[i].kind);
-        match pathfinder::find_path_cached(&state.map, &mut state.path_cache, from, to, net, wh) {
+        let path = if net == pathfinder::PathNetwork::Rail {
+            pathfinder::find_rail_path_for_engine(
+                &state.map,
+                from,
+                to,
+                wh,
+                state.vehicles[i].engine_id,
+            )
+        } else {
+            pathfinder::find_path_cached(&state.map, &mut state.path_cache, from, to, net, wh)
+        };
+        match path {
             Some(path) => {
                 state.vehicles[i].path = path.into_iter().collect();
                 state.vehicles[i].no_network_route_to_order = false;

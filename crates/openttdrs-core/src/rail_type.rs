@@ -1,12 +1,15 @@
 //! Tipos de vía (`RailType` / `RailTypeInfo` de `OpenTTD`).
 //!
 //! Persistidos en `Tile.m8` bits 0–5 (`GetRailType` / `SetRailType` en `rail_map.h`).
-//! MVP Fase 5: normal + eléctrico (mono/maglev → Fase 6).
+//! Fase 5: normal + eléctrico. Fase 6: monorail + maglev.
+//!
+//! El tranvía en `OpenTTD` es `RoadType` (no `RailType`); queda fuera de este módulo.
 
 use serde::{Deserialize, Serialize};
 
 use crate::engine::{
-    ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_SH_30, ENGINE_TRAIN_SH_40, ENGINE_TRAIN_TIM, EngineDef,
+    ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_LEV1, ENGINE_TRAIN_SH_30, ENGINE_TRAIN_SH_40,
+    ENGINE_TRAIN_TIM, ENGINE_TRAIN_X2001, EngineDef,
 };
 use crate::map::Tile;
 
@@ -17,9 +20,8 @@ pub enum RailType {
     #[default]
     Rail = 0,
     Electric = 1,
-    // Reservados Fase 6:
-    // Monorail = 2,
-    // Maglev = 3,
+    Monorail = 2,
+    Maglev = 3,
 }
 
 impl RailType {
@@ -27,6 +29,8 @@ impl RailType {
     pub const fn from_u8(v: u8) -> Self {
         match v & 0x3F {
             1 => Self::Electric,
+            2 => Self::Monorail,
+            3 => Self::Maglev,
             _ => Self::Rail,
         }
     }
@@ -41,6 +45,8 @@ impl RailType {
         match self {
             Self::Rail => "Normal",
             Self::Electric => "Eléctrica",
+            Self::Monorail => "Monorail",
+            Self::Maglev => "Maglev",
         }
     }
 
@@ -48,6 +54,27 @@ impl RailType {
     #[must_use]
     pub const fn has_catenary(self) -> bool {
         matches!(self, Self::Electric)
+    }
+
+    /// Siguiente tipo en el ciclo de conversión / construcción.
+    #[must_use]
+    pub const fn next(self) -> Self {
+        match self {
+            Self::Rail => Self::Electric,
+            Self::Electric => Self::Monorail,
+            Self::Monorail => Self::Maglev,
+            Self::Maglev => Self::Rail,
+        }
+    }
+
+    /// Índice para tablas de movimiento (`ACCEL_SLOWDOWN[3]`): 0=rail/el, 1=mono, 2=maglev.
+    #[must_use]
+    pub const fn accel_table_index(self) -> usize {
+        match self {
+            Self::Rail | Self::Electric => 0,
+            Self::Monorail => 1,
+            Self::Maglev => 2,
+        }
     }
 }
 
@@ -70,19 +97,32 @@ pub fn set_rail_type_on_tile(mut tile: Tile, rail_type: RailType) -> Tile {
 /// Coste de convertir una tesela de vía (`CmdConvertRail` simplificado).
 pub const RAIL_CONVERT_COST: i64 = 15;
 
-/// ¿El motor puede circular / comprarse sobre este tipo de vía?
+/// ¿Dos tipos de vía son transitables entre sí para pathfinding?
 ///
-/// Eléctricos (SH 30/40, TIM, `AsiaStar`) requieren vía electrificada.
-/// Vapor/diésel/vagones aceptan ambos (como en `OpenTTD` temperate vanilla).
+/// Estaciones/depósitos no tienen tipo propio: se aceptan siempre.
+/// Vapor/diésel: Rail ↔ Electric. Mono y Maglev son redes aisladas.
+#[must_use]
+pub fn rail_types_compatible(a: RailType, b: RailType) -> bool {
+    if a == b {
+        return true;
+    }
+    matches!(
+        (a, b),
+        (RailType::Rail, RailType::Electric) | (RailType::Electric, RailType::Rail)
+    )
+}
+
+/// ¿El motor puede circular / comprarse sobre este tipo de vía?
 #[must_use]
 pub fn engine_compatible_with_rail(engine: &EngineDef, rail_type: RailType) -> bool {
     if !engine.is_train_engine() && !engine.is_wagon() {
         return true;
     }
-    if engine_requires_electric(engine.id) {
-        return rail_type == RailType::Electric;
+    let required = required_rail_type_for_engine(engine.id);
+    match required {
+        RailType::Rail => matches!(rail_type, RailType::Rail | RailType::Electric),
+        other => other == rail_type,
     }
-    true
 }
 
 /// Motores eléctricos del catálogo temperate (ids 110–113).
@@ -94,13 +134,45 @@ pub const fn engine_requires_electric(engine_id: u16) -> bool {
     )
 }
 
-/// Tipo de vía requerido por el motor (para UI / mensajes).
+#[must_use]
+pub const fn engine_requires_monorail(engine_id: u16) -> bool {
+    engine_id == ENGINE_TRAIN_X2001
+}
+
+#[must_use]
+pub const fn engine_requires_maglev(engine_id: u16) -> bool {
+    engine_id == ENGINE_TRAIN_LEV1
+}
+
+/// Tipo de vía requerido por el motor (para UI / pathfinding / compra).
 #[must_use]
 pub fn required_rail_type_for_engine(engine_id: u16) -> RailType {
-    if engine_requires_electric(engine_id) {
+    if engine_requires_maglev(engine_id) {
+        RailType::Maglev
+    } else if engine_requires_monorail(engine_id) {
+        RailType::Monorail
+    } else if engine_requires_electric(engine_id) {
         RailType::Electric
     } else {
         RailType::Rail
+    }
+}
+
+/// ¿Una tesela de vía es usable por un motor con `required`?
+///
+/// Depósitos/estaciones/túneles/puentes no filtran por tipo (MVP).
+#[must_use]
+pub fn tile_usable_by_rail_type(tile: Tile, required: RailType) -> bool {
+    use crate::map::TileKind;
+    match tile.kind {
+        TileKind::Rail => {
+            let t = rail_type_from_tile(tile);
+            t == required || rail_types_compatible(t, required)
+        }
+        TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge | TileKind::Station => {
+            true
+        }
+        _ => false,
     }
 }
 
@@ -129,11 +201,23 @@ mod tests {
     }
 
     #[test]
-    fn m8_roundtrip_rail_types() {
-        let t = set_rail_type_on_tile(rail_tile(0), RailType::Electric);
-        assert_eq!(rail_type_from_tile(t), RailType::Electric);
-        let t2 = set_rail_type_on_tile(t, RailType::Rail);
-        assert_eq!(rail_type_from_tile(t2), RailType::Rail);
+    fn m8_roundtrip_all_rail_types() {
+        for rt in [
+            RailType::Rail,
+            RailType::Electric,
+            RailType::Monorail,
+            RailType::Maglev,
+        ] {
+            let t = set_rail_type_on_tile(rail_tile(0), rt);
+            assert_eq!(rail_type_from_tile(t), rt);
+        }
+    }
+
+    #[test]
+    fn mono_and_maglev_are_isolated() {
+        assert!(!rail_types_compatible(RailType::Monorail, RailType::Rail));
+        assert!(!rail_types_compatible(RailType::Maglev, RailType::Electric));
+        assert!(rail_types_compatible(RailType::Rail, RailType::Electric));
     }
 
     #[test]
@@ -141,8 +225,22 @@ mod tests {
         let asia = engine_by_id(ENGINE_TRAIN_ASIASTAR).unwrap();
         assert!(!engine_compatible_with_rail(asia, RailType::Rail));
         assert!(engine_compatible_with_rail(asia, RailType::Electric));
+        assert!(!engine_compatible_with_rail(asia, RailType::Monorail));
         let kirby = engine_by_id(ENGINE_TRAIN_KIRBY).unwrap();
         assert!(engine_compatible_with_rail(kirby, RailType::Rail));
         assert!(engine_compatible_with_rail(kirby, RailType::Electric));
+        assert!(!engine_compatible_with_rail(kirby, RailType::Maglev));
+    }
+
+    #[test]
+    fn cycle_visits_all_types() {
+        let mut t = RailType::Rail;
+        let mut seen = [false; 4];
+        for _ in 0..4 {
+            seen[t.as_u8() as usize] = true;
+            t = t.next();
+        }
+        assert!(seen.iter().all(|&x| x));
+        assert_eq!(t, RailType::Rail);
     }
 }

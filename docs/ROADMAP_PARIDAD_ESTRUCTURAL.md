@@ -38,11 +38,15 @@ implementadas jul 2026. Fases 6–7 = hitos 0.5–0.6.
 - `rail_type.rs`: `Rail` / `Electric` en `m8` bits 0–5; `current_rail_type`.
 - `Command::ConvertRail`; eléctricos (110–113) exigen vía electrificada adyacente.
 - Toolbar «Convertir vía»; save **v15**.
-- Pendiente: catenaria visual OpenGFX; mono/maglev (Fase 6).
+- Pendiente: catenaria visual OpenGFX.
 
-## Fase 6 — Tranvía / monorail / maglev
+## Fase 6 — Monorail / maglev ✅ (MVP)
 
-Sistemas propios (bits, pathfinding, depósitos) sobre railtypes.
+- `RailType::{Monorail, Maglev}` (2/3); redes aisladas (solo Rail↔Electric compatibles).
+- Motores X2001 (154) / Lev1 (184); compra exige vía adyacente del tipo.
+- YAPF filtra por `required_rail_type_for_engine`; ConvertRail cicla 4 tipos.
+- Save **v16** (migración no-op desde v15). Tint visual MVP; sprites OpenGFX mono/maglev pendientes.
+- Tranvía = `RoadType` en OpenTTD → fuera de este corte.
 
 ## Fase 7 — NewGRF runtime completo
 

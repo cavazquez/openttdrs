@@ -29,7 +29,8 @@ use crate::GameState;
 /// v13: cargo packets en estación/vehículo; balances `CargoStock` se hidratan.
 /// v14: pool multi-compañía (`companies`, `owner` en vehículo/estación).
 /// v15: railtypes en `m8` + `current_rail_type` (vías existentes → normal).
-pub const CURRENT_SAVE_VERSION: u32 = 15;
+/// v16: monorail/maglev como `RailType` 2/3 (sin migración de datos; esquema).
+pub const CURRENT_SAVE_VERSION: u32 = 16;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -142,7 +143,8 @@ fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState,
                 crate::command::normalize_synthetic_rail_crossings(&mut state.map);
             }
             3 => migrate_state_v3_to_v4(&mut state),
-            4 | 6 | 7 | 8 | 9 => {}
+            // v16: mono/maglev ya caben en m8; sin cambio de datos desde v15.
+            4 | 6 | 7 | 8 | 9 | 15 => {}
             5 => migrate_state_v5_to_v6(&mut state),
             10 => migrate_state_v10_to_v11(&mut state),
             11 => migrate_state_v11_to_v12(&mut state),

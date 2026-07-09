@@ -1,6 +1,6 @@
 # Paridad de ventanas: depósito, trenes y órdenes
 
-Fecha: 2026-07-02 · Auditoría de UI (solo lectura, sin cambios de código).
+Fecha: 2026-07-09 · Actualizado tras Fase 1 consist (core + UI MVP).
 Compara las ventanas/paneles del cliente Bevy (`openttdrs-client/src/ui/`)
 contra las ventanas reales de OpenTTD (`depot_gui.cpp`, `vehicle_gui.cpp`,
 `train_gui.cpp`, `order_gui.cpp`, `timetable_gui.cpp`, `build_vehicle_gui.cpp`,
@@ -17,14 +17,11 @@ Para cada feature se indica qué tan cerca podemos llegar y qué lo limita:
 - **B (comando chico)** — requiere agregar un comando o campo pequeño en la
   sim, sin cambios estructurales.
 - **C (bloqueado por la sim)** — depende de una carencia estructural
-  (principalmente: **no hay consist** — el tren es un vehículo puntual —,
-  la entrada a plataforma es la Fase Rail 3C, y no existen averías,
-  intervalos de servicio ni beneficio por vehículo).
+  (p. ej. PBS multi-tesela fina, averías/servicio, beneficio por vehículo).
+  El **consist ya existe** en core (Fase 1); lo que falta es pulido de UI.
 
-Conclusión anticipada: **en comandos las ventanas están sorprendentemente
-cerca** (clonar, vender todo, autoreemplazo, órdenes compartidas, grupos,
-horarios ya existen); **en presentación y en todo lo que toca vagones/consist
-la distancia es estructural** y no se cierra desde la UI.
+Conclusión: comandos de flota siguen cerca; depósito/compra ya enganchan
+vagones (MVP). Falta matriz horizontal con sprites por unidad y drag nativo.
 
 ## 1. Ventana de depósito
 
@@ -35,10 +32,10 @@ abre con clic en tile `RoadDepot`/`RailDepot`).
 | Feature OpenTTD | Estado en cliente | Cercanía |
 |---|---|---|
 | Matriz de vehículos con sprites (`WID_D_MATRIX`, `DrawTrainImage`) | Filas de texto (8 slots): nombre, grupo, edad, carga | **A** — dibujar el sprite del vehículo en la fila es solo UI |
-| 1 fila = 1 consist (loco + vagones, scroll horizontal) | 1 fila = 1 vehículo puntual | **C** — sin consist no hay nada que dibujar en horizontal |
-| **Drag & drop de vagones** (`MoveRailVehicle`, formar/partir trenes, Ctrl = cadena) | No existe | **C** — el gap de UI más grande; requiere modelo de consist en core |
+| 1 fila = 1 consist (loco + vagones, scroll horizontal) | 1 fila = cabeza; label `[Nu]` unidades | **A** — falta scroll horizontal con sprites por vagón |
+| **Drag & drop de vagones** (`MoveRailVehicle`, formar/partir trenes, Ctrl = cadena) | Clic A→B en filas rail → `MoveRailVehicle`; compra auto-engancha | **A** — gesto distinto al drag nativo; Ctrl=cadena pendiente |
 | Ctrl+soltar sobre sí mismo = `ReverseTrainDirection` en depósito | Botón «Dar la vuelta» en ventana de vehículo | ✔ funcional (gesto distinto) |
-| Vender arrastrando a `WID_D_SELL` / vender cadena | Botón «Vender» por fila (`SellVehicle`) | ✔ (vender cadena es C) |
+| Vender arrastrando a `WID_D_SELL` / vender cadena | Botón «Vender» por fila (`SellVehicle` vende cadena si es cabeza) | ✔ parcial (gesto drag-a-vender es A) |
 | Vender todo (`DepotMassSell`) | Botón «Vender todo» (`SellAllVehiclesAtDepot`) | ✔ |
 | Comprar (`WID_D_BUILD` → `BuildVehicleWindow`) | Botón «Nuevos vehículos» → `buy_window` | ✔ |
 | Clonar (`CloneVehicle`, Ctrl = compartir órdenes) | Botones «Clonar» (`CloneVehicleAtDepot`) y «Compartir órdenes» separados | ✔ (la variante Ctrl es A) |
@@ -88,7 +85,7 @@ fiabilidad y orden activa dentro de la ventana de vehículo.
 | Peso/potencia/esfuerzo tractor (TE) | Potencia y peso están en `EngineDef` (sin TE) | **A** para peso/potencia; TE es **B** (dato del motor) |
 | Fiabilidad + nº de averías | Fiabilidad estática sí; averías no | Fiabilidad ✔; averías **C** |
 | Intervalo de servicio (`ChangeServiceInterval`, dropdown días/%/min) | No existe | **C** — no hay servicio en la sim |
-| **Lista de vagones con 4 pestañas** (cargo/info/capacidad/totales por vagón) | No existe | **C** — sin consist no hay vagones que listar |
+| **Lista de vagones con 4 pestañas** (cargo/info/capacidad/totales por vagón) | No existe (capacidad agregada en cabeza) | **A** — core ya tiene unidades; falta UI por vagón |
 
 Con tren puntual, lo máximo alcanzable hoy es una ventana de detalles de
 «una unidad»: edad, peso/potencia, coste, fiabilidad, carga — todo A/B.
@@ -140,7 +137,7 @@ OpenTTD: `RefitWindow` (`vehicle_gui.cpp:753-1358`) con selección parcial del
 consist por drag. Cliente: botón «Refit carga» en la ventana de vehículo.
 
 - Lista de cargas con coste/capacidad en vez del ciclo actual: **A**.
-- Refit de parte del consist: **C** (sin consist).
+- Refit de parte del consist: **A/B** (consist existe; falta UI + comando por unidad).
 - Refit como orden (`OrderRefit`): **B** (ver §4).
 
 ## 7. Compra de vehículos
@@ -151,9 +148,9 @@ OpenTTD: `BuildVehicleWindow` (`build_vehicle_gui.cpp:1216+`). Cliente:
 | Feature OpenTTD | Estado en cliente | Cercanía |
 |---|---|---|
 | Lista con orden asc/desc y ~11 criterios | Orden por nombre/precio/velocidad/año | ✔ básico; más criterios **A** |
-| Filtro por cargo / texto / motores ocultos / badges | Filtro todos/buses/camiones (solo road) | **A** (filtros para rail hoy tienen poco sentido: no hay vagones que filtrar) |
+| Filtro por cargo / texto / motores ocultos / badges | Filtro todos/buses/camiones (solo road); rail lista loco+vagón | **A** |
 | Panel de detalle (coste, peso, velocidad, potencia, **TE**, running cost, refit) | Sí salvo TE | ✔ (TE es **B**) |
-| **Comprar vagones** (`CcBuildWagon` acopla a la loco) | No existe | **C** — sin consist |
+| **Comprar vagones** (`CcBuildWagon` acopla a la loco) | Compra `ENGINE_WAGON_*` + auto-`AttachWagonToConsist` | ✔ MVP |
 | Ocultar/renombrar motor (`SetVehicleVisibility`, `RenameEngine`) | No existe | **B**, bajo valor |
 
 ## 8. Lista de vehículos y grupos
@@ -176,14 +173,12 @@ solo hay alertas de flota en el HUD y ciclo de grupo en el depósito.
 | Ya en paridad funcional (✔) | start/stop, vender, vender todo, clonar, autoreemplazo, comprar, órdenes básicas + condicionales + skip + reorden, waypoints, horarios con autofill, reversa/forzar paso de tren, centrar/ir a destino, renombrar vehículo | La mecánica de comandos está prácticamente completa para vehículos puntuales |
 | Alcanzable solo con UI (A) | sprites en filas de depósito, scroll >8 vehículos, string de estado con destino, edad/peso/potencia en detalles, ventana de refit con lista, lista de órdenes compartidas, drag para reordenar órdenes, llegada/salida esperadas, más criterios de orden en compra, clonar desde ventana de vehículo | Un paquete de trabajo de cliente sin tocar core |
 | Comando chico en core (B) | refit en orden, transfer/unload forzado, variantes de full load, más condicionales, velocidad máx. por tramo de horario, renombrar depósito/grupo, TE en `EngineDef`, dar la vuelta para road, ventana de flota/grupos completa | Cambios acotados, sin riesgo de paridad de sim |
-| Bloqueado por la sim (C) | **todo lo de vagones/consist** (drag & drop en depósito, vender cadena, lista de vagones con pestañas, refit parcial, comprar vagones), stop location near/middle/far (Fase Rail 3C), servicio/averías/unbunch, beneficio por vehículo, non-stop/paradas de paso | No tiene sentido construir la UI antes que el modelo |
+| Bloqueado por la sim (C) | PBS/reservas finas, servicio/averías/unbunch, beneficio por vehículo, non-stop/paradas de paso avanzadas | Consist ya no bloquea; ver Fases 2–3 en `ROADMAP_PARIDAD_ESTRUCTURAL.md` |
 
-**El techo actual**: con trabajo A+B el cliente puede quedar funcionalmente
-equivalente a OpenTTD para **vehículos de una unidad** — que es exactamente lo
-que la sim modela hoy. El salto siguiente (matriz de depósito con drag & drop
-de vagones, detalles por vagón, refit parcial) está bloqueado por el ítem 6 de
-`rail_unknown_features.md` (consist), no por la UI: el framework de ventanas
-flotantes (drag, z-order, múltiples ventanas) ya soporta ese tipo de ventana.
+**El techo actual**: Fase 1 desbloqueó consist en core y un MVP de UI
+(compra+enganche, reorden clic A→B, render de trailers, venta de cadena).
+El salto siguiente es pulido A (matriz horizontal, drag nativo, pestañas por
+vagón) más Fases 2–3 de sim (packets, PBS).
 
 ## Orden recomendado si se ataca la UI
 

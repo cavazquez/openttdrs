@@ -43,6 +43,18 @@ impl EngineDef {
             VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Ship => self.max_speed / 2,
         }
     }
+
+    /// Vagón: tren sin potencia y con capacidad de carga.
+    #[must_use]
+    pub const fn is_wagon(self) -> bool {
+        matches!(self.kind, VehicleKind::Train) && self.power_hp == 0 && self.capacity > 0
+    }
+
+    /// Locomotora o DMU (puede ser cabeza de consist).
+    #[must_use]
+    pub const fn is_train_engine(self) -> bool {
+        matches!(self.kind, VehicleKind::Train) && !self.is_wagon()
+    }
 }
 
 pub const ENGINE_BUS_MPS: u16 = 0;
@@ -66,6 +78,14 @@ pub const ENGINE_TRAIN_SH_30: u16 = 110;
 pub const ENGINE_TRAIN_SH_40: u16 = 111;
 pub const ENGINE_TRAIN_TIM: u16 = 112;
 pub const ENGINE_TRAIN_ASIASTAR: u16 = 113;
+/// Vagón de pasajeros (`OpenGFX` temperate, catálogo sandbox).
+pub const ENGINE_WAGON_PASSENGER: u16 = 150;
+/// Vagón de correo.
+pub const ENGINE_WAGON_MAIL: u16 = 151;
+/// Vagón de mercancías.
+pub const ENGINE_WAGON_GOODS: u16 = 152;
+/// Tolva de carbón.
+pub const ENGINE_WAGON_COAL: u16 = 153;
 pub const ENGINE_SHIP_MPS: u16 = 200;
 pub const ENGINE_SHIP_OIL: u16 = 201;
 pub const ENGINE_SHIP_COAL: u16 = 202;
@@ -440,6 +460,67 @@ const ENGINES: &[EngineDef] = &[
         1992,
         RELIABILITY_ELECTRIC,
         23
+    ),
+    // Vagones (power_hp = 0): se enganchan a locomotoras.
+    train!(
+        ENGINE_WAGON_PASSENGER,
+        "Passenger Carriage",
+        0,
+        20,
+        RC_STEAM,
+        10,
+        40,
+        Some(CargoType::Passengers),
+        0,
+        25,
+        1920,
+        RELIABILITY_STEAM,
+        2
+    ),
+    train!(
+        ENGINE_WAGON_MAIL,
+        "Mail Van",
+        0,
+        18,
+        RC_STEAM,
+        8,
+        30,
+        Some(CargoType::Mail),
+        0,
+        20,
+        1920,
+        RELIABILITY_STEAM,
+        2
+    ),
+    train!(
+        ENGINE_WAGON_GOODS,
+        "Goods Wagon",
+        0,
+        16,
+        RC_STEAM,
+        8,
+        25,
+        Some(CargoType::Goods),
+        0,
+        18,
+        1920,
+        RELIABILITY_STEAM,
+        2
+    ),
+    train!(
+        ENGINE_WAGON_COAL,
+        "Coal Hopper",
+        0,
+        15,
+        RC_STEAM,
+        8,
+        30,
+        Some(CargoType::Coal),
+        0,
+        22,
+        1920,
+        RELIABILITY_STEAM,
+        2
     ),
     road!(
         ENGINE_SHIP_MPS,

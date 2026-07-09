@@ -103,6 +103,9 @@ const fn command_modifies_map(cmd: &Command) -> bool {
             | Command::SetVehicleOrderList(..)
             | Command::BuildRoadVehicleAtDepot(..)
             | Command::BuildVehicleAtDepot(..)
+            | Command::AttachWagonToConsist { .. }
+            | Command::DetachConsistUnit(..)
+            | Command::MoveRailVehicle { .. }
             | Command::SellVehicle(..)
             | Command::ToggleVehicleRunning(..)
             | Command::CloneVehicleOrders { .. }
@@ -174,6 +177,15 @@ fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), Com
         Command::BuildVehicleAtDepot(c, engine_id) => {
             vehicles::build_vehicle_at_depot(state, *c, *engine_id)
         }
+        Command::AttachWagonToConsist { head_id, wagon_id } => {
+            vehicles::attach_wagon_to_consist(state, *head_id, *wagon_id)
+        }
+        Command::DetachConsistUnit(id) => vehicles::detach_consist_unit(state, *id),
+        Command::MoveRailVehicle {
+            head_id,
+            unit_id,
+            after_id,
+        } => vehicles::move_rail_vehicle(state, *head_id, *unit_id, *after_id),
         Command::SellVehicle(id) => vehicles::sell_vehicle(state, *id),
         Command::ToggleVehicleRunning(id) => {
             super::vehicle_fleet::toggle_vehicle_running_checked(state, *id)
@@ -420,6 +432,9 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         | Command::SetVehicleOrderList(..)
         | Command::BuildRoadVehicleAtDepot(..)
         | Command::BuildVehicleAtDepot(..)
+        | Command::AttachWagonToConsist { .. }
+        | Command::DetachConsistUnit(..)
+        | Command::MoveRailVehicle { .. }
         | Command::SellVehicle(..)
         | Command::ToggleVehicleRunning(..)
         | Command::CloneVehicleOrders { .. }

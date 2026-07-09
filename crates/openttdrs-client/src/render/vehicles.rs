@@ -321,6 +321,10 @@ pub(crate) fn spawn_initial_vehicles(
     company: &CompanyColoredSprites,
 ) {
     for vehicle in &sim.state.vehicles {
+        // Vagones enganchados: se dibujan como partes del consist (offsets), no como entidad propia.
+        if vehicle.is_wagon_unit() {
+            continue;
+        }
         let pose = extrapolate_vehicle_pose(vehicle, 0.0);
         let pos3 = vehicle_sprite_pos_at(vehicle, &sim.state.map, pose);
         let vis = if vehicle_is_hidden_in_depot(sim, vehicle) {
@@ -339,6 +343,10 @@ pub(crate) fn spawn_initial_vehicles(
             Transform::from_translation(pos3),
             vis,
         ));
+        // Unidades del consist detrás de la cabeza (sprites desplazados).
+        if vehicle.kind == VehicleKind::Train {
+            spawn_consist_trailer_sprites(commands, sim, trucks, company, vehicle, pose, vis);
+        }
         commands.spawn((
             MapVisualLayer,
             VehicleCargoLabel(vehicle.id),
@@ -349,6 +357,63 @@ pub(crate) fn spawn_initial_vehicles(
             },
             TextColor(vehicle_cargo_color(vehicle)),
             Transform::from_translation(vehicle_cargo_label_pos(pos3)),
+            vis,
+        ));
+    }
+}
+
+/// Sprite de vagón enganchado (mismo id de cabeza + offset visual).
+#[derive(Component)]
+pub(crate) struct ConsistUnitSprite {
+    head_id: u32,
+    unit_index: usize,
+}
+
+fn spawn_consist_trailer_sprites(
+    commands: &mut Commands,
+    sim: &SimWorld,
+    trucks: &TruckHandles,
+    company: &CompanyColoredSprites,
+    head: &Vehicle,
+    pose: openttdrs_core::VehiclePose,
+    vis: Visibility,
+) {
+    let ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, head.id);
+    for (i, &uid) in ids.iter().enumerate().skip(1) {
+        let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == uid) else {
+            continue;
+        };
+        let unit_pose = pose;
+        // Offset atrás ~media tesela por unidad (aproximación visual).
+        let back = openttdrs_core::reverse_direction(head.direction);
+        let (dx, dy) = match back {
+            0 => (0.0, -8.0),
+            1 => (6.0, -4.0),
+            2 => (8.0, 0.0),
+            3 => (6.0, 4.0),
+            4 => (0.0, 8.0),
+            5 => (-6.0, 4.0),
+            6 => (-8.0, 0.0),
+            _ => (-6.0, -4.0),
+        };
+        let base = vehicle_sprite_pos_at(head, &sim.state.map, pose);
+        let pos3 = Vec3::new(
+            base.x + dx * i as f32,
+            base.y + dy * i as f32,
+            base.z - 0.01 * i as f32,
+        );
+        commands.spawn((
+            MapVisualLayer,
+            ConsistUnitSprite {
+                head_id: head.id,
+                unit_index: i,
+            },
+            Sprite {
+                image: trucks.for_vehicle(unit, unit_pose, Some(company)),
+                color: Color::WHITE,
+                ..default()
+            },
+            Transform::from_translation(pos3),
             vis,
         ));
     }
@@ -416,6 +481,7 @@ pub(crate) fn pick_vehicle_id_at_world(world_pos: Vec2, sim: &SimWorld) -> Optio
         .map(|(_, id)| id)
 }
 
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn update_vehicles(
     sim: Res<SimWorld>,
     sim_clock: Res<SimClock>,
@@ -423,6 +489,15 @@ pub(crate) fn update_vehicles(
     company: Res<CompanyColoredSprites>,
     vehicle_index: Res<VehicleIndex>,
     mut q: Query<(&VehicleSprite, &mut Transform, &mut Sprite, &mut Visibility)>,
+    mut trailers: Query<
+        (
+            &ConsistUnitSprite,
+            &mut Transform,
+            &mut Sprite,
+            &mut Visibility,
+        ),
+        Without<VehicleSprite>,
+    >,
     mut labels: Query<
         (
             &VehicleCargoLabel,
@@ -431,7 +506,7 @@ pub(crate) fn update_vehicles(
             &mut TextColor,
             &mut Visibility,
         ),
-        Without<VehicleSprite>,
+        (Without<VehicleSprite>, Without<ConsistUnitSprite>),
     >,
 ) {
     for (vs, mut transform, mut sprite, mut visibility) in &mut q {
@@ -451,6 +526,48 @@ pub(crate) fn update_vehicles(
         transform.translation = pos3;
         sprite.image = trucks.for_vehicle(v, pose, Some(&company));
         sprite.color = vehicle_tint(v);
+    }
+
+    for (trailer, mut transform, mut sprite, mut visibility) in &mut trailers {
+        let Some(&i) = vehicle_index.by_id.get(&trailer.head_id) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        let Some(head) = sim.state.vehicles.get(i) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        let ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, head.id);
+        let Some(&uid) = ids.get(trailer.unit_index) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == uid) else {
+            *visibility = Visibility::Hidden;
+            continue;
+        };
+        if vehicle_is_hidden_in_depot(&sim, head) {
+            *visibility = Visibility::Hidden;
+            continue;
+        }
+        *visibility = Visibility::Visible;
+        let pose = extrapolate_vehicle_pose(head, sim_clock.tick_alpha);
+        let base = vehicle_sprite_pos_at(head, &sim.state.map, pose);
+        let back = openttdrs_core::reverse_direction(head.direction);
+        let (dx, dy) = match back {
+            0 => (0.0, -8.0),
+            1 => (6.0, -4.0),
+            2 => (8.0, 0.0),
+            3 => (6.0, 4.0),
+            4 => (0.0, 8.0),
+            5 => (-6.0, 4.0),
+            6 => (-8.0, 0.0),
+            _ => (-6.0, -4.0),
+        };
+        let i = trailer.unit_index as f32;
+        transform.translation = Vec3::new(base.x + dx * i, base.y + dy * i, base.z - 0.01 * i);
+        sprite.image = trucks.for_vehicle(unit, pose, Some(&company));
+        sprite.color = vehicle_tint(head);
     }
 
     for (label, mut transform, mut text, mut color, mut visibility) in &mut labels {

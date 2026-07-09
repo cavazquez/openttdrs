@@ -98,6 +98,19 @@ pub enum Command {
     /// Compra el modelo `engine_id` del catálogo en un depósito compatible
     /// (carretera o vía según el tipo del motor), validando fondos.
     BuildVehicleAtDepot(TileCoord, u16),
+    /// Engancha el vagón `wagon_id` al final del consist de `head_id` (ambos en depósito).
+    AttachWagonToConsist {
+        head_id: u32,
+        wagon_id: u32,
+    },
+    /// Desengancha `unit_id` del consist (queda suelto en el depósito).
+    DetachConsistUnit(u32),
+    /// Mueve/reordena: engancha `unit_id` tras `after_id` (`None` = al final de `head_id`).
+    MoveRailVehicle {
+        head_id: u32,
+        unit_id: u32,
+        after_id: Option<u32>,
+    },
     SellVehicle(u32),
     ToggleVehicleRunning(u32),
     CloneVehicleOrders {

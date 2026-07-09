@@ -8,7 +8,8 @@
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
-    Command, TileCoord, TileKind, VehicleKind, apply_command, default_engine_id, engine_for_vehicle,
+    Command, TileCoord, TileKind, VehicleKind, apply_command, default_engine_id, engine_by_id,
+    engine_for_vehicle,
 };
 
 use crate::camera::tile_camera_world_pos;
@@ -294,7 +295,8 @@ fn vehicles_at_depot(sim: &SimWorld, depot_pos: TileCoord) -> Vec<&openttdrs_cor
         .state
         .vehicles
         .iter()
-        .filter(|vehicle| vehicle.pos == depot_pos)
+        // Solo cabezas de consist / vehículos sueltos (vagones enganchados no tienen fila).
+        .filter(|vehicle| vehicle.pos == depot_pos && vehicle.is_consist_head())
         .collect();
     vehicles.sort_by(|a, b| match (a.depot_display_slot, b.depot_display_slot) {
         (Some(sa), Some(sb)) => sa.cmp(&sb).then_with(|| a.id.cmp(&b.id)),
@@ -307,9 +309,20 @@ fn vehicles_at_depot(sim: &SimWorld, depot_pos: TileCoord) -> Vec<&openttdrs_cor
 
 fn depot_vehicle_row_label(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) -> String {
     let age = vehicle.vehicle_age_years(sim.state.tick.get());
+    let units = if vehicle.kind == VehicleKind::Train {
+        let n = openttdrs_core::consist_unit_ids(&sim.state.vehicles, vehicle.id).len();
+        if n > 1 {
+            format!("  [{n}u]")
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
     format!(
-        "{}  ({}a)  {}/{}",
+        "{}{}  ({}a)  {}/{}",
         vehicle.display_name(),
+        units,
         age,
         vehicle.cargo,
         vehicle.capacity
@@ -485,6 +498,50 @@ pub(crate) fn handle_depot_panel_buttons(
         else {
             continue;
         };
+        // Rail: segundo clic en otra fila engancha/reordena (MoveRailVehicle).
+        if depot_is_rail(&sim, depot_pos) {
+            if let Some(from_slot) = depot_state.reorder_from_slot
+                && from_slot != row.slot
+            {
+                let vehicles = vehicles_at_depot(&sim, depot_pos);
+                if let (Some(from), Some(to)) = (vehicles.get(from_slot), vehicles.get(row.slot)) {
+                    let (head_id, unit_id) = if from.next_unit.is_none()
+                        && from
+                            .engine_id
+                            .and_then(engine_by_id)
+                            .is_some_and(|e| e.is_wagon())
+                    {
+                        (to.id, from.id)
+                    } else if to.next_unit.is_none()
+                        && to
+                            .engine_id
+                            .and_then(engine_by_id)
+                            .is_some_and(|e| e.is_wagon())
+                    {
+                        (from.id, to.id)
+                    } else {
+                        (to.id, from.id)
+                    };
+                    match apply_command(
+                        &mut sim.state,
+                        &Command::MoveRailVehicle {
+                            head_id,
+                            unit_id,
+                            after_id: None,
+                        },
+                    ) {
+                        Ok(()) => pending.pending = true,
+                        Err(e) => {
+                            push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+                        }
+                    }
+                }
+                depot_state.reorder_from_slot = None;
+                depot_state.selected_vehicle = Some(vehicle_id);
+                continue;
+            }
+            depot_state.reorder_from_slot = Some(row.slot);
+        }
         depot_state.selected_vehicle = Some(vehicle_id);
         vehicle_window.vehicle_id = Some(vehicle_id);
         order_state.clear();

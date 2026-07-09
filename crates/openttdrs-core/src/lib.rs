@@ -44,6 +44,7 @@ pub mod timetable;
 pub mod tnbp_decode;
 pub mod town;
 pub mod townname;
+pub mod train_consist;
 pub mod train_movement;
 pub mod vehicle;
 mod vehicle_ai;
@@ -86,7 +87,8 @@ pub use economy::{
 pub use engine::{
     DepotPurchaseKind, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_FOKKER, ENGINE_AIRCRAFT_TRICARIO,
     ENGINE_BUS_MPS, ENGINE_SHIP_COAL, ENGINE_SHIP_FERRY, ENGINE_SHIP_MPS, ENGINE_SHIP_OIL,
-    ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineCatalogSort, EngineDef,
+    ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, ENGINE_WAGON_COAL,
+    ENGINE_WAGON_GOODS, ENGINE_WAGON_MAIL, ENGINE_WAGON_PASSENGER, EngineCatalogSort, EngineDef,
     REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter, accelerate_train_speed,
     aircraft_is_helicopter, decelerate_road_speed, decelerate_train_speed, default_engine_id,
     engine_available_in_year, engine_by_id, engine_catalog, engine_for_vehicle,
@@ -218,6 +220,11 @@ pub use town::{
     produce_town_cargo,
 };
 pub use townname::generate_town_name;
+pub use train_consist::{
+    VEHICLE_LENGTH, attach_wagon, consist_changed, consist_head_id, consist_occupied_tiles,
+    consist_power_hp, consist_tile_span, consist_unit_ids, consist_weight_t, detach_unit,
+    engine_is_train_engine, engine_is_wagon, same_consist, sell_chain_ids,
+};
 pub use train_movement::{
     ACCEL_SLOWDOWN, AccelSlowdownParams, DELTACOORD_LEAVE_OFFSET, FRACTCOORDS_BEHIND,
     FRACTCOORDS_ENTER, RAIL_TOUCHING_SIDE_NE, RAIL_TOUCHING_SIDE_NW, RAIL_TOUCHING_SIDE_SE,

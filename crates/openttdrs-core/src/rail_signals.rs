@@ -769,34 +769,51 @@ pub fn train_blocked_by_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehic
     if vehicle.kind != VehicleKind::Train || !vehicle.running {
         return false;
     }
+    // Solo la cabeza del consist se mueve / bloquea.
+    if !vehicle.is_consist_head() {
+        return false;
+    }
     let Some(next) = vehicle.movement_target() else {
         return false;
     };
     let self_id = vehicle.id;
+    let foreign = |v: &Vehicle| {
+        v.kind == VehicleKind::Train
+            && v.is_consist_head()
+            && !crate::train_consist::same_consist(vehicles, self_id, v.id)
+    };
 
-    if vehicles
-        .iter()
-        .any(|v| v.id != self_id && v.kind == VehicleKind::Train && v.pos == next)
-    {
+    if vehicles.iter().any(|v| foreign(v) && v.pos == next) {
         return true;
     }
 
     // Varios trenes pueden compartir la misma tesela de depósito (OpenTTD).
     if map.get_kind(vehicle.pos) != Some(crate::map::TileKind::RailDepot)
-        && vehicles
-            .iter()
-            .any(|v| v.id != self_id && v.kind == VehicleKind::Train && v.pos == vehicle.pos)
+        && vehicles.iter().any(|v| foreign(v) && v.pos == vehicle.pos)
     {
         return true;
+    }
+
+    // Colisión con huella multi-tesela de otro consist.
+    let self_tiles = crate::train_consist::consist_occupied_tiles(vehicles, self_id);
+    for other in vehicles.iter().filter(|v| foreign(v)) {
+        let other_tiles = crate::train_consist::consist_occupied_tiles(vehicles, other.id);
+        if other_tiles.contains(&next)
+            || self_tiles
+                .iter()
+                .any(|t| other_tiles.contains(t) && *t != vehicle.pos)
+        {
+            // Solape de huellas (excepto compartir depósito ya filtrado).
+            if map.get_kind(vehicle.pos) != Some(crate::map::TileKind::RailDepot) {
+                return true;
+            }
+        }
     }
 
     let mut prev = vehicle.pos;
     let mut cur = next;
     for _ in 0..64 {
-        if let Some(other) = vehicles
-            .iter()
-            .find(|v| v.id != self_id && v.kind == VehicleKind::Train && v.pos == cur)
-        {
+        if let Some(other) = vehicles.iter().find(|v| foreign(v) && v.pos == cur) {
             if !other.running {
                 return true;
             }

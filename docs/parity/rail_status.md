@@ -1,6 +1,6 @@
 # Estado de paridad ferroviaria openttdrs ↔ OpenTTD
 
-Fecha: 2026-07-04 · Fases Rail 0–4 completadas. Usa los mismos niveles de
+Fecha: 2026-07-09 · Fases Rail 0–4 + **consist Fase 1**. Usa los mismos niveles de
 madurez que `status.md`:
 
 1. **Implementado** — existe código que cubre la funcionalidad.
@@ -10,12 +10,11 @@ madurez que `status.md`:
 4. **Visualmente parecido** — comparación de videos/capturas sin diferencias
    evidentes.
 5. **Realmente equivalente** — traza determinística equivalente tick a tick.
-   Hoy ningún subsistema ferroviario alcanza los niveles 3–5.
+   Hoy ningún subsistema ferroviario alcanza los niveles 4–5.
 
-Supuesto estructural documentado: **el tren de la sim es un vehículo puntual**
-(una locomotora lógica, un sprite, una tesela). No hay consist, vagones ni
-longitud de tren; toda comparación de geometría de consist queda como «no
-verificable todavía» hasta que exista el modelo.
+Modelo de tren: **consist** (`next_unit`/`prev_unit`, longitud en unidades de 8,
+ocupación multi-tesela). Geometría de cola y PBS multi-unidad siguen siendo
+aproximadas (Fases 2–3 del roadmap estructural).
 
 ## Infraestructura ferroviaria
 
@@ -39,7 +38,7 @@ verificable todavía» hasta que exista el modelo.
 
 | Subsistema | Módulo Rust | Referencia OpenTTD | Nivel alcanzado | Evidencia | Riesgo divergencia |
 |---|---|---|---|---|---|
-| Consist (loco + vagones, longitud) | — no existe (tren puntual; la importación de `.sav` descarta vagones) | `train.h` (`Next()`, `tcache`), `train_cmd.cpp:110-254` (`ConsistChanged`) | 0 · no implementado | test `decodes_front_vehicles_and_skips_wagons` (`sav/entities.rs`) | Alto (estructural) |
+| Consist (loco + vagones, longitud) | `train_consist.rs` + campos en `vehicle.rs`; save JSON v12; import `.sav` conserva vagones | `train.h` (`Next()`, `tcache`), `train_cmd.cpp:110-254` (`ConsistChanged`) | 2 · probado | `attach_and_detach_wagon`, `consist_tile_span_grows_with_units`, `train_consist_*`, `decodes_front_vehicles_and_train_wagons` | Medio: sin insertar en medio ni golden longitud vs OpenTTD |
 | Velocidad máxima por motor | `engine.rs` (`EngineDef::max_speed`, `speed_kmh` sin ÷2 para trenes) | `rail_vehicles` (engine info) | 2 · probado | tests de `engine.rs` | Bajo |
 | Aceleración | `engine.rs::train_acceleration` + `accelerate_train_speed` / `decelerate_train_speed`; `vehicle.rs::update_movement_speed` rama `Train` | `train_cmd.cpp:3080-3090` (`UpdateSpeed` `AM_ORIGINAL`: `accel·2` / freno `accel·−4`), `:444-452` (`UpdateAcceleration`: `Clamp(power/weight·4, 1, 255)`) | 3 · validado (Rail 3B) | `kirby_train_acceleration_matches_upstream`, `train_line_divergences_are_absent_after_rail_3b` | Bajo |
 | Frenado por curva | `vehicle.rs::set_direction_with_curve_penalty` + `apply_immediate_train_turnaround` (`ACCEL_SLOWDOWN`, `small_turn=64` / `large_turn=128`) | `train_cmd.cpp:3147-3152` (`_accel_slowdown`), `:3564-3568` (`cur_speed -= x·cur_speed >> 8` en locomotora) | 3 · validado (Rail 3B) | `train_loses_speed_on_direction_change`, chequeo `train_no_curve_braking` | Bajo |
@@ -73,9 +72,9 @@ verificable todavía» hasta que exista el modelo.
    giros y reversas inmediatas.
 3. ~~**El tren no entra a la plataforma**~~ **Corregida (Rail 3C)** —
    `rail_station_stop_tile` + carga con `at_platform: true`.
-4. **Sin consist**: tren puntual sin vagones ni longitud; sin ocupación
-   multi-tesela ni geometría de cola. Divergencia estructural, no medible
-   hasta decidir el modelo.
+4. ~~**Sin consist**~~ **Mitigado (Fase 1 estructural)** — cadena
+   loco+vagones, longitud cacheada, ocupación multi-tesela básica; falta
+   paridad fina de geometría/PBS (Fase 3).
 5. **Señales sin PBS ni semántica ENTRY/EXIT/COMBO** y **salida de depósito
    instantánea** (OpenTTD espera ~37 ticks y usa frames de entrada/salida).
 

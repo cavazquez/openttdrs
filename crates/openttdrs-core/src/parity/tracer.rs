@@ -109,25 +109,32 @@ fn rail_blocked_by_signal(
     rail_signals::train_blocked_by_signal(&state.map, &state.vehicles, v)
 }
 
-/// Bloque ferroviario del registro (solo trenes; `None` para el resto).
+/// Bloque ferroviario del registro (solo cabezas de tren; `None` para el resto).
 fn rail_snapshot(
     state: &GameState,
     train_positions: &[TileCoord],
     v: &crate::Vehicle,
 ) -> Option<RailRecord> {
-    if v.kind != VehicleKind::Train {
+    if v.kind != VehicleKind::Train || !v.is_consist_head() {
         return None;
     }
     let (subtile_x, subtile_y) = road_movement::vehicle_subtile(v);
+    let occupied = crate::train_consist::consist_occupied_tiles(&state.vehicles, v.id);
+    let parts: Vec<RailPartRecord> = occupied
+        .iter()
+        .enumerate()
+        .map(|(i, tile)| RailPartRecord {
+            part_index: i,
+            tile: *tile,
+            subtile_x: if i == 0 { subtile_x } else { 128.0 },
+            subtile_y: if i == 0 { subtile_y } else { 128.0 },
+        })
+        .collect();
+    let tail_tile = occupied.last().copied().unwrap_or(v.pos);
     Some(RailRecord {
-        parts: vec![RailPartRecord {
-            part_index: 0,
-            tile: v.pos,
-            subtile_x,
-            subtile_y,
-        }],
+        parts,
         head_tile: v.pos,
-        tail_tile: v.pos,
+        tail_tile,
         track_bits_under: track_bits_under(&state.map, v.pos),
         blocked_by_signal: rail_blocked_by_signal(state, train_positions, v),
         blocked_by_traffic: rail_signals::train_blocked_by_traffic(&state.map, &state.vehicles, v),
@@ -140,7 +147,7 @@ fn train_positions(state: &GameState) -> Vec<TileCoord> {
     state
         .vehicles
         .iter()
-        .filter(|v| v.kind == VehicleKind::Train)
+        .filter(|v| v.kind == VehicleKind::Train && v.is_consist_head())
         .map(|v| v.pos)
         .collect()
 }

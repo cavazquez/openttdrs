@@ -279,6 +279,7 @@ impl GameState {
             station.name = st.name;
             state.stations.push(station);
         }
+        let mut last_train_head: Option<u32> = None;
         for (i, v) in sav.vehicles.iter().enumerate() {
             let kind = match v.kind {
                 SavVehicleKind::Train => VehicleKind::Train,
@@ -287,7 +288,19 @@ impl GameState {
                 SavVehicleKind::RoadVehicle => VehicleKind::Truck,
             };
             #[allow(clippy::cast_possible_truncation)]
-            let mut vehicle = Vehicle::new(i as u32, kind, v.pos, v.pos);
+            let id = i as u32;
+            let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
+            if v.is_wagon && kind == VehicleKind::Train {
+                vehicle.engine_id = Some(crate::engine::ENGINE_WAGON_GOODS);
+                vehicle.capacity = crate::engine::engine_by_id(crate::engine::ENGINE_WAGON_GOODS)
+                    .map_or(25, |e| e.capacity);
+                vehicle.running = false;
+                state.vehicles.push(vehicle);
+                if let Some(head) = last_train_head {
+                    let _ = crate::train_consist::attach_wagon(&mut state.vehicles, head, id);
+                }
+                continue;
+            }
             let imported_orders = orders::vehicle_orders_from_sav(&v.orders, &sav.station_index);
             if !imported_orders.is_empty() {
                 vehicle.set_vehicle_orders(imported_orders);
@@ -297,6 +310,12 @@ impl GameState {
                 reconcile_imported_vehicle_position(&state.map, &mut vehicle);
             }
             state.vehicles.push(vehicle);
+            if kind == VehicleKind::Train {
+                last_train_head = Some(id);
+                crate::train_consist::consist_changed(&mut state.vehicles, id);
+            } else {
+                last_train_head = None;
+            }
         }
         state
     }
@@ -347,6 +366,7 @@ mod tests {
                     orders: Vec::new(),
                     current_order: 0,
                     running: true,
+                    is_wagon: false,
                 },
                 SavVehicle {
                     kind: SavVehicleKind::RoadVehicle,
@@ -355,6 +375,7 @@ mod tests {
                     orders: Vec::new(),
                     current_order: 0,
                     running: true,
+                    is_wagon: false,
                 },
                 SavVehicle {
                     kind: SavVehicleKind::RoadVehicle,
@@ -363,6 +384,7 @@ mod tests {
                     orders: Vec::new(),
                     current_order: 0,
                     running: true,
+                    is_wagon: false,
                 },
             ],
             money: Some(123_456),

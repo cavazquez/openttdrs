@@ -278,8 +278,15 @@ fn cargo_label(cargo: Option<CargoType>) -> &'static str {
 }
 
 fn stats_text(engine: &EngineDef) -> String {
+    let role = if engine.is_wagon() {
+        "Tipo: vagón (enganchar a locomotora)\n"
+    } else if engine.kind == VehicleKind::Train {
+        "Tipo: locomotora / DMU\n"
+    } else {
+        ""
+    };
     format!(
-        "Precio: ${}  Peso: {}t\nVelocidad: {}km/h  Potencia: {}cv\nCoste de operación: ${}/año\nCapacidad: {} {}\nDiseñado: {}  Fiabilidad: {}%",
+        "{role}Precio: ${}  Peso: {}t\nVelocidad: {}km/h  Potencia: {}cv\nCoste de operación: ${}/año\nCapacidad: {} {}\nDiseñado: {}  Fiabilidad: {}%",
         engine.price,
         engine.weight_t,
         engine.speed_kmh(),
@@ -510,7 +517,35 @@ pub(crate) fn handle_buy_window_buttons(
             &mut sim.state,
             &Command::BuildVehicleAtDepot(depot_pos, engine_id),
         ) {
-            Ok(()) => pending.pending = true,
+            Ok(()) => {
+                // Vagón recién comprado: enganchar a la primera locomotora del depósito.
+                if let Some(engine) = openttdrs_core::engine_by_id(engine_id)
+                    && engine.is_wagon()
+                {
+                    let wagon_id = sim.state.vehicles.iter().map(|v| v.id).max();
+                    let head_id = sim
+                        .state
+                        .vehicles
+                        .iter()
+                        .find(|v| {
+                            v.pos == depot_pos
+                                && v.kind == VehicleKind::Train
+                                && v.is_consist_head()
+                                && !openttdrs_core::engine_by_id(v.engine_id.unwrap_or(0))
+                                    .is_some_and(|e| e.is_wagon())
+                        })
+                        .map(|v| v.id);
+                    if let (Some(wagon_id), Some(head_id)) = (wagon_id, head_id)
+                        && head_id != wagon_id
+                    {
+                        let _ = apply_command(
+                            &mut sim.state,
+                            &Command::AttachWagonToConsist { head_id, wagon_id },
+                        );
+                    }
+                }
+                pending.pending = true;
+            }
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
         }
     }

@@ -149,9 +149,14 @@ pub(super) fn build_vehicle_at_depot(
     let mut vehicle = Vehicle::new(next_id, engine.kind, depot_pos, depot_pos);
     vehicle.running = false;
     vehicle.engine_id = Some(engine.id);
-    // Locomotoras sin capacidad propia: hasta que existan vagones, conservan
-    // la capacidad genérica para que el transporte siga funcionando.
     if engine.capacity > 0 {
+        vehicle.capacity = engine.capacity;
+    } else if engine.kind == VehicleKind::Train && engine.is_train_engine() {
+        // Loco sola: capacidad placeholder hasta enganchar vagones.
+        vehicle.capacity = crate::vehicle::VEHICLE_CAPACITY;
+    }
+    if engine.is_wagon() {
+        vehicle.cargo_type = engine.cargo;
         vehicle.capacity = engine.capacity;
     }
     vehicle.build_tick = state.tick.get();
@@ -162,7 +167,84 @@ pub(super) fn build_vehicle_at_depot(
         vehicle.progress = 0;
     }
     state.vehicles.push(vehicle);
+    if engine.kind == VehicleKind::Train {
+        crate::train_consist::consist_changed(&mut state.vehicles, next_id);
+    }
     state.economy.money -= engine.price;
+    Ok(())
+}
+
+pub(super) fn attach_wagon_to_consist(
+    state: &mut GameState,
+    head_id: u32,
+    wagon_id: u32,
+) -> Result<(), CommandError> {
+    let head = state
+        .vehicles
+        .iter()
+        .find(|v| v.id == head_id)
+        .ok_or(CommandError::VehicleNotFound)?;
+    let wagon = state
+        .vehicles
+        .iter()
+        .find(|v| v.id == wagon_id)
+        .ok_or(CommandError::VehicleNotFound)?;
+    if head.kind != VehicleKind::Train || wagon.kind != VehicleKind::Train {
+        return Err(CommandError::VehicleKindNotAllowed);
+    }
+    if !head.is_consist_head() {
+        return Err(CommandError::VehicleKindNotAllowed);
+    }
+    let in_depot = |pos| matches!(state.map.get_kind(pos), Some(TileKind::RailDepot));
+    if !in_depot(head.pos) || !in_depot(wagon.pos) || head.pos != wagon.pos {
+        return Err(CommandError::VehicleNotInDepot);
+    }
+    let wagon_eng = wagon
+        .engine_id
+        .and_then(crate::engine::engine_by_id)
+        .ok_or(CommandError::EngineNotFound)?;
+    if !wagon_eng.is_wagon() && wagon.prev_unit.is_some() {
+        return Err(CommandError::VehicleKindNotAllowed);
+    }
+    crate::train_consist::attach_wagon(&mut state.vehicles, head_id, wagon_id)
+        .map_err(|()| CommandError::VehicleKindNotAllowed)?;
+    Ok(())
+}
+
+pub(super) fn detach_consist_unit(state: &mut GameState, unit_id: u32) -> Result<(), CommandError> {
+    let unit = state
+        .vehicles
+        .iter()
+        .find(|v| v.id == unit_id)
+        .ok_or(CommandError::VehicleNotFound)?;
+    if unit.kind != VehicleKind::Train {
+        return Err(CommandError::VehicleKindNotAllowed);
+    }
+    if !matches!(state.map.get_kind(unit.pos), Some(TileKind::RailDepot)) {
+        return Err(CommandError::VehicleNotInDepot);
+    }
+    crate::train_consist::detach_unit(&mut state.vehicles, unit_id)
+        .map_err(|()| CommandError::VehicleNotFound)?;
+    Ok(())
+}
+
+pub(super) fn move_rail_vehicle(
+    state: &mut GameState,
+    head_id: u32,
+    unit_id: u32,
+    after_id: Option<u32>,
+) -> Result<(), CommandError> {
+    // Reordenar: detach + attach tras after_id (o al final).
+    detach_consist_unit(state, unit_id)?;
+    let attach_head = after_id
+        .and_then(|aid| crate::train_consist::consist_head_id(&state.vehicles, aid))
+        .unwrap_or(head_id);
+    if after_id.is_some() {
+        // Enganchar al final del consist (MVP: no inserta en medio).
+        attach_wagon_to_consist(state, attach_head, unit_id)?;
+    } else {
+        attach_wagon_to_consist(state, head_id, unit_id)?;
+    }
     Ok(())
 }
 
@@ -177,12 +259,38 @@ pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(),
     if !in_depot {
         return Err(CommandError::VehicleNotInDepot);
     }
-    let refund = crate::economy::vehicle_sell_refund(vehicle);
-    let Some(idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
+    let chain = crate::train_consist::sell_chain_ids(&state.vehicles, vehicle_id);
+    if chain.is_empty() {
         return Err(CommandError::VehicleNotFound);
-    };
-    state.vehicles.remove(idx);
-    state.economy.money += refund;
+    }
+    // Si vendemos un vagón del medio, desenganchar primero.
+    if chain.len() == 1
+        && state
+            .vehicles
+            .iter()
+            .find(|v| v.id == vehicle_id)
+            .is_some_and(|v| v.prev_unit.is_some() || v.next_unit.is_some())
+    {
+        let _ = crate::train_consist::detach_unit(&mut state.vehicles, vehicle_id);
+    }
+    let mut refund_total = 0_i64;
+    for id in &chain {
+        if let Some(v) = state.vehicles.iter().find(|x| x.id == *id) {
+            refund_total += crate::economy::vehicle_sell_refund(v);
+        }
+    }
+    state.vehicles.retain(|v| !chain.contains(&v.id));
+    // Recalcular cabezas restantes tocadas.
+    let heads: Vec<u32> = state
+        .vehicles
+        .iter()
+        .filter(|v| v.kind == VehicleKind::Train && v.is_consist_head())
+        .map(|v| v.id)
+        .collect();
+    for hid in heads {
+        crate::train_consist::consist_changed(&mut state.vehicles, hid);
+    }
+    state.economy.money += refund_total;
     Ok(())
 }
 

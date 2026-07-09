@@ -120,18 +120,28 @@ Referencia detallada (tipos oficiales, codificación `m2`/`m3`, fases A–E):
 
 ---
 
-## Después de S6 (backlog L+, post-0.1)
+## Después de S6 — paridad estructural (hitos 0.2–0.6)
+
+Detalle vivo: [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md).
+
+| Hito | Fase | Cuándo |
+|------|------|--------|
+| 0.2 | **Fase 1 Consist** ✅ + Fase 2 cargo packets / rating | post-0.1 inmediato |
+| 0.3 | Fase 3 YAPF incremental + PBS multi-tesela | tras consist estable |
+| 0.4 | Fase 4 economía multi-compañía + Cargo Dist + IA | tras packets |
+| 0.5 | Fases 5–6 railtypes + tranvía/mono/maglev | tras PBS básico |
+| 0.6 | Fase 7 NewGRF runtime completo | meta larga |
 
 | Item | Cuándo |
 |------|--------|
-| PBS / path signals | Hito 0.2 ferro avanzado |
-| Barcos / aviones | Hito 0.3 transporte completo |
+| PBS / path signals | Hito 0.3 (Fase 3) |
+| Barcos / aviones | paralelo / hito transporte |
 | Terraform (elevar / bajar / nivelar) | [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) T1–T3; paralelo a S4 |
 | Barra de estado + noticias | [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) N1–N3; mejora SP1 |
-| Generación de mundo + 4 climas | Hito 0.2 |
-| Cargo Dist / link graph | Muy post-0.1 |
-| Multijugador I8 | Explícitamente post-0.1 |
-| NewGRF runtime | Opcional / largo plazo |
+| Generación de mundo + 4 climas | Hito 0.2+ |
+| Cargo Dist / link graph | Hito 0.4 (Fase 4) |
+| Multijugador I8 | Explícitamente post-paridad de sim |
+| NewGRF runtime | Hito 0.6 (Fase 7) |
 | Flota F0–F8 (timetable, autoreemplazo, pool) | [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) §13 |
 | **Junctionary completo** (cruces comunidad OTTD) | [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md) J0–J5 |
 

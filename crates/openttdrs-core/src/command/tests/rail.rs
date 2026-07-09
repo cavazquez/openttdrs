@@ -1015,6 +1015,81 @@ fn rail_depot_beside_x_line_connects_exit_tile() {
 }
 
 #[test]
+fn train_consist_attach_wagon_grows_capacity_and_length() {
+    let mut s = GameState::new(12, 12);
+    s.economy.money = 1_000_000;
+    for x in 2..=6_i32 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+    }
+    let depot = TileCoord::new(4, 5);
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_KIRBY),
+    )
+    .unwrap();
+    let head = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_WAGON_PASSENGER),
+    )
+    .unwrap();
+    let wagon = s.vehicles.iter().find(|v| v.id != head).unwrap().id;
+    apply_command(
+        &mut s,
+        &Command::AttachWagonToConsist {
+            head_id: head,
+            wagon_id: wagon,
+        },
+    )
+    .unwrap();
+    let head_v = s.vehicles.iter().find(|v| v.id == head).unwrap();
+    assert_eq!(head_v.next_unit, Some(wagon));
+    assert!(head_v.cached_total_length >= 16);
+    assert!(head_v.capacity >= 40);
+    assert_eq!(
+        crate::consist_unit_ids(&s.vehicles, head),
+        vec![head, wagon]
+    );
+    let tiles = crate::consist_occupied_tiles(&s.vehicles, head);
+    assert!(!tiles.is_empty());
+    assert_eq!(tiles[0], head_v.pos);
+}
+
+#[test]
+fn train_consist_sell_head_sells_chain() {
+    let mut s = GameState::new(12, 12);
+    s.economy.money = 1_000_000;
+    for x in 2..=6_i32 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+    }
+    let depot = TileCoord::new(4, 5);
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_KIRBY),
+    )
+    .unwrap();
+    let head = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_WAGON_COAL),
+    )
+    .unwrap();
+    let wagon = s.vehicles.iter().find(|v| v.id != head).unwrap().id;
+    apply_command(
+        &mut s,
+        &Command::AttachWagonToConsist {
+            head_id: head,
+            wagon_id: wagon,
+        },
+    )
+    .unwrap();
+    apply_command(&mut s, &Command::SellVehicle(head)).unwrap();
+    assert!(s.vehicles.is_empty());
+}
+
+#[test]
 fn two_trains_can_leave_same_rail_depot() {
     let mut s = GameState::new(12, 12);
     s.economy.money = 1_000_000;

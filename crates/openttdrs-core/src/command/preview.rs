@@ -188,6 +188,9 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::SetVehicleOrderList(..)
         | Command::BuildRoadVehicleAtDepot(..)
         | Command::BuildVehicleAtDepot(..)
+        | Command::AttachWagonToConsist { .. }
+        | Command::DetachConsistUnit(..)
+        | Command::MoveRailVehicle { .. }
         | Command::SellVehicle(..)
         | Command::ToggleVehicleRunning(..)
         | Command::CloneVehicleOrders { .. }

@@ -24,7 +24,9 @@ use crate::GameState;
 /// v9: pools de órdenes compartidas.
 /// v10: órdenes condicionales.
 /// v11: teselas `MP_CLEAR` con `m5 == 0` (valor por defecto) → hierba completa.
-pub const CURRENT_SAVE_VERSION: u32 = 11;
+/// v12: consist ferroviario (`next_unit` / `prev_unit` / longitudes); trenes
+/// puntuales migran a consist de una unidad.
+pub const CURRENT_SAVE_VERSION: u32 = 12;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -140,11 +142,36 @@ fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState,
             4 | 6 | 7 | 8 | 9 => {}
             5 => migrate_state_v5_to_v6(&mut state),
             10 => migrate_state_v10_to_v11(&mut state),
+            11 => migrate_state_v11_to_v12(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
     }
     Ok(state)
+}
+
+/// v12: inicializar campos de consist en trenes existentes.
+fn migrate_state_v11_to_v12(state: &mut GameState) {
+    use crate::vehicle::VehicleKind;
+    let train_ids: Vec<u32> = state
+        .vehicles
+        .iter()
+        .filter(|v| v.kind == VehicleKind::Train)
+        .map(|v| v.id)
+        .collect();
+    for id in train_ids {
+        if let Some(v) = state.vehicles.iter_mut().find(|x| x.id == id) {
+            v.next_unit = None;
+            v.prev_unit = None;
+            if v.unit_length == 0 {
+                v.unit_length = crate::train_consist::VEHICLE_LENGTH;
+            }
+            if v.cached_total_length == 0 {
+                v.cached_total_length = u16::from(v.unit_length);
+            }
+        }
+        crate::train_consist::consist_changed(&mut state.vehicles, id);
+    }
 }
 
 /// v4: tipar órdenes legacy y normalizar flags de parada.

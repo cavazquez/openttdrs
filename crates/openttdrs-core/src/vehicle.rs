@@ -638,6 +638,32 @@ pub struct Vehicle {
     /// Ticks restantes en fase Takeoff/Landing.
     #[serde(default)]
     pub aircraft_phase_ticks: u16,
+    /// Siguiente unidad del consist (`OpenTTD` `Next()`); solo trenes.
+    #[serde(default)]
+    pub next_unit: Option<u32>,
+    /// Unidad anterior del consist; `None` = cabeza (front engine).
+    #[serde(default)]
+    pub prev_unit: Option<u32>,
+    /// Longitud de esta unidad en fracciones (`VEHICLE_LENGTH` = 8).
+    #[serde(default = "default_unit_length")]
+    pub unit_length: u8,
+    /// Longitud total del consist en fracciones (solo válida en la cabeza).
+    #[serde(default = "default_cached_total_length")]
+    pub cached_total_length: u16,
+    /// Potencia agregada del consist (HP); cabeza.
+    #[serde(default)]
+    pub cached_power_hp: u32,
+    /// Peso agregado del consist (t); cabeza.
+    #[serde(default)]
+    pub cached_weight_t: u16,
+}
+
+fn default_unit_length() -> u8 {
+    crate::train_consist::VEHICLE_LENGTH
+}
+
+fn default_cached_total_length() -> u16 {
+    u16::from(crate::train_consist::VEHICLE_LENGTH)
 }
 
 impl Vehicle {
@@ -697,7 +723,25 @@ impl Vehicle {
             aircraft_phase: AircraftPhase::InHangar,
             altitude: 0,
             aircraft_phase_ticks: 0,
+            next_unit: None,
+            prev_unit: None,
+            unit_length: crate::train_consist::VEHICLE_LENGTH,
+            cached_total_length: u16::from(crate::train_consist::VEHICLE_LENGTH),
+            cached_power_hp: 0,
+            cached_weight_t: 0,
         }
+    }
+
+    /// ¿Es la cabeza del consist (o no es tren)?
+    #[must_use]
+    pub fn is_consist_head(&self) -> bool {
+        self.kind != VehicleKind::Train || self.prev_unit.is_none()
+    }
+
+    /// ¿Es un vagón enganchado (no cabeza)?
+    #[must_use]
+    pub fn is_wagon_unit(&self) -> bool {
+        self.kind == VehicleKind::Train && self.prev_unit.is_some()
     }
 
     /// Restaura fiabilidad tras servicio en depósito.
@@ -847,15 +891,19 @@ impl Vehicle {
     fn update_movement_speed(&mut self) {
         let engine = self.effective_engine();
         let max_speed = engine.max_speed;
+        let (power, weight) = if self.kind == VehicleKind::Train
+            && (self.cached_power_hp > 0 || self.cached_weight_t > 0)
+        {
+            (
+                self.cached_power_hp.max(engine.power_hp),
+                self.cached_weight_t.max(engine.weight_t),
+            )
+        } else {
+            (engine.power_hp, engine.weight_t)
+        };
         if self.running && self.movement_target().is_some() {
             let (cur, sub) = if self.kind == VehicleKind::Train {
-                accelerate_train_speed(
-                    self.cur_speed,
-                    self.subspeed,
-                    engine.power_hp,
-                    engine.weight_t,
-                    max_speed,
-                )
+                accelerate_train_speed(self.cur_speed, self.subspeed, power, weight, max_speed)
             } else {
                 update_road_speed(
                     self.cur_speed,
@@ -869,7 +917,7 @@ impl Vehicle {
             self.subspeed = sub;
         } else {
             let (cur, sub) = if self.kind == VehicleKind::Train {
-                let accel = train_acceleration(engine.power_hp, engine.weight_t);
+                let accel = train_acceleration(power, weight);
                 decelerate_train_speed(self.cur_speed, self.subspeed, accel)
             } else {
                 decelerate_road_speed(self.cur_speed, self.subspeed)

@@ -250,7 +250,7 @@ pub enum SavVehicleKind {
     RoadVehicle,
 }
 
-/// Vehículo decodificado del chunk `VEHS` (solo cabezas de convoy).
+/// Vehículo decodificado del chunk `VEHS`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavVehicle {
     pub kind: SavVehicleKind,
@@ -263,6 +263,8 @@ pub struct SavVehicle {
     pub current_order: usize,
     /// `false` si el jugador detuvo el vehículo (`VehState::Stopped`).
     pub running: bool,
+    /// Tren: unidad sin `GVSF_FRONT` (vagón del consist anterior).
+    pub is_wagon: bool,
 }
 
 /// Primer (y único) registro de un campo struct de tabla.
@@ -276,8 +278,8 @@ fn nested_struct<'a>(record: &'a SlRecord, name: &str) -> Option<&'a SlRecord> {
 /// Bit `GVSF_FRONT` de `Vehicle::subtype` (cabeza de convoy en tren/camión).
 const GVSF_FRONT: u64 = 0x01;
 
-/// Vehículos del chunk `VEHS` (sparse table): trenes y vehículos de carretera
-/// cabeza de convoy; barcos, aviones y efectos se omiten.
+/// Vehículos del chunk `VEHS` (sparse table): trenes (cabeza + vagones) y
+/// vehículos de carretera cabeza de convoy; barcos/aviones se omiten.
 #[must_use]
 pub(crate) fn vehicles_from_chunks(
     chunks: &[RawChunk],
@@ -307,9 +309,12 @@ pub(crate) fn vehicles_from_chunks(
         let subtype = record_get(common, "subtype")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
-        if subtype & GVSF_FRONT == 0 {
+        let is_front = subtype & GVSF_FRONT != 0;
+        // Carretera: solo cabezas. Tren: cabeza y vagones.
+        if kind == SavVehicleKind::RoadVehicle && !is_front {
             continue;
         }
+        let is_wagon = kind == SavVehicleKind::Train && !is_front;
         let Some(tile) = record_get(common, "tile").and_then(SlValue::as_u64) else {
             continue;
         };
@@ -322,7 +327,11 @@ pub(crate) fn vehicles_from_chunks(
         let order_list_ref = record_get(common, "orders")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
-        let orders = order_import.orders_for_vehicle_ref(order_list_ref);
+        let orders = if is_wagon {
+            Vec::new()
+        } else {
+            order_import.orders_for_vehicle_ref(order_list_ref)
+        };
         let current_order = record_get(common, "cur_real_order_index")
             .and_then(SlValue::as_u64)
             .and_then(|v| usize::try_from(v).ok())
@@ -339,6 +348,7 @@ pub(crate) fn vehicles_from_chunks(
             orders,
             current_order,
             running,
+            is_wagon,
         });
     }
     out
@@ -586,19 +596,24 @@ mod tests {
     }
 
     #[test]
-    fn decodes_front_vehicles_and_skips_wagons() {
+    fn decodes_front_vehicles_and_train_wagons() {
         let vehicles = vehicles_from_chunks(
             &[vehs_chunk()],
             64,
             &super::super::orders::SavOrderImport::from_chunks(&[], 300),
             300,
         );
-        assert_eq!(vehicles.len(), 2);
+        assert_eq!(vehicles.len(), 3);
         assert_eq!(vehicles[0].kind, SavVehicleKind::Train);
+        assert!(!vehicles[0].is_wagon);
         assert_eq!(vehicles[0].pos, TileCoord::new(3, 1));
         assert_eq!(vehicles[0].cargo_type, 9);
-        assert_eq!(vehicles[1].kind, SavVehicleKind::RoadVehicle);
-        assert_eq!(vehicles[1].pos, TileCoord::new(7, 2));
-        assert_eq!(vehicles[1].cargo_type, 0);
+        assert_eq!(vehicles[1].kind, SavVehicleKind::Train);
+        assert!(vehicles[1].is_wagon);
+        assert_eq!(vehicles[1].pos, TileCoord::new(4, 1));
+        assert_eq!(vehicles[2].kind, SavVehicleKind::RoadVehicle);
+        assert!(!vehicles[2].is_wagon);
+        assert_eq!(vehicles[2].pos, TileCoord::new(7, 2));
+        assert_eq!(vehicles[2].cargo_type, 0);
     }
 }

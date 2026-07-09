@@ -683,6 +683,10 @@ fn move_vehicles(state: &mut GameState) {
     let pf = state.pathfinding;
     for i in 0..vehicle_count {
         state.vehicles[i].sim_tick = tick;
+        // Vagones: no se mueven solos; se sincronizan tras la cabeza.
+        if state.vehicles[i].is_wagon_unit() {
+            continue;
+        }
         let blocked = {
             let vehicles = &state.vehicles;
             let vehicle = &vehicles[i];
@@ -747,6 +751,9 @@ fn move_vehicles(state: &mut GameState) {
         let vehicle_kind = state.vehicles[i].kind;
         let vehicle_running = state.vehicles[i].running;
         state.vehicles[i].step();
+        if vehicle_kind == VehicleKind::Train {
+            crate::train_consist::consist_changed(&mut state.vehicles, vehicle_id);
+        }
         if state.vehicles[i].pos != prev_pos {
             crate::ship_movement::maybe_start_lock_transit(&mut state.vehicles[i], &state.map);
             if vehicle_kind == VehicleKind::Train {

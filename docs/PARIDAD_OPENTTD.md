@@ -49,10 +49,11 @@ Ordenada de **más barato a más caro**.
 | 17 | Carretera | Un solo sentido / drive-through | ✅ | 🟡 | M |
 | 18 | Mundo | Subvencios, autoridad local | ✅ | 🟡 | M–L |
 | 19 | Mundo | Terraform + 4 climas + gen mundo | ✅ | 🟡 | T1–T3 + T4 MVP (clima/gen); industrias por clima L — [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) |
-| 20 | Ferrocarril | PBS + path signals | ✅ | 🟡 | L–XL — PBS + UX; MultiExit; segmento estación/túnel/JGR; `_globset` only en tick |
-| 21 | Economía | Cargo Dist (link graph) | ✅ | ❌ | XL |
+| 19b | Ferrocarril | Consist / vagones (longitud, enganche) | ✅ | 🟡 | M — Fase 1 estructural (`train_consist`); ver [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md) |
+| 20 | Ferrocarril | PBS + path signals | ✅ | 🟡 | L–XL — Fase 3 estructural; MultiExit; segmento estación/túnel/JGR |
+| 21 | Economía | Cargo Dist (link graph) | ✅ | ❌ | XL — Fase 4 estructural |
 | 22 | Transporte | Barcos / aviones | ✅ | 🟡 | L — barcos (canal+esclusa Δh+4 motores); aviones (helipuerto + small 4×3 + fases vuelo) |
-| 23 | Modding | NewGRF runtime | ✅ | ❌ | XXL |
+| 23 | Modding | NewGRF runtime | ✅ | ❌ | XXL — Fase 7 estructural |
 | 24 | Red | Multijugador I8 | ✅ | ❌ | XXL |
 | 25 | UI | Barra inferior + noticias (ticker, cartel) | ✅ | 🟡 | M — N1–N5 MVP |
 
@@ -68,7 +69,7 @@ Ordenada de **más barato a más caro**.
 | **Pathfinding** | A* carretera; A* direccional vía; invalidación al editar mapa |
 | **Industrias** | 10 specs sandbox; producción 256 ticks |
 | **Ciudades** | Demanda, etiquetas, ventana pueblo |
-| **Vehículos** | Bus, camión, tren; compra/venta; órdenes simples |
+| **Vehículos** | Bus, camión, tren con consist (loco+vagones); compra/venta cadena; órdenes simples |
 | **Economía** | Dinero, costes, inflación, 6 cargos, pago transporte |
 | **Save** | JSON versionado (v4) |
 | **Import** | `parse_sav.py`, parser Rust, golden CI |

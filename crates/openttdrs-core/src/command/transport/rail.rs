@@ -265,6 +265,11 @@ pub(in crate::command::transport) fn write_normal_rail_tile(
         0
     };
     let old_m2 = tile.m2;
+    let was_rail = matches!(
+        tile.kind,
+        TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge
+    );
+    let keep_m8 = tile.m8;
 
     tile.kind = TileKind::Rail;
     tile.mapt = MP_RAILWAY_MAPT;
@@ -272,7 +277,12 @@ pub(in crate::command::transport) fn write_normal_rail_tile(
     tile.m2_hi = 0;
     tile.m6 = 0;
     tile.m7 = 0;
-    tile.m8 = 0;
+    // Conservar railtype existente; vía nueva → tipo activo del jugador.
+    tile.m8 = if was_rail {
+        keep_m8
+    } else {
+        crate::rail_type::set_rail_type_on_tile(tile, state.current_rail_type).m8
+    };
 
     if had_signals {
         let kept = old_present & trackbits_to_signal_present(tb);
@@ -609,6 +619,44 @@ pub(in crate::command) fn remove_rail(
     c: TileCoord,
 ) -> Result<(), CommandError> {
     remove_rail_bits(state, c, 0x3F)
+}
+
+/// Convierte el tipo de vía de una tesela (`CmdConvertRail`).
+pub(in crate::command) fn convert_rail(
+    state: &mut GameState,
+    c: TileCoord,
+    to_type: crate::rail_type::RailType,
+) -> Result<(), CommandError> {
+    check_in_bounds(&state.map, c)?;
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    if tile.kind != TileKind::Rail {
+        return Err(CommandError::NoRailToConvert);
+    }
+    let current = crate::rail_type::rail_type_from_tile(tile);
+    if current == to_type {
+        return Ok(());
+    }
+    // No convertir si hay tren eléctrico que quedaría sin catenaria.
+    if current == crate::rail_type::RailType::Electric
+        && to_type == crate::rail_type::RailType::Rail
+        && state.vehicles.iter().any(|v| {
+            v.pos == c
+                && v.engine_id
+                    .is_some_and(crate::rail_type::engine_requires_electric)
+        })
+    {
+        return Err(CommandError::TrainIncompatibleWithRailType);
+    }
+    if state.economy.money < crate::rail_type::RAIL_CONVERT_COST {
+        return Err(CommandError::InsufficientFunds);
+    }
+    let out = crate::rail_type::set_rail_type_on_tile(tile, to_type);
+    state
+        .map
+        .set_tile(c, out)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    state.economy.money -= crate::rail_type::RAIL_CONVERT_COST;
+    Ok(())
 }
 
 pub(in crate::command) fn place_rail_signal(

@@ -28,6 +28,7 @@ pub(crate) fn action_supports_drag(action: BuildMenuAction) -> bool {
             | BuildMenuAction::RailBridge
             | BuildMenuAction::RailTunnel
             | BuildMenuAction::RailRemove
+            | BuildMenuAction::RailConvert
             | BuildMenuAction::RailSignals
             | BuildMenuAction::Clear
             | BuildMenuAction::Canal
@@ -269,6 +270,29 @@ pub(crate) fn apply_drag_action(
         }
         if changed {
             let _ = finalize_road_drag_line(&mut sim.state, &placed, axis);
+        }
+        return (changed, if changed { None } else { last_err });
+    }
+
+    if action == BuildMenuAction::RailConvert {
+        use openttdrs_core::{RailType, rail_type_from_tile};
+        let mut changed = false;
+        let mut last_err = None;
+        for (x, y) in tiles {
+            let pos = TileCoord::new(x, y);
+            let to = sim
+                .state
+                .map
+                .get(pos)
+                .map(|t| match rail_type_from_tile(t) {
+                    RailType::Electric => RailType::Rail.as_u8(),
+                    RailType::Rail => RailType::Electric.as_u8(),
+                })
+                .unwrap_or(1);
+            match apply_command(&mut sim.state, &Command::ConvertRail(pos, to)) {
+                Ok(()) => changed = true,
+                Err(e) => last_err = Some(e),
+            }
         }
         return (changed, if changed { None } else { last_err });
     }

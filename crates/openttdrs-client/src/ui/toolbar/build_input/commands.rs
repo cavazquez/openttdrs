@@ -104,7 +104,21 @@ pub(crate) fn command_for_action(
                 sig_type,
             ))
         }
-        BuildMenuAction::RailConvert | BuildMenuAction::Orders => None,
+        BuildMenuAction::RailConvert => {
+            // Alterna a eléctrica (MVP); si ya es eléctrica, vuelve a normal.
+            let to = map
+                .and_then(|m| m.get(pos))
+                .map(|t| {
+                    use openttdrs_core::{RailType, rail_type_from_tile};
+                    match rail_type_from_tile(t) {
+                        RailType::Electric => RailType::Rail.as_u8(),
+                        RailType::Rail => RailType::Electric.as_u8(),
+                    }
+                })
+                .unwrap_or(1);
+            Some(Command::ConvertRail(pos, to))
+        }
+        BuildMenuAction::Orders => None,
         BuildMenuAction::RailWaypoint => Some(Command::PlaceRailWaypoint(pos)),
         BuildMenuAction::BuildHouse => Some(Command::PlaceHouse(pos)),
         BuildMenuAction::BuildCoalMine => Some(Command::PlaceIndustrySpec(

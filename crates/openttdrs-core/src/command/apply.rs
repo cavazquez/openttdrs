@@ -11,7 +11,7 @@ use super::{buy_land, economy, industry, terraform, town, transport, vehicles};
 ///
 /// Ver variantes de [`CommandError`].
 pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), CommandError> {
-    state.ensure_companies();
+    state.prepare_player_command();
     let result = apply_command_inner(state, cmd);
     // Editar el mapa invalida los caminos cacheados: un tren con ruta vieja
     // seguiría cruzando vía recién desconectada. Se recalculan el próximo tick.
@@ -359,6 +359,9 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::PlaceRailWaypoint(c) => transport::place_rail_waypoint(state, *c),
         Command::RemoveRailBits(c, bits) => transport::remove_rail_bits(state, *c, *bits),
         Command::RemoveRail(c) => transport::remove_rail(state, *c),
+        Command::ConvertRail(c, to) => {
+            transport::convert_rail(state, *c, crate::rail_type::RailType::from_u8(*to))
+        }
         Command::PlaceRailSignal(c, face, fx, fy, sig_type) => {
             transport::place_rail_signal(state, *c, *face, *fx, *fy, *sig_type)
         }

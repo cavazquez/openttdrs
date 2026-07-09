@@ -1015,6 +1015,77 @@ fn rail_depot_beside_x_line_connects_exit_tile() {
 }
 
 #[test]
+fn convert_rail_preserves_trackbits_and_sets_electric() {
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(12, 8);
+    s.economy.money = 100_000;
+    let c = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceRail(c)).unwrap();
+    let before = s.map.get(c).unwrap();
+    let bits = before.m5 & 0x3F;
+    assert_eq!(rail_type_from_tile(before), RailType::Rail);
+
+    apply_command(&mut s, &Command::ConvertRail(c, RailType::Electric.as_u8())).unwrap();
+    let after = s.map.get(c).unwrap();
+    assert_eq!(after.m5 & 0x3F, bits, "trackbits intactos");
+    assert_eq!(rail_type_from_tile(after), RailType::Electric);
+
+    apply_command(&mut s, &Command::ConvertRail(c, RailType::Rail.as_u8())).unwrap();
+    assert_eq!(rail_type_from_tile(s.map.get(c).unwrap()), RailType::Rail);
+}
+
+#[test]
+fn electric_engine_requires_electrified_neighbor() {
+    use crate::rail_type::RailType;
+
+    let mut s = GameState::new(12, 8);
+    s.economy.money = 1_000_000;
+    for x in 2..=6_i32 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+    }
+    let depot = TileCoord::new(4, 5);
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+
+    let err = apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_ASIASTAR),
+    )
+    .unwrap_err();
+    assert_eq!(err, CommandError::EngineRequiresElectricRail);
+
+    apply_command(
+        &mut s,
+        &Command::ConvertRail(TileCoord::new(4, 4), RailType::Electric.as_u8()),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_ASIASTAR),
+    )
+    .unwrap();
+    assert_eq!(
+        s.vehicles[0].engine_id,
+        Some(crate::engine::ENGINE_TRAIN_ASIASTAR)
+    );
+}
+
+#[test]
+fn place_rail_uses_current_rail_type() {
+    use crate::rail_type::{RailType, rail_type_from_tile};
+
+    let mut s = GameState::new(8, 8);
+    s.economy.money = 50_000;
+    s.current_rail_type = RailType::Electric;
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRail(c)).unwrap();
+    assert_eq!(
+        rail_type_from_tile(s.map.get(c).unwrap()),
+        RailType::Electric
+    );
+}
+
+#[test]
 fn train_consist_attach_wagon_grows_capacity_and_length() {
     let mut s = GameState::new(12, 12);
     s.economy.money = 1_000_000;

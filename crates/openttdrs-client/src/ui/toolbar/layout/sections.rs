@@ -429,6 +429,11 @@ pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             "assets/opengfx/tiles/toolbar_rail_remove.png",
                             BuildMenuAction::RailRemove,
                         ),
+                        (
+                            "Convertir vía",
+                            "assets/opengfx/tiles/toolbar_rail_remove.png",
+                            BuildMenuAction::RailConvert,
+                        ),
                     ],
                 );
             });

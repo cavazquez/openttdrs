@@ -34,6 +34,8 @@ pub enum Command {
     RemoveRailBits(TileCoord, u8),
     /// Quita toda la vía de la tesela.
     RemoveRail(TileCoord),
+    /// Convierte el tipo de vía (`Rail` ↔ `Electric`); `to_type` = `RailType` como `u8`.
+    ConvertRail(TileCoord, u8),
     /// Coloca señal ferroviaria; `face` es `DiagDir` (0=NE..3=NW).
     /// `fract_x`/`fract_y` (0–255) eligen carril en teselas HORZ/VERT como en `OpenTTD`.
     /// `sig_type`: `SIGTYPE_BLOCK`, `SIGTYPE_PATH` o `SIGTYPE_PATH_ONEWAY`.
@@ -355,6 +357,12 @@ pub enum CommandError {
     CannotPlaceWaypointOnTrack,
     /// No hay vía que quitar en esta tesela.
     NoRailToRemove,
+    /// No hay vía que convertir en esta tesela.
+    NoRailToConvert,
+    /// Un tren en la tesela no es compatible con el tipo de vía destino.
+    TrainIncompatibleWithRailType,
+    /// El motor requiere vía electrificada.
+    EngineRequiresElectricRail,
     /// Solo vía recta admite señales de bloque (v1).
     CannotPlaceSignalOnTrack,
     /// Ya hay una señal en esa dirección en esta tesela.
@@ -449,6 +457,13 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
             "El waypoint solo puede colocarse sobre vía recta (eje X o Y)."
         }
         CommandError::NoRailToRemove => "No hay vía que quitar aquí.",
+        CommandError::NoRailToConvert => "No hay vía que convertir aquí.",
+        CommandError::TrainIncompatibleWithRailType => {
+            "Hay un tren incompatible con ese tipo de vía."
+        }
+        CommandError::EngineRequiresElectricRail => {
+            "Este motor requiere vía electrificada (convertí la vía o el depósito)."
+        }
         CommandError::CannotPlaceSignalOnTrack => {
             "La señal solo puede colocarse sobre vía recta (eje X o Y)."
         }

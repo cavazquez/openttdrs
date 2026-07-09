@@ -91,6 +91,13 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             .or_else(|| check_rail_trackbits_with_autoslope(map, *c, bits & 0x3F, tick).err()),
         Command::PlaceRailWaypoint(c) => check_place_rail_waypoint(map, *c, stations).err(),
         Command::RemoveRailBits(c, _) | Command::RemoveRail(c) => check_remove_rail(map, *c).err(),
+        Command::ConvertRail(c, _) => {
+            if map.get_kind(*c) == Some(crate::map::TileKind::Rail) {
+                None
+            } else {
+                Some(CommandError::NoRailToConvert)
+            }
+        }
         Command::PlaceRailSignal(c, orientation, fract_x, fract_y, _) => {
             check_place_rail_signal_oriented(map, *c, *orientation, *fract_x, *fract_y).err()
         }

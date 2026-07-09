@@ -58,10 +58,9 @@ parcialmente resueltos; se mantienen tachados o anotados.
 
 ## Prioridad baja (dependen de decisiones estructurales o son cosméticas)
 
-13. **Railtypes** (normal/eléctrico/monorail/maglev), compatibilidad
-    motor↔vía, `CmdConvertRail`, `curve_speed` por railtype y catenaria —
-    `rail.h:26-525`. Sin `RailType` en core; el único rastro es la variante
-    visual semáforo/eléctrica de señales.
+13. ~~**Railtypes** (normal/eléctrico)~~ — **MVP (Fase 5)**: `rail_type.rs`,
+    `ConvertRail`, compat eléctricos 110–113. Pendiente: catenaria visual,
+    mono/maglev (Fase 6), `curve_speed` por railtype.
 14. **Ownership por tile de vía** — `m1` se fuerza a 0 al construir.
 15. **AM_REALISTIC + `GetCurveSpeedLimit`** — `train_cmd.cpp:312-381`
     (límites 61 / 88 / `232-(13-n)²`, tilt +20 %, `curve_speed_mod` por motor)

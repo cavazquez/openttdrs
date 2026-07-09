@@ -137,6 +137,20 @@ pub(super) fn build_vehicle_at_depot(
             return Err(CommandError::VehicleKindNotAllowed);
         }
     }
+    // Eléctricos: alguna vía adyacente al depósito debe estar electrificada.
+    if engine.kind == VehicleKind::Train && crate::rail_type::engine_requires_electric(engine_id) {
+        let electric_neighbor = [(-1, 0), (1, 0), (0, -1), (0, 1)].iter().any(|(dx, dy)| {
+            let n = TileCoord::new(depot_pos.x + dx, depot_pos.y + dy);
+            state.map.get(n).is_some_and(|t| {
+                t.kind == TileKind::Rail
+                    && crate::rail_type::rail_type_from_tile(t)
+                        == crate::rail_type::RailType::Electric
+            })
+        });
+        if !electric_neighbor {
+            return Err(CommandError::EngineRequiresElectricRail);
+        }
+    }
     if state.economy.money < engine.price {
         return Err(CommandError::InsufficientFunds);
     }

@@ -28,7 +28,8 @@ use crate::GameState;
 /// puntuales migran a consist de una unidad.
 /// v13: cargo packets en estación/vehículo; balances `CargoStock` se hidratan.
 /// v14: pool multi-compañía (`companies`, `owner` en vehículo/estación).
-pub const CURRENT_SAVE_VERSION: u32 = 14;
+/// v15: railtypes en `m8` + `current_rail_type` (vías existentes → normal).
+pub const CURRENT_SAVE_VERSION: u32 = 15;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -147,11 +148,39 @@ fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState,
             11 => migrate_state_v11_to_v12(&mut state),
             12 => migrate_state_v12_to_v13(&mut state),
             13 => migrate_state_v13_to_v14(&mut state),
+            14 => migrate_state_v14_to_v15(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
     }
     Ok(state)
+}
+
+/// v15: railtype por defecto en vías existentes (`m8` bits 0–5 = Rail).
+fn migrate_state_v14_to_v15(state: &mut GameState) {
+    use crate::map::TileKind;
+    use crate::rail_type::{RailType, set_rail_type_on_tile};
+    state.current_rail_type = RailType::Rail;
+    let (w, h) = state.map.dimensions();
+    for y in 0..h.cast_signed() {
+        for x in 0..w.cast_signed() {
+            let c = crate::map::TileCoord::new(x, y);
+            let Some(tile) = state.map.get(c) else {
+                continue;
+            };
+            if tile.kind != TileKind::Rail {
+                continue;
+            }
+            // Si m8 ya tiene tipo (import .sav), respetarlo; si no, Rail.
+            let _ = state.map.set_tile(
+                c,
+                set_rail_type_on_tile(
+                    tile,
+                    RailType::from_u8(u8::try_from(tile.m8 & 0x3F).unwrap_or(0)),
+                ),
+            );
+        }
+    }
 }
 
 /// v14: pool de compañías + owners por defecto (jugador).

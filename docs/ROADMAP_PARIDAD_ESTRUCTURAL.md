@@ -1,8 +1,7 @@
 # Roadmap: paridad estructural vs OpenTTD
 
-Plan vivo para cerrar las divergencias estructurales. Fases **1–4** (consist,
-packets, YAPF/PBS, multi-compañía/feeder/IA MVP) implementadas jul 2026.
-Fases 5–7 = hitos 0.5–0.6.
+Plan vivo para cerrar las divergencias estructurales. Fases **1–5** MVP
+implementadas jul 2026. Fases 6–7 = hitos 0.5–0.6.
 
 ## Fase 1 — Consist / vagones ✅
 
@@ -34,9 +33,12 @@ Fases 5–7 = hitos 0.5–0.6.
 - IA rival «TransCargo» (`ai/rule_based.rs`); escenario `ai_rival_line`.
 - Pendiente: link graph / Cargo Dist real; UI selector multi-compañía; quiebra rival.
 
-## Fase 5 — Railtypes / electrificación / RailConvert
+## Fase 5 — Railtypes / electrificación / RailConvert ✅ (MVP)
 
-`RailTypeInfo`, compatibilidad motor↔vía, toolbar `RailConvert`, catenaria.
+- `rail_type.rs`: `Rail` / `Electric` en `m8` bits 0–5; `current_rail_type`.
+- `Command::ConvertRail`; eléctricos (110–113) exigen vía electrificada adyacente.
+- Toolbar «Convertir vía»; save **v15**.
+- Pendiente: catenaria visual OpenGFX; mono/maglev (Fase 6).
 
 ## Fase 6 — Tranvía / monorail / maglev
 

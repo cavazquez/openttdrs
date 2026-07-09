@@ -30,6 +30,7 @@ pub mod pathfinding_settings;
 pub mod rail_lane;
 pub mod rail_pbs;
 pub mod rail_signals;
+pub mod rail_type;
 pub mod refit;
 pub mod road_movement;
 pub mod sav;
@@ -169,6 +170,10 @@ pub use rail_signals::{
     signal_facing_for_orientation, signal_on_track_mask, signal_placement_for_facing,
     signal_placement_for_track, signal_type_for_track, signal_type_label, tracks_overlap,
     valid_signal_facings_track, yapf_routing_signal,
+};
+pub use rail_type::{
+    RAIL_CONVERT_COST, RailType, engine_compatible_with_rail, engine_requires_electric,
+    rail_type_from_tile, required_rail_type_for_engine, set_rail_type_on_tile,
 };
 pub use refit::{
     next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_hidden_on_map,

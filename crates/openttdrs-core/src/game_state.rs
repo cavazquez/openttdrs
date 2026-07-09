@@ -107,6 +107,9 @@ pub struct GameState {
     /// Compañía que emite comandos del jugador / UI.
     #[serde(default)]
     pub active_company: crate::company::CompanyId,
+    /// Tipo de vía activo al construir (`_cur_railtype` en `OpenTTD`).
+    #[serde(default)]
+    pub current_rail_type: crate::rail_type::RailType,
     /// Clima del paisaje (`LandscapeType` en `OpenTTD`).
     #[serde(default)]
     pub climate: Climate,
@@ -210,6 +213,7 @@ impl GameState {
                 0,
             )],
             active_company: crate::company::CompanyId::PLAYER,
+            current_rail_type: crate::rail_type::RailType::Rail,
             climate: Climate::default(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
@@ -256,6 +260,7 @@ impl GameState {
                 0,
             )],
             active_company: crate::company::CompanyId::PLAYER,
+            current_rail_type: crate::rail_type::RailType::Rail,
             climate: Climate::default(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
@@ -338,7 +343,7 @@ impl GameState {
         )
     }
 
-    /// Asegura al menos la compañía jugador y alinea espejos desde el pool.
+    /// Asegura al menos la compañía jugador (sin pisar economías del pool).
     pub fn ensure_companies(&mut self) {
         if self.companies.is_empty() {
             self.companies.push(crate::company::Company::player(
@@ -347,7 +352,12 @@ impl GameState {
             ));
             self.active_company = crate::company::CompanyId::PLAYER;
         }
-        self.sync_mirrors_from_active();
+    }
+
+    /// Antes de un comando del jugador: reabsorbe espejos mutados (tests/UI).
+    pub fn prepare_player_command(&mut self) {
+        self.ensure_companies();
+        self.sync_active_from_mirrors();
     }
 
     /// Copia economía/color de la compañía activa a los campos espejo.

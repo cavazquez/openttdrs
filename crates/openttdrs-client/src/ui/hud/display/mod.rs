@@ -17,6 +17,8 @@ use crate::sprites::{
 use crate::state::{SimRunState, SimWorld, sim_is_paused};
 
 use super::{HudBuildFeedback, SelectedTileInfo, SimHudControls, TileInfoText};
+use crate::settings::ClientPreferences;
+use crate::ui::toolbar::StationBuildState;
 use crate::ui::{BuildMenuAction, OrderEditState, UiToolState};
 
 mod labels;
@@ -91,6 +93,19 @@ pub(crate) fn vehicle_hud_alert_line(state: &openttdrs_core::GameState) -> Strin
         }
     } else if waiting_cargo > 1 {
         parts.push(format!("sin carga disponible: {waiting_cargo} vehículos"));
+    }
+
+    let pbs_stuck = vehicles.iter().filter(|v| v.running && v.pbs_stuck).count();
+    if pbs_stuck == 1 {
+        if let Some(v) = vehicles.iter().find(|v| v.running && v.pbs_stuck) {
+            parts.push(format!(
+                "espera PBS: vehículo {} (orden {})",
+                v.id,
+                v.current_order.saturating_add(1)
+            ));
+        }
+    } else if pbs_stuck > 1 {
+        parts.push(format!("espera PBS: {pbs_stuck} vehículos"));
     }
 
     parts.join(" | ")
@@ -220,6 +235,9 @@ pub(crate) struct TileInfoHudKey {
     tile_kind: Option<TileKind>,
     tile_height: Option<u8>,
     vehicle_alert: String,
+    pbs_overlay: bool,
+    signal_type: u8,
+    signal_density: u8,
 }
 
 /// Actualiza el texto de informacion del tile seleccionado.
@@ -228,6 +246,8 @@ pub(crate) fn update_tile_info_text(
     selected: Res<SelectedTileInfo>,
     sim: Res<SimWorld>,
     hud: Res<SimHudControls>,
+    prefs: Res<ClientPreferences>,
+    station_state: Res<StationBuildState>,
     mut feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
     tool_state: Res<UiToolState>,
@@ -315,6 +335,9 @@ pub(crate) fn update_tile_info_text(
         tile_kind: tile_snapshot.map(|t| t.7),
         tile_height: tile_snapshot.map(|t| t.8),
         vehicle_alert: vehicle_alert.clone(),
+        pbs_overlay: prefs.show_pbs_reservations,
+        signal_type: station_state.signal_type,
+        signal_density: station_state.signal_density,
     };
     if cache.as_ref() == Some(&key) {
         return;
@@ -341,6 +364,11 @@ pub(crate) fn update_tile_info_text(
         "mapa M:on"
     } else {
         "mapa M:off"
+    };
+    let pbs_l = if prefs.show_pbs_reservations {
+        "PBS R:on"
+    } else {
+        "PBS R:off"
     };
     let tick_n = sim.state.tick.get();
 
@@ -379,8 +407,17 @@ pub(crate) fn update_tile_info_text(
         }
         hud_lines.push(truncate_hud_line(&alert, 72));
     }
+    let signal_tool_extra = if tool_state.active_tool == Some(BuildMenuAction::RailSignals) {
+        format!(
+            " tipo:{} dens:{}",
+            openttdrs_core::signal_type_label(station_state.signal_type),
+            station_state.signal_density
+        )
+    } else {
+        String::new()
+    };
     hud_lines.push(format!(
-        "Herramienta: {tool_l}{}{} | {minimap_l} | {save_file} · F4",
+        "Herramienta: {tool_l}{}{}{signal_tool_extra} | {minimap_l} | {pbs_l} | {save_file} · F4",
         tool_hint.map_or(String::new(), |h| format!(" ({h})")),
         order_l,
     ));
@@ -567,8 +604,10 @@ mod tests {
     };
 
     use crate::render::PrimaryGameCamera;
+    use crate::settings::ClientPreferences;
     use crate::state::SimWorld;
     use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, SimHudControls};
+    use crate::ui::toolbar::StationBuildState;
     use crate::ui::{OrderEditState, UiToolState};
 
     #[test]
@@ -604,6 +643,8 @@ mod tests {
         world.insert_resource(SelectedTileInfo::default());
         world.insert_resource(SimWorld::default());
         world.insert_resource(SimHudControls::default());
+        world.insert_resource(ClientPreferences::default());
+        world.insert_resource(StationBuildState::default());
         world.insert_resource(HudBuildFeedback::default());
         world.insert_resource(Time::<()>::default());
         world.insert_resource(UiToolState::default());
@@ -619,6 +660,8 @@ mod tests {
             pos: Some(TileCoord::new(1, 1)),
         });
         world.insert_resource(SimHudControls::default());
+        world.insert_resource(ClientPreferences::default());
+        world.insert_resource(StationBuildState::default());
         world.insert_resource(HudBuildFeedback::default());
         world.insert_resource(Time::<()>::default());
         world.insert_resource(UiToolState::default());
@@ -817,6 +860,19 @@ mod tests {
 
         let alert = vehicle_hud_alert_line(&state);
         assert!(alert.contains("sin carga disponible: vehículo 4"));
+    }
+
+    #[test]
+    fn vehicle_hud_alert_line_reports_pbs_stuck() {
+        let origin = TileCoord::new(0, 0);
+        let mut train = Vehicle::new(5, openttdrs_core::VehicleKind::Train, origin, origin);
+        train.running = true;
+        train.pbs_stuck = true;
+        train.set_orders(vec![TileCoord::new(3, 0)]);
+        let mut state = GameState::new(4, 4);
+        state.vehicles = vec![train];
+        let alert = vehicle_hud_alert_line(&state);
+        assert!(alert.contains("espera PBS: vehículo 5"));
     }
 
     #[test]

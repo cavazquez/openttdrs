@@ -405,6 +405,7 @@ fn spawn_map_tiles_in_bounds(
                     &ctx,
                     slope_half_ground,
                     climate,
+                    show_pbs_reservations,
                 );
             }
             TileKind::Rail => {

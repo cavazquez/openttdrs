@@ -209,7 +209,7 @@ Toolbar avanzada vs simplificada: la simplificada solo muestra path signals ([Bu
 | Semaphore vs electric | ✅ | `default_signal_variant` por año (`SEMAPHORE_BUILD_BEFORE_YEAR` = 1950); setting `gui.semaphore_build_before` no expuesto |
 | Tipos Entry / Exit / Combo | ✅ | Colocación + Ctrl ciclo 6 tipos; sim entry exige bloque propio libre **y** algún exit/combo verde |
 | Path / PathOneWay + reserva PBS | ✅ | Safe wait, wait/giro, UI `PBS...`, TryReserve BFS. YAPF nativo completo opcional |
-| Presignal `UpdateSignalsOnSegment` | 🟡 | 3 pasos: greens block/exit + estabilizar combos (`explore_sig_segment` / ProbeSigSeg v0) + entries; sin `_globset` incremental |
+| Presignal `UpdateSignalsOnSegment` | 🟡 | greens + estabilizar combos + MultiExit/MultiGreen; sin `_globset` incremental |
 | Arrastre línea + densidad | ✅ | `signal_density` default 4; Shift+RMB cicla |
 | Bulldozer quita señal (conserva vía) | ✅ | `RemoveRailSignal` vía herramienta Demoler |
 | Signal convert + Ctrl ciclo tipos | ✅ | Ctrl+clic: block→entry→exit→combo→path→path oneway (`CycleRailSignalType`) |
@@ -245,11 +245,12 @@ Orden sugerido alineado con [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) y [PARIDAD_
 
 1. Codificar `SignalType` 1–3 en `m2` al colocar/convertir — ✅ `PlaceRailSignal` acepta 0–5; Ctrl cicla los 6.  
 2. Port simplificado de `signal.cpp`:  
-   - `ProbeSigSeg` / flags de bloque — 🟡 `explore_sig_segment` (Exit acotado; no atraviesa block/path/entry)  
+   - `ProbeSigSeg` / flags de bloque — 🟡 `explore_sig_segment` (`Exit`/`MultiExit`/`Green`/`MultiGreen`; no atraviesa block/path/entry)  
    - `UpdateSignalsOnSegment` + buffer `_globset` — 🟡 greens + punto fijo combo + entries (sin buffer incremental)  
-   - Regla entry: rojo si bloque propio ocupado **o** ningún exit verde — ✅ (incluye cadenas entry→combo→exit)  
+   - Regla entry: rojo si bloque propio ocupado **o** ningún exit verde — ✅ (cadenas combo + bifurcaciones MultiExit)  
+   - Combo bidir MultiExit/MultiGreen — ✅ (`stabilize_combo_presignal_greens`)  
 3. Sprites entry/exit/combo (ya en OpenGFX vía `signal_type > 3`) — ✅.  
-4. Tests: ciclo 6 tipos + colocación entry/exit/combo; demo estación 2 vías — ✅ encoding; dinámico wiki + combo chain + segmento acotado.
+4. Tests: ciclo 6 tipos + colocación entry/exit/combo; demo estación 2 vías — ✅ encoding; dinámico wiki + combo chain + Y MultiExit.
 
 **No replicar** bugs upstream (lost train ignora exit) salvo paridad explícita.
 
@@ -267,7 +268,7 @@ Orden sugerido alineado con [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) y [PARIDAD_
 8. **UI settings:** ✅ toolbar **engranaje** (Ajustes) → `Pathfinding / PBS...` (`pathfinding_settings_window.rs`).  
 9. **TryReservePath:** ✅ Dijkstra con costes YAPF (`find_path_to_safe_wait`: tile + `YAPF_RESERVATION_CROSS_PENALTY` + sesgo off-path) hasta safe wait; reintento acotado por `path_backoff_interval` vía `should_retry_reservation(wait_counter)` en `compute_train_reservation_with_settings` (255 = off).
 
-**Pendiente:** — (`_globset` incremental; flags MultiExit/MultiGreen; túneles/estaciones en segmento).
+**Pendiente:** — (`_globset` incremental; túneles/estaciones en segmento).
 
 Dependencias: pathfinder trenes más fiel (YAPF simplificado o extensión de `pathfinder.rs`).
 

@@ -25,6 +25,7 @@ pub(crate) fn spawn_road_tile(
     ctx: &TileRenderContext,
     slope_half_ground: f32,
     climate: Climate,
+    show_pbs_reservations: bool,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -135,7 +136,7 @@ pub(crate) fn spawn_road_tile(
         if let Some(img) = assets.rail.get(&sid) {
             let crossing_paint = ctx.tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
                 let mut c = rail_track_base_color(t.mapt, TileKind::Rail, t.m5, t.m3);
-                if level_crossing_has_rail_reservation(t.m5) {
+                if show_pbs_reservations && level_crossing_has_rail_reservation(t.m5) {
                     c = c.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26);
                 }
                 if road_tile_tram_visual_active(t.m3, t.m8) {

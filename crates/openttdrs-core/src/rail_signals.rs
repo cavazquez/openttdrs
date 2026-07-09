@@ -804,12 +804,33 @@ pub fn train_blocked_by_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehic
 
 /// Resultado simplificado de `ProbeSigSeg` / `ExploreSegment` (`signal.cpp`).
 ///
-/// Solo flags `Exit` (lista de exit/combo que cierran el segmento). Ocupación
-/// (`Train`) sigue vía [`rail_block_ahead`] + [`block_is_occupied_by_trains`].
+/// Flags `Exit` / `MultiExit` / `Green` / `MultiGreen`. Ocupación (`Train`) sigue
+/// vía [`rail_block_ahead`] + [`block_is_occupied_by_trains`].
 #[derive(Debug, Clone, Default)]
+#[allow(clippy::struct_excessive_bools)] // espejo de `SigFlag` upstream
 struct SigSegmentProbe {
     /// `(tile, signal_bit)` de exit/combo al final del segmento.
     exits: Vec<(TileCoord, u8)>,
+    has_exit: bool,
+    multi_exit: bool,
+    has_green: bool,
+    multi_green: bool,
+}
+
+impl SigSegmentProbe {
+    /// Rellena flags Green a partir del mapa de verdes estabilizado / pasada 1.
+    fn with_green_flags(mut self, greens: &HashMap<(TileCoord, u8), bool>) -> Self {
+        self.has_exit = !self.exits.is_empty();
+        self.multi_exit = self.exits.len() >= 2;
+        let green_n = self
+            .exits
+            .iter()
+            .filter(|k| greens.get(k).copied().unwrap_or(false))
+            .count();
+        self.has_green = green_n >= 1;
+        self.multi_green = green_n >= 2;
+        self
+    }
 }
 
 /// Explora el segmento PBS/presignal desde `signal_tile` hacia `exit_dir`.
@@ -861,9 +882,25 @@ fn explore_sig_segment(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> SigSe
             }
         }
     }
+    probe.has_exit = !probe.exits.is_empty();
+    probe.multi_exit = probe.exits.len() >= 2;
     probe
 }
 
+/// Bit de señal en el sentido contrario del mismo carril (`ReverseTrackdir`).
+fn reverse_signal_bit(rails: u8, bit: u8) -> Option<u8> {
+    let track = signal_track_for_bit(rails, bit)?;
+    let mask = signal_on_track_mask(track);
+    (0..4u8).find(|&b| b != bit && mask & (1 << b) != 0)
+}
+
+/// `true` si hay señal en ambos sentidos del mismo carril (two-way).
+fn is_bidir_signal_on_bit(tile: &crate::map::Tile, bit: u8) -> bool {
+    let present = rail_signal_present_mask(tile.m3);
+    reverse_signal_bit(tile.m5 & 0x3F, bit).is_some_and(|rev| present & (1 << rev) != 0)
+}
+
+#[cfg(test)]
 fn presignal_exit_targets_ahead(
     map: &Map,
     signal_tile: TileCoord,
@@ -876,6 +913,7 @@ fn presignal_exit_targets_ahead(
 ///
 /// Pasada 1 deja combos como “solo bloque propio”; aquí aplican la regla entry
 /// leyendo exits/combos aguas abajo ya estabilizados (arregla cadenas combo).
+/// Combo bidireccional: regla `MultiExit`/`MultiGreen` de `signal.cpp` (~441–448).
 fn stabilize_combo_presignal_greens(
     map: &Map,
     vehicles: &[Vehicle],
@@ -917,15 +955,22 @@ fn stabilize_combo_presignal_greens(
             let exit_ok = exit_green.get(&(c, bit)).copied().unwrap_or_else(|| {
                 signal_bit_block_green(map, vehicles, c, &tile, bit, SIGTYPE_COMBO)
             });
-            let targets = presignal_exit_targets_ahead(map, c, exit_dir);
-            let entry_ok = if targets.is_empty() {
-                true
+            let probe = explore_sig_segment(map, c, exit_dir).with_green_flags(&greens);
+            let entry_ok = if probe.has_exit {
+                probe.has_green
             } else {
-                targets
-                    .iter()
-                    .any(|key| greens.get(key).copied().unwrap_or(false))
+                true
             };
-            let new_green = exit_ok && entry_ok;
+            let mut new_green = exit_ok && entry_ok;
+            // Combo two-way: MultiExit + (ningún verde, o un solo verde con cara reversa verde).
+            if new_green && is_bidir_signal_on_bit(&tile, bit) && probe.multi_exit {
+                let rev_green = reverse_signal_bit(rails, bit)
+                    .and_then(|rev| greens.get(&(c, rev)).copied())
+                    .unwrap_or(false);
+                if !probe.has_green || (!probe.multi_green && rev_green) {
+                    new_green = false;
+                }
+            }
             let prev = greens.insert((c, bit), new_green);
             if prev != Some(new_green) {
                 changed = true;
@@ -1014,16 +1059,12 @@ fn refresh_signal_tile_states(
         let green = if sig_type == SIGTYPE_ENTRY {
             let exit_dir = signal_exit_dir(rails, bit);
             let own_block_ok = signal_bit_block_green(map, vehicles, c, &tile, bit, SIGTYPE_BLOCK);
-            let targets = presignal_exit_targets_ahead(map, c, exit_dir);
-            if targets.is_empty() {
-                own_block_ok
+            let probe = explore_sig_segment(map, c, exit_dir).with_green_flags(signal_green);
+            if probe.has_exit {
+                // OpenTTD: entry verde solo si bloque propio libre Y Exit+Green en el segmento.
+                own_block_ok && probe.has_green
             } else {
-                // OpenTTD: entry verde solo si el bloque propio está libre Y algún exit/combo
-                // aguas abajo está verde (valores ya estabilizados para combos).
                 own_block_ok
-                    && targets
-                        .iter()
-                        .any(|key| signal_green.get(key).copied().unwrap_or(false))
             }
         } else {
             signal_green
@@ -1836,6 +1877,108 @@ mod tests {
         assert!(
             targets.is_empty(),
             "block intermedio cierra el segmento: {targets:?}"
+        );
+    }
+
+    /// Bifurcación en Y: entry ve 2 exits; una ocupada → `MultiExit` + Green (no `MultiGreen`).
+    #[test]
+    fn explore_sig_segment_flags_multi_exit_green() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
+        let mut map = Map::new_flat(12, 8, 0);
+        for x in 0..=8 {
+            write_rail(&mut map, TileCoord::new(x, 3), RAIL_TB_X);
+        }
+        // Cruce + rama norte.
+        write_rail(&mut map, TileCoord::new(4, 3), RAIL_TB_X | RAIL_TB_Y);
+        for y in 0..=2 {
+            write_rail(&mut map, TileCoord::new(4, y), RAIL_TB_Y);
+        }
+        write_signal_facing(&mut map, TileCoord::new(1, 3), RAIL_TB_X, Some(0));
+        let mut entry = map.get(TileCoord::new(1, 3)).expect("entry");
+        entry.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(1, 3), entry).expect("entry");
+        write_signal_facing(&mut map, TileCoord::new(7, 3), RAIL_TB_X, Some(0));
+        let mut exit_a = map.get(TileCoord::new(7, 3)).expect("exit A");
+        exit_a.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(7, 3), exit_a).expect("exit A");
+        write_signal_facing(&mut map, TileCoord::new(4, 1), RAIL_TB_Y, Some(3)); // NW → bloque (4,0)
+        let mut exit_b = map.get(TileCoord::new(4, 1)).expect("exit B");
+        exit_b.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(4, 1), exit_b).expect("exit B");
+
+        let blocker = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(8, 3),
+            TileCoord::new(8, 3),
+        );
+        update_rail_signal_states(
+            &mut map,
+            std::slice::from_ref(&blocker),
+            &mut Vec::new(),
+            true,
+        );
+
+        let greens = compute_exit_signal_greens(&map, std::slice::from_ref(&blocker));
+        let probe = explore_sig_segment(&map, TileCoord::new(1, 3), 0).with_green_flags(&greens);
+        assert!(probe.multi_exit, "debe ver 2 exits: {:?}", probe.exits);
+        assert!(probe.has_green, "rama norte libre → Green");
+        assert!(!probe.multi_green, "solo una exit verde");
+
+        let entry_tile = map.get(TileCoord::new(1, 3)).expect("entry");
+        assert_ne!(
+            rail_signal_state_mask(entry_tile.m3hi) & 0b0100,
+            0,
+            "entry verde con una rama libre"
+        );
+    }
+
+    #[test]
+    fn entry_red_when_all_branch_exits_blocked() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
+        let mut map = Map::new_flat(12, 8, 0);
+        for x in 0..=8 {
+            write_rail(&mut map, TileCoord::new(x, 3), RAIL_TB_X);
+        }
+        write_rail(&mut map, TileCoord::new(4, 3), RAIL_TB_X | RAIL_TB_Y);
+        for y in 0..=2 {
+            write_rail(&mut map, TileCoord::new(4, y), RAIL_TB_Y);
+        }
+        write_signal_facing(&mut map, TileCoord::new(1, 3), RAIL_TB_X, Some(0));
+        let mut entry = map.get(TileCoord::new(1, 3)).expect("entry");
+        entry.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(1, 3), entry).expect("entry");
+        write_signal_facing(&mut map, TileCoord::new(7, 3), RAIL_TB_X, Some(0));
+        let mut exit_a = map.get(TileCoord::new(7, 3)).expect("exit A");
+        exit_a.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(7, 3), exit_a).expect("exit A");
+        write_signal_facing(&mut map, TileCoord::new(4, 1), RAIL_TB_Y, Some(3));
+        let mut exit_b = map.get(TileCoord::new(4, 1)).expect("exit B");
+        exit_b.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(4, 1), exit_b).expect("exit B");
+
+        let a = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(8, 3),
+            TileCoord::new(8, 3),
+        );
+        let b = Vehicle::new(
+            3,
+            VehicleKind::Train,
+            TileCoord::new(4, 0),
+            TileCoord::new(4, 0),
+        );
+        update_rail_signal_states(&mut map, &[a, b], &mut Vec::new(), true);
+        let entry_tile = map.get(TileCoord::new(1, 3)).expect("entry");
+        assert_eq!(
+            rail_signal_state_mask(entry_tile.m3hi) & 0b0100,
+            0,
+            "ambas ramas ocupadas → entry roja"
         );
     }
 

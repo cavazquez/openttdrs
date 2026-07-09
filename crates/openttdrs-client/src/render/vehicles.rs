@@ -385,8 +385,12 @@ fn vehicle_cargo_label_pos(vehicle_pos: Vec3) -> Vec3 {
     Vec3::new(vehicle_pos.x, vehicle_pos.y + 21.0, vehicle_pos.z + 0.35)
 }
 
-fn vehicle_tint() -> Color {
-    Color::WHITE
+fn vehicle_tint(v: &Vehicle) -> Color {
+    if v.pbs_stuck {
+        Color::srgb(1.0, 0.75, 0.35)
+    } else {
+        Color::WHITE
+    }
 }
 
 fn vehicle_is_hidden_in_depot(sim: &SimWorld, v: &Vehicle) -> bool {
@@ -446,7 +450,7 @@ pub(crate) fn update_vehicles(
         let pos3 = vehicle_sprite_pos_at(v, &sim.state.map, pose);
         transform.translation = pos3;
         sprite.image = trucks.for_vehicle(v, pose, Some(&company));
-        sprite.color = vehicle_tint();
+        sprite.color = vehicle_tint(v);
     }
 
     for (label, mut transform, mut text, mut color, mut visibility) in &mut labels {
@@ -548,6 +552,15 @@ mod tests {
             vehicle_layers(&empty_bus)[5].path,
             vehicle_layers(&loaded_bus)[5].path
         );
+    }
+
+    #[test]
+    fn vehicle_tint_amber_when_pbs_stuck() {
+        let mut v = sample_vehicle(1);
+        v.kind = VehicleKind::Train;
+        assert_eq!(vehicle_tint(&v), Color::WHITE);
+        v.pbs_stuck = true;
+        assert_eq!(vehicle_tint(&v), Color::srgb(1.0, 0.75, 0.35));
     }
 
     #[test]

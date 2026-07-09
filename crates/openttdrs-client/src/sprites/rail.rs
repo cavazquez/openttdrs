@@ -1,7 +1,9 @@
 use std::sync::OnceLock;
 
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileCoord, TileKind};
+use openttdrs_core::{
+    Map, TileCoord, TileKind, diag_dir_offset, rail_type_from_tile, tile_slope_and_z,
+};
 
 use super::road::RoadDepotLayerGfx;
 use crate::config;
@@ -44,6 +46,8 @@ pub const WIRE_SPRITE_BASE: u32 = 1039;
 pub const WIRE_SPRITE_LAST: u32 = 1062;
 
 /// `WireSpriteOffset` — `elrail_data.h`.
+const WSO_X_SHORT: u32 = 0;
+const WSO_Y_SHORT: u32 = 1;
 const WSO_EW_SHORT: u32 = 2;
 const WSO_NS_SHORT: u32 = 3;
 const WSO_X_SHORT_DOWN: u32 = 4;
@@ -52,8 +56,76 @@ const WSO_X_SHORT_UP: u32 = 6;
 const WSO_Y_SHORT_DOWN: u32 = 7;
 const WSO_X_SW: u32 = 8;
 const WSO_Y_SE: u32 = 9;
+const WSO_X_SW_DOWN: u32 = 12;
+const WSO_Y_SE_UP: u32 = 13;
+const WSO_X_SW_UP: u32 = 14;
+const WSO_Y_SE_DOWN: u32 = 15;
 const WSO_X_NE: u32 = 16;
 const WSO_Y_NW: u32 = 17;
+const WSO_X_NE_DOWN: u32 = 20;
+const WSO_Y_NW_UP: u32 = 21;
+const WSO_X_NE_UP: u32 = 22;
+const WSO_Y_NW_DOWN: u32 = 23;
+
+/// `DiagDirection`: NE=0, SE=1, SW=2, NW=3.
+const DIAGDIR_NE: u8 = 0;
+const DIAGDIR_SE: u8 = 1;
+const DIAGDIR_SW: u8 = 2;
+const DIAGDIR_NW: u8 = 3;
+
+/// `_pcp_positions[TRACK_*]` — extremos PCP de cada track bit (`elrail_data.h`).
+const PCP_POS: [[u8; 2]; 6] = [
+    [DIAGDIR_NE, DIAGDIR_SW], // X
+    [DIAGDIR_SE, DIAGDIR_NW], // Y
+    [DIAGDIR_NW, DIAGDIR_NE], // UPPER
+    [DIAGDIR_SE, DIAGDIR_SW], // LOWER
+    [DIAGDIR_SW, DIAGDIR_NW], // LEFT
+    [DIAGDIR_NE, DIAGDIR_SE], // RIGHT
+];
+
+/// Track bits que pueden encontrarse en cada borde PCP (`_tracks_at_pcp`).
+const TRACKS_AT_PCP: [[u8; 6]; 4] = [
+    [
+        RAIL_TB_X,
+        RAIL_TB_X,
+        RAIL_TB_UPPER,
+        RAIL_TB_LOWER,
+        RAIL_TB_LEFT,
+        RAIL_TB_RIGHT,
+    ],
+    [
+        RAIL_TB_Y,
+        RAIL_TB_Y,
+        RAIL_TB_UPPER,
+        RAIL_TB_LOWER,
+        RAIL_TB_LEFT,
+        RAIL_TB_RIGHT,
+    ],
+    [
+        RAIL_TB_X,
+        RAIL_TB_X,
+        RAIL_TB_UPPER,
+        RAIL_TB_LOWER,
+        RAIL_TB_LEFT,
+        RAIL_TB_RIGHT,
+    ],
+    [
+        RAIL_TB_Y,
+        RAIL_TB_Y,
+        RAIL_TB_UPPER,
+        RAIL_TB_LOWER,
+        RAIL_TB_LEFT,
+        RAIL_TB_RIGHT,
+    ],
+];
+
+/// `TileSource::Home` (false) / `Neighbour` (true) para cada entrada de `TRACKS_AT_PCP`.
+const TRACK_SOURCE_NEIGHBOUR: [[bool; 6]; 4] = [
+    [false, true, false, true, true, false],
+    [false, true, true, false, true, false],
+    [false, true, true, false, false, true],
+    [false, true, false, true, false, true],
+];
 
 /// Delta de sprite en teselas con nieve/deserto (`SPR_RAIL_SNOW_OFFSET`).
 pub const RAIL_SPRITE_SNOW_OFFSET: u32 = 26;
@@ -174,13 +246,43 @@ pub fn catenary_tileh_selector(tileh: u8) -> u8 {
     if th.is_multiple_of(3) { th / 3 } else { 0 }
 }
 
-/// Cables de catenaria (`DrawRailCatenaryRailway` simplificado).
-///
-/// - Pendientes 3/6/9/12: wires `*_SHORT_UP/DOWN` para X/Y.
-/// - Rectas planas X/Y: alterna poste un lado (`SW`/`NE` o `SE`/`NW`) según `(tx+ty)&1`
-///   (aproximación del «un poste cada dos teselas» sin PCP de vecinos).
-/// - HORZ/VERT/empalmes: `*_SHORT` (ambos extremos).
+/// Grupo de paridad de tesela (`GetTileLocationGroup`): `(x&1)<<1 | (y&1)`.
+#[must_use]
+pub fn catenary_tile_location_group(tx: i32, ty: i32) -> u8 {
+    (((tx & 1) as u8) << 1) | ((ty & 1) as u8)
+}
+
+/// Cables de catenaria sin mapa (tests / fallback): PCP por paridad `(tx+ty)&1`.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn collect_catenary_sprites(tb: u8, tileh: u8, tx: i32, ty: i32, out: &mut Vec<u32>) {
+    let pcp = catenary_pcp_from_parity(tb, tx, ty);
+    collect_catenary_sprites_with_pcp(tb, tileh, pcp, out);
+}
+
+/// Cables de catenaria con PCP real por vecinos (`DrawRailCatenaryRailway`).
+///
+/// Calcula bordes con poste (PCP) mirando vías electrificadas adyacentes y la
+/// regla «un poste cada dos teselas» en rectas (`_ignored_pcp`). Sin postes PPP
+/// sueltos ni túneles/puentes.
+#[allow(clippy::too_many_arguments)]
+pub fn collect_catenary_sprites_from_map(
+    map: &Map,
+    pos: TileCoord,
+    mw: u32,
+    mh: u32,
+    mp_rail: u8,
+    tb: u8,
+    tileh: u8,
+    out: &mut Vec<u32>,
+) {
+    let home_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
+    let wire_tb = if home_tb != 0 { home_tb } else { tb & 0x3F };
+    let pcp = compute_catenary_pcp_status(map, pos, mw, mh, mp_rail, wire_tb, tileh);
+    collect_catenary_sprites_with_pcp(wire_tb, tileh, pcp, out);
+}
+
+/// Máscara de 4 bits: bit `d` = PCP activo en `DiagDirection` d.
+fn collect_catenary_sprites_with_pcp(tb: u8, tileh: u8, pcp: u8, out: &mut Vec<u32>) {
     out.clear();
     let t = tb & 0x3F;
     if t == 0 {
@@ -193,64 +295,245 @@ pub fn collect_catenary_sprites(tb: u8, tileh: u8, tx: i32, ty: i32, out: &mut V
         tileh
     };
     let sel = catenary_tileh_selector(effective_tileh);
+
+    for track_idx in 0..6u8 {
+        let bit = 1u8 << track_idx;
+        if t & bit == 0 {
+            continue;
+        }
+        let mut cfg = pcp_config_for_track(pcp, track_idx);
+        if cfg == 0 {
+            // Sin PCP en ningún extremo: forzar ambos (sprites BOTH / SHORT).
+            cfg = 3;
+        }
+        if let Some(wso) = rail_wire_wso(sel, track_idx, cfg) {
+            let sid = WIRE_SPRITE_BASE + wso;
+            // MVP sin offsets por track: evitar duplicar el mismo WSO (HORZ/VERT).
+            if !out.contains(&sid) {
+                out.push(sid);
+            }
+        }
+    }
+}
+
+fn pcp_config_for_track(pcp: u8, track_idx: u8) -> u8 {
+    let ends = PCP_POS[track_idx as usize];
+    let e0 = u8::from(pcp & (1 << ends[0]) != 0);
+    let e1 = u8::from(pcp & (1 << ends[1]) != 0);
+    e0 + (e1 << 1)
+}
+
+/// `_rail_wires[sel][track][pcp_config]` → offset WSO OpenGFX.
+fn rail_wire_wso(sel: u8, track_idx: u8, pcp_config: u8) -> Option<u32> {
+    // pcp_config: 1=end0, 2=end1, 3=both (0 inválido).
+    let cfg = pcp_config.min(3) as usize;
+    if cfg == 0 {
+        return None;
+    }
+    match (sel, track_idx) {
+        // TRACK_X
+        (0, 0) => Some([0, WSO_X_NE, WSO_X_SW, WSO_X_SHORT][cfg]),
+        (1, 0) => Some([0, WSO_X_NE_UP, WSO_X_SW_UP, WSO_X_SHORT_UP][cfg]),
+        (4, 0) => Some([0, WSO_X_NE_DOWN, WSO_X_SW_DOWN, WSO_X_SHORT_DOWN][cfg]),
+        // TRACK_Y
+        (0, 1) => Some([0, WSO_Y_SE, WSO_Y_NW, WSO_Y_SHORT][cfg]),
+        (2, 1) => Some([0, WSO_Y_SE_UP, WSO_Y_NW_UP, WSO_Y_SHORT_UP][cfg]),
+        (3, 1) => Some([0, WSO_Y_SE_DOWN, WSO_Y_NW_DOWN, WSO_Y_SHORT_DOWN][cfg]),
+        // UPPER / LOWER / LEFT / RIGHT — solo plano; MVP usa SHORT (ambos).
+        (0, 2) | (0, 3) => Some(WSO_EW_SHORT),
+        (0, 4) | (0, 5) => Some(WSO_NS_SHORT),
+        _ => None,
+    }
+}
+
+/// PCP por paridad (fallback sin vecinos): en recta X/Y un extremo según `(tx+ty)&1`.
+#[cfg_attr(not(test), allow(dead_code))]
+fn catenary_pcp_from_parity(tb: u8, tx: i32, ty: i32) -> u8 {
+    let t = tb & 0x3F;
     let alt = ((tx + ty) & 1) == 0;
+    let mut pcp = 0u8;
+    if t & RAIL_TB_X != 0 {
+        // end0=NE, end1=SW → alt: SW (2), else NE (1)
+        pcp |= if alt {
+            1 << DIAGDIR_SW
+        } else {
+            1 << DIAGDIR_NE
+        };
+    }
+    if t & RAIL_TB_Y != 0 {
+        // end0=SE, end1=NW → alt: SE (1), else NW (2)
+        pcp |= if alt {
+            1 << DIAGDIR_SE
+        } else {
+            1 << DIAGDIR_NW
+        };
+    }
+    if t & (RAIL_TB_UPPER | RAIL_TB_LOWER | RAIL_TB_LEFT | RAIL_TB_RIGHT) != 0 {
+        // Empalmes: ambos extremos de cada bit presente.
+        for track_idx in 2..6u8 {
+            if t & (1 << track_idx) != 0 {
+                let ends = PCP_POS[track_idx as usize];
+                pcp |= 1 << ends[0];
+                pcp |= 1 << ends[1];
+            }
+        }
+    }
+    if pcp == 0 && t != 0 {
+        pcp = 0b1111;
+    }
+    pcp
+}
 
-    if t == RAIL_TB_X {
-        if let Some(wso) = catenary_wso_for_x(sel, alt) {
-            out.push(WIRE_SPRITE_BASE + wso);
-        }
-        return;
+/// Track bits electrificados en una tesela (`GetRailTrackBitsUniversal` MVP: vía normal/señales).
+fn electrified_trackbits_at(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp_rail: u8) -> u8 {
+    if pos.x < 0 || pos.y < 0 || pos.x >= mw as i32 || pos.y >= mh as i32 {
+        return 0;
     }
-    if t == RAIL_TB_Y {
-        if let Some(wso) = catenary_wso_for_y(sel, alt) {
-            out.push(WIRE_SPRITE_BASE + wso);
-        }
-        return;
+    let Some(tile) = map.get(pos) else {
+        return 0;
+    };
+    if tile.kind != TileKind::Rail {
+        return 0;
     }
-    if sel != 0 {
-        // Pendiente: solo X/Y tienen sprites; el resto no dibuja wire.
-        return;
+    if !rail_type_from_tile(tile).has_catenary() {
+        return 0;
     }
-    match t {
-        RAIL_TB_HORZ => out.push(WIRE_SPRITE_BASE + WSO_EW_SHORT),
-        RAIL_TB_VERT => out.push(WIRE_SPRITE_BASE + WSO_NS_SHORT),
-        RAIL_TB_CROSS => {
-            out.push(WIRE_SPRITE_BASE + if alt { WSO_X_SW } else { WSO_X_NE });
-            out.push(WIRE_SPRITE_BASE + if alt { WSO_Y_SE } else { WSO_Y_NW });
+    effective_rail_trackbits(tile.mapt, tile.m5, tile.kind, mp_rail).unwrap_or(0) & 0x3F
+}
+
+/// Calcula máscara PCP de 4 bits (`pcp_status` en `DrawRailCatenaryRailway`).
+fn compute_catenary_pcp_status(
+    map: &Map,
+    pos: TileCoord,
+    mw: u32,
+    mh: u32,
+    mp_rail: u8,
+    home_tb: u8,
+    home_tileh: u8,
+) -> u8 {
+    let home_tb = home_tb & 0x3F;
+    if home_tb == 0 {
+        return 0;
+    }
+    let home_flat = home_tb & (RAIL_TB_HORZ | RAIL_TB_VERT) != 0;
+    let home_foundation = openttdrs_core::rail_foundation_for_trackbits(home_tileh, home_tb);
+    let home_eff_h = if home_tileh == 0 || home_foundation == 1 {
+        0
+    } else {
+        home_tileh
+    };
+    let tlg = catenary_tile_location_group(pos.x, pos.y);
+    let mut pcp = 0u8;
+
+    for dir in 0..4u8 {
+        let (dx, dy) = diag_dir_offset(dir);
+        let npos = TileCoord::new(pos.x + dx, pos.y + dy);
+        let neigh_tb = electrified_trackbits_at(map, npos, mw, mh, mp_rail);
+        let neigh_slope = tile_slope_and_z(map, npos).map(|(h, _)| h).unwrap_or(0);
+        let neigh_foundation = openttdrs_core::rail_foundation_for_trackbits(neigh_slope, neigh_tb);
+        let neigh_eff_h = if neigh_tb == 0 || neigh_slope == 0 || neigh_foundation == 1 {
+            0
+        } else {
+            neigh_slope
+        };
+        let neigh_flat = neigh_tb & (RAIL_TB_HORZ | RAIL_TB_VERT) != 0;
+
+        let mut preferred_mask: u8 = 0xFF;
+        let mut used = false;
+        for k in 0..6 {
+            let track_bit = TRACKS_AT_PCP[dir as usize][k];
+            let from_neigh = TRACK_SOURCE_NEIGHBOUR[dir as usize][k];
+            let src_tb = if from_neigh { neigh_tb } else { home_tb };
+            if src_tb & track_bit == 0 {
+                continue;
+            }
+            used = true;
+            let pcp_pos = if from_neigh {
+                reverse_diag_dir(dir)
+            } else {
+                dir
+            };
+            preferred_mask &= preferred_ppp_mask(track_bit, pcp_pos);
         }
-        _ => {
-            if t & RAIL_TB_X != 0 {
-                out.push(WIRE_SPRITE_BASE + if alt { WSO_X_SW } else { WSO_X_NE });
-            }
-            if t & RAIL_TB_Y != 0 {
-                out.push(WIRE_SPRITE_BASE + if alt { WSO_Y_SE } else { WSO_Y_NW });
-            }
-            if t & (RAIL_TB_UPPER | RAIL_TB_LOWER) != 0 {
-                out.push(WIRE_SPRITE_BASE + WSO_EW_SHORT);
-            }
-            if t & (RAIL_TB_LEFT | RAIL_TB_RIGHT) != 0 {
-                out.push(WIRE_SPRITE_BASE + WSO_NS_SHORT);
-            }
+        if !used {
+            continue;
         }
+        pcp |= 1 << dir;
+
+        // Recta nivelada: omitir PCP cada 2 teselas (`_ignored_pcp`).
+        if (home_eff_h == neigh_eff_h || (home_flat && neigh_flat))
+            && is_ignored_pcp(preferred_mask, tlg, dir)
+        {
+            pcp &= !(1 << dir);
+        }
+    }
+    pcp
+}
+
+/// Máscara de PPP preferidos (bits DIR_*) para ignore-group; subset de `_preferred_ppp_of_track_at_pcp`.
+fn preferred_ppp_mask(track_bit: u8, pcp_pos: u8) -> u8 {
+    // DIR: N=0 NE=1 E=2 SE=3 S=4 SW=5 W=6 NW=7
+    const ALL: u8 = 0xFF;
+    match (track_bit, pcp_pos) {
+        (RAIL_TB_X, DIAGDIR_NE) => (1 << 1) | (1 << 3) | (1 << 7), // NE,SE,NW
+        (RAIL_TB_X, DIAGDIR_SW) => (1 << 3) | (1 << 5) | (1 << 7), // SE,SW,NW
+        (RAIL_TB_X, _) => ALL,
+        (RAIL_TB_Y, DIAGDIR_SE) => (1 << 1) | (1 << 3) | (1 << 5), // NE,SE,SW
+        (RAIL_TB_Y, DIAGDIR_NW) => (1 << 5) | (1 << 7) | (1 << 1), // SW,NW,NE
+        (RAIL_TB_Y, _) => ALL,
+        (RAIL_TB_UPPER, DIAGDIR_NE) => (1 << 2) | (1 << 0) | (1 << 4), // E,N,S
+        (RAIL_TB_UPPER, DIAGDIR_NW) => (1 << 6) | (1 << 0) | (1 << 4), // W,N,S
+        (RAIL_TB_UPPER, _) => ALL,
+        (RAIL_TB_LOWER, DIAGDIR_SE) => (1 << 2) | (1 << 0) | (1 << 4),
+        (RAIL_TB_LOWER, DIAGDIR_SW) => (1 << 6) | (1 << 0) | (1 << 4),
+        (RAIL_TB_LOWER, _) => ALL,
+        (RAIL_TB_LEFT, DIAGDIR_SW) => (1 << 4) | (1 << 2) | (1 << 6), // S,E,W
+        (RAIL_TB_LEFT, DIAGDIR_NW) => (1 << 0) | (1 << 2) | (1 << 6), // N,E,W
+        (RAIL_TB_LEFT, _) => ALL,
+        (RAIL_TB_RIGHT, DIAGDIR_NE) => (1 << 0) | (1 << 2) | (1 << 6),
+        (RAIL_TB_RIGHT, DIAGDIR_SE) => (1 << 4) | (1 << 2) | (1 << 6),
+        (RAIL_TB_RIGHT, _) => ALL,
+        _ => ALL,
     }
 }
 
-fn catenary_wso_for_x(sel: u8, alt: bool) -> Option<u32> {
-    match sel {
-        0 => Some(if alt { WSO_X_SW } else { WSO_X_NE }),
-        1 => Some(WSO_X_SHORT_UP),   // SLOPE_SW
-        4 => Some(WSO_X_SHORT_DOWN), // SLOPE_NE
-        _ => None,
-    }
+/// `_ignored_pcp` grupos 0..2: si `preferred` coincide, se omite el PCP.
+fn is_ignored_pcp(preferred: u8, tlg: u8, dir: u8) -> bool {
+    // Grupo 1 (X/Y): máscaras por TLG×diagdir
+    const IG1: [[u8; 4]; 4] = [
+        // XEVEN_YEVEN
+        [0xFF, (1 << 1) | (1 << 5), (1 << 7) | (1 << 3), 0xFF],
+        // XEVEN_YODD
+        [0xFF, 0xFF, (1 << 7) | (1 << 3), (1 << 1) | (1 << 5)],
+        // XODD_YEVEN
+        [(1 << 7) | (1 << 3), (1 << 1) | (1 << 5), 0xFF, 0xFF],
+        // XODD_YODD
+        [(1 << 7) | (1 << 3), 0xFF, 0xFF, (1 << 1) | (1 << 5)],
+    ];
+    // Grupo 2 (LEFT/RIGHT): E|W
+    const EW: u8 = (1 << 2) | (1 << 6);
+    const IG2: [[u8; 4]; 4] = [
+        [EW, 0xFF, 0xFF, EW],
+        [0xFF, EW, EW, 0xFF],
+        [0xFF, EW, EW, 0xFF],
+        [EW, 0xFF, 0xFF, EW],
+    ];
+    // Grupo 3 (UPPER/LOWER): N|S
+    const NS: u8 = (1 << 0) | (1 << 4);
+    const IG3: [[u8; 4]; 4] = [
+        [NS, NS, 0xFF, 0xFF],
+        [0xFF, 0xFF, NS, NS],
+        [0xFF, 0xFF, NS, NS],
+        [NS, NS, 0xFF, 0xFF],
+    ];
+    let tlg = (tlg & 3) as usize;
+    let dir = (dir & 3) as usize;
+    preferred == IG1[tlg][dir] || preferred == IG2[tlg][dir] || preferred == IG3[tlg][dir]
 }
 
-fn catenary_wso_for_y(sel: u8, alt: bool) -> Option<u32> {
-    match sel {
-        0 => Some(if alt { WSO_Y_SE } else { WSO_Y_NW }),
-        2 => Some(WSO_Y_SHORT_UP),   // SLOPE_SE
-        3 => Some(WSO_Y_SHORT_DOWN), // SLOPE_NW
-        _ => None,
-    }
+#[inline]
+fn reverse_diag_dir(dir: u8) -> u8 {
+    dir ^ 2
 }
 
 /// `SPR_RAIL_TRACK_Y_SNOW` / `SPR_RAIL_TRACK_X_SNOW` (OpenGFX).
@@ -1087,7 +1370,7 @@ mod tests {
     #[test]
     fn collect_catenary_flat_maps_trackbits() {
         let mut out = Vec::new();
-        // (0,0): alt=true → SW / SE (un poste).
+        // Fallback paridad (0,0): alt=true → SW / SE (un poste).
         collect_catenary_sprites(RAIL_TB_X, 0, 0, 0, &mut out);
         assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SW]);
         collect_catenary_sprites(RAIL_TB_Y, 0, 0, 0, &mut out);
@@ -1120,17 +1403,104 @@ mod tests {
         assert_eq!(catenary_tileh_selector(SLOPE_NW), 3);
         assert_eq!(catenary_tileh_selector(SLOPE_NE), 4);
 
+        // Paridad (0,0): un PCP → wire de un extremo (UP/DOWN según pendiente).
         collect_catenary_sprites(RAIL_TB_X, SLOPE_SW, 0, 0, &mut out);
-        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SHORT_UP]);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SW_UP]);
         collect_catenary_sprites(RAIL_TB_X, SLOPE_NE, 0, 0, &mut out);
-        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SHORT_DOWN]);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SW_DOWN]);
         collect_catenary_sprites(RAIL_TB_Y, SLOPE_SE, 0, 0, &mut out);
-        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_Y_SHORT_UP]);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_Y_SE_UP]);
         collect_catenary_sprites(RAIL_TB_Y, SLOPE_NW, 0, 0, &mut out);
-        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_Y_SHORT_DOWN]);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_Y_SE_DOWN]);
         // HORZ en pendiente: sin sprite.
         collect_catenary_sprites(RAIL_TB_HORZ, SLOPE_SW, 0, 0, &mut out);
         assert!(out.is_empty());
+    }
+
+    fn electric_rail_tile(trackbits: u8) -> openttdrs_core::Tile {
+        use openttdrs_core::{RailType, Tile, set_rail_type_on_tile};
+        set_rail_type_on_tile(
+            Tile {
+                height: 1,
+                kind: TileKind::Rail,
+                mapt: 0x10, // MP_RAILWAY
+                m5: trackbits & 0x3F,
+                m1: 0,
+                m6: 0,
+                m8: 0,
+                m3: 0,
+                m2: 0,
+                m2_hi: 0,
+                m7: 0,
+                m3hi: 0,
+            },
+            RailType::Electric,
+        )
+    }
+
+    #[test]
+    fn collect_catenary_from_map_isolated_x_uses_both_ends() {
+        let mut map = Map::new_flat(3, 3, 1);
+        let c = TileCoord::new(1, 1);
+        map.set_tile(c, electric_rail_tile(RAIL_TB_X)).unwrap();
+        let mut out = Vec::new();
+        collect_catenary_sprites_from_map(&map, c, 3, 3, 1, RAIL_TB_X, 0, &mut out);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SHORT]);
+    }
+
+    #[test]
+    fn collect_catenary_from_map_x_line_alternates_pcp_ends() {
+        let mut map = Map::new_flat(4, 3, 1);
+        for x in 0..4 {
+            map.set_tile(TileCoord::new(x, 1), electric_rail_tile(RAIL_TB_X))
+                .unwrap();
+        }
+        let mut a = Vec::new();
+        let mut b = Vec::new();
+        collect_catenary_sprites_from_map(
+            &map,
+            TileCoord::new(0, 1),
+            4,
+            3,
+            1,
+            RAIL_TB_X,
+            0,
+            &mut a,
+        );
+        collect_catenary_sprites_from_map(
+            &map,
+            TileCoord::new(1, 1),
+            4,
+            3,
+            1,
+            RAIL_TB_X,
+            0,
+            &mut b,
+        );
+        // Extremo de línea / ignore-group: un solo PCP por tesela, lados opuestos.
+        assert_eq!(a.len(), 1);
+        assert_eq!(b.len(), 1);
+        assert_ne!(a, b);
+        assert!(
+            (a[0] == WIRE_SPRITE_BASE + WSO_X_NE || a[0] == WIRE_SPRITE_BASE + WSO_X_SW)
+                && (b[0] == WIRE_SPRITE_BASE + WSO_X_NE || b[0] == WIRE_SPRITE_BASE + WSO_X_SW)
+        );
+    }
+
+    #[test]
+    fn collect_catenary_from_map_ignores_non_electric_neighbour() {
+        use openttdrs_core::{RailType, set_rail_type_on_tile};
+        let mut map = Map::new_flat(3, 3, 1);
+        let a = TileCoord::new(0, 1);
+        let b = TileCoord::new(1, 1);
+        map.set_tile(a, electric_rail_tile(RAIL_TB_X)).unwrap();
+        let mut plain = electric_rail_tile(RAIL_TB_X);
+        plain = set_rail_type_on_tile(plain, RailType::Rail);
+        map.set_tile(b, plain).unwrap();
+        let mut out = Vec::new();
+        collect_catenary_sprites_from_map(&map, a, 3, 3, 1, RAIL_TB_X, 0, &mut out);
+        // Vecino sin catenaria → ambos PCP del tramo eléctrico aislado.
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SHORT]);
     }
 
     #[test]

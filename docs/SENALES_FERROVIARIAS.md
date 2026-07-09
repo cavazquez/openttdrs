@@ -201,7 +201,7 @@ Toolbar avanzada vs simplificada: la simplificada solo muestra path signals ([Bu
 | Capacidad | Estado | Módulo |
 |-----------|--------|--------|
 | Colocar / quitar señal **block eléctrica** unidireccional | ✅ | `command/transport.rs`, `PlaceRailSignal` |
-| Preview + toolbar + RMB dirección | 🟡 | Pick/colocación en diagonal — ver §11 |
+| Preview + toolbar + RMB dirección | ✅ | Pick diagonal cerrado jul 2026 — §11 |
 | Carriles X/Y/Upper/Lower/Left/Right | ✅ | `resolve_signal_track`, `fract_x/y` |
 | Render presente + rojo/verde | ✅ | `sprites/rail.rs`, `collect_signal_sprite_ids` |
 | Sim block simple (bloque hasta siguiente señal, 1 ocupación) | ✅ | `rail_signals.rs` — X/Y + Horz/Vert (exit por carril) |
@@ -308,7 +308,7 @@ Dependencias: pathfinder trenes más fiel (YAPF simplificado o extensión de `pa
 
 ---
 
-## 11. Bug abierto: fantasma vs colocación en vía diagonal (jun 2026)
+## 11. Fantasma vs colocación en vía diagonal (cerrado jul 2026)
 
 **Estado:** ✅ cerrado jul 2026 · tap ancla al press + preferencia seed en pick.
 
@@ -361,7 +361,7 @@ OpenTTD usa `GetTileBelowCursor()` + `GenericPlaceSignals` sobre **esa** tesela 
 ### Criterio de cierre
 
 - Fantasma y señal colocada en la **misma tesela** y **misma posición en pantalla** al clicar sobre un tramo X o Y diagonal (caso GIF usuario jun 2026).
-- Test cliente: mapa 3×3 con una diagonal; simular `world_pos` en centro del riel → `HoveredTileCoord` == tile del comando `PlaceRailSignal`.
+- Test cliente: `pick_mid_diagonal_rail_segment_stays_on_track_tile` (+ anclas) en `iso/coords.rs` — pick del centro del riel = tesela del track.
 
 ### Repro local
 

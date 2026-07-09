@@ -117,7 +117,7 @@ Render:
 
 - Vía de fondo 1011/1012 + capas 1070–1074 con offsets de `station_land.h` (`rail_station_draw_layers`).
 
-Pendiente SP3: estaciones multi-tesela, techos/pilares tren (gfx 4–7); preview ghost con edificios en toolbar.
+Estaciones multi-tesela y techos/pilares tren (gfx 4–7): ✅ en código. Preview ghost del área: ✅ sprites de vía/plataforma (`preview/rail_station.rs`).
 
 ---
 

@@ -25,7 +25,8 @@ pub(crate) use transport::{
     normalize_synthetic_rail_crossings,
 };
 pub use transport::{
-    rail_bits_placement_target, rail_station_footprint, rail_trackbits_from_neighbors,
+    rail_bits_placement_target, rail_station_footprint, rail_station_layout,
+    rail_trackbits_from_neighbors,
 };
 pub use types::{Command, CommandError, LevelMode, OrderMoveDirection, command_error_message};
 

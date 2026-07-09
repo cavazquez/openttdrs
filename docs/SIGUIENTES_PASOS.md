@@ -28,7 +28,7 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 | **SP4** Pulido | ✅ Cerrado 2026-06-22 | ROADMAP_SPRINTS S1 |
 | **SP1** Ciclo jugable | 🟡 En curso | [SP1_CHECKLIST.md](SP1_CHECKLIST.md), ROADMAP S4 |
 
-**SP3 visual vanilla:** cerrado en código (junctions slope, culling teselas+labels, industrias gfx 0–174). QA manual opcional del checklist y=3/5/7. Fuera de SP3: waypoints rotos ([HANDOFF_WAYPOINTS_RAIL.md](HANDOFF_WAYPOINTS_RAIL.md)), NewGRF gfx≥175, preview estación multi-tesela.
+**SP3 visual vanilla:** cerrado en código (junctions slope, culling teselas+labels, industrias gfx 0–174). QA manual opcional del checklist y=3/5/7. Waypoints: posicionamiento corregido jul 2026 ([HANDOFF_WAYPOINTS_RAIL.md](HANDOFF_WAYPOINTS_RAIL.md)). Preview estación multi-tesela: sprites reales (jul 2026). Fuera de SP3: NewGRF gfx≥175.
 
 **Terraform (paisaje):** T1–T3 implementados; gen procedural T4 MVP en `world_gen.rs` — [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md).
 
@@ -41,14 +41,14 @@ dejarlo — ver [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md).
 ver [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md).
 
 **Señales — pick en diagonal:** ✅ fix jul 2026 (tap ancla press + seed preferido) —
-[SENALES_FERROVIARIAS.md §11](SENALES_FERROVIARIAS.md#11-bug-abierto-fantasma-vs-colocación-en-vía-diagonal-jun-2026).
+[SENALES_FERROVIARIAS.md §11](SENALES_FERROVIARIAS.md#11-fantasma-vs-colocación-en-vía-diagonal-cerrado-jul-2026).
 
 **Menú de inicio:** pantallas raíz/nueva partida, cargar desde menú, población procedural y lagos — ver
 [ROADMAP_MAIN_MENU.md](ROADMAP_MAIN_MENU.md) (fase 2 cerrada; pendiente preferencias resolución/idioma).
 
 **Refactor módulos (jun 2026):** `ui/main_menu/`, `bootstrap/procedural_population/`, `command/transport/`, `command/tests/` — sin cambio de API pública; CI usa perfil nextest `ci` en `.config/nextest.toml`.
 
-**Toolbar rail sin comando:** `RailConvert`, quitar señal → ver ROADMAP_SPRINTS S2 resto.
+**Toolbar rail sin comando:** solo `RailConvert` (oculto hasta railtypes) — ver ROADMAP_SPRINTS S2 resto. `RailRemove`, waypoint y quitar señal ya cableados.
 
 ---
 
@@ -61,7 +61,7 @@ ver [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md).
 5. **Fuente UI** — `static/fonts/DejaVuSansMono.ttf` (no en `assets/` ignorado).
 6. **Estación tren** — multi-tesela `PlaceRailStationArea`, ventana selección, cruce X\|Y en intersecciones (save v3).
 7. **Vía Horz/Vert/X/Y** — `PlaceRailBits` solo en tesela del cursor (fantasma = colocación); uniones automáticas solo con autoraíl. Ver [VIAS_FERROVIARIAS_COLOCACION.md](VIAS_FERROVIARIAS_COLOCACION.md).
-8. **Señales** — pick en vecindario + offset sub-tesela; se conservan al cruzar diagonales. Pick diagonal tap/seed ✅ jul 2026 — [SENALES §11](SENALES_FERROVIARIAS.md#11-bug-abierto-fantasma-vs-colocación-en-vía-diagonal-jun-2026).
+8. **Señales** — pick en vecindario + offset sub-tesela; se conservan al cruzar diagonales. Pick diagonal tap/seed ✅ jul 2026 — [SENALES §11](SENALES_FERROVIARIAS.md#11-fantasma-vs-colocación-en-vía-diagonal-cerrado-jul-2026).
 
 ---
 

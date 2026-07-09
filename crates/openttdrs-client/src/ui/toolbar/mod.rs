@@ -75,7 +75,7 @@ pub(crate) enum BuildMenuAction {
     RailDepot,
     RailBridge,
     RailTunnel,
-    // Herramientas del toolbar oficial aún sin soporte en el simulador.
+    // Waypoint / señales / quitar vía: cableados al simulador.
     RailWaypoint,
     RailSignals,
     RailRemove,

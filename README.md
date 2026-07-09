@@ -96,7 +96,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **Construcción** | Quitar vía (`RailRemove`) | ✅ | `Command::RemoveRail` |
 | **Construcción** | Waypoint ferroviario + orden pasar | ✅ | `PlaceRailWaypoint`, `StopKind::RailWaypoint` |
 | **Construcción** | Colocar señal bloque (`PlaceRailSignal`) | ✅ | `rail_signals.rs`, toolbar rail |
-| **Construcción** | Convertir tipo de vía (`RailConvert`) | ❌ | Botón stub en toolbar |
+| **Construcción** | Convertir tipo de vía (`RailConvert`) | ❌ | Stub oculto hasta railtypes |
 | **Construcción** | Terraform: elevar / bajar / nivelar | ✅ | [ROADMAP_TERRAFORM.md](docs/ROADMAP_TERRAFORM.md) T1–T3 |
 | **Construcción** | Autoslope al construir sobre pendiente | ✅ | Terraform T3 |
 | **Simulación** | Tick de juego, pausa, velocidad | ✅ | `simulation.rs`, `SimHudControls` |
@@ -125,13 +125,13 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **Render** | Árboles multi-especie (1–4/tesela) | ✅ | [ROADMAP_PARIDAD_VISUAL.md](docs/ROADMAP_PARIDAD_VISUAL.md) §2 |
 | **Render** | Campos / cercas (farmland) | ✅ | `gen_field_draw_data.py` |
 | **Render** | Casas / edificios | ✅ | `sprites/house.rs` |
-| **Render** | Industrias gfx 0–130 (tabla estática) | 🟡 | `industry_gfx_data_generated.rs` — [ROADMAP_INDUSTRIAS_PARIDAD.md](docs/ROADMAP_INDUSTRIAS_PARIDAD.md) |
-| **Render** | Industrias gfx 131–174 + anim `draw_proc` | ❌ | Roadmap industrias P8+ |
+| **Render** | Industrias gfx 0–174 (tabla vanilla) | ✅ | `INDUSTRY_GFX_TABLE_LEN=175` — NewGRF ≥175 backlog |
+| **Render** | Anim industria `draw_proc` avanzada | 🟡 | Roadmap industrias P8+ |
 | **Render** | Fundaciones industria en pendiente | 🟡 | Parcial |
 | **Render** | Estaciones rail / road / waypoint | ✅ | `sprites/station.rs` |
 | **Render** | Puente tablero sobre agua (road/rail) | ✅ | `render/tiles/bridge.rs` |
-| **Render** | Junctions vía en pendiente | 🟡 | [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) S3 |
-| **Render** | Culling viewport mapas grandes | 🟡 | `render/world.rs` — solo mapas grandes |
+| **Render** | Junctions vía en pendiente | ✅ | S3 — `sp3_visual_checklist_sloped_junction_sprite_ids` |
+| **Render** | Culling viewport mapas grandes | ✅ | `MapTileSpawnViewport` + labels |
 | **Render** | Paleta compañía (Remap) | ✅ | `company_colour` |
 | **UI** | Menú principal (Nueva partida, Cargar, Demo, Salir) | ✅ | `ui/main_menu/`, [ROADMAP_MAIN_MENU.md](docs/ROADMAP_MAIN_MENU.md) |
 | **UI** | Fondo intro: isla procedural, paneo, agua animada, tráfico | ✅ | `ui/main_menu_intro.rs` |
@@ -170,7 +170,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | SP3 Visual | ✅ Cerrado en código (jul 2026) | [ROADMAP_PARIDAD_VISUAL.md](docs/ROADMAP_PARIDAD_VISUAL.md) |
 | SP1 Ciclo jugable | 🟡 Auto ✅ / manual pendiente | [SP1_CHECKLIST.md](docs/SP1_CHECKLIST.md) |
 
-**Sprints operativos pendientes:** S2 resto (`RailConvert`), S4 SP1 manual, S5 señales+audio, S6 import — ver [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md). S3 visual ✅.
+**Sprints operativos pendientes:** S2 resto (`RailConvert`), S4 SP1 guion manual, S6 import — ver [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md). S3 visual ✅; señales bloque/PBS parciales ya en código (ver [SENALES_FERROVIARIAS.md](docs/SENALES_FERROVIARIAS.md)).
 
 ---
 

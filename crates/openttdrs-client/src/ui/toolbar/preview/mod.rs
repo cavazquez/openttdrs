@@ -6,6 +6,7 @@ mod industry;
 mod orders;
 mod rail_depot;
 mod rail_signal;
+mod rail_station;
 mod rail_waypoint;
 mod road_depot;
 mod road_stop;
@@ -47,6 +48,7 @@ pub(crate) use rail_signal::{
     RailSignalGhost, RailSignalGhostState, rail_signal_flash_position,
     update_rail_signal_ghost_preview,
 };
+use rail_station::spawn_rail_station_area_sprite_preview;
 use rail_waypoint::spawn_rail_waypoint_preview;
 use road_depot::{RoadDepotPreviewSpawn, spawn_road_depot_preview};
 use road_stop::{
@@ -227,11 +229,12 @@ pub(crate) fn update_build_ghost_preview(
             vec![(tx, ty)]
         };
     if action == BuildMenuAction::RailStation {
-        // Estación de tren: rejilla blanca de la huella completa (andenes ×
-        // longitud) + halo de cobertura opcional, como en OpenTTD.
+        // Estación de tren: sprites de vía/plataforma en la huella + cobertura.
         spawn_rail_station_area_preview(
             &mut commands,
             &asset_server,
+            atlas.as_deref(),
+            company.as_deref(),
             &sim,
             &station_state,
             TileCoord::new(tx, ty),
@@ -550,11 +553,13 @@ pub(crate) fn update_build_ghost_preview(
     }
 }
 
-/// Huella de la estación de tren bajo el cursor: rejilla blanca por tesela
-/// (roja si la colocación es inválida) y halo de cobertura si está activado.
+/// Huella de la estación de tren bajo el cursor: sprites de vía/plataforma
+/// (tinte rojo si inválida) y halo de cobertura si está activado.
 fn spawn_rail_station_area_preview(
     commands: &mut Commands,
     asset_server: &AssetServer,
+    atlas: Option<&TileAtlas>,
+    company: Option<&CompanyColoredSprites>,
     sim: &SimWorld,
     station_state: &StationBuildState,
     origin: TileCoord,
@@ -585,30 +590,17 @@ fn spawn_rail_station_area_preview(
         );
     }
 
-    let image = asset_server.load::<Image>("assets/opengfx/tiles/tile_select.png");
-    let tint = if valid {
-        Color::srgba(1.0, 1.0, 1.0, 0.95)
-    } else {
-        Color::srgba(1.0, 0.3, 0.25, 0.95)
-    };
-    for dy in 0..h {
-        for dx in 0..w {
-            let (x, y) = (origin.x + dx, origin.y + dy);
-            let Some(tile) = sim.state.map.get(TileCoord::new(x, y)) else {
-                continue;
-            };
-            commands.spawn((
-                BuildGhostPreview,
-                Sprite {
-                    image: image.clone(),
-                    color: tint,
-                    ..default()
-                },
-                Transform::from_translation(crate::iso::tile_pos(x, y, tile.height, 3.0))
-                    .with_scale(Vec3::new(1.002, 1.002, 1.0)),
-            ));
-        }
-    }
+    spawn_rail_station_area_sprite_preview(
+        commands,
+        atlas,
+        company,
+        &sim.state.map,
+        origin,
+        station_state.rail_axis_y,
+        station_state.rail_platforms,
+        station_state.rail_length,
+        valid,
+    );
 }
 
 fn spawn_airport_small_preview(

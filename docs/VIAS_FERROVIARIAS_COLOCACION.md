@@ -49,7 +49,7 @@ Implementación: `place_rail_bits` en `crates/openttdrs-core/src/command/transpo
 | Dibujo | `rail_signal_subtile_offset` — tabla `SignalPositions` (`DrawSingleSignal`, OpenTTD) |
 | Colocación en cruce | `write_normal_rail_tile` conserva señales al fusionar Y+X → cruce |
 
-**Bug abierto (jun 2026):** en diagonal X/Y el fantasma puede verse bien pero el clic coloca en tesela vecina — ver [SENALES_FERROVIARIAS.md §11](SENALES_FERROVIARIAS.md#11-bug-abierto-fantasma-vs-colocación-en-vía-diagonal-jun-2026).
+**Pick diagonal (cerrado jul 2026):** fantasma y clic alineados — ver [SENALES_FERROVIARIAS.md §11](SENALES_FERROVIARIAS.md#11-fantasma-vs-colocación-en-vía-diagonal-cerrado-jul-2026).
 
 Ver [SENALES_FERROVIARIAS.md](SENALES_FERROVIARIAS.md).
 

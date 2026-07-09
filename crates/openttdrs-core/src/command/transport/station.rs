@@ -120,10 +120,9 @@ pub const fn rail_station_footprint(axis_y: bool, platforms: u8, length: u8) -> 
     if axis_y { (p, l) } else { (l, p) }
 }
 
-pub(in crate::command::transport) fn rail_station_layout(
-    platforms: usize,
-    length: usize,
-) -> Vec<u8> {
+/// Layout gfx base (sin bit de eje) por andén×longitud — `station_cmd` de `OpenTTD`.
+#[must_use]
+pub fn rail_station_layout(platforms: usize, length: usize) -> Vec<u8> {
     fn single(row: &mut [u8]) {
         row.fill(0);
         row[(row.len() - 1) / 2] = 2;

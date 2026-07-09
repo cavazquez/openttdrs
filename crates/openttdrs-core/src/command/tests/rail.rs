@@ -27,6 +27,24 @@ fn place_rail_station_sets_m6_and_axis_in_m5() {
 }
 
 #[test]
+fn rail_station_footprint_swaps_axes() {
+    assert_eq!(crate::rail_station_footprint(false, 3, 5), (5, 3));
+    assert_eq!(crate::rail_station_footprint(true, 3, 5), (3, 5));
+    assert_eq!(crate::rail_station_footprint(false, 1, 1), (1, 1));
+    assert_eq!(crate::rail_station_footprint(true, 2, 7), (2, 7));
+}
+
+#[test]
+fn rail_station_layout_matches_place_area_m5_base() {
+    // 3×5 eje X: andén impar (edificio) + par techado (extremos planos si length>4).
+    let layout = crate::rail_station_layout(3, 5);
+    assert_eq!(layout.len(), 15);
+    assert_eq!(layout[0..5], [0, 0, 2, 0, 0]); // andén 0
+    assert_eq!(layout[5..10], [0, 4, 4, 4, 0]); // andén 1 techado NW
+    assert_eq!(layout[10..15], [0, 6, 6, 6, 0]); // andén 2 techado SE
+}
+
+#[test]
 fn place_rail_station_area_writes_layout_and_anchors_center() {
     let mut s = GameState::new(16, 16);
     let origin = TileCoord::new(3, 4);

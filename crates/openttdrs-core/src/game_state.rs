@@ -95,11 +95,18 @@ pub struct GameState {
     #[serde(default)]
     pub towns: Vec<crate::town::Town>,
     pub stats: SimStats,
+    /// Espejo de la compañía activa (jugador). Fuente de verdad: [`Self::companies`].
     #[serde(default)]
     pub economy: CompanyEconomy,
-    /// Color de compañía del jugador (`Colours` en `OpenTTD`; 0 = azul oscuro).
+    /// Color espejo de la compañía activa (`Colours` en `OpenTTD`; 0 = azul oscuro).
     #[serde(default)]
     pub company_colour: u8,
+    /// Pool de compañías (jugador + rivales IA). Vacío en saves anteriores a v14 → migración.
+    #[serde(default)]
+    pub companies: Vec<crate::company::Company>,
+    /// Compañía que emite comandos del jugador / UI.
+    #[serde(default)]
+    pub active_company: crate::company::CompanyId,
     /// Clima del paisaje (`LandscapeType` en `OpenTTD`).
     #[serde(default)]
     pub climate: Climate,
@@ -198,6 +205,11 @@ impl GameState {
             stats: SimStats::default(),
             economy: CompanyEconomy::default(),
             company_colour: 0,
+            companies: vec![crate::company::Company::player(
+                CompanyEconomy::default(),
+                0,
+            )],
+            active_company: crate::company::CompanyId::PLAYER,
             climate: Climate::default(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
@@ -239,6 +251,11 @@ impl GameState {
             stats: SimStats::default(),
             economy: CompanyEconomy::default(),
             company_colour: 0,
+            companies: vec![crate::company::Company::player(
+                CompanyEconomy::default(),
+                0,
+            )],
+            active_company: crate::company::CompanyId::PLAYER,
             climate: Climate::default(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
@@ -319,5 +336,88 @@ impl GameState {
             &self.map,
             &self.jgr_tunnels_from_footer,
         )
+    }
+
+    /// Asegura al menos la compañía jugador y alinea espejos desde el pool.
+    pub fn ensure_companies(&mut self) {
+        if self.companies.is_empty() {
+            self.companies.push(crate::company::Company::player(
+                self.economy,
+                self.company_colour,
+            ));
+            self.active_company = crate::company::CompanyId::PLAYER;
+        }
+        self.sync_mirrors_from_active();
+    }
+
+    /// Copia economía/color de la compañía activa a los campos espejo.
+    pub fn sync_mirrors_from_active(&mut self) {
+        let idx = self.active_company.index();
+        if let Some(c) = self.companies.get(idx) {
+            self.economy = c.economy;
+            self.company_colour = c.colour;
+        }
+    }
+
+    /// Escribe los espejos en la compañía activa (tras comandos del jugador).
+    pub fn sync_active_from_mirrors(&mut self) {
+        let idx = self.active_company.index();
+        if let Some(c) = self.companies.get_mut(idx) {
+            c.economy = self.economy;
+            c.colour = self.company_colour;
+        }
+    }
+
+    /// Acredita dinero a una compañía (y espejo si es la activa).
+    pub fn credit_company(&mut self, id: crate::company::CompanyId, amount: i64) {
+        if amount == 0 {
+            return;
+        }
+        if let Some(c) = self.companies.get_mut(id.index()) {
+            c.economy.money = c.economy.money.saturating_add(amount);
+        }
+        if id == self.active_company {
+            self.economy.money = self.economy.money.saturating_add(amount);
+        }
+    }
+
+    /// Debita dinero de una compañía (y espejo si es la activa).
+    pub fn debit_company(&mut self, id: crate::company::CompanyId, amount: i64) {
+        if amount == 0 {
+            return;
+        }
+        if let Some(c) = self.companies.get_mut(id.index()) {
+            c.economy.money = c.economy.money.saturating_sub(amount);
+        }
+        if id == self.active_company {
+            self.economy.money = self.economy.money.saturating_sub(amount);
+        }
+    }
+
+    /// Añade rival `TransCargo` si aún no existe (escenarios / nueva partida con IA).
+    pub fn ensure_rival_transcargo(&mut self) {
+        self.ensure_companies();
+        if self.companies.iter().any(|c| c.is_ai) {
+            return;
+        }
+        let id = u8::try_from(self.companies.len()).unwrap_or(1);
+        let mut rival = crate::company::Company::rival_transcargo(
+            CompanyEconomy {
+                money: 200_000,
+                loan: 0,
+                max_loan: crate::economy::DEFAULT_MAX_LOAN,
+            },
+            1, // rojo
+        );
+        rival.id = crate::company::CompanyId(id);
+        self.companies.push(rival);
+    }
+
+    /// Economía de una compañía (fallback al espejo del jugador).
+    #[must_use]
+    pub fn company_economy(&self, id: crate::company::CompanyId) -> CompanyEconomy {
+        self.companies
+            .get(id.index())
+            .map_or(self.economy, |c| c.economy)
     }
 }

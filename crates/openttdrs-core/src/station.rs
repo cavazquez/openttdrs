@@ -63,6 +63,9 @@ pub struct Station {
     pub pos: TileCoord,
     #[serde(default)]
     pub stop_kind: StopKind,
+    /// Compañía propietaria (Fase 4; default jugador).
+    #[serde(default)]
+    pub owner: crate::company::CompanyId,
     /// Nombre de la estación (saves de `OpenTTD` con nombre custom).
     #[serde(default)]
     pub name: Option<String>,
@@ -115,6 +118,7 @@ impl Station {
         Self {
             pos,
             stop_kind,
+            owner: crate::company::CompanyId::PLAYER,
             name: None,
             stock: 0,
             cargo_stock: CargoStock::default(),

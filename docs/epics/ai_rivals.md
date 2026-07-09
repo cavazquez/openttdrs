@@ -1,7 +1,7 @@
 # Epic futuro: IA de compañías rivales
 
-**Estado:** documentado — fuera del alcance de la oleada A→D.  
-**Fecha:** 2026-07-05
+**Estado:** MVP implementado (Fase 4 estructural, jul 2026) — `ai/rule_based.rs` + escenario `ai_rival_line`.  
+**Fecha:** 2026-07-05 (doc); implementación 2026-07-09
 
 ## Contexto
 

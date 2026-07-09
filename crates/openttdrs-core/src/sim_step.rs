@@ -5,10 +5,12 @@ use crate::{
 };
 
 pub(crate) fn step(state: &mut GameState) {
+    state.ensure_companies();
     state.tick.advance();
     let t = state.tick.get();
 
     process_monthly_economy(state, t);
+    crate::ai::tick_ai_companies(state, t);
     produce_industries(state, t);
     produce_town_demand(state, t);
     grow_towns(state, t);
@@ -194,11 +196,14 @@ fn age_vehicle_cargo(state: &mut GameState) {
 }
 
 fn apply_vehicle_running_costs(state: &mut GameState) {
-    for vehicle in &state.vehicles {
-        let moving = vehicle.running && vehicle.cur_speed > 0;
-        let cost = economy::vehicle_running_cost_per_tick(vehicle.kind, vehicle.running, moving);
+    for i in 0..state.vehicles.len() {
+        let kind = state.vehicles[i].kind;
+        let running = state.vehicles[i].running;
+        let moving = running && state.vehicles[i].cur_speed > 0;
+        let owner = state.vehicles[i].owner;
+        let cost = economy::vehicle_running_cost_per_tick(kind, running, moving);
         if cost > 0 {
-            state.economy.money -= cost;
+            state.debit_company(owner, cost);
             state.stats.vehicle_running_costs += cost.cast_unsigned();
         }
     }
@@ -238,17 +243,29 @@ fn process_monthly_economy(state: &mut GameState, tick: u64) {
     if tick == 0 || !tick.is_multiple_of(economy::TICKS_PER_MONTH) {
         return;
     }
-    let interest = economy::monthly_loan_interest(state.economy.loan);
-    if interest > 0 {
-        state.economy.money -= interest;
-        state
-            .pending_sim_events
-            .push(crate::sim_events::SimEvent::LoanInterestPaid { amount: interest });
-    }
-    if economy::check_bankruptcy(state.economy.money, state.economy.max_loan) {
-        state
-            .pending_sim_events
-            .push(crate::sim_events::SimEvent::BankruptcyWarning);
+    // Intereses por compañía; eventos de UI solo para la activa (jugador).
+    for i in 0..state.companies.len() {
+        let loan = state.companies[i].economy.loan;
+        let max_loan = state.companies[i].economy.max_loan;
+        let interest = economy::monthly_loan_interest(loan);
+        if interest > 0 {
+            state.companies[i].economy.money -= interest;
+        }
+        let money = state.companies[i].economy.money;
+        let is_active = state.companies[i].id == state.active_company;
+        if is_active {
+            state.economy = state.companies[i].economy;
+            if interest > 0 {
+                state
+                    .pending_sim_events
+                    .push(crate::sim_events::SimEvent::LoanInterestPaid { amount: interest });
+            }
+            if economy::check_bankruptcy(money, max_loan) {
+                state
+                    .pending_sim_events
+                    .push(crate::sim_events::SimEvent::BankruptcyWarning);
+            }
+        }
     }
 }
 
@@ -552,7 +569,9 @@ fn unload_vehicles(
             continue;
         }
         let unload_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
+        let vehicle_owner = state.vehicles[i].owner;
         let mut payment = 0_i64;
+        let mut feeder_total = 0_i64;
         for packet in &taken {
             let distance = economy::manhattan_distance(packet.source, station_pos);
             let mut part = economy::transported_goods_income(
@@ -570,6 +589,21 @@ fn unload_vehicles(
                 packet.cargo,
                 packet.source,
             ));
+            // Feeder: 25 % al owner de first_station si es distinta del destino.
+            if !packet.feeder_paid
+                && let Some(first) = packet.first_station
+                && first != station_pos
+            {
+                let share = crate::company::feeder_share_of(part);
+                if share > 0
+                    && let Some(feeder_st) = state.stations.iter().find(|s| s.pos == first)
+                {
+                    let feeder_owner = feeder_st.owner;
+                    state.credit_company(feeder_owner, share);
+                    feeder_total = feeder_total.saturating_add(share);
+                    part = part.saturating_sub(share);
+                }
+            }
             payment = payment.saturating_add(part);
         }
 
@@ -586,8 +620,9 @@ fn unload_vehicles(
             state.stations[station_idx].add_waiting_cargo(cargo_type, unload_units);
         }
         state.stations[station_idx].income += payment.cast_unsigned();
-        state.economy.money += payment;
-        state.stats.cargo_income_earned += payment.cast_unsigned();
+        state.credit_company(vehicle_owner, payment);
+        let shown = payment.saturating_add(feeder_total);
+        state.stats.cargo_income_earned += shown.cast_unsigned();
         state.pending_income_popups.push(crate::IncomePopup {
             amount: payment,
             at: vpos,

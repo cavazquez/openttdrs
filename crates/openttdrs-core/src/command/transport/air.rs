@@ -42,6 +42,7 @@ pub(in crate::command) fn place_airport(
     }
     write_airport_tile(state, c, AirportPiece::Heliport)?;
     let mut st = Station::new_with_kind(c, StopKind::Airport);
+    st.owner = state.active_company;
     st.airport_tiles = vec![c];
     state.stations.push(st);
     state.economy.money -= DEPOT_BUILD_COST;
@@ -93,6 +94,7 @@ pub(in crate::command) fn place_airport_area(
         state.economy.money -= STATION_BUILD_COST;
     }
     let mut st = Station::new_with_kind(hangar, StopKind::Airport);
+    st.owner = state.active_company;
     st.airport_tiles = tiles;
     state.stations.push(st);
     Ok(())

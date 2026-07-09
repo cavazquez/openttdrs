@@ -224,9 +224,9 @@ pub(in crate::command) fn place_rail_station_area(
     }
 
     let anchor = TileCoord::new(origin.x + (w - 1) / 2, origin.y + (h - 1) / 2);
-    state
-        .stations
-        .push(Station::new_with_kind(anchor, StopKind::RailStation));
+    let mut st = Station::new_with_kind(anchor, StopKind::RailStation);
+    st.owner = state.active_company;
+    state.stations.push(st);
     if let Some((town_id, delta)) =
         town::apply_station_build_rating_penalty(&mut state.towns, anchor)
     {
@@ -282,7 +282,9 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {
         connect_road_stop(state, c, dir)?;
     }
-    state.stations.push(Station::new_with_kind(c, stop_kind));
+    let mut st = Station::new_with_kind(c, stop_kind);
+    st.owner = state.active_company;
+    state.stations.push(st);
     state.economy.money -= STATION_BUILD_COST;
     if let Some((town_id, delta)) = town::apply_station_build_rating_penalty(&mut state.towns, c) {
         state
@@ -351,9 +353,9 @@ pub(in crate::command) fn place_rail_waypoint(
         .map
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
-    state
-        .stations
-        .push(Station::new_with_kind(c, StopKind::RailWaypoint));
+    let mut st = Station::new_with_kind(c, StopKind::RailWaypoint);
+    st.owner = state.active_company;
+    state.stations.push(st);
     state.economy.money -= WAYPOINT_BUILD_COST;
     Ok(())
 }

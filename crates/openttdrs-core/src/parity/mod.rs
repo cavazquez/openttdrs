@@ -38,9 +38,10 @@ pub use scenario::{
     TRAIN_SUPPLY_MINE, TRAIN_SUPPLY_SIGNAL_EAST, TRAIN_SUPPLY_SIGNAL_SOUTH,
     TRAIN_SUPPLY_SIGNAL_WEST, TRAIN_SUPPLY_VEHICLE_ID, TRAIN_SUPPLY_WAIT_SIGNAL,
     TRUCK_BAY_DELIVER_ROAD, TRUCK_BAY_DELIVER_STOP, TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP,
-    TRUCK_BAY_VEHICLE_ID, build_rail_signals_mixed, build_scenario, build_train_line,
-    build_train_pbs, build_train_signal, build_train_supply, build_train_supply_dual,
-    build_train_supply_signal_snapshot, build_truck_bay, rail_signals_mixed_coord, scenario_names,
+    TRUCK_BAY_VEHICLE_ID, build_ai_rival_line, build_rail_signals_mixed, build_scenario,
+    build_train_line, build_train_pbs, build_train_signal, build_train_supply,
+    build_train_supply_dual, build_train_supply_signal_snapshot, build_truck_bay,
+    rail_signals_mixed_coord, scenario_names,
 };
 pub use tracer::ParityTracer;
 

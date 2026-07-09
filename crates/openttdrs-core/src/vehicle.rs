@@ -515,6 +515,9 @@ pub enum TimetableWaitKind {
 pub struct Vehicle {
     pub id: u32,
     pub kind: VehicleKind,
+    /// Compañía propietaria (Fase 4; default jugador).
+    #[serde(default)]
+    pub owner: crate::company::CompanyId,
     pub pos: TileCoord,
     /// Punto de partida del trayecto actual; se intercambia con `dest` en cada llegada.
     pub origin: TileCoord,
@@ -690,6 +693,7 @@ impl Vehicle {
         Self {
             id,
             kind,
+            owner: crate::company::CompanyId::PLAYER,
             pos,
             origin: pos,
             dest,

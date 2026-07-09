@@ -118,9 +118,9 @@ pub(in crate::command) fn place_dock(
         .map
         .set_tile(c, tile)
         .map_err(|_| CommandError::OutOfBounds)?;
-    state
-        .stations
-        .push(Station::new_with_kind(c, StopKind::Dock));
+    let mut st = Station::new_with_kind(c, StopKind::Dock);
+    st.owner = state.active_company;
+    state.stations.push(st);
     state.economy.money -= STATION_BUILD_COST;
     Ok(())
 }

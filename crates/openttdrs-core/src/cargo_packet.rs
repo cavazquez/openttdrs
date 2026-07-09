@@ -34,9 +34,12 @@ pub struct CargoPacket {
     /// Días de tránsito (incrementa cada `TICKS_PER_TRANSIT_DAY` a bordo).
     #[serde(default)]
     pub periods_in_transit: u16,
-    /// Estación de primer embarque (stub feeder / Cargo Dist).
+    /// Estación de primer embarque (feeder / Cargo Dist).
     #[serde(default)]
     pub first_station: Option<TileCoord>,
+    /// Crédito feeder ya liquidado en este packet (evita doble pago).
+    #[serde(default)]
+    pub feeder_paid: bool,
 }
 
 impl CargoPacket {
@@ -48,6 +51,7 @@ impl CargoPacket {
             source,
             periods_in_transit: 0,
             first_station: None,
+            feeder_paid: false,
         }
     }
 

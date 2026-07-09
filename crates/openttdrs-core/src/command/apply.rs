@@ -11,6 +11,7 @@ use super::{buy_land, economy, industry, terraform, town, transport, vehicles};
 ///
 /// Ver variantes de [`CommandError`].
 pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), CommandError> {
+    state.ensure_companies();
     let result = apply_command_inner(state, cmd);
     // Editar el mapa invalida los caminos cacheados: un tren con ruta vieja
     // seguiría cruzando vía recién desconectada. Se recalculan el próximo tick.
@@ -28,6 +29,8 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
                 .pending_sim_events
                 .push(crate::sim_events::SimEvent::Demolition { at });
         }
+        // Comandos mutan el espejo `economy`; sincronizar pool.
+        state.sync_active_from_mirrors();
     }
     result
 }

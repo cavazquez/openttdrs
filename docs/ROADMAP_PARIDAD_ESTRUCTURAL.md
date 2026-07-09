@@ -1,7 +1,8 @@
 # Roadmap: paridad estructural vs OpenTTD
 
-Plan vivo para cerrar las divergencias estructurales. Fases **1–3** (consist,
-packets, YAPF/PBS MVP) implementadas jul 2026. Fases 4–7 = hitos 0.4–0.6.
+Plan vivo para cerrar las divergencias estructurales. Fases **1–4** (consist,
+packets, YAPF/PBS, multi-compañía/feeder/IA MVP) implementadas jul 2026.
+Fases 5–7 = hitos 0.5–0.6.
 
 ## Fase 1 — Consist / vagones ✅
 
@@ -26,9 +27,12 @@ packets, YAPF/PBS MVP) implementadas jul 2026. Fases 4–7 = hitos 0.4–0.6.
 - Reserva de plataforma en orden Station; TryReserve con wormholes JGR.
 - Pendiente: golden tick-a-tick vs OpenTTD; FollowTrainReservation fino.
 
-## Fase 4 — Economía multi-compañía + Cargo Dist + IA
+## Fase 4 — Economía multi-compañía + Cargo Dist + IA ✅ (MVP)
 
-Pool de compañías; link graph; IA rivales básicas.
+- Pool `companies` + `CompanyId`; `owner` en vehículo/estación; save **v14**.
+- Feeder share 25 % vía `first_station` (sin link graph completo).
+- IA rival «TransCargo» (`ai/rule_based.rs`); escenario `ai_rival_line`.
+- Pendiente: link graph / Cargo Dist real; UI selector multi-compañía; quiebra rival.
 
 ## Fase 5 — Railtypes / electrificación / RailConvert
 

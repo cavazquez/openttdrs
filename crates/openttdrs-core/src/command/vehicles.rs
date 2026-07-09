@@ -160,6 +160,7 @@ pub(super) fn build_vehicle_at_depot(
         vehicle.capacity = engine.capacity;
     }
     vehicle.build_tick = state.tick.get();
+    vehicle.owner = state.active_company;
     if engine.kind == VehicleKind::Train
         && let Some(mouth) = crate::depot::rail_depot_mouth_dir(&state.map, depot_pos)
     {

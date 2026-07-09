@@ -13,6 +13,7 @@ pub mod bridge_spec;
 pub mod cargo;
 pub mod cargo_packet;
 pub mod command;
+pub mod company;
 pub mod depot;
 pub mod dev_metrics;
 pub mod disaster;
@@ -74,6 +75,7 @@ pub use command::{
     rail_station_footprint, rail_station_layout, rail_trackbits_from_neighbors,
     road_bits_for_autoroute, road_drag_line_tiles, road_locked_tool_axis,
 };
+pub use company::{Company, CompanyId, FEEDER_SHARE_DEN, FEEDER_SHARE_NUM, feeder_share_of};
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
 pub use dev_metrics::{CargoProbeOptions, VehicleCargoReport, probe_vehicle_cargo_cycle};
 pub use disaster::{DISASTER_CHECK_INTERVAL, force_disaster, tick_disasters, trigger_disaster_at};

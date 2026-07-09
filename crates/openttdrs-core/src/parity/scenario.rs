@@ -118,6 +118,7 @@ pub fn build_scenario(name: &str) -> Option<GameState> {
         "train_supply_signal" => Some(build_train_supply_signal_snapshot()),
         "train_signal" => Some(build_train_signal()),
         "train_pbs" => Some(build_train_pbs()),
+        "ai_rival_line" => Some(build_ai_rival_line()),
         "rail_signals_mixed" => Some(build_rail_signals_mixed()),
         "loan_interest" => Some(build_loan_interest()),
         "town_growth" => Some(build_town_growth()),
@@ -137,6 +138,7 @@ pub fn scenario_names() -> &'static [&'static str] {
         "train_supply_signal",
         "train_signal",
         "train_pbs",
+        "ai_rival_line",
         "rail_signals_mixed",
         "loan_interest",
         "town_growth",
@@ -940,6 +942,33 @@ fn build_loan_interest() -> GameState {
     let mut state = GameState::new(8, 8);
     state.economy.loan = 100_000;
     state.economy.money = 50_000;
+    state.ensure_companies();
+    state
+}
+
+/// Fase 4: mina + fábrica en la misma fila; rival `TransCargo` construye línea.
+#[must_use]
+#[allow(clippy::expect_used)]
+pub fn build_ai_rival_line() -> GameState {
+    let mut state = GameState::new(24, 12);
+    state.world_seed = 0;
+    state.disasters_enabled = false;
+    state.economy.money = 100_000;
+    state.ensure_companies();
+    state.ensure_rival_transcargo();
+
+    let mine = TileCoord::new(2, 5);
+    let factory = TileCoord::new(18, 5);
+    state
+        .industries
+        .push(Industry::new(mine, IndustryKind::CoalMine));
+    state
+        .industries
+        .push(Industry::new(factory, IndustryKind::Factory));
+    // Stock inicial para que el tren pueda cargar tras construir.
+    if let Some(ind) = state.industries.iter_mut().find(|i| i.pos == mine) {
+        ind.stock = 200;
+    }
     state
 }
 
@@ -1034,6 +1063,7 @@ mod tests {
         assert!(build_scenario("train_supply_signal").is_some());
         assert!(build_scenario("train_signal").is_some());
         assert!(build_scenario("train_pbs").is_some());
+        assert!(build_scenario("ai_rival_line").is_some());
         assert!(build_scenario("train_supply_dual").is_some());
         assert!(build_scenario("rail_signals_mixed").is_some());
         assert_eq!(
@@ -1046,11 +1076,61 @@ mod tests {
                 "train_supply_signal",
                 "train_signal",
                 "train_pbs",
+                "ai_rival_line",
                 "rail_signals_mixed",
                 "loan_interest",
                 "town_growth",
                 "breakdown",
             ]
+        );
+    }
+
+    #[test]
+    fn ai_rival_builds_line_after_monthly_tick() {
+        use crate::economy::TICKS_PER_MONTH;
+        let mut state = build_ai_rival_line();
+        assert!(state.companies.iter().any(|c| c.is_ai));
+        // Avanzar hasta el primer tick mensual (IA corre en múltiplos de TICKS_PER_MONTH).
+        for _ in 0..=TICKS_PER_MONTH {
+            state.step();
+        }
+        let ai_id = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+        assert!(
+            state.stations.iter().any(|s| s.owner == ai_id),
+            "TransCargo debe tener estaciones"
+        );
+        assert!(
+            state.vehicles.iter().any(|v| v.owner == ai_id),
+            "TransCargo debe tener tren"
+        );
+    }
+
+    #[test]
+    fn feeder_share_credits_first_station_owner() {
+        use crate::company::{CompanyId, feeder_share_of};
+        use crate::station::StopKind;
+
+        let mut state = GameState::new(12, 8);
+        state.ensure_companies();
+        state.ensure_rival_transcargo();
+        let ai = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+        let hub = TileCoord::new(3, 3);
+        let mut hub_st = crate::Station::new_with_kind(hub, StopKind::RailStation);
+        hub_st.owner = ai;
+        state.stations = vec![hub_st];
+
+        let payment = 100_i64;
+        let share = feeder_share_of(payment);
+        assert_eq!(share, 25);
+        let ai_before = state.company_economy(ai).money;
+        let player_before = state.economy.money;
+        state.credit_company(ai, share);
+        state.credit_company(CompanyId::PLAYER, payment - share);
+        assert_eq!(state.company_economy(ai).money, ai_before + 25);
+        assert_eq!(state.economy.money, player_before + 75);
+        assert_eq!(
+            state.companies[CompanyId::PLAYER.index()].economy.money,
+            player_before + 75
         );
     }
 

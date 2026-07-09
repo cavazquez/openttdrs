@@ -27,7 +27,8 @@ use crate::GameState;
 /// v12: consist ferroviario (`next_unit` / `prev_unit` / longitudes); trenes
 /// puntuales migran a consist de una unidad.
 /// v13: cargo packets en estación/vehículo; balances `CargoStock` se hidratan.
-pub const CURRENT_SAVE_VERSION: u32 = 13;
+/// v14: pool multi-compañía (`companies`, `owner` en vehículo/estación).
+pub const CURRENT_SAVE_VERSION: u32 = 14;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -145,11 +146,24 @@ fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState,
             10 => migrate_state_v10_to_v11(&mut state),
             11 => migrate_state_v11_to_v12(&mut state),
             12 => migrate_state_v12_to_v13(&mut state),
+            13 => migrate_state_v13_to_v14(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
     }
     Ok(state)
+}
+
+/// v14: pool de compañías + owners por defecto (jugador).
+fn migrate_state_v13_to_v14(state: &mut GameState) {
+    state.ensure_companies();
+    for v in &mut state.vehicles {
+        // `#[serde(default)]` ya pone PLAYER; reforzar por claridad.
+        let _ = v.owner;
+    }
+    for s in &mut state.stations {
+        let _ = s.owner;
+    }
 }
 
 /// v13: hidratar packets desde balances agregados.

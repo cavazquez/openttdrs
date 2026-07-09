@@ -191,20 +191,21 @@ static RAIL_STATION_SEQ_7: [RailStationLayer; 3] = [
     layer(1082, 0.0, 0.0, 16.0, 0.05),
 ];
 
-/// Layout ogfx2_stations Action 2: cuerpo 19/20 + toldos CC 21/22 (eje X).
-/// Offsets TILE_SEQ en cero: el NFO ya separa mitades por xrel (sin dy=11 vanilla).
+/// Layout ogfx2_stations Action0 prop 1A (sprite 32): ground 1012 + 2 parents
+/// en (0,0,0) y (0,13,0). Toldos CC 21/22 como child en el mismo origen.
+/// (Vanilla `station_land.h` usaba dy=11; ogfx2 usa 13, como road waypoints.)
 static RAIL_WAYPOINT_SEQ_X: [RailStationLayer; 4] = [
     layer(4974, 0.0, 0.0, 0.0, 0.05),
-    layer(4975, 0.0, 0.0, 0.0, 0.06),
+    layer(4975, 0.0, 13.0, 0.0, 0.06),
     layer(4978, 0.0, 0.0, 0.0, 0.07),
-    layer(4979, 0.0, 0.0, 0.0, 0.08),
+    layer(4979, 0.0, 13.0, 0.0, 0.08),
 ];
-/// Cuerpo 23/24 + toldos CC 25/26 (eje Y).
+/// Eje Y: parents en (0,0,0) y (13,0,0); toldos CC 25/26.
 static RAIL_WAYPOINT_SEQ_Y: [RailStationLayer; 4] = [
     layer(4976, 0.0, 0.0, 0.0, 0.05),
-    layer(4977, 0.0, 0.0, 0.0, 0.06),
+    layer(4977, 13.0, 0.0, 0.0, 0.06),
     layer(4980, 0.0, 0.0, 0.0, 0.07),
-    layer(4981, 0.0, 0.0, 0.0, 0.08),
+    layer(4981, 13.0, 0.0, 0.0, 0.08),
 ];
 
 /// Capas de waypoint (ogfx2_stations: ground vía aparte + 4 child sprites).
@@ -388,16 +389,20 @@ mod tests {
     }
 
     #[test]
-    fn rail_waypoint_ogfx2_uses_zero_tile_seq_offsets() {
-        // ogfx2_stations: el desplazamiento oeste/este va en xrel del NFO.
-        // TILE_SEQ dy=11 / dx=11 era para toldos vanilla y produce forma en L con ogfx2.
+    fn rail_waypoint_ogfx2_matches_action0_tile_seq() {
+        // Decodificado de ogfx2_stations.nfo sprite 32 (prop 1A): dy=13 / dx=13.
         let x = rail_waypoint_draw_layers(0);
         let y = rail_waypoint_draw_layers(1);
         assert_eq!(x.len(), 4, "cuerpo + toldos CC eje X");
         assert_eq!(y.len(), 4, "cuerpo + toldos CC eje Y");
-        for layer in x.iter().chain(y.iter()) {
-            assert_eq!((layer.dx, layer.dy, layer.dz), (0.0, 0.0, 0.0));
-        }
+        assert_eq!((x[0].dx, x[0].dy), (0.0, 0.0));
+        assert_eq!((x[1].dx, x[1].dy), (0.0, 13.0));
+        assert_eq!((x[2].dx, x[2].dy), (0.0, 0.0));
+        assert_eq!((x[3].dx, x[3].dy), (0.0, 13.0));
+        assert_eq!((y[0].dx, y[0].dy), (0.0, 0.0));
+        assert_eq!((y[1].dx, y[1].dy), (13.0, 0.0));
+        assert_eq!((y[2].dx, y[2].dy), (0.0, 0.0));
+        assert_eq!((y[3].dx, y[3].dy), (13.0, 0.0));
         assert_eq!(
             x.iter().map(|l| l.sprite_id).collect::<Vec<_>>(),
             vec![4974, 4975, 4978, 4979]
@@ -406,11 +411,10 @@ mod tests {
             y.iter().map(|l| l.sprite_id).collect::<Vec<_>>(),
             vec![4976, 4977, 4980, 4981]
         );
-        assert!(x[2].z > x[1].z && x[3].z > x[2].z);
     }
 
     #[test]
-    fn rail_waypoint_halves_offset_by_nfo_xrel() {
+    fn rail_waypoint_halves_offset_by_tile_seq_and_nfo() {
         let origin = crate::iso::iso(3, 4);
         let p0 = rail_waypoint_sprite_center(
             origin,
@@ -430,22 +434,27 @@ mod tests {
             4,
             0,
             0.06,
-            &layer(4975, 0.0, 0.0, 0.0, 0.06),
+            &layer(4975, 0.0, 13.0, 0.0, 0.06),
             -8.0,
             -9.0,
             40.0,
             29.0,
         );
-        assert!(p1.x > p0.x + 15.0, "mitad este desplazada en X (xrel NFO)");
+        // xrel NFO (−30→−8) + RemapCoords(dy=13)×0.5 → este más a la derecha y abajo.
         assert!(
-            (p1.y - p0.y).abs() < 2.0,
-            "mitades alineadas en Y sin TILE_SEQ dy=11 (Δy={})",
+            p1.x > p0.x + 20.0,
+            "mitad este: xrel + dy=13 (Δx={})",
+            p1.x - p0.x
+        );
+        assert!(
+            p1.y < p0.y - 4.0,
+            "mitad este baja con dy=13 (Δy={})",
             p1.y - p0.y
         );
     }
 
     #[test]
-    fn rail_waypoint_y_halves_share_screen_row() {
+    fn rail_waypoint_y_halves_offset_by_dx13() {
         let origin = crate::iso::iso(3, 4);
         let p0 = rail_waypoint_sprite_center(
             origin,
@@ -465,16 +474,21 @@ mod tests {
             4,
             0,
             0.06,
-            &layer(4977, 0.0, 0.0, 0.0, 0.06),
+            &layer(4977, 13.0, 0.0, 0.0, 0.06),
             -8.0,
             -8.0,
             38.0,
             28.0,
         );
-        assert!(p1.x > p0.x + 15.0, "mitad este desplazada en X (xrel NFO)");
+        // remap×0.5(dx=13) ≈ (−26,−13); xrel −28→−8 no alcanza a compensar → Δx ≈ −6.
         assert!(
-            (p1.y - p0.y).abs() < 2.0,
-            "eje Y: mitades en la misma fila sin TILE_SEQ dx=11 (Δy={})",
+            (p1.x - p0.x + 6.0).abs() < 2.0,
+            "eje Y: xrel + dx=13 (Δx={})",
+            p1.x - p0.x
+        );
+        assert!(
+            p1.y < p0.y - 8.0,
+            "eje Y: dx=13 baja la mitad este (Δy={})",
             p1.y - p0.y
         );
     }

@@ -1,19 +1,25 @@
 # Handoff: waypoints ferroviarios
 
-**Estado (jul 2026):** layout ogfx2 Action 2 parcial cerrado en código — vía de fondo
-1011/1012 + 4 capas (cuerpo 4974–4977 + toldos CC 4978–4981). Verificar visualmente
-en partida; si sigue mal, ver § Hipótesis restantes.
+**Estado (jul 2026):** layout alineado con **ogfx2_stations Action0 prop 1A**
+(sprite 32 del NFO): ground 1011/1012 + parents en `(0,0)` / `(0,13)` (eje X) o
+`(13,0)` (eje Y), más toldos CC 21–26 en el mismo origen que cada mitad.
 
 ---
 
-## Comportamiento actual
+## Referencia (decodificada)
 
-1. Ground: `rail_station_ground_track_sprite` (1012 eje X / 1011 eje Y).
-2. Capas: `rail_waypoint_draw_layers` — 4 sprites, TILE_SEQ dx/dy/dz = 0.
-3. Assets: `scripts/gen_rail_waypoint_sprites.py` exporta ogfx2 #19–26.
-4. Preview toolbar: misma vía + capas.
+```
+Layout X: ground=1012
+  parent Action1+0 @ (0, 0, 0) extent 16×3×16  → rail_4974 / toldo 4978
+  parent Action1+1 @ (0, 13, 0) extent 16×3×16 → rail_4975 / toldo 4979
+Layout Y: ground=1011
+  parent @ (0, 0, 0)  → 4976 / 4980
+  parent @ (13, 0, 0) → 4977 / 4981
+```
 
-## Regenerar
+Vanilla `station_land.h` usaba `dy=11`/`dx=11`; ogfx2 usa **13** (igual que road waypoints).
+
+## Regenerar assets
 
 ```bash
 python3 scripts/gen_rail_waypoint_sprites.py
@@ -22,19 +28,11 @@ python3 scripts/gen_tile_atlas.py
 cargo test -p openttdrs-client rail_waypoint
 ```
 
-## Hipótesis restantes (si el usuario sigue viendo mal)
-
-- Atlas/binario desactualizado → `cargo clean` + regenerar + `cargo run`.
-- Layout Action 2 con offsets distintos a xrel NFO (decodificar NFO líneas 32–33).
-- Ancla Bevy vs OpenTTD en toldos 21/22.
-- Eje `m5` invertido en saves importados.
-
-## Archivos clave
+## Archivos
 
 | Archivo | Rol |
 |---------|-----|
 | `sprites/station.rs` | `RAIL_WAYPOINT_SEQ_*` |
 | `render/tiles/objects.rs` | `spawn_station_tile` |
 | `ui/toolbar/preview/rail_waypoint.rs` | Fantasma |
-| `scripts/gen_rail_waypoint_sprites.py` | PNG ogfx2 |
-| `scripts/gen_rail_station_draw_data.py` | Metadata NFO |
+| `scripts/gen_rail_waypoint_sprites.py` | PNG ogfx2 #19–26 |

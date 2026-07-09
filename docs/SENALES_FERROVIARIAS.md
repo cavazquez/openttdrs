@@ -209,7 +209,7 @@ Toolbar avanzada vs simplificada: la simplificada solo muestra path signals ([Bu
 | Semaphore vs electric | ✅ | `default_signal_variant` por año (`SEMAPHORE_BUILD_BEFORE_YEAR` = 1950); setting `gui.semaphore_build_before` no expuesto |
 | Tipos Entry / Exit / Combo | ✅ | Colocación + Ctrl ciclo 6 tipos; sim entry exige bloque propio libre **y** algún exit/combo verde |
 | Path / PathOneWay + reserva PBS | ✅ | Safe wait, wait/giro, UI `PBS...`, TryReserve BFS. YAPF nativo completo opcional |
-| Presignal `UpdateSignalsOnSegment` | 🟡 | greens + combos + MultiExit; `_globset` post-movimiento (barrido global al inicio de tick) |
+| Presignal `UpdateSignalsOnSegment` | ✅ | `_globset` only en sim (`drain` pre/post movimiento); barrido global solo API tests/parity |
 | Arrastre línea + densidad | ✅ | `signal_density` default 4; Shift+RMB cicla |
 | Bulldozer quita señal (conserva vía) | ✅ | `RemoveRailSignal` vía herramienta Demoler |
 | Signal convert + Ctrl ciclo tipos | ✅ | Ctrl+clic: block→entry→exit→combo→path→path oneway (`CycleRailSignalType`) |
@@ -246,7 +246,8 @@ Orden sugerido alineado con [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) y [PARIDAD_
 1. Codificar `SignalType` 1–3 en `m2` al colocar/convertir — ✅ `PlaceRailSignal` acepta 0–5; Ctrl cicla los 6.  
 2. Port simplificado de `signal.cpp`:  
    - `ProbeSigSeg` / flags de bloque — 🟡 `explore_sig_segment` (`Exit`/`MultiExit`/`Green`/`MultiGreen`; estación/túnel/puente + wormholes JGR)  
-   - `UpdateSignalsOnSegment` + buffer `_globset` — 🟡 `signal_globset` + `drain_signal_globset` post-movimiento; barrido global al inicio de tick  
+   - `UpdateSignalsOnSegment` + buffer `_globset` — ✅ `enqueue_trains` + reservas PBS + `drain` pre/post movimiento (sin barrido global en tick)  
+
 
    - Regla entry: rojo si bloque propio ocupado **o** ningún exit verde — ✅ (cadenas combo + bifurcaciones MultiExit)  
    - Combo bidir MultiExit/MultiGreen — ✅ (`stabilize_combo_presignal_greens`)  
@@ -269,7 +270,7 @@ Orden sugerido alineado con [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) y [PARIDAD_
 8. **UI settings:** ✅ toolbar **engranaje** (Ajustes) → `Pathfinding / PBS...` (`pathfinding_settings_window.rs`).  
 9. **TryReservePath:** ✅ Dijkstra con costes YAPF (`find_path_to_safe_wait`: tile + `YAPF_RESERVATION_CROSS_PENALTY` + sesgo off-path) hasta safe wait; reintento acotado por `path_backoff_interval` vía `should_retry_reservation(wait_counter)` en `compute_train_reservation_with_settings` (255 = off).
 
-**Pendiente:** — (quitar barrido global cuando globset cubra todos los casos).
+**Pendiente:** — (ninguno en Fase C/D señales; barrido global retirado del tick).
 
 Dependencias: pathfinder trenes más fiel (YAPF simplificado o extensión de `pathfinder.rs`).
 

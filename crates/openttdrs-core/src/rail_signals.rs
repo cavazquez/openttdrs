@@ -1137,6 +1137,31 @@ pub fn enqueue_signal_glob(set: &mut SignalGlobSet, tile: TileCoord) {
     set.insert(tile);
 }
 
+/// Encola posiciones (y `movement_target`) de trenes para invalidar bloques ocupados.
+pub fn enqueue_trains_for_signal_update(set: &mut SignalGlobSet, vehicles: &[Vehicle]) {
+    for v in vehicles {
+        if v.kind != VehicleKind::Train {
+            continue;
+        }
+        enqueue_signal_glob(set, v.pos);
+        if let Some(next) = v.movement_target() {
+            enqueue_signal_glob(set, next);
+        }
+    }
+}
+
+/// Encola teselas de reserva PBS (path signals dependen de `reserved_steps`).
+pub fn enqueue_pbs_reservations_for_signal_update(set: &mut SignalGlobSet, vehicles: &[Vehicle]) {
+    for v in vehicles {
+        if v.kind != VehicleKind::Train {
+            continue;
+        }
+        for step in &v.reserved_steps {
+            enqueue_signal_glob(set, step.tile);
+        }
+    }
+}
+
 /// Señales cuyo bloque contiene `tile`, más entries/combos que miran esas exits.
 #[must_use]
 pub fn collect_signals_affected_by_tiles(map: &Map, seeds: &SignalGlobSet) -> HashSet<TileCoord> {
@@ -1213,10 +1238,10 @@ pub fn collect_signals_affected_by_tiles_with_wormholes(
     affected
 }
 
-/// Recalcula verde/rojo en todas las teselas con señales.
+/// Recalcula verde/rojo en **todas** las teselas con señales (API explícita).
 ///
-/// Las teselas cuyo `m3hi` cambia se añaden a `dirty` (para remap visual en el cliente).
-/// Si `clear_dirty` es `true`, vacía `dirty` al inicio; si no, solo añade entradas nuevas.
+/// En simulación el tick usa [`drain_signal_globset_with_wormholes`] (incremental).
+/// Esta función queda para setup de tests, parity y carga de mapa.
 ///
 /// Orden (paridad simplificada de `UpdateSignalsOnSegment`):
 /// 1. Pasada block/exit/path/combo-bloque (`compute_exit_signal_greens`).
@@ -2234,7 +2259,8 @@ mod tests {
 
         let mut local = map;
         update_rail_signal_states(&mut local, &[], &mut Vec::new(), true);
-        let mut glob = SignalGlobSet::from([TileCoord::new(4, 1)]);
+        let mut glob = SignalGlobSet::new();
+        enqueue_trains_for_signal_update(&mut glob, std::slice::from_ref(&blocker));
         drain_signal_globset(
             &mut local,
             std::slice::from_ref(&blocker),
@@ -2247,6 +2273,62 @@ mod tests {
             let a = full.get(c).expect("full").m3hi;
             let b = local.get(c).expect("local").m3hi;
             assert_eq!(a, b, "m3hi mismatch at {c:?}");
+        }
+    }
+
+    /// Tick simulado solo con `_globset` (sin barrido global) ≡ update completo.
+    #[test]
+    fn globset_only_tick_matches_full_scan_for_entry_exit() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
+        let mut map = Map::new_flat(12, 4, 0);
+        for x in 0..=8 {
+            write_rail(&mut map, TileCoord::new(x, 1), RAIL_TB_X);
+        }
+        write_signal_facing(&mut map, TileCoord::new(1, 1), RAIL_TB_X, Some(0));
+        let mut entry = map.get(TileCoord::new(1, 1)).expect("entry");
+        entry.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(1, 1), entry).expect("entry");
+        write_signal_facing(&mut map, TileCoord::new(5, 1), RAIL_TB_X, Some(0));
+        let mut exit = map.get(TileCoord::new(5, 1)).expect("exit");
+        exit.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(5, 1), exit).expect("exit");
+
+        let blocker = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(6, 1),
+            TileCoord::new(6, 1),
+        );
+
+        let mut full = map.clone();
+        update_rail_signal_states(
+            &mut full,
+            std::slice::from_ref(&blocker),
+            &mut Vec::new(),
+            true,
+        );
+
+        let mut local = map;
+        // Estado inicial “todo verde” vía update vacío, luego solo globset como en sim_step.
+        update_rail_signal_states(&mut local, &[], &mut Vec::new(), true);
+        let mut glob = SignalGlobSet::new();
+        enqueue_trains_for_signal_update(&mut glob, std::slice::from_ref(&blocker));
+        drain_signal_globset(
+            &mut local,
+            std::slice::from_ref(&blocker),
+            &mut Vec::new(),
+            &mut glob,
+        );
+
+        for x in [1, 5] {
+            let c = TileCoord::new(x, 1);
+            assert_eq!(
+                full.get(c).expect("full").m3hi,
+                local.get(c).expect("local").m3hi,
+                "señal {c:?}"
+            );
         }
     }
 

@@ -25,19 +25,13 @@ pub(crate) fn step(state: &mut GameState) {
     crate::parity::release_staged_depot_trains(state);
     recompute_vehicle_paths(state);
 
-    let wormholes = state.jgr_tunnel_wormholes();
-    let wh = if wormholes.is_empty() {
-        None
-    } else {
-        Some(&wormholes)
-    };
-    crate::rail_signals::update_rail_signal_states_with_wormholes(
-        &mut state.map,
+    // Señales: solo `_globset` (sin barrido global).
+    state.signal_tile_dirty.clear();
+    crate::rail_signals::enqueue_trains_for_signal_update(
+        &mut state.signal_globset,
         &state.vehicles,
-        &mut state.signal_tile_dirty,
-        true,
-        wh,
     );
+    drain_signal_globset_now(state);
 
     crate::rail_pbs::update_train_reservations_with_settings(
         &state.map,
@@ -50,6 +44,11 @@ pub(crate) fn step(state: &mut GameState) {
         &mut state.reservation_tiles_active,
         &mut state.reservation_tile_dirty,
     );
+    crate::rail_signals::enqueue_pbs_reservations_for_signal_update(
+        &mut state.signal_globset,
+        &state.vehicles,
+    );
+    drain_signal_globset_now(state);
 
     state.industry_tile_dirty = crate::map::step_industry_tiles(&mut state.map, t);
 
@@ -65,7 +64,24 @@ pub(crate) fn step(state: &mut GameState) {
     tick_aircraft_phases(state);
     move_vehicles(state);
 
-    // Post-movimiento: refresco local vía `_globset` (si vacío, no hay barrido).
+    crate::rail_signals::enqueue_trains_for_signal_update(
+        &mut state.signal_globset,
+        &state.vehicles,
+    );
+    crate::rail_signals::enqueue_pbs_reservations_for_signal_update(
+        &mut state.signal_globset,
+        &state.vehicles,
+    );
+    drain_signal_globset_now(state);
+
+    sync_vehicle_order_destinations(state);
+    apply_vehicle_running_costs(state);
+    crate::news::poll_vehicle_advice_news(state);
+    crate::news::maybe_purge_old_news(state);
+    crate::parity::record_tick(state);
+}
+
+fn drain_signal_globset_now(state: &mut GameState) {
     let wormholes = state.jgr_tunnel_wormholes();
     let wh = if wormholes.is_empty() {
         None
@@ -79,12 +95,6 @@ pub(crate) fn step(state: &mut GameState) {
         &mut state.signal_globset,
         wh,
     );
-
-    sync_vehicle_order_destinations(state);
-    apply_vehicle_running_costs(state);
-    crate::news::poll_vehicle_advice_news(state);
-    crate::news::maybe_purge_old_news(state);
-    crate::parity::record_tick(state);
 }
 
 fn tick_vehicle_timetables(state: &mut GameState) {

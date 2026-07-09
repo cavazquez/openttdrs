@@ -160,6 +160,24 @@ fn dispatch_sim_events(
                 }
             }
             SimEvent::LoanInterestPaid { .. } | SimEvent::BankruptcyWarning => {}
+            SimEvent::AircraftTakeoff { at, .. } => {
+                if hud.sound_vehicle {
+                    sfx.write(PlayWorldSfx {
+                        sound: SoundId::TakeoffHelicopter,
+                        at,
+                        volume: 0.85,
+                    });
+                }
+            }
+            SimEvent::AircraftLanding { at, .. } => {
+                if hud.sound_vehicle {
+                    sfx.write(PlayWorldSfx {
+                        sound: SoundId::SkidPlane,
+                        at,
+                        volume: 0.8,
+                    });
+                }
+            }
             SimEvent::TownRatingChanged { .. }
             | SimEvent::SubsidyCreated { .. }
             | SimEvent::SubsidyAwarded { .. } => {}

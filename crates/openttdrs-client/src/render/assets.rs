@@ -58,8 +58,15 @@ pub(crate) struct WorldAssets {
     pub(crate) dock_flat: [AtlasSprite; 2],
     /// Helipuerto / hangar 1×1.
     pub(crate) airport_heliport: AtlasSprite,
-    /// Esclusa: [NS, EW] × middle (MVP).
-    pub(crate) water_lock_middle: [AtlasSprite; 2],
+    pub(crate) airport_hangar: AtlasSprite,
+    pub(crate) airport_apron: AtlasSprite,
+    pub(crate) airport_terminal: AtlasSprite,
+    pub(crate) airport_runway: AtlasSprite,
+    pub(crate) airport_taxiway: AtlasSprite,
+    pub(crate) airport_tower: AtlasSprite,
+    pub(crate) airport_stand: AtlasSprite,
+    /// Esclusa: [NS, EW] × [lower, middle, upper].
+    pub(crate) water_lock: [[AtlasSprite; 3]; 2],
     /// Portales de túnel por dirección diagonal (0=NE … 3=NW).
     pub(crate) road_tunnels: [AtlasSprite; 4],
     pub(crate) rail_tunnels: [AtlasSprite; 4],
@@ -226,9 +233,24 @@ impl WorldAssets {
         ];
         let dock_flat = [atlas.get("dock_flat_x.png"), atlas.get("dock_flat_y.png")];
         let airport_heliport = atlas.get("airport_heliport.png");
-        let water_lock_middle = [
-            atlas.get("water_lock_ns_middle.png"),
-            atlas.get("water_lock_ew_middle.png"),
+        let airport_hangar = atlas.get("airport_hangar_front.png");
+        let airport_apron = atlas.get("airport_apron.png");
+        let airport_terminal = atlas.get("airport_terminal_a.png");
+        let airport_runway = atlas.get("airport_runway_0.png");
+        let airport_taxiway = atlas.get("airport_taxiway_0.png");
+        let airport_tower = atlas.get("airport_tower.png");
+        let airport_stand = atlas.get("airport_stand.png");
+        let water_lock = [
+            [
+                atlas.get("water_lock_ns_lower.png"),
+                atlas.get("water_lock_ns_middle.png"),
+                atlas.get("water_lock_ns_upper.png"),
+            ],
+            [
+                atlas.get("water_lock_ew_lower.png"),
+                atlas.get("water_lock_ew_middle.png"),
+                atlas.get("water_lock_ew_upper.png"),
+            ],
         ];
         use crate::sprites::{tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name};
         let road_tunnels = std::array::from_fn(|dir| {
@@ -407,7 +429,14 @@ impl WorldAssets {
             ship_depot,
             dock_flat,
             airport_heliport,
-            water_lock_middle,
+            airport_hangar,
+            airport_apron,
+            airport_terminal,
+            airport_runway,
+            airport_taxiway,
+            airport_tower,
+            airport_stand,
+            water_lock,
             road_tunnels,
             rail_tunnels,
             bridge_by_id,
@@ -427,6 +456,20 @@ impl WorldAssets {
             refinery_fire_frames,
             fizzy_drink_frames,
             foundations,
+        }
+    }
+
+    pub(crate) fn airport_piece_sprite(&self, piece: openttdrs_core::AirportPiece) -> &AtlasSprite {
+        use openttdrs_core::AirportPiece;
+        match piece {
+            AirportPiece::Heliport => &self.airport_heliport,
+            AirportPiece::Hangar => &self.airport_hangar,
+            AirportPiece::Apron => &self.airport_apron,
+            AirportPiece::Terminal => &self.airport_terminal,
+            AirportPiece::Runway => &self.airport_runway,
+            AirportPiece::Taxiway => &self.airport_taxiway,
+            AirportPiece::Tower => &self.airport_tower,
+            AirportPiece::Stand => &self.airport_stand,
         }
     }
 

@@ -79,6 +79,7 @@ mod tests {
             "assets/opengfx/tiles/water_flat.png",
             "assets/opengfx/tiles/water_lock_ns_middle.png",
             "assets/opengfx/tiles/airport_heliport.png",
+            "assets/opengfx/tiles/airport_runway_0.png",
             "assets/opengfx/tiles/house_church_build.png",
             "assets/opengfx/tiles/object_lighthouse.png",
             "assets/opengfx/tiles/object_transmitter.png",

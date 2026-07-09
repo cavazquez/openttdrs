@@ -383,8 +383,7 @@ pub(crate) fn handle_tile_click(
                 }
                 Some(TileKind::RoadDepot)
                 | Some(TileKind::RailDepot)
-                | Some(TileKind::ShipDepot)
-                | Some(TileKind::Airport) => {
+                | Some(TileKind::ShipDepot) => {
                     depot_state.depot_pos = Some(pos);
                     depot_state.selected_vehicle = sim
                         .state
@@ -394,6 +393,33 @@ pub(crate) fn handle_tile_click(
                         .map(|vehicle| vehicle.id);
                     order_state.clear();
                     station_panel.station_pos = None;
+                    industry_panel.open = false;
+                    town_window.town_id = None;
+                    vehicle_window.vehicle_id = None;
+                    return;
+                }
+                Some(TileKind::Airport)
+                    if openttdrs_core::airport_tile_is_hangar(&sim.state.map, pos) =>
+                {
+                    depot_state.depot_pos = Some(pos);
+                    depot_state.selected_vehicle = sim
+                        .state
+                        .vehicles
+                        .iter()
+                        .find(|vehicle| vehicle.pos == pos)
+                        .map(|vehicle| vehicle.id);
+                    order_state.clear();
+                    station_panel.station_pos = None;
+                    industry_panel.open = false;
+                    town_window.town_id = None;
+                    vehicle_window.vehicle_id = None;
+                    return;
+                }
+                Some(TileKind::Airport) => {
+                    station_panel.station_pos = Some(pos);
+                    depot_state.depot_pos = None;
+                    depot_state.selected_vehicle = None;
+                    order_state.clear();
                     industry_panel.open = false;
                     town_window.town_id = None;
                     vehicle_window.vehicle_id = None;

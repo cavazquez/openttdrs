@@ -52,6 +52,17 @@ pub enum VehicleKind {
     Aircraft,
 }
 
+/// Fase de vuelo MVP (aviones).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+pub enum AircraftPhase {
+    #[default]
+    InHangar,
+    Taxi,
+    Takeoff,
+    Flying,
+    Landing,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(untagged)]
 pub enum VehicleOrder {
@@ -618,6 +629,15 @@ pub struct Vehicle {
     /// Ticks restantes de avería (vehículo parado).
     #[serde(default)]
     pub breakdown_ticks_remaining: u32,
+    /// Fase de vuelo (solo aviones; resto ignora).
+    #[serde(default)]
+    pub aircraft_phase: AircraftPhase,
+    /// Altitud de vuelo (0 = suelo; ~8 = crucero). Offset visual Z.
+    #[serde(default)]
+    pub altitude: u8,
+    /// Ticks restantes en fase Takeoff/Landing.
+    #[serde(default)]
+    pub aircraft_phase_ticks: u16,
 }
 
 impl Vehicle {
@@ -674,6 +694,9 @@ impl Vehicle {
             reliability,
             needs_servicing: false,
             breakdown_ticks_remaining: 0,
+            aircraft_phase: AircraftPhase::InHangar,
+            altitude: 0,
+            aircraft_phase_ticks: 0,
         }
     }
 
@@ -1377,7 +1400,17 @@ impl Vehicle {
         if order.is_conditional() {
             return;
         }
-        self.dest = crate::station::resolve_order_destination(map, self.kind, order);
+        self.dest = if self.kind == VehicleKind::Aircraft {
+            match order {
+                VehicleOrder::Station { station, .. } => {
+                    // Prefer apron/loading if the hangar ancla está en un footprint.
+                    crate::airport::airport_loading_tile_at(map, station)
+                }
+                _ => crate::station::resolve_order_destination(map, self.kind, order),
+            }
+        } else {
+            crate::station::resolve_order_destination(map, self.kind, order)
+        };
     }
 
     /// Salida con sentido opuesto al de llegada (giro animado en parada bus/camión).

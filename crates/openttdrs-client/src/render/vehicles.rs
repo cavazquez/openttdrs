@@ -125,6 +125,7 @@ pub(crate) fn vehicle_sprite_pos_at(
 ) -> Vec3 {
     let layer = vehicle_layer(v, Some(map), pose);
     let (anchor, height, tx, ty) = vehicle_draw_anchor_from_pose(v, map, pose);
+    let height = height.saturating_add(v.altitude);
     overlay_pos(
         anchor,
         layer.x_offs,

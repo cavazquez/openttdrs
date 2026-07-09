@@ -51,6 +51,7 @@ pub(crate) fn push_water_tile(
         let m5 = ctx.tile.map(|t| t.m5).unwrap_or(0);
         if (m5 >> 4) & 0x0F == 2 {
             let axis = usize::from(m5 & 1).min(1);
+            let level = openttdrs_core::lock_sprite_level(map, ctx.coord).min(2);
             let half_h = if ctx.info.tileh == 0 {
                 TILE_HALF_H
             } else {
@@ -58,7 +59,7 @@ pub(crate) fn push_water_tile(
             };
             batches.water.push((
                 ctx.map_tile_chunk(),
-                assets.water_lock_middle[axis].sprite(),
+                assets.water_lock[axis][level].sprite(),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),

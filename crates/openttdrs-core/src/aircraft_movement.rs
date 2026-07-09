@@ -1,7 +1,17 @@
-//! Movimiento mínimo de aviones en línea recta.
+//! Movimiento y fases de vuelo de aviones.
 
-use crate::map::TileCoord;
-use crate::vehicle::VehicleKind;
+use crate::airport::{AirportPiece, airport_runway_tile, airport_tile_is_hangar};
+use crate::map::{Map, TileCoord, TileKind};
+use crate::station::Station;
+use crate::vehicle::{AircraftPhase, Vehicle, VehicleKind};
+
+/// Altitud de crucero (unidades de altura de tesela para offset visual).
+pub const AIRCRAFT_CRUISE_ALTITUDE: u8 = 8;
+/// Ticks de despegue / aterrizaje.
+pub const AIRCRAFT_TAKEOFF_TICKS: u16 = 24;
+pub const AIRCRAFT_LANDING_TICKS: u16 = 24;
+/// Distancia Manhattan al destino para iniciar aterrizaje.
+pub const AIRCRAFT_LANDING_APPROACH: i32 = 3;
 
 /// Ruta en línea recta (pasos Manhattan hacia el destino).
 #[must_use]
@@ -27,6 +37,112 @@ pub fn straight_line_path(from: TileCoord, to: TileCoord) -> Vec<TileCoord> {
 #[must_use]
 pub fn aircraft_requires_path(kind: VehicleKind) -> bool {
     kind == VehicleKind::Aircraft
+}
+
+/// Estación aeropuerto que cubre `pos` (hangar o footprint).
+#[must_use]
+pub fn airport_station_at(stations: &[Station], pos: TileCoord) -> Option<&Station> {
+    stations
+        .iter()
+        .find(|s| s.stop_kind == crate::station::StopKind::Airport && s.covers_tile(pos))
+}
+
+/// Actualiza fase/altitud de un avión una vez por tick (antes o después de `step`).
+pub fn tick_aircraft_phase(v: &mut Vehicle, map: &Map, stations: &[Station]) -> AircraftPhaseEvent {
+    if v.kind != VehicleKind::Aircraft {
+        return AircraftPhaseEvent::None;
+    }
+    match v.aircraft_phase {
+        AircraftPhase::InHangar => {
+            if v.running && v.pos != v.dest && !v.orders.is_empty() {
+                // Salir a taxi hacia runway (o dest si helipuerto).
+                let runway = airport_station_at(stations, v.pos)
+                    .and_then(|s| airport_runway_tile(s, map))
+                    .unwrap_or(v.dest);
+                v.aircraft_phase = AircraftPhase::Taxi;
+                v.altitude = 0;
+                if runway != v.pos {
+                    v.path = straight_line_path(v.pos, runway).into();
+                }
+            }
+            AircraftPhaseEvent::None
+        }
+        AircraftPhase::Taxi => {
+            let on_runway = map.get(v.pos).is_some_and(|t| {
+                t.kind == TileKind::Airport && AirportPiece::from_m5(t.m5).is_runway()
+            }) || (airport_tile_is_hangar(map, v.pos)
+                && airport_station_at(stations, v.pos).is_some_and(|s| s.airport_tiles.len() <= 1));
+            if on_runway && v.path.is_empty() {
+                v.aircraft_phase = AircraftPhase::Takeoff;
+                v.aircraft_phase_ticks = AIRCRAFT_TAKEOFF_TICKS;
+                v.cur_speed = v.cur_speed.max(32);
+                return AircraftPhaseEvent::Takeoff;
+            }
+            AircraftPhaseEvent::None
+        }
+        AircraftPhase::Takeoff => {
+            if v.aircraft_phase_ticks > 0 {
+                v.aircraft_phase_ticks -= 1;
+                let done = AIRCRAFT_TAKEOFF_TICKS.saturating_sub(v.aircraft_phase_ticks);
+                let alt = (u32::from(done) * u32::from(AIRCRAFT_CRUISE_ALTITUDE))
+                    / u32::from(AIRCRAFT_TAKEOFF_TICKS.max(1));
+                v.altitude = u8::try_from(alt.min(u32::from(AIRCRAFT_CRUISE_ALTITUDE)))
+                    .unwrap_or(AIRCRAFT_CRUISE_ALTITUDE);
+            }
+            if v.aircraft_phase_ticks == 0 {
+                v.aircraft_phase = AircraftPhase::Flying;
+                v.altitude = AIRCRAFT_CRUISE_ALTITUDE;
+                v.path = straight_line_path(v.pos, v.dest).into();
+                v.set_cruise_speed();
+            }
+            AircraftPhaseEvent::None
+        }
+        AircraftPhase::Flying => {
+            let dist = (v.pos.x - v.dest.x).abs() + (v.pos.y - v.dest.y).abs();
+            if dist <= AIRCRAFT_LANDING_APPROACH || v.pos == v.dest {
+                let runway = airport_station_at(stations, v.dest)
+                    .and_then(|s| airport_runway_tile(s, map))
+                    .unwrap_or(v.dest);
+                v.aircraft_phase = AircraftPhase::Landing;
+                v.aircraft_phase_ticks = AIRCRAFT_LANDING_TICKS;
+                if v.pos != runway {
+                    v.path = straight_line_path(v.pos, runway).into();
+                }
+                return AircraftPhaseEvent::Landing;
+            }
+            AircraftPhaseEvent::None
+        }
+        AircraftPhase::Landing => {
+            if v.aircraft_phase_ticks > 0 {
+                v.aircraft_phase_ticks -= 1;
+                let left = v.aircraft_phase_ticks;
+                let alt = (u32::from(left) * u32::from(AIRCRAFT_CRUISE_ALTITUDE))
+                    / u32::from(AIRCRAFT_LANDING_TICKS.max(1));
+                v.altitude = u8::try_from(alt.min(u32::from(AIRCRAFT_CRUISE_ALTITUDE)))
+                    .unwrap_or(AIRCRAFT_CRUISE_ALTITUDE);
+            }
+            if v.aircraft_phase_ticks == 0 {
+                v.altitude = 0;
+                // Taxi al destino de carga / hangar.
+                if v.pos != v.dest {
+                    v.aircraft_phase = AircraftPhase::Taxi;
+                    v.path = straight_line_path(v.pos, v.dest).into();
+                } else if airport_tile_is_hangar(map, v.pos) {
+                    v.aircraft_phase = AircraftPhase::InHangar;
+                } else {
+                    v.aircraft_phase = AircraftPhase::Taxi;
+                }
+            }
+            AircraftPhaseEvent::None
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AircraftPhaseEvent {
+    None,
+    Takeoff,
+    Landing,
 }
 
 #[cfg(test)]
@@ -70,6 +186,8 @@ mod tests {
         let dest = TileCoord::new(10, 6);
         s.vehicles[0].dest = dest;
         s.vehicles[0].running = true;
+        s.vehicles[0].aircraft_phase = AircraftPhase::Flying;
+        s.vehicles[0].altitude = AIRCRAFT_CRUISE_ALTITUDE;
         s.vehicles[0].path = find_path(&s.map, airport, dest, PathNetwork::Air)
             .unwrap()
             .into();

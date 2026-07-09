@@ -238,6 +238,16 @@ pub(crate) fn update_build_ghost_preview(
         );
         return;
     }
+    if action == BuildMenuAction::AirportSmall {
+        spawn_airport_small_preview(
+            &mut commands,
+            &asset_server,
+            &sim,
+            &station_state,
+            TileCoord::new(tx, ty),
+        );
+        return;
+    }
     if action == BuildMenuAction::RailWaypoint {
         let coord = TileCoord::new(tx, ty);
         if sim.state.map.get(coord).is_some() {
@@ -578,6 +588,47 @@ fn spawn_rail_station_area_preview(
     let image = asset_server.load::<Image>("assets/opengfx/tiles/tile_select.png");
     let tint = if valid {
         Color::srgba(1.0, 1.0, 1.0, 0.95)
+    } else {
+        Color::srgba(1.0, 0.3, 0.25, 0.95)
+    };
+    for dy in 0..h {
+        for dx in 0..w {
+            let (x, y) = (origin.x + dx, origin.y + dy);
+            let Some(tile) = sim.state.map.get(TileCoord::new(x, y)) else {
+                continue;
+            };
+            commands.spawn((
+                BuildGhostPreview,
+                Sprite {
+                    image: image.clone(),
+                    color: tint,
+                    ..default()
+                },
+                Transform::from_translation(crate::iso::tile_pos(x, y, tile.height, 3.0))
+                    .with_scale(Vec3::new(1.002, 1.002, 1.0)),
+            ));
+        }
+    }
+}
+
+fn spawn_airport_small_preview(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    sim: &SimWorld,
+    station_state: &StationBuildState,
+    origin: TileCoord,
+) {
+    use openttdrs_core::{Command, airport_small_footprint, command_would_fail};
+
+    let (w, h) = airport_small_footprint(station_state.rail_axis_y);
+    let cmd = Command::PlaceAirportArea {
+        origin,
+        axis_y: station_state.rail_axis_y,
+    };
+    let valid = command_would_fail(&sim.state, &cmd).is_none();
+    let image = asset_server.load::<Image>("assets/opengfx/tiles/tile_select.png");
+    let tint = if valid {
+        Color::srgba(0.85, 0.95, 1.0, 0.95)
     } else {
         Color::srgba(1.0, 0.3, 0.25, 0.95)
     };

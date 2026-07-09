@@ -21,6 +21,7 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::Canal => "Canal",
         BuildMenuAction::Lock => "Esclusa",
         BuildMenuAction::Airport => "Helipuerto",
+        BuildMenuAction::AirportSmall => "Aeropuerto small",
         BuildMenuAction::RailBridge => "Puente vía",
         BuildMenuAction::RailTunnel => "Túnel vía",
         BuildMenuAction::RailWaypoint => "Waypoint",
@@ -70,6 +71,7 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
         BuildMenuAction::Canal => Some("hierba/bosque → agua navegable"),
         BuildMenuAction::Lock => Some("sobre agua; RMB gira eje NS/EW"),
         BuildMenuAction::Airport => Some("hangar 1×1; comprar avión"),
+        BuildMenuAction::AirportSmall => Some("4×3; RMB rota eje; compra en hangar"),
         BuildMenuAction::RailSignals => {
             Some("arrastre dens.N; clic sentido; Ctrl+clic tipo; Shift+RMB dens.; RMB dir")
         }

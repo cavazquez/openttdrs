@@ -77,6 +77,9 @@ pub struct Station {
     /// Rating global simplificado (0–255; mayor = mejor servicio).
     #[serde(default = "default_station_rating")]
     pub rating: u8,
+    /// Teselas del aeropuerto (helipuerto = `[pos]`; small = footprint completo).
+    #[serde(default)]
+    pub airport_tiles: Vec<TileCoord>,
 }
 
 const fn default_station_rating() -> u8 {
@@ -114,7 +117,14 @@ impl Station {
             income: 0,
             time_since_pickup: CargoTimeSincePickup::default(),
             rating: default_station_rating(),
+            airport_tiles: Vec::new(),
         }
+    }
+
+    /// ¿La estación cubre esta tesela (ancla o footprint aeropuerto)?
+    #[must_use]
+    pub fn covers_tile(&self, c: TileCoord) -> bool {
+        self.pos == c || self.airport_tiles.contains(&c)
     }
 
     #[must_use]
@@ -393,7 +403,13 @@ pub fn vehicle_physically_at_station(
                     && crate::ship_movement::is_water_network_tile_at(map, vpos)
             }
         }
-        VehicleKind::Aircraft => station.stop_kind == StopKind::Airport && vpos == station.pos,
+        VehicleKind::Aircraft => {
+            station.stop_kind == StopKind::Airport
+                && station.covers_tile(vpos)
+                && map
+                    .get(vpos)
+                    .is_some_and(|t| crate::airport::AirportPiece::from_m5(t.m5).is_loading())
+        }
     }
 }
 
@@ -440,6 +456,21 @@ pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrd
         }
         (_, order) => order.destination(),
     }
+}
+
+/// Destino aéreo de una orden de estación (apron/loading del aeropuerto).
+#[must_use]
+pub fn resolve_aircraft_station_dest(
+    stations: &[Station],
+    map: &Map,
+    station_pos: TileCoord,
+) -> TileCoord {
+    stations
+        .iter()
+        .find(|s| s.stop_kind == StopKind::Airport && s.covers_tile(station_pos))
+        .map_or(station_pos, |s| {
+            crate::airport::airport_loading_tile(s, map)
+        })
 }
 
 #[must_use]

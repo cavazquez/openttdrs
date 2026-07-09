@@ -7,6 +7,7 @@
 
 pub mod ai;
 pub mod aircraft_movement;
+pub mod airport;
 pub mod autoreplace;
 pub mod bridge_spec;
 pub mod cargo;
@@ -50,6 +51,11 @@ pub mod vehicle_group;
 pub mod world_gen;
 
 pub use aircraft_movement::{aircraft_requires_path, straight_line_path};
+pub use airport::{
+    AIRPORT_SMALL_H, AIRPORT_SMALL_W, AirportPiece, airport_loading_tile, airport_loading_tile_at,
+    airport_m6_airport, airport_runway_tile, airport_small_footprint, airport_small_tiles,
+    airport_tile_is_hangar,
+};
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
 pub use bridge_spec::{
     BRIDGE_SPECS, BridgePiece, BridgeSpec, BridgeType, bridge_above_axis_from_mapt,
@@ -176,7 +182,11 @@ pub use save::CURRENT_SAVE_VERSION;
 pub use save::SaveError;
 pub use save::load_from_str;
 pub use shared_orders::SharedOrderList;
-pub use ship_movement::{is_water_network_tile, ship_requires_path, water_tiles_connected};
+pub use ship_movement::{
+    LOCK_TRANSIT_TICKS, is_water_network_tile, is_water_network_tile_at, lock_sprite_level,
+    maybe_start_lock_transit, ship_requires_path, tick_ship_lock_wait, water_tile_is_lock,
+    water_tiles_connected,
+};
 pub use sim_events::{ConstructionKind, DisasterKind, SimEvent, SimEventQueue, TrainSmokeKind};
 pub use sound_id::SoundId;
 pub use station::{
@@ -219,9 +229,10 @@ pub use train_movement::{
 };
 pub use vehicle::reverse_direction;
 pub use vehicle::{
-    BREAKDOWN_DURATION_TICKS, DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W,
-    OrderConditionKind, SERVICING_RELIABILITY_THRESHOLD, TimetableWaitKind, VEHICLE_PROGRESS_STEP,
-    Vehicle, VehicleDirection, VehicleKind, VehicleOrder, direction_from_tile_step,
+    AircraftPhase, BREAKDOWN_DURATION_TICKS, DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW,
+    DIR_W, OrderConditionKind, SERVICING_RELIABILITY_THRESHOLD, TimetableWaitKind,
+    VEHICLE_PROGRESS_STEP, Vehicle, VehicleDirection, VehicleKind, VehicleOrder,
+    direction_from_tile_step,
 };
 pub use vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup};
 pub use world_gen::{

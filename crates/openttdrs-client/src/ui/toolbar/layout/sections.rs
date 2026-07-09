@@ -324,16 +324,23 @@ pub(super) fn spawn_water_panel(root: &mut ChildSpawnerCommands, asset_server: &
 pub(super) fn spawn_air_panel(root: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
     root.spawn(tool_panel_node(ToolbarGroup::Air, false))
         .with_children(|panel| {
-            spawn_panel_title(panel, "Construccion aerea", 280.0);
+            spawn_panel_title(panel, "Construccion aerea", 360.0);
             spawn_button_row(panel, |buttons| {
                 spawn_icon_tool_buttons(
                     buttons,
                     asset_server,
-                    &[(
-                        "Helipuerto / hangar",
-                        "assets/opengfx/tiles/airport_heliport.png",
-                        BuildMenuAction::Airport,
-                    )],
+                    &[
+                        (
+                            "Helipuerto / hangar",
+                            "assets/opengfx/tiles/airport_heliport.png",
+                            BuildMenuAction::Airport,
+                        ),
+                        (
+                            "Aeropuerto small (4x3)",
+                            "assets/opengfx/tiles/airport_runway_0.png",
+                            BuildMenuAction::AirportSmall,
+                        ),
+                    ],
                 );
             });
         });

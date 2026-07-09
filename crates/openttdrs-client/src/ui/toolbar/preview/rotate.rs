@@ -34,7 +34,7 @@ pub(crate) fn rotate_station_with_right_click(
         | Some(BuildMenuAction::Lock) => {
             station_state.orientation = (station_state.orientation + 1) % 4;
         }
-        Some(BuildMenuAction::RailStation) => {
+        Some(BuildMenuAction::RailStation) | Some(BuildMenuAction::AirportSmall) => {
             station_state.rail_axis_y = !station_state.rail_axis_y;
         }
         Some(BuildMenuAction::RailSignals) => {

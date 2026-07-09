@@ -116,7 +116,7 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         | BuildMenuAction::Dock
         | BuildMenuAction::Canal
         | BuildMenuAction::Lock => ToolbarGroup::Water,
-        BuildMenuAction::Airport => ToolbarGroup::Air,
+        BuildMenuAction::Airport | BuildMenuAction::AirportSmall => ToolbarGroup::Air,
         BuildMenuAction::Orders => ToolbarGroup::Info,
         BuildMenuAction::BuildHouse
         | BuildMenuAction::BuildCoalMine

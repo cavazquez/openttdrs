@@ -1,8 +1,9 @@
 //! Tests de aeropuerto, canal y esclusa.
 
 use crate::{
-    Command, DEPOT_BUILD_COST, ENGINE_AIRCRAFT_DAKOTA, ENGINE_SHIP_FERRY, GameState,
-    STATION_BUILD_COST, StopKind, TileCoord, TileKind, VehicleKind, apply_command,
+    AircraftPhase, Command, DEPOT_BUILD_COST, ENGINE_AIRCRAFT_DAKOTA, ENGINE_SHIP_FERRY, GameState,
+    STATION_BUILD_COST, StopKind, TileCoord, TileKind, VehicleKind, airport_tile_is_hangar,
+    apply_command,
 };
 
 #[test]
@@ -30,6 +31,43 @@ fn place_airport_and_buy_aircraft() {
 }
 
 #[test]
+fn place_airport_small_footprint_and_hangar_buy() {
+    let mut s = GameState::new(20, 20);
+    let origin = TileCoord::new(2, 2);
+    apply_command(
+        &mut s,
+        &Command::PlaceAirportArea {
+            origin,
+            axis_y: false,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].airport_tiles.len(), 12);
+    let hangar = s.stations[0].pos;
+    assert!(airport_tile_is_hangar(&s.map, hangar));
+    // Compra solo en hangar.
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_DAKOTA),
+    )
+    .unwrap();
+    // Apron no es hangar.
+    let apron = s.stations[0]
+        .airport_tiles
+        .iter()
+        .copied()
+        .find(|&c| !airport_tile_is_hangar(&s.map, c))
+        .unwrap();
+    let err = apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(apron, ENGINE_AIRCRAFT_DAKOTA),
+    )
+    .unwrap_err();
+    assert!(matches!(err, crate::CommandError::InvalidDepotTile));
+}
+
+#[test]
 fn place_canal_converts_grass_to_water() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(3, 3);
@@ -40,14 +78,22 @@ fn place_canal_converts_grass_to_water() {
 }
 
 #[test]
-fn place_lock_marks_water_subtype() {
+fn place_lock_requires_height_delta() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(2, 2);
-    s.map.set_kind(c, TileKind::Water).unwrap();
-    apply_command(&mut s, &Command::PlaceLock(c, true)).unwrap();
+    let a = TileCoord::new(1, 2);
+    let b = TileCoord::new(3, 2);
+    for t in [a, c, b] {
+        s.map.set_kind(t, TileKind::Water).unwrap();
+    }
+    // Misma altura → rechazo.
+    assert!(apply_command(&mut s, &Command::PlaceLock(c, false)).is_err());
+    s.map.set_height(a, 1).unwrap();
+    s.map.set_height(c, 1).unwrap();
+    s.map.set_height(b, 2).unwrap();
+    apply_command(&mut s, &Command::PlaceLock(c, false)).unwrap();
     let tile = s.map.get(c).unwrap();
     assert_eq!(tile.m5 >> 4, 2);
-    assert_eq!(tile.m5 & 1, 1);
 }
 
 #[test]
@@ -55,4 +101,18 @@ fn ferry_engine_is_passenger_ship() {
     let eng = crate::engine_by_id(ENGINE_SHIP_FERRY).unwrap();
     assert_eq!(eng.kind, VehicleKind::Ship);
     assert_eq!(eng.cargo, Some(crate::CargoType::Passengers));
+}
+
+#[test]
+fn aircraft_phase_starts_in_hangar() {
+    let mut s = GameState::new(12, 12);
+    let c = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceAirport(c)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(c, ENGINE_AIRCRAFT_DAKOTA),
+    )
+    .unwrap();
+    assert_eq!(s.vehicles[0].aircraft_phase, AircraftPhase::InHangar);
+    assert_eq!(s.vehicles[0].altitude, 0);
 }

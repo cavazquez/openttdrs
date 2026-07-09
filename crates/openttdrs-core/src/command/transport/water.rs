@@ -1,4 +1,4 @@
-//! Construcción acuática: depósito de barcos y muelle.
+//! Construcción acuática: depósito, muelle, canal y esclusa.
 
 use crate::map::{Map, TileCoord, TileKind};
 use crate::{DEPOT_BUILD_COST, GameState, STATION_BUILD_COST, Station, StopKind};
@@ -60,7 +60,6 @@ pub(in crate::command) fn place_ship_depot_dir(
 ) -> Result<(), CommandError> {
     let dir = dir & 0x03;
     check_ship_depot_placement(&state.map, c, dir)?;
-    // Escritura directa: `place_single_transport_tile` rechaza Water.
     state
         .map
         .set_kind(c, TileKind::ShipDepot)
@@ -109,7 +108,6 @@ pub(in crate::command) fn place_dock(
     dir: u8,
 ) -> Result<(), CommandError> {
     check_dock_placement(&state.map, &state.stations, c)?;
-    // Orientación visual: eje X (dir par) o Y (impar) → m5 0/1.
     let m5 = u8::from(dir & 1 != 0);
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     tile.kind = TileKind::Station;
@@ -157,10 +155,31 @@ pub(in crate::command) fn place_canal(
     Ok(())
 }
 
-/// Esclusa: marca agua como Lock (`m5` bits 4–7 = 2) con eje NS/EW.
-pub(crate) fn check_place_lock(map: &Map, c: TileCoord) -> Result<(), CommandError> {
+fn lock_axis_neighbors(c: TileCoord, axis_y: bool) -> (TileCoord, TileCoord) {
+    if axis_y {
+        (TileCoord::new(c.x, c.y - 1), TileCoord::new(c.x, c.y + 1))
+    } else {
+        (TileCoord::new(c.x - 1, c.y), TileCoord::new(c.x + 1, c.y))
+    }
+}
+
+/// Esclusa: agua + vecinos del eje con `|Δheight| == 1`.
+pub(crate) fn check_place_lock(map: &Map, c: TileCoord, axis_y: bool) -> Result<(), CommandError> {
     check_in_bounds(map, c)?;
     if map.get_kind(c) != Some(TileKind::Water) {
+        return Err(CommandError::CannotPlaceStationOnOccupiedTile);
+    }
+    let (a, b) = lock_axis_neighbors(c, axis_y);
+    check_in_bounds(map, a)?;
+    check_in_bounds(map, b)?;
+    if !crate::ship_movement::is_water_network_tile_at(map, a)
+        || !crate::ship_movement::is_water_network_tile_at(map, b)
+    {
+        return Err(CommandError::StationNotAdjacentToTransport);
+    }
+    let ha = map.get(a).map_or(0, |t| t.height);
+    let hb = map.get(b).map_or(0, |t| t.height);
+    if ha.abs_diff(hb) != 1 {
         return Err(CommandError::CannotPlaceStationOnOccupiedTile);
     }
     Ok(())
@@ -171,7 +190,7 @@ pub(in crate::command) fn place_lock(
     c: TileCoord,
     axis_y: bool,
 ) -> Result<(), CommandError> {
-    check_place_lock(&state.map, c)?;
+    check_place_lock(&state.map, c, axis_y)?;
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     // Water subtype Lock = 2 in bits 4–7; bit 0 of low nibble = axis.
     tile.m5 = (2 << 4) | u8::from(axis_y);

@@ -122,7 +122,10 @@ pub(super) fn build_vehicle_at_depot(
         VehicleKind::Bus | VehicleKind::Truck => tile.kind == TileKind::RoadDepot,
         VehicleKind::Train => tile.kind == TileKind::RailDepot,
         VehicleKind::Ship => tile.kind == TileKind::ShipDepot,
-        VehicleKind::Aircraft => tile.kind == TileKind::Airport,
+        VehicleKind::Aircraft => {
+            tile.kind == TileKind::Airport
+                && crate::airport::airport_tile_is_hangar(&state.map, depot_pos)
+        }
     };
     if !depot_ok {
         return Err(CommandError::InvalidDepotTile);

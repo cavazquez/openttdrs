@@ -90,6 +90,7 @@ pub(crate) enum BuildMenuAction {
     Canal,
     Lock,
     Airport,
+    AirportSmall,
     BuildHouse,
     BuildCoalMine,
     BuildIronOreMine,

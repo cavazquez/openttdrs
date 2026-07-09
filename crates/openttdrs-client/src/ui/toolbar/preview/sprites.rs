@@ -68,6 +68,9 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::Airport => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/airport_heliport.png"))
         }
+        BuildMenuAction::AirportSmall => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/airport_runway_0.png"))
+        }
         BuildMenuAction::RoadBridge => {
             let path = if bridge_axis_y_from_tiles(preview_tiles) {
                 "assets/opengfx/tiles/bridge_wood_road_y.png"

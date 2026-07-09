@@ -80,6 +80,14 @@ pub enum SimEvent {
         amount: i64,
     },
     BankruptcyWarning,
+    AircraftTakeoff {
+        vehicle_id: u32,
+        at: TileCoord,
+    },
+    AircraftLanding {
+        vehicle_id: u32,
+        at: TileCoord,
+    },
 }
 
 /// Cola de eventos del tick actual (no persistida).

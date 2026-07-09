@@ -54,6 +54,11 @@ pub enum Command {
     PlaceDock(TileCoord, u8),
     /// Helipuerto / aeropuerto 1×1 (compra aviones + carga pasajeros).
     PlaceAirport(TileCoord),
+    /// Aeropuerto small 4×3; `axis_y` rota el footprint.
+    PlaceAirportArea {
+        origin: TileCoord,
+        axis_y: bool,
+    },
     /// Canal: convierte terreno en agua navegable.
     PlaceCanal(TileCoord),
     /// Esclusa sobre agua; `axis_y` = eje N-S.

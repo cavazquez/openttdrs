@@ -55,6 +55,7 @@ pub(crate) fn step(state: &mut GameState) {
     run_autoreplace_in_depots(state);
     extend_orderless_vehicle_paths(state);
     assign_orderless_wander_destinations(state);
+    tick_aircraft_phases(state);
     move_vehicles(state);
 
     crate::rail_signals::update_rail_signal_states(
@@ -113,6 +114,30 @@ fn run_autoreplace_in_depots(state: &mut GameState) {
 fn sync_vehicle_order_destinations(state: &mut GameState) {
     for vehicle in &mut state.vehicles {
         vehicle.sync_order_destination(&state.map);
+    }
+}
+
+fn tick_aircraft_phases(state: &mut GameState) {
+    use crate::aircraft_movement::{AircraftPhaseEvent, tick_aircraft_phase};
+    use crate::sim_events::SimEvent;
+
+    for i in 0..state.vehicles.len() {
+        let ev = tick_aircraft_phase(&mut state.vehicles[i], &state.map, &state.stations);
+        let id = state.vehicles[i].id;
+        let at = state.vehicles[i].pos;
+        match ev {
+            AircraftPhaseEvent::Takeoff => {
+                state
+                    .pending_sim_events
+                    .push(SimEvent::AircraftTakeoff { vehicle_id: id, at });
+            }
+            AircraftPhaseEvent::Landing => {
+                state
+                    .pending_sim_events
+                    .push(SimEvent::AircraftLanding { vehicle_id: id, at });
+            }
+            AircraftPhaseEvent::None => {}
+        }
     }
 }
 
@@ -667,10 +692,15 @@ fn move_vehicles(state: &mut GameState) {
             }
             continue;
         }
-        // Liberó el path: limpiar stuck.
-        if state.vehicles[i].pbs_stuck || state.vehicles[i].wait_counter > 0 {
+        // Liberó el path PBS: limpiar stuck (no tocar wait_counter de esclusas).
+        if state.vehicles[i].kind == VehicleKind::Train
+            && (state.vehicles[i].pbs_stuck || state.vehicles[i].wait_counter > 0)
+        {
             state.vehicles[i].pbs_stuck = false;
             state.vehicles[i].wait_counter = 0;
+        }
+        if crate::ship_movement::tick_ship_lock_wait(&mut state.vehicles[i]) {
+            continue;
         }
         let had_force = state.vehicles[i].force_proceed;
         let broke_down = state.vehicles[i].check_breakdown(tick);
@@ -691,6 +721,9 @@ fn move_vehicles(state: &mut GameState) {
         let vehicle_kind = state.vehicles[i].kind;
         let vehicle_running = state.vehicles[i].running;
         state.vehicles[i].step();
+        if state.vehicles[i].pos != prev_pos {
+            crate::ship_movement::maybe_start_lock_transit(&mut state.vehicles[i], &state.map);
+        }
         if vehicle_running {
             if prev_speed == 0 && state.vehicles[i].cur_speed > 0 {
                 state

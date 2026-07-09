@@ -184,10 +184,11 @@ pub(crate) fn spawn_station_tile(
             } else {
                 SLOPE_HALF_H[tileh as usize]
             };
+            let piece = openttdrs_core::AirportPiece::from_m5(m5);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                assets.airport_heliport.sprite(),
+                assets.airport_piece_sprite(piece).sprite(),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
@@ -351,10 +352,12 @@ pub(crate) fn spawn_transport_object_tile(
             } else {
                 SLOPE_HALF_H[tileh as usize]
             };
+            let m5 = ctx.tile.map(|t| t.m5).unwrap_or(0);
+            let piece = openttdrs_core::AirportPiece::from_m5(m5);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                assets.airport_heliport.sprite(),
+                assets.airport_piece_sprite(piece).sprite(),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),

@@ -33,10 +33,18 @@ pub(crate) fn step(state: &mut GameState) {
     );
     drain_signal_globset_now(state);
 
-    crate::rail_pbs::update_train_reservations_with_settings(
+    // PBS Fase 3: reservas con huella de consist; TryReserve usa wormholes de túnel.
+    let wormholes_pbs = state.jgr_tunnel_wormholes();
+    let wh_pbs = if wormholes_pbs.is_empty() {
+        None
+    } else {
+        Some(&wormholes_pbs)
+    };
+    crate::rail_pbs::update_train_reservations_with_wormholes(
         &state.map,
         &mut state.vehicles,
         state.pathfinding,
+        wh_pbs,
     );
     crate::rail_pbs::sync_reservations_to_map(
         &mut state.map,

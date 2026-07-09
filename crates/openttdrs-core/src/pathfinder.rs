@@ -8,7 +8,7 @@ use crate::station::is_rail_waypoint_tile;
 use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::VehicleKind;
 
-mod yapf;
+pub mod yapf;
 
 const RAIL_TB_X: u8 = 0x01;
 const RAIL_TB_Y: u8 = 0x02;

@@ -151,10 +151,11 @@ pub use pathfinding_settings::{
 pub use rail_lane::{rail_horz_lane_bit, rail_vert_lane_bit};
 pub use rail_pbs::{
     ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY, decode_rail_reservation_m2_hi,
-    encode_rail_reservation_to_m2_hi, find_path_to_safe_wait, is_safe_waiting_position,
-    rail_tile_has_pbs_reservation, reservation_ends_at_safe_wait, sync_reservations_to_map,
-    tick_pbs_wait_and_maybe_reverse, train_blocked_by_reservation, train_waiting_for_pbs_path,
-    update_train_reservations, update_train_reservations_with_settings,
+    encode_rail_reservation_to_m2_hi, find_path_to_safe_wait,
+    find_path_to_safe_wait_with_wormholes, is_safe_waiting_position, rail_tile_has_pbs_reservation,
+    reservation_ends_at_safe_wait, sync_reservations_to_map, tick_pbs_wait_and_maybe_reverse,
+    train_blocked_by_reservation, train_waiting_for_pbs_path, update_train_reservations,
+    update_train_reservations_with_settings, update_train_reservations_with_wormholes,
 };
 pub use rail_signals::{
     RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SEMAPHORE_BUILD_BEFORE_YEAR,

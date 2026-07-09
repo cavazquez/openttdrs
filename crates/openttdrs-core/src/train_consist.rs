@@ -176,10 +176,10 @@ pub fn consist_tile_span(vehicles: &[Vehicle], head_id: u32) -> u32 {
     u32::from(len).div_ceil(u32::from(TILE_FRACTIONS)).max(1)
 }
 
-/// Teselas ocupadas por el consist: cabeza + N-1 hacia atrás siguiendo el path
-/// recorrido (o vecinos de vía si no hay historial).
+/// Teselas ocupadas por el consist: cabeza + cola.
 ///
-/// MVP: cabeza + teselas previas en `path` invertido / dirección opuesta.
+/// Preferencia: historial real de la cabeza (`rail_tile_history`); si falta,
+/// vecinos en sentido opuesto a la dirección (MVP).
 #[must_use]
 pub fn consist_occupied_tiles(vehicles: &[Vehicle], head_id: u32) -> Vec<TileCoord> {
     let Some(head) = vehicles.iter().find(|v| v.id == head_id) else {
@@ -190,12 +190,18 @@ pub fn consist_occupied_tiles(vehicles: &[Vehicle], head_id: u32) -> Vec<TileCoo
     if span <= 1 {
         return tiles;
     }
-    // Usar path ya recorrido: los tiles detrás son los que dejamos (no están en path).
-    // Aproximación: repetir `pos` no basta; marcar span-1 vecinos en sentido opuesto
-    // usando dirección de la cabeza.
+    // Historial: teselas que la cabeza acaba de abandonar (frente = más reciente).
+    for &t in head.rail_tile_history.iter().take(span.saturating_sub(1)) {
+        if tiles.last() != Some(&t) {
+            tiles.push(t);
+        }
+        if tiles.len() >= span {
+            return tiles;
+        }
+    }
     let back = opposite_diag(head.direction);
-    let mut cur = head.pos;
-    for _ in 1..span {
+    let mut cur = *tiles.last().unwrap_or(&head.pos);
+    while tiles.len() < span {
         let next = offset_tile(cur, back);
         tiles.push(next);
         cur = next;

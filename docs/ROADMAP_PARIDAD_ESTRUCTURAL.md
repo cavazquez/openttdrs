@@ -1,7 +1,7 @@
 # Roadmap: paridad estructural vs OpenTTD
 
-Plan vivo para cerrar las divergencias estructurales. **Fase 1 (consist)**
-implementada jul 2026. Fases 2–7 quedan como hitos 0.2–0.6.
+Plan vivo para cerrar las divergencias estructurales. Fases **1–3** (consist,
+packets, YAPF/PBS MVP) implementadas jul 2026. Fases 4–7 = hitos 0.4–0.6.
 
 ## Fase 1 — Consist / vagones ✅
 
@@ -19,10 +19,12 @@ implementada jul 2026. Fases 2–7 quedan como hitos 0.2–0.6.
 - Save JSON v13 + migración desde balances; UI estación/vehículo muestra rating/packets.
 - Pendiente: tabla temperate completa (11 cargos), decay fuerte, feeder_share.
 
-## Fase 3 — YAPF incremental + PBS paridad
+## Fase 3 — YAPF incremental + PBS paridad ✅ (MVP)
 
-Pathfinding por trackdir; PBS multi-tesela del consist; reservas de plataforma
-y túnel/puente. Golden vs OpenTTD.
+- YAPF: `next_rail_trackdir_yapf` / `extend_rail_path_yapf`; búsqueda trackdir.
+- PBS: huella multi-tesela del consist (`rail_tile_history` + `consist_occupied_tiles`).
+- Reserva de plataforma en orden Station; TryReserve con wormholes JGR.
+- Pendiente: golden tick-a-tick vs OpenTTD; FollowTrainReservation fino.
 
 ## Fase 4 — Economía multi-compañía + Cargo Dist + IA
 

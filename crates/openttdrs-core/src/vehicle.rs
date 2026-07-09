@@ -546,6 +546,9 @@ pub struct Vehicle {
     /// Pasos de vía reservados por PBS (`tesela` + `TrackBit`).
     #[serde(default)]
     pub reserved_steps: Vec<crate::rail_pbs::ReservedRailStep>,
+    /// Historial reciente de teselas (cabeza → atrás) para huella PBS del consist.
+    #[serde(default)]
+    pub rail_tile_history: VecDeque<TileCoord>,
     /// Camino calculado por el pathfinder (siguiente tile en el frente).
     pub path: VecDeque<TileCoord>,
     /// Lista circular de destinos asignados por el jugador.
@@ -702,6 +705,7 @@ impl Vehicle {
             subspeed: 0,
             path: VecDeque::new(),
             reserved_steps: Vec::new(),
+            rail_tile_history: VecDeque::new(),
             orders: Vec::new(),
             current_order: 0,
             no_network_route_to_order: false,
@@ -1178,13 +1182,30 @@ impl Vehicle {
         }
     }
 
+    /// Máximo de teselas recordadas para huella PBS / consist.
+    const RAIL_HISTORY_CAP: usize = 32;
+
+    fn push_rail_tile_history(&mut self, left: TileCoord) {
+        if self.kind != VehicleKind::Train {
+            return;
+        }
+        if self.rail_tile_history.front() != Some(&left) {
+            self.rail_tile_history.push_front(left);
+        }
+        while self.rail_tile_history.len() > Self::RAIL_HISTORY_CAP {
+            self.rail_tile_history.pop_back();
+        }
+    }
+
     fn advance_one_tile(&mut self) {
         if let Some(next) = self.path.pop_front() {
             self.update_direction_step(self.pos, next);
             if self.orders.is_empty() {
                 self.origin = self.pos;
             }
+            let left = self.pos;
             self.pos = next;
+            self.push_rail_tile_history(left);
             if self.pos == self.dest {
                 self.advance_destination_after_arrival();
             }

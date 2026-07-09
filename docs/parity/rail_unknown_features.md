@@ -4,9 +4,9 @@ Subsistemas y reglas del original detectados durante la auditoría de la Fase
 Rail 0 que hoy no tienen equivalente en la sim Rust. Priorizados por impacto
 en la paridad de movimiento y estaciones (los casos más visibles).
 
-Supuesto explícito: el tren de la sim es un **vehículo puntual** (sin consist).
-Varios ítems de esta lista dependen de esa decisión estructural y se marcan
-como tales.
+Supuesto histórico (Rail 0): tren puntual. **Fase 1 estructural** añadió consist
+(`next_unit` / longitud / ocupación multi-tesela). Varios ítems abajo ya están
+parcialmente resueltos; se mantienen tachados o anotados.
 
 ## Prioridad alta (afectan movimiento y estaciones)
 
@@ -17,9 +17,8 @@ como tales.
    `set_direction_with_curve_penalty` y `apply_immediate_train_turnaround`.
 3. ~~**Entrada a la plataforma + punto de parada**~~ — **Resuelto (Rail 3C)**.
    `rail_station_stop_tile` + `at_platform` en traza.
-4. **Carga/descarga gradual** — `economy.cpp:1609` (`LoadUnloadVehicle`):
-   idéntica divergencia `instant_loading` ya documentada para carretera;
-   aplica también a trenes.
+4. ~~**Carga/descarga gradual**~~ — **Resuelto (Fase 2 estructural)**:
+   `cargo_packet.rs` + `load_unload_speed`; golden `instant_loading=false`.
 5. **Espera y frames de depósito** — `CheckTrainStayInDepot`
    (`train_cmd.cpp:2354-2427`, espera ~37 ticks y chequea señales/reserva
    antes de salir), `_fractcoords_enter` / `_vehicle_initial_*_fract`
@@ -28,24 +27,18 @@ como tales.
 
 ## Prioridad media
 
-6. **Consist: locomotora + vagones** — `train.h` (`Next()`,
-   `GetNextUnit`, `tcache`), `ConsistChanged` (`train_cmd.cpp:110-254`,
-   `cached_total_length` con `VEHICLE_LENGTH = 8` por unidad). Estructural:
-   sin consist no hay longitud, posición de cola, ocupación multi-tesela ni
-   carga por vagón. La importación de `.sav` descarta vagones
-   (`decodes_front_vehicles_and_skips_wagons`). Requiere decisión de alcance
-   antes de planificar (no entra en Rail 0–4).
-7. **Reservas de camino (PBS)** — `pbs.cpp/h` (`TryReserveRailTrack`,
-   `FollowTrainReservation`, `SetRailStationPlatformReservation`) y señales
-   `Path`/`PathOneWay`. La sim usa anticolisión propia
-   (`train_blocked_by_traffic`) y conserva `m2_hi` de los saves sin lógica.
-   Excluido explícitamente del plan Rail 0–4 (Fase 3D solo valida el bloque
-   simple).
+6. ~~**Consist: locomotora + vagones**~~ — **Resuelto (Fase 1 estructural)**:
+   `train_consist.rs`, comandos de enganche, save v12, import `.sav` con
+   vagones. Pendiente fino: articulados / dual-headed (ítem 17).
+7. ~~**Reservas de camino (PBS)**~~ — **MVP (Fase 3 estructural)**:
+   `rail_pbs.rs` (TryReserve, path signals, plataforma, huella consist,
+   wormholes). Escenario `train_pbs`. Pendiente: golden tick-a-tick vs
+   OpenTTD y `FollowTrainReservation` fino.
 8. ~~**Semántica de presignals ENTRY/EXIT/COMBO**~~ — **Decidido (Rail 3D)**:
    se codifican en saves pero **no tienen semántica de presignal** en la sim
    v1. `SIGTYPE_ENTRY` se ignora al bloquear (`train_blocked_by_signal`);
    EXIT y COMBO se tratan como BLOCK sin propagación por segmento
-   (`entry_signal_does_not_block_train`). PBS queda fuera de alcance (ítem 7).
+   (`entry_signal_does_not_block_train`). Path/PBS: ver ítem 7.
 9. **Túneles/puentes en tránsito** — ocultamiento del tren
    (`_tunnel_visibility_frame` {12,8,8,12}, `tunnelbridge_cmd.cpp:1956`),
    límite de velocidad del puente (`cur_speed = min(cur_speed,
@@ -57,11 +50,9 @@ como tales.
     **evaluado en Rail 3E** (`rail_render_evaluation.md`): alineado en X/Y,
     divergencia cosmética documentada en piezas diagonales puras.
 11. **Pathfinder YAPF con penalizaciones y reserva** —
-    `yapf_rail.cpp` (penaliza curvas, señales rojas, plataformas ocupadas;
-    reserva el camino elegido). **Parcial (openttdrs):** `pathfinder/yapf.rs`
-    reemplaza el A* ferroviario con estado `(tesela, trackbit, exit_dir)`,
-    `yapf_routing_signal` (sentido único en contra → dead end, roja → penalización).
-    Falta: segmentos con caché, PBS/reserva, penalizaciones de plataforma/curva 90°.
+    `yapf_rail.cpp`. **MVP (Fase 3):** `pathfinder/yapf.rs` +
+    `next_rail_trackdir_yapf` / `extend_rail_path_yapf`; PBS reserva el path.
+    Falta: segmentos con caché, penalizaciones de plataforma/curva 90° finas.
 12. **Reversa con coste/chequeos** — `ReverseTrainDirection` (news, PBS,
     `reverse_ctr`). Hoy la reversa automática y manual son instantáneas.
 

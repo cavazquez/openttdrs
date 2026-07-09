@@ -186,6 +186,8 @@ impl PartialOrd for TryReserveNode {
 /// Bloqueos duros PBS (reserva ajena, ocupación, señales `DeadEnd`/block rojo) +
 /// costes nativos: tesela, cruce de reserva en mapa, sesgo hacia el path de órdenes.
 /// Elige el safe wait de **menor coste** (no el primero en BFS).
+///
+/// `wormholes`: enlaces túnel JGR (misma semántica que YAPF).
 #[must_use]
 #[allow(clippy::too_many_lines)]
 pub fn find_path_to_safe_wait(
@@ -195,6 +197,29 @@ pub fn find_path_to_safe_wait(
     from: TileCoord,
     preferred: &[TileCoord],
     already_reserved: &HashSet<ReservedRailStep>,
+) -> Option<Vec<TileCoord>> {
+    find_path_to_safe_wait_with_wormholes(
+        map,
+        vehicles,
+        self_id,
+        from,
+        preferred,
+        already_reserved,
+        None,
+    )
+}
+
+/// Como [`find_path_to_safe_wait`], con wormholes de túnel.
+#[must_use]
+#[allow(clippy::too_many_lines)]
+pub fn find_path_to_safe_wait_with_wormholes(
+    map: &Map,
+    vehicles: &[Vehicle],
+    self_id: u32,
+    from: TileCoord,
+    preferred: &[TileCoord],
+    already_reserved: &HashSet<ReservedRailStep>,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) -> Option<Vec<TileCoord>> {
     use crate::rail_signals::rail_neighbors;
     use std::collections::BinaryHeap;
@@ -234,7 +259,14 @@ pub fn find_path_to_safe_wait(
         }
 
         let prev = path_so_far.last().copied();
-        for next in rail_neighbors(map, cur, prev) {
+        let mut neighbors = rail_neighbors(map, cur, prev);
+        if let Some(wh) = wormholes
+            && let Some(other) = wh.other_end(cur)
+            && !neighbors.contains(&other)
+        {
+            neighbors.push(other);
+        }
+        for next in neighbors {
             if !crate::rail_signals::rail_step_signal_allows(map, vehicles, cur, next, None) {
                 continue;
             }
@@ -402,7 +434,7 @@ fn tracks_overlap(a: u8, b: u8) -> bool {
     a & b != 0
 }
 
-/// `true` si otro tren ocupa `tile` en una pista que solapa con `track`.
+/// `true` si otro tren (huella completa del consist) ocupa `tile` solapando `track`.
 #[must_use]
 fn tile_occupied_by_other_train(
     map: &Map,
@@ -415,13 +447,17 @@ fn tile_occupied_by_other_train(
         return false;
     }
     vehicles.iter().any(|v| {
-        if v.id == self_id || v.kind != VehicleKind::Train {
+        if v.id == self_id || v.kind != VehicleKind::Train || !v.is_consist_head() {
             return false;
         }
+        let occupied = crate::train_consist::consist_occupied_tiles(vehicles, v.id);
+        if !occupied.contains(&tile) {
+            return false;
+        }
+        // Cabeza en esta tesela: solape por pista; cola: ocupa toda la tesela.
         if v.pos != tile {
-            return false;
+            return true;
         }
-        // Sin dirección de salida conocida: ocupa toda la tesela (parado / sin path).
         let Some(other) = track_on_departure_tile(map, tile, v.movement_target().unwrap_or(tile))
             .or_else(|| {
                 v.path
@@ -433,6 +469,74 @@ fn tile_occupied_by_other_train(
         };
         tracks_overlap(other, track)
     })
+}
+
+/// ¿Algún tren ajeno tiene reserva o cola sobre la plataforma de `station_anchor`?
+#[must_use]
+pub fn platform_reserved_or_occupied(
+    map: &Map,
+    vehicles: &[Vehicle],
+    self_id: u32,
+    station_anchor: TileCoord,
+    already_reserved: &HashSet<ReservedRailStep>,
+) -> bool {
+    let platforms = crate::station::rail_station_platform_tiles(map, station_anchor);
+    if platforms.is_empty() {
+        return false;
+    }
+    for &tile in &platforms {
+        if already_reserved.iter().any(|s| s.tile == tile) {
+            return true;
+        }
+        if vehicles.iter().any(|v| {
+            v.id != self_id
+                && v.kind == VehicleKind::Train
+                && v.is_consist_head()
+                && (v.reserved_steps.iter().any(|s| s.tile == tile)
+                    || crate::train_consist::consist_occupied_tiles(vehicles, v.id).contains(&tile))
+        }) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Reserva las teselas de plataforma del destino de estación (si la orden actual es Station).
+fn append_platform_reservation(
+    map: &Map,
+    vehicles: &[Vehicle],
+    vehicle: &Vehicle,
+    already_reserved: &HashSet<ReservedRailStep>,
+    out: &mut Vec<ReservedRailStep>,
+) {
+    let Some(crate::vehicle::VehicleOrder::Station { station, .. }) =
+        vehicle.orders.get(vehicle.current_order)
+    else {
+        return;
+    };
+    if platform_reserved_or_occupied(map, vehicles, vehicle.id, *station, already_reserved) {
+        return;
+    }
+    for tile in crate::station::rail_station_platform_tiles(map, *station) {
+        if out.iter().any(|s| s.tile == tile) {
+            continue;
+        }
+        if out.len() >= MAX_TRAIN_RESERVATION_LEN {
+            break;
+        }
+        let tb = crate::rail_signals::rail_traversal_bits(map, tile);
+        let track = (0..6u8)
+            .find_map(|i| {
+                let bit = 1_u8 << i;
+                (tb & bit != 0).then_some(bit)
+            })
+            .unwrap_or(0x01);
+        let step = ReservedRailStep::new(tile, track);
+        if already_reserved.contains(&step) {
+            continue;
+        }
+        out.push(step);
+    }
 }
 
 /// `true` si el tren está detenido ante una path signal sin reserva completa.
@@ -546,13 +650,34 @@ pub fn compute_train_reservation_with_settings(
     already_reserved: &HashSet<ReservedRailStep>,
     settings: crate::pathfinding_settings::PathfindingSettings,
 ) -> Vec<ReservedRailStep> {
+    compute_train_reservation_with_wormholes(
+        map,
+        vehicles,
+        vehicle_idx,
+        already_reserved,
+        settings,
+        None,
+    )
+}
+
+/// Como [`compute_train_reservation_with_settings`], con wormholes de túnel en `TryReserve`.
+#[must_use]
+pub fn compute_train_reservation_with_wormholes(
+    map: &Map,
+    vehicles: &[Vehicle],
+    vehicle_idx: usize,
+    already_reserved: &HashSet<ReservedRailStep>,
+    settings: crate::pathfinding_settings::PathfindingSettings,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) -> Vec<ReservedRailStep> {
     let vehicle = &vehicles[vehicle_idx];
     if vehicle.kind != VehicleKind::Train || !vehicle.running {
         return Vec::new();
     }
 
     let path: Vec<TileCoord> = vehicle.path.iter().copied().collect();
-    let along_path = reserve_along_path(map, vehicles, vehicle, &path, already_reserved);
+    let mut along_path = reserve_along_path(map, vehicles, vehicle, &path, already_reserved);
+    append_platform_reservation(map, vehicles, vehicle, already_reserved, &mut along_path);
     if reservation_ends_at_safe_wait_steps(map, vehicle.pos, &path, &along_path) {
         return along_path;
     }
@@ -562,17 +687,19 @@ pub fn compute_train_reservation_with_settings(
     if !settings.should_retry_reservation(vehicle.wait_counter) {
         return along_path;
     }
-    let Some(alt) = find_path_to_safe_wait(
+    let Some(alt) = find_path_to_safe_wait_with_wormholes(
         map,
         vehicles,
         vehicle.id,
         vehicle.pos,
         &path,
         already_reserved,
+        wormholes,
     ) else {
         return along_path;
     };
-    let alt_res = reserve_along_path(map, vehicles, vehicle, &alt, already_reserved);
+    let mut alt_res = reserve_along_path(map, vehicles, vehicle, &alt, already_reserved);
+    append_platform_reservation(map, vehicles, vehicle, already_reserved, &mut alt_res);
     if alt_res.len() > along_path.len()
         || reservation_ends_at_safe_wait_steps(map, vehicle.pos, &alt, &alt_res)
     {
@@ -679,13 +806,26 @@ pub fn update_train_reservations_with_settings(
     vehicles: &mut [Vehicle],
     settings: crate::pathfinding_settings::PathfindingSettings,
 ) {
+    update_train_reservations_with_wormholes(map, vehicles, settings, None);
+}
+
+/// Como [`update_train_reservations_with_settings`], con wormholes en `TryReserve`.
+pub fn update_train_reservations_with_wormholes(
+    map: &Map,
+    vehicles: &mut [Vehicle],
+    settings: crate::pathfinding_settings::PathfindingSettings,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) {
     let mut global = HashSet::new();
     for i in 0..vehicles.len() {
-        if vehicles[i].kind != VehicleKind::Train {
+        // Solo cabezas de consist reservan; vagones siguen la huella de la cabeza.
+        if vehicles[i].kind != VehicleKind::Train || !vehicles[i].is_consist_head() {
             vehicles[i].reserved_steps.clear();
             continue;
         }
-        let reserved = compute_train_reservation_with_settings(map, vehicles, i, &global, settings);
+        let reserved = compute_train_reservation_with_wormholes(
+            map, vehicles, i, &global, settings, wormholes,
+        );
         for step in &reserved {
             global.insert(*step);
         }
@@ -1600,6 +1740,79 @@ mod tests {
         assert!(
             !forever.iter().any(|s| s.tile.y != y),
             "255 no debe hacer TryReserve: {forever:?}"
+        );
+    }
+
+    #[test]
+    fn consist_tail_blocks_other_train_reservation() {
+        // Tren largo (historial) ocupa (3,1); otro no puede reservar esa tesela.
+        let mut state = GameState::new(12, 4);
+        let y = 1;
+        for x in 0..=8 {
+            apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, y))).expect("vía");
+        }
+        let mut leader = crate::vehicle::Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(4, y),
+            TileCoord::new(8, y),
+        );
+        leader.running = true;
+        leader.unit_length = 100;
+        leader.cached_total_length = 300; // span ≥ 2
+        leader.rail_tile_history = VecDeque::from([TileCoord::new(3, y), TileCoord::new(2, y)]);
+        leader.path = VecDeque::from([
+            TileCoord::new(5, y),
+            TileCoord::new(6, y),
+            TileCoord::new(7, y),
+            TileCoord::new(8, y),
+        ]);
+        let mut follower = crate::vehicle::Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(0, y),
+            TileCoord::new(8, y),
+        );
+        follower.running = true;
+        follower.path = VecDeque::from([
+            TileCoord::new(1, y),
+            TileCoord::new(2, y),
+            TileCoord::new(3, y),
+            TileCoord::new(4, y),
+        ]);
+        state.vehicles = vec![leader, follower];
+        update_train_reservations(&state.map, &mut state.vehicles);
+        let follower_res = &state.vehicles[1].reserved_steps;
+        assert!(
+            !follower_res.iter().any(|s| s.tile == TileCoord::new(3, y)),
+            "no debe reservar la cola del líder: {follower_res:?}"
+        );
+    }
+
+    #[test]
+    fn platform_reservation_appended_for_station_order() {
+        let mut state = GameState::new(16, 12);
+        for x in 2..=8 {
+            apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, 6))).expect("vía");
+        }
+        let station = TileCoord::new(1, 6);
+        apply_command(&mut state, &Command::PlaceRailStation(station, 2)).expect("estación");
+        let platforms = crate::station::rail_station_platform_tiles(&state.map, station);
+        assert!(!platforms.is_empty());
+        let mut train =
+            crate::vehicle::Vehicle::new(1, VehicleKind::Train, TileCoord::new(4, 6), station);
+        train.running = true;
+        train.set_vehicle_orders(vec![crate::vehicle::VehicleOrder::station(station)]);
+        train.sync_order_destination(&state.map);
+        train.path = VecDeque::from([TileCoord::new(3, 6), TileCoord::new(2, 6), station]);
+        state.vehicles = vec![train];
+        update_train_reservations(&state.map, &mut state.vehicles);
+        let reserved = &state.vehicles[0].reserved_steps;
+        assert!(
+            platforms
+                .iter()
+                .any(|p| reserved.iter().any(|s| s.tile == *p)),
+            "debe reservar plataforma: platforms={platforms:?} reserved={reserved:?}"
         );
     }
 }

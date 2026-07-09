@@ -11,6 +11,9 @@
 //! `train_signal` (Fase Rail 3D): dos trenes y una señal de bloque en línea
 //! recta; el tren líder espera hasta que el bloque se libera.
 //!
+//! `train_pbs` (Fase 3 estructural): dos corredores paralelos con path signals;
+//! ambos trenes reservan sin deadlock (PBS multi-tren).
+//!
 //! `train_supply`: mina → estación A → señales → estación B → fábrica.
 //!
 //! `train_supply_signal`: igual con un tren bloqueador para demostrar espera en señal.
@@ -60,6 +63,15 @@ pub const TRAIN_SIGNAL_TILE: TileCoord = TileCoord::new(2, 0);
 /// Tesela ocupada por el tren bloqueador.
 pub const TRAIN_SIGNAL_BLOCK_TILE: TileCoord = TileCoord::new(4, 0);
 
+/// Ids / geometría del escenario `train_pbs` (path signals, dos corredores).
+pub const TRAIN_PBS_NORTH_ID: u32 = 1;
+pub const TRAIN_PBS_SOUTH_ID: u32 = 2;
+pub const TRAIN_PBS_NORTH_Y: i32 = 2;
+pub const TRAIN_PBS_SOUTH_Y: i32 = 4;
+pub const TRAIN_PBS_PATH_A: i32 = 3;
+pub const TRAIN_PBS_PATH_B: i32 = 7;
+pub const TRAIN_PBS_GOAL_X: i32 = 9;
+
 /// Id del tren del escenario `train_supply`.
 pub const TRAIN_SUPPLY_VEHICLE_ID: u32 = 1;
 /// Mina de carbón en cobertura de la estación A.
@@ -105,6 +117,7 @@ pub fn build_scenario(name: &str) -> Option<GameState> {
         "train_supply_dual" => Some(build_train_supply_dual()),
         "train_supply_signal" => Some(build_train_supply_signal_snapshot()),
         "train_signal" => Some(build_train_signal()),
+        "train_pbs" => Some(build_train_pbs()),
         "rail_signals_mixed" => Some(build_rail_signals_mixed()),
         "loan_interest" => Some(build_loan_interest()),
         "town_growth" => Some(build_town_growth()),
@@ -123,6 +136,7 @@ pub fn scenario_names() -> &'static [&'static str] {
         "train_supply_dual",
         "train_supply_signal",
         "train_signal",
+        "train_pbs",
         "rail_signals_mixed",
         "loan_interest",
         "town_growth",
@@ -639,6 +653,69 @@ pub fn build_train_signal() -> GameState {
     state
 }
 
+/// Dos corredores E–O con path signals: ambos trenes reservan en paralelo (Fase 3 PBS).
+///
+/// # Panics
+///
+/// Si la construcción del escenario fijo falla (bug del propio escenario).
+#[must_use]
+#[allow(clippy::expect_used)]
+pub fn build_train_pbs() -> GameState {
+    let mut state = GameState::new(16, 8);
+    state.world_seed = 0;
+    state.disasters_enabled = false;
+
+    for &y in &[TRAIN_PBS_NORTH_Y, TRAIN_PBS_SOUTH_Y] {
+        for x in 1..=10 {
+            apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, y))).expect("vía pbs");
+            let mut t = state.map.get(TileCoord::new(x, y)).expect("tile");
+            t.m5 = 0x01 | (crate::rail_signals::RAIL_TILE_NORMAL << 6); // TRACK_X
+            state.map.set_tile(TileCoord::new(x, y), t).expect("set");
+        }
+        for &x in &[TRAIN_PBS_PATH_A, TRAIN_PBS_PATH_B] {
+            apply_command(
+                &mut state,
+                &Command::PlaceRailSignal(TileCoord::new(x, y), 0, 128, 128, SIGTYPE_PATH),
+            )
+            .expect("path pbs");
+        }
+    }
+
+    let goal_n = TileCoord::new(TRAIN_PBS_GOAL_X, TRAIN_PBS_NORTH_Y);
+    let goal_s = TileCoord::new(TRAIN_PBS_GOAL_X, TRAIN_PBS_SOUTH_Y);
+    let mut north = Vehicle::new(
+        TRAIN_PBS_NORTH_ID,
+        VehicleKind::Train,
+        TileCoord::new(2, TRAIN_PBS_NORTH_Y),
+        goal_n,
+    );
+    north.path = VecDeque::from(
+        (3..=TRAIN_PBS_GOAL_X)
+            .map(|x| TileCoord::new(x, TRAIN_PBS_NORTH_Y))
+            .collect::<Vec<_>>(),
+    );
+    north.running = true;
+    north.set_cruise_speed();
+
+    let mut south = Vehicle::new(
+        TRAIN_PBS_SOUTH_ID,
+        VehicleKind::Train,
+        TileCoord::new(2, TRAIN_PBS_SOUTH_Y),
+        goal_s,
+    );
+    south.path = VecDeque::from(
+        (3..=TRAIN_PBS_GOAL_X)
+            .map(|x| TileCoord::new(x, TRAIN_PBS_SOUTH_Y))
+            .collect::<Vec<_>>(),
+    );
+    south.running = true;
+    south.set_cruise_speed();
+
+    state.vehicles.push(north);
+    state.vehicles.push(south);
+    state
+}
+
 /// Fila Y de la tira de regresión encoding (esquina inferior del mapa demo).
 pub const RAIL_SIGNALS_MIXED_Y: i32 = 18;
 
@@ -956,6 +1033,7 @@ mod tests {
         assert!(build_scenario("train_supply").is_some());
         assert!(build_scenario("train_supply_signal").is_some());
         assert!(build_scenario("train_signal").is_some());
+        assert!(build_scenario("train_pbs").is_some());
         assert!(build_scenario("train_supply_dual").is_some());
         assert!(build_scenario("rail_signals_mixed").is_some());
         assert_eq!(
@@ -967,11 +1045,51 @@ mod tests {
                 "train_supply_dual",
                 "train_supply_signal",
                 "train_signal",
+                "train_pbs",
                 "rail_signals_mixed",
                 "loan_interest",
                 "town_growth",
                 "breakdown",
             ]
+        );
+    }
+
+    #[test]
+    fn train_pbs_both_corridors_reserve_without_overlap() {
+        let mut state = build_train_pbs();
+        state.step();
+        let n = state
+            .vehicles
+            .iter()
+            .find(|v| v.id == TRAIN_PBS_NORTH_ID)
+            .expect("norte");
+        let s = state
+            .vehicles
+            .iter()
+            .find(|v| v.id == TRAIN_PBS_SOUTH_ID)
+            .expect("sur");
+        assert!(
+            n.reserved_steps.len() >= 3,
+            "norte reserva: {:?}",
+            n.reserved_steps
+        );
+        assert!(
+            s.reserved_steps.len() >= 3,
+            "sur reserva: {:?}",
+            s.reserved_steps
+        );
+        assert!(
+            n.reserved_steps
+                .iter()
+                .all(|r| r.tile.y == TRAIN_PBS_NORTH_Y)
+                && s.reserved_steps
+                    .iter()
+                    .all(|r| r.tile.y == TRAIN_PBS_SOUTH_Y),
+            "reservas disjuntas por corredor"
+        );
+        assert!(
+            crate::rail_pbs::reservation_ends_at_safe_wait(&state.map, n),
+            "norte hasta safe wait"
         );
     }
 

@@ -392,6 +392,52 @@ fn expand_neighbors(ctx: &mut SearchCtx<'_>, key: NodeKey, cur_g: u32, cur_td: R
     }
 }
 
+/// Extiende un path parcial hacia `to` (YAPF incremental).
+///
+/// Si `from` ya tiene un path parcial, busca solo desde el último tile hacia el
+/// destino y concatena. Útil cuando el tren vacía `path` cerca del destino.
+#[must_use]
+pub fn extend_rail_path_yapf(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    existing: &[TileCoord],
+    wormholes: Option<&TunnelWormholes>,
+) -> Option<Vec<TileCoord>> {
+    if from == to {
+        return Some(existing.to_vec());
+    }
+    let start = existing.last().copied().unwrap_or(from);
+    if start == to {
+        return Some(existing.to_vec());
+    }
+    let extension = find_rail_path_yapf(map, start, to, wormholes)?;
+    let mut out = existing.to_vec();
+    for tile in extension {
+        if out.last() == Some(&tile) {
+            continue;
+        }
+        out.push(tile);
+    }
+    Some(out)
+}
+
+/// Siguiente trackdir sugerido desde `from` hacia `to` (estado YAPF, no solo tesela).
+#[must_use]
+pub fn next_rail_trackdir_yapf(
+    map: &Map,
+    from: TileCoord,
+    to: TileCoord,
+    wormholes: Option<&TunnelWormholes>,
+) -> Option<(TileCoord, u8, u8)> {
+    let path = find_rail_path_yapf(map, from, to, wormholes)?;
+    let next = path.first().copied()?;
+    let track = crate::rail_pbs::track_on_departure_tile(map, from, next)
+        .or_else(|| crate::rail_pbs::track_for_rail_step(map, from, next))?;
+    let exit_dir = crate::rail_signals::dir_from_to(from, next)?;
+    Some((next, track, exit_dir))
+}
+
 #[must_use]
 pub fn find_rail_path_yapf(
     map: &Map,
@@ -513,6 +559,46 @@ mod tests {
             YapfSignalRouting::DeadEnd,
             "-x bloqueado por señal unidireccional"
         );
+    }
+
+    #[test]
+    fn next_rail_trackdir_returns_first_step() {
+        let mut state = crate::GameState::new(12, 4);
+        for x in 0..=6 {
+            crate::command::apply_command(
+                &mut state,
+                &crate::command::Command::PlaceRail(TileCoord::new(x, 1)),
+            )
+            .expect("vía");
+        }
+        let step =
+            next_rail_trackdir_yapf(&state.map, TileCoord::new(1, 1), TileCoord::new(5, 1), None)
+                .expect("trackdir");
+        assert_eq!(step.0, TileCoord::new(2, 1));
+        assert_ne!(step.1, 0);
+    }
+
+    #[test]
+    fn extend_rail_path_concatenates() {
+        let mut state = crate::GameState::new(12, 4);
+        for x in 0..=8 {
+            crate::command::apply_command(
+                &mut state,
+                &crate::command::Command::PlaceRail(TileCoord::new(x, 1)),
+            )
+            .expect("vía");
+        }
+        let partial = vec![TileCoord::new(2, 1), TileCoord::new(3, 1)];
+        let full = extend_rail_path_yapf(
+            &state.map,
+            TileCoord::new(1, 1),
+            TileCoord::new(7, 1),
+            &partial,
+            None,
+        )
+        .expect("extend");
+        assert!(full.starts_with(&partial));
+        assert!(full.iter().any(|c| *c == TileCoord::new(7, 1)));
     }
 
     #[test]

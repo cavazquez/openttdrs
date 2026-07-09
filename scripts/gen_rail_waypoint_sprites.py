@@ -5,9 +5,11 @@ OpenTTD con OpenGFX2 suele activar el NewGRF ``ogfx2_stations.grf``, que define
 las casetas con ballast (sprites 19–20 eje X, 23–24 eje Y). El GRF *extra*
 base (4974–4977) solo trae toldos planos de fallback.
 
-Salida (alias compatibles con ``SPR_WAYPOINT_*``):
-- ``rail_4974.png`` / ``rail_4975.png`` ← estaciones 19 / 20
-- ``rail_4976.png`` / ``rail_4977.png`` ← estaciones 23 / 24
+Salida (alias compatibles con ``SPR_WAYPOINT_*`` + toldos CC ogfx2):
+- ``rail_4974.png`` / ``rail_4975.png`` ← estaciones 19 / 20 (cuerpo X)
+- ``rail_4978.png`` / ``rail_4979.png`` ← estaciones 21 / 22 (toldo CC X)
+- ``rail_4976.png`` / ``rail_4977.png`` ← estaciones 23 / 24 (cuerpo Y)
+- ``rail_4980.png`` / ``rail_4981.png`` ← estaciones 25 / 26 (toldo CC Y)
 
 Uso: python3 scripts/gen_rail_waypoint_sprites.py
 """
@@ -31,12 +33,16 @@ STATIONS_GRF_URL = (
     "https://github.com/OpenTTD/OpenGFX2/releases/download/v0.6/ogfx2_stations.grf"
 )
 
-# (sprite_id salida OpenTTD, sprite_id ogfx2_stations, xrel, yrel tras recorte)
+# (sprite_id salida OpenTTD, sprite_id ogfx2_stations, etiqueta)
 WAYPOINT_EXPORTS: list[tuple[int, int, str]] = [
     (4974, 19, "X oeste"),
     (4975, 20, "X este"),
+    (4978, 21, "X toldo oeste"),
+    (4979, 22, "X toldo este"),
     (4976, 23, "Y oeste"),
     (4977, 24, "Y este"),
+    (4980, 25, "Y toldo oeste"),
+    (4981, 26, "Y toldo este"),
 ]
 
 ROW_RE = re.compile(

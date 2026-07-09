@@ -3,11 +3,11 @@
 use bevy::prelude::*;
 use openttdrs_core::{Map, TileCoord, TileKind};
 
-use crate::iso::{iso, tile_slope_and_min_z};
+use crate::iso::{TILE_HALF_H, iso, tile_pos_half, tile_slope_and_min_z};
 use crate::render::{CompanyColoredSprites, TileAtlas};
 use crate::sprites::{
-    RAIL_TB_X, RAIL_TB_Y, rail_station_sprite_meta, rail_waypoint_draw_layers,
-    rail_waypoint_sprite_center,
+    RAIL_TB_X, RAIL_TB_Y, rail_station_ground_track_sprite, rail_station_sprite_meta,
+    rail_waypoint_draw_layers, rail_waypoint_sprite_center,
 };
 
 use super::BuildGhostPreview;
@@ -48,6 +48,14 @@ pub(crate) fn spawn_rail_waypoint_preview(
     };
 
     let origin = iso(coord.x, coord.y);
+    let track_sid = rail_station_ground_track_sprite(m5, 0);
+    if let Some(img) = atlas.try_get(&format!("rail_{track_sid}.png")) {
+        commands.spawn((
+            BuildGhostPreview,
+            img.sprite_colored(tint),
+            Transform::from_translation(tile_pos_half(coord.x, coord.y, base_z, 2.4, TILE_HALF_H)),
+        ));
+    }
     for layer in rail_waypoint_draw_layers(m5) {
         let Some(img) = atlas.try_get(&format!("rail_{}.png", layer.sprite_id)) else {
             continue;

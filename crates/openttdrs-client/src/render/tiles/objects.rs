@@ -62,22 +62,21 @@ pub(crate) fn spawn_station_tile(
             // En pendiente el suelo ya se pintó arriba (evita hierba duplicada).
             let station_tb = if m5 & 1 != 0 { 0x02 } else { 0x01 };
             let rail_base_z = spawn_rail_foundation(commands, assets, ctx, tileh, station_tb);
-            if class != StationTileClass::RailWaypoint {
-                let track_sid = rail_station_ground_track_sprite(m5, tileh);
-                if let Some(img) = assets.rail.get(&track_sid) {
-                    commands.spawn((
-                        MapVisualLayer,
-                        ctx.map_tile_chunk(),
-                        img.sprite_colored(Color::srgb(0.88, 0.88, 0.97)),
-                        Transform::from_translation(tile_pos_half(
-                            ctx.tx_i32(),
-                            ctx.ty_i32(),
-                            rail_base_z,
-                            0.02,
-                            rail_half_h,
-                        )),
-                    ));
-                }
+            // OpenTTD: ground SPR_RAIL_TRACK_* bajo estación y waypoint (`station_land.h`).
+            let track_sid = rail_station_ground_track_sprite(m5, tileh);
+            if let Some(img) = assets.rail.get(&track_sid) {
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    img.sprite_colored(Color::srgb(0.88, 0.88, 0.97)),
+                    Transform::from_translation(tile_pos_half(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        rail_base_z,
+                        0.02,
+                        rail_half_h,
+                    )),
+                ));
             }
             let overlay_layers = if class == StationTileClass::RailWaypoint {
                 rail_waypoint_draw_layers(m5)

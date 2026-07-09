@@ -191,17 +191,23 @@ static RAIL_STATION_SEQ_7: [RailStationLayer; 3] = [
     layer(1082, 0.0, 0.0, 16.0, 0.05),
 ];
 
-static RAIL_WAYPOINT_SEQ_X: [RailStationLayer; 2] = [
+/// Layout ogfx2_stations Action 2: cuerpo 19/20 + toldos CC 21/22 (eje X).
+/// Offsets TILE_SEQ en cero: el NFO ya separa mitades por xrel (sin dy=11 vanilla).
+static RAIL_WAYPOINT_SEQ_X: [RailStationLayer; 4] = [
     layer(4974, 0.0, 0.0, 0.0, 0.05),
-    // ogfx2_stations: xrel/yrel del NFO ya separan oeste/este; sin TILE_SEQ dy=11.
     layer(4975, 0.0, 0.0, 0.0, 0.06),
+    layer(4978, 0.0, 0.0, 0.0, 0.07),
+    layer(4979, 0.0, 0.0, 0.0, 0.08),
 ];
-static RAIL_WAYPOINT_SEQ_Y: [RailStationLayer; 2] = [
+/// Cuerpo 23/24 + toldos CC 25/26 (eje Y).
+static RAIL_WAYPOINT_SEQ_Y: [RailStationLayer; 4] = [
     layer(4976, 0.0, 0.0, 0.0, 0.05),
     layer(4977, 0.0, 0.0, 0.0, 0.06),
+    layer(4980, 0.0, 0.0, 0.0, 0.07),
+    layer(4981, 0.0, 0.0, 0.0, 0.08),
 ];
 
-/// Postes de waypoint (`_station_display_datas_waypoint_*` en `station_land.h`).
+/// Capas de waypoint (ogfx2_stations: ground vía aparte + 4 child sprites).
 #[must_use]
 pub fn rail_waypoint_draw_layers(m5: u8) -> &'static [RailStationLayer] {
     if rail_station_axis_y(m5) {
@@ -383,14 +389,24 @@ mod tests {
 
     #[test]
     fn rail_waypoint_ogfx2_uses_zero_tile_seq_offsets() {
-        // ogfx2_stations (sprites 19–24): el desplazamiento oeste/este va en xrel del NFO.
+        // ogfx2_stations: el desplazamiento oeste/este va en xrel del NFO.
         // TILE_SEQ dy=11 / dx=11 era para toldos vanilla y produce forma en L con ogfx2.
         let x = rail_waypoint_draw_layers(0);
         let y = rail_waypoint_draw_layers(1);
-        assert_eq!((x[0].dx, x[0].dy), (0.0, 0.0));
-        assert_eq!((x[1].dx, x[1].dy), (0.0, 0.0));
-        assert_eq!((y[0].dx, y[0].dy), (0.0, 0.0));
-        assert_eq!((y[1].dx, y[1].dy), (0.0, 0.0));
+        assert_eq!(x.len(), 4, "cuerpo + toldos CC eje X");
+        assert_eq!(y.len(), 4, "cuerpo + toldos CC eje Y");
+        for layer in x.iter().chain(y.iter()) {
+            assert_eq!((layer.dx, layer.dy, layer.dz), (0.0, 0.0, 0.0));
+        }
+        assert_eq!(
+            x.iter().map(|l| l.sprite_id).collect::<Vec<_>>(),
+            vec![4974, 4975, 4978, 4979]
+        );
+        assert_eq!(
+            y.iter().map(|l| l.sprite_id).collect::<Vec<_>>(),
+            vec![4976, 4977, 4980, 4981]
+        );
+        assert!(x[2].z > x[1].z && x[3].z > x[2].z);
     }
 
     #[test]

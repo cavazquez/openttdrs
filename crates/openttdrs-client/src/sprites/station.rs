@@ -191,21 +191,24 @@ static RAIL_STATION_SEQ_7: [RailStationLayer; 3] = [
     layer(1082, 0.0, 0.0, 16.0, 0.05),
 ];
 
-/// Layout ogfx2_stations Action0 prop 1A (sprite 32): ground 1012 + 2 parents
-/// en (0,0,0) y (0,13,0). Toldos CC 21/22 como child en el mismo origen.
-/// (Vanilla `station_land.h` usaba dy=11; ogfx2 usa 13, como road waypoints.)
+/// Cuerpo ogfx2 19/20 + toldos CC 21/22 (eje X).
+///
+/// OpenTTD+ogfx2 usa TILE_SEQ dy=13 en el parent este (prop 1A), pero ahí el
+/// Action1 resuelve sprites con var10/registros. En nuestro cliente los PNG ya
+/// traen xrel NFO (−30/−8) que separa las mitades: aplicar dy=13 **además**
+/// duplica el offset y deja una caseta flotando en la hierba (captura jul 2026).
 static RAIL_WAYPOINT_SEQ_X: [RailStationLayer; 4] = [
     layer(4974, 0.0, 0.0, 0.0, 0.05),
-    layer(4975, 0.0, 13.0, 0.0, 0.06),
+    layer(4975, 0.0, 0.0, 0.0, 0.06),
     layer(4978, 0.0, 0.0, 0.0, 0.07),
-    layer(4979, 0.0, 13.0, 0.0, 0.08),
+    layer(4979, 0.0, 0.0, 0.0, 0.08),
 ];
-/// Eje Y: parents en (0,0,0) y (13,0,0); toldos CC 25/26.
+/// Cuerpo 23/24 + toldos CC 25/26 (eje Y); mismo criterio (sin dx=13).
 static RAIL_WAYPOINT_SEQ_Y: [RailStationLayer; 4] = [
     layer(4976, 0.0, 0.0, 0.0, 0.05),
-    layer(4977, 13.0, 0.0, 0.0, 0.06),
+    layer(4977, 0.0, 0.0, 0.0, 0.06),
     layer(4980, 0.0, 0.0, 0.0, 0.07),
-    layer(4981, 13.0, 0.0, 0.0, 0.08),
+    layer(4981, 0.0, 0.0, 0.0, 0.08),
 ];
 
 /// Capas de waypoint (ogfx2_stations: ground vía aparte + 4 child sprites).
@@ -389,20 +392,18 @@ mod tests {
     }
 
     #[test]
-    fn rail_waypoint_ogfx2_matches_action0_tile_seq() {
-        // Decodificado de ogfx2_stations.nfo sprite 32 (prop 1A): dy=13 / dx=13.
+    fn rail_waypoint_ogfx2_uses_nfo_xrel_without_tile_seq() {
         let x = rail_waypoint_draw_layers(0);
         let y = rail_waypoint_draw_layers(1);
         assert_eq!(x.len(), 4, "cuerpo + toldos CC eje X");
         assert_eq!(y.len(), 4, "cuerpo + toldos CC eje Y");
-        assert_eq!((x[0].dx, x[0].dy), (0.0, 0.0));
-        assert_eq!((x[1].dx, x[1].dy), (0.0, 13.0));
-        assert_eq!((x[2].dx, x[2].dy), (0.0, 0.0));
-        assert_eq!((x[3].dx, x[3].dy), (0.0, 13.0));
-        assert_eq!((y[0].dx, y[0].dy), (0.0, 0.0));
-        assert_eq!((y[1].dx, y[1].dy), (13.0, 0.0));
-        assert_eq!((y[2].dx, y[2].dy), (0.0, 0.0));
-        assert_eq!((y[3].dx, y[3].dy), (13.0, 0.0));
+        for layer in x.iter().chain(y.iter()) {
+            assert_eq!(
+                (layer.dx, layer.dy, layer.dz),
+                (0.0, 0.0, 0.0),
+                "sin TILE_SEQ: el xrel NFO ya separa mitades"
+            );
+        }
         assert_eq!(
             x.iter().map(|l| l.sprite_id).collect::<Vec<_>>(),
             vec![4974, 4975, 4978, 4979]
@@ -414,7 +415,7 @@ mod tests {
     }
 
     #[test]
-    fn rail_waypoint_halves_offset_by_tile_seq_and_nfo() {
+    fn rail_waypoint_halves_offset_by_nfo_xrel() {
         let origin = crate::iso::iso(3, 4);
         let p0 = rail_waypoint_sprite_center(
             origin,
@@ -434,27 +435,26 @@ mod tests {
             4,
             0,
             0.06,
-            &layer(4975, 0.0, 13.0, 0.0, 0.06),
+            &layer(4975, 0.0, 0.0, 0.0, 0.06),
             -8.0,
             -9.0,
             40.0,
             29.0,
         );
-        // xrel NFO (−30→−8) + RemapCoords(dy=13)×0.5 → este más a la derecha y abajo.
         assert!(
-            p1.x > p0.x + 20.0,
-            "mitad este: xrel + dy=13 (Δx={})",
+            p1.x > p0.x + 15.0,
+            "mitad este por xrel NFO (Δx={})",
             p1.x - p0.x
         );
         assert!(
-            p1.y < p0.y - 4.0,
-            "mitad este baja con dy=13 (Δy={})",
+            (p1.y - p0.y).abs() < 2.0,
+            "misma fila sin TILE_SEQ dy (Δy={})",
             p1.y - p0.y
         );
     }
 
     #[test]
-    fn rail_waypoint_y_halves_offset_by_dx13() {
+    fn rail_waypoint_y_halves_share_screen_row() {
         let origin = crate::iso::iso(3, 4);
         let p0 = rail_waypoint_sprite_center(
             origin,
@@ -474,21 +474,16 @@ mod tests {
             4,
             0,
             0.06,
-            &layer(4977, 13.0, 0.0, 0.0, 0.06),
+            &layer(4977, 0.0, 0.0, 0.0, 0.06),
             -8.0,
             -8.0,
             38.0,
             28.0,
         );
-        // remap×0.5(dx=13) ≈ (−26,−13); xrel −28→−8 no alcanza a compensar → Δx ≈ −6.
+        assert!(p1.x > p0.x + 15.0, "eje Y: xrel NFO (Δx={})", p1.x - p0.x);
         assert!(
-            (p1.x - p0.x + 6.0).abs() < 2.0,
-            "eje Y: xrel + dx=13 (Δx={})",
-            p1.x - p0.x
-        );
-        assert!(
-            p1.y < p0.y - 8.0,
-            "eje Y: dx=13 baja la mitad este (Δy={})",
+            (p1.y - p0.y).abs() < 2.0,
+            "eje Y: misma fila sin TILE_SEQ dx (Δy={})",
             p1.y - p0.y
         );
     }

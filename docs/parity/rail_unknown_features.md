@@ -60,7 +60,7 @@ parcialmente resueltos; se mantienen tachados o anotados.
 
 13. ~~**Railtypes** (normal/eléctrico)~~ — **MVP (Fase 5)**: `rail_type.rs`,
     `ConvertRail`, compat eléctricos 110–113. Pendiente: catenaria visual,
-    sprites OpenGFX mono/maglev + catenaria, `curve_speed` por railtype.
+    pendientes/nieve tipadas mono/maglev, catenaria eléctrica, `curve_speed` por railtype.
 14. **Ownership por tile de vía** — `m1` se fuerza a 0 al construir.
 15. **AM_REALISTIC + `GetCurveSpeedLimit`** — `train_cmd.cpp:312-381`
     (límites 61 / 88 / `232-(13-n)²`, tilt +20 %, `curve_speed_mod` por motor)

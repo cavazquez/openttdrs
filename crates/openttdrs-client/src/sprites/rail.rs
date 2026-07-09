@@ -33,6 +33,11 @@ const RAIL_3WAY_SE: u8 = RAIL_TB_Y | RAIL_TB_LOWER | RAIL_TB_RIGHT;
 pub const RAIL_SPRITE_TRACK_Y: u32 = 1011;
 pub const RAIL_SPRITE_TRACK_X: u32 = 1012;
 
+/// Offset OpenGFX monorail respecto a vía normal (`SPR_MONORAIL_*` = rail + 82).
+pub const MONO_RAIL_SPRITE_OFFSET: u32 = 82;
+/// Offset OpenGFX maglev respecto a vía normal (`SPR_MAGLEV_*` = rail + 164).
+pub const MAGLEV_RAIL_SPRITE_OFFSET: u32 = 164;
+
 /// Delta de sprite en teselas con nieve/deserto (`SPR_RAIL_SNOW_OFFSET`).
 pub const RAIL_SPRITE_SNOW_OFFSET: u32 = 26;
 
@@ -75,6 +80,61 @@ fn push_rail_junction_overlays(t: u8, out: &mut Vec<u32>) {
     if t & RAIL_TB_LEFT != 0 {
         out.push(1010);
     }
+}
+
+/// ¿Hay PNG tipado (mono/maglev) para este ID de vía plana?
+#[must_use]
+pub fn rail_sprite_has_typed_asset(id: u32) -> bool {
+    matches!(
+        id,
+        1005..=1012 | 1018..=1022 | 1035 // overlays, Y/X, junction ground, HORZ
+    )
+}
+
+/// Remapea un sprite de vía clásica al set mono/maglev si hay asset.
+#[must_use]
+pub fn remap_rail_sprite_id(id: u32, rail_type: openttdrs_core::RailType) -> u32 {
+    use openttdrs_core::RailType;
+    let offset = match rail_type {
+        RailType::Monorail => MONO_RAIL_SPRITE_OFFSET,
+        RailType::Maglev => MAGLEV_RAIL_SPRITE_OFFSET,
+        RailType::Rail | RailType::Electric => return id,
+    };
+    if rail_sprite_has_typed_asset(id) {
+        id + offset
+    } else {
+        id
+    }
+}
+
+/// Nombre(s) de atlas para un ID de vía (alias `rail_<id>` o `mono_*` / `mglv_*`).
+#[must_use]
+pub fn rail_sprite_atlas_keys(id: u32) -> Vec<String> {
+    let mut keys = vec![format!("rail_{id}.png")];
+    if let Some(alt) = rail_sprite_named_alias(id) {
+        keys.push(alt);
+    }
+    keys
+}
+
+fn rail_sprite_named_alias(id: u32) -> Option<String> {
+    match id {
+        1087..=1092 => Some(format!("mono_single_{}.png", id - 1087)),
+        1093 => Some("mono_track_y.png".into()),
+        1094 => Some("mono_track_x.png".into()),
+        1100..=1117 => Some(format!("mono_track_{}.png", id - 1100)),
+        1169..=1174 => Some(format!("mglv_single_{}.png", id - 1169)),
+        1175 => Some("mglv_track_y.png".into()),
+        1176 => Some("mglv_track_x.png".into()),
+        1182..=1199 => Some(format!("mglv_track_{}.png", id - 1182)),
+        _ => None,
+    }
+}
+
+/// ¿El ID pertenece al set tipado mono/maglev (no vía clásica)?
+#[must_use]
+pub fn is_typed_rail_track_sprite(id: u32) -> bool {
+    matches!(id, 1087..=1117 | 1169..=1199)
 }
 
 /// IDs de sprites de vía férrea usados (cruce a nivel 1370–1373; nieve 1037/1038; pendiente 1023–1034).
@@ -198,14 +258,25 @@ pub fn is_road_level_crossing(mapt: u8, m5: u8, kind: TileKind, mp_road: u8) -> 
     kind == TileKind::Road && (mapt >> 4) & 0xF == mp_road && ((m5 >> 6) & 0x3) == 1
 }
 
-/// Sprite de raíl del cruce: `GetRailTypeInfo(...)->base_sprites.crossing + GetCrossingRailAxis(tile)` → 1370 + eje de **vía**.
-/// Si el cruce está barrado (`IsCrossingBarred`, bit 5 de `m5`), OpenTTD suma **+2** al sprite (`road_cmd.cpp`).
+/// Sprite de raíl del cruce: `GetRailTypeInfo(...)->base_sprites.crossing + GetCrossingRailAxis(tile)`.
+/// Si el cruce está barrado (`IsCrossingBarred`, bit 5 de `m5`), OpenTTD suma **+2** (`road_cmd.cpp`).
 #[must_use]
 pub fn level_crossing_rail_sprite_id(m5: u8) -> u32 {
-    const SPR_CROSSING_OFF_X_RAIL: u32 = 1370;
+    level_crossing_rail_sprite_id_for_type(m5, openttdrs_core::RailType::Rail)
+}
+
+/// Como [`level_crossing_rail_sprite_id`], eligiendo base mono/maglev.
+#[must_use]
+pub fn level_crossing_rail_sprite_id_for_type(m5: u8, rail_type: openttdrs_core::RailType) -> u32 {
+    use openttdrs_core::RailType;
+    let base = match rail_type {
+        RailType::Monorail => 1382,
+        RailType::Maglev => 1394,
+        RailType::Rail | RailType::Electric => 1370,
+    };
     let road_axis = m5 & 1;
     let rail_axis = 1 - road_axis;
-    let mut sid = SPR_CROSSING_OFF_X_RAIL + u32::from(rail_axis);
+    let mut sid = base + u32::from(rail_axis);
     if (m5 >> 5) & 1 != 0 {
         sid += 2;
     }
@@ -500,6 +571,20 @@ pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
                     set.insert(id);
                 }
             }
+            // Mono / maglev planos (overlays + Y/X + junction + HORZ).
+            for id in [
+                1005u32, 1006, 1007, 1008, 1009, 1010, 1011, 1012, 1018, 1019, 1020, 1021, 1022,
+                1035,
+            ] {
+                set.insert(id + MONO_RAIL_SPRITE_OFFSET);
+                set.insert(id + MAGLEV_RAIL_SPRITE_OFFSET);
+            }
+            // Cruces tipados (eje + barrado).
+            for base in [1382u32, 1394] {
+                for d in 0..4 {
+                    set.insert(base + d);
+                }
+            }
             for id in signal_sprite_ids_for_preload() {
                 if !SIGNAL_SPRITE_OPENGFX_GAPS.contains(&id) {
                     set.insert(id);
@@ -606,7 +691,13 @@ pub fn rail_ghost_overlay_offset(sprite_id: u32) -> Vec2 {
     const FULL_CENTER_X: f32 = FULL_XREL + FULL_W / 2.0;
     const FULL_CENTER_Y: f32 = FULL_YREL + FULL_H / 2.0;
 
-    let (xrel, yrel, w, h) = match sprite_id {
+    // Overlays mono/maglev comparten anclas con 1005–1010.
+    let base_id = match sprite_id {
+        1087..=1092 => sprite_id - MONO_RAIL_SPRITE_OFFSET,
+        1169..=1174 => sprite_id - MAGLEV_RAIL_SPRITE_OFFSET,
+        other => other,
+    };
+    let (xrel, yrel, w, h) = match base_id {
         1005 => (-19.0, 5.0, 40.0, 21.0),
         1006 => (-19.0, 5.0, 40.0, 21.0),
         1007 => (-19.0, 5.0, 40.0, 7.0),
@@ -694,6 +785,16 @@ pub fn collect_rail_ghost_sprites(tb: u8, tileh: u8, out: &mut Vec<u32>) {
     collect_rail_sprites(tb, tileh, false, out);
 }
 
+/// Fantasma con tipo de vía activo del toolbar / partida.
+pub fn collect_rail_ghost_sprites_for_type(
+    tb: u8,
+    tileh: u8,
+    rail_type: openttdrs_core::RailType,
+    out: &mut Vec<u32>,
+) {
+    collect_rail_sprites_for_type(tb, tileh, false, rail_type, out);
+}
+
 /// Lista de sprites planos (tesela nivelada o con cimiento nivelado).
 ///
 /// Los tramos rectos y medias vías usan el sprite compuesto de OpenGFX
@@ -731,6 +832,17 @@ fn collect_rail_flat_sprites(t: u8, snow_ground: bool, out: &mut Vec<u32>) {
 /// Con `snow_ground`, tramos planos Y/X usan `1037`/`1038`; en pendiente se suma
 /// [`RAIL_SPRITE_SNOW_OFFSET`] al sprite inclinado salvo cimiento nivelado (`GetRailFoundation` = 1).
 pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<u32>) {
+    collect_rail_sprites_for_type(tb, tileh, snow_ground, openttdrs_core::RailType::Rail, out);
+}
+
+/// Como [`collect_rail_sprites`], remapeando planos a mono/maglev cuando hay asset.
+pub fn collect_rail_sprites_for_type(
+    tb: u8,
+    tileh: u8,
+    snow_ground: bool,
+    rail_type: openttdrs_core::RailType,
+    out: &mut Vec<u32>,
+) {
     out.clear();
     let t = tb & 0x3F;
     if t == 0 {
@@ -738,13 +850,21 @@ pub fn collect_rail_sprites(tb: u8, tileh: u8, snow_ground: bool, out: &mut Vec<
     }
     let foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, t);
     if tileh != 0 && foundation != 1 {
-        // Inclinado / halftile / sin fundación: sprite inclinado único (`DrawTrackBits` pendiente).
+        // Pendientes: sin set tipado en assets → vía clásica.
         if let Some(sid) = rail_sloped_track_sprite_id(tileh, snow_ground) {
             out.push(sid);
         }
         return;
     }
     collect_rail_flat_sprites(t, snow_ground, out);
+    if matches!(
+        rail_type,
+        openttdrs_core::RailType::Monorail | openttdrs_core::RailType::Maglev
+    ) {
+        for sid in out.iter_mut() {
+            *sid = remap_rail_sprite_id(*sid, rail_type);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -799,6 +919,55 @@ mod tests {
         assert_eq!(out, vec![1012]);
         collect_rail_ghost_sprites(RAIL_TB_Y, 0, &mut out);
         assert_eq!(out, vec![RAIL_SPRITE_TRACK_Y]);
+    }
+
+    #[test]
+    fn collect_rail_sprites_remaps_mono_and_maglev_flat() {
+        use openttdrs_core::RailType;
+        let mut out = Vec::new();
+        collect_rail_sprites_for_type(RAIL_TB_Y, 0, false, RailType::Monorail, &mut out);
+        assert_eq!(out, vec![1093]);
+        collect_rail_sprites_for_type(RAIL_TB_X, 0, false, RailType::Maglev, &mut out);
+        assert_eq!(out, vec![1176]);
+        collect_rail_sprites_for_type(RAIL_TB_HORZ, 0, false, RailType::Monorail, &mut out);
+        assert_eq!(out, vec![1117]);
+        // VERT sin asset tipado → se queda en clásico.
+        collect_rail_sprites_for_type(RAIL_TB_VERT, 0, false, RailType::Monorail, &mut out);
+        assert_eq!(out, vec![1036]);
+        // Junction: suelo SW + overlays tipados.
+        collect_rail_sprites_for_type(0x29, 0, false, RailType::Monorail, &mut out);
+        assert_eq!(out, vec![1100, 1087, 1090, 1091]);
+    }
+
+    #[test]
+    fn level_crossing_uses_typed_base() {
+        use openttdrs_core::RailType;
+        assert_eq!(
+            level_crossing_rail_sprite_id_for_type(0x40, RailType::Monorail),
+            1383
+        );
+        assert_eq!(
+            level_crossing_rail_sprite_id_for_type(0x41, RailType::Maglev),
+            1394
+        );
+    }
+
+    #[test]
+    fn rail_sprite_atlas_keys_prefer_named_mono() {
+        let keys = rail_sprite_atlas_keys(1093);
+        assert!(keys.iter().any(|k| k == "mono_track_y.png"));
+        assert!(keys.iter().any(|k| k == "rail_1093.png"));
+    }
+
+    #[test]
+    fn preload_includes_mono_maglev_ids() {
+        let ids = rail_sprite_ids_for_preload();
+        assert!(ids.contains(&1093));
+        assert!(ids.contains(&1175));
+        assert!(ids.contains(&1087));
+        assert!(ids.contains(&1169));
+        assert!(ids.contains(&1382));
+        assert!(ids.contains(&1394));
     }
 
     #[test]

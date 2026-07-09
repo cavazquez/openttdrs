@@ -670,6 +670,26 @@ crop_by_id(1175, "mglv_track_y.png")
 crop_by_id(1176, "mglv_track_x.png")
 for sid in range(1182, 1200):
     crop_by_id(sid, f"mglv_track_{sid - 1182}.png")
+# Alias rail_<id> para preload Bevy (además de mono_*/mglv_* nombrados)
+for sid, src_name in [
+    *[(1087 + i, f"mono_single_{i}.png") for i in range(6)],
+    (1093, "mono_track_y.png"),
+    (1094, "mono_track_x.png"),
+    *[(1100 + i, f"mono_track_{i}.png") for i in range(18)],
+    *[(1169 + i, f"mglv_single_{i}.png") for i in range(6)],
+    (1175, "mglv_track_y.png"),
+    (1176, "mglv_track_x.png"),
+    *[(1182 + i, f"mglv_track_{i}.png") for i in range(18)],
+    (1382, "crossing_mono_x.png"),
+    (1394, "crossing_mglv_x.png"),
+]:
+    dst = tiles_dir / f"rail_{sid}.png"
+    if dst.is_file():
+        continue
+    src = tiles_dir / src_name
+    if src.is_file():
+        shutil.copy2(src, dst)
+        print(f"  rail_{sid}.png (alias de {src_name})")
 # Vallas de vía
 for sid in range(1301, 1309):
     crop_by_id(sid, f"track_fence_{sid - 1301}.png")

@@ -45,7 +45,8 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
 - `RailType::{Monorail, Maglev}` (2/3); redes aisladas (solo Rail↔Electric compatibles).
 - Motores X2001 (154) / Lev1 (184); compra exige vía adyacente del tipo.
 - YAPF filtra por `required_rail_type_for_engine`; ConvertRail cicla 4 tipos.
-- Save **v16** (migración no-op desde v15). Tint visual MVP; sprites OpenGFX mono/maglev pendientes.
+- Save **v16** (migración no-op desde v15).
+- Sprites OpenGFX planos mono/maglev (+82/+164); pendientes/nieve siguen con tinte fallback.
 - Tranvía = `RoadType` en OpenTTD → fuera de este corte.
 
 ## Fase 7 — NewGRF runtime ✅ (MVP config) / completo pendiente

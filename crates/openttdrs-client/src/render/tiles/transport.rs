@@ -6,8 +6,9 @@ use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    collect_rail_sprites, collect_signal_sprite_draws, is_road_level_crossing,
-    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id, rail_ghost_overlay_offset,
+    collect_rail_sprites_for_type, collect_signal_sprite_draws, is_road_level_crossing,
+    is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
+    level_crossing_rail_sprite_id_for_type, rail_ghost_overlay_offset,
     rail_tile_has_pbs_reservation, rail_tile_is_signals, rail_track_base_color,
     rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
     road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
@@ -131,11 +132,17 @@ pub(crate) fn spawn_road_tile(
     {
         let sid = ctx
             .tile
-            .map(|t| level_crossing_rail_sprite_id(t.m5))
+            .map(|t| {
+                level_crossing_rail_sprite_id_for_type(t.m5, openttdrs_core::rail_type_from_tile(t))
+            })
             .unwrap_or(1370);
         if let Some(img) = assets.rail.get(&sid) {
             let crossing_paint = ctx.tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
                 let mut c = rail_track_base_color(t.mapt, TileKind::Rail, t.m5, t.m3);
+                // Electric sigue con tinte; mono/maglev usan sprite tipado.
+                if openttdrs_core::rail_type_from_tile(t) == openttdrs_core::RailType::Electric {
+                    c = c.mix(&Color::srgb(0.55, 0.75, 0.95), 0.18);
+                }
                 if show_pbs_reservations && level_crossing_has_rail_reservation(t.m5) {
                     c = c.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26);
                 }
@@ -200,26 +207,34 @@ pub(crate) fn spawn_rail_tile(
     } else {
         SLOPE_HALF_H[tileh as usize]
     };
-    collect_rail_sprites(
+    let rail_type = ctx
+        .tile
+        .map(openttdrs_core::rail_type_from_tile)
+        .unwrap_or_default();
+    collect_rail_sprites_for_type(
         rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1),
         tileh,
         snow_ground,
+        rail_type,
         rail_layers,
     );
+    let typed_layers = rail_layers
+        .iter()
+        .any(|&sid| is_typed_rail_track_sprite(sid));
     let mut rail_paint = ctx.tile.map_or(Color::srgb(0.88, 0.88, 0.97), |t| {
         let mut c = rail_track_base_color(t.mapt, ctx.kind, t.m5, t.m3);
-        // Distinción MVP por railtype (sprites mono/maglev OpenGFX → Fase 6+).
         match openttdrs_core::rail_type_from_tile(t) {
             openttdrs_core::RailType::Electric => {
                 c = c.mix(&Color::srgb(0.55, 0.75, 0.95), 0.18);
             }
-            openttdrs_core::RailType::Monorail => {
+            // Mono/maglev: tinte solo si caímos al sprite clásico (pendiente / sin asset).
+            openttdrs_core::RailType::Monorail if !typed_layers => {
                 c = c.mix(&Color::srgb(0.75, 0.55, 0.90), 0.22);
             }
-            openttdrs_core::RailType::Maglev => {
+            openttdrs_core::RailType::Maglev if !typed_layers => {
                 c = c.mix(&Color::srgb(0.45, 0.90, 0.85), 0.22);
             }
-            openttdrs_core::RailType::Rail => {}
+            _ => {}
         }
         if show_pbs_reservations && rail_tile_has_pbs_reservation(t.m2_hi) {
             c = c.mix(&Color::srgb(0.95, 0.52, 0.42), 0.26);

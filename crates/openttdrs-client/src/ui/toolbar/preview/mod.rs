@@ -454,6 +454,15 @@ pub(crate) fn update_build_ghost_preview(
             preview_rail_lane,
         ) && let Some(atlas) = atlas.as_ref()
         {
+            let ghost_type = if action == BuildMenuAction::RailConvert {
+                sim.state
+                    .map
+                    .get(coord)
+                    .map(|t| openttdrs_core::rail_type_from_tile(t).next())
+                    .unwrap_or(openttdrs_core::RailType::Electric)
+            } else {
+                sim.state.current_rail_type
+            };
             spawn_rail_ghost_preview(
                 &mut commands,
                 atlas,
@@ -465,6 +474,7 @@ pub(crate) fn update_build_ghost_preview(
                     tileh,
                     bits,
                     valid: valid_target,
+                    rail_type: ghost_type,
                 },
             );
             continue;
@@ -687,15 +697,26 @@ struct RailGhostSpawn {
     tileh: u8,
     bits: u8,
     valid: bool,
+    rail_type: openttdrs_core::RailType,
 }
 
 /// Realce del riel a colocar: overlays solo riel en plano; tinte suave en pendiente.
 fn spawn_rail_ghost_preview(commands: &mut Commands, atlas: &TileAtlas, spawn: RailGhostSpawn) {
     let mut ids = Vec::new();
-    crate::sprites::collect_rail_ghost_sprites(spawn.bits, spawn.tileh, &mut ids);
+    crate::sprites::collect_rail_ghost_sprites_for_type(
+        spawn.bits,
+        spawn.tileh,
+        spawn.rail_type,
+        &mut ids,
+    );
     let center = tile_pos_half(spawn.px, spawn.py, spawn.base_z, 3.0, spawn.half_h);
     for (i, sid) in ids.iter().copied().enumerate() {
-        let is_overlay = (1005..=1010).contains(&sid);
+        let base_overlay = match sid {
+            1087..=1092 => sid - crate::sprites::MONO_RAIL_SPRITE_OFFSET,
+            1169..=1174 => sid - crate::sprites::MAGLEV_RAIL_SPRITE_OFFSET,
+            other => other,
+        };
+        let is_overlay = (1005..=1010).contains(&base_overlay);
         let tint = if spawn.valid {
             if is_overlay {
                 Color::srgba(2.2, 2.4, 2.8, 0.9)
@@ -708,7 +729,10 @@ fn spawn_rail_ghost_preview(commands: &mut Commands, atlas: &TileAtlas, spawn: R
             Color::srgba(1.0, 0.4, 0.35, 0.45)
         };
         let offset = rail_ghost_overlay_offset(sid);
-        let img = atlas.get(&format!("rail_{sid}.png"));
+        let img = crate::sprites::rail_sprite_atlas_keys(sid)
+            .into_iter()
+            .find_map(|k| atlas.try_get(&k))
+            .unwrap_or_else(|| atlas.get(&format!("rail_{sid}.png")));
         commands.spawn((
             BuildGhostPreview,
             img.sprite_colored(tint),

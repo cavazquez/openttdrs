@@ -184,7 +184,10 @@ impl WorldAssets {
         let mut rail = std::collections::HashMap::new();
         for id in rail_ids {
             let tex_id = signal_sprite_texture_id(id);
-            let sprite = atlas.get(&format!("rail_{tex_id}.png"));
+            let sprite = crate::sprites::rail_sprite_atlas_keys(tex_id)
+                .into_iter()
+                .find_map(|k| atlas.try_get(&k))
+                .unwrap_or_else(|| atlas.get(&format!("rail_{tex_id}.png")));
             rail.insert(tex_id, sprite.clone());
             if tex_id != id {
                 rail.insert(id, sprite);

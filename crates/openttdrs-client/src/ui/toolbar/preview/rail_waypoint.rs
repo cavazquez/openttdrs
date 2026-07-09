@@ -6,8 +6,8 @@ use openttdrs_core::{Map, TileCoord, TileKind};
 use crate::iso::{TILE_HALF_H, iso, tile_pos_half, tile_slope_and_min_z};
 use crate::render::{CompanyColoredSprites, TileAtlas};
 use crate::sprites::{
-    RAIL_TB_X, RAIL_TB_Y, rail_station_ground_track_sprite, rail_station_sprite_meta,
-    rail_waypoint_draw_layers, rail_waypoint_sprite_center,
+    RAIL_TB_X, RAIL_TB_Y, rail_station_ground_track_sprite, rail_waypoint_draw_layers,
+    rail_waypoint_layer_meta, rail_waypoint_sprite_center,
 };
 
 use super::BuildGhostPreview;
@@ -60,7 +60,7 @@ pub(crate) fn spawn_rail_waypoint_preview(
         let Some(img) = atlas.try_get(&format!("rail_{}.png", layer.sprite_id)) else {
             continue;
         };
-        let Some((w, h, nfo_xrel, nfo_yrel)) = rail_station_sprite_meta(layer.sprite_id) else {
+        let Some((w, h, nfo_xrel, nfo_yrel)) = rail_waypoint_layer_meta(layer.sprite_id) else {
             continue;
         };
         let pos3 = rail_waypoint_sprite_center(

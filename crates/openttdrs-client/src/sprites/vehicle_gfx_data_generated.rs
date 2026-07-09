@@ -482,68 +482,68 @@ pub const SHIP_VEHICLE_LAYERS_COAL: [VehicleLayerGfx; 8] = [
 ];
 
 pub const SHIP_VEHICLE_LAYERS_FERRY: [VehicleLayerGfx; 8] = [
-    // N
+    // N (sprite 0)
     VehicleLayerGfx {
-        w: 24.0,
-        h: 36.0,
-        x_offs: -12.0,
-        y_offs: -18.0,
+        w: 0.0,
+        h: 0.0,
+        x_offs: 0.0,
+        y_offs: 0.0,
         path: "assets/opengfx/tiles/vehicle_ship_ferry_n.png",
     },
-    // NE
+    // NE (sprite 0)
     VehicleLayerGfx {
-        w: 50.0,
-        h: 34.0,
-        x_offs: -25.0,
-        y_offs: -17.0,
+        w: 0.0,
+        h: 0.0,
+        x_offs: 0.0,
+        y_offs: 0.0,
         path: "assets/opengfx/tiles/vehicle_ship_ferry_ne.png",
     },
-    // E
+    // E (sprite 0)
     VehicleLayerGfx {
-        w: 56.0,
-        h: 24.0,
-        x_offs: -28.0,
-        y_offs: -12.0,
+        w: 0.0,
+        h: 0.0,
+        x_offs: 0.0,
+        y_offs: 0.0,
         path: "assets/opengfx/tiles/vehicle_ship_ferry_e.png",
     },
-    // SE
+    // SE (sprite 0)
     VehicleLayerGfx {
-        w: 50.0,
-        h: 37.0,
-        x_offs: -25.0,
-        y_offs: -18.0,
+        w: 0.0,
+        h: 0.0,
+        x_offs: 0.0,
+        y_offs: 0.0,
         path: "assets/opengfx/tiles/vehicle_ship_ferry_se.png",
     },
-    // S
+    // S (sprite 0)
     VehicleLayerGfx {
-        w: 24.0,
-        h: 37.0,
-        x_offs: -12.0,
-        y_offs: -18.0,
+        w: 0.0,
+        h: 0.0,
+        x_offs: 0.0,
+        y_offs: 0.0,
         path: "assets/opengfx/tiles/vehicle_ship_ferry_s.png",
     },
-    // SW
+    // SW (sprite 0)
     VehicleLayerGfx {
-        w: 50.0,
-        h: 37.0,
-        x_offs: -25.0,
-        y_offs: -18.0,
+        w: 0.0,
+        h: 0.0,
+        x_offs: 0.0,
+        y_offs: 0.0,
         path: "assets/opengfx/tiles/vehicle_ship_ferry_sw.png",
     },
-    // W
+    // W (sprite 0)
     VehicleLayerGfx {
-        w: 56.0,
-        h: 25.0,
-        x_offs: -28.0,
-        y_offs: -12.0,
+        w: 0.0,
+        h: 0.0,
+        x_offs: 0.0,
+        y_offs: 0.0,
         path: "assets/opengfx/tiles/vehicle_ship_ferry_w.png",
     },
-    // NW
+    // NW (sprite 0)
     VehicleLayerGfx {
-        w: 50.0,
-        h: 34.0,
-        x_offs: -25.0,
-        y_offs: -17.0,
+        w: 0.0,
+        h: 0.0,
+        x_offs: 0.0,
+        y_offs: 0.0,
         path: "assets/opengfx/tiles/vehicle_ship_ferry_nw.png",
     },
 ];
@@ -679,6 +679,73 @@ pub const AIRCRAFT_VEHICLE_LAYERS_FOKKER: [VehicleLayerGfx; 8] = [
         x_offs: -12.0,
         y_offs: -5.0,
         path: "assets/opengfx/tiles/vehicle_aircraft_fokker_nw.png",
+    },
+];
+
+pub const AIRCRAFT_VEHICLE_LAYERS_TRICARIO: [VehicleLayerGfx; 8] = [
+    // N (sprite 3813)
+    VehicleLayerGfx {
+        w: 12.0,
+        h: 16.0,
+        x_offs: -7.0,
+        y_offs: -8.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_tricario_n.png",
+    },
+    // NE (sprite 3814)
+    VehicleLayerGfx {
+        w: 24.0,
+        h: 14.0,
+        x_offs: -14.0,
+        y_offs: -5.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_tricario_ne.png",
+    },
+    // E (sprite 3815)
+    VehicleLayerGfx {
+        w: 33.0,
+        h: 10.0,
+        x_offs: -21.0,
+        y_offs: -4.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_tricario_e.png",
+    },
+    // SE (sprite 3816)
+    VehicleLayerGfx {
+        w: 28.0,
+        h: 18.0,
+        x_offs: -17.0,
+        y_offs: -9.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_tricario_se.png",
+    },
+    // S (sprite 3817)
+    VehicleLayerGfx {
+        w: 12.0,
+        h: 22.0,
+        x_offs: -6.0,
+        y_offs: -13.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_tricario_s.png",
+    },
+    // SW (sprite 3818)
+    VehicleLayerGfx {
+        w: 25.0,
+        h: 19.0,
+        x_offs: -9.0,
+        y_offs: -11.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_tricario_sw.png",
+    },
+    // W (sprite 3819)
+    VehicleLayerGfx {
+        w: 33.0,
+        h: 13.0,
+        x_offs: -16.0,
+        y_offs: -6.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_tricario_w.png",
+    },
+    // NW (sprite 3820)
+    VehicleLayerGfx {
+        w: 28.0,
+        h: 14.0,
+        x_offs: -14.0,
+        y_offs: -7.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_tricario_nw.png",
     },
 ];
 

@@ -18,8 +18,8 @@ use crate::simulation::SimClock;
 mod vehicle_gfx;
 
 use vehicle_gfx::{
-    AIRCRAFT_VEHICLE_LAYERS, AIRCRAFT_VEHICLE_LAYERS_FOKKER, BUS_VEHICLE_LAYERS,
-    BUS_VEHICLE_LAYERS_LOADED, SHIP_VEHICLE_LAYERS, SHIP_VEHICLE_LAYERS_COAL,
+    AIRCRAFT_VEHICLE_LAYERS, AIRCRAFT_VEHICLE_LAYERS_FOKKER, AIRCRAFT_VEHICLE_LAYERS_TRICARIO,
+    BUS_VEHICLE_LAYERS, BUS_VEHICLE_LAYERS_LOADED, SHIP_VEHICLE_LAYERS, SHIP_VEHICLE_LAYERS_COAL,
     SHIP_VEHICLE_LAYERS_FERRY, SHIP_VEHICLE_LAYERS_OIL, TRAIN_VEHICLE_LAYERS,
     TRAIN_VEHICLE_LAYERS_T0, TRAIN_VEHICLE_LAYERS_T1, TRAIN_VEHICLE_LAYERS_TDIESEL,
     TRAIN_VEHICLE_LAYERS_TELECTRIC, TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED,
@@ -71,10 +71,10 @@ fn aircraft_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8
     let engine_id = v
         .engine_id
         .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
-    if engine_id == openttdrs_core::ENGINE_AIRCRAFT_FOKKER {
-        &AIRCRAFT_VEHICLE_LAYERS_FOKKER
-    } else {
-        &AIRCRAFT_VEHICLE_LAYERS
+    match engine_id {
+        openttdrs_core::ENGINE_AIRCRAFT_FOKKER => &AIRCRAFT_VEHICLE_LAYERS_FOKKER,
+        openttdrs_core::ENGINE_AIRCRAFT_TRICARIO => &AIRCRAFT_VEHICLE_LAYERS_TRICARIO,
+        _ => &AIRCRAFT_VEHICLE_LAYERS,
     }
 }
 
@@ -157,6 +157,7 @@ pub(crate) struct TruckHandles {
     ship_ferry: DirHandles,
     aircraft: DirHandles,
     aircraft_fokker: DirHandles,
+    aircraft_tricario: DirHandles,
     train_groups: [DirHandles; 5],
 }
 
@@ -188,6 +189,7 @@ impl TruckHandles {
             ship_ferry: load_set(asset_server, &SHIP_VEHICLE_LAYERS_FERRY),
             aircraft: load_set(asset_server, &AIRCRAFT_VEHICLE_LAYERS),
             aircraft_fokker: load_set(asset_server, &AIRCRAFT_VEHICLE_LAYERS_FOKKER),
+            aircraft_tricario: load_set(asset_server, &AIRCRAFT_VEHICLE_LAYERS_TRICARIO),
             train_groups: [
                 load_set(asset_server, &TRAIN_VEHICLE_LAYERS_T0),
                 load_set(asset_server, &TRAIN_VEHICLE_LAYERS_T1),
@@ -222,13 +224,11 @@ impl TruckHandles {
                 openttdrs_core::ENGINE_SHIP_FERRY => self.ship_ferry[i].clone(),
                 _ => self.ship[i].clone(),
             },
-            VehicleKind::Aircraft => {
-                if engine.id == openttdrs_core::ENGINE_AIRCRAFT_FOKKER {
-                    self.aircraft_fokker[i].clone()
-                } else {
-                    self.aircraft[i].clone()
-                }
-            }
+            VehicleKind::Aircraft => match engine.id {
+                openttdrs_core::ENGINE_AIRCRAFT_FOKKER => self.aircraft_fokker[i].clone(),
+                openttdrs_core::ENGINE_AIRCRAFT_TRICARIO => self.aircraft_tricario[i].clone(),
+                _ => self.aircraft[i].clone(),
+            },
             other => self.intro_sprite(other, dir),
         }
     }
@@ -275,10 +275,10 @@ impl TruckHandles {
                 let engine_id = v
                     .engine_id
                     .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
-                if engine_id == openttdrs_core::ENGINE_AIRCRAFT_FOKKER {
-                    self.aircraft_fokker[i].clone()
-                } else {
-                    self.aircraft[i].clone()
+                match engine_id {
+                    openttdrs_core::ENGINE_AIRCRAFT_FOKKER => self.aircraft_fokker[i].clone(),
+                    openttdrs_core::ENGINE_AIRCRAFT_TRICARIO => self.aircraft_tricario[i].clone(),
+                    _ => self.aircraft[i].clone(),
                 }
             }
             VehicleKind::Train => {
@@ -503,6 +503,7 @@ mod tests {
             ship_ferry: Default::default(),
             aircraft: Default::default(),
             aircraft_fokker: Default::default(),
+            aircraft_tricario: Default::default(),
             train_groups: Default::default(),
         }
     }

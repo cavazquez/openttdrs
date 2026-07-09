@@ -257,7 +257,12 @@ pub(crate) fn engines_for_buy_window(
         _ => DepotPurchaseKind::Road,
     };
     let year = calendar_year_at_tick(sim.state.tick);
-    engines_for_depot_kind(depot_kind, year, sort, road_filter)
+    let mut engines = engines_for_depot_kind(depot_kind, year, sort, road_filter);
+    if depot_kind == DepotPurchaseKind::Aircraft {
+        let heliport = openttdrs_core::airport_tile_is_heliport(&sim.state.map, depot_pos);
+        engines.retain(|e| openttdrs_core::aircraft_is_helicopter(e.id) == heliport);
+    }
+    engines
 }
 
 fn cargo_label(cargo: Option<CargoType>) -> &'static str {
@@ -291,6 +296,11 @@ fn buy_window_title(sim: &SimWorld, depot_pos: TileCoord) -> &'static str {
     match sim.state.map.get_kind(depot_pos) {
         Some(TileKind::RailDepot) => "Nuevos vehículos ferroviarios",
         Some(TileKind::ShipDepot) => "Nuevos barcos",
+        Some(TileKind::Airport)
+            if openttdrs_core::airport_tile_is_heliport(&sim.state.map, depot_pos) =>
+        {
+            "Nuevos helicópteros"
+        }
         Some(TileKind::Airport) => "Nuevos aviones",
         _ => "Nuevos vehículos de carretera",
     }

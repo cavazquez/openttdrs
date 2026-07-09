@@ -121,6 +121,24 @@ pub fn rail_station_sprite_meta(sprite_id: u32) -> Option<(f32, f32, f32, f32)> 
         .map(|&(_, w, h, xr, yr)| (w, h, xr, yr))
 }
 
+/// Metadata NFO para pintar un layer de waypoint.
+///
+/// Las mitades este reutilizan el xrel/yrel del ancla oeste (mismo parent Action1
+/// con TILE_SEQ dy/dx); el tamaño `w`/`h` sigue siendo el del PNG este.
+#[must_use]
+pub fn rail_waypoint_layer_meta(sprite_id: u32) -> Option<(f32, f32, f32, f32)> {
+    let (w, h, _, _) = rail_station_sprite_meta(sprite_id)?;
+    let anchor = match sprite_id {
+        4975 => 4974, // cuerpo X este ← ancla oeste
+        4979 => 4978, // toldo X este ← toldo oeste
+        4977 => 4976,
+        4981 => 4980,
+        other => other,
+    };
+    let (_, _, xr, yr) = rail_station_sprite_meta(anchor)?;
+    Some((w, h, xr, yr))
+}
+
 /// `xrel`/`yrel` para [`overlay_pos`]: origen `TILE_SEQ` remapeado + offsets NFO.
 #[must_use]
 pub fn rail_station_overlay_rel(
@@ -193,22 +211,22 @@ static RAIL_STATION_SEQ_7: [RailStationLayer; 3] = [
 
 /// Cuerpo ogfx2 19/20 + toldos CC 21/22 (eje X).
 ///
-/// OpenTTD+ogfx2 usa TILE_SEQ dy=13 en el parent este (prop 1A), pero ahí el
-/// Action1 resuelve sprites con var10/registros. En nuestro cliente los PNG ya
-/// traen xrel NFO (−30/−8) que separa las mitades: aplicar dy=13 **además**
-/// duplica el offset y deja una caseta flotando en la hierba (captura jul 2026).
+/// Prop 1A: parents en (0,0) y (0,13). Los PNG este (4975/4979) se dibujan con
+/// el **mismo xrel/yrel** que el oeste (ver `rail_waypoint_sprite_meta`); el
+/// desplazamiento lateral lo aporta solo TILE_SEQ dy=13. Usar xrel NFO −8 además
+/// de dy=13 separaba las mitades; dy=0 + xrel distintos formaba una V (capturas).
 static RAIL_WAYPOINT_SEQ_X: [RailStationLayer; 4] = [
     layer(4974, 0.0, 0.0, 0.0, 0.05),
-    layer(4975, 0.0, 0.0, 0.0, 0.06),
+    layer(4975, 0.0, 13.0, 0.0, 0.06),
     layer(4978, 0.0, 0.0, 0.0, 0.07),
-    layer(4979, 0.0, 0.0, 0.0, 0.08),
+    layer(4979, 0.0, 13.0, 0.0, 0.08),
 ];
-/// Cuerpo 23/24 + toldos CC 25/26 (eje Y); mismo criterio (sin dx=13).
+/// Cuerpo 23/24 + toldos 25/26; parents (0,0) y (13,0).
 static RAIL_WAYPOINT_SEQ_Y: [RailStationLayer; 4] = [
     layer(4976, 0.0, 0.0, 0.0, 0.05),
-    layer(4977, 0.0, 0.0, 0.0, 0.06),
+    layer(4977, 13.0, 0.0, 0.0, 0.06),
     layer(4980, 0.0, 0.0, 0.0, 0.07),
-    layer(4981, 0.0, 0.0, 0.0, 0.08),
+    layer(4981, 13.0, 0.0, 0.0, 0.08),
 ];
 
 /// Capas de waypoint (ogfx2_stations: ground vía aparte + 4 child sprites).
@@ -392,18 +410,21 @@ mod tests {
     }
 
     #[test]
-    fn rail_waypoint_ogfx2_uses_nfo_xrel_without_tile_seq() {
+    fn rail_waypoint_ogfx2_uses_tile_seq_with_shared_anchor() {
         let x = rail_waypoint_draw_layers(0);
         let y = rail_waypoint_draw_layers(1);
         assert_eq!(x.len(), 4, "cuerpo + toldos CC eje X");
         assert_eq!(y.len(), 4, "cuerpo + toldos CC eje Y");
-        for layer in x.iter().chain(y.iter()) {
-            assert_eq!(
-                (layer.dx, layer.dy, layer.dz),
-                (0.0, 0.0, 0.0),
-                "sin TILE_SEQ: el xrel NFO ya separa mitades"
-            );
-        }
+        assert_eq!((x[0].dx, x[0].dy), (0.0, 0.0));
+        assert_eq!((x[1].dx, x[1].dy), (0.0, 13.0));
+        assert_eq!((y[1].dx, y[1].dy), (13.0, 0.0));
+        let Some((_, _, xr_w, yr_w)) = rail_waypoint_layer_meta(4974) else {
+            panic!("meta oeste 4974");
+        };
+        let Some((_, _, xr_e, yr_e)) = rail_waypoint_layer_meta(4975) else {
+            panic!("meta este 4975");
+        };
+        assert_eq!((xr_w, yr_w), (xr_e, yr_e), "mitad este reusa ancla oeste");
         assert_eq!(
             x.iter().map(|l| l.sprite_id).collect::<Vec<_>>(),
             vec![4974, 4975, 4978, 4979]
@@ -415,8 +436,11 @@ mod tests {
     }
 
     #[test]
-    fn rail_waypoint_halves_offset_by_nfo_xrel() {
+    fn rail_waypoint_halves_offset_by_tile_seq_dy13() {
         let origin = crate::iso::iso(3, 4);
+        let Some((_, _, xr, yr)) = rail_waypoint_layer_meta(4974) else {
+            panic!("meta 4974");
+        };
         let p0 = rail_waypoint_sprite_center(
             origin,
             3,
@@ -424,8 +448,8 @@ mod tests {
             0,
             0.05,
             &layer(4974, 0.0, 0.0, 0.0, 0.05),
-            -30.0,
-            -9.0,
+            xr,
+            yr,
             40.0,
             29.0,
         );
@@ -435,27 +459,27 @@ mod tests {
             4,
             0,
             0.06,
-            &layer(4975, 0.0, 0.0, 0.0, 0.06),
-            -8.0,
-            -9.0,
+            &layer(4975, 0.0, 13.0, 0.0, 0.06),
+            xr,
+            yr,
             40.0,
             29.0,
         );
+        // remap×0.5(dy=13) → (+26, −13) en pantalla.
+        assert!(p1.x > p0.x + 20.0, "este por dy=13 (Δx={})", p1.x - p0.x);
         assert!(
-            p1.x > p0.x + 15.0,
-            "mitad este por xrel NFO (Δx={})",
-            p1.x - p0.x
-        );
-        assert!(
-            (p1.y - p0.y).abs() < 2.0,
-            "misma fila sin TILE_SEQ dy (Δy={})",
+            p1.y < p0.y - 8.0,
+            "este baja con dy=13 (Δy={})",
             p1.y - p0.y
         );
     }
 
     #[test]
-    fn rail_waypoint_y_halves_share_screen_row() {
+    fn rail_waypoint_y_halves_offset_by_dx13() {
         let origin = crate::iso::iso(3, 4);
+        let Some((_, _, xr, yr)) = rail_waypoint_layer_meta(4976) else {
+            panic!("meta 4976");
+        };
         let p0 = rail_waypoint_sprite_center(
             origin,
             3,
@@ -463,8 +487,8 @@ mod tests {
             0,
             0.05,
             &layer(4976, 0.0, 0.0, 0.0, 0.05),
-            -28.0,
-            -8.0,
+            xr,
+            yr,
             38.0,
             28.0,
         );
@@ -474,18 +498,18 @@ mod tests {
             4,
             0,
             0.06,
-            &layer(4977, 0.0, 0.0, 0.0, 0.06),
-            -8.0,
-            -8.0,
+            &layer(4977, 13.0, 0.0, 0.0, 0.06),
+            xr,
+            yr,
             38.0,
             28.0,
         );
-        assert!(p1.x > p0.x + 15.0, "eje Y: xrel NFO (Δx={})", p1.x - p0.x);
         assert!(
-            (p1.y - p0.y).abs() < 2.0,
-            "eje Y: misma fila sin TILE_SEQ dx (Δy={})",
-            p1.y - p0.y
+            p1.x < p0.x - 20.0,
+            "eje Y: dx=13 a la izquierda (Δx={})",
+            p1.x - p0.x
         );
+        assert!(p1.y < p0.y - 8.0, "eje Y: dx=13 baja (Δy={})", p1.y - p0.y);
     }
 
     #[test]

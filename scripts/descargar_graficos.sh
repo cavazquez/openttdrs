@@ -1052,6 +1052,34 @@ for sid, name in [
     (2972, "vehicle_train_te_nw.png"),
 ]:
     crop_by_id(sid, name)
+# Dakota / Fokker / Tricario (aviones y helicóptero OpenGFX).
+for sid, name in [
+    (3765, "vehicle_aircraft_dakota_n.png"),
+    (3766, "vehicle_aircraft_dakota_ne.png"),
+    (3767, "vehicle_aircraft_dakota_e.png"),
+    (3768, "vehicle_aircraft_dakota_se.png"),
+    (3769, "vehicle_aircraft_dakota_s.png"),
+    (3770, "vehicle_aircraft_dakota_sw.png"),
+    (3771, "vehicle_aircraft_dakota_w.png"),
+    (3772, "vehicle_aircraft_dakota_nw.png"),
+    (3773, "vehicle_aircraft_fokker_n.png"),
+    (3774, "vehicle_aircraft_fokker_ne.png"),
+    (3775, "vehicle_aircraft_fokker_e.png"),
+    (3776, "vehicle_aircraft_fokker_se.png"),
+    (3777, "vehicle_aircraft_fokker_s.png"),
+    (3778, "vehicle_aircraft_fokker_sw.png"),
+    (3779, "vehicle_aircraft_fokker_w.png"),
+    (3780, "vehicle_aircraft_fokker_nw.png"),
+    (3813, "vehicle_aircraft_tricario_n.png"),
+    (3814, "vehicle_aircraft_tricario_ne.png"),
+    (3815, "vehicle_aircraft_tricario_e.png"),
+    (3816, "vehicle_aircraft_tricario_se.png"),
+    (3817, "vehicle_aircraft_tricario_s.png"),
+    (3818, "vehicle_aircraft_tricario_sw.png"),
+    (3819, "vehicle_aircraft_tricario_w.png"),
+    (3820, "vehicle_aircraft_tricario_nw.png"),
+]:
+    crop_by_id(sid, name)
 # Regenerar metadatos: python3 scripts/gen_vehicle_gfx_data.py
 # Solo locomotoras (sin borrar tiles): python3 scripts/extract_train_vehicle_sprites.py
 

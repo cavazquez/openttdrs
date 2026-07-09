@@ -1,14 +1,20 @@
 # Handoff: waypoints ferroviarios
 
 **Estado (jul 2026):** vía de fondo 1011/1012 + 4 capas ogfx2 (cuerpo + toldos CC).
-**TILE_SEQ dx/dy = 0** — la separación oeste/este va solo en xrel NFO (−30/−8).
 
-## Por qué no dy=13
+**Posicionamiento correcto:** TILE_SEQ `dy=13` (eje X) / `dx=13` (eje Y) **y**
+mitades este con el **mismo xrel/yrel** que el ancla oeste
+(`rail_waypoint_layer_meta`). El tamaño `w`/`h` sigue siendo el del PNG este.
 
-El prop 1A de `ogfx2_stations` declara parents en `(0,13)` / `(13,0)`, pero OpenTTD
-resuelve Action1 con var10/registros. En openttdrs los PNG exportados ya incluyen
-el xrel de separación; sumar dy=13 duplica el offset → **dos casetas**, una en la
-hierba (confirmado en captura del usuario, jul 2026).
+## Por qué no xrel NFO este (−8) + dy=13
+
+Sumar el xrel NFO de la mitad este **y** TILE_SEQ dy=13 duplica el offset →
+una caseta en la vía y otra en la hierba.
+
+## Por qué no dy=0 + xrel distintos (−30/−8)
+
+Sin TILE_SEQ las mitades quedan en la misma fila de pantalla pero con anclas
+independientes → forma de **V** sobre la vía (capturas jul 2026).
 
 ## Regenerar
 
@@ -23,7 +29,7 @@ cargo test -p openttdrs-client rail_waypoint
 
 | Archivo | Rol |
 |---------|-----|
-| `sprites/station.rs` | `RAIL_WAYPOINT_SEQ_*` (dx=dy=0) |
+| `sprites/station.rs` | `RAIL_WAYPOINT_SEQ_*` + `rail_waypoint_layer_meta` |
 | `render/tiles/objects.rs` | ground + overlays |
 | `ui/toolbar/preview/rail_waypoint.rs` | Fantasma |
 | `scripts/gen_rail_waypoint_sprites.py` | PNG #19–26 |

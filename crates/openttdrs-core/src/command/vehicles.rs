@@ -130,6 +130,13 @@ pub(super) fn build_vehicle_at_depot(
     if !depot_ok {
         return Err(CommandError::InvalidDepotTile);
     }
+    if engine.kind == VehicleKind::Aircraft {
+        let heli_tile = crate::airport::airport_tile_is_heliport(&state.map, depot_pos);
+        let heli_engine = crate::engine::aircraft_is_helicopter(engine_id);
+        if heli_tile != heli_engine {
+            return Err(CommandError::VehicleKindNotAllowed);
+        }
+    }
     if state.economy.money < engine.price {
         return Err(CommandError::InsufficientFunds);
     }

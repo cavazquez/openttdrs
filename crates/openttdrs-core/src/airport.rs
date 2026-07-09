@@ -124,6 +124,14 @@ pub fn airport_tile_is_hangar(map: &Map, c: TileCoord) -> bool {
         .is_some_and(|t| AirportPiece::from_m5(t.m5).is_hangar())
 }
 
+/// ¿La tesela es helipuerto 1×1 (compra de helicópteros)?
+#[must_use]
+pub fn airport_tile_is_heliport(map: &Map, c: TileCoord) -> bool {
+    map.get(c)
+        .filter(|t| t.kind == crate::map::TileKind::Airport)
+        .is_some_and(|t| AirportPiece::from_m5(t.m5) == AirportPiece::Heliport)
+}
+
 /// Primera pista del footprint (para despegue/aterrizaje).
 #[must_use]
 pub fn airport_runway_tile(station: &Station, map: &Map) -> Option<TileCoord> {

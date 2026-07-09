@@ -154,9 +154,9 @@ pub use rail::{
 pub use station::{
     StationTileClass, rail_station_axis_y, rail_station_draw_layers,
     rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_sprite_layers,
-    rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_sprite_center,
-    road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,
-    station_type_from_m6, stop_kind_from_m6,
+    rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_layer_meta,
+    rail_waypoint_sprite_center, road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx,
+    station_tile_class, station_type_from_m6, stop_kind_from_m6,
 };
 
 /// Especificación de dibujo de una casa (stage completado).

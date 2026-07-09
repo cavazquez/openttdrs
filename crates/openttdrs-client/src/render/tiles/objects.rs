@@ -14,9 +14,9 @@ use crate::render::{
 use crate::sprites::{
     StationTileClass, rail_station_draw_layers, rail_station_ground_track_sprite,
     rail_station_overlay_rel, rail_station_sprite_meta, rail_waypoint_draw_layers,
-    rail_waypoint_sprite_center, road_depot_build_layers, road_depot_entrance_road_bits,
-    road_depot_seq_gfx, road_flat_sprite_index, road_stop_build_layers, road_stop_ground_index,
-    road_stop_seq_gfx, station_tile_class,
+    rail_waypoint_layer_meta, rail_waypoint_sprite_center, road_depot_build_layers,
+    road_depot_entrance_road_bits, road_depot_seq_gfx, road_flat_sprite_index,
+    road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,
 };
 
 pub(crate) fn spawn_station_tile(
@@ -87,11 +87,12 @@ pub(crate) fn spawn_station_tile(
                 let Some(img) = assets.rail.get(&layer.sprite_id) else {
                     continue;
                 };
-                let Some((w, h, nfo_xrel, nfo_yrel)) = rail_station_sprite_meta(layer.sprite_id)
-                else {
-                    continue;
-                };
                 let pos3 = if class == StationTileClass::RailWaypoint {
+                    let Some((w, h, nfo_xrel, nfo_yrel)) =
+                        rail_waypoint_layer_meta(layer.sprite_id)
+                    else {
+                        continue;
+                    };
                     rail_waypoint_sprite_center(
                         ctx.iso_pos,
                         ctx.tx_i32(),
@@ -105,6 +106,11 @@ pub(crate) fn spawn_station_tile(
                         h,
                     )
                 } else {
+                    let Some((w, h, nfo_xrel, nfo_yrel)) =
+                        rail_station_sprite_meta(layer.sprite_id)
+                    else {
+                        continue;
+                    };
                     let (xrel, yrel) = rail_station_overlay_rel(layer, nfo_xrel, nfo_yrel);
                     crate::iso::overlay_pos(
                         ctx.iso_pos,

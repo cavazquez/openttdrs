@@ -72,6 +72,8 @@ pub const ENGINE_SHIP_COAL: u16 = 202;
 pub const ENGINE_SHIP_FERRY: u16 = 203;
 pub const ENGINE_AIRCRAFT_DAKOTA: u16 = 300;
 pub const ENGINE_AIRCRAFT_FOKKER: u16 = 301;
+/// Helicóptero `OpenGFX` (`image_index` 9 → sprites 3813..3820).
+pub const ENGINE_AIRCRAFT_TRICARIO: u16 = 302;
 
 /// Paso sub-tile del bus MPS en diagonal a velocidad de crucero (`GetAdvanceSpeed` ×
 /// `255/192` sobre `GetAdvanceDistance` diagonal — `vehicle_base.h:439-455`).
@@ -517,6 +519,19 @@ const ENGINES: &[EngineDef] = &[
         25,
         1958
     ),
+    road!(
+        ENGINE_AIRCRAFT_TRICARIO,
+        VehicleKind::Aircraft,
+        "Tricario",
+        240,
+        160,
+        140,
+        15,
+        Some(CargoType::Passengers),
+        800,
+        8,
+        1960
+    ),
 ];
 
 /// Catálogo completo de motores disponibles.
@@ -663,6 +678,12 @@ pub const fn default_engine_id(kind: VehicleKind) -> u16 {
         VehicleKind::Ship => ENGINE_SHIP_MPS,
         VehicleKind::Aircraft => ENGINE_AIRCRAFT_DAKOTA,
     }
+}
+
+/// ¿El motor aéreo es helicóptero (solo helipuertos 1×1)?
+#[must_use]
+pub const fn aircraft_is_helicopter(engine_id: u16) -> bool {
+    engine_id == ENGINE_AIRCRAFT_TRICARIO
 }
 
 #[must_use]

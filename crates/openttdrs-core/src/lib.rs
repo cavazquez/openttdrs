@@ -54,7 +54,7 @@ pub use aircraft_movement::{aircraft_requires_path, straight_line_path};
 pub use airport::{
     AIRPORT_SMALL_H, AIRPORT_SMALL_W, AirportPiece, airport_loading_tile, airport_loading_tile_at,
     airport_m6_airport, airport_runway_tile, airport_small_footprint, airport_small_tiles,
-    airport_tile_is_hangar,
+    airport_tile_is_hangar, airport_tile_is_heliport,
 };
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
 pub use bridge_spec::{
@@ -84,14 +84,15 @@ pub use economy::{
     vehicle_sell_refund,
 };
 pub use engine::{
-    DepotPurchaseKind, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_FOKKER, ENGINE_BUS_MPS,
-    ENGINE_SHIP_COAL, ENGINE_SHIP_FERRY, ENGINE_SHIP_MPS, ENGINE_SHIP_OIL, ENGINE_TRAIN_ASIASTAR,
-    ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineCatalogSort, EngineDef, REFERENCE_PROGRESS_STEP,
-    ROAD_ACCEL_ORIGINAL, RoadEngineFilter, accelerate_train_speed, decelerate_road_speed,
-    decelerate_train_speed, default_engine_id, engine_available_in_year, engine_by_id,
-    engine_catalog, engine_for_vehicle, engines_for_depot_kind, engines_for_depot_purchase,
-    engines_of_kind, progress_step_for_speed, tile_progress_length, train_acceleration,
-    train_smoke_kind, train_sprite_group, update_road_speed,
+    DepotPurchaseKind, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_FOKKER, ENGINE_AIRCRAFT_TRICARIO,
+    ENGINE_BUS_MPS, ENGINE_SHIP_COAL, ENGINE_SHIP_FERRY, ENGINE_SHIP_MPS, ENGINE_SHIP_OIL,
+    ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineCatalogSort, EngineDef,
+    REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter, accelerate_train_speed,
+    aircraft_is_helicopter, decelerate_road_speed, decelerate_train_speed, default_engine_id,
+    engine_available_in_year, engine_by_id, engine_catalog, engine_for_vehicle,
+    engines_for_depot_kind, engines_for_depot_purchase, engines_of_kind, progress_step_for_speed,
+    tile_progress_length, train_acceleration, train_smoke_kind, train_sprite_group,
+    update_road_speed,
 };
 #[allow(deprecated)]
 pub use game_state::CARGO_DELIVERY_PAYMENT;

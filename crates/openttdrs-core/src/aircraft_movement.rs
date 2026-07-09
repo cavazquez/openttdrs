@@ -149,7 +149,7 @@ pub enum AircraftPhaseEvent {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use crate::GameState;
-    use crate::engine::ENGINE_AIRCRAFT_DAKOTA;
+    use crate::engine::ENGINE_AIRCRAFT_TRICARIO;
     use crate::pathfinder::{PathNetwork, find_path};
     use crate::{Command, TileCoord, TileKind, apply_command};
 
@@ -180,7 +180,7 @@ mod tests {
         s.map.set_kind(airport, TileKind::Airport).unwrap();
         apply_command(
             &mut s,
-            &Command::BuildVehicleAtDepot(airport, ENGINE_AIRCRAFT_DAKOTA),
+            &Command::BuildVehicleAtDepot(airport, ENGINE_AIRCRAFT_TRICARIO),
         )
         .unwrap();
         let dest = TileCoord::new(10, 6);

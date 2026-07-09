@@ -1,26 +1,35 @@
 //! Tests de aeropuerto, canal y esclusa.
 
 use crate::{
-    AircraftPhase, Command, DEPOT_BUILD_COST, ENGINE_AIRCRAFT_DAKOTA, ENGINE_SHIP_FERRY, GameState,
-    STATION_BUILD_COST, StopKind, TileCoord, TileKind, VehicleKind, airport_tile_is_hangar,
-    apply_command,
+    AircraftPhase, Command, DEPOT_BUILD_COST, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_TRICARIO,
+    ENGINE_SHIP_FERRY, GameState, STATION_BUILD_COST, StopKind, TileCoord, TileKind, VehicleKind,
+    airport_tile_is_hangar, airport_tile_is_heliport, apply_command,
 };
 
 #[test]
-fn place_airport_and_buy_aircraft() {
+fn place_heliport_and_buy_helicopter() {
     let mut s = GameState::new(12, 12);
     let c = TileCoord::new(4, 4);
     let money = s.economy.money;
     apply_command(&mut s, &Command::PlaceAirport(c)).unwrap();
     assert_eq!(s.map.get_kind(c), Some(TileKind::Airport));
+    assert!(airport_tile_is_heliport(&s.map, c));
     assert_eq!(s.stations.len(), 1);
     assert_eq!(s.stations[0].stop_kind, StopKind::Airport);
     assert!(s.stations[0].can_service_vehicle(VehicleKind::Aircraft));
     assert_eq!(s.economy.money, money - DEPOT_BUILD_COST);
 
-    apply_command(
+    // Aviones no se compran en helipuerto.
+    let err = apply_command(
         &mut s,
         &Command::BuildVehicleAtDepot(c, ENGINE_AIRCRAFT_DAKOTA),
+    )
+    .unwrap_err();
+    assert!(matches!(err, crate::CommandError::VehicleKindNotAllowed));
+
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(c, ENGINE_AIRCRAFT_TRICARIO),
     )
     .unwrap();
     assert!(
@@ -110,9 +119,31 @@ fn aircraft_phase_starts_in_hangar() {
     apply_command(&mut s, &Command::PlaceAirport(c)).unwrap();
     apply_command(
         &mut s,
-        &Command::BuildVehicleAtDepot(c, ENGINE_AIRCRAFT_DAKOTA),
+        &Command::BuildVehicleAtDepot(c, ENGINE_AIRCRAFT_TRICARIO),
     )
     .unwrap();
     assert_eq!(s.vehicles[0].aircraft_phase, AircraftPhase::InHangar);
     assert_eq!(s.vehicles[0].altitude, 0);
+}
+
+#[test]
+fn small_airport_rejects_helicopter() {
+    let mut s = GameState::new(20, 20);
+    let origin = TileCoord::new(2, 2);
+    apply_command(
+        &mut s,
+        &Command::PlaceAirportArea {
+            origin,
+            axis_y: false,
+        },
+    )
+    .unwrap();
+    let hangar = s.stations[0].pos;
+    assert!(!airport_tile_is_heliport(&s.map, hangar));
+    let err = apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_TRICARIO),
+    )
+    .unwrap_err();
+    assert!(matches!(err, crate::CommandError::VehicleKindNotAllowed));
 }

@@ -148,6 +148,20 @@ GFX_SETS: tuple[tuple[str, tuple[tuple[int, str], ...]], ...] = (
         ),
     ),
     (
+        # Tricario (image_index 9): helicóptero OpenGFX sprites 3813..3820.
+        "AIRCRAFT_VEHICLE_LAYERS_TRICARIO",
+        (
+            (3813, "vehicle_aircraft_tricario_n.png"),
+            (3814, "vehicle_aircraft_tricario_ne.png"),
+            (3815, "vehicle_aircraft_tricario_e.png"),
+            (3816, "vehicle_aircraft_tricario_se.png"),
+            (3817, "vehicle_aircraft_tricario_s.png"),
+            (3818, "vehicle_aircraft_tricario_sw.png"),
+            (3819, "vehicle_aircraft_tricario_w.png"),
+            (3820, "vehicle_aircraft_tricario_nw.png"),
+        ),
+    ),
+    (
         "TRAIN_VEHICLE_LAYERS",
         (
             (2921, "vehicle_train_n.png"),

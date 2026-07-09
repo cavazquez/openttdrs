@@ -49,7 +49,7 @@ Ordenada de **más barato a más caro**.
 | 17 | Carretera | Un solo sentido / drive-through | ✅ | 🟡 | M |
 | 18 | Mundo | Subvencios, autoridad local | ✅ | 🟡 | M–L |
 | 19 | Mundo | Terraform + 4 climas + gen mundo | ✅ | 🟡 | T1–T3 + T4 MVP (clima/gen); industrias por clima L — [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) |
-| 20 | Ferrocarril | PBS + path signals | ✅ | 🟡 | L–XL — safe wait, wait/giro, TryReserve+backoff, UI Ajustes→PBS; falta Fase C presignals |
+| 20 | Ferrocarril | PBS + path signals | ✅ | 🟡 | L–XL — PBS completo jugable; presignals ProbeSigSeg v0 + combo chain; falta `_globset` / MultiExit |
 | 21 | Economía | Cargo Dist (link graph) | ✅ | ❌ | XL |
 | 22 | Transporte | Barcos / aviones | ✅ | 🟡 | L — barcos (canal+esclusa Δh+4 motores); aviones (helipuerto + small 4×3 + fases vuelo) |
 | 23 | Modding | NewGRF runtime | ✅ | ❌ | XXL |

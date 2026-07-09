@@ -802,14 +802,24 @@ pub fn train_blocked_by_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehic
     false
 }
 
-fn presignal_exit_targets_ahead(
-    map: &Map,
-    signal_tile: TileCoord,
-    exit_dir: u8,
-) -> Vec<(TileCoord, u8)> {
+/// Resultado simplificado de `ProbeSigSeg` / `ExploreSegment` (`signal.cpp`).
+///
+/// Solo flags `Exit` (lista de exit/combo que cierran el segmento). Ocupación
+/// (`Train`) sigue vía [`rail_block_ahead`] + [`block_is_occupied_by_trains`].
+#[derive(Debug, Clone, Default)]
+struct SigSegmentProbe {
+    /// `(tile, signal_bit)` de exit/combo al final del segmento.
+    exits: Vec<(TileCoord, u8)>,
+}
+
+/// Explora el segmento PBS/presignal desde `signal_tile` hacia `exit_dir`.
+///
+/// Paridad v0 de `ProbeSigSeg`: no atraviesa señales block/path/entry; al hallar
+/// exit/combo registra y corta esa rama (no busca exits más allá de un block).
+fn explore_sig_segment(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> SigSegmentProbe {
     let (dx, dy) = diag_dir_offset(exit_dir);
     let start = TileCoord::new(signal_tile.x + dx, signal_tile.y + dy);
-    let mut found = Vec::new();
+    let mut probe = SigSegmentProbe::default();
     let mut queue = vec![start];
     let mut visited = HashSet::from([signal_tile]);
 
@@ -826,7 +836,7 @@ fn presignal_exit_targets_ahead(
         if rail_tile_is_signals(tile.m5) {
             let present = rail_signal_present_mask(tile.m3);
             let rails = tile.m5 & 0x3F;
-            let mut is_exit = false;
+            let mut closes_segment = false;
             for bit in 0..4u8 {
                 if present & (1 << bit) == 0 {
                     continue;
@@ -834,11 +844,14 @@ fn presignal_exit_targets_ahead(
                 let sig_type = signal_track_for_bit(rails, bit)
                     .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
                 if sig_type == SIGTYPE_EXIT || sig_type == SIGTYPE_COMBO {
-                    found.push((cur, bit));
-                    is_exit = true;
+                    probe.exits.push((cur, bit));
+                    closes_segment = true;
+                } else {
+                    // Block / path / entry: frontera del segmento.
+                    closes_segment = true;
                 }
             }
-            if is_exit {
+            if closes_segment {
                 continue;
             }
         }
@@ -848,7 +861,81 @@ fn presignal_exit_targets_ahead(
             }
         }
     }
-    found
+    probe
+}
+
+fn presignal_exit_targets_ahead(
+    map: &Map,
+    signal_tile: TileCoord,
+    exit_dir: u8,
+) -> Vec<(TileCoord, u8)> {
+    explore_sig_segment(map, signal_tile, exit_dir).exits
+}
+
+/// Propaga verde de combos hasta punto fijo (entry → combo → … → exit).
+///
+/// Pasada 1 deja combos como “solo bloque propio”; aquí aplican la regla entry
+/// leyendo exits/combos aguas abajo ya estabilizados (arregla cadenas combo).
+fn stabilize_combo_presignal_greens(
+    map: &Map,
+    vehicles: &[Vehicle],
+    exit_green: &HashMap<(TileCoord, u8), bool>,
+) -> HashMap<(TileCoord, u8), bool> {
+    let mut greens = exit_green.clone();
+    let (w, h) = map.dimensions();
+    let mut combos = Vec::new();
+    for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
+        for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
+            let c = TileCoord::new(x, y);
+            let Some(tile) = map.get(c) else {
+                continue;
+            };
+            if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
+                continue;
+            }
+            let present = rail_signal_present_mask(tile.m3);
+            let rails = tile.m5 & 0x3F;
+            for bit in 0..4u8 {
+                if present & (1 << bit) == 0 {
+                    continue;
+                }
+                let sig_type = signal_track_for_bit(rails, bit)
+                    .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
+                if sig_type == SIGTYPE_COMBO {
+                    combos.push((c, bit, tile));
+                }
+            }
+        }
+    }
+
+    // Profundidad típica de árboles combo << 8; tope evita bucles patológicos.
+    for _ in 0..8 {
+        let mut changed = false;
+        for &(c, bit, tile) in &combos {
+            let rails = tile.m5 & 0x3F;
+            let exit_dir = signal_exit_dir(rails, bit);
+            let exit_ok = exit_green.get(&(c, bit)).copied().unwrap_or_else(|| {
+                signal_bit_block_green(map, vehicles, c, &tile, bit, SIGTYPE_COMBO)
+            });
+            let targets = presignal_exit_targets_ahead(map, c, exit_dir);
+            let entry_ok = if targets.is_empty() {
+                true
+            } else {
+                targets
+                    .iter()
+                    .any(|key| greens.get(key).copied().unwrap_or(false))
+            };
+            let new_green = exit_ok && entry_ok;
+            let prev = greens.insert((c, bit), new_green);
+            if prev != Some(new_green) {
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    greens
 }
 
 fn signal_bit_block_green(
@@ -907,7 +994,7 @@ fn refresh_signal_tile_states(
     vehicles: &[Vehicle],
     c: TileCoord,
     tile: crate::map::Tile,
-    exit_green: &HashMap<(TileCoord, u8), bool>,
+    signal_green: &HashMap<(TileCoord, u8), bool>,
 ) -> Option<crate::map::Tile> {
     if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
         return None;
@@ -932,29 +1019,14 @@ fn refresh_signal_tile_states(
                 own_block_ok
             } else {
                 // OpenTTD: entry verde solo si el bloque propio está libre Y algún exit/combo
-                // aguas abajo está verde.
+                // aguas abajo está verde (valores ya estabilizados para combos).
                 own_block_ok
                     && targets
                         .iter()
-                        .any(|key| exit_green.get(key).copied().unwrap_or(false))
+                        .any(|key| signal_green.get(key).copied().unwrap_or(false))
             }
-        } else if sig_type == SIGTYPE_COMBO {
-            let exit_dir = signal_exit_dir(rails, bit);
-            let exit_ok = exit_green
-                .get(&(c, bit))
-                .copied()
-                .unwrap_or_else(|| signal_bit_block_green(map, vehicles, c, &tile, bit, sig_type));
-            let targets = presignal_exit_targets_ahead(map, c, exit_dir);
-            let entry_ok = if targets.is_empty() {
-                true
-            } else {
-                targets
-                    .iter()
-                    .any(|key| exit_green.get(key).copied().unwrap_or(false))
-            };
-            exit_ok && entry_ok
         } else {
-            exit_green
+            signal_green
                 .get(&(c, bit))
                 .copied()
                 .unwrap_or_else(|| signal_bit_block_green(map, vehicles, c, &tile, bit, sig_type))
@@ -972,6 +1044,11 @@ fn refresh_signal_tile_states(
 ///
 /// Las teselas cuyo `m3hi` cambia se añaden a `dirty` (para remap visual en el cliente).
 /// Si `clear_dirty` es `true`, vacía `dirty` al inicio; si no, solo añade entradas nuevas.
+///
+/// Orden (paridad simplificada de `UpdateSignalsOnSegment`):
+/// 1. Pasada block/exit/path/combo-bloque (`compute_exit_signal_greens`).
+/// 2. Estabilizar combos (`ProbeSigSeg` v0 + punto fijo entry→combo→exit).
+/// 3. Escribir estados; entries leen greens estabilizados.
 pub fn update_rail_signal_states(
     map: &mut Map,
     vehicles: &[Vehicle],
@@ -982,6 +1059,7 @@ pub fn update_rail_signal_states(
         dirty.clear();
     }
     let exit_green = compute_exit_signal_greens(map, vehicles);
+    let signal_green = stabilize_combo_presignal_greens(map, vehicles, &exit_green);
     let (w, h) = map.dimensions();
     for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
         for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
@@ -989,7 +1067,7 @@ pub fn update_rail_signal_states(
             let Some(tile) = map.get(c) else {
                 continue;
             };
-            if let Some(out) = refresh_signal_tile_states(map, vehicles, c, tile, &exit_green)
+            if let Some(out) = refresh_signal_tile_states(map, vehicles, c, tile, &signal_green)
                 && out.m3hi != tile.m3hi
             {
                 let _ = map.set_tile(c, out);
@@ -1644,6 +1722,121 @@ mod tests {
             "entry roja si el bloque propio está ocupado"
         );
         assert!(train_blocked_by_signal(&map, &vehicles, &train));
+    }
+
+    /// Entry → Combo → Exit: si el bloque tras la exit está ocupado, combo y entry rojas.
+    #[test]
+    fn entry_stays_red_when_combo_downstream_exit_occupied() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
+        let mut map = Map::new_flat(14, 6, 0);
+        for x in 0..=9 {
+            write_rail(&mut map, TileCoord::new(x, 2), RAIL_TB_X);
+        }
+        // Entry @1, Combo @4, Exit @7; blocker tras exit @8.
+        write_signal_facing(&mut map, TileCoord::new(1, 2), RAIL_TB_X, Some(0));
+        let mut entry = map.get(TileCoord::new(1, 2)).expect("entry");
+        entry.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(1, 2), entry).expect("entry");
+
+        write_signal_facing(&mut map, TileCoord::new(4, 2), RAIL_TB_X, Some(0));
+        let mut combo = map.get(TileCoord::new(4, 2)).expect("combo");
+        combo.m2 = (SIGTYPE_COMBO & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(4, 2), combo).expect("combo");
+
+        write_signal_facing(&mut map, TileCoord::new(7, 2), RAIL_TB_X, Some(0));
+        let mut exit = map.get(TileCoord::new(7, 2)).expect("exit");
+        exit.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(7, 2), exit).expect("exit");
+
+        let blocker = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(8, 2),
+            TileCoord::new(8, 2),
+        );
+        update_rail_signal_states(&mut map, &[blocker], &mut Vec::new(), true);
+
+        let combo_tile = map.get(TileCoord::new(4, 2)).expect("combo");
+        assert_eq!(
+            rail_signal_state_mask(combo_tile.m3hi) & 0b0100,
+            0,
+            "combo roja: exit aguas abajo ocupada"
+        );
+        let entry_tile = map.get(TileCoord::new(1, 2)).expect("entry");
+        assert_eq!(
+            rail_signal_state_mask(entry_tile.m3hi) & 0b0100,
+            0,
+            "entry debe leer combo estabilizada (no pasada 1)"
+        );
+    }
+
+    #[test]
+    fn combo_green_only_when_own_block_and_downstream_exit_green() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
+        let mut map = Map::new_flat(14, 6, 0);
+        for x in 0..=9 {
+            write_rail(&mut map, TileCoord::new(x, 2), RAIL_TB_X);
+        }
+        write_signal_facing(&mut map, TileCoord::new(4, 2), RAIL_TB_X, Some(0));
+        let mut combo = map.get(TileCoord::new(4, 2)).expect("combo");
+        combo.m2 = (SIGTYPE_COMBO & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(4, 2), combo).expect("combo");
+        write_signal_facing(&mut map, TileCoord::new(7, 2), RAIL_TB_X, Some(0));
+        let mut exit = map.get(TileCoord::new(7, 2)).expect("exit");
+        exit.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(7, 2), exit).expect("exit");
+
+        // Sin ocupación: combo verde.
+        update_rail_signal_states(&mut map, &[], &mut Vec::new(), true);
+        let combo_tile = map.get(TileCoord::new(4, 2)).expect("combo");
+        assert_ne!(
+            rail_signal_state_mask(combo_tile.m3hi) & 0b0100,
+            0,
+            "combo verde con exit libre"
+        );
+
+        // Bloque propio de combo ocupado → roja aunque exit libre.
+        let mid = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(5, 2),
+            TileCoord::new(5, 2),
+        );
+        update_rail_signal_states(&mut map, &[mid], &mut Vec::new(), true);
+        let combo_tile = map.get(TileCoord::new(4, 2)).expect("combo");
+        assert_eq!(
+            rail_signal_state_mask(combo_tile.m3hi) & 0b0100,
+            0,
+            "combo roja con bloque propio ocupado"
+        );
+    }
+
+    #[test]
+    fn explore_sig_segment_stops_at_block_signal() {
+        let mut map = Map::new_flat(14, 6, 0);
+        for x in 0..=9 {
+            write_rail(&mut map, TileCoord::new(x, 2), RAIL_TB_X);
+        }
+        // Entry @1 → block @4 → exit @7 (exit no debe contar para la entry).
+        write_signal_facing(&mut map, TileCoord::new(1, 2), RAIL_TB_X, Some(0));
+        let mut entry = map.get(TileCoord::new(1, 2)).expect("entry");
+        entry.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(1, 2), entry).expect("entry");
+        write_signal_facing(&mut map, TileCoord::new(4, 2), RAIL_TB_X, Some(0)); // block
+        write_signal_facing(&mut map, TileCoord::new(7, 2), RAIL_TB_X, Some(0));
+        let mut exit = map.get(TileCoord::new(7, 2)).expect("exit");
+        exit.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(7, 2), exit).expect("exit");
+
+        let targets = presignal_exit_targets_ahead(&map, TileCoord::new(1, 2), 0);
+        assert!(
+            targets.is_empty(),
+            "block intermedio cierra el segmento: {targets:?}"
+        );
     }
 
     #[test]

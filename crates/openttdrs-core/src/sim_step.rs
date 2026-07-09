@@ -167,9 +167,20 @@ fn tick_aircraft_phases(state: &mut GameState) {
 }
 
 fn age_vehicle_cargo(state: &mut GameState) {
+    let day = state.tick.get() > 0
+        && state
+            .tick
+            .get()
+            .is_multiple_of(u64::from(economy::TICKS_PER_TRANSIT_DAY));
     for vehicle in &mut state.vehicles {
-        if vehicle.cargo > 0 {
-            vehicle.cargo_transit_ticks = vehicle.cargo_transit_ticks.saturating_add(1);
+        vehicle.ensure_packets_from_legacy();
+        if vehicle.cargo == 0 {
+            continue;
+        }
+        vehicle.cargo_transit_ticks = vehicle.cargo_transit_ticks.saturating_add(1);
+        if day {
+            vehicle.cargo_packets.age_one_day();
+            vehicle.sync_cargo_from_packets();
         }
     }
 }
@@ -247,10 +258,17 @@ fn load_vehicles(
             .orders
             .get(state.vehicles[i].current_order)
             .is_some_and(|o| o.full_load());
-        if state.vehicles[i].cargo != 0 && !allow_top_up {
+        let loading = state.vehicles[i].cargo_loading;
+        // Con carga a bordo: solo seguir cargando si full_load o carga gradual.
+        if state.vehicles[i].cargo != 0 && !allow_top_up && !loading {
             continue;
         }
-        if allow_top_up && state.vehicles[i].cargo >= state.vehicles[i].capacity {
+        if state.vehicles[i].cargo_unloading {
+            // Descarga gradual: no cargar en el mismo tick.
+            continue;
+        }
+        if (allow_top_up || loading) && state.vehicles[i].cargo >= state.vehicles[i].capacity {
+            state.vehicles[i].cargo_loading = false;
             continue;
         }
         let vehicle_kind = state.vehicles[i].kind;
@@ -316,7 +334,9 @@ fn try_load_from_industry(
     station_idx: usize,
     loaded_flag: &mut bool,
 ) -> bool {
+    state.vehicles[vehicle_idx].ensure_packets_from_legacy();
     let vcap = state.vehicles[vehicle_idx].capacity;
+    let room = vcap.saturating_sub(state.vehicles[vehicle_idx].cargo);
     let vcargo_type = state.vehicles[vehicle_idx].cargo_type;
     let station_pos = state.stations[station_idx].pos;
 
@@ -330,21 +350,47 @@ fn try_load_from_industry(
         return false;
     };
 
-    let load = state.industries[ind_idx].stock.min(vcap);
+    if room == 0 {
+        state.vehicles[vehicle_idx].cargo_loading = false;
+        state.vehicles[vehicle_idx].advance_after_loading();
+        return true;
+    }
+
+    let output = state.industries[ind_idx].output_cargo();
+    let speed = crate::cargo_packet::load_unload_speed(output);
+    let load = state.industries[ind_idx].stock.min(room).min(speed);
     if load == 0 {
         return false;
     }
 
-    let output = state.industries[ind_idx].output_cargo();
     let source = state.industries[ind_idx].pos;
-    state.vehicles[vehicle_idx].cargo_type = Some(output);
-    state.vehicles[vehicle_idx].cargo = load;
+    #[allow(clippy::cast_possible_truncation)]
+    let count = load.min(u32::from(u16::MAX)) as u16;
+    let mut packet = crate::cargo_packet::CargoPacket::new(output, count, source);
+    packet.first_station = Some(station_pos);
+    let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
+    state.vehicles[vehicle_idx].cargo_packets.push(packet);
     state.vehicles[vehicle_idx].mark_cargo_loaded(source);
-    state.industries[ind_idx].stock -= load;
+    state.vehicles[vehicle_idx].sync_cargo_from_packets();
+    state.industries[ind_idx].stock -= u32::from(count);
     *loaded_flag = true;
-    state.stats.cargo_pickups += 1;
-    state.stats.cargo_units_loaded += u64::from(load);
-    state.vehicles[vehicle_idx].advance_after_loading();
+    if first_pickup {
+        state.stats.cargo_pickups += 1;
+    }
+    state.stats.cargo_units_loaded += u64::from(count);
+
+    let full = state.vehicles[vehicle_idx].cargo >= vcap;
+    let industry_empty = state.industries[ind_idx].stock == 0;
+    let full_load = state.vehicles[vehicle_idx]
+        .orders
+        .get(state.vehicles[vehicle_idx].current_order)
+        .is_some_and(|o| o.full_load());
+    if full || (!full_load && industry_empty) {
+        state.vehicles[vehicle_idx].cargo_loading = false;
+        state.vehicles[vehicle_idx].advance_after_loading();
+    } else {
+        state.vehicles[vehicle_idx].cargo_loading = true;
+    }
     true
 }
 
@@ -354,11 +400,15 @@ fn try_load_from_station_waiting_cargo(
     station_idx: usize,
     loaded_flag: &mut bool,
 ) -> bool {
+    state.vehicles[vehicle_idx].ensure_packets_from_legacy();
+    state.stations[station_idx].ensure_packets_from_stock();
     let kind = state.vehicles[vehicle_idx].kind;
     let vcap = state.vehicles[vehicle_idx].capacity;
     let room = vcap.saturating_sub(state.vehicles[vehicle_idx].cargo);
     if room == 0 {
-        return false;
+        state.vehicles[vehicle_idx].cargo_loading = false;
+        state.vehicles[vehicle_idx].advance_after_loading();
+        return true;
     }
     let preferred = state.vehicles[vehicle_idx].cargo_type;
     let stock = state.stations[station_idx].cargo_stock;
@@ -368,6 +418,10 @@ fn try_load_from_station_waiting_cargo(
         VehicleKind::Bus | VehicleKind::Aircraft => preferred.unwrap_or(CargoType::Passengers),
         VehicleKind::Truck | VehicleKind::Train => {
             let Some(cargo) = stock.pick_freight_to_load(preferred) else {
+                if state.vehicles[vehicle_idx].cargo_loading {
+                    state.vehicles[vehicle_idx].cargo_loading = false;
+                    state.vehicles[vehicle_idx].advance_after_loading();
+                }
                 return false;
             };
             if matches!(cargo, CargoType::Coal | CargoType::Wood | CargoType::Oil)
@@ -384,7 +438,6 @@ fn try_load_from_station_waiting_cargo(
             cargo
         }
         VehicleKind::Ship => {
-            // Ferry de pasajeros o petrolero/carbonero.
             if preferred.is_some_and(|c| !c.is_freight()) {
                 preferred.unwrap_or(CargoType::Passengers)
             } else if let Some(cargo) = stock.pick_freight_to_load(preferred) {
@@ -403,26 +456,49 @@ fn try_load_from_station_waiting_cargo(
 
     let available = stock.get(cargo);
     let rating = station::station_rating_for_cargo(&state.stations[station_idx], cargo);
-    let mut load = station::load_amount_for_rating(available.min(room), rating);
+    let speed = crate::cargo_packet::load_unload_speed(cargo);
+    let mut load = station::load_amount_for_rating(available.min(room).min(speed), rating);
     if load == 0 && available > 0 && rating > 0 {
-        load = 1;
+        load = 1.min(speed).min(room);
     }
     if load == 0 {
         return false;
     }
 
-    let _ = state.stations[station_idx].cargo_stock.take(cargo, load);
-    let source = state.stations[station_idx].pos;
-    state.vehicles[vehicle_idx].cargo_type = Some(cargo);
-    state.vehicles[vehicle_idx].cargo += load;
-    state.vehicles[vehicle_idx].mark_cargo_loaded(source);
+    let taken = state.stations[station_idx].take_waiting_cargo(cargo, load);
+    if taken.is_empty() {
+        return false;
+    }
+    let loaded_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
+    let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
+    state.vehicles[vehicle_idx]
+        .cargo_packets
+        .append_packets(taken);
+    state.vehicles[vehicle_idx].mark_cargo_loaded(station_pos);
+    state.vehicles[vehicle_idx].sync_cargo_from_packets();
     station::on_station_cargo_pickup(&mut state.stations[station_idx], cargo);
     *loaded_flag = true;
-    state.stats.cargo_pickups += 1;
-    state.stats.cargo_units_loaded += u64::from(load);
+    if first_pickup {
+        state.stats.cargo_pickups += 1;
+    }
+    state.stats.cargo_units_loaded += u64::from(loaded_units);
+
+    let full = state.vehicles[vehicle_idx].cargo >= vcap;
+    let station_empty = state.stations[station_idx].cargo_stock.get(cargo) == 0;
+    let full_load = state.vehicles[vehicle_idx]
+        .orders
+        .get(state.vehicles[vehicle_idx].current_order)
+        .is_some_and(|o| o.full_load());
+    if full || (!full_load && station_empty) {
+        state.vehicles[vehicle_idx].cargo_loading = false;
+        state.vehicles[vehicle_idx].advance_after_loading();
+    } else {
+        state.vehicles[vehicle_idx].cargo_loading = true;
+    }
     true
 }
 
+#[allow(clippy::too_many_lines)]
 fn unload_vehicles(
     state: &mut GameState,
     tick: u64,
@@ -437,6 +513,7 @@ fn unload_vehicles(
         if *loaded_flag {
             continue;
         }
+        state.vehicles[i].ensure_packets_from_legacy();
         let vpos = state.vehicles[i].pos;
         let vcargo = state.vehicles[i].cargo;
         let vcargo_type = state.vehicles[i].cargo_type;
@@ -460,30 +537,47 @@ fn unload_vehicles(
         if !st.accepts_cargo(cargo_type) || !st.can_service_vehicle(state.vehicles[i].kind) {
             continue;
         }
-        let source = state.vehicles[i]
-            .cargo_source
-            .unwrap_or(state.vehicles[i].pos);
-        let distance = economy::manhattan_distance(source, station_pos);
-        let transit_days = economy::ticks_to_transit_days(state.vehicles[i].cargo_transit_ticks);
-        let mut payment =
-            economy::transported_goods_income(vcargo, distance, transit_days, cargo_type, tick);
-        let _ = crate::subsidy::try_award_subsidy(state, station_pos, cargo_type, source);
-        payment = payment.saturating_mul(crate::subsidy::delivery_income_multiplier(
-            state,
-            station_pos,
-            cargo_type,
-            source,
-        ));
-        let st = &mut state.stations[station_idx];
+
+        let speed = crate::cargo_packet::load_unload_speed(cargo_type);
+        let taken = state.vehicles[i].cargo_packets.take_amount(speed);
+        if taken.is_empty() {
+            continue;
+        }
+        let unload_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
+        let mut payment = 0_i64;
+        for packet in &taken {
+            let distance = economy::manhattan_distance(packet.source, station_pos);
+            let mut part = economy::transported_goods_income(
+                u32::from(packet.count),
+                distance,
+                packet.periods_in_transit,
+                packet.cargo,
+                tick,
+            );
+            let _ =
+                crate::subsidy::try_award_subsidy(state, station_pos, packet.cargo, packet.source);
+            part = part.saturating_mul(crate::subsidy::delivery_income_multiplier(
+                state,
+                station_pos,
+                packet.cargo,
+                packet.source,
+            ));
+            payment = payment.saturating_add(part);
+        }
+
         let town_cargo = cargo_type.is_town_cargo();
         if town_cargo {
-            town::record_delivery_near_town(&mut state.towns, station_pos, cargo_type, vcargo);
+            town::record_delivery_near_town(
+                &mut state.towns,
+                station_pos,
+                cargo_type,
+                unload_units,
+            );
         }
         if !town_cargo {
-            st.stock += vcargo;
-            st.cargo_stock.add(cargo_type, vcargo);
+            state.stations[station_idx].add_waiting_cargo(cargo_type, unload_units);
         }
-        st.income += payment.cast_unsigned();
+        state.stations[station_idx].income += payment.cast_unsigned();
         state.economy.money += payment;
         state.stats.cargo_income_earned += payment.cast_unsigned();
         state.pending_income_popups.push(crate::IncomePopup {
@@ -496,22 +590,31 @@ fn unload_vehicles(
                 amount: payment,
                 at: vpos,
             });
-        let first_delivery = state.stats.cargo_deliveries == 0;
-        crate::news::push_cargo_delivery_news(
-            state,
-            vcargo,
-            cargo_type,
-            payment,
-            station_pos,
-            first_delivery,
-        );
-        state.stats.cargo_deliveries += 1;
-        state.stats.cargo_units_delivered += u64::from(vcargo);
-        state.vehicles[i].clear_cargo();
+        let first_chunk = !state.vehicles[i].cargo_unloading;
+        let first_delivery = state.stats.cargo_deliveries == 0 && first_chunk;
+        if first_chunk {
+            crate::news::push_cargo_delivery_news(
+                state,
+                unload_units,
+                cargo_type,
+                payment,
+                station_pos,
+                first_delivery,
+            );
+            state.stats.cargo_deliveries += 1;
+        }
+        state.stats.cargo_units_delivered += u64::from(unload_units);
+        state.vehicles[i].sync_cargo_from_packets();
         unloaded_this_tick[i] = true;
-        if station::vehicle_at_road_stop(&state.map, &state.vehicles[i]) {
+
+        if state.vehicles[i].cargo == 0 {
+            state.vehicles[i].cargo_unloading = false;
+            state.vehicles[i].clear_cargo();
+            // Avanzar orden al terminar descarga (road stop o plataforma rail).
             state.vehicles[i].advance_after_unloading();
             state.vehicles[i].sync_order_destination(&state.map);
+        } else {
+            state.vehicles[i].cargo_unloading = true;
         }
     }
 }
@@ -795,16 +898,44 @@ fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle, state: &GameState)
     if vehicle.cargo == 0 {
         return false;
     }
-    if !station::vehicle_at_road_stop(&state.map, vehicle) {
+    // En parada física (bahía road o plataforma rail) o descarga gradual en curso.
+    let Some(station_idx) = station_index_at_vehicle(state, vehicle) else {
+        return false;
+    };
+    let at_stop = station::vehicle_at_road_stop(&state.map, vehicle)
+        || vehicle.cargo_unloading
+        || station::vehicle_physically_at_station(
+            &state.map,
+            vehicle,
+            &state.stations[station_idx],
+        );
+    if !at_stop {
         return false;
     }
-    if let Some(crate::VehicleOrder::Station { station, .. }) =
-        vehicle.orders.get(vehicle.current_order)
-        && let Some(cargo) = vehicle.cargo_type
-        && station::station_is_freight_pickup_stop(&state.map, &state.industries, *station, cargo)
-    {
-        // Parada de carga: no descargar el lote recién recogido aquí.
-        return false;
+    let station_pos = state.stations[station_idx].pos;
+    if let Some(cargo) = vehicle.cargo_type {
+        // Pax/mail: nunca descargar en la estación de origen.
+        if cargo.is_town_cargo() && vehicle.cargo_source == Some(station_pos) {
+            return false;
+        }
+        // Freight: no descargar en la parada de la orden actual si es de recogida
+        // (mina en cobertura). No usar la estación física sola: una entrega
+        // cercana a la mina también tendría cobertura.
+        if let Some(crate::VehicleOrder::Station { station, .. }) =
+            vehicle.orders.get(vehicle.current_order)
+            && station::station_is_freight_pickup_stop(
+                &state.map,
+                &state.industries,
+                *station,
+                cargo,
+            )
+        {
+            return false;
+        }
+        // Sin órdenes: no descargar en el origen del lote (carga en hub/industria).
+        if vehicle.orders.is_empty() && vehicle.cargo_source == Some(station_pos) {
+            return false;
+        }
     }
     !vehicle
         .orders

@@ -26,7 +26,8 @@ use crate::GameState;
 /// v11: teselas `MP_CLEAR` con `m5 == 0` (valor por defecto) → hierba completa.
 /// v12: consist ferroviario (`next_unit` / `prev_unit` / longitudes); trenes
 /// puntuales migran a consist de una unidad.
-pub const CURRENT_SAVE_VERSION: u32 = 12;
+/// v13: cargo packets en estación/vehículo; balances `CargoStock` se hidratan.
+pub const CURRENT_SAVE_VERSION: u32 = 13;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -143,11 +144,22 @@ fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState,
             5 => migrate_state_v5_to_v6(&mut state),
             10 => migrate_state_v10_to_v11(&mut state),
             11 => migrate_state_v11_to_v12(&mut state),
+            12 => migrate_state_v12_to_v13(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
     }
     Ok(state)
+}
+
+/// v13: hidratar packets desde balances agregados.
+fn migrate_state_v12_to_v13(state: &mut GameState) {
+    for station in &mut state.stations {
+        station.ensure_packets_from_stock();
+    }
+    for vehicle in &mut state.vehicles {
+        vehicle.ensure_packets_from_legacy();
+    }
 }
 
 /// v12: inicializar campos de consist en trenes existentes.

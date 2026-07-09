@@ -11,10 +11,13 @@ implementada jul 2026. Fases 2–7 quedan como hitos 0.2–0.6.
 - Save JSON v12 + migración; import `.sav` conserva vagones.
 - UI: compra auto-engancha; depósito muestra `[Nu]`; render de trailers.
 
-## Fase 2 — Cargo packets + rating + carga gradual
+## Fase 2 — Cargo packets + rating + carga gradual ✅
 
-Reemplazar `CargoStock` u32 por packets con origen/edad; `LoadUnloadVehicle`
-gradual; rating de estación. Ampliar tabla de cargos temperate.
+- `cargo_packet.rs`: `CargoPacket`, colas estación/vehículo, `load_unload_speed`.
+- Carga/descarga gradual por tick; pago por packet (`periods_in_transit`).
+- Rating combina `time_since_pickup` + edad del packet más viejo.
+- Save JSON v13 + migración desde balances; UI estación/vehículo muestra rating/packets.
+- Pendiente: tabla temperate completa (11 cargos), decay fuerte, feeder_share.
 
 ## Fase 3 — YAPF incremental + PBS paridad
 

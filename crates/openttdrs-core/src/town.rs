@@ -112,13 +112,14 @@ pub fn produce_town_cargo(
             continue;
         }
 
+        station.ensure_packets_from_stock();
         let pax_amount = (coverage.house_tiles * PASSENGERS_PER_HOUSE)
             .min(STATION_TOWN_CARGO_CAPACITY.saturating_sub(station.cargo_stock.passengers));
         let mail_amount = (coverage.house_tiles * MAIL_PER_HOUSE)
             .min(STATION_TOWN_CARGO_CAPACITY.saturating_sub(station.cargo_stock.mail));
 
-        station.cargo_stock.add(CargoType::Passengers, pax_amount);
-        station.cargo_stock.add(CargoType::Mail, mail_amount);
+        station.add_waiting_cargo(CargoType::Passengers, pax_amount);
+        station.add_waiting_cargo(CargoType::Mail, mail_amount);
         passengers += u64::from(pax_amount);
         mail += u64::from(mail_amount);
     }

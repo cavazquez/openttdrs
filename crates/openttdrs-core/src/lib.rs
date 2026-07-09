@@ -11,6 +11,7 @@ pub mod airport;
 pub mod autoreplace;
 pub mod bridge_spec;
 pub mod cargo;
+pub mod cargo_packet;
 pub mod command;
 pub mod depot;
 pub mod dev_metrics;
@@ -65,6 +66,7 @@ pub use bridge_spec::{
     set_bridge_middle_mapt, set_bridge_type_m6,
 };
 pub use cargo::{CargoStock, CargoType};
+pub use cargo_packet::{CargoPacket, StationCargoList, VehicleCargoList, load_unload_speed};
 pub use command::{
     Command, CommandError, LevelMode, OrderMoveDirection, ROAD_PLACE_FORCE_AXIS, apply_command,
     check_place_industry_spec, command_error_message, command_would_fail, finalize_road_drag_line,

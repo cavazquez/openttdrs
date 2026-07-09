@@ -97,7 +97,7 @@ Ordenada de **más barato a más caro**.
 | Save | Binario comprimido | JSON completo; `.sav` import + export (mapa+STNN+CITY+INDY+VEHS/ORDL+DATE+PLYR) — [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md) |
 | Pathfinding | YAPF | A* / BFS direccional |
 | Señales | PBS, reserva de rutas | Render en mapas importados |
-| Cargo | Packets, rating, transit time | Balances `u32` |
+| Cargo | Packets, rating, transit time | 🟡 packets + carga gradual (Fase 2); 6 cargos temperate |
 | Órdenes | 20+ tipos, condicionales, shared pool | Lista `Station`/`Tile` |
 | Vehículos | 4 redes + subtipos | Bus, Truck, Train |
 | Multijugador | Replay comandos + desync | No (I8 backlog) |

@@ -254,6 +254,14 @@ mod tests {
     }
 
     #[test]
+    fn packet_transit_days_match_payment_formula() {
+        // Misma fórmula que usa `unload_vehicles` por packet.
+        let young = transported_goods_income(4, 12, 1, CargoType::Coal, 0);
+        let aged = transported_goods_income(4, 12, 40, CargoType::Coal, 0);
+        assert!(young > aged, "packet joven {young} vs envejecido {aged}");
+    }
+
+    #[test]
     fn inflation_increases_income_over_years() {
         let base = transported_goods_income(10, 8, 4, CargoType::Coal, 0);
         let later = transported_goods_income(10, 8, 4, CargoType::Coal, TICKS_PER_YEAR * 10);

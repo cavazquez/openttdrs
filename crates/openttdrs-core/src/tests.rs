@@ -190,10 +190,16 @@ fn vehicle_loads_from_industry() {
     s.vehicles
         .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
 
-    // Primer step: vehicle en ipos, cargo == 0 → carga.
-    s.step();
-    assert_eq!(s.vehicles[0].cargo, VEHICLE_CAPACITY.min(50));
-    assert_eq!(s.industries[0].stock, 50 - VEHICLE_CAPACITY.min(50));
+    // Carga gradual desde industria.
+    let want = VEHICLE_CAPACITY.min(50);
+    for _ in 0..16 {
+        s.step();
+        if s.vehicles[0].cargo == want {
+            break;
+        }
+    }
+    assert_eq!(s.vehicles[0].cargo, want);
+    assert_eq!(s.industries[0].stock, 50 - want);
 }
 
 #[test]
@@ -213,10 +219,16 @@ fn vehicle_loads_from_industry_covered_by_nearby_station() {
         station_pos,
     ));
 
-    s.step();
+    let want = VEHICLE_CAPACITY.min(50);
+    for _ in 0..16 {
+        s.step();
+        if s.vehicles[0].cargo == want {
+            break;
+        }
+    }
 
-    assert_eq!(s.vehicles[0].cargo, VEHICLE_CAPACITY.min(50));
-    assert_eq!(s.industries[0].stock, 50 - VEHICLE_CAPACITY.min(50));
+    assert_eq!(s.vehicles[0].cargo, want);
+    assert_eq!(s.industries[0].stock, 50 - want);
 }
 
 #[test]
@@ -232,18 +244,28 @@ fn vehicle_delivers_to_station() {
         .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
 
     // Carga en industria, luego un tile de viaje hasta la estación.
-    s.step();
+    for _ in 0..16 {
+        s.step();
+        if s.vehicles[0].cargo > 0 && !s.vehicles[0].cargo_transfer_active() {
+            break;
+        }
+    }
     assert!(s.vehicles[0].cargo > 0);
 
     advance_vehicle_tiles(&mut s, 1);
     assert_eq!(s.vehicles[0].pos, spos);
-    s.step();
+    for _ in 0..16 {
+        s.step();
+        if s.vehicles[0].cargo == 0 {
+            break;
+        }
+    }
     assert_eq!(s.vehicles[0].cargo, 0);
     assert!(s.stations[0].income > 0);
     assert!(s.stats.cargo_income_earned > 0, "pago por entrega TTD");
-    assert_eq!(s.pending_income_popups.len(), 1);
-    assert!(s.pending_income_popups[0].amount > 0);
-    assert_eq!(s.pending_income_popups[0].at, spos);
+    assert!(!s.pending_income_popups.is_empty());
+    assert!(s.pending_income_popups.iter().any(|p| p.amount > 0));
+    assert!(s.pending_income_popups.iter().any(|p| p.at == spos));
 }
 
 #[test]
@@ -258,8 +280,16 @@ fn vehicle_delivers_when_inside_station_coverage() {
         station_pos,
     ));
     s.vehicles[0].cargo = 17;
+    s.vehicles[0].cargo_type = Some(CargoType::Coal);
+    s.vehicles[0].mark_cargo_loaded(TileCoord::new(0, 0));
+    s.vehicles[0].ensure_packets_from_legacy();
 
-    s.step();
+    for _ in 0..16 {
+        s.step();
+        if s.vehicles[0].cargo == 0 {
+            break;
+        }
+    }
 
     assert_eq!(s.vehicles[0].cargo, 0);
     assert_eq!(s.stations[0].stock, 17);
@@ -282,11 +312,21 @@ fn sim_stats_count_pickup_and_delivery() {
         .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
     assert_eq!(s.stats.cargo_pickups, 0);
     assert_eq!(s.stats.cargo_deliveries, 0);
-    s.step();
+    for _ in 0..16 {
+        s.step();
+        if s.vehicles[0].cargo > 0 && !s.vehicles[0].cargo_transfer_active() {
+            break;
+        }
+    }
     assert_eq!(s.stats.cargo_pickups, 1);
     assert!(s.stats.cargo_units_loaded > 0);
     advance_vehicle_tiles(&mut s, 1);
-    s.step();
+    for _ in 0..16 {
+        s.step();
+        if s.vehicles[0].cargo == 0 {
+            break;
+        }
+    }
     assert_eq!(s.stats.cargo_deliveries, 1);
     assert!(s.stats.cargo_units_delivered > 0);
 }
@@ -379,11 +419,17 @@ fn truck_loads_freight_waiting_at_station_hub() {
         TileCoord::new(8, 0),
     ));
 
-    s.step();
+    for _ in 0..8 {
+        s.step();
+        if s.vehicles[0].cargo == 14 {
+            break;
+        }
+    }
 
     assert_eq!(s.vehicles[0].cargo, 14);
     assert_eq!(s.vehicles[0].cargo_type, Some(CargoType::Coal));
     assert_eq!(s.stations[0].cargo_stock.coal, 0);
+    assert!(!s.vehicles[0].cargo_packets.is_empty());
 }
 
 #[test]
@@ -400,7 +446,12 @@ fn train_loads_freight_from_rail_station_waiting_cargo() {
         TileCoord::new(7, 2),
     ));
 
-    s.step();
+    for _ in 0..8 {
+        s.step();
+        if s.vehicles[0].cargo == 9 {
+            break;
+        }
+    }
 
     assert_eq!(s.vehicles[0].cargo, 9);
     assert_eq!(s.vehicles[0].cargo_type, Some(CargoType::Goods));
@@ -464,7 +515,12 @@ fn truck_prefers_industry_over_station_waiting_cargo() {
         TileCoord::new(8, 0),
     ));
 
-    s.step();
+    for _ in 0..8 {
+        s.step();
+        if s.vehicles[0].cargo == 11 {
+            break;
+        }
+    }
 
     assert_eq!(s.vehicles[0].cargo, 11);
     assert_eq!(s.industries[0].stock, 0);
@@ -486,18 +542,31 @@ fn two_truck_transfer_via_station_hub() {
     s.vehicles
         .push(Vehicle::new(0, VehicleKind::Truck, hub, hub));
     s.vehicles[0].cargo = 16;
-    s.vehicles[0].cargo_type = Some(CargoType::Wood);
+    // Goods: transferencia en hub (no bloqueada como bulk de mina).
+    s.vehicles[0].cargo_type = Some(CargoType::Goods);
+    s.vehicles[0].mark_cargo_loaded(TileCoord::new(0, 0));
+    s.vehicles[0].ensure_packets_from_legacy();
 
-    s.step();
+    for _ in 0..8 {
+        s.step();
+        if s.vehicles[0].cargo == 0 {
+            break;
+        }
+    }
     assert_eq!(s.vehicles[0].cargo, 0);
-    assert_eq!(s.stations[0].cargo_stock.wood, 16);
+    assert_eq!(s.stations[0].cargo_stock.goods, 16);
     s.vehicles.clear();
 
     s.vehicles
         .push(Vehicle::new(0, VehicleKind::Truck, hub, dest));
-    s.step();
+    for _ in 0..8 {
+        s.step();
+        if s.vehicles[0].cargo == 16 {
+            break;
+        }
+    }
     assert_eq!(s.vehicles[0].cargo, 16);
-    assert_eq!(s.stations[0].cargo_stock.wood, 0);
+    assert_eq!(s.stations[0].cargo_stock.goods, 0);
 }
 
 #[test]
@@ -513,8 +582,14 @@ fn delivery_income_scales_with_haul_distance() {
         truck.cargo = 10;
         truck.cargo_type = Some(CargoType::Coal);
         truck.mark_cargo_loaded(*source);
+        truck.ensure_packets_from_legacy();
         s.vehicles.push(truck);
-        s.step();
+        for _ in 0..8 {
+            s.step();
+            if s.vehicles[0].cargo == 0 {
+                break;
+            }
+        }
         incomes[idx] = s.stations[0].income;
     }
 
@@ -623,13 +698,23 @@ fn bus_loads_and_delivers_passengers_for_income() {
     s.vehicles
         .push(Vehicle::new(0, VehicleKind::Bus, origin, dest));
 
-    s.step();
+    for _ in 0..8 {
+        s.step();
+        if s.vehicles[0].cargo == 15 {
+            break;
+        }
+    }
     assert_eq!(s.vehicles[0].cargo, 15);
     assert_eq!(s.stations[0].cargo_stock.passengers, 0);
 
     advance_vehicle_tiles(&mut s, 4);
     assert_eq!(s.vehicles[0].pos, dest);
-    s.step();
+    for _ in 0..8 {
+        s.step();
+        if s.vehicles[0].cargo == 0 {
+            break;
+        }
+    }
     assert_eq!(s.vehicles[0].cargo, 0);
     assert!(
         s.stats.cargo_income_earned > 0,

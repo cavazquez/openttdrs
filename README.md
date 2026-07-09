@@ -104,7 +104,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | **Simulación** | Carga / descarga en estaciones | ✅ | `sim_step.rs` |
 | **Simulación** | Entrega carga → ingreso + popup `+$N` | ✅ | `economy.rs`, `income_popup.rs` |
 | **Simulación** | Inflación y costes construcción | ✅ | `economy.rs` |
-| **Simulación** | Cargo packets, rating estación, transit time | ❌ | Balances `u32` simplificados |
+| **Simulación** | Cargo packets, rating estación, transit time | 🟡 | Packets + carga gradual (Fase 2); 6 cargos |
 | **Simulación** | Servicio en depósito | ❌ | [PARIDAD_OPENTTD.md](docs/PARIDAD_OPENTTD.md) |
 | **Simulación** | Señales: reserva bloque, un tren/bloque | 🟡 | `rail_signals.rs`, `sim_step.rs` — sin PBS |
 | **Simulación** | PBS / path signals / presignals | ❌ | 🔮 Hito 0.2 |

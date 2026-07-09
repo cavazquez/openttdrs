@@ -1,4 +1,5 @@
 use crate::cargo::{CargoStock, CargoType};
+use crate::cargo_packet::StationCargoList;
 use crate::industry::{Industry, IndustryKind};
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::diag_dir_offset;
@@ -69,6 +70,9 @@ pub struct Station {
     pub stock: u32,
     #[serde(default)]
     pub cargo_stock: CargoStock,
+    /// Cola de packets en espera (`StationCargoList`); fuente de verdad Fase 2.
+    #[serde(default)]
+    pub cargo_packets: StationCargoList,
     /// Contador histórico total de unidades entregadas (análogo a `income` simplificado).
     pub income: u64,
     /// Días sin recogida por tipo de carga en espera.
@@ -114,11 +118,59 @@ impl Station {
             name: None,
             stock: 0,
             cargo_stock: CargoStock::default(),
+            cargo_packets: StationCargoList::default(),
             income: 0,
             time_since_pickup: CargoTimeSincePickup::default(),
             rating: default_station_rating(),
             airport_tiles: Vec::new(),
         }
+    }
+
+    /// Si hay balance legado sin packets, hidrata la cola (tests / saves v12).
+    pub fn ensure_packets_from_stock(&mut self) {
+        if self.cargo_packets.is_empty() {
+            let stock = self.cargo_stock;
+            if stock != CargoStock::default() {
+                self.cargo_packets = StationCargoList::from_stock(stock, self.pos);
+            }
+        }
+        self.sync_stock_from_packets();
+    }
+
+    /// Sincroniza `cargo_stock` / `stock` desde la cola de packets.
+    pub fn sync_stock_from_packets(&mut self) {
+        self.cargo_stock = self.cargo_packets.as_stock();
+        self.stock = [
+            CargoType::Goods,
+            CargoType::Coal,
+            CargoType::Wood,
+            CargoType::Oil,
+        ]
+        .into_iter()
+        .map(|c| self.cargo_stock.get(c))
+        .fold(0_u32, u32::saturating_add);
+    }
+
+    /// Añade carga en espera (producción pueblo / descarga freight).
+    pub fn add_waiting_cargo(&mut self, cargo: CargoType, amount: u32) {
+        if amount == 0 {
+            return;
+        }
+        self.ensure_packets_from_stock();
+        self.cargo_packets.add_amount(cargo, amount, self.pos);
+        self.sync_stock_from_packets();
+    }
+
+    /// Extrae packets en espera (carga a vehículo / consumo industria).
+    pub fn take_waiting_cargo(
+        &mut self,
+        cargo: CargoType,
+        amount: u32,
+    ) -> Vec<crate::cargo_packet::CargoPacket> {
+        self.ensure_packets_from_stock();
+        let taken = self.cargo_packets.take(cargo, amount);
+        self.sync_stock_from_packets();
+        taken
     }
 
     /// ¿La estación cubre esta tesela (ancla o footprint aeropuerto)?
@@ -554,9 +606,13 @@ pub fn industry_in_station_coverage_by_pos(
 }
 
 /// Rating 0–255 para un tipo de carga (255 = recién servido).
+///
+/// Combina días sin recogida con la edad del packet más viejo en cola.
 #[must_use]
 pub fn station_rating_for_cargo(station: &Station, cargo: CargoType) -> u8 {
-    255u8.saturating_sub(station.time_since_pickup.get(cargo))
+    let from_pickup = station.time_since_pickup.get(cargo);
+    let from_packets = station.cargo_packets.oldest_waiting_days(cargo);
+    255u8.saturating_sub(from_pickup.max(from_packets))
 }
 
 /// Recalcula el rating global como mínimo entre cargas con stock en espera.
@@ -592,11 +648,16 @@ pub fn tick_station_cargo_age(stations: &mut [Station]) {
         CargoType::Oil,
     ];
     for station in stations {
+        station.ensure_packets_from_stock();
+        if !station.cargo_packets.is_empty() {
+            station.cargo_packets.age_waiting_one_day();
+        }
         for cargo in CARGO_TYPES {
             if station.cargo_stock.get(cargo) > 0 {
                 station.time_since_pickup.increment_waiting(cargo);
             }
         }
+        station.sync_stock_from_packets();
         recompute_station_rating(station);
     }
 }
@@ -604,6 +665,11 @@ pub fn tick_station_cargo_age(stations: &mut [Station]) {
 /// Marca recogida reciente de un tipo de carga.
 pub fn on_station_cargo_pickup(station: &mut Station, cargo: CargoType) {
     station.time_since_pickup.set(cargo, 0);
+    for p in &mut station.cargo_packets.packets {
+        if p.cargo == cargo {
+            p.periods_in_transit = 0;
+        }
+    }
     recompute_station_rating(station);
 }
 
@@ -827,10 +893,10 @@ mod coherence_tests {
 
         for t in 1..=400 {
             state.step();
-            if state.stats.cargo_units_delivered > 0 {
-                assert_eq!(
-                    state.vehicles[0].cargo, 0,
-                    "sin recarga instantánea tras la primera entrega (t={t})"
+            if state.stats.cargo_units_delivered > 0 && state.vehicles[0].cargo == 0 {
+                assert!(
+                    !state.vehicles[0].cargo_transfer_active(),
+                    "sin recarga tras completar la entrega (t={t})"
                 );
                 return;
             }
@@ -867,6 +933,7 @@ mod coherence_tests {
         truck.cargo_type = Some(CargoType::Coal);
         truck.cargo = 20;
         truck.mark_cargo_loaded(TileCoord::new(2, 3));
+        truck.ensure_packets_from_legacy();
         truck.set_station_orders(vec![load_stop, deliver_stop]);
         truck.current_order = 1;
         truck.sync_order_destination(&state.map);
@@ -874,7 +941,12 @@ mod coherence_tests {
         state.vehicles.push(truck);
         let _ = deliver_road;
 
-        state.step();
+        for _ in 0..16 {
+            state.step();
+            if state.vehicles[0].cargo == 0 {
+                break;
+            }
+        }
         assert_eq!(
             state.vehicles[0].cargo, 0,
             "debe descargar carbón en parada de entrega"
@@ -908,13 +980,19 @@ mod coherence_tests {
         truck.cargo_type = Some(CargoType::Wood);
         truck.cargo = 20;
         truck.mark_cargo_loaded(deliver_stop);
+        truck.ensure_packets_from_legacy();
         truck.set_station_orders(vec![deliver_stop]);
         truck.sync_order_destination(&state.map);
         truck.progress = 255;
         state.vehicles.push(truck);
         let _ = deliver_road;
 
-        state.step();
+        for _ in 0..16 {
+            state.step();
+            if state.vehicles[0].cargo == 0 {
+                break;
+            }
+        }
         assert_eq!(
             state.vehicles[0].cargo, 0,
             "parada de entrega debe aceptar descarga aunque cargo_source sea la misma tesela"
@@ -925,6 +1003,7 @@ mod coherence_tests {
     fn station_rating_decays_with_waiting_cargo() {
         let mut station = Station::new(TileCoord::new(0, 0));
         station.cargo_stock.coal = 50;
+        station.ensure_packets_from_stock();
         tick_station_cargo_age(std::slice::from_mut(&mut station));
         assert_eq!(station.time_since_pickup.coal, 1);
         for _ in 0..300 {

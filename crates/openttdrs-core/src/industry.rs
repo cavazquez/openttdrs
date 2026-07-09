@@ -268,6 +268,9 @@ impl Industry {
             return false;
         }
 
+        for &idx in &station_indices {
+            stations[idx].ensure_packets_from_stock();
+        }
         for &(cargo, amount) in requirements {
             let available: u32 = station_indices
                 .iter()
@@ -286,7 +289,7 @@ impl Industry {
                 }
                 let take = stations[idx].cargo_stock.get(cargo).min(remaining);
                 if take > 0 {
-                    let _ = stations[idx].cargo_stock.take(cargo, take);
+                    let _ = stations[idx].take_waiting_cargo(cargo, take);
                     remaining -= take;
                 }
             }

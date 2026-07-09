@@ -18,6 +18,7 @@ use super::record::{
 
 /// Estado mínimo del tick anterior para derivar eventos por diff.
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)]
 struct PrevVehicle {
     pos: TileCoord,
     dir: u8,
@@ -32,6 +33,8 @@ struct PrevVehicle {
     /// Solo trenes (Fase Rail 1): retención por señal e interior de depósito.
     blocked_by_signal: bool,
     in_depot: bool,
+    /// Carga/descarga gradual en curso el tick anterior.
+    cargo_transfer_was_active: bool,
 }
 
 /// Acumulador de trazas de paridad (vive en `GameState` con `#[serde(skip)]`).
@@ -219,6 +222,7 @@ fn capture_prev(state: &GameState) -> BTreeMap<u32, PrevVehicle> {
                     blocked_by_signal: rail_blocked_by_signal(state, &trains, v),
                     in_depot: v.kind == VehicleKind::Train
                         && refit::vehicle_in_depot(&state.map, v.pos),
+                    cargo_transfer_was_active: v.cargo_transfer_active(),
                 },
             )
         })
@@ -289,25 +293,38 @@ fn push_cargo_and_order_events(
         });
     }
     if v.cargo > p.cargo {
-        events.push(ParityEvent::LoadingStarted {
-            vehicle: v.id,
-            before: p.cargo,
-            after: v.cargo,
-        });
-        // La carga en la sim actual es instantánea (un tick); en OpenTTD es
-        // gradual. Se emiten ambos eventos para conservar el esquema.
+        if !p.cargo_transfer_was_active {
+            events.push(ParityEvent::LoadingStarted {
+                vehicle: v.id,
+                before: p.cargo,
+                after: v.cargo,
+            });
+        }
+        // Carga gradual: `LoadingFinished` solo al cerrar la transferencia.
+        if !v.cargo_transfer_active() {
+            events.push(ParityEvent::LoadingFinished {
+                vehicle: v.id,
+                cargo: v.cargo,
+            });
+        }
+    } else if p.cargo_transfer_was_active && !v.cargo_transfer_active() && v.cargo >= p.cargo {
+        // Terminó la carga sin más unidades este tick (p. ej. cola vacía).
         events.push(ParityEvent::LoadingFinished {
             vehicle: v.id,
             cargo: v.cargo,
         });
     }
     if v.cargo < p.cargo {
-        events.push(ParityEvent::UnloadingStarted {
-            vehicle: v.id,
-            before: p.cargo,
-            after: v.cargo,
-        });
-        events.push(ParityEvent::UnloadingFinished { vehicle: v.id });
+        if !p.cargo_transfer_was_active {
+            events.push(ParityEvent::UnloadingStarted {
+                vehicle: v.id,
+                before: p.cargo,
+                after: v.cargo,
+            });
+        }
+        if !v.cargo_transfer_active() && v.cargo == 0 {
+            events.push(ParityEvent::UnloadingFinished { vehicle: v.id });
+        }
     }
     if p.path_was_empty && !v.path.is_empty() {
         events.push(ParityEvent::PathRecomputed {
@@ -384,6 +401,7 @@ fn diff_events(
                     trend: 0,
                     blocked_by_signal: rail.is_some_and(|r| r.blocked_by_signal),
                     in_depot: rail.is_some_and(|r| r.in_depot),
+                    cargo_transfer_was_active: v.cargo_transfer_active(),
                 },
             );
             continue;
@@ -404,6 +422,7 @@ fn diff_events(
         p.at_station = at_station;
         p.blocked_by_signal = rail.is_some_and(|r| r.blocked_by_signal);
         p.in_depot = rail.is_some_and(|r| r.in_depot);
+        p.cargo_transfer_was_active = v.cargo_transfer_active();
     }
     events
 }

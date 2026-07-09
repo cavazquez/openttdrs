@@ -178,8 +178,8 @@ fn check_instant_loading(records: &[TickRecord]) -> KnownDivergence {
         detected,
         evidence,
         openttd_ref: "OpenTTD/src/economy.cpp:1609 (`LoadUnloadVehicle`, transfiere por tick)",
-        rust_ref: "openttdrs/crates/openttdrs-core/src/sim_step.rs:205-241 (`try_load_from_industry` carga la capacidad completa en un tick)",
-        fix_phase2: "modelar carga gradual con velocidad de carga por tipo de cargo",
+        rust_ref: "openttdrs/crates/openttdrs-core/src/sim_step.rs (`load_unload_speed` + packets)",
+        fix_phase2: "IMPLEMENTADA (Fase 2): transferencia gradual por tick según `load_unload_speed`; packets con origen/edad",
     }
 }
 

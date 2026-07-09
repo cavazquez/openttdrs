@@ -43,7 +43,7 @@ pub fn probe_vehicle_cargo_cycle(
     let income_start = state.stats.cargo_income_earned;
     let deliveries_start = state.stats.cargo_deliveries;
 
-    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == opts.vehicle_id) else {
+    if !state.vehicles.iter().any(|v| v.id == opts.vehicle_id) {
         return VehicleCargoReport {
             vehicle_id: opts.vehicle_id,
             ticks_run: 0,
@@ -57,7 +57,7 @@ pub fn probe_vehicle_cargo_cycle(
             tick_loaded: None,
             tick_delivered: None,
         };
-    };
+    }
 
     let mut loaded = false;
     let mut delivered = false;
@@ -69,11 +69,16 @@ pub fn probe_vehicle_cargo_cycle(
     let mut ticks_run = 0u64;
 
     for _ in 0..opts.max_ticks {
+        let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == opts.vehicle_id) else {
+            break;
+        };
         let cargo_before = state.vehicles[vehicle_idx].cargo;
         state.step();
         ticks_run += 1;
         let tick = state.tick.get();
-        let v = &state.vehicles[vehicle_idx];
+        let Some(v) = state.vehicles.iter().find(|v| v.id == opts.vehicle_id) else {
+            break;
+        };
 
         if !loaded && v.cargo > 0 {
             loaded = true;
@@ -86,13 +91,21 @@ pub fn probe_vehicle_cargo_cycle(
 
         if loaded
             && !delivered
-            && cargo_before > 0
-            && v.cargo == 0
             && state.stats.cargo_deliveries > deliveries_start
+            && (v.cargo == 0 || (cargo_before > 0 && v.cargo < cargo_before))
         {
-            delivered = true;
-            units_delivered = cargo_before;
-            tick_delivered = Some(tick);
+            // Descarga gradual: contar entrega al primer tick con pago/stats,
+            // o cuando el vehículo queda vacío.
+            if v.cargo == 0 || state.stats.cargo_units_delivered > 0 {
+                delivered = true;
+                units_delivered = units_loaded_peak.max(cargo_before.saturating_sub(v.cargo));
+                tick_delivered = Some(tick);
+                if v.cargo == 0 {
+                    break;
+                }
+            }
+        }
+        if loaded && delivered && v.cargo == 0 {
             break;
         }
     }

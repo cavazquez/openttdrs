@@ -232,7 +232,11 @@ fn known_divergences_are_confirmed_by_trace() {
         Some(&false),
         "regresión: el camión debe entrar a la tesela de la bahía (Fase 2)"
     );
-    assert_eq!(by_id.get("instant_loading"), Some(&true));
+    assert_eq!(
+        by_id.get("instant_loading"),
+        Some(&false),
+        "regresión: la carga debe ser gradual (Fase 2 cargo packets)"
+    );
     assert_eq!(
         by_id.get("tick_rate"),
         Some(&false),

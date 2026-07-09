@@ -410,7 +410,7 @@ fn vehicle_details_body(vehicle: &openttdrs_core::Vehicle, sim: &SimWorld) -> St
     };
     format!(
         "Modelo: {}\nTipo carga: {}\nPosición: ({}, {}){depot_note}\n\
-         Velocidad: {} km/h (máx. {}) · Carga: {}/{}\n\
+         Velocidad: {} km/h (máx. {}) · Carga: {}/{} ({} pkt, {}d)\n\
          Coste: ${}/año · Fiabilidad: {}%\n\
          Órdenes: {} · Orden activa: {active_order}",
         engine.name,
@@ -421,6 +421,8 @@ fn vehicle_details_body(vehicle: &openttdrs_core::Vehicle, sim: &SimWorld) -> St
         engine.speed_kmh(),
         vehicle.cargo,
         vehicle.capacity,
+        vehicle.cargo_packets.packets.len(),
+        vehicle.cargo_packets.max_periods_in_transit(),
         engine.running_cost_year,
         engine.reliability_pct,
         vehicle.orders.len(),

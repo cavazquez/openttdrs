@@ -167,16 +167,18 @@ pub(crate) fn sync_station_cargo_panel(
         return;
     };
     let mut out = format!(
-        "Estación ({}, {}) {:?}\nColas cargo: pax:{} mail:{} goods:{} coal:{} wood:{} oil:{}",
+        "Estación ({}, {}) {:?}\nRating: {}/255\nColas cargo: pax:{} mail:{} goods:{} coal:{} wood:{} oil:{}\nPackets en cola: {}",
         station_pos.x,
         station_pos.y,
         station.stop_kind,
+        station.rating,
         station.cargo_stock.passengers,
         station.cargo_stock.mail,
         station.cargo_stock.goods,
         station.cargo_stock.coal,
         station.cargo_stock.wood,
-        station.cargo_stock.oil
+        station.cargo_stock.oil,
+        station.cargo_packets.packets.len()
     );
     let en_route = sim
         .state

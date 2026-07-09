@@ -58,11 +58,12 @@ pub(crate) fn step(state: &mut GameState) {
     tick_aircraft_phases(state);
     move_vehicles(state);
 
-    crate::rail_signals::update_rail_signal_states(
+    // Post-movimiento: refresco local vía `_globset` (si vacío, no hay barrido).
+    crate::rail_signals::drain_signal_globset(
         &mut state.map,
         &state.vehicles,
         &mut state.signal_tile_dirty,
-        false,
+        &mut state.signal_globset,
     );
 
     sync_vehicle_order_destinations(state);
@@ -651,6 +652,7 @@ fn recompute_vehicle_paths(state: &mut GameState) {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn move_vehicles(state: &mut GameState) {
     let tick = state.tick.get();
     let vehicle_count = state.vehicles.len();
@@ -723,6 +725,13 @@ fn move_vehicles(state: &mut GameState) {
         state.vehicles[i].step();
         if state.vehicles[i].pos != prev_pos {
             crate::ship_movement::maybe_start_lock_transit(&mut state.vehicles[i], &state.map);
+            if vehicle_kind == VehicleKind::Train {
+                crate::rail_signals::enqueue_signal_glob(&mut state.signal_globset, prev_pos);
+                crate::rail_signals::enqueue_signal_glob(
+                    &mut state.signal_globset,
+                    state.vehicles[i].pos,
+                );
+            }
         }
         if vehicle_running {
             if prev_speed == 0 && state.vehicles[i].cur_speed > 0 {

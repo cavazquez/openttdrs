@@ -124,6 +124,9 @@ pub struct GameState {
     /// Teselas con señales cuyo estado verde/rojo cambió este tick (remap cliente).
     #[serde(skip)]
     pub signal_tile_dirty: Vec<TileCoord>,
+    /// Cola `_globset`: teselas que invalidan señales (movimiento / construcción).
+    #[serde(skip, default)]
+    pub signal_globset: crate::rail_signals::SignalGlobSet,
     /// Teselas con reserva PBS activa cuyo `m2_hi` cambió (remap cliente).
     #[serde(skip)]
     pub reservation_tile_dirty: Vec<TileCoord>,
@@ -203,6 +206,7 @@ impl GameState {
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
             signal_tile_dirty: Vec::new(),
+            signal_globset: std::collections::HashSet::new(),
             reservation_tile_dirty: Vec::new(),
             reservation_tiles_active: std::collections::HashSet::new(),
             news: crate::news::NewsQueue::default(),
@@ -243,6 +247,7 @@ impl GameState {
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
             signal_tile_dirty: Vec::new(),
+            signal_globset: std::collections::HashSet::new(),
             reservation_tile_dirty: Vec::new(),
             reservation_tiles_active: std::collections::HashSet::new(),
             news: crate::news::NewsQueue::default(),

@@ -833,10 +833,16 @@ impl SigSegmentProbe {
     }
 }
 
+/// `true` si la tesela puede formar parte del segmento `ProbeSigSeg` (vía, estación, túnel, puente).
+#[must_use]
+fn is_sig_segment_traversable(map: &Map, c: TileCoord) -> bool {
+    rail_traversal_bits(map, c) != 0
+}
+
 /// Explora el segmento PBS/presignal desde `signal_tile` hacia `exit_dir`.
 ///
-/// Paridad v0 de `ProbeSigSeg`: no atraviesa señales block/path/entry; al hallar
-/// exit/combo registra y corta esa rama (no busca exits más allá de un block).
+/// Paridad v0 de `ProbeSigSeg`: atraviesa estación/túnel/puente; no atraviesa señales
+/// block/path/entry; al hallar exit/combo registra y corta esa rama.
 fn explore_sig_segment(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> SigSegmentProbe {
     let (dx, dy) = diag_dir_offset(exit_dir);
     let start = TileCoord::new(signal_tile.x + dx, signal_tile.y + dy);
@@ -851,10 +857,11 @@ fn explore_sig_segment(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> SigSe
         let Some(tile) = map.get(cur) else {
             continue;
         };
-        if tile.kind != TileKind::Rail {
+        if !is_sig_segment_traversable(map, cur) {
             continue;
         }
-        if rail_tile_is_signals(tile.m5) {
+        // Señales solo en `TileKind::Rail` (no sobre estación/túnel/puente).
+        if tile.kind == TileKind::Rail && rail_tile_is_signals(tile.m5) {
             let present = rail_signal_present_mask(tile.m3);
             let rails = tile.m5 & 0x3F;
             let mut closes_segment = false;
@@ -1081,6 +1088,80 @@ fn refresh_signal_tile_states(
     Some(out)
 }
 
+/// Cola de invalidación de señales (`_globset` simplificado de `signal.cpp`).
+pub type SignalGlobSet = HashSet<TileCoord>;
+
+/// Encola una tesela ferroviaria para refresco local de señales.
+pub fn enqueue_signal_glob(set: &mut SignalGlobSet, tile: TileCoord) {
+    set.insert(tile);
+}
+
+/// Señales cuyo bloque contiene `tile`, más entries/combos que miran esas exits.
+#[must_use]
+pub fn collect_signals_affected_by_tiles(map: &Map, seeds: &SignalGlobSet) -> HashSet<TileCoord> {
+    if seeds.is_empty() {
+        return HashSet::new();
+    }
+    let (w, h) = map.dimensions();
+    let mut affected = HashSet::new();
+    let mut signal_tiles = Vec::new();
+    for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
+        for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
+            let c = TileCoord::new(x, y);
+            let Some(tile) = map.get(c) else {
+                continue;
+            };
+            if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
+                continue;
+            }
+            signal_tiles.push(c);
+            if seeds.contains(&c) {
+                affected.insert(c);
+            }
+            let present = rail_signal_present_mask(tile.m3);
+            let rails = tile.m5 & 0x3F;
+            for bit in 0..4u8 {
+                if present & (1 << bit) == 0 {
+                    continue;
+                }
+                let exit_dir = signal_exit_dir(rails, bit);
+                let block = rail_block_ahead(map, c, exit_dir);
+                if block.iter().any(|t| seeds.contains(t)) {
+                    affected.insert(c);
+                }
+            }
+        }
+    }
+    // Entries/combos aguas arriba que dependen de exits afectadas.
+    for &c in &signal_tiles {
+        if affected.contains(&c) {
+            continue;
+        }
+        let Some(tile) = map.get(c) else {
+            continue;
+        };
+        let present = rail_signal_present_mask(tile.m3);
+        let rails = tile.m5 & 0x3F;
+        for bit in 0..4u8 {
+            if present & (1 << bit) == 0 {
+                continue;
+            }
+            let sig_type = signal_track_for_bit(rails, bit)
+                .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
+            if sig_type != SIGTYPE_ENTRY && sig_type != SIGTYPE_COMBO {
+                continue;
+            }
+            let exit_dir = signal_exit_dir(rails, bit);
+            let probe = explore_sig_segment(map, c, exit_dir);
+            if probe.exits.iter().any(|(t, _)| affected.contains(t)) {
+                affected.insert(c);
+                break;
+            }
+        }
+    }
+    affected
+}
+
 /// Recalcula verde/rojo en todas las teselas con señales.
 ///
 /// Las teselas cuyo `m3hi` cambia se añaden a `dirty` (para remap visual en el cliente).
@@ -1096,26 +1177,69 @@ pub fn update_rail_signal_states(
     dirty: &mut Vec<TileCoord>,
     clear_dirty: bool,
 ) {
+    update_rail_signal_states_scoped(map, vehicles, dirty, clear_dirty, None);
+}
+
+/// Como [`update_rail_signal_states`], limitado a teselas de `scope` (None = mapa entero).
+#[allow(clippy::implicit_hasher)]
+pub fn update_rail_signal_states_scoped(
+    map: &mut Map,
+    vehicles: &[Vehicle],
+    dirty: &mut Vec<TileCoord>,
+    clear_dirty: bool,
+    scope: Option<&HashSet<TileCoord>>,
+) {
     if clear_dirty {
         dirty.clear();
     }
+    if scope.is_some_and(HashSet::is_empty) {
+        return;
+    }
     let exit_green = compute_exit_signal_greens(map, vehicles);
     let signal_green = stabilize_combo_presignal_greens(map, vehicles, &exit_green);
+    let refresh_one = |map: &mut Map, c: TileCoord, dirty: &mut Vec<TileCoord>| {
+        let Some(tile) = map.get(c) else {
+            return;
+        };
+        if let Some(out) = refresh_signal_tile_states(map, vehicles, c, tile, &signal_green)
+            && out.m3hi != tile.m3hi
+        {
+            let _ = map.set_tile(c, out);
+            dirty.push(c);
+        }
+    };
+    if let Some(tiles) = scope {
+        for &c in tiles {
+            refresh_one(map, c, dirty);
+        }
+        return;
+    }
     let (w, h) = map.dimensions();
     for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
         for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
-            let c = TileCoord::new(x, y);
-            let Some(tile) = map.get(c) else {
-                continue;
-            };
-            if let Some(out) = refresh_signal_tile_states(map, vehicles, c, tile, &signal_green)
-                && out.m3hi != tile.m3hi
-            {
-                let _ = map.set_tile(c, out);
-                dirty.push(c);
-            }
+            refresh_one(map, TileCoord::new(x, y), dirty);
         }
     }
+}
+
+/// Drena `_globset`: refresca señales afectadas y vacía la cola.
+///
+/// Si `globset` está vacío, no hace nada (ahorra el barrido post-movimiento).
+pub fn drain_signal_globset(
+    map: &mut Map,
+    vehicles: &[Vehicle],
+    dirty: &mut Vec<TileCoord>,
+    globset: &mut SignalGlobSet,
+) {
+    if globset.is_empty() {
+        return;
+    }
+    let affected = collect_signals_affected_by_tiles(map, globset);
+    globset.clear();
+    if affected.is_empty() {
+        return;
+    }
+    update_rail_signal_states_scoped(map, vehicles, dirty, false, Some(&affected));
 }
 
 #[must_use]
@@ -1348,6 +1472,22 @@ mod tests {
         map.set_kind(c, TileKind::Rail).expect("kind");
         let mut t = map.get(c).expect("tile");
         t.m5 = tb | (RAIL_TILE_NORMAL << 6);
+        map.set_tile(c, t).expect("tile");
+    }
+
+    /// Plataforma rail (`StationType` 0): `m5 & 1` = 0 → eje X, 1 → eje Y.
+    fn write_rail_station(map: &mut Map, c: TileCoord, axis_y: bool) {
+        map.set_kind(c, TileKind::Station).expect("kind");
+        let mut t = map.get(c).expect("tile");
+        t.m6 &= !0x78; // StationType::Rail = 0
+        t.m5 = u8::from(axis_y);
+        map.set_tile(c, t).expect("tile");
+    }
+
+    fn write_rail_tunnel(map: &mut Map, c: TileCoord, dir: u8) {
+        map.set_kind(c, TileKind::RailTunnel).expect("kind");
+        let mut t = map.get(c).expect("tile");
+        t.m5 = dir & 3;
         map.set_tile(c, t).expect("tile");
     }
 
@@ -1878,6 +2018,104 @@ mod tests {
             targets.is_empty(),
             "block intermedio cierra el segmento: {targets:?}"
         );
+    }
+
+    #[test]
+    fn explore_sig_segment_crosses_station_platform() {
+        let mut map = Map::new_flat(14, 6, 0);
+        for x in 0..=8 {
+            write_rail(&mut map, TileCoord::new(x, 2), RAIL_TB_X);
+        }
+        for x in 3..=5 {
+            write_rail_station(&mut map, TileCoord::new(x, 2), false);
+        }
+        write_signal_facing(&mut map, TileCoord::new(1, 2), RAIL_TB_X, Some(0));
+        let mut entry = map.get(TileCoord::new(1, 2)).expect("entry");
+        entry.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(1, 2), entry).expect("entry");
+        write_signal_facing(&mut map, TileCoord::new(7, 2), RAIL_TB_X, Some(0));
+        let mut exit = map.get(TileCoord::new(7, 2)).expect("exit");
+        exit.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(7, 2), exit).expect("exit");
+
+        let targets = presignal_exit_targets_ahead(&map, TileCoord::new(1, 2), 0);
+        assert!(
+            targets.iter().any(|(c, _)| *c == TileCoord::new(7, 2)),
+            "debe ver exit tras plataforma: {targets:?}"
+        );
+    }
+
+    #[test]
+    fn entry_green_when_exit_after_tunnel() {
+        let mut map = Map::new_flat(14, 6, 0);
+        for x in 0..=2 {
+            write_rail(&mut map, TileCoord::new(x, 2), RAIL_TB_X);
+        }
+        for x in 3..=5 {
+            write_rail_tunnel(&mut map, TileCoord::new(x, 2), 0);
+        }
+        for x in 6..=8 {
+            write_rail(&mut map, TileCoord::new(x, 2), RAIL_TB_X);
+        }
+        write_signal_facing(&mut map, TileCoord::new(1, 2), RAIL_TB_X, Some(0));
+        let mut entry = map.get(TileCoord::new(1, 2)).expect("entry");
+        entry.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(1, 2), entry).expect("entry");
+        write_signal_facing(&mut map, TileCoord::new(7, 2), RAIL_TB_X, Some(0));
+        let mut exit = map.get(TileCoord::new(7, 2)).expect("exit");
+        exit.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(7, 2), exit).expect("exit");
+
+        update_rail_signal_states(&mut map, &[], &mut Vec::new(), true);
+        let entry_tile = map.get(TileCoord::new(1, 2)).expect("entry");
+        assert_ne!(
+            rail_signal_state_mask(entry_tile.m3hi) & 0b0100,
+            0,
+            "entry verde con exit tras túnel libre"
+        );
+    }
+
+    #[test]
+    fn drain_signal_globset_matches_full_update_on_blocker() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
+        let mut map = Map::new_flat(12, 4, 0);
+        for x in 0..=8 {
+            write_rail(&mut map, TileCoord::new(x, 1), RAIL_TB_X);
+        }
+        write_signal_facing(&mut map, TileCoord::new(2, 1), RAIL_TB_X, Some(0));
+        write_signal_facing(&mut map, TileCoord::new(6, 1), RAIL_TB_X, Some(0));
+        let blocker = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(4, 1),
+            TileCoord::new(4, 1),
+        );
+        let mut full = map.clone();
+        update_rail_signal_states(
+            &mut full,
+            std::slice::from_ref(&blocker),
+            &mut Vec::new(),
+            true,
+        );
+
+        let mut local = map;
+        update_rail_signal_states(&mut local, &[], &mut Vec::new(), true);
+        let mut glob = SignalGlobSet::from([TileCoord::new(4, 1)]);
+        drain_signal_globset(
+            &mut local,
+            std::slice::from_ref(&blocker),
+            &mut Vec::new(),
+            &mut glob,
+        );
+        assert!(glob.is_empty());
+        for x in 0..=8 {
+            let c = TileCoord::new(x, 1);
+            let a = full.get(c).expect("full").m3hi;
+            let b = local.get(c).expect("local").m3hi;
+            assert_eq!(a, b, "m3hi mismatch at {c:?}");
+        }
     }
 
     /// Bifurcación en Y: entry ve 2 exits; una ocupada → `MultiExit` + Green (no `MultiGreen`).

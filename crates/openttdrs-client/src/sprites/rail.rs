@@ -38,6 +38,17 @@ pub const MONO_RAIL_SPRITE_OFFSET: u32 = 82;
 /// Offset OpenGFX maglev respecto a vía normal (`SPR_MAGLEV_*` = rail + 164).
 pub const MAGLEV_RAIL_SPRITE_OFFSET: u32 = 164;
 
+/// Base de cables de catenaria en OpenGFX 8 (`ogfx1_base` 1039–1062 = `WSO_*`).
+pub const WIRE_SPRITE_BASE: u32 = 1039;
+/// Último sprite de wire plano/inclinado en el set OpenGFX extraído.
+pub const WIRE_SPRITE_LAST: u32 = 1062;
+
+/// `WireSpriteOffset` (plano, postes en ambos extremos) — `elrail_data.h`.
+const WSO_X_SHORT: u32 = 0;
+const WSO_Y_SHORT: u32 = 1;
+const WSO_EW_SHORT: u32 = 2;
+const WSO_NS_SHORT: u32 = 3;
+
 /// Delta de sprite en teselas con nieve/deserto (`SPR_RAIL_SNOW_OFFSET`).
 pub const RAIL_SPRITE_SNOW_OFFSET: u32 = 26;
 
@@ -143,6 +154,46 @@ pub const RAIL_SPRITE_IDS: [u32; 38] = [
     1021, 1022, 1023, 1024, 1025, 1026, 1027, 1028, 1029, 1030, 1031, 1032, 1033, 1034, 1035, 1036,
     1037, 1038, 1370, 1371, 1372, 1373,
 ];
+
+/// Sprites de catenaria plana OpenGFX (`WIRE_SPRITE_BASE`..`WIRE_SPRITE_LAST`).
+pub fn catenary_wire_sprite_ids() -> impl Iterator<Item = u32> {
+    WIRE_SPRITE_BASE..=WIRE_SPRITE_LAST
+}
+
+/// Cables de catenaria para vía plana (`tileh == 0`), MVP sin lógica de vecinos/PCP.
+///
+/// Usa variantes `*_SHORT` (postes en ambos extremos) de `elrail_data.h`.
+pub fn collect_catenary_flat_sprites(tb: u8, out: &mut Vec<u32>) {
+    out.clear();
+    let t = tb & 0x3F;
+    if t == 0 {
+        return;
+    }
+    match t {
+        RAIL_TB_X => out.push(WIRE_SPRITE_BASE + WSO_X_SHORT),
+        RAIL_TB_Y => out.push(WIRE_SPRITE_BASE + WSO_Y_SHORT),
+        RAIL_TB_HORZ => out.push(WIRE_SPRITE_BASE + WSO_EW_SHORT),
+        RAIL_TB_VERT => out.push(WIRE_SPRITE_BASE + WSO_NS_SHORT),
+        RAIL_TB_CROSS => {
+            out.push(WIRE_SPRITE_BASE + WSO_X_SHORT);
+            out.push(WIRE_SPRITE_BASE + WSO_Y_SHORT);
+        }
+        _ => {
+            if t & RAIL_TB_X != 0 {
+                out.push(WIRE_SPRITE_BASE + WSO_X_SHORT);
+            }
+            if t & RAIL_TB_Y != 0 {
+                out.push(WIRE_SPRITE_BASE + WSO_Y_SHORT);
+            }
+            if t & (RAIL_TB_UPPER | RAIL_TB_LOWER) != 0 {
+                out.push(WIRE_SPRITE_BASE + WSO_EW_SHORT);
+            }
+            if t & (RAIL_TB_LEFT | RAIL_TB_RIGHT) != 0 {
+                out.push(WIRE_SPRITE_BASE + WSO_NS_SHORT);
+            }
+        }
+    }
+}
 
 /// `SPR_RAIL_TRACK_Y_SNOW` / `SPR_RAIL_TRACK_X_SNOW` (OpenGFX).
 pub const RAIL_SPRITE_Y_SNOW: u32 = 1037;
@@ -579,6 +630,9 @@ pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
                 set.insert(id + MONO_RAIL_SPRITE_OFFSET);
                 set.insert(id + MAGLEV_RAIL_SPRITE_OFFSET);
             }
+            for id in catenary_wire_sprite_ids() {
+                set.insert(id);
+            }
             // Cruces tipados (eje + barrado).
             for base in [1382u32, 1394] {
                 for d in 0..4 {
@@ -968,6 +1022,25 @@ mod tests {
         assert!(ids.contains(&1169));
         assert!(ids.contains(&1382));
         assert!(ids.contains(&1394));
+        assert!(ids.contains(&WIRE_SPRITE_BASE));
+        assert!(ids.contains(&WIRE_SPRITE_LAST));
+    }
+
+    #[test]
+    fn collect_catenary_flat_maps_trackbits() {
+        let mut out = Vec::new();
+        collect_catenary_flat_sprites(RAIL_TB_X, &mut out);
+        assert_eq!(out, vec![1039]);
+        collect_catenary_flat_sprites(RAIL_TB_Y, &mut out);
+        assert_eq!(out, vec![1040]);
+        collect_catenary_flat_sprites(RAIL_TB_HORZ, &mut out);
+        assert_eq!(out, vec![1041]);
+        collect_catenary_flat_sprites(RAIL_TB_VERT, &mut out);
+        assert_eq!(out, vec![1042]);
+        collect_catenary_flat_sprites(RAIL_TB_CROSS, &mut out);
+        assert_eq!(out, vec![1039, 1040]);
+        collect_catenary_flat_sprites(0, &mut out);
+        assert!(out.is_empty());
     }
 
     #[test]

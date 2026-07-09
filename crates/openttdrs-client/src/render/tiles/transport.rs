@@ -6,8 +6,8 @@ use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    collect_rail_sprites_for_type, collect_signal_sprite_draws, is_road_level_crossing,
-    is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
+    collect_catenary_flat_sprites, collect_rail_sprites_for_type, collect_signal_sprite_draws,
+    is_road_level_crossing, is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
     level_crossing_rail_sprite_id_for_type, rail_ghost_overlay_offset,
     rail_tile_has_pbs_reservation, rail_tile_is_signals, rail_track_base_color,
     rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
@@ -257,6 +257,25 @@ pub(crate) fn spawn_rail_tile(
             img.sprite_colored(rail_paint),
             Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
         ));
+    }
+    // Catenaria plana OpenGFX (wires 1039–1062); MVP sin postes/PCP ni pendientes.
+    if rail_type.has_catenary() && tileh == 0 {
+        let trackbits = rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1);
+        let mut wires = Vec::new();
+        collect_catenary_flat_sprites(trackbits, &mut wires);
+        for (i, sid) in wires.iter().copied().enumerate() {
+            let Some(img) = assets.rail.get(&sid) else {
+                continue;
+            };
+            let z = 0.035 + i as f32 * 0.0004;
+            let base = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), rail_base_z, z, rail_half_h);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                img.sprite(),
+                Transform::from_translation(base),
+            ));
+        }
     }
     if let Some(t) = ctx.tile.filter(|t| rail_tile_is_signals(t.m5)) {
         let sig_draws = collect_signal_sprite_draws(t.m2, t.m3, t.m3hi, t.m5);

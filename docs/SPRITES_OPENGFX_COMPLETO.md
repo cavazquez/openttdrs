@@ -145,6 +145,12 @@ const ROAD_OFFSET: [u8; 16] = [
 | `SPR_RAIL_DEPOT_NE` | 1067 | Depósito NE |
 | `SPR_RAIL_DEPOT_NW` | 1068 | Depósito NW |
 
+### Catenaria eléctrica
+
+| Rango | Uso |
+|-------|-----|
+| 1039–1062 | Wires OpenGFX (`WSO_*` en `elrail_data.h`); MVP plano: X=1039, Y=1040, EW=1041, NS=1042 |
+
 ### Monorraíl y Maglev
 
 | Tipo | Track Y | Track X | Track Base | N_S |

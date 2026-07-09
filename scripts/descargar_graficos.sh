@@ -587,6 +587,9 @@ crop_by_id(1036, "rail_track_ns_1.png")
 # Nieve
 crop_by_id(1037, "rail_track_y_snow.png")
 crop_by_id(1038, "rail_track_x_snow.png")
+# Catenaria eléctrica (wires OpenGFX 1039–1062 = WSO_*)
+for sid in range(1039, 1063):
+    crop_by_id(sid, f"rail_{sid}.png")
 for sid, src_name in [(1037, "rail_track_y_snow.png"), (1038, "rail_track_x_snow.png")]:
     dst = tiles_dir / f"rail_{sid}.png"
     if dst.is_file():

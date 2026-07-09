@@ -5,6 +5,7 @@ use bevy::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
 use crate::render::MapVisualLayer;
+use crate::render::viewport::TileViewportBounds;
 use crate::state::SimWorld;
 
 /// Z fija por encima de todos los sprites del mapa (cámara en ~1000).
@@ -39,6 +40,22 @@ pub(crate) fn town_label_rect(
     (center, size)
 }
 
+/// `true` si la tesela de la ciudad cae dentro del rectángulo de spawn del mapa.
+#[must_use]
+pub(crate) fn town_label_in_bounds(
+    town: &openttdrs_core::Town,
+    bounds: TileViewportBounds,
+) -> bool {
+    let tx = town.pos.x;
+    let ty = town.pos.y;
+    tx >= 0
+        && ty >= 0
+        && (tx as u32) >= bounds.tx0
+        && (ty as u32) >= bounds.ty0
+        && (tx as u32) < bounds.tx1
+        && (ty as u32) < bounds.ty1
+}
+
 /// Ciudad cuyo cartel contiene `world_pos`, si hay alguna.
 pub(crate) fn town_id_at_label_pos(sim: &SimWorld, world_pos: Vec2) -> Option<u32> {
     sim.state.towns.iter().find_map(|town| {
@@ -49,11 +66,19 @@ pub(crate) fn town_id_at_label_pos(sim: &SimWorld, world_pos: Vec2) -> Option<u3
     })
 }
 
-/// Crea los carteles de todas las ciudades. Se llama al construir la capa de
-/// mundo, así se regeneran junto al resto de `MapVisualLayer` en los remaps.
-pub(crate) fn spawn_town_labels(commands: &mut Commands, sim: &SimWorld, font: &Handle<Font>) {
+/// Crea los carteles de las ciudades dentro de `bounds`.
+/// Se llama al construir la capa de mundo y al panear en mapas con culling.
+pub(crate) fn spawn_town_labels(
+    commands: &mut Commands,
+    sim: &SimWorld,
+    font: &Handle<Font>,
+    bounds: TileViewportBounds,
+) {
     let map = &sim.state.map;
     for town in &sim.state.towns {
+        if !town_label_in_bounds(town, bounds) {
+            continue;
+        }
         let (center, bg_size) = town_label_rect(map, town);
         let label = format!("{} ({})", town.name, town.population);
 
@@ -83,6 +108,20 @@ pub(crate) fn spawn_town_labels(commands: &mut Commands, sim: &SimWorld, font: &
     }
 }
 
+/// Despawn de carteles previos y spawn según el viewport actual.
+pub(crate) fn resync_town_labels(
+    commands: &mut Commands,
+    label_entities: impl IntoIterator<Item = Entity>,
+    sim: &SimWorld,
+    font: &Handle<Font>,
+    bounds: TileViewportBounds,
+) {
+    for entity in label_entities {
+        commands.entity(entity).despawn();
+    }
+    spawn_town_labels(commands, sim, font, bounds);
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
@@ -92,7 +131,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn spawns_text_and_background_per_town() {
+    fn town_label_in_bounds_filters_by_rect() {
+        let town = openttdrs_core::Town {
+            id: 1,
+            pos: TileCoord::new(5, 8),
+            name: "A".into(),
+            population: 1,
+            ..Default::default()
+        };
+        let inside = TileViewportBounds {
+            tx0: 0,
+            ty0: 0,
+            tx1: 10,
+            ty1: 10,
+        };
+        let outside = TileViewportBounds {
+            tx0: 0,
+            ty0: 0,
+            tx1: 4,
+            ty1: 4,
+        };
+        assert!(town_label_in_bounds(&town, inside));
+        assert!(!town_label_in_bounds(&town, outside));
+    }
+
+    #[test]
+    fn spawns_text_and_background_per_town_in_bounds() {
         let mut state = GameState::new(8, 8);
         state.towns.push(openttdrs_core::Town {
             id: 1,
@@ -101,16 +165,29 @@ mod tests {
             population: 738,
             ..Default::default()
         });
+        state.towns.push(openttdrs_core::Town {
+            id: 2,
+            pos: TileCoord::new(7, 7),
+            name: "Farville".to_string(),
+            population: 100,
+            ..Default::default()
+        });
         let sim = SimWorld {
             state,
             ..Default::default()
+        };
+        let bounds = TileViewportBounds {
+            tx0: 0,
+            ty0: 0,
+            tx1: 5,
+            ty1: 5,
         };
 
         let mut world = World::new();
         world.insert_resource(sim);
         world
-            .run_system_once(|mut commands: Commands, sim: Res<SimWorld>| {
-                spawn_town_labels(&mut commands, &sim, &Handle::default());
+            .run_system_once(move |mut commands: Commands, sim: Res<SimWorld>| {
+                spawn_town_labels(&mut commands, &sim, &Handle::default(), bounds);
             })
             .expect("spawn labels");
 
@@ -124,6 +201,6 @@ mod tests {
             .query_filtered::<&Sprite, With<TownLabel>>()
             .iter(&world)
             .count();
-        assert_eq!(bg, 1, "un fondo por ciudad");
+        assert_eq!(bg, 1, "un fondo por ciudad visible");
     }
 }

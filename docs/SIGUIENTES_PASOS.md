@@ -28,7 +28,7 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 | **SP4** Pulido | ✅ Cerrado 2026-06-22 | ROADMAP_SPRINTS S1 |
 | **SP1** Ciclo jugable | 🟡 En curso | [SP1_CHECKLIST.md](SP1_CHECKLIST.md), ROADMAP S4 |
 
-**Huecos visuales reales (SP3):** junctions vía en pendiente; culling global; industrias gfx ≥ 120.
+**Huecos visuales reales (SP3):** industrias gfx ≥ 120 (tabla cliente 0–174; docs/checklist a alinear). Junctions en pendiente y culling de etiquetas: cerrados con regresión `sp3_visual_checklist_sloped_junction_sprite_ids` + `resync_town_labels`.
 
 **Terraform (paisaje):** T1–T3 implementados; gen procedural T4 MVP en `world_gen.rs` — [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md).
 

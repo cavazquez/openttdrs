@@ -549,7 +549,7 @@ fn spawn_world_layer(
         spawn_initial_vehicles(commands, sim, &truck_handles, company);
         commands.insert_resource(truck_handles);
         let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
-        super::town_labels::spawn_town_labels(commands, sim, &label_font);
+        super::town_labels::spawn_town_labels(commands, sim, &label_font, spawn_bounds);
     }
     spawn_map_tiles_in_bounds(
         commands,
@@ -637,6 +637,7 @@ pub(crate) fn apply_remap_map_visuals(
     mut pending: ResMut<RemapMapVisualsPending>,
     q_vis: Query<Entity, With<MapVisualLayer>>,
     q_chunks: Query<(Entity, &MapTileChunk), With<MapVisualLayer>>,
+    q_town_labels: Query<Entity, With<super::town_labels::TownLabel>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut q_cam: Query<
         (&mut Transform, &mut Projection),
@@ -749,6 +750,16 @@ pub(crate) fn apply_remap_map_visuals(
             );
         }
         loaded_chunks.chunks = needed;
+        // Etiquetas no van en chunks: re-sincronizar al panear el viewport.
+        let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
+        let label_entities: Vec<Entity> = q_town_labels.iter().collect();
+        super::town_labels::resync_town_labels(
+            &mut commands,
+            label_entities,
+            &sim,
+            &label_font,
+            spawn_bounds,
+        );
         if !to_add.is_empty() || !to_remove.is_empty() || !refresh_chunks.is_empty() {
             info!(
                 "Mapa visual incremental: +{} −{} ↻{} chunks ({} teselas visibles)",

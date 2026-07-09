@@ -183,9 +183,9 @@ Marcar tras cargar el fixture checklist:
 - [ ] Fila y=5: vía (Y, X, T, cruce, señales, nieve)
 - [ ] Fila y=7: carretera en 4 pendientes (`road_flat_11..14`) + tranvía NE en (13,7) + estación tren NE en (16,7)
 - [x] Fila y=9: bus NE/SE/SW/NW (x=1,3,5,7) + camión + tren + casa + **bus NE en pendiente (15,9)**
-- [ ] Fila y=11: charco Clear **(2–3,11)** + costa **(5,11)** + recta Y NE (9,11) + **cruce X\|Y en pendiente** (12,15,18,11)
-- [ ] Fila y=13: T vía en 4 pendientes (x=1,4,7,10) — comparar con T plano (5,5) y cruce plano (7,5)
-- [ ] Fila y=15: **cruce X\|Y en 4 pendientes** (x=1,4,7,10) — comparar con fila y=11 y cruce plano (7,5)
+- [x] Fila y=11: charco Clear **(2–3,11)** + costa **(5,11)** + recta Y NE (9,11) + **cruce X\|Y en pendiente** (12,15,18,11) — regresión `sp3_visual_checklist_sloped_junction_sprite_ids`
+- [x] Fila y=13: T vía en 4 pendientes (x=1,4,7,10) — comparar con T plano (5,5) y cruce plano (7,5) — misma regresión de sprites
+- [x] Fila y=15: **cruce X\|Y en 4 pendientes** (x=1,4,7,10) — comparar con fila y=11 y cruce plano (7,5) — misma regresión de sprites
 
 **Nota:** el mapa procedural por defecto (`cargo run -p openttdrs-client`) mezcla todo en la demo de transporte; para regresión visual usar el fixture checklist.
 
@@ -199,8 +199,9 @@ Marcar tras cargar el fixture checklist:
 ## SP3.6 — rendimiento mapa grande
 
 - `render/viewport.rs`: rectángulo de teselas visibles desde cámara ortográfica + margen.
-- `spawn_world_layer` solo itera `MapTileSpawnViewport.bounds` en mapas ≥ 4096 teselas.
+- `spawn_world_layer` solo itera `MapTileSpawnViewport.bounds` en mapas ≥ 1024 teselas.
 - `sync_map_tile_spawn_viewport`: remap al panear fuera del bloque (sin `sync_camera`).
+- Etiquetas de ciudad: `spawn_town_labels` / `resync_town_labels` solo dentro del viewport (remap incremental).
 - Bench manual: `scripts/bench_large_map_viewport.md` + `OTTDMAP_FILE=tests/fixtures/stationlist-test.ottdmap`.
 
 ## Siguiente fase

@@ -59,9 +59,10 @@ posición en el borde correspondiente con la z de la esquina.
 Oficial muestra la etiqueta "Nuntburg (738)" flotando sobre la ciudad (nombre
 + población, con fondo translúcido). Ahora `spawn_town_labels` crea un cartel
 `Text2d` («Nombre (población)», blanco sobre fondo oscuro translúcido) por
-cada `Town` del estado, anclado sobre la tesela central (`pos` del save) con
-su altura de terreno, en una capa z por encima de todos los sprites del mapa.
-Se regenera junto al resto de `MapVisualLayer` en cada remap/carga de save.
+cada `Town` visible en el viewport, anclado sobre la tesela central (`pos`
+del save) con su altura de terreno, en una capa z por encima de todos los
+sprites del mapa. En mapas con culling, `resync_town_labels` actualiza los
+carteles al panear; en rebuild completo se regeneran con `MapVisualLayer`.
 
 ## 5. Agua — color/textura y animación
 

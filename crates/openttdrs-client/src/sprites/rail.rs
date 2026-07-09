@@ -919,6 +919,58 @@ mod tests {
         assert_eq!(out, vec![1031 + RAIL_SPRITE_SNOW_OFFSET]);
     }
 
+    const SP3_VISUAL_CHECKLIST: &[u8] =
+        include_bytes!("../../../openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap");
+
+    /// Regresión SP3: filas y=11/13/15 del checklist (recta/T/cruce en pendiente).
+    #[test]
+    fn sp3_visual_checklist_sloped_junction_sprite_ids() {
+        use openttdrs_core::{Map, TileCoord, TileKind, tile_slope_and_z};
+
+        let map = Map::from_ottd_binary(SP3_VISUAL_CHECKLIST).expect("checklist MAP1");
+        let mut out = Vec::new();
+
+        // y=11: recta Y en NE (cimiento nivelado → plano) + cruces en SE/SW/NW.
+        let cases_y11: &[(i32, u8, &[u32])] = &[
+            (9, 0x02, &[1011]),
+            (12, 0x03, &[1032]),
+            (15, 0x03, &[1033]),
+            (18, 0x03, &[1034]),
+        ];
+        for &(x, m5, expect) in cases_y11 {
+            let t = map.get(TileCoord::new(x, 11)).expect("tile y=11");
+            assert_eq!(t.kind, TileKind::Rail);
+            assert_eq!(t.m5 & 0x3F, m5);
+            let tileh = tile_slope_and_z(&map, TileCoord::new(x, 11))
+                .map(|(h, _)| h)
+                .expect("slope");
+            collect_rail_sprites(t.m5 & 0x3F, tileh, false, &mut out);
+            assert_eq!(out, expect, "y=11 x={x} tileh={tileh}");
+        }
+
+        // y=13: T (0x07) en NE/SE/SW/NW → sprite inclinado único.
+        for (x, expect) in [(1, 1031u32), (4, 1032), (7, 1033), (10, 1034)] {
+            let t = map.get(TileCoord::new(x, 13)).expect("tile y=13");
+            assert_eq!(t.m5 & 0x3F, 0x07);
+            let tileh = tile_slope_and_z(&map, TileCoord::new(x, 13))
+                .map(|(h, _)| h)
+                .expect("slope");
+            collect_rail_sprites(t.m5 & 0x3F, tileh, false, &mut out);
+            assert_eq!(out, vec![expect], "y=13 x={x} tileh={tileh}");
+        }
+
+        // y=15: cruce X|Y en las 4 pendientes.
+        for (x, expect) in [(1, 1031u32), (4, 1032), (7, 1033), (10, 1034)] {
+            let t = map.get(TileCoord::new(x, 15)).expect("tile y=15");
+            assert_eq!(t.m5 & 0x3F, RAIL_TB_CROSS);
+            let tileh = tile_slope_and_z(&map, TileCoord::new(x, 15))
+                .map(|(h, _)| h)
+                .expect("slope");
+            collect_rail_sprites(t.m5 & 0x3F, tileh, false, &mut out);
+            assert_eq!(out, vec![expect], "y=15 x={x} tileh={tileh}");
+        }
+    }
+
     const SP3_SLOPE_LAB: &[u8] =
         include_bytes!("../../../openttdrs-core/tests/fixtures/sp3_slope_lab.ottdmap");
 

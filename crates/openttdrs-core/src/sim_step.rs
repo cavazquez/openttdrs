@@ -25,11 +25,18 @@ pub(crate) fn step(state: &mut GameState) {
     crate::parity::release_staged_depot_trains(state);
     recompute_vehicle_paths(state);
 
-    crate::rail_signals::update_rail_signal_states(
+    let wormholes = state.jgr_tunnel_wormholes();
+    let wh = if wormholes.is_empty() {
+        None
+    } else {
+        Some(&wormholes)
+    };
+    crate::rail_signals::update_rail_signal_states_with_wormholes(
         &mut state.map,
         &state.vehicles,
         &mut state.signal_tile_dirty,
         true,
+        wh,
     );
 
     crate::rail_pbs::update_train_reservations_with_settings(
@@ -59,11 +66,18 @@ pub(crate) fn step(state: &mut GameState) {
     move_vehicles(state);
 
     // Post-movimiento: refresco local vía `_globset` (si vacío, no hay barrido).
-    crate::rail_signals::drain_signal_globset(
+    let wormholes = state.jgr_tunnel_wormholes();
+    let wh = if wormholes.is_empty() {
+        None
+    } else {
+        Some(&wormholes)
+    };
+    crate::rail_signals::drain_signal_globset_with_wormholes(
         &mut state.map,
         &state.vehicles,
         &mut state.signal_tile_dirty,
         &mut state.signal_globset,
+        wh,
     );
 
     sync_vehicle_order_destinations(state);

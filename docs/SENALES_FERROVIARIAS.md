@@ -245,8 +245,9 @@ Orden sugerido alineado con [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) y [PARIDAD_
 
 1. Codificar `SignalType` 1–3 en `m2` al colocar/convertir — ✅ `PlaceRailSignal` acepta 0–5; Ctrl cicla los 6.  
 2. Port simplificado de `signal.cpp`:  
-   - `ProbeSigSeg` / flags de bloque — 🟡 `explore_sig_segment` (`Exit`/`MultiExit`/`Green`/`MultiGreen`; atraviesa estación/túnel/puente)  
+   - `ProbeSigSeg` / flags de bloque — 🟡 `explore_sig_segment` (`Exit`/`MultiExit`/`Green`/`MultiGreen`; estación/túnel/puente + wormholes JGR)  
    - `UpdateSignalsOnSegment` + buffer `_globset` — 🟡 `signal_globset` + `drain_signal_globset` post-movimiento; barrido global al inicio de tick  
+
    - Regla entry: rojo si bloque propio ocupado **o** ningún exit verde — ✅ (cadenas combo + bifurcaciones MultiExit)  
    - Combo bidir MultiExit/MultiGreen — ✅ (`stabilize_combo_presignal_greens`)  
 3. Sprites entry/exit/combo (ya en OpenGFX vía `signal_type > 3`) — ✅.  
@@ -268,7 +269,7 @@ Orden sugerido alineado con [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) y [PARIDAD_
 8. **UI settings:** ✅ toolbar **engranaje** (Ajustes) → `Pathfinding / PBS...` (`pathfinding_settings_window.rs`).  
 9. **TryReservePath:** ✅ Dijkstra con costes YAPF (`find_path_to_safe_wait`: tile + `YAPF_RESERVATION_CROSS_PENALTY` + sesgo off-path) hasta safe wait; reintento acotado por `path_backoff_interval` vía `should_retry_reservation(wait_counter)` en `compute_train_reservation_with_settings` (255 = off).
 
-**Pendiente:** — (quitar barrido global cuando globset cubra todos los casos; wormholes JGR en segmento).
+**Pendiente:** — (quitar barrido global cuando globset cubra todos los casos).
 
 Dependencias: pathfinder trenes más fiel (YAPF simplificado o extensión de `pathfinder.rs`).
 

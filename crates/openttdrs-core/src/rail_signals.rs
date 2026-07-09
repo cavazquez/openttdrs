@@ -337,6 +337,17 @@ fn junction_spur_tiles(map: &Map, block: &[TileCoord], exit_dir: u8) -> Vec<Tile
 /// Teselas del bloque protegido al salir de `signal_tile` hacia `exit_dir`.
 #[must_use]
 pub fn rail_block_ahead(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> Vec<TileCoord> {
+    rail_block_ahead_with_wormholes(map, signal_tile, exit_dir, None)
+}
+
+/// Como [`rail_block_ahead`], saltando wormholes JGR (`tile_n` ↔ `tile_s`).
+#[must_use]
+pub fn rail_block_ahead_with_wormholes(
+    map: &Map,
+    signal_tile: TileCoord,
+    exit_dir: u8,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) -> Vec<TileCoord> {
     let (dx, dy) = diag_dir_offset(exit_dir);
     let start = TileCoord::new(signal_tile.x + dx, signal_tile.y + dy);
     if map.get(start).is_none() {
@@ -346,7 +357,15 @@ pub fn rail_block_ahead(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> Vec<
     let mut cur = start;
     let mut prev = signal_tile;
     let mut forward = exit_dir;
-    while let Some(next) = rail_continuation_along(map, cur, prev, forward) {
+    loop {
+        let next = rail_continuation_along(map, cur, prev, forward).or_else(|| {
+            wormholes
+                .and_then(|wh| wh.other_end(cur))
+                .filter(|&o| o != prev && is_sig_segment_traversable(map, o))
+        });
+        let Some(next) = next else {
+            break;
+        };
         if map
             .get(next)
             .is_some_and(|t| t.kind == TileKind::Rail && rail_tile_is_signals(t.m5))
@@ -841,9 +860,14 @@ fn is_sig_segment_traversable(map: &Map, c: TileCoord) -> bool {
 
 /// Explora el segmento PBS/presignal desde `signal_tile` hacia `exit_dir`.
 ///
-/// Paridad v0 de `ProbeSigSeg`: atraviesa estación/túnel/puente; no atraviesa señales
-/// block/path/entry; al hallar exit/combo registra y corta esa rama.
-fn explore_sig_segment(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> SigSegmentProbe {
+/// Paridad v0 de `ProbeSigSeg`: atraviesa estación/túnel/puente y wormholes JGR;
+/// no atraviesa señales block/path/entry; al hallar exit/combo registra y corta esa rama.
+fn explore_sig_segment(
+    map: &Map,
+    signal_tile: TileCoord,
+    exit_dir: u8,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) -> SigSegmentProbe {
     let (dx, dy) = diag_dir_offset(exit_dir);
     let start = TileCoord::new(signal_tile.x + dx, signal_tile.y + dy);
     let mut probe = SigSegmentProbe::default();
@@ -888,6 +912,14 @@ fn explore_sig_segment(map: &Map, signal_tile: TileCoord, exit_dir: u8) -> SigSe
                 queue.push(n);
             }
         }
+        // Wormhole JGR: salto al otro extremo del túnel (desconectado en el mapa).
+        if let Some(wh) = wormholes
+            && let Some(other) = wh.other_end(cur)
+            && is_sig_segment_traversable(map, other)
+            && !visited.contains(&other)
+        {
+            queue.push(other);
+        }
     }
     probe.has_exit = !probe.exits.is_empty();
     probe.multi_exit = probe.exits.len() >= 2;
@@ -912,8 +944,9 @@ fn presignal_exit_targets_ahead(
     map: &Map,
     signal_tile: TileCoord,
     exit_dir: u8,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) -> Vec<(TileCoord, u8)> {
-    explore_sig_segment(map, signal_tile, exit_dir).exits
+    explore_sig_segment(map, signal_tile, exit_dir, wormholes).exits
 }
 
 /// Propaga verde de combos hasta punto fijo (entry → combo → … → exit).
@@ -925,6 +958,7 @@ fn stabilize_combo_presignal_greens(
     map: &Map,
     vehicles: &[Vehicle],
     exit_green: &HashMap<(TileCoord, u8), bool>,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) -> HashMap<(TileCoord, u8), bool> {
     let mut greens = exit_green.clone();
     let (w, h) = map.dimensions();
@@ -960,9 +994,9 @@ fn stabilize_combo_presignal_greens(
             let rails = tile.m5 & 0x3F;
             let exit_dir = signal_exit_dir(rails, bit);
             let exit_ok = exit_green.get(&(c, bit)).copied().unwrap_or_else(|| {
-                signal_bit_block_green(map, vehicles, c, &tile, bit, SIGTYPE_COMBO)
+                signal_bit_block_green(map, vehicles, c, &tile, bit, SIGTYPE_COMBO, wormholes)
             });
-            let probe = explore_sig_segment(map, c, exit_dir).with_green_flags(&greens);
+            let probe = explore_sig_segment(map, c, exit_dir, wormholes).with_green_flags(&greens);
             let entry_ok = if probe.has_exit {
                 probe.has_green
             } else {
@@ -997,9 +1031,10 @@ fn signal_bit_block_green(
     tile: &crate::map::Tile,
     bit: u8,
     sig_type: u8,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) -> bool {
     let exit_dir = signal_exit_dir(tile.m5 & 0x3F, bit);
-    let block = rail_block_ahead(map, c, exit_dir);
+    let block = rail_block_ahead_with_wormholes(map, c, exit_dir, wormholes);
     if is_pbs_signal_type(sig_type) {
         // Path verde solo con reserva válida hasta posición segura (TryReservePath OK).
         crate::rail_pbs::pbs_exit_has_complete_reservation(map, vehicles, c, exit_dir, &block)
@@ -1008,7 +1043,11 @@ fn signal_bit_block_green(
     }
 }
 
-fn compute_exit_signal_greens(map: &Map, vehicles: &[Vehicle]) -> HashMap<(TileCoord, u8), bool> {
+fn compute_exit_signal_greens(
+    map: &Map,
+    vehicles: &[Vehicle],
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) -> HashMap<(TileCoord, u8), bool> {
     let (w, h) = map.dimensions();
     let mut exit_green = HashMap::new();
     for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
@@ -1033,7 +1072,7 @@ fn compute_exit_signal_greens(map: &Map, vehicles: &[Vehicle]) -> HashMap<(TileC
                 }
                 exit_green.insert(
                     (c, bit),
-                    signal_bit_block_green(map, vehicles, c, &tile, bit, sig_type),
+                    signal_bit_block_green(map, vehicles, c, &tile, bit, sig_type, wormholes),
                 );
             }
         }
@@ -1047,6 +1086,7 @@ fn refresh_signal_tile_states(
     c: TileCoord,
     tile: crate::map::Tile,
     signal_green: &HashMap<(TileCoord, u8), bool>,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) -> Option<crate::map::Tile> {
     if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
         return None;
@@ -1065,8 +1105,10 @@ fn refresh_signal_tile_states(
             .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
         let green = if sig_type == SIGTYPE_ENTRY {
             let exit_dir = signal_exit_dir(rails, bit);
-            let own_block_ok = signal_bit_block_green(map, vehicles, c, &tile, bit, SIGTYPE_BLOCK);
-            let probe = explore_sig_segment(map, c, exit_dir).with_green_flags(signal_green);
+            let own_block_ok =
+                signal_bit_block_green(map, vehicles, c, &tile, bit, SIGTYPE_BLOCK, wormholes);
+            let probe =
+                explore_sig_segment(map, c, exit_dir, wormholes).with_green_flags(signal_green);
             if probe.has_exit {
                 // OpenTTD: entry verde solo si bloque propio libre Y Exit+Green en el segmento.
                 own_block_ok && probe.has_green
@@ -1074,10 +1116,9 @@ fn refresh_signal_tile_states(
                 own_block_ok
             }
         } else {
-            signal_green
-                .get(&(c, bit))
-                .copied()
-                .unwrap_or_else(|| signal_bit_block_green(map, vehicles, c, &tile, bit, sig_type))
+            signal_green.get(&(c, bit)).copied().unwrap_or_else(|| {
+                signal_bit_block_green(map, vehicles, c, &tile, bit, sig_type, wormholes)
+            })
         };
         if green {
             states |= 1 << bit;
@@ -1099,6 +1140,16 @@ pub fn enqueue_signal_glob(set: &mut SignalGlobSet, tile: TileCoord) {
 /// Señales cuyo bloque contiene `tile`, más entries/combos que miran esas exits.
 #[must_use]
 pub fn collect_signals_affected_by_tiles(map: &Map, seeds: &SignalGlobSet) -> HashSet<TileCoord> {
+    collect_signals_affected_by_tiles_with_wormholes(map, seeds, None)
+}
+
+/// Como [`collect_signals_affected_by_tiles`], con wormholes JGR.
+#[must_use]
+pub fn collect_signals_affected_by_tiles_with_wormholes(
+    map: &Map,
+    seeds: &SignalGlobSet,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) -> HashSet<TileCoord> {
     if seeds.is_empty() {
         return HashSet::new();
     }
@@ -1125,7 +1176,7 @@ pub fn collect_signals_affected_by_tiles(map: &Map, seeds: &SignalGlobSet) -> Ha
                     continue;
                 }
                 let exit_dir = signal_exit_dir(rails, bit);
-                let block = rail_block_ahead(map, c, exit_dir);
+                let block = rail_block_ahead_with_wormholes(map, c, exit_dir, wormholes);
                 if block.iter().any(|t| seeds.contains(t)) {
                     affected.insert(c);
                 }
@@ -1152,7 +1203,7 @@ pub fn collect_signals_affected_by_tiles(map: &Map, seeds: &SignalGlobSet) -> Ha
                 continue;
             }
             let exit_dir = signal_exit_dir(rails, bit);
-            let probe = explore_sig_segment(map, c, exit_dir);
+            let probe = explore_sig_segment(map, c, exit_dir, wormholes);
             if probe.exits.iter().any(|(t, _)| affected.contains(t)) {
                 affected.insert(c);
                 break;
@@ -1177,7 +1228,18 @@ pub fn update_rail_signal_states(
     dirty: &mut Vec<TileCoord>,
     clear_dirty: bool,
 ) {
-    update_rail_signal_states_scoped(map, vehicles, dirty, clear_dirty, None);
+    update_rail_signal_states_with_wormholes(map, vehicles, dirty, clear_dirty, None);
+}
+
+/// Como [`update_rail_signal_states`], con wormholes JGR para segmentos/bloques.
+pub fn update_rail_signal_states_with_wormholes(
+    map: &mut Map,
+    vehicles: &[Vehicle],
+    dirty: &mut Vec<TileCoord>,
+    clear_dirty: bool,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) {
+    update_rail_signal_states_scoped(map, vehicles, dirty, clear_dirty, None, wormholes);
 }
 
 /// Como [`update_rail_signal_states`], limitado a teselas de `scope` (None = mapa entero).
@@ -1188,6 +1250,7 @@ pub fn update_rail_signal_states_scoped(
     dirty: &mut Vec<TileCoord>,
     clear_dirty: bool,
     scope: Option<&HashSet<TileCoord>>,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) {
     if clear_dirty {
         dirty.clear();
@@ -1195,13 +1258,14 @@ pub fn update_rail_signal_states_scoped(
     if scope.is_some_and(HashSet::is_empty) {
         return;
     }
-    let exit_green = compute_exit_signal_greens(map, vehicles);
-    let signal_green = stabilize_combo_presignal_greens(map, vehicles, &exit_green);
+    let exit_green = compute_exit_signal_greens(map, vehicles, wormholes);
+    let signal_green = stabilize_combo_presignal_greens(map, vehicles, &exit_green, wormholes);
     let refresh_one = |map: &mut Map, c: TileCoord, dirty: &mut Vec<TileCoord>| {
         let Some(tile) = map.get(c) else {
             return;
         };
-        if let Some(out) = refresh_signal_tile_states(map, vehicles, c, tile, &signal_green)
+        if let Some(out) =
+            refresh_signal_tile_states(map, vehicles, c, tile, &signal_green, wormholes)
             && out.m3hi != tile.m3hi
         {
             let _ = map.set_tile(c, out);
@@ -1231,15 +1295,26 @@ pub fn drain_signal_globset(
     dirty: &mut Vec<TileCoord>,
     globset: &mut SignalGlobSet,
 ) {
+    drain_signal_globset_with_wormholes(map, vehicles, dirty, globset, None);
+}
+
+/// Como [`drain_signal_globset`], con wormholes JGR.
+pub fn drain_signal_globset_with_wormholes(
+    map: &mut Map,
+    vehicles: &[Vehicle],
+    dirty: &mut Vec<TileCoord>,
+    globset: &mut SignalGlobSet,
+    wormholes: Option<&crate::pathfinder::TunnelWormholes>,
+) {
     if globset.is_empty() {
         return;
     }
-    let affected = collect_signals_affected_by_tiles(map, globset);
+    let affected = collect_signals_affected_by_tiles_with_wormholes(map, globset, wormholes);
     globset.clear();
     if affected.is_empty() {
         return;
     }
-    update_rail_signal_states_scoped(map, vehicles, dirty, false, Some(&affected));
+    update_rail_signal_states_scoped(map, vehicles, dirty, false, Some(&affected), wormholes);
 }
 
 #[must_use]
@@ -2013,7 +2088,7 @@ mod tests {
         exit.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
         map.set_tile(TileCoord::new(7, 2), exit).expect("exit");
 
-        let targets = presignal_exit_targets_ahead(&map, TileCoord::new(1, 2), 0);
+        let targets = presignal_exit_targets_ahead(&map, TileCoord::new(1, 2), 0, None);
         assert!(
             targets.is_empty(),
             "block intermedio cierra el segmento: {targets:?}"
@@ -2038,10 +2113,67 @@ mod tests {
         exit.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
         map.set_tile(TileCoord::new(7, 2), exit).expect("exit");
 
-        let targets = presignal_exit_targets_ahead(&map, TileCoord::new(1, 2), 0);
+        let targets = presignal_exit_targets_ahead(&map, TileCoord::new(1, 2), 0, None);
         assert!(
             targets.iter().any(|(c, _)| *c == TileCoord::new(7, 2)),
             "debe ver exit tras plataforma: {targets:?}"
+        );
+    }
+
+    /// Entry y exit en extremos desconectados unidos solo por wormhole JGR.
+    #[test]
+    fn explore_sig_segment_crosses_jgr_wormhole() {
+        use crate::pathfinder::TunnelWormholes;
+        use crate::tnbp_decode::JgrTunnelRecord;
+
+        // Ancho potencia de 2 (TileIndex OpenTTD).
+        // Vía 0–1 + boca túnel @2  …hueco…  boca @5 + vía 6–7.
+        let mut map = Map::new_flat(8, 4, 0);
+        for x in 0..=1 {
+            write_rail(&mut map, TileCoord::new(x, 1), RAIL_TB_X);
+        }
+        write_rail_tunnel(&mut map, TileCoord::new(2, 1), 0);
+        write_rail_tunnel(&mut map, TileCoord::new(5, 1), 2);
+        for x in 6..=7 {
+            write_rail(&mut map, TileCoord::new(x, 1), RAIL_TB_X);
+        }
+        write_signal_facing(&mut map, TileCoord::new(1, 1), RAIL_TB_X, Some(0));
+        let mut entry = map.get(TileCoord::new(1, 1)).expect("entry");
+        entry.m2 = (SIGTYPE_ENTRY & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(1, 1), entry).expect("entry");
+        write_signal_facing(&mut map, TileCoord::new(6, 1), RAIL_TB_X, Some(0));
+        let mut exit = map.get(TileCoord::new(6, 1)).expect("exit");
+        exit.m2 = (SIGTYPE_EXIT & 7) | (1 << 3);
+        map.set_tile(TileCoord::new(6, 1), exit).expect("exit");
+
+        let wh = TunnelWormholes::from_jgr_records(
+            &map,
+            &[JgrTunnelRecord {
+                // TileIndex = y * w + x → (2,1)=10, (5,1)=13 con w=8.
+                tile_n: 10,
+                tile_s: 13,
+                height: 1,
+                is_chunnel: false,
+                style_n: None,
+                style_s: None,
+            }],
+        );
+        assert!(
+            presignal_exit_targets_ahead(&map, TileCoord::new(1, 1), 0, None).is_empty(),
+            "sin wormhole no debe cruzar el hueco"
+        );
+        let targets = presignal_exit_targets_ahead(&map, TileCoord::new(1, 1), 0, Some(&wh));
+        assert!(
+            targets.iter().any(|(c, _)| *c == TileCoord::new(6, 1)),
+            "con wormhole debe ver exit: {targets:?}"
+        );
+
+        update_rail_signal_states_with_wormholes(&mut map, &[], &mut Vec::new(), true, Some(&wh));
+        let entry_tile = map.get(TileCoord::new(1, 1)).expect("entry");
+        assert_ne!(
+            rail_signal_state_mask(entry_tile.m3hi) & 0b0100,
+            0,
+            "entry verde con exit tras wormhole libre"
         );
     }
 
@@ -2159,8 +2291,9 @@ mod tests {
             true,
         );
 
-        let greens = compute_exit_signal_greens(&map, std::slice::from_ref(&blocker));
-        let probe = explore_sig_segment(&map, TileCoord::new(1, 3), 0).with_green_flags(&greens);
+        let greens = compute_exit_signal_greens(&map, std::slice::from_ref(&blocker), None);
+        let probe =
+            explore_sig_segment(&map, TileCoord::new(1, 3), 0, None).with_green_flags(&greens);
         assert!(probe.multi_exit, "debe ver 2 exits: {:?}", probe.exits);
         assert!(probe.has_green, "rama norte libre → Green");
         assert!(!probe.multi_green, "solo una exit verde");

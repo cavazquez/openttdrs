@@ -1,7 +1,7 @@
 # Roadmap: paridad estructural vs OpenTTD
 
-Plan vivo para cerrar las divergencias estructurales. Fases **1–5** MVP
-implementadas jul 2026. Fases 6–7 = hitos 0.5–0.6.
+Plan vivo para cerrar las divergencias estructurales. Fases **1–6** MVP
+implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendiente).
 
 ## Fase 1 — Consist / vagones ✅
 
@@ -48,9 +48,14 @@ implementadas jul 2026. Fases 6–7 = hitos 0.5–0.6.
 - Save **v16** (migración no-op desde v15). Tint visual MVP; sprites OpenGFX mono/maglev pendientes.
 - Tranvía = `RoadType` en OpenTTD → fuera de este corte.
 
-## Fase 7 — NewGRF runtime completo
+## Fase 7 — NewGRF runtime ✅ (MVP config) / completo pendiente
 
-Loader + Action0–14, callbacks, gfx ≥175, roundtrip save con GRF activos.
+**MVP (v17):**
+- `newgrf_config.rs`: `NewGrfEntry`, stack por defecto OpenGFX, `scan_grf_*` (contenedor v1/v2 + Action 8).
+- `GameState.newgrf_stack`; save **v17** + migración desde v16.
+- UI Ajustes → «NewGRF…» (lista de solo lectura).
+
+**Pendiente (runtime completo):** Action0–14, callbacks, gfx ≥175, edición/reorden del stack, chunk `NGRF` en `.sav`.
 
 ## UI continua
 

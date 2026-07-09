@@ -185,6 +185,9 @@ pub struct GameState {
     /// Ajustes de pathfinding / PBS (`pf.wait_for_pbs_path`, etc.).
     #[serde(default)]
     pub pathfinding: crate::pathfinding_settings::PathfindingSettings,
+    /// Stack `NewGRF` activo (Fase 7 MVP; sin ejecución Action0–14).
+    #[serde(default = "crate::newgrf_config::default_vanilla_stack")]
+    pub newgrf_stack: Vec<crate::newgrf_config::NewGrfEntry>,
 }
 
 const fn default_true() -> bool {
@@ -239,6 +242,7 @@ impl GameState {
             disasters_enabled: true,
             disaster_timer: default_disaster_timer(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
+            newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
         }
     }
 
@@ -286,6 +290,7 @@ impl GameState {
             disasters_enabled: true,
             disaster_timer: default_disaster_timer(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
+            newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
         }
     }
 

@@ -24,6 +24,7 @@ use super::finances_window::FinancesWindowState;
 use super::floating_window::FloatingWindow;
 use super::hud::TileInfoText;
 use super::industry_panel::{IndustryPanelRoot, IndustryPanelState};
+use super::newgrf_window::NewGrfWindowState;
 use super::news_settings_window::NewsSettingsWindowState;
 use super::pathfinding_settings_window::PathfindingSettingsWindowState;
 use super::statusbar::{NewsHistoryState, NewsPopupRoot, NewsUiState, StatusBarRoot};
@@ -160,6 +161,9 @@ pub(crate) fn leave_ingame(world: &mut World) {
     {
         *pathfinding_settings = PathfindingSettingsWindowState::default();
     }
+    if let Some(mut newgrf) = world.get_resource_mut::<NewGrfWindowState>() {
+        *newgrf = NewGrfWindowState::default();
+    }
     if let Some(mut sound_music) = world.get_resource_mut::<SoundMusicWindowState>() {
         *sound_music = SoundMusicWindowState::default();
     }
@@ -224,6 +228,7 @@ mod tests {
         world.init_resource::<FinancesWindowState>();
         world.init_resource::<NewsSettingsWindowState>();
         world.init_resource::<PathfindingSettingsWindowState>();
+        world.init_resource::<NewGrfWindowState>();
         world.init_resource::<SoundMusicWindowState>();
         world.init_resource::<NewsUiState>();
         world.init_resource::<NewsHistoryState>();

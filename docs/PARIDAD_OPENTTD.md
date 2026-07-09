@@ -53,7 +53,7 @@ Ordenada de **más barato a más caro**.
 | 20 | Ferrocarril | PBS + path signals | ✅ | 🟡 | L — Fase 3 MVP (`rail_pbs` + `train_pbs`); falta golden vs OTTD |
 | 21 | Economía | Multi-compañía + feeder + IA | ✅ | 🟡 | M — Fase 4 MVP; link graph completo pendiente |
 | 22 | Transporte | Barcos / aviones | ✅ | 🟡 | L — barcos (canal+esclusa Δh+4 motores); aviones (helipuerto + small 4×3 + fases vuelo) |
-| 23 | Modding | NewGRF runtime | ✅ | ❌ | XXL — Fase 7 estructural |
+| 23 | Modding | NewGRF runtime | ✅ | 🟡 | XXL — Fase 7 MVP config/save/UI; Action0–14 pendiente |
 | 24 | Red | Multijugador I8 | ✅ | ❌ | XXL |
 | 25 | UI | Barra inferior + noticias (ticker, cartel) | ✅ | 🟡 | M — N1–N5 MVP |
 
@@ -101,7 +101,7 @@ Ordenada de **más barato a más caro**.
 | Órdenes | 20+ tipos, condicionales, shared pool | Lista `Station`/`Tile` |
 | Vehículos | 4 redes + subtipos | Bus, Truck, Train |
 | Multijugador | Replay comandos + desync | No (I8 backlog) |
-| Modding | NewGRF runtime | Sprites OpenGFX estáticos |
+| Modding | NewGRF runtime | Stack + scan cabecera (v17); sprites OpenGFX estáticos |
 
 ---
 

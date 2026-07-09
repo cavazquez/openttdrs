@@ -150,6 +150,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             SaveMenuAction::PathfindingSettings,
         ),
         (
+            "NewGRF...",
+            "Stack NewGRF activo (solo lectura)",
+            SaveMenuAction::NewGrf,
+        ),
+        (
             "Menu principal",
             "Volver al menu de inicio",
             SaveMenuAction::ReturnToMainMenu,

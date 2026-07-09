@@ -18,6 +18,7 @@ mod hud;
 mod industry_panel;
 mod main_menu;
 mod main_menu_intro;
+mod newgrf_window;
 mod news_settings_window;
 mod pathfinding_settings_window;
 mod save_window;
@@ -62,6 +63,9 @@ use main_menu::{
 use main_menu_intro::{
     animate_main_menu_intro_traffic, cleanup_main_menu_on_exit, pan_main_menu_intro_camera,
     setup_main_menu_intro,
+};
+use newgrf_window::{
+    NewGrfWindowState, newgrf_window_on_closed, setup_newgrf_window, sync_newgrf_window,
 };
 use news_settings_window::{
     NewsSettingsWindowState, handle_news_settings_buttons, news_settings_on_closed,
@@ -130,6 +134,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<FinancesWindowState>()
         .init_resource::<NewsSettingsWindowState>()
         .init_resource::<PathfindingSettingsWindowState>()
+        .init_resource::<NewGrfWindowState>()
         .init_resource::<SoundMusicWindowState>()
         .init_resource::<crate::news_prefs::NewsDisplayPrefs>()
         .init_resource::<SelectedTileInfo>()
@@ -194,7 +199,13 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
-            (setup_vehicle_window, setup_timetable_window, load_hud_sfx).in_set(StartupSet::Ui),
+            (
+                setup_newgrf_window,
+                setup_vehicle_window,
+                setup_timetable_window,
+                load_hud_sfx,
+            )
+                .in_set(StartupSet::Ui),
         )
         .add_systems(
             Update,
@@ -351,6 +362,8 @@ impl Plugin for ClientUiPlugin {
         .add_systems(
             Update,
             (
+                newgrf_window_on_closed,
+                sync_newgrf_window,
                 handle_sound_music_toolbar_button,
                 handle_audio_settings_buttons,
                 handle_volume_sliders,

@@ -22,6 +22,7 @@ pub mod engine;
 mod game_state;
 pub mod industry;
 pub mod map;
+pub mod newgrf_config;
 pub mod news;
 pub mod ottdmap_extras;
 pub mod parity;
@@ -129,6 +130,11 @@ pub use map::{
     resolve_tunnel_end, set_industry_gfx, slope_dz_at_subtile, slope_dz_on_tile,
     step_industry_tiles, step_tree_and_field_growth, tick_tree_tile_loop, tile_adjacent_to_water,
     tile_slope_and_z, tree_or_field_stage, tunnel_entrance_m5, tunnel_preview_path,
+};
+pub use newgrf_config::{
+    GrfContainerVersion, GrfFileInfo, GrfScanError, GrfStackIssue, NewGrfEntry,
+    build_minimal_grf_v2, default_vanilla_stack, format_grfid, grfid_from_bytes,
+    parse_grf_container, scan_grf_bytes, scan_grf_file, validate_stack,
 };
 pub use news::{
     CALENDAR_BASE_YEAR, NEWS_MAX_AGE_DAYS, NewsDisplayMode, NewsDisplaySettings, NewsItem,

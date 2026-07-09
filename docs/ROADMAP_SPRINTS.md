@@ -129,8 +129,8 @@ Detalle vivo: [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md).
 | 0.2 | **Fase 1 Consist** ✅ + **Fase 2** cargo packets / rating ✅ | post-0.1 inmediato |
 | 0.3 | **Fase 3** YAPF incremental + PBS multi-tesela ✅ (MVP) | tras consist estable |
 | 0.4 | **Fase 4** economía multi-compañía + feeder + IA ✅ (MVP) | tras packets |
-| 0.5 | **Fase 5–6** railtypes + mono/maglev ✅ (MVP) → Fase 7 NewGRF | tras PBS básico |
-| 0.6 | Fase 7 NewGRF runtime completo | meta larga |
+| 0.5 | **Fase 5–6** railtypes + mono/maglev ✅ (MVP) | tras PBS básico |
+| 0.6 | **Fase 7** NewGRF config ✅ (MVP) → runtime Action0–14 | meta larga |
 
 | Item | Cuándo |
 |------|--------|

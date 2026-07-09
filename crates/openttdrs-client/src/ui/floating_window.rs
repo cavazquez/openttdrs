@@ -54,6 +54,8 @@ pub(crate) enum FloatingWindowId {
     NewsSettings,
     /// Ajustes PBS / pathfinding (`pf.wait_for_pbs_path`, etc.).
     PathfindingSettings,
+    /// Stack NewGRF activo (solo lectura, Fase 7 MVP).
+    NewGrf,
     /// Volúmenes SFX/música, flags de sonido y jukebox OpenMSX.
     SoundMusic,
     /// Horario detallado del vehículo (F4).

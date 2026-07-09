@@ -263,6 +263,7 @@ pub(crate) enum SaveMenuAction {
     ZoomOut,
     NewsSettings,
     PathfindingSettings,
+    NewGrf,
     ReturnToMainMenu,
 }
 

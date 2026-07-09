@@ -30,7 +30,8 @@ use crate::GameState;
 /// v14: pool multi-compañía (`companies`, `owner` en vehículo/estación).
 /// v15: railtypes en `m8` + `current_rail_type` (vías existentes → normal).
 /// v16: monorail/maglev como `RailType` 2/3 (sin migración de datos; esquema).
-pub const CURRENT_SAVE_VERSION: u32 = 16;
+/// v17: stack `NewGRF` (`newgrf_stack`) — config + cabecera; sin Action0–14.
+pub const CURRENT_SAVE_VERSION: u32 = 17;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -151,11 +152,19 @@ fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState,
             12 => migrate_state_v12_to_v13(&mut state),
             13 => migrate_state_v13_to_v14(&mut state),
             14 => migrate_state_v14_to_v15(&mut state),
+            16 => migrate_state_v16_to_v17(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
     }
     Ok(state)
+}
+
+/// v17: stack `NewGRF` vacío → `OpenGFX` documentado.
+fn migrate_state_v16_to_v17(state: &mut GameState) {
+    if state.newgrf_stack.is_empty() {
+        state.newgrf_stack = crate::newgrf_config::default_vanilla_stack();
+    }
 }
 
 /// v15: railtype por defecto en vías existentes (`m8` bits 0–5 = Rail).
@@ -535,6 +544,22 @@ mod tests {
         let text = serde_json::to_string(&file).unwrap();
         let err = load_from_str(&text).unwrap_err();
         assert!(matches!(err, SaveError::UnsupportedVersion(v) if v == CURRENT_SAVE_VERSION + 1));
+    }
+
+    #[test]
+    fn v16_migrates_empty_newgrf_stack_to_vanilla() {
+        let mut s = GameState::new(2, 2);
+        s.newgrf_stack.clear();
+        let file = GameStateFile {
+            version: 16,
+            state: s,
+        };
+        let text = serde_json::to_string(&file).unwrap();
+        let loaded = load_from_str(&text).unwrap();
+        assert_eq!(
+            loaded.newgrf_stack,
+            crate::newgrf_config::default_vanilla_stack()
+        );
     }
 
     #[test]

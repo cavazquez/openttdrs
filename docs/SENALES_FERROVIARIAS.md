@@ -265,9 +265,9 @@ Orden sugerido alineado con [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) y [PARIDAD_
 6. **PathOneWay:** ✅ bloqueo sentido contrario (`DeadEnd` / `train_blocked_by_signal`).  
 7. **Espera / giro:** ✅ `PathfindingSettings` (`wait_for_pbs_path` default 30 días, `path_backoff_interval` 20, `reverse_at_signals`); stuck + giro al timeout (`tick_pbs_wait_and_maybe_reverse`).  
 8. **UI settings:** ✅ toolbar **engranaje** (Ajustes) → `Pathfinding / PBS...` (`pathfinding_settings_window.rs`).  
-9. **TryReservePath:** ✅ Dijkstra con costes YAPF (`find_path_to_safe_wait`: tile + `YAPF_RESERVATION_CROSS_PENALTY` + sesgo off-path) hasta safe wait; desactivable con `path_backoff_interval = 255`.
+9. **TryReservePath:** ✅ Dijkstra con costes YAPF (`find_path_to_safe_wait`: tile + `YAPF_RESERVATION_CROSS_PENALTY` + sesgo off-path) hasta safe wait; reintento acotado por `path_backoff_interval` vía `should_retry_reservation(wait_counter)` en `compute_train_reservation_with_settings` (255 = off).
 
-**Pendiente:** — (TryReservePath usa Dijkstra con costes YAPF: tesela, cruce reserva, sesgo path órdenes).
+**Pendiente:** — (presignals Fase C / `ProbeSigSeg` upstream; TryReserve ya cableado al backoff).
 
 Dependencias: pathfinder trenes más fiel (YAPF simplificado o extensión de `pathfinder.rs`).
 

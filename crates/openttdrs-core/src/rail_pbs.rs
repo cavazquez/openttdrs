@@ -447,8 +447,8 @@ pub fn train_waiting_for_pbs_path(map: &Map, vehicle: &Vehicle) -> bool {
 /// Actualiza `wait_counter` / `pbs_stuck` y, si toca, gira el tren.
 ///
 /// Paridad simplificada de stuck + `wait_for_pbs_path` en `train_cmd.cpp`.
-/// La reserva se reintenta cada tick vía `update_train_reservations`;
-/// `path_backoff_interval == 255` desactiva el giro automático (look-ahead off).
+/// El look-ahead (`TryReserve`) se reintenta según `path_backoff_interval`
+/// en [`compute_train_reservation_with_settings`]; `255` desactiva look-ahead y giro.
 pub fn tick_pbs_wait_and_maybe_reverse(
     map: &Map,
     vehicle: &mut Vehicle,
@@ -557,7 +557,9 @@ pub fn compute_train_reservation_with_settings(
         return along_path;
     }
     // TryReservePath: si el path de órdenes no llega a safe wait, buscar alternativa.
-    if settings.path_backoff_interval == crate::pathfinding_settings::PBS_WAIT_FOREVER {
+    // `path_backoff_interval == 255` desactiva look-ahead; si no, solo reintenta cuando
+    // `should_retry_reservation(wait_counter)` (trenes no stuck tienen wait_counter=0 → siempre).
+    if !settings.should_retry_reservation(vehicle.wait_counter) {
         return along_path;
     }
     let Some(alt) = find_path_to_safe_wait(
@@ -1463,6 +1465,141 @@ mod tests {
         assert!(
             !path.iter().any(|c| c.x >= 7),
             "no debe incluir la 2.ª path: {path:?}"
+        );
+    }
+
+    /// Línea principal bloqueada + desvío libre: `TryReserve` solo corre en ticks de backoff.
+    #[test]
+    #[allow(clippy::too_many_lines)]
+    fn path_backoff_interval_throttles_try_reserve() {
+        use crate::pathfinding_settings::PathfindingSettings;
+
+        let mut state = GameState::new(12, 6);
+        let y = 2;
+        // Vía principal X.
+        for x in 0..=8 {
+            apply_command(
+                &mut state,
+                &Command::SetRailBits(TileCoord::new(x, y), 0x01),
+            )
+            .expect("vía X");
+        }
+        // Cruce + desvío hacia y=0 (fin de vía = safe wait).
+        apply_command(
+            &mut state,
+            &Command::SetRailBits(TileCoord::new(4, y), 0x03),
+        )
+        .expect("cruce");
+        apply_command(
+            &mut state,
+            &Command::SetRailBits(TileCoord::new(4, 1), 0x02),
+        )
+        .expect("desvío");
+        apply_command(
+            &mut state,
+            &Command::SetRailBits(TileCoord::new(4, 0), 0x02),
+        )
+        .expect("fin desvío");
+        apply_command(
+            &mut state,
+            &Command::PlaceRailSignal(TileCoord::new(3, y), 0, 128, 128, SIGTYPE_PATH),
+        )
+        .expect("path");
+
+        let mut blocker = crate::vehicle::Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(6, y),
+            TileCoord::new(6, y),
+        );
+        blocker.running = true;
+        blocker.path.clear();
+
+        let mut train = crate::vehicle::Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(2, y),
+            TileCoord::new(8, y),
+        );
+        train.path = VecDeque::from([
+            TileCoord::new(3, y),
+            TileCoord::new(4, y),
+            TileCoord::new(5, y),
+            TileCoord::new(6, y),
+            TileCoord::new(7, y),
+            TileCoord::new(8, y),
+        ]);
+        train.running = true;
+        train.pbs_stuck = true;
+        state.vehicles = vec![train, blocker];
+
+        let settings = PathfindingSettings {
+            path_backoff_interval: 20,
+            ..Default::default()
+        };
+
+        // Tick intermedio: no TryReserve → no usa el desvío.
+        state.vehicles[0].wait_counter = 7;
+        let mid = compute_train_reservation_with_settings(
+            &state.map,
+            &state.vehicles,
+            0,
+            &HashSet::new(),
+            settings,
+        );
+        assert!(
+            !mid.iter().any(|s| s.tile.y != y),
+            "sin backoff no debe desviarse: {mid:?}"
+        );
+        assert!(
+            !reservation_ends_at_safe_wait_steps(
+                &state.map,
+                state.vehicles[0].pos,
+                &state.vehicles[0].path.iter().copied().collect::<Vec<_>>(),
+                &mid
+            ),
+            "reserva intermedia incompleta: {mid:?}"
+        );
+
+        // Múltiplo del intervalo: TryReserve encuentra el desvío hasta safe wait.
+        state.vehicles[0].wait_counter = 40;
+        let on_backoff = compute_train_reservation_with_settings(
+            &state.map,
+            &state.vehicles,
+            0,
+            &HashSet::new(),
+            settings,
+        );
+        assert!(
+            on_backoff.iter().any(|s| s.tile == TileCoord::new(4, 0)),
+            "con backoff debe reservar el desvío: {on_backoff:?}"
+        );
+        assert!(
+            reservation_ends_at_safe_wait_steps(
+                &state.map,
+                state.vehicles[0].pos,
+                &state.vehicles[0].path.iter().copied().collect::<Vec<_>>(),
+                &on_backoff
+            ),
+            "desvío debe terminar en safe wait: {on_backoff:?}"
+        );
+
+        // 255: look-ahead off aunque wait_counter sea múltiplo.
+        let off = PathfindingSettings {
+            path_backoff_interval: crate::pathfinding_settings::PBS_WAIT_FOREVER,
+            ..Default::default()
+        };
+        state.vehicles[0].wait_counter = 40;
+        let forever = compute_train_reservation_with_settings(
+            &state.map,
+            &state.vehicles,
+            0,
+            &HashSet::new(),
+            off,
+        );
+        assert!(
+            !forever.iter().any(|s| s.tile.y != y),
+            "255 no debe hacer TryReserve: {forever:?}"
         );
     }
 }

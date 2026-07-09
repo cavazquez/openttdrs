@@ -39,7 +39,7 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 | Construcción carretera + ferrocarril | ✅ alto |
 | Simulación, economía, 6 cargos | 🟡 |
 | Import `.sav` → mapa + entidades | 🟡 |
-| Render OpenGFX vanilla | 🟡 ~85–90 % |
+| Render OpenGFX vanilla | ✅ SP3 mapa (QA manual opcional) |
 | UI, toolbar, ventanas, barra inferior | 🟡 |
 | Menú inicio + Nueva partida procedural | ✅ fase 2 |
 | Señales bloque v1 (sin PBS) | 🟡 |
@@ -167,10 +167,10 @@ Tabla maestra para orientar desarrollo, correcciones y paridad con OpenTTD. **Ac
 |------|--------|-----|
 | SP2 Construcción | ✅ Cerrado 2026-05-22 | [SP2_CHECKLIST.md](docs/SP2_CHECKLIST.md) |
 | SP4 Pulido / saves | ✅ Cerrado 2026-06-22 | [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) S1 |
-| SP3 Visual | 🟡 ~90 % | [ROADMAP_PARIDAD_VISUAL.md](docs/ROADMAP_PARIDAD_VISUAL.md) |
+| SP3 Visual | ✅ Cerrado en código (jul 2026) | [ROADMAP_PARIDAD_VISUAL.md](docs/ROADMAP_PARIDAD_VISUAL.md) |
 | SP1 Ciclo jugable | 🟡 Auto ✅ / manual pendiente | [SP1_CHECKLIST.md](docs/SP1_CHECKLIST.md) |
 
-**Sprints operativos pendientes:** S2 resto (`RailConvert`), S3 visual, S4 SP1 manual, S5 señales+audio, S6 import — ver [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md).
+**Sprints operativos pendientes:** S2 resto (`RailConvert`), S4 SP1 manual, S5 señales+audio, S6 import — ver [ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md). S3 visual ✅.
 
 ---
 

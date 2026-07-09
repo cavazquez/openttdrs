@@ -339,8 +339,9 @@ mod industry_coverage_tests {
         industry_animation_frame_from_m4, industry_building_needs_client_anim,
         industry_construction_stage_from_tile, industry_gfx_draw_index,
         industry_gfx_empty_row_is_expected, industry_gfx_entry, industry_gfx_entry_for_tile,
-        industry_gfx_entry_staged, industry_gfx_status, industry_gfx_table_subindex,
-        industry_gfx_uses_generic_fallback, industry_sprite_for_gfx, industry_tile_anim_state,
+        industry_gfx_entry_staged, industry_gfx_status, industry_gfx_status_label,
+        industry_gfx_table_subindex, industry_gfx_uses_generic_fallback, industry_sprite_for_gfx,
+        industry_tile_anim_state,
     };
 
     #[test]
@@ -400,6 +401,36 @@ mod industry_coverage_tests {
         assert_ne!(industry_gfx_status(174), IndustryGfxStatus::OutOfRange);
         assert_eq!(industry_gfx_status(175), IndustryGfxStatus::OutOfRange);
         assert!(industry_gfx_entry(131).is_some());
+    }
+
+    const SP3_VISUAL_CHECKLIST: &[u8] =
+        include_bytes!("../../../openttdrs-core/tests/fixtures/sp3_visual_checklist.ottdmap");
+
+    /// Regresión SP3 P1: y=10 del checklist (gfx 0…120 en tabla; 256 = NewGRF / OutOfRange).
+    #[test]
+    fn sp3_visual_checklist_industry_gfx_in_table() {
+        use openttdrs_core::{Map, TileCoord, TileKind};
+
+        let map = Map::from_ottd_binary(SP3_VISUAL_CHECKLIST).expect("checklist MAP1");
+        let cases: &[(i32, u16, IndustryGfxStatus)] = &[
+            (1, 0, IndustryGfxStatus::Resolved),
+            (3, 42, IndustryGfxStatus::Resolved),
+            (5, 116, IndustryGfxStatus::Resolved),
+            (7, 119, IndustryGfxStatus::Resolved),
+            (9, 120, IndustryGfxStatus::Resolved),
+            (11, 256, IndustryGfxStatus::OutOfRange),
+        ];
+        for &(x, expect_gfx, expect_status) in cases {
+            let t = map.get(TileCoord::new(x, 10)).expect("industry tile");
+            assert_eq!(t.kind, TileKind::Industry, "x={x}");
+            let gfx9 = u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8);
+            assert_eq!(gfx9, expect_gfx, "x={x} gfx9");
+            assert_eq!(industry_gfx_status(gfx9), expect_status, "x={x} gfx={gfx9}");
+        }
+        assert_eq!(
+            industry_gfx_status_label(IndustryGfxStatus::OutOfRange),
+            "gfx≥175"
+        );
     }
 
     #[test]

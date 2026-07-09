@@ -24,11 +24,11 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 | Fase | Estado | Referencia |
 |------|--------|------------|
 | **SP2** Construcción | ✅ Cerrado 2026-05-22 | [SP2_CHECKLIST.md](SP2_CHECKLIST.md) |
-| **SP3** Visual | 🟡 ~90 % | [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md), [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) |
+| **SP3** Visual | ✅ Cerrado en código (jul 2026) | [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md), [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) |
 | **SP4** Pulido | ✅ Cerrado 2026-06-22 | ROADMAP_SPRINTS S1 |
 | **SP1** Ciclo jugable | 🟡 En curso | [SP1_CHECKLIST.md](SP1_CHECKLIST.md), ROADMAP S4 |
 
-**Huecos visuales reales (SP3):** industrias gfx ≥ 120 (tabla cliente 0–174; docs/checklist a alinear). Junctions en pendiente y culling de etiquetas: cerrados con regresión `sp3_visual_checklist_sloped_junction_sprite_ids` + `resync_town_labels`.
+**SP3 visual vanilla:** cerrado en código (junctions slope, culling teselas+labels, industrias gfx 0–174). QA manual opcional del checklist y=3/5/7. Fuera de SP3: waypoints rotos ([HANDOFF_WAYPOINTS_RAIL.md](HANDOFF_WAYPOINTS_RAIL.md)), NewGRF gfx≥175, preview estación multi-tesela.
 
 **Terraform (paisaje):** T1–T3 implementados; gen procedural T4 MVP en `world_gen.rs` — [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md).
 

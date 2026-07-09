@@ -70,7 +70,7 @@ Lo **pendiente para cerrar 0.1** está en las fases **SP** (solitario) más abaj
 |------|----------|---------------------|
 | **SP1 — Ciclo jugable** | Partida local con bucle claro: industria → estación → vehículo → carga/entrega → economía visible | Feedback HUD (sin ruta, dinero, órdenes), coherencia estación en mapa vs `state.stations`, pausa/velocidad, pruebas de integración comando↔sim |
 | **SP2 — Construcción y herramientas** | **Cerrado** (SP2.6 manual 2026-05-22) — [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | Mensajes HUD, preview, transporte, paradas, tren, industria, órdenes |
-| **SP3 — Presentación del mapa** | Que el mapa **se lea** como OpenTTD, sin exigir paridad total | [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md) + [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) S3: pendientes slope, junctions, gfx industrias ≥120, culling |
+| **SP3 — Presentación del mapa** | Que el mapa **se lea** como OpenTTD, sin exigir paridad total | ✅ S3 cerrado (jul 2026): slope/junctions, culling, industrias 0–174 — [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md) |
 | **SP4 — Pulido y deuda** | Estabilidad antes de abrir nuevas grandes features | Migraciones de save si hace falta, `check.sh` alineado con CI, bootstrap demo sin inconsistencias tile/estación, documentación al día |
 
 **Criterio de “0.1 hecho”:** una sesión en solitario de ~15–30 minutos donde se puede **construir red y estaciones**, **asignar órdenes**, **ver vehículos y economía evolucionar**, **guardar y reanudar** sin pasos manuales raros — sin necesidad de red ni segundo cliente.

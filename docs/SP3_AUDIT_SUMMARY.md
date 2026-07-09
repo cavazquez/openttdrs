@@ -204,10 +204,13 @@ Marcar tras cargar el fixture checklist:
 - Etiquetas de ciudad: `spawn_town_labels` / `resync_town_labels` solo dentro del viewport (remap incremental).
 - Bench manual: `scripts/bench_large_map_viewport.md` + `OTTDMAP_FILE=tests/fixtures/stationlist-test.ottdmap`.
 
-## Siguiente fase
+## Cierre SP3 (código, jul 2026)
 
-**SP3.1 en saves reales** — exportar `.ottdmap` con `parse_sav.py` y comparar tramos en pendiente con OpenTTD. **HORZ/VERT:** `verify_parse_sav_rail_m5.py` + § P5 en este doc.
+Vanilla del mapa cerrado: junctions slope, culling teselas+labels, industrias gfx 0–174
+(`sp3_visual_checklist_industry_gfx_in_table`: gfx 120 Resolved, 256 OutOfRange).
+Checklist manual y=3/5/7 sigue siendo QA humano opcional.
 
-**SP4 / I8** — fuera de SP3 visual (multijugador, NewGRF completo, etc.).
+**Fuera de SP3:** NewGRF gfx≥175, waypoints ([HANDOFF_WAYPOINTS_RAIL.md](HANDOFF_WAYPOINTS_RAIL.md)),
+preview estación multi-tesela, MAP_SHOT en CI.
 
 Detalle máquina-legible: [SP3_AUDIT_REPORT.json](SP3_AUDIT_REPORT.json) (regenerar con `audit_sp3_assets.py`).

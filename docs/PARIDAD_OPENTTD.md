@@ -31,12 +31,12 @@ Ordenada de **más barato a más caro**.
 | 1 | Pulido | Migraciones save JSON | ✅ | ✅ | S |
 | 2 | Audio | Música y SFX in-game (`SimEvent`, ~20 SFX, OGG) | ✅ | 🟡 | S |
 | 3 | Render | Depósito carretera RemapCoords | ✅ | ✅ | S — `gen_road_depot_gfx_data.py`, tests `iso/mod.rs` |
-| 4 | Render | Junctions vía en pendiente | ✅ | 🟡 | S–M |
+| 4 | Render | Junctions vía en pendiente | ✅ | ✅ | S–M — regresión checklist y=11/13/15 |
 | 5 | Construcción | Quitar vía (`RailRemove`) | ✅ | ✅ | S |
 | 6 | Construcción | Waypoint ferroviario | ✅ | ✅ | S–M |
 | 7 | Tests | `effective_road_bits` en fixture | ✅ | ✅ | S |
-| 8 | Render | Culling mapas grandes | ✅ | 🟡 | M |
-| 9 | Render | Industrias gfx 120–174 | ✅ | 🟡 0–119 | M |
+| 8 | Render | Culling mapas grandes | ✅ | ✅ | M — teselas + town labels |
+| 9 | Render | Industrias gfx 120–174 | ✅ | ✅ | M — `INDUSTRY_GFX_TABLE_LEN=175` |
 | 9b | Render | Sprites locomotoras por grupo (5 sets OpenGFX) | ✅ | ✅ | S — [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) § locomotoras |
 | 10 | Construcción | Señales bloque (sin PBS) | ✅ | 🟡 render | M |
 | 11 | Construcción | Convertir tipo de vía | ✅ | ❌ | M |
@@ -72,7 +72,7 @@ Ordenada de **más barato a más caro**.
 | **Economía** | Dinero, costes, inflación, 6 cargos, pago transporte |
 | **Save** | JSON versionado (v4) |
 | **Import** | `parse_sav.py`, parser Rust, golden CI |
-| **Render** | OpenGFX + atlas; terreno, agua, costa, casas, industrias 0–119, estaciones, depósito carretera (RemapCoords) |
+| **Render** | OpenGFX + atlas; terreno, agua, costa, casas, industrias 0–174 (vanilla), estaciones, depósito carretera (RemapCoords) |
 | **UI** | Toolbar, minimapa, ventanas flotantes, ghost preview |
 
 ---

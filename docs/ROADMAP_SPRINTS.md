@@ -15,7 +15,7 @@ Objetivo: cerrar el **vertical slice en solitario** sin abrir multijugador, NewG
 |--------|------|-------------------|
 | **S1** | SP4 + deuda técnica | Saves migrables; tests de regresión mapa |
 | **S2** | Toolbar ferroviario | Quitar vía, waypoint, depósito carretera OK |
-| **S3** | Visual ferrocarril | Pendientes y junctions en slope; culling básico |
+| **S3** | Visual ferrocarril | ✅ Pendientes/junctions slope; culling; industrias 0–174 |
 | **S4** | SP1 ciclo jugable | Sesión 15–30 min sin pasos raros |
 | **S5** | Señales v1 + audio | Trenes con bloques simples; SFX básicos |
 | **S6** | Import `.sav` + órdenes | Partidas OTTD más jugables; full load básico |
@@ -52,18 +52,18 @@ Objetivo: cerrar el **vertical slice en solitario** sin abrir multijugador, NewG
 
 ---
 
-## Sprint 3 — Visual ferrocarril y mapas grandes
+## Sprint 3 — Visual ferrocarril y mapas grandes ✅ (cerrado 2026-07)
 
 **Objetivo:** mapa legible en pendientes; FPS estable en mapas grandes.
 
 | Tarea | Costo | Entregable |
 |-------|-------|------------|
-| Junctions de vía en pendiente (overlays slope) | M | `sprites/rail.rs` + `MAP_SHOT` |
-| Culling de teselas fuera de viewport (no solo agua) | M | `render/world.rs` |
-| Industrias gfx 120–130 (frecuentes en saves) | M | `ROADMAP_INDUSTRIAS_PARIDAD.md` |
-| Captura regresión cruce X\|Y + slope | S | `OPENTTDRS_MAP_SHOT_*` |
+| Junctions de vía en pendiente (overlays slope) | M | ✅ `sp3_visual_checklist_sloped_junction_sprite_ids` |
+| Culling de teselas fuera de viewport (no solo agua) | M | ✅ `MapTileSpawnViewport` + `resync_town_labels` |
+| Industrias gfx 120–174 (tabla vanilla) | M | ✅ `INDUSTRY_GFX_TABLE_LEN=175` + checklist y=10 |
+| Captura regresión cruce X\|Y + slope | S | Driver `OPENTTDRS_MAP_SHOT_*` (CI opcional) |
 
-**Done:** curva/cruce en colina correctos; mapa 256×256 con FPS razonable.
+**Done:** curva/cruce en colina correctos; mapa 256×256 con culling; industrias vanilla 0–174.
 
 ---
 

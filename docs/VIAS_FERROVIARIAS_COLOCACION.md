@@ -68,5 +68,5 @@ Casos cubiertos: extensión Horz en línea; segundo carril en tesela vacía; Ver
 
 ## Backlog
 
-- Junctions en pendiente (Sprint 3 — `ROADMAP_SPRINTS.md` § S3).
+- Junctions en pendiente — ✅ S3 (`sp3_visual_checklist_sloped_junction_sprite_ids`).
 - Sim de señales en carriles paralelos (hoy probada sobre todo en X/Y).

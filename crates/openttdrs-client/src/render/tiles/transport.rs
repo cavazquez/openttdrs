@@ -6,8 +6,9 @@ use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    collect_catenary_sprites_from_map, collect_rail_sprites_for_type, collect_signal_sprite_draws,
-    is_road_level_crossing, is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
+    catenary_sprite_color, collect_catenary_pylons_from_map, collect_catenary_sprites_from_map,
+    collect_rail_sprites_for_type, collect_signal_sprite_draws, is_road_level_crossing,
+    is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
     level_crossing_rail_sprite_id_for_type, rail_ghost_overlay_offset,
     rail_tile_has_pbs_reservation, rail_tile_is_signals, rail_track_base_color,
     rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
@@ -258,9 +259,10 @@ pub(crate) fn spawn_rail_tile(
             Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
         ));
     }
-    // Catenaria OpenGFX (wires 1039–1062): PCP por vecinos electrificados.
+    // Catenaria OpenGFX: wires (PCP) + postes PPP; TO_CATENARY vía env.
     if rail_type.has_catenary() {
         let trackbits = rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1);
+        let tint = catenary_sprite_color();
         let mut wires = Vec::new();
         collect_catenary_sprites_from_map(
             map,
@@ -281,8 +283,38 @@ pub(crate) fn spawn_rail_tile(
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                img.sprite(),
+                img.sprite_colored(tint),
                 Transform::from_translation(base),
+            ));
+        }
+        let mut pylons = Vec::new();
+        collect_catenary_pylons_from_map(
+            map,
+            ctx.coord,
+            map_dims.0,
+            map_dims.1,
+            crate::sprites::OTTD_MP_RAIL,
+            trackbits,
+            tileh,
+            &mut pylons,
+        );
+        for draw in pylons {
+            let Some(img) = assets.rail.get(&draw.sprite_id) else {
+                continue;
+            };
+            let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
+            let base = tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                rail_base_z,
+                draw.z_layer,
+                rail_half_h,
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                img.sprite_colored(tint),
+                Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
             ));
         }
     }

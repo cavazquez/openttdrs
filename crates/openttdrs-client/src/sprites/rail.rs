@@ -40,10 +40,14 @@ pub const MONO_RAIL_SPRITE_OFFSET: u32 = 82;
 /// Offset OpenGFX maglev respecto a vía normal (`SPR_MAGLEV_*` = rail + 164).
 pub const MAGLEV_RAIL_SPRITE_OFFSET: u32 = 164;
 
-/// Base de cables de catenaria en OpenGFX 8 (`ogfx1_base` 1039–1062 = `WSO_*`).
+/// Base de cables de catenaria Action5 (`WSO_*` 0..23 → `rail_1039..1062.png`).
 pub const WIRE_SPRITE_BASE: u32 = 1039;
 /// Último sprite de wire plano/inclinado en el set OpenGFX extraído.
 pub const WIRE_SPRITE_LAST: u32 = 1062;
+/// IDs virtuales de entrada de túnel (`WSO_ENTRANCE_*` → `rail_catenary_entrance_*.png`).
+pub const CATENARY_ENTRANCE_SPRITE_BASE: u32 = 910_063;
+/// IDs virtuales de postes PPP (`PSO_*` → `rail_pylon_*.png`).
+pub const PYLON_SPRITE_BASE: u32 = 910_067;
 
 /// `WireSpriteOffset` — `elrail_data.h`.
 const WSO_X_SHORT: u32 = 0;
@@ -66,6 +70,71 @@ const WSO_X_NE_DOWN: u32 = 20;
 const WSO_Y_NW_UP: u32 = 21;
 const WSO_X_NE_UP: u32 = 22;
 const WSO_Y_NW_DOWN: u32 = 23;
+const WSO_ENTRANCE_SW: u32 = 24;
+const WSO_ENTRANCE_NW: u32 = 25;
+const WSO_ENTRANCE_NE: u32 = 26;
+const WSO_ENTRANCE_SE: u32 = 27;
+
+/// `Direction` OpenTTD: N=0 … NW=7.
+const DIR_N: u8 = 0;
+const DIR_NE: u8 = 1;
+const DIR_E: u8 = 2;
+const DIR_SE: u8 = 3;
+const DIR_S: u8 = 4;
+const DIR_SW: u8 = 5;
+const DIR_W: u8 = 6;
+const DIR_NW: u8 = 7;
+
+/// `_pylon_sprites[DIR_*]` → offset PSO.
+const PYLON_SPRITES: [u8; 8] = [4, 0, 7, 3, 5, 1, 6, 2]; // EW_N,Y_NE,NS_E,X_SE,EW_S,Y_SW,NS_W,X_NW
+const X_PCP_OFF: [i8; 4] = [0, 8, 16, 8];
+const Y_PCP_OFF: [i8; 4] = [8, 16, 8, 0];
+const X_PPP_OFF: [i8; 8] = [-2, -4, -2, 0, 2, 4, 2, 0];
+const Y_PPP_OFF: [i8; 8] = [-2, 0, 2, 4, 2, 0, -2, -4];
+
+/// `_allowed_ppp_on_pcp` (bits DIR_*).
+const ALLOWED_PPP: [u8; 4] = [
+    (1 << DIR_N) | (1 << DIR_E) | (1 << DIR_SE) | (1 << DIR_S) | (1 << DIR_W) | (1 << DIR_NW),
+    (1 << DIR_N) | (1 << DIR_NE) | (1 << DIR_E) | (1 << DIR_S) | (1 << DIR_SW) | (1 << DIR_W),
+    (1 << DIR_N) | (1 << DIR_E) | (1 << DIR_SE) | (1 << DIR_S) | (1 << DIR_W) | (1 << DIR_NW),
+    (1 << DIR_N) | (1 << DIR_NE) | (1 << DIR_E) | (1 << DIR_S) | (1 << DIR_SW) | (1 << DIR_W),
+];
+
+/// `_owned_ppp_on_pcp` (bits DIR_*).
+const OWNED_PPP: [u8; 4] = [
+    (1 << DIR_SE) | (1 << DIR_S) | (1 << DIR_SW) | (1 << DIR_W),
+    (1 << DIR_N) | (1 << DIR_SW) | (1 << DIR_W) | (1 << DIR_NW),
+    (1 << DIR_N) | (1 << DIR_NE) | (1 << DIR_E) | (1 << DIR_NW),
+    (1 << DIR_NE) | (1 << DIR_E) | (1 << DIR_SE) | (1 << DIR_S),
+];
+
+/// `_ppp_order[pcp][tlg][0..8]`.
+const PPP_ORDER: [[[u8; 8]; 4]; 4] = [
+    [
+        [DIR_NE, DIR_NW, DIR_SE, DIR_SW, DIR_N, DIR_E, DIR_S, DIR_W],
+        [DIR_NE, DIR_SE, DIR_SW, DIR_NW, DIR_S, DIR_W, DIR_N, DIR_E],
+        [DIR_SW, DIR_NW, DIR_NE, DIR_SE, DIR_S, DIR_W, DIR_N, DIR_E],
+        [DIR_SW, DIR_SE, DIR_NE, DIR_NW, DIR_N, DIR_E, DIR_S, DIR_W],
+    ],
+    [
+        [DIR_NE, DIR_NW, DIR_SE, DIR_SW, DIR_S, DIR_E, DIR_N, DIR_W],
+        [DIR_NE, DIR_SE, DIR_SW, DIR_NW, DIR_N, DIR_W, DIR_S, DIR_E],
+        [DIR_SW, DIR_NW, DIR_NE, DIR_SE, DIR_N, DIR_W, DIR_S, DIR_E],
+        [DIR_SW, DIR_SE, DIR_NE, DIR_NW, DIR_S, DIR_E, DIR_N, DIR_W],
+    ],
+    [
+        [DIR_NE, DIR_NW, DIR_SE, DIR_SW, DIR_S, DIR_W, DIR_N, DIR_E],
+        [DIR_NE, DIR_SE, DIR_SW, DIR_NW, DIR_N, DIR_E, DIR_S, DIR_W],
+        [DIR_SW, DIR_NW, DIR_NE, DIR_SE, DIR_N, DIR_E, DIR_S, DIR_W],
+        [DIR_SW, DIR_SE, DIR_NE, DIR_NW, DIR_S, DIR_W, DIR_N, DIR_E],
+    ],
+    [
+        [DIR_NE, DIR_NW, DIR_SE, DIR_SW, DIR_N, DIR_W, DIR_S, DIR_E],
+        [DIR_NE, DIR_SE, DIR_SW, DIR_NW, DIR_S, DIR_E, DIR_N, DIR_W],
+        [DIR_SW, DIR_NW, DIR_NE, DIR_SE, DIR_S, DIR_E, DIR_N, DIR_W],
+        [DIR_SW, DIR_SE, DIR_NE, DIR_NW, DIR_N, DIR_W, DIR_S, DIR_E],
+    ],
+];
 
 /// `DiagDirection`: NE=0, SE=1, SW=2, NW=3.
 const DIAGDIR_NE: u8 = 0;
@@ -216,6 +285,11 @@ fn rail_sprite_named_alias(id: u32) -> Option<String> {
         1175 => Some("mglv_track_y.png".into()),
         1176 => Some("mglv_track_x.png".into()),
         1182..=1199 => Some(format!("mglv_track_{}.png", id - 1182)),
+        CATENARY_ENTRANCE_SPRITE_BASE..=910_066 => Some(format!(
+            "rail_catenary_entrance_{}.png",
+            id - CATENARY_ENTRANCE_SPRITE_BASE
+        )),
+        PYLON_SPRITE_BASE..=910_074 => Some(format!("rail_pylon_{}.png", id - PYLON_SPRITE_BASE)),
         _ => None,
     }
 }
@@ -236,6 +310,45 @@ pub const RAIL_SPRITE_IDS: [u32; 38] = [
 /// Sprites de catenaria plana OpenGFX (`WIRE_SPRITE_BASE`..`WIRE_SPRITE_LAST`).
 pub fn catenary_wire_sprite_ids() -> impl Iterator<Item = u32> {
     WIRE_SPRITE_BASE..=WIRE_SPRITE_LAST
+}
+
+/// IDs de postes PPP + entradas de túnel para preload.
+pub fn catenary_pylon_sprite_ids() -> impl Iterator<Item = u32> {
+    (0..8)
+        .map(|i| PYLON_SPRITE_BASE + i)
+        .chain((0..4).map(|i| CATENARY_ENTRANCE_SPRITE_BASE + i))
+}
+
+/// Dibujo de un sprite de catenaria con offset sub-tesela (PCP+PPP).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CatenarySpriteDraw {
+    pub sprite_id: u32,
+    /// Offset en coords de tesela OpenTTD (0..16), antes de `remap_tile_offset`.
+    pub tile_dx: f32,
+    pub tile_dy: f32,
+    pub z_layer: f32,
+}
+
+/// `TO_CATENARY` invisibility (`OPENTTDRS_HIDE_CATENARY=1`).
+#[must_use]
+pub fn catenary_hidden() -> bool {
+    crate::config::env_flag("OPENTTDRS_HIDE_CATENARY")
+}
+
+/// `TO_CATENARY` transparency (`OPENTTDRS_TRANSPARENT_CATENARY=1`).
+#[must_use]
+pub fn catenary_transparent() -> bool {
+    crate::config::env_flag("OPENTTDRS_TRANSPARENT_CATENARY")
+}
+
+/// Color de tint para sprites de catenaria (alpha si transparencia).
+#[must_use]
+pub fn catenary_sprite_color() -> Color {
+    if catenary_transparent() {
+        Color::srgba(1.0, 1.0, 1.0, 0.45)
+    } else {
+        Color::WHITE
+    }
 }
 
 /// Selector de pendiente para `_rail_wires` (`elrail.cpp`):
@@ -260,10 +373,6 @@ pub fn collect_catenary_sprites(tb: u8, tileh: u8, tx: i32, ty: i32, out: &mut V
 }
 
 /// Cables de catenaria con PCP real por vecinos (`DrawRailCatenaryRailway`).
-///
-/// Calcula bordes con poste (PCP) mirando vías electrificadas adyacentes y la
-/// regla «un poste cada dos teselas» en rectas (`_ignored_pcp`). Sin postes PPP
-/// sueltos ni túneles/puentes.
 #[allow(clippy::too_many_arguments)]
 pub fn collect_catenary_sprites_from_map(
     map: &Map,
@@ -275,10 +384,168 @@ pub fn collect_catenary_sprites_from_map(
     tileh: u8,
     out: &mut Vec<u32>,
 ) {
+    if catenary_hidden() {
+        out.clear();
+        return;
+    }
     let home_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
     let wire_tb = if home_tb != 0 { home_tb } else { tb & 0x3F };
     let pcp = compute_catenary_pcp_status(map, pos, mw, mh, mp_rail, wire_tb, tileh);
     collect_catenary_sprites_with_pcp(wire_tb, tileh, pcp, out);
+}
+
+/// Postes PPP sueltos (`DrawRailCatenaryRailway` pylon loop).
+#[allow(clippy::too_many_arguments)]
+pub fn collect_catenary_pylons_from_map(
+    map: &Map,
+    pos: TileCoord,
+    mw: u32,
+    mh: u32,
+    mp_rail: u8,
+    tb: u8,
+    tileh: u8,
+    out: &mut Vec<CatenarySpriteDraw>,
+) {
+    out.clear();
+    if catenary_hidden() {
+        return;
+    }
+    let home_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
+    let wire_tb = if home_tb != 0 { home_tb } else { tb & 0x3F };
+    if wire_tb == 0 {
+        return;
+    }
+    let edges = compute_catenary_edge_state(map, pos, mw, mh, mp_rail, wire_tb, tileh);
+    let tlg = catenary_tile_location_group(pos.x, pos.y);
+    for dir in 0..4u8 {
+        if edges.pcp & (1 << dir) == 0 {
+            continue;
+        }
+        let mut allowed = edges.allowed[dir as usize];
+        let preferred = edges.preferred[dir as usize];
+        if allowed & preferred != 0 {
+            allowed &= preferred;
+        }
+        if allowed == 0 {
+            continue;
+        }
+        let order = &PPP_ORDER[dir as usize][tlg as usize];
+        for &ppp in order {
+            if allowed & (1 << ppp) == 0 {
+                continue;
+            }
+            if OWNED_PPP[dir as usize] & (1 << ppp) == 0 {
+                // PPP en el borde: lo dibuja el vecino si tiene vía.
+                let (dx, dy) = diag_dir_offset(dir);
+                let npos = TileCoord::new(pos.x + dx, pos.y + dy);
+                if electrified_trackbits_at(map, npos, mw, mh, mp_rail) != 0 {
+                    break;
+                }
+                continue;
+            }
+            let tile_dx = f32::from(X_PCP_OFF[dir as usize] + X_PPP_OFF[ppp as usize]);
+            let tile_dy = f32::from(Y_PCP_OFF[dir as usize] + Y_PPP_OFF[ppp as usize]);
+            out.push(CatenarySpriteDraw {
+                sprite_id: PYLON_SPRITE_BASE + u32::from(PYLON_SPRITES[ppp as usize]),
+                tile_dx,
+                tile_dy,
+                z_layer: 0.036,
+            });
+            break;
+        }
+    }
+}
+
+/// Wire de portal de túnel (`DrawRailCatenaryOnTunnel`).
+/// `dir` = `DiagDirection` de la boca (NE=0..NW=3).
+#[must_use]
+pub fn catenary_tunnel_wire_sprite(dir: u8) -> u32 {
+    // Upstream: NE→ENTRANCE_SW, SE→NW, SW→NE, NW→SE.
+    let wso = match dir & 3 {
+        DIAGDIR_NE => WSO_ENTRANCE_SW,
+        DIAGDIR_SE => WSO_ENTRANCE_NW,
+        DIAGDIR_SW => WSO_ENTRANCE_NE,
+        _ => WSO_ENTRANCE_SE,
+    };
+    CATENARY_ENTRANCE_SPRITE_BASE + (wso - WSO_ENTRANCE_SW)
+}
+
+/// Catenaria en vano de puente (`DrawRailCatenaryOnBridge` simplificado).
+///
+/// `axis_x`: eje X del puente; `num`: índice 1-based desde el extremo norte;
+/// `length`: longitud del vano (teselas entre rampas, sin contar rampas).
+pub fn collect_catenary_bridge_draws(
+    axis_x: bool,
+    num: u32,
+    length: u32,
+    tlg: u8,
+    out: &mut Vec<CatenarySpriteDraw>,
+) {
+    out.clear();
+    if catenary_hidden() || length == 0 || num == 0 {
+        return;
+    }
+    let wire_wso = if length % 2 == 1 && num == length {
+        if axis_x { WSO_X_SHORT } else { WSO_Y_SHORT }
+    } else {
+        // SW/NE o SE/NW según paridad de num (un poste cada dos teselas).
+        let alt = num % 2 == 1;
+        if axis_x {
+            if alt { WSO_X_SW } else { WSO_X_NE }
+        } else if alt {
+            WSO_Y_SE
+        } else {
+            WSO_Y_NW
+        }
+    };
+    out.push(CatenarySpriteDraw {
+        sprite_id: WIRE_SPRITE_BASE + wire_wso,
+        tile_dx: 8.0,
+        tile_dy: 8.0,
+        z_layer: 0.09,
+    });
+    // Poste en extremo norte cada 2 teselas.
+    if num % 2 == 1 {
+        let pcp = if axis_x { DIAGDIR_NE } else { DIAGDIR_NW };
+        let mut ppp = if axis_x { DIR_NW } else { DIR_NE };
+        let bit = if axis_x { 0 } else { 1 };
+        if tlg & (1 << bit) != 0 {
+            ppp = reverse_dir(ppp);
+        }
+        out.push(CatenarySpriteDraw {
+            sprite_id: PYLON_SPRITE_BASE + u32::from(PYLON_SPRITES[ppp as usize]),
+            tile_dx: f32::from(X_PCP_OFF[pcp as usize] + X_PPP_OFF[ppp as usize]),
+            tile_dy: f32::from(Y_PCP_OFF[pcp as usize] + Y_PPP_OFF[ppp as usize]),
+            z_layer: 0.091,
+        });
+    }
+    // Poste en extremo sur del último vano.
+    if num == length {
+        let pcp = if axis_x { DIAGDIR_SW } else { DIAGDIR_SE };
+        let mut ppp = if axis_x { DIR_NW } else { DIR_NE };
+        let bit = if axis_x { 0 } else { 1 };
+        if tlg & (1 << bit) != 0 {
+            ppp = reverse_dir(ppp);
+        }
+        out.push(CatenarySpriteDraw {
+            sprite_id: PYLON_SPRITE_BASE + u32::from(PYLON_SPRITES[ppp as usize]),
+            tile_dx: f32::from(X_PCP_OFF[pcp as usize] + X_PPP_OFF[ppp as usize]),
+            tile_dy: f32::from(Y_PCP_OFF[pcp as usize] + Y_PPP_OFF[ppp as usize]),
+            z_layer: 0.091,
+        });
+    }
+}
+
+#[inline]
+fn reverse_dir(dir: u8) -> u8 {
+    dir ^ 4
+}
+
+/// Estado por borde para wires + postes.
+struct CatenaryEdgeState {
+    pcp: u8,
+    preferred: [u8; 4],
+    allowed: [u8; 4],
 }
 
 /// Máscara de 4 bits: bit `d` = PCP activo en `DiagDirection` d.
@@ -411,9 +678,27 @@ fn compute_catenary_pcp_status(
     home_tb: u8,
     home_tileh: u8,
 ) -> u8 {
+    compute_catenary_edge_state(map, pos, mw, mh, mp_rail, home_tb, home_tileh).pcp
+}
+
+/// PCP + preferred/allowed PPP por borde (`DrawRailCatenaryRailway`).
+fn compute_catenary_edge_state(
+    map: &Map,
+    pos: TileCoord,
+    mw: u32,
+    mh: u32,
+    mp_rail: u8,
+    home_tb: u8,
+    home_tileh: u8,
+) -> CatenaryEdgeState {
     let home_tb = home_tb & 0x3F;
+    let mut state = CatenaryEdgeState {
+        pcp: 0,
+        preferred: [0; 4],
+        allowed: [0; 4],
+    };
     if home_tb == 0 {
-        return 0;
+        return state;
     }
     let home_flat = home_tb & (RAIL_TB_HORZ | RAIL_TB_VERT) != 0;
     let home_foundation = openttdrs_core::rail_foundation_for_trackbits(home_tileh, home_tb);
@@ -423,7 +708,6 @@ fn compute_catenary_pcp_status(
         home_tileh
     };
     let tlg = catenary_tile_location_group(pos.x, pos.y);
-    let mut pcp = 0u8;
 
     for dir in 0..4u8 {
         let (dx, dy) = diag_dir_offset(dir);
@@ -439,35 +723,63 @@ fn compute_catenary_pcp_status(
         let neigh_flat = neigh_tb & (RAIL_TB_HORZ | RAIL_TB_VERT) != 0;
 
         let mut preferred_mask: u8 = 0xFF;
+        let mut allowed_mask = ALLOWED_PPP[dir as usize];
         let mut used = false;
         for k in 0..6 {
             let track_bit = TRACKS_AT_PCP[dir as usize][k];
             let from_neigh = TRACK_SOURCE_NEIGHBOUR[dir as usize][k];
             let src_tb = if from_neigh { neigh_tb } else { home_tb };
-            if src_tb & track_bit == 0 {
-                continue;
-            }
-            used = true;
             let pcp_pos = if from_neigh {
                 reverse_diag_dir(dir)
             } else {
                 dir
             };
-            preferred_mask &= preferred_ppp_mask(track_bit, pcp_pos);
+            // Wire presente → preferred + PCP activo.
+            if src_tb & track_bit != 0 {
+                used = true;
+                preferred_mask &= preferred_ppp_mask(track_bit, pcp_pos);
+            }
+            // Track (aunque sin wire en máscara) → disallowed PPP.
+            let track_src = if from_neigh {
+                // Vecino: usar trackbits electrificados (MVP = wire_config ≈ track).
+                neigh_tb
+            } else {
+                home_tb
+            };
+            if track_src & track_bit != 0 {
+                allowed_mask &= !disallowed_ppp_mask(track_bit, pcp_pos);
+            }
         }
         if !used {
             continue;
         }
-        pcp |= 1 << dir;
+        state.pcp |= 1 << dir;
+        state.preferred[dir as usize] = preferred_mask;
+        state.allowed[dir as usize] = allowed_mask;
 
         // Recta nivelada: omitir PCP cada 2 teselas (`_ignored_pcp`).
         if (home_eff_h == neigh_eff_h || (home_flat && neigh_flat))
             && is_ignored_pcp(preferred_mask, tlg, dir)
         {
-            pcp &= !(1 << dir);
+            state.pcp &= !(1 << dir);
+            state.preferred[dir as usize] = 0;
+            state.allowed[dir as usize] = 0;
         }
     }
-    pcp
+    state
+}
+
+/// `_disallowed_ppp_of_track_at_pcp` (bits DIR_*).
+fn disallowed_ppp_mask(track_bit: u8, pcp_pos: u8) -> u8 {
+    match (track_bit, pcp_pos) {
+        (RAIL_TB_X, DIAGDIR_NE) | (RAIL_TB_X, DIAGDIR_SW) => (1 << DIR_SW) | (1 << DIR_NE),
+        (RAIL_TB_Y, DIAGDIR_SE) | (RAIL_TB_Y, DIAGDIR_NW) => (1 << DIR_NW) | (1 << DIR_SE),
+        (RAIL_TB_UPPER, DIAGDIR_NE) | (RAIL_TB_UPPER, DIAGDIR_NW) => (1 << DIR_W) | (1 << DIR_E),
+        (RAIL_TB_LOWER, DIAGDIR_SE) | (RAIL_TB_LOWER, DIAGDIR_SW) => (1 << DIR_W) | (1 << DIR_E),
+        (RAIL_TB_LEFT, DIAGDIR_SW) | (RAIL_TB_LEFT, DIAGDIR_NW) => (1 << DIR_S) | (1 << DIR_N),
+        (RAIL_TB_RIGHT, DIAGDIR_NE) | (RAIL_TB_RIGHT, DIAGDIR_SE) => (1 << DIR_S) | (1 << DIR_N),
+        _ => 0,
+    }
 }
 
 /// Máscara de PPP preferidos (bits DIR_*) para ignore-group; subset de `_preferred_ppp_of_track_at_pcp`.
@@ -972,6 +1284,9 @@ pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
                 set.insert(id + MAGLEV_RAIL_SPRITE_OFFSET);
             }
             for id in catenary_wire_sprite_ids() {
+                set.insert(id);
+            }
+            for id in catenary_pylon_sprite_ids() {
                 set.insert(id);
             }
             // Cruces tipados (eje + barrado).
@@ -1501,6 +1816,66 @@ mod tests {
         collect_catenary_sprites_from_map(&map, a, 3, 3, 1, RAIL_TB_X, 0, &mut out);
         // Vecino sin catenaria → ambos PCP del tramo eléctrico aislado.
         assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SHORT]);
+    }
+
+    #[test]
+    fn collect_catenary_pylons_isolated_x_places_owned_post() {
+        let mut map = Map::new_flat(3, 3, 1);
+        let c = TileCoord::new(1, 1);
+        map.set_tile(c, electric_rail_tile(RAIL_TB_X)).unwrap();
+        let mut out = Vec::new();
+        collect_catenary_pylons_from_map(&map, c, 3, 3, 1, RAIL_TB_X, 0, &mut out);
+        assert!(!out.is_empty());
+        assert!(
+            out.iter()
+                .all(|d| { (PYLON_SPRITE_BASE..PYLON_SPRITE_BASE + 8).contains(&d.sprite_id) })
+        );
+    }
+
+    #[test]
+    fn catenary_tunnel_wire_maps_diagdir_to_entrance() {
+        assert_eq!(
+            catenary_tunnel_wire_sprite(DIAGDIR_NE),
+            CATENARY_ENTRANCE_SPRITE_BASE
+        );
+        assert_eq!(
+            catenary_tunnel_wire_sprite(DIAGDIR_SE),
+            CATENARY_ENTRANCE_SPRITE_BASE + 1
+        );
+        assert_eq!(
+            catenary_tunnel_wire_sprite(DIAGDIR_SW),
+            CATENARY_ENTRANCE_SPRITE_BASE + 2
+        );
+        assert_eq!(
+            catenary_tunnel_wire_sprite(DIAGDIR_NW),
+            CATENARY_ENTRANCE_SPRITE_BASE + 3
+        );
+    }
+
+    #[test]
+    fn collect_catenary_bridge_draws_odd_span_uses_short_and_end_pylon() {
+        let mut out = Vec::new();
+        collect_catenary_bridge_draws(true, 3, 3, 0, &mut out);
+        assert!(
+            out.iter()
+                .any(|d| d.sprite_id == WIRE_SPRITE_BASE + WSO_X_SHORT)
+        );
+        assert!(
+            out.iter()
+                .any(|d| { (PYLON_SPRITE_BASE..PYLON_SPRITE_BASE + 8).contains(&d.sprite_id) })
+        );
+    }
+
+    #[test]
+    fn rail_sprite_aliases_resolve_pylon_and_entrance() {
+        assert_eq!(
+            rail_sprite_named_alias(PYLON_SPRITE_BASE),
+            Some("rail_pylon_0.png".into())
+        );
+        assert_eq!(
+            rail_sprite_named_alias(CATENARY_ENTRANCE_SPRITE_BASE + 2),
+            Some("rail_catenary_entrance_2.png".into())
+        );
     }
 
     #[test]

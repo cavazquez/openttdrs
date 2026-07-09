@@ -145,11 +145,16 @@ const ROAD_OFFSET: [u8; 16] = [
 | `SPR_RAIL_DEPOT_NE` | 1067 | Depósito NE |
 | `SPR_RAIL_DEPOT_NW` | 1068 | Depósito NW |
 
-### Catenaria eléctrica
+### Catenaria eléctrica (Action5 tipo 05 en `ogfxe_extra`)
 
-| Rango | Uso |
-|-------|-----|
-| 1039–1062 | Wires OpenGFX (`WSO_*`); plano X/Y alterna SW/NE; pendientes: UP/DOWN 1043–1046; EW/NS=1041/1042 |
+Los IDs 1039–1074 de `ogfx1_base` son vía/depósito/plataforma; wires y postes
+vienen del bloque Action5 (`scripts/extract_elrail_catenary.py`).
+
+| Archivo / ID virtual | Uso |
+|----------------------|-----|
+| `rail_1039`–`rail_1062` | Wires `WSO_*` 0..23 |
+| `rail_catenary_entrance_0..3` (IDs 910063–66) | `WSO_ENTRANCE_*` (túnel) |
+| `rail_pylon_0..7` (IDs 910067–74) | Postes `PSO_*` |
 
 ### Monorraíl y Maglev
 

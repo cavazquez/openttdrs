@@ -1,5 +1,7 @@
 use bevy::prelude::*;
-use openttdrs_core::{Map, Station, TileKind, inclined_slope_direction, is_tunnel_entrance_slope};
+use openttdrs_core::{
+    Map, Station, TileKind, inclined_slope_direction, is_tunnel_entrance_slope, rail_type_from_tile,
+};
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
 use super::{sloped_or_flat_image, spawn_ground_sprite, spawn_rail_foundation};
@@ -12,11 +14,12 @@ use crate::render::{
     sprite_from_atlas_or_company_white,
 };
 use crate::sprites::{
-    StationTileClass, rail_station_draw_layers, rail_station_ground_track_sprite,
-    rail_station_overlay_rel, rail_station_sprite_meta, rail_waypoint_draw_layers,
-    rail_waypoint_layer_meta, rail_waypoint_sprite_center, road_depot_build_layers,
-    road_depot_entrance_road_bits, road_depot_seq_gfx, road_flat_sprite_index,
-    road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx, station_tile_class,
+    StationTileClass, catenary_hidden, catenary_sprite_color, catenary_tunnel_wire_sprite,
+    rail_station_draw_layers, rail_station_ground_track_sprite, rail_station_overlay_rel,
+    rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_layer_meta,
+    rail_waypoint_sprite_center, road_depot_build_layers, road_depot_entrance_road_bits,
+    road_depot_seq_gfx, road_flat_sprite_index, road_stop_build_layers, road_stop_ground_index,
+    road_stop_seq_gfx, station_tile_class,
 };
 
 pub(crate) fn spawn_station_tile(
@@ -326,6 +329,29 @@ pub(crate) fn spawn_transport_object_tile(
                     0.08,
                 )),
             ));
+            // Wire de portal (`DrawRailCatenaryOnTunnel`) si la vía es eléctrica.
+            if rail
+                && !catenary_hidden()
+                && ctx
+                    .tile
+                    .is_some_and(|t| rail_type_from_tile(t).has_catenary())
+            {
+                let sid = catenary_tunnel_wire_sprite(dir);
+                if let Some(img) = assets.rail.get(&sid) {
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        img.sprite_colored(catenary_sprite_color()),
+                        Transform::from_translation(crate::sprites::tunnel_portal_translation(
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            base_z,
+                            sprite_id,
+                            0.085,
+                        )),
+                    ));
+                }
+            }
         }
         TileKind::RoadDepot => {
             let depot_half_h = if tileh == 0 {

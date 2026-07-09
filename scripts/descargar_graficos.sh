@@ -587,9 +587,13 @@ crop_by_id(1036, "rail_track_ns_1.png")
 # Nieve
 crop_by_id(1037, "rail_track_y_snow.png")
 crop_by_id(1038, "rail_track_x_snow.png")
-# Catenaria eléctrica (wires OpenGFX 1039–1062 = WSO_*)
+# Catenaria: Action5 tipo 05 vive en ogfxe_extra (no en IDs 1039–1062 del base).
+# El script dedicado escribe rail_1039..1062, rail_catenary_entrance_*, rail_pylon_*.
+# Placeholder aquí solo si aún no existen (Bevy preload).
 for sid in range(1039, 1063):
-    crop_by_id(sid, f"rail_{sid}.png")
+    out = tiles_dir / f"rail_{sid}.png"
+    if not out.is_file():
+        write_rail_placeholder(out)
 for sid, src_name in [(1037, "rail_track_y_snow.png"), (1038, "rail_track_x_snow.png")]:
     dst = tiles_dir / f"rail_{sid}.png"
     if dst.is_file():
@@ -1168,6 +1172,8 @@ python3 "$(dirname "$0")/gen_rail_station_draw_data.py" || true
 python3 "$(dirname "$0")/gen_bridge_sprites.py" || true
 python3 "$(dirname "$0")/gen_bridge_structure_palette.py" || true
 python3 "$(dirname "$0")/gen_effect_vehicle_sprites.py" || true
+# Catenaria Action5 (wires + postes + entradas de túnel) desde ogfxe_extra.
+python3 "$(dirname "$0")/extract_elrail_catenary.py" || true
 
 # Texture atlas: empaqueta tiles/*.png en páginas + metadata Rust (batching).
 python3 "$(dirname "$0")/gen_tile_atlas.py"

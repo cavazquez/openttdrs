@@ -3,14 +3,15 @@
 use bevy::prelude::*;
 use openttdrs_core::{
     BridgeType, Map, Tile, TileCoord, TileKind, bridge_above_axis_from_mapt, bridge_type_from_m6,
-    calc_bridge_piece,
+    calc_bridge_piece, rail_type_from_tile,
 };
 
 use crate::iso::{HEIGHT_PX, TILE_HALF_H, remap_tile_offset, tile_pos_half, tile_slope_and_min_z};
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_SPRITE_TRACK_X, RAIL_SPRITE_TRACK_Y, bridge_deck_sprite_ids, bridge_sprite_meta,
-    bridge_structure_palette,
+    bridge_structure_palette, catenary_sprite_color, catenary_tile_location_group,
+    collect_catenary_bridge_draws,
 };
 
 const DECK_LAYER_FRAC: f32 = 0.08;
@@ -28,6 +29,12 @@ pub(crate) struct BridgeSpanInfo {
     pub bridge_type: BridgeType,
     pub axis: usize,
     pub piece: openttdrs_core::BridgePiece,
+    /// Teselas del vano entre rampas (sin contar rampas), para catenaria.
+    pub middle_length: u32,
+    /// Índice 1-based desde el norte en el vano (0 = rampa).
+    pub middle_num: u32,
+    /// ¿La rampa norte es vía eléctrica?
+    pub electric: bool,
 }
 
 fn ramp_tile(tile: Tile) -> bool {
@@ -174,6 +181,18 @@ pub(crate) fn bridge_span_at(
     let north_len = tile_dist(coord, north, axis_y);
     let south_len = tile_dist(coord, south, axis_y);
     let piece = calc_bridge_piece(north_len, south_len);
+    let total = tile_dist(north, south, axis_y);
+    let middle_length = total.saturating_sub(2);
+    let on_ramp = ramp_tile(tile);
+    let middle_num = if on_ramp || middle_length == 0 {
+        0
+    } else {
+        north_len.saturating_sub(1).min(middle_length).max(1)
+    };
+    let electric = rail
+        && map
+            .get(north)
+            .is_some_and(|t| rail_type_from_tile(t).has_catenary());
 
     Some(BridgeSpanInfo {
         deck_z,
@@ -181,6 +200,9 @@ pub(crate) fn bridge_span_at(
         bridge_type,
         axis,
         piece,
+        middle_length,
+        middle_num,
+        electric,
     })
 }
 
@@ -194,6 +216,44 @@ fn bridge_rail_track_sprite(axis: usize) -> u32 {
         RAIL_SPRITE_TRACK_X
     } else {
         RAIL_SPRITE_TRACK_Y
+    }
+}
+
+fn spawn_bridge_catenary(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    span: &BridgeSpanInfo,
+) {
+    let tlg = catenary_tile_location_group(ctx.tx_i32(), ctx.ty_i32());
+    let mut draws = Vec::new();
+    collect_catenary_bridge_draws(
+        span.axis == 0,
+        span.middle_num,
+        span.middle_length,
+        tlg,
+        &mut draws,
+    );
+    let tint = catenary_sprite_color();
+    for draw in draws {
+        let Some(img) = assets.rail.get(&draw.sprite_id) else {
+            continue;
+        };
+        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            img.sprite_colored(tint),
+            Transform::from_translation(
+                tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    span.deck_z,
+                    draw.z_layer,
+                    TILE_HALF_H,
+                ) + Vec3::new(off.x, off.y, 0.0),
+            ),
+        ));
     }
 }
 
@@ -309,6 +369,9 @@ pub(crate) fn spawn_bridge_deck(
     );
     if span.rail && bridge_draws_separate_rail_overlay(span.bridge_type) {
         spawn_bridge_rail_overlay(commands, assets, ctx, span);
+    }
+    if span.electric && span.middle_num > 0 && span.middle_length > 0 {
+        spawn_bridge_catenary(commands, assets, ctx, span);
     }
     spawn_layer(
         commands,

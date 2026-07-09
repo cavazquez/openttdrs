@@ -6,7 +6,7 @@ use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    collect_catenary_flat_sprites, collect_rail_sprites_for_type, collect_signal_sprite_draws,
+    collect_catenary_sprites, collect_rail_sprites_for_type, collect_signal_sprite_draws,
     is_road_level_crossing, is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
     level_crossing_rail_sprite_id_for_type, rail_ghost_overlay_offset,
     rail_tile_has_pbs_reservation, rail_tile_is_signals, rail_track_base_color,
@@ -258,11 +258,11 @@ pub(crate) fn spawn_rail_tile(
             Transform::from_translation(base + Vec3::new(offset.x, offset.y, 0.0)),
         ));
     }
-    // Catenaria plana OpenGFX (wires 1039–1062); MVP sin postes/PCP ni pendientes.
-    if rail_type.has_catenary() && tileh == 0 {
+    // Catenaria OpenGFX (wires 1039–1062): plano + pendientes X/Y; sin PCP de vecinos.
+    if rail_type.has_catenary() {
         let trackbits = rail_trackbits_for_render(map, ctx.coord, map_dims.0, map_dims.1);
         let mut wires = Vec::new();
-        collect_catenary_flat_sprites(trackbits, &mut wires);
+        collect_catenary_sprites(trackbits, tileh, ctx.tx_i32(), ctx.ty_i32(), &mut wires);
         for (i, sid) in wires.iter().copied().enumerate() {
             let Some(img) = assets.rail.get(&sid) else {
                 continue;

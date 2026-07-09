@@ -149,7 +149,7 @@ const ROAD_OFFSET: [u8; 16] = [
 
 | Rango | Uso |
 |-------|-----|
-| 1039–1062 | Wires OpenGFX (`WSO_*` en `elrail_data.h`); MVP plano: X=1039, Y=1040, EW=1041, NS=1042 |
+| 1039–1062 | Wires OpenGFX (`WSO_*`); plano X/Y alterna SW/NE; pendientes: UP/DOWN 1043–1046; EW/NS=1041/1042 |
 
 ### Monorraíl y Maglev
 

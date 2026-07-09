@@ -38,7 +38,8 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
 - `rail_type.rs`: `Rail` / `Electric` en `m8` bits 0–5; `current_rail_type`.
 - `Command::ConvertRail`; eléctricos (110–113) exigen vía electrificada adyacente.
 - Toolbar «Convertir vía»; save **v15**.
-- Catenaria plana OpenGFX (wires 1039–1062); pendientes/PCP/túneles pendientes.
+- Catenaria OpenGFX (wires 1039–1062): plano + pendientes X/Y; alternancia de poste.
+- Pendiente: PCP de vecinos real, postes PPP, túneles/puentes.
 
 ## Fase 6 — Monorail / maglev ✅ (MVP)
 

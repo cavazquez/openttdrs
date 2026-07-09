@@ -43,11 +43,17 @@ pub const WIRE_SPRITE_BASE: u32 = 1039;
 /// Último sprite de wire plano/inclinado en el set OpenGFX extraído.
 pub const WIRE_SPRITE_LAST: u32 = 1062;
 
-/// `WireSpriteOffset` (plano, postes en ambos extremos) — `elrail_data.h`.
-const WSO_X_SHORT: u32 = 0;
-const WSO_Y_SHORT: u32 = 1;
+/// `WireSpriteOffset` — `elrail_data.h`.
 const WSO_EW_SHORT: u32 = 2;
 const WSO_NS_SHORT: u32 = 3;
+const WSO_X_SHORT_DOWN: u32 = 4;
+const WSO_Y_SHORT_UP: u32 = 5;
+const WSO_X_SHORT_UP: u32 = 6;
+const WSO_Y_SHORT_DOWN: u32 = 7;
+const WSO_X_SW: u32 = 8;
+const WSO_Y_SE: u32 = 9;
+const WSO_X_NE: u32 = 16;
+const WSO_Y_NW: u32 = 17;
 
 /// Delta de sprite en teselas con nieve/deserto (`SPR_RAIL_SNOW_OFFSET`).
 pub const RAIL_SPRITE_SNOW_OFFSET: u32 = 26;
@@ -160,30 +166,64 @@ pub fn catenary_wire_sprite_ids() -> impl Iterator<Item = u32> {
     WIRE_SPRITE_BASE..=WIRE_SPRITE_LAST
 }
 
-/// Cables de catenaria para vía plana (`tileh == 0`), MVP sin lógica de vecinos/PCP.
+/// Selector de pendiente para `_rail_wires` (`elrail.cpp`):
+/// `!(tileh % 3) * tileh / 3` → 0 plano, 1=`SLOPE_SW`(3), 2=`SE`(6), 3=`NW`(9), 4=`NE`(12).
+#[must_use]
+pub fn catenary_tileh_selector(tileh: u8) -> u8 {
+    let th = tileh & 0x0F;
+    if th.is_multiple_of(3) { th / 3 } else { 0 }
+}
+
+/// Cables de catenaria (`DrawRailCatenaryRailway` simplificado).
 ///
-/// Usa variantes `*_SHORT` (postes en ambos extremos) de `elrail_data.h`.
-pub fn collect_catenary_flat_sprites(tb: u8, out: &mut Vec<u32>) {
+/// - Pendientes 3/6/9/12: wires `*_SHORT_UP/DOWN` para X/Y.
+/// - Rectas planas X/Y: alterna poste un lado (`SW`/`NE` o `SE`/`NW`) según `(tx+ty)&1`
+///   (aproximación del «un poste cada dos teselas» sin PCP de vecinos).
+/// - HORZ/VERT/empalmes: `*_SHORT` (ambos extremos).
+pub fn collect_catenary_sprites(tb: u8, tileh: u8, tx: i32, ty: i32, out: &mut Vec<u32>) {
     out.clear();
     let t = tb & 0x3F;
     if t == 0 {
         return;
     }
+    let foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, t);
+    let effective_tileh = if tileh == 0 || foundation == 1 {
+        0
+    } else {
+        tileh
+    };
+    let sel = catenary_tileh_selector(effective_tileh);
+    let alt = ((tx + ty) & 1) == 0;
+
+    if t == RAIL_TB_X {
+        if let Some(wso) = catenary_wso_for_x(sel, alt) {
+            out.push(WIRE_SPRITE_BASE + wso);
+        }
+        return;
+    }
+    if t == RAIL_TB_Y {
+        if let Some(wso) = catenary_wso_for_y(sel, alt) {
+            out.push(WIRE_SPRITE_BASE + wso);
+        }
+        return;
+    }
+    if sel != 0 {
+        // Pendiente: solo X/Y tienen sprites; el resto no dibuja wire.
+        return;
+    }
     match t {
-        RAIL_TB_X => out.push(WIRE_SPRITE_BASE + WSO_X_SHORT),
-        RAIL_TB_Y => out.push(WIRE_SPRITE_BASE + WSO_Y_SHORT),
         RAIL_TB_HORZ => out.push(WIRE_SPRITE_BASE + WSO_EW_SHORT),
         RAIL_TB_VERT => out.push(WIRE_SPRITE_BASE + WSO_NS_SHORT),
         RAIL_TB_CROSS => {
-            out.push(WIRE_SPRITE_BASE + WSO_X_SHORT);
-            out.push(WIRE_SPRITE_BASE + WSO_Y_SHORT);
+            out.push(WIRE_SPRITE_BASE + if alt { WSO_X_SW } else { WSO_X_NE });
+            out.push(WIRE_SPRITE_BASE + if alt { WSO_Y_SE } else { WSO_Y_NW });
         }
         _ => {
             if t & RAIL_TB_X != 0 {
-                out.push(WIRE_SPRITE_BASE + WSO_X_SHORT);
+                out.push(WIRE_SPRITE_BASE + if alt { WSO_X_SW } else { WSO_X_NE });
             }
             if t & RAIL_TB_Y != 0 {
-                out.push(WIRE_SPRITE_BASE + WSO_Y_SHORT);
+                out.push(WIRE_SPRITE_BASE + if alt { WSO_Y_SE } else { WSO_Y_NW });
             }
             if t & (RAIL_TB_UPPER | RAIL_TB_LOWER) != 0 {
                 out.push(WIRE_SPRITE_BASE + WSO_EW_SHORT);
@@ -192,6 +232,24 @@ pub fn collect_catenary_flat_sprites(tb: u8, out: &mut Vec<u32>) {
                 out.push(WIRE_SPRITE_BASE + WSO_NS_SHORT);
             }
         }
+    }
+}
+
+fn catenary_wso_for_x(sel: u8, alt: bool) -> Option<u32> {
+    match sel {
+        0 => Some(if alt { WSO_X_SW } else { WSO_X_NE }),
+        1 => Some(WSO_X_SHORT_UP),   // SLOPE_SW
+        4 => Some(WSO_X_SHORT_DOWN), // SLOPE_NE
+        _ => None,
+    }
+}
+
+fn catenary_wso_for_y(sel: u8, alt: bool) -> Option<u32> {
+    match sel {
+        0 => Some(if alt { WSO_Y_SE } else { WSO_Y_NW }),
+        2 => Some(WSO_Y_SHORT_UP),   // SLOPE_SE
+        3 => Some(WSO_Y_SHORT_DOWN), // SLOPE_NW
+        _ => None,
     }
 }
 
@@ -1029,17 +1087,49 @@ mod tests {
     #[test]
     fn collect_catenary_flat_maps_trackbits() {
         let mut out = Vec::new();
-        collect_catenary_flat_sprites(RAIL_TB_X, &mut out);
-        assert_eq!(out, vec![1039]);
-        collect_catenary_flat_sprites(RAIL_TB_Y, &mut out);
-        assert_eq!(out, vec![1040]);
-        collect_catenary_flat_sprites(RAIL_TB_HORZ, &mut out);
-        assert_eq!(out, vec![1041]);
-        collect_catenary_flat_sprites(RAIL_TB_VERT, &mut out);
-        assert_eq!(out, vec![1042]);
-        collect_catenary_flat_sprites(RAIL_TB_CROSS, &mut out);
-        assert_eq!(out, vec![1039, 1040]);
-        collect_catenary_flat_sprites(0, &mut out);
+        // (0,0): alt=true → SW / SE (un poste).
+        collect_catenary_sprites(RAIL_TB_X, 0, 0, 0, &mut out);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SW]);
+        collect_catenary_sprites(RAIL_TB_Y, 0, 0, 0, &mut out);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_Y_SE]);
+        collect_catenary_sprites(RAIL_TB_HORZ, 0, 0, 0, &mut out);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_EW_SHORT]);
+        collect_catenary_sprites(RAIL_TB_VERT, 0, 0, 0, &mut out);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_NS_SHORT]);
+        collect_catenary_sprites(0, 0, 0, 0, &mut out);
+        assert!(out.is_empty());
+    }
+
+    #[test]
+    fn collect_catenary_alternates_pylon_side_on_flat() {
+        let mut a = Vec::new();
+        let mut b = Vec::new();
+        collect_catenary_sprites(RAIL_TB_X, 0, 0, 0, &mut a);
+        collect_catenary_sprites(RAIL_TB_X, 0, 1, 0, &mut b);
+        assert_eq!(a, vec![WIRE_SPRITE_BASE + WSO_X_SW]);
+        assert_eq!(b, vec![WIRE_SPRITE_BASE + WSO_X_NE]);
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn collect_catenary_sloped_x_and_y() {
+        use openttdrs_core::{SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW};
+        let mut out = Vec::new();
+        assert_eq!(catenary_tileh_selector(SLOPE_SW), 1);
+        assert_eq!(catenary_tileh_selector(SLOPE_SE), 2);
+        assert_eq!(catenary_tileh_selector(SLOPE_NW), 3);
+        assert_eq!(catenary_tileh_selector(SLOPE_NE), 4);
+
+        collect_catenary_sprites(RAIL_TB_X, SLOPE_SW, 0, 0, &mut out);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SHORT_UP]);
+        collect_catenary_sprites(RAIL_TB_X, SLOPE_NE, 0, 0, &mut out);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_X_SHORT_DOWN]);
+        collect_catenary_sprites(RAIL_TB_Y, SLOPE_SE, 0, 0, &mut out);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_Y_SHORT_UP]);
+        collect_catenary_sprites(RAIL_TB_Y, SLOPE_NW, 0, 0, &mut out);
+        assert_eq!(out, vec![WIRE_SPRITE_BASE + WSO_Y_SHORT_DOWN]);
+        // HORZ en pendiente: sin sprite.
+        collect_catenary_sprites(RAIL_TB_HORZ, SLOPE_SW, 0, 0, &mut out);
         assert!(out.is_empty());
     }
 

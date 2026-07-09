@@ -7,8 +7,8 @@
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
-    CargoType, Command, EngineCatalogSort, EngineDef, RoadEngineFilter, TileCoord, TileKind,
-    VehicleKind, apply_command, calendar_year_at_tick, engines_for_depot_purchase,
+    CargoType, Command, DepotPurchaseKind, EngineCatalogSort, EngineDef, RoadEngineFilter,
+    TileCoord, TileKind, VehicleKind, apply_command, calendar_year_at_tick, engines_for_depot_kind,
 };
 
 use crate::render::{RemapMapVisualsPending, TruckHandles};
@@ -250,9 +250,14 @@ pub(crate) fn engines_for_buy_window(
     sort: EngineCatalogSort,
     road_filter: RoadEngineFilter,
 ) -> Vec<&'static EngineDef> {
-    let depot_is_rail = sim.state.map.get_kind(depot_pos) == Some(TileKind::RailDepot);
+    let depot_kind = match sim.state.map.get_kind(depot_pos) {
+        Some(TileKind::RailDepot) => DepotPurchaseKind::Rail,
+        Some(TileKind::ShipDepot) => DepotPurchaseKind::Ship,
+        Some(TileKind::Airport) => DepotPurchaseKind::Aircraft,
+        _ => DepotPurchaseKind::Road,
+    };
     let year = calendar_year_at_tick(sim.state.tick);
-    engines_for_depot_purchase(depot_is_rail, year, sort, road_filter)
+    engines_for_depot_kind(depot_kind, year, sort, road_filter)
 }
 
 fn cargo_label(cargo: Option<CargoType>) -> &'static str {
@@ -285,6 +290,8 @@ fn stats_text(engine: &EngineDef) -> String {
 fn buy_window_title(sim: &SimWorld, depot_pos: TileCoord) -> &'static str {
     match sim.state.map.get_kind(depot_pos) {
         Some(TileKind::RailDepot) => "Nuevos vehículos ferroviarios",
+        Some(TileKind::ShipDepot) => "Nuevos barcos",
+        Some(TileKind::Airport) => "Nuevos aviones",
         _ => "Nuevos vehículos de carretera",
     }
 }
@@ -293,7 +300,7 @@ fn preview_sprite_for_engine(trucks: &TruckHandles, engine: &EngineDef) -> Handl
     if engine.kind == VehicleKind::Train {
         trucks.train_preview(engine.train_image_index, 2)
     } else {
-        trucks.intro_sprite(engine.kind, 2)
+        trucks.intro_sprite_for_engine(engine, 2)
     }
 }
 
@@ -362,9 +369,12 @@ pub(crate) fn sync_buy_window(
     {
         **title = buy_window_title(&sim, depot_pos).to_string();
     }
-    let depot_is_rail = sim.state.map.get_kind(depot_pos) == Some(TileKind::RailDepot);
+    let hide_road_filters = matches!(
+        sim.state.map.get_kind(depot_pos),
+        Some(TileKind::RailDepot | TileKind::ShipDepot | TileKind::Airport)
+    );
     if let Ok(mut toolbar) = road_toolbar_q.single_mut() {
-        toolbar.display = if depot_is_rail {
+        toolbar.display = if hide_road_filters {
             Display::None
         } else {
             Display::Flex

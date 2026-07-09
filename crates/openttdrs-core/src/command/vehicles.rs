@@ -620,6 +620,9 @@ pub(super) fn turn_around_vehicle(
     }
     vehicle.reverse_heading();
     vehicle.path.clear();
+    vehicle.reserved_steps.clear();
+    vehicle.wait_counter = 0;
+    vehicle.pbs_stuck = false;
     vehicle.no_network_route_to_order = false;
     vehicle.sync_order_destination(&state.map);
     Ok(())

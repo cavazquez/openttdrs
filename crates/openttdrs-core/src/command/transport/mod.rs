@@ -1,11 +1,11 @@
-//! Comandos de transporte: carretera, vía, estaciones, puentes y túneles.
-
+mod air;
 mod bridge;
 mod internal;
 mod rail;
 mod road;
 mod shared;
 mod station;
+mod water;
 
 pub(crate) use rail::{
     bridge_collinear_rail_gaps, normalize_rail_trackbits_from_neighbors,
@@ -18,8 +18,10 @@ pub use road::{
 };
 pub use station::rail_station_footprint;
 
+pub(in crate::command) use air::*;
 pub(in crate::command) use bridge::*;
 pub(in crate::command) use rail::*;
 pub(in crate::command) use road::*;
 pub(in crate::command) use shared::*;
 pub(in crate::command) use station::*;
+pub(in crate::command) use water::*;

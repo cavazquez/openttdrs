@@ -129,7 +129,7 @@ Implementación upstream: barrido de bloque en `signal.cpp` (`ProbeSigSeg`, flag
 
 - `m2` bits 8–10: pista reservada para PBS (`GetRailReservationTrackBits`).  
 - `m2` bit 11: reserva también la pista opuesta (Horz/Vert).  
-- `m5` bit 4: estado de reserva PBS en la tesela.
+- `m5` bit 4: reserva PBS en **cruces a nivel** (`HasCrossingReservation`); en vía plana la reserva vive solo en `m2`.
 
 **Pathfinder (YAPF):** penalizaciones por cruzar reserva ajena, pasar path signal por detrás, estación reservada (`yapf_costrail.hpp`: `ReservationCost`, `SignalCost`, `rail_pbs_cross_penalty`, …).
 
@@ -149,7 +149,7 @@ Cada **signal bit** 0..3 corresponde a direcciones concretas según el `Track` (
 |-------|------|-------------|
 | `m5` | 0–5 | `TrackBits` — qué piezas de vía hay |
 | `m5` | 6–7 | `RailTileType` (= Signals) |
-| `m5` | 4 | reserva PBS (tesela) |
+| `m5` | 4 | reserva PBS **solo en cruce a nivel** (`HasCrossingReservation`) |
 | `m3` | 7–4 | **presente** — bit 1 = señal `n` existe (`GetPresentSignals`) |
 | `m4` / `m3hi` | 7–4 | **estado** — bit 1 = verde (`GetSignalStates`; en `.ottdmap` el chunk `M3HI` carga en `m4()`) |
 | `m2` | 2–0 | tipo señales 2 y 3 |
@@ -206,14 +206,14 @@ Toolbar avanzada vs simplificada: la simplificada solo muestra path signals ([Bu
 | Render presente + rojo/verde | ✅ | `sprites/rail.rs`, `collect_signal_sprite_ids` |
 | Sim block simple (bloque hasta siguiente señal, 1 ocupación) | ✅ | `rail_signals.rs` — X/Y + Horz/Vert (exit por carril) |
 | Two-way / one-way block | ✅ | `cycle_signal_side_m3` vía `PlaceRailSignal` (clic en señal existente) |
-| Semaphore vs electric | 🟡 | `default_signal_variant` por año; colocación usa eléctrico por defecto |
-| Tipos Entry / Exit / Combo | 🟡 | Encoding + sim entry parcial; UI solo coloca block/path |
-| Path / PathOneWay + reserva PBS | ❌ | Hito 0.2 — ver `ROADMAP_SPRINTS.md` |
-| Presignal `UpdateSignalsOnSegment` | ❌ | Requiere port de `signal.cpp` |
+| Semaphore vs electric | ✅ | `default_signal_variant` por año (`SEMAPHORE_BUILD_BEFORE_YEAR` = 1950); setting `gui.semaphore_build_before` no expuesto |
+| Tipos Entry / Exit / Combo | ✅ | Colocación + Ctrl ciclo 6 tipos; sim entry exige bloque propio libre **y** algún exit/combo verde |
+| Path / PathOneWay + reserva PBS | ✅ | Safe wait, wait/giro, UI `PBS...`, TryReserve BFS. YAPF nativo completo opcional |
+| Presignal `UpdateSignalsOnSegment` | 🟡 | 2 pasadas (`compute_exit_signal_greens` + entry/combo); sin `ProbeSigSeg` / `_globset` upstream |
 | Arrastre línea + densidad | ✅ | `signal_density` default 4; Shift+RMB cicla |
 | Bulldozer quita señal (conserva vía) | ✅ | `RemoveRailSignal` vía herramienta Demoler |
-| Signal convert + Ctrl ciclo tipos | 🟡 | Ctrl+clic cicla block→path→path oneway (`CycleRailSignalType`) |
-| Import `.sav` con PBS/presignals | 🟡 | Tipos y render OK; reservas PBS runtime se recalculan; presignal logic parcial |
+| Signal convert + Ctrl ciclo tipos | ✅ | Ctrl+clic: block→entry→exit→combo→path→path oneway (`CycleRailSignalType`) |
+| Import `.sav` con PBS/presignals | 🟡 | Encoding y render OK; reservas PBS runtime se recalculan; árboles combo multi-nivel frágiles |
 
 ---
 
@@ -236,33 +236,38 @@ Orden sugerido alineado con [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) y [PARIDAD_
 
 1. Arrastre con densidad N (`StationBuildState.signal_density`, default 4; Shift+RMB cicla 1/2/4/8/12/16).  
 2. Bulldozer (`Clear`) sobre tesela con señal → `RemoveRailSignal` (conserva vía).  
-3. Semaphore automático por año (opcional; leer game setting) — pendiente.  
-4. Ctrl+clic ciclo de tipo (limitado a tipos ya simulados) — ya en Fase A.
+3. Semaphore automático por año — ✅ `default_signal_variant` (1950); setting GUI opcional pendiente.  
+4. Ctrl+clic ciclo de tipo (6 tipos OpenTTD) — ✅.
 
-### Fase C — Presignals
+### Fase C — Presignals 🟡 (jul 2026)
 
 **Objetivo:** saves antiguos y estaciones legacy.
 
-1. Codificar `SignalType` 1–3 en `m2` al colocar/convertir.  
+1. Codificar `SignalType` 1–3 en `m2` al colocar/convertir — ✅ `PlaceRailSignal` acepta 0–5; Ctrl cicla los 6.  
 2. Port simplificado de `signal.cpp`:  
-   - `ProbeSigSeg` / flags de bloque  
-   - `UpdateSignalsOnSegment` + buffer `_globset`  
-   - Regla entry: rojo si `Exit && !Green`  
-3. Sprites entry/exit/combo (ya en OpenGFX vía `signal_type > 3`).  
-4. Tests: estación 2 vías con entry + 2 exits (caso wiki).
+   - `ProbeSigSeg` / flags de bloque — ❌ (sigue `rail_block_ahead` v1)  
+   - `UpdateSignalsOnSegment` + buffer `_globset` — 🟡 2 pasadas entry/exit/combo  
+   - Regla entry: rojo si bloque propio ocupado **o** ningún exit verde — ✅  
+3. Sprites entry/exit/combo (ya en OpenGFX vía `signal_type > 3`) — ✅.  
+4. Tests: ciclo 6 tipos + colocación entry/exit/combo; demo estación 2 vías — ✅ encoding; dinámico wiki parcial.
 
 **No replicar** bugs upstream (lost train ignora exit) salvo paridad explícita.
 
-### Fase D — Path signals (PBS) — Hito 0.2
+### Fase D — Path signals (PBS) — Hito 0.2 🟡 (parcial, jul 2026)
 
 **Objetivo:** comportamiento moderno por defecto.
 
-1. **Reserva:** estructura de reservas por tren (teselas + track bits); escribir `m2` bits 8–11, `m5` bit 4.  
-2. **Antes de mover tren:** `TryReservePath` hasta safe waiting position (`yapf/` o módulo `rail_pbs.rs`).  
-3. **Estado señal path:** verde solo con reserva válida; desreservar al salir del camino.  
-4. **Pathfinder:** penalización pasar PBS por detrás; cruce de reserva (`ReservationCost`).  
-5. **Cliente:** overlay rutas reservadas (setting).  
-6. **PathOneWay:** `HasOnewaySignalBlockingTrackdir` en movimiento.
+1. **Reserva:** ✅ estructura por tren (`reserved_steps` + track bits); `m2` bits 8–11 vía `m2_hi`; `m5` bit 4 en **cruces a nivel** (`HasCrossingReservation`). En vía plana la reserva no usa `m5` bit 4 (paridad OpenTTD: ahí va en `m2`).  
+2. **Antes de mover tren:** ✅ extensión de reserva a lo largo del `path` hasta **posición segura** (`is_safe_waiting_position`: depósito, block, delante de path, fin de vía) o conflicto.  
+3. **Estado señal path:** ✅ verde solo con reserva completa hasta safe wait (`pbs_exit_has_complete_reservation`); path **no** exige verde previa para extender reserva; movimiento exige reserva completa.  
+4. **Pathfinder:** ✅ penalización PBS por detrás (`YAPF_PBS_BEHIND_PENALTY`); cruce de reserva (`YAPF_RESERVATION_CROSS_PENALTY`).  
+5. **Cliente:** ✅ overlay rutas reservadas (tecla R / `show_pbs_reservations`); default toolbar `SIGTYPE_PATH`.  
+6. **PathOneWay:** ✅ bloqueo sentido contrario (`DeadEnd` / `train_blocked_by_signal`).  
+7. **Espera / giro:** ✅ `PathfindingSettings` (`wait_for_pbs_path` default 30 días, `path_backoff_interval` 20, `reverse_at_signals`); stuck + giro al timeout (`tick_pbs_wait_and_maybe_reverse`).  
+8. **UI settings:** ✅ toolbar **engranaje** (Ajustes) → `Pathfinding / PBS...` (`pathfinding_settings_window.rs`).  
+9. **TryReservePath:** ✅ Dijkstra con costes YAPF (`find_path_to_safe_wait`: tile + `YAPF_RESERVATION_CROSS_PENALTY` + sesgo off-path) hasta safe wait; desactivable con `path_backoff_interval = 255`.
+
+**Pendiente:** — (TryReservePath usa Dijkstra con costes YAPF: tesela, cruce reserva, sesgo path órdenes).
 
 Dependencias: pathfinder trenes más fiel (YAPF simplificado o extensión de `pathfinder.rs`).
 
@@ -285,7 +290,7 @@ Dependencias: pathfinder trenes más fiel (YAPF simplificado o extensión de `pa
 | Estado verde/rojo block | `update_rail_signal_states` | `UpdateSignalsOnSegment` |
 | Bloqueo tren | `train_blocked_by_signal` | `CheckTrainOwnership`, PBS checks |
 | Dibujo | `collect_signal_sprite_ids` | `DrawSignals` |
-| PBS | — | `yapf`, reserva en `train_cmd.cpp` / PBS core |
+| PBS | `rail_pbs.rs` + `sim_step` | `yapf`, reserva en `train_cmd.cpp` / PBS core |
 
 ---
 

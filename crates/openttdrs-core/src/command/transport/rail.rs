@@ -629,6 +629,9 @@ pub(in crate::command) fn place_rail_signal(
     let variant = crate::rail_signals::default_signal_variant(year);
     let placement_sig_type = match sig_type {
         crate::rail_signals::SIGTYPE_BLOCK
+        | crate::rail_signals::SIGTYPE_ENTRY
+        | crate::rail_signals::SIGTYPE_EXIT
+        | crate::rail_signals::SIGTYPE_COMBO
         | crate::rail_signals::SIGTYPE_PATH
         | crate::rail_signals::SIGTYPE_PATH_ONEWAY => sig_type,
         _ => crate::rail_signals::SIGTYPE_BLOCK,

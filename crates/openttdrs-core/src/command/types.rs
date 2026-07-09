@@ -48,6 +48,16 @@ pub enum Command {
     PlaceRailDepot(TileCoord),
     /// Depósito de tren con orientación de entrada `0..3`.
     PlaceRailDepotDir(TileCoord, u8),
+    /// Depósito de barcos sobre agua; `dir` 0..3 = boca hacia agua.
+    PlaceShipDepotDir(TileCoord, u8),
+    /// Muelle 1×1 sobre agua costera; `dir` orienta el sprite (eje X/Y).
+    PlaceDock(TileCoord, u8),
+    /// Helipuerto / aeropuerto 1×1 (compra aviones + carga pasajeros).
+    PlaceAirport(TileCoord),
+    /// Canal: convierte terreno en agua navegable.
+    PlaceCanal(TileCoord),
+    /// Esclusa sobre agua; `axis_y` = eje N-S.
+    PlaceLock(TileCoord, bool),
     PlaceRoadTunnel(TileCoord, TileCoord),
     PlaceRailTunnel(TileCoord, TileCoord),
     PlaceRoadBridge(TileCoord, TileCoord, BridgeType),

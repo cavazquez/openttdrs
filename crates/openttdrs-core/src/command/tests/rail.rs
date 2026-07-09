@@ -595,9 +595,10 @@ fn place_rail_signal_cycles_side_on_same_track() {
 }
 
 #[test]
-fn cycle_rail_signal_type_block_path_oneway() {
+fn cycle_rail_signal_type_full_openttd_order() {
     use crate::rail_signals::{
-        SIGTYPE_BLOCK, SIGTYPE_PATH, SIGTYPE_PATH_ONEWAY, SignalTrack, signal_type_for_track,
+        SIGTYPE_BLOCK, SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SIGTYPE_PATH,
+        SIGTYPE_PATH_ONEWAY, SignalTrack, signal_type_for_track,
     };
 
     let mut s = GameState::new(8, 8);
@@ -609,25 +610,36 @@ fn cycle_rail_signal_type_block_path_oneway() {
     )
     .unwrap();
     let track = SignalTrack::X;
-    assert_eq!(
-        signal_type_for_track(s.map.get(c).unwrap().m2, track),
-        SIGTYPE_BLOCK
-    );
-    apply_command(&mut s, &Command::CycleRailSignalType(c, 128, 128)).unwrap();
-    assert_eq!(
-        signal_type_for_track(s.map.get(c).unwrap().m2, track),
-        SIGTYPE_PATH
-    );
-    apply_command(&mut s, &Command::CycleRailSignalType(c, 128, 128)).unwrap();
-    assert_eq!(
-        signal_type_for_track(s.map.get(c).unwrap().m2, track),
-        SIGTYPE_PATH_ONEWAY
-    );
-    apply_command(&mut s, &Command::CycleRailSignalType(c, 128, 128)).unwrap();
-    assert_eq!(
-        signal_type_for_track(s.map.get(c).unwrap().m2, track),
-        SIGTYPE_BLOCK
-    );
+    let expected = [
+        SIGTYPE_ENTRY,
+        SIGTYPE_EXIT,
+        SIGTYPE_COMBO,
+        SIGTYPE_PATH,
+        SIGTYPE_PATH_ONEWAY,
+        SIGTYPE_BLOCK,
+    ];
+    for want in expected {
+        apply_command(&mut s, &Command::CycleRailSignalType(c, 128, 128)).unwrap();
+        assert_eq!(signal_type_for_track(s.map.get(c).unwrap().m2, track), want);
+    }
+}
+
+#[test]
+fn place_presignal_types_write_m2() {
+    use crate::rail_signals::{
+        SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SignalTrack, signal_type_for_track,
+    };
+
+    for sig_type in [SIGTYPE_ENTRY, SIGTYPE_EXIT, SIGTYPE_COMBO] {
+        let mut s = GameState::new(8, 8);
+        let c = TileCoord::new(2, 2);
+        apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+        apply_command(&mut s, &Command::PlaceRailSignal(c, 0, 128, 128, sig_type)).unwrap();
+        assert_eq!(
+            signal_type_for_track(s.map.get(c).unwrap().m2, SignalTrack::X),
+            sig_type
+        );
+    }
 }
 
 #[test]

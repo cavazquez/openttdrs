@@ -30,6 +30,7 @@ pub(crate) fn action_supports_drag(action: BuildMenuAction) -> bool {
             | BuildMenuAction::RailRemove
             | BuildMenuAction::RailSignals
             | BuildMenuAction::Clear
+            | BuildMenuAction::Canal
             | BuildMenuAction::RaiseLand
             | BuildMenuAction::LowerLand
             | BuildMenuAction::LevelLand

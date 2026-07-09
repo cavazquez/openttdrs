@@ -3,8 +3,8 @@ use openttdrs_core::Map;
 
 use super::{SHORE_LAYER_FRAC, push_water_sprite, spawn_coast_debug_label};
 use crate::iso::{
-    shore_png_index, shore_sprite_half_h, shore_tileh_for_draw_shore, tile_pos_half,
-    tile_slope_bits_from_heights,
+    SLOPE_HALF_H, TILE_HALF_H, shore_png_index, shore_sprite_half_h, shore_tileh_for_draw_shore,
+    tile_pos_half, tile_slope_bits_from_heights,
 };
 use crate::render::{MapSpriteBatches, TileRenderContext, WorldAssets};
 
@@ -47,7 +47,28 @@ pub(crate) fn push_water_tile(
             push_water_sprite(&mut batches.water, &assets.water, ctx);
         }
     } else {
-        // Agua libre (Clear, Lock, Depot en mapas típicos: Clear).
-        push_water_sprite(&mut batches.water, &assets.water, ctx);
+        // Agua libre (Clear) o esclusa (m5 subtype Lock = 2).
+        let m5 = ctx.tile.map(|t| t.m5).unwrap_or(0);
+        if (m5 >> 4) & 0x0F == 2 {
+            let axis = usize::from(m5 & 1).min(1);
+            let half_h = if ctx.info.tileh == 0 {
+                TILE_HALF_H
+            } else {
+                SLOPE_HALF_H[ctx.info.tileh as usize]
+            };
+            batches.water.push((
+                ctx.map_tile_chunk(),
+                assets.water_lock_middle[axis].sprite(),
+                Transform::from_translation(tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    ctx.info.base_z,
+                    0.02,
+                    half_h,
+                )),
+            ));
+        } else {
+            push_water_sprite(&mut batches.water, &assets.water, ctx);
+        }
     }
 }

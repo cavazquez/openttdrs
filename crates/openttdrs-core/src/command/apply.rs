@@ -56,6 +56,11 @@ fn construction_event_for(
         | Command::SetRoadBits(c, _)
         | Command::PlaceRoadDepot(c)
         | Command::PlaceRoadDepotDir(c, _)
+        | Command::PlaceShipDepotDir(c, _)
+        | Command::PlaceDock(c, _)
+        | Command::PlaceAirport(c)
+        | Command::PlaceCanal(c)
+        | Command::PlaceLock(c, _)
         | Command::PlaceStation(c)
         | Command::PlaceStationDir(c, _)
         | Command::PlaceBusStop(c, _)
@@ -349,6 +354,11 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::PlaceRoadDepotDir(c, dir) => transport::place_road_depot_dir(state, *c, *dir),
         Command::PlaceRailDepot(c) => transport::place_rail_depot_dir(state, *c, 0),
         Command::PlaceRailDepotDir(c, dir) => transport::place_rail_depot_dir(state, *c, *dir),
+        Command::PlaceShipDepotDir(c, dir) => transport::place_ship_depot_dir(state, *c, *dir),
+        Command::PlaceDock(c, dir) => transport::place_dock(state, *c, *dir),
+        Command::PlaceAirport(c) => transport::place_airport(state, *c),
+        Command::PlaceCanal(c) => transport::place_canal(state, *c),
+        Command::PlaceLock(c, axis_y) => transport::place_lock(state, *c, *axis_y),
         Command::PlaceRoadTunnel(a, b) => transport::place_tunnel_or_bridge(
             state,
             *a,

@@ -32,7 +32,11 @@ pub(crate) fn step(state: &mut GameState) {
         true,
     );
 
-    crate::rail_pbs::update_train_reservations(&state.map, &mut state.vehicles);
+    crate::rail_pbs::update_train_reservations_with_settings(
+        &state.map,
+        &mut state.vehicles,
+        state.pathfinding,
+    );
     crate::rail_pbs::sync_reservations_to_map(
         &mut state.map,
         &state.vehicles,
@@ -311,8 +315,8 @@ fn try_load_from_station_waiting_cargo(
 
     let station_pos = state.stations[station_idx].pos;
     let cargo = match kind {
-        VehicleKind::Bus => preferred.unwrap_or(CargoType::Passengers),
-        VehicleKind::Truck | VehicleKind::Train | VehicleKind::Ship => {
+        VehicleKind::Bus | VehicleKind::Aircraft => preferred.unwrap_or(CargoType::Passengers),
+        VehicleKind::Truck | VehicleKind::Train => {
             let Some(cargo) = stock.pick_freight_to_load(preferred) else {
                 return false;
             };
@@ -325,12 +329,22 @@ fn try_load_from_station_waiting_cargo(
                 )
                 && !state.vehicles[vehicle_idx].orders.is_empty()
             {
-                // Con órdenes activas, carbón/madera/petróleo solo en paradas de carga (mina, bosque…).
                 return false;
             }
             cargo
         }
-        VehicleKind::Aircraft => return false,
+        VehicleKind::Ship => {
+            // Ferry de pasajeros o petrolero/carbonero.
+            if preferred.is_some_and(|c| !c.is_freight()) {
+                preferred.unwrap_or(CargoType::Passengers)
+            } else if let Some(cargo) = stock.pick_freight_to_load(preferred) {
+                cargo
+            } else if stock.get(CargoType::Passengers) > 0 {
+                CargoType::Passengers
+            } else {
+                return false;
+            }
+        }
     };
 
     if !state.stations[station_idx].accepts_cargo(cargo) {
@@ -615,6 +629,7 @@ fn recompute_vehicle_paths(state: &mut GameState) {
 fn move_vehicles(state: &mut GameState) {
     let tick = state.tick.get();
     let vehicle_count = state.vehicles.len();
+    let pf = state.pathfinding;
     for i in 0..vehicle_count {
         state.vehicles[i].sim_tick = tick;
         let blocked = {
@@ -642,7 +657,20 @@ fn move_vehicles(state: &mut GameState) {
         };
         if blocked {
             state.vehicles[i].cur_speed = 0;
+            let reversed = crate::rail_pbs::tick_pbs_wait_and_maybe_reverse(
+                &state.map,
+                &mut state.vehicles[i],
+                pf,
+            );
+            if reversed {
+                state.vehicles[i].sync_order_destination(&state.map);
+            }
             continue;
+        }
+        // Liberó el path: limpiar stuck.
+        if state.vehicles[i].pbs_stuck || state.vehicles[i].wait_counter > 0 {
+            state.vehicles[i].pbs_stuck = false;
+            state.vehicles[i].wait_counter = 0;
         }
         let had_force = state.vehicles[i].force_proceed;
         let broke_down = state.vehicles[i].check_breakdown(tick);

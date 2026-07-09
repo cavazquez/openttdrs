@@ -127,6 +127,8 @@ fn stop_kind_mismatch_note(vehicle: &Vehicle, station: &Station) -> Option<&'sta
     Some(match station.stop_kind {
         StopKind::BusStop => " — incompatible: solo buses",
         StopKind::TruckStop => " — incompatible: solo camiones/carga",
+        StopKind::Dock => " — incompatible: solo barcos",
+        StopKind::Airport => " — incompatible: solo aviones",
         StopKind::RailStation | StopKind::RailWaypoint => " — incompatible: solo trenes",
     })
 }
@@ -150,6 +152,8 @@ fn order_row_label(
             Some(StopKind::TruckStop) => "Parada carga",
             Some(StopKind::RailStation) => "Estacion tren",
             Some(StopKind::RailWaypoint) => "Waypoint",
+            Some(StopKind::Dock) => "Muelle",
+            Some(StopKind::Airport) => "Aeropuerto",
             None => "Estación",
         },
         VehicleOrder::Waypoint { .. } => "Waypoint",

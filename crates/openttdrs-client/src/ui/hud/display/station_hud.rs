@@ -10,6 +10,7 @@ fn stop_kind_label(class: StationTileClass) -> &'static str {
         StationTileClass::Rail => "estación tren",
         StationTileClass::RailWaypoint => "waypoint",
         StationTileClass::Airport => "aeropuerto",
+        StationTileClass::Dock => "muelle",
         StationTileClass::Other(_) => "estación",
     }
 }

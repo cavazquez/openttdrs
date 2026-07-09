@@ -16,9 +16,9 @@ pub const BUS_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
     // N (sprite 3092)
     VehicleLayerGfx {
         w: 8.0,
-        h: 18.0,
+        h: 20.0,
         x_offs: -3.0,
-        y_offs: -10.0,
+        y_offs: -12.0,
         path: "assets/opengfx/tiles/vehicle_bus_n.png",
     },
     // NE (sprite 3093)
@@ -31,9 +31,9 @@ pub const BUS_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
     },
     // E (sprite 3094)
     VehicleLayerGfx {
-        w: 29.0,
+        w: 27.0,
         h: 12.0,
-        x_offs: -14.0,
+        x_offs: -13.0,
         y_offs: -6.0,
         path: "assets/opengfx/tiles/vehicle_bus_e.png",
     },
@@ -48,9 +48,9 @@ pub const BUS_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
     // S (sprite 3096)
     VehicleLayerGfx {
         w: 8.0,
-        h: 17.0,
+        h: 20.0,
         x_offs: -3.0,
-        y_offs: -9.0,
+        y_offs: -12.0,
         path: "assets/opengfx/tiles/vehicle_bus_s.png",
     },
     // SW (sprite 3097)
@@ -63,9 +63,9 @@ pub const BUS_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
     },
     // W (sprite 3098)
     VehicleLayerGfx {
-        w: 29.0,
+        w: 27.0,
         h: 12.0,
-        x_offs: -14.0,
+        x_offs: -13.0,
         y_offs: -6.0,
         path: "assets/opengfx/tiles/vehicle_bus_w.png",
     },
@@ -115,9 +115,9 @@ pub const BUS_VEHICLE_LAYERS_LOADED: [VehicleLayerGfx; 8] = [
     // S (sprite 3184)
     VehicleLayerGfx {
         w: 8.0,
-        h: 17.0,
+        h: 21.0,
         x_offs: -3.0,
-        y_offs: -9.0,
+        y_offs: -13.0,
         path: "assets/opengfx/tiles/vehicle_bus_s_loaded.png",
     },
     // SW (sprite 3185)
@@ -182,9 +182,9 @@ pub const TRUCK_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
     // S (sprite 3104)
     VehicleLayerGfx {
         w: 8.0,
-        h: 18.0,
+        h: 20.0,
         x_offs: -3.0,
-        y_offs: -10.0,
+        y_offs: -12.0,
         path: "assets/opengfx/tiles/vehicle_truck_s.png",
     },
     // SW (sprite 3105)
@@ -249,9 +249,9 @@ pub const TRUCK_VEHICLE_LAYERS_LOADED: [VehicleLayerGfx; 8] = [
     // S (sprite 3192)
     VehicleLayerGfx {
         w: 8.0,
-        h: 18.0,
+        h: 20.0,
         x_offs: -3.0,
-        y_offs: -10.4,
+        y_offs: -12.0,
         path: "assets/opengfx/tiles/vehicle_truck_s_loaded.png",
     },
     // SW (sprite 3193)
@@ -280,6 +280,408 @@ pub const TRUCK_VEHICLE_LAYERS_LOADED: [VehicleLayerGfx; 8] = [
     },
 ];
 
+pub const SHIP_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
+    // N (sprite 3677)
+    VehicleLayerGfx {
+        w: 19.0,
+        h: 51.0,
+        x_offs: -8.0,
+        y_offs: -19.0,
+        path: "assets/opengfx/tiles/vehicle_ship_mps_n.png",
+    },
+    // NE (sprite 3678)
+    VehicleLayerGfx {
+        w: 67.0,
+        h: 41.0,
+        x_offs: -62.0,
+        y_offs: -3.0,
+        path: "assets/opengfx/tiles/vehicle_ship_mps_ne.png",
+    },
+    // E (sprite 3679)
+    VehicleLayerGfx {
+        w: 86.0,
+        h: 22.0,
+        x_offs: -42.0,
+        y_offs: -9.0,
+        path: "assets/opengfx/tiles/vehicle_ship_mps_e.png",
+    },
+    // SE (sprite 3680)
+    VehicleLayerGfx {
+        w: 67.0,
+        h: 40.0,
+        x_offs: -5.0,
+        y_offs: -4.0,
+        path: "assets/opengfx/tiles/vehicle_ship_mps_se.png",
+    },
+    // S (sprite 3681)
+    VehicleLayerGfx {
+        w: 19.0,
+        h: 50.0,
+        x_offs: -8.0,
+        y_offs: -25.0,
+        path: "assets/opengfx/tiles/vehicle_ship_mps_s.png",
+    },
+    // SW (sprite 3682)
+    VehicleLayerGfx {
+        w: 66.0,
+        h: 40.0,
+        x_offs: -60.0,
+        y_offs: -4.0,
+        path: "assets/opengfx/tiles/vehicle_ship_mps_sw.png",
+    },
+    // W (sprite 3683)
+    VehicleLayerGfx {
+        w: 86.0,
+        h: 22.0,
+        x_offs: -44.0,
+        y_offs: -10.0,
+        path: "assets/opengfx/tiles/vehicle_ship_mps_w.png",
+    },
+    // NW (sprite 3684)
+    VehicleLayerGfx {
+        w: 66.0,
+        h: 42.0,
+        x_offs: -3.0,
+        y_offs: -3.0,
+        path: "assets/opengfx/tiles/vehicle_ship_mps_nw.png",
+    },
+];
+
+pub const SHIP_VEHICLE_LAYERS_OIL: [VehicleLayerGfx; 8] = [
+    // N (sprite 3669)
+    VehicleLayerGfx {
+        w: 19.0,
+        h: 39.0,
+        x_offs: -8.0,
+        y_offs: -15.0,
+        path: "assets/opengfx/tiles/vehicle_ship_oil_n.png",
+    },
+    // NE (sprite 3670)
+    VehicleLayerGfx {
+        w: 56.0,
+        h: 32.0,
+        x_offs: -44.0,
+        y_offs: -1.0,
+        path: "assets/opengfx/tiles/vehicle_ship_oil_ne.png",
+    },
+    // E (sprite 3671)
+    VehicleLayerGfx {
+        w: 73.0,
+        h: 18.0,
+        x_offs: -35.0,
+        y_offs: -6.0,
+        path: "assets/opengfx/tiles/vehicle_ship_oil_e.png",
+    },
+    // SE (sprite 3672)
+    VehicleLayerGfx {
+        w: 56.0,
+        h: 33.0,
+        x_offs: -5.0,
+        y_offs: -2.0,
+        path: "assets/opengfx/tiles/vehicle_ship_oil_se.png",
+    },
+    // S (sprite 3673)
+    VehicleLayerGfx {
+        w: 19.0,
+        h: 42.0,
+        x_offs: -8.0,
+        y_offs: -18.0,
+        path: "assets/opengfx/tiles/vehicle_ship_oil_s.png",
+    },
+    // SW (sprite 3674)
+    VehicleLayerGfx {
+        w: 56.0,
+        h: 33.0,
+        x_offs: -44.0,
+        y_offs: -4.0,
+        path: "assets/opengfx/tiles/vehicle_ship_oil_sw.png",
+    },
+    // W (sprite 3675)
+    VehicleLayerGfx {
+        w: 73.0,
+        h: 18.0,
+        x_offs: -37.0,
+        y_offs: -7.0,
+        path: "assets/opengfx/tiles/vehicle_ship_oil_w.png",
+    },
+    // NW (sprite 3676)
+    VehicleLayerGfx {
+        w: 56.0,
+        h: 31.0,
+        x_offs: -8.0,
+        y_offs: 0.0,
+        path: "assets/opengfx/tiles/vehicle_ship_oil_nw.png",
+    },
+];
+
+pub const SHIP_VEHICLE_LAYERS_COAL: [VehicleLayerGfx; 8] = [
+    // N (sprite 3685)
+    VehicleLayerGfx {
+        w: 16.0,
+        h: 32.0,
+        x_offs: -7.0,
+        y_offs: -15.0,
+        path: "assets/opengfx/tiles/vehicle_ship_coal_n.png",
+    },
+    // NE (sprite 3686)
+    VehicleLayerGfx {
+        w: 42.0,
+        h: 28.0,
+        x_offs: -44.0,
+        y_offs: 2.0,
+        path: "assets/opengfx/tiles/vehicle_ship_coal_ne.png",
+    },
+    // E (sprite 3687)
+    VehicleLayerGfx {
+        w: 52.0,
+        h: 19.0,
+        x_offs: -24.0,
+        y_offs: -6.0,
+        path: "assets/opengfx/tiles/vehicle_ship_coal_e.png",
+    },
+    // SE (sprite 3688)
+    VehicleLayerGfx {
+        w: 42.0,
+        h: 25.0,
+        x_offs: 2.0,
+        y_offs: 3.0,
+        path: "assets/opengfx/tiles/vehicle_ship_coal_se.png",
+    },
+    // S (sprite 3689)
+    VehicleLayerGfx {
+        w: 16.0,
+        h: 26.0,
+        x_offs: -7.0,
+        y_offs: -12.0,
+        path: "assets/opengfx/tiles/vehicle_ship_coal_s.png",
+    },
+    // SW (sprite 3690)
+    VehicleLayerGfx {
+        w: 42.0,
+        h: 25.0,
+        x_offs: -45.0,
+        y_offs: 4.0,
+        path: "assets/opengfx/tiles/vehicle_ship_coal_sw.png",
+    },
+    // W (sprite 3691)
+    VehicleLayerGfx {
+        w: 52.0,
+        h: 19.0,
+        x_offs: -26.0,
+        y_offs: -8.0,
+        path: "assets/opengfx/tiles/vehicle_ship_coal_w.png",
+    },
+    // NW (sprite 3692)
+    VehicleLayerGfx {
+        w: 42.0,
+        h: 28.0,
+        x_offs: 2.0,
+        y_offs: 1.0,
+        path: "assets/opengfx/tiles/vehicle_ship_coal_nw.png",
+    },
+];
+
+pub const SHIP_VEHICLE_LAYERS_FERRY: [VehicleLayerGfx; 8] = [
+    // N
+    VehicleLayerGfx {
+        w: 24.0,
+        h: 36.0,
+        x_offs: -12.0,
+        y_offs: -18.0,
+        path: "assets/opengfx/tiles/vehicle_ship_ferry_n.png",
+    },
+    // NE
+    VehicleLayerGfx {
+        w: 50.0,
+        h: 34.0,
+        x_offs: -25.0,
+        y_offs: -17.0,
+        path: "assets/opengfx/tiles/vehicle_ship_ferry_ne.png",
+    },
+    // E
+    VehicleLayerGfx {
+        w: 56.0,
+        h: 24.0,
+        x_offs: -28.0,
+        y_offs: -12.0,
+        path: "assets/opengfx/tiles/vehicle_ship_ferry_e.png",
+    },
+    // SE
+    VehicleLayerGfx {
+        w: 50.0,
+        h: 37.0,
+        x_offs: -25.0,
+        y_offs: -18.0,
+        path: "assets/opengfx/tiles/vehicle_ship_ferry_se.png",
+    },
+    // S
+    VehicleLayerGfx {
+        w: 24.0,
+        h: 37.0,
+        x_offs: -12.0,
+        y_offs: -18.0,
+        path: "assets/opengfx/tiles/vehicle_ship_ferry_s.png",
+    },
+    // SW
+    VehicleLayerGfx {
+        w: 50.0,
+        h: 37.0,
+        x_offs: -25.0,
+        y_offs: -18.0,
+        path: "assets/opengfx/tiles/vehicle_ship_ferry_sw.png",
+    },
+    // W
+    VehicleLayerGfx {
+        w: 56.0,
+        h: 25.0,
+        x_offs: -28.0,
+        y_offs: -12.0,
+        path: "assets/opengfx/tiles/vehicle_ship_ferry_w.png",
+    },
+    // NW
+    VehicleLayerGfx {
+        w: 50.0,
+        h: 34.0,
+        x_offs: -25.0,
+        y_offs: -17.0,
+        path: "assets/opengfx/tiles/vehicle_ship_ferry_nw.png",
+    },
+];
+
+pub const AIRCRAFT_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
+    // N (sprite 3765)
+    VehicleLayerGfx {
+        w: 48.0,
+        h: 20.0,
+        x_offs: -24.0,
+        y_offs: -9.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_dakota_n.png",
+    },
+    // NE (sprite 3766)
+    VehicleLayerGfx {
+        w: 38.0,
+        h: 17.0,
+        x_offs: -19.0,
+        y_offs: -7.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_dakota_ne.png",
+    },
+    // E (sprite 3767)
+    VehicleLayerGfx {
+        w: 42.0,
+        h: 24.0,
+        x_offs: -21.0,
+        y_offs: -11.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_dakota_e.png",
+    },
+    // SE (sprite 3768)
+    VehicleLayerGfx {
+        w: 37.0,
+        h: 27.0,
+        x_offs: -18.0,
+        y_offs: -12.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_dakota_se.png",
+    },
+    // S (sprite 3769)
+    VehicleLayerGfx {
+        w: 48.0,
+        h: 29.0,
+        x_offs: -24.0,
+        y_offs: -13.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_dakota_s.png",
+    },
+    // SW (sprite 3770)
+    VehicleLayerGfx {
+        w: 37.0,
+        h: 27.0,
+        x_offs: -18.0,
+        y_offs: -12.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_dakota_sw.png",
+    },
+    // W (sprite 3771)
+    VehicleLayerGfx {
+        w: 42.0,
+        h: 24.0,
+        x_offs: -21.0,
+        y_offs: -11.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_dakota_w.png",
+    },
+    // NW (sprite 3772)
+    VehicleLayerGfx {
+        w: 38.0,
+        h: 17.0,
+        x_offs: -19.0,
+        y_offs: -7.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_dakota_nw.png",
+    },
+];
+
+pub const AIRCRAFT_VEHICLE_LAYERS_FOKKER: [VehicleLayerGfx; 8] = [
+    // N (sprite 3773)
+    VehicleLayerGfx {
+        w: 32.0,
+        h: 17.0,
+        x_offs: -16.0,
+        y_offs: -7.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_fokker_n.png",
+    },
+    // NE (sprite 3774)
+    VehicleLayerGfx {
+        w: 25.0,
+        h: 13.0,
+        x_offs: -12.0,
+        y_offs: -5.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_fokker_ne.png",
+    },
+    // E (sprite 3775)
+    VehicleLayerGfx {
+        w: 29.0,
+        h: 17.0,
+        x_offs: -14.0,
+        y_offs: -7.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_fokker_e.png",
+    },
+    // SE (sprite 3776)
+    VehicleLayerGfx {
+        w: 25.0,
+        h: 18.0,
+        x_offs: -12.0,
+        y_offs: -8.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_fokker_se.png",
+    },
+    // S (sprite 3777)
+    VehicleLayerGfx {
+        w: 32.0,
+        h: 22.0,
+        x_offs: -16.0,
+        y_offs: -10.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_fokker_s.png",
+    },
+    // SW (sprite 3778)
+    VehicleLayerGfx {
+        w: 25.0,
+        h: 18.0,
+        x_offs: -12.0,
+        y_offs: -8.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_fokker_sw.png",
+    },
+    // W (sprite 3779)
+    VehicleLayerGfx {
+        w: 29.0,
+        h: 17.0,
+        x_offs: -14.0,
+        y_offs: -7.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_fokker_w.png",
+    },
+    // NW (sprite 3780)
+    VehicleLayerGfx {
+        w: 25.0,
+        h: 13.0,
+        x_offs: -12.0,
+        y_offs: -5.0,
+        path: "assets/opengfx/tiles/vehicle_aircraft_fokker_nw.png",
+    },
+];
+
 pub const TRAIN_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
     // N (sprite 2921)
     VehicleLayerGfx {
@@ -302,7 +704,7 @@ pub const TRAIN_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
         w: 28.0,
         h: 12.0,
         x_offs: -16.0,
-        y_offs: -6.0,
+        y_offs: -8.0,
         path: "assets/opengfx/tiles/vehicle_train_e.png",
     },
     // SE (sprite 2924)
@@ -334,7 +736,7 @@ pub const TRAIN_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
         w: 28.0,
         h: 12.0,
         x_offs: -15.0,
-        y_offs: -6.0,
+        y_offs: -8.0,
         path: "assets/opengfx/tiles/vehicle_train_w.png",
     },
     // NW (sprite 2928)
@@ -369,7 +771,7 @@ pub const TRAIN_VEHICLE_LAYERS_T0: [VehicleLayerGfx; 8] = [
         w: 29.0,
         h: 12.0,
         x_offs: -16.0,
-        y_offs: -6.0,
+        y_offs: -8.0,
         path: "assets/opengfx/tiles/vehicle_train_t0_e.png",
     },
     // SE (sprite 2908)
@@ -401,7 +803,7 @@ pub const TRAIN_VEHICLE_LAYERS_T0: [VehicleLayerGfx; 8] = [
         w: 29.0,
         h: 12.0,
         x_offs: -16.0,
-        y_offs: -6.0,
+        y_offs: -8.0,
         path: "assets/opengfx/tiles/vehicle_train_t0_w.png",
     },
     // NW (sprite 2912)
@@ -436,7 +838,7 @@ pub const TRAIN_VEHICLE_LAYERS_T1: [VehicleLayerGfx; 8] = [
         w: 29.0,
         h: 12.0,
         x_offs: -16.0,
-        y_offs: -6.0,
+        y_offs: -8.0,
         path: "assets/opengfx/tiles/vehicle_train_t1_e.png",
     },
     // SE (sprite 2916)
@@ -468,7 +870,7 @@ pub const TRAIN_VEHICLE_LAYERS_T1: [VehicleLayerGfx; 8] = [
         w: 29.0,
         h: 12.0,
         x_offs: -16.0,
-        y_offs: -6.0,
+        y_offs: -8.0,
         path: "assets/opengfx/tiles/vehicle_train_t1_w.png",
     },
     // NW (sprite 2920)
@@ -503,7 +905,7 @@ pub const TRAIN_VEHICLE_LAYERS_TDIESEL: [VehicleLayerGfx; 8] = [
         w: 29.0,
         h: 12.0,
         x_offs: -16.0,
-        y_offs: -6.0,
+        y_offs: -8.0,
         path: "assets/opengfx/tiles/vehicle_train_td_e.png",
     },
     // SE (sprite 2952)
@@ -535,7 +937,7 @@ pub const TRAIN_VEHICLE_LAYERS_TDIESEL: [VehicleLayerGfx; 8] = [
         w: 29.0,
         h: 12.0,
         x_offs: -16.0,
-        y_offs: -6.0,
+        y_offs: -8.0,
         path: "assets/opengfx/tiles/vehicle_train_td_w.png",
     },
     // NW (sprite 2956)
@@ -567,18 +969,18 @@ pub const TRAIN_VEHICLE_LAYERS_TELECTRIC: [VehicleLayerGfx; 8] = [
     },
     // E (sprite 2967)
     VehicleLayerGfx {
-        w: 29.0,
+        w: 28.0,
         h: 15.0,
-        x_offs: -16.0,
+        x_offs: -15.0,
         y_offs: -9.0,
         path: "assets/opengfx/tiles/vehicle_train_te_e.png",
     },
     // SE (sprite 2968)
     VehicleLayerGfx {
         w: 19.0,
-        h: 16.0,
+        h: 17.0,
         x_offs: -6.0,
-        y_offs: -9.0,
+        y_offs: -10.0,
         path: "assets/opengfx/tiles/vehicle_train_te_se.png",
     },
     // S (sprite 2969)
@@ -592,16 +994,16 @@ pub const TRAIN_VEHICLE_LAYERS_TELECTRIC: [VehicleLayerGfx; 8] = [
     // SW (sprite 2970)
     VehicleLayerGfx {
         w: 19.0,
-        h: 16.0,
+        h: 17.0,
         x_offs: -13.0,
-        y_offs: -9.0,
+        y_offs: -10.0,
         path: "assets/opengfx/tiles/vehicle_train_te_sw.png",
     },
     // W (sprite 2971)
     VehicleLayerGfx {
-        w: 29.0,
+        w: 28.0,
         h: 15.0,
-        x_offs: -16.0,
+        x_offs: -14.0,
         y_offs: -9.0,
         path: "assets/opengfx/tiles/vehicle_train_te_w.png",
     },

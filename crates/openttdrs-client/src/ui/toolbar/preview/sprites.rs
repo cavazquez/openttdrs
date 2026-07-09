@@ -43,6 +43,31 @@ pub(crate) fn preview_image_for_action(
             Some(asset_server.load::<Image>("assets/opengfx/tiles/road_flat_00.png"))
         }
         BuildMenuAction::RoadDepot => None,
+        BuildMenuAction::ShipDepot => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/ship_depot_ne.png"))
+        }
+        BuildMenuAction::Dock => {
+            let path = if station_state.orientation & 1 != 0 {
+                "assets/opengfx/tiles/dock_flat_y.png"
+            } else {
+                "assets/opengfx/tiles/dock_flat_x.png"
+            };
+            Some(asset_server.load::<Image>(path))
+        }
+        BuildMenuAction::Canal => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/water_flat.png"))
+        }
+        BuildMenuAction::Lock => {
+            let path = if station_state.orientation & 1 != 0 {
+                "assets/opengfx/tiles/water_lock_ew_middle.png"
+            } else {
+                "assets/opengfx/tiles/water_lock_ns_middle.png"
+            };
+            Some(asset_server.load::<Image>(path))
+        }
+        BuildMenuAction::Airport => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/airport_heliport.png"))
+        }
         BuildMenuAction::RoadBridge => {
             let path = if bridge_axis_y_from_tiles(preview_tiles) {
                 "assets/opengfx/tiles/bridge_wood_road_y.png"

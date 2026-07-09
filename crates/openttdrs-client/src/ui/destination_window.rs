@@ -144,6 +144,8 @@ fn destinations_for_vehicle(sim: &SimWorld, vehicle_id: u32) -> Vec<DestCandidat
             StopKind::BusStop => "Parada bus",
             StopKind::TruckStop => "Parada carga",
             StopKind::RailStation => "Estación tren",
+            StopKind::Dock => "Muelle",
+            StopKind::Airport => "Aeropuerto",
             StopKind::RailWaypoint => "Waypoint",
         };
         let name = station

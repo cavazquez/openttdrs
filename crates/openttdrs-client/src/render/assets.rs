@@ -52,6 +52,14 @@ pub(crate) struct WorldAssets {
     pub(crate) road_depot_builds: [Vec<AtlasSprite>; 4],
     /// Capas del depósito de vía por dirección (`m5 & 3`: NE/SE/SW/NW).
     pub(crate) rail_depot_builds: [Vec<AtlasSprite>; 4],
+    /// Depósito naval por dirección (`m5 & 3`).
+    pub(crate) ship_depot: [AtlasSprite; 4],
+    /// Muelle plano: índice 0 = eje X, 1 = eje Y.
+    pub(crate) dock_flat: [AtlasSprite; 2],
+    /// Helipuerto / hangar 1×1.
+    pub(crate) airport_heliport: AtlasSprite,
+    /// Esclusa: [NS, EW] × middle (MVP).
+    pub(crate) water_lock_middle: [AtlasSprite; 2],
     /// Portales de túnel por dirección diagonal (0=NE … 3=NW).
     pub(crate) road_tunnels: [AtlasSprite; 4],
     pub(crate) rail_tunnels: [AtlasSprite; 4],
@@ -210,6 +218,18 @@ impl WorldAssets {
                 .map(|layer| atlas.get_path(layer.path))
                 .collect()
         });
+        let ship_depot = [
+            atlas.get("ship_depot_ne.png"),
+            atlas.get("ship_depot_se_front.png"),
+            atlas.get("ship_depot_sw_front.png"),
+            atlas.get("ship_depot_nw.png"),
+        ];
+        let dock_flat = [atlas.get("dock_flat_x.png"), atlas.get("dock_flat_y.png")];
+        let airport_heliport = atlas.get("airport_heliport.png");
+        let water_lock_middle = [
+            atlas.get("water_lock_ns_middle.png"),
+            atlas.get("water_lock_ew_middle.png"),
+        ];
         use crate::sprites::{tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name};
         let road_tunnels = std::array::from_fn(|dir| {
             atlas
@@ -384,6 +404,10 @@ impl WorldAssets {
             road_depot_ground,
             road_depot_builds,
             rail_depot_builds,
+            ship_depot,
+            dock_flat,
+            airport_heliport,
+            water_lock_middle,
             road_tunnels,
             rail_tunnels,
             bridge_by_id,

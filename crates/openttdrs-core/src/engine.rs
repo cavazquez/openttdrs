@@ -67,7 +67,11 @@ pub const ENGINE_TRAIN_SH_40: u16 = 111;
 pub const ENGINE_TRAIN_TIM: u16 = 112;
 pub const ENGINE_TRAIN_ASIASTAR: u16 = 113;
 pub const ENGINE_SHIP_MPS: u16 = 200;
+pub const ENGINE_SHIP_OIL: u16 = 201;
+pub const ENGINE_SHIP_COAL: u16 = 202;
+pub const ENGINE_SHIP_FERRY: u16 = 203;
 pub const ENGINE_AIRCRAFT_DAKOTA: u16 = 300;
+pub const ENGINE_AIRCRAFT_FOKKER: u16 = 301;
 
 /// Paso sub-tile del bus MPS en diagonal a velocidad de crucero (`GetAdvanceSpeed` ×
 /// `255/192` sobre `GetAdvanceDistance` diagonal — `vehicle_base.h:439-455`).
@@ -449,6 +453,45 @@ const ENGINES: &[EngineDef] = &[
         1920
     ),
     road!(
+        ENGINE_SHIP_OIL,
+        VehicleKind::Ship,
+        "MPS Oil Tanker",
+        80,
+        140,
+        110,
+        90,
+        Some(CargoType::Oil),
+        500,
+        120,
+        1930
+    ),
+    road!(
+        ENGINE_SHIP_COAL,
+        VehicleKind::Ship,
+        "MPS Coal Trader",
+        72,
+        130,
+        100,
+        100,
+        Some(CargoType::Coal),
+        450,
+        110,
+        1925
+    ),
+    road!(
+        ENGINE_SHIP_FERRY,
+        VehicleKind::Ship,
+        "FFP Passenger Ferry",
+        112,
+        150,
+        120,
+        80,
+        Some(CargoType::Passengers),
+        600,
+        70,
+        1950
+    ),
+    road!(
         ENGINE_AIRCRAFT_DAKOTA,
         VehicleKind::Aircraft,
         "Dakota",
@@ -460,6 +503,19 @@ const ENGINES: &[EngineDef] = &[
         1_200,
         20,
         1944
+    ),
+    road!(
+        ENGINE_AIRCRAFT_FOKKER,
+        VehicleKind::Aircraft,
+        "Fokker F27",
+        380,
+        240,
+        200,
+        40,
+        Some(CargoType::Passengers),
+        1_800,
+        25,
+        1958
     ),
 ];
 
@@ -508,16 +564,51 @@ pub fn engines_for_depot_purchase(
     sort: EngineCatalogSort,
     road_filter: RoadEngineFilter,
 ) -> Vec<&'static EngineDef> {
+    engines_for_depot_kind(
+        if depot_is_rail {
+            DepotPurchaseKind::Rail
+        } else {
+            DepotPurchaseKind::Road
+        },
+        calendar_year,
+        sort,
+        road_filter,
+    )
+}
+
+/// Tipo de depósito para filtrar el catálogo de compra.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DepotPurchaseKind {
+    Rail,
+    Road,
+    Ship,
+    Aircraft,
+}
+
+/// Motores visibles según el tipo de depósito.
+#[must_use]
+pub fn engines_for_depot_kind(
+    depot_kind: DepotPurchaseKind,
+    calendar_year: u32,
+    sort: EngineCatalogSort,
+    road_filter: RoadEngineFilter,
+) -> Vec<&'static EngineDef> {
     let mut list: Vec<&EngineDef> = ENGINES
         .iter()
         .filter(|engine| {
             if !engine_available_in_year(engine, calendar_year) {
                 return false;
             }
-            match (depot_is_rail, engine.kind) {
-                (true, VehicleKind::Train) => true,
-                (false, VehicleKind::Bus) => road_filter != RoadEngineFilter::TruckOnly,
-                (false, VehicleKind::Truck) => road_filter != RoadEngineFilter::BusOnly,
+            match (depot_kind, engine.kind) {
+                (DepotPurchaseKind::Rail, VehicleKind::Train)
+                | (DepotPurchaseKind::Ship, VehicleKind::Ship)
+                | (DepotPurchaseKind::Aircraft, VehicleKind::Aircraft) => true,
+                (DepotPurchaseKind::Road, VehicleKind::Bus) => {
+                    road_filter != RoadEngineFilter::TruckOnly
+                }
+                (DepotPurchaseKind::Road, VehicleKind::Truck) => {
+                    road_filter != RoadEngineFilter::BusOnly
+                }
                 _ => false,
             }
         })

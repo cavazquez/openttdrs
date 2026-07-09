@@ -40,22 +40,32 @@ pub(super) fn spawn_toolbar_group_buttons(
             ),
             (
                 2,
+                "assets/opengfx/tiles/ship_depot_ne.png",
+                ToolbarGroup::Water,
+            ),
+            (
+                3,
+                "assets/opengfx/tiles/airport_heliport.png",
+                ToolbarGroup::Air,
+            ),
+            (
+                4,
                 "assets/opengfx/tiles/house_church_build.png",
                 ToolbarGroup::Economy,
             ),
             (
-                3,
+                5,
                 "assets/opengfx/tiles/ui_terraform_up.png",
                 ToolbarGroup::Landscape,
             ),
             (
-                4,
+                6,
                 "assets/opengfx/tiles/object_lighthouse.png",
                 ToolbarGroup::Info,
             ),
             (
-                5,
-                "assets/opengfx/tiles/object_transmitter.png",
+                7,
+                "assets/opengfx/tiles/ui_settings.png",
                 ToolbarGroup::Settings,
             ),
         ] {
@@ -68,10 +78,12 @@ pub(super) fn spawn_toolbar_group_buttons(
                         text: match group {
                             ToolbarGroup::Rail => "Ferrocarriles",
                             ToolbarGroup::Road => "Carreteras",
+                            ToolbarGroup::Water => "Agua (barcos)",
+                            ToolbarGroup::Air => "Aeropuertos",
                             ToolbarGroup::Economy => "Economia",
                             ToolbarGroup::Landscape => "Paisaje",
                             ToolbarGroup::Info => "Informacion",
-                            ToolbarGroup::Settings => "Ajustes",
+                            ToolbarGroup::Settings => "Ajustes (pausa, zoom, noticias, PBS...)",
                         },
                     },
                     BuildMenuUi,
@@ -98,7 +110,7 @@ pub(super) fn spawn_toolbar_group_buttons(
                         },
                     ));
                 });
-            if i < 5 {
+            if i < 6 {
                 parent.spawn((
                     Node {
                         width: Val::Px(2.0),
@@ -121,7 +133,7 @@ pub(super) fn spawn_toolbar_group_buttons(
             BackgroundColor(Color::srgb(0.62, 0.55, 0.38)),
             BuildMenuUi,
         ));
-        spawn_sound_music_toolbar_button(parent);
+        spawn_sound_music_toolbar_button(parent, asset_server);
         parent.spawn((
             Node {
                 width: Val::Px(2.0),
@@ -147,34 +159,38 @@ pub(super) fn spawn_toolbar_group_buttons(
     });
 }
 
-fn spawn_sound_music_toolbar_button(parent: &mut ChildSpawnerCommands) {
-    parent.spawn((
-        Button,
-        SoundMusicToolbarButton,
-        ToolbarTooltipTarget {
-            text: "Sonido y música (volúmenes, efectos, jukebox)",
-        },
-        BuildMenuUi,
-        Node {
-            width: Val::Px(72.0),
-            height: Val::Px(48.0),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: UiRect::all(Val::Px(2.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
-        BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
-        Interaction::default(),
-        children![(
-            Text::new("Sonido"),
-            TextFont {
-                font_size: FontSize::Rem(0.85),
+fn spawn_sound_music_toolbar_button(parent: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
+    parent
+        .spawn((
+            Button,
+            SoundMusicToolbarButton,
+            ToolbarTooltipTarget {
+                text: "Sonido y música (volúmenes, efectos, jukebox)",
+            },
+            BuildMenuUi,
+            Node {
+                width: Val::Px(48.0),
+                height: Val::Px(48.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(2.0)),
                 ..default()
             },
-            TextColor(Color::srgb(0.95, 0.92, 0.78)),
-        )],
-    ));
+            BackgroundColor(Color::srgb(0.33, 0.28, 0.19)),
+            BorderColor::all(Color::srgb(0.64, 0.57, 0.39)),
+            Interaction::default(),
+        ))
+        .with_children(|p| {
+            p.spawn((
+                ImageNode::new(asset_server.load::<Image>("assets/opengfx/tiles/ui_sound.png")),
+                Node {
+                    width: Val::Px(32.0),
+                    height: Val::Px(32.0),
+                    padding: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+            ));
+        });
 }
 
 fn spawn_save_load_button(
@@ -270,6 +286,59 @@ pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &A
         });
 }
 
+pub(super) fn spawn_water_panel(root: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
+    root.spawn(tool_panel_node(ToolbarGroup::Water, false))
+        .with_children(|panel| {
+            spawn_panel_title(panel, "Construccion acuatica", 420.0);
+            spawn_button_row(panel, |buttons| {
+                spawn_icon_tool_buttons(
+                    buttons,
+                    asset_server,
+                    &[
+                        (
+                            "Deposito de barcos",
+                            "assets/opengfx/tiles/ship_depot_ne.png",
+                            BuildMenuAction::ShipDepot,
+                        ),
+                        (
+                            "Muelle",
+                            "assets/opengfx/tiles/dock_flat_x.png",
+                            BuildMenuAction::Dock,
+                        ),
+                        (
+                            "Canal",
+                            "assets/opengfx/tiles/water_flat.png",
+                            BuildMenuAction::Canal,
+                        ),
+                        (
+                            "Esclusa",
+                            "assets/opengfx/tiles/water_lock_ns_middle.png",
+                            BuildMenuAction::Lock,
+                        ),
+                    ],
+                );
+            });
+        });
+}
+
+pub(super) fn spawn_air_panel(root: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
+    root.spawn(tool_panel_node(ToolbarGroup::Air, false))
+        .with_children(|panel| {
+            spawn_panel_title(panel, "Construccion aerea", 280.0);
+            spawn_button_row(panel, |buttons| {
+                spawn_icon_tool_buttons(
+                    buttons,
+                    asset_server,
+                    &[(
+                        "Helipuerto / hangar",
+                        "assets/opengfx/tiles/airport_heliport.png",
+                        BuildMenuAction::Airport,
+                    )],
+                );
+            });
+        });
+}
+
 pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
     root.spawn(tool_panel_node(ToolbarGroup::Rail, false))
         .with_children(|panel| {
@@ -334,7 +403,7 @@ pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             BuildMenuAction::RailStation,
                         ),
                         (
-                            "Señales de bloque",
+                            "Señales",
                             "assets/opengfx/tiles/toolbar_rail_signals.png",
                             BuildMenuAction::RailSignals,
                         ),
@@ -526,7 +595,10 @@ pub(super) fn spawn_secondary_tool_panels(
                     )],
                 ),
                 ToolbarGroup::Settings => spawn_settings_buttons(buttons),
-                ToolbarGroup::Rail | ToolbarGroup::Road => {}
+                ToolbarGroup::Rail
+                | ToolbarGroup::Road
+                | ToolbarGroup::Water
+                | ToolbarGroup::Air => {}
             });
     }
 }

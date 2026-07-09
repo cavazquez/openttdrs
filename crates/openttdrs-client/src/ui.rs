@@ -19,6 +19,7 @@ mod industry_panel;
 mod main_menu;
 mod main_menu_intro;
 mod news_settings_window;
+mod pathfinding_settings_window;
 mod save_window;
 mod statusbar;
 mod timetable_window;
@@ -65,6 +66,11 @@ use main_menu_intro::{
 use news_settings_window::{
     NewsSettingsWindowState, handle_news_settings_buttons, news_settings_on_closed,
     setup_news_settings_window, sync_news_settings_window,
+};
+use pathfinding_settings_window::{
+    PathfindingSettingsWindowState, handle_pathfinding_settings_buttons,
+    pathfinding_settings_on_closed, setup_pathfinding_settings_window,
+    sync_pathfinding_settings_window,
 };
 pub(crate) use save_window::SaveWindowState;
 use save_window::{
@@ -123,6 +129,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<NewsHistoryState>()
         .init_resource::<FinancesWindowState>()
         .init_resource::<NewsSettingsWindowState>()
+        .init_resource::<PathfindingSettingsWindowState>()
         .init_resource::<SoundMusicWindowState>()
         .init_resource::<crate::news_prefs::NewsDisplayPrefs>()
         .init_resource::<SelectedTileInfo>()
@@ -166,6 +173,7 @@ impl Plugin for ClientUiPlugin {
                 setup_news_history_window,
                 setup_finances_window,
                 setup_news_settings_window,
+                setup_pathfinding_settings_window,
                 setup_sound_music_window,
                 setup_top_toolbar,
                 setup_build_menu,
@@ -333,6 +341,9 @@ impl Plugin for ClientUiPlugin {
                 handle_news_settings_buttons,
                 news_settings_on_closed,
                 sync_news_settings_window,
+                handle_pathfinding_settings_buttons,
+                pathfinding_settings_on_closed,
+                sync_pathfinding_settings_window,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

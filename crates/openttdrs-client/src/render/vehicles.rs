@@ -18,9 +18,11 @@ use crate::simulation::SimClock;
 mod vehicle_gfx;
 
 use vehicle_gfx::{
-    BUS_VEHICLE_LAYERS, BUS_VEHICLE_LAYERS_LOADED, TRAIN_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS_T0,
-    TRAIN_VEHICLE_LAYERS_T1, TRAIN_VEHICLE_LAYERS_TDIESEL, TRAIN_VEHICLE_LAYERS_TELECTRIC,
-    TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED,
+    AIRCRAFT_VEHICLE_LAYERS, AIRCRAFT_VEHICLE_LAYERS_FOKKER, BUS_VEHICLE_LAYERS,
+    BUS_VEHICLE_LAYERS_LOADED, SHIP_VEHICLE_LAYERS, SHIP_VEHICLE_LAYERS_COAL,
+    SHIP_VEHICLE_LAYERS_FERRY, SHIP_VEHICLE_LAYERS_OIL, TRAIN_VEHICLE_LAYERS,
+    TRAIN_VEHICLE_LAYERS_T0, TRAIN_VEHICLE_LAYERS_T1, TRAIN_VEHICLE_LAYERS_TDIESEL,
+    TRAIN_VEHICLE_LAYERS_TELECTRIC, TRUCK_VEHICLE_LAYERS, TRUCK_VEHICLE_LAYERS_LOADED,
 };
 
 pub(crate) struct VehicleRenderPlugin;
@@ -53,16 +55,37 @@ fn train_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
     }
 }
 
+fn ship_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+    let engine_id = v
+        .engine_id
+        .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
+    match engine_id {
+        openttdrs_core::ENGINE_SHIP_OIL => &SHIP_VEHICLE_LAYERS_OIL,
+        openttdrs_core::ENGINE_SHIP_COAL => &SHIP_VEHICLE_LAYERS_COAL,
+        openttdrs_core::ENGINE_SHIP_FERRY => &SHIP_VEHICLE_LAYERS_FERRY,
+        _ => &SHIP_VEHICLE_LAYERS,
+    }
+}
+
+fn aircraft_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
+    let engine_id = v
+        .engine_id
+        .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
+    if engine_id == openttdrs_core::ENGINE_AIRCRAFT_FOKKER {
+        &AIRCRAFT_VEHICLE_LAYERS_FOKKER
+    } else {
+        &AIRCRAFT_VEHICLE_LAYERS
+    }
+}
+
 fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
     match v.kind {
-        VehicleKind::Truck | VehicleKind::Ship if v.uses_loaded_road_sprite() => {
-            &TRUCK_VEHICLE_LAYERS_LOADED
-        }
-        VehicleKind::Truck | VehicleKind::Ship => &TRUCK_VEHICLE_LAYERS,
-        VehicleKind::Bus | VehicleKind::Aircraft if v.uses_loaded_road_sprite() => {
-            &BUS_VEHICLE_LAYERS_LOADED
-        }
-        VehicleKind::Bus | VehicleKind::Aircraft => &BUS_VEHICLE_LAYERS,
+        VehicleKind::Truck if v.uses_loaded_road_sprite() => &TRUCK_VEHICLE_LAYERS_LOADED,
+        VehicleKind::Truck => &TRUCK_VEHICLE_LAYERS,
+        VehicleKind::Ship => ship_layers_for(v),
+        VehicleKind::Bus if v.uses_loaded_road_sprite() => &BUS_VEHICLE_LAYERS_LOADED,
+        VehicleKind::Bus => &BUS_VEHICLE_LAYERS,
+        VehicleKind::Aircraft => aircraft_layers_for(v),
         VehicleKind::Train => train_layers_for(v),
     }
 }
@@ -127,6 +150,12 @@ pub(crate) struct TruckHandles {
     bus_loaded: DirHandles,
     truck: DirHandles,
     truck_loaded: DirHandles,
+    ship: DirHandles,
+    ship_oil: DirHandles,
+    ship_coal: DirHandles,
+    ship_ferry: DirHandles,
+    aircraft: DirHandles,
+    aircraft_fokker: DirHandles,
     train_groups: [DirHandles; 5],
 }
 
@@ -152,6 +181,12 @@ impl TruckHandles {
             bus_loaded: load_set(asset_server, &BUS_VEHICLE_LAYERS_LOADED),
             truck: load_set(asset_server, &TRUCK_VEHICLE_LAYERS),
             truck_loaded: load_set(asset_server, &TRUCK_VEHICLE_LAYERS_LOADED),
+            ship: load_set(asset_server, &SHIP_VEHICLE_LAYERS),
+            ship_oil: load_set(asset_server, &SHIP_VEHICLE_LAYERS_OIL),
+            ship_coal: load_set(asset_server, &SHIP_VEHICLE_LAYERS_COAL),
+            ship_ferry: load_set(asset_server, &SHIP_VEHICLE_LAYERS_FERRY),
+            aircraft: load_set(asset_server, &AIRCRAFT_VEHICLE_LAYERS),
+            aircraft_fokker: load_set(asset_server, &AIRCRAFT_VEHICLE_LAYERS_FOKKER),
             train_groups: [
                 load_set(asset_server, &TRAIN_VEHICLE_LAYERS_T0),
                 load_set(asset_server, &TRAIN_VEHICLE_LAYERS_T1),
@@ -165,9 +200,35 @@ impl TruckHandles {
     pub(crate) fn intro_sprite(&self, kind: VehicleKind, dir: usize) -> Handle<Image> {
         let i = dir.min(7);
         match kind {
-            VehicleKind::Bus | VehicleKind::Aircraft => self.bus[i].clone(),
+            VehicleKind::Bus => self.bus[i].clone(),
+            VehicleKind::Aircraft => self.aircraft[i].clone(),
             VehicleKind::Train => self.train_groups[2][i].clone(),
-            VehicleKind::Truck | VehicleKind::Ship => self.truck[i].clone(),
+            VehicleKind::Truck => self.truck[i].clone(),
+            VehicleKind::Ship => self.ship[i].clone(),
+        }
+    }
+
+    pub(crate) fn intro_sprite_for_engine(
+        &self,
+        engine: &openttdrs_core::EngineDef,
+        dir: usize,
+    ) -> Handle<Image> {
+        let i = dir.min(7);
+        match engine.kind {
+            VehicleKind::Ship => match engine.id {
+                openttdrs_core::ENGINE_SHIP_OIL => self.ship_oil[i].clone(),
+                openttdrs_core::ENGINE_SHIP_COAL => self.ship_coal[i].clone(),
+                openttdrs_core::ENGINE_SHIP_FERRY => self.ship_ferry[i].clone(),
+                _ => self.ship[i].clone(),
+            },
+            VehicleKind::Aircraft => {
+                if engine.id == openttdrs_core::ENGINE_AIRCRAFT_FOKKER {
+                    self.aircraft_fokker[i].clone()
+                } else {
+                    self.aircraft[i].clone()
+                }
+            }
+            other => self.intro_sprite(other, dir),
         }
     }
 
@@ -194,14 +255,31 @@ impl TruckHandles {
         }
         let i = dir;
         match v.kind {
-            VehicleKind::Truck | VehicleKind::Ship if v.uses_loaded_road_sprite() => {
-                self.truck_loaded[i].clone()
+            VehicleKind::Truck if v.uses_loaded_road_sprite() => self.truck_loaded[i].clone(),
+            VehicleKind::Truck => self.truck[i].clone(),
+            VehicleKind::Ship => {
+                let engine_id = v
+                    .engine_id
+                    .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
+                match engine_id {
+                    openttdrs_core::ENGINE_SHIP_OIL => self.ship_oil[i].clone(),
+                    openttdrs_core::ENGINE_SHIP_COAL => self.ship_coal[i].clone(),
+                    openttdrs_core::ENGINE_SHIP_FERRY => self.ship_ferry[i].clone(),
+                    _ => self.ship[i].clone(),
+                }
             }
-            VehicleKind::Truck | VehicleKind::Ship => self.truck[i].clone(),
-            VehicleKind::Bus | VehicleKind::Aircraft if v.uses_loaded_road_sprite() => {
-                self.bus_loaded[i].clone()
+            VehicleKind::Bus if v.uses_loaded_road_sprite() => self.bus_loaded[i].clone(),
+            VehicleKind::Bus => self.bus[i].clone(),
+            VehicleKind::Aircraft => {
+                let engine_id = v
+                    .engine_id
+                    .unwrap_or_else(|| openttdrs_core::default_engine_id(v.kind));
+                if engine_id == openttdrs_core::ENGINE_AIRCRAFT_FOKKER {
+                    self.aircraft_fokker[i].clone()
+                } else {
+                    self.aircraft[i].clone()
+                }
             }
-            VehicleKind::Bus | VehicleKind::Aircraft => self.bus[i].clone(),
             VehicleKind::Train => {
                 let engine_id = v
                     .engine_id
@@ -414,6 +492,12 @@ mod tests {
             bus_loaded: Default::default(),
             truck: Default::default(),
             truck_loaded: Default::default(),
+            ship: Default::default(),
+            ship_oil: Default::default(),
+            ship_coal: Default::default(),
+            ship_ferry: Default::default(),
+            aircraft: Default::default(),
+            aircraft_fokker: Default::default(),
             train_groups: Default::default(),
         }
     }

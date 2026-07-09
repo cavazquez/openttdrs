@@ -85,6 +85,11 @@ pub(crate) enum BuildMenuAction {
     Station,
     Clear,
     Orders,
+    ShipDepot,
+    Dock,
+    Canal,
+    Lock,
+    Airport,
     BuildHouse,
     BuildCoalMine,
     BuildIronOreMine,
@@ -115,6 +120,8 @@ pub(crate) enum BuildMenuAction {
 pub(crate) enum ToolbarGroup {
     Rail,
     Road,
+    Water,
+    Air,
     Economy,
     Landscape,
     Info,
@@ -163,7 +170,7 @@ pub(crate) struct StationBuildState {
     pub(crate) rail_length: u8,
     /// Mostrar el halo de cobertura al previsualizar la estación de tren.
     pub(crate) rail_show_coverage: bool,
-    /// Tipo de señal a colocar (`SIGTYPE_BLOCK`, `SIGTYPE_PATH`, `SIGTYPE_PATH_ONEWAY`).
+    /// Tipo de señal a colocar (`SIGTYPE_*`; Ctrl cicla block→entry→exit→combo→path→path1vía).
     pub(crate) signal_type: u8,
     /// Densidad de señales al arrastrar (1..=20; OpenTTD default 4).
     pub(crate) signal_density: u8,
@@ -181,7 +188,7 @@ impl Default for StationBuildState {
             rail_platforms: 1,
             rail_length: 1,
             rail_show_coverage: true,
-            signal_type: openttdrs_core::SIGTYPE_BLOCK,
+            signal_type: openttdrs_core::SIGTYPE_PATH,
             signal_density: 4,
             signal_drag_fract: None,
             ctrl_held: false,
@@ -255,6 +262,7 @@ pub(crate) enum SaveMenuAction {
     ZoomIn,
     ZoomOut,
     NewsSettings,
+    PathfindingSettings,
     ReturnToMainMenu,
 }
 

@@ -23,7 +23,6 @@ use crate::industry::{Industry, IndustryKind};
 use crate::map::TileCoord;
 use crate::rail_signals::{
     SIGTYPE_BLOCK, SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SIGTYPE_PATH, SIGTYPE_PATH_ONEWAY,
-    SignalTrack,
 };
 use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
 use crate::{GameState, PathNetwork, find_path};
@@ -845,52 +844,18 @@ fn place_two_way_block_signal(state: &mut GameState, c: TileCoord) {
 
 #[allow(clippy::expect_used)]
 fn place_oriented_presignal(state: &mut GameState, c: TileCoord, sig_type: u8, orientation: u8) {
-    let cmd_type = match sig_type {
-        SIGTYPE_PATH | SIGTYPE_PATH_ONEWAY => sig_type,
-        _ => SIGTYPE_BLOCK,
-    };
     apply_command(
         state,
-        &Command::PlaceRailSignal(c, orientation, 128, 128, cmd_type),
+        &Command::PlaceRailSignal(c, orientation, 128, 128, sig_type),
     )
     .expect("colocar presignal demo");
-    if sig_type <= SIGTYPE_COMBO && sig_type != SIGTYPE_BLOCK {
-        patch_signal_type_on_track(state, c, SignalTrack::X, sig_type);
-    }
 }
 
 #[allow(clippy::expect_used)]
 fn place_mixed_signal_on_x(state: &mut GameState, x: i32, sig_type: u8) {
     let c = rail_signals_mixed_coord(x);
-    let cmd_type = match sig_type {
-        SIGTYPE_PATH | SIGTYPE_PATH_ONEWAY => sig_type,
-        _ => SIGTYPE_BLOCK,
-    };
-    apply_command(state, &Command::PlaceRailSignal(c, 0, 128, 128, cmd_type))
+    apply_command(state, &Command::PlaceRailSignal(c, 0, 128, 128, sig_type))
         .expect("colocar señal rail_signals_mixed");
-    if sig_type <= SIGTYPE_COMBO && sig_type != SIGTYPE_BLOCK {
-        patch_signal_type_on_track(state, c, SignalTrack::X, sig_type);
-    }
-}
-
-#[allow(clippy::expect_used)]
-fn patch_signal_type_on_track(
-    state: &mut GameState,
-    c: TileCoord,
-    track: SignalTrack,
-    sig_type: u8,
-) {
-    let mut tile = state.map.get(c).expect("tesela señal");
-    let base = if matches!(track, SignalTrack::Lower | SignalTrack::Right) {
-        4
-    } else {
-        0
-    };
-    tile.m2 = (tile.m2 & !(7 << base)) | ((sig_type & 7) << base);
-    state
-        .map
-        .set_tile(c, tile)
-        .expect("actualizar tipo de señal");
 }
 
 /// Compañía con préstamo para verificar interés mensual.
@@ -1548,11 +1513,26 @@ mod tests {
         }
     }
 
+    fn signal_type_on_any_track(m2: u8) -> u8 {
+        use crate::rail_signals::{SignalTrack, signal_type_for_track};
+        [
+            SignalTrack::X,
+            SignalTrack::Y,
+            SignalTrack::Upper,
+            SignalTrack::Lower,
+            SignalTrack::Left,
+            SignalTrack::Right,
+        ]
+        .into_iter()
+        .map(|t| signal_type_for_track(m2, t))
+        .find(|&t| t != SIGTYPE_BLOCK)
+        .unwrap_or(SIGTYPE_BLOCK)
+    }
+
     #[test]
     fn rail_signals_mixed_demo_has_presignal_station_and_two_way() {
         use crate::rail_signals::{
-            rail_signal_present_mask, rail_signal_state_mask, signal_type_for_track,
-            update_rail_signal_states,
+            rail_signal_present_mask, rail_signal_state_mask, update_rail_signal_states,
         };
         use crate::station;
         let mut state = build_rail_signals_mixed();
@@ -1619,13 +1599,17 @@ mod tests {
 
         let entry = state.map.get(RAIL_SIGNALS_DEMO_ENTRY).unwrap();
         assert_eq!(
-            signal_type_for_track(entry.m2, SignalTrack::X),
+            signal_type_on_any_track(entry.m2),
             SIGTYPE_ENTRY,
             "entry en ramificación presignal, no en línea principal"
         );
         for exit in [RAIL_SIGNALS_DEMO_EXIT1, RAIL_SIGNALS_DEMO_EXIT2] {
             let tile = state.map.get(exit).unwrap();
-            assert_eq!(signal_type_for_track(tile.m2, SignalTrack::X), SIGTYPE_EXIT);
+            assert_eq!(
+                signal_type_on_any_track(tile.m2),
+                SIGTYPE_EXIT,
+                "exit en {exit:?}"
+            );
         }
         for two_way in [
             RAIL_SIGNALS_DEMO_TWO_WAY_WEST,
@@ -1704,7 +1688,7 @@ mod tests {
     #[test]
     fn rail_signals_mixed_has_all_signal_types() {
         use crate::rail_signals::{
-            default_signal_variant, rail_tile_is_signals, signal_placement_for_track,
+            SignalTrack, default_signal_variant, rail_tile_is_signals, signal_placement_for_track,
             signal_type_for_track,
         };
         let state = build_rail_signals_mixed();
@@ -1730,7 +1714,7 @@ mod tests {
 
     #[test]
     fn rail_signals_mixed_json_roundtrip_preserves_encoding() {
-        use crate::rail_signals::signal_type_for_track;
+        use crate::rail_signals::{SignalTrack, signal_type_for_track};
         let state = build_rail_signals_mixed();
         let json = state.save_json().expect("guardar");
         let restored = GameState::load_json(&json).expect("cargar");

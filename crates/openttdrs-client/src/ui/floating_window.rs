@@ -52,6 +52,8 @@ pub(crate) enum FloatingWindowId {
     Finances,
     /// Configuración Off / Summary / Full por tipo de noticia.
     NewsSettings,
+    /// Ajustes PBS / pathfinding (`pf.wait_for_pbs_path`, etc.).
+    PathfindingSettings,
     /// Volúmenes SFX/música, flags de sonido y jukebox OpenMSX.
     SoundMusic,
     /// Horario detallado del vehículo (F4).

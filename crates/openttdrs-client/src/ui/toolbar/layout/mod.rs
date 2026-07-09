@@ -4,8 +4,8 @@ mod controls;
 mod sections;
 
 use sections::{
-    spawn_rail_panel, spawn_road_panel, spawn_secondary_tool_panels, spawn_toolbar_group_buttons,
-    spawn_toolbar_tooltip,
+    spawn_air_panel, spawn_rail_panel, spawn_road_panel, spawn_secondary_tool_panels,
+    spawn_toolbar_group_buttons, spawn_toolbar_tooltip, spawn_water_panel,
 };
 
 use super::BuildMenuUi;
@@ -33,6 +33,8 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
     commands.entity(root).with_children(|root| {
         spawn_toolbar_group_buttons(root, &asset_server);
         spawn_road_panel(root, &asset_server);
+        spawn_water_panel(root, &asset_server);
+        spawn_air_panel(root, &asset_server);
         spawn_rail_panel(root, &asset_server);
         spawn_secondary_tool_panels(root, &asset_server);
         spawn_toolbar_tooltip(root);
@@ -72,9 +74,16 @@ mod tests {
             "assets/opengfx/tiles/road_flat_00.png",
             "assets/opengfx/tiles/road_flat_01.png",
             "assets/opengfx/tiles/road_flat_02.png",
+            "assets/opengfx/tiles/ship_depot_ne.png",
+            "assets/opengfx/tiles/dock_flat_x.png",
+            "assets/opengfx/tiles/water_flat.png",
+            "assets/opengfx/tiles/water_lock_ns_middle.png",
+            "assets/opengfx/tiles/airport_heliport.png",
             "assets/opengfx/tiles/house_church_build.png",
             "assets/opengfx/tiles/object_lighthouse.png",
             "assets/opengfx/tiles/object_transmitter.png",
+            "assets/opengfx/tiles/ui_settings.png",
+            "assets/opengfx/tiles/ui_sound.png",
             "assets/opengfx/tiles/ui_terraform_up.png",
             "assets/opengfx/tiles/ui_terraform_down.png",
             "assets/opengfx/tiles/ui_terraform_level.png",

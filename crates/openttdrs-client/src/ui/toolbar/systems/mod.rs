@@ -199,6 +199,9 @@ mod tests {
         let mut world = World::new();
         world.insert_resource(SaveWindowState::default());
         world.insert_resource(NewsSettingsWindowState::default());
+        world.insert_resource(
+            crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
+        );
         world.insert_resource(SoundMusicWindowState::default());
         world.insert_resource(SimHudControls {
             sim_speed: 1.0,
@@ -230,6 +233,9 @@ mod tests {
         world.insert_resource(RemapMapVisualsPending::default());
         world.insert_resource(SaveWindowState::default());
         world.insert_resource(NewsSettingsWindowState::default());
+        world.insert_resource(
+            crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
+        );
         world.insert_resource(SoundMusicWindowState::default());
         world.insert_resource(SimHudControls::default());
         world.insert_resource(State::new(SimRunState::Running));
@@ -272,6 +278,9 @@ mod tests {
         world_zoom_in.insert_resource(RemapMapVisualsPending::default());
         world_zoom_in.insert_resource(SaveWindowState::default());
         world_zoom_in.insert_resource(NewsSettingsWindowState::default());
+        world_zoom_in.insert_resource(
+            crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
+        );
         world_zoom_in.insert_resource(SoundMusicWindowState::default());
         world_zoom_in.insert_resource(SimHudControls::default());
         crate::state::insert_test_sim_run_state(&mut world_zoom_in);
@@ -298,6 +307,9 @@ mod tests {
         world_zoom_out.insert_resource(RemapMapVisualsPending::default());
         world_zoom_out.insert_resource(SaveWindowState::default());
         world_zoom_out.insert_resource(NewsSettingsWindowState::default());
+        world_zoom_out.insert_resource(
+            crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
+        );
         world_zoom_out.insert_resource(SoundMusicWindowState::default());
         world_zoom_out.insert_resource(SimHudControls::default());
         crate::state::insert_test_sim_run_state(&mut world_zoom_out);

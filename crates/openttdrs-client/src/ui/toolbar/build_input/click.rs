@@ -381,7 +381,10 @@ pub(crate) fn handle_tile_click(
                     vehicle_window.vehicle_id = None;
                     return;
                 }
-                Some(TileKind::RoadDepot) | Some(TileKind::RailDepot) => {
+                Some(TileKind::RoadDepot)
+                | Some(TileKind::RailDepot)
+                | Some(TileKind::ShipDepot)
+                | Some(TileKind::Airport) => {
                     depot_state.depot_pos = Some(pos);
                     depot_state.selected_vehicle = sim
                         .state

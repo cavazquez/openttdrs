@@ -158,7 +158,46 @@ pub(crate) fn spawn_station_tile(
             spawn_stop_ground_sprite(commands, &image, ctx, base_z, 0.04);
             spawn_road_stop_buildings(commands, assets, company, ctx, base_z, class, dir);
         }
-        StationTileClass::Airport | StationTileClass::Other(_) => {
+        StationTileClass::Dock => {
+            let dock_half_h = if tileh == 0 {
+                TILE_HALF_H
+            } else {
+                SLOPE_HALF_H[tileh as usize]
+            };
+            let axis = usize::from(m5 & 1);
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                assets.dock_flat[axis].sprite(),
+                Transform::from_translation(tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    0.03,
+                    dock_half_h,
+                )),
+            ));
+        }
+        StationTileClass::Airport => {
+            let half_h = if tileh == 0 {
+                TILE_HALF_H
+            } else {
+                SLOPE_HALF_H[tileh as usize]
+            };
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                assets.airport_heliport.sprite(),
+                Transform::from_translation(tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    0.04,
+                    half_h,
+                )),
+            ));
+        }
+        StationTileClass::Other(_) => {
             let dir = road_stop_ground_index(m5).min(3);
             let image = assets
                 .station_grounds
@@ -298,13 +337,62 @@ pub(crate) fn spawn_transport_object_tile(
             };
             spawn_rail_depot_tile(commands, assets, company, ctx, base_z, depot_half_h);
         }
+        TileKind::ShipDepot => {
+            let depot_half_h = if tileh == 0 {
+                TILE_HALF_H
+            } else {
+                SLOPE_HALF_H[tileh as usize]
+            };
+            spawn_ship_depot_tile(commands, assets, ctx, base_z, depot_half_h);
+        }
+        TileKind::Airport => {
+            let half_h = if tileh == 0 {
+                TILE_HALF_H
+            } else {
+                SLOPE_HALF_H[tileh as usize]
+            };
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                assets.airport_heliport.sprite(),
+                Transform::from_translation(tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    0.04,
+                    half_h,
+                )),
+            ));
+        }
         TileKind::RoadBridge | TileKind::RailBridge => {
             if let Some(span) = bridge_span_at(map, ctx.coord, dims) {
                 spawn_bridge_deck(commands, assets, ctx, &span, false);
             }
         }
-        _ => unreachable!(),
+        _ => {}
     }
+}
+
+fn spawn_ship_depot_tile(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    half_h: f32,
+) {
+    let dir = ctx.tile.map_or(0, |t| t.m5 & 0x03).min(3) as usize;
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        assets.ship_depot[dir].sprite(),
+        Transform::from_translation(tile_pos_half(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            base_z,
+            0.04,
+            half_h,
+        )),
+    ));
 }
 
 fn spawn_road_depot_tile(

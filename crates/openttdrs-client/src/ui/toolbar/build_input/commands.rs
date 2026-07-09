@@ -62,6 +62,13 @@ pub(crate) fn command_for_action(
         BuildMenuAction::RoadDepot => {
             Some(Command::PlaceRoadDepotDir(pos, station_state.orientation))
         }
+        BuildMenuAction::ShipDepot => {
+            Some(Command::PlaceShipDepotDir(pos, station_state.orientation))
+        }
+        BuildMenuAction::Dock => Some(Command::PlaceDock(pos, station_state.orientation)),
+        BuildMenuAction::Canal => Some(Command::PlaceCanal(pos)),
+        BuildMenuAction::Lock => Some(Command::PlaceLock(pos, station_state.orientation & 1 != 0)),
+        BuildMenuAction::Airport => Some(Command::PlaceAirport(pos)),
         BuildMenuAction::RailDepot => {
             Some(Command::PlaceRailDepotDir(pos, station_state.orientation))
         }

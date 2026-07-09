@@ -573,4 +573,35 @@ mod tests {
             "no debe cruzar señales unidireccionales de ida en sentido contrario"
         );
     }
+
+    #[test]
+    fn yapf_penalizes_crossing_foreign_reservation() {
+        use crate::rail_pbs::{
+            ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY, encode_rail_reservation_to_m2_hi,
+        };
+
+        let mut map = Map::new_flat(10, 4, 0);
+        for x in 0..8 {
+            map.set_kind(TileCoord::new(x, 1), TileKind::Rail)
+                .expect("rail");
+            let mut t = map.get(TileCoord::new(x, 1)).expect("tile");
+            t.m5 = RAIL_TB_X;
+            map.set_tile(TileCoord::new(x, 1), t).expect("tb");
+        }
+        // Reserva ajena en el medio del corredor.
+        let mid = TileCoord::new(4, 1);
+        let mut t = map.get(mid).expect("mid");
+        t.m2_hi = encode_rail_reservation_to_m2_hi(RAIL_TB_X);
+        map.set_tile(mid, t).expect("res");
+
+        assert_eq!(
+            reservation_step_penalty(&map, mid, RAIL_TB_X),
+            YAPF_RESERVATION_CROSS_PENALTY
+        );
+        assert_eq!(
+            reservation_step_penalty(&map, TileCoord::new(3, 1), RAIL_TB_X),
+            0
+        );
+        let _ = ReservedRailStep::new(mid, RAIL_TB_X);
+    }
 }

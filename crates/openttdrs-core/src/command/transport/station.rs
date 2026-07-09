@@ -76,8 +76,10 @@ pub(in crate::command) fn place_station_dir(
 pub(in crate::command::transport) fn ottd_station_type_bits(stop_kind: StopKind) -> u8 {
     match stop_kind {
         StopKind::RailStation => 0,
+        StopKind::Airport => 1,
         StopKind::TruckStop => 2,
         StopKind::BusStop => 3,
+        StopKind::Dock => 4,
         StopKind::RailWaypoint => 7,
     }
 }

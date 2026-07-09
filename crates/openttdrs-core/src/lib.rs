@@ -23,6 +23,7 @@ pub mod news;
 pub mod ottdmap_extras;
 pub mod parity;
 pub mod pathfinder;
+pub mod pathfinding_settings;
 pub mod rail_lane;
 pub mod rail_pbs;
 pub mod rail_signals;
@@ -77,12 +78,14 @@ pub use economy::{
     vehicle_sell_refund,
 };
 pub use engine::{
-    ENGINE_BUS_MPS, ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineCatalogSort,
-    EngineDef, REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter,
-    accelerate_train_speed, decelerate_road_speed, decelerate_train_speed, default_engine_id,
-    engine_available_in_year, engine_by_id, engine_catalog, engine_for_vehicle,
-    engines_for_depot_purchase, engines_of_kind, progress_step_for_speed, tile_progress_length,
-    train_acceleration, train_smoke_kind, train_sprite_group, update_road_speed,
+    DepotPurchaseKind, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_FOKKER, ENGINE_BUS_MPS,
+    ENGINE_SHIP_COAL, ENGINE_SHIP_FERRY, ENGINE_SHIP_MPS, ENGINE_SHIP_OIL, ENGINE_TRAIN_ASIASTAR,
+    ENGINE_TRAIN_KIRBY, ENGINE_TRUCK_MPS, EngineCatalogSort, EngineDef, REFERENCE_PROGRESS_STEP,
+    ROAD_ACCEL_ORIGINAL, RoadEngineFilter, accelerate_train_speed, decelerate_road_speed,
+    decelerate_train_speed, default_engine_id, engine_available_in_year, engine_by_id,
+    engine_catalog, engine_for_vehicle, engines_for_depot_kind, engines_for_depot_purchase,
+    engines_of_kind, progress_step_for_speed, tile_progress_length, train_acceleration,
+    train_smoke_kind, train_sprite_group, update_road_speed,
 };
 #[allow(deprecated)]
 pub use game_state::CARGO_DELIVERY_PAYMENT;
@@ -130,11 +133,17 @@ pub use pathfinder::{
     station_site_adjacent_to_transport, station_site_tile_allows_build,
     station_site_tile_needs_clear, tile_is_path_traversable,
 };
+pub use pathfinding_settings::{
+    DEFAULT_PATH_BACKOFF_INTERVAL, DEFAULT_WAIT_FOR_PBS_PATH_DAYS, PBS_WAIT_FOREVER,
+    PathfindingSettings,
+};
 pub use rail_lane::{rail_horz_lane_bit, rail_vert_lane_bit};
 pub use rail_pbs::{
     ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY, decode_rail_reservation_m2_hi,
-    encode_rail_reservation_to_m2_hi, rail_tile_has_pbs_reservation, sync_reservations_to_map,
-    train_blocked_by_reservation, update_train_reservations,
+    encode_rail_reservation_to_m2_hi, find_path_to_safe_wait, is_safe_waiting_position,
+    rail_tile_has_pbs_reservation, reservation_ends_at_safe_wait, sync_reservations_to_map,
+    tick_pbs_wait_and_maybe_reverse, train_blocked_by_reservation, train_waiting_for_pbs_path,
+    update_train_reservations, update_train_reservations_with_settings,
 };
 pub use rail_signals::{
     RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SEMAPHORE_BUILD_BEFORE_YEAR,
@@ -144,8 +153,8 @@ pub use rail_signals::{
     cycle_signal_side_m3, cycle_signal_type_m2, default_signal_variant, is_pbs_signal_type,
     next_placeable_signal_type, rail_tile_is_signals, resolve_signal_track,
     signal_facing_for_orientation, signal_on_track_mask, signal_placement_for_facing,
-    signal_placement_for_track, signal_type_for_track, tracks_overlap, valid_signal_facings_track,
-    yapf_routing_signal,
+    signal_placement_for_track, signal_type_for_track, signal_type_label, tracks_overlap,
+    valid_signal_facings_track, yapf_routing_signal,
 };
 pub use refit::{
     next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_hidden_on_map,

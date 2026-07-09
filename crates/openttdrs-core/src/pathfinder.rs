@@ -3,7 +3,7 @@ use std::collections::{BinaryHeap, HashMap};
 
 use crate::aircraft_movement::straight_line_path;
 use crate::map::{Map, Tile, TileCoord, TileKind, openttd_tile_index_to_coord};
-use crate::ship_movement::{is_water_network_tile, water_tiles_connected};
+use crate::ship_movement::{is_water_network_tile_at, water_tiles_connected};
 use crate::station::is_rail_waypoint_tile;
 use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::VehicleKind;
@@ -40,7 +40,7 @@ fn is_network_tile(map: &Map, c: TileCoord, kind: TileKind, network: PathNetwork
         PathNetwork::Road => is_road_network_tile(kind) || is_road_stop_station_tile(map, c),
         // Trenes no circulan por la tesela de plataforma; paran en la vía adyacente.
         PathNetwork::Rail => is_rail_network_tile(kind),
-        PathNetwork::Water => is_water_network_tile(kind),
+        PathNetwork::Water => is_water_network_tile_at(map, c),
         PathNetwork::Air => true,
     }
 }

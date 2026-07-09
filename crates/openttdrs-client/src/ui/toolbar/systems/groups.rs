@@ -74,12 +74,14 @@ pub(crate) fn update_toolbar_tool_visibility(
             Display::None
         };
         let offset = match toolbar_state.active_group {
-            Some(ToolbarGroup::Rail) => -140.0,
-            Some(ToolbarGroup::Road) => -84.0,
-            Some(ToolbarGroup::Economy) => -28.0,
-            Some(ToolbarGroup::Landscape) => 28.0,
-            Some(ToolbarGroup::Info) => 84.0,
-            Some(ToolbarGroup::Settings) => 140.0,
+            Some(ToolbarGroup::Rail) => -196.0,
+            Some(ToolbarGroup::Road) => -140.0,
+            Some(ToolbarGroup::Water) => -84.0,
+            Some(ToolbarGroup::Air) => -28.0,
+            Some(ToolbarGroup::Economy) => 28.0,
+            Some(ToolbarGroup::Landscape) => 84.0,
+            Some(ToolbarGroup::Info) => 140.0,
+            Some(ToolbarGroup::Settings) => 196.0,
             None => 0.0,
         };
         node.margin.left = Val::Px(offset);
@@ -110,6 +112,11 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         | BuildMenuAction::BusStop
         | BuildMenuAction::Station
         | BuildMenuAction::Clear => ToolbarGroup::Road,
+        BuildMenuAction::ShipDepot
+        | BuildMenuAction::Dock
+        | BuildMenuAction::Canal
+        | BuildMenuAction::Lock => ToolbarGroup::Water,
+        BuildMenuAction::Airport => ToolbarGroup::Air,
         BuildMenuAction::Orders => ToolbarGroup::Info,
         BuildMenuAction::BuildHouse
         | BuildMenuAction::BuildCoalMine

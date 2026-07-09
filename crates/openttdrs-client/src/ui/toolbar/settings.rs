@@ -18,6 +18,9 @@ pub(crate) fn handle_settings_menu_buttons(
     mut hud: ResMut<SimHudControls>,
     mut save_window: ResMut<SaveWindowState>,
     mut news_settings: ResMut<crate::ui::news_settings_window::NewsSettingsWindowState>,
+    mut pathfinding_settings: ResMut<
+        crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState,
+    >,
     run_state: Res<State<SimRunState>>,
     mut next_run: ResMut<NextState<SimRunState>>,
     mut next_screen: ResMut<NextState<ClientScreen>>,
@@ -80,6 +83,9 @@ pub(crate) fn handle_settings_menu_buttons(
             }
             SaveMenuAction::NewsSettings => {
                 news_settings.open = true;
+            }
+            SaveMenuAction::PathfindingSettings => {
+                pathfinding_settings.open = true;
             }
             SaveMenuAction::ReturnToMainMenu => {
                 return_to_main_menu(&mut next_screen, &mut suspended);
@@ -145,6 +151,9 @@ mod tests {
         world.insert_resource(SimHudControls::default());
         world.insert_resource(SaveWindowState::default());
         world.insert_resource(NewsSettingsWindowState::default());
+        world.insert_resource(
+            crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
+        );
         crate::state::insert_test_sim_run_state(&mut world);
         world.insert_resource(NextState::<ClientScreen>::default());
         world.insert_resource(SuspendedGameSession::default());
@@ -172,6 +181,9 @@ mod tests {
         world.insert_resource(SimHudControls::default());
         world.insert_resource(SaveWindowState::default());
         world.insert_resource(NewsSettingsWindowState::default());
+        world.insert_resource(
+            crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
+        );
         world.insert_resource(NextState::<ClientScreen>::default());
         world.insert_resource(SuspendedGameSession::default());
         crate::state::insert_test_sim_run_state(&mut world);

@@ -145,6 +145,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             SaveMenuAction::NewsSettings,
         ),
         (
+            "Pathfinding / PBS...",
+            "Espera path, giro en señales y look-ahead (pf.*)",
+            SaveMenuAction::PathfindingSettings,
+        ),
+        (
             "Menu principal",
             "Volver al menu de inicio",
             SaveMenuAction::ReturnToMainMenu,

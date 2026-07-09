@@ -16,10 +16,17 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::RailVert => "Vía N-S",
         BuildMenuAction::RailStation => "Estación tren",
         BuildMenuAction::RailDepot => "Depósito vía",
+        BuildMenuAction::ShipDepot => "Depósito barcos",
+        BuildMenuAction::Dock => "Muelle",
+        BuildMenuAction::Canal => "Canal",
+        BuildMenuAction::Lock => "Esclusa",
+        BuildMenuAction::Airport => "Helipuerto",
         BuildMenuAction::RailBridge => "Puente vía",
         BuildMenuAction::RailTunnel => "Túnel vía",
         BuildMenuAction::RailWaypoint => "Waypoint",
-        BuildMenuAction::RailSignals => "Señales (arrastre; Shift+RMB: densidad)",
+        BuildMenuAction::RailSignals => {
+            "Señales (Ctrl: tipo block/entry/exit/combo/path; Shift+RMB: densidad)"
+        }
         BuildMenuAction::RailRemove => "Quitar vía",
         BuildMenuAction::RailConvert => "Convertir vía (pendiente railtypes)",
         BuildMenuAction::Station => "Parada camión",
@@ -58,6 +65,11 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
     match action {
         BuildMenuAction::RoadDepot => Some("comprar vehículo; no carga cargo"),
         BuildMenuAction::RailDepot => Some("comprar tren"),
+        BuildMenuAction::ShipDepot => Some("comprar barco; boca hacia agua"),
+        BuildMenuAction::Dock => Some("agua costera; carga Goods"),
+        BuildMenuAction::Canal => Some("hierba/bosque → agua navegable"),
+        BuildMenuAction::Lock => Some("sobre agua; RMB gira eje NS/EW"),
+        BuildMenuAction::Airport => Some("hangar 1×1; comprar avión"),
         BuildMenuAction::RailSignals => {
             Some("arrastre dens.N; clic sentido; Ctrl+clic tipo; Shift+RMB dens.; RMB dir")
         }

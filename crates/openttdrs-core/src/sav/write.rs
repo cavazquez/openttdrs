@@ -31,6 +31,8 @@ pub const EXPORT_SAVE_VERSION: u16 = 350;
 const FACIL_TRAIN: u8 = 0x01;
 const FACIL_TRUCK_STOP: u8 = 0x02;
 const FACIL_BUS_STOP: u8 = 0x04;
+const FACIL_AIRPORT: u8 = 0x08;
+const FACIL_DOCK: u8 = 0x10;
 const FACIL_WAYPOINT: u8 = 0x80;
 
 /// `OT_GOTO_STATION` / `OT_GOTO_WAYPOINT` (`order_type.h`).
@@ -297,6 +299,8 @@ fn facilities_for_stop(kind: StopKind) -> u8 {
         StopKind::RailStation => FACIL_TRAIN,
         StopKind::TruckStop => FACIL_TRUCK_STOP,
         StopKind::BusStop => FACIL_BUS_STOP,
+        StopKind::Dock => FACIL_DOCK,
+        StopKind::Airport => FACIL_AIRPORT,
         StopKind::RailWaypoint => FACIL_WAYPOINT | FACIL_TRAIN,
     }
 }

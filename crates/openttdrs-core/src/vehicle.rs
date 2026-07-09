@@ -562,6 +562,12 @@ pub struct Vehicle {
     /// Ignorar señal roja en el próximo paso de simulación (trenes).
     #[serde(default)]
     pub force_proceed: bool,
+    /// Contador de ticks esperando path PBS / señal (`wait_counter` en `OpenTTD`).
+    #[serde(default)]
+    pub wait_counter: u32,
+    /// Tren marcado stuck ante path sin reserva (`VehicleRailFlag::Stuck`).
+    #[serde(default)]
+    pub pbs_stuck: bool,
     /// Horario activo para este vehículo.
     #[serde(default)]
     pub timetable_active: bool,
@@ -649,6 +655,8 @@ impl Vehicle {
             depart_turn: 0,
             awaiting_load_window: false,
             force_proceed: false,
+            wait_counter: 0,
+            pbs_stuck: false,
             timetable_active: false,
             timetable_wait_remaining: 0,
             timetable_wait_kind: TimetableWaitKind::None,

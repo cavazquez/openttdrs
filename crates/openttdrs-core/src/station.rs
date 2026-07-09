@@ -89,6 +89,10 @@ pub enum StopKind {
     TruckStop,
     BusStop,
     RailStation,
+    /// Muelle (`StationType::Dock`); carga de mercancía para barcos.
+    Dock,
+    /// Helipuerto / aeropuerto 1×1 (`StationType::Airport`).
+    Airport,
     /// Punto de paso ferroviario (`StationType::RailWaypoint`); sin carga ni parada.
     RailWaypoint,
 }
@@ -122,6 +126,8 @@ impl Station {
                 StopKind::RailStation | StopKind::RailWaypoint
             ) | (VehicleKind::Bus, StopKind::BusStop)
                 | (VehicleKind::Truck, StopKind::TruckStop)
+                | (VehicleKind::Ship, StopKind::Dock)
+                | (VehicleKind::Aircraft, StopKind::Airport)
         )
     }
 
@@ -137,8 +143,12 @@ impl Station {
         }
         match self.stop_kind {
             StopKind::BusStop => matches!(cargo, CargoType::Passengers | CargoType::Mail),
-            StopKind::TruckStop => !matches!(cargo, CargoType::Passengers | CargoType::Mail),
-            StopKind::RailStation => !matches!(cargo, CargoType::Passengers | CargoType::Mail),
+            StopKind::TruckStop | StopKind::RailStation => {
+                !matches!(cargo, CargoType::Passengers | CargoType::Mail)
+            }
+            // Muelle: mercancía + pasajeros (ferry).
+            StopKind::Dock => true,
+            StopKind::Airport => matches!(cargo, CargoType::Passengers | CargoType::Mail),
             StopKind::RailWaypoint => false,
         }
     }
@@ -375,7 +385,15 @@ pub fn vehicle_physically_at_station(
             station_footprint_tiles(map, station.pos).contains(&vpos)
                 && train_on_rail_platform(map, vpos)
         }
-        VehicleKind::Ship | VehicleKind::Aircraft => false,
+        VehicleKind::Ship => {
+            vpos == station.pos || {
+                // Barco en agua adyacente al muelle (acceso).
+                station.stop_kind == StopKind::Dock
+                    && vpos.x.abs_diff(station.pos.x) + vpos.y.abs_diff(station.pos.y) == 1
+                    && crate::ship_movement::is_water_network_tile_at(map, vpos)
+            }
+        }
+        VehicleKind::Aircraft => station.stop_kind == StopKind::Airport && vpos == station.pos,
     }
 }
 
@@ -429,6 +447,8 @@ pub fn stop_kind_from_m6(m6: u8) -> StopKind {
     match station_type_from_m6(m6) {
         2 => StopKind::TruckStop,
         3 => StopKind::BusStop,
+        4 => StopKind::Dock,
+        1 => StopKind::Airport,
         STATION_TYPE_RAIL_WAYPOINT => StopKind::RailWaypoint,
         _ => StopKind::RailStation,
     }

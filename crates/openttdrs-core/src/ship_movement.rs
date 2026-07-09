@@ -3,10 +3,22 @@
 use crate::map::{Map, TileCoord, TileKind};
 use crate::vehicle::{Vehicle, VehicleKind};
 
-/// Tesela transitable por la red acuática (agua libre o depósito de barcos).
+/// Tesela transitable por la red acuática (agua libre, depósito o muelle).
 #[must_use]
 pub fn is_water_network_tile(kind: TileKind) -> bool {
     matches!(kind, TileKind::Water | TileKind::ShipDepot)
+}
+
+/// Incluye muelles (`StationType::Dock` = 4 en `m6`).
+#[must_use]
+pub fn is_water_network_tile_at(map: &Map, c: TileCoord) -> bool {
+    let Some(tile) = map.get(c) else {
+        return false;
+    };
+    if is_water_network_tile(tile.kind) {
+        return true;
+    }
+    tile.kind == TileKind::Station && (tile.m6 >> 3) & 0x0F == 4
 }
 
 /// Dos teselas de agua adyacentes están conectadas (sin road bits).
@@ -17,8 +29,7 @@ pub fn water_tiles_connected(map: &Map, cur: TileCoord, next: TileCoord) -> bool
     if dx.abs() + dy.abs() != 1 {
         return false;
     }
-    map.get_kind(cur).is_some_and(is_water_network_tile)
-        && map.get_kind(next).is_some_and(is_water_network_tile)
+    is_water_network_tile_at(map, cur) && is_water_network_tile_at(map, next)
 }
 
 /// Barcos solo avanzan con ruta precalculada (como trenes).

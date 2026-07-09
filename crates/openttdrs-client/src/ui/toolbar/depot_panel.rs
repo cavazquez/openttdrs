@@ -280,10 +280,11 @@ fn depot_is_rail(sim: &SimWorld, depot_pos: TileCoord) -> bool {
 }
 
 fn depot_title(sim: &SimWorld, depot_pos: TileCoord) -> String {
-    let nombre = if depot_is_rail(sim, depot_pos) {
-        "Depósito de Trenes"
-    } else {
-        "Depósito de Carretera"
+    let nombre = match sim.state.map.get_kind(depot_pos) {
+        Some(TileKind::RailDepot) => "Depósito de Trenes",
+        Some(TileKind::ShipDepot) => "Depósito de Barcos",
+        Some(TileKind::Airport) => "Hangar de Aviones",
+        _ => "Depósito de Carretera",
     };
     format!("{nombre} ({}, {})", depot_pos.x, depot_pos.y)
 }

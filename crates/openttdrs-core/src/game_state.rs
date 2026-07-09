@@ -169,6 +169,9 @@ pub struct GameState {
     /// Ticks hasta la próxima comprobación de desastre.
     #[serde(default = "default_disaster_timer")]
     pub disaster_timer: u64,
+    /// Ajustes de pathfinding / PBS (`pf.wait_for_pbs_path`, etc.).
+    #[serde(default)]
+    pub pathfinding: crate::pathfinding_settings::PathfindingSettings,
 }
 
 const fn default_true() -> bool {
@@ -215,6 +218,7 @@ impl GameState {
             next_subsidy_id: 1,
             disasters_enabled: true,
             disaster_timer: default_disaster_timer(),
+            pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
         }
     }
 
@@ -254,6 +258,7 @@ impl GameState {
             next_subsidy_id: 1,
             disasters_enabled: true,
             disaster_timer: default_disaster_timer(),
+            pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
         }
     }
 

@@ -49,9 +49,9 @@ Ordenada de **más barato a más caro**.
 | 17 | Carretera | Un solo sentido / drive-through | ✅ | 🟡 | M |
 | 18 | Mundo | Subvencios, autoridad local | ✅ | 🟡 | M–L |
 | 19 | Mundo | Terraform + 4 climas + gen mundo | ✅ | 🟡 | T1–T3 + T4 MVP (clima/gen); industrias por clima L — [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) |
-| 20 | Ferrocarril | PBS + path signals | ✅ | ❌ | L–XL |
+| 20 | Ferrocarril | PBS + path signals | ✅ | 🟡 | L–XL — safe wait, wait/giro, UI Ajustes→PBS; falta YAPF TryReserve nativo + Fase C presignals |
 | 21 | Economía | Cargo Dist (link graph) | ✅ | ❌ | XL |
-| 22 | Transporte | Barcos / aviones | ✅ | ❌ | L |
+| 22 | Transporte | Barcos / aviones | ✅ | 🟡 | L — barcos (depósito+muelle+canal+esclusa+4 motores+sprites); aviones MVP (helipuerto 1×1+Dakota/Fokker) |
 | 23 | Modding | NewGRF runtime | ✅ | ❌ | XXL |
 | 24 | Red | Multijugador I8 | ✅ | ❌ | XXL |
 | 25 | UI | Barra inferior + noticias (ticker, cartel) | ✅ | 🟡 | M — N1–N5 MVP |

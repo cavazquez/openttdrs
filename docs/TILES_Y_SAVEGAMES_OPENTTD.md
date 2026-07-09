@@ -396,7 +396,7 @@ según el `Track` presente en `m5 & 0x3F`.
 | `m2` bits 2–0, 6–4 | `m2()` | **Tipo** (`SignalType` 0–5) por par de señales |
 | `m2` bits 3, 7 | `m2()` | **Variante** eléctrico (0) / semáforo (1) |
 | `m2` bits 8–11 | `m2()` | Reserva **PBS** (path signals) |
-| `m5` bit 4 | `m5()` bit 4 | Flag reserva PBS en tesela |
+| `m5` bit 4 | `m5()` bit 4 | Reserva PBS en **cruce a nivel** (`HasCrossingReservation`); vía plana usa `m2` bits 8–11 |
 
 Tipos (`SignalType` en `signal_type.h`): `0` block, `1` entry, `2` exit, `3` combo,
 `4` path, `5` path one-way. Valores en `m2` como enteros 3-bit (ver tabla en

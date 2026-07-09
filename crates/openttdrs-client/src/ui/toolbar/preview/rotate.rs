@@ -37,7 +37,19 @@ pub(crate) fn rotate_station_with_right_click(
         Some(BuildMenuAction::RailSignals) => {
             let ctrl =
                 keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
-            if ctrl {
+            let shift =
+                keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
+            if shift {
+                // Cicla densidad 1→2→4→8→12→16→1 (como pasos útiles de OpenTTD).
+                station_state.signal_density = match station_state.signal_density {
+                    1 => 2,
+                    2 => 4,
+                    4 => 8,
+                    8 => 12,
+                    12 => 16,
+                    _ => 1,
+                };
+            } else if ctrl {
                 station_state.signal_type =
                     openttdrs_core::next_placeable_signal_type(station_state.signal_type);
             } else if let (Some(sim), Some(hover)) = (sim.as_ref(), hovered.as_ref()) {

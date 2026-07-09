@@ -1,5 +1,5 @@
 use openttdrs_core::{
-    Command, LevelMode, Map, TileCoord,
+    Command, LevelMode, Map, TileCoord, TileKind,
     rail_signals::{
         rail_signal_present_mask, rail_tile_is_signals, resolve_signal_track, signal_on_track_mask,
     },
@@ -42,7 +42,23 @@ pub(crate) fn command_for_action(
         }),
         BuildMenuAction::Station => Some(Command::PlaceStationDir(pos, station_state.orientation)),
         BuildMenuAction::BusStop => Some(Command::PlaceBusStop(pos, station_state.orientation)),
-        BuildMenuAction::Clear => Some(Command::ClearTile(pos)),
+        BuildMenuAction::Clear => {
+            let (fx, fy) = tile_fract.unwrap_or((128, 128));
+            if let Some(map) = map
+                && let Some(tile) = map.get(pos)
+                && tile.kind == TileKind::Rail
+                && rail_tile_is_signals(tile.m5)
+            {
+                let tb = tile.m5 & 0x3F;
+                if let Some(track) = resolve_signal_track(tb, fx, fy) {
+                    let present = rail_signal_present_mask(tile.m3);
+                    if present & signal_on_track_mask(track) != 0 {
+                        return Some(Command::RemoveRailSignal(pos, fx, fy));
+                    }
+                }
+            }
+            Some(Command::ClearTile(pos))
+        }
         BuildMenuAction::RoadDepot => {
             Some(Command::PlaceRoadDepotDir(pos, station_state.orientation))
         }

@@ -165,6 +165,10 @@ pub(crate) struct StationBuildState {
     pub(crate) rail_show_coverage: bool,
     /// Tipo de señal a colocar (`SIGTYPE_BLOCK`, `SIGTYPE_PATH`, `SIGTYPE_PATH_ONEWAY`).
     pub(crate) signal_type: u8,
+    /// Densidad de señales al arrastrar (1..=20; OpenTTD default 4).
+    pub(crate) signal_density: u8,
+    /// Fract de tesela al iniciar arrastre de señales (elige carril HORZ/VERT).
+    pub(crate) signal_drag_fract: Option<(u8, u8)>,
     /// Ctrl pulsado (actualizado cada frame para colocación PBS).
     pub(crate) ctrl_held: bool,
 }
@@ -178,6 +182,8 @@ impl Default for StationBuildState {
             rail_length: 1,
             rail_show_coverage: true,
             signal_type: openttdrs_core::SIGTYPE_BLOCK,
+            signal_density: 4,
+            signal_drag_fract: None,
             ctrl_held: false,
         }
     }
@@ -192,6 +198,8 @@ pub(crate) struct DragBuildState {
     pub(crate) pending_tiles: Vec<(i32, i32)>,
     /// Carril paralelo elegido al iniciar el arrastre (`UPPER`/`LOWER`/`LEFT`/`RIGHT`).
     pub(crate) rail_lane_bit: Option<u8>,
+    /// Posición de mundo al `mousedown` (detectar tap vs arrastre real en señales).
+    pub(crate) press_world_pos: Option<bevy::math::Vec2>,
 }
 
 #[derive(Resource, Default)]

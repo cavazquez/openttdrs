@@ -10,9 +10,9 @@ use super::transport::{
     check_bridge, check_clear_tile, check_cycle_rail_signal_type, check_place_rail,
     check_place_rail_signal_oriented, check_place_rail_waypoint, check_place_road_bits,
     check_rail_depot_placement, check_rail_station_area, check_rail_trackbits_with_autoslope,
-    check_remove_rail, check_road_depot_placement, check_single_transport_tile,
-    check_station_placement, check_tunnel, merged_rail_trackbits_on_tile, rail_station_footprint,
-    rail_trackbits_from_neighbors,
+    check_remove_rail, check_remove_rail_signal, check_road_depot_placement,
+    check_single_transport_tile, check_station_placement, check_tunnel,
+    merged_rail_trackbits_on_tile, rail_station_footprint, rail_trackbits_from_neighbors,
 };
 use super::types::{Command, CommandError};
 
@@ -94,6 +94,9 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         }
         Command::CycleRailSignalType(c, fract_x, fract_y) => {
             check_cycle_rail_signal_type(map, *c, *fract_x, *fract_y).err()
+        }
+        Command::RemoveRailSignal(c, fract_x, fract_y) => {
+            check_remove_rail_signal(map, *c, *fract_x, *fract_y).err()
         }
         Command::PlaceRoadDepot(c) => preview_depot_any(map, *c, check_road_depot_placement),
         Command::PlaceRoadDepotDir(c, dir) => check_road_depot_placement(map, *c, *dir).err(),

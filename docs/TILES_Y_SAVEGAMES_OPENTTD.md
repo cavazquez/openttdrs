@@ -886,6 +886,11 @@ Además de `parse_sav.py` → `.ottdmap`, el cliente puede cargar `.sav` directa
 (`sav::load` → `GameState::from_sav_game`). Esto importa mapa, estaciones, industrias,
 ciudades, vehículos con órdenes y reloj (`DATE`).
 
+**Export:** `sav::save` / `sav::save_to_bytes` escriben un `.sav` mínimo (OTTZ,
+versión 350: planos de mapa + `DATE` + `PLYR`). La UI guarda `.sav` por defecto;
+usar sufijo `.json` para el save nativo completo. Detalle y handoff:
+[ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md).
+
 ### Qué se importa hoy
 
 | Chunk / dato | Estado |

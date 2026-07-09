@@ -9,7 +9,7 @@ use bevy::text::{EditableText, TextEdit};
 // depender de `smol_str` directo (y de que su versión coincida con la de winit).
 use winit::keyboard::SmolStr;
 
-use openttdrs_core::save;
+use openttdrs_core::{sav, save};
 
 use crate::persistence::apply_loaded_state;
 use crate::render::{MapVisualLayer, RemapMapVisualsPending, ShoreTile, VehicleIndex, WaterTile};
@@ -170,9 +170,16 @@ pub(crate) fn handle_save_window_buttons(
             continue;
         }
         state.selected = Some(idx);
-        if state.mode == SaveWindowMode::Save && state.entries[idx].kind == SaveFileKind::Json {
+        if state.mode == SaveWindowMode::Save {
             let name = state.entries[idx].name.clone();
-            let stem = name.trim_end_matches(".json");
+            let lower = name.to_ascii_lowercase();
+            let stem = if lower.ends_with(".json") {
+                &name[..name.len() - 5]
+            } else if lower.ends_with(".sav") {
+                &name[..name.len() - 4]
+            } else {
+                name.as_str()
+            };
             state.filename = stem.to_string();
             if let Ok(mut editable) = name_q.single_mut() {
                 editable.editor_mut().set_text(stem);
@@ -264,13 +271,23 @@ fn confirm_save(state: &mut SaveWindowState, hud: &mut SimHudControls, sim: &Sim
         state.status = format!("No se pudo crear {}: {e}", dir.display());
         return;
     }
-    let file = if name.to_ascii_lowercase().ends_with(".json") {
-        name.to_string()
+    let lower = name.to_ascii_lowercase();
+    let (file, as_json) = if lower.ends_with(".json") {
+        (name.to_string(), true)
+    } else if lower.ends_with(".sav") {
+        (name.to_string(), false)
     } else {
-        format!("{name}.json")
+        // Por defecto: formato OpenTTD `.sav` (mapa + DATE + PLYR).
+        // Sufijo `.json` explícito conserva el save nativo completo.
+        (format!("{name}.sav"), false)
     };
     let path = dir.join(file);
-    match save::save(&sim.state, &path) {
+    let result = if as_json {
+        save::save(&sim.state, &path).map_err(|e| e.to_string())
+    } else {
+        sav::save(&sim.state, &path).map_err(|e| e.to_string())
+    };
+    match result {
         Ok(()) => {
             let path_s = path.to_string_lossy().to_string();
             info!("Guardado en {path_s}");
@@ -324,9 +341,7 @@ fn confirm_load(
         },
     };
     apply_loaded_state(sim, vehicle_index, remap, loaded);
-    if entry.kind == SaveFileKind::Json {
-        hud.json_save_path = entry.path.to_string_lossy().to_string();
-    }
+    hud.json_save_path = entry.path.to_string_lossy().to_string();
     info!("Partida cargada desde {}", entry.path.display());
     state.close();
     true
@@ -461,7 +476,7 @@ mod tests {
         press(&mut world, SaveWindowButton::Confirm);
         world.run_system_once(handle_save_window_buttons).unwrap();
 
-        assert!(dir.path().join("mi_partida.json").exists());
+        assert!(dir.path().join("mi_partida.sav").exists());
         assert!(!world.resource::<SaveWindowState>().open);
 
         world
@@ -474,6 +489,32 @@ mod tests {
 
         assert!(!world.resource::<SaveWindowState>().open);
         assert!(world.resource::<RemapMapVisualsPending>().pending);
+    }
+
+    #[test]
+    fn save_json_when_extension_explicit() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let save_path = dir.path().join("x.json").to_string_lossy().to_string();
+        let mut world = World::new();
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(VehicleIndex::default());
+        world.insert_resource(RemapMapVisualsPending::default());
+        world.insert_resource(SaveWindowState::default());
+        world.insert_resource(SimHudControls {
+            sim_speed: 1.0,
+            json_save_path: save_path.clone(),
+            minimap_visible: true,
+            sfx_volume: 0.22,
+            ..Default::default()
+        });
+        world.spawn((SaveWindowNameText, EditableText::new("mi_partida.json")));
+        world
+            .resource_mut::<SaveWindowState>()
+            .open_in_mode(SaveWindowMode::Save, &save_dir_from(&save_path));
+        press(&mut world, SaveWindowButton::Confirm);
+        world.run_system_once(handle_save_window_buttons).unwrap();
+        assert!(dir.path().join("mi_partida.json").exists());
+        assert!(!dir.path().join("mi_partida.sav").exists());
     }
 
     #[test]

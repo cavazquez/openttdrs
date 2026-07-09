@@ -521,6 +521,52 @@ fn place_rail_signal_on_straight_track() {
 }
 
 #[test]
+fn place_rail_signal_cycles_side_full_on_x() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
+    assert_eq!(
+        crate::rail_signals::rail_signal_present_mask(s.map.get(c).unwrap().m3).count_ones(),
+        1
+    );
+    // 2.º clic → two-way
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
+    assert_eq!(
+        crate::rail_signals::rail_signal_present_mask(s.map.get(c).unwrap().m3).count_ones(),
+        2
+    );
+    // 3.º clic → one-way sentido opuesto
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
+    assert_eq!(
+        crate::rail_signals::rail_signal_present_mask(s.map.get(c).unwrap().m3).count_ones(),
+        1
+    );
+    // 4.º clic → vuelve al one-way inicial (ciclo completo)
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
+    assert_eq!(
+        crate::rail_signals::rail_signal_present_mask(s.map.get(c).unwrap().m3).count_ones(),
+        1
+    );
+}
+
+#[test]
 fn place_rail_signal_cycles_side_on_same_track() {
     let mut s = GameState::new(8, 8);
     let c = TileCoord::new(2, 2);
@@ -615,6 +661,51 @@ fn clear_tile_removes_rail_signal() {
     apply_command(&mut s, &Command::ClearTile(c)).unwrap();
     let tile = s.map.get(c).unwrap();
     assert!(!crate::rail_signals::rail_tile_is_signals(tile.m5));
+}
+
+#[test]
+fn remove_rail_signal_keeps_track() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 128, 128, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
+    let money_before = s.economy.money;
+    apply_command(&mut s, &Command::RemoveRailSignal(c, 128, 128)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert_eq!(tile.kind, TileKind::Rail);
+    assert!(!crate::rail_signals::rail_tile_is_signals(tile.m5));
+    assert_eq!(tile.m5 & 0x3F, 0x01);
+    assert!(s.economy.money > money_before);
+}
+
+#[test]
+fn remove_rail_signal_one_lane_on_horz_keeps_other() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x0C)).unwrap(); // HORZ
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 0, 64, 64, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignal(c, 1, 200, 200, crate::rail_signals::SIGTYPE_BLOCK),
+    )
+    .unwrap();
+    assert!(crate::rail_signals::rail_tile_is_signals(
+        s.map.get(c).unwrap().m5
+    ));
+    apply_command(&mut s, &Command::RemoveRailSignal(c, 64, 64)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert!(crate::rail_signals::rail_tile_is_signals(tile.m5));
+    assert_eq!(tile.m5 & 0x3F, 0x0C);
+    let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
+    assert_ne!(present, 0);
 }
 
 #[test]

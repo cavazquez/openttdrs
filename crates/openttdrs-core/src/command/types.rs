@@ -40,6 +40,9 @@ pub enum Command {
     PlaceRailSignal(TileCoord, u8, u8, u8, u8),
     /// Cicla el tipo de señal existente (Ctrl+clic en `OpenTTD`).
     CycleRailSignalType(TileCoord, u8, u8),
+    /// Quita la señal del carril bajo el cursor sin demoler la vía.
+    /// `fract_x`/`fract_y` eligen carril en teselas HORZ/VERT.
+    RemoveRailSignal(TileCoord, u8, u8),
     PlaceRoadDepot(TileCoord),
     PlaceRoadDepotDir(TileCoord, u8),
     PlaceRailDepot(TileCoord),

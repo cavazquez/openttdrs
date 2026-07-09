@@ -740,34 +740,56 @@ pub(in crate::command) fn cycle_rail_signal_side(
     Ok(())
 }
 
-#[expect(
-    dead_code,
-    reason = "reservado para quitar señal sin vía (bulldozer / CmdRemoveSignal)"
-)]
-pub(in crate::command::transport) fn remove_rail_signal_bit(
-    state: &mut GameState,
+pub(crate) fn check_remove_rail_signal(
+    map: &Map,
     c: TileCoord,
-    sig_bit: u8,
+    fract_x: u8,
+    fract_y: u8,
 ) -> Result<(), CommandError> {
-    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    check_in_bounds(map, c)?;
+    let Some(tile) = map.get(c) else {
+        return Err(CommandError::OutOfBounds);
+    };
     if !rail_tile_is_signals(tile.m5) {
         return Err(CommandError::CannotPlaceSignalOnTrack);
     }
+    let tb = tile.m5 & 0x3F;
+    let track = crate::rail_signals::resolve_signal_track(tb, fract_x, fract_y)
+        .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
     let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
-    if present & (1 << sig_bit) == 0 {
+    if present & crate::rail_signals::signal_on_track_mask(track) == 0 {
         return Err(CommandError::CannotPlaceSignalOnTrack);
     }
+    Ok(())
+}
+
+pub(in crate::command) fn remove_rail_signal(
+    state: &mut GameState,
+    c: TileCoord,
+    fract_x: u8,
+    fract_y: u8,
+) -> Result<(), CommandError> {
+    check_remove_rail_signal(&state.map, c, fract_x, fract_y)?;
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let tb = tile.m5 & 0x3F;
+    let track = crate::rail_signals::resolve_signal_track(tb, fract_x, fract_y)
+        .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
+    let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
+    let on_track = crate::rail_signals::signal_on_track_mask(track);
+    // Quita todos los bits de señal del carril (one-way o two-way).
     let mut out = tile;
-    let new_present = present & !(1 << sig_bit);
+    let new_present = present & !on_track;
     if new_present == 0 {
-        let tb = out.m5 & 0x3F;
         out.m5 = tb | (RAIL_TILE_NORMAL << 6);
         out.m2 = 0;
         out.m3 &= 0x0F;
         out.m3hi &= 0x0F;
     } else {
         out.m3 = (out.m3 & 0x0F) | (new_present << 4);
-        out.m3hi = (out.m3hi & 0x0F) | (new_present << 4);
+        let states = crate::rail_signals::rail_signal_state_mask(out.m3hi) & new_present;
+        out.m3hi = (out.m3hi & 0x0F) | (states << 4);
+        // Limpia bits de tipo/variante del carril quitado en m2.
+        out.m2 = crate::rail_signals::clear_signal_type_bits_m2(out.m2, track);
     }
     state
         .map

@@ -287,7 +287,33 @@ fn best_rail_signal_pick_in_neighborhood(
 pub fn world_pos_to_rail_signal_pick(world_pos: Vec2, map: &Map) -> Option<(i32, i32, u8, u8)> {
     let seed = world_pos_to_tile_coord(world_pos, map)?;
     let (mw, mh) = map.dimensions();
+    // Preferir el seed geométrico si ya es vía válida y el cursor está cerca del ancla:
+    // evita saltar al vecino este/SE en diagonales X/Y por desempate isométrico.
+    if let Some(pick) = rail_signal_pick_if_valid(map, seed.0, seed.1, world_pos) {
+        let (_, _, _, _, dist) = pick;
+        if dist <= RAIL_SIGNAL_PICK_MAX_DIST * 0.85 {
+            return Some((pick.0, pick.1, pick.2, pick.3));
+        }
+    }
     best_rail_signal_pick_in_neighborhood(map, seed.0, seed.1, world_pos, mw as i32, mh as i32)
+}
+
+fn rail_signal_pick_if_valid(
+    map: &Map,
+    tx: i32,
+    ty: i32,
+    world_pos: Vec2,
+) -> Option<(i32, i32, u8, u8, f32)> {
+    let coord = TileCoord::new(tx, ty);
+    let tile = map.get(coord).filter(|t| t.kind == TileKind::Rail)?;
+    let tb = tile.m5 & 0x3F;
+    if tb == 0 {
+        return None;
+    }
+    let fract = world_pos_to_tile_fract(world_pos, map, tx, ty);
+    let track = resolve_signal_track(tb, fract.0, fract.1)?;
+    let dist = min_rail_signal_anchor_dist(map, tx, ty, world_pos, track)?;
+    Some((tx, ty, fract.0, fract.1, dist))
 }
 
 /// Desempate entre teselas ferroviarias con métrica similar (p. ej. vía diagonal en cadena).
@@ -305,13 +331,19 @@ fn rail_signal_pick_better(
     if cand_metric > best_metric + EPS {
         return false;
     }
+    // Empate de distancia al ancla: preferir el seed geométrico (tesela bajo el cursor).
+    if cand == seed {
+        return true;
+    }
+    if best == seed {
+        return false;
+    }
     let cand_dist = (cand.0 - seed.0).abs() + (cand.1 - seed.1).abs();
     let best_dist = (best.0 - seed.0).abs() + (best.1 - seed.1).abs();
     if cand_dist != best_dist {
         return cand_dist < best_dist;
     }
-    // Estable: preferir la tesela del pick geométrico si empata.
-    cand == seed || (best != seed && (cand.0, cand.1) < best)
+    (cand.0, cand.1) < best
 }
 
 #[cfg(test)]
@@ -334,6 +366,22 @@ mod rail_signal_pick_map_tests {
         let mut t = map.get(c).expect("tile");
         t.m5 = RAIL_TB_X | (RAIL_TILE_NORMAL << 6);
         map.set_tile(c, t).expect("tile");
+    }
+
+    #[test]
+    fn pick_mid_diagonal_rail_segment_stays_on_track_tile() {
+        let mut map = Map::new_flat(5, 5, 0);
+        write_rail_x(&mut map, 2, 2);
+        // Punto medio entre anclas SW/NE del riel X (no el ancla exacto del sprite).
+        let sw = signal_screen_position(2, 2, 8, 1276, TILE_HALF_H, 0);
+        let ne = signal_screen_position(2, 2, 9, 1278, TILE_HALF_H, 0);
+        let mid = sw.lerp(ne, 0.5);
+        let (tx, ty, _, _) = world_pos_to_rail_signal_pick(mid, &map).expect("pick");
+        assert_eq!(
+            (tx, ty),
+            (2, 2),
+            "el centro del riel diagonal debe pickear la tesela del track, no un vecino iso"
+        );
     }
 
     #[test]

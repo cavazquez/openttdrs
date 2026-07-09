@@ -1,9 +1,12 @@
-//! Parser nativo de savegames de `OpenTTD` (`.sav`): contenedor comprimido,
-//! chunks de mapa, estaciones (`STNN`), ciudades (`CITY`), industrias
-//! (`INDY`), vehículos (`VEHS`), órdenes (`ORDL`) y dinero de la empresa (`PLYR`).
+//! Parser y export mínimo de savegames de `OpenTTD` (`.sav`): contenedor
+//! comprimido, chunks de mapa, estaciones (`STNN`), ciudades (`CITY`),
+//! industrias (`INDY`), vehículos (`VEHS`), órdenes (`ORDL`) y dinero (`PLYR`).
 //!
 //! El mapa se reconstruye reutilizando el pipeline `.ottdmap` ya validado
 //! (`Map::from_ottd_binary_with_extras`), generando el bloque en memoria.
+//!
+//! Export: [`save`] / [`save_to_bytes`] escriben mapa + `DATE` + `PLYR`
+//! (ver `docs/ROADMAP_SAV_EXPORT.md`).
 
 mod array_legacy;
 mod build;
@@ -14,6 +17,7 @@ mod entities;
 mod house_population_generated;
 mod orders;
 mod table;
+mod write;
 
 use crate::command::{bridge_collinear_rail_gaps, normalize_rail_trackbits_from_neighbors};
 use crate::game_state::GameState;
@@ -25,13 +29,16 @@ use crate::town::Town;
 use crate::vehicle::{Vehicle, VehicleKind};
 
 pub use entities::{SavIndustry, SavStation, SavVehicle, SavVehicleKind};
+pub use write::{
+    EXPORT_SAVE_VERSION, SavContainer, save, save_to_bytes, save_to_bytes_with, save_with,
+};
 
 /// Bits `FACIL_*` de `OpenTTD`.
 const FACIL_TRAIN: u8 = 0x01;
 const FACIL_TRUCK_STOP: u8 = 0x02;
 const FACIL_BUS_STOP: u8 = 0x04;
 
-/// Error al cargar un `.sav`.
+/// Error al cargar o guardar un `.sav`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SavError {
     /// Compresión no soportada (p. ej. LZO de saves muy antiguos).
@@ -40,6 +47,8 @@ pub enum SavError {
     Decompress(String),
     /// Formato/contenido inesperado.
     BadFormat(String),
+    /// Error de E/S al escribir el archivo.
+    Io(String),
 }
 
 impl std::fmt::Display for SavError {
@@ -48,6 +57,7 @@ impl std::fmt::Display for SavError {
             Self::UnsupportedCompression(s) => write!(f, "compresión no soportada: {s}"),
             Self::Decompress(s) => write!(f, "error de descompresión: {s}"),
             Self::BadFormat(s) => write!(f, "formato inválido: {s}"),
+            Self::Io(s) => write!(f, "error de E/S: {s}"),
         }
     }
 }

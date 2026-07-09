@@ -24,8 +24,8 @@ use crate::ui::vehicle_window::VehicleWindowState;
 use super::commands::command_for_action;
 use super::drag::{
     action_is_tunnel, action_supports_drag, apply_drag_action, drag_line_tiles,
-    rail_action_refreshes_neighbors, rail_remap_neighbor_tiles, tunnel_placement_is_valid,
-    tunnel_remap_tiles,
+    rail_action_refreshes_neighbors, rail_remap_neighbor_tiles, subsample_drag_tiles,
+    tunnel_placement_is_valid, tunnel_remap_tiles,
 };
 use super::placement::cancel_placement;
 use super::rail_lane::rail_lane_bits_for_action;
@@ -242,6 +242,7 @@ pub(crate) fn handle_tile_click(
 
     if mouse.just_pressed(MouseButton::Right) && drag_state.armed {
         cancel_placement(&mut drag_state);
+        station_state.signal_drag_fract = None;
         return;
     }
 
@@ -431,6 +432,20 @@ pub(crate) fn handle_tile_click(
             return;
         };
         (pos, (hovered.fract_x, hovered.fract_y))
+    } else if action == BuildMenuAction::Clear {
+        // Preferir pick de señal si hay vía con señales bajo el cursor.
+        if let Some(pos) = hovered.pos
+            && let Some(tile) = sim.state.map.get(pos)
+            && tile.kind == TileKind::Rail
+            && openttdrs_core::rail_signals::rail_tile_is_signals(tile.m5)
+        {
+            (pos, (hovered.fract_x, hovered.fract_y))
+        } else {
+            (
+                pos,
+                world_pos_to_tile_fract(world_pos, &sim.state.map, tx, ty),
+            )
+        }
     } else {
         (
             pos,
@@ -448,18 +463,47 @@ pub(crate) fn handle_tile_click(
         if !drag_state.armed || drag_state.last_action != Some(action) {
             if mouse.just_pressed(MouseButton::Left) {
                 drag_state.armed = true;
-                drag_state.start_tile = Some(current);
-                drag_state.last_tile = Some(current);
+                // Señales: anclar al pick de riel (puede diferir de la tesela iso).
+                let start = if action == BuildMenuAction::RailSignals {
+                    (build_pos.x, build_pos.y)
+                } else {
+                    current
+                };
+                drag_state.start_tile = Some(start);
+                drag_state.last_tile = Some(start);
                 drag_state.last_action = Some(action);
-                drag_state.pending_tiles = vec![current];
+                drag_state.pending_tiles = vec![start];
                 drag_state.rail_lane_bit = rail_lane_bit;
+                drag_state.press_world_pos = Some(world_pos);
+                if action == BuildMenuAction::RailSignals || action == BuildMenuAction::Clear {
+                    station_state.signal_drag_fract = Some(tile_fract);
+                }
             }
             return;
         }
 
         let start = drag_state.start_tile.unwrap_or(current);
-        drag_state.pending_tiles = drag_line_tiles(Some(&sim.state.map), action, start, current);
-        drag_state.last_tile = Some(current);
+        // Tap de señales: el fantasma queda en `start_tile` del press; un re-pick
+        // isométrico en el release (vecino este/SE) no debe mover la colocación.
+        const SIGNAL_TAP_MAX_PX: f32 = 10.0;
+        let signal_tap = action == BuildMenuAction::RailSignals
+            && drag_state
+                .press_world_pos
+                .is_some_and(|p| p.distance(world_pos) <= SIGNAL_TAP_MAX_PX);
+        let end = if signal_tap {
+            start
+        } else if action == BuildMenuAction::RailSignals {
+            (build_pos.x, build_pos.y)
+        } else {
+            current
+        };
+        let line = drag_line_tiles(Some(&sim.state.map), action, start, end);
+        drag_state.pending_tiles = if action == BuildMenuAction::RailSignals {
+            subsample_drag_tiles(&line, station_state.signal_density)
+        } else {
+            line
+        };
+        drag_state.last_tile = Some(end);
 
         if mouse.just_released(MouseButton::Left) {
             confirm_drag_placement(
@@ -467,12 +511,18 @@ pub(crate) fn handle_tile_click(
                 &mut drag_state,
                 &mut sim,
                 &station_state,
-                build_pos,
+                if signal_tap {
+                    TileCoord::new(start.0, start.1)
+                } else {
+                    build_pos
+                },
                 &mut bridge_state,
                 &mut pending,
                 &mut hud_feedback,
                 time.elapsed_secs(),
             );
+            station_state.signal_drag_fract = None;
+            drag_state.press_world_pos = None;
         }
         return;
     }

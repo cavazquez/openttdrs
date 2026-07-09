@@ -204,14 +204,15 @@ Toolbar avanzada vs simplificada: la simplificada solo muestra path signals ([Bu
 | Preview + toolbar + RMB dirección | 🟡 | Pick/colocación en diagonal — ver §11 |
 | Carriles X/Y/Upper/Lower/Left/Right | ✅ | `resolve_signal_track`, `fract_x/y` |
 | Render presente + rojo/verde | ✅ | `sprites/rail.rs`, `collect_signal_sprite_ids` |
-| Sim block simple (bloque hasta siguiente señal, 1 ocupación) | 🟡 | `rail_signals.rs`, `sim_step.rs` — solo X/Y bien probado; Horz/Vert parcial |
-| Two-way / one-way block | ❌ | Falta `CycleSignalSide` + UI clic |
-| Semaphore vs electric | ❌ | Siempre `variant=0` |
-| Tipos Entry / Exit / Combo | ❌ | Solo `sig_type=0` en `m2` |
+| Sim block simple (bloque hasta siguiente señal, 1 ocupación) | ✅ | `rail_signals.rs` — X/Y + Horz/Vert (exit por carril) |
+| Two-way / one-way block | ✅ | `cycle_signal_side_m3` vía `PlaceRailSignal` (clic en señal existente) |
+| Semaphore vs electric | 🟡 | `default_signal_variant` por año; colocación usa eléctrico por defecto |
+| Tipos Entry / Exit / Combo | 🟡 | Encoding + sim entry parcial; UI solo coloca block/path |
 | Path / PathOneWay + reserva PBS | ❌ | Hito 0.2 — ver `ROADMAP_SPRINTS.md` |
 | Presignal `UpdateSignalsOnSegment` | ❌ | Requiere port de `signal.cpp` |
-| Arrastre línea + densidad | ❌ | |
-| Signal convert + Ctrl ciclo tipos | ❌ | |
+| Arrastre línea + densidad | ✅ | `signal_density` default 4; Shift+RMB cicla |
+| Bulldozer quita señal (conserva vía) | ✅ | `RemoveRailSignal` vía herramienta Demoler |
+| Signal convert + Ctrl ciclo tipos | 🟡 | Ctrl+clic cicla block→path→path oneway (`CycleRailSignalType`) |
 | Import `.sav` con PBS/presignals | 🟡 | Tipos y render OK; reservas PBS runtime se recalculan; presignal logic parcial |
 
 ---
@@ -220,23 +221,23 @@ Toolbar avanzada vs simplificada: la simplificada solo muestra path signals ([Bu
 
 Orden sugerido alineado con [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) y [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md).
 
-### Fase A — Block completo (S5 cierre)
+### Fase A — Block completo (S5 cierre) ✅
 
 **Objetivo:** paridad jugable en líneas doble vía con block signals.
 
-1. **Sim en Horz/Vert:** extender `signal_bits_for_exit`, `rail_block_ahead`, `rail_traversal_bits` para Upper/Lower/Left/Right.  
-2. **Two-way / one-way:** portar `CycleSignalSide`; clic en señal existente alterna lados (cliente + comando).  
-3. **Merge `m2` al añadir 2.ª señal** en misma tesela (tipos distintos por carril).  
-4. Tests: doble vía Horz, two-way estación fin de línea.
+1. **Sim en Horz/Vert:** `signal_bits_for_exit` / `signal_exit_dir` por carril; bloque sigue el corredor HORZ/VERT (ocupación por tesela).  
+2. **Two-way / one-way:** `cycle_signal_side_m3` embebido en `PlaceRailSignal` (clic en señal del mismo carril).  
+3. **Merge `m2` al añadir 2.ª señal** en misma tesela (otro carril).  
+4. Tests: Upper≠Lower en Horz, Vert Left, ciclo one/two-way, two-way terminal.
 
 **Archivos:** `rail_signals.rs`, `command/transport.rs`, `build_input/click.rs`, tests en `rail_signals.rs` / `command/tests.rs`.
 
-### Fase B — UX construcción
+### Fase B — UX construcción ✅
 
-1. Arrastre con densidad N (estado en toolbar, como OpenTTD).  
-2. Bulldozer quita señal sin quitar vía (`remove_rail_signal_bit` ya existe).  
-3. Semaphore automático por año (opcional; leer game setting).  
-4. Ctrl+clic ciclo de tipo (limitado a tipos ya simulados).
+1. Arrastre con densidad N (`StationBuildState.signal_density`, default 4; Shift+RMB cicla 1/2/4/8/12/16).  
+2. Bulldozer (`Clear`) sobre tesela con señal → `RemoveRailSignal` (conserva vía).  
+3. Semaphore automático por año (opcional; leer game setting) — pendiente.  
+4. Ctrl+clic ciclo de tipo (limitado a tipos ya simulados) — ya en Fase A.
 
 ### Fase C — Presignals
 
@@ -301,7 +302,7 @@ Dependencias: pathfinder trenes más fiel (YAPF simplificado o extensión de `pa
 
 ## 11. Bug abierto: fantasma vs colocación en vía diagonal (jun 2026)
 
-**Estado:** reproducible · **prioridad:** S5 / SP3 · **dejar documentado hasta fix definitivo.**
+**Estado:** ✅ cerrado jul 2026 · tap ancla al press + preferencia seed en pick.
 
 ### Síntoma (reporte usuario)
 
@@ -313,7 +314,13 @@ En vías **X/Y diagonales** (tesela plana):
 
 OpenTTD usa `GetTileBelowCursor()` + `GenericPlaceSignals` sobre **esa** tesela (`rail_gui.cpp`); no hay búsqueda 5×5.
 
-### Intentos ya en el repo (insuficientes)
+### Fix aplicado
+
+1. **Tap vs arrastre:** en `RailSignals`, si el cursor se movió ≤10 px entre press y release, se coloca en `start_tile` + `signal_drag_fract` del press (misma fuente que el fantasma), sin re-pickear el vecino isométrico.
+2. **Pick:** si el seed geométrico ya es vía válida y el cursor está cerca del ancla, se prefiere ese seed; desempate favorece el seed sobre vecinos.
+3. Test: `pick_mid_diagonal_rail_segment_stays_on_track_tile` en `iso/coords.rs`.
+
+### Intentos previos (insuficientes solos)
 
 | Cambio | Archivos | Resultado |
 |--------|----------|-----------|

@@ -140,11 +140,12 @@ pub use rail_signals::{
     RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SEMAPHORE_BUILD_BEFORE_YEAR,
     SIGNAL_BUILD_COST, SIGTYPE_BLOCK, SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SIGTYPE_PATH,
     SIGTYPE_PATH_ONEWAY, SignalTrack, YAPF_PBS_BEHIND_PENALTY, YAPF_RED_SIGNAL_PENALTY,
-    YapfSignalRouting, calendar_year_at_tick, cycle_signal_facing, cycle_signal_side_m3,
-    cycle_signal_type_m2, default_signal_variant, is_pbs_signal_type, next_placeable_signal_type,
-    rail_tile_is_signals, resolve_signal_track, signal_facing_for_orientation,
-    signal_on_track_mask, signal_placement_for_facing, signal_placement_for_track,
-    signal_type_for_track, tracks_overlap, valid_signal_facings_track, yapf_routing_signal,
+    YapfSignalRouting, calendar_year_at_tick, clear_signal_type_bits_m2, cycle_signal_facing,
+    cycle_signal_side_m3, cycle_signal_type_m2, default_signal_variant, is_pbs_signal_type,
+    next_placeable_signal_type, rail_tile_is_signals, resolve_signal_track,
+    signal_facing_for_orientation, signal_on_track_mask, signal_placement_for_facing,
+    signal_placement_for_track, signal_type_for_track, tracks_overlap, valid_signal_facings_track,
+    yapf_routing_signal,
 };
 pub use refit::{
     next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_hidden_on_map,
@@ -158,7 +159,10 @@ pub use road_movement::{
     vehicle_subtile, vehicle_subtile_at, vehicle_subtile_at_with_map,
     vehicle_subtile_with_progress,
 };
-pub use sav::{SavError, SavGame, SavIndustry, SavStation, SavVehicle, SavVehicleKind};
+pub use sav::{
+    EXPORT_SAVE_VERSION, SavContainer, SavError, SavGame, SavIndustry, SavStation, SavVehicle,
+    SavVehicleKind, save as save_sav, save_to_bytes as save_sav_to_bytes,
+};
 pub use save::CURRENT_SAVE_VERSION;
 pub use save::SaveError;
 pub use save::load_from_str;

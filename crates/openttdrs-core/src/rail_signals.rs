@@ -921,6 +921,17 @@ pub fn cycle_signal_type_m2(m2: u8, track: SignalTrack) -> u8 {
     (m2 & !(7 << base)) | ((new_type & 7) << base)
 }
 
+/// Limpia tipo y variante de señal del carril en `m2` al quitar la señal.
+#[must_use]
+pub fn clear_signal_type_bits_m2(m2: u8, track: SignalTrack) -> u8 {
+    let (base, var_bit) = if matches!(track, SignalTrack::Lower | SignalTrack::Right) {
+        (4, 7)
+    } else {
+        (0, 3)
+    };
+    m2 & !(7 << base) & !(1 << var_bit)
+}
+
 /// Alterna one-way / two-way en el carril (`CycleSignalSide` en `rail_map.h`).
 #[must_use]
 pub fn cycle_signal_side_m3(m3: u8, track: SignalTrack, sig_type: u8) -> u8 {
@@ -1137,6 +1148,18 @@ mod tests {
         map.set_tile(c, t).expect("tile");
     }
 
+    fn write_signal_on_track(map: &mut Map, c: TileCoord, tb: u8, track: SignalTrack, face: u8) {
+        map.set_kind(c, TileKind::Rail).expect("kind");
+        let placement =
+            signal_placement_for_track(track, face, 1, SIGTYPE_BLOCK).expect("placement");
+        let mut t = map.get(c).expect("tile");
+        t.m5 = tb | (RAIL_TILE_SIGNALS << 6);
+        t.m2 = placement.m2;
+        t.m3 = placement.m3;
+        t.m3hi = placement.m3hi;
+        map.set_tile(c, t).expect("tile");
+    }
+
     #[test]
     fn signal_placement_is_single_bit() {
         let p = signal_placement_for_track(SignalTrack::X, 0, 1, SIGTYPE_BLOCK).expect("NE on X");
@@ -1204,6 +1227,173 @@ mod tests {
             0,
             "señal en rojo cuando el bloque está ocupado"
         );
+    }
+
+    /// En HORZ, una señal solo en Upper no controla las salidas del carril Lower.
+    #[test]
+    fn horz_upper_signal_does_not_control_lower_exits() {
+        let mut map = Map::new_flat(8, 4, 0);
+        write_signal_on_track(
+            &mut map,
+            TileCoord::new(1, 1),
+            RAIL_TB_HORZ,
+            SignalTrack::Upper,
+            0,
+        );
+        // Upper face 0 → bit 2, exit dir 0 (+X).
+        assert_eq!(
+            signal_bits_for_exit(&map, TileCoord::new(1, 1), TileCoord::new(2, 1)),
+            vec![2]
+        );
+        // Lower exits: dir 2 (−X, bit 0) y dir 1 (+Y, bit 1) — sin señal Lower.
+        assert!(
+            signal_bits_for_exit(&map, TileCoord::new(1, 1), TileCoord::new(0, 1)).is_empty(),
+            "Upper no controla salida Lower hacia −X"
+        );
+        assert!(
+            signal_bits_for_exit(&map, TileCoord::new(1, 1), TileCoord::new(1, 2)).is_empty(),
+            "Upper no controla salida Lower hacia +Y"
+        );
+        let block = rail_block_ahead(&map, TileCoord::new(1, 1), 0);
+        assert!(
+            block.contains(&TileCoord::new(2, 1)),
+            "bloque Upper sigue el corredor HORZ hacia +X"
+        );
+    }
+
+    #[test]
+    fn signal_bits_for_exit_vert_left_lane() {
+        let mut map = Map::new_flat(8, 8, 0);
+        write_signal_on_track(
+            &mut map,
+            TileCoord::new(0, 1),
+            RAIL_TB_VERT,
+            SignalTrack::Left,
+            3,
+        );
+        // Left facings: (3, 2) NW y (1, 3) SE — face 3 → bit 2, salida dir 3 (−Y).
+        let bits = signal_bits_for_exit(&map, TileCoord::new(0, 1), TileCoord::new(0, 0));
+        assert_eq!(bits, vec![2], "señal Left NW controla salida hacia NW");
+    }
+
+    #[test]
+    fn train_blocked_on_vert_signal_when_block_occupied() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
+        let mut state = GameState::new(4, 8);
+        for y in 0..=3 {
+            write_rail(&mut state.map, TileCoord::new(1, y), RAIL_TB_VERT);
+        }
+        // Left NW (bit 2): salida hacia −Y (dir 3).
+        write_signal_on_track(
+            &mut state.map,
+            TileCoord::new(1, 2),
+            RAIL_TB_VERT,
+            SignalTrack::Left,
+            3,
+        );
+        let blocker = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        let mut on_signal = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 2),
+            TileCoord::new(1, 0),
+        );
+        on_signal.running = true;
+        on_signal.path = std::collections::VecDeque::from([TileCoord::new(1, 1)]);
+        state.vehicles.push(on_signal);
+        state.vehicles.push(blocker);
+        update_rail_signal_states(&mut state.map, &state.vehicles, &mut Vec::new(), true);
+        assert!(train_blocked_by_signal(
+            &state.map,
+            &state.vehicles,
+            &state.vehicles[0]
+        ));
+        let tile = state.map.get(TileCoord::new(1, 2)).expect("signal");
+        assert_eq!(
+            rail_signal_state_mask(tile.m3hi) & 0b0100,
+            0,
+            "señal Vert Left en rojo con bloque ocupado"
+        );
+    }
+
+    #[test]
+    fn cycle_signal_side_m3_full_cycle_on_x() {
+        let mut m3 = 0x40; // one-way bit 2
+        m3 = cycle_signal_side_m3(m3, SignalTrack::X, SIGTYPE_BLOCK);
+        assert_eq!(m3 >> 4, 0x0C, "→ two-way");
+        m3 = cycle_signal_side_m3(m3, SignalTrack::X, SIGTYPE_BLOCK);
+        assert_eq!(m3 >> 4, 0x08, "→ one-way bit 3");
+        m3 = cycle_signal_side_m3(m3, SignalTrack::X, SIGTYPE_BLOCK);
+        assert_eq!(m3 >> 4, 0x04, "→ one-way bit 2");
+    }
+
+    #[test]
+    fn cycle_signal_side_m3_on_horz_upper_and_lower() {
+        let upper = cycle_signal_side_m3(0x40, SignalTrack::Upper, SIGTYPE_BLOCK);
+        assert_eq!(upper >> 4, 0x0C, "Upper: bits 2+3");
+        let lower = cycle_signal_side_m3(0x10, SignalTrack::Lower, SIGTYPE_BLOCK);
+        assert_eq!(lower >> 4, 0x03, "Lower: bits 0+1");
+    }
+
+    #[test]
+    fn two_way_terminal_allows_both_exit_dirs() {
+        use crate::Vehicle;
+        use crate::vehicle::VehicleKind;
+
+        let mut map = Map::new_flat(10, 4, 0);
+        for x in 0..=4 {
+            write_rail(&mut map, TileCoord::new(x, 1), RAIL_TB_X);
+        }
+        write_signal_facing(&mut map, TileCoord::new(2, 1), RAIL_TB_X, Some(0));
+        let mut tile = map.get(TileCoord::new(2, 1)).expect("sig");
+        tile.m3 = cycle_signal_side_m3(tile.m3, SignalTrack::X, SIGTYPE_BLOCK);
+        tile.m3hi = (tile.m3hi & 0x0F) | (rail_signal_present_mask(tile.m3) << 4);
+        map.set_tile(TileCoord::new(2, 1), tile).expect("two-way");
+
+        let present = rail_signal_present_mask(map.get(TileCoord::new(2, 1)).expect("sig").m3);
+        assert_eq!(present, 0x0C, "two-way bits 2+3");
+
+        let east = signal_bits_for_exit(&map, TileCoord::new(2, 1), TileCoord::new(3, 1));
+        let west = signal_bits_for_exit(&map, TileCoord::new(2, 1), TileCoord::new(1, 1));
+        assert_eq!(east, vec![2]);
+        assert_eq!(west, vec![3]);
+
+        let mut eastbound = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(2, 1),
+            TileCoord::new(4, 1),
+        );
+        eastbound.running = true;
+        eastbound.path = std::collections::VecDeque::from([TileCoord::new(3, 1)]);
+        let mut westbound = Vehicle::new(
+            2,
+            VehicleKind::Train,
+            TileCoord::new(2, 1),
+            TileCoord::new(0, 1),
+        );
+        westbound.running = true;
+        westbound.path = std::collections::VecDeque::from([TileCoord::new(1, 1)]);
+
+        update_rail_signal_states(&mut map, &[eastbound.clone()], &mut Vec::new(), true);
+        assert!(!train_blocked_by_signal(
+            &map,
+            &[eastbound.clone()],
+            &eastbound
+        ));
+        update_rail_signal_states(&mut map, &[westbound.clone()], &mut Vec::new(), true);
+        assert!(!train_blocked_by_signal(
+            &map,
+            &[westbound.clone()],
+            &westbound
+        ));
     }
 
     #[test]

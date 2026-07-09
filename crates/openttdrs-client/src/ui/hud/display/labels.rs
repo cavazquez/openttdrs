@@ -19,12 +19,12 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::RailBridge => "Puente vía",
         BuildMenuAction::RailTunnel => "Túnel vía",
         BuildMenuAction::RailWaypoint => "Waypoint",
-        BuildMenuAction::RailSignals => "Señales (RMB: dirección)",
+        BuildMenuAction::RailSignals => "Señales (arrastre; Shift+RMB: densidad)",
         BuildMenuAction::RailRemove => "Quitar vía",
         BuildMenuAction::RailConvert => "Convertir vía (pendiente railtypes)",
         BuildMenuAction::Station => "Parada camión",
         BuildMenuAction::BusStop => "Parada bus",
-        BuildMenuAction::Clear => "Demoler",
+        BuildMenuAction::Clear => "Demoler (señal: quita sin vía)",
         BuildMenuAction::Orders => "Órdenes",
         BuildMenuAction::BuildHouse => "Casa",
         BuildMenuAction::BuildCoalMine => "Mina carbón",
@@ -58,7 +58,9 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
     match action {
         BuildMenuAction::RoadDepot => Some("comprar vehículo; no carga cargo"),
         BuildMenuAction::RailDepot => Some("comprar tren"),
-        BuildMenuAction::RailSignals => Some("clic quita si ya hay; RMB: dirección"),
+        BuildMenuAction::RailSignals => {
+            Some("arrastre dens.N; clic sentido; Ctrl+clic tipo; Shift+RMB dens.; RMB dir")
+        }
         BuildMenuAction::Station | BuildMenuAction::BusStop => {
             Some("hierba junto a vía; carga/descarga")
         }

@@ -62,6 +62,21 @@ pub(crate) fn update_cursor_tile(
         return;
     }
 
+    if tool_state.active_tool == Some(BuildMenuAction::Clear)
+        && let Some((tx, ty, fx, fy)) = world_pos_to_rail_signal_pick(world_pos, &sim.state.map)
+    {
+        let c = TileCoord::new(tx, ty);
+        if let Some(tile) = sim.state.map.get(c)
+            && tile.kind == openttdrs_core::TileKind::Rail
+            && openttdrs_core::rail_signals::rail_tile_is_signals(tile.m5)
+        {
+            hovered.pos = Some(c);
+            hovered.fract_x = fx;
+            hovered.fract_y = fy;
+            return;
+        }
+    }
+
     hovered.pos =
         world_pos_to_tile_coord(world_pos, &sim.state.map).map(|(tx, ty)| TileCoord::new(tx, ty));
     if let Some(pos) = hovered.pos {

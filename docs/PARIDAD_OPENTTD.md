@@ -93,7 +93,7 @@ Ordenada de **más barato a más caro**.
 | Mecánica | OpenTTD | openttdrs |
 |----------|---------|-----------|
 | Tiempo | Calendario + wallclock opcional | Tick numérico |
-| Save | Binario comprimido | JSON propio; `.sav` solo import |
+| Save | Binario comprimido | JSON completo; `.sav` import + export (mapa+STNN+CITY+INDY+VEHS/ORDL+DATE+PLYR) — [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md) |
 | Pathfinding | YAPF | A* / BFS direccional |
 | Señales | PBS, reserva de rutas | Render en mapas importados |
 | Cargo | Packets, rating, transit time | Balances `u32` |

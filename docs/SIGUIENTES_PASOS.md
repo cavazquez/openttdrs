@@ -37,7 +37,10 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 **Carreteras — drag / orientación (handoff IA):** fixes parciales junio 2026; usuario pidió
 dejarlo — ver [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md).
 
-**Señales — pick en diagonal (handoff):** fantasma OK, clic en tesela vecina — ver
+**Export `.sav` (handoff IA):** mapa+STNN+CITY+INDY+ORDL+VEHS+DATE+PLYR; horarios/grupos solo en JSON —
+ver [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md).
+
+**Señales — pick en diagonal:** ✅ fix jul 2026 (tap ancla press + seed preferido) —
 [SENALES_FERROVIARIAS.md §11](SENALES_FERROVIARIAS.md#11-bug-abierto-fantasma-vs-colocación-en-vía-diagonal-jun-2026).
 
 **Menú de inicio:** pantallas raíz/nueva partida, cargar desde menú, población procedural y lagos — ver
@@ -58,7 +61,7 @@ dejarlo — ver [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md).
 5. **Fuente UI** — `static/fonts/DejaVuSansMono.ttf` (no en `assets/` ignorado).
 6. **Estación tren** — multi-tesela `PlaceRailStationArea`, ventana selección, cruce X\|Y en intersecciones (save v3).
 7. **Vía Horz/Vert/X/Y** — `PlaceRailBits` solo en tesela del cursor (fantasma = colocación); uniones automáticas solo con autoraíl. Ver [VIAS_FERROVIARIAS_COLOCACION.md](VIAS_FERROVIARIAS_COLOCACION.md).
-8. **Señales** — pick en vecindario + offset sub-tesela; se conservan al cruzar diagonales. **Bug abierto:** fantasma vs clic en diagonal — [SENALES §11](SENALES_FERROVIARIAS.md#11-bug-abierto-fantasma-vs-colocación-en-vía-diagonal-jun-2026).
+8. **Señales** — pick en vecindario + offset sub-tesela; se conservan al cruzar diagonales. Pick diagonal tap/seed ✅ jul 2026 — [SENALES §11](SENALES_FERROVIARIAS.md#11-bug-abierto-fantasma-vs-colocación-en-vía-diagonal-jun-2026).
 
 ---
 

@@ -28,6 +28,7 @@ pub(crate) fn action_supports_drag(action: BuildMenuAction) -> bool {
             | BuildMenuAction::RailBridge
             | BuildMenuAction::RailTunnel
             | BuildMenuAction::RailRemove
+            | BuildMenuAction::RailSignals
             | BuildMenuAction::Clear
             | BuildMenuAction::RaiseLand
             | BuildMenuAction::LowerLand
@@ -288,6 +289,28 @@ pub(crate) fn apply_drag_action(
         return (changed, if changed { None } else { last_err });
     }
 
+    if action == BuildMenuAction::RailSignals {
+        let density = station_state.signal_density.max(1);
+        let (fx, fy) = station_state.signal_drag_fract.unwrap_or((128, 128));
+        let spaced = subsample_drag_tiles(&tiles, density);
+        let mut changed = false;
+        let mut last_err = None;
+        for (x, y) in spaced {
+            let cmd = Command::PlaceRailSignal(
+                TileCoord::new(x, y),
+                station_state.orientation,
+                fx,
+                fy,
+                station_state.signal_type,
+            );
+            match apply_command(&mut sim.state, &cmd) {
+                Ok(()) => changed = true,
+                Err(e) => last_err = Some(e),
+            }
+        }
+        return (changed, if changed { None } else { last_err });
+    }
+
     let mut changed = false;
     let mut last_err = None;
     for (x, y) in tiles {
@@ -296,8 +319,8 @@ pub(crate) fn apply_drag_action(
             TileCoord::new(x, y),
             station_state,
             rail_lane_bit,
-            None,
-            None,
+            Some(&sim.state.map),
+            station_state.signal_drag_fract,
             station_state.signal_type,
             false,
         ) {
@@ -308,6 +331,18 @@ pub(crate) fn apply_drag_action(
         }
     }
     (changed, if changed { None } else { last_err })
+}
+
+/// Teselas de arrastre espaciadas cada `density` (incluye la primera).
+pub(crate) fn subsample_drag_tiles(tiles: &[(i32, i32)], density: u8) -> Vec<(i32, i32)> {
+    let step = usize::from(density.max(1));
+    tiles
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(i, _)| i % step == 0)
+        .map(|(_, t)| t)
+        .collect()
 }
 
 pub(crate) fn drag_line_tiles(
@@ -549,5 +584,44 @@ mod tests {
                 0x0A
             );
         }
+    }
+
+    #[test]
+    fn subsample_drag_tiles_density_4() {
+        let line: Vec<(i32, i32)> = (0..12).map(|x| (x, 0)).collect();
+        assert_eq!(subsample_drag_tiles(&line, 4), vec![(0, 0), (4, 0), (8, 0)]);
+    }
+
+    #[test]
+    fn signal_drag_places_with_density() {
+        let mut sim = SimWorld {
+            state: GameState::new(16, 8),
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        for x in 1..=12 {
+            apply_command(
+                &mut sim.state,
+                &Command::SetRailBits(TileCoord::new(x, 2), 0x01),
+            )
+            .unwrap();
+        }
+        let station = StationBuildState {
+            signal_density: 4,
+            signal_drag_fract: Some((128, 128)),
+            ..Default::default()
+        };
+        let line: Vec<(i32, i32)> = (1..=12).map(|x| (x, 2)).collect();
+        let (changed, err) =
+            apply_drag_action(&mut sim, BuildMenuAction::RailSignals, line, &station, None);
+        assert!(changed, "{err:?}");
+        assert!(err.is_none());
+        let signaled: Vec<_> = (1..=12)
+            .filter(|&x| {
+                let t = sim.state.map.get(TileCoord::new(x, 2)).unwrap();
+                openttdrs_core::rail_signals::rail_tile_is_signals(t.m5)
+            })
+            .collect();
+        assert_eq!(signaled, vec![1, 5, 9]);
     }
 }

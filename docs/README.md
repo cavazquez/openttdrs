@@ -26,6 +26,7 @@
 | [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md) | **Handoff:** construcción carretera drag/orientación (bug abierto) |
 | [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md) | **Cruces ferroviarios:** catálogo completo [Junctionary OTTD](https://wiki.openttd.org/en/Community/Junctionary/) (J0–J5) |
 | [HANDOFF_BUGS_VISUALES_TERRAIN.md](HANDOFF_BUGS_VISUALES_TERRAIN.md) | **Handoff:** teselas oscuras, ghost al iniciar, casas Toyland, densidad hierba (jul 2026) |
+| [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md) | **Handoff:** export `.sav` (mapa+DATE+PLYR); JSON vs sav; cómo extender |
 | [DEV_BOT.md](DEV_BOT.md) | **DevBot:** sonda headless carga/descarga/ingresos — comandos listos |
 | [epics/ai_rivals.md](epics/ai_rivals.md) | Épica futura: IA rivales CPU |
 | [parity/RAIL_REVIEW_HANDOFF.md](parity/RAIL_REVIEW_HANDOFF.md) | **Handoff IA avanzada:** revisión post Rail 0–4 (paridad ferroviaria) |

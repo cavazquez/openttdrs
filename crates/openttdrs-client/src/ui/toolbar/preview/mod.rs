@@ -262,33 +262,89 @@ pub(crate) fn update_build_ghost_preview(
         return;
     }
     if action == BuildMenuAction::RailSignals {
-        let coord = TileCoord::new(tx, ty);
-        if sim.state.map.get(coord).is_some() {
-            let valid = preview_build_command_valid(
-                &sim.state,
-                action,
-                coord,
-                &station_state,
-                &[(tx, ty)],
-                preview_rail_lane,
-                Some(tile_fract),
-            );
-            update_rail_signal_ghost_preview(
-                commands,
-                time,
-                asset_server,
-                atlas,
-                rail_ghost.state,
-                &sim.state.map,
-                coord,
-                station_state.orientation,
-                tile_fract.0,
-                tile_fract.1,
-                station_state.signal_type,
-                valid,
-                sim.state.tick,
-                rail_ghost.sprites,
-            );
+        let (fx, fy) = if drag_state.armed {
+            station_state
+                .signal_drag_fract
+                .unwrap_or((tile_fract.0, tile_fract.1))
+        } else {
+            tile_fract
+        };
+        let tiles: Vec<(i32, i32)> = if drag_state.armed && !drag_state.pending_tiles.is_empty() {
+            drag_state.pending_tiles.clone()
+        } else {
+            vec![(tx, ty)]
+        };
+        if tiles.len() == 1 {
+            let coord = TileCoord::new(tiles[0].0, tiles[0].1);
+            if sim.state.map.get(coord).is_some() {
+                let valid = preview_build_command_valid(
+                    &sim.state,
+                    action,
+                    coord,
+                    &station_state,
+                    &tiles,
+                    preview_rail_lane,
+                    Some((fx, fy)),
+                );
+                update_rail_signal_ghost_preview(
+                    commands,
+                    time,
+                    asset_server,
+                    atlas,
+                    rail_ghost.state,
+                    &sim.state.map,
+                    coord,
+                    station_state.orientation,
+                    fx,
+                    fy,
+                    station_state.signal_type,
+                    valid,
+                    sim.state.tick,
+                    rail_ghost.sprites,
+                );
+            }
+        } else {
+            // Arrastre: tintar cada tesela de densidad (fantasma completo solo en 1×1).
+            for entity in &rail_ghost.ghosts {
+                commands.entity(entity).despawn();
+            }
+            rail_ghost.state.key = None;
+            for &(px, py) in &tiles {
+                let coord = TileCoord::new(px, py);
+                if sim.state.map.get(coord).is_none() {
+                    continue;
+                }
+                let valid = preview_build_command_valid(
+                    &sim.state,
+                    action,
+                    coord,
+                    &station_state,
+                    &[(px, py)],
+                    preview_rail_lane,
+                    Some((fx, fy)),
+                );
+                let tint = if valid {
+                    Color::srgba(0.2, 0.85, 0.35, 0.4)
+                } else {
+                    Color::srgba(0.9, 0.2, 0.15, 0.4)
+                };
+                let (tileh, base_z) = tile_slope_and_min_z(&sim.state.map, px as u32, py as u32);
+                let half_h = if tileh == 0 {
+                    TILE_HALF_H
+                } else {
+                    SLOPE_HALF_H[tileh as usize]
+                };
+                let pos = tile_pos_half(px, py, base_z, 0.05, half_h);
+                commands.spawn((
+                    BuildGhostPreview,
+                    Sprite {
+                        color: tint,
+                        custom_size: Some(Vec2::new(64.0, 32.0)),
+                        ..default()
+                    },
+                    Transform::from_translation(pos),
+                ));
+            }
         }
         return;
     }

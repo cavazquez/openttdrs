@@ -6,6 +6,7 @@ use super::super::{
     ToolbarGroupButton, ToolbarTooltipTarget, TooltipBox, TooltipText,
 };
 use super::controls::{spawn_icon_tool_buttons, spawn_panel_title, spawn_settings_buttons};
+use crate::ui::navigation::spawn_world_navigation_button;
 use crate::ui::save_window::{SaveLoadToolbarButton, SaveWindowMode};
 
 pub(super) fn spawn_toolbar_group_buttons(
@@ -133,6 +134,7 @@ pub(super) fn spawn_toolbar_group_buttons(
             BackgroundColor(Color::srgb(0.62, 0.55, 0.38)),
             BuildMenuUi,
         ));
+        spawn_world_navigation_button(parent);
         spawn_sound_music_toolbar_button(parent, asset_server);
         parent.spawn((
             Node {

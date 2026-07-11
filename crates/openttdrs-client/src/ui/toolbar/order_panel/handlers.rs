@@ -3,6 +3,7 @@ use openttdrs_core::{Command, CommandError, TileCoord, Vehicle, VehicleOrder, ap
 
 use crate::render::RemapMapVisualsPending;
 use crate::state::{OrderPickState, SimWorld};
+use crate::ui::destination_window::DestinationPickerState;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::timetable_window::{TimetableWindowState, open_timetable_for_vehicle};
 use crate::ui::toolbar::build_input::cancel_placement;
@@ -99,6 +100,7 @@ pub(crate) fn handle_order_panel_buttons(
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     mut tt_state: ResMut<TimetableWindowState>,
+    mut destination_picker: Option<ResMut<DestinationPickerState>>,
     time: Res<Time>,
 ) {
     for (interaction, row) in &mut row_q {
@@ -181,9 +183,14 @@ pub(crate) fn handle_order_panel_buttons(
                 open_timetable_for_vehicle(&mut tt_state, vehicle_id);
             }
             OrderPanelButton::PickDestOnMap => {
-                // «Ir a» estilo OpenTTD: activa el modo selección; el siguiente
-                // clic en una estación/depósito del mapa añade la orden.
-                start_order_destination_pick(&order_state, &mut next_pick);
+                // Primero abre la lista global de destinos. Desde esa ventana
+                // se puede elegir una fila o pasar al picker sobre el mapa.
+                if let Some(picker) = destination_picker.as_deref_mut() {
+                    picker.open = order_state.vehicle_id.is_some();
+                    next_pick.set(OrderPickState::Idle);
+                } else {
+                    start_order_destination_pick(&order_state, &mut next_pick);
+                }
                 cancel_placement(&mut drag_state);
             }
         }

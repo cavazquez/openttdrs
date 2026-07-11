@@ -37,6 +37,8 @@ const DRAG_MARGIN: f32 = 48.0;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum FloatingWindowId {
     Town,
+    /// Directorio global de pueblos.
+    TownDirectory,
     Depot,
     BuyVehicle,
     Vehicle,

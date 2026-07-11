@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 
 use crate::state::SimWorld;
+use crate::ui::navigation::ToolbarMenuState;
 use crate::ui::toolbar::build_input::cancel_placement;
 use crate::ui::toolbar::preview::economy_industry_tool_visible;
 use crate::ui::toolbar::{
@@ -13,9 +14,13 @@ pub(crate) fn toolbar_group_interaction(
     mut toolbar_state: ResMut<ToolbarState>,
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
+    mut navigation_menu: Option<ResMut<ToolbarMenuState>>,
 ) {
     for (interaction, group) in &mut q {
         if *interaction == Interaction::Pressed {
+            if let Some(menu) = navigation_menu.as_deref_mut() {
+                menu.open = None;
+            }
             if toolbar_state.active_group == Some(*group) {
                 toolbar_state.active_group = None;
                 tool_state.active_tool = None;

@@ -65,7 +65,7 @@ Auditoría realizada contra:
 | Botones de toolbar en layout completo | 30 | 8 grupos + 3 botones fijos |
 | Botones que abren dropdown | ~23 | 0 (no hay dropdown genérico) |
 | Herramientas de construcción visibles | ~40 | 50 botones, reorganizados |
-| Clases/IDs de ventana principales | 108 `WindowClass` | 14 `FloatingWindowId` |
+| Clases/IDs de ventana principales | 108 `WindowClass` | 15 `FloatingWindowId` |
 | Paneles/modales adicionales | sistema Window unificado | ~5 paneles + SaveWindow |
 | Acciones de herramienta | widgets por toolbar | 53 `BuildMenuAction` |
 | Acciones del panel Ajustes | menú Settings ~22 ítems máximos | 12 `SaveMenuAction` + 16 colores |
@@ -370,8 +370,9 @@ Objetivo de cobertura: mantener ~24 %, hacerla medible.
 - [ ] Convertir este inventario en checklist versionado por feature.
 - [ ] Añadir test que enumere `ToolbarGroup`, `BuildMenuAction`,
       `SaveMenuAction` y `FloatingWindowId`.
-- [ ] Detectar rutas huérfanas: ventana registrada pero nunca abierta.
-- [ ] Corregir `DestinationPicker`: abrirlo o eliminar la ruta muerta.
+- [x] Detectar rutas huérfanas: ventana registrada pero nunca abierta.
+- [x] Corregir `DestinationPicker`: «Ir a» abre la lista y desde ella el picker
+      sobre mapa.
 - [ ] Corregir documentación divergente de `RailConvert`, depósito y órdenes.
 - [ ] Ampliar `OPENTTDRS_WINDOWS_SHOT` a todas las ventanas/paneles.
 - [ ] Capturas de referencia 1280×720 y 1920×1080.
@@ -392,13 +393,13 @@ Objetivo de cobertura global: **~28–30 %**.
 
 ### Entregables
 
-- [ ] `MenuSpec` y popup/dropdown genérico Bevy.
+- [x] `UiRoute` tipado y primer popover reusable (`Mundo`).
+- [ ] Generalizar las entradas a `MenuSpec` declarativo.
 - [ ] Anclaje al botón, z-order y posicionamiento dentro del viewport.
 - [ ] Checked/disabled/divider/hotkey.
-- [ ] Cierre por selección, Esc, clic externo y cambio de pantalla.
+- [x] Cierre por selección, Esc, clic externo y cambio de pantalla.
 - [ ] Navegación teclado arriba/abajo/Enter/Esc.
 - [ ] Protección contra click-through al mapa (`BuildMenuUi`/focus).
-- [ ] `UiRoute` central.
 - [ ] `ListWindow` base con sort, filtro, scroll y selección.
 - [ ] Migrar tres menús piloto: Mapa, Mundo e Industrias.
 
@@ -418,9 +419,10 @@ Objetivo de cobertura global: **~36–40 %**.
 
 ### UI-2A — Pueblos
 
-- [ ] TownDirectory ordenable por nombre/población/rating.
-- [ ] Centrar cámara.
-- [ ] Doble clic abre `TownWindow`.
+- [x] TownDirectory ordenable por nombre/población.
+- [ ] Añadir sort por rating.
+- [ ] Centrar cámara directamente desde la fila.
+- [x] Clic en fila abre `TownWindow`.
 - [ ] Acción «Fundar pueblo» si el backend lo permite.
 
 ### UI-2B — Industrias
@@ -755,7 +757,7 @@ Actualizar al cerrar cada fase:
 | Dropdowns/submenús | ~8 % |
 | Directorios/listas | ~5 % |
 | Gráficos | 0 % |
-| FloatingWindow con ruta de apertura | 13/14 detectadas |
+| FloatingWindow con ruta de apertura | 15/15 tras reparar DestinationPicker y añadir TownDirectory |
 | Ventanas con test de apertura real | bajo; medir en UI-0 |
 
 Métricas adicionales:

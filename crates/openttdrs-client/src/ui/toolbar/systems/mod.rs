@@ -192,6 +192,34 @@ mod tests {
     }
 
     #[test]
+    fn order_goto_button_opens_destination_picker() {
+        let mut world = World::new();
+        world.insert_resource(OrderEditState {
+            vehicle_id: Some(7),
+            ..default()
+        });
+        world.insert_resource(crate::ui::destination_window::DestinationPickerState::default());
+        world.insert_resource(SimWorld::default());
+        world.insert_resource(DragBuildState::default());
+        world.insert_resource(RemapMapVisualsPending::default());
+        world.insert_resource(HudBuildFeedback::default());
+        world.insert_resource(TimetableWindowState::default());
+        world.insert_resource(Time::<()>::default());
+        insert_order_pick_test_resources(&mut world);
+        world.spawn((
+            Button,
+            crate::ui::toolbar::OrderPanelButton::PickDestOnMap,
+            Interaction::Pressed,
+        ));
+        world.run_system_once(handle_order_panel_buttons).unwrap();
+        assert!(
+            world
+                .resource::<crate::ui::destination_window::DestinationPickerState>()
+                .open
+        );
+    }
+
+    #[test]
     fn handle_settings_menu_buttons_save_load_open_save_window() {
         let dir = tempfile::tempdir().unwrap();
         let save_path = dir.path().join("sim.json");

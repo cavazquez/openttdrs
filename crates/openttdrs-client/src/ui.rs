@@ -18,6 +18,7 @@ mod hud;
 mod industry_panel;
 mod main_menu;
 mod main_menu_intro;
+mod navigation;
 mod newgrf_window;
 mod news_settings_window;
 mod pathfinding_settings_window;
@@ -25,6 +26,7 @@ mod save_window;
 mod statusbar;
 mod timetable_window;
 mod toolbar;
+mod town_directory;
 mod town_window;
 mod vehicle_window;
 mod windows_shot;
@@ -63,6 +65,10 @@ use main_menu::{
 use main_menu_intro::{
     animate_main_menu_intro_traffic, cleanup_main_menu_on_exit, pan_main_menu_intro_camera,
     setup_main_menu_intro,
+};
+use navigation::{
+    OpenUiRoute, ToolbarMenuState, dismiss_toolbar_menu_on_outside_click,
+    handle_toolbar_menu_entries, handle_toolbar_navigation_button, sync_toolbar_navigation_menu,
 };
 use newgrf_window::{
     NewGrfWindowState, newgrf_window_on_closed, setup_newgrf_window, sync_newgrf_window,
@@ -111,6 +117,10 @@ use toolbar::{
     update_toolbar_tooltip,
 };
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState, ToolbarState};
+use town_directory::{
+    TownDirectoryState, handle_town_directory_buttons, open_town_directory_from_routes,
+    setup_town_directory, sync_town_directory, town_directory_on_closed,
+};
 use town_window::{
     TownWindowState, handle_town_window_buttons, setup_town_window, sync_town_window,
     town_window_on_closed,
@@ -155,10 +165,13 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<IndustryPanelState>()
         .init_resource::<SaveWindowState>()
         .init_resource::<TownWindowState>()
+        .init_resource::<TownDirectoryState>()
         .init_resource::<BuyVehicleWindowState>()
         .init_resource::<DestinationPickerState>()
         .init_resource::<VehicleWindowState>()
         .init_resource::<TimetableWindowState>()
+        .init_resource::<ToolbarMenuState>()
+        .add_message::<OpenUiRoute>()
         .init_resource::<crate::state::new_game::NewGameSettingsResource>()
         .add_systems(OnExit(ClientScreen::MainMenu), cleanup_main_menu_on_exit)
         .add_systems(
@@ -203,6 +216,7 @@ impl Plugin for ClientUiPlugin {
                 setup_newgrf_window,
                 setup_vehicle_window,
                 setup_timetable_window,
+                setup_town_directory,
                 load_hud_sfx,
             )
                 .in_set(StartupSet::Ui),
@@ -396,6 +410,28 @@ impl Plugin for ClientUiPlugin {
                 toolbar_click_beep,
                 play_hud_sfx,
                 update_tile_info_text,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                (
+                    handle_toolbar_navigation_button,
+                    handle_toolbar_menu_entries,
+                    dismiss_toolbar_menu_on_outside_click,
+                    sync_toolbar_navigation_menu,
+                )
+                    .chain(),
+                (
+                    open_town_directory_from_routes,
+                    handle_town_directory_buttons,
+                    town_directory_on_closed,
+                    sync_town_directory,
+                )
+                    .chain()
+                    .after(handle_toolbar_menu_entries),
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

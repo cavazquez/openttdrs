@@ -287,7 +287,10 @@ pub(crate) fn handle_destination_picker_buttons(
         };
         match try_append_order_at_tile(&mut sim, vehicle_id, candidate.pos, &mut order_state.orders)
         {
-            Ok(()) => pending.pending = true,
+            Ok(()) => {
+                pending.pending = true;
+                picker_state.open = false;
+            }
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
         }
     }

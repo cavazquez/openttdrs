@@ -6,6 +6,7 @@ use crate::ui::floating_window::{
 };
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::main_menu::return_to_main_menu;
+use crate::ui::navigation::ToolbarMenuState;
 use crate::ui::save_window::SaveWindowState;
 use crate::ui::toolbar::build_input::cancel_placement;
 use crate::ui::toolbar::{
@@ -62,8 +63,14 @@ pub(crate) fn handle_ingame_escape(
     mut closed: MessageWriter<FloatingWindowClosed>,
     mut next_screen: ResMut<NextState<ClientScreen>>,
     mut suspended: ResMut<SuspendedGameSession>,
+    mut navigation_menu: Option<ResMut<ToolbarMenuState>>,
 ) {
     if !keyboard.just_pressed(KeyCode::Escape) {
+        return;
+    }
+    if let Some(menu) = navigation_menu.as_deref_mut()
+        && menu.open.take().is_some()
+    {
         return;
     }
     if ingame_placement_busy(
@@ -148,6 +155,23 @@ mod tests {
         world.insert_resource(keys);
         world.run_system_once(handle_ingame_escape).unwrap();
         assert!(world.resource::<UiToolState>().active_tool.is_none());
+        assert!(matches!(
+            world.resource::<NextState<ClientScreen>>(),
+            NextState::Unchanged
+        ));
+    }
+
+    #[test]
+    fn escape_closes_navigation_menu_before_leaving_game() {
+        let mut world = escape_test_world();
+        world.insert_resource(ToolbarMenuState {
+            open: Some(crate::ui::navigation::ToolbarMenuKind::World),
+        });
+        let mut keys = ButtonInput::<KeyCode>::default();
+        keys.press(KeyCode::Escape);
+        world.insert_resource(keys);
+        world.run_system_once(handle_ingame_escape).unwrap();
+        assert!(world.resource::<ToolbarMenuState>().open.is_none());
         assert!(matches!(
             world.resource::<NextState<ClientScreen>>(),
             NextState::Unchanged

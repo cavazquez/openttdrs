@@ -6,6 +6,10 @@ contra las ventanas reales de OpenTTD (`depot_gui.cpp`, `vehicle_gui.cpp`,
 `train_gui.cpp`, `order_gui.cpp`, `timetable_gui.cpp`, `build_vehicle_gui.cpp`,
 `group_gui.cpp`).
 
+> Este documento profundiza en flota y conserva un snapshot histórico.
+> El roadmap global y su baseline actualizado están en
+> [ROADMAP_PARIDAD_UI_GLOBAL.md](../ROADMAP_PARIDAD_UI_GLOBAL.md).
+
 ## Clasificación de cercanía alcanzable
 
 Para cada feature se indica qué tan cerca podemos llegar y qué lo limita:

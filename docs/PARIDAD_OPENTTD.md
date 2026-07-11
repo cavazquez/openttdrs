@@ -1,7 +1,9 @@
 # Paridad con OpenTTD — inventario y costos
 
 Comparación **openttdrs** (hito 0.1) vs **OpenTTD oficial**. Para el plan de trabajo ver
-[ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md).
+[ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md). Para toolbar, menús, directorios,
+ventanas y subventanas ver
+[ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md).
 
 **Leyenda:** ✅ implementado · 🟡 parcial · ❌ no implementado · **Costo:** S = días · M = 1–2 sem · L = 1–2 meses · XL = 3–6 meses · XXL = 6+ meses
 

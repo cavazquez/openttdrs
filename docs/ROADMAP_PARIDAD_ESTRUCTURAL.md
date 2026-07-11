@@ -64,5 +64,16 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
 
 ## UI continua
 
-Paridad de ventanas según [`parity/ui_windows_parity.md`](parity/ui_windows_parity.md)
-en cada fase (depósito drag, rating, overlay PBS, compañías, NewGRF GUI).
+La prioridad global de toolbar, menús, directorios, ventanas y subventanas vive
+en [`ROADMAP_PARIDAD_UI_GLOBAL.md`](ROADMAP_PARIDAD_UI_GLOBAL.md). El detalle
+histórico de flota continúa en
+[`parity/ui_windows_parity.md`](parity/ui_windows_parity.md).
+
+Orden UI recomendado:
+
+1. infraestructura dropdown/lista y rutas tipadas;
+2. directorios de flota, pueblos, industrias y estaciones;
+3. StationView y subventanas de vehículo;
+4. economía/gráficos/opciones;
+5. construcción clásica restante;
+6. modos avanzados después de la paridad single-player.

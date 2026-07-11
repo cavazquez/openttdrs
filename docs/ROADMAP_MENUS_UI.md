@@ -3,6 +3,12 @@
 Documento de referencia para **humanos e IAs** que amplíen la paridad de menús con OpenTTD.
 Describe qué está implementado (Sprints A–E parcial), dónde vive el código, qué comandos existen y qué falta.
 
+> **Alcance histórico:** este archivo conserva el detalle técnico de flota.
+> La prioridad canónica de toolbar, menús, directorios y todas las familias de
+> ventanas está en
+> [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md).
+> Ante discrepancias de estado, verificar el código y usar el roadmap global.
+
 **Relacionado:** [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md), [FLUJO_MAPA_Y_CLIENTE.md](FLUJO_MAPA_Y_CLIENTE.md), [INFORME_ARQUITECTURA_OPENTTD.md](INFORME_ARQUITECTURA_OPENTTD.md) (widgets originales en `OpenTTD/src/`).
 
 **Última actualización:** junio 2026 — Sprints A–E+ (horario + autoreemplazo).

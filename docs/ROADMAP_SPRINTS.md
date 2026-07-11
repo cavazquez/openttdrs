@@ -143,6 +143,7 @@ Detalle vivo: [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md).
 | Multijugador I8 | Explícitamente post-paridad de sim |
 | NewGRF runtime | Hito 0.6 (Fase 7) |
 | Flota F0–F8 (timetable, autoreemplazo, pool) | [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) §13 |
+| **Paridad UI global** (toolbar, menús, directorios, ventanas) | [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) UI-0–UI-8 |
 | **Junctionary completo** (cruces comunidad OTTD) | [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md) J0–J5 |
 
 ---

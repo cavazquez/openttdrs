@@ -18,6 +18,9 @@ pub(crate) fn action_supports_drag(action: BuildMenuAction) -> bool {
         BuildMenuAction::Road
             | BuildMenuAction::RoadX
             | BuildMenuAction::RoadY
+            | BuildMenuAction::Tram
+            | BuildMenuAction::TramX
+            | BuildMenuAction::TramY
             | BuildMenuAction::RoadBridge
             | BuildMenuAction::RoadTunnel
             | BuildMenuAction::Rail
@@ -27,15 +30,18 @@ pub(crate) fn action_supports_drag(action: BuildMenuAction) -> bool {
             | BuildMenuAction::RailVert
             | BuildMenuAction::RailBridge
             | BuildMenuAction::RailTunnel
+            | BuildMenuAction::Aqueduct
             | BuildMenuAction::RailRemove
             | BuildMenuAction::RailConvert
             | BuildMenuAction::RailSignals
             | BuildMenuAction::Clear
             | BuildMenuAction::Canal
+            | BuildMenuAction::River
             | BuildMenuAction::RaiseLand
             | BuildMenuAction::LowerLand
             | BuildMenuAction::LevelLand
             | BuildMenuAction::BuyLand
+            | BuildMenuAction::PlantTree
     )
 }
 
@@ -46,6 +52,7 @@ pub(crate) fn action_supports_area_drag(action: BuildMenuAction) -> bool {
             | BuildMenuAction::LowerLand
             | BuildMenuAction::LevelLand
             | BuildMenuAction::BuyLand
+            | BuildMenuAction::PlantTree
     )
 }
 
@@ -96,9 +103,9 @@ pub(crate) fn rail_bits_for_drag_action(
 
 fn road_tool_axis(action: BuildMenuAction, from: (i32, i32), to: (i32, i32)) -> u8 {
     match action {
-        BuildMenuAction::RoadX => 0x0A,
-        BuildMenuAction::RoadY => 0x05,
-        BuildMenuAction::Road => {
+        BuildMenuAction::RoadX | BuildMenuAction::TramX => 0x0A,
+        BuildMenuAction::RoadY | BuildMenuAction::TramY => 0x05,
+        BuildMenuAction::Road | BuildMenuAction::Tram => {
             if (to.0 - from.0).abs() >= (to.1 - from.1).abs() {
                 0x0A
             } else {
@@ -114,9 +121,9 @@ pub(crate) fn road_bits_for_drag_action(
     tiles: &[(i32, i32)],
 ) -> Option<u8> {
     match action {
-        BuildMenuAction::RoadX => Some(0x0A),
-        BuildMenuAction::RoadY => Some(0x05),
-        BuildMenuAction::Road => {
+        BuildMenuAction::RoadX | BuildMenuAction::TramX => Some(0x0A),
+        BuildMenuAction::RoadY | BuildMenuAction::TramY => Some(0x05),
+        BuildMenuAction::Road | BuildMenuAction::Tram => {
             let &(sx, sy) = tiles.first()?;
             let &(ex, ey) = tiles.last().unwrap_or(&(sx, sy));
             Some(if (ex - sx).abs() >= (ey - sy).abs() {
@@ -129,6 +136,13 @@ pub(crate) fn road_bits_for_drag_action(
     }
 }
 
+fn action_is_tram_build(action: BuildMenuAction) -> bool {
+    matches!(
+        action,
+        BuildMenuAction::Tram | BuildMenuAction::TramX | BuildMenuAction::TramY
+    )
+}
+
 fn road_drag_axis(
     map: &Map,
     action: BuildMenuAction,
@@ -137,9 +151,15 @@ fn road_drag_axis(
     tool_axis: u8,
 ) -> u8 {
     match action {
-        BuildMenuAction::RoadX => road_locked_tool_axis(map, start, end, 0x0A),
-        BuildMenuAction::RoadY => road_locked_tool_axis(map, start, end, 0x05),
-        BuildMenuAction::Road => infer_road_drag_axis(map, start, end, tool_axis),
+        BuildMenuAction::RoadX | BuildMenuAction::TramX => {
+            road_locked_tool_axis(map, start, end, 0x0A)
+        }
+        BuildMenuAction::RoadY | BuildMenuAction::TramY => {
+            road_locked_tool_axis(map, start, end, 0x05)
+        }
+        BuildMenuAction::Road | BuildMenuAction::Tram => {
+            infer_road_drag_axis(map, start, end, tool_axis)
+        }
         _ => tool_axis,
     }
 }
@@ -259,16 +279,19 @@ pub(crate) fn apply_drag_action(
         let start = placed.first().copied().unwrap_or(TileCoord::new(0, 0));
         let end = placed.last().copied().unwrap_or(start);
         let axis = road_drag_axis(&sim.state.map, action, start, end, tool_axis);
+        let tram = action_is_tram_build(action);
         for c in &placed {
-            match apply_command(
-                &mut sim.state,
-                &Command::PlaceRoadBits(*c, axis | ROAD_PLACE_FORCE_AXIS),
-            ) {
+            let cmd = if tram {
+                Command::PlaceTramBits(*c, axis | ROAD_PLACE_FORCE_AXIS)
+            } else {
+                Command::PlaceRoadBits(*c, axis | ROAD_PLACE_FORCE_AXIS)
+            };
+            match apply_command(&mut sim.state, &cmd) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),
             }
         }
-        if changed {
+        if changed && !tram {
             let _ = finalize_road_drag_line(&mut sim.state, &placed, axis);
         }
         return (changed, if changed { None } else { last_err });
@@ -377,15 +400,15 @@ pub(crate) fn drag_line_tiles(
         return rect_drag_tiles(from, to);
     }
 
-    if action == BuildMenuAction::Road
+    if matches!(action, BuildMenuAction::Road | BuildMenuAction::Tram)
         && let Some(map) = map
     {
         return road_drag_line_tiles(map, from, to, road_tool_axis(action, from, to)).0;
     }
 
     let use_x_axis = match action {
-        BuildMenuAction::RoadX | BuildMenuAction::RailVert => true,
-        BuildMenuAction::RoadY | BuildMenuAction::RailHorz => false,
+        BuildMenuAction::RoadX | BuildMenuAction::TramX | BuildMenuAction::RailVert => true,
+        BuildMenuAction::RoadY | BuildMenuAction::TramY | BuildMenuAction::RailHorz => false,
         _ => (to.0 - from.0).abs() >= (to.1 - from.1).abs(),
     };
     let mut out = Vec::new();

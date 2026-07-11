@@ -299,7 +299,7 @@ fn facilities_for_stop(kind: StopKind) -> u8 {
         StopKind::RailStation => FACIL_TRAIN,
         StopKind::TruckStop => FACIL_TRUCK_STOP,
         StopKind::BusStop => FACIL_BUS_STOP,
-        StopKind::Dock => FACIL_DOCK,
+        StopKind::Dock | StopKind::Buoy => FACIL_DOCK,
         StopKind::Airport => FACIL_AIRPORT,
         StopKind::RailWaypoint => FACIL_WAYPOINT | FACIL_TRAIN,
     }
@@ -766,6 +766,7 @@ mod tests {
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
+            ..Default::default()
         }];
         state.industries = vec![Industry::with_tiles_spec(
             TileCoord::new(36, 20),

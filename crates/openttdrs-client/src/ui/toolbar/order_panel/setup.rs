@@ -69,6 +69,7 @@ pub(crate) fn setup_order_panel(mut commands: Commands, asset_server: Res<AssetS
                 .with_children(|row| {
                     spawn_order_button(row, OrderPanelButton::ToggleFullLoad, "Carga completa");
                     spawn_order_button(row, OrderPanelButton::ToggleNoUnload, "Descargar todo");
+                    spawn_order_button(row, OrderPanelButton::ToggleDepotStop, "Parar depósito");
                 });
             // Fila de acciones (saltarse / eliminar / ir a).
             panel
@@ -79,9 +80,35 @@ pub(crate) fn setup_order_panel(mut commands: Commands, asset_server: Res<AssetS
                     ..default()
                 })
                 .with_children(|row| {
+                    spawn_order_button(row, OrderPanelButton::MoveOrderUp, "↑");
+                    spawn_order_button(row, OrderPanelButton::MoveOrderDown, "↓");
                     spawn_order_button(row, OrderPanelButton::SkipOrder, "Saltarse");
                     spawn_order_button(row, OrderPanelButton::DeleteSelected, "Eliminar");
                     spawn_order_button(row, OrderPanelButton::PickDestOnMap, "Ir a");
+                });
+            panel
+                .spawn(Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(4.0),
+                    ..default()
+                })
+                .with_children(|row| {
+                    spawn_order_button(row, OrderPanelButton::ShareOrders, "Compartir");
+                    spawn_order_button(row, OrderPanelButton::UnlinkSharedOrders, "Desvincular");
+                    spawn_order_button(row, OrderPanelButton::OpenSharedOrders, "Pools");
+                });
+            panel
+                .spawn(Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(4.0),
+                    ..default()
+                })
+                .with_children(|row| {
+                    spawn_order_button(row, OrderPanelButton::AddConditionalAbove, "Cond. >50%");
+                    spawn_order_button(row, OrderPanelButton::AddConditionalBelow, "Cond. <50%");
+                    spawn_order_button(row, OrderPanelButton::CycleConditional, "Ciclar cond.");
                 });
         });
 }

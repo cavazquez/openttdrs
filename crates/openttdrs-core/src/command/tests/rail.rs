@@ -84,6 +84,10 @@ fn place_rail_station_area_writes_layout_and_anchors_center() {
     assert_eq!(s.map.get(TileCoord::new(4, 6)).unwrap().m5, 6, "techo SE");
     assert_eq!(s.stations.len(), 1, "una sola estación para toda la huella");
     assert_eq!(s.stations[0].pos, TileCoord::new(5, 5), "ancla al centro");
+    assert_eq!(
+        s.stations[0].station_spec,
+        crate::StationSpecId::DefaultRail
+    );
     assert_eq!(s.economy.money, money_before - 15 * STATION_BUILD_COST);
 }
 
@@ -952,6 +956,24 @@ fn rename_vehicle_stores_trimmed_name() {
     )
     .unwrap();
     assert_eq!(s.vehicles[0].name.as_deref(), Some("Ruta 42"));
+}
+
+#[test]
+fn rename_station_stores_trimmed_name() {
+    let mut s = GameState::new(8, 8);
+    let pos = TileCoord::new(2, 2);
+    s.stations
+        .push(crate::Station::new_with_kind(pos, crate::StopKind::BusStop));
+    apply_command(
+        &mut s,
+        &Command::RenameStation {
+            station_pos: pos,
+            name: Some("  Central  ".to_string()),
+        },
+    )
+    .unwrap();
+    let station = s.stations.iter().find(|st| st.pos == pos).unwrap();
+    assert_eq!(station.name.as_deref(), Some("Central"));
 }
 
 #[test]

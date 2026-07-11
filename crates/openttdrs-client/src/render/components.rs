@@ -32,6 +32,12 @@ pub(crate) struct FizzyDrinkAnimFrames {
     pub(crate) by_sprite: HashMap<u32, Vec<AtlasSprite>>,
 }
 
+/// Frames faro/estadio (`object_lighthouse_anim_*` / `house_s*_anim_*`), 4 pasos.
+#[derive(Resource)]
+pub(crate) struct LighthouseAnimFrames {
+    pub(crate) by_sprite: HashMap<u32, Vec<AtlasSprite>>,
+}
+
 /// Teselas de suelo, vías, vehículos, etc.: se despawnan al recargar JSON (F9).
 #[derive(Component)]
 pub(crate) struct MapVisualLayer;

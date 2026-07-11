@@ -34,8 +34,11 @@ pub(crate) fn rotate_station_with_right_click(
         | Some(BuildMenuAction::Lock) => {
             station_state.orientation = (station_state.orientation + 1) % 4;
         }
-        Some(BuildMenuAction::RailStation) | Some(BuildMenuAction::AirportSmall) => {
+        Some(BuildMenuAction::RailStation) => {
             station_state.rail_axis_y = !station_state.rail_axis_y;
+        }
+        Some(BuildMenuAction::Airport) => {
+            station_state.airport_axis_y = !station_state.airport_axis_y;
         }
         Some(BuildMenuAction::RailSignals) => {
             let ctrl =
@@ -90,6 +93,15 @@ pub(crate) fn rotate_station_with_right_click(
         }
         Some(BuildMenuAction::Road) => {
             tool_state.active_tool = Some(BuildMenuAction::RoadX);
+        }
+        Some(BuildMenuAction::TramX) => {
+            tool_state.active_tool = Some(BuildMenuAction::TramY);
+        }
+        Some(BuildMenuAction::TramY) => {
+            tool_state.active_tool = Some(BuildMenuAction::TramX);
+        }
+        Some(BuildMenuAction::Tram) => {
+            tool_state.active_tool = Some(BuildMenuAction::TramX);
         }
         _ => return,
     }

@@ -1,5 +1,6 @@
 use crate::CargoType;
 use crate::Climate;
+use crate::entity_history::IndustryHistory;
 use crate::map::TileCoord;
 use crate::station::{self, STATION_COVERAGE_RADIUS, Station, StopKind};
 
@@ -168,10 +169,25 @@ pub struct Industry {
     /// Color aleatorio de industria (`Colours` 0–15) para edificios con paleta.
     #[serde(default)]
     pub random_colour: u8,
+    /// Unidades producidas acumuladas (para deltas mensuales).
+    #[serde(default)]
+    pub produced_total: u64,
+    /// Unidades cargadas desde esta industria (para deltas mensuales).
+    #[serde(default)]
+    pub transported_total: u64,
+    /// Series mensuales (stock / producido / transportado).
+    #[serde(default)]
+    pub history: IndustryHistory,
 }
 
 fn default_industry_tiles() -> Vec<TileCoord> {
     Vec::new()
+}
+
+impl Default for Industry {
+    fn default() -> Self {
+        Self::new(TileCoord::new(0, 0), IndustryKind::CoalMine)
+    }
 }
 
 #[inline]
@@ -196,6 +212,9 @@ impl Industry {
             stock: 0,
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour: 0,
+            produced_total: 0,
+            transported_total: 0,
+            history: IndustryHistory::default(),
         }
     }
 
@@ -209,6 +228,9 @@ impl Industry {
             stock: 0,
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour: 0,
+            produced_total: 0,
+            transported_total: 0,
+            history: IndustryHistory::default(),
         }
     }
 
@@ -228,6 +250,9 @@ impl Industry {
             stock: 0,
             capacity: INDUSTRY_STOCK_CAPACITY,
             random_colour,
+            produced_total: 0,
+            transported_total: 0,
+            history: IndustryHistory::default(),
         }
     }
 

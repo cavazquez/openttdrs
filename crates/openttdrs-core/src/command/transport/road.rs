@@ -364,6 +364,10 @@ pub(in crate::command::transport) fn write_normal_road_tile(
     road_bits: u8,
 ) -> Result<(), CommandError> {
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    // Conservar overlay de tranvía si ya era carretera (UI-6c).
+    let preserve_tram = tile.kind == TileKind::Road;
+    let tram_bits = if preserve_tram { tile.m3 & 0x0F } else { 0 };
+    let tram_m8 = if preserve_tram { tile.m8 & 0x0FC0 } else { 0 };
     tile.kind = TileKind::Road;
     // MP_ROAD normal tile: low nibble stores road bits, high bits subtype=0.
     tile.mapt = 0x20;
@@ -371,15 +375,178 @@ pub(in crate::command::transport) fn write_normal_road_tile(
     tile.m1 = 0;
     tile.m2 = 0;
     tile.m2_hi = 0;
-    tile.m3 = 0;
+    tile.m3 = tram_bits;
     tile.m3hi = 0;
     tile.m6 = 0;
     tile.m7 = 0;
-    tile.m8 = 0;
+    tile.m8 = tram_m8;
+    tile = crate::road_type::set_road_type_on_tile(tile, state.current_road_type);
     state
         .map
         .set_tile(c, tile)
         .map_err(|_| CommandError::OutOfBounds)
+}
+
+/// Coloca / fusiona bits de tranvía en `m3` (misma máscara que road bits).
+pub(in crate::command) fn place_tram_bits(
+    state: &mut GameState,
+    c: TileCoord,
+    bits: u8,
+) -> Result<(), CommandError> {
+    check_place_road_bits(&state.map, c)?;
+    apply_autoslope_if_needed(state, c)?;
+    let force_axis = bits & ROAD_PLACE_FORCE_AXIS != 0;
+    let requested = bits & 0x0F;
+    let existing_road = state.map.get(c).map_or(0, |t| {
+        if t.kind == TileKind::Road {
+            t.m5 & 0x0F
+        } else {
+            0
+        }
+    });
+    let existing_tram = state.map.get(c).map_or(0, |t| {
+        if t.kind == TileKind::Road {
+            t.m3 & 0x0F
+        } else {
+            0
+        }
+    });
+    // Asegurar tesela Road (conserva road bits existentes; puede quedar en 0).
+    if state.map.get_kind(c) != Some(TileKind::Road) {
+        write_normal_road_tile(state, c, existing_road)?;
+    }
+    let tram_bits =
+        merge_tram_bits_with_neighbors(&state.map, c, requested, existing_tram, force_axis);
+    write_tram_geometry(state, c, tram_bits)?;
+    propagate_tram_bits_to_neighbors(state, c, tram_bits)?;
+    state.economy.money -= ROAD_BUILD_COST;
+    Ok(())
+}
+
+fn write_tram_geometry(
+    state: &mut GameState,
+    c: TileCoord,
+    tram_bits: u8,
+) -> Result<(), CommandError> {
+    use crate::road_type::{set_tram_road_type_on_tile, set_tram_track_bits_on_tile};
+    let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    if tile.kind != TileKind::Road {
+        tile.kind = TileKind::Road;
+        tile.mapt = 0x20;
+    }
+    let bits = tram_bits & 0x0F;
+    tile = set_tram_track_bits_on_tile(tile, bits);
+    tile = set_tram_road_type_on_tile(
+        tile,
+        if bits == 0 {
+            None
+        } else {
+            Some(state.current_tram_type)
+        },
+    );
+    state
+        .map
+        .set_tile(c, tile)
+        .map_err(|_| CommandError::OutOfBounds)
+}
+
+fn tram_bits_from_tram_neighbors(map: &Map, c: TileCoord) -> u8 {
+    use crate::road_type::tram_track_bits;
+    let mut bits = 0u8;
+    let west = TileCoord::new(c.x - 1, c.y);
+    let north = TileCoord::new(c.x, c.y - 1);
+    let east = TileCoord::new(c.x + 1, c.y);
+    let south = TileCoord::new(c.x, c.y + 1);
+    if map.get_kind(west) == Some(TileKind::Road)
+        && map.get(west).is_some_and(|t| tram_track_bits(&t) != 0)
+    {
+        bits |= 8;
+    }
+    if map.get_kind(north) == Some(TileKind::Road)
+        && map.get(north).is_some_and(|t| tram_track_bits(&t) != 0)
+    {
+        bits |= 1;
+    }
+    if map.get_kind(east) == Some(TileKind::Road)
+        && map.get(east).is_some_and(|t| tram_track_bits(&t) != 0)
+    {
+        bits |= 2;
+    }
+    if map.get_kind(south) == Some(TileKind::Road)
+        && map.get(south).is_some_and(|t| tram_track_bits(&t) != 0)
+    {
+        bits |= 4;
+    }
+    bits
+}
+
+fn merge_tram_bits_with_neighbors(
+    map: &Map,
+    c: TileCoord,
+    requested: u8,
+    existing: u8,
+    force_axis: bool,
+) -> u8 {
+    use crate::road_type::tram_track_bits;
+    let has_w = map
+        .get(TileCoord::new(c.x - 1, c.y))
+        .is_some_and(|t| t.kind == TileKind::Road && tram_track_bits(&t) != 0);
+    let has_e = map
+        .get(TileCoord::new(c.x + 1, c.y))
+        .is_some_and(|t| t.kind == TileKind::Road && tram_track_bits(&t) != 0);
+    let has_n = map
+        .get(TileCoord::new(c.x, c.y - 1))
+        .is_some_and(|t| t.kind == TileKind::Road && tram_track_bits(&t) != 0);
+    let has_s = map
+        .get(TileCoord::new(c.x, c.y + 1))
+        .is_some_and(|t| t.kind == TileKind::Road && tram_track_bits(&t) != 0);
+    let connect = tram_bits_from_tram_neighbors(map, c);
+    let axis_h = has_w || has_e;
+    let axis_v = has_n || has_s;
+    let straight = requested == 0x0A || requested == 0x05;
+
+    let bits = if axis_h && axis_v {
+        existing | requested | connect | 0x0A | 0x05
+    } else if force_axis && straight {
+        connect | requested
+    } else if axis_h && !axis_v {
+        if existing & 0x05 == 0x05 && existing & 0x0A == 0 {
+            connect | 0x05
+        } else {
+            connect | 0x0A
+        }
+    } else if axis_v && !axis_h {
+        if existing & 0x0A == 0x0A && existing & 0x05 == 0 {
+            connect | 0x0A
+        } else {
+            connect | 0x05
+        }
+    } else {
+        existing | requested | connect
+    };
+    (bits & 0x0F).max(1)
+}
+
+fn propagate_tram_bits_to_neighbors(
+    state: &mut GameState,
+    c: TileCoord,
+    bits: u8,
+) -> Result<(), CommandError> {
+    for &(bit, dx, dy, reciproc) in &ROAD_LINK_TO_NEIGHBOR {
+        if bits & bit == 0 {
+            continue;
+        }
+        let n = TileCoord::new(c.x + dx, c.y + dy);
+        if state.map.get_kind(n) != Some(TileKind::Road) {
+            continue;
+        }
+        let existing = state.map.get(n).map_or(0, |t| t.m3 & 0x0F);
+        let merged = merge_tram_bits_with_neighbors(&state.map, n, reciproc, existing, false);
+        if merged != existing {
+            write_tram_geometry(state, n, merged)?;
+        }
+    }
+    Ok(())
 }
 
 pub(in crate::command::transport) fn road_bits_from_road_neighbors(map: &Map, c: TileCoord) -> u8 {

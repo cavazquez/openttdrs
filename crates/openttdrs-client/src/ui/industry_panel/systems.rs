@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use openttdrs_core::industry::{INDUSTRY_PRODUCE_AMOUNT, industry_produce_period_ticks};
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
 use crate::render::{IndustryPreviewCamera, MapPreviewCamera, PrimaryGameCamera};
@@ -9,9 +10,11 @@ use super::logic::{
     industry_stats_for_component, kind_label, spec_label,
 };
 use super::{
-    IndustryPanelCloseButton, IndustryPanelDetails, IndustryPanelRoot, IndustryPanelState,
-    IndustryPanelTitle,
+    IndustryPanelCenterButton, IndustryPanelCloseButton, IndustryPanelDetails, IndustryPanelRoot,
+    IndustryPanelState, IndustryPanelTitle,
 };
+use crate::ui::industry_directory::industry_chain_label;
+use crate::ui::sparkline::sparkline_u32;
 
 const PREVIEW_SCALE_MUL: f32 = 0.62;
 
@@ -28,6 +31,28 @@ pub(crate) fn industry_panel_close_interaction(
         panel.focus_tile = None;
         if let Ok(mut cam) = preview_cam.single_mut() {
             cam.is_active = false;
+        }
+    }
+}
+
+pub(crate) fn industry_panel_center_interaction(
+    q: Query<&Interaction, (Changed<Interaction>, With<IndustryPanelCenterButton>)>,
+    panel: Res<IndustryPanelState>,
+    sim: Res<SimWorld>,
+    mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
+) {
+    let Some(focus) = panel.focus_tile else {
+        return;
+    };
+    for interaction in &q {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let height = sim.state.map.get(focus).map_or(0, |tile| tile.height);
+        let center = tile_pos(focus.x, focus.y, height, 0.0);
+        if let Ok(mut transform) = cam_q.single_mut() {
+            transform.translation.x = center.x;
+            transform.translation.y = center.y;
         }
     }
 }
@@ -74,16 +99,41 @@ pub(crate) fn sync_industry_panel(
         if let Some((kind, spec, stock, capacity, origin)) =
             industry_stats_for_component(&sim.state.map, &sim, focus)
         {
-            let (focus_gfx_label, _preview_anchor, focus_gfx) =
-                dominant_gfx_for_component(&sim.state.map, focus).unwrap_or(("n/d", focus, 0));
-            let industry_id = sim.state.map.get(origin).map_or(0, |tile| tile.m2);
+            let type_label = spec.map_or_else(|| kind_label(kind), spec_label);
+            let chain = sim
+                .state
+                .industries
+                .iter()
+                .find(|i| i.pos == origin)
+                .map(industry_chain_label)
+                .unwrap_or_else(|| "—".to_string());
+            let period = industry_produce_period_ticks(kind);
+            let industry = sim.state.industries.iter().find(|i| i.pos == origin);
+            let hist_block = industry.map_or_else(
+                || "Historial: —".to_string(),
+                |ind| {
+                    if ind.history.samples.is_empty() {
+                        "Historial mensual: (avanza el tiempo)".to_string()
+                    } else {
+                        let produced: Vec<u32> =
+                            ind.history.samples.iter().map(|s| s.produced).collect();
+                        let transported: Vec<u32> =
+                            ind.history.samples.iter().map(|s| s.transported).collect();
+                        let stock: Vec<u32> =
+                            ind.history.samples.iter().map(|s| s.stock).collect();
+                        format!(
+                            "Historial ({} m):\n  Stock       {}\n  Producido   {}\n  Transport.  {}",
+                            ind.history.samples.len(),
+                            sparkline_u32(&stock, 24),
+                            sparkline_u32(&produced, 24),
+                            sparkline_u32(&transported, 24),
+                        )
+                    }
+                },
+            );
             **details = format!(
-                "Tipo Sim: {} | Tipo GFX: {} | Stock: {stock}/{capacity}\nOrigen sim: ({}, {}) | Industry ID(m2): {} | Tiles conectadas: {tile_count} | gfx9(raw): {focus_gfx}",
-                spec.map_or_else(|| kind_label(kind), spec_label),
-                focus_gfx_label,
-                origin.x,
-                origin.y,
-                industry_id
+                "{type_label}\nPosición: ({}, {}) · tiles: {tile_count}\nStock: {stock}/{capacity}\nProducción: +{INDUSTRY_PRODUCE_AMOUNT} cada {period} ticks\nCadena: {chain}\n\n{hist_block}",
+                origin.x, origin.y,
             );
         } else {
             let gfx9 = sim
@@ -92,7 +142,7 @@ pub(crate) fn sync_industry_panel(
                 .get(focus)
                 .map_or(0, |tile| industry_gfx(&tile));
             **details = format!(
-                "Tipo: desconocido en sim | GFX: n/d | Stock: n/d\nTiles conectadas: {tile_count} | gfx9(raw): {gfx9}"
+                "Industria sin datos de simulación\nTiles conectadas: {tile_count}\n(gfx {gfx9})"
             );
         }
     }

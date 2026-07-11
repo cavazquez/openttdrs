@@ -145,6 +145,7 @@ fn destinations_for_vehicle(sim: &SimWorld, vehicle_id: u32) -> Vec<DestCandidat
             StopKind::TruckStop => "Parada carga",
             StopKind::RailStation => "Estación tren",
             StopKind::Dock => "Muelle",
+            StopKind::Buoy => "Boya",
             StopKind::Airport => "Aeropuerto",
             StopKind::RailWaypoint => "Waypoint",
         };
@@ -160,7 +161,7 @@ fn destinations_for_vehicle(sim: &SimWorld, vehicle_id: u32) -> Vec<DestCandidat
     }
     let depot_kind = match vehicle.kind {
         VehicleKind::Train => Some(TileKind::RailDepot),
-        VehicleKind::Bus | VehicleKind::Truck => Some(TileKind::RoadDepot),
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram => Some(TileKind::RoadDepot),
         VehicleKind::Ship => Some(TileKind::ShipDepot),
         VehicleKind::Aircraft => Some(TileKind::Airport),
     };

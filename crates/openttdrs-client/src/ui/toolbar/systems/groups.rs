@@ -20,6 +20,7 @@ pub(crate) fn toolbar_group_interaction(
         if *interaction == Interaction::Pressed {
             if let Some(menu) = navigation_menu.as_deref_mut() {
                 menu.open = None;
+                menu.focus = None;
             }
             if toolbar_state.active_group == Some(*group) {
                 toolbar_state.active_group = None;
@@ -111,17 +112,24 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         BuildMenuAction::Road
         | BuildMenuAction::RoadX
         | BuildMenuAction::RoadY
+        | BuildMenuAction::Tram
+        | BuildMenuAction::TramX
+        | BuildMenuAction::TramY
         | BuildMenuAction::RoadDepot
         | BuildMenuAction::RoadBridge
         | BuildMenuAction::RoadTunnel
         | BuildMenuAction::BusStop
         | BuildMenuAction::Station
+        | BuildMenuAction::JoinStation
         | BuildMenuAction::Clear => ToolbarGroup::Road,
         BuildMenuAction::ShipDepot
         | BuildMenuAction::Dock
         | BuildMenuAction::Canal
+        | BuildMenuAction::River
+        | BuildMenuAction::Buoy
+        | BuildMenuAction::Aqueduct
         | BuildMenuAction::Lock => ToolbarGroup::Water,
-        BuildMenuAction::Airport | BuildMenuAction::AirportSmall => ToolbarGroup::Air,
+        BuildMenuAction::Airport => ToolbarGroup::Air,
         BuildMenuAction::Orders => ToolbarGroup::Info,
         BuildMenuAction::BuildHouse
         | BuildMenuAction::BuildCoalMine
@@ -146,7 +154,9 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         BuildMenuAction::RaiseLand
         | BuildMenuAction::LowerLand
         | BuildMenuAction::LevelLand
-        | BuildMenuAction::BuyLand => ToolbarGroup::Landscape,
+        | BuildMenuAction::BuyLand
+        | BuildMenuAction::PlantTree
+        | BuildMenuAction::PlaceSign => ToolbarGroup::Landscape,
     }
 }
 
@@ -219,6 +229,7 @@ mod tests {
         });
         world.insert_resource(UiToolState {
             active_tool: Some(BuildMenuAction::Clear),
+            ..Default::default()
         });
         world.insert_resource(DragBuildState::default());
         world.run_system_once(hide_tool_when_panel_closed).unwrap();
@@ -237,6 +248,7 @@ mod tests {
         });
         world.insert_resource(UiToolState {
             active_tool: Some(BuildMenuAction::RailSignals),
+            ..Default::default()
         });
         world.insert_resource(DragBuildState::default());
         world.run_system_once(hide_tool_when_panel_closed).unwrap();

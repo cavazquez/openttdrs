@@ -163,7 +163,7 @@ fn vehicle_waiting_for_cargo(
             && st.accepts_cargo(ind.output_cargo())
     });
     let station_has = match v.kind {
-        openttdrs_core::VehicleKind::Bus => {
+        openttdrs_core::VehicleKind::Bus | openttdrs_core::VehicleKind::Tram => {
             st.cargo_stock.passengers > 0 || st.cargo_stock.mail > 0
         }
         openttdrs_core::VehicleKind::Truck
@@ -236,8 +236,7 @@ pub(crate) struct TileInfoHudKey {
     tile_height: Option<u8>,
     vehicle_alert: String,
     pbs_overlay: bool,
-    hide_catenary: bool,
-    transparent_catenary: bool,
+    catenary_mode: crate::sprites::TransparencyMode,
     signal_type: u8,
     signal_density: u8,
 }
@@ -338,8 +337,7 @@ pub(crate) fn update_tile_info_text(
         tile_height: tile_snapshot.map(|t| t.8),
         vehicle_alert: vehicle_alert.clone(),
         pbs_overlay: prefs.show_pbs_reservations,
-        hide_catenary: prefs.hide_catenary,
-        transparent_catenary: prefs.transparent_catenary,
+        catenary_mode: prefs.transparency_mode(crate::sprites::TransparencyOption::Catenary),
         signal_type: station_state.signal_type,
         signal_density: station_state.signal_density,
     };
@@ -374,12 +372,10 @@ pub(crate) fn update_tile_info_text(
     } else {
         "PBS R:off"
     };
-    let catenary_l = if prefs.hide_catenary {
-        "cat:oculta"
-    } else if prefs.transparent_catenary {
-        "cat:transp."
-    } else {
-        "cat:visible"
+    let catenary_l = match prefs.transparency_mode(crate::sprites::TransparencyOption::Catenary) {
+        crate::sprites::TransparencyMode::Hidden => "cat:oculta",
+        crate::sprites::TransparencyMode::Transparent => "cat:transp.",
+        crate::sprites::TransparencyMode::Visible => "cat:visible",
     };
     let tick_n = sim.state.tick.get();
 
@@ -427,8 +423,60 @@ pub(crate) fn update_tile_info_text(
     } else {
         String::new()
     };
+    let rail_type_extra = if tool_state.active_tool.is_some_and(|a| {
+        matches!(
+            a,
+            BuildMenuAction::Rail
+                | BuildMenuAction::RailX
+                | BuildMenuAction::RailY
+                | BuildMenuAction::RailHorz
+                | BuildMenuAction::RailVert
+                | BuildMenuAction::RailDepot
+                | BuildMenuAction::RailStation
+                | BuildMenuAction::RailBridge
+                | BuildMenuAction::RailTunnel
+                | BuildMenuAction::RailWaypoint
+                | BuildMenuAction::RailConvert
+        )
+    }) {
+        format!(" vía:{}", sim.state.current_rail_type.label())
+    } else {
+        String::new()
+    };
+    let road_type_extra = if tool_state.active_tool.is_some_and(|a| {
+        matches!(
+            a,
+            BuildMenuAction::Road
+                | BuildMenuAction::RoadX
+                | BuildMenuAction::RoadY
+                | BuildMenuAction::RoadDepot
+                | BuildMenuAction::RoadBridge
+                | BuildMenuAction::RoadTunnel
+                | BuildMenuAction::Station
+                | BuildMenuAction::BusStop
+        )
+    }) {
+        format!(" ctra:{}", sim.state.current_road_type.short_label())
+    } else if tool_state.active_tool.is_some_and(|a| {
+        matches!(
+            a,
+            BuildMenuAction::Tram | BuildMenuAction::TramX | BuildMenuAction::TramY
+        )
+    }) {
+        format!(" tram:{}", sim.state.current_tram_type.short_label())
+    } else {
+        String::new()
+    };
+    let join_extra = if tool_state.active_tool == Some(BuildMenuAction::JoinStation) {
+        match station_state.join_keep {
+            Some(p) => format!(" keep:({},{})", p.x, p.y),
+            None => " elige 1ª estación".into(),
+        }
+    } else {
+        String::new()
+    };
     hud_lines.push(format!(
-        "Herramienta: {tool_l}{}{}{signal_tool_extra} | {minimap_l} | {pbs_l} | {catenary_l} | {save_file} · F4",
+        "Herramienta: {tool_l}{}{}{signal_tool_extra}{rail_type_extra}{road_type_extra}{join_extra} | {minimap_l} | {pbs_l} | {catenary_l} | {save_file} · F4",
         tool_hint.map_or(String::new(), |h| format!(" ({h})")),
         order_l,
     ));
@@ -452,7 +500,15 @@ pub(crate) fn update_tile_info_text(
     let kind_str = match tile.kind {
         TileKind::Void => "Void",
         TileKind::Grass => "Grass",
-        TileKind::Water => "Water",
+        TileKind::Water => {
+            use openttdrs_core::{WaterClass, water_class_from_m1};
+            match water_class_from_m1(tile.m1) {
+                WaterClass::Canal => "Canal",
+                WaterClass::River => "Río",
+                WaterClass::Sea => "Mar",
+                WaterClass::Invalid => "Water",
+            }
+        }
         TileKind::Road => "Road",
         TileKind::Rail => "Rail",
         TileKind::RoadDepot => "Depósito carretera",
@@ -916,6 +972,7 @@ mod tests {
             stock: 42,
             capacity: 100,
             random_colour: 0,
+            ..Default::default()
         });
 
         let tile = sim.state.map.get(station_pos).unwrap();

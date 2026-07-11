@@ -216,8 +216,8 @@ pub const fn vehicle_running_cost_per_tick(kind: VehicleKind, running: bool, mov
         return 0;
     }
     match kind {
-        VehicleKind::Bus => 2,
         VehicleKind::Truck => 3,
+        VehicleKind::Bus | VehicleKind::Tram => 2,
         VehicleKind::Train => 8,
         VehicleKind::Ship => 5,
         VehicleKind::Aircraft => 10,

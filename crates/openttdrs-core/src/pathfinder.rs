@@ -38,6 +38,7 @@ fn is_rail_station_tile(tile: &Tile) -> bool {
 fn is_network_tile(map: &Map, c: TileCoord, kind: TileKind, network: PathNetwork) -> bool {
     match network {
         PathNetwork::Road => is_road_network_tile(kind) || is_road_stop_station_tile(map, c),
+        PathNetwork::Tram => is_tram_network_tile(map, c, kind),
         // Trenes no circulan por la tesela de plataforma; paran en la vía adyacente.
         PathNetwork::Rail => is_rail_network_tile(kind),
         PathNetwork::Water => is_water_network_tile_at(map, c),
@@ -49,6 +50,8 @@ fn is_network_tile(map: &Map, c: TileCoord, kind: TileKind, network: PathNetwork
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PathNetwork {
     Road,
+    /// Overlay de tranvía (`m3`); sin fallback a cruce completo.
+    Tram,
     Rail,
     Water,
     Air,
@@ -59,6 +62,7 @@ pub const fn path_network_for_vehicle(kind: VehicleKind) -> PathNetwork {
     match kind {
         VehicleKind::Train => PathNetwork::Rail,
         VehicleKind::Truck | VehicleKind::Bus => PathNetwork::Road,
+        VehicleKind::Tram => PathNetwork::Tram,
         VehicleKind::Ship => PathNetwork::Water,
         VehicleKind::Aircraft => PathNetwork::Air,
     }
@@ -96,6 +100,19 @@ fn is_road_network_tile(kind: TileKind) -> bool {
 fn is_road_stop_station_tile(map: &Map, c: TileCoord) -> bool {
     map.get(c)
         .is_some_and(|t| is_road_stop_station(&t) && (t.m3 & 0x0F) != 0)
+}
+
+/// Tesela de red de tranvía: overlay m3, depósito de carretera, o parada bus.
+#[must_use]
+fn is_tram_network_tile(map: &Map, c: TileCoord, kind: TileKind) -> bool {
+    match kind {
+        TileKind::RoadDepot => true,
+        TileKind::Road | TileKind::RoadTunnel | TileKind::RoadBridge => map
+            .get(c)
+            .is_some_and(|t| crate::road_type::tram_track_bits(&t) != 0),
+        TileKind::Station => is_road_stop_station_tile(map, c),
+        _ => false,
+    }
 }
 
 #[must_use]
@@ -220,6 +237,31 @@ fn effective_road_bits(map: &Map, c: TileCoord) -> u8 {
     }
 }
 
+/// Bits de tranvía (`m3`); sin fallback `0x0F` — m3=0 no es transitable.
+#[must_use]
+fn effective_tram_bits(map: &Map, c: TileCoord) -> u8 {
+    let Some(t) = map.get(c) else {
+        return 0;
+    };
+    match t.kind {
+        TileKind::Road | TileKind::RoadTunnel | TileKind::RoadBridge => {
+            crate::road_type::tram_track_bits(&t)
+        }
+        TileKind::RoadDepot => {
+            let bits = crate::road_type::tram_track_bits(&t);
+            if bits != 0 {
+                bits
+            } else {
+                // Boca del depósito: si aún no hay overlay, usar bits de carretera (m5).
+                let bits = t.m5 & 0x0F;
+                if bits == 0 { 0x0F } else { bits }
+            }
+        }
+        TileKind::Station if is_road_stop_station(&t) => t.m3 & 0x0F,
+        _ => 0,
+    }
+}
+
 const RAIL_TB_CROSS: u8 = RAIL_TB_X | RAIL_TB_Y;
 
 /// Trackbit que conecta dos lados (`DiagDir`) de una tesela (`track_type.h`):
@@ -302,6 +344,20 @@ fn road_tiles_connected(map: &Map, cur: TileCoord, next: TileCoord) -> bool {
 }
 
 #[must_use]
+fn tram_tiles_connected(map: &Map, cur: TileCoord, next: TileCoord) -> bool {
+    let dx = next.x - cur.x;
+    let dy = next.y - cur.y;
+    if dx.abs() + dy.abs() != 1 {
+        return false;
+    }
+    let exit = road_bits_toward_neighbor(dx, dy);
+    let entry = road_bits_toward_neighbor(-dx, -dy);
+    let cur_bits = effective_tram_bits(map, cur);
+    let next_bits = effective_tram_bits(map, next);
+    cur_bits & exit != 0 && next_bits & entry != 0
+}
+
+#[must_use]
 fn rail_station_entrance_links_track(map: &Map, station: TileCoord, track: TileCoord) -> bool {
     let Some(tile) = map.get(station) else {
         return false;
@@ -329,6 +385,7 @@ fn rail_station_entrance_links_track(map: &Map, station: TileCoord, track: TileC
 fn tiles_connected(map: &Map, cur: TileCoord, next: TileCoord, network: PathNetwork) -> bool {
     match network {
         PathNetwork::Road => road_tiles_connected(map, cur, next),
+        PathNetwork::Tram => tram_tiles_connected(map, cur, next),
         PathNetwork::Water => water_tiles_connected(map, cur, next),
         PathNetwork::Rail | PathNetwork::Air => {
             debug_assert!(false, "rail/air no usan tiles_connected genérico");
@@ -391,6 +448,7 @@ fn cache_key(from: TileCoord, to: TileCoord, network: PathNetwork) -> (i32, i32,
             PathNetwork::Rail => 1,
             PathNetwork::Water => 2,
             PathNetwork::Air => 3,
+            PathNetwork::Tram => 4,
         },
     )
 }
@@ -1053,6 +1111,50 @@ mod tests {
                     PathNetwork::Road
                 )
                 .is_none()
+        );
+    }
+
+    fn write_tram(map: &mut Map, c: TileCoord, bits: u8) {
+        use crate::road_type::{RoadType, set_tram_road_type_on_tile, set_tram_track_bits_on_tile};
+        map.set_kind(c, TileKind::Road).unwrap();
+        let mut t = map.get(c).unwrap();
+        t.m5 = 0; // sin carretera: solo overlay tram
+        t = set_tram_track_bits_on_tile(t, bits);
+        t = set_tram_road_type_on_tile(t, Some(RoadType::Tram));
+        map.set_tile(c, t).unwrap();
+    }
+
+    #[test]
+    fn tram_path_follows_m3_not_m5() {
+        let mut m = Map::new_flat(6, 6, 0);
+        write_tram(&mut m, TileCoord::new(1, 1), 0x0A); // E-W
+        write_tram(&mut m, TileCoord::new(2, 1), 0x0A);
+        write_tram(&mut m, TileCoord::new(3, 1), 0x0A);
+        assert!(
+            find_path(
+                &m,
+                TileCoord::new(1, 1),
+                TileCoord::new(3, 1),
+                PathNetwork::Tram
+            )
+            .is_some()
+        );
+        // Road pathfinder no ve tiles sin m5 (fallback 0x0F en Road vacío… wait)
+        // Con m5=0 el road trata como 0x0F, así que Road SÍ conectaría.
+        // Verificamos que un tile sin m3 no es red Tram:
+        m.set_kind(TileCoord::new(4, 1), TileKind::Road).unwrap();
+        let mut t = m.get(TileCoord::new(4, 1)).unwrap();
+        t.m5 = 0x0A;
+        m.set_tile(TileCoord::new(4, 1), t).unwrap();
+        assert!(
+            find_path(
+                &m,
+                TileCoord::new(3, 1),
+                TileCoord::new(4, 1),
+                PathNetwork::Tram
+            )
+            .is_none(),
+            "tile solo-road sin m3 no es red de tranvía"
         );
     }
 }

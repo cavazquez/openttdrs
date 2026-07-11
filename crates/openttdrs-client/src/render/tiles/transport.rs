@@ -6,7 +6,8 @@ use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    catenary_sprite_color, collect_catenary_pylons_from_map, collect_catenary_sprites_from_map,
+    ROADSIDE_TREE_META, ROADSIDE_TREES, TRACK_FENCE_META, catenary_sprite_color,
+    collect_catenary_pylons_from_map, collect_catenary_sprites_from_map,
     collect_rail_sprites_for_type, collect_signal_sprite_draws, is_road_level_crossing,
     is_typed_rail_track_sprite, level_crossing_has_rail_reservation,
     level_crossing_rail_sprite_id_for_type, rail_ghost_overlay_offset,
@@ -14,7 +15,7 @@ use crate::sprites::{
     rail_trackbits_for_render, road_bits_for_render, road_flat_sprite_color,
     road_flat_sprite_index, road_tile_roadside, road_tile_snow_or_desert,
     road_tile_tram_visual_active, roadside_is_paved, signal_screen_position,
-    tram_flat_sprite_index,
+    track_fence_draws_for_tile, tram_flat_sprite_index,
 };
 
 #[allow(clippy::too_many_arguments)]
@@ -28,6 +29,7 @@ pub(crate) fn spawn_road_tile(
     slope_half_ground: f32,
     climate: Climate,
     show_pbs_reservations: bool,
+    show_full_detail: bool,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -101,8 +103,9 @@ pub(crate) fn spawn_road_tile(
     }
 
     // `Roadside::StreetLights` (3): faroles de `_roadside_lamps` en sus
-    // subcoordenadas de mundo. Igual que upstream, solo con 2+ road bits.
-    if roadside == Some(3) && rb.count_ones() > 1 {
+    // subcoordenadas de mundo. Igual que upstream, solo con 2+ road bits
+    // y `FullDetail` activo.
+    if show_full_detail && roadside == Some(3) && rb.count_ones() > 1 {
         for &(lamp, dx, dy) in ROADSIDE_LAMPS[usize::from(rb & 0xF)] {
             let (w, h, xrel, yrel) = ROAD_STREETLIGHT_META[lamp];
             let off = remap_tile_offset(dx, dy, 0.0) * 0.5;
@@ -121,6 +124,31 @@ pub(crate) fn spawn_road_tile(
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 assets.road_streetlights[lamp].sprite(),
+                Transform::from_translation(pos3),
+            ));
+        }
+    }
+
+    // `Roadside::Trees` (5): árboles de `_roadside_trees` (sprite 0x1212).
+    if show_full_detail && roadside == Some(5) && rb.count_ones() > 1 {
+        let (w, h, xrel, yrel) = ROADSIDE_TREE_META;
+        for &(dx, dy) in ROADSIDE_TREES[usize::from(rb & 0xF)] {
+            let off = remap_tile_offset(dx, dy, 0.0) * 0.5;
+            let pos3 = overlay_pos(
+                Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
+                xrel,
+                yrel,
+                w,
+                h,
+                base_z,
+                0.25,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                assets.roadside_tree.sprite(),
                 Transform::from_translation(pos3),
             ));
         }
@@ -179,6 +207,7 @@ pub(crate) fn spawn_rail_tile(
     rail_layers: &mut Vec<u32>,
     climate: Climate,
     show_pbs_reservations: bool,
+    show_full_detail: bool,
 ) {
     let tileh = ctx.info.tileh;
     // Vano con puente encima: la vía la dibuja `spawn_bridge_deck` a la altura del tablero.
@@ -340,6 +369,36 @@ pub(crate) fn spawn_rail_tile(
                 ctx.map_tile_chunk(),
                 img.sprite(),
                 Transform::from_translation(Vec3::new(signal_xy.x, signal_xy.y, depth.z)),
+            ));
+        }
+    }
+
+    // `DrawTrackDetails`: cercas de borde (FullDetail).
+    if show_full_detail && tileh == 0 {
+        let track_bits = ctx.tile.map_or(0, |t| t.m5 & 0x3F);
+        let m3hi = ctx.tile.map_or(0, |t| t.m3hi);
+        let (w, h, xrel, yrel) = TRACK_FENCE_META;
+        for (sprite_i, dx, dy) in track_fence_draws_for_tile(map, ctx.coord, track_bits, m3hi) {
+            let Some(img) = assets.track_fences.get(sprite_i) else {
+                continue;
+            };
+            let off = remap_tile_offset(dx, dy, 0.0) * 0.5;
+            let pos3 = overlay_pos(
+                Vec2::new(ctx.iso_pos.x + off.x, ctx.iso_pos.y + off.y),
+                xrel,
+                yrel,
+                w,
+                h,
+                rail_base_z,
+                0.03,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            );
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                img.sprite(),
+                Transform::from_translation(pos3),
             ));
         }
     }

@@ -48,6 +48,7 @@ fn place_airport_small_footprint_and_hangar_buy() {
         &Command::PlaceAirportArea {
             origin,
             axis_y: false,
+            spec: crate::AirportSpecId::Small,
         },
     )
     .unwrap();
@@ -106,6 +107,46 @@ fn place_lock_requires_height_delta() {
 }
 
 #[test]
+fn place_city_airport_footprint() {
+    let mut s = GameState::new(24, 24);
+    let origin = TileCoord::new(2, 2);
+    apply_command(
+        &mut s,
+        &Command::PlaceAirportArea {
+            origin,
+            axis_y: false,
+            spec: crate::AirportSpecId::City,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.stations[0].airport_tiles.len(), 36);
+    assert!(airport_tile_is_hangar(&s.map, s.stations[0].pos));
+}
+
+#[test]
+fn place_international_airport_footprint() {
+    let mut s = GameState::new(24, 24);
+    let origin = TileCoord::new(1, 1);
+    apply_command(
+        &mut s,
+        &Command::PlaceAirportArea {
+            origin,
+            axis_y: false,
+            spec: crate::AirportSpecId::International,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.stations[0].airport_tiles.len(), 49);
+    let hangar = s.stations[0].pos;
+    assert!(airport_tile_is_hangar(&s.map, hangar));
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_DAKOTA),
+    )
+    .unwrap();
+}
+
+#[test]
 fn ferry_engine_is_passenger_ship() {
     let eng = crate::engine_by_id(ENGINE_SHIP_FERRY).unwrap();
     assert_eq!(eng.kind, VehicleKind::Ship);
@@ -135,6 +176,7 @@ fn small_airport_rejects_helicopter() {
         &Command::PlaceAirportArea {
             origin,
             axis_y: false,
+            spec: crate::AirportSpecId::Small,
         },
     )
     .unwrap();

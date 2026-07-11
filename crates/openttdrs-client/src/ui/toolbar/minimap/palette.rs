@@ -1,5 +1,12 @@
 use bevy::prelude::*;
-use openttdrs_core::TileKind;
+use openttdrs_core::{CompanyId, GameState, TileCoord, TileKind};
+
+use crate::sprites::company_colour_swatch_color;
+
+use super::MinimapLayerState;
+
+const INDUSTRY_DIM: Color = Color::srgb(0.22, 0.28, 0.14);
+const OWNER_NEUTRAL: Color = Color::srgb(0.35, 0.35, 0.32);
 
 pub(super) fn minimap_color(kind: TileKind) -> Color {
     match kind {
@@ -20,4 +27,99 @@ pub(super) fn minimap_color(kind: TileKind) -> Color {
         TileKind::Void => Color::srgb(0.02, 0.02, 0.02),
         TileKind::Unknown(_) => Color::srgb(0.38, 0.12, 0.45),
     }
+}
+
+pub(super) fn minimap_cell_color(
+    state: &GameState,
+    layers: &MinimapLayerState,
+    coord: TileCoord,
+    kind: TileKind,
+) -> Color {
+    let mut color = minimap_color(kind);
+
+    if matches!(kind, TileKind::Industry | TileKind::CoalField) {
+        color = if layers.industries {
+            Color::srgb(0.92, 0.72, 0.18)
+        } else {
+            INDUSTRY_DIM
+        };
+    }
+
+    if layers.owners {
+        if let Some(owner) = owner_for_tile(state, coord, kind) {
+            color = company_color(state, owner);
+        } else if is_owned_infra(kind) {
+            color = OWNER_NEUTRAL;
+        }
+    }
+
+    if layers.vehicles
+        && state
+            .vehicles
+            .iter()
+            .any(|v| v.is_consist_head() && v.pos == coord)
+    {
+        let owner = state
+            .vehicles
+            .iter()
+            .find(|v| v.is_consist_head() && v.pos == coord)
+            .map(|v| v.owner)
+            .unwrap_or(CompanyId::PLAYER);
+        color = company_color(state, owner);
+    }
+
+    color
+}
+
+fn is_owned_infra(kind: TileKind) -> bool {
+    matches!(
+        kind,
+        TileKind::Rail
+            | TileKind::RailDepot
+            | TileKind::RailBridge
+            | TileKind::RailTunnel
+            | TileKind::Road
+            | TileKind::RoadDepot
+            | TileKind::RoadBridge
+            | TileKind::RoadTunnel
+            | TileKind::Station
+            | TileKind::Airport
+            | TileKind::ShipDepot
+    )
+}
+
+fn owner_for_tile(state: &GameState, coord: TileCoord, kind: TileKind) -> Option<CompanyId> {
+    if let Some(station) = state.stations.iter().find(|s| s.covers_tile(coord)) {
+        return Some(station.owner);
+    }
+    if matches!(kind, TileKind::Station | TileKind::Airport) {
+        // Ancla o tesela de estación sin covers_tile (p. ej. andén rail).
+        if let Some(station) = state.stations.iter().min_by_key(|s| {
+            let dx = (s.pos.x - coord.x).unsigned_abs();
+            let dy = (s.pos.y - coord.y).unsigned_abs();
+            dx.saturating_add(dy)
+        }) && (station.pos.x - coord.x).unsigned_abs() <= 4
+            && (station.pos.y - coord.y).unsigned_abs() <= 4
+        {
+            return Some(station.owner);
+        }
+    }
+    if is_owned_infra(kind) {
+        let m1 = state.map.get(coord).map(|t| t.m1).unwrap_or(0);
+        let idx = usize::from(m1);
+        if idx < state.companies.len() {
+            return Some(state.companies[idx].id);
+        }
+        return Some(state.active_company);
+    }
+    None
+}
+
+fn company_color(state: &GameState, owner: CompanyId) -> Color {
+    let colour = state
+        .companies
+        .get(owner.index())
+        .map(|c| c.colour)
+        .unwrap_or(state.company_colour);
+    company_colour_swatch_color(colour)
 }

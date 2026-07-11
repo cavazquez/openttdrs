@@ -6,6 +6,9 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::Road => "Carretera +",
         BuildMenuAction::RoadX => "Carretera NE-SW",
         BuildMenuAction::RoadY => "Carretera NO-SE",
+        BuildMenuAction::Tram => "Tranvía +",
+        BuildMenuAction::TramX => "Tranvía NE-SW",
+        BuildMenuAction::TramY => "Tranvía NO-SE",
         BuildMenuAction::RoadDepot => "Depósito carretera",
         BuildMenuAction::RoadBridge => "Puente carretera",
         BuildMenuAction::RoadTunnel => "Túnel carretera",
@@ -19,9 +22,11 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::ShipDepot => "Depósito barcos",
         BuildMenuAction::Dock => "Muelle",
         BuildMenuAction::Canal => "Canal",
+        BuildMenuAction::River => "Río",
+        BuildMenuAction::Buoy => "Boya",
+        BuildMenuAction::Aqueduct => "Acueducto",
         BuildMenuAction::Lock => "Esclusa",
-        BuildMenuAction::Airport => "Helipuerto",
-        BuildMenuAction::AirportSmall => "Aeropuerto small",
+        BuildMenuAction::Airport => "Aeropuerto",
         BuildMenuAction::RailBridge => "Puente vía",
         BuildMenuAction::RailTunnel => "Túnel vía",
         BuildMenuAction::RailWaypoint => "Waypoint",
@@ -58,6 +63,9 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::LowerLand => "Bajar terreno",
         BuildMenuAction::LevelLand => "Nivelar terreno",
         BuildMenuAction::BuyLand => "Comprar terreno",
+        BuildMenuAction::PlantTree => "Plantar árbol",
+        BuildMenuAction::PlaceSign => "Cartel",
+        BuildMenuAction::JoinStation => "Unir estaciones",
     }
 }
 
@@ -69,9 +77,11 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
         BuildMenuAction::ShipDepot => Some("comprar barco; boca hacia agua"),
         BuildMenuAction::Dock => Some("agua costera; carga Goods"),
         BuildMenuAction::Canal => Some("hierba/bosque → agua navegable"),
+        BuildMenuAction::River => Some("pintura de río; admite pendiente inclinada"),
+        BuildMenuAction::Buoy => Some("agua; waypoint de barcos (sin carga)"),
+        BuildMenuAction::Aqueduct => Some("arrastre entre pendientes enfrentadas"),
         BuildMenuAction::Lock => Some("sobre agua; RMB gira eje NS/EW"),
-        BuildMenuAction::Airport => Some("hangar 1×1; comprar avión"),
-        BuildMenuAction::AirportSmall => Some("4×3; RMB rota eje; compra en hangar"),
+        BuildMenuAction::Airport => Some("picker: tipo/eje; RMB rota; cobertura en ventana"),
         BuildMenuAction::RailSignals => {
             Some("arrastre dens.N; clic sentido; Ctrl+clic tipo; Shift+RMB dens.; RMB dir")
         }
@@ -80,6 +90,14 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
         }
         BuildMenuAction::Orders => Some("clic mapa: destino"),
         BuildMenuAction::RailStation => Some("hierba junto a vía"),
+        BuildMenuAction::PlantTree => Some("hierba → bosque; bosque → crece etapa"),
+        BuildMenuAction::PlaceSign => Some("clic: coloca cartel; Mundo → Carteles para lista"),
+        BuildMenuAction::Tram | BuildMenuAction::TramX | BuildMenuAction::TramY => {
+            Some("overlay visual; sin vehículos de tranvía aún")
+        }
+        BuildMenuAction::JoinStation => {
+            Some("1º clic: estación a conservar; 2º: adyacente a fusionar")
+        }
         _ => None,
     }
 }

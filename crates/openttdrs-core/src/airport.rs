@@ -1,5 +1,6 @@
-//! Tipos y helpers de aeropuerto (piezas, footprint small).
+//! Tipos y helpers de aeropuerto (piezas, footprint).
 
+use crate::airport_class::{AirportSpecId, airport_spec_def};
 use crate::map::{Map, TileCoord};
 use crate::station::Station;
 
@@ -55,43 +56,359 @@ impl AirportPiece {
 pub const AIRPORT_SMALL_W: i32 = 4;
 pub const AIRPORT_SMALL_H: i32 = 3;
 
-/// Layout row-major (fila 0 = norte del footprint en eje X).
-const SMALL_LAYOUT: [[AirportPiece; 4]; 3] = [
-    [
-        AirportPiece::Hangar,
-        AirportPiece::Apron,
-        AirportPiece::Terminal,
-        AirportPiece::Tower,
-    ],
-    [
-        AirportPiece::Runway,
-        AirportPiece::Runway,
-        AirportPiece::Runway,
-        AirportPiece::Runway,
-    ],
-    [
-        AirportPiece::Taxiway,
-        AirportPiece::Apron,
-        AirportPiece::Stand,
-        AirportPiece::Taxiway,
-    ],
+const HELIPORT_LAYOUT: &[AirportPiece] = &[AirportPiece::Heliport];
+
+const HELIDEPOT_LAYOUT: &[AirportPiece] = &[
+    AirportPiece::Hangar,
+    AirportPiece::Apron,
+    AirportPiece::Taxiway,
+    AirportPiece::Stand,
 ];
 
-#[must_use]
-pub fn airport_small_footprint(axis_y: bool) -> (i32, i32) {
-    if axis_y {
-        (AIRPORT_SMALL_H, AIRPORT_SMALL_W)
-    } else {
-        (AIRPORT_SMALL_W, AIRPORT_SMALL_H)
+const SMALL_LAYOUT: &[AirportPiece] = &[
+    AirportPiece::Hangar,
+    AirportPiece::Apron,
+    AirportPiece::Terminal,
+    AirportPiece::Tower,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Taxiway,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Taxiway,
+];
+
+const COMMUTER_LAYOUT: &[AirportPiece] = &[
+    AirportPiece::Hangar,
+    AirportPiece::Apron,
+    AirportPiece::Terminal,
+    AirportPiece::Tower,
+    AirportPiece::Apron,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Taxiway,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Taxiway,
+    AirportPiece::Taxiway,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Taxiway,
+];
+
+/// City 6×6 (inspirado en `_tile_table_city_0`).
+const CITY_LAYOUT: &[AirportPiece] = &[
+    // y=0
+    AirportPiece::Terminal,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Hangar,
+    // y=1
+    AirportPiece::Terminal,
+    AirportPiece::Apron,
+    AirportPiece::Terminal,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    // y=2
+    AirportPiece::Terminal,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    // y=3
+    AirportPiece::Tower,
+    AirportPiece::Apron,
+    AirportPiece::Taxiway,
+    AirportPiece::Taxiway,
+    AirportPiece::Apron,
+    AirportPiece::Tower,
+    // y=4
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Taxiway,
+    AirportPiece::Taxiway,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    // y=5
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+];
+
+/// Metropolitan 6×6 con doble pista.
+const METROPOLITAN_LAYOUT: &[AirportPiece] = &[
+    // y=0
+    AirportPiece::Terminal,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Hangar,
+    // y=1
+    AirportPiece::Terminal,
+    AirportPiece::Apron,
+    AirportPiece::Terminal,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    // y=2
+    AirportPiece::Terminal,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    // y=3
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Tower,
+    // y=4
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    // y=5
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+];
+
+/// International 7×7 con pistas N/S y helipads.
+const INTERNATIONAL_LAYOUT: &[AirportPiece] = &[
+    // y=0 pista norte
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    // y=1
+    AirportPiece::Tower,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Hangar,
+    // y=2
+    AirportPiece::Terminal,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Terminal,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    // y=3
+    AirportPiece::Hangar,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Terminal,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Heliport,
+    // y=4
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Tower,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Heliport,
+    // y=5
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    // y=6 pista sur
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+];
+
+/// Intercontinental 9×11 (doble pista + terminal central).
+const INTERCONTINENTAL_LAYOUT: &[AirportPiece] = &[
+    // y=0 pista norte
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    // y=1
+    AirportPiece::Tower,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Hangar,
+    // y=2
+    AirportPiece::Hangar,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Terminal,
+    AirportPiece::Stand,
+    AirportPiece::Terminal,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Hangar,
+    // y=3
+    AirportPiece::Terminal,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Terminal,
+    // y=4
+    AirportPiece::Terminal,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Tower,
+    AirportPiece::Stand,
+    AirportPiece::Tower,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Terminal,
+    // y=5
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    // y=6
+    AirportPiece::Heliport,
+    AirportPiece::Apron,
+    AirportPiece::Taxiway,
+    AirportPiece::Taxiway,
+    AirportPiece::Taxiway,
+    AirportPiece::Taxiway,
+    AirportPiece::Taxiway,
+    AirportPiece::Apron,
+    AirportPiece::Heliport,
+    // y=7
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    // y=8
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    // y=9 pista sur A
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    // y=10 pista sur B
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+];
+
+fn layout_for_spec(spec: AirportSpecId) -> &'static [AirportPiece] {
+    match spec {
+        AirportSpecId::Heliport => HELIPORT_LAYOUT,
+        AirportSpecId::Helidepot => HELIDEPOT_LAYOUT,
+        AirportSpecId::Small => SMALL_LAYOUT,
+        AirportSpecId::Commuter => COMMUTER_LAYOUT,
+        AirportSpecId::City => CITY_LAYOUT,
+        AirportSpecId::Metropolitan => METROPOLITAN_LAYOUT,
+        AirportSpecId::International => INTERNATIONAL_LAYOUT,
+        AirportSpecId::Intercontinental => INTERCONTINENTAL_LAYOUT,
     }
 }
 
-/// Itera (coord, pieza) del footprint small.
-pub fn airport_small_tiles(
+/// Footprint en teselas según orientación (`axis_y` intercambia X/Y).
+#[must_use]
+pub fn airport_spec_footprint(spec: AirportSpecId, axis_y: bool) -> (i32, i32) {
+    let Some(def) = airport_spec_def(spec) else {
+        return (1, 1);
+    };
+    if axis_y {
+        (def.size_y, def.size_x)
+    } else {
+        (def.size_x, def.size_y)
+    }
+}
+
+/// Itera (coord, pieza) del footprint del spec.
+pub fn airport_spec_tiles(
     origin: TileCoord,
+    spec: AirportSpecId,
     axis_y: bool,
 ) -> impl Iterator<Item = (TileCoord, AirportPiece)> {
-    let (w, h) = airport_small_footprint(axis_y);
+    let def = airport_spec_def(spec);
+    let (base_w, base_h) = def.map_or((1, 1), |d| (d.size_x, d.size_y));
+    let layout = layout_for_spec(spec);
+    let (w, h) = if axis_y {
+        (base_h, base_w)
+    } else {
+        (base_w, base_h)
+    };
     (0..h).flat_map(move |row| {
         (0..w).map(move |col| {
             let (piece_row, piece_col) = if axis_y {
@@ -105,10 +422,24 @@ pub fn airport_small_tiles(
                     usize::try_from(col).unwrap_or(0),
                 )
             };
-            let piece = SMALL_LAYOUT[piece_row][piece_col];
+            let idx = piece_row * usize::try_from(base_w).unwrap_or(1) + piece_col;
+            let piece = layout.get(idx).copied().unwrap_or(AirportPiece::Heliport);
             (TileCoord::new(origin.x + col, origin.y + row), piece)
         })
     })
+}
+
+#[must_use]
+pub fn airport_small_footprint(axis_y: bool) -> (i32, i32) {
+    airport_spec_footprint(AirportSpecId::Small, axis_y)
+}
+
+/// Itera (coord, pieza) del footprint small.
+pub fn airport_small_tiles(
+    origin: TileCoord,
+    axis_y: bool,
+) -> impl Iterator<Item = (TileCoord, AirportPiece)> {
+    airport_spec_tiles(origin, AirportSpecId::Small, axis_y)
 }
 
 #[must_use]
@@ -173,13 +504,12 @@ pub fn airport_loading_tile_at(map: &Map, anchor: TileCoord) -> TileCoord {
     if tile.kind != crate::map::TileKind::Airport {
         return anchor;
     }
-    // Helipuerto.
     if AirportPiece::from_m5(tile.m5) == AirportPiece::Heliport {
         return anchor;
     }
-    // Buscar loading en un radio 4×4 alrededor del ancla.
-    for dy in -2i32..=3 {
-        for dx in -2i32..=3 {
+    // Buscar loading en un radio amplio (cubre hubs 9×11).
+    for dy in -5i32..=10 {
+        for dx in -5i32..=10 {
             let c = TileCoord::new(anchor.x + dx, anchor.y + dy);
             if map.get(c).is_some_and(|t| {
                 t.kind == crate::map::TileKind::Airport
@@ -191,4 +521,72 @@ pub fn airport_loading_tile_at(map: &Map, anchor: TileCoord) -> TileCoord {
         }
     }
     anchor
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn small_footprint_matches_legacy() {
+        assert_eq!(airport_spec_footprint(AirportSpecId::Small, false), (4, 3));
+        assert_eq!(airport_spec_footprint(AirportSpecId::Small, true), (3, 4));
+    }
+
+    #[test]
+    fn heliport_is_single_tile() {
+        let tiles: Vec<_> =
+            airport_spec_tiles(TileCoord::new(1, 1), AirportSpecId::Heliport, false).collect();
+        assert_eq!(tiles.len(), 1);
+        assert_eq!(tiles[0].1, AirportPiece::Heliport);
+    }
+
+    #[test]
+    fn commuter_tile_count() {
+        let n = airport_spec_tiles(TileCoord::new(0, 0), AirportSpecId::Commuter, false).count();
+        assert_eq!(n, 20);
+    }
+
+    #[test]
+    fn city_and_metropolitan_are_6x6() {
+        assert_eq!(
+            airport_spec_tiles(TileCoord::new(0, 0), AirportSpecId::City, false).count(),
+            36
+        );
+        assert_eq!(
+            airport_spec_tiles(TileCoord::new(0, 0), AirportSpecId::Metropolitan, false).count(),
+            36
+        );
+        assert!(
+            airport_spec_tiles(TileCoord::new(0, 0), AirportSpecId::Metropolitan, false)
+                .filter(|(_, p)| *p == AirportPiece::Runway)
+                .count()
+                >= 12
+        );
+    }
+
+    #[test]
+    fn international_is_7x7_with_hangar() {
+        let tiles: Vec<_> =
+            airport_spec_tiles(TileCoord::new(2, 2), AirportSpecId::International, false).collect();
+        assert_eq!(tiles.len(), 49);
+        assert!(tiles.iter().any(|(_, p)| *p == AirportPiece::Hangar));
+        assert_eq!(
+            airport_spec_footprint(AirportSpecId::International, true),
+            (7, 7)
+        );
+    }
+
+    #[test]
+    fn intercontinental_is_9x11() {
+        assert_eq!(
+            airport_spec_footprint(AirportSpecId::Intercontinental, false),
+            (9, 11)
+        );
+        assert_eq!(
+            airport_spec_tiles(TileCoord::new(0, 0), AirportSpecId::Intercontinental, false)
+                .count(),
+            99
+        );
+    }
 }

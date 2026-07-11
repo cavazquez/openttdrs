@@ -19,6 +19,7 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::sparkline::sparkline_u32;
 use crate::ui::toolbar::BuildMenuUi;
 
 #[derive(Resource, Default)]
@@ -195,10 +196,40 @@ pub(crate) fn sync_town_window(
     }
     let houses = count_town_houses(&sim.state, town.id);
     if let Ok(mut body) = body_q.single_mut() {
+        let rating = town.local_authority_rating;
+        let rating_hint = if rating >= 500 {
+            "buena"
+        } else if rating >= 0 {
+            "neutral"
+        } else {
+            "mala"
+        };
+        let pop_hist: Vec<u32> = town.history.samples.iter().map(|s| s.population).collect();
+        let pax_hist: Vec<u32> = town
+            .history
+            .samples
+            .iter()
+            .map(|s| s.passengers_served)
+            .collect();
+        let mail_hist: Vec<u32> = town.history.samples.iter().map(|s| s.mail_served).collect();
+        let hist_block = if town.history.samples.is_empty() {
+            "Historial mensual: (avanza el tiempo para ver series)".to_string()
+        } else {
+            format!(
+                "Historial mensual ({} m):\n  Población  {}\n  Pasajeros  {}\n  Correo     {}",
+                town.history.samples.len(),
+                sparkline_u32(&pop_hist, 24),
+                sparkline_u32(&pax_hist, 24),
+                sparkline_u32(&mail_hist, 24),
+            )
+        };
         **body = format!(
-            "Habitantes: {}\nCasas: {}\n\nPasajeros del último período: máx. {}\nCorreo del último período: máx. {}",
+            "Habitantes: {}\nCasas: {}\nAutoridad local: {rating} (−1000…+1000, {rating_hint})\n\nServicio acumulado (partida):\n  Pasajeros: {}\n  Correo: {}\n  Crecimiento financiado: {}\n\nDemanda teórica por ciclo (casas × tasa):\n  Pasajeros máx. {}\n  Correo máx. {}\n\n{hist_block}",
             town.population,
             houses,
+            town.passengers_served,
+            town.mail_served,
+            town.growth_funded,
             houses * PASSENGERS_PER_HOUSE,
             houses * MAIL_PER_HOUSE,
         );

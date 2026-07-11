@@ -43,11 +43,17 @@ pub(crate) enum FloatingWindowId {
     IndustryDirectory,
     /// Lista global de estaciones.
     StationDirectory,
+    /// Lista global de flota (filtro por tipo).
+    VehicleList,
+    /// Lista de subvenciones (ofertas y contratos).
+    SubsidyList,
     Depot,
     BuyVehicle,
     Vehicle,
     /// «Selección de estación» de tren (opciones de la herramienta).
     RailStationPicker,
+    /// Selección de aeropuerto (clase / tipo / orientación).
+    AirportPicker,
     /// «Selección de puente» tras definir el tramo.
     BridgePicker,
     /// Lista de destinos para la ruta del vehículo.
@@ -66,6 +72,26 @@ pub(crate) enum FloatingWindowId {
     SoundMusic,
     /// Horario detallado del vehículo (F4).
     Timetable,
+    /// Lista de cargas para refit en depósito.
+    Refit,
+    /// Pools de órdenes compartidas.
+    SharedOrders,
+    /// Reglas de autoreemplazo de motores.
+    Autoreplace,
+    /// Gráficos económicos (ingresos / beneficio).
+    Graphs,
+    /// Tarifas de pago por tipo de carga.
+    CargoPaymentRates,
+    /// Opciones de visualización (Display Options).
+    DisplayOptions,
+    /// Segunda cámara / ExtraViewport.
+    ExtraViewport,
+    /// Lista de carteles del mapa.
+    SignList,
+    /// Leyenda Link Graph / CargoDist (stub).
+    LinkGraphLegend,
+    /// Selección de tipo/densidad de señales ferroviarias.
+    SignalPicker,
 }
 
 /// Raíz de una ventana flotante.

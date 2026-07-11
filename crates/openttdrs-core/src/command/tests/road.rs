@@ -380,3 +380,78 @@ fn build_vehicle_at_depot_rejects_train_in_road_depot() {
     .unwrap_err();
     assert_eq!(e, CommandError::InvalidDepotTile);
 }
+
+#[test]
+fn place_tram_bits_sets_m3_and_m8() {
+    use crate::road_type::{RoadType, tram_road_type_from_tile, tram_track_bits};
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceTramBits(c, 0x05)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert_eq!(tile.kind, TileKind::Road);
+    assert_eq!(tram_track_bits(&tile), 0x05);
+    assert_eq!(tram_road_type_from_tile(&tile), Some(RoadType::Tram));
+}
+
+#[test]
+fn place_road_preserves_existing_tram_overlay() {
+    use crate::road_type::{RoadType, tram_road_type_from_tile, tram_track_bits};
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceTramBits(c, 0x0A)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadBits(c, 0x05)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert_eq!(tile.m5 & 0x0F, 0x05);
+    assert_eq!(tram_track_bits(&tile), 0x0A);
+    assert_eq!(tram_road_type_from_tile(&tile), Some(RoadType::Tram));
+}
+
+#[test]
+fn place_tram_on_existing_road_keeps_road_bits() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceRoadBits(c, 0x0A)).unwrap();
+    apply_command(&mut s, &Command::PlaceTramBits(c, 0x05)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert_eq!(tile.m5 & 0x0F, 0x0A);
+    assert_eq!(tile.m3 & 0x0F, 0x05);
+}
+
+#[test]
+fn build_tram_at_depot_and_toggle_uses_tram_network() {
+    use crate::pathfinder::{PathNetwork, find_path};
+    use crate::road_type::tram_track_bits;
+
+    let mut s = GameState::new(10, 10);
+    let depot = TileCoord::new(2, 2);
+    let exit = TileCoord::new(1, 2);
+    let mid = TileCoord::new(1, 3);
+    let end = TileCoord::new(1, 4);
+    apply_command(&mut s, &Command::PlaceRoad(exit)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    // Red de tranvía desde la boca hacia el sur.
+    apply_command(&mut s, &Command::PlaceTramBits(exit, 0x05)).unwrap();
+    apply_command(&mut s, &Command::PlaceTramBits(mid, 0x05)).unwrap();
+    apply_command(&mut s, &Command::PlaceTramBits(end, 0x05)).unwrap();
+
+    assert!(
+        find_path(&s.map, exit, end, PathNetwork::Tram).is_some(),
+        "pathfinder Tram debe conectar overlay m3"
+    );
+
+    apply_command(
+        &mut s,
+        &Command::BuildRoadVehicleAtDepot(depot, VehicleKind::Tram),
+    )
+    .unwrap();
+    assert_eq!(s.vehicles.len(), 1);
+    assert_eq!(s.vehicles[0].kind, VehicleKind::Tram);
+    assert!(!s.vehicles[0].running);
+
+    let id = s.vehicles[0].id;
+    apply_command(&mut s, &Command::ToggleVehicleRunning(id)).unwrap();
+    assert!(s.vehicles[0].running);
+    assert_ne!(s.vehicles[0].dest, depot);
+    // Al salir, la boca debe tener overlay tram (ya lo tenía o se aseguró).
+    assert_ne!(tram_track_bits(&s.map.get(exit).unwrap()), 0);
+}

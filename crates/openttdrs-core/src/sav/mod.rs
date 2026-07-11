@@ -202,6 +202,15 @@ fn nearest_network_tile(
                     tile_kind,
                     TileKind::Road | TileKind::RoadTunnel | TileKind::RoadBridge
                 ),
+                VehicleKind::Tram => map.get(c).is_some_and(|t| {
+                    matches!(
+                        t.kind,
+                        TileKind::Road
+                            | TileKind::RoadDepot
+                            | TileKind::RoadTunnel
+                            | TileKind::RoadBridge
+                    ) && crate::road_type::tram_track_bits(&t) != 0
+                }),
                 VehicleKind::Ship => matches!(tile_kind, TileKind::Water | TileKind::ShipDepot),
                 VehicleKind::Aircraft => true,
             };
@@ -356,6 +365,7 @@ mod tests {
                 passengers_served: 0,
                 mail_served: 0,
                 growth_funded: 0,
+                ..Default::default()
             }],
             industries: Vec::new(),
             vehicles: vec![

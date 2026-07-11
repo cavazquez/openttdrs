@@ -1,49 +1,60 @@
-//! Directorio global de pueblos, primer consumidor de `UiRoute`/menú reusable.
+//! Directorio global de pueblos — primer consumidor de `list_window`.
 
+use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
+use bevy::text::EditableText;
 
+use crate::iso::tile_pos;
+use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
-    FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_CREAM, WINDOW_TEXT,
-    spawn_floating_window, window_text_font,
+    FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_CREAM, spawn_floating_window,
 };
-use crate::ui::font::UiFontRole;
+use crate::ui::list_window::{
+    LIST_DEFAULT_HEIGHT, SortDir, apply_list_search_keyboard, clear_list_children,
+    spawn_list_empty_label, spawn_list_filter_input, spawn_list_row_button, spawn_list_scroll_area,
+    spawn_list_sort_button, sync_list_sort_colors, text_filter_matches,
+};
 use crate::ui::navigation::{OpenUiRoute, UiRoute};
 use crate::ui::toolbar::BuildMenuUi;
 use crate::ui::town_window::TownWindowState;
-
-const LIST_HEIGHT: f32 = 330.0;
-const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
-const BTN_HOVER: Color = Color::srgb(0.47, 0.41, 0.28);
-const BTN_ACTIVE: Color = Color::srgb(0.58, 0.50, 0.31);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum TownDirectorySort {
     #[default]
     Name,
     Population,
+    Rating,
 }
 
 #[derive(Resource, Default)]
 pub(crate) struct TownDirectoryState {
     pub(crate) open: bool,
     pub(crate) sort: TownDirectorySort,
+    pub(crate) sort_dir: SortDir,
+    pub(crate) filter_text: String,
+    pub(crate) selected: Option<u32>,
 }
 
 #[derive(Component)]
 pub(crate) struct TownDirectoryListRoot;
+
+#[derive(Component)]
+pub(crate) struct TownDirectorySearchInput;
 
 #[derive(Component, Clone, Copy)]
 pub(crate) struct TownDirectoryRow {
     town_id: u32,
 }
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TownDirectorySortButton(TownDirectorySort);
 
 #[derive(Default)]
 pub(crate) struct TownDirectoryCache {
     sort: TownDirectorySort,
+    sort_dir: SortDir,
+    filter: String,
     rows: Vec<(u32, String, u32, i16)>,
 }
 
@@ -59,6 +70,12 @@ pub(crate) fn setup_town_directory(mut commands: Commands, asset_server: Res<Ass
         390.0,
     );
     commands.entity(content).with_children(|body| {
+        spawn_list_filter_input(
+            body,
+            asset_server,
+            TownDirectorySearchInput,
+            "buscar pueblo…",
+        );
         body.spawn((
             Node {
                 width: Val::Percent(100.0),
@@ -70,70 +87,30 @@ pub(crate) fn setup_town_directory(mut commands: Commands, asset_server: Res<Ass
             BuildMenuUi,
         ))
         .with_children(|row| {
-            spawn_sort_button(row, asset_server, "Nombre", TownDirectorySort::Name);
-            spawn_sort_button(
+            spawn_list_sort_button(
+                row,
+                asset_server,
+                "Nombre",
+                TownDirectorySortButton(TownDirectorySort::Name),
+                96.0,
+            );
+            spawn_list_sort_button(
                 row,
                 asset_server,
                 "Población",
-                TownDirectorySort::Population,
+                TownDirectorySortButton(TownDirectorySort::Population),
+                96.0,
+            );
+            spawn_list_sort_button(
+                row,
+                asset_server,
+                "Rating",
+                TownDirectorySortButton(TownDirectorySort::Rating),
+                96.0,
             );
         });
-        body.spawn((
-            Node {
-                width: Val::Percent(100.0),
-                height: Val::Px(LIST_HEIGHT),
-                overflow: Overflow::scroll_y(),
-                border: UiRect::all(Val::Px(1.0)),
-                ..default()
-            },
-            BackgroundColor(Color::srgb(0.22, 0.18, 0.12)),
-            BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
-            BuildMenuUi,
-        ))
-        .with_children(|scroll| {
-            scroll.spawn((
-                TownDirectoryListRoot,
-                Node {
-                    width: Val::Percent(100.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(2.0),
-                    padding: UiRect::all(Val::Px(2.0)),
-                    ..default()
-                },
-                BuildMenuUi,
-            ));
-        });
+        spawn_list_scroll_area(body, TownDirectoryListRoot, LIST_DEFAULT_HEIGHT);
     });
-}
-
-fn spawn_sort_button(
-    parent: &mut ChildSpawnerCommands,
-    asset_server: &AssetServer,
-    label: &str,
-    sort: TownDirectorySort,
-) {
-    parent.spawn((
-        Button,
-        TownDirectorySortButton(sort),
-        Node {
-            min_width: Val::Px(96.0),
-            height: Val::Px(24.0),
-            padding: UiRect::horizontal(Val::Px(6.0)),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: UiRect::all(Val::Px(1.0)),
-            ..default()
-        },
-        BackgroundColor(BTN_BG),
-        BorderColor::all(Color::srgb(0.58, 0.50, 0.33)),
-        Interaction::default(),
-        BuildMenuUi,
-        children![(
-            Text::new(label),
-            window_text_font(asset_server, UiFontRole::Caption),
-            TextColor(WINDOW_TEXT),
-        )],
-    ));
 }
 
 pub(crate) fn open_town_directory_from_routes(
@@ -147,6 +124,29 @@ pub(crate) fn open_town_directory_from_routes(
     }
 }
 
+pub(crate) fn town_directory_search_keyboard(
+    mut key_events: MessageReader<KeyboardInput>,
+    mut state: ResMut<TownDirectoryState>,
+    mut inputs: Query<(&mut EditableText, &mut Text), With<TownDirectorySearchInput>>,
+) {
+    if !state.open {
+        key_events.clear();
+        return;
+    }
+    let Ok((mut editable, mut text)) = inputs.single_mut() else {
+        key_events.clear();
+        return;
+    };
+    apply_list_search_keyboard(
+        &mut key_events,
+        &mut editable,
+        &mut text,
+        &mut state.filter_text,
+        32,
+        "buscar pueblo…",
+    );
+}
+
 pub(crate) fn handle_town_directory_buttons(
     mut state: ResMut<TownDirectoryState>,
     sort_buttons: Query<
@@ -155,15 +155,33 @@ pub(crate) fn handle_town_directory_buttons(
     >,
     town_rows: Query<(&Interaction, &TownDirectoryRow), (Changed<Interaction>, With<Button>)>,
     mut town_window: ResMut<TownWindowState>,
+    sim: Res<SimWorld>,
+    mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
     for (interaction, button) in &sort_buttons {
-        if *interaction == Interaction::Pressed {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        if state.sort == button.0 {
+            state.sort_dir = state.sort_dir.toggle();
+        } else {
             state.sort = button.0;
+            state.sort_dir = SortDir::Asc;
         }
     }
     for (interaction, row) in &town_rows {
-        if *interaction == Interaction::Pressed {
-            town_window.town_id = Some(row.town_id);
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        state.selected = Some(row.town_id);
+        town_window.town_id = Some(row.town_id);
+        if let Some(town) = sim.state.towns.iter().find(|town| town.id == row.town_id) {
+            let height = sim.state.map.get(town.pos).map_or(0, |tile| tile.height);
+            let center = tile_pos(town.pos.x, town.pos.y, height, 0.0);
+            if let Ok(mut transform) = cam_q.single_mut() {
+                transform.translation.x = center.x;
+                transform.translation.y = center.y;
+            }
         }
     }
 }
@@ -196,20 +214,13 @@ pub(crate) fn sync_town_directory(
     }
     *visibility = Visibility::Visible;
 
-    for (button, interaction, mut bg) in &mut sort_buttons {
-        *bg = if button.0 == state.sort {
-            BackgroundColor(BTN_ACTIVE)
-        } else if *interaction == Interaction::Hovered {
-            BackgroundColor(BTN_HOVER)
-        } else {
-            BackgroundColor(BTN_BG)
-        };
-    }
+    sync_list_sort_colors(&mut sort_buttons, TownDirectorySortButton(state.sort));
 
     let mut rows: Vec<_> = sim
         .state
         .towns
         .iter()
+        .filter(|town| text_filter_matches(&state.filter_text, &town.name))
         .map(|town| {
             (
                 town.id,
@@ -221,64 +232,65 @@ pub(crate) fn sync_town_directory(
         .collect();
     match state.sort {
         TownDirectorySort::Name => {
-            rows.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)));
+            rows.sort_by(|a, b| {
+                state
+                    .sort_dir
+                    .apply(a.1.cmp(&b.1).then_with(|| a.0.cmp(&b.0)))
+            });
         }
         TownDirectorySort::Population => {
-            rows.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.1.cmp(&b.1)));
+            rows.sort_by(|a, b| {
+                state
+                    .sort_dir
+                    .apply(a.2.cmp(&b.2).then_with(|| a.1.cmp(&b.1)))
+            });
+        }
+        TownDirectorySort::Rating => {
+            rows.sort_by(|a, b| {
+                state
+                    .sort_dir
+                    .apply(a.3.cmp(&b.3).then_with(|| a.1.cmp(&b.1)))
+            });
         }
     }
-    if cache.sort == state.sort && cache.rows == rows {
+    if cache.sort == state.sort
+        && cache.sort_dir == state.sort_dir
+        && cache.filter == state.filter_text
+        && cache.rows == rows
+    {
         return;
     }
     cache.sort = state.sort;
+    cache.sort_dir = state.sort_dir;
+    cache.filter.clone_from(&state.filter_text);
     cache.rows.clone_from(&rows);
 
     let Ok(list_root) = list_roots.single() else {
         return;
     };
-    if let Ok(children) = children_q.get(list_root) {
-        for child in children.iter() {
-            commands.entity(child).despawn();
-        }
-    }
+    clear_list_children(&mut commands, list_root, &children_q);
+    let selected = state.selected;
     commands.entity(list_root).with_children(|list| {
         if rows.is_empty() {
-            list.spawn((
-                Text::new("No hay pueblos."),
-                window_text_font(&asset_server, UiFontRole::Caption),
-                TextColor(WINDOW_TEXT),
-                Node {
-                    padding: UiRect::all(Val::Px(8.0)),
-                    ..default()
+            spawn_list_empty_label(
+                list,
+                &asset_server,
+                if state.filter_text.trim().is_empty() {
+                    "No hay pueblos."
+                } else {
+                    "Ningún pueblo coincide con el filtro."
                 },
-            ));
+            );
             return;
         }
         for (town_id, name, population, rating) in rows {
-            list.spawn((
-                Button,
+            spawn_list_row_button(
+                list,
+                &asset_server,
+                format!("{name}  ·  {population} hab.  ·  autoridad {rating}"),
                 TownDirectoryRow { town_id },
-                Node {
-                    width: Val::Percent(100.0),
-                    min_height: Val::Px(28.0),
-                    padding: UiRect::horizontal(Val::Px(7.0)),
-                    justify_content: JustifyContent::FlexStart,
-                    align_items: AlignItems::Center,
-                    border: UiRect::all(Val::Px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(BTN_BG),
-                BorderColor::all(Color::srgb(0.50, 0.44, 0.30)),
-                Interaction::default(),
-                BuildMenuUi,
-                children![(
-                    Text::new(format!(
-                        "{name}  ·  {population} hab.  ·  autoridad {rating}"
-                    )),
-                    window_text_font(&asset_server, UiFontRole::Caption),
-                    TextColor(WINDOW_TEXT),
-                )],
-            ));
+                selected == Some(town_id),
+            );
         }
     });
 }
@@ -286,10 +298,17 @@ pub(crate) fn sync_town_directory(
 pub(crate) fn town_directory_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut state: ResMut<TownDirectoryState>,
+    mut search_q: Query<(&mut EditableText, &mut Text), With<TownDirectorySearchInput>>,
 ) {
     for message in closed.read() {
         if message.0 == FloatingWindowId::TownDirectory {
             state.open = false;
+            state.filter_text.clear();
+            state.selected = None;
+            if let Ok((mut editable, mut text)) = search_q.single_mut() {
+                *editable = EditableText::new("");
+                **text = "buscar pueblo…".into();
+            }
         }
     }
 }
@@ -313,10 +332,27 @@ mod tests {
     }
 
     #[test]
+    fn sort_toggle_flips_direction() {
+        let mut state = TownDirectoryState {
+            sort: TownDirectorySort::Name,
+            sort_dir: SortDir::Asc,
+            ..Default::default()
+        };
+        if state.sort == TownDirectorySort::Name {
+            state.sort_dir = state.sort_dir.toggle();
+        }
+        assert_eq!(state.sort_dir, SortDir::Desc);
+    }
+
+    #[test]
     fn town_row_opens_existing_town_window() {
         let mut world = World::new();
         world.init_resource::<TownDirectoryState>();
         world.init_resource::<TownWindowState>();
+        world.insert_resource(SimWorld {
+            state: openttdrs_core::GameState::new(8, 8),
+            ..SimWorld::default()
+        });
         world.spawn((
             Button,
             TownDirectoryRow { town_id: 7 },
@@ -326,5 +362,45 @@ mod tests {
             .run_system_once(handle_town_directory_buttons)
             .unwrap();
         assert_eq!(world.resource::<TownWindowState>().town_id, Some(7));
+    }
+
+    #[test]
+    fn town_row_centers_camera_on_town() {
+        let mut world = World::new();
+        world.init_resource::<TownDirectoryState>();
+        world.init_resource::<TownWindowState>();
+        let mut state = openttdrs_core::GameState::new(16, 16);
+        state.towns.push(openttdrs_core::Town {
+            id: 3,
+            pos: openttdrs_core::TileCoord::new(6, 7),
+            name: "Norte".into(),
+            population: 200,
+            local_authority_rating: 40,
+            ..Default::default()
+        });
+        let height = state
+            .map
+            .get(openttdrs_core::TileCoord::new(6, 7))
+            .map_or(0, |tile| tile.height);
+        let expected = tile_pos(6, 7, height, 0.0);
+        world.insert_resource(SimWorld {
+            state,
+            ..SimWorld::default()
+        });
+        world.spawn((Transform::from_xyz(0.0, 0.0, 0.0), PrimaryGameCamera));
+        world.spawn((
+            Button,
+            TownDirectoryRow { town_id: 3 },
+            Interaction::Pressed,
+        ));
+        world
+            .run_system_once(handle_town_directory_buttons)
+            .unwrap();
+        let cam = world
+            .query_filtered::<&Transform, With<PrimaryGameCamera>>()
+            .single(&world)
+            .unwrap();
+        assert!((cam.translation.x - expected.x).abs() < 0.01);
+        assert!((cam.translation.y - expected.y).abs() < 0.01);
     }
 }

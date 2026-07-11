@@ -14,14 +14,24 @@ use crate::render::{
     sprite_from_atlas_or_company_white,
 };
 use crate::sprites::{
-    StationTileClass, catenary_hidden, catenary_sprite_color, catenary_tunnel_wire_sprite,
-    collect_catenary_pylons_from_map, collect_catenary_sprites_from_map, rail_station_draw_layers,
+    StationTileClass, TransparencyOption, catenary_hidden, catenary_sprite_color,
+    catenary_tunnel_wire_sprite, collect_catenary_pylons_from_map,
+    collect_catenary_sprites_from_map, is_hidden, rail_station_draw_layers,
     rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_sprite_meta,
     rail_waypoint_draw_layers, rail_waypoint_layer_meta, rail_waypoint_sprite_center,
     road_depot_build_layers, road_depot_entrance_road_bits, road_depot_seq_gfx,
     road_flat_sprite_index, road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx,
-    station_tile_class,
+    station_tile_class, with_to_alpha,
 };
+
+fn buildings_hidden() -> bool {
+    is_hidden(TransparencyOption::Buildings)
+}
+
+fn tint_building_sprite(mut sprite: Sprite) -> Sprite {
+    sprite.color = with_to_alpha(sprite.color, TransparencyOption::Buildings);
+    sprite
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_station_tile(
@@ -90,58 +100,60 @@ pub(crate) fn spawn_station_tile(
             } else {
                 rail_station_draw_layers(m5)
             };
-            for layer in overlay_layers {
-                let Some(img) = assets.rail.get(&layer.sprite_id) else {
-                    continue;
-                };
-                let pos3 = if class == StationTileClass::RailWaypoint {
-                    let Some((w, h, nfo_xrel, nfo_yrel)) =
-                        rail_waypoint_layer_meta(layer.sprite_id)
-                    else {
+            if !buildings_hidden() {
+                for layer in overlay_layers {
+                    let Some(img) = assets.rail.get(&layer.sprite_id) else {
                         continue;
                     };
-                    rail_waypoint_sprite_center(
-                        ctx.iso_pos,
-                        ctx.tx_i32(),
-                        ctx.ty_i32(),
-                        rail_base_z,
-                        layer.z,
-                        layer,
-                        nfo_xrel,
-                        nfo_yrel,
-                        w,
-                        h,
-                    )
-                } else {
-                    let Some((w, h, nfo_xrel, nfo_yrel)) =
-                        rail_station_sprite_meta(layer.sprite_id)
-                    else {
-                        continue;
+                    let pos3 = if class == StationTileClass::RailWaypoint {
+                        let Some((w, h, nfo_xrel, nfo_yrel)) =
+                            rail_waypoint_layer_meta(layer.sprite_id)
+                        else {
+                            continue;
+                        };
+                        rail_waypoint_sprite_center(
+                            ctx.iso_pos,
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            rail_base_z,
+                            layer.z,
+                            layer,
+                            nfo_xrel,
+                            nfo_yrel,
+                            w,
+                            h,
+                        )
+                    } else {
+                        let Some((w, h, nfo_xrel, nfo_yrel)) =
+                            rail_station_sprite_meta(layer.sprite_id)
+                        else {
+                            continue;
+                        };
+                        let (xrel, yrel) = rail_station_overlay_rel(layer, nfo_xrel, nfo_yrel);
+                        crate::iso::overlay_pos(
+                            ctx.iso_pos,
+                            xrel,
+                            yrel,
+                            w,
+                            h,
+                            rail_base_z,
+                            layer.z,
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                        )
                     };
-                    let (xrel, yrel) = rail_station_overlay_rel(layer, nfo_xrel, nfo_yrel);
-                    crate::iso::overlay_pos(
-                        ctx.iso_pos,
-                        xrel,
-                        yrel,
-                        w,
-                        h,
-                        rail_base_z,
-                        layer.z,
-                        ctx.tx_i32(),
-                        ctx.ty_i32(),
-                    )
-                };
-                let sprite = sprite_from_atlas_or_company_white(
-                    company,
-                    img,
-                    &format!("rail_{}.png", layer.sprite_id),
-                );
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    sprite,
-                    Transform::from_translation(pos3),
-                ));
+                    let sprite = tint_building_sprite(sprite_from_atlas_or_company_white(
+                        company,
+                        img,
+                        &format!("rail_{}.png", layer.sprite_id),
+                    ));
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        sprite,
+                        Transform::from_translation(pos3),
+                    ));
+                }
             }
             if let Some(tile) = ctx.tile.filter(|t| {
                 rail_type_from_tile(*t).has_catenary()
@@ -237,6 +249,9 @@ pub(crate) fn spawn_station_tile(
             spawn_road_stop_buildings(commands, assets, company, ctx, base_z, class, dir);
         }
         StationTileClass::Dock => {
+            if buildings_hidden() {
+                return;
+            }
             let dock_half_h = if tileh == 0 {
                 TILE_HALF_H
             } else {
@@ -246,7 +261,7 @@ pub(crate) fn spawn_station_tile(
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                assets.dock_flat[axis].sprite(),
+                tint_building_sprite(assets.dock_flat[axis].sprite()),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
@@ -256,7 +271,32 @@ pub(crate) fn spawn_station_tile(
                 )),
             ));
         }
+        StationTileClass::Buoy => {
+            if buildings_hidden() {
+                return;
+            }
+            let half_h = if tileh == 0 {
+                TILE_HALF_H
+            } else {
+                SLOPE_HALF_H[tileh as usize]
+            };
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                tint_building_sprite(assets.buoy.sprite()),
+                Transform::from_translation(tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    0.04,
+                    half_h,
+                )),
+            ));
+        }
         StationTileClass::Airport => {
+            if buildings_hidden() {
+                return;
+            }
             let half_h = if tileh == 0 {
                 TILE_HALF_H
             } else {
@@ -266,7 +306,7 @@ pub(crate) fn spawn_station_tile(
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                assets.airport_piece_sprite(piece).sprite(),
+                tint_building_sprite(assets.airport_piece_sprite(piece).sprite()),
                 Transform::from_translation(tile_pos_half(
                     ctx.tx_i32(),
                     ctx.ty_i32(),
@@ -321,6 +361,9 @@ fn spawn_road_stop_buildings(
     class: StationTileClass,
     dir: usize,
 ) {
+    if buildings_hidden() {
+        return;
+    }
     let handles = match class {
         StationTileClass::Bus => &assets.bus_stop_builds,
         StationTileClass::Truck => &assets.truck_stop_builds,
@@ -341,7 +384,9 @@ fn spawn_road_stop_buildings(
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            sprite_from_atlas_or_company_white(company, image, spec.path),
+            tint_building_sprite(sprite_from_atlas_or_company_white(
+                company, image, spec.path,
+            )),
             Transform::from_translation(center),
         ));
     }
@@ -531,6 +576,9 @@ fn spawn_road_depot_tile(
         road_depot_entrance_road_bits(dir as u8),
     );
     for (layer_i, spec) in road_depot_build_layers(dir).iter().enumerate() {
+        if buildings_hidden() {
+            break;
+        }
         let Some(image) = assets.road_depot_builds[dir].get(layer_i) else {
             continue;
         };
@@ -547,7 +595,9 @@ fn spawn_road_depot_tile(
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            sprite_from_atlas_or_company_white(company, image, spec.path),
+            tint_building_sprite(sprite_from_atlas_or_company_white(
+                company, image, spec.path,
+            )),
             Transform::from_translation(center),
         ));
     }
@@ -584,6 +634,9 @@ fn spawn_rail_depot_tile(
         .iter()
         .enumerate()
     {
+        if buildings_hidden() {
+            break;
+        }
         let Some(image) = assets.rail_depot_builds[dir].get(layer_i) else {
             continue;
         };
@@ -600,7 +653,11 @@ fn spawn_rail_depot_tile(
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            sprite_from_atlas_or_company_white(company, image, spec.path),
+            tint_building_sprite(sprite_from_atlas_or_company_white(
+                company,
+                image,
+                &format!("rail_depot_{dir}_{layer_i}"),
+            )),
             Transform::from_translation(center),
         ));
     }

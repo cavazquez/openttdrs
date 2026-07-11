@@ -30,10 +30,18 @@ pub(crate) struct ClientPreferences {
     pub(crate) show_diagnostics_overlay: bool,
     /// Tinte naranja en vías con reserva PBS activa.
     pub(crate) show_pbs_reservations: bool,
-    /// Equivalente a `IsInvisibilitySet(TO_CATENARY)`.
-    pub(crate) hide_catenary: bool,
-    /// Equivalente a `IsTransparencySet(TO_CATENARY)`.
-    pub(crate) transparent_catenary: bool,
+    /// Mostrar carteles de nombre/población de pueblos.
+    pub(crate) show_town_labels: bool,
+    /// Mostrar nombres de estaciones en el mapa.
+    pub(crate) show_station_labels: bool,
+    /// Ciclos de paleta (agua, refinería, burbujas…). Off o pausa → congelados.
+    pub(crate) full_animation: bool,
+    /// Detalle extra de mapa (faroles, árboles de acera, cercas). Off → sin detalle.
+    pub(crate) full_detail: bool,
+    /// Bits `_transparency_opt` (`TransparencyOption`).
+    pub(crate) transparency_opt: u32,
+    /// Bits `_invisibility_opt` (oculta = bit aquí + en transparency_opt).
+    pub(crate) invisibility_opt: u32,
     /// 0=Off, 1=Summary, 2=Full — ver `news_prefs`.
     pub(crate) news_cargo_delivered: u8,
     pub(crate) news_first_cargo: u8,
@@ -57,8 +65,12 @@ impl Default for ClientPreferences {
             show_debug_gizmos: false,
             show_diagnostics_overlay: false,
             show_pbs_reservations: true,
-            hide_catenary: false,
-            transparent_catenary: false,
+            show_town_labels: true,
+            show_station_labels: true,
+            full_animation: true,
+            full_detail: true,
+            transparency_opt: 0,
+            invisibility_opt: 0,
             news_cargo_delivered: crate::news_prefs::DISPLAY_FULL,
             news_first_cargo: crate::news_prefs::DISPLAY_FULL,
             news_first_vehicle: crate::news_prefs::DISPLAY_FULL,
@@ -68,6 +80,29 @@ impl Default for ClientPreferences {
 }
 
 impl ClientPreferences {
+    #[must_use]
+    pub(crate) fn transparency_mode(
+        &self,
+        to: crate::sprites::TransparencyOption,
+    ) -> crate::sprites::TransparencyMode {
+        crate::sprites::mode_from_bits(self.transparency_opt, self.invisibility_opt, to)
+    }
+
+    pub(crate) fn set_transparency_mode(
+        &mut self,
+        to: crate::sprites::TransparencyOption,
+        mode: crate::sprites::TransparencyMode,
+    ) {
+        let (t, i) = crate::sprites::apply_mode_to_bits(
+            self.transparency_opt,
+            self.invisibility_opt,
+            to,
+            mode,
+        );
+        self.transparency_opt = t;
+        self.invisibility_opt = i;
+    }
+
     fn with_env_overrides(mut prefs: Self) -> Self {
         if config::env_flag("OPENTTDRS_GIZMOS") {
             prefs.show_debug_gizmos = true;
@@ -97,7 +132,7 @@ impl Plugin for ClientSettingsPlugin {
                 queue_save_preferences,
                 save_preferences_on_exit,
                 sync_preferences_from_hud,
-                sync_catenary_render_preferences,
+                sync_transparency_render_preferences,
                 crate::news_prefs::sync_news_display_prefs_to_client,
             )
                 .in_set(UpdateSet::Status),
@@ -125,16 +160,19 @@ fn hydrate_runtime_from_preferences(
     hud.sound_disaster = effective.sound_disaster;
     hud.sound_confirm = effective.sound_confirm;
     hud.sound_click_beep = effective.sound_click_beep;
-    crate::sprites::set_catenary_preferences(
-        effective.hide_catenary,
-        effective.transparent_catenary,
+    crate::sprites::set_transparency_preferences(
+        effective.transparency_opt,
+        effective.invisibility_opt,
     );
     hydrated.0 = true;
 }
 
-fn sync_catenary_render_preferences(prefs: Res<ClientPreferences>) {
+fn sync_transparency_render_preferences(prefs: Res<ClientPreferences>) {
     if prefs.is_changed() {
-        crate::sprites::set_catenary_preferences(prefs.hide_catenary, prefs.transparent_catenary);
+        crate::sprites::set_transparency_preferences(
+            prefs.transparency_opt,
+            prefs.invisibility_opt,
+        );
     }
 }
 

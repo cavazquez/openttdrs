@@ -230,6 +230,7 @@ pub fn vehicle_kind_label(kind: VehicleKind) -> &'static str {
     match kind {
         VehicleKind::Bus => "autobús",
         VehicleKind::Truck => "camión",
+        VehicleKind::Tram => "tranvía",
         VehicleKind::Train => "tren",
         VehicleKind::Ship => "barco",
         VehicleKind::Aircraft => "avión",
@@ -282,7 +283,9 @@ fn vehicle_waiting_for_cargo(state: &crate::GameState, v: &Vehicle) -> bool {
             && st.accepts_cargo(ind.output_cargo())
     });
     let station_has = match v.kind {
-        VehicleKind::Bus => st.cargo_stock.passengers > 0 || st.cargo_stock.mail > 0,
+        VehicleKind::Bus | VehicleKind::Tram => {
+            st.cargo_stock.passengers > 0 || st.cargo_stock.mail > 0
+        }
         VehicleKind::Truck | VehicleKind::Train => {
             st.stock > 0 || st.cargo_stock.pick_freight_to_load(v.cargo_type).is_some()
         }

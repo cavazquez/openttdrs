@@ -39,6 +39,11 @@ struct FinancesSnapshot {
     cargo_income: u64,
     running_costs: u64,
     deliveries: u64,
+    units_delivered: u64,
+    vehicles: usize,
+    stations: usize,
+    rail_tiles: u32,
+    road_tiles: u32,
 }
 
 pub(crate) fn setup_finances_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -95,6 +100,17 @@ pub(crate) fn setup_finances_window(mut commands: Commands, asset_server: Res<As
                 }
             });
     });
+}
+
+pub(crate) fn open_finances_from_routes(
+    mut routes: MessageReader<crate::ui::navigation::OpenUiRoute>,
+    mut finances: ResMut<FinancesWindowState>,
+) {
+    for route in routes.read() {
+        if matches!(route.0, crate::ui::navigation::UiRoute::Finances) {
+            finances.open = true;
+        }
+    }
 }
 
 pub(crate) fn handle_open_finances_window(
@@ -161,13 +177,84 @@ pub(crate) fn sync_finances_window(
     }
     *vis = Visibility::Visible;
 
-    let snapshot = FinancesSnapshot {
+    let company = sim
+        .state
+        .companies
+        .iter()
+        .find(|c| c.id == sim.state.active_company);
+    let cargo_income = company
+        .map(|c| c.cargo_income_earned)
+        .unwrap_or(sim.state.stats.cargo_income_earned);
+    let running_costs = company
+        .map(|c| c.vehicle_running_costs)
+        .unwrap_or(sim.state.stats.vehicle_running_costs);
+    let vehicles = sim
+        .state
+        .vehicles
+        .iter()
+        .filter(|v| v.is_consist_head() && v.owner == sim.state.active_company)
+        .count();
+    let stations = sim
+        .state
+        .stations
+        .iter()
+        .filter(|s| s.owner == sim.state.active_company)
+        .count();
+    let soft = FinancesSnapshot {
         money: sim.state.economy.money,
         loan: sim.state.economy.loan,
         max_loan: sim.state.economy.max_loan,
-        cargo_income: sim.state.stats.cargo_income_earned,
-        running_costs: sim.state.stats.vehicle_running_costs,
-        deliveries: sim.state.stats.cargo_deliveries,
+        cargo_income,
+        running_costs,
+        deliveries: company
+            .map(|c| c.cargo_deliveries)
+            .unwrap_or(sim.state.stats.cargo_deliveries),
+        units_delivered: sim.state.stats.cargo_units_delivered,
+        vehicles,
+        stations,
+        rail_tiles: cache.snapshot.as_ref().map_or(0, |s| s.rail_tiles),
+        road_tiles: cache.snapshot.as_ref().map_or(0, |s| s.road_tiles),
+    };
+    let need_infra = cache.snapshot.as_ref().is_none_or(|prev| {
+        prev.money != soft.money
+            || prev.loan != soft.loan
+            || prev.cargo_income != soft.cargo_income
+            || prev.running_costs != soft.running_costs
+            || prev.deliveries != soft.deliveries
+            || prev.vehicles != soft.vehicles
+            || prev.stations != soft.stations
+    });
+    let (rail_tiles, road_tiles) = if need_infra {
+        let (mw, mh) = sim.state.map.dimensions();
+        let mut rail_tiles = 0_u32;
+        let mut road_tiles = 0_u32;
+        for y in 0..mh {
+            for x in 0..mw {
+                match sim
+                    .state
+                    .map
+                    .get_kind(openttdrs_core::TileCoord::new(x as i32, y as i32))
+                {
+                    Some(openttdrs_core::TileKind::Rail)
+                    | Some(openttdrs_core::TileKind::RailDepot)
+                    | Some(openttdrs_core::TileKind::RailBridge)
+                    | Some(openttdrs_core::TileKind::RailTunnel) => rail_tiles += 1,
+                    Some(openttdrs_core::TileKind::Road)
+                    | Some(openttdrs_core::TileKind::RoadDepot)
+                    | Some(openttdrs_core::TileKind::RoadBridge)
+                    | Some(openttdrs_core::TileKind::RoadTunnel) => road_tiles += 1,
+                    _ => {}
+                }
+            }
+        }
+        (rail_tiles, road_tiles)
+    } else {
+        (soft.rail_tiles, soft.road_tiles)
+    };
+    let snapshot = FinancesSnapshot {
+        rail_tiles,
+        road_tiles,
+        ..soft
     };
     if cache.snapshot.as_ref() == Some(&snapshot) {
         return;
@@ -182,11 +269,17 @@ pub(crate) fn sync_finances_window(
     }
     if let Ok(mut body) = body_q.single_mut() {
         let net = snapshot.money.saturating_sub(snapshot.loan);
+        let profit = snapshot.cargo_income as i64 - snapshot.running_costs as i64;
         **body = format!(
             "Efectivo: {}\nPréstamo: {} / {}\nPatrimonio neto: {}\n\
              (cada operación: {})\n\n\
              Ingresos por transporte: {}\nCostes de explotación: {}\n\
-             Entregas completadas: {}",
+             Beneficio operativo: {}\n\
+             Entregas: {} ({} unidades)\n\n\
+             Infraestructura:\n\
+               Vehículos: {}\n\
+               Estaciones: {}\n\
+               Vía: {} teselas · Carretera: {} teselas",
             format_money(snapshot.money),
             format_money(snapshot.loan),
             format_money(snapshot.max_loan),
@@ -194,7 +287,13 @@ pub(crate) fn sync_finances_window(
             format_money(LOAN_INTERVAL),
             format_money(snapshot.cargo_income.cast_signed()),
             format_money(snapshot.running_costs.cast_signed()),
+            format_money(profit),
             snapshot.deliveries,
+            snapshot.units_delivered,
+            snapshot.vehicles,
+            snapshot.stations,
+            snapshot.rail_tiles,
+            snapshot.road_tiles,
         );
     }
 }

@@ -73,7 +73,11 @@ pub(crate) fn spawn_town_labels(
     sim: &SimWorld,
     font: &Handle<Font>,
     bounds: TileViewportBounds,
+    show_town_labels: bool,
 ) {
+    if !show_town_labels {
+        return;
+    }
     let map = &sim.state.map;
     for town in &sim.state.towns {
         if !town_label_in_bounds(town, bounds) {
@@ -115,11 +119,12 @@ pub(crate) fn resync_town_labels(
     sim: &SimWorld,
     font: &Handle<Font>,
     bounds: TileViewportBounds,
+    show_town_labels: bool,
 ) {
     for entity in label_entities {
         commands.entity(entity).despawn();
     }
-    spawn_town_labels(commands, sim, font, bounds);
+    spawn_town_labels(commands, sim, font, bounds, show_town_labels);
 }
 
 #[cfg(test)]
@@ -187,7 +192,7 @@ mod tests {
         world.insert_resource(sim);
         world
             .run_system_once(move |mut commands: Commands, sim: Res<SimWorld>| {
-                spawn_town_labels(&mut commands, &sim, &Handle::default(), bounds);
+                spawn_town_labels(&mut commands, &sim, &Handle::default(), bounds, true);
             })
             .expect("spawn labels");
 

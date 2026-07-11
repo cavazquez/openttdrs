@@ -1,10 +1,14 @@
 use bevy::prelude::*;
-use openttdrs_core::{Command, CommandError, TileCoord, Vehicle, VehicleOrder, apply_command};
+use openttdrs_core::{
+    Command, CommandError, OrderConditionKind, OrderMoveDirection, TileCoord, Vehicle,
+    VehicleOrder, apply_command,
+};
 
 use crate::render::RemapMapVisualsPending;
 use crate::state::{OrderPickState, SimWorld};
 use crate::ui::destination_window::DestinationPickerState;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
+use crate::ui::shared_orders_window::SharedOrdersWindowState;
 use crate::ui::timetable_window::{TimetableWindowState, open_timetable_for_vehicle};
 use crate::ui::toolbar::build_input::cancel_placement;
 use crate::ui::toolbar::build_input::orders::{order_for_clicked_tile, order_pick_valid};
@@ -100,6 +104,7 @@ pub(crate) fn handle_order_panel_buttons(
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
     mut tt_state: ResMut<TimetableWindowState>,
+    mut shared_orders: ResMut<SharedOrdersWindowState>,
     mut destination_picker: Option<ResMut<DestinationPickerState>>,
     time: Res<Time>,
 ) {
@@ -176,11 +181,75 @@ pub(crate) fn handle_order_panel_buttons(
                     |vehicle_id, index| Command::ToggleVehicleOrderNoUnload { vehicle_id, index },
                 );
             }
+            OrderPanelButton::ToggleDepotStop => {
+                toggle_order_flag(
+                    &mut order_state,
+                    &mut sim,
+                    &mut pending,
+                    &mut hud_feedback,
+                    time.elapsed_secs(),
+                    |vehicle_id, index| Command::ToggleVehicleOrderDepotStop { vehicle_id, index },
+                );
+            }
+            OrderPanelButton::MoveOrderUp => {
+                move_selected_order(
+                    &mut order_state,
+                    &mut sim,
+                    &mut pending,
+                    &mut hud_feedback,
+                    time.elapsed_secs(),
+                    OrderMoveDirection::Up,
+                );
+            }
+            OrderPanelButton::MoveOrderDown => {
+                move_selected_order(
+                    &mut order_state,
+                    &mut sim,
+                    &mut pending,
+                    &mut hud_feedback,
+                    time.elapsed_secs(),
+                    OrderMoveDirection::Down,
+                );
+            }
             OrderPanelButton::OpenTimetableWindow => {
                 let Some(vehicle_id) = order_state.vehicle_id else {
                     continue;
                 };
                 open_timetable_for_vehicle(&mut tt_state, vehicle_id);
+            }
+            OrderPanelButton::ShareOrders => {
+                let Some(vehicle_id) = order_state.vehicle_id else {
+                    continue;
+                };
+                match apply_command(
+                    &mut sim.state,
+                    &Command::CreateSharedOrdersFromVehicle(vehicle_id),
+                ) {
+                    Ok(()) => {
+                        pending.pending = true;
+                        refresh_orders_from_sim(&mut order_state, &sim);
+                    }
+                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+                }
+            }
+            OrderPanelButton::UnlinkSharedOrders => {
+                let Some(vehicle_id) = order_state.vehicle_id else {
+                    continue;
+                };
+                match apply_command(
+                    &mut sim.state,
+                    &Command::UnlinkVehicleSharedOrders(vehicle_id),
+                ) {
+                    Ok(()) => {
+                        pending.pending = true;
+                        refresh_orders_from_sim(&mut order_state, &sim);
+                    }
+                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+                }
+            }
+            OrderPanelButton::OpenSharedOrders => {
+                shared_orders.open = true;
+                shared_orders.link_vehicle_id = order_state.vehicle_id;
             }
             OrderPanelButton::PickDestOnMap => {
                 // Primero abre la lista global de destinos. Desde esa ventana
@@ -193,7 +262,144 @@ pub(crate) fn handle_order_panel_buttons(
                 }
                 cancel_placement(&mut drag_state);
             }
+            OrderPanelButton::AddConditionalAbove => {
+                append_conditional_order(
+                    &mut order_state,
+                    &mut sim,
+                    &mut pending,
+                    &mut hud_feedback,
+                    time.elapsed_secs(),
+                    OrderConditionKind::CargoLoadAbove,
+                );
+            }
+            OrderPanelButton::AddConditionalBelow => {
+                append_conditional_order(
+                    &mut order_state,
+                    &mut sim,
+                    &mut pending,
+                    &mut hud_feedback,
+                    time.elapsed_secs(),
+                    OrderConditionKind::CargoLoadBelow,
+                );
+            }
+            OrderPanelButton::CycleConditional => {
+                cycle_selected_conditional(
+                    &mut order_state,
+                    &mut sim,
+                    &mut pending,
+                    &mut hud_feedback,
+                    time.elapsed_secs(),
+                );
+            }
         }
+    }
+}
+
+fn append_conditional_order(
+    order_state: &mut OrderEditState,
+    sim: &mut SimWorld,
+    pending: &mut RemapMapVisualsPending,
+    hud_feedback: &mut HudBuildFeedback,
+    elapsed_secs: f32,
+    condition: OrderConditionKind,
+) {
+    let Some(vehicle_id) = order_state.vehicle_id else {
+        return;
+    };
+    let mut orders = order_state.orders.clone();
+    // Salta a la primera orden si se cumple; si la lista estaba vacía, jump_to=0
+    // es válido tras insertar (índice de la propia condicional).
+    let jump_to = 0;
+    orders.push(VehicleOrder::conditional(condition, 50, jump_to));
+    match apply_order_edit(&mut sim.state, vehicle_id, &orders) {
+        Ok(()) => {
+            pending.pending = true;
+            refresh_orders_from_sim(order_state, sim);
+            order_state.selected_slot = order_state.orders.len().checked_sub(1);
+        }
+        Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
+    }
+}
+
+fn cycle_selected_conditional(
+    order_state: &mut OrderEditState,
+    sim: &mut SimWorld,
+    pending: &mut RemapMapVisualsPending,
+    hud_feedback: &mut HudBuildFeedback,
+    elapsed_secs: f32,
+) {
+    let Some(vehicle_id) = order_state.vehicle_id else {
+        return;
+    };
+    let Some(index) = order_state.selected_slot else {
+        push_build_command_error(
+            hud_feedback,
+            CommandError::OrderIndexOutOfRange,
+            elapsed_secs,
+        );
+        return;
+    };
+    let Some(order) = order_state.orders.get(index).copied() else {
+        push_build_command_error(
+            hud_feedback,
+            CommandError::OrderIndexOutOfRange,
+            elapsed_secs,
+        );
+        return;
+    };
+    let (condition, value, jump_to) = match order {
+        VehicleOrder::Conditional {
+            condition,
+            value,
+            jump_to,
+        } => {
+            // Ciclo: >25 → >50 → >75 → <25 → <50 → <75 → >25…
+            match (condition, value) {
+                (OrderConditionKind::CargoLoadAbove, v) if v < 50 => {
+                    (OrderConditionKind::CargoLoadAbove, 50, jump_to)
+                }
+                (OrderConditionKind::CargoLoadAbove, v) if v < 75 => {
+                    (OrderConditionKind::CargoLoadAbove, 75, jump_to)
+                }
+                (OrderConditionKind::CargoLoadAbove, _) => {
+                    (OrderConditionKind::CargoLoadBelow, 25, jump_to)
+                }
+                (OrderConditionKind::CargoLoadBelow, v) if v < 50 => {
+                    (OrderConditionKind::CargoLoadBelow, 50, jump_to)
+                }
+                (OrderConditionKind::CargoLoadBelow, v) if v < 75 => {
+                    (OrderConditionKind::CargoLoadBelow, 75, jump_to)
+                }
+                (OrderConditionKind::CargoLoadBelow, _) => {
+                    (OrderConditionKind::CargoLoadAbove, 25, jump_to)
+                }
+            }
+        }
+        _ => {
+            // Convierte la orden seleccionada en condicional (salto a la siguiente).
+            let jump_to = if order_state.orders.is_empty() {
+                0
+            } else {
+                (index + 1) % order_state.orders.len()
+            };
+            (OrderConditionKind::CargoLoadAbove, 50, jump_to)
+        }
+    };
+    match apply_command(
+        &mut sim.state,
+        &Command::SetVehicleOrderConditional {
+            vehicle_id,
+            index,
+            condition,
+            value,
+            jump_to,
+        },
+    ) {
+        Ok(()) => {
+            pending.pending = true;
+            refresh_orders_from_sim(order_state, sim);
+        }
+        Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
     }
 }
 
@@ -220,6 +426,47 @@ fn toggle_order_flag(
         Ok(()) => {
             pending.pending = true;
             refresh_orders_from_sim(order_state, sim);
+        }
+        Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
+    }
+}
+
+fn move_selected_order(
+    order_state: &mut OrderEditState,
+    sim: &mut SimWorld,
+    pending: &mut RemapMapVisualsPending,
+    hud_feedback: &mut HudBuildFeedback,
+    elapsed_secs: f32,
+    direction: OrderMoveDirection,
+) {
+    let Some(vehicle_id) = order_state.vehicle_id else {
+        return;
+    };
+    let Some(index) = order_state.selected_slot else {
+        push_build_command_error(
+            hud_feedback,
+            CommandError::OrderIndexOutOfRange,
+            elapsed_secs,
+        );
+        return;
+    };
+    match apply_command(
+        &mut sim.state,
+        &Command::MoveVehicleOrder {
+            vehicle_id,
+            index,
+            direction,
+        },
+    ) {
+        Ok(()) => {
+            pending.pending = true;
+            refresh_orders_from_sim(order_state, sim);
+            order_state.selected_slot = Some(match direction {
+                OrderMoveDirection::Up => index.saturating_sub(1),
+                OrderMoveDirection::Down => {
+                    (index + 1).min(order_state.orders.len().saturating_sub(1))
+                }
+            });
         }
         Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
     }
@@ -329,4 +576,60 @@ pub(crate) fn handle_order_destination_click(
         push_build_command_error(hud_feedback, err, elapsed_secs);
     }
     true
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use openttdrs_core::{GameState, TileCoord, VehicleKind};
+
+    #[test]
+    fn move_order_down_swaps_selected_slot() {
+        let mut world = World::new();
+        let mut state = GameState::new(16, 16);
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.orders = vec![
+            VehicleOrder::station(TileCoord::new(2, 2)),
+            VehicleOrder::station(TileCoord::new(3, 3)),
+        ];
+        state.vehicles.push(vehicle);
+        world.insert_resource(SimWorld {
+            state,
+            ..SimWorld::default()
+        });
+        world.insert_resource(OrderEditState {
+            vehicle_id: Some(1),
+            orders: world.resource::<SimWorld>().state.vehicles[0]
+                .orders
+                .clone(),
+            selected_slot: Some(0),
+        });
+        world.init_resource::<RemapMapVisualsPending>();
+        world.init_resource::<HudBuildFeedback>();
+        world.init_resource::<DragBuildState>();
+        world.init_resource::<TimetableWindowState>();
+        world.init_resource::<SharedOrdersWindowState>();
+        world.insert_resource(Time::<()>::default());
+        world.insert_resource(NextState::<OrderPickState>::default());
+        world.spawn((
+            Button,
+            OrderPanelButton::MoveOrderDown,
+            Interaction::Pressed,
+        ));
+        world.run_system_once(handle_order_panel_buttons).unwrap();
+        let order_state = world.resource::<OrderEditState>();
+        assert_eq!(order_state.selected_slot, Some(1));
+        let sim = world.resource::<SimWorld>();
+        assert_eq!(
+            sim.state.vehicles[0].orders[0],
+            VehicleOrder::station(TileCoord::new(3, 3))
+        );
+    }
 }

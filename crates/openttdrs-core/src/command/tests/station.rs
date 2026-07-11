@@ -175,3 +175,43 @@ fn command_would_fail_matches_apply_for_road_water_and_station() {
     assert_eq!(ridge.map.get(c(3, 5)).unwrap().m5 & 0x03, 2);
     assert_eq!(ridge.map.get(c(4, 5)).unwrap().m5, 0);
 }
+
+#[test]
+fn join_stations_merges_adjacent_bus_stops() {
+    use crate::VehicleOrder;
+    let mut s = GameState::new(8, 8);
+    let keep = TileCoord::new(1, 1);
+    let merge = TileCoord::new(2, 1);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 0))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(2, 0))).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(keep, 3)).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(merge, 3)).unwrap();
+    assert_eq!(s.stations.len(), 2);
+
+    let mut veh = Vehicle::new(1, VehicleKind::Bus, keep, merge);
+    veh.orders = vec![VehicleOrder::station(merge)];
+    s.vehicles.push(veh);
+
+    apply_command(&mut s, &Command::JoinStations { keep, merge }).unwrap();
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].pos, keep);
+    assert!(s.stations[0].joined_tiles.contains(&merge));
+    assert!(s.stations[0].covers_tile(merge));
+    match &s.vehicles[0].orders[0] {
+        VehicleOrder::Station { station, .. } => assert_eq!(*station, keep),
+        other => panic!("expected station order, got {other:?}"),
+    }
+}
+
+#[test]
+fn join_stations_rejects_non_adjacent() {
+    let mut s = GameState::new(8, 8);
+    let a = TileCoord::new(1, 1);
+    let b = TileCoord::new(3, 1);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 0))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(3, 0))).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(a, 3)).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(b, 3)).unwrap();
+    let e = apply_command(&mut s, &Command::JoinStations { keep: a, merge: b }).unwrap_err();
+    assert_eq!(e, CommandError::CannotJoinStations);
+}

@@ -204,7 +204,11 @@ fn apply_vehicle_running_costs(state: &mut GameState) {
         let cost = economy::vehicle_running_cost_per_tick(kind, running, moving);
         if cost > 0 {
             state.debit_company(owner, cost);
-            state.stats.vehicle_running_costs += cost.cast_unsigned();
+            let cost_u = cost.cast_unsigned();
+            state.stats.vehicle_running_costs += cost_u;
+            if let Some(c) = state.companies.get_mut(owner.index()) {
+                c.vehicle_running_costs += cost_u;
+            }
         }
     }
 }
@@ -217,8 +221,10 @@ fn produce_industries(state: &mut GameState, tick: u64) {
         } else {
             state.industries[i].produce(tick);
         }
-        state.stats.industry_cargo_units_produced +=
-            u64::from(state.industries[i].stock.saturating_sub(before));
+        let produced = u64::from(state.industries[i].stock.saturating_sub(before));
+        state.stats.industry_cargo_units_produced += produced;
+        state.industries[i].produced_total =
+            state.industries[i].produced_total.saturating_add(produced);
     }
 }
 
@@ -266,6 +272,45 @@ fn process_monthly_economy(state: &mut GameState, tick: u64) {
                     .push(crate::sim_events::SimEvent::BankruptcyWarning);
             }
         }
+    }
+    // Cierre mensual tras intereses: deltas por compañía + espejo global (activa).
+    for i in 0..state.companies.len() {
+        let money = state.companies[i].economy.money;
+        let loan = state.companies[i].economy.loan;
+        let income = state.companies[i].cargo_income_earned;
+        let costs = state.companies[i].vehicle_running_costs;
+        let deliveries = state.companies[i].cargo_deliveries;
+        let value = crate::game_state::company_net_value(money, loan);
+        state.companies[i]
+            .economy_history
+            .push_month_from_totals(income, costs, deliveries, value);
+    }
+    // Espejo legacy en `stats` = compañía activa (saves / Finances).
+    let active_idx = state.active_company.index();
+    if let Some(active) = state.companies.get(active_idx) {
+        state.stats.economy_history = active.economy_history.clone();
+    } else {
+        state.stats.economy_history.push_month_from_totals(
+            state.stats.cargo_income_earned,
+            state.stats.vehicle_running_costs,
+            state.stats.cargo_deliveries,
+            crate::game_state::company_net_value(state.economy.money, state.economy.loan),
+        );
+    }
+    // Historiales de pueblos e industrias (UI-3).
+    for town in &mut state.towns {
+        let population = town.population;
+        let passengers = town.passengers_served;
+        let mail = town.mail_served;
+        let rating = town.local_authority_rating;
+        town.history
+            .push_month(population, passengers, mail, rating);
+    }
+    for industry in &mut state.industries {
+        let stock = industry.stock;
+        let produced = industry.produced_total;
+        let transported = industry.transported_total;
+        industry.history.push_month(stock, produced, transported);
     }
 }
 
@@ -398,6 +443,9 @@ fn try_load_from_industry(
     state.vehicles[vehicle_idx].mark_cargo_loaded(source);
     state.vehicles[vehicle_idx].sync_cargo_from_packets();
     state.industries[ind_idx].stock -= u32::from(count);
+    state.industries[ind_idx].transported_total = state.industries[ind_idx]
+        .transported_total
+        .saturating_add(u64::from(count));
     *loaded_flag = true;
     if first_pickup {
         state.stats.cargo_pickups += 1;
@@ -440,7 +488,9 @@ fn try_load_from_station_waiting_cargo(
 
     let station_pos = state.stations[station_idx].pos;
     let cargo = match kind {
-        VehicleKind::Bus | VehicleKind::Aircraft => preferred.unwrap_or(CargoType::Passengers),
+        VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
+            preferred.unwrap_or(CargoType::Passengers)
+        }
         VehicleKind::Truck | VehicleKind::Train => {
             let Some(cargo) = stock.pick_freight_to_load(preferred) else {
                 if state.vehicles[vehicle_idx].cargo_loading {
@@ -572,6 +622,7 @@ fn unload_vehicles(
         let vehicle_owner = state.vehicles[i].owner;
         let mut payment = 0_i64;
         let mut feeder_total = 0_i64;
+        let mut feeder_income_by_owner: Vec<(crate::company::CompanyId, i64)> = Vec::new();
         for packet in &taken {
             let distance = economy::manhattan_distance(packet.source, station_pos);
             let mut part = economy::transported_goods_income(
@@ -601,6 +652,14 @@ fn unload_vehicles(
                     let feeder_owner = feeder_st.owner;
                     state.credit_company(feeder_owner, share);
                     feeder_total = feeder_total.saturating_add(share);
+                    if let Some((_, acc)) = feeder_income_by_owner
+                        .iter_mut()
+                        .find(|(id, _)| *id == feeder_owner)
+                    {
+                        *acc = acc.saturating_add(share);
+                    } else {
+                        feeder_income_by_owner.push((feeder_owner, share));
+                    }
                     part = part.saturating_sub(share);
                 }
             }
@@ -623,6 +682,14 @@ fn unload_vehicles(
         state.credit_company(vehicle_owner, payment);
         let shown = payment.saturating_add(feeder_total);
         state.stats.cargo_income_earned += shown.cast_unsigned();
+        if let Some(c) = state.companies.get_mut(vehicle_owner.index()) {
+            c.cargo_income_earned += payment.cast_unsigned();
+        }
+        for (fo, share) in feeder_income_by_owner {
+            if let Some(c) = state.companies.get_mut(fo.index()) {
+                c.cargo_income_earned += share.cast_unsigned();
+            }
+        }
         state.pending_income_popups.push(crate::IncomePopup {
             amount: payment,
             at: vpos,
@@ -645,6 +712,9 @@ fn unload_vehicles(
                 first_delivery,
             );
             state.stats.cargo_deliveries += 1;
+            if let Some(c) = state.companies.get_mut(vehicle_owner.index()) {
+                c.cargo_deliveries += 1;
+            }
         }
         state.stats.cargo_units_delivered += u64::from(unload_units);
         state.vehicles[i].sync_cargo_from_packets();
@@ -667,7 +737,7 @@ fn assign_orderless_wander_destinations(state: &mut GameState) {
     for i in 0..state.vehicles.len() {
         if !matches!(
             state.vehicles[i].kind,
-            VehicleKind::Bus | VehicleKind::Truck
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
         ) {
             continue;
         }
@@ -675,27 +745,41 @@ fn assign_orderless_wander_destinations(state: &mut GameState) {
             && state.vehicles[i].orders.is_empty()
             && state.vehicles[i].path.is_empty()
             && state.vehicles[i].pos == state.vehicles[i].dest
-            && vehicle_ai::orderless_road_next(
-                &state.map,
-                state.vehicles[i].pos,
-                if state.vehicles[i].origin == state.vehicles[i].pos {
-                    None
-                } else {
-                    Some(state.vehicles[i].origin)
-                },
-                state.vehicles[i].id,
-                state.tick,
-            )
-            .is_none()
-            && let Some(dest) = vehicle_ai::orderless_wander_destination(
-                &state.map,
-                state.vehicles[i].id,
-                state.vehicles[i].pos,
-                state.vehicles[i].origin,
-                state.tick,
-            )
         {
-            state.vehicles[i].dest = dest;
+            let prev = if state.vehicles[i].origin == state.vehicles[i].pos {
+                None
+            } else {
+                Some(state.vehicles[i].origin)
+            };
+            let has_next = match state.vehicles[i].kind {
+                VehicleKind::Tram => vehicle_ai::orderless_tram_next(
+                    &state.map,
+                    state.vehicles[i].pos,
+                    prev,
+                    state.vehicles[i].id,
+                    state.tick,
+                )
+                .is_some(),
+                _ => vehicle_ai::orderless_road_next(
+                    &state.map,
+                    state.vehicles[i].pos,
+                    prev,
+                    state.vehicles[i].id,
+                    state.tick,
+                )
+                .is_some(),
+            };
+            if !has_next
+                && let Some(dest) = vehicle_ai::orderless_wander_destination(
+                    &state.map,
+                    state.vehicles[i].id,
+                    state.vehicles[i].pos,
+                    state.vehicles[i].origin,
+                    state.tick,
+                )
+            {
+                state.vehicles[i].dest = dest;
+            }
         }
     }
 }
@@ -744,6 +828,12 @@ fn extend_orderless_vehicle_paths(state: &mut GameState) {
             }
             VehicleKind::Bus | VehicleKind::Truck => {
                 if let Some(next) = vehicle_ai::orderless_road_next(&state.map, pos, prev, id, tick)
+                {
+                    state.vehicles[i].path.push_back(next);
+                }
+            }
+            VehicleKind::Tram => {
+                if let Some(next) = vehicle_ai::orderless_tram_next(&state.map, pos, prev, id, tick)
                 {
                     state.vehicles[i].path.push_back(next);
                 }

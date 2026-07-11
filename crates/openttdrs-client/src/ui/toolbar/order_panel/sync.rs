@@ -51,7 +51,10 @@ pub(crate) fn sync_order_panel(
         ""
     };
     if let Ok(mut text) = title_q.single_mut() {
-        **text = format!("{} (Órdenes){pick_hint}", vehicle.display_name());
+        let shared = vehicle
+            .shared_order_id
+            .map_or_else(String::new, |id| format!(" · pool #{id}"));
+        **text = format!("{} (Órdenes){shared}{pick_hint}", vehicle.display_name());
     }
 
     for (row, mut node, mut bg, mut border) in &mut row_q {
@@ -127,7 +130,7 @@ fn stop_kind_mismatch_note(vehicle: &Vehicle, station: &Station) -> Option<&'sta
     Some(match station.stop_kind {
         StopKind::BusStop => " — incompatible: solo buses",
         StopKind::TruckStop => " — incompatible: solo camiones/carga",
-        StopKind::Dock => " — incompatible: solo barcos",
+        StopKind::Dock | StopKind::Buoy => " — incompatible: solo barcos",
         StopKind::Airport => " — incompatible: solo aviones",
         StopKind::RailStation | StopKind::RailWaypoint => " — incompatible: solo trenes",
     })
@@ -153,6 +156,7 @@ fn order_row_label(
             Some(StopKind::RailStation) => "Estacion tren",
             Some(StopKind::RailWaypoint) => "Waypoint",
             Some(StopKind::Dock) => "Muelle",
+            Some(StopKind::Buoy) => "Boya",
             Some(StopKind::Airport) => "Aeropuerto",
             None => "Estación",
         },
@@ -221,7 +225,11 @@ fn order_row_label(
         ..
     } = order
     {
-        let _ = stop;
+        if stop {
+            line.push_str(" · parar");
+        } else {
+            line.push_str(" · servicio");
+        }
         if wait_ticks > 0 {
             line.push_str(&format!(" · esp.{wait_ticks}"));
         }

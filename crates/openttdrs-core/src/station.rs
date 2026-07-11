@@ -113,6 +113,12 @@ pub struct Station {
     /// Teselas del aeropuerto (helipuerto = `[pos]`; small = footprint completo).
     #[serde(default)]
     pub airport_tiles: Vec<TileCoord>,
+    /// Teselas adicionales unidas con `JoinStation` (paradas road 1×1).
+    #[serde(default)]
+    pub joined_tiles: Vec<TileCoord>,
+    /// Spec NewGRF/vanilla usado al construir (`StationSpecId`; 0 = default).
+    #[serde(default)]
+    pub station_spec: crate::station_class::StationSpecId,
 }
 
 const fn default_station_rating() -> u8 {
@@ -129,6 +135,8 @@ pub enum StopKind {
     Dock,
     /// Helipuerto / aeropuerto 1×1 (`StationType::Airport`).
     Airport,
+    /// Boya (`StationType::Buoy`); waypoint acuático sin carga.
+    Buoy,
     /// Punto de paso ferroviario (`StationType::RailWaypoint`); sin carga ni parada.
     RailWaypoint,
 }
@@ -153,6 +161,8 @@ impl Station {
             time_since_pickup: CargoTimeSincePickup::default(),
             rating: default_station_rating(),
             airport_tiles: Vec::new(),
+            joined_tiles: Vec::new(),
+            station_spec: crate::station_class::StationSpecId::DefaultRail,
         }
     }
 
@@ -203,10 +213,10 @@ impl Station {
         taken
     }
 
-    /// ¿La estación cubre esta tesela (ancla o footprint aeropuerto)?
+    /// ¿La estación cubre esta tesela (ancla, aeropuerto o unidas)?
     #[must_use]
     pub fn covers_tile(&self, c: TileCoord) -> bool {
-        self.pos == c || self.airport_tiles.contains(&c)
+        self.pos == c || self.airport_tiles.contains(&c) || self.joined_tiles.contains(&c)
     }
 
     #[must_use]
@@ -216,21 +226,21 @@ impl Station {
             (
                 VehicleKind::Train,
                 StopKind::RailStation | StopKind::RailWaypoint
-            ) | (VehicleKind::Bus, StopKind::BusStop)
+            ) | (VehicleKind::Bus | VehicleKind::Tram, StopKind::BusStop)
                 | (VehicleKind::Truck, StopKind::TruckStop)
-                | (VehicleKind::Ship, StopKind::Dock)
+                | (VehicleKind::Ship, StopKind::Dock | StopKind::Buoy)
                 | (VehicleKind::Aircraft, StopKind::Airport)
         )
     }
 
     #[must_use]
     pub fn is_waypoint(&self) -> bool {
-        self.stop_kind == StopKind::RailWaypoint
+        matches!(self.stop_kind, StopKind::RailWaypoint | StopKind::Buoy)
     }
 
     #[must_use]
     pub fn accepts_cargo(&self, cargo: CargoType) -> bool {
-        if self.stop_kind == StopKind::RailWaypoint {
+        if matches!(self.stop_kind, StopKind::RailWaypoint | StopKind::Buoy) {
             return false;
         }
         match self.stop_kind {
@@ -241,7 +251,7 @@ impl Station {
             // Muelle: mercancía + pasajeros (ferry).
             StopKind::Dock => true,
             StopKind::Airport => matches!(cargo, CargoType::Passengers | CargoType::Mail),
-            StopKind::RailWaypoint => false,
+            StopKind::RailWaypoint | StopKind::Buoy => false,
         }
     }
 }
@@ -270,6 +280,8 @@ impl StationCoverage {
     }
 }
 
+/// `StationType::Buoy` en bits 3–6 de `m6`.
+pub const STATION_TYPE_BUOY: u8 = 6;
 /// `StationType::RailWaypoint` en bits 3–6 de `m6` (`station_type.h`).
 pub const STATION_TYPE_RAIL_WAYPOINT: u8 = 7;
 
@@ -464,34 +476,42 @@ pub fn vehicle_physically_at_station(
         return false;
     }
     let vpos = vehicle.pos;
-    if vpos == station.pos {
-        return true;
+    if station.covers_tile(vpos) {
+        return match vehicle.kind {
+            VehicleKind::Aircraft => map
+                .get(vpos)
+                .is_some_and(|t| crate::airport::AirportPiece::from_m5(t.m5).is_loading()),
+            _ => true,
+        };
     }
     match vehicle.kind {
-        VehicleKind::Truck | VehicleKind::Bus => {
-            !is_connected_bay_road_stop(map, station.pos)
-                && road_stop_approach_tile(map, station.pos)
-                    .is_some_and(|approach| vpos == approach)
+        VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram => {
+            // Acceso a bahía: ancla o cualquiera de las teselas unidas.
+            station
+                .joined_tiles
+                .iter()
+                .copied()
+                .chain(std::iter::once(station.pos))
+                .any(|stop| {
+                    !is_connected_bay_road_stop(map, stop)
+                        && road_stop_approach_tile(map, stop)
+                            .is_some_and(|approach| vpos == approach)
+                })
         }
         VehicleKind::Train => {
             station_footprint_tiles(map, station.pos).contains(&vpos)
                 && train_on_rail_platform(map, vpos)
         }
         VehicleKind::Ship => {
-            vpos == station.pos || {
-                // Barco en agua adyacente al muelle (acceso).
-                station.stop_kind == StopKind::Dock
-                    && vpos.x.abs_diff(station.pos.x) + vpos.y.abs_diff(station.pos.y) == 1
-                    && crate::ship_movement::is_water_network_tile_at(map, vpos)
-            }
+            matches!(station.stop_kind, StopKind::Dock | StopKind::Buoy)
+                && (if station.stop_kind == StopKind::Buoy {
+                    vpos == station.pos
+                } else {
+                    vpos.x.abs_diff(station.pos.x) + vpos.y.abs_diff(station.pos.y) == 1
+                        && crate::ship_movement::is_water_network_tile_at(map, vpos)
+                })
         }
-        VehicleKind::Aircraft => {
-            station.stop_kind == StopKind::Airport
-                && station.covers_tile(vpos)
-                && map
-                    .get(vpos)
-                    .is_some_and(|t| crate::airport::AirportPiece::from_m5(t.m5).is_loading())
-        }
+        VehicleKind::Aircraft => false,
     }
 }
 
@@ -529,7 +549,10 @@ pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrd
         }
         (VehicleKind::Train, VehicleOrder::Waypoint { waypoint, .. }) => waypoint,
         (_, VehicleOrder::Depot { depot, .. }) => depot,
-        (VehicleKind::Truck | VehicleKind::Bus, VehicleOrder::Station { station, .. }) => {
+        (
+            VehicleKind::Truck | VehicleKind::Bus | VehicleKind::Tram,
+            VehicleOrder::Station { station, .. },
+        ) => {
             if is_connected_bay_road_stop(map, station) {
                 station
             } else {
@@ -562,6 +585,7 @@ pub fn stop_kind_from_m6(m6: u8) -> StopKind {
         3 => StopKind::BusStop,
         4 => StopKind::Dock,
         1 => StopKind::Airport,
+        STATION_TYPE_BUOY => StopKind::Buoy,
         STATION_TYPE_RAIL_WAYPOINT => StopKind::RailWaypoint,
         _ => StopKind::RailStation,
     }

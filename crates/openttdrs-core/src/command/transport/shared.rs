@@ -249,6 +249,7 @@ pub(in crate::command) fn clear_tile(
     state
         .industries
         .retain(|industry| !industry.contains_tile(c));
+    crate::command::sign::remove_signs_at(state, c);
     state.economy.money -= CLEAR_TILE_COST;
     Ok(())
 }

@@ -39,6 +39,10 @@ mod smoke_draw_data_generated;
 pub(crate) mod station;
 #[path = "sprites/tile_atlas_generated.rs"]
 mod tile_atlas_generated;
+#[path = "sprites/track_fence.rs"]
+mod track_fence;
+#[path = "sprites/transparency.rs"]
+mod transparency;
 #[path = "sprites/tree_draw_data_generated.rs"]
 mod tree_draw_data_generated;
 #[path = "sprites/tunnel.rs"]
@@ -98,9 +102,10 @@ pub fn rail_track_base_color(mapt: u8, kind: TileKind, m5: u8, m3: u8) -> Color 
 
 pub use road::{
     ROAD_DEPOT_GROUND_PATH, ROAD_FLAT_OFFSET_TBL, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
-    road_depot_build_layers, road_depot_entrance_road_bits, road_depot_seq_gfx, road_tile_roadside,
-    roadside_is_paved,
+    ROADSIDE_TREE_META, ROADSIDE_TREES, road_depot_build_layers, road_depot_entrance_road_bits,
+    road_depot_seq_gfx, road_tile_roadside, roadside_is_paved,
 };
+pub use track_fence::{TRACK_FENCE_META, track_fence_draws_for_tile};
 
 /// Mitad de la altura en px de cada variante `road_flat_XX`.
 pub const ROAD_FLAT_HALF_H: [f32; 19] = [
@@ -144,19 +149,19 @@ pub use rail::{
     RAIL_SPRITE_TRACK_X, RAIL_SPRITE_TRACK_Y, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT,
     RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y,
     RAIL_TILE_DEPOT, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SignalSpriteDraw, WIRE_SPRITE_BASE,
-    WIRE_SPRITE_LAST, catenary_hidden, catenary_pylon_sprite_ids, catenary_sprite_color,
-    catenary_tile_location_group, catenary_tileh_selector, catenary_transparent,
-    catenary_tunnel_wire_sprite, catenary_wire_sprite_ids, collect_catenary_bridge_draws,
-    collect_catenary_pylons_from_map, collect_catenary_sprites, collect_catenary_sprites_from_map,
-    collect_rail_ghost_sprites, collect_rail_ghost_sprites_for_type, collect_rail_sprites,
-    collect_rail_sprites_for_type, collect_signal_sprite_draws, collect_signal_sprite_ids,
-    is_typed_rail_track_sprite, level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
+    WIRE_SPRITE_LAST, catenary_pylon_sprite_ids, catenary_tile_location_group,
+    catenary_tileh_selector, catenary_tunnel_wire_sprite, catenary_wire_sprite_ids,
+    collect_catenary_bridge_draws, collect_catenary_pylons_from_map, collect_catenary_sprites,
+    collect_catenary_sprites_from_map, collect_rail_ghost_sprites,
+    collect_rail_ghost_sprites_for_type, collect_rail_sprites, collect_rail_sprites_for_type,
+    collect_signal_sprite_draws, collect_signal_sprite_ids, is_typed_rail_track_sprite,
+    level_crossing_has_rail_reservation, level_crossing_rail_sprite_id,
     level_crossing_rail_sprite_id_for_type, rail_depot_build_layers, rail_ghost_overlay_offset,
     rail_signal_present_mask, rail_signal_state_mask, rail_signal_subtile_offset,
     rail_sprite_atlas_keys, rail_sprite_ids_for_preload, rail_tile_has_pbs_reservation,
-    rail_tile_is_signals, remap_rail_sprite_id, set_catenary_preferences, signal_draw_pos,
-    signal_screen_position, signal_sprite_bases, signal_sprite_center_offset,
-    signal_sprite_ids_for_preload, signal_sprite_texture_id,
+    rail_tile_is_signals, remap_rail_sprite_id, signal_draw_pos, signal_screen_position,
+    signal_sprite_bases, signal_sprite_center_offset, signal_sprite_ids_for_preload,
+    signal_sprite_texture_id,
 };
 #[allow(unused_imports)]
 pub use station::{
@@ -165,6 +170,11 @@ pub use station::{
     rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_layer_meta,
     rail_waypoint_sprite_center, road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx,
     station_tile_class, station_type_from_m6, stop_kind_from_m6,
+};
+pub use transparency::{
+    TransparencyMode, TransparencyOption, apply_mode_to_bits, catenary_hidden,
+    catenary_sprite_color, is_hidden, mode_from_bits, set_transparency_preferences, sprite_color,
+    text_color, with_to_alpha,
 };
 
 /// Especificación de dibujo de una casa (stage completado).

@@ -204,6 +204,8 @@ fn windows_shot_driver(
                     pos,
                     openttdrs_core::EngineCatalogSort::default(),
                     openttdrs_core::RoadEngineFilter::default(),
+                    crate::ui::buy_window::RailBuyFilter::default(),
+                    "",
                 )
                 .first()
                 .copied()

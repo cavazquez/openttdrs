@@ -80,6 +80,7 @@ pub(in crate::command::transport) fn ottd_station_type_bits(stop_kind: StopKind)
         StopKind::TruckStop => 2,
         StopKind::BusStop => 3,
         StopKind::Dock => 4,
+        StopKind::Buoy => 6,
         StopKind::RailWaypoint => 7,
     }
 }
@@ -190,6 +191,12 @@ pub(in crate::command) fn place_rail_station_area(
 ) -> Result<(), CommandError> {
     let platforms = platforms.clamp(1, 7);
     let length = length.clamp(1, 7);
+    let spec_id = state.current_station_spec;
+    if let Some(spec) = crate::station_class::station_spec_def(spec_id)
+        && (!spec.allows_platforms(platforms) || !spec.allows_length(length))
+    {
+        return Err(CommandError::StationSizeNotAllowed);
+    }
     let (w, h) = rail_station_footprint(axis_y, platforms, length);
     check_rail_station_area(state, origin, w, h)?;
     let anchor = TileCoord::new(origin.x + (w - 1) / 2, origin.y + (h - 1) / 2);
@@ -197,7 +204,11 @@ pub(in crate::command) fn place_rail_station_area(
         return Err(CommandError::AuthorityRatingTooLow);
     }
 
-    let layout = rail_station_layout(usize::from(platforms), usize::from(length));
+    let layout = crate::station_class::station_spec_layout(
+        spec_id,
+        usize::from(platforms),
+        usize::from(length),
+    );
     for n in 0..platforms {
         for l in 0..length {
             let c = if axis_y {
@@ -228,6 +239,7 @@ pub(in crate::command) fn place_rail_station_area(
     let anchor = TileCoord::new(origin.x + (w - 1) / 2, origin.y + (h - 1) / 2);
     let mut st = Station::new_with_kind(anchor, StopKind::RailStation);
     st.owner = state.active_company;
+    st.station_spec = spec_id;
     state.stations.push(st);
     if let Some((town_id, delta)) =
         town::apply_station_build_rating_penalty(&mut state.towns, anchor)
@@ -364,5 +376,136 @@ pub(in crate::command) fn place_rail_waypoint(
     st.owner = state.active_company;
     state.stations.push(st);
     state.economy.money -= WAYPOINT_BUILD_COST;
+    Ok(())
+}
+
+/// Nombre personalizado de estación (`OpenTTD` ~32 chars).
+pub const MAX_STATION_NAME_CHARS: usize = 32;
+
+pub(crate) fn rename_station(
+    state: &mut GameState,
+    station_pos: TileCoord,
+    name: Option<String>,
+) -> Result<(), CommandError> {
+    let Some(station) = state.stations.iter_mut().find(|s| s.pos == station_pos) else {
+        return Err(CommandError::StationNotFound);
+    };
+    let normalized = name.and_then(|n| {
+        let trimmed = n.trim().to_string();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
+    });
+    if normalized
+        .as_ref()
+        .is_some_and(|n| n.chars().count() > MAX_STATION_NAME_CHARS)
+    {
+        return Err(CommandError::StationNameTooLong);
+    }
+    station.name = normalized;
+    Ok(())
+}
+
+fn rewrite_order_station(order: &mut crate::VehicleOrder, from: TileCoord, to: TileCoord) {
+    use crate::VehicleOrder;
+    match order {
+        VehicleOrder::Station { station, .. } if *station == from => *station = to,
+        VehicleOrder::Waypoint { waypoint, .. } if *waypoint == from => *waypoint = to,
+        _ => {}
+    }
+}
+
+/// Une dos paradas `BusStop`/`TruckStop` 1×1 adyacentes (misma compañía y tipo).
+pub(crate) fn join_stations(
+    state: &mut GameState,
+    keep: TileCoord,
+    merge: TileCoord,
+) -> Result<(), CommandError> {
+    if keep == merge {
+        return Err(CommandError::CannotJoinStations);
+    }
+    let dist = (keep.x - merge.x).abs() + (keep.y - merge.y).abs();
+    if dist != 1 {
+        return Err(CommandError::CannotJoinStations);
+    }
+    let keep_idx = state
+        .stations
+        .iter()
+        .position(|s| s.pos == keep)
+        .ok_or(CommandError::StationNotFound)?;
+    let merge_idx = state
+        .stations
+        .iter()
+        .position(|s| s.pos == merge)
+        .ok_or(CommandError::StationNotFound)?;
+    {
+        let keep_st = &state.stations[keep_idx];
+        let merge_st = &state.stations[merge_idx];
+        if keep_st.owner != merge_st.owner
+            || keep_st.stop_kind != merge_st.stop_kind
+            || !matches!(keep_st.stop_kind, StopKind::BusStop | StopKind::TruckStop)
+        {
+            return Err(CommandError::CannotJoinStations);
+        }
+    }
+    let mut merge_st = state.stations.remove(merge_idx);
+    // Tras remove, keep_idx puede haber cambiado.
+    let keep_idx = state
+        .stations
+        .iter()
+        .position(|s| s.pos == keep)
+        .ok_or(CommandError::StationNotFound)?;
+
+    merge_st.ensure_packets_from_stock();
+    let merge_packets: Vec<_> = merge_st.cargo_packets.packets.drain(..).collect();
+    let merge_income = merge_st.income;
+    let merge_tsp = merge_st.time_since_pickup;
+    let merge_joined = std::mem::take(&mut merge_st.joined_tiles);
+
+    let keep_st = &mut state.stations[keep_idx];
+    keep_st.ensure_packets_from_stock();
+    for packet in merge_packets {
+        keep_st.cargo_packets.push(packet);
+    }
+    keep_st.sync_stock_from_packets();
+    keep_st.income = keep_st.income.saturating_add(merge_income);
+    for cargo in [
+        crate::CargoType::Passengers,
+        crate::CargoType::Mail,
+        crate::CargoType::Goods,
+        crate::CargoType::Coal,
+        crate::CargoType::Wood,
+        crate::CargoType::Oil,
+    ] {
+        let a = keep_st.time_since_pickup.get(cargo);
+        let b = merge_tsp.get(cargo);
+        keep_st.time_since_pickup.set(cargo, a.max(b));
+    }
+    if !keep_st.joined_tiles.contains(&merge) {
+        keep_st.joined_tiles.push(merge);
+    }
+    for t in merge_joined {
+        if t != keep && !keep_st.joined_tiles.contains(&t) {
+            keep_st.joined_tiles.push(t);
+        }
+    }
+
+    for vehicle in &mut state.vehicles {
+        for order in &mut vehicle.orders {
+            rewrite_order_station(order, merge, keep);
+        }
+    }
+    for list in &mut state.shared_order_lists {
+        for order in &mut list.orders {
+            rewrite_order_station(order, merge, keep);
+        }
+    }
+    for sub in &mut state.subsidies {
+        if sub.dest_station_pos == merge {
+            sub.dest_station_pos = keep;
+        }
+    }
     Ok(())
 }

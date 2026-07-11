@@ -31,6 +31,18 @@ pub struct Company {
     /// `true` = controlada por [`crate::ai::CompanyAi`].
     #[serde(default)]
     pub is_ai: bool,
+    /// Ingresos acumulados por entregas (esta compañía).
+    #[serde(default)]
+    pub cargo_income_earned: u64,
+    /// Costes de explotación de vehículos acumulados.
+    #[serde(default)]
+    pub vehicle_running_costs: u64,
+    /// Entregas de carga acumuladas.
+    #[serde(default)]
+    pub cargo_deliveries: u64,
+    /// Series mensuales para gráficos (Income / Operating Profit / Value).
+    #[serde(default)]
+    pub economy_history: crate::game_state::EconomyHistory,
 }
 
 impl Company {
@@ -42,6 +54,10 @@ impl Company {
             colour,
             economy,
             is_ai: false,
+            cargo_income_earned: 0,
+            vehicle_running_costs: 0,
+            cargo_deliveries: 0,
+            economy_history: crate::game_state::EconomyHistory::default(),
         }
     }
 
@@ -53,6 +69,10 @@ impl Company {
             colour,
             economy,
             is_ai: true,
+            cargo_income_earned: 0,
+            vehicle_running_costs: 0,
+            cargo_deliveries: 0,
+            economy_history: crate::game_state::EconomyHistory::default(),
         }
     }
 }

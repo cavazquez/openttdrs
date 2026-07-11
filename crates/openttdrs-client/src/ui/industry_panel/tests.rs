@@ -64,6 +64,7 @@ fn industry_helper_functions_cover_paths() {
         stock: 0,
         capacity: 100,
         random_colour: 0,
+        ..Default::default()
     });
 
     let tiles = flood_industry_tiles(&map, c(2, 2));
@@ -100,6 +101,7 @@ fn format_panel_title_out_of_range_gfx_skips_sim_kind_label() {
         stock: 0,
         capacity: 100,
         random_colour: 0,
+        ..Default::default()
     });
 
     let title = format_panel_title(&map, &sim, focus);

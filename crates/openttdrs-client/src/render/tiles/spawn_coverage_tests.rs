@@ -134,6 +134,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     4.0,
                     TEST_CLIMATE,
                     true,
+                    true,
                 );
                 spawn_road_tile(
                     &mut commands,
@@ -144,6 +145,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &TileRenderContext::new(&m.0, &g.0, 2, 3),
                     4.0,
                     TEST_CLIMATE,
+                    true,
                     true,
                 );
                 spawn_rail_tile(
@@ -156,6 +158,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &mut rails,
                     TEST_CLIMATE,
                     true,
+                    true,
                 );
                 rails.clear();
                 spawn_rail_tile(
@@ -167,6 +170,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     4.0,
                     &mut rails,
                     TEST_CLIMATE,
+                    true,
                     true,
                 );
                 spawn_station_tile(
@@ -381,6 +385,7 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     &TileRenderContext::new(&m.0, &g.0, 1, 1),
                     4.0,
                     TEST_CLIMATE,
+                    true,
                     true,
                 );
                 spawn_station_tile(
@@ -647,6 +652,7 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     4.0,
                     TEST_CLIMATE,
                     true,
+                    true,
                 );
             },
         )
@@ -677,6 +683,7 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     &TileRenderContext::new(&m.0, &g.0, 4, 4),
                     4.0,
                     TEST_CLIMATE,
+                    true,
                     true,
                 );
             },

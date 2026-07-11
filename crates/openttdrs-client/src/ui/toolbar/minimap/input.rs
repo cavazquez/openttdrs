@@ -9,23 +9,35 @@ use crate::ui::hud::{SelectedTileInfo, SimHudControls};
 use crate::ui::toolbar::BuildMenuUi;
 
 use super::{
-    MINIMAP_BOTTOM, MINIMAP_CELL, MINIMAP_COLS, MINIMAP_PAD, MINIMAP_RIGHT, MINIMAP_ROWS,
-    MinimapCell, MinimapRoot,
+    MINIMAP_BOTTOM, MINIMAP_COLS, MINIMAP_PAD, MINIMAP_RIGHT, MINIMAP_ROWS, MinimapCell,
+    MinimapLayerState, MinimapRoot,
 };
 
 /// Rectángulo del minimapa en píxeles de ventana: `(left, top, width, height)`.
 #[must_use]
-pub(crate) fn minimap_pixel_rect(window: &Window) -> (f32, f32, f32, f32) {
-    let total_w = MINIMAP_COLS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
-    let left = window.width() - MINIMAP_RIGHT - total_w;
-    let total_h = MINIMAP_ROWS as f32 * MINIMAP_CELL + MINIMAP_PAD * 2.0;
-    let top = window.height() - MINIMAP_BOTTOM - total_h;
-    (left, top, total_w, total_h)
+pub(crate) fn minimap_pixel_rect(
+    window: &Window,
+    layers: &MinimapLayerState,
+) -> (f32, f32, f32, f32) {
+    let (total_w, total_h) = layers.root_size();
+    if layers.expanded {
+        let left = ((window.width() - total_w) * 0.5).max(8.0);
+        let top = ((window.height() - total_h) * 0.5).max(8.0);
+        (left, top, total_w, total_h)
+    } else {
+        let left = window.width() - MINIMAP_RIGHT - total_w;
+        let top = window.height() - MINIMAP_BOTTOM - total_h;
+        (left, top, total_w, total_h)
+    }
 }
 
 #[must_use]
-pub(crate) fn minimap_contains_cursor(cursor: Vec2, window: &Window) -> bool {
-    let (left, top, w, h) = minimap_pixel_rect(window);
+pub(crate) fn minimap_contains_cursor(
+    cursor: Vec2,
+    window: &Window,
+    layers: &MinimapLayerState,
+) -> bool {
+    let (left, top, w, h) = minimap_pixel_rect(window, layers);
     cursor.x >= left && cursor.y >= top && cursor.x < left + w && cursor.y < top + h
 }
 
@@ -33,14 +45,17 @@ pub(crate) fn minimap_contains_cursor(cursor: Vec2, window: &Window) -> bool {
 pub(crate) fn minimap_tile_at_cursor(
     cursor: Vec2,
     window: &Window,
+    layers: &MinimapLayerState,
     dimensions: (u32, u32),
 ) -> Option<TileCoord> {
-    cursor_to_minimap_tile(cursor, window, dimensions).map(|(x, y)| TileCoord::new(x, y))
+    cursor_to_minimap_tile(cursor, window, layers, dimensions).map(|(x, y)| TileCoord::new(x, y))
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_minimap_click(
     mouse: Res<ButtonInput<MouseButton>>,
     hud: Res<SimHudControls>,
+    layers: Res<MinimapLayerState>,
     windows: Query<&Window, With<PrimaryWindow>>,
     sim: Res<SimWorld>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
@@ -66,7 +81,8 @@ pub(crate) fn handle_minimap_click(
     let Some(cursor) = window.cursor_position() else {
         return;
     };
-    let Some(coord) = minimap_tile_at_cursor(cursor, window, sim.state.map.dimensions()) else {
+    let Some(coord) = minimap_tile_at_cursor(cursor, window, &layers, sim.state.map.dimensions())
+    else {
         return;
     };
     let height = sim.state.map.get(coord).map_or(0, |tile| tile.height);
@@ -82,24 +98,26 @@ pub(crate) fn handle_minimap_click(
 fn cursor_to_minimap_tile(
     cursor: Vec2,
     window: &Window,
+    layers: &MinimapLayerState,
     dimensions: (u32, u32),
 ) -> Option<(i32, i32)> {
     let (mw, mh) = dimensions;
     if mw == 0 || mh == 0 {
         return None;
     }
-    let (left, top, _, _) = minimap_pixel_rect(window);
+    let cell = layers.cell_px();
+    let (left, top, _, _) = minimap_pixel_rect(window, layers);
     let local_x = cursor.x - left - MINIMAP_PAD;
     let local_y_from_top = cursor.y - top - MINIMAP_PAD;
     if local_x < 0.0
         || local_y_from_top < 0.0
-        || local_x >= MINIMAP_COLS as f32 * MINIMAP_CELL
-        || local_y_from_top >= MINIMAP_ROWS as f32 * MINIMAP_CELL
+        || local_x >= MINIMAP_COLS as f32 * cell
+        || local_y_from_top >= MINIMAP_ROWS as f32 * cell
     {
         return None;
     }
-    let col = (local_x / MINIMAP_CELL).floor() as u32;
-    let row = (local_y_from_top / MINIMAP_CELL).floor() as u32;
+    let col = (local_x / cell).floor() as u32;
+    let row = (local_y_from_top / cell).floor() as u32;
     let x = ((MINIMAP_COLS.saturating_sub(1).saturating_sub(col)) * mw / MINIMAP_COLS) as i32;
     let y = (row * mh / MINIMAP_ROWS) as i32;
     Some((x, y))
@@ -109,7 +127,7 @@ fn cursor_to_minimap_tile(
 mod tests {
     use bevy::prelude::*;
 
-    use super::super::{MINIMAP_COLS, MINIMAP_PAD, MINIMAP_ROWS};
+    use super::super::{MINIMAP_COLS, MINIMAP_PAD, MINIMAP_ROWS, MinimapLayerState};
     use super::{cursor_to_minimap_tile, minimap_contains_cursor, minimap_pixel_rect};
 
     #[test]
@@ -118,14 +136,15 @@ mod tests {
             resolution: (200_u32, 150_u32).into(),
             ..default()
         };
-        let (left, top, _, _) = minimap_pixel_rect(&window);
+        let layers = MinimapLayerState::default();
+        let (left, top, _, _) = minimap_pixel_rect(&window, &layers);
         let cursor = Vec2::new(left + MINIMAP_PAD + 1.0, top + MINIMAP_PAD + 1.0);
-        let Some((x, y)) = cursor_to_minimap_tile(cursor, &window, (64, 40)) else {
+        let Some((x, y)) = cursor_to_minimap_tile(cursor, &window, &layers, (64, 40)) else {
             panic!("cursor inside minimap grid");
         };
         assert_eq!(x, 63);
         assert_eq!(y, 0);
-        assert!(minimap_contains_cursor(cursor, &window));
+        assert!(minimap_contains_cursor(cursor, &window, &layers));
     }
 
     #[test]
@@ -134,15 +153,35 @@ mod tests {
             resolution: (800_u32, 600_u32).into(),
             ..default()
         };
-        let (left, top, _, _) = minimap_pixel_rect(&window);
+        let layers = MinimapLayerState::default();
+        let cell = layers.cell_px();
+        let (left, top, _, _) = minimap_pixel_rect(&window, &layers);
         let cursor = Vec2::new(
-            left + MINIMAP_PAD + MINIMAP_COLS as f32 * 3.0 - 1.0,
-            top + MINIMAP_PAD + MINIMAP_ROWS as f32 * 3.0 - 1.0,
+            left + MINIMAP_PAD + MINIMAP_COLS as f32 * cell - 1.0,
+            top + MINIMAP_PAD + MINIMAP_ROWS as f32 * cell - 1.0,
         );
-        let Some((x, y)) = cursor_to_minimap_tile(cursor, &window, (20, 15)) else {
+        let Some((x, y)) = cursor_to_minimap_tile(cursor, &window, &layers, (20, 15)) else {
             panic!("cursor inside minimap grid");
         };
         assert_eq!(x, 0);
         assert_eq!(y, 14);
+    }
+
+    #[test]
+    fn expanded_minimap_is_centered() {
+        let window = Window {
+            resolution: (800_u32, 600_u32).into(),
+            ..default()
+        };
+        let layers = MinimapLayerState {
+            expanded: true,
+            ..Default::default()
+        };
+        let (left, top, w, h) = minimap_pixel_rect(&window, &layers);
+        let (rw, rh) = layers.root_size();
+        assert!((w - rw).abs() < 0.1);
+        assert!((h - rh).abs() < 0.1);
+        assert!((left - (800.0 - rw) * 0.5).abs() < 0.1);
+        assert!((top - (600.0 - rh) * 0.5).abs() < 0.1);
     }
 }

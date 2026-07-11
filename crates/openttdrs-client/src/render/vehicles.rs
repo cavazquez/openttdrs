@@ -83,8 +83,10 @@ fn vehicle_layers(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
         VehicleKind::Truck if v.uses_loaded_road_sprite() => &TRUCK_VEHICLE_LAYERS_LOADED,
         VehicleKind::Truck => &TRUCK_VEHICLE_LAYERS,
         VehicleKind::Ship => ship_layers_for(v),
-        VehicleKind::Bus if v.uses_loaded_road_sprite() => &BUS_VEHICLE_LAYERS_LOADED,
-        VehicleKind::Bus => &BUS_VEHICLE_LAYERS,
+        VehicleKind::Bus | VehicleKind::Tram if v.uses_loaded_road_sprite() => {
+            &BUS_VEHICLE_LAYERS_LOADED
+        }
+        VehicleKind::Bus | VehicleKind::Tram => &BUS_VEHICLE_LAYERS,
         VehicleKind::Aircraft => aircraft_layers_for(v),
         VehicleKind::Train => train_layers_for(v),
     }
@@ -203,7 +205,7 @@ impl TruckHandles {
     pub(crate) fn intro_sprite(&self, kind: VehicleKind, dir: usize) -> Handle<Image> {
         let i = dir.min(7);
         match kind {
-            VehicleKind::Bus => self.bus[i].clone(),
+            VehicleKind::Bus | VehicleKind::Tram => self.bus[i].clone(),
             VehicleKind::Aircraft => self.aircraft[i].clone(),
             VehicleKind::Train => self.train_groups[2][i].clone(),
             VehicleKind::Truck => self.truck[i].clone(),
@@ -269,8 +271,10 @@ impl TruckHandles {
                     _ => self.ship[i].clone(),
                 }
             }
-            VehicleKind::Bus if v.uses_loaded_road_sprite() => self.bus_loaded[i].clone(),
-            VehicleKind::Bus => self.bus[i].clone(),
+            VehicleKind::Bus | VehicleKind::Tram if v.uses_loaded_road_sprite() => {
+                self.bus_loaded[i].clone()
+            }
+            VehicleKind::Bus | VehicleKind::Tram => self.bus[i].clone(),
             VehicleKind::Aircraft => {
                 let engine_id = v
                     .engine_id
@@ -347,18 +351,23 @@ pub(crate) fn spawn_initial_vehicles(
         if vehicle.kind == VehicleKind::Train {
             spawn_consist_trailer_sprites(commands, sim, trucks, company, vehicle, pose, vis);
         }
-        commands.spawn((
-            MapVisualLayer,
-            VehicleCargoLabel(vehicle.id),
-            Text2d::new(vehicle_cargo_label(vehicle)),
-            TextFont {
-                font_size: FontSize::Px(8.0),
-                ..default()
-            },
-            TextColor(vehicle_cargo_color(vehicle)),
-            Transform::from_translation(vehicle_cargo_label_pos(pos3)),
-            vis,
-        ));
+        if !crate::sprites::is_hidden(crate::sprites::TransparencyOption::Text) {
+            commands.spawn((
+                MapVisualLayer,
+                VehicleCargoLabel(vehicle.id),
+                Text2d::new(vehicle_cargo_label(vehicle)),
+                TextFont {
+                    font_size: FontSize::Px(8.0),
+                    ..default()
+                },
+                TextColor(crate::sprites::text_color(
+                    crate::sprites::TransparencyOption::Text,
+                    vehicle_cargo_color(vehicle),
+                )),
+                Transform::from_translation(vehicle_cargo_label_pos(pos3)),
+                vis,
+            ));
+        }
     }
 }
 

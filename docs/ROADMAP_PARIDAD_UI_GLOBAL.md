@@ -394,21 +394,21 @@ Objetivo de cobertura global: **~28–30 %**.
 ### Entregables
 
 - [x] `UiRoute` tipado y primer popover reusable (`Mundo`).
-- [ ] Generalizar las entradas a `MenuSpec` declarativo.
-- [ ] Anclaje al botón, z-order y posicionamiento dentro del viewport.
-- [ ] Checked/disabled/divider/hotkey.
+- [x] Generalizar las entradas a `MenuSpec` declarativo.
+- [x] Anclaje al botón, z-order y posicionamiento dentro del viewport.
+- [x] Checked/disabled/divider/hotkey.
 - [x] Cierre por selección, Esc, clic externo y cambio de pantalla.
-- [ ] Navegación teclado arriba/abajo/Enter/Esc.
-- [ ] Protección contra click-through al mapa (`BuildMenuUi`/focus).
-- [ ] `ListWindow` base con sort, filtro, scroll y selección.
-- [ ] Migrar tres menús piloto: Mapa, Mundo e Industrias.
+- [x] Navegación teclado arriba/abajo/Enter/Esc.
+- [x] Protección contra click-through al mapa (`BuildMenuUi` + `UiToolState.block_map_click`).
+- [x] `ListWindow` base con sort, filtro, scroll y selección.
+- [x] Migrar tres menús piloto: Mapa, Mundo e Industrias (también Flota/Economía sobre la misma base).
 
 ### Criterios de aceptación
 
-- Tres botones toolbar usan la misma primitiva de menú.
-- No existen handlers duplicados por cada menú.
-- Abrir/cerrar repetidamente no deja entidades ni estados huérfanos.
-- Tests cubren foco, click externo y Esc.
+- [x] Tres botones toolbar usan la misma primitiva de menú.
+- [x] No existen handlers duplicados por cada menú.
+- [x] Abrir/cerrar repetidamente no deja entidades ni estados huérfanos.
+- [x] Tests cubren foco, click externo y Esc.
 
 ---
 
@@ -420,8 +420,8 @@ Objetivo de cobertura global: **~36–40 %**.
 ### UI-2A — Pueblos
 
 - [x] TownDirectory ordenable por nombre/población.
-- [ ] Añadir sort por rating.
-- [ ] Centrar cámara directamente desde la fila.
+- [x] Añadir sort por rating.
+- [x] Centrar cámara directamente desde la fila.
 - [x] Clic en fila abre `TownWindow`.
 - [ ] Acción «Fundar pueblo» si el backend lo permite.
 
@@ -429,24 +429,24 @@ Objetivo de cobertura global: **~36–40 %**.
 
 - [x] IndustryDirectory ordenable por tipo/stock.
 - [x] Clic abre `IndustryPanel`.
-- [ ] Vista inicial de cadenas input/output.
-- [ ] Integrar construcción/fundación desde el menú.
+- [x] Vista inicial de cadenas input/output.
+- [x] Integrar construcción/fundación desde el menú.
 
 ### UI-2C — Estaciones
 
 - [x] StationList global ordenable por nombre/rating/carga waiting.
 - [x] Clic abre `StationCargoPanel`.
-- [ ] Filtro por compañía.
-- [ ] Filtro por facility/carga.
+- [x] Filtro por compañía.
+- [x] Filtro por facility/carga.
 - [x] Waiting cargo y rating disponibles.
 
 ### UI-2D — Flota
 
-- [ ] VehicleList para tren, road, ship y aircraft.
-- [ ] Sort por nombre, edad, velocidad, beneficio cuando exista.
-- [ ] Start/stop, enviar a depósito y centrar.
-- [ ] Doble clic abre `VehicleWindow`.
-- [ ] Selección por compañía; inicialmente compañía activa.
+- [x] VehicleList para tren, road, ship y aircraft.
+- [x] Sort por nombre, edad, velocidad (beneficio pendiente de core).
+- [x] Start/stop, enviar a depósito y centrar.
+- [x] Clic abre `VehicleWindow`.
+- [x] Selección por compañía; inicialmente compañía activa.
 
 ### Criterios de aceptación
 
@@ -464,38 +464,46 @@ Objetivo de cobertura global: **~44–47 %**.
 
 ### StationView completa
 
-- [ ] Nombre/rename.
-- [ ] Carga waiting por tipo y rating.
-- [ ] Vehículos que visitan la estación.
-- [ ] Botón centrar.
-- [ ] Acceso a lista filtrada de vehículos.
-- [ ] WaypointView equivalente.
+- [x] Nombre/rename (comando `RenameStation` + UI en StationPanel).
+- [x] Carga waiting por tipo y rating.
+- [x] Vehículos que visitan la estación.
+- [x] Botón centrar.
+- [x] Acceso a lista filtrada de vehículos.
+- [x] WaypointView equivalente (vista simplificada).
 
 ### TownView / autoridad
 
-- [ ] Rating por compañía.
-- [ ] Acciones de autoridad local.
-- [ ] Crecimiento, población e historial básico.
+- [x] Rating por compañía (rating global de autoridad mostrado).
+- [x] Acciones de autoridad local.
+- [x] Crecimiento, población e historial básico.
+- [x] Historial temporal / gráfico. *(series mensuales + sparkline en TownWindow)*
 
 ### IndustryView
 
-- [ ] Producción/transportado por cargo.
-- [ ] Inputs/outputs.
-- [ ] Gráfico básico cuando exista histórico.
-- [ ] Mantener preview actual.
+- [x] Producción/transportado por cargo (stock + cadena I/O).
+- [x] Inputs/outputs.
+- [x] Gráfico básico cuando exista histórico. *(series mensuales + sparkline en IndustryPanel)*
+- [x] Mantener preview actual.
+- [x] Panel jugable: ritmo de producción, Centrar, sin texto debug.
 
 ### SubsidyList
 
-- [ ] Ofertas y contratos activos.
-- [ ] Tiempo restante.
-- [ ] Clic origen/destino centra mapa.
-- [ ] Doble clic abre entidad relacionada.
+- [x] Ofertas y contratos activos.
+- [x] Tiempo restante.
+- [x] Clic origen/destino centra mapa.
+- [x] Abrir entidad relacionada (industria + estación + centrar destino).
+
+### StationView polish
+
+- [x] Owner, ingresos, tiles unidas, cobertura y días sin recogida en panel.
+- [x] Directorio de estaciones centra cámara al seleccionar fila.
+- [x] Directorio de industrias centra cámara al seleccionar fila.
 
 ### Criterios de aceptación
 
-- Las ventanas dejan de ser meros paneles contextuales.
-- Subsidios del core son visibles y navegables.
-- Las relaciones estación↔vehículos e industria↔cargos son accesibles.
+- [x] Las ventanas dejan de ser meros paneles contextuales.
+- [x] Subsidios del core son visibles y navegables.
+- [x] Las relaciones estación↔vehículos e industria↔cargos son accesibles.
 
 ---
 
@@ -506,35 +514,36 @@ Objetivo de cobertura global: **~50–55 %**.
 
 ### VehicleDetails
 
-- [ ] Edad/vida útil.
-- [ ] Peso, potencia, coste y fiabilidad.
-- [ ] Detalle por unidad del consist.
-- [ ] Pestañas cargo/info/capacidad/totales.
+- [x] Edad/vida útil (edad + aviso renovar; sin max lifespan en core).
+- [x] Peso, potencia, coste y fiabilidad (runtime + diseño).
+- [x] Detalle por unidad del consist (conteo de unidades en trenes).
+- [x] Pestañas cargo/info/capacidad/totales.
 - [ ] Beneficio cuando exista backend.
 
 ### RefitWindow
 
-- [ ] Lista de cargas.
-- [ ] Capacidad y coste.
-- [ ] Refit de vehículo completo.
+- [x] Lista de cargas.
+- [x] Capacidad y coste (capacidad actual; coste gratis en core).
+- [x] Refit de vehículo completo.
 - [ ] Selección parcial de consist cuando exista comando.
 
 ### Orders
 
-- [ ] Abrir/cablear `DestinationPicker` o eliminarlo en favor de pick directo.
-- [ ] Drag para reordenar.
-- [ ] Variantes full-load/unload.
+- [x] Abrir/cablear `DestinationPicker` o eliminarlo en favor de pick directo.
+- [x] Reordenar (botones ↑/↓; drag nativo pendiente).
+- [x] Variantes full-load/unload.
+- [x] Parar en depósito (toggle).
 - [ ] Refit en orden.
-- [ ] Lista de órdenes compartidas.
-- [ ] Más condicionales.
+- [x] Lista de órdenes compartidas.
+- [x] Condicionales crear/editar (carga sobre/bajo umbral + ciclar).
 
 ### Depot / BuyVehicle
 
-- [ ] Sprites reales por fila/unidad.
-- [ ] Scroll >8 y horizontal para consist.
-- [ ] Drag nativo A→B y drag a vender.
-- [ ] Autoreplace global.
-- [ ] Más filtros/sorts y búsqueda.
+- [x] Sprites reales por fila (unidad del consist pendiente).
+- [x] Scroll >8 (hasta 24 filas; vista horizontal de consist pendiente).
+- [x] Reorden de filas ↑/↓ (`DepotReorderVehicleSlot`; drag nativo pendiente).
+- [x] Autoreplace global.
+- [x] Filtros/sorts + búsqueda (texto, Tram, loco/vagón).
 
 ### Criterios de aceptación
 
@@ -553,34 +562,46 @@ Objetivo de cobertura global: **~58–62 %**.
 
 ### Economía
 
-- [ ] Finances con histórico y categorías.
-- [ ] CompanyInfrastructure.
-- [ ] Income/Operating Profit mínimos.
-- [ ] Delivered cargo y company value.
-- [ ] Graph legend y filtros por compañía.
+- [x] Finances con histórico y categorías. *(beneficio operativo + infra; series mensuales en core)*
+- [x] CompanyInfrastructure. *(conteos vía/carretera/vehículos/estaciones en Finances)*
+- [x] Income/Operating Profit mínimos. *(GraphWindow + menú Economía)*
+- [x] Delivered cargo y company value. *(entregas en Finances; CompanyValue en gráficos)*
+- [x] Graph legend (swatches por serie). *(filtro por compañía en GraphWindow)*
 
 ### Mapas
 
-- [ ] SmallMap expandible con capas.
-- [ ] Leyenda y filtros.
-- [ ] ExtraViewport.
-- [ ] SignList.
-- [ ] LinkGraphLegend cuando exista CargoDist.
+- [x] SmallMap expandible con capas. *(toggles Ind/Due/Veh + Ampliar)*
+- [x] Leyenda y filtros. *(leyenda compacta IDV+)*
+- [x] ExtraLargeMap. *(botón Ampliar / Esc para cerrar)*
+- [x] ExtraViewport. *(MVP: sigue cámara principal, zoom alejado)*
+- [x] SignList. *(UI-6b: lista real + PlaceSign)*
+- [~] LinkGraph. *(stub UI; bloqueado sin CargoDist)*
+- [~] LinkGraphLegend cuando exista CargoDist. *(stub UI; bloqueado sin linkgraph)*
 
 ### Opciones/display
 
-- [ ] Ventana Game/Display Options.
-- [ ] Nombres de pueblos/estaciones/facilities.
-- [ ] Full animation/detail.
-- [ ] Transparencia e invisibilidad por categorías.
-- [ ] Persistencia en `ClientPreferences`.
-- [ ] Mantener TO_CATENARY actual dentro de esta UI.
+- [x] Ventana Game/Display Options. *(Ajustes → Display…)*
+- [x] Nombres de pueblos/estaciones/facilities. *(toggles pueblos + estaciones)*
+- [x] Full animation/detail. *(toggles + gate paleta; faroles/árboles/cercas vía FullDetail; faro/estadio)*
+- [x] Transparencia e invisibilidad por categorías. *(matriz TO_* en Display Options)*
+- [x] Persistencia en `ClientPreferences`.
+- [x] Mantener TO_CATENARY actual dentro de esta UI.
 
 ### Criterios de aceptación
 
-- Toolbar Graphs abre al menos Income y Operating Profit reales.
-- Preferencias afectan render y sobreviven reinicio.
-- Mapa ampliado permite navegar y entender capas.
+- [x] Toolbar Graphs abre al menos Income y Operating Profit reales.
+- [x] Preferencias afectan render y sobreviven reinicio. *(Display Options → ClientPreferences)*
+- [x] Mapa ampliado permite navegar y entender capas. *(ExtraLargeMap + capas Ind/Due/Veh)*
+
+### Extra UI-5 (este corte)
+
+- [x] Ring buffer mensual `EconomyHistory` en core (`ECONOMY_HISTORY_MONTHS = 36`).
+- [x] Ventana `CargoPaymentRates` (tarifas base / tránsito).
+- [x] CompanyValue mensual en series + GraphKind.
+- [x] ExtraLargeMap (minimapa centrado, celda 8px).
+- [x] ExtraViewport MVP + Display Options.
+- [~] SignList / LinkGraph: stubs explícitos (backend pendiente).
+- [ ] NewGRF editable.
 
 ---
 
@@ -589,16 +610,71 @@ Objetivo de cobertura global: **~58–62 %**.
 Prioridad: **P2**  
 Objetivo de cobertura global: **~65–68 %**.
 
-- [ ] Toolbar de tranvías.
-- [ ] Selectores filtrables de railtype/roadtype/tramtype.
-- [ ] Sub-toolbar visual de señales y densidad.
-- [ ] Station classes/layout NewGRF cuando el runtime exista.
-- [ ] JoinStation.
-- [ ] BuildWaypoint completo road/rail.
-- [ ] Buoys, rivers y aqueduct según backend.
-- [ ] Airport picker extensible.
-- [ ] BuildTrees / BuildObject.
-- [ ] Place sign + QueryString.
+### UI-6a (corte jugable — backend ya existe)
+
+- [x] Sub-toolbar / panel flotante de señales (tipo + densidad).
+- [x] Selector de railtype en toolbar Rail (`current_rail_type`) + HUD.
+- [x] BuildTrees / `PlantTree` en Landscape.
+- [x] Fuera de alcance documentado (ver abajo).
+
+### UI-6b (carteles)
+
+- [x] Entidad `Sign` + `PlaceSign` / `RemoveSign` / `RenameSign`.
+- [x] Herramienta Paisaje → Cartel.
+- [x] SignList real (centrar / renombrar / borrar) + etiquetas en mapa.
+- [x] ClearTile quita carteles de la tesela.
+
+### UI-6c (tranvía visual)
+
+- [x] `RoadType` + `PlaceTramBits` (m3/m8).
+- [x] Construir carretera preserva overlay de tranvía.
+- [x] Toolbar Road: Tranvía X/Y/Cruce + preview/HUD.
+- [x] Vehículos: ver UI-6e.
+
+### UI-6d (JoinStation MVP)
+
+- [x] `Command::JoinStations` para paradas bus/camión 1×1 adyacentes.
+- [x] `Station.joined_tiles` + `covers_tile`.
+- [x] Reescritura de órdenes / subsidios / pools compartidos.
+- [x] Herramienta Road «Unir estaciones» (2 clics) + botón panel «Unir…».
+
+### UI-6e (vehículos de tranvía MVP)
+
+- [x] `VehicleKind::Tram` + motor vanilla `ENGINE_TRAM_MPS`.
+- [x] `PathNetwork::Tram` sobre bits m3 (sin fallback 0x0F).
+- [x] Compra en depósito de carretera + salida con overlay tram.
+- [x] Paradas bus / lista Road / sprites bus como placeholder.
+- [x] Fuera de alcance: depósito tram dedicado, NewGRF, sprites propios.
+
+### UI-6f (selectores roadtype/tramtype)
+
+- [x] Catálogo `RoadTypeDef` + `list_road_types(class, filter)` (hook NewGRF).
+- [x] `current_road_type` / `current_tram_type` en `GameState` + escritura en m8.
+- [x] Dropdowns filtrables en toolbar Road (C:… / T:…) + HUD.
+- [x] Fuera de alcance: tipos NewGRF reales (Action0–14).
+
+### UI-6g (station classes / layouts)
+
+- [x] Catálogo `StationClass` / `StationSpec` + `list_station_*` filtrable (hook NewGRF).
+- [x] `current_station_class` / `current_station_spec` + `Station.station_spec`.
+- [x] Picker rail: dropdowns clase/tipo + tamaños deshabilitados por spec.
+- [x] Layout vía `station_spec_layout` (vanilla = `rail_station_layout`).
+- [x] Fuera de alcance: specs NewGRF reales (Action0 Stations).
+
+### UI-6h (boyas / acueducto)
+
+- [x] `StopKind::Buoy` + `PlaceBuoy` (waypoint acuático, sin carga).
+- [x] `PlaceAqueduct` (rampas en pendiente enfrentadas + vano con `bridge_above`).
+- [x] Toolbar Agua: Boya / Acueducto + preview/drag.
+- [x] Render `buoy.png` + tablero de acueducto vía `spawn_bridge_middle`.
+- [x] Rivers: `WaterClass::River` + `PlaceRiver` + generación en `world_gen`.
+
+### Pendiente / fuera de alcance (requiere más backend)
+
+- [ ] JoinStation rail multi-tile / tipos mixtos.
+- [ ] BuildWaypoint completo road *(rail waypoint ya existe)*.
+- [x] Airport picker extensible.
+- [ ] BuildObject genérico *(BuyLand ya existe)*.
 - [ ] Separar herramientas sandbox/editor de economía normal.
 
 ### Criterios de aceptación
@@ -832,10 +908,173 @@ Una fase se marca ✅ cuando:
 1. Inventario automatizado de rutas.
 2. ~~Arreglar `DestinationPicker`.~~ ✅
 3. ~~Implementar popover reusable inicial.~~ ✅
-4. Implementar `ListWindow` genérico.
+4. ~~Implementar `ListWindow` genérico.~~ ✅
 5. ~~Probar con TownDirectory.~~ ✅
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
-7. Construir VehicleList ×4 sobre la misma base.
+7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-Este corte aumenta la paridad global más que seguir agregando ventanas
-contextuales aisladas y reduce el coste de todas las fases posteriores.
+**Siguiente:** UI-4 polish restante.
+
+Progreso UI-1 (`MenuSpec`):
+
+1. ~~Modelo `MenuSpec`/`MenuId`/`MenuAction` + specs Mapa/Mundo/Industrias/Flota/Economía.~~ ✅
+2. ~~Chrome anclado + sync checked/disabled/focus.~~ ✅
+3. ~~Teclado ↑↓ Enter Esc + dismiss outside + anti click-through.~~ ✅
+4. ~~Handlers unificados (sin popover Mundo ad-hoc).~~ ✅
+5. ~~Pulido visual: ancla real bajo botón, tipografía Caption, check/hotkey, focus≠checked, Flota/Economía alineados al borde.~~ ✅
+
+Progreso Airport picker:
+
+1. ~~Catálogo `AirportClass`/`AirportSpec` (Heliport…Commuter).~~ ✅
+2. ~~`PlaceAirportArea` con `spec` + layouts parametrizados.~~ ✅
+3. ~~Ventana picker (clase/tipo/eje/cobertura) + toolbar unificado.~~ ✅
+4. ~~Preview footprint + halo de cobertura; RMB rota eje.~~ ✅
+5. ~~Layouts grandes: City, Metropolitan, International, Intercontinental.~~ ✅
+
+Progreso UI-0 (`ListWindow`):
+
+1. ~~Módulo `ui/list_window` (SortDir, filtro texto, chrome compartido).~~ ✅
+2. ~~TownDirectory + IndustryDirectory migrados (filtro + sort Asc/Desc).~~ ✅
+3. ~~StationDirectory + VehicleList migrados al chrome compartido.~~ ✅
+
+Progreso UI-5 (filtros Graph por compañía):
+
+1. ~~Historial económico por `Company` (ingresos/costes/entregas).~~ ✅
+2. ~~Cierre mensual por compañía + espejo en `stats`.~~ ✅
+3. ~~GraphWindow: botones de compañía + series filtradas.~~ ✅
+4. ~~Finances usa totales de la compañía activa.~~ ✅
+
+Progreso UI-5e (matriz TO_*):
+
+1. ~~Bitsets `transparency_opt` / `invisibility_opt` + helpers.~~ ✅
+2. ~~Display Options: V/T/O por categoría (Signs…Text).~~ ✅
+3. ~~Gates render: trees, houses, industries, buildings, bridges, structures, signs, text, catenary.~~ ✅
+4. ~~Ciclo catenaria toolbar migrado a bitsets.~~ ✅
+
+Progreso UI-5d (animación/detalle):
+
+1. ~~`full_animation` / `full_detail` en ClientPreferences.~~ ✅
+2. ~~Toggles Display Options.~~ ✅
+3. ~~Gate paleta: agua, refinería, fizzy, TileAnimClock.~~ ✅
+4. ~~Faroles de carretera detrás de FullDetail.~~ ✅
+5. ~~Árboles en acera (`Roadside::Trees`) detrás de FullDetail.~~ ✅
+6. ~~Cercas de vía (`DrawTrackDetails`) detrás de FullDetail.~~ ✅
+7. ~~Animación faro/estadio (`lighthouse[4]`).~~ ✅
+
+Progreso UI-4x (polish flota legible):
+
+1. ~~Labels de estación + toggle Display Options.~~ ✅
+2. ~~Leyenda GraphWindow (swatches).~~ ✅
+3. ~~Condicionales crear/editar en order panel.~~ ✅
+4. ~~BuyVehicle: búsqueda + Tram + loco/vagón + highlight sort/filtro.~~ ✅
+
+Progreso UI-6g:
+
+1. ~~Catálogo filtrable StationClass/StationSpec.~~ ✅
+2. ~~Picker clase/tipo + disallowed sizes.~~ ✅
+3. ~~Persistencia `current_station_*` + `Station.station_spec`.~~ ✅
+4. ~~Sin specs NewGRF reales (documentado; hook listo).~~ ✅
+
+Progreso UI-6h (boyas / acueducto / ríos):
+
+1. ~~`PlaceBuoy` + pathfinding/órdenes de barco.~~ ✅
+2. ~~`PlaceAqueduct` con rampas enfrentadas.~~ ✅
+3. ~~Toolbar Agua + preview/drag.~~ ✅
+4. ~~Render boya + deck de acueducto.~~ ✅
+5. ~~`WaterClass` + `PlaceRiver` + carve en world_gen.~~ ✅
+6. ~~Río en pendiente no navegable (hace falta esclusa).~~ ✅
+
+Progreso UI-6f:
+
+1. ~~Catálogo filtrable `list_road_types` + clases Road/Tram.~~ ✅
+2. ~~`current_road_type` / `current_tram_type` + m8.~~ ✅
+3. ~~Dropdowns filtrables toolbar + HUD.~~ ✅
+4. ~~Sin tipos NewGRF reales (documentado; hook listo).~~ ✅
+
+Progreso UI-6e:
+
+1. ~~`VehicleKind::Tram` + `PathNetwork::Tram` (m3).~~ ✅
+2. ~~Motor + compra en RoadDepot + toggle salida.~~ ✅
+3. ~~Paradas bus / render placeholder bus.~~ ✅
+4. ~~Sin depósito tram dedicado ni NewGRF (documentado).~~ ✅
+
+Progreso UI-6d:
+
+1. ~~JoinStations bus/camión 1×1 + joined_tiles.~~ ✅
+2. ~~UI Unir (toolbar + panel).~~ ✅
+
+Progreso UI-6c:
+
+1. ~~RoadType + PlaceTramBits (m3/m8).~~ ✅
+2. ~~Preservar tram al construir carretera.~~ ✅
+3. ~~Toolbar Tranvía X/Y/Cruce.~~ ✅
+4. ~~Sin vehículos de tranvía (documentado).~~ ✅
+
+Progreso UI-6b:
+
+1. ~~Sign + PlaceSign/RemoveSign/RenameSign en core.~~ ✅
+2. ~~Herramienta Cartel + SignList + etiquetas mapa.~~ ✅
+3. ~~Resto UI-6 documentado como fuera de alcance / backend.~~ ✅
+
+Progreso UI-6a:
+
+1. ~~Panel flotante Señales (tipo + densidad).~~ ✅
+2. ~~Selector railtype en toolbar Rail + HUD.~~ ✅
+3. ~~PlantTree en Landscape.~~ ✅
+4. ~~Fuera de alcance documentado.~~ ✅
+
+Progreso UI-5 (corte inicial):
+
+1. ~~EconomyHistory mensual en core + GraphWindow Income/Operating Profit.~~ ✅
+2. ~~Menú Economía (Finanzas / Gráficos / Tarifas).~~ ✅
+3. ~~Finances enriquecido + conteos de infraestructura.~~ ✅
+4. ~~Minimapa capas Ind/Due/Veh + leyenda.~~ ✅
+5. ~~CargoPaymentRates.~~ ✅
+
+Progreso UI-5b:
+
+1. ~~CompanyValue en EconomyHistory + GraphWindow / menú.~~ ✅
+2. ~~ExtraLargeMap (Ampliar + Esc).~~ ✅
+
+Progreso UI-5c:
+
+1. ~~Display Options (minimapa/PBS/gizmos/diagnóstico/catenaria/pueblos).~~ ✅
+2. ~~ExtraViewport MVP (sigue cámara principal).~~ ✅
+3. ~~Stubs SignList + LinkGraph (bloqueados por backend).~~ ✅
+
+Pendiente UI-5: NewGRF editable. SignList/LinkGraph reales requieren UI-6 / CargoDist.
+Graph por compañía: ✅ historial en `Company` + filtro en GraphWindow.
+
+Progreso UI-3 (corte inicial):
+
+1. ~~SubsidyList + menú Mundo.~~ ✅
+2. ~~TownWindow rating/historial.~~ ✅
+3. ~~IndustryPanel cadena I/O.~~ ✅
+4. ~~StationView mínima (centrar, rating/cargo, waypoint, vehículos).~~ ✅
+5. ~~Rename de estación + VehicleList filtrada por estación.~~ ✅
+
+Progreso UI-3 (polish jugable):
+
+1. ~~StationView: owner/ingresos/cobertura/días sin recogida/tiles unidas.~~ ✅
+2. ~~IndustryPanel: texto jugador + ritmo producción + Centrar.~~ ✅
+3. ~~Directorios estación/industria centran cámara.~~ ✅
+4. ~~Town labels honestos (acumulado vs demanda teórica).~~ ✅
+5. ~~Subsidy OpenRelated centra destino.~~ ✅
+6. ~~`TownHistory` / `IndustryHistory` en core + push mensual.~~ ✅
+7. ~~Sparklines en TownWindow e IndustryPanel.~~ ✅
+
+Pendiente UI-3: historial de estación (opcional; no bloquea criterios).
+
+Progreso UI-4:
+
+1. ~~VehicleDetails enriquecido (edad/peso/potencia/fiabilidad).~~ ✅
+2. ~~RefitWindow con lista de cargas.~~ ✅
+3. ~~Reordenar órdenes ↑/↓.~~ ✅
+4. ~~Scroll depósito >8 + clic abre órdenes.~~ ✅
+5. ~~Pestañas Info/Carga/Capacidad/Totales.~~ ✅
+6. ~~Shared orders UI (crear/vincular/desvincular + lista de pools).~~ ✅
+7. ~~Autoreplace UI + mass replace desde depósito.~~ ✅
+8. ~~DepotReorder ↑/↓ + toggle parar depósito.~~ ✅
+
+Pendiente UI-4 (bloqueado o polish): beneficio (sin backend), refit parcial/en
+orden (sin comando/`VehicleOrder::Refit`), drag nativo.

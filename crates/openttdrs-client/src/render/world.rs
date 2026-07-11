@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 use openttdrs_core::TileKind;
@@ -25,6 +26,14 @@ use crate::sprites::CompanyColour;
 use crate::state::{ClientScreen, SimWorld};
 
 use super::vehicles::{TruckHandles, VehicleIndex, spawn_initial_vehicles};
+
+/// Queries de etiquetas del mapa (agrupadas para no superar el límite de params Bevy).
+#[derive(SystemParam)]
+pub(crate) struct MapLabelEntities<'w, 's> {
+    towns: Query<'w, 's, Entity, With<super::town_labels::TownLabel>>,
+    stations: Query<'w, 's, Entity, With<super::station_labels::StationLabel>>,
+    signs: Query<'w, 's, Entity, With<super::sign_labels::SignLabel>>,
+}
 
 /// Petición de redibujo del mapa. `sync_camera`: solo tras F9 / cambio de tamaño.
 #[derive(Resource)]
@@ -214,6 +223,7 @@ pub(crate) fn setup(
     mut images: ResMut<Assets<Image>>,
     sim: Res<SimWorld>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    prefs: Option<Res<crate::settings::ClientPreferences>>,
 ) {
     let (cam_pos, cam_scale) = initial_map_camera_pose(&sim);
 
@@ -249,6 +259,9 @@ pub(crate) fn setup(
     commands.insert_resource(super::FizzyDrinkAnimFrames {
         by_sprite: assets.fizzy_drink_frames.clone(),
     });
+    commands.insert_resource(super::LighthouseAnimFrames {
+        by_sprite: assets.lighthouse_anim_frames.clone(),
+    });
     commands.insert_resource(super::ChimneySmokeFrames(assets.chimney_smoke.clone()));
     commands.insert_resource(super::CopperMineSmokeFrames(
         assets.copper_mine_smoke.clone(),
@@ -258,6 +271,12 @@ pub(crate) fn setup(
     let mut company_sprites = CompanyColoredSprites::new(company_colour);
     company_sprites.build_all(&mut images);
     commands.insert_resource(company_sprites.clone());
+    let show_town_labels = prefs.as_ref().map(|p| p.show_town_labels).unwrap_or(true);
+    let show_station_labels = prefs
+        .as_ref()
+        .map(|p| p.show_station_labels)
+        .unwrap_or(true);
+    let show_full_detail = prefs.as_ref().map(|p| p.full_detail).unwrap_or(true);
     spawn_world_layer(
         &mut commands,
         &asset_server,
@@ -268,6 +287,9 @@ pub(crate) fn setup(
         spawn_bounds,
         true,
         true,
+        show_full_detail,
+        show_town_labels,
+        show_station_labels,
     );
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
@@ -309,6 +331,9 @@ pub(crate) fn spawn_intro_map_render(
     commands.insert_resource(super::FizzyDrinkAnimFrames {
         by_sprite: assets.fizzy_drink_frames.clone(),
     });
+    commands.insert_resource(super::LighthouseAnimFrames {
+        by_sprite: assets.lighthouse_anim_frames.clone(),
+    });
     commands.insert_resource(super::ChimneySmokeFrames(assets.chimney_smoke.clone()));
     commands.insert_resource(super::CopperMineSmokeFrames(
         assets.copper_mine_smoke.clone(),
@@ -328,6 +353,9 @@ pub(crate) fn spawn_intro_map_render(
         spawn_bounds,
         false,
         true,
+        true,
+        true,
+        true,
     );
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
@@ -335,7 +363,7 @@ pub(crate) fn spawn_intro_map_render(
     });
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn spawn_map_tiles_in_bounds(
     commands: &mut Commands,
     assets: &WorldAssets,
@@ -344,6 +372,7 @@ fn spawn_map_tiles_in_bounds(
     sim: &SimWorld,
     spawn_bounds: TileViewportBounds,
     show_pbs_reservations: bool,
+    show_full_detail: bool,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
     let debug_coast = env_flag("OPENTTDRS_DEBUG_COAST");
@@ -406,6 +435,7 @@ fn spawn_map_tiles_in_bounds(
                     slope_half_ground,
                     climate,
                     show_pbs_reservations,
+                    show_full_detail,
                 );
             }
             TileKind::Rail => {
@@ -419,6 +449,7 @@ fn spawn_map_tiles_in_bounds(
                     &mut rail_layers,
                     climate,
                     show_pbs_reservations,
+                    show_full_detail,
                 );
             }
             TileKind::House | TileKind::Station => {
@@ -545,13 +576,30 @@ fn spawn_world_layer(
     spawn_bounds: TileViewportBounds,
     include_world_extras: bool,
     show_pbs_reservations: bool,
+    show_full_detail: bool,
+    show_town_labels: bool,
+    show_station_labels: bool,
 ) {
     if include_world_extras {
         let truck_handles = TruckHandles::load(asset_server);
         spawn_initial_vehicles(commands, sim, &truck_handles, company);
         commands.insert_resource(truck_handles);
         let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
-        super::town_labels::spawn_town_labels(commands, sim, &label_font, spawn_bounds);
+        super::town_labels::spawn_town_labels(
+            commands,
+            sim,
+            &label_font,
+            spawn_bounds,
+            show_town_labels,
+        );
+        super::station_labels::spawn_station_labels(
+            commands,
+            sim,
+            &label_font,
+            spawn_bounds,
+            show_station_labels,
+        );
+        super::sign_labels::spawn_sign_labels(commands, sim, &label_font, spawn_bounds);
     }
     spawn_map_tiles_in_bounds(
         commands,
@@ -561,6 +609,7 @@ fn spawn_world_layer(
         sim,
         spawn_bounds,
         show_pbs_reservations,
+        show_full_detail,
     );
 }
 
@@ -574,6 +623,7 @@ fn spawn_map_chunk(
     cx: u32,
     cy: u32,
     show_pbs_reservations: bool,
+    show_full_detail: bool,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
     spawn_map_tiles_in_bounds(
@@ -584,6 +634,7 @@ fn spawn_map_chunk(
         sim,
         chunk_tile_bounds(cx, cy, mw, mh),
         show_pbs_reservations,
+        show_full_detail,
     );
 }
 
@@ -639,7 +690,7 @@ pub(crate) fn apply_remap_map_visuals(
     mut pending: ResMut<RemapMapVisualsPending>,
     q_vis: Query<Entity, With<MapVisualLayer>>,
     q_chunks: Query<(Entity, &MapTileChunk), With<MapVisualLayer>>,
-    q_town_labels: Query<Entity, With<super::town_labels::TownLabel>>,
+    label_entities: MapLabelEntities,
     windows: Query<&Window, With<PrimaryWindow>>,
     mut q_cam: Query<
         (&mut Transform, &mut Projection),
@@ -696,6 +747,9 @@ pub(crate) fn apply_remap_map_visuals(
         && !loaded_chunks.chunks.is_empty();
 
     let show_pbs = prefs.show_pbs_reservations;
+    let show_full_detail = prefs.full_detail;
+    let show_town_labels = prefs.show_town_labels;
+    let show_station_labels = prefs.show_station_labels;
 
     if use_incremental {
         let needed = chunks_in_bounds(spawn_bounds);
@@ -725,6 +779,7 @@ pub(crate) fn apply_remap_map_visuals(
                 cx,
                 cy,
                 show_pbs,
+                show_full_detail,
             );
         }
         let mut refresh_despawn = Vec::new();
@@ -749,15 +804,34 @@ pub(crate) fn apply_remap_map_visuals(
                 cx,
                 cy,
                 show_pbs,
+                show_full_detail,
             );
         }
         loaded_chunks.chunks = needed;
         // Etiquetas no van en chunks: re-sincronizar al panear el viewport.
         let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
-        let label_entities: Vec<Entity> = q_town_labels.iter().collect();
+        let town_entities: Vec<Entity> = label_entities.towns.iter().collect();
         super::town_labels::resync_town_labels(
             &mut commands,
-            label_entities,
+            town_entities,
+            &sim,
+            &label_font,
+            spawn_bounds,
+            show_town_labels,
+        );
+        let station_label_entities: Vec<Entity> = label_entities.stations.iter().collect();
+        super::station_labels::resync_station_labels(
+            &mut commands,
+            station_label_entities,
+            &sim,
+            &label_font,
+            spawn_bounds,
+            show_station_labels,
+        );
+        let sign_entities: Vec<Entity> = label_entities.signs.iter().collect();
+        super::sign_labels::resync_sign_labels(
+            &mut commands,
+            sign_entities,
             &sim,
             &label_font,
             spawn_bounds,
@@ -794,6 +868,9 @@ pub(crate) fn apply_remap_map_visuals(
             spawn_bounds,
             true,
             show_pbs,
+            show_full_detail,
+            show_town_labels,
+            show_station_labels,
         );
         loaded_chunks.chunks = chunks_in_bounds(spawn_bounds);
     }

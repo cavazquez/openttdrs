@@ -86,6 +86,7 @@ pub(super) fn place_towns(ctx: &mut PopCtx<'_>, target: usize, town_centers: &mu
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
+            ..Default::default()
         });
         town_centers.push(plan.town_pos);
     }

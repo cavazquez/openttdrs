@@ -41,6 +41,12 @@ pub(crate) struct WorldAssets {
     pub(crate) road_paved: Vec<AtlasSprite>,
     /// Faroles de `Roadside::StreetLights` (sprites 0x57E/0x57F).
     pub(crate) road_streetlights: [AtlasSprite; 2],
+    /// Árbol de acera (`Roadside::Trees`, sprite 0x1212).
+    pub(crate) roadside_tree: AtlasSprite,
+    /// Cercas de vía `track_fence_0..7.png` (`SPR_TRACK_FENCE_*`).
+    pub(crate) track_fences: [AtlasSprite; 8],
+    /// Frames faro/estadio (`object_lighthouse_anim_*` / `house_s148x_anim_*`).
+    pub(crate) lighthouse_anim_frames: HashMap<u32, Vec<AtlasSprite>>,
     /// OpenGFX `tram_flat_*` (SPR_TRAMWAY_OVERLAY+0..18); mismo índice que `road_flat_*`.
     pub(crate) tram_flat: Vec<AtlasSprite>,
     pub(crate) rail: HashMap<u32, AtlasSprite>,
@@ -56,6 +62,8 @@ pub(crate) struct WorldAssets {
     pub(crate) ship_depot: [AtlasSprite; 4],
     /// Muelle plano: índice 0 = eje X, 1 = eje Y.
     pub(crate) dock_flat: [AtlasSprite; 2],
+    /// Boya (`buoy.png`).
+    pub(crate) buoy: AtlasSprite,
     /// Helipuerto / hangar 1×1.
     pub(crate) airport_heliport: AtlasSprite,
     pub(crate) airport_hangar: AtlasSprite,
@@ -164,6 +172,24 @@ impl WorldAssets {
             atlas.get("road_streetlight_0.png"),
             atlas.get("road_streetlight_1.png"),
         ];
+        let roadside_tree = atlas.get("roadside_tree.png");
+        let track_fences = std::array::from_fn(|i| atlas.get(&format!("track_fence_{i}.png")));
+        let mut lighthouse_anim_frames = HashMap::new();
+        for &id in &[2602u32, 1483, 1484, 1485, 1486] {
+            let frames: Vec<_> = (0..4)
+                .filter_map(|f| {
+                    let name = if id == 2602 {
+                        format!("object_lighthouse_anim_{f:02}.png")
+                    } else {
+                        format!("house_s{id}_anim_{f:02}.png")
+                    };
+                    atlas.try_get(&name)
+                })
+                .collect();
+            if frames.len() == 4 {
+                lighthouse_anim_frames.insert(id, frames);
+            }
+        }
         let tram_flat = (0..19)
             .map(|i| atlas.get(&format!("tram_flat_{i:02}.png")))
             .collect();
@@ -235,6 +261,7 @@ impl WorldAssets {
             atlas.get("ship_depot_nw.png"),
         ];
         let dock_flat = [atlas.get("dock_flat_x.png"), atlas.get("dock_flat_y.png")];
+        let buoy = atlas.get("buoy.png");
         let airport_heliport = atlas.get("airport_heliport.png");
         let airport_hangar = atlas.get("airport_hangar_front.png");
         let airport_apron = atlas.get("airport_apron.png");
@@ -420,6 +447,9 @@ impl WorldAssets {
             road_flat,
             road_paved,
             road_streetlights,
+            roadside_tree,
+            track_fences,
+            lighthouse_anim_frames,
             tram_flat,
             rail,
             station_grounds,
@@ -431,6 +461,7 @@ impl WorldAssets {
             rail_depot_builds,
             ship_depot,
             dock_flat,
+            buoy,
             airport_heliport,
             airport_hangar,
             airport_apron,

@@ -8,13 +8,13 @@ use super::industry::check_place_industry_spec;
 use super::terraform::{check_level_land, check_lower_land, check_raise_land};
 use super::transport::{
     check_airport_area, check_airport_placement, check_bridge, check_clear_tile,
-    check_cycle_rail_signal_type, check_dock_placement, check_place_canal, check_place_lock,
-    check_place_rail, check_place_rail_signal_oriented, check_place_rail_waypoint,
-    check_place_road_bits, check_rail_depot_placement, check_rail_station_area,
-    check_rail_trackbits_with_autoslope, check_remove_rail, check_remove_rail_signal,
-    check_road_depot_placement, check_ship_depot_placement, check_single_transport_tile,
-    check_station_placement, check_tunnel, merged_rail_trackbits_on_tile, rail_station_footprint,
-    rail_trackbits_from_neighbors,
+    check_cycle_rail_signal_type, check_dock_placement, check_place_aqueduct, check_place_buoy,
+    check_place_canal, check_place_lock, check_place_rail, check_place_rail_signal_oriented,
+    check_place_rail_waypoint, check_place_river, check_place_road_bits,
+    check_rail_depot_placement, check_rail_station_area, check_rail_trackbits_with_autoslope,
+    check_remove_rail, check_remove_rail_signal, check_road_depot_placement,
+    check_ship_depot_placement, check_single_transport_tile, check_station_placement, check_tunnel,
+    merged_rail_trackbits_on_tile, rail_station_footprint, rail_trackbits_from_neighbors,
 };
 use super::types::{Command, CommandError};
 
@@ -75,9 +75,10 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
     let stations = &state.stations;
     let tick = state.tick.get();
     match cmd {
-        Command::PlaceRoad(c) | Command::PlaceRoadBits(c, _) | Command::SetRoadBits(c, _) => {
-            check_place_road_bits(map, *c).err()
-        }
+        Command::PlaceRoad(c)
+        | Command::PlaceRoadBits(c, _)
+        | Command::PlaceTramBits(c, _)
+        | Command::SetRoadBits(c, _) => check_place_road_bits(map, *c).err(),
         Command::PlaceRail(c) => check_place_rail(map, *c).err().or_else(|| {
             let tb = rail_trackbits_from_neighbors(map, *c);
             check_rail_trackbits_with_autoslope(map, *c, tb, tick).err()
@@ -114,10 +115,15 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         Command::PlaceShipDepotDir(c, dir) => check_ship_depot_placement(map, *c, *dir).err(),
         Command::PlaceDock(c, _) => check_dock_placement(map, &state.stations, *c).err(),
         Command::PlaceAirport(c) => check_airport_placement(map, &state.stations, *c).err(),
-        Command::PlaceAirportArea { origin, axis_y } => {
-            check_airport_area(state, *origin, *axis_y).err()
-        }
+        Command::PlaceAirportArea {
+            origin,
+            axis_y,
+            spec,
+        } => check_airport_area(state, *origin, *axis_y, *spec).err(),
         Command::PlaceCanal(c) => check_place_canal(map, *c).err(),
+        Command::PlaceRiver(c) => check_place_river(map, *c).err(),
+        Command::PlaceBuoy(c) => check_place_buoy(map, &state.stations, *c).err(),
+        Command::PlaceAqueduct(a, b) => check_place_aqueduct(map, *a, *b).err(),
         Command::PlaceLock(c, axis_y) => check_place_lock(map, *c, *axis_y).err(),
         Command::PlaceHouse(c) | Command::PlaceForest(c) => {
             check_single_transport_tile(map, *c).err()
@@ -209,6 +215,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::ToggleVehicleOrderNoUnload { .. }
         | Command::AppendGotoNearestDepot(..)
         | Command::RenameVehicle { .. }
+        | Command::RenameStation { .. }
         | Command::SetDepotVehiclesRunning { .. }
         | Command::MoveVehicleOrder { .. }
         | Command::ToggleVehicleOrderDepotStop { .. }
@@ -242,7 +249,11 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::TownAdvertise(_)
         | Command::TownFundBuildings(_)
         | Command::PlantTree(_)
-        | Command::ClearTree(_) => None,
+        | Command::ClearTree(_)
+        | Command::PlaceSign { .. }
+        | Command::RemoveSign { .. }
+        | Command::RenameSign { .. }
+        | Command::JoinStations { .. } => None,
     }
 }
 

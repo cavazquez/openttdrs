@@ -50,6 +50,29 @@ fn road_bits_at(map: &Map, c: TileCoord) -> u8 {
 }
 
 #[must_use]
+fn tram_bits_at(map: &Map, c: TileCoord) -> u8 {
+    let Some(t) = map.get(c) else {
+        return 0;
+    };
+    match t.kind {
+        TileKind::Road | TileKind::RoadTunnel | TileKind::RoadBridge => {
+            crate::road_type::tram_track_bits(&t)
+        }
+        TileKind::RoadDepot => {
+            let bits = crate::road_type::tram_track_bits(&t);
+            if bits != 0 {
+                bits
+            } else {
+                let bits = t.m5 & 0x0F;
+                if bits == 0 { 0x0F } else { bits }
+            }
+        }
+        TileKind::Station if (t.m6 >> 3) & 0x0F == 2 || (t.m6 >> 3) & 0x0F == 3 => t.m3 & 0x0F,
+        _ => 0,
+    }
+}
+
+#[must_use]
 fn road_tiles_connected(map: &Map, cur: TileCoord, next: TileCoord) -> bool {
     let dx = next.x - cur.x;
     let dy = next.y - cur.y;
@@ -70,6 +93,33 @@ fn road_neighbors(map: &Map, cur: TileCoord, prev: Option<TileCoord>) -> Vec<Til
             continue;
         }
         if road_tiles_connected(map, cur, next) {
+            out.push(next);
+        }
+    }
+    out
+}
+
+#[must_use]
+fn tram_tiles_connected(map: &Map, cur: TileCoord, next: TileCoord) -> bool {
+    let dx = next.x - cur.x;
+    let dy = next.y - cur.y;
+    if dx.abs() + dy.abs() != 1 {
+        return false;
+    }
+    let exit = road_bits_toward_neighbor(dx, dy);
+    let entry = road_bits_toward_neighbor(-dx, -dy);
+    tram_bits_at(map, cur) & exit != 0 && tram_bits_at(map, next) & entry != 0
+}
+
+#[must_use]
+fn tram_neighbors(map: &Map, cur: TileCoord, prev: Option<TileCoord>) -> Vec<TileCoord> {
+    let mut out = Vec::new();
+    for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
+        let next = TileCoord::new(cur.x + dx, cur.y + dy);
+        if prev == Some(next) {
+            continue;
+        }
+        if tram_tiles_connected(map, cur, next) {
             out.push(next);
         }
     }
@@ -185,6 +235,35 @@ pub(crate) fn orderless_road_next(
     tick: GameTick,
 ) -> Option<TileCoord> {
     let neighbors = road_neighbors(map, pos, prev);
+    if neighbors.is_empty() {
+        return None;
+    }
+    if neighbors.len() == 1 {
+        return Some(neighbors[0]);
+    }
+    let mut candidates = neighbors;
+    if let Some(previous) = prev
+        && candidates.len() > 1
+    {
+        candidates.retain(|n| *n != previous);
+        if candidates.is_empty() {
+            return None;
+        }
+    }
+    let seed = orderless_seed(vehicle_id, pos, tick);
+    Some(candidates[seeded_index(seed, candidates.len())])
+}
+
+/// Siguiente tesela de tranvía sin destino (misma lógica, bits m3).
+#[must_use]
+pub(crate) fn orderless_tram_next(
+    map: &Map,
+    pos: TileCoord,
+    prev: Option<TileCoord>,
+    vehicle_id: u32,
+    tick: GameTick,
+) -> Option<TileCoord> {
+    let neighbors = tram_neighbors(map, pos, prev);
     if neighbors.is_empty() {
         return None;
     }

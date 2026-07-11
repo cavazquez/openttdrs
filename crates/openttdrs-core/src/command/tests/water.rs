@@ -1,8 +1,8 @@
-//! Tests de construcción acuática (depósito + muelle).
+//! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
 use crate::{
     Command, DEPOT_BUILD_COST, GameState, STATION_BUILD_COST, StopKind, TileCoord, TileKind,
-    VehicleKind, apply_command,
+    VehicleKind, apply_command, bridge_above_axis_from_mapt,
 };
 
 #[test]
@@ -48,6 +48,83 @@ fn place_dock_on_coast_and_serves_ship() {
 }
 
 #[test]
+fn place_buoy_on_water_is_ship_waypoint() {
+    let mut s = GameState::new(12, 12);
+    let buoy = TileCoord::new(4, 4);
+    s.map.set_kind(buoy, TileKind::Water).unwrap();
+    let money = s.economy.money;
+    apply_command(&mut s, &Command::PlaceBuoy(buoy)).unwrap();
+    assert_eq!(s.map.get_kind(buoy), Some(TileKind::Station));
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].stop_kind, StopKind::Buoy);
+    assert!(s.stations[0].is_waypoint());
+    assert!(s.stations[0].can_service_vehicle(VehicleKind::Ship));
+    assert!(!s.stations[0].accepts_cargo(crate::CargoType::Goods));
+    assert_eq!(s.economy.money, money - STATION_BUILD_COST / 2);
+}
+
+#[test]
+fn place_buoy_rejects_land() {
+    let mut s = GameState::new(8, 8);
+    let e = apply_command(&mut s, &Command::PlaceBuoy(TileCoord::new(2, 2))).unwrap_err();
+    assert!(matches!(
+        e,
+        crate::CommandError::CannotPlaceStationOnOccupiedTile
+    ));
+}
+
+fn set_ne_slope(map: &mut crate::Map, tx: i32, ty: i32, base: u8) {
+    map.set_height(TileCoord::new(tx, ty), base + 1).unwrap();
+    map.set_height(TileCoord::new(tx, ty + 1), base + 1)
+        .unwrap();
+    map.set_height(TileCoord::new(tx + 1, ty), base).unwrap();
+    map.set_height(TileCoord::new(tx + 1, ty + 1), base)
+        .unwrap();
+}
+
+fn set_sw_slope(map: &mut crate::Map, tx: i32, ty: i32, base: u8) {
+    map.set_height(TileCoord::new(tx, ty), base).unwrap();
+    map.set_height(TileCoord::new(tx, ty + 1), base).unwrap();
+    map.set_height(TileCoord::new(tx + 1, ty), base + 1)
+        .unwrap();
+    map.set_height(TileCoord::new(tx + 1, ty + 1), base + 1)
+        .unwrap();
+}
+
+#[test]
+fn place_aqueduct_between_facing_slopes() {
+    let mut s = GameState::new(16, 12);
+    s.economy.money = 1_000_000;
+    // Oeste → este: rampa SW en (3,5), rampa NE en (7,5).
+    let west = TileCoord::new(3, 5);
+    let east = TileCoord::new(7, 5);
+    set_sw_slope(&mut s.map, west.x, west.y, 1);
+    set_ne_slope(&mut s.map, east.x, east.y, 1);
+    apply_command(&mut s, &Command::PlaceAqueduct(west, east)).unwrap();
+    assert_eq!(s.map.get_kind(west), Some(TileKind::Water));
+    assert_eq!(s.map.get_kind(east), Some(TileKind::Water));
+    let mid = s.map.get(TileCoord::new(5, 5)).unwrap();
+    assert_eq!(mid.kind, TileKind::Water);
+    assert!(bridge_above_axis_from_mapt(mid.mapt).is_some());
+    assert!(crate::ship_movement::is_water_network_tile_at(
+        &s.map,
+        TileCoord::new(5, 5)
+    ));
+}
+
+#[test]
+fn place_aqueduct_rejects_flat_endpoints() {
+    let mut s = GameState::new(12, 12);
+    s.economy.money = 1_000_000;
+    let e = apply_command(
+        &mut s,
+        &Command::PlaceAqueduct(TileCoord::new(2, 4), TileCoord::new(6, 4)),
+    )
+    .unwrap_err();
+    assert!(matches!(e, crate::CommandError::InvalidBridgeSpan));
+}
+
+#[test]
 fn ship_buys_at_depot_and_paths_to_dock() {
     use crate::engine::ENGINE_SHIP_MPS;
     use crate::pathfinder::{PathNetwork, find_path};
@@ -79,4 +156,85 @@ fn ship_buys_at_depot_and_paths_to_dock() {
     ship.sync_order_destination(&s.map);
     let path = find_path(&s.map, ship.pos, ship.dest, PathNetwork::Water);
     assert!(path.is_some(), "ruta agua depósito → muelle");
+}
+
+#[test]
+fn ship_paths_via_buoy() {
+    use crate::pathfinder::{PathNetwork, find_path};
+
+    let mut s = GameState::new(16, 10);
+    for x in 2..=10 {
+        s.map
+            .set_kind(TileCoord::new(x, 4), TileKind::Water)
+            .unwrap();
+    }
+    apply_command(&mut s, &Command::PlaceBuoy(TileCoord::new(6, 4))).unwrap();
+    let path = find_path(
+        &s.map,
+        TileCoord::new(2, 4),
+        TileCoord::new(10, 4),
+        PathNetwork::Water,
+    );
+    assert!(path.is_some(), "ruta agua atraviesa boya");
+    assert!(
+        path.unwrap().contains(&TileCoord::new(6, 4)),
+        "la ruta incluye la boya"
+    );
+}
+
+#[test]
+fn place_river_on_flat_and_inclined() {
+    use crate::map::is_river_tile;
+
+    let mut s = GameState::new(12, 12);
+    s.economy.money = 1_000_000;
+    let flat = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceRiver(flat)).unwrap();
+    assert!(s.map.get(flat).is_some_and(is_river_tile));
+
+    // Pendiente NE en (6,4): río permitido.
+    s.map.set_height(TileCoord::new(6, 4), 2).unwrap();
+    s.map.set_height(TileCoord::new(6, 5), 2).unwrap();
+    s.map.set_height(TileCoord::new(7, 4), 1).unwrap();
+    s.map.set_height(TileCoord::new(7, 5), 1).unwrap();
+    let slope = TileCoord::new(6, 4);
+    apply_command(&mut s, &Command::PlaceRiver(slope)).unwrap();
+    assert!(s.map.get(slope).is_some_and(is_river_tile));
+    // Río en pendiente no es navegable.
+    assert!(!crate::ship_movement::is_water_network_tile_at(
+        &s.map, slope
+    ));
+
+    assert!(
+        apply_command(&mut s, &Command::PlaceCanal(slope)).is_err(),
+        "canal rechaza pendiente"
+    );
+}
+
+#[test]
+fn place_canal_sets_water_class_canal() {
+    use crate::map::is_canal_tile;
+
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceCanal(c)).unwrap();
+    assert!(s.map.get(c).is_some_and(is_canal_tile));
+}
+
+#[test]
+fn ship_paths_on_flat_river() {
+    use crate::pathfinder::{PathNetwork, find_path};
+
+    let mut s = GameState::new(16, 10);
+    s.economy.money = 1_000_000;
+    for x in 2..=10 {
+        apply_command(&mut s, &Command::PlaceRiver(TileCoord::new(x, 4))).unwrap();
+    }
+    let path = find_path(
+        &s.map,
+        TileCoord::new(2, 4),
+        TileCoord::new(10, 4),
+        PathNetwork::Water,
+    );
+    assert!(path.is_some(), "río plano navegable");
 }

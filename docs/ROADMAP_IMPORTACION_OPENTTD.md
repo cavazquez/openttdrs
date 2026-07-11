@@ -44,6 +44,7 @@ Sorprendentemente, esta es el área **más avanzada** del port. Ya está portado
 | Ciclo de paleta del agua | `WaterAnimationPlugin` | `render/water.rs` |
 | Llama de refinería | `RefineryFireAnimPlugin` | `render/refinery_fire.rs` |
 | Burbujas fábrica de bebidas | `FizzyDrinkAnimPlugin` | `render/fizzy_drink.rs` |
+| Faro / luces de estadio | `LighthouseAnimPlugin` | `render/lighthouse_anim.rs` |
 | Humo chimenea / mina cobre | `IndustrySmokePlugin` | `render/smoke.rs` |
 | Animación edificios industria | `IndustryBuildingAnimPlugin` | `render/industry_anim.rs` |
 | Overlays draw_proc (chispas, burbujas) | `IndustryDrawProcPlugin` | `render/industry_draw_proc.rs` |

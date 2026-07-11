@@ -27,6 +27,13 @@ pub(crate) fn command_for_action(
         }
         BuildMenuAction::RoadX => Some(Command::PlaceRoadBits(pos, 0x0A)),
         BuildMenuAction::RoadY => Some(Command::PlaceRoadBits(pos, 0x05)),
+        BuildMenuAction::Tram => {
+            let bits = map.map(|m| road_bits_for_autoroute(m, pos)).unwrap_or(0x0A);
+            Some(Command::PlaceTramBits(pos, bits))
+        }
+        BuildMenuAction::TramX => Some(Command::PlaceTramBits(pos, 0x0A)),
+        BuildMenuAction::TramY => Some(Command::PlaceTramBits(pos, 0x05)),
+        BuildMenuAction::JoinStation => None,
         BuildMenuAction::Rail => Some(Command::PlaceRail(pos)),
         BuildMenuAction::RailX => Some(Command::PlaceRailBits(pos, 0x01)),
         BuildMenuAction::RailY => Some(Command::PlaceRailBits(pos, 0x02)),
@@ -67,11 +74,13 @@ pub(crate) fn command_for_action(
         }
         BuildMenuAction::Dock => Some(Command::PlaceDock(pos, station_state.orientation)),
         BuildMenuAction::Canal => Some(Command::PlaceCanal(pos)),
+        BuildMenuAction::River => Some(Command::PlaceRiver(pos)),
+        BuildMenuAction::Buoy => Some(Command::PlaceBuoy(pos)),
         BuildMenuAction::Lock => Some(Command::PlaceLock(pos, station_state.orientation & 1 != 0)),
-        BuildMenuAction::Airport => Some(Command::PlaceAirport(pos)),
-        BuildMenuAction::AirportSmall => Some(Command::PlaceAirportArea {
+        BuildMenuAction::Airport => Some(Command::PlaceAirportArea {
             origin: pos,
-            axis_y: station_state.rail_axis_y,
+            axis_y: station_state.airport_axis_y,
+            spec: station_state.airport_spec,
         }),
         BuildMenuAction::RailDepot => {
             Some(Command::PlaceRailDepotDir(pos, station_state.orientation))
@@ -79,7 +88,8 @@ pub(crate) fn command_for_action(
         BuildMenuAction::RoadBridge
         | BuildMenuAction::RoadTunnel
         | BuildMenuAction::RailBridge
-        | BuildMenuAction::RailTunnel => None,
+        | BuildMenuAction::RailTunnel
+        | BuildMenuAction::Aqueduct => None,
         BuildMenuAction::RailRemove => Some(Command::RemoveRail(pos)),
         BuildMenuAction::RailSignals => {
             let (fx, fy) = tile_fract.unwrap_or((128, 128));
@@ -202,6 +212,8 @@ pub(crate) fn command_for_action(
             mode: LevelMode::Level,
         }),
         BuildMenuAction::BuyLand => Some(Command::BuyLand(pos)),
+        BuildMenuAction::PlantTree => Some(Command::PlantTree(pos)),
+        BuildMenuAction::PlaceSign => Some(Command::PlaceSign { pos, name: None }),
     }
 }
 
@@ -262,6 +274,7 @@ pub(crate) fn command_for_line_action(
         BuildMenuAction::RailTunnel => Some(Command::PlaceRailTunnel(a, b)),
         BuildMenuAction::RoadBridge => Some(Command::PlaceRoadBridge(a, b, bridge_type)),
         BuildMenuAction::RailBridge => Some(Command::PlaceRailBridge(a, b, bridge_type)),
+        BuildMenuAction::Aqueduct => Some(Command::PlaceAqueduct(a, b)),
         _ => None,
     }
 }

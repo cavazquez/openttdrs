@@ -13,6 +13,7 @@ pub enum StationTileClass {
     Truck,
     Bus,
     Dock,
+    Buoy,
     Other(u8),
 }
 
@@ -38,6 +39,7 @@ pub fn station_type_from_m6(m6: u8) -> StationTileClass {
         2 => StationTileClass::Truck,
         3 => StationTileClass::Bus,
         4 => StationTileClass::Dock,
+        6 => StationTileClass::Buoy,
         7 => StationTileClass::RailWaypoint,
         v => StationTileClass::Other(v),
     }
@@ -57,13 +59,15 @@ pub fn station_tile_class(m6: u8, stop_kind: Option<StopKind>) -> StationTileCla
         | StationTileClass::RailWaypoint
         | StationTileClass::Bus
         | StationTileClass::Truck
-        | StationTileClass::Dock => station_type_from_m6(m6),
+        | StationTileClass::Dock
+        | StationTileClass::Buoy => station_type_from_m6(m6),
         StationTileClass::Airport | StationTileClass::Other(_) => {
             if let Some(sk) = stop_kind {
                 match sk {
                     StopKind::BusStop => StationTileClass::Bus,
                     StopKind::TruckStop => StationTileClass::Truck,
                     StopKind::Dock => StationTileClass::Dock,
+                    StopKind::Buoy => StationTileClass::Buoy,
                     StopKind::Airport => StationTileClass::Airport,
                     StopKind::RailWaypoint => StationTileClass::RailWaypoint,
                     StopKind::RailStation => StationTileClass::Rail,
@@ -303,6 +307,7 @@ pub fn road_stop_build_layers(class: StationTileClass, dir: usize) -> &'static [
         | StationTileClass::RailWaypoint
         | StationTileClass::Airport
         | StationTileClass::Dock
+        | StationTileClass::Buoy
         | StationTileClass::Other(_) => &[],
     }
 }

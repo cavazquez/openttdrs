@@ -1,5 +1,6 @@
 //! Tipos y helpers para construir la capa visual del mapa.
 
+mod animation_gate;
 mod assets;
 mod atlas;
 mod company_recolor;
@@ -10,8 +11,11 @@ mod fizzy_drink;
 mod grid;
 mod industry_anim;
 mod industry_draw_proc;
+mod lighthouse_anim;
 mod refinery_fire;
+mod sign_labels;
 mod smoke;
+mod station_labels;
 mod tile_anims;
 mod tiles;
 mod town_labels;
@@ -21,6 +25,7 @@ mod viewport;
 mod water;
 mod world;
 
+pub(crate) use animation_gate::palette_animations_should_run;
 pub(crate) use assets::WorldAssets;
 pub(crate) use atlas::{AtlasSprite, TileAtlas};
 pub(crate) use company_recolor::{
@@ -28,9 +33,9 @@ pub(crate) use company_recolor::{
     sprite_from_atlas_or_industry_palette, sprite_from_company_or_asset,
 };
 pub(crate) use components::{
-    FizzyDrinkAnimFrames, IndustryPreviewCamera, MapPreviewCamera, MapSpriteBatches, MapTileChunk,
-    MapVisualLayer, PrimaryGameCamera, RefineryFireAnimFrames, ShoreTile, WaterAnimFrames,
-    WaterTile,
+    FizzyDrinkAnimFrames, IndustryPreviewCamera, LighthouseAnimFrames, MapPreviewCamera,
+    MapSpriteBatches, MapTileChunk, MapVisualLayer, PrimaryGameCamera, RefineryFireAnimFrames,
+    ShoreTile, WaterAnimFrames, WaterTile,
 };
 pub(crate) use effect_fx::EffectVehiclePlugin;
 pub(crate) use effect_vehicle::EffectVehicleFrames;
@@ -41,6 +46,7 @@ pub(crate) use industry_anim::{
     spawn_industry_anim_layer,
 };
 pub(crate) use industry_draw_proc::{IndustryDrawProcPlugin, spawn_industry_draw_proc_overlays};
+pub(crate) use lighthouse_anim::{LighthouseAnim, LighthouseAnimPlugin};
 pub(crate) use refinery_fire::{RefineryFireAnim, RefineryFireAnimPlugin};
 pub(crate) use smoke::{
     ChimneySmokeFrames, CopperMineSmokeFrames, GFX_COPPER_MINE_CHIMNEY, GFX_POWERPLANT_CHIMNEY,

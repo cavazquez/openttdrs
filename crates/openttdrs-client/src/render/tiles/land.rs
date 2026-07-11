@@ -54,6 +54,11 @@ pub(crate) fn spawn_house_tile(
     let spec_idx =
         house_draw_data_index_for_tile(clean_house_id, ctx.tx_i32(), ctx.ty_i32(), building_stage);
     let spec = &HOUSE_DRAW_DATA[spec_idx];
+    use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
+    if is_hidden(TransparencyOption::Houses) {
+        return;
+    }
+    let tint = sprite_color(TransparencyOption::Houses);
     if spec.s1 != 0
         && let Some(img) = assets.houses.get(&spec.s1)
     {
@@ -71,13 +76,21 @@ pub(crate) fn spawn_house_tile(
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            img.sprite(),
+            img.sprite_colored(tint),
             Transform::from_translation(pos3),
         ));
     }
     if spec.s2 != 0
         && let Some(img) = assets.houses.get(&spec.s2)
     {
+        let anim = (1483..=1486).contains(&spec.s2)
+            && assets.lighthouse_anim_frames.contains_key(&spec.s2);
+        let mut sprite = if anim {
+            assets.lighthouse_anim_frames[&spec.s2][0].sprite()
+        } else {
+            img.sprite()
+        };
+        sprite.color = tint;
         let pos3 = overlay_pos(
             ctx.iso_pos,
             spec.s2_xrel,
@@ -89,12 +102,15 @@ pub(crate) fn spawn_house_tile(
             ctx.tx_i32(),
             ctx.ty_i32(),
         );
-        commands.spawn((
+        let mut entity = commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            img.sprite(),
+            sprite,
             Transform::from_translation(pos3),
         ));
+        if anim {
+            entity.insert(crate::render::LighthouseAnim { sprite_id: spec.s2 });
+        }
     }
 }
 
@@ -125,12 +141,14 @@ pub(crate) fn spawn_industry_tile(
     let m4 = industry_effective_m4_for_draw(gfx, m1, m3hi, 0.0, phase);
     let entry = industry_gfx_entry_for_tile(gfx, m1, m4);
     crate::sprites::log_industry_gfx_once(gfx, m1, m3hi, entry);
+    use crate::sprites::{TransparencyOption, is_hidden, with_to_alpha};
+    let industries_hidden = is_hidden(TransparencyOption::Industries);
     // Chimenea de la central terminada: penacho de humo animado encima.
-    if gfx == crate::render::GFX_POWERPLANT_CHIMNEY && m1 & 0x80 != 0 {
+    if !industries_hidden && gfx == crate::render::GFX_POWERPLANT_CHIMNEY && m1 & 0x80 != 0 {
         crate::render::spawn_chimney_smoke(commands, assets, ctx);
     }
     // Chimenea mina de cobre terminada: humo `EV_COPPER_MINE_SMOKE`.
-    if gfx == crate::render::GFX_COPPER_MINE_CHIMNEY && m1 & 0x80 != 0 {
+    if !industries_hidden && gfx == crate::render::GFX_COPPER_MINE_CHIMNEY && m1 & 0x80 != 0 {
         crate::render::spawn_copper_mine_smoke(commands, assets, ctx);
     }
     let ground_sid = entry.map(|e| e.ground_sprite_id).unwrap_or(0);
@@ -199,6 +217,9 @@ pub(crate) fn spawn_industry_tile(
     };
     let overlay_ctx =
         crate::render::IndustryOverlayContext::from_tile_ctx(ctx, base_z, overlay_z, leveled);
+    if industries_hidden {
+        return;
+    }
     if let Some(s) = entry {
         let anim_base = |ground: bool| {
             crate::render::IndustryBuildingAnim::new(gfx, m1, phase, ground, overlay_ctx)
@@ -218,7 +239,7 @@ pub(crate) fn spawn_industry_tile(
                     0.45,
                 );
             } else if let Some(img) = assets.industries.get(&s.ground_sprite_id) {
-                let sprite = if industry_gfx_uses_random_colour(gfx) {
+                let mut sprite = if industry_gfx_uses_random_colour(gfx) {
                     sprite_from_atlas_or_industry_palette(
                         company,
                         images,
@@ -229,6 +250,7 @@ pub(crate) fn spawn_industry_tile(
                 } else {
                     img.sprite()
                 };
+                sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
                 let pos_g = overlay_at(s.ground_xrel, s.ground_yrel, s.ground_w, s.ground_h, 0.45);
                 commands.spawn((
                     MapVisualLayer,
@@ -257,7 +279,7 @@ pub(crate) fn spawn_industry_tile(
                     && assets.refinery_fire_frames.contains_key(&s.sprite_id);
                 let fizzy_drink = industry_gfx_uses_fizzy_drink_anim(gfx, m1)
                     && assets.fizzy_drink_frames.contains_key(&s.sprite_id);
-                let sprite = if refinery_fire {
+                let mut sprite = if refinery_fire {
                     assets.refinery_fire_frames[&s.sprite_id][0].sprite()
                 } else if fizzy_drink {
                     assets.fizzy_drink_frames[&s.sprite_id][0].sprite()
@@ -272,6 +294,7 @@ pub(crate) fn spawn_industry_tile(
                 } else {
                     img.sprite()
                 };
+                sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
                 let pos3 = overlay_at(s.xrel, s.yrel, s.w, s.h, 0.5);
                 let mut entity = commands.spawn((
                     MapVisualLayer,
@@ -394,6 +417,11 @@ pub(crate) fn spawn_generic_land_tile(
     // MP_OBJECT: renderizar faro o transmisor como overlay.
     // ObjectType de OpenTTD: 0=Transmisor, 1=Faro.
     if ottd_type == 10 {
+        use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
+        if is_hidden(TransparencyOption::Structures) {
+            return;
+        }
+        let tint = sprite_color(TransparencyOption::Structures);
         let (obj_img, obj_xrel, obj_yrel, obj_w, obj_h) = match tile_m5 {
             OBJECT_TYPE_TRANSMITTER => (Some(assets.transmitter.clone()), -26.0, -71.0, 55.0, 77.0),
             OBJECT_TYPE_LIGHTHOUSE => (Some(assets.lighthouse.clone()), -22.0, -48.0, 41.0, 61.0),
@@ -401,6 +429,17 @@ pub(crate) fn spawn_generic_land_tile(
             _ => (None, 0.0, 0.0, 0.0, 0.0),
         };
         if let Some(img) = obj_img {
+            let anim = tile_m5 == OBJECT_TYPE_LIGHTHOUSE
+                && assets.lighthouse_anim_frames.contains_key(&2602);
+            let mut sprite = if anim {
+                assets.lighthouse_anim_frames[&2602][0].sprite()
+            } else {
+                img.sprite()
+            };
+            // Owned land no es "structure" de faro/antena; no tintar si es bought land.
+            if tile_m5 != OBJECT_TYPE_OWNED_LAND {
+                sprite.color = tint;
+            }
             let pos3 = overlay_pos(
                 ctx.iso_pos,
                 obj_xrel,
@@ -412,12 +451,15 @@ pub(crate) fn spawn_generic_land_tile(
                 ctx.tx_i32(),
                 ctx.ty_i32(),
             );
-            commands.spawn((
+            let mut entity = commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                img.sprite(),
+                sprite,
                 Transform::from_translation(pos3),
             ));
+            if anim {
+                entity.insert(crate::render::LighthouseAnim { sprite_id: 2602 });
+            }
         }
     }
 }
@@ -510,6 +552,11 @@ pub(crate) fn push_forest_tree(
     batches: &mut MapSpriteBatches,
     map_w: u32,
 ) {
+    use crate::sprites::{TransparencyOption, is_hidden, sprite_color};
+    if is_hidden(TransparencyOption::Trees) {
+        return;
+    }
+    let tint = sprite_color(TransparencyOption::Trees);
     let (tree_type, count, growth) = match ctx.tile {
         // MP_TREES real (nibble alto de mapt = 4): datos del save.
         Some(t) if (t.mapt >> 4) & 0xF == 4 => (
@@ -552,7 +599,7 @@ pub(crate) fn push_forest_tree(
         );
         batches.trees.push((
             ctx.map_tile_chunk(),
-            assets.trees[sprite_idx].sprite(),
+            assets.trees[sprite_idx].sprite_colored(tint),
             Transform::from_translation(pos3),
         ));
     }

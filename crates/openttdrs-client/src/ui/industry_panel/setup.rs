@@ -8,7 +8,8 @@ use crate::render::{IndustryPreviewCamera, MapPreviewCamera};
 use crate::ui::toolbar::BuildMenuUi;
 
 use super::{
-    IndustryPanelCloseButton, IndustryPanelDetails, IndustryPanelRoot, IndustryPanelTitle,
+    IndustryPanelCenterButton, IndustryPanelCloseButton, IndustryPanelDetails, IndustryPanelRoot,
+    IndustryPanelTitle,
 };
 
 const PREVIEW_TEX_W: u32 = 320;
@@ -92,6 +93,33 @@ pub(crate) fn setup_industry_panel(
                     TextColor(Color::srgb(0.95, 0.92, 0.8)),
                     BuildMenuUi,
                 ));
+                row.spawn((
+                    IndustryPanelCenterButton,
+                    Button,
+                    Node {
+                        height: Val::Px(24.0),
+                        padding: UiRect::horizontal(Val::Px(8.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),
+                    BorderColor::all(Color::srgb(0.7, 0.62, 0.42)),
+                    Interaction::default(),
+                    BuildMenuUi,
+                ))
+                .with_children(|b| {
+                    b.spawn((
+                        Text::new("Centrar"),
+                        TextFont {
+                            font: ui_font.clone().into(),
+                            font_size: FontSize::Rem(0.65),
+                            ..default()
+                        },
+                        TextColor(Color::srgb(0.92, 0.88, 0.78)),
+                    ));
+                });
                 row.spawn((
                     IndustryPanelCloseButton,
                     Button,

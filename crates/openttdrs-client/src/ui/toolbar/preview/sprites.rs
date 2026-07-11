@@ -42,6 +42,15 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::RoadY => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/road_flat_00.png"))
         }
+        BuildMenuAction::Tram => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/tram_flat_02.png"))
+        }
+        BuildMenuAction::TramX => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/tram_flat_01.png"))
+        }
+        BuildMenuAction::TramY => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/tram_flat_00.png"))
+        }
         BuildMenuAction::RoadDepot => None,
         BuildMenuAction::ShipDepot => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/ship_depot_ne.png"))
@@ -57,6 +66,18 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::Canal => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/water_flat.png"))
         }
+        BuildMenuAction::River => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/water_flat.png"))
+        }
+        BuildMenuAction::Buoy => Some(asset_server.load::<Image>("assets/opengfx/tiles/buoy.png")),
+        BuildMenuAction::Aqueduct => {
+            let path = if bridge_axis_y_from_tiles(preview_tiles) {
+                "assets/opengfx/tiles/bridge_wood_road_y.png"
+            } else {
+                "assets/opengfx/tiles/bridge_wood_road_x.png"
+            };
+            Some(asset_server.load::<Image>(path))
+        }
         BuildMenuAction::Lock => {
             let path = if station_state.orientation & 1 != 0 {
                 "assets/opengfx/tiles/water_lock_ew_middle.png"
@@ -66,9 +87,6 @@ pub(crate) fn preview_image_for_action(
             Some(asset_server.load::<Image>(path))
         }
         BuildMenuAction::Airport => {
-            Some(asset_server.load::<Image>("assets/opengfx/tiles/airport_heliport.png"))
-        }
-        BuildMenuAction::AirportSmall => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/airport_runway_0.png"))
         }
         BuildMenuAction::RoadBridge => {
@@ -197,6 +215,15 @@ pub(crate) fn preview_image_for_action(
         }
         BuildMenuAction::BuyLand => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/object_bought_land.png"))
+        }
+        BuildMenuAction::PlantTree => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/tree_01.png"))
+        }
+        BuildMenuAction::PlaceSign => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/object_lighthouse.png"))
+        }
+        BuildMenuAction::JoinStation => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/bus_stop_ne_ground.png"))
         }
     }
 }

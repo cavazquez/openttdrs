@@ -8,16 +8,18 @@ use crate::state::SimWorld;
 use crate::ui::hud::HoveredTileCoord;
 use crate::ui::save_window::SaveWindowState;
 use crate::ui::toolbar::minimap::minimap_contains_cursor;
-use crate::ui::toolbar::minimap::{MinimapCell, MinimapRoot};
+use crate::ui::toolbar::minimap::{MinimapCell, MinimapLayerState, MinimapRoot};
 use crate::ui::toolbar::{BuildMenuAction, BuildMenuUi, UiToolState};
 
 /// Actualiza la tesela bajo el cursor (preview, órdenes). No modifica la selección por clic.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn update_cursor_tile(
     save_window: Option<Res<SaveWindowState>>,
     windows: Query<&Window, With<PrimaryWindow>>,
     cam_q: Query<(&Camera, &GlobalTransform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     sim: Res<SimWorld>,
     tool_state: Res<UiToolState>,
+    layers: Res<MinimapLayerState>,
     mut hovered: ResMut<HoveredTileCoord>,
     toolbar_pointer: Query<
         &Interaction,
@@ -43,7 +45,7 @@ pub(crate) fn update_cursor_tile(
     let Some(cursor_pos) = window.cursor_position() else {
         return;
     };
-    if minimap_contains_cursor(cursor_pos, window) {
+    if minimap_contains_cursor(cursor_pos, window, &layers) {
         return;
     }
     let Ok((camera, cam_tf)) = cam_q.single() else {

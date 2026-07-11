@@ -20,6 +20,8 @@ pub enum Command {
     PlaceRoad(TileCoord),
     /// Coloca o combina una pieza de carretera `OpenTTD` (`RoadBits`, bits 0..3).
     PlaceRoadBits(TileCoord, u8),
+    /// Coloca o combina trazado de tranvía (`m3` bits 0..3; tipo en `m8`).
+    PlaceTramBits(TileCoord, u8),
     /// Reemplaza la geometría de carretera de la tesela con `RoadBits` exactos.
     SetRoadBits(TileCoord, u8),
     /// Coloca via de tren en la tesela (MVP: validacion de terreno).
@@ -56,13 +58,21 @@ pub enum Command {
     PlaceDock(TileCoord, u8),
     /// Helipuerto / aeropuerto 1×1 (compra aviones + carga pasajeros).
     PlaceAirport(TileCoord),
-    /// Aeropuerto small 4×3; `axis_y` rota el footprint.
+    /// Aeropuerto por spec; `axis_y` rota el footprint.
     PlaceAirportArea {
         origin: TileCoord,
         axis_y: bool,
+        #[serde(default)]
+        spec: crate::airport_class::AirportSpecId,
     },
     /// Canal: convierte terreno en agua navegable.
     PlaceCanal(TileCoord),
+    /// Pinta río (`WaterClass::River`); plano o pendiente inclinada.
+    PlaceRiver(TileCoord),
+    /// Boya: waypoint acuático sobre agua (`StationType::Buoy`).
+    PlaceBuoy(TileCoord),
+    /// Acueducto: puente de canal entre dos rampas en pendiente.
+    PlaceAqueduct(TileCoord, TileCoord),
     /// Esclusa sobre agua; `axis_y` = eje N-S.
     PlaceLock(TileCoord, bool),
     PlaceRoadTunnel(TileCoord, TileCoord),
@@ -148,6 +158,11 @@ pub enum Command {
     /// Renombra un vehículo (`None` o cadena vacía → quitar nombre).
     RenameVehicle {
         vehicle_id: u32,
+        name: Option<String>,
+    },
+    /// Renombra una estación (`None` o cadena vacía → quitar nombre).
+    RenameStation {
+        station_pos: TileCoord,
         name: Option<String>,
     },
     /// Pone todos los vehículos en `depot_pos` en marcha o detenidos.
@@ -287,6 +302,26 @@ pub enum Command {
     PlantTree(TileCoord),
     /// Quita árbol o reduce etapa de cultivo.
     ClearTree(TileCoord),
+    /// Coloca un cartel en la tesela (`CmdPlaceSign`).
+    PlaceSign {
+        pos: TileCoord,
+        name: Option<String>,
+    },
+    /// Elimina un cartel por id.
+    RemoveSign {
+        sign_id: u32,
+    },
+    /// Renombra un cartel (nombre vacío no permitido).
+    RenameSign {
+        sign_id: u32,
+        name: Option<String>,
+    },
+    /// Une dos paradas road 1×1 adyacentes (`CmdJoinStation` MVP).
+    /// `keep` permanece; `merge` se fusiona en `keep.joined_tiles`.
+    JoinStations {
+        keep: TileCoord,
+        merge: TileCoord,
+    },
 }
 
 /// Dirección para reordenar órdenes en la lista del vehículo.
@@ -311,6 +346,8 @@ pub enum CommandError {
     /// La tesela no tiene ningún vecino con carretera/vía (ni equivalente transitable).
     StationNotAdjacentToTransport,
     StationAlreadyExists,
+    /// Tamaño de andenes/longitud no permitido por el `StationSpec` activo.
+    StationSizeNotAllowed,
     StationNotFound,
     VehicleNotFound,
     /// Solo se puede vender un vehículo estacionado en un depósito.
@@ -330,6 +367,8 @@ pub enum CommandError {
     DepotNotFound,
     /// Nombre de vehículo demasiado largo.
     VehicleNameTooLong,
+    /// Nombre de estación demasiado largo.
+    StationNameTooLong,
     /// Refit no permitido (fuera de depósito, con carga o tipo inválido).
     RefitNotAllowed,
     /// Horario: el ajuste no aplica a este tipo de orden.
@@ -397,10 +436,19 @@ pub enum CommandError {
     CannotPlantTreeHere,
     /// No hay árbol ni cultivo que quitar.
     NoTreeHere,
+    /// Cartel no encontrado.
+    SignNotFound,
+    /// Nombre de cartel demasiado largo.
+    SignNameTooLong,
+    /// El cartel necesita un nombre no vacío.
+    SignNameEmpty,
+    /// No se pueden unir estas estaciones.
+    CannotJoinStations,
 }
 
 /// Texto breve en español para mostrar al jugador cuando falla un comando.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub const fn command_error_message(err: CommandError) -> &'static str {
     match err {
         CommandError::OutOfBounds => "Fuera del mapa.",
@@ -417,6 +465,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
             "La entrada debe dar a la carretera o vía en esa dirección."
         }
         CommandError::StationAlreadyExists => "Ya hay una estación en esta tesela.",
+        CommandError::StationSizeNotAllowed => {
+            "Este tipo de estación no permite ese número de andenes o longitud."
+        }
         CommandError::StationNotFound => "No hay estación en esta tesela.",
         CommandError::VehicleNotFound => "Vehículo no encontrado.",
         CommandError::VehicleNotInDepot => {
@@ -431,6 +482,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::OrderFlagNotApplicable => "Ese ajuste solo aplica a paradas de estación.",
         CommandError::DepotNotFound => "No hay depósito compatible en el mapa.",
         CommandError::VehicleNameTooLong => "El nombre del vehículo es demasiado largo.",
+        CommandError::StationNameTooLong => "El nombre de la estación es demasiado largo.",
         CommandError::RefitNotAllowed => {
             "Solo se puede refit en depósito, sin carga y con un tipo compatible."
         }
@@ -499,5 +551,11 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         }
         CommandError::CannotPlantTreeHere => "No se puede plantar un árbol aquí.",
         CommandError::NoTreeHere => "No hay árbol ni cultivo en esta tesela.",
+        CommandError::SignNotFound => "Cartel no encontrado.",
+        CommandError::SignNameTooLong => "El nombre del cartel es demasiado largo.",
+        CommandError::SignNameEmpty => "El cartel necesita un nombre.",
+        CommandError::CannotJoinStations => {
+            "No se pueden unir: deben ser paradas bus/camión adyacentes del mismo tipo."
+        }
     }
 }

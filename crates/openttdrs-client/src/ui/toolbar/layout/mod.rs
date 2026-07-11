@@ -10,7 +10,6 @@ use sections::{
 
 use super::BuildMenuUi;
 use crate::state::ingame_lifecycle::InGameUi;
-use crate::ui::navigation::spawn_toolbar_navigation_menus;
 
 /// Barra superior compacta tipo toolbar para seleccion rapida de herramienta.
 pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -38,7 +37,6 @@ pub(crate) fn setup_top_toolbar(mut commands: Commands, asset_server: Res<AssetS
         spawn_air_panel(root, &asset_server);
         spawn_rail_panel(root, &asset_server);
         spawn_secondary_tool_panels(root, &asset_server);
-        spawn_toolbar_navigation_menus(root, &asset_server);
         spawn_toolbar_tooltip(root);
     });
 }
@@ -76,6 +74,9 @@ mod tests {
             "assets/opengfx/tiles/road_flat_00.png",
             "assets/opengfx/tiles/road_flat_01.png",
             "assets/opengfx/tiles/road_flat_02.png",
+            "assets/opengfx/tiles/tram_flat_00.png",
+            "assets/opengfx/tiles/tram_flat_01.png",
+            "assets/opengfx/tiles/tram_flat_02.png",
             "assets/opengfx/tiles/ship_depot_ne.png",
             "assets/opengfx/tiles/dock_flat_x.png",
             "assets/opengfx/tiles/water_flat.png",
@@ -120,6 +121,7 @@ mod tests {
             ..default()
         });
         app.add_plugins(ImagePlugin::default());
+        app.init_asset::<Font>();
         app.update();
         app.world_mut()
             .run_system_once(setup_top_toolbar)

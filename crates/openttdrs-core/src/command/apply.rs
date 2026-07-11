@@ -3,7 +3,7 @@ use crate::map::TileKind;
 use crate::{GameState, StopKind};
 
 use super::types::{Command, CommandError};
-use super::{buy_land, economy, industry, terraform, town, transport, vehicles};
+use super::{buy_land, economy, industry, sign, terraform, town, transport, vehicles};
 
 /// Aplica `cmd` a `state` o devuelve error sin mutar.
 ///
@@ -51,11 +51,12 @@ fn construction_event_for(
         | Command::RemoveRailSignal(c, _, _)
         | Command::PlaceRailStation(c, _)
         | Command::PlaceRailTunnel(c, _) => Some((ConstructionKind::Rail, *c)),
-        Command::PlaceRailBridge(c, _, _) | Command::PlaceRoadBridge(c, _, _) => {
-            Some((ConstructionKind::Bridge, *c))
-        }
+        Command::PlaceRailBridge(c, _, _)
+        | Command::PlaceRoadBridge(c, _, _)
+        | Command::PlaceAqueduct(c, _) => Some((ConstructionKind::Bridge, *c)),
         Command::PlaceRoad(c)
         | Command::PlaceRoadBits(c, _)
+        | Command::PlaceTramBits(c, _)
         | Command::SetRoadBits(c, _)
         | Command::PlaceRoadDepot(c)
         | Command::PlaceRoadDepotDir(c, _)
@@ -64,6 +65,8 @@ fn construction_event_for(
         | Command::PlaceAirport(c)
         | Command::PlaceAirportArea { origin: c, .. }
         | Command::PlaceCanal(c)
+        | Command::PlaceRiver(c)
+        | Command::PlaceBuoy(c)
         | Command::PlaceLock(c, _)
         | Command::PlaceStation(c)
         | Command::PlaceStationDir(c, _)
@@ -120,6 +123,11 @@ const fn command_modifies_map(cmd: &Command) -> bool {
             | Command::ToggleVehicleOrderNoUnload { .. }
             | Command::AppendGotoNearestDepot(..)
             | Command::RenameVehicle { .. }
+            | Command::RenameStation { .. }
+            | Command::RenameSign { .. }
+            | Command::PlaceSign { .. }
+            | Command::RemoveSign { .. }
+            | Command::JoinStations { .. }
             | Command::SetDepotVehiclesRunning { .. }
             | Command::MoveVehicleOrder { .. }
             | Command::ToggleVehicleOrderDepotStop { .. }
@@ -217,6 +225,9 @@ fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), Com
         Command::AppendGotoNearestDepot(id) => vehicles::append_goto_nearest_depot(state, *id),
         Command::RenameVehicle { vehicle_id, name } => {
             vehicles::rename_vehicle(state, *vehicle_id, name.clone())
+        }
+        Command::RenameStation { station_pos, name } => {
+            transport::rename_station(state, *station_pos, name.clone())
         }
         Command::SetDepotVehiclesRunning { depot_pos, running } => {
             vehicles::set_depot_vehicles_running(state, *depot_pos, *running)
@@ -352,6 +363,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
     match cmd {
         Command::PlaceRoad(c) => transport::place_road(state, *c),
         Command::PlaceRoadBits(c, bits) => transport::place_road_bits(state, *c, *bits),
+        Command::PlaceTramBits(c, bits) => transport::place_tram_bits(state, *c, *bits),
         Command::SetRoadBits(c, bits) => transport::set_road_bits(state, *c, *bits),
         Command::PlaceRail(c) => transport::place_rail(state, *c),
         Command::PlaceRailBits(c, bits) => transport::place_rail_bits(state, *c, *bits),
@@ -376,10 +388,15 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::PlaceShipDepotDir(c, dir) => transport::place_ship_depot_dir(state, *c, *dir),
         Command::PlaceDock(c, dir) => transport::place_dock(state, *c, *dir),
         Command::PlaceAirport(c) => transport::place_airport(state, *c),
-        Command::PlaceAirportArea { origin, axis_y } => {
-            transport::place_airport_area(state, *origin, *axis_y)
-        }
+        Command::PlaceAirportArea {
+            origin,
+            axis_y,
+            spec,
+        } => transport::place_airport_area(state, *origin, *axis_y, *spec),
         Command::PlaceCanal(c) => transport::place_canal(state, *c),
+        Command::PlaceRiver(c) => transport::place_river(state, *c),
+        Command::PlaceBuoy(c) => transport::place_buoy(state, *c),
+        Command::PlaceAqueduct(a, b) => transport::place_aqueduct(state, *a, *b),
         Command::PlaceLock(c, axis_y) => transport::place_lock(state, *c, *axis_y),
         Command::PlaceRoadTunnel(a, b) => transport::place_tunnel_or_bridge(
             state,
@@ -452,6 +469,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         | Command::ToggleVehicleOrderNoUnload { .. }
         | Command::AppendGotoNearestDepot(..)
         | Command::RenameVehicle { .. }
+        | Command::RenameStation { .. }
         | Command::SetDepotVehiclesRunning { .. }
         | Command::MoveVehicleOrder { .. }
         | Command::ToggleVehicleOrderDepotStop { .. }
@@ -492,5 +510,9 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::TownFundBuildings(town_id) => town::town_fund_buildings(state, *town_id),
         Command::PlantTree(c) => crate::map::tree_tile_loop::plant_tree(state, *c),
         Command::ClearTree(c) => crate::map::tree_tile_loop::clear_tree(state, *c),
+        Command::PlaceSign { pos, name } => sign::place_sign(state, *pos, name.clone()),
+        Command::RemoveSign { sign_id } => sign::remove_sign(state, *sign_id),
+        Command::RenameSign { sign_id, name } => sign::rename_sign(state, *sign_id, name.clone()),
+        Command::JoinStations { keep, merge } => transport::join_stations(state, *keep, *merge),
     }
 }

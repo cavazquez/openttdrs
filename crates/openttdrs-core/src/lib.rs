@@ -8,6 +8,7 @@
 pub mod ai;
 pub mod aircraft_movement;
 pub mod airport;
+pub mod airport_class;
 pub mod autoreplace;
 pub mod bridge_spec;
 pub mod cargo;
@@ -19,6 +20,7 @@ pub mod dev_metrics;
 pub mod disaster;
 pub mod economy;
 pub mod engine;
+pub mod entity_history;
 mod game_state;
 pub mod industry;
 pub mod map;
@@ -34,14 +36,17 @@ pub mod rail_signals;
 pub mod rail_type;
 pub mod refit;
 pub mod road_movement;
+pub mod road_type;
 pub mod sav;
 pub mod save;
 pub mod shared_orders;
 pub mod ship_movement;
+mod sign;
 mod sim_events;
 mod sim_step;
 pub mod sound_id;
 pub mod station;
+pub mod station_class;
 pub mod subsidy;
 pub mod tick;
 pub mod timetable;
@@ -59,7 +64,12 @@ pub use aircraft_movement::{aircraft_requires_path, straight_line_path};
 pub use airport::{
     AIRPORT_SMALL_H, AIRPORT_SMALL_W, AirportPiece, airport_loading_tile, airport_loading_tile_at,
     airport_m6_airport, airport_runway_tile, airport_small_footprint, airport_small_tiles,
-    airport_tile_is_hangar, airport_tile_is_heliport,
+    airport_spec_footprint, airport_spec_tiles, airport_tile_is_hangar, airport_tile_is_heliport,
+};
+pub use airport_class::{
+    AirportClassDef, AirportClassId, AirportSpecDef, AirportSpecId, airport_class_def,
+    airport_spec_def, all_airport_class_defs, all_airport_spec_defs, list_airport_classes,
+    list_airport_specs,
 };
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
 pub use bridge_spec::{
@@ -71,11 +81,12 @@ pub use bridge_spec::{
 pub use cargo::{CargoStock, CargoType};
 pub use cargo_packet::{CargoPacket, StationCargoList, VehicleCargoList, load_unload_speed};
 pub use command::{
-    Command, CommandError, LevelMode, OrderMoveDirection, ROAD_PLACE_FORCE_AXIS, apply_command,
-    check_place_industry_spec, command_error_message, command_would_fail, finalize_road_drag_line,
-    industry_template, infer_road_drag_axis, preview_road_bits_at, rail_bits_placement_target,
-    rail_station_footprint, rail_station_layout, rail_trackbits_from_neighbors,
-    road_bits_for_autoroute, road_drag_line_tiles, road_locked_tool_axis,
+    Command, CommandError, LevelMode, MAX_STATION_NAME_CHARS, OrderMoveDirection,
+    ROAD_PLACE_FORCE_AXIS, apply_command, check_place_industry_spec, command_error_message,
+    command_would_fail, finalize_road_drag_line, industry_template, infer_road_drag_axis,
+    preview_road_bits_at, rail_bits_placement_target, rail_station_footprint, rail_station_layout,
+    rail_trackbits_from_neighbors, road_bits_for_autoroute, road_drag_line_tiles,
+    road_locked_tool_axis,
 };
 pub use company::{Company, CompanyId, FEEDER_SHARE_DEN, FEEDER_SHARE_NUM, feeder_share_of};
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
@@ -102,13 +113,17 @@ pub use engine::{
     engines_for_depot_purchase, engines_of_kind, progress_step_for_speed, tile_progress_length,
     train_acceleration, train_smoke_kind, train_sprite_group, update_road_speed,
 };
+pub use entity_history::{
+    ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
+};
 #[allow(deprecated)]
 pub use game_state::CARGO_DELIVERY_PAYMENT;
 pub use game_state::IncomePopup;
 pub use game_state::{
     BRIDGE_BUILD_COST_PER_TILE, BUY_LAND_BASE_PRICE, CLEAR_TILE_COST, CompanyEconomy,
-    DEPOT_BUILD_COST, GameState, RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats,
-    TERRAFORM_BASE_PRICE, TERRAFORM_COST, TUNNEL_BUILD_COST_PER_TILE, WAYPOINT_BUILD_COST,
+    DEPOT_BUILD_COST, ECONOMY_HISTORY_MONTHS, EconomyHistory, GameState, MonthlyEconomySample,
+    RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats, TERRAFORM_BASE_PRICE,
+    TERRAFORM_COST, TUNNEL_BUILD_COST_PER_TILE, WAYPOINT_BUILD_COST, company_net_value,
 };
 pub use industry::{
     FACTORY_COAL_INPUT, FACTORY_WOOD_INPUT, INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind,
@@ -120,16 +135,18 @@ pub use map::{
     MAX_TREE_OR_FIELD_STAGE, Map, MapError, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
     OBJECT_TYPE_TRANSMITTER, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, OTTD_TILETYPE_TUNNELBRIDGE,
     SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, TREE_GROWTH_TICK_INTERVAL, Tile, TileCoord, TileKind,
-    advance_industry_construction, advance_industry_tile_animations, apply_seasonal_snow,
-    clear_tree, effective_road_bits, inclined_slope_direction, industry_animation_frame,
-    industry_construction_counter, industry_construction_stage, industry_gfx, industry_instance_id,
-    industry_tile_anim_state, industry_tile_link, industry_tiles_mergeable,
-    industry_uses_water_ground, is_industry_completed, is_map_object_tile, is_owned_land_tile,
-    is_tunnel_entrance_slope, make_industry_tile_bigger, openttd_tile_index_to_coord,
-    partial_pixel_z, plant_tree, rail_foundation_for_trackbits, rail_trackbits_valid_on_slope,
-    resolve_tunnel_end, set_industry_gfx, slope_dz_at_subtile, slope_dz_on_tile,
-    step_industry_tiles, step_tree_and_field_growth, tick_tree_tile_loop, tile_adjacent_to_water,
-    tile_slope_and_z, tree_or_field_stage, tunnel_entrance_m5, tunnel_preview_path,
+    WaterClass, advance_industry_construction, advance_industry_tile_animations,
+    apply_seasonal_snow, clear_tree, effective_road_bits, inclined_slope_direction,
+    industry_animation_frame, industry_construction_counter, industry_construction_stage,
+    industry_gfx, industry_instance_id, industry_tile_anim_state, industry_tile_link,
+    industry_tiles_mergeable, industry_uses_water_ground, is_canal_tile, is_industry_completed,
+    is_map_object_tile, is_owned_land_tile, is_river_tile, is_tunnel_entrance_slope,
+    make_industry_tile_bigger, make_water_tile, openttd_tile_index_to_coord, partial_pixel_z,
+    plant_tree, rail_foundation_for_trackbits, rail_trackbits_valid_on_slope, resolve_tunnel_end,
+    river_tile_is_ship_navigable, set_industry_gfx, set_water_class_m1, slope_dz_at_subtile,
+    slope_dz_on_tile, step_industry_tiles, step_tree_and_field_growth, tick_tree_tile_loop,
+    tile_adjacent_to_water, tile_has_water_class, tile_slope_and_z, tree_or_field_stage,
+    tunnel_entrance_m5, tunnel_preview_path, water_class, water_class_from_m1,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfScanError, GrfStackIssue, NewGrfEntry,
@@ -194,6 +211,11 @@ pub use road_movement::{
     vehicle_subtile, vehicle_subtile_at, vehicle_subtile_at_with_map,
     vehicle_subtile_with_progress,
 };
+pub use road_type::{
+    RoadTramType, RoadType, RoadTypeDef, all_road_type_defs, list_road_types, road_type_def,
+    road_type_from_tile, set_road_type_on_tile, set_tram_road_type_on_tile,
+    set_tram_track_bits_on_tile, tile_has_tram_track, tram_road_type_from_tile, tram_track_bits,
+};
 pub use sav::{
     EXPORT_SAVE_VERSION, SavContainer, SavError, SavGame, SavIndustry, SavStation, SavVehicle,
     SavVehicleKind, save as save_sav, save_to_bytes as save_sav_to_bytes,
@@ -207,6 +229,7 @@ pub use ship_movement::{
     maybe_start_lock_transit, ship_requires_path, tick_ship_lock_wait, water_tile_is_lock,
     water_tiles_connected,
 };
+pub use sign::{MAX_SIGN_NAME_CHARS, Sign};
 pub use sim_events::{ConstructionKind, DisasterKind, SimEvent, SimEventQueue, TrainSmokeKind};
 pub use sound_id::SoundId;
 pub use station::{
@@ -220,6 +243,11 @@ pub use station::{
     station_map_coherence, station_rating_for_cargo, station_tile_can_have_pylons,
     station_tile_can_have_wires, station_type_from_m6, stop_kind_from_m6, tick_station_cargo_age,
     train_on_rail_platform, vehicle_at_road_stop, vehicle_physically_at_station,
+};
+pub use station_class::{
+    StationClassDef, StationClassId, StationSpecDef, StationSpecId, all_station_class_defs,
+    all_station_spec_defs, list_station_classes, list_station_specs, station_class_def,
+    station_spec_def, station_spec_layout,
 };
 pub use subsidy::{
     SUBSIDY_AWARDED_YEARS, SUBSIDY_OFFER_MONTHS, SUBSIDY_PAYMENT_MULTIPLIER, Subsidy,

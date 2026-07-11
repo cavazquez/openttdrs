@@ -22,6 +22,7 @@ fn is_line_build_action(action: BuildMenuAction) -> bool {
             | BuildMenuAction::RailTunnel
             | BuildMenuAction::RoadBridge
             | BuildMenuAction::RailBridge
+            | BuildMenuAction::Aqueduct
     )
 }
 

@@ -18,8 +18,8 @@ use crate::debug_gizmos::DebugGizmosPlugin;
 use crate::persistence::PersistencePlugin;
 use crate::render::{
     EffectVehiclePlugin, FizzyDrinkAnimPlugin, IndustryBuildingAnimPlugin, IndustryDrawProcPlugin,
-    IndustrySmokePlugin, RefineryFireAnimPlugin, TileAnimPlugin, TrainSmokePlugin,
-    WaterAnimationPlugin,
+    IndustrySmokePlugin, LighthouseAnimPlugin, RefineryFireAnimPlugin, TileAnimPlugin,
+    TrainSmokePlugin, WaterAnimationPlugin,
 };
 use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
 use crate::render_trace::RenderTracePlugin;
@@ -145,6 +145,7 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
             WaterAnimationPlugin,
             RefineryFireAnimPlugin,
             FizzyDrinkAnimPlugin,
+            LighthouseAnimPlugin,
             IndustrySmokePlugin,
             IndustryBuildingAnimPlugin,
         ),

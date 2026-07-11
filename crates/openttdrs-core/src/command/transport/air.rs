@@ -1,8 +1,9 @@
-//! Construcción aérea: helipuerto 1×1 y aeropuerto small 4×3.
+//! Construcción aérea: helipuerto y aeropuertos por spec.
 
 use crate::airport::{
-    AirportPiece, airport_m6_airport, airport_small_footprint, airport_small_tiles,
+    AirportPiece, airport_m6_airport, airport_spec_footprint, airport_spec_tiles,
 };
+use crate::airport_class::{AirportSpecId, airport_spec_def};
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{station_site_tile_allows_build, station_site_tile_needs_clear};
 use crate::town::authority_allows_new_station;
@@ -36,25 +37,16 @@ pub(in crate::command) fn place_airport(
     state: &mut GameState,
     c: TileCoord,
 ) -> Result<(), CommandError> {
-    check_airport_placement(&state.map, &state.stations, c)?;
-    if !authority_allows_new_station(&state.towns, c) {
-        return Err(CommandError::AuthorityRatingTooLow);
-    }
-    write_airport_tile(state, c, AirportPiece::Heliport)?;
-    let mut st = Station::new_with_kind(c, StopKind::Airport);
-    st.owner = state.active_company;
-    st.airport_tiles = vec![c];
-    state.stations.push(st);
-    state.economy.money -= DEPOT_BUILD_COST;
-    Ok(())
+    place_airport_area(state, c, false, AirportSpecId::Heliport)
 }
 
 pub(crate) fn check_airport_area(
     state: &GameState,
     origin: TileCoord,
     axis_y: bool,
+    spec: AirportSpecId,
 ) -> Result<(), CommandError> {
-    let (w, h) = airport_small_footprint(axis_y);
+    let (w, h) = airport_spec_footprint(spec, axis_y);
     let h0 = state.map.get(origin).map_or(0, |t| t.height);
     for dy in 0..h {
         for dx in 0..w {
@@ -69,33 +61,42 @@ pub(crate) fn check_airport_area(
     Ok(())
 }
 
-/// Aeropuerto small 4×3: hangar + pista + apron.
+/// Aeropuerto según [`AirportSpecId`]: hangar/helipuerto + footprint.
 pub(in crate::command) fn place_airport_area(
     state: &mut GameState,
     origin: TileCoord,
     axis_y: bool,
+    spec: AirportSpecId,
 ) -> Result<(), CommandError> {
-    check_airport_area(state, origin, axis_y)?;
-    let hangar = airport_small_tiles(origin, axis_y)
-        .find(|(_, p)| *p == AirportPiece::Hangar)
-        .map(|(c, _)| c)
-        .ok_or(CommandError::OutOfBounds)?;
-    if !authority_allows_new_station(&state.towns, hangar) {
+    check_airport_area(state, origin, axis_y, spec)?;
+    let station_anchor = airport_spec_tiles(origin, spec, axis_y)
+        .find(|(_, p)| p.is_hangar())
+        .map_or(origin, |(c, _)| c);
+    if !authority_allows_new_station(&state.towns, station_anchor) {
         return Err(CommandError::AuthorityRatingTooLow);
     }
 
-    let mut tiles = Vec::with_capacity(12);
-    for (c, piece) in airport_small_tiles(origin, axis_y) {
+    let tile_count = airport_spec_tiles(origin, spec, axis_y).count();
+    let mut tiles = Vec::with_capacity(tile_count);
+    for (c, piece) in airport_spec_tiles(origin, spec, axis_y) {
         if station_site_tile_needs_clear(state.map.get_kind(c).unwrap_or(TileKind::Grass)) {
             clear_station_site_tile(state, c)?;
         }
         write_airport_tile(state, c, piece)?;
         tiles.push(c);
-        state.economy.money -= STATION_BUILD_COST;
     }
-    let mut st = Station::new_with_kind(hangar, StopKind::Airport);
+    if matches!(spec, AirportSpecId::Heliport) {
+        state.economy.money -= DEPOT_BUILD_COST;
+    } else {
+        let cost = STATION_BUILD_COST.saturating_mul(i64::try_from(tile_count).unwrap_or(1));
+        state.economy.money -= cost;
+    }
+    let mut st = Station::new_with_kind(station_anchor, StopKind::Airport);
     st.owner = state.active_company;
     st.airport_tiles = tiles;
+    if let Some(def) = airport_spec_def(spec) {
+        let _ = def.catchment; // catchment se usará en cobertura UI; sim usa radio global hoy
+    }
     state.stations.push(st);
     Ok(())
 }

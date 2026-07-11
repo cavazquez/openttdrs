@@ -51,6 +51,7 @@ mod tests {
 
     fn insert_order_pick_test_resources(world: &mut World) {
         crate::state::insert_test_order_pick_state(world);
+        world.insert_resource(crate::ui::shared_orders_window::SharedOrdersWindowState::default());
     }
 
     #[test]
@@ -68,6 +69,7 @@ mod tests {
         world.insert_resource(ToolbarState::default());
         world.insert_resource(UiToolState {
             active_tool: Some(BuildMenuAction::RoadY),
+            ..Default::default()
         });
         world.insert_resource(DragBuildState {
             armed: true,
@@ -78,6 +80,8 @@ mod tests {
         world.insert_resource(SuspendedGameSession::default());
         world.insert_resource(NextState::<ClientScreen>::default());
         world.init_resource::<Messages<FloatingWindowClosed>>();
+        world.init_resource::<crate::ui::toolbar::RoadTypeEscapeConsumed>();
+        world.init_resource::<crate::ui::toolbar::StationBuildState>();
         insert_order_pick_test_resources(&mut world);
         world.run_system_once(handle_ingame_escape).unwrap();
         assert!(world.resource::<UiToolState>().active_tool.is_none());
@@ -92,6 +96,7 @@ mod tests {
         });
         world.insert_resource(UiToolState {
             active_tool: Some(BuildMenuAction::Rail),
+            ..Default::default()
         });
         world.insert_resource(DragBuildState::default());
         world.run_system_once(hide_tool_when_panel_closed).unwrap();
@@ -100,6 +105,7 @@ mod tests {
     #[test]
     fn setup_minimap_then_sync_minimap() {
         let mut world = World::new();
+        world.init_resource::<crate::ui::toolbar::MinimapLayerState>();
         world.run_system_once(setup_minimap).unwrap();
         world.insert_resource(SimWorld::default());
         world.insert_resource(SimHudControls::default());
@@ -115,6 +121,7 @@ mod tests {
         world.insert_resource(SimHudControls::default());
         world.insert_resource(SimWorld::default());
         world.insert_resource(SelectedTileInfo::default());
+        world.init_resource::<crate::ui::toolbar::MinimapLayerState>();
         world.spawn((BuildMenuUi, Interaction::Pressed));
         world.run_system_once(handle_minimap_click).unwrap();
     }
@@ -150,6 +157,7 @@ mod tests {
         world.insert_resource(DragBuildState::default());
         world.insert_resource(OrderEditState::default());
         world.insert_resource(IndustryPanelState::default());
+        world.init_resource::<StationBuildState>();
         insert_order_pick_test_resources(&mut world);
         world.run_system_once(toolbar_group_interaction).unwrap();
         world.run_system_once(update_toolbar_group_visuals).unwrap();
@@ -231,6 +239,11 @@ mod tests {
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
+        world.insert_resource(
+            crate::ui::display_options_window::DisplayOptionsWindowState::default(),
+        );
+        world
+            .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world.insert_resource(SoundMusicWindowState::default());
         world.insert_resource(SimHudControls {
             sim_speed: 1.0,
@@ -266,6 +279,11 @@ mod tests {
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
+        world.insert_resource(
+            crate::ui::display_options_window::DisplayOptionsWindowState::default(),
+        );
+        world
+            .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world.insert_resource(SoundMusicWindowState::default());
         world.insert_resource(SimHudControls::default());
         world.insert_resource(State::new(SimRunState::Running));
@@ -312,6 +330,11 @@ mod tests {
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
         world_zoom_in.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
+        world_zoom_in.insert_resource(
+            crate::ui::display_options_window::DisplayOptionsWindowState::default(),
+        );
+        world_zoom_in
+            .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world_zoom_in.insert_resource(SoundMusicWindowState::default());
         world_zoom_in.insert_resource(SimHudControls::default());
         crate::state::insert_test_sim_run_state(&mut world_zoom_in);
@@ -342,6 +365,11 @@ mod tests {
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
         world_zoom_out.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
+        world_zoom_out.insert_resource(
+            crate::ui::display_options_window::DisplayOptionsWindowState::default(),
+        );
+        world_zoom_out
+            .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world_zoom_out.insert_resource(SoundMusicWindowState::default());
         world_zoom_out.insert_resource(SimHudControls::default());
         crate::state::insert_test_sim_run_state(&mut world_zoom_out);
@@ -383,6 +411,7 @@ mod tests {
         world.insert_resource(crate::ui::vehicle_window::VehicleWindowState::default());
         world.insert_resource(HudBuildFeedback::default());
         world.insert_resource(Time::<()>::default());
+        world.init_resource::<crate::ui::toolbar::MinimapLayerState>();
         insert_order_pick_test_resources(&mut world);
         world.run_system_once(handle_tile_click).unwrap();
     }

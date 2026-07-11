@@ -524,6 +524,7 @@ for i, sid in enumerate(range(1313, 1332)):
 # Faroles de Roadside::StreetLights (table/road_land.h: 0x57E / 0x57F).
 crop_by_id(0x57E, "road_streetlight_0.png")
 crop_by_id(0x57F, "road_streetlight_1.png")
+crop_by_id(0x1212, "roadside_tree.png")  # SPR_ROADSIDE_TREE / _roadside_trees
 # Tranvía sobre asfalto: SPR_TRAMWAY_OVERLAY (OpenTTD table/sprites.h) = 5990;
 # mismas 19 piezas en el mismo orden que road_flat_00..18 (GetRoadSpriteOffset).
 TRAM_FLAT_BASE = 5990

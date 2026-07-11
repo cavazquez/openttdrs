@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+mod airport_picker_window;
 mod bridge_window;
 pub(crate) mod build_input;
 mod depot_panel;
@@ -9,10 +10,17 @@ mod order_panel;
 mod orders_cursor;
 mod preview;
 mod rail_station_window;
+pub(crate) mod rail_type_selector;
+pub(crate) mod road_type_selector;
 mod settings;
+mod signal_picker_window;
 mod station_panel;
 mod systems;
 
+pub(crate) use airport_picker_window::{
+    airport_picker_on_closed, handle_airport_picker_buttons, setup_airport_picker,
+    sync_airport_picker,
+};
 pub(crate) use bridge_window::{
     BridgeBuildState, bridge_picker_on_closed, handle_bridge_picker_buttons, setup_bridge_picker,
     sync_bridge_picker,
@@ -23,26 +31,43 @@ pub(crate) use depot_panel::{
     sync_depot_panel,
 };
 pub(crate) use layout::setup_top_toolbar;
-pub(crate) use minimap::{MinimapRoot, handle_minimap_click, setup_minimap, sync_minimap};
+pub(crate) use minimap::{
+    MinimapLayerState, MinimapRoot, handle_minimap_click, handle_minimap_layer_buttons,
+    setup_minimap, sync_minimap,
+};
 pub(crate) use order_panel::{
     handle_order_panel_buttons, open_order_edit_for_vehicle, setup_order_panel,
     start_order_destination_pick, sync_order_panel, try_append_order_at_tile,
 };
 pub(crate) use orders_cursor::sync_orders_pick_cursor;
 pub(crate) use preview::{
-    BuildGhostPreview, RailSignalGhost, RailSignalGhostState, lerp_ghost_previews,
-    rotate_station_with_right_click, update_build_ghost_preview,
+    BuildGhostPreview, RailSignalGhost, RailSignalGhostState, economy_industry_tool_visible,
+    lerp_ghost_previews, rotate_station_with_right_click, update_build_ghost_preview,
 };
 pub(crate) use rail_station_window::{
-    handle_rail_station_picker_buttons, rail_station_picker_on_closed, setup_rail_station_picker,
-    sync_rail_station_picker,
+    StationCatalogPickerState, handle_rail_station_picker_buttons,
+    handle_station_catalog_open_buttons, handle_station_class_select_buttons,
+    handle_station_spec_select_buttons, rail_station_picker_on_closed, setup_rail_station_picker,
+    station_catalog_filter_keyboard, sync_rail_station_picker,
+};
+pub(crate) use rail_type_selector::{
+    handle_rail_type_select_buttons, sync_rail_type_select_visuals,
+};
+pub(crate) use road_type_selector::{
+    RoadTypeEscapeConsumed, RoadTypePickerState, close_road_type_picker_on_escape,
+    handle_road_type_class_buttons, handle_road_type_select_buttons, road_type_filter_keyboard,
+    sync_road_type_class_labels, sync_road_type_entry_visibility, sync_road_type_popovers,
 };
 pub(crate) use settings::{
     handle_company_colour_swatches, handle_settings_menu_buttons,
     sync_company_colour_swatch_visuals,
 };
+pub(crate) use signal_picker_window::{
+    handle_signal_picker_buttons, setup_signal_picker, signal_picker_on_closed, sync_signal_picker,
+};
 pub(crate) use station_panel::{
-    StationCargoPanelState, handle_station_cargo_panel_buttons, setup_station_cargo_panel,
+    StationCargoPanelState, handle_station_cargo_panel_buttons, handle_station_rename_buttons,
+    setup_station_cargo_panel, station_rename_editable_keyboard, station_rename_keyboard,
     sync_station_cargo_panel,
 };
 pub(crate) use systems::{
@@ -62,6 +87,10 @@ pub(crate) enum BuildMenuAction {
     Road,
     RoadX,
     RoadY,
+    /// Tranvía autorail (bits automáticos).
+    Tram,
+    TramX,
+    TramY,
     RoadDepot,
     RoadBridge,
     RoadTunnel,
@@ -79,7 +108,7 @@ pub(crate) enum BuildMenuAction {
     RailWaypoint,
     RailSignals,
     RailRemove,
-    /// Reservado para `CmdConvertRail`; oculto en toolbar hasta tener railtypes.
+    /// Convierte el tipo de vía existente (ciclo normal→eléc→mono→maglev).
     RailConvert,
     Station,
     Clear,
@@ -87,9 +116,11 @@ pub(crate) enum BuildMenuAction {
     ShipDepot,
     Dock,
     Canal,
+    River,
+    Buoy,
+    Aqueduct,
     Lock,
     Airport,
-    AirportSmall,
     BuildHouse,
     BuildCoalMine,
     BuildIronOreMine,
@@ -114,9 +145,15 @@ pub(crate) enum BuildMenuAction {
     LowerLand,
     LevelLand,
     BuyLand,
+    /// Plantar árbol en hierba / crecer etapa en bosque.
+    PlantTree,
+    /// Colocar cartel de texto en el mapa.
+    PlaceSign,
+    /// Unir dos paradas bus/camión adyacentes (2 clics).
+    JoinStation,
 }
 
-#[derive(Component, Clone, Copy, PartialEq, Eq)]
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum ToolbarGroup {
     Rail,
     Road,
@@ -156,6 +193,8 @@ pub(crate) struct ToolbarTooltipTarget {
 #[derive(Resource, Default)]
 pub(crate) struct UiToolState {
     pub(crate) active_tool: Option<BuildMenuAction>,
+    /// Bloquea el siguiente clic de mapa (cierre/selección de menú toolbar).
+    pub(crate) block_map_click: bool,
 }
 
 /// Estado especifico de la herramienta de estacion.
@@ -170,6 +209,12 @@ pub(crate) struct StationBuildState {
     pub(crate) rail_length: u8,
     /// Mostrar el halo de cobertura al previsualizar la estación de tren.
     pub(crate) rail_show_coverage: bool,
+    /// Spec de aeropuerto activo (picker aéreo).
+    pub(crate) airport_spec: openttdrs_core::AirportSpecId,
+    /// Orientación del footprint aéreo.
+    pub(crate) airport_axis_y: bool,
+    /// Halo de cobertura al previsualizar aeropuerto.
+    pub(crate) airport_show_coverage: bool,
     /// Tipo de señal a colocar (`SIGTYPE_*`; Ctrl cicla block→entry→exit→combo→path→path1vía).
     pub(crate) signal_type: u8,
     /// Densidad de señales al arrastrar (1..=20; OpenTTD default 4).
@@ -178,6 +223,8 @@ pub(crate) struct StationBuildState {
     pub(crate) signal_drag_fract: Option<(u8, u8)>,
     /// Ctrl pulsado (actualizado cada frame para colocación PBS).
     pub(crate) ctrl_held: bool,
+    /// Primera estación elegida al unir (herramienta JoinStation).
+    pub(crate) join_keep: Option<openttdrs_core::TileCoord>,
 }
 
 impl Default for StationBuildState {
@@ -188,10 +235,14 @@ impl Default for StationBuildState {
             rail_platforms: 1,
             rail_length: 1,
             rail_show_coverage: true,
+            airport_spec: openttdrs_core::AirportSpecId::Small,
+            airport_axis_y: false,
+            airport_show_coverage: true,
             signal_type: openttdrs_core::SIGTYPE_PATH,
             signal_density: 4,
             signal_drag_fract: None,
             ctrl_held: false,
+            join_keep: None,
         }
     }
 }
@@ -244,8 +295,26 @@ pub(crate) enum OrderPanelButton {
     ToggleFullLoad,
     /// Alterna «no descargar» en la fila seleccionada.
     ToggleNoUnload,
+    /// Alterna «parar en depósito» en una orden de depósito.
+    ToggleDepotStop,
     /// Abre la ventana de horario (los ajustes de horario viven ahí).
     OpenTimetableWindow,
+    /// Sube la orden seleccionada una posición.
+    MoveOrderUp,
+    /// Baja la orden seleccionada una posición.
+    MoveOrderDown,
+    /// Crea un pool de órdenes compartidas desde este vehículo.
+    ShareOrders,
+    /// Desvincula el vehículo de órdenes compartidas.
+    UnlinkSharedOrders,
+    /// Abre la lista de pools compartidos para vincular.
+    OpenSharedOrders,
+    /// Añade una orden condicional (carga > umbral).
+    AddConditionalAbove,
+    /// Añade una orden condicional (carga < umbral).
+    AddConditionalBelow,
+    /// Cicla condición/umbral de la orden condicional seleccionada.
+    CycleConditional,
 }
 
 /// Muestra de color de compañía en el panel Ajustes (`0..16`).
@@ -266,6 +335,10 @@ pub(crate) enum SaveMenuAction {
     NewGrf,
     /// Cicla visible → transparente → oculta.
     CycleCatenaryDisplay,
+    /// Opciones de visualización (minimapa, PBS, catenaria, labels…).
+    DisplayOptions,
+    /// Segunda cámara (ExtraViewport).
+    ExtraViewport,
     ReturnToMainMenu,
 }
 

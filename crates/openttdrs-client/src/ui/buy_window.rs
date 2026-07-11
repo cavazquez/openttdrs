@@ -1,10 +1,13 @@
 //! Ventana flotante «Nuevos vehículos» estilo `OpenTTD`.
 //!
 //! Lista los modelos del catálogo filtrados por tipo de depósito (vía →
-//! trenes, carretera → buses/camiones), con panel de stats del modelo
+//! trenes, carretera → buses/camiones/tranvías), con panel de stats del modelo
 //! seleccionado y botón de compra (`BuildVehicleAtDepot`).
 
+use bevy::input::ButtonState;
+use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
+use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
     CargoType, Command, DepotPurchaseKind, EngineCatalogSort, EngineDef, RoadEngineFilter,
@@ -26,6 +29,16 @@ const BUY_ROWS: usize = 16;
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
+const BTN_ACTIVE: Color = Color::srgb(0.58, 0.50, 0.31);
+
+/// Filtro locomotora/vagón en depósito de vía.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum RailBuyFilter {
+    #[default]
+    All,
+    LocosOnly,
+    WagonsOnly,
+}
 
 #[derive(Resource, Default)]
 pub(crate) struct BuyVehicleWindowState {
@@ -34,6 +47,8 @@ pub(crate) struct BuyVehicleWindowState {
     pub(crate) selected_engine: Option<u16>,
     pub(crate) sort: EngineCatalogSort,
     pub(crate) road_filter: RoadEngineFilter,
+    pub(crate) rail_filter: RailBuyFilter,
+    pub(crate) name_filter: String,
 }
 
 #[derive(Component, Clone, Copy)]
@@ -55,7 +70,7 @@ pub(crate) struct BuyVehiclePreviewImage;
 #[derive(Component)]
 pub(crate) struct BuyVehicleBuyButton;
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum BuyVehicleToolbarButton {
     SortName,
     SortPrice,
@@ -64,10 +79,22 @@ pub(crate) enum BuyVehicleToolbarButton {
     FilterAll,
     FilterBus,
     FilterTruck,
+    FilterTram,
+    FilterLocos,
+    FilterWagons,
 }
 
 #[derive(Component)]
+pub(crate) struct BuyVehicleSortToolbar;
+
+#[derive(Component)]
 pub(crate) struct BuyVehicleRoadToolbar;
+
+#[derive(Component)]
+pub(crate) struct BuyVehicleRailToolbar;
+
+#[derive(Component)]
+pub(crate) struct BuyVehicleSearchInput;
 
 pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -77,19 +104,37 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
         FloatingWindowId::BuyVehicle,
         "Nuevos vehículos",
         TITLE_CRIMSON,
-        Vec2::new(120.0, 120.0),
-        430.0,
+        Vec2::new(120.0, 100.0),
+        450.0,
     );
     commands.entity(content).with_children(|panel| {
+        panel.spawn((
+            BuyVehicleSearchInput,
+            EditableText::new(""),
+            Text::new("buscar…"),
+            window_text_font(asset_server, UiFontRole::Caption),
+            TextColor(Color::srgb(0.75, 0.72, 0.62)),
+            Node {
+                width: Val::Percent(100.0),
+                min_height: Val::Px(22.0),
+                padding: UiRect::horizontal(Val::Px(6.0)),
+                margin: UiRect::bottom(Val::Px(4.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.18, 0.15, 0.10)),
+            BorderColor::all(BTN_BORDER),
+            BuildMenuUi,
+        ));
         panel
             .spawn((
-                BuyVehicleRoadToolbar,
+                BuyVehicleSortToolbar,
                 Node {
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(3.0),
                     flex_wrap: FlexWrap::Wrap,
                     row_gap: Val::Px(2.0),
-                    display: Display::None,
+                    margin: UiRect::bottom(Val::Px(2.0)),
                     ..default()
                 },
                 BuildMenuUi,
@@ -114,6 +159,22 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
                     "Vel.",
                 );
                 spawn_toolbar_button(row, asset_server, BuyVehicleToolbarButton::SortYear, "Año");
+            });
+        panel
+            .spawn((
+                BuyVehicleRoadToolbar,
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(3.0),
+                    flex_wrap: FlexWrap::Wrap,
+                    row_gap: Val::Px(2.0),
+                    display: Display::None,
+                    margin: UiRect::bottom(Val::Px(2.0)),
+                    ..default()
+                },
+                BuildMenuUi,
+            ))
+            .with_children(|row| {
                 spawn_toolbar_button(
                     row,
                     asset_server,
@@ -131,6 +192,46 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
                     asset_server,
                     BuyVehicleToolbarButton::FilterTruck,
                     "Camiones",
+                );
+                spawn_toolbar_button(
+                    row,
+                    asset_server,
+                    BuyVehicleToolbarButton::FilterTram,
+                    "Tranvías",
+                );
+            });
+        panel
+            .spawn((
+                BuyVehicleRailToolbar,
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(3.0),
+                    flex_wrap: FlexWrap::Wrap,
+                    row_gap: Val::Px(2.0),
+                    display: Display::None,
+                    margin: UiRect::bottom(Val::Px(2.0)),
+                    ..default()
+                },
+                BuildMenuUi,
+            ))
+            .with_children(|row| {
+                spawn_toolbar_button(
+                    row,
+                    asset_server,
+                    BuyVehicleToolbarButton::FilterAll,
+                    "Todos",
+                );
+                spawn_toolbar_button(
+                    row,
+                    asset_server,
+                    BuyVehicleToolbarButton::FilterLocos,
+                    "Locomotoras",
+                );
+                spawn_toolbar_button(
+                    row,
+                    asset_server,
+                    BuyVehicleToolbarButton::FilterWagons,
+                    "Vagones",
                 );
             });
         panel
@@ -243,24 +344,41 @@ fn spawn_toolbar_button(
     ));
 }
 
-/// Modelos visibles según depósito, año, filtro y orden.
+fn depot_kind_at(sim: &SimWorld, depot_pos: TileCoord) -> DepotPurchaseKind {
+    match sim.state.map.get_kind(depot_pos) {
+        Some(TileKind::RailDepot) => DepotPurchaseKind::Rail,
+        Some(TileKind::ShipDepot) => DepotPurchaseKind::Ship,
+        Some(TileKind::Airport) => DepotPurchaseKind::Aircraft,
+        _ => DepotPurchaseKind::Road,
+    }
+}
+
+/// Modelos visibles según depósito, año, filtros y orden.
 pub(crate) fn engines_for_buy_window(
     sim: &SimWorld,
     depot_pos: TileCoord,
     sort: EngineCatalogSort,
     road_filter: RoadEngineFilter,
+    rail_filter: RailBuyFilter,
+    name_filter: &str,
 ) -> Vec<&'static EngineDef> {
-    let depot_kind = match sim.state.map.get_kind(depot_pos) {
-        Some(TileKind::RailDepot) => DepotPurchaseKind::Rail,
-        Some(TileKind::ShipDepot) => DepotPurchaseKind::Ship,
-        Some(TileKind::Airport) => DepotPurchaseKind::Aircraft,
-        _ => DepotPurchaseKind::Road,
-    };
+    let depot_kind = depot_kind_at(sim, depot_pos);
     let year = calendar_year_at_tick(sim.state.tick);
     let mut engines = engines_for_depot_kind(depot_kind, year, sort, road_filter);
     if depot_kind == DepotPurchaseKind::Aircraft {
         let heliport = openttdrs_core::airport_tile_is_heliport(&sim.state.map, depot_pos);
         engines.retain(|e| openttdrs_core::aircraft_is_helicopter(e.id) == heliport);
+    }
+    if depot_kind == DepotPurchaseKind::Rail {
+        match rail_filter {
+            RailBuyFilter::All => {}
+            RailBuyFilter::LocosOnly => engines.retain(|e| e.is_train_engine()),
+            RailBuyFilter::WagonsOnly => engines.retain(|e| e.is_wagon()),
+        }
+    }
+    let needle = name_filter.trim().to_lowercase();
+    if !needle.is_empty() {
+        engines.retain(|e| e.name.to_lowercase().contains(&needle));
     }
     engines
 }
@@ -321,6 +439,23 @@ fn preview_sprite_for_engine(trucks: &TruckHandles, engine: &EngineDef) -> Handl
     }
 }
 
+fn toolbar_button_active(state: &BuyVehicleWindowState, button: BuyVehicleToolbarButton) -> bool {
+    match button {
+        BuyVehicleToolbarButton::SortName => state.sort == EngineCatalogSort::Name,
+        BuyVehicleToolbarButton::SortPrice => state.sort == EngineCatalogSort::Price,
+        BuyVehicleToolbarButton::SortSpeed => state.sort == EngineCatalogSort::Speed,
+        BuyVehicleToolbarButton::SortYear => state.sort == EngineCatalogSort::IntroYear,
+        BuyVehicleToolbarButton::FilterAll => {
+            state.road_filter == RoadEngineFilter::All && state.rail_filter == RailBuyFilter::All
+        }
+        BuyVehicleToolbarButton::FilterBus => state.road_filter == RoadEngineFilter::BusOnly,
+        BuyVehicleToolbarButton::FilterTruck => state.road_filter == RoadEngineFilter::TruckOnly,
+        BuyVehicleToolbarButton::FilterTram => state.road_filter == RoadEngineFilter::TramOnly,
+        BuyVehicleToolbarButton::FilterLocos => state.rail_filter == RailBuyFilter::LocosOnly,
+        BuyVehicleToolbarButton::FilterWagons => state.rail_filter == RailBuyFilter::WagonsOnly,
+    }
+}
+
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn sync_buy_window(
     buy_state: Res<BuyVehicleWindowState>,
@@ -332,9 +467,23 @@ pub(crate) fn sync_buy_window(
         &mut Node,
         (
             With<BuyVehicleRoadToolbar>,
+            Without<BuyVehicleRailToolbar>,
             Without<BuyVehicleRow>,
             Without<BuyVehiclePreviewImage>,
         ),
+    >,
+    mut rail_toolbar_q: Query<
+        &mut Node,
+        (
+            With<BuyVehicleRailToolbar>,
+            Without<BuyVehicleRoadToolbar>,
+            Without<BuyVehicleRow>,
+            Without<BuyVehiclePreviewImage>,
+        ),
+    >,
+    mut toolbar_btn_q: Query<
+        (&BuyVehicleToolbarButton, &Interaction, &mut BackgroundColor),
+        (With<Button>, Without<BuyVehicleRow>),
     >,
     mut row_q: Query<
         (
@@ -348,6 +497,7 @@ pub(crate) fn sync_buy_window(
             With<BuyVehicleRow>,
             Without<BuyVehiclePreviewImage>,
             Without<BuyVehicleRoadToolbar>,
+            Without<BuyVehicleRailToolbar>,
         ),
     >,
     mut row_text_q: Query<(&BuyVehicleRowText, &mut Text), Without<FloatingWindowTitleText>>,
@@ -365,6 +515,7 @@ pub(crate) fn sync_buy_window(
             With<BuyVehiclePreviewImage>,
             Without<BuyVehicleRow>,
             Without<BuyVehicleRoadToolbar>,
+            Without<BuyVehicleRailToolbar>,
             Without<Button>,
         ),
     >,
@@ -386,18 +537,38 @@ pub(crate) fn sync_buy_window(
     {
         **title = buy_window_title(&sim, depot_pos).to_string();
     }
-    let hide_road_filters = matches!(
-        sim.state.map.get_kind(depot_pos),
-        Some(TileKind::RailDepot | TileKind::ShipDepot | TileKind::Airport)
-    );
+    let kind = depot_kind_at(&sim, depot_pos);
     if let Ok(mut toolbar) = road_toolbar_q.single_mut() {
-        toolbar.display = if hide_road_filters {
-            Display::None
-        } else {
+        toolbar.display = if kind == DepotPurchaseKind::Road {
             Display::Flex
+        } else {
+            Display::None
         };
     }
-    let engines = engines_for_buy_window(&sim, depot_pos, buy_state.sort, buy_state.road_filter);
+    if let Ok(mut toolbar) = rail_toolbar_q.single_mut() {
+        toolbar.display = if kind == DepotPurchaseKind::Rail {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    for (button, interaction, mut bg) in &mut toolbar_btn_q {
+        *bg = if toolbar_button_active(&buy_state, *button) {
+            BackgroundColor(BTN_ACTIVE)
+        } else if *interaction == Interaction::Hovered {
+            BackgroundColor(Color::srgb(0.47, 0.41, 0.28))
+        } else {
+            BackgroundColor(BTN_BG)
+        };
+    }
+    let engines = engines_for_buy_window(
+        &sim,
+        depot_pos,
+        buy_state.sort,
+        buy_state.road_filter,
+        buy_state.rail_filter,
+        &buy_state.name_filter,
+    );
     for (row, interaction, mut node, mut bg) in &mut row_q {
         let Some(engine) = engines.get(row.slot) else {
             node.display = Display::None;
@@ -447,6 +618,50 @@ pub(crate) fn sync_buy_window(
     }
 }
 
+pub(crate) fn buy_window_search_keyboard(
+    mut key_events: MessageReader<KeyboardInput>,
+    mut buy_state: ResMut<BuyVehicleWindowState>,
+    mut inputs: Query<(&mut EditableText, &mut Text), With<BuyVehicleSearchInput>>,
+) {
+    if buy_state.depot_pos.is_none() {
+        key_events.clear();
+        return;
+    }
+    let Ok((mut editable, mut text)) = inputs.single_mut() else {
+        key_events.clear();
+        return;
+    };
+    for ev in key_events.read() {
+        if ev.state != ButtonState::Pressed {
+            continue;
+        }
+        if matches!(ev.logical_key, Key::Backspace) {
+            editable.queue_edit(bevy::text::TextEdit::Backspace);
+            continue;
+        }
+        if matches!(ev.logical_key, Key::Delete) {
+            editable.queue_edit(bevy::text::TextEdit::Delete);
+            continue;
+        }
+        let Some(typed) = &ev.text else {
+            continue;
+        };
+        for c in typed.chars() {
+            if !c.is_control() && editable.value().chars().count() < 24 {
+                editable.queue_edit(bevy::text::TextEdit::Insert(
+                    winit::keyboard::SmolStr::from(c.to_string()),
+                ));
+            }
+        }
+    }
+    buy_state.name_filter = editable.value().to_string();
+    if buy_state.name_filter.is_empty() {
+        **text = "buscar…".into();
+    } else {
+        **text = buy_state.name_filter.clone();
+    }
+}
+
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_buy_window_buttons(
     mut row_q: Query<(&Interaction, &BuyVehicleRow), (Changed<Interaction>, With<Button>)>,
@@ -478,6 +693,7 @@ pub(crate) fn handle_buy_window_buttons(
     let Some(depot_pos) = buy_state.depot_pos else {
         return;
     };
+    let kind = depot_kind_at(&sim, depot_pos);
     for (interaction, button) in &mut toolbar_q {
         if *interaction != Interaction::Pressed {
             continue;
@@ -487,11 +703,31 @@ pub(crate) fn handle_buy_window_buttons(
             BuyVehicleToolbarButton::SortPrice => buy_state.sort = EngineCatalogSort::Price,
             BuyVehicleToolbarButton::SortSpeed => buy_state.sort = EngineCatalogSort::Speed,
             BuyVehicleToolbarButton::SortYear => buy_state.sort = EngineCatalogSort::IntroYear,
-            BuyVehicleToolbarButton::FilterAll => buy_state.road_filter = RoadEngineFilter::All,
-            BuyVehicleToolbarButton::FilterBus => buy_state.road_filter = RoadEngineFilter::BusOnly,
+            BuyVehicleToolbarButton::FilterAll => {
+                buy_state.road_filter = RoadEngineFilter::All;
+                buy_state.rail_filter = RailBuyFilter::All;
+            }
+            BuyVehicleToolbarButton::FilterBus => {
+                buy_state.road_filter = RoadEngineFilter::BusOnly;
+            }
             BuyVehicleToolbarButton::FilterTruck => {
                 buy_state.road_filter = RoadEngineFilter::TruckOnly;
             }
+            BuyVehicleToolbarButton::FilterTram => {
+                buy_state.road_filter = RoadEngineFilter::TramOnly;
+            }
+            BuyVehicleToolbarButton::FilterLocos => {
+                buy_state.rail_filter = RailBuyFilter::LocosOnly;
+            }
+            BuyVehicleToolbarButton::FilterWagons => {
+                buy_state.rail_filter = RailBuyFilter::WagonsOnly;
+            }
+        }
+        // Evitar aplicar filtros de carretera en depósito de vía y viceversa.
+        if kind == DepotPurchaseKind::Rail {
+            buy_state.road_filter = RoadEngineFilter::All;
+        } else if kind == DepotPurchaseKind::Road {
+            buy_state.rail_filter = RailBuyFilter::All;
         }
         buy_state.selected_engine = None;
     }
@@ -499,9 +735,15 @@ pub(crate) fn handle_buy_window_buttons(
         if *interaction != Interaction::Pressed {
             continue;
         }
-        if let Some(engine) =
-            engines_for_buy_window(&sim, depot_pos, buy_state.sort, buy_state.road_filter)
-                .get(row.slot)
+        if let Some(engine) = engines_for_buy_window(
+            &sim,
+            depot_pos,
+            buy_state.sort,
+            buy_state.road_filter,
+            buy_state.rail_filter,
+            &buy_state.name_filter,
+        )
+        .get(row.slot)
         {
             buy_state.selected_engine = Some(engine.id);
         }
@@ -555,6 +797,7 @@ pub(crate) fn handle_buy_window_buttons(
 pub(crate) fn buy_window_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut buy_state: ResMut<BuyVehicleWindowState>,
+    mut search_q: Query<(&mut EditableText, &mut Text), With<BuyVehicleSearchInput>>,
 ) {
     for msg in closed.read() {
         if msg.0 == FloatingWindowId::BuyVehicle {
@@ -562,6 +805,12 @@ pub(crate) fn buy_window_on_closed(
             buy_state.selected_engine = None;
             buy_state.sort = EngineCatalogSort::default();
             buy_state.road_filter = RoadEngineFilter::default();
+            buy_state.rail_filter = RailBuyFilter::default();
+            buy_state.name_filter.clear();
+            if let Ok((mut editable, mut text)) = search_q.single_mut() {
+                *editable = EditableText::new("");
+                **text = "buscar…".into();
+            }
         }
     }
 }

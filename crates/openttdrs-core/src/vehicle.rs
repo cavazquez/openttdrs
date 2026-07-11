@@ -44,6 +44,8 @@ pub const DIR_NW: VehicleDirection = 7;
 pub enum VehicleKind {
     Truck,
     Bus,
+    /// Tranvía: misma lógica de movimiento que bus, pathfinding sobre bits m3.
+    Tram,
     /// Misma lógica de movimiento que camión; pensado para rutas sobre `TileKind::Rail`.
     Train,
     /// Navega por teselas de agua (`TileKind::Water`).
@@ -685,7 +687,9 @@ impl Vehicle {
     #[must_use]
     pub fn new(id: u32, kind: VehicleKind, pos: TileCoord, dest: TileCoord) -> Self {
         let cargo_type = match kind {
-            VehicleKind::Bus | VehicleKind::Aircraft => Some(CargoType::Passengers),
+            VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
+                Some(CargoType::Passengers)
+            }
             VehicleKind::Truck | VehicleKind::Train | VehicleKind::Ship => None,
         };
         let engine_id = default_engine_id(kind);
@@ -870,7 +874,9 @@ impl Vehicle {
         self.cargo = self.cargo_packets.total();
         if self.cargo == 0 {
             self.cargo_type = match self.kind {
-                VehicleKind::Bus | VehicleKind::Aircraft => Some(CargoType::Passengers),
+                VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
+                    Some(CargoType::Passengers)
+                }
                 VehicleKind::Truck | VehicleKind::Train | VehicleKind::Ship => None,
             };
             self.cargo_source = None;
@@ -891,7 +897,9 @@ impl Vehicle {
         if self.cargo_packets.is_empty() && self.cargo > 0 {
             let days = crate::economy::ticks_to_transit_days(self.cargo_transit_ticks);
             let cargo_type = self.cargo_type.or(match self.kind {
-                VehicleKind::Bus | VehicleKind::Aircraft => Some(CargoType::Passengers),
+                VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
+                    Some(CargoType::Passengers)
+                }
                 VehicleKind::Truck | VehicleKind::Train | VehicleKind::Ship => {
                     Some(CargoType::Goods)
                 }
@@ -919,7 +927,9 @@ impl Vehicle {
         self.cargo_unloading = false;
         self.cargo = 0;
         self.cargo_type = match self.kind {
-            VehicleKind::Bus | VehicleKind::Aircraft => Some(CargoType::Passengers),
+            VehicleKind::Bus | VehicleKind::Tram | VehicleKind::Aircraft => {
+                Some(CargoType::Passengers)
+            }
             VehicleKind::Truck | VehicleKind::Train | VehicleKind::Ship => None,
         };
         self.cargo_source = None;
@@ -1033,7 +1043,11 @@ impl Vehicle {
         }
         matches!(
             self.kind,
-            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Ship | VehicleKind::Aircraft
+            VehicleKind::Bus
+                | VehicleKind::Truck
+                | VehicleKind::Tram
+                | VehicleKind::Ship
+                | VehicleKind::Aircraft
         )
     }
 
@@ -1267,6 +1281,7 @@ impl Vehicle {
                 }
                 VehicleKind::Bus
                 | VehicleKind::Truck
+                | VehicleKind::Tram
                 | VehicleKind::Ship
                 | VehicleKind::Aircraft => {
                     self.cur_speed -= self.cur_speed >> 2;

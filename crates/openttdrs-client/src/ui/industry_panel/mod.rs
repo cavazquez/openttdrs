@@ -11,8 +11,11 @@ mod systems;
 mod tests;
 
 pub(crate) use logic::kind_label;
+pub(crate) use logic::spec_label;
 pub(crate) use setup::setup_industry_panel;
-pub(crate) use systems::{industry_panel_close_interaction, sync_industry_panel};
+pub(crate) use systems::{
+    industry_panel_center_interaction, industry_panel_close_interaction, sync_industry_panel,
+};
 
 #[derive(Resource, Default)]
 pub(crate) struct IndustryPanelState {
@@ -31,3 +34,6 @@ pub(crate) struct IndustryPanelDetails;
 
 #[derive(Component)]
 pub(crate) struct IndustryPanelCloseButton;
+
+#[derive(Component)]
+pub(crate) struct IndustryPanelCenterButton;

@@ -40,7 +40,9 @@ impl EngineDef {
     pub const fn speed_kmh(&self) -> u16 {
         match self.kind {
             VehicleKind::Train | VehicleKind::Aircraft => self.max_speed,
-            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Ship => self.max_speed / 2,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram | VehicleKind::Ship => {
+                self.max_speed / 2
+            }
         }
     }
 
@@ -60,6 +62,8 @@ impl EngineDef {
 pub const ENGINE_BUS_MPS: u16 = 0;
 pub const ENGINE_BUS_HEREFORD: u16 = 1;
 pub const ENGINE_BUS_FOSTER: u16 = 2;
+/// Tranvía vanilla (pasajeros; sprites de bus como placeholder).
+pub const ENGINE_TRAM_MPS: u16 = 5;
 pub const ENGINE_TRUCK_MPS: u16 = 10;
 pub const ENGINE_TRUCK_BALOGH_GOODS: u16 = 11;
 pub const ENGINE_TRUCK_CRAIGHEAD_GOODS: u16 = 12;
@@ -204,6 +208,19 @@ const ENGINES: &[EngineDef] = &[
         150,
         18,
         1986
+    ),
+    road!(
+        ENGINE_TRAM_MPS,
+        VehicleKind::Tram,
+        "MPS Electric Tram",
+        128,
+        130,
+        100,
+        33,
+        Some(CargoType::Passengers),
+        100,
+        12,
+        1935
     ),
     // Carretera: camiones.
     road!(
@@ -683,6 +700,7 @@ pub enum RoadEngineFilter {
     All,
     BusOnly,
     TruckOnly,
+    TramOnly,
 }
 
 /// `true` si el modelo ya está disponible en el año calendario dado.
@@ -740,9 +758,15 @@ pub fn engines_for_depot_kind(
                 | (DepotPurchaseKind::Aircraft, VehicleKind::Aircraft) => true,
                 (DepotPurchaseKind::Road, VehicleKind::Bus) => {
                     road_filter != RoadEngineFilter::TruckOnly
+                        && road_filter != RoadEngineFilter::TramOnly
                 }
                 (DepotPurchaseKind::Road, VehicleKind::Truck) => {
                     road_filter != RoadEngineFilter::BusOnly
+                        && road_filter != RoadEngineFilter::TramOnly
+                }
+                (DepotPurchaseKind::Road, VehicleKind::Tram) => {
+                    road_filter != RoadEngineFilter::BusOnly
+                        && road_filter != RoadEngineFilter::TruckOnly
                 }
                 _ => false,
             }
@@ -794,6 +818,7 @@ pub const fn default_engine_id(kind: VehicleKind) -> u16 {
     match kind {
         VehicleKind::Bus => ENGINE_BUS_MPS,
         VehicleKind::Truck => ENGINE_TRUCK_MPS,
+        VehicleKind::Tram => ENGINE_TRAM_MPS,
         VehicleKind::Train => ENGINE_TRAIN_KIRBY,
         VehicleKind::Ship => ENGINE_SHIP_MPS,
         VehicleKind::Aircraft => ENGINE_AIRCRAFT_DAKOTA,

@@ -14,7 +14,8 @@ use openttdrs_core::{
 
 use crate::camera::tile_camera_world_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles};
-use crate::state::SimWorld;
+use crate::state::{OrderPickState, SimWorld};
+use crate::ui::autoreplace_window::AutoreplaceWindowState;
 use crate::ui::buy_window::BuyVehicleWindowState;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_BROWN,
@@ -24,9 +25,10 @@ use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::vehicle_window::VehicleWindowState;
 
-use super::{BuildMenuUi, OrderEditState};
+use super::{BuildMenuUi, OrderEditState, open_order_edit_for_vehicle};
 
-const DEPOT_VEHICLE_ROWS: usize = 8;
+const DEPOT_VEHICLE_ROWS: usize = 24;
+const DEPOT_LIST_VISIBLE_ROWS: usize = 8;
 const ROW_HEIGHT: f32 = 30.0;
 const SPRITE_W: f32 = 64.0;
 const SPRITE_H: f32 = 24.0;
@@ -83,6 +85,12 @@ pub(crate) enum DepotPanelButton {
     /// Compra una copia del vehículo seleccionado (motor + órdenes).
     CloneVehicle,
     CenterDepot,
+    /// Sube el vehículo seleccionado en la lista del depósito.
+    MoveSlotUp,
+    /// Baja el vehículo seleccionado en la lista del depósito.
+    MoveSlotDown,
+    /// Abre la ventana de autoreemplazo para este depósito.
+    Autoreplace,
 }
 
 /// Texto del botón «Clonar» (cambia entre tren / vehículo según depósito).
@@ -109,6 +117,8 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
                     row_gap: Val::Px(1.0),
                     padding: UiRect::all(Val::Px(2.0)),
                     margin: UiRect::bottom(Val::Px(4.0)),
+                    max_height: Val::Px(ROW_HEIGHT * DEPOT_LIST_VISIBLE_ROWS as f32 + 4.0),
+                    overflow: Overflow::scroll_y(),
                     ..default()
                 },
                 BackgroundColor(LIST_BG),
@@ -142,6 +152,30 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
                     "Clonar tren",
                     true,
                     true,
+                );
+                spawn_depot_button(
+                    row,
+                    asset_server,
+                    DepotPanelButton::MoveSlotUp,
+                    "↑",
+                    false,
+                    false,
+                );
+                spawn_depot_button(
+                    row,
+                    asset_server,
+                    DepotPanelButton::MoveSlotDown,
+                    "↓",
+                    false,
+                    false,
+                );
+                spawn_depot_button(
+                    row,
+                    asset_server,
+                    DepotPanelButton::Autoreplace,
+                    "Autoreemplazo",
+                    true,
+                    false,
                 );
                 spawn_depot_button(
                     row,
@@ -477,8 +511,10 @@ pub(crate) fn handle_depot_panel_buttons(
     >,
     mut depot_state: ResMut<DepotPanelState>,
     mut order_state: ResMut<OrderEditState>,
+    mut next_pick: ResMut<NextState<OrderPickState>>,
     mut vehicle_window: ResMut<VehicleWindowState>,
     mut buy_state: ResMut<BuyVehicleWindowState>,
+    mut autoreplace: ResMut<AutoreplaceWindowState>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
@@ -544,7 +580,10 @@ pub(crate) fn handle_depot_panel_buttons(
         }
         depot_state.selected_vehicle = Some(vehicle_id);
         vehicle_window.vehicle_id = Some(vehicle_id);
-        order_state.clear();
+        vehicle_window.rename_editing = false;
+        if let Some(fresh) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
+            open_order_edit_for_vehicle(&mut order_state, fresh, &mut next_pick);
+        }
     }
 
     for (interaction, sell) in &mut sell_q {
@@ -585,6 +624,40 @@ pub(crate) fn handle_depot_panel_buttons(
             DepotPanelButton::NewVehicles => {
                 buy_state.depot_pos = Some(depot_pos);
                 buy_state.selected_engine = None;
+            }
+            DepotPanelButton::Autoreplace => {
+                autoreplace.open_for_depot(depot_pos);
+            }
+            DepotPanelButton::MoveSlotUp | DepotPanelButton::MoveSlotDown => {
+                let vehicles = vehicles_at_depot(&sim, depot_pos);
+                let Some(selected) = depot_state.selected_vehicle else {
+                    continue;
+                };
+                let Some(from_slot) = vehicles.iter().position(|v| v.id == selected) else {
+                    continue;
+                };
+                let to_slot = match button {
+                    DepotPanelButton::MoveSlotUp => from_slot.checked_sub(1),
+                    DepotPanelButton::MoveSlotDown => {
+                        let next = from_slot + 1;
+                        (next < vehicles.len()).then_some(next)
+                    }
+                    _ => None,
+                };
+                let Some(to_slot) = to_slot else {
+                    continue;
+                };
+                match apply_command(
+                    &mut sim.state,
+                    &Command::DepotReorderVehicleSlot {
+                        depot_pos,
+                        from_slot,
+                        to_slot,
+                    },
+                ) {
+                    Ok(()) => pending.pending = true,
+                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+                }
             }
             DepotPanelButton::CloneVehicle => {
                 let source_id = depot_state

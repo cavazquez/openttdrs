@@ -60,6 +60,7 @@ fn place_town_block(state: &mut GameState) {
         passengers_served: 0,
         mail_served: 0,
         growth_funded: 0,
+        ..Default::default()
     });
     for x in 14..=22_i32 {
         let _ = apply_command(

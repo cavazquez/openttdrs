@@ -13,6 +13,7 @@ pub(crate) fn build_menu_interaction(
     mut q: Query<(&Interaction, &BuildMenuAction), (Changed<Interaction>, With<Button>)>,
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
+    mut station_state: ResMut<crate::ui::toolbar::StationBuildState>,
     order_state: Res<OrderEditState>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
 ) {
@@ -22,6 +23,9 @@ pub(crate) fn build_menu_interaction(
         }
         tool_state.active_tool = Some(*action);
         cancel_placement(&mut drag_state);
+        if *action != BuildMenuAction::JoinStation {
+            station_state.join_keep = None;
+        }
         if *action == BuildMenuAction::Orders {
             start_order_destination_pick(&order_state, &mut next_pick);
         } else {

@@ -1,6 +1,7 @@
 //! Demanda urbana mínima: casas en cobertura de parada generan pasajeros y correo.
 
 use crate::cargo::CargoType;
+use crate::entity_history::TownHistory;
 use crate::industry::Industry;
 use crate::map::{Map, TileCoord};
 use crate::station::{self, STATION_COVERAGE_RADIUS, Station, StopKind};
@@ -24,6 +25,9 @@ pub struct Town {
     /// Veces que la compañía financió edificios (`TownFundBuildings`).
     #[serde(default)]
     pub growth_funded: u32,
+    /// Series mensuales (población / servicio).
+    #[serde(default)]
+    pub history: TownHistory,
 }
 
 impl Default for Town {
@@ -37,6 +41,7 @@ impl Default for Town {
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
+            history: TownHistory::default(),
         }
     }
 }
@@ -253,6 +258,7 @@ mod tests {
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
+            ..Default::default()
         }];
         assert!(!authority_allows_new_station(&towns, TileCoord::new(6, 5)));
         assert!(authority_allows_new_station(&towns, TileCoord::new(30, 30)));
@@ -272,6 +278,7 @@ mod tests {
             passengers_served: 10,
             mail_served: 0,
             growth_funded: 0,
+            ..Default::default()
         }];
         let stations = vec![Station::new_with_kind(
             TileCoord::new(8, 9),
@@ -292,6 +299,7 @@ mod tests {
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
+            ..Default::default()
         };
         town.adjust_rating(50);
         assert_eq!(town.local_authority_rating, 1000);

@@ -32,7 +32,7 @@ use super::rail_lane::rail_lane_bits_for_action;
 use crate::ui::toolbar::bridge_window::{BridgeBuildState, PendingBridge};
 use crate::ui::toolbar::depot_panel::DepotPanelState;
 use crate::ui::toolbar::minimap::minimap_contains_cursor;
-use crate::ui::toolbar::minimap::{MinimapCell, MinimapRoot};
+use crate::ui::toolbar::minimap::{MinimapCell, MinimapLayerState, MinimapRoot};
 use crate::ui::toolbar::order_panel::{
     handle_order_destination_click, start_order_destination_pick,
 };
@@ -46,7 +46,12 @@ use crate::ui::toolbar::{
 fn road_action_refreshes_neighbors(action: BuildMenuAction) -> bool {
     matches!(
         action,
-        BuildMenuAction::Road | BuildMenuAction::RoadX | BuildMenuAction::RoadY
+        BuildMenuAction::Road
+            | BuildMenuAction::RoadX
+            | BuildMenuAction::RoadY
+            | BuildMenuAction::Tram
+            | BuildMenuAction::TramX
+            | BuildMenuAction::TramY
     )
 }
 
@@ -94,6 +99,7 @@ pub(crate) struct PanelStates<'w> {
     industry: ResMut<'w, IndustryPanelState>,
     town: ResMut<'w, TownWindowState>,
     vehicle: ResMut<'w, VehicleWindowState>,
+    minimap_layers: Res<'w, MinimapLayerState>,
 }
 
 /// Clic en un vehículo del mapa: abre su ventana flotante (las órdenes se
@@ -211,7 +217,7 @@ pub(crate) fn handle_tile_click(
     cam_q: Query<(&Camera, &GlobalTransform), (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut selected: ResMut<SelectedTileInfo>,
     mut sim: ResMut<SimWorld>,
-    tool_state: Res<UiToolState>,
+    mut tool_state: ResMut<UiToolState>,
     mut station_state: ResMut<StationBuildState>,
     mut drag_state: ResMut<DragBuildState>,
     mut bridge_state: ResMut<BridgeBuildState>,
@@ -235,8 +241,14 @@ pub(crate) fn handle_tile_click(
     let industry_panel = &mut *panels.industry;
     let town_window = &mut *panels.town;
     let vehicle_window = &mut *panels.vehicle;
+    let minimap_layers = &*panels.minimap_layers;
 
     if save_window.is_some_and(|w| w.open) {
+        return;
+    }
+
+    if mouse.just_pressed(MouseButton::Left) && tool_state.block_map_click {
+        tool_state.block_map_click = false;
         return;
     }
 
@@ -258,7 +270,7 @@ pub(crate) fn handle_tile_click(
     let Some(cursor_pos) = window.cursor_position() else {
         return;
     };
-    if minimap_contains_cursor(cursor_pos, window) {
+    if minimap_contains_cursor(cursor_pos, window, minimap_layers) {
         return;
     }
     let Ok((camera, cam_tf)) = cam_q.single() else {
@@ -557,6 +569,45 @@ pub(crate) fn handle_tile_click(
     }
 
     if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+
+    if action == BuildMenuAction::JoinStation {
+        let Some(station) = sim.state.stations.iter().find(|s| s.covers_tile(build_pos)) else {
+            push_build_command_error(
+                &mut hud_feedback,
+                CommandError::StationNotFound,
+                time.elapsed_secs(),
+            );
+            return;
+        };
+        let clicked = station.pos;
+        match station_state.join_keep {
+            None => {
+                station_state.join_keep = Some(clicked);
+            }
+            Some(keep) if keep == clicked => {
+                station_state.join_keep = None;
+            }
+            Some(keep) => {
+                match apply_command(
+                    &mut sim.state,
+                    &Command::JoinStations {
+                        keep,
+                        merge: clicked,
+                    },
+                ) {
+                    Ok(()) => {
+                        station_state.join_keep = None;
+                        let (mw, mh) = sim.state.map.dimensions();
+                        request_map_visual_remap(&mut pending, mw, mh, &[]);
+                    }
+                    Err(e) => {
+                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+                    }
+                }
+            }
+        }
         return;
     }
 

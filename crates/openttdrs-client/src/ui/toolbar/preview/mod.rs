@@ -83,9 +83,9 @@ fn road_preview_at(
     preview_tiles: &[(i32, i32)],
 ) -> Option<(u8, String)> {
     let (requested, _force_axis) = match action {
-        BuildMenuAction::RoadX => (0x0A, true),
-        BuildMenuAction::RoadY => (0x05, true),
-        BuildMenuAction::Road => (road_bits_for_autoroute(map, pos), false),
+        BuildMenuAction::RoadX | BuildMenuAction::TramX => (0x0A, true),
+        BuildMenuAction::RoadY | BuildMenuAction::TramY => (0x05, true),
+        BuildMenuAction::Road | BuildMenuAction::Tram => (road_bits_for_autoroute(map, pos), false),
         _ => return None,
     };
     let tool_bits = road_bits_for_drag_action(action, preview_tiles).unwrap_or(requested);
@@ -98,15 +98,29 @@ fn road_preview_at(
         .map(|&(x, y)| TileCoord::new(x, y))
         .unwrap_or(pos);
     let axis = match action {
-        BuildMenuAction::RoadX => road_locked_tool_axis(map, start, end, 0x0A),
-        BuildMenuAction::RoadY => road_locked_tool_axis(map, start, end, 0x05),
-        BuildMenuAction::Road => infer_road_drag_axis(map, start, end, tool_bits),
+        BuildMenuAction::RoadX | BuildMenuAction::TramX => {
+            road_locked_tool_axis(map, start, end, 0x0A)
+        }
+        BuildMenuAction::RoadY | BuildMenuAction::TramY => {
+            road_locked_tool_axis(map, start, end, 0x05)
+        }
+        BuildMenuAction::Road | BuildMenuAction::Tram => {
+            infer_road_drag_axis(map, start, end, tool_bits)
+        }
         _ => tool_bits,
     };
     let bits = preview_road_bits_at(map, pos, axis, true);
     let tileh = tile_slope_and_z(map, pos).map(|(h, _)| h).unwrap_or(0);
     let idx = road_flat_sprite_index(tileh, bits);
-    Some((bits, format!("assets/opengfx/tiles/road_flat_{idx:02}.png")))
+    let prefix = if matches!(
+        action,
+        BuildMenuAction::Tram | BuildMenuAction::TramX | BuildMenuAction::TramY
+    ) {
+        "tram_flat"
+    } else {
+        "road_flat"
+    };
+    Some((bits, format!("assets/opengfx/tiles/{prefix}_{idx:02}.png")))
 }
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
@@ -218,7 +232,7 @@ pub(crate) fn update_build_ghost_preview(
                 .unwrap_or_else(|| vec![(tx, ty)])
         } else if matches!(
             action,
-            BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge
+            BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge | BuildMenuAction::Aqueduct
         ) && drag_state.armed
             && let Some(start) = drag_state.start_tile
         {
@@ -241,8 +255,8 @@ pub(crate) fn update_build_ghost_preview(
         );
         return;
     }
-    if action == BuildMenuAction::AirportSmall {
-        spawn_airport_small_preview(
+    if action == BuildMenuAction::Airport {
+        spawn_airport_preview(
             &mut commands,
             &asset_server,
             &sim,
@@ -363,7 +377,7 @@ pub(crate) fn update_build_ghost_preview(
     }
     if matches!(
         action,
-        BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge
+        BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge | BuildMenuAction::Aqueduct
     ) {
         let valid = preview_tiles.len() >= 3
             && preview_tiles
@@ -613,43 +627,76 @@ fn spawn_rail_station_area_preview(
     );
 }
 
-fn spawn_airport_small_preview(
+fn spawn_airport_preview(
     commands: &mut Commands,
     asset_server: &AssetServer,
     sim: &SimWorld,
     station_state: &StationBuildState,
     origin: TileCoord,
 ) {
-    use openttdrs_core::{Command, airport_small_footprint, command_would_fail};
+    use openttdrs_core::{
+        Command, STATION_COVERAGE_RADIUS, airport_spec_def, airport_spec_footprint,
+        airport_spec_tiles, command_would_fail,
+    };
 
-    let (w, h) = airport_small_footprint(station_state.rail_axis_y);
+    let spec = station_state.airport_spec;
+    let axis_y = station_state.airport_axis_y;
+    let (w, h) = airport_spec_footprint(spec, axis_y);
     let cmd = Command::PlaceAirportArea {
         origin,
-        axis_y: station_state.rail_axis_y,
+        axis_y,
+        spec,
     };
     let valid = command_would_fail(&sim.state, &cmd).is_none();
-    let image = asset_server.load::<Image>("assets/opengfx/tiles/tile_select.png");
+    let select = asset_server.load::<Image>("assets/opengfx/tiles/tile_select.png");
     let tint = if valid {
         Color::srgba(0.85, 0.95, 1.0, 0.95)
     } else {
         Color::srgba(1.0, 0.3, 0.25, 0.95)
     };
-    for dy in 0..h {
-        for dx in 0..w {
-            let (x, y) = (origin.x + dx, origin.y + dy);
-            let Some(tile) = sim.state.map.get(TileCoord::new(x, y)) else {
-                continue;
-            };
-            commands.spawn((
-                BuildGhostPreview,
-                Sprite {
-                    image: image.clone(),
-                    color: tint,
-                    ..default()
-                },
-                Transform::from_translation(crate::iso::tile_pos(x, y, tile.height, 3.0))
-                    .with_scale(Vec3::new(1.002, 1.002, 1.0)),
-            ));
+    for (coord, _piece) in airport_spec_tiles(origin, spec, axis_y) {
+        let Some(tile) = sim.state.map.get(coord) else {
+            continue;
+        };
+        commands.spawn((
+            BuildGhostPreview,
+            Sprite {
+                image: select.clone(),
+                color: tint,
+                ..default()
+            },
+            Transform::from_translation(crate::iso::tile_pos(coord.x, coord.y, tile.height, 3.0))
+                .with_scale(Vec3::new(1.002, 1.002, 1.0)),
+        ));
+    }
+    if station_state.airport_show_coverage {
+        let radius = airport_spec_def(spec)
+            .map(|d| d.catchment)
+            .unwrap_or(STATION_COVERAGE_RADIUS);
+        let coverage_img = asset_server.load::<Image>("assets/opengfx/tiles/tile_select.png");
+        let coverage_tint = Color::srgba(0.35, 0.85, 0.45, 0.28);
+        for dy in -radius..=(h - 1 + radius) {
+            for dx in -radius..=(w - 1 + radius) {
+                let x = origin.x + dx;
+                let y = origin.y + dy;
+                // Solo halo exterior (no solapar footprint).
+                if dx >= 0 && dy >= 0 && dx < w && dy < h {
+                    continue;
+                }
+                let Some(tile) = sim.state.map.get(TileCoord::new(x, y)) else {
+                    continue;
+                };
+                commands.spawn((
+                    BuildGhostPreview,
+                    Sprite {
+                        image: coverage_img.clone(),
+                        color: coverage_tint,
+                        ..default()
+                    },
+                    Transform::from_translation(crate::iso::tile_pos(x, y, tile.height, 2.5))
+                        .with_scale(Vec3::new(1.001, 1.001, 1.0)),
+                ));
+            }
         }
     }
 }
@@ -765,7 +812,10 @@ mod tests {
         mouse.press(MouseButton::Right);
         world.insert_resource(mouse);
         world.insert_resource(ButtonInput::<KeyCode>::default());
-        world.insert_resource(UiToolState { active_tool: tool });
+        world.insert_resource(UiToolState {
+            active_tool: tool,
+            ..Default::default()
+        });
         world.insert_resource(StationBuildState::default());
         world.insert_resource(DragBuildState {
             armed: drag_armed,
@@ -911,6 +961,7 @@ mod tests {
             stock: 30,
             capacity: 100,
             random_colour: 0,
+            ..Default::default()
         }];
         assert!(station_preview_has_coverage(&map, &industries, 3, 3));
         assert!(!station_preview_has_coverage(&map, &[], 0, 0));

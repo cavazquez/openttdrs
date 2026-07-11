@@ -6,7 +6,10 @@ use super::super::{
     ToolbarGroupButton, ToolbarTooltipTarget, TooltipBox, TooltipText,
 };
 use super::controls::{spawn_icon_tool_buttons, spawn_panel_title, spawn_settings_buttons};
-use crate::ui::navigation::spawn_world_navigation_button;
+use crate::ui::navigation::{
+    spawn_economy_navigation_button, spawn_fleet_navigation_button,
+    spawn_industries_navigation_button, spawn_map_navigation_button, spawn_world_navigation_button,
+};
 use crate::ui::save_window::{SaveLoadToolbarButton, SaveWindowMode};
 
 pub(super) fn spawn_toolbar_group_buttons(
@@ -134,7 +137,11 @@ pub(super) fn spawn_toolbar_group_buttons(
             BackgroundColor(Color::srgb(0.62, 0.55, 0.38)),
             BuildMenuUi,
         ));
-        spawn_world_navigation_button(parent);
+        spawn_map_navigation_button(parent, asset_server);
+        spawn_world_navigation_button(parent, asset_server);
+        spawn_industries_navigation_button(parent, asset_server);
+        spawn_fleet_navigation_button(parent, asset_server);
+        spawn_economy_navigation_button(parent, asset_server);
         spawn_sound_music_toolbar_button(parent, asset_server);
         parent.spawn((
             Node {
@@ -231,7 +238,7 @@ fn spawn_save_load_button(
 pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
     root.spawn(tool_panel_node(ToolbarGroup::Road, false))
         .with_children(|panel| {
-            spawn_panel_title(panel, "Construccion de carretera", 504.0);
+            spawn_panel_title(panel, "Construccion de carretera", 780.0);
             spawn_button_row(panel, |buttons| {
                 spawn_icon_tool_buttons(
                     buttons,
@@ -251,6 +258,33 @@ pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             "Cruce de carretera",
                             "assets/opengfx/tiles/road_flat_02.png",
                             BuildMenuAction::Road,
+                        ),
+                    ],
+                );
+                spawn_toolbar_spacer(buttons);
+                crate::ui::toolbar::road_type_selector::spawn_road_type_selectors(
+                    buttons,
+                    asset_server,
+                );
+                spawn_toolbar_spacer(buttons);
+                spawn_icon_tool_buttons(
+                    buttons,
+                    asset_server,
+                    &[
+                        (
+                            "Tranvía NW-SE",
+                            "assets/opengfx/tiles/tram_flat_00.png",
+                            BuildMenuAction::TramY,
+                        ),
+                        (
+                            "Tranvía NE-SW",
+                            "assets/opengfx/tiles/tram_flat_01.png",
+                            BuildMenuAction::TramX,
+                        ),
+                        (
+                            "Cruce de tranvía",
+                            "assets/opengfx/tiles/tram_flat_02.png",
+                            BuildMenuAction::Tram,
                         ),
                         (
                             "Deposito de carretera",
@@ -281,6 +315,11 @@ pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             "Parada de bus",
                             "assets/opengfx/tiles/bus_stop_ne_ground.png",
                             BuildMenuAction::BusStop,
+                        ),
+                        (
+                            "Unir estaciones",
+                            "assets/opengfx/tiles/truck_stop_ground_0.png",
+                            BuildMenuAction::JoinStation,
                         ),
                     ],
                 );
@@ -313,6 +352,21 @@ pub(super) fn spawn_water_panel(root: &mut ChildSpawnerCommands, asset_server: &
                             BuildMenuAction::Canal,
                         ),
                         (
+                            "Rio",
+                            "assets/opengfx/tiles/water_flat.png",
+                            BuildMenuAction::River,
+                        ),
+                        (
+                            "Boya",
+                            "assets/opengfx/tiles/buoy.png",
+                            BuildMenuAction::Buoy,
+                        ),
+                        (
+                            "Acueducto",
+                            "assets/opengfx/tiles/bridge_wood_road_x.png",
+                            BuildMenuAction::Aqueduct,
+                        ),
+                        (
                             "Esclusa",
                             "assets/opengfx/tiles/water_lock_ns_middle.png",
                             BuildMenuAction::Lock,
@@ -331,18 +385,11 @@ pub(super) fn spawn_air_panel(root: &mut ChildSpawnerCommands, asset_server: &As
                 spawn_icon_tool_buttons(
                     buttons,
                     asset_server,
-                    &[
-                        (
-                            "Helipuerto / hangar",
-                            "assets/opengfx/tiles/airport_heliport.png",
-                            BuildMenuAction::Airport,
-                        ),
-                        (
-                            "Aeropuerto small (4x3)",
-                            "assets/opengfx/tiles/airport_runway_0.png",
-                            BuildMenuAction::AirportSmall,
-                        ),
-                    ],
+                    &[(
+                        "Aeropuerto (picker)",
+                        "assets/opengfx/tiles/airport_runway_0.png",
+                        BuildMenuAction::Airport,
+                    )],
                 );
             });
         });
@@ -351,7 +398,7 @@ pub(super) fn spawn_air_panel(root: &mut ChildSpawnerCommands, asset_server: &As
 pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
     root.spawn(tool_panel_node(ToolbarGroup::Rail, false))
         .with_children(|panel| {
-            spawn_panel_title(panel, "Construccion de Ferrocarril", 770.0);
+            spawn_panel_title(panel, "Construccion de Ferrocarril", 980.0);
             spawn_button_row(panel, |buttons| {
                 // Mismo orden que `_nested_build_rail_widgets` (rail_gui.cpp):
                 // 4 direcciones + autorail | separador | resto de herramientas.
@@ -385,6 +432,11 @@ pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             BuildMenuAction::Rail,
                         ),
                     ],
+                );
+                spawn_toolbar_spacer(buttons);
+                crate::ui::toolbar::rail_type_selector::spawn_rail_type_selector(
+                    buttons,
+                    asset_server,
                 );
                 spawn_toolbar_spacer(buttons);
                 spawn_icon_tool_buttons(
@@ -596,6 +648,16 @@ pub(super) fn spawn_secondary_tool_panels(
                             "Comprar terreno",
                             "assets/opengfx/tiles/object_bought_land.png",
                             BuildMenuAction::BuyLand,
+                        ),
+                        (
+                            "Plantar árbol",
+                            "assets/opengfx/tiles/tree_01.png",
+                            BuildMenuAction::PlantTree,
+                        ),
+                        (
+                            "Colocar cartel",
+                            "assets/opengfx/tiles/object_lighthouse.png",
+                            BuildMenuAction::PlaceSign,
                         ),
                     ],
                 ),

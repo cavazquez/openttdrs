@@ -306,8 +306,9 @@ fn spawn_layer(
     if sprite_id == 0 {
         return;
     }
+    use crate::sprites::{TransparencyOption, sprite_color};
     let palette = bridge_structure_palette(bridge_type);
-    let sprite = if let Some(handle) = assets.bridge_palettes.handle(sprite_id, palette) {
+    let mut sprite = if let Some(handle) = assets.bridge_palettes.handle(sprite_id, palette) {
         Sprite {
             image: handle.clone(),
             ..default()
@@ -317,6 +318,7 @@ fn spawn_layer(
     } else {
         return;
     };
+    sprite.color = sprite_color(TransparencyOption::Bridges);
     let (w, h, xrel, yrel) = bridge_sprite_meta(sprite_id).unwrap_or((64.0, 32.0, -32.0, -16.0));
     let pos = Vec3::new(
         ctx.iso_pos.x + shift.x + xrel + w / 2.0,
@@ -339,6 +341,14 @@ pub(crate) fn spawn_bridge_deck(
     span: &BridgeSpanInfo,
     draw_pillars: bool,
 ) {
+    use crate::sprites::{TransparencyOption, is_hidden};
+    if is_hidden(TransparencyOption::Bridges) {
+        // Vía sobre el vano sigue visible; solo se oculta la estructura.
+        if span.rail && bridge_draws_separate_rail_overlay(span.bridge_type) {
+            spawn_bridge_rail_overlay(commands, assets, ctx, span);
+        }
+        return;
+    }
     let ids = bridge_deck_sprite_ids(span.bridge_type, span.piece);
     let rear_id = ids.rear(span.rail, span.axis);
     let front_id = ids.front[span.axis];

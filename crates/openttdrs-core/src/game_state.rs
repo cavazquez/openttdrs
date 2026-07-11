@@ -14,7 +14,7 @@ pub struct IncomePopup {
 }
 
 /// Contadores acumulativos de la simulación (carga/descarga, producción).
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SimStats {
     /// Eventos de carga (vehículo tomó cargo en una industria).
     pub cargo_pickups: u64,
@@ -38,6 +38,167 @@ pub struct SimStats {
     /// Costes de explotación de vehículos acumulados.
     #[serde(default)]
     pub vehicle_running_costs: u64,
+    /// Series mensuales para gráficos (Income / Operating Profit).
+    #[serde(default)]
+    pub economy_history: EconomyHistory,
+}
+
+/// Número de meses retenidos en gráficos económicos.
+pub const ECONOMY_HISTORY_MONTHS: usize = 36;
+
+/// Muestra mensual de la economía (deltas del mes + valor de compañía al cierre).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MonthlyEconomySample {
+    pub income: u64,
+    pub running_costs: u64,
+    pub deliveries: u64,
+    /// Patrimonio neto al cierre del mes (`money - loan`).
+    #[serde(default)]
+    pub company_value: i64,
+}
+
+impl MonthlyEconomySample {
+    #[must_use]
+    pub const fn operating_profit(self) -> i64 {
+        self.income.cast_signed() - self.running_costs.cast_signed()
+    }
+}
+
+/// Ring buffer de muestras mensuales + baselines para calcular deltas.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct EconomyHistory {
+    pub samples: Vec<MonthlyEconomySample>,
+    #[serde(default)]
+    pub last_income: u64,
+    #[serde(default)]
+    pub last_running_costs: u64,
+    #[serde(default)]
+    pub last_deliveries: u64,
+}
+
+impl EconomyHistory {
+    /// Registra el mes a partir de los totales acumulados y el valor de compañía.
+    pub fn push_month_from_totals(
+        &mut self,
+        income_total: u64,
+        running_costs_total: u64,
+        deliveries_total: u64,
+        company_value: i64,
+    ) {
+        let sample = MonthlyEconomySample {
+            income: income_total.saturating_sub(self.last_income),
+            running_costs: running_costs_total.saturating_sub(self.last_running_costs),
+            deliveries: deliveries_total.saturating_sub(self.last_deliveries),
+            company_value,
+        };
+        self.last_income = income_total;
+        self.last_running_costs = running_costs_total;
+        self.last_deliveries = deliveries_total;
+        self.samples.push(sample);
+        if self.samples.len() > ECONOMY_HISTORY_MONTHS {
+            let drop = self.samples.len() - ECONOMY_HISTORY_MONTHS;
+            self.samples.drain(0..drop);
+        }
+    }
+}
+
+/// Patrimonio neto simplificado (espejo de Finances: efectivo − préstamo).
+#[must_use]
+pub fn company_net_value(money: i64, loan: i64) -> i64 {
+    money.saturating_sub(loan)
+}
+
+#[cfg(test)]
+mod economy_history_tests {
+    use super::{ECONOMY_HISTORY_MONTHS, EconomyHistory, company_net_value};
+
+    #[test]
+    fn push_month_from_totals_stores_deltas_and_caps_length() {
+        let mut history = EconomyHistory::default();
+        history.push_month_from_totals(100, 40, 2, 90_000);
+        history.push_month_from_totals(250, 90, 5, 95_000);
+        assert_eq!(history.samples.len(), 2);
+        assert_eq!(history.samples[0].income, 100);
+        assert_eq!(history.samples[0].running_costs, 40);
+        assert_eq!(history.samples[0].deliveries, 2);
+        assert_eq!(history.samples[0].operating_profit(), 60);
+        assert_eq!(history.samples[0].company_value, 90_000);
+        assert_eq!(history.samples[1].income, 150);
+        assert_eq!(history.samples[1].running_costs, 50);
+        assert_eq!(history.samples[1].deliveries, 3);
+        assert_eq!(history.samples[1].company_value, 95_000);
+
+        for i in 0..ECONOMY_HISTORY_MONTHS {
+            let total = 250 + (i as u64 + 1) * 10;
+            history.push_month_from_totals(total, 90, 5, 100_000);
+        }
+        assert_eq!(history.samples.len(), ECONOMY_HISTORY_MONTHS);
+        assert_eq!(history.samples.last().map(|s| s.income), Some(10));
+    }
+
+    #[test]
+    fn company_net_value_is_money_minus_loan() {
+        assert_eq!(company_net_value(100_000, 20_000), 80_000);
+        assert_eq!(company_net_value(10_000, 50_000), -40_000);
+    }
+
+    #[test]
+    fn monthly_close_records_per_company_history() {
+        use crate::economy::TICKS_PER_MONTH;
+        use crate::{GameState, GameTick};
+
+        let mut s = GameState::new(12, 12);
+        s.ensure_rival_transcargo();
+        assert_eq!(s.companies.len(), 2);
+        s.tick = GameTick::new(TICKS_PER_MONTH.saturating_sub(1));
+        s.step();
+        assert!(
+            s.companies
+                .iter()
+                .all(|c| !c.economy_history.samples.is_empty()),
+            "cada compañía debe tener cierre mensual"
+        );
+        assert_eq!(
+            s.stats.economy_history.samples.len(),
+            s.companies[s.active_company.index()]
+                .economy_history
+                .samples
+                .len()
+        );
+    }
+
+    #[test]
+    fn monthly_close_records_town_and_industry_history() {
+        use crate::economy::TICKS_PER_MONTH;
+        use crate::industry::IndustryKind;
+        use crate::map::TileCoord;
+        use crate::{GameState, GameTick, Industry, Town};
+
+        let mut s = GameState::new(12, 12);
+        s.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(3, 3),
+            name: "Hist".into(),
+            population: 50,
+            passengers_served: 4,
+            mail_served: 1,
+            ..Default::default()
+        });
+        let mut industry = Industry::new(TileCoord::new(5, 5), IndustryKind::CoalMine);
+        industry.produced_total = 8;
+        industry.transported_total = 2;
+        industry.stock = 6;
+        s.industries.push(industry);
+        s.tick = GameTick::new(TICKS_PER_MONTH.saturating_sub(1));
+        s.step();
+        assert_eq!(s.towns[0].history.samples.len(), 1);
+        assert_eq!(s.towns[0].history.samples[0].population, 50);
+        assert_eq!(s.towns[0].history.samples[0].passengers_served, 4);
+        assert_eq!(s.industries[0].history.samples.len(), 1);
+        assert_eq!(s.industries[0].history.samples[0].produced, 8);
+        assert_eq!(s.industries[0].history.samples[0].transported, 2);
+        assert_eq!(s.industries[0].history.samples[0].stock, 6);
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -110,6 +271,24 @@ pub struct GameState {
     /// Tipo de vía activo al construir (`_cur_railtype` en `OpenTTD`).
     #[serde(default)]
     pub current_rail_type: crate::rail_type::RailType,
+    /// Tipo de carretera activo (`_last_built_roadtype` / `_cur_roadtype` clase road).
+    #[serde(default)]
+    pub current_road_type: crate::road_type::RoadType,
+    /// Tipo de tranvía activo (`_last_built_tramtype`).
+    #[serde(default = "default_current_tram_type")]
+    pub current_tram_type: crate::road_type::RoadType,
+    /// Clase de estación ferroviaria activa (picker `NewGRF` / vanilla).
+    #[serde(default)]
+    pub current_station_class: crate::station_class::StationClassId,
+    /// Spec de estación ferroviaria activa dentro de la clase.
+    #[serde(default)]
+    pub current_station_spec: crate::station_class::StationSpecId,
+    /// Clase de aeropuerto activa (picker).
+    #[serde(default)]
+    pub current_airport_class: crate::airport_class::AirportClassId,
+    /// Spec de aeropuerto activo dentro de la clase.
+    #[serde(default)]
+    pub current_airport_spec: crate::airport_class::AirportSpecId,
     /// Clima del paisaje (`LandscapeType` en `OpenTTD`).
     #[serde(default)]
     pub climate: Climate,
@@ -188,6 +367,12 @@ pub struct GameState {
     /// Stack `NewGRF` activo (Fase 7 MVP; sin ejecución Action0–14).
     #[serde(default = "crate::newgrf_config::default_vanilla_stack")]
     pub newgrf_stack: Vec<crate::newgrf_config::NewGrfEntry>,
+    /// Carteles del mapa (`Sign` en `OpenTTD`).
+    #[serde(default)]
+    pub signs: Vec<crate::sign::Sign>,
+    /// Contador para IDs de cartel.
+    #[serde(default = "default_next_sign_id")]
+    pub next_sign_id: u32,
 }
 
 const fn default_true() -> bool {
@@ -196,6 +381,14 @@ const fn default_true() -> bool {
 
 const fn default_disaster_timer() -> u64 {
     crate::disaster::DISASTER_CHECK_INTERVAL
+}
+
+const fn default_current_tram_type() -> crate::road_type::RoadType {
+    crate::road_type::RoadType::Tram
+}
+
+const fn default_next_sign_id() -> u32 {
+    1
 }
 
 impl GameState {
@@ -217,6 +410,12 @@ impl GameState {
             )],
             active_company: crate::company::CompanyId::PLAYER,
             current_rail_type: crate::rail_type::RailType::Rail,
+            current_road_type: crate::road_type::RoadType::Road,
+            current_tram_type: crate::road_type::RoadType::Tram,
+            current_station_class: crate::station_class::StationClassId::Default,
+            current_station_spec: crate::station_class::StationSpecId::DefaultRail,
+            current_airport_class: crate::airport_class::AirportClassId::Small,
+            current_airport_spec: crate::airport_class::AirportSpecId::Small,
             climate: Climate::default(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
@@ -243,6 +442,8 @@ impl GameState {
             disaster_timer: default_disaster_timer(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
+            signs: Vec::new(),
+            next_sign_id: 1,
         }
     }
 
@@ -265,6 +466,12 @@ impl GameState {
             )],
             active_company: crate::company::CompanyId::PLAYER,
             current_rail_type: crate::rail_type::RailType::Rail,
+            current_road_type: crate::road_type::RoadType::Road,
+            current_tram_type: crate::road_type::RoadType::Tram,
+            current_station_class: crate::station_class::StationClassId::Default,
+            current_station_spec: crate::station_class::StationSpecId::DefaultRail,
+            current_airport_class: crate::airport_class::AirportClassId::Small,
+            current_airport_spec: crate::airport_class::AirportSpecId::Small,
             climate: Climate::default(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
@@ -291,6 +498,8 @@ impl GameState {
             disaster_timer: default_disaster_timer(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
+            signs: Vec::new(),
+            next_sign_id: 1,
         }
     }
 
@@ -356,6 +565,23 @@ impl GameState {
                 self.company_colour,
             ));
             self.active_company = crate::company::CompanyId::PLAYER;
+        }
+        // Migración: historial global → compañía activa si aún no tiene series.
+        let active_idx = self.active_company.index();
+        if let Some(c) = self.companies.get_mut(active_idx)
+            && c.economy_history.samples.is_empty()
+            && !self.stats.economy_history.samples.is_empty()
+        {
+            c.economy_history = self.stats.economy_history.clone();
+            if c.cargo_income_earned == 0 {
+                c.cargo_income_earned = self.stats.cargo_income_earned;
+            }
+            if c.vehicle_running_costs == 0 {
+                c.vehicle_running_costs = self.stats.vehicle_running_costs;
+            }
+            if c.cargo_deliveries == 0 {
+                c.cargo_deliveries = self.stats.cargo_deliveries;
+            }
         }
     }
 

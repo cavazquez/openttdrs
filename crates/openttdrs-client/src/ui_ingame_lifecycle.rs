@@ -7,10 +7,10 @@ use crate::debug_gizmos::DiagnosticsOverlayRoot;
 use crate::render::effect_fx::FxSpawnQueue;
 use crate::render::{
     ChimneySmokeFrames, CompanyColoredSprites, CopperMineSmokeFrames, EffectVehicleFrames,
-    FizzyDrinkAnimFrames, IndustryPreviewCamera, LoadedMapTileChunks, MapPreviewCamera,
-    MapTileSpawnViewport, MapVisualLayer, PrimaryGameCamera, RefineryFireAnimFrames,
-    RemapMapVisualsPending, ShoreTile, TileAtlas, TruckHandles, VehicleIndex, WaterAnimFrames,
-    WaterTile, WorldAssets,
+    FizzyDrinkAnimFrames, IndustryPreviewCamera, LighthouseAnimFrames, LoadedMapTileChunks,
+    MapPreviewCamera, MapTileSpawnViewport, MapVisualLayer, PrimaryGameCamera,
+    RefineryFireAnimFrames, RemapMapVisualsPending, ShoreTile, TileAtlas, TruckHandles,
+    VehicleIndex, WaterAnimFrames, WaterTile, WorldAssets,
 };
 use crate::simulation::SimClock;
 use crate::state::ingame_lifecycle::InGameUi;
@@ -18,10 +18,13 @@ use crate::state::{ClientScreen, OrderPickState};
 
 use super::SaveWindowState;
 use super::audio_settings_window::SoundMusicWindowState;
+use super::autoreplace_window::AutoreplaceWindowState;
 use super::buy_window::BuyVehicleWindowState;
+use super::cargo_payment_window::CargoPaymentWindowState;
 use super::destination_window::DestinationPickerState;
 use super::finances_window::FinancesWindowState;
 use super::floating_window::FloatingWindow;
+use super::graph_window::GraphWindowState;
 use super::hud::TileInfoText;
 use super::industry_directory::IndustryDirectoryState;
 use super::industry_panel::{IndustryPanelRoot, IndustryPanelState};
@@ -29,8 +32,11 @@ use super::navigation::ToolbarMenuState;
 use super::newgrf_window::NewGrfWindowState;
 use super::news_settings_window::NewsSettingsWindowState;
 use super::pathfinding_settings_window::PathfindingSettingsWindowState;
+use super::refit_window::RefitWindowState;
+use super::shared_orders_window::SharedOrdersWindowState;
 use super::station_directory::StationDirectoryState;
 use super::statusbar::{NewsHistoryState, NewsPopupRoot, NewsUiState, StatusBarRoot};
+use super::subsidy_list::SubsidyListState;
 use super::timetable_window::TimetableWindowState;
 use super::toolbar::{
     BridgeBuildState, BuildGhostPreview, DepotPanelState, DragBuildState, MinimapRoot,
@@ -39,6 +45,7 @@ use super::toolbar::{
 };
 use super::town_directory::TownDirectoryState;
 use super::town_window::TownWindowState;
+use super::vehicle_list::VehicleListState;
 use super::vehicle_window::VehicleWindowState;
 
 pub(crate) struct InGameLifecyclePlugin;
@@ -154,6 +161,12 @@ pub(crate) fn leave_ingame(world: &mut World) {
     if let Some(mut station_directory) = world.get_resource_mut::<StationDirectoryState>() {
         *station_directory = StationDirectoryState::default();
     }
+    if let Some(mut vehicle_list) = world.get_resource_mut::<VehicleListState>() {
+        *vehicle_list = VehicleListState::default();
+    }
+    if let Some(mut subsidy_list) = world.get_resource_mut::<SubsidyListState>() {
+        *subsidy_list = SubsidyListState::default();
+    }
     if let Some(mut buy_window) = world.get_resource_mut::<BuyVehicleWindowState>() {
         *buy_window = BuyVehicleWindowState::default();
     }
@@ -163,11 +176,26 @@ pub(crate) fn leave_ingame(world: &mut World) {
     if let Some(mut vehicle_window) = world.get_resource_mut::<VehicleWindowState>() {
         *vehicle_window = VehicleWindowState::default();
     }
+    if let Some(mut refit_window) = world.get_resource_mut::<RefitWindowState>() {
+        *refit_window = RefitWindowState::default();
+    }
+    if let Some(mut shared_orders) = world.get_resource_mut::<SharedOrdersWindowState>() {
+        *shared_orders = SharedOrdersWindowState::default();
+    }
+    if let Some(mut autoreplace) = world.get_resource_mut::<AutoreplaceWindowState>() {
+        *autoreplace = AutoreplaceWindowState::default();
+    }
     if let Some(mut timetable_window) = world.get_resource_mut::<TimetableWindowState>() {
         *timetable_window = TimetableWindowState::default();
     }
     if let Some(mut finances_window) = world.get_resource_mut::<FinancesWindowState>() {
         *finances_window = FinancesWindowState::default();
+    }
+    if let Some(mut graph_window) = world.get_resource_mut::<GraphWindowState>() {
+        *graph_window = GraphWindowState::default();
+    }
+    if let Some(mut cargo_payment) = world.get_resource_mut::<CargoPaymentWindowState>() {
+        *cargo_payment = CargoPaymentWindowState::default();
     }
     if let Some(mut news_settings) = world.get_resource_mut::<NewsSettingsWindowState>() {
         *news_settings = NewsSettingsWindowState::default();
@@ -195,6 +223,7 @@ pub(crate) fn leave_ingame(world: &mut World) {
     world.remove_resource::<WaterAnimFrames>();
     world.remove_resource::<RefineryFireAnimFrames>();
     world.remove_resource::<FizzyDrinkAnimFrames>();
+    world.remove_resource::<LighthouseAnimFrames>();
     world.remove_resource::<ChimneySmokeFrames>();
     world.remove_resource::<CopperMineSmokeFrames>();
     world.remove_resource::<EffectVehicleFrames>();
@@ -240,8 +269,13 @@ mod tests {
         world.init_resource::<BuyVehicleWindowState>();
         world.init_resource::<DestinationPickerState>();
         world.init_resource::<VehicleWindowState>();
+        world.init_resource::<RefitWindowState>();
+        world.init_resource::<SharedOrdersWindowState>();
+        world.init_resource::<AutoreplaceWindowState>();
         world.init_resource::<TimetableWindowState>();
         world.init_resource::<FinancesWindowState>();
+        world.init_resource::<GraphWindowState>();
+        world.init_resource::<CargoPaymentWindowState>();
         world.init_resource::<NewsSettingsWindowState>();
         world.init_resource::<PathfindingSettingsWindowState>();
         world.init_resource::<NewGrfWindowState>();

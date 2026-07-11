@@ -1,5 +1,4 @@
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use bevy::prelude::*;
 use openttdrs_core::{
@@ -7,6 +6,7 @@ use openttdrs_core::{
 };
 
 use super::road::RoadDepotLayerGfx;
+use super::transparency::catenary_hidden;
 use crate::config;
 use crate::iso::remap_tile_offset;
 
@@ -328,39 +328,6 @@ pub struct CatenarySpriteDraw {
     pub tile_dx: f32,
     pub tile_dy: f32,
     pub z_layer: f32,
-}
-
-/// `TO_CATENARY` invisibility (`OPENTTDRS_HIDE_CATENARY=1`).
-static PREF_HIDE_CATENARY: AtomicBool = AtomicBool::new(false);
-static PREF_TRANSPARENT_CATENARY: AtomicBool = AtomicBool::new(false);
-
-/// Sincroniza las preferencias persistidas con el render de catenaria.
-pub fn set_catenary_preferences(hidden: bool, transparent: bool) {
-    PREF_HIDE_CATENARY.store(hidden, Ordering::Relaxed);
-    PREF_TRANSPARENT_CATENARY.store(transparent, Ordering::Relaxed);
-}
-
-/// `TO_CATENARY` invisibility (preferencia o override de entorno).
-#[must_use]
-pub fn catenary_hidden() -> bool {
-    PREF_HIDE_CATENARY.load(Ordering::Relaxed) || crate::config::env_flag("OPENTTDRS_HIDE_CATENARY")
-}
-
-/// `TO_CATENARY` transparency (preferencia o override de entorno).
-#[must_use]
-pub fn catenary_transparent() -> bool {
-    PREF_TRANSPARENT_CATENARY.load(Ordering::Relaxed)
-        || crate::config::env_flag("OPENTTDRS_TRANSPARENT_CATENARY")
-}
-
-/// Color de tint para sprites de catenaria (alpha si transparencia).
-#[must_use]
-pub fn catenary_sprite_color() -> Color {
-    if catenary_transparent() {
-        Color::srgba(1.0, 1.0, 1.0, 0.45)
-    } else {
-        Color::WHITE
-    }
 }
 
 /// Selector de pendiente para `_rail_wires` (`elrail.cpp`):

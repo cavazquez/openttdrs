@@ -155,6 +155,16 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             SaveMenuAction::NewGrf,
         ),
         (
+            "Display...",
+            "Minimapa, PBS, catenaria, nombres de pueblos",
+            SaveMenuAction::DisplayOptions,
+        ),
+        (
+            "Vista extra",
+            "Segunda camara (sigue a la principal)",
+            SaveMenuAction::ExtraViewport,
+        ),
+        (
             "Catenaria",
             "Cicla visible / transparente / oculta (TO_CATENARY)",
             SaveMenuAction::CycleCatenaryDisplay,

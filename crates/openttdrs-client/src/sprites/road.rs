@@ -45,6 +45,9 @@ pub fn roadside_is_paved(roadside: u8) -> bool {
 /// mundo (0..15) dentro de la tesela.
 pub type RoadsideLamp = (usize, f32, f32);
 
+/// Árbol de acera (`_roadside_trees`): un solo sprite `0x1212` + (dx, dy).
+pub type RoadsideTree = (f32, f32);
+
 /// `_roadside_lamps[road_bits]` (`table/road_land.h`): faroles a dibujar cuando
 /// `Roadside::StreetLights`. Indexado por los 4 road bits (NW=1, SW=2, SE=4, NE=8).
 pub static ROADSIDE_LAMPS: [&[RoadsideLamp]; 16] = [
@@ -66,9 +69,33 @@ pub static ROADSIDE_LAMPS: [&[RoadsideLamp]; 16] = [
     &[],
 ];
 
+/// `_roadside_trees[road_bits]` (`table/road_land.h`): árboles cuando
+/// `Roadside::Trees` (5). Mismo índice de road bits que faroles.
+pub static ROADSIDE_TREES: [&[RoadsideTree]; 16] = [
+    &[],
+    &[],
+    &[],
+    &[(0.0, 2.0), (3.0, 9.0), (10.0, 12.0)],
+    &[],
+    &[(0.0, 2.0), (0.0, 10.0), (12.0, 2.0), (12.0, 10.0)],
+    &[(10.0, 0.0), (3.0, 3.0), (0.0, 10.0)],
+    &[(0.0, 2.0), (0.0, 10.0)],
+    &[],
+    &[(12.0, 2.0), (9.0, 9.0), (2.0, 12.0)],
+    &[(2.0, 0.0), (10.0, 0.0), (2.0, 12.0), (10.0, 12.0)],
+    &[(2.0, 12.0), (10.0, 12.0)],
+    &[(2.0, 0.0), (9.0, 3.0), (12.0, 10.0)],
+    &[(12.0, 2.0), (12.0, 10.0)],
+    &[(2.0, 0.0), (10.0, 0.0)],
+    &[],
+];
+
 /// (w, h, xrel, yrel) NFO de `road_streetlight_{0,1}.png` (sprites 0x57E/0x57F).
 pub static ROAD_STREETLIGHT_META: [(f32, f32, f32, f32); 2] =
     [(4.0, 14.0, 2.0, -13.0), (4.0, 14.0, -2.0, -13.0)];
+
+/// (w, h, xrel, yrel) NFO de `roadside_tree.png` (sprite 0x1212 / 4626).
+pub const ROADSIDE_TREE_META: (f32, f32, f32, f32) = (18.0, 32.0, -9.0, -28.0);
 
 #[must_use]
 pub fn road_depot_build_layers(dir: usize) -> &'static [RoadDepotLayerGfx] {

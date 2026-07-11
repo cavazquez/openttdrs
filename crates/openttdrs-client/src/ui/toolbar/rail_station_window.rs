@@ -1,13 +1,18 @@
 //! Ventana «Selección de estación» de tren, estilo `OpenTTD`.
 //!
 //! Se abre al activar la herramienta de estación de tren y permite elegir
-//! orientación (eje X/Y), número de andenes (1..=7), longitud de andén
-//! (1..=7) y mostrar/ocultar el área de cobertura. Abajo informa qué carga
-//! aceptaría/suministraría la estación en la tesela bajo el cursor.
+//! clase/spec (catálogo NewGRF/vanilla), orientación (eje X/Y), número de
+//! andenes (1..=7), longitud de andén (1..=7) y mostrar/ocultar el área de
+//! cobertura. Abajo informa qué carga aceptaría/suministraría la estación
+//! en la tesela bajo el cursor.
 
 use bevy::prelude::*;
+use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
-use openttdrs_core::{STATION_COVERAGE_RADIUS, TileCoord, station_coverage_at};
+use openttdrs_core::{
+    STATION_COVERAGE_RADIUS, StationClassId, StationSpecId, TileCoord, list_station_classes,
+    list_station_specs, station_class_def, station_coverage_at, station_spec_def,
+};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -21,8 +26,10 @@ use super::{BuildMenuAction, BuildMenuUi, StationBuildState, UiToolState};
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BG_SELECTED: Color = Color::srgb(0.55, 0.47, 0.3);
+const BTN_BG_DISABLED: Color = Color::srgb(0.22, 0.20, 0.16);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
 const BTN_BORDER_SELECTED: Color = Color::srgb(0.92, 0.8, 0.5);
+const ENTRY_BG: Color = Color::srgb(0.30, 0.26, 0.18);
 
 /// Botones de la ventana de selección de estación.
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +41,40 @@ pub(crate) enum RailStationPickerButton {
     CoverageOff,
     CoverageOn,
 }
+
+/// Abre el dropdown de clase o de spec.
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StationCatalogKind {
+    Class,
+    Spec,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct StationCatalogPickerState {
+    pub(crate) open: Option<StationCatalogKind>,
+    pub(crate) filter: String,
+}
+
+#[derive(Component)]
+pub(crate) struct StationClassLabel;
+
+#[derive(Component)]
+pub(crate) struct StationSpecLabel;
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct StationCatalogOpenButton(pub StationCatalogKind);
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct StationCatalogPopover(pub StationCatalogKind);
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct StationCatalogFilterInput(pub StationCatalogKind);
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct StationClassSelectButton(pub StationClassId);
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct StationSpecSelectButton(pub StationSpecId);
 
 #[derive(Component)]
 pub(crate) struct RailStationAcceptsText;
@@ -50,9 +91,11 @@ pub(crate) fn setup_rail_station_picker(mut commands: Commands, asset_server: Re
         "Selección de estación",
         TITLE_BROWN,
         Vec2::new(240.0, 64.0),
-        230.0,
+        280.0,
     );
     commands.entity(content).with_children(|panel| {
+        spawn_section_label(panel, asset_server, "Clase / tipo (NewGRF)");
+        spawn_catalog_row(panel, asset_server);
         spawn_section_label(panel, asset_server, "Orientación");
         panel
             .spawn(Node {
@@ -116,6 +159,163 @@ pub(crate) fn setup_rail_station_picker(mut commands: Commands, asset_server: Re
             TextColor(Color::srgb(0.95, 0.9, 0.3)),
         ));
     });
+}
+
+fn spawn_catalog_row(parent: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
+    parent
+        .spawn(Node {
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::Center,
+            column_gap: Val::Px(6.0),
+            ..default()
+        })
+        .with_children(|row| {
+            spawn_catalog_dropdown(row, asset_server, StationCatalogKind::Class, "Dflt");
+            spawn_catalog_dropdown(row, asset_server, StationCatalogKind::Spec, "Rail");
+        });
+}
+
+fn spawn_catalog_dropdown(
+    parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    kind: StationCatalogKind,
+    initial: &'static str,
+) {
+    parent
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(2.0),
+                ..default()
+            },
+            BuildMenuUi,
+        ))
+        .with_children(|col| {
+            col.spawn((
+                Button,
+                StationCatalogOpenButton(kind),
+                BuildMenuUi,
+                Node {
+                    min_width: Val::Px(100.0),
+                    height: Val::Px(24.0),
+                    padding: UiRect::horizontal(Val::Px(6.0)),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(BTN_BG),
+                BorderColor::all(BTN_BORDER),
+                Interaction::default(),
+            ))
+            .with_children(|btn| match kind {
+                StationCatalogKind::Class => {
+                    btn.spawn((
+                        StationClassLabel,
+                        Text::new(initial),
+                        window_text_font(asset_server, UiFontRole::Caption),
+                        TextColor(Color::srgb(0.92, 0.88, 0.72)),
+                    ));
+                }
+                StationCatalogKind::Spec => {
+                    btn.spawn((
+                        StationSpecLabel,
+                        Text::new(initial),
+                        window_text_font(asset_server, UiFontRole::Caption),
+                        TextColor(Color::srgb(0.92, 0.88, 0.72)),
+                    ));
+                }
+            });
+            col.spawn((
+                StationCatalogPopover(kind),
+                BuildMenuUi,
+                Node {
+                    width: Val::Px(160.0),
+                    padding: UiRect::all(Val::Px(4.0)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(2.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    display: Display::None,
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(26.0),
+                    left: Val::Px(0.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.20, 0.18, 0.14)),
+                BorderColor::all(BTN_BORDER),
+                GlobalZIndex(2300),
+            ))
+            .with_children(|menu| {
+                menu.spawn((
+                    StationCatalogFilterInput(kind),
+                    EditableText::new(""),
+                    Text::new("filtrar…"),
+                    window_text_font(asset_server, UiFontRole::Caption),
+                    TextColor(Color::srgb(0.75, 0.72, 0.60)),
+                    Node {
+                        width: Val::Percent(100.0),
+                        min_height: Val::Px(20.0),
+                        padding: UiRect::horizontal(Val::Px(4.0)),
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BackgroundColor(ENTRY_BG),
+                    BorderColor::all(BTN_BORDER),
+                ));
+                match kind {
+                    StationCatalogKind::Class => {
+                        for def in list_station_classes("") {
+                            spawn_catalog_entry(
+                                menu,
+                                asset_server,
+                                def.label,
+                                StationClassSelectButton(def.id),
+                            );
+                        }
+                    }
+                    StationCatalogKind::Spec => {
+                        for def in list_station_specs(StationClassId::Default, "") {
+                            spawn_catalog_entry(
+                                menu,
+                                asset_server,
+                                def.label,
+                                StationSpecSelectButton(def.id),
+                            );
+                        }
+                    }
+                }
+            });
+        });
+}
+
+fn spawn_catalog_entry<B: Component>(
+    parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    label: &'static str,
+    button: B,
+) {
+    parent.spawn((
+        Button,
+        button,
+        BuildMenuUi,
+        Node {
+            width: Val::Percent(100.0),
+            min_height: Val::Px(22.0),
+            padding: UiRect::horizontal(Val::Px(6.0)),
+            justify_content: JustifyContent::FlexStart,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(1.0)),
+            ..default()
+        },
+        BackgroundColor(ENTRY_BG),
+        BorderColor::all(BTN_BORDER),
+        Interaction::default(),
+        children![(
+            Text::new(label),
+            window_text_font(asset_server, UiFontRole::Caption),
+            TextColor(Color::srgb(0.92, 0.88, 0.72)),
+        )],
+    ));
 }
 
 fn spawn_section_label(
@@ -291,7 +491,14 @@ pub(crate) fn sync_rail_station_picker(
     station_state: Res<StationBuildState>,
     sim: Res<SimWorld>,
     hovered: Res<HoveredTileCoord>,
-    mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
+    catalog: Res<StationCatalogPickerState>,
+    mut root_q: Query<
+        (&FloatingWindow, &mut Visibility),
+        (
+            Without<StationClassSelectButton>,
+            Without<StationSpecSelectButton>,
+        ),
+    >,
     mut buttons_q: Query<
         (
             &RailStationPickerButton,
@@ -301,13 +508,50 @@ pub(crate) fn sync_rail_station_picker(
         ),
         With<Button>,
     >,
-    mut accepts_q: Query<&mut Text, With<RailStationAcceptsText>>,
+    mut accepts_q: Query<
+        &mut Text,
+        (
+            With<RailStationAcceptsText>,
+            Without<RailStationSuppliesText>,
+            Without<StationClassLabel>,
+            Without<StationSpecLabel>,
+        ),
+    >,
     mut supplies_q: Query<
         &mut Text,
         (
             With<RailStationSuppliesText>,
             Without<RailStationAcceptsText>,
+            Without<StationClassLabel>,
+            Without<StationSpecLabel>,
         ),
+    >,
+    mut class_label: Query<
+        &mut Text,
+        (
+            With<StationClassLabel>,
+            Without<RailStationAcceptsText>,
+            Without<RailStationSuppliesText>,
+            Without<StationSpecLabel>,
+        ),
+    >,
+    mut spec_label: Query<
+        &mut Text,
+        (
+            With<StationSpecLabel>,
+            Without<StationClassLabel>,
+            Without<RailStationAcceptsText>,
+            Without<RailStationSuppliesText>,
+        ),
+    >,
+    mut popovers: Query<(&StationCatalogPopover, &mut Node)>,
+    mut class_entries: Query<
+        (&StationClassSelectButton, &mut Visibility),
+        (Without<FloatingWindow>, Without<StationSpecSelectButton>),
+    >,
+    mut spec_entries: Query<
+        (&StationSpecSelectButton, &mut Visibility),
+        (Without<FloatingWindow>, Without<StationClassSelectButton>),
     >,
 ) {
     let Some((_, mut vis)) = root_q
@@ -322,7 +566,18 @@ pub(crate) fn sync_rail_station_picker(
     }
     *vis = Visibility::Visible;
 
+    let spec = station_spec_def(sim.state.current_station_spec);
     for (button, interaction, mut bg, mut border) in &mut buttons_q {
+        let allowed = match *button {
+            RailStationPickerButton::Platforms(n) => spec.is_none_or(|s| s.allows_platforms(n)),
+            RailStationPickerButton::Length(n) => spec.is_none_or(|s| s.allows_length(n)),
+            _ => true,
+        };
+        if !allowed {
+            *bg = BackgroundColor(BTN_BG_DISABLED);
+            *border = BorderColor::all(Color::srgb(0.35, 0.32, 0.28));
+            continue;
+        }
         let selected = button_is_selected(*button, &station_state);
         *bg = if selected {
             BackgroundColor(BTN_BG_SELECTED)
@@ -336,6 +591,54 @@ pub(crate) fn sync_rail_station_picker(
         } else {
             BorderColor::all(BTN_BORDER)
         };
+    }
+
+    if let Ok(mut text) = class_label.single_mut() {
+        let short = station_class_def(sim.state.current_station_class)
+            .map(|c| c.short_label)
+            .unwrap_or("?");
+        **text = short.into();
+    }
+    if let Ok(mut text) = spec_label.single_mut() {
+        let short = station_spec_def(sim.state.current_station_spec)
+            .map(|s| s.short_label)
+            .unwrap_or("?");
+        **text = short.into();
+    }
+
+    for (popover, mut node) in &mut popovers {
+        node.display = if catalog.open == Some(popover.0) {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+
+    if catalog.open == Some(StationCatalogKind::Class) {
+        let matched: Vec<_> = list_station_classes(&catalog.filter)
+            .into_iter()
+            .map(|c| c.id)
+            .collect();
+        for (entry, mut vis) in &mut class_entries {
+            *vis = if matched.contains(&entry.0) {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+        }
+    }
+    if catalog.open == Some(StationCatalogKind::Spec) {
+        let matched: Vec<_> = list_station_specs(sim.state.current_station_class, &catalog.filter)
+            .into_iter()
+            .map(|s| s.id)
+            .collect();
+        for (entry, mut vis) in &mut spec_entries {
+            *vis = if matched.contains(&entry.0) {
+                Visibility::Inherited
+            } else {
+                Visibility::Hidden
+            };
+        }
     }
 
     if let Some(hover) = hovered.pos {
@@ -355,7 +658,9 @@ pub(crate) fn handle_rail_station_picker_buttons(
         (Changed<Interaction>, With<Button>),
     >,
     mut station_state: ResMut<StationBuildState>,
+    sim: Res<SimWorld>,
 ) {
+    let spec = station_spec_def(sim.state.current_station_spec);
     for (interaction, button) in &buttons_q {
         if *interaction != Interaction::Pressed {
             continue;
@@ -363,11 +668,120 @@ pub(crate) fn handle_rail_station_picker_buttons(
         match *button {
             RailStationPickerButton::AxisX => station_state.rail_axis_y = false,
             RailStationPickerButton::AxisY => station_state.rail_axis_y = true,
-            RailStationPickerButton::Platforms(n) => station_state.rail_platforms = n,
-            RailStationPickerButton::Length(n) => station_state.rail_length = n,
+            RailStationPickerButton::Platforms(n) => {
+                if spec.is_none_or(|s| s.allows_platforms(n)) {
+                    station_state.rail_platforms = n;
+                }
+            }
+            RailStationPickerButton::Length(n) => {
+                if spec.is_none_or(|s| s.allows_length(n)) {
+                    station_state.rail_length = n;
+                }
+            }
             RailStationPickerButton::CoverageOff => station_state.rail_show_coverage = false,
             RailStationPickerButton::CoverageOn => station_state.rail_show_coverage = true,
         }
+    }
+}
+
+pub(crate) fn handle_station_catalog_open_buttons(
+    buttons: Query<(&Interaction, &StationCatalogOpenButton), (Changed<Interaction>, With<Button>)>,
+    mut catalog: ResMut<StationCatalogPickerState>,
+) {
+    for (interaction, button) in &buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        catalog.open = if catalog.open == Some(button.0) {
+            None
+        } else {
+            Some(button.0)
+        };
+        if catalog.open.is_none() {
+            catalog.filter.clear();
+        }
+    }
+}
+
+pub(crate) fn handle_station_class_select_buttons(
+    buttons: Query<(&Interaction, &StationClassSelectButton), (Changed<Interaction>, With<Button>)>,
+    mut sim: ResMut<SimWorld>,
+    mut catalog: ResMut<StationCatalogPickerState>,
+) {
+    for (interaction, button) in &buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        sim.state.current_station_class = button.0;
+        // Al cambiar de clase, elegir el primer spec disponible.
+        if let Some(first) = list_station_specs(button.0, "").first() {
+            sim.state.current_station_spec = first.id;
+        }
+        catalog.open = None;
+        catalog.filter.clear();
+    }
+}
+
+pub(crate) fn handle_station_spec_select_buttons(
+    buttons: Query<(&Interaction, &StationSpecSelectButton), (Changed<Interaction>, With<Button>)>,
+    mut sim: ResMut<SimWorld>,
+    mut catalog: ResMut<StationCatalogPickerState>,
+) {
+    for (interaction, button) in &buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        sim.state.current_station_spec = button.0;
+        catalog.open = None;
+        catalog.filter.clear();
+    }
+}
+
+pub(crate) fn station_catalog_filter_keyboard(
+    mut key_events: MessageReader<bevy::input::keyboard::KeyboardInput>,
+    mut catalog: ResMut<StationCatalogPickerState>,
+    mut inputs: Query<(&StationCatalogFilterInput, &mut EditableText, &mut Text)>,
+) {
+    use bevy::input::ButtonState;
+    use bevy::input::keyboard::Key;
+
+    let Some(open) = catalog.open else {
+        key_events.clear();
+        return;
+    };
+    let Some((_, mut editable, mut text)) = inputs.iter_mut().find(|(input, _, _)| input.0 == open)
+    else {
+        key_events.clear();
+        return;
+    };
+    for ev in key_events.read() {
+        if ev.state != ButtonState::Pressed {
+            continue;
+        }
+        if matches!(ev.logical_key, Key::Backspace) {
+            editable.queue_edit(bevy::text::TextEdit::Backspace);
+            continue;
+        }
+        if matches!(ev.logical_key, Key::Delete) {
+            editable.queue_edit(bevy::text::TextEdit::Delete);
+            continue;
+        }
+        let Some(typed) = &ev.text else {
+            continue;
+        };
+        for c in typed.chars() {
+            if !c.is_control() && editable.value().chars().count() < 24 {
+                editable.queue_edit(bevy::text::TextEdit::Insert(
+                    winit::keyboard::SmolStr::from(c.to_string()),
+                ));
+            }
+        }
+    }
+    catalog.filter = editable.value().to_string();
+    if catalog.filter.is_empty() {
+        **text = "filtrar…".into();
+    } else {
+        **text = catalog.filter.clone();
     }
 }
 
@@ -375,12 +789,15 @@ pub(crate) fn handle_rail_station_picker_buttons(
 pub(crate) fn rail_station_picker_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut tool_state: ResMut<UiToolState>,
+    mut catalog: ResMut<StationCatalogPickerState>,
 ) {
     for msg in closed.read() {
         if msg.0 == FloatingWindowId::RailStationPicker
             && tool_state.active_tool == Some(BuildMenuAction::RailStation)
         {
             tool_state.active_tool = None;
+            catalog.open = None;
+            catalog.filter.clear();
         }
     }
 }

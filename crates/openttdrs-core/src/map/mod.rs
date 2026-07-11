@@ -13,6 +13,7 @@ pub mod road_bits;
 pub mod slope;
 pub mod tree_tile_loop;
 mod types;
+pub mod water_class;
 
 #[cfg(test)]
 use binary::{OTTDMAP_FLAG_HAS_M2_HI, OTTDMAP_FORMAT_VERSION_CURRENT};
@@ -55,6 +56,10 @@ pub use tree_tile_loop::{
 };
 pub use types::{
     MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind, openttd_tile_index_to_coord,
+};
+pub use water_class::{
+    WaterClass, is_canal_tile, is_river_tile, make_water_tile, river_tile_is_ship_navigable,
+    set_water_class_m1, tile_has_water_class, water_class, water_class_from_m1,
 };
 
 /// Mapa rectangular denso en memoria.

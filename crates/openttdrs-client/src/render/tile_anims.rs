@@ -3,6 +3,7 @@
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
+use crate::render::palette_animations_should_run;
 use crate::state::ClientScreen;
 use crate::ui::ToolbarState;
 
@@ -18,7 +19,8 @@ impl Plugin for TileAnimPlugin {
             )
                 .chain()
                 .in_set(UpdateSet::Visuals)
-                .run_if(in_state(ClientScreen::InGame)),
+                .run_if(in_state(ClientScreen::InGame))
+                .run_if(palette_animations_should_run),
         );
     }
 }

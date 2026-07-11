@@ -9,27 +9,41 @@ use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 
 mod audio_settings_window;
+mod autoreplace_window;
 mod buy_window;
+mod cargo_payment_window;
 mod destination_window;
+mod display_options_window;
+mod extra_viewport_window;
 mod finances_window;
 mod floating_window;
 pub(crate) mod font;
+mod graph_window;
 mod hud;
 mod industry_directory;
 mod industry_panel;
+mod list_window;
 mod main_menu;
 mod main_menu_intro;
+mod menu;
 mod navigation;
 mod newgrf_window;
 mod news_settings_window;
 mod pathfinding_settings_window;
+mod refit_window;
 mod save_window;
+mod shared_orders_window;
+mod sign_list_window;
+mod sparkline;
 mod station_directory;
 mod statusbar;
+mod subsidy_list;
 mod timetable_window;
 mod toolbar;
 mod town_directory;
 mod town_window;
+mod ui5_blocked_stubs;
+mod vehicle_list;
 mod vehicle_window;
 mod windows_shot;
 use audio_settings_window::{
@@ -37,17 +51,38 @@ use audio_settings_window::{
     handle_sound_music_toolbar_button, handle_volume_sliders, setup_sound_music_window,
     sound_music_window_on_closed, sync_sound_music_window,
 };
+use autoreplace_window::{
+    AutoreplaceWindowState, autoreplace_window_on_closed, handle_autoreplace_buttons,
+    setup_autoreplace_window, sync_autoreplace_window,
+};
 use buy_window::{
-    BuyVehicleWindowState, buy_window_on_closed, handle_buy_window_buttons, setup_buy_window,
-    sync_buy_window,
+    BuyVehicleWindowState, buy_window_on_closed, buy_window_search_keyboard,
+    handle_buy_window_buttons, setup_buy_window, sync_buy_window,
+};
+use cargo_payment_window::{
+    CargoPaymentWindowState, cargo_payment_window_on_closed, open_cargo_payment_from_routes,
+    setup_cargo_payment_window, sync_cargo_payment_window,
 };
 use destination_window::{
     DestinationPickerState, destination_picker_on_closed, handle_destination_picker_buttons,
     setup_destination_picker, sync_destination_picker,
 };
+use display_options_window::{
+    DisplayOptionsWindowState, display_options_window_on_closed, handle_display_options_buttons,
+    setup_display_options_window, sync_display_options_window,
+};
+use extra_viewport_window::{
+    ExtraViewportWindowState, extra_viewport_window_on_closed, setup_extra_viewport_window,
+    sync_extra_viewport_window,
+};
 use finances_window::{
     FinancesWindowState, finances_window_on_closed, handle_finances_window_buttons,
-    handle_open_finances_window, setup_finances_window, sync_finances_window,
+    handle_open_finances_window, open_finances_from_routes, setup_finances_window,
+    sync_finances_window,
+};
+use graph_window::{
+    GraphWindowState, graph_window_on_closed, handle_graph_window_buttons, open_graph_from_routes,
+    setup_graph_window, sync_graph_window,
 };
 pub(crate) use hud::SimHudControls;
 use hud::{
@@ -58,10 +93,12 @@ use hud::{
 };
 use industry_directory::{
     IndustryDirectoryState, handle_industry_directory_buttons, industry_directory_on_closed,
-    open_industry_directory_from_routes, setup_industry_directory, sync_industry_directory,
+    industry_directory_search_keyboard, open_industry_directory_from_routes,
+    setup_industry_directory, sync_industry_directory,
 };
 use industry_panel::{
-    IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
+    IndustryPanelState, industry_panel_center_interaction, industry_panel_close_interaction,
+    setup_industry_panel, sync_industry_panel,
 };
 use main_menu::{
     auto_start_preloaded_json, main_menu_continue_interaction, main_menu_interaction,
@@ -74,7 +111,8 @@ use main_menu_intro::{
 };
 use navigation::{
     OpenUiRoute, ToolbarMenuState, dismiss_toolbar_menu_on_outside_click,
-    handle_toolbar_menu_entries, handle_toolbar_navigation_button, sync_toolbar_navigation_menu,
+    handle_toolbar_menu_entries, handle_toolbar_menu_keyboard, handle_toolbar_navigation_button,
+    sync_toolbar_navigation_menu,
 };
 use newgrf_window::{
     NewGrfWindowState, newgrf_window_on_closed, setup_newgrf_window, sync_newgrf_window,
@@ -88,11 +126,24 @@ use pathfinding_settings_window::{
     pathfinding_settings_on_closed, setup_pathfinding_settings_window,
     sync_pathfinding_settings_window,
 };
+use refit_window::{
+    RefitWindowState, handle_refit_window_buttons, refit_window_on_closed, setup_refit_window,
+    sync_refit_window,
+};
 pub(crate) use save_window::SaveWindowState;
 use save_window::{
     handle_save_load_toolbar_buttons, handle_save_window_buttons, prepare_save_window_name,
     save_window_editable_keyboard, save_window_keyboard, save_window_name_click_focus,
     setup_save_window, sync_save_window,
+};
+use shared_orders_window::{
+    SharedOrdersWindowState, handle_shared_orders_buttons, setup_shared_orders_window,
+    shared_orders_window_on_closed, sync_shared_orders_window,
+};
+use sign_list_window::{
+    SignListWindowState, handle_sign_list_body_click, handle_sign_list_buttons,
+    open_sign_list_from_routes, setup_sign_list_window, sign_list_rename_keyboard,
+    sign_list_window_on_closed, sync_sign_list_window,
 };
 use station_directory::{
     StationDirectoryState, handle_station_directory_buttons, open_station_directory_from_routes,
@@ -104,24 +155,38 @@ use statusbar::{
     handle_status_bar_center_click, news_history_on_closed, setup_news_history_window,
     setup_status_bar, sync_news_history_window, sync_status_bar, update_news_playback,
 };
+use subsidy_list::{
+    SubsidyListState, handle_subsidy_list_buttons, open_subsidy_list_from_routes,
+    setup_subsidy_list, subsidy_list_on_closed, sync_subsidy_list,
+};
 use timetable_window::{
     TimetableWindowState, handle_timetable_window_buttons, setup_timetable_window,
     sync_timetable_window, timetable_window_on_closed,
 };
 use toolbar::depot_panel_on_closed;
 use toolbar::{
-    BridgeBuildState, DepotPanelState, DragBuildState, RailSignalGhostState, StationBuildState,
-    StationCargoPanelState, UiToolState, bridge_picker_on_closed, build_menu_interaction,
-    close_toolbar_button_interaction, handle_bridge_picker_buttons, handle_company_colour_swatches,
+    BridgeBuildState, DepotPanelState, DragBuildState, MinimapLayerState, RailSignalGhostState,
+    RoadTypeEscapeConsumed, RoadTypePickerState, StationBuildState, StationCargoPanelState,
+    StationCatalogPickerState, UiToolState, airport_picker_on_closed, bridge_picker_on_closed,
+    build_menu_interaction, close_road_type_picker_on_escape, close_toolbar_button_interaction,
+    handle_airport_picker_buttons, handle_bridge_picker_buttons, handle_company_colour_swatches,
     handle_depot_panel_buttons, handle_ingame_escape, handle_minimap_click,
-    handle_order_panel_buttons, handle_rail_station_picker_buttons, handle_settings_menu_buttons,
-    handle_station_cargo_panel_buttons, handle_tile_click, hide_tool_when_panel_closed,
-    lerp_ghost_previews, rail_station_picker_on_closed, rotate_station_with_right_click,
-    setup_bridge_picker, setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
-    setup_rail_station_picker, setup_station_cargo_panel, setup_top_toolbar, sync_bridge_picker,
-    sync_build_pointer_modifiers, sync_climate_industry_tools, sync_company_colour_swatch_visuals,
-    sync_depot_panel, sync_minimap, sync_order_panel, sync_orders_pick_cursor,
-    sync_rail_station_picker, sync_station_cargo_panel, toolbar_click_beep,
+    handle_minimap_layer_buttons, handle_order_panel_buttons, handle_rail_station_picker_buttons,
+    handle_rail_type_select_buttons, handle_road_type_class_buttons,
+    handle_road_type_select_buttons, handle_settings_menu_buttons, handle_signal_picker_buttons,
+    handle_station_cargo_panel_buttons, handle_station_catalog_open_buttons,
+    handle_station_class_select_buttons, handle_station_rename_buttons,
+    handle_station_spec_select_buttons, handle_tile_click, hide_tool_when_panel_closed,
+    lerp_ghost_previews, rail_station_picker_on_closed, road_type_filter_keyboard,
+    rotate_station_with_right_click, setup_airport_picker, setup_bridge_picker, setup_build_menu,
+    setup_depot_panel, setup_minimap, setup_order_panel, setup_rail_station_picker,
+    setup_signal_picker, setup_station_cargo_panel, setup_top_toolbar, signal_picker_on_closed,
+    station_catalog_filter_keyboard, station_rename_editable_keyboard, station_rename_keyboard,
+    sync_airport_picker, sync_bridge_picker, sync_build_pointer_modifiers,
+    sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_depot_panel,
+    sync_minimap, sync_order_panel, sync_orders_pick_cursor, sync_rail_station_picker,
+    sync_rail_type_select_visuals, sync_road_type_class_labels, sync_road_type_entry_visibility,
+    sync_road_type_popovers, sync_signal_picker, sync_station_cargo_panel, toolbar_click_beep,
     toolbar_group_interaction, update_build_ghost_preview, update_cursor_tile,
     update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
     update_toolbar_tooltip,
@@ -130,10 +195,19 @@ pub(crate) use toolbar::{BuildMenuAction, OrderEditState, ToolbarState};
 use town_directory::{
     TownDirectoryState, handle_town_directory_buttons, open_town_directory_from_routes,
     setup_town_directory, sync_town_directory, town_directory_on_closed,
+    town_directory_search_keyboard,
 };
 use town_window::{
     TownWindowState, handle_town_window_buttons, setup_town_window, sync_town_window,
     town_window_on_closed,
+};
+use ui5_blocked_stubs::{
+    LinkGraphWindowState, link_graph_window_on_closed, open_link_graph_from_routes,
+    setup_link_graph_window, sync_link_graph_window,
+};
+use vehicle_list::{
+    VehicleListState, handle_vehicle_list_buttons, open_vehicle_list_from_routes,
+    setup_vehicle_list, sync_vehicle_list, vehicle_list_on_closed,
 };
 use vehicle_window::{
     VehicleWindowState, handle_vehicle_rename_buttons, handle_vehicle_window_buttons,
@@ -152,7 +226,13 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<NewsUiState>()
         .init_resource::<NewsHistoryState>()
         .init_resource::<FinancesWindowState>()
+        .init_resource::<GraphWindowState>()
+        .init_resource::<CargoPaymentWindowState>()
         .init_resource::<NewsSettingsWindowState>()
+        .init_resource::<DisplayOptionsWindowState>()
+        .init_resource::<ExtraViewportWindowState>()
+        .init_resource::<SignListWindowState>()
+        .init_resource::<LinkGraphWindowState>()
         .init_resource::<PathfindingSettingsWindowState>()
         .init_resource::<NewGrfWindowState>()
         .init_resource::<SoundMusicWindowState>()
@@ -166,21 +246,30 @@ impl Plugin for ClientUiPlugin {
         .add_message::<PlayHudSfx>()
         .init_resource::<UiToolState>()
         .init_resource::<StationBuildState>()
+        .init_resource::<StationCatalogPickerState>()
+        .init_resource::<RoadTypePickerState>()
+        .init_resource::<RoadTypeEscapeConsumed>()
         .init_resource::<DragBuildState>()
         .init_resource::<BridgeBuildState>()
         .init_resource::<OrderEditState>()
         .init_resource::<DepotPanelState>()
         .init_resource::<StationCargoPanelState>()
         .init_resource::<ToolbarState>()
+        .init_resource::<MinimapLayerState>()
         .init_resource::<IndustryPanelState>()
         .init_resource::<IndustryDirectoryState>()
         .init_resource::<SaveWindowState>()
         .init_resource::<TownWindowState>()
         .init_resource::<TownDirectoryState>()
         .init_resource::<StationDirectoryState>()
+        .init_resource::<VehicleListState>()
+        .init_resource::<SubsidyListState>()
         .init_resource::<BuyVehicleWindowState>()
         .init_resource::<DestinationPickerState>()
         .init_resource::<VehicleWindowState>()
+        .init_resource::<RefitWindowState>()
+        .init_resource::<SharedOrdersWindowState>()
+        .init_resource::<AutoreplaceWindowState>()
         .init_resource::<TimetableWindowState>()
         .init_resource::<ToolbarMenuState>()
         .add_message::<OpenUiRoute>()
@@ -224,13 +313,28 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
+            (setup_signal_picker, setup_airport_picker).in_set(StartupSet::Ui),
+        )
+        .add_systems(
+            OnEnter(ClientScreen::InGame),
             (
+                setup_graph_window,
+                setup_cargo_payment_window,
+                setup_display_options_window,
+                setup_extra_viewport_window,
+                setup_sign_list_window,
+                setup_link_graph_window,
                 setup_newgrf_window,
                 setup_vehicle_window,
+                setup_refit_window,
+                setup_shared_orders_window,
+                setup_autoreplace_window,
                 setup_timetable_window,
                 setup_town_directory,
                 setup_industry_directory,
                 setup_station_directory,
+                setup_vehicle_list,
+                setup_subsidy_list,
                 load_hud_sfx,
             )
                 .in_set(StartupSet::Ui),
@@ -274,6 +378,7 @@ impl Plugin for ClientUiPlugin {
                 cycle_json_save_path_hotkey,
                 handle_tool_hotkeys,
                 rotate_station_with_right_click,
+                close_road_type_picker_on_escape,
                 handle_ingame_escape,
             )
                 .in_set(UpdateSet::Input)
@@ -308,7 +413,11 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             Update,
-            sync_climate_industry_tools
+            (
+                industry_panel_center_interaction,
+                handle_minimap_layer_buttons,
+                sync_climate_industry_tools,
+            )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),
         )
@@ -318,6 +427,7 @@ impl Plugin for ClientUiPlugin {
                 handle_town_window_buttons,
                 town_window_on_closed,
                 handle_buy_window_buttons,
+                buy_window_search_keyboard,
                 buy_window_on_closed,
                 handle_destination_picker_buttons,
                 destination_picker_on_closed,
@@ -333,6 +443,48 @@ impl Plugin for ClientUiPlugin {
                 rail_station_picker_on_closed,
                 handle_bridge_picker_buttons,
                 bridge_picker_on_closed,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                handle_station_catalog_open_buttons,
+                handle_station_class_select_buttons,
+                handle_station_spec_select_buttons,
+                station_catalog_filter_keyboard,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                handle_signal_picker_buttons,
+                signal_picker_on_closed,
+                handle_airport_picker_buttons,
+                airport_picker_on_closed,
+                handle_rail_type_select_buttons,
+                handle_road_type_class_buttons,
+                handle_road_type_select_buttons,
+                road_type_filter_keyboard,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                handle_station_rename_buttons,
+                station_rename_keyboard,
+                station_rename_editable_keyboard,
+                handle_refit_window_buttons,
+                refit_window_on_closed,
+                handle_shared_orders_buttons,
+                shared_orders_window_on_closed,
+                handle_autoreplace_buttons,
+                autoreplace_window_on_closed,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),
@@ -390,6 +542,39 @@ impl Plugin for ClientUiPlugin {
         .add_systems(
             Update,
             (
+                graph_window_on_closed,
+                cargo_payment_window_on_closed,
+                handle_graph_window_buttons,
+                sync_graph_window,
+                sync_cargo_payment_window,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                handle_display_options_buttons,
+                display_options_window_on_closed,
+                sync_display_options_window,
+                extra_viewport_window_on_closed,
+                sync_extra_viewport_window,
+                open_sign_list_from_routes,
+                open_link_graph_from_routes,
+                sign_list_window_on_closed,
+                link_graph_window_on_closed,
+                sync_sign_list_window,
+                sync_link_graph_window,
+                handle_sign_list_buttons,
+                handle_sign_list_body_click,
+                sign_list_rename_keyboard,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
                 newgrf_window_on_closed,
                 sync_newgrf_window,
                 handle_sound_music_toolbar_button,
@@ -431,9 +616,33 @@ impl Plugin for ClientUiPlugin {
         .add_systems(
             Update,
             (
+                sync_signal_picker,
+                sync_airport_picker,
+                sync_rail_type_select_visuals,
+                sync_road_type_popovers,
+                sync_road_type_entry_visibility,
+                sync_road_type_class_labels,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                sync_refit_window,
+                sync_shared_orders_window,
+                sync_autoreplace_window,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
                 (
                     handle_toolbar_navigation_button,
                     handle_toolbar_menu_entries,
+                    handle_toolbar_menu_keyboard,
                     dismiss_toolbar_menu_on_outside_click,
                     sync_toolbar_navigation_menu,
                 )
@@ -441,6 +650,7 @@ impl Plugin for ClientUiPlugin {
                 (
                     open_town_directory_from_routes,
                     handle_town_directory_buttons,
+                    town_directory_search_keyboard,
                     town_directory_on_closed,
                     sync_town_directory,
                 )
@@ -449,6 +659,7 @@ impl Plugin for ClientUiPlugin {
                 (
                     open_industry_directory_from_routes,
                     handle_industry_directory_buttons,
+                    industry_directory_search_keyboard,
                     industry_directory_on_closed,
                     sync_industry_directory,
                 )
@@ -461,6 +672,28 @@ impl Plugin for ClientUiPlugin {
                     sync_station_directory,
                 )
                     .chain()
+                    .after(handle_toolbar_menu_entries),
+                (
+                    open_vehicle_list_from_routes,
+                    handle_vehicle_list_buttons,
+                    vehicle_list_on_closed,
+                    sync_vehicle_list,
+                )
+                    .chain()
+                    .after(handle_toolbar_menu_entries),
+                (
+                    open_subsidy_list_from_routes,
+                    handle_subsidy_list_buttons,
+                    subsidy_list_on_closed,
+                    sync_subsidy_list,
+                )
+                    .chain()
+                    .after(handle_toolbar_menu_entries),
+                (
+                    open_finances_from_routes,
+                    open_graph_from_routes,
+                    open_cargo_payment_from_routes,
+                )
                     .after(handle_toolbar_menu_entries),
             )
                 .in_set(UpdateSet::Ui)

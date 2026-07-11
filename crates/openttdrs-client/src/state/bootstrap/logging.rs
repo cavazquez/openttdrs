@@ -172,6 +172,7 @@ pub(crate) fn log_detection_summary(
         let key = match v.kind {
             VehicleKind::Truck => "Truck",
             VehicleKind::Bus => "Bus",
+            VehicleKind::Tram => "Tram",
             VehicleKind::Train => "Train",
             VehicleKind::Ship => "Ship",
             VehicleKind::Aircraft => "Aircraft",
@@ -233,6 +234,7 @@ mod logging_coverage_tests {
             stock: 10,
             capacity: 100,
             random_colour: 0,
+            ..Default::default()
         });
         state
             .stations

@@ -25,7 +25,7 @@ const TRAIN_FREIGHT: [CargoType; 4] = [
 pub fn refittable_cargo_types(vehicle: &Vehicle) -> &'static [CargoType] {
     let engine = vehicle.effective_engine();
     match vehicle.kind {
-        VehicleKind::Bus => &[CargoType::Passengers],
+        VehicleKind::Bus | VehicleKind::Tram => &[CargoType::Passengers],
         VehicleKind::Truck => &TRUCK_FREIGHT,
         VehicleKind::Ship => &[CargoType::Goods],
         VehicleKind::Aircraft => &[CargoType::Passengers, CargoType::Mail],

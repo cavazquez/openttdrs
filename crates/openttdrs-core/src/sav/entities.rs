@@ -148,6 +148,7 @@ pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32, save_version: u
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
+            ..Default::default()
         });
     }
     out

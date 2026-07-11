@@ -24,6 +24,8 @@ pub(crate) fn handle_settings_menu_buttons(
         crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState,
     >,
     mut newgrf_window: ResMut<crate::ui::newgrf_window::NewGrfWindowState>,
+    mut display_options: ResMut<crate::ui::display_options_window::DisplayOptionsWindowState>,
+    mut extra_viewport: ResMut<crate::ui::extra_viewport_window::ExtraViewportWindowState>,
     mut prefs: Option<ResMut<ClientPreferences>>,
     mut pending_remap: Option<ResMut<RemapMapVisualsPending>>,
     run_state: Res<State<SimRunState>>,
@@ -95,37 +97,32 @@ pub(crate) fn handle_settings_menu_buttons(
             SaveMenuAction::NewGrf => {
                 newgrf_window.open = true;
             }
+            SaveMenuAction::DisplayOptions => {
+                display_options.open = true;
+            }
+            SaveMenuAction::ExtraViewport => {
+                extra_viewport.open = true;
+            }
             SaveMenuAction::CycleCatenaryDisplay => {
                 let (Some(prefs), Some(pending_remap)) =
                     (prefs.as_deref_mut(), pending_remap.as_deref_mut())
                 else {
                     continue;
                 };
-                match (prefs.hide_catenary, prefs.transparent_catenary) {
-                    (false, false) => prefs.transparent_catenary = true,
-                    (false, true) => {
-                        prefs.transparent_catenary = false;
-                        prefs.hide_catenary = true;
-                    }
-                    (true, _) => {
-                        prefs.hide_catenary = false;
-                        prefs.transparent_catenary = false;
-                    }
-                }
-                crate::sprites::set_catenary_preferences(
-                    prefs.hide_catenary,
-                    prefs.transparent_catenary,
+                use crate::sprites::{TransparencyMode, TransparencyOption};
+                let next = match prefs.transparency_mode(TransparencyOption::Catenary) {
+                    TransparencyMode::Visible => TransparencyMode::Transparent,
+                    TransparencyMode::Transparent => TransparencyMode::Hidden,
+                    TransparencyMode::Hidden => TransparencyMode::Visible,
+                };
+                prefs.set_transparency_mode(TransparencyOption::Catenary, next);
+                crate::sprites::set_transparency_preferences(
+                    prefs.transparency_opt,
+                    prefs.invisibility_opt,
                 );
                 pending_remap.pending = true;
                 pending_remap.full = true;
-                let mode = if prefs.hide_catenary {
-                    "oculta"
-                } else if prefs.transparent_catenary {
-                    "transparente"
-                } else {
-                    "visible"
-                };
-                info!("Catenaria: {mode}");
+                info!("Catenaria: {}", next.label_es().to_ascii_lowercase());
             }
             SaveMenuAction::ReturnToMainMenu => {
                 return_to_main_menu(&mut next_screen, &mut suspended);
@@ -195,6 +192,11 @@ mod tests {
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
+        world.insert_resource(
+            crate::ui::display_options_window::DisplayOptionsWindowState::default(),
+        );
+        world
+            .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world.insert_resource(crate::settings::ClientPreferences::default());
         world.insert_resource(crate::render::RemapMapVisualsPending::default());
         crate::state::insert_test_sim_run_state(&mut world);
@@ -228,6 +230,11 @@ mod tests {
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
+        world.insert_resource(
+            crate::ui::display_options_window::DisplayOptionsWindowState::default(),
+        );
+        world
+            .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world.insert_resource(crate::settings::ClientPreferences::default());
         world.insert_resource(crate::render::RemapMapVisualsPending::default());
         world.insert_resource(NextState::<ClientScreen>::default());
@@ -269,13 +276,22 @@ mod tests {
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
+        world.insert_resource(
+            crate::ui::display_options_window::DisplayOptionsWindowState::default(),
+        );
+        world
+            .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world.insert_resource(crate::settings::ClientPreferences::default());
         world.insert_resource(crate::render::RemapMapVisualsPending::default());
         world.insert_resource(NextState::<ClientScreen>::default());
         world.insert_resource(SuspendedGameSession::default());
         crate::state::insert_test_sim_run_state(&mut world);
 
-        for expected in [(false, true), (true, false), (false, false)] {
+        for expected in [
+            crate::sprites::TransparencyMode::Transparent,
+            crate::sprites::TransparencyMode::Hidden,
+            crate::sprites::TransparencyMode::Visible,
+        ] {
             let entity = world
                 .spawn((
                     Button,
@@ -285,7 +301,10 @@ mod tests {
                 .id();
             world.run_system_once(handle_settings_menu_buttons).unwrap();
             let prefs = world.resource::<crate::settings::ClientPreferences>();
-            assert_eq!((prefs.hide_catenary, prefs.transparent_catenary), expected);
+            assert_eq!(
+                prefs.transparency_mode(crate::sprites::TransparencyOption::Catenary),
+                expected
+            );
             world.despawn(entity);
         }
         assert!(

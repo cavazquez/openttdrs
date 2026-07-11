@@ -119,6 +119,7 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         | BuildMenuAction::RoadBridge
         | BuildMenuAction::RoadTunnel
         | BuildMenuAction::BusStop
+        | BuildMenuAction::RoadWaypoint
         | BuildMenuAction::Station
         | BuildMenuAction::JoinStation
         | BuildMenuAction::Clear => ToolbarGroup::Road,

@@ -60,6 +60,7 @@ fn construction_event_for(
         | Command::SetRoadBits(c, _)
         | Command::PlaceRoadDepot(c)
         | Command::PlaceRoadDepotDir(c, _)
+        | Command::PlaceRoadWaypoint(c)
         | Command::PlaceShipDepotDir(c, _)
         | Command::PlaceDock(c, _)
         | Command::PlaceAirport(c)
@@ -373,6 +374,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::PlaceRailBits(c, bits) => transport::place_rail_bits(state, *c, *bits),
         Command::SetRailBits(c, bits) => transport::set_rail_bits(state, *c, *bits),
         Command::PlaceRailWaypoint(c) => transport::place_rail_waypoint(state, *c),
+        Command::PlaceRoadWaypoint(c) => transport::place_road_waypoint(state, *c),
         Command::RemoveRailBits(c, bits) => transport::remove_rail_bits(state, *c, *bits),
         Command::RemoveRail(c) => transport::remove_rail(state, *c),
         Command::ConvertRail(c, to) => {

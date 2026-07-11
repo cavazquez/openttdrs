@@ -82,6 +82,7 @@ pub(in crate::command::transport) fn ottd_station_type_bits(stop_kind: StopKind)
         StopKind::Dock => 4,
         StopKind::Buoy => 6,
         StopKind::RailWaypoint => 7,
+        StopKind::RoadWaypoint => 8,
     }
 }
 
@@ -373,6 +374,67 @@ pub(in crate::command) fn place_rail_waypoint(
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
     let mut st = Station::new_with_kind(c, StopKind::RailWaypoint);
+    st.owner = state.active_company;
+    state.stations.push(st);
+    state.economy.money -= WAYPOINT_BUILD_COST;
+    Ok(())
+}
+
+/// Eje de waypoint road: solo carretera recta X (`0x0A`) o Y (`0x05`).
+pub(in crate::command::transport) fn road_waypoint_axis_bits(bits: u8) -> Option<u8> {
+    match bits & 0x0F {
+        0x0A => Some(0x0A),
+        0x05 => Some(0x05),
+        _ => None,
+    }
+}
+
+pub(crate) fn check_place_road_waypoint(
+    map: &Map,
+    c: TileCoord,
+    stations: &[Station],
+) -> Result<(), CommandError> {
+    check_in_bounds(map, c)?;
+    if stations.iter().any(|s| s.pos == c) {
+        return Err(CommandError::StationAlreadyExists);
+    }
+    let Some(tile) = map.get(c) else {
+        return Err(CommandError::OutOfBounds);
+    };
+    match tile.kind {
+        TileKind::Road => {
+            road_waypoint_axis_bits(tile.m5).ok_or(CommandError::CannotPlaceWaypointOnTrack)?;
+            Ok(())
+        }
+        TileKind::Station
+            if crate::station::station_type_from_m6(tile.m6)
+                == crate::station::STATION_TYPE_ROAD_WAYPOINT =>
+        {
+            Err(CommandError::StationAlreadyExists)
+        }
+        _ => Err(CommandError::CannotPlaceWaypointOnTrack),
+    }
+}
+
+pub(in crate::command) fn place_road_waypoint(
+    state: &mut GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    check_place_road_waypoint(&state.map, c, &state.stations)?;
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let axis = road_waypoint_axis_bits(tile.m5).unwrap_or(0x0A);
+    let mut out = tile;
+    out.kind = TileKind::Station;
+    out.mapt = 0x50;
+    // Eje en m5 (0 = X, 1 = Y), bits de carretera en m3 para pathfinding.
+    out.m5 = u8::from(axis == 0x05);
+    out.m3 = (out.m3 & !0x0F) | axis;
+    out.m6 = apply_station_m6(out.m6, StopKind::RoadWaypoint);
+    state
+        .map
+        .set_tile(c, out)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    let mut st = Station::new_with_kind(c, StopKind::RoadWaypoint);
     st.owner = state.active_company;
     state.stations.push(st);
     state.economy.money -= WAYPOINT_BUILD_COST;

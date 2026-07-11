@@ -606,7 +606,7 @@ Objetivo de cobertura global: **~58–62 %**.
 - [~] LinkGraph: stub documentado hasta CargoDist.
 - [x] NewGRF editable (config-only: ON/OFF, ↑/↓, quitar; sin Action0–14).
 
-**UI-5 cerrado** (criterios + extras jugables). Parámetros NewGRF / runtime Action0–14 → UI-7.
+**UI-5 cerrado** (criterios + extras jugables). Parámetros NewGRF / runtime Action0–14 → OOS (UI-7 cerró stack config-only).
 
 ---
 
@@ -676,18 +676,20 @@ Objetivo de cobertura global: **~65–68 %**.
 
 ### Pendiente / fuera de alcance (requiere más backend)
 
-- [ ] JoinStation rail multi-tile / tipos mixtos.
-- [ ] BuildWaypoint completo road *(rail waypoint ya existe)*.
+- [~] JoinStation rail multi-tile / tipos mixtos. *(OOS UI-6: solo road 1×1; rail/mixtos → futuro)*
+- [x] BuildWaypoint road MVP (`PlaceRoadWaypoint` + botón toolbar; órdenes road vía `VehicleOrder::Waypoint`).
 - [x] Airport picker extensible.
-- [ ] BuildObject genérico *(BuyLand ya existe)*.
-- [ ] Separar herramientas sandbox/editor de economía normal.
+- [~] BuildObject genérico. *(OOS UI-6: BuyLand = objeto jugable; faro/transmisor = worldgen/saves; NewGRF runtime → OOS post UI-7)*
+- [~] Separar herramientas sandbox/editor. *(etiquetadas «editor» en Economía/Agua; modo editor UI-8)*
 
 ### Criterios de aceptación
 
-- Cada herramienta upstream base tiene botón, selector o decisión explícita de
+- [x] Cada herramienta upstream base tiene botón, selector o decisión explícita de
   fuera de alcance.
-- Tipo seleccionado se conserva y se muestra.
-- Pickers tienen coste, disponibilidad y preview.
+- [x] Tipo seleccionado se conserva y se muestra.
+- [x] Pickers tienen coste, disponibilidad y preview.
+
+**UI-6 cerrado** para el corte jugable documentado.
 
 ---
 
@@ -696,17 +698,20 @@ Objetivo de cobertura global: **~65–68 %**.
 Prioridad: **P2/P3**  
 Objetivo de cobertura global: **~70–75 %**.
 
-- [ ] NewGRF editable: activar/desactivar/reordenar. *(parcial en UI-5: config-only; falta runtime)*
-- [ ] Parámetros NewGRF.
-- [ ] Presets de settings.
-- [ ] Sandbox/cheats si se decide soportarlos.
-- [ ] Consola y diagnostics para desarrollo.
-- [ ] About/help y mapa de hotkeys.
-- [ ] Posiciones/tamaños de ventana persistentes.
+**UI-7 cerrado** (corte jugable). Runtime Action0–14 / parámetros NewGRF /
+consola REPL / cheats formales → OOS o UI-8.
 
-NewGRF editable **completo** (aplicar Action0–14) está bloqueado por el runtime;
-la UI de stack (ON/OFF/↑↓/quitar) ya existe desde UI-5 y no simula efectos de
-sprites/gameplay.
+- [x] NewGRF editable config-only: ON/OFF/↑↓/quitar + **Añadir…** desde disco
+      (`assets/opengfx/…` / `OPENTTDRS_NEWGRF_DIR`). Sin runtime Action0–14.
+- [ ] Parámetros NewGRF. *(OOS: sin runtime de params)*
+- [x] Presets de settings (Clásico / Rendimiento / Dev en Display Options).
+- [ ] Sandbox/cheats si se decide soportarlos. *(OOS)*
+- [ ] Consola y diagnostics para desarrollo. *(OOS; overlay Dev en preset)*
+- [x] About/help y mapa de hotkeys (F1 / ? + Ajustes → Ayuda…).
+- [x] Posiciones de ventana persistentes (`ClientPreferences.window_layouts`).
+
+NewGRF editable **completo** (aplicar Action0–14) sigue bloqueado por el runtime;
+la UI de stack no simula efectos de sprites/gameplay.
 
 ---
 
@@ -919,7 +924,22 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** UI-6 gaps documentados, o UI-7 (NewGRF runtime / settings avanzados).
+**Siguiente:** UI-8 seleccionado (modos opcionales) o pulir gaps OOS de UI-6/UI-7
+(parámetros NewGRF / Action0–14 cuando exista runtime; consola; cheats).
+
+Progreso UI-7 (cierre):
+
+1. ~~Ayuda / About + hotkeys (F1 / ? + menú Ajustes).~~ ✅
+2. ~~Persistencia de posiciones de ventanas flotantes.~~ ✅
+3. ~~NewGRF «Añadir…» desde disco (scan `.grf` + `AddNewGrfToStack`).~~ ✅
+4. ~~Presets Clásico / Rendimiento / Dev.~~ ✅
+5. ~~Parámetros NewGRF / Action0–14 / consola / cheats documentados OOS.~~ ✅
+
+Progreso UI-6 (cierre):
+
+1. ~~Road Waypoint MVP (`PlaceRoadWaypoint` + toolbar + preview).~~ ✅
+2. ~~Etiquetas editor (Río / casa / industrias) + BuyLand como objeto.~~ ✅
+3. ~~JoinStation / BuildObject genérico documentados como OOS.~~ ✅
 
 Progreso UI-5 (cierre):
 
@@ -1056,7 +1076,8 @@ Progreso UI-5c:
 3. ~~Stubs SignList + LinkGraph (bloqueados por backend).~~ ✅
 
 Pendiente UI-5: ninguno que bloquee cierre. LinkGraph real → CargoDist.
-NewGRF Action0–14 / parámetros → UI-7. Graph por compañía: ✅.
+NewGRF Action0–14 / parámetros → OOS hasta runtime (UI-7 cerró config-only).
+Graph por compañía: ✅.
 
 Progreso UI-3 (corte inicial):
 

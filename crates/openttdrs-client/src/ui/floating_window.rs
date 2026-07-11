@@ -9,6 +9,7 @@ use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
 
 use crate::bevy_app::UpdateSet;
+use crate::settings::ClientPreferences;
 use crate::state::ClientScreen;
 use crate::ui::font::UiFontRole;
 use crate::ui::toolbar::BuildMenuUi;
@@ -71,7 +72,7 @@ pub(crate) enum FloatingWindowId {
     NewsSettings,
     /// Ajustes PBS / pathfinding (`pf.wait_for_pbs_path`, etc.).
     PathfindingSettings,
-    /// Stack NewGRF activo (solo lectura, Fase 7 MVP).
+    /// Stack NewGRF activo (config-only; sin Action0–14).
     NewGrf,
     /// Volúmenes SFX/música, flags de sonido y jukebox OpenMSX.
     SoundMusic,
@@ -97,6 +98,48 @@ pub(crate) enum FloatingWindowId {
     LinkGraphLegend,
     /// Selección de tipo/densidad de señales ferroviarias.
     SignalPicker,
+    /// Ayuda / About / mapa de hotkeys (UI-7).
+    Help,
+}
+
+impl FloatingWindowId {
+    /// Clave estable para persistir posición en `ClientPreferences`.
+    #[must_use]
+    pub(crate) const fn storage_key(self) -> &'static str {
+        match self {
+            Self::Town => "Town",
+            Self::TownDirectory => "TownDirectory",
+            Self::IndustryDirectory => "IndustryDirectory",
+            Self::StationDirectory => "StationDirectory",
+            Self::VehicleList => "VehicleList",
+            Self::SubsidyList => "SubsidyList",
+            Self::Depot => "Depot",
+            Self::BuyVehicle => "BuyVehicle",
+            Self::Vehicle => "Vehicle",
+            Self::RailStationPicker => "RailStationPicker",
+            Self::AirportPicker => "AirportPicker",
+            Self::BridgePicker => "BridgePicker",
+            Self::DestinationPicker => "DestinationPicker",
+            Self::NewsHistory => "NewsHistory",
+            Self::Finances => "Finances",
+            Self::NewsSettings => "NewsSettings",
+            Self::PathfindingSettings => "PathfindingSettings",
+            Self::NewGrf => "NewGrf",
+            Self::SoundMusic => "SoundMusic",
+            Self::Timetable => "Timetable",
+            Self::Refit => "Refit",
+            Self::SharedOrders => "SharedOrders",
+            Self::Autoreplace => "Autoreplace",
+            Self::Graphs => "Graphs",
+            Self::CargoPaymentRates => "CargoPaymentRates",
+            Self::DisplayOptions => "DisplayOptions",
+            Self::ExtraViewport => "ExtraViewport",
+            Self::SignList => "SignList",
+            Self::LinkGraphLegend => "LinkGraphLegend",
+            Self::SignalPicker => "SignalPicker",
+            Self::Help => "Help",
+        }
+    }
 }
 
 /// Raíz de una ventana flotante.
@@ -150,6 +193,7 @@ impl Plugin for FloatingWindowPlugin {
                     begin_window_drag,
                     drag_floating_windows,
                     close_window_buttons,
+                    apply_saved_floating_window_positions,
                 )
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),
@@ -316,12 +360,19 @@ fn drag_floating_windows(
     mouse: Res<ButtonInput<MouseButton>>,
     primary: Query<&Window, With<PrimaryWindow>>,
     mut drag: ResMut<WindowDragState>,
-    mut windows_q: Query<&mut Node, With<FloatingWindow>>,
+    mut windows_q: Query<(&FloatingWindow, &mut Node)>,
+    mut prefs: Option<ResMut<ClientPreferences>>,
 ) {
     let Some(entity) = drag.window else {
         return;
     };
     if !mouse.pressed(MouseButton::Left) {
+        if let Ok((win, node)) = windows_q.get(entity)
+            && let (Val::Px(x), Val::Px(y)) = (node.left, node.top)
+            && let Some(prefs) = prefs.as_deref_mut()
+        {
+            prefs.set_window_pos_by_key(win.id.storage_key(), Vec2::new(x, y));
+        }
         drag.window = None;
         return;
     }
@@ -331,7 +382,7 @@ fn drag_floating_windows(
     let Some(cursor) = window.cursor_position() else {
         return;
     };
-    let Ok(mut node) = windows_q.get_mut(entity) else {
+    let Ok((_, mut node)) = windows_q.get_mut(entity) else {
         drag.window = None;
         return;
     };
@@ -342,6 +393,24 @@ fn drag_floating_windows(
     );
     node.left = Val::Px(pos.x);
     node.top = Val::Px(pos.y);
+}
+
+/// Aplica posiciones guardadas una vez al entrar en partida.
+fn apply_saved_floating_window_positions(
+    prefs: Res<ClientPreferences>,
+    mut applied: Local<bool>,
+    mut windows_q: Query<(&FloatingWindow, &mut Node)>,
+) {
+    if *applied || windows_q.is_empty() {
+        return;
+    }
+    for (win, mut node) in &mut windows_q {
+        if let Some(pos) = prefs.window_pos_by_key(win.id.storage_key()) {
+            node.left = Val::Px(pos.x);
+            node.top = Val::Px(pos.y);
+        }
+    }
+    *applied = true;
 }
 
 /// Botón ✕: oculta la ventana y avisa al dueño para que limpie su estado.
@@ -419,6 +488,16 @@ mod tests {
         assert!(off_right.x <= viewport.x - 48.0);
         let off_bottom = drag_window_position(Vec2::new(100.0, 5000.0), Vec2::ZERO, viewport);
         assert!(off_bottom.y <= viewport.y - 20.0);
+    }
+
+    #[test]
+    fn storage_keys_are_stable() {
+        assert_eq!(FloatingWindowId::Help.storage_key(), "Help");
+        assert_eq!(FloatingWindowId::NewGrf.storage_key(), "NewGrf");
+        assert_eq!(
+            FloatingWindowId::DisplayOptions.storage_key(),
+            "DisplayOptions"
+        );
     }
 
     #[test]

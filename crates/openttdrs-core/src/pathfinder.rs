@@ -28,7 +28,7 @@ fn is_any_transport_tile(kind: TileKind) -> bool {
 }
 
 fn is_road_stop_station(tile: &Tile) -> bool {
-    tile.kind == TileKind::Station && matches!((tile.m6 >> 3) & 0x0F, 2 | 3)
+    tile.kind == TileKind::Station && matches!((tile.m6 >> 3) & 0x0F, 2 | 3 | 8)
 }
 
 fn is_rail_station_tile(tile: &Tile) -> bool {

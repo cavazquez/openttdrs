@@ -19,6 +19,7 @@ mod finances_window;
 mod floating_window;
 pub(crate) mod font;
 mod graph_window;
+mod help_window;
 mod hud;
 mod industry_directory;
 mod industry_panel;
@@ -83,6 +84,9 @@ use finances_window::{
 use graph_window::{
     GraphWindowState, graph_window_on_closed, handle_graph_window_buttons, open_graph_from_routes,
     setup_graph_window, sync_graph_window,
+};
+use help_window::{
+    HelpWindowState, handle_help_hotkey, help_window_on_closed, setup_help_window, sync_help_window,
 };
 pub(crate) use hud::SimHudControls;
 use hud::{
@@ -237,6 +241,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<LinkGraphWindowState>()
         .init_resource::<PathfindingSettingsWindowState>()
         .init_resource::<NewGrfWindowState>()
+        .init_resource::<HelpWindowState>()
         .init_resource::<SoundMusicWindowState>()
         .init_resource::<crate::news_prefs::NewsDisplayPrefs>()
         .init_resource::<SelectedTileInfo>()
@@ -327,6 +332,7 @@ impl Plugin for ClientUiPlugin {
                 setup_sign_list_window,
                 setup_link_graph_window,
                 setup_newgrf_window,
+                setup_help_window,
                 setup_vehicle_window,
                 setup_refit_window,
                 setup_shared_orders_window,
@@ -378,6 +384,7 @@ impl Plugin for ClientUiPlugin {
                 save_window_name_click_focus,
                 handle_pause_toggle,
                 cycle_json_save_path_hotkey,
+                handle_help_hotkey,
                 handle_tool_hotkeys,
                 rotate_station_with_right_click,
                 close_road_type_picker_on_escape,
@@ -587,6 +594,8 @@ impl Plugin for ClientUiPlugin {
                 newgrf_window_on_closed,
                 sync_newgrf_window,
                 handle_newgrf_window_buttons,
+                help_window_on_closed,
+                sync_help_window,
                 handle_sound_music_toolbar_button,
                 handle_audio_settings_buttons,
                 handle_volume_sliders,

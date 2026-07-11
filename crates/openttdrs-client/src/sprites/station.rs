@@ -9,6 +9,7 @@ use super::rail::rail_sloped_track_sprite_id;
 pub enum StationTileClass {
     Rail,
     RailWaypoint,
+    RoadWaypoint,
     Airport,
     Truck,
     Bus,
@@ -41,6 +42,7 @@ pub fn station_type_from_m6(m6: u8) -> StationTileClass {
         4 => StationTileClass::Dock,
         6 => StationTileClass::Buoy,
         7 => StationTileClass::RailWaypoint,
+        8 => StationTileClass::RoadWaypoint,
         v => StationTileClass::Other(v),
     }
 }
@@ -54,9 +56,13 @@ pub fn station_tile_class(m6: u8, stop_kind: Option<StopKind>) -> StationTileCla
     if stop_kind == Some(StopKind::RailWaypoint) {
         return StationTileClass::RailWaypoint;
     }
+    if stop_kind == Some(StopKind::RoadWaypoint) {
+        return StationTileClass::RoadWaypoint;
+    }
     match station_type_from_m6(m6) {
         StationTileClass::Rail
         | StationTileClass::RailWaypoint
+        | StationTileClass::RoadWaypoint
         | StationTileClass::Bus
         | StationTileClass::Truck
         | StationTileClass::Dock
@@ -70,6 +76,7 @@ pub fn station_tile_class(m6: u8, stop_kind: Option<StopKind>) -> StationTileCla
                     StopKind::Buoy => StationTileClass::Buoy,
                     StopKind::Airport => StationTileClass::Airport,
                     StopKind::RailWaypoint => StationTileClass::RailWaypoint,
+                    StopKind::RoadWaypoint => StationTileClass::RoadWaypoint,
                     StopKind::RailStation => StationTileClass::Rail,
                 }
             } else {
@@ -305,6 +312,7 @@ pub fn road_stop_build_layers(class: StationTileClass, dir: usize) -> &'static [
         StationTileClass::Truck => &TRUCK_STOP_BUILD_LAYERS[dir],
         StationTileClass::Rail
         | StationTileClass::RailWaypoint
+        | StationTileClass::RoadWaypoint
         | StationTileClass::Airport
         | StationTileClass::Dock
         | StationTileClass::Buoy

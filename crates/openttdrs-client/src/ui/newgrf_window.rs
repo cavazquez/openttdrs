@@ -4,7 +4,7 @@
 //! `is_static` (p. ej. OpenGFX) no se pueden desactivar ni eliminar.
 
 use bevy::prelude::*;
-use openttdrs_core::{Command, apply_command, format_grfid};
+use openttdrs_core::{Command, NewGrfEntry, apply_command, format_grfid, scan_grf_file};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -44,6 +44,8 @@ pub(crate) enum NewGrfAction {
     MoveUp,
     MoveDown,
     Remove,
+    /// Escanea directorios conocidos y añade el primer `.grf` ausente del stack.
+    AddFromDisk,
 }
 
 pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -117,6 +119,7 @@ pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<Asse
             spawn_action_btn(bar, asset_server, NewGrfAction::MoveUp, "↑");
             spawn_action_btn(bar, asset_server, NewGrfAction::MoveDown, "↓");
             spawn_action_btn(bar, asset_server, NewGrfAction::Remove, "Quitar");
+            spawn_action_btn(bar, asset_server, NewGrfAction::AddFromDisk, "Añadir…");
         });
     });
 }
@@ -243,6 +246,19 @@ pub(crate) fn handle_newgrf_window_buttons(
         if *interaction != Interaction::Pressed {
             continue;
         }
+        if matches!(action, NewGrfAction::AddFromDisk) {
+            match add_next_available_grf(&mut sim) {
+                Ok(name) => {
+                    state.selected = sim.state.newgrf_stack.len().checked_sub(1);
+                    info!("NewGRF añadido (config): {name}");
+                }
+                Err(msg) => {
+                    hud_feedback.message = Some(msg);
+                    hud_feedback.expires_at_secs = time.elapsed_secs() + 3.5;
+                }
+            }
+            continue;
+        }
         let Some(index) = state.selected else {
             continue;
         };
@@ -269,6 +285,7 @@ pub(crate) fn handle_newgrf_window_buttons(
                 Command::MoveNewGrfInStack { from: index, to }
             }
             NewGrfAction::Remove => Command::RemoveNewGrfFromStack { index },
+            NewGrfAction::AddFromDisk => unreachable!(),
         };
         match apply_command(&mut sim.state, &cmd) {
             Ok(()) => {
@@ -284,11 +301,84 @@ pub(crate) fn handle_newgrf_window_buttons(
                     NewGrfAction::MoveUp => index.checked_sub(1).or(Some(index)),
                     NewGrfAction::MoveDown => Some((index + 1).min(len.saturating_sub(1))),
                     NewGrfAction::Toggle => Some(index),
+                    NewGrfAction::AddFromDisk => state.selected,
                 };
             }
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
         }
     }
+}
+
+fn newgrf_search_dirs() -> Vec<std::path::PathBuf> {
+    let mut dirs = vec![
+        std::path::PathBuf::from("assets/opengfx/opengfx2-32ez"),
+        std::path::PathBuf::from("assets/newgrf"),
+    ];
+    if let Ok(extra) = std::env::var("OPENTTDRS_NEWGRF_DIR")
+        && !extra.trim().is_empty()
+    {
+        dirs.push(std::path::PathBuf::from(extra));
+    }
+    dirs
+}
+
+fn add_next_available_grf(sim: &mut SimWorld) -> Result<String, String> {
+    let known: std::collections::HashSet<u32> =
+        sim.state.newgrf_stack.iter().map(|e| e.grfid).collect();
+    let known_names: std::collections::HashSet<String> = sim
+        .state
+        .newgrf_stack
+        .iter()
+        .map(|e| e.filename.clone())
+        .collect();
+    for dir in newgrf_search_dirs() {
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        let mut files: Vec<_> = rd
+            .filter_map(Result::ok)
+            .map(|e| e.path())
+            .filter(|p| {
+                p.extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| e.eq_ignore_ascii_case("grf"))
+            })
+            .collect();
+        files.sort();
+        for path in files {
+            let Some(file_name) = path.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            if known_names.contains(file_name) {
+                continue;
+            }
+            let info = scan_grf_file(&path).map_err(|e| format!("Scan {file_name}: {e}"))?;
+            let Some(grfid) = info.grfid else {
+                continue;
+            };
+            if known.contains(&grfid) {
+                continue;
+            }
+            let mut entry = NewGrfEntry::new(file_name, grfid);
+            entry.name = info.name.unwrap_or_default();
+            entry.description = info.description.unwrap_or_default();
+            entry.grf_version = info.grf_version.unwrap_or(0);
+            apply_command(
+                &mut sim.state,
+                &Command::AddNewGrfToStack {
+                    entry: entry.clone(),
+                },
+            )
+            .map_err(|e| openttdrs_core::command_error_message(e).to_string())?;
+            let label = if entry.name.is_empty() {
+                file_name.to_string()
+            } else {
+                entry.name
+            };
+            return Ok(label);
+        }
+    }
+    Err("No hay más .grf nuevos en assets/opengfx/opengfx2-32ez ni OPENTTDRS_NEWGRF_DIR.".into())
 }
 
 pub(crate) fn newgrf_window_on_closed(

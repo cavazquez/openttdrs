@@ -95,6 +95,8 @@ pub(crate) enum BuildMenuAction {
     RoadBridge,
     RoadTunnel,
     BusStop,
+    /// Waypoint road sobre carretera recta.
+    RoadWaypoint,
     RailStation,
     Rail,
     RailX,
@@ -339,6 +341,8 @@ pub(crate) enum SaveMenuAction {
     DisplayOptions,
     /// Segunda cámara (ExtraViewport).
     ExtraViewport,
+    /// Ayuda / About / hotkeys.
+    Help,
     ReturnToMainMenu,
 }
 

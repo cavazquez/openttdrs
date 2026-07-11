@@ -10,6 +10,7 @@ mod rail_station;
 mod rail_waypoint;
 mod road_depot;
 mod road_stop;
+mod road_waypoint;
 mod rotate;
 mod sprites;
 mod station_coverage;
@@ -55,6 +56,7 @@ use road_stop::{
     RoadStopPreviewSpawn, bus_stop_ground_path, road_stop_preview_dir, spawn_road_stop_preview,
     truck_stop_ground_path,
 };
+use road_waypoint::spawn_road_waypoint_preview;
 use sprites::preview_image_for_action;
 use station_coverage::{spawn_station_coverage_preview, station_preview_has_coverage};
 use tunnel::spawn_tunnel_entrance_preview;
@@ -285,6 +287,22 @@ pub(crate) fn update_build_ghost_preview(
                 coord,
                 valid,
             );
+        }
+        return;
+    }
+    if action == BuildMenuAction::RoadWaypoint {
+        let coord = TileCoord::new(tx, ty);
+        if sim.state.map.get(coord).is_some() {
+            let valid = preview_build_command_valid(
+                &sim.state,
+                action,
+                coord,
+                &station_state,
+                &[(tx, ty)],
+                preview_rail_lane,
+                Some(tile_fract),
+            );
+            spawn_road_waypoint_preview(&mut commands, &asset_server, &sim.state.map, coord, valid);
         }
         return;
     }

@@ -262,6 +262,7 @@ fn migrate_state_v3_to_v4(state: &mut GameState) {
             .map(|&order| match order {
                 VehicleOrder::Tile(pos) => {
                     if station_kinds.get(&pos) == Some(&StopKind::RailWaypoint)
+                        || station_kinds.get(&pos) == Some(&StopKind::RoadWaypoint)
                         || state
                             .map
                             .get(pos)

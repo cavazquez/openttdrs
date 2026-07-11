@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 
 use crate::render::RemapMapVisualsPending;
-use crate::settings::ClientPreferences;
+use crate::settings::{ClientPreferences, ClientSettingsPreset};
 use crate::sprites::{TransparencyMode, TransparencyOption};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
@@ -39,6 +39,13 @@ pub(crate) enum DisplayOptionsToggle {
     },
 }
 
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DisplayOptionsPreset {
+    Classic,
+    Performance,
+    Dev,
+}
+
 pub(crate) fn setup_display_options_window(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
     let (_root, content) = spawn_floating_window(
@@ -68,6 +75,31 @@ pub(crate) fn setup_display_options_window(mut commands: Commands, asset_server:
         ] {
             spawn_toggle_row(body, asset_server, label, toggle);
         }
+        body.spawn((
+            Text::new("Presets de cliente"),
+            window_text_font(asset_server, UiFontRole::Caption),
+            TextColor(WINDOW_TEXT),
+            Node {
+                margin: UiRect::top(Val::Px(10.0)),
+                ..default()
+            },
+        ));
+        body.spawn(Node {
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(4.0),
+            ..default()
+        })
+        .with_children(|row| {
+            spawn_preset_btn(row, asset_server, DisplayOptionsPreset::Classic, "Clásico");
+            spawn_preset_btn(
+                row,
+                asset_server,
+                DisplayOptionsPreset::Performance,
+                "Rendimiento",
+            );
+            spawn_preset_btn(row, asset_server, DisplayOptionsPreset::Dev, "Dev");
+        });
         body.spawn((
             Text::new("Transparencia / invisibilidad (TO_*)"),
             window_text_font(asset_server, UiFontRole::Caption),
@@ -124,6 +156,38 @@ fn spawn_toggle_row(
                     window_text_font(asset_server, UiFontRole::Caption),
                     TextColor(WINDOW_TEXT),
                 )],
+            ));
+        });
+}
+
+fn spawn_preset_btn(
+    parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    preset: DisplayOptionsPreset,
+    label: &'static str,
+) {
+    parent
+        .spawn((
+            Button,
+            preset,
+            Node {
+                flex_grow: 1.0,
+                height: Val::Px(22.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(BTN_BG),
+            BorderColor::all(BTN_BORDER),
+            Interaction::default(),
+            BuildMenuUi,
+        ))
+        .with_children(|btn| {
+            btn.spawn((
+                Text::new(label),
+                window_text_font(asset_server, UiFontRole::Caption),
+                TextColor(WINDOW_TEXT),
             ));
         });
 }
@@ -196,11 +260,44 @@ fn spawn_transparency_row(
 }
 
 pub(crate) fn handle_display_options_buttons(
-    buttons: Query<(&Interaction, &DisplayOptionsToggle), (Changed<Interaction>, With<Button>)>,
+    buttons: Query<
+        (&Interaction, &DisplayOptionsToggle),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<DisplayOptionsPreset>,
+        ),
+    >,
+    presets: Query<
+        (&Interaction, &DisplayOptionsPreset),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<DisplayOptionsToggle>,
+        ),
+    >,
     mut prefs: ResMut<ClientPreferences>,
     mut hud: ResMut<SimHudControls>,
     mut pending_remap: Option<ResMut<RemapMapVisualsPending>>,
 ) {
+    for (interaction, preset) in &presets {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let mapped = match *preset {
+            DisplayOptionsPreset::Classic => ClientSettingsPreset::Classic,
+            DisplayOptionsPreset::Performance => ClientSettingsPreset::Performance,
+            DisplayOptionsPreset::Dev => ClientSettingsPreset::Dev,
+        };
+        prefs.apply_preset(mapped);
+        hud.minimap_visible = prefs.minimap_visible;
+        hud.sim_speed = prefs.default_sim_speed.clamp(0.25, 8.0);
+        crate::sprites::set_transparency_preferences(
+            prefs.transparency_opt,
+            prefs.invisibility_opt,
+        );
+        request_full_remap(pending_remap.as_deref_mut());
+    }
     for (interaction, toggle) in &buttons {
         if *interaction != Interaction::Pressed {
             continue;

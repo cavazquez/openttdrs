@@ -41,6 +41,7 @@ const fn station_kind_short(kind: StopKind) -> &'static str {
         StopKind::Buoy => "Boya",
         StopKind::Airport => "Aero",
         StopKind::RailWaypoint => "WP",
+        StopKind::RoadWaypoint => "WP-R",
     }
 }
 
@@ -83,7 +84,10 @@ pub(crate) fn spawn_station_labels(
     }
     let map = &sim.state.map;
     for station in &sim.state.stations {
-        if station.stop_kind == StopKind::RailWaypoint {
+        if matches!(
+            station.stop_kind,
+            StopKind::RailWaypoint | StopKind::RoadWaypoint
+        ) {
             continue;
         }
         if !station_label_in_bounds(station, bounds) {

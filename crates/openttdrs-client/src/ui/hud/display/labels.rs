@@ -30,6 +30,7 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::RailBridge => "Puente vía",
         BuildMenuAction::RailTunnel => "Túnel vía",
         BuildMenuAction::RailWaypoint => "Waypoint",
+        BuildMenuAction::RoadWaypoint => "Waypoint road",
         BuildMenuAction::RailSignals => {
             "Señales (Ctrl: tipo block/entry/exit/combo/path; Shift+RMB: densidad)"
         }

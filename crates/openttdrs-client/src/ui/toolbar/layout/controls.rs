@@ -151,7 +151,7 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
         ),
         (
             "NewGRF...",
-            "Stack NewGRF activo (solo lectura)",
+            "Stack NewGRF (ON/OFF, orden, añadir; sin Action0–14)",
             SaveMenuAction::NewGrf,
         ),
         (
@@ -163,6 +163,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             "Vista extra",
             "Segunda camara (sigue a la principal)",
             SaveMenuAction::ExtraViewport,
+        ),
+        (
+            "Ayuda...",
+            "About y mapa de hotkeys (F1)",
+            SaveMenuAction::Help,
         ),
         (
             "Catenaria",

@@ -47,6 +47,8 @@ pub(crate) struct ClientPreferences {
     pub(crate) news_first_cargo: u8,
     pub(crate) news_first_vehicle: u8,
     pub(crate) news_vehicle_advice: u8,
+    /// Posiciones de ventanas flotantes: `Id=x,y;Id2=x,y` (UI-7).
+    pub(crate) window_layouts: String,
 }
 
 impl Default for ClientPreferences {
@@ -75,6 +77,7 @@ impl Default for ClientPreferences {
             news_first_cargo: crate::news_prefs::DISPLAY_FULL,
             news_first_vehicle: crate::news_prefs::DISPLAY_FULL,
             news_vehicle_advice: crate::news_prefs::DISPLAY_SUMMARY,
+            window_layouts: String::new(),
         }
     }
 }
@@ -103,6 +106,77 @@ impl ClientPreferences {
         self.invisibility_opt = i;
     }
 
+    /// Posición guardada de una ventana flotante, si existe.
+    #[must_use]
+    pub(crate) fn window_pos_by_key(&self, key: &str) -> Option<bevy::math::Vec2> {
+        for entry in self.window_layouts.split(';').filter(|s| !s.is_empty()) {
+            let Some((k, rest)) = entry.split_once('=') else {
+                continue;
+            };
+            if k != key {
+                continue;
+            }
+            let Some((xs, ys)) = rest.split_once(',') else {
+                continue;
+            };
+            let x: f32 = xs.parse().ok()?;
+            let y: f32 = ys.parse().ok()?;
+            return Some(bevy::math::Vec2::new(x, y));
+        }
+        None
+    }
+
+    pub(crate) fn set_window_pos_by_key(&mut self, key: &str, pos: bevy::math::Vec2) {
+        let mut parts: Vec<String> = self
+            .window_layouts
+            .split(';')
+            .filter(|s| !s.is_empty())
+            .filter(|s| !s.starts_with(&format!("{key}=")))
+            .map(str::to_string)
+            .collect();
+        parts.push(format!("{key}={:.0},{:.0}", pos.x, pos.y));
+        self.window_layouts = parts.join(";");
+    }
+
+    /// Aplica un preset de cliente (Display / QoL).
+    pub(crate) fn apply_preset(&mut self, preset: ClientSettingsPreset) {
+        match preset {
+            ClientSettingsPreset::Classic => {
+                self.minimap_visible = true;
+                self.full_animation = true;
+                self.full_detail = true;
+                self.show_town_labels = true;
+                self.show_station_labels = true;
+                self.show_pbs_reservations = true;
+                self.show_debug_gizmos = false;
+                self.show_diagnostics_overlay = false;
+                self.default_sim_speed = 1.0;
+            }
+            ClientSettingsPreset::Performance => {
+                self.minimap_visible = true;
+                self.full_animation = false;
+                self.full_detail = false;
+                self.show_town_labels = false;
+                self.show_station_labels = false;
+                self.show_pbs_reservations = false;
+                self.show_debug_gizmos = false;
+                self.show_diagnostics_overlay = false;
+                self.default_sim_speed = 1.0;
+            }
+            ClientSettingsPreset::Dev => {
+                self.minimap_visible = true;
+                self.full_animation = true;
+                self.full_detail = true;
+                self.show_town_labels = true;
+                self.show_station_labels = true;
+                self.show_pbs_reservations = true;
+                self.show_debug_gizmos = true;
+                self.show_diagnostics_overlay = true;
+                self.default_sim_speed = 1.0;
+            }
+        }
+    }
+
     fn with_env_overrides(mut prefs: Self) -> Self {
         if config::env_flag("OPENTTDRS_GIZMOS") {
             prefs.show_debug_gizmos = true;
@@ -112,6 +186,14 @@ impl ClientPreferences {
         }
         prefs
     }
+}
+
+/// Presets de `ClientPreferences` (UI-7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ClientSettingsPreset {
+    Classic,
+    Performance,
+    Dev,
 }
 
 /// Marcador: las prefs en disco aún no se hidrataron en runtime.
@@ -290,5 +372,41 @@ mod tests {
         assert_eq!(hud.json_save_path, DEFAULT_JSON_SAVE_PATH);
         assert!(hud.minimap_visible);
         assert!((hud.sim_speed - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn window_layouts_roundtrip() {
+        let mut prefs = ClientPreferences::default();
+        prefs.set_window_pos_by_key("Help", bevy::math::Vec2::new(40.0, 80.0));
+        prefs.set_window_pos_by_key("NewGrf", bevy::math::Vec2::new(100.0, 120.0));
+        assert_eq!(
+            prefs.window_pos_by_key("Help"),
+            Some(bevy::math::Vec2::new(40.0, 80.0))
+        );
+        prefs.set_window_pos_by_key("Help", bevy::math::Vec2::new(50.0, 90.0));
+        assert_eq!(
+            prefs.window_pos_by_key("Help"),
+            Some(bevy::math::Vec2::new(50.0, 90.0))
+        );
+        assert_eq!(
+            prefs.window_pos_by_key("NewGrf"),
+            Some(bevy::math::Vec2::new(100.0, 120.0))
+        );
+    }
+
+    #[test]
+    fn apply_preset_performance_disables_detail() {
+        let mut prefs = ClientPreferences::default();
+        prefs.apply_preset(ClientSettingsPreset::Performance);
+        assert!(!prefs.full_animation);
+        assert!(!prefs.full_detail);
+        assert!(!prefs.show_town_labels);
+        assert!(!prefs.show_debug_gizmos);
+        prefs.apply_preset(ClientSettingsPreset::Dev);
+        assert!(prefs.show_debug_gizmos);
+        assert!(prefs.show_diagnostics_overlay);
+        prefs.apply_preset(ClientSettingsPreset::Classic);
+        assert!(prefs.full_animation);
+        assert!(!prefs.show_debug_gizmos);
     }
 }

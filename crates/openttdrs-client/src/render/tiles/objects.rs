@@ -248,6 +248,20 @@ pub(crate) fn spawn_station_tile(
             spawn_stop_ground_sprite(commands, &image, ctx, base_z, 0.04);
             spawn_road_stop_buildings(commands, assets, company, ctx, base_z, class, dir);
         }
+        StationTileClass::RoadWaypoint => {
+            if tileh == 0 {
+                let grass = sloped_or_flat_image(0, &assets.grass, &assets.grass_slopes);
+                spawn_ground_sprite(commands, &grass, Color::WHITE, ctx, slope_half_ground);
+            }
+            let bits = ctx.tile.map_or(0x0A, |t| t.m3 & 0x0F);
+            let flat_idx = match bits {
+                0x05 => 5usize,
+                _ => 10usize,
+            };
+            if let Some(img) = assets.road_flat.get(flat_idx) {
+                spawn_stop_ground_sprite(commands, img, ctx, base_z, 0.03);
+            }
+        }
         StationTileClass::Dock => {
             if buildings_hidden() {
                 return;

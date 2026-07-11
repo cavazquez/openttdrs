@@ -32,6 +32,8 @@ pub enum Command {
     SetRailBits(TileCoord, u8),
     /// Convierte vía recta (solo X o Y) en waypoint ferroviario.
     PlaceRailWaypoint(TileCoord),
+    /// Waypoint road 1×1 sobre carretera recta (`StationType::RoadWaypoint`).
+    PlaceRoadWaypoint(TileCoord),
     /// Quita `TrackBits` de una tesela de vía (drag de «quitar vía»).
     RemoveRailBits(TileCoord, u8),
     /// Quita toda la vía de la tesela.

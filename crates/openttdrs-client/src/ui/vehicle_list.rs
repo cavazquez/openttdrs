@@ -108,6 +108,7 @@ impl VehicleListState {
             openttdrs_core::StopKind::RailStation | openttdrs_core::StopKind::RailWaypoint => {
                 VehicleListKind::Train
             }
+            openttdrs_core::StopKind::RoadWaypoint => VehicleListKind::Road,
             openttdrs_core::StopKind::Dock | openttdrs_core::StopKind::Buoy => {
                 VehicleListKind::Ship
             }

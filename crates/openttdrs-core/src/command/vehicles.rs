@@ -30,13 +30,10 @@ pub(super) fn set_vehicle_order_list(
                 }
             }
             VehicleOrder::Waypoint { waypoint, .. } => {
-                if vehicle_kind != VehicleKind::Train {
-                    return Err(CommandError::IncompatibleStopForVehicle);
-                }
                 let Some(st) = state.stations.iter().find(|s| s.pos == *waypoint) else {
                     return Err(CommandError::StationNotFound);
                 };
-                if !st.is_waypoint() {
+                if !st.is_waypoint() || !st.can_service_vehicle(vehicle_kind) {
                     return Err(CommandError::IncompatibleStopForVehicle);
                 }
             }

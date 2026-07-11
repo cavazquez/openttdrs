@@ -10,7 +10,7 @@ use super::transport::{
     check_airport_area, check_airport_placement, check_bridge, check_clear_tile,
     check_cycle_rail_signal_type, check_dock_placement, check_place_aqueduct, check_place_buoy,
     check_place_canal, check_place_lock, check_place_rail, check_place_rail_signal_oriented,
-    check_place_rail_waypoint, check_place_river, check_place_road_bits,
+    check_place_rail_waypoint, check_place_river, check_place_road_bits, check_place_road_waypoint,
     check_rail_depot_placement, check_rail_station_area, check_rail_trackbits_with_autoslope,
     check_remove_rail, check_remove_rail_signal, check_road_depot_placement,
     check_ship_depot_placement, check_single_transport_tile, check_station_placement, check_tunnel,
@@ -91,6 +91,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             .err()
             .or_else(|| check_rail_trackbits_with_autoslope(map, *c, bits & 0x3F, tick).err()),
         Command::PlaceRailWaypoint(c) => check_place_rail_waypoint(map, *c, stations).err(),
+        Command::PlaceRoadWaypoint(c) => check_place_road_waypoint(map, *c, stations).err(),
         Command::RemoveRailBits(c, _) | Command::RemoveRail(c) => check_remove_rail(map, *c).err(),
         Command::ConvertRail(c, _) => {
             if map.get_kind(*c) == Some(crate::map::TileKind::Rail) {

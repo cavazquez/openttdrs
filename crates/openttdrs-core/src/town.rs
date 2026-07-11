@@ -149,8 +149,10 @@ pub fn grow_town_if_served(
             continue;
         }
         let has_station = stations.iter().any(|st| {
-            st.stop_kind != StopKind::RailWaypoint
-                && crate::economy::manhattan_distance(st.pos, town.pos) <= TOWN_AUTHORITY_RADIUS
+            !matches!(
+                st.stop_kind,
+                StopKind::RailWaypoint | StopKind::RoadWaypoint | StopKind::Buoy
+            ) && crate::economy::manhattan_distance(st.pos, town.pos) <= TOWN_AUTHORITY_RADIUS
         });
         if !has_station {
             continue;

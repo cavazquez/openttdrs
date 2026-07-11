@@ -455,3 +455,34 @@ fn build_tram_at_depot_and_toggle_uses_tram_network() {
     // Al salir, la boca debe tener overlay tram (ya lo tenía o se aseguró).
     assert_ne!(tram_track_bits(&s.map.get(exit).unwrap()), 0);
 }
+
+#[test]
+fn place_road_waypoint_on_straight_road() {
+    use crate::WAYPOINT_BUILD_COST;
+    use crate::station::{STATION_TYPE_ROAD_WAYPOINT, StopKind, station_type_from_m6};
+
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRoadBits(c, 0x0A)).unwrap();
+    let money = s.economy.money;
+    apply_command(&mut s, &Command::PlaceRoadWaypoint(c)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert_eq!(tile.kind, TileKind::Station);
+    assert_eq!(station_type_from_m6(tile.m6), STATION_TYPE_ROAD_WAYPOINT);
+    assert_eq!(tile.m3 & 0x0F, 0x0A);
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].stop_kind, StopKind::RoadWaypoint);
+    assert!(s.stations[0].is_waypoint());
+    assert_eq!(s.economy.money, money - WAYPOINT_BUILD_COST);
+}
+
+#[test]
+fn place_road_waypoint_rejects_crossing() {
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoadBits(c, 0x0F)).unwrap();
+    assert_eq!(
+        apply_command(&mut s, &Command::PlaceRoadWaypoint(c)),
+        Err(CommandError::CannotPlaceWaypointOnTrack)
+    );
+}

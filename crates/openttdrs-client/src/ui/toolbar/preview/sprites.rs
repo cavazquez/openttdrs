@@ -116,6 +116,7 @@ pub(crate) fn preview_image_for_action(
             Some(asset_server.load::<Image>("assets/opengfx/tiles/rail_1036.png"))
         }
         BuildMenuAction::RailWaypoint
+        | BuildMenuAction::RoadWaypoint
         | BuildMenuAction::RailSignals
         | BuildMenuAction::RailRemove
         | BuildMenuAction::RailConvert => None,

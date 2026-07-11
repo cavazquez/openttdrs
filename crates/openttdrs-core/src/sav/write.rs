@@ -302,6 +302,7 @@ fn facilities_for_stop(kind: StopKind) -> u8 {
         StopKind::Dock | StopKind::Buoy => FACIL_DOCK,
         StopKind::Airport => FACIL_AIRPORT,
         StopKind::RailWaypoint => FACIL_WAYPOINT | FACIL_TRAIN,
+        StopKind::RoadWaypoint => FACIL_WAYPOINT | FACIL_BUS_STOP | FACIL_TRUCK_STOP,
     }
 }
 

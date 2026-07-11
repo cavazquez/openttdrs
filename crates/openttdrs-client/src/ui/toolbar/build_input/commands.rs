@@ -127,6 +127,7 @@ pub(crate) fn command_for_action(
         }
         BuildMenuAction::Orders => None,
         BuildMenuAction::RailWaypoint => Some(Command::PlaceRailWaypoint(pos)),
+        BuildMenuAction::RoadWaypoint => Some(Command::PlaceRoadWaypoint(pos)),
         BuildMenuAction::BuildHouse => Some(Command::PlaceHouse(pos)),
         BuildMenuAction::BuildCoalMine => Some(Command::PlaceIndustrySpec(
             pos,

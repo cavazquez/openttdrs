@@ -317,7 +317,12 @@ pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             BuildMenuAction::BusStop,
                         ),
                         (
-                            "Unir estaciones",
+                            "Waypoint road",
+                            "assets/opengfx/tiles/road_flat_10.png",
+                            BuildMenuAction::RoadWaypoint,
+                        ),
+                        (
+                            "Unir estaciones (road 1x1)",
                             "assets/opengfx/tiles/truck_stop_ground_0.png",
                             BuildMenuAction::JoinStation,
                         ),
@@ -352,7 +357,7 @@ pub(super) fn spawn_water_panel(root: &mut ChildSpawnerCommands, asset_server: &
                             BuildMenuAction::Canal,
                         ),
                         (
-                            "Rio",
+                            "Rio (editor)",
                             "assets/opengfx/tiles/water_flat.png",
                             BuildMenuAction::River,
                         ),
@@ -524,17 +529,17 @@ pub(super) fn spawn_secondary_tool_panels(
                     asset_server,
                     &[
                         (
-                            "Construir casa",
+                            "Construir casa (editor)",
                             "assets/opengfx/tiles/house_church_build.png",
                             BuildMenuAction::BuildHouse,
                         ),
                         (
-                            "Mina de carbón",
+                            "Mina de carbón (editor)",
                             "assets/opengfx/tiles/industry_2013.png",
                             BuildMenuAction::BuildCoalMine,
                         ),
                         (
-                            "Mina de hierro",
+                            "Mina de hierro (editor)",
                             "assets/opengfx/tiles/industry_2092.png",
                             BuildMenuAction::BuildIronOreMine,
                         ),
@@ -645,7 +650,7 @@ pub(super) fn spawn_secondary_tool_panels(
                             BuildMenuAction::LevelLand,
                         ),
                         (
-                            "Comprar terreno",
+                            "Comprar terreno (objeto)",
                             "assets/opengfx/tiles/object_bought_land.png",
                             BuildMenuAction::BuyLand,
                         ),

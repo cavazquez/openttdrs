@@ -139,6 +139,8 @@ pub enum StopKind {
     Buoy,
     /// Punto de paso ferroviario (`StationType::RailWaypoint`); sin carga ni parada.
     RailWaypoint,
+    /// Punto de paso road (`StationType::RoadWaypoint`); sin carga ni parada.
+    RoadWaypoint,
 }
 
 impl Station {
@@ -228,6 +230,10 @@ impl Station {
                 StopKind::RailStation | StopKind::RailWaypoint
             ) | (VehicleKind::Bus | VehicleKind::Tram, StopKind::BusStop)
                 | (VehicleKind::Truck, StopKind::TruckStop)
+                | (
+                    VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram,
+                    StopKind::RoadWaypoint,
+                )
                 | (VehicleKind::Ship, StopKind::Dock | StopKind::Buoy)
                 | (VehicleKind::Aircraft, StopKind::Airport)
         )
@@ -235,12 +241,18 @@ impl Station {
 
     #[must_use]
     pub fn is_waypoint(&self) -> bool {
-        matches!(self.stop_kind, StopKind::RailWaypoint | StopKind::Buoy)
+        matches!(
+            self.stop_kind,
+            StopKind::RailWaypoint | StopKind::Buoy | StopKind::RoadWaypoint
+        )
     }
 
     #[must_use]
     pub fn accepts_cargo(&self, cargo: CargoType) -> bool {
-        if matches!(self.stop_kind, StopKind::RailWaypoint | StopKind::Buoy) {
+        if matches!(
+            self.stop_kind,
+            StopKind::RailWaypoint | StopKind::Buoy | StopKind::RoadWaypoint
+        ) {
             return false;
         }
         match self.stop_kind {
@@ -251,7 +263,7 @@ impl Station {
             // Muelle: mercancía + pasajeros (ferry).
             StopKind::Dock => true,
             StopKind::Airport => matches!(cargo, CargoType::Passengers | CargoType::Mail),
-            StopKind::RailWaypoint | StopKind::Buoy => false,
+            StopKind::RailWaypoint | StopKind::Buoy | StopKind::RoadWaypoint => false,
         }
     }
 }
@@ -284,6 +296,8 @@ impl StationCoverage {
 pub const STATION_TYPE_BUOY: u8 = 6;
 /// `StationType::RailWaypoint` en bits 3–6 de `m6` (`station_type.h`).
 pub const STATION_TYPE_RAIL_WAYPOINT: u8 = 7;
+/// `StationType::RoadWaypoint` en bits 3–6 de `m6` (`station_type.h`).
+pub const STATION_TYPE_ROAD_WAYPOINT: u8 = 8;
 
 #[must_use]
 pub fn station_type_from_m6(m6: u8) -> u8 {
@@ -587,6 +601,7 @@ pub fn stop_kind_from_m6(m6: u8) -> StopKind {
         1 => StopKind::Airport,
         STATION_TYPE_BUOY => StopKind::Buoy,
         STATION_TYPE_RAIL_WAYPOINT => StopKind::RailWaypoint,
+        STATION_TYPE_ROAD_WAYPOINT => StopKind::RoadWaypoint,
         _ => StopKind::RailStation,
     }
 }

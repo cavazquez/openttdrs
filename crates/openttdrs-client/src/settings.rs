@@ -30,6 +30,10 @@ pub(crate) struct ClientPreferences {
     pub(crate) show_diagnostics_overlay: bool,
     /// Tinte naranja en vías con reserva PBS activa.
     pub(crate) show_pbs_reservations: bool,
+    /// Equivalente a `IsInvisibilitySet(TO_CATENARY)`.
+    pub(crate) hide_catenary: bool,
+    /// Equivalente a `IsTransparencySet(TO_CATENARY)`.
+    pub(crate) transparent_catenary: bool,
     /// 0=Off, 1=Summary, 2=Full — ver `news_prefs`.
     pub(crate) news_cargo_delivered: u8,
     pub(crate) news_first_cargo: u8,
@@ -53,6 +57,8 @@ impl Default for ClientPreferences {
             show_debug_gizmos: false,
             show_diagnostics_overlay: false,
             show_pbs_reservations: true,
+            hide_catenary: false,
+            transparent_catenary: false,
             news_cargo_delivered: crate::news_prefs::DISPLAY_FULL,
             news_first_cargo: crate::news_prefs::DISPLAY_FULL,
             news_first_vehicle: crate::news_prefs::DISPLAY_FULL,
@@ -91,6 +97,7 @@ impl Plugin for ClientSettingsPlugin {
                 queue_save_preferences,
                 save_preferences_on_exit,
                 sync_preferences_from_hud,
+                sync_catenary_render_preferences,
                 crate::news_prefs::sync_news_display_prefs_to_client,
             )
                 .in_set(UpdateSet::Status),
@@ -118,7 +125,17 @@ fn hydrate_runtime_from_preferences(
     hud.sound_disaster = effective.sound_disaster;
     hud.sound_confirm = effective.sound_confirm;
     hud.sound_click_beep = effective.sound_click_beep;
+    crate::sprites::set_catenary_preferences(
+        effective.hide_catenary,
+        effective.transparent_catenary,
+    );
     hydrated.0 = true;
+}
+
+fn sync_catenary_render_preferences(prefs: Res<ClientPreferences>) {
+    if prefs.is_changed() {
+        crate::sprites::set_catenary_preferences(prefs.hide_catenary, prefs.transparent_catenary);
+    }
 }
 
 /// Copia cambios de sesión relevantes de vuelta a `ClientPreferences` para persistir.

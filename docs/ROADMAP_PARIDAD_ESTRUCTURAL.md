@@ -39,9 +39,10 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
 - `Command::ConvertRail`; eléctricos (110–113) exigen vía electrificada adyacente.
 - Toolbar «Convertir vía»; save **v15**.
 - Catenaria Action5 (`ogfxe_extra`): wires + postes PPP + entradas túnel;
-  PCP/PPP por vecinos; vanos de puente; `OPENTTDRS_HIDE_CATENARY` /
-  `OPENTTDRS_TRANSPARENT_CATENARY` (TO_CATENARY MVP).
-- Pendiente: UI de transparencia, estaciones CanStationTileHavePylons/Wires.
+  PCP/PPP por vecinos; vanos de puente; estaciones con flags m3
+  `CanStationTileHavePylons/Wires`.
+- TO_CATENARY persistente desde Ajustes (visible/transparente/oculta), con
+  `OPENTTDRS_HIDE_CATENARY` / `OPENTTDRS_TRANSPARENT_CATENARY` como overrides.
 
 ## Fase 6 — Monorail / maglev ✅ (MVP)
 

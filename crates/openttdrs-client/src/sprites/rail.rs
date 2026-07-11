@@ -1,4 +1,5 @@
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use bevy::prelude::*;
 use openttdrs_core::{
@@ -330,15 +331,26 @@ pub struct CatenarySpriteDraw {
 }
 
 /// `TO_CATENARY` invisibility (`OPENTTDRS_HIDE_CATENARY=1`).
-#[must_use]
-pub fn catenary_hidden() -> bool {
-    crate::config::env_flag("OPENTTDRS_HIDE_CATENARY")
+static PREF_HIDE_CATENARY: AtomicBool = AtomicBool::new(false);
+static PREF_TRANSPARENT_CATENARY: AtomicBool = AtomicBool::new(false);
+
+/// Sincroniza las preferencias persistidas con el render de catenaria.
+pub fn set_catenary_preferences(hidden: bool, transparent: bool) {
+    PREF_HIDE_CATENARY.store(hidden, Ordering::Relaxed);
+    PREF_TRANSPARENT_CATENARY.store(transparent, Ordering::Relaxed);
 }
 
-/// `TO_CATENARY` transparency (`OPENTTDRS_TRANSPARENT_CATENARY=1`).
+/// `TO_CATENARY` invisibility (preferencia o override de entorno).
+#[must_use]
+pub fn catenary_hidden() -> bool {
+    PREF_HIDE_CATENARY.load(Ordering::Relaxed) || crate::config::env_flag("OPENTTDRS_HIDE_CATENARY")
+}
+
+/// `TO_CATENARY` transparency (preferencia o override de entorno).
 #[must_use]
 pub fn catenary_transparent() -> bool {
-    crate::config::env_flag("OPENTTDRS_TRANSPARENT_CATENARY")
+    PREF_TRANSPARENT_CATENARY.load(Ordering::Relaxed)
+        || crate::config::env_flag("OPENTTDRS_TRANSPARENT_CATENARY")
 }
 
 /// Color de tint para sprites de catenaria (alpha si transparencia).
@@ -388,6 +400,12 @@ pub fn collect_catenary_sprites_from_map(
         out.clear();
         return;
     }
+    if map.get(pos).is_some_and(|tile| {
+        tile.kind == TileKind::Station && !openttdrs_core::station_tile_can_have_wires(tile.m3)
+    }) {
+        out.clear();
+        return;
+    }
     let home_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
     let wire_tb = if home_tb != 0 { home_tb } else { tb & 0x3F };
     let pcp = compute_catenary_pcp_status(map, pos, mw, mh, mp_rail, wire_tb, tileh);
@@ -408,6 +426,11 @@ pub fn collect_catenary_pylons_from_map(
 ) {
     out.clear();
     if catenary_hidden() {
+        return;
+    }
+    if map.get(pos).is_some_and(|tile| {
+        tile.kind == TileKind::Station && !openttdrs_core::station_tile_can_have_pylons(tile.m3)
+    }) {
         return;
     }
     let home_tb = electrified_trackbits_at(map, pos, mw, mh, mp_rail);
@@ -659,13 +682,27 @@ fn electrified_trackbits_at(map: &Map, pos: TileCoord, mw: u32, mh: u32, mp_rail
     let Some(tile) = map.get(pos) else {
         return 0;
     };
-    if tile.kind != TileKind::Rail {
-        return 0;
-    }
     if !rail_type_from_tile(tile).has_catenary() {
         return 0;
     }
-    effective_rail_trackbits(tile.mapt, tile.m5, tile.kind, mp_rail).unwrap_or(0) & 0x3F
+    match tile.kind {
+        TileKind::Rail => {
+            effective_rail_trackbits(tile.mapt, tile.m5, tile.kind, mp_rail).unwrap_or(0) & 0x3F
+        }
+        TileKind::Station
+            if matches!(
+                openttdrs_core::stop_kind_from_m6(tile.m6),
+                openttdrs_core::StopKind::RailStation | openttdrs_core::StopKind::RailWaypoint
+            ) && openttdrs_core::station_tile_can_have_wires(tile.m3) =>
+        {
+            if tile.m5 & 1 != 0 {
+                RAIL_TB_Y
+            } else {
+                RAIL_TB_X
+            }
+        }
+        _ => 0,
+    }
 }
 
 /// Calcula máscara PCP de 4 bits (`pcp_status` en `DrawRailCatenaryRailway`).
@@ -1753,6 +1790,15 @@ mod tests {
         )
     }
 
+    fn electric_station_tile(axis_y: bool, wires: bool, pylons: bool) -> openttdrs_core::Tile {
+        let mut tile = electric_rail_tile(if axis_y { RAIL_TB_Y } else { RAIL_TB_X });
+        tile.kind = TileKind::Station;
+        tile.mapt = 0x50;
+        tile.m5 = u8::from(axis_y);
+        tile.m3 = (u8::from(wires) << 1) | (u8::from(pylons) << 2);
+        tile
+    }
+
     #[test]
     fn collect_catenary_from_map_isolated_x_uses_both_ends() {
         let mut map = Map::new_flat(3, 3, 1);
@@ -1830,6 +1876,44 @@ mod tests {
             out.iter()
                 .all(|d| { (PYLON_SPRITE_BASE..PYLON_SPRITE_BASE + 8).contains(&d.sprite_id) })
         );
+    }
+
+    #[test]
+    fn electric_station_participates_in_wire_neighbourhood() {
+        let mut map = Map::new_flat(3, 3, 1);
+        let rail = TileCoord::new(0, 1);
+        let station = TileCoord::new(1, 1);
+        map.set_tile(rail, electric_rail_tile(RAIL_TB_X)).unwrap();
+        map.set_tile(station, electric_station_tile(false, true, true))
+            .unwrap();
+        let mut out = Vec::new();
+        collect_catenary_sprites_from_map(&map, station, 3, 3, 1, RAIL_TB_X, 0, &mut out);
+        assert!(!out.is_empty());
+    }
+
+    #[test]
+    fn station_roof_keeps_wires_but_suppresses_pylons() {
+        let mut map = Map::new_flat(3, 3, 1);
+        let station = TileCoord::new(1, 1);
+        map.set_tile(station, electric_station_tile(false, true, false))
+            .unwrap();
+        let mut wires = Vec::new();
+        let mut pylons = Vec::new();
+        collect_catenary_sprites_from_map(&map, station, 3, 3, 1, RAIL_TB_X, 0, &mut wires);
+        collect_catenary_pylons_from_map(&map, station, 3, 3, 1, RAIL_TB_X, 0, &mut pylons);
+        assert!(!wires.is_empty());
+        assert!(pylons.is_empty());
+    }
+
+    #[test]
+    fn station_without_wire_flag_suppresses_catenary() {
+        let mut map = Map::new_flat(3, 3, 1);
+        let station = TileCoord::new(1, 1);
+        map.set_tile(station, electric_station_tile(false, false, false))
+            .unwrap();
+        let mut wires = Vec::new();
+        collect_catenary_sprites_from_map(&map, station, 3, 3, 1, RAIL_TB_X, 0, &mut wires);
+        assert!(wires.is_empty());
     }
 
     #[test]

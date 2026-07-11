@@ -484,6 +484,8 @@ fn spawn_map_tiles_in_bounds(
         match ctx.kind {
             TileKind::Station => spawn_station_tile(
                 commands,
+                map,
+                (mw, mh),
                 assets,
                 Some(company),
                 &ctx,

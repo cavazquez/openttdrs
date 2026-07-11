@@ -60,9 +60,9 @@ parcialmente resueltos; se mantienen tachados o anotados.
 
 13. ~~**Railtypes** (normal/eléctrico)~~ — **MVP (Fase 5)**: `rail_type.rs`,
     `ConvertRail`, compat eléctricos 110–113. Catenaria wires + PCP/PPP +
-    túnel/puente; `OPENTTDRS_HIDE_CATENARY` /
-    `OPENTTDRS_TRANSPARENT_CATENARY`. Pendiente: pendientes/nieve tipadas
-    mono/maglev, UI de transparencia, `curve_speed` por railtype.
+    estación/túnel/puente; TO_CATENARY persistente desde Ajustes y overrides
+    `OPENTTDRS_HIDE_CATENARY` / `OPENTTDRS_TRANSPARENT_CATENARY`. Pendiente:
+    pendientes/nieve tipadas mono/maglev, `curve_speed` por railtype.
 14. **Ownership por tile de vía** — `m1` se fuerza a 0 al construir.
 15. **AM_REALISTIC + `GetCurveSpeedLimit`** — `train_cmd.cpp:312-381`
     (límites 61 / 88 / `232-(13-n)²`, tilt +20 %, `curve_speed_mod` por motor)

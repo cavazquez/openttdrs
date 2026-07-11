@@ -9,6 +9,32 @@ pub const STATION_COVERAGE_RADIUS: i32 = 4;
 /// Máximo de días sin recogida antes de truncar (`station_cmd.cpp`).
 pub const MAX_TIME_SINCE_PICKUP_DAYS: u8 = 255;
 
+/// `station_map.h`: bit 1 de m3 permite cables de catenaria.
+pub const STATION_TILE_WIRES: u8 = 1 << 1;
+/// `station_map.h`: bit 2 de m3 permite postes de catenaria.
+pub const STATION_TILE_PYLONS: u8 = 1 << 2;
+
+/// ¿La tesela ferroviaria de estación permite cables?
+#[must_use]
+pub const fn station_tile_can_have_wires(m3: u8) -> bool {
+    m3 & STATION_TILE_WIRES != 0
+}
+
+/// ¿La tesela ferroviaria de estación permite postes?
+#[must_use]
+pub const fn station_tile_can_have_pylons(m3: u8) -> bool {
+    m3 & STATION_TILE_PYLONS != 0
+}
+
+/// Flags por defecto de una estación clásica (`GetStationTileFlags`).
+///
+/// Todas las piezas permiten cables; solo gfx 0..3 permiten postes bajo la
+/// plataforma/edificio. Los techos gfx >= 4 ocultan el poste.
+#[must_use]
+pub const fn default_station_catenary_flags(gfx: u8) -> u8 {
+    STATION_TILE_WIRES | if gfx < 4 { STATION_TILE_PYLONS } else { 0 }
+}
+
 /// Días desde la última recogida por tipo de carga (0 = reciente).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CargoTimeSincePickup {

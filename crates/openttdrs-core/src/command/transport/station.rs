@@ -214,6 +214,8 @@ pub(in crate::command) fn place_rail_station_area(
             tile.kind = TileKind::Station;
             tile.mapt = 0x50;
             tile.m5 = gfx;
+            tile.m3 = (tile.m3 & !0x06) | crate::default_station_catenary_flags(gfx);
+            tile.m8 = crate::set_rail_type_on_tile(tile, state.current_rail_type).m8;
             tile.m6 = apply_station_m6(tile.m6, StopKind::RailStation);
             state
                 .map
@@ -274,6 +276,10 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     } else {
         road_stop_m5(dir)
     };
+    if stop_kind == StopKind::RailStation {
+        tile.m3 = (tile.m3 & !0x06) | crate::default_station_catenary_flags(tile.m5);
+        tile.m8 = crate::set_rail_type_on_tile(tile, state.current_rail_type).m8;
+    }
     tile.m6 = apply_station_m6(tile.m6, stop_kind);
     state
         .map
@@ -348,6 +354,7 @@ pub(in crate::command) fn place_rail_waypoint(
     out.kind = TileKind::Station;
     out.mapt = 0x50;
     out.m5 = u8::from(axis_y);
+    out.m3 = (out.m3 & !0x06) | crate::default_station_catenary_flags(out.m5);
     out.m6 = apply_station_m6(out.m6, StopKind::RailWaypoint);
     state
         .map

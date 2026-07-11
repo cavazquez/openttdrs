@@ -155,6 +155,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             SaveMenuAction::NewGrf,
         ),
         (
+            "Catenaria",
+            "Cicla visible / transparente / oculta (TO_CATENARY)",
+            SaveMenuAction::CycleCatenaryDisplay,
+        ),
+        (
             "Menu principal",
             "Volver al menu de inicio",
             SaveMenuAction::ReturnToMainMenu,

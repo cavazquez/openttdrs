@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 
+use crate::render::RemapMapVisualsPending;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
+use crate::settings::ClientPreferences;
 use crate::sprites::company_colour_name;
 use crate::state::SimWorld;
 use crate::state::{
@@ -22,6 +24,8 @@ pub(crate) fn handle_settings_menu_buttons(
         crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState,
     >,
     mut newgrf_window: ResMut<crate::ui::newgrf_window::NewGrfWindowState>,
+    mut prefs: Option<ResMut<ClientPreferences>>,
+    mut pending_remap: Option<ResMut<RemapMapVisualsPending>>,
     run_state: Res<State<SimRunState>>,
     mut next_run: ResMut<NextState<SimRunState>>,
     mut next_screen: ResMut<NextState<ClientScreen>>,
@@ -91,6 +95,38 @@ pub(crate) fn handle_settings_menu_buttons(
             SaveMenuAction::NewGrf => {
                 newgrf_window.open = true;
             }
+            SaveMenuAction::CycleCatenaryDisplay => {
+                let (Some(prefs), Some(pending_remap)) =
+                    (prefs.as_deref_mut(), pending_remap.as_deref_mut())
+                else {
+                    continue;
+                };
+                match (prefs.hide_catenary, prefs.transparent_catenary) {
+                    (false, false) => prefs.transparent_catenary = true,
+                    (false, true) => {
+                        prefs.transparent_catenary = false;
+                        prefs.hide_catenary = true;
+                    }
+                    (true, _) => {
+                        prefs.hide_catenary = false;
+                        prefs.transparent_catenary = false;
+                    }
+                }
+                crate::sprites::set_catenary_preferences(
+                    prefs.hide_catenary,
+                    prefs.transparent_catenary,
+                );
+                pending_remap.pending = true;
+                pending_remap.full = true;
+                let mode = if prefs.hide_catenary {
+                    "oculta"
+                } else if prefs.transparent_catenary {
+                    "transparente"
+                } else {
+                    "visible"
+                };
+                info!("Catenaria: {mode}");
+            }
             SaveMenuAction::ReturnToMainMenu => {
                 return_to_main_menu(&mut next_screen, &mut suspended);
             }
@@ -159,6 +195,8 @@ mod tests {
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
+        world.insert_resource(crate::settings::ClientPreferences::default());
+        world.insert_resource(crate::render::RemapMapVisualsPending::default());
         crate::state::insert_test_sim_run_state(&mut world);
         world.insert_resource(NextState::<ClientScreen>::default());
         world.insert_resource(SuspendedGameSession::default());
@@ -190,6 +228,8 @@ mod tests {
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
+        world.insert_resource(crate::settings::ClientPreferences::default());
+        world.insert_resource(crate::render::RemapMapVisualsPending::default());
         world.insert_resource(NextState::<ClientScreen>::default());
         world.insert_resource(SuspendedGameSession::default());
         crate::state::insert_test_sim_run_state(&mut world);
@@ -217,5 +257,41 @@ mod tests {
             .run_system_once(handle_company_colour_swatches)
             .unwrap();
         assert_eq!(world.resource::<SimWorld>().state.company_colour, 6);
+    }
+
+    #[test]
+    fn catenary_button_cycles_visible_transparent_hidden() {
+        let mut world = World::new();
+        world.insert_resource(SimHudControls::default());
+        world.insert_resource(SaveWindowState::default());
+        world.insert_resource(NewsSettingsWindowState::default());
+        world.insert_resource(
+            crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
+        );
+        world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
+        world.insert_resource(crate::settings::ClientPreferences::default());
+        world.insert_resource(crate::render::RemapMapVisualsPending::default());
+        world.insert_resource(NextState::<ClientScreen>::default());
+        world.insert_resource(SuspendedGameSession::default());
+        crate::state::insert_test_sim_run_state(&mut world);
+
+        for expected in [(false, true), (true, false), (false, false)] {
+            let entity = world
+                .spawn((
+                    Button,
+                    SaveMenuAction::CycleCatenaryDisplay,
+                    Interaction::Pressed,
+                ))
+                .id();
+            world.run_system_once(handle_settings_menu_buttons).unwrap();
+            let prefs = world.resource::<crate::settings::ClientPreferences>();
+            assert_eq!((prefs.hide_catenary, prefs.transparent_catenary), expected);
+            world.despawn(entity);
+        }
+        assert!(
+            world
+                .resource::<crate::render::RemapMapVisualsPending>()
+                .full
+        );
     }
 }

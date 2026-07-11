@@ -23,6 +23,8 @@ fn place_rail_station_sets_m6_and_axis_in_m5() {
         tile.m5, 3,
         "vía vecina aislada es eje Y → gfx 3 con edificio"
     );
+    assert!(crate::station_tile_can_have_wires(tile.m3));
+    assert!(crate::station_tile_can_have_pylons(tile.m3));
     assert_eq!(s.stations[0].stop_kind, StopKind::RailStation);
 }
 
@@ -66,6 +68,12 @@ fn place_rail_station_area_writes_layout_and_anchors_center() {
             assert_eq!(t.kind, TileKind::Station, "tesela ({dx},{dy}) de la huella");
             assert_eq!((t.m6 >> 3) & 0x0F, 0, "tipo rail en m6");
             assert!(t.m5.is_multiple_of(2), "eje X → gfx par");
+            assert!(crate::station_tile_can_have_wires(t.m3));
+            assert_eq!(
+                crate::station_tile_can_have_pylons(t.m3),
+                t.m5 < 4,
+                "solo gfx sin techo permite postes"
+            );
         }
     }
     // Layout estándar: andén impar primero (edificio al centro), luego par techado.
@@ -488,6 +496,8 @@ fn place_rail_waypoint_on_straight_track() {
     let tile = s.map.get(c).unwrap();
     assert_eq!(tile.kind, TileKind::Station);
     assert_eq!(station_type_from_m6(tile.m6), STATION_TYPE_RAIL_WAYPOINT);
+    assert!(crate::station_tile_can_have_wires(tile.m3));
+    assert!(crate::station_tile_can_have_pylons(tile.m3));
     assert_eq!(s.stations.len(), 1);
     assert_eq!(s.stations[0].stop_kind, StopKind::RailWaypoint);
     assert_eq!(s.economy.money, money - WAYPOINT_BUILD_COST);

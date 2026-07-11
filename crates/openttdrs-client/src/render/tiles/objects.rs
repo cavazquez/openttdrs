@@ -6,8 +6,8 @@ use openttdrs_core::{
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
 use super::{sloped_or_flat_image, spawn_ground_sprite, spawn_rail_foundation};
 use crate::iso::{
-    SLOPE_HALF_H, TILE_HALF_H, road_depot_build_sprite_center, road_stop_build_sprite_center,
-    tile_pos, tile_pos_half,
+    SLOPE_HALF_H, TILE_HALF_H, remap_tile_offset, road_depot_build_sprite_center,
+    road_stop_build_sprite_center, tile_pos, tile_pos_half,
 };
 use crate::render::{
     AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext, WorldAssets,
@@ -15,15 +15,19 @@ use crate::render::{
 };
 use crate::sprites::{
     StationTileClass, catenary_hidden, catenary_sprite_color, catenary_tunnel_wire_sprite,
-    rail_station_draw_layers, rail_station_ground_track_sprite, rail_station_overlay_rel,
-    rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_layer_meta,
-    rail_waypoint_sprite_center, road_depot_build_layers, road_depot_entrance_road_bits,
-    road_depot_seq_gfx, road_flat_sprite_index, road_stop_build_layers, road_stop_ground_index,
-    road_stop_seq_gfx, station_tile_class,
+    collect_catenary_pylons_from_map, collect_catenary_sprites_from_map, rail_station_draw_layers,
+    rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_sprite_meta,
+    rail_waypoint_draw_layers, rail_waypoint_layer_meta, rail_waypoint_sprite_center,
+    road_depot_build_layers, road_depot_entrance_road_bits, road_depot_seq_gfx,
+    road_flat_sprite_index, road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx,
+    station_tile_class,
 };
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_station_tile(
     commands: &mut Commands,
+    map: &Map,
+    dims: (u32, u32),
     assets: &WorldAssets,
     company: Option<&CompanyColoredSprites>,
     ctx: &TileRenderContext,
@@ -138,6 +142,72 @@ pub(crate) fn spawn_station_tile(
                     sprite,
                     Transform::from_translation(pos3),
                 ));
+            }
+            if let Some(tile) = ctx.tile.filter(|t| {
+                rail_type_from_tile(*t).has_catenary()
+                    && openttdrs_core::station_tile_can_have_wires(t.m3)
+            }) {
+                let tint = catenary_sprite_color();
+                let mut wires = Vec::new();
+                collect_catenary_sprites_from_map(
+                    map,
+                    ctx.coord,
+                    dims.0,
+                    dims.1,
+                    crate::sprites::OTTD_MP_RAIL,
+                    station_tb,
+                    tileh,
+                    &mut wires,
+                );
+                for (i, sid) in wires.into_iter().enumerate() {
+                    let Some(img) = assets.rail.get(&sid) else {
+                        continue;
+                    };
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        img.sprite_colored(tint),
+                        Transform::from_translation(tile_pos_half(
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            rail_base_z,
+                            0.035 + i as f32 * 0.0004,
+                            rail_half_h,
+                        )),
+                    ));
+                }
+                if openttdrs_core::station_tile_can_have_pylons(tile.m3) {
+                    let mut pylons = Vec::new();
+                    collect_catenary_pylons_from_map(
+                        map,
+                        ctx.coord,
+                        dims.0,
+                        dims.1,
+                        crate::sprites::OTTD_MP_RAIL,
+                        station_tb,
+                        tileh,
+                        &mut pylons,
+                    );
+                    for draw in pylons {
+                        let Some(img) = assets.rail.get(&draw.sprite_id) else {
+                            continue;
+                        };
+                        let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
+                        let base = tile_pos_half(
+                            ctx.tx_i32(),
+                            ctx.ty_i32(),
+                            rail_base_z,
+                            draw.z_layer,
+                            rail_half_h,
+                        );
+                        commands.spawn((
+                            MapVisualLayer,
+                            ctx.map_tile_chunk(),
+                            img.sprite_colored(tint),
+                            Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
+                        ));
+                    }
+                }
             }
         }
         StationTileClass::Bus | StationTileClass::Truck => {

@@ -264,6 +264,8 @@ pub(crate) enum SaveMenuAction {
     NewsSettings,
     PathfindingSettings,
     NewGrf,
+    /// Cicla visible → transparente → oculta.
+    CycleCatenaryDisplay,
     ReturnToMainMenu,
 }
 

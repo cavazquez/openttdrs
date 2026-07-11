@@ -236,6 +236,8 @@ pub(crate) struct TileInfoHudKey {
     tile_height: Option<u8>,
     vehicle_alert: String,
     pbs_overlay: bool,
+    hide_catenary: bool,
+    transparent_catenary: bool,
     signal_type: u8,
     signal_density: u8,
 }
@@ -336,6 +338,8 @@ pub(crate) fn update_tile_info_text(
         tile_height: tile_snapshot.map(|t| t.8),
         vehicle_alert: vehicle_alert.clone(),
         pbs_overlay: prefs.show_pbs_reservations,
+        hide_catenary: prefs.hide_catenary,
+        transparent_catenary: prefs.transparent_catenary,
         signal_type: station_state.signal_type,
         signal_density: station_state.signal_density,
     };
@@ -369,6 +373,13 @@ pub(crate) fn update_tile_info_text(
         "PBS R:on"
     } else {
         "PBS R:off"
+    };
+    let catenary_l = if prefs.hide_catenary {
+        "cat:oculta"
+    } else if prefs.transparent_catenary {
+        "cat:transp."
+    } else {
+        "cat:visible"
     };
     let tick_n = sim.state.tick.get();
 
@@ -417,7 +428,7 @@ pub(crate) fn update_tile_info_text(
         String::new()
     };
     hud_lines.push(format!(
-        "Herramienta: {tool_l}{}{}{signal_tool_extra} | {minimap_l} | {pbs_l} | {save_file} · F4",
+        "Herramienta: {tool_l}{}{}{signal_tool_extra} | {minimap_l} | {pbs_l} | {catenary_l} | {save_file} · F4",
         tool_hint.map_or(String::new(), |h| format!(" ({h})")),
         order_l,
     ));

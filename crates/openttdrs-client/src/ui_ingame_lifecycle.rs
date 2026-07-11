@@ -23,11 +23,13 @@ use super::destination_window::DestinationPickerState;
 use super::finances_window::FinancesWindowState;
 use super::floating_window::FloatingWindow;
 use super::hud::TileInfoText;
+use super::industry_directory::IndustryDirectoryState;
 use super::industry_panel::{IndustryPanelRoot, IndustryPanelState};
 use super::navigation::ToolbarMenuState;
 use super::newgrf_window::NewGrfWindowState;
 use super::news_settings_window::NewsSettingsWindowState;
 use super::pathfinding_settings_window::PathfindingSettingsWindowState;
+use super::station_directory::StationDirectoryState;
 use super::statusbar::{NewsHistoryState, NewsPopupRoot, NewsUiState, StatusBarRoot};
 use super::timetable_window::TimetableWindowState;
 use super::toolbar::{
@@ -137,6 +139,9 @@ pub(crate) fn leave_ingame(world: &mut World) {
     if let Some(mut industry_panel) = world.get_resource_mut::<IndustryPanelState>() {
         *industry_panel = IndustryPanelState::default();
     }
+    if let Some(mut industry_directory) = world.get_resource_mut::<IndustryDirectoryState>() {
+        *industry_directory = IndustryDirectoryState::default();
+    }
     if let Some(mut save_window) = world.get_resource_mut::<SaveWindowState>() {
         save_window.close();
     }
@@ -145,6 +150,9 @@ pub(crate) fn leave_ingame(world: &mut World) {
     }
     if let Some(mut town_directory) = world.get_resource_mut::<TownDirectoryState>() {
         *town_directory = TownDirectoryState::default();
+    }
+    if let Some(mut station_directory) = world.get_resource_mut::<StationDirectoryState>() {
+        *station_directory = StationDirectoryState::default();
     }
     if let Some(mut buy_window) = world.get_resource_mut::<BuyVehicleWindowState>() {
         *buy_window = BuyVehicleWindowState::default();

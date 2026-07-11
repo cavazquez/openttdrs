@@ -39,6 +39,10 @@ pub(crate) enum FloatingWindowId {
     Town,
     /// Directorio global de pueblos.
     TownDirectory,
+    /// Directorio global de industrias.
+    IndustryDirectory,
+    /// Lista global de estaciones.
+    StationDirectory,
     Depot,
     BuyVehicle,
     Vehicle,

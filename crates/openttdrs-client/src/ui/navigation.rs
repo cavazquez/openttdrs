@@ -18,7 +18,9 @@ const ENTRY_HOVER: Color = Color::srgb(0.47, 0.41, 0.28);
 /// repetir el problema de ventanas registradas pero inalcanzables.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum UiRoute {
-    TownDirectory,
+    Towns,
+    Industries,
+    Stations,
 }
 
 /// Petición tipada para abrir una superficie UI.
@@ -99,7 +101,9 @@ pub(crate) fn spawn_toolbar_navigation_menus(
         GlobalZIndex(2150),
     ))
     .with_children(|menu| {
-        spawn_menu_entry(menu, "Directorio de pueblos", UiRoute::TownDirectory);
+        spawn_menu_entry(menu, "Directorio de pueblos", UiRoute::Towns);
+        spawn_menu_entry(menu, "Directorio de industrias", UiRoute::Industries);
+        spawn_menu_entry(menu, "Lista de estaciones", UiRoute::Stations);
     });
 }
 

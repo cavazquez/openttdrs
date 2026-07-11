@@ -15,6 +15,7 @@ mod finances_window;
 mod floating_window;
 pub(crate) mod font;
 mod hud;
+mod industry_directory;
 mod industry_panel;
 mod main_menu;
 mod main_menu_intro;
@@ -23,6 +24,7 @@ mod newgrf_window;
 mod news_settings_window;
 mod pathfinding_settings_window;
 mod save_window;
+mod station_directory;
 mod statusbar;
 mod timetable_window;
 mod toolbar;
@@ -53,6 +55,10 @@ use hud::{
     animate_build_place_flash, animate_income_popups, cycle_json_save_path_hotkey, flush_hud_sfx,
     handle_pause_toggle, handle_tool_hotkeys, load_hud_sfx, play_hud_sfx, setup_tile_info_ui,
     spawn_build_place_flash, spawn_income_popups, update_tile_info_text,
+};
+use industry_directory::{
+    IndustryDirectoryState, handle_industry_directory_buttons, industry_directory_on_closed,
+    open_industry_directory_from_routes, setup_industry_directory, sync_industry_directory,
 };
 use industry_panel::{
     IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
@@ -87,6 +93,10 @@ use save_window::{
     handle_save_load_toolbar_buttons, handle_save_window_buttons, prepare_save_window_name,
     save_window_editable_keyboard, save_window_keyboard, save_window_name_click_focus,
     setup_save_window, sync_save_window,
+};
+use station_directory::{
+    StationDirectoryState, handle_station_directory_buttons, open_station_directory_from_routes,
+    setup_station_directory, station_directory_on_closed, sync_station_directory,
 };
 use statusbar::{
     NewsHistoryState, NewsUiState, drain_news_events, handle_news_history_row_click,
@@ -163,9 +173,11 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<StationCargoPanelState>()
         .init_resource::<ToolbarState>()
         .init_resource::<IndustryPanelState>()
+        .init_resource::<IndustryDirectoryState>()
         .init_resource::<SaveWindowState>()
         .init_resource::<TownWindowState>()
         .init_resource::<TownDirectoryState>()
+        .init_resource::<StationDirectoryState>()
         .init_resource::<BuyVehicleWindowState>()
         .init_resource::<DestinationPickerState>()
         .init_resource::<VehicleWindowState>()
@@ -217,6 +229,8 @@ impl Plugin for ClientUiPlugin {
                 setup_vehicle_window,
                 setup_timetable_window,
                 setup_town_directory,
+                setup_industry_directory,
+                setup_station_directory,
                 load_hud_sfx,
             )
                 .in_set(StartupSet::Ui),
@@ -429,6 +443,22 @@ impl Plugin for ClientUiPlugin {
                     handle_town_directory_buttons,
                     town_directory_on_closed,
                     sync_town_directory,
+                )
+                    .chain()
+                    .after(handle_toolbar_menu_entries),
+                (
+                    open_industry_directory_from_routes,
+                    handle_industry_directory_buttons,
+                    industry_directory_on_closed,
+                    sync_industry_directory,
+                )
+                    .chain()
+                    .after(handle_toolbar_menu_entries),
+                (
+                    open_station_directory_from_routes,
+                    handle_station_directory_buttons,
+                    station_directory_on_closed,
+                    sync_station_directory,
                 )
                     .chain()
                     .after(handle_toolbar_menu_entries),

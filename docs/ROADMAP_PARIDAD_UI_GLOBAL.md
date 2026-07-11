@@ -65,7 +65,7 @@ Auditoría realizada contra:
 | Botones de toolbar en layout completo | 30 | 8 grupos + 3 botones fijos |
 | Botones que abren dropdown | ~23 | 0 (no hay dropdown genérico) |
 | Herramientas de construcción visibles | ~40 | 50 botones, reorganizados |
-| Clases/IDs de ventana principales | 108 `WindowClass` | 15 `FloatingWindowId` |
+| Clases/IDs de ventana principales | 108 `WindowClass` | 17 `FloatingWindowId` |
 | Paneles/modales adicionales | sistema Window unificado | ~5 paneles + SaveWindow |
 | Acciones de herramienta | widgets por toolbar | 53 `BuildMenuAction` |
 | Acciones del panel Ajustes | menú Settings ~22 ítems máximos | 12 `SaveMenuAction` + 16 colores |
@@ -427,17 +427,18 @@ Objetivo de cobertura global: **~36–40 %**.
 
 ### UI-2B — Industrias
 
-- [ ] IndustryDirectory por tipo/producción/estado.
-- [ ] Doble clic abre `IndustryPanel`.
+- [x] IndustryDirectory ordenable por tipo/stock.
+- [x] Clic abre `IndustryPanel`.
 - [ ] Vista inicial de cadenas input/output.
 - [ ] Integrar construcción/fundación desde el menú.
 
 ### UI-2C — Estaciones
 
-- [ ] StationList por compañía.
+- [x] StationList global ordenable por nombre/rating/carga waiting.
+- [x] Clic abre `StationCargoPanel`.
+- [ ] Filtro por compañía.
 - [ ] Filtro por facility/carga.
-- [ ] Waiting cargo y rating disponible.
-- [ ] Doble clic abre StationView/panel.
+- [x] Waiting cargo y rating disponibles.
 
 ### UI-2D — Flota
 
@@ -757,7 +758,7 @@ Actualizar al cerrar cada fase:
 | Dropdowns/submenús | ~8 % |
 | Directorios/listas | ~5 % |
 | Gráficos | 0 % |
-| FloatingWindow con ruta de apertura | 15/15 tras reparar DestinationPicker y añadir TownDirectory |
+| FloatingWindow con ruta de apertura | 17/17 tras DestinationPicker + 3 directorios globales |
 | Ventanas con test de apertura real | bajo; medir en UI-0 |
 
 Métricas adicionales:
@@ -829,12 +830,12 @@ Una fase se marca ✅ cuando:
 **UI-0 + UI-1A: infraestructura de navegación**
 
 1. Inventario automatizado de rutas.
-2. Arreglar `DestinationPicker`.
-3. Implementar popup/dropdown reusable.
-4. Implementar `ListWindow`.
-5. Probar con TownDirectory.
-6. Migrar IndustryDirectory y StationList.
-7. Después construir VehicleList ×4 sobre la misma base.
+2. ~~Arreglar `DestinationPicker`.~~ ✅
+3. ~~Implementar popover reusable inicial.~~ ✅
+4. Implementar `ListWindow` genérico.
+5. ~~Probar con TownDirectory.~~ ✅
+6. ~~Migrar IndustryDirectory y StationList.~~ ✅
+7. Construir VehicleList ×4 sobre la misma base.
 
 Este corte aumenta la paridad global más que seguir agregando ventanas
 contextuales aisladas y reduce el coste de todas las fases posteriores.

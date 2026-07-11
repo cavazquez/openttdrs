@@ -10,6 +10,7 @@ mod systems;
 #[cfg(test)]
 mod tests;
 
+pub(crate) use logic::kind_label;
 pub(crate) use setup::setup_industry_panel;
 pub(crate) use systems::{industry_panel_close_interaction, sync_industry_panel};
 

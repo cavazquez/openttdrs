@@ -3,7 +3,7 @@ use crate::map::TileKind;
 use crate::{GameState, StopKind};
 
 use super::types::{Command, CommandError};
-use super::{buy_land, economy, industry, sign, terraform, town, transport, vehicles};
+use super::{buy_land, economy, industry, newgrf, sign, terraform, town, transport, vehicles};
 
 /// Aplica `cmd` a `state` o devuelve error sin mutar.
 ///
@@ -160,6 +160,10 @@ const fn command_modifies_map(cmd: &Command) -> bool {
             | Command::DecreaseLoan
             | Command::TownAdvertise(..)
             | Command::TownFundBuildings(..)
+            | Command::SetNewGrfEnabled { .. }
+            | Command::MoveNewGrfInStack { .. }
+            | Command::RemoveNewGrfFromStack { .. }
+            | Command::AddNewGrfToStack { .. }
     )
 }
 
@@ -514,5 +518,11 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::RemoveSign { sign_id } => sign::remove_sign(state, *sign_id),
         Command::RenameSign { sign_id, name } => sign::rename_sign(state, *sign_id, name.clone()),
         Command::JoinStations { keep, merge } => transport::join_stations(state, *keep, *merge),
+        Command::SetNewGrfEnabled { index, enabled } => {
+            newgrf::set_newgrf_enabled(state, *index, *enabled)
+        }
+        Command::MoveNewGrfInStack { from, to } => newgrf::move_newgrf_in_stack(state, *from, *to),
+        Command::RemoveNewGrfFromStack { index } => newgrf::remove_newgrf_from_stack(state, *index),
+        Command::AddNewGrfToStack { entry } => newgrf::add_newgrf_to_stack(state, entry.clone()),
     }
 }

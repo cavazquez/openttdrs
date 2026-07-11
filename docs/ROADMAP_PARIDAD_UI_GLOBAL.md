@@ -516,7 +516,7 @@ Objetivo de cobertura global: **~50–55 %**.
 
 - [x] Edad/vida útil (edad + aviso renovar; sin max lifespan en core).
 - [x] Peso, potencia, coste y fiabilidad (runtime + diseño).
-- [x] Detalle por unidad del consist (conteo de unidades en trenes).
+- [x] Detalle por unidad del consist (conteo + tira horizontal de sprites).
 - [x] Pestañas cargo/info/capacidad/totales.
 - [ ] Beneficio cuando exista backend.
 
@@ -530,7 +530,7 @@ Objetivo de cobertura global: **~50–55 %**.
 ### Orders
 
 - [x] Abrir/cablear `DestinationPicker` o eliminarlo en favor de pick directo.
-- [x] Reordenar (botones ↑/↓; drag nativo pendiente).
+- [x] Reordenar (botones ↑/↓; drag nativo de órdenes pendiente).
 - [x] Variantes full-load/unload.
 - [x] Parar en depósito (toggle).
 - [ ] Refit en orden.
@@ -539,9 +539,9 @@ Objetivo de cobertura global: **~50–55 %**.
 
 ### Depot / BuyVehicle
 
-- [x] Sprites reales por fila (unidad del consist pendiente).
-- [x] Scroll >8 (hasta 24 filas; vista horizontal de consist pendiente).
-- [x] Reorden de filas ↑/↓ (`DepotReorderVehicleSlot`; drag nativo pendiente).
+- [x] Sprites reales por fila + tira horizontal del consist (hasta 8 unidades).
+- [x] Scroll >8 (hasta 24 filas).
+- [x] Reorden de filas ↑/↓ y drag nativo (`DepotReorderVehicleSlot`).
 - [x] Autoreplace global.
 - [x] Filtros/sorts + búsqueda (texto, Tram, loco/vagón).
 
@@ -550,8 +550,10 @@ Objetivo de cobertura global: **~50–55 %**.
 - Flujo `VehicleList → Vehicle → Orders/Details/Refit/Timetable`.
 - Flujo `Depot → BuyVehicle/Autoreplace`.
 - Subventanas conservan el `VehicleID` correcto.
-- Pueden coexistir ventanas de vehículos distintos o se documenta la política
-  single-instance.
+- **Política single-instance (MVP):** una ventana por `FloatingWindowId`
+  (Vehicle, Orders, Refit, Timetable, Depot…). Al seleccionar otro vehículo se
+  reemplaza el `Option<vehicle_id>` compartido; no coexisten dos VehicleDetails.
+  Multi-instance (`WindowKey`) queda documentado en §12.2 como trabajo futuro.
 
 ---
 
@@ -574,9 +576,9 @@ Objetivo de cobertura global: **~58–62 %**.
 - [x] Leyenda y filtros. *(leyenda compacta IDV+)*
 - [x] ExtraLargeMap. *(botón Ampliar / Esc para cerrar)*
 - [x] ExtraViewport. *(MVP: sigue cámara principal, zoom alejado)*
-- [x] SignList. *(UI-6b: lista real + PlaceSign)*
-- [~] LinkGraph. *(stub UI; bloqueado sin CargoDist)*
-- [~] LinkGraphLegend cuando exista CargoDist. *(stub UI; bloqueado sin linkgraph)*
+- [x] SignList. *(lista real + PlaceSign / Rename / Remove)*
+- [~] LinkGraph. *(stub UI explícito; bloqueado sin CargoDist — fuera de alcance UI-5)*
+- [~] LinkGraphLegend cuando exista CargoDist. *(mismo stub; fuera de alcance UI-5)*
 
 ### Opciones/display
 
@@ -600,8 +602,11 @@ Objetivo de cobertura global: **~58–62 %**.
 - [x] CompanyValue mensual en series + GraphKind.
 - [x] ExtraLargeMap (minimapa centrado, celda 8px).
 - [x] ExtraViewport MVP + Display Options.
-- [~] SignList / LinkGraph: stubs explícitos (backend pendiente).
-- [ ] NewGRF editable.
+- [x] SignList real (UI-6b adelantado).
+- [~] LinkGraph: stub documentado hasta CargoDist.
+- [x] NewGRF editable (config-only: ON/OFF, ↑/↓, quitar; sin Action0–14).
+
+**UI-5 cerrado** (criterios + extras jugables). Parámetros NewGRF / runtime Action0–14 → UI-7.
 
 ---
 
@@ -691,7 +696,7 @@ Objetivo de cobertura global: **~65–68 %**.
 Prioridad: **P2/P3**  
 Objetivo de cobertura global: **~70–75 %**.
 
-- [ ] NewGRF editable: activar/desactivar/reordenar.
+- [ ] NewGRF editable: activar/desactivar/reordenar. *(parcial en UI-5: config-only; falta runtime)*
 - [ ] Parámetros NewGRF.
 - [ ] Presets de settings.
 - [ ] Sandbox/cheats si se decide soportarlos.
@@ -699,8 +704,9 @@ Objetivo de cobertura global: **~70–75 %**.
 - [ ] About/help y mapa de hotkeys.
 - [ ] Posiciones/tamaños de ventana persistentes.
 
-NewGRF editable está bloqueado por el runtime Action0–14; la UI puede diseñarse
-antes, pero no debe simular que aplica cambios inexistentes.
+NewGRF editable **completo** (aplicar Action0–14) está bloqueado por el runtime;
+la UI de stack (ON/OFF/↑↓/quitar) ya existe desde UI-5 y no simula efectos de
+sprites/gameplay.
 
 ---
 
@@ -861,14 +867,14 @@ Los paneles Bevy actuales pueden mantenerse si:
 
 ### 12.2 Single-instance vs multi-instance
 
-Hoy muchos estados usan un único `Option<ID>`. Antes de implementar listas y
-subventanas, decidir:
+**Decisión MVP (UI-4):** single-instance por `FloatingWindowId`. Los resources
+(`VehicleWindowState`, `OrderEditState`, `RefitWindowState`,
+`TimetableWindowState`, …) guardan un único `Option<ID>`; abrir otro contexto
+reemplaza el anterior. Documentado en `floating_window.rs` y criterios UI-4.
 
-- single-instance por tipo (más simple), o
-- `WindowKey(kind, instance)` (más cercano a OpenTTD).
-
-Recomendación: multi-instance para Vehicle/Orders/Details/Station; single para
-directorios, settings, gráficos y audio.
+Futuro (más cercano a OpenTTD): `WindowKey { kind, instance }` para
+Vehicle/Orders/Details/Station. Directorios, settings, gráficos y audio siguen
+single-instance.
 
 ### 12.3 Documentación histórica divergente
 
@@ -913,7 +919,14 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** UI-4 polish restante.
+**Siguiente:** UI-6 gaps documentados, o UI-7 (NewGRF runtime / settings avanzados).
+
+Progreso UI-5 (cierre):
+
+1. ~~Economía + Graph + Display + mapas (criterios).~~ ✅
+2. ~~SignList real.~~ ✅
+3. ~~LinkGraph stub documentado (fuera de alcance sin CargoDist).~~ ✅
+4. ~~NewGRF editable config-only (comandos + UI ON/OFF/↑↓/quitar).~~ ✅
 
 Progreso UI-1 (`MenuSpec`):
 
@@ -1042,8 +1055,8 @@ Progreso UI-5c:
 2. ~~ExtraViewport MVP (sigue cámara principal).~~ ✅
 3. ~~Stubs SignList + LinkGraph (bloqueados por backend).~~ ✅
 
-Pendiente UI-5: NewGRF editable. SignList/LinkGraph reales requieren UI-6 / CargoDist.
-Graph por compañía: ✅ historial en `Company` + filtro en GraphWindow.
+Pendiente UI-5: ninguno que bloquee cierre. LinkGraph real → CargoDist.
+NewGRF Action0–14 / parámetros → UI-7. Graph por compañía: ✅.
 
 Progreso UI-3 (corte inicial):
 
@@ -1075,6 +1088,9 @@ Progreso UI-4:
 6. ~~Shared orders UI (crear/vincular/desvincular + lista de pools).~~ ✅
 7. ~~Autoreplace UI + mass replace desde depósito.~~ ✅
 8. ~~DepotReorder ↑/↓ + toggle parar depósito.~~ ✅
+9. ~~Tira horizontal de consist (depósito + VehicleDetails).~~ ✅
+10. ~~Drag nativo reordenar filas de depósito.~~ ✅
+11. ~~Política single-instance documentada (MVP).~~ ✅
 
 Pendiente UI-4 (bloqueado o polish): beneficio (sin backend), refit parcial/en
-orden (sin comando/`VehicleOrder::Refit`), drag nativo.
+orden (sin comando/`VehicleOrder::Refit`), drag nativo de órdenes.

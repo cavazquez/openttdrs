@@ -27,8 +27,8 @@ pub(crate) use bridge_window::{
 };
 pub(crate) use build_input::{handle_tile_click, sync_build_pointer_modifiers, update_cursor_tile};
 pub(crate) use depot_panel::{
-    DepotPanelState, depot_panel_on_closed, handle_depot_panel_buttons, setup_depot_panel,
-    sync_depot_panel,
+    DepotPanelState, begin_depot_list_drag, depot_panel_on_closed, finish_depot_list_drag,
+    handle_depot_panel_buttons, setup_depot_panel, sync_depot_panel,
 };
 pub(crate) use layout::setup_top_toolbar;
 pub(crate) use minimap::{

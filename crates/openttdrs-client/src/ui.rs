@@ -115,7 +115,8 @@ use navigation::{
     sync_toolbar_navigation_menu,
 };
 use newgrf_window::{
-    NewGrfWindowState, newgrf_window_on_closed, setup_newgrf_window, sync_newgrf_window,
+    NewGrfWindowState, handle_newgrf_window_buttons, newgrf_window_on_closed, setup_newgrf_window,
+    sync_newgrf_window,
 };
 use news_settings_window::{
     NewsSettingsWindowState, handle_news_settings_buttons, news_settings_on_closed,
@@ -167,11 +168,12 @@ use toolbar::depot_panel_on_closed;
 use toolbar::{
     BridgeBuildState, DepotPanelState, DragBuildState, MinimapLayerState, RailSignalGhostState,
     RoadTypeEscapeConsumed, RoadTypePickerState, StationBuildState, StationCargoPanelState,
-    StationCatalogPickerState, UiToolState, airport_picker_on_closed, bridge_picker_on_closed,
-    build_menu_interaction, close_road_type_picker_on_escape, close_toolbar_button_interaction,
-    handle_airport_picker_buttons, handle_bridge_picker_buttons, handle_company_colour_swatches,
-    handle_depot_panel_buttons, handle_ingame_escape, handle_minimap_click,
-    handle_minimap_layer_buttons, handle_order_panel_buttons, handle_rail_station_picker_buttons,
+    StationCatalogPickerState, UiToolState, airport_picker_on_closed, begin_depot_list_drag,
+    bridge_picker_on_closed, build_menu_interaction, close_road_type_picker_on_escape,
+    close_toolbar_button_interaction, finish_depot_list_drag, handle_airport_picker_buttons,
+    handle_bridge_picker_buttons, handle_company_colour_swatches, handle_depot_panel_buttons,
+    handle_ingame_escape, handle_minimap_click, handle_minimap_layer_buttons,
+    handle_order_panel_buttons, handle_rail_station_picker_buttons,
     handle_rail_type_select_buttons, handle_road_type_class_buttons,
     handle_road_type_select_buttons, handle_settings_menu_buttons, handle_signal_picker_buttons,
     handle_station_cargo_panel_buttons, handle_station_catalog_open_buttons,
@@ -413,6 +415,13 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             Update,
+            (begin_depot_list_drag, finish_depot_list_drag)
+                .chain()
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
             (
                 industry_panel_center_interaction,
                 handle_minimap_layer_buttons,
@@ -577,6 +586,7 @@ impl Plugin for ClientUiPlugin {
             (
                 newgrf_window_on_closed,
                 sync_newgrf_window,
+                handle_newgrf_window_buttons,
                 handle_sound_music_toolbar_button,
                 handle_audio_settings_buttons,
                 handle_volume_sliders,

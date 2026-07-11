@@ -1,10 +1,15 @@
 //! Ventana flotante de tren/vehículo estilo `OpenTTD`.
 //!
 //! Se abre al hacer clic en un vehículo del mapa: vista previa en vivo
-//! (cámara a render-target sobre el vehículo), modelo, velocidad actual y
-//! máxima, carga, estado («Detenido» en rojo / «En marcha» en verde) y
-//! acciones Iniciar/Detener, Órdenes, Enviar al depósito y Centrar vista.
-//! La venta es una acción del depósito, no de esta ventana.
+//! (cámara a render-target sobre el vehículo), tira horizontal del consist,
+//! modelo, velocidad actual y máxima, carga, estado («Detenido» en rojo /
+//! «En marcha» en verde) y acciones Iniciar/Detener, Órdenes, Enviar al
+//! depósito y Centrar vista. La venta es una acción del depósito, no de esta
+//! ventana.
+//!
+//! **Single-instance:** solo hay una [`FloatingWindowId::Vehicle`]; al elegir
+//! otro vehículo se reemplaza `VehicleWindowState.vehicle_id` (y el contexto
+//! de Órdenes/Refit/Timetable vinculados).
 
 use bevy::camera::RenderTarget;
 use bevy::input::ButtonState;
@@ -14,14 +19,15 @@ use bevy::render::render_resource::TextureFormat;
 use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
-    Command, VehicleKind, apply_command, cargo_display_name, refit_allowed,
-    station::resolve_order_destination, vehicle::MAX_VEHICLE_NAME_CHARS,
+    Command, VehicleKind, apply_command, cargo_display_name, default_engine_id, engine_for_vehicle,
+    refit_allowed, station::resolve_order_destination, vehicle::MAX_VEHICLE_NAME_CHARS,
 };
 
 use crate::camera::tile_camera_world_pos;
 
 use crate::render::{
-    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, vehicle_world_position,
+    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles,
+    vehicle_world_position,
 };
 use crate::state::{OrderPickState, SimWorld};
 use crate::ui::floating_window::{
@@ -36,6 +42,11 @@ use crate::ui::toolbar::{BuildMenuUi, OrderEditState, open_order_edit_for_vehicl
 const PREVIEW_TEX_W: u32 = 280;
 const PREVIEW_TEX_H: u32 = 120;
 const PREVIEW_SCALE: f32 = 0.5;
+/// Unidades visibles en la tira horizontal del consist.
+pub(crate) const CONSIST_STRIP_MAX_UNITS: usize = 8;
+pub(crate) const CONSIST_UNIT_SPRITE_W: f32 = 28.0;
+pub(crate) const CONSIST_UNIT_SPRITE_H: f32 = 14.0;
+const PLACEHOLDER_SPRITE: &str = "assets/opengfx/tiles/vehicle_train_e.png";
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
@@ -114,6 +125,28 @@ pub(crate) struct VehicleWindowRefitOnly;
 #[derive(Component)]
 pub(crate) struct VehicleWindowToggleText;
 
+/// Mini-sprite de una unidad en la tira horizontal del consist.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct VehicleConsistUnitSprite {
+    unit_idx: usize,
+}
+
+/// Sprite lateral (preview UI) según motor/tipo.
+pub(crate) fn vehicle_side_sprite(
+    trucks: &TruckHandles,
+    vehicle: &openttdrs_core::Vehicle,
+) -> Handle<Image> {
+    let engine_id = vehicle
+        .engine_id
+        .unwrap_or_else(|| default_engine_id(vehicle.kind));
+    if vehicle.kind == VehicleKind::Train {
+        let engine = engine_for_vehicle(vehicle.kind, engine_id);
+        trucks.train_preview(engine.train_image_index, 2)
+    } else {
+        trucks.intro_sprite(vehicle.kind, 2)
+    }
+}
+
 pub(crate) fn setup_vehicle_window(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
@@ -167,6 +200,31 @@ pub(crate) fn setup_vehicle_window(
             BorderColor::all(Color::srgb(0.13, 0.10, 0.07)),
             BuildMenuUi,
         ));
+        panel
+            .spawn(Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(CONSIST_UNIT_SPRITE_H + 4.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(1.0),
+                margin: UiRect::bottom(Val::Px(4.0)),
+                overflow: Overflow::clip(),
+                ..default()
+            })
+            .with_children(|strip| {
+                for unit_idx in 0..CONSIST_STRIP_MAX_UNITS {
+                    strip.spawn((
+                        VehicleConsistUnitSprite { unit_idx },
+                        ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
+                        Node {
+                            width: Val::Px(CONSIST_UNIT_SPRITE_W),
+                            height: Val::Px(CONSIST_UNIT_SPRITE_H),
+                            display: Display::None,
+                            ..default()
+                        },
+                    ));
+                }
+            });
         panel
             .spawn(Node {
                 flex_direction: FlexDirection::Row,
@@ -629,6 +687,7 @@ fn vehicle_details_totals(vehicle: &openttdrs_core::Vehicle, sim: &SimWorld) -> 
 pub(crate) fn sync_vehicle_window(
     window_state: Res<VehicleWindowState>,
     sim: Res<SimWorld>,
+    trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
     mut body_q: Query<
@@ -676,6 +735,14 @@ pub(crate) fn sync_vehicle_window(
         (&VehicleDetailsTabButton, &Interaction, &mut BackgroundColor),
         With<Button>,
     >,
+    mut consist_q: Query<
+        (&VehicleConsistUnitSprite, &mut ImageNode, &mut Node),
+        (
+            Without<VehicleWindowRenameRow>,
+            Without<VehicleWindowTrainOnly>,
+            Without<VehicleWindowRefitOnly>,
+        ),
+    >,
     mut preview: Query<
         (&mut Transform, &mut Camera),
         (With<VehicleWindowPreviewCamera>, Without<PrimaryGameCamera>),
@@ -695,9 +762,30 @@ pub(crate) fn sync_vehicle_window(
         if let Ok((_, mut cam)) = preview.single_mut() {
             cam.is_active = false;
         }
+        for (_, _, mut node) in &mut consist_q {
+            node.display = Display::None;
+        }
         return;
     };
     *vis = Visibility::Visible;
+
+    let unit_ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, vehicle.id);
+    if let Some(trucks) = trucks.as_ref() {
+        for (sprite, mut image, mut node) in &mut consist_q {
+            if let Some(&unit_id) = unit_ids.get(sprite.unit_idx)
+                && let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id)
+            {
+                node.display = Display::Flex;
+                image.image = vehicle_side_sprite(trucks, unit);
+            } else {
+                node.display = Display::None;
+            }
+        }
+    } else {
+        for (_, _, mut node) in &mut consist_q {
+            node.display = Display::None;
+        }
+    }
 
     if window_state.rename_editing
         && let Ok(mut row) = rename_row_q.single_mut()

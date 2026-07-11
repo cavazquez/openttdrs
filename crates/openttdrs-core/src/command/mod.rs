@@ -4,6 +4,7 @@ mod apply;
 mod buy_land;
 mod economy;
 mod industry;
+mod newgrf;
 mod preview;
 mod sign;
 mod terraform;

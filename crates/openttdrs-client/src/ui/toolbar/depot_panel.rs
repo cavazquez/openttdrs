@@ -1,16 +1,15 @@
 //! Ventana flotante de depósito (carretera y vía), estilo `OpenTTD`.
 //!
-//! Muestra la lista de vehículos estacionados con su sprite lateral y un
-//! botón de venta por fila; al hacer clic en un vehículo se abren sus órdenes.
-//! La barra inferior replica el original: «Nuevos vehículos» y «Clonar», más
-//! un botón de localización del depósito.
+//! Muestra la lista de vehículos estacionados con tira horizontal del consist
+//! (sprites laterales) y un botón de venta por fila; clic abre órdenes /
+//! VehicleDetails. Arrastrar una fila sobre otra reordena la lista
+//! (`DepotReorderVehicleSlot`). En depósitos de vía, clic A→B engancha
+//! unidades (`MoveRailVehicle`). La barra inferior replica el original:
+//! «Nuevos vehículos» y «Clonar», más localización del depósito.
 
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
-use openttdrs_core::{
-    Command, TileCoord, TileKind, VehicleKind, apply_command, default_engine_id, engine_by_id,
-    engine_for_vehicle,
-};
+use openttdrs_core::{Command, TileCoord, TileKind, VehicleKind, apply_command, engine_by_id};
 
 use crate::camera::tile_camera_world_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles};
@@ -23,15 +22,17 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
-use crate::ui::vehicle_window::VehicleWindowState;
+use crate::ui::vehicle_window::{
+    CONSIST_STRIP_MAX_UNITS, CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState,
+    vehicle_side_sprite,
+};
 
 use super::{BuildMenuUi, OrderEditState, open_order_edit_for_vehicle};
 
 const DEPOT_VEHICLE_ROWS: usize = 24;
 const DEPOT_LIST_VISIBLE_ROWS: usize = 8;
-const ROW_HEIGHT: f32 = 30.0;
-const SPRITE_W: f32 = 64.0;
-const SPRITE_H: f32 = 24.0;
+const ROW_HEIGHT: f32 = 32.0;
+const CONSIST_STRIP_W: f32 = CONSIST_UNIT_SPRITE_W * CONSIST_STRIP_MAX_UNITS as f32;
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
@@ -47,8 +48,10 @@ const PLACEHOLDER_SPRITE: &str = "assets/opengfx/tiles/vehicle_train_e.png";
 pub(crate) struct DepotPanelState {
     pub(crate) depot_pos: Option<TileCoord>,
     pub(crate) selected_vehicle: Option<u32>,
-    /// Origen de reordenación por clic (arrastre simplificado).
+    /// Origen de enganche rail por clic A→B (`MoveRailVehicle`).
     pub(crate) reorder_from_slot: Option<usize>,
+    /// Origen de drag de lista (`DepotReorderVehicleSlot`).
+    pub(crate) list_drag_from: Option<usize>,
 }
 
 /// Contenedor de una fila (sprite + nombre + vender) para mostrar/ocultar junta.
@@ -68,9 +71,11 @@ pub(crate) struct DepotVehicleRowText {
     slot: usize,
 }
 
+/// Mini-sprite de una unidad del consist en la fila del depósito.
 #[derive(Component, Clone, Copy)]
-pub(crate) struct DepotVehicleSprite {
+pub(crate) struct DepotConsistUnitSprite {
     slot: usize,
+    unit_idx: usize,
 }
 
 /// Botón de venta por fila (icono ✕ rojo, estilo original).
@@ -105,8 +110,8 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
         FloatingWindowId::Depot,
         "Depósito",
         TITLE_BROWN,
-        Vec2::new(360.0, 300.0),
-        360.0,
+        Vec2::new(420.0, 300.0),
+        420.0,
     );
     commands.entity(content).with_children(|panel| {
         panel
@@ -228,15 +233,31 @@ fn spawn_depot_vehicle_row(
                 BuildMenuUi,
             ))
             .with_children(|inner| {
-                inner.spawn((
-                    DepotVehicleSprite { slot },
-                    ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
-                    Node {
-                        width: Val::Px(SPRITE_W),
-                        height: Val::Px(SPRITE_H),
+                inner
+                    .spawn(Node {
+                        width: Val::Px(CONSIST_STRIP_W),
+                        height: Val::Px(CONSIST_UNIT_SPRITE_H),
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(1.0),
+                        overflow: Overflow::clip(),
+                        flex_shrink: 0.0,
                         ..default()
-                    },
-                ));
+                    })
+                    .with_children(|strip| {
+                        for unit_idx in 0..CONSIST_STRIP_MAX_UNITS {
+                            strip.spawn((
+                                DepotConsistUnitSprite { slot, unit_idx },
+                                ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
+                                Node {
+                                    width: Val::Px(CONSIST_UNIT_SPRITE_W),
+                                    height: Val::Px(CONSIST_UNIT_SPRITE_H),
+                                    display: Display::None,
+                                    ..default()
+                                },
+                            ));
+                        }
+                    });
                 inner.spawn((
                     DepotVehicleRowText { slot },
                     Text::new(""),
@@ -363,18 +384,6 @@ fn depot_vehicle_row_label(sim: &SimWorld, vehicle: &openttdrs_core::Vehicle) ->
     )
 }
 
-fn vehicle_side_sprite(trucks: &TruckHandles, vehicle: &openttdrs_core::Vehicle) -> Handle<Image> {
-    let engine_id = vehicle
-        .engine_id
-        .unwrap_or_else(|| default_engine_id(vehicle.kind));
-    if vehicle.kind == VehicleKind::Train {
-        let engine = engine_for_vehicle(vehicle.kind, engine_id);
-        trucks.train_preview(engine.train_image_index, 2)
-    } else {
-        trucks.intro_sprite(vehicle.kind, 2)
-    }
-}
-
 #[allow(clippy::too_many_arguments, clippy::type_complexity)] // sistema ECS Bevy
 pub(crate) fn sync_depot_panel(
     depot_state: Res<DepotPanelState>,
@@ -393,7 +402,10 @@ pub(crate) fn sync_depot_panel(
         With<Button>,
     >,
     mut row_text_q: Query<(&DepotVehicleRowText, &mut Text), Without<FloatingWindowTitleText>>,
-    mut sprite_q: Query<(&DepotVehicleSprite, &mut ImageNode)>,
+    mut consist_q: Query<
+        (&DepotConsistUnitSprite, &mut ImageNode, &mut Node),
+        Without<DepotRowContainer>,
+    >,
     mut clone_label_q: Query<
         &mut Text,
         (
@@ -439,12 +451,19 @@ pub(crate) fn sync_depot_panel(
             Display::None
         };
     }
+    let drag_from = depot_state.list_drag_from;
     for (row, interaction, mut bg, mut border) in &mut row_q {
         let Some(vehicle) = vehicles_here.get(row.slot) else {
             continue;
         };
         let selected = depot_state.selected_vehicle == Some(vehicle.id);
-        *bg = if selected && *interaction == Interaction::Pressed {
+        let is_drag_source = drag_from == Some(row.slot);
+        let is_drop_target = drag_from.is_some_and(|from| {
+            from != row.slot && matches!(*interaction, Interaction::Hovered | Interaction::Pressed)
+        });
+        *bg = if is_drop_target {
+            BackgroundColor(Color::srgb(0.42, 0.48, 0.28))
+        } else if is_drag_source || (selected && *interaction == Interaction::Pressed) {
             BackgroundColor(Color::srgb(0.62, 0.54, 0.34))
         } else if selected {
             BackgroundColor(Color::srgb(0.48, 0.41, 0.27))
@@ -453,7 +472,9 @@ pub(crate) fn sync_depot_panel(
         } else {
             BackgroundColor(ROW_BG)
         };
-        *border = if selected {
+        *border = if is_drop_target {
+            BorderColor::all(Color::srgb(0.72, 0.88, 0.42))
+        } else if selected || is_drag_source {
             BorderColor::all(Color::srgb(0.9, 0.78, 0.48))
         } else {
             BorderColor::all(ROW_BORDER)
@@ -467,10 +488,24 @@ pub(crate) fn sync_depot_panel(
         }
     }
     if let Some(trucks) = trucks.as_ref() {
-        for (sprite, mut image) in &mut sprite_q {
-            if let Some(vehicle) = vehicles_here.get(sprite.slot) {
-                image.image = vehicle_side_sprite(trucks, vehicle);
+        for (sprite, mut image, mut node) in &mut consist_q {
+            let Some(head) = vehicles_here.get(sprite.slot) else {
+                node.display = Display::None;
+                continue;
+            };
+            let unit_ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, head.id);
+            if let Some(&unit_id) = unit_ids.get(sprite.unit_idx)
+                && let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id)
+            {
+                node.display = Display::Flex;
+                image.image = vehicle_side_sprite(trucks, unit);
+            } else {
+                node.display = Display::None;
             }
+        }
+    } else {
+        for (_, _, mut node) in &mut consist_q {
+            node.display = Display::None;
         }
     }
 }
@@ -485,13 +520,13 @@ pub(crate) fn depot_panel_on_closed(
             depot_state.depot_pos = None;
             depot_state.selected_vehicle = None;
             depot_state.reorder_from_slot = None;
+            depot_state.list_drag_from = None;
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
-pub(crate) fn handle_depot_panel_buttons(
-    mut q: Query<(&Interaction, &DepotPanelButton), (Changed<Interaction>, With<Button>)>,
+/// Inicia drag de lista al pulsar una fila (el drop se resuelve al soltar).
+pub(crate) fn begin_depot_list_drag(
     mut row_q: Query<
         (&Interaction, &DepotVehicleRow),
         (
@@ -500,26 +535,8 @@ pub(crate) fn handle_depot_panel_buttons(
             Without<DepotPanelButton>,
         ),
     >,
-    mut sell_q: Query<
-        (&Interaction, &DepotSellButton),
-        (
-            Changed<Interaction>,
-            With<Button>,
-            Without<DepotPanelButton>,
-            Without<DepotVehicleRow>,
-        ),
-    >,
     mut depot_state: ResMut<DepotPanelState>,
-    mut order_state: ResMut<OrderEditState>,
-    mut next_pick: ResMut<NextState<OrderPickState>>,
-    mut vehicle_window: ResMut<VehicleWindowState>,
-    mut buy_state: ResMut<BuyVehicleWindowState>,
-    mut autoreplace: ResMut<AutoreplaceWindowState>,
-    mut sim: ResMut<SimWorld>,
-    mut pending: ResMut<RemapMapVisualsPending>,
-    mut hud_feedback: ResMut<HudBuildFeedback>,
-    mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
-    time: Res<Time>,
+    sim: Res<SimWorld>,
 ) {
     for (interaction, row) in &mut row_q {
         if *interaction != Interaction::Pressed {
@@ -534,58 +551,168 @@ pub(crate) fn handle_depot_panel_buttons(
         else {
             continue;
         };
-        // Rail: segundo clic en otra fila engancha/reordena (MoveRailVehicle).
-        if depot_is_rail(&sim, depot_pos) {
-            if let Some(from_slot) = depot_state.reorder_from_slot
-                && from_slot != row.slot
-            {
-                let vehicles = vehicles_at_depot(&sim, depot_pos);
-                if let (Some(from), Some(to)) = (vehicles.get(from_slot), vehicles.get(row.slot)) {
-                    let (head_id, unit_id) = if from.next_unit.is_none()
-                        && from
-                            .engine_id
-                            .and_then(engine_by_id)
-                            .is_some_and(|e| e.is_wagon())
-                    {
-                        (to.id, from.id)
-                    } else if to.next_unit.is_none()
-                        && to
-                            .engine_id
-                            .and_then(engine_by_id)
-                            .is_some_and(|e| e.is_wagon())
-                    {
-                        (from.id, to.id)
-                    } else {
-                        (to.id, from.id)
-                    };
-                    match apply_command(
-                        &mut sim.state,
-                        &Command::MoveRailVehicle {
-                            head_id,
-                            unit_id,
-                            after_id: None,
-                        },
-                    ) {
-                        Ok(()) => pending.pending = true,
-                        Err(e) => {
-                            push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                        }
-                    }
-                }
-                depot_state.reorder_from_slot = None;
-                depot_state.selected_vehicle = Some(vehicle_id);
-                continue;
-            }
-            depot_state.reorder_from_slot = Some(row.slot);
-        }
+        depot_state.list_drag_from = Some(row.slot);
         depot_state.selected_vehicle = Some(vehicle_id);
-        vehicle_window.vehicle_id = Some(vehicle_id);
-        vehicle_window.rename_editing = false;
-        if let Some(fresh) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-            open_order_edit_for_vehicle(&mut order_state, fresh, &mut next_pick);
+    }
+}
+
+/// Al soltar: reordena si el destino es otra fila; si no, activa clic (órdenes / enganche).
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
+pub(crate) fn finish_depot_list_drag(
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut depot_state: ResMut<DepotPanelState>,
+    row_q: Query<(&DepotVehicleRow, &Interaction), With<Button>>,
+    mut order_state: ResMut<OrderEditState>,
+    mut next_pick: ResMut<NextState<OrderPickState>>,
+    mut vehicle_window: ResMut<VehicleWindowState>,
+    mut sim: ResMut<SimWorld>,
+    mut pending: ResMut<RemapMapVisualsPending>,
+    mut hud_feedback: ResMut<HudBuildFeedback>,
+    time: Res<Time>,
+) {
+    let Some(from_slot) = depot_state.list_drag_from else {
+        return;
+    };
+    if mouse.pressed(MouseButton::Left) {
+        return;
+    }
+    depot_state.list_drag_from = None;
+    let Some(depot_pos) = depot_state.depot_pos else {
+        return;
+    };
+
+    let drop_slot = row_q.iter().find_map(|(row, interaction)| {
+        matches!(*interaction, Interaction::Hovered | Interaction::Pressed).then_some(row.slot)
+    });
+
+    if let Some(to_slot) = drop_slot
+        && to_slot != from_slot
+    {
+        match apply_command(
+            &mut sim.state,
+            &Command::DepotReorderVehicleSlot {
+                depot_pos,
+                from_slot,
+                to_slot,
+            },
+        ) {
+            Ok(()) => {
+                pending.pending = true;
+                if let Some(vehicle) = vehicles_at_depot(&sim, depot_pos).get(to_slot) {
+                    depot_state.selected_vehicle = Some(vehicle.id);
+                }
+            }
+            Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
         }
+        depot_state.reorder_from_slot = None;
+        return;
     }
 
+    activate_depot_row_click(
+        from_slot,
+        &mut depot_state,
+        &mut order_state,
+        &mut next_pick,
+        &mut vehicle_window,
+        &mut sim,
+        &mut pending,
+        &mut hud_feedback,
+        time.elapsed_secs(),
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn activate_depot_row_click(
+    slot: usize,
+    depot_state: &mut DepotPanelState,
+    order_state: &mut OrderEditState,
+    next_pick: &mut NextState<OrderPickState>,
+    vehicle_window: &mut VehicleWindowState,
+    sim: &mut SimWorld,
+    pending: &mut RemapMapVisualsPending,
+    hud_feedback: &mut HudBuildFeedback,
+    now: f32,
+) {
+    let Some(depot_pos) = depot_state.depot_pos else {
+        return;
+    };
+    let Some(vehicle_id) = vehicles_at_depot(sim, depot_pos).get(slot).map(|v| v.id) else {
+        return;
+    };
+    // Rail: segundo clic en otra fila engancha/reordena (MoveRailVehicle).
+    if depot_is_rail(sim, depot_pos) {
+        if let Some(from_slot) = depot_state.reorder_from_slot
+            && from_slot != slot
+        {
+            let vehicles = vehicles_at_depot(sim, depot_pos);
+            if let (Some(from), Some(to)) = (vehicles.get(from_slot), vehicles.get(slot)) {
+                let (head_id, unit_id) = if from.next_unit.is_none()
+                    && from
+                        .engine_id
+                        .and_then(engine_by_id)
+                        .is_some_and(|e| e.is_wagon())
+                {
+                    (to.id, from.id)
+                } else if to.next_unit.is_none()
+                    && to
+                        .engine_id
+                        .and_then(engine_by_id)
+                        .is_some_and(|e| e.is_wagon())
+                {
+                    (from.id, to.id)
+                } else {
+                    (to.id, from.id)
+                };
+                match apply_command(
+                    &mut sim.state,
+                    &Command::MoveRailVehicle {
+                        head_id,
+                        unit_id,
+                        after_id: None,
+                    },
+                ) {
+                    Ok(()) => pending.pending = true,
+                    Err(e) => {
+                        push_build_command_error(hud_feedback, e, now);
+                    }
+                }
+            }
+            depot_state.reorder_from_slot = None;
+            depot_state.selected_vehicle = Some(vehicle_id);
+            return;
+        }
+        depot_state.reorder_from_slot = Some(slot);
+    }
+    depot_state.selected_vehicle = Some(vehicle_id);
+    vehicle_window.vehicle_id = Some(vehicle_id);
+    vehicle_window.rename_editing = false;
+    if let Some(fresh) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
+        open_order_edit_for_vehicle(order_state, fresh, next_pick);
+    }
+}
+
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
+pub(crate) fn handle_depot_panel_buttons(
+    mut q: Query<(&Interaction, &DepotPanelButton), (Changed<Interaction>, With<Button>)>,
+    mut sell_q: Query<
+        (&Interaction, &DepotSellButton),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<DepotPanelButton>,
+            Without<DepotVehicleRow>,
+        ),
+    >,
+    mut depot_state: ResMut<DepotPanelState>,
+    mut order_state: ResMut<OrderEditState>,
+    mut buy_state: ResMut<BuyVehicleWindowState>,
+    mut autoreplace: ResMut<AutoreplaceWindowState>,
+    mut sim: ResMut<SimWorld>,
+    mut pending: ResMut<RemapMapVisualsPending>,
+    mut hud_feedback: ResMut<HudBuildFeedback>,
+    mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
+    time: Res<Time>,
+) {
     for (interaction, sell) in &mut sell_q {
         if *interaction != Interaction::Pressed {
             continue;

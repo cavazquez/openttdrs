@@ -284,13 +284,21 @@ pub(super) fn depot_reorder_vehicle_slot(
     to_slot: usize,
 ) -> Result<(), CommandError> {
     in_bounds(&state.map, depot_pos)?;
-    let mut ids: Vec<u32> = state
+    // Misma lista que la UI del depósito: solo cabezas de consist, ordenadas
+    // por `depot_display_slot` (y `id` como desempate).
+    let mut heads: Vec<(u32, Option<u8>)> = state
         .vehicles
         .iter()
-        .filter(|v| v.pos == depot_pos)
-        .map(|v| v.id)
+        .filter(|v| v.pos == depot_pos && v.is_consist_head())
+        .map(|v| (v.id, v.depot_display_slot))
         .collect();
-    ids.sort_unstable();
+    heads.sort_by(|a, b| match (a.1, b.1) {
+        (Some(sa), Some(sb)) => sa.cmp(&sb).then_with(|| a.0.cmp(&b.0)),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => a.0.cmp(&b.0),
+    });
+    let mut ids: Vec<u32> = heads.into_iter().map(|(id, _)| id).collect();
     if from_slot >= ids.len() || to_slot >= ids.len() || from_slot == to_slot {
         return Err(CommandError::OrderIndexOutOfRange);
     }

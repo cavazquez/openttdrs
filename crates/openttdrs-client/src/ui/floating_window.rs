@@ -33,7 +33,12 @@ const TITLE_BAR_H: f32 = 20.0;
 /// Margen mínimo visible al clampear el arrastre.
 const DRAG_MARGIN: f32 = 48.0;
 
-/// Identifica cada ventana del juego (una instancia por id).
+/// Identifica cada ventana del juego (**una instancia por id**).
+///
+/// Política MVP (UI-4): no hay multi-instance. Abrir otro vehículo/estación
+/// reutiliza la misma ventana y sobrescribe el `Option<ID>` del resource
+/// asociado (`VehicleWindowState`, `OrderEditState`, etc.). Multi-instance
+/// vía `WindowKey { kind, instance }` queda para una fase posterior.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum FloatingWindowId {
     Town,

@@ -253,7 +253,11 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::PlaceSign { .. }
         | Command::RemoveSign { .. }
         | Command::RenameSign { .. }
-        | Command::JoinStations { .. } => None,
+        | Command::JoinStations { .. }
+        | Command::SetNewGrfEnabled { .. }
+        | Command::MoveNewGrfInStack { .. }
+        | Command::RemoveNewGrfFromStack { .. }
+        | Command::AddNewGrfToStack { .. } => None,
     }
 }
 

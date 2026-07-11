@@ -322,6 +322,24 @@ pub enum Command {
         keep: TileCoord,
         merge: TileCoord,
     },
+    /// Activa/desactiva una entrada del stack `NewGRF` (config-only).
+    SetNewGrfEnabled {
+        index: usize,
+        enabled: bool,
+    },
+    /// Reordena una entrada del stack `NewGRF`.
+    MoveNewGrfInStack {
+        from: usize,
+        to: usize,
+    },
+    /// Quita una entrada no estática del stack `NewGRF`.
+    RemoveNewGrfFromStack {
+        index: usize,
+    },
+    /// Añade una entrada al stack `NewGRF` (rechaza `GRFID` duplicado).
+    AddNewGrfToStack {
+        entry: crate::newgrf_config::NewGrfEntry,
+    },
 }
 
 /// Dirección para reordenar órdenes en la lista del vehículo.
@@ -444,6 +462,14 @@ pub enum CommandError {
     SignNameEmpty,
     /// No se pueden unir estas estaciones.
     CannotJoinStations,
+    /// Índice fuera del stack `NewGRF`.
+    NewGrfIndexOutOfRange,
+    /// Entrada base/estática: no se puede desactivar ni quitar.
+    NewGrfStaticImmutable,
+    /// Ya hay un `NewGRF` con ese `GRFID` en el stack.
+    NewGrfDuplicateGrfid,
+    /// Entrada `NewGRF` inválida (p. ej. nombre de archivo vacío).
+    NewGrfInvalidEntry,
 }
 
 /// Texto breve en español para mostrar al jugador cuando falla un comando.
@@ -557,5 +583,11 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::CannotJoinStations => {
             "No se pueden unir: deben ser paradas bus/camión adyacentes del mismo tipo."
         }
+        CommandError::NewGrfIndexOutOfRange => "Índice NewGRF inválido.",
+        CommandError::NewGrfStaticImmutable => {
+            "Ese NewGRF es base y no se puede desactivar ni quitar."
+        }
+        CommandError::NewGrfDuplicateGrfid => "Ya hay un NewGRF con ese GRFID.",
+        CommandError::NewGrfInvalidEntry => "Entrada NewGRF inválida.",
     }
 }

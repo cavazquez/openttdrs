@@ -6,8 +6,8 @@ use crate::rail_signals::{
 };
 use crate::{DEPOT_BUILD_COST, GameState, RAIL_BUILD_COST};
 
-use super::super::CommandError;
 use super::super::terraform::{apply_autoslope_if_needed, check_autoslope_flat};
+use super::super::{CommandError, require_tile_owned_by_active};
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
@@ -251,6 +251,7 @@ pub(in crate::command::transport) fn write_normal_rail_tile(
     c: TileCoord,
     trackbits: u8,
 ) -> Result<(), CommandError> {
+    require_tile_owned_by_active(state, c)?;
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let tb = trackbits & 0x3F;
     let had_signals = rail_tile_is_signals(tile.m5);
@@ -584,6 +585,7 @@ pub(in crate::command) fn remove_rail_bits(
     bits: u8,
 ) -> Result<(), CommandError> {
     check_remove_rail(&state.map, c)?;
+    require_tile_owned_by_active(state, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let existing = tile.m5 & 0x3F;
     let remove = bits & 0x3F;
@@ -628,6 +630,7 @@ pub(in crate::command) fn convert_rail(
     to_type: crate::rail_type::RailType,
 ) -> Result<(), CommandError> {
     check_in_bounds(&state.map, c)?;
+    require_tile_owned_by_active(state, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     if tile.kind != TileKind::Rail {
         return Err(CommandError::NoRailToConvert);
@@ -666,6 +669,7 @@ pub(in crate::command) fn place_rail_signal(
     fract_y: u8,
     sig_type: u8,
 ) -> Result<(), CommandError> {
+    require_tile_owned_by_active(state, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let tb = tile.m5 & 0x3F;
     let track = crate::rail_signals::resolve_signal_track(tb, fract_x, fract_y)
@@ -720,6 +724,7 @@ pub(in crate::command) fn cycle_rail_signal_type(
     fract_x: u8,
     fract_y: u8,
 ) -> Result<(), CommandError> {
+    require_tile_owned_by_active(state, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     if !rail_tile_is_signals(tile.m5) {
         return Err(CommandError::CannotPlaceSignalOnTrack);
@@ -769,6 +774,7 @@ pub(in crate::command) fn cycle_rail_signal_side(
     c: TileCoord,
     track: crate::rail_signals::SignalTrack,
 ) -> Result<(), CommandError> {
+    require_tile_owned_by_active(state, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     if !rail_tile_is_signals(tile.m5) {
         return Err(CommandError::CannotPlaceSignalOnTrack);
@@ -823,6 +829,7 @@ pub(in crate::command) fn remove_rail_signal(
     fract_y: u8,
 ) -> Result<(), CommandError> {
     check_remove_rail_signal(&state.map, c, fract_x, fract_y)?;
+    require_tile_owned_by_active(state, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let tb = tile.m5 & 0x3F;
     let track = crate::rail_signals::resolve_signal_track(tb, fract_x, fract_y)

@@ -17,6 +17,7 @@ use super::transport::{
     merged_rail_trackbits_on_tile, rail_station_footprint, rail_trackbits_from_neighbors,
 };
 use super::types::{Command, CommandError};
+use super::util::require_tile_owned_by_active;
 
 fn preview_industry_error(
     map: &crate::map::Map,
@@ -78,37 +79,58 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         Command::PlaceRoad(c)
         | Command::PlaceRoadBits(c, _)
         | Command::PlaceTramBits(c, _)
-        | Command::SetRoadBits(c, _) => check_place_road_bits(map, *c).err(),
-        Command::PlaceRail(c) => check_place_rail(map, *c).err().or_else(|| {
-            let tb = rail_trackbits_from_neighbors(map, *c);
-            check_rail_trackbits_with_autoslope(map, *c, tb, tick).err()
-        }),
-        Command::PlaceRailBits(c, bits) => check_place_rail(map, *c).err().or_else(|| {
-            let tb = merged_rail_trackbits_on_tile(map, *c, *bits);
-            check_rail_trackbits_with_autoslope(map, *c, tb, tick).err()
-        }),
-        Command::SetRailBits(c, bits) => check_place_rail(map, *c)
+        | Command::SetRoadBits(c, _) => require_tile_owned_by_active(state, *c)
             .err()
+            .or_else(|| check_place_road_bits(map, *c).err()),
+        Command::PlaceRail(c) => require_tile_owned_by_active(state, *c).err().or_else(|| {
+            check_place_rail(map, *c).err().or_else(|| {
+                let tb = rail_trackbits_from_neighbors(map, *c);
+                check_rail_trackbits_with_autoslope(map, *c, tb, tick).err()
+            })
+        }),
+        Command::PlaceRailBits(c, bits) => {
+            require_tile_owned_by_active(state, *c).err().or_else(|| {
+                check_place_rail(map, *c).err().or_else(|| {
+                    let tb = merged_rail_trackbits_on_tile(map, *c, *bits);
+                    check_rail_trackbits_with_autoslope(map, *c, tb, tick).err()
+                })
+            })
+        }
+        Command::SetRailBits(c, bits) => require_tile_owned_by_active(state, *c)
+            .err()
+            .or_else(|| check_place_rail(map, *c).err())
             .or_else(|| check_rail_trackbits_with_autoslope(map, *c, bits & 0x3F, tick).err()),
-        Command::PlaceRailWaypoint(c) => check_place_rail_waypoint(map, *c, stations).err(),
-        Command::PlaceRoadWaypoint(c) => check_place_road_waypoint(map, *c, stations).err(),
-        Command::RemoveRailBits(c, _) | Command::RemoveRail(c) => check_remove_rail(map, *c).err(),
-        Command::ConvertRail(c, _) => {
+        Command::PlaceRailWaypoint(c) => require_tile_owned_by_active(state, *c)
+            .err()
+            .or_else(|| check_place_rail_waypoint(map, *c, stations).err()),
+        Command::PlaceRoadWaypoint(c) => require_tile_owned_by_active(state, *c)
+            .err()
+            .or_else(|| check_place_road_waypoint(map, *c, stations).err()),
+        Command::RemoveRailBits(c, _) | Command::RemoveRail(c) => {
+            require_tile_owned_by_active(state, *c)
+                .err()
+                .or_else(|| check_remove_rail(map, *c).err())
+        }
+        Command::ConvertRail(c, _) => require_tile_owned_by_active(state, *c).err().or_else(|| {
             if map.get_kind(*c) == Some(crate::map::TileKind::Rail) {
                 None
             } else {
                 Some(CommandError::NoRailToConvert)
             }
-        }
+        }),
         Command::PlaceRailSignal(c, orientation, fract_x, fract_y, _) => {
-            check_place_rail_signal_oriented(map, *c, *orientation, *fract_x, *fract_y).err()
+            require_tile_owned_by_active(state, *c).err().or_else(|| {
+                check_place_rail_signal_oriented(map, *c, *orientation, *fract_x, *fract_y).err()
+            })
         }
         Command::CycleRailSignalType(c, fract_x, fract_y) => {
-            check_cycle_rail_signal_type(map, *c, *fract_x, *fract_y).err()
+            require_tile_owned_by_active(state, *c)
+                .err()
+                .or_else(|| check_cycle_rail_signal_type(map, *c, *fract_x, *fract_y).err())
         }
-        Command::RemoveRailSignal(c, fract_x, fract_y) => {
-            check_remove_rail_signal(map, *c, *fract_x, *fract_y).err()
-        }
+        Command::RemoveRailSignal(c, fract_x, fract_y) => require_tile_owned_by_active(state, *c)
+            .err()
+            .or_else(|| check_remove_rail_signal(map, *c, *fract_x, *fract_y).err()),
         Command::PlaceRoadDepot(c) => preview_depot_any(map, *c, check_road_depot_placement),
         Command::PlaceRoadDepotDir(c, dir) => check_road_depot_placement(map, *c, *dir).err(),
         Command::PlaceRailDepot(c) => preview_depot_any(map, *c, check_rail_depot_placement),
@@ -180,7 +202,9 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
                 rail_station_footprint(*axis_y, (*platforms).clamp(1, 7), (*length).clamp(1, 7));
             check_rail_station_area(state, *origin, w, h).err()
         }
-        Command::ClearTile(c) => check_clear_tile(map, *c).err(),
+        Command::ClearTile(c) => require_tile_owned_by_active(state, *c)
+            .err()
+            .or_else(|| check_clear_tile(map, *c).err()),
         Command::BuyLand(c) => check_buy_land(map, *c).err(),
         Command::BuyLandArea { from, to } => {
             let any_ok =

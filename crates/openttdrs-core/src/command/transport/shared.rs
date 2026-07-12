@@ -1,7 +1,7 @@
 use crate::map::{Map, TileCoord, TileKind};
 use crate::{CLEAR_TILE_COST, GameState};
 
-use super::super::{CommandError, in_bounds};
+use super::super::{CommandError, in_bounds, require_tile_owned_by_active, tile_owner};
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
@@ -73,6 +73,9 @@ pub(in crate::command::transport) fn propagate_rail_diag_to_neighbors(
     for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
         let n = TileCoord::new(c.x + dx, c.y + dy);
         if state.map.get_kind(n) != Some(TileKind::Rail) {
+            continue;
+        }
+        if tile_owner(state, n).is_some_and(|o| o != state.active_company) {
             continue;
         }
         let existing = existing_rail_trackbits(&state.map, n);
@@ -176,6 +179,7 @@ pub(in crate::command) fn place_single_transport_tile(
     cost: i64,
 ) -> Result<(), CommandError> {
     check_single_transport_tile(&state.map, c)?;
+    require_tile_owned_by_active(state, c)?;
     state
         .map
         .set_kind(c, kind_to_place)
@@ -222,6 +226,7 @@ pub(in crate::command) fn clear_tile(
     c: TileCoord,
 ) -> Result<(), CommandError> {
     check_clear_tile(&state.map, c)?;
+    require_tile_owned_by_active(state, c)?;
     if let Some(industry_idx) = state.industries.iter().position(|i| i.contains_tile(c)) {
         let industry_tiles = state.industries[industry_idx].tiles.clone();
         for tile in industry_tiles {

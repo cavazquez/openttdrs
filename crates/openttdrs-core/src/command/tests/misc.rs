@@ -224,7 +224,7 @@ fn clear_any_industry_tile_removes_whole_industry_footprint() {
 
 #[test]
 fn every_command_error_has_user_message() {
-    const ERRORS: [CommandError; 26] = [
+    const ERRORS: [CommandError; 27] = [
         CommandError::OutOfBounds,
         CommandError::CannotPlaceRoadOnWater,
         CommandError::CannotPlaceRoadOnVoid,
@@ -238,6 +238,7 @@ fn every_command_error_has_user_message() {
         CommandError::StationNotFound,
         CommandError::VehicleNotFound,
         CommandError::VehicleNotOwned,
+        CommandError::TileNotOwned,
         CommandError::VehicleNotInDepot,
         CommandError::InvalidDepotTile,
         CommandError::VehicleKindNotAllowed,
@@ -299,4 +300,48 @@ fn toggle_vehicle_running_rejects_other_company_owner() {
     let err = apply_command(&mut s, &Command::ToggleVehicleRunning(id)).unwrap_err();
     assert_eq!(err, CommandError::VehicleNotOwned);
     assert!(!s.vehicles[0].running);
+}
+
+#[test]
+fn clear_and_remove_rail_reject_foreign_owned_infra() {
+    let mut s = GameState::new(8, 8);
+    s.economy.money = 1_000_000;
+    s.ensure_rival_transcargo();
+    let rival = crate::CompanyId(1);
+    assert!(s.set_active_company(rival));
+    let rail = TileCoord::new(3, 3);
+    let road = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceRail(rail)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+    assert!(s.set_active_company(crate::CompanyId::PLAYER));
+    assert_eq!(
+        apply_command(&mut s, &Command::ClearTile(rail)).unwrap_err(),
+        CommandError::TileNotOwned
+    );
+    assert_eq!(
+        apply_command(&mut s, &Command::RemoveRail(rail)).unwrap_err(),
+        CommandError::TileNotOwned
+    );
+    assert_eq!(
+        apply_command(&mut s, &Command::ClearTile(road)).unwrap_err(),
+        CommandError::TileNotOwned
+    );
+    assert_eq!(s.map.get_kind(rail), Some(TileKind::Rail));
+    assert_eq!(s.map.get_kind(road), Some(TileKind::Road));
+}
+
+#[test]
+fn place_rail_bits_rejects_overwrite_of_foreign_rail() {
+    let mut s = GameState::new(8, 8);
+    s.economy.money = 1_000_000;
+    s.ensure_rival_transcargo();
+    assert!(s.set_active_company(crate::CompanyId(1)));
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRail(c)).unwrap();
+    assert!(s.set_active_company(crate::CompanyId::PLAYER));
+    assert_eq!(
+        apply_command(&mut s, &Command::PlaceRailBits(c, 0x02)).unwrap_err(),
+        CommandError::TileNotOwned
+    );
+    assert_eq!(s.map.get(c).unwrap().m1, 1);
 }

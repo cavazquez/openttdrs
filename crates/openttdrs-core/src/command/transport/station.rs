@@ -8,7 +8,7 @@ use crate::{
     CLEAR_TILE_COST, GameState, STATION_BUILD_COST, Station, StopKind, WAYPOINT_BUILD_COST,
 };
 
-use super::super::CommandError;
+use super::super::{CommandError, require_tile_owned_by_active};
 use crate::town::{self, authority_allows_new_station};
 
 #[allow(unused_imports)]
@@ -361,6 +361,7 @@ pub(in crate::command) fn place_rail_waypoint(
     c: TileCoord,
 ) -> Result<(), CommandError> {
     check_place_rail_waypoint(&state.map, c, &state.stations)?;
+    require_tile_owned_by_active(state, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let axis_y = rail_waypoint_axis_from_trackbits(tile.m5).unwrap_or(false);
     let mut out = tile;
@@ -421,6 +422,7 @@ pub(in crate::command) fn place_road_waypoint(
     c: TileCoord,
 ) -> Result<(), CommandError> {
     check_place_road_waypoint(&state.map, c, &state.stations)?;
+    require_tile_owned_by_active(state, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     let axis = road_waypoint_axis_bits(tile.m5).unwrap_or(0x0A);
     let mut out = tile;

@@ -2,8 +2,8 @@ use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{diag_dir_offset, station_site_tile_allows_build};
 use crate::{DEPOT_BUILD_COST, GameState, ROAD_BUILD_COST};
 
-use super::super::CommandError;
 use super::super::terraform::apply_autoslope_if_needed;
+use super::super::{CommandError, require_tile_owned_by_active, tile_owner};
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{check_in_bounds, place_single_transport_tile};
@@ -363,6 +363,7 @@ pub(in crate::command::transport) fn write_normal_road_tile(
     c: TileCoord,
     road_bits: u8,
 ) -> Result<(), CommandError> {
+    require_tile_owned_by_active(state, c)?;
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     // Conservar overlay de tranvía si ya era carretera (UI-6c).
     let preserve_tram = tile.kind == TileKind::Road;
@@ -623,6 +624,9 @@ pub(in crate::command::transport) fn propagate_road_bits_to_neighbors(
         }
         let n = TileCoord::new(c.x + dx, c.y + dy);
         if state.map.get_kind(n) != Some(TileKind::Road) {
+            continue;
+        }
+        if tile_owner(state, n).is_some_and(|o| o != state.active_company) {
             continue;
         }
         let existing = state.map.get(n).map_or(0, |t| t.m5 & 0x0F);

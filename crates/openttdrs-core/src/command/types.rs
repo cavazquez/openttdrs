@@ -372,6 +372,8 @@ pub enum CommandError {
     VehicleNotFound,
     /// El vehículo no pertenece a la compañía activa.
     VehicleNotOwned,
+    /// La infraestructura no pertenece a la compañía activa.
+    TileNotOwned,
     /// Solo se puede vender un vehículo estacionado en un depósito.
     VehicleNotInDepot,
     InvalidDepotTile,
@@ -501,6 +503,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::StationNotFound => "No hay estación en esta tesela.",
         CommandError::VehicleNotFound => "Vehículo no encontrado.",
         CommandError::VehicleNotOwned => "Ese vehículo pertenece a otra compañía.",
+        CommandError::TileNotOwned => "Esta infraestructura pertenece a otra compañía.",
         CommandError::VehicleNotInDepot => {
             "Solo se puede vender un vehículo dentro de un depósito."
         }

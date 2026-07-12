@@ -733,6 +733,7 @@ Objetivo: posterior a la paridad single-player.
 
 - [x] Multi-compañía mínima: rival IA opcional, selector activa, HUD/listas.
 - [x] Multi-compañía polish ownership: `m1` en vía/carretera/depósitos, render por owner, guards flota. *(resto: segunda humana, demolish ownership, MP)*
+- [x] Multi-compañía demolish/build: no pisar/demoler infra ajena (`TileNotOwned`). *(resto: segunda humana, MP)*
 - [ ] Multi-compañía completa en toolbar/listas/finanzas. *(resto: segunda humana, …)*
 - [ ] Multijugador: lobby, clientes, chat, join/spectate.
 - [ ] Scenario editor y toolbar de 19 botones.
@@ -939,7 +940,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** segunda humana / demolish ownership / MP, o editor.
+**Siguiente:** segunda humana / MP, o editor / NewGRF in-world.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -951,7 +952,8 @@ Progreso UI-8 (multi-compañía mínima):
 6. ~~Ownership tiles (`m1`) PlaceRail/PlaceRoad/depósitos.~~ ✅
 7. ~~Render estaciones/depósitos/vehículos por owner (caché multi-paleta).~~ ✅
 8. ~~Guards flota (`VehicleNotOwned`) + feedback UI.~~ ✅
-9. Segunda humana / demolish ownership / tram `m3` / MP → OOS.
+9. ~~Demolish/build ownership (`TileNotOwned` + preview).~~ ✅
+10. Segunda humana / tram `m3` / MP → OOS.
 
 Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world trenes):
 

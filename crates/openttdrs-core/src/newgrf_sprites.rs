@@ -2,7 +2,7 @@
 //!
 //! Contenedor **v1** (inline) o **v2** (sprite section + `0xFD`).
 //! 8bpp/32bpp plano / LZ77 / chunked; multi-zoom; máscara company-colour.
-//! Action3→Action2 (básico / variational rangos / random)→Action1 trains.
+//! Action3→Action2 (básico / variational+divide/modulo / random 80/83/84)→Action1.
 
 use std::collections::HashMap;
 
@@ -39,19 +39,33 @@ pub struct TrainSpriteAssign {
 }
 
 /// Action2 variational (`0x81`/`0x82`): variable + rangos + default.
+///
+/// Soporta shift/and y opcionalmente add+divide o add+modulo (bits 6/7 de shift).
+/// Bit 5 (advanced chain) sigue OOS.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Action2VarEntry {
     pub variable: u8,
+    /// Bits 0..4 del `shift-num`.
     pub shift: u8,
     pub and_mask: u8,
+    /// Presente si bit 6 o 7 de `shift-num`.
+    pub add_val: Option<u8>,
+    /// Bit 6: dividir `(var&mask)+add` por este valor (signed).
+    pub divide_val: Option<u8>,
+    /// Bit 7: módulo `(var&mask)+add` (signed).
+    pub modulo_val: Option<u8>,
     /// `(result_set, low, high)` inclusive.
     pub ranges: Vec<(u16, u8, u8)>,
     pub default: u16,
 }
 
-/// Action2 random (`0x80`/`0x83`): elección por bits aleatorios.
+/// Action2 random (`0x80`/`0x83`/`0x84`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Action2RandomEntry {
+    /// `0x80` propio, `0x83` related, `0x84` consist.
+    pub typ: u8,
+    /// Solo `0x84`: conteo desde vehículo de control (nibble bajo).
+    pub consist_count: u8,
     pub triggers: u8,
     pub randbit: u8,
     pub sets: Vec<u16>,
@@ -64,6 +78,8 @@ pub struct Action2EvalCtx {
     pub vars: HashMap<u8, u32>,
     /// Bits aleatorios del objeto (vehículo/estación/…).
     pub random_bits: u32,
+    /// Bits de vehículos del consist indexados por `consist_count` (tipo `0x84`).
+    pub consist_random_bits: HashMap<u8, u32>,
 }
 
 /// Resultado de parsear Action1/2/3 de un feature (trains / roadtypes).
@@ -76,7 +92,7 @@ pub struct TrainSpriteGraphics {
     pub action2_to_action1: HashMap<u8, u16>,
     /// Action2 variational completo (rangos + default).
     pub action2_var: HashMap<u8, Action2VarEntry>,
-    /// Action2 random (`0x80`/`0x83`).
+    /// Action2 random (`0x80`/`0x83`/`0x84`).
     pub action2_random: HashMap<u8, Action2RandomEntry>,
 }
 
@@ -100,7 +116,7 @@ impl TrainSpriteGraphics {
         for _ in 0..8 {
             let a2 = u8::try_from(id).unwrap_or(u8::MAX);
             if let Some(rnd) = self.action2_random.get(&a2) {
-                let next = eval_action2_random(rnd, ctx.random_bits);
+                let next = eval_action2_random(rnd, ctx);
                 if next & 0x8000 != 0 {
                     break;
                 }
@@ -147,23 +163,44 @@ fn eval_action2_var(entry: &Action2VarEntry, ctx: &Action2EvalCtx) -> u16 {
     let Some(&raw) = ctx.vars.get(&entry.variable) else {
         return entry.default;
     };
-    let shifted = raw.wrapping_shr(u32::from(entry.shift & 0x1F));
-    let value = u8::try_from(shifted & u32::from(entry.and_mask)).unwrap_or(u8::MAX);
+    let mut value = i32::try_from(raw.wrapping_shr(u32::from(entry.shift & 0x1F))).unwrap_or(0);
+    value &= i32::from(entry.and_mask);
+    if let Some(add) = entry.add_val {
+        value = value.wrapping_add(i32::from(add));
+    }
+    if let Some(div) = entry.divide_val
+        && div != 0
+    {
+        value /= i32::from(div);
+    } else if let Some(modulo) = entry.modulo_val
+        && modulo != 0
+    {
+        value %= i32::from(modulo);
+    }
+    let value_u8 = u8::try_from(value & 0xFF).unwrap_or(0);
     for &(result, low, high) in &entry.ranges {
-        if value >= low && value <= high {
+        if value_u8 >= low && value_u8 <= high {
             return result;
         }
     }
     entry.default
 }
 
-fn eval_action2_random(entry: &Action2RandomEntry, random_bits: u32) -> u16 {
+fn eval_action2_random(entry: &Action2RandomEntry, ctx: &Action2EvalCtx) -> u16 {
+    let bits = if entry.typ == 0x84 {
+        ctx.consist_random_bits
+            .get(&entry.consist_count)
+            .copied()
+            .unwrap_or(ctx.random_bits)
+    } else {
+        ctx.random_bits
+    };
     let n = entry.sets.len();
     if n == 0 {
         return 0;
     }
     let mask = n.next_power_of_two().saturating_sub(1);
-    let idx = (usize::try_from(random_bits >> entry.randbit).unwrap_or(0) & mask) % n;
+    let idx = (usize::try_from(bits >> entry.randbit).unwrap_or(0) & mask) % n;
     entry.sets[idx]
 }
 
@@ -483,7 +520,7 @@ fn parse_action2_vehicle_basic(payload: &[u8], feature: u8) -> Option<(u8, u16)>
 
 /// Action2 variational `0x81`/`0x82` (byte): variable + rangos + default.
 ///
-/// Sin advanced/divide/modulo. `0x82` = related object (mismo layout).
+/// Divide (bit 6) / modulo (bit 7) soportados. Advanced chain (bit 5) → OOS.
 fn parse_action2_variational(payload: &[u8], feature: u8) -> Option<(u8, Action2VarEntry)> {
     if payload.len() < 8 || payload[0] != 0x02 || payload[1] != feature {
         return None;
@@ -494,9 +531,14 @@ fn parse_action2_variational(payload: &[u8], feature: u8) -> Option<(u8, Action2
         return None;
     }
     let variable = payload[4];
-    let shift = payload[5];
-    // Advanced / divide / modulo → OOS.
-    if shift & 0xE0 != 0 {
+    let shift_num = payload[5];
+    // Advanced chain (bit 5) → OOS.
+    if shift_num & 0x20 != 0 {
+        return None;
+    }
+    let do_divide = shift_num & 0x40 != 0;
+    let do_modulo = shift_num & 0x80 != 0;
+    if do_divide && do_modulo {
         return None;
     }
     let mut i = 6usize;
@@ -505,6 +547,22 @@ fn parse_action2_variational(payload: &[u8], feature: u8) -> Option<(u8, Action2
     }
     let and_mask = payload[i];
     i += 1;
+    let mut add_val = None;
+    let mut divide_val = None;
+    let mut modulo_val = None;
+    if do_divide || do_modulo {
+        if i + 2 > payload.len() {
+            return None;
+        }
+        add_val = Some(payload[i]);
+        let operand = payload[i + 1];
+        i += 2;
+        if do_divide {
+            divide_val = Some(operand);
+        } else {
+            modulo_val = Some(operand);
+        }
+    }
     if i >= payload.len() {
         return None;
     }
@@ -529,43 +587,63 @@ fn parse_action2_variational(payload: &[u8], feature: u8) -> Option<(u8, Action2
         set_id,
         Action2VarEntry {
             variable,
-            shift: shift & 0x1F,
+            shift: shift_num & 0x1F,
             and_mask,
+            add_val,
+            divide_val,
+            modulo_val,
             ranges,
             default,
         },
     ))
 }
 
-/// Action2 random `0x80`/`0x83`: triggers + randbit + n sets (potencia de 2).
+/// Action2 random `0x80`/`0x83`/`0x84`: triggers + randbit + n sets (potencia de 2).
 fn parse_action2_random(payload: &[u8], feature: u8) -> Option<(u8, Action2RandomEntry)> {
     if payload.len() < 8 || payload[0] != 0x02 || payload[1] != feature {
         return None;
     }
     let set_id = payload[2];
     let typ = payload[3];
-    if typ != 0x80 && typ != 0x83 {
+    if typ != 0x80 && typ != 0x83 && typ != 0x84 {
         return None;
     }
-    let triggers = payload[4];
-    let randbit = payload[5];
-    let nrand = payload[6];
+    let mut i = 4usize;
+    let consist_count = if typ == 0x84 {
+        if i >= payload.len() {
+            return None;
+        }
+        let c = payload[i];
+        i += 1;
+        c
+    } else {
+        0
+    };
+    if i + 3 > payload.len() {
+        return None;
+    }
+    let triggers = payload[i];
+    let randbit = payload[i + 1];
+    let nrand = payload[i + 2];
+    i += 3;
     if nrand == 0 || !nrand.is_power_of_two() {
         return None;
     }
     let n = usize::from(nrand);
-    let words_end = 7usize.checked_add(n.checked_mul(2)?)?;
+    let words_end = i.checked_add(n.checked_mul(2)?)?;
     if payload.len() < words_end {
         return None;
     }
     let mut sets = Vec::with_capacity(n);
     for k in 0..n {
-        let o = 7 + k * 2;
+        let o = i + k * 2;
         sets.push(u16::from_le_bytes([payload[o], payload[o + 1]]));
     }
     Some((
         set_id,
         Action2RandomEntry {
+            typ,
+            consist_count,
             triggers,
             randbit,
             sets,
@@ -1202,7 +1280,7 @@ pub fn build_action2_trains_payload(
     )
 }
 
-/// Action2 variational `0x81` con rangos opcionales.
+/// Action2 variational `0x81` con rangos opcionales (sin divide/modulo).
 #[must_use]
 pub fn build_action2_variational_payload(
     feature: u8,
@@ -1213,16 +1291,47 @@ pub fn build_action2_variational_payload(
     ranges: &[(u16, u8, u8)],
     default_set: u16,
 ) -> Vec<u8> {
-    let mut p = vec![
-        0x02,
+    build_action2_variational_divmod_payload(
         feature,
         set_id,
-        0x81,
         variable,
         shift & 0x1F,
         and_mask,
-        u8::try_from(ranges.len()).unwrap_or(0),
-    ];
+        None,
+        None,
+        None,
+        ranges,
+        default_set,
+    )
+}
+
+/// Action2 variational con add+divide o add+modulo (`shift` bits 6/7).
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn build_action2_variational_divmod_payload(
+    feature: u8,
+    set_id: u8,
+    variable: u8,
+    shift: u8,
+    and_mask: u8,
+    add_val: Option<u8>,
+    divide_val: Option<u8>,
+    modulo_val: Option<u8>,
+    ranges: &[(u16, u8, u8)],
+    default_set: u16,
+) -> Vec<u8> {
+    let mut shift_num = shift & 0x1F;
+    if divide_val.is_some() {
+        shift_num |= 0x40;
+    } else if modulo_val.is_some() {
+        shift_num |= 0x80;
+    }
+    let mut p = vec![0x02, feature, set_id, 0x81, variable, shift_num, and_mask];
+    if let Some(add) = add_val {
+        p.push(add);
+        p.push(divide_val.or(modulo_val).unwrap_or(1));
+    }
+    p.push(u8::try_from(ranges.len()).unwrap_or(0));
     for &(result, low, high) in ranges {
         p.extend_from_slice(&result.to_le_bytes());
         p.push(low);
@@ -1253,6 +1362,31 @@ pub fn build_action2_trains_variational_default(set_id: u8, default_set: u16) ->
 pub fn build_action2_trains_random(set_id: u8, randbit: u8, sets: &[u16]) -> Vec<u8> {
     let n = u8::try_from(sets.len()).unwrap_or(0);
     let mut p = vec![0x02, ACTION0_FEATURE_TRAINS, set_id, 0x80, 0x00, randbit, n];
+    for &s in sets {
+        p.extend_from_slice(&s.to_le_bytes());
+    }
+    p
+}
+
+/// Action2 random `0x84` trains (consist): `count` + triggers + randbit + sets.
+#[must_use]
+pub fn build_action2_trains_random_consist(
+    set_id: u8,
+    consist_count: u8,
+    randbit: u8,
+    sets: &[u16],
+) -> Vec<u8> {
+    let n = u8::try_from(sets.len()).unwrap_or(0);
+    let mut p = vec![
+        0x02,
+        ACTION0_FEATURE_TRAINS,
+        set_id,
+        0x84,
+        consist_count,
+        0x00,
+        randbit,
+        n,
+    ];
     for &s in sets {
         p.extend_from_slice(&s.to_le_bytes());
     }
@@ -2535,6 +2669,52 @@ mod tests {
     }
 
     #[test]
+    fn resolve_variational_divide_with_ctx() {
+        let payload = build_action2_variational_divmod_payload(
+            ACTION0_FEATURE_TRAINS,
+            5,
+            0x40,
+            0,
+            0xFF,
+            Some(0),
+            Some(10),
+            None,
+            &[(1, 2, 2)], // value 25/10 = 2
+            9,
+        );
+        let (set_id, entry) = parse_action2_variational(&payload, ACTION0_FEATURE_TRAINS).unwrap();
+        assert_eq!(set_id, 5);
+        assert_eq!(entry.divide_val, Some(10));
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_var.insert(5, entry);
+        gfx.action2_to_action1.insert(1, 0);
+        gfx.action2_to_action1.insert(9, 1);
+        let mut ctx = Action2EvalCtx::default();
+        ctx.vars.insert(0x40, 25);
+        assert_eq!(gfx.resolve_action1_set_ctx(5, &ctx), 0);
+        ctx.vars.insert(0x40, 5);
+        assert_eq!(gfx.resolve_action1_set_ctx(5, &ctx), 1); // 5/10=0 → default 9
+    }
+
+    #[test]
+    fn parse_and_resolve_random_consist_0x84() {
+        let payload = build_action2_trains_random_consist(6, 2, 0, &[20, 21]);
+        let (set_id, entry) = parse_action2_random(&payload, ACTION0_FEATURE_TRAINS).unwrap();
+        assert_eq!(set_id, 6);
+        assert_eq!(entry.typ, 0x84);
+        assert_eq!(entry.consist_count, 2);
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_random.insert(6, entry);
+        gfx.action2_to_action1.insert(20, 0);
+        gfx.action2_to_action1.insert(21, 1);
+        let mut ctx = Action2EvalCtx::default();
+        ctx.consist_random_bits.insert(2, 1);
+        assert_eq!(gfx.resolve_action1_set_ctx(6, &ctx), 1);
+        ctx.consist_random_bits.insert(2, 0);
+        assert_eq!(gfx.resolve_action1_set_ctx(6, &ctx), 0);
+    }
+
+    #[test]
     fn resolve_variational_ranges_with_ctx() {
         let mut gfx = TrainSpriteGraphics::default();
         gfx.action2_var.insert(
@@ -2543,6 +2723,9 @@ mod tests {
                 variable: 0x40,
                 shift: 0,
                 and_mask: 0xFF,
+                add_val: None,
+                divide_val: None,
+                modulo_val: None,
                 ranges: vec![(7, 1, 1), (8, 2, 5)],
                 default: 9,
             },
@@ -2564,6 +2747,8 @@ mod tests {
         gfx.action2_random.insert(
             4,
             Action2RandomEntry {
+                typ: 0x80,
+                consist_count: 0,
                 triggers: 0,
                 randbit: 0,
                 sets: vec![10, 11],

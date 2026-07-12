@@ -21,7 +21,12 @@ impl NewGrfStationSpriteCache {
     }
 
     fn decoded_to_image(sprite: &DecodedSprite, colour: Option<CompanyColour>) -> Image {
-        let mut rgba = sprite.rgba.clone();
+        let mut rgba = if sprite.mask.is_empty() {
+            sprite.rgba.clone()
+        } else {
+            let c = colour.map(CompanyColour::as_u8).unwrap_or(0);
+            openttdrs_core::bake_sprite_company_mask(sprite, c)
+        };
         if let Some(c) = colour {
             recolor_rgba8(&mut rgba, c);
         }

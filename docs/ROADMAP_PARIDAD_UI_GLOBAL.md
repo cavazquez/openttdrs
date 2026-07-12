@@ -721,7 +721,7 @@ compra depósito + mapa (fallback OpenGFX si no hay vistas).
 **Preview Stations Action1/3** ✅ en picker rail + in-world plano (vista 0; sin 0x0E).
 **Action5 shore in-world** ✅ slots `0x0D` → costa (OpenGFX fallback; clima/animación OOS).
 **Action5 catenary in-world** ✅ slots `0x05` → wires/pylons/túnel/puente (OpenGFX fallback).
-**Action5 parse + Inspeccionar** ✅ slots; 32bpp+mask/chunked ✅; Action2 var/random MVP ✅.
+**Action5 parse + Inspeccionar** ✅ slots; 32bpp+mask/chunked ✅; Action2 var/random/0x84 ✅.
      
 ---
 
@@ -942,7 +942,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** advanced variational / random consist / mask in-world, o segunda humana / editor.
+**Siguiente:** advanced variational chain (bit 5) / consist runtime completo, o segunda humana / editor.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -983,7 +983,8 @@ Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 22. ~~Action2 variational `0x81` → rama `default` (sin evaluar vars / random `0x82`).~~ ✅
 23. ~~Action2 variational rangos + vars (`Action2EvalCtx`); random `0x80`/`0x83`.~~ ✅
 24. ~~Chunked 32bpp + máscara company-colour (`info` RGB+A+M).~~ ✅
-25. Advanced variational (divide/modulo) / random `0x84` consist / mask runtime in-world → OOS.
+25. ~~Action2 divide/modulo + random `0x84` consist + mask in-world (trains/estaciones).~~ ✅
+26. Advanced variational chain (bit 5) / resolución consist runtime completa → OOS.
 
 Progreso backend OOS (JoinStation rail + CargoDist observacional):
 

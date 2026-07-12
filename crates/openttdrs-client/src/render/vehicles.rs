@@ -2,11 +2,14 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use openttdrs_core::{CargoType, DecodedSprite, EngineDef, Map, Vehicle, VehicleKind};
+use openttdrs_core::{
+    CargoType, DecodedSprite, EngineDef, Map, Vehicle, VehicleKind, bake_sprite_company_mask,
+};
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_and_min_z};
 use crate::render::{CompanyColoredSprites, MapVisualLayer};
+use crate::sprites::CompanyColour;
 use crate::state::{ClientScreen, SimWorld};
 use openttdrs_core::{
     extrapolate_vehicle_pose, slope_dz_at_subtile, vehicle_render_direction_at,
@@ -43,10 +46,10 @@ impl Plugin for VehicleRenderPlugin {
     }
 }
 
-/// Caché in-world / preview: `(engine_id, view_idx)` → textura.
+/// Caché in-world / preview: `(engine_id, view_idx, company_colour)` → textura.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfTrainSpriteCache {
-    handles: HashMap<(u16, u8), Handle<Image>>,
+    handles: HashMap<(u16, u8, u8), Handle<Image>>,
 }
 
 impl NewGrfTrainSpriteCache {
@@ -54,7 +57,12 @@ impl NewGrfTrainSpriteCache {
         self.handles.clear();
     }
 
-    fn decoded_to_image(sprite: &DecodedSprite) -> Image {
+    fn decoded_to_image(sprite: &DecodedSprite, colour: CompanyColour) -> Image {
+        let rgba = if sprite.mask.is_empty() {
+            sprite.rgba.clone()
+        } else {
+            bake_sprite_company_mask(sprite, colour.as_u8())
+        };
         Image::new(
             Extent3d {
                 width: u32::from(sprite.width),
@@ -62,7 +70,7 @@ impl NewGrfTrainSpriteCache {
                 depth_or_array_layers: 1,
             },
             TextureDimension::D2,
-            sprite.rgba.clone(),
+            rgba,
             TextureFormat::Rgba8UnormSrgb,
             default(),
         )
@@ -73,15 +81,16 @@ impl NewGrfTrainSpriteCache {
         &mut self,
         engine: &EngineDef,
         dir: usize,
+        colour: CompanyColour,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
         let view = engine.newgrf_view(dir)?;
         let view_idx = u8::try_from(dir % engine.newgrf_views.len()).unwrap_or(0);
-        let key = (engine.id, view_idx);
+        let key = (engine.id, view_idx, colour.as_u8());
         Some(
             self.handles
                 .entry(key)
-                .or_insert_with(|| images.add(Self::decoded_to_image(view)))
+                .or_insert_with(|| images.add(Self::decoded_to_image(view, colour)))
                 .clone(),
         )
     }
@@ -384,9 +393,11 @@ impl TruckHandles {
         if v.kind == VehicleKind::Train
             && let Some(eid) = v.engine_id
             && let Some(eng) = engine_in_sim(sim, eid)
-            && let Some(handle) = cache.handle_for(eng, dir, images)
         {
-            return handle;
+            let colour = owner_colour.unwrap_or(CompanyColour::DarkBlue);
+            if let Some(handle) = cache.handle_for(eng, dir, colour, images) {
+                return handle;
+            }
         }
         self.for_vehicle(v, pose, company, owner_colour)
     }
@@ -965,10 +976,10 @@ mod tests {
         let mut images = Assets::<Image>::default();
         let mut cache = NewGrfTrainSpriteCache::default();
         let handle = cache
-            .handle_for(&eng, 0, &mut images)
+            .handle_for(&eng, 0, CompanyColour::DarkBlue, &mut images)
             .expect("newgrf texture");
         let handle_again = cache
-            .handle_for(&eng, 3, &mut images)
+            .handle_for(&eng, 3, CompanyColour::DarkBlue, &mut images)
             .expect("reuse single view");
         assert_eq!(handle, handle_again);
         assert_eq!(cache.handles.len(), 1);

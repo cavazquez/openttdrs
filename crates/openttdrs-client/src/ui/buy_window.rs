@@ -34,13 +34,18 @@ const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
 const BTN_ACTIVE: Color = Color::srgb(0.58, 0.50, 0.31);
 
-/// Caché de previews NewGRF (engine_id → textura RGBA).
+/// Caché de previews NewGRF (`engine_id`, `company_colour`) → textura RGBA.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfTrainPreviewCache {
-    handles: HashMap<u16, Handle<Image>>,
+    handles: HashMap<(u16, u8), Handle<Image>>,
 }
 
-fn decoded_sprite_to_image(sprite: &DecodedSprite) -> Image {
+fn decoded_sprite_to_image(sprite: &DecodedSprite, company_colour: u8) -> Image {
+    let rgba = if sprite.mask.is_empty() {
+        sprite.rgba.clone()
+    } else {
+        openttdrs_core::bake_sprite_company_mask(sprite, company_colour)
+    };
     Image::new(
         Extent3d {
             width: u32::from(sprite.width),
@@ -48,7 +53,7 @@ fn decoded_sprite_to_image(sprite: &DecodedSprite) -> Image {
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
-        sprite.rgba.clone(),
+        rgba,
         TextureFormat::Rgba8UnormSrgb,
         default(),
     )
@@ -474,12 +479,13 @@ fn preview_sprite_for_engine(
     engine: &EngineDef,
     cache: &mut NewGrfTrainPreviewCache,
     images: &mut Assets<Image>,
+    company_colour: u8,
 ) -> Handle<Image> {
     if let Some(decoded) = engine.newgrf_preview() {
         return cache
             .handles
-            .entry(engine.id)
-            .or_insert_with(|| images.add(decoded_sprite_to_image(decoded)))
+            .entry((engine.id, company_colour))
+            .or_insert_with(|| images.add(decoded_sprite_to_image(decoded, company_colour)))
             .clone();
     }
     if engine.kind == VehicleKind::Train {
@@ -671,8 +677,13 @@ pub(crate) fn sync_buy_window(
         });
         match (engine, trucks.as_ref()) {
             (Some(engine), Some(trucks)) => {
-                image.image =
-                    preview_sprite_for_engine(trucks, engine, &mut preview_cache, &mut images);
+                image.image = preview_sprite_for_engine(
+                    trucks,
+                    engine,
+                    &mut preview_cache,
+                    &mut images,
+                    sim.state.company_colour,
+                );
                 node.display = Display::Flex;
             }
             _ => {

@@ -1,8 +1,8 @@
 //! Decode mínimo de sprites reales `NewGRF` + Action1/2/3 (trains / roadtypes, preview).
 //!
 //! MVP: contenedor **v1** (inline) o **v2** (sprite section + `0xFD`).
-//! 8bpp plano / LZ77 / chunked. Action3→Action2→Action1 estático para trains.
-//! Road/station Action3→Action1. Action5 parcial. Callbacks / 32bpp / multi-zoom OOS.
+//! 8bpp plano / LZ77 / chunked; multi-zoom palette (preferencia normal).
+//! Action3→Action2→Action1 trains. Callbacks / 32bpp OOS.
 
 use std::collections::HashMap;
 
@@ -40,6 +40,8 @@ pub struct TrainSpriteGraphics {
     pub assigns: Vec<TrainSpriteAssign>,
     /// Action2 set-id → índice del primer set Action1 “moving” (solo trains).
     pub action2_to_action1: HashMap<u8, u16>,
+    /// Action2 variational → set-id `default` (cadena; sin evaluar variables).
+    pub action2_var_default: HashMap<u8, u16>,
 }
 
 impl TrainSpriteGraphics {
@@ -49,14 +51,29 @@ impl TrainSpriteGraphics {
         self.views_for_local_id(local_id)?.first()
     }
 
-    /// Resuelve Action3 → Action2 (si hay) → Action1.
+    /// Resuelve Action3 → variational default* → Action2 básico → Action1.
     #[must_use]
     pub fn resolve_action1_set(&self, action3_set_id: u16) -> u16 {
-        let a2 = u8::try_from(action3_set_id).unwrap_or(u8::MAX);
+        let mut id = action3_set_id;
+        for _ in 0..8 {
+            let a2 = u8::try_from(id).unwrap_or(u8::MAX);
+            if let Some(&next) = self.action2_var_default.get(&a2) {
+                // Resultado callback (bit 15) → no seguir.
+                if next & 0x8000 != 0 {
+                    break;
+                }
+                id = next;
+                continue;
+            }
+            if let Some(&a1) = self.action2_to_action1.get(&a2) {
+                return a1;
+            }
+            return id;
+        }
         self.action2_to_action1
-            .get(&a2)
+            .get(&u8::try_from(id).unwrap_or(u8::MAX))
             .copied()
-            .unwrap_or(action3_set_id)
+            .unwrap_or(id)
     }
 
     /// Todas las vistas del set asignado al id local.
@@ -356,7 +373,7 @@ fn parse_action2_vehicle_basic(payload: &[u8], feature: u8) -> Option<(u8, u16)>
     let set_id = payload[2];
     let num_load = payload[3];
     let num_loading = payload[4];
-    // Variational / random Action2 (0x81 / 0x82 / …) → OOS.
+    // Variational / random Action2 (0x81 / 0x82 / …) → ver `parse_action2_variational_default`.
     if num_load >= 0x80 || num_load == 0 || num_loading == 0 {
         return None;
     }
@@ -368,6 +385,50 @@ fn parse_action2_vehicle_basic(payload: &[u8], feature: u8) -> Option<(u8, u16)>
     }
     let a1 = u16::from_le_bytes([payload[words_start], payload[words_start + 1]]);
     Some((set_id, a1))
+}
+
+/// Action2 variational tipo `0x81` (byte): solo extrae el `default` (sin evaluar vars).
+///
+/// Formato simple (sin advanced/divide/modulo):\
+/// `02 feat set 81 var shift and nvar {result:u16 low:u8 high:u8}* default:u16`
+fn parse_action2_variational_default(payload: &[u8], feature: u8) -> Option<(u8, u16)> {
+    if payload.len() < 8 || payload[0] != 0x02 || payload[1] != feature {
+        return None;
+    }
+    let set_id = payload[2];
+    let typ = payload[3];
+    if typ != 0x81 {
+        return None;
+    }
+    // payload[4] = variable (ignorado: siempre default)
+    let shift = payload[5];
+    // Advanced / divide / modulo → OOS.
+    if shift & 0xE0 != 0 {
+        return None;
+    }
+    let mut i = 6usize;
+    // and-mask: 1 byte for type 81
+    if i >= payload.len() {
+        return None;
+    }
+    i += 1;
+    if i >= payload.len() {
+        return None;
+    }
+    let nvar = payload[i];
+    i += 1;
+    for _ in 0..nvar {
+        // result:u16 + low:u8 + high:u8
+        if i + 4 > payload.len() {
+            return None;
+        }
+        i += 4;
+    }
+    if i + 2 > payload.len() {
+        return None;
+    }
+    let default = u16::from_le_bytes([payload[i], payload[i + 1]]);
+    Some((set_id, default))
 }
 
 fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Vec<TrainSpriteAssign>> {
@@ -438,19 +499,71 @@ pub fn index_sprite_section(section: &[u8]) -> HashMap<u32, Vec<(u8, &[u8])>> {
     map
 }
 
-/// Decodifica imagen de sprite section v2 (palette 8bpp, zoom normal).
+/// Orden de preferencia de zoom v2 (`OpenTTD` `zoom_lvl_map` invertido para UI).
 ///
-/// `info`: bits RGB/alpha OOS; requiere bit palette (`0x04`). LZ77 siempre.
+/// 0=normal, 2=2×in, 1=4×in, 3=2×out, 4=4×out, 5=8×out.
+pub const SPRITE_V2_ZOOM_PREFERENCE: [u8; 6] = [0, 2, 1, 3, 4, 5];
+
+/// Bytes por píxel según bits `info` v2 (RGB / alpha / palette).
 #[must_use]
-pub fn decode_real_sprite_v2_section(info: u8, body: &[u8]) -> Option<DecodedSprite> {
-    if info == 0xFF || info & 0x04 == 0 || info & 0x03 != 0 {
+pub const fn sprite_v2_bpp(info: u8) -> usize {
+    let mut bpp = 0usize;
+    if info & 0x01 != 0 {
+        bpp += 3;
+    }
+    if info & 0x02 != 0 {
+        bpp += 1;
+    }
+    if info & 0x04 != 0 {
+        bpp += 1;
+    }
+    bpp
+}
+
+/// Convierte buffer descomprimido v2 (componentes R,G,B,A,M) → RGBA.
+fn v2_pixels_to_rgba(info: u8, pixels: &[u8], width: u16, height: u16) -> Option<Vec<u8>> {
+    let pixel_count = usize::from(width).checked_mul(usize::from(height))?;
+    let bpp = sprite_v2_bpp(info);
+    if bpp == 0 || pixels.len() < pixel_count.checked_mul(bpp)? {
+        return None;
+    }
+    let has_rgb = info & 0x01 != 0;
+    let has_a = info & 0x02 != 0;
+    let has_pal = info & 0x04 != 0;
+    if has_pal && !has_rgb {
+        return indices_to_rgba(&pixels[..pixel_count], width, height);
+    }
+    let mut rgba = Vec::with_capacity(pixel_count * 4);
+    for idx in 0..pixel_count {
+        let px = &pixels[idx * bpp..];
+        let (red, green, blue, alpha) = match (has_rgb, has_a) {
+            (true, true) => (px[0], px[1], px[2], px[3]),
+            (true, false) => (px[0], px[1], px[2], 255),
+            (false, true) => (0, 0, 0, px[0]),
+            (false, false) => (0, 0, 0, 255),
+        };
+        rgba.extend_from_slice(&[red, green, blue, alpha]);
+    }
+    Some(rgba)
+}
+
+/// Decodifica imagen de sprite section v2 (8bpp palette o 32bpp RGB/RGBA).
+///
+/// Chunked solo para palette (`bpp==1`). Devuelve `(zoom, sprite)`.
+#[must_use]
+pub fn decode_real_sprite_v2_section_zoom(info: u8, body: &[u8]) -> Option<(u8, DecodedSprite)> {
+    if info == 0xFF {
+        return None;
+    }
+    let bpp = sprite_v2_bpp(info);
+    if bpp == 0 {
         return None;
     }
     if body.len() < 9 {
         return None;
     }
     let zoom = body[0];
-    if zoom != 0 {
+    if zoom > 5 {
         return None;
     }
     let height = u16::from_le_bytes([body[1], body[2]]);
@@ -461,7 +574,11 @@ pub fn decode_real_sprite_v2_section(info: u8, body: &[u8]) -> Option<DecodedSpr
         return None;
     }
     let chunked = info & 0x08 != 0;
+    if chunked && bpp != 1 {
+        return None;
+    }
     let mut pos = 9usize;
+    let pixel_count = usize::from(width).checked_mul(usize::from(height))?;
     let decomp_size = if chunked {
         if body.len() < pos + 4 {
             return None;
@@ -471,40 +588,65 @@ pub fn decode_real_sprite_v2_section(info: u8, body: &[u8]) -> Option<DecodedSpr
         pos += 4;
         n
     } else {
-        usize::from(width).checked_mul(usize::from(height))?
+        pixel_count.checked_mul(bpp)?
     };
-    if decomp_size == 0 || decomp_size > 512 * 512 {
+    if decomp_size == 0 || decomp_size > 512 * 512 * 5 {
         return None;
     }
     let intermediate = decompress_grf_lz77(&body[pos..], decomp_size)?;
-    let indices = if chunked {
-        decode_chunked_8bpp(&intermediate, width, height)?
+    let rgba = if chunked {
+        let indices = decode_chunked_8bpp(&intermediate, width, height)?;
+        indices_to_rgba(&indices, width, height)?
     } else {
-        intermediate
+        v2_pixels_to_rgba(info, &intermediate, width, height)?
     };
-    let rgba = indices_to_rgba(&indices, width, height)?;
-    Some(DecodedSprite {
-        width,
-        height,
-        x_offs,
-        y_offs,
-        rgba,
-    })
+    Some((
+        zoom,
+        DecodedSprite {
+            width,
+            height,
+            x_offs,
+            y_offs,
+            rgba,
+        },
+    ))
 }
 
-/// Primera vista palette/zoom0 del ID en el índice sprite section.
+/// Decodifica imagen v2; solo zoom normal (`0`).
+#[must_use]
+pub fn decode_real_sprite_v2_section(info: u8, body: &[u8]) -> Option<DecodedSprite> {
+    let (zoom, spr) = decode_real_sprite_v2_section_zoom(info, body)?;
+    (zoom == 0).then_some(spr)
+}
+
+/// Mejor vista del ID: zoom preferido, luego 32bpp sobre 8bpp.
 #[must_use]
 pub fn resolve_fd_sprite<S: ::std::hash::BuildHasher>(
     index: &HashMap<u32, Vec<(u8, &[u8])>, S>,
     sprite_id: u32,
 ) -> Option<DecodedSprite> {
     let entries = index.get(&sprite_id)?;
+    let mut best: Option<(usize, usize, DecodedSprite)> = None;
     for &(info, body) in entries {
-        if let Some(spr) = decode_real_sprite_v2_section(info, body) {
-            return Some(spr);
+        let Some((zoom, spr)) = decode_real_sprite_v2_section_zoom(info, body) else {
+            continue;
+        };
+        let zoom_rank = SPRITE_V2_ZOOM_PREFERENCE
+            .iter()
+            .position(|&z| z == zoom)
+            .unwrap_or(usize::MAX);
+        let depth_rank = usize::from(info & 0x01 == 0);
+        let better = best
+            .as_ref()
+            .is_none_or(|(bz, bd, _)| (zoom_rank, depth_rank) < (*bz, *bd));
+        if better {
+            best = Some((zoom_rank, depth_rank, spr));
+            if zoom_rank == 0 && depth_rank == 0 {
+                break;
+            }
         }
     }
-    None
+    best.map(|(_, _, spr)| spr)
 }
 
 /// Recorre el GRF y extrae sets Action1 + Action2 (trains) + asignaciones Action3.
@@ -575,6 +717,10 @@ pub fn collect_feature_sprite_graphics(
                 && let Some((a2_id, a1_idx)) = parse_action2_vehicle_basic(payload, feature)
             {
                 out.action2_to_action1.insert(a2_id, a1_idx);
+            } else if feature == ACTION0_FEATURE_TRAINS
+                && let Some((a2_id, def)) = parse_action2_variational_default(payload, feature)
+            {
+                out.action2_var_default.insert(a2_id, def);
             } else if let Some(assigns) = parse_action3_feature(payload, feature) {
                 out.assigns.extend(assigns);
             }
@@ -836,6 +982,29 @@ pub fn build_action2_trains_payload(
     )
 }
 
+/// Action2 variational `0x81` sin rangos: siempre `default` (var/shift/and fijos).
+#[must_use]
+pub fn build_action2_variational_default_payload(
+    feature: u8,
+    set_id: u8,
+    default_set: u16,
+) -> Vec<u8> {
+    let mut p = vec![
+        0x02, feature, set_id, 0x81, 0x00, // variable
+        0x00, // shift (sin advanced)
+        0xFF, // and-mask
+        0x00, // nvar
+    ];
+    p.extend_from_slice(&default_set.to_le_bytes());
+    p
+}
+
+/// Action2 variational trains → `default_set`.
+#[must_use]
+pub fn build_action2_trains_variational_default(set_id: u8, default_set: u16) -> Vec<u8> {
+    build_action2_variational_default_payload(ACTION0_FEATURE_TRAINS, set_id, default_set)
+}
+
 /// Append sprite real v2: `DWORD size` + `info` + payload (sin type duplicado).
 fn append_v2_real_sprite(data_section: &mut Vec<u8>, info: u8, payload: &[u8]) {
     let sz = u32::try_from(payload.len()).unwrap_or(0);
@@ -952,10 +1121,11 @@ pub fn build_grf_v2_train_with_compressed_sprite(
     )
 }
 
-/// Entrada sprite section v2: palette 8bpp + zoom 0 + LZ77.
+/// Entrada sprite section v2: palette 8bpp + zoom + LZ77.
 #[must_use]
 pub fn build_sprite_section_palette_entry(
     sprite_id: u32,
+    zoom: u8,
     width: u16,
     height: u16,
     x_offs: i16,
@@ -963,7 +1133,7 @@ pub fn build_sprite_section_palette_entry(
     indices: &[u8],
 ) -> Vec<u8> {
     let mut img = Vec::new();
-    img.push(0); // zoom normal
+    img.push(zoom);
     img.extend_from_slice(&height.to_le_bytes());
     img.extend_from_slice(&width.to_le_bytes());
     img.extend_from_slice(&x_offs.to_le_bytes());
@@ -974,6 +1144,33 @@ pub fn build_sprite_section_palette_entry(
     let size = u32::try_from(1 + img.len()).unwrap_or(0);
     entry.extend_from_slice(&size.to_le_bytes());
     entry.push(0x04); // palette only
+    entry.extend(img);
+    entry
+}
+
+/// Entrada sprite section v2: RGBA 32bpp (`info=0x03`) + zoom + LZ77.
+#[must_use]
+pub fn build_sprite_section_rgba_entry(
+    sprite_id: u32,
+    zoom: u8,
+    width: u16,
+    height: u16,
+    x_offs: i16,
+    y_offs: i16,
+    rgba: &[u8],
+) -> Vec<u8> {
+    let mut img = Vec::new();
+    img.push(zoom);
+    img.extend_from_slice(&height.to_le_bytes());
+    img.extend_from_slice(&width.to_le_bytes());
+    img.extend_from_slice(&x_offs.to_le_bytes());
+    img.extend_from_slice(&y_offs.to_le_bytes());
+    img.extend(compress_grf_lz77_literals(rgba));
+    let mut entry = Vec::with_capacity(8 + 1 + img.len());
+    entry.extend_from_slice(&sprite_id.to_le_bytes());
+    let size = u32::try_from(1 + img.len()).unwrap_or(0);
+    entry.extend_from_slice(&size.to_le_bytes());
+    entry.push(0x03); // RGB + alpha
     entry.extend(img);
     entry
 }
@@ -1022,6 +1219,7 @@ pub fn build_grf_v2_train_with_fd_sprite(
 
     let mut sprite_section = build_sprite_section_palette_entry(
         sprite_id,
+        0,
         width,
         height,
         -i16::try_from(width / 2).unwrap_or(0),
@@ -1167,6 +1365,135 @@ pub fn build_grf_v2_train_with_action2_chain(
     out.push(0x00);
     out.extend_from_slice(&data_section);
     out.extend_from_slice(&0u32.to_le_bytes());
+    out
+}
+
+/// GRF v2: Action3 → variational default → Action2 básico → Action1.
+#[must_use]
+#[expect(clippy::too_many_arguments)]
+pub fn build_grf_v2_train_with_variational_chain(
+    action0: &[u8],
+    local_id: u8,
+    var_set_id: u8,
+    basic_set_id: u8,
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+    let action1 = build_action1_trains_payload(1, 1);
+    let action2_basic = build_action2_trains_payload(basic_set_id, 0, 0);
+    let action2_var = build_action2_trains_variational_default(var_set_id, u16::from(basic_set_id));
+    let action3 = build_action3_trains_payload(local_id, u16::from(var_set_id));
+    let mut action8 = vec![0x08, 0x07];
+    action8.extend_from_slice(&grfid);
+    action8.extend_from_slice(name.as_bytes());
+    action8.push(0);
+    action8.push(0);
+
+    let sprite_body = build_real_sprite_v1_uncompressed_payload(
+        width,
+        height,
+        -i16::try_from(width / 2).unwrap_or(0),
+        -i16::try_from(height).unwrap_or(0),
+        indices,
+    );
+
+    let mut data_section = Vec::new();
+    for payload in [action0, action1.as_slice()] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    append_v2_real_sprite(&mut data_section, 0x01, &sprite_body);
+
+    for payload in [
+        action2_basic.as_slice(),
+        action2_var.as_slice(),
+        action3.as_slice(),
+        action8.as_slice(),
+    ] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    data_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let sprite_offs = u32::try_from(1 + data_section.len()).unwrap_or(0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[0x00, 0x00]);
+    out.extend_from_slice(&SIG);
+    out.extend_from_slice(&sprite_offs.to_le_bytes());
+    out.push(0x00);
+    out.extend_from_slice(&data_section);
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out
+}
+
+/// GRF v2 canónico: Action1 + ref `0xFD` → sprite section RGBA 32bpp.
+#[must_use]
+#[expect(clippy::too_many_arguments)]
+pub fn build_grf_v2_train_with_fd_rgba_sprite(
+    action0: &[u8],
+    local_id: u8,
+    sprite_id: u32,
+    width: u16,
+    height: u16,
+    rgba: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+    let action1 = build_action1_trains_payload(1, 1);
+    let action3 = build_action3_trains_payload(local_id, 0);
+    let mut action8 = vec![0x08, 0x07];
+    action8.extend_from_slice(&grfid);
+    action8.extend_from_slice(name.as_bytes());
+    action8.push(0);
+    action8.push(0);
+
+    let mut data_section = Vec::new();
+    for payload in [action0, action1.as_slice()] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    data_section.extend_from_slice(&4u32.to_le_bytes());
+    data_section.push(0xFD);
+    data_section.extend_from_slice(&sprite_id.to_le_bytes());
+
+    for payload in [action3.as_slice(), action8.as_slice()] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    data_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let mut sprite_section = build_sprite_section_rgba_entry(
+        sprite_id,
+        0,
+        width,
+        height,
+        -i16::try_from(width / 2).unwrap_or(0),
+        -i16::try_from(height).unwrap_or(0),
+        rgba,
+    );
+    sprite_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let sprite_offs = u32::try_from(1 + data_section.len()).unwrap_or(0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[0x00, 0x00]);
+    out.extend_from_slice(&SIG);
+    out.extend_from_slice(&sprite_offs.to_le_bytes());
+    out.push(0x00);
+    out.extend_from_slice(&data_section);
+    out.extend_from_slice(&sprite_section);
     out
 }
 
@@ -1677,11 +2004,81 @@ mod tests {
     #[test]
     fn decode_v2_section_palette_roundtrip() {
         let indices = [0u8, 174, 174, 0];
-        let entry = build_sprite_section_palette_entry(7, 2, 2, -1, -2, &indices);
+        let entry = build_sprite_section_palette_entry(7, 0, 2, 2, -1, -2, &indices);
         let index = index_sprite_section(&entry);
         let spr = resolve_fd_sprite(&index, 7).unwrap();
         assert_eq!(spr.width, 2);
         assert_eq!(spr.height, 2);
+    }
+
+    #[test]
+    fn resolve_fd_prefers_normal_zoom_over_2x_in() {
+        let normal = [10u8, 11, 12, 13];
+        let zoom2 = [20u8, 21, 22, 23];
+        let mut section = build_sprite_section_palette_entry(3, 2, 2, 2, 0, 0, &zoom2);
+        // Mismo ID, zoom normal después (OpenTTD agrupa por id).
+        section.extend(build_sprite_section_palette_entry(
+            3, 0, 2, 2, 0, 0, &normal,
+        ));
+        let index = index_sprite_section(&section);
+        let spr = resolve_fd_sprite(&index, 3).unwrap();
+        // Pixel (0,0) del zoom normal = índice 10 → no transparente.
+        assert_ne!(&spr.rgba[0..4], &[0, 0, 0, 0]);
+        let only_2x = build_sprite_section_palette_entry(4, 2, 2, 2, 0, 0, &zoom2);
+        let index2 = index_sprite_section(&only_2x);
+        let spr2 = resolve_fd_sprite(&index2, 4).unwrap();
+        assert_eq!(spr2.width, 2);
+    }
+
+    #[test]
+    fn decode_v2_section_rgba_roundtrip() {
+        let rgba = [10u8, 20, 30, 255, 40, 50, 60, 128, 0, 0, 0, 0, 1, 2, 3, 200];
+        let entry = build_sprite_section_rgba_entry(9, 0, 2, 2, -1, -2, &rgba);
+        let index = index_sprite_section(&entry);
+        let spr = resolve_fd_sprite(&index, 9).unwrap();
+        assert_eq!(spr.width, 2);
+        assert_eq!(spr.height, 2);
+        assert_eq!(spr.rgba, rgba);
+    }
+
+    #[test]
+    fn resolve_fd_prefers_32bpp_over_palette_same_zoom() {
+        let indices = [174u8, 0, 0, 174];
+        let rgba = [1u8, 2, 3, 255, 4, 5, 6, 255, 7, 8, 9, 255, 10, 11, 12, 255];
+        let mut section = build_sprite_section_palette_entry(5, 0, 2, 2, 0, 0, &indices);
+        section.extend(build_sprite_section_rgba_entry(5, 0, 2, 2, 0, 0, &rgba));
+        let index = index_sprite_section(&section);
+        let spr = resolve_fd_sprite(&index, 5).unwrap();
+        assert_eq!(&spr.rgba[0..4], &[1, 2, 3, 255]);
+    }
+
+    #[test]
+    fn collect_train_fd_rgba_sprite_from_sprite_section() {
+        let a0 = build_action0_train_payload(1983, 110, 780, "RGBA Loco");
+        let mut rgba = vec![0u8; 8 * 8 * 4];
+        for y in 2..6 {
+            for x in 2..6 {
+                let i = (y * 8 + x) * 4;
+                rgba[i] = 200;
+                rgba[i + 1] = 40;
+                rgba[i + 2] = 40;
+                rgba[i + 3] = 255;
+            }
+        }
+        let bytes = build_grf_v2_train_with_fd_rgba_sprite(
+            &a0,
+            0,
+            2,
+            8,
+            8,
+            &rgba,
+            [b'T', b'R', 0, 1],
+            "trgba",
+        );
+        let gfx = collect_train_sprite_graphics(&bytes).unwrap();
+        let preview = gfx.preview_for_local_id(0).unwrap();
+        assert_eq!(preview.width, 8);
+        assert!(preview.rgba.windows(4).any(|p| p == [200, 40, 40, 255]));
     }
 
     #[test]
@@ -1768,15 +2165,54 @@ mod tests {
     }
 
     #[test]
-    fn parse_action2_skips_variational() {
-        // 02 trains set=1 variational 0x81 …
+    fn parse_action2_variational_default_only() {
+        // Basic: num_load 0x81 → None; variational parser sí.
         let payload = [0x02, ACTION0_FEATURE_TRAINS, 0x01, 0x81, 0x00];
         assert!(parse_action2_vehicle_basic(&payload, ACTION0_FEATURE_TRAINS).is_none());
+        let var = build_action2_trains_variational_default(9, 5);
+        assert_eq!(
+            parse_action2_variational_default(&var, ACTION0_FEATURE_TRAINS),
+            Some((9, 5))
+        );
         let basic = build_action2_trains_payload(3, 0, 0);
         assert_eq!(
             parse_action2_vehicle_basic(&basic, ACTION0_FEATURE_TRAINS),
             Some((3, 0))
         );
+        assert!(parse_action2_variational_default(&basic, ACTION0_FEATURE_TRAINS).is_none());
+    }
+
+    #[test]
+    fn collect_train_variational_chain_follows_default() {
+        let a0 = build_action0_train_payload(1976, 130, 920, "Var Loco");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let var_id = 9u8;
+        let basic_id = 7u8;
+        let bytes = build_grf_v2_train_with_variational_chain(
+            &a0,
+            0,
+            var_id,
+            basic_id,
+            8,
+            8,
+            &indices,
+            [b'T', b'V', 0, 2],
+            "tvar",
+        );
+        let gfx = collect_train_sprite_graphics(&bytes).unwrap();
+        assert_eq!(
+            gfx.action2_var_default.get(&var_id),
+            Some(&u16::from(basic_id))
+        );
+        assert_eq!(gfx.action2_to_action1.get(&basic_id), Some(&0));
+        assert_eq!(gfx.resolve_action1_set(u16::from(var_id)), 0);
+        let preview = gfx.preview_for_local_id(0).unwrap();
+        assert_eq!(preview.width, 8);
     }
 
     #[test]

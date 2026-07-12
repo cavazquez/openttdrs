@@ -111,7 +111,7 @@ pub(super) fn spawn_icon_tool_buttons(
 }
 
 pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
-    for (label, tip, action) in [
+    const ROW1: &[(&str, &str, SaveMenuAction)] = &[
         (
             "Pausa/Reanudar",
             "Alternar pausa de simulacion",
@@ -149,6 +149,8 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             "Espera path, giro en señales y look-ahead (pf.*)",
             SaveMenuAction::PathfindingSettings,
         ),
+    ];
+    const ROW2: &[(&str, &str, SaveMenuAction)] = &[
         (
             "NewGRF...",
             "Stack NewGRF (ON/OFF, orden, añadir; sin Action0–14)",
@@ -194,35 +196,89 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             "Volver al menu de inicio",
             SaveMenuAction::ReturnToMainMenu,
         ),
-    ] {
-        buttons.spawn((
-            Button,
-            action,
-            ToolbarTooltipTarget { text: tip },
-            BuildMenuUi,
+    ];
+
+    buttons
+        .spawn((
             Node {
-                width: Val::Px(120.0),
-                height: Val::Px(32.0),
-                justify_content: JustifyContent::Center,
-                align_items: AlignItems::Center,
-                border: UiRect::all(Val::Px(1.0)),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(1.0),
                 ..default()
             },
-            BackgroundColor(Color::srgb(0.5, 0.63, 0.35)),
-            BorderColor::all(Color::srgb(0.18, 0.25, 0.12)),
-            Interaction::default(),
-            children![(
-                Text::new(label),
-                TextFont {
-                    font_size: FontSize::Rem(0.7),
+            BuildMenuUi,
+        ))
+        .with_children(|col| {
+            spawn_settings_button_row(col, ROW1);
+            col.spawn((
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    column_gap: Val::Px(1.0),
+                    align_items: AlignItems::Center,
                     ..default()
                 },
-                TextColor(Color::srgb(0.08, 0.07, 0.05)),
-            )],
-        ));
-    }
-    spawn_company_colour_picker(buttons);
-    crate::ui::toolbar::company_selector::spawn_company_selector(buttons);
+                BuildMenuUi,
+            ))
+            .with_children(|row| {
+                for &(label, tip, action) in ROW2 {
+                    spawn_settings_text_button(row, label, tip, action);
+                }
+                spawn_company_colour_picker(row);
+                crate::ui::toolbar::company_selector::spawn_company_selector(row);
+            });
+        });
+}
+
+fn spawn_settings_button_row(
+    parent: &mut ChildSpawnerCommands,
+    defs: &[(&'static str, &'static str, SaveMenuAction)],
+) {
+    parent
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(1.0),
+                ..default()
+            },
+            BuildMenuUi,
+        ))
+        .with_children(|row| {
+            for &(label, tip, action) in defs {
+                spawn_settings_text_button(row, label, tip, action);
+            }
+        });
+}
+
+fn spawn_settings_text_button(
+    parent: &mut ChildSpawnerCommands,
+    label: &'static str,
+    tip: &'static str,
+    action: SaveMenuAction,
+) {
+    parent.spawn((
+        Button,
+        action,
+        ToolbarTooltipTarget { text: tip },
+        BuildMenuUi,
+        Node {
+            width: Val::Px(118.0),
+            height: Val::Px(28.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(1.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.5, 0.63, 0.35)),
+        BorderColor::all(Color::srgb(0.18, 0.25, 0.12)),
+        Interaction::default(),
+        children![(
+            Text::new(label),
+            TextFont {
+                font_size: FontSize::Rem(0.65),
+                ..default()
+            },
+            TextColor(Color::srgb(0.08, 0.07, 0.05)),
+        )],
+    ));
 }
 
 fn spawn_company_colour_picker(buttons: &mut ChildSpawnerCommands) {

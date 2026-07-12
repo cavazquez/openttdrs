@@ -2,6 +2,7 @@
 
 use crate::map::{Map, TileCoord, TileKind, tile_slope_and_z};
 use crate::newgrf_sprites::Action2EvalCtx;
+use crate::newgrf_type_tables::{GrfTypeTranslationTables, reverse_rail_type};
 use crate::rail_type::rail_type_from_tile;
 use crate::station::{Station, station_at_tile, station_type_from_m6};
 use crate::world_gen::Climate;
@@ -17,6 +18,7 @@ pub fn action2_eval_ctx_for_station_tile(
     coord: TileCoord,
     owner_colour: u8,
     climate: Climate,
+    type_tables: Option<&GrfTypeTranslationTables>,
 ) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
     let Some(st) = station_at_tile(map, stations, coord) else {
@@ -43,9 +45,9 @@ pub fn action2_eval_ctx_for_station_tile(
         .insert(0x40, platform_info_for_tile(map, stations, coord, m5));
 
     let terrain = terrain_type_for_tile(map, coord, climate, tile);
-    let rail_tt = tile.map_or(0xFF, |t| {
+    let rail_tt = tile.map_or(0xFF_u32, |t| {
         if t.kind == TileKind::Station && station_type_from_m6(t.m6) == 0 {
-            u32::from(rail_type_from_tile(t).as_u8())
+            u32::from(reverse_rail_type(type_tables, rail_type_from_tile(t)))
         } else {
             0xFF
         }
@@ -220,7 +222,7 @@ mod tests {
         let mut st = Station::new_with_kind(c, StopKind::RailStation);
         st.newgrf_random_bits = 0xAB;
         st.owner = CompanyId(2);
-        let ctx = action2_eval_ctx_for_station_tile(&map, &[st], c, 4, Climate::Temperate);
+        let ctx = action2_eval_ctx_for_station_tile(&map, &[st], c, 4, Climate::Temperate, None);
         assert_eq!(ctx.random_bits, 0xAB);
         assert_eq!(ctx.vars.get(&0x5F), Some(&(0xAB << 8)));
         let v40 = *ctx.vars.get(&0x40).unwrap();
@@ -243,7 +245,7 @@ mod tests {
         }
         let st = Station::new_with_kind(TileCoord::new(2, 4), StopKind::RailStation);
         let mid = TileCoord::new(3, 4);
-        let ctx = action2_eval_ctx_for_station_tile(&map, &[st], mid, 0, Climate::Temperate);
+        let ctx = action2_eval_ctx_for_station_tile(&map, &[st], mid, 0, Climate::Temperate, None);
         let v40 = *ctx.vars.get(&0x40).unwrap();
         assert_eq!(v40 & 0x0F, 1, "P=1 (medio)");
         assert_eq!((v40 >> 4) & 0x0F, 1, "p=1");
@@ -257,7 +259,27 @@ mod tests {
         let c = TileCoord::new(1, 1);
         map.set_tile(c, rail_station_tile(0)).unwrap();
         let st = Station::new_with_kind(c, StopKind::RailStation);
-        let ctx = action2_eval_ctx_for_station_tile(&map, &[st], c, 0, Climate::SubArctic);
+        let ctx = action2_eval_ctx_for_station_tile(&map, &[st], c, 0, Climate::SubArctic, None);
         assert_eq!(ctx.vars.get(&0x42).map(|v| v & 0xFF), Some(4));
+    }
+
+    #[test]
+    fn station_ctx_var42_uses_rail_translation() {
+        use crate::newgrf_type_tables::GrfTypeTranslationTables;
+        use crate::rail_type::{RailType, set_rail_type_on_tile};
+        let mut map = Map::new_flat(4, 4, 0);
+        let c = TileCoord::new(1, 1);
+        let mut tile = rail_station_tile(0);
+        tile = set_rail_type_on_tile(tile, RailType::Electric);
+        map.set_tile(c, tile).unwrap();
+        let st = Station::new_with_kind(c, StopKind::RailStation);
+        let tables = GrfTypeTranslationTables {
+            rail: vec![*b"MONO", *b"ELRL", *b"RAIL"],
+            ..Default::default()
+        };
+        let ctx =
+            action2_eval_ctx_for_station_tile(&map, &[st], c, 0, Climate::Temperate, Some(&tables));
+        let v42 = *ctx.vars.get(&0x42).unwrap();
+        assert_eq!((v42 >> 8) & 0xFF, 1); // ELRL at index 1
     }
 }

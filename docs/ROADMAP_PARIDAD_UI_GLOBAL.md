@@ -942,7 +942,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** Action `0x0E` tiletypes / tablas de traducción, o segunda humana / editor.
+**Siguiente:** segunda humana / editor, o Action2 stations layouts avanzados / callback 24.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -989,6 +989,8 @@ Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 28. ~~Procedure call `7E` + `\2psto` (`7C` / `1C`).~~ ✅
 29. ~~Action2 stations/road in-world (parse + resolve al cargar).~~ ✅
 30. ~~Vars de tesela stations/road en runtime (`40`/`42`/`43`/`45`/`5F`/…).~~ ✅
+31. ~~Tablas de traducción NewGRF rail/road/tram (Action0 GlobalVar `12`/`16`/`17` → vars `42`/`45`).~~ ✅
+32. ~~Action0 Stations prop `0x0E` layouts custom (build; sin `0x0F` complejo / callback 24).~~ ✅
 
 Progreso backend OOS (JoinStation rail + CargoDist observacional):
 

@@ -82,7 +82,14 @@ pub(crate) fn spawn_road_tile(
         && let Some(view) = def.newgrf_view(view_idx)
         && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
     {
-        let mut a2 = openttdrs_core::action2_eval_ctx_for_road_tile(map, tile, ctx.coord, climate);
+        let mut a2 = openttdrs_core::action2_eval_ctx_for_road_tile(
+            map,
+            tile,
+            ctx.coord,
+            climate,
+            def.newgrf_type_tables.as_ref(),
+            road_catalog,
+        );
         if let Some(handle) = cache.handle_for_runtime(def, view_idx, &mut a2, images) {
             let pos3 = if tileh == 0 {
                 overlay_pos(
@@ -145,8 +152,14 @@ pub(crate) fn spawn_road_tile(
             && let Some(view) = def.newgrf_view(tfi)
             && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
         {
-            let mut a2 =
-                openttdrs_core::action2_eval_ctx_for_road_tile(map, tile, ctx.coord, climate);
+            let mut a2 = openttdrs_core::action2_eval_ctx_for_road_tile(
+                map,
+                tile,
+                ctx.coord,
+                climate,
+                def.newgrf_type_tables.as_ref(),
+                road_catalog,
+            );
             if let Some(handle) = cache.handle_for_runtime(def, tfi, &mut a2, images) {
                 let pos3 = if tileh == 0 {
                     overlay_pos(

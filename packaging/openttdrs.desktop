@@ -3,8 +3,9 @@ Type=Application
 Name=OpenTTDRS
 GenericName=Transport tycoon sandbox
 Comment=Sandbox isométrico inspirado en OpenTTD
+# `scripts/install-desktop.sh` reescribe Exec/TryExec a ~/.local/bin/openttdrs-client.
 Exec=openttdrs-client
-# Tras `scripts/install-desktop.sh` o copia manual a hicolor (ver static/app/README.md).
+TryExec=openttdrs-client
 Icon=openttdrs
 Terminal=false
 Categories=Game;Simulation;

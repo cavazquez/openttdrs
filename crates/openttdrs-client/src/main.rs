@@ -41,6 +41,8 @@ mod simulation;
 mod sprites;
 mod startup;
 mod state;
+#[cfg(target_os = "linux")]
+mod tray;
 mod ui;
 mod window_status;
 

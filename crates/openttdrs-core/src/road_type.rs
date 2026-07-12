@@ -117,6 +117,12 @@ pub struct RoadTypeDef {
     /// Graphics completas si Action2 var/random requiere runtime.
     #[serde(default, skip)]
     pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
+    /// GRFID del `NewGRF` que definió este tipo (0 = vanilla).
+    #[serde(default, skip)]
+    pub newgrf_grfid: u32,
+    /// Tablas de traducción del GRF (rail/road/tram) para vars Action2.
+    #[serde(default, skip)]
+    pub newgrf_type_tables: Option<crate::newgrf_type_tables::GrfTypeTranslationTables>,
 }
 
 impl RoadTypeDef {
@@ -167,6 +173,8 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             newgrf_views: Vec::new(),
             newgrf_local_id: 0,
             newgrf_runtime: None,
+            newgrf_grfid: 0,
+            newgrf_type_tables: None,
         },
         RoadTypeDef {
             id: RoadType::TRAM,
@@ -179,6 +187,8 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             newgrf_views: Vec::new(),
             newgrf_local_id: 0,
             newgrf_runtime: None,
+            newgrf_grfid: 0,
+            newgrf_type_tables: None,
         },
     ]
 }

@@ -1134,6 +1134,111 @@ mod tests {
         );
     }
 
+    /// Hub IA → destino jugador: al descargar se paga 25 % al feeder, se marca
+    /// `feeder_paid` y se reinserta el packet con `first_station` intacto.
+    #[test]
+    fn feeder_share_paid_on_unload_preserves_packet_flags() {
+        use crate::cargo::CargoType;
+        use crate::cargo_packet::CargoPacket;
+        use crate::company::CompanyId;
+        use crate::station::StopKind;
+
+        let mut state = GameState::new(16, 10);
+        state.ensure_companies();
+        state.ensure_rival_transcargo();
+        let ai = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+        let hub = TileCoord::new(2, 2);
+        let dest = TileCoord::new(10, 5);
+        let mut hub_st = crate::Station::new_with_kind(hub, StopKind::TruckStop);
+        hub_st.owner = ai;
+        let mut dest_st = crate::Station::new_with_kind(dest, StopKind::TruckStop);
+        dest_st.owner = CompanyId::PLAYER;
+        state.stations = vec![hub_st, dest_st];
+
+        let mut truck = Vehicle::new(90, VehicleKind::Truck, dest, dest);
+        truck.set_vehicle_orders(vec![VehicleOrder::station(dest)]);
+        truck.sync_order_destination(&state.map);
+        let mut packet = CargoPacket::new(CargoType::Coal, 8, TileCoord::new(1, 1));
+        packet.first_station = Some(hub);
+        packet.feeder_paid = false;
+        truck.cargo_packets.push(packet);
+        truck.sync_cargo_from_packets();
+        truck.cargo_source = Some(hub);
+        truck.last_pickup_station = Some(hub);
+        state.vehicles.push(truck);
+
+        let ai_before = state.company_economy(ai).money;
+        let player_before = state.company_economy(CompanyId::PLAYER).money;
+        for _ in 0..8 {
+            state.step();
+            if state.vehicles[0].cargo == 0 {
+                break;
+            }
+        }
+
+        assert_eq!(state.vehicles[0].cargo, 0, "debe descargar en destino");
+        let waiting = state.stations[1].cargo_stock.get(CargoType::Coal);
+        assert_eq!(waiting, 8, "freight queda en cola del hub de destino");
+        let reinserted = state.stations[1]
+            .cargo_packets
+            .packets
+            .iter()
+            .find(|p| p.cargo == CargoType::Coal)
+            .expect("packet reinsertado");
+        assert_eq!(reinserted.first_station, Some(hub));
+        assert!(reinserted.feeder_paid, "feeder liquidado una sola vez");
+        assert!(
+            state.company_economy(ai).money > ai_before,
+            "IA feeder debe cobrar su 25 %"
+        );
+        assert!(
+            state.company_economy(CompanyId::PLAYER).money > player_before,
+            "jugador cobra el resto del ingreso"
+        );
+    }
+
+    #[test]
+    fn load_from_station_sets_first_station_when_missing() {
+        use crate::cargo::CargoType;
+        use crate::cargo_packet::CargoPacket;
+        use crate::station::StopKind;
+
+        let mut state = GameState::new(12, 8);
+        let stop = TileCoord::new(4, 4);
+        let mut st = crate::Station::new_with_kind(stop, StopKind::TruckStop);
+        st.cargo_packets
+            .push(CargoPacket::new(CargoType::Goods, 6, stop));
+        st.sync_stock_from_packets();
+        assert!(
+            st.cargo_packets
+                .packets
+                .iter()
+                .all(|p| p.first_station.is_none())
+        );
+        state.stations = vec![st];
+
+        let mut truck = Vehicle::new(91, VehicleKind::Truck, stop, stop);
+        truck.set_vehicle_orders(vec![VehicleOrder::station_with_flags(stop, true, false)]);
+        truck.sync_order_destination(&state.map);
+        state.vehicles.push(truck);
+
+        for _ in 0..8 {
+            state.step();
+            if state.vehicles[0].cargo > 0 {
+                break;
+            }
+        }
+        assert!(state.vehicles[0].cargo > 0, "debe cargar desde la cola");
+        assert!(
+            state.vehicles[0]
+                .cargo_packets
+                .packets
+                .iter()
+                .all(|p| p.first_station == Some(stop)),
+            "first_station anclado al embarque"
+        );
+    }
+
     #[test]
     fn train_pbs_both_corridors_reserve_without_overlap() {
         let mut state = build_train_pbs();

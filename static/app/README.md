@@ -19,22 +19,33 @@ El cliente carga `static/app/openttdrs-icon.png`, lo escala a **128×128** y lo 
 (`AppIconPlugin` en `crates/openttdrs-client/src/app_icon.rs`). `StartupWMClass` / `Window.name`
 deben ser **`openttdrs`** (ver `bevy_app.rs`).
 
-Si al ejecutar con `cargo run -p openttdrs-client` sigues viendo un icono genérico en el **dock**:
+Si al ejecutar con `cargo run -p openttdrs-client` ves un **engranaje gris** en el dock de Ubuntu:
 
-1. Cierra instancias viejas del juego.
-2. Instala el tema de iconos y el `.desktop`:
+En GNOME/Wayland el dock casi no usa el icono X11 (`set_window_icon`); asocia la
+ventana al `.desktop` por `StartupWMClass=openttdrs` / `app_id` y muestra `Icon=openttdrs`.
+Si `Exec=` apunta a un binario inexistente, GNOME ignora la entrada y cae al icono genérico.
+
+1. Compila al menos una vez (`cargo build -p openttdrs-client`).
+2. Instala iconos hicolor + `.desktop` (y un symlink en `~/.local/bin`):
 
 ```bash
 bash scripts/install-desktop.sh
 ```
 
-3. Arranca desde el menú de aplicaciones **OpenTTDRS** o:
+3. Cierra el juego, vuelve a lanzarlo y, si hace falta, reinicia GNOME Shell
+   (`Alt+F2` → `r` en Xorg) o cierra sesión.
 
-```bash
-cargo run -p openttdrs-client
-```
+El cliente compila con features Bevy `wayland` + `x11` para que el `app_id` sea
+`openttdrs` en sesiones Wayland nativas.
 
 ## Bandeja del sistema (tray)
 
-No hay icono de **bandeja** (minimizar a tray): haría falta un crate aparte (`tray-icon`).
-En GNOME el icono del dock es el del `.desktop` + `set_window_icon`, no un tray separado.
+En **Linux**, el cliente registra un icono StatusNotifierItem / AppIndicator con
+`static/app/openttdrs-icon.png` (`TrayIconPlugin` + crate `ksni`).
+
+- Clic: mostrar / enfocar la ventana.
+- Menú: «Mostrar ventana» / «Salir».
+- GNOME: suele hacer falta la extensión *AppIndicator and KStatusNotifierItem Support*.
+- Sin sesión D-Bus (p. ej. headless): se omite con un warning; el juego sigue.
+
+No hay tray en Windows/macOS todavía.

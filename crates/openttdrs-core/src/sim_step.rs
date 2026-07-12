@@ -549,9 +549,15 @@ fn try_load_from_station_waiting_cargo(
         return false;
     }
 
-    let taken = state.stations[station_idx].take_waiting_cargo(cargo, load);
+    let mut taken = state.stations[station_idx].take_waiting_cargo(cargo, load);
     if taken.is_empty() {
         return false;
+    }
+    // Primer embarque desde cola de estación: anclar feeder si el packet no lo trae.
+    for packet in &mut taken {
+        if packet.first_station.is_none() {
+            packet.first_station = Some(station_pos);
+        }
     }
     let loaded_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
@@ -638,7 +644,8 @@ fn unload_vehicles(
         let mut payment = 0_i64;
         let mut feeder_total = 0_i64;
         let mut feeder_income_by_owner: Vec<(crate::company::CompanyId, i64)> = Vec::new();
-        for packet in &taken {
+        let mut taken = taken;
+        for packet in &mut taken {
             let distance = economy::manhattan_distance(packet.source, station_pos);
             let mut part = economy::transported_goods_income(
                 u32::from(packet.count),
@@ -676,6 +683,7 @@ fn unload_vehicles(
                         feeder_income_by_owner.push((feeder_owner, share));
                     }
                     part = part.saturating_sub(share);
+                    packet.feeder_paid = true;
                 }
             }
             payment = payment.saturating_add(part);
@@ -691,7 +699,8 @@ fn unload_vehicles(
             );
         }
         if !town_cargo {
-            state.stations[station_idx].add_waiting_cargo(cargo_type, unload_units);
+            // Preservar first_station / feeder_paid para el siguiente tramo.
+            state.stations[station_idx].push_waiting_packets(taken);
         }
         state.stations[station_idx].income += payment.cast_unsigned();
         state.credit_company(vehicle_owner, payment);
@@ -1094,6 +1103,15 @@ fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle, state: &GameState)
         }
         // Sin órdenes: no descargar en el origen del lote (carga en hub/industria).
         if vehicle.orders.is_empty() && vehicle.cargo_source == Some(station_pos) {
+            return false;
+        }
+        // Hub de transferencia: acaba de cargar aquí y aún tiene otro destino.
+        // (No aplica si `manhattan_to_dest == 0`: entrega en la misma estación
+        // que cubría la industria de recogida.)
+        if vehicle.orders.is_empty()
+            && vehicle.last_pickup_station == Some(station_pos)
+            && vehicle.manhattan_to_dest() > 0
+        {
             return false;
         }
     }

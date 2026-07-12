@@ -17,7 +17,9 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
 - Carga/descarga gradual por tick; pago por packet (`periods_in_transit`).
 - Rating combina `time_since_pickup` + edad del packet más viejo.
 - Save JSON v13 + migración desde balances; UI estación/vehículo muestra rating/packets.
-- Pendiente: tabla temperate completa (11 cargos), decay fuerte, feeder_share.
+- Decay fuerte: `time_since_pickup == 255` → `truncate_cargo` (estilo `TruncateCargo` /
+  `selectgoods`); nueva carga reinicia antigüedad.
+- Pendiente: tabla temperate completa (11 cargos).
 
 ## Fase 3 — YAPF incremental + PBS paridad ✅ (MVP)
 
@@ -29,7 +31,9 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
 ## Fase 4 — Economía multi-compañía + Cargo Dist + IA ✅ (MVP)
 
 - Pool `companies` + `CompanyId`; `owner` en vehículo/estación; save **v14**.
-- Feeder share 25 % vía `first_station` (sin link graph completo).
+- Feeder share 25 % vía `first_station` (sin link graph completo):
+  `feeder_paid` al liquidar; `first_station` al cargar desde cola de estación;
+  reinserción freight preserva flags del packet.
 - IA rival «TransCargo» (`ai/rule_based.rs`); escenario `ai_rival_line`.
 - Pendiente: link graph / Cargo Dist real; UI selector multi-compañía; quiebra rival.
 

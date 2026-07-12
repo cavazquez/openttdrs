@@ -103,6 +103,7 @@ impl StationCargoList {
             && last.source == packet.source
             && last.periods_in_transit == packet.periods_in_transit
             && last.first_station == packet.first_station
+            && last.feeder_paid == packet.feeder_paid
         {
             last.count = last.count.saturating_add(packet.count);
             return;
@@ -194,6 +195,11 @@ impl StationCargoList {
             p.periods_in_transit = p.periods_in_transit.saturating_add(1);
         }
     }
+
+    /// Elimina toda la carga en espera de un tipo (`TruncateCargo` en `OpenTTD`).
+    pub fn truncate_cargo(&mut self, cargo: CargoType) {
+        self.packets.retain(|p| p.cargo != cargo);
+    }
 }
 
 /// Carga a bordo del vehículo como lista de packets.
@@ -250,6 +256,7 @@ impl VehicleCargoList {
             && last.source == packet.source
             && last.periods_in_transit == packet.periods_in_transit
             && last.first_station == packet.first_station
+            && last.feeder_paid == packet.feeder_paid
         {
             last.count = last.count.saturating_add(packet.count);
             return;

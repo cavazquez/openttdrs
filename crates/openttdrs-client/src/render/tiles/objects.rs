@@ -124,7 +124,12 @@ pub(crate) fn spawn_station_tile(
             {
                 let colour_u8 = owner_colour.map(CompanyColour::as_u8).unwrap_or(0);
                 let mut a2 = openttdrs_core::action2_eval_ctx_for_station_tile(
-                    map, stations, ctx.coord, colour_u8, climate,
+                    map,
+                    stations,
+                    ctx.coord,
+                    colour_u8,
+                    climate,
+                    def.newgrf_type_tables.as_ref(),
                 );
                 if let Some(handle) =
                     cache.handle_for_runtime(def, 0, owner_colour, &mut a2, images)

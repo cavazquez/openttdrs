@@ -116,6 +116,9 @@ fn place_rail_station_area_persists_newgrf_station_spec() {
         newgrf_views: Vec::new(),
         newgrf_local_id: 0,
         newgrf_runtime: None,
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+        custom_layouts: std::collections::HashMap::new(),
     });
     s.current_station_class = class_id;
     s.current_station_spec = spec_id;

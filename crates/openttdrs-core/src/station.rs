@@ -208,8 +208,33 @@ impl Station {
         if amount == 0 {
             return;
         }
+        let was_empty = self.cargo_stock.get(cargo) == 0;
         self.ensure_packets_from_stock();
         self.cargo_packets.add_amount(cargo, amount, self.pos);
+        if was_empty {
+            // Tras truncate a 255, nueva carga empieza el ciclo de antigüedad.
+            self.time_since_pickup.set(cargo, 0);
+        }
+        self.sync_stock_from_packets();
+    }
+
+    /// Reinserta packets en espera preservando `first_station` / `feeder_paid`.
+    pub fn push_waiting_packets(
+        &mut self,
+        packets: impl IntoIterator<Item = crate::cargo_packet::CargoPacket>,
+    ) {
+        self.ensure_packets_from_stock();
+        for p in packets {
+            if p.count == 0 {
+                continue;
+            }
+            let cargo = p.cargo;
+            let was_empty = self.cargo_stock.get(cargo) == 0;
+            self.cargo_packets.push(p);
+            if was_empty {
+                self.time_since_pickup.set(cargo, 0);
+            }
+        }
         self.sync_stock_from_packets();
     }
 
@@ -786,6 +811,9 @@ pub fn recompute_station_rating(station: &mut Station) {
 }
 
 /// Incrementa antigüedad de carga en espera (una vez por día simulado).
+///
+/// Si `time_since_pickup` satura en 255 (`MAX_TIME_SINCE_PICKUP_DAYS`), se
+/// descarta la carga de ese tipo (`TruncateCargo` / `selectgoods` en `OpenTTD`).
 pub fn tick_station_cargo_age(stations: &mut [Station]) {
     const CARGO_TYPES: [CargoType; 6] = [
         CargoType::Passengers,
@@ -801,8 +829,13 @@ pub fn tick_station_cargo_age(stations: &mut [Station]) {
             station.cargo_packets.age_waiting_one_day();
         }
         for cargo in CARGO_TYPES {
-            if station.cargo_stock.get(cargo) > 0 {
-                station.time_since_pickup.increment_waiting(cargo);
+            if station.cargo_stock.get(cargo) == 0 {
+                continue;
+            }
+            station.time_since_pickup.increment_waiting(cargo);
+            if station.time_since_pickup.get(cargo) == MAX_TIME_SINCE_PICKUP_DAYS {
+                station.cargo_packets.truncate_cargo(cargo);
+                station.time_since_pickup.set(cargo, 0);
             }
         }
         station.sync_stock_from_packets();
@@ -1154,14 +1187,30 @@ mod coherence_tests {
         station.ensure_packets_from_stock();
         tick_station_cargo_age(std::slice::from_mut(&mut station));
         assert_eq!(station.time_since_pickup.coal, 1);
-        for _ in 0..300 {
+        for _ in 0..253 {
             tick_station_cargo_age(std::slice::from_mut(&mut station));
         }
-        assert_eq!(station.time_since_pickup.coal, MAX_TIME_SINCE_PICKUP_DAYS);
+        assert_eq!(station.time_since_pickup.coal, 254);
+        assert_eq!(station.cargo_stock.coal, 50);
         assert!(station.rating < 255);
-        on_station_cargo_pickup(&mut station, CargoType::Coal);
+        // Día 255: truncate (decay fuerte).
+        tick_station_cargo_age(std::slice::from_mut(&mut station));
+        assert_eq!(station.cargo_stock.coal, 0);
+        assert!(station.cargo_packets.is_empty());
         assert_eq!(station.time_since_pickup.coal, 0);
         assert_eq!(station.rating, 255);
+    }
+
+    #[test]
+    fn station_cargo_truncate_at_max_pickup_age() {
+        let mut station = Station::new(TileCoord::new(1, 1));
+        station.add_waiting_cargo(CargoType::Wood, 40);
+        station.time_since_pickup.set(CargoType::Wood, 254);
+        tick_station_cargo_age(std::slice::from_mut(&mut station));
+        assert_eq!(station.cargo_stock.wood, 0);
+        station.add_waiting_cargo(CargoType::Wood, 10);
+        assert_eq!(station.time_since_pickup.wood, 0);
+        assert_eq!(station.cargo_stock.wood, 10);
     }
 
     #[test]

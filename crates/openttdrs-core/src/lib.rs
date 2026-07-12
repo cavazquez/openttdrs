@@ -30,6 +30,7 @@ mod newgrf_company_ramp;
 pub mod newgrf_config;
 mod newgrf_palette_data;
 pub mod newgrf_sprites;
+pub mod newgrf_type_tables;
 pub mod news;
 pub mod ottdmap_extras;
 pub mod parity;
@@ -212,6 +213,10 @@ pub use newgrf_sprites::{
     encode_chunked_8bpp_full_rows, encode_chunked_pixels_full_rows, index_sprite_section,
     indices_to_rgba, merge_catenary_action5_block, merge_shore_action5_block, resolve_fd_sprite,
     sprite_v2_bpp,
+};
+pub use newgrf_type_tables::{
+    GrfTypeTranslationTables, TypeLabel, collect_type_tables_from_grf,
+    parse_action0_type_translation_tables, reverse_rail_type, reverse_road_type,
 };
 pub use news::{
     CALENDAR_BASE_YEAR, NEWS_MAX_AGE_DAYS, NewsDisplayMode, NewsDisplaySettings, NewsItem,

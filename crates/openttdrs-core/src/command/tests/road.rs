@@ -503,6 +503,8 @@ fn place_road_writes_newgrf_road_type_m8() {
         newgrf_views: Vec::new(),
         newgrf_local_id: 0,
         newgrf_runtime: None,
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
     });
     s.current_road_type = ngrf;
     let c = TileCoord::new(3, 3);

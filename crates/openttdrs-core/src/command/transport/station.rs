@@ -206,6 +206,7 @@ pub(in crate::command) fn place_rail_station_area(
     }
 
     let layout = crate::station_class::station_spec_layout(
+        &state.station_spec_catalog,
         spec_id,
         usize::from(platforms),
         usize::from(length),

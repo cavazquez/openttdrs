@@ -26,6 +26,8 @@ use crate::render_trace::RenderTracePlugin;
 use crate::settings::{ClientSettingsPlugin, patch_window_plugin_for_settings};
 use crate::simulation::SimulationPlugin;
 use crate::state::{ClientScreen, SimWorld, SuspendedGameSession};
+#[cfg(target_os = "linux")]
+use crate::tray::TrayIconPlugin;
 use crate::ui::ClientUiPlugin;
 use crate::ui::font::sync_rem_size_from_window;
 use crate::window_status::WindowStatusPlugin;
@@ -160,6 +162,8 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
     app.add_plugins((DebugGizmosPlugin, CameraControlPlugin));
     if !headless {
         app.add_plugins(AppIconPlugin::new(asset_root));
+        #[cfg(target_os = "linux")]
+        app.add_plugins(TrayIconPlugin::new(asset_root));
         app.add_systems(Update, sync_rem_size_from_window.in_set(UpdateSet::Status));
     }
     app

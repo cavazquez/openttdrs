@@ -2,8 +2,11 @@
 
 use crate::map::{Map, Tile, TileCoord, TileKind, is_road_level_crossing};
 use crate::newgrf_sprites::Action2EvalCtx;
+use crate::newgrf_type_tables::{
+    GrfTypeTranslationTables, reverse_rail_type_for_var45, reverse_road_type_for_var45,
+};
 use crate::rail_type::rail_type_from_tile;
-use crate::road_type::{road_type_from_tile, tram_road_type_from_tile};
+use crate::road_type::{RoadTypeDef, road_type_from_tile, tram_road_type_from_tile};
 use crate::world_gen::Climate;
 
 /// Contexto Action2 para dibujar / resolver sprites de una tesela road/tram.
@@ -15,6 +18,8 @@ pub fn action2_eval_ctx_for_road_tile(
     tile: Tile,
     coord: TileCoord,
     climate: Climate,
+    type_tables: Option<&GrfTypeTranslationTables>,
+    road_catalog: &[RoadTypeDef],
 ) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
 
@@ -34,7 +39,8 @@ pub fn action2_eval_ctx_for_road_tile(
     };
     ctx.vars.insert(0x42, crossing_closed);
 
-    ctx.vars.insert(0x45, track_types_on_tile(tile));
+    ctx.vars
+        .insert(0x45, track_types_on_tile(tile, type_tables, road_catalog));
 
     ctx
 }
@@ -55,16 +61,29 @@ fn terrain_type_for_road_tile(tile: Tile, climate: Climate) -> u32 {
     0
 }
 
-/// Formato `__RRttrr` sin tabla de traducción: IDs raw; `0xFF` si ausente.
-fn track_types_on_tile(tile: Tile) -> u32 {
+/// Formato `__RRttrr` (`GetTrackTypes`); `0xFF` ausente, `0xFE` sin match en tabla.
+fn track_types_on_tile(
+    tile: Tile,
+    tables: Option<&GrfTypeTranslationTables>,
+    catalog: &[RoadTypeDef],
+) -> u32 {
     let rr = if tile.kind == TileKind::Road || tile.kind == TileKind::RoadDepot {
-        u32::from(road_type_from_tile(&tile).as_u8())
+        u32::from(reverse_road_type_for_var45(
+            tables,
+            catalog,
+            road_type_from_tile(&tile),
+        ))
     } else {
         0xFF
     };
-    let tt = tram_road_type_from_tile(&tile).map_or(0xFF_u32, |t| u32::from(t.as_u8()));
+    let tt = tram_road_type_from_tile(&tile).map_or(0xFF_u32, |t| {
+        u32::from(reverse_road_type_for_var45(tables, catalog, t))
+    });
     let rail = if is_road_level_crossing(tile.mapt, tile.m5, tile.kind) {
-        u32::from(rail_type_from_tile(tile).as_u8())
+        u32::from(reverse_rail_type_for_var45(
+            tables,
+            rail_type_from_tile(tile),
+        ))
     } else {
         0xFF
     };
@@ -100,7 +119,8 @@ mod tests {
         let map = Map::new_flat(4, 4, 0);
         let c = TileCoord::new(1, 1);
         let tile = set_road_type_on_tile(plain_road(), RoadType::Road);
-        let ctx = action2_eval_ctx_for_road_tile(&map, tile, c, Climate::Temperate);
+        let catalog = crate::road_type::vanilla_road_type_catalog();
+        let ctx = action2_eval_ctx_for_road_tile(&map, tile, c, Climate::Temperate, None, &catalog);
         assert_eq!(ctx.vars.get(&0x40), Some(&0));
         assert_eq!(ctx.vars.get(&0x42), Some(&0));
         let v45 = *ctx.vars.get(&0x45).unwrap();
@@ -115,7 +135,8 @@ mod tests {
         let c = TileCoord::new(2, 2);
         let mut tile = plain_road();
         tile.m5 = (1 << 6) | 0x20; // crossing + barred
-        let ctx = action2_eval_ctx_for_road_tile(&map, tile, c, Climate::Temperate);
+        let catalog = crate::road_type::vanilla_road_type_catalog();
+        let ctx = action2_eval_ctx_for_road_tile(&map, tile, c, Climate::Temperate, None, &catalog);
         assert_eq!(ctx.vars.get(&0x42), Some(&1));
         let v45 = *ctx.vars.get(&0x45).unwrap();
         assert_eq!((v45 >> 16) & 0xFF, 0); // rail type present on crossing
@@ -127,9 +148,33 @@ mod tests {
         let c = TileCoord::new(0, 0);
         let mut tile = set_tram_road_type_on_tile(plain_road(), Some(RoadType::Tram));
         tile.m7 |= 0x20;
-        let ctx = action2_eval_ctx_for_road_tile(&map, tile, c, Climate::SubArctic);
+        let catalog = crate::road_type::vanilla_road_type_catalog();
+        let ctx = action2_eval_ctx_for_road_tile(&map, tile, c, Climate::SubArctic, None, &catalog);
         assert_eq!(ctx.vars.get(&0x40), Some(&4));
         let v45 = *ctx.vars.get(&0x45).unwrap();
         assert_eq!((v45 >> 8) & 0xFF, 1); // tram id
+    }
+
+    #[test]
+    fn road_ctx_var45_uses_translation_table() {
+        use crate::newgrf_type_tables::GrfTypeTranslationTables;
+        let map = Map::new_flat(4, 4, 0);
+        let c = TileCoord::new(1, 1);
+        let tile = set_road_type_on_tile(plain_road(), RoadType::Road);
+        let catalog = crate::road_type::vanilla_road_type_catalog();
+        let tables = GrfTypeTranslationTables {
+            road: vec![*b"COBB", *b"ROAD"],
+            ..Default::default()
+        };
+        let ctx = action2_eval_ctx_for_road_tile(
+            &map,
+            tile,
+            c,
+            Climate::Temperate,
+            Some(&tables),
+            &catalog,
+        );
+        let v45 = *ctx.vars.get(&0x45).unwrap();
+        assert_eq!(v45 & 0xFF, 1); // ROAD at index 1
     }
 }

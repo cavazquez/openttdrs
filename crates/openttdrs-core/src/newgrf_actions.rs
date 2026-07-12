@@ -35,6 +35,10 @@ const PROP_STATION_DISALLOWED_PLATFORMS: u8 = 0x0A;
 const PROP_STATION_DISALLOWED_LENGTHS: u8 = 0x0B;
 /// Stations: short label 4 chars del spec.
 const PROP_STATION_SPEC_SHORT: u8 = 0x0C;
+/// Stations: custom tile layout (platforms × length).
+const PROP_STATION_CUSTOM_LAYOUT: u8 = 0x0E;
+/// Stations: copy custom layout from another station id.
+const PROP_STATION_COPY_LAYOUT: u8 = 0x0F;
 /// Prop año introducción (uint16 LE).
 const PROP_INTRO_YEAR: u8 = 0x16;
 /// Extensión local: nombre C-string (tests / GRFs propios).
@@ -144,6 +148,10 @@ pub struct ParsedStationMeta {
     pub label: String,
     pub disallowed_platforms: u8,
     pub disallowed_lengths: u8,
+    /// Layouts prop `0x0E`: `(platforms, length)` → tiletypes.
+    pub custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
+    /// Prop `0x0F`: copiar layouts desde este id local (si definido).
+    pub copy_layout_from: Option<u16>,
 }
 
 /// Metadatos `Trains` Action0 (antes de asignar ID ≥1000).
@@ -453,6 +461,8 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
+        let tables_opt = (!type_tables.is_empty()).then_some(type_tables);
         let gfx =
             crate::newgrf_sprites::collect_roadtype_sprite_graphics(&data).unwrap_or_default();
         for (local_idx, meta) in collect_roadtype_metas_from_grf(&data)
@@ -484,6 +494,8 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
                 newgrf_views: views,
                 newgrf_local_id: local_id,
                 newgrf_runtime,
+                newgrf_grfid: entry.grfid,
+                newgrf_type_tables: tables_opt.clone(),
             });
         }
     }
@@ -511,6 +523,68 @@ pub fn apply_newgrf_road_types_default_dirs(state: &mut GameState) {
     apply_newgrf_road_types(state, &refs);
 }
 
+fn read_four_char_label(payload: &[u8], i: &mut usize, fallback: &str) -> Option<String> {
+    if *i + 4 > payload.len() {
+        return None;
+    }
+    let mut s = String::from_utf8_lossy(&payload[*i..*i + 4])
+        .trim_end_matches('\0')
+        .trim()
+        .to_string();
+    *i += 4;
+    if s.is_empty() {
+        s = fallback.into();
+    }
+    Some(s)
+}
+
+fn parse_station_custom_layouts(
+    payload: &[u8],
+    i: &mut usize,
+) -> std::collections::HashMap<(u8, u8), Vec<u8>> {
+    let mut custom_layouts = std::collections::HashMap::new();
+    loop {
+        if *i + 2 > payload.len() {
+            break;
+        }
+        let length = payload[*i];
+        let number = payload[*i + 1];
+        *i += 2;
+        if length == 0 || number == 0 {
+            break;
+        }
+        let n = usize::from(length).saturating_mul(usize::from(number));
+        if *i + n > payload.len() {
+            break;
+        }
+        let mut tiles = payload[*i..*i + n].to_vec();
+        *i += n;
+        for t in &mut tiles {
+            *t &= !1u8; // eje en 0 (OpenTTD)
+        }
+        custom_layouts.insert((number, length), tiles);
+    }
+    custom_layouts
+}
+
+fn parse_station_copy_layout_id(payload: &[u8], i: &mut usize) -> Option<u16> {
+    if *i >= payload.len() {
+        return None;
+    }
+    let b = payload[*i];
+    *i += 1;
+    if b == 0xFF {
+        if *i + 1 > payload.len() {
+            return None;
+        }
+        let id = u16::from_le_bytes([payload[*i], payload[*i + 1]]);
+        *i += 2;
+        Some(id)
+    } else {
+        Some(u16::from(b))
+    }
+}
+
 #[must_use]
 pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
     let header = parse_action0_header(payload)?;
@@ -526,6 +600,8 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
     let mut label = String::new();
     let mut disallowed_platforms = 0u8;
     let mut disallowed_lengths = 0u8;
+    let mut custom_layouts = std::collections::HashMap::new();
+    let mut copy_layout_from = None;
     for _ in 0..header.num_props {
         if i >= payload.len() {
             break;
@@ -534,30 +610,16 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
         i += 1;
         match prop {
             PROP_LABEL => {
-                if i + 4 > payload.len() {
+                let Some(s) = read_four_char_label(payload, &mut i, "NGRF") else {
                     break;
-                }
-                class_short = String::from_utf8_lossy(&payload[i..i + 4])
-                    .trim_end_matches('\0')
-                    .trim()
-                    .to_string();
-                if class_short.is_empty() {
-                    class_short = "NGRF".into();
-                }
-                i += 4;
+                };
+                class_short = s;
             }
             PROP_STATION_SPEC_SHORT => {
-                if i + 4 > payload.len() {
+                let Some(s) = read_four_char_label(payload, &mut i, "Stat") else {
                     break;
-                }
-                short_label = String::from_utf8_lossy(&payload[i..i + 4])
-                    .trim_end_matches('\0')
-                    .trim()
-                    .to_string();
-                if short_label.is_empty() {
-                    short_label = "Stat".into();
-                }
-                i += 4;
+                };
+                short_label = s;
             }
             PROP_STATION_DISALLOWED_PLATFORMS => {
                 if i >= payload.len() {
@@ -572,6 +634,15 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
                 }
                 disallowed_lengths = payload[i];
                 i += 1;
+            }
+            PROP_STATION_CUSTOM_LAYOUT => {
+                custom_layouts = parse_station_custom_layouts(payload, &mut i);
+            }
+            PROP_STATION_COPY_LAYOUT => {
+                let Some(id) = parse_station_copy_layout_id(payload, &mut i) else {
+                    break;
+                };
+                copy_layout_from = Some(id);
             }
             PROP_NAME_CSTRING => {
                 let Some(nul) = payload[i..].iter().position(|&b| b == 0) else {
@@ -598,6 +669,8 @@ pub fn parse_action0_station_meta(payload: &[u8]) -> Option<ParsedStationMeta> {
         label,
         disallowed_platforms,
         disallowed_lengths,
+        custom_layouts,
+        copy_layout_from,
     })
 }
 
@@ -654,11 +727,26 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
+        let type_tables = crate::newgrf_type_tables::collect_type_tables_from_grf(&data);
+        let tables_opt = (!type_tables.is_empty()).then_some(type_tables);
         let gfx = crate::newgrf_sprites::collect_station_sprite_graphics(&data).unwrap_or_default();
-        for (local_idx, meta) in collect_station_metas_from_grf(&data)
-            .into_iter()
-            .enumerate()
-        {
+        let metas = collect_station_metas_from_grf(&data);
+        // Resolver copy_layout (0x0F) dentro del mismo GRF por índice local.
+        let mut layouts_by_local: Vec<std::collections::HashMap<(u8, u8), Vec<u8>>> =
+            Vec::with_capacity(metas.len());
+        for meta in &metas {
+            let mut layouts = meta.custom_layouts.clone();
+            if layouts.is_empty()
+                && let Some(src) = meta.copy_layout_from
+            {
+                let idx = usize::from(src);
+                if let Some(src_layouts) = layouts_by_local.get(idx) {
+                    layouts.clone_from(src_layouts);
+                }
+            }
+            layouts_by_local.push(layouts);
+        }
+        for (local_idx, meta) in metas.into_iter().enumerate() {
             let Some(class_id) = resolve_or_create_station_class(&mut classes, &meta) else {
                 break;
             };
@@ -676,6 +764,7 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
             } else {
                 None
             };
+            let custom_layouts = layouts_by_local.get(local_idx).cloned().unwrap_or_default();
             specs.push(StationSpecDef {
                 id: spec_id,
                 class: class_id,
@@ -688,6 +777,9 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 newgrf_views: views,
                 newgrf_local_id: local_id,
                 newgrf_runtime,
+                newgrf_grfid: entry.grfid,
+                newgrf_type_tables: tables_opt.clone(),
+                custom_layouts,
             });
         }
     }
@@ -1533,6 +1625,74 @@ mod tests {
         let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'T', b'0', 0, 1], "t", "d");
         let report = inspect_grf_bytes(&bytes).unwrap();
         assert_eq!(report.action0_features, vec![ACTION0_FEATURE_TRAINS]);
+    }
+
+    #[test]
+    fn parse_station_custom_layout_prop_0e() {
+        let mut p = vec![0x00, ACTION0_FEATURE_STATIONS, 0x02, 0x01, 0x00];
+        p.push(PROP_LABEL);
+        p.extend_from_slice(b"DFLT");
+        p.push(PROP_STATION_CUSTOM_LAYOUT);
+        p.push(3); // length
+        p.push(1); // platforms
+        p.extend_from_slice(&[0, 2, 0]);
+        p.push(0);
+        p.push(0);
+        let meta = parse_action0_station_meta(&p).unwrap();
+        assert_eq!(meta.custom_layouts.get(&(1, 3)), Some(&vec![0, 2, 0]));
+    }
+
+    #[test]
+    fn apply_embeds_type_translation_tables_on_road() {
+        use crate::newgrf_type_tables::{
+            PROP_RAILTYPE_TRANSLATION, build_action0_type_translation_payload,
+        };
+        const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+        // Dos Action0 (tabla + roadtype) + Action8.
+        let translation_a0 = build_action0_type_translation_payload(
+            PROP_RAILTYPE_TRANSLATION,
+            &[*b"ELRL", *b"RAIL"],
+        );
+        let roadtype_a0 = build_action0_roadtype_payload(b"COBB", false, 1850, "Adoquines");
+        let mut action8 = vec![0x08, 0x07];
+        action8.extend_from_slice(&[b'T', b'T', 0, 1]);
+        action8.extend_from_slice(b"tt\0d\0");
+        let mut data_section = Vec::new();
+        for payload in [
+            translation_a0.as_slice(),
+            roadtype_a0.as_slice(),
+            action8.as_slice(),
+        ] {
+            let size = u32::try_from(payload.len()).unwrap();
+            data_section.extend_from_slice(&size.to_le_bytes());
+            data_section.push(0xFF);
+            data_section.extend_from_slice(payload);
+        }
+        data_section.extend_from_slice(&0u32.to_le_bytes());
+        let sprite_offs = u32::try_from(1 + data_section.len()).unwrap();
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&[0x00, 0x00]);
+        bytes.extend_from_slice(&SIG);
+        bytes.extend_from_slice(&sprite_offs.to_le_bytes());
+        bytes.push(0x00);
+        bytes.extend_from_slice(&data_section);
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+
+        let dir = tempfile_dir_with("ttables.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        let grfid = crate::newgrf_config::grfid_from_bytes([b'T', b'T', 0, 1]);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ttables.grf", grfid));
+        apply_newgrf_road_types(&mut state, &[&dir]);
+        let def = state
+            .road_type_catalog
+            .iter()
+            .find(|d| d.from_newgrf)
+            .unwrap();
+        assert_eq!(def.newgrf_grfid, grfid);
+        let tables = def.newgrf_type_tables.as_ref().unwrap();
+        assert_eq!(tables.rail, vec![*b"ELRL", *b"RAIL"]);
     }
 
     fn tempfile_dir_with(name: &str, bytes: &[u8]) -> std::path::PathBuf {

@@ -95,6 +95,15 @@ pub struct StationSpecDef {
     /// Graphics completas si Action2 var/random requiere runtime.
     #[serde(default, skip)]
     pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
+    /// GRFID del `NewGRF` que definió este spec (0 = vanilla).
+    #[serde(default, skip)]
+    pub newgrf_grfid: u32,
+    /// Tablas de traducción del GRF para vars Action2 (`42`, etc.).
+    #[serde(default, skip)]
+    pub newgrf_type_tables: Option<crate::newgrf_type_tables::GrfTypeTranslationTables>,
+    /// Layouts custom Action0 prop `0x0E`: clave `(platforms, length)` → tiletypes.
+    #[serde(default, skip)]
+    pub custom_layouts: std::collections::HashMap<(u8, u8), Vec<u8>>,
 }
 
 impl StationSpecDef {
@@ -168,6 +177,9 @@ pub fn vanilla_station_spec_catalog() -> Vec<StationSpecDef> {
         newgrf_views: Vec::new(),
         newgrf_local_id: 0,
         newgrf_runtime: None,
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+        custom_layouts: std::collections::HashMap::new(),
     }]
 }
 
@@ -232,10 +244,22 @@ pub fn list_station_specs<'a>(
         .collect()
 }
 
-/// Layout gfx; `NewGRF` sin prop 0E → vanilla.
+/// Layout gfx; usa prop `0x0E` del spec si existe, si no vanilla.
 #[must_use]
-pub fn station_spec_layout(spec: StationSpecId, platforms: usize, length: usize) -> Vec<u8> {
-    let _ = spec;
+pub fn station_spec_layout(
+    catalog: &[StationSpecDef],
+    spec: StationSpecId,
+    platforms: usize,
+    length: usize,
+) -> Vec<u8> {
+    let p = u8::try_from(platforms).unwrap_or(0);
+    let l = u8::try_from(length).unwrap_or(0);
+    if let Some(def) = station_spec_def(catalog, spec)
+        && let Some(layout) = def.custom_layouts.get(&(p, l))
+        && layout.len() == platforms.saturating_mul(length)
+    {
+        return layout.clone();
+    }
     crate::rail_station_layout(platforms, length)
 }
 
@@ -296,5 +320,15 @@ mod tests {
         spec.disallowed_platforms = 1 << 2;
         assert!(!spec.allows_platforms(3));
         assert!(spec.allows_platforms(2));
+    }
+
+    #[test]
+    fn custom_layout_0e_overrides_vanilla() {
+        let mut specs = vanilla_station_spec_catalog();
+        specs[0].custom_layouts.insert((1, 3), vec![0, 2, 0]);
+        let layout = station_spec_layout(&specs, StationSpecId::DefaultRail, 1, 3);
+        assert_eq!(layout, vec![0, 2, 0]);
+        let vanilla = station_spec_layout(&specs, StationSpecId::DefaultRail, 2, 2);
+        assert_eq!(vanilla, crate::rail_station_layout(2, 2));
     }
 }

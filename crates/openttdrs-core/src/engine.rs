@@ -42,6 +42,12 @@ pub struct EngineDef {
     /// Vistas Action1 (1..=8); vacías = sin gfx `NewGRF`. No se serializa en saves.
     #[serde(default, skip)]
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
+    /// Id local Action3 en el GRF (para re-resolver Action2 en runtime).
+    #[serde(default, skip)]
+    pub newgrf_local_id: u8,
+    /// Graphics completas si hace falta re-resolver random/advanced al dibujar.
+    #[serde(default, skip)]
+    pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
 }
 
 impl EngineDef {
@@ -59,6 +65,20 @@ impl EngineDef {
         }
         let i = dir % self.newgrf_views.len();
         self.newgrf_views.get(i)
+    }
+
+    /// Vista `NewGRF` re-resolviendo Action2 random/advanced con contexto de consist.
+    pub fn newgrf_view_runtime(
+        &self,
+        dir: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::DecodedSprite> {
+        let runtime = self.newgrf_runtime.as_ref()?;
+        let views = runtime.views_for_local_id_ctx(self.newgrf_local_id, ctx)?;
+        if views.is_empty() {
+            return None;
+        }
+        Some(views[dir % views.len()].clone())
     }
 
     /// Velocidad máxima en km/h para mostrar en UI (conversión por tipo).
@@ -164,6 +184,8 @@ macro_rules! road {
             train_image_index: 0,
             from_newgrf: false,
             newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
         }
     };
 }
@@ -186,6 +208,8 @@ macro_rules! train {
             train_image_index: $img,
             from_newgrf: false,
             newgrf_views: Vec::new(),
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
         }
     };
 }

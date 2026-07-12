@@ -942,7 +942,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** advanced variational chain (bit 5) / consist runtime completo, o segunda humana / editor.
+**Siguiente:** segunda humana / editor, o vars NewGRF runtime más allá de random/consist.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -984,7 +984,7 @@ Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 23. ~~Action2 variational rangos + vars (`Action2EvalCtx`); random `0x80`/`0x83`.~~ ✅
 24. ~~Chunked 32bpp + máscara company-colour (`info` RGB+A+M).~~ ✅
 25. ~~Action2 divide/modulo + random `0x84` consist + mask in-world (trains/estaciones).~~ ✅
-26. Advanced variational chain (bit 5) / resolución consist runtime completa → OOS.
+26. ~~Advanced variational chain (bit 5) / resolución consist runtime completa.~~ ✅
 
 Progreso backend OOS (JoinStation rail + CargoDist observacional):
 

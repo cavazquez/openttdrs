@@ -676,6 +676,9 @@ pub struct Vehicle {
     /// Peso agregado del consist (t); cabeza.
     #[serde(default)]
     pub cached_weight_t: u16,
+    /// Bits aleatorios `NewGRF` del vehículo (`random_bits`; random Action2 / consist).
+    #[serde(default)]
+    pub newgrf_random_bits: u8,
 }
 
 fn default_unit_length() -> u8 {
@@ -684,6 +687,10 @@ fn default_unit_length() -> u8 {
 
 fn default_cached_total_length() -> u16 {
     u16::from(crate::train_consist::VEHICLE_LENGTH)
+}
+
+fn seed_newgrf_random_bits(id: u32) -> u8 {
+    (id.wrapping_mul(0x9E37_79B9) >> 24) as u8
 }
 
 impl Vehicle {
@@ -757,6 +764,7 @@ impl Vehicle {
             cached_total_length: u16::from(crate::train_consist::VEHICLE_LENGTH),
             cached_power_hp: 0,
             cached_weight_t: 0,
+            newgrf_random_bits: seed_newgrf_random_bits(id),
         }
     }
 

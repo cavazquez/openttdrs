@@ -2,7 +2,7 @@
 //!
 //! Contenedor **v1** (inline) o **v2** (sprite section + `0xFD`).
 //! 8bpp/32bpp plano / LZ77 / chunked; multi-zoom; máscara company-colour.
-//! Action3→Action2 (básico / variational+divide/modulo / random 80/83/84)→Action1.
+//! Action3→Action2 (básico / variational+advanced bit5 / random 80/83/84)→Action1.
 
 use std::collections::HashMap;
 
@@ -38,22 +38,41 @@ pub struct TrainSpriteAssign {
     pub set_id: u16,
 }
 
-/// Action2 variational (`0x81`/`0x82`): variable + rangos + default.
-///
-/// Soporta shift/and y opcionalmente add+divide o add+modulo (bits 6/7 de shift).
-/// Bit 5 (advanced chain) sigue OOS.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Action2VarEntry {
-    pub variable: u8,
+/// Ajuste `varadjust` (shift/and [+add+div|mod]).
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Action2VarAdjust {
     /// Bits 0..4 del `shift-num`.
     pub shift: u8,
     pub and_mask: u8,
-    /// Presente si bit 6 o 7 de `shift-num`.
     pub add_val: Option<u8>,
-    /// Bit 6: dividir `(var&mask)+add` por este valor (signed).
     pub divide_val: Option<u8>,
-    /// Bit 7: módulo `(var&mask)+add` (signed).
     pub modulo_val: Option<u8>,
+}
+
+/// Un término variable + ajuste (y parámetro opcional para `60+x`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Action2VarTerm {
+    pub variable: u8,
+    /// Parámetro tras variables `60+x` (p. ej. registro `7D`).
+    pub param: Option<u8>,
+    pub adjust: Action2VarAdjust,
+}
+
+/// Operación advanced: `operator` entre acumulador y el siguiente término.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Action2VarOp {
+    pub operator: u8,
+    pub rhs: Action2VarTerm,
+}
+
+/// Action2 variational (`0x81`/`0x82`): variable + rangos + default.
+///
+/// Con bit 5 en `shift-num` se encadena `ops` (advanced). Sin bit 5, `ops` vacío.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Action2VarEntry {
+    pub first: Action2VarTerm,
+    /// Cadena advanced (`operator` + término); vacía = variational simple.
+    pub ops: Vec<Action2VarOp>,
     /// `(result_set, low, high)` inclusive.
     pub ranges: Vec<(u16, u8, u8)>,
     pub default: u16,
@@ -64,7 +83,7 @@ pub struct Action2VarEntry {
 pub struct Action2RandomEntry {
     /// `0x80` propio, `0x83` related, `0x84` consist.
     pub typ: u8,
-    /// Solo `0x84`: conteo desde vehículo de control (nibble bajo).
+    /// Solo `0x84`: conteo desde vehículo de control (nibble bajo = offset).
     pub consist_count: u8,
     pub triggers: u8,
     pub randbit: u8,
@@ -78,19 +97,21 @@ pub struct Action2EvalCtx {
     pub vars: HashMap<u8, u32>,
     /// Bits aleatorios del objeto (vehículo/estación/…).
     pub random_bits: u32,
-    /// Bits de vehículos del consist indexados por `consist_count` (tipo `0x84`).
+    /// Bits de vehículos del consist indexados por offset (`0x84` nibble bajo).
     pub consist_random_bits: HashMap<u8, u32>,
+    /// Registros temporales (variable `7D` / operador `\2sto`).
+    pub temp_registers: HashMap<u8, u32>,
 }
 
 /// Resultado de parsear Action1/2/3 de un feature (trains / roadtypes).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TrainSpriteGraphics {
     /// `sets[set_id][view]` — sets Action1 en orden de aparición.
     pub sets: Vec<Vec<DecodedSprite>>,
     pub assigns: Vec<TrainSpriteAssign>,
     /// Action2 set-id → índice del primer set Action1 “moving” (solo trains).
     pub action2_to_action1: HashMap<u8, u16>,
-    /// Action2 variational completo (rangos + default).
+    /// Action2 variational completo (rangos + default / advanced).
     pub action2_var: HashMap<u8, Action2VarEntry>,
     /// Action2 random (`0x80`/`0x83`/`0x84`).
     pub action2_random: HashMap<u8, Action2RandomEntry>,
@@ -106,12 +127,11 @@ impl TrainSpriteGraphics {
     /// Resuelve sin contexto (variational → `default`; random → set[0]).
     #[must_use]
     pub fn resolve_action1_set(&self, action3_set_id: u16) -> u16 {
-        self.resolve_action1_set_ctx(action3_set_id, &Action2EvalCtx::default())
+        self.resolve_action1_set_ctx(action3_set_id, &mut Action2EvalCtx::default())
     }
 
     /// Resuelve Action3 → var/random → Action2 básico → Action1.
-    #[must_use]
-    pub fn resolve_action1_set_ctx(&self, action3_set_id: u16, ctx: &Action2EvalCtx) -> u16 {
+    pub fn resolve_action1_set_ctx(&self, action3_set_id: u16, ctx: &mut Action2EvalCtx) -> u16 {
         let mut id = action3_set_id;
         for _ in 0..8 {
             let a2 = u8::try_from(id).unwrap_or(u8::MAX);
@@ -123,8 +143,8 @@ impl TrainSpriteGraphics {
                 id = next;
                 continue;
             }
-            if let Some(var) = self.action2_var.get(&a2) {
-                let next = eval_action2_var(var, ctx);
+            if let Some(var) = self.action2_var.get(&a2).cloned() {
+                let next = eval_action2_var(&var, ctx);
                 if next & 0x8000 != 0 {
                     break;
                 }
@@ -142,42 +162,156 @@ impl TrainSpriteGraphics {
             .unwrap_or(id)
     }
 
-    /// Todas las vistas del set asignado al id local.
+    /// Todas las vistas del set asignado al id local (ctx por defecto).
     #[must_use]
     pub fn views_for_local_id(&self, local_id: u8) -> Option<&[DecodedSprite]> {
+        self.views_for_local_id_ctx(local_id, &mut Action2EvalCtx::default())
+    }
+
+    /// Vistas resolviendo Action2 con contexto (random/consist/advanced).
+    pub fn views_for_local_id_ctx(
+        &self,
+        local_id: u8,
+        ctx: &mut Action2EvalCtx,
+    ) -> Option<&[DecodedSprite]> {
         let set_id = self
             .assigns
             .iter()
             .find(|a| a.local_id == local_id)
             .map(|a| a.set_id)
             .or_else(|| (!self.sets.is_empty()).then_some(0))?;
-        let action1_idx = self.resolve_action1_set(set_id);
+        let action1_idx = self.resolve_action1_set_ctx(set_id, ctx);
         self.sets
             .get(usize::from(action1_idx))
             .map(Vec::as_slice)
             .filter(|s| !s.is_empty())
     }
+
+    /// ¿Necesita re-resolución en runtime (random o advanced)?
+    #[must_use]
+    pub fn needs_runtime_resolve(&self) -> bool {
+        !self.action2_random.is_empty() || self.action2_var.values().any(|v| !v.ops.is_empty())
+    }
 }
 
-fn eval_action2_var(entry: &Action2VarEntry, ctx: &Action2EvalCtx) -> u16 {
-    let Some(&raw) = ctx.vars.get(&entry.variable) else {
-        return entry.default;
-    };
-    let mut value = i32::try_from(raw.wrapping_shr(u32::from(entry.shift & 0x1F))).unwrap_or(0);
-    value &= i32::from(entry.and_mask);
-    if let Some(add) = entry.add_val {
+fn apply_var_adjust(raw: u32, adj: &Action2VarAdjust) -> i32 {
+    // Cast wrapping: literales `0x1A` usan `0xFFFFFFFF` → `-1` en i32.
+    let mut value = raw.wrapping_shr(u32::from(adj.shift & 0x1F)).cast_signed();
+    value &= i32::from(adj.and_mask);
+    if let Some(add) = adj.add_val {
         value = value.wrapping_add(i32::from(add));
     }
-    if let Some(div) = entry.divide_val
+    if let Some(div) = adj.divide_val
         && div != 0
     {
         value /= i32::from(div);
-    } else if let Some(modulo) = entry.modulo_val
+    } else if let Some(modulo) = adj.modulo_val
         && modulo != 0
     {
         value %= i32::from(modulo);
     }
-    let value_u8 = u8::try_from(value & 0xFF).unwrap_or(0);
+    value
+}
+
+fn read_action2_var(ctx: &Action2EvalCtx, term: &Action2VarTerm) -> Option<u32> {
+    match term.variable {
+        // Literal: `and-mask` selecciona bits de 0xFFFFFFFF.
+        0x1A => Some(0xFFFF_FFFF),
+        // Registro temporal `7D[param]`.
+        0x7D => {
+            let idx = term.param.unwrap_or(0);
+            Some(ctx.temp_registers.get(&idx).copied().unwrap_or(0))
+        }
+        v => ctx.vars.get(&v).copied(),
+    }
+}
+
+fn eval_term(ctx: &Action2EvalCtx, term: &Action2VarTerm) -> Option<i32> {
+    let raw = read_action2_var(ctx, term)?;
+    Some(apply_var_adjust(raw, &term.adjust))
+}
+
+fn apply_advanced_op(op: u8, val1: i32, val2: i32, ctx: &mut Action2EvalCtx) -> i32 {
+    match op {
+        0x00 => val1.wrapping_add(val2),
+        0x01 => val1.wrapping_sub(val2),
+        0x02 => val1.min(val2),
+        0x03 => val1.max(val2),
+        0x04 => val1.cast_unsigned().min(val2.cast_unsigned()).cast_signed(),
+        0x05 => val1.cast_unsigned().max(val2.cast_unsigned()).cast_signed(),
+        0x06 => {
+            if val2 != 0 {
+                val1 / val2
+            } else {
+                val1
+            }
+        }
+        0x07 => {
+            if val2 != 0 {
+                val1 % val2
+            } else {
+                val1
+            }
+        }
+        0x08 => {
+            if val2 != 0 {
+                (val1.cast_unsigned() / val2.cast_unsigned()).cast_signed()
+            } else {
+                val1
+            }
+        }
+        0x09 => {
+            if val2 != 0 {
+                (val1.cast_unsigned() % val2.cast_unsigned()).cast_signed()
+            } else {
+                val1
+            }
+        }
+        0x0A => val1.wrapping_mul(val2),
+        0x0B => val1 & val2,
+        0x0C => val1 | val2,
+        0x0D => val1 ^ val2,
+        // \2sto: temp_registers[val2] = val1
+        0x0E => {
+            let idx = u8::try_from(val2 & 0xFF).unwrap_or(0);
+            ctx.temp_registers.insert(idx, val1.cast_unsigned());
+            val1
+        }
+        // \2rst: result = val2
+        0x0F => val2,
+        0x11 => val1.rotate_right(val2.cast_unsigned() & 31),
+        0x12 => match val1.cmp(&val2) {
+            std::cmp::Ordering::Less => 0,
+            std::cmp::Ordering::Equal => 1,
+            std::cmp::Ordering::Greater => 2,
+        },
+        0x13 => {
+            let a = val1.cast_unsigned();
+            let b = val2.cast_unsigned();
+            match a.cmp(&b) {
+                std::cmp::Ordering::Less => 0,
+                std::cmp::Ordering::Equal => 1,
+                std::cmp::Ordering::Greater => 2,
+            }
+        }
+        0x14 => val1.wrapping_shl(val2.cast_unsigned() & 31),
+        0x15 => (val1.cast_unsigned() >> (val2.cast_unsigned() & 31)).cast_signed(),
+        0x16 => val1.wrapping_shr(val2.cast_unsigned() & 31),
+        _ => val1,
+    }
+}
+
+fn eval_action2_var(entry: &Action2VarEntry, ctx: &mut Action2EvalCtx) -> u16 {
+    let Some(mut acc) = eval_term(ctx, &entry.first) else {
+        return entry.default;
+    };
+    for op in &entry.ops {
+        let Some(rhs) = eval_term(ctx, &op.rhs) else {
+            return entry.default;
+        };
+        acc = apply_advanced_op(op.operator, acc, rhs, ctx);
+    }
+    let value_u8 = u8::try_from(acc & 0xFF).unwrap_or(0);
     for &(result, low, high) in &entry.ranges {
         if value_u8 >= low && value_u8 <= high {
             return result;
@@ -187,9 +321,10 @@ fn eval_action2_var(entry: &Action2VarEntry, ctx: &Action2EvalCtx) -> u16 {
 }
 
 fn eval_action2_random(entry: &Action2RandomEntry, ctx: &Action2EvalCtx) -> u16 {
+    let count_key = entry.consist_count & 0x0F;
     let bits = if entry.typ == 0x84 {
         ctx.consist_random_bits
-            .get(&entry.consist_count)
+            .get(&count_key)
             .copied()
             .unwrap_or(ctx.random_bits)
     } else {
@@ -518,9 +653,72 @@ fn parse_action2_vehicle_basic(payload: &[u8], feature: u8) -> Option<(u8, u16)>
     Some((set_id, a1))
 }
 
-/// Action2 variational `0x81`/`0x82` (byte): variable + rangos + default.
-///
-/// Divide (bit 6) / modulo (bit 7) soportados. Advanced chain (bit 5) → OOS.
+/// Lee `variable` [+param `60+x`] + `varadjust`. Devuelve `(término, bit5_continúa)`.
+fn parse_var_term(payload: &[u8], i: &mut usize) -> Option<(Action2VarTerm, bool)> {
+    if *i >= payload.len() {
+        return None;
+    }
+    let variable = payload[*i];
+    *i += 1;
+    let param = if (0x60..=0x7F).contains(&variable) {
+        if *i >= payload.len() {
+            return None;
+        }
+        let p = payload[*i];
+        *i += 1;
+        Some(p)
+    } else {
+        None
+    };
+    if *i >= payload.len() {
+        return None;
+    }
+    let shift_num = payload[*i];
+    *i += 1;
+    let continued = shift_num & 0x20 != 0;
+    let do_divide = shift_num & 0x40 != 0;
+    let do_modulo = shift_num & 0x80 != 0;
+    if do_divide && do_modulo {
+        return None;
+    }
+    if *i >= payload.len() {
+        return None;
+    }
+    let and_mask = payload[*i];
+    *i += 1;
+    let mut add_val = None;
+    let mut divide_val = None;
+    let mut modulo_val = None;
+    if do_divide || do_modulo {
+        if *i + 2 > payload.len() {
+            return None;
+        }
+        add_val = Some(payload[*i]);
+        let operand = payload[*i + 1];
+        *i += 2;
+        if do_divide {
+            divide_val = Some(operand);
+        } else {
+            modulo_val = Some(operand);
+        }
+    }
+    Some((
+        Action2VarTerm {
+            variable,
+            param,
+            adjust: Action2VarAdjust {
+                shift: shift_num & 0x1F,
+                and_mask,
+                add_val,
+                divide_val,
+                modulo_val,
+            },
+        },
+        continued,
+    ))
+}
+
+/// Action2 variational `0x81`/`0x82` (byte): simple, divide/modulo o advanced (bit 5).
 fn parse_action2_variational(payload: &[u8], feature: u8) -> Option<(u8, Action2VarEntry)> {
     if payload.len() < 8 || payload[0] != 0x02 || payload[1] != feature {
         return None;
@@ -530,37 +728,20 @@ fn parse_action2_variational(payload: &[u8], feature: u8) -> Option<(u8, Action2
     if typ != 0x81 && typ != 0x82 {
         return None;
     }
-    let variable = payload[4];
-    let shift_num = payload[5];
-    // Advanced chain (bit 5) → OOS.
-    if shift_num & 0x20 != 0 {
-        return None;
-    }
-    let do_divide = shift_num & 0x40 != 0;
-    let do_modulo = shift_num & 0x80 != 0;
-    if do_divide && do_modulo {
-        return None;
-    }
-    let mut i = 6usize;
-    if i >= payload.len() {
-        return None;
-    }
-    let and_mask = payload[i];
-    i += 1;
-    let mut add_val = None;
-    let mut divide_val = None;
-    let mut modulo_val = None;
-    if do_divide || do_modulo {
-        if i + 2 > payload.len() {
+    let mut i = 4usize;
+    let (first, mut continued) = parse_var_term(payload, &mut i)?;
+    let mut ops = Vec::new();
+    while continued {
+        if i >= payload.len() {
             return None;
         }
-        add_val = Some(payload[i]);
-        let operand = payload[i + 1];
-        i += 2;
-        if do_divide {
-            divide_val = Some(operand);
-        } else {
-            modulo_val = Some(operand);
+        let operator = payload[i];
+        i += 1;
+        let (rhs, next) = parse_var_term(payload, &mut i)?;
+        ops.push(Action2VarOp { operator, rhs });
+        continued = next;
+        if ops.len() > 32 {
+            return None;
         }
     }
     if i >= payload.len() {
@@ -586,12 +767,8 @@ fn parse_action2_variational(payload: &[u8], feature: u8) -> Option<(u8, Action2
     Some((
         set_id,
         Action2VarEntry {
-            variable,
-            shift: shift_num & 0x1F,
-            and_mask,
-            add_val,
-            divide_val,
-            modulo_val,
+            first,
+            ops,
             ranges,
             default,
         },
@@ -1331,6 +1508,43 @@ pub fn build_action2_variational_divmod_payload(
         p.push(add);
         p.push(divide_val.or(modulo_val).unwrap_or(1));
     }
+    p.push(u8::try_from(ranges.len()).unwrap_or(0));
+    for &(result, low, high) in ranges {
+        p.extend_from_slice(&result.to_le_bytes());
+        p.push(low);
+        p.push(high);
+    }
+    p.extend_from_slice(&default_set.to_le_bytes());
+    p
+}
+
+/// Advanced variational: `variable` `+` literal `0x1A` (bit 5 en el primer término).
+///
+/// Cadena: `var (shift|0x20) and` → op `0x00` (+) → `0x1A shift=0 and=literal`.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn build_action2_variational_advanced_add_literal(
+    feature: u8,
+    set_id: u8,
+    variable: u8,
+    and_mask_var: u8,
+    literal: u8,
+    ranges: &[(u16, u8, u8)],
+    default_set: u16,
+) -> Vec<u8> {
+    let mut p = vec![
+        0x02,
+        feature,
+        set_id,
+        0x81,
+        variable,
+        0x20, // shift 0 + bit 5 (continúa)
+        and_mask_var,
+        0x00, // +
+        0x1A, // literal
+        0x00, // shift 0, sin continuar
+        literal,
+    ];
     p.push(u8::try_from(ranges.len()).unwrap_or(0));
     for &(result, low, high) in ranges {
         p.extend_from_slice(&result.to_le_bytes());
@@ -2684,16 +2898,46 @@ mod tests {
         );
         let (set_id, entry) = parse_action2_variational(&payload, ACTION0_FEATURE_TRAINS).unwrap();
         assert_eq!(set_id, 5);
-        assert_eq!(entry.divide_val, Some(10));
+        assert_eq!(entry.first.adjust.divide_val, Some(10));
         let mut gfx = TrainSpriteGraphics::default();
         gfx.action2_var.insert(5, entry);
         gfx.action2_to_action1.insert(1, 0);
         gfx.action2_to_action1.insert(9, 1);
         let mut ctx = Action2EvalCtx::default();
         ctx.vars.insert(0x40, 25);
-        assert_eq!(gfx.resolve_action1_set_ctx(5, &ctx), 0);
+        assert_eq!(gfx.resolve_action1_set_ctx(5, &mut ctx), 0);
         ctx.vars.insert(0x40, 5);
-        assert_eq!(gfx.resolve_action1_set_ctx(5, &ctx), 1); // 5/10=0 → default 9
+        assert_eq!(gfx.resolve_action1_set_ctx(5, &mut ctx), 1); // 5/10=0 → default 9
+    }
+
+    #[test]
+    fn parse_and_resolve_advanced_variational_add_literal() {
+        // var 0x40 (=5) + literal 3 = 8 → rango (1, 8, 8)
+        let payload = build_action2_variational_advanced_add_literal(
+            ACTION0_FEATURE_TRAINS,
+            4,
+            0x40,
+            0xFF,
+            3,
+            &[(1, 8, 8)],
+            9,
+        );
+        let (set_id, entry) = parse_action2_variational(&payload, ACTION0_FEATURE_TRAINS).unwrap();
+        assert_eq!(set_id, 4);
+        assert_eq!(entry.ops.len(), 1);
+        assert_eq!(entry.ops[0].operator, 0x00);
+        assert_eq!(entry.ops[0].rhs.variable, 0x1A);
+        assert_eq!(entry.ops[0].rhs.adjust.and_mask, 3);
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_var.insert(4, entry);
+        gfx.action2_to_action1.insert(1, 0);
+        gfx.action2_to_action1.insert(9, 1);
+        let mut ctx = Action2EvalCtx::default();
+        ctx.vars.insert(0x40, 5);
+        assert_eq!(gfx.resolve_action1_set_ctx(4, &mut ctx), 0);
+        ctx.vars.insert(0x40, 0);
+        assert_eq!(gfx.resolve_action1_set_ctx(4, &mut ctx), 1); // 0+3=3 → default
+        assert!(gfx.needs_runtime_resolve());
     }
 
     #[test]
@@ -2709,9 +2953,9 @@ mod tests {
         gfx.action2_to_action1.insert(21, 1);
         let mut ctx = Action2EvalCtx::default();
         ctx.consist_random_bits.insert(2, 1);
-        assert_eq!(gfx.resolve_action1_set_ctx(6, &ctx), 1);
+        assert_eq!(gfx.resolve_action1_set_ctx(6, &mut ctx), 1);
         ctx.consist_random_bits.insert(2, 0);
-        assert_eq!(gfx.resolve_action1_set_ctx(6, &ctx), 0);
+        assert_eq!(gfx.resolve_action1_set_ctx(6, &mut ctx), 0);
     }
 
     #[test]
@@ -2720,12 +2964,18 @@ mod tests {
         gfx.action2_var.insert(
             3,
             Action2VarEntry {
-                variable: 0x40,
-                shift: 0,
-                and_mask: 0xFF,
-                add_val: None,
-                divide_val: None,
-                modulo_val: None,
+                first: Action2VarTerm {
+                    variable: 0x40,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
                 ranges: vec![(7, 1, 1), (8, 2, 5)],
                 default: 9,
             },
@@ -2734,11 +2984,11 @@ mod tests {
         gfx.action2_to_action1.insert(8, 1);
         gfx.action2_to_action1.insert(9, 2);
         let mut ctx = Action2EvalCtx::default();
-        assert_eq!(gfx.resolve_action1_set_ctx(3, &ctx), 2); // default → 9 → a1 2
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx), 2); // default → 9 → a1 2
         ctx.vars.insert(0x40, 1);
-        assert_eq!(gfx.resolve_action1_set_ctx(3, &ctx), 0);
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx), 0);
         ctx.vars.insert(0x40, 3);
-        assert_eq!(gfx.resolve_action1_set_ctx(3, &ctx), 1);
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx), 1);
     }
 
     #[test]
@@ -2760,9 +3010,9 @@ mod tests {
             random_bits: 0,
             ..Action2EvalCtx::default()
         };
-        assert_eq!(gfx.resolve_action1_set_ctx(4, &ctx), 0);
+        assert_eq!(gfx.resolve_action1_set_ctx(4, &mut ctx), 0);
         ctx.random_bits = 1;
-        assert_eq!(gfx.resolve_action1_set_ctx(4, &ctx), 1);
+        assert_eq!(gfx.resolve_action1_set_ctx(4, &mut ctx), 1);
         assert_eq!(gfx.resolve_action1_set(4), 0); // sin ctx → set[0]
     }
 

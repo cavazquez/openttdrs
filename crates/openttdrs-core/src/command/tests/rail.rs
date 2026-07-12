@@ -1579,6 +1579,8 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         train_image_index: 2,
         from_newgrf: true,
         newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: None,
     });
     let money_before = s.economy.money;
     apply_command(&mut s, &Command::BuildVehicleAtDepot(depot, id)).unwrap();

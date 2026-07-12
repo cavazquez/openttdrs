@@ -6,6 +6,7 @@
 
 use crate::engine::{EngineDef, engine_by_id};
 use crate::map::TileCoord;
+use crate::newgrf_sprites::Action2EvalCtx;
 use crate::vehicle::{Vehicle, VehicleKind};
 
 /// Longitud de una unidad de tren en fracciones de tesela (`OpenTTD` `VEHICLE_LENGTH`).
@@ -43,6 +44,31 @@ pub fn consist_unit_ids(vehicles: &[Vehicle], head_id: u32) -> Vec<u32> {
             .and_then(|v| v.next_unit);
     }
     out
+}
+
+/// Contexto Action2 para dibujar/resolver sprites de una unidad del consist.
+///
+/// `consist_random_bits[n]` = bits del vehículo a `n` pasos hacia la cabeza
+/// (`prev_unit`; 0 = la propia unidad). Usado por random Action2 `0x84`.
+#[must_use]
+pub fn action2_eval_ctx_for_unit(vehicles: &[Vehicle], unit_id: u32) -> Action2EvalCtx {
+    let mut ctx = Action2EvalCtx::default();
+    let mut cur = Some(unit_id);
+    for offset in 0u8..=15 {
+        let Some(id) = cur else {
+            break;
+        };
+        let Some(unit) = vehicles.iter().find(|v| v.id == id) else {
+            break;
+        };
+        let bits = u32::from(unit.newgrf_random_bits);
+        if offset == 0 {
+            ctx.random_bits = bits;
+        }
+        ctx.consist_random_bits.insert(offset, bits);
+        cur = unit.prev_unit;
+    }
+    ctx
 }
 
 /// ID de la cabeza del consist que contiene `vehicle_id`.
@@ -358,6 +384,23 @@ mod tests {
         assert!(detach_unit(&mut vs, 2).is_ok());
         assert_eq!(vs[0].next_unit, None);
         assert_eq!(vs[1].prev_unit, None);
+    }
+
+    #[test]
+    fn action2_ctx_counts_back_to_head() {
+        let mut vs = vec![train(1), train(2), train(3)];
+        vs[0].newgrf_random_bits = 0x11;
+        vs[1].newgrf_random_bits = 0x22;
+        vs[2].newgrf_random_bits = 0x33;
+        vs[1].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        vs[2].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+        assert!(attach_wagon(&mut vs, 1, 3).is_ok());
+        let ctx = action2_eval_ctx_for_unit(&vs, 3);
+        assert_eq!(ctx.random_bits, 0x33);
+        assert_eq!(ctx.consist_random_bits.get(&0), Some(&0x33));
+        assert_eq!(ctx.consist_random_bits.get(&1), Some(&0x22));
+        assert_eq!(ctx.consist_random_bits.get(&2), Some(&0x11));
     }
 
     #[test]

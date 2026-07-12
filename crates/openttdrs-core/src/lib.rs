@@ -178,14 +178,15 @@ pub use newgrf_config::{
     parse_grf_container, parse_grf_full, scan_grf_bytes, scan_grf_file, validate_stack,
 };
 pub use newgrf_sprites::{
-    ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, Action2EvalCtx, Action2RandomEntry, Action2VarEntry,
-    Action5Block, CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE,
-    CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, DecodedSprite, SHORE_ACTION5_SLOT_COUNT,
-    SHORE_MISSING_BLOCK_SLOTS, SPRITE_V2_ZOOM_PREFERENCE, TrainSpriteAssign, TrainSpriteGraphics,
-    action5_type_name, apply_company_colour_mask, bake_sprite_company_mask,
-    build_action1_feature_payload, build_action1_trains_payload, build_action2_trains_payload,
-    build_action2_trains_random, build_action2_trains_random_consist,
-    build_action2_trains_variational_default, build_action2_variational_default_payload,
+    ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, Action2EvalCtx, Action2RandomEntry,
+    Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm, Action5Block,
+    CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE,
+    CATENARY_WIRE_SPRITE_BASE, DecodedSprite, SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS,
+    SPRITE_V2_ZOOM_PREFERENCE, TrainSpriteAssign, TrainSpriteGraphics, action5_type_name,
+    apply_company_colour_mask, bake_sprite_company_mask, build_action1_feature_payload,
+    build_action1_trains_payload, build_action2_trains_payload, build_action2_trains_random,
+    build_action2_trains_random_consist, build_action2_trains_variational_default,
+    build_action2_variational_advanced_add_literal, build_action2_variational_default_payload,
     build_action2_variational_divmod_payload, build_action2_variational_payload,
     build_action2_vehicle_payload, build_action3_feature_payload, build_action3_trains_payload,
     build_grf_v2_action5_with_sprite, build_grf_v2_roadtype_with_preview_sprite,
@@ -330,9 +331,10 @@ pub use town::{
 };
 pub use townname::generate_town_name;
 pub use train_consist::{
-    VEHICLE_LENGTH, attach_wagon, consist_changed, consist_head_id, consist_occupied_tiles,
-    consist_power_hp, consist_tile_span, consist_unit_ids, consist_weight_t, detach_unit,
-    engine_is_train_engine, engine_is_wagon, same_consist, sell_chain_ids,
+    VEHICLE_LENGTH, action2_eval_ctx_for_unit, attach_wagon, consist_changed, consist_head_id,
+    consist_occupied_tiles, consist_power_hp, consist_tile_span, consist_unit_ids,
+    consist_weight_t, detach_unit, engine_is_train_engine, engine_is_wagon, same_consist,
+    sell_chain_ids,
 };
 pub use train_movement::{
     ACCEL_SLOWDOWN, AccelSlowdownParams, DELTACOORD_LEAVE_OFFSET, FRACTCOORDS_BEHIND,

@@ -896,6 +896,11 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 .views_for_local_id(local_id)
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
+            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+                Some(Box::new(gfx.clone()))
+            } else {
+                None
+            };
             catalog.push(EngineDef {
                 id,
                 kind: VehicleKind::Train,
@@ -912,6 +917,8 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 train_image_index: 2,
                 from_newgrf: true,
                 newgrf_views: views,
+                newgrf_local_id: local_id,
+                newgrf_runtime,
             });
         }
     }

@@ -49,7 +49,8 @@ impl Plugin for VehicleRenderPlugin {
 /// Caché in-world / preview: `(engine_id, view_idx, company_colour)` → textura.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfTrainSpriteCache {
-    handles: HashMap<(u16, u8, u8), Handle<Image>>,
+    /// `(engine_id, view_idx, colour, runtime_fp)` → textura.
+    handles: HashMap<(u16, u8, u8, u32), Handle<Image>>,
 }
 
 impl NewGrfTrainSpriteCache {
@@ -76,7 +77,20 @@ impl NewGrfTrainSpriteCache {
         )
     }
 
-    /// Textura para la vista `dir` (0..=7) de un motor NewGRF.
+    fn runtime_fingerprint(ctx: &openttdrs_core::Action2EvalCtx) -> u32 {
+        let mut h = ctx.random_bits;
+        for offset in 0u8..=15 {
+            if let Some(&bits) = ctx.consist_random_bits.get(&offset) {
+                h = h
+                    .wrapping_mul(31)
+                    .wrapping_add(bits)
+                    .wrapping_add(u32::from(offset) << 24);
+            }
+        }
+        h
+    }
+
+    /// Textura para la vista `dir` (0..=7) de un motor NewGRF (vistas horneadas).
     pub(crate) fn handle_for(
         &mut self,
         engine: &EngineDef,
@@ -86,7 +100,33 @@ impl NewGrfTrainSpriteCache {
     ) -> Option<Handle<Image>> {
         let view = engine.newgrf_view(dir)?;
         let view_idx = u8::try_from(dir % engine.newgrf_views.len()).unwrap_or(0);
-        let key = (engine.id, view_idx, colour.as_u8());
+        let key = (engine.id, view_idx, colour.as_u8(), 0);
+        Some(
+            self.handles
+                .entry(key)
+                .or_insert_with(|| images.add(Self::decoded_to_image(view, colour)))
+                .clone(),
+        )
+    }
+
+    /// Textura re-resolviendo Action2 con bits del vehículo / consist.
+    pub(crate) fn handle_for_runtime(
+        &mut self,
+        engine: &EngineDef,
+        dir: usize,
+        colour: CompanyColour,
+        ctx: &mut openttdrs_core::Action2EvalCtx,
+        images: &mut Assets<Image>,
+    ) -> Option<Handle<Image>> {
+        let runtime = engine.newgrf_runtime.as_ref()?;
+        let views = runtime.views_for_local_id_ctx(engine.newgrf_local_id, ctx)?;
+        if views.is_empty() {
+            return None;
+        }
+        let view = &views[dir % views.len()];
+        let view_idx = u8::try_from(dir % views.len()).unwrap_or(0);
+        let fp = Self::runtime_fingerprint(ctx);
+        let key = (engine.id, view_idx, colour.as_u8(), fp);
         Some(
             self.handles
                 .entry(key)
@@ -395,7 +435,12 @@ impl TruckHandles {
             && let Some(eng) = engine_in_sim(sim, eid)
         {
             let colour = owner_colour.unwrap_or(CompanyColour::DarkBlue);
-            if let Some(handle) = cache.handle_for(eng, dir, colour, images) {
+            if eng.newgrf_runtime.is_some() {
+                let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(&sim.state.vehicles, v.id);
+                if let Some(handle) = cache.handle_for_runtime(eng, dir, colour, &mut ctx, images) {
+                    return handle;
+                }
+            } else if let Some(handle) = cache.handle_for(eng, dir, colour, images) {
                 return handle;
             }
         }

@@ -40,12 +40,22 @@ const PROP_INTRO_YEAR: u8 = 0x16;
 /// Extensión local: nombre C-string (tests / GRFs propios).
 const PROP_NAME_CSTRING: u8 = 0xFE;
 
+/// Resumen de un bloque Action5 para Inspeccionar.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Action5SlotSummary {
+    pub type_id: u8,
+    pub num_sprites: u8,
+    pub offset: u16,
+    pub preview_wh: Option<(u16, u16)>,
+}
+
 /// Informe de inspección de un `.grf` (sin aplicar).
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GrfInspectReport {
     pub container: Option<GrfContainerVersion>,
     pub action_counts: [u32; 16],
     pub action0_features: Vec<u8>,
+    pub action5_slots: Vec<Action5SlotSummary>,
     pub pseudo_sprites: u32,
     pub real_sprites: u32,
     pub warnings: Vec<String>,
@@ -82,6 +92,24 @@ impl GrfInspectReport {
                 .map(|f| format!("0x{f:02X}"))
                 .collect();
             lines.push(format!("Action0 features: {}", feats.join(", ")));
+        }
+        if !self.action5_slots.is_empty() {
+            let slots: Vec<_> = self
+                .action5_slots
+                .iter()
+                .map(|s| {
+                    let name = crate::newgrf_sprites::action5_type_name(s.type_id);
+                    let preview = s
+                        .preview_wh
+                        .map(|(w, h)| format!(" {w}×{h}"))
+                        .unwrap_or_default();
+                    format!(
+                        "0x{:02X}×{} @{} ({name}){preview}",
+                        s.type_id, s.num_sprites, s.offset
+                    )
+                })
+                .collect();
+            lines.push(format!("Action5: {}", slots.join("; ")));
         }
         for w in &self.warnings {
             lines.push(format!("! {w}"));
@@ -139,6 +167,17 @@ pub fn inspect_grf_bytes(data: &[u8]) -> Result<GrfInspectReport, GrfScanError> 
         ..Default::default()
     };
     walk_data_section(section, container, &mut report);
+    if let Ok(blocks) = crate::newgrf_sprites::collect_action5_blocks(data) {
+        report.action5_slots = blocks
+            .into_iter()
+            .map(|b| Action5SlotSummary {
+                type_id: b.type_id,
+                num_sprites: b.num_sprites,
+                offset: b.offset,
+                preview_wh: b.first_preview.as_ref().map(|s| (s.width, s.height)),
+            })
+            .collect();
+    }
     Ok(report)
 }
 
@@ -414,10 +453,17 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
-        for meta in collect_roadtype_metas_from_grf(&data) {
+        let gfx =
+            crate::newgrf_sprites::collect_roadtype_sprite_graphics(&data).unwrap_or_default();
+        for (local_idx, meta) in collect_roadtype_metas_from_grf(&data)
+            .into_iter()
+            .enumerate()
+        {
             let Some(id) = next_free_road_type_id(&catalog) else {
                 break;
             };
+            let local_id = u8::try_from(local_idx).unwrap_or(0);
+            let preview = gfx.preview_for_local_id(local_id).cloned();
             catalog.push(RoadTypeDef {
                 id,
                 class: meta.class,
@@ -425,6 +471,7 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
                 short_label: meta.short_label,
                 intro_year: meta.intro_year,
                 from_newgrf: true,
+                newgrf_preview: preview,
             });
         }
     }
@@ -595,13 +642,19 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
-        for meta in collect_station_metas_from_grf(&data) {
+        let gfx = crate::newgrf_sprites::collect_station_sprite_graphics(&data).unwrap_or_default();
+        for (local_idx, meta) in collect_station_metas_from_grf(&data)
+            .into_iter()
+            .enumerate()
+        {
             let Some(class_id) = resolve_or_create_station_class(&mut classes, &meta) else {
                 break;
             };
             let Some(spec_id) = next_free_station_spec_id(&specs) else {
                 break;
             };
+            let local_id = u8::try_from(local_idx).unwrap_or(0);
+            let preview = gfx.preview_for_local_id(local_id).cloned();
             specs.push(StationSpecDef {
                 id: spec_id,
                 class: class_id,
@@ -610,6 +663,7 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 disallowed_platforms: meta.disallowed_platforms,
                 disallowed_lengths: meta.disallowed_lengths,
                 from_newgrf: true,
+                newgrf_preview: preview,
             });
         }
     }
@@ -724,7 +778,7 @@ pub fn collect_train_metas_from_grf(data: &[u8]) -> Vec<ParsedTrainMeta> {
     out
 }
 
-/// Reconstruye el catálogo de motores (vanilla + Action0 trains).
+/// Reconstruye el catálogo de motores (vanilla + Action0/1/3 trains).
 pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]) {
     let mut catalog = vanilla_engine_catalog();
     let stack = state.newgrf_stack.clone();
@@ -742,10 +796,18 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
         let Ok(data) = std::fs::read(&path) else {
             continue;
         };
-        for meta in collect_train_metas_from_grf(&data) {
+        let metas = collect_train_metas_from_grf(&data);
+        let gfx = crate::newgrf_sprites::collect_train_sprite_graphics(&data).unwrap_or_default();
+        // Emparejar Action0 (orden de aparición) con ids locales 0,1,2,…
+        for (local_idx, meta) in metas.into_iter().enumerate() {
             let Some(id) = next_free_engine_id(&catalog) else {
                 break;
             };
+            let local_id = u8::try_from(local_idx).unwrap_or(0);
+            let views = gfx
+                .views_for_local_id(local_id)
+                .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
+                .unwrap_or_default();
             catalog.push(EngineDef {
                 id,
                 kind: VehicleKind::Train,
@@ -761,6 +823,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 reliability_pct: 85,
                 train_image_index: 2,
                 from_newgrf: true,
+                newgrf_views: views,
             });
         }
     }
@@ -969,6 +1032,49 @@ mod tests {
             .unwrap()
             .id;
         assert!(id.as_u8() >= 2);
+        assert!(
+            state
+                .road_type_catalog
+                .iter()
+                .find(|d| d.from_newgrf)
+                .unwrap()
+                .newgrf_preview
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn apply_roadtype_with_action1_3_attaches_preview() {
+        let a0 = build_action0_roadtype_payload(b"COBB", false, 1970, "Cobble Road");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::build_grf_v2_roadtype_with_preview_sprite(
+            &a0,
+            0,
+            8,
+            8,
+            &indices,
+            [b'R', b'G', 0, 1],
+            "rgfx",
+        );
+        let dir = tempfile_dir_with("rgfx.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("rgfx.grf", 2));
+        apply_newgrf_road_types(&mut state, &[&dir]);
+        let def = state
+            .road_type_catalog
+            .iter()
+            .find(|d| d.from_newgrf)
+            .unwrap();
+        let preview = def.newgrf_preview_sprite().unwrap();
+        assert_eq!(preview.width, 8);
+        assert_eq!(preview.height, 8);
     }
 
     #[test]
@@ -1008,6 +1114,77 @@ mod tests {
             .unwrap()
             .id;
         assert!(spec_id.as_u16() >= 1);
+        assert!(
+            state
+                .station_spec_catalog
+                .iter()
+                .find(|d| d.from_newgrf)
+                .unwrap()
+                .newgrf_preview
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn apply_station_with_action1_3_attaches_preview() {
+        let a0 = build_action0_station_payload(b"MODN", b"Plat", 0, 0, "Sprite Andén");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::build_grf_v2_station_with_preview_sprite(
+            &a0,
+            0,
+            8,
+            8,
+            &indices,
+            [b'S', b'G', 0, 1],
+            "sgfx",
+        );
+        let dir = tempfile_dir_with("sgfx.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("sgfx.grf", 2));
+        apply_newgrf_stations(&mut state, &[&dir]);
+        let def = state
+            .station_spec_catalog
+            .iter()
+            .find(|d| d.from_newgrf)
+            .unwrap();
+        let preview = def.newgrf_preview_sprite().unwrap();
+        assert_eq!(preview.width, 8);
+        assert_eq!(preview.height, 8);
+    }
+
+    #[test]
+    fn inspect_summarizes_action5_slots() {
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 1..7 {
+            for x in 1..7 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::build_grf_v2_action5_with_sprite(
+            0x05,
+            1039,
+            8,
+            8,
+            &indices,
+            [b'E', b'L', 0, 1],
+            "elrail",
+        );
+        let report = inspect_grf_bytes(&bytes).unwrap();
+        assert_eq!(report.action_counts[0x05], 1);
+        assert_eq!(report.action5_slots.len(), 1);
+        assert_eq!(report.action5_slots[0].type_id, 0x05);
+        assert_eq!(report.action5_slots[0].offset, 1039);
+        assert_eq!(report.action5_slots[0].preview_wh, Some((8, 8)));
+        let summary = report.format_summary();
+        assert!(summary.contains("Action5:"));
+        assert!(summary.contains("catenary"));
     }
 
     #[test]
@@ -1040,6 +1217,39 @@ mod tests {
         assert!(eng.id >= crate::NEWGRF_ENGINE_ID_BASE);
         assert_eq!(eng.name, "Locomotora NewGRF");
         assert_eq!(eng.kind, VehicleKind::Train);
+        assert!(eng.newgrf_preview().is_none());
+    }
+
+    #[test]
+    fn apply_train_with_action1_3_attaches_preview() {
+        let a0 = build_action0_train_payload(1960, 100, 800, "Sprite Loco");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::build_grf_v2_train_with_preview_sprite(
+            &a0,
+            0,
+            8,
+            8,
+            &indices,
+            [b'T', b'S', 0, 2],
+            "tsprite",
+        );
+        let dir = tempfile_dir_with("tsprite.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("tsprite.grf", 3));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let eng = state.engine_catalog.iter().find(|e| e.from_newgrf).unwrap();
+        let preview = eng.newgrf_preview().unwrap();
+        assert_eq!(preview.width, 8);
+        assert_eq!(preview.height, 8);
+        assert_eq!(eng.newgrf_views.len(), 1);
+        assert!(eng.newgrf_view(3).is_some());
     }
 
     #[test]

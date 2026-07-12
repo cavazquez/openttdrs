@@ -27,6 +27,8 @@ pub mod link_graph;
 pub mod map;
 pub mod newgrf_actions;
 pub mod newgrf_config;
+mod newgrf_palette_data;
+pub mod newgrf_sprites;
 pub mod news;
 pub mod ottdmap_extras;
 pub mod parity;
@@ -155,7 +157,7 @@ pub use map::{
 };
 pub use newgrf_actions::{
     ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header,
-    GrfInspectReport, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,
+    Action5SlotSummary, GrfInspectReport, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,
     apply_newgrf_road_types, apply_newgrf_road_types_default_dirs,
     apply_newgrf_stack_catalogs_default_dirs, apply_newgrf_stations,
     apply_newgrf_stations_default_dirs, apply_newgrf_vehicles_trains,
@@ -170,6 +172,16 @@ pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfScanError, GrfStackIssue, NewGrfEntry,
     build_minimal_grf_v2, default_vanilla_stack, format_grfid, grfid_from_bytes,
     parse_grf_container, scan_grf_bytes, scan_grf_file, validate_stack,
+};
+pub use newgrf_sprites::{
+    Action5Block, DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics, action5_type_name,
+    build_action1_feature_payload, build_action1_trains_payload, build_action3_feature_payload,
+    build_action3_trains_payload, build_grf_v2_action5_with_sprite,
+    build_grf_v2_roadtype_with_preview_sprite, build_grf_v2_station_with_preview_sprite,
+    build_grf_v2_train_with_preview_sprite, build_grf_v2_with_preview_sprite,
+    build_real_sprite_v1_uncompressed, collect_action5_blocks, collect_feature_sprite_graphics,
+    collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
+    collect_train_sprite_graphics, decode_real_sprite_v1_uncompressed, indices_to_rgba,
 };
 pub use news::{
     CALENDAR_BASE_YEAR, NEWS_MAX_AGE_DAYS, NewsDisplayMode, NewsDisplaySettings, NewsItem,

@@ -714,8 +714,13 @@ parámetros NewGRF / consola REPL / cheats formales → OOS o UI-8.
 - [x] Posiciones de ventana persistentes (`ClientPreferences.window_layouts`).
 
 NewGRF editable **completo** (sprites Action1/3/5 + callbacks) sigue OOS;
-RoadTypes / Stations / Trains metadatos alimentan catálogos (sin sprites).
-
+RoadTypes / Stations / Trains metadatos alimentan catálogos.
+**Preview + in-world trenes Action1/3** (8bpp sin comprimir, sin Action2/5) ✅
+compra depósito + mapa (fallback OpenGFX si no hay vistas).
+**Preview RoadTypes Action1/3** ✅ en selector carretera/tranvía (sin gfx in-world).
+**Preview Stations Action1/3** ✅ en picker rail (sin gfx in-world / layouts 0x0E).
+**Action5 parse + Inspeccionar** ✅ slots (tipo/offset/count + primer sprite); runtime tiles OOS.
+     
 ---
 
 ## UI-8 — Modos opcionales
@@ -932,15 +937,20 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** UI-8 multi-compañía mínima, o sprites NewGRF Action1/3/5.
+**Siguiente:** UI-8 multi-compañía mínima, o roadtype/station in-world / Action5 runtime.
 
-Progreso NewGRF Action0–14 (parse + metadatos):
+Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world trenes):
 
 1. ~~Walker parse-only Action0–14 + histograma Inspeccionar.~~ ✅
 2. ~~Action0 RoadTypes (0x12) metadatos → catálogo dinámico + selector.~~ ✅
 3. ~~Action0 Stations (0x04) metadatos → catálogo clase/spec + picker rail.~~ ✅
 4. ~~Action0 Trains (0x00) metadatos → `engine_catalog` + compra depósito rail.~~ ✅
-5. Sprites Action1/3/5, road/ship/aircraft Vehicles, callbacks → OOS.
+5. ~~Action1/3 trains → preview 8bpp en compra (sin Action2/5).~~ ✅
+6. ~~Action1/3 trains → sprites in-world (dirs / 1 vista reutilizada; sin Action2).~~ ✅
+7. ~~Action1/3 RoadTypes → preview en selector (sin in-world).~~ ✅
+8. ~~Action1/3 Stations → preview en picker rail (sin in-world / 0x0E).~~ ✅
+9. ~~Action5 → parse slots + resumen Inspeccionar (sin runtime tiles).~~ ✅
+10. Roadtype/station in-world, Action5 runtime (shore/catenary), callbacks, 32bpp / RLE → OOS.
 
 Progreso backend OOS (JoinStation rail + CargoDist observacional):
 

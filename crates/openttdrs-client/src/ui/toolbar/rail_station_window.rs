@@ -7,12 +7,15 @@
 //! en la tesela bajo el cursor.
 
 use bevy::prelude::*;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
-    STATION_COVERAGE_RADIUS, StationClassId, StationSpecId, TileCoord, list_station_classes,
-    list_station_specs, station_class_def, station_coverage_at, station_spec_def,
+    DecodedSprite, STATION_COVERAGE_RADIUS, StationClassId, StationSpecId, TileCoord,
+    list_station_classes, list_station_specs, station_class_def, station_coverage_at,
+    station_spec_def,
 };
+use std::collections::HashMap;
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -55,6 +58,42 @@ pub(crate) struct StationCatalogPickerState {
     pub(crate) filter: String,
 }
 
+/// Caché de thumbnails NewGRF (spec id → textura).
+#[derive(Resource, Default)]
+pub(crate) struct NewGrfStationPreviewCache {
+    handles: HashMap<u16, Handle<Image>>,
+}
+
+impl NewGrfStationPreviewCache {
+    pub(crate) fn clear(&mut self) {
+        self.handles.clear();
+    }
+
+    fn handle_for(
+        &mut self,
+        id: StationSpecId,
+        sprite: &DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
+        self.handles
+            .entry(id.as_u16())
+            .or_insert_with(|| {
+                images.add(Image::new(
+                    Extent3d {
+                        width: u32::from(sprite.width),
+                        height: u32::from(sprite.height),
+                        depth_or_array_layers: 1,
+                    },
+                    TextureDimension::D2,
+                    sprite.rgba.clone(),
+                    TextureFormat::Rgba8UnormSrgb,
+                    default(),
+                ))
+            })
+            .clone()
+    }
+}
+
 #[derive(Component)]
 pub(crate) struct StationClassLabel;
 
@@ -75,6 +114,12 @@ pub(crate) struct StationClassSelectButton(pub StationClassId);
 
 #[derive(Component, Clone, Copy)]
 pub(crate) struct StationSpecSelectButton(pub StationSpecId);
+
+/// Thumbnail NewGRF de una entrada de spec.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct StationSpecEntryPreview {
+    pub id: StationSpecId,
+}
 
 #[derive(Component)]
 pub(crate) struct RailStationAcceptsText;
@@ -296,6 +341,53 @@ fn spawn_catalog_entry<B: Component>(
             TextColor(Color::srgb(0.92, 0.88, 0.72)),
         )],
     ));
+}
+
+fn spawn_spec_catalog_entry(
+    parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    id: StationSpecId,
+    label: impl Into<String>,
+) {
+    let label = label.into();
+    parent
+        .spawn((
+            Button,
+            StationSpecSelectButton(id),
+            BuildMenuUi,
+            Node {
+                width: Val::Percent(100.0),
+                min_height: Val::Px(28.0),
+                padding: UiRect::horizontal(Val::Px(4.0)),
+                column_gap: Val::Px(6.0),
+                justify_content: JustifyContent::FlexStart,
+                align_items: AlignItems::Center,
+                flex_direction: FlexDirection::Row,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(ENTRY_BG),
+            BorderColor::all(BTN_BORDER),
+            Interaction::default(),
+        ))
+        .with_children(|row| {
+            row.spawn((
+                StationSpecEntryPreview { id },
+                ImageNode::default(),
+                Node {
+                    width: Val::Px(20.0),
+                    height: Val::Px(20.0),
+                    flex_shrink: 0.0,
+                    display: Display::None,
+                    ..default()
+                },
+            ));
+            row.spawn((
+                Text::new(label),
+                window_text_font(asset_server, UiFontRole::Caption),
+                TextColor(Color::srgb(0.92, 0.88, 0.72)),
+            ));
+        });
 }
 
 fn spawn_section_label(
@@ -736,6 +828,27 @@ pub(crate) fn handle_station_spec_select_buttons(
     }
 }
 
+/// Asigna thumbnails NewGRF a las entradas de spec.
+pub(crate) fn sync_station_spec_entry_previews(
+    sim: Res<SimWorld>,
+    mut cache: ResMut<NewGrfStationPreviewCache>,
+    mut images: ResMut<Assets<Image>>,
+    mut previews: Query<(&StationSpecEntryPreview, &mut ImageNode, &mut Node)>,
+) {
+    for (preview, mut image, mut node) in &mut previews {
+        let Some(def) = station_spec_def(&sim.state.station_spec_catalog, preview.id) else {
+            node.display = Display::None;
+            continue;
+        };
+        let Some(sprite) = def.newgrf_preview_sprite() else {
+            node.display = Display::None;
+            continue;
+        };
+        image.image = cache.handle_for(preview.id, sprite, &mut images);
+        node.display = Display::Flex;
+    }
+}
+
 /// Añade entradas del catálogo que aún no tienen botón (tras apply NewGRF Stations).
 pub(crate) fn sync_station_catalog_entries(
     mut commands: Commands,
@@ -776,12 +889,7 @@ pub(crate) fn sync_station_catalog_entries(
                     let id = def.id;
                     let label = def.label.clone();
                     commands.entity(popover_entity).with_children(|menu| {
-                        spawn_catalog_entry(
-                            menu,
-                            &asset_server,
-                            label,
-                            StationSpecSelectButton(id),
-                        );
+                        spawn_spec_catalog_entry(menu, &asset_server, id, label);
                     });
                 }
             }

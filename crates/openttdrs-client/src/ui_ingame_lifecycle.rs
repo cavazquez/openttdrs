@@ -174,6 +174,26 @@ pub(crate) fn leave_ingame(world: &mut World) {
     if let Some(mut buy_window) = world.get_resource_mut::<BuyVehicleWindowState>() {
         *buy_window = BuyVehicleWindowState::default();
     }
+    if let Some(mut preview_cache) =
+        world.get_resource_mut::<crate::ui::buy_window::NewGrfTrainPreviewCache>()
+    {
+        *preview_cache = crate::ui::buy_window::NewGrfTrainPreviewCache::default();
+    }
+    if let Some(mut road_preview_cache) =
+        world.get_resource_mut::<crate::ui::toolbar::NewGrfRoadTypePreviewCache>()
+    {
+        road_preview_cache.clear();
+    }
+    if let Some(mut station_preview_cache) =
+        world.get_resource_mut::<crate::ui::toolbar::NewGrfStationPreviewCache>()
+    {
+        station_preview_cache.clear();
+    }
+    if let Some(mut newgrf_train_sprites) =
+        world.get_resource_mut::<crate::render::NewGrfTrainSpriteCache>()
+    {
+        newgrf_train_sprites.clear();
+    }
     if let Some(mut destination_picker) = world.get_resource_mut::<DestinationPickerState>() {
         *destination_picker = DestinationPickerState::default();
     }
@@ -250,6 +270,7 @@ pub(crate) fn leave_ingame(world: &mut World) {
     world.remove_resource::<TileAtlas>();
     world.remove_resource::<LoadedMapTileChunks>();
     world.remove_resource::<TruckHandles>();
+    world.remove_resource::<crate::render::NewGrfTrainSpriteCache>();
 }
 
 fn collect_matching<M: Component>(world: &mut World, out: &mut Vec<Entity>) {

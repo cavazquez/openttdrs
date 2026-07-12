@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use openttdrs_core::{CargoType, Map, Vehicle, VehicleKind};
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
+use openttdrs_core::{CargoType, DecodedSprite, EngineDef, Map, Vehicle, VehicleKind};
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_and_min_z};
@@ -30,6 +31,7 @@ pub(crate) struct VehicleRenderPlugin;
 impl Plugin for VehicleRenderPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<VehicleIndex>()
+            .init_resource::<NewGrfTrainSpriteCache>()
             .add_systems(OnEnter(ClientScreen::InGame), rebuild_vehicle_index)
             .add_systems(
                 Update,
@@ -39,6 +41,55 @@ impl Plugin for VehicleRenderPlugin {
                     .run_if(in_state(ClientScreen::InGame)),
             );
     }
+}
+
+/// Caché in-world / preview: `(engine_id, view_idx)` → textura.
+#[derive(Resource, Default)]
+pub(crate) struct NewGrfTrainSpriteCache {
+    handles: HashMap<(u16, u8), Handle<Image>>,
+}
+
+impl NewGrfTrainSpriteCache {
+    pub(crate) fn clear(&mut self) {
+        self.handles.clear();
+    }
+
+    fn decoded_to_image(sprite: &DecodedSprite) -> Image {
+        Image::new(
+            Extent3d {
+                width: u32::from(sprite.width),
+                height: u32::from(sprite.height),
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            sprite.rgba.clone(),
+            TextureFormat::Rgba8UnormSrgb,
+            default(),
+        )
+    }
+
+    /// Textura para la vista `dir` (0..=7) de un motor NewGRF.
+    pub(crate) fn handle_for(
+        &mut self,
+        engine: &EngineDef,
+        dir: usize,
+        images: &mut Assets<Image>,
+    ) -> Option<Handle<Image>> {
+        let view = engine.newgrf_view(dir)?;
+        let view_idx = u8::try_from(dir % engine.newgrf_views.len()).unwrap_or(0);
+        let key = (engine.id, view_idx);
+        Some(
+            self.handles
+                .entry(key)
+                .or_insert_with(|| images.add(Self::decoded_to_image(view)))
+                .clone(),
+        )
+    }
+}
+
+fn engine_in_sim(sim: &SimWorld, engine_id: u16) -> Option<&EngineDef> {
+    openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, engine_id)
+        .or_else(|| openttdrs_core::engine_by_id(engine_id))
 }
 
 fn train_layers_for(v: &Vehicle) -> &'static [vehicle_gfx::VehicleLayerGfx; 8] {
@@ -125,20 +176,35 @@ pub(crate) fn vehicle_sprite_pos_at(
     map: &Map,
     pose: openttdrs_core::VehiclePose,
 ) -> Vec3 {
-    let layer = vehicle_layer(v, Some(map), pose);
+    vehicle_sprite_pos_at_with_catalog(v, map, pose, None)
+}
+
+pub(crate) fn vehicle_sprite_pos_at_with_catalog(
+    v: &Vehicle,
+    map: &Map,
+    pose: openttdrs_core::VehiclePose,
+    catalog: Option<&[EngineDef]>,
+) -> Vec3 {
+    let dir = vehicle_render_direction_at_with_map(v, pose, Some(map)).min(7) as usize;
+    let (x_offs, y_offs, w, h) = if v.kind == VehicleKind::Train
+        && let Some(cat) = catalog
+        && let Some(eid) = v.engine_id
+        && let Some(eng) = openttdrs_core::engine_in_catalog(cat, eid)
+        && let Some(view) = eng.newgrf_view(dir)
+    {
+        (
+            f32::from(view.x_offs),
+            f32::from(view.y_offs),
+            f32::from(view.width),
+            f32::from(view.height),
+        )
+    } else {
+        let layer = vehicle_layer(v, Some(map), pose);
+        (layer.x_offs, layer.y_offs, layer.w, layer.h)
+    };
     let (anchor, height, tx, ty) = vehicle_draw_anchor_from_pose(v, map, pose);
     let height = height.saturating_add(v.altitude);
-    overlay_pos(
-        anchor,
-        layer.x_offs,
-        layer.y_offs,
-        layer.w,
-        layer.h,
-        height,
-        1.0,
-        tx,
-        ty,
-    )
+    overlay_pos(anchor, x_offs, y_offs, w, h, height, 1.0, tx, ty)
 }
 
 pub(crate) fn vehicle_sprite_pos(v: &Vehicle, map: &Map, tick_alpha: f32) -> Vec3 {
@@ -296,6 +362,27 @@ impl TruckHandles {
             }
         }
     }
+
+    /// Textura del vehículo; prioriza vistas NewGRF del catálogo runtime.
+    fn for_vehicle_with_newgrf(
+        &self,
+        v: &Vehicle,
+        pose: openttdrs_core::VehiclePose,
+        company: Option<&CompanyColoredSprites>,
+        sim: &SimWorld,
+        cache: &mut NewGrfTrainSpriteCache,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
+        let dir = vehicle_render_direction_at(v, pose).min(7) as usize;
+        if v.kind == VehicleKind::Train
+            && let Some(eid) = v.engine_id
+            && let Some(eng) = engine_in_sim(sim, eid)
+            && let Some(handle) = cache.handle_for(eng, dir, images)
+        {
+            return handle;
+        }
+        self.for_vehicle(v, pose, company)
+    }
 }
 
 /// Índice `Vehicle.id` → posición en `GameState::vehicles` (evita `find` O(V) por sprite).
@@ -323,6 +410,8 @@ pub(crate) fn spawn_initial_vehicles(
     sim: &SimWorld,
     trucks: &TruckHandles,
     company: &CompanyColoredSprites,
+    cache: &mut NewGrfTrainSpriteCache,
+    images: &mut Assets<Image>,
 ) {
     for vehicle in &sim.state.vehicles {
         // Vagones enganchados: se dibujan como partes del consist (offsets), no como entidad propia.
@@ -330,7 +419,12 @@ pub(crate) fn spawn_initial_vehicles(
             continue;
         }
         let pose = extrapolate_vehicle_pose(vehicle, 0.0);
-        let pos3 = vehicle_sprite_pos_at(vehicle, &sim.state.map, pose);
+        let pos3 = vehicle_sprite_pos_at_with_catalog(
+            vehicle,
+            &sim.state.map,
+            pose,
+            Some(&sim.state.engine_catalog),
+        );
         let vis = if vehicle_is_hidden_in_depot(sim, vehicle) {
             Visibility::Hidden
         } else {
@@ -340,7 +434,14 @@ pub(crate) fn spawn_initial_vehicles(
             MapVisualLayer,
             VehicleSprite(vehicle.id),
             Sprite {
-                image: trucks.for_vehicle(vehicle, pose, Some(company)),
+                image: trucks.for_vehicle_with_newgrf(
+                    vehicle,
+                    pose,
+                    Some(company),
+                    sim,
+                    cache,
+                    images,
+                ),
                 color: Color::WHITE,
                 ..default()
             },
@@ -349,7 +450,9 @@ pub(crate) fn spawn_initial_vehicles(
         ));
         // Unidades del consist detrás de la cabeza (sprites desplazados).
         if vehicle.kind == VehicleKind::Train {
-            spawn_consist_trailer_sprites(commands, sim, trucks, company, vehicle, pose, vis);
+            spawn_consist_trailer_sprites(
+                commands, sim, trucks, company, vehicle, pose, vis, cache, images,
+            );
         }
         if !crate::sprites::is_hidden(crate::sprites::TransparencyOption::Text) {
             commands.spawn((
@@ -378,6 +481,7 @@ pub(crate) struct ConsistUnitSprite {
     unit_index: usize,
 }
 
+#[expect(clippy::too_many_arguments)]
 fn spawn_consist_trailer_sprites(
     commands: &mut Commands,
     sim: &SimWorld,
@@ -386,6 +490,8 @@ fn spawn_consist_trailer_sprites(
     head: &Vehicle,
     pose: openttdrs_core::VehiclePose,
     vis: Visibility,
+    cache: &mut NewGrfTrainSpriteCache,
+    images: &mut Assets<Image>,
 ) {
     let ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, head.id);
     for (i, &uid) in ids.iter().enumerate().skip(1) {
@@ -405,12 +511,13 @@ fn spawn_consist_trailer_sprites(
             6 => (-8.0, 0.0),
             _ => (-6.0, -4.0),
         };
-        let base = vehicle_sprite_pos_at(head, &sim.state.map, pose);
-        let pos3 = Vec3::new(
-            base.x + dx * i as f32,
-            base.y + dy * i as f32,
-            base.z - 0.01 * i as f32,
+        let base = vehicle_sprite_pos_at_with_catalog(
+            head,
+            &sim.state.map,
+            pose,
+            Some(&sim.state.engine_catalog),
         );
+        let fi = i as f32;
         commands.spawn((
             MapVisualLayer,
             ConsistUnitSprite {
@@ -418,11 +525,22 @@ fn spawn_consist_trailer_sprites(
                 unit_index: i,
             },
             Sprite {
-                image: trucks.for_vehicle(unit, unit_pose, Some(company)),
+                image: trucks.for_vehicle_with_newgrf(
+                    unit,
+                    unit_pose,
+                    Some(company),
+                    sim,
+                    cache,
+                    images,
+                ),
                 color: Color::WHITE,
                 ..default()
             },
-            Transform::from_translation(pos3),
+            Transform::from_translation(Vec3::new(
+                base.x + dx * fi,
+                base.y + dy * fi,
+                base.z - 0.01 * fi,
+            )),
             vis,
         ));
     }
@@ -497,6 +615,8 @@ pub(crate) fn update_vehicles(
     trucks: Res<TruckHandles>,
     company: Res<CompanyColoredSprites>,
     vehicle_index: Res<VehicleIndex>,
+    mut cache: ResMut<NewGrfTrainSpriteCache>,
+    mut images: ResMut<Assets<Image>>,
     mut q: Query<(&VehicleSprite, &mut Transform, &mut Sprite, &mut Visibility)>,
     mut trailers: Query<
         (
@@ -531,9 +651,15 @@ pub(crate) fn update_vehicles(
         }
         *visibility = Visibility::Visible;
         let pose = extrapolate_vehicle_pose(v, sim_clock.tick_alpha);
-        let pos3 = vehicle_sprite_pos_at(v, &sim.state.map, pose);
+        let pos3 = vehicle_sprite_pos_at_with_catalog(
+            v,
+            &sim.state.map,
+            pose,
+            Some(&sim.state.engine_catalog),
+        );
         transform.translation = pos3;
-        sprite.image = trucks.for_vehicle(v, pose, Some(&company));
+        sprite.image =
+            trucks.for_vehicle_with_newgrf(v, pose, Some(&company), &sim, &mut cache, &mut images);
         sprite.color = vehicle_tint(v);
     }
 
@@ -561,7 +687,12 @@ pub(crate) fn update_vehicles(
         }
         *visibility = Visibility::Visible;
         let pose = extrapolate_vehicle_pose(head, sim_clock.tick_alpha);
-        let base = vehicle_sprite_pos_at(head, &sim.state.map, pose);
+        let base = vehicle_sprite_pos_at_with_catalog(
+            head,
+            &sim.state.map,
+            pose,
+            Some(&sim.state.engine_catalog),
+        );
         let back = openttdrs_core::reverse_direction(head.direction);
         let (dx, dy) = match back {
             0 => (0.0, -8.0),
@@ -575,7 +706,14 @@ pub(crate) fn update_vehicles(
         };
         let i = trailer.unit_index as f32;
         transform.translation = Vec3::new(base.x + dx * i, base.y + dy * i, base.z - 0.01 * i);
-        sprite.image = trucks.for_vehicle(unit, pose, Some(&company));
+        sprite.image = trucks.for_vehicle_with_newgrf(
+            unit,
+            pose,
+            Some(&company),
+            &sim,
+            &mut cache,
+            &mut images,
+        );
         sprite.color = vehicle_tint(head);
     }
 
@@ -725,6 +863,8 @@ mod tests {
         world.insert_resource(default_handles());
         world.insert_resource(crate::sprites::CompanyColoredSprites::default());
         world.insert_resource(VehicleIndex::default());
+        world.insert_resource(NewGrfTrainSpriteCache::default());
+        world.init_resource::<Assets<Image>>();
 
         world.spawn((
             VehicleSprite(11),
@@ -745,6 +885,80 @@ mod tests {
 
         let mut labels = world.query_filtered::<&Text2d, With<VehicleCargoLabel>>();
         assert_eq!(labels.single(&world).unwrap().to_string(), "ANY 0/20");
+    }
+
+    #[test]
+    fn newgrf_train_sprite_cache_and_pos_use_decoded_views() {
+        use openttdrs_core::{
+            apply_newgrf_vehicles_trains, build_action0_train_payload,
+            build_grf_v2_train_with_preview_sprite,
+        };
+
+        let a0 = build_action0_train_payload(1960, 100, 800, "InWorld Loco");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = build_grf_v2_train_with_preview_sprite(
+            &a0,
+            0,
+            8,
+            8,
+            &indices,
+            [b'T', b'I', 0, 1],
+            "tinworld",
+        );
+        let dir = tempfile::tempdir().expect("tmp");
+        std::fs::write(dir.path().join("tinworld.grf"), &bytes).expect("write grf");
+        let mut state = GameState::new(8, 8);
+        state
+            .newgrf_stack
+            .push(openttdrs_core::NewGrfEntry::new("tinworld.grf", 1));
+        apply_newgrf_vehicles_trains(&mut state, &[dir.path()]);
+        let eng = state
+            .engine_catalog
+            .iter()
+            .find(|e| e.from_newgrf)
+            .expect("newgrf engine")
+            .clone();
+        assert!(!eng.newgrf_views.is_empty());
+
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfTrainSpriteCache::default();
+        let handle = cache
+            .handle_for(&eng, 0, &mut images)
+            .expect("newgrf texture");
+        let handle_again = cache
+            .handle_for(&eng, 3, &mut images)
+            .expect("reuse single view");
+        assert_eq!(handle, handle_again);
+        assert_eq!(cache.handles.len(), 1);
+
+        let mut v = sample_vehicle(99);
+        v.kind = VehicleKind::Train;
+        v.engine_id = Some(eng.id);
+        let pose = extrapolate_vehicle_pose(&v, 0.0);
+        let map = &state.map;
+        let pos_vanilla = vehicle_sprite_pos_at(&v, map, pose);
+        let pos_newgrf =
+            vehicle_sprite_pos_at_with_catalog(&v, map, pose, Some(&state.engine_catalog));
+        assert_ne!(
+            (pos_vanilla.x, pos_vanilla.y),
+            (pos_newgrf.x, pos_newgrf.y),
+            "offsets NewGRF deben mover el sprite vs OpenGFX"
+        );
+
+        let sim = SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        };
+        let trucks = default_handles();
+        let selected =
+            trucks.for_vehicle_with_newgrf(&v, pose, None, &sim, &mut cache, &mut images);
+        assert_eq!(selected, handle);
     }
 
     #[test]

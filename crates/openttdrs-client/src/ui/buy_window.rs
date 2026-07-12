@@ -7,13 +7,15 @@
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
-    CargoType, Command, DepotPurchaseKind, EngineCatalogSort, EngineDef, RoadEngineFilter,
-    TileCoord, TileKind, VehicleKind, apply_command, calendar_year_at_tick,
+    CargoType, Command, DecodedSprite, DepotPurchaseKind, EngineCatalogSort, EngineDef,
+    RoadEngineFilter, TileCoord, TileKind, VehicleKind, apply_command, calendar_year_at_tick,
     engines_for_depot_kind_in,
 };
+use std::collections::HashMap;
 
 use crate::render::{RemapMapVisualsPending, TruckHandles};
 use crate::state::SimWorld;
@@ -31,6 +33,26 @@ const BUY_ROWS: usize = 16;
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
 const BTN_ACTIVE: Color = Color::srgb(0.58, 0.50, 0.31);
+
+/// Caché de previews NewGRF (engine_id → textura RGBA).
+#[derive(Resource, Default)]
+pub(crate) struct NewGrfTrainPreviewCache {
+    handles: HashMap<u16, Handle<Image>>,
+}
+
+fn decoded_sprite_to_image(sprite: &DecodedSprite) -> Image {
+    Image::new(
+        Extent3d {
+            width: u32::from(sprite.width),
+            height: u32::from(sprite.height),
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        sprite.rgba.clone(),
+        TextureFormat::Rgba8UnormSrgb,
+        default(),
+    )
+}
 
 /// Filtro locomotora/vagón en depósito de vía.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -411,7 +433,11 @@ fn stats_text(engine: &EngineDef) -> String {
         ""
     };
     let newgrf = if engine.from_newgrf {
-        "NewGRF: metadatos; sin sprites\n"
+        if engine.newgrf_preview().is_some() {
+            "NewGRF: preview Action1/3\n"
+        } else {
+            "NewGRF: metadatos; sin sprites\n"
+        }
     } else {
         ""
     };
@@ -443,7 +469,19 @@ fn buy_window_title(sim: &SimWorld, depot_pos: TileCoord) -> &'static str {
     }
 }
 
-fn preview_sprite_for_engine(trucks: &TruckHandles, engine: &EngineDef) -> Handle<Image> {
+fn preview_sprite_for_engine(
+    trucks: &TruckHandles,
+    engine: &EngineDef,
+    cache: &mut NewGrfTrainPreviewCache,
+    images: &mut Assets<Image>,
+) -> Handle<Image> {
+    if let Some(decoded) = engine.newgrf_preview() {
+        return cache
+            .handles
+            .entry(engine.id)
+            .or_insert_with(|| images.add(decoded_sprite_to_image(decoded)))
+            .clone();
+    }
     if engine.kind == VehicleKind::Train {
         trucks.train_preview(engine.train_image_index, 2)
     } else {
@@ -473,6 +511,8 @@ pub(crate) fn sync_buy_window(
     buy_state: Res<BuyVehicleWindowState>,
     sim: Res<SimWorld>,
     trucks: Option<Res<TruckHandles>>,
+    mut preview_cache: ResMut<NewGrfTrainPreviewCache>,
+    mut images: ResMut<Assets<Image>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
     mut road_toolbar_q: Query<
@@ -599,7 +639,12 @@ pub(crate) fn sync_buy_window(
     for (row_text, mut text) in &mut row_text_q {
         if let Some(engine) = engines.get(row_text.slot) {
             **text = if engine.from_newgrf {
-                format!("{:<28} ${} · meta", engine.name, engine.price)
+                let tag = if engine.newgrf_preview().is_some() {
+                    "gfx"
+                } else {
+                    "meta"
+                };
+                format!("{:<28} ${} · {tag}", engine.name, engine.price)
             } else {
                 format!("{:<28} ${}", engine.name, engine.price)
             };
@@ -620,14 +665,14 @@ pub(crate) fn sync_buy_window(
             );
     }
     if let Ok((mut image, mut node)) = preview_q.single_mut() {
-        match (
-            buy_state
-                .selected_engine
-                .and_then(openttdrs_core::engine_by_id),
-            trucks.as_ref(),
-        ) {
+        let engine = buy_state.selected_engine.and_then(|id| {
+            openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, id)
+                .or_else(|| openttdrs_core::engine_by_id(id))
+        });
+        match (engine, trucks.as_ref()) {
             (Some(engine), Some(trucks)) => {
-                image.image = preview_sprite_for_engine(trucks, engine);
+                image.image =
+                    preview_sprite_for_engine(trucks, engine, &mut preview_cache, &mut images);
                 node.display = Display::Flex;
             }
             _ => {

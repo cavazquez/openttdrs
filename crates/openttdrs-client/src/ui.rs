@@ -60,8 +60,8 @@ use autoreplace_window::{
     setup_autoreplace_window, sync_autoreplace_window,
 };
 use buy_window::{
-    BuyVehicleWindowState, buy_window_on_closed, buy_window_search_keyboard,
-    handle_buy_window_buttons, setup_buy_window, sync_buy_window,
+    BuyVehicleWindowState, NewGrfTrainPreviewCache, buy_window_on_closed,
+    buy_window_search_keyboard, handle_buy_window_buttons, setup_buy_window, sync_buy_window,
 };
 use cargo_payment_window::{
     CargoPaymentWindowState, cargo_payment_window_on_closed, open_cargo_payment_from_routes,
@@ -186,7 +186,8 @@ use timetable_window::{
 };
 use toolbar::depot_panel_on_closed;
 use toolbar::{
-    BridgeBuildState, DepotPanelState, DragBuildState, MinimapLayerState, RailSignalGhostState,
+    BridgeBuildState, DepotPanelState, DragBuildState, MinimapLayerState,
+    NewGrfRoadTypePreviewCache, NewGrfStationPreviewCache, RailSignalGhostState,
     RoadTypeEscapeConsumed, RoadTypePickerState, StationBuildState, StationCargoPanelState,
     StationCatalogPickerState, UiToolState, airport_picker_on_closed, begin_depot_list_drag,
     bridge_picker_on_closed, build_menu_interaction, close_road_type_picker_on_escape,
@@ -208,11 +209,11 @@ use toolbar::{
     sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_depot_panel,
     sync_minimap, sync_order_panel, sync_orders_pick_cursor, sync_rail_station_picker,
     sync_rail_type_select_visuals, sync_road_type_catalog_entries, sync_road_type_class_labels,
-    sync_road_type_entry_visibility, sync_road_type_popovers, sync_signal_picker,
-    sync_station_cargo_panel, sync_station_catalog_entries, toolbar_click_beep,
-    toolbar_group_interaction, update_build_ghost_preview, update_cursor_tile,
-    update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
-    update_toolbar_tooltip,
+    sync_road_type_entry_previews, sync_road_type_entry_visibility, sync_road_type_popovers,
+    sync_signal_picker, sync_station_cargo_panel, sync_station_catalog_entries,
+    sync_station_spec_entry_previews, toolbar_click_beep, toolbar_group_interaction,
+    update_build_ghost_preview, update_cursor_tile, update_tool_button_visuals,
+    update_toolbar_group_visuals, update_toolbar_tool_visibility, update_toolbar_tooltip,
 };
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState, ToolbarState};
 use town_directory::{
@@ -275,8 +276,10 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<UiToolState>()
         .init_resource::<StationBuildState>()
         .init_resource::<StationCatalogPickerState>()
+        .init_resource::<NewGrfStationPreviewCache>()
         .init_resource::<RoadTypePickerState>()
         .init_resource::<RoadTypeEscapeConsumed>()
+        .init_resource::<NewGrfRoadTypePreviewCache>()
         .init_resource::<DragBuildState>()
         .init_resource::<BridgeBuildState>()
         .init_resource::<OrderEditState>()
@@ -293,6 +296,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<VehicleListState>()
         .init_resource::<SubsidyListState>()
         .init_resource::<BuyVehicleWindowState>()
+        .init_resource::<NewGrfTrainPreviewCache>()
         .init_resource::<DestinationPickerState>()
         .init_resource::<VehicleWindowState>()
         .init_resource::<RefitWindowState>()
@@ -699,7 +703,9 @@ impl Plugin for ClientUiPlugin {
                 sync_road_type_popovers,
                 sync_road_type_entry_visibility,
                 sync_road_type_catalog_entries,
+                sync_road_type_entry_previews,
                 sync_road_type_class_labels,
+                sync_station_spec_entry_previews,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

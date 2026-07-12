@@ -39,9 +39,28 @@ pub struct EngineDef {
     /// Procedente de Action0 Vehicles `NewGRF`.
     #[serde(default)]
     pub from_newgrf: bool,
+    /// Vistas Action1 (1..=8); vacías = sin gfx `NewGRF`. No se serializa en saves.
+    #[serde(default, skip)]
+    pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
 }
 
 impl EngineDef {
+    /// Preview de compra: primera vista `NewGRF`, si hay.
+    #[must_use]
+    pub fn newgrf_preview(&self) -> Option<&crate::newgrf_sprites::DecodedSprite> {
+        self.newgrf_views.first()
+    }
+
+    /// Vista para dirección de render (`dir` 0..=7); con 1 sola vista se reutiliza.
+    #[must_use]
+    pub fn newgrf_view(&self, dir: usize) -> Option<&crate::newgrf_sprites::DecodedSprite> {
+        if self.newgrf_views.is_empty() {
+            return None;
+        }
+        let i = dir % self.newgrf_views.len();
+        self.newgrf_views.get(i)
+    }
+
     /// Velocidad máxima en km/h para mostrar en UI (conversión por tipo).
     #[must_use]
     pub fn speed_kmh(&self) -> u16 {
@@ -144,6 +163,7 @@ macro_rules! road {
             reliability_pct: RELIABILITY_ROAD,
             train_image_index: 0,
             from_newgrf: false,
+            newgrf_views: Vec::new(),
         }
     };
 }
@@ -165,6 +185,7 @@ macro_rules! train {
             reliability_pct: $rel,
             train_image_index: $img,
             from_newgrf: false,
+            newgrf_views: Vec::new(),
         }
     };
 }

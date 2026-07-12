@@ -45,18 +45,20 @@ pub(crate) use preview::{
     lerp_ghost_previews, rotate_station_with_right_click, update_build_ghost_preview,
 };
 pub(crate) use rail_station_window::{
-    StationCatalogPickerState, handle_rail_station_picker_buttons,
+    NewGrfStationPreviewCache, StationCatalogPickerState, handle_rail_station_picker_buttons,
     handle_station_catalog_open_buttons, handle_station_class_select_buttons,
     handle_station_spec_select_buttons, rail_station_picker_on_closed, setup_rail_station_picker,
     station_catalog_filter_keyboard, sync_rail_station_picker, sync_station_catalog_entries,
+    sync_station_spec_entry_previews,
 };
 pub(crate) use rail_type_selector::{
     handle_rail_type_select_buttons, sync_rail_type_select_visuals,
 };
 pub(crate) use road_type_selector::{
-    RoadTypeEscapeConsumed, RoadTypePickerState, close_road_type_picker_on_escape,
-    handle_road_type_class_buttons, handle_road_type_select_buttons, road_type_filter_keyboard,
-    sync_road_type_catalog_entries, sync_road_type_class_labels, sync_road_type_entry_visibility,
+    NewGrfRoadTypePreviewCache, RoadTypeEscapeConsumed, RoadTypePickerState,
+    close_road_type_picker_on_escape, handle_road_type_class_buttons,
+    handle_road_type_select_buttons, road_type_filter_keyboard, sync_road_type_catalog_entries,
+    sync_road_type_class_labels, sync_road_type_entry_previews, sync_road_type_entry_visibility,
     sync_road_type_popovers,
 };
 pub(crate) use settings::{

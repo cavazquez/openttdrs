@@ -112,6 +112,7 @@ fn place_rail_station_area_persists_newgrf_station_spec() {
         disallowed_platforms: 0,
         disallowed_lengths: 0,
         from_newgrf: true,
+        newgrf_preview: None,
     });
     s.current_station_class = class_id;
     s.current_station_spec = spec_id;
@@ -1561,6 +1562,7 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         reliability_pct: 85,
         train_image_index: 2,
         from_newgrf: true,
+        newgrf_views: Vec::new(),
     });
     let money_before = s.economy.money;
     apply_command(&mut s, &Command::BuildVehicleAtDepot(depot, id)).unwrap();

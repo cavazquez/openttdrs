@@ -83,9 +83,18 @@ pub struct StationSpecDef {
     /// Bits 0..=6 = longitudes 1..=7 deshabilitadas; bit 7 = >7.
     pub disallowed_lengths: u8,
     pub from_newgrf: bool,
+    /// Preview Action1/3 (primera vista); no se serializa en saves.
+    #[serde(default, skip)]
+    pub newgrf_preview: Option<crate::newgrf_sprites::DecodedSprite>,
 }
 
 impl StationSpecDef {
+    /// Preview `NewGRF` si el spec trae sprite Action1/3.
+    #[must_use]
+    pub fn newgrf_preview_sprite(&self) -> Option<&crate::newgrf_sprites::DecodedSprite> {
+        self.newgrf_preview.as_ref()
+    }
+
     #[must_use]
     pub fn allows_platforms(&self, platforms: u8) -> bool {
         let n = platforms.clamp(1, 7);
@@ -121,6 +130,7 @@ pub fn vanilla_station_spec_catalog() -> Vec<StationSpecDef> {
         disallowed_platforms: 0,
         disallowed_lengths: 0,
         from_newgrf: false,
+        newgrf_preview: None,
     }]
 }
 

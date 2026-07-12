@@ -1,13 +1,17 @@
 //! Selectores filtrables de roadtype / tramtype (`GetRoadTypeDropDownList`).
 //!
-//! Catálogo dinámico: vanilla + Action0 RoadTypes (metadatos; sin sprites).
+//! Catálogo dinámico: vanilla + Action0 RoadTypes; preview Action1/3 si hay sprite.
+
+use std::collections::HashMap;
 
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
+use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::EditableText;
 use bevy::ui::RelativeCursorPosition;
-use openttdrs_core::{RoadTramType, RoadType, list_road_types, road_type_def};
+use bevy::ui::widget::ImageNode;
+use openttdrs_core::{DecodedSprite, RoadTramType, RoadType, list_road_types, road_type_def};
 
 use crate::state::SimWorld;
 use crate::ui::font::{UiFontRole, ui_text_font_loaded};
@@ -19,6 +23,42 @@ const BTN_BORDER: Color = Color::srgb(0.55, 0.68, 0.4);
 const BTN_TEXT: Color = Color::srgb(0.95, 0.96, 0.82);
 const MENU_BG: Color = Color::srgb(0.22, 0.28, 0.18);
 const ENTRY_BG: Color = Color::srgb(0.30, 0.38, 0.22);
+
+/// Caché de thumbnails NewGRF (road type id → textura).
+#[derive(Resource, Default)]
+pub(crate) struct NewGrfRoadTypePreviewCache {
+    handles: HashMap<u8, Handle<Image>>,
+}
+
+impl NewGrfRoadTypePreviewCache {
+    pub(crate) fn clear(&mut self) {
+        self.handles.clear();
+    }
+
+    fn handle_for(
+        &mut self,
+        id: RoadType,
+        sprite: &DecodedSprite,
+        images: &mut Assets<Image>,
+    ) -> Handle<Image> {
+        self.handles
+            .entry(id.as_u8())
+            .or_insert_with(|| {
+                images.add(Image::new(
+                    Extent3d {
+                        width: u32::from(sprite.width),
+                        height: u32::from(sprite.height),
+                        depth_or_array_layers: 1,
+                    },
+                    TextureDimension::D2,
+                    sprite.rgba.clone(),
+                    TextureFormat::Rgba8UnormSrgb,
+                    default(),
+                ))
+            })
+            .clone()
+    }
+}
 
 /// Estado del popover filtrable (road o tram).
 #[derive(Resource, Default)]
@@ -54,6 +94,12 @@ pub(crate) struct RoadTypeSelectButton {
     pub id: RoadType,
 }
 
+/// Thumbnail NewGRF de una entrada (hijo del botón).
+#[derive(Component, Clone, Copy)]
+pub(crate) struct RoadTypeEntryPreview {
+    pub id: RoadType,
+}
+
 pub(crate) fn spawn_road_type_selectors(
     buttons: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
@@ -69,8 +115,8 @@ fn spawn_class_dropdown(
     class: RoadTramType,
 ) {
     let tip = match class {
-        RoadTramType::Road => "Tipo de carretera (vanilla + NewGRF Action0 metadatos)",
-        RoadTramType::Tram => "Tipo de tranvía (vanilla + NewGRF Action0 metadatos)",
+        RoadTramType::Road => "Tipo de carretera (vanilla + NewGRF Action0/1/3)",
+        RoadTramType::Tram => "Tipo de tranvía (vanilla + NewGRF Action0/1/3)",
     };
     let catalog = openttdrs_core::vanilla_road_type_catalog();
     parent
@@ -112,7 +158,7 @@ fn spawn_class_dropdown(
                 RelativeCursorPosition::default(),
                 BuildMenuUi,
                 Node {
-                    width: Val::Px(180.0),
+                    width: Val::Px(200.0),
                     padding: UiRect::all(Val::Px(4.0)),
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(2.0),
@@ -145,31 +191,56 @@ fn spawn_class_dropdown(
                     BorderColor::all(Color::srgb(0.45, 0.55, 0.35)),
                 ));
                 for def in list_road_types(&catalog, class, "", 10_000) {
-                    menu.spawn((
-                        Button,
-                        RoadTypeSelectButton { class, id: def.id },
-                        BuildMenuUi,
-                        Node {
-                            width: Val::Percent(100.0),
-                            min_height: Val::Px(26.0),
-                            padding: UiRect::horizontal(Val::Px(6.0)),
-                            justify_content: JustifyContent::FlexStart,
-                            align_items: AlignItems::Center,
-                            border: UiRect::all(Val::Px(1.0)),
-                            ..default()
-                        },
-                        BackgroundColor(ENTRY_BG),
-                        BorderColor::all(Color::srgb(0.45, 0.55, 0.35)),
-                        Interaction::default(),
-                        children![(
-                            Text::new(def.label.clone()),
-                            ui_text_font_loaded(asset_server, UiFontRole::Caption),
-                            TextColor(BTN_TEXT),
-                        )],
-                    ));
+                    spawn_road_type_entry(menu, asset_server, def.class, def.id, &def.label);
                 }
             });
         });
+}
+
+fn spawn_road_type_entry(
+    menu: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    class: RoadTramType,
+    id: RoadType,
+    label: &str,
+) {
+    menu.spawn((
+        Button,
+        RoadTypeSelectButton { class, id },
+        BuildMenuUi,
+        Node {
+            width: Val::Percent(100.0),
+            min_height: Val::Px(28.0),
+            padding: UiRect::horizontal(Val::Px(4.0)),
+            column_gap: Val::Px(6.0),
+            justify_content: JustifyContent::FlexStart,
+            align_items: AlignItems::Center,
+            flex_direction: FlexDirection::Row,
+            border: UiRect::all(Val::Px(1.0)),
+            ..default()
+        },
+        BackgroundColor(ENTRY_BG),
+        BorderColor::all(Color::srgb(0.45, 0.55, 0.35)),
+        Interaction::default(),
+    ))
+    .with_children(|row| {
+        row.spawn((
+            RoadTypeEntryPreview { id },
+            ImageNode::default(),
+            Node {
+                width: Val::Px(20.0),
+                height: Val::Px(20.0),
+                flex_shrink: 0.0,
+                display: Display::None,
+                ..default()
+            },
+        ));
+        row.spawn((
+            Text::new(label.to_owned()),
+            ui_text_font_loaded(asset_server, UiFontRole::Caption),
+            TextColor(BTN_TEXT),
+        ));
+    });
 }
 
 const fn default_short(class: RoadTramType) -> &'static str {
@@ -333,30 +404,30 @@ pub(crate) fn sync_road_type_catalog_entries(
             let id = def.id;
             let label = def.label.clone();
             commands.entity(popover_entity).with_children(|menu| {
-                menu.spawn((
-                    Button,
-                    RoadTypeSelectButton { class, id },
-                    BuildMenuUi,
-                    Node {
-                        width: Val::Percent(100.0),
-                        min_height: Val::Px(26.0),
-                        padding: UiRect::horizontal(Val::Px(6.0)),
-                        justify_content: JustifyContent::FlexStart,
-                        align_items: AlignItems::Center,
-                        border: UiRect::all(Val::Px(1.0)),
-                        ..default()
-                    },
-                    BackgroundColor(ENTRY_BG),
-                    BorderColor::all(Color::srgb(0.45, 0.55, 0.35)),
-                    Interaction::default(),
-                    children![(
-                        Text::new(label),
-                        ui_text_font_loaded(&asset_server, UiFontRole::Caption),
-                        TextColor(BTN_TEXT),
-                    )],
-                ));
+                spawn_road_type_entry(menu, &asset_server, class, id, &label);
             });
         }
+    }
+}
+
+/// Asigna thumbnails NewGRF a las entradas del popover.
+pub(crate) fn sync_road_type_entry_previews(
+    sim: Res<SimWorld>,
+    mut cache: ResMut<NewGrfRoadTypePreviewCache>,
+    mut images: ResMut<Assets<Image>>,
+    mut previews: Query<(&RoadTypeEntryPreview, &mut ImageNode, &mut Node)>,
+) {
+    for (preview, mut image, mut node) in &mut previews {
+        let Some(def) = road_type_def(&sim.state.road_type_catalog, preview.id) else {
+            node.display = Display::None;
+            continue;
+        };
+        let Some(sprite) = def.newgrf_preview_sprite() else {
+            node.display = Display::None;
+            continue;
+        };
+        image.image = cache.handle_for(preview.id, sprite, &mut images);
+        node.display = Display::Flex;
     }
 }
 

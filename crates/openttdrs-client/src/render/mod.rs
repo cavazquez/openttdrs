@@ -62,8 +62,8 @@ pub(crate) use tiles::{
     spawn_rail_tile, spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
 };
 pub(crate) use vehicles::{
-    TruckHandles, VehicleIndex, VehicleRenderPlugin, pick_vehicle_id_at_world,
-    vehicle_sprite_pos_at, vehicle_world_position,
+    NewGrfTrainSpriteCache, TruckHandles, VehicleIndex, VehicleRenderPlugin,
+    pick_vehicle_id_at_world, vehicle_sprite_pos_at, vehicle_world_position,
 };
 pub(crate) use viewport::{
     TileViewportBounds, chunk_tile_bounds, chunks_in_bounds, large_map_viewport_cull_enabled,

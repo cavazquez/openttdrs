@@ -499,6 +499,7 @@ fn place_road_writes_newgrf_road_type_m8() {
         short_label: "COBB".into(),
         intro_year: 0,
         from_newgrf: true,
+        newgrf_preview: None,
     });
     s.current_road_type = ngrf;
     let c = TileCoord::new(3, 3);

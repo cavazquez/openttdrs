@@ -25,7 +25,7 @@ use crate::render::{
 use crate::sprites::CompanyColour;
 use crate::state::{ClientScreen, SimWorld};
 
-use super::vehicles::{TruckHandles, VehicleIndex, spawn_initial_vehicles};
+use super::vehicles::{NewGrfTrainSpriteCache, TruckHandles, VehicleIndex, spawn_initial_vehicles};
 
 /// Queries de etiquetas del mapa (agrupadas para no superar el límite de params Bevy).
 #[derive(SystemParam)]
@@ -582,8 +582,17 @@ fn spawn_world_layer(
 ) {
     if include_world_extras {
         let truck_handles = TruckHandles::load(asset_server);
-        spawn_initial_vehicles(commands, sim, &truck_handles, company);
+        let mut newgrf_train_sprites = NewGrfTrainSpriteCache::default();
+        spawn_initial_vehicles(
+            commands,
+            sim,
+            &truck_handles,
+            company,
+            &mut newgrf_train_sprites,
+            images,
+        );
         commands.insert_resource(truck_handles);
+        commands.insert_resource(newgrf_train_sprites);
         let label_font = asset_server.load::<Font>(crate::ui::font::UI_FONT_PATH);
         super::town_labels::spawn_town_labels(
             commands,

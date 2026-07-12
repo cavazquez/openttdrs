@@ -105,6 +105,17 @@ pub struct RoadTypeDef {
     pub short_label: String,
     pub intro_year: u16,
     pub from_newgrf: bool,
+    /// Preview Action1/3 (primera vista); no se serializa en saves.
+    #[serde(default, skip)]
+    pub newgrf_preview: Option<crate::newgrf_sprites::DecodedSprite>,
+}
+
+impl RoadTypeDef {
+    /// Preview `NewGRF` si el tipo trae sprite Action1/3.
+    #[must_use]
+    pub fn newgrf_preview_sprite(&self) -> Option<&crate::newgrf_sprites::DecodedSprite> {
+        self.newgrf_preview.as_ref()
+    }
 }
 
 /// Catálogo vanilla (Road + Tram).
@@ -118,6 +129,7 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             short_label: "Norm".into(),
             intro_year: 0,
             from_newgrf: false,
+            newgrf_preview: None,
         },
         RoadTypeDef {
             id: RoadType::TRAM,
@@ -126,6 +138,7 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             short_label: "Tram".into(),
             intro_year: 0,
             from_newgrf: false,
+            newgrf_preview: None,
         },
     ]
 }

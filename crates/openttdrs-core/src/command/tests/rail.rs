@@ -113,6 +113,7 @@ fn place_rail_station_area_persists_newgrf_station_spec() {
         disallowed_lengths: 0,
         from_newgrf: true,
         newgrf_preview: None,
+        newgrf_views: Vec::new(),
     });
     s.current_station_class = class_id;
     s.current_station_spec = spec_id;

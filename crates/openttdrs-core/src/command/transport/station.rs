@@ -303,6 +303,9 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     }
     let mut st = Station::new_with_kind(c, stop_kind);
     st.owner = state.active_company;
+    if stop_kind == StopKind::RailStation {
+        st.station_spec = state.current_station_spec;
+    }
     state.stations.push(st);
     state.economy.money -= STATION_BUILD_COST;
     if let Some((town_id, delta)) = town::apply_station_build_rating_penalty(&mut state.towns, c) {

@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use openttdrs_core::{
-    Map, Station, TileKind, inclined_slope_direction, is_tunnel_entrance_slope, rail_type_from_tile,
+    Map, Station, StationSpecDef, TileKind, inclined_slope_direction, is_tunnel_entrance_slope,
+    rail_type_from_tile,
 };
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
@@ -9,6 +10,7 @@ use crate::iso::{
     SLOPE_HALF_H, TILE_HALF_H, remap_tile_offset, road_depot_build_sprite_center,
     road_stop_build_sprite_center, tile_pos, tile_pos_half,
 };
+use crate::render::station_newgrf::{NewGrfStationSpriteCache, newgrf_station_def_for_tile};
 use crate::render::{
     AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext, WorldAssets,
     sprite_from_atlas_or_company_white_colour,
@@ -44,6 +46,9 @@ pub(crate) fn spawn_station_tile(
     ctx: &TileRenderContext,
     stations: &[Station],
     slope_half_ground: f32,
+    station_catalog: &[StationSpecDef],
+    station_sprites: Option<&mut NewGrfStationSpriteCache>,
+    images: Option<&mut Assets<Image>>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -101,7 +106,41 @@ pub(crate) fn spawn_station_tile(
             } else {
                 rail_station_draw_layers(m5)
             };
-            if !buildings_hidden() {
+            // MVP NewGRF: en plano, sustituir overlays de edificio OpenGFX por vista 0.
+            let mut used_newgrf = false;
+            if class == StationTileClass::Rail
+                && tileh == 0
+                && !buildings_hidden()
+                && let Some(def) =
+                    newgrf_station_def_for_tile(station_catalog, map, stations, ctx.coord)
+                && let (Some(cache), Some(images)) = (station_sprites, images)
+                && let Some(view) = def.newgrf_view(0)
+                && let Some(handle) = cache.handle_for(def, 0, images)
+            {
+                let pos3 = crate::iso::overlay_pos(
+                    ctx.iso_pos,
+                    f32::from(view.x_offs),
+                    f32::from(view.y_offs),
+                    f32::from(view.width),
+                    f32::from(view.height),
+                    rail_base_z,
+                    0.04,
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                );
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    Sprite {
+                        image: handle,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                    Transform::from_translation(pos3),
+                ));
+                used_newgrf = true;
+            }
+            if !buildings_hidden() && !used_newgrf {
                 for layer in overlay_layers {
                     let Some(img) = assets.rail.get(&layer.sprite_id) else {
                         continue;

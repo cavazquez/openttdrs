@@ -189,6 +189,9 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &TileRenderContext::new(&m.0, &g.0, 4, 2),
                     &[],
                     4.0,
+                    &[],
+                    None,
+                    None,
                 );
                 for (x, y) in [(5, 2), (5, 3), (5, 4), (5, 5), (5, 6), (5, 7)] {
                     spawn_transport_object_tile(
@@ -409,6 +412,9 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     &TileRenderContext::new(&m.0, &g.0, 1, 1),
                     &[],
                     4.0,
+                    &[],
+                    None,
+                    None,
                 );
             },
         )

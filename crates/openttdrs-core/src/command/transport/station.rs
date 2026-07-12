@@ -193,7 +193,7 @@ pub(in crate::command) fn place_rail_station_area(
     let platforms = platforms.clamp(1, 7);
     let length = length.clamp(1, 7);
     let spec_id = state.current_station_spec;
-    if let Some(spec) = crate::station_class::station_spec_def(spec_id)
+    if let Some(spec) = crate::station_class::station_spec_def(&state.station_spec_catalog, spec_id)
         && (!spec.allows_platforms(platforms) || !spec.allows_length(length))
     {
         return Err(CommandError::StationSizeNotAllowed);
@@ -479,17 +479,14 @@ fn rewrite_order_station(order: &mut crate::VehicleOrder, from: TileCoord, to: T
     }
 }
 
-/// Une dos paradas `BusStop`/`TruckStop` 1×1 adyacentes (misma compañía y tipo).
+/// Une dos paradas road 1×1 adyacentes o dos estaciones rail con huellas
+/// adyacentes (misma compañía, mismo tipo; rail: mismo eje).
 pub(crate) fn join_stations(
     state: &mut GameState,
     keep: TileCoord,
     merge: TileCoord,
 ) -> Result<(), CommandError> {
     if keep == merge {
-        return Err(CommandError::CannotJoinStations);
-    }
-    let dist = (keep.x - merge.x).abs() + (keep.y - merge.y).abs();
-    if dist != 1 {
         return Err(CommandError::CannotJoinStations);
     }
     let keep_idx = state
@@ -505,11 +502,33 @@ pub(crate) fn join_stations(
     {
         let keep_st = &state.stations[keep_idx];
         let merge_st = &state.stations[merge_idx];
-        if keep_st.owner != merge_st.owner
-            || keep_st.stop_kind != merge_st.stop_kind
-            || !matches!(keep_st.stop_kind, StopKind::BusStop | StopKind::TruckStop)
-        {
+        if keep_st.owner != merge_st.owner || keep_st.stop_kind != merge_st.stop_kind {
             return Err(CommandError::CannotJoinStations);
+        }
+        match keep_st.stop_kind {
+            StopKind::BusStop | StopKind::TruckStop => {
+                let dist = (keep.x - merge.x).abs() + (keep.y - merge.y).abs();
+                if dist != 1 {
+                    return Err(CommandError::CannotJoinStations);
+                }
+            }
+            StopKind::RailStation => {
+                let keep_tiles =
+                    crate::station::rail_station_owned_tiles(&state.map, &state.stations, keep_st);
+                let merge_tiles =
+                    crate::station::rail_station_owned_tiles(&state.map, &state.stations, merge_st);
+                if !crate::station::station_tile_sets_adjacent(&keep_tiles, &merge_tiles) {
+                    return Err(CommandError::CannotJoinStations);
+                }
+                let keep_axis =
+                    crate::station::rail_station_axis_y(&state.map, &state.stations, keep_st);
+                let merge_axis =
+                    crate::station::rail_station_axis_y(&state.map, &state.stations, merge_st);
+                if keep_axis != merge_axis {
+                    return Err(CommandError::CannotJoinStations);
+                }
+            }
+            _ => return Err(CommandError::CannotJoinStations),
         }
     }
     let mut merge_st = state.stations.remove(merge_idx);

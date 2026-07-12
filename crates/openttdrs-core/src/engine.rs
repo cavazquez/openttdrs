@@ -8,13 +8,17 @@
 
 use crate::cargo::CargoType;
 use crate::vehicle::{VehicleDirection, VehicleKind};
+use serde::{Deserialize, Serialize};
+
+/// Primer ID reservado para motores Action0 `NewGRF` (trains).
+pub const NEWGRF_ENGINE_ID_BASE: u16 = 1000;
 
 /// Definición de motor (paridad con `_orig_*_vehicle_info` del upstream).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EngineDef {
     pub id: u16,
     pub kind: VehicleKind,
-    pub name: &'static str,
+    pub name: String,
     /// Unidades `OpenTTD` (`RVI` ≈ 1 km/h por unidad; `ROV` ≈ 0,5 km/h).
     pub max_speed: u16,
     /// Precio de compra (libras internas TTD: `base_price × cost_factor >> 8`).
@@ -32,12 +36,15 @@ pub struct EngineDef {
     pub reliability_pct: u8,
     /// Índice de sprite de locomotora (`OpenTTD` `image_index`; 0 en carretera).
     pub train_image_index: u8,
+    /// Procedente de Action0 Vehicles `NewGRF`.
+    #[serde(default)]
+    pub from_newgrf: bool,
 }
 
 impl EngineDef {
     /// Velocidad máxima en km/h para mostrar en UI (conversión por tipo).
     #[must_use]
-    pub const fn speed_kmh(&self) -> u16 {
+    pub fn speed_kmh(&self) -> u16 {
         match self.kind {
             VehicleKind::Train | VehicleKind::Aircraft => self.max_speed,
             VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram | VehicleKind::Ship => {
@@ -48,13 +55,13 @@ impl EngineDef {
 
     /// Vagón: tren sin potencia y con capacidad de carga.
     #[must_use]
-    pub const fn is_wagon(self) -> bool {
+    pub fn is_wagon(&self) -> bool {
         matches!(self.kind, VehicleKind::Train) && self.power_hp == 0 && self.capacity > 0
     }
 
     /// Locomotora o DMU (puede ser cabeza de consist).
     #[must_use]
-    pub const fn is_train_engine(self) -> bool {
+    pub fn is_train_engine(&self) -> bool {
         matches!(self.kind, VehicleKind::Train) && !self.is_wagon()
     }
 }
@@ -125,7 +132,7 @@ macro_rules! road {
         EngineDef {
             id: $id,
             kind: $kind,
-            name: $name,
+            name: ($name).into(),
             max_speed: $speed,
             price: (14_000 * $cf) >> 8,
             running_cost_year: (1_600 * $rc) >> 8,
@@ -136,6 +143,7 @@ macro_rules! road {
             intro_year: $year,
             reliability_pct: RELIABILITY_ROAD,
             train_image_index: 0,
+            from_newgrf: false,
         }
     };
 }
@@ -145,7 +153,7 @@ macro_rules! train {
         EngineDef {
             id: $id,
             kind: VehicleKind::Train,
-            name: $name,
+            name: ($name).into(),
             max_speed: $speed,
             price: (400_000_i64 * $cf) >> 8,
             running_cost_year: ($rc_base * $rc) >> 8,
@@ -156,6 +164,7 @@ macro_rules! train {
             intro_year: $year,
             reliability_pct: $rel,
             train_image_index: $img,
+            from_newgrf: false,
         }
     };
 }
@@ -168,518 +177,545 @@ const RC_MAGLEV: i64 = 4_000;
 const RELIABILITY_MONORAIL: u8 = 92;
 const RELIABILITY_MAGLEV: u8 = 95;
 
-const ENGINES: &[EngineDef] = &[
-    // Carretera: buses (pesos del upstream en cuartos de tonelada, redondeados).
-    road!(
-        ENGINE_BUS_MPS,
-        VehicleKind::Bus,
-        "MPS Regal Bus",
-        112,
-        120,
-        91,
-        31,
-        Some(CargoType::Passengers),
-        90,
-        11,
-        1929
-    ),
-    road!(
-        ENGINE_BUS_HEREFORD,
-        VehicleKind::Bus,
-        "Hereford Leopard Bus",
-        176,
-        140,
-        128,
-        35,
-        Some(CargoType::Passengers),
-        120,
-        15,
-        1964
-    ),
-    road!(
-        ENGINE_BUS_FOSTER,
-        VehicleKind::Bus,
-        "Foster Bus",
-        224,
-        150,
-        178,
-        37,
-        Some(CargoType::Passengers),
-        150,
-        18,
-        1986
-    ),
-    road!(
-        ENGINE_TRAM_MPS,
-        VehicleKind::Tram,
-        "MPS Electric Tram",
-        128,
-        130,
-        100,
-        33,
-        Some(CargoType::Passengers),
-        100,
-        12,
-        1935
-    ),
-    // Carretera: camiones.
-    road!(
-        ENGINE_TRUCK_MPS,
-        VehicleKind::Truck,
-        "MPS Mail Truck",
-        96,
-        115,
-        90,
-        22,
-        Some(CargoType::Mail),
-        120,
-        10,
-        1935
-    ),
-    road!(
-        ENGINE_TRUCK_BALOGH_GOODS,
-        VehicleKind::Truck,
-        "Balogh Goods Truck",
-        96,
-        107,
-        90,
-        14,
-        Some(CargoType::Goods),
-        120,
-        10,
-        1935
-    ),
-    road!(
-        ENGINE_TRUCK_CRAIGHEAD_GOODS,
-        VehicleKind::Truck,
-        "Craighead Goods Truck",
-        176,
-        130,
-        168,
-        16,
-        Some(CargoType::Goods),
-        220,
-        12,
-        1974
-    ),
-    road!(
-        ENGINE_TRUCK_GOSS_GOODS,
-        VehicleKind::Truck,
-        "Goss Goods Truck",
-        224,
-        140,
-        240,
-        18,
-        Some(CargoType::Goods),
-        450,
-        17,
-        2005
-    ),
-    // Trenes (clima templado del original).
-    train!(
-        ENGINE_TRAIN_KIRBY,
-        "Kirby Paul Tank (Vapor)",
-        64,
-        7,
-        RC_STEAM,
-        50,
-        0,
-        None,
-        300,
-        47,
-        1925,
-        RELIABILITY_STEAM,
-        2
-    ),
-    train!(
-        ENGINE_TRAIN_CHANEY_JUBILEE,
-        "Chaney 'Jubilee' (Vapor)",
-        112,
-        13,
-        RC_STEAM,
-        120,
-        0,
-        None,
-        1_000,
-        131,
-        1934,
-        RELIABILITY_STEAM,
-        0
-    ),
-    train!(
-        ENGINE_TRAIN_GINZU_A4,
-        "Ginzu 'A4' (Vapor)",
-        128,
-        19,
-        RC_STEAM,
-        140,
-        0,
-        None,
-        1_200,
-        162,
-        1935,
-        RELIABILITY_STEAM,
-        1
-    ),
-    train!(
-        ENGINE_TRAIN_SH_8P,
-        "SH '8P' (Vapor)",
-        144,
-        22,
-        RC_STEAM,
-        130,
-        0,
-        None,
-        1_600,
-        170,
-        1954,
-        RELIABILITY_STEAM,
-        0
-    ),
-    train!(
-        ENGINE_TRAIN_MANLEY_MOREL,
-        "Manley-Morel DMU (Diésel)",
-        112,
-        11,
-        RC_DIESEL,
-        85,
-        38,
-        Some(CargoType::Passengers),
-        600,
-        32,
-        1956,
-        RELIABILITY_DIESEL,
-        8
-    ),
-    train!(
-        ENGINE_TRAIN_DASH,
-        "'Dash' (Diésel)",
-        120,
-        14,
-        RC_DIESEL,
-        70,
-        40,
-        Some(CargoType::Passengers),
-        700,
-        38,
-        1984,
-        RELIABILITY_DIESEL,
-        10
-    ),
-    train!(
-        ENGINE_TRAIN_SH_HENDRY_25,
-        "SH/Hendry '25' (Diésel)",
-        128,
-        15,
-        RC_DIESEL,
-        95,
-        0,
-        None,
-        1_250,
-        72,
-        1961,
-        RELIABILITY_DIESEL,
-        4
-    ),
-    train!(
-        ENGINE_TRAIN_UU_37,
-        "UU '37' (Diésel)",
-        144,
-        17,
-        RC_DIESEL,
-        120,
-        0,
-        None,
-        1_750,
-        101,
-        1959,
-        RELIABILITY_DIESEL,
-        5
-    ),
-    train!(
-        ENGINE_TRAIN_FLOSS_47,
-        "Floss '47' (Diésel)",
-        160,
-        18,
-        RC_DIESEL,
-        140,
-        0,
-        None,
-        2_580,
-        112,
-        1962,
-        RELIABILITY_DIESEL,
-        4
-    ),
-    train!(
-        ENGINE_TRAIN_SH_125,
-        "SH '125' (Diésel)",
-        200,
-        20,
-        RC_DIESEL,
-        190,
-        4,
-        Some(CargoType::Mail),
-        4_500,
-        70,
-        1977,
-        RELIABILITY_DIESEL,
-        6
-    ),
-    train!(
-        ENGINE_TRAIN_SH_30,
-        "SH '30' (Eléctrico)",
-        160,
-        26,
-        RC_ELECTRIC,
-        180,
-        0,
-        None,
-        3_600,
-        84,
-        1965,
-        RELIABILITY_ELECTRIC,
-        20
-    ),
-    train!(
-        ENGINE_TRAIN_SH_40,
-        "SH '40' (Eléctrico)",
-        176,
-        30,
-        RC_ELECTRIC,
-        205,
-        0,
-        None,
-        5_000,
-        82,
-        1973,
-        RELIABILITY_ELECTRIC,
-        20
-    ),
-    train!(
-        ENGINE_TRAIN_TIM,
-        "'T.I.M.' (Eléctrico)",
-        240,
-        40,
-        RC_ELECTRIC,
-        240,
-        0,
-        None,
-        7_000,
-        90,
-        1984,
-        RELIABILITY_ELECTRIC,
-        21
-    ),
-    train!(
-        ENGINE_TRAIN_ASIASTAR,
-        "'AsiaStar' (Eléctrico)",
-        264,
-        43,
-        RC_ELECTRIC,
-        250,
-        0,
-        None,
-        8_000,
-        95,
-        1992,
-        RELIABILITY_ELECTRIC,
-        23
-    ),
-    // Vagones (power_hp = 0): se enganchan a locomotoras.
-    train!(
-        ENGINE_WAGON_PASSENGER,
-        "Passenger Carriage",
-        0,
-        20,
-        RC_STEAM,
-        10,
-        40,
-        Some(CargoType::Passengers),
-        0,
-        25,
-        1920,
-        RELIABILITY_STEAM,
-        2
-    ),
-    train!(
-        ENGINE_WAGON_MAIL,
-        "Mail Van",
-        0,
-        18,
-        RC_STEAM,
-        8,
-        30,
-        Some(CargoType::Mail),
-        0,
-        20,
-        1920,
-        RELIABILITY_STEAM,
-        2
-    ),
-    train!(
-        ENGINE_WAGON_GOODS,
-        "Goods Wagon",
-        0,
-        16,
-        RC_STEAM,
-        8,
-        25,
-        Some(CargoType::Goods),
-        0,
-        18,
-        1920,
-        RELIABILITY_STEAM,
-        2
-    ),
-    train!(
-        ENGINE_WAGON_COAL,
-        "Coal Hopper",
-        0,
-        15,
-        RC_STEAM,
-        8,
-        30,
-        Some(CargoType::Coal),
-        0,
-        22,
-        1920,
-        RELIABILITY_STEAM,
-        2
-    ),
-    // Monorail / Maglev (Fase 6; ids OpenTTD +100).
-    train!(
-        ENGINE_TRAIN_X2001,
-        "X2001 (Monorail)",
-        240,
-        40,
-        RC_MONORAIL,
-        200,
-        0,
-        None,
-        5_000,
-        70,
-        1990,
-        RELIABILITY_MONORAIL,
-        24
-    ),
-    train!(
-        ENGINE_TRAIN_LEV1,
-        "Lev1 (Maglev)",
-        320,
-        50,
-        RC_MAGLEV,
-        220,
-        0,
-        None,
-        6_000,
-        65,
-        2000,
-        RELIABILITY_MAGLEV,
-        25
-    ),
-    road!(
-        ENGINE_SHIP_MPS,
-        VehicleKind::Ship,
-        "MPS Channel Ferry",
-        96,
-        120,
-        95,
-        60,
-        Some(CargoType::Goods),
-        400,
-        80,
-        1920
-    ),
-    road!(
-        ENGINE_SHIP_OIL,
-        VehicleKind::Ship,
-        "MPS Oil Tanker",
-        80,
-        140,
-        110,
-        90,
-        Some(CargoType::Oil),
-        500,
-        120,
-        1930
-    ),
-    road!(
-        ENGINE_SHIP_COAL,
-        VehicleKind::Ship,
-        "MPS Coal Trader",
-        72,
-        130,
-        100,
-        100,
-        Some(CargoType::Coal),
-        450,
-        110,
-        1925
-    ),
-    road!(
-        ENGINE_SHIP_FERRY,
-        VehicleKind::Ship,
-        "FFP Passenger Ferry",
-        112,
-        150,
-        120,
-        80,
-        Some(CargoType::Passengers),
-        600,
-        70,
-        1950
-    ),
-    road!(
-        ENGINE_AIRCRAFT_DAKOTA,
-        VehicleKind::Aircraft,
-        "Dakota",
-        320,
-        200,
-        180,
-        25,
-        Some(CargoType::Passengers),
-        1_200,
-        20,
-        1944
-    ),
-    road!(
-        ENGINE_AIRCRAFT_FOKKER,
-        VehicleKind::Aircraft,
-        "Fokker F27",
-        380,
-        240,
-        200,
-        40,
-        Some(CargoType::Passengers),
-        1_800,
-        25,
-        1958
-    ),
-    road!(
-        ENGINE_AIRCRAFT_TRICARIO,
-        VehicleKind::Aircraft,
-        "Tricario",
-        240,
-        160,
-        140,
-        15,
-        Some(CargoType::Passengers),
-        800,
-        8,
-        1960
-    ),
-];
+#[allow(clippy::too_many_lines)]
+fn build_vanilla_engines() -> Vec<EngineDef> {
+    vec![
+        // Carretera: buses (pesos del upstream en cuartos de tonelada, redondeados).
+        road!(
+            ENGINE_BUS_MPS,
+            VehicleKind::Bus,
+            "MPS Regal Bus",
+            112,
+            120,
+            91,
+            31,
+            Some(CargoType::Passengers),
+            90,
+            11,
+            1929
+        ),
+        road!(
+            ENGINE_BUS_HEREFORD,
+            VehicleKind::Bus,
+            "Hereford Leopard Bus",
+            176,
+            140,
+            128,
+            35,
+            Some(CargoType::Passengers),
+            120,
+            15,
+            1964
+        ),
+        road!(
+            ENGINE_BUS_FOSTER,
+            VehicleKind::Bus,
+            "Foster Bus",
+            224,
+            150,
+            178,
+            37,
+            Some(CargoType::Passengers),
+            150,
+            18,
+            1986
+        ),
+        road!(
+            ENGINE_TRAM_MPS,
+            VehicleKind::Tram,
+            "MPS Electric Tram",
+            128,
+            130,
+            100,
+            33,
+            Some(CargoType::Passengers),
+            100,
+            12,
+            1935
+        ),
+        // Carretera: camiones.
+        road!(
+            ENGINE_TRUCK_MPS,
+            VehicleKind::Truck,
+            "MPS Mail Truck",
+            96,
+            115,
+            90,
+            22,
+            Some(CargoType::Mail),
+            120,
+            10,
+            1935
+        ),
+        road!(
+            ENGINE_TRUCK_BALOGH_GOODS,
+            VehicleKind::Truck,
+            "Balogh Goods Truck",
+            96,
+            107,
+            90,
+            14,
+            Some(CargoType::Goods),
+            120,
+            10,
+            1935
+        ),
+        road!(
+            ENGINE_TRUCK_CRAIGHEAD_GOODS,
+            VehicleKind::Truck,
+            "Craighead Goods Truck",
+            176,
+            130,
+            168,
+            16,
+            Some(CargoType::Goods),
+            220,
+            12,
+            1974
+        ),
+        road!(
+            ENGINE_TRUCK_GOSS_GOODS,
+            VehicleKind::Truck,
+            "Goss Goods Truck",
+            224,
+            140,
+            240,
+            18,
+            Some(CargoType::Goods),
+            450,
+            17,
+            2005
+        ),
+        // Trenes (clima templado del original).
+        train!(
+            ENGINE_TRAIN_KIRBY,
+            "Kirby Paul Tank (Vapor)",
+            64,
+            7,
+            RC_STEAM,
+            50,
+            0,
+            None,
+            300,
+            47,
+            1925,
+            RELIABILITY_STEAM,
+            2
+        ),
+        train!(
+            ENGINE_TRAIN_CHANEY_JUBILEE,
+            "Chaney 'Jubilee' (Vapor)",
+            112,
+            13,
+            RC_STEAM,
+            120,
+            0,
+            None,
+            1_000,
+            131,
+            1934,
+            RELIABILITY_STEAM,
+            0
+        ),
+        train!(
+            ENGINE_TRAIN_GINZU_A4,
+            "Ginzu 'A4' (Vapor)",
+            128,
+            19,
+            RC_STEAM,
+            140,
+            0,
+            None,
+            1_200,
+            162,
+            1935,
+            RELIABILITY_STEAM,
+            1
+        ),
+        train!(
+            ENGINE_TRAIN_SH_8P,
+            "SH '8P' (Vapor)",
+            144,
+            22,
+            RC_STEAM,
+            130,
+            0,
+            None,
+            1_600,
+            170,
+            1954,
+            RELIABILITY_STEAM,
+            0
+        ),
+        train!(
+            ENGINE_TRAIN_MANLEY_MOREL,
+            "Manley-Morel DMU (Diésel)",
+            112,
+            11,
+            RC_DIESEL,
+            85,
+            38,
+            Some(CargoType::Passengers),
+            600,
+            32,
+            1956,
+            RELIABILITY_DIESEL,
+            8
+        ),
+        train!(
+            ENGINE_TRAIN_DASH,
+            "'Dash' (Diésel)",
+            120,
+            14,
+            RC_DIESEL,
+            70,
+            40,
+            Some(CargoType::Passengers),
+            700,
+            38,
+            1984,
+            RELIABILITY_DIESEL,
+            10
+        ),
+        train!(
+            ENGINE_TRAIN_SH_HENDRY_25,
+            "SH/Hendry '25' (Diésel)",
+            128,
+            15,
+            RC_DIESEL,
+            95,
+            0,
+            None,
+            1_250,
+            72,
+            1961,
+            RELIABILITY_DIESEL,
+            4
+        ),
+        train!(
+            ENGINE_TRAIN_UU_37,
+            "UU '37' (Diésel)",
+            144,
+            17,
+            RC_DIESEL,
+            120,
+            0,
+            None,
+            1_750,
+            101,
+            1959,
+            RELIABILITY_DIESEL,
+            5
+        ),
+        train!(
+            ENGINE_TRAIN_FLOSS_47,
+            "Floss '47' (Diésel)",
+            160,
+            18,
+            RC_DIESEL,
+            140,
+            0,
+            None,
+            2_580,
+            112,
+            1962,
+            RELIABILITY_DIESEL,
+            4
+        ),
+        train!(
+            ENGINE_TRAIN_SH_125,
+            "SH '125' (Diésel)",
+            200,
+            20,
+            RC_DIESEL,
+            190,
+            4,
+            Some(CargoType::Mail),
+            4_500,
+            70,
+            1977,
+            RELIABILITY_DIESEL,
+            6
+        ),
+        train!(
+            ENGINE_TRAIN_SH_30,
+            "SH '30' (Eléctrico)",
+            160,
+            26,
+            RC_ELECTRIC,
+            180,
+            0,
+            None,
+            3_600,
+            84,
+            1965,
+            RELIABILITY_ELECTRIC,
+            20
+        ),
+        train!(
+            ENGINE_TRAIN_SH_40,
+            "SH '40' (Eléctrico)",
+            176,
+            30,
+            RC_ELECTRIC,
+            205,
+            0,
+            None,
+            5_000,
+            82,
+            1973,
+            RELIABILITY_ELECTRIC,
+            20
+        ),
+        train!(
+            ENGINE_TRAIN_TIM,
+            "'T.I.M.' (Eléctrico)",
+            240,
+            40,
+            RC_ELECTRIC,
+            240,
+            0,
+            None,
+            7_000,
+            90,
+            1984,
+            RELIABILITY_ELECTRIC,
+            21
+        ),
+        train!(
+            ENGINE_TRAIN_ASIASTAR,
+            "'AsiaStar' (Eléctrico)",
+            264,
+            43,
+            RC_ELECTRIC,
+            250,
+            0,
+            None,
+            8_000,
+            95,
+            1992,
+            RELIABILITY_ELECTRIC,
+            23
+        ),
+        // Vagones (power_hp = 0): se enganchan a locomotoras.
+        train!(
+            ENGINE_WAGON_PASSENGER,
+            "Passenger Carriage",
+            0,
+            20,
+            RC_STEAM,
+            10,
+            40,
+            Some(CargoType::Passengers),
+            0,
+            25,
+            1920,
+            RELIABILITY_STEAM,
+            2
+        ),
+        train!(
+            ENGINE_WAGON_MAIL,
+            "Mail Van",
+            0,
+            18,
+            RC_STEAM,
+            8,
+            30,
+            Some(CargoType::Mail),
+            0,
+            20,
+            1920,
+            RELIABILITY_STEAM,
+            2
+        ),
+        train!(
+            ENGINE_WAGON_GOODS,
+            "Goods Wagon",
+            0,
+            16,
+            RC_STEAM,
+            8,
+            25,
+            Some(CargoType::Goods),
+            0,
+            18,
+            1920,
+            RELIABILITY_STEAM,
+            2
+        ),
+        train!(
+            ENGINE_WAGON_COAL,
+            "Coal Hopper",
+            0,
+            15,
+            RC_STEAM,
+            8,
+            30,
+            Some(CargoType::Coal),
+            0,
+            22,
+            1920,
+            RELIABILITY_STEAM,
+            2
+        ),
+        // Monorail / Maglev (Fase 6; ids OpenTTD +100).
+        train!(
+            ENGINE_TRAIN_X2001,
+            "X2001 (Monorail)",
+            240,
+            40,
+            RC_MONORAIL,
+            200,
+            0,
+            None,
+            5_000,
+            70,
+            1990,
+            RELIABILITY_MONORAIL,
+            24
+        ),
+        train!(
+            ENGINE_TRAIN_LEV1,
+            "Lev1 (Maglev)",
+            320,
+            50,
+            RC_MAGLEV,
+            220,
+            0,
+            None,
+            6_000,
+            65,
+            2000,
+            RELIABILITY_MAGLEV,
+            25
+        ),
+        road!(
+            ENGINE_SHIP_MPS,
+            VehicleKind::Ship,
+            "MPS Channel Ferry",
+            96,
+            120,
+            95,
+            60,
+            Some(CargoType::Goods),
+            400,
+            80,
+            1920
+        ),
+        road!(
+            ENGINE_SHIP_OIL,
+            VehicleKind::Ship,
+            "MPS Oil Tanker",
+            80,
+            140,
+            110,
+            90,
+            Some(CargoType::Oil),
+            500,
+            120,
+            1930
+        ),
+        road!(
+            ENGINE_SHIP_COAL,
+            VehicleKind::Ship,
+            "MPS Coal Trader",
+            72,
+            130,
+            100,
+            100,
+            Some(CargoType::Coal),
+            450,
+            110,
+            1925
+        ),
+        road!(
+            ENGINE_SHIP_FERRY,
+            VehicleKind::Ship,
+            "FFP Passenger Ferry",
+            112,
+            150,
+            120,
+            80,
+            Some(CargoType::Passengers),
+            600,
+            70,
+            1950
+        ),
+        road!(
+            ENGINE_AIRCRAFT_DAKOTA,
+            VehicleKind::Aircraft,
+            "Dakota",
+            320,
+            200,
+            180,
+            25,
+            Some(CargoType::Passengers),
+            1_200,
+            20,
+            1944
+        ),
+        road!(
+            ENGINE_AIRCRAFT_FOKKER,
+            VehicleKind::Aircraft,
+            "Fokker F27",
+            380,
+            240,
+            200,
+            40,
+            Some(CargoType::Passengers),
+            1_800,
+            25,
+            1958
+        ),
+        road!(
+            ENGINE_AIRCRAFT_TRICARIO,
+            VehicleKind::Aircraft,
+            "Tricario",
+            240,
+            160,
+            140,
+            15,
+            Some(CargoType::Passengers),
+            800,
+            8,
+            1960
+        ),
+    ]
+}
 
-/// Catálogo completo de motores disponibles.
+fn engines_table() -> &'static [EngineDef] {
+    use std::sync::OnceLock;
+    static TABLE: OnceLock<Vec<EngineDef>> = OnceLock::new();
+    TABLE.get_or_init(build_vanilla_engines).as_slice()
+}
+
+/// Catálogo vanilla (owned) para inicializar `GameState.engine_catalog`.
 #[must_use]
-pub const fn engine_catalog() -> &'static [EngineDef] {
-    ENGINES
+pub fn vanilla_engine_catalog() -> Vec<EngineDef> {
+    build_vanilla_engines()
+}
+
+/// Catálogo completo de motores vanilla (estático).
+#[must_use]
+pub fn engine_catalog() -> &'static [EngineDef] {
+    engines_table()
+}
+
+/// Siguiente ID libre en el rango `NewGRF` (≥ [`NEWGRF_ENGINE_ID_BASE`]).
+#[must_use]
+pub fn next_free_engine_id(catalog: &[EngineDef]) -> Option<u16> {
+    (NEWGRF_ENGINE_ID_BASE..=u16::MAX).find(|&id| !catalog.iter().any(|e| e.id == id))
+}
+
+/// Busca un motor en un catálogo runtime.
+#[must_use]
+pub fn engine_in_catalog(catalog: &[EngineDef], id: u16) -> Option<&EngineDef> {
+    catalog.iter().find(|e| e.id == id)
 }
 
 /// Motores de un tipo de vehículo concreto (orden del catálogo).
 pub fn engines_of_kind(kind: VehicleKind) -> impl Iterator<Item = &'static EngineDef> {
-    ENGINES.iter().filter(move |e| e.kind == kind)
+    engines_table().iter().filter(move |e| e.kind == kind)
 }
 
 /// Orden de la lista de compra en ventana de depósito.
@@ -746,7 +782,25 @@ pub fn engines_for_depot_kind(
     sort: EngineCatalogSort,
     road_filter: RoadEngineFilter,
 ) -> Vec<&'static EngineDef> {
-    let mut list: Vec<&EngineDef> = ENGINES
+    engines_for_depot_kind_in(
+        engines_table(),
+        depot_kind,
+        calendar_year,
+        sort,
+        road_filter,
+    )
+}
+
+/// Como [`engines_for_depot_kind`] sobre un catálogo runtime (vanilla + `NewGRF`).
+#[must_use]
+pub fn engines_for_depot_kind_in(
+    catalog: &[EngineDef],
+    depot_kind: DepotPurchaseKind,
+    calendar_year: u32,
+    sort: EngineCatalogSort,
+    road_filter: RoadEngineFilter,
+) -> Vec<&EngineDef> {
+    let mut list: Vec<&EngineDef> = catalog
         .iter()
         .filter(|engine| {
             if !engine_available_in_year(engine, calendar_year) {
@@ -774,7 +828,7 @@ pub fn engines_for_depot_kind(
         .collect();
     match sort {
         EngineCatalogSort::Catalog => {}
-        EngineCatalogSort::Name => list.sort_by_key(|e| e.name),
+        EngineCatalogSort::Name => list.sort_by_key(|e| e.name.as_str()),
         EngineCatalogSort::Price => list.sort_by_key(|e| e.price),
         EngineCatalogSort::Speed => list.sort_by_key(|e| std::cmp::Reverse(e.max_speed)),
         EngineCatalogSort::IntroYear => list.sort_by_key(|e| e.intro_year),
@@ -797,7 +851,7 @@ pub const fn train_sprite_group(image_index: u8) -> u8 {
 /// Busca un motor por id, sin importar el tipo.
 #[must_use]
 pub fn engine_by_id(id: u16) -> Option<&'static EngineDef> {
-    ENGINES.iter().find(|e| e.id == id)
+    engines_table().iter().find(|e| e.id == id)
 }
 
 /// Tipo de humo/chispas de locomotora según fiabilidad/clase del motor.
@@ -833,7 +887,7 @@ pub const fn aircraft_is_helicopter(engine_id: u16) -> bool {
 
 #[must_use]
 pub fn engine_for_vehicle(kind: VehicleKind, id: u16) -> &'static EngineDef {
-    if let Some(engine) = ENGINES
+    if let Some(engine) = engines_table()
         .iter()
         .find(|engine| engine.kind == kind && engine.id == id)
     {

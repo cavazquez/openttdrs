@@ -460,14 +460,30 @@ pub(crate) fn update_tile_info_text(
                 | BuildMenuAction::BusStop
         )
     }) {
-        format!(" ctra:{}", sim.state.current_road_type.short_label())
+        format!(
+            " ctra:{}",
+            openttdrs_core::road_type_def(
+                &sim.state.road_type_catalog,
+                sim.state.current_road_type
+            )
+            .map(|d| d.short_label.as_str())
+            .unwrap_or(sim.state.current_road_type.short_label())
+        )
     } else if tool_state.active_tool.is_some_and(|a| {
         matches!(
             a,
             BuildMenuAction::Tram | BuildMenuAction::TramX | BuildMenuAction::TramY
         )
     }) {
-        format!(" tram:{}", sim.state.current_tram_type.short_label())
+        format!(
+            " tram:{}",
+            openttdrs_core::road_type_def(
+                &sim.state.road_type_catalog,
+                sim.state.current_tram_type
+            )
+            .map(|d| d.short_label.as_str())
+            .unwrap_or(sim.state.current_tram_type.short_label())
+        )
     } else {
         String::new()
     };

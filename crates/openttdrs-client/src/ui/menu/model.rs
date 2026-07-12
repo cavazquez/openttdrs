@@ -89,6 +89,7 @@ impl MenuEntrySpec {
     }
 
     #[must_use]
+    #[allow(dead_code)]
     pub(crate) const fn disabled(label: &'static str, action: MenuAction) -> Self {
         Self {
             kind: MenuEntryKind::Action,
@@ -171,10 +172,7 @@ pub(crate) const INDUSTRIES_MENU: MenuSpec = MenuSpec {
             MenuAction::Route(UiRoute::Industries),
         ),
         MenuEntrySpec::divider(),
-        MenuEntrySpec::disabled(
-            "Link Graph (pendiente)",
-            MenuAction::Route(UiRoute::LinkGraph),
-        ),
+        MenuEntrySpec::item("Link Graph", MenuAction::Route(UiRoute::LinkGraph)),
     ],
 };
 
@@ -247,11 +245,11 @@ mod tests {
     }
 
     #[test]
-    fn industries_link_graph_is_disabled() {
+    fn industries_link_graph_is_enabled() {
         let entry = INDUSTRIES_MENU
             .entries
             .iter()
             .find(|e| e.label.contains("Link Graph"));
-        assert!(entry.is_some_and(|e| !e.enabled));
+        assert!(entry.is_some_and(|e| e.enabled));
     }
 }

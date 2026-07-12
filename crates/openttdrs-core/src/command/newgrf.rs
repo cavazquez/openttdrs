@@ -1,5 +1,6 @@
-//! Comandos de edición del stack `NewGRF` (config-only; sin runtime Action0–14).
+//! Comandos de edición del stack `NewGRF` (config + apply Action0 metadatos).
 
+use crate::newgrf_actions::apply_newgrf_stack_catalogs_default_dirs;
 use crate::newgrf_config::{GrfStackIssue, NewGrfEntry, validate_stack};
 use crate::{GameState, command::CommandError};
 
@@ -9,6 +10,10 @@ fn index_ok(state: &GameState, index: usize) -> Result<(), CommandError> {
     } else {
         Ok(())
     }
+}
+
+fn refresh_newgrf_catalogs(state: &mut GameState) {
+    apply_newgrf_stack_catalogs_default_dirs(state);
 }
 
 /// Activa o desactiva una entrada. Las estáticas no se pueden desactivar.
@@ -23,6 +28,7 @@ pub(crate) fn set_newgrf_enabled(
         return Err(CommandError::NewGrfStaticImmutable);
     }
     entry.enabled = enabled;
+    refresh_newgrf_catalogs(state);
     Ok(())
 }
 
@@ -39,6 +45,7 @@ pub(crate) fn move_newgrf_in_stack(
     }
     let entry = state.newgrf_stack.remove(from);
     state.newgrf_stack.insert(to, entry);
+    refresh_newgrf_catalogs(state);
     Ok(())
 }
 
@@ -52,6 +59,7 @@ pub(crate) fn remove_newgrf_from_stack(
         return Err(CommandError::NewGrfStaticImmutable);
     }
     state.newgrf_stack.remove(index);
+    refresh_newgrf_catalogs(state);
     Ok(())
 }
 
@@ -79,6 +87,7 @@ pub(crate) fn add_newgrf_to_stack(
         return Err(CommandError::NewGrfInvalidEntry);
     }
     state.newgrf_stack.push(entry);
+    refresh_newgrf_catalogs(state);
     Ok(())
 }
 

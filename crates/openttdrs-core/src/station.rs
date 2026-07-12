@@ -323,8 +323,12 @@ fn is_rail_track_kind(kind: TileKind) -> bool {
 }
 
 /// Teselas `Station` contiguas al ancla (huella de una estación multi-tesela).
+///
+/// Si dos estaciones rail son adyacentes, el flood-fill puede unificar ambas
+/// huellas; usar [`rail_station_owned_tiles`] / [`station_at_tile`] para
+/// asignar cada tesela al ancla más cercana.
 #[must_use]
-fn station_footprint_tiles(map: &Map, anchor: TileCoord) -> Vec<TileCoord> {
+pub fn station_footprint_tiles(map: &Map, anchor: TileCoord) -> Vec<TileCoord> {
     const MAX_FOOTPRINT: usize = 64;
     let mut tiles = vec![anchor];
     let mut seen = std::collections::HashSet::from([anchor]);
@@ -341,6 +345,71 @@ fn station_footprint_tiles(map: &Map, anchor: TileCoord) -> Vec<TileCoord> {
         }
     }
     tiles
+}
+
+#[must_use]
+fn manhattan(a: TileCoord, b: TileCoord) -> i32 {
+    (a.x - b.x).abs() + (a.y - b.y).abs()
+}
+
+/// Estación lógica en `tile` (ancla / joined / airport / huella rail por ancla más cercana).
+#[must_use]
+pub fn station_at_tile<'a>(
+    map: &Map,
+    stations: &'a [Station],
+    tile: TileCoord,
+) -> Option<&'a Station> {
+    if let Some(s) = stations.iter().find(|s| s.covers_tile(tile)) {
+        return Some(s);
+    }
+    if map.get_kind(tile) != Some(TileKind::Station) {
+        return None;
+    }
+    stations
+        .iter()
+        .filter(|s| {
+            matches!(s.stop_kind, StopKind::RailStation | StopKind::RailWaypoint)
+                && station_footprint_tiles(map, s.pos).contains(&tile)
+        })
+        .min_by_key(|s| manhattan(s.pos, tile))
+}
+
+/// Teselas de plataforma/huella rail asignadas a esta estación (Voronoi por ancla).
+#[must_use]
+pub fn rail_station_owned_tiles(
+    map: &Map,
+    stations: &[Station],
+    station: &Station,
+) -> Vec<TileCoord> {
+    if !matches!(station.stop_kind, StopKind::RailStation) {
+        return Vec::new();
+    }
+    station_footprint_tiles(map, station.pos)
+        .into_iter()
+        .filter(|&tile| station_at_tile(map, stations, tile).is_some_and(|s| s.pos == station.pos))
+        .collect()
+}
+
+/// `true` si alguna tesela de `a` comparte borde (Manhattan 1) con alguna de `b`.
+#[must_use]
+pub fn station_tile_sets_adjacent(a: &[TileCoord], b: &[TileCoord]) -> bool {
+    a.iter()
+        .any(|ta| b.iter().any(|tb| manhattan(*ta, *tb) == 1))
+}
+
+/// Eje de una estación rail (`true` = eje Y) a partir de `m5` de sus plataformas.
+#[must_use]
+pub fn rail_station_axis_y(map: &Map, stations: &[Station], station: &Station) -> Option<bool> {
+    let owned = rail_station_owned_tiles(map, stations, station);
+    let sample = owned
+        .into_iter()
+        .find(|&c| is_rail_platform_tile(map, c))
+        .or_else(|| {
+            station_footprint_tiles(map, station.pos)
+                .into_iter()
+                .find(|&c| is_rail_platform_tile(map, c))
+        })?;
+    Some(map.get(sample).is_some_and(|t| t.m5 & 1 != 0))
 }
 
 #[must_use]

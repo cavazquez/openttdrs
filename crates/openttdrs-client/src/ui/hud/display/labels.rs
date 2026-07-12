@@ -97,7 +97,7 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
             Some("overlay visual; sin vehículos de tranvía aún")
         }
         BuildMenuAction::JoinStation => {
-            Some("1º clic: estación a conservar; 2º: adyacente a fusionar")
+            Some("1º clic: conservar; 2º: road adyacente o rail (huella/eje)")
         }
         _ => None,
     }

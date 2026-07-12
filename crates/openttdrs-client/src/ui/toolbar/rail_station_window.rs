@@ -262,28 +262,7 @@ fn spawn_catalog_dropdown(
                     BackgroundColor(ENTRY_BG),
                     BorderColor::all(BTN_BORDER),
                 ));
-                match kind {
-                    StationCatalogKind::Class => {
-                        for def in list_station_classes("") {
-                            spawn_catalog_entry(
-                                menu,
-                                asset_server,
-                                def.label,
-                                StationClassSelectButton(def.id),
-                            );
-                        }
-                    }
-                    StationCatalogKind::Spec => {
-                        for def in list_station_specs(StationClassId::Default, "") {
-                            spawn_catalog_entry(
-                                menu,
-                                asset_server,
-                                def.label,
-                                StationSpecSelectButton(def.id),
-                            );
-                        }
-                    }
-                }
+                // Entradas iniciales vacías: `sync_station_catalog_entries` las rellena.
             });
         });
 }
@@ -291,9 +270,10 @@ fn spawn_catalog_dropdown(
 fn spawn_catalog_entry<B: Component>(
     parent: &mut ChildSpawnerCommands,
     asset_server: &AssetServer,
-    label: &'static str,
+    label: impl Into<String>,
     button: B,
 ) {
+    let label = label.into();
     parent.spawn((
         Button,
         button,
@@ -566,7 +546,10 @@ pub(crate) fn sync_rail_station_picker(
     }
     *vis = Visibility::Visible;
 
-    let spec = station_spec_def(sim.state.current_station_spec);
+    let spec = station_spec_def(
+        &sim.state.station_spec_catalog,
+        sim.state.current_station_spec,
+    );
     for (button, interaction, mut bg, mut border) in &mut buttons_q {
         let allowed = match *button {
             RailStationPickerButton::Platforms(n) => spec.is_none_or(|s| s.allows_platforms(n)),
@@ -594,15 +577,21 @@ pub(crate) fn sync_rail_station_picker(
     }
 
     if let Ok(mut text) = class_label.single_mut() {
-        let short = station_class_def(sim.state.current_station_class)
-            .map(|c| c.short_label)
-            .unwrap_or("?");
+        let short = station_class_def(
+            &sim.state.station_class_catalog,
+            sim.state.current_station_class,
+        )
+        .map(|c| c.short_label.as_str())
+        .unwrap_or("?");
         **text = short.into();
     }
     if let Ok(mut text) = spec_label.single_mut() {
-        let short = station_spec_def(sim.state.current_station_spec)
-            .map(|s| s.short_label)
-            .unwrap_or("?");
+        let short = station_spec_def(
+            &sim.state.station_spec_catalog,
+            sim.state.current_station_spec,
+        )
+        .map(|s| s.short_label.as_str())
+        .unwrap_or("?");
         **text = short.into();
     }
 
@@ -615,10 +604,11 @@ pub(crate) fn sync_rail_station_picker(
     }
 
     if catalog.open == Some(StationCatalogKind::Class) {
-        let matched: Vec<_> = list_station_classes(&catalog.filter)
-            .into_iter()
-            .map(|c| c.id)
-            .collect();
+        let matched: Vec<_> =
+            list_station_classes(&sim.state.station_class_catalog, &catalog.filter)
+                .into_iter()
+                .map(|c| c.id)
+                .collect();
         for (entry, mut vis) in &mut class_entries {
             *vis = if matched.contains(&entry.0) {
                 Visibility::Inherited
@@ -628,10 +618,14 @@ pub(crate) fn sync_rail_station_picker(
         }
     }
     if catalog.open == Some(StationCatalogKind::Spec) {
-        let matched: Vec<_> = list_station_specs(sim.state.current_station_class, &catalog.filter)
-            .into_iter()
-            .map(|s| s.id)
-            .collect();
+        let matched: Vec<_> = list_station_specs(
+            &sim.state.station_spec_catalog,
+            sim.state.current_station_class,
+            &catalog.filter,
+        )
+        .into_iter()
+        .map(|s| s.id)
+        .collect();
         for (entry, mut vis) in &mut spec_entries {
             *vis = if matched.contains(&entry.0) {
                 Visibility::Inherited
@@ -660,7 +654,10 @@ pub(crate) fn handle_rail_station_picker_buttons(
     mut station_state: ResMut<StationBuildState>,
     sim: Res<SimWorld>,
 ) {
-    let spec = station_spec_def(sim.state.current_station_spec);
+    let spec = station_spec_def(
+        &sim.state.station_spec_catalog,
+        sim.state.current_station_spec,
+    );
     for (interaction, button) in &buttons_q {
         if *interaction != Interaction::Pressed {
             continue;
@@ -714,7 +711,9 @@ pub(crate) fn handle_station_class_select_buttons(
         }
         sim.state.current_station_class = button.0;
         // Al cambiar de clase, elegir el primer spec disponible.
-        if let Some(first) = list_station_specs(button.0, "").first() {
+        if let Some(first) =
+            list_station_specs(&sim.state.station_spec_catalog, button.0, "").first()
+        {
             sim.state.current_station_spec = first.id;
         }
         catalog.open = None;
@@ -734,6 +733,59 @@ pub(crate) fn handle_station_spec_select_buttons(
         sim.state.current_station_spec = button.0;
         catalog.open = None;
         catalog.filter.clear();
+    }
+}
+
+/// Añade entradas del catálogo que aún no tienen botón (tras apply NewGRF Stations).
+pub(crate) fn sync_station_catalog_entries(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    sim: Res<SimWorld>,
+    popovers: Query<(Entity, &StationCatalogPopover)>,
+    class_entries: Query<&StationClassSelectButton>,
+    spec_entries: Query<&StationSpecSelectButton>,
+) {
+    let existing_classes: std::collections::HashSet<u16> =
+        class_entries.iter().map(|e| e.0.as_u16()).collect();
+    let existing_specs: std::collections::HashSet<u16> =
+        spec_entries.iter().map(|e| e.0.as_u16()).collect();
+    for (popover_entity, popover) in &popovers {
+        match popover.0 {
+            StationCatalogKind::Class => {
+                for def in list_station_classes(&sim.state.station_class_catalog, "") {
+                    if existing_classes.contains(&def.id.as_u16()) {
+                        continue;
+                    }
+                    let id = def.id;
+                    let label = def.label.clone();
+                    commands.entity(popover_entity).with_children(|menu| {
+                        spawn_catalog_entry(
+                            menu,
+                            &asset_server,
+                            label,
+                            StationClassSelectButton(id),
+                        );
+                    });
+                }
+            }
+            StationCatalogKind::Spec => {
+                for def in &sim.state.station_spec_catalog {
+                    if existing_specs.contains(&def.id.as_u16()) {
+                        continue;
+                    }
+                    let id = def.id;
+                    let label = def.label.clone();
+                    commands.entity(popover_entity).with_children(|menu| {
+                        spawn_catalog_entry(
+                            menu,
+                            &asset_server,
+                            label,
+                            StationSpecSelectButton(id),
+                        );
+                    });
+                }
+            }
+        }
     }
 }
 

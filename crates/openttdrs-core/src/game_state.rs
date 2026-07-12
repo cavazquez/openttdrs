@@ -277,12 +277,24 @@ pub struct GameState {
     /// Tipo de tranvía activo (`_last_built_tramtype`).
     #[serde(default = "default_current_tram_type")]
     pub current_tram_type: crate::road_type::RoadType,
+    /// Catálogo road/tram (vanilla + Action0 `RoadTypes`).
+    #[serde(default = "crate::road_type::vanilla_road_type_catalog")]
+    pub road_type_catalog: Vec<crate::road_type::RoadTypeDef>,
     /// Clase de estación ferroviaria activa (picker `NewGRF` / vanilla).
     #[serde(default)]
     pub current_station_class: crate::station_class::StationClassId,
     /// Spec de estación ferroviaria activa dentro de la clase.
     #[serde(default)]
     pub current_station_spec: crate::station_class::StationSpecId,
+    /// Catálogo de clases de estación (vanilla + Action0 Stations).
+    #[serde(default = "crate::station_class::vanilla_station_class_catalog")]
+    pub station_class_catalog: Vec<crate::station_class::StationClassDef>,
+    /// Catálogo de specs de estación (vanilla + Action0 Stations).
+    #[serde(default = "crate::station_class::vanilla_station_spec_catalog")]
+    pub station_spec_catalog: Vec<crate::station_class::StationSpecDef>,
+    /// Catálogo de motores (vanilla + Action0 Trains).
+    #[serde(default = "crate::engine::vanilla_engine_catalog")]
+    pub engine_catalog: Vec<crate::engine::EngineDef>,
     /// Clase de aeropuerto activa (picker).
     #[serde(default)]
     pub current_airport_class: crate::airport_class::AirportClassId,
@@ -373,6 +385,15 @@ pub struct GameState {
     /// Contador para IDs de cartel.
     #[serde(default = "default_next_sign_id")]
     pub next_sign_id: u32,
+    /// Meses consecutivos en quiebra de la compañía activa.
+    #[serde(default)]
+    pub bankruptcy_streak: u8,
+    /// Partida cerrada (endscreen); no emitir más `GameOver`.
+    #[serde(default)]
+    pub game_finished: bool,
+    /// Flujos estación→estación observados (link graph; sin routing `CargoDist`).
+    #[serde(default)]
+    pub link_graph: crate::link_graph::LinkGraphStats,
 }
 
 const fn default_true() -> bool {
@@ -412,8 +433,12 @@ impl GameState {
             current_rail_type: crate::rail_type::RailType::Rail,
             current_road_type: crate::road_type::RoadType::Road,
             current_tram_type: crate::road_type::RoadType::Tram,
+            road_type_catalog: crate::road_type::vanilla_road_type_catalog(),
             current_station_class: crate::station_class::StationClassId::Default,
             current_station_spec: crate::station_class::StationSpecId::DefaultRail,
+            station_class_catalog: crate::station_class::vanilla_station_class_catalog(),
+            station_spec_catalog: crate::station_class::vanilla_station_spec_catalog(),
+            engine_catalog: crate::engine::vanilla_engine_catalog(),
             current_airport_class: crate::airport_class::AirportClassId::Small,
             current_airport_spec: crate::airport_class::AirportSpecId::Small,
             climate: Climate::default(),
@@ -444,6 +469,9 @@ impl GameState {
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             signs: Vec::new(),
             next_sign_id: 1,
+            bankruptcy_streak: 0,
+            game_finished: false,
+            link_graph: crate::link_graph::LinkGraphStats::default(),
         }
     }
 
@@ -468,8 +496,12 @@ impl GameState {
             current_rail_type: crate::rail_type::RailType::Rail,
             current_road_type: crate::road_type::RoadType::Road,
             current_tram_type: crate::road_type::RoadType::Tram,
+            road_type_catalog: crate::road_type::vanilla_road_type_catalog(),
             current_station_class: crate::station_class::StationClassId::Default,
             current_station_spec: crate::station_class::StationSpecId::DefaultRail,
+            station_class_catalog: crate::station_class::vanilla_station_class_catalog(),
+            station_spec_catalog: crate::station_class::vanilla_station_spec_catalog(),
+            engine_catalog: crate::engine::vanilla_engine_catalog(),
             current_airport_class: crate::airport_class::AirportClassId::Small,
             current_airport_spec: crate::airport_class::AirportSpecId::Small,
             climate: Climate::default(),
@@ -500,6 +532,9 @@ impl GameState {
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             signs: Vec::new(),
             next_sign_id: 1,
+            bankruptcy_streak: 0,
+            game_finished: false,
+            link_graph: crate::link_graph::LinkGraphStats::default(),
         }
     }
 

@@ -94,12 +94,16 @@ pub(crate) enum FloatingWindowId {
     ExtraViewport,
     /// Lista de carteles del mapa.
     SignList,
-    /// Leyenda Link Graph / CargoDist (stub).
+    /// Leyenda Link Graph / flujos observados.
     LinkGraphLegend,
     /// Selección de tipo/densidad de señales ferroviarias.
     SignalPicker,
     /// Ayuda / About / mapa de hotkeys (UI-7).
     Help,
+    /// Consola / métricas FPS / toggles de debug (UI-8).
+    DevConsole,
+    /// Inspección estructurada del tile seleccionado (UI-8).
+    TileInspector,
 }
 
 impl FloatingWindowId {
@@ -138,6 +142,8 @@ impl FloatingWindowId {
             Self::LinkGraphLegend => "LinkGraphLegend",
             Self::SignalPicker => "SignalPicker",
             Self::Help => "Help",
+            Self::DevConsole => "DevConsole",
+            Self::TileInspector => "TileInspector",
         }
     }
 }

@@ -577,8 +577,8 @@ Objetivo de cobertura global: **~58–62 %**.
 - [x] ExtraLargeMap. *(botón Ampliar / Esc para cerrar)*
 - [x] ExtraViewport. *(MVP: sigue cámara principal, zoom alejado)*
 - [x] SignList. *(lista real + PlaceSign / Rename / Remove)*
-- [~] LinkGraph. *(stub UI explícito; bloqueado sin CargoDist — fuera de alcance UI-5)*
-- [~] LinkGraphLegend cuando exista CargoDist. *(mismo stub; fuera de alcance UI-5)*
+- [x] LinkGraph. *(observacional: flujos estación→estación; sin routing CargoDist)*
+- [x] LinkGraphLegend. *(ventana con top aristas + filtro cargo; overlay mapa OOS)*
 
 ### Opciones/display
 
@@ -603,10 +603,11 @@ Objetivo de cobertura global: **~58–62 %**.
 - [x] ExtraLargeMap (minimapa centrado, celda 8px).
 - [x] ExtraViewport MVP + Display Options.
 - [x] SignList real (UI-6b adelantado).
-- [~] LinkGraph: stub documentado hasta CargoDist.
+- [x] LinkGraph: observacional (`LinkGraphStats` + UI; routing CargoDist OOS).
 - [x] NewGRF editable (config-only: ON/OFF, ↑/↓, quitar; sin Action0–14).
 
 **UI-5 cerrado** (criterios + extras jugables). Parámetros NewGRF / runtime Action0–14 → OOS (UI-7 cerró stack config-only).
+Routing CargoDist completo (next_hop / modos) sigue OOS.
 
 ---
 
@@ -642,6 +643,7 @@ Objetivo de cobertura global: **~65–68 %**.
 - [x] `Station.joined_tiles` + `covers_tile`.
 - [x] Reescritura de órdenes / subsidios / pools compartidos.
 - [x] Herramienta Road «Unir estaciones» (2 clics) + botón panel «Unir…».
+- [x] Rail: huellas adyacentes + mismo eje; `station_at_tile`; toolbar Rail.
 
 ### UI-6e (vehículos de tranvía MVP)
 
@@ -656,7 +658,7 @@ Objetivo de cobertura global: **~65–68 %**.
 - [x] Catálogo `RoadTypeDef` + `list_road_types(class, filter)` (hook NewGRF).
 - [x] `current_road_type` / `current_tram_type` en `GameState` + escritura en m8.
 - [x] Dropdowns filtrables en toolbar Road (C:… / T:…) + HUD.
-- [x] Fuera de alcance: tipos NewGRF reales (Action0–14).
+- [x] Fuera de alcance: tipos NewGRF reales con sprites. *(Action0 RoadTypes metadatos ✅)*
 
 ### UI-6g (station classes / layouts)
 
@@ -664,7 +666,7 @@ Objetivo de cobertura global: **~65–68 %**.
 - [x] `current_station_class` / `current_station_spec` + `Station.station_spec`.
 - [x] Picker rail: dropdowns clase/tipo + tamaños deshabilitados por spec.
 - [x] Layout vía `station_spec_layout` (vanilla = `rail_station_layout`).
-- [x] Fuera de alcance: specs NewGRF reales (Action0 Stations).
+- [x] Action0 Stations (0x04) metadatos → catálogo dinámico (layouts gfx NewGRF OOS).
 
 ### UI-6h (boyas / acueducto)
 
@@ -676,7 +678,7 @@ Objetivo de cobertura global: **~65–68 %**.
 
 ### Pendiente / fuera de alcance (requiere más backend)
 
-- [~] JoinStation rail multi-tile / tipos mixtos. *(OOS UI-6: solo road 1×1; rail/mixtos → futuro)*
+- [~] JoinStation tipos mixtos (road+rail / aeropuerto / dock). *(OOS)*
 - [x] BuildWaypoint road MVP (`PlaceRoadWaypoint` + botón toolbar; órdenes road vía `VehicleOrder::Waypoint`).
 - [x] Airport picker extensible.
 - [~] BuildObject genérico. *(OOS UI-6: BuyLand = objeto jugable; faro/transmisor = worldgen/saves; NewGRF runtime → OOS post UI-7)*
@@ -698,20 +700,21 @@ Objetivo de cobertura global: **~65–68 %**.
 Prioridad: **P2/P3**  
 Objetivo de cobertura global: **~70–75 %**.
 
-**UI-7 cerrado** (corte jugable). Runtime Action0–14 / parámetros NewGRF /
-consola REPL / cheats formales → OOS o UI-8.
+**UI-7 cerrado** (corte jugable). Runtime Action0–14 completo (sprites/callbacks) /
+parámetros NewGRF / consola REPL / cheats formales → OOS o UI-8.
 
 - [x] NewGRF editable config-only: ON/OFF/↑↓/quitar + **Añadir…** desde disco
-      (`assets/opengfx/…` / `OPENTTDRS_NEWGRF_DIR`). Sin runtime Action0–14.
+      (`assets/opengfx/…` / `OPENTTDRS_NEWGRF_DIR`).
+- [x] Parse-only Action0–14 (histograma Inspeccionar) + Action0 RoadTypes / Stations / Trains metadatos.
 - [ ] Parámetros NewGRF. *(OOS: sin runtime de params)*
 - [x] Presets de settings (Clásico / Rendimiento / Dev en Display Options).
 - [ ] Sandbox/cheats si se decide soportarlos. *(OOS)*
-- [ ] Consola y diagnostics para desarrollo. *(OOS; overlay Dev en preset)*
+- [x] Consola y diagnostics para desarrollo. *(UI-8: Consola/Dev + overlay; REPL/cheats OOS)*
 - [x] About/help y mapa de hotkeys (F1 / ? + Ajustes → Ayuda…).
 - [x] Posiciones de ventana persistentes (`ClientPreferences.window_layouts`).
 
-NewGRF editable **completo** (aplicar Action0–14) sigue bloqueado por el runtime;
-la UI de stack no simula efectos de sprites/gameplay.
+NewGRF editable **completo** (sprites Action1/3/5 + callbacks) sigue OOS;
+RoadTypes / Stations / Trains metadatos alimentan catálogos (sin sprites).
 
 ---
 
@@ -720,13 +723,18 @@ la UI de stack no simula efectos de sprites/gameplay.
 Prioridad: **P3**  
 Objetivo: posterior a la paridad single-player.
 
+**UI-8 (cortes tools-dev + highscore/endscreen) cerrados.** Resto de modos
+(multi, MP, editor, GS/AI) siguen pendientes.
+
 - [ ] Multi-compañía completa en toolbar/listas/finanzas.
 - [ ] Multijugador: lobby, clientes, chat, join/spectate.
 - [ ] Scenario editor y toolbar de 19 botones.
 - [ ] GameScript: story, goals, league.
 - [ ] AI settings/debug.
-- [ ] Highscore/endscreen.
-- [ ] Herramientas dev: framerate, sprite aligner, inspección NewGRF.
+- [x] Herramientas dev: framerate / consola corta, tile inspect, NewGRF inspect,
+      sprite-bounds lite (gizmos + tile seleccionado).
+- [x] Highscore/endscreen. *(retiro + quiebra ×3 meses; tabla local en prefs)*
+- [ ] Consola REPL completa / cheats formales. *(OOS; cmds help/fps/…/endgame/clear)*
 
 No usar UI-8 para bloquear UI-1 a UI-6.
 
@@ -924,8 +932,36 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** UI-8 seleccionado (modos opcionales) o pulir gaps OOS de UI-6/UI-7
-(parámetros NewGRF / Action0–14 cuando exista runtime; consola; cheats).
+**Siguiente:** UI-8 multi-compañía mínima, o sprites NewGRF Action1/3/5.
+
+Progreso NewGRF Action0–14 (parse + metadatos):
+
+1. ~~Walker parse-only Action0–14 + histograma Inspeccionar.~~ ✅
+2. ~~Action0 RoadTypes (0x12) metadatos → catálogo dinámico + selector.~~ ✅
+3. ~~Action0 Stations (0x04) metadatos → catálogo clase/spec + picker rail.~~ ✅
+4. ~~Action0 Trains (0x00) metadatos → `engine_catalog` + compra depósito rail.~~ ✅
+5. Sprites Action1/3/5, road/ship/aircraft Vehicles, callbacks → OOS.
+
+Progreso backend OOS (JoinStation rail + CargoDist observacional):
+
+1. ~~JoinStation rail (huella/eje + `station_at_tile` + toolbar Rail).~~ ✅
+2. ~~Link graph observacional (`LinkGraphStats`, save v18, UI LinkGraph).~~ ✅
+3. Routing CargoDist completo (next_hop / modos) → OOS futuro.
+
+Progreso UI-8 (highscore/endscreen):
+
+1. ~~Trigger fin: quiebra ×3 meses + retiro (Ajustes / `endgame`).~~ ✅
+2. ~~Endscreen modal + ranking local.~~ ✅
+3. ~~Highscores persistidos en `ClientPreferences`.~~ ✅
+4. ~~Menú «Mejores puntuaciones» + salida sin Continuar.~~ ✅
+
+Progreso UI-8 (tools-dev):
+
+1. ~~Consola / Dev (F3 / `` ` ``): FPS, frame ms, toggles overlay/gizmos, cmds.~~ ✅
+2. ~~Inspector de tile (F2) + dump estructurado.~~ ✅
+3. ~~NewGRF Inspeccionar (scan + validate_stack).~~ ✅
+4. ~~Sprite bounds lite en tile seleccionado (gizmos ON).~~ ✅
+5. ~~Help + menú Ajustes actualizados.~~ ✅
 
 Progreso UI-7 (cierre):
 
@@ -1006,7 +1042,7 @@ Progreso UI-6g:
 1. ~~Catálogo filtrable StationClass/StationSpec.~~ ✅
 2. ~~Picker clase/tipo + disallowed sizes.~~ ✅
 3. ~~Persistencia `current_station_*` + `Station.station_spec`.~~ ✅
-4. ~~Sin specs NewGRF reales (documentado; hook listo).~~ ✅
+4. ~~Action0 Stations metadatos (0x04) + picker dinámico.~~ ✅
 
 Progreso UI-6h (boyas / acueducto / ríos):
 
@@ -1075,7 +1111,8 @@ Progreso UI-5c:
 2. ~~ExtraViewport MVP (sigue cámara principal).~~ ✅
 3. ~~Stubs SignList + LinkGraph (bloqueados por backend).~~ ✅
 
-Pendiente UI-5: ninguno que bloquee cierre. LinkGraph real → CargoDist.
+Pendiente UI-5: ninguno que bloquee cierre. LinkGraph observacional ✅;
+routing CargoDist completo → OOS. NewGRF Action0–14 / parámetros → OOS.
 NewGRF Action0–14 / parámetros → OOS hasta runtime (UI-7 cerró config-only).
 Graph por compañía: ✅.
 

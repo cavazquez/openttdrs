@@ -120,7 +120,7 @@ fn hide_order_rows(
 }
 
 fn station_at_tile(sim: &SimWorld, pos: openttdrs_core::TileCoord) -> Option<&Station> {
-    sim.state.stations.iter().find(|s| s.pos == pos)
+    openttdrs_core::station_at_tile(&sim.state.map, &sim.state.stations, pos)
 }
 
 fn stop_kind_mismatch_note(vehicle: &Vehicle, station: &Station) -> Option<&'static str> {

@@ -13,7 +13,9 @@ mod autoreplace_window;
 mod buy_window;
 mod cargo_payment_window;
 mod destination_window;
+mod dev_console;
 mod display_options_window;
+mod endscreen;
 mod extra_viewport_window;
 mod finances_window;
 mod floating_window;
@@ -39,6 +41,7 @@ mod sparkline;
 mod station_directory;
 mod statusbar;
 mod subsidy_list;
+mod tile_inspector_window;
 mod timetable_window;
 mod toolbar;
 mod town_directory;
@@ -68,9 +71,17 @@ use destination_window::{
     DestinationPickerState, destination_picker_on_closed, handle_destination_picker_buttons,
     setup_destination_picker, sync_destination_picker,
 };
+use dev_console::{
+    DevConsoleState, dev_console_window_on_closed, handle_dev_console_buttons,
+    handle_dev_console_keyboard, setup_dev_console, sync_dev_console,
+};
 use display_options_window::{
     DisplayOptionsWindowState, display_options_window_on_closed, handle_display_options_buttons,
     setup_display_options_window, sync_display_options_window,
+};
+use endscreen::{
+    EndScreenState, RetireGameRequested, handle_endscreen_menu_button, process_retire_game_request,
+    setup_endscreen, sync_endscreen, watch_game_over_events,
 };
 use extra_viewport_window::{
     ExtraViewportWindowState, extra_viewport_window_on_closed, setup_extra_viewport_window,
@@ -105,9 +116,10 @@ use industry_panel::{
     setup_industry_panel, sync_industry_panel,
 };
 use main_menu::{
-    auto_start_preloaded_json, main_menu_continue_interaction, main_menu_interaction,
-    main_menu_options_interaction, setup_main_menu, sync_main_menu_continue_button,
-    sync_main_menu_panel_visibility, sync_main_menu_summary,
+    auto_start_preloaded_json, main_menu_continue_interaction, main_menu_highscores_interaction,
+    main_menu_interaction, main_menu_options_interaction, setup_main_menu,
+    sync_main_menu_continue_button, sync_main_menu_highscores, sync_main_menu_panel_visibility,
+    sync_main_menu_summary,
 };
 use main_menu_intro::{
     animate_main_menu_intro_traffic, cleanup_main_menu_on_exit, pan_main_menu_intro_camera,
@@ -164,6 +176,10 @@ use subsidy_list::{
     SubsidyListState, handle_subsidy_list_buttons, open_subsidy_list_from_routes,
     setup_subsidy_list, subsidy_list_on_closed, sync_subsidy_list,
 };
+use tile_inspector_window::{
+    TileInspectorWindowState, draw_selected_tile_bounds, handle_tile_inspector_hotkey,
+    setup_tile_inspector_window, sync_tile_inspector_window, tile_inspector_window_on_closed,
+};
 use timetable_window::{
     TimetableWindowState, handle_timetable_window_buttons, setup_timetable_window,
     sync_timetable_window, timetable_window_on_closed,
@@ -191,8 +207,9 @@ use toolbar::{
     sync_airport_picker, sync_bridge_picker, sync_build_pointer_modifiers,
     sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_depot_panel,
     sync_minimap, sync_order_panel, sync_orders_pick_cursor, sync_rail_station_picker,
-    sync_rail_type_select_visuals, sync_road_type_class_labels, sync_road_type_entry_visibility,
-    sync_road_type_popovers, sync_signal_picker, sync_station_cargo_panel, toolbar_click_beep,
+    sync_rail_type_select_visuals, sync_road_type_catalog_entries, sync_road_type_class_labels,
+    sync_road_type_entry_visibility, sync_road_type_popovers, sync_signal_picker,
+    sync_station_cargo_panel, sync_station_catalog_entries, toolbar_click_beep,
     toolbar_group_interaction, update_build_ghost_preview, update_cursor_tile,
     update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
     update_toolbar_tooltip,
@@ -208,8 +225,8 @@ use town_window::{
     town_window_on_closed,
 };
 use ui5_blocked_stubs::{
-    LinkGraphWindowState, link_graph_window_on_closed, open_link_graph_from_routes,
-    setup_link_graph_window, sync_link_graph_window,
+    LinkGraphWindowState, handle_link_graph_filter_button, link_graph_window_on_closed,
+    open_link_graph_from_routes, setup_link_graph_window, sync_link_graph_window,
 };
 use vehicle_list::{
     VehicleListState, handle_vehicle_list_buttons, open_vehicle_list_from_routes,
@@ -242,6 +259,10 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<PathfindingSettingsWindowState>()
         .init_resource::<NewGrfWindowState>()
         .init_resource::<HelpWindowState>()
+        .init_resource::<DevConsoleState>()
+        .init_resource::<TileInspectorWindowState>()
+        .init_resource::<EndScreenState>()
+        .init_resource::<RetireGameRequested>()
         .init_resource::<SoundMusicWindowState>()
         .init_resource::<crate::news_prefs::NewsDisplayPrefs>()
         .init_resource::<SelectedTileInfo>()
@@ -348,16 +369,27 @@ impl Plugin for ClientUiPlugin {
                 .in_set(StartupSet::Ui),
         )
         .add_systems(
+            OnEnter(ClientScreen::InGame),
+            (
+                setup_dev_console,
+                setup_tile_inspector_window,
+                setup_endscreen,
+            )
+                .in_set(StartupSet::Ui),
+        )
+        .add_systems(
             Update,
             (
                 pan_main_menu_intro_camera,
                 animate_main_menu_intro_traffic,
                 auto_start_preloaded_json,
                 (main_menu_interaction, main_menu_continue_interaction).chain(),
+                main_menu_highscores_interaction,
                 main_menu_options_interaction,
                 sync_main_menu_panel_visibility,
                 sync_main_menu_summary,
                 sync_main_menu_continue_button,
+                sync_main_menu_highscores,
                 toolbar_click_beep,
                 play_hud_sfx,
             )
@@ -385,6 +417,8 @@ impl Plugin for ClientUiPlugin {
                 handle_pause_toggle,
                 cycle_json_save_path_hotkey,
                 handle_help_hotkey,
+                handle_tile_inspector_hotkey,
+                handle_dev_console_keyboard,
                 handle_tool_hotkeys,
                 rotate_station_with_right_click,
                 close_road_type_picker_on_escape,
@@ -412,6 +446,13 @@ impl Plugin for ClientUiPlugin {
                 handle_settings_menu_buttons,
                 handle_company_colour_swatches,
                 sync_company_colour_swatch_visuals,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
                 handle_save_load_toolbar_buttons,
                 handle_save_window_buttons,
                 sync_save_window,
@@ -515,6 +556,12 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             Update,
+            draw_selected_tile_bounds
+                .in_set(UpdateSet::Visuals)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
             (
                 update_cursor_tile,
                 update_build_ghost_preview,
@@ -581,6 +628,7 @@ impl Plugin for ClientUiPlugin {
                 link_graph_window_on_closed,
                 sync_sign_list_window,
                 sync_link_graph_window,
+                handle_link_graph_filter_button,
                 handle_sign_list_buttons,
                 handle_sign_list_body_click,
                 sign_list_rename_keyboard,
@@ -596,6 +644,15 @@ impl Plugin for ClientUiPlugin {
                 handle_newgrf_window_buttons,
                 help_window_on_closed,
                 sync_help_window,
+                process_retire_game_request,
+                watch_game_over_events,
+                sync_endscreen,
+                handle_endscreen_menu_button,
+                dev_console_window_on_closed,
+                sync_dev_console,
+                handle_dev_console_buttons,
+                tile_inspector_window_on_closed,
+                sync_tile_inspector_window,
                 handle_sound_music_toolbar_button,
                 handle_audio_settings_buttons,
                 handle_volume_sliders,
@@ -622,6 +679,7 @@ impl Plugin for ClientUiPlugin {
                 sync_buy_window,
                 sync_destination_picker,
                 sync_rail_station_picker,
+                sync_station_catalog_entries,
                 sync_bridge_picker,
                 sync_vehicle_window,
                 sync_timetable_window,
@@ -640,6 +698,7 @@ impl Plugin for ClientUiPlugin {
                 sync_rail_type_select_visuals,
                 sync_road_type_popovers,
                 sync_road_type_entry_visibility,
+                sync_road_type_catalog_entries,
                 sync_road_type_class_labels,
             )
                 .in_set(UpdateSet::Ui)

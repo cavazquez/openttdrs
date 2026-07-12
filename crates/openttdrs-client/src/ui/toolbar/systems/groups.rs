@@ -169,6 +169,9 @@ fn tool_compatible_with_panel(action: BuildMenuAction, active: Option<ToolbarGro
     if action == BuildMenuAction::Clear {
         return matches!(active, ToolbarGroup::Road | ToolbarGroup::Rail);
     }
+    if action == BuildMenuAction::JoinStation {
+        return matches!(active, ToolbarGroup::Road | ToolbarGroup::Rail);
+    }
     toolbar_group_for_action(action) == active
 }
 
@@ -237,6 +240,25 @@ mod tests {
         assert_eq!(
             world.resource::<UiToolState>().active_tool,
             Some(BuildMenuAction::Clear)
+        );
+    }
+
+    #[test]
+    fn join_station_tool_stays_active_on_rail_panel() {
+        let mut world = World::new();
+        world.insert_resource(ToolbarState {
+            active_group: Some(ToolbarGroup::Rail),
+            ..Default::default()
+        });
+        world.insert_resource(UiToolState {
+            active_tool: Some(BuildMenuAction::JoinStation),
+            ..Default::default()
+        });
+        world.insert_resource(DragBuildState::default());
+        world.run_system_once(hide_tool_when_panel_closed).unwrap();
+        assert_eq!(
+            world.resource::<UiToolState>().active_tool,
+            Some(BuildMenuAction::JoinStation)
         );
     }
 

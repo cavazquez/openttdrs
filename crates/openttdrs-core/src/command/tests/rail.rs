@@ -92,6 +92,43 @@ fn place_rail_station_area_writes_layout_and_anchors_center() {
 }
 
 #[test]
+fn place_rail_station_area_persists_newgrf_station_spec() {
+    use crate::station_class::{StationClassDef, StationClassId, StationSpecDef, StationSpecId};
+
+    let mut s = GameState::new(16, 16);
+    let class_id = StationClassId::from_u16(1);
+    let spec_id = StationSpecId::from_u16(1);
+    s.station_class_catalog.push(StationClassDef {
+        id: class_id,
+        label: "Moderna".into(),
+        short_label: "MODN".into(),
+        from_newgrf: true,
+    });
+    s.station_spec_catalog.push(StationSpecDef {
+        id: spec_id,
+        class: class_id,
+        label: "Andén NewGRF".into(),
+        short_label: "Plat".into(),
+        disallowed_platforms: 0,
+        disallowed_lengths: 0,
+        from_newgrf: true,
+    });
+    s.current_station_class = class_id;
+    s.current_station_spec = spec_id;
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(3, 3),
+            axis_y: false,
+            platforms: 1,
+            length: 2,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.stations[0].station_spec, spec_id);
+}
+
+#[test]
 fn place_rail_station_area_axis_y_uses_odd_gfx() {
     let mut s = GameState::new(16, 16);
     apply_command(
@@ -1498,6 +1535,38 @@ fn build_vehicle_at_depot_rejects_unknown_engine() {
     apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
     let e = apply_command(&mut s, &Command::BuildVehicleAtDepot(depot, 9_999)).unwrap_err();
     assert_eq!(e, CommandError::EngineNotFound);
+}
+
+#[test]
+fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
+    use crate::engine::{EngineDef, NEWGRF_ENGINE_ID_BASE};
+
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(2, 3))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
+    let id = NEWGRF_ENGINE_ID_BASE;
+    s.engine_catalog.push(EngineDef {
+        id,
+        kind: VehicleKind::Train,
+        name: "NewGRF Express".into(),
+        max_speed: 140,
+        price: 50_000,
+        running_cost_year: 2_000,
+        capacity: 0,
+        cargo: None,
+        power_hp: 2_000,
+        weight_t: 90,
+        intro_year: 1960,
+        reliability_pct: 85,
+        train_image_index: 2,
+        from_newgrf: true,
+    });
+    let money_before = s.economy.money;
+    apply_command(&mut s, &Command::BuildVehicleAtDepot(depot, id)).unwrap();
+    assert_eq!(s.vehicles.len(), 1);
+    assert_eq!(s.vehicles[0].engine_id, Some(id));
+    assert_eq!(s.economy.money, money_before - 50_000);
 }
 
 #[test]

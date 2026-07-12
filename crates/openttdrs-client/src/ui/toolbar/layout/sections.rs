@@ -322,7 +322,7 @@ pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             BuildMenuAction::RoadWaypoint,
                         ),
                         (
-                            "Unir estaciones (road 1x1)",
+                            "Unir estaciones (road/rail)",
                             "assets/opengfx/tiles/truck_stop_ground_0.png",
                             BuildMenuAction::JoinStation,
                         ),
@@ -492,6 +492,11 @@ pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             "Convertir vía",
                             "assets/opengfx/tiles/toolbar_rail_remove.png",
                             BuildMenuAction::RailConvert,
+                        ),
+                        (
+                            "Unir estaciones (rail)",
+                            "assets/opengfx/tiles/toolbar_rail_station.png",
+                            BuildMenuAction::JoinStation,
                         ),
                     ],
                 );

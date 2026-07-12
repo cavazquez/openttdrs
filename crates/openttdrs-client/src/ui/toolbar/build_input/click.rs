@@ -438,7 +438,11 @@ pub(crate) fn handle_tile_click(
                     return;
                 }
                 Some(TileKind::Station) => {
-                    station_panel.station_pos = Some(pos);
+                    let station_pos =
+                        openttdrs_core::station_at_tile(&sim.state.map, &sim.state.stations, pos)
+                            .map(|s| s.pos)
+                            .unwrap_or(pos);
+                    station_panel.station_pos = Some(station_pos);
                     depot_state.depot_pos = None;
                     depot_state.selected_vehicle = None;
                     order_state.clear();
@@ -573,7 +577,9 @@ pub(crate) fn handle_tile_click(
     }
 
     if action == BuildMenuAction::JoinStation {
-        let Some(station) = sim.state.stations.iter().find(|s| s.covers_tile(build_pos)) else {
+        let Some(station) =
+            openttdrs_core::station_at_tile(&sim.state.map, &sim.state.stations, build_pos)
+        else {
             push_build_command_error(
                 &mut hud_feedback,
                 CommandError::StationNotFound,

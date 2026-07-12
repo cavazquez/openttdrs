@@ -76,8 +76,12 @@ pub(crate) fn handle_ingame_escape(
     mut next_screen: ResMut<NextState<ClientScreen>>,
     mut suspended: ResMut<SuspendedGameSession>,
     mut overlays: InGameEscOverlays,
+    endscreen: Option<Res<crate::ui::endscreen::EndScreenState>>,
 ) {
     if !keyboard.just_pressed(KeyCode::Escape) {
+        return;
+    }
+    if endscreen.is_some_and(|e| crate::ui::endscreen::endscreen_blocks_escape(&e)) {
         return;
     }
     if overlays.road_type_escape.0 {

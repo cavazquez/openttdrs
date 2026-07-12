@@ -570,6 +570,64 @@ fn two_truck_transfer_via_station_hub() {
 }
 
 #[test]
+fn link_graph_records_station_flow_on_unload() {
+    let mut s = GameState::new(16, 8);
+    let from = TileCoord::new(2, 0);
+    let dest = TileCoord::new(10, 0);
+    s.stations.push(Station::new(dest));
+    let mut truck = Vehicle::new(1, VehicleKind::Truck, dest, dest);
+    truck.cargo = 10;
+    truck.cargo_type = Some(CargoType::Goods);
+    truck.mark_cargo_loaded(from);
+    truck.ensure_packets_from_legacy();
+    truck.last_pickup_station = Some(from);
+    s.vehicles.push(truck);
+    for _ in 0..8 {
+        s.step();
+        if s.vehicles[0].cargo == 0 {
+            break;
+        }
+    }
+    assert_eq!(s.vehicles[0].cargo, 0);
+    let key = LinkEdgeKey {
+        from,
+        to: dest,
+        cargo: CargoType::Goods,
+    };
+    assert_eq!(
+        s.link_graph.edges.get(&key).map(|e| e.units_total),
+        Some(10)
+    );
+    assert_eq!(s.link_graph.edges[&key].units_month, 10);
+    s.link_graph.rollover_month();
+    assert_eq!(s.link_graph.edges[&key].units_month, 0);
+    assert_eq!(s.link_graph.edges[&key].units_total, 10);
+}
+
+#[test]
+fn link_graph_sets_pickup_when_loading_waiting_cargo() {
+    let mut s = GameState::new(12, 8);
+    let hub = TileCoord::new(4, 0);
+    s.stations.push(Station::new(hub));
+    s.stations[0].cargo_stock.goods = 14;
+    s.vehicles.push(Vehicle::new(
+        0,
+        VehicleKind::Truck,
+        hub,
+        TileCoord::new(8, 0),
+    ));
+
+    for _ in 0..8 {
+        s.step();
+        if s.vehicles[0].cargo == 14 {
+            break;
+        }
+    }
+    assert_eq!(s.vehicles[0].cargo, 14);
+    assert_eq!(s.vehicles[0].last_pickup_station, Some(hub));
+}
+
+#[test]
 fn delivery_income_scales_with_haul_distance() {
     let station = TileCoord::new(10, 0);
     let cases = [(TileCoord::new(9, 0), 0_u64), (TileCoord::new(0, 0), 0_u64)];

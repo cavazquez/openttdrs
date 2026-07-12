@@ -12,17 +12,23 @@ fn save_window_open(save_window: Option<&Res<SaveWindowState>>) -> bool {
     save_window.is_some_and(|w| w.open)
 }
 
+fn dev_console_open(console: Option<&Res<crate::ui::dev_console::DevConsoleState>>) -> bool {
+    console.is_some_and(|c| crate::ui::dev_console::dev_console_captures_keyboard(c))
+}
+
 /// **P** alterna pausa del tick de simulacion (`GameState::step`).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_pause_toggle(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut hud: ResMut<SimHudControls>,
     mut prefs: ResMut<ClientPreferences>,
     mut pending_remap: ResMut<RemapMapVisualsPending>,
     save_window: Option<Res<SaveWindowState>>,
+    console: Option<Res<crate::ui::dev_console::DevConsoleState>>,
     run_state: Res<State<SimRunState>>,
     mut next_run: ResMut<NextState<SimRunState>>,
 ) {
-    if save_window_open(save_window.as_ref()) {
+    if save_window_open(save_window.as_ref()) || dev_console_open(console.as_ref()) {
         return;
     }
     if keyboard.just_pressed(KeyCode::KeyP) {
@@ -58,8 +64,9 @@ pub(crate) fn cycle_json_save_path_hotkey(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut hud: ResMut<SimHudControls>,
     save_window: Option<Res<SaveWindowState>>,
+    console: Option<Res<crate::ui::dev_console::DevConsoleState>>,
 ) {
-    if save_window_open(save_window.as_ref()) {
+    if save_window_open(save_window.as_ref()) || dev_console_open(console.as_ref()) {
         return;
     }
     if keyboard.just_pressed(KeyCode::F4) {
@@ -77,8 +84,9 @@ pub(crate) fn handle_tool_hotkeys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut tool_state: ResMut<UiToolState>,
     save_window: Option<Res<SaveWindowState>>,
+    console: Option<Res<crate::ui::dev_console::DevConsoleState>>,
 ) {
-    if save_window_open(save_window.as_ref()) {
+    if save_window_open(save_window.as_ref()) || dev_console_open(console.as_ref()) {
         return;
     }
     if keyboard.just_pressed(KeyCode::Digit1) {

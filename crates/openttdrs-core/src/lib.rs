@@ -23,7 +23,9 @@ pub mod engine;
 pub mod entity_history;
 mod game_state;
 pub mod industry;
+pub mod link_graph;
 pub mod map;
+pub mod newgrf_actions;
 pub mod newgrf_config;
 pub mod news;
 pub mod ottdmap_extras;
@@ -39,6 +41,7 @@ pub mod road_movement;
 pub mod road_type;
 pub mod sav;
 pub mod save;
+mod score;
 pub mod shared_orders;
 pub mod ship_movement;
 mod sign;
@@ -106,12 +109,13 @@ pub use engine::{
     ENGINE_BUS_MPS, ENGINE_SHIP_COAL, ENGINE_SHIP_FERRY, ENGINE_SHIP_MPS, ENGINE_SHIP_OIL,
     ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_KIRBY, ENGINE_TRAIN_LEV1, ENGINE_TRAIN_X2001,
     ENGINE_TRUCK_MPS, ENGINE_WAGON_COAL, ENGINE_WAGON_GOODS, ENGINE_WAGON_MAIL,
-    ENGINE_WAGON_PASSENGER, EngineCatalogSort, EngineDef, REFERENCE_PROGRESS_STEP,
-    ROAD_ACCEL_ORIGINAL, RoadEngineFilter, accelerate_train_speed, aircraft_is_helicopter,
-    decelerate_road_speed, decelerate_train_speed, default_engine_id, engine_available_in_year,
-    engine_by_id, engine_catalog, engine_for_vehicle, engines_for_depot_kind,
-    engines_for_depot_purchase, engines_of_kind, progress_step_for_speed, tile_progress_length,
-    train_acceleration, train_smoke_kind, train_sprite_group, update_road_speed,
+    ENGINE_WAGON_PASSENGER, EngineCatalogSort, EngineDef, NEWGRF_ENGINE_ID_BASE,
+    REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter, accelerate_train_speed,
+    aircraft_is_helicopter, decelerate_road_speed, decelerate_train_speed, default_engine_id,
+    engine_available_in_year, engine_by_id, engine_catalog, engine_for_vehicle, engine_in_catalog,
+    engines_for_depot_kind, engines_for_depot_kind_in, engines_for_depot_purchase, engines_of_kind,
+    next_free_engine_id, progress_step_for_speed, tile_progress_length, train_acceleration,
+    train_smoke_kind, train_sprite_group, update_road_speed, vanilla_engine_catalog,
 };
 pub use entity_history::{
     ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
@@ -129,6 +133,7 @@ pub use industry::{
     FACTORY_COAL_INPUT, FACTORY_WOOD_INPUT, INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind,
     IndustrySpec, industry_produce_period_ticks,
 };
+pub use link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphStats};
 pub use map::{
     GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED, GFX_GOLD_MINE_TOWER_ANIMATED,
     GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2, GFX_OILWELL_ANIMATED_3, IndustryTileLink,
@@ -147,6 +152,19 @@ pub use map::{
     slope_dz_on_tile, step_industry_tiles, step_tree_and_field_growth, tick_tree_tile_loop,
     tile_adjacent_to_water, tile_has_water_class, tile_slope_and_z, tree_or_field_stage,
     tunnel_entrance_m5, tunnel_preview_path, water_class, water_class_from_m1,
+};
+pub use newgrf_actions::{
+    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header,
+    GrfInspectReport, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,
+    apply_newgrf_road_types, apply_newgrf_road_types_default_dirs,
+    apply_newgrf_stack_catalogs_default_dirs, apply_newgrf_stations,
+    apply_newgrf_stations_default_dirs, apply_newgrf_vehicles_trains,
+    apply_newgrf_vehicles_trains_default_dirs, build_action0_roadtype_payload,
+    build_action0_station_payload, build_action0_train_payload,
+    build_grf_v2_with_action0_and_action8, collect_roadtype_metas_from_grf,
+    collect_station_metas_from_grf, collect_train_metas_from_grf, default_newgrf_search_dirs,
+    for_each_pseudo_payload, inspect_grf_bytes, inspect_grf_file, parse_action0_header,
+    parse_action0_roadtype_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfScanError, GrfStackIssue, NewGrfEntry,
@@ -212,9 +230,10 @@ pub use road_movement::{
     vehicle_subtile_with_progress,
 };
 pub use road_type::{
-    RoadTramType, RoadType, RoadTypeDef, all_road_type_defs, list_road_types, road_type_def,
-    road_type_from_tile, set_road_type_on_tile, set_tram_road_type_on_tile,
-    set_tram_track_bits_on_tile, tile_has_tram_track, tram_road_type_from_tile, tram_track_bits,
+    RoadTramType, RoadType, RoadTypeDef, all_road_type_defs, list_road_types,
+    next_free_road_type_id, road_type_def, road_type_from_tile, set_road_type_on_tile,
+    set_tram_road_type_on_tile, set_tram_track_bits_on_tile, tile_has_tram_track,
+    tram_road_type_from_tile, tram_track_bits, vanilla_road_type_catalog,
 };
 pub use sav::{
     EXPORT_SAVE_VERSION, SavContainer, SavError, SavGame, SavIndustry, SavStation, SavVehicle,
@@ -223,6 +242,10 @@ pub use sav::{
 pub use save::CURRENT_SAVE_VERSION;
 pub use save::SaveError;
 pub use save::load_from_str;
+pub use score::{
+    BANKRUPTCY_STREAK_LIMIT, GameOverReason, GameScore, finish_game, retire_game,
+    snapshot_active_score,
+};
 pub use shared_orders::SharedOrderList;
 pub use ship_movement::{
     LOCK_TRANSIT_TICKS, is_water_network_tile, is_water_network_tile_at, lock_sprite_level,
@@ -238,16 +261,19 @@ pub use station::{
     StationMapCoherenceReport, StopKind, default_station_catenary_flags,
     industry_in_station_coverage, is_rail_waypoint_at, is_rail_waypoint_tile,
     load_amount_for_rating, on_station_cargo_pickup, rail_station_approach_tile,
-    rail_station_platform_tiles, rail_station_stop_tile, recompute_station_rating,
-    resolve_order_destination, road_stop_approach_tile, station_coverage_at, station_covers_tile,
-    station_map_coherence, station_rating_for_cargo, station_tile_can_have_pylons,
-    station_tile_can_have_wires, station_type_from_m6, stop_kind_from_m6, tick_station_cargo_age,
-    train_on_rail_platform, vehicle_at_road_stop, vehicle_physically_at_station,
+    rail_station_axis_y, rail_station_owned_tiles, rail_station_platform_tiles,
+    rail_station_stop_tile, recompute_station_rating, resolve_order_destination,
+    road_stop_approach_tile, station_at_tile, station_coverage_at, station_covers_tile,
+    station_footprint_tiles, station_map_coherence, station_rating_for_cargo,
+    station_tile_can_have_pylons, station_tile_can_have_wires, station_tile_sets_adjacent,
+    station_type_from_m6, stop_kind_from_m6, tick_station_cargo_age, train_on_rail_platform,
+    vehicle_at_road_stop, vehicle_physically_at_station,
 };
 pub use station_class::{
     StationClassDef, StationClassId, StationSpecDef, StationSpecId, all_station_class_defs,
-    all_station_spec_defs, list_station_classes, list_station_specs, station_class_def,
-    station_spec_def, station_spec_layout,
+    all_station_spec_defs, list_station_classes, list_station_specs, next_free_station_class_id,
+    next_free_station_spec_id, station_class_def, station_spec_def, station_spec_layout,
+    vanilla_station_class_catalog, vanilla_station_spec_catalog,
 };
 pub use subsidy::{
     SUBSIDY_AWARDED_YEARS, SUBSIDY_OFFER_MONTHS, SUBSIDY_PAYMENT_MULTIPLIER, Subsidy,

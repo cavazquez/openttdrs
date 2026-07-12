@@ -1,7 +1,6 @@
 //! Selectores filtrables de roadtype / tramtype (`GetRoadTypeDropDownList`).
 //!
-//! Vanilla: un tipo por clase. NewGRF ampliará el catálogo vía `list_road_types`
-//! cuando exista el runtime Action0–14.
+//! Catálogo dinámico: vanilla + Action0 RoadTypes (metadatos; sin sprites).
 
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
@@ -70,9 +69,10 @@ fn spawn_class_dropdown(
     class: RoadTramType,
 ) {
     let tip = match class {
-        RoadTramType::Road => "Tipo de carretera (filtro NewGRF cuando exista runtime)",
-        RoadTramType::Tram => "Tipo de tranvía (filtro NewGRF cuando exista runtime)",
+        RoadTramType::Road => "Tipo de carretera (vanilla + NewGRF Action0 metadatos)",
+        RoadTramType::Tram => "Tipo de tranvía (vanilla + NewGRF Action0 metadatos)",
     };
+    let catalog = openttdrs_core::vanilla_road_type_catalog();
     parent
         .spawn((
             Node {
@@ -144,7 +144,7 @@ fn spawn_class_dropdown(
                     BackgroundColor(ENTRY_BG),
                     BorderColor::all(Color::srgb(0.45, 0.55, 0.35)),
                 ));
-                for def in list_road_types(class, "", 10_000) {
+                for def in list_road_types(&catalog, class, "", 10_000) {
                     menu.spawn((
                         Button,
                         RoadTypeSelectButton { class, id: def.id },
@@ -162,7 +162,7 @@ fn spawn_class_dropdown(
                         BorderColor::all(Color::srgb(0.45, 0.55, 0.35)),
                         Interaction::default(),
                         children![(
-                            Text::new(def.label),
+                            Text::new(def.label.clone()),
                             ui_text_font_loaded(asset_server, UiFontRole::Caption),
                             TextColor(BTN_TEXT),
                         )],
@@ -287,6 +287,7 @@ pub(crate) fn sync_road_type_popovers(
 }
 
 pub(crate) fn sync_road_type_entry_visibility(
+    sim: Res<SimWorld>,
     picker: Res<RoadTypePickerState>,
     mut entries: Query<(&RoadTypeSelectButton, &mut Visibility)>,
 ) {
@@ -296,10 +297,11 @@ pub(crate) fn sync_road_type_entry_visibility(
         }
         return;
     };
-    let matched: Vec<RoadType> = list_road_types(open, &picker.filter, 10_000)
-        .into_iter()
-        .map(|d| d.id)
-        .collect();
+    let matched: Vec<RoadType> =
+        list_road_types(&sim.state.road_type_catalog, open, &picker.filter, 10_000)
+            .into_iter()
+            .map(|d| d.id)
+            .collect();
     for (entry, mut vis) in &mut entries {
         if entry.class != open {
             continue;
@@ -309,6 +311,52 @@ pub(crate) fn sync_road_type_entry_visibility(
         } else {
             Visibility::Hidden
         };
+    }
+}
+
+/// Añade entradas del catálogo que aún no tienen botón (tras apply NewGRF).
+pub(crate) fn sync_road_type_catalog_entries(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    sim: Res<SimWorld>,
+    popovers: Query<(Entity, &RoadTypePopover)>,
+    entries: Query<&RoadTypeSelectButton>,
+) {
+    let existing: std::collections::HashSet<(RoadTramType, u8)> =
+        entries.iter().map(|e| (e.class, e.id.as_u8())).collect();
+    for (popover_entity, popover) in &popovers {
+        for def in list_road_types(&sim.state.road_type_catalog, popover.0, "", 10_000) {
+            if existing.contains(&(def.class, def.id.as_u8())) {
+                continue;
+            }
+            let class = def.class;
+            let id = def.id;
+            let label = def.label.clone();
+            commands.entity(popover_entity).with_children(|menu| {
+                menu.spawn((
+                    Button,
+                    RoadTypeSelectButton { class, id },
+                    BuildMenuUi,
+                    Node {
+                        width: Val::Percent(100.0),
+                        min_height: Val::Px(26.0),
+                        padding: UiRect::horizontal(Val::Px(6.0)),
+                        justify_content: JustifyContent::FlexStart,
+                        align_items: AlignItems::Center,
+                        border: UiRect::all(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BackgroundColor(ENTRY_BG),
+                    BorderColor::all(Color::srgb(0.45, 0.55, 0.35)),
+                    Interaction::default(),
+                    children![(
+                        Text::new(label),
+                        ui_text_font_loaded(&asset_server, UiFontRole::Caption),
+                        TextColor(BTN_TEXT),
+                    )],
+                ));
+            });
+        }
     }
 }
 
@@ -323,8 +371,8 @@ pub(crate) fn sync_road_type_class_labels(
             RoadTramType::Road => sim.state.current_road_type,
             RoadTramType::Tram => sim.state.current_tram_type,
         };
-        let short = road_type_def(id)
-            .map(|d| d.short_label)
+        let short = road_type_def(&sim.state.road_type_catalog, id)
+            .map(|d| d.short_label.as_str())
             .unwrap_or(id.short_label());
         let prefix = match label.0 {
             RoadTramType::Road => "C",

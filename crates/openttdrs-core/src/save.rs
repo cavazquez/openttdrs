@@ -31,7 +31,8 @@ use crate::GameState;
 /// v15: railtypes en `m8` + `current_rail_type` (vías existentes → normal).
 /// v16: monorail/maglev como `RailType` 2/3 (sin migración de datos; esquema).
 /// v17: stack `NewGRF` (`newgrf_stack`) — config + cabecera; sin Action0–14.
-pub const CURRENT_SAVE_VERSION: u32 = 17;
+/// v18: link graph observacional (`link_graph`).
+pub const CURRENT_SAVE_VERSION: u32 = 18;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -153,11 +154,23 @@ fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState,
             13 => migrate_state_v13_to_v14(&mut state),
             14 => migrate_state_v14_to_v15(&mut state),
             16 => migrate_state_v16_to_v17(&mut state),
+            17 => migrate_state_v17_to_v18(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
     }
+    after_migrate_refresh_newgrf(&mut state);
     Ok(state)
+}
+
+/// v18: link graph vacío (observacional; sin datos previos).
+fn migrate_state_v17_to_v18(state: &mut GameState) {
+    state.link_graph = crate::link_graph::LinkGraphStats::default();
+}
+
+/// Tras migrar: reaplicar `RoadTypes` del stack si hay archivos.
+fn after_migrate_refresh_newgrf(state: &mut GameState) {
+    crate::newgrf_actions::apply_newgrf_stack_catalogs_default_dirs(state);
 }
 
 /// v17: stack `NewGRF` vacío → `OpenGFX` documentado.

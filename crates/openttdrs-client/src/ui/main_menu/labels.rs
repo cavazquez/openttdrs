@@ -73,6 +73,7 @@ pub(super) fn panel_title(panel: MainMenuPanel) -> &'static str {
     match panel {
         MainMenuPanel::Root => "OpenTTDRS",
         MainMenuPanel::NewGame => "Nueva partida",
+        MainMenuPanel::Highscores => "Mejores puntuaciones",
         MainMenuPanel::QuitConfirm => "Salir del juego",
     }
 }
@@ -83,6 +84,7 @@ pub(super) fn panel_hints(panel: MainMenuPanel) -> &'static str {
         MainMenuPanel::NewGame => {
             "Enter iniciar · Esc volver · 1-4 clima · [ ] semilla · z/x densidad"
         }
+        MainMenuPanel::Highscores => "Esc volver",
         MainMenuPanel::QuitConfirm => "Esc cancelar",
     }
 }

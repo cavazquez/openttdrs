@@ -935,7 +935,7 @@ pub(crate) fn handle_vehicle_window_buttons(
                         .name
                         .as_deref()
                         .filter(|n| !n.trim().is_empty())
-                        .unwrap_or(vehicle.effective_engine().name);
+                        .unwrap_or(vehicle.effective_engine().name.as_str());
                     editable.editor_mut().set_text(seed);
                 }
             }

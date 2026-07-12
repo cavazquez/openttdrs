@@ -114,7 +114,10 @@ pub(super) fn build_vehicle_at_depot(
     let Some(tile) = state.map.get(depot_pos) else {
         return Err(CommandError::OutOfBounds);
     };
-    let Some(engine) = crate::engine::engine_by_id(engine_id) else {
+    let Some(engine) = crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
+        .cloned()
+        .or_else(|| crate::engine::engine_by_id(engine_id).cloned())
+    else {
         return Err(CommandError::EngineNotFound);
     };
     let depot_ok = match engine.kind {

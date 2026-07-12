@@ -26,7 +26,6 @@ pub(crate) fn handle_settings_menu_buttons(
     mut newgrf_window: ResMut<crate::ui::newgrf_window::NewGrfWindowState>,
     mut display_options: ResMut<crate::ui::display_options_window::DisplayOptionsWindowState>,
     mut extra_viewport: ResMut<crate::ui::extra_viewport_window::ExtraViewportWindowState>,
-    mut help_window: ResMut<crate::ui::help_window::HelpWindowState>,
     mut prefs: Option<ResMut<ClientPreferences>>,
     mut pending_remap: Option<ResMut<RemapMapVisualsPending>>,
     run_state: Res<State<SimRunState>>,
@@ -37,6 +36,12 @@ pub(crate) fn handle_settings_menu_buttons(
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
+    mut help_tools: ParamSet<(
+        ResMut<crate::ui::help_window::HelpWindowState>,
+        ResMut<crate::ui::dev_console::DevConsoleState>,
+        ResMut<crate::ui::tile_inspector_window::TileInspectorWindowState>,
+        ResMut<crate::ui::endscreen::RetireGameRequested>,
+    )>,
 ) {
     for (interaction, action) in &mut q {
         if *interaction != Interaction::Pressed {
@@ -105,7 +110,16 @@ pub(crate) fn handle_settings_menu_buttons(
                 extra_viewport.open = true;
             }
             SaveMenuAction::Help => {
-                help_window.open = true;
+                help_tools.p0().open = true;
+            }
+            SaveMenuAction::DevConsole => {
+                help_tools.p1().open = true;
+            }
+            SaveMenuAction::TileInspector => {
+                help_tools.p2().open = true;
+            }
+            SaveMenuAction::EndGame => {
+                help_tools.p3().0 = true;
             }
             SaveMenuAction::CycleCatenaryDisplay => {
                 let (Some(prefs), Some(pending_remap)) =
@@ -202,6 +216,11 @@ mod tests {
         world
             .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world.insert_resource(crate::ui::help_window::HelpWindowState::default());
+        world.insert_resource(crate::ui::dev_console::DevConsoleState::default());
+        world
+            .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
+        world.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world.insert_resource(crate::settings::ClientPreferences::default());
         world.insert_resource(crate::render::RemapMapVisualsPending::default());
         crate::state::insert_test_sim_run_state(&mut world);
@@ -241,6 +260,11 @@ mod tests {
         world
             .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world.insert_resource(crate::ui::help_window::HelpWindowState::default());
+        world.insert_resource(crate::ui::dev_console::DevConsoleState::default());
+        world
+            .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
+        world.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world.insert_resource(crate::settings::ClientPreferences::default());
         world.insert_resource(crate::render::RemapMapVisualsPending::default());
         world.insert_resource(NextState::<ClientScreen>::default());
@@ -288,6 +312,11 @@ mod tests {
         world
             .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world.insert_resource(crate::ui::help_window::HelpWindowState::default());
+        world.insert_resource(crate::ui::dev_console::DevConsoleState::default());
+        world
+            .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
+        world.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world.insert_resource(crate::settings::ClientPreferences::default());
         world.insert_resource(crate::render::RemapMapVisualsPending::default());
         world.insert_resource(NextState::<ClientScreen>::default());

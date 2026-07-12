@@ -20,13 +20,17 @@ Atajos de teclado\n\
   1 / 2 / 3 / 4   Herramientas rápidas de toolbar\n\
   C          Demoler (Clear)\n\
   F1 / ?     Esta ayuda\n\
+  F2         Inspector de tile\n\
+  F3 / `     Consola / Dev (FPS, comandos)\n\
   F4         Alternar ruta de guardado JSON\n\
   F5 / F9    Guardar / cargar partida rápida\n\
   Esc        Cerrar ventana superior / cancelar herramienta\n\
 \n\
-Ajustes → NewGRF: edita el stack (config). Sin runtime Action0–14\n\
-aún no cambia sprites ni gameplay.\n\
+Ajustes → Consola: fps, overlay, gizmos, tile, newgrf, endgame, clear.\n\
+Ajustes → Finalizar partida: retiro voluntario → endscreen / highscore.\n\
+Ajustes → NewGRF: stack + Inspeccionar (scan/validate; sin Action0–14).\n\
 Ajustes → Display: presets Clásico / Rendimiento / Dev.\n\
+Con gizmos ON, el tile seleccionado muestra bounds (aligner lite).\n\
 ";
 
 #[derive(Resource, Default)]
@@ -89,7 +93,11 @@ pub(crate) fn help_window_on_closed(
 pub(crate) fn handle_help_hotkey(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<HelpWindowState>,
+    console: Option<Res<crate::ui::dev_console::DevConsoleState>>,
 ) {
+    if console.is_some_and(|c| crate::ui::dev_console::dev_console_captures_keyboard(&c)) {
+        return;
+    }
     if keyboard.just_pressed(KeyCode::F1) || keyboard.just_pressed(KeyCode::Slash) {
         state.open = !state.open;
     }

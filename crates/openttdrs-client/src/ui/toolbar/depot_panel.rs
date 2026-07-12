@@ -650,14 +650,14 @@ fn activate_depot_row_click(
                     && from
                         .engine_id
                         .and_then(engine_by_id)
-                        .is_some_and(|e| e.is_wagon())
+                        .is_some_and(openttdrs_core::EngineDef::is_wagon)
                 {
                     (to.id, from.id)
                 } else if to.next_unit.is_none()
                     && to
                         .engine_id
                         .and_then(engine_by_id)
-                        .is_some_and(|e| e.is_wagon())
+                        .is_some_and(openttdrs_core::EngineDef::is_wagon)
                 {
                     (from.id, to.id)
                 } else {

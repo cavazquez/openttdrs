@@ -11,7 +11,8 @@ use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
     CargoType, Command, DepotPurchaseKind, EngineCatalogSort, EngineDef, RoadEngineFilter,
-    TileCoord, TileKind, VehicleKind, apply_command, calendar_year_at_tick, engines_for_depot_kind,
+    TileCoord, TileKind, VehicleKind, apply_command, calendar_year_at_tick,
+    engines_for_depot_kind_in,
 };
 
 use crate::render::{RemapMapVisualsPending, TruckHandles};
@@ -354,17 +355,23 @@ fn depot_kind_at(sim: &SimWorld, depot_pos: TileCoord) -> DepotPurchaseKind {
 }
 
 /// Modelos visibles según depósito, año, filtros y orden.
-pub(crate) fn engines_for_buy_window(
-    sim: &SimWorld,
+pub(crate) fn engines_for_buy_window<'a>(
+    sim: &'a SimWorld,
     depot_pos: TileCoord,
     sort: EngineCatalogSort,
     road_filter: RoadEngineFilter,
     rail_filter: RailBuyFilter,
     name_filter: &str,
-) -> Vec<&'static EngineDef> {
+) -> Vec<&'a EngineDef> {
     let depot_kind = depot_kind_at(sim, depot_pos);
     let year = calendar_year_at_tick(sim.state.tick);
-    let mut engines = engines_for_depot_kind(depot_kind, year, sort, road_filter);
+    let mut engines = engines_for_depot_kind_in(
+        &sim.state.engine_catalog,
+        depot_kind,
+        year,
+        sort,
+        road_filter,
+    );
     if depot_kind == DepotPurchaseKind::Aircraft {
         let heliport = openttdrs_core::airport_tile_is_heliport(&sim.state.map, depot_pos);
         engines.retain(|e| openttdrs_core::aircraft_is_helicopter(e.id) == heliport);
@@ -403,8 +410,13 @@ fn stats_text(engine: &EngineDef) -> String {
     } else {
         ""
     };
+    let newgrf = if engine.from_newgrf {
+        "NewGRF: metadatos; sin sprites\n"
+    } else {
+        ""
+    };
     format!(
-        "{role}Precio: ${}  Peso: {}t\nVelocidad: {}km/h  Potencia: {}cv\nCoste de operación: ${}/año\nCapacidad: {} {}\nDiseñado: {}  Fiabilidad: {}%",
+        "{role}{newgrf}Precio: ${}  Peso: {}t\nVelocidad: {}km/h  Potencia: {}cv\nCoste de operación: ${}/año\nCapacidad: {} {}\nDiseñado: {}  Fiabilidad: {}%",
         engine.price,
         engine.weight_t,
         engine.speed_kmh(),
@@ -586,7 +598,11 @@ pub(crate) fn sync_buy_window(
     }
     for (row_text, mut text) in &mut row_text_q {
         if let Some(engine) = engines.get(row_text.slot) {
-            **text = format!("{:<28} ${}", engine.name, engine.price);
+            **text = if engine.from_newgrf {
+                format!("{:<28} ${} · meta", engine.name, engine.price)
+            } else {
+                format!("{:<28} ${}", engine.name, engine.price)
+            };
         } else {
             **text = String::new();
         }
@@ -594,7 +610,10 @@ pub(crate) fn sync_buy_window(
     if let Ok(mut stats) = stats_q.single_mut() {
         **stats = buy_state
             .selected_engine
-            .and_then(openttdrs_core::engine_by_id)
+            .and_then(|id| {
+                openttdrs_core::engine_in_catalog(&sim.state.engine_catalog, id)
+                    .or_else(|| openttdrs_core::engine_by_id(id))
+            })
             .map_or_else(
                 || "Selecciona un modelo para ver sus características.".to_string(),
                 stats_text,
@@ -774,7 +793,7 @@ pub(crate) fn handle_buy_window_buttons(
                                 && v.kind == VehicleKind::Train
                                 && v.is_consist_head()
                                 && !openttdrs_core::engine_by_id(v.engine_id.unwrap_or(0))
-                                    .is_some_and(|e| e.is_wagon())
+                                    .is_some_and(openttdrs_core::EngineDef::is_wagon)
                         })
                         .map(|v| v.id);
                     if let (Some(wagon_id), Some(head_id)) = (wagon_id, head_id)

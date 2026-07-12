@@ -267,9 +267,16 @@ fn process_monthly_economy(state: &mut GameState, tick: u64) {
                     .push(crate::sim_events::SimEvent::LoanInterestPaid { amount: interest });
             }
             if economy::check_bankruptcy(money, max_loan) {
+                state.bankruptcy_streak = state.bankruptcy_streak.saturating_add(1);
                 state
                     .pending_sim_events
                     .push(crate::sim_events::SimEvent::BankruptcyWarning);
+                if state.bankruptcy_streak >= crate::score::BANKRUPTCY_STREAK_LIMIT {
+                    let _ =
+                        crate::score::finish_game(state, crate::score::GameOverReason::Bankruptcy);
+                }
+            } else {
+                state.bankruptcy_streak = 0;
             }
         }
     }
@@ -297,6 +304,7 @@ fn process_monthly_economy(state: &mut GameState, tick: u64) {
             crate::game_state::company_net_value(state.economy.money, state.economy.loan),
         );
     }
+    state.link_graph.rollover_month();
     // Historiales de pueblos e industrias (UI-3).
     for town in &mut state.towns {
         let population = town.population;
@@ -442,6 +450,7 @@ fn try_load_from_industry(
     state.vehicles[vehicle_idx].cargo_packets.push(packet);
     state.vehicles[vehicle_idx].mark_cargo_loaded(source);
     state.vehicles[vehicle_idx].sync_cargo_from_packets();
+    state.vehicles[vehicle_idx].last_pickup_station = Some(station_pos);
     state.industries[ind_idx].stock -= u32::from(count);
     state.industries[ind_idx].transported_total = state.industries[ind_idx]
         .transported_total
@@ -551,6 +560,7 @@ fn try_load_from_station_waiting_cargo(
         .append_packets(taken);
     state.vehicles[vehicle_idx].mark_cargo_loaded(station_pos);
     state.vehicles[vehicle_idx].sync_cargo_from_packets();
+    state.vehicles[vehicle_idx].last_pickup_station = Some(station_pos);
     station::on_station_cargo_pickup(&mut state.stations[station_idx], cargo);
     *loaded_flag = true;
     if first_pickup {
@@ -620,6 +630,11 @@ fn unload_vehicles(
         }
         let unload_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
         let vehicle_owner = state.vehicles[i].owner;
+        if let Some(from) = state.vehicles[i].last_pickup_station {
+            state
+                .link_graph
+                .record_flow(from, station_pos, cargo_type, unload_units);
+        }
         let mut payment = 0_i64;
         let mut feeder_total = 0_i64;
         let mut feeder_income_by_owner: Vec<(crate::company::CompanyId, i64)> = Vec::new();
@@ -723,6 +738,7 @@ fn unload_vehicles(
         if state.vehicles[i].cargo == 0 {
             state.vehicles[i].cargo_unloading = false;
             state.vehicles[i].clear_cargo();
+            state.vehicles[i].last_pickup_station = None;
             // Avanzar orden al terminar descarga (road stop o plataforma rail).
             state.vehicles[i].advance_after_unloading();
             state.vehicles[i].sync_order_destination(&state.map);

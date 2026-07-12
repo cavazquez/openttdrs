@@ -573,6 +573,9 @@ pub struct Vehicle {
     /// Packets a bordo (fuente de verdad Fase 2); `cargo`/`cargo_source` se sincronizan.
     #[serde(default)]
     pub cargo_packets: crate::cargo_packet::VehicleCargoList,
+    /// Última estación donde se cargó (link graph observacional; no persistido).
+    #[serde(skip)]
+    pub last_pickup_station: Option<TileCoord>,
     /// Carga gradual en curso (no avanzar orden hasta terminar o `full_load`).
     #[serde(default)]
     pub cargo_loading: bool,
@@ -720,6 +723,7 @@ impl Vehicle {
             cargo_source: None,
             cargo_transit_ticks: 0,
             cargo_packets: crate::cargo_packet::VehicleCargoList::default(),
+            last_pickup_station: None,
             cargo_loading: false,
             cargo_unloading: false,
             depart_turn: 0,

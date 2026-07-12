@@ -318,7 +318,7 @@ pub enum Command {
         sign_id: u32,
         name: Option<String>,
     },
-    /// Une dos paradas road 1×1 adyacentes (`CmdJoinStation` MVP).
+    /// Une dos paradas road 1×1 o estaciones rail con huellas adyacentes.
     /// `keep` permanece; `merge` se fusiona en `keep.joined_tiles`.
     JoinStations {
         keep: TileCoord,
@@ -583,7 +583,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::SignNameTooLong => "El nombre del cartel es demasiado largo.",
         CommandError::SignNameEmpty => "El cartel necesita un nombre.",
         CommandError::CannotJoinStations => {
-            "No se pueden unir: deben ser paradas bus/camión adyacentes del mismo tipo."
+            "No se pueden unir: road 1×1 adyacentes o rail (huella/eje) del mismo tipo."
         }
         CommandError::NewGrfIndexOutOfRange => "Índice NewGRF inválido.",
         CommandError::NewGrfStaticImmutable => {

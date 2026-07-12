@@ -22,9 +22,12 @@ use super::autoreplace_window::AutoreplaceWindowState;
 use super::buy_window::BuyVehicleWindowState;
 use super::cargo_payment_window::CargoPaymentWindowState;
 use super::destination_window::DestinationPickerState;
+use super::dev_console::DevConsoleState;
+use super::endscreen::{EndScreenState, RetireGameRequested};
 use super::finances_window::FinancesWindowState;
 use super::floating_window::FloatingWindow;
 use super::graph_window::GraphWindowState;
+use super::help_window::HelpWindowState;
 use super::hud::TileInfoText;
 use super::industry_directory::IndustryDirectoryState;
 use super::industry_panel::{IndustryPanelRoot, IndustryPanelState};
@@ -37,6 +40,7 @@ use super::shared_orders_window::SharedOrdersWindowState;
 use super::station_directory::StationDirectoryState;
 use super::statusbar::{NewsHistoryState, NewsPopupRoot, NewsUiState, StatusBarRoot};
 use super::subsidy_list::SubsidyListState;
+use super::tile_inspector_window::TileInspectorWindowState;
 use super::timetable_window::TimetableWindowState;
 use super::toolbar::{
     BridgeBuildState, BuildGhostPreview, DepotPanelState, DragBuildState, MinimapRoot,
@@ -207,6 +211,21 @@ pub(crate) fn leave_ingame(world: &mut World) {
     }
     if let Some(mut newgrf) = world.get_resource_mut::<NewGrfWindowState>() {
         *newgrf = NewGrfWindowState::default();
+    }
+    if let Some(mut help) = world.get_resource_mut::<HelpWindowState>() {
+        *help = HelpWindowState::default();
+    }
+    if let Some(mut console) = world.get_resource_mut::<DevConsoleState>() {
+        *console = DevConsoleState::default();
+    }
+    if let Some(mut tile_inspector) = world.get_resource_mut::<TileInspectorWindowState>() {
+        *tile_inspector = TileInspectorWindowState::default();
+    }
+    if let Some(mut endscreen) = world.get_resource_mut::<EndScreenState>() {
+        *endscreen = EndScreenState::default();
+    }
+    if let Some(mut retire) = world.get_resource_mut::<RetireGameRequested>() {
+        *retire = RetireGameRequested::default();
     }
     if let Some(mut sound_music) = world.get_resource_mut::<SoundMusicWindowState>() {
         *sound_music = SoundMusicWindowState::default();

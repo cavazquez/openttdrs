@@ -245,6 +245,11 @@ mod tests {
         world
             .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world.insert_resource(crate::ui::help_window::HelpWindowState::default());
+        world.insert_resource(crate::ui::dev_console::DevConsoleState::default());
+        world
+            .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
+        world.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world.insert_resource(SoundMusicWindowState::default());
         world.insert_resource(SimHudControls {
             sim_speed: 1.0,
@@ -286,6 +291,11 @@ mod tests {
         world
             .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world.insert_resource(crate::ui::help_window::HelpWindowState::default());
+        world.insert_resource(crate::ui::dev_console::DevConsoleState::default());
+        world
+            .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
+        world.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world.insert_resource(SoundMusicWindowState::default());
         world.insert_resource(SimHudControls::default());
         world.insert_resource(State::new(SimRunState::Running));
@@ -338,6 +348,11 @@ mod tests {
         world_zoom_in
             .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world_zoom_in.insert_resource(crate::ui::help_window::HelpWindowState::default());
+        world_zoom_in.insert_resource(crate::ui::dev_console::DevConsoleState::default());
+        world_zoom_in
+            .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world_zoom_in.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
+        world_zoom_in.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world_zoom_in.insert_resource(SoundMusicWindowState::default());
         world_zoom_in.insert_resource(SimHudControls::default());
         crate::state::insert_test_sim_run_state(&mut world_zoom_in);
@@ -374,6 +389,11 @@ mod tests {
         world_zoom_out
             .insert_resource(crate::ui::extra_viewport_window::ExtraViewportWindowState::default());
         world_zoom_out.insert_resource(crate::ui::help_window::HelpWindowState::default());
+        world_zoom_out.insert_resource(crate::ui::dev_console::DevConsoleState::default());
+        world_zoom_out
+            .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world_zoom_out.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
+        world_zoom_out.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world_zoom_out.insert_resource(SoundMusicWindowState::default());
         world_zoom_out.insert_resource(SimHudControls::default());
         crate::state::insert_test_sim_run_state(&mut world_zoom_out);

@@ -170,6 +170,21 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             SaveMenuAction::Help,
         ),
         (
+            "Consola...",
+            "FPS, gizmos, comandos (F3 / `)",
+            SaveMenuAction::DevConsole,
+        ),
+        (
+            "Inspector tile",
+            "Dump del tile seleccionado (F2)",
+            SaveMenuAction::TileInspector,
+        ),
+        (
+            "Finalizar partida",
+            "Retiro voluntario → puntuación y menú",
+            SaveMenuAction::EndGame,
+        ),
+        (
             "Catenaria",
             "Cicla visible / transparente / oculta (TO_CATENARY)",
             SaveMenuAction::CycleCatenaryDisplay,

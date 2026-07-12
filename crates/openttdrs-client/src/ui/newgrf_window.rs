@@ -4,7 +4,10 @@
 //! `is_static` (p. ej. OpenGFX) no se pueden desactivar ni eliminar.
 
 use bevy::prelude::*;
-use openttdrs_core::{Command, NewGrfEntry, apply_command, format_grfid, scan_grf_file};
+use openttdrs_core::{
+    Command, NewGrfEntry, apply_command, format_grfid, inspect_grf_file, scan_grf_file,
+    validate_stack,
+};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -26,7 +29,12 @@ const NEWGRF_ROWS: usize = 12;
 pub(crate) struct NewGrfWindowState {
     pub(crate) open: bool,
     pub(crate) selected: Option<usize>,
+    /// Texto de inspección (scan + validate_stack).
+    pub(crate) inspect_text: String,
 }
+
+#[derive(Component)]
+pub(crate) struct NewGrfInspectText;
 
 #[derive(Component, Clone, Copy)]
 pub(crate) struct NewGrfRow {
@@ -46,6 +54,8 @@ pub(crate) enum NewGrfAction {
     Remove,
     /// Escanea directorios conocidos y añade el primer `.grf` ausente del stack.
     AddFromDisk,
+    /// Re-escanea la entrada seleccionada (Action8 + histograma Action0–14).
+    Inspect,
 }
 
 pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -62,7 +72,7 @@ pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<Asse
     commands.entity(content).with_children(|body| {
         body.spawn((
             Text::new(
-                "Edición de stack (config). Sin runtime Action0–14: no cambia sprites ni gameplay.",
+                "Stack + Inspeccionar (histograma). RoadTypes Action0: metadatos en selector (sin sprites).",
             ),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.82, 0.78, 0.68)),
@@ -120,7 +130,22 @@ pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<Asse
             spawn_action_btn(bar, asset_server, NewGrfAction::MoveDown, "↓");
             spawn_action_btn(bar, asset_server, NewGrfAction::Remove, "Quitar");
             spawn_action_btn(bar, asset_server, NewGrfAction::AddFromDisk, "Añadir…");
+            spawn_action_btn(bar, asset_server, NewGrfAction::Inspect, "Inspeccionar");
         });
+        body.spawn((
+            NewGrfInspectText,
+            Text::new(
+                "Selecciona una entrada y pulsa Inspeccionar (scan + validate; sin Action0–14).",
+            ),
+            window_text_font(asset_server, UiFontRole::Caption),
+            TextColor(Color::srgb(0.78, 0.84, 0.72)),
+            Node {
+                width: Val::Percent(100.0),
+                margin: UiRect::top(Val::Px(8.0)),
+                ..default()
+            },
+            BuildMenuUi,
+        ));
     });
 }
 
@@ -161,7 +186,8 @@ pub(crate) fn sync_newgrf_window(
     sim: Option<Res<SimWorld>>,
     mut windows: Query<(&FloatingWindow, &mut Visibility)>,
     mut rows: Query<(&NewGrfRow, &mut Node, &mut BackgroundColor), With<Button>>,
-    mut texts: Query<(&NewGrfRowText, &mut Text)>,
+    mut texts: Query<(&NewGrfRowText, &mut Text), Without<NewGrfInspectText>>,
+    mut inspect_q: Query<&mut Text, With<NewGrfInspectText>>,
 ) {
     let Some(sim) = sim else {
         return;
@@ -215,6 +241,14 @@ pub(crate) fn sync_newgrf_window(
             **text = String::new();
         }
     }
+    let inspect_body = if state.inspect_text.is_empty() {
+        "Selecciona una entrada y pulsa Inspeccionar (scan + validate; sin Action0–14).".to_string()
+    } else {
+        state.inspect_text.clone()
+    };
+    for mut text in &mut inspect_q {
+        **text = inspect_body.clone();
+    }
 }
 
 pub(crate) fn handle_newgrf_window_buttons(
@@ -259,6 +293,14 @@ pub(crate) fn handle_newgrf_window_buttons(
             }
             continue;
         }
+        if matches!(action, NewGrfAction::Inspect) {
+            let Some(index) = state.selected else {
+                state.inspect_text = "Selecciona una entrada del stack.".into();
+                continue;
+            };
+            state.inspect_text = inspect_newgrf_entry(&sim.state.newgrf_stack, index);
+            continue;
+        }
         let Some(index) = state.selected else {
             continue;
         };
@@ -285,7 +327,7 @@ pub(crate) fn handle_newgrf_window_buttons(
                 Command::MoveNewGrfInStack { from: index, to }
             }
             NewGrfAction::Remove => Command::RemoveNewGrfFromStack { index },
-            NewGrfAction::AddFromDisk => unreachable!(),
+            NewGrfAction::AddFromDisk | NewGrfAction::Inspect => unreachable!(),
         };
         match apply_command(&mut sim.state, &cmd) {
             Ok(()) => {
@@ -301,12 +343,76 @@ pub(crate) fn handle_newgrf_window_buttons(
                     NewGrfAction::MoveUp => index.checked_sub(1).or(Some(index)),
                     NewGrfAction::MoveDown => Some((index + 1).min(len.saturating_sub(1))),
                     NewGrfAction::Toggle => Some(index),
-                    NewGrfAction::AddFromDisk => state.selected,
+                    NewGrfAction::AddFromDisk | NewGrfAction::Inspect => state.selected,
                 };
             }
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
         }
     }
+}
+
+fn inspect_newgrf_entry(stack: &[NewGrfEntry], index: usize) -> String {
+    let Some(entry) = stack.get(index) else {
+        return "Índice fuera de rango.".into();
+    };
+    let dirs = newgrf_search_dirs();
+    let path = dirs
+        .iter()
+        .map(|d| d.join(&entry.filename))
+        .find(|p| p.is_file());
+    let mut lines = vec![
+        format!(
+            "[{}] {}  enabled={} static={}",
+            format_grfid(entry.grfid),
+            entry.filename,
+            entry.enabled,
+            entry.is_static
+        ),
+        format!(
+            "name={}  ver={}",
+            if entry.name.is_empty() {
+                "—"
+            } else {
+                entry.name.as_str()
+            },
+            entry.grf_version
+        ),
+    ];
+    match path {
+        Some(p) => {
+            match scan_grf_file(&p) {
+                Ok(info) => {
+                    lines.push(format!(
+                        "scan: {:?} size={}B grfid={:?} name={:?}",
+                        info.container,
+                        info.file_size,
+                        info.grfid.map(format_grfid),
+                        info.name
+                    ));
+                    if let Some(desc) = info.description.filter(|d| !d.is_empty()) {
+                        lines.push(format!("desc: {desc}"));
+                    }
+                }
+                Err(e) => lines.push(format!("scan error: {e}")),
+            }
+            match inspect_grf_file(&p) {
+                Ok(report) => {
+                    lines.push("--- histograma Action0–14 ---".into());
+                    lines.push(report.format_summary());
+                }
+                Err(e) => lines.push(format!("inspect error: {e}")),
+            }
+        }
+        None => lines.push("archivo no encontrado en dirs de búsqueda".into()),
+    }
+    let dir_refs: Vec<&std::path::Path> = dirs.iter().map(std::path::PathBuf::as_path).collect();
+    let issues = validate_stack(stack, &dir_refs);
+    if issues.is_empty() {
+        lines.push("validate_stack: OK".into());
+    } else {
+        lines.push(format!("validate_stack: {issues:?}"));
+    }
+    lines.join("\n")
 }
 
 fn newgrf_search_dirs() -> Vec<std::path::PathBuf> {
@@ -389,6 +495,7 @@ pub(crate) fn newgrf_window_on_closed(
         if msg.0 == FloatingWindowId::NewGrf {
             state.open = false;
             state.selected = None;
+            state.inspect_text.clear();
         }
     }
 }

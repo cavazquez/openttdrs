@@ -20,11 +20,11 @@ use super::widgets::{
 use super::{
     MainMenuBackButton, MainMenuCamera, MainMenuClimateButton, MainMenuContinueButton,
     MainMenuContinueWrap, MainMenuDemoButton, MainMenuDensityButton, MainMenuDensityTarget,
-    MainMenuHintsText, MainMenuLoadButton, MainMenuMapSizeButton, MainMenuNewGameButton,
-    MainMenuPanel, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
-    MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuStartButton, MainMenuStartYearButton,
-    MainMenuStartingMoneyButton, MainMenuSubPanel, MainMenuSummaryText, MainMenuTitleText,
-    MainMenuToggle, MainMenuUi,
+    MainMenuHighscoresButton, MainMenuHighscoresText, MainMenuHintsText, MainMenuLoadButton,
+    MainMenuMapSizeButton, MainMenuNewGameButton, MainMenuPanel, MainMenuQuitButton,
+    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuSeedDecButton, MainMenuSeedIncButton,
+    MainMenuStartButton, MainMenuStartYearButton, MainMenuStartingMoneyButton, MainMenuSubPanel,
+    MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
 };
 
 pub(crate) fn sync_main_menu_panel_visibility(
@@ -410,6 +410,10 @@ pub(crate) fn main_menu_interaction(
             *panel = MainMenuPanel::Root;
             return;
         }
+        MainMenuPanel::Highscores if esc => {
+            *panel = MainMenuPanel::Root;
+            return;
+        }
         MainMenuPanel::QuitConfirm if esc => {
             *panel = MainMenuPanel::Root;
             return;
@@ -515,5 +519,73 @@ pub(crate) fn main_menu_interaction(
                 hover_secondary(interaction, &mut bg);
             }
         }
+        MainMenuPanel::Highscores => {
+            for (interaction, mut bg) in &mut button_sets.p4() {
+                if *interaction == Interaction::Pressed {
+                    *panel = MainMenuPanel::Root;
+                    return;
+                }
+                hover_secondary(interaction, &mut bg);
+            }
+        }
+    }
+}
+
+pub(crate) fn main_menu_highscores_interaction(
+    mut panel: ResMut<MainMenuPanel>,
+    mut buttons: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<MainMenuHighscoresButton>),
+    >,
+) {
+    if *panel != MainMenuPanel::Root {
+        return;
+    }
+    for (interaction, mut bg) in &mut buttons {
+        if *interaction == Interaction::Pressed {
+            *panel = MainMenuPanel::Highscores;
+            return;
+        }
+        hover_secondary(interaction, &mut bg);
+    }
+}
+
+pub(crate) fn sync_main_menu_highscores(
+    panel: Res<MainMenuPanel>,
+    prefs: Option<Res<crate::settings::ClientPreferences>>,
+    mut q: Query<&mut Text, With<MainMenuHighscoresText>>,
+) {
+    if *panel != MainMenuPanel::Highscores {
+        return;
+    }
+    if !panel.is_changed() && prefs.as_ref().is_none_or(|p| !p.is_changed()) {
+        // Still refresh when opening: panel.is_changed covers that.
+    }
+    let body = prefs
+        .as_ref()
+        .map(|p| {
+            let entries = p.highscore_entries();
+            if entries.is_empty() {
+                "(sin puntuaciones aún — finaliza una partida)".into()
+            } else {
+                entries
+                    .iter()
+                    .enumerate()
+                    .map(|(i, e)| {
+                        format!(
+                            "{}. {}  {}  ({})  {}\n",
+                            i + 1,
+                            e.company_name,
+                            openttdrs_core::format_money(e.company_value),
+                            e.calendar_year,
+                            e.reason.label_es()
+                        )
+                    })
+                    .collect::<String>()
+            }
+        })
+        .unwrap_or_else(|| "(preferencias no cargadas)".into());
+    for mut text in &mut q {
+        **text = body.clone();
     }
 }

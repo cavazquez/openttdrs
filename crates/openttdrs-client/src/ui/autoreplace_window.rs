@@ -320,10 +320,10 @@ fn depot_engines(sim: &SimWorld, depot_pos: TileCoord) -> Vec<u16> {
 
 fn rule_label(rule: &AutoReplaceRule) -> String {
     let from = engine_by_id(rule.from_engine_id)
-        .map(|e| e.name)
+        .map(|e| e.name.as_str())
         .unwrap_or("?");
     let to = engine_by_id(rule.to_engine_id)
-        .map(|e| e.name)
+        .map(|e| e.name.as_str())
         .unwrap_or("?");
     let flags = match (rule.enabled, rule.only_when_old) {
         (true, true) => "on · viejos",
@@ -432,12 +432,12 @@ pub(crate) fn sync_autoreplace_window(
         let from = state
             .from_engine
             .and_then(engine_by_id)
-            .map(|e| e.name)
+            .map(|e| e.name.as_str())
             .unwrap_or("—");
         let to = state
             .to_engine
             .and_then(engine_by_id)
-            .map(|e| e.name)
+            .map(|e| e.name.as_str())
             .unwrap_or("—");
         **hint = format!("Desde: {from} · Hacia: {to}");
     }
@@ -488,7 +488,7 @@ pub(crate) fn sync_autoreplace_window(
     for (row_text, mut text) in &mut from_texts {
         if let Some(&engine_id) = engines.get(row_text.slot) {
             **text = engine_by_id(engine_id)
-                .map(|e| e.name.to_string())
+                .map(|e| e.name.clone())
                 .unwrap_or_else(|| format!("#{engine_id}"));
         } else {
             **text = String::new();
@@ -512,7 +512,7 @@ pub(crate) fn sync_autoreplace_window(
     for (row_text, mut text) in &mut to_texts {
         if let Some(&engine_id) = engines.get(row_text.slot) {
             **text = engine_by_id(engine_id)
-                .map(|e| e.name.to_string())
+                .map(|e| e.name.clone())
                 .unwrap_or_else(|| format!("#{engine_id}"));
         } else {
             **text = String::new();

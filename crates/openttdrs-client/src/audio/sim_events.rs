@@ -159,7 +159,9 @@ fn dispatch_sim_events(
                     });
                 }
             }
-            SimEvent::LoanInterestPaid { .. } | SimEvent::BankruptcyWarning => {}
+            SimEvent::LoanInterestPaid { .. }
+            | SimEvent::BankruptcyWarning
+            | SimEvent::GameOver { .. } => {}
             SimEvent::AircraftTakeoff { at, .. } => {
                 if hud.sound_vehicle {
                     sfx.write(PlayWorldSfx {

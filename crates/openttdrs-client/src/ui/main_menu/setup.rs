@@ -14,10 +14,11 @@ use super::widgets::{
 };
 use super::{
     MainMenuBackButton, MainMenuContinueButton, MainMenuContinueWrap, MainMenuDemoButton,
-    MainMenuDensityTarget, MainMenuHintsText, MainMenuLoadButton, MainMenuNewGameButton,
-    MainMenuPanel, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
-    MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuStartButton, MainMenuSubPanel,
-    MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
+    MainMenuDensityTarget, MainMenuHighscoresButton, MainMenuHighscoresText, MainMenuHintsText,
+    MainMenuLoadButton, MainMenuNewGameButton, MainMenuPanel, MainMenuQuitButton,
+    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuSeedDecButton, MainMenuSeedIncButton,
+    MainMenuStartButton, MainMenuSubPanel, MainMenuSummaryText, MainMenuTitleText, MainMenuToggle,
+    MainMenuUi,
 };
 
 pub(crate) fn setup_main_menu(mut commands: Commands) {
@@ -72,6 +73,7 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
 
                 spawn_root_panel(panel);
                 spawn_new_game_panel(panel);
+                spawn_highscores_panel(panel);
                 spawn_quit_confirm_panel(panel);
 
                 panel.spawn((
@@ -137,7 +139,45 @@ fn spawn_root_panel(parent: &mut ChildSpawnerCommands) {
                 "Demo clasica (mapa plano)",
                 42.0,
             ));
+            menu.spawn(secondary_button(
+                MainMenuHighscoresButton,
+                "Mejores puntuaciones",
+                42.0,
+            ));
             menu.spawn(secondary_button(MainMenuQuitButton, "Salir", 42.0));
+        });
+}
+
+fn spawn_highscores_panel(parent: &mut ChildSpawnerCommands) {
+    parent
+        .spawn((
+            MainMenuSubPanel(MainMenuPanel::Highscores),
+            hidden_subpanel_node(Node {
+                width: Val::Percent(100.0),
+                flex_grow: 1.0,
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::Center,
+                row_gap: Val::Px(10.0),
+                ..default()
+            }),
+            Visibility::Hidden,
+        ))
+        .with_children(|panel| {
+            panel.spawn((
+                MainMenuHighscoresText,
+                Text::new("(sin puntuaciones)"),
+                TextFont {
+                    font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.9, 0.86, 0.74)),
+                Node {
+                    width: Val::Percent(100.0),
+                    flex_grow: 1.0,
+                    ..default()
+                },
+            ));
+            panel.spawn(secondary_button(MainMenuBackButton, "Volver", 42.0));
         });
 }
 

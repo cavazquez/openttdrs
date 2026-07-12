@@ -80,6 +80,13 @@ pub enum SimEvent {
         amount: i64,
     },
     BankruptcyWarning,
+    /// Fin de partida (quiebra definitiva o retiro).
+    GameOver {
+        company_name: String,
+        company_value: i64,
+        calendar_year: u32,
+        reason: crate::score::GameOverReason,
+    },
     AircraftTakeoff {
         vehicle_id: u32,
         at: TileCoord,

@@ -215,3 +215,135 @@ fn join_stations_rejects_non_adjacent() {
     let e = apply_command(&mut s, &Command::JoinStations { keep: a, merge: b }).unwrap_err();
     assert_eq!(e, CommandError::CannotJoinStations);
 }
+
+#[test]
+fn join_stations_merges_adjacent_rail_1x1() {
+    use crate::VehicleOrder;
+    let mut s = GameState::new(16, 16);
+    let keep = TileCoord::new(4, 4);
+    let merge = TileCoord::new(5, 4);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailStation(keep, 0)).unwrap();
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(6, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailStation(merge, 0)).unwrap();
+    assert_eq!(s.stations.len(), 2);
+
+    let mut veh = Vehicle::new(1, VehicleKind::Train, keep, merge);
+    veh.orders = vec![VehicleOrder::station(merge)];
+    s.vehicles.push(veh);
+
+    apply_command(&mut s, &Command::JoinStations { keep, merge }).unwrap();
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].pos, keep);
+    assert!(s.stations[0].joined_tiles.contains(&merge));
+    match &s.vehicles[0].orders[0] {
+        VehicleOrder::Station { station, .. } => assert_eq!(*station, keep),
+        other => panic!("expected station order, got {other:?}"),
+    }
+    assert_eq!(
+        crate::station_at_tile(&s.map, &s.stations, merge).map(|st| st.pos),
+        Some(keep)
+    );
+}
+
+#[test]
+fn join_stations_merges_multi_tile_rail_footprints() {
+    let mut s = GameState::new(24, 24);
+    // Dos huellas 3×1 en eje X, adyacentes por el borde (origen (2,4) y (5,4)).
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(2, 4),
+            axis_y: false,
+            platforms: 1,
+            length: 3,
+        },
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(5, 4),
+            axis_y: false,
+            platforms: 1,
+            length: 3,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.stations.len(), 2);
+    let keep = s.stations[0].pos;
+    let merge = s.stations[1].pos;
+    assert!((keep.x - merge.x).abs() + (keep.y - merge.y).abs() > 1);
+
+    apply_command(&mut s, &Command::JoinStations { keep, merge }).unwrap();
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].pos, keep);
+    let footprint = crate::station_footprint_tiles(&s.map, keep);
+    assert!(footprint.len() >= 6, "huella unificada tras join");
+    assert!(crate::station_at_tile(&s.map, &s.stations, TileCoord::new(7, 4)).is_some());
+}
+
+#[test]
+fn join_stations_rejects_rail_with_bus() {
+    let mut s = GameState::new(16, 16);
+    let rail = TileCoord::new(4, 4);
+    let bus = TileCoord::new(5, 4);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailStation(rail, 0)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(5, 3))).unwrap();
+    apply_command(&mut s, &Command::PlaceBusStop(bus, 3)).unwrap();
+    let e = apply_command(
+        &mut s,
+        &Command::JoinStations {
+            keep: rail,
+            merge: bus,
+        },
+    )
+    .unwrap_err();
+    assert_eq!(e, CommandError::CannotJoinStations);
+}
+
+#[test]
+fn join_stations_rejects_rail_perpendicular_axis() {
+    let mut s = GameState::new(16, 16);
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(2, 4),
+            axis_y: false,
+            platforms: 1,
+            length: 2,
+        },
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(4, 4),
+            axis_y: true,
+            platforms: 1,
+            length: 2,
+        },
+    )
+    .unwrap();
+    let keep = s.stations[0].pos;
+    let merge = s.stations[1].pos;
+    let e = apply_command(&mut s, &Command::JoinStations { keep, merge }).unwrap_err();
+    assert_eq!(e, CommandError::CannotJoinStations);
+}
+
+#[test]
+fn join_stations_merges_rail_cargo_packets() {
+    let mut s = GameState::new(16, 16);
+    let keep = TileCoord::new(4, 4);
+    let merge = TileCoord::new(5, 4);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailStation(keep, 0)).unwrap();
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(6, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailStation(merge, 0)).unwrap();
+    let merge_idx = s.stations.iter().position(|st| st.pos == merge).unwrap();
+    s.stations[merge_idx].add_waiting_cargo(crate::CargoType::Coal, 40);
+    apply_command(&mut s, &Command::JoinStations { keep, merge }).unwrap();
+    assert_eq!(s.stations.len(), 1);
+    assert!(s.stations[0].cargo_stock.get(crate::CargoType::Coal) >= 40);
+}

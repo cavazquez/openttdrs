@@ -486,3 +486,22 @@ fn place_road_waypoint_rejects_crossing() {
         Err(CommandError::CannotPlaceWaypointOnTrack)
     );
 }
+
+#[test]
+fn place_road_writes_newgrf_road_type_m8() {
+    use crate::{RoadTramType, RoadType, RoadTypeDef, road_type_from_tile};
+    let mut s = GameState::new(8, 8);
+    let ngrf = RoadType::from_u8(2);
+    s.road_type_catalog.push(RoadTypeDef {
+        id: ngrf,
+        class: RoadTramType::Road,
+        label: "Adoquines".into(),
+        short_label: "COBB".into(),
+        intro_year: 0,
+        from_newgrf: true,
+    });
+    s.current_road_type = ngrf;
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRoad(c)).unwrap();
+    assert_eq!(road_type_from_tile(&s.map.get(c).unwrap()), ngrf);
+}

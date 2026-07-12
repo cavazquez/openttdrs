@@ -49,6 +49,8 @@ pub(crate) struct ClientPreferences {
     pub(crate) news_vehicle_advice: u8,
     /// Posiciones de ventanas flotantes: `Id=x,y;Id2=x,y` (UI-7).
     pub(crate) window_layouts: String,
+    /// Highscores locales: `name|value|year|B|R;…` (UI-8).
+    pub(crate) highscores: String,
 }
 
 impl Default for ClientPreferences {
@@ -78,6 +80,7 @@ impl Default for ClientPreferences {
             news_first_vehicle: crate::news_prefs::DISPLAY_FULL,
             news_vehicle_advice: crate::news_prefs::DISPLAY_SUMMARY,
             window_layouts: String::new(),
+            highscores: String::new(),
         }
     }
 }
@@ -136,6 +139,70 @@ impl ClientPreferences {
             .collect();
         parts.push(format!("{key}={:.0},{:.0}", pos.x, pos.y));
         self.window_layouts = parts.join(";");
+    }
+
+    pub(crate) const HIGHSCORE_LIMIT: usize = 10;
+
+    /// Entradas ordenadas por valor descendente.
+    #[must_use]
+    pub(crate) fn highscore_entries(&self) -> Vec<openttdrs_core::GameScore> {
+        let mut out = Vec::new();
+        for entry in self.highscores.split(';').filter(|s| !s.is_empty()) {
+            let mut parts = entry.split('|');
+            let (Some(name), Some(value), Some(year), Some(reason)) =
+                (parts.next(), parts.next(), parts.next(), parts.next())
+            else {
+                continue;
+            };
+            let Ok(company_value) = value.parse::<i64>() else {
+                continue;
+            };
+            let Ok(calendar_year) = year.parse::<u32>() else {
+                continue;
+            };
+            let Some(reason) = reason
+                .chars()
+                .next()
+                .and_then(openttdrs_core::GameOverReason::from_storage_code)
+            else {
+                continue;
+            };
+            out.push(openttdrs_core::GameScore {
+                company_name: name.to_string(),
+                company_value,
+                calendar_year,
+                reason,
+            });
+        }
+        out.sort_by_key(|b| std::cmp::Reverse(b.company_value));
+        out
+    }
+
+    /// Inserta un score y recorta al top [`Self::HIGHSCORE_LIMIT`]. Devuelve el rango 1-based.
+    pub(crate) fn insert_highscore(&mut self, score: &openttdrs_core::GameScore) -> usize {
+        let mut entries = self.highscore_entries();
+        entries.push(score.clone());
+        entries.sort_by_key(|b| std::cmp::Reverse(b.company_value));
+        entries.truncate(Self::HIGHSCORE_LIMIT);
+        let rank = entries
+            .iter()
+            .position(|e| e == score)
+            .map(|i| i + 1)
+            .unwrap_or(entries.len().max(1));
+        self.highscores = entries
+            .iter()
+            .map(|e| {
+                format!(
+                    "{}|{}|{}|{}",
+                    e.company_name.replace('|', "/").replace(';', ","),
+                    e.company_value,
+                    e.calendar_year,
+                    e.reason.storage_code()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(";");
+        rank
     }
 
     /// Aplica un preset de cliente (Display / QoL).
@@ -408,5 +475,27 @@ mod tests {
         prefs.apply_preset(ClientSettingsPreset::Classic);
         assert!(prefs.full_animation);
         assert!(!prefs.show_debug_gizmos);
+    }
+
+    #[test]
+    fn insert_highscore_ranks_by_value() {
+        let mut prefs = ClientPreferences::default();
+        let low = openttdrs_core::GameScore {
+            company_name: "A".into(),
+            company_value: 10_000,
+            calendar_year: 1960,
+            reason: openttdrs_core::GameOverReason::Retired,
+        };
+        let high = openttdrs_core::GameScore {
+            company_name: "B".into(),
+            company_value: 90_000,
+            calendar_year: 1970,
+            reason: openttdrs_core::GameOverReason::Bankruptcy,
+        };
+        assert_eq!(prefs.insert_highscore(&low), 1);
+        assert_eq!(prefs.insert_highscore(&high), 1);
+        let entries = prefs.highscore_entries();
+        assert_eq!(entries[0].company_name, "B");
+        assert_eq!(entries[1].company_name, "A");
     }
 }

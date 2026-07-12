@@ -323,7 +323,15 @@ pub(crate) fn sync_station_cargo_panel(
         return;
     };
     *vis = Visibility::Visible;
-    let Some(station) = sim.state.stations.iter().find(|st| st.pos == station_pos) else {
+    let Some(station) = sim
+        .state
+        .stations
+        .iter()
+        .find(|st| st.pos == station_pos)
+        .or_else(|| {
+            openttdrs_core::station_at_tile(&sim.state.map, &sim.state.stations, station_pos)
+        })
+    else {
         return;
     };
 

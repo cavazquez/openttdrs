@@ -11,8 +11,9 @@ mod tests;
 pub(crate) use setup::setup_main_menu;
 pub(crate) use systems::{
     auto_start_preloaded_json, leave_main_menu, main_menu_continue_interaction,
-    main_menu_interaction, main_menu_options_interaction, return_to_main_menu,
-    sync_main_menu_continue_button, sync_main_menu_panel_visibility, sync_main_menu_summary,
+    main_menu_highscores_interaction, main_menu_interaction, main_menu_options_interaction,
+    return_to_main_menu, sync_main_menu_continue_button, sync_main_menu_highscores,
+    sync_main_menu_panel_visibility, sync_main_menu_summary,
 };
 
 use bevy::prelude::*;
@@ -31,6 +32,7 @@ pub(crate) enum MainMenuPanel {
     #[default]
     Root,
     NewGame,
+    Highscores,
     QuitConfirm,
 }
 
@@ -57,6 +59,12 @@ pub(crate) struct MainMenuLoadButton;
 
 #[derive(Component)]
 pub(crate) struct MainMenuDemoButton;
+
+#[derive(Component)]
+pub(crate) struct MainMenuHighscoresButton;
+
+#[derive(Component)]
+pub(crate) struct MainMenuHighscoresText;
 
 #[derive(Component)]
 pub(crate) struct MainMenuQuitButton;

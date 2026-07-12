@@ -679,6 +679,9 @@ pub struct Vehicle {
     /// Bits aleatorios `NewGRF` del vehículo (`random_bits`; random Action2 / consist).
     #[serde(default)]
     pub newgrf_random_bits: u8,
+    /// Registros persistentes `NewGRF` (`7C` / `\2psto`); copiados al ctx al dibujar.
+    #[serde(default)]
+    pub newgrf_persistent_regs: std::collections::HashMap<u8, u32>,
 }
 
 fn default_unit_length() -> u8 {
@@ -765,6 +768,7 @@ impl Vehicle {
             cached_power_hp: 0,
             cached_weight_t: 0,
             newgrf_random_bits: seed_newgrf_random_bits(id),
+            newgrf_persistent_regs: std::collections::HashMap::new(),
         }
     }
 

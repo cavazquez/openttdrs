@@ -198,6 +198,9 @@ fn fill_vehicle_action2_vars(
     ctx.vars.insert(0xC6, u32::from(local_id));
     // FD = trains forward
     ctx.vars.insert(0xC8, 0xFD);
+
+    ctx.persistent_registers
+        .clone_from(&unit.newgrf_persistent_regs);
 }
 
 /// ID de la cabeza del consist que contiene `vehicle_id`.

@@ -2,7 +2,7 @@
 //!
 //! Contenedor **v1** (inline) o **v2** (sprite section + `0xFD`).
 //! 8bpp/32bpp plano / LZ77 / chunked; multi-zoom; máscara company-colour.
-//! Action3→Action2 (básico / variational+advanced bit5 / random 80/83/84)→Action1.
+//! Action3→Action2 (básico / variational+advanced+7E/7C / random 80/83/84)→Action1.
 
 use std::collections::HashMap;
 
@@ -101,6 +101,10 @@ pub struct Action2EvalCtx {
     pub consist_random_bits: HashMap<u8, u32>,
     /// Registros temporales (variable `7D` / operador `\2sto`).
     pub temp_registers: HashMap<u8, u32>,
+    /// Registros persistentes (variable `7C` / operador `\2psto`).
+    pub persistent_registers: HashMap<u8, u32>,
+    /// Último resultado de un `VarAction2` (variable `1C`; p. ej. tras procedure `7E`).
+    pub last_result: u32,
 }
 
 /// Resultado de parsear Action1/2/3 de un feature (trains / roadtypes).
@@ -144,7 +148,7 @@ impl TrainSpriteGraphics {
                 continue;
             }
             if let Some(var) = self.action2_var.get(&a2).cloned() {
-                let next = eval_action2_var(&var, ctx);
+                let next = eval_action2_var(self, &var, ctx, 0);
                 if next & 0x8000 != 0 {
                     break;
                 }
@@ -213,21 +217,43 @@ fn apply_var_adjust(raw: u32, adj: &Action2VarAdjust) -> i32 {
     value
 }
 
-fn read_action2_var(ctx: &Action2EvalCtx, term: &Action2VarTerm) -> Option<u32> {
+fn read_action2_var(
+    gfx: &TrainSpriteGraphics,
+    ctx: &mut Action2EvalCtx,
+    term: &Action2VarTerm,
+    depth: u8,
+) -> Option<u32> {
     match term.variable {
         // Literal: `and-mask` selecciona bits de 0xFFFFFFFF.
         0x1A => Some(0xFFFF_FFFF),
+        // Resultado del VarAction2 anterior / procedure.
+        0x1C => Some(ctx.last_result),
+        // Registro persistente `7C[param]`.
+        0x7C => {
+            let idx = term.param.unwrap_or(0);
+            Some(ctx.persistent_registers.get(&idx).copied().unwrap_or(0))
+        }
         // Registro temporal `7D[param]`.
         0x7D => {
             let idx = term.param.unwrap_or(0);
             Some(ctx.temp_registers.get(&idx).copied().unwrap_or(0))
         }
+        // Procedure call: parámetro = set-id Action2 a invocar.
+        0x7E => {
+            let proc_id = term.param.unwrap_or(0);
+            Some(invoke_action2_procedure(gfx, proc_id, ctx, depth))
+        }
         v => ctx.vars.get(&v).copied(),
     }
 }
 
-fn eval_term(ctx: &Action2EvalCtx, term: &Action2VarTerm) -> Option<i32> {
-    let raw = read_action2_var(ctx, term)?;
+fn eval_term(
+    gfx: &TrainSpriteGraphics,
+    ctx: &mut Action2EvalCtx,
+    term: &Action2VarTerm,
+    depth: u8,
+) -> Option<i32> {
+    let raw = read_action2_var(gfx, ctx, term, depth)?;
     Some(apply_var_adjust(raw, &term.adjust))
 }
 
@@ -279,6 +305,12 @@ fn apply_advanced_op(op: u8, val1: i32, val2: i32, ctx: &mut Action2EvalCtx) -> 
         }
         // \2rst: result = val2
         0x0F => val2,
+        // \2psto: persistent_registers[val2] = val1
+        0x10 => {
+            let idx = u8::try_from(val2 & 0xFF).unwrap_or(0);
+            ctx.persistent_registers.insert(idx, val1.cast_unsigned());
+            val1
+        }
         0x11 => val1.rotate_right(val2.cast_unsigned() & 31),
         0x12 => match val1.cmp(&val2) {
             std::cmp::Ordering::Less => 0,
@@ -301,15 +333,66 @@ fn apply_advanced_op(op: u8, val1: i32, val2: i32, ctx: &mut Action2EvalCtx) -> 
     }
 }
 
-fn eval_action2_var(entry: &Action2VarEntry, ctx: &mut Action2EvalCtx) -> u16 {
-    let Some(mut acc) = eval_term(ctx, &entry.first) else {
+/// Invoca un Action2 como procedure (`7E`); el valor calculado alimenta la variable.
+fn invoke_action2_procedure(
+    gfx: &TrainSpriteGraphics,
+    set_id: u8,
+    ctx: &mut Action2EvalCtx,
+    depth: u8,
+) -> u32 {
+    if depth >= 8 {
+        return 0;
+    }
+    let mut id = u16::from(set_id);
+    for _ in 0..8 {
+        let a2 = u8::try_from(id).unwrap_or(u8::MAX);
+        if let Some(rnd) = gfx.action2_random.get(&a2) {
+            let next = eval_action2_random(rnd, ctx);
+            if next & 0x8000 != 0 {
+                let v = u32::from(next & 0x7FFF);
+                ctx.last_result = v;
+                return v;
+            }
+            id = next;
+            continue;
+        }
+        if let Some(var) = gfx.action2_var.get(&a2).cloned() {
+            let next = eval_action2_var(gfx, &var, ctx, depth.saturating_add(1));
+            if next & 0x8000 != 0 {
+                // `last_result` guarda el acumulador completo (32-bit).
+                return ctx.last_result;
+            }
+            id = next;
+            continue;
+        }
+        // Cadena termina en Action2 básico → 0xFFFF.
+        ctx.last_result = 0xFFFF;
+        return 0xFFFF;
+    }
+    ctx.last_result = 0xFFFF;
+    0xFFFF
+}
+
+fn eval_action2_var(
+    gfx: &TrainSpriteGraphics,
+    entry: &Action2VarEntry,
+    ctx: &mut Action2EvalCtx,
+    depth: u8,
+) -> u16 {
+    let Some(mut acc) = eval_term(gfx, ctx, &entry.first, depth) else {
         return entry.default;
     };
     for op in &entry.ops {
-        let Some(rhs) = eval_term(ctx, &op.rhs) else {
+        let Some(rhs) = eval_term(gfx, ctx, &op.rhs, depth) else {
             return entry.default;
         };
         acc = apply_advanced_op(op.operator, acc, rhs, ctx);
+    }
+    ctx.last_result = acc.cast_unsigned();
+    // nvar=0: devolver el valor calculado como callback (procedure / result).
+    if entry.ranges.is_empty() {
+        let low = u16::try_from(acc & 0x7FFF).unwrap_or(0);
+        return low | 0x8000;
     }
     let value_u8 = u8::try_from(acc & 0xFF).unwrap_or(0);
     for &(result, low, high) in &entry.ranges {
@@ -1555,14 +1638,25 @@ pub fn build_action2_variational_advanced_add_literal(
     p
 }
 
-/// Action2 variational `0x81` sin rangos: siempre `default`.
+/// Action2 variational `0x81` que siempre elige `default_set` (rango catch-all).
+///
+/// Nota: `nvar=0` en la spec es resultado de callback (p. ej. procedures `7E`),
+/// no “usar default”; por eso aquí se emite un rango `0..=0xFF`.
 #[must_use]
 pub fn build_action2_variational_default_payload(
     feature: u8,
     set_id: u8,
     default_set: u16,
 ) -> Vec<u8> {
-    build_action2_variational_payload(feature, set_id, 0x00, 0x00, 0xFF, &[], default_set)
+    build_action2_variational_payload(
+        feature,
+        set_id,
+        0x00,
+        0x00,
+        0xFF,
+        &[(default_set, 0, 0xFF)],
+        default_set,
+    )
 }
 
 /// Action2 variational trains → `default_set`.
@@ -2842,7 +2936,7 @@ mod tests {
         let parsed = parse_action2_variational(&var, ACTION0_FEATURE_TRAINS).unwrap();
         assert_eq!(parsed.0, 9);
         assert_eq!(parsed.1.default, 5);
-        assert!(parsed.1.ranges.is_empty());
+        assert_eq!(parsed.1.ranges, vec![(5, 0, 0xFF)]);
         let basic = build_action2_trains_payload(3, 0, 0);
         assert_eq!(
             parse_action2_vehicle_basic(&basic, ACTION0_FEATURE_TRAINS),
@@ -3096,6 +3190,104 @@ mod tests {
         let mut ctx_wagon =
             action2_eval_ctx_for_unit(&vs, 2, crate::tick::GameTick::new(0), &[], 0);
         assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx_wagon), 0); // ff=1 → set 7
+    }
+
+    #[test]
+    fn resolve_procedure_7e_and_psto() {
+        // Procedure set 8: nvar=0 → callback con valor de var 0x40 (=7)
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_var.insert(
+            8,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x40,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(), // nvar=0 → callback
+                default: 0,
+            },
+        );
+        // Caller set 3: 7E[8] → si valor==7 elige set 1
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x7E,
+                    param: Some(8),
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(1, 7, 7)],
+                default: 9,
+            },
+        );
+        gfx.action2_to_action1.insert(1, 0);
+        gfx.action2_to_action1.insert(9, 1);
+        let mut ctx = Action2EvalCtx::default();
+        ctx.vars.insert(0x40, 7);
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx), 0);
+        assert_eq!(ctx.last_result, 7);
+
+        // \2psto: store 5 into persistent[2], then read 7C[2]
+        gfx.action2_var.insert(
+            4,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 5,
+                        ..Action2VarAdjust::default()
+                    },
+                },
+                ops: vec![
+                    Action2VarOp {
+                        operator: 0x10, // psto
+                        rhs: Action2VarTerm {
+                            variable: 0x1A,
+                            param: None,
+                            adjust: Action2VarAdjust {
+                                shift: 0,
+                                and_mask: 2, // register index
+                                ..Action2VarAdjust::default()
+                            },
+                        },
+                    },
+                    Action2VarOp {
+                        operator: 0x0F, // rst → start fresh with 7C[2]
+                        rhs: Action2VarTerm {
+                            variable: 0x7C,
+                            param: Some(2),
+                            adjust: Action2VarAdjust {
+                                shift: 0,
+                                and_mask: 0xFF,
+                                ..Action2VarAdjust::default()
+                            },
+                        },
+                    },
+                ],
+                ranges: vec![(1, 5, 5)],
+                default: 9,
+            },
+        );
+        let mut ctx2 = Action2EvalCtx::default();
+        assert_eq!(gfx.resolve_action1_set_ctx(4, &mut ctx2), 0);
+        assert_eq!(ctx2.persistent_registers.get(&2), Some(&5));
     }
 
     #[test]

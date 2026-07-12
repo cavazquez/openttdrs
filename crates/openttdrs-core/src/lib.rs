@@ -172,9 +172,9 @@ pub use newgrf_actions::{
     parse_action0_roadtype_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_config::{
-    GrfContainerVersion, GrfFileInfo, GrfScanError, GrfStackIssue, NewGrfEntry,
+    GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, NewGrfEntry,
     build_minimal_grf_v2, default_vanilla_stack, format_grfid, grfid_from_bytes,
-    parse_grf_container, scan_grf_bytes, scan_grf_file, validate_stack,
+    parse_grf_container, parse_grf_full, scan_grf_bytes, scan_grf_file, validate_stack,
 };
 pub use newgrf_sprites::{
     ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, Action5Block, CATENARY_ACTION5_SLOT_COUNT,
@@ -185,17 +185,18 @@ pub use newgrf_sprites::{
     build_action3_feature_payload, build_action3_trains_payload, build_grf_v2_action5_with_sprite,
     build_grf_v2_roadtype_with_preview_sprite, build_grf_v2_station_with_preview_sprite,
     build_grf_v2_train_with_action2_chain, build_grf_v2_train_with_chunked_sprite,
-    build_grf_v2_train_with_compressed_sprite, build_grf_v2_train_with_preview_sprite,
-    build_grf_v2_with_preview_sprite, build_real_sprite_v1_chunked,
-    build_real_sprite_v1_chunked_payload, build_real_sprite_v1_compressed,
-    build_real_sprite_v1_compressed_payload, build_real_sprite_v1_dims,
-    build_real_sprite_v1_uncompressed, build_real_sprite_v1_uncompressed_payload,
+    build_grf_v2_train_with_compressed_sprite, build_grf_v2_train_with_fd_sprite,
+    build_grf_v2_train_with_preview_sprite, build_grf_v2_with_preview_sprite,
+    build_real_sprite_v1_chunked, build_real_sprite_v1_chunked_payload,
+    build_real_sprite_v1_compressed, build_real_sprite_v1_compressed_payload,
+    build_real_sprite_v1_dims, build_real_sprite_v1_uncompressed,
+    build_real_sprite_v1_uncompressed_payload, build_sprite_section_palette_entry,
     catenary_action5_local_slot, collect_action5_blocks, collect_feature_sprite_graphics,
     collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
     collect_train_sprite_graphics, compress_grf_lz77_literals, decode_chunked_8bpp,
-    decode_real_sprite_v1, decode_real_sprite_v1_uncompressed, decompress_grf_lz77,
-    encode_chunked_8bpp_full_rows, indices_to_rgba, merge_catenary_action5_block,
-    merge_shore_action5_block,
+    decode_real_sprite_v1, decode_real_sprite_v1_uncompressed, decode_real_sprite_v2_section,
+    decompress_grf_lz77, encode_chunked_8bpp_full_rows, index_sprite_section, indices_to_rgba,
+    merge_catenary_action5_block, merge_shore_action5_block, resolve_fd_sprite,
 };
 pub use news::{
     CALENDAR_BASE_YEAR, NEWS_MAX_AGE_DAYS, NewsDisplayMode, NewsDisplaySettings, NewsItem,

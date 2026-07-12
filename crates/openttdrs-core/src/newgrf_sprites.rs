@@ -1,10 +1,8 @@
 //! Decode mínimo de sprites reales `NewGRF` + Action1/2/3 (trains / roadtypes, preview).
 //!
-//! MVP: contenedor **v1** (o entradas reales inline), 8bpp plano, **LZ77**
-//! (bit `0x02`) y **chunked** tile (bit `0x08`). Action3→Action2→Action1
-//! estático para **trains** (default moving; sin variational/callbacks).
-//! Road/station siguen Action3→Action1 directo. Action5 shore runtime parcial;
-//! 32bpp / trozos anchos (`width>256`) OOS.
+//! MVP: contenedor **v1** (inline) o **v2** (sprite section + `0xFD`).
+//! 8bpp plano / LZ77 / chunked. Action3→Action2→Action1 estático para trains.
+//! Road/station Action3→Action1. Action5 parcial. Callbacks / 32bpp / multi-zoom OOS.
 
 use std::collections::HashMap;
 
@@ -13,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use crate::newgrf_actions::{
     ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
 };
-use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_container};
+use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_full};
 use crate::newgrf_palette_data::DOS_PALETTE_RGB;
 
 /// Sprite RGBA decodificado (índice 0 → alpha 0).
@@ -412,16 +410,117 @@ fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Vec<TrainSpriteA
     )
 }
 
+/// Índice sprite section v2: `id` → lista `(info, body)` (body = tras el BYTE info).
+#[must_use]
+pub fn index_sprite_section(section: &[u8]) -> HashMap<u32, Vec<(u8, &[u8])>> {
+    let mut map: HashMap<u32, Vec<(u8, &[u8])>> = HashMap::new();
+    let mut i = 0usize;
+    while i + 8 <= section.len() {
+        let id = u32::from_le_bytes([section[i], section[i + 1], section[i + 2], section[i + 3]]);
+        if id == 0 {
+            break;
+        }
+        let size = u32::from_le_bytes([
+            section[i + 4],
+            section[i + 5],
+            section[i + 6],
+            section[i + 7],
+        ]) as usize;
+        let info_at = i + 8;
+        if size == 0 || info_at + size > section.len() {
+            break;
+        }
+        let info = section[info_at];
+        let body = &section[info_at + 1..info_at + size];
+        map.entry(id).or_default().push((info, body));
+        i = info_at + size;
+    }
+    map
+}
+
+/// Decodifica imagen de sprite section v2 (palette 8bpp, zoom normal).
+///
+/// `info`: bits RGB/alpha OOS; requiere bit palette (`0x04`). LZ77 siempre.
+#[must_use]
+pub fn decode_real_sprite_v2_section(info: u8, body: &[u8]) -> Option<DecodedSprite> {
+    if info == 0xFF || info & 0x04 == 0 || info & 0x03 != 0 {
+        return None;
+    }
+    if body.len() < 9 {
+        return None;
+    }
+    let zoom = body[0];
+    if zoom != 0 {
+        return None;
+    }
+    let height = u16::from_le_bytes([body[1], body[2]]);
+    let width = u16::from_le_bytes([body[3], body[4]]);
+    let x_offs = i16::from_le_bytes([body[5], body[6]]);
+    let y_offs = i16::from_le_bytes([body[7], body[8]]);
+    if width == 0 || height == 0 || width > 512 || height > 512 {
+        return None;
+    }
+    let chunked = info & 0x08 != 0;
+    let mut pos = 9usize;
+    let decomp_size = if chunked {
+        if body.len() < pos + 4 {
+            return None;
+        }
+        let n =
+            u32::from_le_bytes([body[pos], body[pos + 1], body[pos + 2], body[pos + 3]]) as usize;
+        pos += 4;
+        n
+    } else {
+        usize::from(width).checked_mul(usize::from(height))?
+    };
+    if decomp_size == 0 || decomp_size > 512 * 512 {
+        return None;
+    }
+    let intermediate = decompress_grf_lz77(&body[pos..], decomp_size)?;
+    let indices = if chunked {
+        decode_chunked_8bpp(&intermediate, width, height)?
+    } else {
+        intermediate
+    };
+    let rgba = indices_to_rgba(&indices, width, height)?;
+    Some(DecodedSprite {
+        width,
+        height,
+        x_offs,
+        y_offs,
+        rgba,
+    })
+}
+
+/// Primera vista palette/zoom0 del ID en el índice sprite section.
+#[must_use]
+pub fn resolve_fd_sprite<S: ::std::hash::BuildHasher>(
+    index: &HashMap<u32, Vec<(u8, &[u8])>, S>,
+    sprite_id: u32,
+) -> Option<DecodedSprite> {
+    let entries = index.get(&sprite_id)?;
+    for &(info, body) in entries {
+        if let Some(spr) = decode_real_sprite_v2_section(info, body) {
+            return Some(spr);
+        }
+    }
+    None
+}
+
 /// Recorre el GRF y extrae sets Action1 + Action2 (trains) + asignaciones Action3.
 ///
 /// # Errors
 ///
 /// Contenedor inválido.
+#[allow(clippy::too_many_lines)]
 pub fn collect_feature_sprite_graphics(
     data: &[u8],
     feature: u8,
 ) -> Result<TrainSpriteGraphics, GrfScanError> {
-    let (container, section) = parse_grf_container(data)?;
+    let parsed = parse_grf_full(data)?;
+    let container = parsed.container;
+    let section = parsed.data_section;
+    let sprite_index = index_sprite_section(parsed.sprite_section);
     let mut out = TrainSpriteGraphics::default();
     let mut current_set: Vec<DecodedSprite> = Vec::new();
     let mut views_left_in_set = 0u8;
@@ -483,28 +582,46 @@ pub fn collect_feature_sprite_graphics(
             continue;
         }
 
-        let Some(payload) = real_sprite_payload(section, i, size, header, container) else {
-            break;
+        let end = match container {
+            GrfContainerVersion::V1 => i + 2 + size,
+            GrfContainerVersion::V2 => payload_start + size,
         };
+        if end > section.len() {
+            break;
+        }
 
-        if (sets_left > 0 || views_left_in_set > 0)
-            && let Some(decoded) = decode_real_sprite_entry(container, info, payload)
-        {
-            current_set.push(decoded);
-            views_left_in_set = views_left_in_set.saturating_sub(1);
-            if views_left_in_set == 0 {
-                out.sets.push(std::mem::take(&mut current_set));
-                sets_left = sets_left.saturating_sub(1);
-                if sets_left > 0 {
-                    views_left_in_set = views_per_set;
+        if sets_left > 0 || views_left_in_set > 0 {
+            let decoded = if container == GrfContainerVersion::V2 && info == 0xFD {
+                if size == 4 && payload_start + 4 <= section.len() {
+                    let id = u32::from_le_bytes([
+                        section[payload_start],
+                        section[payload_start + 1],
+                        section[payload_start + 2],
+                        section[payload_start + 3],
+                    ]);
+                    resolve_fd_sprite(&sprite_index, id)
+                } else {
+                    None
+                }
+            } else if let Some(payload) = real_sprite_payload(section, i, size, header, container) {
+                decode_real_sprite_entry(container, info, payload)
+            } else {
+                None
+            };
+            if let Some(decoded) = decoded {
+                current_set.push(decoded);
+                views_left_in_set = views_left_in_set.saturating_sub(1);
+                if views_left_in_set == 0 {
+                    out.sets.push(std::mem::take(&mut current_set));
+                    sets_left = sets_left.saturating_sub(1);
+                    if sets_left > 0 {
+                        views_left_in_set = views_per_set;
+                    }
                 }
             }
         }
 
-        i = match container {
-            GrfContainerVersion::V1 => i + 2 + size,
-            GrfContainerVersion::V2 => payload_start + size,
-        };
+        i = end;
     }
     if !current_set.is_empty() {
         out.sets.push(current_set);
@@ -835,6 +952,95 @@ pub fn build_grf_v2_train_with_compressed_sprite(
     )
 }
 
+/// Entrada sprite section v2: palette 8bpp + zoom 0 + LZ77.
+#[must_use]
+pub fn build_sprite_section_palette_entry(
+    sprite_id: u32,
+    width: u16,
+    height: u16,
+    x_offs: i16,
+    y_offs: i16,
+    indices: &[u8],
+) -> Vec<u8> {
+    let mut img = Vec::new();
+    img.push(0); // zoom normal
+    img.extend_from_slice(&height.to_le_bytes());
+    img.extend_from_slice(&width.to_le_bytes());
+    img.extend_from_slice(&x_offs.to_le_bytes());
+    img.extend_from_slice(&y_offs.to_le_bytes());
+    img.extend(compress_grf_lz77_literals(indices));
+    let mut entry = Vec::with_capacity(8 + 1 + img.len());
+    entry.extend_from_slice(&sprite_id.to_le_bytes());
+    let size = u32::try_from(1 + img.len()).unwrap_or(0);
+    entry.extend_from_slice(&size.to_le_bytes());
+    entry.push(0x04); // palette only
+    entry.extend(img);
+    entry
+}
+
+/// GRF v2 canónico: Action1 + ref `0xFD` → sprite section (sin sprite inline).
+#[must_use]
+#[expect(clippy::too_many_arguments)]
+pub fn build_grf_v2_train_with_fd_sprite(
+    action0: &[u8],
+    local_id: u8,
+    sprite_id: u32,
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+    let action1 = build_action1_trains_payload(1, 1);
+    let action3 = build_action3_trains_payload(local_id, 0);
+    let mut action8 = vec![0x08, 0x07];
+    action8.extend_from_slice(&grfid);
+    action8.extend_from_slice(name.as_bytes());
+    action8.push(0);
+    action8.push(0);
+
+    let mut data_section = Vec::new();
+    for payload in [action0, action1.as_slice()] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    // Ref 0xFD → sprite_id
+    data_section.extend_from_slice(&4u32.to_le_bytes());
+    data_section.push(0xFD);
+    data_section.extend_from_slice(&sprite_id.to_le_bytes());
+
+    for payload in [action3.as_slice(), action8.as_slice()] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    data_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let mut sprite_section = build_sprite_section_palette_entry(
+        sprite_id,
+        width,
+        height,
+        -i16::try_from(width / 2).unwrap_or(0),
+        -i16::try_from(height).unwrap_or(0),
+        indices,
+    );
+    sprite_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let sprite_offs = u32::try_from(1 + data_section.len()).unwrap_or(0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[0x00, 0x00]);
+    out.extend_from_slice(&SIG);
+    out.extend_from_slice(&sprite_offs.to_le_bytes());
+    out.push(0x00);
+    out.extend_from_slice(&data_section);
+    out.extend_from_slice(&sprite_section);
+    out
+}
+
 /// GRF v2 train con sprite chunked (`info=0x09`).
 #[must_use]
 pub fn build_grf_v2_train_with_chunked_sprite(
@@ -1146,7 +1352,10 @@ fn finish_action5_block(
 ///
 /// Contenedor inválido.
 pub fn collect_action5_blocks(data: &[u8]) -> Result<Vec<Action5Block>, GrfScanError> {
-    let (container, section) = parse_grf_container(data)?;
+    let parsed = parse_grf_full(data)?;
+    let container = parsed.container;
+    let section = parsed.data_section;
+    let sprite_index = index_sprite_section(parsed.sprite_section);
     let mut out = Vec::new();
     let mut sprites_left = 0u8;
     let mut cur_type = 0u8;
@@ -1188,12 +1397,33 @@ pub fn collect_action5_blocks(data: &[u8]) -> Result<Vec<Action5Block>, GrfScanE
             continue;
         }
 
-        let Some(payload) = real_sprite_payload(section, i, size, header, container) else {
-            break;
+        let end = match container {
+            GrfContainerVersion::V1 => i + 2 + size,
+            GrfContainerVersion::V2 => payload_start + size,
         };
+        if end > section.len() {
+            break;
+        }
 
         if in_block && sprites_left > 0 {
-            if let Some(spr) = decode_real_sprite_entry(container, info, payload) {
+            let spr = if container == GrfContainerVersion::V2 && info == 0xFD {
+                if size == 4 && payload_start + 4 <= section.len() {
+                    let id = u32::from_le_bytes([
+                        section[payload_start],
+                        section[payload_start + 1],
+                        section[payload_start + 2],
+                        section[payload_start + 3],
+                    ]);
+                    resolve_fd_sprite(&sprite_index, id)
+                } else {
+                    None
+                }
+            } else if let Some(payload) = real_sprite_payload(section, i, size, header, container) {
+                decode_real_sprite_entry(container, info, payload)
+            } else {
+                None
+            };
+            if let Some(spr) = spr {
                 sprites.push(spr);
             }
             sprites_left = sprites_left.saturating_sub(1);
@@ -1208,10 +1438,7 @@ pub fn collect_action5_blocks(data: &[u8]) -> Result<Vec<Action5Block>, GrfScanE
             }
         }
 
-        i = match container {
-            GrfContainerVersion::V1 => i + 2 + size,
-            GrfContainerVersion::V2 => payload_start + size,
-        };
+        i = end;
     }
     if in_block {
         out.push(finish_action5_block(cur_type, cur_num, cur_offset, sprites));
@@ -1427,6 +1654,34 @@ mod tests {
         let preview = gfx.preview_for_local_id(0).unwrap();
         assert_eq!(preview.width, 8);
         assert!(preview.rgba.iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn collect_train_fd_sprite_from_sprite_section() {
+        let a0 = build_action0_train_payload(1982, 100, 750, "FD Loco");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes =
+            build_grf_v2_train_with_fd_sprite(&a0, 0, 1, 8, 8, &indices, [b'T', b'F', 0, 1], "tfd");
+        let gfx = collect_train_sprite_graphics(&bytes).unwrap();
+        assert_eq!(gfx.sets.len(), 1);
+        let preview = gfx.preview_for_local_id(0).unwrap();
+        assert_eq!(preview.width, 8);
+        assert!(preview.rgba.iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn decode_v2_section_palette_roundtrip() {
+        let indices = [0u8, 174, 174, 0];
+        let entry = build_sprite_section_palette_entry(7, 2, 2, -1, -2, &indices);
+        let index = index_sprite_section(&entry);
+        let spr = resolve_fd_sprite(&index, 7).unwrap();
+        assert_eq!(spr.width, 2);
+        assert_eq!(spr.height, 2);
     }
 
     #[test]

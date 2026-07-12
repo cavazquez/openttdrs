@@ -199,6 +199,73 @@ pub fn parse_grf_container(data: &[u8]) -> Result<(GrfContainerVersion, &[u8]), 
     split_data_section(data)
 }
 
+/// Contenedor parseado: data section (+ sprite section en v2).
+#[derive(Debug, Clone, Copy)]
+pub struct GrfParsed<'a> {
+    pub container: GrfContainerVersion,
+    pub data_section: &'a [u8],
+    /// Vacío en v1; en v2 bytes desde el primer `DWORD id` hasta el terminador.
+    pub sprite_section: &'a [u8],
+}
+
+/// Parsea data section y, en v2, la sprite section (hasta `DWORD 0`).
+///
+/// # Errors
+///
+/// Archivo demasiado corto o firma inválida.
+pub fn parse_grf_full(data: &[u8]) -> Result<GrfParsed<'_>, GrfScanError> {
+    if data.len() < 2 {
+        return Err(GrfScanError::TooShort);
+    }
+    if data[0] == 0 && data[1] == 0 {
+        if data.len() < 15 {
+            return Err(GrfScanError::TooShort);
+        }
+        if data[2..10] != GRF_CONT_V2_SIG {
+            return Err(GrfScanError::InvalidContainer);
+        }
+        let sprite_offs = u32::from_le_bytes([data[10], data[11], data[12], data[13]]) as usize;
+        if sprite_offs == 0 || data.len() < 14 + sprite_offs {
+            return Err(GrfScanError::InvalidContainer);
+        }
+        let data_end = 14 + sprite_offs;
+        let data_section = &data[15..data_end];
+        let sprite_section = trim_sprite_section(&data[data_end..]);
+        return Ok(GrfParsed {
+            container: GrfContainerVersion::V2,
+            data_section,
+            sprite_section,
+        });
+    }
+    Ok(GrfParsed {
+        container: GrfContainerVersion::V1,
+        data_section: data,
+        sprite_section: &[],
+    })
+}
+
+/// Incluye entradas hasta (sin) el `DWORD 0` terminador.
+fn trim_sprite_section(rest: &[u8]) -> &[u8] {
+    let mut i = 0usize;
+    while i + 4 <= rest.len() {
+        let id = u32::from_le_bytes([rest[i], rest[i + 1], rest[i + 2], rest[i + 3]]);
+        if id == 0 {
+            return &rest[..i];
+        }
+        if i + 8 > rest.len() {
+            break;
+        }
+        let size =
+            u32::from_le_bytes([rest[i + 4], rest[i + 5], rest[i + 6], rest[i + 7]]) as usize;
+        let next = i.saturating_add(8).saturating_add(size);
+        if next > rest.len() {
+            break;
+        }
+        i = next;
+    }
+    rest
+}
+
 struct Action8Info {
     grf_version: u8,
     grfid: u32,

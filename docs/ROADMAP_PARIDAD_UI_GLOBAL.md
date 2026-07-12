@@ -942,7 +942,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** segunda humana / editor, o vars NewGRF runtime más allá de random/consist.
+**Siguiente:** procedure call `7E` / `\2psto`, o Action2 stations/road in-world.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -985,6 +985,7 @@ Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 24. ~~Chunked 32bpp + máscara company-colour (`info` RGB+A+M).~~ ✅
 25. ~~Action2 divide/modulo + random `0x84` consist + mask in-world (trains/estaciones).~~ ✅
 26. ~~Advanced variational chain (bit 5) / resolución consist runtime completa.~~ ✅
+27. ~~Vars vehículo runtime (`40`/`47`/`B4`/…) al dibujar.~~ ✅
 
 Progreso backend OOS (JoinStation rail + CargoDist observacional):
 

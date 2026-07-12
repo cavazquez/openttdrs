@@ -187,10 +187,10 @@ impl TrainSpriteGraphics {
             .filter(|s| !s.is_empty())
     }
 
-    /// ¿Necesita re-resolución en runtime (random o advanced)?
+    /// ¿Necesita re-resolución en runtime (random o cualquier variational)?
     #[must_use]
     pub fn needs_runtime_resolve(&self) -> bool {
-        !self.action2_random.is_empty() || self.action2_var.values().any(|v| !v.ops.is_empty())
+        !self.action2_random.is_empty() || !self.action2_var.is_empty()
     }
 }
 
@@ -2580,7 +2580,9 @@ pub fn build_grf_v2_action5_with_sprite(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::map::TileCoord;
     use crate::newgrf_actions::{build_action0_roadtype_payload, build_action0_train_payload};
+    use crate::vehicle::Vehicle;
 
     #[test]
     fn decode_flat_8bpp_applies_palette_and_transparency() {
@@ -3014,6 +3016,86 @@ mod tests {
         ctx.random_bits = 1;
         assert_eq!(gfx.resolve_action1_set_ctx(4, &mut ctx), 1);
         assert_eq!(gfx.resolve_action1_set(4), 0); // sin ctx → set[0]
+    }
+
+    #[test]
+    fn needs_runtime_resolve_for_any_variational() {
+        let mut gfx = TrainSpriteGraphics::default();
+        assert!(!gfx.needs_runtime_resolve());
+        gfx.action2_var.insert(
+            1,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x40,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(2, 1, 1)],
+                default: 3,
+            },
+        );
+        assert!(gfx.needs_runtime_resolve());
+    }
+
+    #[test]
+    fn resolve_variational_var40_from_unit_ctx() {
+        use crate::train_consist::action2_eval_ctx_for_unit;
+        use crate::vehicle::VehicleKind;
+
+        let mut vs = vec![
+            Vehicle::new(
+                1,
+                VehicleKind::Train,
+                TileCoord::new(0, 0),
+                TileCoord::new(0, 0),
+            ),
+            Vehicle::new(
+                2,
+                VehicleKind::Train,
+                TileCoord::new(0, 0),
+                TileCoord::new(0, 0),
+            ),
+        ];
+        vs[1].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        assert!(crate::train_consist::attach_wagon(&mut vs, 1, 2).is_ok());
+
+        let mut gfx = TrainSpriteGraphics::default();
+        // shift 0, and FF → ff position; rango set 7 si ff==1
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x40,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(7, 1, 1)],
+                default: 9,
+            },
+        );
+        gfx.action2_to_action1.insert(7, 0);
+        gfx.action2_to_action1.insert(9, 1);
+
+        let mut ctx_head = action2_eval_ctx_for_unit(&vs, 1, crate::tick::GameTick::new(0), &[], 0);
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx_head), 1); // ff=0 → default
+
+        let mut ctx_wagon =
+            action2_eval_ctx_for_unit(&vs, 2, crate::tick::GameTick::new(0), &[], 0);
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx_wagon), 0); // ff=1 → set 7
     }
 
     #[test]

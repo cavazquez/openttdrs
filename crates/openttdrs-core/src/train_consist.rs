@@ -4,15 +4,56 @@
 //! lleva órdenes y pathfinding; los vagones siguen la posición de la cabeza
 //! con offset por longitud acumulada.
 
-use crate::engine::{EngineDef, engine_by_id};
+use crate::cargo::CargoType;
+use crate::economy::TICKS_PER_TRANSIT_DAY;
+use crate::engine::{EngineDef, engine_by_id, engine_in_catalog};
 use crate::map::TileCoord;
 use crate::newgrf_sprites::Action2EvalCtx;
+use crate::news::{calendar_day_index, calendar_year_day};
+use crate::tick::GameTick;
 use crate::vehicle::{Vehicle, VehicleKind};
 
 /// Longitud de una unidad de tren en fracciones de tesela (`OpenTTD` `VEHICLE_LENGTH`).
 pub const VEHICLE_LENGTH: u8 = 8;
 /// Fracciones de tesela por tesela completa.
 pub const TILE_FRACTIONS: u16 = 256;
+
+/// Mapa fijo `CargoType` → cargo type A (clima templado TTD, sin tabla GRF).
+#[must_use]
+pub fn cargo_type_a_id(cargo: Option<CargoType>) -> u8 {
+    match cargo {
+        Some(CargoType::Passengers) => 0,
+        Some(CargoType::Coal) => 1,
+        Some(CargoType::Mail) => 2,
+        Some(CargoType::Oil) => 3,
+        Some(CargoType::Goods) => 5,
+        Some(CargoType::Wood) => 7,
+        None => 0xFF,
+    }
+}
+
+/// Clase de carga (bits) aproximada para var `47`.
+#[must_use]
+pub fn cargo_class_bits(cargo: Option<CargoType>) -> u16 {
+    match cargo {
+        Some(CargoType::Passengers) => 0x0001,
+        Some(CargoType::Mail) => 0x0002,
+        Some(CargoType::Goods) => 0x0020,
+        Some(CargoType::Coal | CargoType::Wood) => 0x0010,
+        Some(CargoType::Oil) => 0x0040,
+        None => 0,
+    }
+}
+
+fn cargo_unit_weight_16ths(cargo: Option<CargoType>) -> u8 {
+    match cargo {
+        Some(CargoType::Passengers) => 1,
+        Some(CargoType::Mail) => 4,
+        Some(CargoType::Goods) => 8,
+        Some(CargoType::Coal | CargoType::Wood | CargoType::Oil) => 16,
+        None => 0,
+    }
+}
 
 /// ¿El motor es un vagón (sin potencia, con capacidad de carga)?
 #[must_use]
@@ -48,10 +89,16 @@ pub fn consist_unit_ids(vehicles: &[Vehicle], head_id: u32) -> Vec<u32> {
 
 /// Contexto Action2 para dibujar/resolver sprites de una unidad del consist.
 ///
-/// `consist_random_bits[n]` = bits del vehículo a `n` pasos hacia la cabeza
-/// (`prev_unit`; 0 = la propia unidad). Usado por random Action2 `0x84`.
+/// Rellena `random_bits` / `consist_random_bits` y variables de vehículo MVP
+/// (`40`, `47`, `48`, `49`, `43`, `5F`, `B2`, `B4`, `B9`, `C0`, `C4`, `C6`, `C8`).
 #[must_use]
-pub fn action2_eval_ctx_for_unit(vehicles: &[Vehicle], unit_id: u32) -> Action2EvalCtx {
+pub fn action2_eval_ctx_for_unit(
+    vehicles: &[Vehicle],
+    unit_id: u32,
+    tick: GameTick,
+    engine_catalog: &[EngineDef],
+    owner_colour: u8,
+) -> Action2EvalCtx {
     let mut ctx = Action2EvalCtx::default();
     let mut cur = Some(unit_id);
     for offset in 0u8..=15 {
@@ -68,7 +115,89 @@ pub fn action2_eval_ctx_for_unit(vehicles: &[Vehicle], unit_id: u32) -> Action2E
         ctx.consist_random_bits.insert(offset, bits);
         cur = unit.prev_unit;
     }
+    fill_vehicle_action2_vars(
+        &mut ctx,
+        vehicles,
+        unit_id,
+        tick,
+        engine_catalog,
+        owner_colour,
+    );
     ctx
+}
+
+fn fill_vehicle_action2_vars(
+    ctx: &mut Action2EvalCtx,
+    vehicles: &[Vehicle],
+    unit_id: u32,
+    tick: GameTick,
+    engine_catalog: &[EngineDef],
+    owner_colour: u8,
+) {
+    let Some(unit) = vehicles.iter().find(|v| v.id == unit_id) else {
+        return;
+    };
+    let head_id = consist_head_id(vehicles, unit_id).unwrap_or(unit_id);
+    let ids = consist_unit_ids(vehicles, head_id);
+    let n = ids.len();
+    let ff = ids.iter().position(|&id| id == unit_id).unwrap_or(0);
+    let bb = n.saturating_sub(1).saturating_sub(ff);
+    let nn = n.saturating_sub(1); // var 40: zero-based count
+    let var40 = u32::from(u8::try_from(ff).unwrap_or(0xFF))
+        | (u32::from(u8::try_from(bb).unwrap_or(0xFF)) << 8)
+        | (u32::from(u8::try_from(nn).unwrap_or(0xFF)) << 16);
+    ctx.vars.insert(0x40, var40);
+
+    let cargo = unit.cargo_type;
+    let tt = cargo_type_a_id(cargo);
+    let ww = cargo_unit_weight_16ths(cargo);
+    let cccc = u32::from(cargo_class_bits(cargo));
+    let var47 = u32::from(tt) | (u32::from(ww) << 8) | (cccc << 16);
+    ctx.vars.insert(0x47, var47);
+    ctx.vars.insert(0xB9, u32::from(tt));
+
+    // bit0 = available on market
+    ctx.vars.insert(0x48, 1);
+
+    let build_year = calendar_year_day(calendar_day_index(GameTick::new(unit.build_tick))).0;
+    ctx.vars.insert(0x49, build_year);
+    ctx.vars.insert(
+        0xC4,
+        u32::from(u8::try_from(build_year.saturating_sub(1920).min(255)).unwrap_or(255)),
+    );
+
+    let age_days = tick.get().saturating_sub(unit.build_tick) / u64::from(TICKS_PER_TRANSIT_DAY);
+    ctx.vars.insert(
+        0xC0,
+        u32::try_from(age_days.min(u64::from(u16::MAX))).unwrap_or(u32::from(u16::MAX)),
+    );
+
+    // 43: Ccttmmnn — colour primary/secondary + company id
+    let nn_player = u32::from(unit.owner.0);
+    let mm = 0u32; // single-player host
+    let tt_player = 0u32; // human
+    let c = u32::from(owner_colour & 0x0F);
+    let var43 = nn_player | (mm << 8) | (tt_player << 16) | ((c | (c << 4)) << 24);
+    ctx.vars.insert(0x43, var43);
+
+    // 5F: triggers low byte + random bits in other bytes
+    let random_data = u32::from(unit.newgrf_random_bits) << 8;
+    ctx.vars.insert(0x5F, random_data);
+
+    let mut status = 0u32;
+    if !unit.running {
+        status |= 1 << 1;
+    }
+    ctx.vars.insert(0xB2, status);
+    ctx.vars.insert(0xB4, u32::from(unit.cur_speed));
+
+    let eng = unit
+        .engine_id
+        .and_then(|id| engine_in_catalog(engine_catalog, id));
+    let local_id = eng.map_or(0, |e| e.newgrf_local_id);
+    ctx.vars.insert(0xC6, u32::from(local_id));
+    // FD = trains forward
+    ctx.vars.insert(0xC8, 0xFD);
 }
 
 /// ID de la cabeza del consist que contiene `vehicle_id`.
@@ -358,6 +487,8 @@ pub fn sell_chain_ids(vehicles: &[Vehicle], vehicle_id: u32) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cargo::CargoType;
+    use crate::economy::TICKS_PER_TRANSIT_DAY;
     use crate::vehicle::VehicleKind;
 
     fn train(id: u32) -> Vehicle {
@@ -396,11 +527,47 @@ mod tests {
         vs[2].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
         assert!(attach_wagon(&mut vs, 1, 2).is_ok());
         assert!(attach_wagon(&mut vs, 1, 3).is_ok());
-        let ctx = action2_eval_ctx_for_unit(&vs, 3);
+        let ctx = action2_eval_ctx_for_unit(&vs, 3, crate::tick::GameTick::new(0), &[], 0);
         assert_eq!(ctx.random_bits, 0x33);
         assert_eq!(ctx.consist_random_bits.get(&0), Some(&0x33));
         assert_eq!(ctx.consist_random_bits.get(&1), Some(&0x22));
         assert_eq!(ctx.consist_random_bits.get(&2), Some(&0x11));
+    }
+
+    #[test]
+    fn action2_ctx_var40_consist_position() {
+        let mut vs = vec![train(1), train(2), train(3)];
+        vs[1].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        vs[2].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+        assert!(attach_wagon(&mut vs, 1, 3).is_ok());
+        let ctx = action2_eval_ctx_for_unit(&vs, 2, crate::tick::GameTick::new(0), &[], 4);
+        // head=1 ff=0; unit2 ff=1 bb=1; nn=2 (3 vehicles zero-based)
+        let v40 = ctx.vars.get(&0x40).copied();
+        assert_eq!(v40.map(|v| v & 0xFF), Some(1)); // ff
+        assert_eq!(v40.map(|v| (v >> 8) & 0xFF), Some(1)); // bb
+        assert_eq!(v40.map(|v| (v >> 16) & 0xFF), Some(2)); // nn
+    }
+
+    #[test]
+    fn action2_ctx_cargo_vars() {
+        let mut v = train(10);
+        v.cargo_type = Some(CargoType::Coal);
+        v.cur_speed = 40;
+        v.running = false;
+        let vs = vec![v];
+        let ctx = action2_eval_ctx_for_unit(
+            &vs,
+            10,
+            crate::tick::GameTick::new(u64::from(TICKS_PER_TRANSIT_DAY) * 10),
+            &[],
+            2,
+        );
+        assert_eq!(ctx.vars.get(&0xB9), Some(&1)); // coal type A
+        assert_eq!(ctx.vars.get(&0x47).map(|v| v & 0xFF), Some(1));
+        assert_eq!(ctx.vars.get(&0xB4), Some(&40));
+        assert_eq!(ctx.vars.get(&0xB2), Some(&(1 << 1)));
+        assert_eq!(ctx.vars.get(&0xC8), Some(&0xFD));
     }
 
     #[test]

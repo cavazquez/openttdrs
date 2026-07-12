@@ -87,6 +87,15 @@ impl NewGrfTrainSpriteCache {
                     .wrapping_add(u32::from(offset) << 24);
             }
         }
+        // Vars que suelen cambiar el sprite (consist / carga / estado / velocidad).
+        for &var in &[0x40_u8, 0x47, 0x43, 0x5F, 0xB2, 0xB4, 0xC8] {
+            if let Some(&v) = ctx.vars.get(&var) {
+                h = h
+                    .wrapping_mul(31)
+                    .wrapping_add(v)
+                    .wrapping_add(u32::from(var) << 16);
+            }
+        }
         h
     }
 
@@ -436,7 +445,14 @@ impl TruckHandles {
         {
             let colour = owner_colour.unwrap_or(CompanyColour::DarkBlue);
             if eng.newgrf_runtime.is_some() {
-                let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(&sim.state.vehicles, v.id);
+                let colour_u8 = colour.as_u8();
+                let mut ctx = openttdrs_core::action2_eval_ctx_for_unit(
+                    &sim.state.vehicles,
+                    v.id,
+                    sim.state.tick,
+                    &sim.state.engine_catalog,
+                    colour_u8,
+                );
                 if let Some(handle) = cache.handle_for_runtime(eng, dir, colour, &mut ctx, images) {
                     return handle;
                 }

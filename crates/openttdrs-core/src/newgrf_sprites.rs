@@ -1,9 +1,10 @@
 //! Decode mínimo de sprites reales `NewGRF` + Action1/2/3 (trains / roadtypes, preview).
 //!
-//! MVP: contenedor **v1** (o entradas reales inline), 8bpp plano o **LZ77**
-//! (bit `0x02`; sin chunked `0x08`). Action3→Action2→Action1 estático para
-//! **trains** (default moving; sin variational/callbacks). Road/station siguen
-//! Action3→Action1 directo. Action5 shore runtime parcial; 32bpp OOS.
+//! MVP: contenedor **v1** (o entradas reales inline), 8bpp plano, **LZ77**
+//! (bit `0x02`) y **chunked** tile (bit `0x08`). Action3→Action2→Action1
+//! estático para **trains** (default moving; sin variational/callbacks).
+//! Road/station siguen Action3→Action1 directo. Action5 shore runtime parcial;
+//! 32bpp / trozos anchos (`width>256`) OOS.
 
 use std::collections::HashMap;
 
@@ -146,18 +147,114 @@ pub fn decompress_grf_lz77(src: &[u8], out_len: usize) -> Option<Vec<u8>> {
     Some(dest)
 }
 
-/// Decodifica sprite real v1: `sprite_type` + `height…` + datos (plano o LZ77).
+/// LZ77 con tamaño de salida: plano = `pixel_len`; chunked prueba candidatos.
+fn decompress_sprite_lz77(
+    data: &[u8],
+    pixel_len: usize,
+    chunked: bool,
+    width: u16,
+    height: u16,
+) -> Option<Vec<u8>> {
+    if !chunked {
+        return decompress_grf_lz77(data, pixel_len);
+    }
+    // V1 usa `w*h`; buffers chunked reales/sintéticos pueden ser mayores.
+    let full_rows = usize::from(height).checked_mul(4 + usize::from(width))?;
+    let candidates = [
+        pixel_len,
+        full_rows,
+        data.len().saturating_mul(4).max(full_rows),
+    ];
+    for &n in &candidates {
+        if let Some(buf) = decompress_grf_lz77(data, n)
+            && decode_chunked_8bpp(&buf, width, height).is_some()
+        {
+            return Some(buf);
+        }
+    }
+    None
+}
+
+/// Decodifica buffer “tile” chunked 8bpp (offsets u16 + trozos `cinfo`/`cofs`).
 ///
-/// - Sin bit `0x02`: índices planos.
-/// - Con bit `0x02`: stream LZ77 → `width*height` índices.
-/// - Bit `0x08` (chunked) → `None` (OOS).
+/// Formato `OpenTTD`/`grf.txt` para `width ≤ 256`: por fila, offset LE desde el
+/// inicio del buffer; trozos `(length|last, skip, pixels…)`.
+#[must_use]
+pub fn decode_chunked_8bpp(buf: &[u8], width: u16, height: u16) -> Option<Vec<u8>> {
+    let w = usize::from(width);
+    let h = usize::from(height);
+    if w == 0 || h == 0 || w > 256 {
+        return None;
+    }
+    let table_bytes = h.checked_mul(2)?;
+    if buf.len() < table_bytes {
+        return None;
+    }
+    let mut out = vec![0u8; w.checked_mul(h)?];
+    for y in 0..h {
+        let offset = usize::from(u16::from_le_bytes([buf[y * 2], buf[y * 2 + 1]]));
+        if offset >= buf.len() {
+            return None;
+        }
+        let mut dest = offset;
+        loop {
+            if dest + 2 > buf.len() {
+                return None;
+            }
+            let cinfo = buf[dest];
+            let last = cinfo & 0x80 != 0;
+            let length = usize::from(cinfo & 0x7F);
+            let skip = usize::from(buf[dest + 1]);
+            dest += 2;
+            if skip.checked_add(length)? > w || dest.checked_add(length)? > buf.len() {
+                return None;
+            }
+            let row_at = y.checked_mul(w)?.checked_add(skip)?;
+            out[row_at..row_at + length].copy_from_slice(&buf[dest..dest + length]);
+            dest += length;
+            if last {
+                break;
+            }
+        }
+    }
+    Some(out)
+}
+
+/// Codifica índices planos → buffer chunked (1 trozo de fila completa, `width ≤ 127`).
+#[must_use]
+pub fn encode_chunked_8bpp_full_rows(width: u16, height: u16, indices: &[u8]) -> Option<Vec<u8>> {
+    let w = usize::from(width);
+    let h = usize::from(height);
+    if w == 0 || h == 0 || w > 127 || indices.len() < w.checked_mul(h)? {
+        return None;
+    }
+    let table_bytes = h * 2;
+    let mut body = Vec::with_capacity(h * (2 + w));
+    let mut offsets = Vec::with_capacity(h);
+    for y in 0..h {
+        offsets.push(u16::try_from(table_bytes + body.len()).ok()?);
+        let cinfo = 0x80u8 | u8::try_from(w).ok()?;
+        body.push(cinfo);
+        body.push(0); // skip
+        let row = y * w;
+        body.extend_from_slice(&indices[row..row + w]);
+    }
+    let mut out = Vec::with_capacity(table_bytes + body.len());
+    for off in offsets {
+        out.extend_from_slice(&off.to_le_bytes());
+    }
+    out.extend(body);
+    Some(out)
+}
+
+/// Decodifica sprite real v1: `sprite_type` + `height…` + datos (plano, LZ77 y/o chunked).
+///
+/// - Sin bit `0x02`: datos planos (o buffer chunked crudo).
+/// - Con bit `0x02`: stream LZ77 → buffer intermedio (`width*height` bytes).
+/// - Con bit `0x08`: el buffer intermedio es tile chunked → índices con huecos 0.
 #[must_use]
 pub fn decode_real_sprite_v1(sprite_type: u8, dim_and_data: &[u8]) -> Option<DecodedSprite> {
     if dim_and_data.len() < 7 {
-        return None;
-    }
-    // Chunked / tile compression → OOS.
-    if sprite_type & 0x08 != 0 {
         return None;
     }
     let height = u16::from(dim_and_data[0]);
@@ -167,15 +264,26 @@ pub fn decode_real_sprite_v1(sprite_type: u8, dim_and_data: &[u8]) -> Option<Dec
     if width == 0 || height == 0 || width > 512 || height > 512 {
         return None;
     }
-    let out_len = usize::from(width).checked_mul(usize::from(height))?;
+    let pixel_len = usize::from(width).checked_mul(usize::from(height))?;
     let data = &dim_and_data[7..];
-    let indices = if sprite_type & 0x02 != 0 {
-        decompress_grf_lz77(data, out_len)?
+    let chunked = sprite_type & 0x08 != 0;
+    let intermediate = if sprite_type & 0x02 != 0 {
+        decompress_sprite_lz77(data, pixel_len, chunked, width, height)?
+    } else if chunked {
+        data.to_vec()
     } else {
-        if data.len() < out_len {
+        if data.len() < pixel_len {
             return None;
         }
-        data[..out_len].to_vec()
+        data[..pixel_len].to_vec()
+    };
+    let indices = if chunked {
+        decode_chunked_8bpp(&intermediate, width, height)?
+    } else {
+        if intermediate.len() < pixel_len {
+            return None;
+        }
+        intermediate[..pixel_len].to_vec()
     };
     let rgba = indices_to_rgba(&indices, width, height)?;
     Some(DecodedSprite {
@@ -495,6 +603,41 @@ pub fn build_real_sprite_v1_compressed(
     body
 }
 
+/// Sprite real v1 chunked (`0x09` = transparente + tile).
+#[must_use]
+pub fn build_real_sprite_v1_chunked(
+    width: u16,
+    height: u16,
+    x_offs: i16,
+    y_offs: i16,
+    indices: &[u8],
+) -> Option<Vec<u8>> {
+    let chunked = encode_chunked_8bpp_full_rows(width, height, indices)?;
+    let mut body = Vec::with_capacity(8 + chunked.len());
+    body.push(0x09);
+    body.push(u8::try_from(height).unwrap_or(1));
+    body.extend_from_slice(&width.to_le_bytes());
+    body.extend_from_slice(&x_offs.to_le_bytes());
+    body.extend_from_slice(&y_offs.to_le_bytes());
+    body.extend(chunked);
+    Some(body)
+}
+
+/// Payload v2 canónico chunked (sin type; `info` = `0x09`).
+#[must_use]
+pub fn build_real_sprite_v1_chunked_payload(
+    width: u16,
+    height: u16,
+    x_offs: i16,
+    y_offs: i16,
+    indices: &[u8],
+) -> Option<Vec<u8>> {
+    let chunked = encode_chunked_8bpp_full_rows(width, height, indices)?;
+    let mut body = build_real_sprite_v1_dims(width, height, x_offs, y_offs, &[]);
+    body.extend(chunked);
+    Some(body)
+}
+
 /// Payload v2 canónico comprimido (sin type; el `info` del contenedor es `0x03`).
 #[must_use]
 pub fn build_real_sprite_v1_compressed_payload(
@@ -676,6 +819,53 @@ pub fn build_grf_v2_train_with_compressed_sprite(
     grfid: [u8; 4],
     name: &str,
 ) -> Vec<u8> {
+    build_grf_v2_train_with_sprite_info(
+        action0,
+        local_id,
+        0x03,
+        &build_real_sprite_v1_compressed_payload(
+            width,
+            height,
+            -i16::try_from(width / 2).unwrap_or(0),
+            -i16::try_from(height).unwrap_or(0),
+            indices,
+        ),
+        grfid,
+        name,
+    )
+}
+
+/// GRF v2 train con sprite chunked (`info=0x09`).
+#[must_use]
+pub fn build_grf_v2_train_with_chunked_sprite(
+    action0: &[u8],
+    local_id: u8,
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Option<Vec<u8>> {
+    let payload = build_real_sprite_v1_chunked_payload(
+        width,
+        height,
+        -i16::try_from(width / 2).unwrap_or(0),
+        -i16::try_from(height).unwrap_or(0),
+        indices,
+    )?;
+    Some(build_grf_v2_train_with_sprite_info(
+        action0, local_id, 0x09, &payload, grfid, name,
+    ))
+}
+
+fn build_grf_v2_train_with_sprite_info(
+    action0: &[u8],
+    local_id: u8,
+    info: u8,
+    sprite_body: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
     const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
     let action1 = build_action1_trains_payload(1, 1);
     let action3 = build_action3_trains_payload(local_id, 0);
@@ -685,14 +875,6 @@ pub fn build_grf_v2_train_with_compressed_sprite(
     action8.push(0);
     action8.push(0);
 
-    let sprite_body = build_real_sprite_v1_compressed_payload(
-        width,
-        height,
-        -i16::try_from(width / 2).unwrap_or(0),
-        -i16::try_from(height).unwrap_or(0),
-        indices,
-    );
-
     let mut data_section = Vec::new();
     for payload in [action0, action1.as_slice()] {
         let sz = u32::try_from(payload.len()).unwrap_or(0);
@@ -700,7 +882,7 @@ pub fn build_grf_v2_train_with_compressed_sprite(
         data_section.push(0xFF);
         data_section.extend_from_slice(payload);
     }
-    append_v2_real_sprite(&mut data_section, 0x03, &sprite_body);
+    append_v2_real_sprite(&mut data_section, info, sprite_body);
 
     for payload in [action3.as_slice(), action8.as_slice()] {
         let sz = u32::try_from(payload.len()).unwrap_or(0);
@@ -1210,8 +1392,41 @@ mod tests {
         let a = decode_real_sprite_v1_uncompressed(&plain).unwrap();
         let b = decode_real_sprite_v1_uncompressed(&compressed).unwrap();
         assert_eq!(a, b);
-        // Chunked rejected.
-        assert!(decode_real_sprite_v1(0x09, &plain[1..]).is_none());
+    }
+
+    #[test]
+    fn decode_chunked_sprite_matches_flat() {
+        let indices = [0u8, 174, 174, 0, 174, 0, 0, 174];
+        let plain = build_real_sprite_v1_uncompressed(4, 2, -1, -2, &indices);
+        let chunked = build_real_sprite_v1_chunked(4, 2, -1, -2, &indices).unwrap();
+        let a = decode_real_sprite_v1_uncompressed(&plain).unwrap();
+        let b = decode_real_sprite_v1_uncompressed(&chunked).unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn collect_train_chunked_sprite_from_synthetic_grf() {
+        let a0 = build_action0_train_payload(1981, 95, 720, "Chunk Loco");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = build_grf_v2_train_with_chunked_sprite(
+            &a0,
+            0,
+            8,
+            8,
+            &indices,
+            [b'T', b'C', 0, 1],
+            "tchunk",
+        )
+        .unwrap();
+        let gfx = collect_train_sprite_graphics(&bytes).unwrap();
+        let preview = gfx.preview_for_local_id(0).unwrap();
+        assert_eq!(preview.width, 8);
+        assert!(preview.rgba.iter().any(|&b| b != 0));
     }
 
     #[test]

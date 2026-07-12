@@ -5,7 +5,8 @@ use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite, spawn_rail_foundation}
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::road_newgrf::{
-    NewGrfRoadSpriteCache, newgrf_road_def_for_tile, road_newgrf_view_index,
+    NewGrfRoadSpriteCache, newgrf_road_def_for_tile, newgrf_tram_def_for_tile,
+    road_newgrf_view_index,
 };
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
@@ -35,8 +36,8 @@ pub(crate) fn spawn_road_tile(
     show_pbs_reservations: bool,
     show_full_detail: bool,
     road_catalog: &[RoadTypeDef],
-    road_sprites: Option<&mut NewGrfRoadSpriteCache>,
-    images: Option<&mut Assets<Image>>,
+    mut road_sprites: Option<&mut NewGrfRoadSpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -72,28 +73,31 @@ pub(crate) fn spawn_road_tile(
         );
     }
 
-    // NewGRF: en plano, sustituir el sprite de suelo road por la vista según
-    // `road_bits` (mismo índice que OpenGFX plano).
+    // NewGRF: sustituir el sprite de suelo road por la vista OpenGFX
+    // (`road_flat_sprite_index`, incl. pendientes 11–14).
     let mut used_newgrf = false;
-    let view_idx = road_newgrf_view_index(rb);
-    if tileh == 0
-        && let Some(tile) = ctx.tile
+    let view_idx = road_newgrf_view_index(tileh, rb);
+    if let Some(tile) = ctx.tile
         && let Some(def) = newgrf_road_def_for_tile(road_catalog, tile)
-        && let (Some(cache), Some(images)) = (road_sprites, images)
         && let Some(view) = def.newgrf_view(view_idx)
+        && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
         && let Some(handle) = cache.handle_for(def, view_idx, images)
     {
-        let pos3 = overlay_pos(
-            ctx.iso_pos,
-            f32::from(view.x_offs),
-            f32::from(view.y_offs),
-            f32::from(view.width),
-            f32::from(view.height),
-            base_z,
-            0.02,
-            ctx.tx_i32(),
-            ctx.ty_i32(),
-        );
+        let pos3 = if tileh == 0 {
+            overlay_pos(
+                ctx.iso_pos,
+                f32::from(view.x_offs),
+                f32::from(view.y_offs),
+                f32::from(view.width),
+                f32::from(view.height),
+                base_z,
+                0.02,
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+            )
+        } else {
+            tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, road_half_h)
+        };
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
@@ -133,18 +137,60 @@ pub(crate) fn spawn_road_tile(
         } else {
             SLOPE_HALF_H[tileh as usize]
         };
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            assets.tram_flat[tfi].sprite(),
-            Transform::from_translation(tile_pos_half(
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-                base_z,
-                TRAM_OVERLAY_LAYER_FRAC,
-                tram_half_h,
-            )),
-        ));
+        let mut used_tram_newgrf = false;
+        if let Some(tile) = ctx.tile
+            && let Some(def) = newgrf_tram_def_for_tile(road_catalog, tile)
+            && let Some(view) = def.newgrf_view(tfi)
+            && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
+            && let Some(handle) = cache.handle_for(def, tfi, images)
+        {
+            let pos3 = if tileh == 0 {
+                overlay_pos(
+                    ctx.iso_pos,
+                    f32::from(view.x_offs),
+                    f32::from(view.y_offs),
+                    f32::from(view.width),
+                    f32::from(view.height),
+                    base_z,
+                    TRAM_OVERLAY_LAYER_FRAC,
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                )
+            } else {
+                tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    TRAM_OVERLAY_LAYER_FRAC,
+                    tram_half_h,
+                )
+            };
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                Sprite {
+                    image: handle,
+                    color: Color::WHITE,
+                    ..default()
+                },
+                Transform::from_translation(pos3),
+            ));
+            used_tram_newgrf = true;
+        }
+        if !used_tram_newgrf {
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                assets.tram_flat[tfi].sprite(),
+                Transform::from_translation(tile_pos_half(
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                    base_z,
+                    TRAM_OVERLAY_LAYER_FRAC,
+                    tram_half_h,
+                )),
+            ));
+        }
     }
 
     // `Roadside::StreetLights` (3): faroles de `_roadside_lamps` en sus

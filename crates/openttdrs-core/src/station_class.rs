@@ -89,6 +89,12 @@ pub struct StationSpecDef {
     /// Vistas Action1/3 para in-world (MVP: se usa la primera en plano).
     #[serde(default, skip)]
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
+    /// Id local Action3 en el GRF (re-resolver Action2 en runtime).
+    #[serde(default, skip)]
+    pub newgrf_local_id: u8,
+    /// Graphics completas si Action2 var/random requiere runtime.
+    #[serde(default, skip)]
+    pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
 }
 
 impl StationSpecDef {
@@ -107,6 +113,20 @@ impl StationSpecDef {
             return self.newgrf_preview.as_ref();
         }
         self.newgrf_views.get(idx % self.newgrf_views.len())
+    }
+
+    /// Vista re-resolviendo Action2 con contexto (random/variational).
+    pub fn newgrf_view_runtime(
+        &self,
+        idx: usize,
+        ctx: &mut crate::newgrf_sprites::Action2EvalCtx,
+    ) -> Option<crate::newgrf_sprites::DecodedSprite> {
+        let runtime = self.newgrf_runtime.as_ref()?;
+        let views = runtime.views_for_local_id_ctx(self.newgrf_local_id, ctx)?;
+        if views.is_empty() {
+            return None;
+        }
+        Some(views[idx % views.len()].clone())
     }
 
     #[must_use]
@@ -146,6 +166,8 @@ pub fn vanilla_station_spec_catalog() -> Vec<StationSpecDef> {
         from_newgrf: false,
         newgrf_preview: None,
         newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: None,
     }]
 }
 

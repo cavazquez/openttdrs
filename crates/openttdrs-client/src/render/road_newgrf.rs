@@ -38,6 +38,18 @@ impl NewGrfRoadSpriteCache {
         view_idx: usize,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
+        if def.newgrf_runtime.is_some() {
+            let mut ctx = openttdrs_core::Action2EvalCtx::default();
+            let view = def.newgrf_view_runtime(view_idx, &mut ctx)?;
+            let idx = u8::try_from(view_idx).unwrap_or(0);
+            let key = (def.id.as_u8(), idx);
+            return Some(
+                self.handles
+                    .entry(key)
+                    .or_insert_with(|| images.add(Self::decoded_to_image(&view)))
+                    .clone(),
+            );
+        }
         let view = def.newgrf_view(view_idx)?;
         let idx = u8::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
         let key = (def.id.as_u8(), idx);

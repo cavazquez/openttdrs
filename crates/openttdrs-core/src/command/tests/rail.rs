@@ -114,6 +114,8 @@ fn place_rail_station_area_persists_newgrf_station_spec() {
         from_newgrf: true,
         newgrf_preview: None,
         newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: None,
     });
     s.current_station_class = class_id;
     s.current_station_spec = spec_id;

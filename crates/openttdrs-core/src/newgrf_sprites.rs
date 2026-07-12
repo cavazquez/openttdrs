@@ -709,10 +709,11 @@ fn parse_action1_feature(payload: &[u8], feature: u8) -> Option<(u8, u8)> {
     Some((num_sets, num_ent))
 }
 
-/// Action2 vehículo básico: `02 <feat> <set-id> <n-load> <n-loading> <words…>`.
+/// Action2 básico (vehículos / stations / roadtypes): `02 <feat> <set-id> <n1> <n2> <words…>`.
 ///
-/// Devuelve `(action2_set_id, primer Action1 set moving)`. Variational (`≥0x80`) → None.
-fn parse_action2_vehicle_basic(payload: &[u8], feature: u8) -> Option<(u8, u16)> {
+/// Devuelve `(action2_set_id, primer set Action1)`. Variational (`n1≥0x80`) → None.
+/// Roadtypes usan `01 00` (un set); stations pueden tener `n1=0` y `n2>0`.
+fn parse_action2_basic(payload: &[u8], feature: u8) -> Option<(u8, u16)> {
     if payload.len() < 5 || payload[0] != 0x02 {
         return None;
     }
@@ -720,13 +721,16 @@ fn parse_action2_vehicle_basic(payload: &[u8], feature: u8) -> Option<(u8, u16)>
         return None;
     }
     let set_id = payload[2];
-    let num_load = payload[3];
-    let num_loading = payload[4];
+    let num_ent1 = payload[3];
+    let num_ent2 = payload[4];
     // Variational / random Action2 → `parse_action2_variational` / `parse_action2_random`.
-    if num_load >= 0x80 || num_load == 0 || num_loading == 0 {
+    if num_ent1 >= 0x80 {
         return None;
     }
-    let n_words = usize::from(num_load) + usize::from(num_loading);
+    let n_words = usize::from(num_ent1) + usize::from(num_ent2);
+    if n_words == 0 {
+        return None;
+    }
     let words_start = 5usize;
     let words_end = words_start.checked_add(n_words.checked_mul(2)?)?;
     if payload.len() < words_end {
@@ -1203,7 +1207,15 @@ pub fn resolve_fd_sprite<S: ::std::hash::BuildHasher>(
     best.map(|(_, _, spr)| spr)
 }
 
-/// Recorre el GRF y extrae sets Action1 + Action2 (trains) + asignaciones Action3.
+/// Features con cadena Action3→Action2→Action1 (trains / stations / roadtypes).
+fn supports_action2_chain(feature: u8) -> bool {
+    matches!(
+        feature,
+        ACTION0_FEATURE_TRAINS | ACTION0_FEATURE_STATIONS | ACTION0_FEATURE_ROADTYPES
+    )
+}
+
+/// Recorre el GRF y extrae sets Action1 + Action2 + asignaciones Action3.
 ///
 /// # Errors
 ///
@@ -1267,15 +1279,15 @@ pub fn collect_feature_sprite_graphics(
                 sets_left = ns;
                 views_per_set = ne;
                 views_left_in_set = ne;
-            } else if feature == ACTION0_FEATURE_TRAINS
-                && let Some((a2_id, a1_idx)) = parse_action2_vehicle_basic(payload, feature)
+            } else if supports_action2_chain(feature)
+                && let Some((a2_id, a1_idx)) = parse_action2_basic(payload, feature)
             {
                 out.action2_to_action1.insert(a2_id, a1_idx);
-            } else if feature == ACTION0_FEATURE_TRAINS
+            } else if supports_action2_chain(feature)
                 && let Some((a2_id, var)) = parse_action2_variational(payload, feature)
             {
                 out.action2_var.insert(a2_id, var);
-            } else if feature == ACTION0_FEATURE_TRAINS
+            } else if supports_action2_chain(feature)
                 && let Some((a2_id, rnd)) = parse_action2_random(payload, feature)
             {
                 out.action2_random.insert(a2_id, rnd);
@@ -1538,6 +1550,22 @@ pub fn build_action2_trains_payload(
         action1_moving,
         action1_loading,
     )
+}
+
+/// Action2 single-set (roadtypes/canals/…): `01 00` + un set Action1.
+#[must_use]
+pub fn build_action2_single_set_payload(feature: u8, set_id: u8, action1_set: u16) -> Vec<u8> {
+    let mut p = vec![0x02, feature, set_id, 0x01, 0x00];
+    p.extend_from_slice(&action1_set.to_le_bytes());
+    p
+}
+
+/// Action2 stations: `numlittlesets=0`, `numlotssets=1` → un set Action1.
+#[must_use]
+pub fn build_action2_stations_payload(set_id: u8, action1_set: u16) -> Vec<u8> {
+    let mut p = vec![0x02, ACTION0_FEATURE_STATIONS, set_id, 0x00, 0x01];
+    p.extend_from_slice(&action1_set.to_le_bytes());
+    p
 }
 
 /// Action2 variational `0x81` con rangos opcionales (sin divide/modulo).
@@ -2128,6 +2156,122 @@ pub fn build_grf_v2_train_with_action2_chain(
     out.extend_from_slice(&data_section);
     out.extend_from_slice(&0u32.to_le_bytes());
     out
+}
+
+/// GRF v2: feature genérico con Action3 → Action2 básico → Action1.
+#[must_use]
+#[expect(clippy::too_many_arguments)]
+pub fn build_grf_v2_feature_with_action2_chain(
+    action0: &[u8],
+    feature: u8,
+    local_id: u8,
+    action2_set_id: u8,
+    action2_payload: &[u8],
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+    let action1 = build_action1_feature_payload(feature, 1, 1);
+    let action3 = build_action3_feature_payload(feature, local_id, u16::from(action2_set_id));
+    let mut action8 = vec![0x08, 0x07];
+    action8.extend_from_slice(&grfid);
+    action8.extend_from_slice(name.as_bytes());
+    action8.push(0);
+    action8.push(0);
+
+    let sprite_body = build_real_sprite_v1_uncompressed_payload(
+        width,
+        height,
+        -i16::try_from(width / 2).unwrap_or(0),
+        -i16::try_from(height).unwrap_or(0),
+        indices,
+    );
+
+    let mut data_section = Vec::new();
+    for payload in [action0, action1.as_slice()] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    append_v2_real_sprite(&mut data_section, 0x01, &sprite_body);
+
+    for payload in [action2_payload, action3.as_slice(), action8.as_slice()] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    data_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let sprite_offs = u32::try_from(1 + data_section.len()).unwrap_or(0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[0x00, 0x00]);
+    out.extend_from_slice(&SIG);
+    out.extend_from_slice(&sprite_offs.to_le_bytes());
+    out.push(0x00);
+    out.extend_from_slice(&data_section);
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out
+}
+
+/// GRF v2 station: Action3 → Action2 → Action1.
+#[must_use]
+#[expect(clippy::too_many_arguments)]
+pub fn build_grf_v2_station_with_action2_chain(
+    action0: &[u8],
+    local_id: u8,
+    action2_set_id: u8,
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    let a2 = build_action2_stations_payload(action2_set_id, 0);
+    build_grf_v2_feature_with_action2_chain(
+        action0,
+        ACTION0_FEATURE_STATIONS,
+        local_id,
+        action2_set_id,
+        &a2,
+        width,
+        height,
+        indices,
+        grfid,
+        name,
+    )
+}
+
+/// GRF v2 roadtype: Action3 → Action2 single-set → Action1.
+#[must_use]
+#[expect(clippy::too_many_arguments)]
+pub fn build_grf_v2_roadtype_with_action2_chain(
+    action0: &[u8],
+    local_id: u8,
+    action2_set_id: u8,
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    let a2 = build_action2_single_set_payload(ACTION0_FEATURE_ROADTYPES, action2_set_id, 0);
+    build_grf_v2_feature_with_action2_chain(
+        action0,
+        ACTION0_FEATURE_ROADTYPES,
+        local_id,
+        action2_set_id,
+        &a2,
+        width,
+        height,
+        indices,
+        grfid,
+        name,
+    )
 }
 
 /// GRF v2: Action3 → variational default → Action2 básico → Action1.
@@ -2929,9 +3073,73 @@ mod tests {
     }
 
     #[test]
+    fn collect_station_action2_chain_resolves() {
+        let a0 = crate::newgrf_actions::build_action0_station_payload(
+            b"A2ST",
+            b"Plat",
+            0,
+            0,
+            "A2 Station",
+        );
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let a2_id = 5u8;
+        let bytes = build_grf_v2_station_with_action2_chain(
+            &a0,
+            0,
+            a2_id,
+            8,
+            8,
+            &indices,
+            [b'S', b'A', 0, 2],
+            "sa2",
+        );
+        let gfx = collect_station_sprite_graphics(&bytes).unwrap();
+        assert_eq!(gfx.action2_to_action1.get(&a2_id), Some(&0));
+        assert_eq!(gfx.resolve_action1_set(u16::from(a2_id)), 0);
+        assert!(gfx.preview_for_local_id(0).is_some());
+    }
+
+    #[test]
+    fn collect_roadtype_action2_single_set_resolves() {
+        let a0 =
+            crate::newgrf_actions::build_action0_roadtype_payload(b"A2RD", false, 1970, "A2 Road");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let a2_id = 6u8;
+        let bytes = build_grf_v2_roadtype_with_action2_chain(
+            &a0,
+            0,
+            a2_id,
+            8,
+            8,
+            &indices,
+            [b'R', b'A', 0, 2],
+            "ra2",
+        );
+        let gfx = collect_roadtype_sprite_graphics(&bytes).unwrap();
+        assert_eq!(gfx.action2_to_action1.get(&a2_id), Some(&0));
+        assert_eq!(gfx.resolve_action1_set(u16::from(a2_id)), 0);
+        assert!(gfx.preview_for_local_id(0).is_some());
+        let single = build_action2_single_set_payload(ACTION0_FEATURE_ROADTYPES, 9, 3);
+        assert_eq!(
+            parse_action2_basic(&single, ACTION0_FEATURE_ROADTYPES),
+            Some((9, 3))
+        );
+    }
+
+    #[test]
     fn parse_action2_variational_default_only() {
         let payload = [0x02, ACTION0_FEATURE_TRAINS, 0x01, 0x81, 0x00];
-        assert!(parse_action2_vehicle_basic(&payload, ACTION0_FEATURE_TRAINS).is_none());
+        assert!(parse_action2_basic(&payload, ACTION0_FEATURE_TRAINS).is_none());
         let var = build_action2_trains_variational_default(9, 5);
         let parsed = parse_action2_variational(&var, ACTION0_FEATURE_TRAINS).unwrap();
         assert_eq!(parsed.0, 9);
@@ -2939,7 +3147,7 @@ mod tests {
         assert_eq!(parsed.1.ranges, vec![(5, 0, 0xFF)]);
         let basic = build_action2_trains_payload(3, 0, 0);
         assert_eq!(
-            parse_action2_vehicle_basic(&basic, ACTION0_FEATURE_TRAINS),
+            parse_action2_basic(&basic, ACTION0_FEATURE_TRAINS),
             Some((3, 0))
         );
         assert!(parse_action2_variational(&basic, ACTION0_FEATURE_TRAINS).is_none());

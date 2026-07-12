@@ -51,9 +51,21 @@ impl NewGrfStationSpriteCache {
         colour: Option<CompanyColour>,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
+        let colour_key = colour.map(CompanyColour::as_u8).unwrap_or(0xFF);
+        if def.newgrf_runtime.is_some() {
+            let mut ctx = openttdrs_core::Action2EvalCtx::default();
+            let view = def.newgrf_view_runtime(view_idx, &mut ctx)?;
+            let idx = u8::try_from(view_idx).unwrap_or(0);
+            let key = (def.id.as_u16(), idx, colour_key);
+            return Some(
+                self.handles
+                    .entry(key)
+                    .or_insert_with(|| images.add(Self::decoded_to_image(&view, colour)))
+                    .clone(),
+            );
+        }
         let view = def.newgrf_view(view_idx)?;
         let idx = u8::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
-        let colour_key = colour.map(CompanyColour::as_u8).unwrap_or(0xFF);
         let key = (def.id.as_u16(), idx, colour_key);
         Some(
             self.handles

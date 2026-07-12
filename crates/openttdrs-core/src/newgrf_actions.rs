@@ -468,6 +468,11 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
             let preview = views.first().cloned();
+            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+                Some(Box::new(gfx.clone()))
+            } else {
+                None
+            };
             catalog.push(RoadTypeDef {
                 id,
                 class: meta.class,
@@ -477,6 +482,8 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
                 from_newgrf: true,
                 newgrf_preview: preview,
                 newgrf_views: views,
+                newgrf_local_id: local_id,
+                newgrf_runtime,
             });
         }
     }
@@ -664,6 +671,11 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
                 .unwrap_or_default();
             let preview = views.first().cloned();
+            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+                Some(Box::new(gfx.clone()))
+            } else {
+                None
+            };
             specs.push(StationSpecDef {
                 id: spec_id,
                 class: class_id,
@@ -674,6 +686,8 @@ pub fn apply_newgrf_stations(state: &mut GameState, search_dirs: &[&Path]) {
                 from_newgrf: true,
                 newgrf_preview: preview,
                 newgrf_views: views,
+                newgrf_local_id: local_id,
+                newgrf_runtime,
             });
         }
     }
@@ -1255,6 +1269,76 @@ mod tests {
         assert_eq!(preview.width, 8);
         assert_eq!(preview.height, 8);
         assert_eq!(def.newgrf_views.len(), 1);
+        assert!(def.newgrf_view(0).is_some());
+    }
+
+    #[test]
+    fn apply_station_with_action2_chain_attaches_views() {
+        let a0 = build_action0_station_payload(b"A2ST", b"Plat", 0, 0, "A2 Andén");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::build_grf_v2_station_with_action2_chain(
+            &a0,
+            0,
+            7,
+            8,
+            8,
+            &indices,
+            [b'S', b'2', 0, 1],
+            "sa2",
+        );
+        let dir = tempfile_dir_with("sa2.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("sa2.grf", 2));
+        apply_newgrf_stations(&mut state, &[&dir]);
+        let def = state
+            .station_spec_catalog
+            .iter()
+            .find(|d| d.from_newgrf)
+            .unwrap();
+        assert_eq!(def.newgrf_views.len(), 1);
+        assert_eq!(def.newgrf_local_id, 0);
+        assert!(def.newgrf_view(0).is_some());
+    }
+
+    #[test]
+    fn apply_roadtype_with_action2_chain_attaches_views() {
+        let a0 = build_action0_roadtype_payload(b"A2RD", false, 1970, "A2 Cobble");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::build_grf_v2_roadtype_with_action2_chain(
+            &a0,
+            0,
+            8,
+            8,
+            8,
+            &indices,
+            [b'R', b'2', 0, 1],
+            "ra2",
+        );
+        let dir = tempfile_dir_with("ra2.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ra2.grf", 2));
+        apply_newgrf_road_types(&mut state, &[&dir]);
+        let def = state
+            .road_type_catalog
+            .iter()
+            .find(|d| d.from_newgrf)
+            .unwrap();
+        assert_eq!(def.newgrf_views.len(), 1);
+        assert_eq!(def.newgrf_local_id, 0);
         assert!(def.newgrf_view(0).is_some());
     }
 

@@ -9,10 +9,10 @@ use openttdrs_core::{DecodedSprite, Map, Station, StationSpecDef, StationSpecId,
 use crate::sprites::CompanyColour;
 use crate::sprites::company_palette::recolor_rgba8;
 
-/// `(station_spec_id, view_idx, company_colour)` → textura RGBA.
+/// `(station_spec_id, view_idx, company_colour, runtime_fp)` → textura RGBA.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfStationSpriteCache {
-    handles: HashMap<(u16, u8, u8), Handle<Image>>,
+    handles: HashMap<(u16, u8, u8, u32), Handle<Image>>,
 }
 
 impl NewGrfStationSpriteCache {
@@ -43,34 +43,45 @@ impl NewGrfStationSpriteCache {
         )
     }
 
-    /// Textura de la vista `view_idx` (MVP: 0), opcionalmente recoloreada.
-    pub(crate) fn handle_for(
+    fn runtime_fingerprint(ctx: &openttdrs_core::Action2EvalCtx) -> u32 {
+        let mut h = ctx.random_bits;
+        for &var in &[0x10_u8, 0x40, 0x42, 0x43, 0x5F, 0x67] {
+            if let Some(&v) = ctx.vars.get(&var) {
+                h = h
+                    .wrapping_mul(31)
+                    .wrapping_add(v)
+                    .wrapping_add(u32::from(var) << 16);
+            }
+        }
+        h
+    }
+
+    /// Textura re-resolviendo Action2 con vars de tesela.
+    pub(crate) fn handle_for_runtime(
         &mut self,
         def: &StationSpecDef,
         view_idx: usize,
         colour: Option<CompanyColour>,
+        ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
         let colour_key = colour.map(CompanyColour::as_u8).unwrap_or(0xFF);
-        if def.newgrf_runtime.is_some() {
-            let mut ctx = openttdrs_core::Action2EvalCtx::default();
-            let view = def.newgrf_view_runtime(view_idx, &mut ctx)?;
-            let idx = u8::try_from(view_idx).unwrap_or(0);
-            let key = (def.id.as_u16(), idx, colour_key);
-            return Some(
-                self.handles
-                    .entry(key)
-                    .or_insert_with(|| images.add(Self::decoded_to_image(&view, colour)))
-                    .clone(),
-            );
-        }
-        let view = def.newgrf_view(view_idx)?;
+        let fp = if def.newgrf_runtime.is_some() {
+            Self::runtime_fingerprint(ctx)
+        } else {
+            0
+        };
+        let view = if def.newgrf_runtime.is_some() {
+            def.newgrf_view_runtime(view_idx, ctx)?
+        } else {
+            def.newgrf_view(view_idx)?.clone()
+        };
         let idx = u8::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
-        let key = (def.id.as_u16(), idx, colour_key);
+        let key = (def.id.as_u16(), idx, colour_key, fp);
         Some(
             self.handles
                 .entry(key)
-                .or_insert_with(|| images.add(Self::decoded_to_image(view, colour)))
+                .or_insert_with(|| images.add(Self::decoded_to_image(&view, colour)))
                 .clone(),
         )
     }
@@ -89,7 +100,7 @@ pub(crate) fn newgrf_station_def_for_tile<'a>(
         return None;
     }
     let def = openttdrs_core::station_spec_def(catalog, st.station_spec)?;
-    if def.newgrf_view(0).is_some() {
+    if def.newgrf_view(0).is_some() || def.newgrf_runtime.is_some() {
         Some(def)
     } else {
         None
@@ -137,12 +148,17 @@ mod tests {
             .expect("newgrf station");
         let mut images = Assets::<Image>::default();
         let mut cache = NewGrfStationSpriteCache::default();
-        let handle = cache.handle_for(def, 0, None, &mut images).expect("handle");
+        let mut ctx = openttdrs_core::Action2EvalCtx::default();
+        let handle = cache
+            .handle_for_runtime(def, 0, None, &mut ctx, &mut images)
+            .expect("handle");
         assert!(images.get(&handle).is_some());
-        let again = cache.handle_for(def, 0, None, &mut images).expect("cached");
+        let again = cache
+            .handle_for_runtime(def, 0, None, &mut ctx, &mut images)
+            .expect("cached");
         assert_eq!(handle, again);
         let recolored = cache
-            .handle_for(def, 0, Some(CompanyColour::Red), &mut images)
+            .handle_for_runtime(def, 0, Some(CompanyColour::Red), &mut ctx, &mut images)
             .expect("recolor");
         assert_ne!(handle, recolored);
     }

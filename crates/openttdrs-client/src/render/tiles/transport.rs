@@ -81,34 +81,36 @@ pub(crate) fn spawn_road_tile(
         && let Some(def) = newgrf_road_def_for_tile(road_catalog, tile)
         && let Some(view) = def.newgrf_view(view_idx)
         && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
-        && let Some(handle) = cache.handle_for(def, view_idx, images)
     {
-        let pos3 = if tileh == 0 {
-            overlay_pos(
-                ctx.iso_pos,
-                f32::from(view.x_offs),
-                f32::from(view.y_offs),
-                f32::from(view.width),
-                f32::from(view.height),
-                base_z,
-                0.02,
-                ctx.tx_i32(),
-                ctx.ty_i32(),
-            )
-        } else {
-            tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, road_half_h)
-        };
-        commands.spawn((
-            MapVisualLayer,
-            ctx.map_tile_chunk(),
-            Sprite {
-                image: handle,
-                color: Color::WHITE,
-                ..default()
-            },
-            Transform::from_translation(pos3),
-        ));
-        used_newgrf = true;
+        let mut a2 = openttdrs_core::action2_eval_ctx_for_road_tile(map, tile, ctx.coord, climate);
+        if let Some(handle) = cache.handle_for_runtime(def, view_idx, &mut a2, images) {
+            let pos3 = if tileh == 0 {
+                overlay_pos(
+                    ctx.iso_pos,
+                    f32::from(view.x_offs),
+                    f32::from(view.y_offs),
+                    f32::from(view.width),
+                    f32::from(view.height),
+                    base_z,
+                    0.02,
+                    ctx.tx_i32(),
+                    ctx.ty_i32(),
+                )
+            } else {
+                tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.02, road_half_h)
+            };
+            commands.spawn((
+                MapVisualLayer,
+                ctx.map_tile_chunk(),
+                Sprite {
+                    image: handle,
+                    color: Color::WHITE,
+                    ..default()
+                },
+                Transform::from_translation(pos3),
+            ));
+            used_newgrf = true;
+        }
     }
 
     if !used_newgrf {
@@ -142,40 +144,43 @@ pub(crate) fn spawn_road_tile(
             && let Some(def) = newgrf_tram_def_for_tile(road_catalog, tile)
             && let Some(view) = def.newgrf_view(tfi)
             && let (Some(cache), Some(images)) = (road_sprites.as_mut(), images.as_mut())
-            && let Some(handle) = cache.handle_for(def, tfi, images)
         {
-            let pos3 = if tileh == 0 {
-                overlay_pos(
-                    ctx.iso_pos,
-                    f32::from(view.x_offs),
-                    f32::from(view.y_offs),
-                    f32::from(view.width),
-                    f32::from(view.height),
-                    base_z,
-                    TRAM_OVERLAY_LAYER_FRAC,
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                )
-            } else {
-                tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    TRAM_OVERLAY_LAYER_FRAC,
-                    tram_half_h,
-                )
-            };
-            commands.spawn((
-                MapVisualLayer,
-                ctx.map_tile_chunk(),
-                Sprite {
-                    image: handle,
-                    color: Color::WHITE,
-                    ..default()
-                },
-                Transform::from_translation(pos3),
-            ));
-            used_tram_newgrf = true;
+            let mut a2 =
+                openttdrs_core::action2_eval_ctx_for_road_tile(map, tile, ctx.coord, climate);
+            if let Some(handle) = cache.handle_for_runtime(def, tfi, &mut a2, images) {
+                let pos3 = if tileh == 0 {
+                    overlay_pos(
+                        ctx.iso_pos,
+                        f32::from(view.x_offs),
+                        f32::from(view.y_offs),
+                        f32::from(view.width),
+                        f32::from(view.height),
+                        base_z,
+                        TRAM_OVERLAY_LAYER_FRAC,
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                    )
+                } else {
+                    tile_pos_half(
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                        base_z,
+                        TRAM_OVERLAY_LAYER_FRAC,
+                        tram_half_h,
+                    )
+                };
+                commands.spawn((
+                    MapVisualLayer,
+                    ctx.map_tile_chunk(),
+                    Sprite {
+                        image: handle,
+                        color: Color::WHITE,
+                        ..default()
+                    },
+                    Transform::from_translation(pos3),
+                ));
+                used_tram_newgrf = true;
+            }
         }
         if !used_tram_newgrf {
             commands.spawn((

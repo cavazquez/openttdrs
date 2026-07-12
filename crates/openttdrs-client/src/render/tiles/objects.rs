@@ -52,6 +52,7 @@ pub(crate) fn spawn_station_tile(
     mut images: Option<&mut Assets<Image>>,
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    climate: openttdrs_core::Climate,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -120,30 +121,37 @@ pub(crate) fn spawn_station_tile(
                     newgrf_station_def_for_tile(station_catalog, map, stations, ctx.coord)
                 && let Some(view) = def.newgrf_view(0)
                 && let (Some(cache), Some(images)) = (station_sprites.as_mut(), images.as_mut())
-                && let Some(handle) = cache.handle_for(def, 0, owner_colour, images)
             {
-                let pos3 = crate::iso::overlay_pos(
-                    ctx.iso_pos,
-                    f32::from(view.x_offs),
-                    f32::from(view.y_offs),
-                    f32::from(view.width),
-                    f32::from(view.height),
-                    rail_base_z,
-                    0.04,
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
+                let colour_u8 = owner_colour.map(CompanyColour::as_u8).unwrap_or(0);
+                let mut a2 = openttdrs_core::action2_eval_ctx_for_station_tile(
+                    map, stations, ctx.coord, colour_u8, climate,
                 );
-                commands.spawn((
-                    MapVisualLayer,
-                    ctx.map_tile_chunk(),
-                    tint_building_sprite(Sprite {
-                        image: handle,
-                        color: Color::WHITE,
-                        ..default()
-                    }),
-                    Transform::from_translation(pos3),
-                ));
-                used_newgrf = true;
+                if let Some(handle) =
+                    cache.handle_for_runtime(def, 0, owner_colour, &mut a2, images)
+                {
+                    let pos3 = crate::iso::overlay_pos(
+                        ctx.iso_pos,
+                        f32::from(view.x_offs),
+                        f32::from(view.y_offs),
+                        f32::from(view.width),
+                        f32::from(view.height),
+                        rail_base_z,
+                        0.04,
+                        ctx.tx_i32(),
+                        ctx.ty_i32(),
+                    );
+                    commands.spawn((
+                        MapVisualLayer,
+                        ctx.map_tile_chunk(),
+                        tint_building_sprite(Sprite {
+                            image: handle,
+                            color: Color::WHITE,
+                            ..default()
+                        }),
+                        Transform::from_translation(pos3),
+                    ));
+                    used_newgrf = true;
+                }
             }
             if !buildings_hidden() && !used_newgrf {
                 for layer in overlay_layers {

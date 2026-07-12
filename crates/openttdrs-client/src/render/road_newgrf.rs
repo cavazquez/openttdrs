@@ -6,10 +6,10 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use openttdrs_core::{DecodedSprite, RoadTypeDef};
 
-/// `(road_type_id, view_idx)` → textura RGBA.
+/// `(road_type_id, view_idx, runtime_fp)` → textura RGBA.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfRoadSpriteCache {
-    handles: HashMap<(u8, u8), Handle<Image>>,
+    handles: HashMap<(u8, u8, u32), Handle<Image>>,
 }
 
 impl NewGrfRoadSpriteCache {
@@ -31,32 +31,43 @@ impl NewGrfRoadSpriteCache {
         )
     }
 
-    /// Textura de la vista `view_idx` (`road_flat_sprite_index` / tram).
-    pub(crate) fn handle_for(
+    fn runtime_fingerprint(ctx: &openttdrs_core::Action2EvalCtx) -> u32 {
+        let mut h = ctx.random_bits;
+        for &var in &[0x40_u8, 0x42, 0x45, 0x5F] {
+            if let Some(&v) = ctx.vars.get(&var) {
+                h = h
+                    .wrapping_mul(31)
+                    .wrapping_add(v)
+                    .wrapping_add(u32::from(var) << 16);
+            }
+        }
+        h
+    }
+
+    /// Textura re-resolviendo Action2 con vars de tesela.
+    pub(crate) fn handle_for_runtime(
         &mut self,
         def: &RoadTypeDef,
         view_idx: usize,
+        ctx: &mut openttdrs_core::Action2EvalCtx,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
-        if def.newgrf_runtime.is_some() {
-            let mut ctx = openttdrs_core::Action2EvalCtx::default();
-            let view = def.newgrf_view_runtime(view_idx, &mut ctx)?;
-            let idx = u8::try_from(view_idx).unwrap_or(0);
-            let key = (def.id.as_u8(), idx);
-            return Some(
-                self.handles
-                    .entry(key)
-                    .or_insert_with(|| images.add(Self::decoded_to_image(&view)))
-                    .clone(),
-            );
-        }
-        let view = def.newgrf_view(view_idx)?;
+        let fp = if def.newgrf_runtime.is_some() {
+            Self::runtime_fingerprint(ctx)
+        } else {
+            0
+        };
+        let view = if def.newgrf_runtime.is_some() {
+            def.newgrf_view_runtime(view_idx, ctx)?
+        } else {
+            def.newgrf_view(view_idx)?.clone()
+        };
         let idx = u8::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
-        let key = (def.id.as_u8(), idx);
+        let key = (def.id.as_u8(), idx, fp);
         Some(
             self.handles
                 .entry(key)
-                .or_insert_with(|| images.add(Self::decoded_to_image(view)))
+                .or_insert_with(|| images.add(Self::decoded_to_image(&view)))
                 .clone(),
         )
     }
@@ -73,7 +84,7 @@ pub(crate) fn newgrf_road_def_for_tile(
         return None;
     }
     let def = openttdrs_core::road_type_def(catalog, rt)?;
-    if def.newgrf_view(0).is_some() {
+    if def.newgrf_view(0).is_some() || def.newgrf_runtime.is_some() {
         Some(def)
     } else {
         None
@@ -91,7 +102,7 @@ pub(crate) fn newgrf_tram_def_for_tile(
         return None;
     }
     let def = openttdrs_core::road_type_def(catalog, rt)?;
-    if def.newgrf_view(0).is_some() {
+    if def.newgrf_view(0).is_some() || def.newgrf_runtime.is_some() {
         Some(def)
     } else {
         None
@@ -145,20 +156,29 @@ mod tests {
             .expect("newgrf road");
         let mut images = Assets::<Image>::default();
         let mut cache = NewGrfRoadSpriteCache::default();
-        let handle = cache.handle_for(def, 0, &mut images).expect("handle");
+        let mut ctx = openttdrs_core::Action2EvalCtx::default();
+        let handle = cache
+            .handle_for_runtime(def, 0, &mut ctx, &mut images)
+            .expect("handle");
         assert!(images.get(&handle).is_some());
-        let again = cache.handle_for(def, 0, &mut images).expect("cached");
+        let again = cache
+            .handle_for_runtime(def, 0, &mut ctx, &mut images)
+            .expect("cached");
         assert_eq!(handle, again);
         // Curva / cruce: índices distintos al 0 (módulo len si hay una sola vista).
         let cross = road_newgrf_view_index(0, 0x0F);
         assert_ne!(cross, 0);
-        let h_cross = cache.handle_for(def, cross, &mut images).expect("cross");
+        let h_cross = cache
+            .handle_for_runtime(def, cross, &mut ctx, &mut images)
+            .expect("cross");
         // Con 1 vista, el módulo reutiliza el mismo handle.
         assert_eq!(handle, h_cross);
         // Pendiente diagonal: índice OpenGFX 11 (módulo → misma textura).
         let slope = road_newgrf_view_index(12, 0x05);
         assert_eq!(slope, 11);
-        let h_slope = cache.handle_for(def, slope, &mut images).expect("slope");
+        let h_slope = cache
+            .handle_for_runtime(def, slope, &mut ctx, &mut images)
+            .expect("slope");
         assert_eq!(handle, h_slope);
     }
 

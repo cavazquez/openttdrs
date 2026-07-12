@@ -1,12 +1,14 @@
 # Documentación — openttdrs
 
-Índice de la carpeta `docs/`. Para empezar a desarrollar o planificar, leer en este orden:
+Índice de `docs/`. Orden sugerido al entrar al proyecto:
 
-1. [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) — plan de trabajo actual (6 sprints, hito 0.1)
-2. [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) — **menús de flota** (órdenes, vehículo, depósito): handoff para IAs
-3. [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) — qué tenemos vs OpenTTD y costo de cada gap
-4. [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) — hallazgos técnicos fijos y comandos útiles
-5. [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) — filosofía I0–I8 y estado del código
+1. [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) — paridad UI + NewGRF (fuente de “siguiente corte”)
+2. [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) — sprints del hito 0.1
+3. [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) — gaps vs OpenTTD
+4. [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) — hallazgos técnicos fijos y comandos
+5. [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) — filosofía I0–I8
+
+**Issues de backlog:** [github.com/cavazquez/openttdrs/issues](https://github.com/cavazquez/openttdrs/issues) (abiertas desde los ROADMAP, jul 2026).
 
 ---
 
@@ -14,50 +16,49 @@
 
 | Documento | Uso |
 |-----------|-----|
+| [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) | UI-0…UI-8, NewGRF Action0–14, siguiente corte |
+| [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md) | Cargo packets, YAPF/PBS, economía, mono/maglev |
 | [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) | Sprints S1–S6, criterios de cierre 0.1 |
-| [ROADMAP_IMPORTACION_OPENTTD.md](ROADMAP_IMPORTACION_OPENTTD.md) | **Importación desde original:** animaciones, sonido, música, dinámicas (tablas + orden sugerido) |
-| [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) | Menús flota (vehículo, órdenes, depósito), comandos, gaps OTTD, handoff IA |
-| [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) | Inventario features + mecánicas iguales/diferentes |
-| [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) | Spec incremental I0–I8, traducción upstream ↔ Rust |
-| [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) | Prioridades, hallazgos de tiles/sprites, comandos |
-| [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md) | Checklist visual vs OpenTTD 15.3 (mayoría [x]) |
-| [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) | Elevar / bajar / nivelar terreno (T1–T3) |
-| [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) | Barra inferior, ticker y cartel de noticias (N1–N5) |
-| [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md) | **Handoff:** construcción carretera drag/orientación (bug abierto) |
-| [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md) | **Cruces ferroviarios:** catálogo completo [Junctionary OTTD](https://wiki.openttd.org/en/Community/Junctionary/) (J0–J5) |
-| [HANDOFF_BUGS_VISUALES_TERRAIN.md](HANDOFF_BUGS_VISUALES_TERRAIN.md) | **Handoff:** teselas oscuras, ghost al iniciar, casas Toyland, densidad hierba (jul 2026) |
-| [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md) | **Handoff:** export `.sav` (mapa+DATE+PLYR); JSON vs sav; cómo extender |
-| [DEV_BOT.md](DEV_BOT.md) | **DevBot:** sonda headless carga/descarga/ingresos — comandos listos |
-| [epics/ai_rivals.md](epics/ai_rivals.md) | Épica futura: IA rivales CPU |
-| [parity/RAIL_REVIEW_HANDOFF.md](parity/RAIL_REVIEW_HANDOFF.md) | **Handoff IA avanzada:** revisión post Rail 0–4 (paridad ferroviaria) |
-| [ROADMAP_MAIN_MENU.md](ROADMAP_MAIN_MENU.md) | Menú inicio — pantallas, Nueva partida procedural, cargar, intro animada (fase 2) |
+| [ROADMAP_IMPORTACION_OPENTTD.md](ROADMAP_IMPORTACION_OPENTTD.md) | Animaciones, audio, dinámicas importables |
+| [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) | Menús de flota (órdenes, vehículo, depósito) |
+| [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) | Inventario features vs original |
+| [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) | Spec I0–I8 |
+| [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) | Hallazgos de tiles/sprites, comandos |
+| [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md) | Checklist visual SP3 |
+| [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) | Elevar / bajar / nivelar / gen mundo |
+| [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) | Barra inferior y noticias |
+| [ROADMAP_MAIN_MENU.md](ROADMAP_MAIN_MENU.md) | Menú inicio / Nueva partida |
+| [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md) | Handoff drag carretera |
+| [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md) | Cruces ferroviarios (Junctionary) |
+| [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md) | Export `.sav` |
+| [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md) | Industrias gfx 0–174 / NewGRF ≥175 |
+| [DEV_BOT.md](DEV_BOT.md) | Sonda headless carga/ingresos |
+| [epics/ai_rivals.md](epics/ai_rivals.md) | Épica IA rivales |
+| [parity/RAIL_REVIEW_HANDOFF.md](parity/RAIL_REVIEW_HANDOFF.md) | Handoff revisión ferroviaria |
 
-### Organización del código (jun 2026)
-
-Módulos grandes partidos siguiendo el patrón `ui/save_window/`:
+### Organización del código
 
 | Área | Ruta |
 |------|------|
 | Menú inicio | `crates/openttdrs-client/src/ui/main_menu/` |
-| Flota (vehículo, órdenes, depósito) | `ui/vehicle_window.rs`, `ui/toolbar/order_panel/`, `ui/toolbar/depot_panel.rs` — ver [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) |
-| Población procedural | `crates/openttdrs-client/src/state/bootstrap/procedural_population/` |
-| Comandos transporte | `crates/openttdrs-core/src/command/transport/` |
-| Tests de command | `crates/openttdrs-core/src/command/tests/` |
-
-Las APIs públicas (`ui.rs`, `command/mod.rs`, `bootstrap/world.rs`) no cambiaron de imports.
+| Flota | `ui/vehicle_window.rs`, `ui/toolbar/order_panel/`, `depot_panel.rs` |
+| NewGRF render | `render/station_newgrf.rs`, `road_newgrf.rs`, `vehicles.rs` |
+| Población procedural | `state/bootstrap/procedural_population/` |
+| Comandos transporte | `openttdrs-core/src/command/transport/` |
+| Action2 / sprites GRF | `openttdrs-core/src/newgrf_sprites.rs`, `station_action2.rs`, `road_action2.rs` |
 
 ---
 
-## Mapa, saves y flujo de datos
+## Mapa, saves y flujo
 
 | Documento | Uso |
 |-----------|-----|
 | [FLUJO_MAPA_Y_CLIENTE.md](FLUJO_MAPA_Y_CLIENTE.md) | Save → `.ottdmap` → cliente → JSON |
-| [OTTDMAP_FORMAT.md](OTTDMAP_FORMAT.md) | Especificación binaria `.ottdmap` |
-| [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) | MAPT, `m5`, semántica tiles OpenTTD |
-| [SENALES_FERROVIARIAS.md](SENALES_FERROVIARIAS.md) | Tipos de señal OpenTTD, codificación mapa, plan de implementación |
-| [VIAS_FERROVIARIAS_COLOCACION.md](VIAS_FERROVIARIAS_COLOCACION.md) | Horz/Vert/X/Y vs autoraíl, uniones, pick de señales |
-| [SNAPSHOT_ORACLE_WORKFLOW.md](SNAPSHOT_ORACLE_WORKFLOW.md) | Comparación manual con fork OpenTTD oráculo |
+| [OTTDMAP_FORMAT.md](OTTDMAP_FORMAT.md) | Spec binaria `.ottdmap` |
+| [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) | MAPT, `m5`, chunks |
+| [SENALES_FERROVIARIAS.md](SENALES_FERROVIARIAS.md) | Señales, PBS, pick diagonal |
+| [VIAS_FERROVIARIAS_COLOCACION.md](VIAS_FERROVIARIAS_COLOCACION.md) | Autorail vs bits, uniones |
+| [SNAPSHOT_ORACLE_WORKFLOW.md](SNAPSHOT_ORACLE_WORKFLOW.md) | Comparación con fork oráculo |
 
 ---
 
@@ -65,20 +66,22 @@ Las APIs públicas (`ui.rs`, `command/mod.rs`, `bootstrap/world.rs`) no cambiaro
 
 | Documento | Uso |
 |-----------|-----|
-| [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) | Guía práctica: NFO, extracción, proyección isométrica; **§ locomotoras** (gap visual trenes) |
-| [SPRITES_OPENGFX_COMPLETO.md](SPRITES_OPENGFX_COMPLETO.md) | Catálogo de IDs de sprite (referencia) |
-| [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md) | Paridad industrias gfx 0–174 |
-| [INDUSTRIAS_OPENGFX.md](INDUSTRIAS_OPENGFX.md) | Tabla gfx → sprite_id por industria |
-| [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) | Auditoría de assets PNG y fixtures visuales |
+| [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) | Extracción, isometría, locomotoras |
+| [SPRITES_OPENGFX_COMPLETO.md](SPRITES_OPENGFX_COMPLETO.md) | Catálogo de IDs |
+| [INDUSTRIAS_OPENGFX.md](INDUSTRIAS_OPENGFX.md) | gfx → sprite |
+| [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) | Auditoría PNG / fixtures |
+| [HANDOFF_BUGS_VISUALES_TERRAIN.md](HANDOFF_BUGS_VISUALES_TERRAIN.md) | Bugs visuales terreno |
+| [HANDOFF_WAYPOINTS_RAIL.md](HANDOFF_WAYPOINTS_RAIL.md) | Waypoints rail |
 
 ---
 
-## Construcción y regresión (SP2 cerrado)
+## Construcción (SP2 cerrado)
 
 | Documento | Uso |
 |-----------|-----|
-| [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | Checklist manual + automático construcción |
-| [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Paradas bus/camión/tren, sprites, conexión carretera |
+| [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | Checklist construcción |
+| [SP1_CHECKLIST.md](SP1_CHECKLIST.md) | Ciclo jugable (sesión manual) |
+| [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Paradas bus/camión/tren |
 
 ---
 
@@ -86,27 +89,16 @@ Las APIs públicas (`ui.rs`, `command/mod.rs`, `bootstrap/world.rs`) no cambiaro
 
 | Documento | Uso |
 |-----------|-----|
-| [INFORME_ARQUITECTURA_OPENTTD.md](INFORME_ARQUITECTURA_OPENTTD.md) | Arquitectura OpenTTD C++ (clon local) |
+| [INFORME_ARQUITECTURA_OPENTTD.md](INFORME_ARQUITECTURA_OPENTTD.md) | Arquitectura C++ (clon local) |
+
+Clon: `./scripts/fetch-openttd-reference.sh` → `reference/openttd-upstream/`.
 
 ---
 
 ## Archivo histórico
 
-Planes y notas de sesión **cerrados o absorbidos en código** — conservados por contexto, no son la fuente de verdad actual:
-
-| Documento | Motivo del archivo |
-|-----------|-------------------|
-| [archive/PLAN_SP2_CONSTRUCCION.md](archive/PLAN_SP2_CONSTRUCCION.md) | SP2 cerrado 2026-05-22 |
-| [archive/PLAN_SP4_PULIDO.md](archive/PLAN_SP4_PULIDO.md) | Sustituido por ROADMAP_SPRINTS S1 |
-| [archive/PLAN_SP3_VISUAL.md](archive/PLAN_SP3_VISUAL.md) | Fases SP3.0–3.6 cerradas; huecos en ROADMAP_SPRINTS S3 |
-| [archive/PLAN_SP3_CASAS_INDUSTRIAS.md](archive/PLAN_SP3_CASAS_INDUSTRIAS.md) | P1–P6 cerrados |
-| [archive/PLAN_PARADAS_REMAPCOORDS.md](archive/PLAN_PARADAS_REMAPCOORDS.md) | Implementado en código |
-| [archive/PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md](archive/PLAN_DEPOSITO_CARRETERA_REMAPCOORDS.md) | Implementado (jun 2026) — histórico |
-| [archive/SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md](archive/SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md) | Nota de sesión; integrado en core/cliente |
-| [archive/SESION_CLIENTE_MAPA_COSTA_2026-04-28.md](archive/SESION_CLIENTE_MAPA_COSTA_2026-04-28.md) | Nota de sesión costa/agua |
-
-Ver [archive/README.md](archive/README.md).
+Planes cerrados o absorbidos — no son fuente de verdad actual: [archive/README.md](archive/README.md).
 
 ---
 
-*Última actualización: 2026-06-22 (refactor módulos, menú fase 2, CI nextest)*
+*Última actualización: 2026-07-12 (NewGRF Action2, issues de backlog, índice alineado al README raíz)*

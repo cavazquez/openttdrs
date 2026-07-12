@@ -942,7 +942,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** vars de tesela stations/road en runtime, o segunda humana / editor.
+**Siguiente:** Action `0x0E` tiletypes / tablas de traducción, o segunda humana / editor.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -988,6 +988,7 @@ Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 27. ~~Vars vehículo runtime (`40`/`47`/`B4`/…) al dibujar.~~ ✅
 28. ~~Procedure call `7E` + `\2psto` (`7C` / `1C`).~~ ✅
 29. ~~Action2 stations/road in-world (parse + resolve al cargar).~~ ✅
+30. ~~Vars de tesela stations/road en runtime (`40`/`42`/`43`/`45`/`5F`/…).~~ ✅
 
 Progreso backend OOS (JoinStation rail + CargoDist observacional):
 

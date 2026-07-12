@@ -119,10 +119,19 @@ pub struct Station {
     /// Spec NewGRF/vanilla usado al construir (`StationSpecId`; 0 = default).
     #[serde(default)]
     pub station_spec: crate::station_class::StationSpecId,
+    /// Bits aleatorios `NewGRF` de la estación (var `5F` / random Action2).
+    #[serde(default)]
+    pub newgrf_random_bits: u8,
 }
 
 const fn default_station_rating() -> u8 {
     255
+}
+
+fn seed_station_newgrf_random_bits(pos: TileCoord) -> u8 {
+    let x = pos.x.cast_unsigned();
+    let y = pos.y.cast_unsigned();
+    ((x.wrapping_mul(0x9E37_79B9) ^ y.wrapping_mul(0x85EB_CA6B)) >> 24) as u8
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
@@ -165,6 +174,7 @@ impl Station {
             airport_tiles: Vec::new(),
             joined_tiles: Vec::new(),
             station_spec: crate::station_class::StationSpecId::DefaultRail,
+            newgrf_random_bits: seed_station_newgrf_random_bits(pos),
         }
     }
 

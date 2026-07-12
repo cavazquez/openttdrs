@@ -40,6 +40,7 @@ pub mod rail_pbs;
 pub mod rail_signals;
 pub mod rail_type;
 pub mod refit;
+pub mod road_action2;
 pub mod road_movement;
 pub mod road_type;
 pub mod sav;
@@ -52,6 +53,7 @@ mod sim_events;
 mod sim_step;
 pub mod sound_id;
 pub mod station;
+pub mod station_action2;
 pub mod station_class;
 pub mod subsidy;
 pub mod tick;
@@ -261,6 +263,7 @@ pub use refit::{
     next_refit_cargo, refit_allowed, refittable_cargo_types, vehicle_hidden_on_map,
     vehicle_in_depot,
 };
+pub use road_action2::action2_eval_ctx_for_road_tile;
 pub use road_movement::{
     BayStationTable, VehiclePose, bay_station_table, extrapolate_vehicle_pose,
     retreat_vehicle_pose, road_turn_entry_exit, straight_subtile, train_straight_subtile,
@@ -309,6 +312,7 @@ pub use station::{
     station_type_from_m6, stop_kind_from_m6, tick_station_cargo_age, train_on_rail_platform,
     vehicle_at_road_stop, vehicle_physically_at_station,
 };
+pub use station_action2::action2_eval_ctx_for_station_tile;
 pub use station_class::{
     StationClassDef, StationClassId, StationSpecDef, StationSpecId, all_station_class_defs,
     all_station_spec_defs, list_station_classes, list_station_specs, next_free_station_class_id,

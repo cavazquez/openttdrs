@@ -631,6 +631,7 @@ fn spawn_map_tiles_in_bounds(
                 Some(images),
                 &sim.state.catenary_newgrf_sprites,
                 Some(catenary_sprites),
+                climate,
             ),
             TileKind::House => spawn_house_tile(commands, assets, &ctx, slope_half_ground),
             TileKind::Industry => {

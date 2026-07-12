@@ -489,6 +489,14 @@ pub const ACTION5_TYPE_CATENARY: u8 = 0x05;
 pub const SHORE_ACTION5_SLOT_COUNT: usize = 18;
 /// Orden del bloque de 10 («missing shore sprites», `newgrf_act5.cpp`).
 pub const SHORE_MISSING_BLOCK_SLOTS: [usize; 10] = [0, 5, 7, 10, 11, 13, 14, 15, 16, 17];
+/// Slots Action5 catenary `OpenGFX`: wires 0..23 + entrances 24..27 + pylons 28..35.
+pub const CATENARY_ACTION5_SLOT_COUNT: usize = 36;
+/// Base `OpenTTD` de wires (`SPR_WIRE_*` / `rail_1039`).
+pub const CATENARY_WIRE_SPRITE_BASE: u32 = 1039;
+/// IDs virtuales de entrada de túnel en el cliente (`WSO_ENTRANCE_*`).
+pub const CATENARY_ENTRANCE_SPRITE_BASE: u32 = 910_063;
+/// IDs virtuales de postes PPP en el cliente (`PSO_*`).
+pub const CATENARY_PYLON_SPRITE_BASE: u32 = 910_067;
 
 /// Bloque Action5 parseado (tipo + offset + sprites siguientes).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -706,6 +714,49 @@ pub fn merge_shore_action5_block(slots: &mut [Option<DecodedSprite>], block: &Ac
     for (i, spr) in sprites.iter().enumerate() {
         let slot = base + i;
         if slot >= SHORE_ACTION5_SLOT_COUNT {
+            break;
+        }
+        slots[slot] = Some(spr.clone());
+    }
+}
+
+/// Índice local Action5 (0..35) para un `sprite_id` de catenaria del cliente.
+#[must_use]
+pub fn catenary_action5_local_slot(sprite_id: u32) -> Option<usize> {
+    if (CATENARY_WIRE_SPRITE_BASE..=CATENARY_WIRE_SPRITE_BASE + 23).contains(&sprite_id) {
+        return Some((sprite_id - CATENARY_WIRE_SPRITE_BASE) as usize);
+    }
+    if (CATENARY_ENTRANCE_SPRITE_BASE..=CATENARY_ENTRANCE_SPRITE_BASE + 3).contains(&sprite_id) {
+        return Some(24 + (sprite_id - CATENARY_ENTRANCE_SPRITE_BASE) as usize);
+    }
+    if (CATENARY_PYLON_SPRITE_BASE..=CATENARY_PYLON_SPRITE_BASE + 7).contains(&sprite_id) {
+        return Some(28 + (sprite_id - CATENARY_PYLON_SPRITE_BASE) as usize);
+    }
+    None
+}
+
+/// Fusiona un bloque Action5 catenary (`0x05`) en la tabla de slots locales.
+///
+/// El `offset` 1039 (base `OpenTTD`) o 0 empieza en el slot 0; un offset `< 36`
+/// se usa como índice de inicio (GRFs de prueba).
+pub fn merge_catenary_action5_block(slots: &mut [Option<DecodedSprite>], block: &Action5Block) {
+    if block.type_id != ACTION5_TYPE_CATENARY || slots.len() < CATENARY_ACTION5_SLOT_COUNT {
+        return;
+    }
+    if block.sprites.is_empty() {
+        return;
+    }
+    let wire_base = u16::try_from(CATENARY_WIRE_SPRITE_BASE).unwrap_or(1039);
+    let base = if block.offset == wire_base || block.offset == 0 {
+        0
+    } else if usize::from(block.offset) < CATENARY_ACTION5_SLOT_COUNT {
+        usize::from(block.offset)
+    } else {
+        0
+    };
+    for (i, spr) in block.sprites.iter().enumerate() {
+        let slot = base + i;
+        if slot >= CATENARY_ACTION5_SLOT_COUNT {
             break;
         }
         slots[slot] = Some(spr.clone());

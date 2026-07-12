@@ -78,6 +78,7 @@ pub(crate) struct NewGrfMapSpriteCaches<'w> {
     road: ResMut<'w, crate::render::NewGrfRoadSpriteCache>,
     station: ResMut<'w, crate::render::NewGrfStationSpriteCache>,
     shore: ResMut<'w, crate::render::NewGrfShoreSpriteCache>,
+    catenary: ResMut<'w, crate::render::NewGrfCatenarySpriteCache>,
 }
 
 /// Petición de redibujo del mapa. `sync_camera`: solo tras F9 / cambio de tamaño.
@@ -163,6 +164,7 @@ impl Plugin for WorldRenderPlugin {
             .init_resource::<crate::render::NewGrfRoadSpriteCache>()
             .init_resource::<crate::render::NewGrfStationSpriteCache>()
             .init_resource::<crate::render::NewGrfShoreSpriteCache>()
+            .init_resource::<crate::render::NewGrfCatenarySpriteCache>()
             .add_systems(OnEnter(ClientScreen::InGame), setup)
             .add_systems(
                 Update,
@@ -328,6 +330,7 @@ pub(crate) fn setup(
     let mut road_sprites = crate::render::NewGrfRoadSpriteCache::default();
     let mut station_sprites = crate::render::NewGrfStationSpriteCache::default();
     let mut shore_sprites = crate::render::NewGrfShoreSpriteCache::default();
+    let mut catenary_sprites = crate::render::NewGrfCatenarySpriteCache::default();
     spawn_world_layer(
         &mut commands,
         &asset_server,
@@ -344,10 +347,12 @@ pub(crate) fn setup(
         &mut road_sprites,
         &mut station_sprites,
         &mut shore_sprites,
+        &mut catenary_sprites,
     );
     commands.insert_resource(road_sprites);
     commands.insert_resource(station_sprites);
     commands.insert_resource(shore_sprites);
+    commands.insert_resource(catenary_sprites);
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
         chunks: chunks_in_bounds(spawn_bounds),
@@ -403,6 +408,7 @@ pub(crate) fn spawn_intro_map_render(
     let mut road_sprites = crate::render::NewGrfRoadSpriteCache::default();
     let mut station_sprites = crate::render::NewGrfStationSpriteCache::default();
     let mut shore_sprites = crate::render::NewGrfShoreSpriteCache::default();
+    let mut catenary_sprites = crate::render::NewGrfCatenarySpriteCache::default();
     spawn_world_layer(
         commands,
         asset_server,
@@ -419,10 +425,12 @@ pub(crate) fn spawn_intro_map_render(
         &mut road_sprites,
         &mut station_sprites,
         &mut shore_sprites,
+        &mut catenary_sprites,
     );
     commands.insert_resource(road_sprites);
     commands.insert_resource(station_sprites);
     commands.insert_resource(shore_sprites);
+    commands.insert_resource(catenary_sprites);
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
         chunks: chunks_in_bounds(spawn_bounds),
@@ -442,6 +450,7 @@ fn spawn_map_tiles_in_bounds(
     road_sprites: &mut crate::render::NewGrfRoadSpriteCache,
     station_sprites: &mut crate::render::NewGrfStationSpriteCache,
     shore_sprites: &mut crate::render::NewGrfShoreSpriteCache,
+    catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
     let debug_coast = env_flag("OPENTTDRS_DEBUG_COAST");
@@ -525,6 +534,9 @@ fn spawn_map_tiles_in_bounds(
                     climate,
                     show_pbs_reservations,
                     show_full_detail,
+                    &sim.state.catenary_newgrf_sprites,
+                    Some(catenary_sprites),
+                    Some(images),
                 );
             }
             TileKind::House | TileKind::Station => {
@@ -547,6 +559,9 @@ fn spawn_map_tiles_in_bounds(
                     slope_half_ground,
                     map,
                     (mw, mh),
+                    &sim.state.catenary_newgrf_sprites,
+                    Some(catenary_sprites),
+                    Some(images),
                 );
             }
             TileKind::Industry => {
@@ -584,7 +599,16 @@ fn spawn_map_tiles_in_bounds(
         }
 
         // Tramos de puente que pasan por encima de esta tesela (IsBridgeAbove).
-        spawn_bridge_middle(commands, map, (mw, mh), assets, &ctx);
+        spawn_bridge_middle(
+            commands,
+            map,
+            (mw, mh),
+            assets,
+            &ctx,
+            &sim.state.catenary_newgrf_sprites,
+            Some(catenary_sprites),
+            Some(images),
+        );
     }
 
     flush_map_batches(commands, batches);
@@ -605,6 +629,8 @@ fn spawn_map_tiles_in_bounds(
                 &sim.state.station_spec_catalog,
                 Some(station_sprites),
                 Some(images),
+                &sim.state.catenary_newgrf_sprites,
+                Some(catenary_sprites),
             ),
             TileKind::House => spawn_house_tile(commands, assets, &ctx, slope_half_ground),
             TileKind::Industry => {
@@ -665,6 +691,7 @@ fn spawn_world_layer(
     road_sprites: &mut crate::render::NewGrfRoadSpriteCache,
     station_sprites: &mut crate::render::NewGrfStationSpriteCache,
     shore_sprites: &mut crate::render::NewGrfShoreSpriteCache,
+    catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
 ) {
     if include_world_extras {
         let truck_handles = TruckHandles::load(asset_server);
@@ -708,6 +735,7 @@ fn spawn_world_layer(
         road_sprites,
         station_sprites,
         shore_sprites,
+        catenary_sprites,
     );
 }
 
@@ -725,6 +753,7 @@ fn spawn_map_chunk(
     road_sprites: &mut crate::render::NewGrfRoadSpriteCache,
     station_sprites: &mut crate::render::NewGrfStationSpriteCache,
     shore_sprites: &mut crate::render::NewGrfShoreSpriteCache,
+    catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
     spawn_map_tiles_in_bounds(
@@ -739,6 +768,7 @@ fn spawn_map_chunk(
         road_sprites,
         station_sprites,
         shore_sprites,
+        catenary_sprites,
     );
 }
 
@@ -888,6 +918,7 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.road.as_mut(),
                 newgrf_sprites.station.as_mut(),
                 newgrf_sprites.shore.as_mut(),
+                newgrf_sprites.catenary.as_mut(),
             );
         }
         let mut refresh_despawn = Vec::new();
@@ -916,6 +947,7 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.road.as_mut(),
                 newgrf_sprites.station.as_mut(),
                 newgrf_sprites.shore.as_mut(),
+                newgrf_sprites.catenary.as_mut(),
             );
         }
         loaded_chunks.chunks = needed;
@@ -985,6 +1017,7 @@ pub(crate) fn apply_remap_map_visuals(
             newgrf_sprites.road.as_mut(),
             newgrf_sprites.station.as_mut(),
             newgrf_sprites.shore.as_mut(),
+            newgrf_sprites.catenary.as_mut(),
         );
         loaded_chunks.chunks = chunks_in_bounds(spawn_bounds);
     }

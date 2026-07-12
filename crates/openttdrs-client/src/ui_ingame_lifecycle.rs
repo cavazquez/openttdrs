@@ -209,6 +209,11 @@ pub(crate) fn leave_ingame(world: &mut World) {
     {
         newgrf_shore_sprites.clear();
     }
+    if let Some(mut newgrf_catenary_sprites) =
+        world.get_resource_mut::<crate::render::NewGrfCatenarySpriteCache>()
+    {
+        newgrf_catenary_sprites.clear();
+    }
     if let Some(mut destination_picker) = world.get_resource_mut::<DestinationPickerState>() {
         *destination_picker = DestinationPickerState::default();
     }
@@ -289,6 +294,7 @@ pub(crate) fn leave_ingame(world: &mut World) {
     world.remove_resource::<crate::render::NewGrfRoadSpriteCache>();
     world.remove_resource::<crate::render::NewGrfStationSpriteCache>();
     world.remove_resource::<crate::render::NewGrfShoreSpriteCache>();
+    world.remove_resource::<crate::render::NewGrfCatenarySpriteCache>();
 }
 
 fn collect_matching<M: Component>(world: &mut World, out: &mut Vec<Entity>) {

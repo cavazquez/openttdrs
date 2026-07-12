@@ -3,6 +3,7 @@
 mod animation_gate;
 mod assets;
 mod atlas;
+mod catenary_newgrf;
 mod company_recolor;
 mod components;
 pub(crate) mod effect_fx;
@@ -59,6 +60,7 @@ pub(crate) use tile_anims::TileAnimPlugin;
 pub(crate) use town_labels::town_id_at_label_pos;
 pub(crate) use train_smoke::TrainSmokePlugin;
 
+pub(crate) use catenary_newgrf::NewGrfCatenarySpriteCache;
 pub(crate) use road_newgrf::NewGrfRoadSpriteCache;
 pub(crate) use shore_newgrf::NewGrfShoreSpriteCache;
 pub(crate) use station_newgrf::NewGrfStationSpriteCache;

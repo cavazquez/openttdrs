@@ -160,6 +160,7 @@ pub use map::{
 pub use newgrf_actions::{
     ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header,
     Action5SlotSummary, GrfInspectReport, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,
+    apply_newgrf_action5_catenary, apply_newgrf_action5_catenary_default_dirs,
     apply_newgrf_action5_shore, apply_newgrf_action5_shore_default_dirs, apply_newgrf_road_types,
     apply_newgrf_road_types_default_dirs, apply_newgrf_stack_catalogs_default_dirs,
     apply_newgrf_stations, apply_newgrf_stations_default_dirs, apply_newgrf_vehicles_trains,
@@ -176,16 +177,18 @@ pub use newgrf_config::{
     parse_grf_container, scan_grf_bytes, scan_grf_file, validate_stack,
 };
 pub use newgrf_sprites::{
-    ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, Action5Block, DecodedSprite,
-    SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS, TrainSpriteAssign, TrainSpriteGraphics,
-    action5_type_name, build_action1_feature_payload, build_action1_trains_payload,
-    build_action3_feature_payload, build_action3_trains_payload, build_grf_v2_action5_with_sprite,
-    build_grf_v2_roadtype_with_preview_sprite, build_grf_v2_station_with_preview_sprite,
-    build_grf_v2_train_with_preview_sprite, build_grf_v2_with_preview_sprite,
-    build_real_sprite_v1_uncompressed, collect_action5_blocks, collect_feature_sprite_graphics,
+    ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, Action5Block, CATENARY_ACTION5_SLOT_COUNT,
+    CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE,
+    DecodedSprite, SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS, TrainSpriteAssign,
+    TrainSpriteGraphics, action5_type_name, build_action1_feature_payload,
+    build_action1_trains_payload, build_action3_feature_payload, build_action3_trains_payload,
+    build_grf_v2_action5_with_sprite, build_grf_v2_roadtype_with_preview_sprite,
+    build_grf_v2_station_with_preview_sprite, build_grf_v2_train_with_preview_sprite,
+    build_grf_v2_with_preview_sprite, build_real_sprite_v1_uncompressed,
+    catenary_action5_local_slot, collect_action5_blocks, collect_feature_sprite_graphics,
     collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
     collect_train_sprite_graphics, decode_real_sprite_v1_uncompressed, indices_to_rgba,
-    merge_shore_action5_block,
+    merge_catenary_action5_block, merge_shore_action5_block,
 };
 pub use news::{
     CALENDAR_BASE_YEAR, NEWS_MAX_AGE_DAYS, NewsDisplayMode, NewsDisplaySettings, NewsItem,

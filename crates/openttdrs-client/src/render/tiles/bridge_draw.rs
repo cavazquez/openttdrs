@@ -7,7 +7,8 @@ use openttdrs_core::{
 };
 
 use crate::iso::{HEIGHT_PX, TILE_HALF_H, remap_tile_offset, tile_pos_half, tile_slope_and_min_z};
-use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
+use crate::render::catenary_newgrf::catenary_sprite_colored;
+use crate::render::{MapVisualLayer, NewGrfCatenarySpriteCache, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_SPRITE_TRACK_X, RAIL_SPRITE_TRACK_Y, bridge_deck_sprite_ids, bridge_sprite_meta,
     bridge_structure_palette, catenary_sprite_color, catenary_tile_location_group,
@@ -224,6 +225,9 @@ fn spawn_bridge_catenary(
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     span: &BridgeSpanInfo,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    mut catenary_sprites: Option<&mut NewGrfCatenarySpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
 ) {
     let tlg = catenary_tile_location_group(ctx.tx_i32(), ctx.ty_i32());
     let mut draws = Vec::new();
@@ -236,14 +240,21 @@ fn spawn_bridge_catenary(
     );
     let tint = catenary_sprite_color();
     for draw in draws {
-        let Some(img) = assets.rail.get(&draw.sprite_id) else {
+        let Some(sprite) = catenary_sprite_colored(
+            assets,
+            draw.sprite_id,
+            tint,
+            catenary_newgrf,
+            catenary_sprites.as_deref_mut(),
+            images.as_deref_mut(),
+        ) else {
             continue;
         };
         let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            img.sprite_colored(tint),
+            sprite,
             Transform::from_translation(
                 tile_pos_half(
                     ctx.tx_i32(),
@@ -334,12 +345,16 @@ fn spawn_layer(
 }
 
 /// Dibuja tablero + barandilla + pilares para rampa o vano.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_bridge_deck(
     commands: &mut Commands,
     assets: &WorldAssets,
     ctx: &TileRenderContext,
     span: &BridgeSpanInfo,
     draw_pillars: bool,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: Option<&mut NewGrfCatenarySpriteCache>,
+    images: Option<&mut Assets<Image>>,
 ) {
     use crate::sprites::{TransparencyOption, is_hidden};
     if is_hidden(TransparencyOption::Bridges) {
@@ -381,7 +396,15 @@ pub(crate) fn spawn_bridge_deck(
         spawn_bridge_rail_overlay(commands, assets, ctx, span);
     }
     if span.electric && span.middle_num > 0 && span.middle_length > 0 {
-        spawn_bridge_catenary(commands, assets, ctx, span);
+        spawn_bridge_catenary(
+            commands,
+            assets,
+            ctx,
+            span,
+            catenary_newgrf,
+            catenary_sprites,
+            images,
+        );
     }
     spawn_layer(
         commands,

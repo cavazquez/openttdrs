@@ -8,12 +8,16 @@ use crate::render::{TileRenderContext, WorldAssets};
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};
 
 /// Dibuja el tablero si la tesela tiene un puente por encima (no rampa).
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_bridge_middle(
     commands: &mut Commands,
     map: &Map,
     dims: (u32, u32),
     assets: &WorldAssets,
     ctx: &TileRenderContext,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    images: Option<&mut Assets<Image>>,
 ) {
     let Some(tile) = ctx.tile else {
         return;
@@ -24,7 +28,16 @@ pub(crate) fn spawn_bridge_middle(
     let Some(span) = bridge_span_at(map, ctx.coord, dims) else {
         return;
     };
-    spawn_bridge_deck(commands, assets, ctx, &span, true);
+    spawn_bridge_deck(
+        commands,
+        assets,
+        ctx,
+        &span,
+        true,
+        catenary_newgrf,
+        catenary_sprites,
+        images,
+    );
 }
 
 #[cfg(test)]

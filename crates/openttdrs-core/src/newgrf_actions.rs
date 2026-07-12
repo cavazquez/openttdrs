@@ -708,6 +708,7 @@ pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     apply_newgrf_stations_default_dirs(state);
     apply_newgrf_vehicles_trains_default_dirs(state);
     apply_newgrf_action5_shore_default_dirs(state);
+    apply_newgrf_action5_catenary_default_dirs(state);
 }
 
 /// Aplica bloques Action5 shore (`0x0D`) del stack enabled → `shore_newgrf_sprites`.
@@ -746,6 +747,44 @@ pub fn apply_newgrf_action5_shore_default_dirs(state: &mut GameState) {
     let owned = default_newgrf_search_dirs();
     let refs: Vec<&Path> = owned.iter().map(AsRef::as_ref).collect();
     apply_newgrf_action5_shore(state, &refs);
+}
+
+/// Aplica bloques Action5 catenary (`0x05`) → `catenary_newgrf_sprites`.
+pub fn apply_newgrf_action5_catenary(state: &mut GameState, search_dirs: &[&Path]) {
+    use crate::newgrf_sprites::{
+        CATENARY_ACTION5_SLOT_COUNT, collect_action5_blocks, merge_catenary_action5_block,
+    };
+    let mut slots = vec![None; CATENARY_ACTION5_SLOT_COUNT];
+    let stack = state.newgrf_stack.clone();
+    for entry in &stack {
+        if !entry.enabled {
+            continue;
+        }
+        let Some(path) = search_dirs
+            .iter()
+            .map(|d| d.join(&entry.filename))
+            .find(|p| p.is_file())
+        else {
+            continue;
+        };
+        let Ok(data) = std::fs::read(&path) else {
+            continue;
+        };
+        let Ok(blocks) = collect_action5_blocks(&data) else {
+            continue;
+        };
+        for block in &blocks {
+            merge_catenary_action5_block(&mut slots, block);
+        }
+    }
+    state.catenary_newgrf_sprites = slots;
+}
+
+/// Action5 catenary con directorios de búsqueda por defecto.
+pub fn apply_newgrf_action5_catenary_default_dirs(state: &mut GameState) {
+    let owned = default_newgrf_search_dirs();
+    let refs: Vec<&Path> = owned.iter().map(AsRef::as_ref).collect();
+    apply_newgrf_action5_catenary(state, &refs);
 }
 
 /// Prop velocidad máxima tren (uint16 LE) — extensión local / subset Action0.
@@ -1269,6 +1308,36 @@ mod tests {
         assert!(state.shore_newgrf_sprites[0].is_none());
         let spr = state.shore_newgrf_sprites[3].as_ref().unwrap();
         assert_eq!(spr.width, 8);
+    }
+
+    #[test]
+    fn apply_action5_catenary_fills_slot_from_stack() {
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 1..7 {
+            for x in 1..7 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        // offset 1039 → slot local 0 (primer wire)
+        let bytes = crate::build_grf_v2_action5_with_sprite(
+            0x05,
+            1039,
+            8,
+            8,
+            &indices,
+            [b'E', b'L', 0, 2],
+            "el2",
+        );
+        let dir = tempfile_dir_with("el2.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("el2.grf", 2));
+        apply_newgrf_action5_catenary(&mut state, &[&dir]);
+        assert_eq!(state.catenary_newgrf_sprites.len(), 36);
+        assert!(state.catenary_newgrf_sprites[0].is_some());
+        assert!(crate::catenary_action5_local_slot(1039) == Some(0));
+        assert!(crate::catenary_action5_local_slot(910_067) == Some(28));
     }
 
     #[test]

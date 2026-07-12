@@ -165,6 +165,9 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     TEST_CLIMATE,
                     true,
                     true,
+                    &[],
+                    None,
+                    None,
                 );
                 rails.clear();
                 spawn_rail_tile(
@@ -178,6 +181,9 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     TEST_CLIMATE,
                     true,
                     true,
+                    &[],
+                    None,
+                    None,
                 );
                 spawn_station_tile(
                     &mut commands,
@@ -192,6 +198,8 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &[],
                     None,
                     None,
+                    &[],
+                    None,
                 );
                 for (x, y) in [(5, 2), (5, 3), (5, 4), (5, 5), (5, 6), (5, 7)] {
                     spawn_transport_object_tile(
@@ -203,6 +211,9 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                         4.0,
                         &m.0,
                         (m.0.dimensions().0, m.0.dimensions().1),
+                        &[],
+                        None,
+                        None,
                     );
                 }
             },
@@ -421,6 +432,8 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     &[],
                     None,
                     None,
+                    &[],
+                    None,
                 );
             },
         )
@@ -513,6 +526,9 @@ fn spawn_bridge_middle_draws_deck_over_marked_water() {
                     dims,
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 2, 1),
+                    &[],
+                    None,
+                    None,
                 );
                 // Tesela sin puente encima: no debe agregar nada.
                 spawn_bridge_middle(
@@ -521,6 +537,9 @@ fn spawn_bridge_middle_draws_deck_over_marked_water() {
                     dims,
                     &a.0,
                     &TileRenderContext::new(&m.0, &g.0, 6, 6),
+                    &[],
+                    None,
+                    None,
                 );
             },
         )

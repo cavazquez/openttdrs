@@ -10,6 +10,7 @@ use crate::iso::{
     SLOPE_HALF_H, TILE_HALF_H, remap_tile_offset, road_depot_build_sprite_center,
     road_stop_build_sprite_center, tile_pos, tile_pos_half,
 };
+use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::station_newgrf::{NewGrfStationSpriteCache, newgrf_station_def_for_tile};
 use crate::render::{
     AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext, WorldAssets,
@@ -47,8 +48,10 @@ pub(crate) fn spawn_station_tile(
     stations: &[Station],
     slope_half_ground: f32,
     station_catalog: &[StationSpecDef],
-    station_sprites: Option<&mut NewGrfStationSpriteCache>,
-    images: Option<&mut Assets<Image>>,
+    mut station_sprites: Option<&mut NewGrfStationSpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -113,8 +116,8 @@ pub(crate) fn spawn_station_tile(
                 && !buildings_hidden()
                 && let Some(def) =
                     newgrf_station_def_for_tile(station_catalog, map, stations, ctx.coord)
-                && let (Some(cache), Some(images)) = (station_sprites, images)
                 && let Some(view) = def.newgrf_view(0)
+                && let (Some(cache), Some(images)) = (station_sprites.as_mut(), images.as_mut())
                 && let Some(handle) = cache.handle_for(def, 0, images)
             {
                 let pos3 = crate::iso::overlay_pos(
@@ -213,13 +216,20 @@ pub(crate) fn spawn_station_tile(
                     &mut wires,
                 );
                 for (i, sid) in wires.into_iter().enumerate() {
-                    let Some(img) = assets.rail.get(&sid) else {
+                    let Some(sprite) = catenary_sprite_colored(
+                        assets,
+                        sid,
+                        tint,
+                        catenary_newgrf,
+                        catenary_sprites.as_deref_mut(),
+                        images.as_deref_mut(),
+                    ) else {
                         continue;
                     };
                     commands.spawn((
                         MapVisualLayer,
                         ctx.map_tile_chunk(),
-                        img.sprite_colored(tint),
+                        sprite,
                         Transform::from_translation(tile_pos_half(
                             ctx.tx_i32(),
                             ctx.ty_i32(),
@@ -242,7 +252,14 @@ pub(crate) fn spawn_station_tile(
                         &mut pylons,
                     );
                     for draw in pylons {
-                        let Some(img) = assets.rail.get(&draw.sprite_id) else {
+                        let Some(sprite) = catenary_sprite_colored(
+                            assets,
+                            draw.sprite_id,
+                            tint,
+                            catenary_newgrf,
+                            catenary_sprites.as_deref_mut(),
+                            images.as_deref_mut(),
+                        ) else {
                             continue;
                         };
                         let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
@@ -256,7 +273,7 @@ pub(crate) fn spawn_station_tile(
                         commands.spawn((
                             MapVisualLayer,
                             ctx.map_tile_chunk(),
-                            img.sprite_colored(tint),
+                            sprite,
                             Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
                         ));
                     }
@@ -486,6 +503,9 @@ pub(crate) fn spawn_transport_object_tile(
     slope_half_ground: f32,
     map: &Map,
     dims: (u32, u32),
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    images: Option<&mut Assets<Image>>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -523,11 +543,18 @@ pub(crate) fn spawn_transport_object_tile(
                     .is_some_and(|t| rail_type_from_tile(t).has_catenary())
             {
                 let sid = catenary_tunnel_wire_sprite(dir);
-                if let Some(img) = assets.rail.get(&sid) {
+                if let Some(sprite) = catenary_sprite_colored(
+                    assets,
+                    sid,
+                    catenary_sprite_color(),
+                    catenary_newgrf,
+                    catenary_sprites,
+                    images,
+                ) {
                     commands.spawn((
                         MapVisualLayer,
                         ctx.map_tile_chunk(),
-                        img.sprite_colored(catenary_sprite_color()),
+                        sprite,
                         Transform::from_translation(crate::sprites::tunnel_portal_translation(
                             ctx.tx_i32(),
                             ctx.ty_i32(),
@@ -603,7 +630,16 @@ pub(crate) fn spawn_transport_object_tile(
         }
         TileKind::RoadBridge | TileKind::RailBridge => {
             if let Some(span) = bridge_span_at(map, ctx.coord, dims) {
-                spawn_bridge_deck(commands, assets, ctx, &span, false);
+                spawn_bridge_deck(
+                    commands,
+                    assets,
+                    ctx,
+                    &span,
+                    false,
+                    catenary_newgrf,
+                    catenary_sprites,
+                    images,
+                );
             }
         }
         _ => {}

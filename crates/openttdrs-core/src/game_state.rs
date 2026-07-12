@@ -401,6 +401,9 @@ pub struct GameState {
     /// Se reconstruye al aplicar el stack; no se persiste en el save.
     #[serde(skip)]
     pub shore_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
+    /// Slots Action5 catenary `0x05` (wires/entrances/pylons; `None` = `OpenGFX`).
+    #[serde(skip)]
+    pub catenary_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
     /// Carteles del mapa (`Sign` en `OpenTTD`).
     #[serde(default)]
     pub signs: Vec<crate::sign::Sign>,
@@ -490,6 +493,7 @@ impl GameState {
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             shore_newgrf_sprites: Vec::new(),
+            catenary_newgrf_sprites: Vec::new(),
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,
@@ -554,6 +558,7 @@ impl GameState {
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             shore_newgrf_sprites: Vec::new(),
+            catenary_newgrf_sprites: Vec::new(),
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,

@@ -720,7 +720,8 @@ compra depósito + mapa (fallback OpenGFX si no hay vistas).
 **Preview RoadTypes Action1/3** ✅ en selector + in-world plano (vista 0).
 **Preview Stations Action1/3** ✅ en picker rail + in-world plano (vista 0; sin 0x0E).
 **Action5 shore in-world** ✅ slots `0x0D` → costa (OpenGFX fallback; clima/animación OOS).
-**Action5 parse + Inspeccionar** ✅ slots; catenary/runtime tiles OOS.
+**Action5 catenary in-world** ✅ slots `0x05` → wires/pylons/túnel/puente (OpenGFX fallback).
+**Action5 parse + Inspeccionar** ✅ slots; callbacks / 32bpp OOS.
      
 ---
 
@@ -941,7 +942,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** Action5 catenary / callbacks / 32bpp, o segunda humana / editor.
+**Siguiente:** callbacks / 32bpp NewGRF, o segunda humana / editor.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -970,7 +971,8 @@ Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 10. ~~Action1/3 RoadTypes → in-world plano (vista 0; sin pendientes/tram overlay).~~ ✅
 11. ~~Action1/3 Stations → in-world plano (vista 0; overlays Rail; sin 0x0E/waypoint).~~ ✅
 12. ~~Action5 shore (`0x0D`) → in-world slots (merge 10/16; sin clima/animación).~~ ✅
-13. Action5 catenary / callbacks / 32bpp → OOS.
+13. ~~Action5 catenary (`0x05`) → in-world wires/pylons (rail/estación/túnel/puente).~~ ✅
+14. Callbacks / 32bpp → OOS.
 
 Progreso backend OOS (JoinStation rail + CargoDist observacional):
 

@@ -3,6 +3,7 @@ use openttdrs_core::{Climate, Map, RoadTypeDef, TileKind, bridge_above_axis_from
 
 use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite, spawn_rail_foundation};
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};
+use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::road_newgrf::{NewGrfRoadSpriteCache, newgrf_road_def_for_tile};
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
@@ -248,6 +249,9 @@ pub(crate) fn spawn_rail_tile(
     climate: Climate,
     show_pbs_reservations: bool,
     show_full_detail: bool,
+    catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
+    mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
+    mut images: Option<&mut Assets<Image>>,
 ) {
     let tileh = ctx.info.tileh;
     // Vano con puente encima: la vía la dibuja `spawn_bridge_deck` a la altura del tablero.
@@ -344,7 +348,14 @@ pub(crate) fn spawn_rail_tile(
             &mut wires,
         );
         for (i, sid) in wires.iter().copied().enumerate() {
-            let Some(img) = assets.rail.get(&sid) else {
+            let Some(sprite) = catenary_sprite_colored(
+                assets,
+                sid,
+                tint,
+                catenary_newgrf,
+                catenary_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            ) else {
                 continue;
             };
             let z = 0.035 + i as f32 * 0.0004;
@@ -352,7 +363,7 @@ pub(crate) fn spawn_rail_tile(
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                img.sprite_colored(tint),
+                sprite,
                 Transform::from_translation(base),
             ));
         }
@@ -368,7 +379,14 @@ pub(crate) fn spawn_rail_tile(
             &mut pylons,
         );
         for draw in pylons {
-            let Some(img) = assets.rail.get(&draw.sprite_id) else {
+            let Some(sprite) = catenary_sprite_colored(
+                assets,
+                draw.sprite_id,
+                tint,
+                catenary_newgrf,
+                catenary_sprites.as_deref_mut(),
+                images.as_deref_mut(),
+            ) else {
                 continue;
             };
             let off = remap_tile_offset(draw.tile_dx, draw.tile_dy, 0.0) * 0.5;
@@ -382,7 +400,7 @@ pub(crate) fn spawn_rail_tile(
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
-                img.sprite_colored(tint),
+                sprite,
                 Transform::from_translation(base + Vec3::new(off.x, off.y, 0.0)),
             ));
         }

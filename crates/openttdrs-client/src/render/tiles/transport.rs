@@ -4,7 +4,9 @@ use openttdrs_core::{Climate, Map, RoadTypeDef, TileKind, bridge_above_axis_from
 use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite, spawn_rail_foundation};
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};
 use crate::render::catenary_newgrf::catenary_sprite_colored;
-use crate::render::road_newgrf::{NewGrfRoadSpriteCache, newgrf_road_def_for_tile};
+use crate::render::road_newgrf::{
+    NewGrfRoadSpriteCache, newgrf_road_def_for_tile, road_newgrf_view_index,
+};
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
@@ -70,14 +72,16 @@ pub(crate) fn spawn_road_tile(
         );
     }
 
-    // MVP NewGRF: en plano, sustituir el sprite de suelo road por la vista 0 del tipo.
+    // NewGRF: en plano, sustituir el sprite de suelo road por la vista según
+    // `road_bits` (mismo índice que OpenGFX plano).
     let mut used_newgrf = false;
+    let view_idx = road_newgrf_view_index(rb);
     if tileh == 0
         && let Some(tile) = ctx.tile
         && let Some(def) = newgrf_road_def_for_tile(road_catalog, tile)
         && let (Some(cache), Some(images)) = (road_sprites, images)
-        && let Some(view) = def.newgrf_view(0)
-        && let Some(handle) = cache.handle_for(def, 0, images)
+        && let Some(view) = def.newgrf_view(view_idx)
+        && let Some(handle) = cache.handle_for(def, view_idx, images)
     {
         let pos3 = overlay_pos(
             ctx.iso_pos,

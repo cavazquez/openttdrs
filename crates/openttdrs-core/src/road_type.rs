@@ -108,7 +108,7 @@ pub struct RoadTypeDef {
     /// Preview Action1/3 (primera vista); no se serializa en saves.
     #[serde(default, skip)]
     pub newgrf_preview: Option<crate::newgrf_sprites::DecodedSprite>,
-    /// Vistas Action1/3 para in-world (MVP: se usa la primera en plano).
+    /// Vistas Action1/3 para in-world (índice = `road_flat_sprite_index` en plano).
     #[serde(default, skip)]
     pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
 }
@@ -122,7 +122,7 @@ impl RoadTypeDef {
             .or_else(|| self.newgrf_views.first())
     }
 
-    /// Vista in-world (`idx` módulo longitud; MVP suele usar 0).
+    /// Vista in-world (`idx` módulo longitud; plano usa `road_flat_sprite_index`).
     #[must_use]
     pub fn newgrf_view(&self, idx: usize) -> Option<&crate::newgrf_sprites::DecodedSprite> {
         if self.newgrf_views.is_empty() {

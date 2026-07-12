@@ -31,7 +31,7 @@ impl NewGrfRoadSpriteCache {
         )
     }
 
-    /// Textura de la vista `view_idx` (MVP: 0) para un roadtype NewGRF.
+    /// Textura de la vista `view_idx` (índice OpenGFX plano / `road_flat_sprite_index`).
     pub(crate) fn handle_for(
         &mut self,
         def: &RoadTypeDef,
@@ -50,7 +50,7 @@ impl NewGrfRoadSpriteCache {
     }
 }
 
-/// Si el tipo de carretera de la tesela trae vistas NewGRF, devuelve def + vista 0.
+/// Si el tipo de carretera de la tesela trae vistas NewGRF, devuelve el def.
 #[must_use]
 pub(crate) fn newgrf_road_def_for_tile(
     catalog: &[RoadTypeDef],
@@ -66,6 +66,12 @@ pub(crate) fn newgrf_road_def_for_tile(
     } else {
         None
     }
+}
+
+/// Índice de vista NewGRF en plano: igual que `road_flat_sprite_index(0, road_bits)`.
+#[must_use]
+pub(crate) fn road_newgrf_view_index(road_bits: u8) -> usize {
+    crate::sprites::road_flat_sprite_index(0, road_bits)
 }
 
 #[cfg(test)]
@@ -113,5 +119,27 @@ mod tests {
         assert!(images.get(&handle).is_some());
         let again = cache.handle_for(def, 0, &mut images).expect("cached");
         assert_eq!(handle, again);
+        // Curva / cruce: índices distintos al 0 (módulo len si hay una sola vista).
+        let cross = road_newgrf_view_index(0x0F);
+        assert_ne!(cross, 0);
+        let h_cross = cache.handle_for(def, cross, &mut images).expect("cross");
+        // Con 1 vista, el módulo reutiliza el mismo handle.
+        assert_eq!(handle, h_cross);
+    }
+
+    #[test]
+    fn road_newgrf_view_index_matches_flat_opengfx_table() {
+        assert_eq!(
+            road_newgrf_view_index(0x05),
+            crate::sprites::road_flat_sprite_index(0, 0x05)
+        );
+        assert_eq!(
+            road_newgrf_view_index(0x0A),
+            crate::sprites::road_flat_sprite_index(0, 0x0A)
+        );
+        assert_eq!(
+            road_newgrf_view_index(0x0F),
+            crate::sprites::road_flat_sprite_index(0, 0x0F)
+        );
     }
 }

@@ -26,6 +26,7 @@ pub mod industry;
 pub mod link_graph;
 pub mod map;
 pub mod newgrf_actions;
+mod newgrf_company_ramp;
 pub mod newgrf_config;
 mod newgrf_palette_data;
 pub mod newgrf_sprites;
@@ -177,12 +178,14 @@ pub use newgrf_config::{
     parse_grf_container, parse_grf_full, scan_grf_bytes, scan_grf_file, validate_stack,
 };
 pub use newgrf_sprites::{
-    ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, Action5Block, CATENARY_ACTION5_SLOT_COUNT,
-    CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE,
-    DecodedSprite, SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS, SPRITE_V2_ZOOM_PREFERENCE,
-    TrainSpriteAssign, TrainSpriteGraphics, action5_type_name, build_action1_feature_payload,
-    build_action1_trains_payload, build_action2_trains_payload,
-    build_action2_trains_variational_default, build_action2_variational_default_payload,
+    ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, Action2EvalCtx, Action2RandomEntry, Action2VarEntry,
+    Action5Block, CATENARY_ACTION5_SLOT_COUNT, CATENARY_ENTRANCE_SPRITE_BASE,
+    CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE, DecodedSprite, SHORE_ACTION5_SLOT_COUNT,
+    SHORE_MISSING_BLOCK_SLOTS, SPRITE_V2_ZOOM_PREFERENCE, TrainSpriteAssign, TrainSpriteGraphics,
+    action5_type_name, apply_company_colour_mask, bake_sprite_company_mask,
+    build_action1_feature_payload, build_action1_trains_payload, build_action2_trains_payload,
+    build_action2_trains_random, build_action2_trains_variational_default,
+    build_action2_variational_default_payload, build_action2_variational_payload,
     build_action2_vehicle_payload, build_action3_feature_payload, build_action3_trains_payload,
     build_grf_v2_action5_with_sprite, build_grf_v2_roadtype_with_preview_sprite,
     build_grf_v2_station_with_preview_sprite, build_grf_v2_train_with_action2_chain,
@@ -193,14 +196,16 @@ pub use newgrf_sprites::{
     build_real_sprite_v1_chunked_payload, build_real_sprite_v1_compressed,
     build_real_sprite_v1_compressed_payload, build_real_sprite_v1_dims,
     build_real_sprite_v1_uncompressed, build_real_sprite_v1_uncompressed_payload,
-    build_sprite_section_palette_entry, build_sprite_section_rgba_entry,
+    build_sprite_section_palette_entry, build_sprite_section_rgba_chunked_entry,
+    build_sprite_section_rgba_entry, build_sprite_section_rgba_mask_entry,
     catenary_action5_local_slot, collect_action5_blocks, collect_feature_sprite_graphics,
     collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
     collect_train_sprite_graphics, compress_grf_lz77_literals, decode_chunked_8bpp,
-    decode_real_sprite_v1, decode_real_sprite_v1_uncompressed, decode_real_sprite_v2_section,
-    decode_real_sprite_v2_section_zoom, decompress_grf_lz77, encode_chunked_8bpp_full_rows,
-    index_sprite_section, indices_to_rgba, merge_catenary_action5_block, merge_shore_action5_block,
-    resolve_fd_sprite, sprite_v2_bpp,
+    decode_chunked_pixels, decode_real_sprite_v1, decode_real_sprite_v1_uncompressed,
+    decode_real_sprite_v2_section, decode_real_sprite_v2_section_zoom, decompress_grf_lz77,
+    encode_chunked_8bpp_full_rows, encode_chunked_pixels_full_rows, index_sprite_section,
+    indices_to_rgba, merge_catenary_action5_block, merge_shore_action5_block, resolve_fd_sprite,
+    sprite_v2_bpp,
 };
 pub use news::{
     CALENDAR_BASE_YEAR, NEWS_MAX_AGE_DAYS, NewsDisplayMode, NewsDisplaySettings, NewsItem,

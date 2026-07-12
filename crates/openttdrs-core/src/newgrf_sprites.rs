@@ -1,8 +1,8 @@
 //! Decode mínimo de sprites reales `NewGRF` + Action1/2/3 (trains / roadtypes, preview).
 //!
-//! MVP: contenedor **v1** (inline) o **v2** (sprite section + `0xFD`).
-//! 8bpp plano / LZ77 / chunked; multi-zoom palette (preferencia normal).
-//! Action3→Action2→Action1 trains. Callbacks / 32bpp OOS.
+//! Contenedor **v1** (inline) o **v2** (sprite section + `0xFD`).
+//! 8bpp/32bpp plano / LZ77 / chunked; multi-zoom; máscara company-colour.
+//! Action3→Action2 (básico / variational rangos / random)→Action1 trains.
 
 use std::collections::HashMap;
 
@@ -10,6 +10,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::newgrf_actions::{
     ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
+};
+use crate::newgrf_company_ramp::{
+    AUTHOR_CC_PALETTE_FIRST, COMPANY_COLOUR_COUNT, COMPANY_RAMP_RGB, COMPANY_RAMP_SHADES,
 };
 use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_full};
 use crate::newgrf_palette_data::DOS_PALETTE_RGB;
@@ -23,6 +26,9 @@ pub struct DecodedSprite {
     pub y_offs: i16,
     /// `width * height * 4` bytes RGBA.
     pub rgba: Vec<u8>,
+    /// Máscara 8bpp (mismo `width*height`); vacío si no hay.
+    #[serde(default)]
+    pub mask: Vec<u8>,
 }
 
 /// Asignación Action3: id local → set Action2 (o índice Action1 si no hay Action2).
@@ -30,6 +36,34 @@ pub struct DecodedSprite {
 pub struct TrainSpriteAssign {
     pub local_id: u8,
     pub set_id: u16,
+}
+
+/// Action2 variational (`0x81`/`0x82`): variable + rangos + default.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Action2VarEntry {
+    pub variable: u8,
+    pub shift: u8,
+    pub and_mask: u8,
+    /// `(result_set, low, high)` inclusive.
+    pub ranges: Vec<(u16, u8, u8)>,
+    pub default: u16,
+}
+
+/// Action2 random (`0x80`/`0x83`): elección por bits aleatorios.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Action2RandomEntry {
+    pub triggers: u8,
+    pub randbit: u8,
+    pub sets: Vec<u16>,
+}
+
+/// Contexto para evaluar variational / random (preview o runtime).
+#[derive(Debug, Clone, Default)]
+pub struct Action2EvalCtx {
+    /// Valores de variables `NewGRF` (`variable` → raw).
+    pub vars: HashMap<u8, u32>,
+    /// Bits aleatorios del objeto (vehículo/estación/…).
+    pub random_bits: u32,
 }
 
 /// Resultado de parsear Action1/2/3 de un feature (trains / roadtypes).
@@ -40,8 +74,10 @@ pub struct TrainSpriteGraphics {
     pub assigns: Vec<TrainSpriteAssign>,
     /// Action2 set-id → índice del primer set Action1 “moving” (solo trains).
     pub action2_to_action1: HashMap<u8, u16>,
-    /// Action2 variational → set-id `default` (cadena; sin evaluar variables).
-    pub action2_var_default: HashMap<u8, u16>,
+    /// Action2 variational completo (rangos + default).
+    pub action2_var: HashMap<u8, Action2VarEntry>,
+    /// Action2 random (`0x80`/`0x83`).
+    pub action2_random: HashMap<u8, Action2RandomEntry>,
 }
 
 impl TrainSpriteGraphics {
@@ -51,14 +87,28 @@ impl TrainSpriteGraphics {
         self.views_for_local_id(local_id)?.first()
     }
 
-    /// Resuelve Action3 → variational default* → Action2 básico → Action1.
+    /// Resuelve sin contexto (variational → `default`; random → set[0]).
     #[must_use]
     pub fn resolve_action1_set(&self, action3_set_id: u16) -> u16 {
+        self.resolve_action1_set_ctx(action3_set_id, &Action2EvalCtx::default())
+    }
+
+    /// Resuelve Action3 → var/random → Action2 básico → Action1.
+    #[must_use]
+    pub fn resolve_action1_set_ctx(&self, action3_set_id: u16, ctx: &Action2EvalCtx) -> u16 {
         let mut id = action3_set_id;
         for _ in 0..8 {
             let a2 = u8::try_from(id).unwrap_or(u8::MAX);
-            if let Some(&next) = self.action2_var_default.get(&a2) {
-                // Resultado callback (bit 15) → no seguir.
+            if let Some(rnd) = self.action2_random.get(&a2) {
+                let next = eval_action2_random(rnd, ctx.random_bits);
+                if next & 0x8000 != 0 {
+                    break;
+                }
+                id = next;
+                continue;
+            }
+            if let Some(var) = self.action2_var.get(&a2) {
+                let next = eval_action2_var(var, ctx);
                 if next & 0x8000 != 0 {
                     break;
                 }
@@ -91,6 +141,30 @@ impl TrainSpriteGraphics {
             .map(Vec::as_slice)
             .filter(|s| !s.is_empty())
     }
+}
+
+fn eval_action2_var(entry: &Action2VarEntry, ctx: &Action2EvalCtx) -> u16 {
+    let Some(&raw) = ctx.vars.get(&entry.variable) else {
+        return entry.default;
+    };
+    let shifted = raw.wrapping_shr(u32::from(entry.shift & 0x1F));
+    let value = u8::try_from(shifted & u32::from(entry.and_mask)).unwrap_or(u8::MAX);
+    for &(result, low, high) in &entry.ranges {
+        if value >= low && value <= high {
+            return result;
+        }
+    }
+    entry.default
+}
+
+fn eval_action2_random(entry: &Action2RandomEntry, random_bits: u32) -> u16 {
+    let n = entry.sets.len();
+    if n == 0 {
+        return 0;
+    }
+    let mask = n.next_power_of_two().saturating_sub(1);
+    let idx = (usize::try_from(random_bits >> entry.randbit).unwrap_or(0) & mask) % n;
+    entry.sets[idx]
 }
 
 /// Convierte índices 8bpp → RGBA con paleta DOS.
@@ -191,21 +265,27 @@ fn decompress_sprite_lz77(
 }
 
 /// Decodifica buffer “tile” chunked 8bpp (offsets u16 + trozos `cinfo`/`cofs`).
-///
-/// Formato `OpenTTD`/`grf.txt` para `width ≤ 256`: por fila, offset LE desde el
-/// inicio del buffer; trozos `(length|last, skip, pixels…)`.
 #[must_use]
 pub fn decode_chunked_8bpp(buf: &[u8], width: u16, height: u16) -> Option<Vec<u8>> {
+    decode_chunked_pixels(buf, width, height, 1)
+}
+
+/// Decodifica buffer chunked con `bpp` bytes/píxel (8bpp o 32bpp RGB/A/M).
+///
+/// Formato `OpenTTD` v2 `width ≤ 256`: por fila, offset LE; trozos
+/// `(length|last, skip, pixels×bpp…)`.
+#[must_use]
+pub fn decode_chunked_pixels(buf: &[u8], width: u16, height: u16, bpp: usize) -> Option<Vec<u8>> {
     let w = usize::from(width);
     let h = usize::from(height);
-    if w == 0 || h == 0 || w > 256 {
+    if w == 0 || h == 0 || w > 256 || bpp == 0 || bpp > 5 {
         return None;
     }
     let table_bytes = h.checked_mul(2)?;
     if buf.len() < table_bytes {
         return None;
     }
-    let mut out = vec![0u8; w.checked_mul(h)?];
+    let mut out = vec![0u8; w.checked_mul(h)?.checked_mul(bpp)?];
     for y in 0..h {
         let offset = usize::from(u16::from_le_bytes([buf[y * 2], buf[y * 2 + 1]]));
         if offset >= buf.len() {
@@ -221,12 +301,13 @@ pub fn decode_chunked_8bpp(buf: &[u8], width: u16, height: u16) -> Option<Vec<u8
             let length = usize::from(cinfo & 0x7F);
             let skip = usize::from(buf[dest + 1]);
             dest += 2;
-            if skip.checked_add(length)? > w || dest.checked_add(length)? > buf.len() {
+            let nbytes = length.checked_mul(bpp)?;
+            if skip.checked_add(length)? > w || dest.checked_add(nbytes)? > buf.len() {
                 return None;
             }
-            let row_at = y.checked_mul(w)?.checked_add(skip)?;
-            out[row_at..row_at + length].copy_from_slice(&buf[dest..dest + length]);
-            dest += length;
+            let row_at = y.checked_mul(w)?.checked_add(skip)?.checked_mul(bpp)?;
+            out[row_at..row_at + nbytes].copy_from_slice(&buf[dest..dest + nbytes]);
+            dest += nbytes;
             if last {
                 break;
             }
@@ -235,24 +316,30 @@ pub fn decode_chunked_8bpp(buf: &[u8], width: u16, height: u16) -> Option<Vec<u8
     Some(out)
 }
 
-/// Codifica índices planos → buffer chunked (1 trozo de fila completa, `width ≤ 127`).
+/// Codifica píxeles planos → chunked (1 trozo de fila completa, `width ≤ 127`).
 #[must_use]
-pub fn encode_chunked_8bpp_full_rows(width: u16, height: u16, indices: &[u8]) -> Option<Vec<u8>> {
+pub fn encode_chunked_pixels_full_rows(
+    width: u16,
+    height: u16,
+    bpp: usize,
+    pixels: &[u8],
+) -> Option<Vec<u8>> {
     let w = usize::from(width);
     let h = usize::from(height);
-    if w == 0 || h == 0 || w > 127 || indices.len() < w.checked_mul(h)? {
+    let row_bytes = w.checked_mul(bpp)?;
+    if w == 0 || h == 0 || w > 127 || bpp == 0 || pixels.len() < h.checked_mul(row_bytes)? {
         return None;
     }
     let table_bytes = h * 2;
-    let mut body = Vec::with_capacity(h * (2 + w));
+    let mut body = Vec::with_capacity(h * (2 + row_bytes));
     let mut offsets = Vec::with_capacity(h);
     for y in 0..h {
         offsets.push(u16::try_from(table_bytes + body.len()).ok()?);
         let cinfo = 0x80u8 | u8::try_from(w).ok()?;
         body.push(cinfo);
-        body.push(0); // skip
-        let row = y * w;
-        body.extend_from_slice(&indices[row..row + w]);
+        body.push(0);
+        let row = y * row_bytes;
+        body.extend_from_slice(&pixels[row..row + row_bytes]);
     }
     let mut out = Vec::with_capacity(table_bytes + body.len());
     for off in offsets {
@@ -260,6 +347,12 @@ pub fn encode_chunked_8bpp_full_rows(width: u16, height: u16, indices: &[u8]) ->
     }
     out.extend(body);
     Some(out)
+}
+
+/// Codifica índices planos → buffer chunked (1 trozo de fila completa, `width ≤ 127`).
+#[must_use]
+pub fn encode_chunked_8bpp_full_rows(width: u16, height: u16, indices: &[u8]) -> Option<Vec<u8>> {
+    encode_chunked_pixels_full_rows(width, height, 1, indices)
 }
 
 /// Decodifica sprite real v1: `sprite_type` + `height…` + datos (plano, LZ77 y/o chunked).
@@ -307,6 +400,7 @@ pub fn decode_real_sprite_v1(sprite_type: u8, dim_and_data: &[u8]) -> Option<Dec
         x_offs,
         y_offs,
         rgba,
+        mask: Vec::new(),
     })
 }
 
@@ -373,7 +467,7 @@ fn parse_action2_vehicle_basic(payload: &[u8], feature: u8) -> Option<(u8, u16)>
     let set_id = payload[2];
     let num_load = payload[3];
     let num_loading = payload[4];
-    // Variational / random Action2 (0x81 / 0x82 / …) → ver `parse_action2_variational_default`.
+    // Variational / random Action2 → `parse_action2_variational` / `parse_action2_random`.
     if num_load >= 0x80 || num_load == 0 || num_loading == 0 {
         return None;
     }
@@ -387,48 +481,96 @@ fn parse_action2_vehicle_basic(payload: &[u8], feature: u8) -> Option<(u8, u16)>
     Some((set_id, a1))
 }
 
-/// Action2 variational tipo `0x81` (byte): solo extrae el `default` (sin evaluar vars).
+/// Action2 variational `0x81`/`0x82` (byte): variable + rangos + default.
 ///
-/// Formato simple (sin advanced/divide/modulo):\
-/// `02 feat set 81 var shift and nvar {result:u16 low:u8 high:u8}* default:u16`
-fn parse_action2_variational_default(payload: &[u8], feature: u8) -> Option<(u8, u16)> {
+/// Sin advanced/divide/modulo. `0x82` = related object (mismo layout).
+fn parse_action2_variational(payload: &[u8], feature: u8) -> Option<(u8, Action2VarEntry)> {
     if payload.len() < 8 || payload[0] != 0x02 || payload[1] != feature {
         return None;
     }
     let set_id = payload[2];
     let typ = payload[3];
-    if typ != 0x81 {
+    if typ != 0x81 && typ != 0x82 {
         return None;
     }
-    // payload[4] = variable (ignorado: siempre default)
+    let variable = payload[4];
     let shift = payload[5];
     // Advanced / divide / modulo → OOS.
     if shift & 0xE0 != 0 {
         return None;
     }
     let mut i = 6usize;
-    // and-mask: 1 byte for type 81
     if i >= payload.len() {
         return None;
     }
+    let and_mask = payload[i];
     i += 1;
     if i >= payload.len() {
         return None;
     }
     let nvar = payload[i];
     i += 1;
+    let mut ranges = Vec::with_capacity(usize::from(nvar));
     for _ in 0..nvar {
-        // result:u16 + low:u8 + high:u8
         if i + 4 > payload.len() {
             return None;
         }
+        let result = u16::from_le_bytes([payload[i], payload[i + 1]]);
+        let low = payload[i + 2];
+        let high = payload[i + 3];
+        ranges.push((result, low, high));
         i += 4;
     }
     if i + 2 > payload.len() {
         return None;
     }
     let default = u16::from_le_bytes([payload[i], payload[i + 1]]);
-    Some((set_id, default))
+    Some((
+        set_id,
+        Action2VarEntry {
+            variable,
+            shift: shift & 0x1F,
+            and_mask,
+            ranges,
+            default,
+        },
+    ))
+}
+
+/// Action2 random `0x80`/`0x83`: triggers + randbit + n sets (potencia de 2).
+fn parse_action2_random(payload: &[u8], feature: u8) -> Option<(u8, Action2RandomEntry)> {
+    if payload.len() < 8 || payload[0] != 0x02 || payload[1] != feature {
+        return None;
+    }
+    let set_id = payload[2];
+    let typ = payload[3];
+    if typ != 0x80 && typ != 0x83 {
+        return None;
+    }
+    let triggers = payload[4];
+    let randbit = payload[5];
+    let nrand = payload[6];
+    if nrand == 0 || !nrand.is_power_of_two() {
+        return None;
+    }
+    let n = usize::from(nrand);
+    let words_end = 7usize.checked_add(n.checked_mul(2)?)?;
+    if payload.len() < words_end {
+        return None;
+    }
+    let mut sets = Vec::with_capacity(n);
+    for k in 0..n {
+        let o = 7 + k * 2;
+        sets.push(u16::from_le_bytes([payload[o], payload[o + 1]]));
+    }
+    Some((
+        set_id,
+        Action2RandomEntry {
+            triggers,
+            randbit,
+            sets,
+        },
+    ))
 }
 
 fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Vec<TrainSpriteAssign>> {
@@ -520,8 +662,13 @@ pub const fn sprite_v2_bpp(info: u8) -> usize {
     bpp
 }
 
-/// Convierte buffer descomprimido v2 (componentes R,G,B,A,M) → RGBA.
-fn v2_pixels_to_rgba(info: u8, pixels: &[u8], width: u16, height: u16) -> Option<Vec<u8>> {
+/// Convierte buffer descomprimido v2 (componentes R,G,B,A,M) → `(rgba, mask)`.
+fn v2_pixels_to_rgba_mask(
+    info: u8,
+    pixels: &[u8],
+    width: u16,
+    height: u16,
+) -> Option<(Vec<u8>, Vec<u8>)> {
     let pixel_count = usize::from(width).checked_mul(usize::from(height))?;
     let bpp = sprite_v2_bpp(info);
     if bpp == 0 || pixels.len() < pixel_count.checked_mul(bpp)? {
@@ -531,31 +678,102 @@ fn v2_pixels_to_rgba(info: u8, pixels: &[u8], width: u16, height: u16) -> Option
     let has_a = info & 0x02 != 0;
     let has_pal = info & 0x04 != 0;
     if has_pal && !has_rgb {
-        return indices_to_rgba(&pixels[..pixel_count], width, height);
+        let rgba = indices_to_rgba(&pixels[..pixel_count], width, height)?;
+        return Some((rgba, Vec::new()));
     }
     let mut rgba = Vec::with_capacity(pixel_count * 4);
+    let mut mask = if has_pal {
+        Vec::with_capacity(pixel_count)
+    } else {
+        Vec::new()
+    };
     for idx in 0..pixel_count {
         let px = &pixels[idx * bpp..];
-        let (red, green, blue, alpha) = match (has_rgb, has_a) {
-            (true, true) => (px[0], px[1], px[2], px[3]),
-            (true, false) => (px[0], px[1], px[2], 255),
-            (false, true) => (0, 0, 0, px[0]),
-            (false, false) => (0, 0, 0, 255),
+        let mut o = 0usize;
+        let (red, green, blue) = if has_rgb {
+            o = 3;
+            (px[0], px[1], px[2])
+        } else {
+            (0, 0, 0)
         };
+        let alpha = if has_a {
+            let a = px[o];
+            o += 1;
+            a
+        } else {
+            255
+        };
+        if has_pal {
+            mask.push(px.get(o).copied().unwrap_or(0));
+        }
         rgba.extend_from_slice(&[red, green, blue, alpha]);
     }
-    Some(rgba)
+    Some((rgba, mask))
 }
 
-/// Decodifica imagen de sprite section v2 (8bpp palette o 32bpp RGB/RGBA).
+const DEFAULT_BRIGHTNESS: u32 = 128;
+
+/// Ajusta brillo estilo `OpenTTD` (`AdjustBrightness`, aproximación).
+fn adjust_brightness_rgb(rgb: [u8; 3], brightness: u8) -> [u8; 3] {
+    let bright = u32::from(brightness);
+    if bright == DEFAULT_BRIGHTNESS {
+        return rgb;
+    }
+    let scale = |channel: u8| -> u8 {
+        let scaled = (u32::from(channel) * bright) >> 7;
+        u8::try_from(scaled.min(255)).unwrap_or(255)
+    };
+    [scale(rgb[0]), scale(rgb[1]), scale(rgb[2])]
+}
+
+/// Aplica máscara company-colour in-place sobre RGBA (`mask==0` → sin cambio).
 ///
-/// Chunked solo para palette (`bpp==1`). Devuelve `(zoom, sprite)`.
+/// Índices `198..=205` (rampa autor) se remapean a la rampa de `company_colour`.
+pub fn apply_company_colour_mask(rgba: &mut [u8], mask: &[u8], company_colour: u8) {
+    let company = usize::from(company_colour) % COMPANY_COLOUR_COUNT;
+    let pixel_count = mask.len().min(rgba.len() / 4);
+    let author_end =
+        AUTHOR_CC_PALETTE_FIRST.saturating_add(u8::try_from(COMPANY_RAMP_SHADES).unwrap_or(8));
+    for idx in 0..pixel_count {
+        let mask_idx = mask[idx];
+        if mask_idx == 0 {
+            continue;
+        }
+        let px = &mut rgba[idx * 4..idx * 4 + 4];
+        let brightness = px[0].max(px[1]).max(px[2]);
+        let base = if (AUTHOR_CC_PALETTE_FIRST..author_end).contains(&mask_idx) {
+            let shade = usize::from(mask_idx - AUTHOR_CC_PALETTE_FIRST) % COMPANY_RAMP_SHADES;
+            COMPANY_RAMP_RGB[company * COMPANY_RAMP_SHADES + shade]
+        } else {
+            DOS_PALETTE_RGB[usize::from(mask_idx)]
+        };
+        let tuned = adjust_brightness_rgb(base, brightness);
+        px[0] = tuned[0];
+        px[1] = tuned[1];
+        px[2] = tuned[2];
+    }
+}
+
+/// Hornea la máscara del sprite con el color de compañía (copia RGBA).
+#[must_use]
+pub fn bake_sprite_company_mask(sprite: &DecodedSprite, company_colour: u8) -> Vec<u8> {
+    let mut rgba = sprite.rgba.clone();
+    if !sprite.mask.is_empty() {
+        apply_company_colour_mask(&mut rgba, &sprite.mask, company_colour);
+    }
+    rgba
+}
+
+/// Decodifica imagen de sprite section v2 (8bpp / 32bpp / máscara / chunked).
+///
+/// Devuelve `(zoom, sprite)`.
 #[must_use]
 pub fn decode_real_sprite_v2_section_zoom(info: u8, body: &[u8]) -> Option<(u8, DecodedSprite)> {
     if info == 0xFF {
         return None;
     }
-    let bpp = sprite_v2_bpp(info);
+    let colour = info & 0x07;
+    let bpp = sprite_v2_bpp(colour);
     if bpp == 0 {
         return None;
     }
@@ -574,9 +792,6 @@ pub fn decode_real_sprite_v2_section_zoom(info: u8, body: &[u8]) -> Option<(u8, 
         return None;
     }
     let chunked = info & 0x08 != 0;
-    if chunked && bpp != 1 {
-        return None;
-    }
     let mut pos = 9usize;
     let pixel_count = usize::from(width).checked_mul(usize::from(height))?;
     let decomp_size = if chunked {
@@ -594,12 +809,12 @@ pub fn decode_real_sprite_v2_section_zoom(info: u8, body: &[u8]) -> Option<(u8, 
         return None;
     }
     let intermediate = decompress_grf_lz77(&body[pos..], decomp_size)?;
-    let rgba = if chunked {
-        let indices = decode_chunked_8bpp(&intermediate, width, height)?;
-        indices_to_rgba(&indices, width, height)?
+    let flat = if chunked {
+        decode_chunked_pixels(&intermediate, width, height, bpp)?
     } else {
-        v2_pixels_to_rgba(info, &intermediate, width, height)?
+        intermediate
     };
+    let (rgba, mask) = v2_pixels_to_rgba_mask(colour, &flat, width, height)?;
     Some((
         zoom,
         DecodedSprite {
@@ -608,6 +823,7 @@ pub fn decode_real_sprite_v2_section_zoom(info: u8, body: &[u8]) -> Option<(u8, 
             x_offs,
             y_offs,
             rgba,
+            mask,
         },
     ))
 }
@@ -718,9 +934,13 @@ pub fn collect_feature_sprite_graphics(
             {
                 out.action2_to_action1.insert(a2_id, a1_idx);
             } else if feature == ACTION0_FEATURE_TRAINS
-                && let Some((a2_id, def)) = parse_action2_variational_default(payload, feature)
+                && let Some((a2_id, var)) = parse_action2_variational(payload, feature)
             {
-                out.action2_var_default.insert(a2_id, def);
+                out.action2_var.insert(a2_id, var);
+            } else if feature == ACTION0_FEATURE_TRAINS
+                && let Some((a2_id, rnd)) = parse_action2_random(payload, feature)
+            {
+                out.action2_random.insert(a2_id, rnd);
             } else if let Some(assigns) = parse_action3_feature(payload, feature) {
                 out.assigns.extend(assigns);
             }
@@ -982,27 +1202,61 @@ pub fn build_action2_trains_payload(
     )
 }
 
-/// Action2 variational `0x81` sin rangos: siempre `default` (var/shift/and fijos).
+/// Action2 variational `0x81` con rangos opcionales.
+#[must_use]
+pub fn build_action2_variational_payload(
+    feature: u8,
+    set_id: u8,
+    variable: u8,
+    shift: u8,
+    and_mask: u8,
+    ranges: &[(u16, u8, u8)],
+    default_set: u16,
+) -> Vec<u8> {
+    let mut p = vec![
+        0x02,
+        feature,
+        set_id,
+        0x81,
+        variable,
+        shift & 0x1F,
+        and_mask,
+        u8::try_from(ranges.len()).unwrap_or(0),
+    ];
+    for &(result, low, high) in ranges {
+        p.extend_from_slice(&result.to_le_bytes());
+        p.push(low);
+        p.push(high);
+    }
+    p.extend_from_slice(&default_set.to_le_bytes());
+    p
+}
+
+/// Action2 variational `0x81` sin rangos: siempre `default`.
 #[must_use]
 pub fn build_action2_variational_default_payload(
     feature: u8,
     set_id: u8,
     default_set: u16,
 ) -> Vec<u8> {
-    let mut p = vec![
-        0x02, feature, set_id, 0x81, 0x00, // variable
-        0x00, // shift (sin advanced)
-        0xFF, // and-mask
-        0x00, // nvar
-    ];
-    p.extend_from_slice(&default_set.to_le_bytes());
-    p
+    build_action2_variational_payload(feature, set_id, 0x00, 0x00, 0xFF, &[], default_set)
 }
 
 /// Action2 variational trains → `default_set`.
 #[must_use]
 pub fn build_action2_trains_variational_default(set_id: u8, default_set: u16) -> Vec<u8> {
     build_action2_variational_default_payload(ACTION0_FEATURE_TRAINS, set_id, default_set)
+}
+
+/// Action2 random `0x80` trains.
+#[must_use]
+pub fn build_action2_trains_random(set_id: u8, randbit: u8, sets: &[u16]) -> Vec<u8> {
+    let n = u8::try_from(sets.len()).unwrap_or(0);
+    let mut p = vec![0x02, ACTION0_FEATURE_TRAINS, set_id, 0x80, 0x00, randbit, n];
+    for &s in sets {
+        p.extend_from_slice(&s.to_le_bytes());
+    }
+    p
 }
 
 /// Append sprite real v2: `DWORD size` + `info` + payload (sin type duplicado).
@@ -1173,6 +1427,72 @@ pub fn build_sprite_section_rgba_entry(
     entry.push(0x03); // RGB + alpha
     entry.extend(img);
     entry
+}
+
+/// Entrada sprite section v2: RGBA + máscara (`info=0x07`) + LZ77.
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn build_sprite_section_rgba_mask_entry(
+    sprite_id: u32,
+    zoom: u8,
+    width: u16,
+    height: u16,
+    x_offs: i16,
+    y_offs: i16,
+    rgba: &[u8],
+    mask: &[u8],
+) -> Vec<u8> {
+    let n = usize::from(width) * usize::from(height);
+    let mut pixels = Vec::with_capacity(n * 5);
+    for i in 0..n {
+        let o = i * 4;
+        pixels.extend_from_slice(&rgba[o..o + 4]);
+        pixels.push(mask.get(i).copied().unwrap_or(0));
+    }
+    let mut img = Vec::new();
+    img.push(zoom);
+    img.extend_from_slice(&height.to_le_bytes());
+    img.extend_from_slice(&width.to_le_bytes());
+    img.extend_from_slice(&x_offs.to_le_bytes());
+    img.extend_from_slice(&y_offs.to_le_bytes());
+    img.extend(compress_grf_lz77_literals(&pixels));
+    let mut entry = Vec::with_capacity(8 + 1 + img.len());
+    entry.extend_from_slice(&sprite_id.to_le_bytes());
+    let size = u32::try_from(1 + img.len()).unwrap_or(0);
+    entry.extend_from_slice(&size.to_le_bytes());
+    entry.push(0x07); // RGB + alpha + palette mask
+    entry.extend(img);
+    entry
+}
+
+/// Entrada sprite section v2: RGBA chunked (`info=0x0B`).
+#[must_use]
+pub fn build_sprite_section_rgba_chunked_entry(
+    sprite_id: u32,
+    zoom: u8,
+    width: u16,
+    height: u16,
+    x_offs: i16,
+    y_offs: i16,
+    rgba: &[u8],
+) -> Option<Vec<u8>> {
+    let chunked = encode_chunked_pixels_full_rows(width, height, 4, rgba)?;
+    let mut img = Vec::new();
+    img.push(zoom);
+    img.extend_from_slice(&height.to_le_bytes());
+    img.extend_from_slice(&width.to_le_bytes());
+    img.extend_from_slice(&x_offs.to_le_bytes());
+    img.extend_from_slice(&y_offs.to_le_bytes());
+    let decomp = u32::try_from(chunked.len()).ok()?;
+    img.extend_from_slice(&decomp.to_le_bytes());
+    img.extend(compress_grf_lz77_literals(&chunked));
+    let mut entry = Vec::with_capacity(8 + 1 + img.len());
+    entry.extend_from_slice(&sprite_id.to_le_bytes());
+    let size = u32::try_from(1 + img.len()).unwrap_or(0);
+    entry.extend_from_slice(&size.to_le_bytes());
+    entry.push(0x0B); // RGB + alpha + chunked
+    entry.extend(img);
+    Some(entry)
 }
 
 /// GRF v2 canónico: Action1 + ref `0xFD` → sprite section (sin sprite inline).
@@ -2166,20 +2486,19 @@ mod tests {
 
     #[test]
     fn parse_action2_variational_default_only() {
-        // Basic: num_load 0x81 → None; variational parser sí.
         let payload = [0x02, ACTION0_FEATURE_TRAINS, 0x01, 0x81, 0x00];
         assert!(parse_action2_vehicle_basic(&payload, ACTION0_FEATURE_TRAINS).is_none());
         let var = build_action2_trains_variational_default(9, 5);
-        assert_eq!(
-            parse_action2_variational_default(&var, ACTION0_FEATURE_TRAINS),
-            Some((9, 5))
-        );
+        let parsed = parse_action2_variational(&var, ACTION0_FEATURE_TRAINS).unwrap();
+        assert_eq!(parsed.0, 9);
+        assert_eq!(parsed.1.default, 5);
+        assert!(parsed.1.ranges.is_empty());
         let basic = build_action2_trains_payload(3, 0, 0);
         assert_eq!(
             parse_action2_vehicle_basic(&basic, ACTION0_FEATURE_TRAINS),
             Some((3, 0))
         );
-        assert!(parse_action2_variational_default(&basic, ACTION0_FEATURE_TRAINS).is_none());
+        assert!(parse_action2_variational(&basic, ACTION0_FEATURE_TRAINS).is_none());
     }
 
     #[test]
@@ -2206,13 +2525,83 @@ mod tests {
         );
         let gfx = collect_train_sprite_graphics(&bytes).unwrap();
         assert_eq!(
-            gfx.action2_var_default.get(&var_id),
-            Some(&u16::from(basic_id))
+            gfx.action2_var.get(&var_id).map(|v| v.default),
+            Some(u16::from(basic_id))
         );
         assert_eq!(gfx.action2_to_action1.get(&basic_id), Some(&0));
         assert_eq!(gfx.resolve_action1_set(u16::from(var_id)), 0);
         let preview = gfx.preview_for_local_id(0).unwrap();
         assert_eq!(preview.width, 8);
+    }
+
+    #[test]
+    fn resolve_variational_ranges_with_ctx() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                variable: 0x40,
+                shift: 0,
+                and_mask: 0xFF,
+                ranges: vec![(7, 1, 1), (8, 2, 5)],
+                default: 9,
+            },
+        );
+        gfx.action2_to_action1.insert(7, 0);
+        gfx.action2_to_action1.insert(8, 1);
+        gfx.action2_to_action1.insert(9, 2);
+        let mut ctx = Action2EvalCtx::default();
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &ctx), 2); // default → 9 → a1 2
+        ctx.vars.insert(0x40, 1);
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &ctx), 0);
+        ctx.vars.insert(0x40, 3);
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &ctx), 1);
+    }
+
+    #[test]
+    fn resolve_random_action2_with_bits() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_random.insert(
+            4,
+            Action2RandomEntry {
+                triggers: 0,
+                randbit: 0,
+                sets: vec![10, 11],
+            },
+        );
+        gfx.action2_to_action1.insert(10, 0);
+        gfx.action2_to_action1.insert(11, 1);
+        let mut ctx = Action2EvalCtx {
+            random_bits: 0,
+            ..Action2EvalCtx::default()
+        };
+        assert_eq!(gfx.resolve_action1_set_ctx(4, &ctx), 0);
+        ctx.random_bits = 1;
+        assert_eq!(gfx.resolve_action1_set_ctx(4, &ctx), 1);
+        assert_eq!(gfx.resolve_action1_set(4), 0); // sin ctx → set[0]
+    }
+
+    #[test]
+    fn decode_v2_chunked_rgba_roundtrip() {
+        let rgba = [10u8, 20, 30, 255, 40, 50, 60, 128, 0, 0, 0, 0, 1, 2, 3, 200];
+        let entry = build_sprite_section_rgba_chunked_entry(11, 0, 2, 2, -1, -2, &rgba).unwrap();
+        let index = index_sprite_section(&entry);
+        let spr = resolve_fd_sprite(&index, 11).unwrap();
+        assert_eq!(spr.rgba, rgba);
+    }
+
+    #[test]
+    fn bake_company_mask_remaps_author_ramp() {
+        let rgba = vec![128u8, 128, 128, 255, 200, 200, 200, 255];
+        let mask = vec![AUTHOR_CC_PALETTE_FIRST, 0];
+        let entry = build_sprite_section_rgba_mask_entry(12, 0, 2, 1, 0, 0, &rgba, &mask);
+        let index = index_sprite_section(&entry);
+        let spr = resolve_fd_sprite(&index, 12).unwrap();
+        assert_eq!(spr.mask, mask);
+        let baked = bake_sprite_company_mask(&spr, 4); // Red
+        // Pixel 0 masked → rampa red; pixel 1 sin máscara.
+        assert_ne!(&baked[0..3], &rgba[0..3]);
+        assert_eq!(&baked[4..8], &rgba[4..8]);
     }
 
     #[test]

@@ -1406,6 +1406,37 @@ mod tests {
     }
 
     #[test]
+    fn apply_train_with_action2_chain_attaches_preview() {
+        let a0 = build_action0_train_payload(1975, 120, 900, "A2 Loco Apply");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::build_grf_v2_train_with_action2_chain(
+            &a0,
+            0,
+            7,
+            8,
+            8,
+            &indices,
+            [b'T', b'A', 0, 3],
+            "ta2apply",
+        );
+        let dir = tempfile_dir_with("ta2apply.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("ta2apply.grf", 4));
+        apply_newgrf_vehicles_trains(&mut state, &[&dir]);
+        let eng = state.engine_catalog.iter().find(|e| e.from_newgrf).unwrap();
+        let preview = eng.newgrf_preview().unwrap();
+        assert_eq!(preview.width, 8);
+        assert!(!eng.newgrf_views.is_empty());
+    }
+
+    #[test]
     fn inspect_counts_action0_trains_feature() {
         let a0 = build_action0_train_payload(1960, 100, 800, "T");
         let bytes = build_grf_v2_with_action0_and_action8(&a0, [b'T', b'0', 0, 1], "t", "d");

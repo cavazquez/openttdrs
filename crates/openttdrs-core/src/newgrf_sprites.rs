@@ -1,8 +1,11 @@
-//! Decode mínimo de sprites reales `NewGRF` + Action1/3 (trains / roadtypes, preview).
+//! Decode mínimo de sprites reales `NewGRF` + Action1/2/3 (trains / roadtypes, preview).
 //!
 //! MVP: contenedor **v1** (o entradas reales inline), 8bpp **sin comprimir**
-//! (sin bit 0x02 ni chunked 0x08). Action3 resuelve set-ID como índice de
-//! Action1 (sin Action2). Action5 shore runtime parcial; 32bpp / callbacks OOS.
+//! (sin bit 0x02 ni chunked 0x08). Action3→Action2→Action1 estático para
+//! **trains** (default moving; sin variational/callbacks). Road/station siguen
+//! Action3→Action1 directo. Action5 shore runtime parcial; 32bpp OOS.
+
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -23,19 +26,21 @@ pub struct DecodedSprite {
     pub rgba: Vec<u8>,
 }
 
-/// Asignación Action3: id local → set Action1.
+/// Asignación Action3: id local → set Action2 (o índice Action1 si no hay Action2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TrainSpriteAssign {
     pub local_id: u8,
     pub set_id: u16,
 }
 
-/// Resultado de parsear Action1/3 de un feature (trains / roadtypes).
+/// Resultado de parsear Action1/2/3 de un feature (trains / roadtypes).
 #[derive(Debug, Clone, Default)]
 pub struct TrainSpriteGraphics {
-    /// `sets[set_id][view]`.
+    /// `sets[set_id][view]` — sets Action1 en orden de aparición.
     pub sets: Vec<Vec<DecodedSprite>>,
     pub assigns: Vec<TrainSpriteAssign>,
+    /// Action2 set-id → índice del primer set Action1 “moving” (solo trains).
+    pub action2_to_action1: HashMap<u8, u16>,
 }
 
 impl TrainSpriteGraphics {
@@ -43,6 +48,16 @@ impl TrainSpriteGraphics {
     #[must_use]
     pub fn preview_for_local_id(&self, local_id: u8) -> Option<&DecodedSprite> {
         self.views_for_local_id(local_id)?.first()
+    }
+
+    /// Resuelve Action3 → Action2 (si hay) → Action1.
+    #[must_use]
+    pub fn resolve_action1_set(&self, action3_set_id: u16) -> u16 {
+        let a2 = u8::try_from(action3_set_id).unwrap_or(u8::MAX);
+        self.action2_to_action1
+            .get(&a2)
+            .copied()
+            .unwrap_or(action3_set_id)
     }
 
     /// Todas las vistas del set asignado al id local.
@@ -54,8 +69,9 @@ impl TrainSpriteGraphics {
             .find(|a| a.local_id == local_id)
             .map(|a| a.set_id)
             .or_else(|| (!self.sets.is_empty()).then_some(0))?;
+        let action1_idx = self.resolve_action1_set(set_id);
         self.sets
-            .get(usize::from(set_id))
+            .get(usize::from(action1_idx))
             .map(Vec::as_slice)
             .filter(|s| !s.is_empty())
     }
@@ -128,6 +144,33 @@ fn parse_action1_feature(payload: &[u8], feature: u8) -> Option<(u8, u8)> {
     Some((num_sets, num_ent))
 }
 
+/// Action2 vehículo básico: `02 <feat> <set-id> <n-load> <n-loading> <words…>`.
+///
+/// Devuelve `(action2_set_id, primer Action1 set moving)`. Variational (`≥0x80`) → None.
+fn parse_action2_vehicle_basic(payload: &[u8], feature: u8) -> Option<(u8, u16)> {
+    if payload.len() < 5 || payload[0] != 0x02 {
+        return None;
+    }
+    if payload[1] != feature {
+        return None;
+    }
+    let set_id = payload[2];
+    let num_load = payload[3];
+    let num_loading = payload[4];
+    // Variational / random Action2 (0x81 / 0x82 / …) → OOS.
+    if num_load >= 0x80 || num_load == 0 || num_loading == 0 {
+        return None;
+    }
+    let n_words = usize::from(num_load) + usize::from(num_loading);
+    let words_start = 5usize;
+    let words_end = words_start.checked_add(n_words.checked_mul(2)?)?;
+    if payload.len() < words_end {
+        return None;
+    }
+    let a1 = u16::from_le_bytes([payload[words_start], payload[words_start + 1]]);
+    Some((set_id, a1))
+}
+
 fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Vec<TrainSpriteAssign>> {
     // 03 <feature> <n-id> <ids…> <num-cid> [cargo…] <default:u16>
     if payload.len() < 6 || payload[0] != 0x03 {
@@ -168,7 +211,7 @@ fn parse_action3_feature(payload: &[u8], feature: u8) -> Option<Vec<TrainSpriteA
     )
 }
 
-/// Recorre el GRF y extrae sets Action1 + asignaciones Action3 para un feature.
+/// Recorre el GRF y extrae sets Action1 + Action2 (trains) + asignaciones Action3.
 ///
 /// # Errors
 ///
@@ -228,6 +271,10 @@ pub fn collect_feature_sprite_graphics(
                 sets_left = ns;
                 views_per_set = ne;
                 views_left_in_set = ne;
+            } else if feature == ACTION0_FEATURE_TRAINS
+                && let Some((a2_id, a1_idx)) = parse_action2_vehicle_basic(payload, feature)
+            {
+                out.action2_to_action1.insert(a2_id, a1_idx);
             } else if let Some(assigns) = parse_action3_feature(payload, feature) {
                 out.assigns.extend(assigns);
             }
@@ -341,6 +388,35 @@ pub fn build_action3_trains_payload(local_id: u8, default_set: u16) -> Vec<u8> {
     build_action3_feature_payload(ACTION0_FEATURE_TRAINS, local_id, default_set)
 }
 
+/// Action2 vehículo básico: 1 estado moving + 1 loading → mismos/distintos sets Action1.
+#[must_use]
+pub fn build_action2_vehicle_payload(
+    feature: u8,
+    set_id: u8,
+    action1_moving: u16,
+    action1_loading: u16,
+) -> Vec<u8> {
+    let mut p = vec![0x02, feature, set_id, 0x01, 0x01];
+    p.extend_from_slice(&action1_moving.to_le_bytes());
+    p.extend_from_slice(&action1_loading.to_le_bytes());
+    p
+}
+
+/// Action2 trains: set-id → Action1 moving/loading.
+#[must_use]
+pub fn build_action2_trains_payload(
+    set_id: u8,
+    action1_moving: u16,
+    action1_loading: u16,
+) -> Vec<u8> {
+    build_action2_vehicle_payload(
+        ACTION0_FEATURE_TRAINS,
+        set_id,
+        action1_moving,
+        action1_loading,
+    )
+}
+
 /// GRF v2 sintético: Action0 + Action1 + sprite(s) + Action3 + Action8.
 #[must_use]
 #[expect(clippy::too_many_arguments)]
@@ -424,6 +500,70 @@ pub fn build_grf_v2_train_with_preview_sprite(
         grfid,
         name,
     )
+}
+
+/// GRF v2: Action0 train + Action1 + sprite + Action2 + Action3 + Action8.
+///
+/// Action3 apunta a `action2_set_id` (≠ índice Action1); la cadena resuelve al set 0.
+#[must_use]
+#[expect(clippy::too_many_arguments)]
+pub fn build_grf_v2_train_with_action2_chain(
+    action0: &[u8],
+    local_id: u8,
+    action2_set_id: u8,
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    const SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+    let action1 = build_action1_trains_payload(1, 1);
+    let action2 = build_action2_trains_payload(action2_set_id, 0, 0);
+    let action3 = build_action3_trains_payload(local_id, u16::from(action2_set_id));
+    let mut action8 = vec![0x08, 0x07];
+    action8.extend_from_slice(&grfid);
+    action8.extend_from_slice(name.as_bytes());
+    action8.push(0);
+    action8.push(0);
+
+    let sprite_body = build_real_sprite_v1_uncompressed(
+        width,
+        height,
+        -i16::try_from(width / 2).unwrap_or(0),
+        -i16::try_from(height).unwrap_or(0),
+        indices,
+    );
+
+    let mut data_section = Vec::new();
+    for payload in [action0, action1.as_slice()] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    let sz = u32::try_from(sprite_body.len()).unwrap_or(0);
+    data_section.extend_from_slice(&sz.to_le_bytes());
+    data_section.push(0x01);
+    data_section.extend_from_slice(&sprite_body);
+
+    for payload in [action2.as_slice(), action3.as_slice(), action8.as_slice()] {
+        let sz = u32::try_from(payload.len()).unwrap_or(0);
+        data_section.extend_from_slice(&sz.to_le_bytes());
+        data_section.push(0xFF);
+        data_section.extend_from_slice(payload);
+    }
+    data_section.extend_from_slice(&0u32.to_le_bytes());
+
+    let sprite_offs = u32::try_from(1 + data_section.len()).unwrap_or(0);
+    let mut out = Vec::new();
+    out.extend_from_slice(&[0x00, 0x00]);
+    out.extend_from_slice(&SIG);
+    out.extend_from_slice(&sprite_offs.to_le_bytes());
+    out.push(0x00);
+    out.extend_from_slice(&data_section);
+    out.extend_from_slice(&0u32.to_le_bytes());
+    out
 }
 
 /// GRF v2 sintético: Action0 roadtype + Action1 + sprite + Action3 + Action8.
@@ -865,6 +1005,49 @@ mod tests {
         assert_eq!(preview.width, 8);
         assert_eq!(preview.height, 8);
         assert!(preview.rgba.iter().any(|&b| b != 0));
+    }
+
+    #[test]
+    fn collect_train_action2_chain_resolves_to_action1_set() {
+        let a0 = build_action0_train_payload(1975, 120, 900, "A2 Loco");
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let a2_id = 7u8;
+        let bytes = build_grf_v2_train_with_action2_chain(
+            &a0,
+            0,
+            a2_id,
+            8,
+            8,
+            &indices,
+            [b'T', b'A', 0, 2],
+            "ta2",
+        );
+        let gfx = collect_train_sprite_graphics(&bytes).unwrap();
+        assert_eq!(gfx.sets.len(), 1);
+        assert_eq!(gfx.action2_to_action1.get(&a2_id), Some(&0));
+        assert_eq!(gfx.assigns[0].set_id, u16::from(a2_id));
+        // Sin Action2: sets[7] no existe; con resolución → set 0.
+        assert!(gfx.sets.get(usize::from(a2_id)).is_none());
+        let preview = gfx.preview_for_local_id(0).unwrap();
+        assert_eq!(preview.width, 8);
+        assert_eq!(gfx.resolve_action1_set(u16::from(a2_id)), 0);
+    }
+
+    #[test]
+    fn parse_action2_skips_variational() {
+        // 02 trains set=1 variational 0x81 …
+        let payload = [0x02, ACTION0_FEATURE_TRAINS, 0x01, 0x81, 0x00];
+        assert!(parse_action2_vehicle_basic(&payload, ACTION0_FEATURE_TRAINS).is_none());
+        let basic = build_action2_trains_payload(3, 0, 0);
+        assert_eq!(
+            parse_action2_vehicle_basic(&basic, ACTION0_FEATURE_TRAINS),
+            Some((3, 0))
+        );
     }
 
     #[test]

@@ -942,7 +942,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** callbacks / 32bpp NewGRF, o segunda humana / editor.
+**Siguiente:** callbacks variational / 32bpp / decompress, o segunda humana / editor.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -974,7 +974,8 @@ Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 13. ~~Action5 catenary (`0x05`) → in-world wires/pylons (rail/estación/túnel/puente).~~ ✅
 14. ~~Stations NewGRF: waypoint + recoloreo compañía (vista 0 plano; sin 0x0E).~~ ✅
 15. ~~Road NewGRF: pendientes (`road_flat` 11–14) + tram overlay (tipo m8).~~ ✅
-16. Callbacks / 32bpp / Action2 → OOS.
+16. ~~Action2 trains estático (Action3→Action2→Action1 moving; sin variational).~~ ✅
+17. Callbacks variational/random / 32bpp / sprites comprimidos → OOS.
 
 Progreso backend OOS (JoinStation rail + CargoDist observacional):
 

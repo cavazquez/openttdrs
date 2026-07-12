@@ -3,6 +3,7 @@ use bevy::prelude::*;
 mod airport_picker_window;
 mod bridge_window;
 pub(crate) mod build_input;
+mod company_selector;
 mod depot_panel;
 mod layout;
 mod minimap;
@@ -26,6 +27,7 @@ pub(crate) use bridge_window::{
     sync_bridge_picker,
 };
 pub(crate) use build_input::{handle_tile_click, sync_build_pointer_modifiers, update_cursor_tile};
+pub(crate) use company_selector::{handle_company_selector_buttons, sync_company_selector};
 pub(crate) use depot_panel::{
     DepotPanelState, begin_depot_list_drag, depot_panel_on_closed, finish_depot_list_drag,
     handle_depot_panel_buttons, setup_depot_panel, sync_depot_panel,

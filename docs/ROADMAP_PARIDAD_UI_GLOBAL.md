@@ -731,7 +731,8 @@ Objetivo: posterior a la paridad single-player.
 **UI-8 (cortes tools-dev + highscore/endscreen) cerrados.** Resto de modos
 (multi, MP, editor, GS/AI) siguen pendientes.
 
-- [ ] Multi-compañía completa en toolbar/listas/finanzas.
+- [x] Multi-compañía mínima: rival IA opcional, selector activa, HUD/listas.
+- [ ] Multi-compañía completa en toolbar/listas/finanzas. *(resto: ownership tiles, render por owner, …)*
 - [ ] Multijugador: lobby, clientes, chat, join/spectate.
 - [ ] Scenario editor y toolbar de 19 botones.
 - [ ] GameScript: story, goals, league.
@@ -937,7 +938,16 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** UI-8 multi-compañía mínima, o roadtype/station in-world / Action5 runtime.
+**Siguiente:** multi-compañía polish (ownership vía/rail, render por owner), o MP/editor.
+
+Progreso UI-8 (multi-compañía mínima):
+
+1. ~~`set_active_company` + sync espejo.~~ ✅
+2. ~~Nueva partida: toggle Rival IA (TransCargo).~~ ✅
+3. ~~Selector compañía en toolbar + nombre en statusbar.~~ ✅
+4. ~~Finanzas título + vehicle list Mía/Todas.~~ ✅
+5. ~~Color swatch → pool (`sync_active_from_mirrors`).~~ ✅
+6. Ownership tiles / sprites por owner / segunda humana → OOS.
 
 Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world trenes):
 

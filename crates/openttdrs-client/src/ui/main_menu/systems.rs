@@ -164,6 +164,7 @@ pub(crate) fn main_menu_options_interaction(
                         settings.0.preserve_demo = !settings.0.preserve_demo;
                     }
                 }
+                MainMenuToggle::RivalAi => settings.0.rival_ai = !settings.0.rival_ai,
             }
         }
         let on = match toggle {
@@ -172,6 +173,7 @@ pub(crate) fn main_menu_options_interaction(
             MainMenuToggle::PreserveDemo => {
                 settings.0.preserve_demo && settings.0.map_size == MapSizePreset::Compact
             }
+            MainMenuToggle::RivalAi => settings.0.rival_ai,
         };
         *bg = toggle_button_bg(on, *interaction);
     }
@@ -451,6 +453,7 @@ pub(crate) fn main_menu_interaction(
                         town_density: PopulationDensity::Normal,
                         industry_density: PopulationDensity::Normal,
                         starting_money: STARTING_MONEY_OPTIONS[1],
+                        rival_ai: true,
                     };
                     enter_new_game(
                         &mut commands,

@@ -41,7 +41,7 @@ pub(crate) fn summary_text(settings: NewGameSettings) -> String {
         "mapa plano"
     };
     format!(
-        "Mapa {} · clima {} · inicio {} · {} · semilla={}\nPueblos {} · industrias {} · capital {}",
+        "Mapa {} · clima {} · inicio {} · {} · semilla={}\nPueblos {} · industrias {} · capital {} · rival {}",
         map_size_label(settings.map_size),
         climate_label(settings.climate),
         settings.start_year,
@@ -54,6 +54,7 @@ pub(crate) fn summary_text(settings: NewGameSettings) -> String {
         settings.town_density.menu_label(),
         settings.industry_density.menu_label(),
         format_money(settings.starting_money),
+        if settings.rival_ai { "sí" } else { "no" },
     )
 }
 

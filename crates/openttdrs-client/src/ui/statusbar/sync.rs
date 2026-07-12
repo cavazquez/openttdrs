@@ -13,10 +13,20 @@ use super::{
     StatusBarReminderDot, StatusBarTickerText, TICKER_SCROLL_MAX, TICKER_SCROLL_SPEED, TickerState,
 };
 
+fn active_company_display_name(sim: &SimWorld) -> String {
+    sim.state
+        .companies
+        .iter()
+        .find(|c| c.id == sim.state.active_company)
+        .map(|c| c.name.clone())
+        .unwrap_or_else(|| COMPANY_DISPLAY_NAME.to_string())
+}
+
 #[derive(Default)]
 pub(crate) struct StatusBarCache {
     date: String,
     money: String,
+    company: String,
     ticker: Option<(u64, f32)>,
     default_visible: bool,
     ticker_visible: bool,
@@ -40,6 +50,7 @@ pub(crate) fn sync_status_bar(
 ) {
     let date = format_calendar_date(sim.state.tick);
     let money = format_money(sim.state.economy.money);
+    let company = active_company_display_name(&sim);
     let paused_label = sim_is_paused(&run_state).then(|| "Pausado".to_string());
     let ticker_key = news_ui.ticker.as_ref().map(|t| (t.item_id, t.scroll));
     let default_visible = news_ui.ticker.is_none() && paused_label.is_none();
@@ -50,6 +61,7 @@ pub(crate) fn sync_status_bar(
 
     if cache.date == date
         && cache.money == money
+        && cache.company == company
         && cache.ticker == ticker_key
         && cache.default_visible == default_visible
         && cache.ticker_visible == ticker_visible
@@ -60,6 +72,7 @@ pub(crate) fn sync_status_bar(
     }
     cache.date = date.clone();
     cache.money = money.clone();
+    cache.company = company.clone();
     cache.ticker = ticker_key;
     cache.default_visible = default_visible;
     cache.ticker_visible = ticker_visible;
@@ -78,7 +91,7 @@ pub(crate) fn sync_status_bar(
             *text = Text::new(paused.clone());
             *vis = Visibility::Visible;
         } else if default_visible {
-            *text = Text::new(COMPANY_DISPLAY_NAME);
+            *text = Text::new(company);
             *vis = Visibility::Visible;
         } else {
             *vis = Visibility::Hidden;

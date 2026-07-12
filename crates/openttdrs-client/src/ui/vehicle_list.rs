@@ -80,6 +80,13 @@ pub(crate) enum VehicleListAction {
     ClearStationFilter,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum VehicleCompanyFilter {
+    #[default]
+    Active,
+    All,
+}
+
 #[derive(Resource, Default)]
 pub(crate) struct VehicleListState {
     pub(crate) open: bool,
@@ -89,6 +96,7 @@ pub(crate) struct VehicleListState {
     pub(crate) selected: Option<u32>,
     /// Si está definido, solo muestra vehículos con orden a esa estación.
     pub(crate) station_filter: Option<TileCoord>,
+    pub(crate) company: VehicleCompanyFilter,
 }
 
 impl VehicleListState {
@@ -134,6 +142,9 @@ pub(crate) struct VehicleListKindButton(VehicleListKind);
 #[derive(Component, Clone, Copy)]
 pub(crate) struct VehicleListActionButton(VehicleListAction);
 
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct VehicleCompanyFilterButton(VehicleCompanyFilter);
+
 #[derive(Component)]
 pub(crate) struct VehicleListToggleLabel;
 
@@ -144,6 +155,7 @@ pub(crate) struct VehicleListCache {
     sort_dir: SortDir,
     selected: Option<u32>,
     station_filter: Option<TileCoord>,
+    company: VehicleCompanyFilter,
     rows: Vec<(u32, String, u32, u16, i32, i32, String)>,
 }
 
@@ -197,6 +209,20 @@ pub(crate) fn setup_vehicle_list(mut commands: Commands, asset_server: Res<Asset
                 "Aviones",
                 VehicleListKindButton(VehicleListKind::Aircraft),
                 84.0,
+            );
+            spawn_list_sort_button(
+                row,
+                asset_server,
+                "Mía",
+                VehicleCompanyFilterButton(VehicleCompanyFilter::Active),
+                48.0,
+            );
+            spawn_list_sort_button(
+                row,
+                asset_server,
+                "Todas",
+                VehicleCompanyFilterButton(VehicleCompanyFilter::All),
+                56.0,
             );
         });
         body.spawn((
@@ -357,6 +383,10 @@ pub(crate) fn handle_vehicle_list_buttons(
         (&Interaction, &VehicleListKindButton),
         (Changed<Interaction>, With<Button>),
     >,
+    company_filter_buttons: Query<
+        (&Interaction, &VehicleCompanyFilterButton),
+        (Changed<Interaction>, With<Button>),
+    >,
     sort_buttons: Query<
         (&Interaction, &VehicleListSortButton),
         (Changed<Interaction>, With<Button>),
@@ -377,6 +407,11 @@ pub(crate) fn handle_vehicle_list_buttons(
         if *interaction == Interaction::Pressed {
             state.kind = button.0;
             state.selected = None;
+        }
+    }
+    for (interaction, button) in &company_filter_buttons {
+        if *interaction == Interaction::Pressed {
+            state.company = button.0;
         }
     }
     for (interaction, button) in &sort_buttons {
@@ -556,7 +591,10 @@ pub(crate) fn sync_vehicle_list(
         .vehicles
         .iter()
         .filter(|vehicle| vehicle.is_consist_head())
-        .filter(|vehicle| vehicle.owner == company)
+        .filter(|vehicle| match state.company {
+            VehicleCompanyFilter::Active => vehicle.owner == company,
+            VehicleCompanyFilter::All => true,
+        })
         .filter(|vehicle| state.kind.matches(vehicle.kind))
         .filter(|vehicle| {
             state
@@ -564,9 +602,13 @@ pub(crate) fn sync_vehicle_list(
                 .is_none_or(|pos| vehicle_visits_station(vehicle, pos))
         })
         .map(|vehicle| {
+            let mut name = vehicle.display_name();
+            if state.company == VehicleCompanyFilter::All && vehicle.owner != company {
+                name = format!("[{}] {name}", vehicle.owner.0);
+            }
             (
                 vehicle.id,
-                vehicle.display_name(),
+                name,
                 vehicle.vehicle_age_years(tick),
                 speed_to_kmh(vehicle.kind, vehicle.effective_speed()),
                 vehicle.pos.x,
@@ -603,6 +645,7 @@ pub(crate) fn sync_vehicle_list(
         && cache.sort == state.sort
         && cache.sort_dir == state.sort_dir
         && cache.station_filter == state.station_filter
+        && cache.company == state.company
         && cache.rows == rows
     {
         if cache.selected != state.selected {
@@ -621,6 +664,7 @@ pub(crate) fn sync_vehicle_list(
     cache.sort = state.sort;
     cache.sort_dir = state.sort_dir;
     cache.station_filter = state.station_filter;
+    cache.company = state.company;
     cache.selected = state.selected;
     cache.rows.clone_from(&rows);
 

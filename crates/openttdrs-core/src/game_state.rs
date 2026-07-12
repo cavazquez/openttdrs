@@ -109,6 +109,7 @@ pub fn company_net_value(money: i64, loan: i64) -> i64 {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod economy_history_tests {
     use super::{ECONOMY_HISTORY_MONTHS, EconomyHistory, company_net_value};
 
@@ -165,6 +166,23 @@ mod economy_history_tests {
                 .samples
                 .len()
         );
+    }
+
+    #[test]
+    fn set_active_company_swaps_economy_mirrors() {
+        use crate::{CompanyId, GameState};
+
+        let mut s = GameState::new(8, 8);
+        s.ensure_rival_transcargo();
+        s.economy.money = 50_000;
+        s.sync_active_from_mirrors();
+        let rival = s.companies.iter().find(|c| c.is_ai).expect("rival").id;
+        assert!(s.set_active_company(rival));
+        assert_eq!(s.active_company, rival);
+        assert_eq!(s.economy.money, s.companies[rival.index()].economy.money);
+        assert!(s.set_active_company(CompanyId::PLAYER));
+        assert_eq!(s.active_company, CompanyId::PLAYER);
+        assert_eq!(s.economy.money, 50_000);
     }
 
     #[test]
@@ -642,6 +660,23 @@ impl GameState {
             c.economy = self.economy;
             c.colour = self.company_colour;
         }
+    }
+
+    /// Cambia la compañía activa (comandos / HUD) y sincroniza espejos.
+    ///
+    /// Devuelve `false` si `id` no está en el pool.
+    pub fn set_active_company(&mut self, id: crate::company::CompanyId) -> bool {
+        self.ensure_companies();
+        if !self.companies.iter().any(|c| c.id == id) {
+            return false;
+        }
+        if self.active_company == id {
+            return true;
+        }
+        self.sync_active_from_mirrors();
+        self.active_company = id;
+        self.sync_mirrors_from_active();
+        true
     }
 
     /// Acredita dinero a una compañía (y espejo si es la activa).

@@ -101,6 +101,8 @@ pub struct NewGameSettings {
     pub town_density: PopulationDensity,
     pub industry_density: PopulationDensity,
     pub starting_money: i64,
+    /// Si true, añade rival IA TransCargo al iniciar.
+    pub rival_ai: bool,
 }
 
 impl Default for NewGameSettings {
@@ -116,6 +118,7 @@ impl Default for NewGameSettings {
             town_density: PopulationDensity::Normal,
             industry_density: PopulationDensity::Normal,
             starting_money: STARTING_MONEY_OPTIONS[1],
+            rival_ai: true,
         }
     }
 }
@@ -159,6 +162,7 @@ impl NewGameSettings {
             town_density: PopulationDensity::Normal,
             industry_density: PopulationDensity::Normal,
             starting_money: STARTING_MONEY_OPTIONS[1],
+            rival_ai: true,
         }
     }
 }
@@ -205,6 +209,11 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
         place_bridge_demo_gap(&mut state);
     } else {
         state.economy.money = settings.starting_money;
+    }
+    state.ensure_companies();
+    state.sync_active_from_mirrors();
+    if settings.rival_ai {
+        state.ensure_rival_transcargo();
     }
     state
 }
@@ -262,6 +271,28 @@ mod tests {
         assert!(!state.towns.is_empty());
         assert!(!state.industries.is_empty());
         assert_eq!(state.economy.money, 1_000_000);
+    }
+
+    #[test]
+    fn rival_ai_adds_transcargo_on_new_game() {
+        let with_rival = build_procedural_demo_world(&NewGameSettings {
+            rival_ai: true,
+            map_size: MapSizePreset::Compact,
+            preserve_demo: false,
+            starting_money: 100_000,
+            ..NewGameSettings::default()
+        });
+        assert!(with_rival.companies.iter().any(|c| c.is_ai));
+        assert!(with_rival.companies.len() >= 2);
+
+        let without = build_procedural_demo_world(&NewGameSettings {
+            rival_ai: false,
+            map_size: MapSizePreset::Compact,
+            preserve_demo: false,
+            starting_money: 100_000,
+            ..NewGameSettings::default()
+        });
+        assert!(!without.companies.iter().any(|c| c.is_ai));
     }
 
     #[test]

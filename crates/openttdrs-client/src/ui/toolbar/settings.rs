@@ -162,6 +162,7 @@ pub(crate) fn handle_company_colour_swatches(
             continue;
         }
         sim.state.company_colour = colour;
+        sim.state.sync_active_from_mirrors();
         info!("Color compañía: {} ({colour})", company_colour_name(colour));
     }
 }
@@ -287,13 +288,16 @@ mod tests {
     #[test]
     fn company_colour_swatch_updates_sim_state() {
         let mut world = World::new();
-        world.insert_resource(SimWorld::default());
+        let mut sim = SimWorld::default();
+        sim.state.ensure_companies();
+        world.insert_resource(sim);
 
         world.spawn((Button, CompanyColourSwatch(6), Interaction::Pressed));
         world
             .run_system_once(handle_company_colour_swatches)
             .unwrap();
         assert_eq!(world.resource::<SimWorld>().state.company_colour, 6);
+        assert_eq!(world.resource::<SimWorld>().state.companies[0].colour, 6);
     }
 
     #[test]

@@ -39,6 +39,7 @@ const INTRO_SETTINGS: NewGameSettings = NewGameSettings {
     town_density: PopulationDensity::Normal,
     industry_density: PopulationDensity::Normal,
     starting_money: STARTING_MONEY_OPTIONS[1],
+    rival_ai: false,
 };
 
 const INTRO_PAN_AMPLITUDE_X: f32 = 48.0;

@@ -222,6 +222,7 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
         ));
     }
     spawn_company_colour_picker(buttons);
+    crate::ui::toolbar::company_selector::spawn_company_selector(buttons);
 }
 
 fn spawn_company_colour_picker(buttons: &mut ChildSpawnerCommands) {

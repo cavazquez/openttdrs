@@ -335,6 +335,10 @@ fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
                 "Terreno procedural",
             ));
             toggles.spawn(toggle_button(MainMenuToggle::Island, "Modo isla (costas)"));
+            toggles.spawn(toggle_button(
+                MainMenuToggle::RivalAi,
+                "Rival IA (TransCargo)",
+            ));
             if dev_mode() {
                 toggles.spawn(toggle_button(
                     MainMenuToggle::PreserveDemo,

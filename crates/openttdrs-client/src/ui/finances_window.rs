@@ -265,7 +265,14 @@ pub(crate) fn sync_finances_window(
         .iter_mut()
         .find(|(t, _)| t.0 == FloatingWindowId::Finances)
     {
-        **title = crate::ui::statusbar::COMPANY_DISPLAY_NAME.to_string();
+        let name = sim
+            .state
+            .companies
+            .iter()
+            .find(|c| c.id == sim.state.active_company)
+            .map(|c| c.name.as_str())
+            .unwrap_or(crate::ui::statusbar::COMPANY_DISPLAY_NAME);
+        **title = name.to_string();
     }
     if let Ok(mut body) = body_q.single_mut() {
         let net = snapshot.money.saturating_sub(snapshot.loan);

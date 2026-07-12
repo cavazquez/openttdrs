@@ -14,6 +14,7 @@ mod industry_draw_proc;
 mod lighthouse_anim;
 mod refinery_fire;
 mod road_newgrf;
+mod shore_newgrf;
 mod sign_labels;
 mod smoke;
 mod station_labels;
@@ -59,6 +60,7 @@ pub(crate) use town_labels::town_id_at_label_pos;
 pub(crate) use train_smoke::TrainSmokePlugin;
 
 pub(crate) use road_newgrf::NewGrfRoadSpriteCache;
+pub(crate) use shore_newgrf::NewGrfShoreSpriteCache;
 pub(crate) use station_newgrf::NewGrfStationSpriteCache;
 pub(crate) use tiles::{
     flush_map_batches, leveled_foundation_overlay_pos, push_forest_tree, push_water_tile,

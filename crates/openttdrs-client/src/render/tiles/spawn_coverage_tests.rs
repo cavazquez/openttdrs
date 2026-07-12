@@ -343,6 +343,9 @@ fn spawn_land_house_industry_generics_and_batches() {
                     &TileRenderContext::new(&m.0, &g.0, 0, 6),
                     true,
                     &mut batches,
+                    &[],
+                    None,
+                    None,
                 );
                 push_water_tile(
                     &mut commands,
@@ -352,6 +355,9 @@ fn spawn_land_house_industry_generics_and_batches() {
                     &TileRenderContext::new(&m.0, &g.0, 6, 6),
                     false,
                     &mut batches,
+                    &[],
+                    None,
+                    None,
                 );
                 push_forest_tree(
                     &a.0,

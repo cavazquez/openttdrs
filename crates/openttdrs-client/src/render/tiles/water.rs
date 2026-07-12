@@ -1,13 +1,15 @@
 use bevy::prelude::*;
-use openttdrs_core::Map;
+use openttdrs_core::{DecodedSprite, Map};
 
 use super::{SHORE_LAYER_FRAC, push_water_sprite, spawn_coast_debug_label};
 use crate::iso::{
     SLOPE_HALF_H, TILE_HALF_H, shore_png_index, shore_sprite_half_h, shore_tileh_for_draw_shore,
     tile_pos_half, tile_slope_bits_from_heights,
 };
+use crate::render::shore_newgrf::{NEWGRF_SHORE_TILE_FLAG, NewGrfShoreSpriteCache};
 use crate::render::{MapSpriteBatches, TileRenderContext, WorldAssets};
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn push_water_tile(
     commands: &mut Commands,
     map: &Map,
@@ -16,6 +18,9 @@ pub(crate) fn push_water_tile(
     ctx: &TileRenderContext,
     debug_coast: bool,
     batches: &mut MapSpriteBatches,
+    shore_newgrf: &[Option<DecodedSprite>],
+    shore_sprites: Option<&mut NewGrfShoreSpriteCache>,
+    images: Option<&mut Assets<Image>>,
 ) {
     if ctx.info.use_shore {
         // `DrawShoreTile(tileh)` — igual que OpenTTD: pendiente real del 2×2
@@ -23,21 +28,40 @@ pub(crate) fn push_water_tile(
         let th = shore_tileh_for_draw_shore(map, ctx.tx, ctx.ty, map_dims.0, map_dims.1);
         if th != 0 {
             let si = shore_png_index(th);
+            let transform = Transform::from_translation(tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                ctx.info.base_z,
+                SHORE_LAYER_FRAC,
+                shore_sprite_half_h(th),
+            ));
+            let mut used_newgrf = false;
+            let sprite = if let (Some(cache), Some(images), Some(decoded)) = (
+                shore_sprites,
+                images,
+                shore_newgrf.get(si).and_then(|s| s.as_ref()),
+            ) {
+                used_newgrf = true;
+                let handle = cache.handle_for(si as u8, decoded, images);
+                Sprite {
+                    image: handle,
+                    color: Color::WHITE,
+                    ..default()
+                }
+            } else {
+                assets.shore[si].sprite()
+            };
+            let shore_marker = if used_newgrf {
+                crate::render::ShoreTile(si as u8 | NEWGRF_SHORE_TILE_FLAG)
+            } else {
+                crate::render::ShoreTile(si as u8)
+            };
             // Coast en OpenTTD dibuja solo `DrawShoreTile`: el PNG del set
             // completo ya incluye agua/tierra del rombo, con transparencia
             // solo fuera de él.
-            batches.shore.push((
-                ctx.map_tile_chunk(),
-                crate::render::ShoreTile(si as u8),
-                assets.shore[si].sprite(),
-                Transform::from_translation(tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    ctx.info.base_z,
-                    SHORE_LAYER_FRAC,
-                    shore_sprite_half_h(th),
-                )),
-            ));
+            batches
+                .shore
+                .push((ctx.map_tile_chunk(), shore_marker, sprite, transform));
             if debug_coast {
                 let (raw, _) = tile_slope_bits_from_heights(map, ctx.tx, ctx.ty);
                 spawn_coast_debug_label(commands, ctx, raw, th, si);

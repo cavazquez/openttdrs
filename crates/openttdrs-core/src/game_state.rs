@@ -397,6 +397,10 @@ pub struct GameState {
     /// Stack `NewGRF` activo (Fase 7 MVP; sin ejecución Action0–14).
     #[serde(default = "crate::newgrf_config::default_vanilla_stack")]
     pub newgrf_stack: Vec<crate::newgrf_config::NewGrfEntry>,
+    /// Slots `SPR_SHORE_BASE + 0..17` desde Action5 `0x0D` (`None` = `OpenGFX`).
+    /// Se reconstruye al aplicar el stack; no se persiste en el save.
+    #[serde(skip)]
+    pub shore_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
     /// Carteles del mapa (`Sign` en `OpenTTD`).
     #[serde(default)]
     pub signs: Vec<crate::sign::Sign>,
@@ -485,6 +489,7 @@ impl GameState {
             disaster_timer: default_disaster_timer(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
+            shore_newgrf_sprites: Vec::new(),
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,
@@ -548,6 +553,7 @@ impl GameState {
             disaster_timer: default_disaster_timer(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
+            shore_newgrf_sprites: Vec::new(),
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,

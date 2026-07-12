@@ -2,7 +2,7 @@
 //!
 //! MVP: contenedor **v1** (o entradas reales inline), 8bpp **sin comprimir**
 //! (sin bit 0x02 ni chunked 0x08). Action3 resuelve set-ID como índice de
-//! Action1 (sin Action2). Action5 / 32bpp / callbacks OOS.
+//! Action1 (sin Action2). Action5 shore runtime parcial; 32bpp / callbacks OOS.
 
 use serde::{Deserialize, Serialize};
 
@@ -481,6 +481,15 @@ pub fn build_grf_v2_station_with_preview_sprite(
     )
 }
 
+/// Tipo Action5: shore / coastline (`ACT5_SHORELINE`).
+pub const ACTION5_TYPE_SHORE: u8 = 0x0D;
+/// Tipo Action5: catenaria (`ACT5_ELRAIL`).
+pub const ACTION5_TYPE_CATENARY: u8 = 0x05;
+/// Slots `SPR_SHORE_BASE + 0..17`.
+pub const SHORE_ACTION5_SLOT_COUNT: usize = 18;
+/// Orden del bloque de 10 («missing shore sprites», `newgrf_act5.cpp`).
+pub const SHORE_MISSING_BLOCK_SLOTS: [usize; 10] = [0, 5, 7, 10, 11, 13, 14, 15, 16, 17];
+
 /// Bloque Action5 parseado (tipo + offset + sprites siguientes).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Action5Block {
@@ -489,6 +498,8 @@ pub struct Action5Block {
     pub offset: u16,
     /// Primer sprite real decodificado (8bpp sin comprimir), si se pudo.
     pub first_preview: Option<DecodedSprite>,
+    /// Todos los sprites del bloque que se pudieron decodificar (orden de archivo).
+    pub sprites: Vec<DecodedSprite>,
 }
 
 /// Nombre corto de tipos Action5 conocidos (resto = `other`).
@@ -568,7 +579,22 @@ fn real_sprite_payload(
     }
 }
 
-/// Recorre el GRF y extrae bloques Action5 + primer sprite de cada bloque.
+fn finish_action5_block(
+    type_id: u8,
+    num_sprites: u8,
+    offset: u16,
+    sprites: Vec<DecodedSprite>,
+) -> Action5Block {
+    Action5Block {
+        type_id,
+        num_sprites,
+        offset,
+        first_preview: sprites.first().cloned(),
+        sprites,
+    }
+}
+
+/// Recorre el GRF y extrae bloques Action5 + sprites decodificados de cada bloque.
 ///
 /// # Errors
 ///
@@ -580,7 +606,7 @@ pub fn collect_action5_blocks(data: &[u8]) -> Result<Vec<Action5Block>, GrfScanE
     let mut cur_type = 0u8;
     let mut cur_num = 0u8;
     let mut cur_offset = 0u16;
-    let mut first_preview: Option<DecodedSprite> = None;
+    let mut sprites: Vec<DecodedSprite> = Vec::new();
     let mut in_block = false;
 
     let mut i = 0usize;
@@ -598,18 +624,18 @@ pub fn collect_action5_blocks(data: &[u8]) -> Result<Vec<Action5Block>, GrfScanE
             let payload = &section[payload_start..end];
             if let Some((type_id, num, offset)) = parse_action5_header(payload) {
                 if in_block {
-                    out.push(Action5Block {
-                        type_id: cur_type,
-                        num_sprites: cur_num,
-                        offset: cur_offset,
-                        first_preview: first_preview.take(),
-                    });
+                    out.push(finish_action5_block(
+                        cur_type,
+                        cur_num,
+                        cur_offset,
+                        std::mem::take(&mut sprites),
+                    ));
                 }
                 cur_type = type_id;
                 cur_num = num;
                 cur_offset = offset;
                 sprites_left = num;
-                first_preview = None;
+                sprites.clear();
                 in_block = true;
             }
             i = end;
@@ -621,17 +647,17 @@ pub fn collect_action5_blocks(data: &[u8]) -> Result<Vec<Action5Block>, GrfScanE
         };
 
         if in_block && sprites_left > 0 {
-            if first_preview.is_none() {
-                first_preview = decode_real_sprite_v1_uncompressed(type_and_rest);
+            if let Some(spr) = decode_real_sprite_v1_uncompressed(type_and_rest) {
+                sprites.push(spr);
             }
             sprites_left = sprites_left.saturating_sub(1);
             if sprites_left == 0 {
-                out.push(Action5Block {
-                    type_id: cur_type,
-                    num_sprites: cur_num,
-                    offset: cur_offset,
-                    first_preview: first_preview.take(),
-                });
+                out.push(finish_action5_block(
+                    cur_type,
+                    cur_num,
+                    cur_offset,
+                    std::mem::take(&mut sprites),
+                ));
                 in_block = false;
             }
         }
@@ -642,14 +668,48 @@ pub fn collect_action5_blocks(data: &[u8]) -> Result<Vec<Action5Block>, GrfScanE
         };
     }
     if in_block {
-        out.push(Action5Block {
-            type_id: cur_type,
-            num_sprites: cur_num,
-            offset: cur_offset,
-            first_preview: first_preview.take(),
-        });
+        out.push(finish_action5_block(cur_type, cur_num, cur_offset, sprites));
     }
     Ok(out)
+}
+
+/// Fusiona un bloque Action5 shore (`0x0D`) en la tabla de 18 slots.
+///
+/// - 10 sprites → tabla «missing» de `OpenTTD`.
+/// - 16 sprites → slots `0..15`.
+/// - resto → escribe desde `offset` si `offset < 18`; si no, desde el slot 0.
+pub fn merge_shore_action5_block(slots: &mut [Option<DecodedSprite>], block: &Action5Block) {
+    if block.type_id != ACTION5_TYPE_SHORE || slots.len() < SHORE_ACTION5_SLOT_COUNT {
+        return;
+    }
+    let sprites = &block.sprites;
+    if sprites.is_empty() {
+        return;
+    }
+    if block.num_sprites == 10 && sprites.len() >= 10 {
+        for (i, &slot) in SHORE_MISSING_BLOCK_SLOTS.iter().enumerate() {
+            slots[slot] = Some(sprites[i].clone());
+        }
+        return;
+    }
+    if block.num_sprites == 16 && sprites.len() >= 16 {
+        for i in 0..16 {
+            slots[i] = Some(sprites[i].clone());
+        }
+        return;
+    }
+    let base = if usize::from(block.offset) < SHORE_ACTION5_SLOT_COUNT {
+        usize::from(block.offset)
+    } else {
+        0
+    };
+    for (i, spr) in sprites.iter().enumerate() {
+        let slot = base + i;
+        if slot >= SHORE_ACTION5_SLOT_COUNT {
+            break;
+        }
+        slots[slot] = Some(spr.clone());
+    }
 }
 
 /// GRF v2 sintético: Action5 + un sprite + Action8.
@@ -831,9 +891,14 @@ mod tests {
         assert_eq!(blocks[0].type_id, 0x0D);
         assert_eq!(blocks[0].num_sprites, 1);
         assert_eq!(blocks[0].offset, 4804);
+        assert_eq!(blocks[0].sprites.len(), 1);
         assert_eq!(action5_type_name(0x0D), "shore");
         let preview = blocks[0].first_preview.as_ref().unwrap();
         assert_eq!(preview.width, 8);
         assert!(preview.rgba.iter().any(|&b| b != 0));
+        let mut slots = vec![None; SHORE_ACTION5_SLOT_COUNT];
+        merge_shore_action5_block(&mut slots, &blocks[0]);
+        // offset 4804 ≥ 18 → escribe en slot 0
+        assert!(slots[0].is_some());
     }
 }

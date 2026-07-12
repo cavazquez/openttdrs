@@ -60,6 +60,9 @@ pub(crate) fn animate_water(
         frames.water[idx].apply_to(&mut sprite);
     }
     for (shore, mut sprite) in &mut shore_q {
+        if shore.0 >= 18 {
+            continue;
+        }
         if let Some(shore_set) = frames.shore.get(usize::from(shore.0)) {
             shore_set[idx].apply_to(&mut sprite);
         }

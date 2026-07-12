@@ -1,5 +1,6 @@
 //! Obra de industrias en mapa — paridad con `MakeIndustryTileBigger` (`industry_cmd.cpp`).
 
+use super::tile_loop::for_each_map_tile_loop;
 use super::{Map, TileCoord, TileKind};
 
 /// Etapa de obra 0–2 en `m1` bits 0–1; 3 = terminada (`INDUSTRY_COMPLETED`).
@@ -47,7 +48,7 @@ pub fn make_industry_tile_bigger(m1: u8) -> u8 {
 
 /// Obra + animaciones de industria en un tick de sim (P6 + P7).
 pub fn step_industry_tiles(map: &mut Map, tick: u64) -> Vec<TileCoord> {
-    let mut dirty = advance_industry_construction(map);
+    let mut dirty = advance_industry_construction(map, tick);
     dirty.extend(super::industry_tile_anim::advance_industry_tile_animations(
         map, tick,
     ));
@@ -56,30 +57,29 @@ pub fn step_industry_tiles(map: &mut Map, tick: u64) -> Vec<TileCoord> {
     dirty
 }
 
-/// Avanza obra en teselas `MP_INDUSTRY` incompletas (una llamada ≈ un tile loop).
-pub fn advance_industry_construction(map: &mut Map) -> Vec<TileCoord> {
-    let (w, h) = map.dimensions();
+/// Avanza obra en teselas `MP_INDUSTRY` incompletas (una franja de tile loop por tick).
+pub fn advance_industry_construction(map: &mut Map, tick: u64) -> Vec<TileCoord> {
+    let mut candidates = Vec::new();
+    for_each_map_tile_loop(map, tick, |coord, tile| {
+        if tile.kind == TileKind::Industry && !is_industry_completed(tile.m1) {
+            candidates.push(coord);
+        }
+    });
     let mut dirty = Vec::new();
-    for uy in 0..h {
-        for ux in 0..w {
-            let coord = TileCoord::new(
-                i32::try_from(ux).unwrap_or(0),
-                i32::try_from(uy).unwrap_or(0),
-            );
-            let Some(mut tile) = map.get(coord) else {
-                continue;
-            };
-            if tile.kind != TileKind::Industry || is_industry_completed(tile.m1) {
-                continue;
-            }
-            let next = make_industry_tile_bigger(tile.m1);
-            if next == tile.m1 {
-                continue;
-            }
-            tile.m1 = next;
-            if map.set_tile(coord, tile).is_ok() {
-                dirty.push(coord);
-            }
+    for coord in candidates {
+        let Some(mut tile) = map.get(coord) else {
+            continue;
+        };
+        if tile.kind != TileKind::Industry || is_industry_completed(tile.m1) {
+            continue;
+        }
+        let next = make_industry_tile_bigger(tile.m1);
+        if next == tile.m1 {
+            continue;
+        }
+        tile.m1 = next;
+        if map.set_tile(coord, tile).is_ok() {
+            dirty.push(coord);
         }
     }
     dirty
@@ -125,8 +125,8 @@ mod tests {
             },
         )
         .unwrap();
-        for _ in 0..64 {
-            advance_industry_construction(&mut map);
+        for tick in 0..64 {
+            advance_industry_construction(&mut map, tick);
         }
         let tile = map.get(TileCoord::new(0, 0)).unwrap();
         assert!(is_industry_completed(tile.m1));

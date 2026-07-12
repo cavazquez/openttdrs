@@ -184,11 +184,22 @@ pub fn apply_world_gen(
             let ground = effective_clear_ground(config.climate, 0, x, y, config.seed);
             let m5 = clear_ground_m5(ground, grass_density(x, y, config.seed));
             if forest_patch(x, y, config.seed, config.climate) {
+                // MP_TREES: m5 = (count-1)<<6 | growth; adulto por defecto (OpenTTD Grown).
+                let count_m1 = ((config
+                    .seed
+                    .wrapping_mul(x as u64 + 1)
+                    .wrapping_add(y as u64 * 17))
+                    & 3) as u8;
+                let tree_m5 = (count_m1 << 6) | 3; // TreeGrowthStage::Grown
+                let density = grass_density(x, y, config.seed) & 3;
+                let tree_m2 = density << 4; // TreeGround::Grass
                 map.set_kind(c, TileKind::Forest)?;
+                map.set_mapt_m5(c, 0x40, tree_m5)?;
+                map.set_m2(c, tree_m2)?;
             } else {
                 map.set_kind(c, TileKind::Grass)?;
+                map.set_mapt_m5(c, 0, m5)?;
             }
-            map.set_mapt_m5(c, 0, m5)?;
         }
     }
 

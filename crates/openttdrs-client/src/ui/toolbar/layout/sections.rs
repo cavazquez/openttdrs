@@ -337,43 +337,44 @@ pub(super) fn spawn_water_panel(root: &mut ChildSpawnerCommands, asset_server: &
         .with_children(|panel| {
             spawn_panel_title(panel, "Construccion acuatica", 420.0);
             spawn_button_row(panel, |buttons| {
+                // Iconos GUI OpenTTD (dock_gui): gen_toolbar_water_icons.py
                 spawn_icon_tool_buttons(
                     buttons,
                     asset_server,
                     &[
                         (
                             "Deposito de barcos",
-                            "assets/opengfx/tiles/ship_depot_ne.png",
+                            "assets/opengfx/tiles/toolbar_water_depot.png",
                             BuildMenuAction::ShipDepot,
                         ),
                         (
                             "Muelle",
-                            "assets/opengfx/tiles/dock_flat_x.png",
+                            "assets/opengfx/tiles/toolbar_water_dock.png",
                             BuildMenuAction::Dock,
                         ),
                         (
                             "Canal",
-                            "assets/opengfx/tiles/water_flat.png",
+                            "assets/opengfx/tiles/toolbar_water_canal.png",
                             BuildMenuAction::Canal,
                         ),
                         (
                             "Rio (editor)",
-                            "assets/opengfx/tiles/water_flat.png",
+                            "assets/opengfx/tiles/toolbar_water_river.png",
                             BuildMenuAction::River,
                         ),
                         (
                             "Boya",
-                            "assets/opengfx/tiles/buoy.png",
+                            "assets/opengfx/tiles/toolbar_water_buoy.png",
                             BuildMenuAction::Buoy,
                         ),
                         (
                             "Acueducto",
-                            "assets/opengfx/tiles/bridge_wood_road_x.png",
+                            "assets/opengfx/tiles/toolbar_water_aqueduct.png",
                             BuildMenuAction::Aqueduct,
                         ),
                         (
                             "Esclusa",
-                            "assets/opengfx/tiles/water_lock_ns_middle.png",
+                            "assets/opengfx/tiles/toolbar_water_lock.png",
                             BuildMenuAction::Lock,
                         ),
                     ],
@@ -490,7 +491,7 @@ pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                         ),
                         (
                             "Convertir vía",
-                            "assets/opengfx/tiles/toolbar_rail_remove.png",
+                            "assets/opengfx/tiles/toolbar_rail_convert.png",
                             BuildMenuAction::RailConvert,
                         ),
                         (

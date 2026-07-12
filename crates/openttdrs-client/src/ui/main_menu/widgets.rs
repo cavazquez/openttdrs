@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use openttdrs_core::Climate;
 
-use crate::state::bootstrap::{MapSizePreset, PopulationDensity};
+use crate::state::bootstrap::PopulationDensity;
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::UiClickBeep;
 
@@ -75,13 +75,19 @@ pub(super) fn starting_money_button(amount: i64) -> impl Bundle {
     )
 }
 
-pub(super) fn map_size_button(size: MapSizePreset) -> impl Bundle {
+pub(super) fn map_size_button(btn: MainMenuMapSizeButton) -> impl Bundle {
+    let label = match btn {
+        MainMenuMapSizeButton::Compact => "24×18".to_string(),
+        MainMenuMapSizeButton::Width(axis) | MainMenuMapSizeButton::Height(axis) => {
+            axis.menu_label().to_string()
+        }
+    };
     (
         Button,
         UiClickBeep,
-        MainMenuMapSizeButton(size),
+        btn,
         Node {
-            width: Val::Px(92.0),
+            width: Val::Px(56.0),
             height: Val::Px(30.0),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
@@ -92,7 +98,7 @@ pub(super) fn map_size_button(size: MapSizePreset) -> impl Bundle {
         BorderColor::all(Color::srgb(0.62, 0.58, 0.44)),
         Interaction::default(),
         children![(
-            Text::new(size.menu_label()),
+            Text::new(label),
             TextFont {
                 font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
                 ..default()

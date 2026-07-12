@@ -21,7 +21,7 @@ fn setup_main_menu_and_camera_run() {
 #[test]
 fn summary_text_includes_density_and_money() {
     let text = summary_text(NewGameSettings {
-        map_size: MapSizePreset::Small,
+        map_size: MapSizePreset::SMALL,
         climate: Climate::Temperate,
         town_density: PopulationDensity::Dense,
         industry_density: PopulationDensity::Sparse,

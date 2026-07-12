@@ -63,7 +63,7 @@ Código principal: `crates/openttdrs-client/src/ui/main_menu.rs`,
 
 1. **Fondo intro** — [x] mapa procedural isla fija + paneo suave + agua animada (`main_menu_intro.rs`).
    Pendiente: vehículos/tráfico en intro como OpenTTD upstream.
-2. **Generate world** — [x] tamaño mapa (24×18 … 256²), año inicio (1950–2020), semilla ±/[].
+2. **Generate world** — [x] tamaño mapa (demo 24×18 + ancho/alto 64…4096 como OpenTTD), año inicio (1950–2020), semilla ±/[].
    Pendiente: densidad ciudades/industrias, dinero inicial, relieve avanzado.
 3. **Escenarios / heightmap** — fuera de 0.1; ver [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md).
 4. **Música / SFX menú** — cuando exista pipeline de audio UI.

@@ -11,7 +11,7 @@ pub struct NewGameSettingsResource(pub NewGameSettings);
 impl Default for NewGameSettingsResource {
     fn default() -> Self {
         Self(NewGameSettings {
-            map_size: MapSizePreset::Small,
+            map_size: MapSizePreset::SMALL,
             start_year: START_YEARS[0],
             world_gen: true,
             island: true,

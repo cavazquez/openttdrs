@@ -91,7 +91,7 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
         }
         BuildMenuAction::Orders => Some("clic mapa: destino"),
         BuildMenuAction::RailStation => Some("hierba junto a vía"),
-        BuildMenuAction::PlantTree => Some("hierba → bosque; bosque → crece etapa"),
+        BuildMenuAction::PlantTree => Some("hierba → bosque; bosque → +1 árbol (máx 4)"),
         BuildMenuAction::PlaceSign => Some("clic: coloca cartel; Mundo → Carteles para lista"),
         BuildMenuAction::Tram | BuildMenuAction::TramX | BuildMenuAction::TramY => {
             Some("overlay visual; sin vehículos de tranvía aún")

@@ -1163,6 +1163,7 @@ python3 "$(dirname "$0")/gen_shore_full_set.py"
 python3 "$(dirname "$0")/gen_water_anim_frames.py"
 python3 "$(dirname "$0")/gen_field_draw_data.py"
 python3 "$(dirname "$0")/gen_toolbar_rail_icons.py"
+python3 "$(dirname "$0")/gen_toolbar_water_icons.py"
 python3 "$(dirname "$0")/crop_ui_terraform_icons.py"
 
 # Waypoints ferroviarios (SPR_WAYPOINT_* en GRF extra).

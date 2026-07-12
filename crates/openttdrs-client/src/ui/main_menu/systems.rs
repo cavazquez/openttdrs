@@ -139,12 +139,35 @@ pub(crate) fn main_menu_options_interaction(
 
     for (interaction, btn, mut bg) in &mut button_sets.p1() {
         if *interaction == Interaction::Pressed {
-            settings.0.map_size = btn.0;
-            if settings.0.map_size != MapSizePreset::Compact {
+            match *btn {
+                MainMenuMapSizeButton::Compact => {
+                    settings.0.map_size = MapSizePreset::Compact;
+                }
+                MainMenuMapSizeButton::Width(axis) => {
+                    settings.0.map_size.set_width(axis);
+                    settings.0.preserve_demo = false;
+                }
+                MainMenuMapSizeButton::Height(axis) => {
+                    settings.0.map_size.set_height(axis);
+                    settings.0.preserve_demo = false;
+                }
+            }
+            if !settings.0.map_size.is_compact() {
                 settings.0.preserve_demo = false;
             }
         }
-        *bg = option_button_bg(settings.0.map_size == btn.0, *interaction);
+        let selected = match *btn {
+            MainMenuMapSizeButton::Compact => settings.0.map_size.is_compact(),
+            MainMenuMapSizeButton::Width(axis) => matches!(
+                settings.0.map_size,
+                MapSizePreset::Sized { width, .. } if width == axis
+            ),
+            MainMenuMapSizeButton::Height(axis) => matches!(
+                settings.0.map_size,
+                MapSizePreset::Sized { height, .. } if height == axis
+            ),
+        };
+        *bg = option_button_bg(selected, *interaction);
     }
 
     for (interaction, btn, mut bg) in &mut button_sets.p2() {
@@ -160,7 +183,7 @@ pub(crate) fn main_menu_options_interaction(
                 MainMenuToggle::WorldGen => settings.0.world_gen = !settings.0.world_gen,
                 MainMenuToggle::Island => settings.0.island = !settings.0.island,
                 MainMenuToggle::PreserveDemo => {
-                    if settings.0.map_size == MapSizePreset::Compact {
+                    if settings.0.map_size.is_compact() {
                         settings.0.preserve_demo = !settings.0.preserve_demo;
                     }
                 }
@@ -171,7 +194,7 @@ pub(crate) fn main_menu_options_interaction(
             MainMenuToggle::WorldGen => settings.0.world_gen,
             MainMenuToggle::Island => settings.0.island,
             MainMenuToggle::PreserveDemo => {
-                settings.0.preserve_demo && settings.0.map_size == MapSizePreset::Compact
+                settings.0.preserve_demo && settings.0.map_size.is_compact()
             }
             MainMenuToggle::RivalAi => settings.0.rival_ai,
         };

@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use openttdrs_core::Climate;
 
 use crate::state::bootstrap::{
-    MapSizePreset, PopulationDensity, START_YEARS, STARTING_MONEY_OPTIONS,
+    MapAxisSize, PopulationDensity, START_YEARS, STARTING_MONEY_OPTIONS,
 };
 use crate::state::new_game::NewGameSettingsResource;
 use crate::ui::font::UiFontRole;
@@ -15,10 +15,10 @@ use super::widgets::{
 use super::{
     MainMenuBackButton, MainMenuContinueButton, MainMenuContinueWrap, MainMenuDemoButton,
     MainMenuDensityTarget, MainMenuHighscoresButton, MainMenuHighscoresText, MainMenuHintsText,
-    MainMenuLoadButton, MainMenuNewGameButton, MainMenuPanel, MainMenuQuitButton,
-    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuSeedDecButton, MainMenuSeedIncButton,
-    MainMenuStartButton, MainMenuSubPanel, MainMenuSummaryText, MainMenuTitleText, MainMenuToggle,
-    MainMenuUi,
+    MainMenuLoadButton, MainMenuMapSizeButton, MainMenuNewGameButton, MainMenuPanel,
+    MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuSeedDecButton,
+    MainMenuSeedIncButton, MainMenuStartButton, MainMenuSubPanel, MainMenuSummaryText,
+    MainMenuTitleText, MainMenuToggle, MainMenuUi,
 };
 
 pub(crate) fn setup_main_menu(mut commands: Commands) {
@@ -249,7 +249,7 @@ fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
             }
         });
 
-    panel.spawn(option_section_label("Tamano del mapa"));
+    panel.spawn(option_section_label("Tamano del mapa (demo)"));
     panel
         .spawn((Node {
             flex_direction: FlexDirection::Row,
@@ -257,8 +257,40 @@ fn spawn_new_game_options(panel: &mut ChildSpawnerCommands) {
             ..default()
         },))
         .with_children(|row| {
-            for size in MapSizePreset::all() {
-                row.spawn(map_size_button(size));
+            row.spawn(map_size_button(MainMenuMapSizeButton::Compact));
+        });
+
+    panel.spawn(option_section_label("Ancho (teselas)"));
+    panel
+        .spawn((Node {
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::Wrap,
+            width: Val::Px(420.0),
+            column_gap: Val::Px(4.0),
+            row_gap: Val::Px(4.0),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },))
+        .with_children(|row| {
+            for axis in MapAxisSize::all() {
+                row.spawn(map_size_button(MainMenuMapSizeButton::Width(axis)));
+            }
+        });
+
+    panel.spawn(option_section_label("Alto (teselas)"));
+    panel
+        .spawn((Node {
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::Wrap,
+            width: Val::Px(420.0),
+            column_gap: Val::Px(4.0),
+            row_gap: Val::Px(4.0),
+            justify_content: JustifyContent::Center,
+            ..default()
+        },))
+        .with_children(|row| {
+            for axis in MapAxisSize::all() {
+                row.spawn(map_size_button(MainMenuMapSizeButton::Height(axis)));
             }
         });
 

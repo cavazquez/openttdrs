@@ -10,40 +10,141 @@ use super::gameplay_showcase::place_gameplay_showcase;
 use super::procedural_population::{populate_procedural_world, should_populate_procedurally};
 use super::terrain::place_tunnel_demo_ridge;
 
-/// Tamaños de mapa disponibles en «Nueva partida» (OpenTTD usa potencias de 2; compacta = demo 24×18).
+/// Bits de tamaño por eje (OpenTTD `MIN_MAP_SIZE_BITS`..=`MAX_MAP_SIZE_BITS`).
+pub const MIN_MAP_SIZE_BITS: u8 = 6;
+pub const MAX_MAP_SIZE_BITS: u8 = 12;
+
+/// Tamaño de un eje del mapa: 2^bits teselas (64…4096), como OpenTTD.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum MapSizePreset {
+pub enum MapAxisSize {
     #[default]
-    Compact,
-    Small,
-    Medium,
-    Large,
+    T64,
+    T128,
+    T256,
+    T512,
+    T1024,
+    T2048,
+    T4096,
 }
 
-impl MapSizePreset {
+impl MapAxisSize {
     #[must_use]
-    pub const fn dimensions(self) -> (u32, u32) {
+    pub const fn bits(self) -> u8 {
         match self {
-            Self::Compact => (24, 18),
-            Self::Small => (64, 64),
-            Self::Medium => (128, 128),
-            Self::Large => (256, 256),
+            Self::T64 => 6,
+            Self::T128 => 7,
+            Self::T256 => 8,
+            Self::T512 => 9,
+            Self::T1024 => 10,
+            Self::T2048 => 11,
+            Self::T4096 => 12,
         }
+    }
+
+    #[must_use]
+    pub const fn tiles(self) -> u32 {
+        1_u32 << self.bits()
     }
 
     #[must_use]
     pub const fn menu_label(self) -> &'static str {
         match self {
-            Self::Compact => "24×18",
-            Self::Small => "64²",
-            Self::Medium => "128²",
-            Self::Large => "256²",
+            Self::T64 => "64",
+            Self::T128 => "128",
+            Self::T256 => "256",
+            Self::T512 => "512",
+            Self::T1024 => "1024",
+            Self::T2048 => "2048",
+            Self::T4096 => "4096",
         }
     }
 
     #[must_use]
-    pub const fn all() -> [Self; 4] {
-        [Self::Compact, Self::Small, Self::Medium, Self::Large]
+    pub const fn all() -> [Self; 7] {
+        [
+            Self::T64,
+            Self::T128,
+            Self::T256,
+            Self::T512,
+            Self::T1024,
+            Self::T2048,
+            Self::T4096,
+        ]
+    }
+}
+
+const _: () = {
+    assert!(MapAxisSize::T64.bits() == MIN_MAP_SIZE_BITS);
+    assert!(MapAxisSize::T4096.bits() == MAX_MAP_SIZE_BITS);
+    assert!(MapAxisSize::T4096.tiles() == 4096);
+};
+
+/// Tamaño de mapa en «Nueva partida»: demo compacta o ejes independientes (OpenTTD).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum MapSizePreset {
+    /// Demo clásica 24×18 (no es potencia de 2).
+    #[default]
+    Compact,
+    /// Ancho × alto en potencias de 2 (64…4096 por eje).
+    Sized {
+        width: MapAxisSize,
+        height: MapAxisSize,
+    },
+}
+
+impl MapSizePreset {
+    pub const SMALL: Self = Self::square(MapAxisSize::T64);
+
+    #[must_use]
+    pub const fn square(axis: MapAxisSize) -> Self {
+        Self::Sized {
+            width: axis,
+            height: axis,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_compact(self) -> bool {
+        matches!(self, Self::Compact)
+    }
+
+    #[must_use]
+    pub const fn dimensions(self) -> (u32, u32) {
+        match self {
+            Self::Compact => (24, 18),
+            Self::Sized { width, height } => (width.tiles(), height.tiles()),
+        }
+    }
+
+    #[must_use]
+    pub fn menu_label(self) -> String {
+        let (w, h) = self.dimensions();
+        if w == h {
+            format!("{w}²")
+        } else {
+            format!("{w}×{h}")
+        }
+    }
+
+    /// Pasa a modo Sized (64×64) si estaba en Compact; útil al elegir un eje.
+    pub fn ensure_sized(&mut self) {
+        if self.is_compact() {
+            *self = Self::SMALL;
+        }
+    }
+
+    pub fn set_width(&mut self, width: MapAxisSize) {
+        self.ensure_sized();
+        if let Self::Sized { height, .. } = *self {
+            *self = Self::Sized { width, height };
+        }
+    }
+
+    pub fn set_height(&mut self, height: MapAxisSize) {
+        self.ensure_sized();
+        if let Self::Sized { width, .. } = *self {
+            *self = Self::Sized { width, height };
+        }
     }
 }
 
@@ -133,7 +234,7 @@ impl NewGameSettings {
     #[must_use]
     pub fn sanitized(self) -> Self {
         let mut s = self;
-        if s.map_size != MapSizePreset::Compact {
+        if !s.map_size.is_compact() {
             s.preserve_demo = false;
         }
         if s.start_year < START_YEARS[0] {
@@ -153,7 +254,7 @@ impl NewGameSettings {
     pub const fn procedural_island(climate: Climate, seed: u64) -> Self {
         Self {
             climate,
-            map_size: MapSizePreset::Small,
+            map_size: MapSizePreset::SMALL,
             start_year: START_YEARS[0],
             world_gen: true,
             island: true,
@@ -256,9 +357,25 @@ mod tests {
     use openttdrs_core::{format_calendar_date, tick_for_calendar_year};
 
     #[test]
+    fn map_size_matches_openttd_axis_limits() {
+        assert_eq!(MapAxisSize::T64.tiles(), 64);
+        assert_eq!(MapAxisSize::T4096.tiles(), 4096);
+        assert_eq!(
+            MapSizePreset::square(MapAxisSize::T4096).dimensions(),
+            (4096, 4096)
+        );
+        let asym = MapSizePreset::Sized {
+            width: MapAxisSize::T256,
+            height: MapAxisSize::T512,
+        };
+        assert_eq!(asym.dimensions(), (256, 512));
+        assert_eq!(asym.menu_label(), "256×512");
+    }
+
+    #[test]
     fn starting_money_applies_on_large_maps() {
         let settings = NewGameSettings {
-            map_size: MapSizePreset::Medium,
+            map_size: MapSizePreset::square(MapAxisSize::T128),
             start_year: 1980,
             world_gen: true,
             preserve_demo: true,
@@ -298,7 +415,7 @@ mod tests {
     #[test]
     fn sanitized_clears_demo_on_large_maps() {
         let settings = NewGameSettings {
-            map_size: MapSizePreset::Large,
+            map_size: MapSizePreset::square(MapAxisSize::T256),
             preserve_demo: true,
             ..NewGameSettings::default()
         }
@@ -319,7 +436,7 @@ mod tests {
         use openttdrs_core::{TileCoord, TileKind};
 
         let settings = NewGameSettings {
-            map_size: MapSizePreset::Small,
+            map_size: MapSizePreset::SMALL,
             world_gen: true,
             island: true,
             preserve_demo: false,

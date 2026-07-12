@@ -468,7 +468,9 @@ fn spawn_map_tiles_in_bounds(
     for c in &sim.state.companies {
         company.ensure_palette(CompanyColour::from_u8(c.colour), images);
     }
-    let render_grid = RenderGrid::from_map(map, mw, mh);
+    // +1 para vecinos de orilla; no barrer el mapa completo en 1024²+.
+    let grid_bounds = spawn_bounds.expand(1, mw, mh);
+    let render_grid = RenderGrid::from_bounds(map, mw, mh, grid_bounds);
     let mut batches = MapSpriteBatches::default();
 
     let mut rail_layers: Vec<u32> = Vec::with_capacity(8);

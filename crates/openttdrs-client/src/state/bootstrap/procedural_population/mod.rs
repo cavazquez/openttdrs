@@ -8,7 +8,7 @@ mod tests;
 
 use openttdrs_core::{GameState, PreserveRect, TileCoord, TileKind, tile_slope_and_z};
 
-use super::world::{MapSizePreset, NewGameSettings, PopulationDensity};
+use super::world::{NewGameSettings, PopulationDensity};
 
 /// HouseID originales OpenTTD (0..=109); evitamos NewGRF.
 pub(super) const PROCEDURAL_HOUSE_ID_MAX: u32 = 110;
@@ -42,7 +42,7 @@ impl SeededRng {
 #[must_use]
 pub(crate) fn should_populate_procedurally(settings: &NewGameSettings) -> bool {
     let s = settings.sanitized();
-    !(s.preserve_demo && s.map_size == MapSizePreset::Compact)
+    !(s.preserve_demo && s.map_size.is_compact())
 }
 
 pub(crate) fn populate_procedural_world(

@@ -18,13 +18,8 @@ pub(super) fn climate_label(climate: Climate) -> &'static str {
     }
 }
 
-pub(super) fn map_size_label(size: MapSizePreset) -> &'static str {
-    match size {
-        MapSizePreset::Compact => "24×18",
-        MapSizePreset::Small => "64×64",
-        MapSizePreset::Medium => "128×128",
-        MapSizePreset::Large => "256×256",
-    }
+pub(super) fn map_size_label(size: MapSizePreset) -> String {
+    size.menu_label()
 }
 
 pub(crate) fn summary_text(settings: NewGameSettings) -> String {

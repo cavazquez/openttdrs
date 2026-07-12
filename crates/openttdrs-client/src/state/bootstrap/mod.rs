@@ -10,8 +10,8 @@ mod transport;
 pub(crate) mod world;
 
 pub(crate) use world::{
-    MapSizePreset, NewGameSettings, PopulationDensity, START_YEARS, STARTING_MONEY_OPTIONS,
-    build_procedural_demo_world,
+    MapAxisSize, MapSizePreset, NewGameSettings, PopulationDensity, START_YEARS,
+    STARTING_MONEY_OPTIONS, build_procedural_demo_world,
 };
 
 pub(crate) use super::stations::{place_stations_from_footer_stxy, place_stations_from_map_tiles};

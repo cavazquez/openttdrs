@@ -30,7 +30,7 @@ pub(crate) struct MainMenuIntroState {
 
 const INTRO_SETTINGS: NewGameSettings = NewGameSettings {
     climate: openttdrs_core::Climate::Temperate,
-    map_size: MapSizePreset::Small,
+    map_size: MapSizePreset::SMALL,
     start_year: 1950,
     world_gen: true,
     island: true,

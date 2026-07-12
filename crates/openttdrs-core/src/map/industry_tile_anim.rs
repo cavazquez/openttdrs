@@ -313,29 +313,28 @@ fn advance_industry_tile(tile: &mut Tile, tick: u64, x: i32, y: i32) -> Industry
     IndustryAnimUpdate::None
 }
 
-/// Avanza animaciones de teselas `MP_INDUSTRY` terminadas.
+/// Avanza animaciones de teselas `MP_INDUSTRY` terminadas (franja de tile loop).
 pub fn advance_industry_tile_animations(map: &mut Map, tick: u64) -> Vec<TileCoord> {
-    let (w, h) = map.dimensions();
+    let mut candidates = Vec::new();
+    super::tile_loop::for_each_map_tile_loop(map, tick, |coord, tile| {
+        if tile.kind == TileKind::Industry {
+            candidates.push(coord);
+        }
+    });
     let mut dirty = Vec::new();
-    for uy in 0..h {
-        for ux in 0..w {
-            let coord = TileCoord::new(
-                i32::try_from(ux).unwrap_or(0),
-                i32::try_from(uy).unwrap_or(0),
-            );
-            let Some(mut tile) = map.get(coord) else {
-                continue;
-            };
-            let update = advance_industry_tile(&mut tile, tick, coord.x, coord.y);
-            if update == IndustryAnimUpdate::None {
-                continue;
-            }
-            if map.set_tile(coord, tile).is_err() {
-                continue;
-            }
-            if update == IndustryAnimUpdate::Visual {
-                dirty.push(coord);
-            }
+    for coord in candidates {
+        let Some(mut tile) = map.get(coord) else {
+            continue;
+        };
+        let update = advance_industry_tile(&mut tile, tick, coord.x, coord.y);
+        if update == IndustryAnimUpdate::None {
+            continue;
+        }
+        if map.set_tile(coord, tile).is_err() {
+            continue;
+        }
+        if update == IndustryAnimUpdate::Visual {
+            dirty.push(coord);
         }
     }
     dirty

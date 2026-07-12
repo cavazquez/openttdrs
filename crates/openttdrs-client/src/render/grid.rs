@@ -3,6 +3,7 @@ use openttdrs_core::{Map, Tile, TileCoord, TileKind};
 
 use crate::iso::{iso, tile_slope_and_min_z};
 use crate::render::MapTileChunk;
+use crate::render::viewport::TileViewportBounds;
 
 /// `true` si algún vecino del 8-neighborhood no es agua ni vacío (borde mar/tierra o río).
 ///
@@ -31,6 +32,31 @@ fn water_tile_touches_land(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32) -> boo
     NEIGH8.iter().any(|(dx, dy)| is_land(x + dx, y + dy))
 }
 
+fn tile_render_info_at(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32) -> TileRenderInfo {
+    let (tileh, base_z) = tile_slope_and_min_z(map, tx, ty);
+    let c = TileCoord::new(tx as i32, ty as i32);
+    let tile = map.get(c);
+    let kind = tile.map_or(TileKind::Grass, |t| t.kind);
+    let use_shore = if kind == TileKind::Water {
+        let m5_w = tile.map_or(0u8, |t| t.m5);
+        let mapt = tile.map_or(0u8, |t| t.mapt);
+        let water_tile_type = (m5_w >> 4) & 0x0F;
+        // OpenTTD solo dibuja `DrawShoreTile` en `WATER_TILE_COAST`
+        // (`water_cmd.cpp`); el agua lisa junto a tierra es agua plana.
+        // La heurística de vecinos queda solo para mapas generados sin
+        // MAPT (demo), donde `m5` no trae el tipo de agua.
+        water_tile_type == 1
+            || (mapt == 0 && water_tile_type == 0 && water_tile_touches_land(map, tx, ty, mw, mh))
+    } else {
+        false
+    };
+    TileRenderInfo {
+        tileh,
+        base_z,
+        use_shore,
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct TileRenderInfo {
     pub(crate) tileh: u8,
@@ -38,57 +64,85 @@ pub(crate) struct TileRenderInfo {
     pub(crate) use_shore: bool,
 }
 
+/// Rejilla de pendientes/orillas acotada a una región (viewport ± margen).
+///
+/// En mapas grandes no se materializa el mapa completo: solo la ventana pedida.
 pub(crate) struct RenderGrid {
-    width: u32,
+    tx0: u32,
+    ty0: u32,
+    /// Ancho de la región almacenada (`tx1 - tx0`).
+    stride: u32,
     tiles: Vec<TileRenderInfo>,
 }
 
 impl RenderGrid {
+    /// Mapa completo (tests y mapas pequeños).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn from_map(map: &Map, mw: u32, mh: u32) -> Self {
+        Self::from_bounds(map, mw, mh, TileViewportBounds::full(mw, mh))
+    }
+
+    /// Solo la región `bounds` (expandir +1 en el caller si hace falta costa por vecinos).
+    pub(crate) fn from_bounds(map: &Map, mw: u32, mh: u32, bounds: TileViewportBounds) -> Self {
+        let tx0 = bounds.tx0.min(mw);
+        let ty0 = bounds.ty0.min(mh);
+        let tx1 = bounds.tx1.min(mw).max(tx0);
+        let ty1 = bounds.ty1.min(mh).max(ty0);
+        let stride = tx1.saturating_sub(tx0);
+        let rows = ty1.saturating_sub(ty0);
+        let len = usize::try_from(stride.saturating_mul(rows)).unwrap_or(0);
         let mut tiles = vec![
             TileRenderInfo {
                 tileh: 0,
                 base_z: 0,
                 use_shore: false,
             };
-            (mw * mh) as usize
+            len
         ];
 
-        for ty in 0..mh {
-            for tx in 0..mw {
-                let idx = (ty * mw + tx) as usize;
-                let (tileh, base_z) = tile_slope_and_min_z(map, tx, ty);
-                let c = TileCoord::new(tx as i32, ty as i32);
-                let tile = map.get(c);
-                let kind = tile.map_or(TileKind::Grass, |t| t.kind);
-                let use_shore = if kind == TileKind::Water {
-                    let m5_w = tile.map_or(0u8, |t| t.m5);
-                    let mapt = tile.map_or(0u8, |t| t.mapt);
-                    let water_tile_type = (m5_w >> 4) & 0x0F;
-                    // OpenTTD solo dibuja `DrawShoreTile` en `WATER_TILE_COAST`
-                    // (`water_cmd.cpp`); el agua lisa junto a tierra es agua plana.
-                    // La heurística de vecinos queda solo para mapas generados sin
-                    // MAPT (demo), donde `m5` no trae el tipo de agua.
-                    water_tile_type == 1
-                        || (mapt == 0
-                            && water_tile_type == 0
-                            && water_tile_touches_land(map, tx, ty, mw, mh))
-                } else {
-                    false
-                };
-                tiles[idx] = TileRenderInfo {
-                    tileh,
-                    base_z,
-                    use_shore,
-                };
+        for ty in ty0..ty1 {
+            for tx in tx0..tx1 {
+                let idx = ((ty - ty0) * stride + (tx - tx0)) as usize;
+                tiles[idx] = tile_render_info_at(map, tx, ty, mw, mh);
             }
         }
 
-        Self { width: mw, tiles }
+        Self {
+            tx0,
+            ty0,
+            stride,
+            tiles,
+        }
     }
 
     fn get(&self, tx: u32, ty: u32) -> TileRenderInfo {
-        self.tiles[(ty * self.width + tx) as usize]
+        let Some(ix) = tx.checked_sub(self.tx0) else {
+            return TileRenderInfo {
+                tileh: 0,
+                base_z: 0,
+                use_shore: false,
+            };
+        };
+        let Some(iy) = ty.checked_sub(self.ty0) else {
+            return TileRenderInfo {
+                tileh: 0,
+                base_z: 0,
+                use_shore: false,
+            };
+        };
+        if self.stride == 0 || ix >= self.stride {
+            return TileRenderInfo {
+                tileh: 0,
+                base_z: 0,
+                use_shore: false,
+            };
+        }
+        let idx = (iy * self.stride + ix) as usize;
+        self.tiles.get(idx).copied().unwrap_or(TileRenderInfo {
+            tileh: 0,
+            base_z: 0,
+            use_shore: false,
+        })
     }
 }
 
@@ -228,5 +282,20 @@ mod tests {
 
         assert!(!grid.get(1, 1).use_shore, "agua lisa diagonal a tierra");
         assert!(grid.get(1, 2).use_shore, "WATER_TILE_COAST marcada");
+    }
+
+    #[test]
+    fn from_bounds_only_materializes_region() {
+        let map = Map::new_flat(64, 64, 0);
+        let bounds = TileViewportBounds {
+            tx0: 10,
+            ty0: 10,
+            tx1: 14,
+            ty1: 14,
+        };
+        let grid = RenderGrid::from_bounds(&map, 64, 64, bounds);
+        assert_eq!(grid.tiles.len(), 16);
+        let _ = grid.get(10, 10);
+        let _ = grid.get(13, 13);
     }
 }

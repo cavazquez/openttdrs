@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
-"""Extrae los iconos del toolbar de construcción ferroviaria de OpenGFX.
+"""Extrae iconos del toolbar ferroviario por tipo de vía (OpenTTD rail_gui).
 
-Iconos del set base (`_nested_build_rail_widgets`, `rail_gui.cpp`): dinamita
-(703), quitar (714), vías NS/X/EW/Y (1251–1254), señales (1291), depósito
-(1294), estación (1298), túnel (2430) y puente (2594) — sprite IDs de
-`table/sprites.h`, recortados del NFO base.
+Iconos normales del set base + variantes eléctrica / mono / maglev
+(`table/railtypes.h` + `sprites.h`).
 
-Los tres restantes son del GRF extra (`SPR_OPENTTD_BASE + n`): autorail (+53),
-convertir vía (+55) y waypoint (+76). En `ogfx2e_extra` van en bloques
-Action 5 tipo `95` (con offset): autorail/convertir en `05 95 FF 0B 00 FF 2C 00`
-(offsets 0x2C..0x36, sprites consecutivos tras la cabecera) y waypoint en el
-bloque con offset 0x4A.
-
-Salida: assets/opengfx/tiles/toolbar_rail_<nombre>.png
+Salida: assets/opengfx/tiles/toolbar_rail_*.png
+        assets/opengfx/tiles/toolbar_rail_{electric,mono,maglev}_*.png
 
 Uso: python3 scripts/gen_toolbar_rail_icons.py
 """
@@ -52,10 +45,87 @@ EXTRA_ICONS = [
     (76, "waypoint"),
 ]
 
+# Variantes tipadas: OpenTTD OnInit solo cambia estas 8 ranuras.
+# Electric: GUI sprites en Action5 elrail (offsets 36..39, 44) + extra offsets.
+# Mono/Maglev: sprites base 1255–1262 + túneles 2431/2432 + extra.
+TYPED_BASE = {
+    "mono": {
+        "rail_ns": 1255,
+        "rail_x": 1256,
+        "rail_ew": 1257,
+        "rail_y": 1258,
+        "tunnel": 2431,
+    },
+    "maglev": {
+        "rail_ns": 1259,
+        "rail_x": 1260,
+        "rail_y": 1261,  # 0x4ED
+        "rail_ew": 1262,  # 0x4EE
+        "tunnel": 2432,
+    },
+}
+
+TYPED_EXTRA = {
+    "electric": {
+        "autorail": 57,
+        "convert": 59,
+        "depot": 61,
+    },
+    "mono": {
+        "autorail": 63,
+        "convert": 65,
+        "depot": 67,
+    },
+    "maglev": {
+        "autorail": 69,
+        "convert": 71,
+        "depot": 73,
+    },
+}
+
+# Action5 elrail (tipo 05): índices dentro del bloque → nombre toolbar.
+ELECTRIC_A5_SLOTS = {
+    36: "rail_ns",
+    37: "rail_x",
+    38: "rail_ew",
+    39: "rail_y",
+    44: "tunnel",
+}
+
+ELRAIL_8BPP_NFOS = [
+    REPO / "assets" / "opengfx" / ".signal-src-8bpp" / "sprites" / "ogfxe_extra.nfo",
+    REPO
+    / "assets"
+    / "opengfx"
+    / ".signal-src-8bpp"
+    / "extract"
+    / "opengfx-8.0"
+    / "sprites"
+    / "ogfxe_extra.nfo",
+]
+PALETTES_H = REPO / "third_party" / "openttd" / "table" / "palettes.h"
+A5_ELRAIL_RE = re.compile(r"\*\s*5\s+05\s+05\s+FF\s+30")
+
 ROW_RE = re.compile(
     r"^\s*(\d+)\s+(\S+?\.png)\s+(8bpp)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(-?\d+)"
 )
 A5_GUI_RE = re.compile(r"^\s*(\d+)\s+\*\s+\d+\s+05 95 FF ([0-9A-F]{2}) 00 FF ([0-9A-F]{2}) 00")
+
+
+def load_dos_palette() -> list[tuple[int, int, int]]:
+    text = PALETTES_H.read_text(encoding="utf-8", errors="replace")
+    start = text.index("static const Palette _palette")
+    end = text.index("};", start)
+    colours = [
+        tuple(map(int, m))
+        for m in re.findall(r"M\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", text[start:end])
+    ]
+    if len(colours) < 206:
+        raise SystemExit(f"paleta DOS incompleta ({len(colours)} entradas)")
+    # Completar a 256 por si el archivo trae menos (índices altos raros).
+    while len(colours) < 256:
+        colours.append((0, 0, 0))
+    return colours
 
 
 def parse_rows(nfo: Path) -> dict[int, tuple[str, int, int, int, int]]:
@@ -87,33 +157,108 @@ def gui_offset_map(nfo: Path) -> dict[int, int]:
         count = int(m.group(2), 16)
         offset = int(m.group(3), 16)
         for i in range(count):
-            # Los sprites del bloque siguen consecutivos a la cabecera.
             out.setdefault(offset + i, header_num + 1 + i)
     return out
 
 
-def crop(rows: dict[int, tuple[str, int, int, int, int]], sid: int, out_name: str) -> None:
-    sheet_name, x, y, w, h = rows[sid]
-    sheet = Image.open(SPRITES / sheet_name)
-    img = sheet.crop((x, y, x + w, y + h)).convert("RGBA")
-    # Azul puro = índice transparente del 8bpp.
+def dematte_blue(img: Image.Image) -> Image.Image:
+    img = img.convert("RGBA")
     px = img.load()
     for j in range(img.height):
         for i in range(img.width):
             if px[i, j][:3] == (0, 0, 255):
                 px[i, j] = (0, 0, 0, 0)
-    # Lienzo uniforme 63×51 (proporción del icono del botón, 42×34) con el
-    # sprite a ×2 (o menos si no entra), centrado y sin deformar.
+    return img
+
+
+def to_toolbar_canvas(img: Image.Image) -> Image.Image:
+    w, h = img.size
     scale = min(2.0, 63.0 / w, 51.0 / h)
     sw, sh = max(1, round(w * scale)), max(1, round(h * scale))
     icon = img.resize((sw, sh), Image.NEAREST)
     canvas = Image.new("RGBA", (63, 51), (0, 0, 0, 0))
     canvas.alpha_composite(icon, ((63 - sw) // 2, (51 - sh) // 2))
-    canvas.save(TILES / out_name)
+    return canvas
+
+
+def crop(rows: dict[int, tuple[str, int, int, int, int]], sid: int, out_name: str) -> None:
+    sheet_name, x, y, w, h = rows[sid]
+    sheet = Image.open(SPRITES / sheet_name)
+    img = dematte_blue(sheet.crop((x, y, x + w, y + h)))
+    to_toolbar_canvas(img).save(TILES / out_name)
     print(f"  {out_name} <- {sheet_name} sprite {sid} ({w}x{h})")
 
 
+def crop_indexed_dos(
+    sheet: Image.Image,
+    dos: list[tuple[int, int, int]],
+    x: int,
+    y: int,
+    w: int,
+    h: int,
+) -> Image.Image:
+    """Recorta 8bpp y aplica paleta DOS (la paleta embebida del PNG miente)."""
+    crop_img = sheet.crop((x, y, x + w, y + h))
+    if crop_img.mode != "P":
+        return dematte_blue(crop_img)
+    idx = list(crop_img.getdata())
+    out = Image.new("RGBA", (w, h))
+    px = out.load()
+    for row in range(h):
+        for col in range(w):
+            p = idx[row * w + col]
+            if p == 0:
+                px[col, row] = (0, 0, 0, 0)
+            else:
+                r, g, b = dos[p]
+                px[col, row] = (r, g, b, 255)
+    return out
+
+
+def find_elrail_8bpp_nfo() -> Path | None:
+    for p in ELRAIL_8BPP_NFOS:
+        if p.is_file():
+            return p
+    return None
+
+
+def write_electric_gui_from_8bpp(dos: list[tuple[int, int, int]]) -> None:
+    nfo = find_elrail_8bpp_nfo()
+    if nfo is None:
+        raise SystemExit(
+            "falta ogfxe_extra.nfo 8bpp (assets/opengfx/.signal-src-8bpp/…) "
+            "para iconos eléctricos"
+        )
+    lines = nfo.read_text(errors="replace").splitlines()
+    start = next((i + 1 for i, l in enumerate(lines) if A5_ELRAIL_RE.search(l)), None)
+    if start is None:
+        raise SystemExit(f"sin bloque Action5 elrail en {nfo}")
+    sprites: list[re.Match[str]] = []
+    for line in lines[start : start + 80]:
+        m = ROW_RE.match(line)
+        if m:
+            sprites.append(m)
+        if len(sprites) >= 48:
+            break
+    if len(sprites) < 45:
+        raise SystemExit(f"Action5 elrail incompleto ({len(sprites)} sprites)")
+    sheets: dict[str, Image.Image] = {}
+    sheet_dir = nfo.parent
+    for slot, name in ELECTRIC_A5_SLOTS.items():
+        m = sprites[slot]
+        sheet_name = Path(m.group(2)).name
+        if sheet_name not in sheets:
+            sheets[sheet_name] = Image.open(sheet_dir / sheet_name)
+        x, y, w, h = map(int, m.group(4, 5, 6, 7))
+        rgba = crop_indexed_dos(sheets[sheet_name], dos, x, y, w, h)
+        out_name = f"toolbar_rail_electric_{name}.png"
+        to_toolbar_canvas(rgba).save(TILES / out_name)
+        print(f"  {out_name} <- {sheet_name} A5[{slot}] DOS ({w}x{h})")
+
+
 def main() -> None:
+    TILES.mkdir(parents=True, exist_ok=True)
+    dos = load_dos_palette()
     base_rows = parse_rows(BASE_NFO)
     for sid, name in BASE_ICONS:
         crop(base_rows, sid, f"toolbar_rail_{name}.png")
@@ -125,6 +270,22 @@ def main() -> None:
         if sid is None or sid not in extra_rows:
             raise SystemExit(f"icono extra GUI offset {off:#x} ({name}) no encontrado")
         crop(extra_rows, sid, f"toolbar_rail_{name}.png")
+
+    write_electric_gui_from_8bpp(dos)
+    for name, off in TYPED_EXTRA["electric"].items():
+        sid = offsets.get(off)
+        if sid is None or sid not in extra_rows:
+            raise SystemExit(f"electric extra offset {off:#x} ({name}) no encontrado")
+        crop(extra_rows, sid, f"toolbar_rail_electric_{name}.png")
+
+    for railtype, mapping in TYPED_BASE.items():
+        for name, sid in mapping.items():
+            crop(base_rows, sid, f"toolbar_rail_{railtype}_{name}.png")
+        for name, off in TYPED_EXTRA[railtype].items():
+            sid = offsets.get(off)
+            if sid is None or sid not in extra_rows:
+                raise SystemExit(f"{railtype} extra offset {off:#x} ({name}) no encontrado")
+            crop(extra_rows, sid, f"toolbar_rail_{railtype}_{name}.png")
 
 
 if __name__ == "__main__":

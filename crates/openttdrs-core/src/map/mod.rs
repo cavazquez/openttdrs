@@ -11,6 +11,7 @@ pub mod object;
 pub mod rail_slope;
 pub mod road_bits;
 pub mod slope;
+pub mod tile_loop;
 pub mod tree_tile_loop;
 mod types;
 pub mod water_class;
@@ -49,10 +50,12 @@ pub use slope::{
     slope_dz_at_subtile, slope_dz_on_tile, tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles,
     tunnel_preview_path,
 };
+pub use tile_loop::{MAP_FULL_SCAN_TILE_LIMIT, MAP_TILE_LOOP_STRIDE, for_each_map_tile_loop};
 pub use tree_tile_loop::{
-    MAX_TREE_OR_FIELD_STAGE, TREE_GROWTH_TICK_INTERVAL, apply_seasonal_snow, clear_tree,
-    plant_tree, step_tree_and_field_growth, tick_tree_tile_loop, tree_or_field_stage,
-    with_tree_or_field_stage,
+    MAX_TREE_OR_FIELD_STAGE, TREE_GROWTH_DEAD, TREE_GROWTH_GROWING1, TREE_GROWTH_GROWN,
+    TREE_GROWTH_TICK_INTERVAL, apply_seasonal_snow, clear_tree, normalize_tree_growth, plant_tree,
+    step_tree_and_field_growth, tick_tree_tile_loop, tree_count, tree_or_field_stage,
+    with_tree_count, with_tree_or_field_stage,
 };
 pub use types::{
     MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind, openttd_tile_index_to_coord,
@@ -106,6 +109,12 @@ impl Map {
     #[must_use]
     pub const fn dimensions(&self) -> (u32, u32) {
         (self.width, self.height)
+    }
+
+    /// Vista densa de todas las teselas (orden fila-mayor: `y * width + x`).
+    #[must_use]
+    pub fn tiles(&self) -> &[Tile] {
+        &self.tiles
     }
 
     /// Teselas `MP_CLEAR` con `m5 == 0` eran el valor por defecto de [`Self::new_flat`],
@@ -195,6 +204,12 @@ impl Map {
         Ok(())
     }
 
+    pub fn set_m3(&mut self, c: TileCoord, m3: u8) -> Result<(), MapError> {
+        let i = self.index(c).ok_or(MapError::OutOfBounds)?;
+        self.tiles[i].m3 = m3;
+        Ok(())
+    }
+
     /// Coloca una casa terminada conservando la altura del terreno.
     pub fn set_completed_house(
         &mut self,
@@ -223,6 +238,14 @@ impl Map {
 #[cfg(test)]
 mod ottdmap_binary_tests {
     use super::*;
+
+    #[test]
+    fn tile_layout_size_is_documented() {
+        // OpenTTD: 12 B/tile (8+4). Nuestro AoS con TileKind redundante ≈ 14 B.
+        assert_eq!(size_of::<Tile>(), 14);
+        assert_eq!(size_of::<TileKind>(), 2);
+        assert_eq!(align_of::<Tile>(), 2);
+    }
 
     fn push_map1_header(v: &mut Vec<u8>, w: u32, h: u32) {
         v.extend_from_slice(OTTDMAP_MAGIC_VERSIONED);

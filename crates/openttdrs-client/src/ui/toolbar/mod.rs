@@ -54,7 +54,7 @@ pub(crate) use rail_station_window::{
     sync_station_spec_entry_previews,
 };
 pub(crate) use rail_type_selector::{
-    handle_rail_type_select_buttons, sync_rail_type_select_visuals,
+    handle_rail_type_select_buttons, sync_rail_toolbar_icons, sync_rail_type_select_visuals,
 };
 pub(crate) use road_type_selector::{
     NewGrfRoadTypePreviewCache, RoadTypeEscapeConsumed, RoadTypePickerState,

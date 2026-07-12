@@ -15,6 +15,23 @@ pub(crate) fn log_detection_summary(
     let (mw, mh) = state.map.dimensions();
     info!("Resumen deteccion: mapa {mw}x{mh} ({} teselas)", mw * mh);
 
+    let tile_count = mw.saturating_mul(mh);
+    // En mapas enormes el conteo por tipo es O(N) y solo sirve de debug.
+    if tile_count > 262_144 {
+        info!(
+            "Omitido conteo por tipo de tesela (mapa > 512²; {} teselas)",
+            tile_count
+        );
+        info!(
+            "Entidades: {} industrias, {} pueblos, {} estaciones, {} vehiculos",
+            state.industries.len(),
+            state.towns.len(),
+            state.stations.len(),
+            state.vehicles.len()
+        );
+        return;
+    }
+
     let mut tiles: BTreeMap<String, u32> = BTreeMap::new();
     for y in 0..mh {
         for x in 0..mw {

@@ -19,7 +19,7 @@ pub(crate) use systems::{
 use bevy::prelude::*;
 use openttdrs_core::Climate;
 
-use crate::state::bootstrap::{MapSizePreset, PopulationDensity};
+use crate::state::bootstrap::{MapAxisSize, PopulationDensity};
 
 #[derive(Component)]
 pub(crate) struct MainMenuUi;
@@ -84,8 +84,12 @@ pub(crate) struct MainMenuQuitConfirmNo;
 #[derive(Component, Clone, Copy)]
 pub(crate) struct MainMenuClimateButton(pub Climate);
 
-#[derive(Component, Clone, Copy)]
-pub(crate) struct MainMenuMapSizeButton(pub MapSizePreset);
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MainMenuMapSizeButton {
+    Compact,
+    Width(MapAxisSize),
+    Height(MapAxisSize),
+}
 
 #[derive(Component, Clone, Copy)]
 pub(crate) struct MainMenuStartYearButton(pub u32);

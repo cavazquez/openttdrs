@@ -1,11 +1,15 @@
 //! Selector de tipo de vía en el panel Rail (`GameState.current_rail_type`).
+//!
+//! Al cambiar el tipo, actualiza los iconos del toolbar como OpenTTD
+//! (`BuildRailToolbarWindow::OnInit` / `gui_sprites`).
 
 use bevy::prelude::*;
+use bevy::ui::widget::ImageNode;
 use openttdrs_core::RailType;
 
 use crate::state::SimWorld;
 use crate::ui::font::{UiFontRole, ui_text_font_loaded};
-use crate::ui::toolbar::{BuildMenuUi, ToolbarTooltipTarget};
+use crate::ui::toolbar::{BuildMenuAction, BuildMenuUi, ToolSelectButton, ToolbarTooltipTarget};
 
 const BTN_BG: Color = Color::srgb(0.36, 0.47, 0.26);
 const BTN_ACTIVE: Color = Color::srgb(0.98, 0.92, 0.35);
@@ -69,6 +73,66 @@ fn short_label(rt: RailType) -> &'static str {
     }
 }
 
+/// Icono tipado del toolbar (paridad `RailTypeInfo::gui_sprites`).
+#[must_use]
+pub(crate) fn rail_toolbar_icon_path(
+    rt: RailType,
+    action: BuildMenuAction,
+) -> Option<&'static str> {
+    let slot = match action {
+        BuildMenuAction::RailVert => "rail_ns",
+        BuildMenuAction::RailX => "rail_x",
+        BuildMenuAction::RailHorz => "rail_ew",
+        BuildMenuAction::RailY => "rail_y",
+        BuildMenuAction::Rail => "autorail",
+        BuildMenuAction::RailDepot => "depot",
+        BuildMenuAction::RailTunnel => "tunnel",
+        BuildMenuAction::RailConvert => "convert",
+        _ => return None,
+    };
+    Some(match (rt, slot) {
+        (RailType::Rail, "rail_ns") => "assets/opengfx/tiles/toolbar_rail_rail_ns.png",
+        (RailType::Rail, "rail_x") => "assets/opengfx/tiles/toolbar_rail_rail_x.png",
+        (RailType::Rail, "rail_ew") => "assets/opengfx/tiles/toolbar_rail_rail_ew.png",
+        (RailType::Rail, "rail_y") => "assets/opengfx/tiles/toolbar_rail_rail_y.png",
+        (RailType::Rail, "autorail") => "assets/opengfx/tiles/toolbar_rail_autorail.png",
+        (RailType::Rail, "depot") => "assets/opengfx/tiles/toolbar_rail_depot.png",
+        (RailType::Rail, "tunnel") => "assets/opengfx/tiles/toolbar_rail_tunnel.png",
+        (RailType::Rail, "convert") => "assets/opengfx/tiles/toolbar_rail_convert.png",
+
+        (RailType::Electric, "rail_ns") => "assets/opengfx/tiles/toolbar_rail_electric_rail_ns.png",
+        (RailType::Electric, "rail_x") => "assets/opengfx/tiles/toolbar_rail_electric_rail_x.png",
+        (RailType::Electric, "rail_ew") => "assets/opengfx/tiles/toolbar_rail_electric_rail_ew.png",
+        (RailType::Electric, "rail_y") => "assets/opengfx/tiles/toolbar_rail_electric_rail_y.png",
+        (RailType::Electric, "autorail") => {
+            "assets/opengfx/tiles/toolbar_rail_electric_autorail.png"
+        }
+        (RailType::Electric, "depot") => "assets/opengfx/tiles/toolbar_rail_electric_depot.png",
+        (RailType::Electric, "tunnel") => "assets/opengfx/tiles/toolbar_rail_electric_tunnel.png",
+        (RailType::Electric, "convert") => "assets/opengfx/tiles/toolbar_rail_electric_convert.png",
+
+        (RailType::Monorail, "rail_ns") => "assets/opengfx/tiles/toolbar_rail_mono_rail_ns.png",
+        (RailType::Monorail, "rail_x") => "assets/opengfx/tiles/toolbar_rail_mono_rail_x.png",
+        (RailType::Monorail, "rail_ew") => "assets/opengfx/tiles/toolbar_rail_mono_rail_ew.png",
+        (RailType::Monorail, "rail_y") => "assets/opengfx/tiles/toolbar_rail_mono_rail_y.png",
+        (RailType::Monorail, "autorail") => "assets/opengfx/tiles/toolbar_rail_mono_autorail.png",
+        (RailType::Monorail, "depot") => "assets/opengfx/tiles/toolbar_rail_mono_depot.png",
+        (RailType::Monorail, "tunnel") => "assets/opengfx/tiles/toolbar_rail_mono_tunnel.png",
+        (RailType::Monorail, "convert") => "assets/opengfx/tiles/toolbar_rail_mono_convert.png",
+
+        (RailType::Maglev, "rail_ns") => "assets/opengfx/tiles/toolbar_rail_maglev_rail_ns.png",
+        (RailType::Maglev, "rail_x") => "assets/opengfx/tiles/toolbar_rail_maglev_rail_x.png",
+        (RailType::Maglev, "rail_ew") => "assets/opengfx/tiles/toolbar_rail_maglev_rail_ew.png",
+        (RailType::Maglev, "rail_y") => "assets/opengfx/tiles/toolbar_rail_maglev_rail_y.png",
+        (RailType::Maglev, "autorail") => "assets/opengfx/tiles/toolbar_rail_maglev_autorail.png",
+        (RailType::Maglev, "depot") => "assets/opengfx/tiles/toolbar_rail_maglev_depot.png",
+        (RailType::Maglev, "tunnel") => "assets/opengfx/tiles/toolbar_rail_maglev_tunnel.png",
+        (RailType::Maglev, "convert") => "assets/opengfx/tiles/toolbar_rail_maglev_convert.png",
+
+        _ => return None,
+    })
+}
+
 pub(crate) fn handle_rail_type_select_buttons(
     buttons: Query<(&Interaction, &RailTypeSelectButton), (Changed<Interaction>, With<Button>)>,
     mut sim: ResMut<SimWorld>,
@@ -92,6 +156,32 @@ pub(crate) fn sync_rail_type_select_visuals(
         } else {
             BTN_BG
         });
+    }
+}
+
+/// Cambia los iconos de construcción según `current_rail_type` (como OpenTTD).
+pub(crate) fn sync_rail_toolbar_icons(
+    sim: Res<SimWorld>,
+    asset_server: Res<AssetServer>,
+    mut last: Local<Option<RailType>>,
+    buttons: Query<(&BuildMenuAction, &Children), With<ToolSelectButton>>,
+    mut icons: Query<&mut ImageNode>,
+) {
+    let rt = sim.state.current_rail_type;
+    if *last == Some(rt) {
+        return;
+    }
+    *last = Some(rt);
+    for (action, children) in &buttons {
+        let Some(path) = rail_toolbar_icon_path(rt, *action) else {
+            continue;
+        };
+        for child in children.iter() {
+            let Ok(mut node) = icons.get_mut(child) else {
+                continue;
+            };
+            node.image = asset_server.load(path);
+        }
     }
 }
 
@@ -119,5 +209,20 @@ mod tests {
             world.resource::<SimWorld>().state.current_rail_type,
             RailType::Electric
         );
+    }
+
+    #[test]
+    fn toolbar_icons_differ_by_rail_type() {
+        let ns_rail = rail_toolbar_icon_path(RailType::Rail, BuildMenuAction::RailVert).unwrap();
+        let ns_el = rail_toolbar_icon_path(RailType::Electric, BuildMenuAction::RailVert).unwrap();
+        let ns_mono =
+            rail_toolbar_icon_path(RailType::Monorail, BuildMenuAction::RailVert).unwrap();
+        let ns_mag = rail_toolbar_icon_path(RailType::Maglev, BuildMenuAction::RailVert).unwrap();
+        assert_ne!(ns_rail, ns_el);
+        assert_ne!(ns_rail, ns_mono);
+        assert_ne!(ns_rail, ns_mag);
+        assert!(ns_el.contains("electric"));
+        assert!(ns_mono.contains("mono"));
+        assert!(ns_mag.contains("maglev"));
     }
 }

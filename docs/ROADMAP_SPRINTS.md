@@ -46,7 +46,7 @@ Objetivo: cerrar el **vertical slice en solitario** sin abrir multijugador, NewG
 | `RailRemove`: borrar solo vía + `refresh_rail_neighbors` | S | ✅ `Command::RemoveRail` + preview |
 | `RailWaypoint`: tesela waypoint + orden “pasar por” | S–M | ✅ `PlaceRailWaypoint` + render ogfx2 |
 | Depósito carretera: calibración RemapCoords | S | ✅ Hecho — `gen_road_depot_gfx_data.py`, `road_depot_build_sprite_center` |
-| `RailConvert`: diferir o railtypes mínimos (normal/eléctrico) | S–M | Stub oculto en toolbar hasta railtypes |
+| `RailConvert`: ciclo normal→eléctrico→mono→maglev (`Command::ConvertRail`) | S | ✅ MVP visible en toolbar Rail |
 
 **Done:** construir T, quitar tramo, waypoint visitable por tren; depósito carretera alineado. **Resto:** solo `RailConvert`.
 

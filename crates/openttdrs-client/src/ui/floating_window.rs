@@ -106,7 +106,45 @@ pub(crate) enum FloatingWindowId {
     TileInspector,
 }
 
+#[allow(dead_code)] // inventarios UI-0 consumidos en tests
 impl FloatingWindowId {
+    /// Inventario estable UI-0 (#30): actualizar al añadir variantes.
+    pub(crate) const ALL: &[Self] = &[
+        Self::Town,
+        Self::TownDirectory,
+        Self::IndustryDirectory,
+        Self::StationDirectory,
+        Self::VehicleList,
+        Self::SubsidyList,
+        Self::Depot,
+        Self::BuyVehicle,
+        Self::Vehicle,
+        Self::RailStationPicker,
+        Self::AirportPicker,
+        Self::BridgePicker,
+        Self::DestinationPicker,
+        Self::NewsHistory,
+        Self::Finances,
+        Self::NewsSettings,
+        Self::PathfindingSettings,
+        Self::NewGrf,
+        Self::SoundMusic,
+        Self::Timetable,
+        Self::Refit,
+        Self::SharedOrders,
+        Self::Autoreplace,
+        Self::Graphs,
+        Self::CargoPaymentRates,
+        Self::DisplayOptions,
+        Self::ExtraViewport,
+        Self::SignList,
+        Self::LinkGraphLegend,
+        Self::SignalPicker,
+        Self::Help,
+        Self::DevConsole,
+        Self::TileInspector,
+    ];
+
     /// Clave estable para persistir posición en `ClientPreferences`.
     #[must_use]
     pub(crate) const fn storage_key(self) -> &'static str {

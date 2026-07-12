@@ -115,7 +115,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 
 | Área | Estado | Notas |
 |------|--------|-------|
-| Construcción road + rail + terraform | ✅ | Waypoints, señales bloque; `RailConvert` stub |
+| Construcción road + rail + terraform | ✅ | Waypoints, señales, `RailConvert` (ciclo railtypes) |
 | PBS / path signals | 🟡 | Reserva básica; afinado en issues |
 | Economía + 6 cargos + packets | 🟡 | Sin tabla temperate completa / CargoDist routing |
 | Import `.sav` → mapa + flota | 🟡 | Roundtrip propio; OpenTTD oficial incompleto |

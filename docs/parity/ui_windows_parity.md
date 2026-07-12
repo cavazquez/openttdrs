@@ -160,8 +160,10 @@ OpenTTD: `BuildVehicleWindow` (`build_vehicle_gui.cpp:1216+`). Cliente:
 ## 8. Lista de vehículos y grupos
 
 OpenTTD: `VehicleListWindow` (`vehicle_gui.cpp:1923-2319`) y
-`VehicleGroupWindow` (`group_gui.cpp:208-1244`). Cliente: **no existen**;
-solo hay alertas de flota en el HUD y ciclo de grupo en el depósito.
+`VehicleGroupWindow` (`group_gui.cpp:208-1244`). Cliente: **`VehicleList`
+existe** (UI-2, `vehicle_list.rs` / `FloatingWindowId::VehicleList`) con filtro
+por tipo y acciones básicas. Grupos dedicados (`VehicleGroupWindow`) siguen
+parciales (ciclo de grupo en depósito + HUD).
 
 - Ventana de lista de flota con ordenamiento y acciones masivas
   (`MassStartStop`, enviar todos a depósito): **A/B** — los comandos masivos

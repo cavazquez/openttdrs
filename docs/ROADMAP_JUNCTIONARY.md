@@ -153,10 +153,10 @@ Extraídas de [Junctionary — Tips](https://wiki.openttd.org/en/Community/Junct
 
 ## Backlog técnico transversal
 
-- [ ] Comando o macro `export_junction_json(name)` para cada escenario
-- [ ] Catálogo en cliente: cargar escenario junction desde menú debug (opcional)
+- [x] Comando o macro `export_junction_json(name)` para cada escenario
+- [x] Catálogo en cliente: `scenario list` / `scenario export` en DevConsole
 - [ ] Tabla golden `junctionary_golden.json` con hashes de tiles/señales por diseño
-- [ ] Documentar en `DEV_BOT.md` flags `--junction <name>` por escenario
+- [x] Documentar en `DEV_BOT.md` flags `--junction <name>` por escenario
 
 ---
 

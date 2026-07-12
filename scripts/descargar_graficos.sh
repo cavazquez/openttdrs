@@ -463,6 +463,9 @@ def crop_by_id(sid: int, out_name: str) -> None:
 # UI toolbar (sprites de cursor OpenTTD)
 # =============================================================================
 crop_by_id(704, "ui_demolish.png")  # SPR_CURSOR_DEMOLISH_FIRST (dinamita)
+crop_by_id(705, "ui_demolish_1.png")  # SPR_CURSOR_DEMOLISH_1
+crop_by_id(706, "ui_demolish_2.png")  # SPR_CURSOR_DEMOLISH_2
+crop_by_id(707, "ui_demolish_3.png")  # SPR_CURSOR_DEMOLISH_LAST
 crop_by_id(694, "ui_terraform_up.png")    # SPR_IMG_TERRAFORM_UP
 crop_by_id(695, "ui_terraform_down.png")  # SPR_IMG_TERRAFORM_DOWN (T1 bajar)
 # ui_terraform_level.png (SPR_IMG_LEVEL_LAND = 4964) vive en ogfx2e_extra; ver crop_ui_terraform_icons.py

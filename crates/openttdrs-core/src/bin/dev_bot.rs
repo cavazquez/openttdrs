@@ -28,7 +28,7 @@ struct Args {
 
 fn print_usage() {
     eprintln!(
-        "uso: dev_bot --scenario <nombre> [--vehicle ID] [--ticks N] [--out report.json] [--export-json partida.json] [--require-delivery] [--require-signal-wait]"
+        "uso: dev_bot --scenario|--junction <nombre> [--vehicle ID] [--ticks N] [--out report.json] [--export-json partida.json] [--require-delivery] [--require-signal-wait]"
     );
     eprintln!("escenarios: {}", parity::scenario_names().join(", "));
 }
@@ -46,7 +46,7 @@ fn parse_args() -> Result<Args, String> {
     while let Some(arg) = it.next() {
         let mut value = |name: &str| it.next().ok_or_else(|| format!("falta el valor de {name}"));
         match arg.as_str() {
-            "--scenario" => scenario = value("--scenario")?,
+            "--scenario" | "--junction" => scenario = value("--scenario|--junction")?,
             "--vehicle" => {
                 vehicle_id = value("--vehicle")?
                     .parse()

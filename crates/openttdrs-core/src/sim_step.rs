@@ -1022,7 +1022,7 @@ fn move_vehicles(state: &mut GameState) {
         let vehicle_id = state.vehicles[i].id;
         let vehicle_kind = state.vehicles[i].kind;
         let vehicle_running = state.vehicles[i].running;
-        state.vehicles[i].step();
+        state.vehicles[i].step_with_map(Some(&state.map));
         if vehicle_kind == VehicleKind::Train {
             crate::train_consist::consist_changed(&mut state.vehicles, vehicle_id);
         }

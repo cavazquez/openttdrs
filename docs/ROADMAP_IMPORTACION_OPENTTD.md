@@ -32,10 +32,10 @@ Sorprendentemente, esta es el área **más avanzada** del port. Ya está portado
 | **Explosiones / humo de avería** | `effectvehicle.cpp:152-253` | Media | **Hecho** — sprites `3709–3724` / `3737–3740` (`render/effect_fx.rs`) |
 | **Bulldozer en obras** | `effectvehicle.cpp:255-325` | Baja | **Hecho** (road works FX) |
 | **Animación de estaciones/aeropuertos** | `newgrf_station.cpp` | Media | **Parcial** (`tile_anims.rs`) |
-| **Ascensor de edificios de ciudad** | `town_cmd.cpp:346-368` | Baja | **Parcial** (clock m7) |
+| **Ascensor de edificios de ciudad** | `town_cmd.cpp:346-368` | Baja | **MVP** (`HouseLiftAnimPlugin`, s2 1442/4569) |
+| **Cursores animados** | `table/animcursors.h` | Baja | **MVP demolish** (4 frames + `anim_cursor_frame`) |
 | **Árboles creciendo / cultivos** | `tree_cmd.cpp:679` | Baja–Media | **Hecho** (sim + render) |
 | **Scroll suave del viewport** | `viewport.cpp:1947` | Media | **Hecho** (lerp 300 ms) |
-| **Cursores animados** | `table/animcursors.h` | Baja | **Parcial** (`TileAnimClock` + `anim_cursor_frame`) |
 
 ### 1.2 Ya implementado en el cliente
 
@@ -286,7 +286,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 |----------|----------|------|
 | 13 tipos puente (specs) | `bridge_land.h` | **EXISTE** (`bridge_spec.rs`) |
 | Construcción rail/road | `tunnelbridge_cmd.cpp` | **PARCIAL** (`bridge.rs`) |
-| Límite velocidad en puente | specs → movimiento | **FALTA** |
+| Límite velocidad en puente | specs → movimiento | **HECHO** (`bridge_max_speed_for_tile` + `step_with_map`) |
 | Ocultamiento tren en túnel | `_tunnel_visibility_frame` | **PARCIAL** (tabla, sin render) |
 
 ---

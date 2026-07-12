@@ -288,6 +288,21 @@ pub fn bridge_type_from_m6(m6: u8) -> BridgeType {
     BridgeType::from_u8((m6 >> 2) & 0x0F).unwrap_or(BridgeType::Wooden)
 }
 
+/// Velocidad máxima del puente en la tesela (`None` si no hay puente).
+///
+/// Aplica a rampas `RailBridge` / `RoadBridge`. El vano central sigue siendo
+/// `Water` con marca `mapt` (pathfinder aún no lo cruza).
+#[must_use]
+pub fn bridge_max_speed_for_tile(map: &crate::map::Map, pos: TileCoord) -> Option<u16> {
+    let tile = map.get(pos)?;
+    match tile.kind {
+        crate::map::TileKind::RailBridge | crate::map::TileKind::RoadBridge => {
+            Some(bridge_spec(bridge_type_from_m6(tile.m6)).max_speed)
+        }
+        _ => None,
+    }
+}
+
 #[must_use]
 pub fn set_bridge_type_m6(m6: u8, bt: BridgeType) -> u8 {
     (m6 & 0xC3) | ((bt.as_u8() & 0x0F) << 2)
@@ -403,5 +418,44 @@ mod tests {
             bridge_type_from_m6(s.map.get(c(1, 2)).unwrap().m6),
             BridgeType::CantileverRed
         );
+    }
+
+    #[test]
+    fn train_on_wooden_bridge_is_speed_capped() {
+        use crate::command::{Command, apply_command};
+        use crate::vehicle::{Vehicle, VehicleKind};
+
+        let mut s = GameState::new(16, 8);
+        let c = |x: i32, y: i32| TileCoord::new(x, y);
+        for x in 2..=5 {
+            s.map.set_kind(c(x, 4), TileKind::Water).unwrap();
+        }
+        let west = c(1, 4);
+        let east = c(6, 4);
+        apply_command(
+            &mut s,
+            &Command::PlaceRailBridge(west, east, BridgeType::Wooden),
+        )
+        .expect("puente madera");
+        let wood_cap = bridge_spec(BridgeType::Wooden).max_speed;
+        assert_eq!(wood_cap, 32);
+        assert_eq!(bridge_max_speed_for_tile(&s.map, west), Some(32));
+
+        let mut train = Vehicle::new(1, VehicleKind::Train, west, east);
+        train.running = true;
+        train.path.push_back(east);
+        train.set_cruise_speed();
+        assert!(train.cur_speed > wood_cap, "motor más rápido que el puente");
+        s.vehicles.push(train);
+
+        for _ in 0..30 {
+            s.step();
+            assert!(
+                s.vehicles[0].cur_speed <= wood_cap,
+                "velocidad {} supera tope de puente {}",
+                s.vehicles[0].cur_speed,
+                wood_cap
+            );
+        }
     }
 }

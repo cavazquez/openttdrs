@@ -47,6 +47,8 @@ pub(crate) struct WorldAssets {
     pub(crate) track_fences: [AtlasSprite; 8],
     /// Frames faro/estadio (`object_lighthouse_anim_*` / `house_s148x_anim_*`).
     pub(crate) lighthouse_anim_frames: HashMap<u32, Vec<AtlasSprite>>,
+    /// Ascensor Large Office (`SPR_LIFT` / `house_lift.png`, atlas id ~1443).
+    pub(crate) house_lift: AtlasSprite,
     /// OpenGFX `tram_flat_*` (SPR_TRAMWAY_OVERLAY+0..18); mismo índice que `road_flat_*`.
     pub(crate) tram_flat: Vec<AtlasSprite>,
     pub(crate) rail: HashMap<u32, AtlasSprite>,
@@ -190,6 +192,7 @@ impl WorldAssets {
                 lighthouse_anim_frames.insert(id, frames);
             }
         }
+        let house_lift = atlas.get("house_lift.png");
         let tram_flat = (0..19)
             .map(|i| atlas.get(&format!("tram_flat_{i:02}.png")))
             .collect();
@@ -450,6 +453,7 @@ impl WorldAssets {
             roadside_tree,
             track_fences,
             lighthouse_anim_frames,
+            house_lift,
             tram_flat,
             rail,
             station_grounds,

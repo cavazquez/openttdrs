@@ -2,10 +2,44 @@
 
 **Fecha:** jul 2026  
 **Estado:** implementado (módulo opcional, sin rival CPU aún).  
-**Relacionado:** [epics/ai_rivals.md](epics/ai_rivals.md), [parity/status.md](parity/status.md)
+**Relacionado:** [epics/ai_rivals.md](epics/ai_rivals.md), [parity/status.md](parity/status.md), [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md)
 
 Herramienta de desarrollo y QA que corre la simulación **sin cliente Bevy** y responde:
 ¿el vehículo **cargó**, **descargó** y **cuánto ganó**?
+
+---
+
+## Flags
+
+| Flag | Descripción |
+|------|-------------|
+| `--scenario <nombre>` | Escenario de paridad (`parity::build_scenario`) |
+| `--junction <nombre>` | **Alias** de `--scenario` (Junctionary J0) |
+| `--vehicle ID` | Id de vehículo a sondear (default 1) |
+| `--ticks N` | Ticks máximos (default 12000) |
+| `--export-json path` | Guarda la partida en tick 0 (`parity::export_junction_json`) |
+| `--out report.json` | Informe JSON de la sonda |
+| `--require-delivery` | Exit ≠ 0 si no hubo entrega |
+| `--require-signal-wait` | Solo `train_supply`: espera en señal roja |
+
+### Escenarios disponibles
+
+`truck_bay`, `train_line`, `train_supply`, `train_supply_dual`, `train_supply_signal`, `train_signal`, `train_pbs`, `ai_rival_line`, `rail_signals_mixed`, `loan_interest`, `town_growth`, `breakdown`.
+
+Lista runtime: `cargo run -p openttdrs-core --bin dev_bot -- --help`.
+
+### Junctionary (J0)
+
+Hasta existir builders `junction_*` del wiki, `--junction` y `export_junction_json` usan los escenarios de paridad anteriores.
+
+```bash
+cargo run -p openttdrs-core --bin dev_bot -- \
+  --junction rail_signals_mixed --export-json save/scenarios/rail_signals_mixed.json
+
+OTTDJSON_LOAD=save/scenarios/rail_signals_mixed.json cargo run -p openttdrs-client
+```
+
+En el cliente (DevConsole F3): `scenario list` y `scenario export <nombre> [ruta]`.
 
 ---
 

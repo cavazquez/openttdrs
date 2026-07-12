@@ -415,9 +415,49 @@ fn run_dev_command(
         "help" | "?" => {
             push_log(
                 state,
-                "cmds: help | fps | overlay | gizmos | tile | newgrf | endgame | clear".into(),
+                "cmds: help | fps | overlay | gizmos | tile | newgrf | scenario | endgame | clear"
+                    .into(),
             );
         }
+        "scenario" | "junction" => match parts.next().unwrap_or("list") {
+            "list" | "ls" => {
+                push_log(
+                    state,
+                    format!(
+                        "escenarios: {}",
+                        openttdrs_core::parity::scenario_names().join(", ")
+                    ),
+                );
+            }
+            "export" => {
+                let Some(name) = parts.next() else {
+                    push_log(state, "uso: scenario export <nombre> [ruta.json]".into());
+                    return;
+                };
+                let path = parts
+                    .next()
+                    .map(std::path::PathBuf::from)
+                    .unwrap_or_else(|| {
+                        std::path::PathBuf::from(format!("save/scenarios/{name}.json"))
+                    });
+                match openttdrs_core::parity::export_junction_json(name, &path) {
+                    Ok(()) => push_log(
+                        state,
+                        format!(
+                            "exportado {} → {} (OTTDJSON_LOAD={})",
+                            name,
+                            path.display(),
+                            path.display()
+                        ),
+                    ),
+                    Err(e) => push_log(state, format!("export falló: {e}")),
+                }
+            }
+            other => push_log(
+                state,
+                format!("scenario: desconocido '{other}' (list|export)"),
+            ),
+        },
         "fps" | "stats" => {
             push_log(
                 state,

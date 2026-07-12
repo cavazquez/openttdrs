@@ -6,7 +6,7 @@ use crate::engine::{
     default_engine_id, engine_for_vehicle, progress_step_for_speed, train_acceleration,
     update_road_speed,
 };
-use crate::map::TileCoord;
+use crate::map::{Map, TileCoord};
 use crate::train_movement::{ACCEL_SLOWDOWN, is_45_degree_turn};
 
 /// Umbral de fiabilidad bajo el cual conviene servicio en depósito.
@@ -990,9 +990,14 @@ impl Vehicle {
         self.cur_speed
     }
 
-    fn update_movement_speed(&mut self) {
+    fn update_movement_speed(&mut self, map: Option<&Map>) {
         let engine = self.effective_engine();
-        let max_speed = engine.max_speed;
+        let mut max_speed = engine.max_speed;
+        if let Some(map) = map
+            && let Some(bridge_cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, self.pos)
+        {
+            max_speed = max_speed.min(bridge_cap);
+        }
         let (power, weight) = if self.kind == VehicleKind::Train
             && (self.cached_power_hp > 0 || self.cached_weight_t > 0)
         {
@@ -1026,6 +1031,9 @@ impl Vehicle {
             };
             self.cur_speed = cur;
             self.subspeed = sub;
+        }
+        if self.cur_speed > max_speed {
+            self.cur_speed = max_speed;
         }
     }
 
@@ -1122,8 +1130,13 @@ impl Vehicle {
 
     /// Avanza un tick de sim: sub-tile y, al completar 255, la tesela siguiente.
     pub fn step(&mut self) {
+        self.step_with_map(None);
+    }
+
+    /// Como [`Self::step`], aplicando límites de velocidad del mapa (puentes).
+    pub fn step_with_map(&mut self, map: Option<&Map>) {
         if !self.running {
-            self.update_movement_speed();
+            self.update_movement_speed(map);
             self.progress = 0;
             return;
         }
@@ -1131,7 +1144,7 @@ impl Vehicle {
         self.resolve_conditional_orders();
 
         if self.holding_for_timetable() {
-            self.update_movement_speed();
+            self.update_movement_speed(map);
             return;
         }
 
@@ -1149,7 +1162,7 @@ impl Vehicle {
         // de la parada se decide ahora.
         self.complete_station_load_window();
 
-        self.update_movement_speed();
+        self.update_movement_speed(map);
 
         if self.kind == VehicleKind::Train {
             self.apply_immediate_train_turnaround();

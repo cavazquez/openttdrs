@@ -1,18 +1,22 @@
 //! Verificación visual automatizada de las ventanas flotantes.
 //!
 //! Con `OPENTTDRS_WINDOWS_SHOT=/ruta/captura.png` el cliente abre las
-//! ventanas de pueblo, depósito, compra y vehículo sobre el estado cargado,
-//! guarda una captura y sale. Pensado para comparar contra screenshots del
-//! `OpenTTD` oficial sin interacción manual.
+//! ventanas de pueblo, depósito, compra, vehículo, finanzas y directorio de
+//! pueblos, guarda una captura y sale.
+//!
+//! Resolución opcional: `OPENTTDRS_SHOT_RES=1280x720` o `1920x1080`.
 
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
+use bevy::window::PrimaryWindow;
 use openttdrs_core::{TileCoord, TileKind};
 
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::buy_window::BuyVehicleWindowState;
+use crate::ui::finances_window::FinancesWindowState;
 use crate::ui::main_menu::{MainMenuCamera, MainMenuUi};
 use crate::ui::toolbar::DepotPanelState;
+use crate::ui::town_directory::TownDirectoryState;
 use crate::ui::town_window::TownWindowState;
 use crate::ui::vehicle_window::VehicleWindowState;
 
@@ -24,6 +28,11 @@ pub(crate) struct WindowsShotPlugin;
 
 impl Plugin for WindowsShotPlugin {
     fn build(&self, app: &mut App) {
+        if std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some()
+            || std::env::var_os("OPENTTDRS_MAP_SHOT").is_some()
+        {
+            app.add_systems(Startup, apply_shot_resolution);
+        }
         if std::env::var_os("OPENTTDRS_WINDOWS_SHOT").is_some() {
             app.add_systems(
                 Update,
@@ -44,6 +53,29 @@ impl Plugin for WindowsShotPlugin {
                 ),
             );
         }
+    }
+}
+
+fn parse_shot_resolution() -> Option<(u32, u32)> {
+    let Ok(raw) = std::env::var("OPENTTDRS_SHOT_RES") else {
+        return None;
+    };
+    let (w, h) = raw.split_once('x').or_else(|| raw.split_once('X'))?;
+    let w = w.parse().ok()?;
+    let h = h.parse().ok()?;
+    if w < 320 || h < 240 {
+        return None;
+    }
+    Some((w, h))
+}
+
+fn apply_shot_resolution(mut windows: Query<&mut Window, With<PrimaryWindow>>) {
+    let Some((w, h)) = parse_shot_resolution() else {
+        return;
+    };
+    for mut window in &mut windows {
+        window.resolution.set(w as f32, h as f32);
+        info!("shot: resolución {w}×{h}");
     }
 }
 
@@ -189,6 +221,8 @@ fn windows_shot_driver(
     mut depot: ResMut<DepotPanelState>,
     mut buy: ResMut<BuyVehicleWindowState>,
     mut vehicle: ResMut<VehicleWindowState>,
+    mut finances: ResMut<FinancesWindowState>,
+    mut town_dir: ResMut<TownDirectoryState>,
     mut exit: MessageWriter<AppExit>,
 ) {
     *frame += 1;
@@ -212,8 +246,10 @@ fn windows_shot_driver(
             })
             .map(|e| e.id);
         vehicle.vehicle_id = sim.state.vehicles.first().map(|v| v.id);
+        finances.open = true;
+        town_dir.open = true;
         info!(
-            "windows_shot: town={:?} depot={:?} vehicle={:?}",
+            "windows_shot: town={:?} depot={:?} vehicle={:?} finances+town_dir",
             town.town_id, depot.depot_pos, vehicle.vehicle_id
         );
     }

@@ -112,6 +112,33 @@ pub(crate) fn spawn_house_tile(
             entity.insert(crate::render::LighthouseAnim { sprite_id: spec.s2 });
         }
     }
+    // Ascensor Large Office (`SPR_LIFT`): s2 1442 / 4569 según `town_land.h` draw_proc.
+    if crate::render::house_sprite_has_lift(spec.s2) {
+        let lift_w = 4.0;
+        let lift_h = 13.0;
+        // OpenTTD: AddChildSpriteScreen(SPR_LIFT, …, 14, 60 - pos).
+        let off = remap_tile_offset(14.0, 60.0, 0.0) * 0.5;
+        let pos3 = overlay_pos(
+            ctx.iso_pos + off,
+            -lift_w / 2.0,
+            -lift_h / 2.0,
+            lift_w,
+            lift_h,
+            base_z,
+            0.55,
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        );
+        let mut sprite = assets.house_lift.sprite();
+        sprite.color = tint;
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            sprite,
+            Transform::from_translation(pos3),
+            crate::render::HouseLiftAnim { base: pos3 },
+        ));
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -2,6 +2,20 @@ use bevy::prelude::*;
 
 use crate::ui::toolbar::{BuildMenuAction, StationBuildState};
 
+/// Frames del cursor de demolición (`animcursors.h` / SPR_CURSOR_DEMOLISH_FIRST..LAST).
+const DEMOLISH_CURSOR_FRAMES: [&str; 4] = [
+    "assets/opengfx/tiles/ui_demolish.png",
+    "assets/opengfx/tiles/ui_demolish_1.png",
+    "assets/opengfx/tiles/ui_demolish_2.png",
+    "assets/opengfx/tiles/ui_demolish_3.png",
+];
+
+/// Índice de frame del cursor demolición (`anim_cursor_frame & 3`).
+#[must_use]
+pub(crate) fn demolish_cursor_frame_index(anim_cursor_frame: u8) -> usize {
+    usize::from(anim_cursor_frame & 3)
+}
+
 fn bridge_axis_y_from_tiles(tiles: &[(i32, i32)]) -> bool {
     let Some(&(sx, sy)) = tiles.first() else {
         return false;
@@ -17,6 +31,7 @@ pub(crate) fn preview_image_for_action(
     asset_server: &AssetServer,
     station_state: &StationBuildState,
     preview_tiles: &[(i32, i32)],
+    anim_cursor_frame: u8,
 ) -> Option<Handle<Image>> {
     const BUS_STOP_GROUNDS: [&str; 4] = [
         "assets/opengfx/tiles/bus_stop_ne_ground.png",
@@ -142,7 +157,8 @@ pub(crate) fn preview_image_for_action(
             Some(asset_server.load::<Image>("assets/opengfx/tiles/tunnel_rail_rear.png"))
         }
         BuildMenuAction::Clear => {
-            Some(asset_server.load::<Image>("assets/opengfx/tiles/ui_demolish.png"))
+            let path = DEMOLISH_CURSOR_FRAMES[demolish_cursor_frame_index(anim_cursor_frame)];
+            Some(asset_server.load::<Image>(path))
         }
         BuildMenuAction::Orders => None,
         BuildMenuAction::BuildHouse => {
@@ -226,5 +242,23 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::JoinStation => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/bus_stop_ne_ground.png"))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn demolish_frame_cycles_four() {
+        assert_eq!(demolish_cursor_frame_index(0), 0);
+        assert_eq!(demolish_cursor_frame_index(1), 1);
+        assert_eq!(demolish_cursor_frame_index(3), 3);
+        assert_eq!(demolish_cursor_frame_index(4), 0);
+        assert_eq!(demolish_cursor_frame_index(7), 3);
+        assert_eq!(
+            DEMOLISH_CURSOR_FRAMES[demolish_cursor_frame_index(2)],
+            "assets/opengfx/tiles/ui_demolish_2.png"
+        );
     }
 }

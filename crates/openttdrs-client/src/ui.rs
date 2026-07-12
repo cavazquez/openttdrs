@@ -47,6 +47,8 @@ mod toolbar;
 mod town_directory;
 mod town_window;
 mod ui5_blocked_stubs;
+#[cfg(test)]
+mod ui_enum_inventory_test;
 mod vehicle_list;
 mod vehicle_window;
 mod windows_shot;

@@ -160,6 +160,75 @@ pub(crate) enum BuildMenuAction {
     JoinStation,
 }
 
+#[allow(dead_code)] // inventarios UI-0 consumidos en tests
+impl BuildMenuAction {
+    /// Inventario estable UI-0 (#30): actualizar al añadir variantes.
+    pub(crate) const ALL: &[Self] = &[
+        Self::Road,
+        Self::RoadX,
+        Self::RoadY,
+        Self::Tram,
+        Self::TramX,
+        Self::TramY,
+        Self::RoadDepot,
+        Self::RoadBridge,
+        Self::RoadTunnel,
+        Self::BusStop,
+        Self::RoadWaypoint,
+        Self::RailStation,
+        Self::Rail,
+        Self::RailX,
+        Self::RailY,
+        Self::RailHorz,
+        Self::RailVert,
+        Self::RailDepot,
+        Self::RailBridge,
+        Self::RailTunnel,
+        Self::RailWaypoint,
+        Self::RailSignals,
+        Self::RailRemove,
+        Self::RailConvert,
+        Self::Station,
+        Self::Clear,
+        Self::Orders,
+        Self::ShipDepot,
+        Self::Dock,
+        Self::Canal,
+        Self::River,
+        Self::Buoy,
+        Self::Aqueduct,
+        Self::Lock,
+        Self::Airport,
+        Self::BuildHouse,
+        Self::BuildCoalMine,
+        Self::BuildIronOreMine,
+        Self::BuildGoldMine,
+        Self::BuildOilWell,
+        Self::BuildOilRefinery,
+        Self::BuildFactory,
+        Self::BuildSawmill,
+        Self::BuildForest,
+        Self::BuildFarm,
+        Self::BuildCottonCandy,
+        Self::BuildCandyFactory,
+        Self::BuildBatteryFarm,
+        Self::BuildColaWells,
+        Self::BuildToyFactory,
+        Self::BuildPlasticFountain,
+        Self::BuildFizzyDrinkFactory,
+        Self::BuildBubbleGenerator,
+        Self::BuildToffeeQuarry,
+        Self::BuildSugarMine,
+        Self::RaiseLand,
+        Self::LowerLand,
+        Self::LevelLand,
+        Self::BuyLand,
+        Self::PlantTree,
+        Self::PlaceSign,
+        Self::JoinStation,
+    ];
+}
+
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum ToolbarGroup {
     Rail,
@@ -170,6 +239,21 @@ pub(crate) enum ToolbarGroup {
     Landscape,
     Info,
     Settings,
+}
+
+#[allow(dead_code)] // inventarios UI-0 consumidos en tests
+impl ToolbarGroup {
+    /// Inventario estable UI-0 (#30).
+    pub(crate) const ALL: &[Self] = &[
+        Self::Rail,
+        Self::Road,
+        Self::Water,
+        Self::Air,
+        Self::Economy,
+        Self::Landscape,
+        Self::Info,
+        Self::Settings,
+    ];
 }
 
 /// Marca botones que seleccionan herramienta de construccion.
@@ -355,6 +439,31 @@ pub(crate) enum SaveMenuAction {
     /// Retiro voluntario → endscreen / highscore.
     EndGame,
     ReturnToMainMenu,
+}
+
+#[allow(dead_code)] // inventarios UI-0 consumidos en tests
+impl SaveMenuAction {
+    /// Inventario estable UI-0 (#30).
+    pub(crate) const ALL: &[Self] = &[
+        Self::SaveAs,
+        Self::LoadFrom,
+        Self::PauseResume,
+        Self::SpeedUp,
+        Self::Normalize,
+        Self::ZoomIn,
+        Self::ZoomOut,
+        Self::NewsSettings,
+        Self::PathfindingSettings,
+        Self::NewGrf,
+        Self::CycleCatenaryDisplay,
+        Self::DisplayOptions,
+        Self::ExtraViewport,
+        Self::Help,
+        Self::DevConsole,
+        Self::TileInspector,
+        Self::EndGame,
+        Self::ReturnToMainMenu,
+    ];
 }
 
 /// Botón directo en la barra superior: abre la ventana unificada de sonido y música.

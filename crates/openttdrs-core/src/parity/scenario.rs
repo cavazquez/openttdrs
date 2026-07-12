@@ -146,6 +146,29 @@ pub fn scenario_names() -> &'static [&'static str] {
     ]
 }
 
+/// Exporta un escenario de paridad / Junctionary a JSON (`save::save`).
+///
+/// # Errors
+///
+/// Escenario desconocido o fallo de E/S / serialización.
+pub fn export_junction_json(
+    name: &str,
+    path: &std::path::Path,
+) -> Result<(), crate::save::SaveError> {
+    let Some(state) = build_scenario(name) else {
+        return Err(crate::save::SaveError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("escenario desconocido: {name}"),
+        )));
+    };
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+    crate::save::save(&state, path)
+}
+
 fn place_road_polyline(state: &mut GameState, waypoints: &[TileCoord]) -> Vec<TileCoord> {
     let mut tiles = Vec::new();
     for pair in waypoints.windows(2) {
@@ -1027,6 +1050,20 @@ fn build_breakdown() -> GameState {
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn export_junction_json_roundtrips_rail_signals_mixed() {
+        let path =
+            std::env::temp_dir().join(format!("openttdrs_junction_{}.json", std::process::id()));
+        export_junction_json("rail_signals_mixed", &path).expect("export");
+        let loaded = crate::save::load(&path).expect("load");
+        let _ = std::fs::remove_file(&path);
+        let original = build_rail_signals_mixed();
+        assert_eq!(loaded.map.dimensions(), original.map.dimensions());
+        assert_eq!(loaded.vehicles.len(), original.vehicles.len());
+        assert_eq!(loaded.stations.len(), original.stations.len());
+        assert!(!loaded.vehicles.is_empty());
+    }
     use crate::station::road_stop_approach_tile;
 
     #[test]

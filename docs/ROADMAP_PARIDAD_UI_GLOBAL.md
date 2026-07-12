@@ -367,15 +367,16 @@ Objetivo de cobertura: mantener ~24 %, hacerla medible.
 
 ### Entregables
 
-- [ ] Convertir este inventario en checklist versionado por feature.
-- [ ] Añadir test que enumere `ToolbarGroup`, `BuildMenuAction`,
-      `SaveMenuAction` y `FloatingWindowId`.
+- [x] Convertir este inventario en checklist versionado por feature
+      (`docs/parity/ui_route_inventory.md`).
+- [x] Añadir test que enumere `ToolbarGroup`, `BuildMenuAction`,
+      `SaveMenuAction` y `FloatingWindowId` (`ui_enum_inventory_test.rs`).
 - [x] Detectar rutas huérfanas: ventana registrada pero nunca abierta.
 - [x] Corregir `DestinationPicker`: «Ir a» abre la lista y desde ella el picker
       sobre mapa.
-- [ ] Corregir documentación divergente de `RailConvert`, depósito y órdenes.
-- [ ] Ampliar `OPENTTDRS_WINDOWS_SHOT` a todas las ventanas/paneles.
-- [ ] Capturas de referencia 1280×720 y 1920×1080.
+- [x] Corregir documentación divergente de `RailConvert`, depósito y órdenes.
+- [x] Ampliar `OPENTTDRS_WINDOWS_SHOT` (Finances + TownDirectory + `OPENTTDRS_SHOT_RES`).
+- [x] Capturas de referencia 1280×720 y 1920×1080 (`scripts/capture_ui_reference.sh`).
 
 ### Criterios de aceptación
 

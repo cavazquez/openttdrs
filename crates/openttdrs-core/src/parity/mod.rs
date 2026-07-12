@@ -41,7 +41,7 @@ pub use scenario::{
     TRUCK_BAY_VEHICLE_ID, build_ai_rival_line, build_rail_signals_mixed, build_scenario,
     build_train_line, build_train_pbs, build_train_signal, build_train_supply,
     build_train_supply_dual, build_train_supply_signal_snapshot, build_truck_bay,
-    rail_signals_mixed_coord, scenario_names,
+    export_junction_json, rail_signals_mixed_coord, scenario_names,
 };
 pub use tracer::ParityTracer;
 

@@ -39,7 +39,9 @@ use crate::state::{OrderPickState, SimWorld, order_pick_active};
 use crate::ui::hud::HoveredTileCoord;
 
 use super::build_input::drag::{drag_line_tiles, road_bits_for_drag_action};
-use super::{BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, UiToolState};
+use super::{
+    BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, ToolbarState, UiToolState,
+};
 
 use bridge::spawn_bridge_span_preview;
 use industry::spawn_industry_template_preview;
@@ -75,6 +77,8 @@ pub(crate) struct RailSignalGhostPreviewParams<'w, 's> {
     pub state: ResMut<'w, RailSignalGhostState>,
     pub sprites:
         Query<'w, 's, (Entity, &'static mut GhostLerp, &'static mut Sprite), With<RailSignalGhost>>,
+    /// Frame de cursor animado (demolición); vive aquí para no superar el límite de params Bevy.
+    pub toolbar: Res<'w, ToolbarState>,
 }
 
 /// Bits y PNG de preview de carretera (misma lógica que la colocación final).
@@ -144,6 +148,7 @@ pub(crate) fn update_build_ghost_preview(
     hovered: Res<HoveredTileCoord>,
     time: Res<Time>,
 ) {
+    let anim_cursor_frame = rail_ghost.toolbar.anim_cursor_frame;
     if tool_state.active_tool != Some(BuildMenuAction::RailSignals) {
         for entity in &rail_ghost.ghosts {
             commands.entity(entity).despawn();
@@ -576,9 +581,13 @@ pub(crate) fn update_build_ghost_preview(
             continue;
         }
 
-        let Some(image) =
-            preview_image_for_action(action, &asset_server, &station_state, &preview_tiles)
-        else {
+        let Some(image) = preview_image_for_action(
+            action,
+            &asset_server,
+            &station_state,
+            &preview_tiles,
+            anim_cursor_frame,
+        ) else {
             continue;
         };
 

@@ -10,6 +10,7 @@ pub(crate) mod effect_fx;
 mod effect_vehicle;
 mod fizzy_drink;
 mod grid;
+mod house_lift_anim;
 mod industry_anim;
 mod industry_draw_proc;
 mod lighthouse_anim;
@@ -45,6 +46,7 @@ pub(crate) use effect_fx::EffectVehiclePlugin;
 pub(crate) use effect_vehicle::EffectVehicleFrames;
 pub(crate) use fizzy_drink::{FizzyDrinkAnim, FizzyDrinkAnimPlugin};
 pub(crate) use grid::{RenderGrid, TileRenderContext};
+pub(crate) use house_lift_anim::{HouseLiftAnim, HouseLiftAnimPlugin, house_sprite_has_lift};
 pub(crate) use industry_anim::{
     IndustryBuildingAnim, IndustryBuildingAnimPlugin, IndustryOverlayContext, industry_anim_phase,
     spawn_industry_anim_layer,

@@ -13,6 +13,7 @@ mod industry_anim;
 mod industry_draw_proc;
 mod lighthouse_anim;
 mod refinery_fire;
+mod road_newgrf;
 mod sign_labels;
 mod smoke;
 mod station_labels;
@@ -56,6 +57,7 @@ pub(crate) use tile_anims::TileAnimPlugin;
 pub(crate) use town_labels::town_id_at_label_pos;
 pub(crate) use train_smoke::TrainSmokePlugin;
 
+pub(crate) use road_newgrf::NewGrfRoadSpriteCache;
 pub(crate) use tiles::{
     flush_map_batches, leveled_foundation_overlay_pos, push_forest_tree, push_water_tile,
     spawn_bridge_middle, spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile,

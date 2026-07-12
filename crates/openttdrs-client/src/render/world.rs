@@ -152,6 +152,7 @@ impl Plugin for WorldRenderPlugin {
         app.init_resource::<RemapMapVisualsPending>()
             .init_resource::<MapTileSpawnViewport>()
             .init_resource::<LoadedMapTileChunks>()
+            .init_resource::<crate::render::NewGrfRoadSpriteCache>()
             .add_systems(OnEnter(ClientScreen::InGame), setup)
             .add_systems(
                 Update,
@@ -314,6 +315,7 @@ pub(crate) fn setup(
         .map(|p| p.show_station_labels)
         .unwrap_or(true);
     let show_full_detail = prefs.as_ref().map(|p| p.full_detail).unwrap_or(true);
+    let mut road_sprites = crate::render::NewGrfRoadSpriteCache::default();
     spawn_world_layer(
         &mut commands,
         &asset_server,
@@ -327,7 +329,9 @@ pub(crate) fn setup(
         show_full_detail,
         show_town_labels,
         show_station_labels,
+        &mut road_sprites,
     );
+    commands.insert_resource(road_sprites);
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
         chunks: chunks_in_bounds(spawn_bounds),
@@ -380,6 +384,7 @@ pub(crate) fn spawn_intro_map_render(
     let mut company_sprites = CompanyColoredSprites::new(company_colour);
     company_sprites.build_all(images);
     commands.insert_resource(company_sprites.clone());
+    let mut road_sprites = crate::render::NewGrfRoadSpriteCache::default();
     spawn_world_layer(
         commands,
         asset_server,
@@ -393,7 +398,9 @@ pub(crate) fn spawn_intro_map_render(
         true,
         true,
         true,
+        &mut road_sprites,
     );
+    commands.insert_resource(road_sprites);
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
         chunks: chunks_in_bounds(spawn_bounds),
@@ -410,6 +417,7 @@ fn spawn_map_tiles_in_bounds(
     spawn_bounds: TileViewportBounds,
     show_pbs_reservations: bool,
     show_full_detail: bool,
+    road_sprites: &mut crate::render::NewGrfRoadSpriteCache,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
     let debug_coast = env_flag("OPENTTDRS_DEBUG_COAST");
@@ -476,6 +484,9 @@ fn spawn_map_tiles_in_bounds(
                     climate,
                     show_pbs_reservations,
                     show_full_detail,
+                    &sim.state.road_type_catalog,
+                    Some(road_sprites),
+                    Some(images),
                 );
             }
             TileKind::Rail => {
@@ -621,6 +632,7 @@ fn spawn_world_layer(
     show_full_detail: bool,
     show_town_labels: bool,
     show_station_labels: bool,
+    road_sprites: &mut crate::render::NewGrfRoadSpriteCache,
 ) {
     if include_world_extras {
         let truck_handles = TruckHandles::load(asset_server);
@@ -661,6 +673,7 @@ fn spawn_world_layer(
         spawn_bounds,
         show_pbs_reservations,
         show_full_detail,
+        road_sprites,
     );
 }
 
@@ -675,6 +688,7 @@ fn spawn_map_chunk(
     cy: u32,
     show_pbs_reservations: bool,
     show_full_detail: bool,
+    road_sprites: &mut crate::render::NewGrfRoadSpriteCache,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
     spawn_map_tiles_in_bounds(
@@ -686,6 +700,7 @@ fn spawn_map_chunk(
         chunk_tile_bounds(cx, cy, mw, mh),
         show_pbs_reservations,
         show_full_detail,
+        road_sprites,
     );
 }
 
@@ -751,6 +766,7 @@ pub(crate) fn apply_remap_map_visuals(
     assets: Option<Res<WorldAssets>>,
     mut company: Option<ResMut<CompanyColoredSprites>>,
     mut images: Option<ResMut<Assets<Image>>>,
+    mut road_sprites: ResMut<crate::render::NewGrfRoadSpriteCache>,
     sim: Res<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
     mut loaded_chunks: ResMut<LoadedMapTileChunks>,
@@ -831,6 +847,7 @@ pub(crate) fn apply_remap_map_visuals(
                 cy,
                 show_pbs,
                 show_full_detail,
+                road_sprites.as_mut(),
             );
         }
         let mut refresh_despawn = Vec::new();
@@ -856,6 +873,7 @@ pub(crate) fn apply_remap_map_visuals(
                 cy,
                 show_pbs,
                 show_full_detail,
+                road_sprites.as_mut(),
             );
         }
         loaded_chunks.chunks = needed;
@@ -922,6 +940,7 @@ pub(crate) fn apply_remap_map_visuals(
             show_full_detail,
             show_town_labels,
             show_station_labels,
+            road_sprites.as_mut(),
         );
         loaded_chunks.chunks = chunks_in_bounds(spawn_bounds);
     }

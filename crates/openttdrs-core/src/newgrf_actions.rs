@@ -463,7 +463,11 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
                 break;
             };
             let local_id = u8::try_from(local_idx).unwrap_or(0);
-            let preview = gfx.preview_for_local_id(local_id).cloned();
+            let views = gfx
+                .views_for_local_id(local_id)
+                .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
+                .unwrap_or_default();
+            let preview = views.first().cloned();
             catalog.push(RoadTypeDef {
                 id,
                 class: meta.class,
@@ -472,6 +476,7 @@ pub fn apply_newgrf_road_types(state: &mut GameState, search_dirs: &[&Path]) {
                 intro_year: meta.intro_year,
                 from_newgrf: true,
                 newgrf_preview: preview,
+                newgrf_views: views,
             });
         }
     }
@@ -1075,6 +1080,8 @@ mod tests {
         let preview = def.newgrf_preview_sprite().unwrap();
         assert_eq!(preview.width, 8);
         assert_eq!(preview.height, 8);
+        assert_eq!(def.newgrf_views.len(), 1);
+        assert!(def.newgrf_view(0).is_some());
     }
 
     #[test]

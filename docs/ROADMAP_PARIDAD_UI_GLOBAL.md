@@ -940,7 +940,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** segunda humana / MP, o editor / NewGRF in-world.
+**Siguiente:** station in-world / Action5 shore-catenary, o segunda humana / editor.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -955,7 +955,7 @@ Progreso UI-8 (multi-compañía mínima):
 9. ~~Demolish/build ownership (`TileNotOwned` + preview).~~ ✅
 10. Segunda humana / tram `m3` / MP → OOS.
 
-Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world trenes):
+Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 
 1. ~~Walker parse-only Action0–14 + histograma Inspeccionar.~~ ✅
 2. ~~Action0 RoadTypes (0x12) metadatos → catálogo dinámico + selector.~~ ✅
@@ -966,7 +966,8 @@ Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world trenes):
 7. ~~Action1/3 RoadTypes → preview en selector (sin in-world).~~ ✅
 8. ~~Action1/3 Stations → preview en picker rail (sin in-world / 0x0E).~~ ✅
 9. ~~Action5 → parse slots + resumen Inspeccionar (sin runtime tiles).~~ ✅
-10. Roadtype/station in-world, Action5 runtime (shore/catenary), callbacks, 32bpp / RLE → OOS.
+10. ~~Action1/3 RoadTypes → in-world plano (vista 0; sin pendientes/tram overlay).~~ ✅
+11. Station in-world / Action5 shore-catenary / callbacks / 32bpp → OOS.
 
 Progreso backend OOS (JoinStation rail + CargoDist observacional):
 

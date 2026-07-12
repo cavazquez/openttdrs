@@ -1,8 +1,9 @@
 use bevy::prelude::*;
-use openttdrs_core::{Climate, Map, TileKind, bridge_above_axis_from_mapt};
+use openttdrs_core::{Climate, Map, RoadTypeDef, TileKind, bridge_above_axis_from_mapt};
 
 use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite, spawn_rail_foundation};
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};
+use crate::render::road_newgrf::{NewGrfRoadSpriteCache, newgrf_road_def_for_tile};
 use crate::render::{MapVisualLayer, TileRenderContext, WorldAssets};
 use crate::sprites::{
     RAIL_GROUND_SNOW_OR_DESERT, ROAD_FLAT_HALF_H, ROAD_STREETLIGHT_META, ROADSIDE_LAMPS,
@@ -30,6 +31,9 @@ pub(crate) fn spawn_road_tile(
     climate: Climate,
     show_pbs_reservations: bool,
     show_full_detail: bool,
+    road_catalog: &[RoadTypeDef],
+    road_sprites: Option<&mut NewGrfRoadSpriteCache>,
+    images: Option<&mut Assets<Image>>,
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -64,23 +68,59 @@ pub(crate) fn spawn_road_tile(
             slope_half_ground,
         );
     }
-    let road_set = if paved {
-        &assets.road_paved
-    } else {
-        &assets.road_flat
-    };
-    commands.spawn((
-        MapVisualLayer,
-        ctx.map_tile_chunk(),
-        road_set[fi].sprite_colored(road_paint),
-        Transform::from_translation(tile_pos_half(
-            ctx.tx_i32(),
-            ctx.ty_i32(),
+
+    // MVP NewGRF: en plano, sustituir el sprite de suelo road por la vista 0 del tipo.
+    let mut used_newgrf = false;
+    if tileh == 0
+        && let Some(tile) = ctx.tile
+        && let Some(def) = newgrf_road_def_for_tile(road_catalog, tile)
+        && let (Some(cache), Some(images)) = (road_sprites, images)
+        && let Some(view) = def.newgrf_view(0)
+        && let Some(handle) = cache.handle_for(def, 0, images)
+    {
+        let pos3 = overlay_pos(
+            ctx.iso_pos,
+            f32::from(view.x_offs),
+            f32::from(view.y_offs),
+            f32::from(view.width),
+            f32::from(view.height),
             base_z,
             0.02,
-            road_half_h,
-        )),
-    ));
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+        );
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            Sprite {
+                image: handle,
+                color: Color::WHITE,
+                ..default()
+            },
+            Transform::from_translation(pos3),
+        ));
+        used_newgrf = true;
+    }
+
+    if !used_newgrf {
+        let road_set = if paved {
+            &assets.road_paved
+        } else {
+            &assets.road_flat
+        };
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            road_set[fi].sprite_colored(road_paint),
+            Transform::from_translation(tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                base_z,
+                0.02,
+                road_half_h,
+            )),
+        ));
+    }
 
     if let Some(tfi) = ctx.tile.and_then(|t| tram_flat_sprite_index(tileh, t.m3)) {
         let tram_half_h = if tileh == 0 {

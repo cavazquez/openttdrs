@@ -500,6 +500,7 @@ fn place_road_writes_newgrf_road_type_m8() {
         intro_year: 0,
         from_newgrf: true,
         newgrf_preview: None,
+        newgrf_views: Vec::new(),
     });
     s.current_road_type = ngrf;
     let c = TileCoord::new(3, 3);

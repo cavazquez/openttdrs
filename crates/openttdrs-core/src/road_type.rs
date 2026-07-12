@@ -108,13 +108,27 @@ pub struct RoadTypeDef {
     /// Preview Action1/3 (primera vista); no se serializa en saves.
     #[serde(default, skip)]
     pub newgrf_preview: Option<crate::newgrf_sprites::DecodedSprite>,
+    /// Vistas Action1/3 para in-world (MVP: se usa la primera en plano).
+    #[serde(default, skip)]
+    pub newgrf_views: Vec<crate::newgrf_sprites::DecodedSprite>,
 }
 
 impl RoadTypeDef {
     /// Preview `NewGRF` si el tipo trae sprite Action1/3.
     #[must_use]
     pub fn newgrf_preview_sprite(&self) -> Option<&crate::newgrf_sprites::DecodedSprite> {
-        self.newgrf_preview.as_ref()
+        self.newgrf_preview
+            .as_ref()
+            .or_else(|| self.newgrf_views.first())
+    }
+
+    /// Vista in-world (`idx` módulo longitud; MVP suele usar 0).
+    #[must_use]
+    pub fn newgrf_view(&self, idx: usize) -> Option<&crate::newgrf_sprites::DecodedSprite> {
+        if self.newgrf_views.is_empty() {
+            return self.newgrf_preview.as_ref();
+        }
+        self.newgrf_views.get(idx % self.newgrf_views.len())
     }
 }
 
@@ -130,6 +144,7 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             intro_year: 0,
             from_newgrf: false,
             newgrf_preview: None,
+            newgrf_views: Vec::new(),
         },
         RoadTypeDef {
             id: RoadType::TRAM,
@@ -139,6 +154,7 @@ pub fn vanilla_road_type_catalog() -> Vec<RoadTypeDef> {
             intro_year: 0,
             from_newgrf: false,
             newgrf_preview: None,
+            newgrf_views: Vec::new(),
         },
     ]
 }

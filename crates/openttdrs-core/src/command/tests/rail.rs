@@ -543,7 +543,22 @@ fn place_rail_waypoint_on_straight_track() {
     assert!(crate::station_tile_can_have_pylons(tile.m3));
     assert_eq!(s.stations.len(), 1);
     assert_eq!(s.stations[0].stop_kind, StopKind::RailWaypoint);
+    assert_eq!(
+        s.stations[0].station_spec,
+        crate::station_class::StationSpecId::DEFAULT_RAIL
+    );
     assert_eq!(s.economy.money, money - WAYPOINT_BUILD_COST);
+}
+
+#[test]
+fn place_rail_waypoint_persists_current_station_spec() {
+    let mut s = GameState::new(8, 8);
+    let custom = crate::station_class::StationSpecId::from_u16(42);
+    s.current_station_spec = custom;
+    let c = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+    apply_command(&mut s, &Command::PlaceRailWaypoint(c)).unwrap();
+    assert_eq!(s.stations[0].station_spec, custom);
 }
 
 #[test]

@@ -6,10 +6,13 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use openttdrs_core::{DecodedSprite, Map, Station, StationSpecDef, StationSpecId, TileCoord};
 
-/// `(station_spec_id, view_idx)` → textura RGBA.
+use crate::sprites::CompanyColour;
+use crate::sprites::company_palette::recolor_rgba8;
+
+/// `(station_spec_id, view_idx, company_colour)` → textura RGBA.
 #[derive(Resource, Default)]
 pub(crate) struct NewGrfStationSpriteCache {
-    handles: HashMap<(u16, u8), Handle<Image>>,
+    handles: HashMap<(u16, u8, u8), Handle<Image>>,
 }
 
 impl NewGrfStationSpriteCache {
@@ -17,7 +20,11 @@ impl NewGrfStationSpriteCache {
         self.handles.clear();
     }
 
-    fn decoded_to_image(sprite: &DecodedSprite) -> Image {
+    fn decoded_to_image(sprite: &DecodedSprite, colour: Option<CompanyColour>) -> Image {
+        let mut rgba = sprite.rgba.clone();
+        if let Some(c) = colour {
+            recolor_rgba8(&mut rgba, c);
+        }
         Image::new(
             Extent3d {
                 width: u32::from(sprite.width),
@@ -25,32 +32,34 @@ impl NewGrfStationSpriteCache {
                 depth_or_array_layers: 1,
             },
             TextureDimension::D2,
-            sprite.rgba.clone(),
+            rgba,
             TextureFormat::Rgba8UnormSrgb,
             default(),
         )
     }
 
-    /// Textura de la vista `view_idx` (MVP: 0) para un station spec NewGRF.
+    /// Textura de la vista `view_idx` (MVP: 0), opcionalmente recoloreada.
     pub(crate) fn handle_for(
         &mut self,
         def: &StationSpecDef,
         view_idx: usize,
+        colour: Option<CompanyColour>,
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
         let view = def.newgrf_view(view_idx)?;
         let idx = u8::try_from(view_idx % def.newgrf_views.len().max(1)).unwrap_or(0);
-        let key = (def.id.as_u16(), idx);
+        let colour_key = colour.map(CompanyColour::as_u8).unwrap_or(0xFF);
+        let key = (def.id.as_u16(), idx, colour_key);
         Some(
             self.handles
                 .entry(key)
-                .or_insert_with(|| images.add(Self::decoded_to_image(view)))
+                .or_insert_with(|| images.add(Self::decoded_to_image(view, colour)))
                 .clone(),
         )
     }
 }
 
-/// Spec NewGRF con vista 0 para la estación que cubre `coord`.
+/// Spec NewGRF con vista 0 para la estación/waypoint que cubre `coord`.
 #[must_use]
 pub(crate) fn newgrf_station_def_for_tile<'a>(
     catalog: &'a [StationSpecDef],
@@ -111,9 +120,13 @@ mod tests {
             .expect("newgrf station");
         let mut images = Assets::<Image>::default();
         let mut cache = NewGrfStationSpriteCache::default();
-        let handle = cache.handle_for(def, 0, &mut images).expect("handle");
+        let handle = cache.handle_for(def, 0, None, &mut images).expect("handle");
         assert!(images.get(&handle).is_some());
-        let again = cache.handle_for(def, 0, &mut images).expect("cached");
+        let again = cache.handle_for(def, 0, None, &mut images).expect("cached");
         assert_eq!(handle, again);
+        let recolored = cache
+            .handle_for(def, 0, Some(CompanyColour::Red), &mut images)
+            .expect("recolor");
+        assert_ne!(handle, recolored);
     }
 }

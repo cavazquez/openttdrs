@@ -379,6 +379,7 @@ pub(in crate::command) fn place_rail_waypoint(
         .map_err(|_| CommandError::OutOfBounds)?;
     let mut st = Station::new_with_kind(c, StopKind::RailWaypoint);
     st.owner = state.active_company;
+    st.station_spec = state.current_station_spec;
     state.stations.push(st);
     state.economy.money -= WAYPOINT_BUILD_COST;
     Ok(())

@@ -184,6 +184,7 @@ pub(in crate::command) fn place_single_transport_tile(
         .map
         .set_mapt_m5(c, mapt, m5)
         .map_err(|_| CommandError::OutOfBounds)?;
+    let _ = state.map.set_m1(c, state.active_company.0);
     state.economy.money -= cost;
     Ok(())
 }

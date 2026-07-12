@@ -224,7 +224,7 @@ fn clear_any_industry_tile_removes_whole_industry_footprint() {
 
 #[test]
 fn every_command_error_has_user_message() {
-    const ERRORS: [CommandError; 25] = [
+    const ERRORS: [CommandError; 26] = [
         CommandError::OutOfBounds,
         CommandError::CannotPlaceRoadOnWater,
         CommandError::CannotPlaceRoadOnVoid,
@@ -237,6 +237,7 @@ fn every_command_error_has_user_message() {
         CommandError::StationAlreadyExists,
         CommandError::StationNotFound,
         CommandError::VehicleNotFound,
+        CommandError::VehicleNotOwned,
         CommandError::VehicleNotInDepot,
         CommandError::InvalidDepotTile,
         CommandError::VehicleKindNotAllowed,
@@ -259,4 +260,43 @@ fn every_command_error_has_user_message() {
             "mensaje sin letras para {err:?}: {msg}"
         );
     }
+}
+
+#[test]
+fn place_rail_and_road_write_active_company_owner_m1() {
+    let mut s = GameState::new(8, 8);
+    s.ensure_rival_transcargo();
+    let rival = crate::CompanyId(1);
+    assert!(s.set_active_company(rival));
+    let rail = TileCoord::new(2, 2);
+    let road = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRail(rail)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoad(road)).unwrap();
+    assert_eq!(s.map.get(rail).unwrap().m1, rival.0);
+    assert_eq!(s.map.get(road).unwrap().m1, rival.0);
+    assert_eq!(
+        crate::CompanyId::from_tile_m1(s.map.get(rail).unwrap().m1, s.companies.len()),
+        rival
+    );
+}
+
+#[test]
+fn toggle_vehicle_running_rejects_other_company_owner() {
+    let mut s = GameState::new(8, 8);
+    s.economy.money = 1_000_000;
+    s.ensure_rival_transcargo();
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildRoadVehicleAtDepot(depot, crate::VehicleKind::Bus),
+    )
+    .unwrap();
+    let id = s.vehicles[0].id;
+    assert_eq!(s.vehicles[0].owner, crate::CompanyId::PLAYER);
+    assert!(s.set_active_company(crate::CompanyId(1)));
+    let err = apply_command(&mut s, &Command::ToggleVehicleRunning(id)).unwrap_err();
+    assert_eq!(err, CommandError::VehicleNotOwned);
+    assert!(!s.vehicles[0].running);
 }

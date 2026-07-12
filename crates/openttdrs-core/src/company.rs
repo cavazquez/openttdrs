@@ -19,6 +19,24 @@ impl CompanyId {
     pub const fn index(self) -> usize {
         self.0 as usize
     }
+
+    /// Owner de tesela desde byte `m1` (MAPO), acotado a compañías existentes.
+    #[must_use]
+    pub fn from_tile_m1(m1: u8, company_count: usize) -> Self {
+        let idx = usize::from(m1);
+        if company_count == 0 || idx >= company_count {
+            Self::PLAYER
+        } else {
+            Self(m1)
+        }
+    }
+}
+
+/// Escribe el owner de infraestructura en `m1` (vía / carretera / depósitos).
+#[must_use]
+pub fn tile_with_owner(mut tile: crate::map::Tile, owner: CompanyId) -> crate::map::Tile {
+    tile.m1 = owner.0;
+    tile
 }
 
 /// Compañía jugable o IA.

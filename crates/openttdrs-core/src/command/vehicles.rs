@@ -7,13 +7,14 @@ use crate::vehicle::{MAX_VEHICLE_NAME_CHARS, Vehicle, VehicleKind, VehicleOrder}
 
 use super::transport::road_depot_exit_for_dir;
 use super::types::OrderMoveDirection;
-use super::{CommandError, in_bounds};
+use super::{CommandError, in_bounds, require_vehicle_owned_by_active};
 
 pub(super) fn set_vehicle_order_list(
     state: &mut GameState,
     id: u32,
     orders: Vec<VehicleOrder>,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, id)?;
     let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -66,6 +67,7 @@ pub(super) fn set_vehicle_orders(
     id: u32,
     orders: Vec<TileCoord>,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, id)?;
     for order in &orders {
         in_bounds(&state.map, *order)?;
     }
@@ -206,6 +208,8 @@ pub(super) fn attach_wagon_to_consist(
     head_id: u32,
     wagon_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, head_id)?;
+    require_vehicle_owned_by_active(state, wagon_id)?;
     let head = state
         .vehicles
         .iter()
@@ -239,6 +243,7 @@ pub(super) fn attach_wagon_to_consist(
 }
 
 pub(super) fn detach_consist_unit(state: &mut GameState, unit_id: u32) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, unit_id)?;
     let unit = state
         .vehicles
         .iter()
@@ -276,9 +281,11 @@ pub(super) fn move_rail_vehicle(
 }
 
 pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle) = state.vehicles.iter().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
+    let owner = vehicle.owner;
     let in_depot = matches!(
         state.map.get_kind(vehicle.pos),
         Some(TileKind::RoadDepot | TileKind::RailDepot | TileKind::ShipDepot | TileKind::Airport)
@@ -317,7 +324,7 @@ pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(),
     for hid in heads {
         crate::train_consist::consist_changed(&mut state.vehicles, hid);
     }
-    state.economy.money += refund_total;
+    state.credit_company(owner, refund_total);
     Ok(())
 }
 
@@ -325,6 +332,7 @@ pub(super) fn toggle_vehicle_running(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let kind = state
         .vehicles
         .iter()
@@ -514,6 +522,8 @@ pub(super) fn clone_vehicle_orders(
     from_vehicle_id: u32,
     to_vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, from_vehicle_id)?;
+    require_vehicle_owned_by_active(state, to_vehicle_id)?;
     let Some(src_idx) = state.vehicles.iter().position(|v| v.id == from_vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -531,6 +541,7 @@ pub(super) fn clone_vehicle_at_depot(
     source_vehicle_id: u32,
     depot_pos: TileCoord,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, source_vehicle_id)?;
     let (engine_id, orders) = {
         let Some(source) = state.vehicles.iter().find(|v| v.id == source_vehicle_id) else {
             return Err(CommandError::VehicleNotFound);
@@ -558,10 +569,11 @@ pub(super) fn sell_all_vehicles_at_depot(
     state: &mut GameState,
     depot_pos: TileCoord,
 ) -> Result<(), CommandError> {
+    let owner = state.active_company;
     let ids: Vec<u32> = state
         .vehicles
         .iter()
-        .filter(|v| v.pos == depot_pos)
+        .filter(|v| v.pos == depot_pos && v.owner == owner)
         .map(|v| v.id)
         .collect();
     for id in ids {
@@ -575,6 +587,7 @@ pub(super) fn refit_vehicle(
     vehicle_id: u32,
     cargo: crate::cargo::CargoType,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -596,6 +609,7 @@ pub(super) fn remove_vehicle_order_at(
     vehicle_id: u32,
     index: usize,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -627,6 +641,7 @@ pub(super) fn skip_vehicle_order(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -676,6 +691,7 @@ fn toggle_vehicle_order_flag(
     index: usize,
     toggle: impl FnOnce(VehicleOrder) -> Option<VehicleOrder>,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -697,6 +713,7 @@ pub(super) fn append_goto_nearest_depot(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -718,6 +735,7 @@ pub(super) fn rename_vehicle(
     vehicle_id: u32,
     name: Option<String>,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -752,10 +770,11 @@ pub(super) fn set_depot_vehicles_running(
     ) {
         return Err(CommandError::InvalidDepotTile);
     }
+    let owner = state.active_company;
     let ids: Vec<u32> = state
         .vehicles
         .iter()
-        .filter(|v| v.pos == depot_pos)
+        .filter(|v| v.pos == depot_pos && v.owner == owner)
         .map(|v| v.id)
         .collect();
     for id in ids {
@@ -808,6 +827,7 @@ pub(super) fn move_vehicle_order(
     index: usize,
     direction: OrderMoveDirection,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -846,6 +866,7 @@ pub(super) fn turn_around_vehicle(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -866,6 +887,7 @@ pub(super) fn force_vehicle_proceed(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -880,6 +902,7 @@ pub(super) fn toggle_vehicle_timetable(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -904,6 +927,7 @@ pub(super) fn cycle_vehicle_order_travel(
     vehicle_id: u32,
     index: usize,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };

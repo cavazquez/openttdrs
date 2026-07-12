@@ -5,36 +5,42 @@ pub(crate) use crate::sprites::CompanyColoredSprites;
 use bevy::prelude::*;
 
 use crate::render::AtlasSprite;
-use crate::sprites::tile_filename;
+use crate::sprites::{CompanyColour, tile_filename};
 
-/// Usa textura recoloreada si existe; si no, el sprite del atlas.
+/// Usa textura recoloreada de la paleta activa o del owner; si no, el atlas.
 #[must_use]
-pub fn sprite_from_atlas_or_company(
+pub fn sprite_from_atlas_or_company_colour(
     company: Option<&CompanyColoredSprites>,
+    colour: Option<CompanyColour>,
     atlas: &AtlasSprite,
     asset_path: &str,
     tint: Color,
 ) -> Sprite {
-    if let Some(c) = company
-        && let Some(handle) = c.tile_handle_path(asset_path)
-    {
-        return Sprite {
-            image: handle.clone(),
-            color: tint,
-            ..default()
+    if let Some(c) = company {
+        let handle = match colour {
+            Some(col) => c.tile_handle_path_for_colour(col, asset_path),
+            None => c.tile_handle_path(asset_path),
         };
+        if let Some(handle) = handle {
+            return Sprite {
+                image: handle.clone(),
+                color: tint,
+                ..default()
+            };
+        }
     }
     atlas.sprite_colored(tint)
 }
 
-/// Como [`sprite_from_atlas_or_company`] con tinte blanco.
+/// Como [`sprite_from_atlas_or_company_colour`] con tinte blanco.
 #[must_use]
-pub fn sprite_from_atlas_or_company_white(
+pub fn sprite_from_atlas_or_company_white_colour(
     company: Option<&CompanyColoredSprites>,
+    colour: Option<CompanyColour>,
     atlas: &AtlasSprite,
     asset_path: &str,
 ) -> Sprite {
-    sprite_from_atlas_or_company(company, atlas, asset_path, Color::WHITE)
+    sprite_from_atlas_or_company_colour(company, colour, atlas, asset_path, Color::WHITE)
 }
 
 /// Atlas o PNG recoloreado con la paleta `random_colour` de la industria (P4).

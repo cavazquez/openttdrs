@@ -372,7 +372,7 @@ pub(in crate::command::transport) fn write_normal_road_tile(
     // MP_ROAD normal tile: low nibble stores road bits, high bits subtype=0.
     tile.mapt = 0x20;
     tile.m5 = road_bits & 0x0F;
-    tile.m1 = 0;
+    tile.m1 = state.active_company.0;
     tile.m2 = 0;
     tile.m2_hi = 0;
     tile.m3 = tram_bits;

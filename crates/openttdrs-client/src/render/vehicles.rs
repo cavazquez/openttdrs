@@ -314,13 +314,18 @@ impl TruckHandles {
         v: &Vehicle,
         pose: openttdrs_core::VehiclePose,
         company: Option<&CompanyColoredSprites>,
+        owner_colour: Option<crate::sprites::CompanyColour>,
     ) -> Handle<Image> {
         let dir = vehicle_render_direction_at(v, pose).min(7) as usize;
         let layer = &vehicle_layers(v)[dir];
-        if let Some(c) = company
-            && let Some(handle) = c.vehicle_handle(layer.path)
-        {
-            return handle.clone();
+        if let Some(c) = company {
+            let handle = match owner_colour {
+                Some(col) => c.vehicle_handle_for_colour(col, layer.path),
+                None => c.vehicle_handle(layer.path),
+            };
+            if let Some(handle) = handle {
+                return handle.clone();
+            }
         }
         let i = dir;
         match v.kind {
@@ -364,11 +369,13 @@ impl TruckHandles {
     }
 
     /// Textura del vehículo; prioriza vistas NewGRF del catálogo runtime.
+    #[allow(clippy::too_many_arguments)]
     fn for_vehicle_with_newgrf(
         &self,
         v: &Vehicle,
         pose: openttdrs_core::VehiclePose,
         company: Option<&CompanyColoredSprites>,
+        owner_colour: Option<crate::sprites::CompanyColour>,
         sim: &SimWorld,
         cache: &mut NewGrfTrainSpriteCache,
         images: &mut Assets<Image>,
@@ -381,7 +388,7 @@ impl TruckHandles {
         {
             return handle;
         }
-        self.for_vehicle(v, pose, company)
+        self.for_vehicle(v, pose, company, owner_colour)
     }
 }
 
@@ -405,14 +412,27 @@ pub(crate) fn rebuild_vehicle_index(sim: Res<SimWorld>, mut idx: ResMut<VehicleI
     idx.rebuild(&sim.state.vehicles);
 }
 
+fn vehicle_owner_colour(sim: &SimWorld, v: &Vehicle) -> crate::sprites::CompanyColour {
+    crate::sprites::CompanyColour::from_u8(
+        sim.state
+            .companies
+            .get(v.owner.index())
+            .map(|c| c.colour)
+            .unwrap_or(sim.state.company_colour),
+    )
+}
+
 pub(crate) fn spawn_initial_vehicles(
     commands: &mut Commands,
     sim: &SimWorld,
     trucks: &TruckHandles,
-    company: &CompanyColoredSprites,
+    company: &mut CompanyColoredSprites,
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
 ) {
+    for c in &sim.state.companies {
+        company.ensure_palette(crate::sprites::CompanyColour::from_u8(c.colour), images);
+    }
     for vehicle in &sim.state.vehicles {
         // Vagones enganchados: se dibujan como partes del consist (offsets), no como entidad propia.
         if vehicle.is_wagon_unit() {
@@ -438,6 +458,7 @@ pub(crate) fn spawn_initial_vehicles(
                     vehicle,
                     pose,
                     Some(company),
+                    Some(vehicle_owner_colour(sim, vehicle)),
                     sim,
                     cache,
                     images,
@@ -493,6 +514,7 @@ fn spawn_consist_trailer_sprites(
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
 ) {
+    let owner_colour = Some(vehicle_owner_colour(sim, head));
     let ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, head.id);
     for (i, &uid) in ids.iter().enumerate().skip(1) {
         let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == uid) else {
@@ -529,6 +551,7 @@ fn spawn_consist_trailer_sprites(
                     unit,
                     unit_pose,
                     Some(company),
+                    owner_colour,
                     sim,
                     cache,
                     images,
@@ -613,7 +636,7 @@ pub(crate) fn update_vehicles(
     sim: Res<SimWorld>,
     sim_clock: Res<SimClock>,
     trucks: Res<TruckHandles>,
-    company: Res<CompanyColoredSprites>,
+    mut company: ResMut<CompanyColoredSprites>,
     vehicle_index: Res<VehicleIndex>,
     mut cache: ResMut<NewGrfTrainSpriteCache>,
     mut images: ResMut<Assets<Image>>,
@@ -638,6 +661,12 @@ pub(crate) fn update_vehicles(
         (Without<VehicleSprite>, Without<ConsistUnitSprite>),
     >,
 ) {
+    for c in &sim.state.companies {
+        company.ensure_palette(
+            crate::sprites::CompanyColour::from_u8(c.colour),
+            &mut images,
+        );
+    }
     for (vs, mut transform, mut sprite, mut visibility) in &mut q {
         let Some(&i) = vehicle_index.by_id.get(&vs.0) else {
             continue;
@@ -658,8 +687,15 @@ pub(crate) fn update_vehicles(
             Some(&sim.state.engine_catalog),
         );
         transform.translation = pos3;
-        sprite.image =
-            trucks.for_vehicle_with_newgrf(v, pose, Some(&company), &sim, &mut cache, &mut images);
+        sprite.image = trucks.for_vehicle_with_newgrf(
+            v,
+            pose,
+            Some(&company),
+            Some(vehicle_owner_colour(&sim, v)),
+            &sim,
+            &mut cache,
+            &mut images,
+        );
         sprite.color = vehicle_tint(v);
     }
 
@@ -710,6 +746,7 @@ pub(crate) fn update_vehicles(
             unit,
             pose,
             Some(&company),
+            Some(vehicle_owner_colour(&sim, unit)),
             &sim,
             &mut cache,
             &mut images,
@@ -957,7 +994,7 @@ mod tests {
         };
         let trucks = default_handles();
         let selected =
-            trucks.for_vehicle_with_newgrf(&v, pose, None, &sim, &mut cache, &mut images);
+            trucks.for_vehicle_with_newgrf(&v, pose, None, None, &sim, &mut cache, &mut images);
         assert_eq!(selected, handle);
     }
 
@@ -1005,7 +1042,7 @@ mod tests {
         );
 
         let handles = default_handles();
-        let selected = handles.for_vehicle(&v, pose, None);
+        let selected = handles.for_vehicle(&v, pose, None, None);
         assert_eq!(selected, handles.bus[render_dir]);
     }
 

@@ -448,9 +448,11 @@ pub(crate) fn handle_vehicle_list_buttons(
         };
         match action.0 {
             VehicleListAction::ToggleRunning => {
-                if apply_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id)).is_ok()
-                {
-                    pending.pending = true;
+                match apply_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id)) {
+                    Ok(()) => pending.pending = true,
+                    Err(e) => {
+                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+                    }
                 }
             }
             VehicleListAction::GotoDepot => {

@@ -8,6 +8,7 @@ use crate::vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup, next_vehi
 
 use super::in_bounds;
 use super::types::CommandError;
+use super::util::require_vehicle_owned_by_active;
 use super::vehicles;
 
 pub(super) fn create_vehicle_group(state: &mut GameState, name: &str) -> Result<(), CommandError> {
@@ -49,6 +50,7 @@ pub(super) fn assign_vehicle_to_group(
     vehicle_id: u32,
     group_id: Option<u32>,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     if let Some(gid) = group_id
         && !state.vehicle_groups.iter().any(|g| g.id == gid)
     {
@@ -65,6 +67,7 @@ pub(super) fn clear_vehicle_timetable_lateness(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -78,6 +81,7 @@ pub(super) fn set_vehicle_order_wait_ticks(
     index: usize,
     wait_ticks: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -98,6 +102,7 @@ pub(super) fn set_vehicle_order_travel_ticks(
     index: usize,
     travel_ticks: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -113,6 +118,7 @@ pub(super) fn toggle_vehicle_timetable_autofill(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -172,10 +178,11 @@ pub(super) fn depot_mass_autoreplace(
     ) {
         return Err(CommandError::InvalidDepotTile);
     }
+    let owner = state.active_company;
     let ids: Vec<u32> = state
         .vehicles
         .iter()
-        .filter(|v| v.pos == depot_pos)
+        .filter(|v| v.pos == depot_pos && v.owner == owner)
         .map(|v| v.id)
         .collect();
     for id in ids {
@@ -191,6 +198,7 @@ pub(super) fn create_shared_orders_from_vehicle(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle) = state.vehicles.iter().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -214,6 +222,7 @@ pub(super) fn link_vehicle_to_shared_orders(
     vehicle_id: u32,
     shared_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     if !state.shared_order_lists.iter().any(|l| l.id == shared_id) {
         return Err(CommandError::SharedOrdersNotFound);
     }
@@ -229,6 +238,7 @@ pub(super) fn unlink_vehicle_shared_orders(
     state: &mut GameState,
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -266,6 +276,7 @@ pub(super) fn set_vehicle_order_conditional(
     value: u8,
     jump_to: usize,
 ) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
     let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
@@ -284,12 +295,13 @@ pub(super) fn depot_reorder_vehicle_slot(
     to_slot: usize,
 ) -> Result<(), CommandError> {
     in_bounds(&state.map, depot_pos)?;
-    // Misma lista que la UI del depósito: solo cabezas de consist, ordenadas
+    // Misma lista que la UI del depósito: solo cabezas de consist propias, ordenadas
     // por `depot_display_slot` (y `id` como desempate).
+    let owner = state.active_company;
     let mut heads: Vec<(u32, Option<u8>)> = state
         .vehicles
         .iter()
-        .filter(|v| v.pos == depot_pos && v.is_consist_head())
+        .filter(|v| v.pos == depot_pos && v.is_consist_head() && v.owner == owner)
         .map(|v| (v.id, v.depot_display_slot))
         .collect();
     heads.sort_by(|a, b| match (a.1, b.1) {

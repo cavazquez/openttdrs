@@ -265,11 +265,15 @@ pub fn company_palette_tile_filenames() -> Vec<String> {
 }
 
 /// Sprites recoloreados para la compañía activa (fuera del atlas de teselas).
+///
+/// `tiles` = paleta de la compañía activa; `extra` = otras compañías vistas en mapa.
 #[derive(Resource, Clone, Default)]
 pub struct CompanyColoredSprites {
     pub colour: CompanyColour,
     /// Clave = nombre de archivo (`bus_stop_ne_build_a.png`).
     pub tiles: HashMap<String, Handle<Image>>,
+    /// Paletas adicionales: `colour.as_u8()` → filename → handle.
+    pub extra: HashMap<u8, HashMap<String, Handle<Image>>>,
 }
 
 impl CompanyColoredSprites {
@@ -278,16 +282,39 @@ impl CompanyColoredSprites {
         Self {
             colour,
             tiles: HashMap::new(),
+            extra: HashMap::new(),
         }
     }
 
     pub fn build_all(&mut self, images: &mut Assets<Image>) {
         self.tiles.clear();
+        self.extra.clear();
         for filename in company_palette_tile_filenames() {
             if let Some(handle) = load_recolored_png(&filename, self.colour, images) {
                 self.tiles.insert(filename, handle);
             }
         }
+    }
+
+    /// Asegura una paleta para `colour` (activa o en `extra`).
+    pub fn ensure_palette(&mut self, colour: CompanyColour, images: &mut Assets<Image>) {
+        if colour == self.colour {
+            if self.tiles.is_empty() {
+                self.build_all(images);
+            }
+            return;
+        }
+        let key = colour.as_u8();
+        if self.extra.contains_key(&key) {
+            return;
+        }
+        let mut tiles = HashMap::new();
+        for filename in company_palette_tile_filenames() {
+            if let Some(handle) = load_recolored_png(&filename, colour, images) {
+                tiles.insert(filename, handle);
+            }
+        }
+        self.extra.insert(key, tiles);
     }
 
     #[must_use]
@@ -296,8 +323,31 @@ impl CompanyColoredSprites {
     }
 
     #[must_use]
+    pub fn tile_handle_for_colour(
+        &self,
+        colour: CompanyColour,
+        filename: &str,
+    ) -> Option<&Handle<Image>> {
+        if colour == self.colour {
+            return self.tiles.get(filename);
+        }
+        self.extra
+            .get(&colour.as_u8())
+            .and_then(|m| m.get(filename))
+    }
+
+    #[must_use]
     pub fn tile_handle_path(&self, asset_path: &str) -> Option<&Handle<Image>> {
         self.tile_handle(tile_filename(asset_path))
+    }
+
+    #[must_use]
+    pub fn tile_handle_path_for_colour(
+        &self,
+        colour: CompanyColour,
+        asset_path: &str,
+    ) -> Option<&Handle<Image>> {
+        self.tile_handle_for_colour(colour, tile_filename(asset_path))
     }
 
     #[must_use]
@@ -308,6 +358,15 @@ impl CompanyColoredSprites {
     #[must_use]
     pub fn vehicle_handle(&self, path: &str) -> Option<&Handle<Image>> {
         self.tile_handle_path(path)
+    }
+
+    #[must_use]
+    pub fn vehicle_handle_for_colour(
+        &self,
+        colour: CompanyColour,
+        path: &str,
+    ) -> Option<&Handle<Image>> {
+        self.tile_handle_path_for_colour(colour, path)
     }
 
     /// Sprite de industria recoloreado (`PALETTE_MODIFIER_COLOUR` / `random_colour`).

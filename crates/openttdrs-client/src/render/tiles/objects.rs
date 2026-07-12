@@ -11,10 +11,10 @@ use crate::iso::{
 };
 use crate::render::{
     AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext, WorldAssets,
-    sprite_from_atlas_or_company_white,
+    sprite_from_atlas_or_company_white_colour,
 };
 use crate::sprites::{
-    StationTileClass, TransparencyOption, catenary_hidden, catenary_sprite_color,
+    CompanyColour, StationTileClass, TransparencyOption, catenary_hidden, catenary_sprite_color,
     catenary_tunnel_wire_sprite, collect_catenary_pylons_from_map,
     collect_catenary_sprites_from_map, is_hidden, rail_station_draw_layers,
     rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_sprite_meta,
@@ -40,6 +40,7 @@ pub(crate) fn spawn_station_tile(
     dims: (u32, u32),
     assets: &WorldAssets,
     company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
     stations: &[Station],
     slope_half_ground: f32,
@@ -142,8 +143,9 @@ pub(crate) fn spawn_station_tile(
                             ctx.ty_i32(),
                         )
                     };
-                    let sprite = tint_building_sprite(sprite_from_atlas_or_company_white(
+                    let sprite = tint_building_sprite(sprite_from_atlas_or_company_white_colour(
                         company,
+                        owner_colour,
                         img,
                         &format!("rail_{}.png", layer.sprite_id),
                     ));
@@ -246,7 +248,16 @@ pub(crate) fn spawn_station_tile(
                     .unwrap_or_else(|| assets.station_grounds[0].clone())
             };
             spawn_stop_ground_sprite(commands, &image, ctx, base_z, 0.04);
-            spawn_road_stop_buildings(commands, assets, company, ctx, base_z, class, dir);
+            spawn_road_stop_buildings(
+                commands,
+                assets,
+                company,
+                owner_colour,
+                ctx,
+                base_z,
+                class,
+                dir,
+            );
         }
         StationTileClass::RoadWaypoint => {
             if tileh == 0 {
@@ -366,10 +377,12 @@ fn spawn_road_stop_link(
     ));
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_road_stop_buildings(
     commands: &mut Commands,
     assets: &WorldAssets,
     company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
     base_z: u8,
     class: StationTileClass,
@@ -398,8 +411,11 @@ fn spawn_road_stop_buildings(
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            tint_building_sprite(sprite_from_atlas_or_company_white(
-                company, image, spec.path,
+            tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+                company,
+                owner_colour,
+                image,
+                spec.path,
             )),
             Transform::from_translation(center),
         ));
@@ -421,10 +437,12 @@ fn spawn_stop_ground_sprite(
     ));
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn_transport_object_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
     company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
     slope_half_ground: f32,
     map: &Map,
@@ -488,7 +506,16 @@ pub(crate) fn spawn_transport_object_tile(
             } else {
                 SLOPE_HALF_H[tileh as usize]
             };
-            spawn_road_depot_tile(commands, assets, company, ctx, base_z, depot_half_h, tileh);
+            spawn_road_depot_tile(
+                commands,
+                assets,
+                company,
+                owner_colour,
+                ctx,
+                base_z,
+                depot_half_h,
+                tileh,
+            );
         }
         TileKind::RailDepot => {
             let depot_half_h = if tileh == 0 {
@@ -496,7 +523,15 @@ pub(crate) fn spawn_transport_object_tile(
             } else {
                 SLOPE_HALF_H[tileh as usize]
             };
-            spawn_rail_depot_tile(commands, assets, company, ctx, base_z, depot_half_h);
+            spawn_rail_depot_tile(
+                commands,
+                assets,
+                company,
+                owner_colour,
+                ctx,
+                base_z,
+                depot_half_h,
+            );
         }
         TileKind::ShipDepot => {
             let depot_half_h = if tileh == 0 {
@@ -558,10 +593,12 @@ fn spawn_ship_depot_tile(
     ));
 }
 
+#[allow(clippy::too_many_arguments)]
 fn spawn_road_depot_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
     company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
     base_z: u8,
     half_h: f32,
@@ -609,8 +646,11 @@ fn spawn_road_depot_tile(
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            tint_building_sprite(sprite_from_atlas_or_company_white(
-                company, image, spec.path,
+            tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+                company,
+                owner_colour,
+                image,
+                spec.path,
             )),
             Transform::from_translation(center),
         ));
@@ -623,6 +663,7 @@ fn spawn_rail_depot_tile(
     commands: &mut Commands,
     assets: &WorldAssets,
     company: Option<&CompanyColoredSprites>,
+    owner_colour: Option<CompanyColour>,
     ctx: &TileRenderContext,
     base_z: u8,
     half_h: f32,
@@ -667,8 +708,9 @@ fn spawn_rail_depot_tile(
         commands.spawn((
             MapVisualLayer,
             ctx.map_tile_chunk(),
-            tint_building_sprite(sprite_from_atlas_or_company_white(
+            tint_building_sprite(sprite_from_atlas_or_company_white_colour(
                 company,
+                owner_colour,
                 image,
                 &format!("rail_depot_{dir}_{layer_i}"),
             )),

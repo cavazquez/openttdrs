@@ -93,7 +93,9 @@ pub use command::{
     rail_trackbits_from_neighbors, road_bits_for_autoroute, road_drag_line_tiles,
     road_locked_tool_axis,
 };
-pub use company::{Company, CompanyId, FEEDER_SHARE_DEN, FEEDER_SHARE_NUM, feeder_share_of};
+pub use company::{
+    Company, CompanyId, FEEDER_SHARE_DEN, FEEDER_SHARE_NUM, feeder_share_of, tile_with_owner,
+};
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
 pub use dev_metrics::{CargoProbeOptions, VehicleCargoReport, probe_vehicle_cargo_cycle};
 pub use disaster::{DISASTER_CHECK_INTERVAL, force_disaster, tick_disasters, trigger_disaster_at};

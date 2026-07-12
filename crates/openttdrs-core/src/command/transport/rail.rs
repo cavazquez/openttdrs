@@ -273,7 +273,7 @@ pub(in crate::command::transport) fn write_normal_rail_tile(
 
     tile.kind = TileKind::Rail;
     tile.mapt = MP_RAILWAY_MAPT;
-    tile.m1 = 0;
+    tile.m1 = state.active_company.0;
     tile.m2_hi = 0;
     tile.m6 = 0;
     tile.m7 = 0;

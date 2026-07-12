@@ -32,7 +32,7 @@ pub(crate) use transport::{
 };
 pub use types::{Command, CommandError, LevelMode, OrderMoveDirection, command_error_message};
 
-pub(super) use util::in_bounds;
+pub(super) use util::{in_bounds, require_vehicle_owned_by_active};
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]

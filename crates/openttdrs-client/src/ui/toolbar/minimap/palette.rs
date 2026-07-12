@@ -106,11 +106,7 @@ fn owner_for_tile(state: &GameState, coord: TileCoord, kind: TileKind) -> Option
     }
     if is_owned_infra(kind) {
         let m1 = state.map.get(coord).map(|t| t.m1).unwrap_or(0);
-        let idx = usize::from(m1);
-        if idx < state.companies.len() {
-            return Some(state.companies[idx].id);
-        }
-        return Some(state.active_company);
+        return Some(CompanyId::from_tile_m1(m1, state.companies.len()));
     }
     None
 }

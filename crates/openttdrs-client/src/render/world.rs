@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::TileKind;
+use openttdrs_core::{CompanyId, TileCoord, TileKind};
 
 use crate::bevy_app::UpdateSet;
 use crate::config::{env_flag, env_string};
@@ -26,6 +26,43 @@ use crate::sprites::CompanyColour;
 use crate::state::{ClientScreen, SimWorld};
 
 use super::vehicles::{NewGrfTrainSpriteCache, TruckHandles, VehicleIndex, spawn_initial_vehicles};
+
+fn owner_colour_for_tile(
+    sim: &SimWorld,
+    coord: TileCoord,
+    kind: TileKind,
+) -> Option<CompanyColour> {
+    let colour_of = |owner: CompanyId| {
+        CompanyColour::from_u8(
+            sim.state
+                .companies
+                .get(owner.index())
+                .map(|c| c.colour)
+                .unwrap_or(sim.state.company_colour),
+        )
+    };
+    if let Some(station) = sim.state.stations.iter().find(|s| s.covers_tile(coord)) {
+        return Some(colour_of(station.owner));
+    }
+    if matches!(kind, TileKind::Station | TileKind::Airport)
+        && let Some(station) = sim.state.stations.iter().find(|s| s.pos == coord)
+    {
+        return Some(colour_of(station.owner));
+    }
+    if matches!(
+        kind,
+        TileKind::RoadDepot
+            | TileKind::RailDepot
+            | TileKind::ShipDepot
+            | TileKind::Rail
+            | TileKind::Road
+    ) {
+        let m1 = sim.state.map.get(coord).map(|t| t.m1).unwrap_or(0);
+        let owner = CompanyId::from_tile_m1(m1, sim.state.companies.len());
+        return Some(colour_of(owner));
+    }
+    None
+}
 
 /// Queries de etiquetas del mapa (agrupadas para no superar el límite de params Bevy).
 #[derive(SystemParam)]
@@ -387,6 +424,9 @@ fn spawn_map_tiles_in_bounds(
     let map = &sim.state.map;
     let climate = sim.state.climate;
     let world_seed = sim.state.world_seed;
+    for c in &sim.state.companies {
+        company.ensure_palette(CompanyColour::from_u8(c.colour), images);
+    }
     let render_grid = RenderGrid::from_map(map, mw, mh);
     let mut batches = MapSpriteBatches::default();
 
@@ -467,6 +507,7 @@ fn spawn_map_tiles_in_bounds(
                     commands,
                     assets,
                     Some(company),
+                    owner_colour_for_tile(sim, ctx.coord, kind),
                     &ctx,
                     slope_half_ground,
                     map,
@@ -519,6 +560,7 @@ fn spawn_map_tiles_in_bounds(
                 (mw, mh),
                 assets,
                 Some(company),
+                owner_colour_for_tile(sim, ctx.coord, TileKind::Station),
                 &ctx,
                 &sim.state.stations,
                 slope_half_ground,

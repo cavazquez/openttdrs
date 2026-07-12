@@ -69,9 +69,15 @@ pub(super) fn place_industry_spec_sandbox(
             .set_mapt_m5(*tile, 0x80, *m5)
             .map_err(|_| CommandError::OutOfBounds)?;
         // Obra desde etapa 0; el tile loop (P6) avanza `m1` hasta `IsIndustryCompleted`.
+        // Oil rigs (gfx 24–28): WaterClass::Sea como OpenTTD `IsTileOnWater`.
+        let m1 = if crate::map::industry_gfx_is_oil_rig(u16::from(*m5)) {
+            crate::map::set_water_class_m1(0, crate::map::WaterClass::Sea)
+        } else {
+            0
+        };
         state
             .map
-            .set_m1(*tile, 0)
+            .set_m1(*tile, m1)
             .map_err(|_| CommandError::OutOfBounds)?;
         state
             .map
@@ -82,13 +88,10 @@ pub(super) fn place_industry_spec_sandbox(
     state
         .industries
         .retain(|industry| !industry.contains_tile(c));
-    state.industries.push(Industry::with_tiles_spec(
-        c,
-        spec.kind(),
-        spec,
-        footprint,
-        random_colour,
-    ));
+    state.industries.push(
+        Industry::with_tiles_spec(c, spec.kind(), spec, footprint, random_colour)
+            .with_instance_id(industry_id),
+    );
     state.economy.money -= 250;
     Ok(())
 }

@@ -94,14 +94,23 @@ mod tests {
     #[test]
     fn construction_advances_counter_then_stage() {
         let mut m1 = 0u8;
-        for _ in 0..3 {
+        for expected_counter in 1..=3 {
             m1 = make_industry_tile_bigger(m1);
             assert!(!is_industry_completed(m1));
             assert_eq!(industry_construction_stage(m1), 0);
+            assert_eq!(industry_construction_counter(m1), expected_counter);
         }
         m1 = make_industry_tile_bigger(m1);
         assert_eq!(industry_construction_stage(m1), 1);
         assert_eq!(industry_construction_counter(m1), 0);
+    }
+
+    #[test]
+    fn construction_counter_bits_round_trip_in_m1() {
+        let m1 = make_industry_tile_bigger(0);
+        assert_eq!(m1 & 0x0F, 0x04); // stage 0, counter 1
+        let m1 = make_industry_tile_bigger(m1);
+        assert_eq!(industry_construction_counter(m1), 2);
     }
 
     #[test]

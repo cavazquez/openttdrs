@@ -1,6 +1,6 @@
 //! Terreno bajo industrias — agua costera / plataformas (`DrawWaterClassGround`).
 
-use super::{Map, TileCoord, TileKind};
+use super::{Map, Tile, TileCoord, TileKind, WaterClass, water_class_from_m1};
 
 /// `GFX_OILRIG_1` … `GFX_OILRIG_5` en `industry_map.h`.
 pub const GFX_OILRIG_FIRST: u16 = 24;
@@ -13,6 +13,12 @@ pub const SPR_FLAT_GRASS_TILE: u32 = 3924;
 #[must_use]
 pub fn industry_gfx_is_oil_rig(gfx: u16) -> bool {
     (GFX_OILRIG_FIRST..=GFX_OILRIG_LAST).contains(&gfx)
+}
+
+/// OpenTTD `IsTileOnWater`: `WaterClass != Invalid` en tipos con clase de agua.
+#[must_use]
+pub fn industry_tile_on_water(tile: Tile) -> bool {
+    tile.kind == TileKind::Industry && water_class_from_m1(tile.m1) != WaterClass::Invalid
 }
 
 #[must_use]
@@ -36,13 +42,16 @@ pub fn industry_uses_water_ground(
     if industry_gfx_is_oil_rig(gfx) {
         return true;
     }
+    if map.get(c).is_some_and(industry_tile_on_water) {
+        return true;
+    }
     ground_sprite_id == SPR_FLAT_GRASS_TILE && tile_adjacent_to_water(map, c)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::Map;
+    use crate::map::{Map, set_water_class_m1};
 
     #[test]
     fn oil_rig_always_water_ground() {
@@ -76,5 +85,16 @@ mod tests {
             0,
             SPR_FLAT_GRASS_TILE
         ));
+    }
+
+    #[test]
+    fn industry_with_sea_water_class_uses_water() {
+        let mut map = Map::new_flat(3, 3, 0);
+        let c = TileCoord::new(1, 1);
+        map.set_kind(c, TileKind::Industry).unwrap();
+        map.set_m1(c, set_water_class_m1(0x80, WaterClass::Sea))
+            .unwrap();
+        assert!(industry_uses_water_ground(&map, c, 0, SPR_FLAT_GRASS_TILE));
+        assert!(industry_tile_on_water(map.get(c).unwrap()));
     }
 }

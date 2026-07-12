@@ -29,7 +29,7 @@ pub use industry_link::{
 };
 pub use industry_terrain::{
     GFX_OILRIG_FIRST, GFX_OILRIG_LAST, SPR_FLAT_GRASS_TILE, industry_gfx_is_oil_rig,
-    industry_uses_water_ground, tile_adjacent_to_water,
+    industry_tile_on_water, industry_uses_water_ground, tile_adjacent_to_water,
 };
 pub use industry_tile_anim::{
     GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED, GFX_GOLD_MINE_TOWER_ANIMATED,

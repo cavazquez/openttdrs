@@ -99,6 +99,16 @@ pub(crate) fn industry_stats_for_component(
     anchor: TileCoord,
 ) -> Option<(IndustryKind, Option<IndustrySpec>, u32, u32, TileCoord)> {
     let tiles = flood_industry_tiles(map, anchor);
+    let instance_id = map.get(anchor).map(|t| t.m2).unwrap_or(0);
+    if instance_id != 0
+        && let Some(i) = sim
+            .state
+            .industries
+            .iter()
+            .find(|i| i.instance_id == instance_id)
+    {
+        return Some((i.kind, i.spec, i.stock, i.capacity, i.pos));
+    }
     let set: HashSet<TileCoord> = tiles.into_iter().collect();
     sim.state
         .industries

@@ -124,21 +124,14 @@ pub fn industry_sprite_uses_fizzy_drink_anim(sprite_id: u32) -> bool {
     FIZZY_DRINK_SPRITE_IDS.contains(&sprite_id)
 }
 
-/// Edificios con `PALETTE_MODIFIER_COLOUR` en tabla vanilla (gfx ≥29, excl. torres/pozos).
+/// Edificios con `PALETTE_MODIFIER_COLOUR` en tabla vanilla (gfx 29–174,
+/// excl. pozos/torres animados 30–32, 48, 88).
 #[must_use]
 pub fn industry_gfx_uses_random_colour(gfx: u16) -> bool {
-    (29..=130).contains(&gfx)
-        && !matches!(
-            gfx,
-            GFX_OILWELL_ANIMATED_1 | GFX_OILWELL_ANIMATED_2 | GFX_OILWELL_ANIMATED_3 | 48 | 88
-        )
+    (29..=174).contains(&gfx) && !matches!(gfx, 30 | 31 | 32 | 48 | 88)
 }
 
-const GFX_OILWELL_ANIMATED_1: u16 = 30;
-const GFX_OILWELL_ANIMATED_2: u16 = 31;
-const GFX_OILWELL_ANIMATED_3: u16 = 32;
-
-/// Color de compañía OpenTTD para la instancia (`Industry.random_colour`).
+/// Color de compañía OpenTTD para la instancia (`Industry.random_colour` vía `m2`).
 #[must_use]
 pub fn industry_palette_colour_for_instance(
     instance_id: u8,
@@ -147,9 +140,16 @@ pub fn industry_palette_colour_for_instance(
     if instance_id == 0 {
         return crate::sprites::CompanyColour::DarkBlue;
     }
+    if let Some(ind) = industries.iter().find(|i| i.instance_id == instance_id) {
+        return crate::sprites::CompanyColour::from_u8(ind.random_colour);
+    }
+    // Fallback: índice secuencial legacy o hash del id.
     let idx = usize::from(instance_id.saturating_sub(1));
     crate::sprites::CompanyColour::from_u8(
-        industries.get(idx).map(|i| i.random_colour).unwrap_or(0),
+        industries
+            .get(idx)
+            .map(|i| i.random_colour)
+            .unwrap_or_else(|| instance_id.wrapping_mul(5) % 16),
     )
 }
 
@@ -531,5 +531,29 @@ mod industry_coverage_tests {
             let done = industry_gfx_entry_staged(gfx, 3).expect("terminada");
             assert_ne!(done.sprite_id, 0);
         }
+    }
+
+    #[test]
+    fn toyland_gfx_uses_random_colour() {
+        assert!(super::industry_gfx_uses_random_colour(143)); // toy factory band
+        assert!(!super::industry_gfx_uses_random_colour(30)); // oil well anim
+        assert!(!super::industry_gfx_uses_random_colour(10)); // below band
+    }
+
+    #[test]
+    fn palette_colour_looks_up_by_instance_id_not_vector_index() {
+        use openttdrs_core::{Industry, IndustryKind, IndustrySpec, TileCoord};
+        let industries = vec![
+            Industry::with_tiles_spec(
+                TileCoord::new(0, 0),
+                IndustryKind::CoalMine,
+                IndustrySpec::CoalMine,
+                vec![TileCoord::new(0, 0)],
+                7,
+            )
+            .with_instance_id(10),
+        ];
+        let colour = super::industry_palette_colour_for_instance(10, &industries);
+        assert_eq!(colour, crate::sprites::CompanyColour::from_u8(7));
     }
 }

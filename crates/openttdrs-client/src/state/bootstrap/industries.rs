@@ -47,13 +47,15 @@ pub(crate) fn place_industries_from_sav(state: &mut GameState, sav_industries: &
                 .get(origin)
                 .map(|t| industry_random_colour(t.m2))
                 .unwrap_or(0);
-            state
-                .industries
-                .push(Industry::with_tiles_spec(origin, kind, spec, tiles, colour));
+            state.industries.push(
+                Industry::with_tiles_spec(origin, kind, spec, tiles, colour)
+                    .with_instance_id(state.map.get(origin).map(|t| t.m2).unwrap_or(0)),
+            );
         } else {
-            state
-                .industries
-                .push(Industry::with_tiles(origin, kind, tiles));
+            state.industries.push(
+                Industry::with_tiles(origin, kind, tiles)
+                    .with_instance_id(state.map.get(origin).map(|t| t.m2).unwrap_or(0)),
+            );
         }
     }
 }
@@ -102,15 +104,20 @@ pub(crate) fn place_industries(
                         let gfx = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
                         let kind = classify_industry_kind_from_gfx(gfx);
                         if let Some(spec) = classify_industry_spec_from_gfx(gfx) {
-                            state.industries.push(Industry::with_tiles_spec(
-                                c,
-                                kind,
-                                spec,
-                                vec![c],
-                                industry_random_colour(tile.m2),
-                            ));
+                            state.industries.push(
+                                Industry::with_tiles_spec(
+                                    c,
+                                    kind,
+                                    spec,
+                                    vec![c],
+                                    industry_random_colour(tile.m2),
+                                )
+                                .with_instance_id(tile.m2),
+                            );
                         } else {
-                            state.industries.push(Industry::new(c, kind));
+                            state
+                                .industries
+                                .push(Industry::new(c, kind).with_instance_id(tile.m2));
                         }
                     }
                     industry_n += 1;
@@ -141,17 +148,20 @@ fn place_industries_from_map_components(
             classify_industry_kind_from_gfx(gfx)
         };
         if let Some(spec) = classify_industry_spec_from_gfx(gfx) {
-            state.industries.push(Industry::with_tiles_spec(
-                origin,
-                kind,
-                spec,
-                component,
-                industry_random_colour(tile.m2),
-            ));
+            state.industries.push(
+                Industry::with_tiles_spec(
+                    origin,
+                    kind,
+                    spec,
+                    component,
+                    industry_random_colour(tile.m2),
+                )
+                .with_instance_id(tile.m2),
+            );
         } else {
             state
                 .industries
-                .push(Industry::with_tiles(origin, kind, component));
+                .push(Industry::with_tiles(origin, kind, component).with_instance_id(tile.m2));
         }
     }
 }

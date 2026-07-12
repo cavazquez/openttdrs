@@ -28,7 +28,7 @@ completo (`gfx ≥ 175`).
 | **C — Datos de mapa** | B + semántica `m2`/`m1`/`m4` alineada con upstream | Agrupación industria y HUD coherentes en saves reales |
 | **D — NewGRF** | `gfx ≥ 175`, `DrawNewIndustryTile`, callbacks | Partidas con GRF de industria custom |
 
-Hoy openttdrs: **nivel A ✅**; **B parcial** (P2/P3/P4 hechos en código); **C/D** pendientes.
+Hoy openttdrs: **nivel A ✅**; **B ✅** (P2–P4); **C parcial** (P5–P6 hechos; P7 random GRF pendiente).
 
 ---
 
@@ -111,10 +111,10 @@ Fuente canónica: [OpenTTD `industry_map.h`](https://github.com/OpenTTD/OpenTTD/
 | Campo | OpenTTD (MP_INDUSTRY) | openttdrs hoy | Gap |
 |-------|----------------------|---------------|-----|
 | **`m5` + `m6` bit 2** | `GetCleanIndustryGfx` (9 bits) | OK en render | — |
-| **`m2`** | **`IndustryID`** (índice de instancia) | Parseado; agrupación usa **`m1`** en bootstrap/panel | **P5** |
+| **`m2`** | **`IndustryID`** (índice de instancia) | `Industry.instance_id` + flood/`industry_link` por `m2` | **P5 ✅** |
 | **`m1` bit 7** | obra terminada | OK | — |
 | **`m1` bits 0–1** | etapa 0–2 | OK | — |
-| **`m1` bits 2–3** | contador construcción (`MakeIndustryTileBigger`) | No simulado | **P6** |
+| **`m1` bits 2–3** | contador construcción (`MakeIndustryTileBigger`) | `industry_construction.rs` en tile loop | **P6 ✅** |
 | **`m3`** | random bits (callbacks GRF) | No usado | **P7** |
 | **`m4` / `m3hi`** | frame animación (`GetAnimationFrame`) | Usado si `anim_state` | — |
 | **`m6` bits 3–5** | triggers random | No usado | **P7** |
@@ -133,13 +133,16 @@ HUD: `⚠gfx≥175` solo fuera de tabla.
 
 ### P3 — Procedimientos `draw_proc` (1–5) — **hecho**
 
-### P4 — Fundación / agua / paleta — **parcial**
+### P4 — Fundación / agua / paleta — **hecho**
 
-Fundación y agua en `land.rs`; transparencia `TO_INDUSTRIES` / paleta company en gfx altos: polish.
+Fundación en pendiente; agua si oil-rig / `IsTileOnWater` (`WaterClass`) / hierba+costa;
+paleta company en gfx 29–174 (excl. pozos/torres animados); lookup por `instance_id`/`m2`.
 
-### P5 — `m2` IndustryID — **pendiente**
+### P5 — `m2` IndustryID — **hecho**
 
-### P6 — Obra simulada — **pendiente**
+### P6 — Obra simulada — **hecho**
+
+`MakeIndustryTileBigger` en tile loop (`m1` bits 2–3 → stage → completed).
 
 ### P7 — Tile loop / random — **parcial**
 
@@ -156,9 +159,9 @@ Fundación y agua en `land.rs`; transparencia `TO_INDUSTRIES` / paleta company e
 | P1 | Tabla 0..174 | **hecho** | — |
 | P2 | anim_state + m4 | **hecho** | — |
 | P3 | draw_proc 1–5 | **hecho** | — |
-| P4 | Fundación/agua/paleta | parcial | Pendiente/costa edge |
-| P5 | m2 IndustryID | pendiente | Agrupación saves reales |
-| P6 | Obra simulada | pendiente | Construcción in-game |
+| P4 | Fundación/agua/paleta | **hecho** | — |
+| P5 | m2 IndustryID | **hecho** | — |
+| P6 | Obra simulada | **hecho** | — |
 | P7 | Tile loop | parcial | Random GRF |
 | P8 | NewGRF ≥175 | backlog | GRF custom |
 | P9 | Logs obra vacía | opcional | Ruido debug |

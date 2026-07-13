@@ -302,7 +302,9 @@ pub use ship_movement::{
     water_tiles_connected,
 };
 pub use sign::{MAX_SIGN_NAME_CHARS, Sign};
-pub use sim_events::{ConstructionKind, DisasterKind, SimEvent, SimEventQueue, TrainSmokeKind};
+pub use sim_events::{
+    ConstructionKind, DisasterKind, SimEvent, SimEventQueue, TrainSmokeKind, VehicleRunningPhase,
+};
 pub use sound_id::SoundId;
 pub use station::{
     CargoTimeSincePickup, MAX_TIME_SINCE_PICKUP_DAYS, STATION_COVERAGE_RADIUS, STATION_TILE_PYLONS,

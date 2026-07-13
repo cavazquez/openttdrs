@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Copia el subset de OpenSFX usado por SoundId / SimEvent (además del HUD).
+# Copia el catálogo completo OpenSFX (73 SFX) usado por SoundId.
 #
 # Índices osfx_NN vía _sound_idx[] de sound.cpp (SoundFx enum → slot en .cat).
-# Requiere WAV decodificados (catcodec); ver preparar_sonidos_hud.sh.
+# Salida canónica: assets/sounds/snd_XX.wav (XX = índice SoundFx 0..72).
+# También mantiene alias legibles del HUD / subset histórico.
 #
 # Uso:
 #   ./scripts/preparar_sonidos_opensfx.sh
@@ -14,6 +15,20 @@ OPENSFX_BASE="${ROOT}/assets/opensfx/opensfx-${VERSION}"
 CAT_FILE="${OPENSFX_BASE}/opensfx.cat"
 WAV_DIR="${OPENSFX_BASE}/src/wav"
 OUT_DIR="${ROOT}/assets/sounds"
+
+# _sound_idx[] de OpenTTD/src/sound.cpp
+SOUND_IDX=(
+  2 3 4 5 6 7 8 9
+  10 11 12 13 14 15 16 17
+  18 19 20 21 22 23 24 25
+  26 27 28 29 30 31 32 33
+  34 35 36 37 38 39 40 0
+  1 41 42 43 44 45 46 47
+  48 49 50 51 52 53 54 55
+  56 57 58 59 60 61 62 63
+  64 65 66 67 68 69 70 71
+  72
+)
 
 resolve_catcodec() {
   if [[ -n "${CATCODEC:-}" && -x "${CATCODEC}" ]]; then
@@ -68,24 +83,32 @@ ensure_wav_extracted
 # HUD (idempotente con preparar_sonidos_hud.sh)
 "${ROOT}/scripts/preparar_sonidos_hud.sh"
 
-# SoundId / SimEvent (SoundFx → osfx según _sound_idx[])
-copy_osfx 0  good_year.wav           # SND_00_GOOD_YEAR (39)
-copy_osfx 1  bad_year.wav            # SND_01_BAD_YEAR (40)
-copy_osfx 2  construction_water.wav  # SND_BEGIN / agua (0)
-copy_osfx 4  departure_steam.wav     # SND_04_DEPARTURE_STEAM (2)
-copy_osfx 5  train_tunnel.wav        # SND_05_TRAIN_THROUGH_TUNNEL (3)
-copy_osfx 10 departure_train.wav     # SND_0A_DEPARTURE_TRAIN (8)
-copy_osfx 14 level_crossing.wav      # SND_0E_LEVEL_CROSSING (12)
-copy_osfx 18 explosion.wav           # SND_12_EXPLOSION (16)
-copy_osfx 19 train_collision.wav     # SND_13_TRAIN_COLLISION (17)
-copy_osfx 23 skid_plane.wav          # SND_17_SKID_PLANE (21) → osfx_23
-copy_osfx 25 departure_road.wav      # SND_19_DEPARTURE_OLD_RV_1 (23) → osfx_25
-copy_osfx 24 takeoff_heli.wav        # SND_18_TAKEOFF_HELICOPTER (22) → osfx_24
-copy_osfx 31 construction_other.wav  # SND_1F_CONSTRUCTION_OTHER (29) — splat no-rail
-copy_osfx 32 construction_rail.wav     # SND_20_CONSTRUCTION_RAIL (30)
-copy_osfx 33 road_works.wav          # SND_21_ROAD_WORKS (31) — jackhammer
-copy_osfx 39 construction_bridge.wav # SND_27_CONSTRUCTION_BRIDGE (37)
+# Catálogo completo SoundFx → snd_XX.wav
+for i in $(seq 0 72); do
+  osfx="${SOUND_IDX[$i]}"
+  copy_osfx "${osfx}" "snd_$(printf '%02d' "${i}").wav"
+done
+
+# Alias legibles (compat scripts/docs antiguos)
+copy_osfx 0  good_year.wav
+copy_osfx 1  bad_year.wav
+copy_osfx 2  construction_water.wav
+copy_osfx 4  departure_steam.wav
+copy_osfx 5  train_tunnel.wav
+copy_osfx 10 departure_train.wav
+copy_osfx 14 level_crossing.wav
+copy_osfx 18 explosion.wav
+copy_osfx 19 train_collision.wav
+copy_osfx 23 skid_plane.wav
+copy_osfx 25 departure_road.wav
+copy_osfx 24 takeoff_heli.wav
+copy_osfx 31 construction_other.wav
+copy_osfx 32 construction_rail.wav
+copy_osfx 33 road_works.wav
+copy_osfx 39 construction_bridge.wav
 
 echo ""
-echo "Sonidos OpenSFX en ${OUT_DIR}/:"
-ls -1 "${OUT_DIR}/"*.wav
+echo "Catálogo OpenSFX (snd_XX + alias) en ${OUT_DIR}/:"
+ls -1 "${OUT_DIR}/"snd_*.wav 2>/dev/null | wc -l | xargs -I{} echo "  snd_XX.wav: {} archivos"
+ls -1 "${OUT_DIR}/"*.wav | head -n 20
+echo "  ..."

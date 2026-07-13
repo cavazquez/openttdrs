@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-use openttdrs_core::{ConstructionKind, SimEvent, SoundId};
+use openttdrs_core::{ConstructionKind, SimEvent, SoundId, VehicleRunningPhase};
 
 use crate::audio::PlayWorldSfx;
 use crate::bevy_app::UpdateSet;
@@ -59,11 +59,7 @@ fn dispatch_sim_events(
         match event {
             SimEvent::Income { at, .. } => {
                 if hud.sound_confirm {
-                    sfx.write(PlayWorldSfx {
-                        sound: SoundId::CashTill,
-                        at,
-                        volume: 1.0,
-                    });
+                    sfx.write(PlayWorldSfx::new(SoundId::CashTill, at, 1.0).with_priority(80));
                 }
             }
             SimEvent::Construction { kind, at } => {
@@ -77,86 +73,93 @@ fn dispatch_sim_events(
                             SoundId::ConstructionOther
                         }
                     };
-                    sfx.write(PlayWorldSfx {
-                        sound,
-                        at,
-                        volume: 0.85,
-                    });
+                    sfx.write(PlayWorldSfx::new(sound, at, 0.85).with_priority(70));
                 }
             }
             SimEvent::Demolition { at } => {
                 if hud.sound_confirm {
-                    sfx.write(PlayWorldSfx {
-                        sound: SoundId::Explosion,
-                        at,
-                        volume: 0.5,
-                    });
+                    sfx.write(PlayWorldSfx::new(SoundId::Explosion, at, 0.5).with_priority(90));
                 }
                 fx.push_explosion(at);
             }
-            SimEvent::VehicleDepart { at, .. } => {
+            SimEvent::VehicleDepart { at, kind, .. } => {
                 if hud.sound_vehicle {
-                    sfx.write(PlayWorldSfx {
-                        sound: SoundId::DepartureTrain,
-                        at,
-                        volume: 0.9,
-                    });
+                    sfx.write(
+                        PlayWorldSfx::new(SoundId::departure_for_kind(kind), at, 0.9)
+                            .with_priority(72),
+                    );
                 }
+            }
+            SimEvent::VehicleRunning {
+                at, kind, phase, ..
+            } => {
+                if !hud.sound_vehicle {
+                    continue;
+                }
+                let (volume, priority) = match phase {
+                    VehicleRunningPhase::Running => (0.22, 8),
+                    VehicleRunningPhase::Running16 => (0.18, 6),
+                    VehicleRunningPhase::Stopped16 => (0.12, 4),
+                };
+                sfx.write(
+                    PlayWorldSfx::new(SoundId::running_for_kind(kind), at, volume)
+                        .with_priority(priority),
+                );
             }
             SimEvent::LevelCrossing { at } => {
                 if hud.sound_vehicle {
-                    sfx.write(PlayWorldSfx {
-                        sound: SoundId::LevelCrossing,
-                        at,
-                        volume: 0.8,
-                    });
+                    sfx.write(PlayWorldSfx::new(SoundId::LevelCrossing, at, 0.8).with_priority(75));
                 }
             }
-            SimEvent::Breakdown { at, .. } => {
+            SimEvent::Breakdown { at, kind, .. } => {
                 if hud.sound_vehicle {
-                    sfx.write(PlayWorldSfx {
-                        sound: SoundId::Beep,
-                        at,
-                        volume: 0.7,
-                    });
+                    sfx.write(
+                        PlayWorldSfx::new(SoundId::breakdown_for_kind(kind), at, 0.7)
+                            .with_priority(85),
+                    );
                 }
                 fx.push_breakdown(at);
             }
             SimEvent::Disaster { at, .. } => {
                 if hud.sound_disaster {
-                    sfx.write(PlayWorldSfx {
-                        sound: SoundId::Explosion,
-                        at,
-                        volume: 1.0,
-                    });
+                    sfx.write(PlayWorldSfx::new(SoundId::Explosion, at, 1.0).with_priority(120));
                 }
                 fx.push_explosion(at);
             }
             SimEvent::NewsTicker => {
                 if hud.sound_confirm {
-                    sfx.write(PlayWorldSfx {
-                        sound: SoundId::NewsTicker,
-                        at: openttdrs_core::TileCoord::new(0, 0),
-                        volume: 0.6,
-                    });
+                    sfx.write(
+                        PlayWorldSfx::new(
+                            SoundId::NewsTicker,
+                            openttdrs_core::TileCoord::new(0, 0),
+                            0.6,
+                        )
+                        .with_priority(60),
+                    );
                 }
             }
             SimEvent::NewsApplause => {
                 if hud.sound_confirm {
-                    sfx.write(PlayWorldSfx {
-                        sound: SoundId::Applause,
-                        at: openttdrs_core::TileCoord::new(0, 0),
-                        volume: 0.7,
-                    });
+                    sfx.write(
+                        PlayWorldSfx::new(
+                            SoundId::Applause,
+                            openttdrs_core::TileCoord::new(0, 0),
+                            0.7,
+                        )
+                        .with_priority(60),
+                    );
                 }
             }
             SimEvent::NewsChime => {
                 if hud.sound_confirm {
-                    sfx.write(PlayWorldSfx {
-                        sound: SoundId::NewEngine,
-                        at: openttdrs_core::TileCoord::new(0, 0),
-                        volume: 0.6,
-                    });
+                    sfx.write(
+                        PlayWorldSfx::new(
+                            SoundId::NewEngine,
+                            openttdrs_core::TileCoord::new(0, 0),
+                            0.6,
+                        )
+                        .with_priority(60),
+                    );
                 }
             }
             SimEvent::LoanInterestPaid { .. }
@@ -164,20 +167,14 @@ fn dispatch_sim_events(
             | SimEvent::GameOver { .. } => {}
             SimEvent::AircraftTakeoff { at, .. } => {
                 if hud.sound_vehicle {
-                    sfx.write(PlayWorldSfx {
-                        sound: SoundId::TakeoffHelicopter,
-                        at,
-                        volume: 0.85,
-                    });
+                    sfx.write(
+                        PlayWorldSfx::new(SoundId::TakeoffHelicopter, at, 0.85).with_priority(78),
+                    );
                 }
             }
             SimEvent::AircraftLanding { at, .. } => {
                 if hud.sound_vehicle {
-                    sfx.write(PlayWorldSfx {
-                        sound: SoundId::SkidPlane,
-                        at,
-                        volume: 0.8,
-                    });
+                    sfx.write(PlayWorldSfx::new(SoundId::SkidPlane, at, 0.8).with_priority(78));
                 }
             }
             SimEvent::TownRatingChanged { .. }

@@ -246,7 +246,11 @@ impl Plugin for FloatingWindowPlugin {
             )
             .add_systems(
                 Update,
-                (begin_window_drag, drag_floating_windows, close_window_buttons)
+                (
+                    begin_window_drag,
+                    drag_floating_windows,
+                    close_window_buttons,
+                )
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::MainMenu)),
             );

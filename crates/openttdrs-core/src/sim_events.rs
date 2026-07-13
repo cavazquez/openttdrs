@@ -32,6 +32,17 @@ pub enum TrainSmokeKind {
     Electric,
 }
 
+/// Fase de motor en marcha (`VSE_RUNNING` / `VSE_RUNNING_16` / `VSE_STOPPED_16`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VehicleRunningPhase {
+    /// Cruce del contador de movimiento (∝ velocidad).
+    Running,
+    /// Pulso cada 16 ticks con velocidad > 0.
+    Running16,
+    /// Pulso cada 16 ticks parado / frenando.
+    Stopped16,
+}
+
 /// Evento discreto emitido durante un tick de simulación.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SimEvent {
@@ -49,6 +60,14 @@ pub enum SimEvent {
     VehicleDepart {
         vehicle_id: u32,
         at: TileCoord,
+        kind: crate::vehicle::VehicleKind,
+    },
+    /// Motor en marcha / idle (estilo `vehicle.cpp` `motion_counter`).
+    VehicleRunning {
+        vehicle_id: u32,
+        at: TileCoord,
+        kind: crate::vehicle::VehicleKind,
+        phase: VehicleRunningPhase,
     },
     LevelCrossing {
         at: TileCoord,
@@ -56,6 +75,7 @@ pub enum SimEvent {
     Breakdown {
         vehicle_id: u32,
         at: TileCoord,
+        kind: crate::vehicle::VehicleKind,
     },
     Disaster {
         kind: DisasterKind,

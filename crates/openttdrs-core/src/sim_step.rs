@@ -1065,6 +1065,7 @@ fn move_vehicles(state: &mut GameState) {
                 .push(crate::sim_events::SimEvent::Breakdown {
                     vehicle_id: state.vehicles[i].id,
                     at: state.vehicles[i].pos,
+                    kind: state.vehicles[i].kind,
                 });
         }
         if state.vehicles[i].breakdown_ticks_remaining > 0 {
@@ -1096,6 +1097,7 @@ fn move_vehicles(state: &mut GameState) {
                     .push(crate::sim_events::SimEvent::VehicleDepart {
                         vehicle_id,
                         at: state.vehicles[i].pos,
+                        kind: vehicle_kind,
                     });
             }
             if vehicle_kind == VehicleKind::Train
@@ -1110,9 +1112,72 @@ fn move_vehicles(state: &mut GameState) {
                     });
             }
         }
+        update_vehicle_running_sounds(state, i, tick);
         if had_force && vehicle_kind == VehicleKind::Train {
             state.vehicles[i].force_proceed = false;
         }
+    }
+}
+
+/// SFX de motor en marcha (`vehicle.cpp` `motion_counter` / `VSE_RUNNING*`).
+fn update_vehicle_running_sounds(state: &mut GameState, i: usize, tick: u64) {
+    use crate::map::TileKind;
+    use crate::sim_events::VehicleRunningPhase;
+    use crate::vehicle::AircraftPhase;
+
+    let vehicle = &state.vehicles[i];
+    if vehicle.is_wagon_unit() {
+        return;
+    }
+    if !vehicle.running && vehicle.cur_speed == 0 {
+        return;
+    }
+    let in_depot = match state.map.get(vehicle.pos).map(|t| t.kind) {
+        Some(TileKind::RailDepot | TileKind::RoadDepot | TileKind::ShipDepot) => true,
+        _ => {
+            vehicle.kind == VehicleKind::Aircraft
+                && matches!(vehicle.aircraft_phase, AircraftPhase::InHangar)
+        }
+    };
+    if in_depot {
+        return;
+    }
+
+    let speed = vehicle.cur_speed;
+    let kind = vehicle.kind;
+    let vehicle_id = vehicle.id;
+    let at = vehicle.pos;
+    let running_flag = vehicle.running;
+
+    if speed > 0 {
+        let mc = state.vehicles[i].motion_counter.wrapping_add(speed);
+        state.vehicles[i].motion_counter = mc;
+        if (mc & 0xFF) < speed {
+            state
+                .pending_sim_events
+                .push(crate::sim_events::SimEvent::VehicleRunning {
+                    vehicle_id,
+                    at,
+                    kind,
+                    phase: VehicleRunningPhase::Running,
+                });
+        }
+    }
+
+    if tick.is_multiple_of(16) {
+        let moving = speed > 0 && running_flag;
+        state
+            .pending_sim_events
+            .push(crate::sim_events::SimEvent::VehicleRunning {
+                vehicle_id,
+                at,
+                kind,
+                phase: if moving {
+                    VehicleRunningPhase::Running16
+                } else {
+                    VehicleRunningPhase::Stopped16
+                },
+            });
     }
 }
 

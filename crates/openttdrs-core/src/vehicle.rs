@@ -602,6 +602,9 @@ pub struct Vehicle {
     /// Velocidad actual (unidades `OpenTTD`; 0 = parado).
     #[serde(default)]
     pub cur_speed: u16,
+    /// Contador de movimiento para SFX de motor (`vehicle.cpp` `motion_counter`).
+    #[serde(default)]
+    pub motion_counter: u16,
     /// Fracción sub-unidad de velocidad (`Vehicle::subspeed`).
     #[serde(default)]
     pub subspeed: u8,
@@ -789,6 +792,7 @@ impl Vehicle {
             engine_id: Some(engine_id),
             name: None,
             cur_speed: 0,
+            motion_counter: 0,
             subspeed: 0,
             path: VecDeque::new(),
             reserved_steps: Vec::new(),

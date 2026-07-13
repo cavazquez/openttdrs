@@ -14,7 +14,7 @@ El port tiene un **core jugable** (transporte carretera/rail, industrias, econom
 | Área | Nivel actual | Gap principal |
 |------|--------------|---------------|
 | Animaciones visuales | Avanzado + humo trenes/FX | NewGRF tile callbacks completos |
-| Sonido | SFX espacial + SimEvent (~20 SFX) | 73 SFX completos |
+| Sonido | Catálogo 73 SFX + mixer 8 ch + motores | Ambiente / NewGRF Action11 |
 | Música | MusicPlugin + script OGG | Playlist completa OpenMSX |
 | Dinámicas de juego | Préstamos, ciudades, averías, subsidios, desastres | IA rival (epic futuro) |
 
@@ -78,7 +78,7 @@ Sorprendentemente, esta es el área **más avanzada** del port. Ya está portado
 
 ## 2. Sonido
 
-Estado actual: **~20 SFX** vía `SimEvent` + audio espacial (`audio/world_sfx.rs`); 6 WAV HUD heredados; script `preparar_sonidos_opensfx.sh` para el subset prioritario.
+Estado actual: **73 SFX** vía `SoundId` + mixer de 8 canales (`audio/world_sfx.rs`); motores por `motion_counter` / `VehicleRunning`; 6 WAV HUD heredados; script `preparar_sonidos_opensfx.sh` genera `snd_00`…`snd_72`.
 
 ### 2.1 Arquitectura del original
 
@@ -123,16 +123,16 @@ Estado actual: **~20 SFX** vía `SimEvent` + audio espacial (`audio/world_sfx.rs
 |---------|--------|-----------|
 | Dependencia audio | `bevy` + `bevy_audio` + `wav` | `openttdrs-client/Cargo.toml` |
 | SFX HUD (5 tipos) | Implementado | `ui/hud/sound_ping.rs` |
-| SFX mundo (~20 `SoundId`) | Implementado | `sound_id.rs`, `audio/sim_events.rs` |
+| SFX mundo (73 `SoundId`) | Implementado | `sound_id.rs`, `audio/sim_events.rs` |
 | Audio espacial (paneo por cámara) | Implementado | `audio/world_sfx.rs` |
 | Volumen SFX / música | `sfx_volume`, `music_volume` | `settings.rs`, ventana **Audio...** |
 | Flags granulares | `sound_vehicle/ambient/disaster/confirm/click_beep` | `settings.rs`, `audio_settings_window.rs` |
 | OpenSFX metadatos | En repo | `assets/opensfx/opensfx-1.0.3/` |
-| WAV runtime | Scripts HUD + OpenSFX | `preparar_sonidos_hud.sh`, `preparar_sonidos_opensfx.sh` |
+| WAV runtime | Scripts HUD + OpenSFX (73) | `preparar_sonidos_hud.sh`, `preparar_sonidos_opensfx.sh` |
 | Eventos cruce / salida tren | `LevelCrossing`, `VehicleDepart` | `sim_step.rs`, `map/level_crossing.rs` |
-| Mixer 8 canales estilo original | **Falta** | — |
-| Catálogo 73 SFX completo | **Parcial** (~20) | — |
-| Motores en marcha por tick | **Falta** | — |
+| Mixer 8 canales estilo original | Implementado (MVP Bevy) | `audio/world_sfx.rs` `SfxMixer` |
+| Catálogo 73 SFX completo | Implementado | `sound_id.rs` + script |
+| Motores en marcha por tick | Implementado (MVP) | `motion_counter` + `SimEvent::VehicleRunning` |
 
 ### 2.5 Mapeo HUD actual → OpenTTD
 

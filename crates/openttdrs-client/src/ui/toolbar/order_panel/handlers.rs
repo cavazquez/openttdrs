@@ -191,6 +191,16 @@ pub(crate) fn handle_order_panel_buttons(
                     |vehicle_id, index| Command::ToggleVehicleOrderDepotStop { vehicle_id, index },
                 );
             }
+            OrderPanelButton::CycleDepotRefit => {
+                toggle_order_flag(
+                    &mut order_state,
+                    &mut sim,
+                    &mut pending,
+                    &mut hud_feedback,
+                    time.elapsed_secs(),
+                    |vehicle_id, index| Command::CycleVehicleOrderDepotRefit { vehicle_id, index },
+                );
+            }
             OrderPanelButton::MoveOrderUp => {
                 move_selected_order(
                     &mut order_state,

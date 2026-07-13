@@ -519,14 +519,14 @@ Objetivo de cobertura global: **~50–55 %**.
 - [x] Peso, potencia, coste y fiabilidad (runtime + diseño).
 - [x] Detalle por unidad del consist (conteo + tira horizontal de sprites).
 - [x] Pestañas cargo/info/capacidad/totales.
-- [ ] Beneficio cuando exista backend.
+- [x] Beneficio cuando exista backend.
 
 ### RefitWindow
 
 - [x] Lista de cargas.
 - [x] Capacidad y coste (capacidad actual; coste gratis en core).
 - [x] Refit de vehículo completo.
-- [ ] Selección parcial de consist cuando exista comando.
+- [x] Selección parcial de consist cuando exista comando.
 
 ### Orders
 
@@ -534,7 +534,7 @@ Objetivo de cobertura global: **~50–55 %**.
 - [x] Reordenar (botones ↑/↓; drag nativo de órdenes pendiente).
 - [x] Variantes full-load/unload.
 - [x] Parar en depósito (toggle).
-- [ ] Refit en orden.
+- [x] Refit en orden.
 - [x] Lista de órdenes compartidas.
 - [x] Condicionales crear/editar (carga sobre/bajo umbral + ciclar).
 
@@ -1200,6 +1200,8 @@ Progreso UI-4:
 9. ~~Tira horizontal de consist (depósito + VehicleDetails).~~ ✅
 10. ~~Drag nativo reordenar filas de depósito.~~ ✅
 11. ~~Política single-instance documentada (MVP).~~ ✅
+12. ~~Beneficio este año / anterior (backend + Totales).~~ ✅
+13. ~~Refit parcial de consist (`unit_ids` + tira en RefitWindow).~~ ✅
+14. ~~Refit en orden de depósito (ciclar + aplicar al llegar).~~ ✅
 
-Pendiente UI-4 (bloqueado o polish): beneficio (sin backend), refit parcial/en
-orden (sin comando/`VehicleOrder::Refit`), drag nativo de órdenes.
+Pendiente UI-4 (polish): drag nativo de órdenes.

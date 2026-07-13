@@ -135,6 +135,7 @@ const fn command_modifies_map(cmd: &Command) -> bool {
             | Command::TurnAroundVehicle(..)
             | Command::ForceVehicleProceed(..)
             | Command::RefitVehicle { .. }
+            | Command::CycleVehicleOrderDepotRefit { .. }
             | Command::ToggleVehicleTimetable(..)
             | Command::CycleVehicleOrderWait { .. }
             | Command::CycleVehicleOrderTravel { .. }
@@ -247,8 +248,13 @@ fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), Com
         }
         Command::TurnAroundVehicle(id) => vehicles::turn_around_vehicle(state, *id),
         Command::ForceVehicleProceed(id) => vehicles::force_vehicle_proceed(state, *id),
-        Command::RefitVehicle { vehicle_id, cargo } => {
-            vehicles::refit_vehicle(state, *vehicle_id, *cargo)
+        Command::RefitVehicle {
+            vehicle_id,
+            cargo,
+            unit_ids,
+        } => vehicles::refit_vehicle(state, *vehicle_id, *cargo, unit_ids),
+        Command::CycleVehicleOrderDepotRefit { vehicle_id, index } => {
+            vehicles::cycle_vehicle_order_depot_refit(state, *vehicle_id, *index)
         }
         Command::ToggleVehicleTimetable(id) => vehicles::toggle_vehicle_timetable(state, *id),
         Command::CycleVehicleOrderWait { vehicle_id, index } => {
@@ -482,6 +488,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         | Command::TurnAroundVehicle(..)
         | Command::ForceVehicleProceed(..)
         | Command::RefitVehicle { .. }
+        | Command::CycleVehicleOrderDepotRefit { .. }
         | Command::ToggleVehicleTimetable(..)
         | Command::CycleVehicleOrderWait { .. }
         | Command::CycleVehicleOrderTravel { .. }

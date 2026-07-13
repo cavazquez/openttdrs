@@ -70,6 +70,7 @@ pub(crate) fn setup_order_panel(mut commands: Commands, asset_server: Res<AssetS
                     spawn_order_button(row, OrderPanelButton::ToggleFullLoad, "Carga completa");
                     spawn_order_button(row, OrderPanelButton::ToggleNoUnload, "Descargar todo");
                     spawn_order_button(row, OrderPanelButton::ToggleDepotStop, "Parar depósito");
+                    spawn_order_button(row, OrderPanelButton::CycleDepotRefit, "Refit orden");
                 });
             // Fila de acciones (saltarse / eliminar / ir a).
             panel

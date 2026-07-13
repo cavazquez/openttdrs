@@ -10,6 +10,7 @@ pub(crate) fn step(state: &mut GameState) {
     let t = state.tick.get();
 
     process_monthly_economy(state, t);
+    rollover_vehicle_profit_year(state, t);
     crate::ai::tick_ai_companies(state, t);
     produce_industries(state, t);
     produce_town_demand(state, t);
@@ -73,6 +74,8 @@ pub(crate) fn step(state: &mut GameState) {
     assign_orderless_wander_destinations(state);
     tick_aircraft_phases(state);
     move_vehicles(state);
+
+    apply_pending_depot_order_refits(state);
 
     crate::rail_signals::enqueue_trains_for_signal_update(
         &mut state.signal_globset,
@@ -201,6 +204,7 @@ fn apply_vehicle_running_costs(state: &mut GameState) {
         let running = state.vehicles[i].running;
         let moving = running && state.vehicles[i].cur_speed > 0;
         let owner = state.vehicles[i].owner;
+        let vehicle_id = state.vehicles[i].id;
         let cost = economy::vehicle_running_cost_per_tick(kind, running, moving);
         if cost > 0 {
             state.debit_company(owner, cost);
@@ -209,6 +213,49 @@ fn apply_vehicle_running_costs(state: &mut GameState) {
             if let Some(c) = state.companies.get_mut(owner.index()) {
                 c.vehicle_running_costs += cost_u;
             }
+            let head_id = crate::consist_head_id(&state.vehicles, vehicle_id).unwrap_or(vehicle_id);
+            if let Some(head) = state.vehicles.iter_mut().find(|v| v.id == head_id) {
+                head.profit_this_year = head.profit_this_year.saturating_sub(cost);
+            }
+        }
+    }
+}
+
+fn rollover_vehicle_profit_year(state: &mut GameState, tick: u64) {
+    if tick == 0 || !tick.is_multiple_of(economy::TICKS_PER_YEAR) {
+        return;
+    }
+    for vehicle in &mut state.vehicles {
+        if !vehicle.is_consist_head() {
+            continue;
+        }
+        vehicle.profit_last_year = vehicle.profit_this_year;
+        vehicle.profit_this_year = 0;
+    }
+}
+
+fn apply_pending_depot_order_refits(state: &mut GameState) {
+    let pending: Vec<(u32, crate::cargo::CargoType)> = state
+        .vehicles
+        .iter()
+        .filter_map(|v| v.pending_depot_order_refit.map(|cargo| (v.id, cargo)))
+        .collect();
+    for (head_id, cargo) in pending {
+        if let Some(v) = state.vehicles.iter_mut().find(|v| v.id == head_id) {
+            v.pending_depot_order_refit = None;
+        }
+        let unit_ids = crate::consist_unit_ids(&state.vehicles, head_id);
+        for unit_id in unit_ids {
+            let Some(idx) = state.vehicles.iter().position(|v| v.id == unit_id) else {
+                continue;
+            };
+            if state.vehicles[idx].cargo > 0 {
+                continue;
+            }
+            if !crate::refit::refittable_cargo_types(&state.vehicles[idx]).contains(&cargo) {
+                continue;
+            }
+            state.vehicles[idx].cargo_type = Some(cargo);
         }
     }
 }
@@ -708,6 +755,12 @@ fn unload_vehicles(
         state.stats.cargo_income_earned += shown.cast_unsigned();
         if let Some(c) = state.companies.get_mut(vehicle_owner.index()) {
             c.cargo_income_earned += payment.cast_unsigned();
+        }
+        let profit_vehicle_id = state.vehicles[i].id;
+        let head_id =
+            crate::consist_head_id(&state.vehicles, profit_vehicle_id).unwrap_or(profit_vehicle_id);
+        if let Some(head) = state.vehicles.iter_mut().find(|v| v.id == head_id) {
+            head.profit_this_year = head.profit_this_year.saturating_add(payment);
         }
         for (fo, share) in feeder_income_by_owner {
             if let Some(c) = state.companies.get_mut(fo.index()) {

@@ -305,6 +305,7 @@ fn migrate_state_v3_to_v4(state: &mut GameState) {
                     stop,
                     wait_ticks: 0,
                     travel_ticks: 0,
+                    refit_cargo: None,
                 },
                 VehicleOrder::Conditional { .. } => order,
             })

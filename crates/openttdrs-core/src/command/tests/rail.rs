@@ -1741,6 +1741,7 @@ fn refit_truck_in_depot_changes_cargo_type() {
         &Command::RefitVehicle {
             vehicle_id: id,
             cargo: CargoType::Coal,
+            unit_ids: vec![],
         },
     )
     .unwrap();
@@ -1766,6 +1767,7 @@ fn refit_rejects_with_cargo_on_board() {
             &Command::RefitVehicle {
                 vehicle_id: id,
                 cargo: CargoType::Coal,
+                unit_ids: vec![],
             },
         ),
         Err(CommandError::RefitNotAllowed)
@@ -1969,4 +1971,130 @@ fn depot_reorder_vehicle_slot_updates_display_order() {
     .unwrap();
     assert_eq!(s.vehicles[0].depot_display_slot, Some(1));
     assert_eq!(s.vehicles[1].depot_display_slot, Some(0));
+}
+
+#[test]
+fn vehicle_profit_tracks_income_and_running_costs() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRUCK_MPS),
+    )
+    .unwrap();
+    let id = s.vehicles[0].id;
+    s.vehicles[0].profit_this_year = 0;
+    s.vehicles[0].running = true;
+    s.vehicles[0].cur_speed = 10;
+    s.step();
+    assert!(
+        s.vehicles[0].profit_this_year < 0,
+        "costes de marcha restan beneficio"
+    );
+    let after_cost = s.vehicles[0].profit_this_year;
+    if let Some(v) = s.vehicles.iter_mut().find(|v| v.id == id) {
+        v.profit_this_year = after_cost.saturating_add(500);
+    }
+    assert_eq!(
+        s.vehicles
+            .iter()
+            .find(|v| v.id == id)
+            .unwrap()
+            .profit_this_year,
+        after_cost + 500
+    );
+}
+
+#[test]
+fn refit_partial_consist_units() {
+    let mut s = GameState::new(12, 12);
+    s.economy.money = 1_000_000;
+    for x in 2..=6_i32 {
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+    }
+    let depot = TileCoord::new(4, 5);
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 3)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_KIRBY),
+    )
+    .unwrap();
+    let head = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_WAGON_GOODS),
+    )
+    .unwrap();
+    let wagon = s.vehicles.iter().find(|v| v.id != head).unwrap().id;
+    apply_command(
+        &mut s,
+        &Command::AttachWagonToConsist {
+            head_id: head,
+            wagon_id: wagon,
+        },
+    )
+    .unwrap();
+    let wagon_before = s
+        .vehicles
+        .iter()
+        .find(|v| v.id == wagon)
+        .unwrap()
+        .cargo_type;
+    apply_command(
+        &mut s,
+        &Command::RefitVehicle {
+            vehicle_id: head,
+            cargo: CargoType::Oil,
+            unit_ids: vec![head],
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        s.vehicles.iter().find(|v| v.id == head).unwrap().cargo_type,
+        Some(CargoType::Oil)
+    );
+    assert_eq!(
+        s.vehicles
+            .iter()
+            .find(|v| v.id == wagon)
+            .unwrap()
+            .cargo_type,
+        wagon_before
+    );
+}
+
+#[test]
+fn cycle_depot_order_refit_and_apply_on_arrival() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRUCK_MPS),
+    )
+    .unwrap();
+    let id = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(id, vec![VehicleOrder::depot(depot)]),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::CycleVehicleOrderDepotRefit {
+            vehicle_id: id,
+            index: 0,
+        },
+    )
+    .unwrap();
+    let cargo = s.vehicles[0].orders[0].depot_refit_cargo();
+    assert!(cargo.is_some());
+    s.vehicles[0].cargo = 0;
+    s.vehicles[0].pending_depot_order_refit = cargo;
+    s.step();
+    assert_eq!(s.vehicles[0].cargo_type, cargo);
+    assert!(s.vehicles[0].pending_depot_order_refit.is_none());
 }

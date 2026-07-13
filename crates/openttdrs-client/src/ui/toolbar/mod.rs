@@ -388,6 +388,8 @@ pub(crate) enum OrderPanelButton {
     ToggleNoUnload,
     /// Alterna «parar en depósito» en una orden de depósito.
     ToggleDepotStop,
+    /// Cicla el refit automático de una orden de depósito.
+    CycleDepotRefit,
     /// Abre la ventana de horario (los ajustes de horario viven ahí).
     OpenTimetableWindow,
     /// Sube la orden seleccionada una posición.

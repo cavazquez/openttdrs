@@ -586,21 +586,61 @@ pub(super) fn refit_vehicle(
     state: &mut GameState,
     vehicle_id: u32,
     cargo: crate::cargo::CargoType,
+    unit_ids: &[u32],
 ) -> Result<(), CommandError> {
     require_vehicle_owned_by_active(state, vehicle_id)?;
-    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
+    let targets: Vec<u32> = if unit_ids.is_empty() {
+        vec![vehicle_id]
+    } else {
+        unit_ids.to_vec()
+    };
+    for &tid in &targets {
+        require_vehicle_owned_by_active(state, tid)?;
+        if tid != vehicle_id && !crate::same_consist(&state.vehicles, vehicle_id, tid) {
+            return Err(CommandError::RefitNotAllowed);
+        }
+    }
+    for &tid in &targets {
+        let Some(vehicle) = state.vehicles.iter().find(|v| v.id == tid) else {
+            return Err(CommandError::VehicleNotFound);
+        };
+        if vehicle.cargo > 0 {
+            return Err(CommandError::RefitNotAllowed);
+        }
+        if !crate::refit::vehicle_in_depot(&state.map, vehicle.pos) {
+            return Err(CommandError::RefitNotAllowed);
+        }
+        if !crate::refit::refittable_cargo_types(vehicle).contains(&cargo) {
+            return Err(CommandError::RefitNotAllowed);
+        }
+    }
+    for &tid in &targets {
+        let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == tid) else {
+            return Err(CommandError::VehicleNotFound);
+        };
+        vehicle.cargo_type = Some(cargo);
+    }
+    Ok(())
+}
+
+pub(super) fn cycle_vehicle_order_depot_refit(
+    state: &mut GameState,
+    vehicle_id: u32,
+    index: usize,
+) -> Result<(), CommandError> {
+    require_vehicle_owned_by_active(state, vehicle_id)?;
+    let Some(vehicle_idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
-    if vehicle.cargo > 0 {
-        return Err(CommandError::RefitNotAllowed);
+    if index >= state.vehicles[vehicle_idx].orders.len() {
+        return Err(CommandError::OrderIndexOutOfRange);
     }
-    if !crate::refit::vehicle_in_depot(&state.map, vehicle.pos) {
-        return Err(CommandError::RefitNotAllowed);
-    }
-    if !crate::refit::refittable_cargo_types(vehicle).contains(&cargo) {
-        return Err(CommandError::RefitNotAllowed);
-    }
-    vehicle.cargo_type = Some(cargo);
+    let options = crate::refit::refittable_cargo_types(&state.vehicles[vehicle_idx]).to_vec();
+    let Some(updated) = state.vehicles[vehicle_idx].orders[index].with_cycled_depot_refit(&options)
+    else {
+        return Err(CommandError::OrderIndexOutOfRange);
+    };
+    state.vehicles[vehicle_idx].orders[index] = updated;
     Ok(())
 }
 

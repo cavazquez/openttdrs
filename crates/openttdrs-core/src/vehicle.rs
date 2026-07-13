@@ -97,6 +97,9 @@ pub enum VehicleOrder {
         wait_ticks: u32,
         #[serde(default)]
         travel_ticks: u32,
+        /// Refit automático al llegar (solo si `stop` y sin carga a bordo).
+        #[serde(default)]
+        refit_cargo: Option<CargoType>,
     },
     Tile(TileCoord),
     /// Salta a `jump_to` si la condición se cumple al llegar a esta «orden».
@@ -207,6 +210,7 @@ impl VehicleOrder {
             stop: true,
             wait_ticks: 0,
             travel_ticks: 0,
+            refit_cargo: None,
         }
     }
 
@@ -217,6 +221,7 @@ impl VehicleOrder {
             stop: false,
             wait_ticks: 0,
             travel_ticks: 0,
+            refit_cargo: None,
         }
     }
 
@@ -233,6 +238,14 @@ impl VehicleOrder {
     #[must_use]
     pub const fn depot_stops(self) -> bool {
         matches!(self, Self::Depot { stop: true, .. })
+    }
+
+    #[must_use]
+    pub const fn depot_refit_cargo(self) -> Option<CargoType> {
+        match self {
+            Self::Depot { refit_cargo, .. } => refit_cargo,
+            _ => None,
+        }
     }
 
     #[must_use]
@@ -316,12 +329,48 @@ impl VehicleOrder {
                 stop,
                 wait_ticks,
                 travel_ticks,
+                refit_cargo,
             } => Some(Self::Depot {
                 depot,
                 stop: !stop,
                 wait_ticks,
                 travel_ticks,
+                refit_cargo,
             }),
+            _ => None,
+        }
+    }
+
+    /// Cicla el tipo de refit de una orden de depósito (`None` → opciones → `None`).
+    #[must_use]
+    pub fn with_cycled_depot_refit(self, options: &[CargoType]) -> Option<Self> {
+        match self {
+            Self::Depot {
+                depot,
+                stop,
+                wait_ticks,
+                travel_ticks,
+                refit_cargo,
+            } => {
+                let next = match refit_cargo {
+                    None => options.first().copied(),
+                    Some(current) => {
+                        let idx = options.iter().position(|&c| c == current)?;
+                        if idx + 1 < options.len() {
+                            Some(options[idx + 1])
+                        } else {
+                            None
+                        }
+                    }
+                };
+                Some(Self::Depot {
+                    depot,
+                    stop,
+                    wait_ticks,
+                    travel_ticks,
+                    refit_cargo: next,
+                })
+            }
             _ => None,
         }
     }
@@ -366,11 +415,13 @@ impl VehicleOrder {
                 stop,
                 wait_ticks,
                 travel_ticks,
+                refit_cargo,
             } => Some(Self::Depot {
                 depot,
                 stop,
                 wait_ticks: cycle_wait_ticks(wait_ticks),
                 travel_ticks,
+                refit_cargo,
             }),
             _ => None,
         }
@@ -405,11 +456,13 @@ impl VehicleOrder {
                 stop,
                 wait_ticks,
                 travel_ticks,
+                refit_cargo,
             } => Self::Depot {
                 depot,
                 stop,
                 wait_ticks,
                 travel_ticks: cycle_travel_ticks(travel_ticks),
+                refit_cargo,
             },
             Self::Tile(t) => Self::Tile(t),
             Self::Conditional {
@@ -444,12 +497,14 @@ impl VehicleOrder {
                 depot,
                 stop,
                 travel_ticks,
+                refit_cargo,
                 ..
             } => Some(Self::Depot {
                 depot,
                 stop,
                 wait_ticks,
                 travel_ticks,
+                refit_cargo,
             }),
             _ => None,
         }
@@ -479,12 +534,14 @@ impl VehicleOrder {
                 depot,
                 stop,
                 wait_ticks,
+                refit_cargo,
                 ..
             } => Self::Depot {
                 depot,
                 stop,
                 wait_ticks,
                 travel_ticks,
+                refit_cargo,
             },
             other => other,
         }
@@ -682,6 +739,15 @@ pub struct Vehicle {
     /// Registros persistentes `NewGRF` (`7C` / `\2psto`); copiados al ctx al dibujar.
     #[serde(default)]
     pub newgrf_persistent_regs: std::collections::HashMap<u8, u32>,
+    /// Beneficio neto del año en curso (ingresos − costes; solo cabeza de consist).
+    #[serde(default)]
+    pub profit_this_year: i64,
+    /// Beneficio neto del año anterior (solo cabeza de consist).
+    #[serde(default)]
+    pub profit_last_year: i64,
+    /// Refit pendiente al llegar a depósito con orden (`VehicleOrder::Depot.refit_cargo`).
+    #[serde(skip, default)]
+    pub(crate) pending_depot_order_refit: Option<CargoType>,
 }
 
 fn default_unit_length() -> u8 {
@@ -769,6 +835,9 @@ impl Vehicle {
             cached_weight_t: 0,
             newgrf_random_bits: seed_newgrf_random_bits(id),
             newgrf_persistent_regs: std::collections::HashMap::new(),
+            profit_this_year: 0,
+            profit_last_year: 0,
+            pending_depot_order_refit: None,
         }
     }
 
@@ -1431,6 +1500,9 @@ impl Vehicle {
         }
         let pass_through = self.orders[self.current_order].is_pass_through();
         if self.orders[self.current_order].depot_stops() {
+            if let Some(cargo) = self.orders[self.current_order].depot_refit_cargo() {
+                self.pending_depot_order_refit = Some(cargo);
+            }
             self.service_at_depot();
             self.running = false;
             self.progress = 255;

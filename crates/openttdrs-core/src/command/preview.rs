@@ -247,6 +247,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::TurnAroundVehicle(..)
         | Command::ForceVehicleProceed(..)
         | Command::RefitVehicle { .. }
+        | Command::CycleVehicleOrderDepotRefit { .. }
         | Command::ToggleVehicleTimetable(..)
         | Command::CycleVehicleOrderWait { .. }
         | Command::CycleVehicleOrderTravel { .. }

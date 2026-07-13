@@ -224,6 +224,7 @@ fn order_row_label(
         stop,
         wait_ticks,
         travel_ticks,
+        refit_cargo,
         ..
     } = order
     {
@@ -231,6 +232,12 @@ fn order_row_label(
             line.push_str(" · parar");
         } else {
             line.push_str(" · servicio");
+        }
+        if let Some(cargo) = refit_cargo {
+            line.push_str(&format!(
+                " · refit {}",
+                openttdrs_core::cargo_display_name(cargo)
+            ));
         }
         if wait_ticks > 0 {
             line.push_str(&format!(" · esp.{wait_ticks}"));

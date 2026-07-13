@@ -20,7 +20,8 @@ use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
     Command, VehicleKind, apply_command, cargo_display_name, default_engine_id, engine_for_vehicle,
-    refit_allowed, station::resolve_order_destination, vehicle::MAX_VEHICLE_NAME_CHARS,
+    format_money, refit_allowed, station::resolve_order_destination,
+    vehicle::MAX_VEHICLE_NAME_CHARS,
 };
 
 use crate::camera::tile_camera_world_pos;
@@ -679,7 +680,9 @@ fn vehicle_details_totals(vehicle: &openttdrs_core::Vehicle, sim: &SimWorld) -> 
     format!(
         "Unidades: {units}\nPeso: {weight} t · Potencia: {power} CV\n\
          Carga: {cargo}/{capacity}\nCoste operación (cabeza): ${cost}/año\n\
-         Beneficio: (sin datos en core)"
+         Beneficio este año: {}\nBeneficio anterior: {}",
+        format_money(vehicle.profit_this_year),
+        format_money(vehicle.profit_last_year),
     )
 }
 

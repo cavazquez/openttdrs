@@ -188,9 +188,17 @@ pub enum Command {
     /// Ignora la señal roja en el próximo tick de movimiento (solo trenes).
     ForceVehicleProceed(u32),
     /// Cambia el tipo de carga aceptado (solo en depósito, sin carga a bordo).
+    /// `unit_ids` vacío = solo la unidad `vehicle_id` (cabeza u otra).
     RefitVehicle {
         vehicle_id: u32,
         cargo: crate::cargo::CargoType,
+        #[serde(default)]
+        unit_ids: Vec<u32>,
+    },
+    /// Cicla el refit automático de una orden [`VehicleOrder::Depot`].
+    CycleVehicleOrderDepotRefit {
+        vehicle_id: u32,
+        index: usize,
     },
     /// Activa/desactiva el horario del vehículo.
     ToggleVehicleTimetable(u32),

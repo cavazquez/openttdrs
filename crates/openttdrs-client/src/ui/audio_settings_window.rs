@@ -9,8 +9,8 @@ use crate::audio::{
 };
 use crate::state::ClientScreen;
 use crate::ui::floating_window::{
-    FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
-    spawn_floating_window, window_text_font,
+    FloatingWindow, FloatingWindowClosed, FloatingWindowId, MENU_OVERLAY_WINDOW_Z, TITLE_BROWN,
+    WINDOW_TEXT, spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::SimHudControls;
@@ -231,7 +231,7 @@ pub(crate) fn setup_sound_music_window(
         FloatingWindowId::SoundMusic,
         "Sonido y música",
         TITLE_BROWN,
-        Vec2::new(300.0, 400.0),
+        Vec2::new(300.0, 72.0),
         320.0,
     );
     commands.entity(content).with_children(|body| {
@@ -295,9 +295,10 @@ pub(crate) fn handle_sound_music_toolbar_button(
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn sync_sound_music_window(
     state: Res<SoundMusicWindowState>,
+    screen: Res<State<ClientScreen>>,
     hud: Res<SimHudControls>,
     music: Res<MusicState>,
-    mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
+    mut root_q: Query<(&FloatingWindow, &mut Visibility, &mut GlobalZIndex)>,
     mut labels: Query<(&VolumeSliderLabel, &mut Text)>,
     mut fills: Query<(&VolumeSliderFill, &mut Node)>,
     mut toggles: Query<
@@ -339,9 +340,9 @@ pub(crate) fn sync_sound_music_window(
         ),
     >,
 ) {
-    let Some((_, mut vis)) = root_q
+    let Some((_, mut vis, mut z)) = root_q
         .iter_mut()
-        .find(|(w, _)| w.id == FloatingWindowId::SoundMusic)
+        .find(|(w, _, _)| w.id == FloatingWindowId::SoundMusic)
     else {
         return;
     };
@@ -350,6 +351,10 @@ pub(crate) fn sync_sound_music_window(
         return;
     }
     *vis = Visibility::Visible;
+    // El menú principal usa GlobalZIndex(3000); sin esto la ventana queda detrás y no recibe clics.
+    if *screen.get() == ClientScreen::MainMenu {
+        z.0 = z.0.max(MENU_OVERLAY_WINDOW_Z);
+    }
 
     for (label, mut text) in &mut labels {
         **text = match label.0 {

@@ -103,7 +103,6 @@ pub(crate) fn main_menu_options_interaction(
             &mut BackgroundColor,
         )>,
     )>,
-    mut roughness_q: Query<(&Interaction, &MainMenuRoughnessButton, &mut BackgroundColor)>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     if *panel != MainMenuPanel::NewGame {
@@ -239,7 +238,17 @@ pub(crate) fn main_menu_options_interaction(
         }
         *bg = option_button_bg(settings.0.starting_money == btn.0, *interaction);
     }
+}
 
+/// Relieve del terreno en sistema aparte (el `ParamSet` de opciones ya tiene 8 queries).
+pub(crate) fn main_menu_roughness_interaction(
+    panel: Res<MainMenuPanel>,
+    mut settings: ResMut<NewGameSettingsResource>,
+    mut roughness_q: Query<(&Interaction, &MainMenuRoughnessButton, &mut BackgroundColor)>,
+) {
+    if *panel != MainMenuPanel::NewGame {
+        return;
+    }
     for (interaction, btn, mut bg) in &mut roughness_q {
         if *interaction == Interaction::Pressed {
             settings.0.terrain_roughness = btn.0;
@@ -675,7 +684,13 @@ pub(crate) fn main_menu_scenarios_interaction(
     intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
     mut root_btn: Query<
         (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<MainMenuScenariosButton>),
+        (
+            Changed<Interaction>,
+            With<MainMenuScenariosButton>,
+            Without<MainMenuOpenScenariosDirButton>,
+            Without<MainMenuOpenHeightmapsDirButton>,
+            Without<MainMenuHeightmapSlot>,
+        ),
     >,
     mut open_scn: Query<
         (&Interaction, &mut BackgroundColor),
@@ -683,6 +698,8 @@ pub(crate) fn main_menu_scenarios_interaction(
             Changed<Interaction>,
             With<MainMenuOpenScenariosDirButton>,
             Without<MainMenuScenariosButton>,
+            Without<MainMenuOpenHeightmapsDirButton>,
+            Without<MainMenuHeightmapSlot>,
         ),
     >,
     mut open_hmap: Query<
@@ -692,9 +709,17 @@ pub(crate) fn main_menu_scenarios_interaction(
             With<MainMenuOpenHeightmapsDirButton>,
             Without<MainMenuScenariosButton>,
             Without<MainMenuOpenScenariosDirButton>,
+            Without<MainMenuHeightmapSlot>,
         ),
     >,
-    mut slots: Query<(&Interaction, &MainMenuHeightmapSlot, &mut BackgroundColor)>,
+    mut slots: Query<
+        (&Interaction, &MainMenuHeightmapSlot, &mut BackgroundColor),
+        (
+            Without<MainMenuScenariosButton>,
+            Without<MainMenuOpenScenariosDirButton>,
+            Without<MainMenuOpenHeightmapsDirButton>,
+        ),
+    >,
     mut commands: Commands,
 ) {
     if *panel == MainMenuPanel::Root {
@@ -829,13 +854,20 @@ pub(crate) fn main_menu_preferences_interaction(
     mut windows: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
     mut root_btn: Query<
         (&Interaction, &mut BackgroundColor),
-        (Changed<Interaction>, With<MainMenuPreferencesButton>),
+        (
+            Changed<Interaction>,
+            With<MainMenuPreferencesButton>,
+            Without<MainMenuResolutionButton>,
+        ),
     >,
-    mut res_btn: Query<(
-        &Interaction,
-        &MainMenuResolutionButton,
-        &mut BackgroundColor,
-    )>,
+    mut res_btn: Query<
+        (
+            &Interaction,
+            &MainMenuResolutionButton,
+            &mut BackgroundColor,
+        ),
+        Without<MainMenuPreferencesButton>,
+    >,
 ) {
     if *panel == MainMenuPanel::Root {
         for (interaction, mut bg) in &mut root_btn {

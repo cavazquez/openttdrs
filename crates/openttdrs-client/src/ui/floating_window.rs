@@ -29,6 +29,8 @@ pub(crate) const TITLE_CREAM: Color = Color::srgb(0.62, 0.56, 0.42);
 
 /// Z base de las ventanas flotantes (sobre paneles fijos, bajo modales 2900+).
 const WINDOW_BASE_Z: i32 = 2400;
+/// Por encima del menú principal (`GlobalZIndex(3000)`) para recibir clics.
+pub(crate) const MENU_OVERLAY_WINDOW_Z: i32 = 3100;
 /// Altura de la barra de título.
 const TITLE_BAR_H: f32 = 20.0;
 /// Margen mínimo visible al clampear el arrastre.
@@ -241,6 +243,12 @@ impl Plugin for FloatingWindowPlugin {
                 )
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),
+            )
+            .add_systems(
+                Update,
+                (begin_window_drag, drag_floating_windows, close_window_buttons)
+                    .in_set(UpdateSet::Ui)
+                    .run_if(in_state(ClientScreen::MainMenu)),
             );
     }
 }
@@ -373,6 +381,7 @@ fn begin_window_drag(
     bars: Query<(&Interaction, &ChildOf), (Changed<Interaction>, With<FloatingWindowTitleBar>)>,
     mut windows_q: Query<(Entity, &Node, &mut GlobalZIndex), With<FloatingWindow>>,
     primary: Query<&Window, With<PrimaryWindow>>,
+    screen: Res<State<ClientScreen>>,
     mut drag: ResMut<WindowDragState>,
     mut z_counter: ResMut<WindowZCounter>,
 ) {
@@ -395,6 +404,10 @@ fn begin_window_drag(
         drag.window = Some(entity);
         drag.grab_offset = cursor - Vec2::new(left, top);
         z_counter.0 += 1;
+        // En el menú hay que quedar por encima de GlobalZIndex(3000).
+        if *screen.get() == ClientScreen::MainMenu {
+            z_counter.0 = z_counter.0.max(MENU_OVERLAY_WINDOW_Z + 1);
+        }
         z.0 = z_counter.0;
     }
 }

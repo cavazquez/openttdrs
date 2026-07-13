@@ -3,8 +3,9 @@ use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
 use bevy::text::EditableText;
 use openttdrs_core::{
-    CargoType, Command, CommandError, MAX_STATION_NAME_CHARS, STATION_COVERAGE_RADIUS, TileCoord,
-    VehicleOrder, apply_command, cargo_display_name, station_coverage_at, station_rating_for_cargo,
+    ALL_CARGO_TYPES, CargoType, Command, CommandError, MAX_STATION_NAME_CHARS,
+    STATION_COVERAGE_RADIUS, TileCoord, VehicleOrder, apply_command, cargo_display_name,
+    station_coverage_at, station_rating_for_cargo,
 };
 
 use crate::iso::tile_pos;
@@ -55,14 +56,7 @@ pub(crate) enum StationCargoPanelButton {
     Close,
 }
 
-const CARGO_TYPES: [CargoType; 6] = [
-    CargoType::Passengers,
-    CargoType::Mail,
-    CargoType::Goods,
-    CargoType::Coal,
-    CargoType::Wood,
-    CargoType::Oil,
-];
+const CARGO_TYPES: &[CargoType] = &ALL_CARGO_TYPES;
 
 pub(crate) fn setup_station_cargo_panel(mut commands: Commands) {
     commands
@@ -384,7 +378,7 @@ pub(crate) fn sync_station_cargo_panel(
             ),
             "Carga en espera:".to_string(),
         ];
-        for cargo in CARGO_TYPES {
+        for &cargo in CARGO_TYPES {
             let waiting = station.cargo_stock.get(cargo);
             if waiting == 0 && !station.accepts_cargo(cargo) {
                 continue;

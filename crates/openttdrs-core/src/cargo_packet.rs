@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 
 use serde::{Deserialize, Serialize};
 
-use crate::cargo::{CargoStock, CargoType};
+use crate::cargo::{ALL_CARGO_TYPES, CargoStock, CargoType};
 use crate::map::TileCoord;
 
 /// Unidades transferidas por tick en carga/descarga gradual (MVP).
@@ -20,8 +20,13 @@ pub const fn load_unload_speed(cargo: CargoType) -> u32 {
     match cargo {
         CargoType::Passengers => 8,
         CargoType::Mail => 6,
-        CargoType::Goods => 5,
-        CargoType::Coal | CargoType::Wood | CargoType::Oil => 4,
+        CargoType::Goods | CargoType::Valuables | CargoType::Livestock => 5,
+        CargoType::Coal
+        | CargoType::Wood
+        | CargoType::Oil
+        | CargoType::Grain
+        | CargoType::IronOre
+        | CargoType::Steel => 4,
     }
 }
 
@@ -40,6 +45,9 @@ pub struct CargoPacket {
     /// Crédito feeder ya liquidado en este packet (evita doble pago).
     #[serde(default)]
     pub feeder_paid: bool,
+    /// Acumulado de pagos feeder (`Money feeder_share` en `OpenTTD`).
+    #[serde(default)]
+    pub feeder_share: i64,
 }
 
 impl CargoPacket {
@@ -52,6 +60,7 @@ impl CargoPacket {
             periods_in_transit: 0,
             first_station: None,
             feeder_paid: false,
+            feeder_share: 0,
         }
     }
 
@@ -104,6 +113,7 @@ impl StationCargoList {
             && last.periods_in_transit == packet.periods_in_transit
             && last.first_station == packet.first_station
             && last.feeder_paid == packet.feeder_paid
+            && last.feeder_share == packet.feeder_share
         {
             last.count = last.count.saturating_add(packet.count);
             return;
@@ -160,14 +170,7 @@ impl StationCargoList {
     #[must_use]
     pub fn from_stock(stock: CargoStock, source: TileCoord) -> Self {
         let mut list = Self::default();
-        for cargo in [
-            CargoType::Passengers,
-            CargoType::Mail,
-            CargoType::Goods,
-            CargoType::Coal,
-            CargoType::Wood,
-            CargoType::Oil,
-        ] {
+        for cargo in ALL_CARGO_TYPES {
             list.add_amount(cargo, stock.get(cargo), source);
         }
         list
@@ -257,6 +260,7 @@ impl VehicleCargoList {
             && last.periods_in_transit == packet.periods_in_transit
             && last.first_station == packet.first_station
             && last.feeder_paid == packet.feeder_paid
+            && last.feeder_share == packet.feeder_share
         {
             last.count = last.count.saturating_add(packet.count);
             return;

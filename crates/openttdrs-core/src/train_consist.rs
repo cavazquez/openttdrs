@@ -22,12 +22,7 @@ pub const TILE_FRACTIONS: u16 = 256;
 #[must_use]
 pub fn cargo_type_a_id(cargo: Option<CargoType>) -> u8 {
     match cargo {
-        Some(CargoType::Passengers) => 0,
-        Some(CargoType::Coal) => 1,
-        Some(CargoType::Mail) => 2,
-        Some(CargoType::Oil) => 3,
-        Some(CargoType::Goods) => 5,
-        Some(CargoType::Wood) => 7,
+        Some(c) => c.temperate_id(),
         None => 0xFF,
     }
 }
@@ -38,8 +33,15 @@ pub fn cargo_class_bits(cargo: Option<CargoType>) -> u16 {
     match cargo {
         Some(CargoType::Passengers) => 0x0001,
         Some(CargoType::Mail) => 0x0002,
-        Some(CargoType::Goods) => 0x0020,
-        Some(CargoType::Coal | CargoType::Wood) => 0x0010,
+        Some(CargoType::Goods | CargoType::Valuables) => 0x0020,
+        Some(
+            CargoType::Coal
+            | CargoType::Wood
+            | CargoType::Grain
+            | CargoType::IronOre
+            | CargoType::Livestock
+            | CargoType::Steel,
+        ) => 0x0010,
         Some(CargoType::Oil) => 0x0040,
         None => 0,
     }
@@ -48,9 +50,16 @@ pub fn cargo_class_bits(cargo: Option<CargoType>) -> u16 {
 fn cargo_unit_weight_16ths(cargo: Option<CargoType>) -> u8 {
     match cargo {
         Some(CargoType::Passengers) => 1,
-        Some(CargoType::Mail) => 4,
-        Some(CargoType::Goods) => 8,
-        Some(CargoType::Coal | CargoType::Wood | CargoType::Oil) => 16,
+        Some(CargoType::Mail | CargoType::Valuables) => 4,
+        Some(CargoType::Goods | CargoType::Livestock) => 8,
+        Some(
+            CargoType::Coal
+            | CargoType::Wood
+            | CargoType::Oil
+            | CargoType::Grain
+            | CargoType::IronOre
+            | CargoType::Steel,
+        ) => 16,
         None => 0,
     }
 }

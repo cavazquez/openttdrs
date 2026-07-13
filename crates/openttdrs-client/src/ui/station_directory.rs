@@ -69,6 +69,11 @@ pub(crate) enum StationCargoFilter {
     Coal,
     Wood,
     Oil,
+    Livestock,
+    Grain,
+    IronOre,
+    Steel,
+    Valuables,
 }
 
 impl StationCargoFilter {
@@ -81,6 +86,11 @@ impl StationCargoFilter {
             Self::Coal => Some(CargoType::Coal),
             Self::Wood => Some(CargoType::Wood),
             Self::Oil => Some(CargoType::Oil),
+            Self::Livestock => Some(CargoType::Livestock),
+            Self::Grain => Some(CargoType::Grain),
+            Self::IronOre => Some(CargoType::IronOre),
+            Self::Steel => Some(CargoType::Steel),
+            Self::Valuables => Some(CargoType::Valuables),
         }
     }
 }
@@ -208,6 +218,11 @@ pub(crate) fn setup_station_directory(mut commands: Commands, asset_server: Res<
             spawn_cargo_filter(row, asset_server, "Carbón", StationCargoFilter::Coal);
             spawn_cargo_filter(row, asset_server, "Madera", StationCargoFilter::Wood);
             spawn_cargo_filter(row, asset_server, "Petróleo", StationCargoFilter::Oil);
+            spawn_cargo_filter(row, asset_server, "Grano", StationCargoFilter::Grain);
+            spawn_cargo_filter(row, asset_server, "Hierro", StationCargoFilter::IronOre);
+            spawn_cargo_filter(row, asset_server, "Acero", StationCargoFilter::Steel);
+            spawn_cargo_filter(row, asset_server, "Ganado", StationCargoFilter::Livestock);
+            spawn_cargo_filter(row, asset_server, "Valor", StationCargoFilter::Valuables);
         });
         spawn_list_scroll_area(body, StationDirectoryListRoot, LIST_HEIGHT);
     });

@@ -13,7 +13,6 @@ use std::path::Path;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 
-use crate::cargo::CargoType;
 use crate::game_state::GameState;
 use crate::industry::{Industry, IndustryKind, IndustrySpec};
 use crate::map::{Map, Tile, TileCoord, TileKind};
@@ -423,12 +422,7 @@ fn station_id_for_pos(state: &GameState, pos: TileCoord) -> Option<u16> {
 
 fn cargo_ottd_byte(v: &Vehicle) -> u8 {
     match v.cargo_type {
-        Some(CargoType::Passengers) => 0,
-        Some(CargoType::Mail) => 2,
-        Some(CargoType::Oil) => 3,
-        Some(CargoType::Goods) => 5,
-        Some(CargoType::Wood) => 7,
-        Some(CargoType::Coal) => 1,
+        Some(c) => c.temperate_id(),
         None => match v.kind {
             VehicleKind::Bus | VehicleKind::Aircraft => 0,
             _ => 1,

@@ -419,12 +419,7 @@ pub(crate) fn engines_for_buy_window<'a>(
 
 fn cargo_label(cargo: Option<CargoType>) -> &'static str {
     match cargo {
-        Some(CargoType::Passengers) => "pasajeros",
-        Some(CargoType::Mail) => "sacas de correo",
-        Some(CargoType::Goods) => "cajas de mercancías",
-        Some(CargoType::Coal) => "toneladas de carbón",
-        Some(CargoType::Wood) => "toneladas de madera",
-        Some(CargoType::Oil) => "litros de petróleo",
+        Some(c) => c.display_name(),
         None => "nada (solo locomotora)",
     }
 }

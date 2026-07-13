@@ -1,7 +1,7 @@
 //! Tarifas de pago por tipo de carga (`CargoPaymentRates`).
 
 use bevy::prelude::*;
-use openttdrs_core::{CargoType, calendar_year_at_tick, cargo_display_name};
+use openttdrs_core::{ALL_CARGO_TYPES, CargoType, calendar_year_at_tick, cargo_display_name};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -12,14 +12,7 @@ use crate::ui::font::UiFontRole;
 use crate::ui::navigation::{OpenUiRoute, UiRoute};
 use crate::ui::toolbar::BuildMenuUi;
 
-const CARGOS: [CargoType; 6] = [
-    CargoType::Passengers,
-    CargoType::Mail,
-    CargoType::Goods,
-    CargoType::Coal,
-    CargoType::Wood,
-    CargoType::Oil,
-];
+const CARGOS: &[CargoType] = &ALL_CARGO_TYPES;
 
 #[derive(Resource, Default)]
 pub(crate) struct CargoPaymentWindowState {
@@ -97,7 +90,7 @@ pub(crate) fn sync_cargo_payment_window(
             "Carga", "base", "rápido", "lento"
         ),
     ];
-    for cargo in CARGOS {
+    for &cargo in CARGOS {
         let spec = cargo.payment_spec();
         lines.push(format!(
             "{:<14} {:>8} {:>8} {:>8}",

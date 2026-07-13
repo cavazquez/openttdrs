@@ -95,13 +95,12 @@ impl Company {
     }
 }
 
-/// Fracción del pago que va a la estación de primer embarque (feeder MVP).
+/// Fracción del pago feeder (`_settings_game.economy.feeder_payment_share`, default 75 %).
 ///
-/// `OpenTTD` usa `feeder_share` por packet; aquí un 25 % fijo del ingreso de
-/// entrega si `first_station` ≠ destino y pertenece a otra compañía o a la misma
-/// (crédito a la estación origen vía owner).
-pub const FEEDER_SHARE_NUM: i64 = 1;
-pub const FEEDER_SHARE_DEN: i64 = 4;
+/// `OpenTTD` acumula `feeder_share` por packet; aquí se acredita al owner de
+/// `first_station` si difiere del destino de descarga.
+pub const FEEDER_SHARE_NUM: i64 = 75;
+pub const FEEDER_SHARE_DEN: i64 = 100;
 
 /// Parte del pago que corresponde al feeder (`first_station`).
 #[must_use]
@@ -117,8 +116,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn feeder_share_is_quarter() {
-        assert_eq!(feeder_share_of(100), 25);
+    fn feeder_share_is_three_quarters() {
+        assert_eq!(feeder_share_of(100), 75);
         assert_eq!(feeder_share_of(0), 0);
         assert_eq!(feeder_share_of(-10), 0);
     }

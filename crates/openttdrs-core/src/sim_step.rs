@@ -18,7 +18,7 @@ pub(crate) fn step(state: &mut GameState) {
     age_vehicle_cargo(state);
 
     if t > 0 && t.is_multiple_of(u64::from(economy::TICKS_PER_TRANSIT_DAY)) {
-        station::tick_station_cargo_age(&mut state.stations);
+        station::tick_station_cargo_age(&mut state.stations, state.order.selectgoods);
     }
 
     crate::subsidy::tick_subsidies(state);
@@ -523,6 +523,7 @@ fn try_load_from_industry(
     true
 }
 
+#[allow(clippy::too_many_lines)] // carga gradual + filtros freight / hub
 fn try_load_from_station_waiting_cargo(
     state: &mut GameState,
     vehicle_idx: usize,
@@ -555,14 +556,20 @@ fn try_load_from_station_waiting_cargo(
                 }
                 return false;
             };
-            if matches!(cargo, CargoType::Coal | CargoType::Wood | CargoType::Oil)
-                && !station::station_is_freight_pickup_stop(
-                    &state.map,
-                    &state.industries,
-                    station_pos,
-                    cargo,
-                )
-                && !state.vehicles[vehicle_idx].orders.is_empty()
+            if matches!(
+                cargo,
+                CargoType::Coal
+                    | CargoType::Wood
+                    | CargoType::Oil
+                    | CargoType::Grain
+                    | CargoType::Livestock
+                    | CargoType::IronOre
+            ) && !station::station_is_freight_pickup_stop(
+                &state.map,
+                &state.industries,
+                station_pos,
+                cargo,
+            ) && !state.vehicles[vehicle_idx].orders.is_empty()
             {
                 return false;
             }
@@ -709,7 +716,7 @@ fn unload_vehicles(
                 packet.cargo,
                 packet.source,
             ));
-            // Feeder: 25 % al owner de first_station si es distinta del destino.
+            // Feeder: 75 % al owner de first_station si es distinta del destino.
             if !packet.feeder_paid
                 && let Some(first) = packet.first_station
                 && first != station_pos
@@ -730,6 +737,7 @@ fn unload_vehicles(
                         feeder_income_by_owner.push((feeder_owner, share));
                     }
                     part = part.saturating_sub(share);
+                    packet.feeder_share = packet.feeder_share.saturating_add(share);
                     packet.feeder_paid = true;
                 }
             }

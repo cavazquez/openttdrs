@@ -52,20 +52,45 @@ impl CargoType {
                 transit_fast_days: 7,
                 transit_slow_days: 255,
             },
-            Self::Wood => CargoPaymentSpec {
-                base_rate: 5005,
-                transit_fast_days: 15,
-                transit_slow_days: 255,
-            },
             Self::Oil => CargoPaymentSpec {
                 base_rate: 4437,
                 transit_fast_days: 25,
                 transit_slow_days: 255,
             },
+            Self::Livestock => CargoPaymentSpec {
+                base_rate: 4322,
+                transit_fast_days: 4,
+                transit_slow_days: 18,
+            },
             Self::Goods => CargoPaymentSpec {
                 base_rate: 6144,
                 transit_fast_days: 5,
                 transit_slow_days: 28,
+            },
+            Self::Grain => CargoPaymentSpec {
+                base_rate: 4778,
+                transit_fast_days: 4,
+                transit_slow_days: 40,
+            },
+            Self::Wood => CargoPaymentSpec {
+                base_rate: 5005,
+                transit_fast_days: 15,
+                transit_slow_days: 255,
+            },
+            Self::IronOre => CargoPaymentSpec {
+                base_rate: 5120,
+                transit_fast_days: 9,
+                transit_slow_days: 255,
+            },
+            Self::Steel => CargoPaymentSpec {
+                base_rate: 5688,
+                transit_fast_days: 7,
+                transit_slow_days: 255,
+            },
+            Self::Valuables => CargoPaymentSpec {
+                base_rate: 7509,
+                transit_fast_days: 1,
+                transit_slow_days: 32,
             },
         }
     }

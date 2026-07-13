@@ -22,7 +22,9 @@ pub fn industry_template(c: TileCoord, spec: IndustrySpec) -> Vec<(TileCoord, u8
         IndustrySpec::Farm => choose_layout(c, &FARM_LAYOUTS),
         IndustrySpec::OilWells => choose_layout(c, &OIL_LAYOUTS),
         IndustrySpec::OilRefinery => choose_layout(c, &REFINERY_LAYOUTS),
-        IndustrySpec::Factory => choose_layout(c, &FACTORY_LAYOUTS),
+        IndustrySpec::Factory | IndustrySpec::SteelMill | IndustrySpec::Bank => {
+            choose_layout(c, &FACTORY_LAYOUTS)
+        }
         IndustrySpec::Sawmill => choose_layout(c, &SAWMILL_LAYOUTS),
         IndustrySpec::CottonCandy => choose_layout(c, &COTTON_CANDY_LAYOUTS),
         IndustrySpec::CandyFactory => choose_layout(c, &CANDY_FACTORY_LAYOUTS),

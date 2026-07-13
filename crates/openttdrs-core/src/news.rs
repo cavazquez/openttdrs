@@ -335,14 +335,7 @@ fn vehicle_advice_headline(
 
 #[must_use]
 pub fn cargo_display_name(cargo: CargoType) -> &'static str {
-    match cargo {
-        CargoType::Passengers => "pasajeros",
-        CargoType::Mail => "correo",
-        CargoType::Goods => "mercancías",
-        CargoType::Coal => "carbón",
-        CargoType::Wood => "madera",
-        CargoType::Oil => "petróleo",
-    }
+    cargo.display_name()
 }
 
 #[must_use]

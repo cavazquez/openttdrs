@@ -655,6 +655,11 @@ fn vehicle_cargo_label(v: &Vehicle) -> String {
         Some(CargoType::Coal) => "COAL",
         Some(CargoType::Wood) => "WOOD",
         Some(CargoType::Oil) => "OIL",
+        Some(CargoType::Livestock) => "LIVE",
+        Some(CargoType::Grain) => "GRAIN",
+        Some(CargoType::IronOre) => "ORE",
+        Some(CargoType::Steel) => "STEEL",
+        Some(CargoType::Valuables) => "VAL",
         None => "ANY",
     };
     format!("{cargo} {}/{}", v.cargo, v.capacity)

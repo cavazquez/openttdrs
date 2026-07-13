@@ -87,7 +87,7 @@ pub use bridge_spec::{
     bridge_max_speed_for_tile, bridge_middle_length, bridge_spec, bridge_total_length,
     bridge_type_from_m6, calc_bridge_piece, set_bridge_middle_mapt, set_bridge_type_m6,
 };
-pub use cargo::{CargoStock, CargoType};
+pub use cargo::{ALL_CARGO_TYPES, CargoStock, CargoType, OrderSettings, TEMPERATE_CARGO_TYPES};
 pub use cargo_packet::{CargoPacket, StationCargoList, VehicleCargoList, load_unload_speed};
 pub use command::{
     Command, CommandError, LevelMode, MAX_STATION_NAME_CHARS, OrderMoveDirection,

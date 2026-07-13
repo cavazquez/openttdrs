@@ -39,6 +39,10 @@ pub enum IndustrySpec {
     OilRefinery,
     Factory,
     Sawmill,
+    /// Acería temperate (hierro + carbón → acero).
+    SteelMill,
+    /// Banco temperate (objetos de valor).
+    Bank,
     /// Plantación de algodón de azúcar (Toyland).
     CottonCandy,
     /// Fábrica de caramelos (Toyland).
@@ -73,6 +77,8 @@ impl IndustrySpec {
                 Self::Factory,
                 Self::Farm,
                 Self::IronOreMine,
+                Self::SteelMill,
+                Self::Bank,
             ],
             Climate::SubArctic => &[
                 Self::CoalMine,
@@ -126,6 +132,8 @@ impl IndustrySpec {
             Self::OilWells | Self::OilRefinery | Self::ColaWells => IndustryKind::OilWell,
             Self::Factory
             | Self::Sawmill
+            | Self::SteelMill
+            | Self::Bank
             | Self::CandyFactory
             | Self::ToyFactory
             | Self::FizzyDrinkFactory => IndustryKind::Factory,
@@ -135,18 +143,18 @@ impl IndustrySpec {
     #[must_use]
     pub const fn output_cargo(self) -> CargoType {
         match self {
-            Self::Forest
-            | Self::Farm
-            | Self::Sawmill
-            | Self::CottonCandy
-            | Self::BubbleGenerator => CargoType::Wood,
+            Self::Forest | Self::Sawmill | Self::CottonCandy | Self::BubbleGenerator => {
+                CargoType::Wood
+            }
+            Self::Farm => CargoType::Grain,
             Self::OilWells | Self::OilRefinery | Self::ColaWells => CargoType::Oil,
             Self::Factory | Self::CandyFactory | Self::ToyFactory | Self::FizzyDrinkFactory => {
                 CargoType::Goods
             }
+            Self::SteelMill => CargoType::Steel,
+            Self::Bank => CargoType::Valuables,
+            Self::IronOreMine | Self::CopperOreMine => CargoType::IronOre,
             Self::CoalMine
-            | Self::IronOreMine
-            | Self::CopperOreMine
             | Self::GoldMine
             | Self::BatteryFarm
             | Self::PlasticFountain

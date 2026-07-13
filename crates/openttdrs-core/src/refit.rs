@@ -5,19 +5,27 @@ use crate::depot::{rail_depot_for_entrance_tile, rail_depot_mouth_dir};
 use crate::map::{Map, TileKind};
 use crate::vehicle::{Vehicle, VehicleKind};
 
-const TRUCK_FREIGHT: [CargoType; 5] = [
+const TRUCK_FREIGHT: [CargoType; 9] = [
     CargoType::Mail,
     CargoType::Goods,
     CargoType::Coal,
     CargoType::Wood,
     CargoType::Oil,
+    CargoType::Grain,
+    CargoType::Livestock,
+    CargoType::IronOre,
+    CargoType::Steel,
 ];
 
-const TRAIN_FREIGHT: [CargoType; 4] = [
+const TRAIN_FREIGHT: [CargoType; 8] = [
     CargoType::Coal,
     CargoType::Wood,
     CargoType::Oil,
     CargoType::Goods,
+    CargoType::Grain,
+    CargoType::Livestock,
+    CargoType::IronOre,
+    CargoType::Steel,
 ];
 
 /// Tipos de carga que el vehículo puede adoptar en depósito.
@@ -27,16 +35,12 @@ pub fn refittable_cargo_types(vehicle: &Vehicle) -> &'static [CargoType] {
     match vehicle.kind {
         VehicleKind::Bus | VehicleKind::Tram => &[CargoType::Passengers],
         VehicleKind::Truck => &TRUCK_FREIGHT,
-        VehicleKind::Ship => &[CargoType::Goods],
+        VehicleKind::Ship => &[CargoType::Goods, CargoType::Oil, CargoType::Valuables],
         VehicleKind::Aircraft => &[CargoType::Passengers, CargoType::Mail],
         VehicleKind::Train => match engine.cargo {
             Some(CargoType::Passengers) => &[CargoType::Passengers],
             Some(CargoType::Mail) => &[CargoType::Mail],
-            Some(CargoType::Goods) => &[CargoType::Goods],
-            Some(CargoType::Coal) => &[CargoType::Coal],
-            Some(CargoType::Wood) => &[CargoType::Wood],
-            Some(CargoType::Oil) => &[CargoType::Oil],
-            None => &TRAIN_FREIGHT,
+            _ => &TRAIN_FREIGHT,
         },
     }
 }

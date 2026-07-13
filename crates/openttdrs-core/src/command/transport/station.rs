@@ -559,14 +559,7 @@ pub(crate) fn join_stations(
     }
     keep_st.sync_stock_from_packets();
     keep_st.income = keep_st.income.saturating_add(merge_income);
-    for cargo in [
-        crate::CargoType::Passengers,
-        crate::CargoType::Mail,
-        crate::CargoType::Goods,
-        crate::CargoType::Coal,
-        crate::CargoType::Wood,
-        crate::CargoType::Oil,
-    ] {
+    for cargo in crate::ALL_CARGO_TYPES {
         let a = keep_st.time_since_pickup.get(cargo);
         let b = merge_tsp.get(cargo);
         keep_st.time_since_pickup.set(cargo, a.max(b));

@@ -1,4 +1,4 @@
-use crate::cargo::{CargoStock, CargoType};
+use crate::cargo::{ALL_CARGO_TYPES, CargoStock, CargoType};
 use crate::cargo_packet::StationCargoList;
 use crate::industry::{Industry, IndustryKind};
 use crate::map::{Map, TileCoord, TileKind};
@@ -39,11 +39,16 @@ pub const fn default_station_catenary_flags(gfx: u8) -> u8 {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CargoTimeSincePickup {
     pub passengers: u8,
-    pub mail: u8,
-    pub goods: u8,
     pub coal: u8,
-    pub wood: u8,
+    pub mail: u8,
     pub oil: u8,
+    pub livestock: u8,
+    pub goods: u8,
+    pub grain: u8,
+    pub wood: u8,
+    pub iron_ore: u8,
+    pub steel: u8,
+    pub valuables: u8,
 }
 
 impl CargoTimeSincePickup {
@@ -51,36 +56,42 @@ impl CargoTimeSincePickup {
     pub const fn get(self, cargo: CargoType) -> u8 {
         match cargo {
             CargoType::Passengers => self.passengers,
-            CargoType::Mail => self.mail,
-            CargoType::Goods => self.goods,
             CargoType::Coal => self.coal,
-            CargoType::Wood => self.wood,
+            CargoType::Mail => self.mail,
             CargoType::Oil => self.oil,
+            CargoType::Livestock => self.livestock,
+            CargoType::Goods => self.goods,
+            CargoType::Grain => self.grain,
+            CargoType::Wood => self.wood,
+            CargoType::IronOre => self.iron_ore,
+            CargoType::Steel => self.steel,
+            CargoType::Valuables => self.valuables,
         }
     }
 
     pub fn set(&mut self, cargo: CargoType, days: u8) {
-        let slot = match cargo {
-            CargoType::Passengers => &mut self.passengers,
-            CargoType::Mail => &mut self.mail,
-            CargoType::Goods => &mut self.goods,
-            CargoType::Coal => &mut self.coal,
-            CargoType::Wood => &mut self.wood,
-            CargoType::Oil => &mut self.oil,
-        };
-        *slot = days;
+        *self.slot_mut(cargo) = days;
     }
 
     pub fn increment_waiting(&mut self, cargo: CargoType) {
-        let slot = match cargo {
-            CargoType::Passengers => &mut self.passengers,
-            CargoType::Mail => &mut self.mail,
-            CargoType::Goods => &mut self.goods,
-            CargoType::Coal => &mut self.coal,
-            CargoType::Wood => &mut self.wood,
-            CargoType::Oil => &mut self.oil,
-        };
+        let slot = self.slot_mut(cargo);
         *slot = slot.saturating_add(1);
+    }
+
+    fn slot_mut(&mut self, cargo: CargoType) -> &mut u8 {
+        match cargo {
+            CargoType::Passengers => &mut self.passengers,
+            CargoType::Coal => &mut self.coal,
+            CargoType::Mail => &mut self.mail,
+            CargoType::Oil => &mut self.oil,
+            CargoType::Livestock => &mut self.livestock,
+            CargoType::Goods => &mut self.goods,
+            CargoType::Grain => &mut self.grain,
+            CargoType::Wood => &mut self.wood,
+            CargoType::IronOre => &mut self.iron_ore,
+            CargoType::Steel => &mut self.steel,
+            CargoType::Valuables => &mut self.valuables,
+        }
     }
 }
 
@@ -192,15 +203,12 @@ impl Station {
     /// Sincroniza `cargo_stock` / `stock` desde la cola de packets.
     pub fn sync_stock_from_packets(&mut self) {
         self.cargo_stock = self.cargo_packets.as_stock();
-        self.stock = [
-            CargoType::Goods,
-            CargoType::Coal,
-            CargoType::Wood,
-            CargoType::Oil,
-        ]
-        .into_iter()
-        .map(|c| self.cargo_stock.get(c))
-        .fold(0_u32, u32::saturating_add);
+        self.stock = ALL_CARGO_TYPES
+            .iter()
+            .copied()
+            .filter(|c| c.is_freight())
+            .map(|c| self.cargo_stock.get(c))
+            .fold(0_u32, u32::saturating_add);
     }
 
     /// Añade carga en espera (producción pueblo / descarga freight).
@@ -790,17 +798,9 @@ pub fn station_rating_for_cargo(station: &Station, cargo: CargoType) -> u8 {
 
 /// Recalcula el rating global como mínimo entre cargas con stock en espera.
 pub fn recompute_station_rating(station: &mut Station) {
-    const CARGO_TYPES: [CargoType; 6] = [
-        CargoType::Passengers,
-        CargoType::Mail,
-        CargoType::Goods,
-        CargoType::Coal,
-        CargoType::Wood,
-        CargoType::Oil,
-    ];
     let mut min_rating = 255u8;
     let mut any_waiting = false;
-    for cargo in CARGO_TYPES {
+    for cargo in ALL_CARGO_TYPES {
         if station.cargo_stock.get(cargo) == 0 {
             continue;
         }
@@ -812,28 +812,20 @@ pub fn recompute_station_rating(station: &mut Station) {
 
 /// Incrementa antigüedad de carga en espera (una vez por día simulado).
 ///
-/// Si `time_since_pickup` satura en 255 (`MAX_TIME_SINCE_PICKUP_DAYS`), se
-/// descarta la carga de ese tipo (`TruncateCargo` / `selectgoods` en `OpenTTD`).
-pub fn tick_station_cargo_age(stations: &mut [Station]) {
-    const CARGO_TYPES: [CargoType; 6] = [
-        CargoType::Passengers,
-        CargoType::Mail,
-        CargoType::Goods,
-        CargoType::Coal,
-        CargoType::Wood,
-        CargoType::Oil,
-    ];
+/// Si `time_since_pickup` satura en 255 (`MAX_TIME_SINCE_PICKUP_DAYS`) y
+/// `selectgoods` está activo, se descarta la carga (`TruncateCargo` en `OpenTTD`).
+pub fn tick_station_cargo_age(stations: &mut [Station], selectgoods: bool) {
     for station in stations {
         station.ensure_packets_from_stock();
         if !station.cargo_packets.is_empty() {
             station.cargo_packets.age_waiting_one_day();
         }
-        for cargo in CARGO_TYPES {
+        for cargo in ALL_CARGO_TYPES {
             if station.cargo_stock.get(cargo) == 0 {
                 continue;
             }
             station.time_since_pickup.increment_waiting(cargo);
-            if station.time_since_pickup.get(cargo) == MAX_TIME_SINCE_PICKUP_DAYS {
+            if selectgoods && station.time_since_pickup.get(cargo) == MAX_TIME_SINCE_PICKUP_DAYS {
                 station.cargo_packets.truncate_cargo(cargo);
                 station.time_since_pickup.set(cargo, 0);
             }
@@ -915,8 +907,8 @@ pub fn station_is_freight_pickup_stop(
 ) -> bool {
     let coverage = station_coverage_at(map, industries, station_pos, STATION_COVERAGE_RADIUS);
     match cargo {
-        CargoType::Coal => coverage.supplies_coal > 0,
-        CargoType::Wood => coverage.supplies_wood > 0,
+        CargoType::Coal | CargoType::IronOre => coverage.supplies_coal > 0,
+        CargoType::Wood | CargoType::Grain | CargoType::Livestock => coverage.supplies_wood > 0,
         CargoType::Oil => coverage.supplies_oil > 0,
         _ => false,
     }
@@ -1185,16 +1177,16 @@ mod coherence_tests {
         let mut station = Station::new(TileCoord::new(0, 0));
         station.cargo_stock.coal = 50;
         station.ensure_packets_from_stock();
-        tick_station_cargo_age(std::slice::from_mut(&mut station));
+        tick_station_cargo_age(std::slice::from_mut(&mut station), true);
         assert_eq!(station.time_since_pickup.coal, 1);
         for _ in 0..253 {
-            tick_station_cargo_age(std::slice::from_mut(&mut station));
+            tick_station_cargo_age(std::slice::from_mut(&mut station), true);
         }
         assert_eq!(station.time_since_pickup.coal, 254);
         assert_eq!(station.cargo_stock.coal, 50);
         assert!(station.rating < 255);
         // Día 255: truncate (decay fuerte).
-        tick_station_cargo_age(std::slice::from_mut(&mut station));
+        tick_station_cargo_age(std::slice::from_mut(&mut station), true);
         assert_eq!(station.cargo_stock.coal, 0);
         assert!(station.cargo_packets.is_empty());
         assert_eq!(station.time_since_pickup.coal, 0);
@@ -1206,7 +1198,7 @@ mod coherence_tests {
         let mut station = Station::new(TileCoord::new(1, 1));
         station.add_waiting_cargo(CargoType::Wood, 40);
         station.time_since_pickup.set(CargoType::Wood, 254);
-        tick_station_cargo_age(std::slice::from_mut(&mut station));
+        tick_station_cargo_age(std::slice::from_mut(&mut station), true);
         assert_eq!(station.cargo_stock.wood, 0);
         station.add_waiting_cargo(CargoType::Wood, 10);
         assert_eq!(station.time_since_pickup.wood, 0);

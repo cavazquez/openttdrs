@@ -1,7 +1,7 @@
 //! Ventana Link Graph (flujos estación→estación observados; sin routing CargoDist).
 
 use bevy::prelude::*;
-use openttdrs_core::CargoType;
+use openttdrs_core::{ALL_CARGO_TYPES, CargoType};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -82,6 +82,11 @@ fn cargo_label(c: CargoType) -> &'static str {
         CargoType::Coal => "Coal",
         CargoType::Wood => "Wood",
         CargoType::Oil => "Oil",
+        CargoType::Livestock => "Live",
+        CargoType::Grain => "Grain",
+        CargoType::IronOre => "Ore",
+        CargoType::Steel => "Steel",
+        CargoType::Valuables => "Val",
     }
 }
 
@@ -94,13 +99,11 @@ fn filter_label(filter: Option<CargoType>) -> String {
 
 fn next_cargo_filter(current: Option<CargoType>) -> Option<CargoType> {
     match current {
-        None => Some(CargoType::Passengers),
-        Some(CargoType::Passengers) => Some(CargoType::Mail),
-        Some(CargoType::Mail) => Some(CargoType::Goods),
-        Some(CargoType::Goods) => Some(CargoType::Coal),
-        Some(CargoType::Coal) => Some(CargoType::Wood),
-        Some(CargoType::Wood) => Some(CargoType::Oil),
-        Some(CargoType::Oil) => None,
+        None => Some(ALL_CARGO_TYPES[0]),
+        Some(c) => {
+            let idx = ALL_CARGO_TYPES.iter().position(|x| *x == c)?;
+            ALL_CARGO_TYPES.get(idx + 1).copied()
+        }
     }
 }
 
@@ -214,7 +217,8 @@ mod tests {
     #[test]
     fn filter_cycles_through_cargos() {
         let mut f = None;
-        for _ in 0..7 {
+        // None → 11 cargos → None
+        for _ in 0..=ALL_CARGO_TYPES.len() {
             f = next_cargo_filter(f);
         }
         assert_eq!(f, None);

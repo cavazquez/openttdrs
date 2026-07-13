@@ -297,6 +297,8 @@ fn classify_industry_spec_from_gfx(gfx: u16) -> Option<IndustrySpec> {
         29..=32 => Some(IndustrySpec::OilWells),
         33..=38 => Some(IndustrySpec::Farm),
         39..=42 => Some(IndustrySpec::Factory),
+        52..=57 => Some(IndustrySpec::SteelMill),
+        58..=59 | 89..=90 => Some(IndustrySpec::Bank),
         47..=51 => Some(IndustrySpec::CopperOreMine),
         72..=88 => Some(IndustrySpec::GoldMine),
         100..=115 => Some(IndustrySpec::IronOreMine),

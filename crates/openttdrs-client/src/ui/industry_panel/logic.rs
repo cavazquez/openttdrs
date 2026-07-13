@@ -138,6 +138,8 @@ pub(crate) fn spec_label(spec: IndustrySpec) -> &'static str {
         IndustrySpec::OilRefinery => "Refinería",
         IndustrySpec::Factory => "Fábrica",
         IndustrySpec::Sawmill => "Aserradero",
+        IndustrySpec::SteelMill => "Acería",
+        IndustrySpec::Bank => "Banco",
         IndustrySpec::CottonCandy => "Algodón de azúcar",
         IndustrySpec::CandyFactory => "Fábrica de caramelos",
         IndustrySpec::BatteryFarm => "Granja de baterías",

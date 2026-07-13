@@ -1158,20 +1158,20 @@ mod tests {
 
         let payment = 100_i64;
         let share = feeder_share_of(payment);
-        assert_eq!(share, 25);
+        assert_eq!(share, 75);
         let ai_before = state.company_economy(ai).money;
         let player_before = state.economy.money;
         state.credit_company(ai, share);
         state.credit_company(CompanyId::PLAYER, payment - share);
-        assert_eq!(state.company_economy(ai).money, ai_before + 25);
-        assert_eq!(state.economy.money, player_before + 75);
+        assert_eq!(state.company_economy(ai).money, ai_before + 75);
+        assert_eq!(state.economy.money, player_before + 25);
         assert_eq!(
             state.companies[CompanyId::PLAYER.index()].economy.money,
-            player_before + 75
+            player_before + 25
         );
     }
 
-    /// Hub IA → destino jugador: al descargar se paga 25 % al feeder, se marca
+    /// Hub IA → destino jugador: al descargar se paga 75 % al feeder, se marca
     /// `feeder_paid` y se reinserta el packet con `first_station` intacto.
     #[test]
     fn feeder_share_paid_on_unload_preserves_packet_flags() {
@@ -1226,8 +1226,9 @@ mod tests {
         assert!(reinserted.feeder_paid, "feeder liquidado una sola vez");
         assert!(
             state.company_economy(ai).money > ai_before,
-            "IA feeder debe cobrar su 25 %"
+            "IA feeder debe cobrar su 75 %"
         );
+        assert!(reinserted.feeder_share > 0, "packet acumula feeder_share");
         assert!(
             state.company_economy(CompanyId::PLAYER).money > player_before,
             "jugador cobra el resto del ingreso"

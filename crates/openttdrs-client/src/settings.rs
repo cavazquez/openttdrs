@@ -51,6 +51,12 @@ pub(crate) struct ClientPreferences {
     pub(crate) window_layouts: String,
     /// Highscores locales: `name|value|year|B|R;…` (UI-8).
     pub(crate) highscores: String,
+    /// Ancho de ventana primaria (preferencias de menú).
+    pub(crate) window_width: u32,
+    /// Alto de ventana primaria.
+    pub(crate) window_height: u32,
+    /// Código de idioma (`es` por ahora; placeholder i18n).
+    pub(crate) language: String,
 }
 
 impl Default for ClientPreferences {
@@ -81,6 +87,9 @@ impl Default for ClientPreferences {
             news_vehicle_advice: crate::news_prefs::DISPLAY_SUMMARY,
             window_layouts: String::new(),
             highscores: String::new(),
+            window_width: 1280,
+            window_height: 720,
+            language: "es".into(),
         }
     }
 }
@@ -276,6 +285,10 @@ impl Plugin for ClientSettingsPlugin {
         app.add_systems(Startup, hydrate_runtime_from_preferences);
         app.add_systems(Startup, crate::news_prefs::hydrate_news_display_prefs);
         app.add_systems(
+            Startup,
+            apply_window_resolution_from_preferences.after(hydrate_runtime_from_preferences),
+        );
+        app.add_systems(
             Update,
             (
                 queue_save_preferences,
@@ -399,7 +412,31 @@ fn save_preferences_on_exit(
 /// Configura `ExitCondition::DontExit` para interceptar cierre y guardar prefs.
 pub(crate) fn patch_window_plugin_for_settings(mut window_plugin: WindowPlugin) -> WindowPlugin {
     window_plugin.exit_condition = ExitCondition::DontExit;
+    if let Some(window) = window_plugin.primary_window.as_mut() {
+        // Preferencias se hidratan tras Startup; el tamaño inicial sigue siendo 1280×720
+        // y el menú Preferencias lo actualiza en caliente + persiste para el próximo arranque
+        // vía `apply_window_resolution_from_preferences`.
+        let _ = window;
+    }
     window_plugin
+}
+
+/// Aplica resolución guardada tras hidratar preferencias (arranque).
+fn apply_window_resolution_from_preferences(
+    prefs: Res<ClientPreferences>,
+    hydrated: Res<SettingsHydrated>,
+    mut windows: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
+    mut applied: Local<bool>,
+) {
+    if *applied || !hydrated.0 {
+        return;
+    }
+    let w = prefs.window_width.max(640);
+    let h = prefs.window_height.max(480);
+    if let Ok(mut window) = windows.single_mut() {
+        window.resolution.set(w as f32, h as f32);
+    }
+    *applied = true;
 }
 
 #[cfg(test)]

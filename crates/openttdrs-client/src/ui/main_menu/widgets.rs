@@ -1,14 +1,14 @@
 use bevy::prelude::*;
 use openttdrs_core::Climate;
 
-use crate::state::bootstrap::PopulationDensity;
+use crate::state::bootstrap::{PopulationDensity, TerrainRoughness};
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::UiClickBeep;
 
 use super::labels::climate_label;
 use super::{
     MainMenuClimateButton, MainMenuDensityButton, MainMenuDensityTarget, MainMenuMapSizeButton,
-    MainMenuStartYearButton, MainMenuStartingMoneyButton, MainMenuToggle,
+    MainMenuRoughnessButton, MainMenuStartYearButton, MainMenuStartingMoneyButton, MainMenuToggle,
 };
 
 pub(super) fn density_button(
@@ -66,6 +66,33 @@ pub(super) fn starting_money_button(amount: i64) -> impl Bundle {
         Interaction::default(),
         children![(
             Text::new(label),
+            TextFont {
+                font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
+                ..default()
+            },
+            TextColor(Color::srgb(0.9, 0.86, 0.72)),
+        )],
+    )
+}
+
+pub(super) fn roughness_button(roughness: TerrainRoughness) -> impl Bundle {
+    (
+        Button,
+        UiClickBeep,
+        MainMenuRoughnessButton(roughness),
+        Node {
+            width: Val::Px(96.0),
+            height: Val::Px(28.0),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(1.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgb(0.26, 0.24, 0.19)),
+        BorderColor::all(Color::srgb(0.58, 0.54, 0.42)),
+        Interaction::default(),
+        children![(
+            Text::new(roughness.menu_label()),
             TextFont {
                 font_size: FontSize::Rem(UiFontRole::Caption.rem_size()),
                 ..default()

@@ -8,7 +8,7 @@ use bevy::prelude::*;
 use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 
-mod audio_settings_window;
+pub(crate) mod audio_settings_window;
 mod autoreplace_window;
 mod buy_window;
 mod cargo_payment_window;
@@ -118,10 +118,12 @@ use industry_panel::{
     setup_industry_panel, sync_industry_panel,
 };
 use main_menu::{
-    auto_start_preloaded_json, main_menu_continue_interaction, main_menu_highscores_interaction,
-    main_menu_interaction, main_menu_options_interaction, setup_main_menu,
-    sync_main_menu_continue_button, sync_main_menu_highscores, sync_main_menu_panel_visibility,
-    sync_main_menu_summary,
+    apply_pending_heightmap_on_enter, auto_start_preloaded_json, main_menu_continue_interaction,
+    main_menu_highscores_interaction, main_menu_interaction, main_menu_options_interaction,
+    main_menu_preferences_interaction, main_menu_scenarios_interaction,
+    main_menu_sound_interaction, setup_main_menu, sync_main_menu_continue_button,
+    sync_main_menu_heightmap_slots, sync_main_menu_highscores, sync_main_menu_panel_visibility,
+    sync_main_menu_preferences, sync_main_menu_summary,
 };
 use main_menu_intro::{
     animate_main_menu_intro_traffic, cleanup_main_menu_on_exit, pan_main_menu_intro_camera,
@@ -316,8 +318,13 @@ impl Plugin for ClientUiPlugin {
                 setup_main_menu_intro,
                 setup_main_menu,
                 setup_save_window,
+                setup_sound_music_window,
                 load_hud_sfx,
             ),
+        )
+        .add_systems(
+            OnEnter(ClientScreen::InGame),
+            apply_pending_heightmap_on_enter,
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
@@ -392,11 +399,27 @@ impl Plugin for ClientUiPlugin {
                 auto_start_preloaded_json,
                 (main_menu_interaction, main_menu_continue_interaction).chain(),
                 main_menu_highscores_interaction,
+                main_menu_scenarios_interaction,
+                main_menu_preferences_interaction,
+                main_menu_sound_interaction,
                 main_menu_options_interaction,
                 sync_main_menu_panel_visibility,
                 sync_main_menu_summary,
                 sync_main_menu_continue_button,
                 sync_main_menu_highscores,
+                sync_main_menu_heightmap_slots,
+                sync_main_menu_preferences,
+            )
+                .run_if(in_state(ClientScreen::MainMenu)),
+        )
+        .add_systems(
+            Update,
+            (
+                handle_audio_settings_buttons,
+                handle_volume_sliders,
+                handle_music_window_buttons,
+                sound_music_window_on_closed,
+                sync_sound_music_window,
                 toolbar_click_beep,
                 play_hud_sfx,
             )

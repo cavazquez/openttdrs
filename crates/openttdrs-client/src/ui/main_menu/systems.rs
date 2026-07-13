@@ -5,6 +5,7 @@ use openttdrs_core::Climate;
 use crate::render::{MapVisualLayer, ShoreTile, WaterTile};
 use crate::state::bootstrap::{
     MapSizePreset, NewGameSettings, PopulationDensity, START_YEARS, STARTING_MONEY_OPTIONS,
+    TerrainRoughness,
 };
 use crate::state::{
     ClientScreen, SimWorld, SuspendedGameSession, new_game::NewGameSettingsResource,
@@ -20,11 +21,14 @@ use super::widgets::{
 use super::{
     MainMenuBackButton, MainMenuCamera, MainMenuClimateButton, MainMenuContinueButton,
     MainMenuContinueWrap, MainMenuDemoButton, MainMenuDensityButton, MainMenuDensityTarget,
-    MainMenuHighscoresButton, MainMenuHighscoresText, MainMenuHintsText, MainMenuLoadButton,
-    MainMenuMapSizeButton, MainMenuNewGameButton, MainMenuPanel, MainMenuQuitButton,
-    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuSeedDecButton, MainMenuSeedIncButton,
-    MainMenuStartButton, MainMenuStartYearButton, MainMenuStartingMoneyButton, MainMenuSubPanel,
-    MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
+    MainMenuHeightmapSlot, MainMenuHighscoresButton, MainMenuHighscoresText, MainMenuHintsText,
+    MainMenuLoadButton, MainMenuMapSizeButton, MainMenuNewGameButton,
+    MainMenuOpenHeightmapsDirButton, MainMenuOpenScenariosDirButton, MainMenuPanel,
+    MainMenuPreferencesButton, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
+    MainMenuResolutionButton, MainMenuRoughnessButton, MainMenuScenariosButton,
+    MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuSoundButton, MainMenuStartButton,
+    MainMenuStartYearButton, MainMenuStartingMoneyButton, MainMenuSubPanel, MainMenuSummaryText,
+    MainMenuTitleText, MainMenuToggle, MainMenuUi,
 };
 
 pub(crate) fn sync_main_menu_panel_visibility(
@@ -99,6 +103,7 @@ pub(crate) fn main_menu_options_interaction(
             &mut BackgroundColor,
         )>,
     )>,
+    mut roughness_q: Query<(&Interaction, &MainMenuRoughnessButton, &mut BackgroundColor)>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
     if *panel != MainMenuPanel::NewGame {
@@ -233,6 +238,13 @@ pub(crate) fn main_menu_options_interaction(
             settings.0.starting_money = btn.0;
         }
         *bg = option_button_bg(settings.0.starting_money == btn.0, *interaction);
+    }
+
+    for (interaction, btn, mut bg) in &mut roughness_q {
+        if *interaction == Interaction::Pressed {
+            settings.0.terrain_roughness = btn.0;
+        }
+        *bg = option_button_bg(settings.0.terrain_roughness == btn.0, *interaction);
     }
 }
 
@@ -439,6 +451,14 @@ pub(crate) fn main_menu_interaction(
             *panel = MainMenuPanel::Root;
             return;
         }
+        MainMenuPanel::Scenarios if esc => {
+            *panel = MainMenuPanel::Root;
+            return;
+        }
+        MainMenuPanel::Preferences if esc => {
+            *panel = MainMenuPanel::Root;
+            return;
+        }
         MainMenuPanel::QuitConfirm if esc => {
             *panel = MainMenuPanel::Root;
             return;
@@ -477,6 +497,7 @@ pub(crate) fn main_menu_interaction(
                         industry_density: PopulationDensity::Normal,
                         starting_money: STARTING_MONEY_OPTIONS[1],
                         rival_ai: true,
+                        terrain_roughness: TerrainRoughness::Normal,
                     };
                     enter_new_game(
                         &mut commands,
@@ -545,7 +566,7 @@ pub(crate) fn main_menu_interaction(
                 hover_secondary(interaction, &mut bg);
             }
         }
-        MainMenuPanel::Highscores => {
+        MainMenuPanel::Highscores | MainMenuPanel::Scenarios | MainMenuPanel::Preferences => {
             for (interaction, mut bg) in &mut button_sets.p4() {
                 if *interaction == Interaction::Pressed {
                     *panel = MainMenuPanel::Root;
@@ -613,5 +634,273 @@ pub(crate) fn sync_main_menu_highscores(
         .unwrap_or_else(|| "(preferencias no cargadas)".into());
     for mut text in &mut q {
         **text = body.clone();
+    }
+}
+
+fn scenarios_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from("save/scenarios")
+}
+
+fn heightmaps_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from("save/heightmaps")
+}
+
+fn list_heightmap_files() -> Vec<std::path::PathBuf> {
+    let dir = heightmaps_dir();
+    let Ok(rd) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut paths: Vec<_> = rd
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| {
+            p.extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case("hmap"))
+        })
+        .collect();
+    paths.sort();
+    paths
+}
+
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
+pub(crate) fn main_menu_scenarios_interaction(
+    mut panel: ResMut<MainMenuPanel>,
+    mut save_window: ResMut<SaveWindowState>,
+    mut settings: ResMut<NewGameSettingsResource>,
+    mut next_screen: ResMut<NextState<ClientScreen>>,
+    mut suspended: ResMut<SuspendedGameSession>,
+    q_menu: Query<Entity, With<MainMenuUi>>,
+    q_menu_cam: Query<Entity, With<MainMenuCamera>>,
+    intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
+    mut root_btn: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<MainMenuScenariosButton>),
+    >,
+    mut open_scn: Query<
+        (&Interaction, &mut BackgroundColor),
+        (
+            Changed<Interaction>,
+            With<MainMenuOpenScenariosDirButton>,
+            Without<MainMenuScenariosButton>,
+        ),
+    >,
+    mut open_hmap: Query<
+        (&Interaction, &mut BackgroundColor),
+        (
+            Changed<Interaction>,
+            With<MainMenuOpenHeightmapsDirButton>,
+            Without<MainMenuScenariosButton>,
+            Without<MainMenuOpenScenariosDirButton>,
+        ),
+    >,
+    mut slots: Query<(&Interaction, &MainMenuHeightmapSlot, &mut BackgroundColor)>,
+    mut commands: Commands,
+) {
+    if *panel == MainMenuPanel::Root {
+        for (interaction, mut bg) in &mut root_btn {
+            if *interaction == Interaction::Pressed {
+                let _ = std::fs::create_dir_all(scenarios_dir());
+                let _ = std::fs::create_dir_all(heightmaps_dir());
+                *panel = MainMenuPanel::Scenarios;
+                return;
+            }
+            hover_secondary(interaction, &mut bg);
+        }
+        return;
+    }
+    if *panel != MainMenuPanel::Scenarios {
+        return;
+    }
+    for (interaction, mut bg) in &mut open_scn {
+        if *interaction == Interaction::Pressed {
+            let dir = scenarios_dir();
+            let _ = std::fs::create_dir_all(&dir);
+            let path = dir.join("_menu.json");
+            save_window.open_in_mode(
+                SaveWindowMode::Load,
+                &save_dir_from(&path.to_string_lossy()),
+            );
+            return;
+        }
+        hover_primary(interaction, &mut bg);
+    }
+    for (interaction, mut bg) in &mut open_hmap {
+        if *interaction == Interaction::Pressed {
+            let dir = heightmaps_dir();
+            let _ = std::fs::create_dir_all(&dir);
+            let path = dir.join("README.txt");
+            let _ = std::fs::write(
+                &path,
+                "Coloca archivos .hmap (OTDRHMAP1) aquí y elígelos en la lista del menú.\n",
+            );
+            return;
+        }
+        hover_secondary(interaction, &mut bg);
+    }
+    let files = list_heightmap_files();
+    for (interaction, slot, mut bg) in &mut slots {
+        if *interaction != Interaction::Pressed {
+            hover_secondary(interaction, &mut bg);
+            continue;
+        }
+        let Some(path) = files.get(slot.0) else {
+            continue;
+        };
+        let Ok(text) = std::fs::read_to_string(path) else {
+            continue;
+        };
+        let Ok(data) = openttdrs_core::parse_hmap(&text) else {
+            continue;
+        };
+        settings.0 = NewGameSettings {
+            world_gen: false,
+            island: false,
+            preserve_demo: false,
+            map_size: MapSizePreset::SMALL,
+            ..NewGameSettings::default()
+        };
+        commands.insert_resource(PendingHeightmap(data));
+        enter_new_game(
+            &mut commands,
+            &q_menu,
+            &q_menu_cam,
+            &intro_layers,
+            settings.settings(),
+            &mut next_screen,
+            &mut suspended,
+        );
+        return;
+    }
+}
+
+#[derive(Resource)]
+pub(crate) struct PendingHeightmap(pub openttdrs_core::HeightmapData);
+
+pub(crate) fn apply_pending_heightmap_on_enter(
+    mut commands: Commands,
+    pending: Option<Res<PendingHeightmap>>,
+    mut sim: ResMut<SimWorld>,
+) {
+    let Some(pending) = pending else {
+        return;
+    };
+    let data = pending.0.clone();
+    let climate = sim.state.climate;
+    let seed = sim.state.world_seed;
+    if openttdrs_core::apply_heightmap(&mut sim.state.map, &data, 1, climate, seed).is_ok() {
+        sim.state.towns.clear();
+        sim.state.industries.clear();
+        sim.state.stations.clear();
+    }
+    commands.remove_resource::<PendingHeightmap>();
+}
+
+pub(crate) fn sync_main_menu_heightmap_slots(
+    panel: Res<MainMenuPanel>,
+    mut q: Query<(&MainMenuHeightmapSlot, &mut Node, &Children)>,
+    mut texts: Query<&mut Text>,
+) {
+    if *panel != MainMenuPanel::Scenarios {
+        return;
+    }
+    let files = list_heightmap_files();
+    for (slot, mut node, children) in &mut q {
+        if let Some(path) = files.get(slot.0) {
+            node.display = Display::Flex;
+            let name = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("heightmap.hmap");
+            for child in children.iter() {
+                if let Ok(mut text) = texts.get_mut(child) {
+                    **text = name.to_string();
+                }
+            }
+        } else {
+            node.display = Display::None;
+        }
+    }
+}
+
+pub(crate) fn main_menu_preferences_interaction(
+    mut panel: ResMut<MainMenuPanel>,
+    mut prefs: ResMut<crate::settings::ClientPreferences>,
+    mut windows: Query<&mut Window, With<bevy::window::PrimaryWindow>>,
+    mut root_btn: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<MainMenuPreferencesButton>),
+    >,
+    mut res_btn: Query<(
+        &Interaction,
+        &MainMenuResolutionButton,
+        &mut BackgroundColor,
+    )>,
+) {
+    if *panel == MainMenuPanel::Root {
+        for (interaction, mut bg) in &mut root_btn {
+            if *interaction == Interaction::Pressed {
+                *panel = MainMenuPanel::Preferences;
+                return;
+            }
+            hover_secondary(interaction, &mut bg);
+        }
+        return;
+    }
+    if *panel != MainMenuPanel::Preferences {
+        return;
+    }
+    for (interaction, btn, mut bg) in &mut res_btn {
+        let selected = prefs.window_width == btn.width && prefs.window_height == btn.height;
+        if *interaction == Interaction::Pressed {
+            prefs.window_width = btn.width;
+            prefs.window_height = btn.height;
+            prefs.set_changed();
+            if let Ok(mut window) = windows.single_mut() {
+                window.resolution.set(btn.width as f32, btn.height as f32);
+            }
+        }
+        *bg = option_button_bg(
+            selected || (*interaction == Interaction::Pressed),
+            *interaction,
+        );
+    }
+}
+
+pub(crate) fn sync_main_menu_preferences(
+    panel: Res<MainMenuPanel>,
+    prefs: Res<crate::settings::ClientPreferences>,
+    mut res_btn: Query<(
+        &MainMenuResolutionButton,
+        &mut BackgroundColor,
+        &Interaction,
+    )>,
+) {
+    if *panel != MainMenuPanel::Preferences {
+        return;
+    }
+    for (btn, mut bg, interaction) in &mut res_btn {
+        let selected = prefs.window_width == btn.width && prefs.window_height == btn.height;
+        *bg = option_button_bg(selected, *interaction);
+    }
+}
+
+pub(crate) fn main_menu_sound_interaction(
+    panel: Res<MainMenuPanel>,
+    mut sound: ResMut<crate::ui::audio_settings_window::SoundMusicWindowState>,
+    mut buttons: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<MainMenuSoundButton>),
+    >,
+) {
+    if *panel != MainMenuPanel::Root {
+        return;
+    }
+    for (interaction, mut bg) in &mut buttons {
+        if *interaction == Interaction::Pressed {
+            sound.open = true;
+            return;
+        }
+        hover_secondary(interaction, &mut bg);
     }
 }

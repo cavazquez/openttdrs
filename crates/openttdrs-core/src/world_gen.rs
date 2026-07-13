@@ -88,6 +88,8 @@ pub struct WorldGenConfig {
     pub sea_level: u8,
     /// Bordes del mapa más bajos → costas / isla jugable.
     pub island: bool,
+    /// Amplitud de relieve (`n * height_span` sobre el nivel del mar); típico 3/6/10.
+    pub height_span: u8,
 }
 
 impl Default for WorldGenConfig {
@@ -97,6 +99,7 @@ impl Default for WorldGenConfig {
             seed: 0,
             sea_level: 1,
             island: false,
+            height_span: 6,
         }
     }
 }
@@ -160,7 +163,14 @@ pub fn apply_world_gen(
             if preserve.iter().any(|r| r.contains(x, y)) {
                 continue;
             }
-            let h = corner_height_from_grid(&corners, corners_w, x, y, config.sea_level);
+            let h = corner_height_from_grid(
+                &corners,
+                corners_w,
+                x,
+                y,
+                config.sea_level,
+                config.height_span,
+            );
             let c = TileCoord::new(x, y);
             map.set_height(c, h)?;
         }
@@ -361,11 +371,19 @@ fn mark_water_coasts(map: &mut Map, mw: i32, mh: i32, _sea_level: u8, preserve: 
     }
 }
 
-fn corner_height_from_grid(corners: &[f32], corners_w: i32, x: i32, y: i32, sea_level: u8) -> u8 {
+fn corner_height_from_grid(
+    corners: &[f32],
+    corners_w: i32,
+    x: i32,
+    y: i32,
+    sea_level: u8,
+    height_span: u8,
+) -> u8 {
     let idx = (y * corners_w + x) as usize;
     let n = corners.get(idx).copied().unwrap_or(0.5);
     // `n`≈0 → nivel del mar / lagos; `n`≈1 → colinas.
-    let base = f32::from(sea_level) + n * 6.0;
+    let span = f32::from(height_span.max(1));
+    let base = f32::from(sea_level) + n * span;
     base.round().clamp(0.0, 15.0) as u8
 }
 
@@ -457,6 +475,102 @@ fn forest_patch(x: i32, y: i32, seed: u64, climate: Climate) -> bool {
 
 fn desert_patch(x: i32, y: i32, seed: u64) -> bool {
     hash_u64(seed.wrapping_add(i64_pair_hash(x.wrapping_mul(13), y.wrapping_mul(17)))) % 5 == 0
+}
+
+/// Heightmap ASCII: primera línea `OTDRHMAP1`, segunda `WIDTH HEIGHT`, luego `WIDTH*HEIGHT`
+/// enteros 0..=15 (separados por whitespace).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeightmapData {
+    pub width: u32,
+    pub height: u32,
+    pub heights: Vec<u8>,
+}
+
+/// Parsea un heightmap `.hmap` en texto.
+///
+/// # Errors
+/// Cabecera inválida, dimensiones incoherentes o alturas fuera de rango.
+pub fn parse_hmap(text: &str) -> Result<HeightmapData, String> {
+    let mut tokens = text.split_whitespace();
+    let magic = tokens.next().ok_or_else(|| "heightmap vacío".to_string())?;
+    if magic != "OTDRHMAP1" {
+        return Err(format!(
+            "cabecera heightmap esperada OTDRHMAP1, got {magic}"
+        ));
+    }
+    let width: u32 = tokens
+        .next()
+        .ok_or_else(|| "falta WIDTH".to_string())?
+        .parse()
+        .map_err(|_| "WIDTH inválido".to_string())?;
+    let height: u32 = tokens
+        .next()
+        .ok_or_else(|| "falta HEIGHT".to_string())?
+        .parse()
+        .map_err(|_| "HEIGHT inválido".to_string())?;
+    if width == 0 || height == 0 || width > 4096 || height > 4096 {
+        return Err(format!(
+            "dimensiones heightmap fuera de rango: {width}×{height}"
+        ));
+    }
+    let expected = (width as usize).saturating_mul(height as usize);
+    let mut heights = Vec::with_capacity(expected);
+    for tok in tokens {
+        let h: u8 = tok.parse().map_err(|_| format!("altura inválida: {tok}"))?;
+        if h > 15 {
+            return Err(format!("altura {h} > 15"));
+        }
+        heights.push(h);
+    }
+    if heights.len() != expected {
+        return Err(format!(
+            "se esperaban {expected} alturas, hay {}",
+            heights.len()
+        ));
+    }
+    Ok(HeightmapData {
+        width,
+        height,
+        heights,
+    })
+}
+
+/// Aplica un heightmap al mapa (redimensiona si hace falta) y marca agua ≤ `sea_level`.
+///
+/// # Errors
+/// Fallos de mapa al setear altura/tipo.
+pub fn apply_heightmap(
+    map: &mut Map,
+    data: &HeightmapData,
+    sea_level: u8,
+    climate: Climate,
+    seed: u64,
+) -> Result<(), MapError> {
+    if map.dimensions() != (data.width, data.height) {
+        *map = Map::new_flat(data.width, data.height, sea_level.saturating_add(2));
+    }
+    let mw = i32::try_from(data.width).expect("width fits i32");
+    let mh = i32::try_from(data.height).expect("height fits i32");
+    for y in 0..mh {
+        for x in 0..mw {
+            let idx = (y as u32 * data.width + x as u32) as usize;
+            let h = data.heights.get(idx).copied().unwrap_or(sea_level);
+            let c = TileCoord::new(x, y);
+            map.set_height(c, h)?;
+            if h <= sea_level {
+                map.set_kind(c, TileKind::Water)?;
+                map.set_mapt_m5(c, 0x60, 0)?;
+                map.set_m1(c, set_water_class_m1(0, WaterClass::Sea))?;
+            } else {
+                let ground = effective_clear_ground(climate, 0, x, y, seed);
+                let m5 = clear_ground_m5(ground, grass_density(x, y, seed));
+                map.set_kind(c, TileKind::Grass)?;
+                map.set_mapt_m5(c, 0x40, m5)?;
+            }
+        }
+    }
+    mark_water_coasts(map, mw, mh, sea_level, &[]);
+    Ok(())
 }
 
 #[cfg(test)]
@@ -644,5 +758,50 @@ mod tests {
             effective_clear_ground(Climate::SubArctic, 0, 0, 0, 0),
             CLEAR_GROUND_SNOW
         );
+    }
+
+    #[test]
+    fn parse_and_apply_hmap_roundtrip() {
+        let text = "OTDRHMAP1\n4 3\n\
+            0 0 1 1\n\
+            0 2 3 1\n\
+            1 2 2 0\n";
+        let data = parse_hmap(text).expect("parse");
+        assert_eq!(data.width, 4);
+        assert_eq!(data.height, 3);
+        assert_eq!(data.heights.len(), 12);
+        let mut map = Map::new_flat(4, 3, 2);
+        apply_heightmap(&mut map, &data, 0, Climate::Temperate, 1).expect("apply");
+        assert_eq!(map.get(TileCoord::new(0, 0)).map(|t| t.height), Some(0));
+        assert_eq!(map.get_kind(TileCoord::new(0, 0)), Some(TileKind::Water));
+        assert_eq!(map.get(TileCoord::new(1, 1)).map(|t| t.height), Some(2));
+        assert_eq!(map.get_kind(TileCoord::new(1, 1)), Some(TileKind::Grass));
+    }
+
+    #[test]
+    fn hilly_height_span_raises_peaks() {
+        let mut flat = Map::new_flat(16, 12, 2);
+        let mut hilly = Map::new_flat(16, 12, 2);
+        let base = WorldGenConfig {
+            seed: 123,
+            height_span: 3,
+            island: false,
+            ..Default::default()
+        };
+        let tall = WorldGenConfig {
+            height_span: 10,
+            ..base
+        };
+        apply_world_gen(&mut flat, &base, &[]).expect("flat");
+        apply_world_gen(&mut hilly, &tall, &[]).expect("hilly");
+        let max_h = |map: &Map| {
+            let (w, h) = map.dimensions();
+            (0..h)
+                .flat_map(|y| (0..w).map(move |x| TileCoord::new(x as i32, y as i32)))
+                .filter_map(|c| map.get(c).map(|t| t.height))
+                .max()
+                .unwrap_or(0)
+        };
+        assert!(max_h(&hilly) >= max_h(&flat));
     }
 }

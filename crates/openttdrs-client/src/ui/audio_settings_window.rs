@@ -213,7 +213,17 @@ fn spawn_jukebox_section(parent: &mut ChildSpawnerCommands, asset_server: &Asset
         });
 }
 
-pub(crate) fn setup_sound_music_window(mut commands: Commands, asset_server: Res<AssetServer>) {
+pub(crate) fn setup_sound_music_window(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    existing: Query<&FloatingWindow>,
+) {
+    if existing
+        .iter()
+        .any(|w| w.id == FloatingWindowId::SoundMusic)
+    {
+        return;
+    }
     let asset_server = &*asset_server;
     let (_root, content) = spawn_floating_window(
         &mut commands,

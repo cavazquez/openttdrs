@@ -10,16 +10,18 @@ mod tests;
 
 pub(crate) use setup::setup_main_menu;
 pub(crate) use systems::{
-    auto_start_preloaded_json, leave_main_menu, main_menu_continue_interaction,
-    main_menu_highscores_interaction, main_menu_interaction, main_menu_options_interaction,
-    return_to_main_menu, sync_main_menu_continue_button, sync_main_menu_highscores,
-    sync_main_menu_panel_visibility, sync_main_menu_summary,
+    apply_pending_heightmap_on_enter, auto_start_preloaded_json, leave_main_menu,
+    main_menu_continue_interaction, main_menu_highscores_interaction, main_menu_interaction,
+    main_menu_options_interaction, main_menu_preferences_interaction,
+    main_menu_scenarios_interaction, main_menu_sound_interaction, return_to_main_menu,
+    sync_main_menu_continue_button, sync_main_menu_heightmap_slots, sync_main_menu_highscores,
+    sync_main_menu_panel_visibility, sync_main_menu_preferences, sync_main_menu_summary,
 };
 
 use bevy::prelude::*;
 use openttdrs_core::Climate;
 
-use crate::state::bootstrap::{MapAxisSize, PopulationDensity};
+use crate::state::bootstrap::{MapAxisSize, PopulationDensity, TerrainRoughness};
 
 #[derive(Component)]
 pub(crate) struct MainMenuUi;
@@ -33,6 +35,8 @@ pub(crate) enum MainMenuPanel {
     Root,
     NewGame,
     Highscores,
+    Scenarios,
+    Preferences,
     QuitConfirm,
 }
 
@@ -119,6 +123,36 @@ pub(crate) struct MainMenuDensityButton(pub PopulationDensity, pub MainMenuDensi
 
 #[derive(Component, Clone, Copy)]
 pub(crate) struct MainMenuStartingMoneyButton(pub i64);
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct MainMenuRoughnessButton(pub TerrainRoughness);
+
+#[derive(Component)]
+pub(crate) struct MainMenuScenariosButton;
+
+#[derive(Component)]
+pub(crate) struct MainMenuPreferencesButton;
+
+#[derive(Component)]
+pub(crate) struct MainMenuSoundButton;
+
+#[derive(Component)]
+pub(crate) struct MainMenuOpenScenariosDirButton;
+
+#[derive(Component)]
+pub(crate) struct MainMenuOpenHeightmapsDirButton;
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct MainMenuHeightmapSlot(pub usize);
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct MainMenuResolutionButton {
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Component)]
+pub(crate) struct MainMenuLanguageLabel;
 
 #[derive(Component)]
 pub(crate) struct MainMenuSummaryText;

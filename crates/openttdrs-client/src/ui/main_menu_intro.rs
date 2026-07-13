@@ -40,6 +40,7 @@ const INTRO_SETTINGS: NewGameSettings = NewGameSettings {
     industry_density: PopulationDensity::Normal,
     starting_money: STARTING_MONEY_OPTIONS[1],
     rival_ai: false,
+    terrain_roughness: crate::state::bootstrap::TerrainRoughness::Normal,
 };
 
 const INTRO_PAN_AMPLITUDE_X: f32 = 48.0;
@@ -49,7 +50,9 @@ const INTRO_PAN_PERIOD_SECS: f32 = 42.0;
 #[derive(Clone, Copy)]
 enum IntroVehicleKind {
     Bus,
+    Truck,
     Train,
+    Ship,
 }
 
 #[derive(Component, Clone, Copy)]
@@ -71,7 +74,7 @@ struct IntroTrafficRoute {
     start_progress: f32,
 }
 
-const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 4] = [
+const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 8] = [
     IntroTrafficRoute {
         from: (16, 34),
         to: (48, 34),
@@ -89,6 +92,22 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 4] = [
         start_progress: 0.55,
     },
     IntroTrafficRoute {
+        from: (20, 40),
+        to: (44, 40),
+        speed: 0.1,
+        direction: 4,
+        kind: IntroVehicleKind::Truck,
+        start_progress: 0.3,
+    },
+    IntroTrafficRoute {
+        from: (44, 20),
+        to: (22, 20),
+        speed: 0.08,
+        direction: 0,
+        kind: IntroVehicleKind::Truck,
+        start_progress: 0.8,
+    },
+    IntroTrafficRoute {
         from: (26, 22),
         to: (40, 38),
         speed: 0.07,
@@ -103,6 +122,22 @@ const INTRO_TRAFFIC_ROUTES: [IntroTrafficRoute; 4] = [
         direction: 2,
         kind: IntroVehicleKind::Train,
         start_progress: 0.7,
+    },
+    IntroTrafficRoute {
+        from: (12, 30),
+        to: (12, 44),
+        speed: 0.05,
+        direction: 6,
+        kind: IntroVehicleKind::Ship,
+        start_progress: 0.15,
+    },
+    IntroTrafficRoute {
+        from: (52, 44),
+        to: (52, 26),
+        speed: 0.045,
+        direction: 2,
+        kind: IntroVehicleKind::Ship,
+        start_progress: 0.65,
     },
 ];
 
@@ -176,7 +211,9 @@ fn spawn_intro_traffic(commands: &mut Commands, map: &Map, trucks: &TruckHandles
 fn intro_sprite_handle(trucks: &TruckHandles, actor: &MainMenuIntroTrafficActor) -> Handle<Image> {
     match actor.kind {
         IntroVehicleKind::Bus => trucks.intro_sprite(VehicleKind::Bus, actor.direction),
+        IntroVehicleKind::Truck => trucks.intro_sprite(VehicleKind::Truck, actor.direction),
         IntroVehicleKind::Train => trucks.intro_sprite(VehicleKind::Train, actor.direction),
+        IntroVehicleKind::Ship => trucks.intro_sprite(VehicleKind::Ship, actor.direction),
     }
 }
 
@@ -260,4 +297,19 @@ pub(crate) fn cleanup_main_menu_on_exit(mut commands: Commands) {
     commands.remove_resource::<MainMenuIntroState>();
     commands.remove_resource::<MainMenuIntroMap>();
     commands.remove_resource::<TruckHandles>();
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn intro_traffic_covers_road_rail_and_water() {
+        let kinds: Vec<_> = super::INTRO_TRAFFIC_ROUTES
+            .iter()
+            .map(|r| std::mem::discriminant(&r.kind))
+            .collect();
+        assert_eq!(super::INTRO_TRAFFIC_ROUTES.len(), 8);
+        assert_eq!(kinds.len(), 8);
+        let unique: std::collections::HashSet<_> = kinds.into_iter().collect();
+        assert_eq!(unique.len(), 4, "bus, truck, train y ship");
+    }
 }

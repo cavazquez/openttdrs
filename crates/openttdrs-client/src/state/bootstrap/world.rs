@@ -188,6 +188,40 @@ impl PopulationDensity {
     }
 }
 
+/// Relieve procedural (amplitud de colinas).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum TerrainRoughness {
+    Flat,
+    #[default]
+    Normal,
+    Hilly,
+}
+
+impl TerrainRoughness {
+    #[must_use]
+    pub const fn all() -> [Self; 3] {
+        [Self::Flat, Self::Normal, Self::Hilly]
+    }
+
+    #[must_use]
+    pub const fn menu_label(self) -> &'static str {
+        match self {
+            Self::Flat => "Llano",
+            Self::Normal => "Normal",
+            Self::Hilly => "Montañoso",
+        }
+    }
+
+    #[must_use]
+    pub const fn height_span(self) -> u8 {
+        match self {
+            Self::Flat => 3,
+            Self::Normal => 6,
+            Self::Hilly => 10,
+        }
+    }
+}
+
 /// Opciones de «Nueva partida» (menú principal o tests).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NewGameSettings {
@@ -204,6 +238,7 @@ pub struct NewGameSettings {
     pub starting_money: i64,
     /// Si true, añade rival IA TransCargo al iniciar.
     pub rival_ai: bool,
+    pub terrain_roughness: TerrainRoughness,
 }
 
 impl Default for NewGameSettings {
@@ -220,6 +255,7 @@ impl Default for NewGameSettings {
             industry_density: PopulationDensity::Normal,
             starting_money: STARTING_MONEY_OPTIONS[1],
             rival_ai: true,
+            terrain_roughness: TerrainRoughness::Normal,
         }
     }
 }
@@ -264,6 +300,7 @@ impl NewGameSettings {
             industry_density: PopulationDensity::Normal,
             starting_money: STARTING_MONEY_OPTIONS[1],
             rival_ai: true,
+            terrain_roughness: TerrainRoughness::Normal,
         }
     }
 }
@@ -295,6 +332,7 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
                 seed,
                 sea_level: 1,
                 island: settings.island,
+                height_span: settings.terrain_roughness.height_span(),
             },
             &preserve,
         );
@@ -308,9 +346,8 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
         place_gameplay_showcase(&mut state);
         place_tunnel_demo_ridge(&mut state);
         place_bridge_demo_gap(&mut state);
-    } else {
-        state.economy.money = settings.starting_money;
     }
+    state.economy.money = settings.starting_money;
     state.ensure_companies();
     state.sync_active_from_mirrors();
     if settings.rival_ai {
@@ -343,6 +380,7 @@ pub(crate) fn build_empty_procedural_world(
                 seed,
                 sea_level: 1,
                 island: settings.island,
+                height_span: settings.terrain_roughness.height_span(),
             },
             &[],
         );

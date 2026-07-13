@@ -1,6 +1,8 @@
 use openttdrs_core::{Climate, format_money};
 
-use crate::state::bootstrap::{MapSizePreset, NewGameSettings, PopulationDensity};
+use crate::state::bootstrap::{
+    MapSizePreset, NewGameSettings, PopulationDensity, TerrainRoughness,
+};
 use crate::ui::font::UiFontRole;
 
 use super::MainMenuPanel;
@@ -36,7 +38,8 @@ pub(crate) fn summary_text(settings: NewGameSettings) -> String {
         "mapa plano"
     };
     format!(
-        "Mapa {} · clima {} · inicio {} · {} · semilla={}\nPueblos {} · industrias {} · capital {} · rival {}",
+        "Mapa {} · clima {} · inicio {} · {} · semilla={}\n\
+         Pueblos {} · industrias {} · capital {} · relieve {} · rival {}",
         map_size_label(settings.map_size),
         climate_label(settings.climate),
         settings.start_year,
@@ -49,6 +52,7 @@ pub(crate) fn summary_text(settings: NewGameSettings) -> String {
         settings.town_density.menu_label(),
         settings.industry_density.menu_label(),
         format_money(settings.starting_money),
+        settings.terrain_roughness.menu_label(),
         if settings.rival_ai { "sí" } else { "no" },
     )
 }
@@ -70,6 +74,8 @@ pub(super) fn panel_title(panel: MainMenuPanel) -> &'static str {
         MainMenuPanel::Root => "OpenTTDRS",
         MainMenuPanel::NewGame => "Nueva partida",
         MainMenuPanel::Highscores => "Mejores puntuaciones",
+        MainMenuPanel::Scenarios => "Escenarios / heightmap",
+        MainMenuPanel::Preferences => "Preferencias",
         MainMenuPanel::QuitConfirm => "Salir del juego",
     }
 }
@@ -80,9 +86,16 @@ pub(super) fn panel_hints(panel: MainMenuPanel) -> &'static str {
         MainMenuPanel::NewGame => {
             "Enter iniciar · Esc volver · 1-4 clima · [ ] semilla · z/x densidad"
         }
-        MainMenuPanel::Highscores => "Esc volver",
+        MainMenuPanel::Highscores | MainMenuPanel::Scenarios | MainMenuPanel::Preferences => {
+            "Esc volver"
+        }
         MainMenuPanel::QuitConfirm => "Esc cancelar",
     }
+}
+
+#[allow(dead_code)]
+pub(super) fn roughness_label(roughness: TerrainRoughness) -> &'static str {
+    roughness.menu_label()
 }
 
 pub(crate) fn cycle_density(density: &mut PopulationDensity) {

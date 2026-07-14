@@ -30,10 +30,17 @@ La UI de partidas (`ui/save_window/`):
 Desde la raíz del repo `openttdrs/`:
 
 ```bash
-# Tests del writer + roundtrip
+# Tests del writer + roundtrip + chunks obligatorios (#66)
 cargo test -p openttdrs-core sav::write::
 
-# Suite habitual
+# Validación estructural de chunks (fixture / export)
+python3 scripts/validate_sav_export.py
+python3 scripts/validate_sav_export.py --export ruta/export.sav
+
+# Smoke opcional con OpenTTD oficial (SKIP si no hay binario)
+bash scripts/validate_sav_openttd.sh [ruta.sav]
+
+# Suite habitual (incluye validate_sav_export.py)
 bash scripts/check.sh
 
 # Smoke manual (cliente)
@@ -77,6 +84,8 @@ python3 scripts/gen_demo_sav.py crates/openttdrs-core/tests/fixtures/demo_opentt
 | `crates/openttdrs-core/src/save.rs` | Persistencia **JSON** (no confundir) |
 | `crates/openttdrs-client/src/ui/save_window/systems.rs` | `confirm_save` / `confirm_load` |
 | `scripts/gen_demo_sav.py` | Generador OTTN de referencia |
+| `scripts/validate_sav_export.py` | Validación estructural de chunks (#66) |
+| `scripts/validate_sav_openttd.sh` | Smoke carga con OpenTTD oficial (opcional) |
 | `docs/TILES_Y_SAVEGAMES_OPENTTD.md` §16–17 | Formato chunks / import |
 
 Versión de export: `EXPORT_SAVE_VERSION = 350` (≥ 348 HouseID en MAP8; ≥ 300 tick u64).
@@ -153,7 +162,7 @@ Orden sugerido:
 3. ~~**`INDY`**~~ ✅  
 4. ~~**`ORDL` + `VEHS`**~~ ✅ (goto estación/waypoint/depósito/condicional + full_load)  
 5. ~~Órdenes depósito / condicionales / flags full_load más fieles~~ ✅  
-6. Validar con OpenTTD real (settings + chunks obligatorios del juego completo)
+6. ~~Validar export (#66)~~ ✅ estructural (`REQUIRED_EXPORT_CHUNKS` + `validate_sav_export.py`); smoke OpenTTD opcional (`validate_sav_openttd.sh`). Pendiente: GSET/NewGRF para carga completa en oficial.
 
 Reglas:
 
@@ -187,4 +196,4 @@ Reglas:
 
 ---
 
-*Última actualización: 2026-07-08 — export STNN+CITY+INDY+ORDL+VEHS.*
+*Última actualización: 2026-07-13 — #66 validación estructural + smoke OpenTTD opcional.*

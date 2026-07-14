@@ -77,6 +77,7 @@ pub(crate) fn step(state: &mut GameState) {
     assign_orderless_wander_destinations(state);
     tick_aircraft_phases(state);
     move_vehicles(state);
+    crate::train_collision::resolve_train_collisions(state);
 
     apply_pending_depot_order_refits(state);
 
@@ -296,11 +297,7 @@ fn grow_towns(state: &mut GameState, tick: u64) {
     state.landscape_tile_dirty.extend(dirty);
 }
 
-fn process_monthly_economy(state: &mut GameState, tick: u64) {
-    if tick == 0 || !tick.is_multiple_of(economy::TICKS_PER_MONTH) {
-        return;
-    }
-    // Intereses por compañía; eventos de UI solo para la activa (jugador).
+fn apply_monthly_interest_and_bankruptcy(state: &mut GameState) {
     for i in 0..state.companies.len() {
         let loan = state.companies[i].economy.loan;
         let max_loan = state.companies[i].economy.max_loan;
@@ -310,6 +307,7 @@ fn process_monthly_economy(state: &mut GameState, tick: u64) {
         }
         let money = state.companies[i].economy.money;
         let is_active = state.companies[i].id == state.active_company;
+        let company_name = state.companies[i].name.clone();
         if is_active {
             state.economy = state.companies[i].economy;
             if interest > 0 {
@@ -322,6 +320,12 @@ fn process_monthly_economy(state: &mut GameState, tick: u64) {
                 state
                     .pending_sim_events
                     .push(crate::sim_events::SimEvent::BankruptcyWarning);
+                crate::news::push_bankruptcy_news(
+                    state,
+                    &company_name,
+                    state.bankruptcy_streak,
+                    crate::score::BANKRUPTCY_STREAK_LIMIT,
+                );
                 if state.bankruptcy_streak >= crate::score::BANKRUPTCY_STREAK_LIMIT {
                     let _ =
                         crate::score::finish_game(state, crate::score::GameOverReason::Bankruptcy);
@@ -329,8 +333,27 @@ fn process_monthly_economy(state: &mut GameState, tick: u64) {
             } else {
                 state.bankruptcy_streak = 0;
             }
+        } else if economy::check_bankruptcy(money, max_loan) {
+            state.companies[i].bankruptcy_months =
+                state.companies[i].bankruptcy_months.saturating_add(1);
+            let months = state.companies[i].bankruptcy_months;
+            crate::news::push_bankruptcy_news(
+                state,
+                &company_name,
+                months,
+                crate::score::BANKRUPTCY_STREAK_LIMIT,
+            );
+        } else {
+            state.companies[i].bankruptcy_months = 0;
         }
     }
+}
+
+fn process_monthly_economy(state: &mut GameState, tick: u64) {
+    if tick == 0 || !tick.is_multiple_of(economy::TICKS_PER_MONTH) {
+        return;
+    }
+    apply_monthly_interest_and_bankruptcy(state);
     // Cierre mensual tras intereses: deltas por compañía + espejo global (activa).
     for i in 0..state.companies.len() {
         let company_id = state.companies[i].id;
@@ -1060,7 +1083,8 @@ fn move_vehicles(state: &mut GameState) {
                 && vehicle.movement_target().is_some()
             {
                 if vehicle.force_proceed {
-                    crate::rail_signals::train_blocked_by_traffic(&state.map, vehicles, vehicle)
+                    // Ignorar señales/PBS/tráfico: puede provocar choque (OpenTTD).
+                    false
                 } else {
                     // PBS fase 2: reserva por pista; bloqueo solo si el paso no está reservado.
                     crate::rail_pbs::train_blocked_by_reservation(&state.map, vehicle)

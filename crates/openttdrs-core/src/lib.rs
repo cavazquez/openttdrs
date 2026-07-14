@@ -65,6 +65,7 @@ pub mod tnbp_decode;
 pub mod town;
 pub mod town_expand;
 pub mod townname;
+pub mod train_collision;
 pub mod train_consist;
 pub mod train_movement;
 pub mod vehicle;
@@ -358,6 +359,7 @@ pub use town_expand::{
     expand_town_once, expand_town_physically,
 };
 pub use townname::generate_town_name;
+pub use train_collision::{TrainCollision, detect_train_collisions, resolve_train_collisions};
 pub use train_consist::{
     VEHICLE_LENGTH, action2_eval_ctx_for_unit, attach_wagon, cargo_class_bits, cargo_type_a_id,
     consist_changed, consist_head_id, consist_occupied_tiles, consist_power_hp, consist_tile_span,

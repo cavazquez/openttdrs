@@ -100,6 +100,12 @@ pub enum SimEvent {
         amount: i64,
     },
     BankruptcyWarning,
+    /// Choque de trenes (misma compañía).
+    TrainCollision {
+        at: TileCoord,
+        vehicle_a: u32,
+        vehicle_b: u32,
+    },
     /// Fin de partida (quiebra definitiva o retiro).
     GameOver {
         company_name: String,

@@ -64,6 +64,9 @@ pub struct Company {
     /// Series trimestrales (`CompaniesGenStatistics` / rating + valoración con activos).
     #[serde(default)]
     pub quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory,
+    /// Meses consecutivos en quiebra (rivales; el jugador usa `GameState::bankruptcy_streak`).
+    #[serde(default)]
+    pub bankruptcy_months: u8,
 }
 
 impl Company {
@@ -80,6 +83,7 @@ impl Company {
             cargo_deliveries: 0,
             economy_history: crate::game_state::EconomyHistory::default(),
             quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
+            bankruptcy_months: 0,
         }
     }
 
@@ -96,6 +100,7 @@ impl Company {
             cargo_deliveries: 0,
             economy_history: crate::game_state::EconomyHistory::default(),
             quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
+            bankruptcy_months: 0,
         }
     }
 }

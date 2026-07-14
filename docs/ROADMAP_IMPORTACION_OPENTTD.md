@@ -209,7 +209,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Dinámica | Referencia OpenTTD | Estado port | Prioridad sugerida |
 |----------|-------------------|-------------|-------------------|
 | **Crecimiento de ciudades + autoridad local** | `town_cmd.cpp:890-4190` | Parcial (rating, publicidad, fondos UI) | ⭐ Alta |
-| **Préstamos, intereses, quiebra** | `economy.cpp:799`, `misc_cmd.cpp:41` | Parcial (comandos + UI finanzas) | ⭐ Alta |
+| **Préstamos, intereses, quiebra** | `economy.cpp:799`, `misc_cmd.cpp:41` | Parcial→casi completo (préstamos + compra rival en quiebra) | ⭐ Alta |
 | **Averías + fiabilidad + servicio** | `vehicle.cpp:1303-1492` | Parcial (averías sim + servicio depósito) | ⭐ Alta |
 | **Subsidios** | `subsidy.cpp` | Parcial (`subsidy.rs`) | Media |
 | **Decaimiento carga en estación + ratings** | `station_cmd.cpp:3959` | Parcial (edad carga; rating ciudad sí) | Media |
@@ -230,7 +230,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Costes operativos | `economy.cpp:644` | **EXISTE** (`sim_step.rs`) |
 | Préstamos pedir/devolver | `misc_cmd.cpp:41` | **PARCIAL** (`command/economy.rs`, `finances_window.rs`) |
 | Intereses mensuales | `economy.cpp:799` | **PARCIAL** (`sim_step.rs`) |
-| Quiebra / compra rivales | `company_cmd.cpp:546` | **PARCIAL** (aviso quiebra) |
+| Quiebra / compra rivales | `company_cmd.cpp:546` | **EXISTE** (`BuyCompany` + `bankruptcy_months` / streak) |
 | Subsidios en pagos | `subsidy.cpp` | **PARCIAL** (`subsidy.rs`) |
 | Valoración trimestral compañía | `economy.cpp:637` | **EXISTE** (`economy_quarterly.rs`) |
 
@@ -240,7 +240,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 |----------|----------|------|
 | Desastres ambientales (UFO, zeppelin, etc.) | `disaster_vehicle.cpp:939` | **PARCIAL** (`disaster.rs`) |
 | Breakdowns vehículos | `vehicle.cpp:1303` | **PARCIAL** (`vehicle.rs`, `sim_step.rs`) |
-| Choques de trenes | `train_cmd.cpp:3205` | **FALTA** |
+| Choques de trenes | `train_cmd.cpp:3205` | **EXISTE** (`train_collision.rs`; `force_proceed` puede forzar) |
 | Servicio en depósito vs fiabilidad | `vehicle.cpp:187` | **PARCIAL** (`service_at_depot`) |
 
 #### Ciudades

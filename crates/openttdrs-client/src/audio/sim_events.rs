@@ -126,6 +126,14 @@ fn dispatch_sim_events(
                 }
                 fx.push_explosion(at);
             }
+            SimEvent::TrainCollision { at, .. } => {
+                if hud.sound_disaster || hud.sound_vehicle {
+                    sfx.write(
+                        PlayWorldSfx::new(SoundId::TrainCollision, at, 1.0).with_priority(130),
+                    );
+                }
+                fx.push_explosion(at);
+            }
             SimEvent::NewsTicker => {
                 if hud.sound_confirm {
                     sfx.write(

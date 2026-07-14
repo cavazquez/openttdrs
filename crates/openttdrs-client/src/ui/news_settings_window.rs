@@ -26,11 +26,13 @@ pub(crate) struct NewsSettingsModeButton {
     pub(crate) mode: NewsDisplayMode,
 }
 
-const NEWS_TYPES: [NewsType; 4] = [
+const NEWS_TYPES: [NewsType; 6] = [
     NewsType::CargoDelivered,
     NewsType::FirstCargoDelivered,
     NewsType::FirstVehicleRunning,
     NewsType::VehicleAdvice,
+    NewsType::Accident,
+    NewsType::CompanyInfo,
 ];
 
 pub(crate) fn setup_news_settings_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -42,7 +44,7 @@ pub(crate) fn setup_news_settings_window(mut commands: Commands, asset_server: R
         "Noticias",
         TITLE_BROWN,
         Vec2::new(260.0, 140.0),
-        360.0,
+        440.0,
     );
     commands.entity(content).with_children(|body| {
         body.spawn((

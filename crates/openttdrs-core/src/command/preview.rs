@@ -280,6 +280,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::DepotReorderVehicleSlot { .. }
         | Command::IncreaseLoan
         | Command::DecreaseLoan
+        | Command::BuyCompany(_)
         | Command::TownAdvertise(_)
         | Command::TownFundBuildings(_)
         | Command::CheatSetEnabled(_)

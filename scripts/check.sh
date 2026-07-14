@@ -70,6 +70,7 @@ do_golden_parse_sav() {
     python3 scripts/verify_parse_sav_reference.py
     python3 scripts/verify_parse_sav_water_m5.py
     python3 scripts/verify_parse_sav_rail_m5.py
+    python3 scripts/validate_sav_export.py
     info "Golden parse_sav OK ✓"
 }
 
@@ -80,6 +81,7 @@ do_py_compile() {
     python3 -m py_compile scripts/emit_parse_sav_golden.py
     python3 -m py_compile scripts/verify_parse_sav_water_m5.py
     python3 -m py_compile scripts/verify_parse_sav_rail_m5.py
+    python3 -m py_compile scripts/validate_sav_export.py
     python3 -m py_compile scripts/gen_tnbp_fixture_ottdmap.py
     python3 -m py_compile scripts/audit_sp3_assets.py
     python3 -m py_compile scripts/gen_house_draw_data.py

@@ -82,6 +82,72 @@ pub fn save_to_bytes_with(state: &GameState, container: SavContainer) -> Result<
     wrap_container(&payload, EXPORT_SAVE_VERSION, container)
 }
 
+/// Chunks siempre presentes en un export mínimo (mapa vacío + DATE + PLYR).
+pub const REQUIRED_EXPORT_CHUNKS: &[&str] = &[
+    "MAPS", "MAPT", "MAPH", "MAPO", "MAP2", "M3LO", "M3HI", "MAP5", "MAPE", "MAP7", "MAP8", "DATE",
+    "PLYR",
+];
+
+/// Nombres de chunks RIFF/TABLE en el stream exportado (orden de aparición).
+///
+/// # Errors
+///
+/// Fallo al construir el stream (mapa vacío, etc.).
+pub fn exported_chunk_names(state: &GameState) -> Result<Vec<String>, SavError> {
+    let payload = build_chunk_stream(state)?;
+    Ok(scan_chunk_names(&payload))
+}
+
+fn scan_chunk_names(payload: &[u8]) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut i = 0usize;
+    while i + 4 <= payload.len() {
+        if payload[i..i + 4] == [0, 0, 0, 0] {
+            break;
+        }
+        let name = String::from_utf8_lossy(&payload[i..i + 4]).into_owned();
+        if name.len() == 4 && name.bytes().all(|b| (32..127).contains(&b)) {
+            names.push(name);
+        }
+        // Saltar cabecera chunk: 4 (id) + 1 (type/size hi) + 3 (size) = 8, luego payload.
+        // El id ya está en i..i+4; el byte de tipo está en i+4.
+        if i + 8 > payload.len() {
+            break;
+        }
+        let m = payload[i + 4];
+        let size = (u32::from(m & 0xF0) << 20)
+            | (u32::from(payload[i + 5]) << 16)
+            | (u32::from(payload[i + 6]) << 8)
+            | u32::from(payload[i + 7]);
+        let chunk_type = m & 0x0F;
+        i += 8;
+        // CH_TABLE/SPARSE tienen tamaño 0 en el header y payload con gamma — no
+        // podemos saltar de forma fiable aquí; para validación basta detectar
+        // fourcc conocidos en secuencia con búsqueda lineal.
+        if chunk_type == 0 {
+            // CH_RIFF: size es el payload.
+            i = i.saturating_add(size as usize);
+        } else {
+            // Para tablas: re-escanear desde aquí buscando el siguiente fourcc
+            // ASCII de 4 letras conocido / alfanumérico.
+            break;
+        }
+    }
+    // Tras CH_TABLE el tamaño del header no basta: completar con búsqueda de fourcc.
+    for &want in REQUIRED_EXPORT_CHUNKS
+        .iter()
+        .chain(["STNN", "CITY", "INDY", "ORDL", "VEHS"].iter())
+    {
+        if names.iter().any(|n| n == want) {
+            continue;
+        }
+        if payload.windows(4).any(|w| w == want.as_bytes()) {
+            names.push(want.to_string());
+        }
+    }
+    names
+}
+
 fn wrap_container(
     payload: &[u8],
     version: u16,
@@ -724,6 +790,8 @@ mod tests {
     use crate::sav;
     use crate::station::{Station, StopKind};
     use crate::tick::GameTick;
+    use crate::town::Town;
+    use crate::vehicle::{Vehicle, VehicleKind};
 
     fn tiny_state() -> GameState {
         let mut state = GameState::new(64, 64);
@@ -957,5 +1025,35 @@ mod tests {
         let tile = loaded.map.get(TileCoord::new(10, 20)).expect("tile");
         assert_eq!(tile.kind, TileKind::Rail);
         assert_eq!(tile.m5, 0x01);
+    }
+
+    #[test]
+    fn export_includes_required_chunks_for_openttd_validation() {
+        let names = exported_chunk_names(&tiny_state()).expect("chunks");
+        for req in REQUIRED_EXPORT_CHUNKS {
+            assert!(
+                names.iter().any(|n| n == *req),
+                "falta chunk obligatorio {req} en {names:?}"
+            );
+        }
+
+        // Escenario con entidades: opcionales presentes (#66).
+        let mut state = tiny_state();
+        let mut rail = Station::new_with_kind(TileCoord::new(28, 39), StopKind::RailStation);
+        rail.name = Some("Central".into());
+        state.stations = vec![rail];
+        state.towns = vec![Town {
+            id: 0,
+            pos: TileCoord::new(16, 16),
+            name: "Villa".into(),
+            population: 500,
+            ..Default::default()
+        }];
+        let pos = TileCoord::new(10, 20);
+        state.vehicles = vec![Vehicle::new(0, VehicleKind::Train, pos, pos)];
+        let names = exported_chunk_names(&state).expect("chunks");
+        assert!(names.iter().any(|n| n == "STNN"), "{names:?}");
+        assert!(names.iter().any(|n| n == "CITY"), "{names:?}");
+        assert!(names.iter().any(|n| n == "VEHS"), "{names:?}");
     }
 }

@@ -47,6 +47,8 @@ pub(crate) struct ClientPreferences {
     pub(crate) news_first_cargo: u8,
     pub(crate) news_first_vehicle: u8,
     pub(crate) news_vehicle_advice: u8,
+    pub(crate) news_accident: u8,
+    pub(crate) news_company_info: u8,
     /// Posiciones de ventanas flotantes: `Id=x,y;Id2=x,y` (UI-7).
     pub(crate) window_layouts: String,
     /// Highscores locales: `name|value|year|B|R;…` (UI-8).
@@ -85,6 +87,8 @@ impl Default for ClientPreferences {
             news_first_cargo: crate::news_prefs::DISPLAY_FULL,
             news_first_vehicle: crate::news_prefs::DISPLAY_FULL,
             news_vehicle_advice: crate::news_prefs::DISPLAY_SUMMARY,
+            news_accident: crate::news_prefs::DISPLAY_FULL,
+            news_company_info: crate::news_prefs::DISPLAY_SUMMARY,
             window_layouts: String::new(),
             highscores: String::new(),
             window_width: 1280,

@@ -3,7 +3,9 @@ use crate::map::TileKind;
 use crate::{GameState, StopKind};
 
 use super::types::{Command, CommandError};
-use super::{buy_land, economy, industry, newgrf, sign, terraform, town, transport, vehicles};
+use super::{
+    buy_land, company, economy, industry, newgrf, sign, terraform, town, transport, vehicles,
+};
 
 /// Aplica `cmd` a `state` o devuelve error sin mutar.
 ///
@@ -166,6 +168,7 @@ const fn command_modifies_map(cmd: &Command) -> bool {
             | Command::DepotReorderVehicleSlot { .. }
             | Command::IncreaseLoan
             | Command::DecreaseLoan
+            | Command::BuyCompany(_)
             | Command::TownAdvertise(..)
             | Command::TownFundBuildings(..)
             | Command::CheatSetEnabled(..)
@@ -530,6 +533,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::BuyLandArea { from, to } => buy_land::buy_land_area(state, *from, *to),
         Command::IncreaseLoan => economy::increase_company_loan(state),
         Command::DecreaseLoan => economy::decrease_company_loan(state),
+        Command::BuyCompany(id) => company::buy_company(state, *id),
         Command::TownAdvertise(town_id) => town::town_advertise(state, *town_id),
         Command::TownFundBuildings(town_id) => town::town_fund_buildings(state, *town_id),
         Command::FoundTown(c) => town::found_town(state, *c),

@@ -2,6 +2,7 @@
 
 mod apply;
 mod buy_land;
+mod company;
 mod economy;
 mod industry;
 mod newgrf;

@@ -77,7 +77,7 @@ parcialmente resueltos; se mantienen tachados o anotados.
     requiere que el movimiento consulte `z`.
 19. **Vagones en depósito / compra de vagones / refit de consist** — UI y
     comandos; depende del ítem 6.
-20. **Choques (`CheckTrainCollision`) y averías** de trenes.
+20. ~~**Choques (`CheckTrainCollision`)**~~ ✅ MVP (`train_collision.rs`); averías ya parciales.
 
 ## Cómo detectar regresiones/omisiones nuevas
 

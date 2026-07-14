@@ -30,7 +30,8 @@ use crate::vehicle::{Vehicle, VehicleKind};
 
 pub use entities::{SavIndustry, SavStation, SavVehicle, SavVehicleKind};
 pub use write::{
-    EXPORT_SAVE_VERSION, SavContainer, save, save_to_bytes, save_to_bytes_with, save_with,
+    EXPORT_SAVE_VERSION, REQUIRED_EXPORT_CHUNKS, SavContainer, exported_chunk_names, save,
+    save_to_bytes, save_to_bytes_with, save_with,
 };
 
 /// Bits `FACIL_*` de `OpenTTD`.

@@ -21,6 +21,10 @@ pub enum NewsType {
     FirstCargoDelivered,
     FirstVehicleRunning,
     VehicleAdvice,
+    /// Accidente (choque de trenes, etc.).
+    Accident,
+    /// Información de compañía (compra, quiebra rival).
+    CompanyInfo,
 }
 
 /// Variante de aviso operativo de vehículo (deduplicación en sim).
@@ -167,6 +171,18 @@ pub struct NewsDisplaySettings {
     pub first_cargo_delivered: NewsDisplayMode,
     pub first_vehicle_running: NewsDisplayMode,
     pub vehicle_advice: NewsDisplayMode,
+    #[serde(default = "default_accident_display")]
+    pub accident: NewsDisplayMode,
+    #[serde(default = "default_company_info_display")]
+    pub company_info: NewsDisplayMode,
+}
+
+const fn default_accident_display() -> NewsDisplayMode {
+    NewsDisplayMode::Full
+}
+
+const fn default_company_info_display() -> NewsDisplayMode {
+    NewsDisplayMode::Summary
 }
 
 impl Default for NewsDisplaySettings {
@@ -183,6 +199,8 @@ impl NewsDisplaySettings {
             first_cargo_delivered: NewsDisplayMode::Full,
             first_vehicle_running: NewsDisplayMode::Full,
             vehicle_advice: NewsDisplayMode::Summary,
+            accident: NewsDisplayMode::Full,
+            company_info: NewsDisplayMode::Summary,
         }
     }
 
@@ -193,6 +211,8 @@ impl NewsDisplaySettings {
             NewsType::FirstCargoDelivered => self.first_cargo_delivered,
             NewsType::FirstVehicleRunning => self.first_vehicle_running,
             NewsType::VehicleAdvice => self.vehicle_advice,
+            NewsType::Accident => self.accident,
+            NewsType::CompanyInfo => self.company_info,
         }
     }
 
@@ -202,6 +222,8 @@ impl NewsDisplaySettings {
             NewsType::FirstCargoDelivered => self.first_cargo_delivered = mode,
             NewsType::FirstVehicleRunning => self.first_vehicle_running = mode,
             NewsType::VehicleAdvice => self.vehicle_advice = mode,
+            NewsType::Accident => self.accident = mode,
+            NewsType::CompanyInfo => self.company_info = mode,
         }
     }
 }
@@ -213,6 +235,8 @@ pub fn news_type_label(news_type: NewsType) -> &'static str {
         NewsType::FirstCargoDelivered => "Primera entrega",
         NewsType::FirstVehicleRunning => "Primer vehículo en marcha",
         NewsType::VehicleAdvice => "Avisos de vehículo",
+        NewsType::Accident => "Accidentes",
+        NewsType::CompanyInfo => "Compañías",
     }
 }
 
@@ -427,6 +451,29 @@ pub fn push_first_vehicle_running_news(
         default_display_for_type(NewsType::FirstVehicleRunning),
         state.tick,
         NewsReference::Tile(at),
+    );
+    add_news_item(state, item);
+}
+
+/// Aviso de quiebra (jugador o rival).
+pub fn push_bankruptcy_news(
+    state: &mut crate::GameState,
+    company_name: &str,
+    month: u8,
+    limit: u8,
+) {
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        format!("Quiebra: {company_name}"),
+        Some(format!(
+            "La compañía «{company_name}» está en quiebra (mes {month}/{limit})."
+        )),
+        NewsType::CompanyInfo,
+        default_display_for_type(NewsType::CompanyInfo),
+        state.tick,
+        NewsReference::None,
     );
     add_news_item(state, item);
 }

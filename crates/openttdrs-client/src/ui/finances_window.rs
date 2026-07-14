@@ -24,6 +24,7 @@ pub(crate) struct FinancesWindowBodyText;
 pub(crate) enum FinancesWindowButton {
     IncreaseLoan,
     DecreaseLoan,
+    BuyRival,
 }
 
 #[derive(Default)]
@@ -75,6 +76,7 @@ pub(crate) fn setup_finances_window(mut commands: Commands, asset_server: Res<As
                 for (label, button) in [
                     ("Pedir préstamo", FinancesWindowButton::IncreaseLoan),
                     ("Devolver préstamo", FinancesWindowButton::DecreaseLoan),
+                    ("Comprar rival (quiebra)", FinancesWindowButton::BuyRival),
                 ] {
                     row.spawn((
                         Button,
@@ -143,6 +145,18 @@ pub(crate) fn handle_finances_window_buttons(
         let cmd = match button {
             FinancesWindowButton::IncreaseLoan => Command::IncreaseLoan,
             FinancesWindowButton::DecreaseLoan => Command::DecreaseLoan,
+            FinancesWindowButton::BuyRival => {
+                let Some(rival) = sim
+                    .state
+                    .companies
+                    .iter()
+                    .find(|c| c.id != sim.state.active_company)
+                    .map(|c| c.id)
+                else {
+                    continue;
+                };
+                Command::BuyCompany(rival)
+            }
         };
         if let Err(e) = apply_command(&mut sim.state, &cmd) {
             push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());

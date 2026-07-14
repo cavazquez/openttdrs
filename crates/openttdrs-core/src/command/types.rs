@@ -306,6 +306,8 @@ pub enum Command {
     IncreaseLoan,
     /// Devuelve parte del préstamo (`CmdDecreaseLoan`).
     DecreaseLoan,
+    /// Compra una compañía rival en quiebra (`CmdBuyCompany`).
+    BuyCompany(crate::company::CompanyId),
     /// Campaña publicitaria en una ciudad (`CmdTownAction::Advertise`).
     TownAdvertise(u32),
     /// Financia edificios en una ciudad (`CmdTownAction::FundBuildings`).
@@ -482,6 +484,12 @@ pub enum CommandError {
     TownTooClose,
     /// Cheats desactivados.
     CheatsDisabled,
+    /// Compañía no encontrada en el pool.
+    CompanyNotFound,
+    /// No se puede comprar la propia compañía.
+    CannotBuyOwnCompany,
+    /// La compañía rival no está en quiebra.
+    CompanyNotBankrupt,
     /// La autoridad local no permite construir aquí.
     AuthorityRatingTooLow,
     /// No se puede plantar un árbol aquí.
@@ -612,6 +620,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::CannotFoundTownHere => "No se puede fundar un pueblo aquí.",
         CommandError::TownTooClose => "Hay otro pueblo demasiado cerca.",
         CommandError::CheatsDisabled => "Cheats desactivados (consola: cheat on).",
+        CommandError::CompanyNotFound => "Compañía no encontrada.",
+        CommandError::CannotBuyOwnCompany => "No puedes comprar tu propia compañía.",
+        CommandError::CompanyNotBankrupt => "La compañía no está en quiebra.",
         CommandError::AuthorityRatingTooLow => {
             "La autoridad local no permite construir una estación aquí."
         }

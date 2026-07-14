@@ -38,7 +38,8 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
   `feeder_paid` al liquidar; `first_station` al cargar desde cola de estación;
   reinserción freight preserva flags del packet.
 - IA rival «TransCargo» (`ai/rule_based.rs`); escenario `ai_rival_line`.
-- Pendiente: link graph / Cargo Dist real; UI selector multi-compañía; quiebra rival.
+- Quiebra rival + `BuyCompany` ✅ (`bankruptcy_months`, UI Finanzas).
+- Pendiente: link graph / Cargo Dist real; UI selector multi-compañía.
 
 ## Fase 5 — Railtypes / electrificación / RailConvert ✅ (MVP)
 

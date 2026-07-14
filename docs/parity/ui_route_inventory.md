@@ -4,7 +4,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 `FloatingWindowId::ALL` / `BuildMenuAction::ALL` / etc. (test
 `ui_enum_inventory_counts`).
 
-**Fecha:** 2026-07-12 · **FloatingWindowId:** 33 · **BuildMenuAction:** 62 ·
+**Fecha:** 2026-07-13 · **FloatingWindowId:** 33 · **BuildMenuAction:** 63 ·
 **SaveMenuAction:** 18 · **ToolbarGroup:** 8
 
 ## Ventanas flotantes (`FloatingWindowId`)
@@ -59,7 +59,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 ## Toolbar
 
 - **ToolbarGroup (8):** Rail, Road, Water, Air, Economy, Landscape, Info, Settings
-- **BuildMenuAction (62):** ver `BuildMenuAction::ALL` en `toolbar/mod.rs`
+- **BuildMenuAction (63):** ver `BuildMenuAction::ALL` en `toolbar/mod.rs`
 - **SaveMenuAction (18):** ver `SaveMenuAction::ALL`
 
 ## Mantenimiento

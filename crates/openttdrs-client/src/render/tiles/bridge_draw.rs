@@ -395,6 +395,25 @@ pub(crate) fn spawn_bridge_deck(
     if span.rail && bridge_draws_separate_rail_overlay(span.bridge_type) {
         spawn_bridge_rail_overlay(commands, assets, ctx, span);
     }
+    // Overlay de tranvía sobre tablero de puente de carretera.
+    if !span.rail
+        && let Some(tile) = ctx.tile
+        && let Some(tfi) = crate::sprites::tram_flat_sprite_index(0, tile.m3)
+        && let Some(tram) = assets.tram_flat.get(tfi)
+    {
+        commands.spawn((
+            MapVisualLayer,
+            ctx.map_tile_chunk(),
+            tram.sprite(),
+            Transform::from_translation(tile_pos_half(
+                ctx.tx_i32(),
+                ctx.ty_i32(),
+                span.deck_z,
+                RAIL_ON_BRIDGE_LAYER_FRAC,
+                TILE_HALF_H,
+            )),
+        ));
+    }
     if span.electric && span.middle_num > 0 && span.middle_length > 0 {
         spawn_bridge_catenary(
             commands,

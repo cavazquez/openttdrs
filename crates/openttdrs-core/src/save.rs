@@ -32,7 +32,7 @@ use crate::GameState;
 /// v16: monorail/maglev como `RailType` 2/3 (sin migración de datos; esquema).
 /// v17: stack `NewGRF` (`newgrf_stack`) — config + cabecera; sin Action0–14.
 /// v18: link graph observacional (`link_graph`).
-pub const CURRENT_SAVE_VERSION: u32 = 18;
+pub const CURRENT_SAVE_VERSION: u32 = 19;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -155,12 +155,26 @@ fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState,
             14 => migrate_state_v14_to_v15(&mut state),
             16 => migrate_state_v16_to_v17(&mut state),
             17 => migrate_state_v17_to_v18(&mut state),
+            18 => migrate_state_v18_to_v19(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
     }
     after_migrate_refresh_newgrf(&mut state);
     Ok(state)
+}
+
+/// v19: intervalo de servicio por defecto en vehículos antiguos.
+fn migrate_state_v18_to_v19(state: &mut GameState) {
+    for v in &mut state.vehicles {
+        if v.service_interval_days == 0 {
+            v.service_interval_days = crate::vehicle::DEFAULT_SERVICE_INTERVAL_DAYS;
+        }
+        if v.last_service_day == 0 {
+            v.last_service_day =
+                crate::news::calendar_day_index(crate::tick::GameTick::new(v.build_tick));
+        }
+    }
 }
 
 /// v18: link graph vacío (observacional; sin datos previos).

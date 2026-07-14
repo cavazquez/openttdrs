@@ -96,6 +96,8 @@ pub(crate) enum BuildMenuAction {
     Tram,
     TramX,
     TramY,
+    /// Quitar overlay de tranvía.
+    TramRemove,
     RoadDepot,
     RoadBridge,
     RoadTunnel,
@@ -170,6 +172,7 @@ impl BuildMenuAction {
         Self::Tram,
         Self::TramX,
         Self::TramY,
+        Self::TramRemove,
         Self::RoadDepot,
         Self::RoadBridge,
         Self::RoadTunnel,

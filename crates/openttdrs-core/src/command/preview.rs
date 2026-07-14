@@ -79,6 +79,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         Command::PlaceRoad(c)
         | Command::PlaceRoadBits(c, _)
         | Command::PlaceTramBits(c, _)
+        | Command::RemoveTramBits(c)
         | Command::SetRoadBits(c, _) => require_tile_owned_by_active(state, *c)
             .err()
             .or_else(|| check_place_road_bits(map, *c).err()),

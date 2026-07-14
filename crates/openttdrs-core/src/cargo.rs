@@ -164,6 +164,25 @@ impl CargoType {
         }
     }
 
+    /// Inverso de [`Self::temperate_id`].
+    #[must_use]
+    pub const fn from_temperate_id(id: u8) -> Option<Self> {
+        Some(match id {
+            0 => Self::Passengers,
+            1 => Self::Coal,
+            2 => Self::Mail,
+            3 => Self::Oil,
+            4 => Self::Livestock,
+            5 => Self::Goods,
+            6 => Self::Grain,
+            7 => Self::Wood,
+            8 => Self::IronOre,
+            9 => Self::Steel,
+            10 => Self::Valuables,
+            _ => return None,
+        })
+    }
+
     /// Nombre corto para UI / noticias.
     #[must_use]
     pub const fn display_name(self) -> &'static str {

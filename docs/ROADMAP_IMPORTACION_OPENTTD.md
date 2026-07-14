@@ -259,7 +259,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Autoreemplazo en depósito | `vehicle.cpp:695` | **PARCIAL** (`autoreplace.rs`) |
 | Edad calendario | `vehicle.cpp:1440` | **PARCIAL** (`vehicle_age_years`) |
 | Fiabilidad dinámica | `vehicle.cpp:1318` | **PARCIAL** (`check_breakdown`) |
-| Órdenes de servicio / revisión | `vehicle.cpp:210` | **FALTA** |
+| Órdenes de servicio / revisión | `vehicle.cpp:210` | **EXISTE** (`requires_service` + skip depósito) |
 
 #### Clima
 

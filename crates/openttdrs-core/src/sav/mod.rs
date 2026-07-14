@@ -313,7 +313,9 @@ impl GameState {
                 }
                 continue;
             }
-            let imported_orders = orders::vehicle_orders_from_sav(&v.orders, &sav.station_index);
+            let map_w = state.map.dimensions().0;
+            let imported_orders =
+                orders::vehicle_orders_from_sav(&v.orders, &sav.station_index, map_w);
             if !imported_orders.is_empty() {
                 vehicle.set_vehicle_orders(imported_orders);
                 vehicle.current_order = v.current_order.min(vehicle.orders.len().saturating_sub(1));

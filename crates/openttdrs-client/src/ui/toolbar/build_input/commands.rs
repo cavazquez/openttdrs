@@ -33,6 +33,7 @@ pub(crate) fn command_for_action(
         }
         BuildMenuAction::TramX => Some(Command::PlaceTramBits(pos, 0x0A)),
         BuildMenuAction::TramY => Some(Command::PlaceTramBits(pos, 0x05)),
+        BuildMenuAction::TramRemove => Some(Command::RemoveTramBits(pos)),
         BuildMenuAction::JoinStation => None,
         BuildMenuAction::Rail => Some(Command::PlaceRail(pos)),
         BuildMenuAction::RailX => Some(Command::PlaceRailBits(pos, 0x01)),

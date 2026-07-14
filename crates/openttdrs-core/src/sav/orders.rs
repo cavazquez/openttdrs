@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use crate::map::TileCoord;
 use crate::vehicle::VehicleOrder;
 
 use super::chunks::{RawChunk, find_chunk};
@@ -11,7 +12,11 @@ use super::table::{SlRecord, SlValue, record_get};
 /// Tipos de orden relevantes (`order_type.h` en `OpenTTD`).
 const OT_NOTHING: u8 = 0;
 const OT_GOTO_STATION: u8 = 1;
+const OT_GOTO_DEPOT: u8 = 2;
 const OT_GOTO_WAYPOINT: u8 = 6;
+const OT_CONDITIONAL: u8 = 7;
+const OTTD_DEPOT_SERVICE: u8 = 1 << 0;
+const OTTD_DEPOT_HALT: u8 = 1 << 3;
 
 /// `SLV_105` — listas de órdenes como pool `OrderList` (`ORDL`).
 const SLV_105: u16 = 105;
@@ -218,13 +223,12 @@ fn order_lists_from_chunks(
     out
 }
 
-/// Convierte órdenes del save a destinos jugables (estación/waypoint/tesela).
-///
-/// Se omiten depósitos, condicionales y órdenes implícitas (`OT_LOADING`, etc.).
+/// Convierte órdenes del save a destinos jugables (estación/waypoint/depósito/condicional).
 #[must_use]
 pub(crate) fn vehicle_orders_from_sav(
     sav_orders: &[SavOrder],
     stations: &HashMap<u32, SavStationIndex>,
+    map_w: u32,
 ) -> Vec<VehicleOrder> {
     let mut out = Vec::new();
     for order in sav_orders {
@@ -247,10 +251,40 @@ pub(crate) fn vehicle_orders_from_sav(
                     out.push(VehicleOrder::waypoint(st.pos));
                 }
             }
+            OT_GOTO_DEPOT => {
+                let pos = tile_coord_from_index(order.dest, map_w);
+                let halt = order.flags & OTTD_DEPOT_HALT != 0;
+                let service = order.flags & OTTD_DEPOT_SERVICE != 0;
+                let depot_order = if halt || !service {
+                    VehicleOrder::depot(pos)
+                } else {
+                    VehicleOrder::depot_pass_through(pos)
+                };
+                out.push(depot_order);
+            }
+            OT_CONDITIONAL => {
+                let comparator = (order.order_type >> 5) & 0x07;
+                let value = u8::try_from(order.dest & 0x07FF).unwrap_or(255);
+                let jump_to = usize::from(order.flags);
+                let condition = match comparator {
+                    4 => crate::vehicle::OrderConditionKind::CargoLoadAbove,
+                    2 => crate::vehicle::OrderConditionKind::CargoLoadBelow,
+                    _ => continue,
+                };
+                out.push(VehicleOrder::conditional(condition, value, jump_to));
+            }
             _ => {}
         }
     }
     out
+}
+
+fn tile_coord_from_index(idx: u16, map_w: u32) -> TileCoord {
+    if map_w == 0 {
+        return TileCoord::new(0, 0);
+    }
+    let i = u32::from(idx);
+    TileCoord::new((i % map_w).cast_signed(), (i / map_w).cast_signed())
 }
 
 #[cfg(test)]
@@ -375,6 +409,7 @@ mod tests {
                 flags: 0,
             }],
             &stations,
+            64,
         );
         assert_eq!(orders, vec![VehicleOrder::station(TileCoord::new(5, 2))]);
     }
@@ -402,6 +437,7 @@ mod tests {
                 flags: (OTTD_LOAD_FULL << 4) | OTTD_UNLOAD_NO_UNLOAD,
             }],
             &stations,
+            64,
         );
         assert_eq!(
             orders,
@@ -410,6 +446,39 @@ mod tests {
                 true,
                 true
             )]
+        );
+    }
+
+    #[test]
+    fn maps_depot_and_conditional_orders() {
+        let orders = vehicle_orders_from_sav(
+            &[
+                SavOrder {
+                    order_type: OT_GOTO_DEPOT,
+                    dest: 5 + 2 * 64,
+                    flags: OTTD_DEPOT_HALT | (1 << 1),
+                },
+                SavOrder {
+                    order_type: OT_CONDITIONAL | (4 << 5),
+                    dest: 50,
+                    flags: 2,
+                },
+            ],
+            &HashMap::new(),
+            64,
+        );
+        assert_eq!(orders.len(), 2);
+        assert!(matches!(
+            orders[0],
+            VehicleOrder::Depot {
+                depot: TileCoord { x: 5, y: 2 },
+                stop: true,
+                ..
+            }
+        ));
+        assert_eq!(
+            orders[1],
+            VehicleOrder::conditional(crate::vehicle::OrderConditionKind::CargoLoadAbove, 50, 2)
         );
     }
 }

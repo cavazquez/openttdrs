@@ -129,7 +129,7 @@ Endianness crítica (debe coincidir con `build.rs` al importar):
 | `STNN` | ✅ nombres + facilities |
 | `CITY` | ✅ nombre + pos; población se recalcula al load |
 | `INDY` | ✅ tile/w/h/type (mapeo `IndustrySpec` → tipo OTTD best-effort) |
-| `VEHS` / `ORDL` | ✅ tren/bus/camión + goto estación/waypoint; sin depósito/condicionales/shared |
+| `VEHS` / `ORDL` | ✅ tren/bus/camión + goto estación/waypoint/depósito/condicional + full_load |
 | Barcos / aviones | ❌ omitidos |
 | Horarios / grupos / shared orders / autoreplace | ❌ solo en `.json` |
 | `OBJS`, `NEWS`, settings, NewGRF | ❌ |
@@ -151,8 +151,8 @@ Orden sugerido:
 1. ~~**`STNN`**~~ ✅  
 2. ~~**`CITY`**~~ ✅  
 3. ~~**`INDY`**~~ ✅  
-4. ~~**`ORDL` + `VEHS`**~~ ✅ (goto estación/waypoint)  
-5. Órdenes depósito / condicionales / flags full_load más fieles  
+4. ~~**`ORDL` + `VEHS`**~~ ✅ (goto estación/waypoint/depósito/condicional + full_load)  
+5. ~~Órdenes depósito / condicionales / flags full_load más fieles~~ ✅  
 6. Validar con OpenTTD real (settings + chunks obligatorios del juego completo)
 
 Reglas:
@@ -173,7 +173,7 @@ Reglas:
 | `m8` HouseID basura | MAP8 no en BE, o versión &lt; 348 |
 | Dinero `None` al cargar | Falta chunk `PLYR` o tipo SLE distinto de 7 |
 | UI guarda JSON sin querer | Nombre con `.json`; por defecto ya es `.sav` |
-| Órdenes depósito/condicionales perdidas | Solo se exportan goto estación/waypoint |
+| Órdenes depósito/condicionales perdidas | ✅ `OT_GOTO_DEPOT` / `OT_CONDITIONAL` en export/import |
 | Vehículos sin lista | Órdenes vacías → `orders` ref = 0 (válido) |
 
 ---

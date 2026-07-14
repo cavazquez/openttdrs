@@ -406,21 +406,58 @@ pub(in crate::command) fn place_tram_bits(
         }
     });
     let existing_tram = state.map.get(c).map_or(0, |t| {
-        if t.kind == TileKind::Road {
+        if matches!(
+            t.kind,
+            TileKind::Road | TileKind::RoadBridge | TileKind::RoadTunnel
+        ) {
             t.m3 & 0x0F
         } else {
             0
         }
     });
     // Asegurar tesela Road (conserva road bits existentes; puede quedar en 0).
-    if state.map.get_kind(c) != Some(TileKind::Road) {
-        write_normal_road_tile(state, c, existing_road)?;
+    // Puente/túnel: solo overlay m3, sin degradar a Road.
+    match state.map.get_kind(c) {
+        Some(TileKind::Road | TileKind::RoadBridge | TileKind::RoadTunnel) => {}
+        _ => {
+            write_normal_road_tile(state, c, existing_road)?;
+        }
     }
     let tram_bits =
         merge_tram_bits_with_neighbors(&state.map, c, requested, existing_tram, force_axis);
     write_tram_geometry(state, c, tram_bits)?;
     propagate_tram_bits_to_neighbors(state, c, tram_bits)?;
     state.economy.money -= ROAD_BUILD_COST;
+    Ok(())
+}
+
+/// Quita el overlay de tranvía (`m3`/`m8`) sin demoler la carretera.
+pub(in crate::command) fn remove_tram_bits(
+    state: &mut GameState,
+    c: TileCoord,
+) -> Result<(), CommandError> {
+    use crate::road_type::{
+        set_tram_road_type_on_tile, set_tram_track_bits_on_tile, tram_track_bits,
+    };
+    check_in_bounds(&state.map, c)?;
+    require_tile_owned_by_active(state, c)?;
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    if !matches!(
+        tile.kind,
+        TileKind::Road | TileKind::RoadBridge | TileKind::RoadTunnel
+    ) {
+        return Err(CommandError::NoTramToRemove);
+    }
+    if tram_track_bits(&tile) == 0 {
+        return Ok(());
+    }
+    let mut out = set_tram_track_bits_on_tile(tile, 0);
+    out = set_tram_road_type_on_tile(out, None);
+    state
+        .map
+        .set_tile(c, out)
+        .map_err(|_| CommandError::OutOfBounds)?;
+    state.economy.money -= ROAD_BUILD_COST / 2;
     Ok(())
 }
 
@@ -431,7 +468,10 @@ fn write_tram_geometry(
 ) -> Result<(), CommandError> {
     use crate::road_type::{set_tram_road_type_on_tile, set_tram_track_bits_on_tile};
     let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
-    if tile.kind != TileKind::Road {
+    if !matches!(
+        tile.kind,
+        TileKind::Road | TileKind::RoadBridge | TileKind::RoadTunnel
+    ) {
         tile.kind = TileKind::Road;
         tile.mapt = 0x20;
     }

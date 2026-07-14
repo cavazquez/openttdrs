@@ -368,9 +368,9 @@ pub use train_movement::{
 };
 pub use vehicle::reverse_direction;
 pub use vehicle::{
-    AircraftPhase, BREAKDOWN_DURATION_TICKS, DIR_E, DIR_N, DIR_NE, DIR_NW, DIR_S, DIR_SE, DIR_SW,
-    DIR_W, OrderConditionKind, SERVICING_RELIABILITY_THRESHOLD, TimetableWaitKind,
-    VEHICLE_PROGRESS_STEP, Vehicle, VehicleDirection, VehicleKind, VehicleOrder,
+    AircraftPhase, BREAKDOWN_DURATION_TICKS, DEFAULT_SERVICE_INTERVAL_DAYS, DIR_E, DIR_N, DIR_NE,
+    DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W, OrderConditionKind, SERVICING_RELIABILITY_THRESHOLD,
+    TimetableWaitKind, VEHICLE_PROGRESS_STEP, Vehicle, VehicleDirection, VehicleKind, VehicleOrder,
     direction_from_tile_step,
 };
 pub use vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup};

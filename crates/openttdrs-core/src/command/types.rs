@@ -22,6 +22,8 @@ pub enum Command {
     PlaceRoadBits(TileCoord, u8),
     /// Coloca o combina trazado de tranvía (`m3` bits 0..3; tipo en `m8`).
     PlaceTramBits(TileCoord, u8),
+    /// Quita el overlay de tranvía sin demoler la carretera.
+    RemoveTramBits(TileCoord),
     /// Reemplaza la geometría de carretera de la tesela con `RoadBits` exactos.
     SetRoadBits(TileCoord, u8),
     /// Coloca via de tren en la tesela (MVP: validacion de terreno).
@@ -428,6 +430,8 @@ pub enum CommandError {
     CannotPlaceWaypointOnTrack,
     /// No hay vía que quitar en esta tesela.
     NoRailToRemove,
+    /// No hay overlay de tranvía que quitar.
+    NoTramToRemove,
     /// No hay vía que convertir en esta tesela.
     NoRailToConvert,
     /// Un tren en la tesela no es compatible con el tipo de vía destino.
@@ -555,6 +559,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
             "El waypoint solo puede colocarse sobre vía recta (eje X o Y)."
         }
         CommandError::NoRailToRemove => "No hay vía que quitar aquí.",
+        CommandError::NoTramToRemove => "No hay tranvía que quitar aquí.",
         CommandError::NoRailToConvert => "No hay vía que convertir aquí.",
         CommandError::TrainIncompatibleWithRailType => {
             "Hay un tren incompatible con ese tipo de vía."

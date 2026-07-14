@@ -115,6 +115,7 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         | BuildMenuAction::Tram
         | BuildMenuAction::TramX
         | BuildMenuAction::TramY
+        | BuildMenuAction::TramRemove
         | BuildMenuAction::RoadDepot
         | BuildMenuAction::RoadBridge
         | BuildMenuAction::RoadTunnel

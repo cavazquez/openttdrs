@@ -394,6 +394,21 @@ fn place_tram_bits_sets_m3_and_m8() {
 }
 
 #[test]
+fn remove_tram_bits_clears_overlay_keeps_road() {
+    use crate::road_type::{tram_road_type_from_tile, tram_track_bits};
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceRoadBits(c, 0x05)).unwrap();
+    apply_command(&mut s, &Command::PlaceTramBits(c, 0x05)).unwrap();
+    apply_command(&mut s, &Command::RemoveTramBits(c)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert_eq!(tile.kind, TileKind::Road);
+    assert_eq!(tile.m5 & 0x0F, 0x05);
+    assert_eq!(tram_track_bits(&tile), 0);
+    assert_eq!(tram_road_type_from_tile(&tile), None);
+}
+
+#[test]
 fn place_road_preserves_existing_tram_overlay() {
     use crate::road_type::{RoadType, tram_road_type_from_tile, tram_track_bits};
     let mut s = GameState::new(8, 8);

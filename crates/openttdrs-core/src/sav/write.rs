@@ -13,6 +13,7 @@ use std::path::Path;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 
+use crate::CargoType;
 use crate::game_state::GameState;
 use crate::industry::{Industry, IndustryKind, IndustrySpec};
 use crate::map::{Map, Tile, TileCoord, TileKind};
@@ -34,9 +35,14 @@ const FACIL_AIRPORT: u8 = 0x08;
 const FACIL_DOCK: u8 = 0x10;
 const FACIL_WAYPOINT: u8 = 0x80;
 
-/// `OT_GOTO_STATION` / `OT_GOTO_WAYPOINT` (`order_type.h`).
+/// `OT_GOTO_STATION` / `OT_GOTO_DEPOT` / `OT_GOTO_WAYPOINT` / `OT_CONDITIONAL` (`order_type.h`).
 const OT_GOTO_STATION: u8 = 1;
+const OT_GOTO_DEPOT: u8 = 2;
 const OT_GOTO_WAYPOINT: u8 = 6;
+const OT_CONDITIONAL: u8 = 7;
+const OTTD_DEPOT_SERVICE: u8 = 1 << 0;
+const OTTD_DEPOT_PART_OF_ORDERS: u8 = 1 << 1;
+const OTTD_DEPOT_HALT: u8 = 1 << 3;
 /// Cabeza de convoy (`GVSF_FRONT`).
 const GVSF_FRONT: u8 = 0x01;
 
@@ -430,8 +436,8 @@ fn cargo_ottd_byte(v: &Vehicle) -> u8 {
     }
 }
 
-fn encode_goto_order(order: &VehicleOrder, state: &GameState) -> Option<Vec<u8>> {
-    let (order_type, dest, flags) = match *order {
+fn encode_goto_order(order: &VehicleOrder, state: &GameState, map_w: u32) -> Option<Vec<u8>> {
+    let (order_type, dest, flags, refit) = match *order {
         VehicleOrder::Station {
             station,
             full_load,
@@ -446,19 +452,50 @@ fn encode_goto_order(order: &VehicleOrder, state: &GameState) -> Option<Vec<u8>>
             if no_unload {
                 flags |= 4; // NoUnload
             }
-            (OT_GOTO_STATION, id, flags)
+            (OT_GOTO_STATION, id, flags, 0xFFu8)
         }
         VehicleOrder::Waypoint { waypoint, .. } => {
             let id = station_id_for_pos(state, waypoint)?;
-            (OT_GOTO_WAYPOINT, id, 0)
+            (OT_GOTO_WAYPOINT, id, 0, 0xFF)
         }
-        _ => return None,
+        VehicleOrder::Depot {
+            depot,
+            stop,
+            refit_cargo,
+            ..
+        } => {
+            let id = u16::try_from(tile_index(depot, map_w)?).ok()?;
+            let mut flags = OTTD_DEPOT_PART_OF_ORDERS;
+            if stop {
+                flags |= OTTD_DEPOT_HALT;
+            } else {
+                flags |= OTTD_DEPOT_SERVICE;
+            }
+            let refit = refit_cargo.map_or(0xFF, CargoType::temperate_id);
+            (OT_GOTO_DEPOT, id, flags, refit)
+        }
+        VehicleOrder::Conditional {
+            condition,
+            value,
+            jump_to,
+        } => {
+            // LoadPercentage (var 0) + MoreThan(4) / LessThan(2).
+            let comparator: u8 = match condition {
+                crate::vehicle::OrderConditionKind::CargoLoadAbove => 4,
+                crate::vehicle::OrderConditionKind::CargoLoadBelow => 2,
+            };
+            let order_type = OT_CONDITIONAL | (comparator << 5);
+            let flags = u8::try_from(jump_to.min(255)).unwrap_or(255);
+            let dest = u16::from(value); // variable 0 in high bits
+            (order_type, dest, flags, 0xFF)
+        }
+        VehicleOrder::Tile(_) => return None,
     };
     let mut o = Vec::with_capacity(10);
     o.push(order_type);
     o.push(flags);
     o.extend_from_slice(&dest.to_be_bytes());
-    o.push(0xFF); // refit_cargo
+    o.push(refit);
     o.extend_from_slice(&0u16.to_be_bytes()); // wait_time
     o.extend_from_slice(&0u16.to_be_bytes()); // travel_time
     o.extend_from_slice(&0u16.to_be_bytes()); // max_speed
@@ -484,7 +521,7 @@ fn ordl_and_vehs_records(state: &GameState, map_w: u32) -> (Vec<Vec<u8>>, Vec<Ve
 
         let mut order_bytes = Vec::new();
         for order in &v.orders {
-            if let Some(enc) = encode_goto_order(order, state) {
+            if let Some(enc) = encode_goto_order(order, state, map_w) {
                 order_bytes.push(enc);
             }
         }

@@ -287,6 +287,11 @@ pub(super) fn spawn_road_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             BuildMenuAction::Tram,
                         ),
                         (
+                            "Quitar tranvía",
+                            "assets/opengfx/tiles/ui_demolish.png",
+                            BuildMenuAction::TramRemove,
+                        ),
+                        (
                             "Deposito de carretera",
                             "assets/opengfx/tiles/rail_1412.png",
                             BuildMenuAction::RoadDepot,

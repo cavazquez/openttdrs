@@ -166,14 +166,14 @@ fn order_row_label(
         VehicleOrder::Depot { depot, stop, .. } => {
             if sim.state.map.get_kind(depot) == Some(TileKind::RailDepot) {
                 if stop {
-                    "Depósito vía"
+                    "Depósito vía (parar)"
                 } else {
-                    "Depósito vía (paso)"
+                    "Depósito vía (serv. si hace falta)"
                 }
             } else if stop {
-                "Depósito"
+                "Depósito (parar)"
             } else {
-                "Depósito (paso)"
+                "Depósito (serv. si hace falta)"
             }
         }
         VehicleOrder::Tile(tile) if sim.state.map.get_kind(tile) == Some(TileKind::RoadDepot) => {

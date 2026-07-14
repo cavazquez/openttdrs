@@ -11,11 +11,17 @@ use crate::train_movement::{ACCEL_SLOWDOWN, is_45_degree_turn};
 
 /// Umbral de fiabilidad bajo el cual conviene servicio en depósito.
 pub const SERVICING_RELIABILITY_THRESHOLD: u16 = 5_000;
+/// Intervalo de revisión por defecto (`OpenTTD` `service_interval` ≈ 150 días).
+pub const DEFAULT_SERVICE_INTERVAL_DAYS: u16 = 150;
 /// Duración de una avería (~3 días de calendario).
 pub const BREAKDOWN_DURATION_TICKS: u32 = crate::economy::TICKS_PER_TRANSIT_DAY * 3;
 
 const fn default_vehicle_reliability() -> u16 {
     8_500
+}
+
+const fn default_service_interval_days() -> u16 {
+    DEFAULT_SERVICE_INTERVAL_DAYS
 }
 
 fn initial_reliability_for_engine(engine_id: u16, kind: VehicleKind) -> u16 {
@@ -706,6 +712,12 @@ pub struct Vehicle {
     /// Fiabilidad por debajo del umbral de servicio recomendado.
     #[serde(default)]
     pub needs_servicing: bool,
+    /// Intervalo de revisión en días de calendario.
+    #[serde(default = "default_service_interval_days")]
+    pub service_interval_days: u16,
+    /// Día de calendario del último servicio en depósito.
+    #[serde(default)]
+    pub last_service_day: u64,
     /// Ticks restantes de avería (vehículo parado).
     #[serde(default)]
     pub breakdown_ticks_remaining: u32,
@@ -827,6 +839,8 @@ impl Vehicle {
             sim_tick: 0,
             reliability,
             needs_servicing: false,
+            service_interval_days: DEFAULT_SERVICE_INTERVAL_DAYS,
+            last_service_day: 0,
             breakdown_ticks_remaining: 0,
             aircraft_phase: AircraftPhase::InHangar,
             altitude: 0,
@@ -865,6 +879,24 @@ impl Vehicle {
         self.reliability = initial_reliability_for_engine(engine_id, self.kind);
         self.needs_servicing = false;
         self.breakdown_ticks_remaining = 0;
+        self.last_service_day =
+            crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
+    }
+
+    /// ¿Toca revisión? (`NeedsServicing`: intervalo o fiabilidad baja).
+    ///
+    /// Órdenes `Depot { stop: false }` = «servicio si hace falta» (se saltan si esto es false).
+    #[must_use]
+    pub fn requires_service(&self) -> bool {
+        if self.breakdown_ticks_remaining > 0 {
+            return false;
+        }
+        if self.reliability < SERVICING_RELIABILITY_THRESHOLD {
+            return true;
+        }
+        let day = crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
+        let interval = u64::from(self.service_interval_days.max(1));
+        day.saturating_sub(self.last_service_day) >= interval
     }
 
     /// Comprueba avería durante el movimiento; devuelve `true` si acaba de averiarse.
@@ -879,7 +911,7 @@ impl Vehicle {
         }
         if tick.is_multiple_of(256) {
             self.reliability = self.reliability.saturating_sub(10);
-            self.needs_servicing = self.reliability < SERVICING_RELIABILITY_THRESHOLD;
+            self.needs_servicing = self.requires_service();
         }
         if self.reliability >= 4_000 {
             return false;
@@ -1503,13 +1535,22 @@ impl Vehicle {
             return;
         }
         let pass_through = self.orders[self.current_order].is_pass_through();
-        if self.orders[self.current_order].depot_stops() {
-            if let Some(cargo) = self.orders[self.current_order].depot_refit_cargo() {
-                self.pending_depot_order_refit = Some(cargo);
+        if self.orders[self.current_order].is_depot() {
+            let halt = self.orders[self.current_order].depot_stops();
+            let needs = self.requires_service();
+            // `stop:true` = parar siempre; `stop:false` = servicio si hace falta.
+            if halt || needs {
+                if let Some(cargo) = self.orders[self.current_order].depot_refit_cargo() {
+                    self.pending_depot_order_refit = Some(cargo);
+                }
+                self.service_at_depot();
             }
-            self.service_at_depot();
-            self.running = false;
-            self.progress = 255;
+            if halt {
+                self.running = false;
+                self.progress = 255;
+                return;
+            }
+            self.do_advance_after_arrival(true);
             return;
         }
         if self.orders[self.current_order].full_load() && self.cargo < self.capacity {
@@ -1670,6 +1711,7 @@ impl Vehicle {
     /// Actualiza `dest` según la orden actual (vía adyacente para estaciones de tren).
     pub fn sync_order_destination(&mut self, map: &crate::map::Map) {
         self.resolve_conditional_orders();
+        self.skip_inapplicable_service_depot_orders();
         if self.orders.is_empty() {
             return;
         }
@@ -1688,6 +1730,28 @@ impl Vehicle {
         } else {
             crate::station::resolve_order_destination(map, self.kind, order)
         };
+    }
+
+    /// Salta órdenes «servicio si hace falta» cuando no toca revisión.
+    fn skip_inapplicable_service_depot_orders(&mut self) {
+        if self.orders.is_empty() {
+            return;
+        }
+        let max = self.orders.len();
+        for _ in 0..max {
+            let Some(order) = self.orders.get(self.current_order).copied() else {
+                break;
+            };
+            if matches!(order, VehicleOrder::Depot { stop: false, .. }) && !self.requires_service()
+            {
+                self.current_order = (self.current_order + 1) % self.orders.len();
+                self.path.clear();
+                self.progress = 0;
+                continue;
+            }
+            break;
+        }
+        self.resolve_conditional_orders();
     }
 
     /// Salida con sentido opuesto al de llegada (giro animado en parada bus/camión).
@@ -2098,6 +2162,49 @@ mod tests {
         assert!(v.reliability >= 8_000);
         assert!(!v.needs_servicing);
         assert_eq!(v.breakdown_ticks_remaining, 0);
+    }
+
+    #[test]
+    fn requires_service_by_reliability_and_interval() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.service_interval_days = 10;
+        v.last_service_day = 0;
+        v.sim_tick = 0;
+        v.reliability = 9_000;
+        assert!(!v.requires_service());
+        v.reliability = 4_000;
+        assert!(v.requires_service());
+        v.reliability = 9_000;
+        // 10 días × TICKS_PER_TRANSIT_DAY
+        v.sim_tick = u64::from(crate::economy::TICKS_PER_TRANSIT_DAY) * 10;
+        assert!(v.requires_service());
+        v.service_at_depot();
+        assert!(!v.requires_service());
+    }
+
+    #[test]
+    fn service_if_needed_depot_order_is_skipped_when_fresh() {
+        let mut map = crate::map::Map::new_flat(8, 8, 0);
+        let depot = TileCoord::new(2, 2);
+        map.set_kind(depot, crate::map::TileKind::RoadDepot)
+            .unwrap();
+        let mut v = Vehicle::new(1, VehicleKind::Bus, TileCoord::new(1, 1), depot);
+        v.reliability = 9_000;
+        v.last_service_day = 0;
+        v.service_interval_days = 150;
+        v.sim_tick = 0;
+        v.orders = vec![
+            VehicleOrder::depot_pass_through(depot),
+            VehicleOrder::station(TileCoord::new(4, 4)),
+        ];
+        v.current_order = 0;
+        v.sync_order_destination(&map);
+        assert_eq!(v.current_order, 1);
     }
 
     #[test]

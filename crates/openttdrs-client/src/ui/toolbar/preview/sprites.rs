@@ -66,6 +66,7 @@ pub(crate) fn preview_image_for_action(
         BuildMenuAction::TramY => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/tram_flat_00.png"))
         }
+        BuildMenuAction::TramRemove => None,
         BuildMenuAction::RoadDepot => None,
         BuildMenuAction::ShipDepot => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/ship_depot_ne.png"))

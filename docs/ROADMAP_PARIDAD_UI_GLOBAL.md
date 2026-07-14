@@ -83,7 +83,7 @@ Método:
 | Categoría | Cobertura base | Diagnóstico |
 |---|---:|---|
 | Ventanas de entidad | ~62 % | fuerte en vehículo/órdenes/horario |
-| Toolbars de construcción | ~55 % | rail/road fuertes; faltan tram y selectores |
+| Toolbars de construcción | ~70 % | rail/road/tram + selectores; quitar tranvía |
 | Toolbar principal | ~38 % | funciones condensadas en 8 grupos |
 | **Global WindowClass** | **~24 %** | baseline del roadmap |
 | Settings/meta | ~18 % | audio, noticias, save, PBS, NewGRF RO |

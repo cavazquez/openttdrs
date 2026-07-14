@@ -19,6 +19,7 @@ pub mod depot;
 pub mod dev_metrics;
 pub mod disaster;
 pub mod economy;
+pub mod economy_quarterly;
 pub mod engine;
 pub mod entity_history;
 mod game_state;
@@ -111,6 +112,10 @@ pub use economy::{
     monthly_loan_interest, terraform_cost_per_corner, ticks_to_transit_days,
     transported_goods_income, vehicle_purchase_cost, vehicle_running_cost_per_tick,
     vehicle_sell_refund,
+};
+pub use economy_quarterly::{
+    ECONOMY_HISTORY_QUARTERS, QuarterlyEconomyEntry, QuarterlyEconomyHistory,
+    calculate_company_value, calculate_performance_rating,
 };
 pub use engine::{
     DepotPurchaseKind, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_FOKKER, ENGINE_AIRCRAFT_TRICARIO,
@@ -338,10 +343,11 @@ pub use tnbp_decode::{
     jgr_tunnels_from_decoded, read_sl_gamma, split_sl_gamma_segments, tnbp_blob_to_json_value,
 };
 pub use town::{
-    AUTHORITY_MIN_STATION, FUND_BUILDINGS_COST, MAIL_PER_HOUSE, PASSENGERS_PER_HOUSE,
-    STATION_TOWN_CARGO_CAPACITY, TOWN_ADVERTISE_COST, TOWN_AUTHORITY_RADIUS, TOWN_GROWTH_TICKS,
-    TOWN_PRODUCE_TICKS, Town, authority_allows_new_station, grow_town_if_served,
-    produce_town_cargo,
+    AUTHORITY_MIN_STATION, FUND_BUILDINGS_COST, FUND_BUILDINGS_MONTHS, MAIL_PER_HOUSE,
+    PASSENGERS_PER_HOUSE, STATION_TOWN_CARGO_CAPACITY, TOWN_ADVERTISE_COST, TOWN_AUTHORITY_RADIUS,
+    TOWN_GROWTH_DESERT, TOWN_GROWTH_TICKS, TOWN_GROWTH_WINTER, TOWN_PRODUCE_TICKS, Town,
+    TownGrowthEffect, authority_allows_new_station, grow_town_if_served,
+    process_town_monthly_growth, produce_town_cargo, town_goal_satisfied, update_town_growth_state,
 };
 pub use townname::generate_town_name;
 pub use train_consist::{

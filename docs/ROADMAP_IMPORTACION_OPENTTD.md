@@ -231,7 +231,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Intereses mensuales | `economy.cpp:799` | **PARCIAL** (`sim_step.rs`) |
 | Quiebra / compra rivales | `company_cmd.cpp:546` | **PARCIAL** (aviso quiebra) |
 | Subsidios en pagos | `subsidy.cpp` | **PARCIAL** (`subsidy.rs`) |
-| Valoración trimestral compañía | `economy.cpp:637` | **FALTA** |
+| Valoración trimestral compañía | `economy.cpp:637` | **EXISTE** (`economy_quarterly.rs`) |
 
 #### Desastres y averías
 
@@ -250,7 +250,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Expansión física (casas, calles) | `town_cmd.cpp:1184` | **FALTA** |
 | Rating autoridad local | `town_cmd.cpp:3257` | **PARCIAL** (`town.rs`, estaciones) |
 | Acciones de ciudad (publicidad, fondos, vías) | `town_cmd.cpp:3421` | **PARCIAL** (publicidad/fondos UI) |
-| Metas de carga para crecer | `town_cmd.cpp:3916` | **FALTA** |
+| Metas de carga para crecer | `town_cmd.cpp:3916` | **EXISTE** (`town.rs` goals/received/is_growing) |
 
 #### Vehículos (envejecimiento)
 

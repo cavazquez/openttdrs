@@ -7,7 +7,10 @@
 use bevy::prelude::*;
 use openttdrs_core::{
     Command, GameState, TileCoord, TileKind, apply_command, format_money,
-    town::{FUND_BUILDINGS_COST, MAIL_PER_HOUSE, PASSENGERS_PER_HOUSE, TOWN_ADVERTISE_COST},
+    town::{
+        FUND_BUILDINGS_COST, MAIL_PER_HOUSE, PASSENGERS_PER_HOUSE, TOWN_ADVERTISE_COST,
+        TOWN_GROWTH_DESERT, TOWN_GROWTH_WINTER, Town, TownGrowthEffect,
+    },
 };
 
 use crate::iso::tile_pos;
@@ -164,6 +167,46 @@ fn nearest_town_id(state: &GameState, pos: TileCoord) -> Option<u32> {
         .map(|t| t.id)
 }
 
+fn format_goal_value(goal: u32) -> String {
+    if goal == 0 {
+        "—".into()
+    } else if goal == TOWN_GROWTH_WINTER {
+        "invierno".into()
+    } else if goal == TOWN_GROWTH_DESERT {
+        "desierto".into()
+    } else {
+        goal.to_string()
+    }
+}
+
+fn format_town_goals(town: &Town) -> String {
+    let labels = [
+        (TownGrowthEffect::Passengers, "Pasajeros"),
+        (TownGrowthEffect::Mail, "Correo"),
+        (TownGrowthEffect::Goods, "Bienes"),
+        (TownGrowthEffect::Food, "Comida"),
+        (TownGrowthEffect::Water, "Agua"),
+    ];
+    let mut lines = Vec::new();
+    for (effect, label) in labels {
+        let i = effect as usize;
+        let goal = town.goals[i];
+        if goal == 0 && town.received_old[i] == 0 {
+            continue;
+        }
+        lines.push(format!(
+            "  {label}: {} / meta {}",
+            town.received_old[i],
+            format_goal_value(goal)
+        ));
+    }
+    if lines.is_empty() {
+        "  (sin metas activas en este clima)".into()
+    } else {
+        lines.join("\n")
+    }
+}
+
 pub(crate) fn sync_town_window(
     town_state: Res<TownWindowState>,
     sim: Res<SimWorld>,
@@ -223,8 +266,11 @@ pub(crate) fn sync_town_window(
                 sparkline_u32(&mail_hist, 24),
             )
         };
+        let growing = if town.is_growing { "sí" } else { "no" };
+        let fund_left = town.fund_buildings_months;
+        let goals_line = format_town_goals(town);
         **body = format!(
-            "Habitantes: {}\nCasas: {}\nAutoridad local: {rating} (−1000…+1000, {rating_hint})\n\nServicio acumulado (partida):\n  Pasajeros: {}\n  Correo: {}\n  Crecimiento financiado: {}\n\nDemanda teórica por ciclo (casas × tasa):\n  Pasajeros máx. {}\n  Correo máx. {}\n\n{hist_block}",
+            "Habitantes: {}\nCasas: {}\nAutoridad local: {rating} (−1000…+1000, {rating_hint})\nCreciendo: {growing}\nFinanciación edificios: {fund_left} mes(es)\n\nServicio acumulado (partida):\n  Pasajeros: {}\n  Correo: {}\n  Crecimiento financiado: {}\n\nMetas de carga (mes anterior):\n{goals_line}\n\nDemanda teórica por ciclo (casas × tasa):\n  Pasajeros máx. {}\n  Correo máx. {}\n\n{hist_block}",
             town.population,
             houses,
             town.passengers_served,

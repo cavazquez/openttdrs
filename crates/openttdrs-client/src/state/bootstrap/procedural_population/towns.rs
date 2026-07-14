@@ -77,7 +77,7 @@ pub(super) fn place_towns(ctx: &mut PopCtx<'_>, target: usize, town_centers: &mu
         let name_seed = ctx.rng.next_u32();
         let name = generate_town_name(4, name_seed).unwrap_or_else(|| format!("Pueblo {x},{y}"));
         let town_id = u32::try_from(ctx.state.towns.len().saturating_add(1)).unwrap_or(1);
-        ctx.state.towns.push(Town {
+        let mut town = Town {
             id: town_id,
             pos: plan.town_pos,
             name,
@@ -87,7 +87,9 @@ pub(super) fn place_towns(ctx: &mut PopCtx<'_>, target: usize, town_centers: &mu
             mail_served: 0,
             growth_funded: 0,
             ..Default::default()
-        });
+        };
+        town.init_growth_goals(ctx.state.climate);
+        ctx.state.towns.push(town);
         town_centers.push(plan.town_pos);
     }
 }

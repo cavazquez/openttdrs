@@ -329,15 +329,42 @@ fn process_monthly_economy(state: &mut GameState, tick: u64) {
     }
     // Cierre mensual tras intereses: deltas por compañía + espejo global (activa).
     for i in 0..state.companies.len() {
+        let company_id = state.companies[i].id;
         let money = state.companies[i].economy.money;
         let loan = state.companies[i].economy.loan;
         let income = state.companies[i].cargo_income_earned;
         let costs = state.companies[i].vehicle_running_costs;
         let deliveries = state.companies[i].cargo_deliveries;
-        let value = crate::game_state::company_net_value(money, loan);
-        state.companies[i]
+        let liquid_value = crate::game_state::company_net_value(money, loan);
+        state.companies[i].economy_history.push_month_from_totals(
+            income,
+            costs,
+            deliveries,
+            liquid_value,
+        );
+        let month = state.companies[i]
             .economy_history
-            .push_month_from_totals(income, costs, deliveries, value);
+            .samples
+            .last()
+            .copied()
+            .unwrap_or_default();
+        let quarter_deliveries = state.companies[i]
+            .quarterly_economy
+            .cur_deliveries
+            .saturating_add(month.deliveries);
+        let performance = crate::economy_quarterly::calculate_performance_rating(
+            state,
+            company_id,
+            quarter_deliveries,
+        );
+        let company_value = crate::economy_quarterly::calculate_company_value(state, company_id);
+        state.companies[i].quarterly_economy.push_month(
+            month.income,
+            month.running_costs,
+            month.deliveries,
+            performance,
+            company_value,
+        );
     }
     // Espejo legacy en `stats` = compañía activa (saves / Finances).
     let active_idx = state.active_company.index();
@@ -352,7 +379,8 @@ fn process_monthly_economy(state: &mut GameState, tick: u64) {
         );
     }
     state.link_graph.rollover_month();
-    // Historiales de pueblos e industrias (UI-3).
+    // Metas de crecimiento urbano + historiales de pueblos e industrias (UI-3).
+    town::process_town_monthly_growth(&mut state.towns, &state.stations);
     for town in &mut state.towns {
         let population = town.population;
         let passengers = town.passengers_served;

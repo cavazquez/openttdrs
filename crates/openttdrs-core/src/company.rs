@@ -61,6 +61,9 @@ pub struct Company {
     /// Series mensuales para gráficos (Income / Operating Profit / Value).
     #[serde(default)]
     pub economy_history: crate::game_state::EconomyHistory,
+    /// Series trimestrales (`CompaniesGenStatistics` / rating + valoración con activos).
+    #[serde(default)]
+    pub quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory,
 }
 
 impl Company {
@@ -76,6 +79,7 @@ impl Company {
             vehicle_running_costs: 0,
             cargo_deliveries: 0,
             economy_history: crate::game_state::EconomyHistory::default(),
+            quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
         }
     }
 
@@ -91,6 +95,7 @@ impl Company {
             vehicle_running_costs: 0,
             cargo_deliveries: 0,
             economy_history: crate::game_state::EconomyHistory::default(),
+            quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
         }
     }
 }

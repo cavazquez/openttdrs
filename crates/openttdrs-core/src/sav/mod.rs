@@ -276,6 +276,9 @@ impl GameState {
         }
         state.jgr_tunnels_from_footer = sav.extras.jgr_tunnels_from_tnbp();
         state.towns = sav.towns;
+        for town in &mut state.towns {
+            town.init_growth_goals(state.climate);
+        }
         if let Some(money) = sav.money {
             state.economy.money = money;
         }

@@ -30,6 +30,8 @@ pub(crate) enum GraphKind {
     Income,
     OperatingProfit,
     CompanyValue,
+    /// Rating 0..=1000 por trimestre (`performance_history`).
+    PerformanceHistory,
 }
 
 #[derive(Resource)]
@@ -104,6 +106,12 @@ pub(crate) fn setup_graph_window(mut commands: Commands, asset_server: Res<Asset
                     "Beneficio operativo",
                 );
                 spawn_kind_button(row, asset_server, GraphKind::CompanyValue, "Valor compañía");
+                spawn_kind_button(
+                    row,
+                    asset_server,
+                    GraphKind::PerformanceHistory,
+                    "Rendimiento",
+                );
             });
         panel.spawn((
             GraphCompanyFilterRow,
@@ -326,6 +334,7 @@ pub(crate) fn sync_graph_window(
         GraphKind::Income => format!("Ingresos — {company_name}"),
         GraphKind::OperatingProfit => format!("Beneficio operativo — {company_name}"),
         GraphKind::CompanyValue => format!("Valor — {company_name}"),
+        GraphKind::PerformanceHistory => format!("Rendimiento — {company_name}"),
     };
     if let Some((_, mut t)) = title_q
         .iter_mut()
@@ -398,25 +407,41 @@ pub(crate) fn sync_graph_window(
     }
 
     let company = sim.state.companies.iter().find(|c| c.id == filter_id);
-    let samples = company
-        .map(|c| c.economy_history.samples.as_slice())
-        .unwrap_or(&[]);
-    // Fallback: saves antiguos sin historial por compañía.
-    let legacy = &sim.state.stats.economy_history.samples;
-    let samples = if samples.is_empty() && filter_id == sim.state.active_company {
-        legacy.as_slice()
-    } else {
-        samples
+    let (values, period_label): (Vec<i64>, &str) = match state.kind {
+        GraphKind::PerformanceHistory => {
+            let q = company
+                .map(|c| c.quarterly_economy.samples.as_slice())
+                .unwrap_or(&[]);
+            (
+                q.iter().map(|s| i64::from(s.performance_history)).collect(),
+                "trimestrales",
+            )
+        }
+        _ => {
+            let samples = company
+                .map(|c| c.economy_history.samples.as_slice())
+                .unwrap_or(&[]);
+            // Fallback: saves antiguos sin historial por compañía.
+            let legacy = &sim.state.stats.economy_history.samples;
+            let samples = if samples.is_empty() && filter_id == sim.state.active_company {
+                legacy.as_slice()
+            } else {
+                samples
+            };
+            (
+                samples
+                    .iter()
+                    .map(|s| match state.kind {
+                        GraphKind::Income => s.income as i64,
+                        GraphKind::OperatingProfit => s.operating_profit(),
+                        GraphKind::CompanyValue => s.company_value,
+                        GraphKind::PerformanceHistory => 0,
+                    })
+                    .collect(),
+                "mensuales",
+            )
+        }
     };
-
-    let values: Vec<i64> = samples
-        .iter()
-        .map(|s| match state.kind {
-            GraphKind::Income => s.income as i64,
-            GraphKind::OperatingProfit => s.operating_profit(),
-            GraphKind::CompanyValue => s.company_value,
-        })
-        .collect();
     let max_abs = values
         .iter()
         .map(|v| v.unsigned_abs())
@@ -426,7 +451,7 @@ pub(crate) fn sync_graph_window(
 
     if let Ok(mut hint) = hint_q.single_mut() {
         if values.is_empty() {
-            **hint = format!("Sin datos mensuales de {company_name} (avanza el tiempo).");
+            **hint = format!("Sin datos {period_label} de {company_name} (avanza el tiempo).");
         } else {
             let last = *values.last().unwrap_or(&0);
             match state.kind {
@@ -439,6 +464,15 @@ pub(crate) fn sync_graph_window(
                         "{company_name} · Último cierre: {} · Actual: {}",
                         format_money(last),
                         format_money(live),
+                    );
+                }
+                GraphKind::PerformanceHistory => {
+                    let live_value = company
+                        .map(|c| openttdrs_core::calculate_company_value(&sim.state, c.id))
+                        .unwrap_or(0);
+                    **hint = format!(
+                        "{company_name} · Último trimestre: {last}/1000 · Valoración activos: {}",
+                        format_money(live_value),
                     );
                 }
                 _ => {
@@ -477,6 +511,7 @@ pub(crate) fn sync_graph_window(
             GraphKind::OperatingProfit => PROFIT_NEG,
             GraphKind::CompanyValue if value >= 0 => VALUE_POS,
             GraphKind::CompanyValue => VALUE_NEG,
+            GraphKind::PerformanceHistory => Color::srgb(0.45, 0.62, 0.78),
         });
     }
 }

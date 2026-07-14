@@ -5,6 +5,33 @@ use crate::entity_history::TownHistory;
 use crate::industry::Industry;
 use crate::map::{Map, TileCoord};
 use crate::station::{self, STATION_COVERAGE_RADIUS, Station, StopKind};
+use crate::world_gen::Climate;
+
+/// Efectos de carga que alimentan metas de crecimiento (`TownEffect` simplificado).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(usize)]
+pub enum TownGrowthEffect {
+    Passengers = 0,
+    Mail = 1,
+    Goods = 2,
+    /// Comida (ártico) — proxy vía `Goods` hasta existir cargo Food.
+    Food = 3,
+    /// Agua (trópico) — proxy vía `Oil` hasta existir cargo Water.
+    Water = 4,
+}
+
+pub const TOWN_GROWTH_EFFECT_COUNT: usize = 5;
+
+/// Meta especial: comida solo en invierno (`TOWN_GROWTH_WINTER`).
+pub const TOWN_GROWTH_WINTER: u32 = u32::MAX - 1;
+/// Meta especial: comida/agua en desierto (`TOWN_GROWTH_DESERT`).
+pub const TOWN_GROWTH_DESERT: u32 = u32::MAX;
+/// Umbral de población para exigir comida en ártico.
+pub const TOWN_GROWTH_WINTER_POP_THRESHOLD: u32 = 90;
+/// Umbral de población para exigir comida/agua en trópico.
+pub const TOWN_GROWTH_DESERT_POP_THRESHOLD: u32 = 60;
+/// Meses de crecimiento forzado al financiar edificios (`fund_buildings`).
+pub const FUND_BUILDINGS_MONTHS: u8 = 3;
 
 /// Ciudad (importada de saves de `OpenTTD` o creada por el juego).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -25,6 +52,21 @@ pub struct Town {
     /// Veces que la compañía financió edificios (`TownFundBuildings`).
     #[serde(default)]
     pub growth_funded: u32,
+    /// Metas mensuales por efecto (`town->goal[]`).
+    #[serde(default)]
+    pub goals: [u32; TOWN_GROWTH_EFFECT_COUNT],
+    /// Entregas del mes en curso (`received_new`).
+    #[serde(default)]
+    pub received_new: [u32; TOWN_GROWTH_EFFECT_COUNT],
+    /// Entregas del mes anterior (`received_old`), usadas para el gate de crecimiento.
+    #[serde(default)]
+    pub received_old: [u32; TOWN_GROWTH_EFFECT_COUNT],
+    /// Meses restantes de crecimiento forzado por financiación.
+    #[serde(default)]
+    pub fund_buildings_months: u8,
+    /// Resultado de `UpdateTownGrowth` (solo crece si es `true`).
+    #[serde(default)]
+    pub is_growing: bool,
     /// Series mensuales (población / servicio).
     #[serde(default)]
     pub history: TownHistory,
@@ -41,12 +83,32 @@ impl Default for Town {
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
+            goals: [0; TOWN_GROWTH_EFFECT_COUNT],
+            received_new: [0; TOWN_GROWTH_EFFECT_COUNT],
+            received_old: [0; TOWN_GROWTH_EFFECT_COUNT],
+            fund_buildings_months: 0,
+            is_growing: false,
             history: TownHistory::default(),
         }
     }
 }
 
 impl Town {
+    /// Inicializa metas según clima (`InitTownAndName` / clima ártico-trópico).
+    pub fn init_growth_goals(&mut self, climate: Climate) {
+        self.goals = [0; TOWN_GROWTH_EFFECT_COUNT];
+        match climate {
+            Climate::SubArctic => {
+                self.goals[TownGrowthEffect::Food as usize] = TOWN_GROWTH_WINTER;
+            }
+            Climate::SubTropical => {
+                self.goals[TownGrowthEffect::Food as usize] = TOWN_GROWTH_DESERT;
+                self.goals[TownGrowthEffect::Water as usize] = TOWN_GROWTH_DESERT;
+            }
+            Climate::Temperate | Climate::Toyland => {}
+        }
+    }
+
     /// Ajusta la valoración y devuelve el delta aplicado (clamp -1000..=1000).
     pub fn adjust_rating(&mut self, delta: i8) -> i8 {
         let before = self.local_authority_rating;
@@ -60,10 +122,89 @@ impl Town {
         match cargo {
             CargoType::Passengers => {
                 self.passengers_served = self.passengers_served.saturating_add(amount);
+                self.add_received(TownGrowthEffect::Passengers, amount);
             }
-            CargoType::Mail => self.mail_served = self.mail_served.saturating_add(amount),
+            CargoType::Mail => {
+                self.mail_served = self.mail_served.saturating_add(amount);
+                self.add_received(TownGrowthEffect::Mail, amount);
+            }
+            CargoType::Goods => {
+                self.add_received(TownGrowthEffect::Goods, amount);
+                // Proxy Food hasta existir cargo dedicado.
+                self.add_received(TownGrowthEffect::Food, amount);
+            }
+            CargoType::Oil => {
+                // Proxy Water (trópico) hasta existir cargo dedicado.
+                self.add_received(TownGrowthEffect::Water, amount);
+            }
             _ => {}
         }
+    }
+
+    fn add_received(&mut self, effect: TownGrowthEffect, amount: u32) {
+        let i = effect as usize;
+        self.received_new[i] = self.received_new[i].saturating_add(amount);
+    }
+}
+
+/// ¿La meta del efecto está satisfecha con las entregas del mes anterior?
+#[must_use]
+pub fn town_goal_satisfied(goal: u32, received: u32, population: u32) -> bool {
+    if goal == 0 {
+        return true;
+    }
+    if goal == TOWN_GROWTH_WINTER {
+        if population <= TOWN_GROWTH_WINTER_POP_THRESHOLD {
+            return true;
+        }
+        return received > 0;
+    }
+    if goal == TOWN_GROWTH_DESERT {
+        if population <= TOWN_GROWTH_DESERT_POP_THRESHOLD {
+            return true;
+        }
+        return received > 0;
+    }
+    received >= goal
+}
+
+/// Actualiza `is_growing` tras el rollover mensual (`UpdateTownGrowth`).
+pub fn update_town_growth_state(town: &mut Town, stations: &[Station]) {
+    let has_station = stations.iter().any(|st| {
+        !matches!(
+            st.stop_kind,
+            StopKind::RailWaypoint | StopKind::RoadWaypoint | StopKind::Buoy
+        ) && crate::economy::manhattan_distance(st.pos, town.pos) <= TOWN_AUTHORITY_RADIUS
+    });
+    if !has_station {
+        town.is_growing = false;
+        return;
+    }
+    if town.fund_buildings_months > 0 {
+        town.is_growing = true;
+        return;
+    }
+    for (i, &goal) in town.goals.iter().enumerate() {
+        if !town_goal_satisfied(goal, town.received_old[i], town.population) {
+            town.is_growing = false;
+            return;
+        }
+    }
+    let activity = town.received_old.iter().copied().sum::<u32>() > 0
+        || town.passengers_served.saturating_add(town.mail_served) > 0
+        || town.growth_funded > 0;
+    town.is_growing = activity;
+}
+
+/// Rollover mensual de entregas + decaimiento de financiación + gate de crecimiento.
+pub fn process_town_monthly_growth(towns: &mut [Town], stations: &[Station]) {
+    for town in towns {
+        town.received_old = town.received_new;
+        town.received_new = [0; TOWN_GROWTH_EFFECT_COUNT];
+        if town.fund_buildings_months > 0 {
+            town.fund_buildings_months = town.fund_buildings_months.saturating_sub(1);
+        }
+        update_town_growth_state(town, stations);
     }
 }
 
@@ -132,7 +273,7 @@ pub fn produce_town_cargo(
     (passengers, mail)
 }
 
-/// Crece la población si hay estación en cobertura y demanda atendida recientemente.
+/// Crece la población si `is_growing` y hay cobertura de casas (o financiación).
 pub fn grow_town_if_served(
     map: &Map,
     industries: &[Industry],
@@ -144,8 +285,8 @@ pub fn grow_town_if_served(
         return;
     }
     for town in towns {
-        let served = town.passengers_served + town.mail_served + town.growth_funded;
-        if served == 0 {
+        update_town_growth_state(town, stations);
+        if !town.is_growing {
             continue;
         }
         let has_station = stations.iter().any(|st| {
@@ -159,10 +300,10 @@ pub fn grow_town_if_served(
         }
         let coverage =
             station::station_coverage_at(map, industries, town.pos, STATION_COVERAGE_RADIUS);
-        if coverage.house_tiles > 0 || town.growth_funded > 0 {
-            town.population = town
-                .population
-                .saturating_add(TOWN_GROWTH_POPULATION_STEP + town.growth_funded.min(3));
+        if coverage.house_tiles > 0 || town.growth_funded > 0 || town.fund_buildings_months > 0 {
+            town.population = town.population.saturating_add(
+                TOWN_GROWTH_POPULATION_STEP + u32::from(town.fund_buildings_months.min(3)),
+            );
         }
     }
 }
@@ -280,6 +421,7 @@ mod tests {
             passengers_served: 10,
             mail_served: 0,
             growth_funded: 0,
+            is_growing: true,
             ..Default::default()
         }];
         let stations = vec![Station::new_with_kind(
@@ -288,6 +430,70 @@ mod tests {
         )];
         grow_town_if_served(&map, &[], &stations, &mut towns, TOWN_GROWTH_TICKS);
         assert!(towns[0].population > 100);
+    }
+
+    #[test]
+    fn town_does_not_grow_when_goals_unmet() {
+        let mut map = Map::new_flat(16, 16, 0);
+        let town_pos = TileCoord::new(8, 8);
+        map.set_kind(TileCoord::new(7, 8), TileKind::House).unwrap();
+        let mut towns = vec![Town {
+            id: 0,
+            pos: town_pos,
+            name: "Stuck".into(),
+            population: 120,
+            passengers_served: 10,
+            ..Default::default()
+        }];
+        towns[0].init_growth_goals(Climate::SubArctic);
+        let stations = vec![Station::new_with_kind(
+            TileCoord::new(8, 9),
+            StopKind::BusStop,
+        )];
+        grow_town_if_served(&map, &[], &stations, &mut towns, TOWN_GROWTH_TICKS);
+        assert_eq!(towns[0].population, 120);
+        assert!(!towns[0].is_growing);
+    }
+
+    #[test]
+    fn arctic_food_goal_blocks_large_town_without_goods() {
+        let mut town = Town {
+            id: 0,
+            pos: TileCoord::new(5, 5),
+            name: "Arctic".into(),
+            population: 120,
+            passengers_served: 50,
+            ..Default::default()
+        };
+        town.init_growth_goals(Climate::SubArctic);
+        let stations = vec![Station::new_with_kind(
+            TileCoord::new(5, 6),
+            StopKind::BusStop,
+        )];
+        update_town_growth_state(&mut town, &stations);
+        assert!(!town.is_growing);
+        town.received_old[TownGrowthEffect::Food as usize] = 1;
+        update_town_growth_state(&mut town, &stations);
+        assert!(town.is_growing);
+    }
+
+    #[test]
+    fn fund_buildings_forces_growth_gate() {
+        let mut town = Town {
+            id: 0,
+            pos: TileCoord::new(5, 5),
+            name: "Fund".into(),
+            population: 200,
+            fund_buildings_months: 3,
+            ..Default::default()
+        };
+        town.init_growth_goals(Climate::SubArctic);
+        let stations = vec![Station::new_with_kind(
+            TileCoord::new(5, 6),
+            StopKind::BusStop,
+        )];
+        update_town_growth_state(&mut town, &stations);
+        assert!(town.is_growing);
     }
 
     #[test]

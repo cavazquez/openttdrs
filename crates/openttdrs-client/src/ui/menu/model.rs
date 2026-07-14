@@ -215,6 +215,10 @@ pub(crate) const ECONOMY_MENU: MenuSpec = MenuSpec {
             MenuAction::Route(UiRoute::Graph(GraphKind::CompanyValue)),
         ),
         MenuEntrySpec::item(
+            "Rendimiento",
+            MenuAction::Route(UiRoute::Graph(GraphKind::PerformanceHistory)),
+        ),
+        MenuEntrySpec::item(
             "Tarifas de carga",
             MenuAction::Route(UiRoute::CargoPaymentRates),
         ),

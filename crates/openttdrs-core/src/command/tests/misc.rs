@@ -182,6 +182,14 @@ fn place_industry_spec_starts_construction_in_progress() {
         assert_eq!(tile.kind, TileKind::Industry);
         assert_eq!(tile.m1 & 0x80, 0, "obra en curso en {coord:?}");
         assert_eq!(tile.m2, 1);
+        // P7: MakeIndustry siembra m3 y deja triggers (m6 bits 3–5) a 0.
+        assert_eq!(
+            crate::industry_random_triggers(&tile),
+            0,
+            "triggers limpios en {coord:?}"
+        );
+        // Determinista con world_seed=0; al menos el byte queda escrito (puede ser 0).
+        let _ = crate::industry_random_bits(&tile);
     }
 }
 

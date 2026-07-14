@@ -62,7 +62,8 @@ pub(crate) fn step(state: &mut GameState) {
     );
     drain_signal_globset_now(state);
 
-    state.industry_tile_dirty = crate::map::step_industry_tiles(&mut state.map, t);
+    state.industry_tile_dirty =
+        crate::map::step_industry_tiles_with_seed(&mut state.map, t, state.world_seed);
     let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t);
     state.industry_tile_dirty.extend(airport_dirty);
 
@@ -267,10 +268,34 @@ fn apply_pending_depot_order_refits(state: &mut GameState) {
 fn produce_industries(state: &mut GameState, tick: u64) {
     for i in 0..state.industries.len() {
         let before = state.industries[i].stock;
+        let tiles = state.industries[i].tiles.clone();
+        let pos = state.industries[i].pos;
+        let footprint: Vec<TileCoord> = if tiles.is_empty() { vec![pos] } else { tiles };
         if state.industries[i].requires_station_inputs() {
-            let _ = state.industries[i].produce_from_nearby_stations(&mut state.stations, tick);
+            let processed =
+                state.industries[i].produce_from_nearby_stations(&mut state.stations, tick);
+            if processed {
+                let dirty = crate::map::trigger_industry_randomisation_at(
+                    &mut state.map,
+                    &footprint,
+                    crate::map::IndustryRandomTrigger::CargoReceived,
+                    state.world_seed,
+                    tick,
+                );
+                state.industry_tile_dirty.extend(dirty);
+            }
         } else {
             state.industries[i].produce(tick);
+            if state.industries[i].stock > before {
+                let dirty = crate::map::trigger_industry_randomisation_at(
+                    &mut state.map,
+                    &footprint,
+                    crate::map::IndustryRandomTrigger::IndustryTick,
+                    state.world_seed,
+                    tick,
+                );
+                state.industry_tile_dirty.extend(dirty);
+            }
         }
         let produced = u64::from(state.industries[i].stock.saturating_sub(before));
         state.stats.industry_cargo_units_produced += produced;

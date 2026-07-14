@@ -4,6 +4,7 @@
 mod binary;
 pub mod industry_construction;
 pub mod industry_link;
+pub mod industry_random;
 pub mod industry_terrain;
 pub mod industry_tile_anim;
 pub mod level_crossing;
@@ -23,10 +24,16 @@ pub(crate) use binary::{OTTDMAP_HEADER_LEN_VERSIONED, OTTDMAP_MAGIC_VERSIONED};
 pub use industry_construction::{
     INDUSTRY_CONSTRUCTION_COMPLETED, advance_industry_construction, industry_construction_counter,
     industry_construction_stage, is_industry_completed, make_industry_tile_bigger,
-    step_industry_tiles,
+    step_industry_tiles, step_industry_tiles_with_seed,
 };
 pub use industry_link::{
     IndustryTileLink, industry_instance_id, industry_tile_link, industry_tiles_mergeable,
+};
+pub use industry_random::{
+    INDUSTRY_RANDOM_TRIGGERS_MASK, IndustryRandomTrigger, advance_industry_tile_randomisation,
+    industry_random_bits, industry_random_triggers, industry_tile_rng, init_industry_tile_random,
+    set_industry_random_bits, set_industry_random_triggers, trigger_industry_randomisation_at,
+    trigger_industry_tile_randomisation,
 };
 pub use industry_terrain::{
     GFX_OILRIG_FIRST, GFX_OILRIG_LAST, SPR_FLAT_GRASS_TILE, industry_gfx_is_oil_rig,

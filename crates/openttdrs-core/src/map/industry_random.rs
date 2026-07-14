@@ -1,0 +1,214 @@
+//! Random bits (`m3`) y triggers (`m6` bits 3–5) de teselas industria.
+//!
+//! Paridad con `industry_map.h` / `TriggerIndustryTileRandomisation`
+//! (`newgrf_industrytiles.cpp`). Sin grupos NewGRF de tile, OpenTTD no-op;
+//! aquí reseedeamos `m3` al consumir triggers para ejercitar el cableado P7
+//! hasta que exista `ResolveRerandomisation` completo (P8).
+
+use super::{Map, Tile, TileCoord, TileKind};
+
+/// `IndustryRandomTrigger` (`industry_type.h`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum IndustryRandomTrigger {
+    /// Tile loop periódico.
+    TileLoop = 1 << 0,
+    /// Tick de la industria.
+    IndustryTick = 1 << 1,
+    /// Cargo entregado / recibido.
+    CargoReceived = 1 << 2,
+}
+
+impl IndustryRandomTrigger {
+    #[must_use]
+    pub const fn bit(self) -> u8 {
+        self as u8
+    }
+}
+
+/// Máscara de los 3 bits de triggers en `m6` (bits 3–5).
+pub const INDUSTRY_RANDOM_TRIGGERS_MASK: u8 = 0x38; // bits 3..5
+
+/// OpenTTD `GetIndustryRandomBits` — byte completo `m3`.
+#[must_use]
+pub const fn industry_random_bits(tile: &Tile) -> u8 {
+    tile.m3
+}
+
+/// OpenTTD `SetIndustryRandomBits`.
+pub fn set_industry_random_bits(tile: &mut Tile, bits: u8) {
+    tile.m3 = bits;
+}
+
+/// OpenTTD `GetIndustryRandomTriggers` — `GB(m6, 3, 3)`.
+#[must_use]
+pub const fn industry_random_triggers(tile: &Tile) -> u8 {
+    (tile.m6 >> 3) & 0x07
+}
+
+/// OpenTTD `SetIndustryRandomTriggers` — `SB(m6, 3, 3, …)` preservando gfx bit 2 y 6–7.
+pub fn set_industry_random_triggers(tile: &mut Tile, triggers: u8) {
+    tile.m6 = (tile.m6 & !INDUSTRY_RANDOM_TRIGGERS_MASK) | ((triggers & 0x07) << 3);
+}
+
+/// RNG determinista para bits de industria (estilo `tree_rng`).
+#[must_use]
+pub fn industry_tile_rng(world_seed: u64, tick: u64, c: TileCoord, salt: u64) -> u8 {
+    let mut x = world_seed
+        .wrapping_mul(0x9E37_79B9_7F4A_7C15)
+        .wrapping_add(tick)
+        .wrapping_add(u64::from(c.x.cast_unsigned()).wrapping_mul(0xC2B2_AE3D))
+        .wrapping_add(u64::from(c.y.cast_unsigned()).wrapping_mul(0x1656_67B1))
+        .wrapping_add(salt.wrapping_mul(0x27BB_2EE6_87B0_B0FD));
+    x ^= x >> 30;
+    x = x.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x ^= x >> 27;
+    x = x.wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^= x >> 31;
+    u8::try_from(x & 0xFF).unwrap_or(0)
+}
+
+/// Inicializa `m3` / triggers como `MakeIndustry` (triggers vacíos).
+pub fn init_industry_tile_random(tile: &mut Tile, random_bits: u8) {
+    set_industry_random_bits(tile, random_bits);
+    set_industry_random_triggers(tile, 0);
+}
+
+/// Acumula un trigger, reseedea `m3` y limpia triggers (MVP sin sprite groups).
+///
+/// Devuelve `true` si la tesela cambió.
+pub fn trigger_industry_tile_randomisation(
+    tile: &mut Tile,
+    trigger: IndustryRandomTrigger,
+    world_seed: u64,
+    tick: u64,
+    c: TileCoord,
+) -> bool {
+    if tile.kind != TileKind::Industry {
+        return false;
+    }
+    let before_m3 = tile.m3;
+    let before_m6 = tile.m6;
+    let waiting = industry_random_triggers(tile) | trigger.bit();
+    set_industry_random_triggers(tile, waiting);
+    // Consume todos los triggers pendientes: reseed completo de m3.
+    let new_bits = industry_tile_rng(world_seed, tick, c, u64::from(waiting));
+    set_industry_random_bits(tile, new_bits);
+    set_industry_random_triggers(tile, 0);
+    tile.m3 != before_m3 || tile.m6 != before_m6
+}
+
+/// Tile loop: `IndustryRandomTrigger::TileLoop` en la franja del mapa.
+pub fn advance_industry_tile_randomisation(
+    map: &mut Map,
+    tick: u64,
+    world_seed: u64,
+) -> Vec<TileCoord> {
+    let mut candidates = Vec::new();
+    super::tile_loop::for_each_map_tile_loop(map, tick, |coord, tile| {
+        if tile.kind == TileKind::Industry {
+            candidates.push(coord);
+        }
+    });
+    let mut dirty = Vec::new();
+    for coord in candidates {
+        let Some(mut tile) = map.get(coord) else {
+            continue;
+        };
+        if !trigger_industry_tile_randomisation(
+            &mut tile,
+            IndustryRandomTrigger::TileLoop,
+            world_seed,
+            tick,
+            coord,
+        ) {
+            continue;
+        }
+        if map.set_tile(coord, tile).is_ok() {
+            dirty.push(coord);
+        }
+    }
+    dirty
+}
+
+/// Dispara un trigger en todas las teselas de una industria (por `m2` / footprint).
+pub fn trigger_industry_randomisation_at(
+    map: &mut Map,
+    tiles: &[TileCoord],
+    trigger: IndustryRandomTrigger,
+    world_seed: u64,
+    tick: u64,
+) -> Vec<TileCoord> {
+    let mut dirty = Vec::new();
+    for &coord in tiles {
+        let Some(mut tile) = map.get(coord) else {
+            continue;
+        };
+        if !trigger_industry_tile_randomisation(&mut tile, trigger, world_seed, tick, coord) {
+            continue;
+        }
+        if map.set_tile(coord, tile).is_ok() {
+            dirty.push(coord);
+        }
+    }
+    dirty
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::map::{TileKind, set_industry_gfx};
+
+    fn industry_tile(gfx: u16) -> Tile {
+        let mut t = Tile {
+            kind: TileKind::Industry,
+            height: 0,
+            mapt: 0x80,
+            m5: 0,
+            m6: 0,
+            m1: 0x80,
+            m2: 1,
+            m3: 0,
+            m7: 0,
+            m8: 0,
+            m3hi: 0,
+            m2_hi: 0,
+        };
+        set_industry_gfx(&mut t, gfx);
+        t
+    }
+
+    #[test]
+    fn triggers_occupy_m6_bits_3_to_5_without_clobbering_gfx_bit() {
+        let mut tile = industry_tile(0x100); // bit 8 → m6 bit 2
+        assert_eq!((tile.m6 >> 2) & 1, 1);
+        set_industry_random_triggers(&mut tile, 0b101);
+        assert_eq!(industry_random_triggers(&tile), 0b101);
+        assert_eq!((tile.m6 >> 2) & 1, 1, "gfx bit 8 debe preservarse");
+        assert_eq!(tile.m6 & INDUSTRY_RANDOM_TRIGGERS_MASK, 0b101 << 3);
+    }
+
+    #[test]
+    fn make_industry_seeds_m3_and_clears_triggers() {
+        let mut tile = industry_tile(0);
+        init_industry_tile_random(&mut tile, 0xA5);
+        assert_eq!(industry_random_bits(&tile), 0xA5);
+        assert_eq!(industry_random_triggers(&tile), 0);
+    }
+
+    #[test]
+    fn tile_loop_trigger_reseeds_m3() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let c = TileCoord::new(2, 2);
+        let mut tile = industry_tile(1);
+        init_industry_tile_random(&mut tile, 0x11);
+        map.set_kind(c, TileKind::Industry).unwrap();
+        map.set_tile(c, tile).unwrap();
+        let dirty = advance_industry_tile_randomisation(&mut map, 1, 42);
+        assert!(dirty.contains(&c));
+        let after = map.get(c).unwrap();
+        assert_ne!(industry_random_bits(&after), 0x11);
+        assert_eq!(industry_random_triggers(&after), 0);
+    }
+}

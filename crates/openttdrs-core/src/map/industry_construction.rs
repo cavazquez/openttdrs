@@ -46,11 +46,19 @@ pub fn make_industry_tile_bigger(m1: u8) -> u8 {
     }
 }
 
-/// Obra + animaciones de industria en un tick de sim (P6 + P7).
+/// Obra + animaciones + random triggers de industria en un tick de sim (P6 + P7).
 pub fn step_industry_tiles(map: &mut Map, tick: u64) -> Vec<TileCoord> {
+    step_industry_tiles_with_seed(map, tick, 0)
+}
+
+/// Como [`step_industry_tiles`], con `world_seed` para reseeding determinista de `m3`.
+pub fn step_industry_tiles_with_seed(map: &mut Map, tick: u64, world_seed: u64) -> Vec<TileCoord> {
     let mut dirty = advance_industry_construction(map, tick);
     dirty.extend(super::industry_tile_anim::advance_industry_tile_animations(
         map, tick,
+    ));
+    dirty.extend(super::industry_random::advance_industry_tile_randomisation(
+        map, tick, world_seed,
     ));
     dirty.sort_by_key(|c| (c.x, c.y));
     dirty.dedup();

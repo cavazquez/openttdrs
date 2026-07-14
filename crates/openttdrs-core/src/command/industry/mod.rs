@@ -83,6 +83,19 @@ pub(super) fn place_industry_spec_sandbox(
             .map
             .set_m2(*tile, industry_id)
             .map_err(|_| CommandError::OutOfBounds)?;
+        // P7: `MakeIndustry` — random bits en m3, triggers limpios en m6.
+        let bits = crate::map::industry_tile_rng(
+            state.world_seed,
+            state.tick.get(),
+            *tile,
+            u64::from(*m5),
+        );
+        let mut map_tile = state.map.get(*tile).ok_or(CommandError::OutOfBounds)?;
+        crate::map::init_industry_tile_random(&mut map_tile, bits);
+        state
+            .map
+            .set_tile(*tile, map_tile)
+            .map_err(|_| CommandError::OutOfBounds)?;
     }
     state.industry_tile_dirty.extend(footprint.iter().copied());
     state

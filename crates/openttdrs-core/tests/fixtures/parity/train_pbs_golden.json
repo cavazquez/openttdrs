@@ -1,0 +1,167 @@
+{
+  "note": "Golden interno openttdrs train_pbs (#54). No comparar contra OpenTTD.",
+  "ticks": 80,
+  "sample_every": 10,
+  "snapshots": [
+    {
+      "tick": 10,
+      "vehicle": 1,
+      "reserved_len": 4,
+      "reservation_end": [
+        6,
+        2
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 10,
+      "vehicle": 2,
+      "reserved_len": 4,
+      "reservation_end": [
+        6,
+        4
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 20,
+      "vehicle": 1,
+      "reserved_len": 6,
+      "reservation_end": [
+        9,
+        2
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 20,
+      "vehicle": 2,
+      "reserved_len": 6,
+      "reservation_end": [
+        9,
+        4
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 30,
+      "vehicle": 1,
+      "reserved_len": 5,
+      "reservation_end": [
+        9,
+        2
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 30,
+      "vehicle": 2,
+      "reserved_len": 5,
+      "reservation_end": [
+        9,
+        4
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 40,
+      "vehicle": 1,
+      "reserved_len": 3,
+      "reservation_end": [
+        9,
+        2
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 40,
+      "vehicle": 2,
+      "reserved_len": 3,
+      "reservation_end": [
+        9,
+        4
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 50,
+      "vehicle": 1,
+      "reserved_len": 2,
+      "reservation_end": [
+        9,
+        2
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 50,
+      "vehicle": 2,
+      "reserved_len": 2,
+      "reservation_end": [
+        9,
+        4
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 60,
+      "vehicle": 1,
+      "reserved_len": 1,
+      "reservation_end": [
+        10,
+        2
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 60,
+      "vehicle": 2,
+      "reserved_len": 1,
+      "reservation_end": [
+        10,
+        4
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 70,
+      "vehicle": 1,
+      "reserved_len": 1,
+      "reservation_end": [
+        10,
+        2
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 70,
+      "vehicle": 2,
+      "reserved_len": 1,
+      "reservation_end": [
+        10,
+        4
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 80,
+      "vehicle": 1,
+      "reserved_len": 1,
+      "reservation_end": [
+        10,
+        2
+      ],
+      "blocked_by_reservation": false
+    },
+    {
+      "tick": 80,
+      "vehicle": 2,
+      "reserved_len": 1,
+      "reservation_end": [
+        10,
+        4
+      ],
+      "blocked_by_reservation": false
+    }
+  ]
+}

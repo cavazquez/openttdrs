@@ -28,7 +28,9 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
 - YAPF: `next_rail_trackdir_yapf` / `extend_rail_path_yapf`; búsqueda trackdir.
 - PBS: huella multi-tesela del consist (`rail_tile_history` + `consist_occupied_tiles`).
 - Reserva de plataforma en orden Station; TryReserve con wormholes JGR.
-- Pendiente: golden tick-a-tick vs OpenTTD; FollowTrainReservation fino.
+- `FollowTrainReservation` simplificado + traza PBS (`reserved_len` / `blocked_by_reservation`) + golden interno `train_pbs` (#54) ✅.
+- Golden estático de rutas YAPF (`yapf_routes_golden.json`, #53 slice) ✅.
+- Pendiente: golden tick-a-tick vs OpenTTD (captura externa YAPF/PBS).
 
 ## Fase 4 — Economía multi-compañía + Cargo Dist + IA ✅ (MVP)
 

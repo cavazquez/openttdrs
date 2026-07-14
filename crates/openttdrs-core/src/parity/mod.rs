@@ -28,6 +28,7 @@ pub use record::{
     ParityEvent, RailPartRecord, RailRecord, SpeedTrend, TickRecord, TraceVehicleState,
     VehicleRecord, derive_vehicle_state, order_kind_name,
 };
+pub use report::{KnownDivergence, detect_known_divergences, divergences_markdown};
 pub use scenario::{
     RAIL_SIGNALS_MIXED_TYPES, RAIL_SIGNALS_MIXED_Y, TRAIN_DUAL_COAL_MINE, TRAIN_DUAL_DEPOT,
     TRAIN_DUAL_DEPOT_EXIT, TRAIN_DUAL_FACTORY, TRAIN_DUAL_STATION_A, TRAIN_DUAL_STATION_B,

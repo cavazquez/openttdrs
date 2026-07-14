@@ -30,7 +30,7 @@ pub enum Subsystem {
     Loading,
     /// Bloqueos por señal/tráfico y esperas (`SignalWait*`).
     Signaling,
-    /// Reservas de vía (PBS). Reservado: sin emisor mientras no exista PBS.
+    /// Reservas de vía (PBS): `reserved_len`, `blocked_by_reservation`, etc.
     Reservation,
     /// Entrada/salida de depósito.
     Depot,
@@ -89,6 +89,7 @@ fn field_subsystem(field: &str) -> Subsystem {
         return match rest {
             "track_bits_under" => Subsystem::RailInfrastructure,
             "blocked_by_signal" | "blocked_by_traffic" => Subsystem::Signaling,
+            "blocked_by_reservation" | "reserved_len" | "reservation_end" => Subsystem::Reservation,
             "in_depot" => Subsystem::Depot,
             "at_platform" => Subsystem::StationEntry,
             // parts.len, parts[i].tile, parts[i].part_index, head_tile, tail_tile
@@ -303,6 +304,24 @@ fn rail_field_diffs(a: &RailRecord, b: &RailRecord, epsilon: f32) -> Vec<FieldDi
         "rail.blocked_by_traffic".to_string(),
         a.blocked_by_traffic.to_string(),
         b.blocked_by_traffic.to_string(),
+    );
+    push_ne(
+        &mut out,
+        "rail.blocked_by_reservation".to_string(),
+        a.blocked_by_reservation.to_string(),
+        b.blocked_by_reservation.to_string(),
+    );
+    push_ne(
+        &mut out,
+        "rail.reserved_len".to_string(),
+        a.reserved_len.to_string(),
+        b.reserved_len.to_string(),
+    );
+    push_ne(
+        &mut out,
+        "rail.reservation_end".to_string(),
+        format!("{:?}", a.reservation_end),
+        format!("{:?}", b.reservation_end),
     );
     push_ne(
         &mut out,
@@ -798,6 +817,9 @@ mod tests {
             track_bits_under: 0x01,
             blocked_by_signal: false,
             blocked_by_traffic: false,
+            blocked_by_reservation: false,
+            reserved_len: 0,
+            reservation_end: None,
             in_depot: false,
             at_platform: false,
         }

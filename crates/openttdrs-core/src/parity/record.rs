@@ -57,9 +57,17 @@ pub struct RailRecord {
     pub blocked_by_signal: bool,
     /// El tren no avanzaría este tick por otro tren delante.
     pub blocked_by_traffic: bool,
+    /// Bloqueo PBS: falta reserva en el siguiente paso (`train_blocked_by_reservation`).
+    #[serde(default)]
+    pub blocked_by_reservation: bool,
+    /// Longitud de `Vehicle::reserved_steps` (reserva PBS activa).
+    #[serde(default)]
+    pub reserved_len: u16,
+    /// Última tesela de la reserva (safe wait / fin de path), si hay pasos.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reservation_end: Option<TileCoord>,
     pub in_depot: bool,
-    /// Hoy siempre `false`: el tren para en la vía de acceso y no pisa la
-    /// plataforma (divergencia documentada; se corrige en la Fase Rail 3C).
+    /// El tren está físicamente en plataforma de estación rail.
     pub at_platform: bool,
 }
 

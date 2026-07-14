@@ -1,0 +1,95 @@
+{
+  "note": "Rutas YAPF estáticas (#53 slice). No es golden tick-a-tick vs OpenTTD.",
+  "routes": [
+    {
+      "label": "train_pbs_north",
+      "from": [
+        1,
+        2
+      ],
+      "to": [
+        9,
+        2
+      ],
+      "path_len": 8,
+      "path_prefix": [
+        [
+          2,
+          2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          5,
+          2
+        ]
+      ]
+    },
+    {
+      "label": "train_pbs_south",
+      "from": [
+        1,
+        4
+      ],
+      "to": [
+        9,
+        4
+      ],
+      "path_len": 8,
+      "path_prefix": [
+        [
+          2,
+          4
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          4
+        ],
+        [
+          5,
+          4
+        ]
+      ]
+    },
+    {
+      "label": "train_line_depot_exit_to_corner",
+      "from": [
+        2,
+        6
+      ],
+      "to": [
+        12,
+        10
+      ],
+      "path_len": 14,
+      "path_prefix": [
+        [
+          3,
+          6
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          6,
+          6
+        ]
+      ]
+    }
+  ]
+}

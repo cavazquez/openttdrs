@@ -8,8 +8,9 @@ use std::fmt::Write as _;
 
 use super::record::{ParityEvent, TickRecord, TraceVehicleState, VehicleRecord};
 use super::scenario::{
-    TRAIN_LINE_VEHICLE_ID, TRAIN_SIGNAL_BLOCKER_ID, TRAIN_SIGNAL_LEAD_ID, TRAIN_SIGNAL_TILE,
-    TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP, TRUCK_BAY_VEHICLE_ID,
+    TRAIN_LINE_VEHICLE_ID, TRAIN_PBS_NORTH_ID, TRAIN_PBS_SOUTH_ID, TRAIN_SIGNAL_BLOCKER_ID,
+    TRAIN_SIGNAL_LEAD_ID, TRAIN_SIGNAL_TILE, TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP,
+    TRUCK_BAY_VEHICLE_ID,
 };
 use crate::road_movement;
 use crate::train_movement::is_diagonal_rail_piece;
@@ -507,6 +508,52 @@ fn check_train_diagonal_subcoord_approximation(records: &[TickRecord]) -> KnownD
     }
 }
 
+/// Regresión PBS (#54): ambos corredores de `train_pbs` deben reservar path.
+fn check_train_pbs_reservation(records: &[TickRecord]) -> KnownDivergence {
+    let mut north_max = 0_u16;
+    let mut south_max = 0_u16;
+    let mut evidence = String::new();
+    for r in records {
+        for v in &r.vehicles {
+            let Some(rail) = v.rail.as_ref() else {
+                continue;
+            };
+            if v.id == TRAIN_PBS_NORTH_ID {
+                north_max = north_max.max(rail.reserved_len);
+            }
+            if v.id == TRAIN_PBS_SOUTH_ID {
+                south_max = south_max.max(rail.reserved_len);
+            }
+        }
+    }
+    let _ = writeln!(
+        evidence,
+        "- reserved_len máx norte={north_max} sur={south_max} (mínimo esperado ≥ 3)"
+    );
+    let detected = north_max < 3 || south_max < 3;
+    KnownDivergence {
+        id: "train_pbs_reservation_active",
+        title: "PBS train_pbs sin reserva activa en ambos corredores",
+        detected,
+        evidence,
+        openttd_ref: "OpenTTD/src/pbs.cpp (`TryReserveRailTrack` / `FollowTrainReservation`)",
+        rust_ref: "openttdrs/crates/openttdrs-core/src/rail_pbs.rs + parity RailRecord.reserved_len",
+        fix_phase2: "IMPLEMENTADA (#54 slice): traza PBS + golden interno train_pbs",
+    }
+}
+
+fn trace_has_train_pbs(records: &[TickRecord]) -> bool {
+    let mut north = false;
+    let mut south = false;
+    for r in records {
+        for v in &r.vehicles {
+            north |= v.id == TRAIN_PBS_NORTH_ID;
+            south |= v.id == TRAIN_PBS_SOUTH_ID;
+        }
+    }
+    north && south
+}
+
 /// Evalúa todas las divergencias conocidas sobre una traza de paridad.
 #[must_use]
 pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> {
@@ -525,6 +572,9 @@ pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> 
     }
     if trace_has_train_signal(records) {
         out.push(check_train_signal_wait(records));
+    }
+    if trace_has_train_pbs(records) {
+        out.push(check_train_pbs_reservation(records));
     }
     out
 }

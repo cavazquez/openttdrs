@@ -24,11 +24,11 @@ aproximadas (Fases 2–3 del roadmap estructural).
 | Pendientes + fundaciones de vía | `map/rail_slope.rs` (`rail_trackbits_valid_on_slope`), `command/terraform.rs` (autoslope) | `rail_cmd.cpp` (foundations), `slope_func.h` | 3 · validado parcial (`computed_tileh_matches_openrtd_sw`) | tests de `map/rail_slope.rs` | Bajo |
 | Señales — colocación y encoding | `rail_signals.rs` (`signal_placement_for_track`, `m2`/`m3`/`m3hi`) | `rail_map.h:287-526`, `signal_type.h` | 2 · probado (encoding compatible con saves OpenTTD) | tests de `rail_signals.rs` (`signal_placement_is_single_bit`, `cycle_signal_side_*`) | Medio: ENTRY/EXIT/COMBO degradados a BLOCK (Rail 3D) |
 | Señales — bloqueo | `rail_signals.rs` (`rail_block_ahead`, `train_blocked_by_signal`, `update_rail_signal_states`) + `sim_step.rs` | `signal.cpp:280-660` (`UpdateSignalsOnSegment`) | 3 · validado (Rail 3D: bloque v1 + escenario `train_signal`) | `sim_train_waits_until_block_ahead_clears`, `train_signal_divergences_are_absent_after_rail_3d`, `signal_wait_events_emitted_with_two_trains` | Alto: sin presignals reales ni PBS; timing sin golden contra OpenTTD |
-| Reservas de camino (PBS) | `rail_pbs.rs` (TryReserve, path signals, plataforma, consist) | `pbs.cpp` (`TryReserveRailTrack`), señales `Path` | 2 · probado (Fase 3 MVP) | `consist_tail_blocks_*`, `platform_reservation_*`, tests PBS existentes | Medio: sin golden tick-a-tick vs OpenTTD |
+| Reservas de camino (PBS) | `rail_pbs.rs` (TryReserve, `follow_train_reservation`, path signals, plataforma) | `pbs.cpp` (`TryReserveRailTrack`, `FollowTrainReservation`) | 2 · probado (+ golden interno) | `golden_pbs.rs`, `follow_train_reservation_*`, `train_pbs_*` | Medio: sin golden tick-a-tick vs OpenTTD |
 | Estaciones rail (plataformas 1..=7, waypoints) | `command/transport/station.rs` (`place_rail_station_area`, `rail_station_layout`), `station.rs` | `station_cmd.cpp:1416-1433`, `CmdBuildRailStation` | 2 · probado (layout + flags catenaria m3 compatibles; entrada exige vía adyacente) | `place_rail_station_area_*`, `place_rail_waypoint_*`, `station_*catenary*` | Medio |
 | Depósitos rail | `command/transport/rail.rs` (`place_rail_depot_dir`, `rail_depot_exit_for_dir`), `depot.rs` | `rail_map.h:171-185`, `rail_cmd.cpp:2975-3064` | 2 · probado (boca + empalme automático) | `rail_depot_beside_x_line_connects_exit_tile`, `train_uses_rail_depot_only` | Medio: sin timing de entrada/salida (frames, 37 ticks) |
 | Túneles/puentes rail | `command/transport/bridge.rs` (compartido con road), `map/slope.rs` | `tunnelbridge_cmd.cpp:1959-2087` | 1 · implementado (colocación validada; **0 tests específicos rail**, solo road) | tests solo `PlaceRoadBridge` en `command/tests/bridge.rs` | Medio: sin ocultamiento del tren (`_tunnel_visibility_frame`) ni límite de velocidad de puente |
-| Pathfinding rail | `pathfinder/yapf.rs` (trackdir + señales/reservas) | `pathfinder/yapf/yapf_rail.cpp`, `follow_track.hpp` | 2 · probado (YAPF propio; extensión incremental MVP) | `yapf_*`, `next_rail_trackdir_*`, `extend_rail_path_*` | Medio: desempates y penalizaciones difieren de upstream |
+| Pathfinding rail | `pathfinder/yapf.rs` (trackdir + señales/reservas) | `pathfinder/yapf/yapf_rail.cpp`, `follow_track.hpp` | 2 · probado (+ golden rutas estáticas) | `yapf_*`, `golden_yapf.rs` | Medio: sin golden tick-a-tick vs OpenTTD; desempates difieren |
 | Ocupación/anticolisión | `rail_signals.rs` (`train_blocked_by_traffic`) | (OpenTTD lo resuelve con reservas + señales) | 2 · probado (tile ocupado, frente a frente, tren parado delante) | `trains_block_head_on_without_signal` | Alto: modelo distinto al de OpenTTD (que usa PBS) |
 | Railtypes / electrificación / conversión | `rail_type.rs` + `ConvertRail` + catenaria | `rail.h`, `elrail.cpp` / `elrail_data.h` | 2 · probado (Fase 5–6 + catenaria) | `convert_rail_*`, `collect_catenary_*`, `*_engine_requires_*` | Medio: wires PCP + postes PPP + estación/túnel/puente; TO_CATENARY persistente + env; tranvía = RoadType |
 | Ownership por tile de vía | — (`m1` se fuerza a 0 al construir) | `rail_map.h` (`GetTileOwner`) | 0 · no implementado | — | Bajo |
@@ -56,13 +56,14 @@ aproximadas (Fases 2–3 del roadmap estructural).
 
 | Herramienta | Estado |
 |---|---|
-| Traza por tick para trenes | **Implementada (Fase Rail 1)** — bloque `rail` en `VehicleRecord` (partes, track bits, bloqueos, depósito, plataforma) + eventos `SignalWait*`, `DepotEntry/Exit`, `SignalStateChanged` |
+| Traza por tick para trenes | **Implementada (Fase Rail 1 + #54)** — bloque `rail` (partes, bloqueos, depósito, plataforma, `reserved_len` / `blocked_by_reservation` / `reservation_end`) + eventos `SignalWait*`, `DepotEntry/Exit`, `SignalStateChanged` |
 | Escenario headless de tren | **Implementado (Fase Rail 1)** — `train_line` en `parity/scenario.rs` (depósito, L con curva, señal de bloque, 2 estaciones, órdenes A↔B) |
 | Comparador con subsistemas rail | **Implementado (Fase Rail 2)** — subsistemas `rail_infrastructure`/`train_motion`/`consist_geometry`/`pathfinding`/`station_entry`/`loading`/`signaling`/`reservation`/`depot`, filtros `--tile`/`--event`, `--subtile-epsilon` (default 0.51) y `--json` |
 | Golden de tablas C++ de tren | **Implementado (Fase Rail 3A)** — `extract_train_movement.py` + `train_movement_golden.json` + `golden_rail.rs` (11 tests) |
 | Chequeos de divergencia rail en `parity/report.rs` | **Implementados (Rail 3B–3E)** — `train_road_acceleration`, `train_no_curve_braking`, `train_platform_stop`, `train_signal_wait`, `train_render_subtile_consistency`, `train_diagonal_subcoord_approximation` |
 | Reporte `train_line_divergences.md` | **Implementado (Rail 4)** — `parity_runner --scenario train_line --divergence-report` |
-| Escenarios headless | `truck_bay`, `train_line`, `train_signal` |
+| Escenarios headless | `truck_bay`, `train_line`, `train_signal`, `train_pbs`, … |
+| Golden PBS / YAPF interno | **#54/#53 slices** — `train_pbs_golden.json`, `yapf_routes_golden.json` (no vs OpenTTD) |
 
 ## Top 5 divergencias ferroviarias detectadas en la auditoría
 

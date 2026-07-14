@@ -30,10 +30,9 @@ parcialmente resueltos; se mantienen tachados o anotados.
 6. ~~**Consist: locomotora + vagones**~~ — **Resuelto (Fase 1 estructural)**:
    `train_consist.rs`, comandos de enganche, save v12, import `.sav` con
    vagones. Pendiente fino: articulados / dual-headed (ítem 17).
-7. ~~**Reservas de camino (PBS)**~~ — **MVP (Fase 3 estructural)**:
-   `rail_pbs.rs` (TryReserve, path signals, plataforma, huella consist,
-   wormholes). Escenario `train_pbs`. Pendiente: golden tick-a-tick vs
-   OpenTTD y `FollowTrainReservation` fino.
+7. ~~**Reservas de camino (PBS)**~~ — **MVP (Fase 3 + #54)**:
+   `rail_pbs.rs` + `follow_train_reservation` + traza/golden interno
+   `train_pbs_golden.json`. Pendiente: golden tick-a-tick vs OpenTTD.
 8. ~~**Semántica de presignals ENTRY/EXIT/COMBO**~~ — **Decidido (Rail 3D)**:
    se codifican en saves pero **no tienen semántica de presignal** en la sim
    v1. `SIGTYPE_ENTRY` se ignora al bloquear (`train_blocked_by_signal`);
@@ -49,10 +48,9 @@ parcialmente resueltos; se mantienen tachados o anotados.
     cada track. La sim usa eje central en rectas (`train_straight_subtile`);
     **evaluado en Rail 3E** (`rail_render_evaluation.md`): alineado en X/Y,
     divergencia cosmética documentada en piezas diagonales puras.
-11. **Pathfinder YAPF con penalizaciones y reserva** —
-    `yapf_rail.cpp`. **MVP (Fase 3):** `pathfinder/yapf.rs` +
-    `next_rail_trackdir_yapf` / `extend_rail_path_yapf`; PBS reserva el path.
-    Falta: segmentos con caché, penalizaciones de plataforma/curva 90° finas.
+11. ~~**Pathfinder YAPF con penalizaciones y reserva**~~ — **MVP (Fase 3 + #53 slice)**:
+    `pathfinder/yapf.rs` + golden estático `yapf_routes_golden.json`.
+    Falta: tick-a-tick vs OpenTTD; caché de segmentos; penalizaciones finas.
 12. **Reversa con coste/chequeos** — `ReverseTrainDirection` (news, PBS,
     `reverse_ctr`). Hoy la reversa automática y manual son instantáneas.
 

@@ -791,6 +791,34 @@ fn reserve_along_path(
     out
 }
 
+/// Conserva pasos de una reserva previa aún válidos si `TryReserve` falla
+/// (`FollowTrainReservation` simplificado de `pbs.cpp`).
+///
+/// Si hay reserva nueva, se usa. Si queda vacía pero el tren sigue sobre la
+/// reserva anterior, se mantienen los pasos bajo el tren y por delante en `path`.
+#[must_use]
+pub fn follow_train_reservation(
+    previous: &[ReservedRailStep],
+    newly_reserved: Vec<ReservedRailStep>,
+    vehicle: &Vehicle,
+) -> Vec<ReservedRailStep> {
+    if !newly_reserved.is_empty() {
+        return newly_reserved;
+    }
+    if previous.is_empty() {
+        return newly_reserved;
+    }
+    if !previous.iter().any(|s| s.tile == vehicle.pos) {
+        return newly_reserved;
+    }
+    let path_tiles: HashSet<TileCoord> = vehicle.path.iter().copied().collect();
+    previous
+        .iter()
+        .copied()
+        .filter(|s| s.tile == vehicle.pos || path_tiles.contains(&s.tile))
+        .collect()
+}
+
 /// Recalcula `reserved_steps` de todos los trenes (orden por índice = prioridad).
 pub fn update_train_reservations(map: &Map, vehicles: &mut [Vehicle]) {
     update_train_reservations_with_settings(
@@ -823,9 +851,11 @@ pub fn update_train_reservations_with_wormholes(
             vehicles[i].reserved_steps.clear();
             continue;
         }
+        let previous = vehicles[i].reserved_steps.clone();
         let reserved = compute_train_reservation_with_wormholes(
             map, vehicles, i, &global, settings, wormholes,
         );
+        let reserved = follow_train_reservation(&previous, reserved, &vehicles[i]);
         for step in &reserved {
             global.insert(*step);
         }
@@ -1814,5 +1844,33 @@ mod tests {
                 .any(|p| reserved.iter().any(|s| s.tile == *p)),
             "debe reservar plataforma: platforms={platforms:?} reserved={reserved:?}"
         );
+    }
+
+    #[test]
+    fn follow_train_reservation_keeps_previous_when_try_reserve_empty() {
+        let pos = TileCoord::new(3, 0);
+        let mut vehicle = Vehicle::new(1, VehicleKind::Train, pos, TileCoord::new(8, 0));
+        vehicle.path = VecDeque::from([
+            TileCoord::new(4, 0),
+            TileCoord::new(5, 0),
+            TileCoord::new(6, 0),
+        ]);
+        let previous = vec![
+            ReservedRailStep::new(pos, 0x01),
+            ReservedRailStep::new(TileCoord::new(4, 0), 0x01),
+            ReservedRailStep::new(TileCoord::new(5, 0), 0x01),
+        ];
+        let kept = follow_train_reservation(&previous, Vec::new(), &vehicle);
+        assert_eq!(kept.len(), 3);
+        assert!(kept.iter().any(|s| s.tile == pos));
+        assert!(kept.iter().any(|s| s.tile == TileCoord::new(5, 0)));
+        // Pasos detrás del path (fuera de path y pos) no se conservan.
+        let previous_stale = vec![
+            ReservedRailStep::new(TileCoord::new(1, 0), 0x01),
+            ReservedRailStep::new(pos, 0x01),
+        ];
+        let kept_stale = follow_train_reservation(&previous_stale, Vec::new(), &vehicle);
+        assert!(!kept_stale.iter().any(|s| s.tile == TileCoord::new(1, 0)));
+        assert!(kept_stale.iter().any(|s| s.tile == pos));
     }
 }

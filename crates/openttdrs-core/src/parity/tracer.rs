@@ -134,6 +134,7 @@ fn rail_snapshot(
         })
         .collect();
     let tail_tile = occupied.last().copied().unwrap_or(v.pos);
+    let reservation_end = v.reserved_steps.last().map(|s| s.tile);
     Some(RailRecord {
         parts,
         head_tile: v.pos,
@@ -141,6 +142,9 @@ fn rail_snapshot(
         track_bits_under: track_bits_under(&state.map, v.pos),
         blocked_by_signal: rail_blocked_by_signal(state, train_positions, v),
         blocked_by_traffic: rail_signals::train_blocked_by_traffic(&state.map, &state.vehicles, v),
+        blocked_by_reservation: crate::rail_pbs::train_blocked_by_reservation(&state.map, v),
+        reserved_len: u16::try_from(v.reserved_steps.len()).unwrap_or(u16::MAX),
+        reservation_end,
         in_depot: refit::vehicle_in_depot(&state.map, v.pos),
         at_platform: train_at_rail_platform(&state.map, v.pos),
     })

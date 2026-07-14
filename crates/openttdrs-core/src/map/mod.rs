@@ -61,12 +61,16 @@ pub use slope::{
 pub use station_tile_anim::{
     AIRPORT_RADAR_FRAMES, airport_radar_frame, is_airport_tower_tile, step_airport_tiles,
 };
-pub use tile_loop::{MAP_FULL_SCAN_TILE_LIMIT, MAP_TILE_LOOP_STRIDE, for_each_map_tile_loop};
+pub use tile_loop::{
+    MAP_FULL_SCAN_TILE_LIMIT, MAP_TILE_LOOP_STRIDE, for_each_map_tile_loop,
+    for_each_map_tile_loop_stripe,
+};
 pub use tree_tile_loop::{
-    MAX_TREE_OR_FIELD_STAGE, TREE_GROWTH_DEAD, TREE_GROWTH_GROWING1, TREE_GROWTH_GROWN,
-    TREE_GROWTH_TICK_INTERVAL, apply_seasonal_snow, clear_tree, normalize_tree_growth, plant_tree,
-    step_tree_and_field_growth, tick_tree_tile_loop, tree_count, tree_or_field_stage,
-    with_tree_count, with_tree_or_field_stage,
+    MAX_TREE_OR_FIELD_STAGE, TILE_LOOP_FREQUENCY, TREE_GROWTH_DEAD, TREE_GROWTH_GROWING1,
+    TREE_GROWTH_GROWN, TREE_GROWTH_TICK_INTERVAL, TREE_UPDATE_FREQUENCY, apply_seasonal_snow,
+    clear_tree, landscape_tile_cycle, next_clear_update_tick, next_tree_update_tick,
+    normalize_tree_growth, plant_tree, step_tree_and_field_growth, tick_tree_tile_loop, tree_count,
+    tree_or_field_stage, with_tree_count, with_tree_or_field_stage,
 };
 pub use types::{
     MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind, openttd_tile_index_to_coord,

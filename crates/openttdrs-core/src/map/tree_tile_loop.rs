@@ -1,18 +1,28 @@
 //! Crecimiento de árboles y campos (`tree_cmd.cpp` / `tree_map.h`, `clear_cmd.cpp`).
 //!
-//! Árboles: etapas OpenTTD `TreeGrowthStage` (0…6). Adulto puede morir, densificar
-//! la tesela o propagarse a un vecino. Campos (`CoalField`) siguen etapa 0…7 lineal.
+//! Ritmo OpenTTD (`landscape.cpp` + `TileLoop_Trees`):
+//! - cada tesela se visita cada [`TILE_LOOP_FREQUENCY`] ticks (`RunTileLoop`);
+//! - hierba/campos avanzan cada 8 visitas (`cycle & 7 == 7`);
+//! - árboles avanzan cada [`TREE_UPDATE_FREQUENCY`] visitas (`cycle % 16 == 15`).
+//!
+//! Árboles: etapas `TreeGrowthStage` (0…6). Adulto puede morir, densificar o propagarse.
+//! Campos (`CoalField`) siguen etapa 0…7 lineal.
 
 use crate::GameState;
 use crate::economy::TICKS_PER_TRANSIT_DAY;
+use crate::map::tile_loop::{MAP_TILE_LOOP_STRIDE, for_each_map_tile_loop_stripe};
 use crate::map::{Map, TileCoord, TileKind};
 use crate::world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
     CLEAR_GROUND_SNOW, Climate, clear_ground_m5,
 };
 
-/// Intervalo entre actualizaciones de crecimiento (8 ticks lógicos).
-pub const TREE_GROWTH_TICK_INTERVAL: u64 = 8;
+/// OpenTTD `TILE_UPDATE_FREQUENCY`: ticks entre visitas a la misma tesela.
+pub const TILE_LOOP_FREQUENCY: u64 = 256;
+/// Alias histórico (= [`TILE_LOOP_FREQUENCY`]).
+pub const TREE_GROWTH_TICK_INTERVAL: u64 = TILE_LOOP_FREQUENCY;
+/// OpenTTD `TREE_UPDATE_FREQUENCY`: visitas al tile loop por un avance de árbol.
+pub const TREE_UPDATE_FREQUENCY: u32 = 16;
 /// Etapa máxima de cultivo en `CoalField` (0–7).
 pub const MAX_TREE_OR_FIELD_STAGE: u8 = 7;
 
@@ -24,8 +34,61 @@ pub const TREE_GROWTH_DEAD: u8 = 6;
 const GROWTH_MASK: u8 = 0x07;
 const TREE_COUNT_SHIFT: u8 = 6;
 
-/// Frecuencia relativa OpenTTD (`TREE_UPDATE_FREQUENCY = 16` vs grass cada 8).
-const TREE_UPDATE_EVERY_N_GENERATIONS: u64 = 2;
+/// Ciclo de paisaje OpenTTD: `11*x + 9*y + (tick >> 8)`.
+#[must_use]
+pub fn landscape_tile_cycle(c: TileCoord, tick: u64) -> u32 {
+    let x = c.x.cast_unsigned();
+    let y = c.y.cast_unsigned();
+    let epoch = u32::try_from(tick >> 8).unwrap_or(u32::MAX);
+    11u32
+        .wrapping_mul(x)
+        .wrapping_add(9u32.wrapping_mul(y))
+        .wrapping_add(epoch)
+}
+
+#[must_use]
+fn tile_index(c: TileCoord, map_w: u32) -> u32 {
+    let x = c.x.cast_unsigned();
+    let y = c.y.cast_unsigned();
+    y.saturating_mul(map_w).saturating_add(x)
+}
+
+/// Primer tick ≥ `after` en el que la tesela recibe una actualización de árbol.
+#[must_use]
+pub fn next_tree_update_tick(c: TileCoord, map_w: u32, after: u64) -> u64 {
+    let stripe = u64::from(tile_index(c, map_w) % MAP_TILE_LOOP_STRIDE);
+    let mut tick = after.saturating_add(1);
+    // Alinear a la franja de esta tesela.
+    let rem = tick % u64::from(MAP_TILE_LOOP_STRIDE);
+    if rem != stripe {
+        tick += (stripe + u64::from(MAP_TILE_LOOP_STRIDE) - rem) % u64::from(MAP_TILE_LOOP_STRIDE);
+    }
+    for _ in 0..(u64::from(TREE_UPDATE_FREQUENCY) * 2) {
+        if landscape_tile_cycle(c, tick) % TREE_UPDATE_FREQUENCY == TREE_UPDATE_FREQUENCY - 1 {
+            return tick;
+        }
+        tick = tick.saturating_add(u64::from(MAP_TILE_LOOP_STRIDE));
+    }
+    tick
+}
+
+/// Primer tick ≥ `after` en el que hierba/campos avanzan en esa tesela (`cycle & 7 == 7`).
+#[must_use]
+pub fn next_clear_update_tick(c: TileCoord, map_w: u32, after: u64) -> u64 {
+    let stripe = u64::from(tile_index(c, map_w) % MAP_TILE_LOOP_STRIDE);
+    let mut tick = after.saturating_add(1);
+    let rem = tick % u64::from(MAP_TILE_LOOP_STRIDE);
+    if rem != stripe {
+        tick += (stripe + u64::from(MAP_TILE_LOOP_STRIDE) - rem) % u64::from(MAP_TILE_LOOP_STRIDE);
+    }
+    for _ in 0..16u64 {
+        if landscape_tile_cycle(c, tick) & 7 == 7 {
+            return tick;
+        }
+        tick = tick.saturating_add(u64::from(MAP_TILE_LOOP_STRIDE));
+    }
+    tick
+}
 
 #[must_use]
 pub const fn tree_or_field_stage(m5: u8) -> u8 {
@@ -148,45 +211,63 @@ fn plant_trees_on_clear(map: &mut Map, c: TileCoord, growth: u8, tree_type: u8) 
     let _ = map.set_m3(c, tree_type);
 }
 
-/// Avanza hierba / campos cada [`TREE_GROWTH_TICK_INTERVAL`]; árboles con lógica OpenTTD.
+/// Avanza hierba / campos / árboles al ritmo de `RunTileLoop` + `TileLoop_Trees`.
 pub fn step_tree_and_field_growth(map: &mut Map, tick: u64, world_seed: u64) {
-    if tick == 0 || !tick.is_multiple_of(TREE_GROWTH_TICK_INTERVAL) {
-        return;
-    }
-    let generation = tick / TREE_GROWTH_TICK_INTERVAL;
-    let update_trees = generation.is_multiple_of(TREE_UPDATE_EVERY_N_GENERATIONS);
-
     let mut grass_updates = Vec::new();
     let mut field_updates = Vec::new();
     let mut forest_coords = Vec::new();
+    let mut forest_ground_updates = Vec::new();
 
-    super::tile_loop::for_each_map_tile_loop(map, generation, |c, tile| match tile.kind {
-        TileKind::Forest if update_trees => forest_coords.push(c),
-        TileKind::CoalField => {
-            let stage = tree_or_field_stage(tile.m5);
-            if stage < MAX_TREE_OR_FIELD_STAGE {
-                let new_m5 = with_tree_or_field_stage(tile.m5, stage + 1);
-                field_updates.push((c, tile.mapt, new_m5));
+    for_each_map_tile_loop_stripe(map, tick, |c, tile| {
+        let cycle = landscape_tile_cycle(c, tick);
+        match tile.kind {
+            TileKind::Forest => {
+                // Hierba bajo árboles: cada 8 visitas, como Clear grass.
+                if cycle & 7 == 7 && tree_ground(tile.m2) == 0 {
+                    let density = tree_ground_density(tile.m2);
+                    if density < 3 {
+                        forest_ground_updates.push((c, make_tree_m2(0, density + 1)));
+                    }
+                }
+                if cycle % TREE_UPDATE_FREQUENCY == TREE_UPDATE_FREQUENCY - 1 {
+                    forest_coords.push(c);
+                }
             }
+            TileKind::CoalField => {
+                if cycle & 7 != 7 {
+                    return;
+                }
+                let stage = tree_or_field_stage(tile.m5);
+                if stage < MAX_TREE_OR_FIELD_STAGE {
+                    let new_m5 = with_tree_or_field_stage(tile.m5, stage + 1);
+                    field_updates.push((c, tile.mapt, new_m5));
+                }
+            }
+            TileKind::Grass => {
+                if cycle & 7 != 7 {
+                    return;
+                }
+                let ground = clear_ground_type(tile.m5);
+                let density = clear_density(tile.m5);
+                if ground == CLEAR_GROUND_ROUGH && density == 0 {
+                    grass_updates.push((c, tile.mapt, clear_ground_m5(CLEAR_GROUND_GRASS, 3)));
+                    return;
+                }
+                if ground == CLEAR_GROUND_GRASS && density < 3 {
+                    grass_updates.push((
+                        c,
+                        tile.mapt,
+                        clear_ground_m5(CLEAR_GROUND_GRASS, density + 1),
+                    ));
+                }
+            }
+            _ => {}
         }
-        TileKind::Grass => {
-            let ground = clear_ground_type(tile.m5);
-            let density = clear_density(tile.m5);
-            if ground == CLEAR_GROUND_ROUGH && density == 0 {
-                grass_updates.push((c, tile.mapt, clear_ground_m5(CLEAR_GROUND_GRASS, 3)));
-                return;
-            }
-            if ground == CLEAR_GROUND_GRASS && density < 3 {
-                grass_updates.push((
-                    c,
-                    tile.mapt,
-                    clear_ground_m5(CLEAR_GROUND_GRASS, density + 1),
-                ));
-            }
-        }
-        _ => {}
     });
 
+    for (c, m2) in forest_ground_updates {
+        let _ = map.set_m2(c, m2);
+    }
     for (c, mapt, new_m5) in grass_updates {
         let _ = map.set_mapt_m5(c, mapt, new_m5);
     }
@@ -457,36 +538,58 @@ mod tests {
         map.set_m3(c, 0).unwrap();
     }
 
+    fn map_w(map: &Map) -> u32 {
+        map.dimensions().0
+    }
+
     #[test]
-    fn tree_grows_every_update_generation() {
+    fn tree_grows_on_open_ttd_update_cycle() {
         let mut state = GameState::new(4, 4);
         let c = TileCoord::new(1, 1);
         apply_command(&mut state, &Command::PlantTree(c)).unwrap();
         assert_eq!(tree_or_field_stage(state.map.get(c).unwrap().m5), 0);
-        // generation 2 (tick 16) es múltiplo de TREE_UPDATE_EVERY_N_GENERATIONS.
-        let tick = TREE_GROWTH_TICK_INTERVAL * TREE_UPDATE_EVERY_N_GENERATIONS;
+        let tick = next_tree_update_tick(c, map_w(&state.map), 0);
         step_tree_and_field_growth(&mut state.map, tick, 0);
         assert_eq!(tree_or_field_stage(state.map.get(c).unwrap().m5), 1);
+        // Un tick de franja sin ciclo de árbol no debe avanzar otra etapa.
+        let between = tick + u64::from(MAP_TILE_LOOP_STRIDE);
+        if landscape_tile_cycle(c, between) % TREE_UPDATE_FREQUENCY != TREE_UPDATE_FREQUENCY - 1 {
+            step_tree_and_field_growth(&mut state.map, between, 0);
+            assert_eq!(tree_or_field_stage(state.map.get(c).unwrap().m5), 1);
+        }
+    }
+
+    #[test]
+    fn tree_stage_needs_about_4096_ticks_per_step() {
+        // Visita cada 256 ticks × TREE_UPDATE_FREQUENCY 16 ≈ 4096 ticks/etapa.
+        let c = TileCoord::new(0, 0);
+        let t0 = next_tree_update_tick(c, 4, 0);
+        let t1 = next_tree_update_tick(c, 4, t0);
+        assert!(
+            t1 - t0 >= 256 * 15,
+            "intervalo entre avances debe ser ~4096 ticks, got {}",
+            t1 - t0
+        );
+        assert!(t1 - t0 <= 256 * 17);
     }
 
     #[test]
     fn growing_stops_advancing_past_grown_without_rng_death() {
         let mut map = Map::new_flat(2, 2, 0);
         let c = TileCoord::new(0, 0);
-        // Grown: con seed/tick que den GB&7 >= 3 no cambia.
         force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
         let mut found_stable = false;
-        for salt_tick in
-            (1u64..=64).map(|g| g * TREE_GROWTH_TICK_INTERVAL * TREE_UPDATE_EVERY_N_GENERATIONS)
-        {
+        let mut after = 0u64;
+        for _ in 0..64 {
+            let tick = next_tree_update_tick(c, map_w(&map), after);
+            after = tick;
             let before = map.get(c).unwrap().m5;
-            step_tree_and_field_growth(&mut map, salt_tick, 0xDEAD_BEEF);
-            let after = map.get(c).unwrap().m5;
-            if after == before && tree_or_field_stage(after) == TREE_GROWTH_GROWN {
+            step_tree_and_field_growth(&mut map, tick, 0xDEAD_BEEF);
+            let after_m5 = map.get(c).unwrap().m5;
+            if after_m5 == before && tree_or_field_stage(after_m5) == TREE_GROWTH_GROWN {
                 found_stable = true;
                 break;
             }
-            // Si murió o densificó, volver a Grown 1 árbol.
             force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
         }
         assert!(found_stable, "adulto debe poder quedarse estable");
@@ -498,18 +601,17 @@ mod tests {
         let c = TileCoord::new(0, 0);
         force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
         let mut died = false;
-        for g in 1u64..=256 {
-            let tick = g * TREE_GROWTH_TICK_INTERVAL * TREE_UPDATE_EVERY_N_GENERATIONS;
+        let mut after = 0u64;
+        for _ in 0..256 {
+            let tick = next_tree_update_tick(c, map_w(&map), after);
+            after = tick;
             step_tree_and_field_growth(&mut map, tick, 42);
             let stage = tree_or_field_stage(map.get(c).unwrap().m5);
             if stage == TREE_GROWTH_GROWN + 1 {
                 died = true;
                 break;
             }
-            if map.get_kind(c) != Some(TileKind::Forest) {
-                // se propagó o limpió; reinstalar adulto
-                force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
-            } else if stage != TREE_GROWTH_GROWN {
+            if map.get_kind(c) != Some(TileKind::Forest) || stage != TREE_GROWTH_GROWN {
                 force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_GROWN));
             }
         }
@@ -521,7 +623,7 @@ mod tests {
         let mut map = Map::new_flat(2, 2, 0);
         let c = TileCoord::new(0, 0);
         force_forest(&mut map, c, with_tree_or_field_stage(0, TREE_GROWTH_DEAD));
-        let tick = TREE_GROWTH_TICK_INTERVAL * TREE_UPDATE_EVERY_N_GENERATIONS;
+        let tick = next_tree_update_tick(c, map_w(&map), 0);
         step_tree_and_field_growth(&mut map, tick, 0);
         assert_eq!(map.get_kind(c), Some(TileKind::Grass));
     }
@@ -572,7 +674,8 @@ mod tests {
             .map
             .set_mapt_m5(c, 0x50, MAX_TREE_OR_FIELD_STAGE)
             .unwrap();
-        step_tree_and_field_growth(&mut state.map, TREE_GROWTH_TICK_INTERVAL, 0);
+        let tick = next_clear_update_tick(c, map_w(&state.map), 0);
+        step_tree_and_field_growth(&mut state.map, tick, 0);
         assert_eq!(
             tree_or_field_stage(state.map.get(c).unwrap().m5),
             MAX_TREE_OR_FIELD_STAGE
@@ -587,8 +690,11 @@ mod tests {
         map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
             .unwrap();
         assert_eq!(map.get(c).unwrap().m5, 0x03);
-        for generation in 1..=8 {
-            step_tree_and_field_growth(&mut map, generation * TREE_GROWTH_TICK_INTERVAL, 0);
+        let mut after = 0u64;
+        for _ in 0..8 {
+            let tick = next_clear_update_tick(c, map_w(&map), after);
+            after = tick;
+            step_tree_and_field_growth(&mut map, tick, 0);
         }
         assert_eq!(
             map.get(c).unwrap().m5,
@@ -603,7 +709,8 @@ mod tests {
         let c = TileCoord::new(0, 0);
         map.set_kind(c, TileKind::Grass).unwrap();
         map.set_mapt_m5(c, 0, 0x04).unwrap(); // Rough + density 0 (inválido)
-        step_tree_and_field_growth(&mut map, TREE_GROWTH_TICK_INTERVAL, 0);
+        let tick = next_clear_update_tick(c, map_w(&map), 0);
+        step_tree_and_field_growth(&mut map, tick, 0);
         assert_eq!(map.get(c).unwrap().m5, 0x03);
     }
 
@@ -624,8 +731,10 @@ mod tests {
             }
         }
         let mut spread = false;
-        for g in 1u64..=512 {
-            let tick = g * TREE_GROWTH_TICK_INTERVAL * TREE_UPDATE_EVERY_N_GENERATIONS;
+        let mut after = 0u64;
+        for _ in 0..512 {
+            let tick = next_tree_update_tick(c, map_w(&map), after);
+            after = tick;
             step_tree_and_field_growth(&mut map, tick, 7);
             let forests = (0..3)
                 .flat_map(|y| (0..3).map(move |x| TileCoord::new(x, y)))
@@ -635,7 +744,6 @@ mod tests {
                 spread = true;
                 break;
             }
-            // Mantener el origen adulto si murió.
             if map.get_kind(c) != Some(TileKind::Forest)
                 || tree_or_field_stage(map.get(c).unwrap().m5) != TREE_GROWTH_GROWN
             {

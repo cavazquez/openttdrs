@@ -1,4 +1,4 @@
-# Paquetes APT para compilar openttdrs-client (Bevy/X11/audio). El hash de este archivo
+# Paquetes APT para compilar openttdrs-client (Bevy/X11/Wayland/audio). El hash de este archivo
 # invalida la caché de apt en CI cuando cambien las dependencias del sistema.
 build-essential
 mold
@@ -7,6 +7,7 @@ libx11-dev
 libxcursor-dev
 libxi-dev
 libxkbcommon-dev
+libwayland-dev
 libssl-dev
 libasound2-dev
 libvulkan1

@@ -1,5 +1,5 @@
 name: Rust toolchain + caché + deps Linux
-description: Rust 1.95, rust-cache compartido y paquetes APT para Bevy (X11/Vulkan/ALSA)
+description: Rust 1.95, rust-cache compartido y paquetes APT para Bevy (X11/Wayland/Vulkan/ALSA)
 inputs:
   components:
     description: Componentes rustup (p. ej. rustfmt, clippy)

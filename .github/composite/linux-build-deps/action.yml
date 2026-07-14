@@ -1,5 +1,5 @@
 name: Linux build dependencies
-description: Librerías de sistema para Bevy (X11, Vulkan, ALSA) con caché APT fiable
+description: Librerías de sistema para Bevy (X11, Wayland, Vulkan, ALSA) con caché APT fiable
 runs:
   using: composite
   steps:

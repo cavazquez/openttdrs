@@ -67,6 +67,8 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::BuyLand => "Comprar terreno",
         BuildMenuAction::PlantTree => "Plantar árbol",
         BuildMenuAction::PlaceSign => "Cartel",
+        BuildMenuAction::BuildLighthouse => "Faro",
+        BuildMenuAction::BuildTransmitter => "Transmisor",
         BuildMenuAction::JoinStation => "Unir estaciones",
         BuildMenuAction::TramRemove => "Quitar tranvía",
     }
@@ -96,6 +98,8 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
         BuildMenuAction::FoundTown => Some("clic en hierba: funda un pueblo nuevo"),
         BuildMenuAction::PlantTree => Some("hierba → bosque; bosque → +1 árbol (máx 4)"),
         BuildMenuAction::PlaceSign => Some("clic: coloca cartel; Mundo → Carteles para lista"),
+        BuildMenuAction::BuildLighthouse => Some("1 faro por mapa; hierba/bosque"),
+        BuildMenuAction::BuildTransmitter => Some("1 transmisor por mapa; hierba/bosque"),
         BuildMenuAction::Tram | BuildMenuAction::TramX | BuildMenuAction::TramY => {
             Some("overlay m3; vehículos Tram en depósito carretera")
         }

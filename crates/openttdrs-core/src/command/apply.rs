@@ -4,7 +4,8 @@ use crate::{GameState, StopKind};
 
 use super::types::{Command, CommandError};
 use super::{
-    buy_land, company, economy, industry, newgrf, sign, terraform, town, transport, vehicles,
+    build_object, buy_land, company, economy, industry, newgrf, sign, terraform, town, transport,
+    vehicles,
 };
 
 /// Aplica `cmd` a `state` o devuelve error sin mutar.
@@ -87,6 +88,7 @@ fn construction_event_for(
             Some((ConstructionKind::Rail, *c))
         }
         Command::BuyLand(c)
+        | Command::BuildObject { pos: c, .. }
         | Command::RaiseLand(c)
         | Command::LowerLand(c)
         | Command::PlaceIndustry(c)
@@ -531,6 +533,9 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::LevelLand { from, to, mode } => terraform::level_land(state, *from, *to, *mode),
         Command::BuyLand(c) => buy_land::buy_land(state, *c),
         Command::BuyLandArea { from, to } => buy_land::buy_land_area(state, *from, *to),
+        Command::BuildObject { pos, object_type } => {
+            build_object::build_object(state, *pos, *object_type)
+        }
         Command::IncreaseLoan => economy::increase_company_loan(state),
         Command::DecreaseLoan => economy::decrease_company_loan(state),
         Command::BuyCompany(id) => company::buy_company(state, *id),

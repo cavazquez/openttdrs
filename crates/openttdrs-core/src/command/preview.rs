@@ -3,6 +3,7 @@
 use crate::bridge_spec::{bridge_available_at_tick, bridge_build_cost};
 use crate::{GameState, IndustrySpec, StopKind};
 
+use super::build_object::check_build_object_placement;
 use super::buy_land::check_buy_land;
 use super::industry::check_place_industry_spec;
 use super::terraform::{check_level_land, check_lower_land, check_raise_land};
@@ -223,6 +224,9 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
                 Some(CommandError::CannotBuyLandHere)
             }
         }
+        Command::BuildObject { pos, object_type } => {
+            check_build_object_placement(map, *pos, *object_type).err()
+        }
         Command::PlaceIndustry(_)
         | Command::PlaceIndustryKind(_, _)
         | Command::PlaceIndustrySpec(_, _)
@@ -317,6 +321,12 @@ fn preview_station_with_authority(
 pub fn command_would_fail(state: &GameState, cmd: &Command) -> Option<CommandError> {
     if matches!(cmd, Command::BuyLand(_) | Command::BuyLandArea { .. }) {
         let quote = super::buy_land::buy_land_quote(state, cmd);
+        if quote > 0 && state.economy.money < quote {
+            return Some(CommandError::InsufficientFunds);
+        }
+    }
+    if matches!(cmd, Command::BuildObject { .. }) {
+        let quote = super::build_object::build_object_quote(state, cmd);
         if quote > 0 && state.economy.money < quote {
             return Some(CommandError::InsufficientFunds);
         }

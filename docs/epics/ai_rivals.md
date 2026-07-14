@@ -36,9 +36,11 @@ OpenTTD original ejecuta scripts Squirrel (`ai/`, `game/`) para competidores CPU
 
 ## Criterio de cierre futuro
 
-- 1 rival coloca una línea y entrega carga sin intervención del jugador.
-- Compite por un subsidio activo (`subsidy.rs`).
-- `check.sh` verde con escenario headless `ai_rival_line`.
+- ~~1 rival coloca una línea y entrega carga sin intervención del jugador.~~ ✅ (`ai_rival_delivers_coal_and_awards_subsidy`)
+- ~~Compite por un subsidio activo (`subsidy.rs`).~~ ✅ (oferta sembrada al comprar tren + `try_award_subsidy`)
+- ~~`check.sh` verde con escenario headless `ai_rival_line`.~~ ✅
+
+Pendiente épica (#86): más rutas, terraform/señales, UI finanzas rival.
 
 ## DevBot / métricas (implementado, jul 2026)
 

@@ -682,7 +682,7 @@ Objetivo de cobertura global: **~65–68 %**.
 - [~] JoinStation tipos mixtos (road+rail / aeropuerto / dock). *(OOS)*
 - [x] BuildWaypoint road MVP (`PlaceRoadWaypoint` + botón toolbar; órdenes road vía `VehicleOrder::Waypoint`).
 - [x] Airport picker extensible.
-- [~] BuildObject genérico. *(OOS UI-6: BuyLand = objeto jugable; faro/transmisor = worldgen/saves; NewGRF runtime → OOS post UI-7)*
+- [~] BuildObject genérico. *(BuyLand + faro/transmisor jugables UI-6; NewGRF Objects → OOS post UI-7)*
 - [~] Separar herramientas sandbox/editor. *(etiquetadas «editor» en Economía/Agua; modo editor UI-8)*
 
 ### Criterios de aceptación

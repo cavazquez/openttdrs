@@ -111,9 +111,9 @@ pub use disaster::{DISASTER_CHECK_INTERVAL, force_disaster, tick_disasters, trig
 pub use economy::{
     ANNUAL_INTEREST_RATE_PCT, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL,
     OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND, TICKS_PER_MONTH, TICKS_PER_TRANSIT_DAY,
-    TICKS_PER_YEAR, buy_land_cost, cargo_time_factor, check_bankruptcy, decrease_loan,
-    increase_loan, inflation_income_factor, inflation_prices_factor, manhattan_distance,
-    monthly_loan_interest, terraform_cost_per_corner, ticks_to_transit_days,
+    TICKS_PER_YEAR, build_object_cost, buy_land_cost, cargo_time_factor, check_bankruptcy,
+    decrease_loan, increase_loan, inflation_income_factor, inflation_prices_factor,
+    manhattan_distance, monthly_loan_interest, terraform_cost_per_corner, ticks_to_transit_days,
     transported_goods_income, vehicle_purchase_cost, vehicle_running_cost_per_tick,
     vehicle_sell_refund,
 };

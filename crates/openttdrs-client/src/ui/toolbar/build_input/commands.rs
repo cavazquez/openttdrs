@@ -217,6 +217,14 @@ pub(crate) fn command_for_action(
         BuildMenuAction::BuyLand => Some(Command::BuyLand(pos)),
         BuildMenuAction::PlantTree => Some(Command::PlantTree(pos)),
         BuildMenuAction::PlaceSign => Some(Command::PlaceSign { pos, name: None }),
+        BuildMenuAction::BuildLighthouse => Some(Command::BuildObject {
+            pos,
+            object_type: openttdrs_core::OBJECT_TYPE_LIGHTHOUSE,
+        }),
+        BuildMenuAction::BuildTransmitter => Some(Command::BuildObject {
+            pos,
+            object_type: openttdrs_core::OBJECT_TYPE_TRANSMITTER,
+        }),
     }
 }
 

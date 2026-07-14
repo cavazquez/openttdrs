@@ -672,8 +672,18 @@ pub(super) fn spawn_secondary_tool_panels(
                         ),
                         (
                             "Colocar cartel",
-                            "assets/opengfx/tiles/object_lighthouse.png",
+                            "assets/opengfx/tiles/object_statue_company.png",
                             BuildMenuAction::PlaceSign,
+                        ),
+                        (
+                            "Faro",
+                            "assets/opengfx/tiles/object_lighthouse.png",
+                            BuildMenuAction::BuildLighthouse,
+                        ),
+                        (
+                            "Transmisor",
+                            "assets/opengfx/tiles/object_transmitter.png",
+                            BuildMenuAction::BuildTransmitter,
                         ),
                     ],
                 ),

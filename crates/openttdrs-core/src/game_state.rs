@@ -255,6 +255,8 @@ pub const CLEAR_TILE_COST: i64 = 5;
 pub const TERRAFORM_BASE_PRICE: i64 = 500;
 /// Precio base por tesela de terreno comprado (`Price::BuildObject` / owned land).
 pub const BUY_LAND_BASE_PRICE: i64 = 50;
+/// Precio base faro/transmisor jugable (`CmdBuildObject` vanilla simplificado).
+pub const BUILD_OBJECT_BASE_PRICE: i64 = 400;
 /// Alias en tick 0 (sin inflación de precios); preferir [`crate::economy::terraform_cost_per_corner`].
 pub const TERRAFORM_COST: i64 = TERRAFORM_BASE_PRICE;
 

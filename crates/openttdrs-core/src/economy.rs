@@ -143,6 +143,13 @@ pub fn buy_land_cost(tick: u64) -> i64 {
     BUY_LAND_BASE_PRICE.saturating_mul(i64::from(inflation_prices_factor(tick))) / 1024
 }
 
+/// Coste de colocar faro o transmisor.
+#[must_use]
+pub fn build_object_cost(tick: u64) -> i64 {
+    use crate::game_state::BUILD_OBJECT_BASE_PRICE;
+    BUILD_OBJECT_BASE_PRICE.saturating_mul(i64::from(inflation_prices_factor(tick))) / 1024
+}
+
 const MIN_TIME_FACTOR: i32 = 31;
 const MAX_TIME_FACTOR: i32 = 255;
 

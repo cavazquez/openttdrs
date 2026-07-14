@@ -1143,6 +1143,51 @@ mod tests {
     }
 
     #[test]
+    fn ai_rival_delivers_coal_and_awards_subsidy() {
+        use crate::cargo::CargoType;
+        use crate::economy::TICKS_PER_MONTH;
+
+        let mut state = build_ai_rival_line();
+        for _ in 0..=TICKS_PER_MONTH {
+            state.step();
+        }
+        let ai_id = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+        assert!(state.vehicles.iter().any(|v| v.owner == ai_id), "tren IA");
+        assert!(
+            state
+                .subsidies
+                .iter()
+                .any(|s| s.cargo == CargoType::Coal && !s.awarded),
+            "oferta de subsidio carbón"
+        );
+
+        let income_before = state.companies[ai_id.index()].cargo_income_earned;
+        let mut earned = false;
+        let mut awarded = false;
+        for _ in 0..12_000 {
+            state.step();
+            if state
+                .subsidies
+                .iter()
+                .any(|s| s.awarded && s.awarded_company == Some(ai_id))
+            {
+                awarded = true;
+            }
+            if state.companies[ai_id.index()].cargo_income_earned > income_before {
+                earned = true;
+            }
+            if earned && awarded {
+                break;
+            }
+        }
+        assert!(
+            earned,
+            "TransCargo debe registrar ingreso por entrega de carbón"
+        );
+        assert!(awarded, "TransCargo debe adjudicar el subsidio al entregar");
+    }
+
+    #[test]
     fn feeder_share_credits_first_station_owner() {
         use crate::company::{CompanyId, feeder_share_of};
         use crate::station::StopKind;

@@ -238,7 +238,13 @@ pub(crate) fn preview_image_for_action(
             Some(asset_server.load::<Image>("assets/opengfx/tiles/tree_01.png"))
         }
         BuildMenuAction::PlaceSign => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/object_statue_company.png"))
+        }
+        BuildMenuAction::BuildLighthouse => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/object_lighthouse.png"))
+        }
+        BuildMenuAction::BuildTransmitter => {
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/object_transmitter.png"))
         }
         BuildMenuAction::JoinStation => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/bus_stop_ne_ground.png"))

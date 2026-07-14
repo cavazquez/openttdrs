@@ -6,11 +6,13 @@ use crate::GameState;
 use crate::cargo::CargoType;
 use crate::command::{Command, apply_command};
 use crate::company::CompanyId;
+use crate::economy::TICKS_PER_MONTH;
 use crate::engine::ENGINE_TRAIN_KIRBY;
 use crate::industry::IndustryKind;
 use crate::map::{TileCoord, TileKind};
 use crate::pathfinder::{PathNetwork, find_path};
-use crate::vehicle::VehicleKind;
+use crate::subsidy::{SUBSIDY_OFFER_MONTHS, Subsidy};
+use crate::vehicle::{VehicleKind, VehicleOrder};
 
 use super::CompanyAi;
 
@@ -146,6 +148,29 @@ fn build_coal_line(state: &mut GameState, ai_id: CompanyId) -> bool {
     has_load && has_unload
 }
 
+fn seed_coal_subsidy(state: &mut GameState, mine: TileCoord, unload_st: TileCoord) {
+    if state.subsidies.iter().any(|s| {
+        s.cargo == CargoType::Coal
+            && s.source_industry_pos == mine
+            && s.dest_station_pos == unload_st
+    }) {
+        return;
+    }
+    let tick = state.tick.get();
+    let id = state.next_subsidy_id;
+    state.next_subsidy_id = state.next_subsidy_id.saturating_add(1);
+    state.subsidies.push(Subsidy {
+        id,
+        cargo: CargoType::Coal,
+        source_industry_pos: mine,
+        dest_station_pos: unload_st,
+        offer_expires_tick: tick.saturating_add(u64::from(SUBSIDY_OFFER_MONTHS) * TICKS_PER_MONTH),
+        awarded: false,
+        award_expires_tick: 0,
+        awarded_company: None,
+    });
+}
+
 fn buy_and_order_train(state: &mut GameState, ai_id: CompanyId) -> bool {
     let ai_stations: Vec<TileCoord> = state
         .stations
@@ -166,6 +191,11 @@ fn buy_and_order_train(state: &mut GameState, ai_id: CompanyId) -> bool {
     if state.map.get_kind(depot) != Some(TileKind::RailDepot) {
         return false;
     }
+    let mine = state
+        .industries
+        .iter()
+        .find(|i| i.kind == IndustryKind::CoalMine)
+        .map(|i| i.pos);
 
     let mut ok = false;
     with_ai_active(state, ai_id, |state| {
@@ -190,7 +220,13 @@ fn buy_and_order_train(state: &mut GameState, ai_id: CompanyId) -> bool {
 
         let _ = apply_command(
             state,
-            &Command::SetVehicleOrders(vid, vec![load_st, unload_st]),
+            &Command::SetVehicleOrderList(
+                vid,
+                vec![
+                    VehicleOrder::station_with_flags(load_st, true, false),
+                    VehicleOrder::station(unload_st),
+                ],
+            ),
         );
         let _ = apply_command(state, &Command::ToggleVehicleRunning(vid));
 
@@ -205,5 +241,8 @@ fn buy_and_order_train(state: &mut GameState, ai_id: CompanyId) -> bool {
         }
         ok = true;
     });
+    if ok && let Some(mine) = mine {
+        seed_coal_subsidy(state, mine, unload_st);
+    }
     ok
 }

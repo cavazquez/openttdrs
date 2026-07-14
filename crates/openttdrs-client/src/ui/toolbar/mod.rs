@@ -160,6 +160,10 @@ pub(crate) enum BuildMenuAction {
     PlantTree,
     /// Colocar cartel de texto en el mapa.
     PlaceSign,
+    /// Faro vanilla (`OBJECT_TYPE_LIGHTHOUSE`).
+    BuildLighthouse,
+    /// Transmisor vanilla (`OBJECT_TYPE_TRANSMITTER`).
+    BuildTransmitter,
     /// Unir dos paradas bus/camión adyacentes (2 clics).
     JoinStation,
 }
@@ -231,6 +235,8 @@ impl BuildMenuAction {
         Self::BuyLand,
         Self::PlantTree,
         Self::PlaceSign,
+        Self::BuildLighthouse,
+        Self::BuildTransmitter,
         Self::JoinStation,
     ];
 }

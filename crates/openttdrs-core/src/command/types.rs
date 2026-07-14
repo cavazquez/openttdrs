@@ -302,6 +302,12 @@ pub enum Command {
         from: TileCoord,
         to: TileCoord,
     },
+    /// Coloca faro o transmisor vanilla (`CmdBuildObject`).
+    BuildObject {
+        pos: TileCoord,
+        /// `OBJECT_TYPE_TRANSMITTER` o `OBJECT_TYPE_LIGHTHOUSE`.
+        object_type: u8,
+    },
     /// Solicita más préstamo bancario (`CmdIncreaseLoan`).
     IncreaseLoan,
     /// Devuelve parte del préstamo (`CmdDecreaseLoan`).
@@ -470,6 +476,10 @@ pub enum CommandError {
     LandAlreadyOwned,
     /// Solo se puede comprar hierba o bosque libre.
     CannotBuyLandHere,
+    /// Solo hierba/bosque libre admite faro o transmisor.
+    CannotBuildObjectHere,
+    /// Ya hay un faro o transmisor de ese tipo en el mapa (límite 1).
+    ObjectLimitReached,
     /// Esta industria no está disponible en el clima actual del mapa.
     IndustryNotAvailableInClimate,
     /// Préstamo ya al máximo permitido.
@@ -611,6 +621,10 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::CannotBuyLandHere => {
             "Solo se puede comprar hierba o bosque libre (sin objetos ni infra)."
         }
+        CommandError::CannotBuildObjectHere => {
+            "Solo se puede colocar el faro/transmisor en hierba o bosque libre."
+        }
+        CommandError::ObjectLimitReached => "Ya hay un faro o transmisor de ese tipo en el mapa.",
         CommandError::IndustryNotAvailableInClimate => {
             "Esta industria no está disponible en el clima de este mapa."
         }

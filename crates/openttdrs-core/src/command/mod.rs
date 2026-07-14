@@ -1,6 +1,7 @@
 //! Comandos del jugador que mutan [`crate::GameState`] de forma validada e identificable.
 
 mod apply;
+mod build_object;
 mod buy_land;
 mod company;
 mod economy;

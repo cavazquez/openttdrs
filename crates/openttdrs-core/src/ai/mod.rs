@@ -15,12 +15,13 @@ pub trait CompanyAi {
     fn decide(&self, state: &GameState) -> Vec<Command>;
 }
 
-/// Ciclo mensual de IA (Fase 4c).
+/// Ciclo de IA: mantenimiento de vehículos cada tick; construcción mensual.
 pub fn tick_ai_companies(state: &mut GameState, tick: u64) {
-    if tick == 0 || !tick.is_multiple_of(TICKS_PER_MONTH) {
+    if !state.companies.iter().any(|c| c.is_ai) {
         return;
     }
-    if !state.companies.iter().any(|c| c.is_ai) {
+    rule_based::maintain_transcargo_vehicles(state);
+    if tick == 0 || !tick.is_multiple_of(TICKS_PER_MONTH) {
         return;
     }
     rule_based::tick_transcargo(state);

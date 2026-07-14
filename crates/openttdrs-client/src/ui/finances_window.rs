@@ -33,6 +33,15 @@ pub(crate) struct FinancesSyncCache {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct CompanyFinanceRow {
+    name: String,
+    is_ai: bool,
+    colour: u8,
+    money: i64,
+    cargo_income: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct FinancesSnapshot {
     money: i64,
     loan: i64,
@@ -45,6 +54,7 @@ struct FinancesSnapshot {
     stations: usize,
     rail_tiles: u32,
     road_tiles: u32,
+    companies: Vec<CompanyFinanceRow>,
 }
 
 pub(crate) fn setup_finances_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -56,7 +66,7 @@ pub(crate) fn setup_finances_window(mut commands: Commands, asset_server: Res<As
         "Finanzas",
         TITLE_BROWN,
         Vec2::new(720.0, 200.0),
-        280.0,
+        320.0,
     );
     commands.entity(content).with_children(|body| {
         body.spawn((
@@ -214,6 +224,18 @@ pub(crate) fn sync_finances_window(
         .iter()
         .filter(|s| s.owner == sim.state.active_company)
         .count();
+    let companies: Vec<CompanyFinanceRow> = sim
+        .state
+        .companies
+        .iter()
+        .map(|c| CompanyFinanceRow {
+            name: c.name.clone(),
+            is_ai: c.is_ai,
+            colour: c.colour,
+            money: c.economy.money,
+            cargo_income: c.cargo_income_earned,
+        })
+        .collect();
     let soft = FinancesSnapshot {
         money: sim.state.economy.money,
         loan: sim.state.economy.loan,
@@ -228,6 +250,7 @@ pub(crate) fn sync_finances_window(
         stations,
         rail_tiles: cache.snapshot.as_ref().map_or(0, |s| s.rail_tiles),
         road_tiles: cache.snapshot.as_ref().map_or(0, |s| s.road_tiles),
+        companies,
     };
     let need_infra = cache.snapshot.as_ref().is_none_or(|prev| {
         prev.money != soft.money
@@ -237,6 +260,7 @@ pub(crate) fn sync_finances_window(
             || prev.deliveries != soft.deliveries
             || prev.vehicles != soft.vehicles
             || prev.stations != soft.stations
+            || prev.companies != soft.companies
     });
     let (rail_tiles, road_tiles) = if need_infra {
         let (mw, mh) = sim.state.map.dimensions();
@@ -291,6 +315,18 @@ pub(crate) fn sync_finances_window(
     if let Ok(mut body) = body_q.single_mut() {
         let net = snapshot.money.saturating_sub(snapshot.loan);
         let profit = snapshot.cargo_income as i64 - snapshot.running_costs as i64;
+        let mut companies_block = String::from("\n\nCompañías:");
+        for row in &snapshot.companies {
+            let tag = if row.is_ai { " (IA)" } else { "" };
+            companies_block.push_str(&format!(
+                "\n  {}{} · color #{} · {} · ingresos {}",
+                row.name,
+                tag,
+                row.colour,
+                format_money(row.money),
+                format_money(row.cargo_income.cast_signed()),
+            ));
+        }
         **body = format!(
             "Efectivo: {}\nPréstamo: {} / {}\nPatrimonio neto: {}\n\
              (cada operación: {})\n\n\
@@ -300,7 +336,7 @@ pub(crate) fn sync_finances_window(
              Infraestructura:\n\
                Vehículos: {}\n\
                Estaciones: {}\n\
-               Vía: {} teselas · Carretera: {} teselas",
+               Vía: {} teselas · Carretera: {} teselas{}",
             format_money(snapshot.money),
             format_money(snapshot.loan),
             format_money(snapshot.max_loan),
@@ -315,6 +351,7 @@ pub(crate) fn sync_finances_window(
             snapshot.stations,
             snapshot.rail_tiles,
             snapshot.road_tiles,
+            companies_block,
         );
     }
 }

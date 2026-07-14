@@ -969,11 +969,11 @@ fn build_loan_interest() -> GameState {
     state
 }
 
-/// Fase 4: mina + fábrica en la misma fila; rival `TransCargo` construye línea.
+/// Fase 4 / #86: mina+fábrica colineales + bosque en otra fila (2ª ruta en L).
 #[must_use]
 #[allow(clippy::expect_used)]
 pub fn build_ai_rival_line() -> GameState {
-    let mut state = GameState::new(24, 12);
+    let mut state = GameState::new(24, 14);
     state.world_seed = 0;
     state.disasters_enabled = false;
     state.economy.money = 100_000;
@@ -982,15 +982,21 @@ pub fn build_ai_rival_line() -> GameState {
 
     let mine = TileCoord::new(2, 5);
     let factory = TileCoord::new(18, 5);
+    let forest = TileCoord::new(2, 9);
     state
         .industries
         .push(Industry::new(mine, IndustryKind::CoalMine));
     state
         .industries
         .push(Industry::new(factory, IndustryKind::Factory));
-    // Stock inicial para que el tren pueda cargar tras construir.
-    if let Some(ind) = state.industries.iter_mut().find(|i| i.pos == mine) {
-        ind.stock = 200;
+    state
+        .industries
+        .push(Industry::new(forest, IndustryKind::Forest));
+    // Stock inicial para que los trenes puedan cargar tras construir.
+    for pos in [mine, forest] {
+        if let Some(ind) = state.industries.iter_mut().find(|i| i.pos == pos) {
+            ind.stock = 200;
+        }
     }
     state
 }
@@ -1139,6 +1145,55 @@ mod tests {
         assert!(
             state.vehicles.iter().any(|v| v.owner == ai_id),
             "TransCargo debe tener tren"
+        );
+    }
+
+    #[test]
+    fn ai_rival_builds_second_wood_route_on_l() {
+        use crate::economy::TICKS_PER_MONTH;
+        use crate::vehicle::VehicleKind;
+
+        let mut state = build_ai_rival_line();
+        // Dos cierres mensuales: 1ª carbón, 2ª madera (L).
+        for _ in 0..=(TICKS_PER_MONTH * 2) {
+            state.step();
+        }
+        let ai_id = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+        let trains = state
+            .vehicles
+            .iter()
+            .filter(|v| v.owner == ai_id && v.kind == VehicleKind::Train && v.is_consist_head())
+            .count();
+        assert!(
+            trains >= 2,
+            "TransCargo debe tener 2 trenes (carbón + madera), got {trains}"
+        );
+        // La 2ª ruta ancla carga al bosque (estación a ±2 de Forest).
+        let wood_load = state.stations.iter().filter(|s| s.owner == ai_id).any(|s| {
+            state.industries.iter().any(|i| {
+                i.kind == IndustryKind::Forest
+                    && (i.pos.x - s.pos.x).abs() <= 2
+                    && (i.pos.y - s.pos.y).abs() <= 2
+            })
+        });
+        assert!(wood_load, "debe existir estación IA junto al bosque");
+        // Tras unos ticks el tren de madera debe cargar Wood (industria más cercana).
+        let mut saw_wood = false;
+        for _ in 0..4_000 {
+            state.step();
+            if state
+                .vehicles
+                .iter()
+                .any(|v| v.owner == ai_id && v.cargo > 0 && v.cargo_type == Some(CargoType::Wood))
+            {
+                saw_wood = true;
+                break;
+            }
+        }
+        assert!(saw_wood, "el tren de la ruta bosque debe cargar madera");
+        assert!(
+            state.stations.iter().filter(|s| s.owner == ai_id).count() >= 3,
+            "al menos 3 estaciones IA (2 carga + descarga)"
         );
     }
 

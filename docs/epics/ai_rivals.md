@@ -1,7 +1,7 @@
 # Epic futuro: IA de compañías rivales
 
-**Estado:** MVP implementado (Fase 4 estructural, jul 2026) — `ai/rule_based.rs` + escenario `ai_rival_line`.  
-**Fecha:** 2026-07-05 (doc); implementación 2026-07-09
+**Estado:** Slice jugable #86 (jul 2026) — 2 rutas (carbón + madera), vía Manhattan en L, rival en Finanzas.  
+**Fecha:** 2026-07-05 (doc); MVP 2026-07-09; slice multi-ruta 2026-07-14
 
 ## Contexto
 
@@ -17,30 +17,33 @@ OpenTTD original ejecuta scripts Squirrel (`ai/`, `game/`) para competidores CPU
 
 ## MVP propuesto (Rust)
 
-1. **Rival estático «TransCargo»** — una línea fija mina→fábrica, un tren, compite por subsidios.
+1. **Rival estático «TransCargo»** — líneas mina→fábrica y bosque→fábrica, compite por subsidios.
 2. **Ciclo de decisión** (cada mes simulado):
-   - Si `money > umbral` y no hay ruta activa → construir vía mínima hacia industria más cercana.
-   - Comprar tren más barato disponible en año actual.
-   - Repetir hasta 3 rutas.
-3. **Sin terraform ni señales avanzadas** — pathfinding existente (`PathNetwork::Rail`).
-4. **UI:** color de compañía distinto, nombre en tabla de finanzas (futuro).
+   - Si `money >= AI_BUILD_MONEY_THRESHOLD` y rutas `< MAX_AI_ROUTES` (2) → siguiente par sin servir.
+   - Vía Manhattan (L) entre estaciones; depósito junto a la carga.
+   - Comprar tren + órdenes full-load; sembrar subsidio del cargo.
+3. **Sin terraform ni señales avanzadas** — pathfinding existente (`PathNetwork::Rail`) para el tren.
+4. **UI:** rival listado en Finanzas (nombre, IA, color, efectivo, ingresos).
 
-## Archivos previstos
+## Archivos
 
 | Módulo | Rol |
 |--------|-----|
-| `crates/openttdrs-core/src/ai/mod.rs` | Trait `CompanyAi` |
-| `crates/openttdrs-core/src/ai/rule_based.rs` | Heurísticas mina→fábrica |
-| `sim_step.rs` | `tick_ai_companies` tras tick mensual |
-| Cliente | Sin cambios obligatorios en v1 |
+| `crates/openttdrs-core/src/ai/mod.rs` | Trait `CompanyAi` + tick mensual / maintain |
+| `crates/openttdrs-core/src/ai/rule_based.rs` | Heurísticas multi-ruta + Manhattan |
+| `sim_step.rs` | `tick_ai_companies`; carga desde industria más cercana |
+| `finances_window.rs` | Lista de compañías |
+| Escenario `ai_rival_line` | Mina + fábrica + bosque |
 
-## Criterio de cierre futuro
+## Criterio de cierre
 
-- ~~1 rival coloca una línea y entrega carga sin intervención del jugador.~~ ✅ (`ai_rival_delivers_coal_and_awards_subsidy`)
-- ~~Compite por un subsidio activo (`subsidy.rs`).~~ ✅ (oferta sembrada al comprar tren + `try_award_subsidy`)
+- ~~1 rival coloca una línea y entrega carga sin intervención del jugador.~~ ✅
+- ~~Compite por un subsidio activo (`subsidy.rs`).~~ ✅
 - ~~`check.sh` verde con escenario headless `ai_rival_line`.~~ ✅
+- ~~2ª ruta (madera) + vía en L.~~ ✅ (`ai_rival_builds_second_wood_route_on_l`)
+- ~~Rival visible en Finanzas.~~ ✅
 
-Pendiente épica (#86): más rutas, terraform/señales, UI finanzas rival.
+Pendiente épica (#86): 3ª ruta, terraform/señales, settings/debug UI (#44).
 
 ## DevBot / métricas (implementado, jul 2026)
 
@@ -51,8 +54,6 @@ sin UI. Eliminar: borrar `dev_metrics/`, `bin/dev_bot.rs`, exports en `lib.rs`.
 cargo run -p openttdrs-core --bin dev_bot -- \
   --scenario train_line --vehicle 1 --ticks 12000 --require-delivery
 ```
-
-Trait vacío `ai::CompanyAi` listo para políticas futuras (rival / fuzzer).
 
 **Comandos y guía completa:** [DEV_BOT.md](../DEV_BOT.md)
 

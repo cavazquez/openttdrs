@@ -1,6 +1,6 @@
-//! IA rival «TransCargo»: construye una línea mina→fábrica y un tren (Fase 4c).
+//! IA rival «TransCargo»: hasta 2 rutas de freight (carbón / madera), vía Manhattan.
 //!
-//! Heurística mínima: una sola ruta de carbón, sin terraform ni señales.
+//! Sin terraform ni señales. Ver `docs/epics/ai_rivals.md`.
 
 use crate::GameState;
 use crate::cargo::CargoType;
@@ -16,6 +16,11 @@ use crate::vehicle::{VehicleKind, VehicleOrder};
 
 use super::CompanyAi;
 
+/// Máximo de líneas (trenes head) que construye `TransCargo`.
+pub const MAX_AI_ROUTES: usize = 2;
+/// Efectivo mínimo de la IA antes de abrir una ruta nueva.
+pub const AI_BUILD_MONEY_THRESHOLD: i64 = 80_000;
+
 /// Rival estático documentado en `docs/epics/ai_rivals.md`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TransCargoAi;
@@ -27,24 +32,130 @@ impl CompanyAi for TransCargoAi {
     }
 }
 
-/// Ejecuta un paso de construcción/compra para `TransCargo` si hace falta.
-pub fn tick_transcargo(state: &mut GameState) {
+#[derive(Debug, Clone, Copy)]
+struct RoutePlan {
+    source: TileCoord,
+    dest: TileCoord,
+    cargo: CargoType,
+}
+
+/// Mantiene trenes IA en marcha y `cargo_type` anclado (cada tick).
+pub fn maintain_transcargo_vehicles(state: &mut GameState) {
     state.ensure_rival_transcargo();
     let Some(ai_id) = state.companies.iter().find(|c| c.is_ai).map(|c| c.id) else {
         return;
     };
-    if state.vehicles.iter().any(|v| v.owner == ai_id) {
-        for v in &mut state.vehicles {
-            if v.owner == ai_id && v.kind == VehicleKind::Train {
-                v.running = true;
-            }
+    refresh_ai_train_cargo_types(state, ai_id);
+    for v in &mut state.vehicles {
+        if v.owner == ai_id && v.kind == VehicleKind::Train && v.is_consist_head() {
+            v.running = true;
         }
+    }
+}
+
+/// Ejecuta un paso de construcción/compra para `TransCargo` si hace falta.
+pub fn tick_transcargo(state: &mut GameState) {
+    maintain_transcargo_vehicles(state);
+    let Some(ai_id) = state.companies.iter().find(|c| c.is_ai).map(|c| c.id) else {
+        return;
+    };
+
+    let routes = ai_route_count(state, ai_id);
+    if routes >= MAX_AI_ROUTES {
         return;
     }
-    if !build_coal_line(state, ai_id) {
+    let money = state.company_economy(ai_id).money;
+    if money < AI_BUILD_MONEY_THRESHOLD {
         return;
     }
-    let _ = buy_and_order_train(state, ai_id);
+    let Some(plan) = next_unserved_plan(state, ai_id) else {
+        return;
+    };
+    let Some((load_st, unload_st, depot)) = build_freight_line(state, ai_id, plan) else {
+        return;
+    };
+    let _ = buy_and_order_train(state, ai_id, load_st, unload_st, depot, plan);
+}
+
+/// `sync_cargo_from_packets` pone `cargo_type = None` al vaciar; reanclar al
+/// cargo de la industria junto a la primera orden de estación.
+fn refresh_ai_train_cargo_types(state: &mut GameState, ai_id: CompanyId) {
+    let hints: Vec<(u32, TileCoord)> = state
+        .vehicles
+        .iter()
+        .filter(|v| v.owner == ai_id && v.kind == VehicleKind::Train && v.is_consist_head())
+        .filter(|v| v.cargo == 0)
+        .filter_map(|v| {
+            let load = v.orders.iter().find_map(|o| match o {
+                VehicleOrder::Station { station, .. } => Some(*station),
+                _ => None,
+            })?;
+            Some((v.id, load))
+        })
+        .collect();
+    for (vid, load_st) in hints {
+        let cargo = state.industries.iter().find_map(|ind| {
+            if (ind.pos.x - load_st.x).abs() <= 2 && (ind.pos.y - load_st.y).abs() <= 2 {
+                Some(ind.output_cargo())
+            } else {
+                None
+            }
+        });
+        if let (Some(cargo), Some(v)) = (cargo, state.vehicles.iter_mut().find(|v| v.id == vid)) {
+            v.cargo_type = Some(cargo);
+        }
+    }
+}
+
+fn ai_route_count(state: &GameState, ai_id: CompanyId) -> usize {
+    state
+        .vehicles
+        .iter()
+        .filter(|v| v.owner == ai_id && v.kind == VehicleKind::Train && v.is_consist_head())
+        .count()
+}
+
+fn industry_served_by_ai(state: &GameState, ai_id: CompanyId, industry_pos: TileCoord) -> bool {
+    // Solo estaciones «de carga» junto a la industria (±2), no toda la cobertura
+    // de radio 4 (una estación de carbón no debe marcar el bosque como servido).
+    state.stations.iter().any(|st| {
+        st.owner == ai_id
+            && (st.pos.x - industry_pos.x).abs() <= 2
+            && (st.pos.y - industry_pos.y).abs() <= 2
+    })
+}
+
+fn next_unserved_plan(state: &GameState, ai_id: CompanyId) -> Option<RoutePlan> {
+    let factory = state
+        .industries
+        .iter()
+        .find(|i| i.kind == IndustryKind::Factory)
+        .map(|i| i.pos)?;
+
+    // Prioridad: carbón, luego madera.
+    let candidates = [
+        (IndustryKind::CoalMine, CargoType::Coal),
+        (IndustryKind::Forest, CargoType::Wood),
+    ];
+    for (kind, cargo) in candidates {
+        let Some(source) = state
+            .industries
+            .iter()
+            .find(|i| i.kind == kind)
+            .map(|i| i.pos)
+        else {
+            continue;
+        };
+        if industry_served_by_ai(state, ai_id, source) {
+            continue;
+        }
+        return Some(RoutePlan {
+            source,
+            dest: factory,
+            cargo,
+        });
+    }
+    None
 }
 
 fn with_ai_active(state: &mut GameState, ai_id: CompanyId, f: impl FnOnce(&mut GameState)) {
@@ -59,84 +170,153 @@ fn with_ai_active(state: &mut GameState, ai_id: CompanyId, f: impl FnOnce(&mut G
     state.sync_mirrors_from_active();
 }
 
-fn build_coal_line(state: &mut GameState, ai_id: CompanyId) -> bool {
-    let Some(mine) = state
-        .industries
-        .iter()
-        .find(|i| i.kind == IndustryKind::CoalMine)
-        .map(|i| i.pos)
-    else {
-        return false;
-    };
-    let Some(factory) = state
-        .industries
-        .iter()
-        .find(|i| i.kind == IndustryKind::Factory)
-        .map(|i| i.pos)
-    else {
-        return false;
-    };
+fn tile_buildable_for_station(map: &crate::map::Map, c: TileCoord) -> bool {
+    matches!(
+        map.get_kind(c),
+        Some(TileKind::Grass | TileKind::Forest | TileKind::Rail)
+    )
+}
 
-    if mine.y != factory.y {
-        return false;
-    }
-    let y = mine.y;
-    // Estaciones en hierba a ±2 de las industrias; vía continua entre ellas.
-    let load_st = TileCoord::new(mine.x + 2, y);
-    let unload_st = TileCoord::new(factory.x - 2, y);
-    if load_st.x >= unload_st.x {
-        return false;
-    }
-    if state.map.get(load_st).is_none() || state.map.get(unload_st).is_none() {
-        return false;
-    }
+/// Offsets candidatos a ±2 (cardinales) respecto de la industria.
+fn station_candidates_near(industry: TileCoord) -> [TileCoord; 4] {
+    [
+        TileCoord::new(industry.x + 2, industry.y),
+        TileCoord::new(industry.x - 2, industry.y),
+        TileCoord::new(industry.x, industry.y + 2),
+        TileCoord::new(industry.x, industry.y - 2),
+    ]
+}
 
-    with_ai_active(state, ai_id, |state| {
-        // 1) Vía en todo el corredor (incluye teselas de estación: se pisan al colocar).
-        for x in load_st.x..=unload_st.x {
-            let c = TileCoord::new(x, y);
-            if matches!(
-                state.map.get_kind(c),
-                Some(TileKind::Rail | TileKind::Station | TileKind::RailDepot)
-            ) {
-                continue;
-            }
-            let _ = apply_command(state, &Command::PlaceRail(c));
+fn pick_station_tile(
+    map: &crate::map::Map,
+    industry: TileCoord,
+    toward: TileCoord,
+) -> Option<TileCoord> {
+    let mut cands: Vec<TileCoord> = station_candidates_near(industry)
+        .into_iter()
+        .filter(|&c| map.get(c).is_some() && tile_buildable_for_station(map, c))
+        .collect();
+    // Preferir la tesela más cercana al otro extremo (corredor corto).
+    cands.sort_by_key(|c| (c.x - toward.x).abs() + (c.y - toward.y).abs());
+    cands.into_iter().next()
+}
+
+/// Coloca vía en corredor Manhattan: primero eje X, luego eje Y.
+fn place_rail_manhattan_corridor(state: &mut GameState, from: TileCoord, to: TileCoord) {
+    let mut c = from;
+    let step_x = (to.x - from.x).signum();
+    while c.x != to.x {
+        c = TileCoord::new(c.x + step_x, c.y);
+        place_rail_if_needed(state, c);
+    }
+    let step_y = (to.y - from.y).signum();
+    while c.y != to.y {
+        c = TileCoord::new(c.x, c.y + step_y);
+        place_rail_if_needed(state, c);
+    }
+}
+
+fn place_rail_if_needed(state: &mut GameState, c: TileCoord) {
+    if matches!(
+        state.map.get_kind(c),
+        Some(TileKind::Rail | TileKind::Station | TileKind::RailDepot)
+    ) {
+        return;
+    }
+    let _ = apply_command(state, &Command::PlaceRail(c));
+}
+
+fn place_rail_station_owned(state: &mut GameState, st_pos: TileCoord, ai_id: CompanyId) -> bool {
+    if state.stations.iter().any(|s| s.pos == st_pos) {
+        if let Some(st) = state.stations.iter_mut().find(|s| s.pos == st_pos) {
+            st.owner = ai_id;
         }
-
-        // 2) Estaciones: probar dirs 0..3 (entrada debe mirar a la vía).
-        for st_pos in [load_st, unload_st] {
-            if state.stations.iter().any(|s| s.pos == st_pos) {
-                continue;
-            }
-            if state.map.get_kind(st_pos) == Some(TileKind::Rail) {
-                let _ = apply_command(state, &Command::ClearTile(st_pos));
-            }
-            for dir in 0..4u8 {
-                if apply_command(state, &Command::PlaceRailStation(st_pos, dir)).is_ok() {
-                    break;
-                }
-            }
-        }
-        for st in &mut state.stations {
-            if st.pos == load_st || st.pos == unload_st {
+        return true;
+    }
+    if state.map.get_kind(st_pos) == Some(TileKind::Rail) {
+        let _ = apply_command(state, &Command::ClearTile(st_pos));
+    }
+    for dir in 0..4u8 {
+        if apply_command(state, &Command::PlaceRailStation(st_pos, dir)).is_ok() {
+            if let Some(st) = state.stations.iter_mut().find(|s| s.pos == st_pos) {
                 st.owner = ai_id;
             }
+            return true;
         }
+    }
+    false
+}
 
-        // 3) Depósito al sur de la primera tesela de vía tras la estación de carga.
-        let mouth = TileCoord::new(load_st.x + 1, y);
-        let depot = TileCoord::new(load_st.x + 1, y + 1);
-        if state.map.get(depot).is_some() {
-            if state.map.get_kind(mouth) != Some(TileKind::Rail) {
-                let _ = apply_command(state, &Command::PlaceRail(mouth));
-            }
-            if state.map.get_kind(depot) != Some(TileKind::RailDepot) {
-                let _ = apply_command(state, &Command::PlaceRailDepotDir(depot, 3));
-            }
+fn try_place_depot_near(state: &mut GameState, load_st: TileCoord) -> Option<TileCoord> {
+    // Preferido: boca al norte hacia la línea, depósito al sur de la tesela
+    // al este de la estación (layout que ya funciona en `ai_rival_line`).
+    let preferred = [
+        (
+            TileCoord::new(load_st.x + 1, load_st.y + 1),
+            TileCoord::new(load_st.x + 1, load_st.y),
+            3u8,
+        ),
+        (
+            TileCoord::new(load_st.x - 1, load_st.y + 1),
+            TileCoord::new(load_st.x - 1, load_st.y),
+            3u8,
+        ),
+        (
+            TileCoord::new(load_st.x + 1, load_st.y - 1),
+            TileCoord::new(load_st.x + 1, load_st.y),
+            1u8,
+        ),
+        (
+            TileCoord::new(load_st.x - 1, load_st.y - 1),
+            TileCoord::new(load_st.x - 1, load_st.y),
+            1u8,
+        ),
+        (TileCoord::new(load_st.x, load_st.y + 1), load_st, 3u8),
+        (TileCoord::new(load_st.x, load_st.y - 1), load_st, 1u8),
+    ];
+    for (depot, mouth, dir) in preferred {
+        if state.map.get(depot).is_none() {
+            continue;
         }
+        if state.map.get_kind(depot) == Some(TileKind::RailDepot) {
+            return Some(depot);
+        }
+        if mouth != load_st && mouth != depot {
+            place_rail_if_needed(state, mouth);
+        }
+        if apply_command(state, &Command::PlaceRailDepotDir(depot, dir)).is_ok() {
+            return Some(depot);
+        }
+    }
+    None
+}
+
+fn build_freight_line(
+    state: &mut GameState,
+    ai_id: CompanyId,
+    plan: RoutePlan,
+) -> Option<(TileCoord, TileCoord, TileCoord)> {
+    let load_st = pick_station_tile(&state.map, plan.source, plan.dest)?;
+    let unload_st = pick_station_tile(&state.map, plan.dest, plan.source)?;
+    if load_st == unload_st {
+        return None;
+    }
+
+    let mut depot_out = None;
+    with_ai_active(state, ai_id, |state| {
+        place_rail_manhattan_corridor(state, load_st, unload_st);
+        if !place_rail_station_owned(state, load_st, ai_id) {
+            return;
+        }
+        if !place_rail_station_owned(state, unload_st, ai_id) {
+            return;
+        }
+        // Reconectar vía bajo/alrededor de las estaciones.
+        place_rail_manhattan_corridor(state, load_st, unload_st);
+        depot_out = try_place_depot_near(state, load_st);
     });
 
+    let depot = depot_out?;
     let has_load = state
         .stations
         .iter()
@@ -145,14 +325,21 @@ fn build_coal_line(state: &mut GameState, ai_id: CompanyId) -> bool {
         .stations
         .iter()
         .any(|s| s.owner == ai_id && s.pos == unload_st);
-    has_load && has_unload
+    if has_load && has_unload {
+        Some((load_st, unload_st, depot))
+    } else {
+        None
+    }
 }
 
-fn seed_coal_subsidy(state: &mut GameState, mine: TileCoord, unload_st: TileCoord) {
+fn seed_route_subsidy(
+    state: &mut GameState,
+    cargo: CargoType,
+    source: TileCoord,
+    unload_st: TileCoord,
+) {
     if state.subsidies.iter().any(|s| {
-        s.cargo == CargoType::Coal
-            && s.source_industry_pos == mine
-            && s.dest_station_pos == unload_st
+        s.cargo == cargo && s.source_industry_pos == source && s.dest_station_pos == unload_st
     }) {
         return;
     }
@@ -161,8 +348,8 @@ fn seed_coal_subsidy(state: &mut GameState, mine: TileCoord, unload_st: TileCoor
     state.next_subsidy_id = state.next_subsidy_id.saturating_add(1);
     state.subsidies.push(Subsidy {
         id,
-        cargo: CargoType::Coal,
-        source_industry_pos: mine,
+        cargo,
+        source_industry_pos: source,
         dest_station_pos: unload_st,
         offer_expires_tick: tick.saturating_add(u64::from(SUBSIDY_OFFER_MONTHS) * TICKS_PER_MONTH),
         awarded: false,
@@ -171,31 +358,17 @@ fn seed_coal_subsidy(state: &mut GameState, mine: TileCoord, unload_st: TileCoor
     });
 }
 
-fn buy_and_order_train(state: &mut GameState, ai_id: CompanyId) -> bool {
-    let ai_stations: Vec<TileCoord> = state
-        .stations
-        .iter()
-        .filter(|s| s.owner == ai_id)
-        .map(|s| s.pos)
-        .collect();
-    let Some(&load_st) = ai_stations.iter().min_by_key(|p| p.x) else {
-        return false;
-    };
-    let Some(&unload_st) = ai_stations.iter().max_by_key(|p| p.x) else {
-        return false;
-    };
-    if load_st == unload_st {
-        return false;
-    }
-    let depot = TileCoord::new(load_st.x + 1, load_st.y + 1);
+fn buy_and_order_train(
+    state: &mut GameState,
+    ai_id: CompanyId,
+    load_st: TileCoord,
+    unload_st: TileCoord,
+    depot: TileCoord,
+    plan: RoutePlan,
+) -> bool {
     if state.map.get_kind(depot) != Some(TileKind::RailDepot) {
         return false;
     }
-    let mine = state
-        .industries
-        .iter()
-        .find(|i| i.kind == IndustryKind::CoalMine)
-        .map(|i| i.pos);
 
     let mut ok = false;
     with_ai_active(state, ai_id, |state| {
@@ -232,7 +405,7 @@ fn buy_and_order_train(state: &mut GameState, ai_id: CompanyId) -> bool {
 
         if let Some(v) = state.vehicles.iter_mut().find(|v| v.id == vid) {
             v.owner = ai_id;
-            v.cargo_type = Some(CargoType::Coal);
+            v.cargo_type = Some(plan.cargo);
             if let Some(path) = find_path(&state.map, v.pos, load_st, PathNetwork::Rail) {
                 v.path = path.into_iter().collect();
                 v.dest = load_st;
@@ -241,8 +414,37 @@ fn buy_and_order_train(state: &mut GameState, ai_id: CompanyId) -> bool {
         }
         ok = true;
     });
-    if ok && let Some(mine) = mine {
-        seed_coal_subsidy(state, mine, unload_st);
+    if ok {
+        seed_route_subsidy(state, plan.cargo, plan.source, unload_st);
     }
     ok
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::map::TileCoord;
+
+    #[test]
+    fn manhattan_corridor_places_l_shape() {
+        let mut state = GameState::new(16, 16);
+        state.economy.money = 500_000;
+        let a = TileCoord::new(2, 2);
+        let b = TileCoord::new(8, 6);
+        place_rail_manhattan_corridor(&mut state, a, b);
+        // Esquina del L en (8,2).
+        assert_eq!(
+            state.map.get_kind(TileCoord::new(8, 2)),
+            Some(TileKind::Rail)
+        );
+        assert_eq!(
+            state.map.get_kind(TileCoord::new(8, 6)),
+            Some(TileKind::Rail)
+        );
+        assert_eq!(
+            state.map.get_kind(TileCoord::new(5, 2)),
+            Some(TileKind::Rail)
+        );
+    }
 }

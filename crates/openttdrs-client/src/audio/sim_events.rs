@@ -185,9 +185,26 @@ fn dispatch_sim_events(
                     sfx.write(PlayWorldSfx::new(SoundId::SkidPlane, at, 0.8).with_priority(78));
                 }
             }
-            SimEvent::TownRatingChanged { .. }
-            | SimEvent::SubsidyCreated { .. }
-            | SimEvent::SubsidyAwarded { .. } => {}
+            SimEvent::TownRatingChanged { .. } => {}
+            SimEvent::SubsidyCreated { station_pos, .. } => {
+                if hud.sound_confirm {
+                    sfx.write(
+                        PlayWorldSfx::new(SoundId::NewsTicker, station_pos, 0.65).with_priority(70),
+                    );
+                }
+            }
+            SimEvent::SubsidyAwarded { .. } => {
+                if hud.sound_confirm {
+                    sfx.write(
+                        PlayWorldSfx::new(
+                            SoundId::Applause,
+                            openttdrs_core::TileCoord::new(0, 0),
+                            0.7,
+                        )
+                        .with_priority(70),
+                    );
+                }
+            }
         }
     }
 }

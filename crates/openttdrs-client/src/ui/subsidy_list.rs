@@ -190,7 +190,17 @@ fn format_subsidy_row(sim: &SimWorld, subsidy: &openttdrs_core::Subsidy, tick: u
     let dest = station_label(sim, subsidy.dest_station_pos);
     if subsidy.is_award_active(tick) {
         let months = months_remaining(subsidy.award_expires_tick, tick);
-        format!("[Activo ×2] {cargo}: {source} → {dest} · {months} meses")
+        let winner = subsidy
+            .awarded_company
+            .and_then(|id| {
+                sim.state
+                    .companies
+                    .iter()
+                    .find(|c| c.id == id)
+                    .map(|c| c.name.as_str())
+            })
+            .unwrap_or("?");
+        format!("[Activo ×2 · {winner}] {cargo}: {source} → {dest} · {months} meses")
     } else {
         let months = months_remaining(subsidy.offer_expires_tick, tick);
         format!("[Oferta] {cargo}: {source} → {dest} · {months} meses")
@@ -422,6 +432,7 @@ mod tests {
             offer_expires_tick: 10_000,
             awarded: false,
             award_expires_tick: 0,
+            awarded_company: None,
         });
         let height = state.map.get(src).map_or(0, |t| t.height);
         let expected = tile_pos(src.x, src.y, height, 0.0);

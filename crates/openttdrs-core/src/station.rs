@@ -1,5 +1,6 @@
 use crate::cargo::{ALL_CARGO_TYPES, CargoStock, CargoType};
 use crate::cargo_packet::StationCargoList;
+use crate::company::CompanyId;
 use crate::industry::{Industry, IndustryKind};
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::diag_dir_offset;
@@ -8,6 +9,8 @@ use crate::vehicle::{VehicleKind, VehicleOrder};
 pub const STATION_COVERAGE_RADIUS: i32 = 4;
 /// Máximo de días sin recogida antes de truncar (`station_cmd.cpp`).
 pub const MAX_TIME_SINCE_PICKUP_DAYS: u8 = 255;
+/// Rating mínimo del dueño para generar pax/correo en parada bus (`station_cmd.cpp` ≈ 130).
+pub const TOWN_CARGO_MIN_OWNER_RATING: u8 = 130;
 
 /// `station_map.h`: bit 1 de m3 permite cables de catenaria.
 pub const STATION_TILE_WIRES: u8 = 1 << 1;
@@ -102,7 +105,7 @@ pub struct Station {
     pub stop_kind: StopKind,
     /// Compañía propietaria (Fase 4; default jugador).
     #[serde(default)]
-    pub owner: crate::company::CompanyId,
+    pub owner: CompanyId,
     /// Nombre de la estación (saves de `OpenTTD` con nombre custom).
     #[serde(default)]
     pub name: Option<String>,
@@ -121,6 +124,9 @@ pub struct Station {
     /// Rating global simplificado (0–255; mayor = mejor servicio).
     #[serde(default = "default_station_rating")]
     pub rating: u8,
+    /// Días sin recogida por compañía (rating competitivo; default vacío).
+    #[serde(default)]
+    pub company_time_since_pickup: Vec<(CompanyId, CargoTimeSincePickup)>,
     /// Teselas del aeropuerto (helipuerto = `[pos]`; small = footprint completo).
     #[serde(default)]
     pub airport_tiles: Vec<TileCoord>,
@@ -174,7 +180,7 @@ impl Station {
         Self {
             pos,
             stop_kind,
-            owner: crate::company::CompanyId::PLAYER,
+            owner: CompanyId::PLAYER,
             name: None,
             stock: 0,
             cargo_stock: CargoStock::default(),
@@ -182,11 +188,34 @@ impl Station {
             income: 0,
             time_since_pickup: CargoTimeSincePickup::default(),
             rating: default_station_rating(),
+            company_time_since_pickup: vec![(CompanyId::PLAYER, CargoTimeSincePickup::default())],
             airport_tiles: Vec::new(),
             joined_tiles: Vec::new(),
             station_spec: crate::station_class::StationSpecId::DefaultRail,
             newgrf_random_bits: seed_station_newgrf_random_bits(pos),
         }
+    }
+
+    fn company_pickup_slot_mut(&mut self, company: CompanyId) -> &mut CargoTimeSincePickup {
+        if let Some(idx) = self
+            .company_time_since_pickup
+            .iter()
+            .position(|(id, _)| *id == company)
+        {
+            return &mut self.company_time_since_pickup[idx].1;
+        }
+        self.company_time_since_pickup
+            .push((company, CargoTimeSincePickup::default()));
+        let idx = self.company_time_since_pickup.len() - 1;
+        &mut self.company_time_since_pickup[idx].1
+    }
+
+    #[must_use]
+    pub fn company_pickup_days(&self, company: CompanyId, cargo: CargoType) -> u8 {
+        self.company_time_since_pickup
+            .iter()
+            .find(|(id, _)| *id == company)
+            .map_or_else(|| self.time_since_pickup.get(cargo), |(_, t)| t.get(cargo))
     }
 
     /// Si hay balance legado sin packets, hidrata la cola (tests / saves v12).
@@ -796,6 +825,18 @@ pub fn station_rating_for_cargo(station: &Station, cargo: CargoType) -> u8 {
     255u8.saturating_sub(from_pickup.max(from_packets))
 }
 
+/// Rating 0–255 para la compañía que carga (competencia multi-compañía).
+#[must_use]
+pub fn station_rating_for_company_cargo(
+    station: &Station,
+    company: CompanyId,
+    cargo: CargoType,
+) -> u8 {
+    let from_pickup = station.company_pickup_days(company, cargo);
+    let from_packets = station.cargo_packets.oldest_waiting_days(cargo);
+    255u8.saturating_sub(from_pickup.max(from_packets))
+}
+
 /// Recalcula el rating global como mínimo entre cargas con stock en espera.
 pub fn recompute_station_rating(station: &mut Station) {
     let mut min_rating = 255u8;
@@ -825,6 +866,9 @@ pub fn tick_station_cargo_age(stations: &mut [Station], selectgoods: bool) {
                 continue;
             }
             station.time_since_pickup.increment_waiting(cargo);
+            for (_, company_tsp) in &mut station.company_time_since_pickup {
+                company_tsp.increment_waiting(cargo);
+            }
             if selectgoods && station.time_since_pickup.get(cargo) == MAX_TIME_SINCE_PICKUP_DAYS {
                 station.cargo_packets.truncate_cargo(cargo);
                 station.time_since_pickup.set(cargo, 0);
@@ -835,9 +879,10 @@ pub fn tick_station_cargo_age(stations: &mut [Station], selectgoods: bool) {
     }
 }
 
-/// Marca recogida reciente de un tipo de carga.
-pub fn on_station_cargo_pickup(station: &mut Station, cargo: CargoType) {
+/// Marca recogida reciente de un tipo de carga por una compañía.
+pub fn on_station_cargo_pickup(station: &mut Station, cargo: CargoType, company: CompanyId) {
     station.time_since_pickup.set(cargo, 0);
+    station.company_pickup_slot_mut(company).set(cargo, 0);
     for p in &mut station.cargo_packets.packets {
         if p.cargo == cargo {
             p.periods_in_transit = 0;
@@ -1210,5 +1255,31 @@ mod coherence_tests {
         assert_eq!(load_amount_for_rating(100, 255), 100);
         assert_eq!(load_amount_for_rating(100, 128), 50);
         assert_eq!(load_amount_for_rating(100, 0), 0);
+    }
+
+    #[test]
+    fn company_rating_tracks_pickup_independently() {
+        let mut station = Station::new(TileCoord::new(0, 0));
+        station.add_waiting_cargo(CargoType::Passengers, 20);
+        for _ in 0..140 {
+            tick_station_cargo_age(std::slice::from_mut(&mut station), false);
+        }
+        let owner_before =
+            station_rating_for_company_cargo(&station, CompanyId::PLAYER, CargoType::Passengers);
+        assert!(owner_before < TOWN_CARGO_MIN_OWNER_RATING);
+
+        let rival = CompanyId(1);
+        on_station_cargo_pickup(&mut station, CargoType::Passengers, rival);
+        assert_eq!(
+            station_rating_for_company_cargo(&station, rival, CargoType::Passengers),
+            255
+        );
+        // El dueño no se beneficia de la recogida rival.
+        let owner_after =
+            station_rating_for_company_cargo(&station, CompanyId::PLAYER, CargoType::Passengers);
+        assert!(owner_after < TOWN_CARGO_MIN_OWNER_RATING);
+        assert!(
+            station_rating_for_company_cargo(&station, rival, CargoType::Passengers) > owner_after
+        );
     }
 }

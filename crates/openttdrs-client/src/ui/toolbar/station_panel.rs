@@ -5,7 +5,7 @@ use bevy::text::EditableText;
 use openttdrs_core::{
     ALL_CARGO_TYPES, CargoType, Command, CommandError, MAX_STATION_NAME_CHARS,
     STATION_COVERAGE_RADIUS, TileCoord, VehicleOrder, apply_command, cargo_display_name,
-    station_coverage_at, station_rating_for_cargo,
+    station_coverage_at, station_rating_for_cargo, station_rating_for_company_cargo,
 };
 
 use crate::iso::tile_pos;
@@ -384,6 +384,7 @@ pub(crate) fn sync_station_cargo_panel(
                 continue;
             }
             let rating = station_rating_for_cargo(station, cargo);
+            let yours = station_rating_for_company_cargo(station, station.owner, cargo);
             let days = station.time_since_pickup.get(cargo);
             let age = if waiting > 0 {
                 format!(" · sin recogida {days}d")
@@ -391,7 +392,7 @@ pub(crate) fn sync_station_cargo_panel(
                 String::new()
             };
             lines.push(format!(
-                "  {} · espera {waiting} · rating {rating}/255{age}",
+                "  {} · espera {waiting} · rating {rating}/255 · dueño {yours}/255{age}",
                 cargo_display_name(cargo)
             ));
         }

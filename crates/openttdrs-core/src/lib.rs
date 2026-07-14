@@ -319,16 +319,16 @@ pub use sound_id::SoundId;
 pub use station::{
     CargoTimeSincePickup, MAX_TIME_SINCE_PICKUP_DAYS, STATION_COVERAGE_RADIUS, STATION_TILE_PYLONS,
     STATION_TILE_WIRES, STATION_TYPE_RAIL_WAYPOINT, Station, StationCoverage,
-    StationMapCoherenceReport, StopKind, default_station_catenary_flags,
-    industry_in_station_coverage, is_rail_waypoint_at, is_rail_waypoint_tile,
-    load_amount_for_rating, on_station_cargo_pickup, rail_station_approach_tile,
-    rail_station_axis_y, rail_station_owned_tiles, rail_station_platform_tiles,
-    rail_station_stop_tile, recompute_station_rating, resolve_order_destination,
-    road_stop_approach_tile, station_at_tile, station_coverage_at, station_covers_tile,
-    station_footprint_tiles, station_map_coherence, station_rating_for_cargo,
-    station_tile_can_have_pylons, station_tile_can_have_wires, station_tile_sets_adjacent,
-    station_type_from_m6, stop_kind_from_m6, tick_station_cargo_age, train_on_rail_platform,
-    vehicle_at_road_stop, vehicle_physically_at_station,
+    StationMapCoherenceReport, StopKind, TOWN_CARGO_MIN_OWNER_RATING,
+    default_station_catenary_flags, industry_in_station_coverage, is_rail_waypoint_at,
+    is_rail_waypoint_tile, load_amount_for_rating, on_station_cargo_pickup,
+    rail_station_approach_tile, rail_station_axis_y, rail_station_owned_tiles,
+    rail_station_platform_tiles, rail_station_stop_tile, recompute_station_rating,
+    resolve_order_destination, road_stop_approach_tile, station_at_tile, station_coverage_at,
+    station_covers_tile, station_footprint_tiles, station_map_coherence, station_rating_for_cargo,
+    station_rating_for_company_cargo, station_tile_can_have_pylons, station_tile_can_have_wires,
+    station_tile_sets_adjacent, station_type_from_m6, stop_kind_from_m6, tick_station_cargo_age,
+    train_on_rail_platform, vehicle_at_road_stop, vehicle_physically_at_station,
 };
 pub use station_action2::action2_eval_ctx_for_station_tile;
 pub use station_class::{

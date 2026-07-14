@@ -92,6 +92,7 @@ pub enum SimEvent {
     },
     SubsidyAwarded {
         cargo: CargoType,
+        company: crate::company::CompanyId,
     },
     NewsTicker,
     NewsApplause,

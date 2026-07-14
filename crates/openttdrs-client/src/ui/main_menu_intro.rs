@@ -40,6 +40,7 @@ const INTRO_SETTINGS: NewGameSettings = NewGameSettings {
     industry_density: PopulationDensity::Normal,
     starting_money: STARTING_MONEY_OPTIONS[1],
     rival_ai: false,
+    disasters_enabled: false,
     terrain_roughness: crate::state::bootstrap::TerrainRoughness::Normal,
 };
 

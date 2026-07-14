@@ -111,6 +111,7 @@ pub(crate) enum MainMenuToggle {
     Island,
     PreserveDemo,
     RivalAi,
+    Disasters,
 }
 
 #[derive(Component, Clone, Copy)]

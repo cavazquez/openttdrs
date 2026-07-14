@@ -62,6 +62,7 @@ pub fn trigger_disaster_at(state: &mut GameState, kind: DisasterKind, at: TileCo
     state
         .pending_sim_events
         .push(SimEvent::Disaster { kind, at });
+    crate::news::push_disaster_news(state, kind, at);
 }
 
 fn destroy_tile_contents(state: &mut GameState, at: TileCoord) {
@@ -119,6 +120,13 @@ mod tests {
                 at,
             } if *at == pos
         )));
+        assert!(
+            state
+                .news
+                .items
+                .iter()
+                .any(|n| n.news_type == crate::NewsType::Accident)
+        );
     }
 
     #[test]

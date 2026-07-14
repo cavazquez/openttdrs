@@ -2,6 +2,7 @@
 
 use crate::GameState;
 use crate::cargo::CargoType;
+use crate::company::CompanyId;
 use crate::economy::{TICKS_PER_MONTH, TICKS_PER_YEAR};
 use crate::map::TileCoord;
 use crate::sim_events::SimEvent;
@@ -28,6 +29,9 @@ pub struct Subsidy {
     /// Tick en el que termina la bonificación (`0` si no adjudicado).
     #[serde(default)]
     pub award_expires_tick: u64,
+    /// Compañía que adjudicó el subsidio.
+    #[serde(default)]
+    pub awarded_company: Option<CompanyId>,
 }
 
 impl Subsidy {
@@ -144,12 +148,14 @@ pub fn try_create_subsidy(state: &mut GameState) -> bool {
         offer_expires_tick,
         awarded: false,
         award_expires_tick: 0,
+        awarded_company: None,
     });
     state.pending_sim_events.push(SimEvent::SubsidyCreated {
         industry_pos: source,
         station_pos: dest,
         cargo,
     });
+    crate::news::push_subsidy_offer_news(state, cargo, source, dest);
     let _ = station_idx;
     true
 }
@@ -161,6 +167,7 @@ pub fn try_award_subsidy(
     dest_station: TileCoord,
     cargo: CargoType,
     source: TileCoord,
+    company: CompanyId,
 ) -> bool {
     let tick = state.tick.get();
     let Some(idx) = state.subsidies.iter().position(|s| {
@@ -174,23 +181,34 @@ pub fn try_award_subsidy(
     let award_expires_tick = tick.saturating_add(u64::from(SUBSIDY_AWARDED_YEARS) * TICKS_PER_YEAR);
     state.subsidies[idx].awarded = true;
     state.subsidies[idx].award_expires_tick = award_expires_tick;
+    state.subsidies[idx].awarded_company = Some(company);
     state
         .pending_sim_events
-        .push(SimEvent::SubsidyAwarded { cargo });
+        .push(SimEvent::SubsidyAwarded { cargo, company });
+    let company_name = state
+        .companies
+        .iter()
+        .find(|c| c.id == company)
+        .map_or_else(|| format!("Compañía {}", company.0), |c| c.name.clone());
+    crate::news::push_subsidy_awarded_news(state, cargo, &company_name, dest_station);
     true
 }
 
 /// Multiplicador de ingreso por entrega (`1` o [`SUBSIDY_PAYMENT_MULTIPLIER`]).
+///
+/// Solo la compañía adjudicada recibe el ×2.
 #[must_use]
 pub fn delivery_income_multiplier(
     state: &GameState,
     dest_station: TileCoord,
     cargo: CargoType,
     source: TileCoord,
+    company: CompanyId,
 ) -> i64 {
     let tick = state.tick.get();
     if state.subsidies.iter().any(|s| {
         s.awarded
+            && s.awarded_company == Some(company)
             && s.is_award_active(tick)
             && s.matches_delivery(cargo, dest_station, source, tick)
     }) {
@@ -228,7 +246,7 @@ mod tests {
     }
 
     #[test]
-    fn create_subsidy_emits_event() {
+    fn create_subsidy_emits_event_and_news() {
         let mut state = setup_subsidy_route();
         assert!(try_create_subsidy(&mut state));
         assert_eq!(state.subsidies.len(), 1);
@@ -241,19 +259,31 @@ mod tests {
                 ..
             }
         )));
+        assert!(!state.news.items.is_empty());
     }
 
     #[test]
-    fn award_on_first_delivery_doubles_income() {
+    fn award_on_first_delivery_doubles_income_for_winner() {
         let mut state = setup_subsidy_route();
         let _ = try_create_subsidy(&mut state);
         let dest = state.subsidies[0].dest_station_pos;
         let source = state.subsidies[0].source_industry_pos;
-        assert!(try_award_subsidy(&mut state, dest, CargoType::Coal, source));
+        assert!(try_award_subsidy(
+            &mut state,
+            dest,
+            CargoType::Coal,
+            source,
+            CompanyId::PLAYER
+        ));
         assert!(state.subsidies[0].awarded);
+        assert_eq!(state.subsidies[0].awarded_company, Some(CompanyId::PLAYER));
         assert_eq!(
-            delivery_income_multiplier(&state, dest, CargoType::Coal, source),
+            delivery_income_multiplier(&state, dest, CargoType::Coal, source, CompanyId::PLAYER),
             SUBSIDY_PAYMENT_MULTIPLIER
+        );
+        assert_eq!(
+            delivery_income_multiplier(&state, dest, CargoType::Coal, source, CompanyId(1)),
+            1
         );
     }
 

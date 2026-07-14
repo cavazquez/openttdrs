@@ -259,6 +259,15 @@ pub fn produce_town_cargo(
         if coverage.house_tiles == 0 {
             continue;
         }
+        // Gate OpenTTD-style: dueño con rating bajo deja de atraer pax/correo.
+        let owner_rating = station::station_rating_for_company_cargo(
+            station,
+            station.owner,
+            CargoType::Passengers,
+        );
+        if owner_rating < station::TOWN_CARGO_MIN_OWNER_RATING {
+            continue;
+        }
 
         station.ensure_packets_from_stock();
         let pax_amount = (coverage.house_tiles * PASSENGERS_PER_HOUSE)

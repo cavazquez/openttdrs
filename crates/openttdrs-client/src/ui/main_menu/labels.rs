@@ -39,7 +39,7 @@ pub(crate) fn summary_text(settings: NewGameSettings) -> String {
     };
     format!(
         "Mapa {} · clima {} · inicio {} · {} · semilla={}\n\
-         Pueblos {} · industrias {} · capital {} · relieve {} · rival {}",
+         Pueblos {} · industrias {} · capital {} · relieve {} · rival {} · desastres {}",
         map_size_label(settings.map_size),
         climate_label(settings.climate),
         settings.start_year,
@@ -54,6 +54,11 @@ pub(crate) fn summary_text(settings: NewGameSettings) -> String {
         format_money(settings.starting_money),
         settings.terrain_roughness.menu_label(),
         if settings.rival_ai { "sí" } else { "no" },
+        if settings.disasters_enabled {
+            "sí"
+        } else {
+            "no"
+        },
     )
 }
 

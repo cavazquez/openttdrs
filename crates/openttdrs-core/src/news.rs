@@ -455,6 +455,107 @@ pub fn push_first_vehicle_running_news(
     add_news_item(state, item);
 }
 
+/// Oferta de subsidio publicada.
+pub fn push_subsidy_offer_news(
+    state: &mut crate::GameState,
+    cargo: CargoType,
+    industry_pos: TileCoord,
+    station_pos: TileCoord,
+) {
+    let cargo_name = cargo_display_name(cargo);
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        format!("Subvención: {cargo_name}"),
+        Some(format!(
+            "Transportar {cargo_name} desde ({}, {}) hacia la estación ({}, {}).",
+            industry_pos.x, industry_pos.y, station_pos.x, station_pos.y
+        )),
+        NewsType::CompanyInfo,
+        default_display_for_type(NewsType::CompanyInfo),
+        state.tick,
+        NewsReference::Tile(station_pos),
+    );
+    add_news_item(state, item);
+}
+
+/// Subsidio adjudicado a una compañía.
+pub fn push_subsidy_awarded_news(
+    state: &mut crate::GameState,
+    cargo: CargoType,
+    company_name: &str,
+    station_pos: TileCoord,
+) {
+    let cargo_name = cargo_display_name(cargo);
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        format!("Subvención adjudicada: {cargo_name}"),
+        Some(format!(
+            "«{company_name}» se adjudica el transporte de {cargo_name} (pago ×2)."
+        )),
+        NewsType::CompanyInfo,
+        default_display_for_type(NewsType::CompanyInfo),
+        state.tick,
+        NewsReference::Tile(station_pos),
+    );
+    add_news_item(state, item);
+}
+
+/// Desastre ambiental / accidente.
+pub fn push_disaster_news(
+    state: &mut crate::GameState,
+    kind: crate::sim_events::DisasterKind,
+    at: TileCoord,
+) {
+    let (headline, body) = disaster_copy(kind, at);
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        headline,
+        Some(body),
+        NewsType::Accident,
+        default_display_for_type(NewsType::Accident),
+        state.tick,
+        NewsReference::Tile(at),
+    );
+    add_news_item(state, item);
+}
+
+fn disaster_copy(kind: crate::sim_events::DisasterKind, at: TileCoord) -> (String, String) {
+    use crate::sim_events::DisasterKind;
+    let where_ = format!("({}, {})", at.x, at.y);
+    match kind {
+        DisasterKind::SmallUfo => (
+            "OVNI pequeño avistado".into(),
+            format!("Un OVNI pequeño causa destrozos en {where_}."),
+        ),
+        DisasterKind::BigUfo => (
+            "OVNI enorme".into(),
+            format!("Un OVNI enorme arrasa la zona {where_}."),
+        ),
+        DisasterKind::Airplane => (
+            "Accidente aéreo".into(),
+            format!("Un avión se estrella cerca de {where_}."),
+        ),
+        DisasterKind::Helicopter => (
+            "Accidente de helicóptero".into(),
+            format!("Un helicóptero se estrella en {where_}."),
+        ),
+        DisasterKind::Submarine => (
+            "Submarino a la deriva".into(),
+            format!("Un submarino provoca daños en {where_}."),
+        ),
+        DisasterKind::CoalMineSubsidence => (
+            "Hundimiento minero".into(),
+            format!("Un hundimiento en mina afecta {where_}."),
+        ),
+    }
+}
+
 /// Aviso de quiebra (jugador o rival).
 pub fn push_bankruptcy_news(
     state: &mut crate::GameState,

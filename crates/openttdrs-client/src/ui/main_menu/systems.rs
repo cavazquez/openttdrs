@@ -192,6 +192,9 @@ pub(crate) fn main_menu_options_interaction(
                     }
                 }
                 MainMenuToggle::RivalAi => settings.0.rival_ai = !settings.0.rival_ai,
+                MainMenuToggle::Disasters => {
+                    settings.0.disasters_enabled = !settings.0.disasters_enabled;
+                }
             }
         }
         let on = match toggle {
@@ -201,6 +204,7 @@ pub(crate) fn main_menu_options_interaction(
                 settings.0.preserve_demo && settings.0.map_size.is_compact()
             }
             MainMenuToggle::RivalAi => settings.0.rival_ai,
+            MainMenuToggle::Disasters => settings.0.disasters_enabled,
         };
         *bg = toggle_button_bg(on, *interaction);
     }
@@ -506,6 +510,7 @@ pub(crate) fn main_menu_interaction(
                         industry_density: PopulationDensity::Normal,
                         starting_money: STARTING_MONEY_OPTIONS[1],
                         rival_ai: true,
+                        disasters_enabled: true,
                         terrain_roughness: TerrainRoughness::Normal,
                     };
                     enter_new_game(

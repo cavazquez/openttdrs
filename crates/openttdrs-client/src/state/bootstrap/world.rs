@@ -238,6 +238,8 @@ pub struct NewGameSettings {
     pub starting_money: i64,
     /// Si true, añade rival IA TransCargo al iniciar.
     pub rival_ai: bool,
+    /// Si true, pueden ocurrir desastres ambientales.
+    pub disasters_enabled: bool,
     pub terrain_roughness: TerrainRoughness,
 }
 
@@ -255,6 +257,7 @@ impl Default for NewGameSettings {
             industry_density: PopulationDensity::Normal,
             starting_money: STARTING_MONEY_OPTIONS[1],
             rival_ai: true,
+            disasters_enabled: true,
             terrain_roughness: TerrainRoughness::Normal,
         }
     }
@@ -300,6 +303,7 @@ impl NewGameSettings {
             industry_density: PopulationDensity::Normal,
             starting_money: STARTING_MONEY_OPTIONS[1],
             rival_ai: true,
+            disasters_enabled: true,
             terrain_roughness: TerrainRoughness::Normal,
         }
     }
@@ -311,6 +315,7 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
     let (mw, mh) = settings.map_dimensions();
     let mut state = GameState::new(mw, mh);
     state.climate = settings.climate;
+    state.disasters_enabled = settings.disasters_enabled;
     state.tick = tick_for_calendar_year(settings.start_year);
     fill_flat_grass(&mut state);
     let preserve = if settings.preserve_demo {

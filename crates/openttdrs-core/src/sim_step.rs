@@ -648,7 +648,9 @@ fn try_load_from_station_waiting_cargo(
     }
 
     let available = stock.get(cargo);
-    let rating = station::station_rating_for_cargo(&state.stations[station_idx], cargo);
+    let company = state.vehicles[vehicle_idx].owner;
+    let rating =
+        station::station_rating_for_company_cargo(&state.stations[station_idx], company, cargo);
     let speed = crate::cargo_packet::load_unload_speed(cargo);
     let mut load = station::load_amount_for_rating(available.min(room).min(speed), rating);
     if load == 0 && available > 0 && rating > 0 {
@@ -676,7 +678,7 @@ fn try_load_from_station_waiting_cargo(
     state.vehicles[vehicle_idx].mark_cargo_loaded(station_pos);
     state.vehicles[vehicle_idx].sync_cargo_from_packets();
     state.vehicles[vehicle_idx].last_pickup_station = Some(station_pos);
-    station::on_station_cargo_pickup(&mut state.stations[station_idx], cargo);
+    station::on_station_cargo_pickup(&mut state.stations[station_idx], cargo, company);
     *loaded_flag = true;
     if first_pickup {
         state.stats.cargo_pickups += 1;
@@ -763,13 +765,19 @@ fn unload_vehicles(
                 packet.cargo,
                 tick,
             );
-            let _ =
-                crate::subsidy::try_award_subsidy(state, station_pos, packet.cargo, packet.source);
+            let _ = crate::subsidy::try_award_subsidy(
+                state,
+                station_pos,
+                packet.cargo,
+                packet.source,
+                vehicle_owner,
+            );
             part = part.saturating_mul(crate::subsidy::delivery_income_multiplier(
                 state,
                 station_pos,
                 packet.cargo,
                 packet.source,
+                vehicle_owner,
             ));
             // Feeder: 75 % al owner de first_station si es distinta del destino.
             if !packet.feeder_paid

@@ -211,9 +211,9 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | **Crecimiento de ciudades + autoridad local** | `town_cmd.cpp:890-4190` | Parcial (rating, publicidad, fondos UI) | ⭐ Alta |
 | **Préstamos, intereses, quiebra** | `economy.cpp:799`, `misc_cmd.cpp:41` | Parcial→casi completo (préstamos + compra rival en quiebra) | ⭐ Alta |
 | **Averías + fiabilidad + servicio** | `vehicle.cpp:1303-1492` | Parcial (averías sim + servicio depósito) | ⭐ Alta |
-| **Subsidios** | `subsidy.cpp` | Parcial (`subsidy.rs`) | Media |
-| **Decaimiento carga en estación + ratings** | `station_cmd.cpp:3959` | Parcial (edad carga; rating ciudad sí) | Media |
-| **Desastres** (UFO, accidentes, submarinos) | `disaster_vehicle.cpp` | Parcial (`disaster.rs`) | Media |
+| **Subsidios** | `subsidy.cpp` | Parcial→casi (noticias/SFX + compañía adjudicada) | Media |
+| **Decaimiento carga en estación + ratings** | `station_cmd.cpp:3959` | Parcial→casi (rating por compañía + gate urbana) | Media |
+| **Desastres** (UFO, accidentes, submarinos) | `disaster_vehicle.cpp` | Parcial→casi (noticias + toggle nueva partida) | Media |
 | **Árboles** (crecer / talar / plantar) | `tree_cmd.cpp` | Parcial (`tree_tile_loop.rs`) | Baja–Media |
 | **IA de compañías rivales** | `ai/` (Squirrel) | Falta (doc `epics/ai_rivals.md`) | Baja |
 | **Barcos y aviones** | `ship_cmd.cpp`, `aircraft_cmd.cpp` | Parcial (movimiento básico) | Media |
@@ -231,14 +231,14 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Préstamos pedir/devolver | `misc_cmd.cpp:41` | **PARCIAL** (`command/economy.rs`, `finances_window.rs`) |
 | Intereses mensuales | `economy.cpp:799` | **PARCIAL** (`sim_step.rs`) |
 | Quiebra / compra rivales | `company_cmd.cpp:546` | **EXISTE** (`BuyCompany` + `bankruptcy_months` / streak) |
-| Subsidios en pagos | `subsidy.cpp` | **PARCIAL** (`subsidy.rs`) |
+| Subsidios en pagos | `subsidy.cpp` | **EXISTE** (`subsidy.rs`; ×2 solo compañía adjudicada) |
 | Valoración trimestral compañía | `economy.cpp:637` | **EXISTE** (`economy_quarterly.rs`) |
 
 #### Desastres y averías
 
 | Mecánica | Original | Port |
 |----------|----------|------|
-| Desastres ambientales (UFO, zeppelin, etc.) | `disaster_vehicle.cpp:939` | **PARCIAL** (`disaster.rs`) |
+| Desastres ambientales (UFO, zeppelin, etc.) | `disaster_vehicle.cpp:939` | **PARCIAL** (`disaster.rs` + noticias; sin vehículo animado) |
 | Breakdowns vehículos | `vehicle.cpp:1303` | **PARCIAL** (`vehicle.rs`, `sim_step.rs`) |
 | Choques de trenes | `train_cmd.cpp:3205` | **EXISTE** (`train_collision.rs`; `force_proceed` puede forzar) |
 | Servicio en depósito vs fiabilidad | `vehicle.cpp:187` | **PARCIAL** (`service_at_depot`) |
@@ -278,7 +278,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | 6 tipos básicos | `cargotype.h` | **EXISTE** (`cargo.rs`) |
 | Cadena fábrica (madera+carbón→goods) | `industry_cmd.cpp` | **PARCIAL** |
 | Envejecimiento en vehículo | `cargopacket.cpp` | **EXISTE** (`cargo_transit_ticks`) |
-| Decaimiento en estación | `station_cmd.cpp:3959` | **FALTA** |
+| Decaimiento en estación | `station_cmd.cpp:3959` | **EXISTE** (edad + truncate; rating por compañía + gate pax) |
 | Link graph / flow stats | `linkgraph/` | **FALTA** |
 
 #### Puentes y túneles
@@ -406,7 +406,7 @@ Combinando impacto en el “feel” del juego y esfuerzo de desarrollo:
 
 ### 8.1 Próximo paso concreto (recomendado)
 
-**Completar catálogo SFX** (resto de los 73 sonidos) y **playlists OpenMSX** con controles en UI. Dinámicas pendientes de mayor impacto: expansión física de ciudades, decaimiento de carga en estación, IA rivales (épica aparte).
+Feel de partida (decaimiento/rating compañía, subsidios con feedback, desastres con noticias) ✅. Pendiente de impacto: IA rivales (épica), CargoDist real, NewGRF runtime completo.
 
 ---
 

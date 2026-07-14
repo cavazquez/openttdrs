@@ -13,6 +13,7 @@ pub mod autoreplace;
 pub mod bridge_spec;
 pub mod cargo;
 pub mod cargo_packet;
+pub mod cheats;
 pub mod command;
 pub mod company;
 pub mod depot;
@@ -90,6 +91,7 @@ pub use bridge_spec::{
 };
 pub use cargo::{ALL_CARGO_TYPES, CargoStock, CargoType, OrderSettings, TEMPERATE_CARGO_TYPES};
 pub use cargo_packet::{CargoPacket, StationCargoList, VehicleCargoList, load_unload_speed};
+pub use cheats::CheatsState;
 pub use command::{
     Command, CommandError, LevelMode, MAX_STATION_NAME_CHARS, OrderMoveDirection,
     ROAD_PLACE_FORCE_AXIS, apply_command, check_place_industry_spec, command_error_message,
@@ -148,24 +150,25 @@ pub use industry::{
 };
 pub use link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphStats};
 pub use map::{
-    GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED, GFX_GOLD_MINE_TOWER_ANIMATED,
-    GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2, GFX_OILWELL_ANIMATED_3, IndustryTileLink,
-    MAX_TREE_OR_FIELD_STAGE, Map, MapError, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
-    OBJECT_TYPE_TRANSMITTER, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, OTTD_TILETYPE_TUNNELBRIDGE,
-    SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, TREE_GROWTH_TICK_INTERVAL, Tile, TileCoord, TileKind,
-    WaterClass, advance_industry_construction, advance_industry_tile_animations,
+    AIRPORT_RADAR_FRAMES, GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED,
+    GFX_GOLD_MINE_TOWER_ANIMATED, GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2,
+    GFX_OILWELL_ANIMATED_3, IndustryTileLink, MAX_TREE_OR_FIELD_STAGE, Map, MapError,
+    OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_TRANSMITTER, OTTD_MP_ROAD,
+    OTTD_MP_TUNNELBRIDGE, OTTD_TILETYPE_TUNNELBRIDGE, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW,
+    TREE_GROWTH_TICK_INTERVAL, Tile, TileCoord, TileKind, WaterClass,
+    advance_industry_construction, advance_industry_tile_animations, airport_radar_frame,
     apply_seasonal_snow, clear_tree, effective_road_bits, inclined_slope_direction,
     industry_animation_frame, industry_construction_counter, industry_construction_stage,
     industry_gfx, industry_instance_id, industry_tile_anim_state, industry_tile_link,
-    industry_tile_on_water, industry_tiles_mergeable, industry_uses_water_ground, is_canal_tile,
-    is_industry_completed, is_map_object_tile, is_owned_land_tile, is_river_tile,
-    is_tunnel_entrance_slope, make_industry_tile_bigger, make_water_tile,
-    openttd_tile_index_to_coord, partial_pixel_z, plant_tree, rail_foundation_for_trackbits,
-    rail_trackbits_valid_on_slope, resolve_tunnel_end, river_tile_is_ship_navigable,
-    set_industry_gfx, set_water_class_m1, slope_dz_at_subtile, slope_dz_on_tile,
-    step_industry_tiles, step_tree_and_field_growth, tick_tree_tile_loop, tile_adjacent_to_water,
-    tile_has_water_class, tile_slope_and_z, tree_or_field_stage, tunnel_entrance_m5,
-    tunnel_preview_path, water_class, water_class_from_m1,
+    industry_tile_on_water, industry_tiles_mergeable, industry_uses_water_ground,
+    is_airport_tower_tile, is_canal_tile, is_industry_completed, is_map_object_tile,
+    is_owned_land_tile, is_river_tile, is_tunnel_entrance_slope, make_industry_tile_bigger,
+    make_water_tile, openttd_tile_index_to_coord, partial_pixel_z, plant_tree,
+    rail_foundation_for_trackbits, rail_trackbits_valid_on_slope, resolve_tunnel_end,
+    river_tile_is_ship_navigable, set_industry_gfx, set_water_class_m1, slope_dz_at_subtile,
+    slope_dz_on_tile, step_airport_tiles, step_industry_tiles, step_tree_and_field_growth,
+    tick_tree_tile_loop, tile_adjacent_to_water, tile_has_water_class, tile_slope_and_z,
+    tree_or_field_stage, tunnel_entrance_m5, tunnel_preview_path, water_class, water_class_from_m1,
 };
 pub use newgrf_actions::{
     ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header,

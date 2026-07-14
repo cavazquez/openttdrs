@@ -63,6 +63,8 @@ pub(crate) fn step(state: &mut GameState) {
     drain_signal_globset_now(state);
 
     state.industry_tile_dirty = crate::map::step_industry_tiles(&mut state.map, t);
+    let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t);
+    state.industry_tile_dirty.extend(airport_dirty);
 
     let mut loaded_this_tick = vec![false; state.vehicles.len()];
     let mut unloaded_this_tick = vec![false; state.vehicles.len()];

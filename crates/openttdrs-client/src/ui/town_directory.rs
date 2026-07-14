@@ -8,15 +8,20 @@ use crate::iso::tile_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
-    FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_CREAM, spawn_floating_window,
+    FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_CREAM, WINDOW_TEXT,
+    spawn_floating_window, window_text_font,
 };
+use crate::ui::font::UiFontRole;
 use crate::ui::list_window::{
     LIST_DEFAULT_HEIGHT, SortDir, apply_list_search_keyboard, clear_list_children,
     spawn_list_empty_label, spawn_list_filter_input, spawn_list_row_button, spawn_list_scroll_area,
     spawn_list_sort_button, sync_list_sort_colors, text_filter_matches,
 };
 use crate::ui::navigation::{OpenUiRoute, UiRoute};
-use crate::ui::toolbar::BuildMenuUi;
+use crate::ui::toolbar::build_input::cancel_placement;
+use crate::ui::toolbar::{
+    BuildMenuAction, BuildMenuUi, DragBuildState, ToolbarGroup, ToolbarState, UiToolState,
+};
 use crate::ui::town_window::TownWindowState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -49,6 +54,10 @@ pub(crate) struct TownDirectoryRow {
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct TownDirectorySortButton(TownDirectorySort);
+
+/// Activa la herramienta «Fundar pueblo» y cierra el directorio.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct TownDirectoryFundButton;
 
 #[derive(Default)]
 pub(crate) struct TownDirectoryCache {
@@ -109,6 +118,28 @@ pub(crate) fn setup_town_directory(mut commands: Commands, asset_server: Res<Ass
                 96.0,
             );
         });
+        body.spawn((
+            Button,
+            TownDirectoryFundButton,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(24.0),
+                margin: UiRect::bottom(Val::Px(5.0)),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.32, 0.38, 0.28)),
+            BorderColor::all(Color::srgb(0.50, 0.58, 0.40)),
+            Interaction::default(),
+            BuildMenuUi,
+            children![(
+                Text::new("Fundar pueblo"),
+                window_text_font(asset_server, UiFontRole::Caption),
+                TextColor(WINDOW_TEXT),
+            )],
+        ));
         spawn_list_scroll_area(body, TownDirectoryListRoot, LIST_DEFAULT_HEIGHT);
     });
 }
@@ -147,14 +178,26 @@ pub(crate) fn town_directory_search_keyboard(
     );
 }
 
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_town_directory_buttons(
     mut state: ResMut<TownDirectoryState>,
     sort_buttons: Query<
         (&Interaction, &TownDirectorySortButton),
         (Changed<Interaction>, With<Button>),
     >,
+    fund_buttons: Query<
+        &Interaction,
+        (
+            Changed<Interaction>,
+            With<Button>,
+            With<TownDirectoryFundButton>,
+        ),
+    >,
     town_rows: Query<(&Interaction, &TownDirectoryRow), (Changed<Interaction>, With<Button>)>,
     mut town_window: ResMut<TownWindowState>,
+    mut toolbar: ResMut<ToolbarState>,
+    mut tool_state: ResMut<UiToolState>,
+    mut drag_state: ResMut<DragBuildState>,
     sim: Res<SimWorld>,
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
@@ -168,6 +211,15 @@ pub(crate) fn handle_town_directory_buttons(
             state.sort = button.0;
             state.sort_dir = SortDir::Asc;
         }
+    }
+    for interaction in &fund_buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        toolbar.active_group = Some(ToolbarGroup::Landscape);
+        tool_state.active_tool = Some(BuildMenuAction::FoundTown);
+        cancel_placement(&mut drag_state);
+        state.open = false;
     }
     for (interaction, row) in &town_rows {
         if *interaction != Interaction::Pressed {
@@ -349,6 +401,9 @@ mod tests {
         let mut world = World::new();
         world.init_resource::<TownDirectoryState>();
         world.init_resource::<TownWindowState>();
+        world.init_resource::<ToolbarState>();
+        world.init_resource::<UiToolState>();
+        world.init_resource::<DragBuildState>();
         world.insert_resource(SimWorld {
             state: openttdrs_core::GameState::new(8, 8),
             ..SimWorld::default()
@@ -365,10 +420,41 @@ mod tests {
     }
 
     #[test]
+    fn fund_button_arms_found_town_tool() {
+        let mut world = World::new();
+        world.init_resource::<TownDirectoryState>();
+        world.resource_mut::<TownDirectoryState>().open = true;
+        world.init_resource::<TownWindowState>();
+        world.init_resource::<ToolbarState>();
+        world.init_resource::<UiToolState>();
+        world.init_resource::<DragBuildState>();
+        world.insert_resource(SimWorld {
+            state: openttdrs_core::GameState::new(8, 8),
+            ..SimWorld::default()
+        });
+        world.spawn((Button, TownDirectoryFundButton, Interaction::Pressed));
+        world
+            .run_system_once(handle_town_directory_buttons)
+            .unwrap();
+        assert!(!world.resource::<TownDirectoryState>().open);
+        assert_eq!(
+            world.resource::<ToolbarState>().active_group,
+            Some(ToolbarGroup::Landscape)
+        );
+        assert_eq!(
+            world.resource::<UiToolState>().active_tool,
+            Some(BuildMenuAction::FoundTown)
+        );
+    }
+
+    #[test]
     fn town_row_centers_camera_on_town() {
         let mut world = World::new();
         world.init_resource::<TownDirectoryState>();
         world.init_resource::<TownWindowState>();
+        world.init_resource::<ToolbarState>();
+        world.init_resource::<UiToolState>();
+        world.init_resource::<DragBuildState>();
         let mut state = openttdrs_core::GameState::new(16, 16);
         state.towns.push(openttdrs_core::Town {
             id: 3,

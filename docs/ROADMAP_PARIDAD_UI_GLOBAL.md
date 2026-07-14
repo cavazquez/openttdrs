@@ -424,7 +424,7 @@ Objetivo de cobertura global: **~36–40 %**.
 - [x] Añadir sort por rating.
 - [x] Centrar cámara directamente desde la fila.
 - [x] Clic en fila abre `TownWindow`.
-- [ ] Acción «Fundar pueblo» si el backend lo permite.
+- [x] Acción «Fundar pueblo» si el backend lo permite.
 
 ### UI-2B — Industrias
 
@@ -709,8 +709,8 @@ parámetros NewGRF / consola REPL / cheats formales → OOS o UI-8.
 - [x] Parse-only Action0–14 (histograma Inspeccionar) + Action0 RoadTypes / Stations / Trains metadatos.
 - [ ] Parámetros NewGRF. *(OOS: sin runtime de params)*
 - [x] Presets de settings (Clásico / Rendimiento / Dev en Display Options).
-- [ ] Sandbox/cheats si se decide soportarlos. *(OOS)*
-- [x] Consola y diagnostics para desarrollo. *(UI-8: Consola/Dev + overlay; REPL/cheats OOS)*
+- [x] Sandbox/cheats si se decide soportarlos. *(DevConsole: `cheat on|off|money|infinite|bulldozer`)*
+- [x] Consola y diagnostics para desarrollo. *(UI-8: Consola/Dev + overlay; cheats vía DevConsole)*
 - [x] About/help y mapa de hotkeys (F1 / ? + Ajustes → Ayuda…).
 - [x] Posiciones de ventana persistentes (`ClientPreferences.window_layouts`).
 
@@ -834,9 +834,9 @@ Cada ventana/panel nuevo debe incluir:
 
 Ampliar `windows_shot`:
 
-- todas las `FloatingWindowId`;
-- SaveWindow;
-- OrderPanel, StationCargoPanel, IndustryPanel, Minimap;
+- [x] todas las `FloatingWindowId` (`windows_shot_covered_ids` == `ALL`);
+- [x] SaveWindow;
+- [x] OrderPanel, StationCargoPanel, IndustryPanel (IDs/estado cuando hay datos en sim);
 - toolbar y cada panel de grupo;
 - viewport 1280×720 y 1920×1080;
 - datos mínimos y datos con scroll.

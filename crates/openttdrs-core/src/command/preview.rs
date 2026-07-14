@@ -6,6 +6,7 @@ use crate::{GameState, IndustrySpec, StopKind};
 use super::buy_land::check_buy_land;
 use super::industry::check_place_industry_spec;
 use super::terraform::{check_level_land, check_lower_land, check_raise_land};
+use super::town;
 use super::transport::{
     check_airport_area, check_airport_placement, check_bridge, check_clear_tile,
     check_cycle_rail_signal_type, check_dock_placement, check_place_aqueduct, check_place_buoy,
@@ -203,9 +204,15 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
                 rail_station_footprint(*axis_y, (*platforms).clamp(1, 7), (*length).clamp(1, 7));
             check_rail_station_area(state, *origin, w, h).err()
         }
-        Command::ClearTile(c) => require_tile_owned_by_active(state, *c)
-            .err()
-            .or_else(|| check_clear_tile(map, *c).err()),
+        Command::ClearTile(c) => {
+            let ownership = if state.cheats.magic_bulldozer_active() {
+                None
+            } else {
+                require_tile_owned_by_active(state, *c).err()
+            };
+            ownership.or_else(|| check_clear_tile(map, *c).err())
+        }
+        Command::FoundTown(c) => town::check_found_town(state, *c).err(),
         Command::BuyLand(c) => check_buy_land(map, *c).err(),
         Command::BuyLandArea { from, to } => {
             let any_ok =
@@ -275,6 +282,10 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::DecreaseLoan
         | Command::TownAdvertise(_)
         | Command::TownFundBuildings(_)
+        | Command::CheatSetEnabled(_)
+        | Command::CheatAddMoney(_)
+        | Command::CheatToggleInfiniteMoney
+        | Command::CheatToggleMagicBulldozer
         | Command::PlantTree(_)
         | Command::ClearTree(_)
         | Command::PlaceSign { .. }

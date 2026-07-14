@@ -13,8 +13,8 @@ use crate::iso::{
 use crate::render::catenary_newgrf::catenary_sprite_colored;
 use crate::render::station_newgrf::{NewGrfStationSpriteCache, newgrf_station_def_for_tile};
 use crate::render::{
-    AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext, WorldAssets,
-    sprite_from_atlas_or_company_white_colour,
+    AirportRadarAnim, AtlasSprite, CompanyColoredSprites, MapVisualLayer, TileRenderContext,
+    WorldAssets, sprite_from_atlas_or_company_white_colour,
 };
 use crate::sprites::{
     CompanyColour, StationTileClass, TransparencyOption, catenary_hidden, catenary_sprite_color,
@@ -34,6 +34,33 @@ fn buildings_hidden() -> bool {
 fn tint_building_sprite(mut sprite: Sprite) -> Sprite {
     sprite.color = with_to_alpha(sprite.color, TransparencyOption::Buildings);
     sprite
+}
+
+fn spawn_airport_radar_overlay(
+    commands: &mut Commands,
+    assets: &WorldAssets,
+    ctx: &TileRenderContext,
+    base_z: u8,
+    half_h: f32,
+) {
+    let m7 = ctx.tile.map(|t| t.m7).unwrap_or(0);
+    let frame = usize::from(openttdrs_core::airport_radar_frame(m7));
+    let Some(radar) = assets.airport_radar.get(frame) else {
+        return;
+    };
+    commands.spawn((
+        MapVisualLayer,
+        ctx.map_tile_chunk(),
+        AirportRadarAnim { pos: ctx.coord },
+        tint_building_sprite(radar.sprite()),
+        Transform::from_translation(tile_pos_half(
+            ctx.tx_i32(),
+            ctx.ty_i32(),
+            base_z,
+            0.055,
+            half_h,
+        )),
+    ));
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -399,18 +426,16 @@ pub(crate) fn spawn_station_tile(
                 SLOPE_HALF_H[tileh as usize]
             };
             let piece = openttdrs_core::AirportPiece::from_m5(m5);
+            let tower_pos = tile_pos_half(ctx.tx_i32(), ctx.ty_i32(), base_z, 0.04, half_h);
             commands.spawn((
                 MapVisualLayer,
                 ctx.map_tile_chunk(),
                 tint_building_sprite(assets.airport_piece_sprite(piece).sprite()),
-                Transform::from_translation(tile_pos_half(
-                    ctx.tx_i32(),
-                    ctx.ty_i32(),
-                    base_z,
-                    0.04,
-                    half_h,
-                )),
+                Transform::from_translation(tower_pos),
             ));
+            if piece == openttdrs_core::AirportPiece::Tower {
+                spawn_airport_radar_overlay(commands, assets, ctx, base_z, half_h);
+            }
         }
         StationTileClass::Other(_) => {
             let dir = road_stop_ground_index(m5).min(3);
@@ -642,6 +667,9 @@ pub(crate) fn spawn_transport_object_tile(
                     half_h,
                 )),
             ));
+            if piece == openttdrs_core::AirportPiece::Tower {
+                spawn_airport_radar_overlay(commands, assets, ctx, base_z, half_h);
+            }
         }
         TileKind::RoadBridge | TileKind::RailBridge => {
             if let Some(span) = bridge_span_at(map, ctx.coord, dims) {

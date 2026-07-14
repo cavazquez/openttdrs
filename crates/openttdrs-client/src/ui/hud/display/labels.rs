@@ -41,6 +41,7 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
         BuildMenuAction::Clear => "Demoler (señal: quita sin vía)",
         BuildMenuAction::Orders => "Órdenes",
         BuildMenuAction::BuildHouse => "Casa",
+        BuildMenuAction::FoundTown => "Fundar pueblo",
         BuildMenuAction::BuildCoalMine => "Mina carbón",
         BuildMenuAction::BuildIronOreMine => "Mina hierro",
         BuildMenuAction::BuildGoldMine => "Mina oro",
@@ -92,6 +93,7 @@ pub(crate) fn tool_hud_hint(action: BuildMenuAction) -> Option<&'static str> {
         }
         BuildMenuAction::Orders => Some("clic mapa: destino"),
         BuildMenuAction::RailStation => Some("hierba junto a vía"),
+        BuildMenuAction::FoundTown => Some("clic en hierba: funda un pueblo nuevo"),
         BuildMenuAction::PlantTree => Some("hierba → bosque; bosque → +1 árbol (máx 4)"),
         BuildMenuAction::PlaceSign => Some("clic: coloca cartel; Mundo → Carteles para lista"),
         BuildMenuAction::Tram | BuildMenuAction::TramX | BuildMenuAction::TramY => {

@@ -1,0 +1,104 @@
+{
+  "scenarios": [
+    {
+      "bounds": {
+        "x0": 0,
+        "x1": 23,
+        "y0": 0,
+        "y1": 17
+      },
+      "name": "truck_bay",
+      "signal_tiles": 0,
+      "tile_hash": "017975547da1e486"
+    },
+    {
+      "bounds": {
+        "x0": 0,
+        "x1": 19,
+        "y0": 0,
+        "y1": 13
+      },
+      "name": "train_line",
+      "signal_tiles": 1,
+      "tile_hash": "066af6112e567e3e"
+    },
+    {
+      "bounds": {
+        "x0": 0,
+        "x1": 19,
+        "y0": 0,
+        "y1": 13
+      },
+      "name": "train_supply",
+      "signal_tiles": 4,
+      "tile_hash": "388e24c781db9b74"
+    },
+    {
+      "bounds": {
+        "x0": 0,
+        "x1": 23,
+        "y0": 0,
+        "y1": 13
+      },
+      "name": "train_supply_dual",
+      "signal_tiles": 6,
+      "tile_hash": "d6d192a5e508103a"
+    },
+    {
+      "bounds": {
+        "x0": 0,
+        "x1": 19,
+        "y0": 0,
+        "y1": 13
+      },
+      "name": "train_supply_signal",
+      "signal_tiles": 4,
+      "tile_hash": "388e24c781db9b74"
+    },
+    {
+      "bounds": {
+        "x0": 0,
+        "x1": 11,
+        "y0": 0,
+        "y1": 3
+      },
+      "name": "train_signal",
+      "signal_tiles": 1,
+      "tile_hash": "1678f11599d558c1"
+    },
+    {
+      "bounds": {
+        "x0": 0,
+        "x1": 15,
+        "y0": 0,
+        "y1": 7
+      },
+      "name": "train_pbs",
+      "signal_tiles": 4,
+      "tile_hash": "e58117397bc3cd30"
+    },
+    {
+      "bounds": {
+        "x0": 0,
+        "x1": 23,
+        "y0": 0,
+        "y1": 11
+      },
+      "name": "ai_rival_line",
+      "signal_tiles": 0,
+      "tile_hash": "d9264aa91dab42c0"
+    },
+    {
+      "bounds": {
+        "x0": 0,
+        "x1": 35,
+        "y0": 0,
+        "y1": 21
+      },
+      "name": "rail_signals_mixed",
+      "signal_tiles": 11,
+      "tile_hash": "68722ec86d46f60f"
+    }
+  ],
+  "version": 1
+}

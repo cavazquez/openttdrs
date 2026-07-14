@@ -162,7 +162,7 @@ pub(crate) fn preview_image_for_action(
             Some(asset_server.load::<Image>(path))
         }
         BuildMenuAction::Orders => None,
-        BuildMenuAction::BuildHouse => {
+        BuildMenuAction::BuildHouse | BuildMenuAction::FoundTown => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/house_church_build.png"))
         }
         BuildMenuAction::BuildCoalMine => {

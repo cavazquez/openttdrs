@@ -130,6 +130,7 @@ pub(crate) fn command_for_action(
         BuildMenuAction::RailWaypoint => Some(Command::PlaceRailWaypoint(pos)),
         BuildMenuAction::RoadWaypoint => Some(Command::PlaceRoadWaypoint(pos)),
         BuildMenuAction::BuildHouse => Some(Command::PlaceHouse(pos)),
+        BuildMenuAction::FoundTown => Some(Command::FoundTown(pos)),
         BuildMenuAction::BuildCoalMine => Some(Command::PlaceIndustrySpec(
             pos,
             openttdrs_core::IndustrySpec::CoalMine,

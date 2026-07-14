@@ -12,6 +12,7 @@ use super::{buy_land, economy, industry, newgrf, sign, terraform, town, transpor
 /// Ver variantes de [`CommandError`].
 pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), CommandError> {
     state.prepare_player_command();
+    let money_before = state.economy.money;
     let result = apply_command_inner(state, cmd);
     // Editar el mapa invalida los caminos cacheados: un tren con ruta vieja
     // seguiría cruzando vía recién desconectada. Se recalculan el próximo tick.
@@ -28,6 +29,9 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
             state
                 .pending_sim_events
                 .push(crate::sim_events::SimEvent::Demolition { at });
+        }
+        if state.cheats.infinite_money_active() && state.economy.money < money_before {
+            state.economy.money = money_before;
         }
         // Comandos mutan el espejo `economy`; sincronizar pool.
         state.sync_active_from_mirrors();
@@ -87,7 +91,8 @@ fn construction_event_for(
         | Command::PlaceIndustryKind(c, _)
         | Command::PlaceIndustrySpec(c, _)
         | Command::PlaceHouse(c)
-        | Command::PlaceForest(c) => Some((ConstructionKind::Other, *c)),
+        | Command::PlaceForest(c)
+        | Command::FoundTown(c) => Some((ConstructionKind::Other, *c)),
         Command::BuyLandArea { from, .. } | Command::LevelLand { from, .. } => {
             Some((ConstructionKind::Other, *from))
         }
@@ -163,6 +168,10 @@ const fn command_modifies_map(cmd: &Command) -> bool {
             | Command::DecreaseLoan
             | Command::TownAdvertise(..)
             | Command::TownFundBuildings(..)
+            | Command::CheatSetEnabled(..)
+            | Command::CheatAddMoney(..)
+            | Command::CheatToggleInfiniteMoney
+            | Command::CheatToggleMagicBulldozer
             | Command::SetNewGrfEnabled { .. }
             | Command::MoveNewGrfInStack { .. }
             | Command::RemoveNewGrfFromStack { .. }
@@ -523,6 +532,32 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::DecreaseLoan => economy::decrease_company_loan(state),
         Command::TownAdvertise(town_id) => town::town_advertise(state, *town_id),
         Command::TownFundBuildings(town_id) => town::town_fund_buildings(state, *town_id),
+        Command::FoundTown(c) => town::found_town(state, *c),
+        Command::CheatSetEnabled(on) => {
+            state.cheats.enabled = *on;
+            Ok(())
+        }
+        Command::CheatAddMoney(amount) => {
+            if !state.cheats.enabled {
+                return Err(CommandError::CheatsDisabled);
+            }
+            state.economy.money = state.economy.money.saturating_add(*amount);
+            Ok(())
+        }
+        Command::CheatToggleInfiniteMoney => {
+            if !state.cheats.enabled {
+                return Err(CommandError::CheatsDisabled);
+            }
+            state.cheats.infinite_money = !state.cheats.infinite_money;
+            Ok(())
+        }
+        Command::CheatToggleMagicBulldozer => {
+            if !state.cheats.enabled {
+                return Err(CommandError::CheatsDisabled);
+            }
+            state.cheats.magic_bulldozer = !state.cheats.magic_bulldozer;
+            Ok(())
+        }
         Command::PlantTree(c) => crate::map::tree_tile_loop::plant_tree(state, *c),
         Command::ClearTree(c) => crate::map::tree_tile_loop::clear_tree(state, *c),
         Command::PlaceSign { pos, name } => sign::place_sign(state, *pos, name.clone()),

@@ -75,6 +75,8 @@ pub(crate) struct WorldAssets {
     pub(crate) airport_taxiway: AtlasSprite,
     pub(crate) airport_tower: AtlasSprite,
     pub(crate) airport_stand: AtlasSprite,
+    /// Radar vanilla: `airport_radar_00` … `_11`.
+    pub(crate) airport_radar: [AtlasSprite; 12],
     /// Esclusa: [NS, EW] × [lower, middle, upper].
     pub(crate) water_lock: [[AtlasSprite; 3]; 2],
     /// Portales de túnel por dirección diagonal (0=NE … 3=NW).
@@ -273,6 +275,8 @@ impl WorldAssets {
         let airport_taxiway = atlas.get("airport_taxiway_0.png");
         let airport_tower = atlas.get("airport_tower.png");
         let airport_stand = atlas.get("airport_stand.png");
+        let airport_radar: [AtlasSprite; 12] =
+            std::array::from_fn(|i| atlas.get(&format!("airport_radar_{i:02}.png")));
         let water_lock = [
             [
                 atlas.get("water_lock_ns_lower.png"),
@@ -474,6 +478,7 @@ impl WorldAssets {
             airport_taxiway,
             airport_tower,
             airport_stand,
+            airport_radar,
             water_lock,
             road_tunnels,
             rail_tunnels,

@@ -310,6 +310,16 @@ pub enum Command {
     TownAdvertise(u32),
     /// Financia edificios en una ciudad (`CmdTownAction::FundBuildings`).
     TownFundBuildings(u32),
+    /// Funda un pueblo nuevo en hierba (`CmdBuildTown`).
+    FoundTown(TileCoord),
+    /// Activa/desactiva cheats formales.
+    CheatSetEnabled(bool),
+    /// Añade dinero a la compañía activa (requiere cheats enabled).
+    CheatAddMoney(i64),
+    /// Alterna dinero infinito.
+    CheatToggleInfiniteMoney,
+    /// Alterna magic bulldozer (demoler sin dueño).
+    CheatToggleMagicBulldozer,
     /// Planta un árbol en hierba o incrementa densidad en bosque.
     PlantTree(TileCoord),
     /// Quita árbol o reduce etapa de cultivo.
@@ -466,6 +476,12 @@ pub enum CommandError {
     NoLoanToRepay,
     /// Ciudad no encontrada.
     TownNotFound,
+    /// No se puede fundar pueblo en esta tesela.
+    CannotFoundTownHere,
+    /// Hay otro pueblo demasiado cerca.
+    TownTooClose,
+    /// Cheats desactivados.
+    CheatsDisabled,
     /// La autoridad local no permite construir aquí.
     AuthorityRatingTooLow,
     /// No se puede plantar un árbol aquí.
@@ -593,6 +609,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::LoanAtMaximum => "El préstamo ya está al máximo permitido.",
         CommandError::NoLoanToRepay => "No hay préstamo suficiente para devolver.",
         CommandError::TownNotFound => "Ciudad no encontrada.",
+        CommandError::CannotFoundTownHere => "No se puede fundar un pueblo aquí.",
+        CommandError::TownTooClose => "Hay otro pueblo demasiado cerca.",
+        CommandError::CheatsDisabled => "Cheats desactivados (consola: cheat on).",
         CommandError::AuthorityRatingTooLow => {
             "La autoridad local no permite construir una estación aquí."
         }

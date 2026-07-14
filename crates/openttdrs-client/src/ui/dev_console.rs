@@ -280,7 +280,7 @@ pub(crate) fn handle_dev_console_keyboard(
     mut newgrf: ResMut<NewGrfWindowState>,
     mut retire: ResMut<RetireGameRequested>,
     hud: Res<SimHudControls>,
-    sim: Option<Res<SimWorld>>,
+    mut sim: Option<ResMut<SimWorld>>,
     diagnostics: Res<DiagnosticsStore>,
     map_q: Query<(), With<MapVisualLayer>>,
 ) {
@@ -310,7 +310,7 @@ pub(crate) fn handle_dev_console_keyboard(
                         &mut newgrf,
                         &mut retire,
                         &hud,
-                        sim.as_deref(),
+                        sim.as_deref_mut(),
                         &diagnostics,
                         map_q.iter().count(),
                         &cmd,
@@ -401,7 +401,7 @@ fn run_dev_command(
     newgrf: &mut NewGrfWindowState,
     retire: &mut RetireGameRequested,
     hud: &SimHudControls,
-    sim: Option<&SimWorld>,
+    sim: Option<&mut SimWorld>,
     diagnostics: &DiagnosticsStore,
     visual_entities: usize,
     cmd: &str,
@@ -415,10 +415,15 @@ fn run_dev_command(
         "help" | "?" => {
             push_log(
                 state,
-                "cmds: help | fps | overlay | gizmos | tile | newgrf | scenario | endgame | clear"
+                "cmds: help | fps | overlay | gizmos | tile | newgrf | scenario | cheat | endgame | clear"
                     .into(),
             );
+            push_log(
+                state,
+                "cheat: on|off | money [n] | infinite | bulldozer".into(),
+            );
         }
+        "cheat" => apply_cheat_command(state, sim, &mut parts),
         "scenario" | "junction" => match parts.next().unwrap_or("list") {
             "list" | "ls" => {
                 push_log(
@@ -461,7 +466,7 @@ fn run_dev_command(
         "fps" | "stats" => {
             push_log(
                 state,
-                format_dev_metrics(diagnostics, sim, hud, visual_entities),
+                format_dev_metrics(diagnostics, sim.as_deref(), hud, visual_entities),
             );
         }
         "overlay" => {
@@ -512,6 +517,59 @@ fn run_dev_command(
             state.log.clear();
         }
         other => push_log(state, format!("desconocido: {other} (help)")),
+    }
+}
+
+const DEFAULT_CHEAT_MONEY: i64 = 1_000_000;
+
+/// Parsea subcomandos `cheat on|off|money|infinite|bulldozer` (tests unitarios).
+fn parse_cheat_command<'a>(
+    parts: &mut impl Iterator<Item = &'a str>,
+) -> Result<openttdrs_core::Command, &'static str> {
+    match parts.next().unwrap_or("").to_ascii_lowercase().as_str() {
+        "on" | "1" | "true" => Ok(openttdrs_core::Command::CheatSetEnabled(true)),
+        "off" | "0" | "false" => Ok(openttdrs_core::Command::CheatSetEnabled(false)),
+        "money" => {
+            let amount = parts
+                .next()
+                .and_then(|s| s.parse::<i64>().ok())
+                .unwrap_or(DEFAULT_CHEAT_MONEY);
+            Ok(openttdrs_core::Command::CheatAddMoney(amount))
+        }
+        "infinite" => Ok(openttdrs_core::Command::CheatToggleInfiniteMoney),
+        "bulldozer" | "magic" => Ok(openttdrs_core::Command::CheatToggleMagicBulldozer),
+        "" => Err("uso: cheat on|off | money [n] | infinite | bulldozer"),
+        _ => Err("cheat: desconocido (on|off|money|infinite|bulldozer)"),
+    }
+}
+
+fn apply_cheat_command<'a>(
+    state: &mut DevConsoleState,
+    sim: Option<&mut SimWorld>,
+    parts: &mut impl Iterator<Item = &'a str>,
+) {
+    let Some(sim) = sim else {
+        push_log(state, "cheat: sin SimWorld".into());
+        return;
+    };
+    match parse_cheat_command(parts) {
+        Ok(cmd) => match openttdrs_core::apply_command(&mut sim.state, &cmd) {
+            Ok(()) => {
+                let c = &sim.state.cheats;
+                push_log(
+                    state,
+                    format!(
+                        "cheats enabled={} infinite={} bulldozer={} money={}",
+                        c.enabled, c.infinite_money, c.magic_bulldozer, sim.state.economy.money
+                    ),
+                );
+            }
+            Err(e) => push_log(
+                state,
+                format!("cheat falló: {}", openttdrs_core::command_error_message(e)),
+            ),
+        },
+        Err(msg) => push_log(state, msg.into()),
     }
 }
 
@@ -568,5 +626,34 @@ mod tests {
             "clear",
         );
         assert!(state.log.is_empty());
+    }
+
+    #[test]
+    fn parse_cheat_subcommands() {
+        let mut on = "on".split_whitespace();
+        assert!(matches!(
+            parse_cheat_command(&mut on),
+            Ok(openttdrs_core::Command::CheatSetEnabled(true))
+        ));
+        let mut money = "money 500".split_whitespace();
+        assert!(matches!(
+            parse_cheat_command(&mut money),
+            Ok(openttdrs_core::Command::CheatAddMoney(500))
+        ));
+        let mut money_default = "money".split_whitespace();
+        assert!(matches!(
+            parse_cheat_command(&mut money_default),
+            Ok(openttdrs_core::Command::CheatAddMoney(DEFAULT_CHEAT_MONEY))
+        ));
+        let mut infinite = "infinite".split_whitespace();
+        assert!(matches!(
+            parse_cheat_command(&mut infinite),
+            Ok(openttdrs_core::Command::CheatToggleInfiniteMoney)
+        ));
+        let mut bulldozer = "bulldozer".split_whitespace();
+        assert!(matches!(
+            parse_cheat_command(&mut bulldozer),
+            Ok(openttdrs_core::Command::CheatToggleMagicBulldozer)
+        ));
     }
 }

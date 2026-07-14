@@ -23,8 +23,8 @@ pub(crate) use airport_picker_window::{
     sync_airport_picker,
 };
 pub(crate) use bridge_window::{
-    BridgeBuildState, bridge_picker_on_closed, handle_bridge_picker_buttons, setup_bridge_picker,
-    sync_bridge_picker,
+    BridgeBuildState, PendingBridge, bridge_picker_on_closed, handle_bridge_picker_buttons,
+    setup_bridge_picker, sync_bridge_picker,
 };
 pub(crate) use build_input::{handle_tile_click, sync_build_pointer_modifiers, update_cursor_tile};
 pub(crate) use company_selector::{handle_company_selector_buttons, sync_company_selector};
@@ -47,11 +47,11 @@ pub(crate) use preview::{
     lerp_ghost_previews, rotate_station_with_right_click, update_build_ghost_preview,
 };
 pub(crate) use rail_station_window::{
-    NewGrfStationPreviewCache, StationCatalogPickerState, handle_rail_station_picker_buttons,
-    handle_station_catalog_open_buttons, handle_station_class_select_buttons,
-    handle_station_spec_select_buttons, rail_station_picker_on_closed, setup_rail_station_picker,
-    station_catalog_filter_keyboard, sync_rail_station_picker, sync_station_catalog_entries,
-    sync_station_spec_entry_previews,
+    NewGrfStationPreviewCache, StationCatalogKind, StationCatalogPickerState,
+    handle_rail_station_picker_buttons, handle_station_catalog_open_buttons,
+    handle_station_class_select_buttons, handle_station_spec_select_buttons,
+    rail_station_picker_on_closed, setup_rail_station_picker, station_catalog_filter_keyboard,
+    sync_rail_station_picker, sync_station_catalog_entries, sync_station_spec_entry_previews,
 };
 pub(crate) use rail_type_selector::{
     handle_rail_type_select_buttons, sync_rail_toolbar_icons, sync_rail_type_select_visuals,
@@ -131,6 +131,8 @@ pub(crate) enum BuildMenuAction {
     Lock,
     Airport,
     BuildHouse,
+    /// Fundar un pueblo nuevo en hierba (CmdFoundTown).
+    FoundTown,
     BuildCoalMine,
     BuildIronOreMine,
     BuildGoldMine,
@@ -203,6 +205,7 @@ impl BuildMenuAction {
         Self::Lock,
         Self::Airport,
         Self::BuildHouse,
+        Self::FoundTown,
         Self::BuildCoalMine,
         Self::BuildIronOreMine,
         Self::BuildGoldMine,

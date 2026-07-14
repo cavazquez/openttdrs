@@ -358,7 +358,7 @@ pub(in crate::command) fn set_road_bits(
     Ok(())
 }
 
-pub(in crate::command::transport) fn write_normal_road_tile(
+pub(in crate::command) fn write_normal_road_tile(
     state: &mut GameState,
     c: TileCoord,
     road_bits: u8,

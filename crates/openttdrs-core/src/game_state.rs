@@ -397,6 +397,9 @@ pub struct GameState {
     /// Ajustes de pathfinding / PBS (`pf.wait_for_pbs_path`, etc.).
     #[serde(default)]
     pub pathfinding: crate::pathfinding_settings::PathfindingSettings,
+    /// Cheats / sandbox formales (UI-7; off por defecto).
+    #[serde(default)]
+    pub cheats: crate::cheats::CheatsState,
     /// Órdenes / selectgoods (`order.selectgoods` en `OpenTTD`).
     #[serde(default)]
     pub order: crate::cargo::OrderSettings,
@@ -498,6 +501,7 @@ impl GameState {
             disasters_enabled: true,
             disaster_timer: default_disaster_timer(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
+            cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             shore_newgrf_sprites: Vec::new(),
@@ -565,6 +569,7 @@ impl GameState {
             disasters_enabled: true,
             disaster_timer: default_disaster_timer(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
+            cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
             shore_newgrf_sprites: Vec::new(),

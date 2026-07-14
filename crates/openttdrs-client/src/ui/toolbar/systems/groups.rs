@@ -153,7 +153,8 @@ pub(crate) fn toolbar_group_for_action(action: BuildMenuAction) -> ToolbarGroup 
         | BuildMenuAction::BuildBubbleGenerator
         | BuildMenuAction::BuildToffeeQuarry
         | BuildMenuAction::BuildSugarMine => ToolbarGroup::Economy,
-        BuildMenuAction::RaiseLand
+        BuildMenuAction::FoundTown
+        | BuildMenuAction::RaiseLand
         | BuildMenuAction::LowerLand
         | BuildMenuAction::LevelLand
         | BuildMenuAction::BuyLand

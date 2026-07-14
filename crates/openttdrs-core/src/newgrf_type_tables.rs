@@ -87,6 +87,47 @@ fn reverse_in_table(table: &[TypeLabel], label: TypeLabel) -> u8 {
         .map_or(0xFF, |i| u8::try_from(i).unwrap_or(0xFF))
 }
 
+/// Traducción directa índice local GRF → `RailType` (`GetRailTypeTranslation`).
+///
+/// Sin tabla o índice fuera de rango: `None`. Etiqueta desconocida: `None`.
+#[must_use]
+pub fn forward_rail_type(tables: Option<&GrfTypeTranslationTables>, index: u8) -> Option<RailType> {
+    let tables = tables?;
+    let label = *tables.rail.get(usize::from(index))?;
+    rail_type_from_label(label)
+}
+
+/// Traducción directa índice local → `RoadType` según clase road/tram.
+#[must_use]
+pub fn forward_road_type(
+    tables: Option<&GrfTypeTranslationTables>,
+    catalog: &[RoadTypeDef],
+    class: RoadTramType,
+    index: u8,
+) -> Option<RoadType> {
+    let tables = tables?;
+    let list = match class {
+        RoadTramType::Road => &tables.road,
+        RoadTramType::Tram => &tables.tram,
+    };
+    let label = *list.get(usize::from(index))?;
+    catalog
+        .iter()
+        .find(|d| d.class == class && road_type_label(d) == label)
+        .map(|d| d.id)
+}
+
+#[must_use]
+pub const fn rail_type_from_label(label: TypeLabel) -> Option<RailType> {
+    match &label {
+        b"RAIL" => Some(RailType::Rail),
+        b"ELRL" => Some(RailType::Electric),
+        b"MONO" => Some(RailType::Monorail),
+        b"MGLV" => Some(RailType::Maglev),
+        _ => None,
+    }
+}
+
 /// Traducción inversa rail → índice local GRF (`GetReverseRailTypeTranslation`).
 ///
 /// Sin tabla: ID global tal cual. Con tabla y sin match: `0xFF`.
@@ -234,6 +275,28 @@ mod tests {
         assert_eq!(reverse_rail_type(Some(&t), RailType::Rail), 1);
         assert_eq!(reverse_rail_type(Some(&t), RailType::Maglev), 0xFF);
         assert_eq!(reverse_rail_type(None, RailType::Rail), 0);
+        assert_eq!(forward_rail_type(Some(&t), 0), Some(RailType::Electric));
+        assert_eq!(forward_rail_type(Some(&t), 1), Some(RailType::Rail));
+        assert_eq!(forward_rail_type(Some(&t), 2), Some(RailType::Monorail));
+        assert_eq!(forward_rail_type(Some(&t), 3), None);
+    }
+
+    #[test]
+    fn forward_reverse_rail_roundtrip() {
+        let t = GrfTypeTranslationTables {
+            rail: vec![*b"RAIL", *b"ELRL", *b"MONO", *b"MGLV"],
+            ..Default::default()
+        };
+        for rt in [
+            RailType::Rail,
+            RailType::Electric,
+            RailType::Monorail,
+            RailType::Maglev,
+        ] {
+            let idx = reverse_rail_type(Some(&t), rt);
+            assert_ne!(idx, 0xFF);
+            assert_eq!(forward_rail_type(Some(&t), idx), Some(rt));
+        }
     }
 
     #[test]

@@ -11,6 +11,7 @@ pub mod object;
 pub mod rail_slope;
 pub mod road_bits;
 pub mod slope;
+pub mod station_tile_anim;
 pub mod tile_loop;
 pub mod tree_tile_loop;
 mod types;
@@ -49,6 +50,9 @@ pub use slope::{
     inclined_slope_direction, is_tunnel_entrance_slope, partial_pixel_z, resolve_tunnel_end,
     slope_dz_at_subtile, slope_dz_on_tile, tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles,
     tunnel_preview_path,
+};
+pub use station_tile_anim::{
+    AIRPORT_RADAR_FRAMES, airport_radar_frame, is_airport_tower_tile, step_airport_tiles,
 };
 pub use tile_loop::{MAP_FULL_SCAN_TILE_LIMIT, MAP_TILE_LOOP_STRIDE, for_each_map_tile_loop};
 pub use tree_tile_loop::{

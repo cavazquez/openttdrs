@@ -16,12 +16,14 @@
 //! ```
 
 mod diff;
+mod junction_hash;
 mod record;
 pub mod report;
 mod scenario;
 mod tracer;
 
 pub use diff::{DiffFilter, DiffReport, Divergence, Subsystem, compare_traces, render_report};
+pub use junction_hash::{JunctionBounds, count_signal_tiles, hash_junction_tiles};
 pub use record::{
     ParityEvent, RailPartRecord, RailRecord, SpeedTrend, TickRecord, TraceVehicleState,
     VehicleRecord, derive_vehicle_state, order_kind_name,

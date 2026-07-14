@@ -1,5 +1,6 @@
 //! Tipos y helpers para construir la capa visual del mapa.
 
+mod airport_radar_anim;
 mod animation_gate;
 mod assets;
 mod atlas;
@@ -30,6 +31,7 @@ mod viewport;
 mod water;
 mod world;
 
+pub(crate) use airport_radar_anim::{AirportRadarAnim, AirportRadarAnimPlugin};
 pub(crate) use animation_gate::palette_animations_should_run;
 pub(crate) use assets::WorldAssets;
 pub(crate) use atlas::{AtlasSprite, TileAtlas};

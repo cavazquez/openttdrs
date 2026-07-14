@@ -1,8 +1,10 @@
 //! Verificación visual automatizada de las ventanas flotantes.
 //!
-//! Con `OPENTTDRS_WINDOWS_SHOT=/ruta/captura.png` el cliente abre las
-//! ventanas de pueblo, depósito, compra, vehículo, finanzas y directorio de
-//! pueblos, guarda una captura y sale.
+//! Con `OPENTTDRS_WINDOWS_SHOT=/ruta/captura.png` el cliente abre **todas** las
+//! [`FloatingWindowId`] (más SaveWindow / OrderPanel / paneles auxiliares),
+//! guarda una captura y sale.
+//!
+//! Inventario cubierto: ver [`windows_shot_covered_ids`] (debe == `FloatingWindowId::ALL`).
 //!
 //! Resolución opcional: `OPENTTDRS_SHOT_RES=1280x720` o `1920x1080`.
 
@@ -12,17 +14,56 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::{TileCoord, TileKind};
 
 use crate::state::{ClientScreen, SimWorld};
+use crate::ui::audio_settings_window::SoundMusicWindowState;
+use crate::ui::autoreplace_window::AutoreplaceWindowState;
 use crate::ui::buy_window::BuyVehicleWindowState;
+use crate::ui::cargo_payment_window::CargoPaymentWindowState;
+use crate::ui::destination_window::DestinationPickerState;
+use crate::ui::dev_console::DevConsoleState;
+use crate::ui::display_options_window::DisplayOptionsWindowState;
+use crate::ui::extra_viewport_window::ExtraViewportWindowState;
 use crate::ui::finances_window::FinancesWindowState;
+use crate::ui::floating_window::{FloatingWindow, FloatingWindowId};
+use crate::ui::graph_window::GraphWindowState;
+use crate::ui::help_window::HelpWindowState;
+use crate::ui::hud::SimHudControls;
+use crate::ui::industry_directory::IndustryDirectoryState;
+use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::main_menu::{MainMenuCamera, MainMenuUi};
-use crate::ui::toolbar::DepotPanelState;
+use crate::ui::newgrf_window::NewGrfWindowState;
+use crate::ui::news_settings_window::NewsSettingsWindowState;
+use crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState;
+use crate::ui::refit_window::RefitWindowState;
+use crate::ui::save_window::{SaveWindowMode, SaveWindowState, save_dir_from};
+use crate::ui::shared_orders_window::SharedOrdersWindowState;
+use crate::ui::sign_list_window::SignListWindowState;
+use crate::ui::station_directory::StationDirectoryState;
+use crate::ui::statusbar::NewsHistoryState;
+use crate::ui::subsidy_list::SubsidyListState;
+use crate::ui::tile_inspector_window::TileInspectorWindowState;
+use crate::ui::timetable_window::TimetableWindowState;
+use crate::ui::toolbar::{
+    BridgeBuildState, BuildMenuAction, DepotPanelState, OrderEditState, PendingBridge,
+    StationCargoPanelState, StationCatalogKind, StationCatalogPickerState, ToolbarGroup,
+    ToolbarState, UiToolState,
+};
 use crate::ui::town_directory::TownDirectoryState;
 use crate::ui::town_window::TownWindowState;
+use crate::ui::ui5_blocked_stubs::LinkGraphWindowState;
+use crate::ui::vehicle_list::VehicleListState;
 use crate::ui::vehicle_window::VehicleWindowState;
 
 const OPEN_FRAME: u32 = 30;
 const SHOT_FRAME: u32 = 60;
 const EXIT_FRAME: u32 = 120;
+
+/// Inventario de `FloatingWindowId` que `windows_shot` intenta abrir.
+/// Debe coincidir con [`FloatingWindowId::ALL`] (test de cobertura).
+#[allow(dead_code)] // consumido en tests de inventario
+#[must_use]
+pub(crate) fn windows_shot_covered_ids() -> &'static [FloatingWindowId] {
+    FloatingWindowId::ALL
+}
 
 pub(crate) struct WindowsShotPlugin;
 
@@ -109,6 +150,14 @@ fn first_depot(sim: &SimWorld) -> Option<TileCoord> {
         }
     }
     None
+}
+
+fn first_station(sim: &SimWorld) -> Option<TileCoord> {
+    sim.state.stations.first().map(|s| s.pos)
+}
+
+fn first_industry_tile(sim: &SimWorld) -> Option<TileCoord> {
+    sim.state.industries.first().map(|i| i.pos)
 }
 
 /// Con `OPENTTDRS_MAP_SHOT=/ruta.png`: captura el mapa sin abrir ventanas y sale.
@@ -212,56 +261,165 @@ fn map_shot_driver(
     }
 }
 
-#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
-fn windows_shot_driver(
-    mut commands: Commands,
-    mut frame: Local<u32>,
-    sim: Res<SimWorld>,
-    mut town: ResMut<TownWindowState>,
-    mut depot: ResMut<DepotPanelState>,
-    mut buy: ResMut<BuyVehicleWindowState>,
-    mut vehicle: ResMut<VehicleWindowState>,
-    mut finances: ResMut<FinancesWindowState>,
-    mut town_dir: ResMut<TownDirectoryState>,
-    mut exit: MessageWriter<AppExit>,
-) {
+/// Abre todas las ventanas flotantes + paneles auxiliares para captura de paridad.
+/// Sistema exclusivo: demasiados `ResMut` para el límite de SystemParam de Bevy.
+fn windows_shot_driver(world: &mut World, mut frame: Local<u32>) {
     *frame += 1;
     if *frame == OPEN_FRAME {
-        town.town_id = sim.state.towns.first().map(|t| t.id);
-        let depot_pos = first_depot(&sim);
-        depot.depot_pos = depot_pos;
-        buy.depot_pos = depot_pos;
-        buy.selected_engine = depot_pos
-            .and_then(|pos| {
-                crate::ui::buy_window::engines_for_buy_window(
-                    &sim,
-                    pos,
-                    openttdrs_core::EngineCatalogSort::default(),
-                    openttdrs_core::RoadEngineFilter::default(),
-                    crate::ui::buy_window::RailBuyFilter::default(),
-                    "",
-                )
-                .first()
-                .copied()
-            })
-            .map(|e| e.id);
-        vehicle.vehicle_id = sim.state.vehicles.first().map(|v| v.id);
-        finances.open = true;
-        town_dir.open = true;
-        info!(
-            "windows_shot: town={:?} depot={:?} vehicle={:?} finances+town_dir",
-            town.town_id, depot.depot_pos, vehicle.vehicle_id
-        );
+        open_all_windows_for_shot(world);
     }
+
+    // Fuerza visibilidad de pickers tool-gated (Airport/Signal/Bridge/RailStation)
+    // que el sync ocultaría por la herramienta activa única.
+    if (OPEN_FRAME..=SHOT_FRAME).contains(&*frame) {
+        let mut q = world.query::<(&FloatingWindow, &mut Visibility)>();
+        for (_, mut vis) in q.iter_mut(world) {
+            *vis = Visibility::Visible;
+        }
+    }
+
     if *frame == SHOT_FRAME
         && let Ok(path) = std::env::var("OPENTTDRS_WINDOWS_SHOT")
     {
         info!("windows_shot: guardando captura en {path}");
-        commands
+        world
+            .commands()
             .spawn(Screenshot::primary_window())
             .observe(save_to_disk(path));
     }
     if *frame == EXIT_FRAME {
-        exit.write(AppExit::Success);
+        world.write_message(AppExit::Success);
+    }
+}
+
+fn open_all_windows_for_shot(world: &mut World) {
+    let town_id = world
+        .resource::<SimWorld>()
+        .state
+        .towns
+        .first()
+        .map(|t| t.id);
+    let vehicle_id = world
+        .resource::<SimWorld>()
+        .state
+        .vehicles
+        .first()
+        .map(|v| v.id);
+    let vehicle_orders = vehicle_id.and_then(|vid| {
+        world
+            .resource::<SimWorld>()
+            .state
+            .vehicles
+            .iter()
+            .find(|v| v.id == vid)
+            .map(|v| v.orders.clone())
+    });
+    let depot_pos = first_depot(world.resource::<SimWorld>());
+    let station_pos = first_station(world.resource::<SimWorld>());
+    let industry_pos = first_industry_tile(world.resource::<SimWorld>());
+    let selected_engine = depot_pos.and_then(|pos| {
+        let sim = world.resource::<SimWorld>();
+        crate::ui::buy_window::engines_for_buy_window(
+            sim,
+            pos,
+            openttdrs_core::EngineCatalogSort::default(),
+            openttdrs_core::RoadEngineFilter::default(),
+            crate::ui::buy_window::RailBuyFilter::default(),
+            "",
+        )
+        .first()
+        .map(|e| e.id)
+    });
+    let save_dir = save_dir_from(&world.resource::<SimHudControls>().json_save_path);
+
+    world.resource_mut::<TownWindowState>().town_id = town_id;
+    {
+        let mut depot = world.resource_mut::<DepotPanelState>();
+        depot.depot_pos = depot_pos;
+    }
+    {
+        let mut buy = world.resource_mut::<BuyVehicleWindowState>();
+        buy.depot_pos = depot_pos;
+        buy.selected_engine = selected_engine;
+    }
+    world.resource_mut::<VehicleWindowState>().vehicle_id = vehicle_id;
+    world.resource_mut::<TimetableWindowState>().vehicle_id = vehicle_id;
+    if let Some(vid) = vehicle_id {
+        world.resource_mut::<RefitWindowState>().open_for(vid);
+        {
+            let mut order = world.resource_mut::<OrderEditState>();
+            order.vehicle_id = Some(vid);
+            order.orders = vehicle_orders.unwrap_or_default();
+        }
+        {
+            let mut shared = world.resource_mut::<SharedOrdersWindowState>();
+            shared.open = true;
+            shared.link_vehicle_id = Some(vid);
+        }
+        world.resource_mut::<DestinationPickerState>().open = true;
+    }
+    if let Some(pos) = depot_pos {
+        world
+            .resource_mut::<AutoreplaceWindowState>()
+            .open_for_depot(pos);
+    }
+    world.resource_mut::<StationCargoPanelState>().station_pos = station_pos;
+    if let Some(pos) = industry_pos {
+        let mut panel = world.resource_mut::<IndustryPanelState>();
+        panel.open = true;
+        panel.focus_tile = Some(pos);
+    }
+
+    world.resource_mut::<FinancesWindowState>().open = true;
+    world.resource_mut::<TownDirectoryState>().open = true;
+    world.resource_mut::<IndustryDirectoryState>().open = true;
+    world.resource_mut::<StationDirectoryState>().open = true;
+    world.resource_mut::<VehicleListState>().open = true;
+    world.resource_mut::<SubsidyListState>().open = true;
+    world.resource_mut::<NewsHistoryState>().open = true;
+    world.resource_mut::<NewsSettingsWindowState>().open = true;
+    world.resource_mut::<PathfindingSettingsWindowState>().open = true;
+    world.resource_mut::<NewGrfWindowState>().open = true;
+    world.resource_mut::<SoundMusicWindowState>().open = true;
+    world.resource_mut::<GraphWindowState>().open = true;
+    world.resource_mut::<CargoPaymentWindowState>().open = true;
+    world.resource_mut::<DisplayOptionsWindowState>().open = true;
+    world.resource_mut::<ExtraViewportWindowState>().open = true;
+    world.resource_mut::<SignListWindowState>().open = true;
+    world.resource_mut::<LinkGraphWindowState>().open = true;
+    world.resource_mut::<HelpWindowState>().open = true;
+    world.resource_mut::<DevConsoleState>().open = true;
+    world.resource_mut::<TileInspectorWindowState>().open = true;
+
+    world
+        .resource_mut::<SaveWindowState>()
+        .open_in_mode(SaveWindowMode::Save, &save_dir);
+    world.resource_mut::<StationCatalogPickerState>().open = Some(StationCatalogKind::Spec);
+
+    world.resource_mut::<ToolbarState>().active_group = Some(ToolbarGroup::Rail);
+    world.resource_mut::<UiToolState>().active_tool = Some(BuildMenuAction::RailStation);
+    world.resource_mut::<BridgeBuildState>().pending = Some(PendingBridge {
+        start: TileCoord::new(2, 2),
+        end: TileCoord::new(6, 2),
+        road: false,
+    });
+
+    info!(
+        "windows_shot: abriendo ALL FloatingWindowId ({}) + Save/Order/panels",
+        FloatingWindowId::ALL.len()
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_shot_covers_all_floating_ids() {
+        assert_eq!(
+            windows_shot_covered_ids(),
+            FloatingWindowId::ALL,
+            "actualizar windows_shot_covered_ids al añadir FloatingWindowId"
+        );
     }
 }

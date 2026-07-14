@@ -31,7 +31,7 @@ Sorprendentemente, esta es el área **más avanzada** del port. Ya está portado
 | **Humo de locomotoras** (vapor/diésel/chispas eléctricas) | `effectvehicle.cpp` | Media | **Hecho** — sprites `3073–3089` (`gen_effect_vehicle_sprites.py`, `render/train_smoke.rs`) |
 | **Explosiones / humo de avería** | `effectvehicle.cpp:152-253` | Media | **Hecho** — sprites `3709–3724` / `3737–3740` (`render/effect_fx.rs`) |
 | **Bulldozer en obras** | `effectvehicle.cpp:255-325` | Baja | **Hecho** (road works FX) |
-| **Animación de estaciones/aeropuertos** | `newgrf_station.cpp` | Media | **Parcial** (`tile_anims.rs`) |
+| **Animación de estaciones/aeropuertos** | `newgrf_station.cpp` | Media | **OK radar** (`airport_radar_anim.rs` + `step_airport_tiles` m7) |
 | **Ascensor de edificios de ciudad** | `town_cmd.cpp:346-368` | Baja | **MVP** (`HouseLiftAnimPlugin`, s2 1442/4569) |
 | **Cursores animados** | `table/animcursors.h` | Baja | **MVP demolish** (4 frames + `anim_cursor_frame`) |
 | **Árboles creciendo / cultivos** | `tree_cmd.cpp:679` | Baja–Media | **Hecho** (sim + render) |
@@ -47,6 +47,7 @@ Sorprendentemente, esta es el área **más avanzada** del port. Ya está portado
 | Faro / luces de estadio | `LighthouseAnimPlugin` | `render/lighthouse_anim.rs` |
 | Humo chimenea / mina cobre | `IndustrySmokePlugin` | `render/smoke.rs` |
 | Animación edificios industria | `IndustryBuildingAnimPlugin` | `render/industry_anim.rs` |
+| Radar aeropuerto (m7) | `AirportRadarAnimPlugin` | `render/airport_radar_anim.rs` |
 | Overlays draw_proc (chispas, burbujas) | `IndustryDrawProcPlugin` | `render/industry_draw_proc.rs` |
 | Tween sprites fantasma construcción | ghost lerp | `ui/toolbar/preview/ghost_lerp.rs` |
 | Popups de ingreso animados | income popup | `ui/hud/income_popup.rs` |

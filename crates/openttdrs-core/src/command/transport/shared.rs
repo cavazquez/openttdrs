@@ -226,7 +226,9 @@ pub(in crate::command) fn clear_tile(
     c: TileCoord,
 ) -> Result<(), CommandError> {
     check_clear_tile(&state.map, c)?;
-    require_tile_owned_by_active(state, c)?;
+    if !state.cheats.magic_bulldozer_active() {
+        require_tile_owned_by_active(state, c)?;
+    }
     if let Some(industry_idx) = state.industries.iter().position(|i| i.contains_tile(c)) {
         let industry_tiles = state.industries[industry_idx].tiles.clone();
         for tile in industry_tiles {

@@ -63,6 +63,7 @@ pub mod tick;
 pub mod timetable;
 pub mod tnbp_decode;
 pub mod town;
+pub mod town_expand;
 pub mod townname;
 pub mod train_consist;
 pub mod train_movement;
@@ -351,6 +352,10 @@ pub use town::{
     TOWN_GROWTH_DESERT, TOWN_GROWTH_TICKS, TOWN_GROWTH_WINTER, TOWN_PRODUCE_TICKS, Town,
     TownGrowthEffect, authority_allows_new_station, grow_town_if_served,
     process_town_monthly_growth, produce_town_cargo, town_goal_satisfied, update_town_growth_state,
+};
+pub use town_expand::{
+    TOWN_EXPAND_ATTEMPTS, TOWN_EXPAND_POP_PER_HOUSE, TOWN_EXPAND_SEARCH_RADIUS, TownExpandResult,
+    expand_town_once, expand_town_physically,
 };
 pub use townname::generate_town_name;
 pub use train_consist::{

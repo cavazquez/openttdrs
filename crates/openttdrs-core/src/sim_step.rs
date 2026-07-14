@@ -286,13 +286,14 @@ fn produce_town_demand(state: &mut GameState, tick: u64) {
 }
 
 fn grow_towns(state: &mut GameState, tick: u64) {
-    town::grow_town_if_served(
-        &state.map,
+    let dirty = town::grow_town_if_served(
+        &mut state.map,
         &state.industries,
         &state.stations,
         &mut state.towns,
         tick,
     );
+    state.landscape_tile_dirty.extend(dirty);
 }
 
 fn process_monthly_economy(state: &mut GameState, tick: u64) {

@@ -276,16 +276,19 @@ pub fn produce_town_cargo(
 }
 
 /// Crece la población si `is_growing` y hay cobertura de casas (o financiación).
+///
+/// Además intenta expansión física (calles/casas) y devuelve teselas dirty.
 pub fn grow_town_if_served(
-    map: &Map,
+    map: &mut Map,
     industries: &[Industry],
     stations: &[Station],
     towns: &mut [Town],
     tick: u64,
-) {
+) -> Vec<TileCoord> {
     if tick == 0 || !tick.is_multiple_of(TOWN_GROWTH_TICKS) {
-        return;
+        return Vec::new();
     }
+    let mut dirty = Vec::new();
     for town in towns {
         update_town_growth_state(town, stations);
         if !town.is_growing {
@@ -304,12 +307,16 @@ pub fn grow_town_if_served(
         }
         let coverage =
             station::station_coverage_at(map, industries, town.pos, STATION_COVERAGE_RADIUS);
-        if coverage.house_tiles > 0 || funded {
+        // Casas existentes / financiación: step abstracto. Con estación también
+        // expandimos físicamente aunque aún no haya casas en cobertura.
+        if coverage.house_tiles > 0 || funded || has_station {
             town.population = town.population.saturating_add(
                 TOWN_GROWTH_POPULATION_STEP + u32::from(town.fund_buildings_months.min(3)),
             );
+            dirty.extend(crate::town_expand::expand_town_physically(map, town, tick));
         }
     }
+    dirty
 }
 
 /// Impulso inmediato al financiar edificios (feedback en UI + arranque del ciclo).
@@ -442,7 +449,7 @@ mod tests {
             TileCoord::new(8, 9),
             StopKind::BusStop,
         )];
-        grow_town_if_served(&map, &[], &stations, &mut towns, TOWN_GROWTH_TICKS);
+        grow_town_if_served(&mut map, &[], &stations, &mut towns, TOWN_GROWTH_TICKS);
         assert!(towns[0].population > 100);
     }
 
@@ -464,7 +471,7 @@ mod tests {
             TileCoord::new(8, 9),
             StopKind::BusStop,
         )];
-        grow_town_if_served(&map, &[], &stations, &mut towns, TOWN_GROWTH_TICKS);
+        grow_town_if_served(&mut map, &[], &stations, &mut towns, TOWN_GROWTH_TICKS);
         assert_eq!(towns[0].population, 120);
         assert!(!towns[0].is_growing);
     }
@@ -508,7 +515,7 @@ mod tests {
 
     #[test]
     fn fund_buildings_grows_without_station() {
-        let map = Map::new_flat(16, 16, 0);
+        let mut map = Map::new_flat(16, 16, 0);
         let mut towns = vec![Town {
             id: 0,
             pos: TileCoord::new(8, 8),
@@ -519,7 +526,7 @@ mod tests {
             is_growing: true,
             ..Default::default()
         }];
-        grow_town_if_served(&map, &[], &[], &mut towns, TOWN_GROWTH_TICKS);
+        grow_town_if_served(&mut map, &[], &[], &mut towns, TOWN_GROWTH_TICKS);
         assert!(towns[0].population > 50);
         assert!(towns[0].is_growing);
     }

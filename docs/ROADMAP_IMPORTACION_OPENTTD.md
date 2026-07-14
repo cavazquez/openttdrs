@@ -248,7 +248,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Mecánica | Original | Port |
 |----------|----------|------|
 | Demanda pasajeros/correo | `town_cmd.cpp:522` | **PARCIAL** (`town.rs`) |
-| Expansión física (casas, calles) | `town_cmd.cpp:1184` | **FALTA** |
+| Expansión física (casas, calles) | `town_cmd.cpp:1184` | **OK MVP** (`town_expand.rs` + `grow_town_if_served`) |
 | Rating autoridad local | `town_cmd.cpp:3257` | **PARCIAL** (`town.rs`, estaciones) |
 | Acciones de ciudad (publicidad, fondos, vías) | `town_cmd.cpp:3421` | **PARCIAL** (publicidad/fondos UI) |
 | Metas de carga para crecer | `town_cmd.cpp:3916` | **EXISTE** (`town.rs` goals/received/is_growing) |

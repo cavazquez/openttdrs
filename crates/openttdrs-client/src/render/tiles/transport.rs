@@ -49,6 +49,7 @@ pub(crate) fn spawn_road_tile(
         SLOPE_HALF_H[tileh as usize]
     };
     let road_paint = ctx.tile.map_or(Color::WHITE, |t| {
+        // Ártico: tinte nieve suave; el suelo hierba/nieve lo decide `m5` vía land.rs.
         if climate.uses_snow_ground() {
             Color::srgb(0.82, 0.88, 0.98)
         } else {

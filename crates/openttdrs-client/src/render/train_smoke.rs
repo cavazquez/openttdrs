@@ -89,7 +89,7 @@ fn spawn_train_smoke(
     let elapsed = time.elapsed_secs();
     for v in &sim.state.vehicles {
         if v.kind != VehicleKind::Train
-            || openttdrs_core::vehicle_hidden_on_map(map, v)
+            || openttdrs_core::vehicle_hidden_from_view(map, v, v.pos, v.progress)
             || !v.running
             || v.cur_speed == 0
         {
@@ -167,7 +167,9 @@ fn cull_train_smoke(
             .iter()
             .find(|v| v.id == smoke.vehicle_id)
             .is_none_or(|v| {
-                openttdrs_core::vehicle_hidden_on_map(map, v) || !v.running || v.cur_speed == 0
+                openttdrs_core::vehicle_hidden_from_view(map, v, v.pos, v.progress)
+                    || !v.running
+                    || v.cur_speed == 0
             });
         if hide {
             spawn_clock.last_spawn.remove(&smoke.vehicle_id);

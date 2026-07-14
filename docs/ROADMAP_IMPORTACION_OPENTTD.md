@@ -266,7 +266,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Mecánica | Original | Port |
 |----------|----------|------|
 | 4 climas (LandscapeType) | `landscape.h` | **PARCIAL** (`world_gen.rs` `Climate`) |
-| Nieve estacional variable | `landscape.cpp:612` | **FALTA** (nieve fija ártico) |
+| Nieve estacional variable | `landscape.cpp:612` | **EXISTE** (`apply_seasonal_snow` + dirty remap) |
 | Zonas desierto/selva tropical | `landscape.cpp:984` | **PARCIAL** |
 | Industrias por clima | `industry_cmd.cpp` | **EXISTE** (`industry.rs`) |
 
@@ -287,7 +287,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | 13 tipos puente (specs) | `bridge_land.h` | **EXISTE** (`bridge_spec.rs`) |
 | Construcción rail/road | `tunnelbridge_cmd.cpp` | **PARCIAL** (`bridge.rs`) |
 | Límite velocidad en puente | specs → movimiento | **HECHO** (`bridge_max_speed_for_tile` + `step_with_map`) |
-| Ocultamiento tren en túnel | `_tunnel_visibility_frame` | **PARCIAL** (tabla, sin render) |
+| Ocultamiento tren en túnel | `_tunnel_visibility_frame` | **EXISTE** (`vehicle_hidden_in_tunnel` + render) |
 
 ---
 

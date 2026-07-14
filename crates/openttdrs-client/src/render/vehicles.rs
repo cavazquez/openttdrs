@@ -517,7 +517,7 @@ pub(crate) fn spawn_initial_vehicles(
             pose,
             Some(&sim.state.engine_catalog),
         );
-        let vis = if vehicle_is_hidden_in_depot(sim, vehicle) {
+        let vis = if vehicle_is_hidden_from_view(sim, vehicle, pose) {
             Visibility::Hidden
         } else {
             Visibility::Visible
@@ -685,8 +685,12 @@ fn vehicle_tint(v: &Vehicle) -> Color {
     }
 }
 
-fn vehicle_is_hidden_in_depot(sim: &SimWorld, v: &Vehicle) -> bool {
-    openttdrs_core::vehicle_hidden_on_map(&sim.state.map, v)
+fn vehicle_is_hidden_from_view(
+    sim: &SimWorld,
+    v: &Vehicle,
+    pose: openttdrs_core::VehiclePose,
+) -> bool {
+    openttdrs_core::vehicle_hidden_from_view(&sim.state.map, v, pose.pos, pose.progress)
 }
 
 /// Radio de picking en unidades mundo (clic sobre el sprite del vehículo).
@@ -698,7 +702,10 @@ pub(crate) fn pick_vehicle_id_at_world(world_pos: Vec2, sim: &SimWorld) -> Optio
     sim.state
         .vehicles
         .iter()
-        .filter(|v| !vehicle_is_hidden_in_depot(sim, v))
+        .filter(|v| {
+            let pose = extrapolate_vehicle_pose(v, 0.0);
+            !vehicle_is_hidden_from_view(sim, v, pose)
+        })
         .filter_map(|v| {
             let sprite_xy = vehicle_sprite_pos(v, &sim.state.map, 0.0).truncate();
             let dist_sq = sprite_xy.distance_squared(world_pos);
@@ -751,12 +758,12 @@ pub(crate) fn update_vehicles(
         let Some(v) = sim.state.vehicles.get(i) else {
             continue;
         };
-        if vehicle_is_hidden_in_depot(&sim, v) {
+        let pose = extrapolate_vehicle_pose(v, sim_clock.tick_alpha);
+        if vehicle_is_hidden_from_view(&sim, v, pose) {
             *visibility = Visibility::Hidden;
             continue;
         }
         *visibility = Visibility::Visible;
-        let pose = extrapolate_vehicle_pose(v, sim_clock.tick_alpha);
         let pos3 = vehicle_sprite_pos_at_with_catalog(
             v,
             &sim.state.map,
@@ -794,12 +801,12 @@ pub(crate) fn update_vehicles(
             *visibility = Visibility::Hidden;
             continue;
         };
-        if vehicle_is_hidden_in_depot(&sim, head) {
+        let pose = extrapolate_vehicle_pose(head, sim_clock.tick_alpha);
+        if vehicle_is_hidden_from_view(&sim, head, pose) {
             *visibility = Visibility::Hidden;
             continue;
         }
         *visibility = Visibility::Visible;
-        let pose = extrapolate_vehicle_pose(head, sim_clock.tick_alpha);
         let base = vehicle_sprite_pos_at_with_catalog(
             head,
             &sim.state.map,
@@ -838,7 +845,8 @@ pub(crate) fn update_vehicles(
         let Some(v) = sim.state.vehicles.get(i) else {
             continue;
         };
-        if vehicle_is_hidden_in_depot(&sim, v) {
+        let pose = extrapolate_vehicle_pose(v, sim_clock.tick_alpha);
+        if vehicle_is_hidden_from_view(&sim, v, pose) {
             *visibility = Visibility::Hidden;
             continue;
         }
@@ -958,7 +966,11 @@ mod tests {
         train.running = false;
         sim.state.vehicles.push(train);
         let anchor = vehicle_sprite_pos(&sim.state.vehicles[0], &sim.state.map, 0.0).truncate();
-        assert!(vehicle_is_hidden_in_depot(&sim, &sim.state.vehicles[0]));
+        assert!(vehicle_is_hidden_from_view(
+            &sim,
+            &sim.state.vehicles[0],
+            extrapolate_vehicle_pose(&sim.state.vehicles[0], 0.0)
+        ));
         assert_eq!(pick_vehicle_id_at_world(anchor, &sim), None);
     }
 

@@ -299,12 +299,19 @@ fn clear_dead_tree_tile(map: &mut Map, c: TileCoord, m2: u8) {
 }
 
 /// Nieve estacional simplificada para clima ártico (línea de nieve por latitud + estación).
-pub fn apply_seasonal_snow(map: &mut Map, climate: Climate, tick: u64, world_seed: u64) {
+///
+/// Devuelve las teselas cuyo `m5` cambió (para remap del cliente).
+pub fn apply_seasonal_snow(
+    map: &mut Map,
+    climate: Climate,
+    tick: u64,
+    world_seed: u64,
+) -> Vec<TileCoord> {
     if !climate.uses_snow_ground() {
-        return;
+        return Vec::new();
     }
     if tick == 0 || !tick.is_multiple_of(u64::from(TICKS_PER_TRANSIT_DAY)) {
-        return;
+        return Vec::new();
     }
     let day = tick / u64::from(TICKS_PER_TRANSIT_DAY);
     let day_of_year = day % 365;
@@ -328,10 +335,13 @@ pub fn apply_seasonal_snow(map: &mut Map, climate: Climate, tick: u64, world_see
             updates.push((c, tile.mapt, new_m5));
         }
     });
+    let mut dirty = Vec::with_capacity(updates.len());
     for (c, mapt, new_m5) in updates {
         let _ = map.set_mapt_m5(c, mapt, new_m5);
+        dirty.push(c);
     }
     let _ = world_seed;
+    dirty
 }
 
 /// Coloca un árbol (hierba → bosque etapa 0; bosque → +1 árbol si hay sitio).
@@ -430,7 +440,8 @@ pub fn clear_tree(
 pub fn tick_tree_tile_loop(state: &mut GameState) {
     let tick = state.tick.get();
     step_tree_and_field_growth(&mut state.map, tick, state.world_seed);
-    apply_seasonal_snow(&mut state.map, state.climate, tick, state.world_seed);
+    let snow_dirty = apply_seasonal_snow(&mut state.map, state.climate, tick, state.world_seed);
+    state.landscape_tile_dirty.extend(snow_dirty);
 }
 
 #[cfg(test)]
@@ -632,5 +643,34 @@ mod tests {
             }
         }
         assert!(spread, "debe poder propagarse a hierba vecina");
+    }
+
+    #[test]
+    fn seasonal_snow_thaws_in_summer_and_returns_in_winter() {
+        let mut map = Map::new_flat(10, 10, 0);
+        for y in 0..10 {
+            for x in 0..10 {
+                let c = TileCoord::new(x, y);
+                map.set_kind(c, TileKind::Grass).unwrap();
+                map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_SNOW, 0))
+                    .unwrap();
+            }
+        }
+        // Día de verano (~150): deshielo (MVP: nieve solo en invierno + norte).
+        let summer_tick = u64::from(TICKS_PER_TRANSIT_DAY) * 150;
+        let dirty = apply_seasonal_snow(&mut map, Climate::SubArctic, summer_tick, 0);
+        assert!(!dirty.is_empty());
+        let north = map.get(TileCoord::new(1, 1)).unwrap().m5;
+        let south = map.get(TileCoord::new(1, 7)).unwrap().m5;
+        assert_eq!((north >> 2) & 0x7, CLEAR_GROUND_GRASS);
+        assert_eq!((south >> 2) & 0x7, CLEAR_GROUND_GRASS);
+        // Día de invierno: nieve solo al norte de la línea (y < 4).
+        let winter_tick = u64::from(TICKS_PER_TRANSIT_DAY) * 320;
+        let dirty_w = apply_seasonal_snow(&mut map, Climate::SubArctic, winter_tick, 0);
+        assert!(!dirty_w.is_empty());
+        let north_w = map.get(TileCoord::new(1, 1)).unwrap().m5;
+        let south_w = map.get(TileCoord::new(1, 7)).unwrap().m5;
+        assert_eq!((north_w >> 2) & 0x7, CLEAR_GROUND_SNOW);
+        assert_eq!((south_w >> 2) & 0x7, CLEAR_GROUND_GRASS);
     }
 }

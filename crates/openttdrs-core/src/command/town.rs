@@ -28,9 +28,7 @@ pub(crate) fn town_fund_buildings(state: &mut GameState, town_id: u32) -> Result
     }
     state.economy.money -= FUND_BUILDINGS_COST;
     let delta = state.towns[idx].adjust_rating(FUND_BUILDINGS_RATING_BOOST);
-    state.towns[idx].growth_funded += 1;
-    state.towns[idx].fund_buildings_months = crate::town::FUND_BUILDINGS_MONTHS;
-    state.towns[idx].is_growing = true;
+    crate::town::apply_fund_buildings_boost(&mut state.towns[idx]);
     state
         .pending_sim_events
         .push(crate::sim_events::SimEvent::TownRatingChanged { town_id, delta });

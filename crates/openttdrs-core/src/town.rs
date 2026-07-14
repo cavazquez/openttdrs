@@ -168,8 +168,14 @@ pub fn town_goal_satisfied(goal: u32, received: u32, population: u32) -> bool {
     received >= goal
 }
 
-/// Actualiza `is_growing` tras el rollover mensual (`UpdateTownGrowth`).
+/// Actualiza `is_growing` (`UpdateTownGrowth`).
+///
+/// Financiar edificios fuerza crecimiento aunque no haya estación cerca.
 pub fn update_town_growth_state(town: &mut Town, stations: &[Station]) {
+    if town.fund_buildings_months > 0 {
+        town.is_growing = true;
+        return;
+    }
     let has_station = stations.iter().any(|st| {
         !matches!(
             st.stop_kind,
@@ -178,10 +184,6 @@ pub fn update_town_growth_state(town: &mut Town, stations: &[Station]) {
     });
     if !has_station {
         town.is_growing = false;
-        return;
-    }
-    if town.fund_buildings_months > 0 {
-        town.is_growing = true;
         return;
     }
     for (i, &goal) in town.goals.iter().enumerate() {
@@ -289,23 +291,35 @@ pub fn grow_town_if_served(
         if !town.is_growing {
             continue;
         }
+        let funded = town.fund_buildings_months > 0 || town.growth_funded > 0;
         let has_station = stations.iter().any(|st| {
             !matches!(
                 st.stop_kind,
                 StopKind::RailWaypoint | StopKind::RoadWaypoint | StopKind::Buoy
             ) && crate::economy::manhattan_distance(st.pos, town.pos) <= TOWN_AUTHORITY_RADIUS
         });
-        if !has_station {
+        // Financiación permite crecer sin estación; el resto exige una cerca.
+        if !funded && !has_station {
             continue;
         }
         let coverage =
             station::station_coverage_at(map, industries, town.pos, STATION_COVERAGE_RADIUS);
-        if coverage.house_tiles > 0 || town.growth_funded > 0 || town.fund_buildings_months > 0 {
+        if coverage.house_tiles > 0 || funded {
             town.population = town.population.saturating_add(
                 TOWN_GROWTH_POPULATION_STEP + u32::from(town.fund_buildings_months.min(3)),
             );
         }
     }
+}
+
+/// Impulso inmediato al financiar edificios (feedback en UI + arranque del ciclo).
+pub fn apply_fund_buildings_boost(town: &mut Town) {
+    town.growth_funded = town.growth_funded.saturating_add(1);
+    town.fund_buildings_months = FUND_BUILDINGS_MONTHS;
+    town.is_growing = true;
+    town.population = town
+        .population
+        .saturating_add(TOWN_GROWTH_POPULATION_STEP + u32::from(FUND_BUILDINGS_MONTHS));
 }
 
 #[must_use]
@@ -478,7 +492,7 @@ mod tests {
     }
 
     #[test]
-    fn fund_buildings_forces_growth_gate() {
+    fn fund_buildings_forces_growth_gate_without_station() {
         let mut town = Town {
             id: 0,
             pos: TileCoord::new(5, 5),
@@ -488,12 +502,42 @@ mod tests {
             ..Default::default()
         };
         town.init_growth_goals(Climate::SubArctic);
-        let stations = vec![Station::new_with_kind(
-            TileCoord::new(5, 6),
-            StopKind::BusStop,
-        )];
-        update_town_growth_state(&mut town, &stations);
+        update_town_growth_state(&mut town, &[]);
         assert!(town.is_growing);
+    }
+
+    #[test]
+    fn fund_buildings_grows_without_station() {
+        let map = Map::new_flat(16, 16, 0);
+        let mut towns = vec![Town {
+            id: 0,
+            pos: TileCoord::new(8, 8),
+            name: "Funded".into(),
+            population: 50,
+            fund_buildings_months: 3,
+            growth_funded: 1,
+            is_growing: true,
+            ..Default::default()
+        }];
+        grow_town_if_served(&map, &[], &[], &mut towns, TOWN_GROWTH_TICKS);
+        assert!(towns[0].population > 50);
+        assert!(towns[0].is_growing);
+    }
+
+    #[test]
+    fn apply_fund_boost_raises_population_immediately() {
+        let mut town = Town {
+            id: 0,
+            pos: TileCoord::new(0, 0),
+            name: "X".into(),
+            population: 40,
+            ..Default::default()
+        };
+        apply_fund_buildings_boost(&mut town);
+        assert_eq!(town.fund_buildings_months, FUND_BUILDINGS_MONTHS);
+        assert!(town.is_growing);
+        assert!(town.population > 40);
+        assert_eq!(town.growth_funded, 1);
     }
 
     #[test]

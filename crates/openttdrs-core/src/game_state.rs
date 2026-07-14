@@ -340,6 +340,9 @@ pub struct GameState {
     /// Teselas industriales con `m1` mutado este tick (obra P6 → remap cliente).
     #[serde(skip)]
     pub industry_tile_dirty: Vec<TileCoord>,
+    /// Teselas de paisaje (nieve estacional, etc.) mutadas este tick → remap cliente.
+    #[serde(skip)]
+    pub landscape_tile_dirty: Vec<TileCoord>,
     /// Teselas con señales cuyo estado verde/rojo cambió este tick (remap cliente).
     #[serde(skip)]
     pub signal_tile_dirty: Vec<TileCoord>,
@@ -476,6 +479,7 @@ impl GameState {
             pending_income_popups: Vec::new(),
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
+            landscape_tile_dirty: Vec::new(),
             signal_tile_dirty: Vec::new(),
             signal_globset: std::collections::HashSet::new(),
             reservation_tile_dirty: Vec::new(),
@@ -542,6 +546,7 @@ impl GameState {
             pending_income_popups: Vec::new(),
             pending_sim_events: crate::sim_events::SimEventQueue::new(),
             industry_tile_dirty: Vec::new(),
+            landscape_tile_dirty: Vec::new(),
             signal_tile_dirty: Vec::new(),
             signal_globset: std::collections::HashSet::new(),
             reservation_tile_dirty: Vec::new(),

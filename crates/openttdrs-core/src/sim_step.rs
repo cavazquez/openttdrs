@@ -22,6 +22,7 @@ pub(crate) fn step(state: &mut GameState) {
     }
 
     crate::subsidy::tick_subsidies(state);
+    state.landscape_tile_dirty.clear();
     crate::map::tree_tile_loop::tick_tree_tile_loop(state);
     crate::disaster::tick_disasters(state);
 

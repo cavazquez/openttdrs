@@ -68,6 +68,55 @@ pub fn vehicle_hidden_on_map(map: &Map, vehicle: &Vehicle) -> bool {
         && rail_depot_for_entrance_tile(map, vehicle.pos).is_some()
 }
 
+/// Tren oculto dentro de un túnel / en la rampa según `_tunnel_visibility_frame`.
+#[must_use]
+pub fn vehicle_hidden_in_tunnel(
+    map: &Map,
+    vehicle: &Vehicle,
+    pos: crate::TileCoord,
+    progress: u8,
+) -> bool {
+    if vehicle.kind != VehicleKind::Train {
+        return false;
+    }
+    let Some(tile) = map.get(pos) else {
+        return false;
+    };
+    if tile.kind != TileKind::RailTunnel {
+        return false;
+    }
+    let Some((tileh, _)) = crate::map::tile_slope_and_z(map, pos) else {
+        return true;
+    };
+    if !crate::map::is_tunnel_entrance_slope(tileh) {
+        // Tramo interior: siempre oculto.
+        return true;
+    }
+    let enter_diag = crate::map::inclined_slope_direction(tileh).unwrap_or(crate::vehicle::DIR_NE);
+    let next_is_tunnel = vehicle
+        .movement_target()
+        .and_then(|p| map.get_kind(p))
+        .is_some_and(|k| k == TileKind::RailTunnel);
+    if next_is_tunnel {
+        // Entrando: visible al inicio de la rampa, oculto al fondo.
+        !crate::train_movement::tunnel_hides_train_at_progress(enter_diag, progress)
+    } else {
+        // Saliendo: oculto al inicio, visible al salir.
+        crate::train_movement::tunnel_hides_train_at_progress(enter_diag, progress)
+    }
+}
+
+/// Oculto en depósito o túnel (render / picking / humo).
+#[must_use]
+pub fn vehicle_hidden_from_view(
+    map: &Map,
+    vehicle: &Vehicle,
+    pos: crate::TileCoord,
+    progress: u8,
+) -> bool {
+    vehicle_hidden_on_map(map, vehicle) || vehicle_hidden_in_tunnel(map, vehicle, pos, progress)
+}
+
 fn vehicle_hidden_on_depot_tile(map: &Map, vehicle: &Vehicle) -> bool {
     if !vehicle.running {
         return true;
@@ -202,5 +251,36 @@ mod tests {
         let mut train = Vehicle::new(1, VehicleKind::Train, entrance, depot);
         train.running = false;
         assert!(vehicle_hidden_on_map(&map, &train));
+    }
+
+    #[test]
+    fn train_inside_flat_tunnel_is_hidden() {
+        let mut map = crate::map::Map::new_flat(8, 8, 0);
+        let c = TileCoord::new(3, 3);
+        map.set_kind(c, TileKind::RailTunnel).unwrap();
+        let train = Vehicle::new(1, VehicleKind::Train, c, c);
+        assert!(vehicle_hidden_in_tunnel(&map, &train, c, 0));
+        assert!(vehicle_hidden_from_view(&map, &train, c, 128));
+    }
+
+    #[test]
+    fn train_entering_tunnel_ramp_hides_after_visibility_frame() {
+        use std::collections::VecDeque;
+        let mut map = crate::map::Map::new_flat(12, 12, 1);
+        // Pendiente NE en (5,5): boca de túnel.
+        map.set_height(TileCoord::new(5, 5), 2).unwrap();
+        map.set_height(TileCoord::new(5, 6), 2).unwrap();
+        map.set_height(TileCoord::new(6, 5), 1).unwrap();
+        map.set_height(TileCoord::new(6, 6), 1).unwrap();
+        let entrance = TileCoord::new(5, 5);
+        let interior = TileCoord::new(4, 5);
+        map.set_kind(entrance, TileKind::RailTunnel).unwrap();
+        map.set_kind(interior, TileKind::RailTunnel).unwrap();
+        let mut train = Vehicle::new(1, VehicleKind::Train, entrance, interior);
+        train.running = true;
+        train.path = VecDeque::from([interior]);
+        // Entrando: visible al inicio, oculto tras el frame.
+        assert!(!vehicle_hidden_in_tunnel(&map, &train, entrance, 0));
+        assert!(vehicle_hidden_in_tunnel(&map, &train, entrance, 200));
     }
 }

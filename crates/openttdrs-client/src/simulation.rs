@@ -73,6 +73,7 @@ fn step_sim(mut sim: ResMut<SimWorld>, mut vehicle_index: ResMut<VehicleIndex>) 
 
 fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVisualsPending>) {
     if sim.state.industry_tile_dirty.is_empty()
+        && sim.state.landscape_tile_dirty.is_empty()
         && sim.state.signal_tile_dirty.is_empty()
         && sim.state.reservation_tile_dirty.is_empty()
     {
@@ -88,6 +89,7 @@ fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVis
         .state
         .industry_tile_dirty
         .iter()
+        .chain(sim.state.landscape_tile_dirty.iter())
         .chain(sim.state.signal_tile_dirty.iter())
         .chain(sim.state.reservation_tile_dirty.iter())
     {

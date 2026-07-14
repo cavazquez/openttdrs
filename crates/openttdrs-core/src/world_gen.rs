@@ -65,6 +65,9 @@ pub const fn clear_ground_m5(ground: u8, density: u8) -> u8 {
 }
 
 /// Resuelve el suelo visible según clima y datos de tesela (para render / gen).
+///
+/// En ártico la nieve vive en `m5` (`CLEAR_GROUND_SNOW`); no se fuerza aquí para
+/// permitir deshielo estacional (`apply_seasonal_snow`).
 #[must_use]
 pub fn effective_clear_ground(climate: Climate, tile_m5: u8, tx: i32, ty: i32, seed: u64) -> u8 {
     let explicit = (tile_m5 >> 2) & 0x7;
@@ -72,10 +75,25 @@ pub fn effective_clear_ground(climate: Climate, tile_m5: u8, tx: i32, ty: i32, s
         return explicit;
     }
     match climate {
-        Climate::SubArctic => CLEAR_GROUND_SNOW,
         Climate::SubTropical if desert_patch(tx, ty, seed) => CLEAR_GROUND_DESERT,
-        Climate::Temperate | Climate::SubTropical => CLEAR_GROUND_GRASS,
+        Climate::SubArctic | Climate::Temperate | Climate::SubTropical => CLEAR_GROUND_GRASS,
         Climate::Toyland => CLEAR_GROUND_ROUGH,
+    }
+}
+
+/// Suelo inicial al generar mapa (ártico: nieve al norte de la línea estacional).
+#[must_use]
+pub fn initial_clear_ground(climate: Climate, tx: i32, ty: i32, map_h: i32, seed: u64) -> u8 {
+    match climate {
+        Climate::SubArctic => {
+            let snow_line = map_h * 2 / 5;
+            if ty < snow_line {
+                CLEAR_GROUND_SNOW
+            } else {
+                CLEAR_GROUND_GRASS
+            }
+        }
+        _ => effective_clear_ground(climate, 0, tx, ty, seed),
     }
 }
 
@@ -191,7 +209,7 @@ pub fn apply_world_gen(
                 map.set_m1(c, set_water_class_m1(0, WaterClass::Sea))?;
                 continue;
             }
-            let ground = effective_clear_ground(config.climate, 0, x, y, config.seed);
+            let ground = initial_clear_ground(config.climate, x, y, map_h, config.seed);
             let m5 = clear_ground_m5(ground, grass_density(x, y, config.seed));
             if forest_patch(x, y, config.seed, config.climate) {
                 // MP_TREES: m5 = (count-1)<<6 | growth; adulto por defecto (OpenTTD Grown).
@@ -562,7 +580,7 @@ pub fn apply_heightmap(
                 map.set_mapt_m5(c, 0x60, 0)?;
                 map.set_m1(c, set_water_class_m1(0, WaterClass::Sea))?;
             } else {
-                let ground = effective_clear_ground(climate, 0, x, y, seed);
+                let ground = initial_clear_ground(climate, x, y, mh, seed);
                 let m5 = clear_ground_m5(ground, grass_density(x, y, seed));
                 map.set_kind(c, TileKind::Grass)?;
                 map.set_mapt_m5(c, 0x40, m5)?;
@@ -753,10 +771,28 @@ mod tests {
     }
 
     #[test]
-    fn arctic_effective_clear_ground_is_snow() {
+    fn arctic_effective_clear_ground_respects_m5_snow() {
         assert_eq!(
             effective_clear_ground(Climate::SubArctic, 0, 0, 0, 0),
+            CLEAR_GROUND_GRASS
+        );
+        assert_eq!(
+            effective_clear_ground(
+                Climate::SubArctic,
+                clear_ground_m5(CLEAR_GROUND_SNOW, 0),
+                0,
+                0,
+                0
+            ),
             CLEAR_GROUND_SNOW
+        );
+        assert_eq!(
+            initial_clear_ground(Climate::SubArctic, 0, 0, 100, 0),
+            CLEAR_GROUND_SNOW
+        );
+        assert_eq!(
+            initial_clear_ground(Climate::SubArctic, 0, 50, 100, 0),
+            CLEAR_GROUND_GRASS
         );
     }
 

@@ -17,24 +17,6 @@ impl TileCoord {
 /// Nibble alto de `mapt` / MAPT: `TileType::TunnelBridge` en OpenTTD (= 9).
 pub const OTTD_TILETYPE_TUNNELBRIDGE: u8 = 9;
 
-/// Convierte un `TileIndex` de OpenTTD a coordenadas cuando el mapa es potencia de 2 en X e Y
-/// (misma convención que `TileXY`: `tile = x | (y << log2(map_w))`).
-#[must_use]
-pub fn openttd_tile_index_to_coord(tile: u32, map_w: u32, map_h: u32) -> Option<TileCoord> {
-    if !map_w.is_power_of_two() || !map_h.is_power_of_two() {
-        return None;
-    }
-    let log_w = map_w.trailing_zeros();
-    let x = tile & (map_w - 1);
-    let y = tile >> log_w;
-    if y >= map_h {
-        return None;
-    }
-    let xi = i32::try_from(x).ok()?;
-    let yi = i32::try_from(y).ok()?;
-    Some(TileCoord::new(xi, yi))
-}
-
 /// Tipo semántico de una tesela.
 ///
 /// Cubre los tipos de `TileType` de `OpenTTD` necesarios para el renderer.

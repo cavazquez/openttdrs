@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::map::TileCoord;
+use crate::map::{TileCoord, coord_from_linear_index};
 use crate::vehicle::VehicleOrder;
 
 use super::chunks::{RawChunk, find_chunk};
@@ -252,7 +252,8 @@ pub(crate) fn vehicle_orders_from_sav(
                 }
             }
             OT_GOTO_DEPOT => {
-                let pos = tile_coord_from_index(order.dest, map_w);
+                let pos = coord_from_linear_index(u64::from(order.dest), map_w)
+                    .unwrap_or(TileCoord::new(0, 0));
                 let halt = order.flags & OTTD_DEPOT_HALT != 0;
                 let service = order.flags & OTTD_DEPOT_SERVICE != 0;
                 let depot_order = if halt || !service {
@@ -277,14 +278,6 @@ pub(crate) fn vehicle_orders_from_sav(
         }
     }
     out
-}
-
-fn tile_coord_from_index(idx: u16, map_w: u32) -> TileCoord {
-    if map_w == 0 {
-        return TileCoord::new(0, 0);
-    }
-    let i = u32::from(idx);
-    TileCoord::new((i % map_w).cast_signed(), (i / map_w).cast_signed())
 }
 
 #[cfg(test)]

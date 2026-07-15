@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::cargo::{ALL_CARGO_TYPES, CargoType};
 use crate::link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphStats};
-use crate::map::TileCoord;
+use crate::map::{TileCoord, coord_from_linear_index, coord_to_linear_index};
 
 use super::SavError;
 use super::chunks::{RawChunk, find_chunk};
@@ -36,15 +36,6 @@ pub(crate) fn cargo_to_openttd_id(cargo: CargoType) -> u8 {
         .unwrap_or(0)
 }
 
-fn tile_to_coord(tile: u64, map_w: u32) -> Option<TileCoord> {
-    if map_w == 0 {
-        return None;
-    }
-    let x = i32::try_from(tile % u64::from(map_w)).ok()?;
-    let y = i32::try_from(tile / u64::from(map_w)).ok()?;
-    Some(TileCoord::new(x, y))
-}
-
 fn node_tile(
     node: &SlRecord,
     station_index: &HashMap<u32, SavStationIndex>,
@@ -52,7 +43,7 @@ fn node_tile(
 ) -> Option<TileCoord> {
     if let Some(pos) = record_get(node, "xy")
         .and_then(SlValue::as_u64)
-        .and_then(|xy| tile_to_coord(xy, map_w))
+        .and_then(|xy| coord_from_linear_index(xy, map_w))
     {
         return Some(pos);
     }
@@ -213,7 +204,7 @@ pub(crate) fn encode_lgrp_record(
 
     for (i, tile) in tiles.iter().enumerate() {
         let node_id = u16::try_from(i).unwrap_or(u16::MAX);
-        let xy = tile_index(*tile, map_w)
+        let xy = coord_to_linear_index(*tile, map_w)
             .ok_or_else(|| SavError::BadFormat(format!("tile LGRP fuera de mapa: {tile:?}")))?;
         rec.extend_from_slice(&xy.to_be_bytes());
         rec.extend_from_slice(&0_u32.to_be_bytes()); // supply
@@ -239,15 +230,6 @@ pub(crate) fn encode_lgrp_record(
         }
     }
     Ok(rec)
-}
-
-fn tile_index(pos: TileCoord, map_w: u32) -> Option<u32> {
-    if pos.x < 0 || pos.y < 0 {
-        return None;
-    }
-    let ux = u32::try_from(pos.x).ok()?;
-    let uy = u32::try_from(pos.y).ok()?;
-    Some(uy.saturating_mul(map_w).saturating_add(ux))
 }
 
 fn write_gamma(v: u32, buf: &mut Vec<u8>) {

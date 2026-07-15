@@ -2,6 +2,7 @@
 #![allow(clippy::doc_markdown, clippy::expect_used, clippy::unwrap_used)]
 
 mod binary;
+pub mod index;
 pub mod industry_construction;
 pub mod industry_link;
 pub mod industry_random;
@@ -21,6 +22,10 @@ pub mod water_class;
 #[cfg(test)]
 use binary::{OTTDMAP_FLAG_HAS_M2_HI, OTTDMAP_FORMAT_VERSION_CURRENT};
 pub(crate) use binary::{OTTDMAP_HEADER_LEN_VERSIONED, OTTDMAP_MAGIC_VERSIONED};
+pub use index::{
+    coord_from_linear_index, coord_to_dense_index, coord_to_linear_index,
+    openttd_tile_index_to_coord,
+};
 pub use industry_construction::{
     INDUSTRY_CONSTRUCTION_COMPLETED, advance_industry_construction, industry_construction_counter,
     industry_construction_stage, is_industry_completed, make_industry_tile_bigger,
@@ -73,9 +78,7 @@ pub use tree_tile_loop::{
     normalize_tree_growth, plant_tree, step_tree_and_field_growth, tick_tree_tile_loop, tree_count,
     tree_or_field_stage, with_tree_count, with_tree_or_field_stage,
 };
-pub use types::{
-    MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind, openttd_tile_index_to_coord,
-};
+pub use types::{MapError, OTTD_TILETYPE_TUNNELBRIDGE, Tile, TileCoord, TileKind};
 pub use water_class::{
     WaterClass, is_canal_tile, is_river_tile, make_water_tile, river_tile_is_ship_navigable,
     set_water_class_m1, tile_has_water_class, water_class, water_class_from_m1,
@@ -172,15 +175,7 @@ impl Map {
     }
 
     fn index(&self, c: TileCoord) -> Option<usize> {
-        if c.x < 0 || c.y < 0 {
-            return None;
-        }
-        let ux = u32::try_from(c.x).ok()?;
-        let uy = u32::try_from(c.y).ok()?;
-        if ux >= self.width || uy >= self.height {
-            return None;
-        }
-        Some(usize::try_from(uy * self.width + ux).unwrap())
+        coord_to_dense_index(c, self.width, self.height)
     }
 
     #[must_use]
@@ -354,28 +349,6 @@ mod ottdmap_binary_tests {
         v.extend_from_slice(b"INDP");
         v.extend_from_slice(&0_u32.to_le_bytes()); // count = 0
         v
-    }
-
-    #[test]
-    fn openttd_tile_index_roundtrip_2x2() {
-        assert_eq!(
-            openttd_tile_index_to_coord(0, 2, 2),
-            Some(TileCoord::new(0, 0))
-        );
-        assert_eq!(
-            openttd_tile_index_to_coord(1, 2, 2),
-            Some(TileCoord::new(1, 0))
-        );
-        assert_eq!(
-            openttd_tile_index_to_coord(2, 2, 2),
-            Some(TileCoord::new(0, 1))
-        );
-        assert_eq!(
-            openttd_tile_index_to_coord(3, 2, 2),
-            Some(TileCoord::new(1, 1))
-        );
-        assert_eq!(openttd_tile_index_to_coord(4, 2, 2), None);
-        assert_eq!(openttd_tile_index_to_coord(0, 3, 3), None);
     }
 
     #[test]

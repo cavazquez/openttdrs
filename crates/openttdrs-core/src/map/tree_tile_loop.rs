@@ -11,7 +11,7 @@
 use crate::GameState;
 use crate::economy::TICKS_PER_TRANSIT_DAY;
 use crate::map::tile_loop::{MAP_TILE_LOOP_STRIDE, for_each_map_tile_loop_stripe};
-use crate::map::{Map, TileCoord, TileKind};
+use crate::map::{Map, TileCoord, TileKind, coord_to_linear_index};
 use crate::world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
     CLEAR_GROUND_SNOW, Climate, clear_ground_m5,
@@ -46,11 +46,17 @@ pub fn landscape_tile_cycle(c: TileCoord, tick: u64) -> u32 {
         .wrapping_add(epoch)
 }
 
+/// Índice lineal para franjas del tile loop.
+///
+/// Precondición habitual: coords de mapa no negativas. Si son negativas, se
+/// preserva el wrap `cast_unsigned` histórico del landscape cycle.
 #[must_use]
 fn tile_index(c: TileCoord, map_w: u32) -> u32 {
-    let x = c.x.cast_unsigned();
-    let y = c.y.cast_unsigned();
-    y.saturating_mul(map_w).saturating_add(x)
+    coord_to_linear_index(c, map_w).unwrap_or_else(|| {
+        c.y.cast_unsigned()
+            .saturating_mul(map_w)
+            .saturating_add(c.x.cast_unsigned())
+    })
 }
 
 /// Primer tick ≥ `after` en el que la tesela recibe una actualización de árbol.

@@ -1,7 +1,7 @@
 //! Estaciones (`STNN`), ciudades (`CITY`), industrias (`INDY`), vehículos
 //! (`VEHS`) y empresas (`PLYR`) desde tablas autodescriptivas.
 
-use crate::map::TileCoord;
+use crate::map::{TileCoord, coord_from_linear_index};
 use crate::town::Town;
 
 use super::chunks::{RawChunk, find_chunk};
@@ -44,7 +44,7 @@ pub(crate) fn station_index_from_chunks(
         let Some(xy) = record_get(&record, "xy").and_then(SlValue::as_u64) else {
             continue;
         };
-        let Some(pos) = tile_to_coord(xy, map_w) else {
+        let Some(pos) = coord_from_linear_index(xy, map_w) else {
             continue;
         };
         let facilities = record_get(&record, "facilities")
@@ -67,15 +67,6 @@ pub(crate) fn station_index_from_chunks(
         );
     }
     out
-}
-
-fn tile_to_coord(tile: u64, map_w: u32) -> Option<TileCoord> {
-    if map_w == 0 {
-        return None;
-    }
-    let x = i32::try_from(tile % u64::from(map_w)).ok()?;
-    let y = i32::try_from(tile / u64::from(map_w)).ok()?;
-    Some(TileCoord::new(x, y))
 }
 
 fn table_rows(chunk: &RawChunk, save_version: u16) -> Vec<(u32, super::table::SlRecord)> {
@@ -130,7 +121,7 @@ pub(crate) fn towns_from_chunks(chunks: &[RawChunk], map_w: u32, save_version: u
         let Some(xy) = record_get(&record, "xy").and_then(SlValue::as_u64) else {
             continue;
         };
-        let Some(pos) = tile_to_coord(xy, map_w) else {
+        let Some(pos) = coord_from_linear_index(xy, map_w) else {
             continue;
         };
         let name = record_get(&record, "name")
@@ -184,7 +175,7 @@ pub(crate) fn industries_from_chunks(
     }
     if out.is_empty() {
         for &(index, industry_type) in &super::build::indy_pairs(chunks) {
-            if let Some(pos) = tile_to_coord(u64::from(index), map_w) {
+            if let Some(pos) = coord_from_linear_index(u64::from(index), map_w) {
                 out.push(SavIndustry {
                     pos,
                     width: 1,
@@ -199,7 +190,7 @@ pub(crate) fn industries_from_chunks(
 
 fn sav_industry_from_record(record: &SlRecord, map_w: u32) -> Option<SavIndustry> {
     let tile = record_get(record, "location.tile").and_then(SlValue::as_u64)?;
-    let pos = tile_to_coord(tile, map_w)?;
+    let pos = coord_from_linear_index(tile, map_w)?;
     let width = record_get(record, "location.w")
         .and_then(SlValue::as_u64)
         .unwrap_or(1);
@@ -319,7 +310,7 @@ pub(crate) fn vehicles_from_chunks(
         let Some(tile) = record_get(common, "tile").and_then(SlValue::as_u64) else {
             continue;
         };
-        let Some(pos) = tile_to_coord(tile, map_w) else {
+        let Some(pos) = coord_from_linear_index(tile, map_w) else {
             continue;
         };
         let cargo_type = record_get(common, "cargo_type")

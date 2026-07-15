@@ -16,7 +16,7 @@ use flate2::write::ZlibEncoder;
 use crate::CargoType;
 use crate::game_state::GameState;
 use crate::industry::{Industry, IndustryKind, IndustrySpec};
-use crate::map::{Map, Tile, TileCoord, TileKind};
+use crate::map::{Map, Tile, TileCoord, TileKind, coord_to_linear_index};
 use crate::news::{CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day};
 use crate::station::StopKind;
 use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
@@ -404,22 +404,10 @@ fn stnn_records(state: &GameState, map_w: u32) -> Vec<Vec<u8>> {
     out
 }
 
-fn tile_index(pos: TileCoord, map_w: u32) -> Option<u32> {
-    if pos.x < 0 || pos.y < 0 {
-        return None;
-    }
-    Some(
-        pos.y
-            .cast_unsigned()
-            .saturating_mul(map_w)
-            .saturating_add(pos.x.cast_unsigned()),
-    )
-}
-
 fn city_records(state: &GameState, map_w: u32) -> Vec<Vec<u8>> {
     let mut out = Vec::with_capacity(state.towns.len());
     for town in &state.towns {
-        let Some(tile_idx) = tile_index(town.pos, map_w) else {
+        let Some(tile_idx) = coord_to_linear_index(town.pos, map_w) else {
             continue;
         };
         let mut rec = Vec::new();
@@ -465,7 +453,7 @@ fn industry_ottd_type(ind: &Industry) -> u8 {
 fn indy_records(state: &GameState, map_w: u32) -> Vec<Vec<u8>> {
     let mut out = Vec::with_capacity(state.industries.len());
     for ind in &state.industries {
-        let Some(tile_idx) = tile_index(ind.pos, map_w) else {
+        let Some(tile_idx) = coord_to_linear_index(ind.pos, map_w) else {
             continue;
         };
         let (w, h) = industry_footprint(ind);
@@ -538,7 +526,7 @@ fn encode_goto_order(order: &VehicleOrder, state: &GameState, map_w: u32) -> Opt
             refit_cargo,
             ..
         } => {
-            let id = u16::try_from(tile_index(depot, map_w)?).ok()?;
+            let id = u16::try_from(coord_to_linear_index(depot, map_w)?).ok()?;
             let mut flags = OTTD_DEPOT_PART_OF_ORDERS;
             if stop {
                 flags |= OTTD_DEPOT_HALT;
@@ -589,7 +577,7 @@ fn ordl_and_vehs_records(state: &GameState, map_w: u32) -> (Vec<Vec<u8>>, Vec<Ve
         ) {
             continue;
         }
-        let Some(tile_idx) = tile_index(v.pos, map_w) else {
+        let Some(tile_idx) = coord_to_linear_index(v.pos, map_w) else {
             continue;
         };
 

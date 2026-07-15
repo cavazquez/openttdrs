@@ -51,10 +51,18 @@ impl Path {
         }
     }
 
+    /// Paridad con `Path::GetCapacityRatio` de `OpenTTD`.
+    ///
+    /// En C++ la expresión es `(int * int) / uint`: el producto se promociona a
+    /// `unsigned` antes del cociente. Con `free` negativo eso produce un ratio
+    /// enorme positivo (p. ej. free=-2, cap=20 → 214748363), no un cociente
+    /// con signo. MCF2 depende de ese comportamiento al sobrecargar aristas.
     #[must_use]
     pub fn capacity_ratio_value(free: i32, total: u32) -> i32 {
         let clamped = free.clamp(Self::PATH_CAP_MIN_FREE, Self::PATH_CAP_MAX_FREE);
-        clamped * Self::PATH_CAP_MULTIPLIER / i32::try_from(total.max(1)).unwrap_or(1)
+        let total = total.max(1);
+        let product = clamped.wrapping_mul(Self::PATH_CAP_MULTIPLIER);
+        (product as u32 / total) as i32
     }
 
     #[must_use]
@@ -124,5 +132,20 @@ impl Path {
         }
         job.path_arena[path_id].flow = job.path_arena[path_id].flow.saturating_add(new_flow);
         new_flow
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Path;
+
+    #[test]
+    fn capacity_ratio_matches_openttd_unsigned_division() {
+        // Positivos: cociente con signo habitual.
+        assert_eq!(Path::capacity_ratio_value(4, 20), 3);
+        assert_eq!(Path::capacity_ratio_value(10, 50), 3);
+        // Negativos: (int*16)/uint → promoción unsigned (OpenTTD).
+        assert_eq!(Path::capacity_ratio_value(-2, 20), 214_748_363);
+        assert_eq!(Path::capacity_ratio_value(-8, 20), 214_748_358);
     }
 }

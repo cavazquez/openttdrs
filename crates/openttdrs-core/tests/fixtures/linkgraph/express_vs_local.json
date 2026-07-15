@@ -11,23 +11,83 @@
     "runtime": 30
   },
   "nodes": [
-    { "station": 0, "x": 10, "y": 10, "supply": 100, "demand": 0 },
-    { "station": 1, "x": 20, "y": 20, "supply": 0, "demand": 0 },
-    { "station": 2, "x": 40, "y": 10, "supply": 0, "demand": 8 }
+    {
+      "station": 0,
+      "x": 10,
+      "y": 10,
+      "supply": 100,
+      "demand": 0
+    },
+    {
+      "station": 1,
+      "x": 20,
+      "y": 20,
+      "supply": 0,
+      "demand": 0
+    },
+    {
+      "station": 2,
+      "x": 40,
+      "y": 10,
+      "supply": 0,
+      "demand": 8
+    }
   ],
   "edges": [
-    { "from": 0, "to": 1, "capacity": 50, "usage": 0, "travel_time": 200 },
-    { "from": 1, "to": 2, "capacity": 50, "usage": 0, "travel_time": 200 },
-    { "from": 0, "to": 2, "capacity": 20, "usage": 0, "travel_time": 50 }
+    {
+      "from": 0,
+      "to": 1,
+      "capacity": 50,
+      "usage": 0,
+      "travel_time": 200
+    },
+    {
+      "from": 1,
+      "to": 2,
+      "capacity": 50,
+      "usage": 0,
+      "travel_time": 200
+    },
+    {
+      "from": 0,
+      "to": 2,
+      "capacity": 20,
+      "usage": 0,
+      "travel_time": 50
+    }
   ],
   "expected_demand": [
-    { "from": 0, "to": 2, "demand": 100 }
+    {
+      "from": 0,
+      "to": 2,
+      "demand": 100
+    }
   ],
   "expected_flows": [
-    { "at": 0, "origin": 0, "via": 1, "amount": 70 },
-    { "at": 0, "origin": 0, "via": 2, "amount": 30 },
-    { "at": 1, "origin": 0, "via": 2, "amount": 70 },
-    { "at": 2, "origin": 0, "via": 2, "amount": 100 }
+    {
+      "at": 0,
+      "origin": 0,
+      "via": 1,
+      "amount": 40
+    },
+    {
+      "at": 0,
+      "origin": 0,
+      "via": 2,
+      "amount": 60
+    },
+    {
+      "at": 1,
+      "origin": 0,
+      "via": 2,
+      "amount": 40
+    },
+    {
+      "at": 2,
+      "origin": 0,
+      "via": 2,
+      "amount": 100
+    }
   ],
-  "notes": "Express directo (tt=50, cap=20) vs local 2-hop (tt=200); MCF1+saturación reparte 30/70."
+  "notes": "Golden dump from OpenTTD Catch2 linkgraph_parity_fixtures (OPENTTD_DUMP_LINKGRAPH)."
 }

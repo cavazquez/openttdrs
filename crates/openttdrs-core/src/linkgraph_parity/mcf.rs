@@ -260,11 +260,14 @@ impl<'a> MultiCommodityFlow<'a> {
                     self.job.nodes[usize::from(to)].y,
                 )
                 .saturating_add(1);
-                let distance_annotation = if edge.travel_time != 0 {
+                // OpenTTD: express cargo usa tiempo; freight usa distancia.
+                // Sin clases de cargo aún → freight (como CT sin Passengers/Mail/Express).
+                let _time = if edge.travel_time != 0 {
                     edge.travel_time.saturating_add(DAY_TICKS)
                 } else {
-                    distance
+                    distance.saturating_mul(DAY_TICKS)
                 };
+                let distance_annotation = distance;
                 let Some(dest_path_id) = paths[usize::from(to)] else {
                     continue;
                 };

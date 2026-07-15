@@ -11,36 +11,156 @@
     "runtime": 30
   },
   "nodes": [
-    { "station": 0, "x": 10, "y": 10, "supply": 60, "demand": 4 },
-    { "station": 1, "x": 30, "y": 10, "supply": 60, "demand": 4 },
-    { "station": 2, "x": 20, "y": 30, "supply": 60, "demand": 4 }
+    {
+      "station": 0,
+      "x": 10,
+      "y": 10,
+      "supply": 60,
+      "demand": 4
+    },
+    {
+      "station": 1,
+      "x": 30,
+      "y": 10,
+      "supply": 60,
+      "demand": 4
+    },
+    {
+      "station": 2,
+      "x": 20,
+      "y": 30,
+      "supply": 60,
+      "demand": 4
+    }
   ],
   "edges": [
-    { "from": 0, "to": 1, "capacity": 30, "usage": 0, "travel_time": 0 },
-    { "from": 1, "to": 2, "capacity": 30, "usage": 0, "travel_time": 0 },
-    { "from": 2, "to": 0, "capacity": 30, "usage": 0, "travel_time": 0 }
+    {
+      "from": 0,
+      "to": 1,
+      "capacity": 30,
+      "usage": 0,
+      "travel_time": 0
+    },
+    {
+      "from": 1,
+      "to": 2,
+      "capacity": 30,
+      "usage": 0,
+      "travel_time": 0
+    },
+    {
+      "from": 2,
+      "to": 0,
+      "capacity": 30,
+      "usage": 0,
+      "travel_time": 0
+    }
   ],
   "expected_demand": [
-    { "from": 0, "to": 1, "demand": 30 },
-    { "from": 0, "to": 2, "demand": 30 },
-    { "from": 1, "to": 0, "demand": 30 },
-    { "from": 1, "to": 2, "demand": 30 },
-    { "from": 2, "to": 0, "demand": 30 },
-    { "from": 2, "to": 1, "demand": 30 }
+    {
+      "from": 0,
+      "to": 1,
+      "demand": 30
+    },
+    {
+      "from": 0,
+      "to": 2,
+      "demand": 30
+    },
+    {
+      "from": 1,
+      "to": 0,
+      "demand": 30
+    },
+    {
+      "from": 1,
+      "to": 2,
+      "demand": 30
+    },
+    {
+      "from": 2,
+      "to": 0,
+      "demand": 30
+    },
+    {
+      "from": 2,
+      "to": 1,
+      "demand": 30
+    }
   ],
   "expected_flows": [
-    { "at": 0, "origin": 0, "via": 1, "amount": 60 },
-    { "at": 0, "origin": 1, "via": 0, "amount": 30 },
-    { "at": 0, "origin": 2, "via": 0, "amount": 30 },
-    { "at": 0, "origin": 2, "via": 1, "amount": 30 },
-    { "at": 1, "origin": 0, "via": 1, "amount": 30 },
-    { "at": 1, "origin": 0, "via": 2, "amount": 30 },
-    { "at": 1, "origin": 1, "via": 2, "amount": 60 },
-    { "at": 1, "origin": 2, "via": 1, "amount": 30 },
-    { "at": 2, "origin": 0, "via": 2, "amount": 30 },
-    { "at": 2, "origin": 1, "via": 0, "amount": 30 },
-    { "at": 2, "origin": 1, "via": 2, "amount": 30 },
-    { "at": 2, "origin": 2, "via": 0, "amount": 60 }
+    {
+      "at": 0,
+      "origin": 0,
+      "via": 1,
+      "amount": 60
+    },
+    {
+      "at": 0,
+      "origin": 1,
+      "via": 0,
+      "amount": 30
+    },
+    {
+      "at": 0,
+      "origin": 2,
+      "via": 0,
+      "amount": 30
+    },
+    {
+      "at": 0,
+      "origin": 2,
+      "via": 1,
+      "amount": 30
+    },
+    {
+      "at": 1,
+      "origin": 0,
+      "via": 1,
+      "amount": 30
+    },
+    {
+      "at": 1,
+      "origin": 0,
+      "via": 2,
+      "amount": 30
+    },
+    {
+      "at": 1,
+      "origin": 1,
+      "via": 2,
+      "amount": 60
+    },
+    {
+      "at": 1,
+      "origin": 2,
+      "via": 1,
+      "amount": 30
+    },
+    {
+      "at": 2,
+      "origin": 0,
+      "via": 2,
+      "amount": 30
+    },
+    {
+      "at": 2,
+      "origin": 1,
+      "via": 0,
+      "amount": 30
+    },
+    {
+      "at": 2,
+      "origin": 1,
+      "via": 2,
+      "amount": 30
+    },
+    {
+      "at": 2,
+      "origin": 2,
+      "via": 0,
+      "amount": 60
+    }
   ],
-  "notes": "Ciclo dirigido A→B→C→A; MCF debe eliminar ciclos de flow."
+  "notes": "Golden dump from OpenTTD Catch2 linkgraph_parity_fixtures (OPENTTD_DUMP_LINKGRAPH)."
 }

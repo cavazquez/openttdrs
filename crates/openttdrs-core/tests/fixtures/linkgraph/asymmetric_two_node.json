@@ -11,18 +11,50 @@
     "runtime": 30
   },
   "nodes": [
-    { "station": 0, "x": 10, "y": 10, "supply": 100, "demand": 0 },
-    { "station": 1, "x": 20, "y": 20, "supply": 0, "demand": 8 }
+    {
+      "station": 0,
+      "x": 10,
+      "y": 10,
+      "supply": 100,
+      "demand": 0
+    },
+    {
+      "station": 1,
+      "x": 20,
+      "y": 20,
+      "supply": 0,
+      "demand": 8
+    }
   ],
   "edges": [
-    { "from": 0, "to": 1, "capacity": 50, "usage": 0, "travel_time": 0 }
+    {
+      "from": 0,
+      "to": 1,
+      "capacity": 50,
+      "usage": 0,
+      "travel_time": 0
+    }
   ],
   "expected_demand": [
-    { "from": 0, "to": 1, "demand": 100 }
+    {
+      "from": 0,
+      "to": 1,
+      "demand": 100
+    }
   ],
   "expected_flows": [
-    { "at": 0, "origin": 0, "via": 1, "amount": 100 },
-    { "at": 1, "origin": 0, "via": 1, "amount": 100 }
+    {
+      "at": 0,
+      "origin": 0,
+      "via": 1,
+      "amount": 100
+    },
+    {
+      "at": 1,
+      "origin": 0,
+      "via": 1,
+      "amount": 100
+    }
   ],
-  "notes": "1-hop Asymmetric; DemandCalculator reparte todo el supply."
+  "notes": "Golden dump from OpenTTD Catch2 linkgraph_parity_fixtures (OPENTTD_DUMP_LINKGRAPH)."
 }

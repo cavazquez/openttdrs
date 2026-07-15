@@ -279,7 +279,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Cadena fábrica (madera+carbón→goods) | `industry_cmd.cpp` | **PARCIAL** |
 | Envejecimiento en vehículo | `cargopacket.cpp` | **EXISTE** (`cargo_transit_ticks`) |
 | Decaimiento en estación | `station_cmd.cpp:3959` | **EXISTE** (edad + truncate; rating por compañía + gate pax) |
-| Link graph / flow stats | `linkgraph/` | **EXISTE** (`linkgraph_parity/` Demand+MCF1/2; LGRP OOS) |
+| Link graph / flow stats | `linkgraph/` | **EXISTE** (`linkgraph_parity/` + `sav/linkgraph` LGRP MVP; LGRJ jobs/overlay OOS) |
 
 #### Puentes y túneles
 

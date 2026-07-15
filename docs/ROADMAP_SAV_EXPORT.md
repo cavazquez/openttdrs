@@ -4,7 +4,8 @@ Documento de reproducción: cómo guardar y cargar el mismo formato `.sav` en
 openttdrs, qué está implementado, qué falta, y cómo extenderlo sin romper el
 import existente.
 
-**Estado (2026-07-08):** export operativo (mapa + `STNN` + `CITY` + `INDY` + `ORDL` + `VEHS` + `DATE` + `PLYR`).
+**Estado (2026-07-15):** export operativo (mapa + `STNN` + `CITY` + `INDY` + `ORDL` + `VEHS` + `LGRP`/`LGRJ`/`LGRS` + `DATE` + `PLYR`).
+`LGRP` persiste capacity/usage/travel_time del link graph observado (#102); jobs vacíos.
 El JSON propio sigue siendo el formato más completo (horarios, grupos, shared orders, etc.).
 
 ---
@@ -73,7 +74,8 @@ python3 scripts/gen_demo_sav.py crates/openttdrs-core/tests/fixtures/demo_opentt
 
 | Ruta | Rol |
 |------|-----|
-| `crates/openttdrs-core/src/sav/write.rs` | **Writer**: planos + STNN/CITY/INDY/ORDL/VEHS + DATE + PLYR |
+| `crates/openttdrs-core/src/sav/write.rs` | **Writer**: planos + STNN/CITY/INDY/ORDL/VEHS + LGRP + DATE + PLYR |
+| `crates/openttdrs-core/src/sav/linkgraph.rs` | Decode/encode `LGRP` → `LinkGraphStats` (#102) |
 | `crates/openttdrs-core/src/sav/mod.rs` | `load`, `SavError`, reexport `save` / `SavContainer` |
 | `crates/openttdrs-core/src/sav/container.rs` | OTTN / OTTZ / OTTX decompress |
 | `crates/openttdrs-core/src/sav/chunks.rs` | Parse RIFF / TABLE |

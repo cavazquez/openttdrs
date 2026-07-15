@@ -1,7 +1,7 @@
 //! Export mínimo de [`GameState`] a savegame `OpenTTD` (`.sav`).
 //!
 //! Contenedor por defecto: `OTTZ` (zlib). Versión de save: [`EXPORT_SAVE_VERSION`].
-//! Chunks: `MAPS` + planos + `STNN` + `CITY` + `INDY` + `ORDL` + `VEHS` + `DATE` + `PLYR`.
+//! Chunks: `MAPS` + planos + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`LGRP` + `DATE` + `PLYR`.
 //!
 //! Limitaciones: ver `docs/ROADMAP_SAV_EXPORT.md`.
 
@@ -134,10 +134,12 @@ fn scan_chunk_names(payload: &[u8]) -> Vec<String> {
         }
     }
     // Tras CH_TABLE el tamaño del header no basta: completar con búsqueda de fourcc.
-    for &want in REQUIRED_EXPORT_CHUNKS
-        .iter()
-        .chain(["STNN", "CITY", "INDY", "ORDL", "VEHS"].iter())
-    {
+    for &want in REQUIRED_EXPORT_CHUNKS.iter().chain(
+        [
+            "STNN", "CITY", "INDY", "ORDL", "VEHS", "LGRP", "LGRJ", "LGRS",
+        ]
+        .iter(),
+    ) {
         if names.iter().any(|n| n == want) {
             continue;
         }
@@ -253,6 +255,12 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     if !vehs.is_empty() {
         data.extend_from_slice(&vehs_chunk(&vehs));
     }
+
+    data.extend_from_slice(&super::linkgraph::encode_linkgraph_chunks(
+        &state.link_graph,
+        &state.stations,
+        w,
+    )?);
 
     data.extend_from_slice(&table_chunk(
         *b"DATE",
@@ -1055,5 +1063,36 @@ mod tests {
         assert!(names.iter().any(|n| n == "STNN"), "{names:?}");
         assert!(names.iter().any(|n| n == "CITY"), "{names:?}");
         assert!(names.iter().any(|n| n == "VEHS"), "{names:?}");
+        assert!(names.iter().any(|n| n == "LGRP"), "{names:?}");
+    }
+
+    #[test]
+    fn export_roundtrip_preserves_lgrp_edge() {
+        use crate::cargo::CargoType;
+        use crate::link_graph::LinkEdgeKey;
+
+        let mut state = tiny_state();
+        let a = TileCoord::new(4, 4);
+        let b = TileCoord::new(8, 6);
+        state.stations = vec![Station::new(a), Station::new(b)];
+        state
+            .link_graph
+            .record_trip(a, b, CargoType::Goods, 7, 40, 120);
+        let bytes = save_to_bytes_with(&state, SavContainer::Ottn).expect("save");
+        let sav = sav::load(&bytes).expect("load");
+        let key = LinkEdgeKey {
+            from: a,
+            to: b,
+            cargo: CargoType::Goods,
+        };
+        let sample = sav.link_graph.edges.get(&key).expect("LGRP edge");
+        assert_eq!(sample.units_total, 7);
+        assert!(sample.capacity_total >= 40);
+        assert_eq!(sample.travel_time(), 120);
+        let loaded = GameState::from_sav_game(sav);
+        assert_eq!(
+            loaded.link_graph.edges.get(&key).map(|s| s.units_total),
+            Some(7)
+        );
     }
 }

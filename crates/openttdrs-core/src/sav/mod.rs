@@ -15,12 +15,14 @@ mod container;
 mod date;
 mod entities;
 mod house_population_generated;
+mod linkgraph;
 mod orders;
 mod table;
 mod write;
 
 use crate::command::{bridge_collinear_rail_gaps, normalize_rail_trackbits_from_neighbors};
 use crate::game_state::GameState;
+use crate::link_graph::LinkGraphStats;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::ottdmap_extras::OttdmapExtras;
 use crate::pathfinder;
@@ -89,6 +91,8 @@ pub struct SavGame {
     pub(crate) station_index: std::collections::HashMap<u32, entities::SavStationIndex>,
     /// Reloj de simulación del chunk `DATE`, si está presente.
     pub game_time: Option<date::SavGameTime>,
+    /// Grafo de enlaces observado (`LGRP`); vacío si el chunk falta o es legacy.
+    pub link_graph: LinkGraphStats,
 }
 
 /// Carga un savegame de `OpenTTD` desde sus bytes.
@@ -115,6 +119,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
     let game_time = date::game_time_from_chunks(&chunk_list, version);
     let money = entities::company_money_from_chunks(&chunk_list, version);
     let company_colour = entities::company_colour_from_chunks(&chunk_list, version);
+    let link_graph = linkgraph::link_graph_from_chunks(&chunk_list, map_w, &station_index, version);
     Ok(SavGame {
         version,
         map,
@@ -127,6 +132,7 @@ pub fn load(raw: &[u8]) -> Result<SavGame, SavError> {
         company_colour,
         station_index,
         game_time,
+        link_graph,
     })
 }
 
@@ -292,6 +298,13 @@ impl GameState {
             station.name = st.name;
             state.stations.push(station);
         }
+        state.link_graph = sav.link_graph;
+        if !matches!(
+            state.cargo_dist.distribution,
+            crate::flow_stat::DistributionType::Manual
+        ) {
+            state.rebuild_station_flows();
+        }
         let mut last_train_head: Option<u32> = None;
         for (i, v) in sav.vehicles.iter().enumerate() {
             let kind = match v.kind {
@@ -374,6 +387,7 @@ mod tests {
                 ..Default::default()
             }],
             industries: Vec::new(),
+            link_graph: LinkGraphStats::default(),
             vehicles: vec![
                 SavVehicle {
                     kind: SavVehicleKind::Train,

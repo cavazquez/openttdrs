@@ -2,8 +2,8 @@
 
 **Estado:** implementado en `openttdrs-core::linkgraph_parity`  
 **MVP previo:** #49 (Manual + stub `CapacityScaled`)  
-**Seguimiento OOS:** #102 (LGRP save, dumps C++, overlay)  
-**Fuera de alcance de esta meta:** chunks save `LGRP` / `LGRJ` / `LGRS` e interop `.sav` completo.
+**Seguimiento:** #102  
+**LGRP MVP:** load/save del grafo observado (`sav/linkgraph.rs`) ✅ — `LGRJ`/`LGRS` vacíos; dumps C++ byte-igual y overlay mapa siguen pendientes.
 
 ## Pipeline
 

@@ -16,7 +16,7 @@ El port tiene un **core jugable** (transporte carretera/rail, industrias, econom
 | Animaciones visuales | Avanzado + humo trenes/FX | NewGRF tile callbacks completos |
 | Sonido | Catálogo 73 SFX + mixer 8 ch + motores | Ambiente / NewGRF Action11 |
 | Música | MusicPlugin + script OGG | Playlist completa OpenMSX |
-| Dinámicas de juego | Préstamos, ciudades, averías, subsidios, desastres, IA rival (#86) | CargoDist real, NewGRF runtime |
+| Dinámicas de juego | Préstamos, ciudades, averías, subsidios, desastres, IA rival (#86), CargoDist MCF nivel 2 | NewGRF runtime; LGRP save |
 
 ---
 
@@ -279,7 +279,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Cadena fábrica (madera+carbón→goods) | `industry_cmd.cpp` | **PARCIAL** |
 | Envejecimiento en vehículo | `cargopacket.cpp` | **EXISTE** (`cargo_transit_ticks`) |
 | Decaimiento en estación | `station_cmd.cpp:3959` | **EXISTE** (edad + truncate; rating por compañía + gate pax) |
-| Link graph / flow stats | `linkgraph/` | **FALTA** |
+| Link graph / flow stats | `linkgraph/` | **EXISTE** (`linkgraph_parity/` Demand+MCF1/2; LGRP OOS) |
 
 #### Puentes y túneles
 
@@ -406,7 +406,7 @@ Combinando impacto en el “feel” del juego y esfuerzo de desarrollo:
 
 ### 8.1 Próximo paso concreto (recomendado)
 
-Feel de partida + IA rivales (#86) ✅. CargoDist MVP (#49) ✅. Pendiente de impacto jugable: NewGRF runtime. «Segunda humana» local (#41) descartada (las varias humanas son modelo MP, #21). Paridad rail fina: ver `docs/parity/rail_unknown_features.md`.
+Feel de partida + IA rivales (#86) ✅. CargoDist MVP (#49) ✅ + paridad MCF nivel 2 ✅. Pendiente de impacto jugable: NewGRF runtime. «Segunda humana» local (#41) descartada (las varias humanas son modelo MP, #21). Paridad rail fina: ver `docs/parity/rail_unknown_features.md`.
 
 ---
 

@@ -41,8 +41,8 @@ pub(crate) fn setup_cargo_dist_settings_window(
         body.spawn((
             Text::new(
                 "Manual: hop desde órdenes del vehículo.\n\
-                 Asimétrica: FlowStat vía MCF CapacityScaled (2 pases).\n\
-                 Simétrica: espeja aristas A↔B y luego el mismo MCF.",
+                 Asimétrica: Demand + MCF OpenTTD (Dijkstra distancia/capacidad).\n\
+                 Simétrica: Demand Symmetric OpenTTD (geografía + supply) + MCF.",
             ),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.82, 0.78, 0.68)),

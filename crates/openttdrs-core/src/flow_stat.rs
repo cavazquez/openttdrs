@@ -1,7 +1,7 @@
 //! `FlowStat` / `FlowStatMap` simplificados (#49).
 //!
-//! En `OpenTTD` el MCF rellena shares. Aquí: mapper ingenuo o stub
-//! [`crate::mcf`] (`GreedyShortest`). Modo `Manual` ignora flows y usa órdenes.
+//! `FlowStat` de partida + `resolve_next_hop`.
+//! Los shares los rellena [`crate::linkgraph_parity`] (Demand + MCF1/2).
 
 use std::collections::HashMap;
 
@@ -18,9 +18,9 @@ pub enum DistributionType {
     /// Sin auto-routing: `next_hop` solo desde órdenes del vehículo.
     #[default]
     Manual,
-    /// Usa `FlowStat` vía MCF `CapacityScaled` (2 pases stub).
+    /// `FlowStat` vía pipeline `OpenTTD` (Demand Asymmetric + MCF).
     Asymmetric,
-    /// Como [`Asymmetric`], tras espejar aristas observadas A↔B.
+    /// Demand Symmetric `OpenTTD` (geografía + supply) + MCF.
     Symmetric,
 }
 
@@ -63,6 +63,25 @@ impl FlowStat {
             .map(|(via, _)| *via)
     }
 
+    /// `GetVia` estilo `OpenTTD`: `RandomRange` ponderado por shares.
+    pub fn get_via_random(
+        &self,
+        rng: &mut crate::linkgraph_parity::Randomizer,
+    ) -> Option<TileCoord> {
+        let total: u32 = self.shares.iter().map(|(_, a)| *a).sum();
+        if total == 0 {
+            return None;
+        }
+        let mut pick = rng.random_range(total);
+        for (via, amount) in &self.shares {
+            if pick < *amount {
+                return Some(*via);
+            }
+            pick = pick.saturating_sub(*amount);
+        }
+        self.shares.last().map(|(via, _)| *via)
+    }
+
     #[must_use]
     pub fn get_share(&self, via: TileCoord) -> u32 {
         self.shares
@@ -94,6 +113,16 @@ impl FlowStatMap {
     pub fn get_via(&self, origin: TileCoord) -> Option<TileCoord> {
         self.by_origin.get(&origin).and_then(FlowStat::get_via)
     }
+
+    pub fn get_via_random(
+        &self,
+        origin: TileCoord,
+        rng: &mut crate::linkgraph_parity::Randomizer,
+    ) -> Option<TileCoord> {
+        self.by_origin
+            .get(&origin)
+            .and_then(|fs| fs.get_via_random(rng))
+    }
 }
 
 /// Tabla de flows de una estación: por cargo.
@@ -113,6 +142,17 @@ impl StationFlowTable {
     #[must_use]
     pub fn get_via(&self, cargo: CargoType, origin: TileCoord) -> Option<TileCoord> {
         self.by_cargo.get(&cargo).and_then(|m| m.get_via(origin))
+    }
+
+    pub fn get_via_random(
+        &self,
+        cargo: CargoType,
+        origin: TileCoord,
+        rng: &mut crate::linkgraph_parity::Randomizer,
+    ) -> Option<TileCoord> {
+        self.by_cargo
+            .get(&cargo)
+            .and_then(|m| m.get_via_random(origin, rng))
     }
 }
 
@@ -164,6 +204,19 @@ impl StationFlows {
             .or_else(|| table.get_via(cargo, at_station))
     }
 
+    pub fn get_via_random(
+        &self,
+        at_station: TileCoord,
+        cargo: CargoType,
+        origin: TileCoord,
+        rng: &mut crate::linkgraph_parity::Randomizer,
+    ) -> Option<TileCoord> {
+        let table = self.by_station.get(&at_station)?;
+        table
+            .get_via_random(cargo, origin, rng)
+            .or_else(|| table.get_via_random(cargo, at_station, rng))
+    }
+
     /// Agrega shares como aristas planificadas (orden: amount desc).
     #[must_use]
     pub fn planned_edges_filtered(
@@ -211,7 +264,6 @@ impl StationFlows {
 }
 
 /// Elige `next_hop` según modo de distribución.
-#[must_use]
 pub fn resolve_next_hop(
     distribution: DistributionType,
     flows: &StationFlows,
@@ -219,12 +271,13 @@ pub fn resolve_next_hop(
     cargo: CargoType,
     origin: TileCoord,
     order_hop: Option<TileCoord>,
+    rng: &mut crate::linkgraph_parity::Randomizer,
 ) -> Option<TileCoord> {
     match distribution {
         DistributionType::Manual => order_hop,
-        DistributionType::Asymmetric | DistributionType::Symmetric => {
-            flows.get_via(at_station, cargo, origin).or(order_hop)
-        }
+        DistributionType::Asymmetric | DistributionType::Symmetric => flows
+            .get_via_random(at_station, cargo, origin, rng)
+            .or(order_hop),
     }
 }
 
@@ -254,6 +307,7 @@ mod tests {
             Some(b),
             "desde A el hop de carbón es B"
         );
+        let mut rng = crate::linkgraph_parity::Randomizer::new(1);
         assert_eq!(
             resolve_next_hop(
                 DistributionType::Manual,
@@ -261,7 +315,8 @@ mod tests {
                 a,
                 CargoType::Coal,
                 a,
-                Some(TileCoord::new(9, 9))
+                Some(TileCoord::new(9, 9)),
+                &mut rng,
             ),
             Some(TileCoord::new(9, 9))
         );
@@ -272,7 +327,8 @@ mod tests {
                 a,
                 CargoType::Coal,
                 a,
-                Some(TileCoord::new(9, 9))
+                Some(TileCoord::new(9, 9)),
+                &mut rng,
             ),
             Some(b)
         );

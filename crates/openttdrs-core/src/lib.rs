@@ -28,6 +28,7 @@ pub mod flow_stat;
 mod game_state;
 pub mod industry;
 pub mod link_graph;
+pub mod linkgraph_parity;
 pub mod map;
 pub mod mcf;
 pub mod newgrf_actions;
@@ -166,6 +167,15 @@ pub use industry::{
     IndustrySpec, industry_produce_period_ticks,
 };
 pub use link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphStats};
+pub use linkgraph_parity::{
+    BaseEdge as LinkgraphParityBaseEdge, BaseNode as LinkgraphParityBaseNode,
+    DistributionType as LinkgraphParityDistributionType, FlowMapper as LinkgraphParityFlowMapper,
+    FlowStat as LinkgraphParityFlowStat, FlowStatMap as LinkgraphParityFlowStatMap,
+    Job as LinkgraphParityJob, LinkGraphSettings as LinkgraphParitySettings,
+    SimpleShare as LinkgraphParitySimpleShare, flows_as_simple_shares,
+    run_full_pipeline as run_linkgraph_parity_pipeline,
+    to_station_flows_helper as linkgraph_parity_to_station_flows,
+};
 pub use map::{
     AIRPORT_RADAR_FRAMES, GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED,
     GFX_GOLD_MINE_TOWER_ANIMATED, GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2,

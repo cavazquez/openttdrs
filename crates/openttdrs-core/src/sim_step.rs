@@ -600,12 +600,14 @@ fn try_load_from_industry(
         output,
         station_pos,
         order_hop,
+        &mut state.cargo_rng,
     );
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
     state.vehicles[vehicle_idx].cargo_packets.push(packet);
     state.vehicles[vehicle_idx].mark_cargo_loaded(source);
     state.vehicles[vehicle_idx].sync_cargo_from_packets();
     state.vehicles[vehicle_idx].last_pickup_station = Some(station_pos);
+    state.vehicles[vehicle_idx].last_depart_tick = Some(state.tick.get());
     state.industries[ind_idx].stock -= u32::from(count);
     state.industries[ind_idx].transported_total = state.industries[ind_idx]
         .transported_total
@@ -736,6 +738,7 @@ fn try_load_from_station_waiting_cargo(
             packet.cargo,
             origin,
             order_hop,
+            &mut state.cargo_rng,
         );
     }
     let loaded_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
@@ -746,6 +749,7 @@ fn try_load_from_station_waiting_cargo(
     state.vehicles[vehicle_idx].mark_cargo_loaded(station_pos);
     state.vehicles[vehicle_idx].sync_cargo_from_packets();
     state.vehicles[vehicle_idx].last_pickup_station = Some(station_pos);
+    state.vehicles[vehicle_idx].last_depart_tick = Some(state.tick.get());
     station::on_station_cargo_pickup(&mut state.stations[station_idx], cargo, company);
     *loaded_flag = true;
     if first_pickup {
@@ -824,9 +828,20 @@ fn unload_vehicles(
         let unload_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
         let vehicle_owner = state.vehicles[i].owner;
         if let Some(from) = state.vehicles[i].last_pickup_station {
-            state
-                .link_graph
-                .record_flow(from, station_pos, cargo_type, unload_units);
+            let capacity = state.vehicles[i].capacity.max(unload_units);
+            let travel_time = state.vehicles[i]
+                .last_depart_tick
+                .map(|depart| state.tick.get().saturating_sub(depart))
+                .and_then(|t| u32::try_from(t).ok())
+                .unwrap_or(0);
+            state.link_graph.record_trip(
+                from,
+                station_pos,
+                cargo_type,
+                unload_units,
+                capacity,
+                travel_time,
+            );
             state.rebuild_station_flows();
         }
         let mut payment = 0_i64;
@@ -953,6 +968,7 @@ fn unload_vehicles(
             state.vehicles[i].cargo_unloading = false;
             state.vehicles[i].clear_cargo();
             state.vehicles[i].last_pickup_station = None;
+            state.vehicles[i].last_depart_tick = None;
             // Avanzar orden al terminar descarga (road stop o plataforma rail).
             state.vehicles[i].advance_after_unloading();
             state.vehicles[i].sync_order_destination(&state.map);

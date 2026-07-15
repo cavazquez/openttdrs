@@ -1,6 +1,6 @@
-//! Stub MCF para `CargoDist` (#49).
+//! Stub MCF legado (#49 MVP). El camino de juego usa [`crate::linkgraph_parity`].
 //!
-//! Aproxima (sin Dijkstra ni jobs) los pases de `OpenTTD`:
+//! Se mantiene para tests de regresión del aproximador BFS:
 //! - [`McfAlgorithm::GreedyShortest`]: un pase BFS hop-count.
 //! - [`McfAlgorithm::CapacityScaled`]: pase 1 con tope `short_path_saturation`
 //!   + pase 2 priorizando bottleneck residual en aristas ya usadas.
@@ -562,6 +562,7 @@ mod tests {
         let flows = compute_station_flows(&g, McfAlgorithm::GreedyShortest, McfConfig::default());
         assert_eq!(flows.get_via(a, CargoType::Goods, a), Some(b));
         assert_eq!(flows.get_via(b, CargoType::Goods, a), Some(c));
+        let mut rng = crate::linkgraph_parity::Randomizer::new(1);
         assert_eq!(
             resolve_next_hop(
                 DistributionType::Asymmetric,
@@ -569,7 +570,8 @@ mod tests {
                 b,
                 CargoType::Goods,
                 a,
-                Some(TileCoord::new(9, 9))
+                Some(TileCoord::new(9, 9)),
+                &mut rng,
             ),
             Some(c)
         );

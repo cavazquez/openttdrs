@@ -439,6 +439,13 @@ pub struct GameState {
     /// `FlowStat` reconstruidos desde `link_graph` (no persistidos).
     #[serde(skip, default)]
     pub station_flows: crate::flow_stat::StationFlows,
+    /// RNG de partida para `GetVia` (`Random` de `OpenTTD`).
+    #[serde(skip, default = "default_cargo_rng")]
+    pub cargo_rng: crate::linkgraph_parity::Randomizer,
+}
+
+fn default_cargo_rng() -> crate::linkgraph_parity::Randomizer {
+    crate::linkgraph_parity::Randomizer::new(1)
 }
 
 const fn default_true() -> bool {
@@ -525,6 +532,7 @@ impl GameState {
             link_graph: crate::link_graph::LinkGraphStats::default(),
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             station_flows: crate::flow_stat::StationFlows::default(),
+            cargo_rng: default_cargo_rng(),
         }
     }
 
@@ -596,17 +604,47 @@ impl GameState {
             link_graph: crate::link_graph::LinkGraphStats::default(),
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             station_flows: crate::flow_stat::StationFlows::default(),
+            cargo_rng: default_cargo_rng(),
         }
     }
 
-    /// Reconstruye [`StationFlows`] según `cargo_dist.distribution`.
+    /// Reconstruye [`StationFlows`] con el pipeline `OpenTTD` (Demand + MCF1/2).
     pub fn rebuild_station_flows(&mut self) {
-        use crate::mcf::{McfConfig, compute_station_flows_for_distribution};
-        self.station_flows = compute_station_flows_for_distribution(
+        use crate::flow_stat::{DistributionType, StationFlows};
+        use crate::linkgraph_parity::{
+            build_jobs_from_game, run_full_pipeline, to_station_flows_helper,
+        };
+
+        if matches!(self.cargo_dist.distribution, DistributionType::Manual) {
+            self.station_flows = StationFlows::default();
+            return;
+        }
+
+        let (map_w, map_h) = self.map.dimensions();
+        let jobs = build_jobs_from_game(
+            &self.stations,
             &self.link_graph,
             self.cargo_dist.distribution,
-            McfConfig::default(),
+            map_w,
+            map_h,
         );
+        let mut merged = StationFlows::default();
+        for (cargo, mut job) in jobs {
+            run_full_pipeline(&mut job);
+            let part = to_station_flows_helper(&job, cargo);
+            for (station, table) in part.by_station {
+                let dest = merged.by_station.entry(station).or_default();
+                for (c, map) in table.by_cargo {
+                    let dest_map = dest.by_cargo.entry(c).or_default();
+                    for (origin, fs) in map.by_origin {
+                        for (via, amount) in fs.shares {
+                            dest_map.add_flow(origin, via, amount);
+                        }
+                    }
+                }
+            }
+        }
+        self.station_flows = merged;
     }
 
     /// Activa la traza de paridad: cada `step()` añade un registro por tick.

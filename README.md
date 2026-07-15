@@ -117,7 +117,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 |------|--------|-------|
 | Construcción road + rail + terraform | ✅ | Waypoints, señales, `RailConvert` (ciclo railtypes) |
 | PBS / path signals | 🟡 | Reserva básica; afinado en issues |
-| Economía + 6 cargos + packets | 🟡 | Sin tabla temperate completa / CargoDist routing |
+| Economía + 6 cargos + packets | 🟡 | CargoDist MCF nivel 2 ✅; falta tabla temperate completa |
 | Import `.sav` → mapa + flota | 🟡 | Roundtrip propio; OpenTTD oficial incompleto |
 | Export `.sav` | 🟡 | Mapa+STNN+CITY+INDY+VEHS; órdenes avanzadas pendientes |
 | Render OpenGFX vanilla | ✅ | Industrias gfx 0–174; NewGRF ≥175 backlog |

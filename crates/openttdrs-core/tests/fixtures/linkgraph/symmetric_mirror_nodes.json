@@ -1,0 +1,31 @@
+{
+  "name": "symmetric_two_node",
+  "settings": {
+    "accuracy": 16,
+    "demand_size": 100,
+    "demand_distance": 100,
+    "short_path_saturation": 80,
+    "distribution": "symmetric",
+    "map_max_x": 255,
+    "map_max_y": 255,
+    "runtime": 30
+  },
+  "nodes": [
+    { "station": 0, "x": 10, "y": 10, "supply": 50, "demand": 8 },
+    { "station": 1, "x": 20, "y": 20, "supply": 50, "demand": 8 }
+  ],
+  "edges": [
+    { "from": 0, "to": 1, "capacity": 40, "usage": 0, "travel_time": 0 },
+    { "from": 1, "to": 0, "capacity": 40, "usage": 0, "travel_time": 0 }
+  ],
+  "expected_demand": [
+    { "from": 0, "to": 1, "demand": 50 },
+    { "from": 1, "to": 0, "demand": 50 }
+  ],
+  "expected_flows": [
+    { "at": 0, "origin": 0, "via": 1, "amount": 50 },
+    { "at": 0, "origin": 1, "via": 0, "amount": 50 },
+    { "at": 1, "origin": 0, "via": 1, "amount": 50 },
+    { "at": 1, "origin": 1, "via": 0, "amount": 50 }
+  ]
+}

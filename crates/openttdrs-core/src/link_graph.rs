@@ -1,5 +1,5 @@
 //! Link graph observacional: flujos estación→estación por cargo.
-//! Alimenta `FlowStat` (`CargoDist` Asymmetric/Symmetric; sin MCF).
+//! Alimenta el pipeline de paridad MCF (`linkgraph_parity`) y la UI Link Graph.
 
 use std::collections::HashMap;
 
@@ -21,6 +21,23 @@ pub struct LinkFlowSample {
     pub units_month: u64,
     /// Unidades acumuladas desde el inicio de la partida / carga.
     pub units_total: u64,
+    /// Capacidad de vehículos acumulada (`IncreaseStats`-like).
+    #[serde(default)]
+    pub capacity_total: u64,
+    /// Suma ponderada de tiempos de viaje (ticks × capacity), como `OpenTTD`.
+    #[serde(default)]
+    pub travel_time_sum: u64,
+}
+
+impl LinkFlowSample {
+    /// Tiempo de viaje medio en ticks (`travel_time_sum / capacity`).
+    #[must_use]
+    pub fn travel_time(&self) -> u32 {
+        if self.capacity_total == 0 {
+            return 0;
+        }
+        u32::try_from(self.travel_time_sum / self.capacity_total).unwrap_or(u32::MAX)
+    }
 }
 
 /// Estadísticas de flujos observados.
@@ -33,14 +50,45 @@ pub struct LinkGraphStats {
 impl LinkGraphStats {
     /// Registra un flujo `from → to` con `units` del `cargo` dado.
     pub fn record_flow(&mut self, from: TileCoord, to: TileCoord, cargo: CargoType, units: u32) {
-        if from == to || units == 0 {
+        self.record_trip(from, to, cargo, units, units, 0);
+    }
+
+    /// Registra viaje: usage (`units`) + capacidad + tiempo de viaje.
+    pub fn record_trip(
+        &mut self,
+        from: TileCoord,
+        to: TileCoord,
+        cargo: CargoType,
+        units: u32,
+        capacity: u32,
+        travel_time: u32,
+    ) {
+        if from == to || (units == 0 && capacity == 0) {
             return;
         }
         let key = LinkEdgeKey { from, to, cargo };
         let sample = self.edges.entry(key).or_default();
         let u = u64::from(units);
+        let cap = u64::from(capacity);
         sample.units_month = sample.units_month.saturating_add(u);
         sample.units_total = sample.units_total.saturating_add(u);
+        sample.capacity_total = sample.capacity_total.saturating_add(cap);
+        if travel_time > 0 && cap > 0 {
+            sample.travel_time_sum = sample
+                .travel_time_sum
+                .saturating_add(u64::from(travel_time).saturating_mul(cap));
+        } else if travel_time == 0
+            && cap > 0
+            && sample.travel_time_sum > 0
+            && sample.capacity_total > cap
+        {
+            // Sin medición nueva: prorratea el promedio previo (OpenTTD Update Increase).
+            let prev_cap = sample.capacity_total - cap;
+            let avg = sample.travel_time_sum / prev_cap.max(1);
+            sample.travel_time_sum = sample
+                .travel_time_sum
+                .saturating_add(avg.saturating_mul(cap));
+        }
     }
 
     /// Al cierre de mes: pone a cero los contadores mensuales (conserva totales).
@@ -94,6 +142,21 @@ impl LinkGraphStats {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn record_trip_tracks_capacity_and_travel_time() {
+        let mut g = LinkGraphStats::default();
+        let a = TileCoord::new(1, 1);
+        let b = TileCoord::new(2, 2);
+        g.record_trip(a, b, CargoType::Coal, 10, 40, 100);
+        let sample = g.edges[&LinkEdgeKey {
+            from: a,
+            to: b,
+            cargo: CargoType::Coal,
+        }];
+        assert_eq!(sample.capacity_total, 40);
+        assert_eq!(sample.travel_time(), 100);
+    }
 
     #[test]
     fn record_and_rollover() {

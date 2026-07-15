@@ -1522,8 +1522,8 @@ mod tests {
         state
             .link_graph
             .record_flow(via, flow_dest, CargoType::Goods, 50);
-        state.rebuild_station_flows();
         state.cargo_dist.distribution = DistributionType::Asymmetric;
+        state.rebuild_station_flows();
 
         let mut truck = Vehicle::new(92, VehicleKind::Truck, via, order_dest);
         truck.set_vehicle_orders(vec![

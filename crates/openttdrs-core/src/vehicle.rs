@@ -669,6 +669,9 @@ pub struct Vehicle {
     /// Última estación donde se cargó (link graph observacional; no persistido).
     #[serde(skip)]
     pub last_pickup_station: Option<TileCoord>,
+    /// Tick de la última carga (para `travel_time` del link graph; no persistido).
+    #[serde(skip)]
+    pub last_depart_tick: Option<u64>,
     /// Carga gradual en curso (no avanzar orden hasta terminar o `full_load`).
     #[serde(default)]
     pub cargo_loading: bool,
@@ -850,6 +853,7 @@ impl Vehicle {
             cargo_transit_ticks: 0,
             cargo_packets: crate::cargo_packet::VehicleCargoList::default(),
             last_pickup_station: None,
+            last_depart_tick: None,
             cargo_loading: false,
             cargo_unloading: false,
             depart_turn: 0,

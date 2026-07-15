@@ -1,0 +1,10 @@
+# Dependencias Python para descargar/procesar gráficos OpenGFX
+# (scripts/descargar_graficos.sh y gen_*.py asociados).
+#
+# Preferido en Ubuntu/Debian:
+#   sudo apt-get install -y python3-numpy python3-pil
+#
+# Alternativa con pip (si falta: sudo apt-get install -y python3-pip):
+#   python3 -m pip install --user -r scripts/requirements-assets.txt
+numpy>=1.24
+Pillow>=10.0

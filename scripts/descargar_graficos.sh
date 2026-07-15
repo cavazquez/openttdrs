@@ -88,6 +88,25 @@ fi
 ZIP_CACHE_8BPP="${DOWNLOADS_DIR}/opengfx-${VERSION}-all.zip"
 TAR_CACHE_8BPP="${DOWNLOADS_DIR}/opengfx-${VERSION}.tar"
 
+# Fallar antes de borrar/descargar si faltan deps del post-proceso (gen_tile_select, atlas, …).
+require_py_mod() {
+  local mod="$1"
+  if ! python3 -c "import ${mod}" 2>/dev/null; then
+    echo "ERROR: falta el módulo Python '${mod}' (necesario para post-procesar sprites)." >&2
+    echo "Instalá con uno de:" >&2
+    echo "  sudo apt-get install -y python3-numpy python3-pil" >&2
+    echo "  python3 -m pip install --user -r ${ROOT}/scripts/requirements-assets.txt" >&2
+    echo "Luego: ./scripts/doctor.sh && ./scripts/descargar_assets.sh graficos --${GRAPHICS_MODE}" >&2
+    exit 1
+  fi
+}
+if ! command -v python3 &>/dev/null; then
+  echo "ERROR: python3 no está en PATH." >&2
+  exit 1
+fi
+require_py_mod numpy
+require_py_mod PIL
+
 mkdir -p "${DEST}"
 mkdir -p "${DOWNLOADS_DIR}"
 

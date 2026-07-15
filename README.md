@@ -15,7 +15,7 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 > Compilar Bevy puede saturar CPU/RAM. Si hace falta: `cargo build -j 1`, o dejá que [CI](.github/workflows/ci.yml) valide el build.
 
-**Última actualización:** 2026-07-12
+**Última actualización:** 2026-07-15
 
 ---
 
@@ -37,12 +37,35 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 ## Arranque rápido
 
 ```bash
+# 0) Diagnóstico de entorno (no adivinar qué falta)
+./scripts/doctor.sh
+# Si hay FAIL: ./scripts/doctor.sh --fix
+
 # 1) Gráficos (obligatorio la primera vez; audio ya viene en git)
 ./scripts/descargar_assets.sh graficos --32bpp
 
 # 2) Cliente (menú: Nueva partida / Cargar / Demo / Salir)
 cargo run -p openttdrs-client
 ```
+
+### Dependencias (máquina nueva)
+
+`./scripts/doctor.sh` chequea toolchain Rust, paquetes APT (misma lista que CI en [`.github/apt-packages.txt`](.github/apt-packages.txt)), `grfcodec`, Python (`numpy` / `Pillow`), `pip` y assets. Con `--fix` imprime los comandos a correr.
+
+```bash
+# Libs Bevy (X11 / Wayland / ALSA / …) — misma lista que CI
+sudo apt-get update
+sudo apt-get install -y $(grep -v '^#' .github/apt-packages.txt | grep -v '^[[:space:]]*$')
+
+# Decodificar OpenGFX + post-proceso de sprites
+sudo apt-get install -y grfcodec python3-numpy python3-pil
+
+# pip (opcional; alternativa a los paquetes APT de numpy/Pillow)
+sudo apt-get install -y python3-pip
+python3 -m pip install --user -r scripts/requirements-assets.txt
+```
+
+`descargar_graficos.sh` valida `numpy` y `Pillow` **antes** de borrar/descargar, para no fallar al final del pipeline.
 
 | Asset | ¿En el repo? | Notas |
 |-------|----------------|-------|
@@ -70,6 +93,7 @@ En juego: **F5** guardar · **F9** cargar · pausa/velocidad en toolbar · prefe
 ## Desarrollo
 
 ```bash
+./scripts/doctor.sh         # deps de sistema + toolchain + assets (antes de adivinar)
 ./scripts/check.sh          # fmt + clippy + tests (día a día)
 ./scripts/check.sh ci       # paridad con el job CI (TNBP, golden parse_sav, …)
 ./scripts/check.sh cov      # cobertura → lcov.info (cargo-llvm-cov)
@@ -81,7 +105,7 @@ cargo test --workspace
 | `crates/openttdrs-core/` | Simulación, mapa, comandos, NewGRF parse, save/sav |
 | `crates/openttdrs-client/` | Bevy, render, UI, bootstrap |
 | `docs/` | Roadmaps e informes — índice: [docs/README.md](docs/README.md) |
-| `scripts/` | Assets, `parse_sav.py`, referencia OpenTTD, `check.sh` |
+| `scripts/` | Assets, `doctor.sh`, `check.sh`, `parse_sav.py`, referencia OpenTTD |
 | `tests/fixtures/` | `.sav` + goldens versionados |
 
 **Convención:** lógica de juego en core vía `Command` / `apply_command`; el cliente no mutea el mundo por su cuenta.

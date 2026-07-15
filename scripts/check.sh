@@ -11,6 +11,7 @@
 #   ./scripts/check.sh ci     # Paridad con .github/workflows/ci.yml (sin instalar APT)
 #   ./scripts/check.sh audit  # SP3.0: PNG OpenGFX requeridos vs assets/opengfx/tiles
 #   ./scripts/check.sh build  # cargo build --workspace
+#   ./scripts/check.sh doctor # deps de entorno (delegado a scripts/doctor.sh)
 
 set -euo pipefail
 
@@ -114,6 +115,11 @@ do_build() {
     info "Build OK ✓"
 }
 
+do_doctor() {
+    info "Chequeando dependencias de entorno..."
+    ./scripts/doctor.sh
+}
+
 do_all() {
     do_fmt
     do_lint
@@ -155,10 +161,11 @@ case "${1:-all}" in
     cov|coverage) do_coverage ;;
     build)       do_build ;;
     audit)       do_audit ;;
+    doctor)      do_doctor ;;
     ci)          do_ci ;;
     all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|audit|cov|build|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|audit|cov|build|doctor|ci|all}"
         exit 1
         ;;
 esac

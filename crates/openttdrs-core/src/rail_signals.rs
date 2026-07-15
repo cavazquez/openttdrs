@@ -38,9 +38,18 @@ impl SignalTrack {
         }
     }
 
+    /// Índice `Track` de `OpenTTD` (0..5).
     #[must_use]
-    const fn ottd_track(self) -> u8 {
-        self as u8
+    pub const fn from_u8(track: u8) -> Option<Self> {
+        match track {
+            0 => Some(Self::X),
+            1 => Some(Self::Y),
+            2 => Some(Self::Upper),
+            3 => Some(Self::Lower),
+            4 => Some(Self::Left),
+            5 => Some(Self::Right),
+            _ => None,
+        }
     }
 
     #[must_use]
@@ -1328,6 +1337,17 @@ pub fn signal_type_for_track(m2: u8, track: SignalTrack) -> u8 {
     (m2 >> base) & 7
 }
 
+/// Variante de señal en `m2` (`GetSignalVariant`: bit 3 o 7 según carril).
+#[must_use]
+pub fn signal_variant_for_track(m2: u8, track: SignalTrack) -> u8 {
+    let bit = if matches!(track, SignalTrack::Lower | SignalTrack::Right) {
+        7
+    } else {
+        3
+    };
+    (m2 >> bit) & 1
+}
+
 /// Reemplaza el tipo PBS/block de una señal en `m2` (`SetSignalType` en `rail_map.h`).
 #[must_use]
 pub fn cycle_signal_type_m2(m2: u8, track: SignalTrack) -> u8 {
@@ -1463,19 +1483,13 @@ pub fn signal_bit_for_facing(track: SignalTrack, face: u8) -> Option<u8> {
         .map(|(_, bit)| *bit)
 }
 
-const OTTD_TRACK_LOWER: u8 = 3;
-const OTTD_TRACK_RIGHT: u8 = 5;
-
-fn m2_for_signal(sig_type: u8, variant: u8, track: u8) -> u8 {
-    let base = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
-        4
+/// Codifica tipo y variante de señal en `m2` para un carril (`SetSignalType` / variante).
+#[must_use]
+pub fn m2_for_signal(sig_type: u8, variant: u8, track: SignalTrack) -> u8 {
+    let (base, var_bit) = if matches!(track, SignalTrack::Lower | SignalTrack::Right) {
+        (4, 7)
     } else {
-        0
-    };
-    let var_bit = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
-        7
-    } else {
-        3
+        (0, 3)
     };
     ((sig_type & 7) << base) | ((variant & 1) << var_bit)
 }
@@ -1492,7 +1506,7 @@ pub fn signal_placement_for_track(
     let present = 1 << sig_bit;
     Some(SignalPlacement {
         sig_bit,
-        m2: m2_for_signal(sig_type, variant, track.ottd_track()),
+        m2: m2_for_signal(sig_type, variant, track),
         m3: present << 4,
         m3hi: present << 4,
     })

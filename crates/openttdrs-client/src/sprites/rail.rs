@@ -2,7 +2,8 @@ use std::sync::OnceLock;
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    Map, TileCoord, TileKind, diag_dir_offset, rail_type_from_tile, tile_slope_and_z,
+    Map, SignalTrack, TileCoord, TileKind, diag_dir_offset, m2_for_signal, rail_type_from_tile,
+    signal_type_for_track, signal_variant_for_track, tile_slope_and_z,
 };
 
 pub use openttdrs_core::{
@@ -1030,26 +1031,6 @@ pub fn signal_sprite_bases() -> (u32, u32) {
 }
 const SIGTYPE_LAST_NOPBS: u8 = 3;
 
-#[inline]
-fn signal_type_from_m2(m2: u8, track: u8) -> u8 {
-    let base = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
-        4
-    } else {
-        0
-    };
-    (m2 >> base) & 7
-}
-
-#[inline]
-fn signal_variant_from_m2(m2: u8, track: u8) -> u8 {
-    let bit = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
-        7
-    } else {
-        3
-    };
-    (m2 >> bit) & 1
-}
-
 /// Offset de imagen en la hoja de señales (`SignalOffsets` en `rail_cmd.cpp`).
 #[inline]
 fn signal_sprite_id(sig_type: u8, variant: u8, image: u8, green: bool) -> u32 {
@@ -1149,8 +1130,11 @@ pub fn collect_signal_sprite_draws(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<Sign
             return;
         }
         let green = (states >> sig_bit) & 1 != 0;
-        let ty = signal_type_from_m2(m2, track);
-        let var = signal_variant_from_m2(m2, track);
+        let Some(sig_track) = SignalTrack::from_u8(track) else {
+            return;
+        };
+        let ty = signal_type_for_track(m2, sig_track);
+        let var = signal_variant_for_track(m2, sig_track);
         out.push(SignalSpriteDraw {
             sprite_id: signal_sprite_texture_id(signal_sprite_id(ty, var, image, green)),
             track,
@@ -1200,17 +1184,8 @@ pub fn collect_signal_sprite_ids(m2: u8, m3: u8, m3hi: u8, m5: u8) -> Vec<u32> {
 /// Construye un byte `m2` que produce `sig_type` / `variant` para el `track` dado (`DrawSignals`).
 #[inline]
 fn m2_for_signal_encoding(sig_type: u8, variant: u8, track: u8) -> u8 {
-    let base = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
-        4
-    } else {
-        0
-    };
-    let var_bit = if track == OTTD_TRACK_LOWER || track == OTTD_TRACK_RIGHT {
-        7
-    } else {
-        3
-    };
-    ((sig_type & 7) << base) | ((variant & 1) << var_bit)
+    let sig_track = SignalTrack::from_u8(track).unwrap_or(SignalTrack::X);
+    m2_for_signal(sig_type, variant, sig_track)
 }
 
 /// IDs de señal que [`collect_signal_sprite_ids`] puede emitir (no el producto cartesiano completo).

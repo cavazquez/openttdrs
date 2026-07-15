@@ -321,11 +321,11 @@ pub use rail_signals::{
     SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SIGTYPE_PATH, SIGTYPE_PATH_ONEWAY, SignalTrack,
     YAPF_PBS_BEHIND_PENALTY, YAPF_RED_SIGNAL_PENALTY, YapfSignalRouting, calendar_year_at_tick,
     clear_signal_type_bits_m2, cycle_signal_facing, cycle_signal_side_m3, cycle_signal_type_m2,
-    default_signal_variant, is_pbs_signal_type, next_placeable_signal_type,
+    default_signal_variant, is_pbs_signal_type, m2_for_signal, next_placeable_signal_type,
     rail_signal_present_mask, rail_signal_state_mask, resolve_signal_track,
     signal_facing_for_orientation, signal_on_track_mask, signal_placement_for_facing,
-    signal_placement_for_track, signal_type_for_track, signal_type_label, tracks_overlap,
-    valid_signal_facings_track, yapf_routing_signal,
+    signal_placement_for_track, signal_type_for_track, signal_type_label, signal_variant_for_track,
+    tracks_overlap, valid_signal_facings_track, yapf_routing_signal,
 };
 pub use rail_type::{
     RAIL_CONVERT_COST, RailType, engine_compatible_with_rail, engine_requires_electric,

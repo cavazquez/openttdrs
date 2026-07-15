@@ -10,10 +10,18 @@ use crate::ship_movement::{is_water_network_tile_at, water_tiles_connected};
 use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::VehicleKind;
 
+mod cache;
+mod station_sites;
 pub mod yapf;
 
 /// Reexport canónico `OpenTTD` (`map::diag_dir_offset`).
 pub use crate::map::diag_dir_offset;
+pub use cache::PathCache;
+pub use station_sites::{
+    station_entrance_faces_rail, station_entrance_faces_road, station_site_adjacent_to_rail,
+    station_site_adjacent_to_transport, station_site_tile_allows_build,
+    station_site_tile_needs_clear,
+};
 
 fn is_any_transport_tile(kind: TileKind) -> bool {
     matches!(
@@ -112,57 +120,6 @@ pub(crate) fn is_rail_network_tile(kind: TileKind) -> bool {
         kind,
         TileKind::Rail | TileKind::RailDepot | TileKind::RailTunnel | TileKind::RailBridge
     )
-}
-
-#[must_use]
-pub fn station_site_adjacent_to_rail(map: &Map, c: TileCoord) -> bool {
-    for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
-        let n = TileCoord::new(c.x + dx, c.y + dy);
-        if map
-            .get_kind(n)
-            .is_some_and(|k| is_rail_network_tile(k) || k == TileKind::Station)
-        {
-            return true;
-        }
-    }
-    false
-}
-
-#[must_use]
-pub fn station_site_adjacent_to_transport(map: &Map, c: TileCoord) -> bool {
-    for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
-        let n = TileCoord::new(c.x + dx, c.y + dy);
-        let k = map.get_kind(n).unwrap_or(TileKind::Grass);
-        if is_road_network_tile(k) {
-            return true;
-        }
-    }
-    false
-}
-
-#[must_use]
-pub fn station_site_tile_allows_build(kind: TileKind) -> bool {
-    matches!(kind, TileKind::Grass | TileKind::Forest)
-}
-
-#[must_use]
-pub fn station_site_tile_needs_clear(kind: TileKind) -> bool {
-    matches!(kind, TileKind::Forest)
-}
-
-#[must_use]
-pub fn station_entrance_faces_road(map: &Map, c: TileCoord, dir: u8) -> bool {
-    let (dx, dy) = diag_dir_offset(dir);
-    let n = TileCoord::new(c.x + dx, c.y + dy);
-    map.get_kind(n).is_some_and(is_road_network_tile)
-}
-
-#[must_use]
-pub fn station_entrance_faces_rail(map: &Map, c: TileCoord, dir: u8) -> bool {
-    let (dx, dy) = diag_dir_offset(dir);
-    let n = TileCoord::new(c.x + dx, c.y + dy);
-    map.get_kind(n)
-        .is_some_and(|k| is_rail_network_tile(k) || k == TileKind::Station)
 }
 
 /// Enlaces «wormhole» entre entradas de túnel (p. ej. pool JGR `tile_n` ↔ `tile_s`).
@@ -323,65 +280,6 @@ fn tiles_connected(map: &Map, cur: TileCoord, next: TileCoord, network: PathNetw
             false
         }
     }
-}
-
-/// Caché de rutas por tick (no se serializa; se invalida al avanzar la simulación).
-#[derive(Debug, Default, Clone)]
-pub struct PathCache {
-    tick: u64,
-    entries: HashMap<(i32, i32, i32, i32, u8), Vec<TileCoord>>,
-}
-
-impl PathCache {
-    const MAX_ENTRIES: usize = 256;
-
-    pub fn begin_tick(&mut self, tick: u64) {
-        if self.tick != tick {
-            self.entries.clear();
-            self.tick = tick;
-        }
-    }
-
-    #[must_use]
-    pub fn get(
-        &self,
-        from: TileCoord,
-        to: TileCoord,
-        network: PathNetwork,
-    ) -> Option<&Vec<TileCoord>> {
-        let key = cache_key(from, to, network);
-        self.entries.get(&key)
-    }
-
-    pub fn insert(
-        &mut self,
-        from: TileCoord,
-        to: TileCoord,
-        network: PathNetwork,
-        path: Vec<TileCoord>,
-    ) {
-        if self.entries.len() >= Self::MAX_ENTRIES {
-            self.entries.clear();
-        }
-        self.entries.insert(cache_key(from, to, network), path);
-    }
-}
-
-#[must_use]
-fn cache_key(from: TileCoord, to: TileCoord, network: PathNetwork) -> (i32, i32, i32, i32, u8) {
-    (
-        from.x,
-        from.y,
-        to.x,
-        to.y,
-        match network {
-            PathNetwork::Road => 0,
-            PathNetwork::Rail => 1,
-            PathNetwork::Water => 2,
-            PathNetwork::Air => 3,
-            PathNetwork::Tram => 4,
-        },
-    )
 }
 
 /// Encuentra el camino más corto entre `from` y `to` (A* con conectividad por

@@ -149,6 +149,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             "Espera path, giro en señales y look-ahead (pf.*)",
             SaveMenuAction::PathfindingSettings,
         ),
+        (
+            "IA / TransCargo...",
+            "Activar rival, umbral de dinero, máx. rutas y debug",
+            SaveMenuAction::AiSettings,
+        ),
     ];
     const ROW2: &[(&str, &str, SaveMenuAction)] = &[
         (

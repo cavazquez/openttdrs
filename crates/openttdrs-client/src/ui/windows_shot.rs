@@ -14,6 +14,7 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::{TileCoord, TileKind};
 
 use crate::state::{ClientScreen, SimWorld};
+use crate::ui::ai_settings_window::AiSettingsWindowState;
 use crate::ui::audio_settings_window::SoundMusicWindowState;
 use crate::ui::autoreplace_window::AutoreplaceWindowState;
 use crate::ui::buy_window::BuyVehicleWindowState;
@@ -379,6 +380,7 @@ fn open_all_windows_for_shot(world: &mut World) {
     world.resource_mut::<NewsHistoryState>().open = true;
     world.resource_mut::<NewsSettingsWindowState>().open = true;
     world.resource_mut::<PathfindingSettingsWindowState>().open = true;
+    world.resource_mut::<AiSettingsWindowState>().open = true;
     world.resource_mut::<NewGrfWindowState>().open = true;
     world.resource_mut::<SoundMusicWindowState>().open = true;
     world.resource_mut::<GraphWindowState>().open = true;

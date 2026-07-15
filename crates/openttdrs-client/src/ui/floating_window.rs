@@ -74,6 +74,8 @@ pub(crate) enum FloatingWindowId {
     NewsSettings,
     /// Ajustes PBS / pathfinding (`pf.wait_for_pbs_path`, etc.).
     PathfindingSettings,
+    /// Ajustes / debug de IA rival (TransCargo; UI-8 / #44).
+    AiSettings,
     /// Stack NewGRF activo (config-only; sin Action0–14).
     NewGrf,
     /// Volúmenes SFX/música, flags de sonido y jukebox OpenMSX.
@@ -129,6 +131,7 @@ impl FloatingWindowId {
         Self::Finances,
         Self::NewsSettings,
         Self::PathfindingSettings,
+        Self::AiSettings,
         Self::NewGrf,
         Self::SoundMusic,
         Self::Timetable,
@@ -168,6 +171,7 @@ impl FloatingWindowId {
             Self::Finances => "Finances",
             Self::NewsSettings => "NewsSettings",
             Self::PathfindingSettings => "PathfindingSettings",
+            Self::AiSettings => "AiSettings",
             Self::NewGrf => "NewGrf",
             Self::SoundMusic => "SoundMusic",
             Self::Timetable => "Timetable",

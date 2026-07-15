@@ -73,6 +73,10 @@ mod vehicle_ai;
 pub mod vehicle_group;
 pub mod world_gen;
 
+pub use ai::{
+    AI_BUILD_MONEY_THRESHOLD, AiSettings, CompanyAi, DEFAULT_AI_BUILD_MONEY_THRESHOLD,
+    DEFAULT_AI_MAX_ROUTES, MAX_AI_ROUTES, TransCargoAi, format_ai_debug_status, tick_ai_companies,
+};
 pub use aircraft_movement::{aircraft_requires_path, straight_line_path};
 pub use airport::{
     AIRPORT_SMALL_H, AIRPORT_SMALL_W, AirportPiece, airport_loading_tile, airport_loading_tile_at,

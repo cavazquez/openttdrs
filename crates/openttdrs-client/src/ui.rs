@@ -8,6 +8,7 @@ use bevy::prelude::*;
 use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 
+mod ai_settings_window;
 pub(crate) mod audio_settings_window;
 mod autoreplace_window;
 mod buy_window;
@@ -52,6 +53,10 @@ mod ui_enum_inventory_test;
 mod vehicle_list;
 mod vehicle_window;
 mod windows_shot;
+use ai_settings_window::{
+    AiSettingsWindowState, ai_settings_on_closed, handle_ai_settings_buttons,
+    setup_ai_settings_window, sync_ai_settings_window,
+};
 use audio_settings_window::{
     SoundMusicWindowState, handle_audio_settings_buttons, handle_music_window_buttons,
     handle_sound_music_toolbar_button, handle_volume_sliders, setup_sound_music_window,
@@ -263,6 +268,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<SignListWindowState>()
         .init_resource::<LinkGraphWindowState>()
         .init_resource::<PathfindingSettingsWindowState>()
+        .init_resource::<AiSettingsWindowState>()
         .init_resource::<NewGrfWindowState>()
         .init_resource::<HelpWindowState>()
         .init_resource::<DevConsoleState>()
@@ -355,7 +361,12 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
-            (setup_signal_picker, setup_airport_picker).in_set(StartupSet::Ui),
+            (
+                setup_signal_picker,
+                setup_airport_picker,
+                setup_ai_settings_window,
+            )
+                .in_set(StartupSet::Ui),
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
@@ -631,6 +642,16 @@ impl Plugin for ClientUiPlugin {
                 handle_pathfinding_settings_buttons,
                 pathfinding_settings_on_closed,
                 sync_pathfinding_settings_window,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                handle_ai_settings_buttons,
+                ai_settings_on_closed,
+                sync_ai_settings_window,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

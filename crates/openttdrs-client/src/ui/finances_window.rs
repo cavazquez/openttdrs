@@ -25,6 +25,7 @@ pub(crate) enum FinancesWindowButton {
     IncreaseLoan,
     DecreaseLoan,
     BuyRival,
+    OpenAiSettings,
 }
 
 #[derive(Default)]
@@ -87,6 +88,7 @@ pub(crate) fn setup_finances_window(mut commands: Commands, asset_server: Res<As
                     ("Pedir préstamo", FinancesWindowButton::IncreaseLoan),
                     ("Devolver préstamo", FinancesWindowButton::DecreaseLoan),
                     ("Comprar rival (quiebra)", FinancesWindowButton::BuyRival),
+                    ("IA…", FinancesWindowButton::OpenAiSettings),
                 ] {
                     row.spawn((
                         Button,
@@ -146,6 +148,7 @@ pub(crate) fn handle_finances_window_buttons(
     buttons: Query<(&Interaction, &FinancesWindowButton), (Changed<Interaction>, With<Button>)>,
     mut sim: ResMut<SimWorld>,
     mut hud_feedback: ResMut<HudBuildFeedback>,
+    mut ai_settings: ResMut<crate::ui::ai_settings_window::AiSettingsWindowState>,
     time: Res<Time>,
 ) {
     for (interaction, button) in &buttons {
@@ -153,6 +156,10 @@ pub(crate) fn handle_finances_window_buttons(
             continue;
         }
         let cmd = match button {
+            FinancesWindowButton::OpenAiSettings => {
+                ai_settings.open = true;
+                continue;
+            }
             FinancesWindowButton::IncreaseLoan => Command::IncreaseLoan,
             FinancesWindowButton::DecreaseLoan => Command::DecreaseLoan,
             FinancesWindowButton::BuyRival => {

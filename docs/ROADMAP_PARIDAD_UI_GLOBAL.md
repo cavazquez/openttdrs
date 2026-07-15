@@ -741,7 +741,7 @@ Objetivo: posterior a la paridad single-player.
 - [ ] Multijugador: lobby, clientes, chat, join/spectate.
 - [ ] Scenario editor y toolbar de 19 botones.
 - [ ] GameScript: story, goals, league.
-- [ ] AI settings/debug.
+- [x] AI settings/debug. *(ventana Ajustes + Finanzas; `GameState.ai`)*
 - [x] Herramientas dev: framerate / consola corta, tile inspect, NewGRF inspect,
       sprite-bounds lite (gizmos + tile seleccionado).
 - [x] Highscore/endscreen. *(retiro + quiebra ×3 meses; tabla local en prefs)*

@@ -1,7 +1,8 @@
 # Epic futuro: IA de compañías rivales
 
 **Estado:** Slice jugable #86 (jul 2026) — 2 rutas (carbón + madera), vía Manhattan en L, rival en Finanzas.  
-**Fecha:** 2026-07-05 (doc); MVP 2026-07-09; slice multi-ruta 2026-07-14
+Settings/debug UI #44: `GameState.ai` + ventana «IA / TransCargo».  
+**Fecha:** 2026-07-05 (doc); MVP 2026-07-09; slice multi-ruta 2026-07-14; settings #44 2026-07-14
 
 ## Contexto
 
@@ -43,7 +44,7 @@ OpenTTD original ejecuta scripts Squirrel (`ai/`, `game/`) para competidores CPU
 - ~~2ª ruta (madera) + vía en L.~~ ✅ (`ai_rival_builds_second_wood_route_on_l`)
 - ~~Rival visible en Finanzas.~~ ✅
 
-Pendiente épica (#86): 3ª ruta, terraform/señales, settings/debug UI (#44).
+Pendiente épica (#86): 3ª ruta, terraform/señales. Settings/debug UI (#44) ✅.
 
 ## DevBot / métricas (implementado, jul 2026)
 

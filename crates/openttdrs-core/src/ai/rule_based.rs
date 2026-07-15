@@ -16,10 +16,11 @@ use crate::vehicle::{VehicleKind, VehicleOrder};
 
 use super::CompanyAi;
 
-/// Máximo de líneas (trenes head) que construye `TransCargo`.
-pub const MAX_AI_ROUTES: usize = 2;
-/// Efectivo mínimo de la IA antes de abrir una ruta nueva.
-pub const AI_BUILD_MONEY_THRESHOLD: i64 = 80_000;
+/// Alias histórico (= [`super::DEFAULT_AI_MAX_ROUTES`]).
+#[allow(clippy::cast_lossless)]
+pub const MAX_AI_ROUTES: usize = super::DEFAULT_AI_MAX_ROUTES as usize;
+/// Alias histórico (= [`super::DEFAULT_AI_BUILD_MONEY_THRESHOLD`]).
+pub const AI_BUILD_MONEY_THRESHOLD: i64 = super::DEFAULT_AI_BUILD_MONEY_THRESHOLD;
 
 /// Rival estático documentado en `docs/epics/ai_rivals.md`.
 #[derive(Debug, Default, Clone, Copy)]
@@ -60,12 +61,13 @@ pub fn tick_transcargo(state: &mut GameState) {
         return;
     };
 
+    let ai = state.ai.clamped();
     let routes = ai_route_count(state, ai_id);
-    if routes >= MAX_AI_ROUTES {
+    if routes >= ai.max_routes_usize() {
         return;
     }
     let money = state.company_economy(ai_id).money;
-    if money < AI_BUILD_MONEY_THRESHOLD {
+    if money < ai.build_money_threshold {
         return;
     }
     let Some(plan) = next_unserved_plan(state, ai_id) else {

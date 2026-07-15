@@ -399,6 +399,9 @@ pub struct GameState {
     /// Ajustes de pathfinding / PBS (`pf.wait_for_pbs_path`, etc.).
     #[serde(default)]
     pub pathfinding: crate::pathfinding_settings::PathfindingSettings,
+    /// Ajustes de IA rival (`TransCargo`; UI-8 / #44).
+    #[serde(default)]
+    pub ai: crate::ai::AiSettings,
     /// Cheats / sandbox formales (UI-7; off por defecto).
     #[serde(default)]
     pub cheats: crate::cheats::CheatsState,
@@ -503,6 +506,7 @@ impl GameState {
             disasters_enabled: true,
             disaster_timer: default_disaster_timer(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
+            ai: crate::ai::AiSettings::default(),
             cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
@@ -571,6 +575,7 @@ impl GameState {
             disasters_enabled: true,
             disaster_timer: default_disaster_timer(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
+            ai: crate::ai::AiSettings::default(),
             cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),

@@ -28,6 +28,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | Finances | menú Economía | |
 | NewsSettings | Ajustes | |
 | PathfindingSettings | Ajustes | |
+| AiSettings | Ajustes / Finanzas «IA…» | |
 | NewGrf | Ajustes | |
 | SoundMusic | toolbar audio | |
 | Timetable | vehículo / F4 | |

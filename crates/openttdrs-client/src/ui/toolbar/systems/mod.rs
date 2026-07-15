@@ -238,6 +238,7 @@ mod tests {
         world.insert_resource(
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
+        world.insert_resource(crate::ui::ai_settings_window::AiSettingsWindowState::default());
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
         world.insert_resource(
             crate::ui::display_options_window::DisplayOptionsWindowState::default(),
@@ -284,6 +285,7 @@ mod tests {
         world.insert_resource(
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
+        world.insert_resource(crate::ui::ai_settings_window::AiSettingsWindowState::default());
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
         world.insert_resource(
             crate::ui::display_options_window::DisplayOptionsWindowState::default(),
@@ -341,6 +343,8 @@ mod tests {
         world_zoom_in.insert_resource(
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
+        world_zoom_in
+            .insert_resource(crate::ui::ai_settings_window::AiSettingsWindowState::default());
         world_zoom_in.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
         world_zoom_in.insert_resource(
             crate::ui::display_options_window::DisplayOptionsWindowState::default(),
@@ -382,6 +386,8 @@ mod tests {
         world_zoom_out.insert_resource(
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
+        world_zoom_out
+            .insert_resource(crate::ui::ai_settings_window::AiSettingsWindowState::default());
         world_zoom_out.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
         world_zoom_out.insert_resource(
             crate::ui::display_options_window::DisplayOptionsWindowState::default(),

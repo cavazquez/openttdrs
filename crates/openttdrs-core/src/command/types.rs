@@ -328,6 +328,10 @@ pub enum Command {
     CheatToggleInfiniteMoney,
     /// Alterna magic bulldozer (demoler sin dueño).
     CheatToggleMagicBulldozer,
+    /// Cambia el año de calendario (`change_date` de `OpenTTD`).
+    CheatSetYear(u32),
+    /// Cambia la compañía activa (`switch_company`).
+    CheatSwitchCompany(crate::company::CompanyId),
     /// Planta un árbol en hierba o incrementa densidad en bosque.
     PlantTree(TileCoord),
     /// Quita árbol o reduce etapa de cultivo.
@@ -500,6 +504,8 @@ pub enum CommandError {
     TownTooClose,
     /// Cheats desactivados.
     CheatsDisabled,
+    /// Año de cheat fuera de rango.
+    InvalidCheatYear,
     /// Compañía no encontrada en el pool.
     CompanyNotFound,
     /// No se puede comprar la propia compañía.
@@ -642,6 +648,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::CannotFoundTownHere => "No se puede fundar un pueblo aquí.",
         CommandError::TownTooClose => "Hay otro pueblo demasiado cerca.",
         CommandError::CheatsDisabled => "Cheats desactivados (consola: cheat on).",
+        CommandError::InvalidCheatYear => "Año de cheat inválido (1950–2450).",
         CommandError::CompanyNotFound => "Compañía no encontrada.",
         CommandError::CannotBuyOwnCompany => "No puedes comprar tu propia compañía.",
         CommandError::CompanyNotBankrupt => "La compañía no está en quiebra.",

@@ -291,6 +291,8 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::CheatAddMoney(_)
         | Command::CheatToggleInfiniteMoney
         | Command::CheatToggleMagicBulldozer
+        | Command::CheatSetYear(_)
+        | Command::CheatSwitchCompany(_)
         | Command::PlantTree(_)
         | Command::ClearTree(_)
         | Command::PlaceSign { .. }

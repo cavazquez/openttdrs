@@ -19,6 +19,7 @@ use crate::ui::audio_settings_window::SoundMusicWindowState;
 use crate::ui::autoreplace_window::AutoreplaceWindowState;
 use crate::ui::buy_window::BuyVehicleWindowState;
 use crate::ui::cargo_payment_window::CargoPaymentWindowState;
+use crate::ui::cheat_window::CheatWindowState;
 use crate::ui::destination_window::DestinationPickerState;
 use crate::ui::dev_console::DevConsoleState;
 use crate::ui::display_options_window::DisplayOptionsWindowState;
@@ -392,6 +393,7 @@ fn open_all_windows_for_shot(world: &mut World) {
     world.resource_mut::<HelpWindowState>().open = true;
     world.resource_mut::<DevConsoleState>().open = true;
     world.resource_mut::<TileInspectorWindowState>().open = true;
+    world.resource_mut::<CheatWindowState>().open = true;
 
     world
         .resource_mut::<SaveWindowState>()

@@ -64,7 +64,7 @@ pub(crate) use road_type_selector::{
     sync_road_type_popovers,
 };
 pub(crate) use settings::{
-    handle_company_colour_swatches, handle_settings_menu_buttons,
+    handle_cheats_menu_button, handle_company_colour_swatches, handle_settings_menu_buttons,
     sync_company_colour_swatch_visuals,
 };
 pub(crate) use signal_picker_window::{
@@ -452,6 +452,8 @@ pub(crate) enum SaveMenuAction {
     DevConsole,
     /// Inspector de tile seleccionado.
     TileInspector,
+    /// Ventana formal de cheats (#45).
+    Cheats,
     /// Retiro voluntario → endscreen / highscore.
     EndGame,
     ReturnToMainMenu,
@@ -479,6 +481,7 @@ impl SaveMenuAction {
         Self::Help,
         Self::DevConsole,
         Self::TileInspector,
+        Self::Cheats,
         Self::EndGame,
         Self::ReturnToMainMenu,
     ];

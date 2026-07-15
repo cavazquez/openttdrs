@@ -252,6 +252,7 @@ mod tests {
         world.insert_resource(crate::ui::dev_console::DevConsoleState::default());
         world
             .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world.insert_resource(crate::ui::cheat_window::CheatWindowState::default());
         world.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
         world.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world.insert_resource(SoundMusicWindowState::default());
@@ -302,6 +303,7 @@ mod tests {
         world.insert_resource(crate::ui::dev_console::DevConsoleState::default());
         world
             .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world.insert_resource(crate::ui::cheat_window::CheatWindowState::default());
         world.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
         world.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world.insert_resource(SoundMusicWindowState::default());
@@ -364,6 +366,7 @@ mod tests {
         world_zoom_in.insert_resource(crate::ui::dev_console::DevConsoleState::default());
         world_zoom_in
             .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world_zoom_in.insert_resource(crate::ui::cheat_window::CheatWindowState::default());
         world_zoom_in.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
         world_zoom_in.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world_zoom_in.insert_resource(SoundMusicWindowState::default());
@@ -410,6 +413,7 @@ mod tests {
         world_zoom_out.insert_resource(crate::ui::dev_console::DevConsoleState::default());
         world_zoom_out
             .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world_zoom_out.insert_resource(crate::ui::cheat_window::CheatWindowState::default());
         world_zoom_out.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
         world_zoom_out.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world_zoom_out.insert_resource(SoundMusicWindowState::default());

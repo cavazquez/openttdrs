@@ -126,6 +126,9 @@ pub(crate) fn handle_settings_menu_buttons(
             SaveMenuAction::TileInspector => {
                 help_tools.p2().open = true;
             }
+            SaveMenuAction::Cheats => {
+                // Abierto en `handle_cheats_menu_button` (límite SystemParam).
+            }
             SaveMenuAction::EndGame => {
                 help_tools.p3().0 = true;
             }
@@ -153,6 +156,18 @@ pub(crate) fn handle_settings_menu_buttons(
             SaveMenuAction::ReturnToMainMenu => {
                 return_to_main_menu(&mut next_screen, &mut suspended);
             }
+        }
+    }
+}
+
+/// Abre la ventana de cheats desde Ajustes (separado por límite de SystemParam).
+pub(crate) fn handle_cheats_menu_button(
+    mut q: Query<(&Interaction, &SaveMenuAction), (Changed<Interaction>, With<Button>)>,
+    mut cheat_window: ResMut<crate::ui::cheat_window::CheatWindowState>,
+) {
+    for (interaction, action) in &mut q {
+        if *interaction == Interaction::Pressed && matches!(action, SaveMenuAction::Cheats) {
+            cheat_window.open = true;
         }
     }
 }
@@ -232,6 +247,7 @@ mod tests {
         world.insert_resource(crate::ui::dev_console::DevConsoleState::default());
         world
             .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world.insert_resource(crate::ui::cheat_window::CheatWindowState::default());
         world.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
         world.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world.insert_resource(crate::settings::ClientPreferences::default());
@@ -280,6 +296,7 @@ mod tests {
         world.insert_resource(crate::ui::dev_console::DevConsoleState::default());
         world
             .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world.insert_resource(crate::ui::cheat_window::CheatWindowState::default());
         world.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
         world.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world.insert_resource(crate::settings::ClientPreferences::default());
@@ -339,6 +356,7 @@ mod tests {
         world.insert_resource(crate::ui::dev_console::DevConsoleState::default());
         world
             .insert_resource(crate::ui::tile_inspector_window::TileInspectorWindowState::default());
+        world.insert_resource(crate::ui::cheat_window::CheatWindowState::default());
         world.insert_resource(crate::ui::endscreen::RetireGameRequested::default());
         world.insert_resource(crate::ui::endscreen::EndScreenState::default());
         world.insert_resource(crate::settings::ClientPreferences::default());

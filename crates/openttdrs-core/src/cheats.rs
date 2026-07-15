@@ -1,4 +1,15 @@
-//! Cheats / sandbox formales (UI-7). Solo afectan partida si `enabled`.
+//! Cheats / sandbox formales (UI-7 / #45). Solo afectan partida si `enabled`.
+
+use crate::news::CALENDAR_BASE_YEAR;
+
+/// Año máximo admitido por `CheatSetYear` (MVP; `OpenTTD` permite más rango).
+pub const CHEAT_YEAR_MAX: u32 = CALENDAR_BASE_YEAR + 500;
+
+/// `true` si el año está en el rango admitido por cheats.
+#[must_use]
+pub const fn year_in_range(year: u32) -> bool {
+    year >= CALENDAR_BASE_YEAR && year <= CHEAT_YEAR_MAX
+}
 
 /// Estado de cheats de la partida (no afecta saves antiguos: `#[serde(default)]`).
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]

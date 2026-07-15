@@ -177,6 +177,8 @@ const fn command_modifies_map(cmd: &Command) -> bool {
             | Command::CheatAddMoney(..)
             | Command::CheatToggleInfiniteMoney
             | Command::CheatToggleMagicBulldozer
+            | Command::CheatSetYear(..)
+            | Command::CheatSwitchCompany(..)
             | Command::SetNewGrfEnabled { .. }
             | Command::MoveNewGrfInStack { .. }
             | Command::RemoveNewGrfFromStack { .. }
@@ -566,6 +568,25 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
                 return Err(CommandError::CheatsDisabled);
             }
             state.cheats.magic_bulldozer = !state.cheats.magic_bulldozer;
+            Ok(())
+        }
+        Command::CheatSetYear(year) => {
+            if !state.cheats.enabled {
+                return Err(CommandError::CheatsDisabled);
+            }
+            if !crate::cheats::year_in_range(*year) {
+                return Err(CommandError::InvalidCheatYear);
+            }
+            state.tick = crate::news::tick_for_calendar_year(*year);
+            Ok(())
+        }
+        Command::CheatSwitchCompany(id) => {
+            if !state.cheats.enabled {
+                return Err(CommandError::CheatsDisabled);
+            }
+            if !state.set_active_company(*id) {
+                return Err(CommandError::CompanyNotFound);
+            }
             Ok(())
         }
         Command::PlantTree(c) => crate::map::tree_tile_loop::plant_tree(state, *c),

@@ -14,6 +14,7 @@ mod autoreplace_window;
 mod buy_window;
 mod cargo_dist_settings_window;
 mod cargo_payment_window;
+mod cheat_window;
 mod destination_window;
 mod dev_console;
 mod display_options_window;
@@ -79,6 +80,10 @@ use cargo_dist_settings_window::{
 use cargo_payment_window::{
     CargoPaymentWindowState, cargo_payment_window_on_closed, open_cargo_payment_from_routes,
     setup_cargo_payment_window, sync_cargo_payment_window,
+};
+use cheat_window::{
+    CheatWindowState, cheat_window_on_closed, handle_cheat_window_buttons,
+    handle_cheat_window_hotkey, setup_cheat_window, sync_cheat_window,
 };
 use destination_window::{
     DestinationPickerState, destination_picker_on_closed, handle_destination_picker_buttons,
@@ -207,20 +212,20 @@ use toolbar::{
     StationCatalogPickerState, UiToolState, airport_picker_on_closed, begin_depot_list_drag,
     bridge_picker_on_closed, build_menu_interaction, close_road_type_picker_on_escape,
     close_toolbar_button_interaction, finish_depot_list_drag, handle_airport_picker_buttons,
-    handle_bridge_picker_buttons, handle_company_colour_swatches, handle_company_selector_buttons,
-    handle_depot_panel_buttons, handle_ingame_escape, handle_minimap_click,
-    handle_minimap_layer_buttons, handle_order_panel_buttons, handle_rail_station_picker_buttons,
-    handle_rail_type_select_buttons, handle_road_type_class_buttons,
-    handle_road_type_select_buttons, handle_settings_menu_buttons, handle_signal_picker_buttons,
-    handle_station_cargo_panel_buttons, handle_station_catalog_open_buttons,
-    handle_station_class_select_buttons, handle_station_rename_buttons,
-    handle_station_spec_select_buttons, handle_tile_click, hide_tool_when_panel_closed,
-    lerp_ghost_previews, rail_station_picker_on_closed, road_type_filter_keyboard,
-    rotate_station_with_right_click, setup_airport_picker, setup_bridge_picker, setup_build_menu,
-    setup_depot_panel, setup_minimap, setup_order_panel, setup_rail_station_picker,
-    setup_signal_picker, setup_station_cargo_panel, setup_top_toolbar, signal_picker_on_closed,
-    station_catalog_filter_keyboard, station_rename_editable_keyboard, station_rename_keyboard,
-    sync_airport_picker, sync_bridge_picker, sync_build_pointer_modifiers,
+    handle_bridge_picker_buttons, handle_cheats_menu_button, handle_company_colour_swatches,
+    handle_company_selector_buttons, handle_depot_panel_buttons, handle_ingame_escape,
+    handle_minimap_click, handle_minimap_layer_buttons, handle_order_panel_buttons,
+    handle_rail_station_picker_buttons, handle_rail_type_select_buttons,
+    handle_road_type_class_buttons, handle_road_type_select_buttons, handle_settings_menu_buttons,
+    handle_signal_picker_buttons, handle_station_cargo_panel_buttons,
+    handle_station_catalog_open_buttons, handle_station_class_select_buttons,
+    handle_station_rename_buttons, handle_station_spec_select_buttons, handle_tile_click,
+    hide_tool_when_panel_closed, lerp_ghost_previews, rail_station_picker_on_closed,
+    road_type_filter_keyboard, rotate_station_with_right_click, setup_airport_picker,
+    setup_bridge_picker, setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
+    setup_rail_station_picker, setup_signal_picker, setup_station_cargo_panel, setup_top_toolbar,
+    signal_picker_on_closed, station_catalog_filter_keyboard, station_rename_editable_keyboard,
+    station_rename_keyboard, sync_airport_picker, sync_bridge_picker, sync_build_pointer_modifiers,
     sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_company_selector,
     sync_depot_panel, sync_minimap, sync_order_panel, sync_orders_pick_cursor,
     sync_rail_station_picker, sync_rail_toolbar_icons, sync_rail_type_select_visuals,
@@ -281,6 +286,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<HelpWindowState>()
         .init_resource::<DevConsoleState>()
         .init_resource::<TileInspectorWindowState>()
+        .init_resource::<CheatWindowState>()
         .init_resource::<EndScreenState>()
         .init_resource::<RetireGameRequested>()
         .init_resource::<SoundMusicWindowState>()
@@ -407,6 +413,7 @@ impl Plugin for ClientUiPlugin {
             (
                 setup_dev_console,
                 setup_tile_inspector_window,
+                setup_cheat_window,
                 setup_endscreen,
             )
                 .in_set(StartupSet::Ui),
@@ -470,6 +477,7 @@ impl Plugin for ClientUiPlugin {
                 handle_help_hotkey,
                 handle_tile_inspector_hotkey,
                 handle_dev_console_keyboard,
+                handle_cheat_window_hotkey,
                 handle_tool_hotkeys,
                 rotate_station_with_right_click,
                 close_road_type_picker_on_escape,
@@ -495,6 +503,7 @@ impl Plugin for ClientUiPlugin {
                 handle_depot_panel_buttons,
                 handle_station_cargo_panel_buttons,
                 handle_settings_menu_buttons,
+                handle_cheats_menu_button,
                 handle_company_colour_swatches,
                 handle_company_selector_buttons,
                 sync_company_colour_swatch_visuals,
@@ -733,6 +742,16 @@ impl Plugin for ClientUiPlugin {
                 handle_music_window_buttons,
                 sound_music_window_on_closed,
                 sync_sound_music_window,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                cheat_window_on_closed,
+                sync_cheat_window,
+                handle_cheat_window_buttons,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

@@ -110,6 +110,8 @@ pub(crate) enum FloatingWindowId {
     DevConsole,
     /// Inspección estructurada del tile seleccionado (UI-8).
     TileInspector,
+    /// Cheats formales (UI-8 / #45).
+    CheatWindow,
 }
 
 #[allow(dead_code)] // inventarios UI-0 consumidos en tests
@@ -151,6 +153,7 @@ impl FloatingWindowId {
         Self::Help,
         Self::DevConsole,
         Self::TileInspector,
+        Self::CheatWindow,
     ];
 
     /// Clave estable para persistir posición en `ClientPreferences`.
@@ -192,6 +195,7 @@ impl FloatingWindowId {
             Self::Help => "Help",
             Self::DevConsole => "DevConsole",
             Self::TileInspector => "TileInspector",
+            Self::CheatWindow => "CheatWindow",
         }
     }
 }

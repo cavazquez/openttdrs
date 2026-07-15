@@ -30,7 +30,7 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Trabajo reciente (jul 2026):** Action2 variational (trains/stations/road), procedure `7E` / `\2psto`, vars de vehículo y de tesela al dibujar. Issues de backlog: [issues abiertas](https://github.com/cavazquez/openttdrs/issues).
 
-**Siguiente corte NewGRF (roadmap):** editor (#42) — ver [ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md).
+**Siguiente corte (roadmap):** editor (#42) — ver [ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md). Cheats formales / consola ampliada ✅ (#45).
 
 ---
 

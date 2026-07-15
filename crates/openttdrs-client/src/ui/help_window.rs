@@ -22,11 +22,13 @@ Atajos de teclado\n\
   F1 / ?     Esta ayuda\n\
   F2         Inspector de tile\n\
   F3 / `     Consola / Dev (FPS, comandos)\n\
+  Ctrl+Alt+C Cheats (dinero, año, bulldozer, compañía)\n\
   F4         Alternar ruta de guardado JSON\n\
   F5 / F9    Guardar / cargar partida rápida\n\
   Esc        Cerrar ventana superior / cancelar herramienta\n\
 \n\
-Ajustes → Consola: fps, overlay, gizmos, tile, newgrf, endgame, clear.\n\
+Ajustes → Consola: help|list, fps, overlay, gizmos, tile, newgrf, cheat, cheats, endgame, clear.\n\
+Ajustes → Cheats: ventana formal (también `cheats` en consola).\n\
 Ajustes → Finalizar partida: retiro voluntario → endscreen / highscore.\n\
 Ajustes → NewGRF: stack + Inspeccionar (scan/validate; sin Action0–14).\n\
 Ajustes → Display: presets Clásico / Rendimiento / Dev.\n\

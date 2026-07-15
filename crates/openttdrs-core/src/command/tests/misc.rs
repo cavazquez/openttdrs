@@ -409,3 +409,42 @@ fn place_rail_bits_rejects_overwrite_of_foreign_rail() {
     );
     assert_eq!(s.map.get(c).unwrap().m1, 1);
 }
+
+#[test]
+fn cheat_set_year_and_switch_company_require_enabled() {
+    let mut s = GameState::new(8, 8);
+    s.ensure_rival_transcargo();
+    assert_eq!(
+        apply_command(&mut s, &Command::CheatSetYear(2000)).unwrap_err(),
+        CommandError::CheatsDisabled
+    );
+    apply_command(&mut s, &Command::CheatSetEnabled(true)).unwrap();
+    apply_command(&mut s, &Command::CheatSetYear(2000)).unwrap();
+    let (year, _) = crate::calendar_year_day(crate::calendar_day_index(s.tick));
+    assert_eq!(year, 2000);
+    assert_eq!(
+        apply_command(&mut s, &Command::CheatSetYear(1000)).unwrap_err(),
+        CommandError::InvalidCheatYear
+    );
+    apply_command(&mut s, &Command::CheatSwitchCompany(crate::CompanyId(1))).unwrap();
+    assert_eq!(s.active_company, crate::CompanyId(1));
+    assert_eq!(
+        apply_command(&mut s, &Command::CheatSwitchCompany(crate::CompanyId(99))).unwrap_err(),
+        CommandError::CompanyNotFound
+    );
+}
+
+#[test]
+fn magic_bulldozer_clears_foreign_tile() {
+    let mut s = GameState::new(8, 8);
+    s.economy.money = 1_000_000;
+    s.ensure_rival_transcargo();
+    assert!(s.set_active_company(crate::CompanyId(1)));
+    let rail = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRail(rail)).unwrap();
+    assert!(s.set_active_company(crate::CompanyId::PLAYER));
+    apply_command(&mut s, &Command::CheatSetEnabled(true)).unwrap();
+    apply_command(&mut s, &Command::CheatToggleMagicBulldozer).unwrap();
+    apply_command(&mut s, &Command::ClearTile(rail)).unwrap();
+    assert_eq!(s.map.get_kind(rail), Some(TileKind::Grass));
+}

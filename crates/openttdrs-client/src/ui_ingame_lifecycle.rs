@@ -23,6 +23,7 @@ use super::autoreplace_window::AutoreplaceWindowState;
 use super::buy_window::BuyVehicleWindowState;
 use super::cargo_dist_settings_window::CargoDistSettingsWindowState;
 use super::cargo_payment_window::CargoPaymentWindowState;
+use super::cheat_window::CheatWindowState;
 use super::destination_window::DestinationPickerState;
 use super::dev_console::DevConsoleState;
 use super::endscreen::{EndScreenState, RetireGameRequested};
@@ -269,6 +270,9 @@ pub(crate) fn leave_ingame(world: &mut World) {
     }
     if let Some(mut tile_inspector) = world.get_resource_mut::<TileInspectorWindowState>() {
         *tile_inspector = TileInspectorWindowState::default();
+    }
+    if let Some(mut cheats) = world.get_resource_mut::<CheatWindowState>() {
+        *cheats = CheatWindowState::default();
     }
     if let Some(mut endscreen) = world.get_resource_mut::<EndScreenState>() {
         *endscreen = EndScreenState::default();

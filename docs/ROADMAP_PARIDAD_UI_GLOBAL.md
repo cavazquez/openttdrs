@@ -709,8 +709,8 @@ parámetros NewGRF / consola REPL / cheats formales → OOS o UI-8.
 - [x] Parse-only Action0–14 (histograma Inspeccionar) + Action0 RoadTypes / Stations / Trains metadatos.
 - [x] Parámetros NewGRF. *(MVP #39: `NewGrfEntry.params`, UI P◀/P▶/−/+, Action2 `0x7F`; Action14 labels OOS)*
 - [x] Presets de settings (Clásico / Rendimiento / Dev en Display Options).
-- [x] Sandbox/cheats si se decide soportarlos. *(DevConsole: `cheat on|off|money|infinite|bulldozer`)*
-- [x] Consola y diagnostics para desarrollo. *(UI-8: Consola/Dev + overlay; cheats vía DevConsole)*
+- [x] Sandbox/cheats si se decide soportarlos. *(#45: CheatWindow + `cheat on|off|money|infinite|bulldozer|year|company|status`)*
+- [x] Consola y diagnostics para desarrollo. *(UI-8: Consola/Dev + overlay; cheats vía DevConsole/CheatWindow)*
 - [x] About/help y mapa de hotkeys (F1 / ? + Ajustes → Ayuda…).
 - [x] Posiciones de ventana persistentes (`ClientPreferences.window_layouts`).
 
@@ -745,7 +745,7 @@ Objetivo: posterior a la paridad single-player.
 - [x] Herramientas dev: framerate / consola corta, tile inspect, NewGRF inspect,
       sprite-bounds lite (gizmos + tile seleccionado).
 - [x] Highscore/endscreen. *(retiro + quiebra ×3 meses; tabla local en prefs)*
-- [ ] Consola REPL completa / cheats formales. *(OOS; cmds help/fps/…/endgame/clear)*
+- [x] Consola REPL completa / cheats formales. *(#45: CheatWindow + `cheat year|company|status` + `list`/`cheats`; scripting OTTD OOS)*
 
 No usar UI-8 para bloquear UI-1 a UI-6.
 
@@ -943,7 +943,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** editor (#42). Callback 24 estaciones ✅ (build tile layout).
+**Siguiente:** editor (#42). Consola/cheats formales ✅ (#45).
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -1016,6 +1016,7 @@ Progreso UI-8 (tools-dev):
 3. ~~NewGRF Inspeccionar (scan + validate_stack).~~ ✅
 4. ~~Sprite bounds lite en tile seleccionado (gizmos ON).~~ ✅
 5. ~~Help + menú Ajustes actualizados.~~ ✅
+6. ~~Cheats formales: CheatWindow + `cheat year|company|status` + `list`/`cheats` (#45).~~ ✅
 
 Progreso UI-7 (cierre):
 

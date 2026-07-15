@@ -8,6 +8,7 @@ use bevy::prelude::*;
 use crate::render::MapVisualLayer;
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
+use crate::ui::cheat_window::CheatWindowState;
 use crate::ui::endscreen::{RetireGameRequested, request_retire_game};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
@@ -278,6 +279,7 @@ pub(crate) fn handle_dev_console_keyboard(
     mut prefs: ResMut<ClientPreferences>,
     mut tile_inspector: ResMut<TileInspectorWindowState>,
     mut newgrf: ResMut<NewGrfWindowState>,
+    mut cheat_window: ResMut<CheatWindowState>,
     mut retire: ResMut<RetireGameRequested>,
     hud: Res<SimHudControls>,
     mut sim: Option<ResMut<SimWorld>>,
@@ -308,6 +310,7 @@ pub(crate) fn handle_dev_console_keyboard(
                         &mut prefs,
                         &mut tile_inspector,
                         &mut newgrf,
+                        &mut cheat_window,
                         &mut retire,
                         &hud,
                         sim.as_deref_mut(),
@@ -399,6 +402,7 @@ fn run_dev_command(
     prefs: &mut ClientPreferences,
     tile_inspector: &mut TileInspectorWindowState,
     newgrf: &mut NewGrfWindowState,
+    cheat_window: &mut CheatWindowState,
     retire: &mut RetireGameRequested,
     hud: &SimHudControls,
     sim: Option<&mut SimWorld>,
@@ -412,16 +416,21 @@ fn run_dev_command(
         return;
     };
     match head.to_ascii_lowercase().as_str() {
-        "help" | "?" => {
+        "help" | "?" | "list" | "cmds" => {
             push_log(
                 state,
-                "cmds: help | fps | overlay | gizmos | tile | newgrf | scenario | cheat | endgame | clear"
+                "cmds: help|list | fps | overlay | gizmos | tile | newgrf | scenario | cheat | cheats | endgame | clear"
                     .into(),
             );
             push_log(
                 state,
-                "cheat: on|off | money [n] | infinite | bulldozer".into(),
+                "cheat: on|off | status | money [n] | infinite | bulldozer | year <n> | company <id>"
+                    .into(),
             );
+        }
+        "cheats" | "cheatgui" => {
+            cheat_window.open = true;
+            push_log(state, "ventana Cheats abierta".into());
         }
         "cheat" => apply_cheat_command(state, sim, &mut parts),
         "scenario" | "junction" => match parts.next().unwrap_or("list") {
@@ -522,25 +531,78 @@ fn run_dev_command(
 
 const DEFAULT_CHEAT_MONEY: i64 = 1_000_000;
 
-/// Parsea subcomandos `cheat on|off|money|infinite|bulldozer` (tests unitarios).
+/// Resultado de parsear `cheat …` (status no emite `Command`).
+enum ParsedCheat {
+    Status,
+    Cmd(openttdrs_core::Command),
+}
+
+/// Parsea subcomandos `cheat on|off|status|money|infinite|bulldozer|year|company`.
 fn parse_cheat_command<'a>(
     parts: &mut impl Iterator<Item = &'a str>,
-) -> Result<openttdrs_core::Command, &'static str> {
+) -> Result<ParsedCheat, &'static str> {
     match parts.next().unwrap_or("").to_ascii_lowercase().as_str() {
-        "on" | "1" | "true" => Ok(openttdrs_core::Command::CheatSetEnabled(true)),
-        "off" | "0" | "false" => Ok(openttdrs_core::Command::CheatSetEnabled(false)),
+        "" | "status" | "info" => Ok(ParsedCheat::Status),
+        "on" | "1" | "true" => Ok(ParsedCheat::Cmd(openttdrs_core::Command::CheatSetEnabled(
+            true,
+        ))),
+        "off" | "0" | "false" => Ok(ParsedCheat::Cmd(openttdrs_core::Command::CheatSetEnabled(
+            false,
+        ))),
         "money" => {
             let amount = parts
                 .next()
                 .and_then(|s| s.parse::<i64>().ok())
                 .unwrap_or(DEFAULT_CHEAT_MONEY);
-            Ok(openttdrs_core::Command::CheatAddMoney(amount))
+            Ok(ParsedCheat::Cmd(openttdrs_core::Command::CheatAddMoney(
+                amount,
+            )))
         }
-        "infinite" => Ok(openttdrs_core::Command::CheatToggleInfiniteMoney),
-        "bulldozer" | "magic" => Ok(openttdrs_core::Command::CheatToggleMagicBulldozer),
-        "" => Err("uso: cheat on|off | money [n] | infinite | bulldozer"),
-        _ => Err("cheat: desconocido (on|off|money|infinite|bulldozer)"),
+        "infinite" => Ok(ParsedCheat::Cmd(
+            openttdrs_core::Command::CheatToggleInfiniteMoney,
+        )),
+        "bulldozer" | "magic" => Ok(ParsedCheat::Cmd(
+            openttdrs_core::Command::CheatToggleMagicBulldozer,
+        )),
+        "year" | "date" => {
+            let Some(raw) = parts.next() else {
+                return Err("uso: cheat year <n>");
+            };
+            let Ok(year) = raw.parse::<u32>() else {
+                return Err("uso: cheat year <n>");
+            };
+            Ok(ParsedCheat::Cmd(openttdrs_core::Command::CheatSetYear(
+                year,
+            )))
+        }
+        "company" | "cia" => {
+            let Some(raw) = parts.next() else {
+                return Err("uso: cheat company <id>");
+            };
+            let Ok(id) = raw.parse::<u8>() else {
+                return Err("uso: cheat company <id>");
+            };
+            Ok(ParsedCheat::Cmd(
+                openttdrs_core::Command::CheatSwitchCompany(openttdrs_core::CompanyId(id)),
+            ))
+        }
+        _ => Err("cheat: desconocido (on|off|status|money|infinite|bulldozer|year|company)"),
     }
+}
+
+fn format_cheat_log(sim: &SimWorld) -> String {
+    let c = &sim.state.cheats;
+    let (year, _) =
+        openttdrs_core::calendar_year_day(openttdrs_core::calendar_day_index(sim.state.tick));
+    format!(
+        "cheats enabled={} infinite={} bulldozer={} money={} year={} company={}",
+        c.enabled,
+        c.infinite_money,
+        c.magic_bulldozer,
+        sim.state.economy.money,
+        year,
+        sim.state.active_company.0
+    )
 }
 
 fn apply_cheat_command<'a>(
@@ -553,17 +615,9 @@ fn apply_cheat_command<'a>(
         return;
     };
     match parse_cheat_command(parts) {
-        Ok(cmd) => match openttdrs_core::apply_command(&mut sim.state, &cmd) {
-            Ok(()) => {
-                let c = &sim.state.cheats;
-                push_log(
-                    state,
-                    format!(
-                        "cheats enabled={} infinite={} bulldozer={} money={}",
-                        c.enabled, c.infinite_money, c.magic_bulldozer, sim.state.economy.money
-                    ),
-                );
-            }
+        Ok(ParsedCheat::Status) => push_log(state, format_cheat_log(sim)),
+        Ok(ParsedCheat::Cmd(cmd)) => match openttdrs_core::apply_command(&mut sim.state, &cmd) {
+            Ok(()) => push_log(state, format_cheat_log(sim)),
             Err(e) => push_log(
                 state,
                 format!("cheat falló: {}", openttdrs_core::command_error_message(e)),
@@ -584,6 +638,7 @@ mod tests {
         let mut prefs = ClientPreferences::default();
         let mut tile = TileInspectorWindowState::default();
         let mut newgrf = NewGrfWindowState::default();
+        let mut cheats = CheatWindowState::default();
         let mut retire = RetireGameRequested::default();
         let hud = SimHudControls::default();
         let diagnostics = DiagnosticsStore::default();
@@ -592,6 +647,7 @@ mod tests {
             &mut prefs,
             &mut tile,
             &mut newgrf,
+            &mut cheats,
             &mut retire,
             &hud,
             None,
@@ -605,6 +661,7 @@ mod tests {
             &mut prefs,
             &mut tile,
             &mut newgrf,
+            &mut cheats,
             &mut retire,
             &hud,
             None,
@@ -618,6 +675,21 @@ mod tests {
             &mut prefs,
             &mut tile,
             &mut newgrf,
+            &mut cheats,
+            &mut retire,
+            &hud,
+            None,
+            &diagnostics,
+            0,
+            "cheats",
+        );
+        assert!(cheats.open);
+        run_dev_command(
+            &mut state,
+            &mut prefs,
+            &mut tile,
+            &mut newgrf,
+            &mut cheats,
             &mut retire,
             &hud,
             None,
@@ -633,27 +705,56 @@ mod tests {
         let mut on = "on".split_whitespace();
         assert!(matches!(
             parse_cheat_command(&mut on),
-            Ok(openttdrs_core::Command::CheatSetEnabled(true))
+            Ok(ParsedCheat::Cmd(openttdrs_core::Command::CheatSetEnabled(
+                true
+            )))
         ));
         let mut money = "money 500".split_whitespace();
         assert!(matches!(
             parse_cheat_command(&mut money),
-            Ok(openttdrs_core::Command::CheatAddMoney(500))
+            Ok(ParsedCheat::Cmd(openttdrs_core::Command::CheatAddMoney(
+                500
+            )))
         ));
         let mut money_default = "money".split_whitespace();
         assert!(matches!(
             parse_cheat_command(&mut money_default),
-            Ok(openttdrs_core::Command::CheatAddMoney(DEFAULT_CHEAT_MONEY))
+            Ok(ParsedCheat::Cmd(openttdrs_core::Command::CheatAddMoney(
+                DEFAULT_CHEAT_MONEY
+            )))
         ));
         let mut infinite = "infinite".split_whitespace();
         assert!(matches!(
             parse_cheat_command(&mut infinite),
-            Ok(openttdrs_core::Command::CheatToggleInfiniteMoney)
+            Ok(ParsedCheat::Cmd(
+                openttdrs_core::Command::CheatToggleInfiniteMoney
+            ))
         ));
         let mut bulldozer = "bulldozer".split_whitespace();
         assert!(matches!(
             parse_cheat_command(&mut bulldozer),
-            Ok(openttdrs_core::Command::CheatToggleMagicBulldozer)
+            Ok(ParsedCheat::Cmd(
+                openttdrs_core::Command::CheatToggleMagicBulldozer
+            ))
+        ));
+        let mut year = "year 2000".split_whitespace();
+        assert!(matches!(
+            parse_cheat_command(&mut year),
+            Ok(ParsedCheat::Cmd(openttdrs_core::Command::CheatSetYear(
+                2000
+            )))
+        ));
+        let mut company = "company 1".split_whitespace();
+        assert!(matches!(
+            parse_cheat_command(&mut company),
+            Ok(ParsedCheat::Cmd(
+                openttdrs_core::Command::CheatSwitchCompany(openttdrs_core::CompanyId(1))
+            ))
+        ));
+        let mut status = "".split_whitespace();
+        assert!(matches!(
+            parse_cheat_command(&mut status),
+            Ok(ParsedCheat::Status)
         ));
     }
 }

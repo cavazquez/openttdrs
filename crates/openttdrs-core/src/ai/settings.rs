@@ -2,8 +2,8 @@
 
 /// Umbral de efectivo por defecto antes de abrir una ruta nueva.
 pub const DEFAULT_AI_BUILD_MONEY_THRESHOLD: i64 = 80_000;
-/// Máximo de líneas (trenes head) por defecto.
-pub const DEFAULT_AI_MAX_ROUTES: u8 = 2;
+/// Máximo de líneas (trenes head) por defecto (carbón + madera + petróleo).
+pub const DEFAULT_AI_MAX_ROUTES: u8 = 3;
 
 /// Ajustes de IA persistidos en la partida.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

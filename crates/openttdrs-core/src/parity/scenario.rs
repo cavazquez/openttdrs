@@ -969,7 +969,7 @@ fn build_loan_interest() -> GameState {
     state
 }
 
-/// Fase 4 / #86: mina+fábrica colineales + bosque en otra fila (2ª ruta en L).
+/// Fase 4 / #86: mina+fábrica + bosque + pozo (3 rutas; L en madera/petróleo).
 #[must_use]
 #[allow(clippy::expect_used)]
 pub fn build_ai_rival_line() -> GameState {
@@ -979,10 +979,16 @@ pub fn build_ai_rival_line() -> GameState {
     state.economy.money = 100_000;
     state.ensure_companies();
     state.ensure_rival_transcargo();
+    // Margen para 3 líneas (estaciones + vía + trenes) bajo umbral 80k.
+    if let Some(ai) = state.companies.iter_mut().find(|c| c.is_ai) {
+        ai.economy.money = 350_000;
+    }
 
     let mine = TileCoord::new(2, 5);
     let factory = TileCoord::new(18, 5);
     let forest = TileCoord::new(2, 9);
+    // Separado en X/Y de la fábrica para no compartir tesela de estación (±2).
+    let oil = TileCoord::new(14, 11);
     state
         .industries
         .push(Industry::new(mine, IndustryKind::CoalMine));
@@ -992,8 +998,11 @@ pub fn build_ai_rival_line() -> GameState {
     state
         .industries
         .push(Industry::new(forest, IndustryKind::Forest));
+    state
+        .industries
+        .push(Industry::new(oil, IndustryKind::OilWell));
     // Stock inicial para que los trenes puedan cargar tras construir.
-    for pos in [mine, forest] {
+    for pos in [mine, forest, oil] {
         if let Some(ind) = state.industries.iter_mut().find(|i| i.pos == pos) {
             ind.stock = 200;
         }
@@ -1195,6 +1204,50 @@ mod tests {
             state.stations.iter().filter(|s| s.owner == ai_id).count() >= 3,
             "al menos 3 estaciones IA (2 carga + descarga)"
         );
+    }
+
+    #[test]
+    fn ai_rival_builds_third_oil_route() {
+        use crate::economy::TICKS_PER_MONTH;
+        use crate::vehicle::VehicleKind;
+
+        let mut state = build_ai_rival_line();
+        assert_eq!(state.ai.max_routes, 3);
+        // Tres cierres mensuales: carbón, madera, petróleo.
+        for _ in 0..=(TICKS_PER_MONTH * 3) {
+            state.step();
+        }
+        let ai_id = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+        let trains = state
+            .vehicles
+            .iter()
+            .filter(|v| v.owner == ai_id && v.kind == VehicleKind::Train && v.is_consist_head())
+            .count();
+        assert!(
+            trains >= 3,
+            "TransCargo debe tener 3 trenes (carbón + madera + petróleo), got {trains}"
+        );
+        let oil_load = state.stations.iter().filter(|s| s.owner == ai_id).any(|s| {
+            state.industries.iter().any(|i| {
+                i.kind == IndustryKind::OilWell
+                    && (i.pos.x - s.pos.x).abs() <= 2
+                    && (i.pos.y - s.pos.y).abs() <= 2
+            })
+        });
+        assert!(oil_load, "debe existir estación IA junto al pozo");
+        let mut saw_oil = false;
+        for _ in 0..12_000 {
+            state.step();
+            if state
+                .vehicles
+                .iter()
+                .any(|v| v.owner == ai_id && v.cargo > 0 && v.cargo_type == Some(CargoType::Oil))
+            {
+                saw_oil = true;
+                break;
+            }
+        }
+        assert!(saw_oil, "el tren de la ruta petróleo debe cargar oil");
     }
 
     #[test]

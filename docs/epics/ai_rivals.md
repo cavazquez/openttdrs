@@ -1,8 +1,8 @@
 # Epic futuro: IA de compañías rivales
 
-**Estado:** Slice jugable #86 (jul 2026) — 2 rutas (carbón + madera), vía Manhattan en L, rival en Finanzas.  
+**Estado:** Slice jugable #86 (jul 2026) — 3 rutas (carbón + madera + petróleo), vía Manhattan en L, rival en Finanzas.  
 Settings/debug UI #44: `GameState.ai` + ventana «IA / TransCargo».  
-**Fecha:** 2026-07-05 (doc); MVP 2026-07-09; slice multi-ruta 2026-07-14; settings #44 2026-07-14
+**Fecha:** 2026-07-05 (doc); MVP 2026-07-09; multi-ruta 2026-07-14; settings #44 2026-07-14; 3ª ruta petróleo 2026-07-14
 
 ## Contexto
 
@@ -18,9 +18,9 @@ OpenTTD original ejecuta scripts Squirrel (`ai/`, `game/`) para competidores CPU
 
 ## MVP propuesto (Rust)
 
-1. **Rival estático «TransCargo»** — líneas mina→fábrica y bosque→fábrica, compite por subsidios.
+1. **Rival estático «TransCargo»** — líneas mina/bosque/pozo → fábrica, compite por subsidios.
 2. **Ciclo de decisión** (cada mes simulado):
-   - Si `money >= AI_BUILD_MONEY_THRESHOLD` y rutas `< MAX_AI_ROUTES` (2) → siguiente par sin servir.
+   - Si `money >= build_money_threshold` y rutas `< max_routes` (default 3) → siguiente par sin servir.
    - Vía Manhattan (L) entre estaciones; depósito junto a la carga.
    - Comprar tren + órdenes full-load; sembrar subsidio del cargo.
 3. **Sin terraform ni señales avanzadas** — pathfinding existente (`PathNetwork::Rail`) para el tren.
@@ -34,7 +34,7 @@ OpenTTD original ejecuta scripts Squirrel (`ai/`, `game/`) para competidores CPU
 | `crates/openttdrs-core/src/ai/rule_based.rs` | Heurísticas multi-ruta + Manhattan |
 | `sim_step.rs` | `tick_ai_companies`; carga desde industria más cercana |
 | `finances_window.rs` | Lista de compañías |
-| Escenario `ai_rival_line` | Mina + fábrica + bosque |
+| Escenario `ai_rival_line` | Mina + fábrica + bosque + pozo |
 
 ## Criterio de cierre
 
@@ -42,9 +42,11 @@ OpenTTD original ejecuta scripts Squirrel (`ai/`, `game/`) para competidores CPU
 - ~~Compite por un subsidio activo (`subsidy.rs`).~~ ✅
 - ~~`check.sh` verde con escenario headless `ai_rival_line`.~~ ✅
 - ~~2ª ruta (madera) + vía en L.~~ ✅ (`ai_rival_builds_second_wood_route_on_l`)
+- ~~3ª ruta (petróleo).~~ ✅ (`ai_rival_builds_third_oil_route`)
 - ~~Rival visible en Finanzas.~~ ✅
+- ~~Settings/debug UI (#44).~~ ✅
 
-Pendiente épica (#86): 3ª ruta, terraform/señales. Settings/debug UI (#44) ✅.
+Pendiente épica (#86): terraform/señales.
 
 ## DevBot / métricas (implementado, jul 2026)
 

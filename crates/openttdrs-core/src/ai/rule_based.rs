@@ -1,6 +1,6 @@
-//! IA rival «TransCargo»: hasta 2 rutas de freight (carbón / madera), vía Manhattan.
+//! IA rival «TransCargo»: hasta N rutas de freight (carbón / madera / petróleo).
 //!
-//! Sin terraform ni señales. Ver `docs/epics/ai_rivals.md`.
+//! Vía Manhattan en L. Sin terraform ni señales. Ver `docs/epics/ai_rivals.md`.
 
 use crate::GameState;
 use crate::cargo::CargoType;
@@ -10,7 +10,7 @@ use crate::economy::TICKS_PER_MONTH;
 use crate::engine::ENGINE_TRAIN_KIRBY;
 use crate::industry::IndustryKind;
 use crate::map::{TileCoord, TileKind};
-use crate::pathfinder::{PathNetwork, find_path};
+use crate::pathfinder::{PathNetwork, find_path, rail_bit_for_sides};
 use crate::subsidy::{SUBSIDY_OFFER_MONTHS, Subsidy};
 use crate::vehicle::{VehicleKind, VehicleOrder};
 
@@ -134,10 +134,11 @@ fn next_unserved_plan(state: &GameState, ai_id: CompanyId) -> Option<RoutePlan> 
         .find(|i| i.kind == IndustryKind::Factory)
         .map(|i| i.pos)?;
 
-    // Prioridad: carbón, luego madera.
+    // Prioridad: carbón → madera → petróleo (todos descargan en la fábrica).
     let candidates = [
         (IndustryKind::CoalMine, CargoType::Coal),
         (IndustryKind::Forest, CargoType::Wood),
+        (IndustryKind::OilWell, CargoType::Oil),
     ];
     for (kind, cargo) in candidates {
         let Some(source) = state
@@ -193,10 +194,12 @@ fn pick_station_tile(
     map: &crate::map::Map,
     industry: TileCoord,
     toward: TileCoord,
+    avoid: &[TileCoord],
 ) -> Option<TileCoord> {
     let mut cands: Vec<TileCoord> = station_candidates_near(industry)
         .into_iter()
         .filter(|&c| map.get(c).is_some() && tile_buildable_for_station(map, c))
+        .filter(|c| !avoid.contains(c))
         .collect();
     // Preferir la tesela más cercana al otro extremo (corredor corto).
     cands.sort_by_key(|c| (c.x - toward.x).abs() + (c.y - toward.y).abs());
@@ -204,24 +207,62 @@ fn pick_station_tile(
 }
 
 /// Coloca vía en corredor Manhattan: primero eje X, luego eje Y.
+///
+/// Usa `PlaceRailBits` por eje para **fusionar** en cruces con corredores previos
+/// (p. ej. vertical de petróleo sobre la esquina L de madera en `(16,9)`).
 fn place_rail_manhattan_corridor(state: &mut GameState, from: TileCoord, to: TileCoord) {
-    let mut c = from;
     let step_x = (to.x - from.x).signum();
+    let step_y = (to.y - from.y).signum();
+    let mut c = from;
     while c.x != to.x {
         c = TileCoord::new(c.x + step_x, c.y);
-        place_rail_if_needed(state, c);
+        place_rail_axis(state, c, false);
     }
-    let step_y = (to.y - from.y).signum();
+    let corner = c;
     while c.y != to.y {
         c = TileCoord::new(c.x, c.y + step_y);
-        place_rail_if_needed(state, c);
+        place_rail_axis(state, c, true);
+    }
+    // Codo L: el merge X|Y permite seguir recto, pero no girar; hace falta la curva.
+    if step_x != 0 && step_y != 0 {
+        place_l_corner_curve(state, corner, step_x, step_y);
     }
 }
 
-fn place_rail_if_needed(state: &mut GameState, c: TileCoord) {
+/// Pieza de giro en la esquina X→Y (`DiagDir` NE=0 … NW=3).
+fn place_l_corner_curve(state: &mut GameState, corner: TileCoord, step_x: i32, step_y: i32) {
+    if matches!(
+        state.map.get_kind(corner),
+        Some(TileKind::Station | TileKind::RailDepot)
+    ) {
+        return;
+    }
+    // Entrada por el lado opuesto a `step_x`; salida hacia `step_y`.
+    let entry = if step_x > 0 { 0u8 } else { 2u8 };
+    let exit = if step_y > 0 { 1u8 } else { 3u8 };
+    let curve = rail_bit_for_sides(entry, exit);
+    let _ = apply_command(state, &Command::PlaceRailBits(corner, curve));
+    // Mantener ejes para tráfico que atraviese el cruce (otra ruta).
+    let _ = apply_command(state, &Command::PlaceRailBits(corner, 0x01));
+    let _ = apply_command(state, &Command::PlaceRailBits(corner, 0x02));
+}
+
+fn place_rail_axis(state: &mut GameState, c: TileCoord, axis_y: bool) {
     if matches!(
         state.map.get_kind(c),
-        Some(TileKind::Rail | TileKind::Station | TileKind::RailDepot)
+        Some(TileKind::Station | TileKind::RailDepot)
+    ) {
+        return;
+    }
+    let bits = if axis_y { 0x02 } else { 0x01 };
+    let _ = apply_command(state, &Command::PlaceRailBits(c, bits));
+}
+
+fn place_rail_if_needed(state: &mut GameState, c: TileCoord) {
+    // Boca de depósito / enlaces ortogonales: autorraíl por vecinos.
+    if matches!(
+        state.map.get_kind(c),
+        Some(TileKind::Station | TileKind::RailDepot)
     ) {
         return;
     }
@@ -250,9 +291,21 @@ fn place_rail_station_owned(state: &mut GameState, st_pos: TileCoord, ai_id: Com
 }
 
 fn try_place_depot_near(state: &mut GameState, load_st: TileCoord) -> Option<TileCoord> {
-    // Preferido: boca al norte hacia la línea, depósito al sur de la tesela
-    // al este de la estación (layout que ya funciona en `ai_rival_line`).
+    // Candidatos: adyacentes (boca a andén) y laterales (boca a vía paralela).
+    // Se acepta el primero con path real al destino de la orden (plataforma).
     let preferred = [
+        (
+            TileCoord::new(load_st.x + 1, load_st.y),
+            load_st,
+            0u8, // boca al oeste
+        ),
+        (
+            TileCoord::new(load_st.x - 1, load_st.y),
+            load_st,
+            2u8, // boca al este
+        ),
+        (TileCoord::new(load_st.x, load_st.y + 1), load_st, 3u8),
+        (TileCoord::new(load_st.x, load_st.y - 1), load_st, 1u8),
         (
             TileCoord::new(load_st.x + 1, load_st.y + 1),
             TileCoord::new(load_st.x + 1, load_st.y),
@@ -273,22 +326,29 @@ fn try_place_depot_near(state: &mut GameState, load_st: TileCoord) -> Option<Til
             TileCoord::new(load_st.x - 1, load_st.y),
             1u8,
         ),
-        (TileCoord::new(load_st.x, load_st.y + 1), load_st, 3u8),
-        (TileCoord::new(load_st.x, load_st.y - 1), load_st, 1u8),
     ];
+    let stop = crate::station::rail_station_stop_tile(&state.map, load_st).unwrap_or(load_st);
     for (depot, mouth, dir) in preferred {
         if state.map.get(depot).is_none() {
             continue;
         }
         if state.map.get_kind(depot) == Some(TileKind::RailDepot) {
-            return Some(depot);
+            if find_path(&state.map, depot, stop, PathNetwork::Rail).is_some() {
+                return Some(depot);
+            }
+            continue;
         }
         if mouth != load_st && mouth != depot {
             place_rail_if_needed(state, mouth);
         }
-        if apply_command(state, &Command::PlaceRailDepotDir(depot, dir)).is_ok() {
+        if apply_command(state, &Command::PlaceRailDepotDir(depot, dir)).is_err() {
+            continue;
+        }
+        if find_path(&state.map, depot, stop, PathNetwork::Rail).is_some() {
             return Some(depot);
         }
+        // Layout inválido para pathfinding: retirar y probar otro.
+        let _ = apply_command(state, &Command::ClearTile(depot));
     }
     None
 }
@@ -298,8 +358,22 @@ fn build_freight_line(
     ai_id: CompanyId,
     plan: RoutePlan,
 ) -> Option<(TileCoord, TileCoord, TileCoord)> {
-    let load_st = pick_station_tile(&state.map, plan.source, plan.dest)?;
-    let unload_st = pick_station_tile(&state.map, plan.dest, plan.source)?;
+    let existing_ai: Vec<TileCoord> = state
+        .stations
+        .iter()
+        .filter(|s| s.owner == ai_id)
+        .map(|s| s.pos)
+        .collect();
+    let load_st = pick_station_tile(&state.map, plan.source, plan.dest, &existing_ai)?;
+    // Preferir reutilizar una estación de descarga ya existente junto al destino.
+    let unload_reuse = existing_ai.iter().copied().find(|&st| {
+        (st.x - plan.dest.x).abs() <= 2 && (st.y - plan.dest.y).abs() <= 2 && st != load_st
+    });
+    let unload_st = unload_reuse.or_else(|| {
+        let mut avoid = existing_ai.clone();
+        avoid.push(load_st);
+        pick_station_tile(&state.map, plan.dest, plan.source, &avoid)
+    })?;
     if load_st == unload_st {
         return None;
     }
@@ -408,9 +482,13 @@ fn buy_and_order_train(
         if let Some(v) = state.vehicles.iter_mut().find(|v| v.id == vid) {
             v.owner = ai_id;
             v.cargo_type = Some(plan.cargo);
-            if let Some(path) = find_path(&state.map, v.pos, load_st, PathNetwork::Rail) {
+            // Destino de movimiento: plataforma o vía de acceso (no path a andén lateral).
+            let dest = crate::station::rail_station_stop_tile(&state.map, load_st)
+                .or_else(|| crate::station::rail_station_approach_tile(&state.map, load_st))
+                .unwrap_or(load_st);
+            if let Some(path) = find_path(&state.map, v.pos, dest, PathNetwork::Rail) {
                 v.path = path.into_iter().collect();
-                v.dest = load_st;
+                v.dest = dest;
             }
             v.running = true;
         }

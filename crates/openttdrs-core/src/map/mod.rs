@@ -66,7 +66,8 @@ pub use rail_bits::{
 pub use rail_slope::{rail_foundation_for_trackbits, rail_trackbits_valid_on_slope};
 pub use rail_topology::{
     RAIL_TOUCHING_SIDE_NE, RAIL_TOUCHING_SIDE_NW, RAIL_TOUCHING_SIDE_SE, RAIL_TOUCHING_SIDE_SW,
-    rail_bit_for_sides, rail_bits_touching_side, rail_traversal_bits,
+    opposite_diag_dir, rail_bit_for_sides, rail_bits_touching_side, rail_signal_diag_dir_offset,
+    rail_traversal_bits,
 };
 pub use road_bits::{OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, effective_road_bits};
 pub use slope::{

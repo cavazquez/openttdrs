@@ -7,7 +7,8 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use crate::map::{
-    Map, RAIL_TB_X, TileCoord, TileKind, rail_bit_for_sides, rail_bits_touching_side,
+    Map, RAIL_TB_X, TileCoord, TileKind, opposite_diag_dir as opposite_dir, rail_bit_for_sides,
+    rail_bits_touching_side, rail_signal_diag_dir_offset as rail_diag_dir_offset,
     rail_traversal_bits,
 };
 use crate::rail_pbs::{YAPF_RESERVATION_CROSS_PENALTY, tile_track_reserved_by_map};
@@ -61,22 +62,6 @@ impl PartialOrd for AstarNode {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
-}
-
-/// Offset de tesela vecina (`TileOffsByDiagDir` / `rail_signals`).
-#[must_use]
-const fn rail_diag_dir_offset(dir: u8) -> (i32, i32) {
-    match dir & 3 {
-        0 => (1, 0),
-        1 => (0, 1),
-        2 => (-1, 0),
-        _ => (0, -1),
-    }
-}
-
-#[must_use]
-const fn opposite_dir(d: u8) -> u8 {
-    (d + 2) & 3
 }
 
 /// Convierte `DiagDir` YAPF → convención del pathfinder legado (solo E/O; N/S iguales).

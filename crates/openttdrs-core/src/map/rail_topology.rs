@@ -41,6 +41,25 @@ pub const fn rail_bit_for_sides(a: u8, b: u8) -> u8 {
     }
 }
 
+/// Dirección diagonal opuesta (`DiagDir` 0..3).
+#[must_use]
+pub const fn opposite_diag_dir(d: u8) -> u8 {
+    (d + 2) & 3
+}
+
+/// Offset de tesela para bloques de señal / YAPF.
+///
+/// NE/SW invertidos respecto a `TileOffsByDiagDir` ([`super::diag_dir_offset`]).
+#[must_use]
+pub const fn rail_signal_diag_dir_offset(dir: u8) -> (i32, i32) {
+    match dir & 3 {
+        0 => (1, 0),
+        1 => (0, 1),
+        2 => (-1, 0),
+        _ => (0, -1),
+    }
+}
+
 #[must_use]
 fn is_rail_station_tile(tile: &Tile) -> bool {
     tile.kind == TileKind::Station && (tile.m6 >> 3).trailing_zeros() >= 4
@@ -85,6 +104,14 @@ mod tests {
         assert_eq!(rail_bit_for_sides(1, 3), RAIL_TB_Y);
         assert_eq!(rail_bit_for_sides(0, 3), 0x04); // UPPER
         assert_eq!(rail_bit_for_sides(2, 0), RAIL_TB_X); // simetría
+    }
+
+    #[test]
+    fn opposite_and_signal_offset() {
+        assert_eq!(opposite_diag_dir(0), 2);
+        assert_eq!(opposite_diag_dir(1), 3);
+        assert_eq!(rail_signal_diag_dir_offset(0), (1, 0));
+        assert_eq!(rail_signal_diag_dir_offset(2), (-1, 0));
     }
 
     #[test]

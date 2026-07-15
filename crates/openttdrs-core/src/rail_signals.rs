@@ -4,7 +4,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::map::{
     Map, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT,
-    RAIL_TB_X, RAIL_TB_Y, TileCoord, TileKind, rail_bits_touching_side,
+    RAIL_TB_X, RAIL_TB_Y, TileCoord, TileKind, opposite_diag_dir as opposite_dir,
+    rail_bits_touching_side, rail_signal_diag_dir_offset as diag_dir_offset,
 };
 use crate::news::{CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day};
 use crate::tick::GameTick;
@@ -195,21 +196,6 @@ pub fn rail_signal_state_mask(m3hi: u8) -> u8 {
 #[must_use]
 pub fn signal_is_green(m3hi: u8, sig_bit: u8) -> bool {
     (rail_signal_state_mask(m3hi) >> sig_bit) & 1 != 0
-}
-
-#[must_use]
-const fn opposite_dir(d: u8) -> u8 {
-    (d + 2) & 3
-}
-
-#[must_use]
-const fn diag_dir_offset(d: u8) -> (i32, i32) {
-    match d & 3 {
-        0 => (1, 0),
-        1 => (0, 1),
-        2 => (-1, 0),
-        _ => (0, -1),
-    }
 }
 
 #[must_use]

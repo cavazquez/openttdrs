@@ -3,14 +3,17 @@ use std::collections::{BinaryHeap, HashMap};
 
 use crate::aircraft_movement::straight_line_path;
 use crate::map::{
-    Map, Tile, TileCoord, TileKind, openttd_tile_index_to_coord, rail_bit_for_sides,
-    rail_bits_touching_side, rail_traversal_bits,
+    Map, Tile, TileCoord, TileKind, openttd_tile_index_to_coord, opposite_diag_dir as opposite_dir,
+    rail_bit_for_sides, rail_bits_touching_side, rail_traversal_bits,
 };
 use crate::ship_movement::{is_water_network_tile_at, water_tiles_connected};
 use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::VehicleKind;
 
 pub mod yapf;
+
+/// Reexport canónico `OpenTTD` (`map::diag_dir_offset`).
+pub use crate::map::diag_dir_offset;
 
 fn is_any_transport_tile(kind: TileKind) -> bool {
     matches!(
@@ -71,18 +74,6 @@ pub const fn path_network_for_vehicle(kind: VehicleKind) -> PathNetwork {
 #[must_use]
 pub fn tile_is_path_traversable(kind: TileKind) -> bool {
     is_any_transport_tile(kind)
-}
-
-/// Offset de tesela vecina hacia donde apunta la entrada (`OpenTTD` `TileOffsByDiagDir`).
-#[must_use]
-pub const fn diag_dir_offset(dir: u8) -> (i32, i32) {
-    const OFFSETS: [(i32, i32); 4] = [
-        (-1, 0), // DIAGDIR_NE
-        (0, 1),  // DIAGDIR_SE
-        (1, 0),  // DIAGDIR_SW
-        (0, -1), // DIAGDIR_NW
-    ];
-    OFFSETS[dir as usize & 3]
 }
 
 #[must_use]
@@ -259,11 +250,6 @@ fn effective_tram_bits(map: &Map, c: TileCoord) -> u8 {
         TileKind::Station if is_road_stop_station(&t) => t.m3 & 0x0F,
         _ => 0,
     }
-}
-
-#[must_use]
-const fn opposite_dir(d: u8) -> u8 {
-    (d + 2) & 3
 }
 
 /// Boca del depósito de vía (`m5 & 3`) si la tesela es un depósito.

@@ -10,7 +10,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::map::rail_traversal_bits;
-use crate::map::{Map, TileCoord, TileKind};
+use crate::map::{Map, TileCoord, TileKind, opposite_diag_dir as opposite_dir};
 use crate::rail_signals::{
     SIGTYPE_BLOCK, YapfSignalRouting, dir_from_to, is_pbs_signal_type, rail_signal_present_mask,
     rail_tile_is_signals, signal_exit_dir, signal_track_for_bit, signal_type_for_track,
@@ -44,11 +44,6 @@ impl ReservedRailStep {
     pub const fn new(tile: TileCoord, track: u8) -> Self {
         Self { tile, track }
     }
-}
-
-#[must_use]
-const fn opposite_dir(d: u8) -> u8 {
-    (d + 2) & 3
 }
 
 /// `true` si `tile` tiene una señal no-PBS que controla la salida `exit_dir`.

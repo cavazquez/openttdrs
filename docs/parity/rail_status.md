@@ -31,7 +31,7 @@ aproximadas (Fases 2–3 del roadmap estructural).
 | Pathfinding rail | `pathfinder/yapf.rs` (trackdir + señales/reservas) | `pathfinder/yapf/yapf_rail.cpp`, `follow_track.hpp` | 2 · probado (+ golden rutas estáticas) | `yapf_*`, `golden_yapf.rs` | Medio: sin golden tick-a-tick vs OpenTTD; desempates difieren |
 | Ocupación/anticolisión | `rail_signals.rs` (`train_blocked_by_traffic`) | (OpenTTD lo resuelve con reservas + señales) | 2 · probado (tile ocupado, frente a frente, tren parado delante) | `trains_block_head_on_without_signal` | Alto: modelo distinto al de OpenTTD (que usa PBS) |
 | Railtypes / electrificación / conversión | `rail_type.rs` + `ConvertRail` + catenaria | `rail.h`, `elrail.cpp` / `elrail_data.h` | 2 · probado (Fase 5–6 + catenaria) | `convert_rail_*`, `collect_catenary_*`, `*_engine_requires_*` | Medio: wires PCP + postes PPP + estación/túnel/puente; TO_CATENARY persistente + env; tranvía = RoadType |
-| Ownership por tile de vía | — (`m1` se fuerza a 0 al construir) | `rail_map.h` (`GetTileOwner`) | 0 · no implementado | — | Bajo |
+| Ownership por tile de vía | `m1` = compañía activa en `PlaceRail` / depósito / túnel / puente (`bridge.rs`, `rail.rs`) | `rail_map.h` (`GetTileOwner` / `MAPO`) | 2 · probado | `place_rail_and_road_write_active_company_owner_m1`, `place_rail_tunnel_and_bridge_write_active_company_owner_m1` | Bajo |
 | Serialización (JSON v10, `.sav`, `.ottdmap`) | `save.rs` (migraciones de cruces), `sav/mod.rs`, `map/binary.rs` | formato de mapa OpenTTD | 2 · probado (roundtrip + carga de saves reales) | `tests/sav_load_rail_saves.rs` (`grinnway_sav_has_rail_network`) | Bajo |
 
 ## Trenes

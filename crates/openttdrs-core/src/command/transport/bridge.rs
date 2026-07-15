@@ -162,6 +162,8 @@ pub(in crate::command) fn place_tunnel_or_bridge(
                 tile.m6 = set_bridge_type_m6(tile.m6, bridge_type);
             }
         }
+        // Dueño de la infra (`MAPO` / `m1`), igual que vía y carretera.
+        tile.m1 = state.active_company.0;
         state
             .map
             .set_tile(*c, tile)

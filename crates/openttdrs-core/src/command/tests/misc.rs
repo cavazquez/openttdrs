@@ -291,6 +291,61 @@ fn place_rail_and_road_write_active_company_owner_m1() {
 }
 
 #[test]
+fn place_rail_tunnel_and_bridge_write_active_company_owner_m1() {
+    use crate::{BridgeType, TileKind};
+
+    let mut s = GameState::new(16, 16);
+    s.economy.money = 1_000_000;
+    s.ensure_rival_transcargo();
+    let rival = crate::CompanyId(1);
+    assert!(s.set_active_company(rival));
+
+    let c = |x: i32, y: i32| TileCoord::new(x, y);
+    // Huella de túnel del golden / station tests.
+    s.map.set_height(c(5, 5), 2).unwrap();
+    s.map.set_height(c(5, 6), 2).unwrap();
+    s.map.set_height(c(6, 5), 1).unwrap();
+    s.map.set_height(c(6, 6), 1).unwrap();
+    s.map.set_height(c(3, 5), 1).unwrap();
+    s.map.set_height(c(3, 6), 1).unwrap();
+    s.map.set_height(c(4, 5), 2).unwrap();
+    s.map.set_height(c(4, 6), 2).unwrap();
+    apply_command(&mut s, &Command::PlaceRailTunnel(c(5, 5), c(3, 5))).unwrap();
+    for pos in [c(5, 5), c(4, 5), c(3, 5)] {
+        assert_eq!(
+            s.map.get(pos).unwrap().m1,
+            rival.0,
+            "túnel {pos:?} debe ser de la compañía activa"
+        );
+        assert_eq!(s.map.get_kind(pos), Some(TileKind::RailTunnel));
+    }
+
+    for x in 2..=5 {
+        s.map.set_kind(c(x, 10), TileKind::Water).unwrap();
+    }
+    let west = c(1, 10);
+    let east = c(6, 10);
+    apply_command(
+        &mut s,
+        &Command::PlaceRailBridge(west, east, BridgeType::Wooden),
+    )
+    .unwrap();
+    assert_eq!(s.map.get(west).unwrap().m1, rival.0);
+    assert_eq!(s.map.get(east).unwrap().m1, rival.0);
+
+    // Rival no deja demoler al jugador.
+    assert!(s.set_active_company(crate::CompanyId::PLAYER));
+    assert_eq!(
+        apply_command(&mut s, &Command::ClearTile(c(5, 5))).unwrap_err(),
+        CommandError::TileNotOwned
+    );
+    assert_eq!(
+        apply_command(&mut s, &Command::ClearTile(west)).unwrap_err(),
+        CommandError::TileNotOwned
+    );
+}
+
+#[test]
 fn toggle_vehicle_running_rejects_other_company_owner() {
     let mut s = GameState::new(8, 8);
     s.economy.money = 1_000_000;

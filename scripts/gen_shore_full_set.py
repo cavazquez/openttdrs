@@ -160,6 +160,9 @@ def main() -> None:
         meta.append((w, h, xr, yr))
     print(f"Recortados {SHORE_SPRITE_COUNT} sprites de orilla en {TILES_DIR}")
 
+    # Formato estable (alineado como rustfmt) para no ensuciar git si los datos no cambian.
+    meta_bodies = [f"({w}.0, {h}.0, {xr}.0, {yr}.0)," for w, h, xr, yr in meta]
+    meta_width = max(len(b) for b in meta_bodies)
     lines = [
         "// Generado por scripts/gen_shore_full_set.py — NO EDITAR A MANO.",
         "//",
@@ -174,19 +177,22 @@ def main() -> None:
         "/// (w, h, xrel, yrel) NFO por slot de `SPR_SHORE_BASE`.",
         f"pub static SHORE_META: [(f32, f32, f32, f32); {SHORE_SPRITE_COUNT}] = [",
     ]
-    for slot, (w, h, xr, yr) in enumerate(meta):
-        lines.append(f"    ({w}.0, {h}.0, {xr}.0, {yr}.0), // slot {slot}")
+    for slot, body in enumerate(meta_bodies):
+        lines.append(f"    {body:<{meta_width}} // slot {slot}")
+    tileh = ", ".join(str(v) for v in TILEH_TO_SHORE_SPRITE)
     lines += [
         "];",
         "",
         "/// `tileh` (0..14) → slot de sprite de orilla (`tileh_to_shoresprite`).",
-        "pub static TILEH_TO_SHORE_SPRITE: [u8; 15] = [",
-        "    " + ", ".join(str(v) for v in TILEH_TO_SHORE_SPRITE) + ",",
-        "];",
+        f"pub static TILEH_TO_SHORE_SPRITE: [u8; 15] = [{tileh}];",
         "",
     ]
-    OUT_RS.write_text("\n".join(lines), encoding="utf-8")
-    print(f"Escrito {OUT_RS.relative_to(REPO)}")
+    text = "\n".join(lines)
+    if OUT_RS.is_file() and OUT_RS.read_text(encoding="utf-8") == text:
+        print(f"Sin cambios en {OUT_RS.relative_to(REPO)}")
+    else:
+        OUT_RS.write_text(text, encoding="utf-8")
+        print(f"Escrito {OUT_RS.relative_to(REPO)}")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ use crate::engine::{
     default_engine_id, engine_for_vehicle, progress_step_for_speed, train_acceleration,
     update_road_speed,
 };
-use crate::map::{Map, TileCoord, tile_slope_and_z};
+use crate::map::{Map, TileCoord, slope_pixel_z};
 use crate::rail_type::rail_type_from_tile;
 use crate::train_movement::{ACCEL_SLOWDOWN, affect_speed_by_z_change, is_45_degree_turn};
 
@@ -609,6 +609,9 @@ pub struct Vehicle {
     /// Velocidad actual (unidades `OpenTTD`; 0 = parado).
     #[serde(default)]
     pub cur_speed: u16,
+    /// Altura en píxeles (`Vehicle::z_pos` / `GetSlopePixelZ`); `None` = sin sincronizar.
+    #[serde(default)]
+    pub z_pos: Option<i16>,
     /// Contador de movimiento para SFX de motor (`vehicle.cpp` `motion_counter`).
     #[serde(default)]
     pub motion_counter: u16,
@@ -805,6 +808,7 @@ impl Vehicle {
             engine_id: Some(engine_id),
             name: None,
             cur_speed: 0,
+            z_pos: None,
             motion_counter: 0,
             subspeed: 0,
             path: VecDeque::new(),
@@ -1313,6 +1317,9 @@ impl Vehicle {
             if let Ok(progress) = u8::try_from(next) {
                 self.progress = progress;
             }
+            if let Some(map) = map {
+                self.sync_train_slope_speed(map);
+            }
             return;
         }
         let mut remaining = next;
@@ -1327,9 +1334,15 @@ impl Vehicle {
                 {
                     self.progress = progress;
                 }
+                if let Some(map) = map {
+                    self.sync_train_slope_speed(map);
+                }
                 return;
             }
             if self.movement_target().is_none() {
+                if let Some(map) = map {
+                    self.sync_train_slope_speed(map);
+                }
                 return;
             }
         }
@@ -1351,7 +1364,6 @@ impl Vehicle {
     }
 
     fn advance_one_tile(&mut self, map: Option<&Map>) {
-        let old_pos = self.pos;
         if let Some(next) = self.path.pop_front() {
             self.update_direction_step(self.pos, next);
             if self.orders.is_empty() {
@@ -1392,22 +1404,25 @@ impl Vehicle {
             }
         }
         if let Some(map) = map {
-            self.apply_train_z_speed_change(map, old_pos);
+            self.sync_train_slope_speed(map);
         }
     }
 
-    /// `AffectSpeedByZChange` al cruzar tesela (MVP: Δ`GetTileZ` entre tiles).
-    fn apply_train_z_speed_change(&mut self, map: &Map, old_pos: TileCoord) {
-        if self.kind != VehicleKind::Train || !self.is_consist_head() || old_pos == self.pos {
+    /// `UpdateInclination` + `AffectSpeedByZChange` (`ground_vehicle.hpp` / `train_cmd.cpp`).
+    ///
+    /// Usa Z en píxeles (`GetSlopePixelZ` ≈ base·8 + partial) en la sub-tesela actual.
+    fn sync_train_slope_speed(&mut self, map: &Map) {
+        if self.kind != VehicleKind::Train || !self.is_consist_head() {
             return;
         }
-        let Some((_, z_old)) = tile_slope_and_z(map, old_pos) else {
+        let (sub_x, sub_y) = crate::road_movement::vehicle_subtile(self);
+        let new_z = slope_pixel_z(map, self.pos, sub_x, sub_y);
+        let Some(old_z) = self.z_pos else {
+            self.z_pos = Some(new_z);
             return;
         };
-        let Some((_, z_new)) = tile_slope_and_z(map, self.pos) else {
-            return;
-        };
-        let z_diff = i16::from(z_new) - i16::from(z_old);
+        let z_diff = new_z - old_z;
+        self.z_pos = Some(new_z);
         if z_diff == 0 {
             return;
         }
@@ -2201,7 +2216,43 @@ mod tests {
             v.cur_speed = cruise;
             v.step_with_map(Some(&map));
         }
-        assert_eq!(v.cur_speed, cruise + 2, "bajada Δz=−1: +z_down");
+        assert_eq!(v.cur_speed, cruise + 2, "bajada Δz píxel: +z_down");
+    }
+
+    #[test]
+    fn train_applies_z_change_while_progressing_on_inclined_tile() {
+        use crate::map::{Map, SLOPE_NE, TileKind, tile_slope_and_z};
+
+        let mut map = Map::new_flat(8, 8, 4);
+        // SLOPE_NE en (3,3): N+E elevados.
+        map.set_height(TileCoord::new(3, 3), 5).unwrap();
+        map.set_height(TileCoord::new(3, 4), 5).unwrap();
+        let c = TileCoord::new(3, 3);
+        assert_eq!(tile_slope_and_z(&map, c).unwrap().0, SLOPE_NE);
+        map.set_kind(c, TileKind::Rail).unwrap();
+        map.set_mapt_m5(c, 0x10, 0x01).unwrap(); // TRACK_X
+
+        let mut v = Vehicle::new(0, VehicleKind::Train, c, TileCoord::new(4, 3));
+        v.direction = DIR_SW; // +X
+        v.running = true;
+        let cruise = v.effective_engine().max_speed.saturating_sub(10).max(4);
+        v.cur_speed = cruise;
+        v.progress = 0;
+        v.sync_train_slope_speed(&map);
+        let z0 = v.z_pos.unwrap();
+        v.cur_speed = cruise;
+        v.progress = 220;
+        v.sync_train_slope_speed(&map);
+        let z1 = v.z_pos.unwrap();
+        assert!(
+            z1 < z0,
+            "en SLOPE_NE hacia el este baja el Z; z0={z0} z1={z1}"
+        );
+        assert_eq!(
+            v.cur_speed,
+            cruise + 2,
+            "ΔZ subpíxel en bajada aplica +z_down"
+        );
     }
 
     #[test]

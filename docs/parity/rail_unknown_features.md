@@ -61,7 +61,8 @@ parcialmente resueltos; se mantienen tachados o anotados.
     estación/túnel/puente; TO_CATENARY persistente desde Ajustes y overrides
     `OPENTTDRS_HIDE_CATENARY` / `OPENTTDRS_TRANSPARENT_CATENARY`. Pendiente:
     pendientes/nieve tipadas mono/maglev, `curve_speed` por railtype.
-14. **Ownership por tile de vía** — `m1` se fuerza a 0 al construir.
+14. ~~**Ownership por tile de vía**~~ ✅ `m1` = compañía activa en
+    `PlaceRail` / depósito / túnel / puente.
 15. **AM_REALISTIC + `GetCurveSpeedLimit`** — `train_cmd.cpp:312-381`
     (límites 61 / 88 / `232-(13-n)²`, tilt +20 %, `curve_speed_mod` por motor)
     y `GetAcceleration` física completa (`ground_vehicle.cpp:105-183`). Solo
@@ -71,8 +72,9 @@ parcialmente resueltos; se mantienen tachados o anotados.
 17. **Multi-head / articulados / dual-headed** — `IsArticulatedPart`,
     `GetNextUnit`. Depende del ítem 6.
 18. ~~**Pendientes que afectan velocidad (`z_up`/`z_down` de
-    `_accel_slowdown`)**~~ ✅ MVP: `affect_speed_by_z_change` al cruzar tesela
-    (`ΔGetTileZ`); pendiente fino: ΔZ subpíxel como `UpdateInclination`.
+    `_accel_slowdown`)**~~ ✅ `affect_speed_by_z_change` + `sync_train_slope_speed`
+    con Z en píxeles (`slope_pixel_z` ≈ `GetSlopePixelZ`) al avanzar progreso o
+    cruzar tesela.
 19. **Vagones en depósito / compra de vagones / refit de consist** — UI y
     comandos; depende del ítem 6.
 20. ~~**Choques (`CheckTrainCollision`)**~~ ✅ MVP (`train_collision.rs`); averías ya parciales.

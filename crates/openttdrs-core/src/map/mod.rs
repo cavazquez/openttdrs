@@ -54,10 +54,10 @@ pub use object::{
 pub use rail_slope::{rail_foundation_for_trackbits, rail_trackbits_valid_on_slope};
 pub use road_bits::{OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, effective_road_bits};
 pub use slope::{
-    SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, complement_slope, diag_dir_offset,
+    SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, TILE_PIXEL_HEIGHT, complement_slope, diag_dir_offset,
     inclined_slope_direction, is_tunnel_entrance_slope, partial_pixel_z, resolve_tunnel_end,
-    slope_dz_at_subtile, slope_dz_on_tile, tile_slope_and_z, tunnel_entrance_m5, tunnel_path_tiles,
-    tunnel_preview_path,
+    slope_dz_at_subtile, slope_dz_on_tile, slope_pixel_z, tile_slope_and_z, tunnel_entrance_m5,
+    tunnel_path_tiles, tunnel_preview_path,
 };
 pub use station_tile_anim::{
     AIRPORT_RADAR_FRAMES, airport_radar_frame, is_airport_tower_tile, step_airport_tiles,

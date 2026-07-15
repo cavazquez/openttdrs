@@ -9,14 +9,14 @@
 
 ## Resumen: qué ya tenemos vs. qué falta
 
-El port tiene un **core jugable** (transporte carretera/rail, industrias, economía básica, señales v1) y un **cliente Bevy con animaciones visuales fieles** (agua, humo, paletas). Los grandes huecos son **música**, **sonido completo** y las **dinámicas de “mundo vivo”** (ciudades que crecen, desastres, préstamos, subsidios, IA rival).
+El port tiene un **core jugable** (transporte carretera/rail, industrias, economía básica, señales v1, IA rival #86) y un **cliente Bevy con animaciones visuales fieles** (agua, humo, paletas). Los grandes huecos son **música**, **sonido completo**, **CargoDist** y **NewGRF runtime**.
 
 | Área | Nivel actual | Gap principal |
 |------|--------------|---------------|
 | Animaciones visuales | Avanzado + humo trenes/FX | NewGRF tile callbacks completos |
 | Sonido | Catálogo 73 SFX + mixer 8 ch + motores | Ambiente / NewGRF Action11 |
 | Música | MusicPlugin + script OGG | Playlist completa OpenMSX |
-| Dinámicas de juego | Préstamos, ciudades, averías, subsidios, desastres | IA rival (epic futuro) |
+| Dinámicas de juego | Préstamos, ciudades, averías, subsidios, desastres, IA rival (#86) | CargoDist real, NewGRF runtime |
 
 ---
 
@@ -312,7 +312,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Subsidios | ✅ Parcial | `subsidy.rs` |
 | Desastres | ✅ Parcial | `disaster.rs` |
 | Préstamos activos | ✅ Parcial | `economy.rs`, `command/economy.rs` |
-| IA rivales | ❌ | `docs/epics/ai_rivals.md` |
+| IA rivales | ✅ (#86) | `docs/epics/ai_rivals.md` |
 | Barcos / aviones | ✅ Parcial | `ship_movement.rs`, `aircraft_movement.rs` |
 
 ### 5.2 Cliente (`openttdrs-client`)
@@ -401,12 +401,12 @@ Combinando impacto en el “feel” del juego y esfuerzo de desarrollo:
 | **C4** | Desastres | Dinámica + FX | M | Medio — flavor |
 | **C5** | Árboles + campos | Visual + sim | M | Bajo–Medio |
 | **D1** | Barcos / aviones | Vehículo nuevo | L | Medio |
-| **D2** | IA rivales | Dinámica | XL | Alto a largo plazo |
+| **D2** | IA rivales | Dinámica | XL | ✅ Cerrado (#86, jul 2026) |
 | **—** | NewGRF runtime | Mods | XL | Fuera de alcance actual |
 
 ### 8.1 Próximo paso concreto (recomendado)
 
-Feel de partida (decaimiento/rating compañía, subsidios con feedback, desastres con noticias) ✅. Pendiente de impacto: IA rivales (épica), CargoDist real, NewGRF runtime completo.
+Feel de partida + IA rivales (#86) ✅. Pendiente de impacto jugable: CargoDist real (#49), multi-compañía humana (#41), NewGRF runtime. Paridad rail fina: ver `docs/parity/rail_unknown_features.md`.
 
 ---
 

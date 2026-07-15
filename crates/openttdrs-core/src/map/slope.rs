@@ -95,6 +95,9 @@ pub const fn complement_slope(tileh: u8) -> u8 {
 const TILE_SIZE_SUB: i32 = 16;
 const TILE_HEIGHT_SUB: i32 = 8;
 
+/// Altura de un nivel de terreno en píxeles (`TILE_HEIGHT` de OpenTTD).
+pub const TILE_PIXEL_HEIGHT: i16 = 8;
+
 /// Altura sub-tesela en unidades `TILE_HEIGHT` (`GetPartialPixelZ` / `landscape.cpp`).
 #[must_use]
 #[allow(
@@ -143,6 +146,15 @@ pub fn slope_dz_at_subtile(sub_x: f32, sub_y: f32, tileh: u8) -> f32 {
 #[must_use]
 pub fn slope_dz_on_tile(map: &Map, c: TileCoord, sub_x: f32, sub_y: f32) -> f32 {
     tile_slope_and_z(map, c).map_or(0.0, |(tileh, _)| slope_dz_at_subtile(sub_x, sub_y, tileh))
+}
+
+/// Z en píxeles al estilo `GetSlopePixelZ` (base `GetTileZ` + `GetPartialPixelZ`).
+#[must_use]
+pub fn slope_pixel_z(map: &Map, c: TileCoord, sub_x: f32, sub_y: f32) -> i16 {
+    let Some((tileh, z)) = tile_slope_and_z(map, c) else {
+        return 0;
+    };
+    i16::from(z) * TILE_PIXEL_HEIGHT + i16::from(partial_pixel_z(sub_x, sub_y, tileh))
 }
 
 /// Offset de tesela en dirección diagonal (`TileOffsByDiagDir`).
@@ -258,6 +270,26 @@ mod tests {
         assert_eq!(partial_pixel_z(0.0, 9.0, SLOPE_NE), 8);
         assert_eq!(partial_pixel_z(15.0, 9.0, SLOPE_NE), 0);
         assert_eq!(partial_pixel_z(8.0, 9.0, SLOPE_NE), 4);
+    }
+
+    #[test]
+    fn slope_pixel_z_combines_tile_z_and_partial() {
+        let mut map = Map::new_flat(4, 4, 4);
+        // N+E elevados → SLOPE_NE en (1,1).
+        map.set_height(TileCoord::new(1, 1), 5).unwrap();
+        map.set_height(TileCoord::new(1, 2), 5).unwrap();
+        let c = TileCoord::new(1, 1);
+        let (tileh, z) = tile_slope_and_z(&map, c).unwrap();
+        assert_eq!(tileh, SLOPE_NE);
+        assert_eq!(z, 4);
+        assert_eq!(
+            slope_pixel_z(&map, c, 0.0, 9.0),
+            i16::from(z) * TILE_PIXEL_HEIGHT + 8
+        );
+        assert_eq!(
+            slope_pixel_z(&map, c, 15.0, 9.0),
+            i16::from(z) * TILE_PIXEL_HEIGHT
+        );
     }
 
     #[test]

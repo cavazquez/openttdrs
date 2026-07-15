@@ -1,0 +1,726 @@
+{
+  "note": "Tick-a-tick interno train_pbs (#97). Formato listo para diff vs OpenTTD.",
+  "ticks": 40,
+  "rows": [
+    {
+      "tick": 1,
+      "vehicle": 1,
+      "x": 2,
+      "y": 2,
+      "progress": 32,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 1,
+      "vehicle": 2,
+      "x": 2,
+      "y": 4,
+      "progress": 32,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 2,
+      "vehicle": 1,
+      "x": 2,
+      "y": 2,
+      "progress": 64,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 2,
+      "vehicle": 2,
+      "x": 2,
+      "y": 4,
+      "progress": 64,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 3,
+      "vehicle": 1,
+      "x": 2,
+      "y": 2,
+      "progress": 96,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 3,
+      "vehicle": 2,
+      "x": 2,
+      "y": 4,
+      "progress": 96,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 4,
+      "vehicle": 1,
+      "x": 2,
+      "y": 2,
+      "progress": 128,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 4,
+      "vehicle": 2,
+      "x": 2,
+      "y": 4,
+      "progress": 128,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 5,
+      "vehicle": 1,
+      "x": 2,
+      "y": 2,
+      "progress": 160,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 5,
+      "vehicle": 2,
+      "x": 2,
+      "y": 4,
+      "progress": 160,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 6,
+      "vehicle": 1,
+      "x": 2,
+      "y": 2,
+      "progress": 192,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 6,
+      "vehicle": 2,
+      "x": 2,
+      "y": 4,
+      "progress": 192,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 7,
+      "vehicle": 1,
+      "x": 2,
+      "y": 2,
+      "progress": 224,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 7,
+      "vehicle": 2,
+      "x": 2,
+      "y": 4,
+      "progress": 224,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 8,
+      "vehicle": 1,
+      "x": 3,
+      "y": 2,
+      "progress": 1,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 8,
+      "vehicle": 2,
+      "x": 3,
+      "y": 4,
+      "progress": 1,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 9,
+      "vehicle": 1,
+      "x": 3,
+      "y": 2,
+      "progress": 33,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 9,
+      "vehicle": 2,
+      "x": 3,
+      "y": 4,
+      "progress": 33,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 10,
+      "vehicle": 1,
+      "x": 3,
+      "y": 2,
+      "progress": 65,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 10,
+      "vehicle": 2,
+      "x": 3,
+      "y": 4,
+      "progress": 65,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 11,
+      "vehicle": 1,
+      "x": 3,
+      "y": 2,
+      "progress": 98,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 11,
+      "vehicle": 2,
+      "x": 3,
+      "y": 4,
+      "progress": 98,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 12,
+      "vehicle": 1,
+      "x": 3,
+      "y": 2,
+      "progress": 131,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 12,
+      "vehicle": 2,
+      "x": 3,
+      "y": 4,
+      "progress": 131,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 13,
+      "vehicle": 1,
+      "x": 3,
+      "y": 2,
+      "progress": 164,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 13,
+      "vehicle": 2,
+      "x": 3,
+      "y": 4,
+      "progress": 164,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 14,
+      "vehicle": 1,
+      "x": 3,
+      "y": 2,
+      "progress": 197,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 14,
+      "vehicle": 2,
+      "x": 3,
+      "y": 4,
+      "progress": 197,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 15,
+      "vehicle": 1,
+      "x": 3,
+      "y": 2,
+      "progress": 230,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 15,
+      "vehicle": 2,
+      "x": 3,
+      "y": 4,
+      "progress": 230,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 16,
+      "vehicle": 1,
+      "x": 4,
+      "y": 2,
+      "progress": 9,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 16,
+      "vehicle": 2,
+      "x": 4,
+      "y": 4,
+      "progress": 9,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 17,
+      "vehicle": 1,
+      "x": 4,
+      "y": 2,
+      "progress": 43,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 17,
+      "vehicle": 2,
+      "x": 4,
+      "y": 4,
+      "progress": 43,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 18,
+      "vehicle": 1,
+      "x": 4,
+      "y": 2,
+      "progress": 77,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 18,
+      "vehicle": 2,
+      "x": 4,
+      "y": 4,
+      "progress": 77,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 19,
+      "vehicle": 1,
+      "x": 4,
+      "y": 2,
+      "progress": 111,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 19,
+      "vehicle": 2,
+      "x": 4,
+      "y": 4,
+      "progress": 111,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 20,
+      "vehicle": 1,
+      "x": 4,
+      "y": 2,
+      "progress": 145,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 20,
+      "vehicle": 2,
+      "x": 4,
+      "y": 4,
+      "progress": 145,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 21,
+      "vehicle": 1,
+      "x": 4,
+      "y": 2,
+      "progress": 179,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 21,
+      "vehicle": 2,
+      "x": 4,
+      "y": 4,
+      "progress": 179,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 22,
+      "vehicle": 1,
+      "x": 4,
+      "y": 2,
+      "progress": 215,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 22,
+      "vehicle": 2,
+      "x": 4,
+      "y": 4,
+      "progress": 215,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 23,
+      "vehicle": 1,
+      "x": 4,
+      "y": 2,
+      "progress": 251,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 23,
+      "vehicle": 2,
+      "x": 4,
+      "y": 4,
+      "progress": 251,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 24,
+      "vehicle": 1,
+      "x": 5,
+      "y": 2,
+      "progress": 32,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 24,
+      "vehicle": 2,
+      "x": 5,
+      "y": 4,
+      "progress": 32,
+      "reserved_len": 6,
+      "blocked": false
+    },
+    {
+      "tick": 25,
+      "vehicle": 1,
+      "x": 5,
+      "y": 2,
+      "progress": 68,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 25,
+      "vehicle": 2,
+      "x": 5,
+      "y": 4,
+      "progress": 68,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 26,
+      "vehicle": 1,
+      "x": 5,
+      "y": 2,
+      "progress": 104,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 26,
+      "vehicle": 2,
+      "x": 5,
+      "y": 4,
+      "progress": 104,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 27,
+      "vehicle": 1,
+      "x": 5,
+      "y": 2,
+      "progress": 140,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 27,
+      "vehicle": 2,
+      "x": 5,
+      "y": 4,
+      "progress": 140,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 28,
+      "vehicle": 1,
+      "x": 5,
+      "y": 2,
+      "progress": 176,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 28,
+      "vehicle": 2,
+      "x": 5,
+      "y": 4,
+      "progress": 176,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 29,
+      "vehicle": 1,
+      "x": 5,
+      "y": 2,
+      "progress": 212,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 29,
+      "vehicle": 2,
+      "x": 5,
+      "y": 4,
+      "progress": 212,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 30,
+      "vehicle": 1,
+      "x": 5,
+      "y": 2,
+      "progress": 248,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 30,
+      "vehicle": 2,
+      "x": 5,
+      "y": 4,
+      "progress": 248,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 31,
+      "vehicle": 1,
+      "x": 6,
+      "y": 2,
+      "progress": 29,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 31,
+      "vehicle": 2,
+      "x": 6,
+      "y": 4,
+      "progress": 29,
+      "reserved_len": 5,
+      "blocked": false
+    },
+    {
+      "tick": 32,
+      "vehicle": 1,
+      "x": 6,
+      "y": 2,
+      "progress": 66,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 32,
+      "vehicle": 2,
+      "x": 6,
+      "y": 4,
+      "progress": 66,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 33,
+      "vehicle": 1,
+      "x": 6,
+      "y": 2,
+      "progress": 103,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 33,
+      "vehicle": 2,
+      "x": 6,
+      "y": 4,
+      "progress": 103,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 34,
+      "vehicle": 1,
+      "x": 6,
+      "y": 2,
+      "progress": 140,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 34,
+      "vehicle": 2,
+      "x": 6,
+      "y": 4,
+      "progress": 140,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 35,
+      "vehicle": 1,
+      "x": 6,
+      "y": 2,
+      "progress": 177,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 35,
+      "vehicle": 2,
+      "x": 6,
+      "y": 4,
+      "progress": 177,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 36,
+      "vehicle": 1,
+      "x": 6,
+      "y": 2,
+      "progress": 214,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 36,
+      "vehicle": 2,
+      "x": 6,
+      "y": 4,
+      "progress": 214,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 37,
+      "vehicle": 1,
+      "x": 6,
+      "y": 2,
+      "progress": 251,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 37,
+      "vehicle": 2,
+      "x": 6,
+      "y": 4,
+      "progress": 251,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 38,
+      "vehicle": 1,
+      "x": 7,
+      "y": 2,
+      "progress": 34,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 38,
+      "vehicle": 2,
+      "x": 7,
+      "y": 4,
+      "progress": 34,
+      "reserved_len": 4,
+      "blocked": false
+    },
+    {
+      "tick": 39,
+      "vehicle": 1,
+      "x": 7,
+      "y": 2,
+      "progress": 72,
+      "reserved_len": 3,
+      "blocked": false
+    },
+    {
+      "tick": 39,
+      "vehicle": 2,
+      "x": 7,
+      "y": 4,
+      "progress": 72,
+      "reserved_len": 3,
+      "blocked": false
+    },
+    {
+      "tick": 40,
+      "vehicle": 1,
+      "x": 7,
+      "y": 2,
+      "progress": 110,
+      "reserved_len": 3,
+      "blocked": false
+    },
+    {
+      "tick": 40,
+      "vehicle": 2,
+      "x": 7,
+      "y": 4,
+      "progress": 110,
+      "reserved_len": 3,
+      "blocked": false
+    }
+  ]
+}

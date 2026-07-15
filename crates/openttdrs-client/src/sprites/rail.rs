@@ -241,12 +241,15 @@ fn push_rail_junction_overlays(t: u8, out: &mut Vec<u32>) {
     }
 }
 
-/// ¿Hay PNG tipado (mono/maglev) para este ID de vía plana?
+/// ¿Hay PNG tipado (mono/maglev) para este ID de vía?
+///
+/// Incluye planos y pendientes (`1023..=1034` → `mono_track_*` / `mglv_track_*`).
+/// Nieve plana `1037`/`1038` no tiene set tipado en el atlas → se deja clásica.
 #[must_use]
 pub fn rail_sprite_has_typed_asset(id: u32) -> bool {
     matches!(
         id,
-        1005..=1012 | 1018..=1022 | 1035 // overlays, Y/X, junction ground, HORZ
+        1005..=1012 | 1018..=1035 // overlays, Y/X, pendientes, junction, HORZ
     )
 }
 
@@ -1564,9 +1567,8 @@ pub fn collect_rail_sprites_for_type(
     }
     let foundation = openttdrs_core::rail_foundation_for_trackbits(tileh, t);
     if tileh != 0 && foundation != 1 {
-        // Pendientes: sin set tipado en assets → vía clásica.
         if let Some(sid) = rail_sloped_track_sprite_id(tileh, snow_ground) {
-            out.push(sid);
+            out.push(remap_rail_sprite_id(sid, rail_type));
         }
         return;
     }
@@ -1633,6 +1635,23 @@ mod tests {
         assert_eq!(out, vec![1012]);
         collect_rail_ghost_sprites(RAIL_TB_Y, 0, &mut out);
         assert_eq!(out, vec![RAIL_SPRITE_TRACK_Y]);
+    }
+
+    #[test]
+    fn collect_rail_sprites_remaps_mono_sloped_track() {
+        use openttdrs_core::RailType;
+        let mut out = Vec::new();
+        collect_rail_sprites_for_type(
+            RAIL_TB_X,
+            openttdrs_core::SLOPE_SW,
+            false,
+            RailType::Monorail,
+            &mut out,
+        );
+        assert!(
+            out.iter().any(|&id| (1087..=1117).contains(&id)),
+            "pendiente mono remapeada: {out:?}"
+        );
     }
 
     #[test]

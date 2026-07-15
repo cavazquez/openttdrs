@@ -34,6 +34,8 @@ pub enum VehicleAdviceKind {
     NoOrders,
     IncompatibleStop,
     WaitingForCargo,
+    /// Sin path PBS tras reversa / timeout (`MarkTrainAsStuck`).
+    PbsStuck,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -353,6 +355,9 @@ fn vehicle_advice_headline(
         }
         VehicleAdviceKind::WaitingForCargo => {
             format!("Sin carga disponible: vehículo {vehicle_id}")
+        }
+        VehicleAdviceKind::PbsStuck => {
+            format!("Sin camino reservado: vehículo {vehicle_id}")
         }
     }
 }

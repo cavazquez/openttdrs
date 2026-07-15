@@ -1021,6 +1021,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 intro_year: meta.intro_year,
                 reliability_pct: 85,
                 train_image_index: 2,
+                dual_headed: false,
                 from_newgrf: true,
                 newgrf_views: views,
                 newgrf_local_id: local_id,

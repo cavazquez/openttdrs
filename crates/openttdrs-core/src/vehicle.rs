@@ -666,6 +666,9 @@ pub struct Vehicle {
     /// Contador de ticks esperando path PBS / señal (`wait_counter` en `OpenTTD`).
     #[serde(default)]
     pub wait_counter: u32,
+    /// Ya pasó `CheckTrainStayInDepot` en esta estancia (equivalente a dejar `Track::Depot`).
+    #[serde(default)]
+    pub depot_leave_cleared: bool,
     /// Tren marcado stuck ante path sin reserva (`VehicleRailFlag::Stuck`).
     #[serde(default)]
     pub pbs_stuck: bool,
@@ -740,6 +743,9 @@ pub struct Vehicle {
     /// Unidad anterior del consist; `None` = cabeza (front engine).
     #[serde(default)]
     pub prev_unit: Option<u32>,
+    /// Par dual-headed (`other_multiheaded_part`); `None` si no aplica.
+    #[serde(default)]
+    pub other_multiheaded_part: Option<u32>,
     /// Longitud de esta unidad en fracciones (`VEHICLE_LENGTH` = 8).
     #[serde(default = "default_unit_length")]
     pub unit_length: u8,
@@ -827,6 +833,7 @@ impl Vehicle {
             awaiting_load_window: false,
             force_proceed: false,
             wait_counter: 0,
+            depot_leave_cleared: false,
             pbs_stuck: false,
             timetable_active: false,
             timetable_wait_remaining: 0,
@@ -852,6 +859,7 @@ impl Vehicle {
             aircraft_phase_ticks: 0,
             next_unit: None,
             prev_unit: None,
+            other_multiheaded_part: None,
             unit_length: crate::train_consist::VEHICLE_LENGTH,
             cached_total_length: u16::from(crate::train_consist::VEHICLE_LENGTH),
             cached_power_hp: 0,
@@ -1275,7 +1283,7 @@ impl Vehicle {
         self.update_movement_speed(map);
 
         if self.kind == VehicleKind::Train {
-            self.apply_immediate_train_turnaround();
+            self.apply_immediate_train_turnaround(map);
         }
 
         if self.movement_target().is_none() {
@@ -1300,7 +1308,10 @@ impl Vehicle {
                 self.depart_turn = 0;
                 self.progress = 0;
                 if let Some(next) = self.movement_target() {
-                    self.set_direction_with_curve_penalty(direction_from_tile_step(self.pos, next));
+                    self.set_direction_with_curve_penalty(
+                        direction_from_tile_step(self.pos, next),
+                        map,
+                    );
                 }
             }
             return;
@@ -1365,7 +1376,7 @@ impl Vehicle {
 
     fn advance_one_tile(&mut self, map: Option<&Map>) {
         if let Some(next) = self.path.pop_front() {
-            self.update_direction_step(self.pos, next);
+            self.update_direction_step(self.pos, next, map);
             if self.orders.is_empty() {
                 self.origin = self.pos;
             }
@@ -1394,7 +1405,7 @@ impl Vehicle {
                 self.pos.y += dy.signum();
             }
             if self.pos != previous {
-                self.update_direction_step(previous, self.pos);
+                self.update_direction_step(previous, self.pos, map);
             }
             if self.orders.is_empty() && self.pos != previous {
                 self.origin = previous;
@@ -1436,18 +1447,23 @@ impl Vehicle {
         self.cur_speed = affect_speed_by_z_change(self.cur_speed, z_diff, rail_idx, max_speed);
     }
 
-    fn update_direction_step(&mut self, from: TileCoord, to: TileCoord) {
-        self.set_direction_with_curve_penalty(direction_from_tile_step(from, to));
+    fn update_direction_step(&mut self, from: TileCoord, to: TileCoord, map: Option<&Map>) {
+        self.set_direction_with_curve_penalty(direction_from_tile_step(from, to), map);
     }
 
     /// Cambia `direction` aplicando penalización de curva del modelo original:
     /// carretera `v->cur_speed -= v->cur_speed >> 2` (`roadveh_cmd.cpp:1481`);
     /// tren `_accel_slowdown` (`train_cmd.cpp:3564-3568`, locomotora).
-    fn set_direction_with_curve_penalty(&mut self, new_dir: VehicleDirection) {
+    fn set_direction_with_curve_penalty(&mut self, new_dir: VehicleDirection, map: Option<&Map>) {
         if new_dir != self.direction {
             match self.kind {
                 VehicleKind::Train => {
-                    let params = &ACCEL_SLOWDOWN[0];
+                    // Índice por railtype: normal/eléctrico=0, mono=1, maglev=2.
+                    let rail_idx = map
+                        .and_then(|m| m.get(self.pos))
+                        .map_or(0, |t| rail_type_from_tile(t).accel_table_index())
+                        .min(ACCEL_SLOWDOWN.len() - 1);
+                    let params = &ACCEL_SLOWDOWN[rail_idx];
                     let turn = if is_45_degree_turn(self.direction, new_dir) {
                         params.small_turn
                     } else {
@@ -1816,7 +1832,7 @@ impl Vehicle {
     }
 
     /// Tren: invierte el rumbo en el acto si la siguiente tesela exige sentido opuesto.
-    fn apply_immediate_train_turnaround(&mut self) {
+    fn apply_immediate_train_turnaround(&mut self, map: Option<&Map>) {
         let Some(next) = self.movement_target() else {
             return;
         };
@@ -1824,7 +1840,7 @@ impl Vehicle {
         if outbound != reverse_direction(self.direction) {
             return;
         }
-        self.set_direction_with_curve_penalty(outbound);
+        self.set_direction_with_curve_penalty(outbound, map);
         self.depart_turn = 0;
         if self.progress == 255 {
             self.progress = 0;
@@ -1925,6 +1941,26 @@ mod tests {
         v.step();
         assert_eq!(v.direction, DIR_NE, "giro inmediato al volver por la vía");
         assert_eq!(v.progress, 0);
+    }
+
+    #[test]
+    fn maglev_45_degree_turn_skips_small_turn_penalty() {
+        use crate::map::{Map, TileKind};
+        use crate::rail_type::{RailType, set_rail_type_on_tile};
+
+        let mut map = Map::new_flat(8, 8, 4);
+        let c = TileCoord::new(3, 3);
+        map.set_kind(c, TileKind::Rail).unwrap();
+        let tile = set_rail_type_on_tile(map.get(c).unwrap(), RailType::Maglev);
+        map.set_tile(c, tile).unwrap();
+        let mut v = Vehicle::new(0, VehicleKind::Train, c, c);
+        v.direction = DIR_NE;
+        v.cur_speed = 200;
+        v.set_direction_with_curve_penalty(DIR_N, Some(&map));
+        assert_eq!(
+            v.cur_speed, 200,
+            "maglev small_turn=0: giro 45° sin penalización"
+        );
     }
 
     #[test]

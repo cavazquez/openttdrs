@@ -36,6 +36,9 @@ pub struct EngineDef {
     pub reliability_pct: u8,
     /// Índice de sprite de locomotora (`OpenTTD` `image_index`; 0 en carretera).
     pub train_image_index: u8,
+    /// `RailVehicleType::Multihead` (`engines.h`): compra spawnea cabina trasera.
+    #[serde(default)]
+    pub dual_headed: bool,
     /// Procedente de Action0 Vehicles `NewGRF`.
     #[serde(default)]
     pub from_newgrf: bool,
@@ -102,6 +105,12 @@ impl EngineDef {
     #[must_use]
     pub fn is_train_engine(&self) -> bool {
         matches!(self.kind, VehicleKind::Train) && !self.is_wagon()
+    }
+
+    /// Multihead vanilla (`RailVehicleType::Multihead`).
+    #[must_use]
+    pub fn is_dual_headed(&self) -> bool {
+        self.dual_headed
     }
 }
 
@@ -182,6 +191,7 @@ macro_rules! road {
             intro_year: $year,
             reliability_pct: RELIABILITY_ROAD,
             train_image_index: 0,
+            dual_headed: false,
             from_newgrf: false,
             newgrf_views: Vec::new(),
             newgrf_local_id: 0,
@@ -192,6 +202,12 @@ macro_rules! road {
 
 macro_rules! train {
     ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr, $img:expr) => {
+        train!(
+            $id, $name, $speed, $cf, $rc_base, $rc, $cap, $cargo, $hp, $wt, $year, $rel, $img,
+            false
+        )
+    };
+    ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr, $img:expr, $dual:expr) => {
         EngineDef {
             id: $id,
             kind: VehicleKind::Train,
@@ -206,6 +222,7 @@ macro_rules! train {
             intro_year: $year,
             reliability_pct: $rel,
             train_image_index: $img,
+            dual_headed: $dual,
             from_newgrf: false,
             newgrf_views: Vec::new(),
             newgrf_local_id: 0,
@@ -405,7 +422,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             32,
             1956,
             RELIABILITY_DIESEL,
-            8
+            8,
+            true
         ),
         train!(
             ENGINE_TRAIN_DASH,
@@ -420,7 +438,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             38,
             1984,
             RELIABILITY_DIESEL,
-            10
+            10,
+            true
         ),
         train!(
             ENGINE_TRAIN_SH_HENDRY_25,
@@ -480,7 +499,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             70,
             1977,
             RELIABILITY_DIESEL,
-            6
+            6,
+            true
         ),
         train!(
             ENGINE_TRAIN_SH_30,
@@ -525,7 +545,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             90,
             1984,
             RELIABILITY_ELECTRIC,
-            21
+            21,
+            true
         ),
         train!(
             ENGINE_TRAIN_ASIASTAR,
@@ -540,7 +561,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             95,
             1992,
             RELIABILITY_ELECTRIC,
-            23
+            23,
+            true
         ),
         // Vagones (power_hp = 0): se enganchan a locomotoras.
         train!(

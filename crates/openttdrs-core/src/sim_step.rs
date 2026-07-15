@@ -1121,6 +1121,12 @@ fn move_vehicles(state: &mut GameState) {
         if state.vehicles[i].is_wagon_unit() {
             continue;
         }
+        // Espera ~37 ticks + chequeo de boca (`CheckTrainStayInDepot`).
+        if state.vehicles[i].kind == VehicleKind::Train
+            && crate::depot_leave::tick_train_stay_in_depot(&state.map, &mut state.vehicles, i)
+        {
+            continue;
+        }
         let blocked = {
             let vehicles = &state.vehicles;
             let vehicle = &vehicles[i];
@@ -1153,7 +1159,18 @@ fn move_vehicles(state: &mut GameState) {
                 pf,
             );
             if reversed {
+                let vehicle_id = state.vehicles[i].id;
+                let order = state.vehicles[i].current_order;
+                let pos = state.vehicles[i].pos;
                 state.vehicles[i].sync_order_destination(&state.map);
+                state.vehicles[i].pbs_stuck = true;
+                crate::news::push_vehicle_advice_news(
+                    state,
+                    vehicle_id,
+                    order,
+                    pos,
+                    crate::news::VehicleAdviceKind::PbsStuck,
+                );
             }
             continue;
         }

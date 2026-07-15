@@ -17,6 +17,7 @@ pub mod cheats;
 pub mod command;
 pub mod company;
 pub mod depot;
+pub mod depot_leave;
 pub mod dev_metrics;
 pub mod disaster;
 pub mod economy;
@@ -110,6 +111,7 @@ pub use company::{
     Company, CompanyId, FEEDER_SHARE_DEN, FEEDER_SHARE_NUM, feeder_share_of, tile_with_owner,
 };
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
+pub use depot_leave::{TRAIN_DEPOT_LEAVE_WAIT_TICKS, tick_train_stay_in_depot};
 pub use dev_metrics::{CargoProbeOptions, VehicleCargoReport, probe_vehicle_cargo_cycle};
 pub use disaster::{DISASTER_CHECK_INTERVAL, force_disaster, tick_disasters, trigger_disaster_at};
 pub use economy::{

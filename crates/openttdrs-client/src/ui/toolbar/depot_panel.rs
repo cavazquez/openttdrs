@@ -9,7 +9,9 @@
 
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
-use openttdrs_core::{Command, TileCoord, TileKind, VehicleKind, apply_command, engine_by_id};
+use openttdrs_core::{
+    Command, TileCoord, TileKind, VehicleKind, apply_command, consist_unit_ids, engine_by_id,
+};
 
 use crate::camera::tile_camera_world_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles};
@@ -96,6 +98,8 @@ pub(crate) enum DepotPanelButton {
     MoveSlotDown,
     /// Abre la ventana de autoreemplazo para este depósito.
     Autoreplace,
+    /// Desengancha la última unidad del consist seleccionado (vía).
+    DetachLastUnit,
 }
 
 /// Texto del botón «Clonar» (cambia entre tren / vehículo según depósito).
@@ -179,6 +183,14 @@ pub(crate) fn setup_depot_panel(mut commands: Commands, asset_server: Res<AssetS
                     asset_server,
                     DepotPanelButton::Autoreplace,
                     "Autoreemplazo",
+                    true,
+                    false,
+                );
+                spawn_depot_button(
+                    row,
+                    asset_server,
+                    DepotPanelButton::DetachLastUnit,
+                    "Desenganchar",
                     true,
                     false,
                 );
@@ -754,6 +766,28 @@ pub(crate) fn handle_depot_panel_buttons(
             }
             DepotPanelButton::Autoreplace => {
                 autoreplace.open_for_depot(depot_pos);
+            }
+            DepotPanelButton::DetachLastUnit => {
+                if !depot_is_rail(&sim, depot_pos) {
+                    continue;
+                }
+                let Some(head_id) = depot_state.selected_vehicle else {
+                    continue;
+                };
+                let units = consist_unit_ids(&sim.state.vehicles, head_id);
+                let Some(&tail_id) = units.last() else {
+                    continue;
+                };
+                if units.len() < 2 {
+                    continue;
+                }
+                match apply_command(&mut sim.state, &Command::DetachConsistUnit(tail_id)) {
+                    Ok(()) => {
+                        pending.pending = true;
+                        depot_state.selected_vehicle = Some(head_id);
+                    }
+                    Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
+                }
             }
             DepotPanelButton::MoveSlotUp | DepotPanelButton::MoveSlotDown => {
                 let vehicles = vehicles_at_depot(&sim, depot_pos);

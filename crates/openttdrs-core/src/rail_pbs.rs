@@ -584,6 +584,7 @@ pub fn tick_pbs_wait_and_maybe_reverse(
         return false;
     }
     // Timeout: girar y limpiar reserva/path (como ReverseTrainDirection stuck).
+    vehicle.cur_speed = 0;
     vehicle.reverse_heading();
     vehicle.path.clear();
     vehicle.reserved_steps.clear();

@@ -196,11 +196,47 @@ pub(super) fn build_vehicle_at_depot(
         vehicle.progress = 0;
     }
     state.vehicles.push(vehicle);
+    if engine.kind == VehicleKind::Train && engine.is_dual_headed() {
+        spawn_dual_headed_rear(state, next_id, depot_pos, &engine);
+    }
     if engine.kind == VehicleKind::Train {
         crate::train_consist::consist_changed(&mut state.vehicles, next_id);
     }
     state.economy.money -= engine.price;
     Ok(())
+}
+
+/// Cabina trasera multihead (`AddRearEngineToMultiheadedTrain`).
+fn spawn_dual_headed_rear(
+    state: &mut GameState,
+    front_id: u32,
+    depot_pos: TileCoord,
+    engine: &crate::engine::EngineDef,
+) {
+    let rear_id = front_id.saturating_add(1);
+    let mut rear = Vehicle::new(rear_id, engine.kind, depot_pos, depot_pos);
+    rear.running = false;
+    rear.engine_id = Some(engine.id);
+    rear.capacity = engine.capacity;
+    rear.cargo_type = engine.cargo;
+    rear.build_tick = state.tick.get();
+    rear.owner = state.active_company;
+    rear.direction = state
+        .vehicles
+        .iter()
+        .find(|v| v.id == front_id)
+        .map_or(crate::DIR_NE, |v| v.direction);
+    rear.prev_unit = Some(front_id);
+    rear.other_multiheaded_part = Some(front_id);
+    if let Some(front) = state.vehicles.iter_mut().find(|v| v.id == front_id) {
+        front.next_unit = Some(rear_id);
+        front.other_multiheaded_part = Some(rear_id);
+        if engine.capacity > 0 {
+            front.capacity = engine.capacity;
+            front.cargo_type = engine.cargo;
+        }
+    }
+    state.vehicles.push(rear);
 }
 
 pub(super) fn attach_wagon_to_consist(
@@ -376,6 +412,9 @@ pub(super) fn toggle_vehicle_running(
             vehicle.direction = crate::train_movement::train_depot_facing(mouth);
             vehicle.progress = 0;
             vehicle.depart_turn = 0;
+            vehicle.wait_counter = 0;
+            vehicle.depot_leave_cleared = false;
+            vehicle.pbs_stuck = false;
         }
         if now_running
             && vehicle.pos == vehicle.dest
@@ -836,6 +875,9 @@ pub(super) fn set_depot_vehicles_running(
                 state.vehicles[idx].direction = crate::train_movement::train_depot_facing(mouth);
                 state.vehicles[idx].progress = 0;
                 state.vehicles[idx].depart_turn = 0;
+                state.vehicles[idx].wait_counter = 0;
+                state.vehicles[idx].depot_leave_cleared = false;
+                state.vehicles[idx].pbs_stuck = false;
             }
             state.vehicles[idx].running = running;
             if running
@@ -907,19 +949,36 @@ pub(super) fn turn_around_vehicle(
     vehicle_id: u32,
 ) -> Result<(), CommandError> {
     require_vehicle_owned_by_active(state, vehicle_id)?;
-    let Some(vehicle) = state.vehicles.iter_mut().find(|v| v.id == vehicle_id) else {
+    let Some(idx) = state.vehicles.iter().position(|v| v.id == vehicle_id) else {
         return Err(CommandError::VehicleNotFound);
     };
-    if vehicle.kind != VehicleKind::Train {
+    if state.vehicles[idx].kind != VehicleKind::Train {
         return Err(CommandError::VehicleKindNotAllowed);
     }
-    vehicle.reverse_heading();
-    vehicle.path.clear();
-    vehicle.reserved_steps.clear();
-    vehicle.wait_counter = 0;
-    vehicle.pbs_stuck = false;
-    vehicle.no_network_route_to_order = false;
-    vehicle.sync_order_destination(&state.map);
+    if state.vehicles[idx].breakdown_ticks_remaining > 0 {
+        return Err(CommandError::VehicleKindNotAllowed);
+    }
+    // `CmdReverseTrainDirection`: velocidad a 0 + liberar reserva delante.
+    state.vehicles[idx].cur_speed = 0;
+    state.vehicles[idx].force_proceed = false;
+    state.vehicles[idx].reverse_heading();
+    state.vehicles[idx].path.clear();
+    state.vehicles[idx].reserved_steps.clear();
+    state.vehicles[idx].wait_counter = 0;
+    state.vehicles[idx].pbs_stuck = false;
+    state.vehicles[idx].no_network_route_to_order = false;
+    state.vehicles[idx].sync_order_destination(&state.map);
+    crate::rail_pbs::update_train_reservations(&state.map, &mut state.vehicles);
+    if crate::rail_pbs::train_waiting_for_pbs_path(&state.map, &state.vehicles[idx]) {
+        state.vehicles[idx].pbs_stuck = true;
+        crate::news::push_vehicle_advice_news(
+            state,
+            vehicle_id,
+            state.vehicles[idx].current_order,
+            state.vehicles[idx].pos,
+            crate::news::VehicleAdviceKind::PbsStuck,
+        );
+    }
     Ok(())
 }
 

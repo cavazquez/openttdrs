@@ -336,6 +336,8 @@ pub fn build_train_line() -> GameState {
     if let Some(path) = find_path(&state.map, train.pos, train.dest, PathNetwork::Rail) {
         train.path = VecDeque::from(path);
     }
+    // Escenario: ya en servicio (sin espera de 37 ticks al spawnear).
+    train.depot_leave_cleared = true;
     state.vehicles.push(train);
 
     state
@@ -439,6 +441,7 @@ fn build_train_supply_core() -> GameState {
     if let Some(path) = find_path(&state.map, train.pos, train.dest, PathNetwork::Rail) {
         train.path = VecDeque::from(path);
     }
+    train.depot_leave_cleared = true;
     state.vehicles.push(train);
 
     state
@@ -545,6 +548,8 @@ pub(crate) fn release_staged_depot_trains(state: &mut GameState) {
         return;
     };
     train2.running = true;
+    train2.depot_leave_cleared = true;
+    train2.wait_counter = 0;
     train2.sync_order_destination(&state.map);
 }
 
@@ -572,6 +577,9 @@ fn push_dual_train(state: &mut GameState, id: u32, orders: Vec<VehicleOrder>, ru
         TRAIN_DUAL_STATION_A,
     );
     train.running = running;
+    if running {
+        train.depot_leave_cleared = true;
+    }
     train.set_vehicle_orders(orders);
     train.sync_order_destination(&state.map);
     if let Some(path) = find_path(&state.map, train.pos, train.dest, PathNetwork::Rail) {
@@ -907,6 +915,7 @@ fn build_rail_signals_demo_track(state: &mut GameState) {
     if let Some(path) = find_path(&state.map, lead.pos, lead.dest, PathNetwork::Rail) {
         lead.path = VecDeque::from(path);
     }
+    lead.depot_leave_cleared = true;
 
     let mut blocker2 = Vehicle::new(
         RAIL_SIGNALS_DEMO_BLOCKER2_ID,
@@ -1057,6 +1066,7 @@ fn build_breakdown() -> GameState {
         v.reliability = 1;
         v.running = true;
         v.cur_speed = 40;
+        v.depot_leave_cleared = true;
     }
     state
 }

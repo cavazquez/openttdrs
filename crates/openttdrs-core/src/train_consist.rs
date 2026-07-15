@@ -263,7 +263,13 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
             .and_then(engine_by_id)
             .unwrap_or_else(|| crate::engine::engine_for_vehicle(v.kind, 0));
         total_weight = total_weight.saturating_add(eng.weight_t);
-        total_power = total_power.saturating_add(eng.power_hp);
+        // Multihead: cada cabina aporta la mitad de la potencia del motor.
+        let unit_power = if eng.is_dual_headed() || v.other_multiheaded_part.is_some() {
+            eng.power_hp / 2
+        } else {
+            eng.power_hp
+        };
+        total_power = total_power.saturating_add(unit_power);
         if eng.capacity > 0 {
             total_cap = total_cap.saturating_add(eng.capacity);
             if cargo_type.is_none() {
@@ -448,6 +454,10 @@ pub fn detach_unit(vehicles: &mut [Vehicle], unit_id: u32) -> Result<(), ()> {
     let Some(v) = vehicles.iter().find(|x| x.id == unit_id) else {
         return Err(());
     };
+    // No partir un par dual-headed.
+    if v.other_multiheaded_part.is_some() {
+        return Err(());
+    }
     let prev = v.prev_unit;
     let next = v.next_unit;
     let old_head = consist_head_id(vehicles, unit_id).unwrap_or(unit_id);

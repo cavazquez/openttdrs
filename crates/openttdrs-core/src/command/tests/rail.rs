@@ -1582,6 +1582,7 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         intro_year: 1960,
         reliability_pct: 85,
         train_image_index: 2,
+        dual_headed: false,
         from_newgrf: true,
         newgrf_views: Vec::new(),
         newgrf_local_id: 0,
@@ -1663,9 +1664,76 @@ fn turn_around_vehicle_reverses_train_heading() {
     let pos = TileCoord::new(2, 2);
     let mut train = Vehicle::new(1, VehicleKind::Train, pos, pos);
     train.direction = DIR_N;
+    train.cur_speed = 80;
     s.vehicles.push(train);
     apply_command(&mut s, &Command::TurnAroundVehicle(1)).unwrap();
     assert_eq!(s.vehicles[0].direction, DIR_S);
+    assert_eq!(s.vehicles[0].cur_speed, 0);
+}
+
+#[test]
+fn build_manley_morel_creates_dual_head_pair() {
+    let mut s = GameState::new(12, 12);
+    s.economy.money = 1_000_000;
+    let depot = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_MANLEY_MOREL),
+    )
+    .unwrap();
+    assert_eq!(s.vehicles.len(), 2);
+    let head = &s.vehicles[0];
+    let rear = &s.vehicles[1];
+    assert_eq!(head.next_unit, Some(rear.id));
+    assert_eq!(rear.prev_unit, Some(head.id));
+    assert_eq!(head.other_multiheaded_part, Some(rear.id));
+    assert_eq!(rear.other_multiheaded_part, Some(head.id));
+    assert_eq!(head.cached_total_length, 16);
+    // Potencia total = valor del motor (cada cabina aporta la mitad).
+    assert_eq!(head.cached_power_hp, 600);
+    assert_eq!(head.capacity, 76);
+}
+
+#[test]
+fn build_wagon_then_attach_updates_consist() {
+    let mut s = GameState::new(12, 12);
+    s.economy.money = 1_000_000;
+    let depot = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_GINZU_A4),
+    )
+    .unwrap();
+    let head = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_WAGON_PASSENGER),
+    )
+    .unwrap();
+    let wagon = s.vehicles.iter().find(|v| v.id != head).unwrap().id;
+    apply_command(
+        &mut s,
+        &Command::AttachWagonToConsist {
+            head_id: head,
+            wagon_id: wagon,
+        },
+    )
+    .unwrap();
+    let h = s.vehicles.iter().find(|v| v.id == head).unwrap();
+    assert_eq!(h.next_unit, Some(wagon));
+    assert!(h.capacity >= 40);
+    assert_eq!(h.cached_total_length, 16);
+
+    apply_command(&mut s, &Command::DetachConsistUnit(wagon)).unwrap();
+    let h = s.vehicles.iter().find(|v| v.id == head).unwrap();
+    assert!(h.next_unit.is_none());
+    let w = s.vehicles.iter().find(|v| v.id == wagon).unwrap();
+    assert!(w.prev_unit.is_none());
+    assert!(w.is_consist_head());
 }
 
 #[test]

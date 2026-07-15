@@ -1,8 +1,7 @@
 # Epic futuro: IA de compañías rivales
 
-**Estado:** Slice jugable #86 (jul 2026) — 3 rutas (carbón + madera + petróleo), vía Manhattan en L, rival en Finanzas.  
-Settings/debug UI #44: `GameState.ai` + ventana «IA / TransCargo».  
-**Fecha:** 2026-07-05 (doc); MVP 2026-07-09; multi-ruta 2026-07-14; settings #44 2026-07-14; 3ª ruta petróleo 2026-07-14
+**Estado:** Épica #86 cerrada (jul 2026) — 3 rutas, terraform de corredor, señales de bloque, rival en Finanzas + settings #44.  
+**Fecha:** 2026-07-05 (doc); MVP 2026-07-09; multi-ruta 2026-07-14; settings #44 2026-07-14; 3ª ruta 2026-07-14; terraform/señales 2026-07-14
 
 ## Contexto
 
@@ -23,8 +22,8 @@ OpenTTD original ejecuta scripts Squirrel (`ai/`, `game/`) para competidores CPU
    - Si `money >= build_money_threshold` y rutas `< max_routes` (default 3) → siguiente par sin servir.
    - Vía Manhattan (L) entre estaciones; depósito junto a la carga.
    - Comprar tren + órdenes full-load; sembrar subsidio del cargo.
-3. **Sin terraform ni señales avanzadas** — pathfinding existente (`PathNetwork::Rail`) para el tren.
-4. **UI:** rival listado en Finanzas (nombre, IA, color, efectivo, ingresos).
+3. **Terraform + señales** — `LevelLand` en la banda del corredor; señales de bloque bidireccionales en tramos rectos.
+4. **UI:** rival listado en Finanzas (nombre, IA, color, efectivo, ingresos) + ventana ajustes #44.
 
 ## Archivos
 
@@ -45,8 +44,7 @@ OpenTTD original ejecuta scripts Squirrel (`ai/`, `game/`) para competidores CPU
 - ~~3ª ruta (petróleo).~~ ✅ (`ai_rival_builds_third_oil_route`)
 - ~~Rival visible en Finanzas.~~ ✅
 - ~~Settings/debug UI (#44).~~ ✅
-
-Pendiente épica (#86): terraform/señales.
+- ~~Terraform de corredor + señales de bloque.~~ ✅ (`ai_rival_flattens_terrain_and_places_block_signals`)
 
 ## DevBot / métricas (implementado, jul 2026)
 

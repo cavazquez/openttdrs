@@ -1,16 +1,18 @@
 //! IA rival «TransCargo»: hasta N rutas de freight (carbón / madera / petróleo).
 //!
-//! Vía Manhattan en L. Sin terraform ni señales. Ver `docs/epics/ai_rivals.md`.
+//! Vía Manhattan en L, nivelado del corredor y señales de bloque bidireccionales.
+//! Ver `docs/epics/ai_rivals.md`.
 
 use crate::GameState;
 use crate::cargo::CargoType;
-use crate::command::{Command, apply_command};
+use crate::command::{Command, LevelMode, apply_command};
 use crate::company::CompanyId;
 use crate::economy::TICKS_PER_MONTH;
 use crate::engine::ENGINE_TRAIN_KIRBY;
 use crate::industry::IndustryKind;
 use crate::map::{TileCoord, TileKind};
 use crate::pathfinder::{PathNetwork, find_path, rail_bit_for_sides};
+use crate::rail_signals::{SIGTYPE_BLOCK, rail_tile_is_signals};
 use crate::subsidy::{SUBSIDY_OFFER_MONTHS, Subsidy};
 use crate::vehicle::{VehicleKind, VehicleOrder};
 
@@ -216,12 +218,12 @@ fn place_rail_manhattan_corridor(state: &mut GameState, from: TileCoord, to: Til
     let mut c = from;
     while c.x != to.x {
         c = TileCoord::new(c.x + step_x, c.y);
-        place_rail_axis(state, c, false);
+        place_rail_axis(state, c, false, from);
     }
     let corner = c;
     while c.y != to.y {
         c = TileCoord::new(c.x, c.y + step_y);
-        place_rail_axis(state, c, true);
+        place_rail_axis(state, c, true, from);
     }
     // Codo L: el merge X|Y permite seguir recto, pero no girar; hace falta la curva.
     if step_x != 0 && step_y != 0 {
@@ -247,7 +249,7 @@ fn place_l_corner_curve(state: &mut GameState, corner: TileCoord, step_x: i32, s
     let _ = apply_command(state, &Command::PlaceRailBits(corner, 0x02));
 }
 
-fn place_rail_axis(state: &mut GameState, c: TileCoord, axis_y: bool) {
+fn place_rail_axis(state: &mut GameState, c: TileCoord, axis_y: bool, height_anchor: TileCoord) {
     if matches!(
         state.map.get_kind(c),
         Some(TileKind::Station | TileKind::RailDepot)
@@ -255,7 +257,123 @@ fn place_rail_axis(state: &mut GameState, c: TileCoord, axis_y: bool) {
         return;
     }
     let bits = if axis_y { 0x02 } else { 0x01 };
+    if apply_command(state, &Command::PlaceRailBits(c, bits)).is_ok() {
+        return;
+    }
+    // Pendiente / desnivel: igualar a la altura del ancla del corredor y reintentar.
+    let _ = apply_command(
+        state,
+        &Command::LevelLand {
+            from: height_anchor,
+            to: c,
+            mode: LevelMode::Level,
+        },
+    );
     let _ = apply_command(state, &Command::PlaceRailBits(c, bits));
+}
+
+/// Nivela la banda Manhattan (con margen) a la altura de `anchor`.
+fn flatten_build_band(state: &mut GameState, anchor: TileCoord, other: TileCoord) {
+    let (mw, mh) = state.map.dimensions();
+    let max_x = i32::try_from(mw.saturating_sub(1)).unwrap_or(0);
+    let max_y = i32::try_from(mh.saturating_sub(1)).unwrap_or(0);
+    let min_x = (anchor.x.min(other.x) - 1).max(0);
+    let min_y = (anchor.y.min(other.y) - 1).max(0);
+    let end_x = (anchor.x.max(other.x) + 1).min(max_x);
+    let end_y = (anchor.y.max(other.y) + 1).min(max_y);
+    let to = TileCoord::new(
+        if anchor.x <= i32::midpoint(min_x, end_x) {
+            end_x
+        } else {
+            min_x
+        },
+        if anchor.y <= i32::midpoint(min_y, end_y) {
+            end_y
+        } else {
+            min_y
+        },
+    );
+    let _ = apply_command(
+        state,
+        &Command::LevelLand {
+            from: anchor,
+            to,
+            mode: LevelMode::Level,
+        },
+    );
+}
+
+/// Teselas interiores del corredor X→Y (sin extremos) y si el tramo es eje Y.
+fn manhattan_interior_tiles(from: TileCoord, to: TileCoord) -> Vec<(TileCoord, bool)> {
+    let step_x = (to.x - from.x).signum();
+    let step_y = (to.y - from.y).signum();
+    let mut out = Vec::new();
+    let mut c = from;
+    while c.x != to.x {
+        c = TileCoord::new(c.x + step_x, c.y);
+        if c != to {
+            out.push((c, false));
+        }
+    }
+    while c.y != to.y {
+        c = TileCoord::new(c.x, c.y + step_y);
+        if c != to {
+            out.push((c, true));
+        }
+    }
+    out
+}
+
+fn try_place_two_way_block_signal(state: &mut GameState, c: TileCoord, axis_y: bool) {
+    let Some(tile) = state.map.get(c) else {
+        return;
+    };
+    if tile.kind != TileKind::Rail {
+        return;
+    }
+    if rail_tile_is_signals(tile.m5) {
+        return;
+    }
+    let tb = tile.m5 & 0x3F;
+    // Solo tramos rectos puros (evitar cruces / curvas del codo L).
+    if axis_y {
+        if tb != 0x02 {
+            return;
+        }
+    } else if tb != 0x01 {
+        return;
+    }
+    let orient = u8::from(axis_y);
+    if apply_command(
+        state,
+        &Command::PlaceRailSignal(c, orient, 128, 128, SIGTYPE_BLOCK),
+    )
+    .is_err()
+    {
+        return;
+    }
+    // 2.º clic → bidireccional (mismo encoding que la UI).
+    let _ = apply_command(
+        state,
+        &Command::PlaceRailSignal(c, orient, 128, 128, SIGTYPE_BLOCK),
+    );
+}
+
+/// Señales de bloque en el corredor (punto medio y cuartiles si es largo).
+fn place_corridor_block_signals(state: &mut GameState, from: TileCoord, to: TileCoord) {
+    let tiles = manhattan_interior_tiles(from, to);
+    if tiles.is_empty() {
+        return;
+    }
+    let idxs: Vec<usize> = if tiles.len() >= 8 {
+        vec![tiles.len() / 4, tiles.len() / 2, (3 * tiles.len()) / 4]
+    } else {
+        vec![tiles.len() / 2]
+    };
+    for i in idxs {
+        let (c, axis_y) = tiles[i];
+        try_place_two_way_block_signal(state, c, axis_y);
+    }
 }
 
 fn place_rail_if_needed(state: &mut GameState, c: TileCoord) {
@@ -380,6 +498,7 @@ fn build_freight_line(
 
     let mut depot_out = None;
     with_ai_active(state, ai_id, |state| {
+        flatten_build_band(state, load_st, unload_st);
         place_rail_manhattan_corridor(state, load_st, unload_st);
         if !place_rail_station_owned(state, load_st, ai_id) {
             return;
@@ -389,6 +508,7 @@ fn build_freight_line(
         }
         // Reconectar vía bajo/alrededor de las estaciones.
         place_rail_manhattan_corridor(state, load_st, unload_st);
+        place_corridor_block_signals(state, load_st, unload_st);
         depot_out = try_place_depot_near(state, load_st);
     });
 

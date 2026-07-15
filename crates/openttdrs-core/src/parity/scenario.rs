@@ -1251,6 +1251,53 @@ mod tests {
     }
 
     #[test]
+    fn ai_rival_flattens_terrain_and_places_block_signals() {
+        use crate::TileKind;
+        use crate::command::{Command, apply_command};
+        use crate::economy::TICKS_PER_MONTH;
+        use crate::rail_signals::rail_tile_is_signals;
+        use crate::vehicle::VehicleKind;
+
+        let mut state = build_ai_rival_line();
+        // Baches en el corredor carbón (y=5) para forzar LevelLand de la IA.
+        state.economy.money = 500_000;
+        for x in [8, 9, 10, 11] {
+            for _ in 0..2 {
+                apply_command(&mut state, &Command::RaiseLand(TileCoord::new(x, 5))).ok();
+            }
+        }
+        for _ in 0..=TICKS_PER_MONTH {
+            state.step();
+        }
+        let ai_id = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+        assert!(
+            state
+                .vehicles
+                .iter()
+                .any(|v| v.owner == ai_id && v.kind == VehicleKind::Train),
+            "TransCargo debe construir pese al terreno irregular"
+        );
+        let (mw, mh) = state.map.dimensions();
+        let mut signals = 0usize;
+        for y in 0..mh.cast_signed() {
+            for x in 0..mw.cast_signed() {
+                let c = TileCoord::new(x, y);
+                if let Some(t) = state.map.get(c)
+                    && t.kind == TileKind::Rail
+                    && rail_tile_is_signals(t.m5)
+                    && t.m1 == ai_id.0
+                {
+                    signals += 1;
+                }
+            }
+        }
+        assert!(
+            signals >= 1,
+            "TransCargo debe colocar al menos una señal de bloque, got {signals}"
+        );
+    }
+
+    #[test]
     fn ai_rival_delivers_coal_and_awards_subsidy() {
         use crate::cargo::CargoType;
         use crate::economy::TICKS_PER_MONTH;

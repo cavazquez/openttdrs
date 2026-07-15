@@ -211,6 +211,80 @@ fn place_rail_station_0e_layout_writes_tiletypes_for_distinct_views() {
 }
 
 #[test]
+fn place_rail_station_cb24_overrides_0e_tiletype() {
+    use crate::newgrf_sprites::{
+        Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign, TrainSpriteGraphics,
+    };
+    use crate::station_class::{StationClassDef, StationClassId, StationSpecDef, StationSpecId};
+
+    let mut gfx = TrainSpriteGraphics::default();
+    gfx.assigns.push(TrainSpriteAssign {
+        local_id: 0,
+        set_id: 5,
+    });
+    gfx.action2_var.insert(
+        5,
+        Action2VarEntry {
+            first: Action2VarTerm {
+                variable: 0x1A,
+                param: None,
+                adjust: Action2VarAdjust {
+                    shift: 0,
+                    and_mask: 6,
+                    add_val: None,
+                    divide_val: None,
+                    modulo_val: None,
+                },
+            },
+            ops: Vec::new(),
+            ranges: Vec::new(),
+            default: 0,
+        },
+    );
+
+    let mut s = GameState::new(16, 16);
+    let class_id = StationClassId::from_u16(1);
+    let spec_id = StationSpecId::from_u16(1);
+    let mut layouts = std::collections::HashMap::new();
+    layouts.insert((1, 1), vec![0]); // 0x0E diría 0; CB24 → 6
+    s.station_class_catalog.push(StationClassDef {
+        id: class_id,
+        label: "CB24".into(),
+        short_label: "CB24".into(),
+        from_newgrf: true,
+    });
+    s.station_spec_catalog.push(StationSpecDef {
+        id: spec_id,
+        class: class_id,
+        label: "Callback 24".into(),
+        short_label: "Cb24".into(),
+        disallowed_platforms: 0,
+        disallowed_lengths: 0,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: Vec::new(),
+        newgrf_local_id: 0,
+        newgrf_runtime: Some(Box::new(gfx)),
+        newgrf_grfid: 1,
+        newgrf_type_tables: None,
+        custom_layouts: layouts,
+    });
+    s.current_station_class = class_id;
+    s.current_station_spec = spec_id;
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(4, 4),
+            axis_y: false,
+            platforms: 1,
+            length: 1,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.map.get(TileCoord::new(4, 4)).unwrap().m5, 6);
+}
+
+#[test]
 fn place_rail_station_area_axis_y_uses_odd_gfx() {
     let mut s = GameState::new(16, 16);
     apply_command(

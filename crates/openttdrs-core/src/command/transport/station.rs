@@ -211,6 +211,21 @@ pub(in crate::command) fn place_rail_station_area(
         usize::from(platforms),
         usize::from(length),
     );
+    // Precalcular m5 (layout 0x0E + callback 24) antes de mutar el mapa.
+    let mut tile_gfx: Vec<u8> = Vec::with_capacity(layout.len());
+    for n in 0..platforms {
+        for l in 0..length {
+            let idx = usize::from(n) * usize::from(length) + usize::from(l);
+            let base = layout[idx] + u8::from(axis_y);
+            let gfx = crate::station_class::station_spec_def(&state.station_spec_catalog, spec_id)
+                .map_or(base, |def| {
+                    crate::station_class::apply_station_build_tile_layout_callback(
+                        def, base, platforms, length, n, l, axis_y,
+                    )
+                });
+            tile_gfx.push(gfx);
+        }
+    }
     for n in 0..platforms {
         for l in 0..length {
             let c = if axis_y {
@@ -219,7 +234,7 @@ pub(in crate::command) fn place_rail_station_area(
                 TileCoord::new(origin.x + i32::from(l), origin.y + i32::from(n))
             };
             let idx = usize::from(n) * usize::from(length) + usize::from(l);
-            let gfx = layout[idx] + u8::from(axis_y);
+            let gfx = tile_gfx[idx];
             if station_site_tile_needs_clear(state.map.get_kind(c).unwrap_or(TileKind::Grass)) {
                 clear_station_site_tile(state, c)?;
             }

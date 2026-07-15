@@ -272,6 +272,58 @@ pub fn station_spec_layout(
     crate::rail_station_layout(platforms, length)
 }
 
+/// `GetPlatformInfo` (`newgrf_station.cpp`): datos de plataforma para CB 24 / vars 40+.
+#[must_use]
+pub fn station_platform_info(
+    gfx: u8,
+    platforms: u8,
+    length: u8,
+    platform: u8,
+    position: u8,
+) -> u32 {
+    let pos = u32::from(position.min(15));
+    let dist_end = u32::from(length.saturating_sub(position).saturating_sub(1).min(15));
+    let plat = u32::from(platform.min(15));
+    let dist_side = u32::from(platforms.saturating_sub(platform).saturating_sub(1).min(15));
+    let len = u32::from(length.min(15));
+    let nplat = u32::from(platforms.min(15));
+    pos | (dist_end << 4)
+        | (plat << 8)
+        | (dist_side << 12)
+        | (len << 16)
+        | (nplat << 20)
+        | (u32::from(gfx) << 24)
+}
+
+/// Aplica callback 24 (`CBID_STATION_BUILD_TILE_LAYOUT`) sobre un tiletype de layout.
+///
+/// Si el callback falla o el spec no tiene runtime Action2, devuelve `base_gfx` (layout 0x0E).
+#[must_use]
+pub fn apply_station_build_tile_layout_callback(
+    def: &StationSpecDef,
+    base_gfx: u8,
+    platforms: u8,
+    length: u8,
+    platform: u8,
+    position: u8,
+    axis_y: bool,
+) -> u8 {
+    let Some(runtime) = def.newgrf_runtime.as_ref() else {
+        return base_gfx;
+    };
+    let platinfo = station_platform_info(base_gfx, platforms, length, platform, position);
+    let cb = runtime.resolve_callback(
+        def.newgrf_local_id,
+        crate::newgrf_sprites::CBID_STATION_BUILD_TILE_LAYOUT,
+        platinfo,
+        0,
+    );
+    if cb == crate::newgrf_sprites::CALLBACK_FAILED || cb > 0xFF {
+        return base_gfx;
+    }
+    (u8::try_from(cb).unwrap_or(0) & !1) + u8::from(axis_y)
+}
+
 #[must_use]
 pub fn next_free_station_class_id(catalog: &[StationClassDef]) -> Option<StationClassId> {
     for id in 1u16..=1023 {
@@ -359,6 +411,62 @@ mod tests {
             rgba: vec![r, g, b, 255, r, g, b, 255, r, g, b, 255, r, g, b, 255],
             mask: Vec::new(),
         }
+    }
+
+    #[test]
+    fn platform_info_matches_openttd_bit_layout() {
+        let info = station_platform_info(3, 2, 3, 0, 1);
+        // pos=1, dist_end=1, plat=0, dist_side=1, len=3, nplat=2, gfx=3
+        assert_eq!(info & 0xF, 1);
+        assert_eq!((info >> 4) & 0xF, 1);
+        assert_eq!((info >> 8) & 0xF, 0);
+        assert_eq!((info >> 12) & 0xF, 1);
+        assert_eq!((info >> 16) & 0xF, 3);
+        assert_eq!((info >> 20) & 0xF, 2);
+        assert_eq!((info >> 24) & 0xFF, 3);
+    }
+
+    #[test]
+    fn cb24_overrides_layout_tiletype_when_runtime_returns_literal() {
+        use crate::newgrf_sprites::{
+            Action2VarAdjust, Action2VarEntry, Action2VarTerm, TrainSpriteAssign,
+            TrainSpriteGraphics,
+        };
+
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 3,
+        });
+        // nvar=0: callback result = 4
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 4,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        let mut specs = vanilla_station_spec_catalog();
+        specs[0].newgrf_runtime = Some(Box::new(gfx));
+        specs[0].newgrf_local_id = 0;
+        // Layout 0x0E diría 0; CB24 fuerza 4 (+ axis).
+        specs[0].custom_layouts.insert((1, 1), vec![0]);
+        let out = apply_station_build_tile_layout_callback(&specs[0], 0, 1, 1, 0, 0, false);
+        assert_eq!(out, 4);
+        let out_y = apply_station_build_tile_layout_callback(&specs[0], 1, 1, 1, 0, 0, true);
+        assert_eq!(out_y, 5); // 4|axis_y
     }
 
     #[test]

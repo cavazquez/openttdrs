@@ -943,7 +943,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** editor (#42) o callback 24.
+**Siguiente:** editor (#42). Callback 24 estaciones ✅ (build tile layout).
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -975,6 +975,7 @@ Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 13. ~~Action5 catenary (`0x05`) → in-world wires/pylons (rail/estación/túnel/puente).~~ ✅
 14. ~~Stations NewGRF: waypoint + recoloreo compañía (vista 0 plano; sin 0x0E).~~ ✅
 14b. ~~Stations NewGRF: vista in-world por tiletype `m5` (layouts prop `0x0E`; sin `0x0F`/callback 24).~~ ✅ (#46)
+14c. ~~Stations NewGRF: callback 24 (`CBID_STATION_BUILD_TILE_LAYOUT`) al construir.~~ ✅
 15. ~~Road NewGRF: pendientes (`road_flat` 11–14) + tram overlay (tipo m8).~~ ✅
 16. ~~Action2 trains estático (Action3→Action2→Action1 moving; sin variational).~~ ✅
 17. ~~Sprites NewGRF LZ77 (`0x02`/`0x03`; layout v2 canónico; sin chunked).~~ ✅

@@ -207,7 +207,33 @@ impl TrainSpriteGraphics {
     pub fn needs_runtime_resolve(&self) -> bool {
         !self.action2_random.is_empty() || !self.action2_var.is_empty()
     }
+
+    /// Resuelve un callback `NewGRF` (`nvar=0` → valor; sprite group → [`CALLBACK_FAILED`]).
+    ///
+    /// Inserta `0x0C`/`0x10`/`0x18` en el contexto (como `ResolverObject` upstream).
+    #[must_use]
+    pub fn resolve_callback(&self, local_id: u8, callback: u16, param1: u32, param2: u32) -> u16 {
+        let set_id = self
+            .assigns
+            .iter()
+            .find(|a| a.local_id == local_id)
+            .map(|a| a.set_id)
+            .or_else(|| (!self.sets.is_empty()).then_some(0));
+        let Some(set_id) = set_id else {
+            return CALLBACK_FAILED;
+        };
+        let mut ctx = Action2EvalCtx::default();
+        ctx.vars.insert(0x0C, u32::from(callback));
+        ctx.vars.insert(0x10, param1);
+        ctx.vars.insert(0x18, param2);
+        resolve_callback_chain(self, set_id, &mut ctx)
+    }
 }
+
+/// Resultado “callback fallido” (`OpenTTD` `CALLBACK_FAILED`).
+pub const CALLBACK_FAILED: u16 = 0xFFFF;
+/// Callback estaciones: layout de tesela al construir (`CBID_STATION_BUILD_TILE_LAYOUT`).
+pub const CBID_STATION_BUILD_TILE_LAYOUT: u16 = 0x24;
 
 fn apply_var_adjust(raw: u32, adj: &Action2VarAdjust) -> i32 {
     // Cast wrapping: literales `0x1A` usan `0xFFFFFFFF` → `-1` en i32.
@@ -387,6 +413,36 @@ fn invoke_action2_procedure(
     }
     ctx.last_result = 0xFFFF;
     0xFFFF
+}
+
+fn resolve_callback_chain(
+    gfx: &TrainSpriteGraphics,
+    start_set: u16,
+    ctx: &mut Action2EvalCtx,
+) -> u16 {
+    let mut id = start_set;
+    for _ in 0..8 {
+        let a2 = u8::try_from(id).unwrap_or(u8::MAX);
+        if let Some(rnd) = gfx.action2_random.get(&a2) {
+            let next = eval_action2_random(rnd, ctx);
+            if next & 0x8000 != 0 {
+                return next & 0x7FFF;
+            }
+            id = next;
+            continue;
+        }
+        if let Some(var) = gfx.action2_var.get(&a2).cloned() {
+            let next = eval_action2_var(gfx, &var, ctx, 0);
+            if next & 0x8000 != 0 {
+                return u16::try_from(ctx.last_result & 0xFFFF).unwrap_or(CALLBACK_FAILED);
+            }
+            id = next;
+            continue;
+        }
+        // Action2 básico / sin entrada: no es resultado de callback.
+        return CALLBACK_FAILED;
+    }
+    CALLBACK_FAILED
 }
 
 fn eval_action2_var(
@@ -1683,6 +1739,14 @@ pub fn build_action2_variational_advanced_add_literal(
     }
     p.extend_from_slice(&default_set.to_le_bytes());
     p
+}
+
+/// Action2 variational `nvar=0`: devuelve el literal `value` como resultado de callback.
+///
+/// Usa variable `0x1A` + `and_mask = value` (valor constante).
+#[must_use]
+pub fn build_action2_callback_literal_payload(feature: u8, set_id: u8, value: u8) -> Vec<u8> {
+    build_action2_variational_payload(feature, set_id, 0x1A, 0x00, value, &[], 0)
 }
 
 /// Action2 variational `0x81` que siempre elige `default_set` (rango catch-all).
@@ -3549,6 +3613,44 @@ mod tests {
         let mut ctx2 = Action2EvalCtx::default();
         assert_eq!(gfx.resolve_action1_set_ctx(4, &mut ctx2), 0);
         assert_eq!(ctx2.persistent_registers.get(&2), Some(&5));
+    }
+
+    #[test]
+    fn resolve_callback_nvar0_literal() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.assigns.push(TrainSpriteAssign {
+            local_id: 0,
+            set_id: 2,
+        });
+        gfx.action2_var.insert(
+            2,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x1A,
+                    param: None,
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0x0A,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: Vec::new(),
+                default: 0,
+            },
+        );
+        assert_eq!(
+            gfx.resolve_callback(0, CBID_STATION_BUILD_TILE_LAYOUT, 0, 0),
+            0x0A
+        );
+        // Sin variational callback → falla.
+        let plain = TrainSpriteGraphics::default();
+        assert_eq!(
+            plain.resolve_callback(0, CBID_STATION_BUILD_TILE_LAYOUT, 0, 0),
+            CALLBACK_FAILED
+        );
     }
 
     #[test]

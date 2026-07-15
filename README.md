@@ -30,7 +30,7 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Trabajo reciente (jul 2026):** Action2 variational (trains/stations/road), procedure `7E` / `\2psto`, vars de vehículo y de tesela al dibujar. Issues de backlog: [issues abiertas](https://github.com/cavazquez/openttdrs/issues).
 
-**Siguiente corte NewGRF (roadmap):** editor (#42) o callback 24 — ver [ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md).
+**Siguiente corte NewGRF (roadmap):** editor (#42) — ver [ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md).
 
 ---
 
@@ -123,7 +123,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | Render OpenGFX vanilla | ✅ | Industrias gfx 0–174; NewGRF ≥175 MVP (#71) |
 | UI solitario (menús, listas, noticias) | ✅ | UI-0…UI-7 cortes jugables |
 | Multi-compañía | 🟡 | Mínima + ownership; segunda humana OOS |
-| NewGRF Action0–14 + Action2 runtime | ✅ | Action1/3 tables; estaciones `m5` (#46); params UI+`0x7F` (#39) |
+| NewGRF Action0–14 + Action2 runtime | ✅ | Action1/3; estaciones `m5`+CB24; params `0x7F`; industrias ≥175 |
 | Barcos / aviones | 🔮 | |
 | Multijugador (I8) | 🔮 | [#21](https://github.com/cavazquez/openttdrs/issues/21) |
 | IA rivales / GameScript / editor | 🔮 | Issues #42–#44, #86 |

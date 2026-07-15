@@ -369,8 +369,8 @@ pub use station_action2::action2_eval_ctx_for_station_tile;
 pub use station_class::{
     StationClassDef, StationClassId, StationSpecDef, StationSpecId, all_station_class_defs,
     all_station_spec_defs, list_station_classes, list_station_specs, next_free_station_class_id,
-    next_free_station_spec_id, station_class_def, station_spec_def, station_spec_layout,
-    vanilla_station_class_catalog, vanilla_station_spec_catalog,
+    next_free_station_spec_id, station_class_def, station_newgrf_view_index, station_spec_def,
+    station_spec_layout, vanilla_station_class_catalog, vanilla_station_spec_catalog,
 };
 pub use subsidy::{
     SUBSIDY_AWARDED_YEARS, SUBSIDY_OFFER_MONTHS, SUBSIDY_PAYMENT_MULTIPLIER, Subsidy,

@@ -244,6 +244,15 @@ pub fn list_station_specs<'a>(
         .collect()
 }
 
+/// Índice de vista `NewGRF` Action1/2 desde `StationGfx` en `m5` (bits bajos).
+///
+/// Los layouts prop `0x0E` escriben el tiletype en `m5`; el render usa este
+/// índice en lugar de hardcodear vista 0 (#46).
+#[must_use]
+pub fn station_newgrf_view_index(m5: u8) -> usize {
+    usize::from(m5 & 0x0F)
+}
+
 /// Layout gfx; usa prop `0x0E` del spec si existe, si no vanilla.
 #[must_use]
 pub fn station_spec_layout(
@@ -330,5 +339,48 @@ mod tests {
         assert_eq!(layout, vec![0, 2, 0]);
         let vanilla = station_spec_layout(&specs, StationSpecId::DefaultRail, 2, 2);
         assert_eq!(vanilla, crate::rail_station_layout(2, 2));
+    }
+
+    #[test]
+    fn newgrf_view_index_uses_low_nibble_of_m5() {
+        assert_eq!(station_newgrf_view_index(0x00), 0);
+        assert_eq!(station_newgrf_view_index(0x02), 2);
+        assert_eq!(station_newgrf_view_index(0x0F), 15);
+        assert_eq!(station_newgrf_view_index(0x12), 2);
+        assert_eq!(station_newgrf_view_index(0xA5), 5);
+    }
+
+    fn solid_sprite(r: u8, g: u8, b: u8) -> crate::newgrf_sprites::DecodedSprite {
+        crate::newgrf_sprites::DecodedSprite {
+            width: 2,
+            height: 2,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![r, g, b, 255, r, g, b, 255, r, g, b, 255, r, g, b, 255],
+            mask: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn layout_0e_tiletypes_resolve_to_distinct_newgrf_views() {
+        let mut specs = vanilla_station_spec_catalog();
+        specs[0].custom_layouts.insert((1, 2), vec![0, 2]);
+        specs[0].newgrf_views = vec![
+            solid_sprite(255, 0, 0),
+            solid_sprite(0, 255, 0),
+            solid_sprite(0, 0, 255),
+        ];
+        let layout = station_spec_layout(&specs, StationSpecId::DefaultRail, 1, 2);
+        assert_eq!(layout, vec![0, 2]);
+        let def = station_spec_def(&specs, StationSpecId::DefaultRail).unwrap();
+        let v0 = def
+            .newgrf_view(station_newgrf_view_index(layout[0]))
+            .unwrap();
+        let v2 = def
+            .newgrf_view(station_newgrf_view_index(layout[1]))
+            .unwrap();
+        assert_ne!(v0.rgba, v2.rgba);
+        assert_eq!(v0.rgba[0], 255);
+        assert_eq!(v2.rgba[2], 255);
     }
 }

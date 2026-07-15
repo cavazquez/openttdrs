@@ -87,7 +87,7 @@ impl NewGrfStationSpriteCache {
     }
 }
 
-/// Spec NewGRF con vista 0 para la estación/waypoint que cubre `coord`.
+/// Spec NewGRF con vistas Action1/3 para la estación/waypoint que cubre `coord`.
 #[must_use]
 pub(crate) fn newgrf_station_def_for_tile<'a>(
     catalog: &'a [StationSpecDef],
@@ -100,7 +100,8 @@ pub(crate) fn newgrf_station_def_for_tile<'a>(
         return None;
     }
     let def = openttdrs_core::station_spec_def(catalog, st.station_spec)?;
-    if def.newgrf_view(0).is_some() || def.newgrf_runtime.is_some() {
+    if !def.newgrf_views.is_empty() || def.newgrf_preview.is_some() || def.newgrf_runtime.is_some()
+    {
         Some(def)
     } else {
         None
@@ -161,5 +162,50 @@ mod tests {
             .handle_for_runtime(def, 0, Some(CompanyColour::Red), &mut ctx, &mut images)
             .expect("recolor");
         assert_ne!(handle, recolored);
+    }
+
+    #[test]
+    fn cache_keys_differ_by_view_index_from_m5_tiletype() {
+        use openttdrs_core::{DecodedSprite, station_newgrf_view_index};
+
+        fn solid(r: u8, g: u8, b: u8) -> DecodedSprite {
+            DecodedSprite {
+                width: 2,
+                height: 2,
+                x_offs: 0,
+                y_offs: 0,
+                rgba: vec![r, g, b, 255, r, g, b, 255, r, g, b, 255, r, g, b, 255],
+                mask: Vec::new(),
+            }
+        }
+
+        let def = StationSpecDef {
+            id: StationSpecId::from_u16(9),
+            class: openttdrs_core::StationClassId::from_u16(1),
+            label: "Multi".into(),
+            short_label: "MULT".into(),
+            disallowed_platforms: 0,
+            disallowed_lengths: 0,
+            from_newgrf: true,
+            newgrf_preview: None,
+            newgrf_views: vec![solid(255, 0, 0), solid(0, 255, 0), solid(0, 0, 255)],
+            newgrf_local_id: 0,
+            newgrf_runtime: None,
+            newgrf_grfid: 0,
+            newgrf_type_tables: None,
+            custom_layouts: Default::default(),
+        };
+        let mut images = Assets::<Image>::default();
+        let mut cache = NewGrfStationSpriteCache::default();
+        let mut ctx = openttdrs_core::Action2EvalCtx::default();
+        let idx0 = station_newgrf_view_index(0x00);
+        let idx2 = station_newgrf_view_index(0x02);
+        let h0 = cache
+            .handle_for_runtime(&def, idx0, None, &mut ctx, &mut images)
+            .expect("v0");
+        let h2 = cache
+            .handle_for_runtime(&def, idx2, None, &mut ctx, &mut images)
+            .expect("v2");
+        assert_ne!(h0, h2);
     }
 }

@@ -719,7 +719,7 @@ RoadTypes / Stations / Trains metadatos alimentan catálogos.
 **Preview + in-world trenes Action1/3** (8bpp sin comprimir, sin Action2/5) ✅
 compra depósito + mapa (fallback OpenGFX si no hay vistas).
 **Preview RoadTypes Action1/3** ✅ en selector + in-world plano (vista por `road_bits`; sin pendientes/tram).
-**Preview Stations Action1/3** ✅ en picker rail + in-world plano (vista 0; sin 0x0E).
+**Preview Stations Action1/3** ✅ en picker rail + in-world plano (vista por tiletype `m5` / prop `0x0E`; #46).
 **Action5 shore in-world** ✅ slots `0x0D` → costa (OpenGFX fallback; clima/animación OOS).
 **Action5 catenary in-world** ✅ slots `0x05` → wires/pylons/túnel/puente (OpenGFX fallback).
 **Action5 parse + Inspeccionar** ✅ slots; 32bpp+mask/chunked ✅; Action2 var/random/0x84 ✅.
@@ -943,7 +943,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** editor (#42), o Action2 stations layouts avanzados / callback 24.
+**Siguiente:** editor (#42), o NewGRF params (#39) / industrias gfx≥175 (#71) / callback 24.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -974,6 +974,7 @@ Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 12. ~~Action5 shore (`0x0D`) → in-world slots (merge 10/16; sin clima/animación).~~ ✅
 13. ~~Action5 catenary (`0x05`) → in-world wires/pylons (rail/estación/túnel/puente).~~ ✅
 14. ~~Stations NewGRF: waypoint + recoloreo compañía (vista 0 plano; sin 0x0E).~~ ✅
+14b. ~~Stations NewGRF: vista in-world por tiletype `m5` (layouts prop `0x0E`; sin `0x0F`/callback 24).~~ ✅ (#46)
 15. ~~Road NewGRF: pendientes (`road_flat` 11–14) + tram overlay (tipo m8).~~ ✅
 16. ~~Action2 trains estático (Action3→Action2→Action1 moving; sin variational).~~ ✅
 17. ~~Sprites NewGRF LZ77 (`0x02`/`0x03`; layout v2 canónico; sin chunked).~~ ✅
@@ -991,7 +992,7 @@ Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 29. ~~Action2 stations/road in-world (parse + resolve al cargar).~~ ✅
 30. ~~Vars de tesela stations/road en runtime (`40`/`42`/`43`/`45`/`5F`/…).~~ ✅
 31. ~~Tablas de traducción NewGRF rail/road/tram (Action0 GlobalVar `12`/`16`/`17` → vars `42`/`45`).~~ ✅
-32. ~~Action0 Stations prop `0x0E` layouts custom (build; sin `0x0F` complejo / callback 24).~~ ✅
+32. ~~Action0 Stations prop `0x0E` layouts custom (build + render por `m5`; sin `0x0F` complejo / callback 24).~~ ✅ (#46)
 
 Progreso backend OOS (JoinStation rail + CargoDist observacional):
 

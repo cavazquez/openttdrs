@@ -137,8 +137,9 @@ pub(crate) fn spawn_station_tile(
             } else {
                 rail_station_draw_layers(m5)
             };
-            // NewGRF: en plano, sustituir overlays OpenGFX (estación o waypoint) por vista 0.
+            // NewGRF: en plano, sustituir overlays OpenGFX por vista según tiletype `m5` (#46).
             let mut used_newgrf = false;
+            let view_idx = openttdrs_core::station_newgrf_view_index(m5);
             if matches!(
                 class,
                 StationTileClass::Rail | StationTileClass::RailWaypoint
@@ -146,7 +147,7 @@ pub(crate) fn spawn_station_tile(
                 && !buildings_hidden()
                 && let Some(def) =
                     newgrf_station_def_for_tile(station_catalog, map, stations, ctx.coord)
-                && let Some(view) = def.newgrf_view(0)
+                && let Some(view) = def.newgrf_view(view_idx)
                 && let (Some(cache), Some(images)) = (station_sprites.as_mut(), images.as_mut())
             {
                 let colour_u8 = owner_colour.map(CompanyColour::as_u8).unwrap_or(0);
@@ -159,7 +160,7 @@ pub(crate) fn spawn_station_tile(
                     def.newgrf_type_tables.as_ref(),
                 );
                 if let Some(handle) =
-                    cache.handle_for_runtime(def, 0, owner_colour, &mut a2, images)
+                    cache.handle_for_runtime(def, view_idx, owner_colour, &mut a2, images)
                 {
                     let pos3 = crate::iso::overlay_pos(
                         ctx.iso_pos,

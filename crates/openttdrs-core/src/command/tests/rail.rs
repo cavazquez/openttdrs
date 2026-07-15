@@ -136,6 +136,81 @@ fn place_rail_station_area_persists_newgrf_station_spec() {
 }
 
 #[test]
+fn place_rail_station_0e_layout_writes_tiletypes_for_distinct_views() {
+    use crate::newgrf_sprites::DecodedSprite;
+    use crate::station_class::{
+        StationClassDef, StationClassId, StationSpecDef, StationSpecId, station_newgrf_view_index,
+    };
+
+    fn solid(r: u8, g: u8, b: u8) -> DecodedSprite {
+        DecodedSprite {
+            width: 2,
+            height: 2,
+            x_offs: 0,
+            y_offs: 0,
+            rgba: vec![r, g, b, 255, r, g, b, 255, r, g, b, 255, r, g, b, 255],
+            mask: Vec::new(),
+        }
+    }
+
+    let mut s = GameState::new(16, 16);
+    let class_id = StationClassId::from_u16(1);
+    let spec_id = StationSpecId::from_u16(1);
+    let mut layouts = std::collections::HashMap::new();
+    // 1×2: tiletypes 0 y 2 → vistas NewGRF distintas tras build (axis X).
+    layouts.insert((1, 2), vec![0, 2]);
+    s.station_class_catalog.push(StationClassDef {
+        id: class_id,
+        label: "Moderna".into(),
+        short_label: "MODN".into(),
+        from_newgrf: true,
+    });
+    s.station_spec_catalog.push(StationSpecDef {
+        id: spec_id,
+        class: class_id,
+        label: "Andén 0x0E".into(),
+        short_label: "Plat".into(),
+        disallowed_platforms: 0,
+        disallowed_lengths: 0,
+        from_newgrf: true,
+        newgrf_preview: None,
+        newgrf_views: vec![solid(255, 0, 0), solid(0, 255, 0), solid(0, 0, 255)],
+        newgrf_local_id: 0,
+        newgrf_runtime: None,
+        newgrf_grfid: 0,
+        newgrf_type_tables: None,
+        custom_layouts: layouts,
+    });
+    s.current_station_class = class_id;
+    s.current_station_spec = spec_id;
+    apply_command(
+        &mut s,
+        &Command::PlaceRailStationArea {
+            origin: TileCoord::new(3, 3),
+            axis_y: false,
+            platforms: 1,
+            length: 2,
+        },
+    )
+    .unwrap();
+
+    let m5_a = s.map.get(TileCoord::new(3, 3)).unwrap().m5;
+    let m5_b = s.map.get(TileCoord::new(4, 3)).unwrap().m5;
+    assert_eq!(m5_a, 0);
+    assert_eq!(m5_b, 2);
+    assert_eq!(station_newgrf_view_index(m5_a), 0);
+    assert_eq!(station_newgrf_view_index(m5_b), 2);
+
+    let def = crate::station_spec_def(&s.station_spec_catalog, spec_id).unwrap();
+    let va = def.newgrf_view(station_newgrf_view_index(m5_a)).unwrap();
+    let vb = def.newgrf_view(station_newgrf_view_index(m5_b)).unwrap();
+    assert_ne!(
+        va.rgba, vb.rgba,
+        "tiletypes 0x0E deben elegir sprites distintos"
+    );
+}
+
+#[test]
 fn place_rail_station_area_axis_y_uses_odd_gfx() {
     let mut s = GameState::new(16, 16);
     apply_command(

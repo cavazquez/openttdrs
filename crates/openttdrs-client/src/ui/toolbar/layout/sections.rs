@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
 
+use super::super::editor_toolbar::NormalToolbarGroups;
 use super::super::{
     BuildMenuAction, BuildMenuUi, SoundMusicToolbarButton, ToolButtonGroup, ToolbarGroup,
     ToolbarGroupButton, ToolbarTooltipTarget, TooltipBox, TooltipText,
@@ -17,6 +18,7 @@ pub(super) fn spawn_toolbar_group_buttons(
     asset_server: &AssetServer,
 ) {
     root.spawn((
+        NormalToolbarGroups,
         Node {
             flex_direction: FlexDirection::Row,
             column_gap: Val::Px(2.0),

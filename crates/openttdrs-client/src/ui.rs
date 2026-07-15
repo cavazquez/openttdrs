@@ -214,21 +214,24 @@ use toolbar::{
     bridge_picker_on_closed, build_menu_interaction, close_road_type_picker_on_escape,
     close_toolbar_button_interaction, finish_depot_list_drag, handle_airport_picker_buttons,
     handle_bridge_picker_buttons, handle_cheats_menu_button, handle_company_colour_swatches,
-    handle_company_selector_buttons, handle_depot_panel_buttons, handle_ingame_escape,
-    handle_minimap_click, handle_minimap_layer_buttons, handle_order_panel_buttons,
-    handle_rail_station_picker_buttons, handle_rail_type_select_buttons,
-    handle_road_type_class_buttons, handle_road_type_select_buttons, handle_settings_menu_buttons,
-    handle_signal_picker_buttons, handle_station_cargo_panel_buttons,
-    handle_station_catalog_open_buttons, handle_station_class_select_buttons,
-    handle_station_rename_buttons, handle_station_spec_select_buttons, handle_tile_click,
-    hide_tool_when_panel_closed, lerp_ghost_previews, rail_station_picker_on_closed,
-    road_type_filter_keyboard, rotate_station_with_right_click, setup_airport_picker,
-    setup_bridge_picker, setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
+    handle_company_selector_buttons, handle_depot_panel_buttons,
+    handle_editor_toolbar_control_buttons, handle_editor_toolbar_tool_buttons,
+    handle_ingame_escape, handle_minimap_click, handle_minimap_layer_buttons,
+    handle_order_panel_buttons, handle_rail_station_picker_buttons,
+    handle_rail_type_select_buttons, handle_road_type_class_buttons,
+    handle_road_type_select_buttons, handle_settings_menu_buttons, handle_signal_picker_buttons,
+    handle_station_cargo_panel_buttons, handle_station_catalog_open_buttons,
+    handle_station_class_select_buttons, handle_station_rename_buttons,
+    handle_station_spec_select_buttons, handle_tile_click, hide_tool_when_panel_closed,
+    lerp_ghost_previews, rail_station_picker_on_closed, road_type_filter_keyboard,
+    rotate_station_with_right_click, setup_airport_picker, setup_bridge_picker, setup_build_menu,
+    setup_depot_panel, setup_editor_toolbar, setup_minimap, setup_order_panel,
     setup_rail_station_picker, setup_signal_picker, setup_station_cargo_panel, setup_top_toolbar,
     signal_picker_on_closed, station_catalog_filter_keyboard, station_rename_editable_keyboard,
     station_rename_keyboard, sync_airport_picker, sync_bridge_picker, sync_build_pointer_modifiers,
     sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_company_selector,
-    sync_depot_panel, sync_minimap, sync_order_panel, sync_orders_pick_cursor,
+    sync_depot_panel, sync_editor_toolbar_button_visuals, sync_editor_toolbar_date,
+    sync_editor_toolbar_visibility, sync_minimap, sync_order_panel, sync_orders_pick_cursor,
     sync_rail_station_picker, sync_rail_toolbar_icons, sync_rail_type_select_visuals,
     sync_road_type_catalog_entries, sync_road_type_class_labels, sync_road_type_entry_previews,
     sync_road_type_entry_visibility, sync_road_type_popovers, sync_signal_picker,
@@ -376,6 +379,10 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
+            setup_editor_toolbar.in_set(StartupSet::Ui),
+        )
+        .add_systems(
+            OnEnter(ClientScreen::InGame),
             (
                 setup_signal_picker,
                 setup_airport_picker,
@@ -510,6 +517,18 @@ impl Plugin for ClientUiPlugin {
                 handle_company_selector_buttons,
                 sync_company_colour_swatch_visuals,
                 sync_company_selector,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                sync_editor_toolbar_visibility,
+                sync_editor_toolbar_date,
+                sync_editor_toolbar_button_visuals,
+                handle_editor_toolbar_control_buttons,
+                handle_editor_toolbar_tool_buttons,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

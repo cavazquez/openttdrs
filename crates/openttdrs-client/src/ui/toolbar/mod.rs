@@ -5,6 +5,7 @@ mod bridge_window;
 pub(crate) mod build_input;
 mod company_selector;
 mod depot_panel;
+pub(crate) mod editor_toolbar;
 mod layout;
 mod minimap;
 mod order_panel;
@@ -31,6 +32,11 @@ pub(crate) use company_selector::{handle_company_selector_buttons, sync_company_
 pub(crate) use depot_panel::{
     DepotPanelState, begin_depot_list_drag, depot_panel_on_closed, finish_depot_list_drag,
     handle_depot_panel_buttons, setup_depot_panel, sync_depot_panel,
+};
+pub(crate) use editor_toolbar::{
+    handle_editor_toolbar_control_buttons, handle_editor_toolbar_tool_buttons,
+    setup_editor_toolbar, sync_editor_toolbar_button_visuals, sync_editor_toolbar_date,
+    sync_editor_toolbar_visibility,
 };
 pub(crate) use layout::setup_top_toolbar;
 pub(crate) use minimap::{

@@ -191,6 +191,29 @@ impl VehicleOrder {
         }
     }
 
+    /// Siguiente estación distinta en la lista circular (`CargoDist` Manual / `next_hop`).
+    #[must_use]
+    pub fn next_station_hop(
+        orders: &[Self],
+        current_order: usize,
+        from: TileCoord,
+    ) -> Option<TileCoord> {
+        if orders.is_empty() {
+            return None;
+        }
+        let n = orders.len();
+        let start = current_order.min(n.saturating_sub(1));
+        for offset in 1..=n {
+            let idx = (start + offset) % n;
+            if let Self::Station { station, .. } = orders[idx]
+                && station != from
+            {
+                return Some(station);
+            }
+        }
+        None
+    }
+
     #[must_use]
     pub const fn station_with_flags(station: TileCoord, full_load: bool, no_unload: bool) -> Self {
         Self::Station {
@@ -1924,6 +1947,21 @@ mod tests {
         v.step();
         assert_eq!(v.pos, TileCoord::new(1, 0));
         assert!(v.progress < v.progress_step());
+    }
+
+    #[test]
+    fn next_station_hop_skips_current_and_wraps() {
+        let a = TileCoord::new(1, 1);
+        let b = TileCoord::new(2, 2);
+        let c = TileCoord::new(3, 3);
+        let orders = vec![
+            VehicleOrder::station(a),
+            VehicleOrder::station(b),
+            VehicleOrder::station(c),
+        ];
+        assert_eq!(VehicleOrder::next_station_hop(&orders, 0, a), Some(b));
+        assert_eq!(VehicleOrder::next_station_hop(&orders, 1, b), Some(c));
+        assert_eq!(VehicleOrder::next_station_hop(&orders, 2, c), Some(a));
     }
 
     #[test]

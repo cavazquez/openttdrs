@@ -97,7 +97,10 @@ pub use bridge_spec::{
     bridge_type_from_m6, calc_bridge_piece, set_bridge_middle_mapt, set_bridge_type_m6,
 };
 pub use cargo::{ALL_CARGO_TYPES, CargoStock, CargoType, OrderSettings, TEMPERATE_CARGO_TYPES};
-pub use cargo_packet::{CargoPacket, StationCargoList, VehicleCargoList, load_unload_speed};
+pub use cargo_packet::{
+    CargoPacket, CargoUnloadAction, StationCargoList, VehicleCargoList, decide_cargo_unload_action,
+    load_unload_speed,
+};
 pub use cheats::CheatsState;
 pub use command::{
     Command, CommandError, LevelMode, MAX_STATION_NAME_CHARS, OrderMoveDirection,

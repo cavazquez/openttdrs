@@ -3,6 +3,9 @@
 //! Cada lote lleva origen y edad de tránsito; la estación y el vehículo
 //! mantienen colas FIFO. Los balances agregados (`CargoStock` / `Vehicle.cargo`)
 //! se sincronizan desde estas listas.
+//!
+//! `next_hop` es el primer slice de `CargoDist` Manual (#49): la siguiente
+//! estación de la ruta del vehículo al embarcar.
 
 use std::collections::VecDeque;
 
@@ -10,6 +13,17 @@ use serde::{Deserialize, Serialize};
 
 use crate::cargo::{ALL_CARGO_TYPES, CargoStock, CargoType};
 use crate::map::TileCoord;
+
+/// Acción al llegar a una estación (`CargoPaymentAction` / `ChooseAction` simplificado).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CargoUnloadAction {
+    /// Destino de este hop: pagar y entregar / trasbordar según tipo.
+    Deliver,
+    /// Bajar para otro vehículo (misma tesela que `next_hop`, no sink final).
+    Transfer,
+    /// El `next_hop` apunta a otra estación: no descargar aquí.
+    Keep,
+}
 
 /// Unidades transferidas por tick en carga/descarga gradual (MVP).
 ///
@@ -39,7 +53,7 @@ pub struct CargoPacket {
     /// Días de tránsito (incrementa cada `TICKS_PER_TRANSIT_DAY` a bordo).
     #[serde(default)]
     pub periods_in_transit: u16,
-    /// Estación de primer embarque (feeder / Cargo Dist).
+    /// Estación de primer embarque (feeder / `CargoDist`).
     #[serde(default)]
     pub first_station: Option<TileCoord>,
     /// Crédito feeder ya liquidado en este packet (evita doble pago).
@@ -48,6 +62,9 @@ pub struct CargoPacket {
     /// Acumulado de pagos feeder (`Money feeder_share` en `OpenTTD`).
     #[serde(default)]
     pub feeder_share: i64,
+    /// Siguiente estación de la ruta Manual (`CargoPacket::next_hop`).
+    #[serde(default)]
+    pub next_hop: Option<TileCoord>,
 }
 
 impl CargoPacket {
@@ -61,6 +78,7 @@ impl CargoPacket {
             first_station: None,
             feeder_paid: false,
             feeder_share: 0,
+            next_hop: None,
         }
     }
 
@@ -68,6 +86,31 @@ impl CargoPacket {
     pub fn with_first_station(mut self, station: TileCoord) -> Self {
         self.first_station = Some(station);
         self
+    }
+
+    #[must_use]
+    pub fn with_next_hop(mut self, hop: Option<TileCoord>) -> Self {
+        self.next_hop = hop;
+        self
+    }
+}
+
+/// Decide si el packet debe bajarse en `at` (Manual / sin `FlowStat`).
+///
+/// `reinsert_freight`: freight que queda en cola de estación (hub), no sink final.
+#[must_use]
+pub fn decide_cargo_unload_action(
+    packet: &CargoPacket,
+    at: TileCoord,
+    reinsert_freight: bool,
+) -> CargoUnloadAction {
+    if packet.next_hop.is_some_and(|hop| hop != at) {
+        return CargoUnloadAction::Keep;
+    }
+    if reinsert_freight {
+        CargoUnloadAction::Transfer
+    } else {
+        CargoUnloadAction::Deliver
     }
 }
 
@@ -114,6 +157,7 @@ impl StationCargoList {
             && last.first_station == packet.first_station
             && last.feeder_paid == packet.feeder_paid
             && last.feeder_share == packet.feeder_share
+            && last.next_hop == packet.next_hop
         {
             last.count = last.count.saturating_add(packet.count);
             return;
@@ -261,6 +305,7 @@ impl VehicleCargoList {
             && last.first_station == packet.first_station
             && last.feeder_paid == packet.feeder_paid
             && last.feeder_share == packet.feeder_share
+            && last.next_hop == packet.next_hop
         {
             last.count = last.count.saturating_add(packet.count);
             return;
@@ -377,5 +422,25 @@ mod tests {
         assert_eq!(p.periods_in_transit, 10);
         assert_eq!(load_unload_speed(CargoType::Coal), 4);
         assert_eq!(load_unload_speed(CargoType::Passengers), 8);
+    }
+
+    #[test]
+    fn decide_unload_keeps_when_next_hop_elsewhere() {
+        let at = TileCoord::new(5, 5);
+        let elsewhere = TileCoord::new(9, 9);
+        let p = CargoPacket::new(CargoType::Goods, 1, at).with_next_hop(Some(elsewhere));
+        assert_eq!(
+            decide_cargo_unload_action(&p, at, false),
+            CargoUnloadAction::Keep
+        );
+        let p2 = p.clone().with_next_hop(Some(at));
+        assert_eq!(
+            decide_cargo_unload_action(&p2, at, false),
+            CargoUnloadAction::Deliver
+        );
+        assert_eq!(
+            decide_cargo_unload_action(&p2, at, true),
+            CargoUnloadAction::Transfer
+        );
     }
 }

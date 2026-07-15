@@ -586,6 +586,11 @@ fn try_load_from_industry(
     let count = load.min(u32::from(u16::MAX)) as u16;
     let mut packet = crate::cargo_packet::CargoPacket::new(output, count, source);
     packet.first_station = Some(station_pos);
+    packet.next_hop = crate::VehicleOrder::next_station_hop(
+        &state.vehicles[vehicle_idx].orders,
+        state.vehicles[vehicle_idx].current_order,
+        station_pos,
+    );
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
     state.vehicles[vehicle_idx].cargo_packets.push(packet);
     state.vehicles[vehicle_idx].mark_cargo_loaded(source);
@@ -702,11 +707,17 @@ fn try_load_from_station_waiting_cargo(
     if taken.is_empty() {
         return false;
     }
-    // Primer embarque desde cola de estación: anclar feeder si el packet no lo trae.
+    // Primer embarque: feeder + next_hop Manual desde órdenes del vehículo.
+    let hop = crate::VehicleOrder::next_station_hop(
+        &state.vehicles[vehicle_idx].orders,
+        state.vehicles[vehicle_idx].current_order,
+        station_pos,
+    );
     for packet in &mut taken {
         if packet.first_station.is_none() {
             packet.first_station = Some(station_pos);
         }
+        packet.next_hop = hop;
     }
     let loaded_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
@@ -775,6 +786,14 @@ fn unload_vehicles(
         }
         let station_pos = st.pos;
         if !st.accepts_cargo(cargo_type) || !st.can_service_vehicle(state.vehicles[i].kind) {
+            continue;
+        }
+        // CargoDist Manual: no bajar si `next_hop` apunta a otra estación.
+        let reinsert = !cargo_type.is_town_cargo();
+        if state.vehicles[i].cargo_packets.packets.iter().all(|p| {
+            crate::cargo_packet::decide_cargo_unload_action(p, station_pos, reinsert)
+                == crate::cargo_packet::CargoUnloadAction::Keep
+        }) {
             continue;
         }
 
@@ -855,7 +874,11 @@ fn unload_vehicles(
             );
         }
         if !town_cargo {
-            // Preservar first_station / feeder_paid para el siguiente tramo.
+            // Trasbordo: limpiar next_hop; el siguiente vehículo lo vuelve a fijar.
+            let mut taken = taken;
+            for p in &mut taken {
+                p.next_hop = None;
+            }
             state.stations[station_idx].push_waiting_packets(taken);
         }
         state.stations[station_idx].income += payment.cast_unsigned();

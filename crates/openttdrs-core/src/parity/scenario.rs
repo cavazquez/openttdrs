@@ -1433,6 +1433,7 @@ mod tests {
             .find(|p| p.cargo == CargoType::Coal)
             .expect("packet reinsertado");
         assert_eq!(reinserted.first_station, Some(hub));
+        assert!(reinserted.next_hop.is_none(), "trasbordo limpia next_hop");
         assert!(reinserted.feeder_paid, "feeder liquidado una sola vez");
         assert!(
             state.company_economy(ai).money > ai_before,
@@ -1442,6 +1443,63 @@ mod tests {
         assert!(
             state.company_economy(CompanyId::PLAYER).money > player_before,
             "jugador cobra el resto del ingreso"
+        );
+    }
+
+    #[test]
+    fn cargo_next_hop_keeps_packet_until_destination_station() {
+        use crate::cargo::CargoType;
+        use crate::cargo_packet::CargoPacket;
+        use crate::station::StopKind;
+
+        let mut state = GameState::new(16, 10);
+        let via = TileCoord::new(4, 4);
+        let dest = TileCoord::new(10, 5);
+        state.stations = vec![
+            crate::Station::new_with_kind(via, StopKind::TruckStop),
+            crate::Station::new_with_kind(dest, StopKind::TruckStop),
+        ];
+
+        let mut truck = Vehicle::new(91, VehicleKind::Truck, via, dest);
+        truck.set_vehicle_orders(vec![
+            VehicleOrder::station(via),
+            VehicleOrder::station(dest),
+        ]);
+        truck.current_order = 0;
+        truck.sync_order_destination(&state.map);
+        let mut packet = CargoPacket::new(CargoType::Goods, 6, TileCoord::new(0, 0));
+        packet.next_hop = Some(dest);
+        truck.cargo_packets.push(packet);
+        truck.sync_cargo_from_packets();
+        truck.last_pickup_station = Some(TileCoord::new(0, 0));
+        state.vehicles.push(truck);
+
+        for _ in 0..16 {
+            state.step();
+        }
+        assert_eq!(
+            state.vehicles[0].cargo, 6,
+            "con next_hop=dest no debe descargar en via"
+        );
+        assert!(
+            state.stations[0].cargo_stock.get(CargoType::Goods) == 0,
+            "via no recibe trasbordo prematuro"
+        );
+
+        state.vehicles[0].pos = dest;
+        state.vehicles[0].current_order = 1;
+        state.vehicles[0].sync_order_destination(&state.map);
+        for _ in 0..16 {
+            state.step();
+            if state.vehicles[0].cargo == 0 {
+                break;
+            }
+        }
+        assert_eq!(state.vehicles[0].cargo, 0, "en dest sí descarga");
+        assert_eq!(
+            state.stations[1].cargo_stock.get(CargoType::Goods),
+            6,
+            "goods en cola del destino"
         );
     }
 

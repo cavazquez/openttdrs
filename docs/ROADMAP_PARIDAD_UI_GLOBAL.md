@@ -735,9 +735,9 @@ Objetivo: posterior a la paridad single-player.
 (multi, MP, editor, GS/AI) siguen pendientes.
 
 - [x] Multi-compañía mínima: rival IA opcional, selector activa, HUD/listas.
-- [x] Multi-compañía polish ownership: `m1` en vía/carretera/depósitos, render por owner, guards flota. *(resto: segunda humana, demolish ownership, MP)*
-- [x] Multi-compañía demolish/build: no pisar/demoler infra ajena (`TileNotOwned`). *(resto: segunda humana, MP)*
-- [ ] Multi-compañía completa en toolbar/listas/finanzas. *(resto: segunda humana, …)*
+- [x] Multi-compañía polish ownership: `m1` en vía/carretera/depósitos, render por owner, guards flota.
+- [x] Multi-compañía demolish/build: no pisar/demoler infra ajena (`TileNotOwned`).
+- [x] Multi-compañía SP: activa + IA + ownership/finanzas mínimas. *(«segunda humana» local descartada — #41 wontfix; humanas extra → MP #21)*
 - [ ] Multijugador: lobby, clientes, chat, join/spectate.
 - [ ] Scenario editor y toolbar de 19 botones.
 - [ ] GameScript: story, goals, league.
@@ -943,7 +943,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** segunda humana / editor, o Action2 stations layouts avanzados / callback 24.
+**Siguiente:** CargoDist routing (#49), editor, o Action2 stations layouts avanzados / callback 24.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -956,7 +956,7 @@ Progreso UI-8 (multi-compañía mínima):
 7. ~~Render estaciones/depósitos/vehículos por owner (caché multi-paleta).~~ ✅
 8. ~~Guards flota (`VehicleNotOwned`) + feedback UI.~~ ✅
 9. ~~Demolish/build ownership (`TileNotOwned` + preview).~~ ✅
-10. Segunda humana / tram `m3` / MP → OOS.
+10. ~~Segunda humana local~~ wontfix (#41). MP humanas → #21. tram `m3` → OOS.
 
 Progreso NewGRF Action0–14 (parse + metadatos + preview + in-world):
 

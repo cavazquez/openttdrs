@@ -41,7 +41,8 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
   reinserción freight preserva flags del packet.
 - IA rival «TransCargo» (`ai/rule_based.rs`); escenario `ai_rival_line`.
 - Quiebra rival + `BuyCompany` ✅ (`bankruptcy_months`, UI Finanzas).
-- Pendiente: link graph / Cargo Dist real; UI selector multi-compañía.
+- Link graph observacional ✅. CargoDist Manual: `next_hop` + Keep/Deliver/Transfer (#49 slice).
+  Pendiente: FlowStat / MCF / modos Asymmetric·Symmetric.
 
 ## Fase 5 — Railtypes / electrificación / RailConvert ✅ (MVP)
 

@@ -406,7 +406,7 @@ Combinando impacto en el “feel” del juego y esfuerzo de desarrollo:
 
 ### 8.1 Próximo paso concreto (recomendado)
 
-Feel de partida + IA rivales (#86) ✅. Pendiente de impacto jugable: CargoDist real (#49), NewGRF runtime. «Segunda humana» local (#41) descartada (las varias humanas son modelo MP, #21). Paridad rail fina: ver `docs/parity/rail_unknown_features.md`.
+Feel de partida + IA rivales (#86) ✅. CargoDist MVP (#49) ✅. Pendiente de impacto jugable: NewGRF runtime. «Segunda humana» local (#41) descartada (las varias humanas son modelo MP, #21). Paridad rail fina: ver `docs/parity/rail_unknown_features.md`.
 
 ---
 

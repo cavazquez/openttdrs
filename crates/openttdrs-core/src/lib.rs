@@ -149,8 +149,8 @@ pub use entity_history::{
     ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
 };
 pub use flow_stat::{
-    CargoDistSettings, DistributionType, FlowStat, FlowStatMap, StationFlowTable, StationFlows,
-    resolve_next_hop,
+    CargoDistSettings, DistributionType, FlowStat, FlowStatMap, PlannedFlowEdge, StationFlowTable,
+    StationFlows, resolve_next_hop,
 };
 #[allow(deprecated)]
 pub use game_state::CARGO_DELIVERY_PAYMENT;
@@ -192,7 +192,10 @@ pub use map::{
     trigger_industry_randomisation_at, trigger_industry_tile_randomisation, tunnel_entrance_m5,
     tunnel_preview_path, water_class, water_class_from_m1,
 };
-pub use mcf::{MCF_MAX_EDGES, MCF_MAX_NODES, McfAlgorithm, McfConfig, compute_station_flows};
+pub use mcf::{
+    MCF_MAX_EDGES, MCF_MAX_NODES, McfAlgorithm, McfConfig, compute_station_flows,
+    compute_station_flows_for_distribution, symmetrize_observed_edges,
+};
 pub use newgrf_actions::{
     ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header,
     Action5SlotSummary, GrfInspectReport, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,

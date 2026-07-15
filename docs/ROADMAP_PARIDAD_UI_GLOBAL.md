@@ -608,7 +608,7 @@ Objetivo de cobertura global: **~58–62 %**.
 - [x] NewGRF editable (config-only: ON/OFF, ↑/↓, quitar; sin Action0–14).
 
 **UI-5 cerrado** (criterios + extras jugables). Parámetros NewGRF / runtime Action0–14 → OOS (UI-7 cerró stack config-only).
-Routing CargoDist completo (next_hop / modos) sigue OOS.
+CargoDist MVP (#49) ✅; Dijkstra OpenTTD / overlay mapa → OOS.
 
 ---
 
@@ -943,7 +943,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** CargoDist routing (#49), editor, o Action2 stations layouts avanzados / callback 24.
+**Siguiente:** editor (#42), o Action2 stations layouts avanzados / callback 24.
 
 Progreso UI-8 (multi-compañía mínima):
 
@@ -997,7 +997,8 @@ Progreso backend OOS (JoinStation rail + CargoDist observacional):
 
 1. ~~JoinStation rail (huella/eje + `station_at_tile` + toolbar Rail).~~ ✅
 2. ~~Link graph observacional (`LinkGraphStats`, save v18, UI LinkGraph).~~ ✅
-3. CargoDist: Manual + `FlowStat` + MCF greedy stub + UI Ajustes ✅; MCF 2-pass OpenTTD → OOS.
+3. ~~CargoDist MVP (#49): Manual + FlowStat + CapacityScaled + Symmetric + UI.~~ ✅
+   Dijkstra OpenTTD / overlay mapa → OOS.
 
 Progreso UI-8 (highscore/endscreen):
 
@@ -1163,7 +1164,7 @@ Progreso UI-5c:
 3. ~~Stubs SignList + LinkGraph (bloqueados por backend).~~ ✅
 
 Pendiente UI-5: ninguno que bloquee cierre. LinkGraph observacional ✅;
-routing CargoDist completo → OOS. NewGRF Action0–14 / parámetros → OOS.
+CargoDist MVP ✅; Dijkstra OpenTTD / overlay mapa → OOS. NewGRF Action0–14 / parámetros → OOS.
 NewGRF Action0–14 / parámetros → OOS hasta runtime (UI-7 cerró config-only).
 Graph por compañía: ✅.
 

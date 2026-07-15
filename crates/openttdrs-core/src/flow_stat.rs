@@ -18,9 +18,9 @@ pub enum DistributionType {
     /// Sin auto-routing: `next_hop` solo desde órdenes del vehículo.
     #[default]
     Manual,
-    /// Usa `FlowStat` vía MCF greedy stub (`GreedyShortest`).
+    /// Usa `FlowStat` vía MCF `CapacityScaled` (2 pases stub).
     Asymmetric,
-    /// Igual que [`Asymmetric`] por ahora (sin matching bidireccional).
+    /// Como [`Asymmetric`], tras espejar aristas observadas A↔B.
     Symmetric,
 }
 
@@ -116,6 +116,15 @@ impl StationFlowTable {
     }
 }
 
+/// Arista planificada agregada desde shares (`estación → via`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PlannedFlowEdge {
+    pub from: TileCoord,
+    pub to: TileCoord,
+    pub cargo: CargoType,
+    pub amount: u32,
+}
+
 /// Flows por tesela de estación (reconstruidos; no hace falta persistir).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StationFlows {
@@ -153,6 +162,51 @@ impl StationFlows {
         table
             .get_via(cargo, origin)
             .or_else(|| table.get_via(cargo, at_station))
+    }
+
+    /// Agrega shares como aristas planificadas (orden: amount desc).
+    #[must_use]
+    pub fn planned_edges_filtered(
+        &self,
+        cargo: Option<CargoType>,
+        limit: usize,
+    ) -> Vec<PlannedFlowEdge> {
+        let mut acc: HashMap<(TileCoord, TileCoord, CargoType), u32> = HashMap::new();
+        for (station, table) in &self.by_station {
+            for (cargo_ty, map) in &table.by_cargo {
+                if cargo.is_some_and(|c| c != *cargo_ty) {
+                    continue;
+                }
+                for flow in map.by_origin.values() {
+                    for (via, amount) in &flow.shares {
+                        if *amount == 0 {
+                            continue;
+                        }
+                        let entry = acc.entry((*station, *via, *cargo_ty)).or_default();
+                        *entry = entry.saturating_add(*amount);
+                    }
+                }
+            }
+        }
+        let mut edges: Vec<PlannedFlowEdge> = acc
+            .into_iter()
+            .map(|((from, to, cargo), amount)| PlannedFlowEdge {
+                from,
+                to,
+                cargo,
+                amount,
+            })
+            .collect();
+        edges.sort_by(|a, b| {
+            b.amount
+                .cmp(&a.amount)
+                .then_with(|| a.from.x.cmp(&b.from.x))
+                .then_with(|| a.from.y.cmp(&b.from.y))
+                .then_with(|| a.to.x.cmp(&b.to.x))
+                .then_with(|| a.to.y.cmp(&b.to.y))
+        });
+        edges.truncate(limit);
+        edges
     }
 }
 
@@ -221,6 +275,35 @@ mod tests {
                 Some(TileCoord::new(9, 9))
             ),
             Some(b)
+        );
+    }
+
+    #[test]
+    fn planned_edges_two_hop() {
+        let mut flows = StationFlows::default();
+        let a = TileCoord::new(1, 1);
+        let b = TileCoord::new(3, 3);
+        let c = TileCoord::new(5, 5);
+        flows
+            .by_station
+            .entry(a)
+            .or_default()
+            .add_flow(CargoType::Goods, a, b, 30);
+        flows
+            .by_station
+            .entry(b)
+            .or_default()
+            .add_flow(CargoType::Goods, a, c, 30);
+        let edges = flows.planned_edges_filtered(Some(CargoType::Goods), 10);
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.from == a && e.to == b && e.amount == 30)
+        );
+        assert!(
+            edges
+                .iter()
+                .any(|e| e.from == b && e.to == c && e.amount == 30)
         );
     }
 }

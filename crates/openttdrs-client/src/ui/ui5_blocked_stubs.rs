@@ -1,4 +1,4 @@
-//! Ventana Link Graph (flujos estación→estación observados).
+//! Ventana Link Graph (flujos observados y planificados).
 
 use bevy::prelude::*;
 use openttdrs_core::{ALL_CARGO_TYPES, CargoType};
@@ -12,11 +12,35 @@ use crate::ui::font::UiFontRole;
 use crate::ui::navigation::{OpenUiRoute, UiRoute};
 use crate::ui::toolbar::BuildMenuUi;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum LinkGraphView {
+    #[default]
+    Observed,
+    Planned,
+}
+
+impl LinkGraphView {
+    const fn next(self) -> Self {
+        match self {
+            Self::Observed => Self::Planned,
+            Self::Planned => Self::Observed,
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Observed => "Vista: observados",
+            Self::Planned => "Vista: planificados",
+        }
+    }
+}
+
 #[derive(Resource, Default)]
 pub(crate) struct LinkGraphWindowState {
     pub(crate) open: bool,
     /// Filtro de cargo (`None` = todos). Cicla con el botón Filtrar.
     pub(crate) cargo_filter: Option<CargoType>,
+    pub(crate) view: LinkGraphView,
 }
 
 #[derive(Component)]
@@ -24,6 +48,9 @@ pub(crate) struct LinkGraphBodyText;
 
 #[derive(Component)]
 pub(crate) struct LinkGraphFilterButton;
+
+#[derive(Component)]
+pub(crate) struct LinkGraphViewButton;
 
 pub(crate) fn setup_link_graph_window(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -33,33 +60,56 @@ pub(crate) fn setup_link_graph_window(mut commands: Commands, asset_server: Res<
         FloatingWindowId::LinkGraphLegend,
         "Link Graph",
         TITLE_BROWN,
-        Vec2::new(480.0, 320.0),
+        Vec2::new(480.0, 340.0),
         440.0,
     );
     commands.entity(content).with_children(|panel| {
         panel
-            .spawn((
-                Button,
-                LinkGraphFilterButton,
-                Node {
-                    padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
-                    margin: UiRect::bottom(Val::Px(6.0)),
-                    ..default()
-                },
-                BackgroundColor(Color::srgb(0.35, 0.3, 0.22)),
-                BuildMenuUi,
-            ))
-            .with_children(|btn| {
-                btn.spawn((
-                    Text::new("Filtro: todos"),
-                    window_text_font(asset_server, UiFontRole::Caption),
-                    TextColor(WINDOW_TEXT),
+            .spawn((Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(8.0),
+                margin: UiRect::bottom(Val::Px(6.0)),
+                flex_wrap: FlexWrap::Wrap,
+                ..default()
+            },))
+            .with_children(|row| {
+                row.spawn((
+                    Button,
+                    LinkGraphFilterButton,
+                    Node {
+                        padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.35, 0.3, 0.22)),
                     BuildMenuUi,
+                    children![(
+                        Text::new("Filtro: todos"),
+                        window_text_font(asset_server, UiFontRole::Caption),
+                        TextColor(WINDOW_TEXT),
+                        BuildMenuUi,
+                    )],
+                ));
+                row.spawn((
+                    Button,
+                    LinkGraphViewButton,
+                    Node {
+                        padding: UiRect::axes(Val::Px(6.0), Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.35, 0.3, 0.22)),
+                    BuildMenuUi,
+                    children![(
+                        Text::new(LinkGraphView::Observed.label()),
+                        window_text_font(asset_server, UiFontRole::Caption),
+                        TextColor(WINDOW_TEXT),
+                        BuildMenuUi,
+                    )],
                 ));
             });
         panel.spawn((
             LinkGraphBodyText,
-            Text::new(link_graph_empty_text()),
+            Text::new(link_graph_empty_observed()),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
             BuildMenuUi,
@@ -67,11 +117,18 @@ pub(crate) fn setup_link_graph_window(mut commands: Commands, asset_server: Res<
     });
 }
 
-fn link_graph_empty_text() -> &'static str {
+fn link_graph_empty_observed() -> &'static str {
     "Sin flujos observados aún.\n\n\
      Se registran al cargar en una estación y\n\
      descargar/transferir en otra (mismo cargo).\n\n\
      Modo de distribución: Ajustes → Distribución de carga…"
+}
+
+fn link_graph_empty_planned() -> &'static str {
+    "Sin FlowStat planificados.\n\n\
+     Activá Asimétrica o Simétrica en\n\
+     Ajustes → Distribución de carga…\n\
+     y generá tráfico entre estaciones."
 }
 
 fn cargo_label(c: CargoType) -> &'static str {
@@ -107,29 +164,60 @@ fn next_cargo_filter(current: Option<CargoType>) -> Option<CargoType> {
     }
 }
 
-fn format_link_graph_body(sim: &SimWorld, filter: Option<CargoType>) -> String {
-    let edges = sim.state.link_graph.top_edges_filtered(filter, 24);
-    if edges.is_empty() {
-        return link_graph_empty_text().to_string();
+fn format_link_graph_body(
+    sim: &SimWorld,
+    filter: Option<CargoType>,
+    view: LinkGraphView,
+) -> String {
+    match view {
+        LinkGraphView::Observed => {
+            let edges = sim.state.link_graph.top_edges_filtered(filter, 24);
+            if edges.is_empty() {
+                return link_graph_empty_observed().to_string();
+            }
+            let mut lines = vec![
+                "Flujos observados (mes / total)".to_string(),
+                "Leyenda: intensidad ≈ units_month".to_string(),
+                String::new(),
+            ];
+            for (key, sample) in edges {
+                lines.push(format!(
+                    "({},{})→({},{}) {}  {}/{}",
+                    key.from.x,
+                    key.from.y,
+                    key.to.x,
+                    key.to.y,
+                    cargo_label(key.cargo),
+                    sample.units_month,
+                    sample.units_total,
+                ));
+            }
+            lines.join("\n")
+        }
+        LinkGraphView::Planned => {
+            let edges = sim.state.station_flows.planned_edges_filtered(filter, 24);
+            if edges.is_empty() {
+                return link_graph_empty_planned().to_string();
+            }
+            let mut lines = vec![
+                "Flows planificados (FlowStat / MCF)".to_string(),
+                "Estación → via (suma de shares)".to_string(),
+                String::new(),
+            ];
+            for edge in edges {
+                lines.push(format!(
+                    "({},{})→({},{}) {}  {}",
+                    edge.from.x,
+                    edge.from.y,
+                    edge.to.x,
+                    edge.to.y,
+                    cargo_label(edge.cargo),
+                    edge.amount,
+                ));
+            }
+            lines.join("\n")
+        }
     }
-    let mut lines = vec![
-        "Flujos observados (mes / total)".to_string(),
-        "Leyenda: intensidad ≈ units_month".to_string(),
-        String::new(),
-    ];
-    for (key, sample) in edges {
-        lines.push(format!(
-            "({},{})→({},{}) {}  {}/{}",
-            key.from.x,
-            key.from.y,
-            key.to.x,
-            key.to.y,
-            cargo_label(key.cargo),
-            sample.units_month,
-            sample.units_total,
-        ));
-    }
-    lines.join("\n")
 }
 
 pub(crate) fn open_link_graph_from_routes(
@@ -162,6 +250,25 @@ pub(crate) fn handle_link_graph_filter_button(
     }
 }
 
+pub(crate) fn handle_link_graph_view_button(
+    mut q: Query<(&Interaction, &Children), (Changed<Interaction>, With<LinkGraphViewButton>)>,
+    mut text_q: Query<&mut Text>,
+    mut state: ResMut<LinkGraphWindowState>,
+) {
+    for (interaction, children) in &mut q {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        state.view = state.view.next();
+        let label = state.view.label().to_string();
+        for child in children {
+            if let Ok(mut text) = text_q.get_mut(*child) {
+                **text = label.clone();
+            }
+        }
+    }
+}
+
 pub(crate) fn sync_link_graph_window(
     state: Res<LinkGraphWindowState>,
     sim: Res<SimWorld>,
@@ -183,7 +290,7 @@ pub(crate) fn sync_link_graph_window(
         return;
     }
     if let Ok(mut text) = body_q.single_mut() {
-        **text = format_link_graph_body(&sim, state.cargo_filter);
+        **text = format_link_graph_body(&sim, state.cargo_filter, state.view);
     }
 }
 
@@ -217,10 +324,15 @@ mod tests {
     #[test]
     fn filter_cycles_through_cargos() {
         let mut f = None;
-        // None → 11 cargos → None
         for _ in 0..=ALL_CARGO_TYPES.len() {
             f = next_cargo_filter(f);
         }
         assert_eq!(f, None);
+    }
+
+    #[test]
+    fn view_cycles_observed_planned() {
+        assert_eq!(LinkGraphView::Observed.next(), LinkGraphView::Planned);
+        assert_eq!(LinkGraphView::Planned.next(), LinkGraphView::Observed);
     }
 }

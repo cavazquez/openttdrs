@@ -242,8 +242,9 @@ use town_window::{
     town_window_on_closed,
 };
 use ui5_blocked_stubs::{
-    LinkGraphWindowState, handle_link_graph_filter_button, link_graph_window_on_closed,
-    open_link_graph_from_routes, setup_link_graph_window, sync_link_graph_window,
+    LinkGraphWindowState, handle_link_graph_filter_button, handle_link_graph_view_button,
+    link_graph_window_on_closed, open_link_graph_from_routes, setup_link_graph_window,
+    sync_link_graph_window,
 };
 use vehicle_list::{
     VehicleListState, handle_vehicle_list_buttons, open_vehicle_list_from_routes,
@@ -701,6 +702,7 @@ impl Plugin for ClientUiPlugin {
                 sync_sign_list_window,
                 sync_link_graph_window,
                 handle_link_graph_filter_button,
+                handle_link_graph_view_button,
                 handle_sign_list_buttons,
                 handle_sign_list_body_click,
                 sign_list_rename_keyboard,

@@ -40,9 +40,9 @@ pub(crate) fn setup_cargo_dist_settings_window(
     commands.entity(content).with_children(|body| {
         body.spawn((
             Text::new(
-                "Manual usa órdenes del vehículo.\n\
-                 Asimétrica / Simétrica usan FlowStat (MCF greedy stub).\n\
-                 Simétrica aún no hace matching bidireccional.",
+                "Manual: hop desde órdenes del vehículo.\n\
+                 Asimétrica: FlowStat vía MCF CapacityScaled (2 pases).\n\
+                 Simétrica: espeja aristas A↔B y luego el mismo MCF.",
             ),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.82, 0.78, 0.68)),

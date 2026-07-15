@@ -26,6 +26,7 @@ use crate::ui::display_options_window::DisplayOptionsWindowState;
 use crate::ui::extra_viewport_window::ExtraViewportWindowState;
 use crate::ui::finances_window::FinancesWindowState;
 use crate::ui::floating_window::{FloatingWindow, FloatingWindowId};
+use crate::ui::genland_window::GenLandWindowState;
 use crate::ui::graph_window::GraphWindowState;
 use crate::ui::help_window::HelpWindowState;
 use crate::ui::hud::SimHudControls;
@@ -394,6 +395,7 @@ fn open_all_windows_for_shot(world: &mut World) {
     world.resource_mut::<DevConsoleState>().open = true;
     world.resource_mut::<TileInspectorWindowState>().open = true;
     world.resource_mut::<CheatWindowState>().open = true;
+    world.resource_mut::<GenLandWindowState>().open = true;
 
     world
         .resource_mut::<SaveWindowState>()

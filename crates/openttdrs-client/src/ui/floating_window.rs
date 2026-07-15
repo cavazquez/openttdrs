@@ -112,6 +112,8 @@ pub(crate) enum FloatingWindowId {
     TileInspector,
     /// Cheats formales (UI-8 / #45).
     CheatWindow,
+    /// Generar paisaje (editor #42 GenLand).
+    GenLand,
 }
 
 #[allow(dead_code)] // inventarios UI-0 consumidos en tests
@@ -154,6 +156,7 @@ impl FloatingWindowId {
         Self::DevConsole,
         Self::TileInspector,
         Self::CheatWindow,
+        Self::GenLand,
     ];
 
     /// Clave estable para persistir posición en `ClientPreferences`.
@@ -196,6 +199,7 @@ impl FloatingWindowId {
             Self::DevConsole => "DevConsole",
             Self::TileInspector => "TileInspector",
             Self::CheatWindow => "CheatWindow",
+            Self::GenLand => "GenLand",
         }
     }
 }

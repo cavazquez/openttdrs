@@ -111,6 +111,7 @@ pub(super) fn spawn_icon_tool_buttons(
 }
 
 pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
+    // Tres filas para que el panel no quede aplastado en horizontal.
     const ROW1: &[(&str, &str, SaveMenuAction)] = &[
         (
             "Pausa/Reanudar",
@@ -144,6 +145,8 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             "Off / Summary / Full por tipo de noticia",
             SaveMenuAction::NewsSettings,
         ),
+    ];
+    const ROW2: &[(&str, &str, SaveMenuAction)] = &[
         (
             "Pathfinding / PBS...",
             "Espera path, giro en señales y look-ahead (pf.*)",
@@ -159,8 +162,6 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             "Activar rival, umbral de dinero, máx. rutas y debug",
             SaveMenuAction::AiSettings,
         ),
-    ];
-    const ROW2: &[(&str, &str, SaveMenuAction)] = &[
         (
             "NewGRF...",
             "Stack NewGRF (ON/OFF, orden, añadir; sin Action0–14)",
@@ -186,6 +187,8 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             "FPS, gizmos, comandos (F3 / `)",
             SaveMenuAction::DevConsole,
         ),
+    ];
+    const ROW3: &[(&str, &str, SaveMenuAction)] = &[
         (
             "Inspector tile",
             "Dump del tile seleccionado (F2)",
@@ -229,6 +232,7 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
         ))
         .with_children(|col| {
             spawn_settings_button_row(col, ROW1);
+            spawn_settings_button_row(col, ROW2);
             col.spawn((
                 Node {
                     flex_direction: FlexDirection::Row,
@@ -239,7 +243,7 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
                 BuildMenuUi,
             ))
             .with_children(|row| {
-                for &(label, tip, action) in ROW2 {
+                for &(label, tip, action) in ROW3 {
                     spawn_settings_text_button(row, label, tip, action);
                 }
                 spawn_company_colour_picker(row);

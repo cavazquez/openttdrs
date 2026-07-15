@@ -29,6 +29,7 @@ use super::dev_console::DevConsoleState;
 use super::endscreen::{EndScreenState, RetireGameRequested};
 use super::finances_window::FinancesWindowState;
 use super::floating_window::FloatingWindow;
+use super::genland_window::GenLandWindowState;
 use super::graph_window::GraphWindowState;
 use super::help_window::HelpWindowState;
 use super::hud::TileInfoText;
@@ -273,6 +274,9 @@ pub(crate) fn leave_ingame(world: &mut World) {
     }
     if let Some(mut cheats) = world.get_resource_mut::<CheatWindowState>() {
         *cheats = CheatWindowState::default();
+    }
+    if let Some(mut genland) = world.get_resource_mut::<GenLandWindowState>() {
+        *genland = GenLandWindowState::default();
     }
     // Si hay partida suspendida, conservar flag de editor para «Continuar».
     let suspending = world

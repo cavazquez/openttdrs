@@ -47,6 +47,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | DevConsole | Ajustes / F3 | |
 | TileInspector | Ajustes / F2 | |
 | CheatWindow | Ajustes / Ctrl+Alt+C | |
+| GenLand | Editor → Terreno | |
 
 ## Paneles no flotantes (fijos)
 

@@ -23,6 +23,7 @@ mod extra_viewport_window;
 mod finances_window;
 mod floating_window;
 pub(crate) mod font;
+mod genland_window;
 mod graph_window;
 mod help_window;
 mod hud;
@@ -109,6 +110,10 @@ use finances_window::{
     FinancesWindowState, finances_window_on_closed, handle_finances_window_buttons,
     handle_open_finances_window, open_finances_from_routes, setup_finances_window,
     sync_finances_window,
+};
+use genland_window::{
+    GenLandWindowState, genland_window_on_closed, handle_genland_buttons, setup_genland_window,
+    sync_genland_window,
 };
 use graph_window::{
     GraphWindowState, graph_window_on_closed, handle_graph_window_buttons, open_graph_from_routes,
@@ -291,6 +296,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<DevConsoleState>()
         .init_resource::<TileInspectorWindowState>()
         .init_resource::<CheatWindowState>()
+        .init_resource::<GenLandWindowState>()
         .init_resource::<EndScreenState>()
         .init_resource::<RetireGameRequested>()
         .init_resource::<SoundMusicWindowState>()
@@ -379,7 +385,7 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
-            setup_editor_toolbar.in_set(StartupSet::Ui),
+            (setup_editor_toolbar, setup_genland_window).in_set(StartupSet::Ui),
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
@@ -529,6 +535,9 @@ impl Plugin for ClientUiPlugin {
                 sync_editor_toolbar_button_visuals,
                 handle_editor_toolbar_control_buttons,
                 handle_editor_toolbar_tool_buttons,
+                genland_window_on_closed,
+                sync_genland_window,
+                handle_genland_buttons,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

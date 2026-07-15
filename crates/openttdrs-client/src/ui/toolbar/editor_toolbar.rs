@@ -12,6 +12,7 @@ use crate::state::ingame_lifecycle::InGameUi;
 use crate::state::{EditorSession, SimRunState, SimWorld, sim_is_paused, toggle_sim_run_state};
 use crate::ui::audio_settings_window::SoundMusicWindowState;
 use crate::ui::extra_viewport_window::ExtraViewportWindowState;
+use crate::ui::genland_window::GenLandWindowState;
 use crate::ui::help_window::HelpWindowState;
 use crate::ui::hud::{HudBuildFeedback, SimHudControls};
 use crate::ui::industry_directory::IndustryDirectoryState;
@@ -128,7 +129,7 @@ impl EditorToolbarAction {
             Self::SmallMap => "Minimapa / directorios / vista extra",
             Self::ZoomIn => "Acercar cámara",
             Self::ZoomOut => "Alejar cámara",
-            Self::LandGenerate => "Herramientas de paisaje (GenLand OOS)",
+            Self::LandGenerate => "Generar paisaje + herramientas terraform",
             Self::TownGenerate => "Fundar pueblo",
             Self::Industry => "Colocar industrias",
             Self::Roads => "Carreteras",
@@ -353,6 +354,7 @@ pub(crate) fn sync_editor_toolbar_button_visuals(
     hud: Res<SimHudControls>,
     toolbar: Res<ToolbarState>,
     tool: Res<UiToolState>,
+    genland: Res<GenLandWindowState>,
     mut q: Query<(&EditorToolbarAction, &Interaction, &mut BackgroundColor), With<Button>>,
 ) {
     if !editor.active {
@@ -366,7 +368,7 @@ pub(crate) fn sync_editor_toolbar_button_visuals(
             EditorToolbarAction::FastForward => fast,
             EditorToolbarAction::Settings => toolbar.active_group == Some(ToolbarGroup::Settings),
             EditorToolbarAction::LandGenerate => {
-                toolbar.active_group == Some(ToolbarGroup::Landscape)
+                genland.open || toolbar.active_group == Some(ToolbarGroup::Landscape)
             }
             EditorToolbarAction::TownGenerate => {
                 tool.active_tool == Some(BuildMenuAction::FoundTown)
@@ -502,6 +504,8 @@ pub(crate) fn handle_editor_toolbar_tool_buttons(
     mut industries: ResMut<IndustryDirectoryState>,
     mut signs: ResMut<SignListWindowState>,
     mut extra_view: ResMut<ExtraViewportWindowState>,
+    mut genland: ResMut<GenLandWindowState>,
+    sim: Option<Res<SimWorld>>,
     mut feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
 ) {
@@ -544,9 +548,14 @@ pub(crate) fn handle_editor_toolbar_tool_buttons(
             }
             EditorToolbarAction::LandGenerate => {
                 open_group(&mut toolbar, &mut tool, ToolbarGroup::Landscape);
-                feedback.message =
-                    Some("Terreno: herramientas paisaje (GenLand completo OOS)".into());
-                feedback.expires_at_secs = time.elapsed_secs() + 3.0;
+                if !genland.open
+                    && let Some(sim) = sim.as_ref()
+                {
+                    let seed = sim.state.world_seed;
+                    genland.seed = if seed == 0 { 42 } else { seed };
+                    genland.climate = sim.state.climate;
+                }
+                genland.open = true;
             }
             EditorToolbarAction::TownGenerate => {
                 open_group(&mut toolbar, &mut tool, ToolbarGroup::Landscape);

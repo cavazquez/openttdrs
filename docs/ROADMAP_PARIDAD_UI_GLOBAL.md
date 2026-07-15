@@ -739,7 +739,7 @@ Objetivo: posterior a la paridad single-player.
 - [x] Multi-compañía demolish/build: no pisar/demoler infra ajena (`TileNotOwned`).
 - [x] Multi-compañía SP: activa + IA + ownership/finanzas mínimas. *(«segunda humana» local descartada — #41 wontfix; humanas extra → MP #21)*
 - [ ] Multijugador: lobby, clientes, chat, join/spectate.
-- [~] Scenario editor y toolbar de 19 botones. *(#42 Fase 1–2 ✅: menú Editor + `EditorToolbar` 19 botones cableados; GenLand/dropdowns OTTD OOS)*
+- [~] Scenario editor y toolbar de 19 botones. *(#42 Fase 1–3 ✅: menú + toolbar 19 + GenLand regen; dropdowns Town/Road OTTD OOS)*
 - [ ] GameScript: story, goals, league.
 - [x] AI settings/debug. *(ventana Ajustes + Finanzas; `GameState.ai`)*
 - [x] Herramientas dev: framerate / consola corta, tile inspect, NewGRF inspect,
@@ -943,7 +943,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** GenLand / ventanas Town·Industry editor (resto #42) o GameScript (#43). Red (#21) aplazada.
+**Siguiente:** dropdowns Town/Road editor o GameScript (#43). GenLand ✅. Red (#21) aplazada.
 
 Progreso UI-8 (multi-compañía mínima):
 

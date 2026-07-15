@@ -7,7 +7,8 @@ pub(crate) mod new_game;
 pub(crate) mod stations;
 
 pub(crate) use editor_session::{
-    EditorSession, apply_editor_sandbox, editor_new_game_settings, scenarios_save_dir,
+    EditorSession, apply_editor_sandbox, editor_new_game_settings, regenerate_landscape_in_place,
+    scenarios_save_dir,
 };
 
 use bevy::prelude::*;

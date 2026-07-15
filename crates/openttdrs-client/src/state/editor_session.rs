@@ -60,6 +60,34 @@ pub fn scenarios_save_dir() -> std::path::PathBuf {
     std::path::PathBuf::from("save/scenarios")
 }
 
+/// Regenera el paisaje in-place (editor GenLand). Pisa el mapa y limpia entidades.
+pub fn regenerate_landscape_in_place(
+    state: &mut openttdrs_core::GameState,
+    climate: Climate,
+    seed: u64,
+    island: bool,
+    roughness: TerrainRoughness,
+) -> Result<(), String> {
+    let seed = if seed == 0 { 0xDEAD_BEEF } else { seed };
+    let cfg = openttdrs_core::WorldGenConfig {
+        climate,
+        seed,
+        sea_level: 1,
+        island,
+        height_span: roughness.height_span(),
+    };
+    openttdrs_core::apply_world_gen(&mut state.map, &cfg, &[])
+        .map_err(|e| format!("world_gen: {e:?}"))?;
+    state.climate = climate;
+    state.world_seed = seed;
+    state.towns.clear();
+    state.industries.clear();
+    state.stations.clear();
+    state.vehicles.clear();
+    state.signs.clear();
+    Ok(())
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -86,5 +114,26 @@ mod tests {
         let money_before = sim.state.economy.money;
         apply_command(&mut sim.state, &Command::CheatAddMoney(1)).unwrap();
         assert!(sim.state.economy.money >= money_before);
+    }
+
+    #[test]
+    fn regenerate_landscape_clears_entities() {
+        let mut sim = SimWorld::from_new_game(&editor_new_game_settings());
+        let before_towns = sim.state.towns.len();
+        regenerate_landscape_in_place(
+            &mut sim.state,
+            Climate::SubArctic,
+            99,
+            true,
+            TerrainRoughness::Hilly,
+        )
+        .unwrap();
+        assert_eq!(sim.state.climate, Climate::SubArctic);
+        assert_eq!(sim.state.world_seed, 99);
+        assert!(sim.state.towns.is_empty() || before_towns >= sim.state.towns.len());
+        assert!(sim.state.towns.is_empty());
+        assert!(sim.state.industries.is_empty());
+        assert!(sim.state.stations.is_empty());
+        assert!(sim.state.vehicles.is_empty());
     }
 }

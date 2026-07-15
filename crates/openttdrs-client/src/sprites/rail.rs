@@ -5,26 +5,16 @@ use openttdrs_core::{
     Map, TileCoord, TileKind, diag_dir_offset, rail_type_from_tile, tile_slope_and_z,
 };
 
+pub use openttdrs_core::{
+    RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
+    RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, RAIL_TILE_DEPOT, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS,
+    rail_tile_is_signals,
+};
+
 use super::road::RoadDepotLayerGfx;
 use super::transparency::catenary_hidden;
 use crate::config;
 use crate::iso::remap_tile_offset;
-
-/// Subtipo de tesela ferroviaria en bits 6–7 de `m5` (`rail_map.h`).
-pub const RAIL_TILE_NORMAL: u8 = 0;
-pub const RAIL_TILE_SIGNALS: u8 = 1;
-pub const RAIL_TILE_DEPOT: u8 = 3;
-
-/// `TrackBits` en vía clásica (`track_type.h`).
-pub const RAIL_TB_X: u8 = 1;
-pub const RAIL_TB_Y: u8 = 2;
-pub const RAIL_TB_UPPER: u8 = 4;
-pub const RAIL_TB_LOWER: u8 = 8;
-pub const RAIL_TB_LEFT: u8 = 16;
-pub const RAIL_TB_RIGHT: u8 = 32;
-pub const RAIL_TB_CROSS: u8 = RAIL_TB_X | RAIL_TB_Y;
-pub const RAIL_TB_HORZ: u8 = RAIL_TB_UPPER | RAIL_TB_LOWER;
-pub const RAIL_TB_VERT: u8 = RAIL_TB_LEFT | RAIL_TB_RIGHT;
 
 /// Máscaras 3 vías por esquina.
 const RAIL_3WAY_NE: u8 = RAIL_TB_X | RAIL_TB_UPPER | RAIL_TB_RIGHT;
@@ -1002,12 +992,6 @@ pub fn level_crossing_has_rail_reservation(m5: u8) -> bool {
 
 pub use openttdrs_core::rail_tile_has_pbs_reservation;
 
-/// Vía con señales (`RailTileType::Signals`, bits 6–7 de `m5`).
-#[must_use]
-pub fn rail_tile_is_signals(m5: u8) -> bool {
-    (m5 >> 6) & 0x3 == RAIL_TILE_SIGNALS
-}
-
 // OpenTTD `Track` / `TrackBits` (`track_type.h`, `rail_cmd.cpp::DrawSignals`).
 const OTTD_TRACK_X: u8 = 0;
 const OTTD_TRACK_Y: u8 = 1;
@@ -1313,26 +1297,7 @@ pub fn rail_sprite_ids_for_preload() -> Vec<u32> {
 }
 
 pub fn effective_rail_trackbits(mapt: u8, m5: u8, kind: TileKind, mp_rail: u8) -> Option<u8> {
-    if kind != TileKind::Rail {
-        return None;
-    }
-    let tt = (mapt >> 4) & 0xF;
-    if tt != mp_rail {
-        return None;
-    }
-    let subtype = (m5 >> 6) & 0x3;
-    match subtype {
-        RAIL_TILE_NORMAL | RAIL_TILE_SIGNALS => Some(m5 & 0x3F),
-        RAIL_TILE_DEPOT => {
-            let d = m5 & 0x3;
-            Some(if d == 1 || d == 3 {
-                RAIL_TB_X
-            } else {
-                RAIL_TB_Y
-            })
-        }
-        _ => None,
-    }
+    openttdrs_core::effective_rail_trackbits(mapt, m5, kind, mp_rail)
 }
 
 fn synthetic_rail_trackbits(map: &Map, pos: TileCoord, mw: u32, mh: u32) -> u8 {

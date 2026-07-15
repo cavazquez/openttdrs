@@ -2,24 +2,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::map::{Map, TileCoord, TileKind};
+use crate::map::{
+    Map, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT,
+    RAIL_TB_X, RAIL_TB_Y, TileCoord, TileKind,
+};
 use crate::news::{CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day};
 use crate::station::is_rail_waypoint_tile;
 use crate::tick::GameTick;
 use crate::vehicle::{Vehicle, VehicleKind};
 
-/// Subtipo de tesela ferroviaria en bits 6–7 de `m5` (`RailTileType`).
-pub const RAIL_TILE_NORMAL: u8 = 0;
-pub const RAIL_TILE_SIGNALS: u8 = 1;
-
-const RAIL_TB_X: u8 = 0x01;
-const RAIL_TB_Y: u8 = 0x02;
-const RAIL_TB_UPPER: u8 = 0x04;
-const RAIL_TB_LOWER: u8 = 0x08;
-const RAIL_TB_LEFT: u8 = 0x10;
-const RAIL_TB_RIGHT: u8 = 0x20;
-const RAIL_TB_HORZ: u8 = RAIL_TB_UPPER | RAIL_TB_LOWER;
-const RAIL_TB_VERT: u8 = RAIL_TB_LEFT | RAIL_TB_RIGHT;
+pub use crate::map::{RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, rail_tile_is_signals};
 
 /// Pieza de vía sobre la que se coloca una señal (`Track` en `track_type.h`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -179,11 +171,6 @@ pub fn calendar_year_at_tick(tick: GameTick) -> u32 {
 #[must_use]
 pub fn default_signal_variant(year: u32) -> u8 {
     u8::from(year >= SEMAPHORE_BUILD_BEFORE_YEAR)
-}
-
-#[must_use]
-pub fn rail_tile_is_signals(m5: u8) -> bool {
-    (m5 >> 6) & 0x3 == RAIL_TILE_SIGNALS
 }
 
 #[must_use]

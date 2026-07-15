@@ -10,6 +10,7 @@ pub mod industry_terrain;
 pub mod industry_tile_anim;
 pub mod level_crossing;
 pub mod object;
+pub mod rail_bits;
 pub mod rail_slope;
 pub mod road_bits;
 pub mod slope;
@@ -55,6 +56,11 @@ pub use level_crossing::is_road_level_crossing;
 pub use object::{
     MP_OBJECT_MAPT, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND, OBJECT_TYPE_TRANSMITTER,
     OTTD_MP_OBJECT, is_map_object_tile, is_owned_land_tile, object_type_from_tile,
+};
+pub use rail_bits::{
+    OTTD_MP_RAILWAY, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT,
+    RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, RAIL_TILE_DEPOT, RAIL_TILE_NORMAL,
+    RAIL_TILE_SIGNALS, effective_rail_trackbits, rail_tile_is_signals,
 };
 pub use rail_slope::{rail_foundation_for_trackbits, rail_trackbits_valid_on_slope};
 pub use road_bits::{OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, effective_road_bits};

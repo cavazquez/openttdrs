@@ -4,9 +4,9 @@ Documento de **seguimiento** para cerrar la brecha entre el renderer de industri
 OpenTTD upstream y el cliente Rust. Resume el análisis de `DrawTile_Industry`,
 `industry_map.h` e `industry_land.h` frente a `spawn_industry_tile` y `INDUSTRY_GFX_DATA`.
 
-**Estado (2026-07):** nivel **A (vanilla estático)** cerrado para `gfx 0..174`
-(`INDUSTRY_GFX_TABLE_LEN = 175`, 700 filas). Fuera de alcance inmediato: motor NewGRF
-completo (`gfx ≥ 175`).
+**Estado (2026-07):** nivel **A–C** cerrados para vanilla. Nivel **D** MVP (#71):
+Action0 IndustryTiles + Action1/3 → catálogo gfx≥175 + draw in-world (fallback `subst_id`).
+OOS: callbacks TileLayout / foundations CB / feature Industries.
 
 **Relacionado:**
 
@@ -28,7 +28,7 @@ completo (`gfx ≥ 175`).
 | **C — Datos de mapa** | B + semántica `m2`/`m1`/`m4` alineada con upstream | Agrupación industria y HUD coherentes en saves reales |
 | **D — NewGRF** | `gfx ≥ 175`, `DrawNewIndustryTile`, callbacks | Partidas con GRF de industria custom |
 
-Hoy openttdrs: **nivel A ✅**; **B ✅** (P2–P4); **C ✅** (P5–P7; ResolveRerandomisation NewGRF → P8).
+Hoy openttdrs: **nivel A ✅**; **B ✅** (P2–P4); **C ✅** (P5–P7); **D MVP ✅** (#71 draw NewGRF; callbacks/TileLayout OOS).
 
 ---
 
@@ -150,7 +150,10 @@ paleta company en gfx 29–174 (excl. pozos/torres animados); lookup por `instan
 IndustryTick / CargoReceived. Sin sprite groups NewGRF reseedea `m3` al completo
 (MVP); `ResolveRerandomisation` por grupos → P8.
 
-### P8 — NewGRF ≥175 — **backlog**
+### P8 — NewGRF ≥175 — **MVP hecho** (#71)
+
+Catálogo `IndustryTileSpecDef`, overrides, `collect_industry_tile_sprite_graphics`,
+draw in-world con fallback `subst_id`. Callbacks / TileLayout completo → OOS.
 
 ### P9 — Logs obra vacía — **opcional**
 
@@ -167,7 +170,7 @@ IndustryTick / CargoReceived. Sin sprite groups NewGRF reseedea `m3` al completo
 | P5 | m2 IndustryID | **hecho** | — |
 | P6 | Obra simulada | **hecho** | — |
 | P7 | Tile loop / random bits | **hecho** | ResolveRerandomisation GRF → P8 |
-| P8 | NewGRF ≥175 | backlog | GRF custom |
+| P8 | NewGRF ≥175 | **MVP #71** | callbacks / TileLayout |
 | P9 | Logs obra vacía | opcional | Ruido debug |
 
 ---

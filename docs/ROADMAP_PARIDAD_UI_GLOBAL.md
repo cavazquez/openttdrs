@@ -943,7 +943,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** editor (#42), o industrias gfx≥175 (#71) / callback 24.
+**Siguiente:** editor (#42) o callback 24.
 
 Progreso UI-8 (multi-compañía mínima):
 

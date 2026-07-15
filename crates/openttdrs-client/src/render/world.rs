@@ -79,6 +79,7 @@ pub(crate) struct NewGrfMapSpriteCaches<'w> {
     station: ResMut<'w, crate::render::NewGrfStationSpriteCache>,
     shore: ResMut<'w, crate::render::NewGrfShoreSpriteCache>,
     catenary: ResMut<'w, crate::render::NewGrfCatenarySpriteCache>,
+    industry: ResMut<'w, crate::render::NewGrfIndustrySpriteCache>,
 }
 
 /// Petición de redibujo del mapa. `sync_camera`: solo tras F9 / cambio de tamaño.
@@ -165,6 +166,7 @@ impl Plugin for WorldRenderPlugin {
             .init_resource::<crate::render::NewGrfStationSpriteCache>()
             .init_resource::<crate::render::NewGrfShoreSpriteCache>()
             .init_resource::<crate::render::NewGrfCatenarySpriteCache>()
+            .init_resource::<crate::render::NewGrfIndustrySpriteCache>()
             .add_systems(OnEnter(ClientScreen::InGame), setup)
             .add_systems(
                 Update,
@@ -331,6 +333,7 @@ pub(crate) fn setup(
     let mut station_sprites = crate::render::NewGrfStationSpriteCache::default();
     let mut shore_sprites = crate::render::NewGrfShoreSpriteCache::default();
     let mut catenary_sprites = crate::render::NewGrfCatenarySpriteCache::default();
+    let mut industry_sprites = crate::render::NewGrfIndustrySpriteCache::default();
     spawn_world_layer(
         &mut commands,
         &asset_server,
@@ -348,11 +351,13 @@ pub(crate) fn setup(
         &mut station_sprites,
         &mut shore_sprites,
         &mut catenary_sprites,
+        &mut industry_sprites,
     );
     commands.insert_resource(road_sprites);
     commands.insert_resource(station_sprites);
     commands.insert_resource(shore_sprites);
     commands.insert_resource(catenary_sprites);
+    commands.insert_resource(industry_sprites);
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
         chunks: chunks_in_bounds(spawn_bounds),
@@ -409,6 +414,7 @@ pub(crate) fn spawn_intro_map_render(
     let mut station_sprites = crate::render::NewGrfStationSpriteCache::default();
     let mut shore_sprites = crate::render::NewGrfShoreSpriteCache::default();
     let mut catenary_sprites = crate::render::NewGrfCatenarySpriteCache::default();
+    let mut industry_sprites = crate::render::NewGrfIndustrySpriteCache::default();
     spawn_world_layer(
         commands,
         asset_server,
@@ -426,11 +432,13 @@ pub(crate) fn spawn_intro_map_render(
         &mut station_sprites,
         &mut shore_sprites,
         &mut catenary_sprites,
+        &mut industry_sprites,
     );
     commands.insert_resource(road_sprites);
     commands.insert_resource(station_sprites);
     commands.insert_resource(shore_sprites);
     commands.insert_resource(catenary_sprites);
+    commands.insert_resource(industry_sprites);
     commands.insert_resource(atlas);
     commands.insert_resource(LoadedMapTileChunks {
         chunks: chunks_in_bounds(spawn_bounds),
@@ -451,6 +459,7 @@ fn spawn_map_tiles_in_bounds(
     station_sprites: &mut crate::render::NewGrfStationSpriteCache,
     shore_sprites: &mut crate::render::NewGrfShoreSpriteCache,
     catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
+    industry_sprites: &mut crate::render::NewGrfIndustrySpriteCache,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
     let debug_coast = env_flag("OPENTTDRS_DEBUG_COAST");
@@ -648,6 +657,10 @@ fn spawn_map_tiles_in_bounds(
                     &sim.state.industries,
                     company,
                     images,
+                    &sim.state.industry_tile_spec_catalog,
+                    &sim.state.industry_tile_overrides,
+                    Some(industry_sprites),
+                    &sim.state.newgrf_stack,
                 );
             }
             _ => {}
@@ -697,6 +710,7 @@ fn spawn_world_layer(
     station_sprites: &mut crate::render::NewGrfStationSpriteCache,
     shore_sprites: &mut crate::render::NewGrfShoreSpriteCache,
     catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
+    industry_sprites: &mut crate::render::NewGrfIndustrySpriteCache,
 ) {
     if include_world_extras {
         let truck_handles = TruckHandles::load(asset_server);
@@ -741,6 +755,7 @@ fn spawn_world_layer(
         station_sprites,
         shore_sprites,
         catenary_sprites,
+        industry_sprites,
     );
 }
 
@@ -759,6 +774,7 @@ fn spawn_map_chunk(
     station_sprites: &mut crate::render::NewGrfStationSpriteCache,
     shore_sprites: &mut crate::render::NewGrfShoreSpriteCache,
     catenary_sprites: &mut crate::render::NewGrfCatenarySpriteCache,
+    industry_sprites: &mut crate::render::NewGrfIndustrySpriteCache,
 ) {
     let (mw, mh) = sim.state.map.dimensions();
     spawn_map_tiles_in_bounds(
@@ -774,6 +790,7 @@ fn spawn_map_chunk(
         station_sprites,
         shore_sprites,
         catenary_sprites,
+        industry_sprites,
     );
 }
 
@@ -924,6 +941,7 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.station.as_mut(),
                 newgrf_sprites.shore.as_mut(),
                 newgrf_sprites.catenary.as_mut(),
+                newgrf_sprites.industry.as_mut(),
             );
         }
         let mut refresh_despawn = Vec::new();
@@ -953,6 +971,7 @@ pub(crate) fn apply_remap_map_visuals(
                 newgrf_sprites.station.as_mut(),
                 newgrf_sprites.shore.as_mut(),
                 newgrf_sprites.catenary.as_mut(),
+                newgrf_sprites.industry.as_mut(),
             );
         }
         loaded_chunks.chunks = needed;
@@ -1023,6 +1042,7 @@ pub(crate) fn apply_remap_map_visuals(
             newgrf_sprites.station.as_mut(),
             newgrf_sprites.shore.as_mut(),
             newgrf_sprites.catenary.as_mut(),
+            newgrf_sprites.industry.as_mut(),
         );
         loaded_chunks.chunks = chunks_in_bounds(spawn_bounds);
     }

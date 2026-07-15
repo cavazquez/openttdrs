@@ -27,6 +27,7 @@ pub mod entity_history;
 pub mod flow_stat;
 mod game_state;
 pub mod industry;
+pub mod industry_tile;
 pub mod link_graph;
 pub mod linkgraph_parity;
 pub mod map;
@@ -166,6 +167,11 @@ pub use industry::{
     FACTORY_COAL_INPUT, FACTORY_WOOD_INPUT, INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind,
     IndustrySpec, industry_produce_period_ticks,
 };
+pub use industry_tile::{
+    INVALID_INDUSTRY_TILE, IndustryTileGfxId, IndustryTileSpecDef, NEW_INDUSTRY_TILE_OFFSET,
+    NUM_INDUSTRY_TILES, empty_industry_tile_overrides, get_clean_industry_gfx,
+    get_translated_industry_tile_id, industry_tile_spec_def, next_free_industry_tile_gfx_id,
+};
 pub use link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphStats};
 pub use linkgraph_parity::{
     BaseEdge as LinkgraphParityBaseEdge, BaseNode as LinkgraphParityBaseNode,
@@ -207,18 +213,21 @@ pub use mcf::{
     compute_station_flows_for_distribution, symmetrize_observed_edges,
 };
 pub use newgrf_actions::{
-    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header,
-    Action5SlotSummary, GrfInspectReport, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,
+    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS,
+    ACTION0_FEATURE_TRAINS, Action0Header, Action5SlotSummary, GrfInspectReport,
+    ParsedIndustryTileMeta, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,
     apply_newgrf_action5_catenary, apply_newgrf_action5_catenary_default_dirs,
-    apply_newgrf_action5_shore, apply_newgrf_action5_shore_default_dirs, apply_newgrf_road_types,
+    apply_newgrf_action5_shore, apply_newgrf_action5_shore_default_dirs,
+    apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs, apply_newgrf_road_types,
     apply_newgrf_road_types_default_dirs, apply_newgrf_stack_catalogs_default_dirs,
     apply_newgrf_stations, apply_newgrf_stations_default_dirs, apply_newgrf_vehicles_trains,
-    apply_newgrf_vehicles_trains_default_dirs, build_action0_roadtype_payload,
-    build_action0_station_payload, build_action0_train_payload,
-    build_grf_v2_with_action0_and_action8, collect_roadtype_metas_from_grf,
-    collect_station_metas_from_grf, collect_train_metas_from_grf, default_newgrf_search_dirs,
-    for_each_pseudo_payload, inspect_grf_bytes, inspect_grf_file, parse_action0_header,
-    parse_action0_roadtype_meta, parse_action0_station_meta, parse_action0_train_meta,
+    apply_newgrf_vehicles_trains_default_dirs, build_action0_industry_tile_payload,
+    build_action0_roadtype_payload, build_action0_station_payload, build_action0_train_payload,
+    build_grf_v2_with_action0_and_action8, collect_industry_tile_metas_from_grf,
+    collect_roadtype_metas_from_grf, collect_station_metas_from_grf, collect_train_metas_from_grf,
+    default_newgrf_search_dirs, for_each_pseudo_payload, inspect_grf_bytes, inspect_grf_file,
+    parse_action0_header, parse_action0_industry_tile_meta, parse_action0_roadtype_meta,
+    parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,
@@ -239,19 +248,20 @@ pub use newgrf_sprites::{
     build_action2_variational_default_payload, build_action2_variational_divmod_payload,
     build_action2_variational_payload, build_action2_vehicle_payload,
     build_action3_feature_payload, build_action3_trains_payload, build_grf_v2_action5_with_sprite,
-    build_grf_v2_feature_with_action2_chain, build_grf_v2_roadtype_with_action2_chain,
-    build_grf_v2_roadtype_with_preview_sprite, build_grf_v2_station_with_action2_chain,
-    build_grf_v2_station_with_preview_sprite, build_grf_v2_train_with_action2_chain,
-    build_grf_v2_train_with_chunked_sprite, build_grf_v2_train_with_compressed_sprite,
-    build_grf_v2_train_with_fd_rgba_sprite, build_grf_v2_train_with_fd_sprite,
-    build_grf_v2_train_with_preview_sprite, build_grf_v2_train_with_variational_chain,
-    build_grf_v2_with_preview_sprite, build_real_sprite_v1_chunked,
-    build_real_sprite_v1_chunked_payload, build_real_sprite_v1_compressed,
-    build_real_sprite_v1_compressed_payload, build_real_sprite_v1_dims,
-    build_real_sprite_v1_uncompressed, build_real_sprite_v1_uncompressed_payload,
-    build_sprite_section_palette_entry, build_sprite_section_rgba_chunked_entry,
-    build_sprite_section_rgba_entry, build_sprite_section_rgba_mask_entry,
-    catenary_action5_local_slot, collect_action5_blocks, collect_feature_sprite_graphics,
+    build_grf_v2_feature_with_action2_chain, build_grf_v2_industry_tile_with_preview_sprite,
+    build_grf_v2_roadtype_with_action2_chain, build_grf_v2_roadtype_with_preview_sprite,
+    build_grf_v2_station_with_action2_chain, build_grf_v2_station_with_preview_sprite,
+    build_grf_v2_train_with_action2_chain, build_grf_v2_train_with_chunked_sprite,
+    build_grf_v2_train_with_compressed_sprite, build_grf_v2_train_with_fd_rgba_sprite,
+    build_grf_v2_train_with_fd_sprite, build_grf_v2_train_with_preview_sprite,
+    build_grf_v2_train_with_variational_chain, build_grf_v2_with_preview_sprite,
+    build_real_sprite_v1_chunked, build_real_sprite_v1_chunked_payload,
+    build_real_sprite_v1_compressed, build_real_sprite_v1_compressed_payload,
+    build_real_sprite_v1_dims, build_real_sprite_v1_uncompressed,
+    build_real_sprite_v1_uncompressed_payload, build_sprite_section_palette_entry,
+    build_sprite_section_rgba_chunked_entry, build_sprite_section_rgba_entry,
+    build_sprite_section_rgba_mask_entry, catenary_action5_local_slot, collect_action5_blocks,
+    collect_feature_sprite_graphics, collect_industry_tile_sprite_graphics,
     collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
     collect_train_sprite_graphics, compress_grf_lz77_literals, decode_chunked_8bpp,
     decode_chunked_pixels, decode_real_sprite_v1, decode_real_sprite_v1_uncompressed,

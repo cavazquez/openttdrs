@@ -151,23 +151,41 @@ pub(crate) fn spawn_industry_tile(
     industries: &[openttdrs_core::Industry],
     company: &mut CompanyColoredSprites,
     images: &mut Assets<Image>,
+    industry_catalog: &[openttdrs_core::IndustryTileSpecDef],
+    industry_overrides: &[u16],
+    mut industry_sprites: Option<&mut crate::render::NewGrfIndustrySpriteCache>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
-    // gfx de industria es de 9 bits: m5 (bits 0-7) | bit 2 de m6 (bit 8)
-    // Fuente: GetCleanIndustryGfx() en industry_map.h de OpenTTD
-    let gfx = ctx.tile.map_or(0u16, |t| {
-        u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8)
-    });
+    // gfx limpio + traducción NewGRF (`GetIndustryGfx`).
+    let clean = ctx
+        .tile
+        .map_or(0u16, |t| openttdrs_core::get_clean_industry_gfx(t.m5, t.m6));
+    let translated = openttdrs_core::get_translated_industry_tile_id(clean, industry_overrides);
     let m1 = ctx.tile.map_or(0, |t| t.m1);
     let m2 = ctx.tile.map_or(0, |t| t.m2);
     let m3hi = ctx.tile.map_or(0, |t| t.m3hi);
+    let stage = usize::from(openttdrs_core::industry_construction_stage(m1));
+    let newgrf_def = if translated >= openttdrs_core::NEW_INDUSTRY_TILE_OFFSET {
+        crate::render::industry_newgrf::newgrf_industry_tile_def(industry_catalog, translated)
+    } else {
+        None
+    };
+    // Tabla vanilla: NewGRF usa subst_id si no hay sprites / como fallback.
+    let gfx = if translated >= openttdrs_core::NEW_INDUSTRY_TILE_OFFSET {
+        openttdrs_core::industry_tile_spec_def(industry_catalog, translated)
+            .map(|d| d.subst_id)
+            .unwrap_or(0)
+    } else {
+        translated
+    };
     let palette_colour = industry_palette_colour_for_instance(m2, industries);
     let client_anim = industry_building_needs_client_anim(gfx, m1);
     let phase = crate::render::industry_anim_phase(ctx.tx_i32(), ctx.ty_i32(), m3hi);
     let m4 = industry_effective_m4_for_draw(gfx, m1, m3hi, 0.0, phase);
     let entry = industry_gfx_entry_for_tile(gfx, m1, m4);
-    crate::sprites::log_industry_gfx_once(gfx, m1, m3hi, entry);
+    crate::sprites::log_industry_gfx_once(translated, m1, m3hi, entry);
     use crate::sprites::{TransparencyOption, is_hidden, with_to_alpha};
     let industries_hidden = is_hidden(TransparencyOption::Industries);
     // Chimenea de la central terminada: penacho de humo animado encima.
@@ -246,6 +264,45 @@ pub(crate) fn spawn_industry_tile(
         crate::render::IndustryOverlayContext::from_tile_ctx(ctx, base_z, overlay_z, leveled);
     if industries_hidden {
         return;
+    }
+    if let Some(def) = newgrf_def
+        && let Some(cache) = industry_sprites.as_mut()
+    {
+        let colour = Some(palette_colour);
+        let mut a2 = openttdrs_core::Action2EvalCtx {
+            random_bits: u32::from(m3hi),
+            ..Default::default()
+        };
+        a2.vars.insert(0x5F, u32::from(m3hi) << 8);
+        a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+            newgrf_stack,
+            def.newgrf_grfid,
+        ));
+        if let Some(handle) = cache.handle_for_runtime(def, stage, colour, &mut a2, images) {
+            let view = def.newgrf_view(stage).or(def.newgrf_preview.as_ref());
+            if let Some(view) = view {
+                let pos3 = overlay_at(
+                    f32::from(view.x_offs),
+                    f32::from(view.y_offs),
+                    f32::from(view.width),
+                    f32::from(view.height),
+                    0.5,
+                );
+                let mut sprite = Sprite {
+                    image: handle,
+                    color: Color::WHITE,
+                    ..default()
+                };
+                sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
+                commands.spawn((
+                    MapVisualLayer,
+                    chunk,
+                    sprite,
+                    Transform::from_translation(pos3),
+                ));
+                return;
+            }
+        }
     }
     if let Some(s) = entry {
         let anim_base = |ground: bool| {

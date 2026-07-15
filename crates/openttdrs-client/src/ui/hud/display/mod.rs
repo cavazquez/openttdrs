@@ -576,8 +576,19 @@ pub(crate) fn update_tile_info_text(
         )
     } else if tile.kind == TileKind::Industry {
         // OpenTTD GetCleanIndustryGfx: 9 bits — no confundir con `m5` solo (HUD antes mostraba eso como "gfx").
-        let gfx9 = u16::from(tile.m5) | (u16::from((tile.m6 >> 2) & 1) << 8);
-        let status = crate::sprites::industry_gfx_status(gfx9);
+        let clean = openttdrs_core::get_clean_industry_gfx(tile.m5, tile.m6);
+        let gfx9 = openttdrs_core::get_translated_industry_tile_id(
+            clean,
+            &sim.state.industry_tile_overrides,
+        );
+        let newgrf_ok = gfx9 >= openttdrs_core::NEW_INDUSTRY_TILE_OFFSET
+            && openttdrs_core::industry_tile_spec_def(&sim.state.industry_tile_spec_catalog, gfx9)
+                .is_some_and(openttdrs_core::IndustryTileSpecDef::has_newgrf_sprites);
+        let status = if newgrf_ok {
+            crate::sprites::IndustryGfxStatus::Resolved
+        } else {
+            crate::sprites::industry_gfx_status(gfx9)
+        };
         let flag = if status == crate::sprites::IndustryGfxStatus::Resolved {
             String::new()
         } else {

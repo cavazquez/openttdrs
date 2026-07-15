@@ -9,7 +9,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::newgrf_actions::{
-    ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS,
+    ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS,
+    ACTION0_FEATURE_TRAINS,
 };
 use crate::newgrf_company_ramp::{
     AUTHOR_CC_PALETTE_FIRST, COMPANY_COLOUR_COUNT, COMPANY_RAMP_RGB, COMPANY_RAMP_SHADES,
@@ -1222,11 +1223,14 @@ pub fn resolve_fd_sprite<S: ::std::hash::BuildHasher>(
     best.map(|(_, _, spr)| spr)
 }
 
-/// Features con cadena Action3→Action2→Action1 (trains / stations / roadtypes).
+/// Features con cadena Action3→Action2→Action1 (trains / stations / roadtypes / industrytile).
 fn supports_action2_chain(feature: u8) -> bool {
     matches!(
         feature,
-        ACTION0_FEATURE_TRAINS | ACTION0_FEATURE_STATIONS | ACTION0_FEATURE_ROADTYPES
+        ACTION0_FEATURE_TRAINS
+            | ACTION0_FEATURE_STATIONS
+            | ACTION0_FEATURE_ROADTYPES
+            | ACTION0_FEATURE_INDUSTRYTILES
     )
 }
 
@@ -2448,6 +2452,40 @@ pub fn build_grf_v2_roadtype_with_preview_sprite(
 /// Contenedor inválido.
 pub fn collect_station_sprite_graphics(data: &[u8]) -> Result<TrainSpriteGraphics, GrfScanError> {
     collect_feature_sprite_graphics(data, ACTION0_FEATURE_STATIONS)
+}
+
+/// Action1/3 industry tiles.
+///
+/// # Errors
+///
+/// Contenedor inválido.
+pub fn collect_industry_tile_sprite_graphics(
+    data: &[u8],
+) -> Result<TrainSpriteGraphics, GrfScanError> {
+    collect_feature_sprite_graphics(data, ACTION0_FEATURE_INDUSTRYTILES)
+}
+
+/// GRF v2 sintético: Action0 industry tile + Action1 + sprite + Action3 + Action8.
+#[must_use]
+pub fn build_grf_v2_industry_tile_with_preview_sprite(
+    action0: &[u8],
+    local_id: u8,
+    width: u16,
+    height: u16,
+    indices: &[u8],
+    grfid: [u8; 4],
+    name: &str,
+) -> Vec<u8> {
+    build_grf_v2_with_preview_sprite(
+        action0,
+        ACTION0_FEATURE_INDUSTRYTILES,
+        local_id,
+        width,
+        height,
+        indices,
+        grfid,
+        name,
+    )
 }
 
 /// GRF v2 sintético: Action0 station + Action1 + sprite + Action3 + Action8.

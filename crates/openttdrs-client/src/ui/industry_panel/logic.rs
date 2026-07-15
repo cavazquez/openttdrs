@@ -155,8 +155,15 @@ pub(crate) fn spec_label(spec: IndustrySpec) -> &'static str {
 
 pub(crate) fn format_panel_title(map: &Map, sim: &SimWorld, focus: TileCoord) -> String {
     if let Some(tile) = map.get(focus) {
-        let gfx = industry_gfx(&tile);
-        if industry_gfx_status(gfx) == IndustryGfxStatus::OutOfRange {
+        let clean = openttdrs_core::get_clean_industry_gfx(tile.m5, tile.m6);
+        let gfx = openttdrs_core::get_translated_industry_tile_id(
+            clean,
+            &sim.state.industry_tile_overrides,
+        );
+        let newgrf_ok = gfx >= openttdrs_core::NEW_INDUSTRY_TILE_OFFSET
+            && openttdrs_core::industry_tile_spec_def(&sim.state.industry_tile_spec_catalog, gfx)
+                .is_some_and(openttdrs_core::IndustryTileSpecDef::has_newgrf_sprites);
+        if !newgrf_ok && industry_gfx_status(gfx) == IndustryGfxStatus::OutOfRange {
             return format!("Industria - gfx {gfx} (sin sprite)");
         }
     }

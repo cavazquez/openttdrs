@@ -347,6 +347,10 @@ fn spawn_land_house_industry_generics_and_batches() {
                     &[],
                     &mut company,
                     &mut images,
+                    &[],
+                    &openttdrs_core::empty_industry_tile_overrides(),
+                    None,
+                    &[],
                 );
 
                 let mut batches = MapSpriteBatches::default();
@@ -489,6 +493,10 @@ fn spawn_industry_on_slope_spawns_foundation_layer() {
                     &[],
                     &mut company,
                     &mut images,
+                    &[],
+                    &openttdrs_core::empty_industry_tile_overrides(),
+                    None,
+                    &[],
                 );
             },
         )
@@ -597,6 +605,10 @@ fn power_plant_chimney_spawns_animated_smoke() {
                         &[],
                         &mut company,
                         &mut images,
+                        &[],
+                        &openttdrs_core::empty_industry_tile_overrides(),
+                        None,
+                        &[],
                     );
                 },
             )
@@ -649,6 +661,10 @@ fn copper_mine_chimney_spawns_animated_smoke() {
                         &[],
                         &mut company,
                         &mut images,
+                        &[],
+                        &openttdrs_core::empty_industry_tile_overrides(),
+                        None,
+                        &[],
                     );
                 },
             )

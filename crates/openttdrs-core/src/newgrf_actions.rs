@@ -3,11 +3,16 @@
 //! El walker cuenta acciones sin aplicar. Action0 features registradas:
 //! - `RoadTypes` (0x12) → `GameState.road_type_catalog`
 //! - `Stations` (0x04) → `station_class_catalog` / `station_spec_catalog`
+//! - `IndustryTiles` (0x09) → `industry_tile_spec_catalog`
 
 use std::path::Path;
 
 use crate::GameState;
 use crate::engine::{EngineDef, next_free_engine_id, vanilla_engine_catalog};
+use crate::industry_tile::{
+    INVALID_INDUSTRY_TILE, IndustryTileGfxId, IndustryTileSpecDef, NEW_INDUSTRY_TILE_OFFSET,
+    empty_industry_tile_overrides, next_free_industry_tile_gfx_id,
+};
 use crate::newgrf_config::{GrfContainerVersion, GrfScanError, parse_grf_container};
 use crate::road_type::{
     RoadTramType, RoadType, RoadTypeDef, next_free_road_type_id, vanilla_road_type_catalog,
@@ -22,8 +27,14 @@ use crate::vehicle::VehicleKind;
 pub const ACTION0_FEATURE_TRAINS: u8 = 0x00;
 /// Feature Action0: `Stations` (`OpenTTD` `GSF_STATIONS`).
 pub const ACTION0_FEATURE_STATIONS: u8 = 0x04;
+/// Feature Action0: `IndustryTiles` (`OpenTTD` `GSF_INDUSTRYTILES`).
+pub const ACTION0_FEATURE_INDUSTRYTILES: u8 = 0x09;
 /// Feature Action0: `RoadTypes` (`OpenTTD` `GSF_ROADTYPES`).
 pub const ACTION0_FEATURE_ROADTYPES: u8 = 0x12;
+/// `IndustryTiles`: substitute vanilla gfx (`prop 0x08`).
+const PROP_INDTILE_SUBST: u8 = 0x08;
+/// `IndustryTiles`: override vanilla gfx (`prop 0x09`).
+const PROP_INDTILE_OVERRIDE: u8 = 0x09;
 
 /// Prop etiqueta 4 chars (`RoadTypes` short / Stations class label).
 const PROP_LABEL: u8 = 0x08;
@@ -161,6 +172,16 @@ pub struct ParsedTrainMeta {
     pub intro_year: u16,
     pub max_speed: u16,
     pub power_hp: u32,
+}
+
+/// Metadatos `IndustryTiles` Action0 (antes de asignar gfx ≥175).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedIndustryTileMeta {
+    pub local_id: u8,
+    /// Substitute vanilla (`prop 0x08`); obligatorio para crear slot.
+    pub subst_id: u8,
+    /// Override de gfx vanilla (`prop 0x09`).
+    pub override_of: Option<u8>,
 }
 
 /// Inspecciona bytes de un `.grf` (parse-only).
@@ -813,8 +834,166 @@ pub fn apply_newgrf_stack_catalogs_default_dirs(state: &mut GameState) {
     apply_newgrf_road_types_default_dirs(state);
     apply_newgrf_stations_default_dirs(state);
     apply_newgrf_vehicles_trains_default_dirs(state);
+    apply_newgrf_industry_tiles_default_dirs(state);
     apply_newgrf_action5_shore_default_dirs(state);
     apply_newgrf_action5_catenary_default_dirs(state);
+}
+
+#[must_use]
+pub fn parse_action0_industry_tile_meta(payload: &[u8]) -> Option<ParsedIndustryTileMeta> {
+    let header = parse_action0_header(payload)?;
+    if header.feature != ACTION0_FEATURE_INDUSTRYTILES || header.num_ids == 0 {
+        return None;
+    }
+    if payload.len() < 5 {
+        return None;
+    }
+    let local_id = payload[4];
+    let mut i = 5usize;
+    let mut subst_id: Option<u8> = None;
+    let mut override_of: Option<u8> = None;
+    for _ in 0..header.num_props {
+        if i >= payload.len() {
+            break;
+        }
+        let prop = payload[i];
+        i += 1;
+        match prop {
+            PROP_INDTILE_SUBST => {
+                if i >= payload.len() {
+                    break;
+                }
+                let s = payload[i];
+                i += 1;
+                if u16::from(s) < NEW_INDUSTRY_TILE_OFFSET {
+                    subst_id = Some(s);
+                }
+            }
+            PROP_INDTILE_OVERRIDE => {
+                if i >= payload.len() {
+                    break;
+                }
+                let o = payload[i];
+                i += 1;
+                if u16::from(o) < NEW_INDUSTRY_TILE_OFFSET {
+                    override_of = Some(o);
+                }
+            }
+            // Props conocidos de tamaño fijo (skip).
+            0x0D | 0x0E | 0x10 | 0x11 | 0x12 => {
+                if i >= payload.len() {
+                    break;
+                }
+                i += 1;
+            }
+            0x0A | 0x0B | 0x0C | 0x0F => {
+                if i + 2 > payload.len() {
+                    break;
+                }
+                i += 2;
+            }
+            _ => break,
+        }
+    }
+    Some(ParsedIndustryTileMeta {
+        local_id,
+        subst_id: subst_id?,
+        override_of,
+    })
+}
+
+#[must_use]
+pub fn collect_industry_tile_metas_from_grf(data: &[u8]) -> Vec<ParsedIndustryTileMeta> {
+    let mut out = Vec::new();
+    let _ = for_each_pseudo_payload(data, |payload| {
+        if let Some(meta) = parse_action0_industry_tile_meta(payload) {
+            out.push(meta);
+        }
+    });
+    out
+}
+
+/// Reconstruye catálogo `IndustryTiles` desde el stack enabled.
+pub fn apply_newgrf_industry_tiles(state: &mut GameState, search_dirs: &[&Path]) {
+    let mut catalog = Vec::new();
+    let mut overrides = empty_industry_tile_overrides();
+    let stack = state.newgrf_stack.clone();
+    for entry in &stack {
+        if !entry.enabled {
+            continue;
+        }
+        let Some(path) = search_dirs
+            .iter()
+            .map(|d| d.join(&entry.filename))
+            .find(|p| p.is_file())
+        else {
+            continue;
+        };
+        let Ok(data) = std::fs::read(&path) else {
+            continue;
+        };
+        let gfx =
+            crate::newgrf_sprites::collect_industry_tile_sprite_graphics(&data).unwrap_or_default();
+        let metas = collect_industry_tile_metas_from_grf(&data);
+        for meta in metas {
+            let Some(global_gfx) = next_free_industry_tile_gfx_id(&catalog) else {
+                break;
+            };
+            let views = gfx
+                .views_for_local_id(meta.local_id)
+                .map(<[crate::newgrf_sprites::DecodedSprite]>::to_vec)
+                .unwrap_or_default();
+            let preview = views.first().cloned();
+            let newgrf_runtime = if gfx.needs_runtime_resolve() {
+                Some(Box::new(gfx.clone()))
+            } else {
+                None
+            };
+            if let Some(ovr) = meta.override_of {
+                overrides[usize::from(ovr)] = global_gfx;
+            }
+            catalog.push(IndustryTileSpecDef {
+                gfx: IndustryTileGfxId(global_gfx),
+                subst_id: u16::from(meta.subst_id),
+                from_newgrf: true,
+                newgrf_local_id: meta.local_id,
+                newgrf_grfid: entry.grfid,
+                newgrf_preview: preview,
+                newgrf_views: views,
+                newgrf_runtime,
+            });
+        }
+    }
+    // Marcar slots sin override como inválidos (por claridad).
+    let _ = INVALID_INDUSTRY_TILE;
+    state.industry_tile_spec_catalog = catalog;
+    state.industry_tile_overrides = overrides;
+}
+
+/// `IndustryTiles` con directorios de búsqueda por defecto.
+pub fn apply_newgrf_industry_tiles_default_dirs(state: &mut GameState) {
+    let owned = default_newgrf_search_dirs();
+    let refs: Vec<&Path> = owned.iter().map(AsRef::as_ref).collect();
+    apply_newgrf_industry_tiles(state, &refs);
+}
+
+#[must_use]
+pub fn build_action0_industry_tile_payload(subst_id: u8, override_of: Option<u8>) -> Vec<u8> {
+    let num_props = 1 + u8::from(override_of.is_some());
+    let mut p = vec![
+        0x00,
+        ACTION0_FEATURE_INDUSTRYTILES,
+        num_props,
+        0x01,
+        0x00,
+        PROP_INDTILE_SUBST,
+        subst_id,
+    ];
+    if let Some(o) = override_of {
+        p.push(PROP_INDTILE_OVERRIDE);
+        p.push(o);
+    }
+    p
 }
 
 /// Aplica bloques Action5 shore (`0x0D`) del stack enabled → `shore_newgrf_sprites`.
@@ -1695,6 +1874,45 @@ mod tests {
         assert_eq!(def.newgrf_grfid, grfid);
         let tables = def.newgrf_type_tables.as_ref().unwrap();
         assert_eq!(tables.rail, vec![*b"ELRL", *b"RAIL"]);
+    }
+
+    #[test]
+    fn parse_and_apply_industry_tiles_allocates_gfx_ge_175() {
+        let a0 = build_action0_industry_tile_payload(0, Some(42));
+        let meta = parse_action0_industry_tile_meta(&a0).unwrap();
+        assert_eq!(meta.subst_id, 0);
+        assert_eq!(meta.override_of, Some(42));
+        let mut indices = vec![0u8; 8 * 8];
+        for y in 2..6 {
+            for x in 2..6 {
+                indices[y * 8 + x] = 174;
+            }
+        }
+        let bytes = crate::build_grf_v2_industry_tile_with_preview_sprite(
+            &a0,
+            0,
+            8,
+            8,
+            &indices,
+            [b'I', b'T', 0, 1],
+            "itile",
+        );
+        let dir = tempfile_dir_with("itile.grf", &bytes);
+        let mut state = GameState::new(4, 4);
+        state
+            .newgrf_stack
+            .push(crate::NewGrfEntry::new("itile.grf", 9));
+        apply_newgrf_industry_tiles(&mut state, &[&dir]);
+        assert_eq!(state.industry_tile_spec_catalog.len(), 1);
+        let def = &state.industry_tile_spec_catalog[0];
+        assert!(def.gfx.as_u16() >= NEW_INDUSTRY_TILE_OFFSET);
+        assert_eq!(def.subst_id, 0);
+        assert!(!def.newgrf_views.is_empty());
+        assert_eq!(state.industry_tile_overrides[42], def.gfx.as_u16());
+        assert_eq!(
+            crate::get_translated_industry_tile_id(42, &state.industry_tile_overrides),
+            def.gfx.as_u16()
+        );
     }
 
     fn tempfile_dir_with(name: &str, bytes: &[u8]) -> std::path::PathBuf {

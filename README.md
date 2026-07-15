@@ -30,7 +30,7 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Trabajo reciente (jul 2026):** Action2 variational (trains/stations/road), procedure `7E` / `\2psto`, vars de vehículo y de tesela al dibujar. Issues de backlog: [issues abiertas](https://github.com/cavazquez/openttdrs/issues).
 
-**Siguiente corte NewGRF (roadmap):** industrias gfx≥175 (#71), o editor (#42) — ver [ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md).
+**Siguiente corte NewGRF (roadmap):** editor (#42) o callback 24 — ver [ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md).
 
 ---
 
@@ -120,7 +120,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | Economía + 6 cargos + packets | 🟡 | CargoDist MCF nivel 2 ✅; falta tabla temperate completa |
 | Import `.sav` → mapa + flota | 🟡 | Roundtrip propio; OpenTTD oficial incompleto |
 | Export `.sav` | 🟡 | Mapa+STNN+CITY+INDY+VEHS; órdenes avanzadas pendientes |
-| Render OpenGFX vanilla | ✅ | Industrias gfx 0–174; NewGRF ≥175 backlog |
+| Render OpenGFX vanilla | ✅ | Industrias gfx 0–174; NewGRF ≥175 MVP (#71) |
 | UI solitario (menús, listas, noticias) | ✅ | UI-0…UI-7 cortes jugables |
 | Multi-compañía | 🟡 | Mínima + ownership; segunda humana OOS |
 | NewGRF Action0–14 + Action2 runtime | ✅ | Action1/3 tables; estaciones `m5` (#46); params UI+`0x7F` (#39) |

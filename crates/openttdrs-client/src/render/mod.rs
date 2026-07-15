@@ -14,6 +14,7 @@ mod grid;
 mod house_lift_anim;
 mod industry_anim;
 mod industry_draw_proc;
+pub(crate) mod industry_newgrf;
 mod lighthouse_anim;
 mod refinery_fire;
 mod road_newgrf;
@@ -65,6 +66,7 @@ pub(crate) use town_labels::town_id_at_label_pos;
 pub(crate) use train_smoke::TrainSmokePlugin;
 
 pub(crate) use catenary_newgrf::NewGrfCatenarySpriteCache;
+pub(crate) use industry_newgrf::NewGrfIndustrySpriteCache;
 pub(crate) use road_newgrf::NewGrfRoadSpriteCache;
 pub(crate) use shore_newgrf::NewGrfShoreSpriteCache;
 pub(crate) use station_newgrf::NewGrfStationSpriteCache;

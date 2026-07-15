@@ -315,6 +315,12 @@ pub struct GameState {
     /// Catálogo de motores (vanilla + Action0 Trains).
     #[serde(default = "crate::engine::vanilla_engine_catalog")]
     pub engine_catalog: Vec<crate::engine::EngineDef>,
+    /// Specs `NewGRF` de teselas de industria (gfx ≥175).
+    #[serde(default)]
+    pub industry_tile_spec_catalog: Vec<crate::industry_tile::IndustryTileSpecDef>,
+    /// Overrides vanilla gfx → `NewGRF` (`GetTranslatedIndustryTileID`).
+    #[serde(default = "crate::industry_tile::empty_industry_tile_overrides")]
+    pub industry_tile_overrides: Vec<u16>,
     /// Clase de aeropuerto activa (picker).
     #[serde(default)]
     pub current_airport_class: crate::airport_class::AirportClassId,
@@ -491,6 +497,8 @@ impl GameState {
             station_class_catalog: crate::station_class::vanilla_station_class_catalog(),
             station_spec_catalog: crate::station_class::vanilla_station_spec_catalog(),
             engine_catalog: crate::engine::vanilla_engine_catalog(),
+            industry_tile_spec_catalog: Vec::new(),
+            industry_tile_overrides: crate::industry_tile::empty_industry_tile_overrides(),
             current_airport_class: crate::airport_class::AirportClassId::Small,
             current_airport_spec: crate::airport_class::AirportSpecId::Small,
             climate: Climate::default(),
@@ -563,6 +571,8 @@ impl GameState {
             station_class_catalog: crate::station_class::vanilla_station_class_catalog(),
             station_spec_catalog: crate::station_class::vanilla_station_spec_catalog(),
             engine_catalog: crate::engine::vanilla_engine_catalog(),
+            industry_tile_spec_catalog: Vec::new(),
+            industry_tile_overrides: crate::industry_tile::empty_industry_tile_overrides(),
             current_airport_class: crate::airport_class::AirportClassId::Small,
             current_airport_spec: crate::airport_class::AirportSpecId::Small,
             climate: Climate::default(),

@@ -599,9 +599,17 @@ impl GameState {
         }
     }
 
-    /// Reconstruye [`StationFlows`] desde el link graph observado.
+    /// Reconstruye [`StationFlows`] desde el link graph (Naive o MCF greedy).
     pub fn rebuild_station_flows(&mut self) {
-        self.station_flows = crate::flow_stat::StationFlows::from_link_graph(&self.link_graph);
+        use crate::flow_stat::DistributionType;
+        use crate::mcf::{McfAlgorithm, McfConfig, compute_station_flows};
+        let algo = match self.cargo_dist.distribution {
+            DistributionType::Manual => McfAlgorithm::Naive,
+            DistributionType::Asymmetric | DistributionType::Symmetric => {
+                McfAlgorithm::GreedyShortest
+            }
+        };
+        self.station_flows = compute_station_flows(&self.link_graph, algo, McfConfig::default());
     }
 
     /// Activa la traza de paridad: cada `step()` añade un registro por tick.

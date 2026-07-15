@@ -997,7 +997,7 @@ Progreso backend OOS (JoinStation rail + CargoDist observacional):
 
 1. ~~JoinStation rail (huella/eje + `station_at_tile` + toolbar Rail).~~ ✅
 2. ~~Link graph observacional (`LinkGraphStats`, save v18, UI LinkGraph).~~ ✅
-3. CargoDist slice: Manual + `FlowStat` Asymmetric/Symmetric (sin MCF) ✅; MCF real → OOS.
+3. CargoDist: Manual + `FlowStat` + MCF greedy stub + UI Ajustes ✅; MCF 2-pass OpenTTD → OOS.
 
 Progreso UI-8 (highscore/endscreen):
 

@@ -1,7 +1,7 @@
 //! `FlowStat` / `FlowStatMap` simplificados (#49).
 //!
-//! En `OpenTTD` el MCF rellena shares; aquí se reconstruyen desde el link graph
-//! observacional (mapper ingenuo). Modo `Manual` ignora flows y usa órdenes.
+//! En `OpenTTD` el MCF rellena shares. Aquí: mapper ingenuo o stub
+//! [`crate::mcf`] (`GreedyShortest`). Modo `Manual` ignora flows y usa órdenes.
 
 use std::collections::HashMap;
 
@@ -18,9 +18,9 @@ pub enum DistributionType {
     /// Sin auto-routing: `next_hop` solo desde órdenes del vehículo.
     #[default]
     Manual,
-    /// Usa `FlowStat` derivado del link graph observado (sin MCF).
+    /// Usa `FlowStat` vía MCF greedy stub (`GreedyShortest`).
     Asymmetric,
-    /// Por ahora igual que [`Asymmetric`] (sin matching bidireccional).
+    /// Igual que [`Asymmetric`] por ahora (sin matching bidireccional).
     Symmetric,
 }
 

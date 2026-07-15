@@ -150,6 +150,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             SaveMenuAction::PathfindingSettings,
         ),
         (
+            "Distribución de carga...",
+            "CargoDist: Manual / Asimétrica / Simétrica",
+            SaveMenuAction::CargoDistSettings,
+        ),
+        (
             "IA / TransCargo...",
             "Activar rival, umbral de dinero, máx. rutas y debug",
             SaveMenuAction::AiSettings,

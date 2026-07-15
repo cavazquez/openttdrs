@@ -4,8 +4,8 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 `FloatingWindowId::ALL` / `BuildMenuAction::ALL` / etc. (test
 `ui_enum_inventory_counts`).
 
-**Fecha:** 2026-07-14 · **FloatingWindowId:** 33 · **BuildMenuAction:** 66 ·
-**SaveMenuAction:** 18 · **ToolbarGroup:** 8
+**Fecha:** 2026-07-14 · **FloatingWindowId:** 35 · **BuildMenuAction:** 66 ·
+**SaveMenuAction:** 20 · **ToolbarGroup:** 8
 
 ## Ventanas flotantes (`FloatingWindowId`)
 
@@ -28,6 +28,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | Finances | menú Economía | |
 | NewsSettings | Ajustes | |
 | PathfindingSettings | Ajustes | |
+| CargoDistSettings | Ajustes | Manual / Asimétrica / Simétrica |
 | AiSettings | Ajustes / Finanzas «IA…» | |
 | NewGrf | Ajustes | |
 | SoundMusic | toolbar audio | |

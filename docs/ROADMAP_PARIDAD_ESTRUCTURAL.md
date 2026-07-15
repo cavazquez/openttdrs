@@ -42,8 +42,8 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
 - IA rival «TransCargo» (`ai/rule_based.rs`); escenario `ai_rival_line`.
 - Quiebra rival + `BuyCompany` ✅ (`bankruptcy_months`, UI Finanzas).
 - Link graph observacional ✅. CargoDist (#49): Manual `next_hop` + Keep/Deliver/Transfer;
-  `FlowStat` / modos Asymmetric·Symmetric desde link graph (mapper ingenuo, sin MCF).
-  Pendiente: MCF real / Symmetric fino / overlay.
+  `FlowStat` + modos Asymmetric·Symmetric; MCF stub `GreedyShortest`; UI Ajustes.
+  Pendiente: MCF 2-pass OpenTTD / Symmetric fino / overlay de flows.
 
 ## Fase 5 — Railtypes / electrificación / RailConvert ✅ (MVP)
 

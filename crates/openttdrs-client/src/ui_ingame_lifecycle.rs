@@ -21,6 +21,7 @@ use super::ai_settings_window::AiSettingsWindowState;
 use super::audio_settings_window::SoundMusicWindowState;
 use super::autoreplace_window::AutoreplaceWindowState;
 use super::buy_window::BuyVehicleWindowState;
+use super::cargo_dist_settings_window::CargoDistSettingsWindowState;
 use super::cargo_payment_window::CargoPaymentWindowState;
 use super::destination_window::DestinationPickerState;
 use super::dev_console::DevConsoleState;
@@ -250,6 +251,10 @@ pub(crate) fn leave_ingame(world: &mut World) {
     {
         *pathfinding_settings = PathfindingSettingsWindowState::default();
     }
+    if let Some(mut cargo_dist_settings) = world.get_resource_mut::<CargoDistSettingsWindowState>()
+    {
+        *cargo_dist_settings = CargoDistSettingsWindowState::default();
+    }
     if let Some(mut ai_settings) = world.get_resource_mut::<AiSettingsWindowState>() {
         *ai_settings = AiSettingsWindowState::default();
     }
@@ -346,6 +351,7 @@ mod tests {
         world.init_resource::<CargoPaymentWindowState>();
         world.init_resource::<NewsSettingsWindowState>();
         world.init_resource::<PathfindingSettingsWindowState>();
+        world.init_resource::<CargoDistSettingsWindowState>();
         world.init_resource::<AiSettingsWindowState>();
         world.init_resource::<NewGrfWindowState>();
         world.init_resource::<SoundMusicWindowState>();

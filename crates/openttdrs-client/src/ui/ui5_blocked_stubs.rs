@@ -1,4 +1,4 @@
-//! Ventana Link Graph (flujos estación→estación observados; sin routing CargoDist).
+//! Ventana Link Graph (flujos estación→estación observados).
 
 use bevy::prelude::*;
 use openttdrs_core::{ALL_CARGO_TYPES, CargoType};
@@ -71,7 +71,7 @@ fn link_graph_empty_text() -> &'static str {
     "Sin flujos observados aún.\n\n\
      Se registran al cargar en una estación y\n\
      descargar/transferir en otra (mismo cargo).\n\n\
-     Routing CargoDist completo: fuera de alcance."
+     Modo de distribución: Ajustes → Distribución de carga…"
 }
 
 fn cargo_label(c: CargoType) -> &'static str {

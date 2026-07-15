@@ -437,6 +437,7 @@ pub(crate) enum SaveMenuAction {
     ZoomOut,
     NewsSettings,
     PathfindingSettings,
+    CargoDistSettings,
     AiSettings,
     NewGrf,
     /// Cicla visible → transparente → oculta.
@@ -469,6 +470,7 @@ impl SaveMenuAction {
         Self::ZoomOut,
         Self::NewsSettings,
         Self::PathfindingSettings,
+        Self::CargoDistSettings,
         Self::AiSettings,
         Self::NewGrf,
         Self::CycleCatenaryDisplay,

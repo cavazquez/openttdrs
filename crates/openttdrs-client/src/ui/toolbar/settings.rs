@@ -42,6 +42,7 @@ pub(crate) fn handle_settings_menu_buttons(
         ResMut<crate::ui::tile_inspector_window::TileInspectorWindowState>,
         ResMut<crate::ui::endscreen::RetireGameRequested>,
         ResMut<crate::ui::ai_settings_window::AiSettingsWindowState>,
+        ResMut<crate::ui::cargo_dist_settings_window::CargoDistSettingsWindowState>,
     )>,
 ) {
     for (interaction, action) in &mut q {
@@ -100,6 +101,9 @@ pub(crate) fn handle_settings_menu_buttons(
             }
             SaveMenuAction::PathfindingSettings => {
                 pathfinding_settings.open = true;
+            }
+            SaveMenuAction::CargoDistSettings => {
+                help_tools.p5().open = true;
             }
             SaveMenuAction::AiSettings => {
                 help_tools.p4().open = true;
@@ -214,6 +218,9 @@ mod tests {
         world.insert_resource(
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
+        world.insert_resource(
+            crate::ui::cargo_dist_settings_window::CargoDistSettingsWindowState::default(),
+        );
         world.insert_resource(crate::ui::ai_settings_window::AiSettingsWindowState::default());
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
         world.insert_resource(
@@ -258,6 +265,9 @@ mod tests {
         world.insert_resource(NewsSettingsWindowState::default());
         world.insert_resource(
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
+        );
+        world.insert_resource(
+            crate::ui::cargo_dist_settings_window::CargoDistSettingsWindowState::default(),
         );
         world.insert_resource(crate::ui::ai_settings_window::AiSettingsWindowState::default());
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
@@ -314,6 +324,9 @@ mod tests {
         world.insert_resource(NewsSettingsWindowState::default());
         world.insert_resource(
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
+        );
+        world.insert_resource(
+            crate::ui::cargo_dist_settings_window::CargoDistSettingsWindowState::default(),
         );
         world.insert_resource(crate::ui::ai_settings_window::AiSettingsWindowState::default());
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());

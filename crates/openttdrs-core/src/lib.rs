@@ -29,6 +29,7 @@ mod game_state;
 pub mod industry;
 pub mod link_graph;
 pub mod map;
+pub mod mcf;
 pub mod newgrf_actions;
 mod newgrf_company_ramp;
 pub mod newgrf_config;
@@ -191,6 +192,7 @@ pub use map::{
     trigger_industry_randomisation_at, trigger_industry_tile_randomisation, tunnel_entrance_m5,
     tunnel_preview_path, water_class, water_class_from_m1,
 };
+pub use mcf::{MCF_MAX_EDGES, MCF_MAX_NODES, McfAlgorithm, McfConfig, compute_station_flows};
 pub use newgrf_actions::{
     ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS, ACTION0_FEATURE_TRAINS, Action0Header,
     Action5SlotSummary, GrfInspectReport, ParsedRoadTypeMeta, ParsedStationMeta, ParsedTrainMeta,

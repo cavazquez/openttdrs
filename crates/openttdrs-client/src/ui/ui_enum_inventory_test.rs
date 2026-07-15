@@ -4,9 +4,9 @@ use super::floating_window::FloatingWindowId;
 use super::toolbar::{BuildMenuAction, SaveMenuAction, ToolbarGroup};
 
 /// Debe coincidir con la tabla de `docs/parity/ui_route_inventory.md`.
-const EXPECTED_FLOATING_WINDOWS: usize = 34;
+const EXPECTED_FLOATING_WINDOWS: usize = 35;
 const EXPECTED_BUILD_MENU_ACTIONS: usize = 66;
-const EXPECTED_SAVE_MENU_ACTIONS: usize = 19;
+const EXPECTED_SAVE_MENU_ACTIONS: usize = 20;
 const EXPECTED_TOOLBAR_GROUPS: usize = 8;
 
 #[test]

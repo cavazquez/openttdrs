@@ -12,6 +12,7 @@ mod ai_settings_window;
 pub(crate) mod audio_settings_window;
 mod autoreplace_window;
 mod buy_window;
+mod cargo_dist_settings_window;
 mod cargo_payment_window;
 mod destination_window;
 mod dev_console;
@@ -69,6 +70,11 @@ use autoreplace_window::{
 use buy_window::{
     BuyVehicleWindowState, NewGrfTrainPreviewCache, buy_window_on_closed,
     buy_window_search_keyboard, handle_buy_window_buttons, setup_buy_window, sync_buy_window,
+};
+use cargo_dist_settings_window::{
+    CargoDistSettingsWindowState, cargo_dist_settings_on_closed,
+    handle_cargo_dist_settings_buttons, setup_cargo_dist_settings_window,
+    sync_cargo_dist_settings_window,
 };
 use cargo_payment_window::{
     CargoPaymentWindowState, cargo_payment_window_on_closed, open_cargo_payment_from_routes,
@@ -268,6 +274,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<SignListWindowState>()
         .init_resource::<LinkGraphWindowState>()
         .init_resource::<PathfindingSettingsWindowState>()
+        .init_resource::<CargoDistSettingsWindowState>()
         .init_resource::<AiSettingsWindowState>()
         .init_resource::<NewGrfWindowState>()
         .init_resource::<HelpWindowState>()
@@ -365,6 +372,7 @@ impl Plugin for ClientUiPlugin {
                 setup_signal_picker,
                 setup_airport_picker,
                 setup_ai_settings_window,
+                setup_cargo_dist_settings_window,
             )
                 .in_set(StartupSet::Ui),
         )
@@ -642,6 +650,16 @@ impl Plugin for ClientUiPlugin {
                 handle_pathfinding_settings_buttons,
                 pathfinding_settings_on_closed,
                 sync_pathfinding_settings_window,
+            )
+                .in_set(UpdateSet::Ui)
+                .run_if(in_state(ClientScreen::InGame)),
+        )
+        .add_systems(
+            Update,
+            (
+                handle_cargo_dist_settings_buttons,
+                cargo_dist_settings_on_closed,
+                sync_cargo_dist_settings_window,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

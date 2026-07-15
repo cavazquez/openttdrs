@@ -238,6 +238,9 @@ mod tests {
         world.insert_resource(
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
+        world.insert_resource(
+            crate::ui::cargo_dist_settings_window::CargoDistSettingsWindowState::default(),
+        );
         world.insert_resource(crate::ui::ai_settings_window::AiSettingsWindowState::default());
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
         world.insert_resource(
@@ -284,6 +287,9 @@ mod tests {
         world.insert_resource(NewsSettingsWindowState::default());
         world.insert_resource(
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
+        );
+        world.insert_resource(
+            crate::ui::cargo_dist_settings_window::CargoDistSettingsWindowState::default(),
         );
         world.insert_resource(crate::ui::ai_settings_window::AiSettingsWindowState::default());
         world.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
@@ -343,6 +349,9 @@ mod tests {
         world_zoom_in.insert_resource(
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
         );
+        world_zoom_in.insert_resource(
+            crate::ui::cargo_dist_settings_window::CargoDistSettingsWindowState::default(),
+        );
         world_zoom_in
             .insert_resource(crate::ui::ai_settings_window::AiSettingsWindowState::default());
         world_zoom_in.insert_resource(crate::ui::newgrf_window::NewGrfWindowState::default());
@@ -385,6 +394,9 @@ mod tests {
         world_zoom_out.insert_resource(NewsSettingsWindowState::default());
         world_zoom_out.insert_resource(
             crate::ui::pathfinding_settings_window::PathfindingSettingsWindowState::default(),
+        );
+        world_zoom_out.insert_resource(
+            crate::ui::cargo_dist_settings_window::CargoDistSettingsWindowState::default(),
         );
         world_zoom_out
             .insert_resource(crate::ui::ai_settings_window::AiSettingsWindowState::default());

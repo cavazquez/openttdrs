@@ -3,6 +3,7 @@ mod bridge;
 mod internal;
 mod rail;
 mod road;
+mod road_geometry;
 mod shared;
 mod station;
 mod water;

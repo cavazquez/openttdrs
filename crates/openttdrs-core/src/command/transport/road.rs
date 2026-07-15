@@ -3,7 +3,7 @@ use crate::pathfinder::{diag_dir_offset, station_site_tile_allows_build};
 use crate::{DEPOT_BUILD_COST, GameState, ROAD_BUILD_COST};
 
 use super::super::terraform::apply_autoslope_if_needed;
-use super::super::{CommandError, require_tile_owned_by_active, tile_owner};
+use super::super::{CommandError, require_tile_owned_by_active};
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{check_in_bounds, place_single_transport_tile};
@@ -491,36 +491,6 @@ fn write_tram_geometry(
         .map_err(|_| CommandError::OutOfBounds)
 }
 
-fn tram_bits_from_tram_neighbors(map: &Map, c: TileCoord) -> u8 {
-    use crate::road_type::tram_track_bits;
-    let mut bits = 0u8;
-    let west = TileCoord::new(c.x - 1, c.y);
-    let north = TileCoord::new(c.x, c.y - 1);
-    let east = TileCoord::new(c.x + 1, c.y);
-    let south = TileCoord::new(c.x, c.y + 1);
-    if map.get_kind(west) == Some(TileKind::Road)
-        && map.get(west).is_some_and(|t| tram_track_bits(&t) != 0)
-    {
-        bits |= 8;
-    }
-    if map.get_kind(north) == Some(TileKind::Road)
-        && map.get(north).is_some_and(|t| tram_track_bits(&t) != 0)
-    {
-        bits |= 1;
-    }
-    if map.get_kind(east) == Some(TileKind::Road)
-        && map.get(east).is_some_and(|t| tram_track_bits(&t) != 0)
-    {
-        bits |= 2;
-    }
-    if map.get_kind(south) == Some(TileKind::Road)
-        && map.get(south).is_some_and(|t| tram_track_bits(&t) != 0)
-    {
-        bits |= 4;
-    }
-    bits
-}
-
 fn merge_tram_bits_with_neighbors(
     map: &Map,
     c: TileCoord,
@@ -528,44 +498,14 @@ fn merge_tram_bits_with_neighbors(
     existing: u8,
     force_axis: bool,
 ) -> u8 {
-    use crate::road_type::tram_track_bits;
-    let has_w = map
-        .get(TileCoord::new(c.x - 1, c.y))
-        .is_some_and(|t| t.kind == TileKind::Road && tram_track_bits(&t) != 0);
-    let has_e = map
-        .get(TileCoord::new(c.x + 1, c.y))
-        .is_some_and(|t| t.kind == TileKind::Road && tram_track_bits(&t) != 0);
-    let has_n = map
-        .get(TileCoord::new(c.x, c.y - 1))
-        .is_some_and(|t| t.kind == TileKind::Road && tram_track_bits(&t) != 0);
-    let has_s = map
-        .get(TileCoord::new(c.x, c.y + 1))
-        .is_some_and(|t| t.kind == TileKind::Road && tram_track_bits(&t) != 0);
-    let connect = tram_bits_from_tram_neighbors(map, c);
-    let axis_h = has_w || has_e;
-    let axis_v = has_n || has_s;
-    let straight = requested == 0x0A || requested == 0x05;
-
-    let bits = if axis_h && axis_v {
-        existing | requested | connect | 0x0A | 0x05
-    } else if force_axis && straight {
-        connect | requested
-    } else if axis_h && !axis_v {
-        if existing & 0x05 == 0x05 && existing & 0x0A == 0 {
-            connect | 0x05
-        } else {
-            connect | 0x0A
-        }
-    } else if axis_v && !axis_h {
-        if existing & 0x0A == 0x0A && existing & 0x05 == 0 {
-            connect | 0x0A
-        } else {
-            connect | 0x05
-        }
-    } else {
-        existing | requested | connect
-    };
-    (bits & 0x0F).max(1)
+    super::road_geometry::merge_cardinal_bits_with_neighbors(
+        map,
+        c,
+        requested,
+        existing,
+        force_axis,
+        &super::road_geometry::TRAM_OVERLAY,
+    )
 }
 
 fn propagate_tram_bits_to_neighbors(
@@ -573,38 +513,14 @@ fn propagate_tram_bits_to_neighbors(
     c: TileCoord,
     bits: u8,
 ) -> Result<(), CommandError> {
-    for &(bit, dx, dy, reciproc) in &ROAD_LINK_TO_NEIGHBOR {
-        if bits & bit == 0 {
-            continue;
-        }
-        let n = TileCoord::new(c.x + dx, c.y + dy);
-        if state.map.get_kind(n) != Some(TileKind::Road) {
-            continue;
-        }
-        let existing = state.map.get(n).map_or(0, |t| t.m3 & 0x0F);
-        let merged = merge_tram_bits_with_neighbors(&state.map, n, reciproc, existing, false);
-        if merged != existing {
-            write_tram_geometry(state, n, merged)?;
-        }
-    }
-    Ok(())
-}
-
-pub(in crate::command::transport) fn road_bits_from_road_neighbors(map: &Map, c: TileCoord) -> u8 {
-    let mut bits = 0u8;
-    if map.get_kind(TileCoord::new(c.x - 1, c.y)) == Some(TileKind::Road) {
-        bits |= 8;
-    }
-    if map.get_kind(TileCoord::new(c.x, c.y - 1)) == Some(TileKind::Road) {
-        bits |= 1;
-    }
-    if map.get_kind(TileCoord::new(c.x + 1, c.y)) == Some(TileKind::Road) {
-        bits |= 2;
-    }
-    if map.get_kind(TileCoord::new(c.x, c.y + 1)) == Some(TileKind::Road) {
-        bits |= 4;
-    }
-    bits
+    super::road_geometry::propagate_cardinal_bits_to_neighbors(
+        state,
+        c,
+        bits,
+        &super::road_geometry::TRAM_OVERLAY,
+        write_tram_geometry,
+        false,
+    )
 }
 
 pub(in crate::command::transport) fn merge_road_bits_with_neighbors(
@@ -614,68 +530,29 @@ pub(in crate::command::transport) fn merge_road_bits_with_neighbors(
     existing: u8,
     force_axis: bool,
 ) -> u8 {
-    let has_w = map.get_kind(TileCoord::new(c.x - 1, c.y)) == Some(TileKind::Road);
-    let has_e = map.get_kind(TileCoord::new(c.x + 1, c.y)) == Some(TileKind::Road);
-    let has_n = map.get_kind(TileCoord::new(c.x, c.y - 1)) == Some(TileKind::Road);
-    let has_s = map.get_kind(TileCoord::new(c.x, c.y + 1)) == Some(TileKind::Road);
-    let connect = road_bits_from_road_neighbors(map, c);
-    let axis_h = has_w || has_e;
-    let axis_v = has_n || has_s;
-    let straight = requested == 0x0A || requested == 0x05;
-
-    let bits = if axis_h && axis_v {
-        existing | requested | connect | 0x0A | 0x05
-    } else if force_axis && straight {
-        // Arrastre en línea: no girar 90° por un vecino cardinal suelto.
-        connect | requested
-    } else if axis_h && !axis_v {
-        if existing & 0x05 == 0x05 && existing & 0x0A == 0 {
-            connect | 0x05
-        } else {
-            connect | 0x0A
-        }
-    } else if axis_v && !axis_h {
-        if existing & 0x0A == 0x0A && existing & 0x05 == 0 {
-            connect | 0x0A
-        } else {
-            connect | 0x05
-        }
-    } else {
-        existing | requested | connect
-    };
-    bits.max(1)
+    super::road_geometry::merge_cardinal_bits_with_neighbors(
+        map,
+        c,
+        requested,
+        existing,
+        force_axis,
+        &super::road_geometry::ROAD_OVERLAY,
+    )
 }
-
-pub(in crate::command::transport) const ROAD_LINK_TO_NEIGHBOR: [(u8, i32, i32, u8); 4] = [
-    (8, -1, 0, 2), // NE → oeste recibe SW
-    (1, 0, -1, 4), // NW → norte recibe SE
-    (2, 1, 0, 8),  // SW → este recibe NE
-    (4, 0, 1, 1),  // SE → sur recibe NW
-];
 
 pub(in crate::command::transport) fn propagate_road_bits_to_neighbors(
     state: &mut GameState,
     c: TileCoord,
     bits: u8,
 ) -> Result<(), CommandError> {
-    for &(bit, dx, dy, reciproc) in &ROAD_LINK_TO_NEIGHBOR {
-        if bits & bit == 0 {
-            continue;
-        }
-        let n = TileCoord::new(c.x + dx, c.y + dy);
-        if state.map.get_kind(n) != Some(TileKind::Road) {
-            continue;
-        }
-        if tile_owner(state, n).is_some_and(|o| o != state.active_company) {
-            continue;
-        }
-        let existing = state.map.get(n).map_or(0, |t| t.m5 & 0x0F);
-        let merged = merge_road_bits_with_neighbors(&state.map, n, reciproc, existing, false);
-        if merged != existing {
-            write_normal_road_tile(state, n, merged)?;
-        }
-    }
-    Ok(())
+    super::road_geometry::propagate_cardinal_bits_to_neighbors(
+        state,
+        c,
+        bits,
+        &super::road_geometry::ROAD_OVERLAY,
+        write_normal_road_tile,
+        true,
+    )
 }
 
 pub(in crate::command::transport) fn road_stop_m5(dir: u8) -> u8 {

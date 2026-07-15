@@ -184,6 +184,11 @@ pub(crate) fn graphs_from_stats(
     out
 }
 
+/// `EconomyTime::INVALID_DATE` en `OpenTTD`.
+const LGRP_INVALID_DATE: i32 = -1;
+/// `AddEdge(..., Unrestricted)` con `TimerGameEconomy::date = 0`.
+const LGRP_EDGE_UNRESTRICTED_AT_EPOCH: i32 = 0;
+
 /// Construye el cuerpo binario de un registro `LGRP` (sin gamma de longitud).
 pub(crate) fn encode_lgrp_record(
     cargo: CargoType,
@@ -215,7 +220,7 @@ pub(crate) fn encode_lgrp_record(
         rec.extend_from_slice(&0_u32.to_be_bytes()); // demand
         let station = station_ids.get(tile).copied().unwrap_or(u16::MAX);
         rec.extend_from_slice(&station.to_be_bytes());
-        rec.extend_from_slice(&0_i32.to_be_bytes()); // last_update
+        rec.extend_from_slice(&LGRP_INVALID_DATE.to_be_bytes()); // last_update
 
         let node_edges = by_from.get(&node_id).cloned().unwrap_or_default();
         write_gamma(u32::try_from(node_edges.len()).unwrap_or(0), &mut rec);
@@ -228,8 +233,8 @@ pub(crate) fn encode_lgrp_record(
             rec.extend_from_slice(&capacity.to_be_bytes());
             rec.extend_from_slice(&usage.to_be_bytes());
             rec.extend_from_slice(&sample.travel_time_sum.to_be_bytes());
-            rec.extend_from_slice(&0_i32.to_be_bytes()); // last_unrestricted_update
-            rec.extend_from_slice(&0_i32.to_be_bytes()); // last_restricted_update
+            rec.extend_from_slice(&LGRP_EDGE_UNRESTRICTED_AT_EPOCH.to_be_bytes());
+            rec.extend_from_slice(&LGRP_INVALID_DATE.to_be_bytes()); // last_restricted_update
             rec.extend_from_slice(&dest.to_be_bytes());
         }
     }
@@ -435,5 +440,46 @@ mod tests {
         assert_eq!(sample.units_total, 7);
         assert!(sample.capacity_total >= 40);
         assert_eq!(sample.travel_time(), 120);
+    }
+
+    fn lgrp_chunk_bytes(
+        stats: &LinkGraphStats,
+        stations: &[crate::Station],
+        map_w: u32,
+    ) -> Vec<u8> {
+        let blob = encode_linkgraph_chunks(stats, stations, map_w).expect("encode");
+        let chunks = crate::sav::chunks::parse_chunks(&blob).expect("parse");
+        assert_eq!(&chunks[0].name, b"LGRP");
+        let mut out = Vec::with_capacity(5 + chunks[0].body.len());
+        out.extend_from_slice(b"LGRP");
+        out.push(CH_TABLE);
+        out.extend_from_slice(&chunks[0].body);
+        out
+    }
+
+    fn fixture_lgrp(name: &str) -> Vec<u8> {
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/linkgraph")
+            .join(name);
+        std::fs::read(&path).unwrap_or_else(|e| panic!("leer {}: {e}", path.display()))
+    }
+
+    #[test]
+    fn lgrp_empty_matches_openttd_dump() {
+        let expected = fixture_lgrp("lgrp_empty.bin");
+        let got = lgrp_chunk_bytes(&LinkGraphStats::default(), &[], 256);
+        assert_eq!(got, expected);
+    }
+
+    #[test]
+    fn lgrp_two_node_goods_matches_openttd_dump() {
+        let expected = fixture_lgrp("lgrp_two_node_goods.bin");
+        let a = TileCoord::new(10, 10);
+        let b = TileCoord::new(20, 20);
+        let mut stats = LinkGraphStats::default();
+        stats.record_trip(a, b, CargoType::Goods, 7, 50, 120);
+        let stations = [crate::Station::new(a), crate::Station::new(b)];
+        let got = lgrp_chunk_bytes(&stats, &stations, 256);
+        assert_eq!(got, expected, "got={got:02x?} expected={expected:02x?}");
     }
 }

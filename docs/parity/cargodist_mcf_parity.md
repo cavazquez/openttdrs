@@ -4,7 +4,8 @@
 **MVP previo:** #49 (Manual + stub `CapacityScaled`)  
 **Seguimiento:** #102  
 **LGRP MVP:** load/save del grafo observado (`sav/linkgraph.rs`) ✅ — `LGRJ`/`LGRS` vacíos; overlay mapa sigue pendiente.  
-**Dumps C++ byte-igual:** fixtures en `tests/fixtures/linkgraph/*.json` regenerables desde OpenTTD (`OPENTTD_DUMP_LINKGRAPH=1`).
+**Dumps C++ byte-igual (MCF):** fixtures JSON en `tests/fixtures/linkgraph/*.json` (`OPENTTD_DUMP_LINKGRAPH=1`).  
+**Dumps C++ byte-igual (LGRP wire):** `lgrp_empty.bin` / `lgrp_two_node_goods.bin` (`OPENTTD_DUMP_LGRP=1`).
 
 ## Pipeline
 
@@ -44,6 +45,18 @@ OPENTTD_DUMP_LINKGRAPH=1 ./openttd_test "[linkgraph][parity]"
 ```
 
 Nota de paridad: `Path::GetCapacityRatio` en OpenTTD hace `(int * 16) / uint`; con `free < 0` el cociente se promociona a unsigned y el ratio queda enorme positivo. MCF2 usa eso al sobrecargar aristas (`express_vs_local`: via express 60 / local 40).
+
+### Oráculo LGRP (bytes del chunk)
+
+Harness Catch2: `OpenTTD/src/tests/lgrp_byte_fixtures.cpp` (serializa el grafo en memoria con el layout de `GetLinkGraphDesc`).
+
+```bash
+cd OpenTTD/build
+OPENTTD_DUMP_LGRP=1 ./openttd_test "[linkgraph][lgrp]"
+# Guardar hex → tests/fixtures/linkgraph/lgrp_*.bin
+```
+
+Asserts en `sav/linkgraph.rs` (`lgrp_*_matches_openttd_dump`). `LGRJ`/`LGRS` quedan fuera del golden (chunks aparte; Rust los emite vacíos).
 
 ## Manual
 

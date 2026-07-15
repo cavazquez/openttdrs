@@ -44,7 +44,7 @@ implementadas jul 2026. Fase 7 = hito 0.6 (MVP parcial + runtime completo pendie
 - Link graph observacional ✅. CargoDist (#49) MVP ✅; **nivel 2 MCF** ✅:
   pipeline OpenTTD (`Demand` + MCF1/2 Dijkstra + `FlowMapper`) en `linkgraph_parity/`;
   `GetVia` con `RandomRange` + RNG alineado; Symmetric = Demand Symmetric (no espejo);
-  stub `CapacityScaled` legado solo para tests. OOS: chunks save `LGRP`/`LGRJ`/`LGRS`, overlay mapa.
+  stub `CapacityScaled` legado solo para tests. LGRP + overlay ✅ (#102); OOS: jobs async `LGRJ`/`LGRS`.
 
 ## Fase 5 — Railtypes / electrificación / RailConvert ✅ (MVP)
 

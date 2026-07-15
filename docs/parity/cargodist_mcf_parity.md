@@ -2,8 +2,8 @@
 
 **Estado:** implementado en `openttdrs-core::linkgraph_parity`  
 **MVP previo:** #49 (Manual + stub `CapacityScaled`)  
-**Seguimiento:** #102  
-**LGRP MVP:** load/save del grafo observado (`sav/linkgraph.rs`) ✅ — `LGRJ`/`LGRS` vacíos.  
+**Seguimiento:** [#102](https://github.com/cavazquez/openttdrs/issues/102) ✅ cerrado  
+**LGRP MVP:** load/save del grafo observado (`sav/linkgraph.rs`) ✅ — `LGRJ`/`LGRS` vacíos (OOS consciente).  
 **Overlay mapa:** ✅ gizmos al abrir Link Graph o con «Overlay Link Graph» en Opciones de visualización.  
 **Dumps C++ byte-igual (MCF):** fixtures JSON en `tests/fixtures/linkgraph/*.json` (`OPENTTD_DUMP_LINKGRAPH=1`).  
 **Dumps C++ byte-igual (LGRP wire):** `lgrp_empty.bin` / `lgrp_two_node_goods.bin` (`OPENTTD_DUMP_LGRP=1`).

@@ -50,19 +50,18 @@ cargo run -p openttdrs-client
 
 ### Dependencias (máquina nueva)
 
-`./scripts/doctor.sh` chequea toolchain Rust, paquetes APT (misma lista que CI en [`.github/apt-packages.txt`](.github/apt-packages.txt)), `grfcodec`, Python (`numpy` / `Pillow`), `pip` y assets. Con `--fix` imprime los comandos a correr.
+`./scripts/doctor.sh` chequea toolchain Rust, paquetes APT (misma lista que CI en [`.github/apt-packages.txt`](.github/apt-packages.txt)), `grfcodec`, Python (`numpy` / `Pillow`) y assets. Con `--fix` imprime los comandos a correr. **pip no es obligatorio**: solo es alternativa si no usás paquetes del sistema.
 
 ```bash
 # Libs Bevy (X11 / Wayland / ALSA / …) — misma lista que CI
 sudo apt-get update
 sudo apt-get install -y $(grep -v '^#' .github/apt-packages.txt | grep -v '^[[:space:]]*$')
 
-# Decodificar OpenGFX + post-proceso de sprites
+# Decodificar OpenGFX + post-proceso de sprites (preferido en Ubuntu/Debian)
 sudo apt-get install -y grfcodec python3-numpy python3-pil
 
-# pip (opcional; alternativa a los paquetes APT de numpy/Pillow)
-sudo apt-get install -y python3-pip
-python3 -m pip install --user -r scripts/requirements-assets.txt
+# Alternativa sin APT (otras distros): pip + requirements
+# python3 -m pip install --user -r scripts/requirements-assets.txt
 ```
 
 `descargar_graficos.sh` valida `numpy` y `Pillow` **antes** de borrar/descargar, para no fallar al final del pipeline.

@@ -180,13 +180,12 @@ check_asset_tools() {
   fi
   if have_cmd python3; then
     pass "python3 $(python3 --version 2>&1 | awk '{print $2}')"
+    # pip es opcional (alternativa en distros sin paquetes APT de numpy/Pillow).
+    # No se exige ni se reporta WARN si falta.
     local have_pip=0
     if python3 -m pip --version &>/dev/null; then
       have_pip=1
-      pass "python3 -m pip ($(python3 -m pip --version 2>/dev/null | awk '{print $2}'))"
-    else
-      soft "python3 -m pip no disponible (útil para requirements-assets.txt)"
-      suggest "sudo apt-get install -y python3-pip"
+      pass "python3 -m pip ($(python3 -m pip --version 2>/dev/null | awk '{print $2}')) [opcional]"
     fi
     # Módulos usados por descargar_graficos.sh / gen_tile_select.py / gen_tile_atlas.py
     local mod
@@ -200,17 +199,18 @@ check_asset_tools() {
       fi
     done
     if [[ ${#py_missing[@]} -gt 0 ]]; then
-      # Preferir APT en Ubuntu/Debian (no depende de pip).
+      # Preferir APT en Ubuntu/Debian (no necesita pip).
       suggest "sudo apt-get install -y python3-numpy python3-pil"
+      # Alternativa multi-distro vía pip (solo si ya hay pip, o indicar cómo).
       if [[ "$have_pip" -eq 1 ]]; then
         suggest "python3 -m pip install --user -r scripts/requirements-assets.txt"
       else
-        suggest "sudo apt-get install -y python3-pip && python3 -m pip install --user -r scripts/requirements-assets.txt"
+        suggest "# alternativa sin APT: instalá pip de tu distro y luego: python3 -m pip install --user -r scripts/requirements-assets.txt"
       fi
     fi
   else
     soft "python3 ausente (scripts de parse_sav / auditoría / gráficos)"
-    suggest "sudo apt-get install -y python3"
+    suggest "sudo apt-get install -y python3   # o el equivalente de tu distro"
   fi
 }
 

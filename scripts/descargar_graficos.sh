@@ -95,7 +95,7 @@ require_py_mod() {
     echo "ERROR: falta el módulo Python '${mod}' (necesario para post-procesar sprites)." >&2
     echo "Instalá con uno de:" >&2
     echo "  sudo apt-get install -y python3-numpy python3-pil" >&2
-    echo "  python3 -m pip install --user -r ${ROOT}/scripts/requirements-assets.txt" >&2
+    echo "  # alternativa (sin APT): python3 -m pip install --user -r ${ROOT}/scripts/requirements-assets.txt" >&2
     echo "Luego: ./scripts/doctor.sh && ./scripts/descargar_assets.sh graficos --${GRAPHICS_MODE}" >&2
     exit 1
   fi

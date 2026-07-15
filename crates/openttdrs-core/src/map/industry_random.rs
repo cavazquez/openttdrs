@@ -98,14 +98,14 @@ pub fn trigger_industry_tile_randomisation(
     tile.m3 != before_m3 || tile.m6 != before_m6
 }
 
-/// Tile loop: `IndustryRandomTrigger::TileLoop` en la franja del mapa.
+/// Tile loop: `IndustryRandomTrigger::TileLoop` en la franja (`tick % 256`).
 pub fn advance_industry_tile_randomisation(
     map: &mut Map,
     tick: u64,
     world_seed: u64,
 ) -> Vec<TileCoord> {
     let mut candidates = Vec::new();
-    super::tile_loop::for_each_map_tile_loop(map, tick, |coord, tile| {
+    super::tile_loop::for_each_map_tile_loop_stripe(map, tick, |coord, tile| {
         if tile.kind == TileKind::Industry {
             candidates.push(coord);
         }
@@ -205,10 +205,23 @@ mod tests {
         init_industry_tile_random(&mut tile, 0x11);
         map.set_kind(c, TileKind::Industry).unwrap();
         map.set_tile(c, tile).unwrap();
-        let dirty = advance_industry_tile_randomisation(&mut map, 1, 42);
+        // Índice lineal 2*8+2 = 18 → franja tick % 256 == 18.
+        let dirty = advance_industry_tile_randomisation(&mut map, 18, 42);
         assert!(dirty.contains(&c));
         let after = map.get(c).unwrap();
         assert_ne!(industry_random_bits(&after), 0x11);
         assert_eq!(industry_random_triggers(&after), 0);
+    }
+
+    #[test]
+    fn tile_loop_skips_tiles_outside_stripe() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let c = TileCoord::new(2, 2);
+        let mut tile = industry_tile(1);
+        init_industry_tile_random(&mut tile, 0x11);
+        map.set_tile(c, tile).unwrap();
+        let dirty = advance_industry_tile_randomisation(&mut map, 1, 42);
+        assert!(!dirty.contains(&c));
+        assert_eq!(industry_random_bits(&map.get(c).unwrap()), 0x11);
     }
 }

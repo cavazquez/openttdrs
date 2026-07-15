@@ -1,11 +1,14 @@
-//! Tile loop de industrias vanilla — avance de `m3hi` (frame) y `gfx` (pozos).
+//! Animación de industrias vanilla — `AnimateTile_Industry` / `TileLoop_Industry`.
 //!
-//! Paridad con `AnimateTile_Industry` / `TileLoop_Industry` de OpenTTD:
-//! - Torres mina: gfx idle ↔ animado (0↔1, 47↔48, 79↔88) + frames `m3hi`
-//! - Pozos petróleo: gfx 29 → 30–32 (frames + vuelta a 29)
-//! - Fuente plástico Toyland: ciclo gfx 148–155
-//! - `draw_proc` 1–5 (chispas, burbujas, etc.)
+//! Ritmos separados (como OpenTTD):
+//! - **TileLoop** (franja `tick % 256`): arranque pozo, idle↔torre de mina.
+//! - **AnimateTile** (cada tick, footprints conocidos): frames `m3hi`, gfx animados,
+//!   fuente plástico, `draw_proc`.
+//!
+//! Torres: gfx idle ↔ animado (0↔1, 47↔48, 79↔88) + frames `m3hi`.
+//! Pozos: gfx 29 → 30–32 (+ vuelta a 29). Fuente Toyland: 148–155.
 
+use super::tile_loop::for_each_map_tile_loop_stripe;
 use super::{Map, Tile, TileCoord, TileKind};
 
 /// `GFX_COAL_MINE_TOWER_NOT_ANIMATED`
@@ -141,11 +144,8 @@ fn try_start_oil_well_animation(tile: &mut Tile, gfx: u16, tick: u64, x: i32, y:
     true
 }
 
-/// `TileLoop_Industry` + `AnimateMineTower`: gfx idle ↔ animado y frames `m3hi`.
-fn advance_mine_tower(tile: &mut Tile, gfx: u16, tick: u64, x: i32, y: i32) -> bool {
-    if mine_tower_active(tick) && TOWER_ANIM_GFX.contains(&gfx) {
-        return advance_tower(tile, tick, x, y);
-    }
+/// `TileLoop_Industry`: idle ↔ torre animada (no frames).
+fn tile_loop_mine_tower(tile: &mut Tile, gfx: u16, tick: u64, x: i32, y: i32) -> bool {
     if !mine_tower_quiet(tick) {
         return false;
     }
@@ -159,6 +159,14 @@ fn advance_mine_tower(tile: &mut Tile, gfx: u16, tick: u64, x: i32, y: i32) -> b
             set_industry_gfx(tile, idle);
             return true;
         }
+    }
+    false
+}
+
+/// `AnimateMineTower`: frames `m3hi` mientras la torre está en gfx animado.
+fn animate_mine_tower(tile: &mut Tile, gfx: u16, tick: u64, x: i32, y: i32) -> bool {
+    if mine_tower_active(tick) && TOWER_ANIM_GFX.contains(&gfx) {
+        return advance_tower(tile, tick, x, y);
     }
     false
 }
@@ -274,7 +282,21 @@ enum IndustryAnimUpdate {
     Visual,
 }
 
-fn advance_industry_tile(tile: &mut Tile, tick: u64, x: i32, y: i32) -> IndustryAnimUpdate {
+fn apply_tile_loop_industry(tile: &mut Tile, tick: u64, x: i32, y: i32) -> IndustryAnimUpdate {
+    if tile.kind != TileKind::Industry || !is_industry_completed(tile) {
+        return IndustryAnimUpdate::None;
+    }
+    let gfx = industry_gfx(tile);
+    if try_start_oil_well_animation(tile, gfx, tick, x, y) {
+        return IndustryAnimUpdate::Visual;
+    }
+    if tile_loop_mine_tower(tile, gfx, tick, x, y) {
+        return IndustryAnimUpdate::Visual;
+    }
+    IndustryAnimUpdate::None
+}
+
+fn apply_animate_industry(tile: &mut Tile, tick: u64, x: i32, y: i32) -> IndustryAnimUpdate {
     if tile.kind != TileKind::Industry {
         return IndustryAnimUpdate::None;
     }
@@ -286,16 +308,8 @@ fn advance_industry_tile(tile: &mut Tile, tick: u64, x: i32, y: i32) -> Industry
     if !is_industry_completed(tile) {
         return IndustryAnimUpdate::None;
     }
-    if try_start_oil_well_animation(tile, gfx, tick, x, y) {
-        return IndustryAnimUpdate::Visual;
-    }
-    if advance_mine_tower(tile, gfx, tick, x, y) {
-        let new_gfx = industry_gfx(tile);
-        return if new_gfx == gfx {
-            IndustryAnimUpdate::Frame
-        } else {
-            IndustryAnimUpdate::Visual
-        };
+    if animate_mine_tower(tile, gfx, tick, x, y) {
+        return IndustryAnimUpdate::Frame;
     }
     if (GFX_OILWELL_ANIMATED_1..=GFX_OILWELL_ANIMATED_3).contains(&gfx) {
         let before = industry_gfx(tile);
@@ -313,20 +327,18 @@ fn advance_industry_tile(tile: &mut Tile, tick: u64, x: i32, y: i32) -> Industry
     IndustryAnimUpdate::None
 }
 
-/// Avanza animaciones de teselas `MP_INDUSTRY` terminadas (franja de tile loop).
-pub fn advance_industry_tile_animations(map: &mut Map, tick: u64) -> Vec<TileCoord> {
-    let mut candidates = Vec::new();
-    super::tile_loop::for_each_map_tile_loop(map, tick, |coord, tile| {
-        if tile.kind == TileKind::Industry {
-            candidates.push(coord);
-        }
-    });
+fn commit_industry_updates(
+    map: &mut Map,
+    coords: &[TileCoord],
+    tick: u64,
+    mut apply: impl FnMut(&mut Tile, u64, i32, i32) -> IndustryAnimUpdate,
+) -> Vec<TileCoord> {
     let mut dirty = Vec::new();
-    for coord in candidates {
+    for &coord in coords {
         let Some(mut tile) = map.get(coord) else {
             continue;
         };
-        let update = advance_industry_tile(&mut tile, tick, coord.x, coord.y);
+        let update = apply(&mut tile, tick, coord.x, coord.y);
         if update == IndustryAnimUpdate::None {
             continue;
         }
@@ -337,6 +349,45 @@ pub fn advance_industry_tile_animations(map: &mut Map, tick: u64) -> Vec<TileCoo
             dirty.push(coord);
         }
     }
+    dirty
+}
+
+/// Eventos `TileLoop_Industry` (franja cada 256 ticks).
+pub fn advance_industry_tile_loop_events(map: &mut Map, tick: u64) -> Vec<TileCoord> {
+    let mut candidates = Vec::new();
+    for_each_map_tile_loop_stripe(map, tick, |coord, tile| {
+        if tile.kind == TileKind::Industry {
+            candidates.push(coord);
+        }
+    });
+    commit_industry_updates(map, &candidates, tick, apply_tile_loop_industry)
+}
+
+/// `AnimateTile_Industry` sobre footprints conocidos (cada tick).
+pub fn advance_industry_animated_tiles(
+    map: &mut Map,
+    tick: u64,
+    coords: &[TileCoord],
+) -> Vec<TileCoord> {
+    commit_industry_updates(map, coords, tick, apply_animate_industry)
+}
+
+/// Compat tests / herramientas: TileLoop (franja) + Animate sobre industrias del mapa.
+pub fn advance_industry_tile_animations(map: &mut Map, tick: u64) -> Vec<TileCoord> {
+    let mut dirty = advance_industry_tile_loop_events(map, tick);
+    let (w, h) = map.dimensions();
+    let mut coords = Vec::new();
+    for y in 0..h {
+        for x in 0..w {
+            let c = TileCoord::new(x.cast_signed(), y.cast_signed());
+            if map.get_kind(c) == Some(TileKind::Industry) {
+                coords.push(c);
+            }
+        }
+    }
+    dirty.extend(advance_industry_animated_tiles(map, tick, &coords));
+    dirty.sort_by_key(|c| (c.x, c.y));
+    dirty.dedup();
     dirty
 }
 
@@ -372,8 +423,10 @@ mod tests {
         )
         .unwrap();
         let mut promoted = false;
-        for tick in 0..=512 {
-            advance_industry_tile_animations(&mut map, tick);
+        // TileLoop: tesela 0 solo en ticks múltiplo de 256.
+        for visit in 0..=32u64 {
+            let tick = visit * 256;
+            advance_industry_tile_loop_events(&mut map, tick);
             if industry_gfx(&map.get(TileCoord::new(0, 0)).unwrap()) == GFX_COAL_MINE_TOWER_ANIMATED
             {
                 promoted = true;
@@ -417,8 +470,8 @@ mod tests {
         )
         .unwrap();
         let mut promoted = false;
-        for tick in 0..=256 {
-            advance_industry_tile_animations(&mut map, tick);
+        for visit in 0..=64u64 {
+            advance_industry_tile_loop_events(&mut map, visit * 256);
             if industry_gfx(&map.get(TileCoord::new(0, 0)).unwrap()) >= GFX_OILWELL_ANIMATED_1 {
                 promoted = true;
                 break;

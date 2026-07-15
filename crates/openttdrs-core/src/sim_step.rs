@@ -62,9 +62,13 @@ pub(crate) fn step(state: &mut GameState) {
     );
     drain_signal_globset_now(state);
 
-    state.industry_tile_dirty =
-        crate::map::step_industry_tiles_with_seed(&mut state.map, t, state.world_seed);
-    let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t);
+    state.industry_tile_dirty = crate::map::step_industry_tiles_with_seed(
+        &mut state.map,
+        t,
+        state.world_seed,
+        &state.industries,
+    );
+    let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t, &state.stations);
     state.industry_tile_dirty.extend(airport_dirty);
 
     let mut loaded_this_tick = vec![false; state.vehicles.len()];

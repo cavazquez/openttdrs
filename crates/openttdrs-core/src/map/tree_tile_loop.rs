@@ -397,25 +397,32 @@ pub fn apply_seasonal_snow(
     let day = tick / u64::from(TICKS_PER_TRANSIT_DAY);
     let day_of_year = day % 365;
     let winter = (300..=364).contains(&day_of_year) || day_of_year < 75;
-    let (_, h) = map.dimensions();
+    // Barrido completo del mapa cada día de tránsito (no franja tile-loop):
+    // en mapas grandes la franja dejaría 255/256 teselas sin actualizar.
+    let (w, h) = map.dimensions();
     let snow_line = i32::try_from(h).unwrap_or(0) * 2 / 5;
-
     let mut updates = Vec::new();
-    super::tile_loop::for_each_map_tile_loop(map, day, |c, tile| {
-        if tile.kind != TileKind::Grass {
-            return;
+    for y in 0..h {
+        for x in 0..w {
+            let c = TileCoord::new(x.cast_signed(), y.cast_signed());
+            let Some(tile) = map.get(c) else {
+                continue;
+            };
+            if tile.kind != TileKind::Grass {
+                continue;
+            }
+            let ground = if winter && c.y < snow_line {
+                CLEAR_GROUND_SNOW
+            } else {
+                CLEAR_GROUND_GRASS
+            };
+            let density = tile.m5 & 0x03;
+            let new_m5 = clear_ground_m5(ground, density);
+            if new_m5 != tile.m5 {
+                updates.push((c, tile.mapt, new_m5));
+            }
         }
-        let ground = if winter && c.y < snow_line {
-            CLEAR_GROUND_SNOW
-        } else {
-            CLEAR_GROUND_GRASS
-        };
-        let density = tile.m5 & 0x03;
-        let new_m5 = clear_ground_m5(ground, density);
-        if new_m5 != tile.m5 {
-            updates.push((c, tile.mapt, new_m5));
-        }
-    });
+    }
     let mut dirty = Vec::with_capacity(updates.len());
     for (c, mapt, new_m5) in updates {
         let _ = map.set_mapt_m5(c, mapt, new_m5);
@@ -780,5 +787,26 @@ mod tests {
         let south_w = map.get(TileCoord::new(1, 7)).unwrap().m5;
         assert_eq!((north_w >> 2) & 0x7, CLEAR_GROUND_SNOW);
         assert_eq!((south_w >> 2) & 0x7, CLEAR_GROUND_GRASS);
+    }
+
+    #[test]
+    fn seasonal_snow_covers_large_map_north_in_one_day() {
+        // > MAP_FULL_SCAN_TILE_LIMIT: antes solo una franja/día.
+        let mut map = Map::new_flat(512, 512, 0);
+        for y in 0..20 {
+            for x in 0..20 {
+                let c = TileCoord::new(x, y);
+                map.set_kind(c, TileKind::Grass).unwrap();
+                map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
+                    .unwrap();
+            }
+        }
+        let winter_tick = u64::from(TICKS_PER_TRANSIT_DAY) * 320;
+        let dirty = apply_seasonal_snow(&mut map, Climate::SubArctic, winter_tick, 0);
+        assert!(dirty.len() >= 20 * 20);
+        assert_eq!(
+            (map.get(TileCoord::new(10, 5)).unwrap().m5 >> 2) & 0x7,
+            CLEAR_GROUND_SNOW
+        );
     }
 }

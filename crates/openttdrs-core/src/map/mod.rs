@@ -42,7 +42,8 @@ pub use industry_terrain::{
 pub use industry_tile_anim::{
     GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED, GFX_GOLD_MINE_TOWER_ANIMATED,
     GFX_OILWELL_ANIMATED_1, GFX_OILWELL_ANIMATED_2, GFX_OILWELL_ANIMATED_3,
-    advance_industry_tile_animations, industry_animation_frame, industry_gfx,
+    advance_industry_animated_tiles, advance_industry_tile_animations,
+    advance_industry_tile_loop_events, industry_animation_frame, industry_gfx,
     industry_tile_anim_state, set_industry_gfx,
 };
 pub use level_crossing::is_road_level_crossing;

@@ -202,7 +202,8 @@ fn industry_construction_completes_over_sim_ticks() {
         &Command::PlaceIndustrySpec(origin, IndustrySpec::Sawmill),
     )
     .unwrap();
-    for _ in 0..128 {
+    // RunTileLoop: ~12 visitas/tesela × 256 ticks (counter×stages hasta completed).
+    for _ in 0..4_096 {
         s.step();
     }
     for (coord, _) in industry_template(origin, IndustrySpec::Sawmill) {

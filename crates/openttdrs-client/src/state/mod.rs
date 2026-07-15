@@ -76,6 +76,9 @@ fn bootstrap_procedural_state(settings: &NewGameSettings) -> GameState {
     }
     log_detection_summary(&state, false, None);
     apply_test_company_colour(&mut state);
+    if settings.gamescript_demo {
+        openttdrs_core::seed_gs_demo(&mut state);
+    }
     if settings.world_gen {
         info!(
             "Mapa procedural: clima={:?}, seed={}, isla={}, demo={}",

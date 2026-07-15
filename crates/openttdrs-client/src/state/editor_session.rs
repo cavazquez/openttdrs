@@ -44,6 +44,7 @@ pub fn editor_new_game_settings() -> NewGameSettings {
         rival_ai: false,
         disasters_enabled: false,
         terrain_roughness: TerrainRoughness::Normal,
+        gamescript_demo: false,
     }
 }
 

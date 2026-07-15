@@ -42,6 +42,7 @@ const INTRO_SETTINGS: NewGameSettings = NewGameSettings {
     rival_ai: false,
     disasters_enabled: false,
     terrain_roughness: crate::state::bootstrap::TerrainRoughness::Normal,
+    gamescript_demo: false,
 };
 
 const INTRO_PAN_AMPLITUDE_X: f32 = 48.0;

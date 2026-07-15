@@ -31,6 +31,7 @@ Ajustes → Consola: help|list, fps, overlay, gizmos, tile, newgrf, cheat, cheat
 Ajustes → Cheats: ventana formal (también `cheats` en consola).\n\
 Ajustes → Guardar escenario: JSON en save/scenarios/ (menú Editor).\n\
 Menú → Editor de escenarios: sandbox (∞$, bulldozer) + Paisaje/Fundar pueblo.\n\
+Economía → Objetivos / Liga · Mundo → Historia: GameScript-lite (#43).\n\
 Ajustes → Finalizar partida: retiro voluntario → endscreen / highscore.\n\
 Ajustes → NewGRF: stack + Inspeccionar (scan/validate; sin Action0–14).\n\
 Ajustes → Display: presets Clásico / Rendimiento / Dev.\n\

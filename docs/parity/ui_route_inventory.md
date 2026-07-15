@@ -48,6 +48,9 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | TileInspector | Ajustes / F2 | |
 | CheatWindow | Ajustes / Ctrl+Alt+C | |
 | GenLand | Editor → Terreno | |
+| Goals | menú Economía | |
+| Story | menú Mundo | |
+| League | menú Economía | |
 
 ## Paneles no flotantes (fijos)
 

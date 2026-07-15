@@ -241,6 +241,8 @@ pub struct NewGameSettings {
     /// Si true, pueden ocurrir desastres ambientales.
     pub disasters_enabled: bool,
     pub terrain_roughness: TerrainRoughness,
+    /// Si true, siembra GameScript-lite demo (story/goals) al iniciar (#43).
+    pub gamescript_demo: bool,
 }
 
 impl Default for NewGameSettings {
@@ -259,6 +261,7 @@ impl Default for NewGameSettings {
             rival_ai: true,
             disasters_enabled: true,
             terrain_roughness: TerrainRoughness::Normal,
+            gamescript_demo: true,
         }
     }
 }
@@ -305,6 +308,7 @@ impl NewGameSettings {
             rival_ai: true,
             disasters_enabled: true,
             terrain_roughness: TerrainRoughness::Normal,
+            gamescript_demo: true,
         }
     }
 }

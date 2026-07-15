@@ -574,6 +574,7 @@ pub(crate) fn main_menu_interaction(
                         rival_ai: true,
                         disasters_enabled: true,
                         terrain_roughness: TerrainRoughness::Normal,
+                        gamescript_demo: true,
                     };
                     enter_new_game(
                         &mut commands,

@@ -740,7 +740,7 @@ Objetivo: posterior a la paridad single-player.
 - [x] Multi-compañía SP: activa + IA + ownership/finanzas mínimas. *(«segunda humana» local descartada — #41 wontfix; humanas extra → MP #21)*
 - [ ] Multijugador: lobby, clientes, chat, join/spectate.
 - [x] Scenario editor y toolbar de 19 botones. *(#42: menú + toolbar 19 + GenLand + dropdowns Pueblo/Road-Tram + sandbox SP)*
-- [ ] GameScript: story, goals, league.
+- [x] GameScript: story, goals, league. *(#43 MVP GS-lite Rust; Squirrel OOS — `docs/epics/gamescript.md`)*
 - [x] AI settings/debug. *(ventana Ajustes + Finanzas; `GameState.ai`)*
 - [x] Herramientas dev: framerate / consola corta, tile inspect, NewGRF inspect,
       sprite-bounds lite (gizmos + tile seleccionado).
@@ -943,7 +943,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** GameScript (#43) o red (#21, aplazada). Editor #42 ✅ (toolbar + GenLand + dropdowns + sandbox SP).
+**Siguiente:** red (#21, aplazada) u otro corte P3. Editor #42 ✅ · GameScript-lite #43 ✅.
 
 Progreso UI-8 (multi-compañía mínima):
 

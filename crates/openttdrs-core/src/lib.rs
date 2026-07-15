@@ -26,6 +26,7 @@ pub mod engine;
 pub mod entity_history;
 pub mod flow_stat;
 mod game_state;
+pub mod gs;
 pub mod industry;
 pub mod industry_tile;
 pub mod link_graph;
@@ -162,6 +163,9 @@ pub use game_state::{
     DEPOT_BUILD_COST, ECONOMY_HISTORY_MONTHS, EconomyHistory, GameState, MonthlyEconomySample,
     RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats, TERRAFORM_BASE_PRICE,
     TERRAFORM_COST, TUNNEL_BUILD_COST_PER_TILE, WAYPOINT_BUILD_COST, company_net_value,
+};
+pub use gs::{
+    GsGoal, GsGoalKind, GsLeagueRow, GsState, GsStoryPage, league_rows, seed_gs_demo, tick_gs,
 };
 pub use industry::{
     FACTORY_COAL_INPUT, FACTORY_WOOD_INPUT, INDUSTRY_PRODUCE_TICKS, Industry, IndustryKind,

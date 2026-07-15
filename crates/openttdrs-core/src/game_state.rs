@@ -448,6 +448,9 @@ pub struct GameState {
     /// RNG de partida para `GetVia` (`Random` de `OpenTTD`).
     #[serde(skip, default = "default_cargo_rng")]
     pub cargo_rng: crate::linkgraph_parity::Randomizer,
+    /// GameScript-lite: story / goals / league (#43).
+    #[serde(default)]
+    pub gs: crate::gs::GsState,
 }
 
 fn default_cargo_rng() -> crate::linkgraph_parity::Randomizer {
@@ -541,6 +544,7 @@ impl GameState {
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             station_flows: crate::flow_stat::StationFlows::default(),
             cargo_rng: default_cargo_rng(),
+            gs: crate::gs::GsState::default(),
         }
     }
 
@@ -615,6 +619,7 @@ impl GameState {
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             station_flows: crate::flow_stat::StationFlows::default(),
             cargo_rng: default_cargo_rng(),
+            gs: crate::gs::GsState::default(),
         }
     }
 

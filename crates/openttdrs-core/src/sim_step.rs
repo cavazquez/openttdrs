@@ -12,6 +12,7 @@ pub(crate) fn step(state: &mut GameState) {
     process_monthly_economy(state, t);
     rollover_vehicle_profit_year(state, t);
     crate::ai::tick_ai_companies(state, t);
+    crate::gs::tick_gs(state);
     produce_industries(state, t);
     produce_town_demand(state, t);
     grow_towns(state, t);

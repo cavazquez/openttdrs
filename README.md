@@ -30,7 +30,7 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Trabajo reciente (jul 2026):** Action2 variational (trains/stations/road), procedure `7E` / `\2psto`, vars de vehículo y de tesela al dibujar. Issues de backlog: [issues abiertas](https://github.com/cavazquez/openttdrs/issues).
 
-**Siguiente corte (roadmap):** GenLand / resto #42 o GameScript (#43) — ver [ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md). Editor + toolbar 19 ✅ (#42 Fase 1–2); red (#21) aplazada.
+**Siguiente corte (roadmap):** red (#21, aplazada) u otro P3 — ver [ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md). Editor #42 ✅ · GameScript-lite #43 ✅ (story/goals/league; Squirrel OOS).
 
 ---
 
@@ -126,7 +126,7 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | NewGRF Action0–14 + Action2 runtime | ✅ | Action1/3; estaciones `m5`+CB24; params `0x7F`; industrias ≥175 |
 | Barcos / aviones | 🔮 | |
 | Multijugador (I8) | 🔮 | [#21](https://github.com/cavazquez/openttdrs/issues/21) |
-| IA rivales / GameScript / editor | 🔮 | Issues #42–#44, #86 |
+| IA rivales / GameScript / editor | 🟡 | IA + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
 
 Backlog vivo: [issues del repo](https://github.com/cavazquez/openttdrs/issues) (generadas desde los ROADMAP, jul 2026).
 

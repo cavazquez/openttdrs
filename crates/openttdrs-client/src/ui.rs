@@ -24,11 +24,13 @@ mod finances_window;
 mod floating_window;
 pub(crate) mod font;
 mod genland_window;
+mod goal_list_window;
 mod graph_window;
 mod help_window;
 mod hud;
 mod industry_directory;
 mod industry_panel;
+mod league_window;
 mod list_window;
 mod main_menu;
 mod main_menu_intro;
@@ -44,6 +46,7 @@ mod sign_list_window;
 mod sparkline;
 mod station_directory;
 mod statusbar;
+mod story_window;
 mod subsidy_list;
 mod tile_inspector_window;
 mod timetable_window;
@@ -115,6 +118,10 @@ use genland_window::{
     GenLandWindowState, genland_window_on_closed, handle_genland_buttons, setup_genland_window,
     sync_genland_window,
 };
+use goal_list_window::{
+    GoalListWindowState, goal_list_window_on_closed, open_goal_list_from_routes,
+    setup_goal_list_window, sync_goal_list_window,
+};
 use graph_window::{
     GraphWindowState, graph_window_on_closed, handle_graph_window_buttons, open_graph_from_routes,
     setup_graph_window, sync_graph_window,
@@ -137,6 +144,10 @@ use industry_directory::{
 use industry_panel::{
     IndustryPanelState, industry_panel_center_interaction, industry_panel_close_interaction,
     setup_industry_panel, sync_industry_panel,
+};
+use league_window::{
+    LeagueWindowState, league_window_on_closed, open_league_from_routes, setup_league_window,
+    sync_league_window,
 };
 use main_menu::{
     apply_pending_heightmap_on_enter, auto_start_preloaded_json, main_menu_continue_interaction,
@@ -197,6 +208,10 @@ use statusbar::{
     handle_news_popup_close, handle_news_popup_focus, handle_open_news_history,
     handle_status_bar_center_click, news_history_on_closed, setup_news_history_window,
     setup_status_bar, sync_news_history_window, sync_status_bar, update_news_playback,
+};
+use story_window::{
+    StoryWindowState, handle_story_nav_buttons, open_story_from_routes, setup_story_window,
+    story_window_on_closed, sync_story_window,
 };
 use subsidy_list::{
     SubsidyListState, handle_subsidy_list_buttons, open_subsidy_list_from_routes,
@@ -299,6 +314,9 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<CheatWindowState>()
         .init_resource::<GenLandWindowState>()
         .init_resource::<EditorTownMenuState>()
+        .init_resource::<GoalListWindowState>()
+        .init_resource::<StoryWindowState>()
+        .init_resource::<LeagueWindowState>()
         .init_resource::<EndScreenState>()
         .init_resource::<RetireGameRequested>()
         .init_resource::<SoundMusicWindowState>()
@@ -387,7 +405,14 @@ impl Plugin for ClientUiPlugin {
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
-            (setup_editor_toolbar, setup_genland_window).in_set(StartupSet::Ui),
+            (
+                setup_editor_toolbar,
+                setup_genland_window,
+                setup_goal_list_window,
+                setup_story_window,
+                setup_league_window,
+            )
+                .in_set(StartupSet::Ui),
         )
         .add_systems(
             OnEnter(ClientScreen::InGame),
@@ -896,6 +921,28 @@ impl Plugin for ClientUiPlugin {
                     handle_subsidy_list_buttons,
                     subsidy_list_on_closed,
                     sync_subsidy_list,
+                )
+                    .chain()
+                    .after(handle_toolbar_menu_entries),
+                (
+                    open_goal_list_from_routes,
+                    goal_list_window_on_closed,
+                    sync_goal_list_window,
+                )
+                    .chain()
+                    .after(handle_toolbar_menu_entries),
+                (
+                    open_story_from_routes,
+                    handle_story_nav_buttons,
+                    story_window_on_closed,
+                    sync_story_window,
+                )
+                    .chain()
+                    .after(handle_toolbar_menu_entries),
+                (
+                    open_league_from_routes,
+                    league_window_on_closed,
+                    sync_league_window,
                 )
                     .chain()
                     .after(handle_toolbar_menu_entries),

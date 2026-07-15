@@ -27,11 +27,13 @@ use crate::ui::extra_viewport_window::ExtraViewportWindowState;
 use crate::ui::finances_window::FinancesWindowState;
 use crate::ui::floating_window::{FloatingWindow, FloatingWindowId};
 use crate::ui::genland_window::GenLandWindowState;
+use crate::ui::goal_list_window::GoalListWindowState;
 use crate::ui::graph_window::GraphWindowState;
 use crate::ui::help_window::HelpWindowState;
 use crate::ui::hud::SimHudControls;
 use crate::ui::industry_directory::IndustryDirectoryState;
 use crate::ui::industry_panel::IndustryPanelState;
+use crate::ui::league_window::LeagueWindowState;
 use crate::ui::main_menu::{MainMenuCamera, MainMenuUi};
 use crate::ui::newgrf_window::NewGrfWindowState;
 use crate::ui::news_settings_window::NewsSettingsWindowState;
@@ -42,6 +44,7 @@ use crate::ui::shared_orders_window::SharedOrdersWindowState;
 use crate::ui::sign_list_window::SignListWindowState;
 use crate::ui::station_directory::StationDirectoryState;
 use crate::ui::statusbar::NewsHistoryState;
+use crate::ui::story_window::StoryWindowState;
 use crate::ui::subsidy_list::SubsidyListState;
 use crate::ui::tile_inspector_window::TileInspectorWindowState;
 use crate::ui::timetable_window::TimetableWindowState;
@@ -396,6 +399,9 @@ fn open_all_windows_for_shot(world: &mut World) {
     world.resource_mut::<TileInspectorWindowState>().open = true;
     world.resource_mut::<CheatWindowState>().open = true;
     world.resource_mut::<GenLandWindowState>().open = true;
+    world.resource_mut::<GoalListWindowState>().open = true;
+    world.resource_mut::<StoryWindowState>().open = true;
+    world.resource_mut::<LeagueWindowState>().open = true;
 
     world
         .resource_mut::<SaveWindowState>()

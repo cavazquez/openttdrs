@@ -27,6 +27,9 @@ pub(crate) enum UiRoute {
     CargoPaymentRates,
     SignList,
     LinkGraph,
+    Goals,
+    Story,
+    League,
 }
 
 /// Petición tipada para abrir una superficie UI.

@@ -30,11 +30,13 @@ use super::endscreen::{EndScreenState, RetireGameRequested};
 use super::finances_window::FinancesWindowState;
 use super::floating_window::FloatingWindow;
 use super::genland_window::GenLandWindowState;
+use super::goal_list_window::GoalListWindowState;
 use super::graph_window::GraphWindowState;
 use super::help_window::HelpWindowState;
 use super::hud::TileInfoText;
 use super::industry_directory::IndustryDirectoryState;
 use super::industry_panel::{IndustryPanelRoot, IndustryPanelState};
+use super::league_window::LeagueWindowState;
 use super::navigation::ToolbarMenuState;
 use super::newgrf_window::NewGrfWindowState;
 use super::news_settings_window::NewsSettingsWindowState;
@@ -43,6 +45,7 @@ use super::refit_window::RefitWindowState;
 use super::shared_orders_window::SharedOrdersWindowState;
 use super::station_directory::StationDirectoryState;
 use super::statusbar::{NewsHistoryState, NewsPopupRoot, NewsUiState, StatusBarRoot};
+use super::story_window::StoryWindowState;
 use super::subsidy_list::SubsidyListState;
 use super::tile_inspector_window::TileInspectorWindowState;
 use super::timetable_window::TimetableWindowState;
@@ -281,6 +284,15 @@ pub(crate) fn leave_ingame(world: &mut World) {
     }
     if let Some(mut town_menu) = world.get_resource_mut::<EditorTownMenuState>() {
         *town_menu = EditorTownMenuState::default();
+    }
+    if let Some(mut goals) = world.get_resource_mut::<GoalListWindowState>() {
+        *goals = GoalListWindowState::default();
+    }
+    if let Some(mut story) = world.get_resource_mut::<StoryWindowState>() {
+        *story = StoryWindowState::default();
+    }
+    if let Some(mut league) = world.get_resource_mut::<LeagueWindowState>() {
+        *league = LeagueWindowState::default();
     }
     // Si hay partida suspendida, conservar flag de editor para «Continuar».
     let suspending = world

@@ -161,6 +161,7 @@ pub(crate) const WORLD_MENU: MenuSpec = MenuSpec {
             "Lista de subvenciones",
             MenuAction::Route(UiRoute::Subsidies),
         ),
+        MenuEntrySpec::item("Historia", MenuAction::Route(UiRoute::Story)),
     ],
 };
 
@@ -222,6 +223,9 @@ pub(crate) const ECONOMY_MENU: MenuSpec = MenuSpec {
             "Tarifas de carga",
             MenuAction::Route(UiRoute::CargoPaymentRates),
         ),
+        MenuEntrySpec::divider(),
+        MenuEntrySpec::item("Objetivos", MenuAction::Route(UiRoute::Goals)),
+        MenuEntrySpec::item("Liga", MenuAction::Route(UiRoute::League)),
     ],
 };
 

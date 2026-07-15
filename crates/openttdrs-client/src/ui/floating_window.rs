@@ -114,6 +114,12 @@ pub(crate) enum FloatingWindowId {
     CheatWindow,
     /// Generar paisaje (editor #42 GenLand).
     GenLand,
+    /// Objetivos GameScript-lite (#43).
+    Goals,
+    /// Historia / story book (#43).
+    Story,
+    /// Liga / ranking de compañías (#43).
+    League,
 }
 
 #[allow(dead_code)] // inventarios UI-0 consumidos en tests
@@ -157,6 +163,9 @@ impl FloatingWindowId {
         Self::TileInspector,
         Self::CheatWindow,
         Self::GenLand,
+        Self::Goals,
+        Self::Story,
+        Self::League,
     ];
 
     /// Clave estable para persistir posición en `ClientPreferences`.
@@ -200,6 +209,9 @@ impl FloatingWindowId {
             Self::TileInspector => "TileInspector",
             Self::CheatWindow => "CheatWindow",
             Self::GenLand => "GenLand",
+            Self::Goals => "Goals",
+            Self::Story => "Story",
+            Self::League => "League",
         }
     }
 }

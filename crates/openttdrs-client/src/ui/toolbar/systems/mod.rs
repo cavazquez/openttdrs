@@ -9,8 +9,8 @@ mod tooltip;
 pub(crate) use click_beep::toolbar_click_beep;
 pub(crate) use close::{close_toolbar_button_interaction, handle_ingame_escape};
 pub(crate) use groups::{
-    hide_tool_when_panel_closed, sync_climate_industry_tools, toolbar_group_interaction,
-    update_toolbar_group_visuals, update_toolbar_tool_visibility,
+    hide_tool_when_panel_closed, sync_climate_industry_tools, sync_editor_only_build_tools,
+    toolbar_group_interaction, update_toolbar_group_visuals, update_toolbar_tool_visibility,
 };
 pub(crate) use tools::{build_menu_interaction, update_tool_button_visuals};
 pub(crate) use tooltip::update_toolbar_tooltip;
@@ -152,6 +152,7 @@ mod tests {
     #[test]
     fn toolbar_interaction_systems_run_with_empty_queries() {
         let mut world = World::new();
+        world.insert_resource(crate::state::EditorSession::inactive());
         world.insert_resource(ToolbarState::default());
         world.insert_resource(UiToolState::default());
         world.insert_resource(DragBuildState::default());

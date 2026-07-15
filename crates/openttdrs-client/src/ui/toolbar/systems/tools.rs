@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::state::OrderPickState;
+use crate::state::{EditorSession, OrderPickState};
 use crate::ui::toolbar::build_input::cancel_placement;
 use crate::ui::toolbar::order_panel::start_order_destination_pick;
 use crate::ui::toolbar::{
@@ -10,6 +10,7 @@ use crate::ui::toolbar::{
 /// El boton del menu selecciona la herramienta activa para aplicar en el mapa.
 #[allow(clippy::type_complexity)]
 pub(crate) fn build_menu_interaction(
+    editor: Res<EditorSession>,
     mut q: Query<(&Interaction, &BuildMenuAction), (Changed<Interaction>, With<Button>)>,
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
@@ -19,6 +20,9 @@ pub(crate) fn build_menu_interaction(
 ) {
     for (interaction, action) in &mut q {
         if *interaction != Interaction::Pressed {
+            continue;
+        }
+        if action.is_editor_only() && !editor.active {
             continue;
         }
         tool_state.active_tool = Some(*action);

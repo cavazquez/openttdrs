@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::state::SimWorld;
+use crate::state::{EditorSession, SimWorld};
 use crate::ui::navigation::ToolbarMenuState;
 use crate::ui::toolbar::build_input::cancel_placement;
 use crate::ui::toolbar::preview::economy_industry_tool_visible;
@@ -194,6 +194,7 @@ pub(crate) fn hide_tool_when_panel_closed(
 }
 
 pub(crate) fn sync_climate_industry_tools(
+    editor: Res<EditorSession>,
     sim: Res<SimWorld>,
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
@@ -204,7 +205,8 @@ pub(crate) fn sync_climate_industry_tools(
         if toolbar_group_for_action(*action) != ToolbarGroup::Economy {
             continue;
         }
-        let visible = economy_industry_tool_visible(*action, climate);
+        // Casa + industrias: solo scenario editor (#42), filtradas por clima.
+        let visible = editor.active && economy_industry_tool_visible(*action, climate);
         node.display = if visible {
             Display::Flex
         } else {
@@ -218,6 +220,52 @@ pub(crate) fn sync_climate_industry_tools(
             tool_state.active_tool = None;
             cancel_placement(&mut drag_state);
         }
+    }
+}
+
+/// Oculta Fundar pueblo / Río fuera del editor; limpia tool si quedó activa.
+pub(crate) fn sync_editor_only_build_tools(
+    editor: Res<EditorSession>,
+    mut toolbar: ResMut<ToolbarState>,
+    mut tool_state: ResMut<UiToolState>,
+    mut drag_state: ResMut<DragBuildState>,
+    mut tools: Query<(&BuildMenuAction, &mut Node), With<ToolSelectButton>>,
+    mut group_btns: Query<
+        (&ToolbarGroup, &mut Node),
+        (With<ToolbarGroupButton>, Without<ToolSelectButton>),
+    >,
+) {
+    for (action, mut node) in &mut tools {
+        if !matches!(*action, BuildMenuAction::FoundTown | BuildMenuAction::River) {
+            continue;
+        }
+        node.display = if editor.active {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    for (group, mut node) in &mut group_btns {
+        if *group != ToolbarGroup::Economy {
+            continue;
+        }
+        // En SP el grupo Economía del build menu es solo sandbox de industrias.
+        node.display = if editor.active {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    if !editor.active && toolbar.active_group == Some(ToolbarGroup::Economy) {
+        toolbar.active_group = None;
+    }
+    if !editor.active
+        && tool_state
+            .active_tool
+            .is_some_and(BuildMenuAction::is_editor_only)
+    {
+        tool_state.active_tool = None;
+        cancel_placement(&mut drag_state);
     }
 }
 

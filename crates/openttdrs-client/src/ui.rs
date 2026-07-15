@@ -212,7 +212,7 @@ use timetable_window::{
 };
 use toolbar::depot_panel_on_closed;
 use toolbar::{
-    BridgeBuildState, DepotPanelState, DragBuildState, MinimapLayerState,
+    BridgeBuildState, DepotPanelState, DragBuildState, EditorTownMenuState, MinimapLayerState,
     NewGrfRoadTypePreviewCache, NewGrfStationPreviewCache, RailSignalGhostState,
     RoadTypeEscapeConsumed, RoadTypePickerState, StationBuildState, StationCargoPanelState,
     StationCatalogPickerState, UiToolState, airport_picker_on_closed, begin_depot_list_drag,
@@ -220,30 +220,31 @@ use toolbar::{
     close_toolbar_button_interaction, finish_depot_list_drag, handle_airport_picker_buttons,
     handle_bridge_picker_buttons, handle_cheats_menu_button, handle_company_colour_swatches,
     handle_company_selector_buttons, handle_depot_panel_buttons,
-    handle_editor_toolbar_control_buttons, handle_editor_toolbar_tool_buttons,
-    handle_ingame_escape, handle_minimap_click, handle_minimap_layer_buttons,
-    handle_order_panel_buttons, handle_rail_station_picker_buttons,
-    handle_rail_type_select_buttons, handle_road_type_class_buttons,
-    handle_road_type_select_buttons, handle_settings_menu_buttons, handle_signal_picker_buttons,
-    handle_station_cargo_panel_buttons, handle_station_catalog_open_buttons,
-    handle_station_class_select_buttons, handle_station_rename_buttons,
-    handle_station_spec_select_buttons, handle_tile_click, hide_tool_when_panel_closed,
-    lerp_ghost_previews, rail_station_picker_on_closed, road_type_filter_keyboard,
-    rotate_station_with_right_click, setup_airport_picker, setup_bridge_picker, setup_build_menu,
-    setup_depot_panel, setup_editor_toolbar, setup_minimap, setup_order_panel,
-    setup_rail_station_picker, setup_signal_picker, setup_station_cargo_panel, setup_top_toolbar,
-    signal_picker_on_closed, station_catalog_filter_keyboard, station_rename_editable_keyboard,
-    station_rename_keyboard, sync_airport_picker, sync_bridge_picker, sync_build_pointer_modifiers,
-    sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_company_selector,
-    sync_depot_panel, sync_editor_toolbar_button_visuals, sync_editor_toolbar_date,
-    sync_editor_toolbar_visibility, sync_minimap, sync_order_panel, sync_orders_pick_cursor,
-    sync_rail_station_picker, sync_rail_toolbar_icons, sync_rail_type_select_visuals,
-    sync_road_type_catalog_entries, sync_road_type_class_labels, sync_road_type_entry_previews,
-    sync_road_type_entry_visibility, sync_road_type_popovers, sync_signal_picker,
-    sync_station_cargo_panel, sync_station_catalog_entries, sync_station_spec_entry_previews,
-    toolbar_click_beep, toolbar_group_interaction, update_build_ghost_preview, update_cursor_tile,
-    update_tool_button_visuals, update_toolbar_group_visuals, update_toolbar_tool_visibility,
-    update_toolbar_tooltip,
+    handle_editor_toolbar_build_buttons, handle_editor_toolbar_control_buttons,
+    handle_editor_toolbar_tool_buttons, handle_editor_town_dropdown, handle_ingame_escape,
+    handle_minimap_click, handle_minimap_layer_buttons, handle_order_panel_buttons,
+    handle_rail_station_picker_buttons, handle_rail_type_select_buttons,
+    handle_road_type_class_buttons, handle_road_type_select_buttons, handle_settings_menu_buttons,
+    handle_signal_picker_buttons, handle_station_cargo_panel_buttons,
+    handle_station_catalog_open_buttons, handle_station_class_select_buttons,
+    handle_station_rename_buttons, handle_station_spec_select_buttons, handle_tile_click,
+    hide_tool_when_panel_closed, lerp_ghost_previews, rail_station_picker_on_closed,
+    road_type_filter_keyboard, rotate_station_with_right_click, setup_airport_picker,
+    setup_bridge_picker, setup_build_menu, setup_depot_panel, setup_editor_toolbar, setup_minimap,
+    setup_order_panel, setup_rail_station_picker, setup_signal_picker, setup_station_cargo_panel,
+    setup_top_toolbar, signal_picker_on_closed, station_catalog_filter_keyboard,
+    station_rename_editable_keyboard, station_rename_keyboard, sync_airport_picker,
+    sync_bridge_picker, sync_build_pointer_modifiers, sync_climate_industry_tools,
+    sync_company_colour_swatch_visuals, sync_company_selector, sync_depot_panel,
+    sync_editor_only_build_tools, sync_editor_toolbar_button_visuals, sync_editor_toolbar_date,
+    sync_editor_toolbar_visibility, sync_editor_town_dropdown, sync_minimap, sync_order_panel,
+    sync_orders_pick_cursor, sync_rail_station_picker, sync_rail_toolbar_icons,
+    sync_rail_type_select_visuals, sync_road_type_catalog_entries, sync_road_type_class_labels,
+    sync_road_type_entry_previews, sync_road_type_entry_visibility, sync_road_type_popovers,
+    sync_signal_picker, sync_station_cargo_panel, sync_station_catalog_entries,
+    sync_station_spec_entry_previews, toolbar_click_beep, toolbar_group_interaction,
+    update_build_ghost_preview, update_cursor_tile, update_tool_button_visuals,
+    update_toolbar_group_visuals, update_toolbar_tool_visibility, update_toolbar_tooltip,
 };
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState, ToolbarState};
 use town_directory::{
@@ -297,6 +298,7 @@ impl Plugin for ClientUiPlugin {
         .init_resource::<TileInspectorWindowState>()
         .init_resource::<CheatWindowState>()
         .init_resource::<GenLandWindowState>()
+        .init_resource::<EditorTownMenuState>()
         .init_resource::<EndScreenState>()
         .init_resource::<RetireGameRequested>()
         .init_resource::<SoundMusicWindowState>()
@@ -533,8 +535,11 @@ impl Plugin for ClientUiPlugin {
                 sync_editor_toolbar_visibility,
                 sync_editor_toolbar_date,
                 sync_editor_toolbar_button_visuals,
+                sync_editor_town_dropdown,
                 handle_editor_toolbar_control_buttons,
                 handle_editor_toolbar_tool_buttons,
+                handle_editor_toolbar_build_buttons,
+                handle_editor_town_dropdown,
                 genland_window_on_closed,
                 sync_genland_window,
                 handle_genland_buttons,
@@ -566,6 +571,7 @@ impl Plugin for ClientUiPlugin {
                 industry_panel_center_interaction,
                 handle_minimap_layer_buttons,
                 sync_climate_industry_tools,
+                sync_editor_only_build_tools,
             )
                 .in_set(UpdateSet::Ui)
                 .run_if(in_state(ClientScreen::InGame)),

@@ -34,9 +34,10 @@ pub(crate) use depot_panel::{
     handle_depot_panel_buttons, setup_depot_panel, sync_depot_panel,
 };
 pub(crate) use editor_toolbar::{
+    EditorTownMenuState, handle_editor_toolbar_build_buttons,
     handle_editor_toolbar_control_buttons, handle_editor_toolbar_tool_buttons,
-    setup_editor_toolbar, sync_editor_toolbar_button_visuals, sync_editor_toolbar_date,
-    sync_editor_toolbar_visibility,
+    handle_editor_town_dropdown, setup_editor_toolbar, sync_editor_toolbar_button_visuals,
+    sync_editor_toolbar_date, sync_editor_toolbar_visibility, sync_editor_town_dropdown,
 };
 pub(crate) use layout::setup_top_toolbar;
 pub(crate) use minimap::{
@@ -83,9 +84,9 @@ pub(crate) use station_panel::{
 };
 pub(crate) use systems::{
     build_menu_interaction, close_toolbar_button_interaction, handle_ingame_escape,
-    hide_tool_when_panel_closed, sync_climate_industry_tools, toolbar_click_beep,
-    toolbar_group_interaction, update_tool_button_visuals, update_toolbar_group_visuals,
-    update_toolbar_tool_visibility, update_toolbar_tooltip,
+    hide_tool_when_panel_closed, sync_climate_industry_tools, sync_editor_only_build_tools,
+    toolbar_click_beep, toolbar_group_interaction, update_tool_button_visuals,
+    update_toolbar_group_visuals, update_toolbar_tool_visibility, update_toolbar_tooltip,
 };
 
 /// Marca nodos del menu "Construir" para ignorar clics en el mapa cuando el cursor esta encima.
@@ -245,6 +246,52 @@ impl BuildMenuAction {
         Self::BuildTransmitter,
         Self::JoinStation,
     ];
+
+    /// Herramientas de diseño de escenario: solo visibles/usables con editor activo.
+    #[must_use]
+    pub(crate) const fn is_editor_only(self) -> bool {
+        matches!(
+            self,
+            Self::BuildHouse
+                | Self::FoundTown
+                | Self::River
+                | Self::BuildCoalMine
+                | Self::BuildIronOreMine
+                | Self::BuildGoldMine
+                | Self::BuildOilWell
+                | Self::BuildOilRefinery
+                | Self::BuildFactory
+                | Self::BuildSawmill
+                | Self::BuildForest
+                | Self::BuildFarm
+                | Self::BuildCottonCandy
+                | Self::BuildCandyFactory
+                | Self::BuildBatteryFarm
+                | Self::BuildColaWells
+                | Self::BuildToyFactory
+                | Self::BuildPlasticFountain
+                | Self::BuildFizzyDrinkFactory
+                | Self::BuildBubbleGenerator
+                | Self::BuildToffeeQuarry
+                | Self::BuildSugarMine
+        )
+    }
+}
+
+#[cfg(test)]
+mod editor_only_tests {
+    use super::BuildMenuAction;
+
+    #[test]
+    fn editor_only_tools_cover_town_house_river_industries() {
+        assert!(BuildMenuAction::FoundTown.is_editor_only());
+        assert!(BuildMenuAction::BuildHouse.is_editor_only());
+        assert!(BuildMenuAction::River.is_editor_only());
+        assert!(BuildMenuAction::BuildCoalMine.is_editor_only());
+        assert!(!BuildMenuAction::Rail.is_editor_only());
+        assert!(!BuildMenuAction::RaiseLand.is_editor_only());
+        assert!(!BuildMenuAction::PlantTree.is_editor_only());
+    }
 }
 
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]

@@ -46,6 +46,7 @@ use super::statusbar::{NewsHistoryState, NewsPopupRoot, NewsUiState, StatusBarRo
 use super::subsidy_list::SubsidyListState;
 use super::tile_inspector_window::TileInspectorWindowState;
 use super::timetable_window::TimetableWindowState;
+use super::toolbar::EditorTownMenuState;
 use super::toolbar::{
     BridgeBuildState, BuildGhostPreview, DepotPanelState, DragBuildState, MinimapRoot,
     OrderEditState, OrderPanelRoot, RailSignalGhost, RailSignalGhostState, StationBuildState,
@@ -277,6 +278,9 @@ pub(crate) fn leave_ingame(world: &mut World) {
     }
     if let Some(mut genland) = world.get_resource_mut::<GenLandWindowState>() {
         *genland = GenLandWindowState::default();
+    }
+    if let Some(mut town_menu) = world.get_resource_mut::<EditorTownMenuState>() {
+        *town_menu = EditorTownMenuState::default();
     }
     // Si hay partida suspendida, conservar flag de editor para «Continuar».
     let suspending = world

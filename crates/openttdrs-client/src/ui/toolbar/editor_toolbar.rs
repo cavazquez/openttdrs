@@ -4,7 +4,8 @@
 use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
 use openttdrs_core::{
-    Command, apply_command, calendar_day_index, calendar_year_day, format_calendar_date,
+    Command, RoadTramType, apply_command, calendar_day_index, calendar_year_day,
+    format_calendar_date,
 };
 
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
@@ -19,8 +20,11 @@ use crate::ui::industry_directory::IndustryDirectoryState;
 use crate::ui::save_window::{SaveWindowMode, SaveWindowState};
 use crate::ui::sign_list_window::SignListWindowState;
 use crate::ui::tile_inspector_window::TileInspectorWindowState;
+use crate::ui::toolbar::build_input::cancel_placement;
+use crate::ui::toolbar::road_type_selector::RoadTypePickerState;
 use crate::ui::toolbar::{
-    BuildMenuAction, BuildMenuUi, ToolbarGroup, ToolbarState, ToolbarTooltipTarget, UiToolState,
+    BuildMenuAction, BuildMenuUi, DragBuildState, ToolbarGroup, ToolbarState, ToolbarTooltipTarget,
+    UiToolState,
 };
 use crate::ui::town_directory::TownDirectoryState;
 
@@ -44,6 +48,21 @@ pub(crate) struct EditorToolbarRoot;
 /// Texto del año en el bloque Date.
 #[derive(Component)]
 pub(crate) struct EditorToolbarDateText;
+
+/// Dropdown Pueblo del editor (Fundar / Casa).
+#[derive(Resource, Default)]
+pub(crate) struct EditorTownMenuState {
+    pub(crate) open: bool,
+}
+
+#[derive(Component)]
+pub(crate) struct EditorTownDropdownRoot;
+
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EditorTownChoice {
+    FoundTown,
+    BuildHouse,
+}
 
 /// Acción de uno de los 19 botones (paridad `ToolbarEditorWidgets`).
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
@@ -216,9 +235,9 @@ pub(crate) fn setup_editor_toolbar(mut commands: Commands) {
                     spawn_editor_btn(bar, action);
                 }
                 spawn_spacer(bar);
+                spawn_editor_btn(bar, EditorToolbarAction::LandGenerate);
+                spawn_editor_town_btn(bar);
                 for action in [
-                    EditorToolbarAction::LandGenerate,
-                    EditorToolbarAction::TownGenerate,
                     EditorToolbarAction::Industry,
                     EditorToolbarAction::Roads,
                     EditorToolbarAction::Trams,
@@ -297,13 +316,119 @@ fn spawn_editor_btn(parent: &mut ChildSpawnerCommands, action: EditorToolbarActi
         });
 }
 
+fn spawn_editor_town_btn(parent: &mut ChildSpawnerCommands) {
+    let action = EditorToolbarAction::TownGenerate;
+    parent
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                min_width: Val::Px(52.0),
+                ..default()
+            },
+            BuildMenuUi,
+            ZIndex(2),
+        ))
+        .with_children(|wrap| {
+            wrap.spawn((
+                Button,
+                action,
+                ToolbarTooltipTarget {
+                    text: "Fundar pueblo / colocar casa",
+                },
+                BuildMenuUi,
+                Node {
+                    min_width: Val::Px(52.0),
+                    height: Val::Px(28.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    border: UiRect::all(Val::Px(1.0)),
+                    padding: UiRect::horizontal(Val::Px(4.0)),
+                    ..default()
+                },
+                BackgroundColor(BTN_BG),
+                BorderColor::all(BTN_BORDER),
+                Interaction::default(),
+                children![(
+                    Text::new(action.label()),
+                    TextFont {
+                        font_size: FontSize::Rem(0.6),
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.95, 0.93, 0.82)),
+                )],
+            ));
+            wrap.spawn((
+                EditorTownDropdownRoot,
+                BuildMenuUi,
+                Node {
+                    position_type: PositionType::Absolute,
+                    top: Val::Px(30.0),
+                    left: Val::Px(0.0),
+                    min_width: Val::Px(140.0),
+                    padding: UiRect::all(Val::Px(4.0)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(2.0),
+                    border: UiRect::all(Val::Px(1.0)),
+                    display: Display::None,
+                    ..default()
+                },
+                BackgroundColor(BAR_BG),
+                BorderColor::all(BTN_BORDER),
+                GlobalZIndex(2200),
+            ))
+            .with_children(|menu| {
+                spawn_town_choice(menu, EditorTownChoice::FoundTown, "Fundar pueblo");
+                spawn_town_choice(menu, EditorTownChoice::BuildHouse, "Colocar casa");
+            });
+        });
+}
+
+fn spawn_town_choice(
+    parent: &mut ChildSpawnerCommands,
+    choice: EditorTownChoice,
+    label: &'static str,
+) {
+    parent
+        .spawn((
+            Button,
+            choice,
+            BuildMenuUi,
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(24.0),
+                justify_content: JustifyContent::FlexStart,
+                align_items: AlignItems::Center,
+                padding: UiRect::horizontal(Val::Px(8.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(BTN_BG),
+            BorderColor::all(BTN_BORDER),
+            Interaction::default(),
+        ))
+        .with_children(|btn| {
+            btn.spawn((
+                Text::new(label),
+                TextFont {
+                    font_size: FontSize::Rem(0.6),
+                    ..default()
+                },
+                TextColor(Color::srgb(0.95, 0.93, 0.82)),
+            ));
+        });
+}
+
 /// Alterna visibilidad: barra editor vs fila de grupos normal (los paneles siguen).
 pub(crate) fn sync_editor_toolbar_visibility(
     editor: Res<EditorSession>,
+    mut town_menu: ResMut<EditorTownMenuState>,
     mut editor_q: Query<&mut Visibility, With<EditorToolbarRoot>>,
     mut groups_q: Query<&mut Node, With<NormalToolbarGroups>>,
     mut normal_root_q: Query<&mut Node, (With<NormalToolbarRoot>, Without<NormalToolbarGroups>)>,
 ) {
+    if !editor.active {
+        town_menu.open = false;
+    }
     let editor_vis = if editor.active {
         Visibility::Visible
     } else {
@@ -348,6 +473,7 @@ pub(crate) fn sync_editor_toolbar_date(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_editor_toolbar_button_visuals(
     editor: Res<EditorSession>,
     run_state: Res<State<SimRunState>>,
@@ -355,6 +481,8 @@ pub(crate) fn sync_editor_toolbar_button_visuals(
     toolbar: Res<ToolbarState>,
     tool: Res<UiToolState>,
     genland: Res<GenLandWindowState>,
+    town_menu: Res<EditorTownMenuState>,
+    road_picker: Res<RoadTypePickerState>,
     mut q: Query<(&EditorToolbarAction, &Interaction, &mut BackgroundColor), With<Button>>,
 ) {
     if !editor.active {
@@ -371,11 +499,20 @@ pub(crate) fn sync_editor_toolbar_button_visuals(
                 genland.open || toolbar.active_group == Some(ToolbarGroup::Landscape)
             }
             EditorToolbarAction::TownGenerate => {
-                tool.active_tool == Some(BuildMenuAction::FoundTown)
+                town_menu.open
+                    || matches!(
+                        tool.active_tool,
+                        Some(BuildMenuAction::FoundTown | BuildMenuAction::BuildHouse)
+                    )
             }
             EditorToolbarAction::Industry => toolbar.active_group == Some(ToolbarGroup::Economy),
-            EditorToolbarAction::Roads | EditorToolbarAction::Trams => {
+            EditorToolbarAction::Roads => {
                 toolbar.active_group == Some(ToolbarGroup::Road)
+                    && road_picker.open != Some(RoadTramType::Tram)
+            }
+            EditorToolbarAction::Trams => {
+                toolbar.active_group == Some(ToolbarGroup::Road)
+                    && road_picker.open == Some(RoadTramType::Tram)
             }
             EditorToolbarAction::Water => toolbar.active_group == Some(ToolbarGroup::Water),
             EditorToolbarAction::Trees => tool.active_tool == Some(BuildMenuAction::PlantTree),
@@ -482,7 +619,7 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
     }
 }
 
-/// Handlers de herramientas / grupos / ventanas.
+/// Ventanas / GenLand / SmallMap / Settings.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_editor_toolbar_tool_buttons(
     editor: Res<EditorSession>,
@@ -557,33 +694,6 @@ pub(crate) fn handle_editor_toolbar_tool_buttons(
                 }
                 genland.open = true;
             }
-            EditorToolbarAction::TownGenerate => {
-                open_group(&mut toolbar, &mut tool, ToolbarGroup::Landscape);
-                tool.active_tool = Some(BuildMenuAction::FoundTown);
-            }
-            EditorToolbarAction::Industry => {
-                open_group(&mut toolbar, &mut tool, ToolbarGroup::Economy);
-            }
-            EditorToolbarAction::Roads => {
-                open_group(&mut toolbar, &mut tool, ToolbarGroup::Road);
-            }
-            EditorToolbarAction::Trams => {
-                open_group(&mut toolbar, &mut tool, ToolbarGroup::Road);
-                feedback.message =
-                    Some("Tranvía: usar herramientas tram del panel Carretera".into());
-                feedback.expires_at_secs = time.elapsed_secs() + 3.0;
-            }
-            EditorToolbarAction::Water => {
-                open_group(&mut toolbar, &mut tool, ToolbarGroup::Water);
-            }
-            EditorToolbarAction::Trees => {
-                open_group(&mut toolbar, &mut tool, ToolbarGroup::Landscape);
-                tool.active_tool = Some(BuildMenuAction::PlantTree);
-            }
-            EditorToolbarAction::Signs => {
-                open_group(&mut toolbar, &mut tool, ToolbarGroup::Landscape);
-                tool.active_tool = Some(BuildMenuAction::PlaceSign);
-            }
             EditorToolbarAction::MusicSound => {
                 sound.open = true;
             }
@@ -593,6 +703,117 @@ pub(crate) fn handle_editor_toolbar_tool_buttons(
             }
             _ => {}
         }
+    }
+}
+
+/// Dropdown Pueblo + paneles Road/Water/Landscape del editor.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn handle_editor_toolbar_build_buttons(
+    editor: Res<EditorSession>,
+    buttons: Query<
+        (&Interaction, &EditorToolbarAction),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            With<EditorToolbarAction>,
+        ),
+    >,
+    mut toolbar: ResMut<ToolbarState>,
+    mut tool: ResMut<UiToolState>,
+    mut town_menu: ResMut<EditorTownMenuState>,
+    mut road_picker: ResMut<RoadTypePickerState>,
+) {
+    if !editor.active {
+        return;
+    }
+    for (interaction, action) in &buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        match *action {
+            EditorToolbarAction::TownGenerate => {
+                town_menu.open = !town_menu.open;
+                tool.block_map_click = true;
+            }
+            EditorToolbarAction::Industry => {
+                town_menu.open = false;
+                open_group(&mut toolbar, &mut tool, ToolbarGroup::Economy);
+            }
+            EditorToolbarAction::Roads => {
+                town_menu.open = false;
+                open_group(&mut toolbar, &mut tool, ToolbarGroup::Road);
+                road_picker.open = Some(RoadTramType::Road);
+                road_picker.filter.clear();
+            }
+            EditorToolbarAction::Trams => {
+                town_menu.open = false;
+                open_group(&mut toolbar, &mut tool, ToolbarGroup::Road);
+                road_picker.open = Some(RoadTramType::Tram);
+                road_picker.filter.clear();
+            }
+            EditorToolbarAction::Water => {
+                town_menu.open = false;
+                open_group(&mut toolbar, &mut tool, ToolbarGroup::Water);
+            }
+            EditorToolbarAction::Trees => {
+                town_menu.open = false;
+                open_group(&mut toolbar, &mut tool, ToolbarGroup::Landscape);
+                tool.active_tool = Some(BuildMenuAction::PlantTree);
+            }
+            EditorToolbarAction::Signs => {
+                town_menu.open = false;
+                open_group(&mut toolbar, &mut tool, ToolbarGroup::Landscape);
+                tool.active_tool = Some(BuildMenuAction::PlaceSign);
+            }
+            _ => {}
+        }
+    }
+}
+
+pub(crate) fn sync_editor_town_dropdown(
+    state: Res<EditorTownMenuState>,
+    mut roots: Query<&mut Node, With<EditorTownDropdownRoot>>,
+) {
+    let display = if state.open {
+        Display::Flex
+    } else {
+        Display::None
+    };
+    for mut node in &mut roots {
+        node.display = display;
+    }
+}
+
+pub(crate) fn handle_editor_town_dropdown(
+    editor: Res<EditorSession>,
+    mut state: ResMut<EditorTownMenuState>,
+    mut toolbar: ResMut<ToolbarState>,
+    mut tool: ResMut<UiToolState>,
+    mut drag: ResMut<DragBuildState>,
+    choices: Query<
+        (&Interaction, &EditorTownChoice),
+        (Changed<Interaction>, With<Button>, With<EditorTownChoice>),
+    >,
+) {
+    if !editor.active || !state.open {
+        return;
+    }
+    for (interaction, choice) in &choices {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        open_group(&mut toolbar, &mut tool, ToolbarGroup::Landscape);
+        tool.active_tool = Some(match *choice {
+            EditorTownChoice::FoundTown => BuildMenuAction::FoundTown,
+            EditorTownChoice::BuildHouse => BuildMenuAction::BuildHouse,
+        });
+        // BuildHouse vive en panel Economía; abrir ambos grupos no aplica — Landscape + tool.
+        if *choice == EditorTownChoice::BuildHouse {
+            toolbar.active_group = Some(ToolbarGroup::Economy);
+        }
+        cancel_placement(&mut drag);
+        state.open = false;
+        tool.block_map_click = true;
     }
 }
 

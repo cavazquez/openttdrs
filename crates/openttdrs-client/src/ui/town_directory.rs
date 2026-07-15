@@ -6,7 +6,7 @@ use bevy::text::EditableText;
 
 use crate::iso::tile_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
-use crate::state::SimWorld;
+use crate::state::{EditorSession, SimWorld};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_CREAM, WINDOW_TEXT,
     spawn_floating_window, window_text_font,
@@ -180,6 +180,7 @@ pub(crate) fn town_directory_search_keyboard(
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_town_directory_buttons(
+    editor: Res<EditorSession>,
     mut state: ResMut<TownDirectoryState>,
     sort_buttons: Query<
         (&Interaction, &TownDirectorySortButton),
@@ -213,7 +214,7 @@ pub(crate) fn handle_town_directory_buttons(
         }
     }
     for interaction in &fund_buttons {
-        if *interaction != Interaction::Pressed {
+        if *interaction != Interaction::Pressed || !editor.active {
             continue;
         }
         toolbar.active_group = Some(ToolbarGroup::Landscape);
@@ -240,6 +241,7 @@ pub(crate) fn handle_town_directory_buttons(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn sync_town_directory(
+    editor: Res<EditorSession>,
     state: Res<TownDirectoryState>,
     sim: Res<SimWorld>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
@@ -252,6 +254,7 @@ pub(crate) fn sync_town_directory(
         (&TownDirectorySortButton, &Interaction, &mut BackgroundColor),
         With<Button>,
     >,
+    mut fund_btn: Query<&mut Node, With<TownDirectoryFundButton>>,
 ) {
     let Some((_, mut visibility)) = root_q
         .iter_mut()
@@ -259,6 +262,13 @@ pub(crate) fn sync_town_directory(
     else {
         return;
     };
+    for mut node in &mut fund_btn {
+        node.display = if editor.active {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
     if !state.open {
         *visibility = Visibility::Hidden;
         cache.rows.clear();
@@ -369,6 +379,7 @@ pub(crate) fn town_directory_on_closed(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::state::EditorSession;
     use bevy::ecs::system::RunSystemOnce;
 
     #[test]
@@ -399,6 +410,7 @@ mod tests {
     #[test]
     fn town_row_opens_existing_town_window() {
         let mut world = World::new();
+        world.insert_resource(EditorSession::inactive());
         world.init_resource::<TownDirectoryState>();
         world.init_resource::<TownWindowState>();
         world.init_resource::<ToolbarState>();
@@ -422,6 +434,7 @@ mod tests {
     #[test]
     fn fund_button_arms_found_town_tool() {
         let mut world = World::new();
+        world.insert_resource(EditorSession::active());
         world.init_resource::<TownDirectoryState>();
         world.resource_mut::<TownDirectoryState>().open = true;
         world.init_resource::<TownWindowState>();
@@ -450,6 +463,7 @@ mod tests {
     #[test]
     fn town_row_centers_camera_on_town() {
         let mut world = World::new();
+        world.insert_resource(EditorSession::inactive());
         world.init_resource::<TownDirectoryState>();
         world.init_resource::<TownWindowState>();
         world.init_resource::<ToolbarState>();

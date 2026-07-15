@@ -194,8 +194,9 @@ pub use map::{
     OBJECT_TYPE_TRANSMITTER, OTTD_MP_RAILWAY, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE,
     OTTD_TILETYPE_TUNNELBRIDGE, RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER,
     RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, RAIL_TILE_DEPOT,
-    RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, TILE_PIXEL_HEIGHT,
-    TREE_GROWTH_TICK_INTERVAL, Tile, TileCoord, TileKind, WaterClass,
+    RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, RAIL_TOUCHING_SIDE_NE, RAIL_TOUCHING_SIDE_NW,
+    RAIL_TOUCHING_SIDE_SE, RAIL_TOUCHING_SIDE_SW, SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW,
+    TILE_PIXEL_HEIGHT, TREE_GROWTH_TICK_INTERVAL, Tile, TileCoord, TileKind, WaterClass,
     advance_industry_animated_tiles, advance_industry_construction,
     advance_industry_tile_animations, advance_industry_tile_loop_events, airport_radar_frame,
     apply_seasonal_snow, clear_tree, coord_from_linear_index, coord_to_dense_index,
@@ -206,9 +207,10 @@ pub use map::{
     industry_tiles_mergeable, industry_uses_water_ground, init_industry_tile_random,
     is_airport_tower_tile, is_canal_tile, is_industry_completed, is_map_object_tile,
     is_owned_land_tile, is_river_tile, is_tunnel_entrance_slope, make_industry_tile_bigger,
-    make_water_tile, openttd_tile_index_to_coord, partial_pixel_z, plant_tree,
-    rail_foundation_for_trackbits, rail_tile_is_signals, rail_trackbits_valid_on_slope,
-    resolve_tunnel_end, river_tile_is_ship_navigable, set_industry_gfx, set_industry_random_bits,
+    make_water_tile, openttd_tile_index_to_coord, partial_pixel_z, plant_tree, rail_bit_for_sides,
+    rail_bits_touching_side, rail_foundation_for_trackbits, rail_tile_is_signals,
+    rail_trackbits_valid_on_slope, rail_traversal_bits, resolve_tunnel_end,
+    river_tile_is_ship_navigable, set_industry_gfx, set_industry_random_bits,
     set_industry_random_triggers, set_water_class_m1, slope_dz_at_subtile, slope_dz_on_tile,
     slope_pixel_z, step_airport_tiles, step_industry_tiles, step_industry_tiles_with_seed,
     step_tree_and_field_growth, tick_tree_tile_loop, tile_adjacent_to_water, tile_has_water_class,
@@ -296,9 +298,9 @@ pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
     PathCache, PathNetwork, TunnelWormholes, diag_dir_offset, find_path, find_path_cached,
     find_path_with_wormholes, find_rail_path_for_engine, path_network_for_vehicle,
-    rail_bit_for_sides, station_entrance_faces_rail, station_entrance_faces_road,
-    station_site_adjacent_to_rail, station_site_adjacent_to_transport,
-    station_site_tile_allows_build, station_site_tile_needs_clear, tile_is_path_traversable,
+    station_entrance_faces_rail, station_entrance_faces_road, station_site_adjacent_to_rail,
+    station_site_adjacent_to_transport, station_site_tile_allows_build,
+    station_site_tile_needs_clear, tile_is_path_traversable,
 };
 pub use pathfinding_settings::{
     DEFAULT_PATH_BACKOFF_INTERVAL, DEFAULT_WAIT_FOR_PBS_PATH_DAYS, PBS_WAIT_FOREVER,
@@ -423,8 +425,7 @@ pub use train_consist::{
 };
 pub use train_movement::{
     ACCEL_SLOWDOWN, AccelSlowdownParams, DELTACOORD_LEAVE_OFFSET, FRACTCOORDS_BEHIND,
-    FRACTCOORDS_ENTER, RAIL_TOUCHING_SIDE_NE, RAIL_TOUCHING_SIDE_NW, RAIL_TOUCHING_SIDE_SE,
-    RAIL_TOUCHING_SIDE_SW, TRAIN_UPDATE_SPEED_ACCEL_MUL, TRAIN_UPDATE_SPEED_BRAKE_MUL,
+    FRACTCOORDS_ENTER, TRAIN_UPDATE_SPEED_ACCEL_MUL, TRAIN_UPDATE_SPEED_BRAKE_MUL,
     TUNNEL_VISIBILITY_FRAME, VEHICLE_INITIAL_X_FRACT, VEHICLE_INITIAL_Y_FRACT, VEHICLE_SUBCOORD,
     VehicleSubcoord, affect_speed_by_z_change, diag_dir_index, dir_difference, is_45_degree_turn,
     is_diagonal_rail_piece, openttd_subcoord_at_entry, rail_track_index, track_bit_for_movement,

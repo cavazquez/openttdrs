@@ -12,6 +12,7 @@ pub mod level_crossing;
 pub mod object;
 pub mod rail_bits;
 pub mod rail_slope;
+pub mod rail_topology;
 pub mod road_bits;
 pub mod slope;
 pub mod station_tile_anim;
@@ -63,6 +64,10 @@ pub use rail_bits::{
     RAIL_TILE_SIGNALS, effective_rail_trackbits, rail_tile_is_signals,
 };
 pub use rail_slope::{rail_foundation_for_trackbits, rail_trackbits_valid_on_slope};
+pub use rail_topology::{
+    RAIL_TOUCHING_SIDE_NE, RAIL_TOUCHING_SIDE_NW, RAIL_TOUCHING_SIDE_SE, RAIL_TOUCHING_SIDE_SW,
+    rail_bit_for_sides, rail_bits_touching_side, rail_traversal_bits,
+};
 pub use road_bits::{OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE, effective_road_bits};
 pub use slope::{
     SLOPE_NE, SLOPE_NW, SLOPE_SE, SLOPE_SW, TILE_PIXEL_HEIGHT, complement_slope, diag_dir_offset,

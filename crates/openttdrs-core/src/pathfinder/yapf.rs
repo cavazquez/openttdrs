@@ -6,18 +6,16 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 
-use crate::map::{Map, TileCoord, TileKind};
+use crate::map::{
+    Map, RAIL_TB_X, TileCoord, TileKind, rail_bit_for_sides, rail_bits_touching_side,
+    rail_traversal_bits,
+};
 use crate::rail_pbs::{YAPF_RESERVATION_CROSS_PENALTY, tile_track_reserved_by_map};
 use crate::rail_signals::{YapfSignalRouting, yapf_routing_signal};
-use crate::station::is_rail_waypoint_tile;
 
 use super::{
-    TunnelWormholes, is_rail_network_tile, rail_bit_for_sides, station_entrance_faces_rail,
+    TunnelWormholes, is_rail_network_tile, is_rail_station_tile, station_entrance_faces_rail,
 };
-
-const RAIL_TB_X: u8 = 0x01;
-const RAIL_TB_Y: u8 = 0x02;
-const RAIL_TB_CROSS: u8 = RAIL_TB_X | RAIL_TB_Y;
 
 /// Lado de entrada libre al iniciar la búsqueda.
 const ENTRY_ANY: u8 = 4;
@@ -101,40 +99,15 @@ const fn pathfinder_dir_to_yapf(d: u8) -> u8 {
 }
 
 #[must_use]
-const fn rail_bits_touching_side(side: u8) -> u8 {
-    match side & 3 {
-        0 => 0x25,
-        1 => 0x2A,
-        2 => 0x19,
-        _ => 0x16,
-    }
-}
-
-#[must_use]
-fn is_rail_station_tile(tile: &crate::map::Tile) -> bool {
-    tile.kind == TileKind::Station && (tile.m6 >> 3).trailing_zeros() >= 4
-}
-
-#[must_use]
 fn yapf_traversal_bits(map: &Map, c: TileCoord) -> u8 {
     let Some(t) = map.get(c) else {
         return 0;
     };
-    match t.kind {
-        TileKind::Rail => {
-            let tb = t.m5 & 0x3F;
-            if tb == 0 { RAIL_TB_X } else { tb }
-        }
-        TileKind::RailTunnel | TileKind::RailBridge => RAIL_TB_CROSS,
-        TileKind::RailDepot => {
-            let mouth_pf = t.m5 & 0x03;
-            rail_bits_touching_side(mouth_pf)
-        }
-        TileKind::Station if is_rail_station_tile(&t) || is_rail_waypoint_tile(&t) => {
-            if t.m5 & 1 != 0 { RAIL_TB_Y } else { RAIL_TB_X }
-        }
-        _ => 0,
+    if t.kind == TileKind::RailDepot {
+        let mouth_pf = t.m5 & 0x03;
+        return rail_bits_touching_side(mouth_pf);
     }
+    rail_traversal_bits(map, c)
 }
 
 /// Boca del depósito (`m5 & 3`) en convención pathfinder (como el A* legado).

@@ -1,6 +1,8 @@
 //! Tablas y constantes ferroviarias portadas de `OpenTTD` (golden en
 //! `tests/golden_rail.rs` contra `tests/fixtures/parity/train_movement_golden.json`).
 
+use crate::map::rail_bits_touching_side;
+
 /// Parámetros de frenado en curva y cambio de altura (`train_cmd.cpp:3147`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AccelSlowdownParams {
@@ -244,22 +246,6 @@ pub const VEHICLE_SUBCOORD: [[Option<VehicleSubcoord>; 6]; 4] = [
     ],
 ];
 
-/// Máscara de trackbits que tocan un lado diagonal (`_track_bits_by_diagdir`).
-pub const RAIL_TOUCHING_SIDE_NE: u8 = 0x25;
-pub const RAIL_TOUCHING_SIDE_SE: u8 = 0x2A;
-pub const RAIL_TOUCHING_SIDE_SW: u8 = 0x19;
-pub const RAIL_TOUCHING_SIDE_NW: u8 = 0x16;
-
-#[must_use]
-const fn rail_bits_touching_side(enter_diag: u8) -> u8 {
-    match diag_dir_index(enter_diag) {
-        0 => RAIL_TOUCHING_SIDE_NE,
-        1 => RAIL_TOUCHING_SIDE_SE,
-        2 => RAIL_TOUCHING_SIDE_SW,
-        _ => RAIL_TOUCHING_SIDE_NW,
-    }
-}
-
 /// Trackbit usado al entrar en la tesela en dirección `enter_diag` (NE/SE/SW/NW).
 #[must_use]
 pub fn track_bit_for_movement(enter_diag: u8, track_bits: u8) -> Option<u8> {
@@ -267,7 +253,13 @@ pub fn track_bit_for_movement(enter_diag: u8, track_bits: u8) -> Option<u8> {
     if tb == 0 {
         return None;
     }
-    let mask = rail_bits_touching_side(enter_diag);
+    let side = match diag_dir_index(enter_diag) {
+        0 => 0u8,
+        1 => 1,
+        2 => 2,
+        _ => 3,
+    };
+    let mask = rail_bits_touching_side(side);
     let bits = tb & mask;
     let pick = if bits.is_power_of_two() {
         bits

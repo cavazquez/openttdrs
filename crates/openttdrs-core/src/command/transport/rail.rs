@@ -137,7 +137,7 @@ pub fn rail_trackbits_from_neighbors(map: &Map, c: TileCoord) -> u8 {
             for a in 0..4u8 {
                 for b in (a + 1)..4 {
                     if sides[a as usize] && sides[b as usize] {
-                        bits |= crate::pathfinder::rail_bit_for_sides(a, b);
+                        bits |= crate::map::rail_bit_for_sides(a, b);
                     }
                 }
             }

@@ -2,16 +2,15 @@ use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 
 use crate::aircraft_movement::straight_line_path;
-use crate::map::{Map, Tile, TileCoord, TileKind, openttd_tile_index_to_coord};
+use crate::map::{
+    Map, Tile, TileCoord, TileKind, openttd_tile_index_to_coord, rail_bit_for_sides,
+    rail_bits_touching_side, rail_traversal_bits,
+};
 use crate::ship_movement::{is_water_network_tile_at, water_tiles_connected};
-use crate::station::is_rail_waypoint_tile;
 use crate::tnbp_decode::JgrTunnelRecord;
 use crate::vehicle::VehicleKind;
 
 pub mod yapf;
-
-const RAIL_TB_X: u8 = 0x01;
-const RAIL_TB_Y: u8 = 0x02;
 
 fn is_any_transport_tile(kind: TileKind) -> bool {
     matches!(
@@ -262,63 +261,9 @@ fn effective_tram_bits(map: &Map, c: TileCoord) -> u8 {
     }
 }
 
-const RAIL_TB_CROSS: u8 = RAIL_TB_X | RAIL_TB_Y;
-
-/// Trackbit que conecta dos lados (`DiagDir`) de una tesela (`track_type.h`):
-/// X = NE↔SW, Y = SE↔NW, UPPER = NE↔NW, LOWER = SE↔SW, LEFT = SW↔NW, RIGHT = NE↔SE.
-#[must_use]
-pub const fn rail_bit_for_sides(a: u8, b: u8) -> u8 {
-    let (lo, hi) = if (a & 3) < (b & 3) {
-        (a & 3, b & 3)
-    } else {
-        (b & 3, a & 3)
-    };
-    match (lo, hi) {
-        (0, 2) => 0x01, // X
-        (1, 3) => 0x02, // Y
-        (0, 3) => 0x04, // UPPER
-        (1, 2) => 0x08, // LOWER
-        (2, 3) => 0x10, // LEFT
-        (0, 1) => 0x20, // RIGHT
-        _ => 0,
-    }
-}
-
-/// Máscara de trackbits que tocan un lado (`_track_bits_by_diagdir` de `OpenTTD`).
-#[must_use]
-const fn rail_bits_touching_side(side: u8) -> u8 {
-    match side & 3 {
-        0 => 0x25, // NE: X | UPPER | RIGHT
-        1 => 0x2A, // SE: Y | LOWER | RIGHT
-        2 => 0x19, // SW: X | LOWER | LEFT
-        _ => 0x16, // NW: Y | UPPER | LEFT
-    }
-}
-
 #[must_use]
 const fn opposite_dir(d: u8) -> u8 {
     (d + 2) & 3
-}
-
-/// Trackbits transitables de una tesela de la red ferroviaria (sin depósitos,
-/// que se tratan aparte porque solo conectan por su boca).
-#[must_use]
-fn rail_traversal_bits(map: &Map, c: TileCoord) -> u8 {
-    let Some(t) = map.get(c) else {
-        return 0;
-    };
-    match t.kind {
-        TileKind::Rail => {
-            let tb = t.m5 & 0x3F;
-            if tb == 0 { RAIL_TB_X } else { tb }
-        }
-        TileKind::RailTunnel | TileKind::RailBridge => RAIL_TB_CROSS,
-        // Andenes y waypoints: vía a lo largo del eje en `m5` bit 0.
-        TileKind::Station if is_rail_station_tile(&t) || is_rail_waypoint_tile(&t) => {
-            if t.m5 & 1 != 0 { RAIL_TB_Y } else { RAIL_TB_X }
-        }
-        _ => 0,
-    }
 }
 
 /// Boca del depósito de vía (`m5 & 3`) si la tesela es un depósito.
@@ -884,6 +829,7 @@ fn reconstruct(
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::map::{RAIL_TB_X, RAIL_TB_Y};
     use crate::tnbp_decode::JgrTunnelRecord;
 
     #[test]

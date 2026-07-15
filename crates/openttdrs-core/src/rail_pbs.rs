@@ -9,11 +9,12 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::map::rail_traversal_bits;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::rail_signals::{
     SIGTYPE_BLOCK, YapfSignalRouting, dir_from_to, is_pbs_signal_type, rail_signal_present_mask,
-    rail_tile_is_signals, rail_traversal_bits, signal_exit_dir, signal_track_for_bit,
-    signal_type_for_track, yapf_routing_signal,
+    rail_tile_is_signals, signal_exit_dir, signal_track_for_bit, signal_type_for_track,
+    yapf_routing_signal,
 };
 use crate::train_movement::track_bit_for_movement;
 use crate::vehicle::{Vehicle, VehicleKind};
@@ -524,7 +525,7 @@ fn append_platform_reservation(
         if out.len() >= MAX_TRAIN_RESERVATION_LEN {
             break;
         }
-        let tb = crate::rail_signals::rail_traversal_bits(map, tile);
+        let tb = rail_traversal_bits(map, tile);
         let track = (0..6u8)
             .find_map(|i| {
                 let bit = 1_u8 << i;

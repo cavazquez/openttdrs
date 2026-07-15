@@ -4,13 +4,13 @@ use std::collections::{HashMap, HashSet};
 
 use crate::map::{
     Map, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER, RAIL_TB_VERT,
-    RAIL_TB_X, RAIL_TB_Y, TileCoord, TileKind,
+    RAIL_TB_X, RAIL_TB_Y, TileCoord, TileKind, rail_bits_touching_side,
 };
 use crate::news::{CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day};
-use crate::station::is_rail_waypoint_tile;
 use crate::tick::GameTick;
 use crate::vehicle::{Vehicle, VehicleKind};
 
+pub(crate) use crate::map::rail_traversal_bits;
 pub use crate::map::{RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, rail_tile_is_signals};
 
 /// Pieza de vía sobre la que se coloca una señal (`Track` en `track_type.h`).
@@ -188,25 +188,6 @@ pub fn signal_is_green(m3hi: u8, sig_bit: u8) -> bool {
     (rail_signal_state_mask(m3hi) >> sig_bit) & 1 != 0
 }
 
-/// Trackbits transitables (misma lógica que el pathfinder).
-#[must_use]
-pub(crate) fn rail_traversal_bits(map: &Map, c: TileCoord) -> u8 {
-    let Some(t) = map.get(c) else {
-        return 0;
-    };
-    match t.kind {
-        TileKind::Rail => {
-            let tb = t.m5 & 0x3F;
-            if tb == 0 { RAIL_TB_X } else { tb }
-        }
-        TileKind::RailTunnel | TileKind::RailBridge => RAIL_TB_X | RAIL_TB_Y,
-        TileKind::Station if is_rail_station_tile_kind(&t) || is_rail_waypoint_tile(&t) => {
-            if t.m5 & 1 != 0 { RAIL_TB_Y } else { RAIL_TB_X }
-        }
-        _ => 0,
-    }
-}
-
 #[must_use]
 const fn opposite_dir(d: u8) -> u8 {
     (d + 2) & 3
@@ -219,16 +200,6 @@ const fn diag_dir_offset(d: u8) -> (i32, i32) {
         1 => (0, 1),
         2 => (-1, 0),
         _ => (0, -1),
-    }
-}
-
-#[must_use]
-const fn rail_bits_touching_side(side: u8) -> u8 {
-    match side & 3 {
-        0 => 0x25,
-        1 => 0x2A,
-        2 => 0x19,
-        _ => 0x16,
     }
 }
 
@@ -368,11 +339,6 @@ pub fn rail_block_ahead_with_wormholes(
     }
     block.extend(junction_spur_tiles(map, &block, exit_dir));
     block
-}
-
-#[must_use]
-fn is_rail_station_tile_kind(tile: &crate::map::Tile) -> bool {
-    tile.kind == TileKind::Station && (tile.m6 >> 3).trailing_zeros() >= 4
 }
 
 /// `true` si algún tren ocupa el bloque protegido por la señal en `signal_tile`.

@@ -11,8 +11,8 @@ mod tests;
 pub(crate) use setup::setup_main_menu;
 pub(crate) use systems::{
     apply_pending_heightmap_on_enter, auto_start_preloaded_json, leave_main_menu,
-    main_menu_continue_interaction, main_menu_highscores_interaction, main_menu_interaction,
-    main_menu_options_interaction, main_menu_preferences_interaction,
+    main_menu_continue_interaction, main_menu_editor_interaction, main_menu_highscores_interaction,
+    main_menu_interaction, main_menu_options_interaction, main_menu_preferences_interaction,
     main_menu_roughness_interaction, main_menu_scenarios_interaction, main_menu_sound_interaction,
     return_to_main_menu, sync_main_menu_continue_button, sync_main_menu_heightmap_slots,
     sync_main_menu_highscores, sync_main_menu_panel_visibility, sync_main_menu_preferences,
@@ -64,6 +64,9 @@ pub(crate) struct MainMenuLoadButton;
 
 #[derive(Component)]
 pub(crate) struct MainMenuDemoButton;
+
+#[derive(Component)]
+pub(crate) struct MainMenuEditorButton;
 
 #[derive(Component)]
 pub(crate) struct MainMenuHighscoresButton;

@@ -14,7 +14,7 @@ use crate::render::{
 };
 use crate::simulation::SimClock;
 use crate::state::ingame_lifecycle::InGameUi;
-use crate::state::{ClientScreen, OrderPickState};
+use crate::state::{ClientScreen, EditorSession, OrderPickState};
 
 use super::SaveWindowState;
 use super::ai_settings_window::AiSettingsWindowState;
@@ -273,6 +273,21 @@ pub(crate) fn leave_ingame(world: &mut World) {
     }
     if let Some(mut cheats) = world.get_resource_mut::<CheatWindowState>() {
         *cheats = CheatWindowState::default();
+    }
+    // Si hay partida suspendida, conservar flag de editor para «Continuar».
+    let suspending = world
+        .get_resource::<crate::state::SuspendedGameSession>()
+        .is_some_and(|s| s.active);
+    let editor_active = world
+        .get_resource::<EditorSession>()
+        .is_some_and(|e| e.active);
+    if suspending
+        && let Some(mut suspended) = world.get_resource_mut::<crate::state::SuspendedGameSession>()
+    {
+        suspended.editor = editor_active;
+    }
+    if let Some(mut editor) = world.get_resource_mut::<EditorSession>() {
+        *editor = EditorSession::inactive();
     }
     if let Some(mut endscreen) = world.get_resource_mut::<EndScreenState>() {
         *endscreen = EndScreenState::default();

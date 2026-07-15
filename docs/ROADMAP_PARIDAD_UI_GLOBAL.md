@@ -683,7 +683,7 @@ Objetivo de cobertura global: **~65–68 %**.
 - [x] BuildWaypoint road MVP (`PlaceRoadWaypoint` + botón toolbar; órdenes road vía `VehicleOrder::Waypoint`).
 - [x] Airport picker extensible.
 - [~] BuildObject genérico. *(BuyLand + faro/transmisor jugables UI-6; NewGRF Objects → OOS post UI-7)*
-- [~] Separar herramientas sandbox/editor. *(etiquetadas «editor» en Economía/Agua; modo editor UI-8)*
+- [~] Separar herramientas sandbox/editor. *(#42 Fase 1: `EditorSession` + menú Editor; ocultar sandbox en SP queda OOS)*
 
 ### Criterios de aceptación
 
@@ -739,7 +739,7 @@ Objetivo: posterior a la paridad single-player.
 - [x] Multi-compañía demolish/build: no pisar/demoler infra ajena (`TileNotOwned`).
 - [x] Multi-compañía SP: activa + IA + ownership/finanzas mínimas. *(«segunda humana» local descartada — #41 wontfix; humanas extra → MP #21)*
 - [ ] Multijugador: lobby, clientes, chat, join/spectate.
-- [ ] Scenario editor y toolbar de 19 botones.
+- [~] Scenario editor y toolbar de 19 botones. *(#42 Fase 1 ✅: menú Editor + sandbox + FoundTown en Paisaje + Guardar escenario; toolbar 19 OTTD OOS)*
 - [ ] GameScript: story, goals, league.
 - [x] AI settings/debug. *(ventana Ajustes + Finanzas; `GameState.ai`)*
 - [x] Herramientas dev: framerate / consola corta, tile inspect, NewGRF inspect,
@@ -943,7 +943,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** editor (#42). Consola/cheats formales ✅ (#45).
+**Siguiente:** red (#21) o toolbar editor 19 botones (resto #42). Editor MVP ✅ (#42 Fase 1).
 
 Progreso UI-8 (multi-compañía mínima):
 

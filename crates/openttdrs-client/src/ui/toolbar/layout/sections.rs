@@ -661,6 +661,11 @@ pub(super) fn spawn_secondary_tool_panels(
                             BuildMenuAction::LevelLand,
                         ),
                         (
+                            "Fundar pueblo",
+                            "assets/opengfx/tiles/house_church_build.png",
+                            BuildMenuAction::FoundTown,
+                        ),
+                        (
                             "Comprar terreno (objeto)",
                             "assets/opengfx/tiles/object_bought_land.png",
                             BuildMenuAction::BuyLand,

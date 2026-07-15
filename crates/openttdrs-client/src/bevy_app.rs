@@ -25,7 +25,7 @@ use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
 use crate::render_trace::RenderTracePlugin;
 use crate::settings::{ClientSettingsPlugin, patch_window_plugin_for_settings};
 use crate::simulation::SimulationPlugin;
-use crate::state::{ClientScreen, SimWorld, SuspendedGameSession};
+use crate::state::{ClientScreen, EditorSession, SimWorld, SuspendedGameSession};
 #[cfg(target_os = "linux")]
 use crate::tray::TrayIconPlugin;
 use crate::ui::ClientUiPlugin;
@@ -127,6 +127,7 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
     app.add_sub_state::<crate::state::OrderPickState>();
     app.init_resource::<SimWorld>();
     app.init_resource::<SuspendedGameSession>();
+    app.init_resource::<EditorSession>();
     crate::audio::insert_asset_root(&mut app, asset_root);
     app.insert_resource(RemSize(14.0));
     app.add_plugins((

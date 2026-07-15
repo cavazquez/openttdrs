@@ -18,6 +18,7 @@ upstream `OpenTTD/src/intro_gui.cpp` (`SelectGameWindow`), `OpenTTD/src/genworld
 | Nueva partida | `GenerateLandscapeWindow` | Subpantalla: clima, tamaño, año, semilla, densidades, capital, relieve |
 | Fondo | Intro game animado | Isla procedural + paneo + agua + tráfico (bus/camión/tren/barco) |
 | Escenarios / heightmap | Nativo | `save/scenarios/` + `save/heightmaps/*.hmap` |
+| Scenario editor | Toolbar 19 botones | MVP (#42 Fase 1): menú «Editor de escenarios» + sandbox |
 | Audio | Theme + SFX | Theme menú + ventana Sonido/música |
 | Preferencias | Resolución / idioma | Resolución persistida; idioma placeholder `es` |
 

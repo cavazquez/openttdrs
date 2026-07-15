@@ -454,6 +454,8 @@ pub(crate) enum SaveMenuAction {
     TileInspector,
     /// Ventana formal de cheats (#45).
     Cheats,
+    /// Guardar JSON en `save/scenarios/` (editor #42).
+    SaveScenario,
     /// Retiro voluntario → endscreen / highscore.
     EndGame,
     ReturnToMainMenu,
@@ -482,6 +484,7 @@ impl SaveMenuAction {
         Self::DevConsole,
         Self::TileInspector,
         Self::Cheats,
+        Self::SaveScenario,
         Self::EndGame,
         Self::ReturnToMainMenu,
     ];

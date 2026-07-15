@@ -14,13 +14,14 @@ use super::widgets::{
 };
 use super::{
     MainMenuBackButton, MainMenuContinueButton, MainMenuContinueWrap, MainMenuDemoButton,
-    MainMenuDensityTarget, MainMenuHeightmapSlot, MainMenuHighscoresButton, MainMenuHighscoresText,
-    MainMenuHintsText, MainMenuLanguageLabel, MainMenuLoadButton, MainMenuMapSizeButton,
-    MainMenuNewGameButton, MainMenuOpenHeightmapsDirButton, MainMenuOpenScenariosDirButton,
-    MainMenuPanel, MainMenuPreferencesButton, MainMenuQuitButton, MainMenuQuitConfirmNo,
-    MainMenuQuitConfirmYes, MainMenuResolutionButton, MainMenuScenariosButton,
-    MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuSoundButton, MainMenuStartButton,
-    MainMenuSubPanel, MainMenuSummaryText, MainMenuTitleText, MainMenuToggle, MainMenuUi,
+    MainMenuDensityTarget, MainMenuEditorButton, MainMenuHeightmapSlot, MainMenuHighscoresButton,
+    MainMenuHighscoresText, MainMenuHintsText, MainMenuLanguageLabel, MainMenuLoadButton,
+    MainMenuMapSizeButton, MainMenuNewGameButton, MainMenuOpenHeightmapsDirButton,
+    MainMenuOpenScenariosDirButton, MainMenuPanel, MainMenuPreferencesButton, MainMenuQuitButton,
+    MainMenuQuitConfirmNo, MainMenuQuitConfirmYes, MainMenuResolutionButton,
+    MainMenuScenariosButton, MainMenuSeedDecButton, MainMenuSeedIncButton, MainMenuSoundButton,
+    MainMenuStartButton, MainMenuSubPanel, MainMenuSummaryText, MainMenuTitleText, MainMenuToggle,
+    MainMenuUi,
 };
 
 pub(crate) fn setup_main_menu(mut commands: Commands) {
@@ -141,6 +142,11 @@ fn spawn_root_panel(parent: &mut ChildSpawnerCommands) {
             menu.spawn(secondary_button(
                 MainMenuScenariosButton,
                 "Escenarios / heightmap",
+                42.0,
+            ));
+            menu.spawn(secondary_button(
+                MainMenuEditorButton,
+                "Editor de escenarios",
                 42.0,
             ));
             menu.spawn(secondary_button(

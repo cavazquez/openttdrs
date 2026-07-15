@@ -197,6 +197,11 @@ pub(super) fn spawn_settings_buttons(buttons: &mut ChildSpawnerCommands) {
             SaveMenuAction::Cheats,
         ),
         (
+            "Guardar escenario...",
+            "JSON en save/scenarios/ (editor #42)",
+            SaveMenuAction::SaveScenario,
+        ),
+        (
             "Finalizar partida",
             "Retiro voluntario → puntuación y menú",
             SaveMenuAction::EndGame,

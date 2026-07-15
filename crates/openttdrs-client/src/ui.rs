@@ -135,11 +135,12 @@ use industry_panel::{
 };
 use main_menu::{
     apply_pending_heightmap_on_enter, auto_start_preloaded_json, main_menu_continue_interaction,
-    main_menu_highscores_interaction, main_menu_interaction, main_menu_options_interaction,
-    main_menu_preferences_interaction, main_menu_roughness_interaction,
-    main_menu_scenarios_interaction, main_menu_sound_interaction, setup_main_menu,
-    sync_main_menu_continue_button, sync_main_menu_heightmap_slots, sync_main_menu_highscores,
-    sync_main_menu_panel_visibility, sync_main_menu_preferences, sync_main_menu_summary,
+    main_menu_editor_interaction, main_menu_highscores_interaction, main_menu_interaction,
+    main_menu_options_interaction, main_menu_preferences_interaction,
+    main_menu_roughness_interaction, main_menu_scenarios_interaction, main_menu_sound_interaction,
+    setup_main_menu, sync_main_menu_continue_button, sync_main_menu_heightmap_slots,
+    sync_main_menu_highscores, sync_main_menu_panel_visibility, sync_main_menu_preferences,
+    sync_main_menu_summary,
 };
 use main_menu_intro::{
     animate_main_menu_intro_traffic, cleanup_main_menu_on_exit, pan_main_menu_intro_camera,
@@ -425,6 +426,7 @@ impl Plugin for ClientUiPlugin {
                 animate_main_menu_intro_traffic,
                 auto_start_preloaded_json,
                 (main_menu_interaction, main_menu_continue_interaction).chain(),
+                main_menu_editor_interaction,
                 main_menu_highscores_interaction,
                 main_menu_scenarios_interaction,
                 main_menu_preferences_interaction,

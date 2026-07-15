@@ -129,6 +129,11 @@ pub(crate) fn handle_settings_menu_buttons(
             SaveMenuAction::Cheats => {
                 // Abierto en `handle_cheats_menu_button` (límite SystemParam).
             }
+            SaveMenuAction::SaveScenario => {
+                let dir = crate::state::scenarios_save_dir();
+                let _ = std::fs::create_dir_all(&dir);
+                save_window.open_in_mode(SaveWindowMode::Save, &dir);
+            }
             SaveMenuAction::EndGame => {
                 help_tools.p3().0 = true;
             }

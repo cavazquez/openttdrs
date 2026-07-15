@@ -5,7 +5,7 @@ use openttdrs_core::{
 
 use crate::camera::{CameraFocusRequest, tile_camera_world_pos};
 use crate::news_prefs::NewsDisplayPrefs;
-use crate::state::{SimRunState, SimWorld, sim_is_paused};
+use crate::state::{EditorSession, SimRunState, SimWorld, sim_is_paused};
 use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo};
 
 use super::{
@@ -27,6 +27,7 @@ pub(crate) struct StatusBarCache {
     date: String,
     money: String,
     company: String,
+    editor: bool,
     ticker: Option<(u64, f32)>,
     default_visible: bool,
     ticker_visible: bool,
@@ -38,6 +39,7 @@ pub(crate) fn sync_status_bar(
     sim: Res<SimWorld>,
     news_ui: Res<NewsUiState>,
     run_state: Res<State<SimRunState>>,
+    editor: Res<EditorSession>,
     mut queries: ParamSet<(
         Query<&mut Text, With<StatusBarDateText>>,
         Query<&mut Text, With<StatusBarMoneyText>>,
@@ -50,7 +52,12 @@ pub(crate) fn sync_status_bar(
 ) {
     let date = format_calendar_date(sim.state.tick);
     let money = format_money(sim.state.economy.money);
-    let company = active_company_display_name(&sim);
+    let company_name = active_company_display_name(&sim);
+    let company = if editor.active {
+        format!("EDITOR · {company_name}")
+    } else {
+        company_name
+    };
     let paused_label = sim_is_paused(&run_state).then(|| "Pausado".to_string());
     let ticker_key = news_ui.ticker.as_ref().map(|t| (t.item_id, t.scroll));
     let default_visible = news_ui.ticker.is_none() && paused_label.is_none();
@@ -62,6 +69,7 @@ pub(crate) fn sync_status_bar(
     if cache.date == date
         && cache.money == money
         && cache.company == company
+        && cache.editor == editor.active
         && cache.ticker == ticker_key
         && cache.default_visible == default_visible
         && cache.ticker_visible == ticker_visible
@@ -73,6 +81,7 @@ pub(crate) fn sync_status_bar(
     cache.date = date.clone();
     cache.money = money.clone();
     cache.company = company.clone();
+    cache.editor = editor.active;
     cache.ticker = ticker_key;
     cache.default_visible = default_visible;
     cache.ticker_visible = ticker_visible;

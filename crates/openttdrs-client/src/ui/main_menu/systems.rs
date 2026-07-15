@@ -8,7 +8,8 @@ use crate::state::bootstrap::{
     TerrainRoughness,
 };
 use crate::state::{
-    ClientScreen, SimWorld, SuspendedGameSession, new_game::NewGameSettingsResource,
+    ClientScreen, EditorSession, SimWorld, SuspendedGameSession, apply_editor_sandbox,
+    editor_new_game_settings, new_game::NewGameSettingsResource,
 };
 use crate::ui::SimHudControls;
 use crate::ui::main_menu_intro::despawn_main_menu_intro_layers;
@@ -21,8 +22,8 @@ use super::widgets::{
 use super::{
     MainMenuBackButton, MainMenuCamera, MainMenuClimateButton, MainMenuContinueButton,
     MainMenuContinueWrap, MainMenuDemoButton, MainMenuDensityButton, MainMenuDensityTarget,
-    MainMenuHeightmapSlot, MainMenuHighscoresButton, MainMenuHighscoresText, MainMenuHintsText,
-    MainMenuLoadButton, MainMenuMapSizeButton, MainMenuNewGameButton,
+    MainMenuEditorButton, MainMenuHeightmapSlot, MainMenuHighscoresButton, MainMenuHighscoresText,
+    MainMenuHintsText, MainMenuLoadButton, MainMenuMapSizeButton, MainMenuNewGameButton,
     MainMenuOpenHeightmapsDirButton, MainMenuOpenScenariosDirButton, MainMenuPanel,
     MainMenuPreferencesButton, MainMenuQuitButton, MainMenuQuitConfirmNo, MainMenuQuitConfirmYes,
     MainMenuResolutionButton, MainMenuRoughnessButton, MainMenuScenariosButton,
@@ -284,6 +285,7 @@ pub(crate) fn return_to_main_menu(
     suspended: &mut SuspendedGameSession,
 ) {
     suspended.active = true;
+    // `suspended.editor` lo rellena `leave_ingame` al salir de InGame.
     info!("Volviendo al menu principal (partida suspendida)");
     next_screen.set(ClientScreen::MainMenu);
 }
@@ -297,7 +299,14 @@ pub(crate) fn resume_suspended_game(
     next_screen: &mut NextState<ClientScreen>,
     suspended: &mut SuspendedGameSession,
 ) {
+    let was_editor = suspended.editor;
     suspended.active = false;
+    suspended.editor = false;
+    commands.insert_resource(if was_editor {
+        EditorSession::active()
+    } else {
+        EditorSession::inactive()
+    });
     info!("Continuando partida suspendida");
     leave_main_menu(commands, q_menu, q_menu_cam, intro_layers, next_screen);
 }
@@ -335,8 +344,61 @@ fn enter_new_game(
     suspended: &mut SuspendedGameSession,
 ) {
     suspended.active = false;
+    commands.insert_resource(EditorSession::inactive());
     commands.insert_resource(SimWorld::from_new_game(&settings.sanitized()));
     leave_main_menu(commands, q_menu, q_menu_cam, intro_layers, next_screen);
+}
+
+fn enter_editor(
+    commands: &mut Commands,
+    q_menu: &Query<Entity, With<MainMenuUi>>,
+    q_menu_cam: &Query<Entity, With<MainMenuCamera>>,
+    intro_layers: &Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
+    next_screen: &mut NextState<ClientScreen>,
+    suspended: &mut SuspendedGameSession,
+) {
+    suspended.active = false;
+    let mut sim = SimWorld::from_new_game(&editor_new_game_settings().sanitized());
+    apply_editor_sandbox(&mut sim);
+    commands.insert_resource(sim);
+    commands.insert_resource(EditorSession::active());
+    info!("Editor de escenarios: sandbox ON (dinero ∞, bulldozer, sin IA rival)");
+    leave_main_menu(commands, q_menu, q_menu_cam, intro_layers, next_screen);
+}
+
+/// Botón «Editor de escenarios» (sistema aparte: límite ParamSet del menú).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn main_menu_editor_interaction(
+    panel: Res<MainMenuPanel>,
+    save_window: Res<SaveWindowState>,
+    mut next_screen: ResMut<NextState<ClientScreen>>,
+    mut suspended: ResMut<SuspendedGameSession>,
+    q_menu: Query<Entity, With<MainMenuUi>>,
+    q_menu_cam: Query<Entity, With<MainMenuCamera>>,
+    intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
+    mut buttons: Query<
+        (&Interaction, &mut BackgroundColor),
+        (Changed<Interaction>, With<MainMenuEditorButton>),
+    >,
+    mut commands: Commands,
+) {
+    if save_window.open || *panel != MainMenuPanel::Root {
+        return;
+    }
+    for (interaction, mut bg) in &mut buttons {
+        if *interaction == Interaction::Pressed {
+            enter_editor(
+                &mut commands,
+                &q_menu,
+                &q_menu_cam,
+                &intro_layers,
+                &mut next_screen,
+                &mut suspended,
+            );
+            return;
+        }
+        hover_secondary(interaction, &mut bg);
+    }
 }
 
 pub(crate) fn sync_main_menu_continue_button(

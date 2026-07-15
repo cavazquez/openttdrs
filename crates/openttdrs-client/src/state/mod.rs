@@ -1,9 +1,14 @@
 //! Estado del mundo de simulacion y generacion procedural.
 
 pub(crate) mod bootstrap;
+pub(crate) mod editor_session;
 pub(crate) mod ingame_lifecycle;
 pub(crate) mod new_game;
 pub(crate) mod stations;
+
+pub(crate) use editor_session::{
+    EditorSession, apply_editor_sandbox, editor_new_game_settings, scenarios_save_dir,
+};
 
 use bevy::prelude::*;
 use openttdrs_core::{GameState, Map, OttdmapExtras};
@@ -110,6 +115,8 @@ pub enum OrderPickState {
 #[derive(Resource, Default, Debug)]
 pub struct SuspendedGameSession {
     pub active: bool,
+    /// Si la sesión suspendida era el editor de escenarios (#42).
+    pub editor: bool,
 }
 
 /// Alterna entre ejecución y pausa de la simulación.

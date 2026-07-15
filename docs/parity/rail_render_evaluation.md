@@ -40,8 +40,8 @@ Tolerancia recomendada: `0.51` (medio píxel), igual que `parity_diff --subtile-
 1. **No portar** `_vehicle_subcoord` completo al render en esta fase: en vías `X`/`Y`
    el eje central coincide con la entrada OpenTTD; en `UPPER`/`LOWER`/`LEFT`/`RIGHT`
    el sprite puede desplazarse ~1 px respecto al original.
-2. **No implementar** ocultamiento por `_tunnel_visibility_frame` hasta tener render
-   de wormhole/túnel con capas dedicadas (sigue en `rail_unknown_features.md` ítem 9).
+2. ~~**Ocultamiento por `_tunnel_visibility_frame`**~~ ✅
+   `tunnel_hides_train_at_progress` / `vehicle_hidden_in_tunnel` (ítem 9 cerrado).
 3. **Mantener** extrapolación genérica de carretera para trenes: sin stutter medible
    en `train_line` con física Rail 3B.
 

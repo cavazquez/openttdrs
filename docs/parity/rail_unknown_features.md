@@ -24,6 +24,7 @@ parcialmente resueltos; se mantienen tachados o anotados.
    antes de salir), `_fractcoords_enter` / `_vehicle_initial_*_fract`
    (`rail_cmd.cpp:2975-2991`, `train_cmd.cpp:54-56`) y `TicksToLeaveDepot`
    (salida encadenada de vagones). Hoy la salida es inmediata y sin frames.
+   → [#96](https://github.com/cavazquez/openttdrs/issues/96).
 
 ## Prioridad media
 
@@ -32,27 +33,28 @@ parcialmente resueltos; se mantienen tachados o anotados.
    vagones. Pendiente fino: articulados / dual-headed (ítem 17).
 7. ~~**Reservas de camino (PBS)**~~ — **MVP (Fase 3 + #54)**:
    `rail_pbs.rs` + `follow_train_reservation` + traza/golden interno
-   `train_pbs_golden.json`. Pendiente: golden tick-a-tick vs OpenTTD.
+   `train_pbs_golden.json`. Pendiente: golden tick-a-tick vs OpenTTD (ítem 11).
 8. ~~**Semántica de presignals ENTRY/EXIT/COMBO**~~ — **Decidido (Rail 3D)**:
    se codifican en saves pero **no tienen semántica de presignal** en la sim
    v1. `SIGTYPE_ENTRY` se ignora al bloquear (`train_blocked_by_signal`);
    EXIT y COMBO se tratan como BLOCK sin propagación por segmento
    (`entry_signal_does_not_block_train`). Path/PBS: ver ítem 7.
-9. **Túneles/puentes en tránsito** — ocultamiento del tren
-   (`_tunnel_visibility_frame` {12,8,8,12}, `tunnelbridge_cmd.cpp:1956`),
-   límite de velocidad del puente (`cur_speed = min(cur_speed,
-   BridgeSpec->speed)`, `:2028-2033` y `train_cmd.cpp:427-429`). Hoy el tramo
-   se atraviesa como vía normal y el tren queda visible.
+9. ~~**Túneles/puentes en tránsito**~~ ✅ Ocultamiento
+   (`tunnel_hides_train_at_progress` + `vehicle_hidden_in_tunnel` / cliente) y
+   tope de puente (`bridge_max_speed_for_tile` en `update_movement_speed`).
 10. **Subcoordenadas por pieza `_vehicle_subcoord`** —
     `vehicle.cpp:3359-3392`: posición (x, y) y dirección exactas al entrar a
     cada track. La sim usa eje central en rectas (`train_straight_subtile`);
     **evaluado en Rail 3E** (`rail_render_evaluation.md`): alineado en X/Y,
     divergencia cosmética documentada en piezas diagonales puras.
+    → no abrir issue salvo que se priorice estética diagonal.
 11. ~~**Pathfinder YAPF con penalizaciones y reserva**~~ — **MVP (Fase 3 + #53 slice)**:
     `pathfinder/yapf.rs` + golden estático `yapf_routes_golden.json`.
-    Falta: tick-a-tick vs OpenTTD; caché de segmentos; penalizaciones finas.
+    Falta: tick-a-tick vs OpenTTD; caché de segmentos; penalizaciones finas
+    → [#97](https://github.com/cavazquez/openttdrs/issues/97).
 12. **Reversa con coste/chequeos** — `ReverseTrainDirection` (news, PBS,
     `reverse_ctr`). Hoy la reversa automática y manual son instantáneas.
+    → [#98](https://github.com/cavazquez/openttdrs/issues/98).
 
 ## Prioridad baja (dependen de decisiones estructurales o son cosméticas)
 
@@ -60,24 +62,40 @@ parcialmente resueltos; se mantienen tachados o anotados.
     `ConvertRail`, compat eléctricos 110–113. Catenaria wires + PCP/PPP +
     estación/túnel/puente; TO_CATENARY persistente desde Ajustes y overrides
     `OPENTTDRS_HIDE_CATENARY` / `OPENTTDRS_TRANSPARENT_CATENARY`. Pendiente:
-    pendientes/nieve tipadas mono/maglev, `curve_speed` por railtype.
+    pendientes/nieve tipadas mono/maglev, `curve_speed` por railtype
+    → [#99](https://github.com/cavazquez/openttdrs/issues/99).
 14. ~~**Ownership por tile de vía**~~ ✅ `m1` = compañía activa en
     `PlaceRail` / depósito / túnel / puente.
 15. **AM_REALISTIC + `GetCurveSpeedLimit`** — `train_cmd.cpp:312-381`
     (límites 61 / 88 / `232-(13-n)²`, tilt +20 %, `curve_speed_mod` por motor)
     y `GetAcceleration` física completa (`ground_vehicle.cpp:105-183`). Solo
-    relevante si se adopta el modelo realista.
+    relevante si se adopta el modelo realista. **Diferido** (sin issue hasta
+    decidir `AM_REALISTIC`).
 16. **Frenado anticipado en plataforma (AM_REALISTIC)** —
     `train_cmd.cpp:394-415` (`st_max_speed`, mínimo `25·distance_to_go`).
+    Depende del ítem 15.
 17. **Multi-head / articulados / dual-headed** — `IsArticulatedPart`,
     `GetNextUnit`. Depende del ítem 6.
+    → [#100](https://github.com/cavazquez/openttdrs/issues/100).
 18. ~~**Pendientes que afectan velocidad (`z_up`/`z_down` de
     `_accel_slowdown`)**~~ ✅ `affect_speed_by_z_change` + `sync_train_slope_speed`
     con Z en píxeles (`slope_pixel_z` ≈ `GetSlopePixelZ`) al avanzar progreso o
     cruzar tesela.
 19. **Vagones en depósito / compra de vagones / refit de consist** — UI y
     comandos; depende del ítem 6.
+    → [#101](https://github.com/cavazquez/openttdrs/issues/101).
 20. ~~**Choques (`CheckTrainCollision`)**~~ ✅ MVP (`train_collision.rs`); averías ya parciales.
+
+## Issues de seguimiento (jul 2026)
+
+| Ítem | Issue | Notas |
+|------|-------|--------|
+| 5 | [#96](https://github.com/cavazquez/openttdrs/issues/96) | Espera ~37 ticks + frames de salida |
+| 11 (+7 residual) | [#97](https://github.com/cavazquez/openttdrs/issues/97) | Golden tick-a-tick YAPF/PBS vs OpenTTD |
+| 12 | [#98](https://github.com/cavazquez/openttdrs/issues/98) | Reversa con coste / news / PBS |
+| 13 residual | [#99](https://github.com/cavazquez/openttdrs/issues/99) | Mono/maglev nieve + `curve_speed` |
+| 17 | [#100](https://github.com/cavazquez/openttdrs/issues/100) | Dual-headed / articulados |
+| 19 | [#101](https://github.com/cavazquez/openttdrs/issues/101) | Compra/refit vagones en depósito |
 
 ## Cómo detectar regresiones/omisiones nuevas
 

@@ -36,6 +36,30 @@ pub const ACCEL_SLOWDOWN: [AccelSlowdownParams; 3] = [
     },
 ];
 
+/// `AffectSpeedByZChange` (`train_cmd.cpp:3140-3152`, `AM_ORIGINAL`).
+///
+/// `z_diff` = Z nueva − Z vieja. Subida: `−cur·z_up>>8`. Bajada: `+z_down` solo
+/// si no supera `max_speed`.
+#[must_use]
+pub fn affect_speed_by_z_change(
+    cur_speed: u16,
+    z_diff: i16,
+    railtype_idx: usize,
+    max_speed: u16,
+) -> u16 {
+    if z_diff == 0 {
+        return cur_speed;
+    }
+    let asp = &ACCEL_SLOWDOWN[railtype_idx.min(ACCEL_SLOWDOWN.len() - 1)];
+    if z_diff > 0 {
+        let penalty = (u32::from(cur_speed) * u32::from(asp.z_up)) >> 8;
+        cur_speed.saturating_sub(u16::try_from(penalty).unwrap_or(u16::MAX))
+    } else {
+        let spd = cur_speed.saturating_add(u16::from(asp.z_down));
+        if spd <= max_speed { spd } else { cur_speed }
+    }
+}
+
 /// `_vehicle_initial_x_fract` por `DiagDirection` NE, SE, SW, NW.
 pub const VEHICLE_INITIAL_X_FRACT: [u8; 4] = [10, 8, 4, 8];
 /// `_vehicle_initial_y_fract` por `DiagDirection` NE, SE, SW, NW.
@@ -63,7 +87,7 @@ pub const fn diag_dir_index(diag: u8) -> usize {
 }
 
 /// `true` si el tren aún estaría oculto al entrar al túnel (frames de visibilidad
-/// del original; la sim aún no aplica ocultamiento en render).
+/// del original; el cliente aplica `Visibility::Hidden` vía `vehicle_hidden_in_tunnel`).
 #[must_use]
 pub const fn tunnel_hides_train_at_progress(enter_diag: u8, progress: u8) -> bool {
     progress < TUNNEL_VISIBILITY_FRAME[diag_dir_index(enter_diag)]
@@ -364,5 +388,21 @@ mod tests {
     fn openttd_subcoord_entry_for_x_track() {
         let (x, y) = openttd_subcoord_at_entry(DIR_NE, 0x01).unwrap();
         assert_eq!((x, y), (15.0, 8.0));
+    }
+
+    #[test]
+    fn affect_speed_by_z_change_matches_accel_slowdown() {
+        // z_up=64 → −25 %; z_down=2 suma si cabe bajo max.
+        assert_eq!(
+            affect_speed_by_z_change(100, 1, 0, 200),
+            100 - ((100 * 64) >> 8)
+        );
+        assert_eq!(affect_speed_by_z_change(100, -1, 0, 200), 102);
+        assert_eq!(
+            affect_speed_by_z_change(199, -1, 0, 200),
+            199,
+            "no suma si superaría max_speed"
+        );
+        assert_eq!(affect_speed_by_z_change(80, 0, 0, 200), 80);
     }
 }

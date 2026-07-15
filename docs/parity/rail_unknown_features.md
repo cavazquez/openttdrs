@@ -70,9 +70,9 @@ parcialmente resueltos; se mantienen tachados o anotados.
     `train_cmd.cpp:394-415` (`st_max_speed`, mínimo `25·distance_to_go`).
 17. **Multi-head / articulados / dual-headed** — `IsArticulatedPart`,
     `GetNextUnit`. Depende del ítem 6.
-18. **Pendientes que afectan velocidad (`z_up`/`z_down` de
-    `_accel_slowdown`)** — la parte de curvas es el ítem 2; la de pendientes
-    requiere que el movimiento consulte `z`.
+18. ~~**Pendientes que afectan velocidad (`z_up`/`z_down` de
+    `_accel_slowdown`)**~~ ✅ MVP: `affect_speed_by_z_change` al cruzar tesela
+    (`ΔGetTileZ`); pendiente fino: ΔZ subpíxel como `UpdateInclination`.
 19. **Vagones en depósito / compra de vagones / refit de consist** — UI y
     comandos; depende del ítem 6.
 20. ~~**Choques (`CheckTrainCollision`)**~~ ✅ MVP (`train_collision.rs`); averías ya parciales.

@@ -6,8 +6,9 @@ use crate::engine::{
     default_engine_id, engine_for_vehicle, progress_step_for_speed, train_acceleration,
     update_road_speed,
 };
-use crate::map::{Map, TileCoord};
-use crate::train_movement::{ACCEL_SLOWDOWN, is_45_degree_turn};
+use crate::map::{Map, TileCoord, tile_slope_and_z};
+use crate::rail_type::rail_type_from_tile;
+use crate::train_movement::{ACCEL_SLOWDOWN, affect_speed_by_z_change, is_45_degree_turn};
 
 /// Umbral de fiabilidad bajo el cual conviene servicio en depósito.
 pub const SERVICING_RELIABILITY_THRESHOLD: u16 = 5_000;
@@ -1318,7 +1319,7 @@ impl Vehicle {
         loop {
             remaining = remaining.saturating_sub(255);
             self.progress = 0;
-            self.advance_one_tile();
+            self.advance_one_tile(map);
             if remaining < 255 {
                 // Si `advance_destination_after_arrival` ancló en 255, no pisar con el resto.
                 if self.progress != 255
@@ -1349,7 +1350,8 @@ impl Vehicle {
         }
     }
 
-    fn advance_one_tile(&mut self) {
+    fn advance_one_tile(&mut self, map: Option<&Map>) {
+        let old_pos = self.pos;
         if let Some(next) = self.path.pop_front() {
             self.update_direction_step(self.pos, next);
             if self.orders.is_empty() {
@@ -1389,6 +1391,34 @@ impl Vehicle {
                 self.advance_destination_after_arrival();
             }
         }
+        if let Some(map) = map {
+            self.apply_train_z_speed_change(map, old_pos);
+        }
+    }
+
+    /// `AffectSpeedByZChange` al cruzar tesela (MVP: Δ`GetTileZ` entre tiles).
+    fn apply_train_z_speed_change(&mut self, map: &Map, old_pos: TileCoord) {
+        if self.kind != VehicleKind::Train || !self.is_consist_head() || old_pos == self.pos {
+            return;
+        }
+        let Some((_, z_old)) = tile_slope_and_z(map, old_pos) else {
+            return;
+        };
+        let Some((_, z_new)) = tile_slope_and_z(map, self.pos) else {
+            return;
+        };
+        let z_diff = i16::from(z_new) - i16::from(z_old);
+        if z_diff == 0 {
+            return;
+        }
+        let rail_idx = map
+            .get(self.pos)
+            .map_or(0, |t| rail_type_from_tile(t).accel_table_index());
+        let mut max_speed = self.effective_engine().max_speed;
+        if let Some(bridge_cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, self.pos) {
+            max_speed = max_speed.min(bridge_cap);
+        }
+        self.cur_speed = affect_speed_by_z_change(self.cur_speed, z_diff, rail_idx, max_speed);
     }
 
     fn update_direction_step(&mut self, from: TileCoord, to: TileCoord) {
@@ -2107,6 +2137,71 @@ mod tests {
             cruise - ((cruise * 128) >> 8),
             "giro SE→SW: −50 % de velocidad"
         );
+    }
+
+    #[test]
+    fn train_loses_speed_when_climbing_tile_z() {
+        use crate::map::{Map, TileKind, tile_slope_and_z};
+        use crate::train_movement::affect_speed_by_z_change;
+
+        let mut map = Map::new_flat(8, 8, 4);
+        // Meseta en (3,2): GetTileZ = 5; (2,2) queda en 4.
+        for (x, y) in [(3, 2), (4, 2), (3, 3), (4, 3)] {
+            map.set_height(TileCoord::new(x, y), 5).unwrap();
+        }
+        map.set_kind(TileCoord::new(2, 2), TileKind::Rail).unwrap();
+        map.set_kind(TileCoord::new(3, 2), TileKind::Rail).unwrap();
+        assert_eq!(tile_slope_and_z(&map, TileCoord::new(2, 2)).unwrap().1, 4);
+        assert_eq!(tile_slope_and_z(&map, TileCoord::new(3, 2)).unwrap().1, 5);
+
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(2, 2),
+            TileCoord::new(3, 2),
+        );
+        v.path = VecDeque::from([TileCoord::new(3, 2)]);
+        v.running = true;
+        let max = v.effective_engine().max_speed;
+        // Mantener velocidad al tope del motor para que UpdateSpeed no la mueva.
+        while v.pos != TileCoord::new(3, 2) {
+            v.cur_speed = max;
+            v.step_with_map(Some(&map));
+        }
+        assert_eq!(
+            v.cur_speed,
+            affect_speed_by_z_change(max, 1, 0, max),
+            "subida Δz=+1: −25 % (z_up=64)"
+        );
+    }
+
+    #[test]
+    fn train_gains_speed_when_descending_tile_z() {
+        use crate::map::{Map, TileKind};
+
+        let mut map = Map::new_flat(8, 8, 4);
+        for (x, y) in [(3, 2), (4, 2), (3, 3), (4, 3)] {
+            map.set_height(TileCoord::new(x, y), 5).unwrap();
+        }
+        map.set_kind(TileCoord::new(3, 2), TileKind::Rail).unwrap();
+        map.set_kind(TileCoord::new(2, 2), TileKind::Rail).unwrap();
+
+        let mut v = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(3, 2),
+            TileCoord::new(2, 2),
+        );
+        v.path = VecDeque::from([TileCoord::new(2, 2)]);
+        v.running = true;
+        let max = v.effective_engine().max_speed;
+        // Por debajo del tope para que +z_down (2) quepa.
+        let cruise = max.saturating_sub(10).max(4);
+        while v.pos != TileCoord::new(2, 2) {
+            v.cur_speed = cruise;
+            v.step_with_map(Some(&map));
+        }
+        assert_eq!(v.cur_speed, cruise + 2, "bajada Δz=−1: +z_down");
     }
 
     #[test]

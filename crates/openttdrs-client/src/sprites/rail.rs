@@ -8,7 +8,7 @@ use openttdrs_core::{
 pub use openttdrs_core::{
     RAIL_TB_CROSS, RAIL_TB_HORZ, RAIL_TB_LEFT, RAIL_TB_LOWER, RAIL_TB_RIGHT, RAIL_TB_UPPER,
     RAIL_TB_VERT, RAIL_TB_X, RAIL_TB_Y, RAIL_TILE_DEPOT, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS,
-    rail_tile_is_signals,
+    rail_signal_present_mask, rail_signal_state_mask, rail_tile_is_signals,
 };
 
 use super::road::RoadDepotLayerGfx;
@@ -1128,18 +1128,6 @@ pub fn signal_screen_position(
     let elev = f32::from(base_z) * crate::iso::HEIGHT_PX;
     let track_base = Vec2::new(p.x, p.y - half_h + elev);
     track_base + rail_signal_subtile_offset(pos) + signal_sprite_center_offset(tex_id)
-}
-
-/// Bits de señal presentes en el nibble alto de M3LO (`GetPresentSignals`, `rail_map.h`).
-#[must_use]
-pub fn rail_signal_present_mask(m3: u8) -> u8 {
-    (m3 >> 4) & 0x0F
-}
-
-/// Estados rojo/verde por bit de señal: nibble alto de **`m4()`** (`GetSignalStates`); el chunk save `M3HI` carga en `m4` (`map_sl.cpp`), exportado como `m3hi` en `.ottdmap`.
-#[must_use]
-pub fn rail_signal_state_mask(m3hi: u8) -> u8 {
-    (m3hi >> 4) & 0x0F
 }
 
 /// Sprites de señal visibles en la tesela, con carril para el offset de dibujo.

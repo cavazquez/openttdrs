@@ -53,11 +53,7 @@ pub const INDUSTRY_ANIM_FRAME_MASK: u8 = 3;
 /// Etapa de obra desde `m1` (`GetIndustryConstructionStage` / `IsIndustryCompleted`).
 #[must_use]
 pub fn industry_construction_stage_from_tile(m1: u8) -> usize {
-    if m1 & 0x80 != 0 {
-        3
-    } else {
-        usize::from(m1 & INDUSTRY_ANIM_FRAME_MASK).min(3)
-    }
+    usize::from(openttdrs_core::industry_construction_stage(m1))
 }
 
 /// `IndustryTileSpec.anim_state` para este gfx.

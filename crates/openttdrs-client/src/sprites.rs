@@ -56,9 +56,7 @@ pub(crate) use tile_atlas_generated::{
 // ── Constantes de renderizado de carreteras y vías ───────────────────────────
 
 /// Tipos de tesela `OpenTTD` (nibble alto del byte MAPT).
-pub const OTTD_MP_RAIL: u8 = 1;
-pub const OTTD_MP_ROAD: u8 = 2;
-pub const OTTD_MP_TUNNELBRIDGE: u8 = 9;
+pub use openttdrs_core::{OTTD_MP_RAILWAY as OTTD_MP_RAIL, OTTD_MP_ROAD, OTTD_MP_TUNNELBRIDGE};
 
 /// `RailGroundType::SnowOrDesert` en los 4 bits bajos de `m4`/`m3` en vía normal (`rail_map.h`).
 pub const RAIL_GROUND_SNOW_OR_DESERT: u8 = 12;

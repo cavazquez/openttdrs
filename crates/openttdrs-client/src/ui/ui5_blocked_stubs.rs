@@ -121,6 +121,8 @@ fn link_graph_empty_observed() -> &'static str {
     "Sin flujos observados aún.\n\n\
      Se registran al cargar en una estación y\n\
      descargar/transferir en otra (mismo cargo).\n\n\
+     Con tráfico, las aristas se dibujan en el mapa\n\
+     (esta ventana o Opciones → Overlay Link Graph).\n\n\
      Modo de distribución: Ajustes → Distribución de carga…"
 }
 

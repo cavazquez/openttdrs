@@ -30,6 +30,8 @@ pub(crate) struct ClientPreferences {
     pub(crate) show_diagnostics_overlay: bool,
     /// Tinte naranja en vías con reserva PBS activa.
     pub(crate) show_pbs_reservations: bool,
+    /// Dibujar aristas del Link Graph en el mapa (también se activa al abrir la ventana).
+    pub(crate) show_link_graph_overlay: bool,
     /// Mostrar carteles de nombre/población de pueblos.
     pub(crate) show_town_labels: bool,
     /// Mostrar nombres de estaciones en el mapa.
@@ -77,6 +79,7 @@ impl Default for ClientPreferences {
             show_debug_gizmos: false,
             show_diagnostics_overlay: false,
             show_pbs_reservations: true,
+            show_link_graph_overlay: false,
             show_town_labels: true,
             show_station_labels: true,
             full_animation: true,
@@ -228,6 +231,7 @@ impl ClientPreferences {
                 self.show_town_labels = true;
                 self.show_station_labels = true;
                 self.show_pbs_reservations = true;
+                self.show_link_graph_overlay = false;
                 self.show_debug_gizmos = false;
                 self.show_diagnostics_overlay = false;
                 self.default_sim_speed = 1.0;
@@ -239,6 +243,7 @@ impl ClientPreferences {
                 self.show_town_labels = false;
                 self.show_station_labels = false;
                 self.show_pbs_reservations = false;
+                self.show_link_graph_overlay = false;
                 self.show_debug_gizmos = false;
                 self.show_diagnostics_overlay = false;
                 self.default_sim_speed = 1.0;
@@ -250,6 +255,7 @@ impl ClientPreferences {
                 self.show_town_labels = true;
                 self.show_station_labels = true;
                 self.show_pbs_reservations = true;
+                self.show_link_graph_overlay = true;
                 self.show_debug_gizmos = true;
                 self.show_diagnostics_overlay = true;
                 self.default_sim_speed = 1.0;

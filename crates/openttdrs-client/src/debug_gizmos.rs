@@ -11,6 +11,7 @@ use crate::iso::{gizmo_diamond, iso};
 use crate::render::MapVisualLayer;
 use crate::settings::ClientPreferences;
 use crate::state::{ClientScreen, SimWorld};
+use crate::ui::{LinkGraphView, LinkGraphWindowState};
 
 pub(crate) struct DebugGizmosPlugin;
 
@@ -22,7 +23,7 @@ impl Plugin for DebugGizmosPlugin {
         );
         app.add_systems(
             Update,
-            (draw_industries, draw_stations)
+            (draw_industries, draw_stations, draw_link_graph_overlay)
                 .in_set(UpdateSet::Visuals)
                 .run_if(in_state(ClientScreen::InGame)),
         );
@@ -202,6 +203,69 @@ fn station_bar_width(income: u64) -> Option<f32> {
     Some(48.0 * fill)
 }
 
+const LINK_GRAPH_OVERLAY_MAX_EDGES: usize = 64;
+
+fn show_link_graph_overlay(prefs: &ClientPreferences, link: &LinkGraphWindowState) -> bool {
+    prefs.show_link_graph_overlay || link.open || config::env_flag("OPENTTDRS_LINKGRAPH_OVERLAY")
+}
+
+/// Intensidad 0..1 → verde (bajo) / amarillo / rojo (alto), estilo tráfico.
+fn link_graph_intensity_color(t: f32) -> Color {
+    let t = t.clamp(0.0, 1.0);
+    Color::srgb(t, (1.0 - 0.55 * t).clamp(0.2, 1.0), 0.12)
+}
+
+pub(crate) fn draw_link_graph_overlay(
+    sim: Res<SimWorld>,
+    prefs: Res<ClientPreferences>,
+    link: Res<LinkGraphWindowState>,
+    mut gizmos: Gizmos,
+) {
+    if !show_link_graph_overlay(&prefs, &link) {
+        return;
+    }
+
+    let filter = link.cargo_filter;
+    match link.view {
+        LinkGraphView::Observed => {
+            let edges = sim
+                .state
+                .link_graph
+                .top_edges_filtered(filter, LINK_GRAPH_OVERLAY_MAX_EDGES);
+            let max_units = edges
+                .iter()
+                .map(|(_, s)| s.units_month.max(1))
+                .max()
+                .unwrap_or(1);
+            for (key, sample) in edges {
+                let t = sample.units_month as f32 / max_units as f32;
+                let color = link_graph_intensity_color(t);
+                let from = iso(key.from.x, key.from.y);
+                let to = iso(key.to.x, key.to.y);
+                gizmos.line_2d(from, to, color);
+                gizmo_diamond(&mut gizmos, from, 10.0, 5.0, color);
+                gizmo_diamond(&mut gizmos, to, 10.0, 5.0, color);
+            }
+        }
+        LinkGraphView::Planned => {
+            let edges = sim
+                .state
+                .station_flows
+                .planned_edges_filtered(filter, LINK_GRAPH_OVERLAY_MAX_EDGES);
+            let max_amount = edges.iter().map(|e| e.amount.max(1)).max().unwrap_or(1);
+            for edge in edges {
+                let t = edge.amount as f32 / max_amount as f32;
+                let color = link_graph_intensity_color(t);
+                let from = iso(edge.from.x, edge.from.y);
+                let to = iso(edge.to.x, edge.to.y);
+                gizmos.line_2d(from, to, color);
+                gizmo_diamond(&mut gizmos, from, 10.0, 5.0, color);
+                gizmo_diamond(&mut gizmos, to, 10.0, 5.0, color);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,5 +300,25 @@ mod tests {
         assert!(!show_debug_gizmos(&prefs));
         prefs.show_debug_gizmos = true;
         assert!(show_debug_gizmos(&prefs));
+    }
+
+    #[test]
+    fn link_graph_overlay_follows_prefs_or_window() {
+        let prefs = ClientPreferences::default();
+        let mut link = LinkGraphWindowState::default();
+        assert!(!show_link_graph_overlay(&prefs, &link));
+        link.open = true;
+        assert!(show_link_graph_overlay(&prefs, &link));
+        link.open = false;
+        let prefs_on = ClientPreferences {
+            show_link_graph_overlay: true,
+            ..ClientPreferences::default()
+        };
+        assert!(show_link_graph_overlay(&prefs_on, &link));
+        assert_eq!(link_graph_intensity_color(0.0), Color::srgb(0.0, 1.0, 0.12));
+        assert_eq!(
+            link_graph_intensity_color(1.0),
+            Color::srgb(1.0, 0.45, 0.12)
+        );
     }
 }

@@ -241,10 +241,10 @@ use town_window::{
     TownWindowState, handle_town_window_buttons, setup_town_window, sync_town_window,
     town_window_on_closed,
 };
+pub(crate) use ui5_blocked_stubs::{LinkGraphView, LinkGraphWindowState};
 use ui5_blocked_stubs::{
-    LinkGraphWindowState, handle_link_graph_filter_button, handle_link_graph_view_button,
-    link_graph_window_on_closed, open_link_graph_from_routes, setup_link_graph_window,
-    sync_link_graph_window,
+    handle_link_graph_filter_button, handle_link_graph_view_button, link_graph_window_on_closed,
+    open_link_graph_from_routes, setup_link_graph_window, sync_link_graph_window,
 };
 use vehicle_list::{
     VehicleListState, handle_vehicle_list_buttons, open_vehicle_list_from_routes,

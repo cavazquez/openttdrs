@@ -30,6 +30,7 @@ pub(crate) enum DisplayOptionsToggle {
     FullAnimation,
     FullDetail,
     PbsOverlay,
+    LinkGraphOverlay,
     DebugGizmos,
     Diagnostics,
     /// Fila TO_*: categoría + modo del botón.
@@ -70,6 +71,7 @@ pub(crate) fn setup_display_options_window(mut commands: Commands, asset_server:
             ("Animación completa", DisplayOptionsToggle::FullAnimation),
             ("Detalle completo", DisplayOptionsToggle::FullDetail),
             ("Reservas PBS", DisplayOptionsToggle::PbsOverlay),
+            ("Overlay Link Graph", DisplayOptionsToggle::LinkGraphOverlay),
             ("Gizmos de depuración", DisplayOptionsToggle::DebugGizmos),
             ("Overlay de diagnóstico", DisplayOptionsToggle::Diagnostics),
         ] {
@@ -326,6 +328,9 @@ pub(crate) fn handle_display_options_buttons(
                 prefs.show_pbs_reservations = !prefs.show_pbs_reservations;
                 request_full_remap(pending_remap.as_deref_mut());
             }
+            DisplayOptionsToggle::LinkGraphOverlay => {
+                prefs.show_link_graph_overlay = !prefs.show_link_graph_overlay;
+            }
             DisplayOptionsToggle::DebugGizmos => {
                 prefs.show_debug_gizmos = !prefs.show_debug_gizmos;
             }
@@ -390,6 +395,10 @@ pub(crate) fn sync_display_options_window(
                 prefs.show_pbs_reservations,
                 bool_label(prefs.show_pbs_reservations),
             ),
+            DisplayOptionsToggle::LinkGraphOverlay => (
+                prefs.show_link_graph_overlay,
+                bool_label(prefs.show_link_graph_overlay),
+            ),
             DisplayOptionsToggle::DebugGizmos => {
                 (prefs.show_debug_gizmos, bool_label(prefs.show_debug_gizmos))
             }
@@ -410,6 +419,7 @@ pub(crate) fn sync_display_options_window(
                 | DisplayOptionsToggle::FullAnimation
                 | DisplayOptionsToggle::FullDetail
                 | DisplayOptionsToggle::PbsOverlay
+                | DisplayOptionsToggle::LinkGraphOverlay
                 | DisplayOptionsToggle::DebugGizmos
                 | DisplayOptionsToggle::Diagnostics
         ) {

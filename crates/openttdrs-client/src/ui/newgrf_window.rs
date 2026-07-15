@@ -1,6 +1,6 @@
-//! Ventana NewGRF: edición del stack (activar / reordenar / quitar).
+//! Ventana NewGRF: edición del stack (activar / reordenar / quitar / params).
 //!
-//! Config-only: no aplica Action0–14 ni cambia sprites en runtime. Las entradas
+//! Config + parámetros runtime (`param[]` → Action2 `0x7F`). Las entradas
 //! `is_static` (p. ej. OpenGFX) no se pueden desactivar ni eliminar.
 
 use bevy::prelude::*;
@@ -29,6 +29,8 @@ const NEWGRF_ROWS: usize = 12;
 pub(crate) struct NewGrfWindowState {
     pub(crate) open: bool,
     pub(crate) selected: Option<usize>,
+    /// Índice de parámetro editado con los botones P◀/P▶ / − / +.
+    pub(crate) selected_param: u8,
     /// Texto de inspección (scan + validate_stack).
     pub(crate) inspect_text: String,
 }
@@ -56,6 +58,14 @@ pub(crate) enum NewGrfAction {
     AddFromDisk,
     /// Re-escanea la entrada seleccionada (Action8 + histograma Action0–14).
     Inspect,
+    /// Parámetro anterior (`selected_param`).
+    ParamPrev,
+    /// Parámetro siguiente.
+    ParamNext,
+    /// Decrementa el valor del parámetro seleccionado.
+    ParamDec,
+    /// Incrementa el valor del parámetro seleccionado.
+    ParamInc,
 }
 
 pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -71,9 +81,7 @@ pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<Asse
     );
     commands.entity(content).with_children(|body| {
         body.spawn((
-            Text::new(
-                "Stack + Inspeccionar (histograma). RoadTypes Action0: metadatos en selector (sin sprites).",
-            ),
+            Text::new("Stack + params (P◀/P▶, −/+) + Inspeccionar. Action2 lee param[] vía 0x7F."),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.82, 0.78, 0.68)),
             Node {
@@ -132,11 +140,22 @@ pub(crate) fn setup_newgrf_window(mut commands: Commands, asset_server: Res<Asse
             spawn_action_btn(bar, asset_server, NewGrfAction::AddFromDisk, "Añadir…");
             spawn_action_btn(bar, asset_server, NewGrfAction::Inspect, "Inspeccionar");
         });
+        body.spawn(Node {
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(4.0),
+            margin: UiRect::top(Val::Px(4.0)),
+            ..default()
+        })
+        .with_children(|bar| {
+            spawn_action_btn(bar, asset_server, NewGrfAction::ParamPrev, "P◀");
+            spawn_action_btn(bar, asset_server, NewGrfAction::ParamNext, "P▶");
+            spawn_action_btn(bar, asset_server, NewGrfAction::ParamDec, "−");
+            spawn_action_btn(bar, asset_server, NewGrfAction::ParamInc, "+");
+        });
         body.spawn((
             NewGrfInspectText,
-            Text::new(
-                "Selecciona una entrada y pulsa Inspeccionar (scan + validate; sin Action0–14).",
-            ),
+            Text::new("Selecciona una entrada: Inspeccionar o edita params (P◀/P▶, −/+)."),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.78, 0.84, 0.72)),
             Node {
@@ -241,8 +260,20 @@ pub(crate) fn sync_newgrf_window(
             **text = String::new();
         }
     }
+    let param_line = state.selected.and_then(|idx| {
+        let entry = stack.get(idx)?;
+        let p = state.selected_param;
+        Some(format!(
+            "param[{p}] = {}  (P◀/P▶ elige índice, −/+ cambia valor)",
+            entry.param(usize::from(p))
+        ))
+    });
     let inspect_body = if state.inspect_text.is_empty() {
-        "Selecciona una entrada y pulsa Inspeccionar (scan + validate; sin Action0–14).".to_string()
+        param_line.unwrap_or_else(|| {
+            "Selecciona una entrada: Inspeccionar o edita params (P◀/P▶, −/+).".into()
+        })
+    } else if let Some(pline) = param_line {
+        format!("{pline}\n{}", state.inspect_text)
     } else {
         state.inspect_text.clone()
     };
@@ -301,6 +332,17 @@ pub(crate) fn handle_newgrf_window_buttons(
             state.inspect_text = inspect_newgrf_entry(&sim.state.newgrf_stack, index);
             continue;
         }
+        if matches!(action, NewGrfAction::ParamPrev | NewGrfAction::ParamNext) {
+            if state.selected.is_none() {
+                continue;
+            }
+            state.selected_param = match action {
+                NewGrfAction::ParamPrev => state.selected_param.saturating_sub(1),
+                NewGrfAction::ParamNext => state.selected_param.saturating_add(1).min(127),
+                _ => state.selected_param,
+            };
+            continue;
+        }
         let Some(index) = state.selected else {
             continue;
         };
@@ -327,7 +369,23 @@ pub(crate) fn handle_newgrf_window_buttons(
                 Command::MoveNewGrfInStack { from: index, to }
             }
             NewGrfAction::Remove => Command::RemoveNewGrfFromStack { index },
-            NewGrfAction::AddFromDisk | NewGrfAction::Inspect => unreachable!(),
+            NewGrfAction::ParamDec | NewGrfAction::ParamInc => {
+                let cur = sim.state.newgrf_stack[index].param(usize::from(state.selected_param));
+                let value = match action {
+                    NewGrfAction::ParamDec => cur.saturating_sub(1),
+                    NewGrfAction::ParamInc => cur.saturating_add(1),
+                    _ => cur,
+                };
+                Command::SetNewGrfParam {
+                    index,
+                    param_index: state.selected_param,
+                    value,
+                }
+            }
+            NewGrfAction::AddFromDisk
+            | NewGrfAction::Inspect
+            | NewGrfAction::ParamPrev
+            | NewGrfAction::ParamNext => unreachable!(),
         };
         match apply_command(&mut sim.state, &cmd) {
             Ok(()) => {
@@ -342,8 +400,13 @@ pub(crate) fn handle_newgrf_window_buttons(
                     }
                     NewGrfAction::MoveUp => index.checked_sub(1).or(Some(index)),
                     NewGrfAction::MoveDown => Some((index + 1).min(len.saturating_sub(1))),
-                    NewGrfAction::Toggle => Some(index),
-                    NewGrfAction::AddFromDisk | NewGrfAction::Inspect => state.selected,
+                    NewGrfAction::Toggle | NewGrfAction::ParamDec | NewGrfAction::ParamInc => {
+                        Some(index)
+                    }
+                    NewGrfAction::AddFromDisk
+                    | NewGrfAction::Inspect
+                    | NewGrfAction::ParamPrev
+                    | NewGrfAction::ParamNext => state.selected,
                 };
             }
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
@@ -378,6 +441,23 @@ fn inspect_newgrf_entry(stack: &[NewGrfEntry], index: usize) -> String {
             entry.grf_version
         ),
     ];
+    if entry.params.is_empty() {
+        lines.push("params: (todos 0)".into());
+    } else {
+        let preview: Vec<String> = entry
+            .params
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| **v != 0)
+            .take(12)
+            .map(|(i, v)| format!("p{i}={v}"))
+            .collect();
+        if preview.is_empty() {
+            lines.push(format!("params: len={} (ceros)", entry.params.len()));
+        } else {
+            lines.push(format!("params: {}", preview.join(" ")));
+        }
+    }
     match path {
         Some(p) => {
             match scan_grf_file(&p) {
@@ -495,6 +575,7 @@ pub(crate) fn newgrf_window_on_closed(
         if msg.0 == FloatingWindowId::NewGrf {
             state.open = false;
             state.selected = None;
+            state.selected_param = 0;
             state.inspect_text.clear();
         }
     }

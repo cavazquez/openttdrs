@@ -522,6 +522,7 @@ fn spawn_map_tiles_in_bounds(
                     &sim.state.road_type_catalog,
                     Some(road_sprites),
                     Some(images),
+                    &sim.state.newgrf_stack,
                 );
             }
             TileKind::Rail => {
@@ -634,6 +635,7 @@ fn spawn_map_tiles_in_bounds(
                 &sim.state.catenary_newgrf_sprites,
                 Some(catenary_sprites),
                 climate,
+                &sim.state.newgrf_stack,
             ),
             TileKind::House => spawn_house_tile(commands, assets, &ctx, slope_half_ground),
             TileKind::Industry => {

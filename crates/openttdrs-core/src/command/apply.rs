@@ -181,6 +181,7 @@ const fn command_modifies_map(cmd: &Command) -> bool {
             | Command::MoveNewGrfInStack { .. }
             | Command::RemoveNewGrfFromStack { .. }
             | Command::AddNewGrfToStack { .. }
+            | Command::SetNewGrfParam { .. }
     )
 }
 
@@ -579,5 +580,10 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
         Command::MoveNewGrfInStack { from, to } => newgrf::move_newgrf_in_stack(state, *from, *to),
         Command::RemoveNewGrfFromStack { index } => newgrf::remove_newgrf_from_stack(state, *index),
         Command::AddNewGrfToStack { entry } => newgrf::add_newgrf_to_stack(state, entry.clone()),
+        Command::SetNewGrfParam {
+            index,
+            param_index,
+            value,
+        } => newgrf::set_newgrf_param(state, *index, *param_index, *value),
     }
 }

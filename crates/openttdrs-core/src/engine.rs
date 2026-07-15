@@ -51,6 +51,9 @@ pub struct EngineDef {
     /// Graphics completas si hace falta re-resolver random/advanced al dibujar.
     #[serde(default, skip)]
     pub newgrf_runtime: Option<Box<crate::newgrf_sprites::TrainSpriteGraphics>>,
+    /// GRFID del `NewGRF` que definió este motor (0 = vanilla).
+    #[serde(default, skip)]
+    pub newgrf_grfid: u32,
 }
 
 impl EngineDef {
@@ -196,6 +199,7 @@ macro_rules! road {
             newgrf_views: Vec::new(),
             newgrf_local_id: 0,
             newgrf_runtime: None,
+            newgrf_grfid: 0,
         }
     };
 }
@@ -227,6 +231,7 @@ macro_rules! train {
             newgrf_views: Vec::new(),
             newgrf_local_id: 0,
             newgrf_runtime: None,
+            newgrf_grfid: 0,
         }
     };
 }

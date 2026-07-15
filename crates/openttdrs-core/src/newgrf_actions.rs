@@ -1026,6 +1026,7 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 newgrf_views: views,
                 newgrf_local_id: local_id,
                 newgrf_runtime,
+                newgrf_grfid: entry.grfid,
             });
         }
     }

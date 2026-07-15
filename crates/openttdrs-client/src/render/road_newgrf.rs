@@ -41,6 +41,12 @@ impl NewGrfRoadSpriteCache {
                     .wrapping_add(u32::from(var) << 16);
             }
         }
+        for (i, &p) in ctx.grf_params.iter().enumerate().take(16) {
+            h = h
+                .wrapping_mul(31)
+                .wrapping_add(p)
+                .wrapping_add(u32::try_from(i).unwrap_or(0) << 20);
+        }
         h
     }
 

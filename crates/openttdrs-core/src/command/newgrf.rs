@@ -1,7 +1,7 @@
 //! Comandos de edición del stack `NewGRF` (config + apply Action0 metadatos).
 
 use crate::newgrf_actions::apply_newgrf_stack_catalogs_default_dirs;
-use crate::newgrf_config::{GrfStackIssue, NewGrfEntry, validate_stack};
+use crate::newgrf_config::{GrfStackIssue, MAX_NEWGRF_PARAMS, NewGrfEntry, validate_stack};
 use crate::{GameState, command::CommandError};
 
 fn index_ok(state: &GameState, index: usize) -> Result<(), CommandError> {
@@ -91,6 +91,24 @@ pub(crate) fn add_newgrf_to_stack(
     Ok(())
 }
 
+/// Escribe `param[param_index]` de una entrada del stack (sin re-aplicar Action0).
+pub(crate) fn set_newgrf_param(
+    state: &mut GameState,
+    index: usize,
+    param_index: u8,
+    value: u32,
+) -> Result<(), CommandError> {
+    index_ok(state, index)?;
+    let n = usize::from(param_index);
+    if n >= MAX_NEWGRF_PARAMS {
+        return Err(CommandError::NewGrfParamOutOfRange);
+    }
+    if !state.newgrf_stack[index].set_param(n, value) {
+        return Err(CommandError::NewGrfParamOutOfRange);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -166,5 +184,49 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(e, CommandError::NewGrfDuplicateGrfid);
+    }
+
+    #[test]
+    fn set_newgrf_param_persists_on_stack() {
+        let mut s = GameState::new(4, 4);
+        apply_command(
+            &mut s,
+            &Command::AddNewGrfToStack {
+                entry: sample_entry("params.grf", grfid_from_bytes([0xAA, 0xBB, 0xCC, 0xDD])),
+            },
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::SetNewGrfParam {
+                index: 1,
+                param_index: 0,
+                value: 42,
+            },
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::SetNewGrfParam {
+                index: 1,
+                param_index: 3,
+                value: 7,
+            },
+        )
+        .unwrap();
+        assert_eq!(s.newgrf_stack[1].param(0), 42);
+        assert_eq!(s.newgrf_stack[1].param(1), 0);
+        assert_eq!(s.newgrf_stack[1].param(3), 7);
+        assert_eq!(
+            apply_command(
+                &mut s,
+                &Command::SetNewGrfParam {
+                    index: 1,
+                    param_index: 128,
+                    value: 1,
+                },
+            ),
+            Err(CommandError::NewGrfParamOutOfRange)
+        );
     }
 }

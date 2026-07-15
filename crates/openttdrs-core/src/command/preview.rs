@@ -300,7 +300,8 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::SetNewGrfEnabled { .. }
         | Command::MoveNewGrfInStack { .. }
         | Command::RemoveNewGrfFromStack { .. }
-        | Command::AddNewGrfToStack { .. } => None,
+        | Command::AddNewGrfToStack { .. }
+        | Command::SetNewGrfParam { .. } => None,
     }
 }
 

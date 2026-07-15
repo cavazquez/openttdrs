@@ -707,7 +707,7 @@ parámetros NewGRF / consola REPL / cheats formales → OOS o UI-8.
 - [x] NewGRF editable config-only: ON/OFF/↑↓/quitar + **Añadir…** desde disco
       (`assets/opengfx/…` / `OPENTTDRS_NEWGRF_DIR`).
 - [x] Parse-only Action0–14 (histograma Inspeccionar) + Action0 RoadTypes / Stations / Trains metadatos.
-- [ ] Parámetros NewGRF. *(OOS: sin runtime de params)*
+- [x] Parámetros NewGRF. *(MVP #39: `NewGrfEntry.params`, UI P◀/P▶/−/+, Action2 `0x7F`; Action14 labels OOS)*
 - [x] Presets de settings (Clásico / Rendimiento / Dev en Display Options).
 - [x] Sandbox/cheats si se decide soportarlos. *(DevConsole: `cheat on|off|money|infinite|bulldozer`)*
 - [x] Consola y diagnostics para desarrollo. *(UI-8: Consola/Dev + overlay; cheats vía DevConsole)*
@@ -943,7 +943,7 @@ Una fase se marca ✅ cuando:
 6. ~~Migrar IndustryDirectory y StationList.~~ ✅
 7. ~~Construir VehicleList ×4 sobre la misma base.~~ ✅
 
-**Siguiente:** editor (#42), o NewGRF params (#39) / industrias gfx≥175 (#71) / callback 24.
+**Siguiente:** editor (#42), o industrias gfx≥175 (#71) / callback 24.
 
 Progreso UI-8 (multi-compañía mínima):
 

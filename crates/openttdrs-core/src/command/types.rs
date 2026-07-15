@@ -370,6 +370,12 @@ pub enum Command {
     AddNewGrfToStack {
         entry: crate::newgrf_config::NewGrfEntry,
     },
+    /// Escribe un parámetro del GRF (`param[param_index] = value`).
+    SetNewGrfParam {
+        index: usize,
+        param_index: u8,
+        value: u32,
+    },
 }
 
 /// Dirección para reordenar órdenes en la lista del vehículo.
@@ -522,6 +528,8 @@ pub enum CommandError {
     NewGrfDuplicateGrfid,
     /// Entrada `NewGRF` inválida (p. ej. nombre de archivo vacío).
     NewGrfInvalidEntry,
+    /// Índice de parámetro `NewGRF` fuera de rango (`≥ 128`).
+    NewGrfParamOutOfRange,
 }
 
 /// Texto breve en español para mostrar al jugador cuando falla un comando.
@@ -654,5 +662,6 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         }
         CommandError::NewGrfDuplicateGrfid => "Ya hay un NewGRF con ese GRFID.",
         CommandError::NewGrfInvalidEntry => "Entrada NewGRF inválida.",
+        CommandError::NewGrfParamOutOfRange => "Índice de parámetro NewGRF inválido.",
     }
 }

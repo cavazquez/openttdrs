@@ -138,6 +138,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &[],
                     None,
                     None,
+                    &[],
                 );
                 spawn_road_tile(
                     &mut commands,
@@ -153,6 +154,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &[],
                     None,
                     None,
+                    &[],
                 );
                 spawn_rail_tile(
                     &mut commands,
@@ -201,6 +203,7 @@ fn spawn_road_rail_station_and_transport_cover_main_paths() {
                     &[],
                     None,
                     TEST_CLIMATE,
+                    &[],
                 );
                 for (x, y) in [(5, 2), (5, 3), (5, 4), (5, 5), (5, 6), (5, 7)] {
                     spawn_transport_object_tile(
@@ -419,6 +422,7 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     &[],
                     None,
                     None,
+                    &[],
                 );
                 spawn_station_tile(
                     &mut commands,
@@ -436,6 +440,7 @@ fn spawn_sloped_road_and_station_hit_slope_ground_branch() {
                     &[],
                     None,
                     TEST_CLIMATE,
+                    &[],
                 );
             },
         )
@@ -701,6 +706,7 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     &[],
                     None,
                     None,
+                    &[],
                 );
             },
         )
@@ -736,6 +742,7 @@ fn paved_roadside_uses_paved_set_and_streetlights_spawn_lamps() {
                     &[],
                     None,
                     None,
+                    &[],
                 );
             },
         )

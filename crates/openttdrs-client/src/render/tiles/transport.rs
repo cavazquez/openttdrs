@@ -38,6 +38,7 @@ pub(crate) fn spawn_road_tile(
     road_catalog: &[RoadTypeDef],
     mut road_sprites: Option<&mut NewGrfRoadSpriteCache>,
     mut images: Option<&mut Assets<Image>>,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -91,6 +92,10 @@ pub(crate) fn spawn_road_tile(
             def.newgrf_type_tables.as_ref(),
             road_catalog,
         );
+        a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+            newgrf_stack,
+            def.newgrf_grfid,
+        ));
         if let Some(handle) = cache.handle_for_runtime(def, view_idx, &mut a2, images) {
             let pos3 = if tileh == 0 {
                 overlay_pos(
@@ -161,6 +166,10 @@ pub(crate) fn spawn_road_tile(
                 def.newgrf_type_tables.as_ref(),
                 road_catalog,
             );
+            a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+                newgrf_stack,
+                def.newgrf_grfid,
+            ));
             if let Some(handle) = cache.handle_for_runtime(def, tfi, &mut a2, images) {
                 let pos3 = if tileh == 0 {
                     overlay_pos(

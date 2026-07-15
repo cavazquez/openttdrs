@@ -80,6 +80,7 @@ pub(crate) fn spawn_station_tile(
     catenary_newgrf: &[Option<openttdrs_core::DecodedSprite>],
     mut catenary_sprites: Option<&mut crate::render::NewGrfCatenarySpriteCache>,
     climate: openttdrs_core::Climate,
+    newgrf_stack: &[openttdrs_core::NewGrfEntry],
 ) {
     let tileh = ctx.info.tileh;
     let base_z = ctx.info.base_z;
@@ -159,6 +160,10 @@ pub(crate) fn spawn_station_tile(
                     climate,
                     def.newgrf_type_tables.as_ref(),
                 );
+                a2.set_grf_params(openttdrs_core::stack_params_for_grfid(
+                    newgrf_stack,
+                    def.newgrf_grfid,
+                ));
                 if let Some(handle) =
                     cache.handle_for_runtime(def, view_idx, owner_colour, &mut a2, images)
                 {

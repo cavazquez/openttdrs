@@ -1,7 +1,7 @@
 //! Configuración `NewGRF` (Fase 7 MVP).
 //!
 //! Persistencia del stack activo + lectura de cabecera de contenedor `.grf` y
-//! Action 8 (GRFID / nombre). No ejecuta Action0–14 ni resuelve sprites.
+//! Action 8 (GRFID / nombre). Parámetros runtime (`param[]`, Action2 var `0x7F`).
 
 use std::path::Path;
 
@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 
 /// Firma de contenedor GRF v2 (`grfcodec` / `OpenTTD` `_grf_cont_v2_sig`).
 const GRF_CONT_V2_SIG: [u8; 8] = [b'G', b'R', b'F', 0x82, 0x0D, 0x0A, 0x1A, 0x0A];
+
+/// Máximo de parámetros por GRF (`OpenTTD` `GRFConfig::MAX_NUM_PARAMS`).
+pub const MAX_NEWGRF_PARAMS: usize = 0x80;
 
 /// Entrada del stack `NewGRF` (`GRFConfig` simplificado).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +35,10 @@ pub struct NewGrfEntry {
     /// GRF de base / no desactivable (p. ej. `OpenGFX` documentado).
     #[serde(default)]
     pub is_static: bool,
+    /// Parámetros del GRF (`GRFFile::param` / Action2 variable `0x7F`).
+    /// Ausentes se leen como `0` (igual que `OpenTTD` fuera de rango).
+    #[serde(default)]
+    pub params: Vec<u32>,
 }
 
 const fn default_true() -> bool {
@@ -49,6 +56,7 @@ impl NewGrfEntry {
             grf_version: 0,
             enabled: true,
             is_static: false,
+            params: Vec::new(),
         }
     }
 
@@ -56,6 +64,41 @@ impl NewGrfEntry {
     #[must_use]
     pub fn grfid_hex(&self) -> String {
         format_grfid(self.grfid)
+    }
+
+    /// Lee `param[n]` (`0` si no está definido o fuera de rango).
+    #[must_use]
+    pub fn param(&self, n: usize) -> u32 {
+        if n >= MAX_NEWGRF_PARAMS {
+            return 0;
+        }
+        self.params.get(n).copied().unwrap_or(0)
+    }
+
+    /// Escribe `param[n]` (amplía el vector con ceros si hace falta).
+    ///
+    /// Devuelve `false` si `n >= MAX_NEWGRF_PARAMS`.
+    pub fn set_param(&mut self, n: usize, value: u32) -> bool {
+        if n >= MAX_NEWGRF_PARAMS {
+            return false;
+        }
+        if self.params.len() <= n {
+            self.params.resize(n + 1, 0);
+        }
+        self.params[n] = value;
+        true
+    }
+}
+
+/// Parámetros del stack para un `GRFID` (slice vacío si no hay entrada).
+#[must_use]
+pub fn stack_params_for_grfid(stack: &[NewGrfEntry], grfid: u32) -> &[u32] {
+    if grfid == 0 {
+        return &[];
+    }
+    match stack.iter().find(|e| e.grfid == grfid) {
+        Some(e) => e.params.as_slice(),
+        None => &[],
     }
 }
 
@@ -124,6 +167,7 @@ pub fn default_vanilla_stack() -> Vec<NewGrfEntry> {
         grf_version: 8,
         enabled: true,
         is_static: true,
+        params: Vec::new(),
     }]
 }
 

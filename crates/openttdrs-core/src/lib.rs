@@ -221,9 +221,10 @@ pub use newgrf_actions::{
     parse_action0_roadtype_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_config::{
-    GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, NewGrfEntry,
-    build_minimal_grf_v2, default_vanilla_stack, format_grfid, grfid_from_bytes,
-    parse_grf_container, parse_grf_full, scan_grf_bytes, scan_grf_file, validate_stack,
+    GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,
+    NewGrfEntry, build_minimal_grf_v2, default_vanilla_stack, format_grfid, grfid_from_bytes,
+    parse_grf_container, parse_grf_full, scan_grf_bytes, scan_grf_file, stack_params_for_grfid,
+    validate_stack,
 };
 pub use newgrf_sprites::{
     ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, Action2EvalCtx, Action2RandomEntry,

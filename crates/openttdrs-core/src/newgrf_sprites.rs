@@ -105,6 +105,16 @@ pub struct Action2EvalCtx {
     pub persistent_registers: HashMap<u8, u32>,
     /// Último resultado de un `VarAction2` (variable `1C`; p. ej. tras procedure `7E`).
     pub last_result: u32,
+    /// Parámetros del GRF (`GRFFile::param`; variable `0x7F[param]`).
+    pub grf_params: Vec<u32>,
+}
+
+impl Action2EvalCtx {
+    /// Copia parámetros del stack para resolución Action2 (`0x7F`).
+    pub fn set_grf_params(&mut self, params: &[u32]) {
+        self.grf_params.clear();
+        self.grf_params.extend_from_slice(params);
+    }
 }
 
 /// Resultado de parsear Action1/2/3 de un feature (trains / roadtypes).
@@ -242,6 +252,11 @@ fn read_action2_var(
         0x7E => {
             let proc_id = term.param.unwrap_or(0);
             Some(invoke_action2_procedure(gfx, proc_id, ctx, depth))
+        }
+        // Parámetro del GRF (`GRFFile::GetParam`).
+        0x7F => {
+            let idx = usize::from(term.param.unwrap_or(0));
+            Some(ctx.grf_params.get(idx).copied().unwrap_or(0))
         }
         v => ctx.vars.get(&v).copied(),
     }
@@ -3496,6 +3511,37 @@ mod tests {
         let mut ctx2 = Action2EvalCtx::default();
         assert_eq!(gfx.resolve_action1_set_ctx(4, &mut ctx2), 0);
         assert_eq!(ctx2.persistent_registers.get(&2), Some(&5));
+    }
+
+    #[test]
+    fn resolve_grf_param_7f() {
+        let mut gfx = TrainSpriteGraphics::default();
+        gfx.action2_var.insert(
+            3,
+            Action2VarEntry {
+                first: Action2VarTerm {
+                    variable: 0x7F,
+                    param: Some(1),
+                    adjust: Action2VarAdjust {
+                        shift: 0,
+                        and_mask: 0xFF,
+                        add_val: None,
+                        divide_val: None,
+                        modulo_val: None,
+                    },
+                },
+                ops: Vec::new(),
+                ranges: vec![(1, 9, 9)],
+                default: 2,
+            },
+        );
+        gfx.action2_to_action1.insert(1, 0);
+        gfx.action2_to_action1.insert(2, 1);
+        let mut ctx = Action2EvalCtx::default();
+        ctx.set_grf_params(&[0, 9, 0]);
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx), 0);
+        let mut ctx_miss = Action2EvalCtx::default();
+        assert_eq!(gfx.resolve_action1_set_ctx(3, &mut ctx_miss), 1);
     }
 
     #[test]

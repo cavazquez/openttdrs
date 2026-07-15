@@ -24,6 +24,7 @@ pub mod economy;
 pub mod economy_quarterly;
 pub mod engine;
 pub mod entity_history;
+pub mod flow_stat;
 mod game_state;
 pub mod industry;
 pub mod link_graph;
@@ -145,6 +146,10 @@ pub use engine::{
 };
 pub use entity_history::{
     ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
+};
+pub use flow_stat::{
+    CargoDistSettings, DistributionType, FlowStat, FlowStatMap, StationFlowTable, StationFlows,
+    resolve_next_hop,
 };
 #[allow(deprecated)]
 pub use game_state::CARGO_DELIVERY_PAYMENT;

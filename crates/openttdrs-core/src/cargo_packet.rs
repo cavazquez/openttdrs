@@ -4,8 +4,8 @@
 //! mantienen colas FIFO. Los balances agregados (`CargoStock` / `Vehicle.cargo`)
 //! se sincronizan desde estas listas.
 //!
-//! `next_hop` es el primer slice de `CargoDist` Manual (#49): la siguiente
-//! estación de la ruta del vehículo al embarcar.
+//! `next_hop` es el slice de `CargoDist` (#49): Manual usa órdenes;
+//! Asymmetric/Symmetric usan `FlowStat` (con fallback a órdenes).
 
 use std::collections::VecDeque;
 
@@ -62,7 +62,7 @@ pub struct CargoPacket {
     /// Acumulado de pagos feeder (`Money feeder_share` en `OpenTTD`).
     #[serde(default)]
     pub feeder_share: i64,
-    /// Siguiente estación de la ruta Manual (`CargoPacket::next_hop`).
+    /// Siguiente estación de la ruta (`CargoPacket::next_hop` / `FlowStat`).
     #[serde(default)]
     pub next_hop: Option<TileCoord>,
 }
@@ -95,7 +95,7 @@ impl CargoPacket {
     }
 }
 
-/// Decide si el packet debe bajarse en `at` (Manual / sin `FlowStat`).
+/// Decide si el packet debe bajarse en `at` según `next_hop`.
 ///
 /// `reinsert_freight`: freight que queda en cola de estación (hub), no sink final.
 #[must_use]

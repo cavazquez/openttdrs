@@ -430,9 +430,15 @@ pub struct GameState {
     /// Partida cerrada (endscreen); no emitir más `GameOver`.
     #[serde(default)]
     pub game_finished: bool,
-    /// Flujos estación→estación observados (link graph; sin routing `CargoDist`).
+    /// Flujos estación→estación observados (link graph → `station_flows`).
     #[serde(default)]
     pub link_graph: crate::link_graph::LinkGraphStats,
+    /// Modo `CargoDist` (`Manual` / `Asymmetric` / `Symmetric`).
+    #[serde(default)]
+    pub cargo_dist: crate::flow_stat::CargoDistSettings,
+    /// `FlowStat` reconstruidos desde `link_graph` (no persistidos).
+    #[serde(skip, default)]
+    pub station_flows: crate::flow_stat::StationFlows,
 }
 
 const fn default_true() -> bool {
@@ -517,6 +523,8 @@ impl GameState {
             bankruptcy_streak: 0,
             game_finished: false,
             link_graph: crate::link_graph::LinkGraphStats::default(),
+            cargo_dist: crate::flow_stat::CargoDistSettings::default(),
+            station_flows: crate::flow_stat::StationFlows::default(),
         }
     }
 
@@ -586,7 +594,14 @@ impl GameState {
             bankruptcy_streak: 0,
             game_finished: false,
             link_graph: crate::link_graph::LinkGraphStats::default(),
+            cargo_dist: crate::flow_stat::CargoDistSettings::default(),
+            station_flows: crate::flow_stat::StationFlows::default(),
         }
+    }
+
+    /// Reconstruye [`StationFlows`] desde el link graph observado.
+    pub fn rebuild_station_flows(&mut self) {
+        self.station_flows = crate::flow_stat::StationFlows::from_link_graph(&self.link_graph);
     }
 
     /// Activa la traza de paridad: cada `step()` añade un registro por tick.

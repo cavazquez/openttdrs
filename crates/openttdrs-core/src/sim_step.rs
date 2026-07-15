@@ -435,6 +435,8 @@ fn process_monthly_economy(state: &mut GameState, tick: u64) {
         );
     }
     state.link_graph.rollover_month();
+    // Flows desde totales del link graph (mapper ingenuo; sin MCF).
+    state.rebuild_station_flows();
     // Metas de crecimiento urbano + historiales de pueblos e industrias (UI-3).
     town::process_town_monthly_growth(&mut state.towns, &state.stations);
     for town in &mut state.towns {
@@ -586,10 +588,18 @@ fn try_load_from_industry(
     let count = load.min(u32::from(u16::MAX)) as u16;
     let mut packet = crate::cargo_packet::CargoPacket::new(output, count, source);
     packet.first_station = Some(station_pos);
-    packet.next_hop = crate::VehicleOrder::next_station_hop(
+    let order_hop = crate::VehicleOrder::next_station_hop(
         &state.vehicles[vehicle_idx].orders,
         state.vehicles[vehicle_idx].current_order,
         station_pos,
+    );
+    packet.next_hop = crate::flow_stat::resolve_next_hop(
+        state.cargo_dist.distribution,
+        &state.station_flows,
+        station_pos,
+        output,
+        station_pos,
+        order_hop,
     );
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
     state.vehicles[vehicle_idx].cargo_packets.push(packet);
@@ -707,17 +717,26 @@ fn try_load_from_station_waiting_cargo(
     if taken.is_empty() {
         return false;
     }
-    // Primer embarque: feeder + next_hop Manual desde órdenes del vehículo.
-    let hop = crate::VehicleOrder::next_station_hop(
+    // Feeder + next_hop: Manual = órdenes; Asymmetric/Symmetric = FlowStat.
+    let order_hop = crate::VehicleOrder::next_station_hop(
         &state.vehicles[vehicle_idx].orders,
         state.vehicles[vehicle_idx].current_order,
         station_pos,
     );
+    let distribution = state.cargo_dist.distribution;
     for packet in &mut taken {
         if packet.first_station.is_none() {
             packet.first_station = Some(station_pos);
         }
-        packet.next_hop = hop;
+        let origin = packet.first_station.unwrap_or(station_pos);
+        packet.next_hop = crate::flow_stat::resolve_next_hop(
+            distribution,
+            &state.station_flows,
+            station_pos,
+            packet.cargo,
+            origin,
+            order_hop,
+        );
     }
     let loaded_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
@@ -788,7 +807,7 @@ fn unload_vehicles(
         if !st.accepts_cargo(cargo_type) || !st.can_service_vehicle(state.vehicles[i].kind) {
             continue;
         }
-        // CargoDist Manual: no bajar si `next_hop` apunta a otra estación.
+        // CargoDist: no bajar si `next_hop` apunta a otra estación.
         let reinsert = !cargo_type.is_town_cargo();
         if state.vehicles[i].cargo_packets.packets.iter().all(|p| {
             crate::cargo_packet::decide_cargo_unload_action(p, station_pos, reinsert)
@@ -808,6 +827,7 @@ fn unload_vehicles(
             state
                 .link_graph
                 .record_flow(from, station_pos, cargo_type, unload_units);
+            state.rebuild_station_flows();
         }
         let mut payment = 0_i64;
         let mut feeder_total = 0_i64;

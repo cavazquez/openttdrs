@@ -32,7 +32,9 @@ use crate::GameState;
 /// v16: monorail/maglev como `RailType` 2/3 (sin migración de datos; esquema).
 /// v17: stack `NewGRF` (`newgrf_stack`) — config + cabecera; sin Action0–14.
 /// v18: link graph observacional (`link_graph`).
-pub const CURRENT_SAVE_VERSION: u32 = 19;
+/// v19: intervalo de servicio por defecto en vehículos antiguos.
+/// v20: `cargo_dist` (modo Manual/Asymmetric/Symmetric; flows reconstruidos).
+pub const CURRENT_SAVE_VERSION: u32 = 20;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -129,6 +131,7 @@ pub fn load_from_str(text: &str) -> Result<GameState, SaveError> {
         let mut state = GameState::load_json(text)?;
         crate::command::normalize_synthetic_rail_crossings(&mut state.map);
         state.map.migrate_legacy_clear_grass_m5();
+        state.rebuild_station_flows();
         Ok(state)
     }
 }
@@ -156,12 +159,19 @@ fn migrate_loaded_state(version: u32, mut state: GameState) -> Result<GameState,
             16 => migrate_state_v16_to_v17(&mut state),
             17 => migrate_state_v17_to_v18(&mut state),
             18 => migrate_state_v18_to_v19(&mut state),
+            19 => migrate_state_v19_to_v20(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
     }
     after_migrate_refresh_newgrf(&mut state);
+    state.rebuild_station_flows();
     Ok(state)
+}
+
+/// v20: modo `CargoDist` por defecto (`Manual`); `station_flows` se reconstruyen.
+fn migrate_state_v19_to_v20(state: &mut GameState) {
+    state.cargo_dist = crate::flow_stat::CargoDistSettings::default();
 }
 
 /// v19: intervalo de servicio por defecto en vehículos antiguos.

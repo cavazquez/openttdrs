@@ -1504,6 +1504,61 @@ mod tests {
     }
 
     #[test]
+    fn cargo_asymmetric_next_hop_from_flow_stat() {
+        use crate::cargo::CargoType;
+        use crate::cargo_packet::CargoPacket;
+        use crate::flow_stat::DistributionType;
+        use crate::station::StopKind;
+
+        let mut state = GameState::new(16, 10);
+        let via = TileCoord::new(4, 4);
+        let order_dest = TileCoord::new(10, 5);
+        let flow_dest = TileCoord::new(12, 6);
+        state.stations = vec![
+            crate::Station::new_with_kind(via, StopKind::TruckStop),
+            crate::Station::new_with_kind(order_dest, StopKind::TruckStop),
+            crate::Station::new_with_kind(flow_dest, StopKind::TruckStop),
+        ];
+        state
+            .link_graph
+            .record_flow(via, flow_dest, CargoType::Goods, 50);
+        state.rebuild_station_flows();
+        state.cargo_dist.distribution = DistributionType::Asymmetric;
+
+        let mut truck = Vehicle::new(92, VehicleKind::Truck, via, order_dest);
+        truck.set_vehicle_orders(vec![
+            VehicleOrder::station(via),
+            VehicleOrder::station(order_dest),
+        ]);
+        truck.current_order = 0;
+        truck.sync_order_destination(&state.map);
+        state.vehicles.push(truck);
+
+        let mut waiting = CargoPacket::new(CargoType::Goods, 4, via);
+        waiting.first_station = Some(via);
+        state.stations[0].cargo_packets.push(waiting);
+        state.stations[0].sync_stock_from_packets();
+
+        for _ in 0..8 {
+            state.step();
+            if state.vehicles[0].cargo > 0 {
+                break;
+            }
+        }
+        assert!(state.vehicles[0].cargo > 0, "debe cargar goods");
+        let hop = state.vehicles[0]
+            .cargo_packets
+            .packets
+            .first()
+            .and_then(|p| p.next_hop);
+        assert_eq!(
+            hop,
+            Some(flow_dest),
+            "Asymmetric usa FlowStat (no order_dest)"
+        );
+    }
+
+    #[test]
     fn load_from_station_sets_first_station_when_missing() {
         use crate::cargo::CargoType;
         use crate::cargo_packet::CargoPacket;

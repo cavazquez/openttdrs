@@ -1,4 +1,5 @@
-//! Link graph observacional: flujos estación→estación por cargo (sin routing `CargoDist`).
+//! Link graph observacional: flujos estación→estación por cargo.
+//! Alimenta `FlowStat` (`CargoDist` Asymmetric/Symmetric; sin MCF).
 
 use std::collections::HashMap;
 

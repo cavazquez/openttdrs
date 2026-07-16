@@ -64,6 +64,33 @@ fn two_peers_same_log_same_hash_over_tcp() {
 }
 
 #[test]
+fn late_joiner_gets_live_snapshot_not_boot() {
+    let mut host = GameState::new(32, 32);
+    let boot = host.save_json().unwrap();
+    let port = u16::try_from(44_000 + (std::process::id() % 2000)).unwrap_or(DEFAULT_PORT);
+    let bind = format!("127.0.0.1:{port}");
+    let server = ListenServer::start(&bind, boot).unwrap();
+
+    apply_command(&mut host, &Command::PlaceRail(TileCoord::new(5, 5))).unwrap();
+    for _ in 0..200 {
+        host.step();
+    }
+    server.update_snapshot(host.save_json().unwrap());
+    thread::sleep(Duration::from_millis(30));
+
+    let client = ClientSession::connect(&bind).unwrap();
+    let welcome = wait_event(&client, Duration::from_secs(2));
+    let mut remote = GameState::new(1, 1);
+    apply_session_event(&mut remote, &welcome).unwrap();
+    assert_eq!(
+        host.tick.get(),
+        remote.tick.get(),
+        "late join debe recibir el tick actual"
+    );
+    assert_eq!(host.canonical_hash(), remote.canonical_hash());
+}
+
+#[test]
 fn client_propose_reaches_host() {
     let host_state = GameState::new(24, 24);
     let snapshot = host_state.save_json().unwrap();

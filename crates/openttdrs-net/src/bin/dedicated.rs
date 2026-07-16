@@ -47,6 +47,7 @@ fn main() {
                         eprintln!("dedicated: reject commit seq={seq}: {e}");
                     } else {
                         eprintln!("dedicated: applied commit seq={seq}");
+                        publish_snapshot(&server, &state);
                     }
                 }
                 SessionEvent::Disconnected { reason } => {
@@ -60,7 +61,9 @@ fn main() {
 
         if last_tick.elapsed() >= tick_period {
             state.step();
+            // Primero avisar a peers ya conectados; luego publicar snapshot para late-join.
             let _ = server.broadcast_advance(1);
+            publish_snapshot(&server, &state);
             ticks_since_hash += 1;
             if ticks_since_hash >= 37 {
                 ticks_since_hash = 0;
@@ -72,6 +75,13 @@ fn main() {
         }
 
         thread::sleep(Duration::from_millis(1));
+    }
+}
+
+fn publish_snapshot(server: &ListenServer, state: &GameState) {
+    match state.save_json() {
+        Ok(json) => server.update_snapshot(json),
+        Err(e) => eprintln!("dedicated: snapshot failed: {e}"),
     }
 }
 

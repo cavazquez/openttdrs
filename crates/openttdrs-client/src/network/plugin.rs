@@ -73,6 +73,14 @@ impl NetworkRuntime {
         }
     }
 
+    fn publish_snapshot(&self, snapshot_json: String) {
+        if let Some(server) = &self.server
+            && let Ok(g) = server.lock()
+        {
+            g.update_snapshot(snapshot_json);
+        }
+    }
+
     fn broadcast_hash(&self, tick: u64, hash: u64) {
         if let Some(server) = &self.server
             && let Ok(g) = server.lock()
@@ -205,7 +213,11 @@ fn handle_event(
         SessionEvent::Welcome { snapshot_json, .. } => {
             sim.state = GameState::load_json(snapshot_json).map_err(|e| e.to_string())?;
             vehicle_index.rebuild(&sim.state.vehicles);
-            info!("network: welcome applied");
+            info!(
+                "network: welcome applied tick={} hash={:#x}",
+                sim.state.tick.get(),
+                sim.state.canonical_hash()
+            );
             Ok(())
         }
         SessionEvent::Commit { command, seq } => {
@@ -222,6 +234,12 @@ fn handle_event(
             Ok(())
         }
         SessionEvent::HashCheck { tick, hash } => {
+            let local_tick = sim.state.tick.get();
+            if local_tick != *tick {
+                // Snapshot de late-join o cola de AdvanceTicks aún no al día.
+                debug!("network: skip hash check server_tick={tick} local_tick={local_tick}");
+                return Ok(());
+            }
             let actual = sim.state.canonical_hash();
             if actual != *hash {
                 let msg = format!("desync tick={tick} expected={hash:#x} actual={actual:#x}");
@@ -250,6 +268,10 @@ fn handle_event(
 
 fn broadcast_tick_after_step(net: Res<NetworkRuntime>, sim: Res<SimWorld>) {
     net.broadcast_advance(1);
+    match sim.state.save_json() {
+        Ok(json) => net.publish_snapshot(json),
+        Err(e) => warn!("network: snapshot update failed: {e}"),
+    }
     let tick = sim.state.tick.get();
     if tick > 0 && tick.is_multiple_of(37) {
         net.broadcast_hash(tick, sim.state.canonical_hash());

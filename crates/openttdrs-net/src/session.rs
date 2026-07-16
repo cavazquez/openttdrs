@@ -3,6 +3,7 @@
 use std::io::Read;
 use std::net::{TcpListener, TcpStream};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -39,10 +40,14 @@ enum ServerCmd {
     Shutdown,
 }
 
+/// Snapshot vivo compartido con el hilo de accept (late join).
+type LiveSnapshot = Arc<Mutex<String>>;
+
 /// Handle clonable para emitir commits/ticks desde el hilo de UI.
 #[derive(Clone)]
 pub struct ListenServerHandle {
     cmd_tx: Sender<ServerCmd>,
+    live_snapshot: LiveSnapshot,
 }
 
 impl ListenServerHandle {
@@ -63,6 +68,15 @@ impl ListenServerHandle {
             .send(ServerCmd::HashCheck { tick, hash })
             .map_err(|_| NetError::Closed)
     }
+
+    /// Actualiza de inmediato el JSON de `Welcome` (visible al próximo accept).
+    pub fn update_snapshot(&self, snapshot_json: String) {
+        let mut guard = self
+            .live_snapshot
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *guard = snapshot_json;
+    }
 }
 
 /// Listen-server: acepta clientes y retransmite commits/ticks/hashes.
@@ -73,20 +87,29 @@ pub struct ListenServer {
 }
 
 impl ListenServer {
-    /// Arranca el servidor en un hilo. `snapshot` se clona a cada cliente en Welcome.
+    /// Arranca el servidor en un hilo.
+    ///
+    /// `snapshot_json` es el Welcome inicial; el host debe llamar
+    /// [`ListenServerHandle::update_snapshot`] tras cada avance de sim para que
+    /// los late-joiners reciban el estado **actual** (no el del arranque).
     pub fn start(bind: &str, snapshot_json: String) -> Result<Self, NetError> {
         let listener = crate::listen(bind)?;
         let (cmd_tx, cmd_rx) = mpsc::channel();
         let (event_tx, event_rx) = mpsc::channel();
+        let live: LiveSnapshot = Arc::new(Mutex::new(snapshot_json));
+        let live_thread = Arc::clone(&live);
         let bind_owned = bind.to_string();
         let join = thread::Builder::new()
             .name("openttdrs-listen".into())
             .spawn(move || {
-                server_thread(listener, snapshot_json, cmd_rx, event_tx, &bind_owned);
+                server_thread(listener, live_thread, cmd_rx, event_tx, &bind_owned);
             })
             .map_err(NetError::Io)?;
         Ok(Self {
-            handle: ListenServerHandle { cmd_tx },
+            handle: ListenServerHandle {
+                cmd_tx,
+                live_snapshot: live,
+            },
             event_rx,
             join: Some(join),
         })
@@ -109,6 +132,10 @@ impl ListenServer {
 
     pub fn broadcast_hash(&self, tick: u64, hash: u64) -> Result<(), NetError> {
         self.handle.broadcast_hash(tick, hash)
+    }
+
+    pub fn update_snapshot(&self, snapshot_json: String) {
+        self.handle.update_snapshot(snapshot_json);
     }
 
     /// Eventos remotos (p.ej. Propose ya convertido en Commit por el hilo).
@@ -136,9 +163,10 @@ struct ClientSlot {
     stream: TcpStream,
 }
 
+#[allow(clippy::too_many_lines)]
 fn server_thread(
     listener: TcpListener,
-    mut snapshot_json: String,
+    live_snapshot: LiveSnapshot,
     cmd_rx: Receiver<ServerCmd>,
     event_tx: Sender<SessionEvent>,
     bind: &str,
@@ -162,8 +190,32 @@ fn server_thread(
                     continue;
                 }
                 let mut stream = stream;
-                match handshake_server(&mut stream, &snapshot_json, next_seq) {
-                    Ok(()) => clients.push(ClientSlot { stream }),
+                let snapshot = live_snapshot
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone();
+                match handshake_server(&mut stream, &snapshot, next_seq) {
+                    Ok(()) => {
+                        // Si el host avanzó durante el handshake, reenviar snapshot vivo.
+                        let fresh = live_snapshot
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .clone();
+                        if fresh != snapshot
+                            && let Err(e) = write_message(
+                                &mut stream,
+                                &NetMessage::Welcome {
+                                    protocol: PROTOCOL_VERSION,
+                                    snapshot_json: fresh,
+                                    next_seq,
+                                },
+                            )
+                        {
+                            eprintln!("openttdrs-net: late-join resync failed: {e}");
+                            continue;
+                        }
+                        clients.push(ClientSlot { stream });
+                    }
                     Err(e) => eprintln!("openttdrs-net: handshake failed: {e}"),
                 }
             }
@@ -211,9 +263,6 @@ fn server_thread(
             Ok(ServerCmd::LocalCommit(command)) => {
                 let seq = next_seq;
                 next_seq += 1;
-                // Actualizar snapshot liviano no es obligatorio; Welcome usa el inicial.
-                // Re-serializar snapshot en cada commit sería caro; se omite en v1.
-                let _ = &mut snapshot_json;
                 let commit = NetMessage::Commit {
                     seq,
                     command: command.clone(),
@@ -428,6 +477,17 @@ fn client_thread(
 
         match try_read_client(&mut stream) {
             Ok(None) => thread::sleep(Duration::from_millis(2)),
+            Ok(Some(NetMessage::Welcome {
+                protocol,
+                snapshot_json,
+                next_seq,
+            })) if protocol == PROTOCOL_VERSION => {
+                // Resync post-handshake (host avanzó durante el Welcome).
+                let _ = event_tx.send(SessionEvent::Welcome {
+                    snapshot_json,
+                    next_seq,
+                });
+            }
             Ok(Some(NetMessage::Commit { seq, command })) => {
                 let _ = event_tx.send(SessionEvent::Commit { seq, command });
             }
@@ -483,6 +543,11 @@ pub fn apply_session_event(state: &mut GameState, event: &SessionEvent) -> Resul
             Ok(())
         }
         SessionEvent::HashCheck { tick, hash } => {
+            let local_tick = state.tick.get();
+            if local_tick != *tick {
+                // Late-join / cola: solo comparar cuando el tick coincide.
+                return Ok(());
+            }
             let actual = state.canonical_hash();
             if actual != *hash {
                 return Err(format!(

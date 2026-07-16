@@ -1,4 +1,5 @@
 use crate::command::{Command, CommandError, apply_command};
+use crate::test_fixtures::SandboxMap;
 use crate::{
     GameState, IndustryKind, IndustrySpec, LevelMode, TERRAFORM_COST, TileCoord, TileKind,
     industry_template, tile_slope_and_z,
@@ -26,12 +27,7 @@ fn command_sequence_is_deterministic() {
 
 #[test]
 fn level_land_drag_flattens_area() {
-    let mut s = GameState::new(8, 8);
-    for y in 0..8 {
-        for x in 0..8 {
-            s.map.set_height(TileCoord::new(x, y), 4).unwrap();
-        }
-    }
+    let mut s = SandboxMap::flat(8, 8, 4);
     apply_command(&mut s, &Command::RaiseLand(TileCoord::new(3, 3))).unwrap();
     apply_command(
         &mut s,
@@ -51,13 +47,8 @@ fn level_land_drag_flattens_area() {
 
 #[test]
 fn raise_then_lower_restores_flat_grass() {
-    let mut s = GameState::new(8, 8);
+    let mut s = SandboxMap::flat(8, 8, 4);
     let c = TileCoord::new(3, 4);
-    for y in 0..8 {
-        for x in 0..8 {
-            s.map.set_height(TileCoord::new(x, y), 4).unwrap();
-        }
-    }
     apply_command(&mut s, &Command::RaiseLand(c)).unwrap();
     assert_ne!(tile_slope_and_z(&s.map, c).unwrap().0, 0);
     apply_command(&mut s, &Command::LowerLand(c)).unwrap();
@@ -78,13 +69,8 @@ fn lower_land_rejects_sea_level() {
 
 #[test]
 fn raise_land_on_grass_costs_and_creates_slope() {
-    let mut s = GameState::new(8, 8);
+    let mut s = SandboxMap::flat(8, 8, 4);
     let c = TileCoord::new(3, 4);
-    for y in 0..8 {
-        for x in 0..8 {
-            s.map.set_height(TileCoord::new(x, y), 4).unwrap();
-        }
-    }
     let money_before = s.economy.money;
     apply_command(&mut s, &Command::RaiseLand(c)).unwrap();
     assert_eq!(s.economy.money, money_before - TERRAFORM_COST);
@@ -292,8 +278,7 @@ fn place_rail_and_road_write_active_company_owner_m1() {
 fn place_rail_tunnel_and_bridge_write_active_company_owner_m1() {
     use crate::{BridgeType, TileKind};
 
-    let mut s = GameState::new(16, 16);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(16, 16, 1);
     s.ensure_rival_transcargo();
     let rival = crate::CompanyId(1);
     assert!(s.set_active_company(rival));
@@ -345,8 +330,7 @@ fn place_rail_tunnel_and_bridge_write_active_company_owner_m1() {
 
 #[test]
 fn toggle_vehicle_running_rejects_other_company_owner() {
-    let mut s = GameState::new(8, 8);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(8, 8, 1);
     s.ensure_rival_transcargo();
     let depot = TileCoord::new(2, 2);
     apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(1, 2))).unwrap();
@@ -366,8 +350,7 @@ fn toggle_vehicle_running_rejects_other_company_owner() {
 
 #[test]
 fn clear_and_remove_rail_reject_foreign_owned_infra() {
-    let mut s = GameState::new(8, 8);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(8, 8, 1);
     s.ensure_rival_transcargo();
     let rival = crate::CompanyId(1);
     assert!(s.set_active_company(rival));
@@ -394,8 +377,7 @@ fn clear_and_remove_rail_reject_foreign_owned_infra() {
 
 #[test]
 fn place_rail_bits_rejects_overwrite_of_foreign_rail() {
-    let mut s = GameState::new(8, 8);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(8, 8, 1);
     s.ensure_rival_transcargo();
     assert!(s.set_active_company(crate::CompanyId(1)));
     let c = TileCoord::new(2, 2);
@@ -434,8 +416,7 @@ fn cheat_set_year_and_switch_company_require_enabled() {
 
 #[test]
 fn magic_bulldozer_clears_foreign_tile() {
-    let mut s = GameState::new(8, 8);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(8, 8, 1);
     s.ensure_rival_transcargo();
     assert!(s.set_active_company(crate::CompanyId(1)));
     let rail = TileCoord::new(3, 3);

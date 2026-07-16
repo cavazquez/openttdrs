@@ -452,21 +452,12 @@ pub(super) fn level_land(
 mod tests {
     use super::*;
     use crate::map::TileKind;
-    use crate::{Command, GameState, apply_command, tile_slope_and_z};
-
-    fn flat_map(w: u32, h: u32, height: u8) -> GameState {
-        let mut s = GameState::new(w, h);
-        for y in 0..i32::try_from(h).unwrap() {
-            for x in 0..i32::try_from(w).unwrap() {
-                s.map.set_height(TileCoord::new(x, y), height).unwrap();
-            }
-        }
-        s
-    }
+    use crate::test_fixtures::SandboxMap;
+    use crate::{Command, apply_command, tile_slope_and_z};
 
     #[test]
     fn raise_flat_grass_creates_north_slope() {
-        let mut s = flat_map(8, 8, 4);
+        let mut s = SandboxMap::flat(8, 8, 4);
         let c = TileCoord::new(3, 4);
         apply_command(&mut s, &Command::RaiseLand(c)).unwrap();
         let (tileh, _) = tile_slope_and_z(&s.map, c).unwrap();
@@ -476,7 +467,7 @@ mod tests {
 
     #[test]
     fn lower_flat_grass_removes_north_slope() {
-        let mut s = flat_map(8, 8, 4);
+        let mut s = SandboxMap::flat(8, 8, 4);
         let c = TileCoord::new(3, 4);
         apply_command(&mut s, &Command::RaiseLand(c)).unwrap();
         apply_command(&mut s, &Command::LowerLand(c)).unwrap();
@@ -487,7 +478,7 @@ mod tests {
 
     #[test]
     fn autoslope_noop_near_road_network() {
-        let mut s = flat_map(12, 12, 1);
+        let mut s = SandboxMap::flat(12, 12, 1);
         for x in 3..=6 {
             apply_command(&mut s, &Command::PlaceRoadBits(TileCoord::new(x, 5), 0x0A)).unwrap();
         }
@@ -504,7 +495,7 @@ mod tests {
 
     #[test]
     fn lower_at_sea_level_fails() {
-        let s = flat_map(8, 8, 0);
+        let s = SandboxMap::flat(8, 8, 0);
         let c = TileCoord::new(2, 2);
         assert_eq!(
             check_lower_land(&s.map, c, 0),
@@ -514,7 +505,7 @@ mod tests {
 
     #[test]
     fn lower_to_sea_creates_water() {
-        let mut s = flat_map(8, 8, 1);
+        let mut s = SandboxMap::flat(8, 8, 1);
         let c = TileCoord::new(3, 3);
         apply_command(&mut s, &Command::LowerLand(c)).unwrap();
         assert_eq!(s.map.get_kind(c), Some(TileKind::Water));
@@ -523,7 +514,7 @@ mod tests {
 
     #[test]
     fn raise_from_flat_water_creates_grass() {
-        let mut s = flat_map(8, 8, 0);
+        let mut s = SandboxMap::flat(8, 8, 0);
         let c = TileCoord::new(2, 2);
         s.map.set_kind(c, TileKind::Water).unwrap();
         s.map.set_mapt_m5(c, MAPT_WATER, 0).unwrap();
@@ -533,7 +524,7 @@ mod tests {
 
     #[test]
     fn level_rect_flattens_north_corners() {
-        let mut s = flat_map(8, 8, 4);
+        let mut s = SandboxMap::flat(8, 8, 4);
         let a = TileCoord::new(2, 2);
         let b = TileCoord::new(4, 4);
         apply_command(&mut s, &Command::RaiseLand(TileCoord::new(3, 3))).unwrap();
@@ -555,7 +546,7 @@ mod tests {
 
     #[test]
     fn lower_rejects_road_tile() {
-        let mut s = flat_map(8, 8, 4);
+        let mut s = SandboxMap::flat(8, 8, 4);
         let c = TileCoord::new(2, 2);
         s.map.set_kind(c, TileKind::Road).unwrap();
         assert_eq!(
@@ -566,7 +557,7 @@ mod tests {
 
     #[test]
     fn raise_rejects_road_tile() {
-        let mut s = flat_map(8, 8, 4);
+        let mut s = SandboxMap::flat(8, 8, 4);
         let c = TileCoord::new(2, 2);
         s.map.set_kind(c, TileKind::Road).unwrap();
         assert_eq!(

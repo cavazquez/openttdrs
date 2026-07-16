@@ -1,4 +1,5 @@
 use crate::command::{Command, apply_command};
+use crate::test_fixtures::SandboxMap;
 use crate::{GameState, TileCoord};
 
 pub(crate) fn set_w_only_slope(map: &mut crate::Map, tx: i32, ty: i32, base: u8) {
@@ -55,23 +56,9 @@ pub(crate) fn finish_train_with_cached_path_to_depot(mut s: GameState) -> GameSt
 }
 
 pub(crate) fn train_with_cached_path_to_depot() -> GameState {
-    let mut s = GameState::new(12, 12);
-    s.economy.money = 1_000_000;
-    for y in 0..12 {
-        for x in 0..12 {
-            s.map.set_height(TileCoord::new(x, y), 4).unwrap();
-        }
-    }
-    finish_train_with_cached_path_to_depot(s)
+    finish_train_with_cached_path_to_depot(SandboxMap::flat_rich(12, 12, 4))
 }
 
 pub(crate) fn flat_map_for_terraform_tests() -> GameState {
-    let mut s = GameState::new(12, 12);
-    s.economy.money = 1_000_000;
-    for y in 0..12 {
-        for x in 0..12 {
-            s.map.set_height(TileCoord::new(x, y), 4).unwrap();
-        }
-    }
-    s
+    SandboxMap::flat_rich(12, 12, 4)
 }

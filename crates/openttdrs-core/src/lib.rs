@@ -449,4 +449,7 @@ pub use world_gen::{
 };
 
 #[cfg(test)]
+pub mod test_fixtures;
+
+#[cfg(test)]
 mod tests;

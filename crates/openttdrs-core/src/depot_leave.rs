@@ -120,14 +120,13 @@ fn foreign_reservation_on_tile(vehicles: &[Vehicle], self_id: u32, tile: TileCoo
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
-    use crate::GameState;
     use crate::command::{Command, apply_command};
     use crate::engine::ENGINE_TRAIN_GINZU_A4;
+    use crate::test_fixtures::SandboxMap;
 
     #[test]
     fn train_waits_37_ticks_before_leaving_depot() {
-        let mut s = GameState::new(16, 16);
-        s.economy.money = 1_000_000;
+        let mut s = SandboxMap::flat_rich(16, 16, 1);
         for x in 2..=10_i32 {
             apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
         }

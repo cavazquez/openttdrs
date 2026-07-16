@@ -1,5 +1,6 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
+use crate::test_fixtures::SandboxMap;
 use crate::{
     Command, DEPOT_BUILD_COST, GameState, STATION_BUILD_COST, StopKind, TileCoord, TileKind,
     VehicleKind, apply_command, bridge_above_axis_from_mapt,
@@ -93,8 +94,7 @@ fn set_sw_slope(map: &mut crate::Map, tx: i32, ty: i32, base: u8) {
 
 #[test]
 fn place_aqueduct_between_facing_slopes() {
-    let mut s = GameState::new(16, 12);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(16, 12, 1);
     // Oeste → este: rampa SW en (3,5), rampa NE en (7,5).
     let west = TileCoord::new(3, 5);
     let east = TileCoord::new(7, 5);
@@ -114,8 +114,7 @@ fn place_aqueduct_between_facing_slopes() {
 
 #[test]
 fn place_aqueduct_rejects_flat_endpoints() {
-    let mut s = GameState::new(12, 12);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
     let e = apply_command(
         &mut s,
         &Command::PlaceAqueduct(TileCoord::new(2, 4), TileCoord::new(6, 4)),
@@ -186,8 +185,7 @@ fn ship_paths_via_buoy() {
 fn place_river_on_flat_and_inclined() {
     use crate::map::is_river_tile;
 
-    let mut s = GameState::new(12, 12);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
     let flat = TileCoord::new(4, 4);
     apply_command(&mut s, &Command::PlaceRiver(flat)).unwrap();
     assert!(s.map.get(flat).is_some_and(is_river_tile));
@@ -225,8 +223,7 @@ fn place_canal_sets_water_class_canal() {
 fn ship_paths_on_flat_river() {
     use crate::pathfinder::{PathNetwork, find_path};
 
-    let mut s = GameState::new(16, 10);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(16, 10, 1);
     for x in 2..=10 {
         apply_command(&mut s, &Command::PlaceRiver(TileCoord::new(x, 4))).unwrap();
     }

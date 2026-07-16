@@ -1,4 +1,5 @@
 use crate::command::{Command, CommandError, apply_command};
+use crate::test_fixtures::SandboxMap;
 use crate::{
     CargoType, GameState, LevelMode, OrderConditionKind, RAIL_BUILD_COST, STATION_BUILD_COST,
     STATION_TYPE_RAIL_WAYPOINT, StopKind, TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder,
@@ -1279,8 +1280,7 @@ fn convert_rail_preserves_trackbits_and_sets_electric() {
 fn electric_engine_requires_electrified_neighbor() {
     use crate::rail_type::RailType;
 
-    let mut s = GameState::new(12, 8);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(12, 8, 1);
     for x in 2..=6_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }
@@ -1348,8 +1348,7 @@ fn convert_rail_cycles_through_mono_and_maglev() {
 fn monorail_engine_requires_monorail_neighbor() {
     use crate::rail_type::RailType;
 
-    let mut s = GameState::new(12, 8);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(12, 8, 1);
     for x in 2..=6_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }
@@ -1379,8 +1378,7 @@ fn monorail_engine_requires_monorail_neighbor() {
 fn maglev_engine_requires_maglev_neighbor() {
     use crate::rail_type::RailType;
 
-    let mut s = GameState::new(12, 8);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(12, 8, 1);
     for x in 2..=6_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }
@@ -1411,8 +1409,7 @@ fn monorail_path_does_not_cross_normal_rail() {
     use crate::pathfinder::find_rail_path_for_engine;
     use crate::rail_type::RailType;
 
-    let mut s = GameState::new(16, 8);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(16, 8, 1);
     // Tramo mono 2..5 y tramo normal 6..10 (sin solape de tipo).
     for x in 2..=5_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
@@ -1446,8 +1443,7 @@ fn monorail_path_does_not_cross_normal_rail() {
 
 #[test]
 fn train_consist_attach_wagon_grows_capacity_and_length() {
-    let mut s = GameState::new(12, 12);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
     for x in 2..=6_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }
@@ -1488,8 +1484,7 @@ fn train_consist_attach_wagon_grows_capacity_and_length() {
 
 #[test]
 fn train_consist_sell_head_sells_chain() {
-    let mut s = GameState::new(12, 12);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
     for x in 2..=6_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }
@@ -1521,8 +1516,7 @@ fn train_consist_sell_head_sells_chain() {
 
 #[test]
 fn two_trains_can_leave_same_rail_depot() {
-    let mut s = GameState::new(12, 12);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
     for x in 2..=8_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }
@@ -1823,8 +1817,7 @@ fn turn_around_vehicle_reverses_train_heading() {
 
 #[test]
 fn build_manley_morel_creates_dual_head_pair() {
-    let mut s = GameState::new(12, 12);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
     let depot = TileCoord::new(4, 4);
     apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
     apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
@@ -1848,8 +1841,7 @@ fn build_manley_morel_creates_dual_head_pair() {
 
 #[test]
 fn build_wagon_then_attach_updates_consist() {
-    let mut s = GameState::new(12, 12);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
     let depot = TileCoord::new(4, 4);
     apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
     apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
@@ -2227,8 +2219,7 @@ fn vehicle_profit_tracks_income_and_running_costs() {
 
 #[test]
 fn refit_partial_consist_units() {
-    let mut s = GameState::new(12, 12);
-    s.economy.money = 1_000_000;
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
     for x in 2..=6_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
     }

@@ -1,9 +1,11 @@
 //! Fantasma de construcción: preview de herramientas sobre el mapa.
 
 mod bridge;
+mod dispatch;
 mod ghost_lerp;
-mod industry;
+pub(super) mod industry;
 mod orders;
+mod plan;
 mod rail_depot;
 mod rail_signal;
 mod rail_station;
@@ -12,10 +14,11 @@ mod road_depot;
 mod road_stop;
 mod road_waypoint;
 mod rotate;
+mod spawn;
 mod sprites;
-mod station_coverage;
+pub(super) mod station_coverage;
 mod tunnel;
-mod validation;
+pub(super) mod validation;
 
 pub(crate) use ghost_lerp::{GhostLerp, lerp_ghost_previews};
 pub(crate) use industry::{economy_industry_tool_visible, industry_spec_for_action};
@@ -24,49 +27,27 @@ pub(crate) use rotate::rotate_station_with_right_click;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{
-    Map, TileCoord, infer_road_drag_axis, is_tunnel_entrance_slope, preview_road_bits_at,
-    road_bits_for_autoroute, road_locked_tool_axis, tile_slope_and_z,
-};
+use openttdrs_core::TileCoord;
 
-use crate::iso::{
-    SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z, world_pos_to_rail_signal_pick,
-    world_pos_to_tile_coord, world_pos_to_tile_fract,
-};
+use crate::iso::{world_pos_to_rail_signal_pick, world_pos_to_tile_coord, world_pos_to_tile_fract};
 use crate::render::{CompanyColoredSprites, MapPreviewCamera, PrimaryGameCamera, TileAtlas};
-use crate::sprites::rail_ghost_overlay_offset;
 use crate::state::{OrderPickState, SimWorld, order_pick_active};
 use crate::ui::hud::HoveredTileCoord;
 
-use super::build_input::drag::{drag_line_tiles, road_bits_for_drag_action};
+use super::build_input::rail_lane::rail_lane_bits_for_action;
 use super::{
     BuildMenuAction, DragBuildState, OrderEditState, StationBuildState, ToolbarState, UiToolState,
 };
 
-use bridge::spawn_bridge_span_preview;
-use industry::spawn_industry_template_preview;
+use dispatch::build_preview_plan;
 use orders::{spawn_order_pick_target_preview, spawn_order_route_preview};
-use rail_depot::{RailDepotPreviewSpawn, spawn_rail_depot_preview};
+use plan::PreviewContext;
 pub(crate) use rail_signal::{
     RailSignalGhost, RailSignalGhostState, rail_signal_flash_position,
     update_rail_signal_ghost_preview,
 };
-use rail_station::spawn_rail_station_area_sprite_preview;
-use rail_waypoint::spawn_rail_waypoint_preview;
-use road_depot::{RoadDepotPreviewSpawn, spawn_road_depot_preview};
-use road_stop::{
-    RoadStopPreviewSpawn, bus_stop_ground_path, road_stop_preview_dir, spawn_road_stop_preview,
-    truck_stop_ground_path,
-};
-use road_waypoint::spawn_road_waypoint_preview;
-use sprites::preview_image_for_action;
-use station_coverage::{spawn_station_coverage_preview, station_preview_has_coverage};
-use tunnel::spawn_tunnel_entrance_preview;
-use validation::{action_is_tunnel, preview_bridge_span_valid, preview_build_command_valid};
-
-use crate::ui::toolbar::build_input::rail_lane::rail_lane_bits_for_action;
-
-use crate::sprites::{StationTileClass, road_flat_sprite_index};
+use spawn::spawn_preview_plan;
+use validation::preview_build_command_valid;
 
 #[derive(Component)]
 pub(crate) struct BuildGhostPreview;
@@ -79,54 +60,6 @@ pub(crate) struct RailSignalGhostPreviewParams<'w, 's> {
         Query<'w, 's, (Entity, &'static mut GhostLerp, &'static mut Sprite), With<RailSignalGhost>>,
     /// Frame de cursor animado (demolición); vive aquí para no superar el límite de params Bevy.
     pub toolbar: Res<'w, ToolbarState>,
-}
-
-/// Bits y PNG de preview de carretera (misma lógica que la colocación final).
-fn road_preview_at(
-    map: &Map,
-    action: BuildMenuAction,
-    pos: TileCoord,
-    preview_tiles: &[(i32, i32)],
-) -> Option<(u8, String)> {
-    let (requested, _force_axis) = match action {
-        BuildMenuAction::RoadX | BuildMenuAction::TramX => (0x0A, true),
-        BuildMenuAction::RoadY | BuildMenuAction::TramY => (0x05, true),
-        BuildMenuAction::Road | BuildMenuAction::Tram => (road_bits_for_autoroute(map, pos), false),
-        _ => return None,
-    };
-    let tool_bits = road_bits_for_drag_action(action, preview_tiles).unwrap_or(requested);
-    let start = preview_tiles
-        .first()
-        .map(|&(x, y)| TileCoord::new(x, y))
-        .unwrap_or(pos);
-    let end = preview_tiles
-        .last()
-        .map(|&(x, y)| TileCoord::new(x, y))
-        .unwrap_or(pos);
-    let axis = match action {
-        BuildMenuAction::RoadX | BuildMenuAction::TramX => {
-            road_locked_tool_axis(map, start, end, 0x0A)
-        }
-        BuildMenuAction::RoadY | BuildMenuAction::TramY => {
-            road_locked_tool_axis(map, start, end, 0x05)
-        }
-        BuildMenuAction::Road | BuildMenuAction::Tram => {
-            infer_road_drag_axis(map, start, end, tool_bits)
-        }
-        _ => tool_bits,
-    };
-    let bits = preview_road_bits_at(map, pos, axis, true);
-    let tileh = tile_slope_and_z(map, pos).map(|(h, _)| h).unwrap_or(0);
-    let idx = road_flat_sprite_index(tileh, bits);
-    let prefix = if matches!(
-        action,
-        BuildMenuAction::Tram | BuildMenuAction::TramX | BuildMenuAction::TramY
-    ) {
-        "tram_flat"
-    } else {
-        "road_flat"
-    };
-    Some((bits, format!("assets/opengfx/tiles/{prefix}_{idx:02}.png")))
 }
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
@@ -149,6 +82,8 @@ pub(crate) fn update_build_ghost_preview(
     time: Res<Time>,
 ) {
     let anim_cursor_frame = rail_ghost.toolbar.anim_cursor_frame;
+
+    // Limpieza de ghosts existentes
     if tool_state.active_tool != Some(BuildMenuAction::RailSignals) {
         for entity in &rail_ghost.ghosts {
             commands.entity(entity).despawn();
@@ -160,6 +95,7 @@ pub(crate) fn update_build_ghost_preview(
         commands.entity(entity).despawn();
     }
 
+    // Preview de órdenes (caso especial, manejado aparte)
     let orders_preview =
         order_pick_active(&pick_state) || tool_state.active_tool == Some(BuildMenuAction::Orders);
     if orders_preview && order_state.vehicle_id.is_some() {
@@ -185,6 +121,7 @@ pub(crate) fn update_build_ghost_preview(
         return;
     }
 
+    // Obtener posición del cursor en el mundo
     let Ok(window) = windows.single() else {
         return;
     };
@@ -197,6 +134,7 @@ pub(crate) fn update_build_ghost_preview(
     let Ok(world) = camera.viewport_to_world_2d(camera_transform, cursor) else {
         return;
     };
+
     let (tx, ty, tile_fract) = if action == BuildMenuAction::RailSignals {
         if let Some(pos) = hovered.pos {
             (pos.x, pos.y, (hovered.fract_x, hovered.fract_y))
@@ -216,9 +154,11 @@ pub(crate) fn update_build_ghost_preview(
             world_pos_to_tile_fract(world, &sim.state.map, px, py),
         )
     };
+
     if tx < 0 || ty < 0 {
         return;
     }
+
     let cursor_rail_lane = rail_lane_bits_for_action(action, Some(tile_fract));
     let preview_rail_lane = match action {
         BuildMenuAction::RailHorz | BuildMenuAction::RailVert if drag_state.armed => {
@@ -228,94 +168,12 @@ pub(crate) fn update_build_ghost_preview(
         _ => None,
     };
 
-    let preview_tiles: Vec<(i32, i32)> =
-        if matches!(action, BuildMenuAction::BusStop | BuildMenuAction::Station) {
-            // Parada bus / camión: siempre 1×1 en el cursor (no arrastre ni halo de cobertura).
-            vec![(tx, ty)]
-        } else if action_is_tunnel(action) {
-            let start = TileCoord::new(tx, ty);
-            openttdrs_core::tunnel_preview_path(&sim.state.map, start)
-                .map(|path| path.into_iter().map(|c| (c.x, c.y)).collect())
-                .unwrap_or_else(|| vec![(tx, ty)])
-        } else if matches!(
-            action,
-            BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge | BuildMenuAction::Aqueduct
-        ) && drag_state.armed
-            && let Some(start) = drag_state.start_tile
-        {
-            drag_line_tiles(Some(&sim.state.map), action, start, (tx, ty))
-        } else if drag_state.last_action == Some(action) && !drag_state.pending_tiles.is_empty() {
-            drag_state.pending_tiles.clone()
-        } else {
-            vec![(tx, ty)]
-        };
-    if action == BuildMenuAction::RailStation {
-        // Estación de tren: sprites de vía/plataforma en la huella + cobertura.
-        spawn_rail_station_area_preview(
-            &mut commands,
-            &asset_server,
-            atlas.as_deref(),
-            company.as_deref(),
-            &sim,
-            &station_state,
-            TileCoord::new(tx, ty),
-        );
-        return;
-    }
-    if action == BuildMenuAction::Airport {
-        spawn_airport_preview(
-            &mut commands,
-            &asset_server,
-            &sim,
-            &station_state,
-            TileCoord::new(tx, ty),
-        );
-        return;
-    }
-    if action == BuildMenuAction::RailWaypoint {
-        let coord = TileCoord::new(tx, ty);
-        if sim.state.map.get(coord).is_some() {
-            let valid = preview_build_command_valid(
-                &sim.state,
-                action,
-                coord,
-                &station_state,
-                &[(tx, ty)],
-                preview_rail_lane,
-                Some(tile_fract),
-            );
-            spawn_rail_waypoint_preview(
-                &mut commands,
-                atlas.as_deref(),
-                company.as_deref(),
-                &sim.state.map,
-                coord,
-                valid,
-            );
-        }
-        return;
-    }
-    if action == BuildMenuAction::RoadWaypoint {
-        let coord = TileCoord::new(tx, ty);
-        if sim.state.map.get(coord).is_some() {
-            let valid = preview_build_command_valid(
-                &sim.state,
-                action,
-                coord,
-                &station_state,
-                &[(tx, ty)],
-                preview_rail_lane,
-                Some(tile_fract),
-            );
-            spawn_road_waypoint_preview(&mut commands, &asset_server, &sim.state.map, coord, valid);
-        }
-        return;
-    }
+    // Caso especial: señales 1×1 manejadas por sistema dedicado
     if action == BuildMenuAction::RailSignals {
         let (fx, fy) = if drag_state.armed {
             station_state
                 .signal_drag_fract
-                .unwrap_or((tile_fract.0, tile_fract.1))
+                .unwrap_or(tile_fract)
         } else {
             tile_fract
         };
@@ -324,6 +182,7 @@ pub(crate) fn update_build_ghost_preview(
         } else {
             vec![(tx, ty)]
         };
+
         if tiles.len() == 1 {
             let coord = TileCoord::new(tiles[0].0, tiles[0].1);
             if sim.state.map.get(coord).is_some() {
@@ -353,466 +212,40 @@ pub(crate) fn update_build_ghost_preview(
                     rail_ghost.sprites,
                 );
             }
-        } else {
-            // Arrastre: tintar cada tesela de densidad (fantasma completo solo en 1×1).
-            for entity in &rail_ghost.ghosts {
-                commands.entity(entity).despawn();
-            }
-            rail_ghost.state.key = None;
-            for &(px, py) in &tiles {
-                let coord = TileCoord::new(px, py);
-                if sim.state.map.get(coord).is_none() {
-                    continue;
-                }
-                let valid = preview_build_command_valid(
-                    &sim.state,
-                    action,
-                    coord,
-                    &station_state,
-                    &[(px, py)],
-                    preview_rail_lane,
-                    Some((fx, fy)),
-                );
-                let tint = if valid {
-                    Color::srgba(0.2, 0.85, 0.35, 0.4)
-                } else {
-                    Color::srgba(0.9, 0.2, 0.15, 0.4)
-                };
-                let (tileh, base_z) = tile_slope_and_min_z(&sim.state.map, px as u32, py as u32);
-                let half_h = if tileh == 0 {
-                    TILE_HALF_H
-                } else {
-                    SLOPE_HALF_H[tileh as usize]
-                };
-                let pos = tile_pos_half(px, py, base_z, 0.05, half_h);
-                commands.spawn((
-                    BuildGhostPreview,
-                    Sprite {
-                        color: tint,
-                        custom_size: Some(Vec2::new(64.0, 32.0)),
-                        ..default()
-                    },
-                    Transform::from_translation(pos),
-                ));
-            }
+            return;
         }
-        return;
+        // Multi-tile: manejado por dispatch/spawn
+        for entity in &rail_ghost.ghosts {
+            commands.entity(entity).despawn();
+        }
+        rail_ghost.state.key = None;
     }
-    if matches!(
+
+    // Construir contexto y plan de preview
+    let ctx = PreviewContext {
+        map: &sim.state.map,
         action,
-        BuildMenuAction::RoadBridge | BuildMenuAction::RailBridge | BuildMenuAction::Aqueduct
-    ) {
-        let valid = preview_tiles.len() >= 3
-            && preview_tiles
-                .iter()
-                .all(|&(px, py)| sim.state.map.get(TileCoord::new(px, py)).is_some())
-            && preview_bridge_span_valid(&sim.state, action, &preview_tiles);
-        spawn_bridge_span_preview(
-            &mut commands,
-            &asset_server,
-            action,
-            &preview_tiles,
-            &sim.state.map,
-            valid,
-        );
-        return;
-    }
+        cursor_tile: (tx, ty),
+        tile_fract,
+        station_state: &station_state,
+        drag_state: &drag_state,
+        rail_lane_bit: preview_rail_lane,
+    };
 
-    for (px, py) in &preview_tiles {
-        let coord = TileCoord::new(*px, *py);
-        if sim.state.map.get(coord).is_none() {
-            continue;
-        }
-        let valid_target = preview_build_command_valid(
-            &sim.state,
-            action,
-            coord,
-            &station_state,
-            &preview_tiles,
-            preview_rail_lane,
-            Some(tile_fract),
-        );
-        let tint = if valid_target {
-            Color::srgba(1.0, 1.0, 1.0, 0.55)
-        } else {
-            Color::srgba(1.0, 0.25, 0.2, 0.55)
-        };
+    let plan = build_preview_plan(&ctx, &sim.state);
 
-        if let Some(spec) = industry_spec_for_action(action) {
-            spawn_industry_template_preview(
-                &mut commands,
-                &asset_server,
-                &sim.state.map,
-                coord,
-                spec,
-                tint,
-            );
-            continue;
-        }
-
-        let (tileh, base_z) = tile_slope_and_min_z(&sim.state.map, *px as u32, *py as u32);
-        let half_h = if tileh == 0 {
-            TILE_HALF_H
-        } else {
-            SLOPE_HALF_H[tileh as usize]
-        };
-
-        if matches!(action, BuildMenuAction::BusStop | BuildMenuAction::Station) {
-            let dir = road_stop_preview_dir(station_state.orientation);
-            let (class, ground) = if action == BuildMenuAction::BusStop {
-                (StationTileClass::Bus, bus_stop_ground_path(dir))
-            } else {
-                (StationTileClass::Truck, truck_stop_ground_path(dir))
-            };
-            spawn_road_stop_preview(
-                &mut commands,
-                RoadStopPreviewSpawn {
-                    px: *px,
-                    py: *py,
-                    base_z,
-                    half_h,
-                    class,
-                    dir,
-                    ground_path: ground,
-                    tint,
-                    asset_server: &asset_server,
-                    company: company.as_deref(),
-                },
-            );
-            continue;
-        }
-
-        // Vía / quitar vía: realce blanco de la pieza afectada (tesela bajo el cursor).
-        if let Some(bits) = rail_preview_bits(
-            action,
-            &sim.state.map,
-            coord,
-            &preview_tiles,
-            preview_rail_lane,
-        ) && let Some(atlas) = atlas.as_ref()
-        {
-            let ghost_type = if action == BuildMenuAction::RailConvert {
-                sim.state
-                    .map
-                    .get(coord)
-                    .map(|t| openttdrs_core::rail_type_from_tile(t).next())
-                    .unwrap_or(openttdrs_core::RailType::Electric)
-            } else {
-                sim.state.current_rail_type
-            };
-            spawn_rail_ghost_preview(
-                &mut commands,
-                atlas,
-                RailGhostSpawn {
-                    px: *px,
-                    py: *py,
-                    base_z,
-                    half_h,
-                    tileh,
-                    bits,
-                    valid: valid_target,
-                    rail_type: ghost_type,
-                },
-            );
-            continue;
-        }
-
-        if action == BuildMenuAction::RoadDepot {
-            spawn_road_depot_preview(
-                &mut commands,
-                RoadDepotPreviewSpawn {
-                    px: *px,
-                    py: *py,
-                    base_z,
-                    half_h,
-                    dir: road_stop_preview_dir(station_state.orientation),
-                    tint,
-                    asset_server: &asset_server,
-                    company: company.as_deref(),
-                },
-            );
-            continue;
-        }
-
-        if action == BuildMenuAction::RailDepot {
-            spawn_rail_depot_preview(
-                &mut commands,
-                RailDepotPreviewSpawn {
-                    px: *px,
-                    py: *py,
-                    base_z,
-                    half_h,
-                    dir: road_stop_preview_dir(station_state.orientation),
-                    tint,
-                    asset_server: &asset_server,
-                    company: company.as_deref(),
-                },
-            );
-            continue;
-        }
-
-        if let Some((_bits, path)) = road_preview_at(&sim.state.map, action, coord, &preview_tiles)
-        {
-            commands.spawn((
-                BuildGhostPreview,
-                Sprite {
-                    image: asset_server.load::<Image>(path),
-                    color: tint,
-                    ..default()
-                },
-                Transform::from_translation(tile_pos_half(*px, *py, base_z, 3.0, half_h))
-                    .with_scale(Vec3::new(1.002, 1.002, 1.0)),
-            ));
-            continue;
-        }
-
-        if action_is_tunnel(action) {
-            let coord = TileCoord::new(*px, *py);
-            if is_tunnel_entrance_slope(tileh) {
-                spawn_tunnel_entrance_preview(
-                    &mut commands,
-                    &asset_server,
-                    &sim.state.map,
-                    action,
-                    coord,
-                    valid_target,
-                );
-            }
-            continue;
-        }
-
-        let Some(image) = preview_image_for_action(
-            action,
-            &asset_server,
-            &station_state,
-            &preview_tiles,
-            anim_cursor_frame,
-        ) else {
-            continue;
-        };
-
-        commands.spawn((
-            BuildGhostPreview,
-            Sprite {
-                image,
-                color: tint,
-                ..default()
-            },
-            Transform::from_translation(tile_pos_half(*px, *py, base_z, 3.0, half_h))
-                .with_scale(Vec3::new(1.002, 1.002, 1.0)),
-        ));
-    }
-}
-
-/// Huella de la estación de tren bajo el cursor: sprites de vía/plataforma
-/// (tinte rojo si inválida) y halo de cobertura si está activado.
-fn spawn_rail_station_area_preview(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    atlas: Option<&TileAtlas>,
-    company: Option<&CompanyColoredSprites>,
-    sim: &SimWorld,
-    station_state: &StationBuildState,
-    origin: TileCoord,
-) {
-    use openttdrs_core::{Command, command_would_fail, rail_station_footprint};
-
-    let (w, h) = rail_station_footprint(
-        station_state.rail_axis_y,
-        station_state.rail_platforms,
-        station_state.rail_length,
+    // Spawn entidades según el plan
+    spawn_preview_plan(
+        &mut commands,
+        &plan,
+        &asset_server,
+        atlas.as_deref(),
+        company.as_deref(),
+        &sim,
+        &station_state,
+        action,
+        anim_cursor_frame,
     );
-    let cmd = Command::PlaceRailStationArea {
-        origin,
-        axis_y: station_state.rail_axis_y,
-        platforms: station_state.rail_platforms,
-        length: station_state.rail_length,
-    };
-    let valid = command_would_fail(&sim.state, &cmd).is_none();
-
-    if station_state.rail_show_coverage {
-        let anchor = (origin.x + (w - 1) / 2, origin.y + (h - 1) / 2);
-        spawn_station_coverage_preview(
-            commands,
-            asset_server,
-            &sim.state.map,
-            &[anchor],
-            station_preview_has_coverage(&sim.state.map, &sim.state.industries, anchor.0, anchor.1),
-        );
-    }
-
-    spawn_rail_station_area_sprite_preview(
-        commands,
-        atlas,
-        company,
-        &sim.state.map,
-        origin,
-        station_state.rail_axis_y,
-        station_state.rail_platforms,
-        station_state.rail_length,
-        valid,
-    );
-}
-
-fn spawn_airport_preview(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    sim: &SimWorld,
-    station_state: &StationBuildState,
-    origin: TileCoord,
-) {
-    use openttdrs_core::{
-        Command, STATION_COVERAGE_RADIUS, airport_spec_def, airport_spec_footprint,
-        airport_spec_tiles, command_would_fail,
-    };
-
-    let spec = station_state.airport_spec;
-    let axis_y = station_state.airport_axis_y;
-    let (w, h) = airport_spec_footprint(spec, axis_y);
-    let cmd = Command::PlaceAirportArea {
-        origin,
-        axis_y,
-        spec,
-    };
-    let valid = command_would_fail(&sim.state, &cmd).is_none();
-    let select = asset_server.load::<Image>("assets/opengfx/tiles/tile_select.png");
-    let tint = if valid {
-        Color::srgba(0.85, 0.95, 1.0, 0.95)
-    } else {
-        Color::srgba(1.0, 0.3, 0.25, 0.95)
-    };
-    for (coord, _piece) in airport_spec_tiles(origin, spec, axis_y) {
-        let Some(tile) = sim.state.map.get(coord) else {
-            continue;
-        };
-        commands.spawn((
-            BuildGhostPreview,
-            Sprite {
-                image: select.clone(),
-                color: tint,
-                ..default()
-            },
-            Transform::from_translation(crate::iso::tile_pos(coord.x, coord.y, tile.height, 3.0))
-                .with_scale(Vec3::new(1.002, 1.002, 1.0)),
-        ));
-    }
-    if station_state.airport_show_coverage {
-        let radius = airport_spec_def(spec)
-            .map(|d| d.catchment)
-            .unwrap_or(STATION_COVERAGE_RADIUS);
-        let coverage_img = asset_server.load::<Image>("assets/opengfx/tiles/tile_select.png");
-        let coverage_tint = Color::srgba(0.35, 0.85, 0.45, 0.28);
-        for dy in -radius..=(h - 1 + radius) {
-            for dx in -radius..=(w - 1 + radius) {
-                let x = origin.x + dx;
-                let y = origin.y + dy;
-                // Solo halo exterior (no solapar footprint).
-                if dx >= 0 && dy >= 0 && dx < w && dy < h {
-                    continue;
-                }
-                let Some(tile) = sim.state.map.get(TileCoord::new(x, y)) else {
-                    continue;
-                };
-                commands.spawn((
-                    BuildGhostPreview,
-                    Sprite {
-                        image: coverage_img.clone(),
-                        color: coverage_tint,
-                        ..default()
-                    },
-                    Transform::from_translation(crate::iso::tile_pos(x, y, tile.height, 2.5))
-                        .with_scale(Vec3::new(1.001, 1.001, 1.0)),
-                ));
-            }
-        }
-    }
-}
-
-/// Trackbits a previsualizar para las herramientas de vía, o `None` si la
-/// acción no es una pieza de vía.
-fn rail_preview_bits(
-    action: BuildMenuAction,
-    map: &openttdrs_core::Map,
-    coord: TileCoord,
-    preview_tiles: &[(i32, i32)],
-    rail_lane_bit: Option<u8>,
-) -> Option<u8> {
-    use crate::sprites::{RAIL_TB_X, RAIL_TB_Y};
-    match action {
-        BuildMenuAction::RailX => Some(RAIL_TB_X),
-        BuildMenuAction::RailY => Some(RAIL_TB_Y),
-        BuildMenuAction::RailHorz | BuildMenuAction::RailVert | BuildMenuAction::RailRemove => {
-            rail_lane_bit
-        }
-        BuildMenuAction::Rail => {
-            if preview_tiles.len() >= 2 {
-                // Arrastre: recta a lo largo del eje dominante del tramo.
-                let (sx, sy) = preview_tiles[0];
-                let (ex, ey) = preview_tiles[preview_tiles.len() - 1];
-                Some(if (ex - sx).abs() >= (ey - sy).abs() {
-                    RAIL_TB_X
-                } else {
-                    RAIL_TB_Y
-                })
-            } else {
-                // Una tesela: la pieza que colocaría `PlaceRail` (con curvas).
-                Some(openttdrs_core::rail_trackbits_from_neighbors(map, coord))
-            }
-        }
-        _ => None,
-    }
-}
-
-struct RailGhostSpawn {
-    px: i32,
-    py: i32,
-    base_z: u8,
-    half_h: f32,
-    tileh: u8,
-    bits: u8,
-    valid: bool,
-    rail_type: openttdrs_core::RailType,
-}
-
-/// Realce del riel a colocar: overlays solo riel en plano; tinte suave en pendiente.
-fn spawn_rail_ghost_preview(commands: &mut Commands, atlas: &TileAtlas, spawn: RailGhostSpawn) {
-    let mut ids = Vec::new();
-    crate::sprites::collect_rail_ghost_sprites_for_type(
-        spawn.bits,
-        spawn.tileh,
-        spawn.rail_type,
-        &mut ids,
-    );
-    let center = tile_pos_half(spawn.px, spawn.py, spawn.base_z, 3.0, spawn.half_h);
-    for (i, sid) in ids.iter().copied().enumerate() {
-        let base_overlay = match sid {
-            1087..=1092 => sid - crate::sprites::MONO_RAIL_SPRITE_OFFSET,
-            1169..=1174 => sid - crate::sprites::MAGLEV_RAIL_SPRITE_OFFSET,
-            other => other,
-        };
-        let is_overlay = (1005..=1010).contains(&base_overlay);
-        let tint = if spawn.valid {
-            if is_overlay {
-                Color::srgba(2.2, 2.4, 2.8, 0.9)
-            } else {
-                Color::srgba(1.0, 1.02, 1.05, 0.38)
-            }
-        } else if is_overlay {
-            Color::srgba(3.0, 0.5, 0.45, 0.9)
-        } else {
-            Color::srgba(1.0, 0.4, 0.35, 0.45)
-        };
-        let offset = rail_ghost_overlay_offset(sid);
-        let img = crate::sprites::rail_sprite_atlas_keys(sid)
-            .into_iter()
-            .find_map(|k| atlas.try_get(&k))
-            .unwrap_or_else(|| atlas.get(&format!("rail_{sid}.png")));
-        commands.spawn((
-            BuildGhostPreview,
-            img.sprite_colored(tint),
-            Transform::from_translation(center + Vec3::new(offset.x, offset.y, i as f32 * 0.001)),
-        ));
-    }
 }
 
 #[cfg(test)]

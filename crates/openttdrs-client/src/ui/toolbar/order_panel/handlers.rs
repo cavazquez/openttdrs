@@ -86,6 +86,7 @@ pub(crate) fn start_order_destination_pick(
     }
 }
 
+#[allow(dead_code)] // Conservada para UX de cancelar pick; el flujo de clic usa apply_intent.
 pub(crate) fn cancel_order_destination_pick(next_pick: &mut NextState<OrderPickState>) {
     next_pick.set(OrderPickState::Idle);
 }
@@ -524,6 +525,10 @@ pub(crate) fn try_append_order_at_tile(
 }
 
 /// Clic en mapa mientras se eligen destinos (modo «Agregar destino» o herramienta Órdenes).
+///
+/// El camino activo de clic de mapa usa `MapClickIntent` + `apply_intent`; esta
+/// función queda como referencia de la lógica previa / posible reutilización.
+#[allow(dead_code)]
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn handle_order_destination_click(
     mouse: &ButtonInput<MouseButton>,

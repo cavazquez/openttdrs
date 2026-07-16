@@ -12,6 +12,7 @@ use super::commands::{
 };
 use crate::ui::toolbar::{BuildMenuAction, StationBuildState};
 
+#[allow(dead_code)]
 pub(crate) fn action_supports_drag(action: BuildMenuAction) -> bool {
     matches!(
         action,

@@ -5,8 +5,8 @@ mod setup;
 mod sync;
 
 pub(crate) use handlers::{
-    apply_order_edit, handle_order_destination_click, handle_order_panel_buttons,
-    open_order_edit_for_vehicle, start_order_destination_pick, try_append_order_at_tile,
+    apply_order_edit, handle_order_panel_buttons, open_order_edit_for_vehicle,
+    start_order_destination_pick, try_append_order_at_tile,
 };
 pub(crate) use setup::setup_order_panel;
 pub(crate) use sync::sync_order_panel;

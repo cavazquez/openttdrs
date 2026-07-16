@@ -1,6 +1,10 @@
 [workspace]
 resolver = "3"
-members = ["crates/openttdrs-core", "crates/openttdrs-client"]
+members = [
+    "crates/openttdrs-core",
+    "crates/openttdrs-client",
+    "crates/openttdrs-net",
+]
 
 [workspace.package]
 version = "0.1.0"

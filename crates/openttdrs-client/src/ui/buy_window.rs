@@ -12,7 +12,7 @@ use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
     CargoType, Command, DecodedSprite, DepotPurchaseKind, EngineCatalogSort, EngineDef,
-    RoadEngineFilter, TileCoord, TileKind, VehicleKind, apply_command, calendar_year_at_tick,
+    RoadEngineFilter, TileCoord, TileKind, VehicleKind, calendar_year_at_tick,
     engines_for_depot_kind_in,
 };
 use std::collections::HashMap;
@@ -825,7 +825,7 @@ pub(crate) fn handle_buy_window_buttons(
         let Some(engine_id) = buy_state.selected_engine else {
             continue;
         };
-        match apply_command(
+        match crate::network::apply_player_command(
             &mut sim.state,
             &Command::BuildVehicleAtDepot(depot_pos, engine_id),
         ) {
@@ -850,7 +850,7 @@ pub(crate) fn handle_buy_window_buttons(
                     if let (Some(wagon_id), Some(head_id)) = (wagon_id, head_id)
                         && head_id != wagon_id
                     {
-                        let _ = apply_command(
+                        let _ = crate::network::apply_player_command(
                             &mut sim.state,
                             &Command::AttachWagonToConsist { head_id, wagon_id },
                         );

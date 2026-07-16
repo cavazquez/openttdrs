@@ -617,7 +617,7 @@ fn apply_cheat_command<'a>(
     };
     match parse_cheat_command(parts) {
         Ok(ParsedCheat::Status) => push_log(state, format_cheat_log(sim)),
-        Ok(ParsedCheat::Cmd(cmd)) => match openttdrs_core::apply_command(&mut sim.state, &cmd) {
+        Ok(ParsedCheat::Cmd(cmd)) => match crate::network::apply_player_command(&mut sim.state, &cmd) {
             Ok(()) => push_log(state, format_cheat_log(sim)),
             Err(e) => push_log(state, format!("cheat falló: {}", command_error_message(e))),
         },

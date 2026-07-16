@@ -3,7 +3,7 @@
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
-use openttdrs_core::{Command, MAX_SIGN_NAME_CHARS, apply_command};
+use openttdrs_core::{Command, MAX_SIGN_NAME_CHARS};
 
 use crate::iso::tile_pos;
 use crate::render::{
@@ -270,7 +270,7 @@ pub(crate) fn handle_sign_list_buttons(
                 let Some(id) = state.selected else {
                     continue;
                 };
-                if apply_command(&mut sim.state, &Command::RemoveSign { sign_id: id }).is_ok() {
+                if crate::network::apply_player_command(&mut sim.state, &Command::RemoveSign { sign_id: id }).is_ok() {
                     state.selected = None;
                     state.rename_editing = false;
                     let (mw, mh) = sim.state.map.dimensions();
@@ -286,7 +286,7 @@ pub(crate) fn handle_sign_list_buttons(
                     .ok()
                     .map(|t| t.to_string())
                     .unwrap_or_default();
-                if apply_command(
+                if crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::RenameSign {
                         sign_id: id,

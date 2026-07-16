@@ -43,5 +43,6 @@ fn headless_client_build_registers_plugins_for_coverage() {
     let root = dir.path().to_str().expect("utf8 temp");
     // Sin `app.update()`: el subapp de render exige recursos de ventana/extractor que no existen
     // sin `WinitPlugin`; el registro de plugins y `Plugin::build` ya corre en `add_plugins`.
-    let _app = crate::bevy_app::build_client_app(root, true).expect("bootstrap headless");
+    let _app = crate::bevy_app::build_client_app(root, true, crate::network::NetCli::Offline)
+        .expect("bootstrap headless");
 }

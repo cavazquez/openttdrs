@@ -1,7 +1,7 @@
 //! Lista global de flota (tren / carretera / barco / avión).
 
 use bevy::prelude::*;
-use openttdrs_core::{Command, TileCoord, VehicleKind, VehicleOrder, apply_command};
+use openttdrs_core::{Command, TileCoord, VehicleKind, VehicleOrder};
 
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, vehicle_world_position,
@@ -448,7 +448,7 @@ pub(crate) fn handle_vehicle_list_buttons(
         };
         match action.0 {
             VehicleListAction::ToggleRunning => {
-                match apply_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id)) {
+                match crate::network::apply_player_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id)) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
@@ -456,7 +456,7 @@ pub(crate) fn handle_vehicle_list_buttons(
                 }
             }
             VehicleListAction::GotoDepot => {
-                match apply_command(&mut sim.state, &Command::AppendGotoNearestDepot(vehicle_id)) {
+                match crate::network::apply_player_command(&mut sim.state, &Command::AppendGotoNearestDepot(vehicle_id)) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());

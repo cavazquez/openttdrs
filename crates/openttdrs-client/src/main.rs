@@ -19,6 +19,9 @@
 //! `save/openttdrs_autosave.json` (visible en el HUD). **Clic en el mapa** selecciona tesela; **panel Construir**
 //! (esquina inferior izquierda) aplica carretera / estación en esa tesela.
 //! Bases de sprites de señal: `OPENTTDRS_SIGNAL_BASE` / `OPENTTDRS_SIGNAL_ALT_BASE` (512–4096).
+//!
+//! Red (I8 / #21): `--server [HOST:PORT]` listen-server, `--client HOST[:PORT]`,
+//! o `cargo run -p openttdrs-net --bin openttdrs-dedicated`. Ver `docs/adr/0001-multiplayer-v1.md`.
 
 #![allow(clippy::needless_pass_by_value)]
 #![allow(clippy::cast_precision_loss)]
@@ -51,7 +54,10 @@ mod window_status;
 mod client_coverage_test;
 
 use audio::warn_missing_optional_assets;
+use network::parse_net_cli;
 use startup::check_required_assets;
+
+mod network;
 
 fn main() {
     let repo_root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
@@ -60,5 +66,6 @@ fn main() {
     }
     warn_missing_optional_assets(std::path::Path::new(repo_root));
 
-    bevy_app::run(repo_root);
+    let net = parse_net_cli(std::env::args());
+    bevy_app::run(repo_root, net);
 }

@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    CargoType, Command, apply_command, cargo_display_name, consist_unit_ids, refit_allowed,
+    CargoType, Command, cargo_display_name, consist_unit_ids, refit_allowed,
     refittable_cargo_types,
 };
 
@@ -365,7 +365,7 @@ pub(crate) fn handle_refit_window_buttons(
         let Some(cargo) = options.get(row.slot).copied() else {
             continue;
         };
-        match apply_command(
+        match crate::network::apply_player_command(
             &mut sim.state,
             &Command::RefitVehicle {
                 vehicle_id,

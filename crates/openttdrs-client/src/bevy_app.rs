@@ -15,6 +15,7 @@ use crate::app_icon::AppIconPlugin;
 use crate::audio::{MusicPlugin, SimEventsPlugin, WorldSfxPlugin};
 use crate::camera::CameraControlPlugin;
 use crate::debug_gizmos::DebugGizmosPlugin;
+use crate::network::{NetCli, NetworkPlugin};
 use crate::persistence::PersistencePlugin;
 use crate::render::{
     AirportRadarAnimPlugin, EffectVehiclePlugin, FizzyDrinkAnimPlugin, HouseLiftAnimPlugin,
@@ -64,6 +65,7 @@ pub(crate) enum UpdateSet {
 pub(crate) fn build_client_app(
     asset_root: &str,
     headless: bool,
+    net_cli: NetCli,
 ) -> Result<App, BootstrapLoadError> {
     let window_plugin = if headless {
         WindowPlugin {
@@ -139,6 +141,7 @@ pub(crate) fn build_client_app(
     app.init_resource::<EditorSession>();
     crate::audio::insert_asset_root(&mut app, asset_root);
     app.insert_resource(RemSize(14.0));
+    app.add_plugins(NetworkPlugin { cli: net_cli });
     app.add_plugins((
         (
             ClientSettingsPlugin,
@@ -181,8 +184,8 @@ pub(crate) fn build_client_app(
     Ok(app)
 }
 
-pub(crate) fn run(asset_root: &str) {
-    match build_client_app(asset_root, false) {
+pub(crate) fn run(asset_root: &str, net_cli: NetCli) {
+    match build_client_app(asset_root, false, net_cli) {
         Ok(mut app) => {
             app.run();
         }

@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use openttdrs_core::{
     Command, CommandError, OrderConditionKind, OrderMoveDirection, TileCoord, Vehicle,
-    VehicleOrder, apply_command,
+    VehicleOrder,
 };
 
 use crate::render::RemapMapVisualsPending;
@@ -133,7 +133,7 @@ pub(crate) fn handle_order_panel_buttons(
                 let Some(index) = order_state.selected_slot else {
                     continue;
                 };
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::RemoveVehicleOrderAt { vehicle_id, index },
                 ) {
@@ -149,7 +149,7 @@ pub(crate) fn handle_order_panel_buttons(
                 let Some(vehicle_id) = order_state.vehicle_id else {
                     continue;
                 };
-                match apply_command(&mut sim.state, &Command::SkipVehicleOrder(vehicle_id)) {
+                match crate::network::apply_player_command(&mut sim.state, &Command::SkipVehicleOrder(vehicle_id)) {
                     Ok(()) => {
                         pending.pending = true;
                         refresh_orders_from_sim(&mut order_state, &sim);
@@ -232,7 +232,7 @@ pub(crate) fn handle_order_panel_buttons(
                 let Some(vehicle_id) = order_state.vehicle_id else {
                     continue;
                 };
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::CreateSharedOrdersFromVehicle(vehicle_id),
                 ) {
@@ -247,7 +247,7 @@ pub(crate) fn handle_order_panel_buttons(
                 let Some(vehicle_id) = order_state.vehicle_id else {
                     continue;
                 };
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::UnlinkVehicleSharedOrders(vehicle_id),
                 ) {
@@ -396,7 +396,7 @@ fn cycle_selected_conditional(
             (OrderConditionKind::CargoLoadAbove, 50, jump_to)
         }
     };
-    match apply_command(
+    match crate::network::apply_player_command(
         &mut sim.state,
         &Command::SetVehicleOrderConditional {
             vehicle_id,
@@ -433,7 +433,7 @@ fn toggle_order_flag(
         );
         return;
     };
-    match apply_command(&mut sim.state, &make_cmd(vehicle_id, index)) {
+    match crate::network::apply_player_command(&mut sim.state, &make_cmd(vehicle_id, index)) {
         Ok(()) => {
             pending.pending = true;
             refresh_orders_from_sim(order_state, sim);
@@ -461,7 +461,7 @@ fn move_selected_order(
         );
         return;
     };
-    match apply_command(
+    match crate::network::apply_player_command(
         &mut sim.state,
         &Command::MoveVehicleOrder {
             vehicle_id,
@@ -488,7 +488,7 @@ pub(crate) fn apply_order_edit(
     vehicle_id: u32,
     orders: &[VehicleOrder],
 ) -> Result<(), openttdrs_core::CommandError> {
-    apply_command(
+    crate::network::apply_player_command(
         state,
         &Command::SetVehicleOrderList(vehicle_id, orders.to_vec()),
     )

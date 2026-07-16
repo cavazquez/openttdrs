@@ -1,7 +1,7 @@
 //! Ventana flotante de horario por orden (Sprint F4).
 
 use bevy::prelude::*;
-use openttdrs_core::{Command, VehicleOrder, apply_command, cycle_travel_ticks, cycle_wait_ticks};
+use openttdrs_core::{Command, VehicleOrder, cycle_travel_ticks, cycle_wait_ticks};
 
 use crate::render::RemapMapVisualsPending;
 use crate::state::SimWorld;
@@ -410,7 +410,7 @@ pub(crate) fn handle_timetable_window_buttons(
                 }
             }
         };
-        match apply_command(&mut sim.state, &cmd) {
+        match crate::network::apply_player_command(&mut sim.state, &cmd) {
             Ok(()) => pending.pending = true,
             Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
         }
@@ -425,18 +425,18 @@ pub(crate) fn handle_timetable_window_buttons(
         };
         match button {
             TimetableWindowButton::ToggleTimetable => {
-                let _ = apply_command(&mut sim.state, &Command::ToggleVehicleTimetable(vehicle_id));
+                let _ = crate::network::apply_player_command(&mut sim.state, &Command::ToggleVehicleTimetable(vehicle_id));
                 pending.pending = true;
             }
             TimetableWindowButton::ToggleAutofill => {
-                let _ = apply_command(
+                let _ = crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::ToggleVehicleTimetableAutofill(vehicle_id),
                 );
                 pending.pending = true;
             }
             TimetableWindowButton::ClearLateness => {
-                let _ = apply_command(
+                let _ = crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::ClearVehicleTimetableLateness(vehicle_id),
                 );

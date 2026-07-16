@@ -3,7 +3,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    Command, CompanyId, apply_command, calendar_day_index, calendar_year_day, format_calendar_date,
+    Command, CompanyId, calendar_day_index, calendar_year_day, format_calendar_date,
 };
 
 use crate::state::SimWorld;
@@ -215,7 +215,7 @@ pub(crate) fn handle_cheat_window_buttons(
                 Command::CheatSwitchCompany(next)
             }
         };
-        let _ = apply_command(&mut sim.state, &cmd);
+        let _ = crate::network::apply_player_command(&mut sim.state, &cmd);
     }
 }
 

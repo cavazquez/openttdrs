@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    Command, NewGrfEntry, apply_command, format_grfid, inspect_grf_file, scan_grf_file,
+    Command, NewGrfEntry, format_grfid, inspect_grf_file, scan_grf_file,
     validate_stack,
 };
 
@@ -388,7 +388,7 @@ pub(crate) fn handle_newgrf_window_buttons(
             | NewGrfAction::ParamPrev
             | NewGrfAction::ParamNext => unreachable!(),
         };
-        match apply_command(&mut sim.state, &cmd) {
+        match crate::network::apply_player_command(&mut sim.state, &cmd) {
             Ok(()) => {
                 let len = sim.state.newgrf_stack.len();
                 state.selected = match action {
@@ -550,7 +550,7 @@ fn add_next_available_grf(sim: &mut SimWorld) -> Result<String, String> {
             entry.name = info.name.unwrap_or_default();
             entry.description = info.description.unwrap_or_default();
             entry.grf_version = info.grf_version.unwrap_or(0);
-            apply_command(
+            crate::network::apply_player_command(
                 &mut sim.state,
                 &Command::AddNewGrfToStack {
                     entry: entry.clone(),

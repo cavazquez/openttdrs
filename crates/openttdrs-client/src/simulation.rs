@@ -6,6 +6,7 @@ use bevy::prelude::*;
 
 use openttdrs_core::SIM_TICKS_PER_SECOND;
 
+use crate::network::{NetworkRole, NetworkRuntime};
 use crate::render::{
     MapTileChunk, RemapMapVisualsPending, VehicleIndex, large_map_viewport_cull_enabled,
 };
@@ -66,7 +67,16 @@ fn sync_sim_time_controls(hud: Res<SimHudControls>, mut virtual_time: ResMut<Tim
 }
 
 /// Un paso de simulación por tick fijo (~37 Hz, paridad OpenTTD).
-fn step_sim(mut sim: ResMut<SimWorld>, mut vehicle_index: ResMut<VehicleIndex>) {
+///
+/// En cliente-only (`--client`) no avanza: los ticks llegan por `AdvanceTicks`.
+fn step_sim(
+    mut sim: ResMut<SimWorld>,
+    mut vehicle_index: ResMut<VehicleIndex>,
+    net: Res<NetworkRuntime>,
+) {
+    if net.role() == NetworkRole::Client {
+        return;
+    }
     sim.state.step();
     vehicle_index.rebuild(&sim.state.vehicles);
 }

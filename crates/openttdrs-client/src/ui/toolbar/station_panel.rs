@@ -4,7 +4,7 @@ use bevy::prelude::*;
 use bevy::text::EditableText;
 use openttdrs_core::{
     ALL_CARGO_TYPES, CargoType, Command, CommandError, MAX_STATION_NAME_CHARS,
-    STATION_COVERAGE_RADIUS, TileCoord, VehicleOrder, apply_command, cargo_display_name,
+    STATION_COVERAGE_RADIUS, TileCoord, VehicleOrder, cargo_display_name,
     station_coverage_at, station_rating_for_cargo, station_rating_for_company_cargo,
 };
 
@@ -451,7 +451,7 @@ fn apply_station_rename(
         .ok()
         .map(|e| e.value().to_string())
         .filter(|s| !s.trim().is_empty());
-    match apply_command(
+    match crate::network::apply_player_command(
         &mut sim.state,
         &Command::RenameStation { station_pos, name },
     ) {

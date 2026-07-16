@@ -349,28 +349,33 @@ save.rs
 
 > **Prioridad:** la más baja del proyecto hasta cerrar el hito **0.1 en solitario** (fases SP arriba). No bloquea guardados, construcción ni simulación local.
 
+**Arquitectura v1 (ADR):** [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) — lockstep de comandos, listen-server + dedicated headless; **sin host migration** en v1 (recuperación por save/restart o dedicated).
+
 **Objetivo**: multijugador mínimo basado en replicación de comandos.
 
 **Core — qué añadir / verificar:**
 
 - `Command` ya es serializable (Incremento 6).
-- Añadir `GameState::apply_command_log(cmds: &[Command])` — reproduce una lista desde tick 0.
-- RNG del core debe ser semillado explícitamente si se introduce (hoy no hay).
+- ✅ `GameState::apply_command_log(cmds: &[Command])` — reproduce una lista (ticks aparte vía `step`).
+- ✅ `GameState::canonical_hash()` — fingerprint persistido (#108).
+- RNG del core debe ser semillado explícitamente si se introduce (hoy CargoDist RNG persistido #107).
 
-**Infraestructura (crate nuevo `openttdrs-net` o módulo del cliente):**
+**Infraestructura:**
+- ✅ Crate `openttdrs-net` — TCP length-prefixed JSON, `ListenServer` / `ClientSession`.
+- ✅ Bin `openttdrs-dedicated` — headless (`--bind HOST:PORT`).
 ```
-TCP simple: servidor envía CommandLog a clientes,
+TCP: servidor envía Commit / AdvanceTicks / HashCheck;
 clientes aplican el log y avanzan ticks sincrónicos.
 ```
 
 **Tests:**
-- `two_worlds_same_log_same_state()` — prueba de determinismo con `apply_command_log`.
-- `desync_detected_on_hash_mismatch()` — hash del estado se compara entre instancias.
+- ✅ `two_worlds_same_log_same_state()` / `desync_detected_on_hash_mismatch()` en `tests/command_log_desync.rs`.
+- ✅ `tests/tcp_lockstep.rs` en `openttdrs-net`.
 
 **Cliente Bevy:**
-- Arg `--server` / `--client <addr>` en el binario existente.
+- ✅ Args `--server [bind]` / `--client <addr>` (`network::parse_net_cli`).
 
-**Fuera:** seguridad, cheating, latencia, reconexión.
+**Fuera:** seguridad, cheating, latencia, reconexión, host migration (ADR 0001).
 
 **Referencia upstream:** los clientes aplican la misma secuencia de comandos que el servidor; desync por divergencia de estado (`network_*`). MVP: misma disciplina determinista + hash opcional del `GameState`.
 

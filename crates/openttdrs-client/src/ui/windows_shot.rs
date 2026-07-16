@@ -207,7 +207,7 @@ fn map_shot_driver(
             ) else {
                 continue;
             };
-            let res = openttdrs_core::apply_command(&mut sim.state, &cmd);
+            let res = crate::network::apply_player_command(&mut sim.state, &cmd);
             info!("map_shot: place en ({x},{y}) → {res:?}");
         }
         remap.pending = true;

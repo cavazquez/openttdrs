@@ -10,7 +10,7 @@
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
-    Command, TileCoord, TileKind, VehicleKind, apply_command, consist_unit_ids, engine_by_id,
+    Command, TileCoord, TileKind, VehicleKind, consist_unit_ids, engine_by_id,
 };
 
 use crate::camera::tile_camera_world_pos;
@@ -600,7 +600,7 @@ pub(crate) fn finish_depot_list_drag(
     if let Some(to_slot) = drop_slot
         && to_slot != from_slot
     {
-        match apply_command(
+        match crate::network::apply_player_command(
             &mut sim.state,
             &Command::DepotReorderVehicleSlot {
                 depot_pos,
@@ -675,7 +675,7 @@ fn activate_depot_row_click(
                 } else {
                     (to.id, from.id)
                 };
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::MoveRailVehicle {
                         head_id,
@@ -738,7 +738,7 @@ pub(crate) fn handle_depot_panel_buttons(
         else {
             continue;
         };
-        match apply_command(&mut sim.state, &Command::SellVehicle(vehicle_id)) {
+        match crate::network::apply_player_command(&mut sim.state, &Command::SellVehicle(vehicle_id)) {
             Ok(()) => {
                 pending.pending = true;
                 if depot_state.selected_vehicle == Some(vehicle_id) {
@@ -781,7 +781,7 @@ pub(crate) fn handle_depot_panel_buttons(
                 if units.len() < 2 {
                     continue;
                 }
-                match apply_command(&mut sim.state, &Command::DetachConsistUnit(tail_id)) {
+                match crate::network::apply_player_command(&mut sim.state, &Command::DetachConsistUnit(tail_id)) {
                     Ok(()) => {
                         pending.pending = true;
                         depot_state.selected_vehicle = Some(head_id);
@@ -808,7 +808,7 @@ pub(crate) fn handle_depot_panel_buttons(
                 let Some(to_slot) = to_slot else {
                     continue;
                 };
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::DepotReorderVehicleSlot {
                         depot_pos,
@@ -827,7 +827,7 @@ pub(crate) fn handle_depot_panel_buttons(
                 let Some(source_id) = source_id else {
                     continue;
                 };
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::CloneVehicleAtDepot {
                         source_vehicle_id: source_id,

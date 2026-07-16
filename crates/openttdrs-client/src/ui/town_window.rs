@@ -6,7 +6,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    Command, GameState, TileCoord, TileKind, apply_command, format_money,
+    Command, GameState, TileCoord, TileKind, format_money,
     town::{
         FUND_BUILDINGS_COST, MAIL_PER_HOUSE, PASSENGERS_PER_HOUSE, TOWN_ADVERTISE_COST,
         TOWN_GROWTH_DESERT, TOWN_GROWTH_WINTER, Town, TownGrowthEffect,
@@ -313,7 +313,7 @@ pub(crate) fn handle_town_window_buttons(
                 let Some(town_id) = town_state.town_id else {
                     continue;
                 };
-                if let Err(e) = apply_command(&mut sim.state, &Command::TownAdvertise(town_id)) {
+                if let Err(e) = crate::network::apply_player_command(&mut sim.state, &Command::TownAdvertise(town_id)) {
                     push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                 }
             }
@@ -321,7 +321,7 @@ pub(crate) fn handle_town_window_buttons(
                 let Some(town_id) = town_state.town_id else {
                     continue;
                 };
-                if let Err(e) = apply_command(&mut sim.state, &Command::TownFundBuildings(town_id))
+                if let Err(e) = crate::network::apply_player_command(&mut sim.state, &Command::TownFundBuildings(town_id))
                 {
                     push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                 }

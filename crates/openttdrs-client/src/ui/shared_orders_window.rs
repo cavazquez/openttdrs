@@ -1,7 +1,7 @@
 //! Lista de pools de órdenes compartidas.
 
 use bevy::prelude::*;
-use openttdrs_core::{Command, apply_command};
+use openttdrs_core::{Command};
 
 use crate::render::RemapMapVisualsPending;
 use crate::state::SimWorld;
@@ -249,7 +249,7 @@ pub(crate) fn handle_shared_orders_buttons(
                 else {
                     continue;
                 };
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::LinkVehicleToSharedOrders {
                         vehicle_id,

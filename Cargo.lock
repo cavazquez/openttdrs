@@ -3549,6 +3549,7 @@ dependencies = [
  "image",
  "ksni",
  "openttdrs-core",
+ "openttdrs-net",
  "tempfile",
  "winit",
 ]
@@ -3559,6 +3560,15 @@ version = "0.1.0"
 dependencies = [
  "flate2",
  "lzma-rs",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "openttdrs-net"
+version = "0.1.0"
+dependencies = [
+ "openttdrs-core",
  "serde",
  "serde_json",
 ]

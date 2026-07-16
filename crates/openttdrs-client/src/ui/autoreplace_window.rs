@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use openttdrs_core::{
     AutoReplaceRule, Command, DepotPurchaseKind, EngineCatalogSort, RoadEngineFilter, TileCoord,
-    TileKind, apply_command, calendar_year_at_tick, engine_by_id, engines_for_depot_kind,
+    TileKind, calendar_year_at_tick, engine_by_id, engines_for_depot_kind,
 };
 
 use crate::render::RemapMapVisualsPending;
@@ -609,7 +609,7 @@ pub(crate) fn handle_autoreplace_buttons(
                 let (Some(from), Some(to)) = (state.from_engine, state.to_engine) else {
                     continue;
                 };
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::SetAutoReplaceRule {
                         from_engine_id: from,
@@ -627,7 +627,7 @@ pub(crate) fn handle_autoreplace_buttons(
                 let Some(from) = state.selected_rule_from.or(state.from_engine) else {
                     continue;
                 };
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::ToggleAutoReplaceRule {
                         from_engine_id: from,
@@ -641,7 +641,7 @@ pub(crate) fn handle_autoreplace_buttons(
                 let Some(from) = state.selected_rule_from.or(state.from_engine) else {
                     continue;
                 };
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::ToggleAutoReplaceOnlyWhenOld {
                         from_engine_id: from,
@@ -655,7 +655,7 @@ pub(crate) fn handle_autoreplace_buttons(
                 let Some(from) = state.selected_rule_from.or(state.from_engine) else {
                     continue;
                 };
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut sim.state,
                     &Command::ClearAutoReplaceRule {
                         from_engine_id: from,
@@ -672,7 +672,7 @@ pub(crate) fn handle_autoreplace_buttons(
                 let Some(depot_pos) = state.depot_pos else {
                     continue;
                 };
-                match apply_command(&mut sim.state, &Command::DepotMassAutoreplace { depot_pos }) {
+                match crate::network::apply_player_command(&mut sim.state, &Command::DepotMassAutoreplace { depot_pos }) {
                     Ok(()) => pending.pending = true,
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
                 }

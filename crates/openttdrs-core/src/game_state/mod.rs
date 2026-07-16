@@ -1,3 +1,4 @@
+mod canonical_hash;
 mod runtime;
 
 pub use runtime::SimulationRuntime;
@@ -646,6 +647,25 @@ impl GameState {
     /// 3. Movimiento del vehículo (vehicle.step).
     pub fn step(&mut self) {
         crate::sim_step::step(self);
+    }
+
+    /// Aplica una secuencia de comandos en orden (núcleo I8 / #21).
+    ///
+    /// No avanza ticks: el caller debe llamar [`Self::step`] según el protocolo
+    /// de red o el harness de replay (`docs/adr/0001-multiplayer-v1.md`).
+    ///
+    /// # Errors
+    ///
+    /// Propaga el primer [`crate::command::CommandError`] y deja el estado
+    /// parcialmente aplicado.
+    pub fn apply_command_log(
+        &mut self,
+        cmds: &[crate::command::Command],
+    ) -> Result<(), crate::command::CommandError> {
+        for cmd in cmds {
+            crate::command::apply_command(self, cmd)?;
+        }
+        Ok(())
     }
 
     /// Serializa el estado a JSON (UTF-8) para guardado o depuración.

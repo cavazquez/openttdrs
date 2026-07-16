@@ -24,7 +24,8 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 | Capa | Qué hay |
 |------|---------|
 | **Core** (`openttdrs-core`) | Mapa, tick, comandos, simulación road/rail, señales/PBS parcial, economía, saves JSON + import/export `.sav` / `.ottdmap` |
-| **Cliente** (`openttdrs-client`) | Vista isométrica OpenGFX, menú de inicio, toolbar, listas UI, noticias, multi-compañía mínima |
+| **Cliente** (`openttdrs-client`) | Vista isométrica OpenGFX, menú de inicio, toolbar, listas UI, noticias; `--server` / `--client` (I8) |
+| **Red** (`openttdrs-net`) | TCP lockstep + bin `openttdrs-dedicated` ([ADR 0001](docs/adr/0001-multiplayer-v1.md)) |
 | **NewGRF** | Action0–14 parse; Action1/2/3/5 con sprites in-world (trenes, stations, roadtypes, shore, catenary); vars de tesela/vehículo en runtime |
 | **Hito 0.1** | Fundación I0–I7 hecha; solitario jugable. **I8 red** = [#21](https://github.com/cavazquez/openttdrs/issues/21) (post-0.1) |
 
@@ -195,7 +196,7 @@ Detalle de planos/chunks: [docs/OTTDMAP_FORMAT.md](docs/OTTDMAP_FORMAT.md). Rege
 
 | Tecnología | Rol |
 |------------|-----|
-| Rust 2024 (MSRV **1.95**) | Workspace `openttdrs-core` + `openttdrs-client` |
+| Rust 2024 (MSRV **1.95**) | Workspace `openttdrs-core` + `openttdrs-client` + `openttdrs-net` |
 | Bevy **0.19** | ECS, ventana, render 2D, UI |
 | serde / JSON | Save/load del core |
 | Python 3 + Pillow | `parse_sav`, goldens, recorte OpenGFX |
@@ -209,7 +210,8 @@ Detalle de planos/chunks: [docs/OTTDMAP_FORMAT.md](docs/OTTDMAP_FORMAT.md). Rege
 ```
 Cargo.toml                 # Workspace
 crates/openttdrs-core/     # Simulación sin Bevy
-crates/openttdrs-client/   # Binario Bevy
+crates/openttdrs-client/   # Binario Bevy (--server / --client)
+crates/openttdrs-net/      # TCP I8 + openttdrs-dedicated
 docs/                      # Roadmaps e informes
 scripts/                   # check, assets, parse_sav, fetch upstream
 tests/fixtures/            # .sav + goldens

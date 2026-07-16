@@ -5,7 +5,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    BridgeType, Command, apply_command, bridge_available_at_tick, bridge_build_cost,
+    BridgeType, Command, bridge_available_at_tick, bridge_build_cost,
     bridge_middle_length, bridge_spec, command_would_fail,
 };
 
@@ -178,7 +178,7 @@ pub(crate) fn handle_bridge_picker_buttons(
             push_build_command_error(&mut hud_feedback, err, time.elapsed_secs());
             continue;
         }
-        match apply_command(&mut sim.state, &cmd) {
+        match crate::network::apply_player_command(&mut sim.state, &cmd) {
             Ok(()) => {
                 if pending.road {
                     bridge_state.last_road_type = button.0;

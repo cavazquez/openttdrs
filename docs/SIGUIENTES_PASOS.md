@@ -5,9 +5,9 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md). Índice general: [README.md](README.md).
 
 **Roadmap post-auditoría (jul 2026):** [ROADMAP_AUDITORIA_2026.md](ROADMAP_AUDITORIA_2026.md)
-([#121](https://github.com/cavazquez/openttdrs/issues/121)) — camino crítico `#108 → #115 → #114 → #21`.
+([#121](https://github.com/cavazquez/openttdrs/issues/121)) — camino crítico `#108 → #115 → #114 → #21` ✅. ADR: [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md).
 
-**Hito actual:** 0.1 solitario · **I0–I7** hechos · **I8 (red)** backlog post-0.1.
+**Hito actual:** 0.1 solitario · **I0–I7** hechos · **I8 (red)** MVP: `openttdrs-net` + `--server`/`--client` + `openttdrs-dedicated`.
 
 ---
 

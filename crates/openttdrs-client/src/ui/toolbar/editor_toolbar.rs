@@ -4,7 +4,7 @@
 use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
 use openttdrs_core::{
-    Command, RoadTramType, apply_command, calendar_day_index, calendar_year_day,
+    Command, RoadTramType, calendar_day_index, calendar_year_day,
     format_calendar_date,
 };
 
@@ -603,7 +603,7 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
                 } else {
                     year.saturating_add(1)
                 };
-                match apply_command(&mut sim.state, &Command::CheatSetYear(next)) {
+                match crate::network::apply_player_command(&mut sim.state, &Command::CheatSetYear(next)) {
                     Ok(()) => {
                         feedback.message = Some(format!("Año → {next}"));
                         feedback.expires_at_secs = time.elapsed_secs() + 3.0;

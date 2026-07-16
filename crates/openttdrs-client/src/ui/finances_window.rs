@@ -1,7 +1,7 @@
 //! Ventana de finanzas de la compañía (clic en dinero de la barra inferior).
 
 use bevy::prelude::*;
-use openttdrs_core::{Command, LOAN_INTERVAL, apply_command, format_money};
+use openttdrs_core::{Command, LOAN_INTERVAL, format_money};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -175,7 +175,7 @@ pub(crate) fn handle_finances_window_buttons(
                 Command::BuyCompany(rival)
             }
         };
-        if let Err(e) = apply_command(&mut sim.state, &cmd) {
+        if let Err(e) = crate::network::apply_player_command(&mut sim.state, &cmd) {
             push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
         }
     }

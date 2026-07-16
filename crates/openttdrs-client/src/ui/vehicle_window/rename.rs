@@ -4,7 +4,7 @@ use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
 use bevy::text::EditableText;
-use openttdrs_core::{Command, apply_command, vehicle::MAX_VEHICLE_NAME_CHARS};
+use openttdrs_core::{Command, vehicle::MAX_VEHICLE_NAME_CHARS};
 
 use crate::state::SimWorld;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
@@ -22,7 +22,7 @@ fn apply_vehicle_rename(
         return;
     };
     let name = rename_input_q.single().ok().map(|e| e.value().to_string());
-    match apply_command(&mut sim.state, &Command::RenameVehicle { vehicle_id, name }) {
+    match crate::network::apply_player_command(&mut sim.state, &Command::RenameVehicle { vehicle_id, name }) {
         Ok(()) => window_state.rename_editing = false,
         Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
     }

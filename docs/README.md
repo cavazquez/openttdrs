@@ -8,6 +8,7 @@
 4. [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) — gaps vs OpenTTD
 5. [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) — hallazgos técnicos fijos y comandos
 6. [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) — filosofía I0–I8
+7. [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) — arquitectura red v1 (listen-server + dedicated)
 
 **Issues de backlog:** [github.com/cavazquez/openttdrs/issues](https://github.com/cavazquez/openttdrs/issues) (abiertas desde los ROADMAP, jul 2026).
 
@@ -17,6 +18,10 @@
 
 | Documento | Uso |
 |-----------|-----|
+| [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) | ADR: lockstep, listen-server + dedicated headless, sin host migration v1 |
+| Crate `openttdrs-net` | TCP I8; bin `openttdrs-dedicated`; cliente `--server` / `--client` |
+| [INVENTARIO_HASHMAP_DETERMINISMO.md](INVENTARIO_HASHMAP_DETERMINISMO.md) | #115: HashMap/HashSet vs hash canónico |
+| [INVENTARIO_MUTACIONES_CLIENTE.md](INVENTARIO_MUTACIONES_CLIENTE.md) | #114: mutaciones `SimWorld` fuera de `Command` |
 | [ROADMAP_AUDITORIA_2026.md](ROADMAP_AUDITORIA_2026.md) | Tablero vivo del roadmap #121 (fases, camino crítico, DoD) |
 | [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) | UI-0…UI-8, NewGRF Action0–14, siguiente corte |
 | [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md) | Cargo packets, YAPF/PBS, economía, mono/maglev |

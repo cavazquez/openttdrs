@@ -6,8 +6,12 @@ Baseline original: `main` @ `7e731b32` (2026-07-15). Actualizado: 2026-07-16.
 ## Camino crítico
 
 ```text
-#107 ✅ → #108 ⬜ → #115 ⬜ → #114 ⬜ → #21 ⬜
+#107 ✅ → #108 ✅ → #115 ✅ → #114 ✅ → #21 ✅
 ```
+
+Arquitectura red v1 (listen-server + dedicated headless, sin host migration): [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md).
+
+Inventarios: [INVENTARIO_HASHMAP_DETERMINISMO.md](INVENTARIO_HASHMAP_DETERMINISMO.md) (#115) · [INVENTARIO_MUTACIONES_CLIENTE.md](INVENTARIO_MUTACIONES_CLIENTE.md) (#114).
 
 En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118` ✅ · UI `#113`/`#145` ✅.
 
@@ -18,7 +22,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 | Issue | Estado | Notas |
 |-------|--------|-------|
 | #103 rustdoc CI | ✅ | Cerrado |
-| #108 hash por tick | ⬜ | Bloqueante de equivalencia / red |
+| #108 hash por tick | ✅ | `GameState::canonical_hash` (FNV-1a, dominio `openttdrs-gs-v1`) |
 | #109 pin OpenTTD | ⬜ | Bloquea #110 / #119 |
 | #110 oráculo independiente | ⬜ | Tras #109 |
 | #119 tablas generadas | ⬜ | Tras #109 |
@@ -28,7 +32,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 | Issue | Estado |
 |-------|--------|
-| #117 contribución / ADRs | ⬜ |
+| #117 contribución / ADRs | 🟨 | Primera ADR: [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) |
 | #120 alinear `check.sh ci` ↔ GHA | ⬜ |
 | #106 cargo-audit / deny | ✅ |
 
@@ -36,7 +40,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 | Issue | Estado |
 |-------|--------|
-| #114 mutaciones cliente fuera de Command | ⬜ |
+| #114 mutaciones cliente fuera de Command | ✅ | [INVENTARIO_MUTACIONES_CLIENTE.md](INVENTARIO_MUTACIONES_CLIENTE.md) |
 | #111 estado persistido vs runtime | ✅ |
 | #112 fases de `sim_step` | ✅ |
 
@@ -45,8 +49,8 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 | Issue | Estado |
 |-------|--------|
 | #107 persistir RNG CargoDist | ✅ |
-| #108 hash global | ⬜ |
-| #115 orden HashMap | ⬜ (tras #108) |
+| #108 hash global | ✅ |
+| #115 orden HashMap | ✅ | [INVENTARIO_HASHMAP_DETERMINISMO.md](INVENTARIO_HASHMAP_DETERMINISMO.md); sin BTreeMap masivo |
 
 ### Fase 4 — Subsistemas funcionales
 
@@ -56,7 +60,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 | #122 sanitizar `current_order` | ✅ |
 | #123 gamma SAV tipado | ✅ |
 | #149 codec ORDL simétrico | ✅ |
-| #21 red multiplayer | ⬜ (bloqueada por #108/#114/#115) |
+| #21 red multiplayer | ✅ | `openttdrs-net` + dedicated + `--server`/`--client` (ADR 0001) |
 
 ### Fase 5 — Bevy / presentación
 
@@ -96,16 +100,17 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 - [x] Fmt/check/clippy/tests verdes en el baseline actual (suite ampliada desde la auditoría).
 - [x] Auditoría de dependencias con política (`#104`/`#106`).
-- [ ] Mismo seed/comandos/ticks → hashes idénticos tras save/load (`#108`, refuerzo `#107` ✅).
+- [x] Mismo seed/comandos/ticks → hashes idénticos tras save/load (`#108`, refuerzo `#107` ✅).
 - [ ] Referencia OpenTTD y oráculo independientes (`#109`/`#110`).
-- [ ] Refactors con equivalencia tick-a-tick (`#108`).
+- [x] Refactors con equivalencia tick-a-tick (`#108`).
 - [ ] Benchmarks con baseline (`#116`).
-- [ ] ADRs / gobierno (`#117`).
-- [ ] `#21` solo con bloqueantes de determinismo cerrados.
+- [ ] ADRs / gobierno (`#117` — primera ADR multiplayer hecha).
+- [x] Bloqueantes de determinismo para `#21` cerrados (`#108`/`#114`/`#115`).
+- [x] `#21` transporte TCP + flags cliente / dedicated (ADR 0001).
 
 ## Próximo foco recomendado
 
-1. **#108** — hash estable + repetibilidad (desbloquea #115 y equivalencia de refactors).
-2. **#109** — pin/manifiesto OpenTTD (desbloquea paridad tooling).
-3. **#114** — inventario mutaciones cliente (camino a #21).
-4. **#120** / **#117** — quick wins de CI y gobierno.
+1. **#109** — pin/manifiesto OpenTTD (desbloquea paridad tooling).
+2. **#120** / **#117** — CI y plantilla de contribución/ADRs.
+3. Deuda I8 de settings cliente → `Command` (lista en inventario #114).
+4. Host migration post-v1 (fuera de ADR 0001).

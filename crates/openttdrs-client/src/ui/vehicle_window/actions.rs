@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::text::EditableText;
-use openttdrs_core::{Command, apply_command, station::resolve_order_destination};
+use openttdrs_core::{Command, station::resolve_order_destination};
 
 use crate::camera::tile_camera_world_pos;
 use crate::render::{
@@ -53,7 +53,7 @@ pub(crate) fn handle_vehicle_window_buttons(
         };
         match button {
             VehicleWindowButton::ToggleRunning => {
-                match apply_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id)) {
+                match crate::network::apply_player_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id)) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
@@ -66,7 +66,7 @@ pub(crate) fn handle_vehicle_window_buttons(
                 }
             }
             VehicleWindowButton::GotoDepot => {
-                match apply_command(&mut sim.state, &Command::AppendGotoNearestDepot(vehicle_id)) {
+                match crate::network::apply_player_command(&mut sim.state, &Command::AppendGotoNearestDepot(vehicle_id)) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
@@ -109,7 +109,7 @@ pub(crate) fn handle_vehicle_window_buttons(
                 }
             }
             VehicleWindowButton::TurnAround => {
-                match apply_command(&mut sim.state, &Command::TurnAroundVehicle(vehicle_id)) {
+                match crate::network::apply_player_command(&mut sim.state, &Command::TurnAroundVehicle(vehicle_id)) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
@@ -117,7 +117,7 @@ pub(crate) fn handle_vehicle_window_buttons(
                 }
             }
             VehicleWindowButton::ForceProceed => {
-                match apply_command(&mut sim.state, &Command::ForceVehicleProceed(vehicle_id)) {
+                match crate::network::apply_player_command(&mut sim.state, &Command::ForceVehicleProceed(vehicle_id)) {
                     Ok(()) => {}
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());

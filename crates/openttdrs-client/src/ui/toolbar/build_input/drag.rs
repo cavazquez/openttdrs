@@ -1,5 +1,5 @@
 use openttdrs_core::{
-    Command, CommandError, GameState, Map, ROAD_PLACE_FORCE_AXIS, TileCoord, apply_command,
+    Command, CommandError, GameState, Map, ROAD_PLACE_FORCE_AXIS, TileCoord,
     finalize_road_drag_line, infer_road_drag_axis, resolve_tunnel_end, road_drag_line_tiles,
     road_locked_tool_axis, tunnel_preview_path,
 };
@@ -236,7 +236,7 @@ pub(crate) fn apply_drag_action(
 ) -> (bool, Option<CommandError>) {
     if action_is_tunnel(action) {
         if let Some(cmd) = command_for_tunnel_action(&sim.state, action, &tiles) {
-            return match apply_command(&mut sim.state, &cmd) {
+            return match crate::network::apply_player_command(&mut sim.state, &cmd) {
                 Ok(()) => (true, None),
                 Err(e) => (false, Some(e)),
             };
@@ -245,7 +245,7 @@ pub(crate) fn apply_drag_action(
     }
     if action == BuildMenuAction::BuyLand {
         if let Some(cmd) = buy_land_command_for_tiles(&tiles) {
-            return match apply_command(&mut sim.state, &cmd) {
+            return match crate::network::apply_player_command(&mut sim.state, &cmd) {
                 Ok(()) => (true, None),
                 Err(e) => (false, Some(e)),
             };
@@ -253,7 +253,7 @@ pub(crate) fn apply_drag_action(
         return (false, Some(CommandError::CannotBuyLandHere));
     }
     if let Some(cmd) = terraform_command_for_tiles(action, &tiles) {
-        return match apply_command(&mut sim.state, &cmd) {
+        return match crate::network::apply_player_command(&mut sim.state, &cmd) {
             Ok(()) => (true, None),
             Err(e) => (false, Some(e)),
         };
@@ -267,7 +267,7 @@ pub(crate) fn apply_drag_action(
     }
 
     if let Some(cmd) = command_for_line_action(action, &tiles, openttdrs_core::BridgeType::Wooden) {
-        return match apply_command(&mut sim.state, &cmd) {
+        return match crate::network::apply_player_command(&mut sim.state, &cmd) {
             Ok(()) => (true, None),
             Err(e) => (false, Some(e)),
         };
@@ -287,7 +287,7 @@ pub(crate) fn apply_drag_action(
             } else {
                 Command::PlaceRoadBits(*c, axis | ROAD_PLACE_FORCE_AXIS)
             };
-            match apply_command(&mut sim.state, &cmd) {
+            match crate::network::apply_player_command(&mut sim.state, &cmd) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),
             }
@@ -310,7 +310,7 @@ pub(crate) fn apply_drag_action(
                 .get(pos)
                 .map(|t| rail_type_from_tile(t).next().as_u8())
                 .unwrap_or(1);
-            match apply_command(&mut sim.state, &Command::ConvertRail(pos, to)) {
+            match crate::network::apply_player_command(&mut sim.state, &Command::ConvertRail(pos, to)) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),
             }
@@ -327,7 +327,7 @@ pub(crate) fn apply_drag_action(
             |pos: TileCoord, bits: u8| Command::PlaceRailBits(pos, bits)
         };
         for (x, y) in tiles {
-            match apply_command(&mut sim.state, &cmd_fn(TileCoord::new(x, y), rail_bits)) {
+            match crate::network::apply_player_command(&mut sim.state, &cmd_fn(TileCoord::new(x, y), rail_bits)) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),
             }
@@ -349,7 +349,7 @@ pub(crate) fn apply_drag_action(
                 fy,
                 station_state.signal_type,
             );
-            match apply_command(&mut sim.state, &cmd) {
+            match crate::network::apply_player_command(&mut sim.state, &cmd) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),
             }
@@ -370,7 +370,7 @@ pub(crate) fn apply_drag_action(
             station_state.signal_type,
             false,
         ) {
-            match apply_command(&mut sim.state, &cmd) {
+            match crate::network::apply_player_command(&mut sim.state, &cmd) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),
             }
@@ -458,7 +458,7 @@ fn rect_drag_tiles(from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
 mod tests {
     use super::*;
     use crate::state::SimWorld;
-    use openttdrs_core::{GameState, TileCoord, TileKind, apply_command};
+    use openttdrs_core::{GameState, TileCoord, TileKind};
 
     #[test]
     fn rail_remap_neighbor_tiles_includes_orthogonal_neighbors() {
@@ -573,7 +573,7 @@ mod tests {
             ottdmap_extras: None,
         };
         for y in 2..=5 {
-            apply_command(
+            crate::network::apply_player_command(
                 &mut sim.state,
                 &Command::PlaceRoadBits(TileCoord::new(8, y), 0x05),
             )
@@ -607,7 +607,7 @@ mod tests {
             ottdmap_extras: None,
         };
         for x in 3..=6 {
-            apply_command(
+            crate::network::apply_player_command(
                 &mut sim.state,
                 &Command::PlaceRoadBits(TileCoord::new(x, 5), 0x0A),
             )
@@ -646,7 +646,7 @@ mod tests {
             ottdmap_extras: None,
         };
         for x in 1..=12 {
-            apply_command(
+            crate::network::apply_player_command(
                 &mut sim.state,
                 &Command::SetRailBits(TileCoord::new(x, 2), 0x01),
             )

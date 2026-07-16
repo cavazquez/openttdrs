@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    BridgeType, Command, CommandError, TileCoord, apply_command, command_would_fail,
+    BridgeType, Command, CommandError, TileCoord, command_would_fail,
 };
 
 use crate::render::{RemapMapVisualsPending, request_map_visual_remap};
@@ -244,7 +244,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 ctx.station_state.join_keep = None;
             }
             Some(k) => {
-                match apply_command(
+                match crate::network::apply_player_command(
                     &mut ctx.sim.state,
                     &Command::JoinStations {
                         keep: k,
@@ -285,7 +285,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 sig_type,
                 cycle,
             ) {
-                if let Err(e) = apply_command(&mut ctx.sim.state, &cmd) {
+                if let Err(e) = crate::network::apply_player_command(&mut ctx.sim.state, &cmd) {
                     push_build_command_error(&mut ctx.hud_feedback, e, time_secs);
                 } else {
                     if ctrl_held && action == BuildMenuAction::RailSignals && !cycle {

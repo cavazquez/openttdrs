@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{CompanyId, TileCoord, TileKind};
+use openttdrs_core::{TileCoord, TileKind, tile_owner_colour};
 
 use crate::bevy_app::UpdateSet;
 use crate::config::{env_flag, env_string};
@@ -32,36 +32,15 @@ fn owner_colour_for_tile(
     coord: TileCoord,
     kind: TileKind,
 ) -> Option<CompanyColour> {
-    let colour_of = |owner: CompanyId| {
-        CompanyColour::from_u8(
-            sim.state
-                .companies
-                .get(owner.index())
-                .map(|c| c.colour)
-                .unwrap_or(sim.state.company_colour),
-        )
-    };
-    if let Some(station) = sim.state.stations.iter().find(|s| s.covers_tile(coord)) {
-        return Some(colour_of(station.owner));
-    }
-    if matches!(kind, TileKind::Station | TileKind::Airport)
-        && let Some(station) = sim.state.stations.iter().find(|s| s.pos == coord)
-    {
-        return Some(colour_of(station.owner));
-    }
-    if matches!(
+    tile_owner_colour(
+        &sim.state.companies,
+        &sim.state.stations,
+        &sim.state.map,
+        coord,
         kind,
-        TileKind::RoadDepot
-            | TileKind::RailDepot
-            | TileKind::ShipDepot
-            | TileKind::Rail
-            | TileKind::Road
-    ) {
-        let m1 = sim.state.map.get(coord).map(|t| t.m1).unwrap_or(0);
-        let owner = CompanyId::from_tile_m1(m1, sim.state.companies.len());
-        return Some(colour_of(owner));
-    }
-    None
+        sim.state.company_colour,
+    )
+    .map(CompanyColour::from_u8)
 }
 
 /// Queries de etiquetas del mapa (agrupadas para no superar el límite de params Bevy).

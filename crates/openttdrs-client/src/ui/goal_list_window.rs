@@ -14,6 +14,9 @@ use crate::ui::list_window::{
 };
 use crate::ui::navigation::{OpenUiRoute, UiRoute};
 use crate::ui::toolbar::BuildMenuUi;
+use crate::ui::window_lifecycle::{
+    close_floating_window_on_message, sync_floating_window_visibility,
+};
 
 #[derive(Resource, Default)]
 pub(crate) struct GoalListWindowState {
@@ -79,15 +82,7 @@ pub(crate) fn sync_goal_list_window(
     asset_server: Res<AssetServer>,
     mut cache: Local<GoalListCache>,
 ) {
-    for (w, mut vis) in &mut windows {
-        if w.id == FloatingWindowId::Goals {
-            *vis = if state.open {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            };
-        }
-    }
+    sync_floating_window_visibility(&mut windows, FloatingWindowId::Goals, state.open);
     if !state.open {
         cache.fingerprint = 0;
         return;
@@ -145,9 +140,7 @@ pub(crate) fn goal_list_window_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut state: ResMut<GoalListWindowState>,
 ) {
-    for msg in closed.read() {
-        if msg.0 == FloatingWindowId::Goals {
-            state.open = false;
-        }
-    }
+    close_floating_window_on_message(&mut closed, FloatingWindowId::Goals, || {
+        state.open = false;
+    });
 }

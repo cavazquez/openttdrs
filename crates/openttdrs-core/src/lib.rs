@@ -13,6 +13,7 @@ pub mod autoreplace;
 pub mod bridge_spec;
 pub mod cargo;
 pub mod cargo_packet;
+pub mod cargodist;
 pub mod cheats;
 pub mod command;
 pub mod company;
@@ -24,15 +25,11 @@ pub mod economy;
 pub mod economy_quarterly;
 pub mod engine;
 pub mod entity_history;
-pub mod flow_stat;
 mod game_state;
 pub mod gs;
 pub mod industry;
 pub mod industry_tile;
-pub mod link_graph;
-pub mod linkgraph_parity;
 pub mod map;
-pub mod mcf;
 pub mod newgrf_actions;
 mod newgrf_company_ramp;
 pub mod newgrf_config;
@@ -116,7 +113,8 @@ pub use command::{
     road_locked_tool_axis,
 };
 pub use company::{
-    Company, CompanyId, FEEDER_SHARE_DEN, FEEDER_SHARE_NUM, feeder_share_of, tile_with_owner,
+    Company, CompanyId, FEEDER_SHARE_DEN, FEEDER_SHARE_NUM, feeder_share_of, tile_owner_colour,
+    tile_with_owner,
 };
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
 pub use depot_leave::{TRAIN_DEPOT_LEAVE_WAIT_TICKS, tick_train_stay_in_depot};
@@ -151,10 +149,41 @@ pub use engine::{
 pub use entity_history::{
     ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
 };
-pub use flow_stat::{
+// Shims de compatibilidad: re-exporta desde cargodist::legacy
+pub use cargodist::legacy::flow_stat::{
     CargoDistSettings, DistributionType, FlowStat, FlowStatMap, PlannedFlowEdge, StationFlowTable,
     StationFlows, resolve_next_hop,
 };
+pub use cargodist::legacy::link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphStats};
+pub use cargodist::legacy::mcf::{
+    MCF_MAX_EDGES, MCF_MAX_NODES, McfAlgorithm, McfConfig, compute_station_flows,
+    compute_station_flows_for_distribution, symmetrize_observed_edges,
+};
+
+// Shims de compatibilidad: re-exporta desde cargodist::parity
+pub use cargodist::parity::{
+    BaseEdge as LinkgraphParityBaseEdge, BaseNode as LinkgraphParityBaseNode,
+    DistributionType as LinkgraphParityDistributionType, FlowMapper as LinkgraphParityFlowMapper,
+    FlowStat as LinkgraphParityFlowStat, FlowStatMap as LinkgraphParityFlowStatMap,
+    Job as LinkgraphParityJob, LinkGraphSettings as LinkgraphParitySettings,
+    SimpleShare as LinkgraphParitySimpleShare, flows_as_simple_shares,
+    run_full_pipeline as run_linkgraph_parity_pipeline,
+    to_station_flows_helper as linkgraph_parity_to_station_flows,
+};
+
+// Re-exportaciones para módulos de compatibilidad (permiten usar crate::flow_stat, etc.)
+pub mod flow_stat {
+    pub use crate::cargodist::legacy::flow_stat::*;
+}
+pub mod link_graph {
+    pub use crate::cargodist::legacy::link_graph::*;
+}
+pub mod linkgraph_parity {
+    pub use crate::cargodist::parity::*;
+}
+pub mod mcf {
+    pub use crate::cargodist::legacy::mcf::*;
+}
 #[allow(deprecated)]
 pub use game_state::CARGO_DELIVERY_PAYMENT;
 pub use game_state::IncomePopup;
@@ -175,16 +204,6 @@ pub use industry_tile::{
     INVALID_INDUSTRY_TILE, IndustryTileGfxId, IndustryTileSpecDef, NEW_INDUSTRY_TILE_OFFSET,
     NUM_INDUSTRY_TILES, empty_industry_tile_overrides, get_clean_industry_gfx,
     get_translated_industry_tile_id, industry_tile_spec_def, next_free_industry_tile_gfx_id,
-};
-pub use link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphStats};
-pub use linkgraph_parity::{
-    BaseEdge as LinkgraphParityBaseEdge, BaseNode as LinkgraphParityBaseNode,
-    DistributionType as LinkgraphParityDistributionType, FlowMapper as LinkgraphParityFlowMapper,
-    FlowStat as LinkgraphParityFlowStat, FlowStatMap as LinkgraphParityFlowStatMap,
-    Job as LinkgraphParityJob, LinkGraphSettings as LinkgraphParitySettings,
-    SimpleShare as LinkgraphParitySimpleShare, flows_as_simple_shares,
-    run_full_pipeline as run_linkgraph_parity_pipeline,
-    to_station_flows_helper as linkgraph_parity_to_station_flows,
 };
 pub use map::{
     AIRPORT_RADAR_FRAMES, GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED,
@@ -217,10 +236,6 @@ pub use map::{
     tile_adjacent_to_water, tile_has_water_class, tile_slope_and_z, tree_or_field_stage,
     trigger_industry_randomisation_at, trigger_industry_tile_randomisation, tunnel_entrance_m5,
     tunnel_preview_path, water_class, water_class_from_m1,
-};
-pub use mcf::{
-    MCF_MAX_EDGES, MCF_MAX_NODES, McfAlgorithm, McfConfig, compute_station_flows,
-    compute_station_flows_for_distribution, symmetrize_observed_edges,
 };
 pub use newgrf_actions::{
     ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS,

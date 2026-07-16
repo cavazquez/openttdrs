@@ -58,6 +58,7 @@ mod ui5_blocked_stubs;
 mod ui_enum_inventory_test;
 mod vehicle_list;
 mod vehicle_window;
+mod window_lifecycle;
 mod windows_shot;
 use ai_settings_window::{
     AiSettingsWindowState, ai_settings_on_closed, handle_ai_settings_buttons,

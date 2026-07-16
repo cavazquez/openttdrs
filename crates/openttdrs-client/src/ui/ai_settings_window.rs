@@ -13,6 +13,9 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::toolbar::BuildMenuUi;
+use crate::ui::window_lifecycle::{
+    close_floating_window_on_message, sync_floating_window_visibility,
+};
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
@@ -232,17 +235,10 @@ pub(crate) fn sync_ai_settings_window(
     mut buttons: Query<(&AiSettingsAction, &mut BorderColor), Without<FloatingWindow>>,
     mut debug_q: Query<&mut Text, With<AiSettingsDebugText>>,
 ) {
-    let Some((_, mut vis)) = root_q
-        .iter_mut()
-        .find(|(w, _)| w.id == FloatingWindowId::AiSettings)
-    else {
-        return;
-    };
+    sync_floating_window_visibility(&mut root_q, FloatingWindowId::AiSettings, state.open);
     if !state.open {
-        *vis = Visibility::Hidden;
         return;
     }
-    *vis = Visibility::Visible;
 
     let ai = sim.state.ai.clamped();
     for (action, mut border) in &mut buttons {
@@ -298,9 +294,7 @@ pub(crate) fn ai_settings_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut state: ResMut<AiSettingsWindowState>,
 ) {
-    for msg in closed.read() {
-        if msg.0 == FloatingWindowId::AiSettings {
-            state.open = false;
-        }
-    }
+    close_floating_window_on_message(&mut closed, FloatingWindowId::AiSettings, || {
+        state.open = false;
+    });
 }

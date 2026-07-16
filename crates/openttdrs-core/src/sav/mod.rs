@@ -18,7 +18,7 @@ mod house_population_generated;
 mod linkgraph;
 mod orders;
 mod table;
-mod write;
+pub mod write;
 
 use crate::command::{bridge_collinear_rail_gaps, normalize_rail_trackbits_from_neighbors};
 use crate::game_state::GameState;

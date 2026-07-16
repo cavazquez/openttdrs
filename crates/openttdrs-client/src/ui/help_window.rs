@@ -8,6 +8,9 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::toolbar::BuildMenuUi;
+use crate::ui::window_lifecycle::{
+    close_floating_window_on_message, sync_floating_window_visibility,
+};
 
 const HELP_BODY: &str = "\
 openttdrs — cliente Rust de OpenTTD (paridad single-player)\n\
@@ -72,26 +75,16 @@ pub(crate) fn sync_help_window(
     state: Res<HelpWindowState>,
     mut windows: Query<(&FloatingWindow, &mut Visibility)>,
 ) {
-    for (w, mut vis) in &mut windows {
-        if w.id == FloatingWindowId::Help {
-            *vis = if state.open {
-                Visibility::Visible
-            } else {
-                Visibility::Hidden
-            };
-        }
-    }
+    sync_floating_window_visibility(&mut windows, FloatingWindowId::Help, state.open);
 }
 
 pub(crate) fn help_window_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut state: ResMut<HelpWindowState>,
 ) {
-    for msg in closed.read() {
-        if msg.0 == FloatingWindowId::Help {
-            state.open = false;
-        }
-    }
+    close_floating_window_on_message(&mut closed, FloatingWindowId::Help, || {
+        state.open = false;
+    });
 }
 
 /// **F1** o **?** abre/cierra la ayuda.

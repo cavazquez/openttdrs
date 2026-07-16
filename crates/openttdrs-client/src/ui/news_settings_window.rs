@@ -10,6 +10,9 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::toolbar::BuildMenuUi;
+use crate::ui::window_lifecycle::{
+    close_floating_window_on_message, sync_floating_window_visibility,
+};
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
@@ -119,17 +122,10 @@ pub(crate) fn sync_news_settings_window(
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut buttons: Query<(&NewsSettingsModeButton, &mut BorderColor), Without<FloatingWindow>>,
 ) {
-    let Some((_, mut vis)) = root_q
-        .iter_mut()
-        .find(|(w, _)| w.id == FloatingWindowId::NewsSettings)
-    else {
-        return;
-    };
+    sync_floating_window_visibility(&mut root_q, FloatingWindowId::NewsSettings, state.open);
     if !state.open {
-        *vis = Visibility::Hidden;
         return;
     }
-    *vis = Visibility::Visible;
 
     for (button, mut border) in &mut buttons {
         let active = prefs.0.display_for(button.news_type) == button.mode;
@@ -157,9 +153,7 @@ pub(crate) fn news_settings_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut state: ResMut<NewsSettingsWindowState>,
 ) {
-    for msg in closed.read() {
-        if msg.0 == FloatingWindowId::NewsSettings {
-            state.open = false;
-        }
-    }
+    close_floating_window_on_message(&mut closed, FloatingWindowId::NewsSettings, || {
+        state.open = false;
+    });
 }

@@ -2,11 +2,11 @@
 //!
 //! Ver `docs/epics/ai_rivals.md`. La medición headless vive en [`crate::dev_metrics`].
 
-mod rule_based;
 mod settings;
+mod transcargo;
 
-pub use rule_based::{AI_BUILD_MONEY_THRESHOLD, MAX_AI_ROUTES, TransCargoAi};
 pub use settings::{AiSettings, DEFAULT_AI_BUILD_MONEY_THRESHOLD, DEFAULT_AI_MAX_ROUTES};
+pub use transcargo::{AI_BUILD_MONEY_THRESHOLD, MAX_AI_ROUTES, TransCargoAi};
 
 use crate::GameState;
 use crate::command::Command;
@@ -27,11 +27,11 @@ pub fn tick_ai_companies(state: &mut GameState, tick: u64) {
     if !state.companies.iter().any(|c| c.is_ai) {
         return;
     }
-    rule_based::maintain_transcargo_vehicles(state);
+    transcargo::maintain_transcargo_vehicles(state);
     if tick == 0 || !tick.is_multiple_of(TICKS_PER_MONTH) {
         return;
     }
-    rule_based::tick_transcargo(state);
+    transcargo::tick_transcargo(state);
 }
 
 /// Texto de debug para la ventana AI settings (#44).

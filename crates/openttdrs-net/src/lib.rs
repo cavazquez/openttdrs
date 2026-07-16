@@ -17,7 +17,7 @@ mod protocol;
 mod session;
 
 pub use codec::{read_message, write_message};
-pub use peer::{DEFAULT_PORT, connect, listen};
+pub use peer::{DEFAULT_PORT, connect, failover_connect_addr, failover_listen_bind, listen};
 pub use protocol::{NetError, NetMessage, PROTOCOL_VERSION};
 pub use session::{
     ClientSession, ClientSessionHandle, ListenServer, ListenServerHandle, SessionEvent,

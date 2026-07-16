@@ -14,7 +14,10 @@ fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
     let start = Instant::now();
     loop {
         if let Some(e) = client.try_recv() {
-            return e;
+            match e {
+                SessionEvent::PeerList { .. } | SessionEvent::Heartbeat { .. } => continue,
+                other => return other,
+            }
         }
         if start.elapsed() > timeout {
             panic!("timeout waiting for client event");

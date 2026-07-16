@@ -9,6 +9,7 @@ use openttdrs_net::{ClientSession, ListenServer, SessionEvent};
 use crate::bevy_app::{FixedUpdateSet, UpdateSet};
 use crate::network::cli::NetCli;
 use crate::network::dispatch::{install_client, install_offline, install_server};
+use crate::network::failover::{ClientFailoverState, HOST_SILENCE_TIMEOUT, try_client_failover};
 use crate::render::{MapVisualLayer, ShoreTile, VehicleIndex, WaterTile};
 use crate::state::{ClientScreen, EditorSession, SimRunState, SimWorld};
 use crate::ui::{MainMenuCamera, MainMenuUi, leave_main_menu};
@@ -50,11 +51,29 @@ impl NetworkRuntime {
     }
 
     #[must_use]
+    pub fn listen_server(server: ListenServer) -> Self {
+        Self {
+            role: NetworkRole::ListenServer,
+            server: Some(Mutex::new(server)),
+            client: None,
+        }
+    }
+
+    #[must_use]
+    pub fn client(client: ClientSession) -> Self {
+        Self {
+            role: NetworkRole::Client,
+            server: None,
+            client: Some(Mutex::new(client)),
+        }
+    }
+
+    #[must_use]
     pub const fn role(&self) -> NetworkRole {
         self.role
     }
 
-    fn try_recv_event(&self) -> Option<SessionEvent> {
+    pub(crate) fn try_recv_event(&self) -> Option<SessionEvent> {
         match self.role {
             NetworkRole::ListenServer => self
                 .server
@@ -68,7 +87,7 @@ impl NetworkRuntime {
         }
     }
 
-    fn broadcast_advance(&self, count: u32) {
+    pub(crate) fn broadcast_advance(&self, count: u32) {
         if let Some(server) = &self.server
             && let Ok(g) = server.lock()
         {
@@ -76,7 +95,7 @@ impl NetworkRuntime {
         }
     }
 
-    fn publish_snapshot(&self, snapshot_json: String) {
+    pub(crate) fn publish_snapshot(&self, snapshot_json: String) {
         if let Some(server) = &self.server
             && let Ok(g) = server.lock()
         {
@@ -84,11 +103,19 @@ impl NetworkRuntime {
         }
     }
 
-    fn broadcast_hash(&self, tick: u64, hash: u64) {
+    pub(crate) fn broadcast_hash(&self, tick: u64, hash: u64) {
         if let Some(server) = &self.server
             && let Ok(g) = server.lock()
         {
             let _ = g.broadcast_hash(tick, hash);
+        }
+    }
+
+    pub(crate) fn broadcast_heartbeat(&self, tick: u64) {
+        if let Some(server) = &self.server
+            && let Ok(g) = server.lock()
+        {
+            let _ = g.broadcast_heartbeat(tick);
         }
     }
 }
@@ -108,6 +135,9 @@ impl Plugin for NetworkPlugin {
                 Update,
                 (
                     poll_network.run_if(network_active),
+                    check_host_silence_failover
+                        .run_if(resource_exists::<ClientFailoverState>)
+                        .after(poll_network),
                     enter_ingame_after_network_welcome
                         .run_if(network_pending_enter)
                         .after(poll_network),
@@ -173,6 +203,7 @@ fn enter_ingame_after_network_welcome(
 }
 
 fn start_network_session(
+    mut commands: Commands,
     pending: Res<PendingNetCli>,
     mut net: ResMut<NetworkRuntime>,
     mut status: ResMut<NetworkStatus>,
@@ -200,11 +231,7 @@ fn start_network_session(
                         sim.state.canonical_hash()
                     );
                     status.label = format!("server {bind}");
-                    *net = NetworkRuntime {
-                        role: NetworkRole::ListenServer,
-                        server: Some(Mutex::new(server)),
-                        client: None,
-                    };
+                    *net = NetworkRuntime::listen_server(server);
                 }
                 Err(e) => {
                     error!("no se pudo iniciar --server {bind}: {e}");
@@ -218,11 +245,8 @@ fn start_network_session(
                 install_client(client.handle());
                 info!("client connecting to {addr}");
                 status.label = format!("client {addr}");
-                *net = NetworkRuntime {
-                    role: NetworkRole::Client,
-                    server: None,
-                    client: Some(Mutex::new(client)),
-                };
+                commands.insert_resource(ClientFailoverState::new(addr.clone()));
+                *net = NetworkRuntime::client(client);
             }
             Err(e) => {
                 error!("no se pudo conectar --client {addr}: {e}");
@@ -234,65 +258,116 @@ fn start_network_session(
 }
 
 fn poll_network(
-    net: Res<NetworkRuntime>,
+    mut net: ResMut<NetworkRuntime>,
     mut status: ResMut<NetworkStatus>,
     mut sim: ResMut<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
+    mut failover: Option<ResMut<ClientFailoverState>>,
 ) {
+    let mut host_lost = false;
     while let Some(event) = net.try_recv_event() {
-        if let Err(msg) = handle_event(
+        if let Some(fo) = failover.as_mut() {
+            fo.note_rx();
+        }
+        match handle_event(
             &mut sim,
             &mut vehicle_index,
             &mut status,
+            failover.as_deref_mut(),
             net.role(),
             &event,
         ) {
-            status.desync = Some(msg.clone());
-            error!("network: {msg}");
+            Ok(EventOutcome::HostLost) => host_lost = true,
+            Ok(EventOutcome::Ok) => {}
+            Err(msg) => {
+                status.desync = Some(msg.clone());
+                error!("network: {msg}");
+            }
         }
     }
+    if host_lost && let Some(fo) = failover.as_mut() {
+        let _ = try_client_failover(&mut net, &mut status, fo, &sim);
+    }
+}
+
+fn check_host_silence_failover(
+    mut net: ResMut<NetworkRuntime>,
+    mut status: ResMut<NetworkStatus>,
+    mut failover: ResMut<ClientFailoverState>,
+    sim: Res<SimWorld>,
+) {
+    if net.role() != NetworkRole::Client || failover.failover_attempted {
+        return;
+    }
+    if failover.last_rx.elapsed() < HOST_SILENCE_TIMEOUT {
+        return;
+    }
+    warn!(
+        "network: silencio del host > {:?} — intentando failover",
+        HOST_SILENCE_TIMEOUT
+    );
+    let _ = try_client_failover(&mut net, &mut status, &mut failover, &sim);
+}
+
+enum EventOutcome {
+    Ok,
+    HostLost,
 }
 
 fn handle_event(
     sim: &mut SimWorld,
     vehicle_index: &mut VehicleIndex,
     status: &mut NetworkStatus,
+    failover: Option<&mut ClientFailoverState>,
     role: NetworkRole,
     event: &SessionEvent,
-) -> Result<(), String> {
+) -> Result<EventOutcome, String> {
     match event {
-        SessionEvent::Welcome { snapshot_json, .. } => {
+        SessionEvent::Welcome {
+            snapshot_json,
+            next_seq,
+            peer_id,
+        } => {
             sim.state = GameState::load_json(snapshot_json).map_err(|e| e.to_string())?;
             vehicle_index.rebuild(&sim.state.vehicles);
+            if let Some(fo) = failover {
+                fo.peer_id = Some(*peer_id);
+                fo.next_seq = *next_seq;
+                if !fo.known_peers.contains(peer_id) {
+                    fo.known_peers.push(*peer_id);
+                }
+            }
             info!(
-                "network: welcome applied tick={} hash={:#x}",
+                "network: welcome applied tick={} hash={:#x} peer_id={peer_id}",
                 sim.state.tick.get(),
                 sim.state.canonical_hash()
             );
             if role == NetworkRole::Client {
                 status.pending_enter_ingame = true;
             }
-            Ok(())
+            Ok(EventOutcome::Ok)
         }
         SessionEvent::Commit { command, seq } => {
             apply_command(&mut sim.state, command).map_err(|e| e.to_string())?;
             vehicle_index.rebuild(&sim.state.vehicles);
+            if let Some(fo) = failover {
+                fo.next_seq = seq.saturating_add(1);
+            }
             debug!("network: commit seq={seq}");
-            Ok(())
+            Ok(EventOutcome::Ok)
         }
         SessionEvent::AdvanceTicks { count } => {
             for _ in 0..*count {
                 sim.state.step();
             }
             vehicle_index.rebuild(&sim.state.vehicles);
-            Ok(())
+            Ok(EventOutcome::Ok)
         }
         SessionEvent::HashCheck { tick, hash } => {
             let local_tick = sim.state.tick.get();
             if local_tick != *tick {
-                // Snapshot de late-join o cola de AdvanceTicks aún no al día.
                 debug!("network: skip hash check server_tick={tick} local_tick={local_tick}");
-                return Ok(());
+                return Ok(EventOutcome::Ok);
             }
             let actual = sim.state.canonical_hash();
             if actual != *hash {
@@ -300,7 +375,7 @@ fn handle_event(
                 status.desync = Some(msg.clone());
                 return Err(msg);
             }
-            Ok(())
+            Ok(EventOutcome::Ok)
         }
         SessionEvent::Desync {
             tick,
@@ -312,22 +387,48 @@ fn handle_event(
             status.desync = Some(msg.clone());
             Err(msg)
         }
+        SessionEvent::PeerList { peer_ids } => {
+            if let Some(fo) = failover {
+                fo.known_peers = peer_ids.clone();
+            }
+            debug!("network: peer_list={peer_ids:?}");
+            Ok(EventOutcome::Ok)
+        }
+        SessionEvent::Heartbeat { tick } => {
+            debug!("network: heartbeat tick={tick}");
+            Ok(EventOutcome::Ok)
+        }
         SessionEvent::HostAnnounce {
             bind,
             next_seq,
             new_host_peer_id,
         } => {
-            // ADR 0004: auto-promote Bevy queda fuera del MVP; solo log.
             info!(
                 "network: host_announce bind={bind} next_seq={next_seq} new_host={new_host_peer_id}"
             );
+            if let Some(fo) = failover {
+                fo.next_seq = *next_seq;
+                // Loser: apunta al puerto del anuncio conservando el host de `--client`.
+                if fo.peer_id != Some(*new_host_peer_id)
+                    && let Some(addr) = connect_addr_from_announce(&fo.server_addr, bind)
+                {
+                    fo.server_addr = addr;
+                    fo.failover_attempted = false;
+                    status.label = format!("host_announce:{bind}");
+                    return Ok(EventOutcome::HostLost);
+                }
+            }
             status.label = format!("host_announce:{bind}");
-            Ok(())
+            Ok(EventOutcome::Ok)
         }
         SessionEvent::Disconnected { reason } => {
             warn!("network disconnected: {reason}");
             status.label = format!("disconnected: {reason}");
-            Ok(())
+            if role == NetworkRole::Client {
+                Ok(EventOutcome::HostLost)
+            } else {
+                Ok(EventOutcome::Ok)
+            }
         }
     }
 }
@@ -339,7 +440,19 @@ fn broadcast_tick_after_step(net: Res<NetworkRuntime>, sim: Res<SimWorld>) {
         Err(e) => warn!("network: snapshot update failed: {e}"),
     }
     let tick = sim.state.tick.get();
+    // Heartbeat frecuente (~cada tick) para failover; hash cada segundo de juego.
+    net.broadcast_heartbeat(tick);
     if tick > 0 && tick.is_multiple_of(37) {
         net.broadcast_hash(tick, sim.state.canonical_hash());
     }
+}
+
+/// Conserva el host de `--client` y toma el puerto del bind anunciado (`0.0.0.0:P`).
+fn connect_addr_from_announce(server_addr: &str, announce_bind: &str) -> Option<String> {
+    let (host, _) = server_addr.rsplit_once(':')?;
+    let (_, port) = announce_bind.rsplit_once(':')?;
+    if host.is_empty() || port.is_empty() {
+        return None;
+    }
+    Some(format!("{host}:{port}"))
 }

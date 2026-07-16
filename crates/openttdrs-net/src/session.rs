@@ -46,6 +46,10 @@ pub enum SessionEvent {
         next_seq: u64,
         new_host_peer_id: u64,
     },
+    /// Lista de peers vivos (elección de host).
+    PeerList { peer_ids: Vec<u64> },
+    /// Keep-alive del host.
+    Heartbeat { tick: u64 },
     /// Peer desconectado o error fatal.
     Disconnected { reason: String },
 }
@@ -53,7 +57,13 @@ pub enum SessionEvent {
 enum ServerCmd {
     LocalCommit(Command),
     Advance(u32),
-    HashCheck { tick: u64, hash: u64 },
+    HashCheck {
+        tick: u64,
+        hash: u64,
+    },
+    Heartbeat {
+        tick: u64,
+    },
     HostAnnounce {
         bind: String,
         next_seq: u64,
@@ -92,6 +102,13 @@ impl ListenServerHandle {
     pub fn broadcast_hash(&self, tick: u64, hash: u64) -> Result<(), NetError> {
         self.cmd_tx
             .send(ServerCmd::HashCheck { tick, hash })
+            .map_err(|_| NetError::Closed)
+    }
+
+    /// Keep-alive para que los clientes detecten un host caído.
+    pub fn broadcast_heartbeat(&self, tick: u64) -> Result<(), NetError> {
+        self.cmd_tx
+            .send(ServerCmd::Heartbeat { tick })
             .map_err(|_| NetError::Closed)
     }
 
@@ -217,6 +234,20 @@ impl ListenServer {
         self.handle.broadcast_hash(tick, hash)
     }
 
+    pub fn broadcast_heartbeat(&self, tick: u64) -> Result<(), NetError> {
+        self.handle.broadcast_heartbeat(tick)
+    }
+
+    pub fn broadcast_host_announce(
+        &self,
+        bind: String,
+        next_seq: u64,
+        new_host_peer_id: u64,
+    ) -> Result<(), NetError> {
+        self.handle
+            .broadcast_host_announce(bind, next_seq, new_host_peer_id)
+    }
+
     pub fn update_snapshot(&self, snapshot_json: String) {
         self.handle.update_snapshot(snapshot_json);
     }
@@ -322,6 +353,7 @@ fn server_thread(
                             .unwrap_or_else(std::sync::PoisonError::into_inner)
                             .push(peer_id);
                         clients.push(ClientSlot { stream, peer_id });
+                        broadcast_peer_list(&mut clients, &shared_peer_ids);
                     }
                     Err(e) => eprintln!("openttdrs-net: handshake failed: {e}"),
                 }
@@ -366,12 +398,14 @@ fn server_thread(
                     eprintln!("openttdrs-net: client dropped peer_id={peer_id}");
                     remove_peer_id(&shared_peer_ids, peer_id);
                     clients.remove(i);
+                    broadcast_peer_list(&mut clients, &shared_peer_ids);
                 }
                 Err(e) => {
                     let peer_id = clients[i].peer_id;
                     eprintln!("openttdrs-net: client read error peer_id={peer_id}: {e}");
                     remove_peer_id(&shared_peer_ids, peer_id);
                     clients.remove(i);
+                    broadcast_peer_list(&mut clients, &shared_peer_ids);
                 }
             }
         }
@@ -406,6 +440,13 @@ fn server_thread(
                     &NetMessage::HashCheck { tick, hash },
                 );
             }
+            Ok(ServerCmd::Heartbeat { tick }) => {
+                broadcast_raw(
+                    &mut clients,
+                    &shared_peer_ids,
+                    &NetMessage::Heartbeat { tick },
+                );
+            }
             Ok(ServerCmd::HostAnnounce {
                 bind,
                 next_seq,
@@ -434,6 +475,14 @@ fn remove_peer_id(shared: &SharedPeerIds, peer_id: u64) {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     guard.retain(|id| *id != peer_id);
+}
+
+fn broadcast_peer_list(clients: &mut Vec<ClientSlot>, shared_peer_ids: &SharedPeerIds) {
+    let peer_ids = shared_peer_ids
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    broadcast_raw(clients, shared_peer_ids, &NetMessage::PeerList { peer_ids });
 }
 
 fn handshake_server(
@@ -669,6 +718,12 @@ fn client_thread(
                     new_host_peer_id,
                 });
             }
+            Ok(Some(NetMessage::PeerList { peer_ids })) => {
+                let _ = event_tx.send(SessionEvent::PeerList { peer_ids });
+            }
+            Ok(Some(NetMessage::Heartbeat { tick })) => {
+                let _ = event_tx.send(SessionEvent::Heartbeat { tick });
+            }
             Ok(Some(NetMessage::Desync {
                 tick,
                 expected_hash,
@@ -728,7 +783,9 @@ pub fn apply_session_event(state: &mut GameState, event: &SessionEvent) -> Resul
             }
             Ok(())
         }
-        SessionEvent::HostAnnounce { .. } => Ok(()),
+        SessionEvent::HostAnnounce { .. }
+        | SessionEvent::PeerList { .. }
+        | SessionEvent::Heartbeat { .. } => Ok(()),
         SessionEvent::Desync {
             tick,
             expected_hash,

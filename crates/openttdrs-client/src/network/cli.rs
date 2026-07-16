@@ -51,7 +51,7 @@ pub fn parse_net_cli(args: impl IntoIterator<Item = String>) -> NetCli {
             }
             "--help-net" => {
                 eprintln!(
-                    "Red (#21):\n  --server [HOST:PORT]   listen-server (default 0.0.0.0:{DEFAULT_PORT})\n  --client <HOST[:PORT]> cliente-only (sin mapa local; espera Welcome)\n  dedicated: cargo run -p openttdrs-net --bin openttdrs-dedicated -- [--bind …] [--seed N]"
+                    "Red (#21 / ADR 0004):\n  --server [HOST:PORT]   listen-server (default 0.0.0.0:{DEFAULT_PORT})\n  --client <HOST[:PORT]> cliente-only; failover a puerto+1 si cae el host\n  dedicated: cargo run -p openttdrs-net --bin openttdrs-dedicated -- [--bind …] [--seed N]"
                 );
                 std::process::exit(0);
             }

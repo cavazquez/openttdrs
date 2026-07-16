@@ -2,6 +2,7 @@
 
 mod cli;
 mod dispatch;
+mod failover;
 mod plugin;
 
 pub use cli::{NetCli, parse_net_cli};

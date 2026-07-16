@@ -40,6 +40,10 @@ pub enum NetMessage {
         next_seq: u64,
         new_host_peer_id: u64,
     },
+    /// Servidor → clientes: peers vivos (para elección de host).
+    PeerList { peer_ids: Vec<u64> },
+    /// Servidor → clientes: keep-alive (detección de host caído).
+    Heartbeat { tick: u64 },
     /// Error de protocolo / aplicación.
     Error { message: String },
 }

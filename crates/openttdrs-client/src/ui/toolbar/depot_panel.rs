@@ -2,10 +2,13 @@
 //!
 //! Muestra la lista de vehículos estacionados con tira horizontal del consist
 //! (sprites laterales) y un botón de venta por fila; clic abre la vista del
-//! vehículo. Arrastrar una fila sobre otra reordena la lista
-//! (`DepotReorderVehicleSlot`). En depósitos de vía, clic A→B engancha
-//! unidades (`MoveRailVehicle`). La barra inferior replica el original:
-//! «Nuevos vehículos» y «Clonar», más localización del depósito.
+//! vehículo.
+//!
+//! **Drag (vía):** soltar un vagón (sprite de la tira o fila de vagón suelto)
+//! sobre otra formación ejecuta [`Command::MoveRailVehicle`]. Arrastrar una
+//! locomotora completa solo reordena la lista (`DepotReorderVehicleSlot`).
+//! **Drag (carretera):** siempre reordena slots. Clic A→B en vía también
+//! engancha. Barra inferior: «Nuevos vehículos», «Clonar», «Desenganchar».
 
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
@@ -52,8 +55,10 @@ pub(crate) struct DepotPanelState {
     pub(crate) selected_vehicle: Option<u32>,
     /// Origen de enganche rail por clic A→B (`MoveRailVehicle`).
     pub(crate) reorder_from_slot: Option<usize>,
-    /// Origen de drag de lista (`DepotReorderVehicleSlot`).
+    /// Origen de drag (índice de fila en la lista del depósito).
     pub(crate) list_drag_from: Option<usize>,
+    /// Si `Some`, el drag parte de un sprite de unidad del consist (vagón).
+    pub(crate) list_drag_unit_idx: Option<usize>,
 }
 
 /// Contenedor de una fila (sprite + nombre + vender) para mostrar/ocultar junta.
@@ -221,55 +226,63 @@ fn spawn_depot_vehicle_row(
                 align_items: AlignItems::Center,
                 column_gap: Val::Px(4.0),
                 display: Display::None,
+                border: UiRect::all(Val::Px(1.0)),
+                padding: UiRect::horizontal(Val::Px(2.0)),
                 ..default()
             },
+            BackgroundColor(ROW_BG),
+            BorderColor::all(ROW_BORDER),
             BuildMenuUi,
         ))
         .with_children(|row| {
+            // Tira de unidades como botones hermanos (no anidados) para poder
+            // arrastrar vagones a otra formación.
+            row.spawn(Node {
+                width: Val::Px(CONSIST_STRIP_W),
+                height: Val::Px(CONSIST_UNIT_SPRITE_H),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(1.0),
+                overflow: Overflow::clip(),
+                flex_shrink: 0.0,
+                ..default()
+            })
+            .with_children(|strip| {
+                for unit_idx in 0..CONSIST_STRIP_MAX_UNITS {
+                    strip.spawn((
+                        Button,
+                        DepotConsistUnitSprite { slot, unit_idx },
+                        ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
+                        Node {
+                            width: Val::Px(CONSIST_UNIT_SPRITE_W),
+                            height: Val::Px(CONSIST_UNIT_SPRITE_H),
+                            display: Display::None,
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BorderColor::all(Color::NONE),
+                        BackgroundColor(Color::NONE),
+                        Interaction::default(),
+                        BuildMenuUi,
+                    ));
+                }
+            });
             row.spawn((
                 Button,
                 DepotVehicleRow { slot },
                 Node {
                     flex_grow: 1.0,
-                    height: Val::Px(ROW_HEIGHT - 2.0),
-                    flex_direction: FlexDirection::Row,
+                    height: Val::Px(ROW_HEIGHT - 4.0),
+                    justify_content: JustifyContent::FlexStart,
                     align_items: AlignItems::Center,
-                    column_gap: Val::Px(6.0),
                     padding: UiRect::horizontal(Val::Px(4.0)),
-                    border: UiRect::all(Val::Px(1.0)),
                     ..default()
                 },
-                BackgroundColor(ROW_BG),
-                BorderColor::all(ROW_BORDER),
+                BackgroundColor(Color::NONE),
                 Interaction::default(),
                 BuildMenuUi,
             ))
             .with_children(|inner| {
-                inner
-                    .spawn(Node {
-                        width: Val::Px(CONSIST_STRIP_W),
-                        height: Val::Px(CONSIST_UNIT_SPRITE_H),
-                        flex_direction: FlexDirection::Row,
-                        align_items: AlignItems::Center,
-                        column_gap: Val::Px(1.0),
-                        overflow: Overflow::clip(),
-                        flex_shrink: 0.0,
-                        ..default()
-                    })
-                    .with_children(|strip| {
-                        for unit_idx in 0..CONSIST_STRIP_MAX_UNITS {
-                            strip.spawn((
-                                DepotConsistUnitSprite { slot, unit_idx },
-                                ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
-                                Node {
-                                    width: Val::Px(CONSIST_UNIT_SPRITE_W),
-                                    height: Val::Px(CONSIST_UNIT_SPRITE_H),
-                                    display: Display::None,
-                                    ..default()
-                                },
-                            ));
-                        }
-                    });
                 inner.spawn((
                     DepotVehicleRowText { slot },
                     Text::new(""),
@@ -403,21 +416,21 @@ pub(crate) fn sync_depot_panel(
     trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
-    mut container_q: Query<(&DepotRowContainer, &mut Node)>,
-    mut row_q: Query<
-        (
-            &DepotVehicleRow,
-            &Interaction,
-            &mut BackgroundColor,
-            &mut BorderColor,
-        ),
-        With<Button>,
-    >,
+    mut container_q: Query<(
+        &DepotRowContainer,
+        &mut Node,
+        &mut BackgroundColor,
+        &mut BorderColor,
+    )>,
+    row_interaction_q: Query<(&DepotVehicleRow, &Interaction), With<Button>>,
     mut row_text_q: Query<(&DepotVehicleRowText, &mut Text), Without<FloatingWindowTitleText>>,
-    mut consist_q: Query<
-        (&DepotConsistUnitSprite, &mut ImageNode, &mut Node),
-        Without<DepotRowContainer>,
-    >,
+    mut consist_q: Query<(
+        &DepotConsistUnitSprite,
+        &mut ImageNode,
+        &mut Node,
+        &mut BorderColor,
+        &Interaction,
+    )>,
     mut clone_label_q: Query<
         &mut Text,
         (
@@ -435,7 +448,7 @@ pub(crate) fn sync_depot_panel(
     };
     let Some(depot_pos) = depot_state.depot_pos else {
         *vis = Visibility::Hidden;
-        for (_, mut node) in &mut container_q {
+        for (_, mut node, _, _) in &mut container_q {
             node.display = Display::None;
         }
         return;
@@ -456,31 +469,28 @@ pub(crate) fn sync_depot_panel(
         };
     }
     let vehicles_here = vehicles_at_depot(&sim, depot_pos);
-    for (container, mut node) in &mut container_q {
-        node.display = if vehicles_here.get(container.slot).is_some() {
-            Display::Flex
-        } else {
-            Display::None
-        };
-    }
     let drag_from = depot_state.list_drag_from;
-    for (row, interaction, mut bg, mut border) in &mut row_q {
-        let Some(vehicle) = vehicles_here.get(row.slot) else {
+    let drag_unit = depot_state.list_drag_unit_idx;
+    let hovered_slot = row_interaction_q.iter().find_map(|(row, interaction)| {
+        matches!(*interaction, Interaction::Hovered | Interaction::Pressed).then_some(row.slot)
+    });
+    for (container, mut node, mut bg, mut border) in &mut container_q {
+        let Some(vehicle) = vehicles_here.get(container.slot) else {
+            node.display = Display::None;
             continue;
         };
+        node.display = Display::Flex;
         let selected = depot_state.selected_vehicle == Some(vehicle.id);
-        let is_drag_source = drag_from == Some(row.slot);
+        let is_drag_source = drag_from == Some(container.slot);
         let is_drop_target = drag_from.is_some_and(|from| {
-            from != row.slot && matches!(*interaction, Interaction::Hovered | Interaction::Pressed)
+            from != container.slot && hovered_slot == Some(container.slot)
         });
         *bg = if is_drop_target {
             BackgroundColor(Color::srgb(0.42, 0.48, 0.28))
-        } else if is_drag_source || (selected && *interaction == Interaction::Pressed) {
+        } else if is_drag_source {
             BackgroundColor(Color::srgb(0.62, 0.54, 0.34))
         } else if selected {
             BackgroundColor(Color::srgb(0.48, 0.41, 0.27))
-        } else if *interaction == Interaction::Hovered {
-            BackgroundColor(Color::srgb(0.34, 0.29, 0.2))
         } else {
             BackgroundColor(ROW_BG)
         };
@@ -500,7 +510,7 @@ pub(crate) fn sync_depot_panel(
         }
     }
     if let Some(trucks) = trucks.as_ref() {
-        for (sprite, mut image, mut node) in &mut consist_q {
+        for (sprite, mut image, mut node, mut border, interaction) in &mut consist_q {
             let Some(head) = vehicles_here.get(sprite.slot) else {
                 node.display = Display::None;
                 continue;
@@ -511,12 +521,19 @@ pub(crate) fn sync_depot_panel(
             {
                 node.display = Display::Flex;
                 image.image = vehicle_side_sprite(trucks, unit);
+                let dragging_this = drag_from == Some(sprite.slot)
+                    && drag_unit == Some(sprite.unit_idx);
+                *border = if dragging_this || *interaction == Interaction::Hovered {
+                    BorderColor::all(Color::srgb(0.9, 0.78, 0.48))
+                } else {
+                    BorderColor::all(Color::NONE)
+                };
             } else {
                 node.display = Display::None;
             }
         }
     } else {
-        for (_, _, mut node) in &mut consist_q {
+        for (_, _, mut node, _, _) in &mut consist_q {
             node.display = Display::None;
         }
     }
@@ -533,11 +550,12 @@ pub(crate) fn depot_panel_on_closed(
             depot_state.selected_vehicle = None;
             depot_state.reorder_from_slot = None;
             depot_state.list_drag_from = None;
+            depot_state.list_drag_unit_idx = None;
         }
     }
 }
 
-/// Inicia drag de lista al pulsar una fila (el drop se resuelve al soltar).
+/// Inicia drag al pulsar una fila o un sprite de unidad del consist.
 pub(crate) fn begin_depot_list_drag(
     mut row_q: Query<
         (&Interaction, &DepotVehicleRow),
@@ -545,18 +563,41 @@ pub(crate) fn begin_depot_list_drag(
             Changed<Interaction>,
             With<Button>,
             Without<DepotPanelButton>,
+            Without<DepotConsistUnitSprite>,
+        ),
+    >,
+    mut unit_q: Query<
+        (&Interaction, &DepotConsistUnitSprite, &Node),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<DepotPanelButton>,
+            Without<DepotVehicleRow>,
         ),
     >,
     mut depot_state: ResMut<DepotPanelState>,
     sim: Res<SimWorld>,
 ) {
+    let Some(depot_pos) = depot_state.depot_pos else {
+        return;
+    };
+    for (interaction, unit, node) in &mut unit_q {
+        if *interaction != Interaction::Pressed || node.display == Display::None {
+            continue;
+        }
+        let vehicles = vehicles_at_depot(&sim, depot_pos);
+        let Some(head_id) = vehicles.get(unit.slot).map(|v| v.id) else {
+            continue;
+        };
+        depot_state.list_drag_from = Some(unit.slot);
+        depot_state.list_drag_unit_idx = Some(unit.unit_idx);
+        depot_state.selected_vehicle = Some(head_id);
+        return;
+    }
     for (interaction, row) in &mut row_q {
         if *interaction != Interaction::Pressed {
             continue;
         }
-        let Some(depot_pos) = depot_state.depot_pos else {
-            continue;
-        };
         let Some(vehicle_id) = vehicles_at_depot(&sim, depot_pos)
             .get(row.slot)
             .map(|v| v.id)
@@ -564,16 +605,18 @@ pub(crate) fn begin_depot_list_drag(
             continue;
         };
         depot_state.list_drag_from = Some(row.slot);
+        depot_state.list_drag_unit_idx = None;
         depot_state.selected_vehicle = Some(vehicle_id);
     }
 }
 
-/// Al soltar: reordena si el destino es otra fila; si no, activa clic (vista vehículo / enganche).
+/// Al soltar: en vía engancha vagones (`MoveRailVehicle`); si no, reordena lista o clic.
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn finish_depot_list_drag(
     mouse: Res<ButtonInput<MouseButton>>,
     mut depot_state: ResMut<DepotPanelState>,
     row_q: Query<(&DepotVehicleRow, &Interaction), With<Button>>,
+    unit_q: Query<(&DepotConsistUnitSprite, &Interaction, &Node), With<Button>>,
     mut vehicle_window: ResMut<VehicleWindowState>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
@@ -586,18 +629,53 @@ pub(crate) fn finish_depot_list_drag(
     if mouse.pressed(MouseButton::Left) {
         return;
     }
+    let unit_idx = depot_state.list_drag_unit_idx.take();
     depot_state.list_drag_from = None;
     let Some(depot_pos) = depot_state.depot_pos else {
         return;
     };
 
-    let drop_slot = row_q.iter().find_map(|(row, interaction)| {
-        matches!(*interaction, Interaction::Hovered | Interaction::Pressed).then_some(row.slot)
-    });
+    let drop_slot = row_q
+        .iter()
+        .find_map(|(row, interaction)| {
+            matches!(*interaction, Interaction::Hovered | Interaction::Pressed)
+                .then_some(row.slot)
+        })
+        .or_else(|| {
+            unit_q.iter().find_map(|(unit, interaction, node)| {
+                (node.display != Display::None
+                    && matches!(*interaction, Interaction::Hovered | Interaction::Pressed))
+                .then_some(unit.slot)
+            })
+        });
 
     if let Some(to_slot) = drop_slot
         && to_slot != from_slot
     {
+        if depot_is_rail(&sim, depot_pos) {
+            if let Some((head_id, unit_id)) =
+                resolve_rail_depot_drag_move(&sim, depot_pos, from_slot, to_slot, unit_idx)
+            {
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::MoveRailVehicle {
+                        head_id,
+                        unit_id,
+                        after_id: None,
+                    },
+                ) {
+                    Ok(()) => {
+                        pending.pending = true;
+                        depot_state.selected_vehicle = Some(head_id);
+                        depot_state.reorder_from_slot = None;
+                    }
+                    Err(e) => {
+                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+                    }
+                }
+                return;
+            }
+        }
         match crate::network::apply_player_command(
             &mut sim.state,
             &Command::DepotReorderVehicleSlot {
@@ -627,6 +705,46 @@ pub(crate) fn finish_depot_list_drag(
         &mut hud_feedback,
         time.elapsed_secs(),
     );
+}
+
+fn vehicle_is_wagon(vehicle: &openttdrs_core::Vehicle) -> bool {
+    vehicle
+        .engine_id
+        .and_then(engine_by_id)
+        .is_some_and(openttdrs_core::EngineDef::is_wagon)
+}
+
+/// Destino de enganche tras drag en depósito de vía.
+///
+/// - Sprite de unidad (`unit_idx`): mueve esa unidad (salvo loco en índice 0).
+/// - Fila de vagón suelto: engancha la cabeza-vagón al tren destino.
+/// - Fila de locomotora: `None` → el caller reordena la lista.
+fn resolve_rail_depot_drag_move(
+    sim: &SimWorld,
+    depot_pos: TileCoord,
+    from_slot: usize,
+    to_slot: usize,
+    unit_idx: Option<usize>,
+) -> Option<(u32, u32)> {
+    let vehicles = vehicles_at_depot(sim, depot_pos);
+    let from = vehicles.get(from_slot)?;
+    let to = vehicles.get(to_slot)?;
+    if from.id == to.id {
+        return None;
+    }
+    if let Some(idx) = unit_idx {
+        let ids = consist_unit_ids(&sim.state.vehicles, from.id);
+        let &unit_id = ids.get(idx)?;
+        if idx == 0 && !vehicle_is_wagon(from) {
+            // Arrastrar la loco completa: no fusionar trenes por drag de fila.
+            return None;
+        }
+        return Some((to.id, unit_id));
+    }
+    if vehicle_is_wagon(from) {
+        return Some((to.id, from.id));
+    }
+    None
 }
 
 #[allow(clippy::too_many_arguments)]

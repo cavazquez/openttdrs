@@ -360,6 +360,73 @@ fn build_wagon_then_attach_updates_consist() {
 }
 
 #[test]
+fn move_rail_vehicle_transfers_wagon_between_consists() {
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
+    let depot = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_GINZU_A4),
+    )
+    .unwrap();
+    let head_a = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_GINZU_A4),
+    )
+    .unwrap();
+    let head_b = s.vehicles.iter().find(|v| v.id != head_a).unwrap().id;
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_WAGON_PASSENGER),
+    )
+    .unwrap();
+    let wagon = s
+        .vehicles
+        .iter()
+        .find(|v| v.id != head_a && v.id != head_b)
+        .unwrap()
+        .id;
+    apply_command(
+        &mut s,
+        &Command::AttachWagonToConsist {
+            head_id: head_a,
+            wagon_id: wagon,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        s.vehicles.iter().find(|v| v.id == head_a).unwrap().next_unit,
+        Some(wagon)
+    );
+
+    apply_command(
+        &mut s,
+        &Command::MoveRailVehicle {
+            head_id: head_b,
+            unit_id: wagon,
+            after_id: None,
+        },
+    )
+    .unwrap();
+    assert!(
+        s.vehicles
+            .iter()
+            .find(|v| v.id == head_a)
+            .unwrap()
+            .next_unit
+            .is_none()
+    );
+    assert_eq!(
+        s.vehicles.iter().find(|v| v.id == head_b).unwrap().next_unit,
+        Some(wagon)
+    );
+    let w = s.vehicles.iter().find(|v| v.id == wagon).unwrap();
+    assert_eq!(w.prev_unit, Some(head_b));
+}
+
+#[test]
 fn clone_vehicle_at_depot_copies_engine_and_orders() {
     let mut s = GameState::new(8, 8);
     let depot = TileCoord::new(2, 2);

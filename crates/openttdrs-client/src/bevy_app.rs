@@ -25,7 +25,9 @@ use crate::render::{VehicleRenderPlugin, WorldRenderPlugin};
 use crate::render_trace::RenderTracePlugin;
 use crate::settings::{ClientSettingsPlugin, patch_window_plugin_for_settings};
 use crate::simulation::SimulationPlugin;
-use crate::state::{ClientScreen, EditorSession, SimWorld, SuspendedGameSession};
+use crate::state::{
+    BootstrapLoadError, ClientScreen, EditorSession, SimWorld, SuspendedGameSession,
+};
 #[cfg(target_os = "linux")]
 use crate::tray::TrayIconPlugin;
 use crate::ui::ClientUiPlugin;
@@ -56,7 +58,13 @@ pub(crate) enum UpdateSet {
 
 /// `headless`: sin ventana primaria (tests / cobertura en CI); evita que el proceso termine al no
 /// haber ventanas (`ExitCondition::DontExit`).
-pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
+///
+/// Si `OTTDJSON_LOAD` / `OTTDMAP_FILE` están definidos y fallan, devuelve el error tipado
+/// (sin caer a partida procedural).
+pub(crate) fn build_client_app(
+    asset_root: &str,
+    headless: bool,
+) -> Result<App, BootstrapLoadError> {
     let window_plugin = if headless {
         WindowPlugin {
             primary_window: None,
@@ -125,7 +133,8 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
     app.init_state::<ClientScreen>();
     app.add_sub_state::<crate::state::SimRunState>();
     app.add_sub_state::<crate::state::OrderPickState>();
-    app.init_resource::<SimWorld>();
+    let sim_world = SimWorld::try_bootstrap_from_env()?;
+    app.insert_resource(sim_world);
     app.init_resource::<SuspendedGameSession>();
     app.init_resource::<EditorSession>();
     crate::audio::insert_asset_root(&mut app, asset_root);
@@ -169,9 +178,18 @@ pub(crate) fn build_client_app(asset_root: &str, headless: bool) -> App {
         app.add_plugins(TrayIconPlugin::new(asset_root));
         app.add_systems(Update, sync_rem_size_from_window.in_set(UpdateSet::Status));
     }
-    app
+    Ok(app)
 }
 
 pub(crate) fn run(asset_root: &str) {
-    build_client_app(asset_root, false).run();
+    match build_client_app(asset_root, false) {
+        Ok(mut app) => {
+            app.run();
+        }
+        Err(err) => {
+            error!("{err}");
+            eprintln!("error: {err}");
+            std::process::exit(1);
+        }
+    }
 }

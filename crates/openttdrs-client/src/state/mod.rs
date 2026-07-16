@@ -164,6 +164,48 @@ pub(crate) fn insert_test_order_pick_state(world: &mut World) {
     }
 }
 
+/// Fuente de una carga explícita pedida por variable de entorno.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BootstrapLoadSource {
+    Json,
+    OttdMap,
+}
+
+impl BootstrapLoadSource {
+    fn env_var(self) -> &'static str {
+        match self {
+            Self::Json => "OTTDJSON_LOAD",
+            Self::OttdMap => "OTTDMAP_FILE",
+        }
+    }
+}
+
+/// Error tipado al cargar un mundo solicitado vía `OTTDJSON_LOAD` / `OTTDMAP_FILE`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BootstrapLoadError {
+    pub source: BootstrapLoadSource,
+    pub path: String,
+    pub cause: String,
+}
+
+impl std::fmt::Display for BootstrapLoadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "no se pudo cargar {} ({}={}): {}",
+            match self.source {
+                BootstrapLoadSource::Json => "JSON de simulación",
+                BootstrapLoadSource::OttdMap => "mapa .ottdmap",
+            },
+            self.source.env_var(),
+            self.path,
+            self.cause
+        )
+    }
+}
+
+impl std::error::Error for BootstrapLoadError {}
+
 /// Estado del mundo de simulacion.
 #[derive(Resource)]
 pub struct SimWorld {
@@ -175,61 +217,139 @@ pub struct SimWorld {
 }
 
 impl SimWorld {
-    /// Crea el mundo según opciones del menú (o variables de entorno en CI).
+    /// Nueva partida / intro / editor: solo procedural (no lee paths de carga).
     #[must_use]
     pub fn from_new_game(settings: &NewGameSettings) -> Self {
-        if let Ok(path) = std::env::var("OTTDJSON_LOAD")
-            && let Ok(text) = std::fs::read_to_string(&path)
-            && let Ok(mut state) = openttdrs_core::save::load_from_str(&text)
-        {
-            apply_test_company_colour(&mut state);
-            info!("Estado de simulacion cargado desde JSON: {path}");
-            log_detection_summary(&state, true, None);
-            state.runtime.pending_sim_events.discard_all();
-            return Self {
-                state,
-                loaded_file: true,
-                ottdmap_extras: None,
-            };
-        }
-        if let Ok(path) = std::env::var("OTTDMAP_FILE")
-            && let Ok(data) = std::fs::read(&path)
-            && let Ok((map, extras)) = Map::from_ottd_binary_with_extras(&data)
-        {
-            info!("Mapa cargado desde {path}");
-            let mut state = GameState::from_map(map);
-            state.jgr_tunnels_from_footer = extras.jgr_tunnels_from_tnbp();
-            place_industries(&mut state, true, Some(&extras));
-            place_stations(&mut state);
-            place_stations_from_map_tiles(&mut state);
-            place_stations_from_footer_stxy(&mut state, Some(&extras));
-            apply_test_company_colour(&mut state);
-            log_detection_summary(&state, true, Some(&extras));
-            state.runtime.pending_sim_events.discard_all();
-            return Self {
-                state,
-                loaded_file: true,
-                ottdmap_extras: Some(extras),
-            };
-        }
+        Self::new_procedural(settings)
+    }
+
+    /// Mundo procedural sin I/O de save.
+    #[must_use]
+    pub fn new_procedural(settings: &NewGameSettings) -> Self {
         Self {
             state: bootstrap_procedural_state(settings),
             loaded_file: false,
             ottdmap_extras: None,
         }
     }
+
+    /// Carga opcional por paths explícitos (prioridad JSON > ottdmap). `Ok(None)` si ambos `None`.
+    ///
+    /// Un path inválido o parseo fallido es `Err` (nunca cae a procedural en silencio).
+    pub fn load_requested(
+        json_path: Option<String>,
+        ottdmap_path: Option<String>,
+    ) -> Result<Option<Self>, BootstrapLoadError> {
+        if let Some(path) = json_path {
+            return Ok(Some(Self::load_json_file(&path)?));
+        }
+        if let Some(path) = ottdmap_path {
+            return Ok(Some(Self::load_ottdmap_file(&path)?));
+        }
+        Ok(None)
+    }
+
+    /// Carga JSON desde un path (misma lógica que `OTTDJSON_LOAD`).
+    pub fn load_json_file(path: &str) -> Result<Self, BootstrapLoadError> {
+        Self::load_json_path(path)
+    }
+
+    /// Carga `.ottdmap` desde un path (misma lógica que `OTTDMAP_FILE`).
+    pub fn load_ottdmap_file(path: &str) -> Result<Self, BootstrapLoadError> {
+        Self::load_ottdmap_path(path)
+    }
+
+    /// Arranque: carga pedida por env (`OTTDJSON_LOAD` / `OTTDMAP_FILE`), o procedural.
+    pub fn try_bootstrap(settings: &NewGameSettings) -> Result<Self, BootstrapLoadError> {
+        Self::try_bootstrap_with_loads(
+            settings,
+            std::env::var("OTTDJSON_LOAD").ok(),
+            std::env::var("OTTDMAP_FILE").ok(),
+        )
+    }
+
+    /// Como [`try_bootstrap`] con paths de carga inyectables (tests / headless).
+    pub fn try_bootstrap_with_loads(
+        settings: &NewGameSettings,
+        json_path: Option<String>,
+        ottdmap_path: Option<String>,
+    ) -> Result<Self, BootstrapLoadError> {
+        match Self::load_requested(json_path, ottdmap_path)? {
+            Some(world) => Ok(world),
+            None => Ok(Self::new_procedural(settings)),
+        }
+    }
+
+    /// Como [`try_bootstrap`] con settings derivados del entorno (clima/seed/…).
+    pub fn try_bootstrap_from_env() -> Result<Self, BootstrapLoadError> {
+        Self::try_bootstrap(&settings_from_env())
+    }
+
+    fn load_json_path(path: &str) -> Result<Self, BootstrapLoadError> {
+        let text = std::fs::read_to_string(path).map_err(|e| BootstrapLoadError {
+            source: BootstrapLoadSource::Json,
+            path: path.to_owned(),
+            cause: e.to_string(),
+        })?;
+        let mut state =
+            openttdrs_core::save::load_from_str(&text).map_err(|e| BootstrapLoadError {
+                source: BootstrapLoadSource::Json,
+                path: path.to_owned(),
+                cause: e.to_string(),
+            })?;
+        apply_test_company_colour(&mut state);
+        info!("Estado de simulacion cargado desde JSON: {path}");
+        log_detection_summary(&state, true, None);
+        state.runtime.pending_sim_events.discard_all();
+        Ok(Self {
+            state,
+            loaded_file: true,
+            ottdmap_extras: None,
+        })
+    }
+
+    fn load_ottdmap_path(path: &str) -> Result<Self, BootstrapLoadError> {
+        let data = std::fs::read(path).map_err(|e| BootstrapLoadError {
+            source: BootstrapLoadSource::OttdMap,
+            path: path.to_owned(),
+            cause: e.to_string(),
+        })?;
+        let (map, extras) =
+            Map::from_ottd_binary_with_extras(&data).map_err(|e| BootstrapLoadError {
+                source: BootstrapLoadSource::OttdMap,
+                path: path.to_owned(),
+                cause: format!("{e:?}"),
+            })?;
+        info!("Mapa cargado desde {path}");
+        let mut state = GameState::from_map(map);
+        state.jgr_tunnels_from_footer = extras.jgr_tunnels_from_tnbp();
+        place_industries(&mut state, true, Some(&extras));
+        place_stations(&mut state);
+        place_stations_from_map_tiles(&mut state);
+        place_stations_from_footer_stxy(&mut state, Some(&extras));
+        apply_test_company_colour(&mut state);
+        log_detection_summary(&state, true, Some(&extras));
+        state.runtime.pending_sim_events.discard_all();
+        Ok(Self {
+            state,
+            loaded_file: true,
+            ottdmap_extras: Some(extras),
+        })
+    }
 }
 
 impl Default for SimWorld {
+    /// Default seguro para registro Bevy / tests: procedural, sin I/O de carga.
+    /// La carga por env va en [`SimWorld::try_bootstrap_from_env`] al arrancar.
     fn default() -> Self {
-        Self::from_new_game(&settings_from_env())
+        Self::new_procedural(&settings_from_env())
     }
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used)]
+#[allow(clippy::expect_used, clippy::unwrap_used)]
 mod sim_world_coverage_tests {
-    use super::SimWorld;
+    use super::{BootstrapLoadSource, SimWorld};
     use crate::state::bootstrap::NewGameSettings;
 
     #[test]
@@ -276,6 +396,71 @@ mod sim_world_coverage_tests {
         assert!(!w.state.industries.is_empty());
         assert_eq!(w.state.vehicles.len(), 0);
         assert!(w.state.world_seed != 0);
+    }
+
+    #[test]
+    fn try_bootstrap_without_loads_is_procedural() {
+        assert!(SimWorld::load_requested(None, None).unwrap().is_none());
+        let w =
+            SimWorld::try_bootstrap_with_loads(&NewGameSettings::default(), None, None).unwrap();
+        assert!(!w.loaded_file);
+    }
+
+    #[test]
+    fn missing_json_path_errors_with_path_and_cause() {
+        let path = "/nonexistent/openttdrs_missing_bootstrap.json";
+        let err = match SimWorld::try_bootstrap_with_loads(
+            &NewGameSettings::default(),
+            Some(path.to_owned()),
+            None,
+        ) {
+            Ok(_) => panic!("debe fallar con path inexistente"),
+            Err(e) => e,
+        };
+        assert_eq!(err.source, BootstrapLoadSource::Json);
+        assert_eq!(err.path, path);
+        let msg = err.to_string();
+        assert!(msg.contains(path), "{msg}");
+        assert!(msg.contains("OTTDJSON_LOAD"), "{msg}");
+    }
+
+    #[test]
+    fn invalid_json_errors_without_procedural_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.json");
+        std::fs::write(&path, "{not valid json").unwrap();
+        let path_str = path.to_str().unwrap();
+        let err = match SimWorld::try_bootstrap_with_loads(
+            &NewGameSettings::default(),
+            Some(path_str.to_owned()),
+            None,
+        ) {
+            Ok(_) => panic!("JSON inválido no debe caer a procedural"),
+            Err(e) => e,
+        };
+        assert_eq!(err.source, BootstrapLoadSource::Json);
+        assert!(err.to_string().contains(path_str), "{err}");
+        assert!(!err.cause.is_empty());
+    }
+
+    #[test]
+    fn invalid_ottdmap_errors_without_procedural_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.ottdmap");
+        std::fs::write(&path, b"not-an-ottdmap").unwrap();
+        let path_str = path.to_str().unwrap();
+        let err = match SimWorld::try_bootstrap_with_loads(
+            &NewGameSettings::default(),
+            None,
+            Some(path_str.to_owned()),
+        ) {
+            Ok(_) => panic!("mapa inválido no debe caer a procedural"),
+            Err(e) => e,
+        };
+        assert_eq!(err.source, BootstrapLoadSource::OttdMap);
+        let msg = err.to_string();
+        assert!(msg.contains(path_str), "{msg}");
+        assert!(msg.contains("OTTDMAP_FILE"), "{msg}");
     }
 }
 

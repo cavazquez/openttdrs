@@ -15,7 +15,9 @@ python3 scripts/compare_snapshots.py \
   crates/openttdrs-core/tests/fixtures/parity/stationlist_openttd_oracle.json /tmp/cand.json
 ```
 
-## Coinciden
+## Estado: resuelta
+
+Tras aplicar en `parse_sav.py` / `sav::build` la migración `SLV_ROAD_TYPES` (save &lt; 214), el comparador reporta **OK** en campos hard.
 
 | Campo | Valor |
 |-------|--------|
@@ -24,17 +26,15 @@ python3 scripts/compare_snapshots.py \
 | `hashes.mapt_hash_fnv1a64` | `4298ad417a195769` |
 | `hashes.kind_hash_fnv1a64` | (igual tras alinear KindCode a `ottd_tile_kind`) |
 | `hashes.rail_bits_hash_fnv1a64` | `d0a3931867272a40` |
+| `hashes.road_bits_hash_fnv1a64` | `cc1c08d5ec5b4d7f` |
 | `components.industry_components` | 73 |
 | `components.station_components` | 8 |
 
-## Primera divergencia
+## Causa raíz (histórica)
 
-**`hashes.road_bits_hash_fnv1a64`**
+**`hashes.road_bits_hash_fnv1a64`** divergía porque el oráculo hashea `m8` post-`AfterLoadGame` y el candidato copiaba `MAP8` crudo (todo 0 en este save v211).
 
-- oráculo: `cc1c08d5ec5b4d7f`
-- candidato: `076acdf9406b59e3`
-
-El hash solo incorpora tiles `Road`: `m5 & 0x0F` + `m8` u16 LE. La diferencia apunta a packing/valores de `m8` (RoadType) entre el motor vivo y los planos reconstruidos por `parse_sav`.
+En saves &lt; 214, OpenTTD mueve el RoadType desde bits 6–7 de `m7` a `m4` (road) y `m8` bits 6–11 (tram). Sin tram: `m8 = INVALID_ROADTYPE << 6` (`0xFC0`).
 
 ## Notas
 

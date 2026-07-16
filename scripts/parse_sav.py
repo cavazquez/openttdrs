@@ -33,6 +33,8 @@ Formato de salida (.ottdmap) versionado:
 
   En saves OpenTTD con versión < 348 el HouseID en disco está en M3HI/M3LO;
   parse_sav.py lo copia a m8 como hace afterload.cpp al cargar.
+  En saves < 214 (SLV_ROAD_TYPES) convierte RoadType desde bits 6–7 de m7
+  a m4/m3hi (road) y m8 bits 6–11 (tram), igual que afterload.cpp.
 
 Tipos de tesela OpenTTD (nibble alto de tile_type):
   0  MP_CLEAR       → prado/rough/rocks/fields/desert
@@ -169,9 +171,21 @@ MAGIC_OTTD = b"OTTD"
 MAGIC_NONE = b"OTTN"
 
 SLV_INCREASE_HOUSE_LIMIT = 348
+SLV_ROAD_TYPES = 214  # PR#6811 — RoadType en m4/m8 (afterload.cpp)
 MP_HOUSE = 3
+MP_ROAD = 2
+MP_STATION = 5
+MP_TUNNELBRIDGE = 9
 NEW_HOUSE_OFFSET = 110  # house.h — HouseID ≥110 son NewGRF
 MP_WATER = 6
+ROADTYPE_ROAD = 0
+ROADTYPE_TRAM = 1
+INVALID_ROADTYPE = 63
+TRANSPORT_ROAD = 1
+# StationType en m6 bits 3–6 (station_type.h)
+STATION_TYPE_TRUCK = 2
+STATION_TYPE_BUS = 3
+STATION_TYPE_ROAD_WAYPOINT = 8
 
 # INDY (CH_ARRAY): offset del byte ``Industry.type`` dentro del objeto Industry
 # para saves recientes (p. ej. versión 211 del fixture); ver industry_sl.cpp.
@@ -202,6 +216,47 @@ def build_m8_le_for_save(
             hid = m3hi[i] | (((m3lo[i] >> 6) & 1) << 8)
             struct.pack_into("<H", buf, i * 2, hid & 0xFFFF)
     return bytes(buf)
+
+
+def _tile_needs_road_types(mapt_b: int, m5_b: int, m6_b: int) -> bool:
+    """Réplica del switch de afterload.cpp (SLV_ROAD_TYPES)."""
+    tt = (mapt_b >> 4) & 0xF
+    if tt == MP_ROAD:
+        return True
+    if tt == MP_STATION:
+        st = (m6_b >> 3) & 0xF
+        return st in (STATION_TYPE_TRUCK, STATION_TYPE_BUS, STATION_TYPE_ROAD_WAYPOINT)
+    if tt == MP_TUNNELBRIDGE:
+        return ((m5_b >> 2) & 0x3) == TRANSPORT_ROAD
+    return False
+
+
+def apply_slv_road_types(
+    version: int,
+    mapt: bytes,
+    m5: bytes,
+    m6: bytes,
+    m7: bytearray,
+    m3hi: bytearray,
+    m8_le: bytearray,
+) -> None:
+    """Saves < 214: RoadType desde bits 6–7 de m7 → m4 (road) + m8 bits 6–11 (tram).
+
+    Equivale a ``SetRoadTypes`` + limpiar bits pre-NRT en ``afterload.cpp``.
+    """
+    if version >= SLV_ROAD_TYPES:
+        return
+    n = len(mapt)
+    for i in range(n):
+        if not _tile_needs_road_types(mapt[i], m5[i], m6[i]):
+            continue
+        road_rt = ROADTYPE_ROAD if (m7[i] >> 6) & 1 else INVALID_ROADTYPE
+        tram_rt = ROADTYPE_TRAM if (m7[i] >> 7) & 1 else INVALID_ROADTYPE
+        m3hi[i] = (m3hi[i] & ~0x3F) | (road_rt & 0x3F)
+        m8 = struct.unpack_from("<H", m8_le, i * 2)[0]
+        m8 = (m8 & ~(0x3F << 6)) | ((tram_rt & 0x3F) << 6)
+        struct.pack_into("<H", m8_le, i * 2, m8 & 0xFFFF)
+        m7[i] &= ~0xC0
 
 
 def dimensions_from_chunks(chunks: dict) -> tuple[int, int]:
@@ -459,7 +514,9 @@ def export_ottdmap_from_chunks(chunks: dict, version: int) -> bytes:
                 m5_list[i] = t if t != 0xFF else m5_list[i]
     m5_data = bytes(m5_list)
 
-    m8_data = build_m8_le_for_save(version, mapt[:expected], map8, m3lo, m3hi, expected)
+    m8_buf = bytearray(
+        build_m8_le_for_save(version, mapt[:expected], map8, m3lo, m3hi, expected)
+    )
     m3_export = m3lo[:expected]
     if len(map2) >= 2 * expected:
         m2_lo = bytes(map2[i * 2] for i in range(expected))
@@ -467,8 +524,20 @@ def export_ottdmap_from_chunks(chunks: dict, version: int) -> bytes:
     else:
         m2_lo = (map2[:expected] if len(map2) >= expected else map2 + b"\x00" * expected)[:expected]
         m2_hi_plane = b"\x00" * expected
-    m7_export = map7[:expected]
-    m3hi_export = m3hi[:expected]
+    m7_export = bytearray(map7[:expected])
+    m3hi_export = bytearray(m3hi[:expected])
+    apply_slv_road_types(
+        version,
+        mapt[:expected],
+        m5_data,
+        map6[:expected],
+        m7_export,
+        m3hi_export,
+        m8_buf,
+    )
+    m8_data = bytes(m8_buf)
+    m7_export = bytes(m7_export)
+    m3hi_export = bytes(m3hi_export)
 
     magic_out = b"MAP1"
     format_version = 1

@@ -9,12 +9,23 @@ use super::chunks::{CH_ARRAY, CH_TABLE, RawChunk, find_chunk};
 use super::table::{SlValue, parse_table_chunk, record_get};
 
 const SLV_INCREASE_HOUSE_LIMIT: u16 = 348;
+/// PR#6811: a partir de aquí RoadType vive en m4 (road) / m8 bits 6–11 (tram).
+const SLV_ROAD_TYPES: u16 = 214;
 /// PR#13030: a partir de aquí `WaterTileType` vive directo en bits 4–7 de m5.
 const SLV_WATER_TILE_TYPE: u16 = 342;
 const MP_HOUSE: u8 = 3;
+const MP_ROAD: u8 = 2;
 const MP_STATION: u8 = 5;
+const MP_TUNNELBRIDGE: u8 = 9;
 const MP_WATER: u8 = 6;
 const MP_OBJECT: u8 = 10;
+const ROADTYPE_ROAD: u8 = 0;
+const ROADTYPE_TRAM: u8 = 1;
+const INVALID_ROADTYPE: u8 = 63;
+const TRANSPORT_ROAD: u8 = 1;
+const STATION_TYPE_TRUCK: u8 = 2;
+const STATION_TYPE_BUS: u8 = 3;
+const STATION_TYPE_ROAD_WAYPOINT: u8 = 8;
 /// Offset del byte `Industry.type` en INDY `CH_ARRAY` (saves ~200+, ver `parse_sav.py`).
 const INDY_TYPE_BYTE_OFFSET: usize = 9;
 
@@ -165,6 +176,54 @@ fn build_m8_le(
     buf
 }
 
+fn tile_needs_road_types(mapt: u8, m5: u8, m6: u8) -> bool {
+    match (mapt >> 4) & 0xF {
+        MP_ROAD => true,
+        MP_STATION => matches!(
+            (m6 >> 3) & 0xF,
+            STATION_TYPE_TRUCK | STATION_TYPE_BUS | STATION_TYPE_ROAD_WAYPOINT
+        ),
+        MP_TUNNELBRIDGE => ((m5 >> 2) & 0x3) == TRANSPORT_ROAD,
+        _ => false,
+    }
+}
+
+/// Saves < `SLV_ROAD_TYPES`: RoadType desde bits 6–7 de m7 → m4 + m8 bits 6–11.
+fn apply_slv_road_types(
+    version: u16,
+    mapt: &[u8],
+    m5: &[u8],
+    m6: &[u8],
+    m7: &mut [u8],
+    m3hi: &mut [u8],
+    m8_le: &mut [u8],
+) {
+    if version >= SLV_ROAD_TYPES {
+        return;
+    }
+    let n = mapt.len();
+    for i in 0..n {
+        if !tile_needs_road_types(mapt[i], m5[i], m6[i]) {
+            continue;
+        }
+        let road_rt = if m7[i] & (1 << 6) != 0 {
+            ROADTYPE_ROAD
+        } else {
+            INVALID_ROADTYPE
+        };
+        let tram_rt = if m7[i] & (1 << 7) != 0 {
+            ROADTYPE_TRAM
+        } else {
+            INVALID_ROADTYPE
+        };
+        m3hi[i] = (m3hi[i] & !0x3F) | (road_rt & 0x3F);
+        let mut m8 = u16::from_le_bytes([m8_le[i * 2], m8_le[i * 2 + 1]]);
+        m8 = (m8 & !(0x3F << 6)) | (u16::from(tram_rt & 0x3F) << 6);
+        m8_le[i * 2..i * 2 + 2].copy_from_slice(&m8.to_le_bytes());
+        m7[i] &= !0xC0;
+    }
+}
+
 fn first_tunnel_blob(chunks: &[RawChunk]) -> Option<&RawChunk> {
     ["TNBP", "TBUS", "TUNN"]
         .iter()
@@ -213,9 +272,9 @@ pub(crate) fn export_ottdmap(chunks: &[RawChunk], version: u16) -> Result<Vec<u8
     let maph = padded_plane(chunks, "MAPH", expected);
     let map1 = padded_plane(chunks, "MAPO", expected);
     let map6 = padded_plane(chunks, "MAPE", expected);
-    let map7 = padded_plane(chunks, "MAP7", expected);
+    let mut map7 = padded_plane(chunks, "MAP7", expected);
     let m3lo = padded_plane(chunks, "M3LO", expected);
-    let m3hi = padded_plane(chunks, "M3HI", expected);
+    let mut m3hi = padded_plane(chunks, "M3HI", expected);
     let mut map5 = padded_plane(chunks, "MAP5", expected);
     let map8 = padded_plane(chunks, "MAP8", expected * 2);
     let map2_raw = find_chunk(chunks, "MAP2")
@@ -232,7 +291,8 @@ pub(crate) fn export_ottdmap(chunks: &[RawChunk], version: u16) -> Result<Vec<u8
         }
     }
 
-    let m8 = build_m8_le(version, mapt, &map8, &m3lo, &m3hi, expected);
+    let mut m8 = build_m8_le(version, mapt, &map8, &m3lo, &m3hi, expected);
+    apply_slv_road_types(version, mapt, &map5, &map6, &mut map7, &mut m3hi, &mut m8);
 
     let (m2_lo, m2_hi): (Vec<u8>, Vec<u8>) = if map2_raw.len() >= 2 * expected {
         // MAP2 es `SLE_UINT16` big-endian en el save (TownID en MP_HOUSE,
@@ -380,6 +440,27 @@ mod tests {
         let (map, _) = crate::Map::from_ottd_binary_with_extras(&body).expect("load");
         let tile = map.get(crate::TileCoord::new(0, 0)).expect("tile");
         assert_eq!(tile.m8, 0x012A);
+    }
+
+    #[test]
+    fn road_types_migrate_from_m7_before_slv_214() {
+        let w = 64u32;
+        let n = (w * w) as usize;
+        let mut mapt = vec![0u8; n];
+        let mut map7 = vec![0u8; n];
+        mapt[0] = MP_ROAD << 4;
+        map7[0] = 1 << 6; // pre-NRT: ROADTYPE_ROAD
+        let chunks = vec![
+            maps_table_chunk(w, w),
+            riff(*b"MAPT", mapt),
+            riff(*b"MAP7", map7),
+        ];
+        let body = export_ottdmap(&chunks, 211).expect("export");
+        let (map, _) = crate::Map::from_ottd_binary_with_extras(&body).expect("load");
+        let tile = map.get(crate::TileCoord::new(0, 0)).expect("tile");
+        assert_eq!(tile.m3hi & 0x3F, ROADTYPE_ROAD);
+        assert_eq!((tile.m8 >> 6) & 0x3F, u16::from(INVALID_ROADTYPE));
+        assert_eq!(tile.m7 & 0xC0, 0);
     }
 
     #[test]

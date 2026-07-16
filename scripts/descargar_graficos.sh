@@ -8,6 +8,11 @@
 #   - --8bpp  : OpenGFX clásico.
 #   - --32bpp : OpenGFX2 High Def.
 #
+# En --32bpp también prepara un side-cache mínimo de OpenGFX 8bpp en
+# assets/opengfx/.signal-src-8bpp/ (ogfxe_extra Action5 elrail): hace falta
+# para iconos de vía eléctrica y catenaria hasta que exista equivalente nativo
+# 32bpp en OpenGFX2. Ver docs/SPRITES_OPENGFX.md § «Side-cache 8bpp».
+#
 # Uso:
 #   ./scripts/descargar_graficos.sh --8bpp
 #   ./scripts/descargar_graficos.sh --32bpp
@@ -28,10 +33,13 @@ Opciones:
 
 Notas:
   - Debés elegir exactamente una opción de modo.
-  - OPENGFX_VERSION aplica solo a --8bpp.
+  - OPENGFX_VERSION aplica a --8bpp y al side-cache 8bpp de --32bpp.
   - OPENGFX2_TAG aplica solo a --32bpp (release GitHub, p. ej. 0.8.1).
   - Si --32bpp falla con \"tar: Fin de archivo inesperada\", borrá el .tar en
     .downloads/openttd/ y volvé a ejecutar (el script también detecta tars inválidos).
+  - --32bpp deja OpenGFX clásico en assets/opengfx/.signal-src-8bpp/ solo para
+    GUI/catenaria eléctrica (Action5 elrail). Cuando OpenGFX2 tenga esos
+    sprites nativos en 32bpp, ese side-cache se puede eliminar.
 EOF
 }
 
@@ -117,6 +125,116 @@ for d in "${DEST}"/opengfx-* "${DEST}"/opengfx2-*; do
   rm -rf "$d"
 done
 shopt -u nullglob
+# Conservamos .signal-src-8bpp/ (side-cache elrail); se reutiliza o regenera abajo.
+
+ensure_opengfx_8bpp_tar() {
+  if [[ -f "${TAR_CACHE_8BPP}" ]]; then
+    echo "OpenGFX ${VERSION} ya descargado en ${TAR_CACHE_8BPP}"
+    return 0
+  fi
+  if [[ ! -f "${ZIP_CACHE_8BPP}" ]]; then
+    echo "Descargando OpenGFX ${VERSION} desde ${CDN_8BPP} ..."
+    curl -fL "${CDN_8BPP}" -o "${ZIP_CACHE_8BPP}"
+  else
+    echo "Zip en cache detectado: ${ZIP_CACHE_8BPP}"
+  fi
+
+  echo "Preparando ${TAR_CACHE_8BPP} ..."
+  local tmp
+  tmp="$(mktemp -d)"
+  unzip -q "${ZIP_CACHE_8BPP}" -d "${tmp}/opengfx"
+  local candidate_tar
+  candidate_tar="$(rg --files "${tmp}/opengfx" | rg "opengfx-${VERSION}\\.tar$" | awk 'NR==1{print; exit}' || true)"
+  if [[ -z "${candidate_tar}" ]]; then
+    rm -rf "${tmp}"
+    echo "No encontré opengfx-${VERSION}.tar dentro del zip." >&2
+    exit 1
+  fi
+  cp "${candidate_tar}" "${TAR_CACHE_8BPP}"
+  rm -rf "${tmp}"
+}
+
+# Side-cache OpenGFX 8bpp: ogfxe_extra (Action5 elrail) + ogfx1_base (paletas puente).
+# TODO(32bpp-nativo): cuando OpenGFX2 ofrezca GUI/catenaria eléctrica Action5 y
+# tablas PALETTE_TO_STRUCT_* en 32bpp, borrar esta función y .signal-src-8bpp;
+# gen_toolbar_rail_icons / extract_elrail_catenary / gen_bridge_structure_palette
+# deben leer solo el set 32bpp.
+ensure_signal_src_8bpp() {
+  local signal_src="${DEST}/.signal-src-8bpp"
+  local extra_nfo="${signal_src}/sprites/ogfxe_extra.nfo"
+  local base_nfo="${signal_src}/sprites/ogfx1_base.nfo"
+  local need_extra=0
+  local need_base=0
+  if [[ ! -f "${extra_nfo}" ]] || ! compgen -G "${signal_src}/sprites/ogfxe_extra*.png" >/dev/null; then
+    need_extra=1
+  fi
+  if [[ ! -f "${base_nfo}" ]]; then
+    need_base=1
+  fi
+  if (( need_extra == 0 && need_base == 0 )); then
+    echo "Side-cache 8bpp ya listo en ${signal_src}/ (elrail + ogfx1_base)"
+    return 0
+  fi
+
+  echo ""
+  echo "Preparando side-cache 8bpp (faltan:$(
+    (( need_extra == 1 )) && printf ' ogfxe_extra'
+    (( need_base == 1 )) && printf ' ogfx1_base'
+  ))…"
+  echo "  (provisional hasta equivalentes nativos en OpenGFX2 32bpp; ver docs/SPRITES_OPENGFX.md)"
+  ensure_opengfx_8bpp_tar
+
+  if ! command -v grfcodec &>/dev/null; then
+    echo "ERROR: grfcodec es necesario para decodificar el side-cache 8bpp." >&2
+    echo "  Ubuntu/Debian: sudo apt update && sudo apt install -y grfcodec" >&2
+    exit 1
+  fi
+
+  local tmp
+  tmp="$(mktemp -d)"
+  if ! tar -xf "${TAR_CACHE_8BPP}" -C "${tmp}"; then
+    rm -rf "${tmp}"
+    echo "ERROR: no pude extraer ${TAR_CACHE_8BPP}" >&2
+    exit 1
+  fi
+  mkdir -p "${signal_src}/sprites"
+
+  decode_grf_into_signal_src() {
+    local grf_name="$1"
+    local grf
+    grf="$(find "${tmp}" -name "${grf_name}" -print -quit)"
+    if [[ -z "${grf}" || ! -f "${grf}" ]]; then
+      rm -rf "${tmp}"
+      echo "ERROR: no encontré ${grf_name} dentro de OpenGFX ${VERSION}." >&2
+      exit 1
+    fi
+    cp -a "${grf}" "${signal_src}/${grf_name}"
+    echo "Decodificando ${grf_name} (8bpp) en ${signal_src}/sprites/..."
+    if ! grfcodec -d -o png -p 2 "${signal_src}/${grf_name}" "${signal_src}/sprites/" >/dev/null; then
+      rm -rf "${tmp}"
+      echo "ERROR: grfcodec falló al decodificar ${grf_name}" >&2
+      exit 1
+    fi
+  }
+
+  if (( need_extra == 1 )); then
+    decode_grf_into_signal_src "ogfxe_extra.grf"
+  fi
+  if (( need_base == 1 )); then
+    decode_grf_into_signal_src "ogfx1_base.grf"
+  fi
+  rm -rf "${tmp}"
+
+  if [[ ! -f "${extra_nfo}" ]]; then
+    echo "ERROR: tras decodificar falta ${extra_nfo}" >&2
+    exit 1
+  fi
+  if [[ ! -f "${base_nfo}" ]]; then
+    echo "ERROR: tras decodificar falta ${base_nfo}" >&2
+    exit 1
+  fi
+  echo "Side-cache 8bpp listo: ${extra_nfo} + ${base_nfo}"
+}
 
 if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
   # Descargas interrumpidas dejan un .tar truncado; tar falla al extraer.
@@ -138,27 +256,7 @@ if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
     exit 1
   fi
 else
-  if [[ -f "${TAR_CACHE_8BPP}" ]]; then
-    echo "OpenGFX ${VERSION} ya descargado en ${TAR_CACHE_8BPP}"
-  else
-    if [[ ! -f "${ZIP_CACHE_8BPP}" ]]; then
-      echo "Descargando OpenGFX ${VERSION} desde ${CDN_8BPP} ..."
-      curl -fL "${CDN_8BPP}" -o "${ZIP_CACHE_8BPP}"
-    else
-      echo "Zip en cache detectado: ${ZIP_CACHE_8BPP}"
-    fi
-
-    echo "Preparando ${TAR_CACHE_8BPP} ..."
-    TMP="$(mktemp -d)"
-    trap 'rm -rf "${TMP}"' EXIT
-    unzip -q "${ZIP_CACHE_8BPP}" -d "${TMP}/opengfx"
-    CANDIDATE_TAR="$(rg --files "${TMP}/opengfx" | rg "opengfx-${VERSION}\\.tar$" | awk 'NR==1{print; exit}' || true)"
-    if [[ -z "${CANDIDATE_TAR}" ]]; then
-      echo "No encontré opengfx-${VERSION}.tar dentro del zip."
-      exit 1
-    fi
-    cp "${CANDIDATE_TAR}" "${TAR_CACHE_8BPP}"
-  fi
+  ensure_opengfx_8bpp_tar
 fi
 
 echo ""
@@ -1220,6 +1318,10 @@ python3 "$(dirname "$0")/gen_tile_select.py"
 python3 "$(dirname "$0")/gen_shore_full_set.py"
 python3 "$(dirname "$0")/gen_water_anim_frames.py"
 python3 "$(dirname "$0")/gen_field_draw_data.py"
+# Iconos eléctricos / catenaria: Action5 elrail aún viene de OpenGFX 8bpp.
+if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
+  ensure_signal_src_8bpp
+fi
 python3 "$(dirname "$0")/gen_toolbar_rail_icons.py"
 python3 "$(dirname "$0")/gen_toolbar_water_icons.py"
 python3 "$(dirname "$0")/crop_ui_terraform_icons.py"

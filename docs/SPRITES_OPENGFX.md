@@ -34,6 +34,44 @@ grfcodec -d -p 2 assets/opengfx/opengfx-8.0/ogfx1_base.grf \
          -o assets/opengfx/opengfx-8.0/sprites/
 ```
 
+### Side-cache 8bpp en modo OpenGFX2 (`--32bpp`)
+
+Con `./scripts/descargar_graficos.sh --32bpp` el renderer usa OpenGFX2 High Def
+(`opengfx2-32ez`). Ese set **aún no** expone el bloque Action5 tipo 05 (elrail)
+con iconos GUI de vía eléctrica ni la catenaria indexada como en OpenGFX clásico.
+
+Por eso el pipeline, en `--32bpp`, descarga además OpenGFX 8.x (caché en
+`.downloads/openttd/`) y deja un mínimo decodificado en:
+
+```
+assets/opengfx/.signal-src-8bpp/
+├── ogfxe_extra.grf
+├── ogfx1_base.grf
+└── sprites/
+    ├── ogfxe_extra.nfo + ogfxe_extra*.png
+    └── ogfx1_base.nfo (+ hojas; solo se usan pseudo-sprites de recolor)
+```
+
+Consumidores actuales:
+
+| Script | Qué saca del side-cache |
+|--------|-------------------------|
+| `gen_toolbar_rail_icons.py` | `toolbar_rail_electric_{rail_*,tunnel}.png` (slots A5 36..39, 44) |
+| `extract_elrail_catenary.py` | wires / postes / entradas de túnel |
+| `gen_bridge_structure_palette.py` | tablas `PALETTE_TO_STRUCT_*` (pseudo-sprites 795–801 de `ogfx1_base`) |
+
+Ese directorio **no** se borra en la limpieza de `opengfx-*` / `opengfx2-*` de cada
+corrida; se reutiliza si el NFO ya está.
+
+**Cuando implementen el equivalente 32bpp nativo** (Action5 elrail usable en
+`ogfx2e_extra_32ez` o sucesor):
+
+1. Hacer que `gen_toolbar_rail_icons.py` y `extract_elrail_catenary.py` lean el
+   GRF extra 32bpp (buscar `TODO(32bpp-nativo)` en esos scripts).
+2. Quitar `ensure_signal_src_8bpp` de `descargar_graficos.sh` y dejar de
+   descargar OpenGFX 8.x en modo `--32bpp`.
+3. Borrar esta subsección y el directorio `.signal-src-8bpp/`.
+
 ---
 
 ## Formato del NFO

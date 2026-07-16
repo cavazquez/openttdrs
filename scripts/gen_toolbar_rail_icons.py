@@ -7,6 +7,16 @@ Iconos normales del set base + variantes eléctrica / mono / maglev
 Salida: assets/opengfx/tiles/toolbar_rail_*.png
         assets/opengfx/tiles/toolbar_rail_{electric,mono,maglev}_*.png
 
+Los iconos de vía *eléctrica* (ranuras Action5 elrail 36..39, 44) se recortan
+desde OpenGFX clásico 8bpp (`ogfxe_extra`), no desde OpenGFX2 32ez: ese GRF
+extra todavía no expone un bloque GUI elrail usable en 32bpp. En modo 32bpp,
+`descargar_graficos.sh` deja el NFO en
+`assets/opengfx/.signal-src-8bpp/sprites/ogfxe_extra.nfo`.
+
+TODO(32bpp-nativo): cuando OpenGFX2 tenga Action5 tipo 05 (elrail) con iconos
+GUI en 32bpp, leerlos de `ogfx2e_extra_32ez` y eliminar la dependencia de
+`.signal-src-8bpp` / `write_electric_gui_from_8bpp`.
+
 Uso: python3 scripts/gen_toolbar_rail_icons.py
 """
 from __future__ import annotations
@@ -201,7 +211,8 @@ def crop_indexed_dos(
     crop_img = sheet.crop((x, y, x + w, y + h))
     if crop_img.mode != "P":
         return dematte_blue(crop_img)
-    idx = list(crop_img.getdata())
+    # Pillow 10+: get_flattened_data; getdata() queda deprecado (Pillow 14).
+    idx = list(crop_img.get_flattened_data())
     out = Image.new("RGBA", (w, h))
     px = out.load()
     for row in range(h):
@@ -226,8 +237,11 @@ def write_electric_gui_from_8bpp(dos: list[tuple[int, int, int]]) -> None:
     nfo = find_elrail_8bpp_nfo()
     if nfo is None:
         raise SystemExit(
-            "falta ogfxe_extra.nfo 8bpp (assets/opengfx/.signal-src-8bpp/…) "
-            "para iconos eléctricos"
+            "falta ogfxe_extra.nfo 8bpp para iconos eléctricos "
+            "(assets/opengfx/.signal-src-8bpp/…). "
+            "En --32bpp lo prepara descargar_graficos.sh; si corrés este "
+            "script solo, ejecutá antes ese pipeline. "
+            "TODO(32bpp-nativo): reemplazar por Action5 elrail de OpenGFX2."
         )
     lines = nfo.read_text(errors="replace").splitlines()
     start = next((i + 1 for i, l in enumerate(lines) if A5_ELRAIL_RE.search(l)), None)

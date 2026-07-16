@@ -13,17 +13,32 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 PALETTES_H = REPO / "third_party" / "openttd" / "table" / "palettes.h"
-NFO = (
-    REPO
-    / "assets"
-    / "opengfx"
-    / ".signal-src-8bpp"
-    / "sprites"
-    / "ogfx1_base.nfo"
-)
 OUT_RS = (
     REPO / "crates/openttdrs-client/src/sprites/bridge_structure_palette_data_generated.rs"
 )
+
+
+def find_ogfx1_base_nfo() -> Path | None:
+    """NFO clásico 8bpp (pseudo-sprites PALETTE_TO_STRUCT_*).
+
+    En --32bpp vive en `.signal-src-8bpp/` (lo prepara descargar_graficos.sh).
+    En --8bpp, en `opengfx-*/sprites/`.
+    """
+    opengfx = REPO / "assets" / "opengfx"
+    candidates = [
+        opengfx / ".signal-src-8bpp" / "sprites" / "ogfx1_base.nfo",
+        opengfx
+        / ".signal-src-8bpp"
+        / "extract"
+        / "opengfx-8.0"
+        / "sprites"
+        / "ogfx1_base.nfo",
+        *sorted(opengfx.glob("opengfx-*/sprites/ogfx1_base.nfo")),
+    ]
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
 
 PALETTE_IDS: list[tuple[str, int]] = [
     ("BROWN", 796),
@@ -116,9 +131,14 @@ def rgb_remap(pal: list[tuple[int, int, int]], table: list[int]) -> list[tuple[t
 
 
 def main() -> None:
-    if not NFO.is_file():
-        raise SystemExit(f"Falta {NFO} — ejecutá ./scripts/descargar_graficos.sh")
-    nfo_lines = NFO.read_bytes().decode("latin-1").splitlines()
+    nfo = find_ogfx1_base_nfo()
+    if nfo is None:
+        raise SystemExit(
+            "Falta ogfx1_base.nfo 8bpp para paletas de puente "
+            "(assets/opengfx/.signal-src-8bpp/sprites/ o opengfx-*/sprites/). "
+            "Ejecutá ./scripts/descargar_graficos.sh --32bpp (o --8bpp)."
+        )
+    nfo_lines = nfo.read_bytes().decode("latin-1").splitlines()
     pal = load_dos_palette()
 
     lines = [

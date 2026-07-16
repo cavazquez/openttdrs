@@ -11,6 +11,10 @@ OpenGFX guarda wires/postes en Action5 del GRF *extra*, no en ogfx1_base
 Busca NFO/sheets en:
   assets/opengfx/opengfx-*/sprites/ogfxe_extra*
   assets/opengfx/.signal-src-8bpp/sprites/ogfxe_extra*
+
+En modo 32bpp, `descargar_graficos.sh` prepara `.signal-src-8bpp` porque
+OpenGFX2 aún no ofrece este bloque Action5 elrail en 32bpp.
+TODO(32bpp-nativo): preferir ogfx2e_extra_32ez cuando exista el bloque.
 """
 
 from __future__ import annotations

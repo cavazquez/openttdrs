@@ -13,6 +13,7 @@ Uso: python3 scripts/gen_field_draw_data.py
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -30,8 +31,24 @@ FENCE_VARIANTS = 6
 
 REPO = Path(__file__).resolve().parents[1]
 TILES_DIR = REPO / "assets" / "opengfx" / "tiles"
-CLEAR_LAND_H = REPO / "reference" / "openttd-upstream" / "src" / "table" / "clear_land.h"
 OUT_RS = REPO / "crates/openttdrs-client/src/sprites/field_draw_data_generated.rs"
+
+
+def find_clear_land_h() -> Path:
+    rel = Path("src/table/clear_land.h")
+    candidates = [
+        REPO / "reference" / "openttd-upstream" / rel,
+        REPO.parent / "OpenTTD" / rel,
+    ]
+    if env := os.environ.get("OPENTTD_SRC"):
+        candidates.insert(0, Path(env) / rel)
+    for path in candidates:
+        if path.is_file():
+            return path
+    sys.exit(
+        "No se encontró clear_land.h. Corré ./scripts/fetch-openttd-reference.sh "
+        "o definí OPENTTD_SRC."
+    )
 
 SHEET_RE = re.compile(
     r"^\s*(\d+)\s+(\S*?((?:ogfx1_base|ogfx21_base_32ez)\d+\.(?:32\.png|png|pcx)))\s+(?:8bpp|32bpp)\s+"
@@ -74,18 +91,19 @@ class Cropper:
     def __init__(self, mode: str) -> None:
         self.mode = mode
         self.sprites_dir = find_sprites_dir()
-        nfo = next(self.sprites_dir.glob("*.nfo"))
+        # Hay base + extra; `glob` no garantiza orden y el extra puede salir primero.
         self.rect: dict[int, tuple[int, int, int, int, str]] = {}
-        for line in nfo.read_text(errors="replace").splitlines():
-            m = SHEET_RE.match(line)
-            if m:
-                self.rect[int(m.group(1))] = (
-                    int(m.group(4)),
-                    int(m.group(5)),
-                    int(m.group(6)),
-                    int(m.group(7)),
-                    Path(m.group(2)).name,
-                )
+        for nfo in sorted(self.sprites_dir.glob("*.nfo")):
+            for line in nfo.read_text(errors="replace").splitlines():
+                m = SHEET_RE.match(line)
+                if m:
+                    self.rect[int(m.group(1))] = (
+                        int(m.group(4)),
+                        int(m.group(5)),
+                        int(m.group(6)),
+                        int(m.group(7)),
+                        Path(m.group(2)).name,
+                    )
         self.sheets: dict[str, Image.Image] = {}
 
     def crop(self, sid: int, out_name: str) -> None:
@@ -132,7 +150,7 @@ def main() -> None:
         f"{FENCE_TYPES * FENCE_VARIANTS} de cerca en {TILES_DIR}"
     )
 
-    mods = parse_fence_mods(CLEAR_LAND_H.read_text(encoding="utf-8"))
+    mods = parse_fence_mods(find_clear_land_h().read_text(encoding="utf-8"))
 
     nfo = parse_sprite_offs(REPO)
     fence_meta = []

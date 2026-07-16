@@ -71,19 +71,20 @@ def load_sheet(png_path: Path, mode: str) -> Image.Image:
 
 def crop_tree_sprites(mode: str) -> None:
     sprites_dir = find_sprites_dir()
-    nfo = next(sprites_dir.glob("*.nfo"))
+    # Hay base + extra; `glob` no garantiza orden y el extra puede salir primero.
     sprite_rect: dict[int, tuple[int, int, int, int, str]] = {}
-    for line in nfo.read_text(errors="replace").splitlines():
-        m = SHEET_RE.match(line)
-        if m:
-            sid = int(m.group(1))
-            sprite_rect[sid] = (
-                int(m.group(4)),
-                int(m.group(5)),
-                int(m.group(6)),
-                int(m.group(7)),
-                Path(m.group(2)).name,
-            )
+    for nfo in sorted(sprites_dir.glob("*.nfo")):
+        for line in nfo.read_text(errors="replace").splitlines():
+            m = SHEET_RE.match(line)
+            if m:
+                sid = int(m.group(1))
+                sprite_rect[sid] = (
+                    int(m.group(4)),
+                    int(m.group(5)),
+                    int(m.group(6)),
+                    int(m.group(7)),
+                    Path(m.group(2)).name,
+                )
 
     sheets: dict[str, Image.Image] = {}
     written = 0

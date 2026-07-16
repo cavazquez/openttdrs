@@ -4,6 +4,8 @@ Estado: **decidido — se mantiene 5 Hz en la Fase 2**, con extrapolación de
 render para la fluidez y unidades relativas para la paridad. Revisable cuando
 el resto de divergencias de comportamiento estén cerradas.
 
+ADR canónica: [adr/0002-determinismo-tick-referencia.md](../adr/0002-determinismo-tick-referencia.md).
+
 ## Los dos modelos
 
 | | OpenTTD | openttdrs |

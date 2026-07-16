@@ -15,7 +15,9 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 > Compilar Bevy puede saturar CPU/RAM. Si hace falta: `cargo build -j 1`, o dejá que [CI](.github/workflows/ci.yml) valide el build.
 
-**Última actualización:** 2026-07-15
+**Gobierno:** [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [ADRs](docs/adr/)
+
+**Última actualización:** 2026-07-16
 
 ---
 
@@ -91,6 +93,8 @@ En juego: **F5** guardar · **F9** cargar · pausa/velocidad en toolbar · prefe
 ---
 
 ## Desarrollo
+
+Flujo de PRs y DoD: [CONTRIBUTING.md](CONTRIBUTING.md). Capas: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ```bash
 ./scripts/doctor.sh         # deps de sistema + toolchain + assets (antes de adivinar)

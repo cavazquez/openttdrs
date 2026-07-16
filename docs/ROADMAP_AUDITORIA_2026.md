@@ -32,7 +32,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 | Issue | Estado |
 |-------|--------|
-| #117 contribución / ADRs | 🟨 | Primera ADR: [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) |
+| #117 contribución / ADRs | ✅ | CONTRIBUTING/SECURITY/ARCHITECTURE + ADR 0001–0002 + PR template |
 | #120 alinear `check.sh ci` ↔ GHA | ✅ | `ci_python_manifest.json` + `check.sh ci-python` |
 | #106 cargo-audit / deny | ✅ |
 
@@ -104,13 +104,13 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 - [x] Referencia OpenTTD fijada (`#109`) y oráculo independiente (`#110`, ver `parity/SNAPSHOT_FIRST_DIVERGENCE.md`).
 - [x] Refactors con equivalencia tick-a-tick (`#108`).
 - [ ] Benchmarks con baseline (`#116`).
-- [ ] ADRs / gobierno (`#117` — primera ADR multiplayer hecha).
+- [x] ADRs / gobierno (`#117`).
 - [x] Bloqueantes de determinismo para `#21` cerrados (`#108`/`#114`/`#115`).
 - [x] `#21` transporte TCP + flags cliente / dedicated (ADR 0001).
 
 ## Próximo foco recomendado
 
-1. **#117** — plantilla de contribución / más ADRs.
-2. Extender pilots de tablas generadas (vehicle/atlas) vía #119.
-3. Deuda I8 de settings cliente → `Command` (lista en inventario #114).
-4. Host migration post-v1 (fuera de ADR 0001).
+1. Extender pilots de tablas generadas (vehicle/atlas) vía tooling #119.
+2. Deuda I8 de settings cliente → `Command` (lista en inventario #114).
+3. Host migration post-v1 (fuera de ADR 0001).
+4. Benchmarks headless (#116).

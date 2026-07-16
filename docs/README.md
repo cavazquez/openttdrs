@@ -2,6 +2,7 @@
 
 Índice de `docs/`. Orden sugerido al entrar al proyecto:
 
+0. [../CONTRIBUTING.md](../CONTRIBUTING.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [adr/](adr/) — gobierno (#117)
 1. [ROADMAP_AUDITORIA_2026.md](ROADMAP_AUDITORIA_2026.md) — roadmap maestro post-auditoría ([#121](https://github.com/cavazquez/openttdrs/issues/121))
 2. [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) — paridad UI + NewGRF (fuente de “siguiente corte”)
 3. [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) — sprints del hito 0.1
@@ -9,6 +10,7 @@
 5. [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) — hallazgos técnicos fijos y comandos
 6. [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) — filosofía I0–I8
 7. [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) — arquitectura red v1 (listen-server + dedicated)
+8. [adr/0002-determinismo-tick-referencia.md](adr/0002-determinismo-tick-referencia.md) — tick 5 Hz, hash, pin OpenTTD
 
 **Issues de backlog:** [github.com/cavazquez/openttdrs/issues](https://github.com/cavazquez/openttdrs/issues) (abiertas desde los ROADMAP, jul 2026).
 
@@ -18,7 +20,10 @@
 
 | Documento | Uso |
 |-----------|-----|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Capas core → Bevy → net (#117) |
+| [adr/README.md](adr/README.md) | Índice + plantilla de ADRs |
 | [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) | ADR: lockstep, listen-server + dedicated headless, sin host migration v1 |
+| [adr/0002-determinismo-tick-referencia.md](adr/0002-determinismo-tick-referencia.md) | ADR: determinismo, tick 5 Hz, pin OpenTTD |
 | Crate `openttdrs-net` | TCP I8; bin `openttdrs-dedicated`; cliente `--server` / `--client` |
 | [INVENTARIO_HASHMAP_DETERMINISMO.md](INVENTARIO_HASHMAP_DETERMINISMO.md) | #115: HashMap/HashSet vs hash canónico |
 | [INVENTARIO_MUTACIONES_CLIENTE.md](INVENTARIO_MUTACIONES_CLIENTE.md) | #114: mutaciones `SimWorld` fuera de `Command` |

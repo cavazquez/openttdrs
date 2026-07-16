@@ -64,7 +64,8 @@ pub(crate) fn animate_income_popups(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openttdrs_core::{GameState, IncomePopup, TileCoord};
+    use openttdrs_core::IncomePopup;
+    use openttdrs_core::prelude::*;
 
     #[test]
     fn pending_popups_drained_after_spawn_system() {

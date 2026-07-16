@@ -1,7 +1,8 @@
 use bevy::prelude::*;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    EngineDef, Map, Vehicle, VehicleKind, extrapolate_vehicle_pose, slope_dz_at_subtile,
-    vehicle_render_direction_at_with_map, vehicle_subtile_at_with_map,
+    EngineDef, extrapolate_vehicle_pose, slope_dz_at_subtile, vehicle_render_direction_at_with_map,
+    vehicle_subtile_at_with_map,
 };
 
 use crate::iso::{overlay_pos, road_vehicle_tile_anchor, tile_min_z, tile_slope_and_min_z};

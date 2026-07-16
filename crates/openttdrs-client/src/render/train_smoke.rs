@@ -4,9 +4,9 @@ use std::collections::HashMap;
 
 use bevy::prelude::*;
 
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    VehicleKind, default_engine_id, extrapolate_vehicle_pose, retreat_vehicle_pose,
-    train_smoke_kind,
+    default_engine_id, extrapolate_vehicle_pose, retreat_vehicle_pose, train_smoke_kind,
 };
 
 use crate::bevy_app::UpdateSet;

@@ -123,7 +123,7 @@ fn record_render_trace(
 mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
-    use openttdrs_core::{TileCoord, Vehicle, VehicleKind};
+    use openttdrs_core::prelude::*;
 
     #[test]
     fn disabled_without_env_and_records_rows_when_writer_present() {

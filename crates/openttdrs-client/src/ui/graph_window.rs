@@ -1,7 +1,8 @@
 //! Gráficos económicos (Income / Operating Profit / Company Value) filtrados por compañía.
 
 use bevy::prelude::*;
-use openttdrs_core::{CompanyId, company_net_value, format_money};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{company_net_value, format_money};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -532,7 +533,7 @@ pub(crate) fn graph_window_on_closed(
 mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
-    use openttdrs_core::{GameState, MonthlyEconomySample};
+    use openttdrs_core::MonthlyEconomySample;
 
     #[test]
     fn route_opens_income_graph_for_active_company() {

@@ -1,7 +1,8 @@
 //! Lista global de flota (tren / carretera / barco / avión).
 
 use bevy::prelude::*;
-use openttdrs_core::{Command, TileCoord, VehicleKind, VehicleOrder};
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
 
 use crate::render::{
     MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, vehicle_world_position,
@@ -720,7 +721,6 @@ pub(crate) fn vehicle_list_on_closed(
 mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
-    use openttdrs_core::{GameState, TileCoord, Vehicle, VehicleKind};
 
     fn fixture_resources(world: &mut World) {
         world.init_resource::<VehicleListState>();

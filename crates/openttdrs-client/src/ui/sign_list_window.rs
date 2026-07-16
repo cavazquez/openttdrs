@@ -3,7 +3,8 @@
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
-use openttdrs_core::{Command, MAX_SIGN_NAME_CHARS};
+use openttdrs_core::Command;
+use openttdrs_core::MAX_SIGN_NAME_CHARS;
 
 use crate::iso::tile_pos;
 use crate::render::{

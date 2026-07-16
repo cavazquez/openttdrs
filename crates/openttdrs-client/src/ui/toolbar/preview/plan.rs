@@ -4,7 +4,7 @@
 //! separada de la lógica de creación de entidades Bevy.
 
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileCoord};
+use openttdrs_core::prelude::*;
 
 use crate::ui::toolbar::{BuildMenuAction, DragBuildState, StationBuildState};
 

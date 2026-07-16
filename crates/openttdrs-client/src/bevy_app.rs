@@ -136,7 +136,10 @@ pub(crate) fn build_client_app(
         crate::ui::font::install_utf8_default_font_into_assets(&mut fonts, Path::new(asset_root));
     }
     app.configure_sets(Startup, StartupSet::Ui);
-    app.configure_sets(FixedUpdate, (FixedUpdateSet::Sim, FixedUpdateSet::Events).chain());
+    app.configure_sets(
+        FixedUpdate,
+        (FixedUpdateSet::Sim, FixedUpdateSet::Events).chain(),
+    );
     app.configure_sets(
         Update,
         (

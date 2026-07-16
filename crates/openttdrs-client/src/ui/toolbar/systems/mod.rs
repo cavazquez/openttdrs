@@ -24,7 +24,8 @@ mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
-    use openttdrs_core::{Command, GameState, TileCoord, TileKind, VehicleKind, VehicleOrder};
+    use openttdrs_core::Command;
+    use openttdrs_core::prelude::*;
 
     use crate::render::{PrimaryGameCamera, RemapMapVisualsPending, VehicleIndex};
     use crate::state::{ClientScreen, SimWorld};

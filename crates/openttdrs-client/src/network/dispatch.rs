@@ -2,7 +2,8 @@
 
 use std::sync::RwLock;
 
-use openttdrs_core::{Command, CommandError, GameState, apply_command};
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
 use openttdrs_net::{ClientSessionHandle, ListenServerHandle};
 
 use super::plugin::NetworkRole;

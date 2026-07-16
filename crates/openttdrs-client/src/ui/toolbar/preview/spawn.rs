@@ -1,9 +1,9 @@
 //! Spawn: traducir PreviewPlan en entidades Bevy.
 
 use bevy::prelude::*;
-use openttdrs_core::{
-    Command, GameState, Map, TileCoord, command_would_fail, rail_station_footprint,
-};
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
+use openttdrs_core::rail_station_footprint;
 
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z};
 use crate::render::{CompanyColoredSprites, TileAtlas};
@@ -175,9 +175,9 @@ fn spawn_airport_preview(
     origin: TileCoord,
     show_coverage: bool,
 ) {
+    use openttdrs_core::prelude::*;
     use openttdrs_core::{
-        Command, STATION_COVERAGE_RADIUS, airport_spec_def, airport_spec_footprint,
-        airport_spec_tiles, command_would_fail,
+        STATION_COVERAGE_RADIUS, airport_spec_def, airport_spec_footprint, airport_spec_tiles,
     };
 
     let spec = station_state.airport_spec;

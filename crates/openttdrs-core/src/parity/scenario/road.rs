@@ -19,7 +19,10 @@ pub const TRUCK_BAY_DELIVER_ROAD: TileCoord = TileCoord::new(16, 12);
 /// Id del camión del escenario.
 pub const TRUCK_BAY_VEHICLE_ID: u32 = 1;
 
-pub(crate) fn place_road_polyline(state: &mut GameState, waypoints: &[TileCoord]) -> Vec<TileCoord> {
+pub(crate) fn place_road_polyline(
+    state: &mut GameState,
+    waypoints: &[TileCoord],
+) -> Vec<TileCoord> {
     let mut tiles = Vec::new();
     for pair in waypoints.windows(2) {
         let (a, b) = (pair[0], pair[1]);

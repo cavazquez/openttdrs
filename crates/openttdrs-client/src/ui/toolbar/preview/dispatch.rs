@@ -1,6 +1,7 @@
 //! Dispatch: decidir qué tipo de preview construir según la herramienta activa.
 
-use openttdrs_core::{GameState, Map, TileCoord, is_tunnel_entrance_slope, tile_slope_and_z};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{is_tunnel_entrance_slope, tile_slope_and_z};
 
 use crate::iso::tile_slope_and_min_z;
 use crate::sprites::road_flat_sprite_index;

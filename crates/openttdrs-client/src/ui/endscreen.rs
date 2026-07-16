@@ -1,7 +1,8 @@
 //! Pantalla de fin de partida + highscore local (UI-8).
 
 use bevy::prelude::*;
-use openttdrs_core::{GameScore, SimEvent, format_money, retire_game};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{GameScore, format_money, retire_game};
 
 use crate::audio::PendingSimEvents;
 use crate::settings::ClientPreferences;

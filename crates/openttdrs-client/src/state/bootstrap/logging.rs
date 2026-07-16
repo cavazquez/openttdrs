@@ -1,8 +1,7 @@
 use bevy::prelude::*;
-use openttdrs_core::{
-    GameState, IndustryKind, OttdmapExtras, TileCoord, TileKind, TnbpDecoded, VehicleKind,
-    jgr_tunnels_from_decoded,
-};
+use openttdrs_core::prelude::*;
+use openttdrs_core::tnbp_decode::{TnbpDecoded, jgr_tunnels_from_decoded};
+use openttdrs_core::{IndustryKind, OttdmapExtras};
 use std::collections::BTreeMap;
 
 use super::industries::industry_group_from_gfx;
@@ -209,9 +208,8 @@ pub(crate) fn log_detection_summary(
 #[allow(clippy::unwrap_used)]
 mod logging_coverage_tests {
     use super::log_detection_summary;
-    use openttdrs_core::{
-        GameState, Industry, IndustryKind, OttdmapExtras, TileCoord, TileKind, Vehicle, VehicleKind,
-    };
+    use openttdrs_core::prelude::*;
+    use openttdrs_core::{Industry, IndustryKind, OttdmapExtras};
 
     #[test]
     fn log_detection_summary_runs_on_tiny_map() {

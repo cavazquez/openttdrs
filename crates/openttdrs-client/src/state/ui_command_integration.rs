@@ -4,7 +4,9 @@
 
 use std::collections::HashSet;
 
-use openttdrs_core::{Command, TileCoord, TileKind, apply_command, diag_dir_offset};
+use openttdrs_core::Command;
+use openttdrs_core::diag_dir_offset;
+use openttdrs_core::prelude::*;
 
 use super::SimWorld;
 

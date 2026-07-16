@@ -1,6 +1,6 @@
 //! Logica de carreteras para sprites.
 
-use openttdrs_core::{Map, TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 /// Tabla `offsets[]` de `GetRoadSpriteOffset` en `road_cmd.cpp` (tesela plana).
 /// Sprite final = `SPR_ROAD_Y` (1332) + entrada; índices 11–14 son variantes en pendiente NE/SE/SW/NW.

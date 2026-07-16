@@ -1,8 +1,7 @@
 use std::collections::{HashSet, VecDeque};
 
-use openttdrs_core::{
-    IndustryKind, IndustrySpec, Map, TileCoord, TileKind, industry_tiles_mergeable,
-};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{IndustryKind, IndustrySpec, industry_tiles_mergeable};
 
 use crate::sprites::{IndustryGfxStatus, industry_gfx_status};
 use crate::state::SimWorld;

@@ -4,9 +4,8 @@
 //! `is_static` (p. ej. OpenGFX) no se pueden desactivar ni eliminar.
 
 use bevy::prelude::*;
-use openttdrs_core::{
-    Command, NewGrfEntry, format_grfid, inspect_grf_file, scan_grf_file, validate_stack,
-};
+use openttdrs_core::Command;
+use openttdrs_core::{NewGrfEntry, format_grfid, inspect_grf_file, scan_grf_file, validate_stack};
 
 use crate::state::SimWorld;
 use crate::ui::command_error_text::command_error_message;

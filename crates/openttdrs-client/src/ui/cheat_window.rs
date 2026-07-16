@@ -2,9 +2,9 @@
 //! Mutaciones solo vía `Command::Cheat*`. Abrir: Ctrl+Alt+C / Ajustes → Cheats…
 
 use bevy::prelude::*;
-use openttdrs_core::{
-    Command, CompanyId, calendar_day_index, calendar_year_day, format_calendar_date,
-};
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
+use openttdrs_core::{calendar_day_index, calendar_year_day, format_calendar_date};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{

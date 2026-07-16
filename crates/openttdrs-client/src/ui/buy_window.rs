@@ -9,10 +9,11 @@ use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
 use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    CargoType, Command, DecodedSprite, DepotPurchaseKind, EngineCatalogSort, EngineDef,
-    RoadEngineFilter, TileCoord, TileKind, VehicleKind, calendar_year_at_tick,
-    engines_for_depot_kind_in,
+    CargoType, DecodedSprite, DepotPurchaseKind, EngineCatalogSort, EngineDef, RoadEngineFilter,
+    calendar_year_at_tick, engines_for_depot_kind_in,
 };
 use std::collections::HashMap;
 

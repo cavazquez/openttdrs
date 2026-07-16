@@ -1,6 +1,6 @@
-use openttdrs_core::{
-    Climate, Command, IndustrySpec, TileCoord, apply_command, check_place_industry_spec,
-};
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
+use openttdrs_core::{Climate, IndustrySpec, check_place_industry_spec};
 
 use super::{PopCtx, in_preserve, min_distance_sq};
 

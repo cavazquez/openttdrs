@@ -93,7 +93,8 @@ pub fn regenerate_landscape_in_place(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use openttdrs_core::{Command, apply_command};
+    use openttdrs_core::Command;
+    use openttdrs_core::prelude::*;
 
     #[test]
     fn editor_settings_are_sandbox_friendly() {

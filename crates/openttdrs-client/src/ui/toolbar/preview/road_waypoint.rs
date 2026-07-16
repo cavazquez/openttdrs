@@ -1,7 +1,7 @@
 //! Fantasma de colocación de waypoint road (carretera recta).
 
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 use crate::iso::{TILE_HALF_H, tile_pos_half, tile_slope_and_min_z};
 

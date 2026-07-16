@@ -1,4 +1,4 @@
-use openttdrs_core::{Map, TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 // ── Pendientes (slopes) ───────────────────────────────────────────────────────
 

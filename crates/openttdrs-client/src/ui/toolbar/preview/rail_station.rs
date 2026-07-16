@@ -1,7 +1,8 @@
 //! Fantasma de estación de tren multi-tesela (vía + plataformas reales).
 
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileCoord, rail_station_footprint, rail_station_layout};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{rail_station_footprint, rail_station_layout};
 
 use crate::iso::{TILE_HALF_H, iso, overlay_pos, tile_pos_half, tile_slope_and_min_z};
 use crate::render::{CompanyColoredSprites, TileAtlas};

@@ -42,6 +42,7 @@ pub mod ottdmap_extras;
 pub mod parity;
 pub mod pathfinder;
 pub mod pathfinding_settings;
+pub mod prelude;
 pub mod rail_lane;
 pub mod rail_pbs;
 pub mod rail_signals;
@@ -119,7 +120,6 @@ pub use company::{
 };
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
 pub use depot_leave::{TRAIN_DEPOT_LEAVE_WAIT_TICKS, tick_train_stay_in_depot};
-pub use dev_metrics::{CargoProbeOptions, VehicleCargoReport, probe_vehicle_cargo_cycle};
 pub use disaster::{DISASTER_CHECK_INTERVAL, force_disaster, tick_disasters, trigger_disaster_at};
 pub use economy::{
     ANNUAL_INTEREST_RATE_PCT, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL,
@@ -150,29 +150,7 @@ pub use engine::{
 pub use entity_history::{
     ENTITY_HISTORY_MONTHS, IndustryHistory, IndustryHistorySample, TownHistory, TownHistorySample,
 };
-// Shims de compatibilidad: re-exporta desde cargodist::legacy
-pub use cargodist::legacy::flow_stat::{
-    CargoDistSettings, DistributionType, FlowStat, FlowStatMap, PlannedFlowEdge, StationFlowTable,
-    StationFlows, resolve_next_hop,
-};
-pub use cargodist::legacy::link_graph::{LinkEdgeKey, LinkFlowSample, LinkGraphStats};
-pub use cargodist::legacy::mcf::{
-    MCF_MAX_EDGES, MCF_MAX_NODES, McfAlgorithm, McfConfig, compute_station_flows,
-    compute_station_flows_for_distribution, symmetrize_observed_edges,
-};
-
-// Shims de compatibilidad: re-exporta desde cargodist::parity
-pub use cargodist::parity::{
-    BaseEdge as LinkgraphParityBaseEdge, BaseNode as LinkgraphParityBaseNode,
-    DistributionType as LinkgraphParityDistributionType, FlowMapper as LinkgraphParityFlowMapper,
-    FlowStat as LinkgraphParityFlowStat, FlowStatMap as LinkgraphParityFlowStatMap,
-    Job as LinkgraphParityJob, LinkGraphSettings as LinkgraphParitySettings,
-    SimpleShare as LinkgraphParitySimpleShare, flows_as_simple_shares,
-    run_full_pipeline as run_linkgraph_parity_pipeline,
-    to_station_flows_helper as linkgraph_parity_to_station_flows,
-};
-
-// Re-exportaciones para módulos de compatibilidad (permiten usar crate::flow_stat, etc.)
+// Namespaces de compatibilidad cargodist (sin aplanar tipos en la raíz; #157).
 pub mod flow_stat {
     pub use crate::cargodist::legacy::flow_stat::*;
 }
@@ -239,6 +217,7 @@ pub use map::{
     trigger_industry_randomisation_at, trigger_industry_tile_randomisation, tunnel_entrance_m5,
     tunnel_preview_path, water_class, water_class_from_m1,
 };
+// Runtime NewGRF en raíz; builders/fixtures vía `newgrf_actions` / `newgrf_sprites::fixture` (#157).
 pub use newgrf_actions::{
     ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS,
     ACTION0_FEATURE_TRAINS, Action0Header, Action5SlotSummary, GrfInspectReport,
@@ -248,19 +227,14 @@ pub use newgrf_actions::{
     apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs, apply_newgrf_road_types,
     apply_newgrf_road_types_default_dirs, apply_newgrf_stack_catalogs_default_dirs,
     apply_newgrf_stations, apply_newgrf_stations_default_dirs, apply_newgrf_vehicles_trains,
-    apply_newgrf_vehicles_trains_default_dirs, build_action0_industry_tile_payload,
-    build_action0_roadtype_payload, build_action0_station_payload, build_action0_train_payload,
-    build_grf_v2_with_action0_and_action8, collect_industry_tile_metas_from_grf,
-    collect_roadtype_metas_from_grf, collect_station_metas_from_grf, collect_train_metas_from_grf,
-    for_each_pseudo_payload, inspect_grf_bytes, inspect_grf_file, parse_action0_header,
-    parse_action0_industry_tile_meta, parse_action0_roadtype_meta, parse_action0_station_meta,
-    parse_action0_train_meta,
+    apply_newgrf_vehicles_trains_default_dirs, inspect_grf_bytes, inspect_grf_file,
+    parse_action0_header, parse_action0_industry_tile_meta, parse_action0_roadtype_meta,
+    parse_action0_station_meta, parse_action0_train_meta,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,
-    NewGrfEntry, build_minimal_grf_v2, default_vanilla_stack, format_grfid, grfid_from_bytes,
-    parse_grf_container, parse_grf_full, scan_grf_bytes, scan_grf_file, stack_params_for_grfid,
-    validate_stack,
+    NewGrfEntry, default_vanilla_stack, format_grfid, grfid_from_bytes, parse_grf_container,
+    parse_grf_full, scan_grf_bytes, scan_grf_file, stack_params_for_grfid, validate_stack,
 };
 pub use newgrf_sprites::{
     ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, Action2EvalCtx, Action2RandomEntry,
@@ -269,18 +243,10 @@ pub use newgrf_sprites::{
     CATENARY_WIRE_SPRITE_BASE, CBID_STATION_BUILD_TILE_LAYOUT, DecodedSprite,
     SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS, SPRITE_V2_ZOOM_PREFERENCE,
     TrainSpriteAssign, TrainSpriteGraphics, action5_type_name, apply_company_colour_mask,
-    bake_sprite_company_mask, build_grf_v2_action5_with_sprite,
-    build_grf_v2_industry_tile_with_preview_sprite, build_grf_v2_roadtype_with_action2_chain,
-    build_grf_v2_roadtype_with_preview_sprite, build_grf_v2_station_with_action2_chain,
-    build_grf_v2_station_with_preview_sprite, build_grf_v2_train_with_action2_chain,
-    build_grf_v2_train_with_preview_sprite, catenary_action5_local_slot, collect_action5_blocks,
+    bake_sprite_company_mask, catenary_action5_local_slot, collect_action5_blocks,
     collect_feature_sprite_graphics, collect_industry_tile_sprite_graphics,
     collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
-    collect_train_sprite_graphics, decode_chunked_8bpp, decode_chunked_pixels,
-    decode_real_sprite_v1, decode_real_sprite_v1_uncompressed, decode_real_sprite_v2_section,
-    decode_real_sprite_v2_section_zoom, decompress_grf_lz77, encode_chunked_8bpp_full_rows,
-    encode_chunked_pixels_full_rows, index_sprite_section, indices_to_rgba,
-    merge_catenary_action5_block, merge_shore_action5_block, resolve_fd_sprite, sprite_v2_bpp,
+    collect_train_sprite_graphics, merge_catenary_action5_block, merge_shore_action5_block,
 };
 pub use newgrf_type_tables::{
     GrfTypeTranslationTables, TypeLabel, collect_type_tables_from_grf,
@@ -402,10 +368,6 @@ pub use subsidy::{
 };
 pub use tick::GameTick;
 pub use timetable::{TRAVEL_PRESETS, WAIT_PRESETS, cycle_travel_ticks, cycle_wait_ticks};
-pub use tnbp_decode::{
-    JgrTunnelRecord, SlPrimitive, SlTableField, TnbpDecodeError, TnbpDecoded, decode_tnbp_blob,
-    jgr_tunnels_from_decoded, read_sl_gamma, split_sl_gamma_segments, tnbp_blob_to_json_value,
-};
 pub use town::{
     AUTHORITY_MIN_STATION, FUND_BUILDINGS_COST, FUND_BUILDINGS_MONTHS, MAIL_PER_HOUSE,
     PASSENGERS_PER_HOUSE, STATION_TOWN_CARGO_CAPACITY, TOWN_ADVERTISE_COST, TOWN_AUTHORITY_RADIUS,

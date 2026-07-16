@@ -10,10 +10,10 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    DecodedSprite, STATION_COVERAGE_RADIUS, StationClassId, StationSpecId, TileCoord,
-    list_station_classes, list_station_specs, station_class_def, station_coverage_at,
-    station_spec_def,
+    DecodedSprite, STATION_COVERAGE_RADIUS, StationClassId, StationSpecId, list_station_classes,
+    list_station_specs, station_class_def, station_coverage_at, station_spec_def,
 };
 use std::collections::HashMap;
 

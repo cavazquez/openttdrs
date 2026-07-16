@@ -11,7 +11,7 @@
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::ai_settings_window::AiSettingsWindowState;

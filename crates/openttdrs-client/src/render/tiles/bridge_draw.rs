@@ -1,9 +1,10 @@
 //! Dibujo compartido de tablero de puente (rampas y vano).
 
 use bevy::prelude::*;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    BridgeType, Map, Tile, TileCoord, TileKind, bridge_above_axis_from_mapt, bridge_type_from_m6,
-    calc_bridge_piece, rail_type_from_tile,
+    BridgeType, bridge_above_axis_from_mapt, bridge_type_from_m6, calc_bridge_piece,
+    rail_type_from_tile,
 };
 
 use crate::iso::{HEIGHT_PX, TILE_HALF_H, remap_tile_offset, tile_pos_half, tile_slope_and_min_z};

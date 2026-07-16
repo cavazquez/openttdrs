@@ -5,7 +5,8 @@ use bevy::asset::AssetPlugin;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::image::ImagePlugin;
 use bevy::prelude::*;
-use openttdrs_core::{Climate, Map, Tile, TileCoord, TileKind};
+use openttdrs_core::Climate;
+use openttdrs_core::prelude::*;
 
 const TEST_CLIMATE: Climate = Climate::Temperate;
 const TEST_WORLD_SEED: u64 = 0;

@@ -405,7 +405,7 @@ mod industry_coverage_tests {
     /// Regresión SP3 P1: y=10 del checklist (gfx 0…120 en tabla; 256 = NewGRF / OutOfRange).
     #[test]
     fn sp3_visual_checklist_industry_gfx_in_table() {
-        use openttdrs_core::{Map, TileCoord, TileKind};
+        use openttdrs_core::prelude::*;
 
         let map = Map::from_ottd_binary(SP3_VISUAL_CHECKLIST).expect("checklist MAP1");
         let cases: &[(i32, u16, IndustryGfxStatus)] = &[
@@ -538,7 +538,8 @@ mod industry_coverage_tests {
 
     #[test]
     fn palette_colour_looks_up_by_instance_id_not_vector_index() {
-        use openttdrs_core::{Industry, IndustryKind, IndustrySpec, TileCoord};
+        use openttdrs_core::prelude::*;
+        use openttdrs_core::{Industry, IndustryKind, IndustrySpec};
         let industries = vec![
             Industry::with_tiles_spec(
                 TileCoord::new(0, 0),

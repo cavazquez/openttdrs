@@ -1,7 +1,7 @@
 //! Fondo del menú: mapa procedural isométrico con paneo suave y tráfico decorativo.
 
 use bevy::prelude::*;
-use openttdrs_core::{Map, VehicleKind};
+use openttdrs_core::prelude::*;
 
 use crate::iso::{road_vehicle_tile_anchor, tile_min_z, tile_pos};
 use crate::network::NetCli;

@@ -26,7 +26,7 @@ pub use water::{
 };
 
 #[cfg(test)]
-use openttdrs_core::{Map, TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 #[cfg(test)]
 use slope::water_void_effective_height_for_slope;
 
@@ -45,7 +45,7 @@ mod compute_tileh_tests {
     //! (`tile_map.cpp` de OpenTTD): hnorth@(tx,ty), hwest@(tx+1,ty), heast@(tx,ty+1), hsouth@(tx+1,ty+1).
 
     use super::compute_tileh;
-    use openttdrs_core::{Map, TileCoord};
+    use openttdrs_core::prelude::*;
 
     fn set_h(map: &mut Map, x: i32, y: i32, h: u8) {
         map.set_height(TileCoord::new(x, y), h).unwrap();
@@ -130,7 +130,7 @@ mod water_coast_height_tests {
         TILE_HALF_H, shore_sprite_half_h, shore_tileh_for_draw_shore, tile_slope_and_min_z,
         water_void_effective_height_for_slope,
     };
-    use openttdrs_core::{Map, TileCoord, TileKind};
+    use openttdrs_core::prelude::*;
 
     #[test]
     fn peninsula_grass_flat_when_water_corners_stored_zero() {
@@ -247,7 +247,7 @@ mod water_coast_height_tests {
 #[cfg(test)]
 mod tile_min_corner_height_tests {
     use super::{tile_min_corner_height, tile_min_z};
-    use openttdrs_core::{Map, TileCoord};
+    use openttdrs_core::prelude::*;
 
     fn set_h(map: &mut Map, x: i32, y: i32, h: u8) {
         map.set_height(TileCoord::new(x, y), h).unwrap();
@@ -278,7 +278,7 @@ mod tile_min_corner_height_tests {
 #[cfg(test)]
 mod infer_coast_tileh_tests {
     use super::infer_coast_tileh_when_flat;
-    use openttdrs_core::{Map, TileCoord, TileKind};
+    use openttdrs_core::prelude::*;
 
     #[test]
     fn land_in_quartet_east_sample_prefers_w_slope() {
@@ -446,7 +446,8 @@ mod world_pos_to_tile_tests {
 
     #[test]
     fn road_vehicle_sw_subtile_uses_openrtd_lane_y9() {
-        use openttdrs_core::{DIR_SW, straight_subtile};
+        use openttdrs_core::prelude::*;
+        use openttdrs_core::straight_subtile;
 
         let (x0, y0) = straight_subtile(DIR_SW, 0.0);
         assert_eq!((x0, y0), (0.0, 9.0));
@@ -464,7 +465,8 @@ mod world_pos_to_tile_tests {
 
     #[test]
     fn road_vehicle_sw_lane_near_tile_center_mid_tile() {
-        use openttdrs_core::{DIR_SW, straight_subtile};
+        use openttdrs_core::prelude::*;
+        use openttdrs_core::straight_subtile;
 
         let (sub_x, sub_y) = straight_subtile(DIR_SW, 128.0);
         assert!((sub_x - 7.5).abs() < 0.1);
@@ -480,7 +482,8 @@ mod world_pos_to_tile_tests {
 
     #[test]
     fn road_vehicle_ne_subtile_moves_along_y5() {
-        use openttdrs_core::{DIR_NE, straight_subtile};
+        use openttdrs_core::prelude::*;
+        use openttdrs_core::straight_subtile;
 
         let start = straight_subtile(DIR_NE, 0.0);
         let end = straight_subtile(DIR_NE, 255.0);

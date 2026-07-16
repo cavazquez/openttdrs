@@ -1,7 +1,7 @@
 use bevy::prelude::*;
-use openttdrs_core::{
-    Command, CommandError, OrderConditionKind, OrderMoveDirection, TileCoord, Vehicle, VehicleOrder,
-};
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
+use openttdrs_core::{OrderConditionKind, OrderMoveDirection};
 
 use crate::render::RemapMapVisualsPending;
 use crate::state::{OrderPickState, SimWorld};
@@ -600,7 +600,6 @@ pub(crate) fn handle_order_destination_click(
 mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
-    use openttdrs_core::{GameState, TileCoord, VehicleKind};
 
     #[test]
     fn move_order_down_swaps_selected_slot() {

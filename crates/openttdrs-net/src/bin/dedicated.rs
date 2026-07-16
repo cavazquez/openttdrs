@@ -9,9 +9,10 @@ use std::env;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    Climate, Command, GameState, IndustryKind, IndustrySpec, TileCoord, TileKind, WorldGenConfig,
-    apply_command, apply_world_gen, tile_slope_and_z,
+    Climate, IndustryKind, IndustrySpec, WorldGenConfig, apply_world_gen, tile_slope_and_z,
 };
 use openttdrs_net::{DEFAULT_PORT, ListenServer, SessionEvent};
 

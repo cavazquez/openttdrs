@@ -1,9 +1,11 @@
 //! Ventana de reglas de autoreemplazo de motores.
 
 use bevy::prelude::*;
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    AutoReplaceRule, Command, DepotPurchaseKind, EngineCatalogSort, RoadEngineFilter, TileCoord,
-    TileKind, calendar_year_at_tick, engine_by_id, engines_for_depot_kind,
+    AutoReplaceRule, DepotPurchaseKind, EngineCatalogSort, RoadEngineFilter, calendar_year_at_tick,
+    engine_by_id, engines_for_depot_kind,
 };
 
 use crate::render::RemapMapVisualsPending;
@@ -700,7 +702,7 @@ pub(crate) fn autoreplace_window_on_closed(
 mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
-    use openttdrs_core::{ENGINE_TRUCK_MPS, GameState};
+    use openttdrs_core::ENGINE_TRUCK_MPS;
 
     #[test]
     fn add_rule_stores_autoreplace() {

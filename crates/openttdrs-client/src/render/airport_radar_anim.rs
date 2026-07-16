@@ -4,7 +4,8 @@
 //! vivo del mapa cada tick visual.
 
 use bevy::prelude::*;
-use openttdrs_core::{TileCoord, airport_radar_frame, is_airport_tower_tile};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{airport_radar_frame, is_airport_tower_tile};
 
 use crate::bevy_app::UpdateSet;
 use crate::render::WorldAssets;

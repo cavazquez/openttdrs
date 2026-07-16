@@ -2,9 +2,9 @@
 
 #![allow(clippy::expect_used)]
 
-use openttdrs_core::{
-    JgrTunnelRecord, Map, TileCoord, openttd_tile_index_to_coord, tnbp_blob_to_json_value,
-};
+use openttdrs_core::openttd_tile_index_to_coord;
+use openttdrs_core::prelude::{Map, TileCoord};
+use openttdrs_core::tnbp_decode::{JgrTunnelRecord, tnbp_blob_to_json_value};
 
 const FIXTURE: &[u8] = include_bytes!("fixtures/v5p12_tnbp.ottdmap");
 

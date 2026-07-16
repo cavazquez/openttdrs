@@ -12,6 +12,7 @@ mod tests;
 
 pub use ai::build_ai_rival_line;
 pub use economy::{build_breakdown, build_loan_interest, build_town_growth};
+pub(crate) use rail::release_staged_depot_trains;
 #[allow(unused_imports)] // constantes demo usadas por tests / tooling externo
 pub use rail::{
     RAIL_SIGNALS_DEMO_BLOCKER2_ID, RAIL_SIGNALS_DEMO_DEPOT, RAIL_SIGNALS_DEMO_ENTRY,
@@ -33,7 +34,6 @@ pub use rail::{
     build_train_pbs, build_train_signal, build_train_supply, build_train_supply_dual,
     build_train_supply_signal_snapshot, rail_signals_mixed_coord,
 };
-pub(crate) use rail::release_staged_depot_trains;
 pub use road::{
     TRUCK_BAY_DELIVER_ROAD, TRUCK_BAY_DELIVER_STOP, TRUCK_BAY_LOAD_ROAD, TRUCK_BAY_LOAD_STOP,
     TRUCK_BAY_VEHICLE_ID, build_truck_bay,
@@ -102,4 +102,3 @@ pub fn export_junction_json(
     }
     crate::save::save(&state, path)
 }
-

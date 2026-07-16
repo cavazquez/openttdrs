@@ -131,7 +131,7 @@ pub(crate) fn resync_town_labels(
 #[allow(clippy::expect_used)]
 mod tests {
     use bevy::ecs::system::RunSystemOnce;
-    use openttdrs_core::{GameState, TileCoord};
+    use openttdrs_core::prelude::*;
 
     use super::*;
 

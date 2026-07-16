@@ -1,7 +1,7 @@
 use bevy::prelude::*;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    Map, Station, StationSpecDef, TileKind, inclined_slope_direction, is_tunnel_entrance_slope,
-    rail_type_from_tile,
+    StationSpecDef, inclined_slope_direction, is_tunnel_entrance_slope, rail_type_from_tile,
 };
 
 use super::bridge_draw::{bridge_span_at, spawn_bridge_deck};

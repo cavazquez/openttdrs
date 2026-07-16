@@ -1,7 +1,7 @@
 //! Ventana de ajustes `CargoDist` (`cargo_dist.distribution`).
 
 use bevy::prelude::*;
-use openttdrs_core::DistributionType;
+use openttdrs_core::flow_stat::DistributionType;
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{

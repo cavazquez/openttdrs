@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use openttdrs_core::{IndustrySpec, Map, TileCoord, industry_template};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{IndustrySpec, industry_template};
 
 use crate::iso::{iso, overlay_pos, tile_pos, tile_slope_and_min_z};
 use crate::render::leveled_foundation_overlay_pos;

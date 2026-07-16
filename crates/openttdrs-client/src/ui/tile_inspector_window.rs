@@ -179,7 +179,7 @@ pub(crate) fn format_tile_inspect(state: &openttdrs_core::GameState, pos: TileCo
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use openttdrs_core::{GameState, TileKind};
+    use openttdrs_core::prelude::*;
 
     #[test]
     fn format_tile_inspect_reports_kind() {

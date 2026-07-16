@@ -1,4 +1,5 @@
-use openttdrs_core::{GameState, Map, MapError, TileCoord, TileKind, tunnel_preview_path};
+use openttdrs_core::prelude::*;
+use openttdrs_core::tunnel_preview_path;
 
 #[allow(dead_code)] // mapa aleatorio legacy; el procedural usa fill_flat_grass
 pub(crate) fn distribute_tile_kinds(state: &mut GameState, seed: u64) {
@@ -79,7 +80,8 @@ fn tile_kind_hash(x: u32, y: u32, seed: u64) -> TileKind {
 mod tests {
     use super::distribute_tile_kinds;
     use crate::state::{MAP_H, MAP_W};
-    use openttdrs_core::{GameState, TileCoord, TileKind, tunnel_preview_path};
+    use openttdrs_core::prelude::*;
+    use openttdrs_core::tunnel_preview_path;
 
     fn snapshot(state: &GameState) -> Vec<TileKind> {
         let (mw, mh) = state.map.dimensions();

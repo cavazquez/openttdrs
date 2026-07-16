@@ -1,7 +1,8 @@
 //! Tramos intermedios de puente sobre teselas con `IsBridgeAbove` en `mapt`.
 
 use bevy::prelude::*;
-use openttdrs_core::{Map, bridge_above_axis_from_mapt};
+use openttdrs_core::bridge_above_axis_from_mapt;
+use openttdrs_core::prelude::*;
 
 use crate::render::{TileRenderContext, WorldAssets};
 
@@ -44,9 +45,9 @@ pub(crate) fn spawn_bridge_middle(
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+
     use openttdrs_core::{
-        BridgeType, Map, Tile, TileCoord, TileKind, bridge_above_axis_from_mapt,
-        set_bridge_middle_mapt, set_bridge_type_m6,
+        BridgeType, bridge_above_axis_from_mapt, set_bridge_middle_mapt, set_bridge_type_m6,
     };
 
     fn ramp_tile_template(m5: u8) -> Tile {

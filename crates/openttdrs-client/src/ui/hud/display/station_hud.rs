@@ -1,4 +1,5 @@
-use openttdrs_core::{STATION_COVERAGE_RADIUS, Tile, station_coverage_at};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{STATION_COVERAGE_RADIUS, station_coverage_at};
 
 use crate::sprites::{StationTileClass, station_type_from_m6};
 use crate::state::SimWorld;
@@ -71,7 +72,8 @@ pub(crate) fn rail_depot_tile_details(m5: u8) -> String {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::{road_depot_tile_details, station_details_text};
-    use openttdrs_core::{GameState, Industry, IndustryKind, Station, TileCoord, TileKind};
+    use openttdrs_core::prelude::*;
+    use openttdrs_core::{Industry, IndustryKind};
 
     use crate::state::SimWorld;
 

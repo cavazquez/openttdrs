@@ -9,7 +9,9 @@
 
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
-use openttdrs_core::{Command, TileCoord, TileKind, VehicleKind, consist_unit_ids, engine_by_id};
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
+use openttdrs_core::{consist_unit_ids, engine_by_id};
 
 use crate::camera::tile_camera_world_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles};

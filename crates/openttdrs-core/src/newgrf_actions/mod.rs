@@ -264,7 +264,7 @@ mod tests {
                 indices[y * 8 + x] = 174;
             }
         }
-        let bytes = crate::build_grf_v2_roadtype_with_preview_sprite(
+        let bytes = crate::newgrf_sprites::build_grf_v2_roadtype_with_preview_sprite(
             &a0,
             0,
             8,
@@ -348,7 +348,7 @@ mod tests {
                 indices[y * 8 + x] = 174;
             }
         }
-        let bytes = crate::build_grf_v2_station_with_preview_sprite(
+        let bytes = crate::newgrf_sprites::build_grf_v2_station_with_preview_sprite(
             &a0,
             0,
             8,
@@ -384,7 +384,7 @@ mod tests {
                 indices[y * 8 + x] = 174;
             }
         }
-        let bytes = crate::build_grf_v2_station_with_action2_chain(
+        let bytes = crate::newgrf_sprites::build_grf_v2_station_with_action2_chain(
             &a0,
             0,
             7,
@@ -419,7 +419,7 @@ mod tests {
                 indices[y * 8 + x] = 174;
             }
         }
-        let bytes = crate::build_grf_v2_roadtype_with_action2_chain(
+        let bytes = crate::newgrf_sprites::build_grf_v2_roadtype_with_action2_chain(
             &a0,
             0,
             8,
@@ -453,7 +453,7 @@ mod tests {
                 indices[y * 8 + x] = 174;
             }
         }
-        let bytes = crate::build_grf_v2_action5_with_sprite(
+        let bytes = crate::newgrf_sprites::build_grf_v2_action5_with_sprite(
             0x05,
             1039,
             8,
@@ -481,7 +481,7 @@ mod tests {
                 indices[y * 8 + x] = 174;
             }
         }
-        let bytes = crate::build_grf_v2_action5_with_sprite(
+        let bytes = crate::newgrf_sprites::build_grf_v2_action5_with_sprite(
             0x0D,
             3,
             8,
@@ -511,7 +511,7 @@ mod tests {
                 indices[y * 8 + x] = 174;
             }
         }
-        let bytes = crate::build_grf_v2_action5_with_sprite(
+        let bytes = crate::newgrf_sprites::build_grf_v2_action5_with_sprite(
             0x05,
             1039,
             8,
@@ -574,7 +574,7 @@ mod tests {
                 indices[y * 8 + x] = 174;
             }
         }
-        let bytes = crate::build_grf_v2_train_with_preview_sprite(
+        let bytes = crate::newgrf_sprites::build_grf_v2_train_with_preview_sprite(
             &a0,
             0,
             8,
@@ -606,7 +606,7 @@ mod tests {
                 indices[y * 8 + x] = 174;
             }
         }
-        let bytes = crate::build_grf_v2_train_with_action2_chain(
+        let bytes = crate::newgrf_sprites::build_grf_v2_train_with_action2_chain(
             &a0,
             0,
             7,
@@ -715,7 +715,7 @@ mod tests {
                 indices[y * 8 + x] = 174;
             }
         }
-        let bytes = crate::build_grf_v2_industry_tile_with_preview_sprite(
+        let bytes = crate::newgrf_sprites::build_grf_v2_industry_tile_with_preview_sprite(
             &a0,
             0,
             8,

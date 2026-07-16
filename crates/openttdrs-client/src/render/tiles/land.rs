@@ -1,8 +1,9 @@
 use bevy::prelude::*;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-    CLEAR_GROUND_SNOW, Climate, Map, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
-    OBJECT_TYPE_TRANSMITTER, TileKind, effective_clear_ground, industry_uses_water_ground,
+    CLEAR_GROUND_SNOW, Climate, OBJECT_TYPE_LIGHTHOUSE, OBJECT_TYPE_OWNED_LAND,
+    OBJECT_TYPE_TRANSMITTER, effective_clear_ground, industry_uses_water_ground,
 };
 
 use super::{

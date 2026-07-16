@@ -3,7 +3,7 @@
 use bevy::input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll};
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{Map, TileCoord};
+use openttdrs_core::prelude::*;
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::tile_pos;

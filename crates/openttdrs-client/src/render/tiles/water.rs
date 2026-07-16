@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use openttdrs_core::{DecodedSprite, Map};
+use openttdrs_core::DecodedSprite;
+use openttdrs_core::prelude::*;
 
 use super::{SHORE_LAYER_FRAC, push_water_sprite, spawn_coast_debug_label};
 use crate::iso::{

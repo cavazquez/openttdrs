@@ -1,7 +1,7 @@
 //! Etiquetas de estaciones en el viewport (nombres sobre `station.pos`).
 
 use bevy::prelude::*;
-use openttdrs_core::{Station, StopKind};
+use openttdrs_core::prelude::*;
 
 use crate::iso::{tile_pos, tile_slope_and_min_z};
 use crate::render::MapVisualLayer;
@@ -138,7 +138,6 @@ pub(crate) fn resync_station_labels(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use openttdrs_core::{Station, StopKind, TileCoord};
 
     #[test]
     fn display_name_uses_custom_or_fallback() {

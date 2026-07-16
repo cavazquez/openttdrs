@@ -1,7 +1,8 @@
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    Command, CommandError, GameState, Map, ROAD_PLACE_FORCE_AXIS, TileCoord,
-    finalize_road_drag_line, infer_road_drag_axis, resolve_tunnel_end, road_drag_line_tiles,
-    road_locked_tool_axis, tunnel_preview_path,
+    ROAD_PLACE_FORCE_AXIS, finalize_road_drag_line, infer_road_drag_axis, resolve_tunnel_end,
+    road_drag_line_tiles, road_locked_tool_axis, tunnel_preview_path,
 };
 
 use crate::state::SimWorld;
@@ -464,7 +465,6 @@ fn rect_drag_tiles(from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
 mod tests {
     use super::*;
     use crate::state::SimWorld;
-    use openttdrs_core::{GameState, TileCoord, TileKind};
 
     #[test]
     fn rail_remap_neighbor_tiles_includes_orthogonal_neighbors() {

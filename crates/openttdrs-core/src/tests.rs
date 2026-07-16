@@ -1,4 +1,6 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
+use crate::link_graph::LinkEdgeKey;
+use crate::tnbp_decode::JgrTunnelRecord;
 use std::collections::VecDeque;
 
 use crate::industry::{

@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use openttdrs_core::{Map, Station, StationSpecDef, StationSpecId, TileCoord};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{StationSpecDef, StationSpecId};
 
 use crate::render::newgrf_cache::{
     DecodedSpriteImagePolicy, decoded_sprite_image, runtime_fingerprint, vars,
@@ -82,10 +83,10 @@ pub(crate) fn newgrf_station_def_for_tile<'a>(
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use openttdrs_core::{
-        GameState, apply_newgrf_stations, build_action0_station_payload,
-        build_grf_v2_station_with_preview_sprite,
-    };
+    use openttdrs_core::apply_newgrf_stations;
+    use openttdrs_core::newgrf_actions::build_action0_station_payload;
+    use openttdrs_core::newgrf_sprites::build_grf_v2_station_with_preview_sprite;
+    use openttdrs_core::prelude::GameState;
 
     #[test]
     fn station_sprite_cache_builds_handle_from_catalog_views() {

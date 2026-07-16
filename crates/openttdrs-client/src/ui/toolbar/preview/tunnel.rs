@@ -1,7 +1,8 @@
 //! Fantasma de boca de túnel: sprite y anclaje según la pendiente de la tesela.
 
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileCoord, inclined_slope_direction, is_tunnel_entrance_slope};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{inclined_slope_direction, is_tunnel_entrance_slope};
 
 use crate::sprites::{tunnel_portal_translation, tunnel_rear_sprite_id};
 use crate::ui::toolbar::BuildMenuAction;

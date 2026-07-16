@@ -282,9 +282,8 @@ pub(crate) fn shared_orders_window_on_closed(
 mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
-    use openttdrs_core::{
-        GameState, SharedOrderList, TileCoord, Vehicle, VehicleKind, VehicleOrder,
-    };
+    use openttdrs_core::SharedOrderList;
+    use openttdrs_core::prelude::*;
 
     #[test]
     fn link_selected_pool_sets_shared_order_id() {

@@ -1,7 +1,8 @@
 //! Ventana flotante «Historial de noticias» (N4 — Message history).
 
 use bevy::prelude::*;
-use openttdrs_core::{GameTick, NewsDisplayMode, format_calendar_date};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{NewsDisplayMode, format_calendar_date};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{

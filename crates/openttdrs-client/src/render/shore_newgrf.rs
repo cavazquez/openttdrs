@@ -41,7 +41,9 @@ impl NewGrfShoreSpriteCache {
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use openttdrs_core::{GameState, apply_newgrf_action5_shore, build_grf_v2_action5_with_sprite};
+    use openttdrs_core::apply_newgrf_action5_shore;
+    use openttdrs_core::newgrf_sprites::build_grf_v2_action5_with_sprite;
+    use openttdrs_core::prelude::GameState;
 
     #[test]
     fn shore_sprite_cache_builds_handle_from_action5() {

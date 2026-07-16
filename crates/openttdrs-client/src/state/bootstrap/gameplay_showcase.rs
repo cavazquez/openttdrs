@@ -1,10 +1,9 @@
 //! Laboratorio jugable: ciudades, cadenas, hub y vía (fases B1–B4).
 
 use bevy::prelude::*;
-use openttdrs_core::{
-    Command, GameState, IndustryKind, IndustrySpec, PathNetwork, TileCoord, Vehicle, VehicleKind,
-    VehicleOrder, apply_command, find_path,
-};
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
+use openttdrs_core::{IndustryKind, IndustrySpec, PathNetwork, find_path};
 
 /// Carretera del barrio residencial (eje X).
 pub const SHOWCASE_TOWN_ROAD_Y: i32 = 4;
@@ -227,9 +226,8 @@ pub(crate) fn log_gameplay_showcase_zones() {
 mod tests {
     use super::*;
     use crate::state::{MAP_H, MAP_W};
-    use openttdrs_core::{
-        STATION_COVERAGE_RADIUS, StopKind, TOWN_PRODUCE_TICKS, TileKind, station_coverage_at,
-    };
+
+    use openttdrs_core::{STATION_COVERAGE_RADIUS, TOWN_PRODUCE_TICKS, station_coverage_at};
 
     fn showcase_state() -> GameState {
         let mut state = GameState::new(MAP_W, MAP_H);

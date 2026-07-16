@@ -3,9 +3,8 @@
 
 use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
-use openttdrs_core::{
-    Command, RoadTramType, calendar_day_index, calendar_year_day, format_calendar_date,
-};
+use openttdrs_core::Command;
+use openttdrs_core::{RoadTramType, calendar_day_index, calendar_year_day, format_calendar_date};
 
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::ingame_lifecycle::InGameUi;

@@ -12,7 +12,8 @@ pub(crate) use editor_session::{
 };
 
 use bevy::prelude::*;
-use openttdrs_core::{GameState, Map, OttdmapExtras};
+use openttdrs_core::OttdmapExtras;
+use openttdrs_core::prelude::*;
 
 use crate::config::{apply_test_company_colour, climate_from_env, env_u64, world_gen_enabled};
 use crate::state::bootstrap::{

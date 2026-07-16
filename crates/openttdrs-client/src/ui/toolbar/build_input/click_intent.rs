@@ -4,7 +4,7 @@
 //! depender de Commands o AssetServer de Bevy, facilitando pruebas unitarias.
 
 use bevy::math::Vec2;
-use openttdrs_core::{TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 use crate::ui::toolbar::BuildMenuAction;
 

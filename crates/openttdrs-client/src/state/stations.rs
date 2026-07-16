@@ -1,6 +1,7 @@
 //! Helpers de estaciones para bootstrap de mapas.
 
-use openttdrs_core::{GameState, OttdmapExtras, Station, TileCoord, TileKind};
+use openttdrs_core::OttdmapExtras;
+use openttdrs_core::prelude::*;
 use std::collections::HashSet;
 
 use openttdrs_core::stop_kind_from_m6;
@@ -63,7 +64,8 @@ pub(crate) fn place_stations_from_map_tiles(state: &mut GameState) {
 #[allow(clippy::unwrap_used)]
 mod stations_coverage_tests {
     use super::{place_stations_from_footer_stxy, place_stations_from_map_tiles};
-    use openttdrs_core::{GameState, OttdmapExtras, Station, TileCoord, TileKind};
+    use openttdrs_core::OttdmapExtras;
+    use openttdrs_core::prelude::*;
 
     #[test]
     fn place_stations_from_footer_none_is_noop() {

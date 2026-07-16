@@ -69,10 +69,10 @@ pub(crate) fn newgrf_industry_tile_def(
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use openttdrs_core::{
-        GameState, apply_newgrf_industry_tiles, build_action0_industry_tile_payload,
-        build_grf_v2_industry_tile_with_preview_sprite,
-    };
+    use openttdrs_core::apply_newgrf_industry_tiles;
+    use openttdrs_core::newgrf_actions::build_action0_industry_tile_payload;
+    use openttdrs_core::newgrf_sprites::build_grf_v2_industry_tile_with_preview_sprite;
+    use openttdrs_core::prelude::GameState;
 
     #[test]
     fn industry_sprite_cache_builds_handle_from_catalog_views() {

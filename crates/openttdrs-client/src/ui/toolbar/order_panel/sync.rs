@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{Station, StopKind, TileKind, Vehicle, VehicleOrder};
+use openttdrs_core::prelude::*;
 
 use crate::state::{OrderPickState, SimWorld, order_pick_active};
 use crate::ui::toolbar::{OrderEditState, OrderPanelRoot, OrderPanelTitle};
@@ -263,7 +263,7 @@ fn order_row_label(
 
 #[cfg(test)]
 mod tests {
-    use openttdrs_core::{TileCoord, TileKind, Vehicle, VehicleKind, VehicleOrder};
+    use openttdrs_core::prelude::*;
 
     use crate::state::SimWorld;
 

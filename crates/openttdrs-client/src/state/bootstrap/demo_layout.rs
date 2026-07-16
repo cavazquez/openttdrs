@@ -1,10 +1,11 @@
 //! Mapa procedural limpio: hierba plana + zonas de prueba separadas.
 
 use bevy::prelude::*;
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    Command, FACTORY_WOOD_INPUT, GameState, Industry, IndustryKind, IndustrySpec, PathNetwork,
-    PreserveRect, TileCoord, TileKind, Vehicle, VehicleKind, WorldGenConfig, apply_command,
-    apply_world_gen, find_path, road_stop_approach_tile,
+    FACTORY_WOOD_INPUT, Industry, IndustryKind, IndustrySpec, PathNetwork, PreserveRect,
+    WorldGenConfig, apply_world_gen, find_path, road_stop_approach_tile,
 };
 
 /// Carretera horizontal de demo (eje X).
@@ -185,7 +186,8 @@ fn place_demo_truck_station(state: &mut GameState, pos: TileCoord) {
 
 /// Bus + camión en la carretera demo (para probar sprites sin depósito).
 fn place_demo_road_vehicles(state: &mut GameState) {
-    use openttdrs_core::{DIR_SW, PathNetwork, Vehicle, VehicleKind, find_path};
+    use openttdrs_core::prelude::*;
+    use openttdrs_core::{PathNetwork, find_path};
 
     let start_bus = TileCoord::new(3, DEMO_ROAD_Y);
     let start_truck = TileCoord::new(5, DEMO_ROAD_Y);
@@ -211,7 +213,8 @@ fn place_demo_road_vehicles(state: &mut GameState) {
 
 /// Tren en la vía demo (Kirby Paul Tank, más lento que bus/camión).
 fn place_demo_rail_vehicle(state: &mut GameState) {
-    use openttdrs_core::{DIR_SW, PathNetwork, Vehicle, VehicleKind, find_path};
+    use openttdrs_core::prelude::*;
+    use openttdrs_core::{PathNetwork, find_path};
 
     let start = TileCoord::new(4, DEMO_RAIL_Y);
     let end = TileCoord::new(10, DEMO_RAIL_Y);

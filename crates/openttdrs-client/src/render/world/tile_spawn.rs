@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 use crate::config::{env_flag, env_string};
 use crate::iso::{SLOPE_HALF_H, shore_png_index, shore_tileh_for_draw_shore};

@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use openttdrs_core::{Vehicle, VehicleKind, extrapolate_vehicle_pose};
+use openttdrs_core::extrapolate_vehicle_pose;
+use openttdrs_core::prelude::*;
 
 use crate::render::{CompanyColoredSprites, MapVisualLayer};
 use crate::state::SimWorld;

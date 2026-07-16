@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{CompanyId, GameState, TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 use crate::sprites::company_colour_swatch_color;
 

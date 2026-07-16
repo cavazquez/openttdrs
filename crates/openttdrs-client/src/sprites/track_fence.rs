@@ -1,6 +1,6 @@
 //! Cercas de vía (`DrawTrackDetails` / `SPR_TRACK_FENCE_*`).
 
-use openttdrs_core::{Map, TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 /// `RailGroundType` fence values (`rail_map.h`) — nibble bajo de `m3hi` (= m4 OTTD).
 pub const RAIL_GROUND_FENCE_NW: u8 = 2;

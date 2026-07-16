@@ -3,9 +3,8 @@
 use bevy::input::keyboard::KeyboardInput;
 use bevy::prelude::*;
 use bevy::text::EditableText;
-use openttdrs_core::{
-    Climate, Industry, IndustryKind, IndustrySpec, TileCoord, cargo_display_name,
-};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{Climate, Industry, IndustryKind, IndustrySpec, cargo_display_name};
 
 use crate::iso::tile_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
@@ -463,7 +462,7 @@ pub(crate) fn industry_directory_on_closed(
 mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
-    use openttdrs_core::{CargoType, GameState};
+    use openttdrs_core::CargoType;
 
     #[test]
     fn route_opens_industry_directory() {

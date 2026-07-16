@@ -2,7 +2,10 @@
 //!
 //! Uso: `cargo run -p openttdrs-core --example validate_ottdmap_tnbp -- ruta.ottdmap`
 
-use openttdrs_core::{Map, decode_tnbp_blob, jgr_tunnels_from_decoded, tnbp_blob_to_json_value};
+use openttdrs_core::prelude::Map;
+use openttdrs_core::tnbp_decode::{
+    TnbpDecoded, decode_tnbp_blob, jgr_tunnels_from_decoded, tnbp_blob_to_json_value,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args()
@@ -29,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!(
                 "Túneles JGR: {tot} registro(s); extremos en MP_TUNNELBRIDGE: norte {n_ok}/{tot}, sur {s_ok}/{tot}"
             );
-            if let openttdrs_core::TnbpDecoded::ChTable { skipped_rows, .. } = &dec
+            if let TnbpDecoded::ChTable { skipped_rows, .. } = &dec
                 && *skipped_rows > 0
             {
                 println!("  (filas Sl omitidas por versión/campos: {skipped_rows})");

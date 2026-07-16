@@ -1,9 +1,10 @@
 use std::sync::OnceLock;
 
 use bevy::prelude::*;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    Map, SignalTrack, TileCoord, TileKind, diag_dir_offset, m2_for_signal, rail_type_from_tile,
-    signal_type_for_track, signal_variant_for_track, tile_slope_and_z,
+    SignalTrack, diag_dir_offset, m2_for_signal, rail_type_from_tile, signal_type_for_track,
+    signal_variant_for_track, tile_slope_and_z,
 };
 
 pub use openttdrs_core::{
@@ -1516,7 +1517,6 @@ pub fn collect_rail_sprites_for_type(
 mod tests {
     use super::*;
     use crate::iso::{TILE_HALF_H, iso};
-    use openttdrs_core::{Map, TileCoord, TileKind};
 
     #[test]
     fn collect_rail_on_leveled_foundation_uses_flat_track() {
@@ -1684,7 +1684,8 @@ mod tests {
     }
 
     fn electric_rail_tile(trackbits: u8) -> openttdrs_core::Tile {
-        use openttdrs_core::{RailType, Tile, set_rail_type_on_tile};
+        use openttdrs_core::prelude::*;
+        use openttdrs_core::{RailType, set_rail_type_on_tile};
         set_rail_type_on_tile(
             Tile {
                 height: 1,
@@ -2000,7 +2001,8 @@ mod tests {
     /// Regresión SP3: filas y=11/13/15 del checklist (recta/T/cruce en pendiente).
     #[test]
     fn sp3_visual_checklist_sloped_junction_sprite_ids() {
-        use openttdrs_core::{Map, TileCoord, TileKind, tile_slope_and_z};
+        use openttdrs_core::prelude::*;
+        use openttdrs_core::tile_slope_and_z;
 
         let map = Map::from_ottd_binary(SP3_VISUAL_CHECKLIST).expect("checklist MAP1");
         let mut out = Vec::new();
@@ -2051,7 +2053,8 @@ mod tests {
 
     #[test]
     fn sp3_slope_lab_horz_vert_from_fixture_map() {
-        use openttdrs_core::{Map, TileCoord, TileKind, tile_slope_and_z};
+        use openttdrs_core::prelude::*;
+        use openttdrs_core::tile_slope_and_z;
 
         let map = Map::from_ottd_binary(SP3_SLOPE_LAB).expect("sp3_slope_lab MAP1");
 

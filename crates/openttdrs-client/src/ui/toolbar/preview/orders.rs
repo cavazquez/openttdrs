@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileCoord};
+use openttdrs_core::prelude::*;
 
 use crate::iso::tile_pos;
 use crate::state::SimWorld;

@@ -1,6 +1,7 @@
 //! Arranque del mapa procedural con opciones de nueva partida.
 
-use openttdrs_core::{Climate, GameState, WorldGenConfig, apply_world_gen, tick_for_calendar_year};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{Climate, WorldGenConfig, apply_world_gen, tick_for_calendar_year};
 
 use super::demo_layout::{
     apply_optional_world_gen, demo_preserve_rects, fill_flat_grass, place_bridge_demo_gap,
@@ -480,7 +481,7 @@ mod tests {
 
     #[test]
     fn new_game_world_gen_includes_water() {
-        use openttdrs_core::{TileCoord, TileKind};
+        use openttdrs_core::prelude::*;
 
         let settings = NewGameSettings {
             map_size: MapSizePreset::SMALL,

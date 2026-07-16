@@ -18,7 +18,8 @@ mod setup;
 mod sync;
 
 use bevy::prelude::*;
-use openttdrs_core::{VehicleKind, default_engine_id, engine_for_vehicle};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{default_engine_id, engine_for_vehicle};
 
 use crate::render::TruckHandles;
 use crate::ui::floating_window::{FloatingWindowClosed, FloatingWindowId};

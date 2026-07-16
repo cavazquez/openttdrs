@@ -1,8 +1,8 @@
 //! Escenarios de economía / pueblo / averías.
 
+use crate::GameState;
 use crate::command::{Command, apply_command};
 use crate::map::TileCoord;
-use crate::GameState;
 
 pub fn build_loan_interest() -> GameState {
     let mut state = GameState::new(8, 8);

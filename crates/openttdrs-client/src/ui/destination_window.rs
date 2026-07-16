@@ -1,7 +1,7 @@
 //! Subventana «Destinos» para añadir paradas a la ruta del vehículo seleccionado.
 
 use bevy::prelude::*;
-use openttdrs_core::{StopKind, TileCoord, TileKind, VehicleKind};
+use openttdrs_core::prelude::*;
 
 use crate::render::RemapMapVisualsPending;
 use crate::state::{OrderPickState, SimWorld};

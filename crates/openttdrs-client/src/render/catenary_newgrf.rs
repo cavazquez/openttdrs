@@ -67,9 +67,9 @@ pub(crate) fn catenary_sprite_colored(
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use openttdrs_core::{
-        GameState, apply_newgrf_action5_catenary, build_grf_v2_action5_with_sprite,
-    };
+    use openttdrs_core::apply_newgrf_action5_catenary;
+    use openttdrs_core::newgrf_sprites::build_grf_v2_action5_with_sprite;
+    use openttdrs_core::prelude::GameState;
 
     #[test]
     fn catenary_sprite_cache_builds_handle_from_action5() {

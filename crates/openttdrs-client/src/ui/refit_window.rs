@@ -1,8 +1,11 @@
 //! Ventana de refit: lista de cargas disponibles en depósito.
 
 use bevy::prelude::*;
+use openttdrs_core::Command;
+#[cfg(test)]
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    CargoType, Command, cargo_display_name, consist_unit_ids, refit_allowed, refittable_cargo_types,
+    CargoType, cargo_display_name, consist_unit_ids, refit_allowed, refittable_cargo_types,
 };
 
 use crate::render::RemapMapVisualsPending;
@@ -396,7 +399,6 @@ pub(crate) fn refit_window_on_closed(
 mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
-    use openttdrs_core::{GameState, TileCoord, TileKind, Vehicle, VehicleKind};
 
     fn sim_with(state: GameState) -> SimWorld {
         SimWorld {

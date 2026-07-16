@@ -2,7 +2,8 @@
 
 use bevy::prelude::*;
 
-use openttdrs_core::{SoundId, TileCoord};
+use openttdrs_core::SoundId;
+use openttdrs_core::prelude::*;
 
 use crate::audio::ClientAssetRoot;
 use crate::bevy_app::UpdateSet;

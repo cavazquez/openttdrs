@@ -1,6 +1,7 @@
 //! Constructores de texto para los detalles del vehículo (tabs Info, Cargo, Capacity, Totals).
 
-use openttdrs_core::{VehicleKind, cargo_display_name, format_money};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{cargo_display_name, format_money};
 
 use crate::state::SimWorld;
 
@@ -203,7 +204,6 @@ fn vehicle_details_totals(vehicle: &openttdrs_core::Vehicle, sim: &SimWorld) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openttdrs_core::{GameState, TileCoord, Vehicle};
 
     #[test]
     fn road_speed_units_halve_for_display() {

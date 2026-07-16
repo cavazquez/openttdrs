@@ -1,7 +1,7 @@
 //! Fantasma de colocación de waypoint ferroviario (postes reales, no `tile_select`).
 
 use bevy::prelude::*;
-use openttdrs_core::{Map, TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 use crate::iso::{TILE_HALF_H, iso, tile_pos_half, tile_slope_and_min_z};
 use crate::render::{CompanyColoredSprites, TileAtlas};

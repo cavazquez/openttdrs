@@ -4,9 +4,10 @@
 //! vanilla con coste estimado y velocidad máxima.
 
 use bevy::prelude::*;
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    BridgeType, Command, bridge_available_at_tick, bridge_build_cost, bridge_middle_length,
-    bridge_spec, command_would_fail,
+    BridgeType, bridge_available_at_tick, bridge_build_cost, bridge_middle_length, bridge_spec,
 };
 
 use crate::render::RemapMapVisualsPending;

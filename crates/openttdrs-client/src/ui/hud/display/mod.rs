@@ -626,9 +626,8 @@ mod tests {
     use bevy::sprite::Anchor;
     use bevy::window::{PrimaryWindow, WindowResolution};
     use openttdrs_core::Vehicle;
-    use openttdrs_core::{
-        GameState, Industry, IndustryKind, Station, StopKind, Tile, TileCoord, TileKind,
-    };
+    use openttdrs_core::prelude::*;
+    use openttdrs_core::{Industry, IndustryKind};
 
     use crate::render::PrimaryGameCamera;
     use crate::settings::ClientPreferences;

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use bevy::window::PrimaryWindow;
-use openttdrs_core::{Map, TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 use crate::iso::{ISO_HW, ISO_QH, world_pos_to_tile_coord};
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};

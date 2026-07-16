@@ -1,7 +1,6 @@
-use openttdrs_core::{
-    Command, GameState, TileCoord, TileKind, Town, apply_command, command_would_fail,
-    generate_town_name, tile_slope_and_z,
-};
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
+use openttdrs_core::{Town, generate_town_name, tile_slope_and_z};
 
 use super::{
     PROCEDURAL_HOUSE_ID_MAX, PROCEDURAL_HOUSE_STYLE_SPREAD, PopCtx, in_preserve, min_distance_sq,

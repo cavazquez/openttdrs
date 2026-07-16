@@ -1,7 +1,8 @@
 //! Ventana de finanzas de la compañía (clic en dinero de la barra inferior).
 
 use bevy::prelude::*;
-use openttdrs_core::{Command, LOAN_INTERVAL, format_money};
+use openttdrs_core::Command;
+use openttdrs_core::{LOAN_INTERVAL, format_money};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{

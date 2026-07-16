@@ -3,7 +3,8 @@
 use bevy::asset::AssetPlugin;
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
-use openttdrs_core::{IndustryKind, Map, TileCoord, TileKind};
+use openttdrs_core::IndustryKind;
+use openttdrs_core::prelude::*;
 
 use crate::state::SimWorld;
 

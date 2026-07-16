@@ -6,7 +6,8 @@ mod towns;
 #[cfg(test)]
 mod tests;
 
-use openttdrs_core::{GameState, PreserveRect, TileCoord, TileKind, tile_slope_and_z};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{PreserveRect, tile_slope_and_z};
 
 use super::world::{NewGameSettings, PopulationDensity};
 

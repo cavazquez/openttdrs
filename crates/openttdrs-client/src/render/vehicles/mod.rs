@@ -31,7 +31,7 @@ mod tests {
     use super::*;
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
-    use openttdrs_core::{DIR_S, DIR_SW, GameState, TileCoord, TileKind, Vehicle, VehicleKind};
+    use openttdrs_core::prelude::*;
 
     use assets::vehicle_gfx::{BUS_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS};
     use assets::{TruckHandles, vehicle_layers};
@@ -191,10 +191,10 @@ mod tests {
     #[test]
     fn newgrf_train_sprite_cache_and_pos_use_decoded_views() {
         use crate::sprites::CompanyColour;
-        use openttdrs_core::{
-            apply_newgrf_vehicles_trains, build_action0_train_payload,
-            build_grf_v2_train_with_preview_sprite, extrapolate_vehicle_pose,
-        };
+        use openttdrs_core::apply_newgrf_vehicles_trains;
+        use openttdrs_core::extrapolate_vehicle_pose;
+        use openttdrs_core::newgrf_actions::build_action0_train_payload;
+        use openttdrs_core::newgrf_sprites::build_grf_v2_train_with_preview_sprite;
 
         let a0 = build_action0_train_payload(1960, 100, 800, "InWorld Loco");
         let mut indices = vec![0u8; 8 * 8];

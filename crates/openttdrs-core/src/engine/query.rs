@@ -204,7 +204,6 @@ pub fn engine_for_vehicle(kind: VehicleKind, id: u16) -> &'static EngineDef {
     engine_for_vehicle(kind, default_engine_id(kind))
 }
 
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -238,5 +237,4 @@ mod tests {
         assert_eq!(train_sprite_group(2), 2);
         assert_eq!(train_sprite_group(23), 4);
     }
-
 }

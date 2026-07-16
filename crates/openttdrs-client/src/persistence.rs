@@ -1,7 +1,8 @@
 //! Hotkeys de guardado/carga JSON del estado de simulación.
 
 use bevy::prelude::*;
-use openttdrs_core::{GameState, save};
+use openttdrs_core::prelude::*;
+use openttdrs_core::save;
 
 use crate::bevy_app::UpdateSet;
 use crate::render::{RemapMapVisualsPending, VehicleIndex};

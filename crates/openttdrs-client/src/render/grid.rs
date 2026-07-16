@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use openttdrs_core::{Map, Tile, TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 use crate::iso::{iso, tile_slope_and_min_z};
 use crate::render::MapTileChunk;

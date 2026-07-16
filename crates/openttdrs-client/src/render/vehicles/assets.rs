@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use openttdrs_core::{EngineDef, Vehicle, VehicleKind};
+use openttdrs_core::EngineDef;
+use openttdrs_core::prelude::*;
 
 use crate::render::CompanyColoredSprites;
 use crate::render::newgrf_cache::{

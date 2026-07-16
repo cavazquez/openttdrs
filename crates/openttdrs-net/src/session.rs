@@ -7,7 +7,8 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use openttdrs_core::{Command, GameState, apply_command};
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
 
 use crate::codec::{read_message, write_message};
 use crate::protocol::{NetError, NetMessage, PROTOCOL_VERSION};

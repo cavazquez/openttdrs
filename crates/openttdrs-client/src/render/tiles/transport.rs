@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use openttdrs_core::{Climate, Map, RoadTypeDef, TileKind, bridge_above_axis_from_mapt};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{Climate, RoadTypeDef, bridge_above_axis_from_mapt};
 
 use super::{TRAM_OVERLAY_LAYER_FRAC, spawn_ground_sprite, spawn_rail_foundation};
 use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, overlay_pos, remap_tile_offset, tile_pos_half};

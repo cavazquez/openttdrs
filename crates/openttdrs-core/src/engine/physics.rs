@@ -114,7 +114,6 @@ pub fn progress_step_for_speed(max_speed: u16, direction: VehicleDirection) -> u
     step.clamp(1, 255) as u8
 }
 
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -197,5 +196,4 @@ mod tests {
         assert!(bus > truck);
         assert!(truck > train);
     }
-
 }

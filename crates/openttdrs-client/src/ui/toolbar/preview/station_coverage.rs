@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use openttdrs_core::{Map, STATION_COVERAGE_RADIUS, TileCoord, station_coverage_at};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{STATION_COVERAGE_RADIUS, station_coverage_at};
 
 use crate::iso::tile_pos;
 

@@ -1,7 +1,7 @@
 //! Constantes y lógica de sprites de `OpenGFX`.
 
 use bevy::prelude::Color;
-use openttdrs_core::{Map, TileCoord, TileKind};
+use openttdrs_core::prelude::*;
 
 #[path = "sprites/bridge_draw_data_generated.rs"]
 #[allow(dead_code)]

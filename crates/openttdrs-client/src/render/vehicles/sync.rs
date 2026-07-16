@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use openttdrs_core::{Vehicle, extrapolate_vehicle_pose};
+use openttdrs_core::extrapolate_vehicle_pose;
+use openttdrs_core::prelude::*;
 
 use crate::render::CompanyColoredSprites;
 use crate::simulation::SimClock;

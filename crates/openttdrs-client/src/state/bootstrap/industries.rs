@@ -1,6 +1,6 @@
+use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    GameState, Industry, IndustryKind, IndustrySpec, OttdmapExtras, SavIndustry, TileCoord,
-    TileKind, industry_tiles_mergeable,
+    Industry, IndustryKind, IndustrySpec, OttdmapExtras, SavIndustry, industry_tiles_mergeable,
 };
 use std::collections::{HashSet, VecDeque};
 
@@ -329,7 +329,8 @@ mod tests {
         classify_industry_kind_from_gfx, classify_industry_spec_from_gfx, industry_group_from_gfx,
         place_industries, place_industries_from_sav,
     };
-    use openttdrs_core::{GameState, IndustryKind, IndustrySpec, SavIndustry, TileCoord, TileKind};
+    use openttdrs_core::prelude::*;
+    use openttdrs_core::{IndustryKind, IndustrySpec, SavIndustry};
 
     #[test]
     fn classify_toyland_industry_specs_from_gfx() {

@@ -1,7 +1,9 @@
 //! Ventana flotante de horario por orden (Sprint F4).
 
 use bevy::prelude::*;
-use openttdrs_core::{Command, VehicleOrder, cycle_travel_ticks, cycle_wait_ticks};
+use openttdrs_core::Command;
+use openttdrs_core::prelude::*;
+use openttdrs_core::{cycle_travel_ticks, cycle_wait_ticks};
 
 use crate::render::RemapMapVisualsPending;
 use crate::state::SimWorld;

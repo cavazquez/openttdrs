@@ -1,6 +1,5 @@
-use openttdrs_core::{
-    GameState, PathNetwork, Station, TileCoord, TileKind, Vehicle, VehicleKind, find_path,
-};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{PathNetwork, find_path};
 
 pub(crate) fn place_stations(state: &mut GameState) {
     let (mw, mh) = state.map.dimensions();
@@ -85,7 +84,8 @@ pub(crate) fn place_vehicles(state: &mut GameState) {
 #[cfg(test)]
 mod tests {
     use super::{place_roads, place_stations, place_vehicles};
-    use openttdrs_core::{GameState, Industry, IndustryKind, TileCoord, TileKind, VehicleKind};
+    use openttdrs_core::prelude::*;
+    use openttdrs_core::{Industry, IndustryKind};
 
     #[test]
     fn place_stations_creates_one_station_per_industry() {

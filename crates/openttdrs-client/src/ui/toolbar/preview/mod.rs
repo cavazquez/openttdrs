@@ -255,15 +255,14 @@ mod tests {
     use bevy::ecs::world::World;
     use bevy::input::ButtonInput;
     use bevy::prelude::{MouseButton, default};
-    use openttdrs_core::{
-        Industry, IndustryKind, IndustrySpec, Map, Tile, TileCoord, TileKind, industry_template,
-    };
+    use openttdrs_core::Command;
+    use openttdrs_core::prelude::*;
+    use openttdrs_core::{Industry, IndustryKind, IndustrySpec, industry_template};
 
     use super::industry::industry_spec_for_action;
     use super::station_coverage::station_preview_has_coverage;
     use super::validation::{action_is_tunnel, preview_build_command_valid};
     use crate::state::SimWorld;
-    use openttdrs_core::{Command, GameState, command_would_fail};
 
     fn run_rotate(world: &mut World, tool: Option<BuildMenuAction>, drag_armed: bool) {
         let mut mouse = ButtonInput::<MouseButton>::default();

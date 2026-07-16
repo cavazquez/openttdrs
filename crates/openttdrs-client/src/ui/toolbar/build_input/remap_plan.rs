@@ -1,6 +1,7 @@
 //! Lógica pura para calcular tiles que deben ser remapeados visualmente.
 
-use openttdrs_core::{Map, TileCoord, industry_template};
+use openttdrs_core::industry_template;
+use openttdrs_core::prelude::*;
 
 use crate::ui::toolbar::BuildMenuAction;
 use crate::ui::toolbar::preview::industry_spec_for_action;

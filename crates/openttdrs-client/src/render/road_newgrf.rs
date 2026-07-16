@@ -97,10 +97,12 @@ pub(crate) fn road_newgrf_view_index(tileh: u8, road_bits: u8) -> usize {
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use openttdrs_core::{
-        GameState, apply_newgrf_road_types, build_action0_roadtype_payload,
-        build_grf_v2_roadtype_with_preview_sprite, map::TileKind, set_tram_road_type_on_tile,
-    };
+    use openttdrs_core::apply_newgrf_road_types;
+    use openttdrs_core::map::TileKind;
+    use openttdrs_core::newgrf_actions::build_action0_roadtype_payload;
+    use openttdrs_core::newgrf_sprites::build_grf_v2_roadtype_with_preview_sprite;
+    use openttdrs_core::prelude::GameState;
+    use openttdrs_core::set_tram_road_type_on_tile;
 
     #[test]
     fn road_sprite_cache_builds_handle_from_catalog_views() {

@@ -2,7 +2,8 @@
 
 use bevy::prelude::*;
 
-use openttdrs_core::{ConstructionKind, SimEvent, SoundId, VehicleRunningPhase};
+use openttdrs_core::prelude::*;
+use openttdrs_core::{ConstructionKind, SoundId, VehicleRunningPhase};
 
 use crate::audio::PlayWorldSfx;
 use crate::bevy_app::{FixedUpdateSet, UpdateSet};
@@ -216,7 +217,6 @@ fn dispatch_sim_events(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use openttdrs_core::{GameState, TileCoord};
 
     #[test]
     fn income_event_drains_from_game_state() {

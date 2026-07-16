@@ -4,7 +4,8 @@
 //! la simulación; el cliente lee el frame vivo del mapa cada frame.
 
 use bevy::prelude::*;
-use openttdrs_core::{TileCoord, industry_gfx as core_industry_gfx};
+use openttdrs_core::industry_gfx as core_industry_gfx;
+use openttdrs_core::prelude::*;
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::{overlay_pos, wang_hash};

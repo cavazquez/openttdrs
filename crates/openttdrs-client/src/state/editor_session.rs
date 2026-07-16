@@ -50,9 +50,16 @@ pub fn editor_new_game_settings() -> NewGameSettings {
 
 /// Activa cheats de sandbox para editar sin límites de dinero/propiedad.
 pub fn apply_editor_sandbox(sim: &mut SimWorld) {
-    sim.state.cheats.enabled = true;
-    sim.state.cheats.infinite_money = true;
-    sim.state.cheats.magic_bulldozer = true;
+    use openttdrs_core::Command;
+    use openttdrs_core::prelude::apply_command;
+
+    let _ = apply_command(&mut sim.state, &Command::CheatSetEnabled(true));
+    if !sim.state.cheats.infinite_money {
+        let _ = apply_command(&mut sim.state, &Command::CheatToggleInfiniteMoney);
+    }
+    if !sim.state.cheats.magic_bulldozer {
+        let _ = apply_command(&mut sim.state, &Command::CheatToggleMagicBulldozer);
+    }
 }
 
 /// Directorio de escenarios JSON del menú.
@@ -61,7 +68,8 @@ pub fn scenarios_save_dir() -> std::path::PathBuf {
     std::path::PathBuf::from("save/scenarios")
 }
 
-/// Regenera el paisaje in-place (editor GenLand). Pisa el mapa y limpia entidades.
+/// Regenera el paisaje in-place (helper de tests; producción usa `Command::RegenerateLandscape`).
+#[cfg(test)]
 pub fn regenerate_landscape_in_place(
     state: &mut openttdrs_core::GameState,
     climate: Climate,
@@ -69,24 +77,19 @@ pub fn regenerate_landscape_in_place(
     island: bool,
     roughness: TerrainRoughness,
 ) -> Result<(), String> {
-    let seed = if seed == 0 { 0xDEAD_BEEF } else { seed };
-    let cfg = openttdrs_core::WorldGenConfig {
-        climate,
-        seed,
-        sea_level: 1,
-        island,
-        height_span: roughness.height_span(),
-    };
-    openttdrs_core::apply_world_gen(&mut state.map, &cfg, &[])
-        .map_err(|e| format!("world_gen: {e:?}"))?;
-    state.climate = climate;
-    state.world_seed = seed;
-    state.towns.clear();
-    state.industries.clear();
-    state.stations.clear();
-    state.vehicles.clear();
-    state.signs.clear();
-    Ok(())
+    use openttdrs_core::Command;
+    use openttdrs_core::prelude::apply_command;
+
+    apply_command(
+        state,
+        &Command::RegenerateLandscape {
+            climate,
+            seed,
+            island,
+            height_span: roughness.height_span(),
+        },
+    )
+    .map_err(|e| format!("world_gen: {e:?}"))
 }
 
 #[cfg(test)]

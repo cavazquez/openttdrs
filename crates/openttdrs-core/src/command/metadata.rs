@@ -261,6 +261,10 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::SetCurrentAirportClass(..)
         | Command::SetCurrentAirportSpec(..)
         | Command::SetAiSettings(..) => CommandEffects::none(),
+
+        Command::FinalizeRoadDragLine { .. } | Command::RegenerateLandscape { .. } => {
+            CommandEffects::map_only()
+        }
     }
 }
 

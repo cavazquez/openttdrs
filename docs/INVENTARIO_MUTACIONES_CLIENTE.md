@@ -29,14 +29,19 @@ Fecha: 2026-07-16. Crate: `openttdrs-client`. ADR red: [adr/0001-multiplayer-v1.
 | Selectores vía/road/tram | `rail_type_selector`, `road_type_selector` | `SetCurrentRailType` / `Road` / `Tram` |
 | Estación / aeropuerto | `rail_station_window`, `airport_picker_window` | `SetCurrentStation*` / `Airport*` |
 | AI TransCargo | `ui/ai_settings_window.rs` | `SetAiSettings` |
+| Drag carretera | `ui/toolbar/build_input/drag.rs` | `FinalizeRoadDragLine` |
+| Editor GenLand | `ui/genland_window.rs` / `editor_session` | `RegenerateLandscape` |
+| Editor sandbox cheats | `apply_editor_sandbox` | `CheatSetEnabled` / toggles |
 
-### Deuda I8 restante (debería ser `Command` o settings replicados)
+### Estado local (no debe ser `Command`)
 
-| Grupo | Archivos representativos | Qué muta |
-|-------|--------------------------|----------|
-| Story / GS UI | `ui/story_window.rs` | `gs.story_index` (navegación UI; revisar si debe ser local) |
-| Editor / sandbox | `state/editor_session.rs`, escenarios heightmap | clima, seed, clear entidades, cheats |
-| Drag helper | `ui/toolbar/build_input/drag.rs` → `finalize_road_drag_line` | post-proceso mapa tras colocar |
+| Grupo | Archivos | Motivo |
+|-------|----------|--------|
+| Story page nav | `ui/story_window.rs` → `StoryWindowState.page_index` | Navegación por cliente; no afecta sim |
+
+### Deuda I8 restante
+
+Ninguna mutación productiva pendiente del inventario #114 (tick/load/bootstrap siguen legítimos).
 
 ### Neutro / revisar
 
@@ -49,7 +54,7 @@ Para listen-server / cliente-only, todo lo marcado **Deuda I8** que altere estad
 
 ## Follow-up sugeridos (no bloquean cierre de #114)
 
-1. ~~Commands para pathfinding / cargo_dist / selectores / color / AI.~~ Hecho.
-2. Editor/sandbox solo en modo single-player o como comandos de host.
-3. Asegurar que `finalize_road_drag_line` no duplique efectos ya cubiertos por el comando de colocación.
-4. Decidir si `gs.story_index` es estado local de UI o comando.
+1. ~~Commands settings / selectores / color / AI.~~ Hecho.
+2. ~~Editor GenLand + sandbox cheats vía Command.~~ Hecho.
+3. ~~`FinalizeRoadDragLine` en el log (no solo local).~~ Hecho.
+4. ~~`story_index` → `StoryWindowState.page_index` local.~~ Hecho.

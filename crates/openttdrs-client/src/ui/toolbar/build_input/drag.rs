@@ -1,8 +1,8 @@
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    ROAD_PLACE_FORCE_AXIS, finalize_road_drag_line, infer_road_drag_axis, resolve_tunnel_end,
-    road_drag_line_tiles, road_locked_tool_axis, tunnel_preview_path,
+    ROAD_PLACE_FORCE_AXIS, infer_road_drag_axis, resolve_tunnel_end, road_drag_line_tiles,
+    road_locked_tool_axis, tunnel_preview_path,
 };
 
 use crate::state::SimWorld;
@@ -294,7 +294,13 @@ pub(crate) fn apply_drag_action(
             }
         }
         if changed && !tram {
-            let _ = finalize_road_drag_line(&mut sim.state, &placed, axis);
+            let _ = crate::network::apply_player_command(
+                &mut sim.state,
+                &Command::FinalizeRoadDragLine {
+                    tiles: placed,
+                    axis,
+                },
+            );
         }
         return (changed, if changed { None } else { last_err });
     }

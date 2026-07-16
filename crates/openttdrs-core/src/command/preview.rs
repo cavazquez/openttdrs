@@ -315,7 +315,9 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::SetCurrentStationSpec(..)
         | Command::SetCurrentAirportClass(..)
         | Command::SetCurrentAirportSpec(..)
-        | Command::SetAiSettings(..) => None,
+        | Command::SetAiSettings(..)
+        | Command::FinalizeRoadDragLine { .. }
+        | Command::RegenerateLandscape { .. } => None,
     }
 }
 

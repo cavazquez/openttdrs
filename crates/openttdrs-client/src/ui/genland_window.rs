@@ -5,7 +5,7 @@ use openttdrs_core::Climate;
 
 use crate::render::RemapMapVisualsPending;
 use crate::state::bootstrap::TerrainRoughness;
-use crate::state::{EditorSession, SimWorld, regenerate_landscape_in_place};
+use crate::state::{EditorSession, SimWorld};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
     spawn_floating_window, window_text_font,
@@ -252,12 +252,14 @@ pub(crate) fn handle_genland_buttons(
                 let Some(sim) = sim.as_deref_mut() else {
                     continue;
                 };
-                match regenerate_landscape_in_place(
+                match crate::network::apply_player_command(
                     &mut sim.state,
-                    state.climate,
-                    state.seed,
-                    state.island,
-                    state.roughness,
+                    &openttdrs_core::Command::RegenerateLandscape {
+                        climate: state.climate,
+                        seed: state.seed,
+                        island: state.island,
+                        height_span: state.roughness.height_span(),
+                    },
                 ) {
                     Ok(()) => {
                         if let Some(remap) = remap.as_deref_mut() {

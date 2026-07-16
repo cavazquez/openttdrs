@@ -552,5 +552,33 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             state.ai = next;
             Ok(())
         }
+        Command::FinalizeRoadDragLine { tiles, axis } => {
+            transport::finalize_road_drag_line(state, tiles, *axis)
+        }
+        Command::RegenerateLandscape {
+            climate,
+            seed,
+            island,
+            height_span,
+        } => {
+            let seed = if *seed == 0 { 0xDEAD_BEEF } else { *seed };
+            let cfg = crate::world_gen::WorldGenConfig {
+                climate: *climate,
+                seed,
+                sea_level: 1,
+                island: *island,
+                height_span: *height_span,
+            };
+            crate::world_gen::apply_world_gen(&mut state.map, &cfg, &[])
+                .map_err(|_| CommandError::OutOfBounds)?;
+            state.climate = *climate;
+            state.world_seed = seed;
+            state.towns.clear();
+            state.industries.clear();
+            state.stations.clear();
+            state.vehicles.clear();
+            state.signs.clear();
+            Ok(())
+        }
     }
 }

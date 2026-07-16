@@ -17,6 +17,8 @@ const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
 #[derive(Resource, Default)]
 pub(crate) struct StoryWindowState {
     pub(crate) open: bool,
+    /// Índice de página local (no muta `GameState.gs`; cada cliente navega solo).
+    pub(crate) page_index: usize,
 }
 
 #[derive(Component)]
@@ -139,8 +141,8 @@ pub(crate) fn open_story_from_routes(
 }
 
 pub(crate) fn handle_story_nav_buttons(
-    state: Res<StoryWindowState>,
-    mut sim: Option<ResMut<SimWorld>>,
+    mut state: ResMut<StoryWindowState>,
+    sim: Option<Res<SimWorld>>,
     buttons: Query<
         (&Interaction, &StoryNavAction),
         (Changed<Interaction>, With<Button>, With<StoryNavAction>),
@@ -149,7 +151,7 @@ pub(crate) fn handle_story_nav_buttons(
     if !state.open {
         return;
     }
-    let Some(sim) = sim.as_deref_mut() else {
+    let Some(sim) = sim.as_deref() else {
         return;
     };
     if !sim.state.gs.enabled || sim.state.gs.story_pages.is_empty() {
@@ -162,11 +164,11 @@ pub(crate) fn handle_story_nav_buttons(
         }
         match *action {
             StoryNavAction::Prev => {
-                sim.state.gs.story_index = sim.state.gs.story_index.saturating_sub(1);
+                state.page_index = state.page_index.saturating_sub(1);
             }
             StoryNavAction::Next => {
-                if sim.state.gs.story_index + 1 < n {
-                    sim.state.gs.story_index += 1;
+                if state.page_index + 1 < n {
+                    state.page_index += 1;
                 }
             }
         }
@@ -225,7 +227,7 @@ pub(crate) fn sync_story_window(
             "0 / 0".into(),
         )
     } else {
-        let idx = gs.story_index.min(gs.story_pages.len() - 1);
+        let idx = state.page_index.min(gs.story_pages.len() - 1);
         let page = &gs.story_pages[idx];
         (
             page.title.clone(),

@@ -520,3 +520,58 @@ fn set_ai_settings_clamps() {
     assert_eq!(s.ai.build_money_threshold, 10_000);
     assert_eq!(s.ai.max_routes, 4);
 }
+
+#[test]
+fn finalize_road_drag_line_command_merges_bits() {
+    let mut s = GameState::new(16, 16);
+    let a = TileCoord::new(3, 4);
+    let b = TileCoord::new(4, 4);
+    apply_command(
+        &mut s,
+        &Command::PlaceRoadBits(a, 0x0A | crate::ROAD_PLACE_FORCE_AXIS),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRoadBits(b, 0x0A | crate::ROAD_PLACE_FORCE_AXIS),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::FinalizeRoadDragLine {
+            tiles: vec![a, b],
+            axis: 0x0A,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.map.get_kind(a), Some(TileKind::Road));
+    assert_eq!(s.map.get_kind(b), Some(TileKind::Road));
+}
+
+#[test]
+fn regenerate_landscape_clears_entities_via_command() {
+    let mut s = GameState::new(16, 16);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(2, 2))).unwrap();
+    s.towns.clear();
+    s.towns.push(crate::Town {
+        id: 1,
+        pos: TileCoord::new(1, 1),
+        name: "X".into(),
+        population: 100,
+        ..crate::Town::default()
+    });
+    assert!(!s.towns.is_empty());
+    apply_command(
+        &mut s,
+        &Command::RegenerateLandscape {
+            climate: crate::Climate::Temperate,
+            seed: 99,
+            island: false,
+            height_span: 6,
+        },
+    )
+    .unwrap();
+    assert_eq!(s.world_seed, 99);
+    assert!(s.towns.is_empty());
+    assert!(s.vehicles.is_empty());
+}

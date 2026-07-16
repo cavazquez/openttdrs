@@ -404,4 +404,16 @@ pub enum Command {
     SetCurrentAirportSpec(crate::airport_class::AirportSpecId),
     /// Ajustes de IA TransCargo de la partida.
     SetAiSettings(crate::ai::AiSettings),
+    /// Post-proceso de arrastre de carretera (merge/propagate bits entre vecinos).
+    FinalizeRoadDragLine {
+        tiles: Vec<TileCoord>,
+        axis: u8,
+    },
+    /// Regenera el mapa (editor GenLand): world_gen + limpia entidades.
+    RegenerateLandscape {
+        climate: crate::world_gen::Climate,
+        seed: u64,
+        island: bool,
+        height_span: u8,
+    },
 }

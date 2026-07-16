@@ -5,7 +5,7 @@ use bevy::prelude::*;
 use openttdrs_core::{ConstructionKind, SimEvent, SoundId, VehicleRunningPhase};
 
 use crate::audio::PlayWorldSfx;
-use crate::bevy_app::UpdateSet;
+use crate::bevy_app::{FixedUpdateSet, UpdateSet};
 use crate::render::effect_fx::FxSpawnQueue;
 use crate::state::{ClientScreen, SimWorld};
 use crate::ui::SimHudControls;
@@ -26,7 +26,9 @@ impl Plugin for SimEventsPlugin {
             )
             .add_systems(
                 FixedUpdate,
-                drain_sim_events_from_core.run_if(in_state(ClientScreen::InGame)),
+                drain_sim_events_from_core
+                    .in_set(FixedUpdateSet::Events)
+                    .run_if(in_state(ClientScreen::InGame)),
             )
             .add_systems(
                 Update,
@@ -228,5 +230,19 @@ mod tests {
         });
         let drained = sim.state.runtime.pending_sim_events.drain();
         assert_eq!(drained.len(), 1);
+    }
+
+    #[test]
+    fn pending_bridge_holds_events_until_dispatch() {
+        // Latencia FixedUpdate → Update: drain llena Pending; dispatch vacía.
+        let mut pending = PendingSimEvents::default();
+        pending.0.push(SimEvent::Income {
+            amount: 1,
+            at: TileCoord::new(0, 0),
+        });
+        assert_eq!(pending.0.len(), 1);
+        let drained: Vec<_> = pending.0.drain(..).collect();
+        assert_eq!(drained.len(), 1);
+        assert!(pending.0.is_empty());
     }
 }

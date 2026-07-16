@@ -6,7 +6,7 @@ use bevy::prelude::*;
 use openttdrs_core::{GameState, apply_command};
 use openttdrs_net::{ClientSession, ListenServer, SessionEvent};
 
-use crate::bevy_app::UpdateSet;
+use crate::bevy_app::{FixedUpdateSet, UpdateSet};
 use crate::network::cli::NetCli;
 use crate::network::dispatch::{install_client, install_offline, install_server};
 use crate::render::{MapVisualLayer, ShoreTile, VehicleIndex, WaterTile};
@@ -116,11 +116,13 @@ impl Plugin for NetworkPlugin {
             )
             .add_systems(
                 FixedUpdate,
-                broadcast_tick_after_step.run_if(
-                    in_state(ClientScreen::InGame)
-                        .and_then(in_state(SimRunState::Running))
-                        .and_then(is_listen_server),
-                ),
+                broadcast_tick_after_step
+                    .in_set(FixedUpdateSet::Events)
+                    .run_if(
+                        in_state(ClientScreen::InGame)
+                            .and_then(in_state(SimRunState::Running))
+                            .and_then(is_listen_server),
+                    ),
             );
     }
 }

@@ -125,7 +125,7 @@ impl Plugin for WorldRenderPlugin {
                     apply_remap_map_visuals,
                 )
                     .chain()
-                    .in_set(UpdateSet::Camera)
+                    .in_set(UpdateSet::RenderRefresh)
                     .after(crate::camera::move_camera)
                     .run_if(in_state(ClientScreen::InGame)),
             );

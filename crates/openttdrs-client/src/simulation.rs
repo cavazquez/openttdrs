@@ -6,6 +6,7 @@ use bevy::prelude::*;
 
 use openttdrs_core::SIM_TICKS_PER_SECOND;
 
+use crate::bevy_app::FixedUpdateSet;
 use crate::network::{NetworkRole, NetworkRuntime};
 use crate::render::{
     MapTileChunk, RemapMapVisualsPending, VehicleIndex, large_map_viewport_cull_enabled,
@@ -37,9 +38,12 @@ impl Plugin for SimulationPlugin {
             )
             .add_systems(
                 FixedUpdate,
-                (step_sim, flag_map_tile_dirty_remap).chain().run_if(
-                    in_state(ClientScreen::InGame).and_then(in_state(SimRunState::Running)),
-                ),
+                (step_sim, flag_map_tile_dirty_remap)
+                    .chain()
+                    .in_set(FixedUpdateSet::Sim)
+                    .run_if(
+                        in_state(ClientScreen::InGame).and_then(in_state(SimRunState::Running)),
+                    ),
             );
     }
 }

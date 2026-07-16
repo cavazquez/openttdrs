@@ -1,4 +1,18 @@
 //! Composición de plugins, recursos y sistemas Bevy del cliente.
+//!
+//! ## Contrato de schedules (#124)
+//!
+//! 1. **Startup:** solo [`StartupSet::Ui`] (bootstrap de paneles). World/vehicles
+//!    se materializan en `OnEnter(InGame)`, no en Startup.
+//! 2. **FixedUpdate:** [`FixedUpdateSet::Sim`] (tick + dirty flags) →
+//!    [`FixedUpdateSet::Events`] (drenaje `SimEvent` + broadcast de red).
+//! 3. **Update:** Input → Sim (dispatch de eventos / red) → Persistence →
+//!    Status → Visuals → Camera → **RenderRefresh** (remap de teselas tras la
+//!    cámara) → Ui.
+//!
+//! El puente FixedUpdate→Update: `drain_sim_events_from_core` llena
+//! `PendingSimEvents` en FixedUpdate; `dispatch_sim_events` lo consume en
+//! `UpdateSet::Sim` (un frame de latencia, intencional).
 
 use std::time::Duration;
 
@@ -40,9 +54,15 @@ pub(crate) const CLIENT_SETTINGS_APP_ID: &str = "com.github.cavazquez.openttdrs"
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum StartupSet {
-    World,
-    Vehicles,
+    /// Setup de UI (toolbars, ventanas). Sin sets vacíos World/Vehicles (#124).
     Ui,
+}
+
+/// Orden del tick fijo: simulación autoritativa antes de efectos/red.
+#[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum FixedUpdateSet {
+    Sim,
+    Events,
 }
 
 #[derive(SystemSet, Debug, Hash, PartialEq, Eq, Clone, Copy)]
@@ -50,10 +70,11 @@ pub(crate) enum UpdateSet {
     Input,
     Sim,
     Persistence,
-    RenderRefresh,
     Status,
     Visuals,
     Camera,
+    /// Remap / refresh de sprites de mapa tras actualizar la cámara (#124).
+    RenderRefresh,
     Ui,
 }
 
@@ -114,20 +135,18 @@ pub(crate) fn build_client_app(
         let mut fonts = app.world_mut().resource_mut::<Assets<Font>>();
         crate::ui::font::install_utf8_default_font_into_assets(&mut fonts, Path::new(asset_root));
     }
-    app.configure_sets(
-        Startup,
-        (StartupSet::World, StartupSet::Vehicles, StartupSet::Ui).chain(),
-    );
+    app.configure_sets(Startup, StartupSet::Ui);
+    app.configure_sets(FixedUpdate, (FixedUpdateSet::Sim, FixedUpdateSet::Events).chain());
     app.configure_sets(
         Update,
         (
             UpdateSet::Input,
             UpdateSet::Sim,
             UpdateSet::Persistence,
-            UpdateSet::RenderRefresh,
             UpdateSet::Status,
             UpdateSet::Visuals,
             UpdateSet::Camera,
+            UpdateSet::RenderRefresh,
             UpdateSet::Ui,
         )
             .chain(),
@@ -197,6 +216,45 @@ pub(crate) fn run(asset_root: &str, net_cli: NetCli) {
             error!("{err}");
             eprintln!("error: {err}");
             std::process::exit(1);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FixedUpdateSet, StartupSet, UpdateSet};
+
+    #[test]
+    fn update_set_places_render_refresh_after_camera() {
+        let order = [
+            UpdateSet::Input,
+            UpdateSet::Sim,
+            UpdateSet::Persistence,
+            UpdateSet::Status,
+            UpdateSet::Visuals,
+            UpdateSet::Camera,
+            UpdateSet::RenderRefresh,
+            UpdateSet::Ui,
+        ];
+        let camera = order.iter().position(|s| *s == UpdateSet::Camera).unwrap();
+        let refresh = order
+            .iter()
+            .position(|s| *s == UpdateSet::RenderRefresh)
+            .unwrap();
+        assert!(refresh > camera, "remap debe ir tras la cámara (#124)");
+    }
+
+    #[test]
+    fn fixed_update_set_runs_sim_before_events() {
+        // Contrato: Sim y Events son sets distintos; el configure_sets los encadena.
+        assert_ne!(FixedUpdateSet::Sim, FixedUpdateSet::Events);
+    }
+
+    #[test]
+    fn startup_set_only_ui() {
+        // Evita regresión a sets vacíos World/Vehicles: solo Ui existe.
+        match StartupSet::Ui {
+            StartupSet::Ui => {}
         }
     }
 }

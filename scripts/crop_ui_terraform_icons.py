@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Recorta iconos UI de terraform (OpenGFX) a assets/opengfx/tiles/.
+"""Recorta iconos UI de toolbar (OpenGFX) a assets/opengfx/tiles/.
 
 Elevar/bajar: sprites 694–695 en el NFO base.
 Nivelar: sprite 4964 (`SPR_IMG_LEVEL_LAND` = `SPR_OPENTTD_BASE + 68`) en el GRF extra.
+Ajustes / audio: sprites 751 (`SPR_IMG_SETTINGS`) y 713 (`SPR_IMG_MUSIC`).
 
-Útil tras añadir herramientas de paisaje sin volver a correr descargar_graficos.sh entero.
+Útil sin volver a correr descargar_graficos.sh entero.
 Requiere assets/opengfx/opengfx2-32ez/sprites/ (base + extra ya extraídos).
 
 Uso:
@@ -37,6 +38,8 @@ SPRITES = [
     (694, "ui_terraform_up.png", "ogfx21_base_32ez.nfo"),
     (695, "ui_terraform_down.png", "ogfx21_base_32ez.nfo"),
     (4964, "ui_terraform_level.png", "ogfx2e_extra_32ez.nfo"),
+    (751, "ui_settings.png", "ogfx21_base_32ez.nfo"),
+    (713, "ui_sound.png", "ogfx21_base_32ez.nfo"),
 ]
 
 

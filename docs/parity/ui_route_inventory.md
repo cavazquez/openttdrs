@@ -4,8 +4,8 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 `FloatingWindowId::ALL` / `BuildMenuAction::ALL` / etc. (test
 `ui_enum_inventory_counts`).
 
-**Fecha:** 2026-07-14 · **FloatingWindowId:** 35 · **BuildMenuAction:** 66 ·
-**SaveMenuAction:** 20 · **ToolbarGroup:** 8
+**Fecha:** 2026-07-16 · **FloatingWindowId:** 41 · **BuildMenuAction:** 66 ·
+**SaveMenuAction:** 22 · **ToolbarGroup:** 8
 
 ## Ventanas flotantes (`FloatingWindowId`)
 
@@ -19,7 +19,8 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | SubsidyList | menú Economía | |
 | Depot | clic depósito | |
 | BuyVehicle | depósito → comprar | |
-| Vehicle | clic vehículo | |
+| Vehicle | clic vehículo / depósito | Vista (`VehicleView`) |
+| VehicleDetails | View → Detalles | Tabs Info/Carga/Capacidad/Totales (#173) |
 | RailStationPicker | herramienta estación rail | |
 | AirportPicker | herramienta aeropuerto | |
 | BridgePicker | tras tramo de puente | |

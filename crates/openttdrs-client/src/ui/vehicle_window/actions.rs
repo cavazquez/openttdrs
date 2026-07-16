@@ -1,4 +1,4 @@
-//! Manejo de acciones de botones de la ventana de vehículo.
+//! Manejo de acciones de botones de la ventana de vista del vehículo.
 
 use bevy::prelude::*;
 use bevy::text::EditableText;
@@ -12,23 +12,15 @@ use crate::state::{OrderPickState, SimWorld};
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::refit_window::RefitWindowState;
 use crate::ui::toolbar::{OrderEditState, open_order_edit_for_vehicle};
+use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 
-use super::{
-    VehicleDetailsTabButton, VehicleWindowButton, VehicleWindowRenameInput, VehicleWindowState,
-};
+use super::{VehicleWindowButton, VehicleWindowRenameInput, VehicleWindowState};
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_vehicle_window_buttons(
     mut buttons: Query<(&Interaction, &VehicleWindowButton), (Changed<Interaction>, With<Button>)>,
-    mut tab_buttons: Query<
-        (&Interaction, &VehicleDetailsTabButton),
-        (
-            Changed<Interaction>,
-            With<Button>,
-            Without<VehicleWindowButton>,
-        ),
-    >,
     mut window_state: ResMut<VehicleWindowState>,
+    mut details_state: ResMut<VehicleDetailsWindowState>,
     mut order_state: ResMut<OrderEditState>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
     mut sim: ResMut<SimWorld>,
@@ -39,11 +31,6 @@ pub(crate) fn handle_vehicle_window_buttons(
     mut refit_window: ResMut<RefitWindowState>,
     time: Res<Time>,
 ) {
-    for (interaction, tab) in &mut tab_buttons {
-        if *interaction == Interaction::Pressed {
-            window_state.details_tab = tab.0;
-        }
-    }
     for (interaction, button) in &mut buttons {
         if *interaction != Interaction::Pressed {
             continue;
@@ -139,6 +126,21 @@ pub(crate) fn handle_vehicle_window_buttons(
             VehicleWindowButton::Refit => {
                 refit_window.open_for(vehicle_id);
             }
+            VehicleWindowButton::Details => {
+                details_state.open_for(vehicle_id);
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
+
+    #[test]
+    fn details_button_opens_details_state() {
+        let mut details = VehicleDetailsWindowState::default();
+        details.open_for(42);
+        assert_eq!(details.vehicle_id, Some(42));
     }
 }

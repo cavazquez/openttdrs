@@ -1,8 +1,8 @@
 //! Ventana flotante de depósito (carretera y vía), estilo `OpenTTD`.
 //!
 //! Muestra la lista de vehículos estacionados con tira horizontal del consist
-//! (sprites laterales) y un botón de venta por fila; clic abre órdenes /
-//! VehicleDetails. Arrastrar una fila sobre otra reordena la lista
+//! (sprites laterales) y un botón de venta por fila; clic abre la vista del
+//! vehículo. Arrastrar una fila sobre otra reordena la lista
 //! (`DepotReorderVehicleSlot`). En depósitos de vía, clic A→B engancha
 //! unidades (`MoveRailVehicle`). La barra inferior replica el original:
 //! «Nuevos vehículos» y «Clonar», más localización del depósito.
@@ -15,7 +15,7 @@ use openttdrs_core::{consist_unit_ids, engine_by_id};
 
 use crate::camera::tile_camera_world_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles};
-use crate::state::{OrderPickState, SimWorld};
+use crate::state::SimWorld;
 use crate::ui::autoreplace_window::AutoreplaceWindowState;
 use crate::ui::buy_window::BuyVehicleWindowState;
 use crate::ui::floating_window::{
@@ -29,7 +29,7 @@ use crate::ui::vehicle_window::{
     vehicle_side_sprite,
 };
 
-use super::{BuildMenuUi, OrderEditState, open_order_edit_for_vehicle};
+use super::{BuildMenuUi, OrderEditState};
 
 const DEPOT_VEHICLE_ROWS: usize = 24;
 const DEPOT_LIST_VISIBLE_ROWS: usize = 8;
@@ -568,14 +568,12 @@ pub(crate) fn begin_depot_list_drag(
     }
 }
 
-/// Al soltar: reordena si el destino es otra fila; si no, activa clic (órdenes / enganche).
+/// Al soltar: reordena si el destino es otra fila; si no, activa clic (vista vehículo / enganche).
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy
 pub(crate) fn finish_depot_list_drag(
     mouse: Res<ButtonInput<MouseButton>>,
     mut depot_state: ResMut<DepotPanelState>,
     row_q: Query<(&DepotVehicleRow, &Interaction), With<Button>>,
-    mut order_state: ResMut<OrderEditState>,
-    mut next_pick: ResMut<NextState<OrderPickState>>,
     mut vehicle_window: ResMut<VehicleWindowState>,
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<RemapMapVisualsPending>,
@@ -623,8 +621,6 @@ pub(crate) fn finish_depot_list_drag(
     activate_depot_row_click(
         from_slot,
         &mut depot_state,
-        &mut order_state,
-        &mut next_pick,
         &mut vehicle_window,
         &mut sim,
         &mut pending,
@@ -637,8 +633,6 @@ pub(crate) fn finish_depot_list_drag(
 fn activate_depot_row_click(
     slot: usize,
     depot_state: &mut DepotPanelState,
-    order_state: &mut OrderEditState,
-    next_pick: &mut NextState<OrderPickState>,
     vehicle_window: &mut VehicleWindowState,
     sim: &mut SimWorld,
     pending: &mut RemapMapVisualsPending,
@@ -696,11 +690,9 @@ fn activate_depot_row_click(
         depot_state.reorder_from_slot = Some(slot);
     }
     depot_state.selected_vehicle = Some(vehicle_id);
+    // Solo View; órdenes/detalles se abren desde botones de la ventana (#173).
     vehicle_window.vehicle_id = Some(vehicle_id);
     vehicle_window.rename_editing = false;
-    if let Some(fresh) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
-        open_order_edit_for_vehicle(order_state, fresh, next_pick);
-    }
 }
 
 #[allow(clippy::too_many_arguments)] // sistema ECS Bevy

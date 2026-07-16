@@ -58,6 +58,8 @@ pub(crate) enum FloatingWindowId {
     Depot,
     BuyVehicle,
     Vehicle,
+    /// Detalles del vehículo (tabs Info/Carga/Capacidad/Totales); hija de View (#173).
+    VehicleDetails,
     /// «Selección de estación» de tren (opciones de la herramienta).
     RailStationPicker,
     /// Selección de aeropuerto (clase / tipo / orientación).
@@ -135,6 +137,7 @@ impl FloatingWindowId {
         Self::Depot,
         Self::BuyVehicle,
         Self::Vehicle,
+        Self::VehicleDetails,
         Self::RailStationPicker,
         Self::AirportPicker,
         Self::BridgePicker,
@@ -181,6 +184,7 @@ impl FloatingWindowId {
             Self::Depot => "Depot",
             Self::BuyVehicle => "BuyVehicle",
             Self::Vehicle => "Vehicle",
+            Self::VehicleDetails => "VehicleDetails",
             Self::RailStationPicker => "RailStationPicker",
             Self::AirportPicker => "AirportPicker",
             Self::BridgePicker => "BridgePicker",

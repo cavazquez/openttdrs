@@ -46,6 +46,10 @@ use crate::ui::timetable_window::{
     TimetableWindowState, handle_timetable_window_buttons, setup_timetable_window,
     sync_timetable_window, timetable_window_on_closed,
 };
+use crate::ui::vehicle_details_window::{
+    VehicleDetailsWindowState, handle_vehicle_details_buttons, setup_vehicle_details_window,
+    sync_vehicle_details_window, vehicle_details_window_on_closed,
+};
 use crate::ui::vehicle_window::{
     VehicleWindowState, handle_vehicle_rename_buttons, handle_vehicle_window_buttons,
     setup_vehicle_window, sync_vehicle_window, vehicle_window_on_closed,
@@ -65,6 +69,7 @@ impl Plugin for GameWindowsPlugin {
             .init_resource::<NewGrfTrainPreviewCache>()
             .init_resource::<DestinationPickerState>()
             .init_resource::<VehicleWindowState>()
+            .init_resource::<VehicleDetailsWindowState>()
             .init_resource::<RefitWindowState>()
             .init_resource::<SharedOrdersWindowState>()
             .init_resource::<AutoreplaceWindowState>()
@@ -84,6 +89,7 @@ impl Plugin for GameWindowsPlugin {
                     setup_graph_window,
                     setup_cargo_payment_window,
                     setup_vehicle_window,
+                    setup_vehicle_details_window,
                     setup_refit_window,
                     setup_shared_orders_window,
                     setup_autoreplace_window,
@@ -142,6 +148,8 @@ impl Plugin for GameWindowsPlugin {
                     vehicle_window_rename_keyboard,
                     vehicle_window_rename_editable_keyboard,
                     vehicle_window_on_closed,
+                    handle_vehicle_details_buttons,
+                    vehicle_details_window_on_closed,
                     handle_timetable_window_buttons,
                     timetable_window_on_closed,
                 )
@@ -167,6 +175,7 @@ impl Plugin for GameWindowsPlugin {
                     sync_buy_window,
                     sync_destination_picker,
                     sync_vehicle_window,
+                    sync_vehicle_details_window,
                     sync_timetable_window,
                 )
                     .in_set(UpdateSet::Ui)

@@ -5,7 +5,7 @@ use openttdrs_core::{cargo_display_name, format_money};
 
 use crate::state::SimWorld;
 
-use super::VehicleDetailsTab;
+use super::VehicleDetailsTab; // tabs definidos en el módulo padre
 
 pub(crate) fn speed_to_kmh(kind: VehicleKind, units: u16) -> u16 {
     match kind {

@@ -55,6 +55,7 @@ use super::super::toolbar::{
 use super::super::town_directory::TownDirectoryState;
 use super::super::town_window::TownWindowState;
 use super::super::vehicle_list::VehicleListState;
+use super::super::vehicle_details_window::VehicleDetailsWindowState;
 use super::super::vehicle_window::VehicleWindowState;
 
 /// Entrada inventariable del registro de teardown de recursos.
@@ -316,6 +317,10 @@ pub(super) static RESOURCE_RESETS: &[ResourceTeardown] = &[
     ResourceTeardown {
         name: "VehicleWindowState",
         apply: reset_default::<VehicleWindowState>,
+    },
+    ResourceTeardown {
+        name: "VehicleDetailsWindowState",
+        apply: reset_default::<VehicleDetailsWindowState>,
     },
     ResourceTeardown {
         name: "RefitWindowState",

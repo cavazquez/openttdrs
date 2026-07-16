@@ -1,4 +1,4 @@
-//! Sincronización de la ventana de vehículo (actualización de UI según el estado).
+//! Sincronización de la ventana de vista del vehículo.
 
 use bevy::prelude::*;
 use bevy::text::EditableText;
@@ -7,35 +7,27 @@ use openttdrs_core::VehicleKind;
 use crate::render::{PrimaryGameCamera, TruckHandles, vehicle_world_position};
 use crate::state::SimWorld;
 use crate::ui::floating_window::{FloatingWindow, FloatingWindowId, FloatingWindowTitleText};
+use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 
-use super::details::vehicle_details_body;
 use super::{
-    BTN_BG, STATUS_NO_ROUTE, STATUS_RUNNING, STATUS_STOPPED, VehicleConsistUnitSprite,
-    VehicleDetailsTabButton, VehicleWindowBodyText, VehicleWindowPreviewCamera,
-    VehicleWindowRefitOnly, VehicleWindowRenameInput, VehicleWindowRenameRow, VehicleWindowState,
-    VehicleWindowStatusText, VehicleWindowToggleText, VehicleWindowTrainOnly, vehicle_side_sprite,
+    STATUS_NO_ROUTE, STATUS_RUNNING, STATUS_STOPPED, VehicleConsistUnitSprite,
+    VehicleWindowPreviewCamera, VehicleWindowRefitOnly, VehicleWindowRenameInput,
+    VehicleWindowRenameRow, VehicleWindowState, VehicleWindowStatusText, VehicleWindowToggleText,
+    VehicleWindowTrainOnly, vehicle_side_sprite,
 };
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub(crate) fn sync_vehicle_window(
     window_state: Res<VehicleWindowState>,
+    mut details_state: ResMut<VehicleDetailsWindowState>,
     sim: Res<SimWorld>,
     trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
-    mut body_q: Query<
-        &mut Text,
-        (
-            With<VehicleWindowBodyText>,
-            Without<VehicleWindowStatusText>,
-            Without<FloatingWindowTitleText>,
-        ),
-    >,
     mut status_q: Query<
         (&mut Text, &mut TextColor),
         (
             With<VehicleWindowStatusText>,
-            Without<VehicleWindowBodyText>,
             Without<FloatingWindowTitleText>,
         ),
     >,
@@ -44,7 +36,6 @@ pub(crate) fn sync_vehicle_window(
         (
             With<VehicleWindowToggleText>,
             Without<VehicleWindowStatusText>,
-            Without<VehicleWindowBodyText>,
             Without<FloatingWindowTitleText>,
         ),
     >,
@@ -65,10 +56,6 @@ pub(crate) fn sync_vehicle_window(
         ),
     >,
     _rename_input_q: Query<&mut EditableText, With<VehicleWindowRenameInput>>,
-    mut tab_buttons: Query<
-        (&VehicleDetailsTabButton, &Interaction, &mut BackgroundColor),
-        With<Button>,
-    >,
     mut consist_q: Query<
         (&VehicleConsistUnitSprite, &mut ImageNode, &mut Node),
         (
@@ -102,6 +89,11 @@ pub(crate) fn sync_vehicle_window(
         return;
     };
     *vis = Visibility::Visible;
+
+    // Si Details está abierta, seguir al vehículo de View (#173).
+    if details_state.vehicle_id.is_some() {
+        details_state.vehicle_id = Some(vehicle.id);
+    }
 
     let unit_ids = openttdrs_core::consist_unit_ids(&sim.state.vehicles, vehicle.id);
     if let Some(trucks) = trucks.as_ref() {
@@ -152,18 +144,6 @@ pub(crate) fn sync_vehicle_window(
         .find(|(t, _)| t.0 == FloatingWindowId::Vehicle)
     {
         **title = vehicle.display_name();
-    }
-    if let Ok(mut body) = body_q.single_mut() {
-        **body = vehicle_details_body(vehicle, &sim, window_state.details_tab);
-    }
-    for (tab, interaction, mut bg) in &mut tab_buttons {
-        *bg = if tab.0 == window_state.details_tab {
-            BackgroundColor(Color::srgb(0.58, 0.50, 0.31))
-        } else if *interaction == Interaction::Hovered {
-            BackgroundColor(Color::srgb(0.47, 0.41, 0.28))
-        } else {
-            BackgroundColor(BTN_BG)
-        };
     }
     if let Ok((mut status, mut color)) = status_q.single_mut() {
         if vehicle.running {

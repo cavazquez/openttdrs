@@ -71,16 +71,16 @@ OpenTTD: `VehicleViewWindow` (`vehicle_gui.cpp:3007-3503`). Cliente:
 | Dar la vuelta (`ReverseTrainDirection`/`TurnRoadVehicle`) | «Dar la vuelta» (`TurnAroundVehicle`, solo tren) | ✔ tren; road es **B** |
 | Forzar paso (`ForceTrainProceed`) | «Forzar paso» (`ForceVehicleProceed`, solo tren) | ✔ |
 | Órdenes / horario (Ctrl) | Botones «Órdenes» y «Horario» separados | ✔ |
-| Detalles (`ShowVehicleDetailsWindow`) | No hay ventana de detalles separada (parte va en el cuerpo) | ver §3 |
+| Detalles (`ShowVehicleDetailsWindow`) | Ventana `VehicleDetails` (#173); botón «Detalles» en View | ✔ estructura; lista por vagón → #175 |
 | Ir al destino de la orden (`WID_VV_ORDER_LOCATION`) | Botón «Ir a orden» | ✔ |
 | Renombrar (`RenameVehicle`) | Campo de renombrado inline | ✔ |
 
 ## 3. Ventana de detalles del vehículo
 
 OpenTTD: `VehicleDetailsWindow` (`vehicle_gui.cpp:2436-3006`) +
-`DrawTrainDetails` (`train_gui.cpp:359-471`). Cliente: **no existe como
-ventana**; `vehicle_details_body` muestra modelo, carga, velocidad, coste/año,
-fiabilidad y orden activa dentro de la ventana de vehículo.
+`DrawTrainDetails` (`train_gui.cpp:359-471`). Cliente: `ui/vehicle_details_window.rs`
+(`FloatingWindowId::VehicleDetails`, #173) con tabs Info/Carga/Capacidad/Totales
+y `vehicle_details_body` (aún agregado a la cabeza; lista por vagón → #175).
 
 | Feature OpenTTD | Estado en cliente | Cercanía |
 |---|---|---|

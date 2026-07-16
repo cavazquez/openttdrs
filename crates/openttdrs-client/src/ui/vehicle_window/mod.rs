@@ -1,18 +1,15 @@
-//! Ventana flotante de tren/vehículo estilo `OpenTTD`.
+//! Ventana de vista del vehículo (`VehicleViewWindow` OpenTTD / #173).
 //!
-//! Se abre al hacer clic en un vehículo del mapa: vista previa en vivo
-//! (cámara a render-target sobre el vehículo), tira horizontal del consist,
-//! modelo, velocidad actual y máxima, carga, estado («Detenido» en rojo /
-//! «En marcha» en verde) y acciones Iniciar/Detener, Órdenes, Enviar al
-//! depósito y Centrar vista. La venta es una acción del depósito, no de esta
-//! ventana.
+//! Se abre al hacer clic en un vehículo del mapa o fila del depósito: vista
+//! previa en vivo, tira del consist, estado y acciones (Iniciar/Detener,
+//! Órdenes, Depósito, Detalles, Centrar…). Los stats/tabs viven en
+//! [`crate::ui::vehicle_details_window`]. La venta es del depósito.
 //!
 //! **Single-instance:** solo hay una [`FloatingWindowId::Vehicle`]; al elegir
 //! otro vehículo se reemplaza `VehicleWindowState.vehicle_id` (y el contexto
-//! de Órdenes/Refit/Timetable vinculados).
+//! de Órdenes/Refit/Timetable/Details vinculados).
 
 mod actions;
-mod details;
 mod rename;
 mod setup;
 mod sync;
@@ -23,6 +20,7 @@ use openttdrs_core::{default_engine_id, engine_for_vehicle};
 
 use crate::render::TruckHandles;
 use crate::ui::floating_window::{FloatingWindowClosed, FloatingWindowId};
+use crate::ui::vehicle_details_window::{VehicleDetailsTab, VehicleDetailsWindowState};
 
 pub(crate) use actions::handle_vehicle_window_buttons;
 pub(crate) use rename::{
@@ -46,24 +44,11 @@ const STATUS_STOPPED: Color = Color::srgb(0.92, 0.35, 0.3);
 const STATUS_RUNNING: Color = Color::srgb(0.45, 0.85, 0.4);
 const STATUS_NO_ROUTE: Color = Color::srgb(0.95, 0.75, 0.25);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum VehicleDetailsTab {
-    #[default]
-    Info,
-    Cargo,
-    Capacity,
-    Totals,
-}
-
 #[derive(Resource, Default)]
 pub(crate) struct VehicleWindowState {
     pub(crate) vehicle_id: Option<u32>,
     pub(crate) rename_editing: bool,
-    pub(crate) details_tab: VehicleDetailsTab,
 }
-
-#[derive(Component, Clone, Copy)]
-pub(crate) struct VehicleDetailsTabButton(VehicleDetailsTab);
 
 #[derive(Component)]
 pub(crate) struct VehicleWindowRenameRow;
@@ -81,9 +66,6 @@ pub(crate) enum VehicleWindowRenameButton {
 pub(crate) struct VehicleWindowPreviewCamera;
 
 #[derive(Component)]
-pub(crate) struct VehicleWindowBodyText;
-
-#[derive(Component)]
 pub(crate) struct VehicleWindowStatusText;
 
 #[derive(Component, Clone, Copy)]
@@ -97,6 +79,7 @@ pub(crate) enum VehicleWindowButton {
     TurnAround,
     ForceProceed,
     Refit,
+    Details,
 }
 
 #[derive(Component)]
@@ -131,12 +114,14 @@ pub(crate) fn vehicle_side_sprite(
 pub(crate) fn vehicle_window_on_closed(
     mut closed: MessageReader<FloatingWindowClosed>,
     mut window_state: ResMut<VehicleWindowState>,
+    mut details_state: ResMut<VehicleDetailsWindowState>,
 ) {
     for msg in closed.read() {
         if msg.0 == FloatingWindowId::Vehicle {
             window_state.vehicle_id = None;
             window_state.rename_editing = false;
-            window_state.details_tab = VehicleDetailsTab::Info;
+            details_state.vehicle_id = None;
+            details_state.details_tab = VehicleDetailsTab::Info;
         }
     }
 }

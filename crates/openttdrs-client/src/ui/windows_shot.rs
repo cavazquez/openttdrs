@@ -57,6 +57,7 @@ use crate::ui::town_directory::TownDirectoryState;
 use crate::ui::town_window::TownWindowState;
 use crate::ui::ui5_blocked_stubs::LinkGraphWindowState;
 use crate::ui::vehicle_list::VehicleListState;
+use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 use crate::ui::vehicle_window::VehicleWindowState;
 
 const OPEN_FRAME: u32 = 30;
@@ -351,6 +352,9 @@ fn open_all_windows_for_shot(world: &mut World) {
     world.resource_mut::<VehicleWindowState>().vehicle_id = vehicle_id;
     world.resource_mut::<TimetableWindowState>().vehicle_id = vehicle_id;
     if let Some(vid) = vehicle_id {
+        world
+            .resource_mut::<VehicleDetailsWindowState>()
+            .open_for(vid);
         world.resource_mut::<RefitWindowState>().open_for(vid);
         {
             let mut order = world.resource_mut::<OrderEditState>();

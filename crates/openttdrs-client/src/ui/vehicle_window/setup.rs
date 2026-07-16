@@ -16,10 +16,10 @@ use crate::ui::toolbar::BuildMenuUi;
 use super::{
     BTN_BG, BTN_BORDER, CONSIST_STRIP_MAX_UNITS, CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W,
     PLACEHOLDER_SPRITE, PREVIEW_SCALE, PREVIEW_TEX_H, PREVIEW_TEX_W, STATUS_STOPPED,
-    VehicleConsistUnitSprite, VehicleDetailsTab, VehicleDetailsTabButton, VehicleWindowBodyText,
-    VehicleWindowButton, VehicleWindowPreviewCamera, VehicleWindowRefitOnly,
-    VehicleWindowRenameButton, VehicleWindowRenameInput, VehicleWindowRenameRow,
-    VehicleWindowStatusText, VehicleWindowToggleText, VehicleWindowTrainOnly,
+    VehicleConsistUnitSprite, VehicleWindowButton, VehicleWindowPreviewCamera,
+    VehicleWindowRefitOnly, VehicleWindowRenameButton, VehicleWindowRenameInput,
+    VehicleWindowRenameRow, VehicleWindowStatusText, VehicleWindowToggleText,
+    VehicleWindowTrainOnly,
 };
 
 pub(crate) fn setup_vehicle_window(
@@ -100,25 +100,6 @@ pub(crate) fn setup_vehicle_window(
                     ));
                 }
             });
-        panel
-            .spawn(Node {
-                flex_direction: FlexDirection::Row,
-                column_gap: Val::Px(4.0),
-                margin: UiRect::bottom(Val::Px(4.0)),
-                ..default()
-            })
-            .with_children(|row| {
-                spawn_details_tab(row, asset_server, VehicleDetailsTab::Info, "Info");
-                spawn_details_tab(row, asset_server, VehicleDetailsTab::Cargo, "Carga");
-                spawn_details_tab(row, asset_server, VehicleDetailsTab::Capacity, "Capacidad");
-                spawn_details_tab(row, asset_server, VehicleDetailsTab::Totals, "Totales");
-            });
-        panel.spawn((
-            VehicleWindowBodyText,
-            Text::new(""),
-            window_text_font(asset_server, UiFontRole::Caption),
-            TextColor(WINDOW_TEXT),
-        ));
         panel.spawn((
             VehicleWindowStatusText,
             Text::new(""),
@@ -216,6 +197,13 @@ pub(crate) fn setup_vehicle_window(
                     "Renombrar",
                     false,
                 );
+                spawn_vehicle_button(
+                    row,
+                    asset_server,
+                    VehicleWindowButton::Details,
+                    "Detalles",
+                    false,
+                );
             });
         panel
             .spawn((
@@ -266,36 +254,6 @@ pub(crate) fn setup_vehicle_window(
                 );
             });
     });
-}
-
-fn spawn_details_tab(
-    parent: &mut ChildSpawnerCommands,
-    asset_server: &AssetServer,
-    tab: VehicleDetailsTab,
-    label: &'static str,
-) {
-    parent.spawn((
-        Button,
-        VehicleDetailsTabButton(tab),
-        Node {
-            min_width: Val::Px(64.0),
-            height: Val::Px(22.0),
-            padding: UiRect::horizontal(Val::Px(6.0)),
-            justify_content: JustifyContent::Center,
-            align_items: AlignItems::Center,
-            border: UiRect::all(Val::Px(1.0)),
-            ..default()
-        },
-        BackgroundColor(BTN_BG),
-        BorderColor::all(BTN_BORDER),
-        Interaction::default(),
-        BuildMenuUi,
-        children![(
-            Text::new(label),
-            window_text_font(asset_server, UiFontRole::Caption),
-            TextColor(Color::srgb(0.92, 0.88, 0.72)),
-        )],
-    ));
 }
 
 fn spawn_rename_action(

@@ -9,7 +9,7 @@ Baseline original: `main` @ `7e731b32` (2026-07-15). Actualizado: 2026-07-16.
 #107 ✅ → #108 ✅ → #115 ✅ → #114 ✅ → #21 ✅
 ```
 
-Arquitectura red v1 (listen-server + dedicated headless, sin host migration): [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md).
+Arquitectura red: [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) (v1) + [adr/0004-host-migration-post-v1.md](adr/0004-host-migration-post-v1.md) (#171 ✅).
 
 Inventarios: [INVENTARIO_HASHMAP_DETERMINISMO.md](INVENTARIO_HASHMAP_DETERMINISMO.md) (#115) · [INVENTARIO_MUTACIONES_CLIENTE.md](INVENTARIO_MUTACIONES_CLIENTE.md) (#114).
 
@@ -107,7 +107,14 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 - [x] ADRs / gobierno (`#117`).
 - [x] Bloqueantes de determinismo para `#21` cerrados (`#108`/`#114`/`#115`).
 - [x] `#21` transporte TCP + flags cliente / dedicated (ADR 0001).
+- [x] Host migration listen-server post-v1 (`#171`, ADR 0004).
 
-## Próximo foco recomendado
+## Estado
 
-1. Host migration: auto-promote Bevy + heartbeats (esqueleto ADR 0004 / protocolo v2 ya en `openttdrs-net`).
+**Roadmap #121 cerrado** (2026-07-16). DoD global cumplido.
+
+## Próximo foco recomendado (post-auditoría)
+
+1. Ciclo jugable solitario (**SP1**): [SP1_CHECKLIST.md](SP1_CHECKLIST.md) / [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md).
+2. Paridad / pulido visual: [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md).
+3. Red avanzada (fuera ADR 0004 MVP): failover sin pausa, migración dedicated, anti-cheat.

@@ -135,7 +135,11 @@ pub(crate) fn build_client_app(
     app.init_state::<ClientScreen>();
     app.add_sub_state::<crate::state::SimRunState>();
     app.add_sub_state::<crate::state::OrderPickState>();
-    let sim_world = SimWorld::try_bootstrap_from_env()?;
+    let sim_world = match &net_cli {
+        // El mapa real llega en Welcome; no gastar en demo procedural local.
+        NetCli::Client { .. } => SimWorld::network_client_placeholder(),
+        _ => SimWorld::try_bootstrap_from_env()?,
+    };
     app.insert_resource(sim_world);
     app.init_resource::<SuspendedGameSession>();
     app.init_resource::<EditorSession>();

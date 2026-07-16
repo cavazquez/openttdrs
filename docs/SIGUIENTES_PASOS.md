@@ -8,6 +8,7 @@ Documento vivo con **hallazgos técnicos** y **comandos**. El plan de trabajo es
 ([#121](https://github.com/cavazquez/openttdrs/issues/121)) — camino crítico `#108 → #115 → #114 → #21` ✅. ADR: [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md).
 
 **Hito actual:** 0.1 solitario · **I0–I7** hechos · **I8 (red)** MVP: `openttdrs-net` + `--server`/`--client` + `openttdrs-dedicated`.
+Pulido jul 2026: `--client` sin bootstrap local; dedicated isla 64² con pueblos/industrias (`--seed`); tiles `water_lock_*` vía `scripts/gen_water_lock_tiles.py`.
 
 ---
 
@@ -100,7 +101,7 @@ cargo test -p openttdrs-core dev_metrics
 
 1. [docs/README.md](README.md) — índice completo
 2. Comentarios y submódulos en `crates/openttdrs-core/src/command/` (`transport/`, `tests/`) y `crates/openttdrs-client/src/ui/` (`main_menu/`, `toolbar/`)
-3. Upstream: `bash scripts/fetch-openttd-reference.sh` → `reference/openttd-upstream/`
+3. Upstream (pin #109): `bash scripts/fetch-openttd-reference.sh` → `reference/openttd-upstream/` @ [`parity/openttd-reference.json`](parity/openttd-reference.json)
 
 ---
 

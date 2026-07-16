@@ -4,6 +4,7 @@ use bevy::prelude::*;
 use openttdrs_core::{Map, VehicleKind};
 
 use crate::iso::{road_vehicle_tile_anchor, tile_min_z, tile_pos};
+use crate::network::NetCli;
 use crate::render::{
     MapVisualLayer, ShoreTile, TruckHandles, WaterTile, initial_map_camera_pose,
     spawn_intro_map_render,
@@ -148,7 +149,29 @@ pub(crate) fn setup_main_menu_intro(
     asset_server: Res<AssetServer>,
     mut layout_assets: ResMut<Assets<TextureAtlasLayout>>,
     mut images: ResMut<Assets<Image>>,
+    net_cli: Res<NetCli>,
 ) {
+    // `--client`: no generar mapa intro; el Welcome trae el mundo del servidor.
+    if matches!(*net_cli, NetCli::Client { .. }) {
+        commands.insert_resource(MainMenuIntroState {
+            base_pos: Vec2::ZERO,
+        });
+        commands.insert_resource(MainMenuIntroMap(Map::new_flat(1, 1, 1)));
+        commands.insert_resource(TruckHandles::load(&asset_server));
+        commands.spawn((
+            Camera2d,
+            MainMenuCamera,
+            MainMenuIntroCamera,
+            Camera {
+                clear_color: ClearColorConfig::Custom(Color::srgb(0.12, 0.18, 0.26)),
+                ..default()
+            },
+            Transform::default(),
+            Projection::Orthographic(OrthographicProjection::default_2d()),
+        ));
+        return;
+    }
+
     let intro_sim = SimWorld::from_new_game(&INTRO_SETTINGS);
     let (cam_pos, cam_scale) = initial_map_camera_pose(&intro_sim);
     let base_pos = cam_pos.truncate();

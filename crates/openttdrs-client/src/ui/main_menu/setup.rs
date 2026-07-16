@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use openttdrs_core::Climate;
 
+use crate::network::{NetCli, NetworkStatus};
 use crate::state::bootstrap::{
     MapAxisSize, PopulationDensity, START_YEARS, STARTING_MONEY_OPTIONS, TerrainRoughness,
 };
@@ -24,8 +25,16 @@ use super::{
     MainMenuUi,
 };
 
-pub(crate) fn setup_main_menu(mut commands: Commands) {
+pub(crate) fn setup_main_menu(
+    mut commands: Commands,
+    net_cli: Res<NetCli>,
+    status: Res<NetworkStatus>,
+) {
     commands.insert_resource(MainMenuPanel::default());
+    if let NetCli::Client { addr } = &*net_cli {
+        spawn_client_connecting_menu(&mut commands, addr, &status.label);
+        return;
+    }
     commands
         .spawn((
             Node {
@@ -93,6 +102,63 @@ pub(crate) fn setup_main_menu(mut commands: Commands) {
                         ..default()
                     },
                     TextColor(Color::srgb(0.76, 0.72, 0.58)),
+                ));
+            });
+        });
+}
+
+fn spawn_client_connecting_menu(commands: &mut Commands, addr: &str, status_label: &str) {
+    let subtitle = if status_label.is_empty() {
+        format!("Conectando a {addr}…")
+    } else {
+        format!("{status_label} — esperando Welcome…")
+    };
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.04, 0.06, 0.09, 0.72)),
+            GlobalZIndex(3000),
+            MainMenuUi,
+        ))
+        .with_children(|p| {
+            p.spawn((
+                Node {
+                    width: Val::Px(420.0),
+                    flex_direction: FlexDirection::Column,
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    padding: UiRect::all(Val::Px(24.0)),
+                    border: UiRect::all(Val::Px(3.0)),
+                    row_gap: Val::Px(12.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(0.18, 0.17, 0.12, 0.96)),
+                BorderColor::all(Color::srgb(0.74, 0.68, 0.5)),
+            ))
+            .with_children(|panel| {
+                panel.spawn((
+                    MainMenuTitleText,
+                    Text::new("Multijugador"),
+                    TextFont {
+                        font_size: FontSize::Rem(UiFontRole::Title.rem_size()),
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.96, 0.91, 0.72)),
+                ));
+                panel.spawn((
+                    Text::new(subtitle),
+                    TextFont {
+                        font_size: FontSize::Rem(UiFontRole::Body.rem_size()),
+                        ..default()
+                    },
+                    TextColor(Color::srgb(0.88, 0.84, 0.7)),
                 ));
             });
         });

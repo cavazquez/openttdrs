@@ -233,6 +233,16 @@ impl SimWorld {
         }
     }
 
+    /// Placeholder mínimo para `--client`: el snapshot llega en `Welcome`.
+    #[must_use]
+    pub fn network_client_placeholder() -> Self {
+        Self {
+            state: GameState::new(1, 1),
+            loaded_file: false,
+            ottdmap_extras: None,
+        }
+    }
+
     /// Carga opcional por paths explícitos (prioridad JSON > ottdmap). `Ok(None)` si ambos `None`.
     ///
     /// Un path inválido o parseo fallido es `Err` (nunca cae a procedural en silencio).
@@ -384,6 +394,16 @@ mod sim_world_coverage_tests {
     fn bootstrap_world_has_no_pending_sim_events() {
         let w = SimWorld::default();
         assert!(w.state.runtime.pending_sim_events.is_empty());
+    }
+
+    #[test]
+    fn network_client_placeholder_is_minimal() {
+        let w = SimWorld::network_client_placeholder();
+        assert_eq!(w.state.map.dimensions(), (1, 1));
+        assert!(w.state.towns.is_empty());
+        assert!(w.state.industries.is_empty());
+        assert!(w.state.vehicles.is_empty());
+        assert!(!w.loaded_file);
     }
 
     #[test]

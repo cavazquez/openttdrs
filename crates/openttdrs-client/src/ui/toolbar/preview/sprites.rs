@@ -95,8 +95,7 @@ pub(crate) fn preview_image_for_action(
             Some(asset_server.load::<Image>(path))
         }
         BuildMenuAction::Lock => {
-            // Tiles `water_lock_*` aún no extraídos; icono de toolbar sí existe.
-            Some(asset_server.load::<Image>("assets/opengfx/tiles/toolbar_water_lock.png"))
+            Some(asset_server.load::<Image>("assets/opengfx/tiles/water_lock_ns_middle.png"))
         }
         BuildMenuAction::Airport => {
             Some(asset_server.load::<Image>("assets/opengfx/tiles/airport_runway_0.png"))

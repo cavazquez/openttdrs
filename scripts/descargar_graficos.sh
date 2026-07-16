@@ -1324,6 +1324,8 @@ if [[ "${GRAPHICS_MODE}" == "32bpp" ]]; then
 fi
 python3 "$(dirname "$0")/gen_toolbar_rail_icons.py"
 python3 "$(dirname "$0")/gen_toolbar_water_icons.py"
+# Tiles in-world de esclusas (Action5 canals / SPR_LOCK_*) antes del atlas.
+python3 "$(dirname "$0")/gen_water_lock_tiles.py"
 python3 "$(dirname "$0")/crop_ui_terraform_icons.py"
 
 # Waypoints ferroviarios (SPR_WAYPOINT_* en GRF extra).

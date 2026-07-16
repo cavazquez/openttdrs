@@ -277,8 +277,8 @@ impl WorldAssets {
         let airport_stand = atlas.get("airport_stand.png");
         let airport_radar: [AtlasSprite; 12] =
             std::array::from_fn(|i| atlas.get(&format!("airport_radar_{i:02}.png")));
-        // Esclusas: aún no están en el atlas de tiles (solo `toolbar_water_lock.png`).
-        // Fallback a agua plana hasta extraer Action5 canals (SPR_LOCK_*).
+        // Esclusas: `scripts/gen_water_lock_tiles.py` (Action5 canals SPR_LOCK_*).
+        // Fallback a agua plana si faltan PNGs / atlas desactualizado.
         let water_lock_fallback = atlas
             .try_get("water_flat.png")
             .unwrap_or_else(|| atlas.get("water.png"));
@@ -297,7 +297,7 @@ impl WorldAssets {
             .collect();
         if !missing_locks.is_empty() {
             warn!(
-                "Sprites de esclusa ausentes en atlas ({}): fallback a agua plana — pendiente extracción OpenGFX SPR_LOCK_*",
+                "Sprites de esclusa ausentes en atlas ({}): fallback a agua plana — corré scripts/gen_water_lock_tiles.py && gen_tile_atlas.py",
                 missing_locks.len()
             );
         }

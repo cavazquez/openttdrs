@@ -2,6 +2,7 @@
 
 use super::labels::{adjust_seed, cycle_density, summary_text};
 use super::{MainMenuPanel, setup_main_menu};
+use crate::network::{NetCli, NetworkStatus};
 use crate::state::bootstrap::{
     MapSizePreset, NewGameSettings, PopulationDensity, STARTING_MONEY_OPTIONS,
 };
@@ -14,6 +15,8 @@ use openttdrs_core::Climate;
 fn setup_main_menu_and_camera_run() {
     let mut world = World::new();
     world.init_resource::<NewGameSettingsResource>();
+    world.insert_resource(NetCli::Offline);
+    world.insert_resource(NetworkStatus::default());
     world.run_system_once(setup_main_menu).unwrap();
     assert_eq!(world.resource::<MainMenuPanel>(), &MainMenuPanel::Root);
 }

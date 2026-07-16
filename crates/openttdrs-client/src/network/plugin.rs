@@ -99,7 +99,8 @@ pub struct NetworkPlugin {
 
 impl Plugin for NetworkPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(NetworkRuntime::offline())
+        app.insert_resource(self.cli.clone())
+            .insert_resource(NetworkRuntime::offline())
             .insert_resource(NetworkStatus::default())
             .insert_resource(PendingNetCli(self.cli.clone()))
             .add_systems(Startup, start_network_session)

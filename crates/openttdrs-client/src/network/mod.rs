@@ -6,4 +6,4 @@ mod plugin;
 
 pub use cli::{NetCli, parse_net_cli};
 pub use dispatch::apply_player_command;
-pub use plugin::{NetworkPlugin, NetworkRole, NetworkRuntime};
+pub use plugin::{NetworkPlugin, NetworkRole, NetworkRuntime, NetworkStatus};

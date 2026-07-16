@@ -75,6 +75,12 @@ do_golden_parse_sav() {
     info "Golden parse_sav OK ✓"
 }
 
+do_openttd_reference_manifest() {
+    info "Manifiesto referencia OpenTTD (#109)..."
+    python3 scripts/test_openttd_reference_manifest.py
+    info "Manifiesto OpenTTD OK ✓"
+}
+
 do_py_compile() {
     info "Sintaxis Python (scripts)..."
     python3 -m py_compile scripts/parse_sav.py
@@ -90,6 +96,8 @@ do_py_compile() {
     python3 -m py_compile scripts/extract_ship_vehicle_sprites.py
     python3 -m py_compile scripts/gen_rail_signals_sav.py
     python3 -m py_compile scripts/extract_roadveh_movement.py
+    python3 -m py_compile scripts/test_openttd_reference_manifest.py
+    python3 -m py_compile scripts/gen_water_lock_tiles.py
     info "Python OK ✓"
 }
 
@@ -147,6 +155,7 @@ do_ci() {
     do_tnbp
     do_golden_parse_sav
     do_py_compile
+    do_openttd_reference_manifest
     echo
     info "=== CI OK (paridad con .github/workflows/ci.yml, profile=${CARGO_PROFILE}) ==="
 }
@@ -159,6 +168,7 @@ case "${1:-all}" in
     tnbp)        do_tnbp ;;
     golden)      do_golden_parse_sav ;;
     py)          do_py_compile ;;
+    openttd-ref) do_openttd_reference_manifest ;;
     cov|coverage) do_coverage ;;
     build)       do_build ;;
     audit)       do_audit ;;
@@ -166,7 +176,7 @@ case "${1:-all}" in
     ci)          do_ci ;;
     all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|audit|cov|build|doctor|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|openttd-ref|audit|cov|build|doctor|ci|all}"
         exit 1
         ;;
 esac

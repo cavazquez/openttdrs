@@ -1,9 +1,10 @@
 //! Args de red del binario cliente.
 
+use bevy::prelude::Resource;
 use openttdrs_net::DEFAULT_PORT;
 
 /// Modo de red pedido por CLI.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Resource)]
 pub enum NetCli {
     #[default]
     Offline,
@@ -50,7 +51,7 @@ pub fn parse_net_cli(args: impl IntoIterator<Item = String>) -> NetCli {
             }
             "--help-net" => {
                 eprintln!(
-                    "Red (#21):\n  --server [HOST:PORT]   listen-server (default 0.0.0.0:{DEFAULT_PORT})\n  --client <HOST[:PORT]> cliente-only\n  dedicated: cargo run -p openttdrs-net --bin openttdrs-dedicated"
+                    "Red (#21):\n  --server [HOST:PORT]   listen-server (default 0.0.0.0:{DEFAULT_PORT})\n  --client <HOST[:PORT]> cliente-only (sin mapa local; espera Welcome)\n  dedicated: cargo run -p openttdrs-net --bin openttdrs-dedicated -- [--bind …] [--seed N]"
                 );
                 std::process::exit(0);
             }

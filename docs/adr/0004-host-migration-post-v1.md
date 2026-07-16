@@ -2,7 +2,7 @@
 
 - **Estado:** aceptada
 - **Fecha:** 2026-07-16
-- **Issues:** [#21](https://github.com/cavazquez/openttdrs/issues/21) (transporte v1); issue de seguimiento de migración (fases)
+- **Issues:** [#21](https://github.com/cavazquez/openttdrs/issues/21) (transporte v1); [#171](https://github.com/cavazquez/openttdrs/issues/171) (auto-promote Bevy + heartbeats)
 - **Supersede:** el punto «fuera de v1 — host migration» de [ADR 0001](0001-multiplayer-v1.md)
 - **Protocolo:** `PROTOCOL_VERSION = 2` (`openttdrs-net`)
 

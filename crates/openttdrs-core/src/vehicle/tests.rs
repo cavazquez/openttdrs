@@ -525,3 +525,128 @@ fn check_breakdown_triggers_when_unreliable() {
     assert!(v.breakdown_ticks_remaining > 0);
     assert_eq!(v.cur_speed, 0);
 }
+
+#[test]
+fn sanitize_current_order_with_empty_orders() {
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Truck,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    v.current_order = 5;
+    v.sanitize_current_order();
+    assert_eq!(v.current_order, 0);
+}
+
+#[test]
+fn sanitize_current_order_with_invalid_index() {
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Truck,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    v.orders = vec![
+        VehicleOrder::station(TileCoord::new(2, 2)),
+        VehicleOrder::station(TileCoord::new(3, 3)),
+    ];
+    v.current_order = 99;
+    v.sanitize_current_order();
+    assert_eq!(v.current_order, 0);
+}
+
+#[test]
+fn sanitize_current_order_valid_index_unchanged() {
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Truck,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    v.orders = vec![
+        VehicleOrder::station(TileCoord::new(2, 2)),
+        VehicleOrder::station(TileCoord::new(3, 3)),
+    ];
+    v.current_order = 1;
+    v.sanitize_current_order();
+    assert_eq!(v.current_order, 1);
+}
+
+#[test]
+fn current_order_ref_returns_none_with_empty_orders() {
+    let v = Vehicle::new(
+        1,
+        VehicleKind::Truck,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    assert!(v.current_order_ref().is_none());
+}
+
+#[test]
+fn current_order_ref_returns_none_with_invalid_index() {
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Truck,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    v.orders = vec![VehicleOrder::station(TileCoord::new(2, 2))];
+    v.current_order = 99;
+    assert!(v.current_order_ref().is_none());
+}
+
+#[test]
+fn current_order_ref_returns_some_with_valid_index() {
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Truck,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    let order = VehicleOrder::station(TileCoord::new(2, 2));
+    v.orders = vec![order];
+    v.current_order = 0;
+    assert_eq!(v.current_order_ref(), Some(&order));
+}
+
+#[test]
+fn advance_to_next_order_no_panic_with_invalid_current_order() {
+    use crate::map::Map;
+    let map = Map::new_flat(8, 8, 0);
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Truck,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    v.orders = vec![
+        VehicleOrder::station(TileCoord::new(2, 2)),
+        VehicleOrder::station(TileCoord::new(3, 3)),
+    ];
+    v.current_order = 99;
+    v.sync_order_destination(&map);
+    assert_eq!(v.current_order, 0);
+}
+
+#[test]
+fn advance_after_loading_no_panic_with_invalid_current_order() {
+    let mut v = Vehicle::new(
+        1,
+        VehicleKind::Truck,
+        TileCoord::new(0, 0),
+        TileCoord::new(1, 0),
+    );
+    v.orders = vec![
+        VehicleOrder::station(TileCoord::new(2, 2)),
+        VehicleOrder::station(TileCoord::new(3, 3)),
+    ];
+    v.current_order = 99;
+    v.cargo = 10;
+    v.capacity = 100;
+    v.advance_after_loading();
+    // Sanitiza a 0 y luego avanza a la siguiente orden (1).
+    assert_eq!(v.current_order, 1);
+    assert!(v.current_order < v.orders.len());
+}

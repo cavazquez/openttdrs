@@ -479,4 +479,25 @@ impl Vehicle {
     pub fn needs_autorenewing(&self, current_tick: u64) -> bool {
         self.vehicle_age_years(current_tick) >= 20
     }
+
+    /// Sanitiza `current_order` para prevenir indexación fuera de límites.
+    ///
+    /// Política: si `orders` está vacío → `current_order=0`; si `current_order >= len` → clamp a 0.
+    pub fn sanitize_current_order(&mut self) {
+        if self.orders.is_empty() || self.current_order >= self.orders.len() {
+            self.current_order = 0;
+        }
+    }
+
+    /// Referencia segura a la orden actual (None si índice inválido o sin órdenes).
+    #[must_use]
+    pub fn current_order_ref(&self) -> Option<&crate::vehicle::order::VehicleOrder> {
+        self.orders.get(self.current_order)
+    }
+
+    /// Referencia mutable segura a la orden actual (None si índice inválido o sin órdenes).
+    #[must_use]
+    pub fn current_order_mut(&mut self) -> Option<&mut crate::vehicle::order::VehicleOrder> {
+        self.orders.get_mut(self.current_order)
+    }
 }

@@ -61,6 +61,7 @@ pub fn load_from_str(text: &str) -> Result<GameState, SaveError> {
         crate::command::normalize_synthetic_rail_crossings(&mut state.map);
         state.map.migrate_legacy_clear_grass_m5();
         state.rebuild_station_flows();
+        state.sanitize_all_vehicle_orders();
         Ok(state)
     }
 }

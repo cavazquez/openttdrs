@@ -33,7 +33,8 @@ pub use io::{load, load_from_str, save};
 /// v18: link graph observacional (`link_graph`).
 /// v19: intervalo de servicio por defecto en vehículos antiguos.
 /// v20: `cargo_dist` (modo Manual/Asymmetric/Symmetric; flows reconstruidos).
-pub const CURRENT_SAVE_VERSION: u32 = 20;
+/// v21: `cargo_rng` persistido en `GameState` (antes efímero en runtime).
+pub const CURRENT_SAVE_VERSION: u32 = 21;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 
@@ -309,6 +310,48 @@ mod tests {
     }
 
     #[test]
+    fn cargo_rng_persists_across_save_load_roundtrip() {
+        let mut s = crate::GameState::new(4, 4);
+        for _ in 0..5 {
+            let _ = s.cargo_rng.next();
+        }
+        let expected_next = {
+            let mut copy = s.cargo_rng;
+            copy.next()
+        };
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!(
+            "openttdrs_cargo_rng_persist_{}.json",
+            std::process::id()
+        ));
+        save(&s, &path).unwrap();
+        let mut loaded = load(&path).unwrap();
+        assert_eq!(loaded.cargo_rng.next(), expected_next);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn cargo_rng_v20_save_loads_with_default_seed() {
+        let mut s = crate::GameState::new(3, 3);
+        for _ in 0..10 {
+            let _ = s.cargo_rng.next();
+        }
+        let file = io::GameStateFile {
+            version: 20,
+            state: s.clone(),
+        };
+        let text = serde_json::to_string(&file).unwrap();
+        let mut v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        if let Some(state) = v.get_mut("state").and_then(|s| s.as_object_mut()) {
+            state.remove("cargo_rng");
+        }
+        let modified_text = serde_json::to_string(&v).unwrap();
+        let loaded = load_from_str(&modified_text).unwrap();
+        let default_rng = crate::linkgraph_parity::Randomizer::new(1);
+        assert_eq!(loaded.cargo_rng.state, default_rng.state);
+    }
+
+    #[test]
     fn legacy_json_without_new_vehicle_station_fields_still_loads() {
         let mut s = crate::GameState::new(4, 4);
         s.stations.push(crate::Station::new(TileCoord::new(1, 1)));
@@ -349,5 +392,84 @@ mod tests {
         assert!(loaded.vehicles[0].running);
         assert!(!loaded.vehicles[0].no_network_route_to_order);
         assert_eq!(loaded.stations[0].cargo_stock, crate::CargoStock::default());
+    }
+
+    #[test]
+    fn load_json_with_invalid_current_order_sanitizes() {
+        let mut s = crate::GameState::new(4, 4);
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Truck,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.orders = vec![
+            VehicleOrder::station(TileCoord::new(1, 1)),
+            VehicleOrder::station(TileCoord::new(2, 2)),
+        ];
+        s.vehicles.push(v);
+        let mut v_json: serde_json::Value = serde_json::from_str(&s.save_json().unwrap()).unwrap();
+        if let Some(vehicles) = v_json
+            .get_mut("vehicles")
+            .and_then(serde_json::Value::as_array_mut)
+            && let Some(vehicle) = vehicles.first_mut()
+            && let Some(obj) = vehicle.as_object_mut()
+        {
+            obj.insert("current_order".to_string(), serde_json::json!(99));
+        }
+        let corrupted_text = serde_json::to_string(&v_json).unwrap();
+        let loaded = load_from_str(&corrupted_text).unwrap();
+        assert_eq!(loaded.vehicles[0].current_order, 0);
+    }
+
+    #[test]
+    fn load_json_with_empty_orders_and_invalid_current_order_sanitizes() {
+        let mut s = crate::GameState::new(4, 4);
+        let v = Vehicle::new(
+            1,
+            VehicleKind::Truck,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        s.vehicles.push(v);
+        let mut v_json: serde_json::Value = serde_json::from_str(&s.save_json().unwrap()).unwrap();
+        if let Some(vehicles) = v_json
+            .get_mut("vehicles")
+            .and_then(serde_json::Value::as_array_mut)
+            && let Some(vehicle) = vehicles.first_mut()
+            && let Some(obj) = vehicle.as_object_mut()
+        {
+            obj.insert("current_order".to_string(), serde_json::json!(5));
+        }
+        let corrupted_text = serde_json::to_string(&v_json).unwrap();
+        let loaded = load_from_str(&corrupted_text).unwrap();
+        assert_eq!(loaded.vehicles[0].current_order, 0);
+        assert_eq!(loaded.vehicles[0].orders.len(), 0);
+    }
+
+    #[test]
+    fn vehicle_advance_and_sync_no_panic_after_sanitization() {
+        use crate::map::Map;
+
+        let mut s = crate::GameState::new(8, 8);
+        let map = Map::new_flat(8, 8, 0);
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Truck,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        v.orders = vec![
+            VehicleOrder::station(TileCoord::new(2, 2)),
+            VehicleOrder::station(TileCoord::new(3, 3)),
+        ];
+        v.current_order = 99;
+        s.vehicles.push(v);
+
+        s.sanitize_all_vehicle_orders();
+        assert_eq!(s.vehicles[0].current_order, 0);
+
+        s.vehicles[0].sync_order_destination(&map);
+        s.vehicles[0].advance_after_loading();
     }
 }

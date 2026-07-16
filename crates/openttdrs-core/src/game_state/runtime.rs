@@ -56,9 +56,6 @@ pub struct SimulationRuntime {
 
     /// `FlowStat` reconstruidos desde `link_graph` (no persistidos).
     pub station_flows: crate::flow_stat::StationFlows,
-
-    /// RNG de partida para `GetVia` (`Random` de `OpenTTD`).
-    pub cargo_rng: crate::linkgraph_parity::Randomizer,
 }
 
 impl SimulationRuntime {
@@ -82,7 +79,6 @@ impl SimulationRuntime {
             shore_newgrf_sprites: Vec::new(),
             catenary_newgrf_sprites: Vec::new(),
             station_flows: crate::flow_stat::StationFlows::default(),
-            cargo_rng: crate::linkgraph_parity::Randomizer::new(1),
         }
     }
 

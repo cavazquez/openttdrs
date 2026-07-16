@@ -534,13 +534,16 @@ impl super::model::Vehicle {
             self.progress = 255;
             return;
         }
-        let pass_through = self.orders[self.current_order].is_pass_through();
-        if self.orders[self.current_order].is_depot() {
-            let halt = self.orders[self.current_order].depot_stops();
+        self.sanitize_current_order();
+        let Some(order) = self.current_order_ref().copied() else {
+            return;
+        };
+        let pass_through = order.is_pass_through();
+        if order.is_depot() {
+            let halt = order.depot_stops();
             let needs = self.requires_service();
-            // `stop:true` = parar siempre; `stop:false` = servicio si hace falta.
             if halt || needs {
-                if let Some(cargo) = self.orders[self.current_order].depot_refit_cargo() {
+                if let Some(cargo) = order.depot_refit_cargo() {
                     self.pending_depot_order_refit = Some(cargo);
                 }
                 self.service_at_depot();
@@ -553,7 +556,7 @@ impl super::model::Vehicle {
             self.do_advance_after_arrival(true);
             return;
         }
-        if self.orders[self.current_order].full_load() && self.cargo < self.capacity {
+        if order.full_load() && self.cargo < self.capacity {
             self.progress = 255;
             return;
         }

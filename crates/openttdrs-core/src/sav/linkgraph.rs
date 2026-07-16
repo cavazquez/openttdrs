@@ -200,7 +200,7 @@ pub(crate) fn encode_lgrp_record(
         u32::try_from(tiles.len())
             .map_err(|_| SavError::BadFormat("demasiados nodos LGRP".into()))?,
         &mut rec,
-    );
+    )?;
 
     for (i, tile) in tiles.iter().enumerate() {
         let node_id = u16::try_from(i).unwrap_or(u16::MAX);
@@ -214,7 +214,7 @@ pub(crate) fn encode_lgrp_record(
         rec.extend_from_slice(&LGRP_INVALID_DATE.to_be_bytes()); // last_update
 
         let node_edges = by_from.get(&node_id).cloned().unwrap_or_default();
-        write_gamma(u32::try_from(node_edges.len()).unwrap_or(0), &mut rec);
+        write_gamma(u32::try_from(node_edges.len()).unwrap_or(0), &mut rec)?;
         for (dest, sample) in node_edges {
             let capacity = u32::try_from(sample.capacity_total.min(u64::from(u32::MAX)))
                 .unwrap_or(u32::MAX)
@@ -232,72 +232,69 @@ pub(crate) fn encode_lgrp_record(
     Ok(rec)
 }
 
-fn write_gamma(v: u32, buf: &mut Vec<u8>) {
-    assert!(v < (1 << 14), "export usa gammas < 2^14");
-    if v < (1 << 7) {
-        buf.push(v as u8);
-    } else {
-        buf.push(0x80 | ((v >> 8) as u8));
-        buf.push((v & 0xFF) as u8);
-    }
-}
+use super::write::codec::{write_gamma, write_str};
 
-fn write_str(s: &str, buf: &mut Vec<u8>) {
-    write_gamma(s.len() as u32, buf);
-    buf.extend_from_slice(s.as_bytes());
-}
-
-fn raw_table_chunk(name: [u8; 4], header: &[u8], records: &[Vec<u8>]) -> Vec<u8> {
+/// Construye un chunk TABLE con header y records arbitrarios.
+///
+/// # Errors
+///
+/// Falla si algún valor gamma está fuera de rango.
+fn raw_table_chunk(name: [u8; 4], header: &[u8], records: &[Vec<u8>]) -> Result<Vec<u8>, SavError> {
     use super::chunks::CH_TABLE;
     let mut out = Vec::new();
     out.extend_from_slice(&name);
     out.push(CH_TABLE);
-    write_gamma(header.len() as u32 + 1, &mut out);
+    write_gamma(header.len() as u32 + 1, &mut out)?;
     out.extend_from_slice(header);
     for rec in records {
-        write_gamma(rec.len() as u32 + 1, &mut out);
+        write_gamma(rec.len() as u32 + 1, &mut out)?;
         out.extend_from_slice(rec);
     }
-    write_gamma(0, &mut out);
-    out
+    write_gamma(0, &mut out)?;
+    Ok(out)
 }
 
-fn lgrp_table_header() -> Vec<u8> {
+/// Construye el header TABLE de LGRP.
+///
+/// # Errors
+///
+/// Falla si algún valor gamma está fuera de rango.
+fn lgrp_table_header() -> Result<Vec<u8>, SavError> {
     let mut header = Vec::new();
     header.push(5);
-    write_str("last_compression", &mut header);
+    write_str("last_compression", &mut header)?;
     header.push(2);
-    write_str("cargo", &mut header);
+    write_str("cargo", &mut header)?;
     header.push(0x1B);
-    write_str("nodes", &mut header);
+    write_str("nodes", &mut header)?;
     header.push(0);
     header.push(6);
-    write_str("xy", &mut header);
+    write_str("xy", &mut header)?;
     header.push(6);
-    write_str("supply", &mut header);
+    write_str("supply", &mut header)?;
     header.push(6);
-    write_str("demand", &mut header);
+    write_str("demand", &mut header)?;
     header.push(4);
-    write_str("station", &mut header);
+    write_str("station", &mut header)?;
     header.push(5);
-    write_str("last_update", &mut header);
+    write_str("last_update", &mut header)?;
     header.push(0x1B);
-    write_str("edges", &mut header);
+    write_str("edges", &mut header)?;
     header.push(0);
     header.push(6);
-    write_str("capacity", &mut header);
+    write_str("capacity", &mut header)?;
     header.push(6);
-    write_str("usage", &mut header);
+    write_str("usage", &mut header)?;
     header.push(8);
-    write_str("travel_time_sum", &mut header);
+    write_str("travel_time_sum", &mut header)?;
     header.push(5);
-    write_str("last_unrestricted_update", &mut header);
+    write_str("last_unrestricted_update", &mut header)?;
     header.push(5);
-    write_str("last_restricted_update", &mut header);
+    write_str("last_restricted_update", &mut header)?;
     header.push(4);
-    write_str("dest_node", &mut header);
+    write_str("dest_node", &mut header)?;
     header.push(0);
-    header
+    Ok(header)
 }
 
 /// Emite `LGRP` (+ `LGRJ`/`LGRS` vacíos) desde el grafo observado.
@@ -326,9 +323,9 @@ pub(crate) fn encode_linkgraph_chunks(
 
     let mut out = Vec::new();
     // Siempre emitir LGRP (puede estar vacío): OpenTTD lo tolera.
-    out.extend_from_slice(&raw_table_chunk(*b"LGRP", &lgrp_table_header(), &records));
+    out.extend_from_slice(&raw_table_chunk(*b"LGRP", &lgrp_table_header()?, &records)?);
     // Jobs / schedule vacíos (SpawnAll regenera).
-    out.extend_from_slice(&raw_table_chunk(*b"LGRJ", &[0], &[]));
+    out.extend_from_slice(&raw_table_chunk(*b"LGRJ", &[0], &[])?);
     out.extend_from_slice(&raw_table_chunk(
         *b"LGRS",
         &[
@@ -336,7 +333,7 @@ pub(crate) fn encode_linkgraph_chunks(
             0,
         ],
         &[],
-    ));
+    )?);
     Ok(out)
 }
 
@@ -378,7 +375,7 @@ mod tests {
         rec.extend_from_slice(&0_i32.to_be_bytes());
         tg(0, &mut rec);
 
-        let header = lgrp_table_header();
+        let header = lgrp_table_header().expect("header");
         let mut body = Vec::new();
         tg(header.len() as u32 + 1, &mut body);
         body.extend_from_slice(&header);

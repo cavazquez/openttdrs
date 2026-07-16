@@ -1,6 +1,7 @@
 //! Serialización de vehículos y órdenes (ORDL, VEHS).
 
 use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE};
+use super::super::SavError;
 use super::chunks::raw_table_chunk;
 use super::codec::{write_gamma, write_str};
 use crate::CargoType;
@@ -103,8 +104,18 @@ fn encode_goto_order(order: &VehicleOrder, state: &GameState, map_w: u32) -> Opt
     Some(o)
 }
 
+type SavRecordBytes = Vec<u8>;
+type SavRecordList = Vec<SavRecordBytes>;
+
 /// Una lista ORDL por vehículo (solo órdenes goto estación/waypoint).
-pub(super) fn ordl_and_vehs_records(state: &GameState, map_w: u32) -> (Vec<Vec<u8>>, Vec<Vec<u8>>) {
+///
+/// # Errors
+///
+/// Falla si algún valor gamma está fuera de rango.
+pub(super) fn ordl_and_vehs_records(
+    state: &GameState,
+    map_w: u32,
+) -> Result<(SavRecordList, SavRecordList), SavError> {
     let mut ordl = Vec::new();
     let mut vehs = Vec::new();
     let mut sparse_idx = 0u32;
@@ -131,7 +142,7 @@ pub(super) fn ordl_and_vehs_records(state: &GameState, map_w: u32) -> (Vec<Vec<u
         } else {
             let list_idx = u32::try_from(ordl.len()).unwrap_or(0);
             let mut rec = Vec::new();
-            write_gamma(order_bytes.len() as u32, &mut rec); // count of orders struct
+            write_gamma(order_bytes.len() as u32, &mut rec)?; // count of orders struct
             for o in &order_bytes {
                 rec.extend_from_slice(o);
             }
@@ -149,7 +160,7 @@ pub(super) fn ordl_and_vehs_records(state: &GameState, map_w: u32) -> (Vec<Vec<u
         let vehstatus = u8::from(!v.running); // bit 0 = stopped
 
         let mut rec = Vec::new();
-        write_gamma(sparse_idx, &mut rec);
+        write_gamma(sparse_idx, &mut rec)?;
         rec.push(vtype);
         if vtype == 0 {
             // train presente, roadveh ausente
@@ -176,7 +187,7 @@ pub(super) fn ordl_and_vehs_records(state: &GameState, map_w: u32) -> (Vec<Vec<u
         vehs.push(rec);
         sparse_idx += 1;
     }
-    (ordl, vehs)
+    Ok((ordl, vehs))
 }
 
 fn write_vehs_common(
@@ -197,55 +208,65 @@ fn write_vehs_common(
     buf.push(vehstatus);
 }
 
-pub(super) fn ordl_chunk(records: &[Vec<u8>]) -> Vec<u8> {
+/// Construye chunk ORDL con records.
+///
+/// # Errors
+///
+/// Falla si algún valor gamma está fuera de rango.
+pub(super) fn ordl_chunk(records: &[Vec<u8>]) -> Result<Vec<u8>, SavError> {
     // Header con struct anidado `orders` (como gen_demo_sav.py).
     let mut header = Vec::new();
     header.push(0x1B); // STRUCT | HAS_LENGTH
-    write_str("orders", &mut header);
+    write_str("orders", &mut header)?;
     header.push(0); // fin lista top-level → subcampos de orders
     header.push(2);
-    write_str("type", &mut header);
+    write_str("type", &mut header)?;
     header.push(2);
-    write_str("flags", &mut header);
+    write_str("flags", &mut header)?;
     header.push(4);
-    write_str("dest", &mut header);
+    write_str("dest", &mut header)?;
     header.push(2);
-    write_str("refit_cargo", &mut header);
+    write_str("refit_cargo", &mut header)?;
     header.push(4);
-    write_str("wait_time", &mut header);
+    write_str("wait_time", &mut header)?;
     header.push(4);
-    write_str("travel_time", &mut header);
+    write_str("travel_time", &mut header)?;
     header.push(4);
-    write_str("max_speed", &mut header);
+    write_str("max_speed", &mut header)?;
     header.push(0);
     raw_table_chunk(*b"ORDL", &header, records, CH_TABLE)
 }
 
-pub(super) fn vehs_chunk(records: &[Vec<u8>]) -> Vec<u8> {
+/// Construye chunk VEHS con records.
+///
+/// # Errors
+///
+/// Falla si algún valor gamma está fuera de rango.
+pub(super) fn vehs_chunk(records: &[Vec<u8>]) -> Result<Vec<u8>, SavError> {
     let mut header = Vec::new();
     header.push(2);
-    write_str("type", &mut header);
+    write_str("type", &mut header)?;
     header.push(0x1B); // STRUCT | HAS_LENGTH
-    write_str("train", &mut header);
+    write_str("train", &mut header)?;
     header.push(0x1B);
-    write_str("roadveh", &mut header);
+    write_str("roadveh", &mut header)?;
     header.push(0);
     for _ in 0..2 {
         header.push(0x1B);
-        write_str("common", &mut header);
+        write_str("common", &mut header)?;
         header.push(0);
         header.push(6);
-        write_str("tile", &mut header);
+        write_str("tile", &mut header)?;
         header.push(2);
-        write_str("subtype", &mut header);
+        write_str("subtype", &mut header)?;
         header.push(2);
-        write_str("cargo_type", &mut header);
+        write_str("cargo_type", &mut header)?;
         header.push(6);
-        write_str("orders", &mut header);
+        write_str("orders", &mut header)?;
         header.push(2);
-        write_str("cur_real_order_index", &mut header);
+        write_str("cur_real_order_index", &mut header)?;
         header.push(2);
-        write_str("vehstatus", &mut header);
+        write_str("vehstatus", &mut header)?;
         header.push(0);
     }
     raw_table_chunk(*b"VEHS", &header, records, CH_SPARSE_TABLE)

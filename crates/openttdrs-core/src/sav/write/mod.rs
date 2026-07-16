@@ -8,7 +8,7 @@
 #![allow(clippy::cast_possible_truncation)]
 
 mod chunks;
-mod codec;
+pub(crate) mod codec;
 mod entities;
 mod map;
 mod meta;
@@ -189,16 +189,16 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
     data.extend_from_slice(&chunks::riff_chunk(*b"MAP7", &planes.map7));
     data.extend_from_slice(&chunks::riff_chunk(*b"MAP8", &planes.map8));
 
-    let stnn = entities::stnn_records(state, w);
+    let stnn = entities::stnn_records(state, w)?;
     if !stnn.is_empty() {
         data.extend_from_slice(&chunks::table_chunk(
             *b"STNN",
             &[(6, "xy"), (0x0A | 0x10, "name"), (2, "facilities")],
             &stnn,
-        ));
+        )?);
     }
 
-    let city = entities::city_records(state, w);
+    let city = entities::city_records(state, w)?;
     if !city.is_empty() {
         data.extend_from_slice(&chunks::table_chunk(
             *b"CITY",
@@ -211,7 +211,7 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
                 (6, "townnameparts"),
             ],
             &city,
-        ));
+        )?);
     }
 
     let indy = entities::indy_records(state, w);
@@ -225,15 +225,15 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
                 (2, "type"),
             ],
             &indy,
-        ));
+        )?);
     }
 
-    let (ordl, vehs) = vehicles::ordl_and_vehs_records(state, w);
+    let (ordl, vehs) = vehicles::ordl_and_vehs_records(state, w)?;
     if !ordl.is_empty() {
-        data.extend_from_slice(&vehicles::ordl_chunk(&ordl));
+        data.extend_from_slice(&vehicles::ordl_chunk(&ordl)?);
     }
     if !vehs.is_empty() {
-        data.extend_from_slice(&vehicles::vehs_chunk(&vehs));
+        data.extend_from_slice(&vehicles::vehs_chunk(&vehs)?);
     }
 
     data.extend_from_slice(&super::linkgraph::encode_linkgraph_chunks(
@@ -246,12 +246,12 @@ fn build_chunk_stream(state: &GameState) -> Result<Vec<u8>, SavError> {
         *b"DATE",
         &[(5, "date"), (8, "tick_counter")],
         &[meta::date_record(state)],
-    ));
+    )?);
     data.extend_from_slice(&chunks::table_chunk(
         *b"PLYR",
         &[(7, "money"), (2, "colour")],
         &[meta::plyr_record(state)],
-    ));
+    )?);
 
     data.extend_from_slice(&[0, 0, 0, 0]);
     Ok(data)

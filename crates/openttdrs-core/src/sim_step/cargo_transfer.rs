@@ -353,7 +353,7 @@ fn try_load_from_industry(
         output,
         station_pos,
         order_hop,
-        &mut state.runtime.cargo_rng,
+        &mut state.cargo_rng,
     );
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
     state.vehicles[vehicle_idx].cargo_packets.push(packet);
@@ -491,7 +491,7 @@ fn try_load_from_station_waiting_cargo(
             packet.cargo,
             origin,
             order_hop,
-            &mut state.runtime.cargo_rng,
+            &mut state.cargo_rng,
         );
     }
     let loaded_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();

@@ -30,18 +30,25 @@ pub(super) fn migrate_loaded_state(
             17 => migrate_state_v17_to_v18(&mut state),
             18 => migrate_state_v18_to_v19(&mut state),
             19 => migrate_state_v19_to_v20(&mut state),
+            20 => migrate_state_v20_to_v21(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
     }
     after_migrate_refresh_newgrf(&mut state);
     state.rebuild_station_flows();
+    state.sanitize_all_vehicle_orders();
     Ok(state)
 }
 
 /// v20: modo `CargoDist` por defecto (`Manual`); `station_flows` se reconstruyen.
 fn migrate_state_v19_to_v20(state: &mut GameState) {
     state.cargo_dist = crate::flow_stat::CargoDistSettings::default();
+}
+
+/// v21: `cargo_rng` persistido en `GameState` (campo faltante usa default seed 1).
+fn migrate_state_v20_to_v21(_state: &mut GameState) {
+    // Serde ya aplica el default `Randomizer::new(1)` si el campo está ausente.
 }
 
 /// v19: intervalo de servicio por defecto en vehículos antiguos.

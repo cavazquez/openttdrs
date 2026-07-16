@@ -52,6 +52,8 @@ pub enum SavError {
     BadFormat(String),
     /// Error de E/S al escribir el archivo.
     Io(String),
+    /// Valor fuera del rango permitido para codificación gamma.
+    ValueOutOfRange { field: &'static str, value: u32 },
 }
 
 impl std::fmt::Display for SavError {
@@ -61,6 +63,9 @@ impl std::fmt::Display for SavError {
             Self::Decompress(s) => write!(f, "error de descompresión: {s}"),
             Self::BadFormat(s) => write!(f, "formato inválido: {s}"),
             Self::Io(s) => write!(f, "error de E/S: {s}"),
+            Self::ValueOutOfRange { field, value } => {
+                write!(f, "valor fuera de rango para gamma en campo '{field}': {value} >= 2^14")
+            }
         }
     }
 }

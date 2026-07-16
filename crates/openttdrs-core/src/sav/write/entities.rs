@@ -1,5 +1,6 @@
 //! Serialización de entidades: estaciones, ciudades, industrias.
 
+use super::super::SavError;
 use super::codec::write_str;
 use crate::game_state::GameState;
 use crate::industry::{Industry, IndustryKind, IndustrySpec};
@@ -26,7 +27,12 @@ fn facilities_for_stop(kind: StopKind) -> u8 {
     }
 }
 
-pub(super) fn stnn_records(state: &GameState, map_w: u32) -> Vec<Vec<u8>> {
+/// Construye records STNN desde estaciones del estado.
+///
+/// # Errors
+///
+/// Falla si algún nombre de estación es demasiado largo.
+pub(super) fn stnn_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>, SavError> {
     let mut out = Vec::with_capacity(state.stations.len());
     for st in &state.stations {
         if st.pos.x < 0 || st.pos.y < 0 {
@@ -38,14 +44,19 @@ pub(super) fn stnn_records(state: &GameState, map_w: u32) -> Vec<Vec<u8>> {
         let mut rec = Vec::new();
         rec.extend_from_slice(&tile_idx.to_be_bytes());
         let name = st.name.as_deref().unwrap_or("");
-        write_str(name, &mut rec);
+        write_str(name, &mut rec)?;
         rec.push(facilities_for_stop(st.stop_kind));
         out.push(rec);
     }
-    out
+    Ok(out)
 }
 
-pub(super) fn city_records(state: &GameState, map_w: u32) -> Vec<Vec<u8>> {
+/// Construye records CITY desde ciudades del estado.
+///
+/// # Errors
+///
+/// Falla si algún nombre de ciudad es demasiado largo.
+pub(super) fn city_records(state: &GameState, map_w: u32) -> Result<Vec<Vec<u8>>, SavError> {
     let mut out = Vec::with_capacity(state.towns.len());
     for town in &state.towns {
         let Some(tile_idx) = coord_to_linear_index(town.pos, map_w) else {
@@ -53,7 +64,7 @@ pub(super) fn city_records(state: &GameState, map_w: u32) -> Vec<Vec<u8>> {
         };
         let mut rec = Vec::new();
         rec.extend_from_slice(&tile_idx.to_be_bytes());
-        write_str(&town.name, &mut rec);
+        write_str(&town.name, &mut rec)?;
         // cache.population: el import la pone en 0 y rebuild_town_populations la recalcula;
         // igual la escribimos para roundtrip de lectura best-effort / fixtures.
         rec.extend_from_slice(&town.population.to_be_bytes());
@@ -62,7 +73,7 @@ pub(super) fn city_records(state: &GameState, map_w: u32) -> Vec<Vec<u8>> {
         rec.extend_from_slice(&0u32.to_be_bytes()); // townnameparts
         out.push(rec);
     }
-    out
+    Ok(out)
 }
 
 fn industry_ottd_type(ind: &Industry) -> u8 {

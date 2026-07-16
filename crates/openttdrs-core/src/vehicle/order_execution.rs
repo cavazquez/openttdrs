@@ -41,7 +41,11 @@ impl super::model::Vehicle {
         if self.orders.is_empty() {
             return;
         }
-        if self.orders[self.current_order].full_load() && self.cargo < self.capacity {
+        self.sanitize_current_order();
+        if let Some(order) = self.current_order_ref()
+            && order.full_load()
+            && self.cargo < self.capacity
+        {
             return;
         }
         if self.schedule_timetable_wait(super::model::TimetableWaitKind::AfterLoad) {
@@ -64,10 +68,13 @@ impl super::model::Vehicle {
             return;
         }
         self.current_order = (self.current_order + 1) % self.orders.len();
+        self.sanitize_current_order();
         self.origin = self.pos;
         self.timetable_leg_start_tick = self.sim_tick;
-        if self.kind != super::model::VehicleKind::Train {
-            self.dest = self.orders[self.current_order].destination();
+        if self.kind != super::model::VehicleKind::Train
+            && let Some(order) = self.current_order_ref()
+        {
+            self.dest = order.destination();
         }
     }
 
@@ -94,6 +101,7 @@ impl super::model::Vehicle {
         if !self.timetable_autofill {
             return;
         }
+        self.sanitize_current_order();
         let idx = self.current_order;
         if self.timetable_autofill_samples.len() <= idx {
             self.timetable_autofill_samples.resize(idx + 1, (0, 0));
@@ -101,9 +109,11 @@ impl super::model::Vehicle {
         let (w, t) = &mut self.timetable_autofill_samples[idx];
         *w = u32::midpoint(*w, wait);
         *t = u32::midpoint(*t, travel);
+        let new_w = *w;
+        let new_t = *t;
         if let Some(order) = self.orders.get_mut(idx) {
-            *order = order.with_travel_ticks(*t);
-            if let Some(updated) = order.with_wait_ticks(*w) {
+            *order = order.with_travel_ticks(new_t);
+            if let Some(updated) = order.with_wait_ticks(new_w) {
                 *order = updated;
             }
         }
@@ -141,7 +151,10 @@ impl super::model::Vehicle {
                 self.finish_arrival_processing();
             }
             super::model::TimetableWaitKind::AfterArrival => {
-                let pass_through = self.orders[self.current_order].is_pass_through();
+                self.sanitize_current_order();
+                let pass_through = self
+                    .current_order_ref()
+                    .is_some_and(|o| o.is_pass_through());
                 self.do_advance_after_arrival(pass_through);
             }
             super::model::TimetableWaitKind::AfterUnload => self.do_advance_after_unloading(),
@@ -167,14 +180,16 @@ impl super::model::Vehicle {
         if self.orders.is_empty() {
             return;
         }
-        let order = self.orders[self.current_order];
+        self.sanitize_current_order();
+        let Some(order) = self.current_order_ref().copied() else {
+            return;
+        };
         if order.is_conditional() {
             return;
         }
         self.dest = if self.kind == super::model::VehicleKind::Aircraft {
             match order {
                 crate::vehicle::order::VehicleOrder::Station { station, .. } => {
-                    // Prefer apron/loading if the hangar ancla está en un footprint.
                     crate::airport::airport_loading_tile_at(map, station)
                 }
                 _ => crate::station::resolve_order_destination(map, self.kind, order),

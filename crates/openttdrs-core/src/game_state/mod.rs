@@ -412,6 +412,9 @@ pub struct GameState {
     /// GameScript-lite: story / goals / league (#43).
     #[serde(default)]
     pub gs: crate::gs::GsState,
+    /// RNG de partida para `GetVia` (`Random` de `OpenTTD`) — persistido desde v21.
+    #[serde(default = "default_cargo_rng")]
+    pub cargo_rng: crate::linkgraph_parity::Randomizer,
 
     // ───── Campos efímeros (NO persistidos) ─────
     /// Datos de runtime que no se guardan en el save JSON.
@@ -433,6 +436,10 @@ const fn default_current_tram_type() -> crate::road_type::RoadType {
 
 const fn default_next_sign_id() -> u32 {
     1
+}
+
+fn default_cargo_rng() -> crate::linkgraph_parity::Randomizer {
+    crate::linkgraph_parity::Randomizer::new(1)
 }
 
 impl GameState {
@@ -490,6 +497,7 @@ impl GameState {
             link_graph: crate::link_graph::LinkGraphStats::default(),
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             gs: crate::gs::GsState::default(),
+            cargo_rng: crate::linkgraph_parity::Randomizer::new(1),
             runtime: SimulationRuntime::new(),
         }
     }
@@ -549,6 +557,7 @@ impl GameState {
             link_graph: crate::link_graph::LinkGraphStats::default(),
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             gs: crate::gs::GsState::default(),
+            cargo_rng: crate::linkgraph_parity::Randomizer::new(1),
             runtime: SimulationRuntime::new(),
         }
     }
@@ -560,6 +569,16 @@ impl GameState {
     pub fn hydrate_runtime(&mut self) {
         self.runtime = SimulationRuntime::new();
         self.rebuild_station_flows();
+        self.sanitize_all_vehicle_orders();
+    }
+
+    /// Sanitiza `current_order` en todos los vehículos para prevenir indexación fuera de límites.
+    ///
+    /// Debe llamarse después de cargar un save o deserializar desde JSON.
+    pub fn sanitize_all_vehicle_orders(&mut self) {
+        for vehicle in &mut self.vehicles {
+            vehicle.sanitize_current_order();
+        }
     }
 
     /// Reconstruye [`StationFlows`] con el pipeline `OpenTTD` (Demand + MCF1/2).

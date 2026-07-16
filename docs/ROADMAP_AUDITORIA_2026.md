@@ -68,7 +68,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 |-------|--------|
 | #113 partir `ClientUiPlugin` | ✅ |
 | #145 teardown InGame declarativo | ✅ |
-| #124 schedules / sets vacíos | ⬜ |
+| #124 schedules / sets vacíos | ✅ |
 
 ### Fase 6 — Rendimiento
 
@@ -91,10 +91,10 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 | #139 partir `command/tests/rail` | ✅ |
 | #151 `SandboxMap` | ✅ |
 | #152 `SimHarness` | ✅ |
-| #156 engine catalog | ⬜ |
-| #157 prelude API raíz | ⬜ |
-| #138 escenarios parity | ⬜ |
-| #135 sprites NewGRF | ⬜ |
+| #156 engine catalog | ✅ |
+| #157 prelude API raíz | ✅ |
+| #138 escenarios parity | ✅ |
+| #135 sprites NewGRF | ✅ |
 
 ## Definition of Done global (#121)
 

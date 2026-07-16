@@ -1,46 +1,59 @@
-# Snapshot oracle workflow
+# Snapshot oracle workflow (#110)
 
-Este flujo crea dos snapshots comparables:
+Hay **dos productores independientes**:
 
-- `openttdrs` (loader actual)
-- `oráculo` usando un fork mínimo de OpenTTD (wrapper operativo)
+| Rol | Productor | Entrada |
+|-----|-----------|---------|
+| **Oráculo** | OpenTTD C++ (commit pin [#109](parity/openttd-reference.json)) | `.sav` |
+| **Candidato** | `parse_sav.py` + `snapshot_dumper` (openttdrs) | `.sav` → `.ottdmap` |
 
-## 1) Snapshot desde `.ottdmap` (openttdrs)
+Esquema: [parity/SNAPSHOT_SCHEMA.md](parity/SNAPSHOT_SCHEMA.md).
 
-```bash
-cargo run -p openttdrs-core --bin snapshot_dumper -- tests/fixtures/stationlist-test.ottdmap /tmp/openttdrs.snapshot.json
-```
+> **No es oráculo** el flujo antiguo que envolvía `parse_sav.py` dentro de un “fork” OpenTTD: ambos lados usaban el parser bajo prueba. Ese script quedó reemplazado.
 
-(En local suele usarse `assets/maps/*.ottdmap`, ignorado por git; debe ser `MAP1` generado con `scripts/parse_sav.py`.)
-
-## 2) Bootstrap de fork mínimo OpenTTD
+## 1) Oráculo (OpenTTD real)
 
 ```bash
-scripts/setup_openttd_oracle_fork.sh /tmp/openttd-oracle
+./scripts/fetch-openttd-reference.sh
+./patches/openttd-15.3-snapshot-export/integrate.sh
+cmake -B reference/openttd-upstream/build -S reference/openttd-upstream -DOPTION_DEDICATED=ON
+cmake --build reference/openttd-upstream/build -j
+
+./scripts/export_openttd_oracle_snapshot.sh \
+  crates/openttdrs-core/tests/fixtures/rail_signals_mixed.sav \
+  /tmp/openttd.oracle.json
 ```
 
-Esto clona OpenTTD en el **commit del manifiesto**
-([`docs/parity/openttd-reference.json`](parity/openttd-reference.json), #109)
-y agrega `tools/export_snapshot.sh` en una rama local `openttdrs-snapshot-oracle`.
+El JSON debe tener `"producer": "openttd"`.
 
-## 3) Snapshot oráculo desde `.sav`
+## 2) Candidato (openttdrs)
 
 ```bash
-cd /tmp/openttd-oracle
-OPENTTDRS_ROOT=/home/cristian/repos/propios/openttdrs \
-  ./tools/export_snapshot.sh /ruta/mapa.sav /tmp/openttd.snapshot.json
+python3 scripts/parse_sav.py \
+  crates/openttdrs-core/tests/fixtures/rail_signals_mixed.sav \
+  /tmp/candidate.ottdmap
+cargo run -p openttdrs-core --bin snapshot_dumper -- \
+  /tmp/candidate.ottdmap /tmp/openttdrs.candidate.json
 ```
 
-## 4) Comparación rápida
+## 3) Comparación
 
 ```bash
-diff -u /tmp/openttd.snapshot.json /tmp/openttdrs.snapshot.json
+python3 scripts/compare_snapshots.py \
+  /tmp/openttd.oracle.json \
+  /tmp/openttdrs.candidate.json
 ```
 
-Para CI conviene usar un comparador estructural (JSON) y fallar ante mismatch en:
+La primera divergencia se imprime y el exit code es `1`.  
+Mutación sintética (CI local):
 
-- dimensiones
-- hash de alturas
-- hash de kind/mapt
-- hash rail/road bits
-- conteo de componentes industria/estación
+```bash
+python3 scripts/test_compare_snapshots_mutation.py
+```
+
+## Spike / fixtures
+
+- Save pequeño versionado: `crates/openttdrs-core/tests/fixtures/rail_signals_mixed.sav`
+- Ottdmap 2×2 (solo candidato): `m3_road_tram_2x2.ottdmap`
+
+Sin binario OpenTTD compilado el paso 1 no corre; el resto del tooling y el parche sí están versionados.

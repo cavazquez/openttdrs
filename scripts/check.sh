@@ -81,6 +81,14 @@ do_openttd_reference_manifest() {
     info "Manifiesto OpenTTD OK ✓"
 }
 
+do_snapshot_oracle_tools() {
+    info "Herramientas oráculo de snapshots (#110)..."
+    python3 -m py_compile scripts/compare_snapshots.py
+    python3 -m py_compile scripts/test_compare_snapshots_mutation.py
+    python3 scripts/test_compare_snapshots_mutation.py
+    info "Oráculo snapshots tooling OK ✓"
+}
+
 do_py_compile() {
     info "Sintaxis Python (scripts)..."
     python3 -m py_compile scripts/parse_sav.py
@@ -156,6 +164,7 @@ do_ci() {
     do_golden_parse_sav
     do_py_compile
     do_openttd_reference_manifest
+    do_snapshot_oracle_tools
     echo
     info "=== CI OK (paridad con .github/workflows/ci.yml, profile=${CARGO_PROFILE}) ==="
 }
@@ -169,6 +178,7 @@ case "${1:-all}" in
     golden)      do_golden_parse_sav ;;
     py)          do_py_compile ;;
     openttd-ref) do_openttd_reference_manifest ;;
+    snapshot-oracle) do_snapshot_oracle_tools ;;
     cov|coverage) do_coverage ;;
     build)       do_build ;;
     audit)       do_audit ;;
@@ -176,7 +186,7 @@ case "${1:-all}" in
     ci)          do_ci ;;
     all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|openttd-ref|audit|cov|build|doctor|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|openttd-ref|snapshot-oracle|audit|cov|build|doctor|ci|all}"
         exit 1
         ;;
 esac

@@ -121,3 +121,6 @@ jobs:
 
       - name: Manifiesto referencia OpenTTD (#109)
         run: python3 scripts/test_openttd_reference_manifest.py
+
+      - name: Oráculo snapshots — mutación (#110)
+        run: python3 scripts/test_compare_snapshots_mutation.py

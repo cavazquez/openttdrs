@@ -8,6 +8,11 @@ use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
 struct Snapshot {
+    schema_version: u32,
+    /// `"openttdrs"` (candidato) vs `"openttd"` (oráculo C++). Ver #110.
+    producer: String,
+    /// SHA del manifiesto OpenTTD cuando aplica; vacío en dumps locales.
+    openttd_commit: String,
     source_path: String,
     map: SnapshotMap,
     hashes: SnapshotHashes,
@@ -235,6 +240,9 @@ fn main() -> Result<(), String> {
 
     let n = usize::try_from(w.saturating_mul(h)).expect("n");
     let snapshot = Snapshot {
+        schema_version: 1,
+        producer: "openttdrs".to_string(),
+        openttd_commit: std::env::var("OPENTTDRS_OPENTTD_COMMIT").unwrap_or_default(),
         source_path: input.display().to_string(),
         map: SnapshotMap {
             width: w,

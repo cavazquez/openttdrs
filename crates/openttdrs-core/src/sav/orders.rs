@@ -1,51 +1,20 @@
 //! Órdenes de vehículos desde chunks `ORDL` / `ORDR` y resolución a [`VehicleOrder`].
+//!
+//! El wire format encode/decode vive en [`super::orders_codec`].
 
 use std::collections::HashMap;
 
-use crate::map::{TileCoord, coord_from_linear_index};
-use crate::vehicle::VehicleOrder;
-
 use super::chunks::{RawChunk, find_chunk};
-use super::entities::SavStationIndex;
+use super::orders_codec::OT_NOTHING;
 use super::table::{SlRecord, SlValue, record_get};
 
-/// Tipos de orden relevantes (`order_type.h` en `OpenTTD`).
-const OT_NOTHING: u8 = 0;
-const OT_GOTO_STATION: u8 = 1;
-const OT_GOTO_DEPOT: u8 = 2;
-const OT_GOTO_WAYPOINT: u8 = 6;
-const OT_CONDITIONAL: u8 = 7;
-const OTTD_DEPOT_SERVICE: u8 = 1 << 0;
-const OTTD_DEPOT_HALT: u8 = 1 << 3;
+pub use super::orders_codec::SavOrder;
+pub(crate) use super::orders_codec::vehicle_orders_from_sav;
 
 /// `SLV_105` — listas de órdenes como pool `OrderList` (`ORDL`).
 const SLV_105: u16 = 105;
 /// `SLV_ORDERS_OWNED_BY_ORDERLIST` — órdenes inline en `ORDL`.
 const SLV_ORDERS_OWNED_BY_ORDERLIST: u16 = 354;
-
-/// Orden cruda decodificada del save (`Order::type` + `dest` + `flags`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct SavOrder {
-    pub order_type: u8,
-    pub dest: u16,
-    /// Byte `Order::flags` (`order_base.h`: unload bits 0–2, load bits 4–6).
-    pub flags: u8,
-}
-
-/// `OrderUnloadType::NoUnload` en bits 0–2 de `flags`.
-const OTTD_UNLOAD_NO_UNLOAD: u8 = 4;
-/// `OrderLoadType::FullLoad` / `FullLoadAny` en bits 4–6 de `flags`.
-const OTTD_LOAD_FULL: u8 = 2;
-const OTTD_LOAD_FULL_ANY: u8 = 3;
-
-#[must_use]
-pub(crate) fn stop_flags_from_sav(flags: u8) -> (bool, bool) {
-    let unload = flags & 0x07;
-    let load = (flags >> 4) & 0x07;
-    let no_unload = unload == OTTD_UNLOAD_NO_UNLOAD;
-    let full_load = load == OTTD_LOAD_FULL || load == OTTD_LOAD_FULL_ANY;
-    (full_load, no_unload)
-}
 
 #[derive(Debug, Clone, Copy)]
 struct OrdrEntry {
@@ -223,90 +192,21 @@ fn order_lists_from_chunks(
     out
 }
 
-/// Convierte órdenes del save a destinos jugables (estación/waypoint/depósito/condicional).
-#[must_use]
-pub(crate) fn vehicle_orders_from_sav(
-    sav_orders: &[SavOrder],
-    stations: &HashMap<u32, SavStationIndex>,
-    map_w: u32,
-) -> Vec<VehicleOrder> {
-    let mut out = Vec::new();
-    for order in sav_orders {
-        let ot = order.order_type & 0x0F;
-        match ot {
-            OT_GOTO_STATION => {
-                if let Some(st) = stations.get(&u32::from(order.dest)) {
-                    let (full_load, no_unload) = stop_flags_from_sav(order.flags);
-                    if st.is_waypoint {
-                        out.push(VehicleOrder::waypoint(st.pos));
-                    } else {
-                        out.push(VehicleOrder::station_with_flags(
-                            st.pos, full_load, no_unload,
-                        ));
-                    }
-                }
-            }
-            OT_GOTO_WAYPOINT => {
-                if let Some(st) = stations.get(&u32::from(order.dest)) {
-                    out.push(VehicleOrder::waypoint(st.pos));
-                }
-            }
-            OT_GOTO_DEPOT => {
-                let pos = coord_from_linear_index(u64::from(order.dest), map_w)
-                    .unwrap_or(TileCoord::new(0, 0));
-                let halt = order.flags & OTTD_DEPOT_HALT != 0;
-                let service = order.flags & OTTD_DEPOT_SERVICE != 0;
-                let depot_order = if halt || !service {
-                    VehicleOrder::depot(pos)
-                } else {
-                    VehicleOrder::depot_pass_through(pos)
-                };
-                out.push(depot_order);
-            }
-            OT_CONDITIONAL => {
-                let comparator = (order.order_type >> 5) & 0x07;
-                let value = u8::try_from(order.dest & 0x07FF).unwrap_or(255);
-                let jump_to = usize::from(order.flags);
-                let condition = match comparator {
-                    4 => crate::vehicle::OrderConditionKind::CargoLoadAbove,
-                    2 => crate::vehicle::OrderConditionKind::CargoLoadBelow,
-                    _ => continue,
-                };
-                out.push(VehicleOrder::conditional(condition, value, jump_to));
-            }
-            _ => {}
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::cast_possible_truncation)]
 mod tests {
     use super::super::chunks::{CH_ARRAY, CH_TABLE, RawChunk};
+    use super::super::orders_codec::{
+        OT_CONDITIONAL, OT_GOTO_DEPOT, OT_GOTO_STATION, OTTD_DEPOT_HALT, OTTD_LOAD_FULL,
+        OTTD_UNLOAD_NO_UNLOAD, stop_flags_from_sav,
+    };
     use super::*;
     use crate::map::TileCoord;
+    use crate::vehicle::VehicleOrder;
 
     fn ordl_header_with_orders_subfields() -> Vec<u8> {
         let mut header = Vec::new();
-        header.push(0x1B);
-        super::super::table::tests::write_str("orders", &mut header);
-        header.push(0);
-        header.push(2);
-        super::super::table::tests::write_str("type", &mut header);
-        header.push(2);
-        super::super::table::tests::write_str("flags", &mut header);
-        header.push(4);
-        super::super::table::tests::write_str("dest", &mut header);
-        header.push(2);
-        super::super::table::tests::write_str("refit_cargo", &mut header);
-        header.push(4);
-        super::super::table::tests::write_str("wait_time", &mut header);
-        header.push(4);
-        super::super::table::tests::write_str("travel_time", &mut header);
-        header.push(4);
-        super::super::table::tests::write_str("max_speed", &mut header);
-        header.push(0);
+        super::super::orders_codec::append_ordl_orders_header(&mut header).expect("header");
         header
     }
 
@@ -388,7 +288,7 @@ mod tests {
         let mut stations = HashMap::new();
         stations.insert(
             0,
-            SavStationIndex {
+            super::super::entities::SavStationIndex {
                 pos: TileCoord::new(5, 2),
                 is_waypoint: false,
                 facilities: 1,
@@ -412,7 +312,7 @@ mod tests {
         let mut stations = HashMap::new();
         stations.insert(
             1,
-            SavStationIndex {
+            super::super::entities::SavStationIndex {
                 pos: TileCoord::new(3, 4),
                 is_waypoint: false,
                 facilities: 1,

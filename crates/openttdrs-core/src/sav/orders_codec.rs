@@ -1,0 +1,376 @@
+//! Codec ORDL simétrico: constantes, flags, wire format y header (#149).
+//!
+//! No maneja `current_order` ni resolución de pools `ORDL`/`ORDR`
+//! (eso vive en [`super::orders`]).
+
+use std::collections::HashMap;
+
+use crate::cargo::CargoType;
+use crate::map::{TileCoord, coord_from_linear_index, coord_to_linear_index};
+use crate::vehicle::{OrderConditionKind, VehicleOrder};
+
+use super::SavError;
+use super::entities::SavStationIndex;
+use super::write::codec::write_str;
+
+/// Tipos de orden relevantes (`order_type.h` en `OpenTTD`).
+pub(crate) const OT_NOTHING: u8 = 0;
+pub(crate) const OT_GOTO_STATION: u8 = 1;
+pub(crate) const OT_GOTO_DEPOT: u8 = 2;
+pub(crate) const OT_GOTO_WAYPOINT: u8 = 6;
+pub(crate) const OT_CONDITIONAL: u8 = 7;
+
+pub(crate) const OTTD_DEPOT_SERVICE: u8 = 1 << 0;
+pub(crate) const OTTD_DEPOT_PART_OF_ORDERS: u8 = 1 << 1;
+pub(crate) const OTTD_DEPOT_HALT: u8 = 1 << 3;
+
+/// `OrderUnloadType::NoUnload` en bits 0–2 de `flags`.
+pub(crate) const OTTD_UNLOAD_NO_UNLOAD: u8 = 4;
+/// `OrderLoadType::FullLoad` / `FullLoadAny` en bits 4–6 de `flags`.
+pub(crate) const OTTD_LOAD_FULL: u8 = 2;
+pub(crate) const OTTD_LOAD_FULL_ANY: u8 = 3;
+
+/// Bytes por orden en el wire ORDL moderno:
+/// `type(1) | flags(1) | dest(2) | refit(1) | wait(2) | travel(2) | max_speed(2)`.
+pub(crate) const ORDER_WIRE_LEN: usize = 11;
+
+/// Orden cruda decodificada del save (`Order::type` + `dest` + `flags`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SavOrder {
+    pub order_type: u8,
+    pub dest: u16,
+    /// Byte `Order::flags` (`order_base.h`: unload bits 0–2, load bits 4–6).
+    pub flags: u8,
+}
+
+#[must_use]
+pub(crate) fn stop_flags_from_sav(flags: u8) -> (bool, bool) {
+    let unload = flags & 0x07;
+    let load = (flags >> 4) & 0x07;
+    let no_unload = unload == OTTD_UNLOAD_NO_UNLOAD;
+    let full_load = load == OTTD_LOAD_FULL || load == OTTD_LOAD_FULL_ANY;
+    (full_load, no_unload)
+}
+
+#[must_use]
+pub(crate) fn stop_flags_to_sav(full_load: bool, no_unload: bool) -> u8 {
+    let mut flags = 0u8;
+    if full_load {
+        flags |= OTTD_LOAD_FULL << 4;
+    }
+    if no_unload {
+        flags |= OTTD_UNLOAD_NO_UNLOAD;
+    }
+    flags
+}
+
+#[must_use]
+pub(crate) fn depot_flags_to_sav(stop: bool) -> u8 {
+    let mut flags = OTTD_DEPOT_PART_OF_ORDERS;
+    if stop {
+        flags |= OTTD_DEPOT_HALT;
+    } else {
+        flags |= OTTD_DEPOT_SERVICE;
+    }
+    flags
+}
+
+/// `true` = detener en depósito (halt o sin service).
+#[must_use]
+pub(crate) fn depot_stop_from_sav(flags: u8) -> bool {
+    let halt = flags & OTTD_DEPOT_HALT != 0;
+    let service = flags & OTTD_DEPOT_SERVICE != 0;
+    halt || !service
+}
+
+/// Empaqueta campos en el layout ORDL de 10 bytes (timetable en cero).
+#[must_use]
+pub(crate) fn encode_order_wire(
+    order_type: u8,
+    flags: u8,
+    dest: u16,
+    refit: u8,
+) -> [u8; ORDER_WIRE_LEN] {
+    let mut out = [0u8; ORDER_WIRE_LEN];
+    out[0] = order_type;
+    out[1] = flags;
+    out[2..4].copy_from_slice(&dest.to_be_bytes());
+    out[4] = refit;
+    // wait_time / travel_time / max_speed quedan en cero (timetable no exportado).
+    out
+}
+
+/// Desempaqueta `type`/`flags`/`dest`/`refit` del wire (ignora timetable).
+#[must_use]
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn decode_order_wire(bytes: &[u8]) -> Option<(SavOrder, u8)> {
+    if bytes.len() < ORDER_WIRE_LEN {
+        return None;
+    }
+    Some((
+        SavOrder {
+            order_type: bytes[0],
+            flags: bytes[1],
+            dest: u16::from_be_bytes([bytes[2], bytes[3]]),
+        },
+        bytes[4],
+    ))
+}
+
+/// Codifica una [`VehicleOrder`] al wire ORDL.
+///
+/// `station_id` resuelve el índice STNN de una tesela de estación/waypoint.
+#[must_use]
+pub(crate) fn encode_vehicle_order(
+    order: &VehicleOrder,
+    station_id: impl Fn(TileCoord) -> Option<u16>,
+    map_w: u32,
+) -> Option<[u8; ORDER_WIRE_LEN]> {
+    let (order_type, dest, flags, refit) = match *order {
+        VehicleOrder::Station {
+            station,
+            full_load,
+            no_unload,
+            ..
+        } => {
+            let id = station_id(station)?;
+            (
+                OT_GOTO_STATION,
+                id,
+                stop_flags_to_sav(full_load, no_unload),
+                0xFFu8,
+            )
+        }
+        VehicleOrder::Waypoint { waypoint, .. } => {
+            let id = station_id(waypoint)?;
+            (OT_GOTO_WAYPOINT, id, 0, 0xFF)
+        }
+        VehicleOrder::Depot {
+            depot,
+            stop,
+            refit_cargo,
+            ..
+        } => {
+            let id = u16::try_from(coord_to_linear_index(depot, map_w)?).ok()?;
+            let refit = refit_cargo.map_or(0xFF, CargoType::temperate_id);
+            (OT_GOTO_DEPOT, id, depot_flags_to_sav(stop), refit)
+        }
+        VehicleOrder::Conditional {
+            condition,
+            value,
+            jump_to,
+        } => {
+            let comparator: u8 = match condition {
+                OrderConditionKind::CargoLoadAbove => 4,
+                OrderConditionKind::CargoLoadBelow => 2,
+            };
+            let order_type = OT_CONDITIONAL | (comparator << 5);
+            let flags = u8::try_from(jump_to.min(255)).unwrap_or(255);
+            let dest = u16::from(value);
+            (order_type, dest, flags, 0xFF)
+        }
+        VehicleOrder::Tile(_) => return None,
+    };
+    Some(encode_order_wire(order_type, flags, dest, refit))
+}
+
+/// Convierte órdenes del save a destinos jugables (estación/waypoint/depósito/condicional).
+#[must_use]
+pub(crate) fn vehicle_orders_from_sav(
+    sav_orders: &[SavOrder],
+    stations: &HashMap<u32, SavStationIndex>,
+    map_w: u32,
+) -> Vec<VehicleOrder> {
+    let mut out = Vec::new();
+    for order in sav_orders {
+        let ot = order.order_type & 0x0F;
+        match ot {
+            OT_GOTO_STATION => {
+                if let Some(st) = stations.get(&u32::from(order.dest)) {
+                    let (full_load, no_unload) = stop_flags_from_sav(order.flags);
+                    if st.is_waypoint {
+                        out.push(VehicleOrder::waypoint(st.pos));
+                    } else {
+                        out.push(VehicleOrder::station_with_flags(
+                            st.pos, full_load, no_unload,
+                        ));
+                    }
+                }
+            }
+            OT_GOTO_WAYPOINT => {
+                if let Some(st) = stations.get(&u32::from(order.dest)) {
+                    out.push(VehicleOrder::waypoint(st.pos));
+                }
+            }
+            OT_GOTO_DEPOT => {
+                let pos = coord_from_linear_index(u64::from(order.dest), map_w)
+                    .unwrap_or(TileCoord::new(0, 0));
+                let depot_order = if depot_stop_from_sav(order.flags) {
+                    VehicleOrder::depot(pos)
+                } else {
+                    VehicleOrder::depot_pass_through(pos)
+                };
+                out.push(depot_order);
+            }
+            OT_CONDITIONAL => {
+                let comparator = (order.order_type >> 5) & 0x07;
+                let value = u8::try_from(order.dest & 0x07FF).unwrap_or(255);
+                let jump_to = usize::from(order.flags);
+                let condition = match comparator {
+                    4 => OrderConditionKind::CargoLoadAbove,
+                    2 => OrderConditionKind::CargoLoadBelow,
+                    _ => continue,
+                };
+                out.push(VehicleOrder::conditional(condition, value, jump_to));
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Header SL del struct anidado `orders` del chunk ORDL.
+///
+/// # Errors
+///
+/// Falla si algún string del header no cabe en gamma.
+pub(crate) fn append_ordl_orders_header(header: &mut Vec<u8>) -> Result<(), SavError> {
+    header.push(0x1B); // STRUCT | HAS_LENGTH
+    write_str("orders", header)?;
+    header.push(0); // fin lista top-level → subcampos de orders
+    header.push(2);
+    write_str("type", header)?;
+    header.push(2);
+    write_str("flags", header)?;
+    header.push(4);
+    write_str("dest", header)?;
+    header.push(2);
+    write_str("refit_cargo", header)?;
+    header.push(4);
+    write_str("wait_time", header)?;
+    header.push(4);
+    write_str("travel_time", header)?;
+    header.push(4);
+    write_str("max_speed", header)?;
+    header.push(0);
+    Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use crate::map::TileCoord;
+
+    #[test]
+    fn stop_flags_roundtrip() {
+        assert_eq!(
+            stop_flags_from_sav(stop_flags_to_sav(false, false)),
+            (false, false)
+        );
+        assert_eq!(
+            stop_flags_from_sav(stop_flags_to_sav(true, false)),
+            (true, false)
+        );
+        assert_eq!(
+            stop_flags_from_sav(stop_flags_to_sav(false, true)),
+            (false, true)
+        );
+        assert_eq!(
+            stop_flags_from_sav(stop_flags_to_sav(true, true)),
+            (true, true)
+        );
+        // Decode acepta FullLoadAny; encode emite FullLoad.
+        assert!(stop_flags_from_sav(OTTD_LOAD_FULL_ANY << 4).0);
+    }
+
+    #[test]
+    fn depot_flags_roundtrip() {
+        assert!(depot_stop_from_sav(depot_flags_to_sav(true)));
+        assert!(!depot_stop_from_sav(depot_flags_to_sav(false)));
+    }
+
+    #[test]
+    fn station_wire_roundtrip_preserves_flags() {
+        let order = VehicleOrder::station_with_flags(TileCoord::new(3, 4), true, true);
+        let wire = encode_vehicle_order(&order, |_| Some(1), 64).unwrap();
+        let (sav, refit) = decode_order_wire(&wire).unwrap();
+        assert_eq!(sav.order_type & 0x0F, OT_GOTO_STATION);
+        assert_eq!(sav.dest, 1);
+        assert_eq!(refit, 0xFF);
+        let mut stations = HashMap::new();
+        stations.insert(
+            1,
+            SavStationIndex {
+                pos: TileCoord::new(3, 4),
+                is_waypoint: false,
+                facilities: 1,
+                name: None,
+            },
+        );
+        let decoded = vehicle_orders_from_sav(&[sav], &stations, 64);
+        assert_eq!(decoded, vec![order]);
+    }
+
+    #[test]
+    fn depot_and_conditional_wire_roundtrip() {
+        let depot = VehicleOrder::depot(TileCoord::new(5, 2));
+        let cond = VehicleOrder::conditional(OrderConditionKind::CargoLoadAbove, 50, 2);
+        let map_w = 64u32;
+        let depot_wire = encode_vehicle_order(&depot, |_| None, map_w).unwrap();
+        let cond_wire = encode_vehicle_order(&cond, |_| None, map_w).unwrap();
+        let (depot_sav, _) = decode_order_wire(&depot_wire).unwrap();
+        let (cond_sav, _) = decode_order_wire(&cond_wire).unwrap();
+        let decoded = vehicle_orders_from_sav(&[depot_sav, cond_sav], &HashMap::new(), map_w);
+        assert_eq!(decoded, vec![depot, cond]);
+    }
+
+    #[test]
+    fn waypoint_wire_roundtrip() {
+        let order = VehicleOrder::waypoint(TileCoord::new(1, 1));
+        let wire = encode_vehicle_order(&order, |_| Some(7), 32).unwrap();
+        let (sav, _) = decode_order_wire(&wire).unwrap();
+        assert_eq!(sav.order_type & 0x0F, OT_GOTO_WAYPOINT);
+        let mut stations = HashMap::new();
+        stations.insert(
+            7,
+            SavStationIndex {
+                pos: TileCoord::new(1, 1),
+                is_waypoint: true,
+                facilities: 0,
+                name: None,
+            },
+        );
+        assert_eq!(vehicle_orders_from_sav(&[sav], &stations, 32), vec![order]);
+    }
+
+    #[test]
+    fn ordl_header_is_stable() {
+        let mut header = Vec::new();
+        append_ordl_orders_header(&mut header).unwrap();
+        assert_eq!(header.first().copied(), Some(0x1B));
+        assert!(header.windows(6).any(|w| w == b"orders"));
+        assert!(header.windows(4).any(|w| w == b"type"));
+        assert!(header.windows(4).any(|w| w == b"dest"));
+        assert_eq!(*header.last().unwrap(), 0);
+        assert_eq!(
+            header,
+            hex_literal_ordl_header(),
+            "header ORDL debe coincidir byte-a-byte con el export histórico"
+        );
+    }
+
+    /// Golden del header ORDL previo al codec (#149).
+    fn hex_literal_ordl_header() -> Vec<u8> {
+        // 1b 06 "orders" 00 02 04 "type" 02 05 "flags" 04 04 "dest" 02 0b "refit_cargo"
+        // 04 09 "wait_time" 04 0b "travel_time" 04 09 "max_speed" 00
+        vec![
+            0x1b, 0x06, b'o', b'r', b'd', b'e', b'r', b's', 0x00, 0x02, 0x04, b't', b'y', b'p',
+            b'e', 0x02, 0x05, b'f', b'l', b'a', b'g', b's', 0x04, 0x04, b'd', b'e', b's', b't',
+            0x02, 0x0b, b'r', b'e', b'f', b'i', b't', b'_', b'c', b'a', b'r', b'g', b'o', 0x04,
+            0x09, b'w', b'a', b'i', b't', b'_', b't', b'i', b'm', b'e', 0x04, 0x0b, b't', b'r',
+            b'a', b'v', b'e', b'l', b'_', b't', b'i', b'm', b'e', 0x04, 0x09, b'm', b'a', b'x',
+            b'_', b's', b'p', b'e', b'e', b'd', 0x00,
+        ]
+    }
+}

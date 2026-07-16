@@ -17,6 +17,7 @@ mod entities;
 mod house_population_generated;
 mod linkgraph;
 mod orders;
+mod orders_codec;
 mod table;
 pub mod write;
 

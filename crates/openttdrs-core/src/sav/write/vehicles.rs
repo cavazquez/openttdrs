@@ -2,21 +2,13 @@
 
 use super::super::SavError;
 use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE};
+use super::super::orders_codec::{append_ordl_orders_header, encode_vehicle_order};
 use super::chunks::raw_table_chunk;
 use super::codec::{write_gamma, write_str};
-use crate::CargoType;
 use crate::game_state::GameState;
 use crate::map::{TileCoord, coord_to_linear_index};
 use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
 
-/// `OT_GOTO_STATION` / `OT_GOTO_DEPOT` / `OT_GOTO_WAYPOINT` / `OT_CONDITIONAL` (`order_type.h`).
-const OT_GOTO_STATION: u8 = 1;
-const OT_GOTO_DEPOT: u8 = 2;
-const OT_GOTO_WAYPOINT: u8 = 6;
-const OT_CONDITIONAL: u8 = 7;
-const OTTD_DEPOT_SERVICE: u8 = 1 << 0;
-const OTTD_DEPOT_PART_OF_ORDERS: u8 = 1 << 1;
-const OTTD_DEPOT_HALT: u8 = 1 << 3;
 /// Cabeza de convoy (`GVSF_FRONT`).
 const GVSF_FRONT: u8 = 0x01;
 
@@ -39,75 +31,13 @@ fn cargo_ottd_byte(v: &Vehicle) -> u8 {
 }
 
 fn encode_goto_order(order: &VehicleOrder, state: &GameState, map_w: u32) -> Option<Vec<u8>> {
-    let (order_type, dest, flags, refit) = match *order {
-        VehicleOrder::Station {
-            station,
-            full_load,
-            no_unload,
-            ..
-        } => {
-            let id = station_id_for_pos(state, station)?;
-            let mut flags = 0u8;
-            if full_load {
-                flags |= 2 << 4; // FullLoad
-            }
-            if no_unload {
-                flags |= 4; // NoUnload
-            }
-            (OT_GOTO_STATION, id, flags, 0xFFu8)
-        }
-        VehicleOrder::Waypoint { waypoint, .. } => {
-            let id = station_id_for_pos(state, waypoint)?;
-            (OT_GOTO_WAYPOINT, id, 0, 0xFF)
-        }
-        VehicleOrder::Depot {
-            depot,
-            stop,
-            refit_cargo,
-            ..
-        } => {
-            let id = u16::try_from(coord_to_linear_index(depot, map_w)?).ok()?;
-            let mut flags = OTTD_DEPOT_PART_OF_ORDERS;
-            if stop {
-                flags |= OTTD_DEPOT_HALT;
-            } else {
-                flags |= OTTD_DEPOT_SERVICE;
-            }
-            let refit = refit_cargo.map_or(0xFF, CargoType::temperate_id);
-            (OT_GOTO_DEPOT, id, flags, refit)
-        }
-        VehicleOrder::Conditional {
-            condition,
-            value,
-            jump_to,
-        } => {
-            // LoadPercentage (var 0) + MoreThan(4) / LessThan(2).
-            let comparator: u8 = match condition {
-                crate::vehicle::OrderConditionKind::CargoLoadAbove => 4,
-                crate::vehicle::OrderConditionKind::CargoLoadBelow => 2,
-            };
-            let order_type = OT_CONDITIONAL | (comparator << 5);
-            let flags = u8::try_from(jump_to.min(255)).unwrap_or(255);
-            let dest = u16::from(value); // variable 0 in high bits
-            (order_type, dest, flags, 0xFF)
-        }
-        VehicleOrder::Tile(_) => return None,
-    };
-    let mut o = Vec::with_capacity(10);
-    o.push(order_type);
-    o.push(flags);
-    o.extend_from_slice(&dest.to_be_bytes());
-    o.push(refit);
-    o.extend_from_slice(&0u16.to_be_bytes()); // wait_time
-    o.extend_from_slice(&0u16.to_be_bytes()); // travel_time
-    o.extend_from_slice(&0u16.to_be_bytes()); // max_speed
-    Some(o)
+    encode_vehicle_order(order, |pos| station_id_for_pos(state, pos), map_w).map(|b| b.to_vec())
 }
 
 type SavRecordBytes = Vec<u8>;
 type SavRecordList = Vec<SavRecordBytes>;
 
-/// Una lista ORDL por vehículo (solo órdenes goto estación/waypoint).
+/// Una lista ORDL por vehículo (goto estación/waypoint/depósito/condicional).
 ///
 /// # Errors
 ///
@@ -214,26 +144,8 @@ fn write_vehs_common(
 ///
 /// Falla si algún valor gamma está fuera de rango.
 pub(super) fn ordl_chunk(records: &[Vec<u8>]) -> Result<Vec<u8>, SavError> {
-    // Header con struct anidado `orders` (como gen_demo_sav.py).
     let mut header = Vec::new();
-    header.push(0x1B); // STRUCT | HAS_LENGTH
-    write_str("orders", &mut header)?;
-    header.push(0); // fin lista top-level → subcampos de orders
-    header.push(2);
-    write_str("type", &mut header)?;
-    header.push(2);
-    write_str("flags", &mut header)?;
-    header.push(4);
-    write_str("dest", &mut header)?;
-    header.push(2);
-    write_str("refit_cargo", &mut header)?;
-    header.push(4);
-    write_str("wait_time", &mut header)?;
-    header.push(4);
-    write_str("travel_time", &mut header)?;
-    header.push(4);
-    write_str("max_speed", &mut header)?;
-    header.push(0);
+    append_ordl_orders_header(&mut header)?;
     raw_table_chunk(*b"ORDL", &header, records, CH_TABLE)
 }
 
@@ -270,4 +182,85 @@ pub(super) fn vehs_chunk(records: &[Vec<u8>]) -> Result<Vec<u8>, SavError> {
         header.push(0);
     }
     raw_table_chunk(*b"VEHS", &header, records, CH_SPARSE_TABLE)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::station::{Station, StopKind};
+    use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
+
+    #[test]
+    fn encode_station_order_for_existing_station() {
+        let mut state = GameState::new(64, 64);
+        state.stations = vec![Station::new_with_kind(
+            TileCoord::new(28, 39),
+            StopKind::RailStation,
+        )];
+        let order = VehicleOrder::station(TileCoord::new(28, 39));
+        let enc = encode_goto_order(&order, &state, 64).expect("encode");
+        assert_eq!(enc.len(), 11);
+        assert_eq!(enc[0], 1);
+        assert_eq!(&enc[2..4], &0u16.to_be_bytes());
+    }
+
+    #[test]
+    fn ordl_records_non_empty_for_train_with_orders() {
+        let mut state = GameState::new(64, 64);
+        state.stations = vec![Station::new_with_kind(
+            TileCoord::new(28, 39),
+            StopKind::RailStation,
+        )];
+        let mut train = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(20, 40),
+            TileCoord::new(20, 40),
+        );
+        train.set_vehicle_orders(vec![VehicleOrder::station(TileCoord::new(28, 39))]);
+        state.vehicles = vec![train];
+        let (ordl, vehs) = ordl_and_vehs_records(&state, 64).unwrap();
+        assert_eq!(ordl.len(), 1);
+        assert_eq!(vehs.len(), 1);
+        assert!(ordl[0].len() > 1);
+    }
+
+    #[test]
+    fn exported_ordl_chunk_imports_orders() {
+        use crate::sav::chunks::{find_chunk, parse_chunks};
+        use crate::sav::orders::SavOrderImport;
+        use crate::sav::table::{SlValue, parse_table_chunk, record_get};
+
+        let mut state = GameState::new(64, 64);
+        state.stations = vec![Station::new_with_kind(
+            TileCoord::new(28, 39),
+            StopKind::RailStation,
+        )];
+        let mut train = Vehicle::new(
+            0,
+            VehicleKind::Train,
+            TileCoord::new(20, 40),
+            TileCoord::new(20, 40),
+        );
+        train.set_vehicle_orders(vec![VehicleOrder::station(TileCoord::new(28, 39))]);
+        state.vehicles = vec![train];
+        let (ordl, _) = ordl_and_vehs_records(&state, 64).unwrap();
+        let chunk_bytes = ordl_chunk(&ordl).unwrap();
+        let chunks = parse_chunks(&chunk_bytes).unwrap();
+        let raw = find_chunk(&chunks, "ORDL").expect("ORDL");
+        let rows = parse_table_chunk(&raw.body, false).expect("parse ORDL table");
+        assert_eq!(rows.len(), 1, "una lista ORDL");
+        let orders = record_get(&rows[0].1, "orders").expect("campo orders");
+        let SlValue::Structs(items) = orders else {
+            panic!("orders no es Structs: {orders:?}");
+        };
+        assert_eq!(items.len(), 1);
+        let import = SavOrderImport::from_chunks(&chunks, 350);
+        assert_eq!(
+            import.orders_for_vehicle_ref(1).len(),
+            1,
+            "lista ORDL vía ref 1"
+        );
+    }
 }

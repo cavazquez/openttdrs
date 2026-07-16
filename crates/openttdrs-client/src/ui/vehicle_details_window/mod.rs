@@ -15,7 +15,7 @@ use crate::ui::floating_window::{
 use crate::ui::font::UiFontRole;
 use crate::ui::toolbar::BuildMenuUi;
 
-pub(crate) use details::vehicle_details_body;
+pub(crate) use details::{speed_to_kmh, vehicle_details_body};
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);

@@ -12,6 +12,7 @@
 mod actions;
 mod rename;
 mod setup;
+mod status;
 mod sync;
 
 use bevy::prelude::*;
@@ -30,13 +31,16 @@ pub(crate) use rename::{
 pub(crate) use setup::setup_vehicle_window;
 pub(crate) use sync::sync_vehicle_window;
 
-const PREVIEW_TEX_W: u32 = 280;
-const PREVIEW_TEX_H: u32 = 120;
+const PREVIEW_TEX_W: u32 = 260;
+const PREVIEW_TEX_H: u32 = 100;
 const PREVIEW_SCALE: f32 = 0.5;
 pub(crate) const CONSIST_STRIP_MAX_UNITS: usize = 8;
 pub(crate) const CONSIST_UNIT_SPRITE_W: f32 = 28.0;
 pub(crate) const CONSIST_UNIT_SPRITE_H: f32 = 14.0;
 const PLACEHOLDER_SPRITE: &str = "assets/opengfx/tiles/vehicle_train_e.png";
+/// Botón icono de la toolbar de vista (#174).
+const ICON_BTN: f32 = 28.0;
+const ICON_IMG: f32 = 20.0;
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
@@ -72,6 +76,7 @@ pub(crate) struct VehicleWindowStatusText;
 pub(crate) enum VehicleWindowButton {
     ToggleRunning,
     Orders,
+    Timetable,
     GotoDepot,
     CenterOrder,
     CenterCamera,

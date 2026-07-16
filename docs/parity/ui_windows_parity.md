@@ -63,8 +63,9 @@ OpenTTD: `VehicleViewWindow` (`vehicle_gui.cpp:3007-3503`). Cliente:
 | Feature OpenTTD | Estado en cliente | Cercanía |
 |---|---|---|
 | Viewport siguiendo al vehículo (`WID_VV_VIEWPORT`, zoom) | Cámara render-target 280×120 (preview real del mundo) | ✔ esencial (seguir con doble clic es A) |
-| Barra de estado (`GetVehicleStatusString`): velocidad + destino + «parado» + averiado + atascado | «En marcha»/«Detenido» + velocidad y orden activa en el cuerpo | **A** para componer el string estado+destino; averías/atascado son **C** (no existen en la sim) |
-| Start/stop (`StartStopVehicle`) | «Iniciar/Detener» (`ToggleVehicleRunning`) | ✔ |
+| Barra de estado (`GetVehicleStatusString`): velocidad + destino + «parado» + averiado + atascado | Status corto bajo viewport (#174): Detenido / En marcha a X km/h → destino / Sin ruta / Averiado / PBS | ✔ esencial |
+| Start/stop (`StartStopVehicle`) | Icono ▶/■ + tooltip (`ToggleVehicleRunning`) | ✔ |
+| Toolbar de iconos (vista) | Fila de iconos + tooltips (#174); Horario/Detalles/Depósito/… | ✔ chrome; sprites GUI nativos OpenTTD opcionales |
 | Ir a depósito (`SendVehicleToDepot`, Ctrl = servicio) | «Depósito» (`AppendGotoNearestDepot`) | ✔ funcional; la variante «servicio» es **C** (no hay intervalos de servicio) |
 | Refit (`ShowVehicleRefitWindow`) | Botón «Refit carga» que cicla el tipo (`RefitVehicle`) | ✔ para vehículo puntual; ventana con lista de cargas es A; refit parcial de consist es C |
 | Clonar desde la ventana | Solo desde el depósito | **A** |

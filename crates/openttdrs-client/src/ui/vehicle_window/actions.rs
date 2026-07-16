@@ -11,6 +11,7 @@ use crate::render::{
 use crate::state::{OrderPickState, SimWorld};
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::refit_window::RefitWindowState;
+use crate::ui::timetable_window::{TimetableWindowState, open_timetable_for_vehicle};
 use crate::ui::toolbar::{OrderEditState, open_order_edit_for_vehicle};
 use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 
@@ -29,6 +30,7 @@ pub(crate) fn handle_vehicle_window_buttons(
     mut cam_q: Query<&mut Transform, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
     mut rename_input_q: Query<&mut EditableText, With<VehicleWindowRenameInput>>,
     mut refit_window: ResMut<RefitWindowState>,
+    mut timetable: ResMut<TimetableWindowState>,
     time: Res<Time>,
 ) {
     for (interaction, button) in &mut buttons {
@@ -54,6 +56,9 @@ pub(crate) fn handle_vehicle_window_buttons(
                 if let Some(vehicle) = sim.state.vehicles.iter().find(|v| v.id == vehicle_id) {
                     open_order_edit_for_vehicle(&mut order_state, vehicle, &mut next_pick);
                 }
+            }
+            VehicleWindowButton::Timetable => {
+                open_timetable_for_vehicle(&mut timetable, vehicle_id);
             }
             VehicleWindowButton::GotoDepot => {
                 match crate::network::apply_player_command(

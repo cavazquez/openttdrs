@@ -9,11 +9,11 @@ use crate::state::SimWorld;
 use crate::ui::floating_window::{FloatingWindow, FloatingWindowId, FloatingWindowTitleText};
 use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
 
+use super::status::format_vehicle_status;
 use super::{
-    STATUS_NO_ROUTE, STATUS_RUNNING, STATUS_STOPPED, VehicleConsistUnitSprite,
-    VehicleWindowPreviewCamera, VehicleWindowRefitOnly, VehicleWindowRenameInput,
-    VehicleWindowRenameRow, VehicleWindowState, VehicleWindowStatusText, VehicleWindowToggleText,
-    VehicleWindowTrainOnly, vehicle_side_sprite,
+    VehicleConsistUnitSprite, VehicleWindowPreviewCamera, VehicleWindowRefitOnly,
+    VehicleWindowRenameInput, VehicleWindowRenameRow, VehicleWindowState, VehicleWindowStatusText,
+    VehicleWindowToggleText, VehicleWindowTrainOnly, vehicle_side_sprite,
 };
 
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
@@ -146,24 +146,16 @@ pub(crate) fn sync_vehicle_window(
         **title = vehicle.display_name();
     }
     if let Ok((mut status, mut color)) = status_q.single_mut() {
-        if vehicle.running {
-            if vehicle.no_network_route_to_order {
-                **status = "Sin ruta".to_string();
-                *color = TextColor(STATUS_NO_ROUTE);
-            } else {
-                **status = "En marcha".to_string();
-                *color = TextColor(STATUS_RUNNING);
-            }
-        } else {
-            **status = "Detenido".to_string();
-            *color = TextColor(STATUS_STOPPED);
-        }
+        let (text, status_color) = format_vehicle_status(vehicle, &sim);
+        **status = text;
+        *color = TextColor(status_color);
     }
     if let Ok(mut toggle) = toggle_q.single_mut() {
+        // Iconos ▶ / ■ en la toolbar (#174).
         **toggle = if vehicle.running {
-            "Detener".to_string()
+            "■".to_string()
         } else {
-            "Iniciar".to_string()
+            "▶".to_string()
         };
     }
     if let Ok((mut tf, mut cam)) = preview.single_mut() {

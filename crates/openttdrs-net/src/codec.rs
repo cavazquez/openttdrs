@@ -7,9 +7,8 @@ use crate::protocol::{NetError, NetMessage};
 /// Escribe un mensaje (máx ~64 MiB de payload JSON).
 pub fn write_message(stream: &mut impl Write, msg: &NetMessage) -> Result<(), NetError> {
     let payload = serde_json::to_vec(msg)?;
-    let len = u32::try_from(payload.len()).map_err(|_| {
-        NetError::Protocol(format!("payload too large: {} bytes", payload.len()))
-    })?;
+    let len = u32::try_from(payload.len())
+        .map_err(|_| NetError::Protocol(format!("payload too large: {} bytes", payload.len())))?;
     stream.write_all(&len.to_le_bytes())?;
     stream.write_all(&payload)?;
     stream.flush()?;

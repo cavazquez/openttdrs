@@ -16,7 +16,10 @@ use crate::protocol::{NetError, NetMessage, PROTOCOL_VERSION};
 #[derive(Debug, Clone)]
 pub enum SessionEvent {
     /// Snapshot inicial (solo cliente, tras Welcome).
-    Welcome { snapshot_json: String, next_seq: u64 },
+    Welcome {
+        snapshot_json: String,
+        next_seq: u64,
+    },
     /// Comando autorizado a aplicar.
     Commit { seq: u64, command: Command },
     /// Avanzar ticks.
@@ -566,4 +569,3 @@ pub fn apply_session_event(state: &mut GameState, event: &SessionEvent) -> Resul
         SessionEvent::Disconnected { reason } => Err(reason.clone()),
     }
 }
-

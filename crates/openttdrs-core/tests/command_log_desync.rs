@@ -2,10 +2,10 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use openttdrs_core::GameState;
 use openttdrs_core::command::Command;
 use openttdrs_core::map::TileCoord;
 use openttdrs_core::parity::build_truck_bay;
-use openttdrs_core::GameState;
 
 #[test]
 fn two_worlds_same_log_same_state() {

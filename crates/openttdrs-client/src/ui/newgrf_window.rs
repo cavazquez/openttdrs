@@ -5,8 +5,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    Command, NewGrfEntry, format_grfid, inspect_grf_file, scan_grf_file,
-    validate_stack,
+    Command, NewGrfEntry, format_grfid, inspect_grf_file, scan_grf_file, validate_stack,
 };
 
 use crate::state::SimWorld;

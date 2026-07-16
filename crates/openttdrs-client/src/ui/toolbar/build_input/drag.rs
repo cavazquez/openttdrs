@@ -310,7 +310,10 @@ pub(crate) fn apply_drag_action(
                 .get(pos)
                 .map(|t| rail_type_from_tile(t).next().as_u8())
                 .unwrap_or(1);
-            match crate::network::apply_player_command(&mut sim.state, &Command::ConvertRail(pos, to)) {
+            match crate::network::apply_player_command(
+                &mut sim.state,
+                &Command::ConvertRail(pos, to),
+            ) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),
             }
@@ -327,7 +330,10 @@ pub(crate) fn apply_drag_action(
             |pos: TileCoord, bits: u8| Command::PlaceRailBits(pos, bits)
         };
         for (x, y) in tiles {
-            match crate::network::apply_player_command(&mut sim.state, &cmd_fn(TileCoord::new(x, y), rail_bits)) {
+            match crate::network::apply_player_command(
+                &mut sim.state,
+                &cmd_fn(TileCoord::new(x, y), rail_bits),
+            ) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),
             }

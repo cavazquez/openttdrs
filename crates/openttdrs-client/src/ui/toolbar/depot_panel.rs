@@ -9,9 +9,7 @@
 
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
-use openttdrs_core::{
-    Command, TileCoord, TileKind, VehicleKind, consist_unit_ids, engine_by_id,
-};
+use openttdrs_core::{Command, TileCoord, TileKind, VehicleKind, consist_unit_ids, engine_by_id};
 
 use crate::camera::tile_camera_world_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles};
@@ -738,7 +736,10 @@ pub(crate) fn handle_depot_panel_buttons(
         else {
             continue;
         };
-        match crate::network::apply_player_command(&mut sim.state, &Command::SellVehicle(vehicle_id)) {
+        match crate::network::apply_player_command(
+            &mut sim.state,
+            &Command::SellVehicle(vehicle_id),
+        ) {
             Ok(()) => {
                 pending.pending = true;
                 if depot_state.selected_vehicle == Some(vehicle_id) {
@@ -781,7 +782,10 @@ pub(crate) fn handle_depot_panel_buttons(
                 if units.len() < 2 {
                     continue;
                 }
-                match crate::network::apply_player_command(&mut sim.state, &Command::DetachConsistUnit(tail_id)) {
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::DetachConsistUnit(tail_id),
+                ) {
                     Ok(()) => {
                         pending.pending = true;
                         depot_state.selected_vehicle = Some(head_id);

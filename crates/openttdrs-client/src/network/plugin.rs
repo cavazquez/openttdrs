@@ -140,6 +140,7 @@ fn is_listen_server(net: Res<NetworkRuntime>) -> bool {
 }
 
 /// Al recibir el snapshot del servidor, pasar del menú a la vista de partida.
+#[allow(clippy::too_many_arguments)] // sistema Bevy: queries + estados
 fn enter_ingame_after_network_welcome(
     mut status: ResMut<NetworkStatus>,
     mut commands: Commands,

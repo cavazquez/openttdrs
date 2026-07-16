@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 use openttdrs_core::{
-    Command, CommandError, OrderConditionKind, OrderMoveDirection, TileCoord, Vehicle,
-    VehicleOrder,
+    Command, CommandError, OrderConditionKind, OrderMoveDirection, TileCoord, Vehicle, VehicleOrder,
 };
 
 use crate::render::RemapMapVisualsPending;
@@ -149,7 +148,10 @@ pub(crate) fn handle_order_panel_buttons(
                 let Some(vehicle_id) = order_state.vehicle_id else {
                     continue;
                 };
-                match crate::network::apply_player_command(&mut sim.state, &Command::SkipVehicleOrder(vehicle_id)) {
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::SkipVehicleOrder(vehicle_id),
+                ) {
                     Ok(()) => {
                         pending.pending = true;
                         refresh_orders_from_sim(&mut order_state, &sim);

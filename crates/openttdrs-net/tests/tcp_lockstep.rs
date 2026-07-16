@@ -6,9 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use openttdrs_core::{Command, GameState, TileCoord, apply_command};
-use openttdrs_net::{
-    apply_session_event, ClientSession, ListenServer, SessionEvent, DEFAULT_PORT,
-};
+use openttdrs_net::{ClientSession, DEFAULT_PORT, ListenServer, SessionEvent, apply_session_event};
 
 fn wait_event(client: &ClientSession, timeout: Duration) -> SessionEvent {
     let start = Instant::now();
@@ -55,9 +53,7 @@ fn two_peers_same_log_same_hash_over_tcp() {
     apply_session_event(&mut remote, &advance).unwrap();
 
     let hash = host.canonical_hash();
-    server
-        .broadcast_hash(host.tick.get(), hash)
-        .unwrap();
+    server.broadcast_hash(host.tick.get(), hash).unwrap();
     let check = wait_event(&client, Duration::from_secs(2));
     apply_session_event(&mut remote, &check).unwrap();
     assert_eq!(host.canonical_hash(), remote.canonical_hash());

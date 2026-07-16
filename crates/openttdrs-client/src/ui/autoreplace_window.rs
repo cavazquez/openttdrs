@@ -672,7 +672,10 @@ pub(crate) fn handle_autoreplace_buttons(
                 let Some(depot_pos) = state.depot_pos else {
                     continue;
                 };
-                match crate::network::apply_player_command(&mut sim.state, &Command::DepotMassAutoreplace { depot_pos }) {
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::DepotMassAutoreplace { depot_pos },
+                ) {
                     Ok(()) => pending.pending = true,
                     Err(e) => push_build_command_error(&mut hud_feedback, e, time.elapsed_secs()),
                 }

@@ -22,7 +22,10 @@ fn apply_vehicle_rename(
         return;
     };
     let name = rename_input_q.single().ok().map(|e| e.value().to_string());
-    match crate::network::apply_player_command(&mut sim.state, &Command::RenameVehicle { vehicle_id, name }) {
+    match crate::network::apply_player_command(
+        &mut sim.state,
+        &Command::RenameVehicle { vehicle_id, name },
+    ) {
         Ok(()) => window_state.rename_editing = false,
         Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
     }

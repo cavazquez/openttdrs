@@ -448,7 +448,10 @@ pub(crate) fn handle_vehicle_list_buttons(
         };
         match action.0 {
             VehicleListAction::ToggleRunning => {
-                match crate::network::apply_player_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id)) {
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::ToggleVehicleRunning(vehicle_id),
+                ) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
@@ -456,7 +459,10 @@ pub(crate) fn handle_vehicle_list_buttons(
                 }
             }
             VehicleListAction::GotoDepot => {
-                match crate::network::apply_player_command(&mut sim.state, &Command::AppendGotoNearestDepot(vehicle_id)) {
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::AppendGotoNearestDepot(vehicle_id),
+                ) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());

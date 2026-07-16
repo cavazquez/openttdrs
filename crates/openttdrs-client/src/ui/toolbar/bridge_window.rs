@@ -5,8 +5,8 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    BridgeType, Command, bridge_available_at_tick, bridge_build_cost,
-    bridge_middle_length, bridge_spec, command_would_fail,
+    BridgeType, Command, bridge_available_at_tick, bridge_build_cost, bridge_middle_length,
+    bridge_spec, command_would_fail,
 };
 
 use crate::render::RemapMapVisualsPending;

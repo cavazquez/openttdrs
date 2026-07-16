@@ -53,7 +53,10 @@ pub(crate) fn handle_vehicle_window_buttons(
         };
         match button {
             VehicleWindowButton::ToggleRunning => {
-                match crate::network::apply_player_command(&mut sim.state, &Command::ToggleVehicleRunning(vehicle_id)) {
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::ToggleVehicleRunning(vehicle_id),
+                ) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
@@ -66,7 +69,10 @@ pub(crate) fn handle_vehicle_window_buttons(
                 }
             }
             VehicleWindowButton::GotoDepot => {
-                match crate::network::apply_player_command(&mut sim.state, &Command::AppendGotoNearestDepot(vehicle_id)) {
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::AppendGotoNearestDepot(vehicle_id),
+                ) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
@@ -109,7 +115,10 @@ pub(crate) fn handle_vehicle_window_buttons(
                 }
             }
             VehicleWindowButton::TurnAround => {
-                match crate::network::apply_player_command(&mut sim.state, &Command::TurnAroundVehicle(vehicle_id)) {
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::TurnAroundVehicle(vehicle_id),
+                ) {
                     Ok(()) => pending.pending = true,
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
@@ -117,7 +126,10 @@ pub(crate) fn handle_vehicle_window_buttons(
                 }
             }
             VehicleWindowButton::ForceProceed => {
-                match crate::network::apply_player_command(&mut sim.state, &Command::ForceVehicleProceed(vehicle_id)) {
+                match crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::ForceVehicleProceed(vehicle_id),
+                ) {
                     Ok(()) => {}
                     Err(e) => {
                         push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());

@@ -1,7 +1,7 @@
 //! Lista de pools de órdenes compartidas.
 
 use bevy::prelude::*;
-use openttdrs_core::{Command};
+use openttdrs_core::Command;
 
 use crate::render::RemapMapVisualsPending;
 use crate::state::SimWorld;

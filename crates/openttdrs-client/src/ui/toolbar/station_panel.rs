@@ -4,8 +4,8 @@ use bevy::prelude::*;
 use bevy::text::EditableText;
 use openttdrs_core::{
     ALL_CARGO_TYPES, CargoType, Command, CommandError, MAX_STATION_NAME_CHARS,
-    STATION_COVERAGE_RADIUS, TileCoord, VehicleOrder, cargo_display_name,
-    station_coverage_at, station_rating_for_cargo, station_rating_for_company_cargo,
+    STATION_COVERAGE_RADIUS, TileCoord, VehicleOrder, cargo_display_name, station_coverage_at,
+    station_rating_for_cargo, station_rating_for_company_cargo,
 };
 
 use crate::iso::tile_pos;

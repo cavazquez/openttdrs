@@ -270,7 +270,12 @@ pub(crate) fn handle_sign_list_buttons(
                 let Some(id) = state.selected else {
                     continue;
                 };
-                if crate::network::apply_player_command(&mut sim.state, &Command::RemoveSign { sign_id: id }).is_ok() {
+                if crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::RemoveSign { sign_id: id },
+                )
+                .is_ok()
+                {
                     state.selected = None;
                     state.rename_editing = false;
                     let (mw, mh) = sim.state.map.dimensions();

@@ -2,8 +2,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    CargoType, Command, cargo_display_name, consist_unit_ids, refit_allowed,
-    refittable_cargo_types,
+    CargoType, Command, cargo_display_name, consist_unit_ids, refit_allowed, refittable_cargo_types,
 };
 
 use crate::render::RemapMapVisualsPending;

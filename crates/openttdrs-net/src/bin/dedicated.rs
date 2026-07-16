@@ -9,7 +9,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use openttdrs_core::{Command, GameState, TileCoord, apply_command};
-use openttdrs_net::{ListenServer, SessionEvent, DEFAULT_PORT};
+use openttdrs_net::{DEFAULT_PORT, ListenServer, SessionEvent};
 
 fn main() {
     let bind = parse_bind(env::args().skip(1));

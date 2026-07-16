@@ -72,9 +72,9 @@ fn sync_sim_time_controls(hud: Res<SimHudControls>, mut virtual_time: ResMut<Tim
 fn step_sim(
     mut sim: ResMut<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
-    net: Res<NetworkRuntime>,
+    net: Option<Res<NetworkRuntime>>,
 ) {
-    if net.role() == NetworkRole::Client {
+    if net.is_some_and(|n| n.role() == NetworkRole::Client) {
         return;
     }
     sim.state.step();

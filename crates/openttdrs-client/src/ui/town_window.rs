@@ -313,7 +313,10 @@ pub(crate) fn handle_town_window_buttons(
                 let Some(town_id) = town_state.town_id else {
                     continue;
                 };
-                if let Err(e) = crate::network::apply_player_command(&mut sim.state, &Command::TownAdvertise(town_id)) {
+                if let Err(e) = crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::TownAdvertise(town_id),
+                ) {
                     push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                 }
             }
@@ -321,8 +324,10 @@ pub(crate) fn handle_town_window_buttons(
                 let Some(town_id) = town_state.town_id else {
                     continue;
                 };
-                if let Err(e) = crate::network::apply_player_command(&mut sim.state, &Command::TownFundBuildings(town_id))
-                {
+                if let Err(e) = crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::TownFundBuildings(town_id),
+                ) {
                     push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
                 }
             }

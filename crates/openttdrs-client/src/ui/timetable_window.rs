@@ -425,7 +425,10 @@ pub(crate) fn handle_timetable_window_buttons(
         };
         match button {
             TimetableWindowButton::ToggleTimetable => {
-                let _ = crate::network::apply_player_command(&mut sim.state, &Command::ToggleVehicleTimetable(vehicle_id));
+                let _ = crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::ToggleVehicleTimetable(vehicle_id),
+                );
                 pending.pending = true;
             }
             TimetableWindowButton::ToggleAutofill => {

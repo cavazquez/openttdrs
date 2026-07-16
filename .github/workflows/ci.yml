@@ -100,27 +100,10 @@ jobs:
           name: coverage-lcov
           path: lcov.info
 
+      # TNBP + Python: misma entrada que `./scripts/check.sh ci` (#120).
+      # Excepciones solo-GHA arriba: rustdoc, cargo-audit, cargo-deny, llvm-cov en main.
       - name: Validar TNBP (fixture v5p12_tnbp.ottdmap)
-        run: cargo run -q -p openttdrs-core --profile ci --example validate_ottdmap_tnbp -- crates/openttdrs-core/tests/fixtures/v5p12_tnbp.ottdmap
+        run: ./scripts/check.sh tnbp
 
-      - name: Golden parse_sav (tests/fixtures)
-        run: |
-          python3 scripts/verify_parse_sav_reference.py
-          python3 scripts/verify_parse_sav_water_m5.py
-
-      - name: Sintaxis Python (scripts)
-        run: |
-          python3 -m py_compile scripts/parse_sav.py
-          python3 -m py_compile scripts/verify_parse_sav_reference.py
-          python3 -m py_compile scripts/verify_parse_sav_water_m5.py
-          python3 -m py_compile scripts/emit_parse_sav_golden.py
-          python3 -m py_compile scripts/gen_tnbp_fixture_ottdmap.py
-          python3 -m py_compile scripts/audit_sp3_assets.py
-          python3 -m py_compile scripts/test_openttd_reference_manifest.py
-          python3 -m py_compile scripts/gen_water_lock_tiles.py
-
-      - name: Manifiesto referencia OpenTTD (#109)
-        run: python3 scripts/test_openttd_reference_manifest.py
-
-      - name: Oráculo snapshots — mutación (#110)
-        run: python3 scripts/test_compare_snapshots_mutation.py
+      - name: Checks Python compartidos (golden + py_compile + runs)
+        run: ./scripts/check.sh ci-python

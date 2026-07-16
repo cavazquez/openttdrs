@@ -95,7 +95,8 @@ En juego: **F5** guardar · **F9** cargar · pausa/velocidad en toolbar · prefe
 ```bash
 ./scripts/doctor.sh         # deps de sistema + toolchain + assets (antes de adivinar)
 ./scripts/check.sh          # fmt + clippy + tests (día a día)
-./scripts/check.sh ci       # paridad con el job CI (TNBP, golden parse_sav, …)
+./scripts/check.sh ci       # núcleo compartido con ci.yml (ver excepciones GHA en check.sh)
+./scripts/check.sh ci-python  # solo goldens/py del manifiesto scripts/ci_python_manifest.json
 ./scripts/check.sh cov      # cobertura → lcov.info (cargo-llvm-cov)
 cargo test --workspace
 
@@ -142,7 +143,9 @@ Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (caché Cargo + A
 | `cargo audit` | Vulnerabilidades RustSec (pinned 0.22.1) |
 | `cargo deny` | Licencias + advisories + sources + bans (pinned 0.20.2, `deny.toml`) |
 | tests | PRs: `nextest --no-build`; push a `main`: `llvm-cov` → Codecov |
-| extras | TNBP, golden `parse_sav`, `py_compile` |
+| extras | `./scripts/check.sh tnbp` + `ci-python` ([manifiesto](scripts/ci_python_manifest.json); #120) |
+
+`check.sh ci` replica fmt/clippy/tests/TNBP/Python. Solo en GHA: rustdoc, audit, deny y cobertura en `main`.
 
 Cobertura manual: [.github/workflows/coverage.yml](.github/workflows/coverage.yml) (`workflow_dispatch`) o `./scripts/check.sh cov`.
 

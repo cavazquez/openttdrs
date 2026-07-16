@@ -1,0 +1,35 @@
+{
+  "description": "Fuente única de checks Python para ./scripts/check.sh y .github/workflows/ci.yml (#120).",
+  "golden": [
+    "scripts/verify_parse_sav_reference.py",
+    "scripts/verify_parse_sav_water_m5.py",
+    "scripts/verify_parse_sav_rail_m5.py",
+    "scripts/validate_sav_export.py"
+  ],
+  "py_compile": [
+    "scripts/parse_sav.py",
+    "scripts/verify_parse_sav_reference.py",
+    "scripts/emit_parse_sav_golden.py",
+    "scripts/verify_parse_sav_water_m5.py",
+    "scripts/verify_parse_sav_rail_m5.py",
+    "scripts/validate_sav_export.py",
+    "scripts/gen_tnbp_fixture_ottdmap.py",
+    "scripts/audit_sp3_assets.py",
+    "scripts/gen_house_draw_data.py",
+    "scripts/gen_vehicle_gfx_data.py",
+    "scripts/extract_ship_vehicle_sprites.py",
+    "scripts/gen_rail_signals_sav.py",
+    "scripts/extract_roadveh_movement.py",
+    "scripts/test_openttd_reference_manifest.py",
+    "scripts/gen_water_lock_tiles.py",
+    "scripts/compare_snapshots.py",
+    "scripts/test_compare_snapshots_mutation.py",
+    "scripts/run_ci_python.py",
+    "scripts/test_ci_workflow_parity.py"
+  ],
+  "runs": [
+    "scripts/test_openttd_reference_manifest.py",
+    "scripts/test_compare_snapshots_mutation.py",
+    "scripts/test_ci_workflow_parity.py"
+  ]
+}

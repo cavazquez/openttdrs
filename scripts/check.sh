@@ -9,9 +9,16 @@
 #   ./scripts/check.sh test   # Tests del workspace
 #   ./scripts/check.sh cov    # Tests + informe LCOV (requiere cargo-llvm-cov + llvm-tools-preview)
 #   ./scripts/check.sh ci     # Paridad con .github/workflows/ci.yml (sin instalar APT)
+#   ./scripts/check.sh ci-python  # Goldens + py_compile + runs del manifiesto (#120)
 #   ./scripts/check.sh audit  # SP3.0: PNG OpenGFX requeridos vs assets/opengfx/tiles
 #   ./scripts/check.sh build  # cargo build --workspace
 #   ./scripts/check.sh doctor # deps de entorno (delegado a scripts/doctor.sh)
+#
+# Excepciones documentadas (solo en GitHub Actions, no en `ci` local):
+#   - rustdoc (`cargo doc -D warnings`) — #103
+#   - cargo-audit / cargo-deny — #106
+#   - cobertura llvm-cov en push a main (y workflow Coverage manual)
+# La lista Python compartida vive en scripts/ci_python_manifest.json.
 
 set -euo pipefail
 
@@ -62,16 +69,18 @@ do_test() {
 
 do_tnbp() {
     info "Validando TNBP ($TNBP_FIXTURE)..."
-    cargo run -q -p openttdrs-core --example validate_ottdmap_tnbp -- "$TNBP_FIXTURE"
+    local -a args=(-q -p openttdrs-core)
+    if [[ -n "${CARGO_PROFILE:-}" ]]; then
+        args+=(--profile "$CARGO_PROFILE")
+    fi
+    args+=(--example validate_ottdmap_tnbp -- "$TNBP_FIXTURE")
+    cargo run "${args[@]}"
     info "TNBP OK ✓"
 }
 
 do_golden_parse_sav() {
-    info "Golden parse_sav..."
-    python3 scripts/verify_parse_sav_reference.py
-    python3 scripts/verify_parse_sav_water_m5.py
-    python3 scripts/verify_parse_sav_rail_m5.py
-    python3 scripts/validate_sav_export.py
+    info "Golden parse_sav (manifiesto CI)..."
+    python3 scripts/run_ci_python.py golden
     info "Golden parse_sav OK ✓"
 }
 
@@ -90,23 +99,15 @@ do_snapshot_oracle_tools() {
 }
 
 do_py_compile() {
-    info "Sintaxis Python (scripts)..."
-    python3 -m py_compile scripts/parse_sav.py
-    python3 -m py_compile scripts/verify_parse_sav_reference.py
-    python3 -m py_compile scripts/emit_parse_sav_golden.py
-    python3 -m py_compile scripts/verify_parse_sav_water_m5.py
-    python3 -m py_compile scripts/verify_parse_sav_rail_m5.py
-    python3 -m py_compile scripts/validate_sav_export.py
-    python3 -m py_compile scripts/gen_tnbp_fixture_ottdmap.py
-    python3 -m py_compile scripts/audit_sp3_assets.py
-    python3 -m py_compile scripts/gen_house_draw_data.py
-    python3 -m py_compile scripts/gen_vehicle_gfx_data.py
-    python3 -m py_compile scripts/extract_ship_vehicle_sprites.py
-    python3 -m py_compile scripts/gen_rail_signals_sav.py
-    python3 -m py_compile scripts/extract_roadveh_movement.py
-    python3 -m py_compile scripts/test_openttd_reference_manifest.py
-    python3 -m py_compile scripts/gen_water_lock_tiles.py
+    info "Sintaxis Python (manifiesto CI)..."
+    python3 scripts/run_ci_python.py py_compile
     info "Python OK ✓"
+}
+
+do_ci_python() {
+    info "Checks Python compartidos con GHA (#120)..."
+    python3 scripts/run_ci_python.py all
+    info "ci-python OK ✓"
 }
 
 do_audit() {
@@ -161,12 +162,9 @@ do_ci() {
         do_test
     fi
     do_tnbp
-    do_golden_parse_sav
-    do_py_compile
-    do_openttd_reference_manifest
-    do_snapshot_oracle_tools
+    do_ci_python
     echo
-    info "=== CI OK (paridad con .github/workflows/ci.yml, profile=${CARGO_PROFILE}) ==="
+    info "=== CI OK (núcleo compartido con ci.yml; ver excepciones GHA en cabecera) ==="
 }
 
 case "${1:-all}" in
@@ -177,6 +175,7 @@ case "${1:-all}" in
     tnbp)        do_tnbp ;;
     golden)      do_golden_parse_sav ;;
     py)          do_py_compile ;;
+    ci-python)   do_ci_python ;;
     openttd-ref) do_openttd_reference_manifest ;;
     snapshot-oracle) do_snapshot_oracle_tools ;;
     cov|coverage) do_coverage ;;
@@ -186,7 +185,7 @@ case "${1:-all}" in
     ci)          do_ci ;;
     all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|openttd-ref|snapshot-oracle|audit|cov|build|doctor|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|ci-python|openttd-ref|snapshot-oracle|audit|cov|build|doctor|ci|all}"
         exit 1
         ;;
 esac

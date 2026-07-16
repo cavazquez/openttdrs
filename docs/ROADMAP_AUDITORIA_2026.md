@@ -24,7 +24,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 | #103 rustdoc CI | ✅ | Cerrado |
 | #108 hash por tick | ✅ | `GameState::canonical_hash` (FNV-1a, dominio `openttdrs-gs-v1`) |
 | #109 pin OpenTTD | ✅ | `docs/parity/openttd-reference.json` + fetch por SHA |
-| #110 oráculo independiente | ✅ | Export C++ OpenTTD 15.3; primera divergencia: `road_bits_hash` |
+| #110 oráculo independiente | ✅ | Export C++ 15.3; `road_bits_hash` alineado (`SLV_ROAD_TYPES`) |
 | #119 tablas generadas | ⬜ | Tras #109 |
 | #125 docs tick/carga | ⬜ | Idealmente tras #109 |
 
@@ -33,7 +33,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 | Issue | Estado |
 |-------|--------|
 | #117 contribución / ADRs | 🟨 | Primera ADR: [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) |
-| #120 alinear `check.sh ci` ↔ GHA | ⬜ |
+| #120 alinear `check.sh ci` ↔ GHA | ✅ | `ci_python_manifest.json` + `check.sh ci-python` |
 | #106 cargo-audit / deny | ✅ |
 
 ### Fase 2 — Límites arquitectónicos
@@ -110,7 +110,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 ## Próximo foco recomendado
 
-1. **#120** / **#117** — CI y plantilla de contribución/ADRs.
-2. Investigar divergencia `road_bits_hash` (`SNAPSHOT_FIRST_DIVERGENCE.md`).
+1. **#119** — reproducibilidad de tablas Rust generadas.
+2. **#117** — plantilla de contribución / más ADRs.
 3. Deuda I8 de settings cliente → `Command` (lista en inventario #114).
 4. Host migration post-v1 (fuera de ADR 0001).

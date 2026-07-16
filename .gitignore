@@ -50,6 +50,7 @@ target
 !tests/fixtures/**/*.json
 # Manifiesto pin OpenTTD (#109)
 !docs/parity/openttd-reference.json
+!scripts/ci_python_manifest.json
 
 # Prefijo local de deps / baseset para build dedicated OpenTTD (#110)
 /.deps/

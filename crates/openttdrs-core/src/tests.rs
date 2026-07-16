@@ -8,31 +8,7 @@ use crate::industry::{
 use crate::vehicle::VEHICLE_CAPACITY;
 
 use super::*;
-
-fn advance_vehicle_tiles(s: &mut GameState, tiles: u32) {
-    for _ in 0..tiles {
-        advance_vehicle_one_tile(s);
-    }
-}
-
-fn advance_vehicle_one_tile(s: &mut GameState) {
-    let max_ticks = s
-        .vehicles
-        .iter()
-        .map(Vehicle::ticks_per_tile)
-        .max()
-        .unwrap_or(5)
-        * 2;
-    for _ in 0..max_ticks {
-        let before: Vec<_> = s.vehicles.iter().map(|v| v.pos).collect();
-        s.step();
-        for (vehicle, prev) in s.vehicles.iter().zip(before) {
-            if vehicle.pos != prev {
-                return;
-            }
-        }
-    }
-}
+use crate::test_fixtures::SimHarness;
 
 fn advance_vehicle(v: &mut Vehicle, tiles: u32) {
     for _ in 0..tiles {
@@ -168,7 +144,7 @@ fn vehicle_follows_path() {
         .expect("hay carretera");
 
     for (i, &tile) in expected.iter().enumerate() {
-        advance_vehicle_tiles(&mut s, 1);
+        SimHarness::advance_vehicle_tiles(&mut s, 1);
         assert_eq!(
             s.vehicles[0].pos,
             tile,
@@ -192,12 +168,7 @@ fn vehicle_loads_from_industry() {
 
     // Carga gradual desde industria.
     let want = VEHICLE_CAPACITY.min(50);
-    for _ in 0..16 {
-        s.step();
-        if s.vehicles[0].cargo == want {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, want, 16);
     assert_eq!(s.vehicles[0].cargo, want);
     assert_eq!(s.industries[0].stock, 50 - want);
 }
@@ -220,12 +191,7 @@ fn vehicle_loads_from_industry_covered_by_nearby_station() {
     ));
 
     let want = VEHICLE_CAPACITY.min(50);
-    for _ in 0..16 {
-        s.step();
-        if s.vehicles[0].cargo == want {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, want, 16);
 
     assert_eq!(s.vehicles[0].cargo, want);
     assert_eq!(s.industries[0].stock, 50 - want);
@@ -244,22 +210,14 @@ fn vehicle_delivers_to_station() {
         .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
 
     // Carga en industria, luego un tile de viaje hasta la estación.
-    for _ in 0..16 {
-        s.step();
-        if s.vehicles[0].cargo > 0 && !s.vehicles[0].cargo_transfer_active() {
-            break;
-        }
-    }
+    SimHarness::step_until(&mut s, 16, "vehicle loaded and transfer idle", |s| {
+        s.vehicles[0].cargo > 0 && !s.vehicles[0].cargo_transfer_active()
+    });
     assert!(s.vehicles[0].cargo > 0);
 
-    advance_vehicle_tiles(&mut s, 1);
+    SimHarness::advance_vehicle_tiles(&mut s, 1);
     assert_eq!(s.vehicles[0].pos, spos);
-    for _ in 0..16 {
-        s.step();
-        if s.vehicles[0].cargo == 0 {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, 0, 16);
     assert_eq!(s.vehicles[0].cargo, 0);
     assert!(s.stations[0].income > 0);
     assert!(s.stats.cargo_income_earned > 0, "pago por entrega TTD");
@@ -284,12 +242,7 @@ fn vehicle_delivers_when_inside_station_coverage() {
     s.vehicles[0].mark_cargo_loaded(TileCoord::new(0, 0));
     s.vehicles[0].ensure_packets_from_legacy();
 
-    for _ in 0..16 {
-        s.step();
-        if s.vehicles[0].cargo == 0 {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, 0, 16);
 
     assert_eq!(s.vehicles[0].cargo, 0);
     assert_eq!(s.stations[0].stock, 17);
@@ -312,21 +265,13 @@ fn sim_stats_count_pickup_and_delivery() {
         .push(Vehicle::new(0, VehicleKind::Truck, ipos, spos));
     assert_eq!(s.stats.cargo_pickups, 0);
     assert_eq!(s.stats.cargo_deliveries, 0);
-    for _ in 0..16 {
-        s.step();
-        if s.vehicles[0].cargo > 0 && !s.vehicles[0].cargo_transfer_active() {
-            break;
-        }
-    }
+    SimHarness::step_until(&mut s, 16, "vehicle loaded and transfer idle", |s| {
+        s.vehicles[0].cargo > 0 && !s.vehicles[0].cargo_transfer_active()
+    });
     assert_eq!(s.stats.cargo_pickups, 1);
     assert!(s.stats.cargo_units_loaded > 0);
-    advance_vehicle_tiles(&mut s, 1);
-    for _ in 0..16 {
-        s.step();
-        if s.vehicles[0].cargo == 0 {
-            break;
-        }
-    }
+    SimHarness::advance_vehicle_tiles(&mut s, 1);
+    SimHarness::until_vehicle_cargo(&mut s, 0, 0, 16);
     assert_eq!(s.stats.cargo_deliveries, 1);
     assert!(s.stats.cargo_units_delivered > 0);
 }
@@ -419,12 +364,7 @@ fn truck_loads_freight_waiting_at_station_hub() {
         TileCoord::new(8, 0),
     ));
 
-    for _ in 0..8 {
-        s.step();
-        if s.vehicles[0].cargo == 14 {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, 14, 8);
 
     assert_eq!(s.vehicles[0].cargo, 14);
     assert_eq!(s.vehicles[0].cargo_type, Some(CargoType::Coal));
@@ -446,12 +386,7 @@ fn train_loads_freight_from_rail_station_waiting_cargo() {
         TileCoord::new(7, 2),
     ));
 
-    for _ in 0..8 {
-        s.step();
-        if s.vehicles[0].cargo == 9 {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, 9, 8);
 
     assert_eq!(s.vehicles[0].cargo, 9);
     assert_eq!(s.vehicles[0].cargo_type, Some(CargoType::Goods));
@@ -515,12 +450,7 @@ fn truck_prefers_industry_over_station_waiting_cargo() {
         TileCoord::new(8, 0),
     ));
 
-    for _ in 0..8 {
-        s.step();
-        if s.vehicles[0].cargo == 11 {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, 11, 8);
 
     assert_eq!(s.vehicles[0].cargo, 11);
     assert_eq!(s.industries[0].stock, 0);
@@ -547,24 +477,14 @@ fn two_truck_transfer_via_station_hub() {
     s.vehicles[0].mark_cargo_loaded(TileCoord::new(0, 0));
     s.vehicles[0].ensure_packets_from_legacy();
 
-    for _ in 0..8 {
-        s.step();
-        if s.vehicles[0].cargo == 0 {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, 0, 8);
     assert_eq!(s.vehicles[0].cargo, 0);
     assert_eq!(s.stations[0].cargo_stock.goods, 16);
     s.vehicles.clear();
 
     s.vehicles
         .push(Vehicle::new(0, VehicleKind::Truck, hub, dest));
-    for _ in 0..8 {
-        s.step();
-        if s.vehicles[0].cargo == 16 {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, 16, 8);
     assert_eq!(s.vehicles[0].cargo, 16);
     assert_eq!(s.stations[0].cargo_stock.goods, 0);
 }
@@ -582,12 +502,7 @@ fn link_graph_records_station_flow_on_unload() {
     truck.ensure_packets_from_legacy();
     truck.last_pickup_station = Some(from);
     s.vehicles.push(truck);
-    for _ in 0..8 {
-        s.step();
-        if s.vehicles[0].cargo == 0 {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, 0, 8);
     assert_eq!(s.vehicles[0].cargo, 0);
     let key = LinkEdgeKey {
         from,
@@ -617,12 +532,7 @@ fn link_graph_sets_pickup_when_loading_waiting_cargo() {
         TileCoord::new(8, 0),
     ));
 
-    for _ in 0..8 {
-        s.step();
-        if s.vehicles[0].cargo == 14 {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, 14, 8);
     assert_eq!(s.vehicles[0].cargo, 14);
     assert_eq!(s.vehicles[0].last_pickup_station, Some(hub));
 }
@@ -642,12 +552,7 @@ fn delivery_income_scales_with_haul_distance() {
         truck.mark_cargo_loaded(*source);
         truck.ensure_packets_from_legacy();
         s.vehicles.push(truck);
-        for _ in 0..8 {
-            s.step();
-            if s.vehicles[0].cargo == 0 {
-                break;
-            }
-        }
+        SimHarness::until_vehicle_cargo(&mut s, 0, 0, 8);
         incomes[idx] = s.stations[0].income;
     }
 
@@ -756,23 +661,13 @@ fn bus_loads_and_delivers_passengers_for_income() {
     s.vehicles
         .push(Vehicle::new(0, VehicleKind::Bus, origin, dest));
 
-    for _ in 0..8 {
-        s.step();
-        if s.vehicles[0].cargo == 15 {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, 15, 8);
     assert_eq!(s.vehicles[0].cargo, 15);
     assert_eq!(s.stations[0].cargo_stock.passengers, 0);
 
-    advance_vehicle_tiles(&mut s, 4);
+    SimHarness::advance_vehicle_tiles(&mut s, 4);
     assert_eq!(s.vehicles[0].pos, dest);
-    for _ in 0..8 {
-        s.step();
-        if s.vehicles[0].cargo == 0 {
-            break;
-        }
-    }
+    SimHarness::until_vehicle_cargo(&mut s, 0, 0, 8);
     assert_eq!(s.vehicles[0].cargo, 0);
     assert!(
         s.stats.cargo_income_earned > 0,
@@ -793,7 +688,7 @@ fn vehicle_moves_toward_dest() {
         .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
 
     let dist_before = s.vehicles[0].manhattan_to_dest();
-    advance_vehicle_tiles(&mut s, 1);
+    SimHarness::advance_vehicle_tiles(&mut s, 1);
     let dist_after = s.vehicles[0].manhattan_to_dest();
     assert!(dist_after < dist_before, "debe acercarse al destino");
 }
@@ -807,7 +702,7 @@ fn vehicle_without_orders_waits_at_arrival_without_road_network() {
         .push(Vehicle::new(0, VehicleKind::Truck, start, dest));
 
     // Avanzar hasta llegar al destino (3 tiles Manhattan sin red).
-    advance_vehicle_tiles(&mut s, 3);
+    SimHarness::advance_vehicle_tiles(&mut s, 3);
     assert_eq!(s.vehicles[0].pos, dest);
     assert_eq!(s.vehicles[0].dest, dest);
 
@@ -846,7 +741,7 @@ fn train_without_orders_keeps_moving_on_rail() {
     v.set_cruise_speed();
     s.vehicles.push(v);
 
-    advance_vehicle_tiles(&mut s, 2);
+    SimHarness::advance_vehicle_tiles(&mut s, 2);
 
     assert_ne!(s.vehicles[0].pos, start);
     assert_eq!(s.map.get_kind(s.vehicles[0].pos), Some(TileKind::Rail));
@@ -864,7 +759,7 @@ fn vehicle_without_orders_wanders_on_road_network() {
     s.vehicles
         .push(Vehicle::new(7, VehicleKind::Truck, start, start));
 
-    advance_vehicle_tiles(&mut s, 1);
+    SimHarness::advance_vehicle_tiles(&mut s, 1);
 
     assert_ne!(s.vehicles[0].pos, start);
     assert_eq!(s.map.get_kind(s.vehicles[0].pos), Some(TileKind::Road));

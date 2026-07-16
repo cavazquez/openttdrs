@@ -2,6 +2,7 @@
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod coherence_tests {
     use super::super::*;
+    use crate::test_fixtures::SimHarness;
     use crate::{
         CargoType, Command, CompanyId, GameState, Industry, IndustryKind, PathNetwork, TileCoord,
         TileKind, Vehicle, VehicleKind, command::apply_command, find_path,
@@ -198,12 +199,7 @@ mod coherence_tests {
         state.vehicles.push(truck);
         let _ = deliver_road;
 
-        for _ in 0..16 {
-            state.step();
-            if state.vehicles[0].cargo == 0 {
-                break;
-            }
-        }
+        SimHarness::until_vehicle_cargo(&mut state, 0, 0, 16);
         assert_eq!(
             state.vehicles[0].cargo, 0,
             "debe descargar carbón en parada de entrega"
@@ -244,12 +240,7 @@ mod coherence_tests {
         state.vehicles.push(truck);
         let _ = deliver_road;
 
-        for _ in 0..16 {
-            state.step();
-            if state.vehicles[0].cargo == 0 {
-                break;
-            }
-        }
+        SimHarness::until_vehicle_cargo(&mut state, 0, 0, 16);
         assert_eq!(
             state.vehicles[0].cargo, 0,
             "parada de entrega debe aceptar descarga aunque cargo_source sea la misma tesela"

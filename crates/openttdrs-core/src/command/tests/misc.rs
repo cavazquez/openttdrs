@@ -485,3 +485,38 @@ fn set_cargo_dist_distribution_rebuilds_flows() {
     .unwrap();
     assert_eq!(s.cargo_dist.distribution, DistributionType::Symmetric);
 }
+
+#[test]
+fn set_company_colour_and_build_selectors() {
+    use crate::{RailType, RoadType};
+
+    let mut s = GameState::new(8, 8);
+    apply_command(&mut s, &Command::SetCompanyColour(6)).unwrap();
+    assert_eq!(s.company_colour, 6);
+    apply_command(&mut s, &Command::SetCompanyColour(22)).unwrap(); // 22 % 16 = 6
+    assert_eq!(s.company_colour, 6);
+
+    apply_command(&mut s, &Command::SetCurrentRailType(RailType::Electric)).unwrap();
+    assert_eq!(s.current_rail_type, RailType::Electric);
+    apply_command(&mut s, &Command::SetCurrentRoadType(RoadType::Road)).unwrap();
+    assert_eq!(s.current_road_type, RoadType::Road);
+    apply_command(&mut s, &Command::SetCurrentTramType(RoadType::Tram)).unwrap();
+    assert_eq!(s.current_tram_type, RoadType::Tram);
+}
+
+#[test]
+fn set_ai_settings_clamps() {
+    let mut s = GameState::new(8, 8);
+    apply_command(
+        &mut s,
+        &Command::SetAiSettings(crate::AiSettings {
+            enabled: false,
+            build_money_threshold: 1,
+            max_routes: 99,
+        }),
+    )
+    .unwrap();
+    assert!(!s.ai.enabled);
+    assert_eq!(s.ai.build_money_threshold, 10_000);
+    assert_eq!(s.ai.max_routes, 4);
+}

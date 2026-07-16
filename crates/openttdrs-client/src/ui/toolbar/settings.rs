@@ -189,9 +189,14 @@ pub(crate) fn handle_company_colour_swatches(
         if sim.state.company_colour == colour {
             continue;
         }
-        sim.state.company_colour = colour;
-        sim.state.sync_active_from_mirrors();
-        info!("Color compañía: {} ({colour})", company_colour_name(colour));
+        if crate::network::apply_player_command(
+            &mut sim.state,
+            &openttdrs_core::Command::SetCompanyColour(colour),
+        )
+        .is_ok()
+        {
+            info!("Color compañía: {} ({colour})", company_colour_name(colour));
+        }
     }
 }
 

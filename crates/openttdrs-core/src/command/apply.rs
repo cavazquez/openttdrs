@@ -484,5 +484,73 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             state.rebuild_station_flows();
             Ok(())
         }
+        Command::SetCompanyColour(colour) => {
+            let colour = *colour % 16;
+            if state.company_colour == colour {
+                return Ok(());
+            }
+            state.company_colour = colour;
+            Ok(())
+        }
+        Command::SetCurrentRailType(rt) => {
+            if state.current_rail_type == *rt {
+                return Ok(());
+            }
+            state.current_rail_type = *rt;
+            Ok(())
+        }
+        Command::SetCurrentRoadType(rt) => {
+            if state.current_road_type == *rt {
+                return Ok(());
+            }
+            state.current_road_type = *rt;
+            Ok(())
+        }
+        Command::SetCurrentTramType(rt) => {
+            if state.current_tram_type == *rt {
+                return Ok(());
+            }
+            state.current_tram_type = *rt;
+            Ok(())
+        }
+        Command::SetCurrentStationClass(class) => {
+            state.current_station_class = *class;
+            if let Some(first) =
+                crate::station_class::list_station_specs(&state.station_spec_catalog, *class, "")
+                    .first()
+            {
+                state.current_station_spec = first.id;
+            }
+            Ok(())
+        }
+        Command::SetCurrentStationSpec(spec) => {
+            if state.current_station_spec == *spec {
+                return Ok(());
+            }
+            state.current_station_spec = *spec;
+            Ok(())
+        }
+        Command::SetCurrentAirportClass(class) => {
+            state.current_airport_class = *class;
+            if let Some(first) = crate::airport_class::list_airport_specs(*class, "").first() {
+                state.current_airport_spec = first.id;
+            }
+            Ok(())
+        }
+        Command::SetCurrentAirportSpec(spec) => {
+            if let Some(def) = crate::airport_class::airport_spec_def(*spec) {
+                state.current_airport_class = def.class;
+                state.current_airport_spec = *spec;
+            }
+            Ok(())
+        }
+        Command::SetAiSettings(settings) => {
+            let next = settings.clamped();
+            if state.ai == next {
+                return Ok(());
+            }
+            state.ai = next;
+            Ok(())
+        }
     }
 }

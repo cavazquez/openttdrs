@@ -11,6 +11,7 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::EditableText;
 use bevy::ui::RelativeCursorPosition;
 use bevy::ui::widget::ImageNode;
+use openttdrs_core::Command;
 use openttdrs_core::{DecodedSprite, RoadTramType, RoadType, list_road_types, road_type_def};
 
 use crate::state::SimWorld;
@@ -290,10 +291,11 @@ pub(crate) fn handle_road_type_select_buttons(
         if *interaction != Interaction::Pressed {
             continue;
         }
-        match button.class {
-            RoadTramType::Road => sim.state.current_road_type = button.id,
-            RoadTramType::Tram => sim.state.current_tram_type = button.id,
-        }
+        let cmd = match button.class {
+            RoadTramType::Road => Command::SetCurrentRoadType(button.id),
+            RoadTramType::Tram => Command::SetCurrentTramType(button.id),
+        };
+        let _ = crate::network::apply_player_command(&mut sim.state, &cmd);
         picker.open = None;
         picker.filter.clear();
     }

@@ -3,6 +3,7 @@
 //! Se abre al activar la herramienta Aeropuerto: clase, tipo, orientación y cobertura.
 
 use bevy::prelude::*;
+use openttdrs_core::Command;
 use openttdrs_core::{
     AirportClassId, AirportSpecId, STATION_COVERAGE_RADIUS, airport_class_def, airport_spec_def,
     airport_spec_footprint, list_airport_classes, list_airport_specs, station_coverage_at,
@@ -315,18 +316,18 @@ pub(crate) fn handle_airport_picker_buttons(
         }
         match *button {
             AirportPickerButton::Class(class) => {
-                sim.state.current_airport_class = class;
-                if let Some(first) = list_airport_specs(class, "").first() {
-                    station_state.airport_spec = first.id;
-                    sim.state.current_airport_spec = first.id;
-                }
+                let _ = crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::SetCurrentAirportClass(class),
+                );
+                station_state.airport_spec = sim.state.current_airport_spec;
             }
             AirportPickerButton::Spec(spec) => {
-                if let Some(def) = airport_spec_def(spec) {
-                    sim.state.current_airport_class = def.class;
-                    sim.state.current_airport_spec = spec;
-                    station_state.airport_spec = spec;
-                }
+                let _ = crate::network::apply_player_command(
+                    &mut sim.state,
+                    &Command::SetCurrentAirportSpec(spec),
+                );
+                station_state.airport_spec = sim.state.current_airport_spec;
             }
             AirportPickerButton::AxisX => station_state.airport_axis_y = false,
             AirportPickerButton::AxisY => station_state.airport_axis_y = true,

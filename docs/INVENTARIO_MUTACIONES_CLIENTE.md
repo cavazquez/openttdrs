@@ -19,19 +19,22 @@ Fecha: 2026-07-16. Crate: `openttdrs-client`. ADR red: [adr/0001-multiplayer-v1.
 | Drenaje UI runtime | `ui/statusbar/sync.rs` (news/display) | Colas efímeras de `runtime` |
 | Bootstrap pre-partida | `state/bootstrap/*`, población procedural | Antes de que exista log de red |
 
-### Migrado a `Command` (piloto I8 settings)
+### Migrado a `Command` (I8 settings)
 
 | Grupo | Archivos | Comando |
 |-------|----------|---------|
 | Pathfinding / PBS UI | `ui/pathfinding_settings_window.rs` | `SetPathfindingSettings` |
 | CargoDist UI | `ui/cargo_dist_settings_window.rs` | `SetCargoDistDistribution` |
+| Color compañía | `ui/toolbar/settings.rs` | `SetCompanyColour` |
+| Selectores vía/road/tram | `rail_type_selector`, `road_type_selector` | `SetCurrentRailType` / `Road` / `Tram` |
+| Estación / aeropuerto | `rail_station_window`, `airport_picker_window` | `SetCurrentStation*` / `Airport*` |
+| AI TransCargo | `ui/ai_settings_window.rs` | `SetAiSettings` |
 
 ### Deuda I8 restante (debería ser `Command` o settings replicados)
 
 | Grupo | Archivos representativos | Qué muta |
 |-------|--------------------------|----------|
-| Selectores vía/estación | `ui/toolbar/*_type_selector.rs`, airport/station pickers | `current_rail_type`, road/tram/station/airport |
-| Color / AI / story | ventanas de compañía / AI / GS | espejos y settings de partida |
+| Story / GS UI | `ui/story_window.rs` | `gs.story_index` (navegación UI; revisar si debe ser local) |
 | Editor / sandbox | `state/editor_session.rs`, escenarios heightmap | clima, seed, clear entidades, cheats |
 | Drag helper | `ui/toolbar/build_input/drag.rs` → `finalize_road_drag_line` | post-proceso mapa tras colocar |
 
@@ -46,6 +49,7 @@ Para listen-server / cliente-only, todo lo marcado **Deuda I8** que altere estad
 
 ## Follow-up sugeridos (no bloquean cierre de #114)
 
-1. ~~Commands para `pathfinding` / `cargo_dist`.~~ Hecho (piloto). Quedan tipos de vía activos y color/AI.
+1. ~~Commands para pathfinding / cargo_dist / selectores / color / AI.~~ Hecho.
 2. Editor/sandbox solo en modo single-player o como comandos de host.
 3. Asegurar que `finalize_road_drag_line` no duplique efectos ya cubiertos por el comando de colocación.
+4. Decidir si `gs.story_index` es estado local de UI o comando.

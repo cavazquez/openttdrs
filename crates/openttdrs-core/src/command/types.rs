@@ -386,4 +386,22 @@ pub enum Command {
     SetPathfindingSettings(crate::pathfinding_settings::PathfindingSettings),
     /// Cambia el modo CargoDist y reconstruye flows de estación.
     SetCargoDistDistribution(crate::flow_stat::DistributionType),
+    /// Color de la compañía activa (0..=15).
+    SetCompanyColour(u8),
+    /// Tipo de vía activo para construcción.
+    SetCurrentRailType(crate::rail_type::RailType),
+    /// Tipo de carretera activo para construcción.
+    SetCurrentRoadType(crate::road_type::RoadType),
+    /// Tipo de tranvía activo para construcción.
+    SetCurrentTramType(crate::road_type::RoadType),
+    /// Clase de estación activa (elige el primer spec de esa clase).
+    SetCurrentStationClass(crate::station_class::StationClassId),
+    /// Spec de estación activo.
+    SetCurrentStationSpec(crate::station_class::StationSpecId),
+    /// Clase de aeropuerto activa (elige el primer spec de esa clase).
+    SetCurrentAirportClass(crate::airport_class::AirportClassId),
+    /// Spec de aeropuerto activo.
+    SetCurrentAirportSpec(crate::airport_class::AirportSpecId),
+    /// Ajustes de IA TransCargo de la partida.
+    SetAiSettings(crate::ai::AiSettings),
 }

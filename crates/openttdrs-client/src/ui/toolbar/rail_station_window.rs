@@ -10,6 +10,7 @@ use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
+use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
     DecodedSprite, STATION_COVERAGE_RADIUS, StationClassId, StationSpecId, list_station_classes,
@@ -801,13 +802,10 @@ pub(crate) fn handle_station_class_select_buttons(
         if *interaction != Interaction::Pressed {
             continue;
         }
-        sim.state.current_station_class = button.0;
-        // Al cambiar de clase, elegir el primer spec disponible.
-        if let Some(first) =
-            list_station_specs(&sim.state.station_spec_catalog, button.0, "").first()
-        {
-            sim.state.current_station_spec = first.id;
-        }
+        let _ = crate::network::apply_player_command(
+            &mut sim.state,
+            &Command::SetCurrentStationClass(button.0),
+        );
         catalog.open = None;
         catalog.filter.clear();
     }
@@ -822,7 +820,10 @@ pub(crate) fn handle_station_spec_select_buttons(
         if *interaction != Interaction::Pressed {
             continue;
         }
-        sim.state.current_station_spec = button.0;
+        let _ = crate::network::apply_player_command(
+            &mut sim.state,
+            &Command::SetCurrentStationSpec(button.0),
+        );
         catalog.open = None;
         catalog.filter.clear();
     }

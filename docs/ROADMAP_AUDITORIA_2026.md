@@ -110,7 +110,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 ## Próximo foco recomendado
 
-1. Deuda I8 settings → `Command`: piloto hecho (`SetPathfindingSettings` / `SetCargoDistDistribution`). Siguen selectores de vía, color/AI y editor.
+1. Deuda I8 settings → `Command`: settings + selectores + color/AI migrados. Quedan editor/sandbox, drag helper y story index.
 2. Host migration post-v1 (fuera de ADR 0001).
 3. Benchmarks headless (#116).
 4. Regenerar pilots OpenGFX con drift (house_draw / vehicle_gfx) en PR de datos.

@@ -306,7 +306,16 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::AddNewGrfToStack { .. }
         | Command::SetNewGrfParam { .. }
         | Command::SetPathfindingSettings(..)
-        | Command::SetCargoDistDistribution(..) => None,
+        | Command::SetCargoDistDistribution(..)
+        | Command::SetCompanyColour(..)
+        | Command::SetCurrentRailType(..)
+        | Command::SetCurrentRoadType(..)
+        | Command::SetCurrentTramType(..)
+        | Command::SetCurrentStationClass(..)
+        | Command::SetCurrentStationSpec(..)
+        | Command::SetCurrentAirportClass(..)
+        | Command::SetCurrentAirportSpec(..)
+        | Command::SetAiSettings(..) => None,
     }
 }
 

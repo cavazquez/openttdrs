@@ -5,6 +5,7 @@
 
 use bevy::prelude::*;
 use bevy::ui::widget::ImageNode;
+use openttdrs_core::Command;
 use openttdrs_core::RailType;
 
 use crate::state::SimWorld;
@@ -141,7 +142,10 @@ pub(crate) fn handle_rail_type_select_buttons(
         if *interaction != Interaction::Pressed {
             continue;
         }
-        sim.state.current_rail_type = button.0;
+        let _ = crate::network::apply_player_command(
+            &mut sim.state,
+            &Command::SetCurrentRailType(button.0),
+        );
     }
 }
 

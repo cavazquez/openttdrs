@@ -250,9 +250,17 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         // ═══════════════════════════════════════════════════════════════════
         // Settings de partida (NO modifican mapa)
         // ═══════════════════════════════════════════════════════════════════
-        Command::SetPathfindingSettings(..) | Command::SetCargoDistDistribution(..) => {
-            CommandEffects::none()
-        }
+        Command::SetPathfindingSettings(..)
+        | Command::SetCargoDistDistribution(..)
+        | Command::SetCompanyColour(..)
+        | Command::SetCurrentRailType(..)
+        | Command::SetCurrentRoadType(..)
+        | Command::SetCurrentTramType(..)
+        | Command::SetCurrentStationClass(..)
+        | Command::SetCurrentStationSpec(..)
+        | Command::SetCurrentAirportClass(..)
+        | Command::SetCurrentAirportSpec(..)
+        | Command::SetAiSettings(..) => CommandEffects::none(),
     }
 }
 

@@ -1,6 +1,7 @@
 //! Ventana de ajustes / debug de IA rival (UI-8 / #44).
 
 use bevy::prelude::*;
+use openttdrs_core::Command;
 use openttdrs_core::{
     AiSettings, DEFAULT_AI_BUILD_MONEY_THRESHOLD, DEFAULT_AI_MAX_ROUTES, format_ai_debug_status,
     format_money,
@@ -267,26 +268,26 @@ pub(crate) fn handle_ai_settings_buttons(
         if *interaction != Interaction::Pressed {
             continue;
         }
+        let mut next = sim.state.ai;
         match *action {
             AiSettingsAction::ToggleEnabled => {
-                sim.state.ai.enabled = !sim.state.ai.enabled;
+                next.enabled = !next.enabled;
             }
             AiSettingsAction::MoneyThreshold(v) => {
-                sim.state.ai.build_money_threshold = v;
-                sim.state.ai = sim.state.ai.clamped();
+                next.build_money_threshold = v;
             }
             AiSettingsAction::MaxRoutes(v) => {
-                sim.state.ai.max_routes = v;
-                sim.state.ai = sim.state.ai.clamped();
+                next.max_routes = v;
             }
             AiSettingsAction::ResetDefaults => {
-                sim.state.ai = AiSettings {
+                next = AiSettings {
                     enabled: true,
                     build_money_threshold: DEFAULT_AI_BUILD_MONEY_THRESHOLD,
                     max_routes: DEFAULT_AI_MAX_ROUTES,
                 };
             }
         }
+        let _ = crate::network::apply_player_command(&mut sim.state, &Command::SetAiSettings(next));
     }
 }
 

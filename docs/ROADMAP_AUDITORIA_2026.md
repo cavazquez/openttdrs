@@ -110,5 +110,4 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 ## Próximo foco recomendado
 
-1. Host migration post-v1 (fuera de ADR 0001).
-2. Regenerar pilots OpenGFX con drift (house_draw / vehicle_gfx) en PR de datos.
+1. Host migration post-v1 (fuera de ADR 0001 / ADR nueva).

@@ -26,9 +26,9 @@
       ],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "29c6292f61f30620b1423b870c8dbf2f1c95f4a08973383b8ec19cdf431ab2ed",
+      "output_sha256": "5e8a2fb026ccef1760a6727d194e3995db6bdea91ea86fcba8e29223a8ef2727",
       "license": "GPL-2.0-only (OpenTTD) + offsets OpenGFX locales",
-      "note": "gen --check existe; regenerate diferido (drift conocido vs pin 15.3/OpenGFX local). CI solo hash."
+      "note": "Regenerado 2026-07-16 con OpenGFX local (264 offsets/dims vs pin anterior). CI solo hash."
     },
     {
       "id": "vehicle_gfx_data",
@@ -37,9 +37,9 @@
       "inputs": [],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "71c8453959cad78726ec9846d232c4fb0c202601bc72950bc0ea10b0307d56b6",
+      "output_sha256": "a53924f0081ad5aadefd036511e4e5c6407b89125d3224cd4ad5e0d41c9d2082",
       "license": "metadatos OpenGFX locales (no vendorizado)",
-      "note": "gen --check con PNG; CI solo hash (drift local conocido en offsets)."
+      "note": "Regenerado 2026-07-16: offsets E/W de capas tren. CI solo hash."
     },
     {
       "id": "tile_atlas",

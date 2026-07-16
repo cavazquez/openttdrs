@@ -228,7 +228,7 @@ pub const TRAIN_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
     // NE (sprite 2922)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_ne.png" },
     // E (sprite 2923)
-    VehicleLayerGfx { w: 28.0, h: 12.0, x_offs: -15.0, y_offs: -6.0, path: "assets/opengfx/tiles/vehicle_train_e.png" },
+    VehicleLayerGfx { w: 28.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_e.png" },
     // SE (sprite 2924)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_se.png" },
     // S (sprite 2925)
@@ -236,7 +236,7 @@ pub const TRAIN_VEHICLE_LAYERS: [VehicleLayerGfx; 8] = [
     // SW (sprite 2926)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_sw.png" },
     // W (sprite 2927)
-    VehicleLayerGfx { w: 28.0, h: 12.0, x_offs: -14.0, y_offs: -6.0, path: "assets/opengfx/tiles/vehicle_train_w.png" },
+    VehicleLayerGfx { w: 28.0, h: 12.0, x_offs: -15.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_w.png" },
     // NW (sprite 2928)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_nw.png" },
 ];
@@ -247,7 +247,7 @@ pub const TRAIN_VEHICLE_LAYERS_T0: [VehicleLayerGfx; 8] = [
     // NE (sprite 2906)
     VehicleLayerGfx { w: 20.0, h: 15.0, x_offs: -14.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_t0_ne.png" },
     // E (sprite 2907)
-    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -15.0, y_offs: -6.0, path: "assets/opengfx/tiles/vehicle_train_t0_e.png" },
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_t0_e.png" },
     // SE (sprite 2908)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_t0_se.png" },
     // S (sprite 2909)
@@ -255,7 +255,7 @@ pub const TRAIN_VEHICLE_LAYERS_T0: [VehicleLayerGfx; 8] = [
     // SW (sprite 2910)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_t0_sw.png" },
     // W (sprite 2911)
-    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -15.0, y_offs: -6.0, path: "assets/opengfx/tiles/vehicle_train_t0_w.png" },
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_t0_w.png" },
     // NW (sprite 2912)
     VehicleLayerGfx { w: 20.0, h: 15.0, x_offs: -6.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_t0_nw.png" },
 ];
@@ -266,7 +266,7 @@ pub const TRAIN_VEHICLE_LAYERS_T1: [VehicleLayerGfx; 8] = [
     // NE (sprite 2914)
     VehicleLayerGfx { w: 20.0, h: 15.0, x_offs: -14.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_t1_ne.png" },
     // E (sprite 2915)
-    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -15.0, y_offs: -6.0, path: "assets/opengfx/tiles/vehicle_train_t1_e.png" },
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_t1_e.png" },
     // SE (sprite 2916)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_t1_se.png" },
     // S (sprite 2917)
@@ -274,7 +274,7 @@ pub const TRAIN_VEHICLE_LAYERS_T1: [VehicleLayerGfx; 8] = [
     // SW (sprite 2918)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_t1_sw.png" },
     // W (sprite 2919)
-    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -15.0, y_offs: -6.0, path: "assets/opengfx/tiles/vehicle_train_t1_w.png" },
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_t1_w.png" },
     // NW (sprite 2920)
     VehicleLayerGfx { w: 20.0, h: 15.0, x_offs: -6.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_t1_nw.png" },
 ];
@@ -285,7 +285,7 @@ pub const TRAIN_VEHICLE_LAYERS_TDIESEL: [VehicleLayerGfx; 8] = [
     // NE (sprite 2950)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_td_ne.png" },
     // E (sprite 2951)
-    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -15.0, y_offs: -6.0, path: "assets/opengfx/tiles/vehicle_train_td_e.png" },
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_td_e.png" },
     // SE (sprite 2952)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_td_se.png" },
     // S (sprite 2953)
@@ -293,7 +293,7 @@ pub const TRAIN_VEHICLE_LAYERS_TDIESEL: [VehicleLayerGfx; 8] = [
     // SW (sprite 2954)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -14.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_td_sw.png" },
     // W (sprite 2955)
-    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -15.0, y_offs: -6.0, path: "assets/opengfx/tiles/vehicle_train_td_w.png" },
+    VehicleLayerGfx { w: 29.0, h: 12.0, x_offs: -16.0, y_offs: -8.0, path: "assets/opengfx/tiles/vehicle_train_td_w.png" },
     // NW (sprite 2956)
     VehicleLayerGfx { w: 20.0, h: 16.0, x_offs: -6.0, y_offs: -9.0, path: "assets/opengfx/tiles/vehicle_train_td_nw.png" },
 ];

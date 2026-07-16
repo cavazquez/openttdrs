@@ -19,7 +19,7 @@ Inventario y verificación de reproducibilidad de `*_generated.rs`.
 | `vehicle_gfx_data` | `gen_vehicle_gfx_data.py` | Solo `output_sha256`; `--check` local con PNG |
 | `tile_atlas` | `gen_tile_atlas.py` | Solo `output_sha256` del `.rs`; `--check` no escribe PNG |
 
-Los generadores OpenGFX tienen `--check` (exit 2 si faltan assets). Hoy `house_draw_data` y `vehicle_gfx_data` pueden **divergir** al regenerar con el set local frente al `.rs` versionado; regenerar esos outputs es un PR de datos de render aparte.
+Los generadores OpenGFX tienen `--check` (exit 2 si faltan assets). Tras regenerar con el set local, actualizá `output_sha256` en el manifiesto (PR de datos de render).
 
 OpenGFX (`assets/opengfx/tiles/`) **no** está vendorizado ni se descarga en CI.
 

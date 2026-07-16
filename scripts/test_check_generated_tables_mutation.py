@@ -61,14 +61,16 @@ def main() -> int:
     finally:
         POP_OUT.write_text(original, encoding="utf-8")
 
-    # Hash: manifiesto temporal con sha256 falso para house_draw_data.
+    # Hash: manifiesto temporal con sha256 falso en pilots hash-only.
     man = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    hash_ids = {"house_draw_data", "vehicle_gfx_data", "tile_atlas"}
+    found = 0
     for p in man["pilots"]:
-        if p["id"] == "house_draw_data":
+        if p["id"] in hash_ids:
             p["output_sha256"] = "0" * 64
-            break
-    else:
-        print("FAIL: piloto house_draw_data ausente", file=sys.stderr)
+            found += 1
+    if found != len(hash_ids):
+        print(f"FAIL: pilots hash incompletos ({found}/{len(hash_ids)})", file=sys.stderr)
         return 1
 
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as fh:
@@ -80,7 +82,7 @@ def main() -> int:
             env={"OPENTTDRS_GENERATED_TABLES_MANIFEST": bogus_manifest},
         )
         if hash_dirty.returncode == 0:
-            print("FAIL: check no detectó sha256 falso de house_draw_data", file=sys.stderr)
+            print("FAIL: check no detectó sha256 falso de pilots hash", file=sys.stderr)
             print(hash_dirty.stdout, hash_dirty.stderr, file=sys.stderr)
             return 1
     finally:

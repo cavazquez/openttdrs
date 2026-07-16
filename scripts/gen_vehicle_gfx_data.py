@@ -4,9 +4,14 @@
 OpenTTD road vehicles: `sprite = direction + _roadveh_images[spritenum]`.
 Trenes: `GetDefaultTrainSprite(image_index, direction)` (`train_sprites.h`).
 Índice 0..7 = `Direction` (`N`, `NE`, `E`, `SE`, `S`, `SW`, `W`, `NW`).
+
+Uso:
+  python3 scripts/gen_vehicle_gfx_data.py
+  python3 scripts/gen_vehicle_gfx_data.py --check
 """
 from __future__ import annotations
 
+import argparse
 import sys
 from pathlib import Path
 
@@ -279,12 +284,13 @@ def emit_layers(
     return rows, missing, nfo_ok
 
 
-def main() -> int:
-    repo = Path(__file__).resolve().parents[1]
+def assets_available(repo: Path) -> bool:
+    tiles = repo / "assets" / "opengfx" / "tiles"
+    return (tiles / "vehicle_bus_n.png").is_file()
+
+
+def build_content(repo: Path) -> tuple[str, list[str], int]:
     tiles_dir = repo / "assets" / "opengfx" / "tiles"
-    out_path = (
-        repo / "crates" / "openttdrs-client" / "src" / "sprites" / "vehicle_gfx_data_generated.rs"
-    )
     nfo = parse_sprite_offs(repo)
     prefer_bpp = detect_graphics_mode(repo)
 
@@ -315,8 +321,49 @@ def main() -> int:
         lines.extend(block)
         all_missing.extend(missing)
         total_nfo += nfo_ok
+    return "\n".join(lines), all_missing, total_nfo
 
-    out_path.write_text("\n".join(lines), encoding="utf-8")
+
+def main(argv: list[str] | None = None) -> int:
+    repo = Path(__file__).resolve().parents[1]
+    out_path = (
+        repo / "crates" / "openttdrs-client" / "src" / "sprites" / "vehicle_gfx_data_generated.rs"
+    )
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="genera en memoria y compara (no escribe); requiere PNG OpenGFX",
+    )
+    args = parser.parse_args(argv)
+
+    if args.check and not assets_available(repo):
+        print(
+            "SKIP: --check de vehicle_gfx requiere assets/opengfx/tiles/vehicle_*.png",
+            file=sys.stderr,
+        )
+        return 2
+
+    content, all_missing, total_nfo = build_content(repo)
+    if args.check:
+        current = out_path.read_text(encoding="utf-8")
+        if current != content:
+            print(
+                "DRIFT: vehicle_gfx_data_generated.rs no coincide con el generador.",
+                file=sys.stderr,
+            )
+            print(
+                "  Regenerá con: python3 scripts/gen_vehicle_gfx_data.py",
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            f"OK: {out_path.relative_to(repo)} coincide "
+            f"(nfo={total_nfo}/{8 * len(GFX_SETS)})"
+        )
+        return 0
+
+    out_path.write_text(content, encoding="utf-8")
     print(f"Escrito {out_path} (nfo={total_nfo}/{8 * len(GFX_SETS)})")
     if all_missing:
         print(f"PNG ausentes (fallback Kirby): {sorted(set(all_missing))}")

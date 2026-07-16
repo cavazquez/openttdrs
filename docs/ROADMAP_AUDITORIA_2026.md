@@ -110,7 +110,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 ## Próximo foco recomendado
 
-1. Extender pilots de tablas generadas (vehicle/atlas) vía tooling #119.
-2. Deuda I8 de settings cliente → `Command` (lista en inventario #114).
-3. Host migration post-v1 (fuera de ADR 0001).
-4. Benchmarks headless (#116).
+1. Deuda I8 de settings cliente → `Command` (lista en inventario #114).
+2. Host migration post-v1 (fuera de ADR 0001).
+3. Benchmarks headless (#116).
+4. Regenerar pilots OpenGFX con drift (house_draw / vehicle_gfx) en PR de datos.

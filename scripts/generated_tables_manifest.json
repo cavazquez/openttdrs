@@ -29,6 +29,28 @@
       "output_sha256": "29c6292f61f30620b1423b870c8dbf2f1c95f4a08973383b8ec19cdf431ab2ed",
       "license": "GPL-2.0-only (OpenTTD) + offsets OpenGFX locales",
       "note": "gen --check existe; regenerate diferido (drift conocido vs pin 15.3/OpenGFX local). CI solo hash."
+    },
+    {
+      "id": "vehicle_gfx_data",
+      "generator": "scripts/gen_vehicle_gfx_data.py",
+      "output": "crates/openttdrs-client/src/sprites/vehicle_gfx_data_generated.rs",
+      "inputs": [],
+      "check": "hash",
+      "requires_opengfx": true,
+      "output_sha256": "71c8453959cad78726ec9846d232c4fb0c202601bc72950bc0ea10b0307d56b6",
+      "license": "metadatos OpenGFX locales (no vendorizado)",
+      "note": "gen --check con PNG; CI solo hash (drift local conocido en offsets)."
+    },
+    {
+      "id": "tile_atlas",
+      "generator": "scripts/gen_tile_atlas.py",
+      "output": "crates/openttdrs-client/src/sprites/tile_atlas_generated.rs",
+      "inputs": [],
+      "check": "hash",
+      "requires_opengfx": true,
+      "output_sha256": "f6e4c8c051be578c97a4139cf6eada2bfec3781de46476ebd6a3e17093f74082",
+      "license": "layout derivado de PNG OpenGFX locales",
+      "note": "gen --check no escribe atlas PNG; CI solo hash del .rs."
     }
   ],
   "inventory": [
@@ -44,11 +66,13 @@
     },
     {
       "output": "crates/openttdrs-client/src/sprites/vehicle_gfx_data_generated.rs",
-      "generator": "scripts/gen_vehicle_gfx_data.py"
+      "generator": "scripts/gen_vehicle_gfx_data.py",
+      "pilot": true
     },
     {
       "output": "crates/openttdrs-client/src/sprites/tile_atlas_generated.rs",
-      "generator": "scripts/gen_tile_atlas.py"
+      "generator": "scripts/gen_tile_atlas.py",
+      "pilot": true
     },
     {
       "output": "crates/openttdrs-client/src/sprites/field_draw_data_generated.rs",

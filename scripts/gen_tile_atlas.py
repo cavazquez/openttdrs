@@ -10,22 +10,26 @@ imágenes únicas en páginas de atlas (shelf packing) y genera:
   - crates/openttdrs-client/src/sprites/tile_atlas_generated.rs (committed)
 
 Correr después de scripts/descargar_graficos.sh.
+
+Uso:
+  python3 scripts/gen_tile_atlas.py
+  python3 scripts/gen_tile_atlas.py --check   # solo compara el .rs (no escribe)
 """
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import os
 import sys
+from pathlib import Path
 
 from PIL import Image
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TILES_DIR = os.path.join(ROOT, "assets/opengfx/tiles")
-ATLAS_DIR = os.path.join(ROOT, "assets/opengfx/atlas")
-OUT_RS = os.path.join(
-    ROOT, "crates/openttdrs-client/src/sprites/tile_atlas_generated.rs"
-)
+ROOT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+TILES_DIR = ROOT / "assets" / "opengfx" / "tiles"
+ATLAS_DIR = ROOT / "assets" / "opengfx" / "atlas"
+OUT_RS = ROOT / "crates" / "openttdrs-client" / "src" / "sprites" / "tile_atlas_generated.rs"
 
 PAGE_W = 2048
 PAGE_H = 4096
@@ -54,51 +58,48 @@ def shelf_pack(items):
     return placed, page + 1
 
 
-def main() -> None:
+def assets_available() -> bool:
+    return TILES_DIR.is_dir() and any(TILES_DIR.glob("*.png"))
+
+
+def build_atlas():
+    """Devuelve (rs_text, pages, used_h, files, unique) sin escribir disco."""
     files = sorted(f for f in os.listdir(TILES_DIR) if f.endswith(".png"))
     if not files:
         raise SystemExit(f"No hay PNGs en {TILES_DIR}; corré descargar_graficos.sh")
 
-    # Dedupe por contenido: hash -> imagen única; nombre -> hash.
     unique: dict[str, Image.Image] = {}
     name_to_hash: dict[str, str] = {}
     for f in files:
-        data = open(os.path.join(TILES_DIR, f), "rb").read()
+        data = (TILES_DIR / f).read_bytes()
         h = hashlib.sha1(data).hexdigest()
         name_to_hash[f] = h
         if h not in unique:
-            unique[h] = Image.open(os.path.join(TILES_DIR, f)).convert("RGBA")
+            unique[h] = Image.open(TILES_DIR / f).convert("RGBA")
 
-    # Orden estable: alto desc, ancho desc, hash (mejor relleno de shelf).
     items = sorted(
         ((h, im.width, im.height) for h, im in unique.items()),
         key=lambda t: (-t[2], -t[1], t[0]),
     )
     placed, page_count = shelf_pack(items)
 
-    # Altura real usada por página (recorta la última shelf).
     used_h = [0] * page_count
     for h, im in unique.items():
         page, _x, y = placed[h]
         used_h[page] = max(used_h[page], y + im.height + PAD)
 
-    os.makedirs(ATLAS_DIR, exist_ok=True)
     pages = [Image.new("RGBA", (PAGE_W, used_h[p]), (0, 0, 0, 0)) for p in range(page_count)]
     for h, im in unique.items():
         page, x, y = placed[h]
         pages[page].paste(im, (x, y))
-    for p, img in enumerate(pages):
-        img.save(os.path.join(ATLAS_DIR, f"tiles_atlas_{p}.png"), optimize=True)
 
-    # Rects únicos agrupados por página (índice dentro de página = posición
-    # dentro del rango de su página, que es el índice del TextureAtlasLayout).
     hashes_by_page: list[list[str]] = [[] for _ in range(page_count)]
     for h in unique:
         hashes_by_page[placed[h][0]].append(h)
     for lst in hashes_by_page:
         lst.sort()
 
-    rects = []  # (page, x, y, w, h)
+    rects = []
     rect_index: dict[str, int] = {}
     ranges = []
     for p, lst in enumerate(hashes_by_page):
@@ -112,54 +113,94 @@ def main() -> None:
 
     names = sorted((f, rect_index[name_to_hash[f]]) for f in files)
 
-    with open(OUT_RS, "w") as out:
-        out.write(
-            "//! GENERADO por scripts/gen_tile_atlas.py — no editar a mano.\n"
-            "//!\n"
-            "//! Metadata del texture atlas de assets/opengfx/tiles. Las páginas\n"
-            "//! (assets/opengfx/atlas/tiles_atlas_{p}.png) se regeneran con el\n"
-            "//! script; este archivo se commitea para que el cliente compile la\n"
-            "//! tabla de lookup sin leer los PNGs.\n\n"
-        )
-        out.write(f"pub(crate) const TILE_ATLAS_PAGE_COUNT: usize = {page_count};\n\n")
-        out.write(
-            "/// Dimensiones `(ancho, alto)` de cada página del atlas.\n"
-            "pub(crate) static TILE_ATLAS_PAGE_SIZES: &[(u32, u32)] = &[\n"
-        )
-        for p in range(page_count):
-            out.write(f"    ({PAGE_W}, {used_h[p]}),\n")
-        out.write("];\n\n")
-        out.write(
-            "/// Rects únicos `(página, x, y, w, h)`, agrupados por página.\n"
-            "pub(crate) static TILE_ATLAS_RECTS: &[(u16, u16, u16, u16, u16)] = &[\n"
-        )
-        for r in rects:
-            out.write(f"    ({r[0]}, {r[1]}, {r[2]}, {r[3]}, {r[4]}),\n")
-        out.write("];\n\n")
-        out.write(
-            "/// Rango `[inicio, fin)` de `TILE_ATLAS_RECTS` por página.\n"
-            "pub(crate) static TILE_ATLAS_PAGE_RANGES: &[(u32, u32)] = &[\n"
-        )
-        for a, b in ranges:
-            out.write(f"    ({a}, {b}),\n")
-        out.write("];\n\n")
-        out.write(
-            "/// `(archivo, índice en TILE_ATLAS_RECTS)`, ordenado por nombre\n"
-            "/// (apto para búsqueda binaria). Incluye aliases: varios nombres\n"
-            "/// pueden apuntar al mismo rect.\n"
-            "pub(crate) static TILE_ATLAS_NAMES: &[(&str, u32)] = &[\n"
-        )
-        for f, idx in names:
-            out.write(f'    ("{f}", {idx}),\n')
-        out.write("];\n")
+    lines = [
+        "//! GENERADO por scripts/gen_tile_atlas.py — no editar a mano.\n"
+        "//!\n"
+        "//! Metadata del texture atlas de assets/opengfx/tiles. Las páginas\n"
+        "//! (assets/opengfx/atlas/tiles_atlas_{p}.png) se regeneran con el\n"
+        "//! script; este archivo se commitea para que el cliente compile la\n"
+        "//! tabla de lookup sin leer los PNGs.\n\n",
+        f"pub(crate) const TILE_ATLAS_PAGE_COUNT: usize = {page_count};\n\n",
+        "/// Dimensiones `(ancho, alto)` de cada página del atlas.\n"
+        "pub(crate) static TILE_ATLAS_PAGE_SIZES: &[(u32, u32)] = &[\n",
+    ]
+    for p in range(page_count):
+        lines.append(f"    ({PAGE_W}, {used_h[p]}),\n")
+    lines.append("];\n\n")
+    lines.append(
+        "/// Rects únicos `(página, x, y, w, h)`, agrupados por página.\n"
+        "pub(crate) static TILE_ATLAS_RECTS: &[(u16, u16, u16, u16, u16)] = &[\n"
+    )
+    for r in rects:
+        lines.append(f"    ({r[0]}, {r[1]}, {r[2]}, {r[3]}, {r[4]}),\n")
+    lines.append("];\n\n")
+    lines.append(
+        "/// Rango `[inicio, fin)` de `TILE_ATLAS_RECTS` por página.\n"
+        "pub(crate) static TILE_ATLAS_PAGE_RANGES: &[(u32, u32)] = &[\n"
+    )
+    for a, b in ranges:
+        lines.append(f"    ({a}, {b}),\n")
+    lines.append("];\n\n")
+    lines.append(
+        "/// `(archivo, índice en TILE_ATLAS_RECTS)`, ordenado por nombre\n"
+        "/// (apto para búsqueda binaria). Incluye aliases: varios nombres\n"
+        "/// pueden apuntar al mismo rect.\n"
+        "pub(crate) static TILE_ATLAS_NAMES: &[(&str, u32)] = &[\n"
+    )
+    for f, idx in names:
+        lines.append(f'    ("{f}", {idx}),\n')
+    lines.append("];\n")
+
+    rs_text = "".join(lines)
+    return rs_text, pages, used_h, files, unique
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="empaqueta en memoria y compara el .rs versionado (no escribe PNG ni .rs)",
+    )
+    args = parser.parse_args(argv)
+
+    if not assets_available():
+        if args.check:
+            print(
+                "SKIP: --check de tile_atlas requiere assets/opengfx/tiles/*.png",
+                file=sys.stderr,
+            )
+            return 2
+        raise SystemExit(f"No hay PNGs en {TILES_DIR}; corré descargar_graficos.sh")
+
+    rs_text, pages, used_h, files, unique = build_atlas()
+
+    if args.check:
+        current = OUT_RS.read_text(encoding="utf-8")
+        if current != rs_text:
+            print(
+                "DRIFT: tile_atlas_generated.rs no coincide con el generador.",
+                file=sys.stderr,
+            )
+            print("  Regenerá con: python3 scripts/gen_tile_atlas.py", file=sys.stderr)
+            return 1
+        print(f"OK: {OUT_RS.relative_to(ROOT)} coincide ({len(files)} archivos)")
+        return 0
+
+    ATLAS_DIR.mkdir(parents=True, exist_ok=True)
+    for p, img in enumerate(pages):
+        img.save(ATLAS_DIR / f"tiles_atlas_{p}.png", optimize=True)
+    OUT_RS.write_text(rs_text, encoding="utf-8")
 
     total = sum(im.width * im.height for im in unique.values())
+    page_count = len(pages)
     print(
         f"atlas: {len(files)} archivos, {len(unique)} únicos, "
         f"{page_count} página(s) de {PAGE_W}px de ancho "
         f"(alturas {used_h}), ocupación {total / (PAGE_W * sum(used_h)):.0%}"
     )
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

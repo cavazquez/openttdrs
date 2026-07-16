@@ -1102,6 +1102,42 @@ for sid, name in [
     (2972, "vehicle_train_te_nw.png"),
 ]:
     crop_by_id(sid, name)
+# Barcos OpenTTD `_ship_sprites` (0x0E5D/0x0E55/0x0E65/0x0E6D + Direction).
+for sid, name in [
+    (3677, "vehicle_ship_mps_n.png"),
+    (3678, "vehicle_ship_mps_ne.png"),
+    (3679, "vehicle_ship_mps_e.png"),
+    (3680, "vehicle_ship_mps_se.png"),
+    (3681, "vehicle_ship_mps_s.png"),
+    (3682, "vehicle_ship_mps_sw.png"),
+    (3683, "vehicle_ship_mps_w.png"),
+    (3684, "vehicle_ship_mps_nw.png"),
+    (3669, "vehicle_ship_oil_n.png"),
+    (3670, "vehicle_ship_oil_ne.png"),
+    (3671, "vehicle_ship_oil_e.png"),
+    (3672, "vehicle_ship_oil_se.png"),
+    (3673, "vehicle_ship_oil_s.png"),
+    (3674, "vehicle_ship_oil_sw.png"),
+    (3675, "vehicle_ship_oil_w.png"),
+    (3676, "vehicle_ship_oil_nw.png"),
+    (3685, "vehicle_ship_coal_n.png"),
+    (3686, "vehicle_ship_coal_ne.png"),
+    (3687, "vehicle_ship_coal_e.png"),
+    (3688, "vehicle_ship_coal_se.png"),
+    (3689, "vehicle_ship_coal_s.png"),
+    (3690, "vehicle_ship_coal_sw.png"),
+    (3691, "vehicle_ship_coal_w.png"),
+    (3692, "vehicle_ship_coal_nw.png"),
+    (3693, "vehicle_ship_ferry_n.png"),
+    (3694, "vehicle_ship_ferry_ne.png"),
+    (3695, "vehicle_ship_ferry_e.png"),
+    (3696, "vehicle_ship_ferry_se.png"),
+    (3697, "vehicle_ship_ferry_s.png"),
+    (3698, "vehicle_ship_ferry_sw.png"),
+    (3699, "vehicle_ship_ferry_w.png"),
+    (3700, "vehicle_ship_ferry_nw.png"),
+]:
+    crop_by_id(sid, name)
 # Dakota / Fokker / Tricario (aviones y helicóptero OpenGFX).
 for sid, name in [
     (3765, "vehicle_aircraft_dakota_n.png"),
@@ -1132,6 +1168,7 @@ for sid, name in [
     crop_by_id(sid, name)
 # Regenerar metadatos: python3 scripts/gen_vehicle_gfx_data.py
 # Solo locomotoras (sin borrar tiles): python3 scripts/extract_train_vehicle_sprites.py
+# Solo barcos (sin borrar tiles): python3 scripts/extract_ship_vehicle_sprites.py
 
 # =============================================================================
 # LEGACY (alias del cliente ← sprites NFO; evita recortes fijos con artefactos cian)

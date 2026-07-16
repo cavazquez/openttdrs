@@ -240,6 +240,8 @@ Para que cada grupo se vea distinto como en OpenTTD:
 1. **Extraer PNG** desde OpenGFX:
    ```bash
    python3 scripts/extract_train_vehicle_sprites.py   # solo trenes, sin borrar tiles
+   python3 scripts/extract_ship_vehicle_sprites.py    # solo barcos, sin borrar tiles
+   python3 scripts/gen_vehicle_gfx_data.py
    # o bien el flujo completo:
    ./scripts/descargar_graficos.sh --32bpp
    ```
@@ -270,6 +272,7 @@ requiere ampliar `GFX_SETS` en `gen_vehicle_gfx_data.py`, `train_layers_for` y
 | `openttdrs-client/src/render/vehicles.rs` | `train_layers_for()`, dibujo en mapa |
 | `openttdrs-client/src/sprites/vehicle_gfx_data_generated.rs` | Arrays `TRAIN_VEHICLE_LAYERS_*` |
 | `scripts/extract_train_vehicle_sprites.py` | Recorte incremental de locomotoras (40 PNG) |
+| `scripts/extract_ship_vehicle_sprites.py` | Recorte incremental de barcos (32 PNG) |
 | `scripts/gen_vehicle_gfx_data.py` | Generador Rust desde PNG + NFO |
 | `scripts/descargar_graficos.sh` | Recorte `crop_by_id` de sprites 2905–2972 |
 

@@ -111,14 +111,14 @@ GFX_SETS: tuple[tuple[str, tuple[tuple[int, str], ...]], ...] = (
     (
         "SHIP_VEHICLE_LAYERS_FERRY",
         (
-            (0, "vehicle_ship_ferry_n.png"),
-            (0, "vehicle_ship_ferry_ne.png"),
-            (0, "vehicle_ship_ferry_e.png"),
-            (0, "vehicle_ship_ferry_se.png"),
-            (0, "vehicle_ship_ferry_s.png"),
-            (0, "vehicle_ship_ferry_sw.png"),
-            (0, "vehicle_ship_ferry_w.png"),
-            (0, "vehicle_ship_ferry_nw.png"),
+            (3693, "vehicle_ship_ferry_n.png"),
+            (3694, "vehicle_ship_ferry_ne.png"),
+            (3695, "vehicle_ship_ferry_e.png"),
+            (3696, "vehicle_ship_ferry_se.png"),
+            (3697, "vehicle_ship_ferry_s.png"),
+            (3698, "vehicle_ship_ferry_sw.png"),
+            (3699, "vehicle_ship_ferry_w.png"),
+            (3700, "vehicle_ship_ferry_nw.png"),
         ),
     ),
     (

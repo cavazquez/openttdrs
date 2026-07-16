@@ -116,3 +116,8 @@ jobs:
           python3 -m py_compile scripts/emit_parse_sav_golden.py
           python3 -m py_compile scripts/gen_tnbp_fixture_ottdmap.py
           python3 -m py_compile scripts/audit_sp3_assets.py
+          python3 -m py_compile scripts/test_openttd_reference_manifest.py
+          python3 -m py_compile scripts/gen_water_lock_tiles.py
+
+      - name: Manifiesto referencia OpenTTD (#109)
+        run: python3 scripts/test_openttd_reference_manifest.py

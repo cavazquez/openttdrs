@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "name": "OpenTTD",
+  "url": "https://github.com/OpenTTD/OpenTTD.git",
+  "commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "tag": "15.3",
+  "pinned_at": "2026-07-16",
+  "license_spdx": "GPL-2.0-only",
+  "license_note": "OpenTTD is licensed under GPL-2.0; see upstream COPYING.md. Not vendored in this repo.",
+  "clone_path": "reference/openttd-upstream",
+  "update_policy": "Bump commit/tag only via explicit PR; regenerate parity evidence if extractors or line refs change."
+}

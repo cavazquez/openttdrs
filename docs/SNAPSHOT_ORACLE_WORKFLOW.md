@@ -19,8 +19,9 @@ cargo run -p openttdrs-core --bin snapshot_dumper -- tests/fixtures/stationlist-
 scripts/setup_openttd_oracle_fork.sh /tmp/openttd-oracle
 ```
 
-Esto clona OpenTTD y agrega `tools/export_snapshot.sh` en una rama local
-`openttdrs-snapshot-oracle`.
+Esto clona OpenTTD en el **commit del manifiesto**
+([`docs/parity/openttd-reference.json`](parity/openttd-reference.json), #109)
+y agrega `tools/export_snapshot.sh` en una rama local `openttdrs-snapshot-oracle`.
 
 ## 3) Snapshot oráculo desde `.sav`
 

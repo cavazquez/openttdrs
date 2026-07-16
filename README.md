@@ -120,11 +120,13 @@ cargo deny check       # licencias + advisories + sources + bans (deny.toml)
 
 **Convención:** lógica de juego en core vía `Command` / `apply_command`; el cliente no mutea el mundo por su cuenta.
 
-Referencia OpenTTD (clon local, no versionado):
+Referencia OpenTTD (clon local, no versionado; commit fijado en manifiesto #109):
 
 ```bash
-./scripts/fetch-openttd-reference.sh   # → reference/openttd-upstream/
+./scripts/fetch-openttd-reference.sh   # → reference/openttd-upstream/ @ docs/parity/openttd-reference.json
 ```
+
+Detalle: [docs/parity/OPENTTD_REFERENCE.md](docs/parity/OPENTTD_REFERENCE.md).
 
 ---
 

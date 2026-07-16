@@ -97,9 +97,11 @@
 
 | Documento | Uso |
 |-----------|-----|
+| [parity/openttd-reference.json](parity/openttd-reference.json) | Manifiesto pin (#109): URL, commit, tag, licencia |
+| [parity/OPENTTD_REFERENCE.md](parity/OPENTTD_REFERENCE.md) | Cómo clonar / actualizar la referencia |
 | [INFORME_ARQUITECTURA_OPENTTD.md](INFORME_ARQUITECTURA_OPENTTD.md) | Arquitectura C++ (clon local) |
 
-Clon: `./scripts/fetch-openttd-reference.sh` → `reference/openttd-upstream/`.
+Clon: `./scripts/fetch-openttd-reference.sh` → `reference/openttd-upstream/` (commit del manifiesto).
 
 ---
 

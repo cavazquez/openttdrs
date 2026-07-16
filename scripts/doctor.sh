@@ -305,11 +305,42 @@ if [[ "$FIX_ONLY" -eq 1 ]]; then
   QUIET=1
 fi
 
+check_openttd_reference() {
+  local manifest="$ROOT/docs/parity/openttd-reference.json"
+  local dest="$ROOT/reference/openttd-upstream"
+  if [[ ! -f "$manifest" ]]; then
+    need "falta manifiesto OpenTTD (#109): docs/parity/openttd-reference.json"
+    return
+  fi
+  if ! python3 "$ROOT/scripts/test_openttd_reference_manifest.py" >/dev/null; then
+    need "manifiesto OpenTTD inválido"
+    suggest "python3 scripts/test_openttd_reference_manifest.py"
+    return
+  fi
+  local expected
+  expected="$(python3 -c "import json; print(json.load(open('$manifest'))['commit'])")"
+  pass "manifiesto OpenTTD (#109): commit ${expected:0:12}…"
+  if [[ -d "$dest/.git" ]]; then
+    local actual
+    actual="$(git -C "$dest" rev-parse HEAD 2>/dev/null || true)"
+    if [[ "$actual" == "$expected" ]]; then
+      pass "reference/openttd-upstream @ $actual"
+    else
+      soft "reference/openttd-upstream en ${actual:-?} (esperado $expected)"
+      suggest "./scripts/fetch-openttd-reference.sh"
+    fi
+  else
+    soft "sin clon local de OpenTTD (opcional para paridad)"
+    suggest "./scripts/fetch-openttd-reference.sh"
+  fi
+}
+
 check_rust
 check_apt
 check_pkgconfig
 check_asset_tools
 check_assets
+check_openttd_reference
 
 if [[ "$FIX_ONLY" -eq 1 ]]; then
   QUIET=0

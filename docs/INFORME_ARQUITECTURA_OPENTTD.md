@@ -1,6 +1,9 @@
 # Informe de arquitectura: OpenTTD upstream (referencia para openttdrs)
 
-> Basado en análisis directo del código fuente en `reference/openttd-upstream/` (clon shallow, rama principal, abril 2026).  
+> Basado en análisis directo del código fuente en `reference/openttd-upstream/`.
+> Referencia fijada (#109): manifiesto [`parity/openttd-reference.json`](parity/openttd-reference.json)
+> (tag **15.3**, commit `14ec60f248547d4d062a1160f0fc26d742319888`). Ver [`parity/OPENTTD_REFERENCE.md`](parity/OPENTTD_REFERENCE.md).  
+
 > Licencia upstream: GPL-2.0 (`COPYING.md`). Ver advertencias de licencia al final.
 
 El **plan de trabajo del port** (incrementos I0–I8 y fases SP de solitario) está en [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md), enlazado con este informe por tabla y referencias por incremento. **Prioridad actual:** cerrar 0.1 en un jugador; **I8 (red)** solo después.

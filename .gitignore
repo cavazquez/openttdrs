@@ -47,6 +47,9 @@ target
 *.json
 # Fixtures golden versionados (CI los necesita; se regeneran con scripts/)
 !crates/*/tests/fixtures/**/*.json
+!tests/fixtures/**/*.json
+# Manifiesto pin OpenTTD (#109)
+!docs/parity/openttd-reference.json
 
 # Partidas JSON (F5/F9); por defecto bajo save/
 /save/

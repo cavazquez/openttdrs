@@ -25,7 +25,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 | #108 hash por tick | ✅ | `GameState::canonical_hash` (FNV-1a, dominio `openttdrs-gs-v1`) |
 | #109 pin OpenTTD | ✅ | `docs/parity/openttd-reference.json` + fetch por SHA |
 | #110 oráculo independiente | ✅ | Export C++ 15.3; `road_bits_hash` alineado (`SLV_ROAD_TYPES`) |
-| #119 tablas generadas | ⬜ | Tras #109 |
+| #119 tablas generadas | ✅ | `generated_tables_manifest.json` + check pilots |
 | #125 docs tick/carga | ⬜ | Idealmente tras #109 |
 
 ### Fase 1 — Gobierno
@@ -110,7 +110,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 ## Próximo foco recomendado
 
-1. **#119** — reproducibilidad de tablas Rust generadas.
-2. **#117** — plantilla de contribución / más ADRs.
+1. **#117** — plantilla de contribución / más ADRs.
+2. Extender pilots de tablas generadas (vehicle/atlas) vía #119.
 3. Deuda I8 de settings cliente → `Command` (lista en inventario #114).
 4. Host migration post-v1 (fuera de ADR 0001).

@@ -101,9 +101,13 @@ jobs:
           path: lcov.info
 
       # TNBP + Python: misma entrada que `./scripts/check.sh ci` (#120).
-      # Excepciones solo-GHA arriba: rustdoc, cargo-audit, cargo-deny, llvm-cov en main.
+      # Excepciones solo-GHA: rustdoc, audit, deny, llvm-cov en main,
+      # y fetch OpenTTD para regenerate de tablas (#119).
       - name: Validar TNBP (fixture v5p12_tnbp.ottdmap)
         run: ./scripts/check.sh tnbp
 
       - name: Checks Python compartidos (golden + py_compile + runs)
         run: ./scripts/check.sh ci-python
+
+      - name: Tablas generadas reproducibles (#119)
+        run: ./scripts/check.sh generated-tables-ci

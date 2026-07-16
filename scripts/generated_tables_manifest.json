@@ -1,0 +1,122 @@
+{
+  "schema_version": 1,
+  "description": "Inventario y checks de tablas Rust generadas (#119). Pin OpenTTD: docs/parity/openttd-reference.json.",
+  "openttd_reference": "docs/parity/openttd-reference.json",
+  "license_note": "Tablas derivadas de headers OpenTTD: GPL-2.0-only. Metadatos de draw pueden depender de OpenGFX local (no vendorizado).",
+  "pilots": [
+    {
+      "id": "house_population",
+      "generator": "scripts/gen_house_population.py",
+      "output": "crates/openttdrs-core/src/sav/house_population_generated.rs",
+      "inputs": [
+        "reference/openttd-upstream/src/table/town_land.h"
+      ],
+      "check": "regenerate_or_hash",
+      "requires_opengfx": false,
+      "output_sha256": "0126f3321dfbb1d07cd891caeec203371bc8821ffbeddcf7ac6a97d030656874",
+      "license": "GPL-2.0-only (derivado de OpenTTD table/town_land.h)"
+    },
+    {
+      "id": "house_draw_data",
+      "generator": "scripts/gen_house_draw_data.py",
+      "output": "crates/openttdrs-client/src/sprites/house_draw_data_generated.rs",
+      "inputs": [
+        "reference/openttd-upstream/src/table/town_land.h",
+        "reference/openttd-upstream/src/table/sprites.h"
+      ],
+      "check": "hash",
+      "requires_opengfx": true,
+      "output_sha256": "29c6292f61f30620b1423b870c8dbf2f1c95f4a08973383b8ec19cdf431ab2ed",
+      "license": "GPL-2.0-only (OpenTTD) + offsets OpenGFX locales",
+      "note": "gen --check existe; regenerate diferido (drift conocido vs pin 15.3/OpenGFX local). CI solo hash."
+    }
+  ],
+  "inventory": [
+    {
+      "output": "crates/openttdrs-core/src/sav/house_population_generated.rs",
+      "generator": "scripts/gen_house_population.py",
+      "pilot": true
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/house_draw_data_generated.rs",
+      "generator": "scripts/gen_house_draw_data.py",
+      "pilot": true
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/vehicle_gfx_data_generated.rs",
+      "generator": "scripts/gen_vehicle_gfx_data.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/tile_atlas_generated.rs",
+      "generator": "scripts/gen_tile_atlas.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/field_draw_data_generated.rs",
+      "generator": "scripts/gen_field_draw_data.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/tree_draw_data_generated.rs",
+      "generator": "scripts/gen_tree_draw_data.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/shore_draw_data_generated.rs",
+      "generator": "scripts/gen_shore_full_set.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/bridge_draw_data_generated.rs",
+      "generator": "scripts/gen_bridge_draw_data.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/bridge_sprites_generated.rs",
+      "generator": "scripts/gen_bridge_sprites.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/bridge_structure_palette_data_generated.rs",
+      "generator": "scripts/gen_bridge_structure_palette.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/rail_station_draw_data_generated.rs",
+      "generator": "scripts/gen_rail_station_draw_data.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/road_stop_gfx_data_generated.rs",
+      "generator": "scripts/gen_road_stop_gfx_data.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/road_depot_gfx_data_generated.rs",
+      "generator": "scripts/gen_road_depot_gfx_data.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/industry_gfx_data_generated.rs",
+      "generator": "scripts/gen_industry_gfx_data.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/industry_draw_proc_generated.rs",
+      "generator": "scripts/gen_industry_draw_proc.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/industry_anim_state_generated.rs",
+      "generator": "scripts/gen_industry_anim_state.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/effect_vehicle_draw_data_generated.rs",
+      "generator": "scripts/gen_effect_vehicle_sprites.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/smoke_draw_data_generated.rs",
+      "generator": "scripts/gen_chimney_smoke.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/copper_smoke_draw_data_generated.rs",
+      "generator": "scripts/gen_copper_mine_smoke.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/company_palette_data_generated.rs",
+      "generator": "scripts/gen_company_palette_rust.py"
+    },
+    {
+      "output": "crates/openttdrs-client/src/sprites/company_palette_paths_generated.rs",
+      "generator": "scripts/gen_company_palette_paths.py"
+    }
+  ]
+}

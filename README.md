@@ -143,9 +143,9 @@ Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (caché Cargo + A
 | `cargo audit` | Vulnerabilidades RustSec (pinned 0.22.1) |
 | `cargo deny` | Licencias + advisories + sources + bans (pinned 0.20.2, `deny.toml`) |
 | tests | PRs: `nextest --no-build`; push a `main`: `llvm-cov` → Codecov |
-| extras | `./scripts/check.sh tnbp` + `ci-python` ([manifiesto](scripts/ci_python_manifest.json); #120) |
+| extras | `tnbp` + `ci-python` (#120) + `generated-tables-ci` (#119) |
 
-`check.sh ci` replica fmt/clippy/tests/TNBP/Python. Solo en GHA: rustdoc, audit, deny y cobertura en `main`.
+`check.sh ci` replica fmt/clippy/tests/TNBP/Python/tablas (hash; regen si hay upstream). Solo en GHA: rustdoc, audit, deny, cobertura en `main`, fetch OpenTTD para regen.
 
 Cobertura manual: [.github/workflows/coverage.yml](.github/workflows/coverage.yml) (`workflow_dispatch`) o `./scripts/check.sh cov`.
 

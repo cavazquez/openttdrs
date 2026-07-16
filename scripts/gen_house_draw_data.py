@@ -5,9 +5,14 @@ OpenTTD: `_town_draw_tile_data[house_id * 16 + TileHash2Bit * 4 + stage]`.
 110 casas originales (HouseID 0..109) → 1760 filas.
 
 Offsets w/h/xrel/yrel: NFO + PNG `house_s{id}.png` por capa s1/s2.
+
+Uso:
+  python3 scripts/gen_house_draw_data.py
+  python3 scripts/gen_house_draw_data.py --check
 """
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -90,28 +95,16 @@ def spec_line(
     )
 
 
-def main() -> int:
-    repo = Path(__file__).resolve().parents[1]
-    upstream = repo / "reference" / "openttd-upstream" / "src" / "table" / "town_land.h"
-    if len(sys.argv) >= 2:
-        upstream = Path(sys.argv[1])
-    if not upstream.is_file():
-        print(f"Falta {upstream}. Ejecutá scripts/fetch-openttd-reference.sh", file=sys.stderr)
-        return 1
-
+def build_content(repo: Path, upstream: Path) -> tuple[str, int, int, int, list[int]]:
     spr = parse_sprite_constants(repo)
     if not spr:
         print("Aviso: sin sprites.h; SPR_* en town_land.h quedarán como 0", file=sys.stderr)
 
     rows_macro = parse_macro_rows(upstream, spr)
     if len(rows_macro) < ROWS:
-        print(f"Entries insuficientes: {len(rows_macro)} < {ROWS}", file=sys.stderr)
-        return 1
+        raise SystemExit(f"Entries insuficientes: {len(rows_macro)} < {ROWS}")
 
     tiles_dir = repo / "assets" / "opengfx" / "tiles"
-    out_path = (
-        repo / "crates" / "openttdrs-client" / "src" / "sprites" / "house_draw_data_generated.rs"
-    )
     nfo = parse_sprite_offs(repo)
     prefer_bpp = detect_graphics_mode(repo)
 
@@ -188,8 +181,73 @@ def main() -> int:
         "];",
         "",
     ]
-    out_path.write_text("\n".join(lines), encoding="utf-8")
     missing = sorted(i for i in sprite_ids if i and not (tiles_dir / f"house_s{i}.png").is_file())
+    return "\n".join(lines), nfo_cal, macro_cal, fallback_cal, missing
+
+
+def assets_available(repo: Path) -> bool:
+    tiles = repo / "assets" / "opengfx" / "tiles"
+    if not tiles.is_dir():
+        return False
+    # Muestra mínima: el set local típico tiene cientos de house_s*.png
+    return any(tiles.glob("house_s*.png"))
+
+
+def main(argv: list[str] | None = None) -> int:
+    repo = Path(__file__).resolve().parents[1]
+    default_upstream = repo / "reference" / "openttd-upstream" / "src" / "table" / "town_land.h"
+    out_path = (
+        repo / "crates" / "openttdrs-client" / "src" / "sprites" / "house_draw_data_generated.rs"
+    )
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "upstream",
+        nargs="?",
+        type=Path,
+        default=default_upstream,
+        help="ruta a town_land.h",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="genera en memoria y compara (no escribe); requiere PNG OpenGFX locales",
+    )
+    args = parser.parse_args(argv)
+
+    if not args.upstream.is_file():
+        print(f"Falta {args.upstream}. Ejecutá scripts/fetch-openttd-reference.sh", file=sys.stderr)
+        return 1
+
+    if args.check and not assets_available(repo):
+        print(
+            "SKIP: --check de house_draw_data requiere assets/opengfx/tiles/house_s*.png "
+            "(no vendorizados; ver docs/parity/GENERATED_TABLES.md)",
+            file=sys.stderr,
+        )
+        return 2
+
+    content, nfo_cal, macro_cal, fallback_cal, missing = build_content(repo, args.upstream)
+
+    if args.check:
+        current = out_path.read_text(encoding="utf-8")
+        if current != content:
+            print(
+                "DRIFT: house_draw_data_generated.rs no coincide con el generador.",
+                file=sys.stderr,
+            )
+            print(
+                "  Regenerá con: python3 scripts/gen_house_draw_data.py",
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            f"OK: {out_path.relative_to(repo)} coincide "
+            f"(nfo={nfo_cal}, macro={macro_cal}, fallback={fallback_cal})"
+        )
+        return 0
+
+    out_path.write_text(content, encoding="utf-8")
     print(
         f"Escrito {out_path} ({ROWS} filas, nfo={nfo_cal}, macro={macro_cal}, fallback={fallback_cal})"
     )

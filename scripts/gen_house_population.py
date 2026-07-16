@@ -9,27 +9,30 @@ HouseID es el 3er argumento de las macros `MS(...)` de
 
 Salida: `crates/openttdrs-core/src/sav/house_population_generated.rs`.
 
-Uso: python3 scripts/gen_house_population.py
+Uso:
+  python3 scripts/gen_house_population.py
+  python3 scripts/gen_house_population.py --check
 """
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 TOWN_LAND_H = REPO / "reference" / "openttd-upstream" / "src" / "table" / "town_land.h"
-OUT_RS = REPO / "crates/openttdrs-core/src/sav/house_population_generated.rs"
+OUT_RS = REPO / "crates" / "openttdrs-core" / "src" / "sav" / "house_population_generated.rs"
 
 
-def main() -> None:
-    text = TOWN_LAND_H.read_text(encoding="utf-8")
+def build_content(town_land: Path) -> str:
+    text = town_land.read_text(encoding="utf-8")
     m = re.search(r"_original_house_specs\[\] = \{(.*)\};", text, re.S)
     if not m:
-        sys.exit("no se encontró _original_house_specs")
+        raise SystemExit("no se encontró _original_house_specs")
     entries = re.findall(r"\bMS\(\s*(-?\d+)\s*,[^,]+,\s*(\d+)\s*,", m.group(1))
     if len(entries) < 100:
-        sys.exit(f"esperaba ~110 entradas MS, hay {len(entries)}")
+        raise SystemExit(f"esperaba ~110 entradas MS, hay {len(entries)}")
     pops = [int(p) for _, p in entries]
 
     lines = [
@@ -46,9 +49,65 @@ def main() -> None:
         chunk = ", ".join(str(p) for p in pops[start : start + 10])
         lines.append(f"    {chunk}, // {start}..{min(start + 10, len(pops)) - 1}")
     lines += ["];", ""]
-    OUT_RS.write_text("\n".join(lines), encoding="utf-8")
-    print(f"Escrito {OUT_RS.relative_to(REPO)} ({len(pops)} HouseIDs)")
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="genera en memoria y compara con el archivo versionado (no escribe)",
+    )
+    parser.add_argument(
+        "--town-land",
+        type=Path,
+        default=TOWN_LAND_H,
+        help="ruta a town_land.h (default: referencia OpenTTD pin #109)",
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=OUT_RS,
+        help="ruta de salida al regenerar (ignorado con --check)",
+    )
+    args = parser.parse_args(argv)
+
+    if not args.town_land.is_file():
+        print(
+            f"Falta {args.town_land}. Ejecutá: ./scripts/fetch-openttd-reference.sh",
+            file=sys.stderr,
+        )
+        return 1
+
+    content = build_content(args.town_land)
+    if args.check:
+        if not OUT_RS.is_file():
+            print(f"Falta salida versionada: {OUT_RS}", file=sys.stderr)
+            return 1
+        current = OUT_RS.read_text(encoding="utf-8")
+        if current != content:
+            print(
+                "DRIFT: house_population_generated.rs no coincide con el generador.",
+                file=sys.stderr,
+            )
+            print(
+                "  Regenerá con: python3 scripts/gen_house_population.py",
+                file=sys.stderr,
+            )
+            print(
+                f"  (fuente: {args.town_land}, pin OpenTTD en docs/parity/openttd-reference.json)",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"OK: {OUT_RS.relative_to(REPO)} coincide con el generador")
+        return 0
+
+    args.output.write_text(content, encoding="utf-8")
+    print(f"Escrito {args.output.relative_to(REPO)}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

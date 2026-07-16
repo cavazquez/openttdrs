@@ -10,6 +10,7 @@
 #   ./scripts/check.sh cov    # Tests + informe LCOV (requiere cargo-llvm-cov + llvm-tools-preview)
 #   ./scripts/check.sh ci     # Paridad con .github/workflows/ci.yml (sin instalar APT)
 #   ./scripts/check.sh ci-python  # Goldens + py_compile + runs del manifiesto (#120)
+#   ./scripts/check.sh generated-tables  # reproducibilidad pilots (#119; hash + regen si hay upstream)
 #   ./scripts/check.sh audit  # SP3.0: PNG OpenGFX requeridos vs assets/opengfx/tiles
 #   ./scripts/check.sh build  # cargo build --workspace
 #   ./scripts/check.sh doctor # deps de entorno (delegado a scripts/doctor.sh)
@@ -18,6 +19,7 @@
 #   - rustdoc (`cargo doc -D warnings`) — #103
 #   - cargo-audit / cargo-deny — #106
 #   - cobertura llvm-cov en push a main (y workflow Coverage manual)
+#   - fetch OpenTTD pin + mutación de tablas generadas (`generated-tables` con --fetch-upstream)
 # La lista Python compartida vive en scripts/ci_python_manifest.json.
 
 set -euo pipefail
@@ -110,6 +112,19 @@ do_ci_python() {
     info "ci-python OK ✓"
 }
 
+do_generated_tables() {
+    info "Tablas generadas (#119)..."
+    python3 scripts/check_generated_tables.py --check
+    info "Tablas generadas OK ✓"
+}
+
+do_generated_tables_ci() {
+    info "Tablas generadas CI (#119, fetch pin OpenTTD)..."
+    python3 scripts/check_generated_tables.py --check --fetch-upstream
+    python3 scripts/test_check_generated_tables_mutation.py
+    info "Tablas generadas CI OK ✓"
+}
+
 do_audit() {
     info "Auditoría SP3.0 (assets OpenGFX)..."
     python3 scripts/audit_sp3_assets.py
@@ -163,6 +178,7 @@ do_ci() {
     fi
     do_tnbp
     do_ci_python
+    do_generated_tables
     echo
     info "=== CI OK (núcleo compartido con ci.yml; ver excepciones GHA en cabecera) ==="
 }
@@ -176,6 +192,8 @@ case "${1:-all}" in
     golden)      do_golden_parse_sav ;;
     py)          do_py_compile ;;
     ci-python)   do_ci_python ;;
+    generated-tables) do_generated_tables ;;
+    generated-tables-ci) do_generated_tables_ci ;;
     openttd-ref) do_openttd_reference_manifest ;;
     snapshot-oracle) do_snapshot_oracle_tools ;;
     cov|coverage) do_coverage ;;
@@ -185,7 +203,7 @@ case "${1:-all}" in
     ci)          do_ci ;;
     all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|ci-python|openttd-ref|snapshot-oracle|audit|cov|build|doctor|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|ci-python|generated-tables|generated-tables-ci|openttd-ref|snapshot-oracle|audit|cov|build|doctor|ci|all}"
         exit 1
         ;;
 esac

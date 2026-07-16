@@ -50,6 +50,8 @@ def main() -> int:
         errors.append("ci.yml no invoca ./scripts/check.sh ci-python")
     if "scripts/check.sh tnbp" not in yml:
         errors.append("ci.yml no invoca ./scripts/check.sh tnbp")
+    if "scripts/check.sh generated-tables-ci" not in yml:
+        errors.append("ci.yml no invoca ./scripts/check.sh generated-tables-ci (#119)")
 
     for needle in FORBIDDEN_INLINE:
         for i, line in enumerate(yml.splitlines(), 1):

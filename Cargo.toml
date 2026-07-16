@@ -37,3 +37,10 @@ incremental = false
 [profile.ci.package."*"]
 opt-level = 1
 debug = 0
+
+# RUSTSEC-2026-0194 / RUSTSEC-2026-0195: quick-xml < 0.41 vía wayland-scanner 0.31.10
+# (crates.io pinéa quick-xml ^0.39). Vendorizamos el mismo 0.31.10 con solo el bump a
+# 0.41 (equivalente a Smithay/wayland-rs@d07c4f9, sin mezclar el resto del stack).
+# TODO: quitar `vendor/wayland-scanner` cuando crates.io publique el bump.
+[patch.crates-io]
+wayland-scanner = { path = "vendor/wayland-scanner" }

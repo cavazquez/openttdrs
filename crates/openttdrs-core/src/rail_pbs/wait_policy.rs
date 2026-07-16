@@ -16,7 +16,7 @@ pub fn train_waiting_for_pbs_path(map: &Map, vehicle: &Vehicle) -> bool {
 ///
 /// Paridad simplificada de stuck + `wait_for_pbs_path` en `train_cmd.cpp`.
 /// El look-ahead (`TryReserve`) se reintenta según `path_backoff_interval`
-/// en [`compute_train_reservation_with_settings`]; `255` desactiva look-ahead y giro.
+/// en [`crate::rail_pbs::train_reservation::compute_train_reservation_with_settings`]; `255` desactiva look-ahead y giro.
 pub fn tick_pbs_wait_and_maybe_reverse(
     map: &Map,
     vehicle: &mut Vehicle,

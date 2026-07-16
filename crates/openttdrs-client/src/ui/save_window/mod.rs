@@ -217,7 +217,7 @@ pub(crate) fn sanitize_filename_char(c: char) -> Option<char> {
     }
 }
 
-/// Filtro de caracteres para nombres de partida en [`EditableText`].
+/// Filtro de caracteres para nombres de partida en `EditableText`.
 #[must_use]
 pub(crate) fn filename_filter() -> bevy::text::EditableTextFilter {
     bevy::text::EditableTextFilter::new(|c| sanitize_filename_char(c).is_some())

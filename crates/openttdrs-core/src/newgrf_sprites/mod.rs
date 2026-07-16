@@ -7,6 +7,7 @@
 mod action2;
 mod action5;
 mod action_graph;
+pub mod fixture;
 mod model;
 mod pixel_codec;
 
@@ -17,26 +18,35 @@ pub use model::{
     CALLBACK_FAILED, CBID_STATION_BUILD_TILE_LAYOUT,
 };
 
-// Re-exportar funciones públicas de pixel_codec
+// Re-exportar funciones de runtime de pixel_codec
 pub use pixel_codec::{
-    apply_company_colour_mask, bake_sprite_company_mask, build_real_sprite_v1_chunked,
-    build_real_sprite_v1_chunked_payload, build_real_sprite_v1_compressed,
-    build_real_sprite_v1_compressed_payload, build_real_sprite_v1_dims,
-    build_real_sprite_v1_uncompressed, build_real_sprite_v1_uncompressed_payload,
-    build_sprite_section_palette_entry, build_sprite_section_rgba_chunked_entry,
-    build_sprite_section_rgba_entry, build_sprite_section_rgba_mask_entry,
-    compress_grf_lz77_literals, decode_chunked_8bpp, decode_chunked_pixels,
+    apply_company_colour_mask, bake_sprite_company_mask,
+    decode_chunked_8bpp, decode_chunked_pixels,
     decode_real_sprite_v1, decode_real_sprite_v1_uncompressed,
     decode_real_sprite_v2_section, decode_real_sprite_v2_section_zoom, decompress_grf_lz77,
     encode_chunked_8bpp_full_rows, encode_chunked_pixels_full_rows, indices_to_rgba,
+    index_sprite_section, resolve_fd_sprite,
     sprite_v2_bpp, SPRITE_V2_ZOOM_PREFERENCE,
 };
 
-// Re-exportar funciones internas para compatibilidad con lib.rs
-pub use pixel_codec::{index_sprite_section, resolve_fd_sprite};
-
-// Re-exportar funciones públicas de action_graph
+// Re-exportar funciones de runtime de action_graph
 pub use action_graph::{
+    collect_feature_sprite_graphics, collect_industry_tile_sprite_graphics,
+    collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
+    collect_train_sprite_graphics,
+};
+
+// Re-exportar funciones de runtime de action5
+pub use action5::{
+    action5_type_name, catenary_action5_local_slot,
+    collect_action5_blocks, merge_catenary_action5_block, merge_shore_action5_block,
+    ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, CATENARY_ACTION5_SLOT_COUNT,
+    CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE,
+    SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS,
+};
+
+// Re-exportar builders sintéticos desde fixture (para compatibilidad temporal)
+pub use fixture::{
     build_action1_feature_payload, build_action1_trains_payload,
     build_action2_callback_literal_payload, build_action2_single_set_payload,
     build_action2_stations_payload, build_action2_trains_payload,
@@ -45,25 +55,20 @@ pub use action_graph::{
     build_action2_variational_default_payload, build_action2_variational_divmod_payload,
     build_action2_variational_payload, build_action2_vehicle_payload,
     build_action3_feature_payload, build_action3_trains_payload,
-    build_grf_v2_feature_with_action2_chain, build_grf_v2_industry_tile_with_preview_sprite,
-    build_grf_v2_roadtype_with_action2_chain, build_grf_v2_roadtype_with_preview_sprite,
-    build_grf_v2_station_with_action2_chain, build_grf_v2_station_with_preview_sprite,
-    build_grf_v2_train_with_action2_chain, build_grf_v2_train_with_chunked_sprite,
-    build_grf_v2_train_with_compressed_sprite, build_grf_v2_train_with_fd_rgba_sprite,
-    build_grf_v2_train_with_fd_sprite, build_grf_v2_train_with_preview_sprite,
-    build_grf_v2_train_with_variational_chain, build_grf_v2_with_preview_sprite,
-    collect_feature_sprite_graphics, collect_industry_tile_sprite_graphics,
-    collect_roadtype_sprite_graphics, collect_station_sprite_graphics,
-    collect_train_sprite_graphics,
-};
-
-// Re-exportar funciones públicas de action5
-pub use action5::{
-    action5_type_name, build_grf_v2_action5_with_sprite, catenary_action5_local_slot,
-    collect_action5_blocks, merge_catenary_action5_block, merge_shore_action5_block,
-    ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, CATENARY_ACTION5_SLOT_COUNT,
-    CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE,
-    SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS,
+    build_grf_v2_action5_with_sprite, build_grf_v2_feature_with_action2_chain,
+    build_grf_v2_industry_tile_with_preview_sprite, build_grf_v2_roadtype_with_action2_chain,
+    build_grf_v2_roadtype_with_preview_sprite, build_grf_v2_station_with_action2_chain,
+    build_grf_v2_station_with_preview_sprite, build_grf_v2_train_with_action2_chain,
+    build_grf_v2_train_with_chunked_sprite, build_grf_v2_train_with_compressed_sprite,
+    build_grf_v2_train_with_fd_rgba_sprite, build_grf_v2_train_with_fd_sprite,
+    build_grf_v2_train_with_preview_sprite, build_grf_v2_train_with_variational_chain,
+    build_grf_v2_with_preview_sprite, build_real_sprite_v1_chunked,
+    build_real_sprite_v1_chunked_payload, build_real_sprite_v1_compressed,
+    build_real_sprite_v1_compressed_payload, build_real_sprite_v1_dims,
+    build_real_sprite_v1_uncompressed, build_real_sprite_v1_uncompressed_payload,
+    build_sprite_section_palette_entry, build_sprite_section_rgba_chunked_entry,
+    build_sprite_section_rgba_entry, build_sprite_section_rgba_mask_entry,
+    compress_grf_lz77_literals,
 };
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]

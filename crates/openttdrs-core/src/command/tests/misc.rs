@@ -1,4 +1,4 @@
-use crate::command::{Command, CommandError, apply_command, command_error_message};
+use crate::command::{Command, CommandError, apply_command};
 use crate::{
     GameState, IndustryKind, IndustrySpec, LevelMode, TERRAFORM_COST, TileCoord, TileKind,
     industry_template, tile_slope_and_z,
@@ -90,10 +90,8 @@ fn raise_land_on_grass_costs_and_creates_slope() {
     assert_eq!(s.economy.money, money_before - TERRAFORM_COST);
     let (tileh, _) = tile_slope_and_z(&s.map, c).unwrap();
     assert_ne!(tileh, 0);
-    assert_eq!(
-        command_error_message(CommandError::TileNotTerraformable),
-        "Solo se puede modificar el terreno en hierba o bosque libre."
-    );
+    // CommandError::Display ahora retorna el nombre técnico del variant (sin mensajes UI)
+    assert!(!CommandError::TileNotTerraformable.to_string().is_empty());
 }
 
 #[test]
@@ -263,7 +261,7 @@ fn every_command_error_has_user_message() {
         CommandError::SignalAlreadyPresent,
     ];
     for err in ERRORS {
-        let msg = command_error_message(err);
+        let msg = err.to_string();
         assert!(!msg.is_empty(), "{err:?}");
         assert!(
             msg.chars().any(char::is_alphabetic),

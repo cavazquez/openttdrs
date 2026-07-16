@@ -7,7 +7,7 @@ use crate::vehicle::{OrderConditionKind, VehicleOrder};
 use crate::vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup, next_vehicle_group_id};
 
 use super::in_bounds;
-use super::types::CommandError;
+use super::error::CommandError;
 use super::util::require_vehicle_owned_by_active;
 use super::vehicles;
 

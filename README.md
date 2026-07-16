@@ -97,6 +97,16 @@ En juego: **F5** guardar · **F9** cargar · pausa/velocidad en toolbar · prefe
 ./scripts/check.sh ci       # paridad con el job CI (TNBP, golden parse_sav, …)
 ./scripts/check.sh cov      # cobertura → lcov.info (cargo-llvm-cov)
 cargo test --workspace
+
+# Validar documentación (enlaces rustdoc, code fences)
+RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+
+# Auditoría de seguridad y licencias (cargo-audit 0.22.1, cargo-deny 0.20.2)
+cargo install cargo-audit --version 0.22.1 --locked  # una vez
+cargo install cargo-deny --version 0.20.2 --locked   # una vez
+cargo audit            # vulnerabilidades RustSec
+cargo deny check       # licencias + advisories + sources + bans (deny.toml)
+# Actualizar excepciones: editar deny.toml [advisories].ignore con justificación
 ```
 
 | Ruta | Responsabilidad |
@@ -125,6 +135,9 @@ Un job en [.github/workflows/ci.yml](.github/workflows/ci.yml) (caché Cargo + A
 |------|-----------|
 | `rustfmt` | `cargo fmt --all -- --check` |
 | `clippy` | workspace, `-D warnings`, perfil `ci` |
+| `rustdoc` | `cargo doc` con `-D warnings` (validar enlaces intra-doc) |
+| `cargo audit` | Vulnerabilidades RustSec (pinned 0.22.1) |
+| `cargo deny` | Licencias + advisories + sources + bans (pinned 0.20.2, `deny.toml`) |
 | tests | PRs: `nextest --no-build`; push a `main`: `llvm-cov` → Codecov |
 | extras | TNBP, golden `parse_sav`, `py_compile` |
 

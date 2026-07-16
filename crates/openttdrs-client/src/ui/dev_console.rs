@@ -14,6 +14,7 @@ use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
     spawn_floating_window, window_text_font,
 };
+use crate::ui::command_error_text::command_error_message;
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::SimHudControls;
 use crate::ui::newgrf_window::NewGrfWindowState;
@@ -620,7 +621,7 @@ fn apply_cheat_command<'a>(
             Ok(()) => push_log(state, format_cheat_log(sim)),
             Err(e) => push_log(
                 state,
-                format!("cheat falló: {}", openttdrs_core::command_error_message(e)),
+                format!("cheat falló: {}", command_error_message(e)),
             ),
         },
         Err(msg) => push_log(state, msg.into()),

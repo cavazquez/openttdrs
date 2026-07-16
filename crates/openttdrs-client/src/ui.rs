@@ -14,6 +14,7 @@ mod buy_window;
 mod cargo_dist_settings_window;
 mod cargo_payment_window;
 mod cheat_window;
+pub(crate) mod command_error_text;
 mod destination_window;
 mod dev_console;
 mod display_options_window;

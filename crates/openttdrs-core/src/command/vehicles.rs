@@ -5,7 +5,7 @@ use crate::pathfinder::{PathNetwork, farthest_reachable_tile};
 use crate::vehicle::{MAX_VEHICLE_NAME_CHARS, Vehicle, VehicleKind, VehicleOrder};
 
 use super::transport::road_depot_exit_for_dir;
-use super::types::OrderMoveDirection;
+use super::error::OrderMoveDirection;
 use super::{CommandError, in_bounds, require_vehicle_owned_by_active};
 
 pub(super) fn set_vehicle_order_list(

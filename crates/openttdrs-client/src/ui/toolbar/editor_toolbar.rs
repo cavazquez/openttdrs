@@ -12,6 +12,7 @@ use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::ingame_lifecycle::InGameUi;
 use crate::state::{EditorSession, SimRunState, SimWorld, sim_is_paused, toggle_sim_run_state};
 use crate::ui::audio_settings_window::SoundMusicWindowState;
+use crate::ui::command_error_text::command_error_message;
 use crate::ui::extra_viewport_window::ExtraViewportWindowState;
 use crate::ui::genland_window::GenLandWindowState;
 use crate::ui::help_window::HelpWindowState;
@@ -609,7 +610,7 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
                     }
                     Err(e) => {
                         feedback.message =
-                            Some(openttdrs_core::command_error_message(e).to_string());
+                            Some(command_error_message(e).to_string());
                         feedback.expires_at_secs = time.elapsed_secs() + 4.0;
                     }
                 }

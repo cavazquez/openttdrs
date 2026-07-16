@@ -2,7 +2,7 @@
 //!
 //! `GameState::economy` / `company_colour` siguen siendo el espejo de la compañía
 //! activa (jugador) para no romper comandos/UI. El pool `companies` es la fuente
-//! de verdad multi-compañía; [`sync_company_mirrors`] mantiene ambos alineados.
+//! de verdad multi-compañía; `sync_company_mirrors` mantiene ambos alineados.
 
 use serde::{Deserialize, Serialize};
 

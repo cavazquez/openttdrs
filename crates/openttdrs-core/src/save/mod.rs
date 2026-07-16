@@ -1,4 +1,4 @@
-//! Persistencia en disco del [`GameState`] (JSON con versión de esquema).
+//! Persistencia en disco del [`crate::game_state::GameState`] (JSON con versión de esquema).
 //!
 //! El formato con envoltorio (`version` + `state`) es el oficial a partir de I7.
 //! `load` y [`load_from_str`] aceptan también JSON plano legado (solo `GameState`).
@@ -44,6 +44,8 @@ pub enum SaveError {
     Io(std::io::Error),
     Json(serde_json::Error),
     UnsupportedVersion(u32),
+    /// Archivo JSON excede el límite de seguridad.
+    JsonSizeExceeded { actual: u64, limit: u64 },
 }
 
 impl std::fmt::Display for SaveError {
@@ -54,6 +56,12 @@ impl std::fmt::Display for SaveError {
             SaveError::UnsupportedVersion(v) => {
                 write!(f, "versión de save no soportada: {v}")
             }
+            SaveError::JsonSizeExceeded { actual, limit } => {
+                write!(
+                    f,
+                    "archivo JSON excede el límite: {actual} bytes > {limit} bytes"
+                )
+            }
         }
     }
 }
@@ -63,7 +71,7 @@ impl std::error::Error for SaveError {
         match self {
             SaveError::Io(e) => Some(e),
             SaveError::Json(e) => Some(e),
-            SaveError::UnsupportedVersion(_) => None,
+            SaveError::UnsupportedVersion(_) | SaveError::JsonSizeExceeded { .. } => None,
         }
     }
 }
@@ -471,5 +479,45 @@ mod tests {
 
         s.vehicles[0].sync_order_destination(&map);
         s.vehicles[0].advance_after_loading();
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn excessive_json_file_is_rejected() {
+        // Crear archivo JSON > 100 MB
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("openttdrs_json_bomb_{}.json", std::process::id()));
+        let huge_json = format!(
+            r#"{{"version": 1, "state": {{"map": {{"tiles": [{}]}}}}}}"#,
+            "0,".repeat(60_000_000) // ~240 MB de JSON
+        );
+        std::fs::write(&path, huge_json).unwrap();
+        let err = load(&path).expect_err("debe rechazar JSON excesivo");
+        assert!(matches!(err, SaveError::JsonSizeExceeded { .. }));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    #[allow(clippy::expect_used)]
+    fn excessive_json_string_is_rejected() {
+        // String JSON > 100 MB
+        let huge_json = format!(
+            r#"{{"version": 1, "state": {{"map": {{"tiles": [{}]}}}}}}"#,
+            "0,".repeat(60_000_000) // ~240 MB de JSON
+        );
+        let err = load_from_str(&huge_json).expect_err("debe rechazar JSON excesivo");
+        assert!(matches!(err, SaveError::JsonSizeExceeded { .. }));
+    }
+
+    #[test]
+    fn valid_fixtures_still_load_after_limits() {
+        // Verificar que fixtures válidos siguen cargando
+        let s = crate::GameState::new(16, 16);
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("openttdrs_valid_fixture_{}.json", std::process::id()));
+        save(&s, &path).unwrap();
+        let loaded = load(&path).unwrap();
+        assert_eq!(loaded.map.dimensions(), s.map.dimensions());
+        let _ = std::fs::remove_file(&path);
     }
 }

@@ -3,7 +3,7 @@
 use crate::GameState;
 use crate::economy::{decrease_loan, increase_loan};
 
-use super::types::CommandError;
+use super::error::CommandError;
 
 pub(crate) fn increase_company_loan(state: &mut GameState) -> Result<(), CommandError> {
     increase_loan(&mut state.economy)?;

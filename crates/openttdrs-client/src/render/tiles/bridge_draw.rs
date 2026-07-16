@@ -16,7 +16,7 @@ use crate::sprites::{
 };
 
 const DECK_LAYER_FRAC: f32 = 0.08;
-/// Vía sobre tablero (`DrawBridgeMiddle`: overlay entre psid[0] y psid[1]).
+/// Vía sobre tablero (`DrawBridgeMiddle`: overlay entre psid\[0] y psid\[1]).
 const RAIL_ON_BRIDGE_LAYER_FRAC: f32 = 0.084;
 const FRONT_LAYER_FRAC: f32 = 0.088;
 const PILLAR_BACK_LAYER_FRAC: f32 = 0.074;

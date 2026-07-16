@@ -8,7 +8,7 @@ use crate::map::{
     is_owned_land_tile,
 };
 
-use super::types::CommandError;
+use super::error::CommandError;
 use super::util::in_bounds;
 
 pub(crate) fn check_buy_land(map: &Map, c: TileCoord) -> Result<(), CommandError> {

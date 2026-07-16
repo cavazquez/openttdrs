@@ -7,7 +7,8 @@ use crate::game_state::GameState;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::tile_slope_and_z;
 
-use super::types::{CommandError, LevelMode};
+use super::error::CommandError;
+use super::types::LevelMode;
 use super::util::in_bounds;
 
 const MAP_HEIGHT_LIMIT: u8 = 15;

@@ -8,7 +8,7 @@ use crate::town::{
 };
 use crate::townname::generate_town_name;
 
-use super::types::CommandError;
+use super::error::CommandError;
 
 /// Coste de fundar un pueblo (`CmdBuildTown` simplificado).
 pub const FOUND_TOWN_COST: i64 = 12_500;

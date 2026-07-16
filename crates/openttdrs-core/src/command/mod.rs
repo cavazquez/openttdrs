@@ -5,7 +5,9 @@ mod build_object;
 mod buy_land;
 mod company;
 mod economy;
+mod error;
 mod industry;
+mod metadata;
 mod newgrf;
 mod preview;
 mod sign;
@@ -18,7 +20,9 @@ mod vehicle_fleet;
 mod vehicles;
 
 pub use apply::apply_command;
+pub use error::{CommandError, OrderMoveDirection};
 pub use industry::{check_place_industry_spec, industry_template};
+pub use metadata::command_effects;
 pub use preview::command_would_fail;
 pub use transport::{
     MAX_STATION_NAME_CHARS, rail_bits_placement_target, rail_station_footprint,
@@ -32,7 +36,7 @@ pub(crate) use transport::{
     bridge_collinear_rail_gaps, normalize_rail_trackbits_from_neighbors,
     normalize_synthetic_rail_crossings,
 };
-pub use types::{Command, CommandError, LevelMode, OrderMoveDirection, command_error_message};
+pub use types::{Command, LevelMode};
 
 pub(super) use util::{
     in_bounds, require_tile_owned_by_active, require_vehicle_owned_by_active, tile_owner,

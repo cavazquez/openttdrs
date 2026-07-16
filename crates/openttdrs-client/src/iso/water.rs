@@ -2,7 +2,7 @@ use openttdrs_core::{Map, TileCoord, TileKind};
 
 use super::tile_slope_bits_from_heights;
 
-/// `tileh` para [`DrawShoreTile`] (`water_cmd.cpp`): la costa usa la pendiente **real**
+/// `tileh` para `DrawShoreTile` (`water_cmd.cpp`): la costa usa la pendiente **real**
 /// del MAPH cuando no es plana (SW, NE, …); si el 2×2 es uniforme se usa
 /// [`infer_coast_tileh_when_flat`] mirando vecinos de tierra.
 ///
@@ -20,7 +20,7 @@ pub fn shore_tileh_for_draw_shore(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32)
     raw
 }
 
-/// Cuando las cuatro alturas del bloque 2×2 son iguales, [`compute_tileh`] da **0**.
+/// Cuando las cuatro alturas del bloque 2×2 son iguales, `compute_tileh` da **0**.
 /// En la costa eso es habitual: la tierra puede estar **fuera** de ese bloque (p. ej.
 /// solo al norte), así que OpenTTD guarda agua homogénea pero **`DrawShoreTile`**
 /// sigue siendo no plano (`water_cmd.cpp` aserte `tileh != SLOPE_FLAT`).
@@ -109,7 +109,7 @@ pub fn infer_coast_tileh_when_flat(map: &Map, tx: u32, ty: u32, mw: u32, mh: u32
 
 /// Slot `0..18` para `shore_full_{i:02}.png` (set `SPR_SHORE_BASE + 0..17`).
 ///
-/// OpenTTD dibuja costas con [`DrawShoreTile`] (`water_cmd.cpp`): un único sprite
+/// OpenTTD dibuja costas con `DrawShoreTile` (`water_cmd.cpp`): un único sprite
 /// según la pendiente de la tesela, **no** máscara N/E/S/W sobre agua plana.
 /// Tabla `tileh_to_shoresprite` portada en `shore_draw_data_generated.rs`
 /// (WE→16, NS→17, el resto coincide con `tileh`).
@@ -118,7 +118,7 @@ pub fn shore_png_index(tileh: u8) -> usize {
     crate::sprites::TILEH_TO_SHORE_SPRITE[tileh.min(14) as usize] as usize
 }
 
-/// `half_h` visual para el sprite elegido por [`DrawShoreTile`].
+/// `half_h` visual para el sprite elegido por `DrawShoreTile`.
 ///
 /// Los `shore_full_*.png` no miden todos 64x31 (hay 64x23, 64x39 con
 /// `yrel=-8`, …); el ancla se deriva de los offsets NFO como `h/2 + yrel`,

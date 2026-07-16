@@ -10,6 +10,7 @@ use openttdrs_core::{
 };
 
 use crate::state::SimWorld;
+use crate::ui::command_error_text::command_error_message;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
     spawn_floating_window, window_text_font,
@@ -555,7 +556,7 @@ fn add_next_available_grf(sim: &mut SimWorld) -> Result<String, String> {
                     entry: entry.clone(),
                 },
             )
-            .map_err(|e| openttdrs_core::command_error_message(e).to_string())?;
+            .map_err(|e| command_error_message(e).to_string())?;
             let label = if entry.name.is_empty() {
                 file_name.to_string()
             } else {

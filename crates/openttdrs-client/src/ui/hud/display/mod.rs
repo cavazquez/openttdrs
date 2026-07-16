@@ -32,16 +32,15 @@ pub(crate) use station_hud::{
 /// Alertas breves de vehículos para la tercera línea del HUD.
 #[must_use]
 pub(crate) fn vehicle_hud_alert_line(state: &openttdrs_core::GameState) -> String {
-    let vehicles = &state.vehicles;
+    use openttdrs_core::VehicleOperationalSummary;
+
+    let summary = VehicleOperationalSummary::analyze(state);
     let mut parts = Vec::new();
-    let stuck_route = vehicles
-        .iter()
-        .filter(|v| v.running && v.no_network_route_to_order)
-        .count();
-    if stuck_route == 1 {
-        if let Some(v) = vehicles
-            .iter()
-            .find(|v| v.running && v.no_network_route_to_order)
+
+    // Sin ruta por red
+    if summary.no_network_route.count == 1 {
+        if let Some(&vid) = summary.no_network_route.example_vehicle_ids.first()
+            && let Some(v) = state.vehicles.iter().find(|v| v.id == vid)
         {
             parts.push(format!(
                 "sin ruta por red: vehículo {} (orden {})",
@@ -49,135 +48,62 @@ pub(crate) fn vehicle_hud_alert_line(state: &openttdrs_core::GameState) -> Strin
                 v.current_order.saturating_add(1)
             ));
         }
-    } else if stuck_route > 1 {
-        parts.push(format!("sin ruta por red: {stuck_route} vehículos"));
+    } else if summary.no_network_route.count > 1 {
+        parts.push(format!(
+            "sin ruta por red: {} vehículos",
+            summary.no_network_route.count
+        ));
     }
 
-    let no_orders = vehicles
-        .iter()
-        .filter(|v| v.running && v.orders.is_empty())
-        .count();
-    if no_orders == 1 {
-        if let Some(v) = vehicles.iter().find(|v| v.running && v.orders.is_empty()) {
-            parts.push(format!("sin órdenes: vehículo {}", v.id));
+    // Sin órdenes
+    if summary.no_orders.count == 1 {
+        if let Some(&vid) = summary.no_orders.example_vehicle_ids.first() {
+            parts.push(format!("sin órdenes: vehículo {vid}"));
         }
-    } else if no_orders > 1 {
-        parts.push(format!("sin órdenes: {no_orders} vehículos"));
+    } else if summary.no_orders.count > 1 {
+        parts.push(format!("sin órdenes: {} vehículos", summary.no_orders.count));
     }
 
-    let incompatible = vehicles
-        .iter()
-        .filter(|v| vehicle_has_incompatible_stop(state, v))
-        .count();
-    if incompatible == 1 {
-        if let Some(v) = vehicles
-            .iter()
-            .find(|v| vehicle_has_incompatible_stop(state, v))
+    // Parada incompatible
+    if summary.incompatible_stop.count == 1 {
+        if let Some(&vid) = summary.incompatible_stop.example_vehicle_ids.first() {
+            parts.push(format!("parada incompatible: vehículo {vid}"));
+        }
+    } else if summary.incompatible_stop.count > 1 {
+        parts.push(format!(
+            "parada incompatible: {} vehículos",
+            summary.incompatible_stop.count
+        ));
+    }
+
+    // Sin carga disponible
+    if summary.waiting_cargo.count == 1 {
+        if let Some(&vid) = summary.waiting_cargo.example_vehicle_ids.first() {
+            parts.push(format!("sin carga disponible: vehículo {vid}"));
+        }
+    } else if summary.waiting_cargo.count > 1 {
+        parts.push(format!(
+            "sin carga disponible: {} vehículos",
+            summary.waiting_cargo.count
+        ));
+    }
+
+    // Espera PBS
+    if summary.pbs_stuck.count == 1 {
+        if let Some(&vid) = summary.pbs_stuck.example_vehicle_ids.first()
+            && let Some(v) = state.vehicles.iter().find(|v| v.id == vid)
         {
-            parts.push(format!("parada incompatible: vehículo {}", v.id));
-        }
-    } else if incompatible > 1 {
-        parts.push(format!("parada incompatible: {incompatible} vehículos"));
-    }
-
-    let waiting_cargo = vehicles
-        .iter()
-        .filter(|v| vehicle_waiting_for_cargo(state, v))
-        .count();
-    if waiting_cargo == 1 {
-        if let Some(v) = vehicles
-            .iter()
-            .find(|v| vehicle_waiting_for_cargo(state, v))
-        {
-            parts.push(format!("sin carga disponible: vehículo {}", v.id));
-        }
-    } else if waiting_cargo > 1 {
-        parts.push(format!("sin carga disponible: {waiting_cargo} vehículos"));
-    }
-
-    let pbs_stuck = vehicles.iter().filter(|v| v.running && v.pbs_stuck).count();
-    if pbs_stuck == 1 {
-        if let Some(v) = vehicles.iter().find(|v| v.running && v.pbs_stuck) {
             parts.push(format!(
                 "espera PBS: vehículo {} (orden {})",
                 v.id,
                 v.current_order.saturating_add(1)
             ));
         }
-    } else if pbs_stuck > 1 {
-        parts.push(format!("espera PBS: {pbs_stuck} vehículos"));
+    } else if summary.pbs_stuck.count > 1 {
+        parts.push(format!("espera PBS: {} vehículos", summary.pbs_stuck.count));
     }
 
     parts.join(" | ")
-}
-
-fn vehicle_has_incompatible_stop(
-    state: &openttdrs_core::GameState,
-    v: &openttdrs_core::Vehicle,
-) -> bool {
-    use openttdrs_core::VehicleOrder;
-
-    if !v.running || v.orders.is_empty() {
-        return false;
-    }
-    let Some(order) = v.orders.get(v.current_order) else {
-        return false;
-    };
-    match order {
-        VehicleOrder::Station { station, .. } => state
-            .stations
-            .iter()
-            .find(|s| s.pos == *station)
-            .is_some_and(|st| !st.can_service_vehicle(v.kind) || st.is_waypoint()),
-        VehicleOrder::Waypoint { waypoint, .. } => state
-            .stations
-            .iter()
-            .find(|s| s.pos == *waypoint)
-            .is_none_or(|st| !st.can_service_vehicle(v.kind)),
-        VehicleOrder::Depot { .. } | VehicleOrder::Tile(_) | VehicleOrder::Conditional { .. } => {
-            false
-        }
-    }
-}
-
-fn vehicle_waiting_for_cargo(
-    state: &openttdrs_core::GameState,
-    v: &openttdrs_core::Vehicle,
-) -> bool {
-    use openttdrs_core::{STATION_COVERAGE_RADIUS, VehicleOrder, station_covers_tile};
-
-    if !v.running || v.cargo > 0 || v.no_network_route_to_order || v.orders.is_empty() {
-        return false;
-    }
-    let Some(VehicleOrder::Station { station, .. }) = v.orders.get(v.current_order).copied() else {
-        return false;
-    };
-    if !station_covers_tile(station, v.pos, 1) && v.pos != station {
-        return false;
-    }
-    let Some(st) = state.stations.iter().find(|s| s.pos == station) else {
-        return false;
-    };
-    if !st.can_service_vehicle(v.kind) {
-        return false;
-    }
-    let industry_has = state.industries.iter().any(|ind| {
-        ind.stock > 0
-            && openttdrs_core::industry_in_station_coverage(ind, station, STATION_COVERAGE_RADIUS)
-            && st.accepts_cargo(ind.output_cargo())
-    });
-    let station_has = match v.kind {
-        openttdrs_core::VehicleKind::Bus | openttdrs_core::VehicleKind::Tram => {
-            st.cargo_stock.passengers > 0 || st.cargo_stock.mail > 0
-        }
-        openttdrs_core::VehicleKind::Truck
-        | openttdrs_core::VehicleKind::Train
-        | openttdrs_core::VehicleKind::Ship => {
-            st.stock > 0 || st.cargo_stock.pick_freight_to_load(v.cargo_type).is_some()
-        }
-        openttdrs_core::VehicleKind::Aircraft => false,
-    };
-    !industry_has && !station_has
 }
 
 /// Crea el texto de informacion del tile.

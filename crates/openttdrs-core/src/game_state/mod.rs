@@ -581,7 +581,7 @@ impl GameState {
         }
     }
 
-    /// Reconstruye [`StationFlows`] con el pipeline `OpenTTD` (Demand + MCF1/2).
+    /// Reconstruye `StationFlows` con el pipeline `OpenTTD` (Demand + MCF1/2).
     pub fn rebuild_station_flows(&mut self) {
         use crate::flow_stat::{DistributionType, StationFlows};
         use crate::linkgraph_parity::{

@@ -1,9 +1,9 @@
-//! Cliente isométrico: sprites de `OpenGFX` + gizmos de overlay para el [`GameState`] del core.
+//! Cliente isométrico: sprites de `OpenGFX` + gizmos de overlay para el [`openttdrs_core::GameState`] del core.
 //!
 //! Para cargar un mapa real de `OpenTTD`, exportar con `scripts/parse_sav.py` y
 //! luego ejecutar el cliente con la variable de entorno:
 //!
-//! ```
+//! ```text
 //! OTTDMAP_FILE=/ruta/al/mapa.ottdmap cargo run -p openttdrs-client
 //! Mapas ≥ 1024 teselas (32×32+): culling por viewport (panear regenera solo la ventana visible).
 //! Umbral: `OPENTTDRS_MAP_VIEWPORT_THRESHOLD` (256–65536, default 1024).

@@ -2,7 +2,7 @@ use crate::GameState;
 use crate::company::CompanyId;
 use crate::map::{TileCoord, TileKind};
 
-use super::types::CommandError;
+use super::error::CommandError;
 
 pub(crate) fn in_bounds(map: &crate::map::Map, c: TileCoord) -> Result<(), CommandError> {
     if map.get(c).is_none() {

@@ -54,6 +54,8 @@ pub enum SavError {
     Io(String),
     /// Valor fuera del rango permitido para codificación gamma.
     ValueOutOfRange { field: &'static str, value: u32 },
+    /// Payload descomprimido excede el límite de seguridad.
+    DecompressedSizeExceeded { actual: u64, limit: u64 },
 }
 
 impl std::fmt::Display for SavError {
@@ -65,6 +67,12 @@ impl std::fmt::Display for SavError {
             Self::Io(s) => write!(f, "error de E/S: {s}"),
             Self::ValueOutOfRange { field, value } => {
                 write!(f, "valor fuera de rango para gamma en campo '{field}': {value} >= 2^14")
+            }
+            Self::DecompressedSizeExceeded { actual, limit } => {
+                write!(
+                    f,
+                    "payload descomprimido excede el límite: {actual} bytes > {limit} bytes"
+                )
             }
         }
     }

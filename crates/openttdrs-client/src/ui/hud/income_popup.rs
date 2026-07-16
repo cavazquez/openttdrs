@@ -12,7 +12,7 @@ pub(crate) struct IncomePopupText {
     lifetime: Timer,
 }
 
-/// Drena [`GameState::pending_income_popups`] y crea etiquetas en el mapa.
+/// Drena `GameState::pending_income_popups` y crea etiquetas en el mapa.
 pub(crate) fn spawn_income_popups(
     mut sim: ResMut<SimWorld>,
     hud_font: Res<HudUiFont>,

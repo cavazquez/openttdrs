@@ -29,7 +29,7 @@ pub const SLOPE_HALF_H: [f32; 15] = [
 ];
 
 /// Calcula el bitmask de pendiente (`tileh`) de la tesela `(tx, ty)` igual que
-/// OpenTTD [`GetTileSlopeZ`] / `GetTileSlopeGivenHeight` (`tile_map.cpp`):
+/// OpenTTD `GetTileSlopeZ` / `GetTileSlopeGivenHeight` (`tile_map.cpp`):
 ///
 /// ```text
 /// hnorth = height(tx,   ty  )
@@ -61,7 +61,7 @@ fn slope_bits_from_corner_vals(hnorth: u8, hwest: u8, heast: u8, hsouth: u8) -> 
 }
 
 /// Pendiente y `min_h` **solo** desde las cuatro alturas de esquina (sin truco de UI
-/// para MP_WATER). Es lo que usa OpenTTD en [`GetTileSlopeZ`].
+/// para MP_WATER). Es lo que usa OpenTTD en `GetTileSlopeZ`.
 #[must_use]
 pub fn tile_slope_bits_from_heights(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
     let (mw, mh) = map.dimensions();
@@ -98,7 +98,7 @@ pub fn tile_slope_and_min_z(map: &Map, tx: u32, ty: u32) -> (u8, u8) {
 }
 
 /// Altura usada en una esquina del 2×2 de [`tile_slope_and_min_z`], análoga a
-/// [`GetTileSlopeZ`] / `TileHeight` en OpenTTD.
+/// `GetTileSlopeZ` / `TileHeight` en OpenTTD.
 ///
 /// Algunos exports `.ottdmap` guardan **`height = 0`** en `MP_WATER` aunque la tierra
 /// lindera esté varios niveles más arriba ("costa hundida"); si usamos ese valor

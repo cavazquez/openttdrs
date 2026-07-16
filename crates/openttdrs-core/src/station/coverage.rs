@@ -27,7 +27,7 @@ impl StationCoverage {
     }
 }
 
-/// Desajustes entre teselas `MP_STATION` y entradas en [`GameState::stations`].
+/// Desajustes entre teselas `MP_STATION` y entradas en [`crate::game_state::GameState::stations`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StationMapCoherenceReport {
     pub tiles_without_station: Vec<TileCoord>,

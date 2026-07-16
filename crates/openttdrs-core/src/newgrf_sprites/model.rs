@@ -127,7 +127,7 @@ impl TrainSpriteGraphics {
         self.views_for_local_id(local_id)?.first()
     }
 
-    /// Resuelve sin contexto (variational → `default`; random → set[0]).
+    /// Resuelve sin contexto (variational → `default`; random → set\[0]).
     #[must_use]
     pub fn resolve_action1_set(&self, action3_set_id: u16) -> u16 {
         self.resolve_action1_set_ctx(action3_set_id, &mut Action2EvalCtx::default())

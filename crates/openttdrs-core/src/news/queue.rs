@@ -373,7 +373,7 @@ pub fn push_autoreplace_failed_news(
     err: crate::CommandError,
 ) {
     let headline = format!("Autoreemplazo falló (vehículo {vehicle_id})");
-    let body = Some(crate::command_error_message(err).to_string());
+    let body = Some(err.to_string());
     let id = state.news.next_id;
     state.news.next_id = state.news.next_id.saturating_add(1);
     let at = state

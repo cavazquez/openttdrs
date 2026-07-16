@@ -555,7 +555,7 @@ pub fn road_stop_build_sprite_center(
     overlay_pos(ref_pos, xrel, yrel, w, h, base_z, layer_z, tx, ty)
 }
 
-/// `xrel`/`yrel` para depósito de carretera (como [`rail_station_overlay_rel`]).
+/// `xrel`/`yrel` para depósito de carretera (como `rail_station_overlay_rel`).
 ///
 /// `iso(tx, ty)` ya incluye `RemapCoords(16·tx, 16·ty) / 4`; el delta TILE_SEQ local
 /// debe usar la misma escala (`remap_tile_offset` × 0.5), no la de paradas bus/camión.

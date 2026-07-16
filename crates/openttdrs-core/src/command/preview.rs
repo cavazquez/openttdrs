@@ -18,7 +18,8 @@ use super::transport::{
     check_ship_depot_placement, check_single_transport_tile, check_station_placement, check_tunnel,
     merged_rail_trackbits_on_tile, rail_station_footprint, rail_trackbits_from_neighbors,
 };
-use super::types::{Command, CommandError};
+use super::error::CommandError;
+use super::types::Command;
 use super::util::require_tile_owned_by_active;
 
 fn preview_industry_error(

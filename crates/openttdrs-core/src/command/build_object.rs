@@ -8,7 +8,7 @@ use crate::map::{
     is_map_object_tile, object_type_from_tile,
 };
 
-use super::types::CommandError;
+use super::error::CommandError;
 use super::util::in_bounds;
 
 /// Tipos de objeto que el jugador puede construir (no `OWNED_LAND`).

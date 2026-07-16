@@ -7,7 +7,7 @@ use crate::economy_quarterly::calculate_company_value;
 use crate::map::TileKind;
 use crate::news::{NewsReference, NewsType, add_news_item, default_display_for_type};
 
-use super::types::CommandError;
+use super::error::CommandError;
 
 /// Precio de compra = valoración de activos del rival (mín. 1).
 #[must_use]

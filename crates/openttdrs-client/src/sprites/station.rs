@@ -150,7 +150,7 @@ pub fn rail_waypoint_layer_meta(sprite_id: u32) -> Option<(f32, f32, f32, f32)> 
     Some((w, h, xr, yr))
 }
 
-/// `xrel`/`yrel` para [`overlay_pos`]: origen `TILE_SEQ` remapeado + offsets NFO.
+/// `xrel`/`yrel` para `overlay_pos`: origen `TILE_SEQ` remapeado + offsets NFO.
 #[must_use]
 pub fn rail_station_overlay_rel(
     seq: &RailStationLayer,
@@ -290,7 +290,7 @@ include!(concat!(
     "/src/sprites/rail_station_draw_data_generated.rs"
 ));
 
-/// Convierte metadatos NFO de una capa BUILD a [`RoadStopSeqGfx`].
+/// Convierte metadatos NFO de una capa BUILD a `RoadStopSeqGfx`.
 #[must_use]
 pub fn road_stop_seq_gfx(layer: &RoadStopLayerGfx) -> crate::iso::RoadStopSeqGfx {
     crate::iso::RoadStopSeqGfx {

@@ -52,6 +52,27 @@ jobs:
       - name: clippy (compila workspace + tests + examples)
         run: cargo clippy --workspace --all-targets --profile ci -- -D warnings
 
+      - name: rustdoc (validar documentación del workspace)
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+        env:
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: ""
+
+      - name: Instalar cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit@0.22.1
+
+      - name: Instalar cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.20.2
+
+      - name: cargo audit (vulnerabilidades)
+        run: cargo audit
+
+      - name: cargo deny check (licencias, advisories, sources, bans)
+        run: cargo deny check
+
       - name: Instalar cargo-llvm-cov
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: taiki-e/install-action@cargo-llvm-cov

@@ -2,7 +2,9 @@ use crate::bridge_spec::BridgeType;
 use crate::map::TileKind;
 use crate::{GameState, StopKind};
 
-use super::types::{Command, CommandError};
+use super::error::CommandError;
+use super::metadata::command_effects;
+use super::types::Command;
 use super::{
     build_object, buy_land, company, economy, industry, newgrf, sign, terraform, town, transport,
     vehicles,
@@ -17,19 +19,20 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
     state.prepare_player_command();
     let money_before = state.economy.money;
     let result = apply_command_inner(state, cmd);
-    // Editar el mapa invalida los caminos cacheados: un tren con ruta vieja
-    // seguiría cruzando vía recién desconectada. Se recalculan el próximo tick.
-    if result.is_ok() && command_modifies_map(cmd) {
-        invalidate_vehicle_paths(state);
-    }
     if result.is_ok() {
-        if let Some((kind, at)) = construction_event_for(cmd) {
+        let effects = command_effects(cmd);
+        // Editar el mapa invalida los caminos cacheados: un tren con ruta vieja
+        // seguiría cruzando vía recién desconectada. Se recalculan el próximo tick.
+        if effects.modifies_map {
+            invalidate_vehicle_paths(state);
+        }
+        if let Some((kind, at)) = effects.construction_event {
             state
                 .runtime
                 .pending_sim_events
                 .push(crate::sim_events::SimEvent::Construction { kind, at });
         }
-        if let Some(at) = demolition_event_for(cmd) {
+        if let Some(at) = effects.demolition_event {
             state
                 .runtime
                 .pending_sim_events
@@ -42,151 +45,6 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
         state.sync_active_from_mirrors();
     }
     result
-}
-
-fn construction_event_for(
-    cmd: &Command,
-) -> Option<(crate::sim_events::ConstructionKind, crate::map::TileCoord)> {
-    use crate::sim_events::ConstructionKind;
-    match cmd {
-        Command::PlaceRail(c)
-        | Command::PlaceRailBits(c, _)
-        | Command::SetRailBits(c, _)
-        | Command::PlaceRailWaypoint(c)
-        | Command::PlaceRailDepot(c)
-        | Command::PlaceRailDepotDir(c, _)
-        | Command::PlaceRailSignal(c, _, _, _, _)
-        | Command::CycleRailSignalType(c, _, _)
-        | Command::RemoveRailSignal(c, _, _)
-        | Command::PlaceRailStation(c, _)
-        | Command::PlaceRailTunnel(c, _) => Some((ConstructionKind::Rail, *c)),
-        Command::PlaceRailBridge(c, _, _)
-        | Command::PlaceRoadBridge(c, _, _)
-        | Command::PlaceAqueduct(c, _) => Some((ConstructionKind::Bridge, *c)),
-        Command::PlaceRoad(c)
-        | Command::PlaceRoadBits(c, _)
-        | Command::PlaceTramBits(c, _)
-        | Command::RemoveTramBits(c)
-        | Command::SetRoadBits(c, _)
-        | Command::PlaceRoadDepot(c)
-        | Command::PlaceRoadDepotDir(c, _)
-        | Command::PlaceRoadWaypoint(c)
-        | Command::PlaceShipDepotDir(c, _)
-        | Command::PlaceDock(c, _)
-        | Command::PlaceAirport(c)
-        | Command::PlaceAirportArea { origin: c, .. }
-        | Command::PlaceCanal(c)
-        | Command::PlaceRiver(c)
-        | Command::PlaceBuoy(c)
-        | Command::PlaceLock(c, _)
-        | Command::PlaceStation(c)
-        | Command::PlaceStationDir(c, _)
-        | Command::PlaceBusStop(c, _)
-        | Command::PlaceTruckStop(c, _)
-        | Command::PlaceRoadTunnel(c, _) => Some((ConstructionKind::Road, *c)),
-        Command::PlaceRailStationArea { origin, .. } => Some((ConstructionKind::Rail, *origin)),
-        // Quitar vía suena al SFX de rail (como en OpenTTD), no a explosión.
-        Command::RemoveRail(c) | Command::RemoveRailBits(c, _) => {
-            Some((ConstructionKind::Rail, *c))
-        }
-        Command::BuyLand(c)
-        | Command::BuildObject { pos: c, .. }
-        | Command::RaiseLand(c)
-        | Command::LowerLand(c)
-        | Command::PlaceIndustry(c)
-        | Command::PlaceIndustryKind(c, _)
-        | Command::PlaceIndustrySpec(c, _)
-        | Command::PlaceHouse(c)
-        | Command::PlaceForest(c)
-        | Command::FoundTown(c) => Some((ConstructionKind::Other, *c)),
-        Command::BuyLandArea { from, .. } | Command::LevelLand { from, .. } => {
-            Some((ConstructionKind::Other, *from))
-        }
-        _ => None,
-    }
-}
-
-fn demolition_event_for(cmd: &Command) -> Option<crate::map::TileCoord> {
-    match cmd {
-        // Solo la dinamita/limpieza de tesela suena a explosión.
-        Command::ClearTile(c) => Some(*c),
-        _ => None,
-    }
-}
-
-const fn command_modifies_map(cmd: &Command) -> bool {
-    !matches!(
-        cmd,
-        Command::SetVehicleOrders(..)
-            | Command::SetVehicleStationOrders(..)
-            | Command::SetVehicleOrderList(..)
-            | Command::BuildRoadVehicleAtDepot(..)
-            | Command::BuildVehicleAtDepot(..)
-            | Command::AttachWagonToConsist { .. }
-            | Command::DetachConsistUnit(..)
-            | Command::MoveRailVehicle { .. }
-            | Command::SellVehicle(..)
-            | Command::ToggleVehicleRunning(..)
-            | Command::CloneVehicleOrders { .. }
-            | Command::CloneVehicleAtDepot { .. }
-            | Command::SellAllVehiclesAtDepot(..)
-            | Command::RemoveVehicleOrderAt { .. }
-            | Command::SkipVehicleOrder(..)
-            | Command::ToggleVehicleOrderFullLoad { .. }
-            | Command::ToggleVehicleOrderNoUnload { .. }
-            | Command::AppendGotoNearestDepot(..)
-            | Command::RenameVehicle { .. }
-            | Command::RenameStation { .. }
-            | Command::RenameSign { .. }
-            | Command::PlaceSign { .. }
-            | Command::RemoveSign { .. }
-            | Command::JoinStations { .. }
-            | Command::SetDepotVehiclesRunning { .. }
-            | Command::MoveVehicleOrder { .. }
-            | Command::ToggleVehicleOrderDepotStop { .. }
-            | Command::TurnAroundVehicle(..)
-            | Command::ForceVehicleProceed(..)
-            | Command::RefitVehicle { .. }
-            | Command::CycleVehicleOrderDepotRefit { .. }
-            | Command::ToggleVehicleTimetable(..)
-            | Command::CycleVehicleOrderWait { .. }
-            | Command::CycleVehicleOrderTravel { .. }
-            | Command::SetAutoReplaceRule { .. }
-            | Command::ClearAutoReplaceRule { .. }
-            | Command::ToggleAutoReplaceRule { .. }
-            | Command::CreateVehicleGroup { .. }
-            | Command::RenameVehicleGroup { .. }
-            | Command::AssignVehicleToGroup { .. }
-            | Command::ClearVehicleTimetableLateness(..)
-            | Command::SetVehicleOrderWaitTicks { .. }
-            | Command::SetVehicleOrderTravelTicks { .. }
-            | Command::ToggleVehicleTimetableAutofill(..)
-            | Command::ToggleAutoReplaceOnlyWhenOld { .. }
-            | Command::SetAutoReplaceRuleGroup { .. }
-            | Command::DepotMassAutoreplace { .. }
-            | Command::CreateSharedOrdersFromVehicle(..)
-            | Command::LinkVehicleToSharedOrders { .. }
-            | Command::UnlinkVehicleSharedOrders(..)
-            | Command::SetSharedOrderAt { .. }
-            | Command::SetVehicleOrderConditional { .. }
-            | Command::DepotReorderVehicleSlot { .. }
-            | Command::IncreaseLoan
-            | Command::DecreaseLoan
-            | Command::BuyCompany(_)
-            | Command::TownAdvertise(..)
-            | Command::TownFundBuildings(..)
-            | Command::CheatSetEnabled(..)
-            | Command::CheatAddMoney(..)
-            | Command::CheatToggleInfiniteMoney
-            | Command::CheatToggleMagicBulldozer
-            | Command::CheatSetYear(..)
-            | Command::CheatSwitchCompany(..)
-            | Command::SetNewGrfEnabled { .. }
-            | Command::MoveNewGrfInStack { .. }
-            | Command::RemoveNewGrfFromStack { .. }
-            | Command::AddNewGrfToStack { .. }
-            | Command::SetNewGrfParam { .. }
-    )
 }
 
 fn invalidate_vehicle_paths(state: &mut GameState) {

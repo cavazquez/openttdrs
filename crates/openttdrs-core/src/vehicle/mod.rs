@@ -3,6 +3,7 @@
 mod cargo;
 mod model;
 mod movement;
+mod operational_status;
 mod order;
 mod order_execution;
 mod reliability;
@@ -23,6 +24,9 @@ pub use reliability::{
 
 // Re-exportaciones públicas desde movement.rs
 pub use movement::VEHICLE_PROGRESS_STEP;
+
+// Re-exportaciones públicas desde operational_status.rs
+pub use operational_status::{VehicleIssueDetail, VehicleOperationalSummary};
 
 /// Capacidad de carga por defecto (unidades de cargo).
 pub const VEHICLE_CAPACITY: u32 = 20;

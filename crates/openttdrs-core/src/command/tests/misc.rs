@@ -427,3 +427,61 @@ fn magic_bulldozer_clears_foreign_tile() {
     apply_command(&mut s, &Command::ClearTile(rail)).unwrap();
     assert_eq!(s.map.get_kind(rail), Some(TileKind::Grass));
 }
+
+#[test]
+fn set_pathfinding_settings_clamps_and_is_idempotent() {
+    let mut s = GameState::new(8, 8);
+    let custom = crate::PathfindingSettings {
+        wait_for_pbs_path: 10,
+        path_backoff_interval: 60,
+        reverse_at_signals: false,
+    };
+    apply_command(&mut s, &Command::SetPathfindingSettings(custom)).unwrap();
+    assert_eq!(s.pathfinding, custom);
+
+    apply_command(&mut s, &Command::SetPathfindingSettings(custom)).unwrap();
+    assert_eq!(s.pathfinding, custom);
+
+    let too_low = crate::PathfindingSettings {
+        wait_for_pbs_path: 1,
+        path_backoff_interval: 0,
+        reverse_at_signals: true,
+    };
+    apply_command(&mut s, &Command::SetPathfindingSettings(too_low)).unwrap();
+    assert_eq!(s.pathfinding.wait_for_pbs_path, 2);
+    assert_eq!(s.pathfinding.path_backoff_interval, 1);
+    assert!(s.pathfinding.reverse_at_signals);
+
+    apply_command(
+        &mut s,
+        &Command::SetPathfindingSettings(crate::PathfindingSettings::default()),
+    )
+    .unwrap();
+    assert_eq!(s.pathfinding, crate::PathfindingSettings::default());
+}
+
+#[test]
+fn set_cargo_dist_distribution_rebuilds_flows() {
+    use crate::flow_stat::DistributionType;
+
+    let mut s = GameState::new(8, 8);
+    assert_eq!(s.cargo_dist.distribution, DistributionType::Manual);
+    apply_command(
+        &mut s,
+        &Command::SetCargoDistDistribution(DistributionType::Asymmetric),
+    )
+    .unwrap();
+    assert_eq!(s.cargo_dist.distribution, DistributionType::Asymmetric);
+    // Mapa vacío: rebuild no debe panicar.
+    apply_command(
+        &mut s,
+        &Command::SetCargoDistDistribution(DistributionType::Asymmetric),
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::SetCargoDistDistribution(DistributionType::Symmetric),
+    )
+    .unwrap();
+    assert_eq!(s.cargo_dist.distribution, DistributionType::Symmetric);
+}

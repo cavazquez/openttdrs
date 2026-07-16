@@ -1,6 +1,7 @@
 //! Ventana de ajustes `CargoDist` (`cargo_dist.distribution`).
 
 use bevy::prelude::*;
+use openttdrs_core::Command;
 use openttdrs_core::flow_stat::DistributionType;
 
 use crate::state::SimWorld;
@@ -120,10 +121,10 @@ pub(crate) fn handle_cargo_dist_settings_buttons(
         if *interaction != Interaction::Pressed {
             continue;
         }
-        if sim.state.cargo_dist.distribution != action.0 {
-            sim.state.cargo_dist.distribution = action.0;
-            sim.state.rebuild_station_flows();
-        }
+        let _ = crate::network::apply_player_command(
+            &mut sim.state,
+            &Command::SetCargoDistDistribution(action.0),
+        );
     }
 }
 

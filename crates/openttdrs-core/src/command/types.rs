@@ -382,4 +382,8 @@ pub enum Command {
         param_index: u8,
         value: u32,
     },
+    /// Sustituye los ajustes PBS / pathfinding de la partida (deuda I8 settings).
+    SetPathfindingSettings(crate::pathfinding_settings::PathfindingSettings),
+    /// Cambia el modo CargoDist y reconstruye flows de estación.
+    SetCargoDistDistribution(crate::flow_stat::DistributionType),
 }

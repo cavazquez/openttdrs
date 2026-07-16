@@ -304,7 +304,9 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         | Command::MoveNewGrfInStack { .. }
         | Command::RemoveNewGrfFromStack { .. }
         | Command::AddNewGrfToStack { .. }
-        | Command::SetNewGrfParam { .. } => None,
+        | Command::SetNewGrfParam { .. }
+        | Command::SetPathfindingSettings(..)
+        | Command::SetCargoDistDistribution(..) => None,
     }
 }
 

@@ -1,8 +1,10 @@
 //! Ventana de ajustes PBS / pathfinding (`pf.wait_for_pbs_path`, etc.).
 
 use bevy::prelude::*;
+use openttdrs_core::Command;
 use openttdrs_core::{
     DEFAULT_PATH_BACKOFF_INTERVAL, DEFAULT_WAIT_FOR_PBS_PATH_DAYS, PBS_WAIT_FOREVER,
+    PathfindingSettings,
 };
 
 use crate::state::SimWorld;
@@ -253,23 +255,29 @@ pub(crate) fn handle_pathfinding_settings_buttons(
         if *interaction != Interaction::Pressed {
             continue;
         }
-        let pf = &mut sim.state.pathfinding;
+        let mut next = sim.state.pathfinding;
         match *action {
             PathfindingSettingsAction::WaitDays(d) => {
-                pf.wait_for_pbs_path = d.max(2);
+                next.wait_for_pbs_path = d.max(2);
             }
             PathfindingSettingsAction::Backoff(b) => {
-                pf.path_backoff_interval = b.max(1);
+                next.path_backoff_interval = b.max(1);
             }
             PathfindingSettingsAction::ToggleReverse => {
-                pf.reverse_at_signals = !pf.reverse_at_signals;
+                next.reverse_at_signals = !next.reverse_at_signals;
             }
             PathfindingSettingsAction::ResetDefaults => {
-                pf.wait_for_pbs_path = DEFAULT_WAIT_FOR_PBS_PATH_DAYS;
-                pf.path_backoff_interval = DEFAULT_PATH_BACKOFF_INTERVAL;
-                pf.reverse_at_signals = true;
+                next = PathfindingSettings {
+                    wait_for_pbs_path: DEFAULT_WAIT_FOR_PBS_PATH_DAYS,
+                    path_backoff_interval: DEFAULT_PATH_BACKOFF_INTERVAL,
+                    reverse_at_signals: true,
+                };
             }
         }
+        let _ = crate::network::apply_player_command(
+            &mut sim.state,
+            &Command::SetPathfindingSettings(next),
+        );
     }
 }
 

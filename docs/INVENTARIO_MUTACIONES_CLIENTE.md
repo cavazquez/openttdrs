@@ -19,12 +19,17 @@ Fecha: 2026-07-16. Crate: `openttdrs-client`. ADR red: [adr/0001-multiplayer-v1.
 | Drenaje UI runtime | `ui/statusbar/sync.rs` (news/display) | Colas efímeras de `runtime` |
 | Bootstrap pre-partida | `state/bootstrap/*`, población procedural | Antes de que exista log de red |
 
-### Deuda I8 (debería ser `Command` o settings replicados)
+### Migrado a `Command` (piloto I8 settings)
+
+| Grupo | Archivos | Comando |
+|-------|----------|---------|
+| Pathfinding / PBS UI | `ui/pathfinding_settings_window.rs` | `SetPathfindingSettings` |
+| CargoDist UI | `ui/cargo_dist_settings_window.rs` | `SetCargoDistDistribution` |
+
+### Deuda I8 restante (debería ser `Command` o settings replicados)
 
 | Grupo | Archivos representativos | Qué muta |
 |-------|--------------------------|----------|
-| Pathfinding / PBS UI | `ui/pathfinding_settings_window.rs` | `state.pathfinding.*` |
-| CargoDist UI | `ui/cargo_dist_settings_window.rs` | `cargo_dist` + `rebuild_station_flows` |
 | Selectores vía/estación | `ui/toolbar/*_type_selector.rs`, airport/station pickers | `current_rail_type`, road/tram/station/airport |
 | Color / AI / story | ventanas de compañía / AI / GS | espejos y settings de partida |
 | Editor / sandbox | `state/editor_session.rs`, escenarios heightmap | clima, seed, clear entidades, cheats |
@@ -41,6 +46,6 @@ Para listen-server / cliente-only, todo lo marcado **Deuda I8** que altere estad
 
 ## Follow-up sugeridos (no bloquean cierre de #114)
 
-1. Commands o mensajes de settings para `pathfinding` / `cargo_dist` / tipos de vía activos.
+1. ~~Commands para `pathfinding` / `cargo_dist`.~~ Hecho (piloto). Quedan tipos de vía activos y color/AI.
 2. Editor/sandbox solo en modo single-player o como comandos de host.
 3. Asegurar que `finalize_road_drag_line` no duplique efectos ya cubiertos por el comando de colocación.

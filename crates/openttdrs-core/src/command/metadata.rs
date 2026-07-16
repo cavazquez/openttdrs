@@ -246,6 +246,13 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::RemoveNewGrfFromStack { .. }
         | Command::AddNewGrfToStack { .. }
         | Command::SetNewGrfParam { .. } => CommandEffects::none(),
+
+        // ═══════════════════════════════════════════════════════════════════
+        // Settings de partida (NO modifican mapa)
+        // ═══════════════════════════════════════════════════════════════════
+        Command::SetPathfindingSettings(..) | Command::SetCargoDistDistribution(..) => {
+            CommandEffects::none()
+        }
     }
 }
 

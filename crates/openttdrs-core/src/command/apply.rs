@@ -466,5 +466,23 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             param_index,
             value,
         } => newgrf::set_newgrf_param(state, *index, *param_index, *value),
+        Command::SetPathfindingSettings(settings) => {
+            let mut next = *settings;
+            next.wait_for_pbs_path = next.wait_for_pbs_path.max(2);
+            next.path_backoff_interval = next.path_backoff_interval.max(1);
+            if state.pathfinding == next {
+                return Ok(());
+            }
+            state.pathfinding = next;
+            Ok(())
+        }
+        Command::SetCargoDistDistribution(mode) => {
+            if state.cargo_dist.distribution == *mode {
+                return Ok(());
+            }
+            state.cargo_dist.distribution = *mode;
+            state.rebuild_station_flows();
+            Ok(())
+        }
     }
 }

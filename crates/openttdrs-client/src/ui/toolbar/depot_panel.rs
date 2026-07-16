@@ -416,21 +416,30 @@ pub(crate) fn sync_depot_panel(
     trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
-    mut container_q: Query<(
-        &DepotRowContainer,
-        &mut Node,
-        &mut BackgroundColor,
-        &mut BorderColor,
-    )>,
-    row_interaction_q: Query<(&DepotVehicleRow, &Interaction), With<Button>>,
+    mut container_q: Query<
+        (
+            &DepotRowContainer,
+            &mut Node,
+            &mut BackgroundColor,
+            &mut BorderColor,
+        ),
+        Without<DepotConsistUnitSprite>,
+    >,
+    row_interaction_q: Query<
+        (&DepotVehicleRow, &Interaction),
+        (With<Button>, Without<DepotConsistUnitSprite>),
+    >,
     mut row_text_q: Query<(&DepotVehicleRowText, &mut Text), Without<FloatingWindowTitleText>>,
-    mut consist_q: Query<(
-        &DepotConsistUnitSprite,
-        &mut ImageNode,
-        &mut Node,
-        &mut BorderColor,
-        &Interaction,
-    )>,
+    mut consist_q: Query<
+        (
+            &DepotConsistUnitSprite,
+            &mut ImageNode,
+            &mut Node,
+            &mut BorderColor,
+            &Interaction,
+        ),
+        Without<DepotRowContainer>,
+    >,
     mut clone_label_q: Query<
         &mut Text,
         (

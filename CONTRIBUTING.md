@@ -21,6 +21,8 @@ Guía corta. Detalle de arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.m
 ./scripts/check.sh ci            # núcleo compartido con .github/workflows/ci.yml
 ```
 
+Benchmarks headless (informativos, no bloquean CI): [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — `./scripts/check.sh bench` o `./scripts/bench_baseline.sh`.
+
 Solo en GitHub Actions (no obligatorio en cada commit local): `rustdoc`, `cargo audit`, `cargo deny`, cobertura en `main`, fetch OpenTTD para regen de tablas. Cabecera de `scripts/check.sh` y [README](README.md#ci-y-calidad).
 
 ## Definition of Done (PR)

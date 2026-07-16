@@ -74,7 +74,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 | Issue | Estado |
 |-------|--------|
-| #116 benchmarks headless | ⬜ |
+| #116 benchmarks headless | ✅ | `cargo bench -p openttdrs-core` + `docs/BENCHMARKS.md` |
 
 ### Fase 7 — Endurecimiento
 
@@ -103,14 +103,13 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 - [x] Mismo seed/comandos/ticks → hashes idénticos tras save/load (`#108`, refuerzo `#107` ✅).
 - [x] Referencia OpenTTD fijada (`#109`) y oráculo independiente (`#110`, ver `parity/SNAPSHOT_FIRST_DIVERGENCE.md`).
 - [x] Refactors con equivalencia tick-a-tick (`#108`).
-- [ ] Benchmarks con baseline (`#116`).
+- [x] Benchmarks con baseline (`#116`; ver `docs/BENCHMARKS.md`).
 - [x] ADRs / gobierno (`#117`).
 - [x] Bloqueantes de determinismo para `#21` cerrados (`#108`/`#114`/`#115`).
 - [x] `#21` transporte TCP + flags cliente / dedicated (ADR 0001).
 
 ## Próximo foco recomendado
 
-1. Deuda I8 settings → `Command`: inventario #114 cerrado (settings, selectores, editor GenLand, drag finalize, story local).
-2. Host migration post-v1 (fuera de ADR 0001).
-3. Benchmarks headless (#116).
-4. Regenerar pilots OpenGFX con drift (house_draw / vehicle_gfx) en PR de datos.
+1. Host migration post-v1 (fuera de ADR 0001).
+2. Regenerar pilots OpenGFX con drift (house_draw / vehicle_gfx) en PR de datos.
+3. Docs tick/carga gradual (#125).

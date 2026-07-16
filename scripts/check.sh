@@ -14,6 +14,7 @@
 #   ./scripts/check.sh audit  # SP3.0: PNG OpenGFX requeridos vs assets/opengfx/tiles
 #   ./scripts/check.sh build  # cargo build --workspace
 #   ./scripts/check.sh doctor # deps de entorno (delegado a scripts/doctor.sh)
+#   ./scripts/check.sh bench  # smoke Criterion (#116; no forma parte de `ci`)
 #
 # Excepciones documentadas (solo en GitHub Actions, no en `ci` local):
 #   - rustdoc (`cargo doc -D warnings`) — #103
@@ -153,6 +154,14 @@ do_doctor() {
     ./scripts/doctor.sh
 }
 
+do_bench() {
+    info "Smoke benchmarks headless (#116)..."
+    local args=(--warm-up-time 0.3 --measurement-time 0.8 --sample-size 20)
+    cargo bench -p openttdrs-core --bench sim_tick -- "${args[@]}"
+    cargo bench -p openttdrs-core --bench pathfinding -- "${args[@]}"
+    info "Bench smoke OK ✓ (baseline completo: ./scripts/bench_baseline.sh)"
+}
+
 do_all() {
     do_fmt
     do_lint
@@ -200,10 +209,11 @@ case "${1:-all}" in
     build)       do_build ;;
     audit)       do_audit ;;
     doctor)      do_doctor ;;
+    bench)       do_bench ;;
     ci)          do_ci ;;
     all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|ci-python|generated-tables|generated-tables-ci|openttd-ref|snapshot-oracle|audit|cov|build|doctor|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|ci-python|generated-tables|generated-tables-ci|openttd-ref|snapshot-oracle|audit|cov|build|doctor|bench|ci|all}"
         exit 1
         ;;
 esac

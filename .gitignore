@@ -63,5 +63,8 @@ target
 /lcov.info
 /htmlcov/
 
+# Logs crudos de ./scripts/bench_baseline.sh (#116); se versiona latest.md
+crates/openttdrs-core/benches/baselines/raw-*/
+
 # Volcados accidentales (p. ej. /proc, stderr redirigido)
 /sys

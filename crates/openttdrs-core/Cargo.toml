@@ -7,12 +7,27 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# Evita que `cargo bench` ejecute unittests de lib (harness de test ≠ Criterion).
+[lib]
+bench = false
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # Descompresión de savegames OpenTTD (.sav): OTTZ = zlib, OTTX = xz/lzma.
 flate2 = "1"
 lzma-rs = "0.3"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "sim_tick"
+harness = false
+
+[[bench]]
+name = "pathfinding"
+harness = false
 
 [lints]
 workspace = true

@@ -1,0 +1,35 @@
+//! Helpers compartidos entre benches headless (#116).
+#![allow(dead_code)] // cada [[bench]] incluye el módulo completo
+
+use openttdrs_core::parity::build_scenario;
+use openttdrs_core::{Climate, GameState, WorldGenConfig, apply_world_gen};
+
+/// Escenario parity o panic con mensaje claro (fixture de bench, no runtime).
+#[must_use]
+pub fn scenario(name: &str) -> GameState {
+    build_scenario(name).unwrap_or_else(|| panic!("escenario parity desconocido: {name}"))
+}
+
+/// Mapa grande procedural (256×256) sin flota — mide coste de tick sobre terreno.
+#[must_use]
+pub fn large_world_gen_map() -> GameState {
+    let mut state = GameState::new(256, 256);
+    let cfg = WorldGenConfig {
+        climate: Climate::Temperate,
+        seed: 116,
+        sea_level: 1,
+        island: false,
+        height_span: 6,
+    };
+    apply_world_gen(&mut state.map, &cfg, &[]).expect("world_gen bench 256×256");
+    state.world_seed = cfg.seed;
+    state.climate = cfg.climate;
+    state
+}
+
+/// Avanza exactamente `n` ticks.
+pub fn step_n(state: &mut GameState, n: u32) {
+    for _ in 0..n {
+        state.step();
+    }
+}

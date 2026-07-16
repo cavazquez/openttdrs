@@ -16,6 +16,7 @@ mod industry_anim;
 mod industry_draw_proc;
 pub(crate) mod industry_newgrf;
 mod lighthouse_anim;
+pub(crate) mod newgrf_cache;
 mod refinery_fire;
 mod road_newgrf;
 mod shore_newgrf;

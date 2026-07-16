@@ -7,7 +7,6 @@
 use bevy::input::ButtonState;
 use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use bevy::text::EditableText;
 use bevy::ui::widget::ImageNode;
 use openttdrs_core::{
@@ -17,7 +16,9 @@ use openttdrs_core::{
 };
 use std::collections::HashMap;
 
+use crate::render::newgrf_cache::{DecodedSpriteImagePolicy, decoded_sprite_image};
 use crate::render::{RemapMapVisualsPending, TruckHandles};
+use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CRIMSON,
@@ -41,21 +42,11 @@ pub(crate) struct NewGrfTrainPreviewCache {
 }
 
 fn decoded_sprite_to_image(sprite: &DecodedSprite, company_colour: u8) -> Image {
-    let rgba = if sprite.mask.is_empty() {
-        sprite.rgba.clone()
-    } else {
-        openttdrs_core::bake_sprite_company_mask(sprite, company_colour)
-    };
-    Image::new(
-        Extent3d {
-            width: u32::from(sprite.width),
-            height: u32::from(sprite.height),
-            depth_or_array_layers: 1,
+    decoded_sprite_image(
+        sprite,
+        DecodedSpriteImagePolicy::Masked {
+            colour: CompanyColour::from_u8(company_colour),
         },
-        TextureDimension::D2,
-        rgba,
-        TextureFormat::Rgba8UnormSrgb,
-        default(),
     )
 }
 

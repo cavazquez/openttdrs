@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use openttdrs_core::{DecodedSprite, EngineDef, Vehicle, VehicleKind, bake_sprite_company_mask};
+use openttdrs_core::{EngineDef, Vehicle, VehicleKind};
 
 use crate::render::CompanyColoredSprites;
+use crate::render::newgrf_cache::{
+    DecodedSpriteImagePolicy, decoded_sprite_image, runtime_fingerprint, vars,
+};
 use crate::sprites::CompanyColour;
 
 #[path = "../../sprites/vehicle_gfx_data_generated.rs"]
@@ -93,52 +95,6 @@ impl NewGrfTrainSpriteCache {
         self.handles.len()
     }
 
-    fn decoded_to_image(sprite: &DecodedSprite, colour: CompanyColour) -> Image {
-        let rgba = if sprite.mask.is_empty() {
-            sprite.rgba.clone()
-        } else {
-            bake_sprite_company_mask(sprite, colour.as_u8())
-        };
-        Image::new(
-            Extent3d {
-                width: u32::from(sprite.width),
-                height: u32::from(sprite.height),
-                depth_or_array_layers: 1,
-            },
-            TextureDimension::D2,
-            rgba,
-            TextureFormat::Rgba8UnormSrgb,
-            default(),
-        )
-    }
-
-    fn runtime_fingerprint(ctx: &openttdrs_core::Action2EvalCtx) -> u32 {
-        let mut h = ctx.random_bits;
-        for offset in 0u8..=15 {
-            if let Some(&bits) = ctx.consist_random_bits.get(&offset) {
-                h = h
-                    .wrapping_mul(31)
-                    .wrapping_add(bits)
-                    .wrapping_add(u32::from(offset) << 24);
-            }
-        }
-        for &var in &[0x40_u8, 0x47, 0x43, 0x5F, 0xB2, 0xB4, 0xC8] {
-            if let Some(&v) = ctx.vars.get(&var) {
-                h = h
-                    .wrapping_mul(31)
-                    .wrapping_add(v)
-                    .wrapping_add(u32::from(var) << 16);
-            }
-        }
-        for (i, &p) in ctx.grf_params.iter().enumerate().take(16) {
-            h = h
-                .wrapping_mul(31)
-                .wrapping_add(p)
-                .wrapping_add(u32::try_from(i).unwrap_or(0) << 20);
-        }
-        h
-    }
-
     /// Textura para la vista `dir` (0..=7) de un motor NewGRF (vistas horneadas).
     pub(crate) fn handle_for(
         &mut self,
@@ -153,7 +109,12 @@ impl NewGrfTrainSpriteCache {
         Some(
             self.handles
                 .entry(key)
-                .or_insert_with(|| images.add(Self::decoded_to_image(view, colour)))
+                .or_insert_with(|| {
+                    images.add(decoded_sprite_image(
+                        view,
+                        DecodedSpriteImagePolicy::Masked { colour },
+                    ))
+                })
                 .clone(),
         )
     }
@@ -174,12 +135,17 @@ impl NewGrfTrainSpriteCache {
         }
         let view = &views[dir % views.len()];
         let view_idx = u8::try_from(dir % views.len()).unwrap_or(0);
-        let fp = Self::runtime_fingerprint(ctx);
+        let fp = runtime_fingerprint(ctx, vars::TRAIN, true);
         let key = (engine.id, view_idx, colour.as_u8(), fp);
         Some(
             self.handles
                 .entry(key)
-                .or_insert_with(|| images.add(Self::decoded_to_image(view, colour)))
+                .or_insert_with(|| {
+                    images.add(decoded_sprite_image(
+                        view,
+                        DecodedSpriteImagePolicy::Masked { colour },
+                    ))
+                })
                 .clone(),
         )
     }

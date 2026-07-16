@@ -3,8 +3,9 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use openttdrs_core::DecodedSprite;
+
+use crate::render::newgrf_cache::{DecodedSpriteImagePolicy, decoded_sprite_image};
 
 /// Bit en `ShoreTile` para marcar costa NewGRF (no animar con frames OpenGFX).
 pub(crate) const NEWGRF_SHORE_TILE_FLAG: u8 = 0x80;
@@ -20,20 +21,6 @@ impl NewGrfShoreSpriteCache {
         self.handles.clear();
     }
 
-    fn decoded_to_image(sprite: &DecodedSprite) -> Image {
-        Image::new(
-            Extent3d {
-                width: u32::from(sprite.width),
-                height: u32::from(sprite.height),
-                depth_or_array_layers: 1,
-            },
-            TextureDimension::D2,
-            sprite.rgba.clone(),
-            TextureFormat::Rgba8UnormSrgb,
-            default(),
-        )
-    }
-
     /// Textura del slot shore NewGRF (lazy).
     pub(crate) fn handle_for(
         &mut self,
@@ -43,7 +30,9 @@ impl NewGrfShoreSpriteCache {
     ) -> Handle<Image> {
         self.handles
             .entry(slot)
-            .or_insert_with(|| images.add(Self::decoded_to_image(sprite)))
+            .or_insert_with(|| {
+                images.add(decoded_sprite_image(sprite, DecodedSpriteImagePolicy::Raw))
+            })
             .clone()
     }
 }

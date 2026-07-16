@@ -3,8 +3,11 @@
 use std::collections::HashMap;
 
 use bevy::prelude::*;
-use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use openttdrs_core::{DecodedSprite, RoadTypeDef};
+use openttdrs_core::RoadTypeDef;
+
+use crate::render::newgrf_cache::{
+    DecodedSpriteImagePolicy, decoded_sprite_image, runtime_fingerprint, vars,
+};
 
 /// `(road_type_id, view_idx, runtime_fp)` → textura RGBA.
 #[derive(Resource, Default)]
@@ -17,39 +20,6 @@ impl NewGrfRoadSpriteCache {
         self.handles.clear();
     }
 
-    fn decoded_to_image(sprite: &DecodedSprite) -> Image {
-        Image::new(
-            Extent3d {
-                width: u32::from(sprite.width),
-                height: u32::from(sprite.height),
-                depth_or_array_layers: 1,
-            },
-            TextureDimension::D2,
-            sprite.rgba.clone(),
-            TextureFormat::Rgba8UnormSrgb,
-            default(),
-        )
-    }
-
-    fn runtime_fingerprint(ctx: &openttdrs_core::Action2EvalCtx) -> u32 {
-        let mut h = ctx.random_bits;
-        for &var in &[0x40_u8, 0x42, 0x45, 0x5F] {
-            if let Some(&v) = ctx.vars.get(&var) {
-                h = h
-                    .wrapping_mul(31)
-                    .wrapping_add(v)
-                    .wrapping_add(u32::from(var) << 16);
-            }
-        }
-        for (i, &p) in ctx.grf_params.iter().enumerate().take(16) {
-            h = h
-                .wrapping_mul(31)
-                .wrapping_add(p)
-                .wrapping_add(u32::try_from(i).unwrap_or(0) << 20);
-        }
-        h
-    }
-
     /// Textura re-resolviendo Action2 con vars de tesela.
     pub(crate) fn handle_for_runtime(
         &mut self,
@@ -59,7 +29,7 @@ impl NewGrfRoadSpriteCache {
         images: &mut Assets<Image>,
     ) -> Option<Handle<Image>> {
         let fp = if def.newgrf_runtime.is_some() {
-            Self::runtime_fingerprint(ctx)
+            runtime_fingerprint(ctx, vars::ROAD, false)
         } else {
             0
         };
@@ -73,7 +43,9 @@ impl NewGrfRoadSpriteCache {
         Some(
             self.handles
                 .entry(key)
-                .or_insert_with(|| images.add(Self::decoded_to_image(&view)))
+                .or_insert_with(|| {
+                    images.add(decoded_sprite_image(&view, DecodedSpriteImagePolicy::Raw))
+                })
                 .clone(),
         )
     }

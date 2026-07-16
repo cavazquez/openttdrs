@@ -8,6 +8,9 @@ use openttdrs_core::prelude::*;
 
 use crate::ui::toolbar::BuildMenuAction;
 
+use super::drag::action_supports_drag;
+use super::rail_lane::rail_lane_bits_for_action;
+
 /// Contexto completo para decidir qué hacer ante un clic en el mapa.
 #[derive(Debug, Clone)]
 pub(crate) struct MapClickContext {
@@ -21,6 +24,8 @@ pub(crate) struct MapClickContext {
     pub drag_armed: bool,
     pub drag_last_action: Option<BuildMenuAction>,
     pub drag_start_tile: Option<(i32, i32)>,
+    /// Origen del drag en mundo (para detectar tap de señales).
+    pub drag_press_world_pos: Option<Vec2>,
     pub vehicle_under_cursor: Option<u32>,
     pub town_label_under_cursor: Option<u32>,
     pub tile_kind: Option<TileKind>,
@@ -217,7 +222,7 @@ fn resolve_drag_intent(ctx: &MapClickContext, action: BuildMenuAction) -> MapCli
             return MapClickIntent::StartDrag {
                 action,
                 start_tile: start,
-                rail_lane_bit: None,
+                rail_lane_bit: rail_lane_bits_for_action(action, Some(ctx.tile_fract)),
                 signal_drag_fract,
                 press_world_pos: ctx.world_pos,
             };
@@ -230,7 +235,9 @@ fn resolve_drag_intent(ctx: &MapClickContext, action: BuildMenuAction) -> MapCli
         .unwrap_or((ctx.tile_pos.x, ctx.tile_pos.y));
     const SIGNAL_TAP_MAX_PX: f32 = 10.0;
     let signal_tap = action == BuildMenuAction::RailSignals
-        && ctx.world_pos.distance(ctx.world_pos) <= SIGNAL_TAP_MAX_PX;
+        && ctx
+            .drag_press_world_pos
+            .is_some_and(|press| ctx.world_pos.distance(press) <= SIGNAL_TAP_MAX_PX);
     let end = if signal_tap {
         start
     } else {
@@ -245,26 +252,6 @@ fn resolve_drag_intent(ctx: &MapClickContext, action: BuildMenuAction) -> MapCli
         end_tile: end,
         signal_tap,
     }
-}
-
-fn action_supports_drag(action: BuildMenuAction) -> bool {
-    matches!(
-        action,
-        BuildMenuAction::RailHorz
-            | BuildMenuAction::RailVert
-            | BuildMenuAction::RailBridge
-            | BuildMenuAction::RoadBridge
-            | BuildMenuAction::RoadTunnel
-            | BuildMenuAction::RailTunnel
-            | BuildMenuAction::Road
-            | BuildMenuAction::RoadX
-            | BuildMenuAction::RoadY
-            | BuildMenuAction::Tram
-            | BuildMenuAction::TramX
-            | BuildMenuAction::TramY
-            | BuildMenuAction::RailSignals
-            | BuildMenuAction::Clear
-    )
 }
 
 #[cfg(test)]
@@ -283,6 +270,7 @@ mod tests {
             drag_armed: false,
             drag_last_action: None,
             drag_start_tile: None,
+            drag_press_world_pos: None,
             vehicle_under_cursor: None,
             town_label_under_cursor: None,
             tile_kind: None,
@@ -352,11 +340,59 @@ mod tests {
         ctx.active_tool = Some(BuildMenuAction::RailHorz);
         let intent = resolve_click_intent(&ctx);
         match intent {
-            MapClickIntent::StartDrag { action, .. } => {
+            MapClickIntent::StartDrag {
+                action,
+                rail_lane_bit,
+                ..
+            } => {
                 assert_eq!(action, BuildMenuAction::RailHorz);
+                assert!(rail_lane_bit.is_some());
             }
             _ => panic!("Expected StartDrag"),
         }
+    }
+
+    #[test]
+    fn test_start_drag_autorail_and_fixed_axes() {
+        for action in [
+            BuildMenuAction::Rail,
+            BuildMenuAction::RailX,
+            BuildMenuAction::RailY,
+        ] {
+            let mut ctx = default_ctx();
+            ctx.mouse_left_pressed = true;
+            ctx.active_tool = Some(action);
+            let intent = resolve_click_intent(&ctx);
+            match intent {
+                MapClickIntent::StartDrag {
+                    action: started, ..
+                } => assert_eq!(started, action),
+                other => panic!("Expected StartDrag for {action:?}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_autorail_drag_update_then_confirm() {
+        let mut ctx = default_ctx();
+        ctx.active_tool = Some(BuildMenuAction::Rail);
+        ctx.drag_armed = true;
+        ctx.drag_last_action = Some(BuildMenuAction::Rail);
+        ctx.drag_start_tile = Some((10, 10));
+        ctx.tile_pos = TileCoord::new(14, 10);
+        let intent = resolve_click_intent(&ctx);
+        assert_eq!(
+            intent,
+            MapClickIntent::UpdateDrag {
+                end_tile: (14, 10),
+                signal_tap: false,
+            }
+        );
+        ctx.mouse_left_released = true;
+        assert_eq!(
+            resolve_click_intent(&ctx),
+            MapClickIntent::ConfirmDrag { signal_tap: false }
+        );
     }
 
     #[test]

@@ -18,6 +18,7 @@ use crate::ui::town_window::town_for_house_tile;
 
 use super::apply_intent::{IntentApplyContext, apply_intent};
 use super::click_intent::{MapClickContext, resolve_click_intent};
+use super::drag::action_supports_drag;
 
 /// Estados de paneles/ventanas mutuamente excluyentes, agrupados para no
 /// exceder el límite de parámetros de sistema de Bevy.
@@ -86,7 +87,7 @@ pub(crate) fn handle_tile_click(
         if apply_ctx.drag_state.armed
             && mouse.just_released(MouseButton::Left)
             && let Some(action) = tool_state.active_tool
-            && action_supports_drag_check(action)
+            && action_supports_drag(action)
             && apply_ctx.drag_state.last_action == Some(action)
         {
             let ctx = MapClickContext {
@@ -100,6 +101,7 @@ pub(crate) fn handle_tile_click(
                 drag_armed: apply_ctx.drag_state.armed,
                 drag_last_action: apply_ctx.drag_state.last_action,
                 drag_start_tile: apply_ctx.drag_state.start_tile,
+                drag_press_world_pos: apply_ctx.drag_state.press_world_pos,
                 vehicle_under_cursor: None,
                 town_label_under_cursor: None,
                 tile_kind: None,
@@ -196,6 +198,7 @@ pub(crate) fn handle_tile_click(
         drag_armed: apply_ctx.drag_state.armed,
         drag_last_action: apply_ctx.drag_state.last_action,
         drag_start_tile: apply_ctx.drag_state.start_tile,
+        drag_press_world_pos: apply_ctx.drag_state.press_world_pos,
         vehicle_under_cursor,
         town_label_under_cursor: if tile_kind == Some(TileKind::House) {
             town_for_house_tile(&apply_ctx.sim.state, build_pos)
@@ -215,26 +218,6 @@ pub(crate) fn handle_tile_click(
 
     let intent = resolve_click_intent(&ctx);
     apply_intent(intent, &mut apply_ctx, time.elapsed_secs());
-}
-
-fn action_supports_drag_check(action: BuildMenuAction) -> bool {
-    matches!(
-        action,
-        BuildMenuAction::RailHorz
-            | BuildMenuAction::RailVert
-            | BuildMenuAction::RailBridge
-            | BuildMenuAction::RoadBridge
-            | BuildMenuAction::RoadTunnel
-            | BuildMenuAction::RailTunnel
-            | BuildMenuAction::Road
-            | BuildMenuAction::RoadX
-            | BuildMenuAction::RoadY
-            | BuildMenuAction::Tram
-            | BuildMenuAction::TramX
-            | BuildMenuAction::TramY
-            | BuildMenuAction::RailSignals
-            | BuildMenuAction::Clear
-    )
 }
 
 pub(crate) fn sync_build_pointer_modifiers(

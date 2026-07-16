@@ -277,16 +277,45 @@ impl WorldAssets {
         let airport_stand = atlas.get("airport_stand.png");
         let airport_radar: [AtlasSprite; 12] =
             std::array::from_fn(|i| atlas.get(&format!("airport_radar_{i:02}.png")));
+        // Esclusas: aún no están en el atlas de tiles (solo `toolbar_water_lock.png`).
+        // Fallback a agua plana hasta extraer Action5 canals (SPR_LOCK_*).
+        let water_lock_fallback = atlas
+            .try_get("water_flat.png")
+            .unwrap_or_else(|| atlas.get("water.png"));
+        let lock_names = [
+            "water_lock_ns_lower.png",
+            "water_lock_ns_middle.png",
+            "water_lock_ns_upper.png",
+            "water_lock_ew_lower.png",
+            "water_lock_ew_middle.png",
+            "water_lock_ew_upper.png",
+        ];
+        let missing_locks: Vec<&str> = lock_names
+            .iter()
+            .copied()
+            .filter(|n| atlas.try_get(n).is_none())
+            .collect();
+        if !missing_locks.is_empty() {
+            warn!(
+                "Sprites de esclusa ausentes en atlas ({}): fallback a agua plana — pendiente extracción OpenGFX SPR_LOCK_*",
+                missing_locks.len()
+            );
+        }
+        let water_lock_sprite = |name: &str| {
+            atlas
+                .try_get(name)
+                .unwrap_or_else(|| water_lock_fallback.clone())
+        };
         let water_lock = [
             [
-                atlas.get("water_lock_ns_lower.png"),
-                atlas.get("water_lock_ns_middle.png"),
-                atlas.get("water_lock_ns_upper.png"),
+                water_lock_sprite(lock_names[0]),
+                water_lock_sprite(lock_names[1]),
+                water_lock_sprite(lock_names[2]),
             ],
             [
-                atlas.get("water_lock_ew_lower.png"),
-                atlas.get("water_lock_ew_middle.png"),
-                atlas.get("water_lock_ew_upper.png"),
+                water_lock_sprite(lock_names[3]),
+                water_lock_sprite(lock_names[4]),
+                water_lock_sprite(lock_names[5]),
             ],
         ];
         use crate::sprites::{tunnel_rear_atlas_name, tunnel_rear_legacy_atlas_name};

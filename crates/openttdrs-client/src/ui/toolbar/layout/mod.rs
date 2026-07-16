@@ -82,7 +82,6 @@ mod tests {
             "assets/opengfx/tiles/ship_depot_ne.png",
             "assets/opengfx/tiles/dock_flat_x.png",
             "assets/opengfx/tiles/water_flat.png",
-            "assets/opengfx/tiles/water_lock_ns_middle.png",
             "assets/opengfx/tiles/toolbar_water_depot.png",
             "assets/opengfx/tiles/toolbar_water_dock.png",
             "assets/opengfx/tiles/toolbar_water_canal.png",

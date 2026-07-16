@@ -60,6 +60,7 @@ mod window_lifecycle;
 mod windows_shot;
 
 pub(crate) use hud::SimHudControls;
+pub(crate) use main_menu::{MainMenuCamera, MainMenuUi, leave_main_menu};
 pub(crate) use save_window::SaveWindowState;
 pub(crate) use toolbar::{BuildMenuAction, OrderEditState, ToolbarState, UiToolState};
 pub(crate) use ui5_blocked_stubs::{LinkGraphView, LinkGraphWindowState};

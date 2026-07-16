@@ -9,8 +9,9 @@ use openttdrs_net::{ClientSession, ListenServer, SessionEvent};
 use crate::bevy_app::UpdateSet;
 use crate::network::cli::NetCli;
 use crate::network::dispatch::{install_client, install_offline, install_server};
-use crate::render::VehicleIndex;
-use crate::state::{ClientScreen, SimRunState, SimWorld};
+use crate::render::{MapVisualLayer, ShoreTile, VehicleIndex, WaterTile};
+use crate::state::{ClientScreen, EditorSession, SimRunState, SimWorld};
+use crate::ui::{MainMenuCamera, MainMenuUi, leave_main_menu};
 
 /// Rol de la instancia.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -26,6 +27,8 @@ pub enum NetworkRole {
 pub struct NetworkStatus {
     pub label: String,
     pub desync: Option<String>,
+    /// Tras `Welcome` en modo cliente: salir del menú y mostrar el mapa.
+    pub pending_enter_ingame: bool,
 }
 
 /// Sesión de red. Los sockets viven bajo `Mutex` porque `mpsc::Receiver` no es `Sync`.
@@ -102,9 +105,13 @@ impl Plugin for NetworkPlugin {
             .add_systems(Startup, start_network_session)
             .add_systems(
                 Update,
-                poll_network
-                    .in_set(UpdateSet::Sim)
-                    .run_if(network_active),
+                (
+                    poll_network.run_if(network_active),
+                    enter_ingame_after_network_welcome
+                        .run_if(network_pending_enter)
+                        .after(poll_network),
+                )
+                    .in_set(UpdateSet::Sim),
             )
             .add_systems(
                 FixedUpdate,
@@ -124,8 +131,41 @@ fn network_active(net: Res<NetworkRuntime>) -> bool {
     net.role() != NetworkRole::Offline
 }
 
+fn network_pending_enter(status: Res<NetworkStatus>) -> bool {
+    status.pending_enter_ingame
+}
+
 fn is_listen_server(net: Res<NetworkRuntime>) -> bool {
     net.role() == NetworkRole::ListenServer
+}
+
+/// Al recibir el snapshot del servidor, pasar del menú a la vista de partida.
+fn enter_ingame_after_network_welcome(
+    mut status: ResMut<NetworkStatus>,
+    mut commands: Commands,
+    q_menu: Query<Entity, With<MainMenuUi>>,
+    q_menu_cam: Query<Entity, With<MainMenuCamera>>,
+    intro_layers: Query<Entity, Or<(With<MapVisualLayer>, With<WaterTile>, With<ShoreTile>)>>,
+    mut next_screen: ResMut<NextState<ClientScreen>>,
+    mut next_sim: ResMut<NextState<SimRunState>>,
+    screen: Res<State<ClientScreen>>,
+) {
+    if !status.pending_enter_ingame {
+        return;
+    }
+    status.pending_enter_ingame = false;
+    commands.insert_resource(EditorSession::inactive());
+    if *screen.get() != ClientScreen::InGame {
+        leave_main_menu(
+            &mut commands,
+            &q_menu,
+            &q_menu_cam,
+            &intro_layers,
+            &mut next_screen,
+        );
+        info!("network: entrando a InGame (partida del servidor)");
+    }
+    next_sim.set(SimRunState::Running);
 }
 
 fn start_network_session(
@@ -196,7 +236,13 @@ fn poll_network(
     mut vehicle_index: ResMut<VehicleIndex>,
 ) {
     while let Some(event) = net.try_recv_event() {
-        if let Err(msg) = handle_event(&mut sim, &mut vehicle_index, &mut status, &event) {
+        if let Err(msg) = handle_event(
+            &mut sim,
+            &mut vehicle_index,
+            &mut status,
+            net.role(),
+            &event,
+        ) {
             status.desync = Some(msg.clone());
             error!("network: {msg}");
         }
@@ -207,6 +253,7 @@ fn handle_event(
     sim: &mut SimWorld,
     vehicle_index: &mut VehicleIndex,
     status: &mut NetworkStatus,
+    role: NetworkRole,
     event: &SessionEvent,
 ) -> Result<(), String> {
     match event {
@@ -218,6 +265,9 @@ fn handle_event(
                 sim.state.tick.get(),
                 sim.state.canonical_hash()
             );
+            if role == NetworkRole::Client {
+                status.pending_enter_ingame = true;
+            }
             Ok(())
         }
         SessionEvent::Commit { command, seq } => {

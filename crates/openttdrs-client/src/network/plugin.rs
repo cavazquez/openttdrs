@@ -312,6 +312,18 @@ fn handle_event(
             status.desync = Some(msg.clone());
             Err(msg)
         }
+        SessionEvent::HostAnnounce {
+            bind,
+            next_seq,
+            new_host_peer_id,
+        } => {
+            // ADR 0004: auto-promote Bevy queda fuera del MVP; solo log.
+            info!(
+                "network: host_announce bind={bind} next_seq={next_seq} new_host={new_host_peer_id}"
+            );
+            status.label = format!("host_announce:{bind}");
+            Ok(())
+        }
         SessionEvent::Disconnected { reason } => {
             warn!("network disconnected: {reason}");
             status.label = format!("disconnected: {reason}");

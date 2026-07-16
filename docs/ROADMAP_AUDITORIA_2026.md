@@ -110,4 +110,4 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 ## Próximo foco recomendado
 
-1. Host migration post-v1 (fuera de ADR 0001 / ADR nueva).
+1. Host migration: auto-promote Bevy + heartbeats (esqueleto ADR 0004 / protocolo v2 ya en `openttdrs-net`).

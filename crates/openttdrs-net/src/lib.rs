@@ -1,8 +1,9 @@
-//! Transporte TCP mínimo para multijugador lockstep (I8 / [#21](https://github.com/cavazquez/openttdrs/issues/21)).
+//! Transporte TCP mínimo para multijugador lockstep ([#21](https://github.com/cavazquez/openttdrs/issues/21)).
 //!
-//! Protocolo: frames `u32` LE + JSON [`NetMessage`]. El servidor es autoritativo:
-//! valida propuestas, asigna `seq`, retransmite [`NetMessage::Commit`] y avanza ticks.
-//! Ver `docs/adr/0001-multiplayer-v1.md`.
+//! Protocolo v2: frames `u32` LE + JSON [`NetMessage`]. El servidor es autoritativo:
+//! asigna `seq`, retransmite [`NetMessage::Commit`] y avanza ticks.
+//! Host migration listen-server: [`elect_new_host`] / ADR 0004.
+//! Ver `docs/adr/0001-multiplayer-v1.md` y `docs/adr/0004-host-migration-post-v1.md`.
 
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc)]
@@ -20,5 +21,5 @@ pub use peer::{DEFAULT_PORT, connect, listen};
 pub use protocol::{NetError, NetMessage, PROTOCOL_VERSION};
 pub use session::{
     ClientSession, ClientSessionHandle, ListenServer, ListenServerHandle, SessionEvent,
-    apply_session_event,
+    apply_session_event, elect_new_host,
 };

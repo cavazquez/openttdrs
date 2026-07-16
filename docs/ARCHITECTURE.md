@@ -31,7 +31,7 @@ Contrato actual del repo. Paridad detallada y roadmaps: [docs/README.md](README.
 1. **Mutación de partida** → `Command` (o load/tick orquestado). Ver [INVENTARIO_MUTACIONES_CLIENTE.md](INVENTARIO_MUTACIONES_CLIENTE.md).
 2. **Determinismo** → mismo seed + mismos comandos + mismos ticks ⇒ mismo `canonical_hash` ([ADR 0002](adr/0002-determinismo-tick-referencia.md)).
 3. **Referencia OpenTTD** → commit fijado en [parity/openttd-reference.json](parity/openttd-reference.json); no clonar `master` móvil.
-4. **Red v1** → lockstep; sin host migration ([ADR 0001](adr/0001-multiplayer-v1.md)).
+4. **Red** → lockstep TCP ([ADR 0001](adr/0001-multiplayer-v1.md)); host migration listen-server post-v1 ([ADR 0004](adr/0004-host-migration-post-v1.md)).
 
 ## Dónde va código nuevo
 

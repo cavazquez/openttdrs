@@ -1,10 +1,10 @@
-//! Mensajes del protocolo lockstep v1.
+//! Mensajes del protocolo lockstep v2 (host migration: ADR 0004).
 
 use openttdrs_core::Command;
 use serde::{Deserialize, Serialize};
 
 /// Versión del framing JSON. Subir si cambia el esquema de [`NetMessage`].
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u16 = 2;
 
 /// Mensaje de red (serializado como JSON dentro de un frame length-prefixed).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -17,6 +17,8 @@ pub enum NetMessage {
         protocol: u16,
         snapshot_json: String,
         next_seq: u64,
+        /// Identidad estable del peer en esta partida (elección de host).
+        peer_id: u64,
     },
     /// Cliente → servidor: propone un comando.
     Propose { command: Command },
@@ -31,6 +33,12 @@ pub enum NetMessage {
         tick: u64,
         expected_hash: u64,
         actual_hash: u64,
+    },
+    /// Anuncio de nuevo listen-server tras failover (ADR 0004).
+    HostAnnounce {
+        bind: String,
+        next_seq: u64,
+        new_host_peer_id: u64,
     },
     /// Error de protocolo / aplicación.
     Error { message: String },

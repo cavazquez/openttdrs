@@ -1,4 +1,4 @@
-//! Sesiones listen-server y cliente.
+//! Sesiones listen-server y cliente (protocolo v2 / ADR 0004).
 
 use std::io::Read;
 use std::net::{TcpListener, TcpStream};
@@ -13,6 +13,12 @@ use openttdrs_core::prelude::*;
 use crate::codec::{read_message, write_message};
 use crate::protocol::{NetError, NetMessage, PROTOCOL_VERSION};
 
+/// Elige el nuevo host: menor `peer_id` vivo (ADR 0004).
+#[must_use]
+pub fn elect_new_host(alive: &[u64]) -> Option<u64> {
+    alive.iter().copied().min()
+}
+
 /// Eventos hacia el hilo de UI / simulación.
 #[derive(Debug, Clone)]
 pub enum SessionEvent {
@@ -20,6 +26,7 @@ pub enum SessionEvent {
     Welcome {
         snapshot_json: String,
         next_seq: u64,
+        peer_id: u64,
     },
     /// Comando autorizado a aplicar.
     Commit { seq: u64, command: Command },
@@ -33,6 +40,12 @@ pub enum SessionEvent {
         expected_hash: u64,
         actual_hash: u64,
     },
+    /// Anuncio de nuevo listen-server (failover).
+    HostAnnounce {
+        bind: String,
+        next_seq: u64,
+        new_host_peer_id: u64,
+    },
     /// Peer desconectado o error fatal.
     Disconnected { reason: String },
 }
@@ -41,17 +54,26 @@ enum ServerCmd {
     LocalCommit(Command),
     Advance(u32),
     HashCheck { tick: u64, hash: u64 },
+    HostAnnounce {
+        bind: String,
+        next_seq: u64,
+        new_host_peer_id: u64,
+    },
     Shutdown,
 }
 
 /// Snapshot vivo compartido con el hilo de accept (late join).
 type LiveSnapshot = Arc<Mutex<String>>;
+type SharedSeq = Arc<Mutex<u64>>;
+type SharedPeerIds = Arc<Mutex<Vec<u64>>>;
 
 /// Handle clonable para emitir commits/ticks desde el hilo de UI.
 #[derive(Clone)]
 pub struct ListenServerHandle {
     cmd_tx: Sender<ServerCmd>,
     live_snapshot: LiveSnapshot,
+    next_seq: SharedSeq,
+    peer_ids: SharedPeerIds,
 }
 
 impl ListenServerHandle {
@@ -73,6 +95,22 @@ impl ListenServerHandle {
             .map_err(|_| NetError::Closed)
     }
 
+    /// Retransmite [`NetMessage::HostAnnounce`] a los peers conectados.
+    pub fn broadcast_host_announce(
+        &self,
+        bind: String,
+        next_seq: u64,
+        new_host_peer_id: u64,
+    ) -> Result<(), NetError> {
+        self.cmd_tx
+            .send(ServerCmd::HostAnnounce {
+                bind,
+                next_seq,
+                new_host_peer_id,
+            })
+            .map_err(|_| NetError::Closed)
+    }
+
     /// Actualiza de inmediato el JSON de `Welcome` (visible al próximo accept).
     pub fn update_snapshot(&self, snapshot_json: String) {
         let mut guard = self
@@ -80,6 +118,24 @@ impl ListenServerHandle {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         *guard = snapshot_json;
+    }
+
+    /// Próximo `seq` de commit (para continuidad tras failover).
+    #[must_use]
+    pub fn next_seq(&self) -> u64 {
+        *self
+            .next_seq
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// `peer_id` de clientes actualmente conectados.
+    #[must_use]
+    pub fn peer_ids(&self) -> Vec<u64> {
+        self.peer_ids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
     }
 }
 
@@ -91,28 +147,51 @@ pub struct ListenServer {
 }
 
 impl ListenServer {
-    /// Arranca el servidor en un hilo.
+    /// Arranca el servidor en un hilo con `next_seq = 1`.
+    pub fn start(bind: &str, snapshot_json: String) -> Result<Self, NetError> {
+        Self::start_with_seq(bind, snapshot_json, 1)
+    }
+
+    /// Arranca el servidor continuando desde `initial_next_seq` (failover ADR 0004).
     ///
     /// `snapshot_json` es el Welcome inicial; el host debe llamar
     /// [`ListenServerHandle::update_snapshot`] tras cada avance de sim para que
     /// los late-joiners reciban el estado **actual** (no el del arranque).
-    pub fn start(bind: &str, snapshot_json: String) -> Result<Self, NetError> {
+    pub fn start_with_seq(
+        bind: &str,
+        snapshot_json: String,
+        initial_next_seq: u64,
+    ) -> Result<Self, NetError> {
         let listener = crate::listen(bind)?;
         let (cmd_tx, cmd_rx) = mpsc::channel();
         let (event_tx, event_rx) = mpsc::channel();
         let live: LiveSnapshot = Arc::new(Mutex::new(snapshot_json));
+        let next_seq: SharedSeq = Arc::new(Mutex::new(initial_next_seq.max(1)));
+        let peer_ids: SharedPeerIds = Arc::new(Mutex::new(Vec::new()));
         let live_thread = Arc::clone(&live);
+        let next_seq_thread = Arc::clone(&next_seq);
+        let peer_ids_thread = Arc::clone(&peer_ids);
         let bind_owned = bind.to_string();
         let join = thread::Builder::new()
             .name("openttdrs-listen".into())
             .spawn(move || {
-                server_thread(listener, live_thread, cmd_rx, event_tx, &bind_owned);
+                server_thread(
+                    listener,
+                    live_thread,
+                    next_seq_thread,
+                    peer_ids_thread,
+                    cmd_rx,
+                    event_tx,
+                    &bind_owned,
+                );
             })
             .map_err(NetError::Io)?;
         Ok(Self {
             handle: ListenServerHandle {
                 cmd_tx,
                 live_snapshot: live,
+                next_seq,
+                peer_ids,
             },
             event_rx,
             join: Some(join),
@@ -142,6 +221,16 @@ impl ListenServer {
         self.handle.update_snapshot(snapshot_json);
     }
 
+    #[must_use]
+    pub fn next_seq(&self) -> u64 {
+        self.handle.next_seq()
+    }
+
+    #[must_use]
+    pub fn peer_ids(&self) -> Vec<u64> {
+        self.handle.peer_ids()
+    }
+
     /// Eventos remotos (p.ej. Propose ya convertido en Commit por el hilo).
     pub fn try_recv(&self) -> Option<SessionEvent> {
         match self.event_rx.try_recv() {
@@ -165,12 +254,15 @@ impl Drop for ListenServer {
 
 struct ClientSlot {
     stream: TcpStream,
+    peer_id: u64,
 }
 
 #[allow(clippy::too_many_lines)]
 fn server_thread(
     listener: TcpListener,
     live_snapshot: LiveSnapshot,
+    shared_next_seq: SharedSeq,
+    shared_peer_ids: SharedPeerIds,
     cmd_rx: Receiver<ServerCmd>,
     event_tx: Sender<SessionEvent>,
     bind: &str,
@@ -182,10 +274,14 @@ fn server_thread(
         return;
     }
     let mut clients: Vec<ClientSlot> = Vec::new();
-    let mut next_seq: u64 = 1;
+    let mut next_peer_id: u64 = 1;
     eprintln!("openttdrs-net: listen-server on {bind}");
 
     loop {
+        let next_seq = *shared_next_seq
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+
         match listener.accept() {
             Ok((stream, addr)) => {
                 eprintln!("openttdrs-net: client connected {addr}");
@@ -198,7 +294,9 @@ fn server_thread(
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner)
                     .clone();
-                match handshake_server(&mut stream, &snapshot, next_seq) {
+                let peer_id = next_peer_id;
+                next_peer_id = next_peer_id.saturating_add(1);
+                match handshake_server(&mut stream, &snapshot, next_seq, peer_id) {
                     Ok(()) => {
                         // Si el host avanzó durante el handshake, reenviar snapshot vivo.
                         let fresh = live_snapshot
@@ -212,13 +310,18 @@ fn server_thread(
                                     protocol: PROTOCOL_VERSION,
                                     snapshot_json: fresh,
                                     next_seq,
+                                    peer_id,
                                 },
                             )
                         {
                             eprintln!("openttdrs-net: late-join resync failed: {e}");
                             continue;
                         }
-                        clients.push(ClientSlot { stream });
+                        shared_peer_ids
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .push(peer_id);
+                        clients.push(ClientSlot { stream, peer_id });
                     }
                     Err(e) => eprintln!("openttdrs-net: handshake failed: {e}"),
                 }
@@ -237,13 +340,19 @@ fn server_thread(
         while i < clients.len() {
             match try_read_client(&mut clients[i].stream) {
                 Ok(Some(NetMessage::Propose { command })) => {
-                    let seq = next_seq;
-                    next_seq += 1;
+                    let seq = {
+                        let mut guard = shared_next_seq
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        let seq = *guard;
+                        *guard = seq.saturating_add(1);
+                        seq
+                    };
                     let commit = NetMessage::Commit {
                         seq,
                         command: command.clone(),
                     };
-                    broadcast_raw(&mut clients, &commit);
+                    broadcast_raw(&mut clients, &shared_peer_ids, &commit);
                     let _ = event_tx.send(SessionEvent::Commit { seq, command });
                     i += 1;
                 }
@@ -253,11 +362,15 @@ fn server_thread(
                     i += 1;
                 }
                 Err(NetError::Closed | NetError::Io(_)) => {
-                    eprintln!("openttdrs-net: client dropped");
+                    let peer_id = clients[i].peer_id;
+                    eprintln!("openttdrs-net: client dropped peer_id={peer_id}");
+                    remove_peer_id(&shared_peer_ids, peer_id);
                     clients.remove(i);
                 }
                 Err(e) => {
-                    eprintln!("openttdrs-net: client read error: {e}");
+                    let peer_id = clients[i].peer_id;
+                    eprintln!("openttdrs-net: client read error peer_id={peer_id}: {e}");
+                    remove_peer_id(&shared_peer_ids, peer_id);
                     clients.remove(i);
                 }
             }
@@ -265,19 +378,48 @@ fn server_thread(
 
         match cmd_rx.try_recv() {
             Ok(ServerCmd::LocalCommit(command)) => {
-                let seq = next_seq;
-                next_seq += 1;
+                let seq = {
+                    let mut guard = shared_next_seq
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let seq = *guard;
+                    *guard = seq.saturating_add(1);
+                    seq
+                };
                 let commit = NetMessage::Commit {
                     seq,
                     command: command.clone(),
                 };
-                broadcast_raw(&mut clients, &commit);
+                broadcast_raw(&mut clients, &shared_peer_ids, &commit);
             }
             Ok(ServerCmd::Advance(count)) => {
-                broadcast_raw(&mut clients, &NetMessage::AdvanceTicks { count });
+                broadcast_raw(
+                    &mut clients,
+                    &shared_peer_ids,
+                    &NetMessage::AdvanceTicks { count },
+                );
             }
             Ok(ServerCmd::HashCheck { tick, hash }) => {
-                broadcast_raw(&mut clients, &NetMessage::HashCheck { tick, hash });
+                broadcast_raw(
+                    &mut clients,
+                    &shared_peer_ids,
+                    &NetMessage::HashCheck { tick, hash },
+                );
+            }
+            Ok(ServerCmd::HostAnnounce {
+                bind,
+                next_seq,
+                new_host_peer_id,
+            }) => {
+                broadcast_raw(
+                    &mut clients,
+                    &shared_peer_ids,
+                    &NetMessage::HostAnnounce {
+                        bind,
+                        next_seq,
+                        new_host_peer_id,
+                    },
+                );
             }
             Ok(ServerCmd::Shutdown) | Err(TryRecvError::Disconnected) => return,
             Err(TryRecvError::Empty) => {
@@ -287,10 +429,18 @@ fn server_thread(
     }
 }
 
+fn remove_peer_id(shared: &SharedPeerIds, peer_id: u64) {
+    let mut guard = shared
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    guard.retain(|id| *id != peer_id);
+}
+
 fn handshake_server(
     stream: &mut TcpStream,
     snapshot_json: &str,
     next_seq: u64,
+    peer_id: u64,
 ) -> Result<(), NetError> {
     let hello = read_message(stream)?;
     match hello {
@@ -310,6 +460,7 @@ fn handshake_server(
             protocol: PROTOCOL_VERSION,
             snapshot_json: snapshot_json.to_string(),
             next_seq,
+            peer_id,
         },
     )?;
     Ok(())
@@ -338,7 +489,7 @@ fn try_read_client(stream: &mut TcpStream) -> Result<Option<NetMessage>, NetErro
     }
 }
 
-fn broadcast_raw(clients: &mut Vec<ClientSlot>, msg: &NetMessage) {
+fn broadcast_raw(clients: &mut Vec<ClientSlot>, shared_peer_ids: &SharedPeerIds, msg: &NetMessage) {
     let mut dead = Vec::new();
     for (i, client) in clients.iter_mut().enumerate() {
         if let Err(e) = write_message(&mut client.stream, msg) {
@@ -347,6 +498,8 @@ fn broadcast_raw(clients: &mut Vec<ClientSlot>, msg: &NetMessage) {
         }
     }
     for i in dead.into_iter().rev() {
+        let peer_id = clients[i].peer_id;
+        remove_peer_id(shared_peer_ids, peer_id);
         clients.remove(i);
     }
 }
@@ -449,10 +602,12 @@ fn client_thread(
             protocol,
             snapshot_json,
             next_seq,
+            peer_id,
         } if protocol == PROTOCOL_VERSION => {
             let _ = event_tx.send(SessionEvent::Welcome {
                 snapshot_json,
                 next_seq,
+                peer_id,
             });
         }
         NetMessage::Welcome { protocol, .. } => {
@@ -485,11 +640,13 @@ fn client_thread(
                 protocol,
                 snapshot_json,
                 next_seq,
+                peer_id,
             })) if protocol == PROTOCOL_VERSION => {
                 // Resync post-handshake (host avanzó durante el Welcome).
                 let _ = event_tx.send(SessionEvent::Welcome {
                     snapshot_json,
                     next_seq,
+                    peer_id,
                 });
             }
             Ok(Some(NetMessage::Commit { seq, command })) => {
@@ -500,6 +657,17 @@ fn client_thread(
             }
             Ok(Some(NetMessage::HashCheck { tick, hash })) => {
                 let _ = event_tx.send(SessionEvent::HashCheck { tick, hash });
+            }
+            Ok(Some(NetMessage::HostAnnounce {
+                bind,
+                next_seq,
+                new_host_peer_id,
+            })) => {
+                let _ = event_tx.send(SessionEvent::HostAnnounce {
+                    bind,
+                    next_seq,
+                    new_host_peer_id,
+                });
             }
             Ok(Some(NetMessage::Desync {
                 tick,
@@ -560,6 +728,7 @@ pub fn apply_session_event(state: &mut GameState, event: &SessionEvent) -> Resul
             }
             Ok(())
         }
+        SessionEvent::HostAnnounce { .. } => Ok(()),
         SessionEvent::Desync {
             tick,
             expected_hash,
@@ -568,5 +737,17 @@ pub fn apply_session_event(state: &mut GameState, event: &SessionEvent) -> Resul
             "remote desync tick={tick} expected={expected_hash:#x} actual={actual_hash:#x}"
         )),
         SessionEvent::Disconnected { reason } => Err(reason.clone()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::elect_new_host;
+
+    #[test]
+    fn elect_new_host_picks_minimum_peer_id() {
+        assert_eq!(elect_new_host(&[3, 1, 7]), Some(1));
+        assert_eq!(elect_new_host(&[]), None);
+        assert_eq!(elect_new_host(&[9]), Some(9));
     }
 }

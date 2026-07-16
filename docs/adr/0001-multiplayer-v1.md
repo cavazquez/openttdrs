@@ -22,7 +22,7 @@ El multijugador de OpenTTD es lockstep sobre un log de comandos: el servidor aut
    - `openttdrs-client` — presentación; flags `--server` / `--client <addr>`.
    - Bin `openttdrs-dedicated` — headless sin Bevy.
 4. **Desync:** comparar periódicamente el hash canónico del estado persistido (#108). Divergencia ⇒ desync (partida no migrable en caliente en v1).
-5. **Fuera de v1 — host migration:** si cae el host, no hay transferencia de autoridad. Recuperación: guardar y reiniciar, o usar dedicated. Host migration queda como issue post-v1.
+5. **Fuera de v1 — host migration:** si cae el host, v1 no transfiere autoridad (save/restart o dedicated). Post-v1: ver [ADR 0004](0004-host-migration-post-v1.md).
 
 ## Consecuencias
 
@@ -34,6 +34,6 @@ El multijugador de OpenTTD es lockstep sobre un log de comandos: el servidor aut
 
 | Alternativa | Por qué no |
 |-------------|------------|
-| Host migration | Complejidad de re-sincronizar peers y reasignar autoridad; no necesaria si hay dedicated o save/restart. |
+| Host migration en v1 | Complejidad; aplazada a ADR 0004 (esqueleto post-v1). |
 | State-sync / rollback (GGPO-like) | OpenTTD no lo usa; chocaría con el modelo de comandos ya adoptado. |
 | Solo listen-server sin dedicated | Impide partidas desatendidas y complica el cierre limpio del host. |

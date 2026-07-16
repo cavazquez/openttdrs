@@ -2,11 +2,12 @@
 
 Índice de `docs/`. Orden sugerido al entrar al proyecto:
 
-1. [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) — paridad UI + NewGRF (fuente de “siguiente corte”)
-2. [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) — sprints del hito 0.1
-3. [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) — gaps vs OpenTTD
-4. [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) — hallazgos técnicos fijos y comandos
-5. [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) — filosofía I0–I8
+1. [ROADMAP_AUDITORIA_2026.md](ROADMAP_AUDITORIA_2026.md) — roadmap maestro post-auditoría ([#121](https://github.com/cavazquez/openttdrs/issues/121))
+2. [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) — paridad UI + NewGRF (fuente de “siguiente corte”)
+3. [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) — sprints del hito 0.1
+4. [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) — gaps vs OpenTTD
+5. [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) — hallazgos técnicos fijos y comandos
+6. [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) — filosofía I0–I8
 
 **Issues de backlog:** [github.com/cavazquez/openttdrs/issues](https://github.com/cavazquez/openttdrs/issues) (abiertas desde los ROADMAP, jul 2026).
 
@@ -16,6 +17,7 @@
 
 | Documento | Uso |
 |-----------|-----|
+| [ROADMAP_AUDITORIA_2026.md](ROADMAP_AUDITORIA_2026.md) | Tablero vivo del roadmap #121 (fases, camino crítico, DoD) |
 | [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) | UI-0…UI-8, NewGRF Action0–14, siguiente corte |
 | [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md) | Cargo packets, YAPF/PBS, economía, mono/maglev |
 | [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) | Sprints S1–S6, criterios de cierre 0.1 |
@@ -45,6 +47,7 @@
 | NewGRF render | `render/station_newgrf.rs`, `road_newgrf.rs`, `vehicles.rs` |
 | Población procedural | `state/bootstrap/procedural_population/` |
 | Comandos transporte | `openttdrs-core/src/command/transport/` |
+| Tests rail por dominio | `openttdrs-core/src/command/tests/rail/` (#139) |
 | Action2 / sprites GRF | `openttdrs-core/src/newgrf_sprites.rs`, `station_action2.rs`, `road_action2.rs` |
 
 ---

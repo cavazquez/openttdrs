@@ -1,8 +1,7 @@
-use std::collections::{HashSet, VecDeque};
-
 use crate::GameState;
 use crate::depot::nearest_depot_tile;
-use crate::map::{Map, TileCoord, TileKind};
+use crate::map::{TileCoord, TileKind};
+use crate::pathfinder::{PathNetwork, farthest_reachable_tile};
 use crate::vehicle::{MAX_VEHICLE_NAME_CHARS, Vehicle, VehicleKind, VehicleOrder};
 
 use super::transport::road_depot_exit_for_dir;
@@ -380,13 +379,15 @@ pub(super) fn toggle_vehicle_running(
             .iter()
             .find(|v| v.id == vehicle_id)
             .and_then(|v| road_depot_exit_tile(state, v.pos))
-            .and_then(|exit| farthest_reachable_road_tile(&state.map, exit).or(Some(exit))),
+            .and_then(|exit| {
+                farthest_reachable_tile(&state.map, exit, PathNetwork::Road).or(Some(exit))
+            }),
         Some(VehicleKind::Tram) => {
             if let Some(v) = state.vehicles.iter().find(|v| v.id == vehicle_id)
                 && let Some(exit) = road_depot_exit_tile(state, v.pos)
             {
                 ensure_tram_bits_for_depot_exit(state, v.pos, exit);
-                Some(farthest_reachable_tram_tile(&state.map, exit))
+                farthest_reachable_tile(&state.map, exit, PathNetwork::Tram)
             } else {
                 None
             }
@@ -462,35 +463,6 @@ fn traversable_road_kind(kind: Option<TileKind>) -> bool {
     )
 }
 
-fn farthest_reachable_road_tile(map: &Map, start: TileCoord) -> Option<TileCoord> {
-    let (mw, mh) = map.dimensions();
-    if !traversable_road_kind(map.get_kind(start)) {
-        return None;
-    }
-    let mut seen = HashSet::new();
-    let mut queue = VecDeque::from([start]);
-    let mut farthest = start;
-    seen.insert(start);
-
-    while let Some(cur) = queue.pop_front() {
-        if tile_distance(cur, start) > tile_distance(farthest, start) {
-            farthest = cur;
-        }
-        for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
-            let next = TileCoord::new(cur.x + dx, cur.y + dy);
-            if next.x < 0 || next.y < 0 || next.x >= mw.cast_signed() || next.y >= mh.cast_signed()
-            {
-                continue;
-            }
-            if seen.insert(next) && traversable_road_kind(map.get_kind(next)) {
-                queue.push_back(next);
-            }
-        }
-    }
-
-    Some(farthest)
-}
-
 /// Asegura overlay de tranvía en depósito y boca al salir (copia bits de carretera si falta).
 fn ensure_tram_bits_for_depot_exit(state: &mut GameState, depot: TileCoord, exit: TileCoord) {
     use crate::road_type::{
@@ -518,42 +490,6 @@ fn ensure_tram_bits_for_depot_exit(state: &mut GameState, depot: TileCoord, exit
         t = set_tram_road_type_on_tile(t, Some(RoadType::Tram));
         let _ = state.map.set_tile(depot, t);
     }
-}
-
-fn farthest_reachable_tram_tile(map: &Map, start: TileCoord) -> TileCoord {
-    use crate::pathfinder::PathNetwork;
-    // BFS por vecinos conectados en red Tram (misma idea que road, pero con m3).
-    let (mw, mh) = map.dimensions();
-    let mut seen = HashSet::new();
-    let mut queue = VecDeque::from([start]);
-    let mut farthest = start;
-    seen.insert(start);
-
-    while let Some(cur) = queue.pop_front() {
-        if tile_distance(cur, start) > tile_distance(farthest, start) {
-            farthest = cur;
-        }
-        for (dx, dy) in [(-1_i32, 0_i32), (1, 0), (0, -1), (0, 1)] {
-            let next = TileCoord::new(cur.x + dx, cur.y + dy);
-            if next.x < 0 || next.y < 0 || next.x >= mw.cast_signed() || next.y >= mh.cast_signed()
-            {
-                continue;
-            }
-            if !seen.insert(next) {
-                continue;
-            }
-            // Reutilizar find_path de un paso: tiles_connected vía path de longitud 1
-            if crate::pathfinder::find_path(map, cur, next, PathNetwork::Tram).is_some() {
-                queue.push_back(next);
-            }
-        }
-    }
-
-    farthest
-}
-
-fn tile_distance(a: TileCoord, b: TileCoord) -> u32 {
-    a.x.abs_diff(b.x) + a.y.abs_diff(b.y)
 }
 
 pub(super) fn clone_vehicle_orders(
@@ -883,13 +819,16 @@ pub(super) fn set_depot_vehicles_running(
             if running
                 && was_at_dest
                 && let Some(dest) = match state.vehicles[idx].kind {
-                    VehicleKind::Tram => road_depot_exit_tile(state, vehicle_pos).map(|exit| {
-                        ensure_tram_bits_for_depot_exit(state, vehicle_pos, exit);
-                        farthest_reachable_tram_tile(&state.map, exit)
-                    }),
+                    VehicleKind::Tram => {
+                        road_depot_exit_tile(state, vehicle_pos).and_then(|exit| {
+                            ensure_tram_bits_for_depot_exit(state, vehicle_pos, exit);
+                            farthest_reachable_tile(&state.map, exit, PathNetwork::Tram)
+                        })
+                    }
                     VehicleKind::Bus | VehicleKind::Truck => {
                         road_depot_exit_tile(state, vehicle_pos).and_then(|exit| {
-                            farthest_reachable_road_tile(&state.map, exit).or(Some(exit))
+                            farthest_reachable_tile(&state.map, exit, PathNetwork::Road)
+                                .or(Some(exit))
                         })
                     }
                     _ => None,

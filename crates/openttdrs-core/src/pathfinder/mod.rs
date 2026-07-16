@@ -8,6 +8,7 @@ mod cache;
 mod network;
 #[allow(dead_code)]
 mod rail_legacy;
+mod reachable;
 mod station_sites;
 mod water;
 pub mod yapf;
@@ -19,6 +20,7 @@ pub use network::{
     PathNetwork, TunnelWormholes, path_network_for_vehicle, tile_is_path_traversable,
 };
 pub(crate) use network::{is_rail_network_tile, is_rail_station_tile, is_road_network_tile};
+pub use reachable::farthest_reachable_tile;
 pub use station_sites::{
     station_entrance_faces_rail, station_entrance_faces_road, station_site_adjacent_to_rail,
     station_site_adjacent_to_transport, station_site_tile_allows_build,

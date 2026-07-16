@@ -26,14 +26,16 @@ el caso desatendido y queda fuera de este MVP.
    actual + `next_seq` → resto reconecta con `Hello`/`Welcome` (mismo late-join).
 5. **Protocolo v2:** `Welcome.peer_id`, `PeerList`, `Heartbeat`, `HostAnnounce`.
 6. **Cliente Bevy (#171):** silencio >2 s o `Disconnected` → `elect_new_host` →
-   bind `puerto+1` (ganador) o reconnect (perdedor).
-7. **Fuera aún:** migración de dedicated entre máquinas, UI pulida de
-   “reconectando…”, failover sin pausa, anti-cheat, log completo en disco.
+   bind `puerto+1` (ganador) o reconnect (perdedor); pausa de sim + banner
+   “reconectando…” / “promoviendo host…”; `HostAnnounce` fija destino sin
+   orquestación manual.
+7. **Fuera aún:** migración de dedicated entre máquinas, failover sin pausa,
+   anti-cheat, log completo en disco.
 
 ## Consecuencias
 
 - Clientes v1 (`PROTOCOL_VERSION = 1`) no son compatibles; bump explícito.
-- Bevy aún no auto-promueve: piezas en `openttdrs-net` + test TCP; UI en fase siguiente.
+- Bevy auto-promueve / reconecta (puerto+1 + `HostAnnounce`); banner mínimo de failover.
 - ADR 0001 sigue vigente para el modelo lockstep; solo cambia el “fuera de v1” de migración.
 
 ## Alternativas descartadas

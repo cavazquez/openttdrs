@@ -1,5 +1,6 @@
 //! Multijugador mínimo (#21): flags `--server` / `--client` sobre `openttdrs-net`.
 
+mod banner;
 mod cli;
 mod dispatch;
 mod failover;

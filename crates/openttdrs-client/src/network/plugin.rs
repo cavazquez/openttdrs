@@ -7,9 +7,13 @@ use openttdrs_core::prelude::*;
 use openttdrs_net::{ClientSession, ListenServer, SessionEvent};
 
 use crate::bevy_app::{FixedUpdateSet, UpdateSet};
+use crate::network::banner::sync_failover_banner;
 use crate::network::cli::NetCli;
 use crate::network::dispatch::{install_client, install_offline, install_server};
-use crate::network::failover::{ClientFailoverState, HOST_SILENCE_TIMEOUT, try_client_failover};
+use crate::network::failover::{
+    ClientFailoverState, FailoverUiPhase, HOST_SILENCE_TIMEOUT, PendingFailoverReconnect,
+    tick_pending_reconnect, try_client_failover,
+};
 use crate::render::{MapVisualLayer, ShoreTile, VehicleIndex, WaterTile};
 use crate::state::{ClientScreen, EditorSession, SimRunState, SimWorld};
 use crate::ui::{MainMenuCamera, MainMenuUi, leave_main_menu};
@@ -30,6 +34,10 @@ pub struct NetworkStatus {
     pub desync: Option<String>,
     /// Tras `Welcome` en modo cliente: salir del menú y mostrar el mapa.
     pub pending_enter_ingame: bool,
+    /// Banner / pausa durante host migration (#171).
+    pub failover_phase: FailoverUiPhase,
+    /// Tras pausar por failover, reanudar sim cuando la fase vuelva a Idle.
+    pub resume_sim_after_failover: bool,
 }
 
 /// Sesión de red. Los sockets viven bajo `Mutex` porque `mpsc::Receiver` no es `Sync`.
@@ -138,9 +146,16 @@ impl Plugin for NetworkPlugin {
                     check_host_silence_failover
                         .run_if(resource_exists::<ClientFailoverState>)
                         .after(poll_network),
+                    tick_pending_reconnect
+                        .run_if(resource_exists::<PendingFailoverReconnect>)
+                        .after(check_host_silence_failover),
+                    resume_sim_after_failover
+                        .after(tick_pending_reconnect)
+                        .after(check_host_silence_failover),
                     enter_ingame_after_network_welcome
                         .run_if(network_pending_enter)
                         .after(poll_network),
+                    sync_failover_banner.after(resume_sim_after_failover),
                 )
                     .in_set(UpdateSet::Sim),
             )
@@ -258,11 +273,13 @@ fn start_network_session(
 }
 
 fn poll_network(
+    mut commands: Commands,
     mut net: ResMut<NetworkRuntime>,
     mut status: ResMut<NetworkStatus>,
     mut sim: ResMut<SimWorld>,
     mut vehicle_index: ResMut<VehicleIndex>,
     mut failover: Option<ResMut<ClientFailoverState>>,
+    mut next_sim: ResMut<NextState<SimRunState>>,
 ) {
     let mut host_lost = false;
     while let Some(event) = net.try_recv_event() {
@@ -286,15 +303,18 @@ fn poll_network(
         }
     }
     if host_lost && let Some(fo) = failover.as_mut() {
-        let _ = try_client_failover(&mut net, &mut status, fo, &sim);
+        pause_for_failover(&mut status, &mut next_sim);
+        let _ = try_client_failover(&mut commands, &mut net, &mut status, fo, &sim);
     }
 }
 
 fn check_host_silence_failover(
+    mut commands: Commands,
     mut net: ResMut<NetworkRuntime>,
     mut status: ResMut<NetworkStatus>,
     mut failover: ResMut<ClientFailoverState>,
     sim: Res<SimWorld>,
+    mut next_sim: ResMut<NextState<SimRunState>>,
 ) {
     if net.role() != NetworkRole::Client || failover.failover_attempted {
         return;
@@ -306,7 +326,34 @@ fn check_host_silence_failover(
         "network: silencio del host > {:?} — intentando failover",
         HOST_SILENCE_TIMEOUT
     );
-    let _ = try_client_failover(&mut net, &mut status, &mut failover, &sim);
+    pause_for_failover(&mut status, &mut next_sim);
+    let _ = try_client_failover(&mut commands, &mut net, &mut status, &mut failover, &sim);
+}
+
+fn pause_for_failover(status: &mut NetworkStatus, next_sim: &mut NextState<SimRunState>) {
+    status.resume_sim_after_failover = true;
+    next_sim.set(SimRunState::Paused);
+}
+
+/// Tras promote / reconnect exitoso, reanudar la simulación.
+fn resume_sim_after_failover(
+    mut status: ResMut<NetworkStatus>,
+    mut next_sim: ResMut<NextState<SimRunState>>,
+    pending: Option<Res<PendingFailoverReconnect>>,
+) {
+    if !status.resume_sim_after_failover || pending.is_some() {
+        return;
+    }
+    match &status.failover_phase {
+        FailoverUiPhase::Idle => {
+            status.resume_sim_after_failover = false;
+            next_sim.set(SimRunState::Running);
+        }
+        FailoverUiPhase::Failed { .. } => {
+            // Se mantiene pausado; el banner muestra el error.
+        }
+        FailoverUiPhase::Promoting { .. } | FailoverUiPhase::Reconnecting { .. } => {}
+    }
 }
 
 enum EventOutcome {
@@ -408,13 +455,17 @@ fn handle_event(
             );
             if let Some(fo) = failover {
                 fo.next_seq = *next_seq;
-                // Loser: apunta al puerto del anuncio conservando el host de `--client`.
+                // Loser: destino explícito del anuncio (sin volver a sumar puerto).
                 if fo.peer_id != Some(*new_host_peer_id)
                     && let Some(addr) = connect_addr_from_announce(&fo.server_addr, bind)
                 {
-                    fo.server_addr = addr;
+                    fo.reconnect_addr = Some(addr.clone());
                     fo.failover_attempted = false;
                     status.label = format!("host_announce:{bind}");
+                    status.failover_phase = FailoverUiPhase::Reconnecting {
+                        addr,
+                        attempt: 1,
+                    };
                     return Ok(EventOutcome::HostLost);
                 }
             }

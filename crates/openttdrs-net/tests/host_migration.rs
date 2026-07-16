@@ -134,3 +134,35 @@ fn listen_server_failover_promotes_min_peer_and_preserves_hash() {
     );
     assert!(new_server.next_seq() > next_seq);
 }
+
+#[test]
+fn host_announce_reaches_connected_clients_without_manual_orchestration() {
+    let host = GameState::new(16, 16);
+    let snapshot = host.save_json().unwrap();
+
+    let port = u16::try_from(47_000 + (std::process::id() % 1000)).unwrap_or(DEFAULT_PORT);
+    let bind = format!("127.0.0.1:{port}");
+    let server = ListenServer::start(&bind, snapshot).unwrap();
+    thread::sleep(Duration::from_millis(40));
+
+    let client = ClientSession::connect(&bind).unwrap();
+    let (_, next_seq, peer_id) = wait_welcome(&client, Duration::from_secs(2));
+
+    let announce = format!("127.0.0.1:{}", port.saturating_add(1));
+    server
+        .broadcast_host_announce(announce.clone(), next_seq, peer_id)
+        .unwrap();
+
+    match wait_event(&client, Duration::from_secs(2)) {
+        SessionEvent::HostAnnounce {
+            bind: got_bind,
+            next_seq: got_seq,
+            new_host_peer_id,
+        } => {
+            assert_eq!(got_bind, announce);
+            assert_eq!(got_seq, next_seq);
+            assert_eq!(new_host_peer_id, peer_id);
+        }
+        other => panic!("expected HostAnnounce, got {other:?}"),
+    }
+}

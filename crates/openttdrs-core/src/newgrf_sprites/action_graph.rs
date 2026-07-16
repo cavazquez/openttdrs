@@ -9,12 +9,9 @@ use crate::newgrf_walk::{GrfEntry, walk_grf_entries};
 
 use super::model::{
     Action2RandomEntry, Action2VarAdjust, Action2VarEntry, Action2VarOp, Action2VarTerm,
-    TrainSpriteAssign, TrainSpriteGraphics, DecodedSprite,
+    DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics,
 };
-use super::pixel_codec::{
-    decode_real_sprite_entry,
-    index_sprite_section, resolve_fd_sprite,
-};
+use super::pixel_codec::{decode_real_sprite_entry, index_sprite_section, resolve_fd_sprite};
 
 fn parse_action1_feature(payload: &[u8], feature: u8) -> Option<(u8, u8)> {
     // 01 <feature> <num-sets> <num-ent>
@@ -129,7 +126,10 @@ fn parse_var_term(payload: &[u8], i: &mut usize) -> Option<(Action2VarTerm, bool
 }
 
 /// Action2 variational `0x81`/`0x82` (byte): simple, divide/modulo o advanced (bit 5).
-pub(super) fn parse_action2_variational(payload: &[u8], feature: u8) -> Option<(u8, Action2VarEntry)> {
+pub(super) fn parse_action2_variational(
+    payload: &[u8],
+    feature: u8,
+) -> Option<(u8, Action2VarEntry)> {
     if payload.len() < 8 || payload[0] != 0x02 || payload[1] != feature {
         return None;
     }
@@ -186,7 +186,10 @@ pub(super) fn parse_action2_variational(payload: &[u8], feature: u8) -> Option<(
 }
 
 /// Action2 random `0x80`/`0x83`/`0x84`: triggers + randbit + n sets (potencia de 2).
-pub(super) fn parse_action2_random(payload: &[u8], feature: u8) -> Option<(u8, Action2RandomEntry)> {
+pub(super) fn parse_action2_random(
+    payload: &[u8],
+    feature: u8,
+) -> Option<(u8, Action2RandomEntry)> {
     if payload.len() < 8 || payload[0] != 0x02 || payload[1] != feature {
         return None;
     }
@@ -340,12 +343,8 @@ pub fn collect_feature_sprite_graphics(
             if sets_left > 0 || views_left_in_set > 0 {
                 let decoded = if container == GrfContainerVersion::V2 && info == 0xFD {
                     if payload.len() >= 4 {
-                        let id = u32::from_le_bytes([
-                            payload[0],
-                            payload[1],
-                            payload[2],
-                            payload[3],
-                        ]);
+                        let id =
+                            u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
                         resolve_fd_sprite(&sprite_index, id)
                     } else {
                         None
@@ -411,4 +410,3 @@ pub fn collect_industry_tile_sprite_graphics(
 ) -> Result<TrainSpriteGraphics, GrfScanError> {
     collect_feature_sprite_graphics(data, ACTION0_FEATURE_INDUSTRYTILES)
 }
-

@@ -1081,7 +1081,6 @@ pub fn build_grf_v2_roadtype_with_preview_sprite(
     )
 }
 
-
 /// GRF v2 sintético: Action5 + un sprite + Action8.
 #[must_use]
 pub fn build_grf_v2_action5_with_sprite(

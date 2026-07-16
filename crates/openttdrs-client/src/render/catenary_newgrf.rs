@@ -100,7 +100,9 @@ mod tests {
             .newgrf_stack
             .push(openttdrs_core::NewGrfEntry::new("elw.grf", 2));
         apply_newgrf_action5_catenary(&mut state, &[dir.path()]);
-        let spr = state.runtime.catenary_newgrf_sprites[0].as_ref().expect("slot 0");
+        let spr = state.runtime.catenary_newgrf_sprites[0]
+            .as_ref()
+            .expect("slot 0");
         let mut images = Assets::<Image>::default();
         let mut cache = NewGrfCatenarySpriteCache::default();
         let handle = cache.handle_for(0, spr, &mut images);

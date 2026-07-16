@@ -5,6 +5,7 @@ use crate::{GameState, IndustrySpec, StopKind};
 
 use super::build_object::check_build_object_placement;
 use super::buy_land::check_buy_land;
+use super::error::CommandError;
 use super::industry::check_place_industry_spec;
 use super::terraform::{check_level_land, check_lower_land, check_raise_land};
 use super::town;
@@ -18,7 +19,6 @@ use super::transport::{
     check_ship_depot_placement, check_single_transport_tile, check_station_placement, check_tunnel,
     merged_rail_trackbits_on_tile, rail_station_footprint, rail_trackbits_from_neighbors,
 };
-use super::error::CommandError;
 use super::types::Command;
 use super::util::require_tile_owned_by_active;
 

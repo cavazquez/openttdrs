@@ -163,10 +163,13 @@ pub(super) fn unload_vehicles(
                 c.cargo_income_earned += share.cast_unsigned();
             }
         }
-        state.runtime.pending_income_popups.push(crate::IncomePopup {
-            amount: payment,
-            at: vpos,
-        });
+        state
+            .runtime
+            .pending_income_popups
+            .push(crate::IncomePopup {
+                amount: payment,
+                at: vpos,
+            });
         state
             .runtime
             .pending_sim_events

@@ -211,7 +211,9 @@ pub(crate) fn process_retire_game_request(
     }
     req.0 = false;
     if retire_game(&mut sim.state).is_some() {
-        pending.0.extend(sim.state.runtime.pending_sim_events.drain());
+        pending
+            .0
+            .extend(sim.state.runtime.pending_sim_events.drain());
     }
 }
 

@@ -6,8 +6,12 @@ use crate::map::{Map, TileCoord, TileKind, rail_traversal_bits};
 use crate::vehicle::{Vehicle, VehicleKind};
 
 use super::conflicts::{append_platform_reservation, tile_occupied_by_other_train};
-use super::model::{track_for_rail_step, track_on_departure_tile, ReservedRailStep, MAX_TRAIN_RESERVATION_LEN};
-use super::search::{find_path_to_safe_wait_with_wormholes, is_safe_waiting_position, tile_has_any_pbs_signal};
+use super::model::{
+    MAX_TRAIN_RESERVATION_LEN, ReservedRailStep, track_for_rail_step, track_on_departure_tile,
+};
+use super::search::{
+    find_path_to_safe_wait_with_wormholes, is_safe_waiting_position, tile_has_any_pbs_signal,
+};
 
 /// Calcula la reserva de un tren sin mutar el mapa global de reservas.
 #[must_use]
@@ -275,11 +279,9 @@ pub fn train_blocked_by_reservation(map: &Map, vehicle: &Vehicle) -> bool {
     else {
         return false;
     };
-    if vehicle
-        .reserved_steps
-        .iter()
-        .any(|s| s.tile == next && (s.track == track || super::conflicts::tracks_overlap(s.track, track)))
-    {
+    if vehicle.reserved_steps.iter().any(|s| {
+        s.tile == next && (s.track == track || super::conflicts::tracks_overlap(s.track, track))
+    }) {
         return false;
     }
     if vehicle.reserved_steps.iter().any(|s| s.tile == vehicle.pos) {

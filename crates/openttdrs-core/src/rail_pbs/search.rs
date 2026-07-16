@@ -11,7 +11,10 @@ use crate::rail_signals::{
 use crate::vehicle::Vehicle;
 
 use super::conflicts::tile_occupied_by_other_train;
-use super::model::{track_for_rail_step, track_on_departure_tile, ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY, MAX_TRAIN_RESERVATION_LEN};
+use super::model::{
+    MAX_TRAIN_RESERVATION_LEN, ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY,
+    track_for_rail_step, track_on_departure_tile,
+};
 
 /// Coste base por tesela en `TryReserve` (alineado con YAPF `TILE_COST`).
 const TRY_RESERVE_TILE_COST: u32 = 1;
@@ -184,9 +187,9 @@ pub fn find_path_to_safe_wait_with_wormholes(
     already_reserved: &HashSet<ReservedRailStep>,
     wormholes: Option<&crate::pathfinder::TunnelWormholes>,
 ) -> Option<Vec<TileCoord>> {
+    use super::conflicts::tile_track_reserved_by_map;
     use crate::rail_signals::rail_neighbors;
     use std::collections::BinaryHeap;
-    use super::conflicts::tile_track_reserved_by_map;
 
     if is_safe_waiting_position(map, from, preferred.first().copied(), false) {
         return Some(vec![]);

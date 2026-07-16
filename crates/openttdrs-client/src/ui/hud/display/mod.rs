@@ -61,7 +61,10 @@ pub(crate) fn vehicle_hud_alert_line(state: &openttdrs_core::GameState) -> Strin
             parts.push(format!("sin órdenes: vehículo {vid}"));
         }
     } else if summary.no_orders.count > 1 {
-        parts.push(format!("sin órdenes: {} vehículos", summary.no_orders.count));
+        parts.push(format!(
+            "sin órdenes: {} vehículos",
+            summary.no_orders.count
+        ));
     }
 
     // Parada incompatible

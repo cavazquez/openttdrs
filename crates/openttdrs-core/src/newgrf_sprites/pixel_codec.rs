@@ -534,4 +534,3 @@ pub fn resolve_fd_sprite<S: ::std::hash::BuildHasher>(
     }
     best.map(|(_, _, spr)| spr)
 }
-

@@ -1,17 +1,17 @@
 //! Subplugins de UI organizados por funcionalidad.
 
-mod main_menu;
+mod editor;
+mod game_windows;
 mod hud;
-mod toolbar;
+mod main_menu;
 mod navigation;
 mod settings_windows;
-mod game_windows;
-mod editor;
+mod toolbar;
 
-pub(crate) use main_menu::MainMenuUiPlugin;
+pub(crate) use editor::EditorUiPlugin;
+pub(crate) use game_windows::GameWindowsPlugin;
 pub(crate) use hud::HudUiPlugin;
-pub(crate) use toolbar::ToolbarUiPlugin;
+pub(crate) use main_menu::MainMenuUiPlugin;
 pub(crate) use navigation::NavigationUiPlugin;
 pub(crate) use settings_windows::SettingsWindowsPlugin;
-pub(crate) use game_windows::GameWindowsPlugin;
-pub(crate) use editor::EditorUiPlugin;
+pub(crate) use toolbar::ToolbarUiPlugin;

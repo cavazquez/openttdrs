@@ -6,8 +6,8 @@ use crate::shared_orders::{SharedOrderList, next_shared_order_id, sync_shared_or
 use crate::vehicle::{OrderConditionKind, VehicleOrder};
 use crate::vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup, next_vehicle_group_id};
 
-use super::in_bounds;
 use super::error::CommandError;
+use super::in_bounds;
 use super::util::require_vehicle_owned_by_active;
 use super::vehicles;
 

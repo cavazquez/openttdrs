@@ -4,9 +4,7 @@ use bevy::prelude::*;
 
 use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
-use crate::ui::hud::{
-    cycle_json_save_path_hotkey, handle_pause_toggle, handle_tool_hotkeys,
-};
+use crate::ui::hud::{cycle_json_save_path_hotkey, handle_pause_toggle, handle_tool_hotkeys};
 use crate::ui::industry_panel::{
     IndustryPanelState, industry_panel_center_interaction, industry_panel_close_interaction,
     setup_industry_panel, sync_industry_panel,
@@ -18,35 +16,35 @@ use crate::ui::save_window::{
 };
 use crate::ui::toolbar::{
     BridgeBuildState, DepotPanelState, DragBuildState, MinimapLayerState,
-    NewGrfRoadTypePreviewCache, NewGrfStationPreviewCache, RoadTypeEscapeConsumed,
+    NewGrfRoadTypePreviewCache, NewGrfStationPreviewCache, OrderEditState, RoadTypeEscapeConsumed,
     RoadTypePickerState, StationBuildState, StationCargoPanelState, StationCatalogPickerState,
-    UiToolState,
-    airport_picker_on_closed, begin_depot_list_drag, bridge_picker_on_closed,
-    build_menu_interaction, close_road_type_picker_on_escape, close_toolbar_button_interaction,
-    depot_panel_on_closed, finish_depot_list_drag, handle_airport_picker_buttons,
-    handle_bridge_picker_buttons, handle_cheats_menu_button, handle_company_colour_swatches,
-    handle_company_selector_buttons, handle_depot_panel_buttons, handle_ingame_escape,
-    handle_minimap_click, handle_minimap_layer_buttons, handle_order_panel_buttons,
-    handle_rail_station_picker_buttons, handle_rail_type_select_buttons,
-    handle_road_type_class_buttons, handle_road_type_select_buttons, handle_settings_menu_buttons,
-    handle_signal_picker_buttons, handle_station_cargo_panel_buttons,
-    handle_station_catalog_open_buttons, handle_station_class_select_buttons,
-    handle_station_rename_buttons, handle_station_spec_select_buttons, handle_tile_click,
-    hide_tool_when_panel_closed, lerp_ghost_previews, rail_station_picker_on_closed,
-    road_type_filter_keyboard, rotate_station_with_right_click, setup_airport_picker,
-    setup_bridge_picker, setup_build_menu, setup_depot_panel, setup_minimap, setup_order_panel,
-    setup_rail_station_picker, setup_signal_picker, setup_station_cargo_panel, setup_top_toolbar,
-    signal_picker_on_closed, station_catalog_filter_keyboard, station_rename_editable_keyboard,
-    station_rename_keyboard, sync_airport_picker, sync_bridge_picker,
-    sync_build_pointer_modifiers, sync_climate_industry_tools, sync_company_colour_swatch_visuals,
-    sync_company_selector, sync_depot_panel, sync_editor_only_build_tools, sync_minimap,
-    sync_order_panel, sync_orders_pick_cursor, sync_rail_station_picker, sync_rail_toolbar_icons,
+    ToolbarState, UiToolState, airport_picker_on_closed, begin_depot_list_drag,
+    bridge_picker_on_closed, build_menu_interaction, close_road_type_picker_on_escape,
+    close_toolbar_button_interaction, depot_panel_on_closed, finish_depot_list_drag,
+    handle_airport_picker_buttons, handle_bridge_picker_buttons, handle_cheats_menu_button,
+    handle_company_colour_swatches, handle_company_selector_buttons, handle_depot_panel_buttons,
+    handle_ingame_escape, handle_minimap_click, handle_minimap_layer_buttons,
+    handle_order_panel_buttons, handle_rail_station_picker_buttons,
+    handle_rail_type_select_buttons, handle_road_type_class_buttons,
+    handle_road_type_select_buttons, handle_settings_menu_buttons, handle_signal_picker_buttons,
+    handle_station_cargo_panel_buttons, handle_station_catalog_open_buttons,
+    handle_station_class_select_buttons, handle_station_rename_buttons,
+    handle_station_spec_select_buttons, handle_tile_click, hide_tool_when_panel_closed,
+    lerp_ghost_previews, rail_station_picker_on_closed, road_type_filter_keyboard,
+    rotate_station_with_right_click, setup_airport_picker, setup_bridge_picker, setup_build_menu,
+    setup_depot_panel, setup_minimap, setup_order_panel, setup_rail_station_picker,
+    setup_signal_picker, setup_station_cargo_panel, setup_top_toolbar, signal_picker_on_closed,
+    station_catalog_filter_keyboard, station_rename_editable_keyboard, station_rename_keyboard,
+    sync_airport_picker, sync_bridge_picker, sync_build_pointer_modifiers,
+    sync_climate_industry_tools, sync_company_colour_swatch_visuals, sync_company_selector,
+    sync_depot_panel, sync_editor_only_build_tools, sync_minimap, sync_order_panel,
+    sync_orders_pick_cursor, sync_rail_station_picker, sync_rail_toolbar_icons,
     sync_rail_type_select_visuals, sync_road_type_catalog_entries, sync_road_type_class_labels,
     sync_road_type_entry_previews, sync_road_type_entry_visibility, sync_road_type_popovers,
     sync_signal_picker, sync_station_cargo_panel, sync_station_catalog_entries,
     sync_station_spec_entry_previews, toolbar_group_interaction, update_build_ghost_preview,
     update_cursor_tile, update_tool_button_visuals, update_toolbar_group_visuals,
-    update_toolbar_tool_visibility, update_toolbar_tooltip, OrderEditState, ToolbarState,
+    update_toolbar_tool_visibility, update_toolbar_tooltip,
 };
 use crate::ui::town_window::{
     TownWindowState, handle_town_window_buttons, setup_town_window, sync_town_window,
@@ -94,11 +92,7 @@ impl Plugin for ToolbarUiPlugin {
             )
             .add_systems(
                 OnEnter(ClientScreen::InGame),
-                (
-                    setup_signal_picker,
-                    setup_airport_picker,
-                )
-                    .in_set(StartupSet::Ui),
+                (setup_signal_picker, setup_airport_picker).in_set(StartupSet::Ui),
             )
             .add_systems(
                 Update,

@@ -5,13 +5,13 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::{TileCoord, TileKind};
 
 use crate::config::{env_flag, env_string};
-use crate::iso::{shore_png_index, shore_tileh_for_draw_shore, SLOPE_HALF_H};
+use crate::iso::{SLOPE_HALF_H, shore_png_index, shore_tileh_for_draw_shore};
 use crate::render::{
-    chunk_tile_bounds, chunks_in_bounds, flush_map_batches, push_forest_tree, push_water_tile,
-    spawn_bridge_middle, spawn_generic_land_tile, spawn_house_tile, spawn_industry_tile,
-    spawn_rail_tile, spawn_road_tile, spawn_station_tile, spawn_transport_object_tile,
     CompanyColoredSprites, MapSpriteBatches, RenderGrid, TileAtlas, TileRenderContext,
-    TileViewportBounds, WorldAssets,
+    TileViewportBounds, WorldAssets, chunk_tile_bounds, chunks_in_bounds, flush_map_batches,
+    push_forest_tree, push_water_tile, spawn_bridge_middle, spawn_generic_land_tile,
+    spawn_house_tile, spawn_industry_tile, spawn_rail_tile, spawn_road_tile, spawn_station_tile,
+    spawn_transport_object_tile,
 };
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;
@@ -19,7 +19,7 @@ use crate::state::SimWorld;
 use super::plugin::{LoadedMapTileChunks, MapTileSpawnViewport};
 use super::viewport::{initial_map_camera_pose, resolve_spawn_viewport_at};
 
-use crate::render::vehicles::{spawn_initial_vehicles, NewGrfTrainSpriteCache, TruckHandles};
+use crate::render::vehicles::{NewGrfTrainSpriteCache, TruckHandles, spawn_initial_vehicles};
 
 fn owner_colour_for_tile(
     sim: &SimWorld,

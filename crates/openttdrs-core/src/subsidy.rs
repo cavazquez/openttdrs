@@ -150,11 +150,14 @@ pub fn try_create_subsidy(state: &mut GameState) -> bool {
         award_expires_tick: 0,
         awarded_company: None,
     });
-    state.runtime.pending_sim_events.push(SimEvent::SubsidyCreated {
-        industry_pos: source,
-        station_pos: dest,
-        cargo,
-    });
+    state
+        .runtime
+        .pending_sim_events
+        .push(SimEvent::SubsidyCreated {
+            industry_pos: source,
+            station_pos: dest,
+            cargo,
+        });
     crate::news::push_subsidy_offer_news(state, cargo, source, dest);
     let _ = station_idx;
     true

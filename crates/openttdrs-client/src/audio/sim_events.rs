@@ -46,7 +46,9 @@ fn discard_bootstrap_sim_events_on_enter(
 }
 
 fn drain_sim_events_from_core(mut sim: ResMut<SimWorld>, mut pending: ResMut<PendingSimEvents>) {
-    pending.0.extend(sim.state.runtime.pending_sim_events.drain());
+    pending
+        .0
+        .extend(sim.state.runtime.pending_sim_events.drain());
 }
 
 fn dispatch_sim_events(

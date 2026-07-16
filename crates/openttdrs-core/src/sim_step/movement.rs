@@ -128,7 +128,10 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         if state.vehicles[i].pos != prev_pos {
             crate::ship_movement::maybe_start_lock_transit(&mut state.vehicles[i], &state.map);
             if vehicle_kind == VehicleKind::Train {
-                crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, prev_pos);
+                crate::rail_signals::enqueue_signal_glob(
+                    &mut state.runtime.signal_globset,
+                    prev_pos,
+                );
                 crate::rail_signals::enqueue_signal_glob(
                     &mut state.runtime.signal_globset,
                     state.vehicles[i].pos,

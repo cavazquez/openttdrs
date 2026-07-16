@@ -1,9 +1,9 @@
 //! Tipos de datos y helpers de codificación PBS.
 
 use crate::map::{Map, TileCoord};
+use crate::map::{opposite_diag_dir as opposite_dir, rail_traversal_bits};
 use crate::rail_signals::dir_from_to;
 use crate::train_movement::track_bit_for_movement;
-use crate::map::{opposite_diag_dir as opposite_dir, rail_traversal_bits};
 
 /// Máscara de reserva PBS en el byte alto de `m2` (`m2_hi`: bits 8–11 del `m2()` de 16 bits).
 pub const RAIL_RESERVATION_M2_HI_MASK: u8 = 0x0F;

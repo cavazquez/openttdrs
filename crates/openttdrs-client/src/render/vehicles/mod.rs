@@ -12,7 +12,9 @@ use crate::state::SimWorld;
 pub(crate) use assets::{NewGrfTrainSpriteCache, TruckHandles};
 pub(crate) use picking::pick_vehicle_id_at_world;
 pub(crate) use plugin::VehicleRenderPlugin;
-pub(crate) use pose::{vehicle_draw_anchor_from_pose, vehicle_sprite_pos_at, vehicle_world_position};
+pub(crate) use pose::{
+    vehicle_draw_anchor_from_pose, vehicle_sprite_pos_at, vehicle_world_position,
+};
 pub(crate) use spawn::spawn_initial_vehicles;
 pub(crate) use sync::VehicleIndex;
 
@@ -31,12 +33,12 @@ mod tests {
     use bevy::prelude::*;
     use openttdrs_core::{DIR_S, DIR_SW, GameState, TileCoord, TileKind, Vehicle, VehicleKind};
 
-    use assets::{vehicle_layers, TruckHandles};
     use assets::vehicle_gfx::{BUS_VEHICLE_LAYERS, TRAIN_VEHICLE_LAYERS};
+    use assets::{TruckHandles, vehicle_layers};
     use picking::pick_vehicle_id_at_world;
     use pose::{vehicle_sprite_pos, vehicle_sprite_pos_at, vehicle_sprite_pos_at_with_catalog};
     use spawn::{vehicle_cargo_color, vehicle_cargo_label};
-    use sync::{rebuild_vehicle_index, update_vehicles, vehicle_tint, VehicleIndex};
+    use sync::{VehicleIndex, rebuild_vehicle_index, update_vehicles, vehicle_tint};
 
     fn sample_vehicle(id: u32) -> Vehicle {
         let dest = TileCoord::new(2, 1);
@@ -188,11 +190,11 @@ mod tests {
 
     #[test]
     fn newgrf_train_sprite_cache_and_pos_use_decoded_views() {
+        use crate::sprites::CompanyColour;
         use openttdrs_core::{
             apply_newgrf_vehicles_trains, build_action0_train_payload,
             build_grf_v2_train_with_preview_sprite, extrapolate_vehicle_pose,
         };
-        use crate::sprites::CompanyColour;
 
         let a0 = build_action0_train_payload(1960, 100, 800, "InWorld Loco");
         let mut indices = vec![0u8; 8 * 8];
@@ -297,8 +299,7 @@ mod tests {
             pose.progress >= 128,
             "la extrapolación cruza el punto medio"
         );
-        let render_dir =
-            openttdrs_core::vehicle_render_direction_at(&v, pose).min(7) as usize;
+        let render_dir = openttdrs_core::vehicle_render_direction_at(&v, pose).min(7) as usize;
         assert_eq!(render_dir, openttdrs_core::DIR_E as usize);
 
         assert_eq!(

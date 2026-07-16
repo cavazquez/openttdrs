@@ -14,18 +14,17 @@ pub use action0::{
     ACTION0_FEATURE_INDUSTRYTILES, ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_STATIONS,
     ACTION0_FEATURE_TRAINS, Action0Header, ParsedIndustryTileMeta, ParsedRoadTypeMeta,
     ParsedStationMeta, ParsedTrainMeta, collect_industry_tile_metas_from_grf,
-    collect_roadtype_metas_from_grf, collect_station_metas_from_grf,
-    collect_train_metas_from_grf, for_each_pseudo_payload, parse_action0_header,
-    parse_action0_industry_tile_meta, parse_action0_roadtype_meta, parse_action0_station_meta,
-    parse_action0_train_meta,
+    collect_roadtype_metas_from_grf, collect_station_metas_from_grf, collect_train_metas_from_grf,
+    for_each_pseudo_payload, parse_action0_header, parse_action0_industry_tile_meta,
+    parse_action0_roadtype_meta, parse_action0_station_meta, parse_action0_train_meta,
 };
 
 pub use apply::{
-    apply_newgrf_stack_catalogs_default_dirs,
     action5::{
         apply_newgrf_action5_catenary, apply_newgrf_action5_catenary_default_dirs,
         apply_newgrf_action5_shore, apply_newgrf_action5_shore_default_dirs,
     },
+    apply_newgrf_stack_catalogs_default_dirs,
     industry::{apply_newgrf_industry_tiles, apply_newgrf_industry_tiles_default_dirs},
     road::{apply_newgrf_road_types, apply_newgrf_road_types_default_dirs},
     station::{apply_newgrf_stations, apply_newgrf_stations_default_dirs},

@@ -1,6 +1,6 @@
 //! Dispatch: decidir qué tipo de preview construir según la herramienta activa.
 
-use openttdrs_core::{is_tunnel_entrance_slope, tile_slope_and_z, GameState, Map, TileCoord};
+use openttdrs_core::{GameState, Map, TileCoord, is_tunnel_entrance_slope, tile_slope_and_z};
 
 use crate::iso::tile_slope_and_min_z;
 use crate::sprites::road_flat_sprite_index;
@@ -8,7 +8,7 @@ use crate::ui::toolbar::BuildMenuAction;
 
 use super::industry::industry_spec_for_action;
 use super::plan::{
-    compute_preview_tiles, PreviewContext, PreviewPlan, TilePreviewKind, TilePreviewPlan,
+    PreviewContext, PreviewPlan, TilePreviewKind, TilePreviewPlan, compute_preview_tiles,
 };
 use super::road_stop::road_stop_preview_dir;
 use super::validation::{action_is_tunnel, preview_bridge_span_valid, preview_build_command_valid};

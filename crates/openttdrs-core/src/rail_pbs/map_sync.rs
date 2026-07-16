@@ -5,7 +5,9 @@ use std::collections::{HashMap, HashSet};
 use crate::map::{Map, TileCoord, TileKind};
 use crate::vehicle::{Vehicle, VehicleKind};
 
-use super::model::{decode_rail_reservation_m2_hi, encode_rail_reservation_to_m2_hi, RAIL_RESERVATION_M2_HI_MASK};
+use super::model::{
+    RAIL_RESERVATION_M2_HI_MASK, decode_rail_reservation_m2_hi, encode_rail_reservation_to_m2_hi,
+};
 
 /// Bit de reserva PBS en cruces a nivel (`HasCrossingReservation` / `m5` bit 4).
 pub const CROSSING_RESERVATION_M5_BIT: u8 = 1 << 4;

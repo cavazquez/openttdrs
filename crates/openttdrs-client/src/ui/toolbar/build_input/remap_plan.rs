@@ -2,8 +2,8 @@
 
 use openttdrs_core::{Map, TileCoord, industry_template};
 
-use crate::ui::toolbar::preview::industry_spec_for_action;
 use crate::ui::toolbar::BuildMenuAction;
+use crate::ui::toolbar::preview::industry_spec_for_action;
 
 use super::drag::{
     action_is_tunnel, rail_action_refreshes_neighbors, rail_remap_neighbor_tiles,

@@ -609,8 +609,7 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
                         feedback.expires_at_secs = time.elapsed_secs() + 3.0;
                     }
                     Err(e) => {
-                        feedback.message =
-                            Some(command_error_message(e).to_string());
+                        feedback.message = Some(command_error_message(e).to_string());
                         feedback.expires_at_secs = time.elapsed_secs() + 4.0;
                     }
                 }

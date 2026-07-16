@@ -27,7 +27,7 @@ use crate::ui::save_window::{
     save_window_editable_keyboard, save_window_keyboard, save_window_name_click_focus,
     setup_save_window, sync_save_window,
 };
-use crate::ui::toolbar::{toolbar_click_beep, ToolbarState};
+use crate::ui::toolbar::{ToolbarState, toolbar_click_beep};
 
 pub(crate) struct MainMenuUiPlugin;
 

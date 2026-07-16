@@ -6,8 +6,8 @@ use bevy::window::PrimaryWindow;
 use crate::iso::{ISO_HW, ISO_QH, TILE_HALF_H};
 use crate::render::viewport::initial_camera_span_tiles;
 use crate::render::viewport::{
-    large_map_viewport_cull_enabled, ortho_visible_tile_bounds, TileViewportBounds,
-    VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES,
+    TileViewportBounds, VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES,
+    large_map_viewport_cull_enabled, ortho_visible_tile_bounds,
 };
 use crate::render::{MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;

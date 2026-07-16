@@ -7,8 +7,8 @@ use bevy::window::PrimaryWindow;
 
 use crate::render::vehicles::VehicleIndex;
 use crate::render::{
-    chunks_in_bounds, large_map_viewport_cull_enabled, CompanyColoredSprites, MapTileChunk,
-    MapVisualLayer, WorldAssets,
+    CompanyColoredSprites, MapTileChunk, MapVisualLayer, WorldAssets, chunks_in_bounds,
+    large_map_viewport_cull_enabled,
 };
 use crate::sprites::CompanyColour;
 use crate::state::SimWorld;

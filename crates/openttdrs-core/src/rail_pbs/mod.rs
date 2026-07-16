@@ -7,65 +7,45 @@
 
 #![allow(clippy::implicit_hasher)]
 
+mod conflicts;
+mod map_sync;
 mod model;
 mod search;
-mod conflicts;
 mod train_reservation;
 mod wait_policy;
-mod map_sync;
 
 #[cfg(test)]
 mod tests;
 
 // Reexports públicos desde model
 pub use model::{
-    ReservedRailStep,
-    RAIL_RESERVATION_M2_HI_MASK,
-    MAX_TRAIN_RESERVATION_LEN,
-    YAPF_RESERVATION_CROSS_PENALTY,
-    decode_rail_reservation_m2_hi,
-    encode_rail_reservation_to_m2_hi,
-    rail_tile_has_pbs_reservation,
-    track_for_rail_step,
+    MAX_TRAIN_RESERVATION_LEN, RAIL_RESERVATION_M2_HI_MASK, ReservedRailStep,
+    YAPF_RESERVATION_CROSS_PENALTY, decode_rail_reservation_m2_hi,
+    encode_rail_reservation_to_m2_hi, rail_tile_has_pbs_reservation, track_for_rail_step,
     track_on_departure_tile,
 };
 
 // Reexports públicos desde search
 pub use search::{
-    is_safe_waiting_position,
-    tile_has_any_pbs_signal,
-    find_path_to_safe_wait,
-    find_path_to_safe_wait_with_wormholes,
-    reservation_ends_at_safe_wait,
+    find_path_to_safe_wait, find_path_to_safe_wait_with_wormholes, is_safe_waiting_position,
+    reservation_ends_at_safe_wait, tile_has_any_pbs_signal,
 };
 
 // Reexports públicos desde conflicts
 pub use conflicts::{
-    platform_reserved_or_occupied,
-    pbs_exit_has_complete_reservation,
-    tile_track_reserved_by_map,
+    pbs_exit_has_complete_reservation, platform_reserved_or_occupied, tile_track_reserved_by_map,
 };
 
 // Reexports públicos desde train_reservation
 pub use train_reservation::{
-    compute_train_reservation,
-    compute_train_reservation_with_settings,
-    compute_train_reservation_with_wormholes,
-    follow_train_reservation,
-    update_train_reservations,
-    update_train_reservations_with_settings,
-    update_train_reservations_with_wormholes,
-    train_blocked_by_reservation,
+    compute_train_reservation, compute_train_reservation_with_settings,
+    compute_train_reservation_with_wormholes, follow_train_reservation,
+    train_blocked_by_reservation, update_train_reservations,
+    update_train_reservations_with_settings, update_train_reservations_with_wormholes,
 };
 
 // Reexports públicos desde wait_policy
-pub use wait_policy::{
-    train_waiting_for_pbs_path,
-    tick_pbs_wait_and_maybe_reverse,
-};
+pub use wait_policy::{tick_pbs_wait_and_maybe_reverse, train_waiting_for_pbs_path};
 
 // Reexports públicos desde map_sync
-pub use map_sync::{
-    CROSSING_RESERVATION_M5_BIT,
-    sync_reservations_to_map,
-};
+pub use map_sync::{CROSSING_RESERVATION_M5_BIT, sync_reservations_to_map};

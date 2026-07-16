@@ -36,12 +36,9 @@ fn read_entry_header(
             if i + 5 > section.len() {
                 return None;
             }
-            let size = u32::from_le_bytes([
-                section[i],
-                section[i + 1],
-                section[i + 2],
-                section[i + 3],
-            ]) as usize;
+            let size =
+                u32::from_le_bytes([section[i], section[i + 1], section[i + 2], section[i + 3]])
+                    as usize;
             if size == 0 {
                 return None;
             }
@@ -67,11 +64,7 @@ fn read_entry_header(
 }
 
 /// Calcula el payload de una entrada pseudo-sprite (info == 0xFF).
-fn pseudo_payload<'a>(
-    section: &'a [u8],
-    i: usize,
-    header: &EntryHeader,
-) -> Option<&'a [u8]> {
+fn pseudo_payload<'a>(section: &'a [u8], i: usize, header: &EntryHeader) -> Option<&'a [u8]> {
     let payload_start = i + header.header_len;
     let end = payload_start + header.size;
     if end > section.len() {

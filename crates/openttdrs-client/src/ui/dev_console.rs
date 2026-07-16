@@ -9,12 +9,12 @@ use crate::render::MapVisualLayer;
 use crate::settings::ClientPreferences;
 use crate::state::SimWorld;
 use crate::ui::cheat_window::CheatWindowState;
+use crate::ui::command_error_text::command_error_message;
 use crate::ui::endscreen::{RetireGameRequested, request_retire_game};
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, TITLE_BROWN, WINDOW_TEXT,
     spawn_floating_window, window_text_font,
 };
-use crate::ui::command_error_text::command_error_message;
 use crate::ui::font::UiFontRole;
 use crate::ui::hud::SimHudControls;
 use crate::ui::newgrf_window::NewGrfWindowState;
@@ -619,10 +619,7 @@ fn apply_cheat_command<'a>(
         Ok(ParsedCheat::Status) => push_log(state, format_cheat_log(sim)),
         Ok(ParsedCheat::Cmd(cmd)) => match openttdrs_core::apply_command(&mut sim.state, &cmd) {
             Ok(()) => push_log(state, format_cheat_log(sim)),
-            Err(e) => push_log(
-                state,
-                format!("cheat falló: {}", command_error_message(e)),
-            ),
+            Err(e) => push_log(state, format!("cheat falló: {}", command_error_message(e))),
         },
         Err(msg) => push_log(state, msg.into()),
     }

@@ -10,7 +10,7 @@ const MAGIC_OTTX: &[u8; 4] = b"OTTX";
 const MAGIC_OTTD: &[u8; 4] = b"OTTD";
 
 /// Límite de bytes para payload descomprimido de `.sav`.
-/// 
+///
 /// Mapas 4096×4096 con muchas entidades: ~50–100 MB descomprimidos.
 /// Este límite (200 MB) cubre casos reales y previene agotamiento de memoria.
 const MAX_SAV_DECOMPRESSED_BYTES: u64 = 200 * 1024 * 1024;
@@ -98,7 +98,9 @@ pub(crate) fn decompress(raw: &[u8]) -> Result<(Vec<u8>, u16), SavError> {
             lzma_rs::xz_decompress(&mut input, &mut writer).map_err(|e| {
                 if let Some(io_err) = e.source().and_then(|s| s.downcast_ref::<std::io::Error>())
                     && io_err.kind() == std::io::ErrorKind::Other
-                    && io_err.to_string().contains("límite de descompresión excedido")
+                    && io_err
+                        .to_string()
+                        .contains("límite de descompresión excedido")
                 {
                     return SavError::DecompressedSizeExceeded {
                         actual: writer.written,
@@ -220,7 +222,10 @@ mod tests {
         raw.extend_from_slice(&compressed);
         let err = decompress(&raw).expect_err("debe rechazar bomba xz");
         assert!(
-            matches!(err, SavError::DecompressedSizeExceeded { .. } | SavError::Decompress(_)),
+            matches!(
+                err,
+                SavError::DecompressedSizeExceeded { .. } | SavError::Decompress(_)
+            ),
             "esperado error de límite o descompresión, obtenido: {err:?}"
         );
     }

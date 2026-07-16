@@ -171,9 +171,7 @@ pub(crate) fn update_build_ghost_preview(
     // Caso especial: señales 1×1 manejadas por sistema dedicado
     if action == BuildMenuAction::RailSignals {
         let (fx, fy) = if drag_state.armed {
-            station_state
-                .signal_drag_fract
-                .unwrap_or(tile_fract)
+            station_state.signal_drag_fract.unwrap_or(tile_fract)
         } else {
             tile_fract
         };

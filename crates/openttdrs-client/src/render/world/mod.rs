@@ -7,8 +7,8 @@ mod viewport;
 
 // Re-exports públicos para que el resto del crate pueda seguir usando los mismos símbolos
 pub(crate) use plugin::{
-    request_map_visual_remap, LoadedMapTileChunks, MapTileSpawnViewport, RemapMapVisualsPending,
-    WorldRenderPlugin,
+    LoadedMapTileChunks, MapTileSpawnViewport, RemapMapVisualsPending, WorldRenderPlugin,
+    request_map_visual_remap,
 };
 pub(crate) use tile_spawn::spawn_intro_map_render;
 pub(crate) use viewport::initial_map_camera_pose;
@@ -27,7 +27,7 @@ mod tests {
     use crate::render::assets::stub_opengfx_tiles_for_tests;
     use crate::render::vehicles::VehicleIndex;
     use crate::render::viewport::{
-        ortho_visible_tile_bounds, VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES,
+        VIEWPORT_MARGIN_TILES, VIEWPORT_REBUILD_LEAD_TILES, ortho_visible_tile_bounds,
     };
     use crate::render::{MapPreviewCamera, PrimaryGameCamera};
     use crate::state::SimWorld;

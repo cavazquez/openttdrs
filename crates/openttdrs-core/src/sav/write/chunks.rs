@@ -1,7 +1,7 @@
 //! Construcción de chunks RIFF y TABLE.
 
-use super::super::chunks::{CH_RIFF, CH_TABLE};
 use super::super::SavError;
+use super::super::chunks::{CH_RIFF, CH_TABLE};
 use super::codec::{write_gamma, write_str};
 
 /// Chunk RIFF: fourcc + tamaño 28-bit big-endian + payload.

@@ -94,11 +94,7 @@ impl Plugin for SettingsWindowsPlugin {
             )
             .add_systems(
                 OnEnter(ClientScreen::InGame),
-                (
-                    setup_ai_settings_window,
-                    setup_cargo_dist_settings_window,
-                )
-                    .in_set(StartupSet::Ui),
+                (setup_ai_settings_window, setup_cargo_dist_settings_window).in_set(StartupSet::Ui),
             )
             .add_systems(
                 OnEnter(ClientScreen::InGame),

@@ -2,7 +2,9 @@ use bevy::prelude::*;
 
 use crate::render::{MapVisualLayer, ShoreTile, WaterTile};
 use crate::state::bootstrap::{MapSizePreset, NewGameSettings};
-use crate::state::{ClientScreen, SimWorld, SuspendedGameSession, new_game::NewGameSettingsResource};
+use crate::state::{
+    ClientScreen, SimWorld, SuspendedGameSession, new_game::NewGameSettingsResource,
+};
 use crate::ui::save_window::{SaveWindowMode, SaveWindowState, save_dir_from};
 
 use super::super::widgets::{hover_primary, hover_secondary};

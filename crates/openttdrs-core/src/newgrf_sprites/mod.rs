@@ -14,19 +14,18 @@ mod pixel_codec;
 // Re-exportar todos los tipos públicos del módulo model
 pub use model::{
     Action2EvalCtx, Action2RandomEntry, Action2VarAdjust, Action2VarEntry, Action2VarOp,
-    Action2VarTerm, Action5Block, DecodedSprite, TrainSpriteAssign, TrainSpriteGraphics,
-    CALLBACK_FAILED, CBID_STATION_BUILD_TILE_LAYOUT,
+    Action2VarTerm, Action5Block, CALLBACK_FAILED, CBID_STATION_BUILD_TILE_LAYOUT, DecodedSprite,
+    TrainSpriteAssign, TrainSpriteGraphics,
 };
 
 // Re-exportar funciones de runtime de pixel_codec
 pub use pixel_codec::{
-    apply_company_colour_mask, bake_sprite_company_mask,
-    decode_chunked_8bpp, decode_chunked_pixels,
-    decode_real_sprite_v1, decode_real_sprite_v1_uncompressed,
-    decode_real_sprite_v2_section, decode_real_sprite_v2_section_zoom, decompress_grf_lz77,
-    encode_chunked_8bpp_full_rows, encode_chunked_pixels_full_rows, indices_to_rgba,
-    index_sprite_section, resolve_fd_sprite,
-    sprite_v2_bpp, SPRITE_V2_ZOOM_PREFERENCE,
+    SPRITE_V2_ZOOM_PREFERENCE, apply_company_colour_mask, bake_sprite_company_mask,
+    decode_chunked_8bpp, decode_chunked_pixels, decode_real_sprite_v1,
+    decode_real_sprite_v1_uncompressed, decode_real_sprite_v2_section,
+    decode_real_sprite_v2_section_zoom, decompress_grf_lz77, encode_chunked_8bpp_full_rows,
+    encode_chunked_pixels_full_rows, index_sprite_section, indices_to_rgba, resolve_fd_sprite,
+    sprite_v2_bpp,
 };
 
 // Re-exportar funciones de runtime de action_graph
@@ -38,23 +37,22 @@ pub use action_graph::{
 
 // Re-exportar funciones de runtime de action5
 pub use action5::{
-    action5_type_name, catenary_action5_local_slot,
-    collect_action5_blocks, merge_catenary_action5_block, merge_shore_action5_block,
     ACTION5_TYPE_CATENARY, ACTION5_TYPE_SHORE, CATENARY_ACTION5_SLOT_COUNT,
     CATENARY_ENTRANCE_SPRITE_BASE, CATENARY_PYLON_SPRITE_BASE, CATENARY_WIRE_SPRITE_BASE,
-    SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS,
+    SHORE_ACTION5_SLOT_COUNT, SHORE_MISSING_BLOCK_SLOTS, action5_type_name,
+    catenary_action5_local_slot, collect_action5_blocks, merge_catenary_action5_block,
+    merge_shore_action5_block,
 };
 
 // Re-exportar builders sintéticos desde fixture (para compatibilidad temporal)
 pub use fixture::{
     build_action1_feature_payload, build_action1_trains_payload,
     build_action2_callback_literal_payload, build_action2_single_set_payload,
-    build_action2_stations_payload, build_action2_trains_payload,
-    build_action2_trains_random, build_action2_trains_random_consist,
-    build_action2_trains_variational_default, build_action2_variational_advanced_add_literal,
-    build_action2_variational_default_payload, build_action2_variational_divmod_payload,
-    build_action2_variational_payload, build_action2_vehicle_payload,
-    build_action3_feature_payload, build_action3_trains_payload,
+    build_action2_stations_payload, build_action2_trains_payload, build_action2_trains_random,
+    build_action2_trains_random_consist, build_action2_trains_variational_default,
+    build_action2_variational_advanced_add_literal, build_action2_variational_default_payload,
+    build_action2_variational_divmod_payload, build_action2_variational_payload,
+    build_action2_vehicle_payload, build_action3_feature_payload, build_action3_trains_payload,
     build_grf_v2_action5_with_sprite, build_grf_v2_feature_with_action2_chain,
     build_grf_v2_industry_tile_with_preview_sprite, build_grf_v2_roadtype_with_action2_chain,
     build_grf_v2_roadtype_with_preview_sprite, build_grf_v2_station_with_action2_chain,
@@ -76,8 +74,8 @@ mod tests {
     use super::*;
     use crate::map::TileCoord;
     use crate::newgrf_actions::{
-        build_action0_roadtype_payload, build_action0_train_payload, ACTION0_FEATURE_ROADTYPES,
-        ACTION0_FEATURE_TRAINS,
+        ACTION0_FEATURE_ROADTYPES, ACTION0_FEATURE_TRAINS, build_action0_roadtype_payload,
+        build_action0_train_payload,
     };
     use crate::newgrf_company_ramp::AUTHOR_CC_PALETTE_FIRST;
     use crate::vehicle::Vehicle;

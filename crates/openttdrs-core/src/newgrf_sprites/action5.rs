@@ -110,12 +110,8 @@ pub fn collect_action5_blocks(data: &[u8]) -> Result<Vec<Action5Block>, GrfScanE
             if in_block && sprites_left > 0 {
                 let spr = if container == GrfContainerVersion::V2 && info == 0xFD {
                     if payload.len() >= 4 {
-                        let id = u32::from_le_bytes([
-                            payload[0],
-                            payload[1],
-                            payload[2],
-                            payload[3],
-                        ]);
+                        let id =
+                            u32::from_le_bytes([payload[0], payload[1], payload[2], payload[3]]);
                         resolve_fd_sprite(&sprite_index, id)
                     } else {
                         None
@@ -139,7 +135,7 @@ pub fn collect_action5_blocks(data: &[u8]) -> Result<Vec<Action5Block>, GrfScanE
             }
         }
     });
-    
+
     if in_block {
         out.push(finish_action5_block(cur_type, cur_num, cur_offset, sprites));
     }
@@ -227,4 +223,3 @@ pub fn merge_catenary_action5_block(slots: &mut [Option<DecodedSprite>], block: 
         slots[slot] = Some(spr.clone());
     }
 }
-

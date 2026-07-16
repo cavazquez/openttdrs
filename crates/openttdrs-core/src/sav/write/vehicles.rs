@@ -1,7 +1,7 @@
 //! Serialización de vehículos y órdenes (ORDL, VEHS).
 
-use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE};
 use super::super::SavError;
+use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE};
 use super::chunks::raw_table_chunk;
 use super::codec::{write_gamma, write_str};
 use crate::CargoType;

@@ -1,9 +1,9 @@
 //! Helpers para gestionar la exclusividad de paneles/ventanas al seleccionar entidades.
 
 use crate::ui::industry_panel::IndustryPanelState;
+use crate::ui::toolbar::OrderEditState;
 use crate::ui::toolbar::depot_panel::DepotPanelState;
 use crate::ui::toolbar::station_panel::StationCargoPanelState;
-use crate::ui::toolbar::OrderEditState;
 use crate::ui::town_window::TownWindowState;
 use crate::ui::vehicle_window::VehicleWindowState;
 use openttdrs_core::Vehicle;

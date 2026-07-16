@@ -53,7 +53,14 @@ pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
                 state.vehicles[i].engine_id,
             )
         } else {
-            pathfinder::find_path_cached(&state.map, &mut state.runtime.path_cache, from, to, net, wh)
+            pathfinder::find_path_cached(
+                &state.map,
+                &mut state.runtime.path_cache,
+                from,
+                to,
+                net,
+                wh,
+            )
         };
         match path {
             Some(path) => {

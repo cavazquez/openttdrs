@@ -296,7 +296,8 @@ pub fn vehicle_at_road_stop(map: &Map, vehicle: &crate::Vehicle) -> bool {
     if vehicle.manhattan_to_dest() == 0 {
         return true;
     }
-    let Some(crate::vehicle::VehicleOrder::Station { station, .. }) = vehicle.orders.get(vehicle.current_order)
+    let Some(crate::vehicle::VehicleOrder::Station { station, .. }) =
+        vehicle.orders.get(vehicle.current_order)
     else {
         return false;
     };

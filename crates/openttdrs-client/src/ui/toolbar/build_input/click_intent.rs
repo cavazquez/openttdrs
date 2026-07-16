@@ -74,9 +74,7 @@ pub(crate) enum MapClickIntent {
         signal_tap: bool,
     },
     /// Confirmar colocación drag.
-    ConfirmDrag {
-        signal_tap: bool,
-    },
+    ConfirmDrag { signal_tap: bool },
     /// Herramienta JoinStation: primer, segundo o tercer clic.
     JoinStationClick {
         clicked: TileCoord,
@@ -157,7 +155,7 @@ pub(crate) fn resolve_click_intent(ctx: &MapClickContext) -> MapClickIntent {
                 }
                 _ => {}
             }
-            
+
             // Fallback: vehicle o town label
             if let Some(vehicle_id) = ctx.vehicle_under_cursor {
                 return MapClickIntent::SelectVehicleOnMap(vehicle_id);
@@ -165,7 +163,7 @@ pub(crate) fn resolve_click_intent(ctx: &MapClickContext) -> MapClickIntent {
             if let Some(town_id) = ctx.town_label_under_cursor {
                 return MapClickIntent::OpenTownWindow(town_id);
             }
-            
+
             return MapClickIntent::SelectTileForInspection(ctx.tile_pos);
         }
         return MapClickIntent::Ignore;
@@ -190,9 +188,7 @@ pub(crate) fn resolve_click_intent(ctx: &MapClickContext) -> MapClickIntent {
     // Prioridad 6: construcción inmediata
     if ctx.mouse_left_pressed {
         let mut cycle_signal = false;
-        if ctx.ctrl_held && action == BuildMenuAction::RailSignals
-            && ctx.signal_tile_has_signals
-        {
+        if ctx.ctrl_held && action == BuildMenuAction::RailSignals && ctx.signal_tile_has_signals {
             cycle_signal = true;
         }
         return MapClickIntent::BuildImmediate {
@@ -212,13 +208,12 @@ fn resolve_drag_intent(ctx: &MapClickContext, action: BuildMenuAction) -> MapCli
     if !ctx.drag_armed || ctx.drag_last_action != Some(action) {
         if ctx.mouse_left_pressed {
             let start = (ctx.tile_pos.x, ctx.tile_pos.y);
-            let signal_drag_fract = if action == BuildMenuAction::RailSignals
-                || action == BuildMenuAction::Clear
-            {
-                Some(ctx.tile_fract)
-            } else {
-                None
-            };
+            let signal_drag_fract =
+                if action == BuildMenuAction::RailSignals || action == BuildMenuAction::Clear {
+                    Some(ctx.tile_fract)
+                } else {
+                    None
+                };
             return MapClickIntent::StartDrag {
                 action,
                 start_tile: start,
@@ -230,7 +225,9 @@ fn resolve_drag_intent(ctx: &MapClickContext, action: BuildMenuAction) -> MapCli
         return MapClickIntent::Ignore;
     }
 
-    let start = ctx.drag_start_tile.unwrap_or((ctx.tile_pos.x, ctx.tile_pos.y));
+    let start = ctx
+        .drag_start_tile
+        .unwrap_or((ctx.tile_pos.x, ctx.tile_pos.y));
     const SIGNAL_TAP_MAX_PX: f32 = 10.0;
     let signal_tap = action == BuildMenuAction::RailSignals
         && ctx.world_pos.distance(ctx.world_pos) <= SIGNAL_TAP_MAX_PX;
@@ -244,7 +241,10 @@ fn resolve_drag_intent(ctx: &MapClickContext, action: BuildMenuAction) -> MapCli
         return MapClickIntent::ConfirmDrag { signal_tap };
     }
 
-    MapClickIntent::UpdateDrag { end_tile: end, signal_tap }
+    MapClickIntent::UpdateDrag {
+        end_tile: end,
+        signal_tap,
+    }
 }
 
 fn action_supports_drag(action: BuildMenuAction) -> bool {

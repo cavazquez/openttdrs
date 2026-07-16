@@ -5,7 +5,10 @@ use std::collections::HashSet;
 use crate::map::{Map, TileCoord, TileKind, rail_traversal_bits};
 use crate::vehicle::{Vehicle, VehicleKind};
 
-use super::model::{track_on_departure_tile, ReservedRailStep, decode_rail_reservation_m2_hi, MAX_TRAIN_RESERVATION_LEN};
+use super::model::{
+    MAX_TRAIN_RESERVATION_LEN, ReservedRailStep, decode_rail_reservation_m2_hi,
+    track_on_departure_tile,
+};
 
 pub(super) fn tracks_overlap(a: u8, b: u8) -> bool {
     a & b != 0

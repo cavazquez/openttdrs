@@ -33,6 +33,7 @@ use crate::ui::graph_window::{
     GraphWindowState, graph_window_on_closed, handle_graph_window_buttons, open_graph_from_routes,
     setup_graph_window, sync_graph_window,
 };
+use crate::ui::navigation::handle_toolbar_menu_entries;
 use crate::ui::refit_window::{
     RefitWindowState, handle_refit_window_buttons, refit_window_on_closed, setup_refit_window,
     sync_refit_window,
@@ -45,7 +46,6 @@ use crate::ui::timetable_window::{
     TimetableWindowState, handle_timetable_window_buttons, setup_timetable_window,
     sync_timetable_window, timetable_window_on_closed,
 };
-use crate::ui::navigation::handle_toolbar_menu_entries;
 use crate::ui::vehicle_window::{
     VehicleWindowState, handle_vehicle_rename_buttons, handle_vehicle_window_buttons,
     setup_vehicle_window, sync_vehicle_window, vehicle_window_on_closed,

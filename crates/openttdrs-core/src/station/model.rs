@@ -162,7 +162,10 @@ impl Station {
         }
     }
 
-    pub(super) fn company_pickup_slot_mut(&mut self, company: CompanyId) -> &mut CargoTimeSincePickup {
+    pub(super) fn company_pickup_slot_mut(
+        &mut self,
+        company: CompanyId,
+    ) -> &mut CargoTimeSincePickup {
         if let Some(idx) = self
             .company_time_since_pickup
             .iter()

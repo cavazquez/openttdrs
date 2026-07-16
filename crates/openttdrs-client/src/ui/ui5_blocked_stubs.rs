@@ -197,7 +197,11 @@ fn format_link_graph_body(
             lines.join("\n")
         }
         LinkGraphView::Planned => {
-            let edges = sim.state.runtime.station_flows.planned_edges_filtered(filter, 24);
+            let edges = sim
+                .state
+                .runtime
+                .station_flows
+                .planned_edges_filtered(filter, 24);
             if edges.is_empty() {
                 return link_graph_empty_planned().to_string();
             }

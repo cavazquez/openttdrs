@@ -3,8 +3,8 @@
 //! Este módulo proporciona análisis estructurado del estado de vehículos,
 //! separando la lógica de dominio de la presentación en el HUD.
 
-use crate::vehicle::Vehicle;
 use crate::GameState;
+use crate::vehicle::Vehicle;
 
 /// Resumen de vehículos con problemas operacionales.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -121,9 +121,9 @@ fn vehicle_has_incompatible_stop(state: &GameState, v: &Vehicle) -> bool {
 
 /// Verifica si un vehículo está esperando carga que no está disponible.
 fn vehicle_waiting_for_cargo(state: &GameState, v: &Vehicle) -> bool {
+    use crate::STATION_COVERAGE_RADIUS;
     use crate::station::station_covers_tile;
     use crate::vehicle::VehicleOrder;
-    use crate::STATION_COVERAGE_RADIUS;
 
     if !v.running || v.cargo > 0 || v.no_network_route_to_order || v.orders.is_empty() {
         return false;

@@ -6,7 +6,7 @@ use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use crate::bevy_app::UpdateSet;
-use crate::render::{large_map_viewport_cull_enabled, MapTileChunk, TileViewportBounds};
+use crate::render::{MapTileChunk, TileViewportBounds, large_map_viewport_cull_enabled};
 use crate::state::ClientScreen;
 
 use super::remap::apply_remap_map_visuals;

@@ -3,8 +3,8 @@ use crate::company::CompanyId;
 use crate::industry::Industry;
 use crate::map::{Map, TileCoord};
 
-use super::coverage::{station_coverage_at, STATION_COVERAGE_RADIUS};
 use super::Station;
+use super::coverage::{STATION_COVERAGE_RADIUS, station_coverage_at};
 
 /// Máximo de días sin recogida antes de truncar (`station_cmd.cpp`).
 pub const MAX_TIME_SINCE_PICKUP_DAYS: u8 = 255;

@@ -7,7 +7,9 @@ use openttdrs_core::{
 
 use crate::render::{RemapMapVisualsPending, request_map_visual_remap};
 use crate::state::{OrderPickState, SimWorld};
-use crate::ui::hud::{HudBuildFeedback, SelectedTileInfo, enqueue_build_place_flash, push_build_command_error};
+use crate::ui::hud::{
+    HudBuildFeedback, SelectedTileInfo, enqueue_build_place_flash, push_build_command_error,
+};
 use crate::ui::industry_panel::IndustryPanelState;
 use crate::ui::toolbar::bridge_window::{BridgeBuildState, PendingBridge};
 use crate::ui::toolbar::depot_panel::DepotPanelState;
@@ -51,11 +53,7 @@ pub(crate) struct IntentApplyContext<'w> {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn apply_intent(
-    intent: MapClickIntent,
-    ctx: &mut IntentApplyContext,
-    time_secs: f32,
-) {
+pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext, time_secs: f32) {
     match intent {
         MapClickIntent::Ignore => {}
         MapClickIntent::CancelDrag => {
@@ -80,8 +78,7 @@ pub(crate) fn apply_intent(
                 ) {
                     Ok(()) => {
                         ctx.pending.pending = true;
-                        ctx.order_state.selected_slot =
-                            ctx.order_state.orders.len().checked_sub(1);
+                        ctx.order_state.selected_slot = ctx.order_state.orders.len().checked_sub(1);
                     }
                     Err(e) => {
                         ctx.order_state.orders.pop();
@@ -239,34 +236,32 @@ pub(crate) fn apply_intent(
                 ctx.drag_state.press_world_pos = None;
             }
         }
-        MapClickIntent::JoinStationClick { clicked, keep } => {
-            match keep {
-                None => {
-                    ctx.station_state.join_keep = Some(clicked);
-                }
-                Some(k) if k == clicked => {
-                    ctx.station_state.join_keep = None;
-                }
-                Some(k) => {
-                    match apply_command(
-                        &mut ctx.sim.state,
-                        &Command::JoinStations {
-                            keep: k,
-                            merge: clicked,
-                        },
-                    ) {
-                        Ok(()) => {
-                            ctx.station_state.join_keep = None;
-                            let (mw, mh) = ctx.sim.state.map.dimensions();
-                            request_map_visual_remap(&mut ctx.pending, mw, mh, &[]);
-                        }
-                        Err(e) => {
-                            push_build_command_error(&mut ctx.hud_feedback, e, time_secs);
-                        }
+        MapClickIntent::JoinStationClick { clicked, keep } => match keep {
+            None => {
+                ctx.station_state.join_keep = Some(clicked);
+            }
+            Some(k) if k == clicked => {
+                ctx.station_state.join_keep = None;
+            }
+            Some(k) => {
+                match apply_command(
+                    &mut ctx.sim.state,
+                    &Command::JoinStations {
+                        keep: k,
+                        merge: clicked,
+                    },
+                ) {
+                    Ok(()) => {
+                        ctx.station_state.join_keep = None;
+                        let (mw, mh) = ctx.sim.state.map.dimensions();
+                        request_map_visual_remap(&mut ctx.pending, mw, mh, &[]);
+                    }
+                    Err(e) => {
+                        push_build_command_error(&mut ctx.hud_feedback, e, time_secs);
                     }
                 }
             }
-        }
+        },
         MapClickIntent::BuildImmediate {
             action,
             pos,

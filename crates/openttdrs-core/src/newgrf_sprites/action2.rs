@@ -1,8 +1,8 @@
 //! Evaluación de Action2 (variational, random, callbacks).
 
 use super::model::{
-    Action2EvalCtx, Action2RandomEntry, Action2VarAdjust, Action2VarEntry,
-    Action2VarTerm, TrainSpriteGraphics, CALLBACK_FAILED,
+    Action2EvalCtx, Action2RandomEntry, Action2VarAdjust, Action2VarEntry, Action2VarTerm,
+    CALLBACK_FAILED, TrainSpriteGraphics,
 };
 
 fn apply_var_adjust(raw: u32, adj: &Action2VarAdjust) -> i32 {
@@ -263,4 +263,3 @@ pub(super) fn eval_action2_random(entry: &Action2RandomEntry, ctx: &Action2EvalC
     let idx = (usize::try_from(bits >> entry.randbit).unwrap_or(0) & mask) % n;
     entry.sets[idx]
 }
-

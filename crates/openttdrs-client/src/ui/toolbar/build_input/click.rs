@@ -5,7 +5,9 @@ use bevy::window::PrimaryWindow;
 use openttdrs_core::TileKind;
 
 use crate::iso::{world_pos_to_tile_coord, world_pos_to_tile_fract};
-use crate::render::{MapPreviewCamera, PrimaryGameCamera, pick_vehicle_id_at_world, town_id_at_label_pos};
+use crate::render::{
+    MapPreviewCamera, PrimaryGameCamera, pick_vehicle_id_at_world, town_id_at_label_pos,
+};
 use crate::state::{OrderPickState, order_pick_active};
 use crate::ui::hud::HoveredTileCoord;
 use crate::ui::save_window::SaveWindowState;
@@ -152,9 +154,12 @@ pub(crate) fn handle_tile_click(
     let tile_kind = apply_ctx.sim.state.map.get_kind(build_pos);
     let is_hangar = tile_kind == Some(TileKind::Airport)
         && openttdrs_core::airport_tile_is_hangar(&apply_ctx.sim.state.map, build_pos);
-    let station_pos_at_tile =
-        openttdrs_core::station_at_tile(&apply_ctx.sim.state.map, &apply_ctx.sim.state.stations, build_pos)
-            .map(|s| s.pos);
+    let station_pos_at_tile = openttdrs_core::station_at_tile(
+        &apply_ctx.sim.state.map,
+        &apply_ctx.sim.state.stations,
+        build_pos,
+    )
+    .map(|s| s.pos);
 
     let orders_mode = order_pick_active(&panels.pick_state)
         || tool_state.active_tool == Some(BuildMenuAction::Orders);
@@ -168,12 +173,11 @@ pub(crate) fn handle_tile_click(
         {
             let tb = tile.m5 & 0x3F;
             let (fx, fy) = tile_fract;
-            openttdrs_core::rail_signals::resolve_signal_track(tb, fx, fy)
-                .is_some_and(|track| {
-                    openttdrs_core::rail_signals::rail_signal_present_mask(tile.m3)
-                        & openttdrs_core::rail_signals::signal_on_track_mask(track)
-                        != 0
-                })
+            openttdrs_core::rail_signals::resolve_signal_track(tb, fx, fy).is_some_and(|track| {
+                openttdrs_core::rail_signals::rail_signal_present_mask(tile.m3)
+                    & openttdrs_core::rail_signals::signal_on_track_mask(track)
+                    != 0
+            })
         } else {
             false
         }

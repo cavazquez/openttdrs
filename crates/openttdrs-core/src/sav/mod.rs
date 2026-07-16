@@ -66,7 +66,10 @@ impl std::fmt::Display for SavError {
             Self::BadFormat(s) => write!(f, "formato inválido: {s}"),
             Self::Io(s) => write!(f, "error de E/S: {s}"),
             Self::ValueOutOfRange { field, value } => {
-                write!(f, "valor fuera de rango para gamma en campo '{field}': {value} >= 2^14")
+                write!(
+                    f,
+                    "valor fuera de rango para gamma en campo '{field}': {value} >= 2^14"
+                )
             }
             Self::DecompressedSizeExceeded { actual, limit } => {
                 write!(

@@ -4,8 +4,8 @@ use std::path::Path;
 
 use crate::GameState;
 use crate::industry_tile::{
-    INVALID_INDUSTRY_TILE, IndustryTileGfxId, IndustryTileSpecDef,
-    empty_industry_tile_overrides, next_free_industry_tile_gfx_id,
+    INVALID_INDUSTRY_TILE, IndustryTileGfxId, IndustryTileSpecDef, empty_industry_tile_overrides,
+    next_free_industry_tile_gfx_id,
 };
 
 use super::super::action0::collect_industry_tile_metas_from_grf;

@@ -3,19 +3,19 @@ mod coverage;
 mod destination;
 mod geometry;
 mod model;
-mod tile_encoding;
 mod tests;
+mod tile_encoding;
 
 // Re-exports públicos para mantener compatibilidad con imports existentes
 pub use cargo_rating::{
-    load_amount_for_rating, on_station_cargo_pickup, recompute_station_rating,
-    station_is_freight_pickup_stop, station_rating_for_cargo, station_rating_for_company_cargo,
-    tick_station_cargo_age, MAX_TIME_SINCE_PICKUP_DAYS, TOWN_CARGO_MIN_OWNER_RATING,
+    MAX_TIME_SINCE_PICKUP_DAYS, TOWN_CARGO_MIN_OWNER_RATING, load_amount_for_rating,
+    on_station_cargo_pickup, recompute_station_rating, station_is_freight_pickup_stop,
+    station_rating_for_cargo, station_rating_for_company_cargo, tick_station_cargo_age,
 };
 pub use coverage::{
+    STATION_COVERAGE_RADIUS, StationCoverage, StationMapCoherenceReport,
     industry_in_station_coverage, industry_in_station_coverage_by_pos, station_coverage_at,
-    station_covers_tile, station_map_coherence, StationCoverage, StationMapCoherenceReport,
-    STATION_COVERAGE_RADIUS,
+    station_covers_tile, station_map_coherence,
 };
 pub use destination::{resolve_aircraft_station_dest, resolve_order_destination};
 pub use geometry::{
@@ -27,8 +27,8 @@ pub use geometry::{
 };
 pub use model::{CargoTimeSincePickup, Station, StopKind};
 pub use tile_encoding::{
-    default_station_catenary_flags, is_rail_waypoint_at, is_rail_waypoint_tile,
-    station_tile_can_have_pylons, station_tile_can_have_wires, station_type_from_m6,
-    stop_kind_from_m6, STATION_TILE_PYLONS, STATION_TILE_WIRES, STATION_TYPE_BUOY,
-    STATION_TYPE_RAIL_WAYPOINT, STATION_TYPE_ROAD_WAYPOINT,
+    STATION_TILE_PYLONS, STATION_TILE_WIRES, STATION_TYPE_BUOY, STATION_TYPE_RAIL_WAYPOINT,
+    STATION_TYPE_ROAD_WAYPOINT, default_station_catenary_flags, is_rail_waypoint_at,
+    is_rail_waypoint_tile, station_tile_can_have_pylons, station_tile_can_have_wires,
+    station_type_from_m6, stop_kind_from_m6,
 };

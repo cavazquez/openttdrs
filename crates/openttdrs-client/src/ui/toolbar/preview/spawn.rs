@@ -2,30 +2,30 @@
 
 use bevy::prelude::*;
 use openttdrs_core::{
-    command_would_fail, rail_station_footprint, Command, GameState, Map, TileCoord,
+    Command, GameState, Map, TileCoord, command_would_fail, rail_station_footprint,
 };
 
-use crate::iso::{tile_pos_half, tile_slope_and_min_z, SLOPE_HALF_H, TILE_HALF_H};
+use crate::iso::{SLOPE_HALF_H, TILE_HALF_H, tile_pos_half, tile_slope_and_min_z};
 use crate::render::{CompanyColoredSprites, TileAtlas};
 use crate::state::SimWorld;
 use crate::ui::toolbar::StationBuildState;
 
+use super::BuildGhostPreview;
 use super::bridge::spawn_bridge_span_preview;
 use super::industry::spawn_industry_template_preview;
-use super::plan::{preview_tint, rail_signal_tint, PreviewPlan, TilePreviewKind, TilePreviewPlan};
-use super::rail_depot::{spawn_rail_depot_preview, RailDepotPreviewSpawn};
+use super::plan::{PreviewPlan, TilePreviewKind, TilePreviewPlan, preview_tint, rail_signal_tint};
+use super::rail_depot::{RailDepotPreviewSpawn, spawn_rail_depot_preview};
 use super::rail_station::spawn_rail_station_area_sprite_preview;
 use super::rail_waypoint::spawn_rail_waypoint_preview;
-use super::road_depot::{spawn_road_depot_preview, RoadDepotPreviewSpawn};
+use super::road_depot::{RoadDepotPreviewSpawn, spawn_road_depot_preview};
 use super::road_stop::{
-    bus_stop_ground_path, spawn_road_stop_preview, truck_stop_ground_path, RoadStopPreviewSpawn,
+    RoadStopPreviewSpawn, bus_stop_ground_path, spawn_road_stop_preview, truck_stop_ground_path,
 };
 use super::road_waypoint::spawn_road_waypoint_preview;
 use super::sprites::preview_image_for_action;
 use super::station_coverage::{spawn_station_coverage_preview, station_preview_has_coverage};
 use super::tunnel::spawn_tunnel_entrance_preview;
 use super::validation::preview_build_command_valid;
-use super::BuildGhostPreview;
 
 use crate::sprites::StationTileClass;
 
@@ -176,8 +176,8 @@ fn spawn_airport_preview(
     show_coverage: bool,
 ) {
     use openttdrs_core::{
-        airport_spec_def, airport_spec_footprint, airport_spec_tiles, command_would_fail, Command,
-        STATION_COVERAGE_RADIUS,
+        Command, STATION_COVERAGE_RADIUS, airport_spec_def, airport_spec_footprint,
+        airport_spec_tiles, command_would_fail,
     };
 
     let spec = station_state.airport_spec;

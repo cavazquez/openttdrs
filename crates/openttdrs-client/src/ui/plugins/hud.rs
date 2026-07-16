@@ -6,8 +6,8 @@ use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 use crate::ui::hud::{
     HoveredTileCoord, HudBuildFeedback, HudSfxHandles, PlayHudSfx, SelectedTileInfo,
-    SimHudControls, animate_build_place_flash, animate_income_popups, flush_hud_sfx,
-    load_hud_sfx, play_hud_sfx, setup_tile_info_ui, spawn_build_place_flash, spawn_income_popups,
+    SimHudControls, animate_build_place_flash, animate_income_popups, flush_hud_sfx, load_hud_sfx,
+    play_hud_sfx, setup_tile_info_ui, spawn_build_place_flash, spawn_income_popups,
     update_tile_info_text,
 };
 use crate::ui::statusbar::{
@@ -16,7 +16,7 @@ use crate::ui::statusbar::{
     handle_status_bar_center_click, news_history_on_closed, setup_news_history_window,
     setup_status_bar, sync_news_history_window, sync_status_bar, update_news_playback,
 };
-use crate::ui::toolbar::{toolbar_click_beep, RailSignalGhostState};
+use crate::ui::toolbar::{RailSignalGhostState, toolbar_click_beep};
 
 pub(crate) struct HudUiPlugin;
 
@@ -74,10 +74,7 @@ impl Plugin for HudUiPlugin {
             )
             .add_systems(
                 Update,
-                (
-                    spawn_build_place_flash,
-                    flush_hud_sfx,
-                )
+                (spawn_build_place_flash, flush_hud_sfx)
                     .chain()
                     .in_set(UpdateSet::Ui)
                     .run_if(in_state(ClientScreen::InGame)),

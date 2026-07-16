@@ -77,11 +77,14 @@ pub fn resolve_train_collisions(state: &mut GameState) {
                 doomed.insert(v.id);
             }
         }
-        state.runtime.pending_sim_events.push(SimEvent::TrainCollision {
-            at: c.at,
-            vehicle_a: c.a,
-            vehicle_b: c.b,
-        });
+        state
+            .runtime
+            .pending_sim_events
+            .push(SimEvent::TrainCollision {
+                at: c.at,
+                vehicle_a: c.a,
+                vehicle_b: c.b,
+            });
         let victims = 2u32.saturating_add(
             u32::try_from(
                 state

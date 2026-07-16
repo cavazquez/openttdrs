@@ -45,7 +45,10 @@ pub enum SaveError {
     Json(serde_json::Error),
     UnsupportedVersion(u32),
     /// Archivo JSON excede el límite de seguridad.
-    JsonSizeExceeded { actual: u64, limit: u64 },
+    JsonSizeExceeded {
+        actual: u64,
+        limit: u64,
+    },
 }
 
 impl std::fmt::Display for SaveError {
@@ -514,7 +517,10 @@ mod tests {
         // Verificar que fixtures válidos siguen cargando
         let s = crate::GameState::new(16, 16);
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("openttdrs_valid_fixture_{}.json", std::process::id()));
+        let path = dir.join(format!(
+            "openttdrs_valid_fixture_{}.json",
+            std::process::id()
+        ));
         save(&s, &path).unwrap();
         let loaded = load(&path).unwrap();
         assert_eq!(loaded.map.dimensions(), s.map.dimensions());

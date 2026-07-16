@@ -77,7 +77,7 @@ pub fn resolve_train_collisions(state: &mut GameState) {
                 doomed.insert(v.id);
             }
         }
-        state.pending_sim_events.push(SimEvent::TrainCollision {
+        state.runtime.pending_sim_events.push(SimEvent::TrainCollision {
             at: c.at,
             vehicle_a: c.a,
             vehicle_b: c.b,
@@ -136,6 +136,7 @@ mod tests {
         assert!(state.vehicles.is_empty());
         assert!(
             state
+                .runtime
                 .pending_sim_events
                 .drain()
                 .iter()

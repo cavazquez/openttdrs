@@ -64,7 +64,7 @@ fn phase_economy_and_world(state: &mut GameState, t: u64) {
     }
 
     crate::subsidy::tick_subsidies(state);
-    state.landscape_tile_dirty.clear();
+    state.runtime.landscape_tile_dirty.clear();
     crate::map::tree_tile_loop::tick_tree_tile_loop(state);
     crate::disaster::tick_disasters(state);
 }
@@ -75,9 +75,9 @@ fn phase_routing_and_signals(state: &mut GameState) {
     routing::recompute_vehicle_paths(state);
 
     // Señales: solo `_globset` (sin barrido global).
-    state.signal_tile_dirty.clear();
+    state.runtime.signal_tile_dirty.clear();
     crate::rail_signals::enqueue_trains_for_signal_update(
-        &mut state.signal_globset,
+        &mut state.runtime.signal_globset,
         &state.vehicles,
     );
     routing::drain_signal_globset_now(state);
@@ -98,11 +98,11 @@ fn phase_routing_and_signals(state: &mut GameState) {
     crate::rail_pbs::sync_reservations_to_map(
         &mut state.map,
         &state.vehicles,
-        &mut state.reservation_tiles_active,
-        &mut state.reservation_tile_dirty,
+        &mut state.runtime.reservation_tiles_active,
+        &mut state.runtime.reservation_tile_dirty,
     );
     crate::rail_signals::enqueue_pbs_reservations_for_signal_update(
-        &mut state.signal_globset,
+        &mut state.runtime.signal_globset,
         &state.vehicles,
     );
     routing::drain_signal_globset_now(state);
@@ -110,14 +110,14 @@ fn phase_routing_and_signals(state: &mut GameState) {
 
 /// Fase 3: animación de teselas de industrias y aeropuertos.
 fn phase_tile_animation(state: &mut GameState, t: u64) {
-    state.industry_tile_dirty = crate::map::step_industry_tiles_with_seed(
+    state.runtime.industry_tile_dirty = crate::map::step_industry_tiles_with_seed(
         &mut state.map,
         t,
         state.world_seed,
         &state.industries,
     );
     let airport_dirty = crate::map::step_airport_tiles(&mut state.map, t, &state.stations);
-    state.industry_tile_dirty.extend(airport_dirty);
+    state.runtime.industry_tile_dirty.extend(airport_dirty);
 }
 
 /// Fase 5: horarios, autoreemplazo, extensión de rutas, fases de aeronaves (antes del movimiento).
@@ -141,11 +141,11 @@ fn phase_post_tick(state: &mut GameState) {
     vehicle_ops::apply_pending_depot_order_refits(state);
 
     crate::rail_signals::enqueue_trains_for_signal_update(
-        &mut state.signal_globset,
+        &mut state.runtime.signal_globset,
         &state.vehicles,
     );
     crate::rail_signals::enqueue_pbs_reservations_for_signal_update(
-        &mut state.signal_globset,
+        &mut state.runtime.signal_globset,
         &state.vehicles,
     );
     routing::drain_signal_globset_now(state);

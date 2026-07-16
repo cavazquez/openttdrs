@@ -535,7 +535,7 @@ pub fn tick_tree_tile_loop(state: &mut GameState) {
     let tick = state.tick.get();
     step_tree_and_field_growth(&mut state.map, tick, state.world_seed);
     let snow_dirty = apply_seasonal_snow(&mut state.map, state.climate, tick, state.world_seed);
-    state.landscape_tile_dirty.extend(snow_dirty);
+    state.runtime.landscape_tile_dirty.extend(snow_dirty);
 }
 
 #[cfg(test)]

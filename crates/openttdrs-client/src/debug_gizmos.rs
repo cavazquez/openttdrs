@@ -250,6 +250,7 @@ pub(crate) fn draw_link_graph_overlay(
         LinkGraphView::Planned => {
             let edges = sim
                 .state
+                .runtime
                 .station_flows
                 .planned_edges_filtered(filter, LINK_GRAPH_OVERLAY_MAX_EDGES);
             let max_amount = edges.iter().map(|e| e.amount.max(1)).max().unwrap_or(1);

@@ -72,26 +72,27 @@ fn step_sim(mut sim: ResMut<SimWorld>, mut vehicle_index: ResMut<VehicleIndex>) 
 }
 
 fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVisualsPending>) {
-    if sim.state.industry_tile_dirty.is_empty()
-        && sim.state.landscape_tile_dirty.is_empty()
-        && sim.state.signal_tile_dirty.is_empty()
-        && sim.state.reservation_tile_dirty.is_empty()
+    if sim.state.runtime.industry_tile_dirty.is_empty()
+        && sim.state.runtime.landscape_tile_dirty.is_empty()
+        && sim.state.runtime.signal_tile_dirty.is_empty()
+        && sim.state.runtime.reservation_tile_dirty.is_empty()
     {
         return;
     }
     let (mw, mh) = sim.state.map.dimensions();
     pending.pending = true;
     pending.sync_camera = false;
-    pending.full = (!sim.state.signal_tile_dirty.is_empty()
-        || !sim.state.reservation_tile_dirty.is_empty())
+    pending.full = (!sim.state.runtime.signal_tile_dirty.is_empty()
+        || !sim.state.runtime.reservation_tile_dirty.is_empty())
         && !large_map_viewport_cull_enabled(mw, mh);
     for coord in sim
         .state
+        .runtime
         .industry_tile_dirty
         .iter()
-        .chain(sim.state.landscape_tile_dirty.iter())
-        .chain(sim.state.signal_tile_dirty.iter())
-        .chain(sim.state.reservation_tile_dirty.iter())
+        .chain(sim.state.runtime.landscape_tile_dirty.iter())
+        .chain(sim.state.runtime.signal_tile_dirty.iter())
+        .chain(sim.state.runtime.reservation_tile_dirty.iter())
     {
         let ch = MapTileChunk::from_tile(coord.x.max(0) as u32, coord.y.max(0) as u32);
         pending.refresh_chunks.insert((ch.cx, ch.cy));

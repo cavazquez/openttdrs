@@ -60,6 +60,7 @@ fn pick_disaster_target(map: &Map, vehicles: &[crate::Vehicle], tick: u64) -> Op
 pub fn trigger_disaster_at(state: &mut GameState, kind: DisasterKind, at: TileCoord) {
     destroy_tile_contents(state, at);
     state
+        .runtime
         .pending_sim_events
         .push(SimEvent::Disaster { kind, at });
     crate::news::push_disaster_news(state, kind, at);
@@ -112,7 +113,7 @@ mod tests {
         force_disaster(&mut state, DisasterKind::SmallUfo, pos);
         assert!(state.vehicles.is_empty());
         assert_eq!(state.map.get_kind(pos), Some(TileKind::Grass));
-        let events = state.pending_sim_events.drain();
+        let events = state.runtime.pending_sim_events.drain();
         assert!(events.iter().any(|e| matches!(
             e,
             SimEvent::Disaster {

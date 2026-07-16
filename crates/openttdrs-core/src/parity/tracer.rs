@@ -455,9 +455,9 @@ fn vehicle_record(v: &crate::Vehicle, rail: Option<RailRecord>) -> VehicleRecord
 
 /// Registra el tick recién ejecutado (llamado al final de `sim_step::step`).
 ///
-/// No hace nada si la traza está desactivada (`state.parity == None`).
+/// No hace nada si la traza está desactivada (`state.runtime.parity == None`).
 pub(crate) fn record_tick(state: &mut GameState) {
-    let Some(mut tracer) = state.parity.take() else {
+    let Some(mut tracer) = state.runtime.parity.take() else {
         return;
     };
     let trains = train_positions(state);
@@ -478,5 +478,5 @@ pub(crate) fn record_tick(state: &mut GameState) {
         vehicles,
         events,
     });
-    state.parity = Some(tracer);
+    state.runtime.parity = Some(tracer);
 }

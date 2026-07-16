@@ -699,7 +699,7 @@ pub(in crate::command) fn place_rail_signal(
         .map
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
-    crate::rail_signals::enqueue_signal_glob(&mut state.signal_globset, c);
+    crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, c);
     state.economy.money -= SIGNAL_BUILD_COST;
     Ok(())
 }
@@ -728,7 +728,7 @@ pub(in crate::command) fn cycle_rail_signal_type(
         .map
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
-    crate::rail_signals::enqueue_signal_glob(&mut state.signal_globset, c);
+    crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, c);
     Ok(())
 }
 
@@ -781,7 +781,7 @@ pub(in crate::command) fn cycle_rail_signal_side(
         .map
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
-    crate::rail_signals::enqueue_signal_glob(&mut state.signal_globset, c);
+    crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, c);
     Ok(())
 }
 
@@ -841,7 +841,7 @@ pub(in crate::command) fn remove_rail_signal(
         .map
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
-    crate::rail_signals::enqueue_signal_glob(&mut state.signal_globset, c);
+    crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, c);
     state.economy.money += SIGNAL_REMOVE_REFUND;
     Ok(())
 }

@@ -162,7 +162,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     climate,
                     show_pbs_reservations,
                     show_full_detail,
-                    &sim.state.catenary_newgrf_sprites,
+                    &sim.state.runtime.catenary_newgrf_sprites,
                     Some(catenary_sprites),
                     Some(images),
                 );
@@ -187,7 +187,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     slope_half_ground,
                     map,
                     (mw, mh),
-                    &sim.state.catenary_newgrf_sprites,
+                    &sim.state.runtime.catenary_newgrf_sprites,
                     Some(catenary_sprites),
                     Some(images),
                 );
@@ -204,7 +204,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                     &ctx,
                     debug_coast,
                     &mut batches,
-                    &sim.state.shore_newgrf_sprites,
+                    &sim.state.runtime.shore_newgrf_sprites,
                     Some(shore_sprites),
                     Some(images),
                 );
@@ -233,7 +233,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
             (mw, mh),
             assets,
             &ctx,
-            &sim.state.catenary_newgrf_sprites,
+            &sim.state.runtime.catenary_newgrf_sprites,
             Some(catenary_sprites),
             Some(images),
         );
@@ -257,7 +257,7 @@ pub(crate) fn spawn_map_tiles_in_bounds(
                 &sim.state.station_spec_catalog,
                 Some(station_sprites),
                 Some(images),
-                &sim.state.catenary_newgrf_sprites,
+                &sim.state.runtime.catenary_newgrf_sprites,
                 Some(catenary_sprites),
                 climate,
                 &sim.state.newgrf_stack,

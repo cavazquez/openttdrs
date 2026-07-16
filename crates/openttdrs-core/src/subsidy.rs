@@ -150,7 +150,7 @@ pub fn try_create_subsidy(state: &mut GameState) -> bool {
         award_expires_tick: 0,
         awarded_company: None,
     });
-    state.pending_sim_events.push(SimEvent::SubsidyCreated {
+    state.runtime.pending_sim_events.push(SimEvent::SubsidyCreated {
         industry_pos: source,
         station_pos: dest,
         cargo,
@@ -183,6 +183,7 @@ pub fn try_award_subsidy(
     state.subsidies[idx].award_expires_tick = award_expires_tick;
     state.subsidies[idx].awarded_company = Some(company);
     state
+        .runtime
         .pending_sim_events
         .push(SimEvent::SubsidyAwarded { cargo, company });
     let company_name = state
@@ -251,7 +252,7 @@ mod tests {
         assert!(try_create_subsidy(&mut state));
         assert_eq!(state.subsidies.len(), 1);
         assert_eq!(state.subsidies[0].cargo, CargoType::Coal);
-        let events = state.pending_sim_events.drain();
+        let events = state.runtime.pending_sim_events.drain();
         assert!(events.iter().any(|e| matches!(
             e,
             SimEvent::SubsidyCreated {

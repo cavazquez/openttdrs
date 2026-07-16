@@ -51,7 +51,7 @@ pub(crate) fn load_sav_state(bytes: &[u8]) -> Result<GameState, String> {
         state.economy.money,
     );
     log_detection_summary(&state, true, Some(&extras));
-    state.pending_sim_events.discard_all();
+    state.runtime.pending_sim_events.discard_all();
     Ok(state)
 }
 
@@ -85,7 +85,7 @@ fn bootstrap_procedural_state(settings: &NewGameSettings) -> GameState {
             settings.climate, state.world_seed, settings.island, settings.preserve_demo
         );
     }
-    state.pending_sim_events.discard_all();
+    state.runtime.pending_sim_events.discard_all();
     state
 }
 
@@ -185,7 +185,7 @@ impl SimWorld {
             apply_test_company_colour(&mut state);
             info!("Estado de simulacion cargado desde JSON: {path}");
             log_detection_summary(&state, true, None);
-            state.pending_sim_events.discard_all();
+            state.runtime.pending_sim_events.discard_all();
             return Self {
                 state,
                 loaded_file: true,
@@ -205,7 +205,7 @@ impl SimWorld {
             place_stations_from_footer_stxy(&mut state, Some(&extras));
             apply_test_company_colour(&mut state);
             log_detection_summary(&state, true, Some(&extras));
-            state.pending_sim_events.discard_all();
+            state.runtime.pending_sim_events.discard_all();
             return Self {
                 state,
                 loaded_file: true,
@@ -263,7 +263,7 @@ mod sim_world_coverage_tests {
     #[test]
     fn bootstrap_world_has_no_pending_sim_events() {
         let w = SimWorld::default();
-        assert!(w.state.pending_sim_events.is_empty());
+        assert!(w.state.runtime.pending_sim_events.is_empty());
     }
 
     #[test]

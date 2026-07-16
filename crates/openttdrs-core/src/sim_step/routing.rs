@@ -11,14 +11,14 @@ pub(super) fn drain_signal_globset_now(state: &mut GameState) {
     crate::rail_signals::drain_signal_globset_with_wormholes(
         &mut state.map,
         &state.vehicles,
-        &mut state.signal_tile_dirty,
-        &mut state.signal_globset,
+        &mut state.runtime.signal_tile_dirty,
+        &mut state.runtime.signal_globset,
         wh,
     );
 }
 
 pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
-    state.path_cache.begin_tick(state.tick.get());
+    state.runtime.path_cache.begin_tick(state.tick.get());
     let wormholes =
         pathfinder::TunnelWormholes::from_jgr_records(&state.map, &state.jgr_tunnels_from_footer);
     let wh = if wormholes.is_empty() {
@@ -53,7 +53,7 @@ pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
                 state.vehicles[i].engine_id,
             )
         } else {
-            pathfinder::find_path_cached(&state.map, &mut state.path_cache, from, to, net, wh)
+            pathfinder::find_path_cached(&state.map, &mut state.runtime.path_cache, from, to, net, wh)
         };
         match path {
             Some(path) => {
@@ -134,7 +134,7 @@ pub(super) fn extend_orderless_vehicle_paths(state: &mut GameState) {
                 state.vehicles[i].dest = hangar;
                 if let Some(path) = pathfinder::find_path_cached(
                     &state.map,
-                    &mut state.path_cache,
+                    &mut state.runtime.path_cache,
                     pos,
                     hangar,
                     pathfinder::PathNetwork::Air,

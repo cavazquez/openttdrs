@@ -97,7 +97,7 @@ pub(super) fn place_industry_spec_sandbox(
             .set_tile(*tile, map_tile)
             .map_err(|_| CommandError::OutOfBounds)?;
     }
-    state.industry_tile_dirty.extend(footprint.iter().copied());
+    state.runtime.industry_tile_dirty.extend(footprint.iter().copied());
     state
         .industries
         .retain(|industry| !industry.contains_tile(c));

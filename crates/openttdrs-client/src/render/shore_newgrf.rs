@@ -71,7 +71,7 @@ mod tests {
             .newgrf_stack
             .push(openttdrs_core::NewGrfEntry::new("sworld.grf", 2));
         apply_newgrf_action5_shore(&mut state, &[dir.path()]);
-        let spr = state.shore_newgrf_sprites[2].as_ref().expect("slot 2");
+        let spr = state.runtime.shore_newgrf_sprites[2].as_ref().expect("slot 2");
         let mut images = Assets::<Image>::default();
         let mut cache = NewGrfShoreSpriteCache::default();
         let handle = cache.handle_for(2, spr, &mut images);

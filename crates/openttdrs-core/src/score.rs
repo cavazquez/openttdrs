@@ -77,6 +77,7 @@ pub fn finish_game(state: &mut GameState, reason: GameOverReason) -> Option<Game
     let score = snapshot_active_score(state, reason);
     state.game_finished = true;
     state
+        .runtime
         .pending_sim_events
         .push(crate::sim_events::SimEvent::GameOver {
             company_name: score.company_name.clone(),

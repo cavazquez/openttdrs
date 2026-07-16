@@ -12,11 +12,13 @@ pub(super) fn tick_aircraft_phases(state: &mut GameState) {
         match ev {
             AircraftPhaseEvent::Takeoff => {
                 state
+                    .runtime
                     .pending_sim_events
                     .push(SimEvent::AircraftTakeoff { vehicle_id: id, at });
             }
             AircraftPhaseEvent::Landing => {
                 state
+                    .runtime
                     .pending_sim_events
                     .push(SimEvent::AircraftLanding { vehicle_id: id, at });
             }
@@ -103,6 +105,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         let broke_down = state.vehicles[i].check_breakdown(tick);
         if broke_down {
             state
+                .runtime
                 .pending_sim_events
                 .push(crate::sim_events::SimEvent::Breakdown {
                     vehicle_id: state.vehicles[i].id,
@@ -125,9 +128,9 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         if state.vehicles[i].pos != prev_pos {
             crate::ship_movement::maybe_start_lock_transit(&mut state.vehicles[i], &state.map);
             if vehicle_kind == VehicleKind::Train {
-                crate::rail_signals::enqueue_signal_glob(&mut state.signal_globset, prev_pos);
+                crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, prev_pos);
                 crate::rail_signals::enqueue_signal_glob(
-                    &mut state.signal_globset,
+                    &mut state.runtime.signal_globset,
                     state.vehicles[i].pos,
                 );
             }
@@ -135,6 +138,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         if vehicle_running {
             if prev_speed == 0 && state.vehicles[i].cur_speed > 0 {
                 state
+                    .runtime
                     .pending_sim_events
                     .push(crate::sim_events::SimEvent::VehicleDepart {
                         vehicle_id,
@@ -148,6 +152,7 @@ pub(super) fn move_vehicles(state: &mut GameState) {
                 && crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind)
             {
                 state
+                    .runtime
                     .pending_sim_events
                     .push(crate::sim_events::SimEvent::LevelCrossing {
                         at: state.vehicles[i].pos,
@@ -196,6 +201,7 @@ fn update_vehicle_running_sounds(state: &mut GameState, i: usize, tick: u64) {
         state.vehicles[i].motion_counter = mc;
         if (mc & 0xFF) < speed {
             state
+                .runtime
                 .pending_sim_events
                 .push(crate::sim_events::SimEvent::VehicleRunning {
                     vehicle_id,
@@ -209,6 +215,7 @@ fn update_vehicle_running_sounds(state: &mut GameState, i: usize, tick: u64) {
     if tick.is_multiple_of(16) {
         let moving = speed > 0 && running_flag;
         state
+            .runtime
             .pending_sim_events
             .push(crate::sim_events::SimEvent::VehicleRunning {
                 vehicle_id,

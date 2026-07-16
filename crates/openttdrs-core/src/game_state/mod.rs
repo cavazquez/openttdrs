@@ -1,3 +1,7 @@
+mod runtime;
+
+pub use runtime::SimulationRuntime;
+
 use crate::industry::Industry;
 use crate::map::{Map, TileCoord};
 use crate::station::Station;
@@ -223,7 +227,7 @@ mod economy_history_tests {
 pub struct CompanyEconomy {
     pub money: i64,
     pub loan: i64,
-    /// Tope de préstamo (`economy.cpp` `max_loan`; por defecto 300 000).
+    /// Tope de préstamo (`economy.cpp` `max_loan`; por defecto 300 000).
     #[serde(default = "default_max_loan")]
     pub max_loan: i64,
 }
@@ -264,9 +268,18 @@ pub const TERRAFORM_COST: i64 = TERRAFORM_BASE_PRICE;
 #[deprecated(note = "usar economy::transported_goods_income")]
 pub const CARGO_DELIVERY_PAYMENT: i64 = 12;
 
-/// Estado global mínimo del mundo simulado.
+/// Estado global del mundo simulado.
+///
+/// ## Campos persistidos vs. efímeros
+///
+/// Los campos en el nivel superior de esta estructura (excepto `runtime`) se
+/// **persisten** al guardar la partida como JSON. El campo `runtime` contiene
+/// **datos efímeros** que no se guardan y deben reconstruirse tras cargar.
+///
+/// Ver [`SimulationRuntime`] para detalles de campos no persistidos.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GameState {
+    // ───── Campos persistidos ─────
     pub map: Map,
     pub tick: GameTick,
     pub industries: Vec<Industry>,
@@ -336,39 +349,9 @@ pub struct GameState {
     /// Túneles JGR decodificados desde footer `TNBP` del `.ottdmap` (vacío si no hay o no aplica).
     #[serde(default)]
     pub jgr_tunnels_from_footer: Vec<JgrTunnelRecord>,
-    /// Caché efímera de rutas A* (no persistida).
-    #[serde(skip)]
-    pub path_cache: crate::pathfinder::PathCache,
-    /// Ingresos recién cobrados (drenados por el cliente para texto flotante).
-    #[serde(skip)]
-    pub pending_income_popups: Vec<IncomePopup>,
-    /// Eventos del tick para audio/FX/UI en el cliente.
-    #[serde(skip)]
-    pub pending_sim_events: crate::sim_events::SimEventQueue,
-    /// Teselas industriales con `m1` mutado este tick (obra P6 → remap cliente).
-    #[serde(skip)]
-    pub industry_tile_dirty: Vec<TileCoord>,
-    /// Teselas de paisaje (nieve estacional, etc.) mutadas este tick → remap cliente.
-    #[serde(skip)]
-    pub landscape_tile_dirty: Vec<TileCoord>,
-    /// Teselas con señales cuyo estado verde/rojo cambió este tick (remap cliente).
-    #[serde(skip)]
-    pub signal_tile_dirty: Vec<TileCoord>,
-    /// Cola `_globset`: teselas que invalidan señales (movimiento / construcción).
-    #[serde(skip, default)]
-    pub signal_globset: crate::rail_signals::SignalGlobSet,
-    /// Teselas con reserva PBS activa cuyo `m2_hi` cambió (remap cliente).
-    #[serde(skip)]
-    pub reservation_tile_dirty: Vec<TileCoord>,
-    /// Conjunto de teselas con reserva PBS del tick anterior (sincronización mapa).
-    #[serde(skip, default)]
-    pub reservation_tiles_active: std::collections::HashSet<TileCoord>,
     /// Historial de noticias (más reciente al frente).
     #[serde(default)]
     pub news: crate::news::NewsQueue,
-    /// Eventos de noticia recién creados (consumidos por el cliente).
-    #[serde(skip)]
-    pub pending_news_events: Vec<crate::news::PendingNewsEvent>,
     /// Noticia «primer vehículo en marcha» ya emitida.
     #[serde(default)]
     pub news_first_vehicle_running_sent: bool,
@@ -381,15 +364,6 @@ pub struct GameState {
     /// Pools de órdenes compartidas.
     #[serde(default)]
     pub shared_order_lists: Vec<crate::shared_orders::SharedOrderList>,
-    /// Claves `(vehículo, tipo de aviso)` ya notificadas mientras persiste la condición.
-    #[serde(skip, default)]
-    pub news_advice_sent: std::collections::HashSet<u64>,
-    /// Último día de calendario en que se ejecutó purga de noticias antiguas.
-    #[serde(skip, default)]
-    pub news_last_purge_day: u64,
-    /// Tracer de paridad opcional (coste cero si es `None`; no se persiste).
-    #[serde(skip, default)]
-    pub parity: Option<crate::parity::ParityTracer>,
     /// Subsidios activos u ofrecidos.
     #[serde(default)]
     pub subsidies: Vec<crate::subsidy::Subsidy>,
@@ -417,13 +391,6 @@ pub struct GameState {
     /// Stack `NewGRF` activo (Fase 7 MVP; sin ejecución Action0–14).
     #[serde(default = "crate::newgrf_config::default_vanilla_stack")]
     pub newgrf_stack: Vec<crate::newgrf_config::NewGrfEntry>,
-    /// Slots `SPR_SHORE_BASE + 0..17` desde Action5 `0x0D` (`None` = `OpenGFX`).
-    /// Se reconstruye al aplicar el stack; no se persiste en el save.
-    #[serde(skip)]
-    pub shore_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
-    /// Slots Action5 catenary `0x05` (wires/entrances/pylons; `None` = `OpenGFX`).
-    #[serde(skip)]
-    pub catenary_newgrf_sprites: Vec<Option<crate::newgrf_sprites::DecodedSprite>>,
     /// Carteles del mapa (`Sign` en `OpenTTD`).
     #[serde(default)]
     pub signs: Vec<crate::sign::Sign>,
@@ -442,19 +409,14 @@ pub struct GameState {
     /// Modo `CargoDist` (`Manual` / `Asymmetric` / `Symmetric`).
     #[serde(default)]
     pub cargo_dist: crate::flow_stat::CargoDistSettings,
-    /// `FlowStat` reconstruidos desde `link_graph` (no persistidos).
-    #[serde(skip, default)]
-    pub station_flows: crate::flow_stat::StationFlows,
-    /// RNG de partida para `GetVia` (`Random` de `OpenTTD`).
-    #[serde(skip, default = "default_cargo_rng")]
-    pub cargo_rng: crate::linkgraph_parity::Randomizer,
     /// GameScript-lite: story / goals / league (#43).
     #[serde(default)]
     pub gs: crate::gs::GsState,
-}
 
-fn default_cargo_rng() -> crate::linkgraph_parity::Randomizer {
-    crate::linkgraph_parity::Randomizer::new(1)
+    // ───── Campos efímeros (NO persistidos) ─────
+    /// Datos de runtime que no se guardan en el save JSON.
+    #[serde(skip)]
+    pub runtime: SimulationRuntime,
 }
 
 const fn default_true() -> bool {
@@ -507,24 +469,11 @@ impl GameState {
             climate: Climate::default(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
-            path_cache: crate::pathfinder::PathCache::default(),
-            pending_income_popups: Vec::new(),
-            pending_sim_events: crate::sim_events::SimEventQueue::new(),
-            industry_tile_dirty: Vec::new(),
-            landscape_tile_dirty: Vec::new(),
-            signal_tile_dirty: Vec::new(),
-            signal_globset: std::collections::HashSet::new(),
-            reservation_tile_dirty: Vec::new(),
-            reservation_tiles_active: std::collections::HashSet::new(),
             news: crate::news::NewsQueue::default(),
-            pending_news_events: Vec::new(),
             news_first_vehicle_running_sent: false,
             autoreplace_rules: Vec::new(),
             vehicle_groups: Vec::new(),
             shared_order_lists: Vec::new(),
-            news_advice_sent: std::collections::HashSet::new(),
-            news_last_purge_day: 0,
-            parity: None,
             subsidies: Vec::new(),
             next_subsidy_id: 1,
             disasters_enabled: true,
@@ -534,17 +483,14 @@ impl GameState {
             cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
-            shore_newgrf_sprites: Vec::new(),
-            catenary_newgrf_sprites: Vec::new(),
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,
             game_finished: false,
             link_graph: crate::link_graph::LinkGraphStats::default(),
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
-            station_flows: crate::flow_stat::StationFlows::default(),
-            cargo_rng: default_cargo_rng(),
             gs: crate::gs::GsState::default(),
+            runtime: SimulationRuntime::new(),
         }
     }
 
@@ -582,24 +528,11 @@ impl GameState {
             climate: Climate::default(),
             world_seed: 0,
             jgr_tunnels_from_footer: Vec::new(),
-            path_cache: crate::pathfinder::PathCache::default(),
-            pending_income_popups: Vec::new(),
-            pending_sim_events: crate::sim_events::SimEventQueue::new(),
-            industry_tile_dirty: Vec::new(),
-            landscape_tile_dirty: Vec::new(),
-            signal_tile_dirty: Vec::new(),
-            signal_globset: std::collections::HashSet::new(),
-            reservation_tile_dirty: Vec::new(),
-            reservation_tiles_active: std::collections::HashSet::new(),
             news: crate::news::NewsQueue::default(),
-            pending_news_events: Vec::new(),
             news_first_vehicle_running_sent: false,
             autoreplace_rules: Vec::new(),
             vehicle_groups: Vec::new(),
             shared_order_lists: Vec::new(),
-            news_advice_sent: std::collections::HashSet::new(),
-            news_last_purge_day: 0,
-            parity: None,
             subsidies: Vec::new(),
             next_subsidy_id: 1,
             disasters_enabled: true,
@@ -609,18 +542,24 @@ impl GameState {
             cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),
             newgrf_stack: crate::newgrf_config::default_vanilla_stack(),
-            shore_newgrf_sprites: Vec::new(),
-            catenary_newgrf_sprites: Vec::new(),
             signs: Vec::new(),
             next_sign_id: 1,
             bankruptcy_streak: 0,
             game_finished: false,
             link_graph: crate::link_graph::LinkGraphStats::default(),
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
-            station_flows: crate::flow_stat::StationFlows::default(),
-            cargo_rng: default_cargo_rng(),
             gs: crate::gs::GsState::default(),
+            runtime: SimulationRuntime::new(),
         }
+    }
+
+    /// Reconstruye datos efímeros tras cargar un save (caches, RNG, etc.).
+    ///
+    /// Llama este método después de deserializar desde JSON para inicializar
+    /// correctamente los campos de [`SimulationRuntime`].
+    pub fn hydrate_runtime(&mut self) {
+        self.runtime = SimulationRuntime::new();
+        self.rebuild_station_flows();
     }
 
     /// Reconstruye [`StationFlows`] con el pipeline `OpenTTD` (Demand + MCF1/2).
@@ -631,7 +570,7 @@ impl GameState {
         };
 
         if matches!(self.cargo_dist.distribution, DistributionType::Manual) {
-            self.station_flows = StationFlows::default();
+            self.runtime.station_flows = StationFlows::default();
             return;
         }
 
@@ -659,21 +598,22 @@ impl GameState {
                 }
             }
         }
-        self.station_flows = merged;
+        self.runtime.station_flows = merged;
     }
 
     /// Activa la traza de paridad: cada `step()` añade un registro por tick.
     ///
     /// La línea base para derivar eventos es el estado actual. Coste cero
-    /// mientras esté desactivada (`self.parity == None`).
+    /// mientras esté desactivada (`self.runtime.parity == None`).
     pub fn enable_parity_trace(&mut self) {
-        self.parity = Some(crate::parity::ParityTracer::with_baseline(self));
+        self.runtime.parity = Some(crate::parity::ParityTracer::with_baseline(self));
     }
 
     /// Extrae y vacía los registros de paridad acumulados (vacío si la traza
     /// está desactivada).
     pub fn take_parity_records(&mut self) -> Vec<crate::parity::TickRecord> {
-        self.parity
+        self.runtime
+            .parity
             .as_mut()
             .map(crate::parity::ParityTracer::drain_records)
             .unwrap_or_default()
@@ -704,7 +644,9 @@ impl GameState {
     ///
     /// Devuelve error si el texto no es JSON válido o no coincide el esquema.
     pub fn load_json(s: &str) -> Result<Self, serde_json::Error> {
-        serde_json::from_str(s)
+        let mut state: Self = serde_json::from_str(s)?;
+        state.hydrate_runtime();
+        Ok(state)
     }
 
     /// Enlaces wormhole JGR (`tile_n` ↔ `tile_s`) para pathfinding.

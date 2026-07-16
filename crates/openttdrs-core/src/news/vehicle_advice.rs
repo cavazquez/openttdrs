@@ -151,16 +151,17 @@ pub fn poll_vehicle_advice_news(state: &mut crate::GameState) {
         };
         let key = advice_key(v.id, advice);
         active_keys.insert(key);
-        if state.news_advice_sent.contains(&key) {
+        if state.runtime.news_advice_sent.contains(&key) {
             continue;
         }
         pending.push((v.id, v.current_order, v.pos, advice, key));
     }
     state
+        .runtime
         .news_advice_sent
         .retain(|key| active_keys.contains(key));
     for (vehicle_id, current_order, pos, advice, key) in pending {
         push_vehicle_advice_news(state, vehicle_id, current_order, pos, advice);
-        state.news_advice_sent.insert(key);
+        state.runtime.news_advice_sent.insert(key);
     }
 }

@@ -172,6 +172,7 @@ pub fn add_news_item(state: &mut crate::GameState, item: NewsItem) {
         state.news.items.pop_back();
     }
     state
+        .runtime
         .pending_news_events
         .push(PendingNewsEvent::ItemAdded { id });
 }
@@ -212,6 +213,7 @@ pub fn push_cargo_delivery_news(
     );
     if first_delivery {
         state
+            .runtime
             .pending_sim_events
             .push(crate::sim_events::SimEvent::NewsApplause);
     }
@@ -403,12 +405,12 @@ pub fn purge_old_news_items(state: &mut crate::GameState) {
 /// Purga mensual (cada 30 días de calendario) al estilo `RemoveOldNewsItems`.
 pub fn maybe_purge_old_news(state: &mut crate::GameState) {
     let day = calendar_day_index(state.tick);
-    if day == state.news_last_purge_day {
+    if day == state.runtime.news_last_purge_day {
         return;
     }
     if !day.is_multiple_of(30) {
         return;
     }
-    state.news_last_purge_day = day;
+    state.runtime.news_last_purge_day = day;
     purge_old_news_items(state);
 }

@@ -92,12 +92,14 @@ fn apply_monthly_interest_and_bankruptcy(state: &mut GameState) {
             state.economy = state.companies[i].economy;
             if interest > 0 {
                 state
+                    .runtime
                     .pending_sim_events
                     .push(crate::sim_events::SimEvent::LoanInterestPaid { amount: interest });
             }
             if economy::check_bankruptcy(money, max_loan) {
                 state.bankruptcy_streak = state.bankruptcy_streak.saturating_add(1);
                 state
+                    .runtime
                     .pending_sim_events
                     .push(crate::sim_events::SimEvent::BankruptcyWarning);
                 crate::news::push_bankruptcy_news(
@@ -146,7 +148,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                     state.world_seed,
                     tick,
                 );
-                state.industry_tile_dirty.extend(dirty);
+                state.runtime.industry_tile_dirty.extend(dirty);
             }
         } else {
             state.industries[i].produce(tick);
@@ -158,7 +160,7 @@ pub(super) fn produce_industries(state: &mut GameState, tick: u64) {
                     state.world_seed,
                     tick,
                 );
-                state.industry_tile_dirty.extend(dirty);
+                state.runtime.industry_tile_dirty.extend(dirty);
             }
         }
         let produced = u64::from(state.industries[i].stock.saturating_sub(before));
@@ -183,7 +185,7 @@ pub(super) fn grow_towns(state: &mut GameState, tick: u64) {
         &mut state.towns,
         tick,
     );
-    state.landscape_tile_dirty.extend(dirty);
+    state.runtime.landscape_tile_dirty.extend(dirty);
 }
 
 pub(super) fn age_vehicle_cargo(state: &mut GameState) {

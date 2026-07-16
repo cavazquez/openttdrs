@@ -263,9 +263,9 @@ fn vehicle_delivers_to_station() {
     assert_eq!(s.vehicles[0].cargo, 0);
     assert!(s.stations[0].income > 0);
     assert!(s.stats.cargo_income_earned > 0, "pago por entrega TTD");
-    assert!(!s.pending_income_popups.is_empty());
-    assert!(s.pending_income_popups.iter().any(|p| p.amount > 0));
-    assert!(s.pending_income_popups.iter().any(|p| p.at == spos));
+    assert!(!s.runtime.pending_income_popups.is_empty());
+    assert!(s.runtime.pending_income_popups.iter().any(|p| p.amount > 0));
+    assert!(s.runtime.pending_income_popups.iter().any(|p| p.at == spos));
 }
 
 #[test]

@@ -25,11 +25,13 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
     if result.is_ok() {
         if let Some((kind, at)) = construction_event_for(cmd) {
             state
+                .runtime
                 .pending_sim_events
                 .push(crate::sim_events::SimEvent::Construction { kind, at });
         }
         if let Some(at) = demolition_event_for(cmd) {
             state
+                .runtime
                 .pending_sim_events
                 .push(crate::sim_events::SimEvent::Demolition { at });
         }

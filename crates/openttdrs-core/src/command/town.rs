@@ -25,6 +25,7 @@ pub(crate) fn town_advertise(state: &mut GameState, town_id: u32) -> Result<(), 
     state.economy.money -= TOWN_ADVERTISE_COST;
     let delta = state.towns[idx].adjust_rating(TOWN_ADVERTISE_RATING_BOOST);
     state
+        .runtime
         .pending_sim_events
         .push(crate::sim_events::SimEvent::TownRatingChanged { town_id, delta });
     Ok(())
@@ -39,6 +40,7 @@ pub(crate) fn town_fund_buildings(state: &mut GameState, town_id: u32) -> Result
     let delta = state.towns[idx].adjust_rating(FUND_BUILDINGS_RATING_BOOST);
     crate::town::apply_fund_buildings_boost(&mut state.towns[idx]);
     state
+        .runtime
         .pending_sim_events
         .push(crate::sim_events::SimEvent::TownRatingChanged { town_id, delta });
     Ok(())

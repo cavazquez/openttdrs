@@ -36,6 +36,7 @@ pub mod newgrf_config;
 mod newgrf_palette_data;
 pub mod newgrf_sprites;
 pub mod newgrf_type_tables;
+pub mod newgrf_walk;
 pub mod news;
 pub mod ottdmap_extras;
 pub mod parity;
@@ -190,8 +191,9 @@ pub use game_state::IncomePopup;
 pub use game_state::{
     BRIDGE_BUILD_COST_PER_TILE, BUY_LAND_BASE_PRICE, CLEAR_TILE_COST, CompanyEconomy,
     DEPOT_BUILD_COST, ECONOMY_HISTORY_MONTHS, EconomyHistory, GameState, MonthlyEconomySample,
-    RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats, TERRAFORM_BASE_PRICE,
-    TERRAFORM_COST, TUNNEL_BUILD_COST_PER_TILE, WAYPOINT_BUILD_COST, company_net_value,
+    RAIL_BUILD_COST, ROAD_BUILD_COST, STATION_BUILD_COST, SimStats, SimulationRuntime,
+    TERRAFORM_BASE_PRICE, TERRAFORM_COST, TUNNEL_BUILD_COST_PER_TILE, WAYPOINT_BUILD_COST,
+    company_net_value,
 };
 pub use gs::{
     GsGoal, GsGoalKind, GsLeagueRow, GsState, GsStoryPage, league_rows, seed_gs_demo, tick_gs,
@@ -250,9 +252,9 @@ pub use newgrf_actions::{
     build_action0_roadtype_payload, build_action0_station_payload, build_action0_train_payload,
     build_grf_v2_with_action0_and_action8, collect_industry_tile_metas_from_grf,
     collect_roadtype_metas_from_grf, collect_station_metas_from_grf, collect_train_metas_from_grf,
-    default_newgrf_search_dirs, for_each_pseudo_payload, inspect_grf_bytes, inspect_grf_file,
-    parse_action0_header, parse_action0_industry_tile_meta, parse_action0_roadtype_meta,
-    parse_action0_station_meta, parse_action0_train_meta,
+    for_each_pseudo_payload, inspect_grf_bytes, inspect_grf_file, parse_action0_header,
+    parse_action0_industry_tile_meta, parse_action0_roadtype_meta, parse_action0_station_meta,
+    parse_action0_train_meta,
 };
 pub use newgrf_config::{
     GrfContainerVersion, GrfFileInfo, GrfParsed, GrfScanError, GrfStackIssue, MAX_NEWGRF_PARAMS,

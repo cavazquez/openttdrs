@@ -137,7 +137,7 @@ pub(crate) fn drain_news_events(
     news_prefs: Res<NewsDisplayPrefs>,
     time: Res<Time>,
 ) {
-    let events: Vec<_> = sim.state.pending_news_events.drain(..).collect();
+    let events: Vec<_> = sim.state.runtime.pending_news_events.drain(..).collect();
     for event in events {
         let PendingNewsEvent::ItemAdded { id } = event;
         let display = sim

@@ -41,12 +41,12 @@ fn discard_bootstrap_sim_events_on_enter(
     mut sim: ResMut<SimWorld>,
     mut pending: ResMut<PendingSimEvents>,
 ) {
-    sim.state.pending_sim_events.discard_all();
+    sim.state.runtime.pending_sim_events.discard_all();
     pending.0.clear();
 }
 
 fn drain_sim_events_from_core(mut sim: ResMut<SimWorld>, mut pending: ResMut<PendingSimEvents>) {
-    pending.0.extend(sim.state.pending_sim_events.drain());
+    pending.0.extend(sim.state.runtime.pending_sim_events.drain());
 }
 
 fn dispatch_sim_events(
@@ -220,11 +220,11 @@ mod tests {
             state: GameState::new(4, 4),
             ..Default::default()
         };
-        sim.state.pending_sim_events.push(SimEvent::Income {
+        sim.state.runtime.pending_sim_events.push(SimEvent::Income {
             amount: 100,
             at: TileCoord::new(1, 1),
         });
-        let drained = sim.state.pending_sim_events.drain();
+        let drained = sim.state.runtime.pending_sim_events.drain();
         assert_eq!(drained.len(), 1);
     }
 }

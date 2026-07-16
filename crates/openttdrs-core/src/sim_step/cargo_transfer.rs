@@ -163,11 +163,12 @@ pub(super) fn unload_vehicles(
                 c.cargo_income_earned += share.cast_unsigned();
             }
         }
-        state.pending_income_popups.push(crate::IncomePopup {
+        state.runtime.pending_income_popups.push(crate::IncomePopup {
             amount: payment,
             at: vpos,
         });
         state
+            .runtime
             .pending_sim_events
             .push(crate::sim_events::SimEvent::Income {
                 amount: payment,
@@ -347,12 +348,12 @@ fn try_load_from_industry(
     );
     packet.next_hop = crate::flow_stat::resolve_next_hop(
         state.cargo_dist.distribution,
-        &state.station_flows,
+        &state.runtime.station_flows,
         station_pos,
         output,
         station_pos,
         order_hop,
-        &mut state.cargo_rng,
+        &mut state.runtime.cargo_rng,
     );
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
     state.vehicles[vehicle_idx].cargo_packets.push(packet);
@@ -485,12 +486,12 @@ fn try_load_from_station_waiting_cargo(
         let origin = packet.first_station.unwrap_or(station_pos);
         packet.next_hop = crate::flow_stat::resolve_next_hop(
             distribution,
-            &state.station_flows,
+            &state.runtime.station_flows,
             station_pos,
             packet.cargo,
             origin,
             order_hop,
-            &mut state.cargo_rng,
+            &mut state.runtime.cargo_rng,
         );
     }
     let loaded_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();

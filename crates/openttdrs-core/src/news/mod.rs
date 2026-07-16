@@ -63,7 +63,7 @@ mod tests {
         assert_eq!(state.news.items.len(), 1);
         assert_eq!(state.news.items[0].headline, "Test");
         assert_eq!(
-            state.pending_news_events,
+            state.runtime.pending_news_events,
             vec![PendingNewsEvent::ItemAdded { id: 1 }]
         );
     }
@@ -128,7 +128,7 @@ mod tests {
         assert_eq!(state.news.items.len(), 1);
         state.vehicles[0].running = false;
         poll_vehicle_advice_news(&mut state);
-        assert!(state.news_advice_sent.is_empty());
+        assert!(state.runtime.news_advice_sent.is_empty());
         state.vehicles[0].running = true;
         poll_vehicle_advice_news(&mut state);
         assert_eq!(state.news.items.len(), 2);

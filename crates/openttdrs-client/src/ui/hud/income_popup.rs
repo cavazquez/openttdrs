@@ -18,7 +18,7 @@ pub(crate) fn spawn_income_popups(
     hud_font: Res<HudUiFont>,
     mut commands: Commands,
 ) {
-    let popups: Vec<_> = sim.state.pending_income_popups.drain(..).collect();
+    let popups: Vec<_> = sim.state.runtime.pending_income_popups.drain(..).collect();
     // SFX de ingreso vía SimEvent::Income (SimEventsPlugin), no pending_income_ping.
     let map = &sim.state.map;
     for popup in popups {
@@ -72,12 +72,12 @@ mod tests {
             state: GameState::new(4, 4),
             ..Default::default()
         };
-        sim.state.pending_income_popups.push(IncomePopup {
+        sim.state.runtime.pending_income_popups.push(IncomePopup {
             amount: 42,
             at: TileCoord::new(1, 1),
         });
-        assert_eq!(sim.state.pending_income_popups.len(), 1);
-        sim.state.pending_income_popups.drain(..).count();
-        assert!(sim.state.pending_income_popups.is_empty());
+        assert_eq!(sim.state.runtime.pending_income_popups.len(), 1);
+        sim.state.runtime.pending_income_popups.drain(..).count();
+        assert!(sim.state.runtime.pending_income_popups.is_empty());
     }
 }

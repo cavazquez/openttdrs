@@ -262,6 +262,7 @@ pub(in crate::command) fn place_rail_station_area(
         town::apply_station_build_rating_penalty(&mut state.towns, anchor)
     {
         state
+            .runtime
             .pending_sim_events
             .push(crate::sim_events::SimEvent::TownRatingChanged { town_id, delta });
     }
@@ -326,6 +327,7 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     state.economy.money -= STATION_BUILD_COST;
     if let Some((town_id, delta)) = town::apply_station_build_rating_penalty(&mut state.towns, c) {
         state
+            .runtime
             .pending_sim_events
             .push(crate::sim_events::SimEvent::TownRatingChanged { town_id, delta });
     }

@@ -1,10 +1,8 @@
 //! UI de información de tile seleccionado y menú de construcción (I6).
 
-#[path = "ui_ingame_lifecycle.rs"]
-mod ingame_lifecycle;
-
 use bevy::prelude::*;
 
+mod lifecycle;
 mod plugins;
 
 mod ai_settings_window;
@@ -72,7 +70,7 @@ impl Plugin for ClientUiPlugin {
         app.add_plugins((
             floating_window::FloatingWindowPlugin,
             windows_shot::WindowsShotPlugin,
-            ingame_lifecycle::InGameLifecyclePlugin,
+            lifecycle::InGameLifecyclePlugin,
             plugins::MainMenuUiPlugin,
             plugins::HudUiPlugin,
             plugins::ToolbarUiPlugin,

@@ -10,7 +10,7 @@
 5. [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) — hallazgos técnicos fijos y comandos
 6. [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) — filosofía I0–I8
 7. [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) — arquitectura red v1 (listen-server + dedicated)
-8. [adr/0002-determinismo-tick-referencia.md](adr/0002-determinismo-tick-referencia.md) — tick 5 Hz, hash, pin OpenTTD
+8. [adr/0003-tick-37hz-openttd.md](adr/0003-tick-37hz-openttd.md) — tick ~37 Hz; [0002](adr/0002-determinismo-tick-referencia.md) hash/pin (tick histórico)
 
 **Issues de backlog:** [github.com/cavazquez/openttdrs/issues](https://github.com/cavazquez/openttdrs/issues) (abiertas desde los ROADMAP, jul 2026).
 
@@ -23,7 +23,8 @@
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Capas core → Bevy → net (#117) |
 | [adr/README.md](adr/README.md) | Índice + plantilla de ADRs |
 | [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) | ADR: lockstep, listen-server + dedicated headless, sin host migration v1 |
-| [adr/0002-determinismo-tick-referencia.md](adr/0002-determinismo-tick-referencia.md) | ADR: determinismo, tick 5 Hz, pin OpenTTD |
+| [adr/0003-tick-37hz-openttd.md](adr/0003-tick-37hz-openttd.md) | ADR: tick ~37 Hz (supersede tick de 0002) |
+| [adr/0002-determinismo-tick-referencia.md](adr/0002-determinismo-tick-referencia.md) | ADR: determinismo + pin OpenTTD (tick histórico) |
 | Crate `openttdrs-net` | TCP I8; bin `openttdrs-dedicated`; cliente `--server` / `--client` |
 | [INVENTARIO_HASHMAP_DETERMINISMO.md](INVENTARIO_HASHMAP_DETERMINISMO.md) | #115: HashMap/HashSet vs hash canónico |
 | [INVENTARIO_MUTACIONES_CLIENTE.md](INVENTARIO_MUTACIONES_CLIENTE.md) | #114: mutaciones `SimWorld` fuera de `Command` |

@@ -25,14 +25,14 @@ los módulos Rust, con el mecanismo de validación disponible para cada pieza.
 | Frame exacto de parada en bahía | `_road_stop_stop_frame` (`roadveh_movement.h:1087-1093`, valores 11–20) + chequeo `roadveh_cmd.cpp:1496-1502` | `BayStationTable::stop` por tabla (copiado del upstream); el vehículo se detiene y carga en ese punto | golden verifica valor y que sea el vértice del lazo |
 | `StationType` en `m6` (bits 3–6) | `station_map.h` | `station.rs::station_type_from_m6`, `stop_kind_from_m6` | tests `station.rs` |
 | Orientación de la boca de la parada (`m5 & 3`) | `station_map.h` (`GetBayRoadStopDir`) | `command/transport/station.rs::road_stop_m5` + `road_stop_approach_tile` | tests de comandos |
-| Carga/descarga gradual por tick | `economy.cpp:1609` (`LoadUnloadVehicle`) | `sim_step.rs::load_vehicles` (instantánea) | divergencia `instant_loading` |
+| Carga/descarga gradual por tick | `economy.cpp:1609` (`LoadUnloadVehicle`) | `sim_step/cargo_transfer.rs` + `load_unload_speed` (gradual) | regresión `instant_loading` |
 | Cobertura de estación (radio) | `station_cmd.cpp` (catchment) | `station.rs` (`STATION_COVERAGE_RADIUS = 4`, cuadrado) | tests `station.rs` |
 
 ## Tiempo
 
 | Concepto OpenTTD | Referencia C++ | Equivalente Rust | Validación |
 |---|---|---|---|
-| 74 ticks/día, ~33,3 ticks/s | `timer/timer_game_tick.h:77` | `GameTick` + cliente a 5 Hz (`simulation.rs:12`), un día ≠ mismo tiempo real | divergencia `tick_rate` |
+| 74 ticks/día, ~37 ticks/s (27 ms) | `timer/timer_game_tick.h` | `OTTD_MILLISECONDS_PER_TICK` / `SIM_TICKS_PER_SECOND` + cliente `SIM_TICK_HZ` | ADR 0003; `tick_rate` resuelto |
 | `Vehicle::frame` avanza N pasos por tick según `GetAdvanceSpeed` | `roadveh_cmd.cpp` (`RoadVehController`) | `Vehicle::step` suma `progress_step` por tick (puede cruzar tesela en bucle) | tests `vehicle.rs` |
 
 ## Trazabilidad (nuevo en Fase 1)

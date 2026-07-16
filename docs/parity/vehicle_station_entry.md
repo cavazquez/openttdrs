@@ -41,7 +41,7 @@ curvas de 90° y bahías `TruckStop` en ambos extremos.
 | 169 | `loading_started` + `loading_finished` + `order_advanced` | carga 0→20 **en un solo tick** (OpenTTD: gradual — pendiente) |
 | 170–178 | `depart_turn_started` … `depart_turn_ended` | media vuelta animada dentro de la bahía |
 | 238, 277 | curvas de vuelta | con penalización −25 % en cada giro |
-| 315–316 | `station_entry` + `unloading_started/finished` | descarga (instantánea, pendiente) dentro de la bahía destino |
+| 315–316 | `station_entry` + `unloading_started/finished` | descarga gradual dentro de la bahía destino |
 | 462–463 | segundo ciclo de carga | el ciclo es estable y determinístico |
 
 ## Qué divergencia del reporte explica cada diferencia visual
@@ -50,8 +50,8 @@ curvas de 90° y bahías `TruckStop` en ambos extremos.
 |---|---|---|
 | No frena en las curvas (48 km/h constantes vs 48→33→31) | `curve_speed_penalty` | **CORREGIDA en Fase 2**: `Vehicle::set_direction_with_curve_penalty` aplica −25 % en cada giro (ticks 90/130/238/277 de la traza: 96→72) |
 | Se detiene fuera de la dársena | `bay_stop_position` | **CORREGIDA en Fase 2**: el destino es la tesela de la bahía; carga con el camión en (4,5). El render sigue las tablas exactas `_rv_station_left_*` (entrada por la boca, lazo, parada en el stop frame 11–20 y salida), validadas punto a punto por el golden |
-| La pausa de carga parece un frenazo inmediato | `instant_loading` — carga 0→20 en un tick, sin fase de frenado dentro de la bahía | Pendiente (Fase 3) |
-| Tirones / baja fluidez general | `tick_rate` — sim a 5 Hz con ~51 unidades de progreso por tick; OpenTTD mueve píxeles a ~33 Hz | Pendiente — ver decisión en `docs/parity/tick_rate_decision.md` |
+| La pausa de carga parece un frenazo inmediato | `instant_loading` — ya gradual por tick (`load_unload_speed`) | Resuelto (regresión en reportes) |
+| Tirones / baja fluidez general | `tick_rate` — sim ~37 Hz, `REFERENCE_PROGRESS_STEP=112` | Resuelto — ver `docs/parity/tick_rate_decision.md` / ADR 0003 |
 | Sprite gira tarde en las curvas | corregido en Fase 1: el selector de textura ahora usa la pose extrapolada (`render/vehicles.rs::for_vehicle`); antes usaba `v.render_direction()` lógico | test `sprite_selection_uses_extrapolated_pose_not_logical_direction`; verificable con `OPENTTDRS_RENDER_TRACE` |
 
 ## Cómo verificar la parte visual (render vs sim)
@@ -62,5 +62,5 @@ OPENTTDRS_RENDER_TRACE=/tmp/render_trace.csv cargo run -p openttdrs-client
 
 El CSV registra por frame: pose lógica (tesela + progress del último tick de
 sim), pose extrapolada (lo que se dibuja), `tick_alpha` y `sprite_dir`. Si la
-columna extrapolada avanza suave mientras la lógica salta cada 200 ms, el
-problema restante es de simulación (tick de 5 Hz), no de interpolación.
+columna extrapolada avanza suave mientras la lógica salta cada ~27 ms, la
+extrapolación solo suaviza el render; el tick lógico ya está a ~37 Hz.

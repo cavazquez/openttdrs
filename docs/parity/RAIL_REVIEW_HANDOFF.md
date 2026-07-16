@@ -48,9 +48,8 @@ independiente del diseño. Riesgos que una IA avanzada debe auditar:
 3. **Decisiones documentadas ≠ paridad** — ENTRY/EXIT/COMBO degradados a BLOCK,
    PBS excluido, subcoordenadas en eje central, túnel sin ocultar: son
    **decisiones conscientes**, no equivalencia con OpenTTD.
-4. **Tick rate 5 Hz** — Toda comparación absoluta de velocidad/timing es
-   inválida; la revisión debe usar unidades relativas o explicitar el sesgo
-   (`tick_rate_decision.md`).
+4. **Tick rate ~37 Hz** — Alineado con OpenTTD (ADR 0003); la revisión sigue
+   debiendo explicitar divergencias de comportamiento (`tick_rate_decision.md`).
 5. **Id compartido camión/tren** — Corregido en Rail 4 (`trace_has_train` usa
    `rail.is_some()`), pero conviene verificar que ningún otro chequeo asuma
    `vehicle.id == 1` como tren.
@@ -182,7 +181,7 @@ intencionales:
 
 | Id | Motivo |
 |----|--------|
-| `tick_rate` | Sim a 5 Hz por decisión de producto |
+| `tick_rate` | Resuelto: sim ~37 Hz (ADR 0003) |
 | `instant_loading` | Carga en un tick (carretera y tren) |
 | `train_diagonal_subcoord_approximation` | Render en eje central, no `_vehicle_subcoord` completo |
 | PBS / presignals reales | Fuera de alcance Rail 0–4 |

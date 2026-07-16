@@ -26,7 +26,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 | #109 pin OpenTTD | ✅ | `docs/parity/openttd-reference.json` + fetch por SHA |
 | #110 oráculo independiente | ✅ | Export C++ 15.3; `road_bits_hash` alineado (`SLV_ROAD_TYPES`) |
 | #119 tablas generadas | ✅ | `generated_tables_manifest.json` + check pilots |
-| #125 docs tick/carga | ⬜ | Idealmente tras #109 |
+| #125 docs tick/carga | ✅ | Informes regenerados + ADR 0003 (~37 Hz) |
 
 ### Fase 1 — Gobierno
 
@@ -112,4 +112,3 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 1. Host migration post-v1 (fuera de ADR 0001).
 2. Regenerar pilots OpenGFX con drift (house_draw / vehicle_gfx) en PR de datos.
-3. Docs tick/carga gradual (#125).

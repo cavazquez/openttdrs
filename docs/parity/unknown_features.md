@@ -27,9 +27,9 @@ vehículos de carretera.
 4. **Retardo de un frame por dirección de giro** — `roadveh_cmd.cpp:1483-1487`:
    en curvas el vehículo «pierde» un frame extra por cada cambio de dirección
    (la curva corta de 8 frames pasa a 10). Afecta el timing en esquinas.
-5. **Carga/descarga gradual** — `economy.cpp:1609` (`LoadUnloadVehicle`): mueve
-   cargo por tick con `load_amount` del motor; hoy la sim carga la capacidad
-   completa en un tick.
+5. **Carga/descarga gradual (hecho)** — `economy.cpp:1609` (`LoadUnloadVehicle`):
+   la sim ya transfiere por tick (`load_unload_speed` + packets). Queda afinar
+   cantidades frente a tablas NewGRF del motor.
 
 ## Prioridad media
 

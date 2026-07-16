@@ -7,7 +7,8 @@ Decisiones con alternativas descartadas. **Inmutables** una vez aceptadas: si ca
 | ADR | Título | Estado |
 |-----|--------|--------|
 | [0001](0001-multiplayer-v1.md) | Multiplayer v1: listen-server + dedicated | aceptada |
-| [0002](0002-determinismo-tick-referencia.md) | Determinismo, tick 5 Hz y pin OpenTTD | aceptada |
+| [0002](0002-determinismo-tick-referencia.md) | Determinismo y pin OpenTTD (tick 5 Hz obsoleto) | supersedida parcialmente por 0003 |
+| [0003](0003-tick-37hz-openttd.md) | Tick ~37 Hz alineado con OpenTTD | aceptada |
 
 ## Plantilla
 

@@ -1,78 +1,38 @@
-# Decisión: tick de simulación a 5 Hz frente a ~33,3 Hz de OpenTTD
+# Decisión: tick de simulación alineado con OpenTTD (~37 Hz)
 
-Estado: **decidido — se mantiene 5 Hz en la Fase 2**, con extrapolación de
-render para la fluidez y unidades relativas para la paridad. Revisable cuando
-el resto de divergencias de comportamiento estén cerradas.
+Estado: **vigente — sim a ~37 Hz** (`OTTD_MILLISECONDS_PER_TICK = 27`,
+`SIM_TICKS_PER_SECOND ≈ 37.04`) con `REFERENCE_PROGRESS_STEP = 112`.
 
-ADR canónica: [adr/0002-determinismo-tick-referencia.md](../adr/0002-determinismo-tick-referencia.md).
+ADR canónica: [adr/0003-tick-37hz-openttd.md](../adr/0003-tick-37hz-openttd.md)
+(supersede el punto de tick de [adr/0002](../adr/0002-determinismo-tick-referencia.md)).
 
-## Los dos modelos
+## Los dos modelos (hoy alineados en frecuencia)
 
 | | OpenTTD | openttdrs |
 |---|---|---|
-| Frecuencia del tick | ~33,3 Hz (30 ms/tick, 74 ticks/día — `timer/timer_game_tick.h:77`) | 5 Hz (`openttdrs-client/src/simulation.rs::SIM_TICK_HZ`) |
-| Avance por tick | `frame` 0–15 por entrada de tabla; 1 frame ≈ 1 paso de píxel (`GetAdvanceSpeed`) | `progress` 0–255 lineal por tesela; `REFERENCE_PROGRESS_STEP = 51` (~5 ticks/tesela a velocidad de crucero) |
-| Fluidez visual | nativa (la sim ya corre a frecuencia de animación) | extrapolación entre ticks en el cliente (`extrapolate_vehicle_pose` + `tick_alpha`) |
+| Frecuencia del tick | ~37 Hz (27 ms/tick, 74 ticks/día — `timer/timer_game_tick.h`) | `SIM_TICKS_PER_SECOND = 1000/27` (`economy/time.rs`); cliente `SIM_TICK_HZ` |
+| Avance por tick | `GetAdvanceSpeed` / `GetAdvanceDistance` (`vehicle_base.h`) | `progress` 0–255; `REFERENCE_PROGRESS_STEP = 112` (`engine/physics.rs`) |
+| Fluidez visual | nativa | extrapolación entre ticks (`extrapolate_vehicle_pose` + `tick_alpha`) |
 
-Ambos modelos usan la misma aritmética de velocidad (AM_ORIGINAL portada tal
-cual: `update_road_speed`, `progress_step_for_speed`), así que la *proporción*
-de avance por unidad de tiempo simulado coincide; lo que difiere es la
-granularidad temporal.
+## Historia (ya no vigente)
 
-## Por qué se mantiene 5 Hz (por ahora)
+Hasta la Fase 2 temprana la sim corría a baja frecuencia (~cinco ticks/s) con
+paso sub-tesela reducido (~51) para abaratar CPU y medir paridad en unidades
+relativas. Esa decisión quedó obsoleta al alinear el reloj con OpenTTD; no
+debe citarse como estado actual.
 
-1. **La paridad que buscamos hoy es de comportamiento, no de timing absoluto.**
-   Orden de eventos, teselas recorridas, velocidades relativas, puntos de
-   parada y estados: todo eso se compara bien en unidades relativas
-   (ticks/tesela, % de velocidad) y así están escritos el runner, el
-   comparador y los golden tests.
-2. **Cambiar a 33,3 Hz ahora invalidaría toda la evidencia acumulada** (trazas,
-   timelines documentadas, tests con presupuestos de ticks) mientras aún hay
-   divergencias de comportamiento abiertas (`instant_loading`, trayectorias
-   `_rv_station_*` exactas). Primero cerrar comportamiento, después escalar
-   tiempo.
-3. **El coste visual ya está mitigado**: el cliente extrapola la pose entre
-   ticks y el selector de sprites usa la pose extrapolada (Fase 1), de modo que
-   la fluidez percibida no depende de la frecuencia del tick lógico.
-4. **Costo de CPU**: 5 Hz mantiene la sim barata en mapas grandes; subir a
-   33,3 Hz multiplica ~6,7× el trabajo por segundo sin ganancia de paridad de
-   comportamiento.
+## Qué sigue siendo distinto
 
-## Qué NO se puede comparar mientras tanto (asumido)
-
-- Duraciones absolutas (un día de juego no dura lo mismo en tiempo real).
-- Timing fino intra-tesela: OpenTTD resuelve 16 frames por entrada de tabla;
-  aquí una tesela son ~5 ticks. Efectos de 1–2 frames de OpenTTD (p. ej. el
-  retardo extra por giro de `roadveh_cmd.cpp:1483-1487`) se aproximan o se
-  posponen: a 5 Hz un «frame perdido» equivaldría a ~0,2 s visibles, peor que
-  omitirlo.
-- Cualquier diff tick a tick contra una traza capturada de OpenTTD real; el
-  comparador (`parity_diff`) solo sirve entre corridas de openttdrs.
-
-## Criterios para revisar la decisión
-
-Migrar la sim a ~33,3 Hz (o a un múltiplo con `frame` 0–15 como en el
-original) cuando se cumpla alguna de estas condiciones:
-
-1. Se quiera validar contra **trazas reales de OpenTTD** (nivel 5 de madurez en
-   `status.md`): ahí el eje temporal debe coincidir.
-2. Se quiera que la **sim** avance las trayectorias `_rv_station_*` frame a
-   frame como el original. En el render ya están portadas exactas
-   (`road_movement.rs::bay_station_table`, remuestreadas sobre `progress`
-   0–255), pero la sim sigue tratando la bahía como una tesela lineal.
-3. La extrapolación de render deje de ser suficiente (p. ej. adelantamientos o
-   seguimiento entre vehículos, que necesitan resolución temporal fina en la
-   propia sim).
-
-La migración prevista: mantener las fórmulas ya validadas (son las mismas),
-cambiar `SIM_TICK_HZ` a 33,3, recalibrar `REFERENCE_PROGRESS_STEP` (÷6,7) y
-regenerar los golden de timing. El diseño actual concentra la constante en un
-único punto (`engine.rs` + `simulation.rs`) para que ese cambio sea acotado.
+- Trazas tick-a-tick contra un binario OpenTTD real aún no son el nivel de
+  madurez 5 (`status.md`): hay divergencias de comportamiento abiertas
+  (p. ej. subcoordenadas diagonales rail).
+- Carga/descarga es **gradual** por tick (`load_unload_speed` + packets);
+  la divergencia `instant_loading` quedó como chequeo de regresión.
 
 ## Referencias
 
-- `OpenTTD/src/timer/timer_game_tick.h:77` — 74 ticks/día.
-- `openttdrs/crates/openttdrs-client/src/simulation.rs` — `SIM_TICK_HZ = 5.0`.
-- `openttdrs/crates/openttdrs-core/src/engine.rs` — `REFERENCE_PROGRESS_STEP = 51`.
-- `docs/parity/divergences_found.md` — divergencia `tick_rate` (CONFIRMADA, aceptada).
-- `docs/parity/status.md` — fila «Tick lógico».
+- `OpenTTD/src/timer/timer_game_tick.h` — 74 ticks/día, ~27 ms/tick.
+- `openttdrs/crates/openttdrs-core/src/economy/time.rs` — `OTTD_MILLISECONDS_PER_TICK`, `SIM_TICKS_PER_SECOND`.
+- `openttdrs/crates/openttdrs-core/src/engine/physics.rs` — `REFERENCE_PROGRESS_STEP = 112`.
+- `openttdrs/crates/openttdrs-client/src/simulation.rs` — `SIM_TICK_HZ`.
+- Informes regenerados: `./scripts/regenerate_parity_reports.sh`.

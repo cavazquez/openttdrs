@@ -15,6 +15,7 @@
 #   ./scripts/check.sh build  # cargo build --workspace
 #   ./scripts/check.sh doctor # deps de entorno (delegado a scripts/doctor.sh)
 #   ./scripts/check.sh bench  # smoke Criterion (#116; no forma parte de `ci`)
+#   ./scripts/check.sh parity-docs  # frescura docs tick/carga (#125)
 #
 # Excepciones documentadas (solo en GitHub Actions, no en `ci` local):
 #   - rustdoc (`cargo doc -D warnings`) — #103
@@ -162,6 +163,12 @@ do_bench() {
     info "Bench smoke OK ✓ (baseline completo: ./scripts/bench_baseline.sh)"
 }
 
+do_parity_docs() {
+    info "Frescura docs de paridad (#125)..."
+    ./scripts/check_parity_docs_fresh.sh
+    info "parity-docs OK ✓"
+}
+
 do_all() {
     do_fmt
     do_lint
@@ -210,10 +217,11 @@ case "${1:-all}" in
     audit)       do_audit ;;
     doctor)      do_doctor ;;
     bench)       do_bench ;;
+    parity-docs) do_parity_docs ;;
     ci)          do_ci ;;
     all)         do_all ;;
     *)
-        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|ci-python|generated-tables|generated-tables-ci|openttd-ref|snapshot-oracle|audit|cov|build|doctor|bench|ci|all}"
+        echo "Uso: $0 {fmt|fmt-check|lint|test|tnbp|golden|py|ci-python|generated-tables|generated-tables-ci|openttd-ref|snapshot-oracle|audit|cov|build|doctor|bench|parity-docs|ci|all}"
         exit 1
         ;;
 esac

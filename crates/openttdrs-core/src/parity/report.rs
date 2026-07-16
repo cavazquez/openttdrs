@@ -148,12 +148,14 @@ fn check_bay_stop_position(records: &[TickRecord]) -> KnownDivergence {
     }
 }
 
-/// Divergencia 3: en `OpenTTD` la carga/descarga es gradual (por tick, en
-/// `LoadUnloadVehicle`); en la sim Rust es instantánea (un tick).
+/// Divergencia 3: carga/descarga instantánea (mismo tick start+finish).
+/// Regresión: la sim ya transfiere por tick (`load_unload_speed` + packets).
 fn check_instant_loading(records: &[TickRecord]) -> KnownDivergence {
     let vehicle = TRUCK_BAY_VEHICLE_ID;
     let mut evidence = String::new();
     let mut detected = false;
+    let mut started_ticks = 0_u32;
+    let mut finished_ticks = 0_u32;
     for r in records {
         let started = r.events.iter().any(|e| {
             matches!(e, ParityEvent::LoadingStarted { .. }) && e.vehicle() == Some(vehicle)
@@ -161,6 +163,12 @@ fn check_instant_loading(records: &[TickRecord]) -> KnownDivergence {
         let finished = r.events.iter().any(|e| {
             matches!(e, ParityEvent::LoadingFinished { .. }) && e.vehicle() == Some(vehicle)
         });
+        if started {
+            started_ticks = started_ticks.saturating_add(1);
+        }
+        if finished {
+            finished_ticks = finished_ticks.saturating_add(1);
+        }
         if started && finished {
             detected = true;
             let _ = writeln!(
@@ -171,7 +179,14 @@ fn check_instant_loading(records: &[TickRecord]) -> KnownDivergence {
         }
     }
     if evidence.is_empty() {
-        evidence.push_str("- la traza no contiene eventos de carga del camión\n");
+        if started_ticks > 0 || finished_ticks > 0 {
+            let _ = writeln!(
+                evidence,
+                "- transferencia gradual: {started_ticks}× `loading_started`, {finished_ticks}× `loading_finished` (no en el mismo tick)"
+            );
+        } else {
+            evidence.push_str("- la traza no contiene eventos de carga del camión\n");
+        }
     }
     KnownDivergence {
         id: "instant_loading",
@@ -179,7 +194,7 @@ fn check_instant_loading(records: &[TickRecord]) -> KnownDivergence {
         detected,
         evidence,
         openttd_ref: "OpenTTD/src/economy.cpp:1609 (`LoadUnloadVehicle`, transfiere por tick)",
-        rust_ref: "openttdrs/crates/openttdrs-core/src/sim_step.rs (`load_unload_speed` + packets)",
+        rust_ref: "openttdrs/crates/openttdrs-core/src/sim_step/cargo_transfer.rs (`load_unload_speed` + packets)",
         fix_phase2: "IMPLEMENTADA (Fase 2): transferencia gradual por tick según `load_unload_speed`; packets con origen/edad",
     }
 }
@@ -193,7 +208,7 @@ fn check_tick_rate() -> KnownDivergence {
         detected: false,
         evidence: "- `SIM_TICKS_PER_SECOND` = 1000/27 (`timer_game_tick.h`); `REFERENCE_PROGRESS_STEP` = 112 (`GetAdvanceSpeed`)\n".to_string(),
         openttd_ref: "OpenTTD/src/timer/timer_game_tick.h:77 (`DAY_TICKS = 74`, ~27 ms/tick)",
-        rust_ref: "openttdrs/crates/openttdrs-core/src/economy.rs (`SIM_TICKS_PER_SECOND`) y engine.rs (`REFERENCE_PROGRESS_STEP`)",
+        rust_ref: "openttdrs/crates/openttdrs-core/src/economy/time.rs (`SIM_TICKS_PER_SECOND`) y engine/physics.rs (`REFERENCE_PROGRESS_STEP`)",
         fix_phase2: "IMPLEMENTADO: sim a ~37 Hz y paso sub-tesela según `GetAdvanceSpeed`/`GetAdvanceDistance`.",
     }
 }
@@ -582,11 +597,17 @@ pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> 
 /// Markdown para `docs/parity/divergences_found.md`.
 #[must_use]
 pub fn divergences_markdown(divergences: &[KnownDivergence]) -> String {
+    use crate::{OTTD_MILLISECONDS_PER_TICK, REFERENCE_PROGRESS_STEP, SIM_TICKS_PER_SECOND};
+
     let mut out = String::new();
     out.push_str("# Divergencias conocidas openttdrs ↔ OpenTTD\n\n");
     out.push_str("Archivo generado por `parity_runner --divergence-report`.\n");
     out.push_str(
         "Estas divergencias son conocidas y NO rompen CI; su corrección es parte de las fases de paridad.\n\n",
+    );
+    let _ = writeln!(
+        out,
+        "Metadatos de generación:\n\n- Regenerar: `./scripts/regenerate_parity_reports.sh`\n- Tick: `OTTD_MILLISECONDS_PER_TICK={OTTD_MILLISECONDS_PER_TICK}` (~{SIM_TICKS_PER_SECOND:.2} Hz); `REFERENCE_PROGRESS_STEP={REFERENCE_PROGRESS_STEP}`\n- Pin OpenTTD: [`openttd-reference.json`](openttd-reference.json) (tag/SHA del manifiesto)\n"
     );
     for d in divergences {
         let status = if d.detected {

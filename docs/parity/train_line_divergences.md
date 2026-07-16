@@ -3,6 +3,13 @@
 Archivo generado por `parity_runner --divergence-report`.
 Estas divergencias son conocidas y NO rompen CI; su corrección es parte de las fases de paridad.
 
+Metadatos de generación:
+
+- Regenerar: `./scripts/regenerate_parity_reports.sh`
+- Tick: `OTTD_MILLISECONDS_PER_TICK=27` (~37.04 Hz); `REFERENCE_PROGRESS_STEP=112`
+- Pin OpenTTD: [`openttd-reference.json`](openttd-reference.json) (tag **15.3**, `14ec60f24854`)
+- openttdrs commit: `1792e0c`
+
 ## Falta la penalización de velocidad del 25 % en curvas (`curve_speed_penalty`)
 
 Estado: **no observada en esta traza**
@@ -21,7 +28,7 @@ Estado: **no observada en esta traza**
 
 Evidencia medida:
 
-- tick 213: carga iniciada con el camión en TileCoord { x: 1, y: 6 } (bahía = TileCoord { x: 4, y: 5 }, acceso = TileCoord { x: 4, y: 6 })
+- tick 145: carga iniciada con el camión en TileCoord { x: 1, y: 6 } (bahía = TileCoord { x: 4, y: 5 }, acceso = TileCoord { x: 4, y: 6 })
 
 - Referencia OpenTTD: `OpenTTD/src/table/roadveh_movement.h:1087-1093 (`_road_stop_stop_frame`, frames 11-20) y OpenTTD/src/roadveh_cmd.cpp:1496-1502 (chequeo del frame de parada)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/station.rs (`resolve_order_destination` → tesela de la bahía; `is_connected_bay_road_stop`)`
@@ -29,27 +36,27 @@ Evidencia medida:
 
 ## Carga/descarga instantánea (OpenTTD la hace gradual por tick) (`instant_loading`)
 
-Estado: **CONFIRMADA en la traza**
+Estado: **no observada en esta traza**
 
 Evidencia medida:
 
-- tick 213: `loading_started` y `loading_finished` en el mismo tick (carga instantánea)
+- transferencia gradual: 1× `loading_started`, 1× `loading_finished` (no en el mismo tick)
 
 - Referencia OpenTTD: `OpenTTD/src/economy.cpp:1609 (`LoadUnloadVehicle`, transfiere por tick)`
-- Referencia Rust: `openttdrs/crates/openttdrs-core/src/sim_step.rs:205-241 (`try_load_from_industry` carga la capacidad completa en un tick)`
-- Fase 2: modelar carga gradual con velocidad de carga por tipo de cargo
+- Referencia Rust: `openttdrs/crates/openttdrs-core/src/sim_step/cargo_transfer.rs (`load_unload_speed` + packets)`
+- Fase 2: IMPLEMENTADA (Fase 2): transferencia gradual por tick según `load_unload_speed`; packets con origen/edad
 
-## Tick de simulación a 5 Hz frente a ~33,3 Hz de OpenTTD (`tick_rate`)
+## Tick de simulación alineado con OpenTTD (~37 Hz) (`tick_rate`)
 
-Estado: **CONFIRMADA en la traza**
+Estado: **no observada en esta traza**
 
 Evidencia medida:
 
-- constante: `SIM_TICK_HZ = 5.0` con `REFERENCE_PROGRESS_STEP = 51` (5 ticks/tesela); OpenTTD avanza `frame` cada tick a 74 ticks/día
+- `SIM_TICKS_PER_SECOND` = 1000/27 (`timer_game_tick.h`); `REFERENCE_PROGRESS_STEP` = 112 (`GetAdvanceSpeed`)
 
-- Referencia OpenTTD: `OpenTTD/src/timer/timer_game_tick.h:77 (`DAY_TICKS = 74`)`
-- Referencia Rust: `openttdrs/crates/openttdrs-client/src/simulation.rs:12 (`SIM_TICK_HZ = 5.0`) y openttdrs/crates/openttdrs-core/src/engine.rs:71 (`REFERENCE_PROGRESS_STEP = 51`)`
-- Fase 2: DECIDIDO (Fase 2): se mantiene 5 Hz y la paridad se valida en unidades relativas; criterios de revisión en docs/parity/tick_rate_decision.md
+- Referencia OpenTTD: `OpenTTD/src/timer/timer_game_tick.h:77 (`DAY_TICKS = 74`, ~27 ms/tick)`
+- Referencia Rust: `openttdrs/crates/openttdrs-core/src/economy/time.rs (`SIM_TICKS_PER_SECOND`) y engine/physics.rs (`REFERENCE_PROGRESS_STEP`)`
+- Fase 2: IMPLEMENTADO: sim a ~37 Hz y paso sub-tesela según `GetAdvanceSpeed`/`GetAdvanceDistance`.
 
 ## El tren acelera con la fórmula de carretera (ROAD_ACCEL_ORIGINAL) en lugar de power/weight·4 (`train_road_acceleration`)
 
@@ -69,12 +76,10 @@ Estado: **no observada en esta traza**
 
 Evidencia medida:
 
-- tick 88: giro dir 1→3; velocidad 16→8 (OpenTTD esperaría ≤ 12)
-- tick 138: giro dir 3→1; velocidad 17→9 (OpenTTD esperaría ≤ 13)
-- tick 215: giro dir 1→5; velocidad 22→11 (OpenTTD esperaría ≤ 17)
-- tick 436: giro dir 5→3; velocidad 52→27 (OpenTTD esperaría ≤ 39)
-- tick 493: giro dir 3→7; velocidad 37→19 (OpenTTD esperaría ≤ 28)
-- tick 598: giro dir 7→1; velocidad 38→19 (OpenTTD esperaría ≤ 29)
+- tick 59: giro dir 1→3; velocidad 10→6 (OpenTTD esperaría ≤ 8)
+- tick 91: giro dir 3→1; velocidad 11→6 (OpenTTD esperaría ≤ 9)
+- tick 156: giro dir 1→5; velocidad 1→1 (OpenTTD esperaría ≤ 1)
+- tick 321: giro dir 5→3; velocidad 32→16 (OpenTTD esperaría ≤ 24)
 
 - Referencia OpenTTD: `OpenTTD/src/train_cmd.cpp:3147-3152 (`_accel_slowdown`), :3564-3568 (aplicación en locomotora)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/vehicle.rs (`set_direction_with_curve_penalty` para `VehicleKind::Train`)`
@@ -86,7 +91,7 @@ Estado: **no observada en esta traza**
 
 Evidencia medida:
 
-- tick 213: carga iniciada en TileCoord { x: 1, y: 6 } (at_platform=true)
+- tick 145: carga iniciada en TileCoord { x: 1, y: 6 } (at_platform=true)
 
 - Referencia OpenTTD: `OpenTTD/src/train_cmd.cpp:266-305 (`GetTrainStopLocation`) y :3097-3123 (`TrainEnterStation`)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/station.rs (`resolve_order_destination` → `rail_station_stop_tile`)`
@@ -110,33 +115,15 @@ Estado: **CONFIRMADA en la traza**
 
 Evidencia medida:
 
-- tick 425: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 426: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 427: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 428: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 429: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 430: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 431: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 432: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 433: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 434: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 435: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 582: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 583: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 584: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 585: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 586: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 587: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 588: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 589: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 590: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 591: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 592: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 593: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 594: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 595: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 596: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
-- tick 597: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 312: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 313: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 314: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 315: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 316: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 317: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 318: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 319: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
+- tick 320: pieza diagonal track_bits=0x20 en TileCoord { x: 12, y: 6 } (render ≈ centro de vía)
 
 - Referencia OpenTTD: `OpenTTD/src/vehicle.cpp:3359-3392 (`_vehicle_subcoord` por enterdir×track)`
 - Referencia Rust: `openttdrs/crates/openttdrs-core/src/road_movement.rs (`train_straight_subtile`, `TRAIN_TRACK_CENTER = 8`)`

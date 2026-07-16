@@ -132,7 +132,7 @@ OpenTTD: `TimetableWindow` (`timetable_gui.cpp:174-863`). Cliente:
 | Reset de retraso (`SetVehicleOnTime`) | «Poner en hora» | ✔ |
 | Resumen retraso/adelanto | Sí | ✔ |
 | **Velocidad máxima por tramo** | No existe | **B** (campo por orden + clamp en `update_movement_speed`) |
-| Fecha de inicio (`SetTimetableStart`) | No existe | **B**, de bajo valor con tick a 5 Hz |
+| Fecha de inicio (`SetTimetableStart`) | No existe | **B**, valor moderado con tick ~37 Hz |
 | Llegada/salida esperadas por orden | No existe | **A** (derivable de los tiempos) |
 
 ## 6. Ventana de refit

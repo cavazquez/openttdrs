@@ -13,7 +13,7 @@ gaps frente a `_vehicle_subcoord` y `_tunnel_visibility_frame`.
 | Aspecto | Traza lógica (`parity`) | Render (`vehicle_subtile` + cliente) | Estado |
 |---|---|---|---|
 | Sub-tesela en JSONL | `rail.parts[0].subtile_x/y` | Misma función `vehicle_subtile` a `tick_alpha=0` | **Alineado** — chequeo `train_render_subtile_consistency` |
-| Interpolación entre ticks | Solo cambia a 5 Hz | `extrapolate_vehicle_pose` + `tick_alpha` | **Sin retrocesos** en recta (`train_line_extrapolation_subtile_is_monotonic`) |
+| Interpolación entre ticks | Sim ~37 Hz; render extrapola | `extrapolate_vehicle_pose` + `tick_alpha` | **Sin retrocesos** en recta (`train_line_extrapolation_subtile_is_monotonic`) |
 | Sprite del tren | `dir` lógico | Capa según pose extrapolada | **Alineado** — `sprite_selection_uses_extrapolated_pose_for_train` |
 | CSV de render | — | Columnas `logical_subtile_*` / `extrap_subtile_*` añadidas | **Listo** para diff manual vs JSONL |
 | `_vehicle_subcoord` por pieza | Golden 3A (`vehicle_subcoord_matches_rust_copy`) | Render usa `train_straight_subtile` (eje central) | **Divergencia cosmética** en piezas diagonales puras (`train_diagonal_subcoord_approximation`) |

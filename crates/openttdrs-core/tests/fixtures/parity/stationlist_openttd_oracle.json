@@ -1,0 +1,44 @@
+{
+  "components": {
+    "industry_components": 73,
+    "station_components": 8
+  },
+  "extras": {
+    "dense_payload_end": 0,
+    "footer_industry_pairs": 0,
+    "footer_station_xy": 0,
+    "footer_tnbp_blob_len": 0
+  },
+  "hashes": {
+    "height_hash_fnv1a64": "491f3424ae6844b5",
+    "kind_hash_fnv1a64": "5d4da8a7569672f1",
+    "mapt_hash_fnv1a64": "4298ad417a195769",
+    "rail_bits_hash_fnv1a64": "d0a3931867272a40",
+    "road_bits_hash_fnv1a64": "cc1c08d5ec5b4d7f"
+  },
+  "map": {
+    "height": 256,
+    "max_height": 8,
+    "min_height": 0,
+    "tile_count": 65536,
+    "tile_kind_counts": {
+      "Forest": 14227,
+      "Grass": 29759,
+      "House": 624,
+      "Industry": 795,
+      "Rail": 1,
+      "RailDepot": 2,
+      "Road": 748,
+      "RoadBridge": 4,
+      "RoadDepot": 2,
+      "Station": 27,
+      "Void": 511,
+      "Water": 18836
+    },
+    "width": 256
+  },
+  "openttd_commit": "14ec60f248547d4d062a1160f0fc26d742319888",
+  "producer": "openttd",
+  "schema_version": 1,
+  "source_path": ""
+}

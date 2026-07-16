@@ -6,10 +6,9 @@
 #include "snapshot_export.h"
 
 #include "map_func.h"
-#include "station_map.h"
+#include "openttd.h"
 #include "tile_map.h"
 #include "tile_type.h"
-#include "water_map.h"
 
 #include "3rdparty/nlohmann/json.hpp"
 
@@ -68,9 +67,11 @@ uint8_t KindCode(Tile tile)
 		case MP_TREES:
 			return 8; /* Forest */
 		case MP_STATION:
-			return IsAirportTile(tile) ? 17 : 7;
+			/* Alineado con openttdrs `ottd_tile_kind`: no distingue aeropuerto. */
+			return 7;
 		case MP_WATER:
-			return IsShipDepotTile(tile) ? 16 : 2;
+			/* Alineado con openttdrs: depósitos navales cuentan como Water. */
+			return 2;
 		case MP_VOID:
 			return 0;
 		case MP_INDUSTRY:
@@ -165,6 +166,14 @@ bool OpenttdrsMaybeExportSnapshot(const std::string &source_path)
 	const char *out_path = std::getenv("OPENTTDRS_SNAPSHOT_OUT");
 	if (out_path == nullptr || out_path[0] == '\0') return true;
 
+	/* Dedicated + `-g` genera un new-game (1er AfterLoadGame) y luego carga el .sav
+	 * (2º). Por defecto saltamos el primero. OPENTTDRS_SNAPSHOT_MIN_CALL=1 fuerza el 1º. */
+	static int call_count = 0;
+	call_count++;
+	const char *min_s = std::getenv("OPENTTDRS_SNAPSHOT_MIN_CALL");
+	const int min_call = (min_s != nullptr && min_s[0] != '\0') ? std::atoi(min_s) : 2;
+	if (call_count < min_call) return true;
+
 	const char *commit = std::getenv("OPENTTDRS_OPENTTD_COMMIT");
 	const uint w = Map::SizeX();
 	const uint h = Map::SizeY();
@@ -234,5 +243,9 @@ bool OpenttdrsMaybeExportSnapshot(const std::string &source_path)
 	std::ofstream out(out_path);
 	if (!out) return false;
 	out << j.dump(2) << '\n';
-	return static_cast<bool>(out);
+	if (!out) return false;
+
+	/* Dedicated: salir tras exportar (evita servidor colgado). */
+	_exit_game = true;
+	return true;
 }

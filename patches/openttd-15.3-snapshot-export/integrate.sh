@@ -46,12 +46,12 @@ else:
 
 after = dest / "src" / "saveload" / "afterload.cpp"
 at = after.read_text(encoding="utf-8")
-if '#include "snapshot_export.h"' not in at:
+if '#include "../snapshot_export.h"' not in at:
     # Tras el primer bloque de includes del archivo.
     nl = at.find("\n#include ")
     if nl < 0:
         raise SystemExit("no encuentro includes en afterload.cpp")
-    at = at[: nl + 1] + '#include "snapshot_export.h"\n' + at[nl + 1 :]
+    at = at[: nl + 1] + '#include "../snapshot_export.h"\n' + at[nl + 1 :]
     print("afterload: include")
 
 hook = (

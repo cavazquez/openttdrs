@@ -51,6 +51,9 @@ target
 # Manifiesto pin OpenTTD (#109)
 !docs/parity/openttd-reference.json
 
+# Prefijo local de deps / baseset para build dedicated OpenTTD (#110)
+/.deps/
+
 # Partidas JSON (F5/F9); por defecto bajo save/
 /save/
 

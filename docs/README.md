@@ -100,6 +100,7 @@
 | [parity/openttd-reference.json](parity/openttd-reference.json) | Manifiesto pin (#109): URL, commit, tag, licencia |
 | [parity/OPENTTD_REFERENCE.md](parity/OPENTTD_REFERENCE.md) | Cómo clonar / actualizar la referencia |
 | [parity/SNAPSHOT_SCHEMA.md](parity/SNAPSHOT_SCHEMA.md) | Esquema JSON oráculo ↔ candidato (#110) |
+| [parity/SNAPSHOT_FIRST_DIVERGENCE.md](parity/SNAPSHOT_FIRST_DIVERGENCE.md) | Evidencia: road_bits_hash diverge en stationlist |
 | [SNAPSHOT_ORACLE_WORKFLOW.md](SNAPSHOT_ORACLE_WORKFLOW.md) | Flujo oráculo OpenTTD C++ vs snapshot_dumper |
 | [INFORME_ARQUITECTURA_OPENTTD.md](INFORME_ARQUITECTURA_OPENTTD.md) | Arquitectura C++ (clon local) |
 

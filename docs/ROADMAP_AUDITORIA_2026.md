@@ -24,7 +24,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 | #103 rustdoc CI | ✅ | Cerrado |
 | #108 hash por tick | ✅ | `GameState::canonical_hash` (FNV-1a, dominio `openttdrs-gs-v1`) |
 | #109 pin OpenTTD | ✅ | `docs/parity/openttd-reference.json` + fetch por SHA |
-| #110 oráculo independiente | 🟨 | Parche C++ + comparador; falta golden generado con binario OpenTTD |
+| #110 oráculo independiente | ✅ | Export C++ OpenTTD 15.3; primera divergencia: `road_bits_hash` |
 | #119 tablas generadas | ⬜ | Tras #109 |
 | #125 docs tick/carga | ⬜ | Idealmente tras #109 |
 
@@ -101,7 +101,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 - [x] Fmt/check/clippy/tests verdes en el baseline actual (suite ampliada desde la auditoría).
 - [x] Auditoría de dependencias con política (`#104`/`#106`).
 - [x] Mismo seed/comandos/ticks → hashes idénticos tras save/load (`#108`, refuerzo `#107` ✅).
-- [x] Referencia OpenTTD fijada (`#109`); oráculo `#110` en progreso (export C++ + docs; golden OpenTTD pendiente de build).
+- [x] Referencia OpenTTD fijada (`#109`) y oráculo independiente (`#110`, ver `parity/SNAPSHOT_FIRST_DIVERGENCE.md`).
 - [x] Refactors con equivalencia tick-a-tick (`#108`).
 - [ ] Benchmarks con baseline (`#116`).
 - [ ] ADRs / gobierno (`#117` — primera ADR multiplayer hecha).
@@ -110,7 +110,7 @@ En paralelo (ya avanzado): `#104 → #106` ✅ · save/load `#122`/`#123`/`#118`
 
 ## Próximo foco recomendado
 
-1. **#110** — generar golden con OpenTTD dedicated patched (deps cmake + lib*-dev).
-2. **#120** / **#117** — CI y plantilla de contribución/ADRs.
+1. **#120** / **#117** — CI y plantilla de contribución/ADRs.
+2. Investigar divergencia `road_bits_hash` (`SNAPSHOT_FIRST_DIVERGENCE.md`).
 3. Deuda I8 de settings cliente → `Command` (lista en inventario #114).
 4. Host migration post-v1 (fuera de ADR 0001).

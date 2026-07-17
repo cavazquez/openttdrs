@@ -4,6 +4,7 @@ use crate::aircraft_movement::straight_line_path;
 use crate::map::{Map, TileCoord};
 
 mod astar;
+mod build_corridor;
 mod cache;
 mod network;
 #[allow(dead_code)]
@@ -21,6 +22,7 @@ pub use network::{
 };
 pub(crate) use network::{is_rail_network_tile, is_rail_station_tile, is_road_network_tile};
 pub use reachable::farthest_reachable_tile;
+pub use build_corridor::{find_rail_build_path, tile_allows_rail_build};
 pub use station_sites::{
     station_entrance_faces_rail, station_entrance_faces_road, station_site_adjacent_to_rail,
     station_site_adjacent_to_transport, station_site_tile_allows_build,

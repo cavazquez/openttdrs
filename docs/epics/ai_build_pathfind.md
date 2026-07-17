@@ -1,6 +1,6 @@
 # Épica: pathfind de construcción IA (sin Squirrel)
 
-**Estado:** abierta (post-MVP TransCargo)  
+**Estado:** en curso (primer corte #184)  
 **Alcance:** rival Rust más capaz al tender vías; **no** runtime NoAI/Squirrel.
 
 MVP TransCargo (cerrado): [archive/epics/ai_rivals.md](../archive/epics/ai_rivals.md).
@@ -36,11 +36,17 @@ codos con trackbits correctos, sin depender de L Manhattan puro.
 
 ## Criterio de cierre (borrador)
 
-- [ ] Corredor con obstáculo (bosque/agua) rodea o terraforma de forma acotada.
-- [ ] Codos L sin bits de cruce X; tests de topología.
-- [ ] Pathfind (o A* de buildables) usado en al menos una ruta del rival.
-- [ ] `scripts/check.sh` / escenario AI verde.
-- [ ] Sin runtime Squirrel.
+- [x] Corredor con obstáculo (agua) rodea vía A* buildables (`find_rail_build_path`); fallback L.
+- [x] Codos path/L sin CROSS; tests `path_corridor_*` + `manhattan_corridor_*`.
+- [x] Pathfind usado en `place_rail_corridor` (TransCargo).
+- [ ] Terraform solo en banda del path (hoy LevelLand por tesela del path); pulir.
+- [ ] `scripts/check.sh` completo en CI.
+- [x] Sin runtime Squirrel.
+
+## Hecho (jul 2026, primer corte)
+
+- `pathfinder/build_corridor.rs` — A* hierba/vía coste bajo, bosque alto, agua bloqueada.
+- `ai/transcargo/build.rs` — `place_rail_corridor` + curvas por polyline + señales en path.
 
 ## Issue de seguimiento
 

@@ -86,6 +86,8 @@ pub(crate) enum FloatingWindowId {
     SoundMusic,
     /// Horario detallado del vehículo (F4).
     Timetable,
+    /// Órdenes del vehículo (`OrdersWindow` OpenTTD / #176).
+    Orders,
     /// Lista de cargas para refit en depósito.
     Refit,
     /// Pools de órdenes compartidas.
@@ -151,6 +153,7 @@ impl FloatingWindowId {
         Self::NewGrf,
         Self::SoundMusic,
         Self::Timetable,
+        Self::Orders,
         Self::Refit,
         Self::SharedOrders,
         Self::Autoreplace,
@@ -198,6 +201,7 @@ impl FloatingWindowId {
             Self::NewGrf => "NewGrf",
             Self::SoundMusic => "SoundMusic",
             Self::Timetable => "Timetable",
+            Self::Orders => "Orders",
             Self::Refit => "Refit",
             Self::SharedOrders => "SharedOrders",
             Self::Autoreplace => "Autoreplace",

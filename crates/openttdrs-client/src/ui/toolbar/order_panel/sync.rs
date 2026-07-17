@@ -2,7 +2,10 @@ use bevy::prelude::*;
 use openttdrs_core::prelude::*;
 
 use crate::state::{OrderPickState, SimWorld, order_pick_active};
-use crate::ui::toolbar::{OrderEditState, OrderPanelRoot, OrderPanelTitle};
+use crate::ui::floating_window::{
+    FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText,
+};
+use crate::ui::toolbar::OrderEditState;
 
 use super::{ORDER_PANEL_ROWS, OrderPanelRow, OrderPanelRowText};
 
@@ -12,17 +15,20 @@ pub(crate) fn sync_order_panel(
     pick_state: Res<State<OrderPickState>>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
     sim: Res<SimWorld>,
-    mut root_q: Query<&mut Visibility, With<OrderPanelRoot>>,
-    mut title_q: Query<&mut Text, With<OrderPanelTitle>>,
+    mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
+    mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
     mut row_q: Query<(
         &OrderPanelRow,
         &mut Node,
         &mut BackgroundColor,
         &mut BorderColor,
     )>,
-    mut row_text_q: Query<(&OrderPanelRowText, &mut Text), Without<OrderPanelTitle>>,
+    mut row_text_q: Query<(&OrderPanelRowText, &mut Text), Without<FloatingWindowTitleText>>,
 ) {
-    let Ok(mut vis) = root_q.single_mut() else {
+    let Some((_, mut vis)) = root_q
+        .iter_mut()
+        .find(|(w, _)| w.id == FloatingWindowId::Orders)
+    else {
         return;
     };
     let Some(vehicle_id) = order_state.vehicle_id else {
@@ -50,7 +56,10 @@ pub(crate) fn sync_order_panel(
     } else {
         ""
     };
-    if let Ok(mut text) = title_q.single_mut() {
+    if let Some((_, mut text)) = title_q
+        .iter_mut()
+        .find(|(t, _)| t.0 == FloatingWindowId::Orders)
+    {
         let shared = vehicle
             .shared_order_id
             .map_or_else(String::new, |id| format!(" · pool #{id}"));
@@ -103,6 +112,20 @@ pub(crate) fn sync_order_panel(
         } else {
             String::new()
         };
+    }
+}
+
+/// Limpia el estado al cerrar con ✕ / Esc.
+pub(crate) fn order_panel_on_closed(
+    mut closed: MessageReader<FloatingWindowClosed>,
+    mut order_state: ResMut<OrderEditState>,
+    mut next_pick: ResMut<NextState<OrderPickState>>,
+) {
+    for msg in closed.read() {
+        if msg.0 == FloatingWindowId::Orders {
+            order_state.clear();
+            next_pick.set(OrderPickState::Idle);
+        }
     }
 }
 

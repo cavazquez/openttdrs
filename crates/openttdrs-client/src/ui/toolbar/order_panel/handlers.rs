@@ -122,9 +122,6 @@ pub(crate) fn handle_order_panel_buttons(
             continue;
         }
         match button {
-            OrderPanelButton::Close => {
-                order_state.clear();
-            }
             OrderPanelButton::DeleteSelected => {
                 let Some(vehicle_id) = order_state.vehicle_id else {
                     continue;

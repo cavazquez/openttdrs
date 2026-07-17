@@ -9,7 +9,7 @@ pub(crate) use handlers::{
     start_order_destination_pick, try_append_order_at_tile,
 };
 pub(crate) use setup::setup_order_panel;
-pub(crate) use sync::sync_order_panel;
+pub(crate) use sync::{order_panel_on_closed, sync_order_panel};
 
 pub(crate) const ORDER_PANEL_ROWS: usize = 32;
 /// Altura visible de la lista (~10 filas) con scroll para el resto.

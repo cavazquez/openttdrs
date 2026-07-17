@@ -98,8 +98,9 @@ Con tren puntual, lo máximo alcanzable hoy es una ventana de detalles de
 ## 4. Ventana de órdenes
 
 OpenTTD: `OrdersWindow` (`order_gui.cpp:499-1755`). Cliente:
-`ui/toolbar/order_panel/` (panel fijo a la derecha, no flotante; copia local
-editable + `SetVehicleOrderList`).
+`ui/toolbar/order_panel/` como **ventana flotante** (`FloatingWindowId::Orders`, #176);
+copia local editable + `SetVehicleOrderList`. Se abre desde View / estación /
+picker; no ocupa el borde derecho de forma permanente.
 
 | Feature OpenTTD | Estado en cliente | Cercanía |
 |---|---|---|

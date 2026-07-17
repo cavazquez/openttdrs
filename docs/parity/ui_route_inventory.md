@@ -4,7 +4,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 `FloatingWindowId::ALL` / `BuildMenuAction::ALL` / etc. (test
 `ui_enum_inventory_counts`).
 
-**Fecha:** 2026-07-16 · **FloatingWindowId:** 41 · **BuildMenuAction:** 66 ·
+**Fecha:** 2026-07-17 · **FloatingWindowId:** 42 · **BuildMenuAction:** 66 ·
 **SaveMenuAction:** 22 · **ToolbarGroup:** 8
 
 ## Ventanas flotantes (`FloatingWindowId`)
@@ -34,6 +34,7 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | NewGrf | Ajustes | |
 | SoundMusic | toolbar audio | |
 | Timetable | vehículo / F4 | |
+| Orders | View → Órdenes / estación (#176) | Flotante; ya no dock fijo |
 | Refit | depósito | |
 | SharedOrders | vehículo | |
 | Autoreplace | depósito / flota | |
@@ -57,7 +58,6 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 
 | Superficie | Apertura |
 |------------|----------|
-| OrderPanel | vehículo → órdenes |
 | StationCargoPanel | clic estación |
 | IndustryPanel | clic industria |
 | SaveWindow | Guardar/Cargar |

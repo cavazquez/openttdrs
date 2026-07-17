@@ -45,8 +45,8 @@ pub(crate) use minimap::{
     setup_minimap, sync_minimap,
 };
 pub(crate) use order_panel::{
-    handle_order_panel_buttons, open_order_edit_for_vehicle, setup_order_panel,
-    start_order_destination_pick, sync_order_panel, try_append_order_at_tile,
+    handle_order_panel_buttons, open_order_edit_for_vehicle, order_panel_on_closed,
+    setup_order_panel, start_order_destination_pick, sync_order_panel, try_append_order_at_tile,
 };
 pub(crate) use orders_cursor::sync_orders_pick_cursor;
 pub(crate) use preview::{
@@ -432,15 +432,12 @@ impl OrderEditState {
     }
 }
 
+/// Marcador en la raíz flotante de órdenes (cleanup / queries).
 #[derive(Component)]
 pub(crate) struct OrderPanelRoot;
 
-#[derive(Component)]
-pub(crate) struct OrderPanelTitle;
-
 #[derive(Component, Clone, Copy)]
 pub(crate) enum OrderPanelButton {
-    Close,
     /// «Ir a»: empieza a elegir el destino de una nueva orden.
     PickDestOnMap,
     /// Borra la orden de la fila seleccionada.

@@ -4,7 +4,7 @@ use crate::GameState;
 use crate::command::{Command, LevelMode, apply_command};
 use crate::company::CompanyId;
 use crate::map::rail_bit_for_sides;
-use crate::map::{TileCoord, TileKind};
+use crate::map::{RAIL_TB_Y, TileCoord, TileKind};
 use crate::pathfinder::{PathNetwork, find_path};
 use crate::rail_signals::{SIGTYPE_BLOCK, rail_tile_is_signals};
 
@@ -49,6 +49,8 @@ pub(super) fn build_freight_line(
         place_rail_manhattan_corridor(state, load_st, unload_st);
         place_corridor_block_signals(state, load_st, unload_st);
         depot_out = try_place_depot_near(state, load_st);
+        // El depósito (autorraíl) puede refrescar vecinos: reafirmar el codo L.
+        reapply_l_corner(state, load_st, unload_st);
     });
 
     let depot = depot_out?;
@@ -82,25 +84,37 @@ fn with_ai_active(state: &mut GameState, ai_id: CompanyId, f: impl FnOnce(&mut G
 /// Coloca vía en corredor Manhattan: primero eje X, luego eje Y.
 ///
 /// Usa `PlaceRailBits` por eje para **fusionar** en tramos con corredores previos.
-/// El codo L se resuelve aparte con una curva limpia (no un cruce X|Y).
+/// El codo L no recibe ejes: solo la curva (más ejes ajenos si otra ruta atraviesa).
 fn place_rail_manhattan_corridor(state: &mut GameState, from: TileCoord, to: TileCoord) {
     let step_x = (to.x - from.x).signum();
     let step_y = (to.y - from.y).signum();
     let mut c = from;
     while c.x != to.x {
         c = TileCoord::new(c.x + step_x, c.y);
-        place_rail_axis(state, c, false, from);
+        // No poner eje X en el futuro codo L (evitar X|Y al propagar el tramo Y).
+        let is_l_corner = step_y != 0 && c.x == to.x;
+        if !is_l_corner {
+            place_rail_axis(state, c, false, from);
+        }
     }
     let corner = c;
     while c.y != to.y {
         c = TileCoord::new(c.x, c.y + step_y);
         place_rail_axis(state, c, true, from);
     }
-    // Codo L: el tramo X y la propagación del Y dejan X|Y en la esquina; eso
-    // pinta un cruce y no permite girar. Sustituir por la curva del L.
     if step_x != 0 && step_y != 0 {
         place_l_corner_curve(state, corner, step_x, step_y);
     }
+}
+
+fn reapply_l_corner(state: &mut GameState, from: TileCoord, to: TileCoord) {
+    let step_x = (to.x - from.x).signum();
+    let step_y = (to.y - from.y).signum();
+    if step_x == 0 || step_y == 0 {
+        return;
+    }
+    let corner = TileCoord::new(to.x, from.y);
+    place_l_corner_curve(state, corner, step_x, step_y);
 }
 
 /// Pieza de giro en la esquina X→Y (`DiagDir` NE=0 … NW=3).
@@ -115,8 +129,15 @@ fn place_l_corner_curve(state: &mut GameState, corner: TileCoord, step_x: i32, s
     let entry = if step_x > 0 { 0u8 } else { 2u8 };
     let exit = if step_y > 0 { 1u8 } else { 3u8 };
     let curve = rail_bit_for_sides(entry, exit);
-    // `SetRailBits` (no merge): quita el X|Y residual del corredor.
-    let _ = apply_command(state, &Command::SetRailBits(corner, curve));
+    let existing = state
+        .map
+        .get(corner)
+        .filter(|t| t.kind == TileKind::Rail)
+        .map_or(0, |t| t.m5 & 0x3F);
+    // El L sigue en Y: conservar ese eje si otra ruta ya atraviesa el codo.
+    // El X que llega por propagación del tramo horizontal es ruido (crea CROSS).
+    let bits = curve | (existing & RAIL_TB_Y);
+    let _ = apply_command(state, &Command::SetRailBits(corner, bits));
 }
 
 fn place_rail_axis(state: &mut GameState, c: TileCoord, axis_y: bool, height_anchor: TileCoord) {
@@ -389,6 +410,39 @@ mod tests {
             )
             .is_some(),
             "la curva del codo debe permitir girar X→Y"
+        );
+    }
+
+    #[test]
+    fn second_corridor_keeps_through_axis_plus_curve_at_shared_corner() {
+        let mut state = GameState::new(16, 16);
+        state.economy.money = 500_000;
+        // Ruta 1: (2,2)→(8,6) deja Y en (8,4).
+        place_rail_manhattan_corridor(&mut state, TileCoord::new(2, 2), TileCoord::new(8, 6));
+        // Ruta 2: (4,4)→(8,6); codo en (8,4) donde ya hay Y de la ruta 1.
+        place_rail_manhattan_corridor(&mut state, TileCoord::new(4, 4), TileCoord::new(8, 6));
+        let corner = TileCoord::new(8, 4);
+        let tb = state.map.get(corner).expect("shared corner").m5 & 0x3F;
+        assert_eq!(tb, 0x22, "codo compartido = RIGHT|Y, no cruce: m5={tb:#04x}");
+        assert!(
+            find_path(
+                &state.map,
+                TileCoord::new(8, 3),
+                TileCoord::new(8, 5),
+                PathNetwork::Rail
+            )
+            .is_some(),
+            "la ruta 1 debe seguir pudiendo atravesar en Y"
+        );
+        assert!(
+            find_path(
+                &state.map,
+                TileCoord::new(7, 4),
+                TileCoord::new(8, 5),
+                PathNetwork::Rail
+            )
+            .is_some(),
+            "la ruta 2 debe poder girar en el codo"
         );
     }
 }

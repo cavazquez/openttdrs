@@ -1,11 +1,13 @@
 //! Lista global de flota (tren / carretera / barco / avión).
 
 use bevy::prelude::*;
+use bevy::ui::widget::ImageNode;
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 
 use crate::render::{
-    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, vehicle_world_position,
+    MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending, TruckHandles,
+    vehicle_world_position,
 };
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -16,13 +18,16 @@ use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::list_window::{
     LIST_BTN_ACTIVE, LIST_BTN_BG, LIST_BTN_HOVER, SortDir, clear_list_children, list_chip_bg,
-    spawn_list_empty_label, spawn_list_row_button, spawn_list_scroll_area, spawn_list_sort_button,
+    spawn_list_empty_label, spawn_list_scroll_area, spawn_list_sort_button,
 };
 use crate::ui::navigation::{OpenUiRoute, UiRoute};
 use crate::ui::toolbar::BuildMenuUi;
-use crate::ui::vehicle_window::VehicleWindowState;
+use crate::ui::vehicle_window::{
+    CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, VehicleWindowState, vehicle_side_sprite,
+};
 
 const LIST_HEIGHT: f32 = 300.0;
+const PLACEHOLDER_SPRITE: &str = "assets/opengfx/tiles/vehicle_train_e.png";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum VehicleListKind {
@@ -134,6 +139,9 @@ pub(crate) struct VehicleListRow {
     vehicle_id: u32,
 }
 
+#[derive(Component)]
+pub(crate) struct VehicleListRowSprite;
+
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct VehicleListSortButton(VehicleListSort);
 
@@ -168,8 +176,8 @@ pub(crate) fn setup_vehicle_list(mut commands: Commands, asset_server: Res<Asset
         FloatingWindowId::VehicleList,
         VehicleListKind::Train.title(),
         TITLE_CREAM,
-        Vec2::new(460.0, 110.0),
-        460.0,
+        Vec2::new(500.0, 110.0),
+        500.0,
     );
     commands.entity(content).with_children(|body| {
         body.spawn((
@@ -488,6 +496,7 @@ pub(crate) fn handle_vehicle_list_buttons(
 pub(crate) fn sync_vehicle_list(
     state: Res<VehicleListState>,
     sim: Res<SimWorld>,
+    trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<VehicleListToggleLabel>>,
     list_roots: Query<Entity, With<VehicleListRoot>>,
@@ -692,14 +701,75 @@ pub(crate) fn sync_vehicle_list(
             return;
         }
         for (vehicle_id, name, age, speed, x, y, status) in rows {
-            spawn_list_row_button(
+            spawn_vehicle_list_row(
                 list,
                 &asset_server,
+                trucks.as_deref(),
+                &sim,
+                vehicle_id,
                 format!("{name}  ·  {age}a  ·  {speed} km/h  ·  ({x},{y})  ·  {status}"),
-                VehicleListRow { vehicle_id },
                 Some(vehicle_id) == state.selected,
             );
         }
+    });
+}
+
+fn spawn_vehicle_list_row(
+    list: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    trucks: Option<&TruckHandles>,
+    sim: &SimWorld,
+    vehicle_id: u32,
+    label: String,
+    selected: bool,
+) {
+    let sprite = trucks
+        .and_then(|t| {
+            sim.state
+                .vehicles
+                .iter()
+                .find(|v| v.id == vehicle_id)
+                .map(|v| vehicle_side_sprite(t, v))
+        })
+        .unwrap_or_else(|| asset_server.load::<Image>(PLACEHOLDER_SPRITE));
+    list.spawn((
+        Button,
+        VehicleListRow { vehicle_id },
+        Node {
+            width: Val::Percent(100.0),
+            min_height: Val::Px(24.0),
+            padding: UiRect::horizontal(Val::Px(4.0)),
+            column_gap: Val::Px(6.0),
+            justify_content: JustifyContent::FlexStart,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(1.0)),
+            ..default()
+        },
+        BackgroundColor(if selected {
+            LIST_BTN_ACTIVE
+        } else {
+            LIST_BTN_BG
+        }),
+        BorderColor::all(Color::srgb(0.50, 0.44, 0.30)),
+        Interaction::default(),
+        BuildMenuUi,
+    ))
+    .with_children(|row| {
+        row.spawn((
+            VehicleListRowSprite,
+            ImageNode::new(sprite),
+            Node {
+                width: Val::Px(CONSIST_UNIT_SPRITE_W),
+                height: Val::Px(CONSIST_UNIT_SPRITE_H),
+                flex_shrink: 0.0,
+                ..default()
+            },
+        ));
+        row.spawn((
+            Text::new(label),
+            window_text_font(asset_server, UiFontRole::Caption),
+            TextColor(WINDOW_TEXT),
+        ));
     });
 }
 

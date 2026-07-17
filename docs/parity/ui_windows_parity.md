@@ -184,11 +184,11 @@ Checklist OpenTTD vs openttdrs vs acción (epic UI-Layout #172).
 
 | Superficie | OpenTTD | openttdrs | Acción |
 |---|---|---|---|
-| Estación | `station_gui` viewport + iconos | Panel fijo ficha-texto + botones | **A** residual (chrome); capacidad OK |
+| Estación | `station_gui` viewport + iconos | Panel fijo; barra Ruta/Órd./Loc… (#183) | ✔ chrome; viewport **A** residual |
 | Industria | `industry_gui` | `FloatingWindowId::Industry` + preview RT + Loc | ✔ chrome (#179); Authority/catchment **B/C** |
 | Pueblo | `town_gui` viewport + iconos | Flotante; barra Loc/Pub/Fondos | ✔ chrome (#179); Authority completa **B** |
 | Compra | matriz sprites | Filas con sprite + stats | ✔ chrome (#179); TE/ocultar motor **B** |
-| Lista flota | sprites + mass actions | Filas texto + start/stop | **A** residual (sprites/grupos) |
+| Lista flota | sprites + mass actions | Filas con sprite + start/stop (#182) | ✔ chrome; grupos/mass **A/B** |
 
 Bloqueado por sim / OOS: NewGRF params, cheats, multi-instance, servicio/averías (**C**).
 

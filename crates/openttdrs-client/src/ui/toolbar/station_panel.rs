@@ -13,13 +13,15 @@ use openttdrs_core::{
 use crate::iso::tile_pos;
 use crate::render::{MapPreviewCamera, PrimaryGameCamera, RemapMapVisualsPending};
 use crate::state::{OrderPickState, SimWorld};
+use crate::ui::floating_window::window_text_font;
+use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::vehicle_list::VehicleListState;
 
 use super::order_panel::apply_order_edit;
 use super::{
-    BuildMenuAction, BuildMenuUi, OrderEditState, StationBuildState, UiToolState,
-    open_order_edit_for_vehicle,
+    BuildMenuAction, BuildMenuUi, OrderEditState, StationBuildState, ToolbarTooltipTarget,
+    UiToolState, open_order_edit_for_vehicle,
 };
 
 #[derive(Resource, Default)]
@@ -60,7 +62,8 @@ pub(crate) enum StationCargoPanelButton {
 
 const CARGO_TYPES: &[CargoType] = &ALL_CARGO_TYPES;
 
-pub(crate) fn setup_station_cargo_panel(mut commands: Commands) {
+pub(crate) fn setup_station_cargo_panel(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let asset_server = &*asset_server;
     commands
         .spawn((
             StationCargoPanelRoot,
@@ -84,10 +87,7 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands) {
             panel.spawn((
                 StationCargoPanelText,
                 Text::new("Estación"),
-                TextFont {
-                    font_size: FontSize::Rem(0.85),
-                    ..default()
-                },
+                window_text_font(asset_server, UiFontRole::Caption),
                 TextColor(Color::srgb(0.94, 0.9, 0.76)),
             ));
             panel
@@ -106,10 +106,7 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands) {
                     row.spawn((
                         StationCargoRenameInput,
                         EditableText::new(""),
-                        TextFont {
-                            font_size: FontSize::Rem(0.7),
-                            ..default()
-                        },
+                        window_text_font(asset_server, UiFontRole::Caption),
                         TextColor(Color::srgb(0.92, 0.88, 0.72)),
                         Node {
                             flex_grow: 1.0,
@@ -120,39 +117,75 @@ pub(crate) fn setup_station_cargo_panel(mut commands: Commands) {
                         },
                         BorderColor::all(Color::srgb(0.66, 0.58, 0.38)),
                     ));
-                    spawn_rename_action(row, StationCargoRenameButton::Apply, "Guardar");
-                    spawn_rename_action(row, StationCargoRenameButton::Cancel, "Cancelar");
+                    spawn_rename_action(row, asset_server, StationCargoRenameButton::Apply, "OK");
+                    spawn_rename_action(row, asset_server, StationCargoRenameButton::Cancel, "✕");
                 });
+            // Chrome compacto (#183): labels cortos + tooltip.
             panel
                 .spawn(Node {
                     flex_direction: FlexDirection::Row,
-                    column_gap: Val::Px(4.0),
+                    column_gap: Val::Px(3.0),
                     flex_wrap: FlexWrap::Wrap,
-                    row_gap: Val::Px(4.0),
+                    row_gap: Val::Px(3.0),
                     ..default()
                 })
                 .with_children(|row| {
-                    spawn_station_button(row, StationCargoPanelButton::AddToRoute, "Añadir a ruta");
                     spawn_station_button(
                         row,
+                        asset_server,
+                        StationCargoPanelButton::AddToRoute,
+                        "Ruta",
+                        "Añadir a ruta del vehículo",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
                         StationCargoPanelButton::PickOrders,
+                        "Órd.",
                         "Editar órdenes",
                     );
-                    spawn_station_button(row, StationCargoPanelButton::CenterCamera, "Centrar");
-                    spawn_station_button(row, StationCargoPanelButton::Rename, "Renombrar");
                     spawn_station_button(
                         row,
-                        StationCargoPanelButton::ViewVehicles,
-                        "Ver vehículos",
+                        asset_server,
+                        StationCargoPanelButton::CenterCamera,
+                        "Loc",
+                        "Centrar cámara en la estación",
                     );
-                    spawn_station_button(row, StationCargoPanelButton::JoinWith, "Unir…");
-                    spawn_station_button(row, StationCargoPanelButton::Close, "Cerrar");
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::Rename,
+                        "Nom.",
+                        "Renombrar estación",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::ViewVehicles,
+                        "Flota",
+                        "Ver vehículos que visitan esta estación",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::JoinWith,
+                        "Unir",
+                        "Unir con otra estación",
+                    );
+                    spawn_station_button(
+                        row,
+                        asset_server,
+                        StationCargoPanelButton::Close,
+                        "✕",
+                        "Cerrar",
+                    );
                 });
         });
 }
 
 fn spawn_rename_action(
     parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
     action: StationCargoRenameButton,
     label: &'static str,
 ) {
@@ -160,7 +193,7 @@ fn spawn_rename_action(
         Button,
         action,
         Node {
-            min_width: Val::Px(72.0),
+            min_width: Val::Px(36.0),
             height: Val::Px(22.0),
             padding: UiRect::horizontal(Val::Px(6.0)),
             justify_content: JustifyContent::Center,
@@ -174,10 +207,7 @@ fn spawn_rename_action(
         BuildMenuUi,
         children![(
             Text::new(label),
-            TextFont {
-                font_size: FontSize::Rem(0.65),
-                ..default()
-            },
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.92, 0.88, 0.72)),
         )],
     ));
@@ -185,15 +215,19 @@ fn spawn_rename_action(
 
 fn spawn_station_button(
     parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
     action: StationCargoPanelButton,
     label: &'static str,
+    tip: &'static str,
 ) {
     parent.spawn((
         Button,
         action,
+        ToolbarTooltipTarget { text: tip },
         Node {
-            width: Val::Px(110.0),
+            min_width: Val::Px(36.0),
             height: Val::Px(24.0),
+            padding: UiRect::horizontal(Val::Px(6.0)),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             border: UiRect::all(Val::Px(1.0)),
@@ -205,10 +239,7 @@ fn spawn_station_button(
         BuildMenuUi,
         children![(
             Text::new(label),
-            TextFont {
-                font_size: FontSize::Rem(0.7),
-                ..default()
-            },
+            window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.92, 0.88, 0.72)),
         )],
     ));

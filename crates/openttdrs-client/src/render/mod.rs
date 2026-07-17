@@ -50,7 +50,10 @@ pub(crate) use effect_fx::EffectVehiclePlugin;
 pub(crate) use effect_vehicle::EffectVehicleFrames;
 pub(crate) use fizzy_drink::{FizzyDrinkAnim, FizzyDrinkAnimPlugin};
 pub(crate) use grid::{RenderGrid, TileRenderContext};
-pub(crate) use house_lift_anim::{HouseLiftAnim, HouseLiftAnimPlugin, house_sprite_has_lift};
+pub(crate) use house_lift_anim::{
+    HOUSE_LIFT_SCREEN_X, HOUSE_LIFT_SCREEN_Y, HouseLiftAnim, HouseLiftAnimPlugin,
+    house_sprite_has_lift,
+};
 pub(crate) use industry_anim::{
     IndustryBuildingAnim, IndustryBuildingAnimPlugin, IndustryOverlayContext, industry_anim_phase,
     spawn_industry_anim_layer,

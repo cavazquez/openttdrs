@@ -56,8 +56,50 @@ fn procedural_houses_are_completed_with_varied_ids() {
     }
     assert!(house_tiles.len() >= 3);
     assert!(house_tiles.iter().all(|t| t.m3 & 0x80 != 0));
-    let distinct_ids: std::collections::HashSet<u16> = house_tiles.iter().map(|t| t.m8).collect();
+    let distinct_ids: std::collections::HashSet<u16> =
+        house_tiles.iter().map(|t| t.m8 & 0x0FFF).collect();
     assert!(distinct_ids.len() > 1, "debe haber más de un HouseID");
+    assert!(
+        distinct_ids
+            .iter()
+            .all(|&id| openttdrs_core::house_spec_is_size_1x1(id)),
+        "solo footprint 1×1; ids={distinct_ids:?}"
+    );
+}
+
+#[test]
+fn procedural_town_population_matches_house_specs() {
+    let settings = NewGameSettings::procedural_island(Climate::Temperate, 777);
+    let state = build_procedural_demo_world(&settings);
+    assert!(!state.towns.is_empty());
+    let (mw, mh) = state.map.dimensions();
+    let mut pop_from_houses = 0_u32;
+    for y in 0..mh {
+        for x in 0..mw {
+            let c = TileCoord::new(x as i32, y as i32);
+            if state.map.get_kind(c) != Some(TileKind::House) {
+                continue;
+            }
+            let Some(tile) = state.map.get(c) else {
+                continue;
+            };
+            if tile.m3 & 0x80 == 0 {
+                continue;
+            }
+            pop_from_houses = pop_from_houses.saturating_add(u32::from(
+                openttdrs_core::house_spec_population(tile.m8 & 0x0FFF),
+            ));
+        }
+    }
+    let labeled: u32 = state.towns.iter().map(|t| t.population).sum();
+    assert_eq!(
+        labeled, pop_from_houses,
+        "población de pueblos debe ser suma HouseSpec, no casas×8"
+    );
+    assert!(
+        labeled > 8 * 3,
+        "con houses reales la pop debe superar el viejo casas×8 mínimo; pop={labeled}"
+    );
 }
 
 #[test]

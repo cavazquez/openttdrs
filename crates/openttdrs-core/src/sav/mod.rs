@@ -15,6 +15,45 @@ mod container;
 mod date;
 mod entities;
 mod house_population_generated;
+
+/// Población de un HouseID original (`HouseSpec::population`).
+#[must_use]
+pub fn house_spec_population(house_id: u16) -> u16 {
+    house_population_generated::HOUSE_POPULATION
+        .get(usize::from(house_id))
+        .copied()
+        .unwrap_or(0)
+}
+
+/// `true` si el HouseID original tiene footprint `Size1x1`.
+#[must_use]
+pub fn house_spec_is_size_1x1(house_id: u16) -> bool {
+    house_population_generated::HOUSE_SIZE_1X1
+        .get(usize::from(house_id))
+        .copied()
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod house_spec_tests {
+    use super::{house_spec_is_size_1x1, house_spec_population};
+
+    #[test]
+    fn large_office_is_1x1_with_high_population() {
+        assert!(house_spec_is_size_1x1(4));
+        assert!(house_spec_is_size_1x1(5));
+        assert_eq!(house_spec_population(4), 220);
+        assert_eq!(house_spec_population(5), 220);
+    }
+
+    #[test]
+    fn hotel_multi_tile_is_not_1x1() {
+        assert!(!house_spec_is_size_1x1(7));
+        assert_eq!(house_spec_population(7), 140);
+        assert!(!house_spec_is_size_1x1(8));
+        assert_eq!(house_spec_population(8), 0);
+    }
+}
 mod linkgraph;
 mod orders;
 mod orders_codec;

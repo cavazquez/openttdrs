@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Genera la tabla de población por HouseID desde `table/town_land.h`.
+"""Genera tablas de HouseSpec desde `table/town_land.h`.
 
 OpenTTD **no guarda** la población de las ciudades en el save: la reconstruye
 al cargar (`RebuildTownCaches`, `town_sl.cpp`) sumando
 `HouseSpec::population` de cada tesela MP_HOUSE completada. La población por
 HouseID es el 3er argumento de las macros `MS(...)` de
 `_original_house_specs` (`table/town_land.h`).
+
+También emite `HOUSE_SIZE_1X1` (`BuildingFlag::Size1x1`) para el poblado
+procedural (solo footprint 1×1).
 
 Salida: `crates/openttdrs-core/src/sav/house_population_generated.rs`.
 
@@ -25,16 +28,42 @@ TOWN_LAND_H = REPO / "reference" / "openttd-upstream" / "src" / "table" / "town_
 OUT_RS = REPO / "crates" / "openttdrs-core" / "src" / "sav" / "house_population_generated.rs"
 
 
-def build_content(town_land: Path) -> str:
+def parse_specs(town_land: Path) -> tuple[list[int], list[bool]]:
     text = town_land.read_text(encoding="utf-8")
     m = re.search(r"_original_house_specs\[\] = \{(.*)\};", text, re.S)
     if not m:
         raise SystemExit("no se encontró _original_house_specs")
-    entries = re.findall(r"\bMS\(\s*(-?\d+)\s*,[^,]+,\s*(\d+)\s*,", m.group(1))
-    if len(entries) < 100:
-        raise SystemExit(f"esperaba ~110 entradas MS, hay {len(entries)}")
-    pops = [int(p) for _, p in entries]
+    body = m.group(1)
+    parts = re.split(r"\bMS\(", body)[1:]
+    if len(parts) < 100:
+        raise SystemExit(f"esperaba ~110 entradas MS, hay {len(parts)}")
+    pops: list[int] = []
+    size_1x1: list[bool] = []
+    for p in parts:
+        am = re.match(r"\s*(-?\d+)\s*,[^,]+,\s*(\d+)\s*,", p)
+        if not am:
+            raise SystemExit(f"MS mal formado: {p[:80]!r}")
+        pops.append(int(am.group(2)))
+        head = p[:500]
+        # Size2x* / Size1x2 ganan sobre Size1x1 si aparecen juntos.
+        if re.search(r"BuildingFlag::Size(?:2x1|1x2|2x2)\b", head):
+            size_1x1.append(False)
+        elif re.search(r"BuildingFlag::Size1x1\b", head):
+            size_1x1.append(True)
+        else:
+            size_1x1.append(False)
+    return pops, size_1x1
 
+
+def fmt_bool_row(vals: list[bool], start: int) -> str:
+    chunk = ", ".join("true" if v else "false" for v in vals)
+    end = start + len(vals) - 1
+    return f"    {chunk}, // {start}..{end}"
+
+
+def build_content(town_land: Path) -> str:
+    pops, size_1x1 = parse_specs(town_land)
+    n = len(pops)
     lines = [
         "// Generado por scripts/gen_house_population.py — NO EDITAR A MANO.",
         "//",
@@ -42,12 +71,21 @@ def build_content(town_land: Path) -> str:
         "// macros `MS` en `_original_house_specs`, `table/town_land.h`).",
         "// Usado para reconstruir `Town::cache.population` como",
         "// `RebuildTownCaches` (`town_sl.cpp`).",
+        "//",
+        "// `HOUSE_SIZE_1X1`: `BuildingFlag::Size1x1` (footprint de una tesela).",
         "",
-        f"pub(crate) static HOUSE_POPULATION: [u16; {len(pops)}] = [",
+        f"pub(crate) static HOUSE_POPULATION: [u16; {n}] = [",
     ]
-    for start in range(0, len(pops), 10):
+    for start in range(0, n, 10):
         chunk = ", ".join(str(p) for p in pops[start : start + 10])
-        lines.append(f"    {chunk}, // {start}..{min(start + 10, len(pops)) - 1}")
+        lines.append(f"    {chunk}, // {start}..{min(start + 10, n) - 1}")
+    lines += [
+        "];",
+        "",
+        f"pub(crate) static HOUSE_SIZE_1X1: [bool; {n}] = [",
+    ]
+    for start in range(0, n, 10):
+        lines.append(fmt_bool_row(size_1x1[start : start + 10], start))
     lines += ["];", ""]
     return "\n".join(lines)
 
@@ -75,11 +113,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not args.town_land.is_file():
-        print(
-            f"Falta {args.town_land}. Ejecutá: ./scripts/fetch-openttd-reference.sh",
-            file=sys.stderr,
-        )
-        return 1
+        # Fallback al árbol OpenTTD del monorepo (desarrollo local).
+        fallback = REPO.parent / "OpenTTD" / "src" / "table" / "town_land.h"
+        if fallback.is_file():
+            args.town_land = fallback
+        else:
+            print(
+                f"Falta {args.town_land}. Ejecutá: ./scripts/fetch-openttd-reference.sh",
+                file=sys.stderr,
+            )
+            return 1
 
     content = build_content(args.town_land)
     if args.check:

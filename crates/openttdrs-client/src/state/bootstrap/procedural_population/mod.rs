@@ -11,10 +11,22 @@ use openttdrs_core::{PreserveRect, tile_slope_and_z};
 
 use super::world::{NewGameSettings, PopulationDensity};
 
-/// HouseID originales OpenTTD (0..=109); evitamos NewGRF.
-pub(super) const PROCEDURAL_HOUSE_ID_MAX: u32 = 110;
-/// Variación de estilo dentro de un mismo pueblo.
+/// Variación de estilo dentro de un mismo pueblo (índice en la tabla 1×1).
 pub(super) const PROCEDURAL_HOUSE_STYLE_SPREAD: u32 = 16;
+
+/// HouseIDs 1×1 con población > 0 (evita piezas multi-tile y decoración vacía).
+pub(super) fn procedural_house_choices() -> &'static [u16] {
+    use std::sync::OnceLock;
+    static CHOICES: OnceLock<Vec<u16>> = OnceLock::new();
+    CHOICES.get_or_init(|| {
+        (0u16..110)
+            .filter(|&id| {
+                openttdrs_core::house_spec_is_size_1x1(id)
+                    && openttdrs_core::house_spec_population(id) > 0
+            })
+            .collect()
+    })
+}
 
 /// Generador determinista para colocación (mismo seed → mismo mundo).
 pub(super) struct SeededRng {

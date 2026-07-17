@@ -4,6 +4,8 @@
 // macros `MS` en `_original_house_specs`, `table/town_land.h`).
 // Usado para reconstruir `Town::cache.population` como
 // `RebuildTownCaches` (`town_sl.cpp`).
+//
+// `HOUSE_SIZE_1X1`: `BuildingFlag::Size1x1` (footprint de una tesela).
 
 pub(crate) static HOUSE_POPULATION: [u16; 110] = [
     187, 85, 40, 5, 220, 220, 30, 140, 0, 0, // 0..9
@@ -17,4 +19,18 @@ pub(crate) static HOUSE_POPULATION: [u16; 110] = [
     16, 7, 45, 8, 18, 90, 120, 250, 0, 80, // 80..89
     180, 8, 18, 7, 15, 17, 19, 21, 75, 35, // 90..99
     0, 85, 11, 10, 67, 86, 95, 30, 25, 18, // 100..109
+];
+
+pub(crate) static HOUSE_SIZE_1X1: [bool; 110] = [
+    true, true, true, true, true, true, true, false, false, true, // 0..9
+    true, true, true, true, true, true, true, true, true, true, // 10..19
+    false, false, false, false, true, true, true, true, true, true, // 20..29
+    true, true, false, false, false, false, true, true, true, true, // 30..39
+    false, false, false, false, true, true, true, true, true, true, // 40..49
+    true, true, true, true, true, true, true, true, true, true, // 50..59
+    true, true, true, true, true, true, false, false, false, false, // 60..69
+    true, true, true, true, false, false, false, false, true, true, // 70..79
+    true, true, true, true, true, true, true, false, false, true, // 80..89
+    true, true, true, true, true, true, true, true, true, false, // 90..99
+    false, true, true, true, true, true, true, true, true, true, // 100..109
 ];

@@ -3,7 +3,7 @@ use openttdrs_core::prelude::*;
 use openttdrs_core::{Town, generate_town_name, tile_slope_and_z};
 
 use super::{
-    PROCEDURAL_HOUSE_ID_MAX, PROCEDURAL_HOUSE_STYLE_SPREAD, PopCtx, in_preserve, min_distance_sq,
+    PROCEDURAL_HOUSE_STYLE_SPREAD, PopCtx, in_preserve, min_distance_sq, procedural_house_choices,
     tile_is_flat_grass, tile_ok_for_house,
 };
 
@@ -67,8 +67,14 @@ pub(super) fn place_towns(ctx: &mut PopCtx<'_>, target: usize, town_centers: &mu
             continue;
         }
 
-        let town_house_base = ctx.rng.next_range(PROCEDURAL_HOUSE_ID_MAX);
-        let placed_houses = build_street_town(ctx, &plan, town_house_base);
+        let choices = procedural_house_choices();
+        if choices.is_empty() {
+            continue;
+        }
+        let town_house_base = ctx
+            .rng
+            .next_range(u32::try_from(choices.len()).unwrap_or(1));
+        let (placed_houses, population) = build_street_town(ctx, &plan, town_house_base);
         if placed_houses < 3 {
             continue;
         }
@@ -80,7 +86,7 @@ pub(super) fn place_towns(ctx: &mut PopCtx<'_>, target: usize, town_centers: &mu
             id: town_id,
             pos: plan.town_pos,
             name,
-            population: u32::try_from(placed_houses.saturating_mul(8)).unwrap_or(8),
+            population,
             local_authority_rating: 0,
             passengers_served: 0,
             mail_served: 0,
@@ -224,39 +230,51 @@ fn street_roads_are_flat_and_level(state: &GameState, roads: &[TileCoord]) -> bo
     true
 }
 
-fn build_street_town(ctx: &mut PopCtx<'_>, plan: &StreetTownPlan, town_house_base: u32) -> usize {
+/// Coloca calles/casas; devuelve `(casas_colocadas, población HouseSpec)`.
+fn build_street_town(
+    ctx: &mut PopCtx<'_>,
+    plan: &StreetTownPlan,
+    town_house_base: u32,
+) -> (usize, u32) {
     let road_bits = match plan.axis {
         StreetAxis::EastWest => ROAD_BITS_AXIS_X,
         StreetAxis::NorthSouth => ROAD_BITS_AXIS_Y,
     };
 
     if !plan_fits_terrain(ctx, plan) {
-        return 0;
+        return (0, 0);
     }
 
     for &c in &plan.roads {
         if apply_command(ctx.state, &Command::SetRoadBits(c, road_bits)).is_err() {
             rollback_road_tiles(ctx.state, &plan.roads);
-            return 0;
+            return (0, 0);
         }
     }
 
+    let choices = procedural_house_choices();
+    let n_choices = u32::try_from(choices.len()).unwrap_or(0);
+    if n_choices == 0 {
+        return (0, 0);
+    }
+
     let mut placed = 0_usize;
+    let mut population = 0_u32;
     for &c in &plan.houses {
         if !tile_ok_for_house(ctx.state, c, ctx.preserve) {
             continue;
         }
-        let house_id = u16::try_from(
-            (town_house_base + ctx.rng.next_range(PROCEDURAL_HOUSE_STYLE_SPREAD))
-                % PROCEDURAL_HOUSE_ID_MAX,
-        )
-        .unwrap_or(1);
+        let idx = (town_house_base + ctx.rng.next_range(PROCEDURAL_HOUSE_STYLE_SPREAD)) % n_choices;
+        let house_id = choices[usize::try_from(idx).unwrap_or(0)];
         let age = u8::try_from(ctx.rng.next_u32() % 200).unwrap_or(0);
         if ctx.state.map.set_completed_house(c, house_id, age).is_ok() {
             placed += 1;
+            population = population.saturating_add(u32::from(
+                openttdrs_core::house_spec_population(house_id),
+            ));
         }
     }
-    placed
+    (placed, population)
 }
 
 fn rollback_road_tiles(state: &mut GameState, roads: &[TileCoord]) {

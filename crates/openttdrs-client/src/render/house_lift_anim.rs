@@ -1,6 +1,7 @@
 //! Ascensor de Large Office (`SPR_LIFT` = 1443 / `house_lift.png`).
 //!
 //! OpenTTD: `TownDrawHouseLift` — `AddChildSpriteScreen(SPR_LIFT, …, 14, 60 - pos)`.
+//! Los offsets `(14, 60)` son píxeles de pantalla relativos al sprite del edificio.
 //! MVP: 4 pasos de Y sincronizados con [`TileAnimClock`] (`frame & 3`).
 
 use bevy::prelude::*;
@@ -24,11 +25,16 @@ impl Plugin for HouseLiftAnimPlugin {
     }
 }
 
-/// Overlay del ascensor; `base` = traslación en frame 0.
+/// Overlay del ascensor; `base` = traslación en frame 0 (`pos = 0` → y pantalla 60).
 #[derive(Component, Clone, Copy)]
 pub(crate) struct HouseLiftAnim {
     pub(crate) base: Vec3,
 }
+
+/// Offset X de pantalla OpenTTD (`AddChildSpriteScreen`).
+pub(crate) const HOUSE_LIFT_SCREEN_X: f32 = 14.0;
+/// Offset Y de pantalla OpenTTD con `GetLiftPosition == 0` (`60 - pos`).
+pub(crate) const HOUSE_LIFT_SCREEN_Y: f32 = 60.0;
 
 /// Pasos de elevación (px Bevy, Y+ = arriba). OpenTTD usa `60 - pos` en pantalla.
 pub(crate) const HOUSE_LIFT_Y_OFFSETS: [f32; 4] = [0.0, 6.0, 12.0, 18.0];
@@ -95,5 +101,18 @@ mod tests {
         assert!(house_sprite_has_lift(4569));
         assert!(!house_sprite_has_lift(1483));
         assert!(!house_sprite_has_lift(0));
+    }
+
+    #[test]
+    fn screen_offsets_are_child_sprite_pixels_not_tile_seq() {
+        // Regresión toma2: `remap_tile_offset(14, 60)*0.5` ≈ 3 teselas de error.
+        use crate::iso::{ISO_HW, remap_tile_offset};
+        let bad = remap_tile_offset(HOUSE_LIFT_SCREEN_X, HOUSE_LIFT_SCREEN_Y, 0.0) * 0.5;
+        assert!(
+            bad.length() > ISO_HW * 2.0,
+            "el bug antiguo desplazaba el ascensor varios tiles: {bad:?}"
+        );
+        assert_eq!(HOUSE_LIFT_SCREEN_X, 14.0);
+        assert_eq!(HOUSE_LIFT_SCREEN_Y, 60.0);
     }
 }

@@ -117,12 +117,13 @@ pub(crate) fn spawn_house_tile(
     if crate::render::house_sprite_has_lift(spec.s2) {
         let lift_w = 4.0;
         let lift_h = 13.0;
-        // OpenTTD: AddChildSpriteScreen(SPR_LIFT, …, 14, 60 - pos).
-        let off = remap_tile_offset(14.0, 60.0, 0.0) * 0.5;
+        // OpenTTD: `AddChildSpriteScreen(SPR_LIFT, …, 14, 60 - pos)` — offsets de
+        // **pantalla** relativos al edificio, no unidades TILE_SEQ.
+        // `remap_tile_offset(14, 60)` los trataba como tesela y desplazaba ~3 tiles.
         let pos3 = overlay_pos(
-            ctx.iso_pos + off,
-            -lift_w / 2.0,
-            -lift_h / 2.0,
+            ctx.iso_pos,
+            spec.s2_xrel + crate::render::HOUSE_LIFT_SCREEN_X,
+            spec.s2_yrel + crate::render::HOUSE_LIFT_SCREEN_Y,
             lift_w,
             lift_h,
             base_z,

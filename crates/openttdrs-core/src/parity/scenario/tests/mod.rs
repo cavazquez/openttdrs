@@ -79,16 +79,47 @@ fn unknown_scenario_returns_none() {
     );
 }
 
+/// Espera a que la IA tenga al menos `min_trains` (obra progresiva + meses).
+fn wait_ai_trains(
+    state: &mut crate::GameState,
+    ai_id: crate::company::CompanyId,
+    min_trains: usize,
+) {
+    use crate::economy::TICKS_PER_MONTH;
+    use crate::vehicle::VehicleKind;
+    let month_ticks = usize::try_from(TICKS_PER_MONTH).unwrap_or(usize::MAX);
+    for i in 0_usize..120_000 {
+        // Mantener liquidez: costes de marcha no deben bloquear la siguiente ruta.
+        if i.is_multiple_of(month_ticks)
+            && let Some(c) = state.companies.get_mut(ai_id.index())
+        {
+            c.economy.money = c.economy.money.max(500_000);
+        }
+        state.step();
+        let trains = state
+            .vehicles
+            .iter()
+            .filter(|v| v.owner == ai_id && v.kind == VehicleKind::Train && v.is_consist_head())
+            .count();
+        if trains >= min_trains {
+            return;
+        }
+    }
+    let trains = state
+        .vehicles
+        .iter()
+        .filter(|v| v.owner == ai_id && v.kind == VehicleKind::Train && v.is_consist_head())
+        .count();
+    panic!("timeout esperando {min_trains} trenes IA, got {trains}");
+}
+
 #[test]
 fn ai_rival_builds_line_after_monthly_tick() {
-    use crate::economy::TICKS_PER_MONTH;
     let mut state = build_ai_rival_line();
     assert!(state.companies.iter().any(|c| c.is_ai));
-    // Avanzar hasta el primer tick mensual (IA corre en múltiplos de TICKS_PER_MONTH).
-    for _ in 0..=TICKS_PER_MONTH {
-        state.step();
-    }
     let ai_id = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+    // Encola en el mes 1 y drena comandos a ritmo visible (no one-shot).
+    wait_ai_trains(&mut state, ai_id, 1);
     assert!(
         state.stations.iter().any(|s| s.owner == ai_id),
         "TransCargo debe tener estaciones"
@@ -101,15 +132,12 @@ fn ai_rival_builds_line_after_monthly_tick() {
 
 #[test]
 fn ai_rival_builds_second_wood_route_on_l() {
-    use crate::economy::TICKS_PER_MONTH;
     use crate::vehicle::VehicleKind;
 
     let mut state = build_ai_rival_line();
-    // Dos cierres mensuales: 1ª carbón, 2ª madera (L).
-    for _ in 0..=(TICKS_PER_MONTH * 2) {
-        state.step();
-    }
     let ai_id = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+    // 1ª carbón + 2ª madera (obra progresiva entre meses).
+    wait_ai_trains(&mut state, ai_id, 2);
     let trains = state
         .vehicles
         .iter()
@@ -150,16 +178,13 @@ fn ai_rival_builds_second_wood_route_on_l() {
 
 #[test]
 fn ai_rival_builds_third_oil_route() {
-    use crate::economy::TICKS_PER_MONTH;
     use crate::vehicle::VehicleKind;
 
     let mut state = build_ai_rival_line();
     assert_eq!(state.ai.max_routes, 3);
-    // Tres cierres mensuales: carbón, madera, petróleo.
-    for _ in 0..=(TICKS_PER_MONTH * 3) {
-        state.step();
-    }
     let ai_id = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+    // Carbón + madera + petróleo con cola progresiva.
+    wait_ai_trains(&mut state, ai_id, 3);
     let trains = state
         .vehicles
         .iter()
@@ -196,7 +221,6 @@ fn ai_rival_builds_third_oil_route() {
 fn ai_rival_flattens_terrain_and_places_block_signals() {
     use crate::TileKind;
     use crate::command::{Command, apply_command};
-    use crate::economy::TICKS_PER_MONTH;
     use crate::rail_signals::rail_tile_is_signals;
     use crate::vehicle::VehicleKind;
 
@@ -208,10 +232,8 @@ fn ai_rival_flattens_terrain_and_places_block_signals() {
             apply_command(&mut state, &Command::RaiseLand(TileCoord::new(x, 5))).ok();
         }
     }
-    for _ in 0..=TICKS_PER_MONTH {
-        state.step();
-    }
     let ai_id = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+    wait_ai_trains(&mut state, ai_id, 1);
     assert!(
         state
             .vehicles
@@ -242,13 +264,10 @@ fn ai_rival_flattens_terrain_and_places_block_signals() {
 #[test]
 fn ai_rival_delivers_coal_and_awards_subsidy() {
     use crate::cargo::CargoType;
-    use crate::economy::TICKS_PER_MONTH;
 
     let mut state = build_ai_rival_line();
-    for _ in 0..=TICKS_PER_MONTH {
-        state.step();
-    }
     let ai_id = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+    wait_ai_trains(&mut state, ai_id, 1);
     assert!(state.vehicles.iter().any(|v| v.owner == ai_id), "tren IA");
     assert!(
         state

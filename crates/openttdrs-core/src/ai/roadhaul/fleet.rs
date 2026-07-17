@@ -36,10 +36,7 @@ pub(super) fn buy_and_order_bus(
         else {
             return;
         };
-        let orders = vec![
-            VehicleOrder::station(stop_a),
-            VehicleOrder::station(stop_b),
-        ];
+        let orders = vec![VehicleOrder::station(stop_a), VehicleOrder::station(stop_b)];
         if apply_command(state, &Command::SetVehicleOrderList(vid, orders)).is_err() {
             return;
         }

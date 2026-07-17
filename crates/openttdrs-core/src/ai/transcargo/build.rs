@@ -9,6 +9,7 @@ use crate::pathfinder::{PathNetwork, find_path, find_rail_build_path};
 use crate::rail_signals::{SIGTYPE_BLOCK, rail_tile_is_signals};
 
 use super::plan::{RoutePlan, pick_station_tile};
+use crate::ai::build_queue::{AiBuildFinish, AiBuildQueue, record_build_commands};
 
 /// Corredor tendido: pathfind (#184) o fallback Manhattan L.
 enum BuiltCorridor {
@@ -16,7 +17,35 @@ enum BuiltCorridor {
     Manhattan,
 }
 
-pub(super) fn build_freight_line(
+/// Planifica en un clon (grabando comandos) y devuelve la cola sin mutar `state`.
+pub(crate) fn plan_freight_line_queue(
+    state: &GameState,
+    ai_id: CompanyId,
+    plan: RoutePlan,
+) -> Option<AiBuildQueue> {
+    let mut endpoints = None;
+    let commands = record_build_commands(state, |tmp| {
+        endpoints = build_freight_line(tmp, ai_id, plan);
+    });
+    let (load_st, unload_st, depot) = endpoints?;
+    if commands.is_empty() {
+        return None;
+    }
+    Some(AiBuildQueue {
+        company: ai_id,
+        commands,
+        finish: AiBuildFinish::TransCargo {
+            load_st,
+            unload_st,
+            depot,
+            source: plan.source,
+            dest: plan.dest,
+            cargo: plan.cargo,
+        },
+    })
+}
+
+pub(crate) fn build_freight_line(
     state: &mut GameState,
     ai_id: CompanyId,
     plan: RoutePlan,
@@ -59,11 +88,15 @@ pub(super) fn build_freight_line(
             reapply_l_corner(state, load_st, unload_st);
             corridor = BuiltCorridor::Manhattan;
         }
+        if let Some(spur) = try_spur_to_existing_network(state, load_st, unload_st, &existing_ai) {
+            corridor = spur;
+        }
         if !rail_stations_connected(state, load_st, unload_st) {
             return;
         }
         place_corridor_signals(state, load_st, unload_st, &corridor);
-        depot_out = try_place_depot_near(state, load_st);
+        depot_out = try_place_depot_near(state, load_st)
+            .or_else(|| find_rail_depot_linked_to(state, load_st));
         reapply_corridor_corners(state, load_st, unload_st, &corridor);
         // Depósito/autorail puede romper el codo: reafirmar y revalidar.
         if !rail_stations_connected(state, load_st, unload_st) {
@@ -88,6 +121,91 @@ pub(super) fn build_freight_line(
     } else {
         None
     }
+}
+
+/// 2ª/3ª ruta: empalmar a un vecino Rail de la red existente (la estación hub
+/// puede no aceptar el eje del spur — p. ej. andén E-W vs spur N-S).
+fn try_spur_to_existing_network(
+    state: &mut GameState,
+    load_st: TileCoord,
+    unload_st: TileCoord,
+    existing_ai: &[TileCoord],
+) -> Option<BuiltCorridor> {
+    if rail_stations_connected(state, load_st, unload_st) {
+        return None;
+    }
+    let mut join_targets: Vec<TileCoord> = Vec::new();
+    for &hub in existing_ai {
+        if hub == load_st || hub == unload_st {
+            continue;
+        }
+        if !rail_stations_connected(state, hub, unload_st) {
+            continue;
+        }
+        for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+            let n = TileCoord::new(hub.x + dx, hub.y + dy);
+            if state.map.get_kind(n) == Some(TileKind::Rail)
+                && find_path(&state.map, n, unload_st, PathNetwork::Rail).is_some()
+            {
+                join_targets.push(n);
+            }
+        }
+        join_targets.push(hub);
+    }
+    for join in join_targets {
+        let spur = place_rail_corridor(state, load_st, join);
+        reapply_built_corridor(state, load_st, join, &spur);
+        if !rail_stations_connected(state, load_st, unload_st)
+            && find_path(&state.map, load_st, join, PathNetwork::Rail).is_none()
+        {
+            flatten_build_band(state, load_st, join);
+            place_rail_manhattan_corridor(state, load_st, join);
+            reapply_l_corner(state, load_st, join);
+        }
+        if rail_stations_connected(state, load_st, unload_st) {
+            return Some(spur);
+        }
+    }
+    None
+}
+
+/// Reutilizar un depósito ya enlazado a la red si el nuevo no cabe (2ª ruta).
+fn find_rail_depot_linked_to(state: &GameState, load_st: TileCoord) -> Option<TileCoord> {
+    let (mw, mh) = state.map.dimensions();
+    for y in 0..mh.cast_signed() {
+        for x in 0..mw.cast_signed() {
+            let c = TileCoord::new(x, y);
+            if state.map.get_kind(c) != Some(TileKind::RailDepot) {
+                continue;
+            }
+            if find_path(&state.map, c, load_st, PathNetwork::Rail).is_some() {
+                return Some(c);
+            }
+        }
+    }
+    None
+}
+
+/// Reafirma el corredor entre estaciones (cura huecos del drenado progresivo).
+pub(crate) fn repair_freight_corridor(
+    state: &mut GameState,
+    ai_id: CompanyId,
+    load_st: TileCoord,
+    unload_st: TileCoord,
+) -> bool {
+    with_ai_active(state, ai_id, |state| {
+        let mut corridor = place_rail_corridor(state, load_st, unload_st);
+        reapply_built_corridor(state, load_st, unload_st, &corridor);
+        if !rail_stations_connected(state, load_st, unload_st) {
+            flatten_build_band(state, load_st, unload_st);
+            place_rail_manhattan_corridor(state, load_st, unload_st);
+            reapply_l_corner(state, load_st, unload_st);
+            corridor = BuiltCorridor::Manhattan;
+            reapply_built_corridor(state, load_st, unload_st, &corridor);
+        }
+        reapply_corridor_corners(state, load_st, unload_st, &corridor);
+    });
+    rail_stations_connected(state, load_st, unload_st)
 }
 
 fn with_ai_active(state: &mut GameState, ai_id: CompanyId, f: impl FnOnce(&mut GameState)) {

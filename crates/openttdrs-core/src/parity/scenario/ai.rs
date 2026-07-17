@@ -12,9 +12,9 @@ pub fn build_ai_rival_line() -> GameState {
     state.economy.money = 100_000;
     state.ensure_companies();
     state.ensure_rival_transcargo();
-    // Margen para 3 líneas (estaciones + vía + trenes) bajo umbral 80k.
+    // Margen amplio: obra progresiva + costes de marcha entre rutas (umbral 80k).
     if let Some(ai) = state.companies.iter_mut().find(|c| c.is_ai) {
-        ai.economy.money = 350_000;
+        ai.economy.money = 2_000_000;
     }
 
     let mine = TileCoord::new(2, 5);

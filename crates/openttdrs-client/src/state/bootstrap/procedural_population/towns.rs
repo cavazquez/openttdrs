@@ -269,9 +269,8 @@ fn build_street_town(
         let age = u8::try_from(ctx.rng.next_u32() % 200).unwrap_or(0);
         if ctx.state.map.set_completed_house(c, house_id, age).is_ok() {
             placed += 1;
-            population = population.saturating_add(u32::from(
-                openttdrs_core::house_spec_population(house_id),
-            ));
+            population = population
+                .saturating_add(u32::from(openttdrs_core::house_spec_population(house_id)));
         }
     }
     (placed, population)

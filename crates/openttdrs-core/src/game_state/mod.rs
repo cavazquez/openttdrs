@@ -154,8 +154,10 @@ mod economy_history_tests {
         use crate::{GameState, GameTick};
 
         let mut s = GameState::new(12, 12);
-        s.ensure_rival_transcargo();
-        assert_eq!(s.companies.len(), 2);
+        // Ambos rivales antes del cierre: `tick_ai` también puede crear RoadHaul
+        // en el mismo tick mensual (después del cierre) y dejarlo sin muestra.
+        s.ensure_rival_ais();
+        assert_eq!(s.companies.len(), 3);
         s.tick = GameTick::new(TICKS_PER_MONTH.saturating_sub(1));
         s.step();
         assert!(
@@ -421,6 +423,9 @@ pub struct GameState {
     /// Datos de runtime que no se guardan en el save JSON.
     #[serde(skip)]
     pub runtime: SimulationRuntime,
+    /// Colas de construcción IA (una obra activa por rival); no se persisten.
+    #[serde(skip, default)]
+    pub ai_build_queues: Vec<crate::ai::AiBuildQueue>,
 }
 
 const fn default_true() -> bool {
@@ -500,6 +505,7 @@ impl GameState {
             gs: crate::gs::GsState::default(),
             cargo_rng: crate::linkgraph_parity::Randomizer::new(1),
             runtime: SimulationRuntime::new(),
+            ai_build_queues: Vec::new(),
         }
     }
 
@@ -560,6 +566,7 @@ impl GameState {
             gs: crate::gs::GsState::default(),
             cargo_rng: crate::linkgraph_parity::Randomizer::new(1),
             runtime: SimulationRuntime::new(),
+            ai_build_queues: Vec::new(),
         }
     }
 

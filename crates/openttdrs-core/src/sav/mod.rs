@@ -16,7 +16,7 @@ mod date;
 mod entities;
 mod house_population_generated;
 
-/// Población de un HouseID original (`HouseSpec::population`).
+/// Población de un `HouseID` original (`HouseSpec::population`).
 #[must_use]
 pub fn house_spec_population(house_id: u16) -> u16 {
     house_population_generated::HOUSE_POPULATION
@@ -25,7 +25,7 @@ pub fn house_spec_population(house_id: u16) -> u16 {
         .unwrap_or(0)
 }
 
-/// `true` si el HouseID original tiene footprint `Size1x1`.
+/// `true` si el `HouseID` original tiene footprint `Size1x1`.
 #[must_use]
 pub fn house_spec_is_size_1x1(house_id: u16) -> bool {
     house_population_generated::HOUSE_SIZE_1X1

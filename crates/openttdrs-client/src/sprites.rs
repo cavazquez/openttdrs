@@ -179,6 +179,7 @@ pub use transparency::{
 ///
 /// `s1` es el sprite de suelo/base del tile (0 = omitir, se usa grass).
 /// `s2` es el sprite del edificio principal (0 = sin overlay).
+/// `draw_proc` es el último campo `p` de `M(...)` en `town_land.h` (`1` = ascensor).
 pub struct HouseDrawSpec {
     pub s1: u32,
     pub s1_w: f32,
@@ -190,6 +191,7 @@ pub struct HouseDrawSpec {
     pub s2_h: f32,
     pub s2_xrel: f32,
     pub s2_yrel: f32,
+    pub draw_proc: u8,
 }
 
 /// Tabla `_town_draw_tile_data` (`town_land.h`): **110** casas originales × **16** filas.

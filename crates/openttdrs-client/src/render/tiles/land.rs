@@ -113,8 +113,14 @@ pub(crate) fn spawn_house_tile(
             entity.insert(crate::render::LighthouseAnim { sprite_id: spec.s2 });
         }
     }
-    // Ascensor Large Office (`SPR_LIFT`): s2 1442 / 4569 según `town_land.h` draw_proc.
-    if crate::render::house_sprite_has_lift(spec.s2) {
+    // Ascensor Large Office: solo stage final (`draw_proc == 1` en `town_land.h`).
+    // Stage 2 reusa el mismo s2 (1442/4569) con `draw_proc == 0` (obra sin lift).
+    if spec.draw_proc == 1 {
+        debug_assert!(
+            crate::render::house_sprite_has_lift(spec.s2),
+            "draw_proc==1 esperaba s2 con lift, got {}",
+            spec.s2
+        );
         let lift_w = 4.0;
         let lift_h = 13.0;
         // OpenTTD: `AddChildSpriteScreen(SPR_LIFT, …, 14, 60 - pos)` — offsets de

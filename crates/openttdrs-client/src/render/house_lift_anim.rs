@@ -104,6 +104,24 @@ mod tests {
     }
 
     #[test]
+    fn large_office_lift_only_on_final_stage_draw_proc() {
+        // HouseID 4 (Large Office): stage 2 y 3 comparten s2=1442; solo stage 3 tiene p=1.
+        use crate::sprites::{HOUSE_DRAW_DATA, house_draw_data_index_for_tile};
+        let stage2 = house_draw_data_index_for_tile(4, 0, 0, 2);
+        let stage3 = house_draw_data_index_for_tile(4, 0, 0, 3);
+        let s2 = &HOUSE_DRAW_DATA[stage2];
+        let s3 = &HOUSE_DRAW_DATA[stage3];
+        assert_eq!(s2.s2, 1442);
+        assert_eq!(s3.s2, 1442);
+        assert_eq!(s2.draw_proc, 0, "stage 2 = obra, sin ascensor");
+        assert_eq!(s3.draw_proc, 1, "stage 3 = final, con ascensor");
+        assert!(house_sprite_has_lift(s3.s2));
+        // Gate de spawn: solo draw_proc == 1 (no basta el s2).
+        assert!(s2.draw_proc != 1);
+        assert!(s3.draw_proc == 1);
+    }
+
+    #[test]
     fn screen_offsets_are_child_sprite_pixels_not_tile_seq() {
         // Regresión toma2: `remap_tile_offset(14, 60)*0.5` ≈ 3 teselas de error.
         use crate::iso::{ISO_HW, remap_tile_offset};

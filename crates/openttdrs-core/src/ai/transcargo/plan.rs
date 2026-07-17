@@ -7,7 +7,7 @@ use crate::industry::IndustryKind;
 use crate::map::TileCoord;
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct RoutePlan {
+pub(crate) struct RoutePlan {
     pub source: TileCoord,
     pub dest: TileCoord,
     pub cargo: CargoType,
@@ -36,7 +36,7 @@ pub(super) fn industry_served_by_ai(
     })
 }
 
-pub(super) fn next_unserved_plan(state: &GameState, ai_id: CompanyId) -> Option<RoutePlan> {
+pub(crate) fn next_unserved_plan(state: &GameState, ai_id: CompanyId) -> Option<RoutePlan> {
     let factory = state
         .industries
         .iter()

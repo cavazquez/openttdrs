@@ -7,6 +7,32 @@ use crate::map::{TileCoord, TileKind};
 use crate::pathfinder::{PathNetwork, find_path};
 
 use super::plan::BusPlan;
+use crate::ai::build_queue::{AiBuildFinish, AiBuildQueue, record_build_commands};
+
+/// Planifica en un clon (grabando comandos) y devuelve la cola sin mutar `state`.
+pub(super) fn plan_bus_line_queue(
+    state: &GameState,
+    ai_id: CompanyId,
+    plan: BusPlan,
+) -> Option<AiBuildQueue> {
+    let mut endpoints = None;
+    let commands = record_build_commands(state, |tmp| {
+        endpoints = build_bus_line(tmp, ai_id, plan);
+    });
+    let (stop_a, stop_b, depot) = endpoints?;
+    if commands.is_empty() {
+        return None;
+    }
+    Some(AiBuildQueue {
+        company: ai_id,
+        commands,
+        finish: AiBuildFinish::RoadHaul {
+            stop_a,
+            stop_b,
+            depot,
+        },
+    })
+}
 
 pub(super) fn build_bus_line(
     state: &mut GameState,
@@ -62,7 +88,16 @@ fn with_ai_active(state: &mut GameState, ai_id: CompanyId, f: impl FnOnce(&mut G
 
 fn pick_stop_tile(state: &GameState, near: TileCoord, toward: TileCoord) -> Option<TileCoord> {
     let mut cands = Vec::new();
-    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1), (-2, 0), (2, 0), (0, -2), (0, 2)] {
+    for (dx, dy) in [
+        (-1, 0),
+        (1, 0),
+        (0, -1),
+        (0, 1),
+        (-2, 0),
+        (2, 0),
+        (0, -2),
+        (0, 2),
+    ] {
         let c = TileCoord::new(near.x + dx, near.y + dy);
         if state.map.get(c).is_none() {
             continue;
@@ -125,12 +160,7 @@ fn place_bus_stop_owned(state: &mut GameState, st_pos: TileCoord, ai_id: Company
         return true;
     }
     // Asegurar carretera adyacente hacia el pueblo / corredor.
-    for (dx, dy, dir) in [
-        (0_i32, -1, 3u8),
-        (0, 1, 1),
-        (-1, 0, 0),
-        (1, 0, 2),
-    ] {
+    for (dx, dy, dir) in [(0_i32, -1, 3u8), (0, 1, 1), (-1, 0, 0), (1, 0, 2)] {
         let road = TileCoord::new(st_pos.x + dx, st_pos.y + dy);
         if state.map.get(road).is_none() {
             continue;

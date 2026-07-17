@@ -70,12 +70,9 @@ pub fn find_rail_build_path(map: &Map, from: TileCoord, to: TileCoord) -> Option
         }
 
         let cur_g = *g_score.get(&cur)?;
-        let in_dir = parent.get(&cur).map(|&p| {
-            (
-                (cur.x - p.x).signum(),
-                (cur.y - p.y).signum(),
-            )
-        });
+        let in_dir = parent
+            .get(&cur)
+            .map(|&p| ((cur.x - p.x).signum(), (cur.y - p.y).signum()));
         for (dx, dy) in dirs {
             let next = TileCoord::new(cur.x + dx, cur.y + dy);
             if next.x < 0 || next.y < 0 || next.x >= mw as i32 || next.y >= mh as i32 {

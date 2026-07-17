@@ -51,8 +51,12 @@ pub(super) fn next_bus_plan(state: &GameState, ai_id: CompanyId) -> Option<BusPl
             if dist < 6 {
                 continue;
             }
-            let a_served = served.iter().any(|s| (s.x - a.x).abs() <= 3 && (s.y - a.y).abs() <= 3);
-            let b_served = served.iter().any(|s| (s.x - b.x).abs() <= 3 && (s.y - b.y).abs() <= 3);
+            let a_served = served
+                .iter()
+                .any(|s| (s.x - a.x).abs() <= 3 && (s.y - a.y).abs() <= 3);
+            let b_served = served
+                .iter()
+                .any(|s| (s.x - b.x).abs() <= 3 && (s.y - b.y).abs() <= 3);
             if a_served && b_served {
                 continue;
             }

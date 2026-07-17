@@ -43,6 +43,9 @@ pub fn apply_command(state: &mut GameState, cmd: &Command) -> Result<(), Command
         }
         // Comandos mutan el espejo `economy`; sincronizar pool.
         state.sync_active_from_mirrors();
+        if let Some(rec) = state.runtime.command_recorder.as_mut() {
+            rec.push_back(cmd.clone());
+        }
     }
     result
 }

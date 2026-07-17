@@ -1,5 +1,6 @@
+use crate::command::Command;
 use crate::map::TileCoord;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 /// Campos efímeros de la simulación (no persistidos; reconstruidos tras carga).
 ///
@@ -56,6 +57,9 @@ pub struct SimulationRuntime {
 
     /// `FlowStat` reconstruidos desde `link_graph` (no persistidos).
     pub station_flows: crate::flow_stat::StationFlows,
+
+    /// Grabador opcional: cada `apply_command` exitoso se encola (plan IA progresiva).
+    pub command_recorder: Option<VecDeque<Command>>,
 }
 
 impl SimulationRuntime {
@@ -79,6 +83,7 @@ impl SimulationRuntime {
             shore_newgrf_sprites: Vec::new(),
             catenary_newgrf_sprites: Vec::new(),
             station_flows: crate::flow_stat::StationFlows::default(),
+            command_recorder: None,
         }
     }
 

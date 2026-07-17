@@ -1,5 +1,5 @@
 name: Rust toolchain + caché + deps Linux
-description: Rust 1.95, rust-cache compartido y paquetes APT para Bevy (X11/Wayland/Vulkan/ALSA)
+description: Rust 1.97, rust-cache compartido y paquetes APT para Bevy (X11/Wayland/Vulkan/ALSA)
 inputs:
   components:
     description: Componentes rustup (p. ej. rustfmt, clippy)
@@ -19,7 +19,7 @@ runs:
     - name: Instalar Rust
       uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: 1.95.0
+        toolchain: 1.97.1
         components: ${{ inputs.components }}
 
     - name: caché cargo

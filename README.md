@@ -7,7 +7,7 @@
 [![CI](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml/badge.svg)](https://github.com/cavazquez/openttdrs/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/cavazquez/openttdrs/graph/badge.svg)](https://codecov.io/gh/cavazquez/openttdrs)
 [![Licencia GPL-2.0](https://img.shields.io/badge/licencia-GPL--2.0-blue.svg)](LICENSE)
-[![Rust MSRV](https://img.shields.io/badge/rust-1.95%2B-orange.svg)](https://doc.rust-lang.org/stable/releases.html)
+[![Rust MSRV](https://img.shields.io/badge/rust-1.97%2B-orange.svg)](https://doc.rust-lang.org/stable/releases.html)
 [![Bevy](https://img.shields.io/badge/Bevy-0.19.0-C659D4.svg)](https://bevyengine.org/)
 [![Inspiración OpenTTD](https://img.shields.io/badge/inspiración-OpenTTD-5a3.svg)](https://www.openttd.org/)
 
@@ -205,7 +205,7 @@ Detalle de planos/chunks: [docs/OTTDMAP_FORMAT.md](docs/OTTDMAP_FORMAT.md). Rege
 
 | Tecnología | Rol |
 |------------|-----|
-| Rust 2024 (MSRV **1.95**) | Workspace `openttdrs-core` + `openttdrs-client` + `openttdrs-net` |
+| Rust 2024 (MSRV **1.97**) | Workspace `openttdrs-core` + `openttdrs-client` + `openttdrs-net` |
 | Bevy **0.19** | ECS, ventana, render 2D, UI |
 | serde / JSON | Save/load del core |
 | Python 3 + Pillow | `parse_sav`, goldens, recorte OpenGFX |

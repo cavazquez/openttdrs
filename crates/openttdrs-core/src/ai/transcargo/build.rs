@@ -4,7 +4,7 @@ use crate::GameState;
 use crate::command::{Command, LevelMode, apply_command};
 use crate::company::CompanyId;
 use crate::map::rail_bit_for_sides;
-use crate::map::{RAIL_TB_Y, TileCoord, TileKind};
+use crate::map::{RAIL_TB_Y, TileCoord, TileKind, opposite_diag_dir};
 use crate::pathfinder::{PathNetwork, find_path, find_rail_build_path};
 use crate::rail_signals::{SIGTYPE_BLOCK, rail_tile_is_signals};
 
@@ -43,19 +43,35 @@ pub(super) fn build_freight_line(
 
     let mut depot_out = None;
     with_ai_active(state, ai_id, |state| {
-        let corridor = place_rail_corridor(state, load_st, unload_st);
+        // Un solo polyline: no recalcular A* tras estaciones (evita tramos huérfanos).
+        let mut corridor = place_rail_corridor(state, load_st, unload_st);
         if !place_rail_station_owned(state, load_st, ai_id) {
             return;
         }
         if !place_rail_station_owned(state, unload_st, ai_id) {
             return;
         }
-        // Reconectar vía bajo/alrededor de las estaciones.
-        let _ = place_rail_corridor(state, load_st, unload_st);
+        reapply_built_corridor(state, load_st, unload_st, &corridor);
+        if !rail_stations_connected(state, load_st, unload_st) {
+            // Último recurso: L Manhattan (mismo from/to, sin segundo A*).
+            flatten_build_band(state, load_st, unload_st);
+            place_rail_manhattan_corridor(state, load_st, unload_st);
+            reapply_l_corner(state, load_st, unload_st);
+            corridor = BuiltCorridor::Manhattan;
+        }
+        if !rail_stations_connected(state, load_st, unload_st) {
+            return;
+        }
         place_corridor_signals(state, load_st, unload_st, &corridor);
         depot_out = try_place_depot_near(state, load_st);
-        // El depósito (autorraíl) puede refrescar vecinos: reafirmar curvas.
         reapply_corridor_corners(state, load_st, unload_st, &corridor);
+        // Depósito/autorail puede romper el codo: reafirmar y revalidar.
+        if !rail_stations_connected(state, load_st, unload_st) {
+            reapply_built_corridor(state, load_st, unload_st, &corridor);
+            if !rail_stations_connected(state, load_st, unload_st) {
+                depot_out = None;
+            }
+        }
     });
 
     let depot = depot_out?;
@@ -67,7 +83,7 @@ pub(super) fn build_freight_line(
         .stations
         .iter()
         .any(|s| s.owner == ai_id && s.pos == unload_st);
-    if has_load && has_unload {
+    if has_load && has_unload && rail_stations_connected(state, load_st, unload_st) {
         Some((load_st, unload_st, depot))
     } else {
         None
@@ -86,18 +102,51 @@ fn with_ai_active(state: &mut GameState, ai_id: CompanyId, f: impl FnOnce(&mut G
     state.sync_mirrors_from_active();
 }
 
-/// Pathfind de buildables (#184); si falla, L Manhattan (comportamiento previo).
+/// Pathfind de buildables (#184); si falla o el tendido queda incompleto → L Manhattan.
 fn place_rail_corridor(state: &mut GameState, from: TileCoord, to: TileCoord) -> BuiltCorridor {
     if let Some(path) = find_rail_build_path(&state.map, from, to)
         && path.len() >= 2
     {
         flatten_path_band(state, &path);
-        place_rail_along_path(state, &path);
-        return BuiltCorridor::Path(path);
+        if place_rail_along_path(state, &path) && path_has_rail_or_station(state, &path) {
+            return BuiltCorridor::Path(path);
+        }
     }
     flatten_build_band(state, from, to);
     place_rail_manhattan_corridor(state, from, to);
     BuiltCorridor::Manhattan
+}
+
+/// Reaplica el corredor ya elegido (mismo path / mismo L). No vuelve a pathfind.
+fn reapply_built_corridor(
+    state: &mut GameState,
+    from: TileCoord,
+    to: TileCoord,
+    corridor: &BuiltCorridor,
+) {
+    match corridor {
+        BuiltCorridor::Path(path) => {
+            let _ = place_rail_along_path(state, path);
+            reapply_path_corners(state, path);
+        }
+        BuiltCorridor::Manhattan => {
+            place_rail_manhattan_corridor(state, from, to);
+            reapply_l_corner(state, from, to);
+        }
+    }
+}
+
+fn rail_stations_connected(state: &GameState, a: TileCoord, b: TileCoord) -> bool {
+    find_path(&state.map, a, b, PathNetwork::Rail).is_some()
+}
+
+fn path_has_rail_or_station(state: &GameState, path: &[TileCoord]) -> bool {
+    path.iter().all(|&c| {
+        matches!(
+            state.map.get_kind(c),
+            Some(TileKind::Rail | TileKind::Station | TileKind::RailDepot)
+        )
+    })
 }
 
 fn place_corridor_signals(
@@ -125,10 +174,13 @@ fn reapply_corridor_corners(
 }
 
 /// Coloca vía siguiendo un polyline cardenal (curvas en giros, sin X|Y).
-fn place_rail_along_path(state: &mut GameState, path: &[TileCoord]) {
+///
+/// Devuelve `false` si alguna tesela intermedia no pudo tenderse.
+fn place_rail_along_path(state: &mut GameState, path: &[TileCoord]) -> bool {
     if path.len() < 2 {
-        return;
+        return false;
     }
+    let mut ok = true;
     for i in 0..path.len() {
         let c = path[i];
         if matches!(
@@ -139,33 +191,36 @@ fn place_rail_along_path(state: &mut GameState, path: &[TileCoord]) {
         }
         let prev = i.checked_sub(1).map(|j| path[j]);
         let next = path.get(i + 1).copied();
-        match (prev, next) {
+        let placed = match (prev, next) {
             (Some(p), Some(n)) => {
                 let d_in = (c.x - p.x, c.y - p.y);
                 let d_out = (n.x - c.x, n.y - c.y);
                 if d_in == d_out {
-                    place_rail_axis(state, c, d_in.1 != 0, p);
+                    place_rail_axis(state, c, d_in.1 != 0, p)
                 } else if (d_in.0 != 0 && d_out.1 != 0) || (d_in.1 != 0 && d_out.0 != 0) {
-                    place_path_corner_curve(state, c, p, n);
+                    place_path_corner_curve(state, c, p, n)
                 } else {
-                    place_rail_axis(state, c, d_in.1 != 0, p);
+                    place_rail_axis(state, c, d_in.1 != 0, p)
                 }
             }
             (None, Some(other)) | (Some(other), None) => {
                 let axis_y = c.x == other.x;
-                place_rail_axis(state, c, axis_y, other);
+                place_rail_axis(state, c, axis_y, other)
             }
-            (None, None) => {}
-        }
+            (None, None) => true,
+        };
+        ok &= placed;
     }
+    ok
 }
 
-fn diag_dir_from_step(dx: i32, dy: i32) -> u8 {
+/// `DiagDir` de [`crate::map::diag_dir_offset`]: W=0, S=1, E=2, N=3.
+fn pathfinder_diag_from_step(dx: i32, dy: i32) -> u8 {
     match (dx.signum(), dy.signum()) {
-        (1, 0) => 0,  // NE
-        (0, 1) => 1,  // SE
-        (-1, 0) => 2, // SW
-        (0, -1) => 3, // NW
+        (-1, 0) => 0,
+        (0, 1) => 1,
+        (1, 0) => 2,
+        (0, -1) => 3,
         _ => 0,
     }
 }
@@ -175,12 +230,12 @@ fn place_path_corner_curve(
     corner: TileCoord,
     from_prev: TileCoord,
     to_next: TileCoord,
-) {
+) -> bool {
     if matches!(
         state.map.get_kind(corner),
         Some(TileKind::Station | TileKind::RailDepot)
     ) {
-        return;
+        return true;
     }
     let step_in = (
         (corner.x - from_prev.x).signum(),
@@ -190,23 +245,39 @@ fn place_path_corner_curve(
         (to_next.x - corner.x).signum(),
         (to_next.y - corner.y).signum(),
     );
-    let entry = diag_dir_from_step(step_in.0, step_in.1);
-    let exit = diag_dir_from_step(step_out.0, step_out.1);
-    let curve = rail_bit_for_sides(entry, exit);
+    // Lado de entrada = opuesto al sentido de llegada; salida = sentido de marcha.
+    // (Usar el sentido de marcha en ambos lados produce RIGHT también en giros Y→X,
+    // que YAPF no atraviesa; Y→X necesita LEFT.)
+    let travel_in = pathfinder_diag_from_step(step_in.0, step_in.1);
+    let travel_out = pathfinder_diag_from_step(step_out.0, step_out.1);
+    let curve = rail_bit_for_sides(opposite_diag_dir(travel_in), travel_out);
     if curve == 0 {
-        return;
+        return false;
     }
-    // Crear vía con la curva; SetRailBits fusiona Y ajeno si ya había rail.
-    let _ = apply_command(state, &Command::PlaceRailBits(corner, curve));
+    // Nivelar al ancla del tramo si hace falta y crear la curva.
+    if apply_command(state, &Command::PlaceRailBits(corner, curve)).is_err() {
+        let _ = apply_command(
+            state,
+            &Command::LevelLand {
+                from: from_prev,
+                to: corner,
+                mode: LevelMode::Level,
+            },
+        );
+        if apply_command(state, &Command::PlaceRailBits(corner, curve)).is_err() {
+            return false;
+        }
+    }
+    // Solo la curva: OR con ejes X|Y crea cruces o piezas que no conectan el giro.
     let existing = state
         .map
         .get(corner)
         .filter(|t| t.kind == TileKind::Rail)
         .map_or(0, |t| t.m5 & 0x3F);
-    let bits = curve | (existing & RAIL_TB_Y);
-    if bits != existing {
-        let _ = apply_command(state, &Command::SetRailBits(corner, bits));
+    if existing != curve {
+        let _ = apply_command(state, &Command::SetRailBits(corner, curve));
     }
+    state.map.get_kind(corner) == Some(TileKind::Rail)
 }
 
 fn reapply_path_corners(state: &mut GameState, path: &[TileCoord]) {
@@ -414,16 +485,21 @@ fn place_l_corner_curve(state: &mut GameState, corner: TileCoord, step_x: i32, s
     let _ = apply_command(state, &Command::SetRailBits(corner, bits));
 }
 
-fn place_rail_axis(state: &mut GameState, c: TileCoord, axis_y: bool, height_anchor: TileCoord) {
+fn place_rail_axis(
+    state: &mut GameState,
+    c: TileCoord,
+    axis_y: bool,
+    height_anchor: TileCoord,
+) -> bool {
     if matches!(
         state.map.get_kind(c),
         Some(TileKind::Station | TileKind::RailDepot)
     ) {
-        return;
+        return true;
     }
     let bits = if axis_y { 0x02 } else { 0x01 };
     if apply_command(state, &Command::PlaceRailBits(c, bits)).is_ok() {
-        return;
+        return true;
     }
     // Pendiente / desnivel: igualar a la altura del ancla del corredor y reintentar.
     let _ = apply_command(
@@ -434,7 +510,7 @@ fn place_rail_axis(state: &mut GameState, c: TileCoord, axis_y: bool, height_anc
             mode: LevelMode::Level,
         },
     );
-    let _ = apply_command(state, &Command::PlaceRailBits(c, bits));
+    apply_command(state, &Command::PlaceRailBits(c, bits)).is_ok()
 }
 
 /// Nivela la banda Manhattan (con margen) a la altura de `anchor`.
@@ -806,6 +882,78 @@ mod tests {
                 "codo no debe tener X|Y en {corner:?}: {tb:#04x}"
             );
         }
+    }
+
+    #[test]
+    fn reconnect_after_stations_reuses_same_path_and_stays_connected() {
+        // Regresión: un segundo A* distinto dejaba tramos huérfanos tras estaciones.
+        let mut state = GameState::new(16, 14);
+        state.economy.money = 500_000;
+        // Bosque denso: el A* rodea; el polyline debe ser estable al reaplicar.
+        for x in 4..10 {
+            for y in 3..6 {
+                state
+                    .map
+                    .set_kind(TileCoord::new(x, y), TileKind::Forest)
+                    .unwrap();
+            }
+        }
+        let load = TileCoord::new(2, 4);
+        let unload = TileCoord::new(12, 8);
+        let corridor = place_rail_corridor(&mut state, load, unload);
+        let BuiltCorridor::Path(path) = &corridor else {
+            panic!("esperado pathfind alrededor del bosque");
+        };
+        let path_len = path.len();
+        let ai = CompanyId::PLAYER;
+        assert!(place_rail_station_owned(&mut state, load, ai));
+        assert!(place_rail_station_owned(&mut state, unload, ai));
+        reapply_built_corridor(&mut state, load, unload, &corridor);
+        assert!(
+            rail_stations_connected(&state, load, unload),
+            "estaciones deben quedar unidas por el mismo polyline; path={path:?}"
+        );
+        // No debe aparecer una segunda red Manhattan ajena al path (muchas rails extra).
+        let rail_n = (0..16)
+            .flat_map(|x| (0..14).map(move |y| TileCoord::new(x, y)))
+            .filter(|&c| {
+                matches!(
+                    state.map.get_kind(c),
+                    Some(TileKind::Rail | TileKind::Station)
+                )
+            })
+            .count();
+        assert!(
+            rail_n <= path_len + 6,
+            "demasiadas teselas de vía/estación (doble tendido?): rail_n={rail_n} path_len={path_len}"
+        );
+    }
+
+    #[test]
+    fn path_corner_y_then_x_is_traversable() {
+        let mut state = GameState::new(8, 8);
+        state.economy.money = 500_000;
+        let path = [
+            TileCoord::new(2, 2),
+            TileCoord::new(2, 3),
+            TileCoord::new(2, 4),
+            TileCoord::new(3, 4),
+            TileCoord::new(4, 4),
+        ];
+        assert!(place_rail_along_path(&mut state, &path));
+        let corner = TileCoord::new(2, 4);
+        let tb = state.map.get(corner).expect("corner").m5 & 0x3F;
+        assert_eq!(tb, 0x10, "Y→X debe ser LEFT, no RIGHT: m5={tb:#04x}");
+        assert!(
+            find_path(
+                &state.map,
+                TileCoord::new(2, 2),
+                TileCoord::new(4, 4),
+                PathNetwork::Rail
+            )
+            .is_some(),
+            "codo Y→X debe ser transitable"
+        );
     }
 
     #[test]

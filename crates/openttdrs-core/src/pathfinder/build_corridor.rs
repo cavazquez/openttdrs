@@ -11,6 +11,8 @@ use super::astar::{AstarNode, manhattan, reconstruct};
 
 const COST_GRASS_OR_RAIL: u32 = 10;
 const COST_FOREST: u32 = 40;
+/// Penaliza cambios de dirección: evita dentados S con el mismo coste Manhattan.
+const COST_TURN: u32 = 15;
 
 /// ¿Se puede tender vía por esta tesela (o reutilizar vía)?
 #[must_use]
@@ -68,6 +70,12 @@ pub fn find_rail_build_path(map: &Map, from: TileCoord, to: TileCoord) -> Option
         }
 
         let cur_g = *g_score.get(&cur)?;
+        let in_dir = parent.get(&cur).map(|&p| {
+            (
+                (cur.x - p.x).signum(),
+                (cur.y - p.y).signum(),
+            )
+        });
         for (dx, dy) in dirs {
             let next = TileCoord::new(cur.x + dx, cur.y + dy);
             if next.x < 0 || next.y < 0 || next.x >= mw as i32 || next.y >= mh as i32 {
@@ -77,8 +85,13 @@ pub fn find_rail_build_path(map: &Map, from: TileCoord, to: TileCoord) -> Option
             if !tile_allows_rail_build(map, next, is_end) {
                 continue;
             }
+            let out_dir = (dx, dy);
+            let turn = match in_dir {
+                Some(d) if d != (0, 0) && d != out_dir => COST_TURN,
+                _ => 0,
+            };
             let step = step_build_cost(map, next);
-            let tentative = cur_g.saturating_add(step);
+            let tentative = cur_g.saturating_add(step).saturating_add(turn);
             if g_score.get(&next).is_some_and(|&g| tentative >= g) {
                 continue;
             }
@@ -120,6 +133,24 @@ mod tests {
             path.iter().any(|c| c.y != 3),
             "debe desviarse en Y para rodear"
         );
+    }
+
+    #[test]
+    fn build_path_open_map_is_axis_aligned_l() {
+        // Sin obstáculos: un solo giro (L), no dentado S.
+        let map = Map::new_flat(12, 10, 1);
+        let from = TileCoord::new(2, 2);
+        let to = TileCoord::new(9, 7);
+        let path = find_rail_build_path(&map, from, to).expect("path");
+        let mut turns = 0u32;
+        for w in path.windows(3) {
+            let d0 = (w[1].x - w[0].x, w[1].y - w[0].y);
+            let d1 = (w[2].x - w[1].x, w[2].y - w[1].y);
+            if d0 != d1 {
+                turns += 1;
+            }
+        }
+        assert_eq!(turns, 1, "esperado L con 1 giro; path={path:?}");
     }
 
     #[test]

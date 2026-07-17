@@ -116,12 +116,12 @@ pub(in crate::command::transport) fn merge_cardinal_bits_with_neighbors(
     let axis_h = has_w || has_e;
     let axis_v = has_n || has_s;
     let straight = requested == 0x0A || requested == 0x05;
+    // Solo bits del eje pedido (0x0A = E–O, 0x05 = N–S).
+    let same_axis_connect = connect & requested;
 
-    let bits = if axis_h && axis_v {
-        existing | requested | connect | 0x0A | 0x05
-    } else if force_axis && straight {
-        // Arrastre en línea: no girar 90° por un vecino cardinal suelto.
-        connect | requested
+    // Reforzar/arrastrar un eje recto no debe inventar el perpendicular (#181).
+    let bits = if straight && (force_axis || (axis_h && axis_v)) {
+        existing | requested | same_axis_connect
     } else if axis_h && !axis_v {
         if existing & 0x05 == 0x05 && existing & 0x0A == 0 {
             connect | 0x05
@@ -134,6 +134,10 @@ pub(in crate::command::transport) fn merge_cardinal_bits_with_neighbors(
         } else {
             connect | 0x05
         }
+    } else if requested.is_power_of_two() {
+        // Propagate cardinal: añadir el stub sin OR-ear el eje cruzado (#181).
+        let axis_mask = if requested & 0x0A != 0 { 0x0A } else { 0x05 };
+        existing | requested | (connect & axis_mask)
     } else {
         existing | requested | connect
     };

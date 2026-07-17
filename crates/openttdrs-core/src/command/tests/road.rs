@@ -103,9 +103,82 @@ fn place_road_bits_force_axis_ignores_single_cardinal_neighbor() {
     .unwrap();
     assert_eq!(
         s.map.get(TileCoord::new(4, 4)).unwrap().m5 & 0x0F,
-        0x0B,
-        "eje horizontal forzado + enlace al vecino norte"
+        0x0A,
+        "eje horizontal forzado no inventa bit N hacia el vecino (#181)"
     );
+}
+
+
+
+#[test]
+fn place_road_bits_reinforce_same_axis_keeps_bits_with_parallel() {
+    let mut s = GameState::new(12, 12);
+    // Dos rectas horizontales (FORCE evita que la 2.ª fila se incline al tocar la 1.ª).
+    for x in 3..=6 {
+        apply_command(
+            &mut s,
+            &Command::PlaceRoadBits(TileCoord::new(x, 5), 0x0A | ROAD_PLACE_FORCE_AXIS),
+        )
+        .unwrap();
+    }
+    for x in 3..=6 {
+        apply_command(
+            &mut s,
+            &Command::PlaceRoadBits(TileCoord::new(x, 6), 0x0A | ROAD_PLACE_FORCE_AXIS),
+        )
+        .unwrap();
+    }
+    for x in 3..=6 {
+        let c = TileCoord::new(x, 5);
+        assert_eq!(s.map.get(c).unwrap().m5 & 0x0F, 0x0A, "precondición x={x}");
+        apply_command(&mut s, &Command::PlaceRoadBits(c, 0x0A)).unwrap();
+        assert_eq!(
+            s.map.get(c).unwrap().m5 & 0x0F,
+            0x0A,
+            "reforzar RoadX sin FORCE no añade N/S; x={x}"
+        );
+        apply_command(
+            &mut s,
+            &Command::PlaceRoadBits(c, 0x0A | ROAD_PLACE_FORCE_AXIS),
+        )
+        .unwrap();
+        assert_eq!(
+            s.map.get(c).unwrap().m5 & 0x0F,
+            0x0A,
+            "reforzar RoadX con FORCE no añade N/S; x={x}"
+        );
+    }
+}
+
+#[test]
+fn place_road_bits_reinforce_same_axis_vertical_keeps_bits() {
+    let mut s = GameState::new(12, 12);
+    for y in 3..=6 {
+        apply_command(
+            &mut s,
+            &Command::PlaceRoadBits(TileCoord::new(5, y), 0x05 | ROAD_PLACE_FORCE_AXIS),
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::PlaceRoadBits(TileCoord::new(6, y), 0x05 | ROAD_PLACE_FORCE_AXIS),
+        )
+        .unwrap();
+    }
+    for y in 3..=6 {
+        let c = TileCoord::new(5, y);
+        assert_eq!(s.map.get(c).unwrap().m5 & 0x0F, 0x05, "precondición y={y}");
+        apply_command(
+            &mut s,
+            &Command::PlaceRoadBits(c, 0x05 | ROAD_PLACE_FORCE_AXIS),
+        )
+        .unwrap();
+        assert_eq!(
+            s.map.get(c).unwrap().m5 & 0x0F,
+            0x05,
+            "reforzar RoadY con FORCE no añade E/O; y={y}"
+        );
+    }
 }
 
 #[test]

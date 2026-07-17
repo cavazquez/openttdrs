@@ -1,4 +1,4 @@
-//! Ventana de refit: lista de cargas disponibles en depósito.
+//! Ventana de refit: lista de cargas con coste/capacidad (#178).
 
 use bevy::prelude::*;
 use openttdrs_core::Command;
@@ -18,7 +18,8 @@ use crate::ui::font::UiFontRole;
 use crate::ui::hud::{HudBuildFeedback, push_build_command_error};
 use crate::ui::toolbar::BuildMenuUi;
 
-const REFIT_ROWS: usize = 8;
+/// Cubrir `TRUCK_FREIGHT` (9) y margen; la lista hace scroll.
+const REFIT_ROWS: usize = 12;
 const CONSIST_SLOTS: usize = 8;
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_ACTIVE: Color = Color::srgb(0.58, 0.50, 0.31);
@@ -72,8 +73,8 @@ pub(crate) fn setup_refit_window(mut commands: Commands, asset_server: Res<Asset
         FloatingWindowId::Refit,
         "Refit",
         TITLE_CRIMSON,
-        Vec2::new(520.0, 180.0),
-        340.0,
+        Vec2::new(520.0, 220.0),
+        360.0,
     );
     commands.entity(content).with_children(|panel| {
         panel.spawn((
@@ -236,25 +237,22 @@ pub(crate) fn sync_refit_window(
     let options = refittable_cargo_types(vehicle);
     let unit_ids = consist_unit_ids(&sim.state.vehicles, vehicle.id);
     let show_units = unit_ids.len() > 1;
-    let selected_count = if state.selected_unit_ids.is_empty() {
-        1
-    } else {
-        state.selected_unit_ids.len()
-    };
+    let target_ids = refit_target_unit_ids(vehicle.id, &state.selected_unit_ids);
+    let selected_count = target_ids.len();
+    let result_capacity = refit_result_capacity(&sim, &target_ids);
     if let Ok(mut hint) = hint_q.single_mut() {
         **hint = if !allowed {
             "Refit solo en depósito, sin carga y con tipos alternativos.".to_string()
         } else if show_units {
             format!(
-                "Capacidad actual: {} · Unidades: {selected_count}/{}\n\
+                "Unidades: {selected_count}/{} · Cap. resultante: {result_capacity}\n\
                  Clic en unidad para seleccionar; clic en carga para aplicar.",
-                vehicle.capacity,
                 unit_ids.len()
             )
         } else {
             format!(
-                "Capacidad actual: {} · Coste: gratis\nClic para aplicar el tipo de carga.",
-                vehicle.capacity
+                "Cap. resultante: {result_capacity} · Coste: gratis\n\
+                 Clic en una carga de la lista para aplicar."
             )
         };
     }
@@ -312,11 +310,37 @@ pub(crate) fn sync_refit_window(
     for (row_text, mut text) in &mut row_text_q {
         if let Some(cargo) = options.get(row_text.slot).copied() {
             let mark = if cargo == current { " ●" } else { "" };
-            **text = format!("{}{mark}", cargo_display_name(cargo));
+            // Capacidad no varía por cargo en core; coste de refit = 0.
+            **text = format!(
+                "{} · cap. {result_capacity} · gratis{mark}",
+                cargo_display_name(cargo)
+            );
         } else {
             **text = String::new();
         }
     }
+}
+
+/// Unidades a refitear: selección explícita o solo la cabeza.
+fn refit_target_unit_ids(vehicle_id: u32, selected: &[u32]) -> Vec<u32> {
+    if selected.is_empty() {
+        vec![vehicle_id]
+    } else {
+        selected.to_vec()
+    }
+}
+
+fn refit_result_capacity(sim: &SimWorld, unit_ids: &[u32]) -> u32 {
+    unit_ids
+        .iter()
+        .filter_map(|&id| {
+            sim.state
+                .vehicles
+                .iter()
+                .find(|v| v.id == id)
+                .map(|v| v.capacity)
+        })
+        .sum()
 }
 
 pub(crate) fn handle_refit_window_buttons(
@@ -450,5 +474,32 @@ mod tests {
             world.run_system_once(sync_refit_window).is_ok(),
             "Queries de sync_refit_window deben ser disjuntas (B0001)"
         );
+    }
+
+    #[test]
+    fn refit_rows_cover_truck_freight_options() {
+        let mut v = Vehicle::new(
+            1,
+            VehicleKind::Truck,
+            TileCoord::new(0, 0),
+            TileCoord::new(0, 0),
+        );
+        v.cargo_type = Some(CargoType::Mail);
+        assert!(
+            refittable_cargo_types(&v).len() <= REFIT_ROWS,
+            "REFIT_ROWS debe cubrir todas las cargas de camión"
+        );
+    }
+
+    #[test]
+    fn cargo_row_label_includes_capacity_and_cost() {
+        let label = format!(
+            "{} · cap. {} · gratis",
+            cargo_display_name(CargoType::Coal),
+            40
+        );
+        assert!(label.contains("cap."));
+        assert!(label.contains("gratis"));
+        assert!(label.contains(cargo_display_name(CargoType::Coal)));
     }
 }

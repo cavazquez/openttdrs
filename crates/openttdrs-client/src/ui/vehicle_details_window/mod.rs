@@ -15,6 +15,7 @@ use crate::ui::floating_window::{
     WINDOW_TEXT, spawn_floating_window, window_text_font,
 };
 use crate::ui::font::UiFontRole;
+use crate::ui::refit_window::RefitWindowState;
 use crate::ui::toolbar::BuildMenuUi;
 use crate::ui::vehicle_window::{
     CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, vehicle_side_sprite,
@@ -60,6 +61,12 @@ impl VehicleDetailsWindowState {
 #[derive(Component, Clone, Copy)]
 pub(crate) struct VehicleDetailsTabButton(pub(crate) VehicleDetailsTab);
 
+/// Acciones de chrome en Details (p. ej. abrir Refit).
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum VehicleDetailsAction {
+    Refit,
+}
+
 /// Resumen del tab Totales (oculto en el resto).
 #[derive(Component)]
 pub(crate) struct VehicleDetailsSummaryText;
@@ -103,6 +110,7 @@ pub(crate) fn setup_vehicle_details_window(mut commands: Commands, asset_server:
                 spawn_details_tab(row, asset_server, VehicleDetailsTab::Cargo, "Carga");
                 spawn_details_tab(row, asset_server, VehicleDetailsTab::Capacity, "Capacidad");
                 spawn_details_tab(row, asset_server, VehicleDetailsTab::Totals, "Totales");
+                spawn_details_action(row, asset_server, VehicleDetailsAction::Refit, "Refit");
             });
         panel.spawn((
             VehicleDetailsSummaryText,
@@ -209,16 +217,72 @@ fn spawn_details_tab(
     ));
 }
 
+fn spawn_details_action(
+    parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    action: VehicleDetailsAction,
+    label: &'static str,
+) {
+    parent.spawn((
+        Button,
+        action,
+        Node {
+            min_width: Val::Px(56.0),
+            height: Val::Px(22.0),
+            padding: UiRect::horizontal(Val::Px(6.0)),
+            margin: UiRect::left(Val::Px(8.0)),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            border: UiRect::all(Val::Px(1.0)),
+            ..default()
+        },
+        BackgroundColor(BTN_BG),
+        BorderColor::all(BTN_BORDER),
+        Interaction::default(),
+        BuildMenuUi,
+        children![(
+            Text::new(label),
+            window_text_font(asset_server, UiFontRole::Caption),
+            TextColor(Color::srgb(0.92, 0.88, 0.72)),
+        )],
+    ));
+}
+
 pub(crate) fn handle_vehicle_details_buttons(
     mut tab_buttons: Query<
         (&Interaction, &VehicleDetailsTabButton),
-        (Changed<Interaction>, With<Button>),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<VehicleDetailsAction>,
+        ),
+    >,
+    mut action_buttons: Query<
+        (&Interaction, &VehicleDetailsAction),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<VehicleDetailsTabButton>,
+        ),
     >,
     mut details_state: ResMut<VehicleDetailsWindowState>,
+    mut refit_window: ResMut<RefitWindowState>,
 ) {
     for (interaction, tab) in &mut tab_buttons {
         if *interaction == Interaction::Pressed {
             details_state.details_tab = tab.0;
+        }
+    }
+    for (interaction, action) in &mut action_buttons {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        match action {
+            VehicleDetailsAction::Refit => {
+                if let Some(vehicle_id) = details_state.vehicle_id {
+                    refit_window.open_for(vehicle_id);
+                }
+            }
         }
     }
 }
@@ -252,7 +316,7 @@ pub(crate) fn sync_vehicle_details_window(
     >,
     mut tab_buttons: Query<
         (&VehicleDetailsTabButton, &Interaction, &mut BackgroundColor),
-        With<Button>,
+        (With<Button>, Without<VehicleDetailsAction>),
     >,
 ) {
     let Some((_, mut vis)) = root_q

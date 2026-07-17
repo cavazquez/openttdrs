@@ -67,7 +67,7 @@ OpenTTD: `VehicleViewWindow` (`vehicle_gui.cpp:3007-3503`). Cliente:
 | Start/stop (`StartStopVehicle`) | Icono ▶/■ + tooltip (`ToggleVehicleRunning`) | ✔ |
 | Toolbar de iconos (vista) | Fila de iconos + tooltips (#174); Horario/Detalles/Depósito/… | ✔ chrome; sprites GUI nativos OpenTTD opcionales |
 | Ir a depósito (`SendVehicleToDepot`, Ctrl = servicio) | «Depósito» (`AppendGotoNearestDepot`) | ✔ funcional; la variante «servicio» es **C** (no hay intervalos de servicio) |
-| Refit (`ShowVehicleRefitWindow`) | Botón «Refit carga» que cicla el tipo (`RefitVehicle`) | ✔ para vehículo puntual; ventana con lista de cargas es A; refit parcial de consist es C |
+| Refit (`ShowVehicleRefitWindow`) | `RefitWindow` lista + coste/cap.; View y Details; parcial por unidad | ✔ (#178); `OrderRefit` sigue **B** |
 | Clonar desde la ventana | Solo desde el depósito | **A** |
 | Dar la vuelta (`ReverseTrainDirection`/`TurnRoadVehicle`) | «Dar la vuelta» (`TurnAroundVehicle`, solo tren) | ✔ tren; road es **B** |
 | Forzar paso (`ForceTrainProceed`) | «Forzar paso» (`ForceVehicleProceed`, solo tren) | ✔ |
@@ -140,11 +140,14 @@ OpenTTD: `TimetableWindow` (`timetable_gui.cpp:174-863`). Cliente:
 ## 6. Ventana de refit
 
 OpenTTD: `RefitWindow` (`vehicle_gui.cpp:753-1358`) con selección parcial del
-consist por drag. Cliente: botón «Refit carga» en la ventana de vehículo.
+consist por drag. Cliente: `ui/refit_window.rs` (`FloatingWindowId::Refit`).
 
-- Lista de cargas con coste/capacidad en vez del ciclo actual: **A**.
-- Refit de parte del consist: **A/B** (consist existe; falta UI + comando por unidad).
-- Refit como orden (`OrderRefit`): **B** (ver §4).
+| Feature OpenTTD | Estado en cliente | Cercanía |
+|---|---|---|
+| Lista de cargas con coste/capacidad | Filas `nombre · cap. N · gratis`; coste real **B** | ✔ UI (#178) |
+| Abrir desde View / Details | Botón View + «Refit» en Details | ✔ |
+| Selección parcial del consist | Toggle de unidades + `unit_ids` en `RefitVehicle` | ✔ (sin drag nativo) |
+| Refit como orden (`OrderRefit`) | No existe | **B** (ver §4) |
 
 ## 7. Compra de vehículos
 

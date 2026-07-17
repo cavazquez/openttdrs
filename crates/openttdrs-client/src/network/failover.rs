@@ -42,7 +42,7 @@ pub struct ClientFailoverState {
     pub next_seq: u64,
     /// Addr original de `--client` (para derivar puerto+1).
     pub server_addr: String,
-    /// Destino explícito de [`HostAnnounce`] (no vuelve a sumar puerto).
+    /// Destino explícito de [`openttdrs_net::NetMessage::HostAnnounce`] (no vuelve a sumar puerto).
     pub reconnect_addr: Option<String>,
     pub last_rx: Instant,
     pub failover_attempted: bool,

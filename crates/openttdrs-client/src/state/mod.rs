@@ -278,7 +278,7 @@ impl SimWorld {
         )
     }
 
-    /// Como [`try_bootstrap`] con paths de carga inyectables (tests / headless).
+    /// Como [`Self::try_bootstrap`] con paths de carga inyectables (tests / headless).
     pub fn try_bootstrap_with_loads(
         settings: &NewGameSettings,
         json_path: Option<String>,
@@ -290,7 +290,7 @@ impl SimWorld {
         }
     }
 
-    /// Como [`try_bootstrap`] con settings derivados del entorno (clima/seed/…).
+    /// Como [`Self::try_bootstrap`] con settings derivados del entorno (clima/seed/…).
     pub fn try_bootstrap_from_env() -> Result<Self, BootstrapLoadError> {
         Self::try_bootstrap(&settings_from_env())
     }

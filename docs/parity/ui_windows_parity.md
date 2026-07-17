@@ -72,25 +72,25 @@ OpenTTD: `VehicleViewWindow` (`vehicle_gui.cpp:3007-3503`). Cliente:
 | Dar la vuelta (`ReverseTrainDirection`/`TurnRoadVehicle`) | «Dar la vuelta» (`TurnAroundVehicle`, solo tren) | ✔ tren; road es **B** |
 | Forzar paso (`ForceTrainProceed`) | «Forzar paso» (`ForceVehicleProceed`, solo tren) | ✔ |
 | Órdenes / horario (Ctrl) | Botones «Órdenes» y «Horario» separados | ✔ |
-| Detalles (`ShowVehicleDetailsWindow`) | Ventana `VehicleDetails` (#173); botón «Detalles» en View | ✔ estructura; lista por vagón → #175 |
+| Detalles (`ShowVehicleDetailsWindow`) | Ventana `VehicleDetails` (#173/#175); filas por unidad + sprites | ✔ |
 | Ir al destino de la orden (`WID_VV_ORDER_LOCATION`) | Botón «Ir a orden» | ✔ |
 | Renombrar (`RenameVehicle`) | Campo de renombrado inline | ✔ |
 
 ## 3. Ventana de detalles del vehículo
 
 OpenTTD: `VehicleDetailsWindow` (`vehicle_gui.cpp:2436-3006`) +
-`DrawTrainDetails` (`train_gui.cpp:359-471`). Cliente: `ui/vehicle_details_window.rs`
-(`FloatingWindowId::VehicleDetails`, #173) con tabs Info/Carga/Capacidad/Totales
-y `vehicle_details_body` (aún agregado a la cabeza; lista por vagón → #175).
+`DrawTrainDetails` (`train_gui.cpp:359-471`). Cliente: `ui/vehicle_details_window/`
+(`FloatingWindowId::VehicleDetails`, #173/#175) con tabs Info/Carga/Capacidad/Totales
+y **una fila por unidad** (sprite lateral + texto según tab; scroll).
 
 | Feature OpenTTD | Estado en cliente | Cercanía |
 |---|---|---|
-| Edad + vida útil | Solo en filas del depósito | **A** — el dato existe |
-| Beneficio este año / anterior | No existe | **B/C** — la sim tiene ingresos globales, no beneficio por vehículo (campo + acumulación por tick) |
-| Peso/potencia/esfuerzo tractor (TE) | Potencia y peso están en `EngineDef` (sin TE) | **A** para peso/potencia; TE es **B** (dato del motor) |
-| Fiabilidad + nº de averías | Fiabilidad estática sí; averías no | Fiabilidad ✔; averías **C** |
+| Edad + vida útil | Filas Details (Info) + depósito | **A** |
+| Beneficio este año / anterior | Resumen tab Totales | ✔ (campo en vehículo) |
+| Peso/potencia/esfuerzo tractor (TE) | Peso/potencia por unidad y consist | **A** para peso/potencia; TE es **B** |
+| Fiabilidad + nº de averías | Fiabilidad en fila Info; averías no | Fiabilidad ✔; averías **C** |
 | Intervalo de servicio (`ChangeServiceInterval`, dropdown días/%/min) | No existe | **C** — no hay servicio en la sim |
-| **Lista de vagones con 4 pestañas** (cargo/info/capacidad/totales por vagón) | No existe (capacidad agregada en cabeza) | **A** — core ya tiene unidades; falta UI por vagón |
+| **Lista de vagones con 4 pestañas** (cargo/info/capacidad/totales por vagón) | Filas con sprite + datos por tab (#175) | ✔ |
 
 Con tren puntual, lo máximo alcanzable hoy es una ventana de detalles de
 «una unidad»: edad, peso/potencia, coste, fiabilidad, carga — todo A/B.

@@ -1,12 +1,14 @@
-//! Ventana de detalles del vehículo (`VehicleDetailsWindow` OpenTTD / #173).
+//! Ventana de detalles del vehículo (`VehicleDetailsWindow` OpenTTD / #173–#175).
 //!
-//! Se abre desde el botón «Detalles» de la vista de vehículo. Contiene las
-//! pestañas Info / Carga / Capacidad / Totales y el cuerpo de texto.
+//! Se abre desde el botón «Detalles» de la vista. Tabs Info / Carga / Capacidad /
+//! Totales con **una fila por unidad** del consist (sprite + datos).
 
 mod details;
 
 use bevy::prelude::*;
+use bevy::ui::widget::ImageNode;
 
+use crate::render::TruckHandles;
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
     FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText, TITLE_CRIMSON,
@@ -14,13 +16,25 @@ use crate::ui::floating_window::{
 };
 use crate::ui::font::UiFontRole;
 use crate::ui::toolbar::BuildMenuUi;
+use crate::ui::vehicle_window::{
+    CONSIST_UNIT_SPRITE_H, CONSIST_UNIT_SPRITE_W, vehicle_side_sprite,
+};
 
-pub(crate) use details::{speed_to_kmh, vehicle_details_body};
+pub(crate) use details::speed_to_kmh;
+
+use details::{details_unit_ids, vehicle_details_summary, vehicle_details_unit_line};
+
+const DETAILS_UNIT_ROWS: usize = 24;
+const ROW_HEIGHT: f32 = 28.0;
+const LIST_VISIBLE_ROWS: usize = 7;
+const PLACEHOLDER_SPRITE: &str = "assets/opengfx/tiles/vehicle_train_e.png";
 
 const BTN_BG: Color = Color::srgb(0.36, 0.31, 0.21);
 const BTN_BORDER: Color = Color::srgb(0.66, 0.58, 0.38);
 const BTN_ACTIVE: Color = Color::srgb(0.58, 0.50, 0.31);
 const BTN_HOVER: Color = Color::srgb(0.47, 0.41, 0.28);
+const LIST_BG: Color = Color::srgb(0.16, 0.13, 0.09);
+const ROW_BG: Color = Color::srgb(0.22, 0.18, 0.12);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(crate) enum VehicleDetailsTab {
@@ -46,8 +60,24 @@ impl VehicleDetailsWindowState {
 #[derive(Component, Clone, Copy)]
 pub(crate) struct VehicleDetailsTabButton(pub(crate) VehicleDetailsTab);
 
+/// Resumen del tab Totales (oculto en el resto).
 #[derive(Component)]
-pub(crate) struct VehicleDetailsBodyText;
+pub(crate) struct VehicleDetailsSummaryText;
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct VehicleDetailsUnitRow {
+    unit_idx: usize,
+}
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct VehicleDetailsUnitSprite {
+    unit_idx: usize,
+}
+
+#[derive(Component, Clone, Copy)]
+pub(crate) struct VehicleDetailsUnitText {
+    unit_idx: usize,
+}
 
 pub(crate) fn setup_vehicle_details_window(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
@@ -57,8 +87,8 @@ pub(crate) fn setup_vehicle_details_window(mut commands: Commands, asset_server:
         FloatingWindowId::VehicleDetails,
         "Detalles",
         TITLE_CRIMSON,
-        Vec2::new(420.0, 220.0),
-        360.0,
+        Vec2::new(440.0, 280.0),
+        380.0,
     );
     commands.entity(content).with_children(|panel| {
         panel
@@ -75,12 +105,78 @@ pub(crate) fn setup_vehicle_details_window(mut commands: Commands, asset_server:
                 spawn_details_tab(row, asset_server, VehicleDetailsTab::Totals, "Totales");
             });
         panel.spawn((
-            VehicleDetailsBodyText,
+            VehicleDetailsSummaryText,
             Text::new(""),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
+            Node {
+                width: Val::Percent(100.0),
+                margin: UiRect::bottom(Val::Px(4.0)),
+                ..default()
+            },
         ));
+        panel
+            .spawn((
+                Node {
+                    width: Val::Percent(100.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(1.0),
+                    padding: UiRect::all(Val::Px(2.0)),
+                    max_height: Val::Px(ROW_HEIGHT * LIST_VISIBLE_ROWS as f32 + 4.0),
+                    overflow: Overflow::scroll_y(),
+                    ..default()
+                },
+                BackgroundColor(LIST_BG),
+                BuildMenuUi,
+            ))
+            .with_children(|list| {
+                for unit_idx in 0..DETAILS_UNIT_ROWS {
+                    spawn_details_unit_row(list, asset_server, unit_idx);
+                }
+            });
     });
+}
+
+fn spawn_details_unit_row(
+    parent: &mut ChildSpawnerCommands,
+    asset_server: &AssetServer,
+    unit_idx: usize,
+) {
+    parent
+        .spawn((
+            VehicleDetailsUnitRow { unit_idx },
+            Node {
+                width: Val::Percent(100.0),
+                height: Val::Px(ROW_HEIGHT),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(6.0),
+                display: Display::None,
+                padding: UiRect::horizontal(Val::Px(4.0)),
+                ..default()
+            },
+            BackgroundColor(ROW_BG),
+            BuildMenuUi,
+        ))
+        .with_children(|row| {
+            row.spawn((
+                VehicleDetailsUnitSprite { unit_idx },
+                ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
+                Node {
+                    width: Val::Px(CONSIST_UNIT_SPRITE_W),
+                    height: Val::Px(CONSIST_UNIT_SPRITE_H),
+                    flex_shrink: 0.0,
+                    ..default()
+                },
+                BuildMenuUi,
+            ));
+            row.spawn((
+                VehicleDetailsUnitText { unit_idx },
+                Text::new(""),
+                window_text_font(asset_server, UiFontRole::Caption),
+                TextColor(WINDOW_TEXT),
+            ));
+        });
 }
 
 fn spawn_details_tab(
@@ -127,16 +223,31 @@ pub(crate) fn handle_vehicle_details_buttons(
     }
 }
 
+#[allow(clippy::too_many_arguments, clippy::type_complexity)] // sistema ECS Bevy
 pub(crate) fn sync_vehicle_details_window(
     details_state: Res<VehicleDetailsWindowState>,
     sim: Res<SimWorld>,
+    trucks: Option<Res<TruckHandles>>,
     mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
-    mut body_q: Query<
+    mut summary_q: Query<
         &mut Text,
         (
-            With<VehicleDetailsBodyText>,
+            With<VehicleDetailsSummaryText>,
             Without<FloatingWindowTitleText>,
+            Without<VehicleDetailsUnitText>,
+        ),
+    >,
+    mut row_q: Query<(&VehicleDetailsUnitRow, &mut Node), Without<VehicleDetailsUnitSprite>>,
+    mut sprite_q: Query<
+        (&VehicleDetailsUnitSprite, &mut ImageNode, &mut Node),
+        Without<VehicleDetailsUnitRow>,
+    >,
+    mut unit_text_q: Query<
+        (&VehicleDetailsUnitText, &mut Text),
+        (
+            Without<FloatingWindowTitleText>,
+            Without<VehicleDetailsSummaryText>,
         ),
     >,
     mut tab_buttons: Query<
@@ -153,9 +264,12 @@ pub(crate) fn sync_vehicle_details_window(
 
     let vehicle = details_state
         .vehicle_id
-        .and_then(|id| sim.state.vehicles.iter().find(|v| v.id == id));
+        .and_then(|id| sim.state.vehicles.iter().find(|v| v.id == id).cloned());
     let Some(vehicle) = vehicle else {
         *vis = Visibility::Hidden;
+        for (_, mut node) in &mut row_q {
+            node.display = Display::None;
+        }
         return;
     };
     *vis = Visibility::Visible;
@@ -166,9 +280,44 @@ pub(crate) fn sync_vehicle_details_window(
     {
         **title = format!("Detalles — {}", vehicle.display_name());
     }
-    if let Ok(mut body) = body_q.single_mut() {
-        **body = vehicle_details_body(vehicle, &sim, details_state.details_tab);
+    if let Ok(mut summary) = summary_q.single_mut() {
+        **summary = vehicle_details_summary(&vehicle, &sim, details_state.details_tab);
     }
+
+    let unit_ids = details_unit_ids(&vehicle, &sim);
+    for (row, mut node) in &mut row_q {
+        node.display = if unit_ids.get(row.unit_idx).is_some() {
+            Display::Flex
+        } else {
+            Display::None
+        };
+    }
+    for (unit_text, mut text) in &mut unit_text_q {
+        if let Some(&unit_id) = unit_ids.get(unit_text.unit_idx)
+            && let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id)
+        {
+            **text = vehicle_details_unit_line(unit, &vehicle, &sim, details_state.details_tab);
+        } else {
+            **text = String::new();
+        }
+    }
+    if let Some(trucks) = trucks.as_ref() {
+        for (sprite, mut image, mut node) in &mut sprite_q {
+            if let Some(&unit_id) = unit_ids.get(sprite.unit_idx)
+                && let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == unit_id)
+            {
+                node.display = Display::Flex;
+                image.image = vehicle_side_sprite(trucks, unit);
+            } else {
+                node.display = Display::None;
+            }
+        }
+    } else {
+        for (_, _, mut node) in &mut sprite_q {
+            node.display = Display::None;
+        }
+    }
+
     for (tab, interaction, mut bg) in &mut tab_buttons {
         *bg = if tab.0 == details_state.details_tab {
             BackgroundColor(BTN_ACTIVE)

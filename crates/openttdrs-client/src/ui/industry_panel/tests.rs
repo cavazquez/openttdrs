@@ -12,7 +12,7 @@ use super::logic::{
     flood_industry_tiles, format_panel_title, industry_stats_for_component, kind_label, spec_label,
 };
 use super::{
-    IndustryPanelState, industry_panel_close_interaction, setup_industry_panel, sync_industry_panel,
+    IndustryPanelState, industry_panel_on_closed, setup_industry_panel, sync_industry_panel,
 };
 
 #[test]
@@ -31,12 +31,11 @@ fn setup_industry_panel_runs() {
 }
 
 #[test]
-fn industry_panel_close_no_entities_is_noop() {
+fn industry_panel_on_closed_no_messages_is_noop() {
     let mut world = World::new();
     world.insert_resource(IndustryPanelState::default());
-    world
-        .run_system_once(industry_panel_close_interaction)
-        .unwrap();
+    world.init_resource::<Messages<crate::ui::floating_window::FloatingWindowClosed>>();
+    world.run_system_once(industry_panel_on_closed).unwrap();
 }
 
 #[test]

@@ -4,16 +4,17 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 `FloatingWindowId::ALL` / `BuildMenuAction::ALL` / etc. (test
 `ui_enum_inventory_counts`).
 
-**Fecha:** 2026-07-17 · **FloatingWindowId:** 42 · **BuildMenuAction:** 66 ·
+**Fecha:** 2026-07-17 · **FloatingWindowId:** 43 · **BuildMenuAction:** 66 ·
 **SaveMenuAction:** 22 · **ToolbarGroup:** 8
 
 ## Ventanas flotantes (`FloatingWindowId`)
 
 | Id | Apertura típica | Notas |
 |----|-----------------|-------|
-| Town | clic pueblo / menú | |
+| Town | clic pueblo / menú | Chrome compacto (#179) |
 | TownDirectory | menú Info / `UiRoute` | |
 | IndustryDirectory | menú Info | |
+| Industry | clic industria | Viewport RT + Loc (#179) |
 | StationDirectory | menú Info | |
 | VehicleList | menú Info / flota | |
 | SubsidyList | menú Economía | |
@@ -59,7 +60,6 @@ Checklist versionado de superficies de UI. Los conteos deben coincidir con
 | Superficie | Apertura |
 |------------|----------|
 | StationCargoPanel | clic estación |
-| IndustryPanel | clic industria |
 | SaveWindow | Guardar/Cargar |
 | Minimap | HUD |
 | Build toolbar groups | barra superior |

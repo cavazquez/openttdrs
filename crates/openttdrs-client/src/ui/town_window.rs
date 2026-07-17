@@ -58,27 +58,29 @@ pub(crate) fn setup_town_window(mut commands: Commands, asset_server: Res<AssetS
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(WINDOW_TEXT),
         ));
-        spawn_town_action_button(
-            body,
-            asset_server,
-            "Centrar vista en el pueblo",
-            TownWindowButton::CenterCamera,
-        );
-        spawn_town_action_button(
-            body,
-            asset_server,
-            &format!("Publicidad ({})", format_money(TOWN_ADVERTISE_COST)),
-            TownWindowButton::Advertise,
-        );
-        spawn_town_action_button(
-            body,
-            asset_server,
-            &format!(
-                "Financiar edificios ({})",
-                format_money(FUND_BUILDINGS_COST)
-            ),
-            TownWindowButton::FundBuildings,
-        );
+        // Chrome compacto (#179): fila de acciones cortas, no muro de botones.
+        body.spawn(Node {
+            width: Val::Percent(100.0),
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(4.0),
+            margin: UiRect::top(Val::Px(6.0)),
+            ..default()
+        })
+        .with_children(|row| {
+            spawn_town_action_button(row, asset_server, "Loc", TownWindowButton::CenterCamera);
+            spawn_town_action_button(
+                row,
+                asset_server,
+                &format!("Pub {}", format_money(TOWN_ADVERTISE_COST)),
+                TownWindowButton::Advertise,
+            );
+            spawn_town_action_button(
+                row,
+                asset_server,
+                &format!("Fondos {}", format_money(FUND_BUILDINGS_COST)),
+                TownWindowButton::FundBuildings,
+            );
+        });
     });
 }
 
@@ -92,12 +94,12 @@ fn spawn_town_action_button(
         Button,
         button,
         Node {
-            width: Val::Percent(100.0),
+            flex_grow: 1.0,
             height: Val::Px(22.0),
             justify_content: JustifyContent::Center,
             align_items: AlignItems::Center,
             border: UiRect::all(Val::Px(1.0)),
-            margin: UiRect::top(Val::Px(4.0)),
+            padding: UiRect::horizontal(Val::Px(4.0)),
             ..default()
         },
         BackgroundColor(Color::srgb(0.36, 0.31, 0.21)),

@@ -1,4 +1,5 @@
-//! Panel flotante al clicar una industria (sin herramienta activa), con vista previa renderizada a textura.
+//! Ventana flotante al clicar una industria (sin herramienta activa), con
+//! vista previa renderizada a textura (`FloatingWindowId::Industry` / #179).
 
 use bevy::prelude::*;
 use openttdrs_core::TileCoord;
@@ -14,7 +15,7 @@ pub(crate) use logic::kind_label;
 pub(crate) use logic::spec_label;
 pub(crate) use setup::setup_industry_panel;
 pub(crate) use systems::{
-    industry_panel_center_interaction, industry_panel_close_interaction, sync_industry_panel,
+    industry_panel_center_interaction, industry_panel_on_closed, sync_industry_panel,
 };
 
 #[derive(Resource, Default)]
@@ -24,16 +25,7 @@ pub(crate) struct IndustryPanelState {
 }
 
 #[derive(Component)]
-pub(crate) struct IndustryPanelRoot;
-
-#[derive(Component)]
-pub(crate) struct IndustryPanelTitle;
-
-#[derive(Component)]
 pub(crate) struct IndustryPanelDetails;
-
-#[derive(Component)]
-pub(crate) struct IndustryPanelCloseButton;
 
 #[derive(Component)]
 pub(crate) struct IndustryPanelCenterButton;

@@ -5,7 +5,7 @@ use super::toolbar::editor_toolbar::EditorToolbarAction;
 use super::toolbar::{BuildMenuAction, SaveMenuAction, ToolbarGroup};
 
 /// Debe coincidir con la tabla de `docs/parity/ui_route_inventory.md`.
-const EXPECTED_FLOATING_WINDOWS: usize = 42;
+const EXPECTED_FLOATING_WINDOWS: usize = 43;
 const EXPECTED_BUILD_MENU_ACTIONS: usize = 66;
 const EXPECTED_SAVE_MENU_ACTIONS: usize = 22;
 const EXPECTED_TOOLBAR_GROUPS: usize = 8;

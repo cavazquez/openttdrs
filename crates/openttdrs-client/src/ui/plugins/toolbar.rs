@@ -6,7 +6,7 @@ use crate::bevy_app::{StartupSet, UpdateSet};
 use crate::state::ClientScreen;
 use crate::ui::hud::{cycle_json_save_path_hotkey, handle_pause_toggle, handle_tool_hotkeys};
 use crate::ui::industry_panel::{
-    IndustryPanelState, industry_panel_center_interaction, industry_panel_close_interaction,
+    IndustryPanelState, industry_panel_center_interaction, industry_panel_on_closed,
     setup_industry_panel, sync_industry_panel,
 };
 use crate::ui::save_window::{
@@ -121,7 +121,7 @@ impl Plugin for ToolbarUiPlugin {
                     hide_tool_when_panel_closed,
                     update_tool_button_visuals,
                     update_toolbar_tooltip,
-                    industry_panel_close_interaction,
+                    industry_panel_on_closed,
                     handle_minimap_click,
                     handle_order_panel_buttons,
                     handle_depot_panel_buttons,

@@ -49,6 +49,8 @@ pub(crate) enum FloatingWindowId {
     TownDirectory,
     /// Directorio global de industrias.
     IndustryDirectory,
+    /// Ficha de industria (viewport + stats; #179).
+    Industry,
     /// Lista global de estaciones.
     StationDirectory,
     /// Lista global de flota (filtro por tipo).
@@ -133,6 +135,7 @@ impl FloatingWindowId {
         Self::Town,
         Self::TownDirectory,
         Self::IndustryDirectory,
+        Self::Industry,
         Self::StationDirectory,
         Self::VehicleList,
         Self::SubsidyList,
@@ -181,6 +184,7 @@ impl FloatingWindowId {
             Self::Town => "Town",
             Self::TownDirectory => "TownDirectory",
             Self::IndustryDirectory => "IndustryDirectory",
+            Self::Industry => "Industry",
             Self::StationDirectory => "StationDirectory",
             Self::VehicleList => "VehicleList",
             Self::SubsidyList => "SubsidyList",

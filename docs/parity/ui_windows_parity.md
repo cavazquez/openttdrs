@@ -157,6 +157,7 @@ OpenTTD: `BuildVehicleWindow` (`build_vehicle_gui.cpp:1216+`). Cliente:
 | Feature OpenTTD | Estado en cliente | Cercanía |
 |---|---|---|
 | Lista con orden asc/desc y ~11 criterios | Orden por nombre/precio/velocidad/año | ✔ básico; más criterios **A** |
+| Matriz con sprite por fila | Sprite + nombre/precio por fila (#179) | ✔ chrome; preview grande sigue abajo |
 | Filtro por cargo / texto / motores ocultos / badges | Filtro todos/buses/camiones (solo road); rail lista loco+vagón | **A** |
 | Panel de detalle (coste, peso, velocidad, potencia, **TE**, running cost, refit) | Sí salvo TE | ✔ (TE es **B**) |
 | **Comprar vagones** (`CcBuildWagon` acopla a la loco) | Compra `ENGINE_WAGON_*` + auto-`AttachWagonToConsist` | ✔ MVP |
@@ -176,6 +177,20 @@ parciales (ciclo de grupo en depósito + HUD).
 - Ventana de grupos (crear/renombrar/borrar, drag de vehículos): **B** — el
   core ya tiene `CreateVehicleGroup`/`AssignVehicleToGroup`; faltan renombrar
   y borrar grupo.
+
+## 9. Auditoría layout entidad (#179)
+
+Checklist OpenTTD vs openttdrs vs acción (epic UI-Layout #172).
+
+| Superficie | OpenTTD | openttdrs | Acción |
+|---|---|---|---|
+| Estación | `station_gui` viewport + iconos | Panel fijo ficha-texto + botones | **A** residual (chrome); capacidad OK |
+| Industria | `industry_gui` | `FloatingWindowId::Industry` + preview RT + Loc | ✔ chrome (#179); Authority/catchment **B/C** |
+| Pueblo | `town_gui` viewport + iconos | Flotante; barra Loc/Pub/Fondos | ✔ chrome (#179); Authority completa **B** |
+| Compra | matriz sprites | Filas con sprite + stats | ✔ chrome (#179); TE/ocultar motor **B** |
+| Lista flota | sprites + mass actions | Filas texto + start/stop | **A** residual (sprites/grupos) |
+
+Bloqueado por sim / OOS: NewGRF params, cheats, multi-instance, servicio/averías (**C**).
 
 ## Resumen: qué tan cerca podemos llegar
 

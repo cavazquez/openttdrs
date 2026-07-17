@@ -81,6 +81,15 @@ pub(crate) struct BuyVehicleRowText {
     slot: usize,
 }
 
+#[derive(Component, Clone, Copy)]
+pub(crate) struct BuyVehicleRowSprite {
+    slot: usize,
+}
+
+const ROW_SPRITE_W: f32 = 40.0;
+const ROW_SPRITE_H: f32 = 24.0;
+const PLACEHOLDER_SPRITE: &str = "assets/opengfx/tiles/vehicle_train_e.png";
+
 #[derive(Component)]
 pub(crate) struct BuyVehicleStatsText;
 
@@ -267,8 +276,9 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
                         BuyVehicleRow { slot },
                         Node {
                             width: Val::Percent(100.0),
-                            height: Val::Px(20.0),
-                            padding: UiRect::horizontal(Val::Px(6.0)),
+                            height: Val::Px(28.0),
+                            padding: UiRect::horizontal(Val::Px(4.0)),
+                            column_gap: Val::Px(6.0),
                             justify_content: JustifyContent::FlexStart,
                             align_items: AlignItems::Center,
                             border: UiRect::all(Val::Px(1.0)),
@@ -279,13 +289,25 @@ pub(crate) fn setup_buy_window(mut commands: Commands, asset_server: Res<AssetSe
                         BorderColor::all(Color::srgb(0.45, 0.39, 0.27)),
                         Interaction::default(),
                         BuildMenuUi,
-                        children![(
+                    ))
+                    .with_children(|row| {
+                        row.spawn((
+                            BuyVehicleRowSprite { slot },
+                            ImageNode::new(asset_server.load::<Image>(PLACEHOLDER_SPRITE)),
+                            Node {
+                                width: Val::Px(ROW_SPRITE_W),
+                                height: Val::Px(ROW_SPRITE_H),
+                                flex_shrink: 0.0,
+                                ..default()
+                            },
+                        ));
+                        row.spawn((
                             BuyVehicleRowText { slot },
                             Text::new(""),
                             window_text_font(asset_server, UiFontRole::Caption),
                             TextColor(Color::srgb(0.92, 0.88, 0.72)),
-                        )],
-                    ));
+                        ));
+                    });
                 }
             });
         panel.spawn((
@@ -546,6 +568,10 @@ pub(crate) fn sync_buy_window(
         ),
     >,
     mut row_text_q: Query<(&BuyVehicleRowText, &mut Text), Without<FloatingWindowTitleText>>,
+    mut row_sprite_q: Query<
+        (&BuyVehicleRowSprite, &mut ImageNode),
+        (Without<BuyVehiclePreviewImage>, Without<Button>),
+    >,
     mut stats_q: Query<
         &mut Text,
         (
@@ -559,6 +585,7 @@ pub(crate) fn sync_buy_window(
         (
             With<BuyVehiclePreviewImage>,
             Without<BuyVehicleRow>,
+            Without<BuyVehicleRowSprite>,
             Without<BuyVehicleRoadToolbar>,
             Without<BuyVehicleRailToolbar>,
             Without<Button>,
@@ -637,12 +664,25 @@ pub(crate) fn sync_buy_window(
                 } else {
                     "meta"
                 };
-                format!("{:<28} ${} · {tag}", engine.name, engine.price)
+                format!("{} · ${} · {tag}", engine.name, engine.price)
             } else {
-                format!("{:<28} ${}", engine.name, engine.price)
+                format!("{} · ${}", engine.name, engine.price)
             };
         } else {
             **text = String::new();
+        }
+    }
+    if let Some(trucks) = trucks.as_ref() {
+        for (sprite, mut image) in &mut row_sprite_q {
+            if let Some(engine) = engines.get(sprite.slot) {
+                image.image = preview_sprite_for_engine(
+                    trucks,
+                    engine,
+                    &mut preview_cache,
+                    &mut images,
+                    sim.state.company_colour,
+                );
+            }
         }
     }
     if let Ok(mut stats) = stats_q.single_mut() {

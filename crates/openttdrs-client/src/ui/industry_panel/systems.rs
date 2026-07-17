@@ -4,27 +4,27 @@ use openttdrs_core::industry::{INDUSTRY_PRODUCE_AMOUNT, industry_produce_period_
 use crate::iso::{tile_pos, tile_slope_and_min_z};
 use crate::render::{IndustryPreviewCamera, MapPreviewCamera, PrimaryGameCamera};
 use crate::state::SimWorld;
+use crate::ui::floating_window::{
+    FloatingWindow, FloatingWindowClosed, FloatingWindowId, FloatingWindowTitleText,
+};
 
 use super::logic::{
     dominant_gfx_for_component, flood_industry_tiles, format_panel_title, industry_gfx,
     industry_stats_for_component, kind_label, spec_label,
 };
-use super::{
-    IndustryPanelCenterButton, IndustryPanelCloseButton, IndustryPanelDetails, IndustryPanelRoot,
-    IndustryPanelState, IndustryPanelTitle,
-};
+use super::{IndustryPanelCenterButton, IndustryPanelDetails, IndustryPanelState};
 use crate::ui::industry_directory::industry_chain_label;
 use crate::ui::sparkline::sparkline_u32;
 
 const PREVIEW_SCALE_MUL: f32 = 0.62;
 
-pub(crate) fn industry_panel_close_interaction(
-    q: Query<&Interaction, (Changed<Interaction>, With<IndustryPanelCloseButton>)>,
+pub(crate) fn industry_panel_on_closed(
+    mut closed: MessageReader<FloatingWindowClosed>,
     mut panel: ResMut<IndustryPanelState>,
     mut preview_cam: Query<&mut Camera, (With<IndustryPreviewCamera>, Without<PrimaryGameCamera>)>,
 ) {
-    for interaction in &q {
-        if *interaction != Interaction::Pressed {
+    for msg in closed.read() {
+        if msg.0 != FloatingWindowId::Industry {
             continue;
         }
         panel.open = false;
@@ -60,16 +60,19 @@ pub(crate) fn industry_panel_center_interaction(
 pub(crate) fn sync_industry_panel(
     panel: Res<IndustryPanelState>,
     sim: Res<SimWorld>,
-    mut root_q: Query<&mut Visibility, With<IndustryPanelRoot>>,
-    mut title_q: Query<&mut Text, (With<IndustryPanelTitle>, Without<IndustryPanelDetails>)>,
-    mut details_q: Query<&mut Text, (With<IndustryPanelDetails>, Without<IndustryPanelTitle>)>,
+    mut root_q: Query<(&FloatingWindow, &mut Visibility)>,
+    mut title_q: Query<(&FloatingWindowTitleText, &mut Text), Without<IndustryPanelDetails>>,
+    mut details_q: Query<&mut Text, (With<IndustryPanelDetails>, Without<FloatingWindowTitleText>)>,
     mut preview: Query<
         (&mut Transform, &mut Projection, &mut Camera),
         (With<IndustryPreviewCamera>, Without<PrimaryGameCamera>),
     >,
     primary_proj: Query<&Projection, (With<PrimaryGameCamera>, Without<MapPreviewCamera>)>,
 ) {
-    let Ok(mut root_vis) = root_q.single_mut() else {
+    let Some((_, mut root_vis)) = root_q
+        .iter_mut()
+        .find(|(w, _)| w.id == FloatingWindowId::Industry)
+    else {
         return;
     };
 
@@ -91,7 +94,10 @@ pub(crate) fn sync_industry_panel(
 
     *root_vis = Visibility::Visible;
 
-    if let Ok(mut text) = title_q.single_mut() {
+    if let Some((_, mut text)) = title_q
+        .iter_mut()
+        .find(|(t, _)| t.0 == FloatingWindowId::Industry)
+    {
         **text = format_panel_title(&sim.state.map, &sim, focus);
     }
     if let Ok(mut details) = details_q.single_mut() {

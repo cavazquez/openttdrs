@@ -12,7 +12,6 @@ use crate::state::ingame_lifecycle::InGameUi;
 
 use super::super::floating_window::FloatingWindow;
 use super::super::hud::TileInfoText;
-use super::super::industry_panel::IndustryPanelRoot;
 use super::super::statusbar::{NewsPopupRoot, StatusBarRoot};
 use super::super::toolbar::{BuildGhostPreview, MinimapRoot, OrderPanelRoot, RailSignalGhost};
 
@@ -60,10 +59,6 @@ pub(super) static ENTITY_TEARDOWNS: &[EntityTeardown] = &[
     EntityTeardown {
         name: "OrderPanelRoot",
         collect: collect_matching::<OrderPanelRoot>,
-    },
-    EntityTeardown {
-        name: "IndustryPanelRoot",
-        collect: collect_matching::<IndustryPanelRoot>,
     },
     EntityTeardown {
         name: "FloatingWindow",

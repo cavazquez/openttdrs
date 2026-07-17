@@ -344,6 +344,28 @@ fn disaster_copy(kind: crate::sim_events::DisasterKind, at: TileCoord) -> (Strin
     }
 }
 
+/// Logro / goal de escenario cumplido por una compañía rival (#180).
+pub fn push_rival_achievement_news(
+    state: &mut crate::GameState,
+    company_name: &str,
+    goal_title: &str,
+) {
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        format!("Logro rival: {company_name}"),
+        Some(format!(
+            "«{company_name}» cumplió el objetivo: {goal_title}"
+        )),
+        NewsType::CompanyInfo,
+        default_display_for_type(NewsType::CompanyInfo),
+        state.tick,
+        NewsReference::None,
+    );
+    add_news_item(state, item);
+}
+
 /// Aviso de quiebra (jugador o rival).
 pub fn push_bankruptcy_news(
     state: &mut crate::GameState,

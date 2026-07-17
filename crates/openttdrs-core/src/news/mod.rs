@@ -17,7 +17,7 @@ pub use queue::{
     NewsType, PendingNewsEvent, add_news_item, default_display_for_type, maybe_purge_old_news,
     purge_old_news_items, push_autoreplace_failed_news, push_bankruptcy_news,
     push_cargo_delivery_news, push_disaster_news, push_first_vehicle_running_news,
-    push_subsidy_awarded_news, push_subsidy_offer_news,
+    push_rival_achievement_news, push_subsidy_awarded_news, push_subsidy_offer_news,
 };
 pub use vehicle_advice::{VehicleAdviceKind, poll_vehicle_advice_news, push_vehicle_advice_news};
 

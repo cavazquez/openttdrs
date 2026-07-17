@@ -6,7 +6,7 @@ use crate::cargo::CargoType;
 use crate::game_state::{GameState, company_net_value};
 use crate::news::{
     NewsDisplayMode, NewsItem, NewsReference, NewsType, add_news_item, calendar_day_index,
-    calendar_year_day,
+    calendar_year_day, push_rival_achievement_news,
 };
 
 /// Objetivo de escenario (paridad conceptual con `Goal` de `OpenTTD`).
@@ -52,6 +52,9 @@ pub struct GsState {
     /// Evita repetir la noticia de victoria GS.
     #[serde(default)]
     pub victory_news_sent: bool,
+    /// `(company_id, goal_id)` ya anunciados como logro rival (#180).
+    #[serde(default)]
+    pub rival_goal_news_sent: Vec<(u8, u32)>,
 }
 
 /// Fila de liga (compañías ordenadas por valor neto).
@@ -116,6 +119,7 @@ pub fn seed_gs_demo(state: &mut GameState) {
         story_index: 0,
         all_complete: false,
         victory_news_sent: false,
+        rival_goal_news_sent: Vec::new(),
     };
     refresh_gs_progress(state);
 }
@@ -126,6 +130,7 @@ pub fn tick_gs(state: &mut GameState) {
         return;
     }
     refresh_gs_progress(state);
+    emit_rival_goal_news(state);
     let all = !state.gs.goals.is_empty() && state.gs.goals.iter().all(|g| g.completed);
     state.gs.all_complete = all;
     if all && !state.gs.victory_news_sent {
@@ -134,37 +139,98 @@ pub fn tick_gs(state: &mut GameState) {
     }
 }
 
+fn goal_progress_for_company(
+    net: i64,
+    deliveries: u64,
+    kind: GsGoalKind,
+    calendar_year: u32,
+) -> (u64, u64, bool) {
+    match kind {
+        GsGoalKind::CompanyValue { min } => {
+            let den = u64::try_from(min.max(1)).unwrap_or(1);
+            let num = u64::try_from(net.max(0)).unwrap_or(0).min(den);
+            (num, den, net >= min)
+        }
+        GsGoalKind::CargoDelivered { min, .. } => {
+            let den = min.max(1);
+            (deliveries.min(den), den, deliveries >= min)
+        }
+        GsGoalKind::ReachYear { year: target } => {
+            let den = u64::from(target.max(1));
+            let num = u64::from(calendar_year).min(den);
+            (num, den, calendar_year >= target)
+        }
+    }
+}
+
 fn refresh_gs_progress(state: &mut GameState) {
+    let (year, _) = calendar_year_day(calendar_day_index(state.tick));
     let company = state
         .companies
         .get(state.active_company.index())
         .or_else(|| state.companies.first());
     let net = company.map_or(0, |c| company_net_value(c.economy.money, c.economy.loan));
     let deliveries = company.map_or(0, |c| c.cargo_deliveries);
-    let (year, _) = calendar_year_day(calendar_day_index(state.tick));
 
     for goal in &mut state.gs.goals {
-        let (num, den, done) = match goal.kind {
-            GsGoalKind::CompanyValue { min } => {
-                let den = u64::try_from(min.max(1)).unwrap_or(1);
-                let num = u64::try_from(net.max(0)).unwrap_or(0).min(den);
-                (num, den, net >= min)
-            }
-            GsGoalKind::CargoDelivered { min, .. } => {
-                let den = min.max(1);
-                (deliveries.min(den), den, deliveries >= min)
-            }
-            GsGoalKind::ReachYear { year: target } => {
-                let den = u64::from(target.max(1));
-                let num = u64::from(year).min(den);
-                (num, den, year >= target)
-            }
-        };
+        let (num, den, done) = goal_progress_for_company(net, deliveries, goal.kind, year);
         goal.progress_num = num;
         goal.progress_den = den;
         if done {
             goal.completed = true;
         }
+    }
+}
+
+/// Noticia al espectador cuando otra compañía cumple un goal de compañía (#180).
+///
+/// `ReachYear` es global del mapa: no se anuncia por rival (evita spam).
+fn emit_rival_goal_news(state: &mut GameState) {
+    let active = state.active_company.0;
+    let (year, _) = calendar_year_day(calendar_day_index(state.tick));
+    let snapshots: Vec<(u8, String, i64, u64)> = state
+        .companies
+        .iter()
+        .filter(|c| c.id.0 != active)
+        .map(|c| {
+            (
+                c.id.0,
+                c.name.clone(),
+                company_net_value(c.economy.money, c.economy.loan),
+                c.cargo_deliveries,
+            )
+        })
+        .collect();
+    let goals: Vec<(u32, String, GsGoalKind)> = state
+        .gs
+        .goals
+        .iter()
+        .map(|g| (g.id, g.title.clone(), g.kind))
+        .collect();
+
+    let mut pending: Vec<(u8, u32, String, String)> = Vec::new();
+    for (company_id, name, net, deliveries) in &snapshots {
+        for (goal_id, title, kind) in &goals {
+            if matches!(kind, GsGoalKind::ReachYear { .. }) {
+                continue;
+            }
+            let (_, _, done) = goal_progress_for_company(*net, *deliveries, *kind, year);
+            if !done {
+                continue;
+            }
+            if state
+                .gs
+                .rival_goal_news_sent
+                .contains(&(*company_id, *goal_id))
+            {
+                continue;
+            }
+            pending.push((*company_id, *goal_id, name.clone(), title.clone()));
+        }
+    }
+    for (company_id, goal_id, name, title) in pending {
+        state.gs.rival_goal_news_sent.push((company_id, goal_id));
+        push_rival_achievement_news(state, &name, &title);
     }
 }
 
@@ -213,7 +279,7 @@ pub fn league_rows(state: &GameState) -> Vec<GsLeagueRow> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::news::tick_for_calendar_year;
@@ -262,5 +328,88 @@ mod tests {
         let rows = league_rows(&state);
         assert!(rows.len() >= 2);
         assert!(rows[0].net_value >= rows[1].net_value);
+    }
+
+    #[test]
+    fn rival_goal_completion_emits_company_info_news_once() {
+        let mut state = GameState::new(16, 16);
+        seed_gs_demo(&mut state);
+        state.ensure_rival_transcargo();
+        let rival_name = state
+            .companies
+            .iter()
+            .find(|c| c.is_ai)
+            .map(|c| c.name.clone())
+            .expect("rival");
+        if let Some(ai) = state.companies.iter_mut().find(|c| c.is_ai) {
+            ai.economy.money = 200_000;
+            ai.economy.loan = 0;
+        }
+        let before = state.news.items.len();
+        tick_gs(&mut state);
+        let rival_news: Vec<_> = state
+            .news
+            .items
+            .iter()
+            .filter(|n| {
+                n.news_type == NewsType::CompanyInfo
+                    && n.headline.contains("Logro rival")
+                    && n.body.as_deref().is_some_and(|b| b.contains(&rival_name))
+            })
+            .collect();
+        assert_eq!(rival_news.len(), 1, "una noticia por transición de goal");
+        assert!(
+            rival_news[0]
+                .body
+                .as_deref()
+                .is_some_and(|b| b.contains("120.000") || b.contains("valor")),
+            "copy menciona el objetivo: {:?}",
+            rival_news[0].body
+        );
+        assert!(
+            state
+                .gs
+                .rival_goal_news_sent
+                .iter()
+                .any(|&(cid, gid)| { cid != state.active_company.0 && gid == 1 })
+        );
+
+        let mid = state.news.items.len();
+        assert!(mid > before);
+        tick_gs(&mut state);
+        let rival_again = state
+            .news
+            .items
+            .iter()
+            .filter(|n| n.headline.contains("Logro rival"))
+            .count();
+        assert_eq!(rival_again, 1, "sin spam en ticks siguientes");
+        assert_eq!(state.news.items.len(), mid);
+    }
+
+    #[test]
+    fn active_company_goal_does_not_emit_rival_news() {
+        let mut state = GameState::new(16, 16);
+        seed_gs_demo(&mut state);
+        state.ensure_rival_transcargo();
+        // TransCargo arranca con 200k; bajarlo para no disparar logro rival.
+        if let Some(ai) = state.companies.iter_mut().find(|c| c.is_ai) {
+            ai.economy.money = 10_000;
+            ai.economy.loan = 0;
+        }
+        if let Some(player) = state.companies.iter_mut().find(|c| !c.is_ai) {
+            player.economy.money = 200_000;
+            player.economy.loan = 0;
+        }
+        tick_gs(&mut state);
+        assert!(
+            state
+                .news
+                .items
+                .iter()
+                .all(|n| !n.headline.contains("Logro rival")),
+            "el progreso del jugador activo no usa copy de rival"
+        );
+        assert!(state.gs.goals.iter().any(|g| g.id == 1 && g.completed));
     }
 }

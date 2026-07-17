@@ -258,8 +258,8 @@ pub use news::{
     calendar_day_index, calendar_year_day, cargo_display_name, default_display_for_type,
     format_calendar_date, format_money, maybe_purge_old_news, news_display_mode_label,
     news_type_label, poll_vehicle_advice_news, purge_old_news_items, push_cargo_delivery_news,
-    push_first_vehicle_running_news, push_vehicle_advice_news, tick_for_calendar_year,
-    vehicle_kind_label,
+    push_first_vehicle_running_news, push_rival_achievement_news, push_vehicle_advice_news,
+    tick_for_calendar_year, vehicle_kind_label,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{

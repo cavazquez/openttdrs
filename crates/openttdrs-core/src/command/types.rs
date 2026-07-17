@@ -124,10 +124,13 @@ pub enum Command {
     /// Desengancha `unit_id` del consist (queda suelto en el depósito).
     DetachConsistUnit(u32),
     /// Mueve/reordena: engancha `unit_id` tras `after_id` (`None` = al final de `head_id`).
+    /// Con `move_chain`, mueve también la cola detrás de `unit_id` (Ctrl+drag en `OpenTTD`).
     MoveRailVehicle {
         head_id: u32,
         unit_id: u32,
         after_id: Option<u32>,
+        #[serde(default)]
+        move_chain: bool,
     },
     SellVehicle(u32),
     ToggleVehicleRunning(u32),

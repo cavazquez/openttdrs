@@ -243,6 +243,15 @@ pub(super) fn attach_wagon_to_consist(
     head_id: u32,
     wagon_id: u32,
 ) -> Result<(), CommandError> {
+    attach_wagon_to_consist_ex(state, head_id, wagon_id, false)
+}
+
+fn attach_wagon_to_consist_ex(
+    state: &mut GameState,
+    head_id: u32,
+    wagon_id: u32,
+    keep_chain: bool,
+) -> Result<(), CommandError> {
     require_vehicle_owned_by_active(state, head_id)?;
     require_vehicle_owned_by_active(state, wagon_id)?;
     let head = state
@@ -272,7 +281,12 @@ pub(super) fn attach_wagon_to_consist(
     if !wagon_eng.is_wagon() && wagon.prev_unit.is_some() {
         return Err(CommandError::VehicleKindNotAllowed);
     }
-    crate::train_consist::attach_wagon(&mut state.vehicles, head_id, wagon_id)
+    let attach = if keep_chain {
+        crate::train_consist::attach_wagon_chain
+    } else {
+        crate::train_consist::attach_wagon
+    };
+    attach(&mut state.vehicles, head_id, wagon_id)
         .map_err(|()| CommandError::VehicleKindNotAllowed)?;
     Ok(())
 }
@@ -300,19 +314,33 @@ pub(super) fn move_rail_vehicle(
     head_id: u32,
     unit_id: u32,
     after_id: Option<u32>,
+    move_chain: bool,
 ) -> Result<(), CommandError> {
-    // Reordenar: detach + attach tras after_id (o al final).
-    detach_consist_unit(state, unit_id)?;
+    // Validar como detach; luego cortar con o sin cola.
+    require_vehicle_owned_by_active(state, unit_id)?;
+    let unit = state
+        .vehicles
+        .iter()
+        .find(|v| v.id == unit_id)
+        .ok_or(CommandError::VehicleNotFound)?;
+    if unit.kind != VehicleKind::Train {
+        return Err(CommandError::VehicleKindNotAllowed);
+    }
+    if !matches!(state.map.get_kind(unit.pos), Some(TileKind::RailDepot)) {
+        return Err(CommandError::VehicleNotInDepot);
+    }
+    if move_chain {
+        crate::train_consist::detach_unit_keep_tail(&mut state.vehicles, unit_id)
+            .map_err(|()| CommandError::VehicleNotFound)?;
+    } else {
+        crate::train_consist::detach_unit(&mut state.vehicles, unit_id)
+            .map_err(|()| CommandError::VehicleNotFound)?;
+    }
     let attach_head = after_id
         .and_then(|aid| crate::train_consist::consist_head_id(&state.vehicles, aid))
         .unwrap_or(head_id);
-    if after_id.is_some() {
-        // Enganchar al final del consist (MVP: no inserta en medio).
-        attach_wagon_to_consist(state, attach_head, unit_id)?;
-    } else {
-        attach_wagon_to_consist(state, head_id, unit_id)?;
-    }
-    Ok(())
+    // Enganchar al final del consist (MVP: no inserta en medio).
+    attach_wagon_to_consist_ex(state, attach_head, unit_id, move_chain)
 }
 
 pub(super) fn sell_vehicle(state: &mut GameState, vehicle_id: u32) -> Result<(), CommandError> {

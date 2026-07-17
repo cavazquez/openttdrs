@@ -411,6 +411,7 @@ fn move_rail_vehicle_transfers_wagon_between_consists() {
             head_id: head_b,
             unit_id: wagon,
             after_id: None,
+            move_chain: false,
         },
     )
     .unwrap();
@@ -432,6 +433,77 @@ fn move_rail_vehicle_transfers_wagon_between_consists() {
     );
     let w = s.vehicles.iter().find(|v| v.id == wagon).unwrap();
     assert_eq!(w.prev_unit, Some(head_b));
+}
+
+#[test]
+fn move_rail_vehicle_chain_keeps_tail_wagons() {
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
+    let depot = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_GINZU_A4),
+    )
+    .unwrap();
+    let head_a = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_GINZU_A4),
+    )
+    .unwrap();
+    let head_b = s.vehicles.iter().find(|v| v.id != head_a).unwrap().id;
+    for _ in 0..2 {
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_WAGON_PASSENGER),
+        )
+        .unwrap();
+    }
+    let wagons: Vec<u32> = s
+        .vehicles
+        .iter()
+        .filter(|v| v.id != head_a && v.id != head_b)
+        .map(|v| v.id)
+        .collect();
+    assert_eq!(wagons.len(), 2);
+    let (w1, w2) = (wagons[0], wagons[1]);
+    apply_command(
+        &mut s,
+        &Command::AttachWagonToConsist {
+            head_id: head_a,
+            wagon_id: w1,
+        },
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::AttachWagonToConsist {
+            head_id: head_a,
+            wagon_id: w2,
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        crate::consist_unit_ids(&s.vehicles, head_a),
+        vec![head_a, w1, w2]
+    );
+
+    apply_command(
+        &mut s,
+        &Command::MoveRailVehicle {
+            head_id: head_b,
+            unit_id: w1,
+            after_id: None,
+            move_chain: true,
+        },
+    )
+    .unwrap();
+    assert_eq!(crate::consist_unit_ids(&s.vehicles, head_a), vec![head_a]);
+    assert_eq!(
+        crate::consist_unit_ids(&s.vehicles, head_b),
+        vec![head_b, w1, w2]
+    );
 }
 
 #[test]

@@ -9,7 +9,9 @@ mod metrics;
 mod newgrf_vars;
 mod topology;
 
-pub use couple::{attach_wagon, detach_unit, sell_chain_ids};
+pub use couple::{
+    attach_wagon, attach_wagon_chain, detach_unit, detach_unit_keep_tail, sell_chain_ids,
+};
 pub use metrics::{
     consist_capacity, consist_occupied_tiles, consist_power_hp, consist_tile_span, consist_weight_t,
 };

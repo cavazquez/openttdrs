@@ -4,9 +4,25 @@ use crate::vehicle::Vehicle;
 
 use super::topology::{consist_changed, consist_head_id, consist_unit_ids};
 
-/// Engancha `wagon_id` al final del consist de `head_id`.
+/// Engancha `wagon_id` al final del consist de `head_id` (corta su cola).
 #[allow(clippy::result_unit_err)]
 pub fn attach_wagon(vehicles: &mut [Vehicle], head_id: u32, wagon_id: u32) -> Result<(), ()> {
+    attach_wagon_ex(vehicles, head_id, wagon_id, false)
+}
+
+/// Engancha `wagon_id` y su cola (`next_unit…`) al final del consist de `head_id`.
+#[allow(clippy::result_unit_err)]
+pub fn attach_wagon_chain(vehicles: &mut [Vehicle], head_id: u32, wagon_id: u32) -> Result<(), ()> {
+    attach_wagon_ex(vehicles, head_id, wagon_id, true)
+}
+
+#[allow(clippy::result_unit_err)]
+fn attach_wagon_ex(
+    vehicles: &mut [Vehicle],
+    head_id: u32,
+    wagon_id: u32,
+    keep_chain: bool,
+) -> Result<(), ()> {
     if head_id == wagon_id {
         return Err(());
     }
@@ -28,18 +44,22 @@ pub fn attach_wagon(vehicles: &mut [Vehicle], head_id: u32, wagon_id: u32) -> Re
     if ids.contains(&wagon_id) {
         return Err(());
     }
-    // Desconectar wagon de su cadena previa (si era cabeza de otra).
-    let wagon_next = vehicles
-        .iter()
-        .find(|v| v.id == wagon_id)
-        .and_then(|v| v.next_unit);
-    if let Some(n) = wagon_next
-        && let Some(v) = vehicles.iter_mut().find(|v| v.id == n)
-    {
-        v.prev_unit = None;
+    if !keep_chain {
+        // Desconectar wagon de su cadena previa (si era cabeza de otra).
+        let wagon_next = vehicles
+            .iter()
+            .find(|v| v.id == wagon_id)
+            .and_then(|v| v.next_unit);
+        if let Some(n) = wagon_next
+            && let Some(v) = vehicles.iter_mut().find(|v| v.id == n)
+        {
+            v.prev_unit = None;
+        }
     }
     if let Some(w) = vehicles.iter_mut().find(|v| v.id == wagon_id) {
-        w.next_unit = None;
+        if !keep_chain {
+            w.next_unit = None;
+        }
         w.prev_unit = Some(tail_id);
         w.orders.clear();
         w.current_order = 0;
@@ -49,6 +69,35 @@ pub fn attach_wagon(vehicles: &mut [Vehicle], head_id: u32, wagon_id: u32) -> Re
         t.next_unit = Some(wagon_id);
     }
     consist_changed(vehicles, head_id);
+    Ok(())
+}
+
+/// Corta `unit_id` de su `prev`; mantiene la cola (`next_unit…`) como subcadena.
+///
+/// Usado por `MoveRailVehicle` con `move_chain` (Ctrl+drag en depósito).
+#[allow(clippy::result_unit_err)]
+pub fn detach_unit_keep_tail(vehicles: &mut [Vehicle], unit_id: u32) -> Result<(), ()> {
+    let Some(v) = vehicles.iter().find(|x| x.id == unit_id) else {
+        return Err(());
+    };
+    if v.other_multiheaded_part.is_some() {
+        return Err(());
+    }
+    let prev = v.prev_unit;
+    let old_head = consist_head_id(vehicles, unit_id).unwrap_or(unit_id);
+
+    if let Some(p) = prev
+        && let Some(pv) = vehicles.iter_mut().find(|x| x.id == p)
+    {
+        pv.next_unit = None;
+    }
+    if let Some(u) = vehicles.iter_mut().find(|x| x.id == unit_id) {
+        u.prev_unit = None;
+    }
+    if old_head != unit_id {
+        consist_changed(vehicles, old_head);
+    }
+    consist_changed(vehicles, unit_id);
     Ok(())
 }
 

@@ -37,15 +37,15 @@ abre con clic en tile `RoadDepot`/`RailDepot`).
 |---|---|---|
 | Matriz de vehículos con sprites (`WID_D_MATRIX`, `DrawTrainImage`) | Filas de texto (8 slots): nombre, grupo, edad, carga | **A** — dibujar el sprite del vehículo en la fila es solo UI |
 | 1 fila = 1 consist (loco + vagones, scroll horizontal) | 1 fila = cabeza; label `[Nu]` unidades | **A** — falta scroll horizontal con sprites por vagón |
-| **Drag & drop de vagones** (`MoveRailVehicle`, formar/partir trenes, Ctrl = cadena) | Clic A→B en filas rail → `MoveRailVehicle`; compra auto-engancha | **A** — gesto distinto al drag nativo; Ctrl=cadena pendiente |
+| **Drag & drop de vagones** (`MoveRailVehicle`, formar/partir trenes, Ctrl = cadena) | Drag sprites/filas + Ctrl=`move_chain`; clic A→B también | ✔ |
 | Ctrl+soltar sobre sí mismo = `ReverseTrainDirection` en depósito | Botón «Dar la vuelta» en ventana de vehículo | ✔ funcional (gesto distinto) |
-| Vender arrastrando a `WID_D_SELL` / vender cadena | Botón «Vender» por fila (`SellVehicle` vende cadena si es cabeza) | ✔ parcial (gesto drag-a-vender es A) |
+| Vender arrastrando a `WID_D_SELL` / vender cadena | Zonas drop «Vender»/«Cadena» + ✕ por fila; Ctrl en drop = cadena | ✔ |
 | Vender todo (`DepotMassSell`) | Botón «Vender todo» (`SellAllVehiclesAtDepot`) | ✔ |
 | Comprar (`WID_D_BUILD` → `BuildVehicleWindow`) | Botón «Nuevos vehículos» → `buy_window` | ✔ |
 | Clonar (`CloneVehicle`, Ctrl = compartir órdenes) | Botones «Clonar» (`CloneVehicleAtDepot`) y «Compartir órdenes» separados | ✔ (la variante Ctrl es A) |
 | Parar/arrancar todos (`MassStartStop`) | Botones «Parar todos»/«Arrancar todos» (`SetDepotVehiclesRunning`) | ✔ |
 | Autoreemplazo masivo (`DepotMassAutoreplace`) | Botones autoreemplazo + regla + «solo viejos» | ✔ (el cliente incluso expone más que la ventana de depósito de OpenTTD) |
-| Bandera start/stop por celda | Botón «Iniciar/Detener» por fila | ✔ |
+| Bandera start/stop por celda | ▶/■ por fila (`ToggleVehicleRunning`) | ✔ |
 | Renombrar depósito (`RenameDepot`) | No existe | **B** — falta nombre de depósito en core |
 | Tooltip de carga con clic derecho | No existe | A (bajo valor) |
 | Lista de vehículos del depósito (`WID_D_VEHICLE_LIST`) | Las 8 filas cumplen ese rol | ✔ parcial (sin scroll: >8 vehículos quedan ocultos → **A**) |

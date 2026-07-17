@@ -80,7 +80,8 @@ fn apply_vehicle_command(state: &mut GameState, cmd: &Command) -> Result<(), Com
             head_id,
             unit_id,
             after_id,
-        } => vehicles::move_rail_vehicle(state, *head_id, *unit_id, *after_id),
+            move_chain,
+        } => vehicles::move_rail_vehicle(state, *head_id, *unit_id, *after_id, *move_chain),
         Command::SellVehicle(id) => vehicles::sell_vehicle(state, *id),
         Command::ToggleVehicleRunning(id) => {
             super::vehicle_fleet::toggle_vehicle_running_checked(state, *id)

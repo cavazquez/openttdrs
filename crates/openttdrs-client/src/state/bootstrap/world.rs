@@ -361,7 +361,7 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
     state.ensure_companies();
     state.sync_active_from_mirrors();
     if settings.rival_ai {
-        state.ensure_rival_transcargo();
+        state.ensure_rival_ais();
     }
     state
 }
@@ -448,7 +448,19 @@ mod tests {
             ..NewGameSettings::default()
         });
         assert!(with_rival.companies.iter().any(|c| c.is_ai));
-        assert!(with_rival.companies.len() >= 2);
+        assert!(with_rival.companies.len() >= 3); // jugador + TransCargo + RoadHaul
+        assert!(
+            with_rival
+                .companies
+                .iter()
+                .any(|c| c.name == openttdrs_core::RIVAL_NAME_TRANSCARGO)
+        );
+        assert!(
+            with_rival
+                .companies
+                .iter()
+                .any(|c| c.name == openttdrs_core::RIVAL_NAME_ROADHAUL)
+        );
 
         let without = build_procedural_demo_world(&NewGameSettings {
             rival_ai: false,

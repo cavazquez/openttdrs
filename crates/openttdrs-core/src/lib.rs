@@ -116,8 +116,8 @@ pub use command::{
 };
 pub use company::{
     COMPANY_COLOUR_SLOTS, Company, CompanyId, FEEDER_SHARE_DEN, FEEDER_SHARE_NUM,
-    company_colour_taken_by_other, feeder_share_of, first_free_company_colour, tile_owner_colour,
-    tile_with_owner,
+    RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO, company_colour_taken_by_other, company_id_by_name,
+    feeder_share_of, first_free_company_colour, tile_owner_colour, tile_with_owner,
 };
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
 pub use depot_leave::{TRAIN_DEPOT_LEAVE_WAIT_TICKS, tick_train_stay_in_depot};

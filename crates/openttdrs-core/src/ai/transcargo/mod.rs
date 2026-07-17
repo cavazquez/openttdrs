@@ -9,6 +9,7 @@ mod plan;
 
 use crate::GameState;
 use crate::command::Command;
+use crate::company::{RIVAL_NAME_TRANSCARGO, company_id_by_name};
 use crate::vehicle::VehicleKind;
 
 use build::build_freight_line;
@@ -35,7 +36,7 @@ impl super::CompanyAi for TransCargoAi {
 /// Mantiene trenes IA en marcha y `cargo_type` anclado (cada tick).
 pub fn maintain_transcargo_vehicles(state: &mut GameState) {
     state.ensure_rival_transcargo();
-    let Some(ai_id) = state.companies.iter().find(|c| c.is_ai).map(|c| c.id) else {
+    let Some(ai_id) = company_id_by_name(&state.companies, RIVAL_NAME_TRANSCARGO) else {
         return;
     };
     refresh_ai_train_cargo_types(state, ai_id);
@@ -49,7 +50,7 @@ pub fn maintain_transcargo_vehicles(state: &mut GameState) {
 /// Ejecuta un paso de construcción/compra para `TransCargo` si hace falta.
 pub fn tick_transcargo(state: &mut GameState) {
     maintain_transcargo_vehicles(state);
-    let Some(ai_id) = state.companies.iter().find(|c| c.is_ai).map(|c| c.id) else {
+    let Some(ai_id) = company_id_by_name(&state.companies, RIVAL_NAME_TRANSCARGO) else {
         return;
     };
 

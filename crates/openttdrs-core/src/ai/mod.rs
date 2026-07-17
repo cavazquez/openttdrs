@@ -1,7 +1,9 @@
 //! Hooks para decisión automática de compañías (rivales CPU).
 //!
-//! Ver `docs/archive/epics/ai_rivals.md` (épica cerrada). La medición headless vive en [`crate::dev_metrics`].
+//! Ver `docs/archive/epics/ai_rivals.md` y pathfind #184.
+//! Rivales Rust: `TransCargo` (rail) + `RoadHaul` (buses).
 
+mod roadhaul;
 mod settings;
 mod transcargo;
 
@@ -10,6 +12,7 @@ pub use transcargo::{AI_BUILD_MONEY_THRESHOLD, MAX_AI_ROUTES, TransCargoAi};
 
 use crate::GameState;
 use crate::command::Command;
+use crate::company::{RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO};
 use crate::economy::TICKS_PER_MONTH;
 use crate::format_money;
 use crate::vehicle::{VehicleKind, VehicleOrder};
@@ -28,10 +31,12 @@ pub fn tick_ai_companies(state: &mut GameState, tick: u64) {
         return;
     }
     transcargo::maintain_transcargo_vehicles(state);
+    roadhaul::maintain_roadhaul_vehicles(state);
     if tick == 0 || !tick.is_multiple_of(TICKS_PER_MONTH) {
         return;
     }
     transcargo::tick_transcargo(state);
+    roadhaul::tick_roadhaul(state);
 }
 
 /// Texto de debug para la ventana AI settings (#44).
@@ -39,73 +44,120 @@ pub fn tick_ai_companies(state: &mut GameState, tick: u64) {
 pub fn format_ai_debug_status(state: &GameState) -> String {
     let ai = state.ai.clamped();
     let mut lines = vec![format!(
-        "IA: {} · umbral {} · máx. rutas {}",
+        "IA: {} · umbral {} · máx. rutas rail {}",
         if ai.enabled { "ON" } else { "OFF" },
         format_money(ai.build_money_threshold),
         ai.max_routes
     )];
-    let Some(company) = state.companies.iter().find(|c| c.is_ai) else {
+    let rivals: Vec<_> = state.companies.iter().filter(|c| c.is_ai).collect();
+    if rivals.is_empty() {
         lines.push("Sin compañía IA en la partida.".into());
         return lines.join("\n");
-    };
-    let econ = state.company_economy(company.id);
-    lines.push(format!(
-        "{} · color {} · {}",
-        company.name,
-        company.colour,
-        format_money(econ.money)
-    ));
-    let trains: Vec<_> = state
-        .vehicles
-        .iter()
-        .filter(|v| v.owner == company.id && v.kind == VehicleKind::Train && v.is_consist_head())
-        .collect();
-    lines.push(format!(
-        "Rutas / trenes: {} / {}",
-        trains.len(),
-        ai.max_routes
-    ));
-    if trains.is_empty() {
-        lines.push("(sin trenes IA)".into());
     }
-    for v in trains {
-        let stations: Vec<String> = v
-            .orders
-            .iter()
-            .filter_map(|o| match o {
-                VehicleOrder::Station { station, .. } => {
-                    Some(format!("({},{})", station.x, station.y))
-                }
-                _ => None,
-            })
-            .collect();
-        let cargo = v
-            .cargo_type
-            .map_or_else(|| "?".into(), |c| format!("{c:?}"));
-        let route = if stations.is_empty() {
-            "sin órdenes".into()
-        } else {
-            stations.join(" → ")
-        };
+    for company in rivals {
+        let econ = state.company_economy(company.id);
         lines.push(format!(
-            "  tren #{} · {} · {} · {}",
-            v.id,
-            cargo,
-            if v.running { "marcha" } else { "parado" },
-            route
+            "{} · color {} · {}",
+            company.name,
+            company.colour,
+            format_money(econ.money)
         ));
+        if company.name == RIVAL_NAME_TRANSCARGO {
+            append_train_routes(&mut lines, state, company.id, ai.max_routes);
+        } else if company.name == RIVAL_NAME_ROADHAUL {
+            append_bus_routes(&mut lines, state, company.id);
+        }
     }
     lines.join("\n")
 }
 
+fn append_train_routes(
+    lines: &mut Vec<String>,
+    state: &GameState,
+    ai_id: crate::company::CompanyId,
+    max_routes: u8,
+) {
+    let trains: Vec<_> = state
+        .vehicles
+        .iter()
+        .filter(|v| v.owner == ai_id && v.kind == VehicleKind::Train && v.is_consist_head())
+        .collect();
+    lines.push(format!(
+        "  Rutas / trenes: {} / {}",
+        trains.len(),
+        max_routes
+    ));
+    if trains.is_empty() {
+        lines.push("  (sin trenes)".into());
+    }
+    for v in trains {
+        lines.push(format_vehicle_route_line(v));
+    }
+}
+
+fn append_bus_routes(
+    lines: &mut Vec<String>,
+    state: &GameState,
+    ai_id: crate::company::CompanyId,
+) {
+    let buses: Vec<_> = state
+        .vehicles
+        .iter()
+        .filter(|v| v.owner == ai_id && v.kind == VehicleKind::Bus)
+        .collect();
+    lines.push(format!(
+        "  Rutas / buses: {} / {}",
+        buses.len(),
+        roadhaul::ROADHAUL_MAX_ROUTES
+    ));
+    if buses.is_empty() {
+        lines.push("  (sin buses)".into());
+    }
+    for v in buses {
+        lines.push(format_vehicle_route_line(v));
+    }
+}
+
+fn format_vehicle_route_line(v: &crate::vehicle::Vehicle) -> String {
+    let stations: Vec<String> = v
+        .orders
+        .iter()
+        .filter_map(|o| match o {
+            VehicleOrder::Station { station, .. } => {
+                Some(format!("({},{})", station.x, station.y))
+            }
+            _ => None,
+        })
+        .collect();
+    let cargo = v
+        .cargo_type
+        .map_or_else(|| "?".into(), |c| format!("{c:?}"));
+    let route = if stations.is_empty() {
+        "sin órdenes".into()
+    } else {
+        stations.join(" → ")
+    };
+    format!(
+        "  #{} · {} · {} · {}",
+        v.id,
+        cargo,
+        if v.running { "marcha" } else { "parado" },
+        route
+    )
+}
+
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
+    use crate::company::{RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO};
+    use crate::map::TileCoord;
+    use crate::town::Town;
 
     #[test]
     fn disabled_ai_skips_construction() {
         let mut state = GameState::new(32, 32);
-        state.ensure_rival_transcargo();
+        state.ensure_rival_ais();
         state.ai.enabled = false;
         let before = state.vehicles.len();
         for _ in 0..(TICKS_PER_MONTH + 2) {
@@ -117,11 +169,105 @@ mod tests {
     }
 
     #[test]
-    fn debug_status_lists_rival_name() {
+    fn debug_status_lists_both_rivals() {
         let mut state = GameState::new(16, 16);
-        state.ensure_rival_transcargo();
+        state.ensure_rival_ais();
         let text = format_ai_debug_status(&state);
-        assert!(text.contains("TransCargo"));
+        assert!(text.contains(RIVAL_NAME_TRANSCARGO));
+        assert!(text.contains(RIVAL_NAME_ROADHAUL));
         assert!(text.contains("ON"));
+    }
+
+    #[test]
+    fn ensure_rivals_use_distinct_free_colours() {
+        let mut state = GameState::new(8, 8);
+        apply_set_colour(&mut state, 1);
+        state.ensure_rival_ais();
+        let tc = state
+            .companies
+            .iter()
+            .find(|c| c.name == RIVAL_NAME_TRANSCARGO)
+            .unwrap();
+        let rh = state
+            .companies
+            .iter()
+            .find(|c| c.name == RIVAL_NAME_ROADHAUL)
+            .unwrap();
+        assert_ne!(tc.colour, rh.colour);
+        assert_ne!(tc.colour, state.company_colour);
+        assert_ne!(rh.colour, state.company_colour);
+    }
+
+    fn apply_set_colour(state: &mut GameState, colour: u8) {
+        crate::command::apply_command(state, &Command::SetCompanyColour(colour)).unwrap();
+    }
+
+    #[test]
+    fn roadhaul_builds_one_bus_route_on_month() {
+        let mut state = GameState::new(32, 24);
+        state.ensure_rival_ais();
+        state.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(4, 4),
+            name: "Norte".into(),
+            population: 800,
+            ..Town::default()
+        });
+        state.towns.push(Town {
+            id: 2,
+            pos: TileCoord::new(20, 16),
+            name: "Sur".into(),
+            population: 600,
+            ..Town::default()
+        });
+        // Dar liquidez al rival de buses.
+        if let Some(c) = state
+            .companies
+            .iter_mut()
+            .find(|c| c.name == RIVAL_NAME_ROADHAUL)
+        {
+            c.economy.money = 200_000;
+        }
+        let tick = TICKS_PER_MONTH;
+        state.tick = crate::GameTick::new(tick);
+        tick_ai_companies(&mut state, tick);
+
+        let rh_id = state
+            .companies
+            .iter()
+            .find(|c| c.name == RIVAL_NAME_ROADHAUL)
+            .unwrap()
+            .id;
+        let buses = state
+            .vehicles
+            .iter()
+            .filter(|v| v.owner == rh_id && v.kind == VehicleKind::Bus)
+            .count();
+        assert_eq!(buses, 1, "RoadHaul debe comprar un bus");
+        let bus_stops = state
+            .stations
+            .iter()
+            .filter(|s| s.owner == rh_id && s.stop_kind == crate::station::StopKind::BusStop)
+            .count();
+        assert_eq!(bus_stops, 2, "dos paradas bus");
+    }
+
+    #[test]
+    fn two_rivals_coexist_after_ensure() {
+        let mut state = GameState::new(8, 8);
+        state.ensure_rival_ais();
+        assert_eq!(state.companies.iter().filter(|c| c.is_ai).count(), 2);
+        assert!(
+            state
+                .companies
+                .iter()
+                .any(|c| c.name == RIVAL_NAME_TRANSCARGO)
+        );
+        assert!(
+            state
+                .companies
+                .iter()
+                .any(|c| c.name == RIVAL_NAME_ROADHAUL)
+        );
     }
 }

@@ -792,10 +792,15 @@ impl GameState {
         }
     }
 
-    /// Añade rival `TransCargo` si aún no existe (escenarios / nueva partida con IA).
+    /// Añade rival `TransCargo` si aún no existe (por nombre).
     pub fn ensure_rival_transcargo(&mut self) {
         self.ensure_companies();
-        if self.companies.iter().any(|c| c.is_ai) {
+        if crate::company::company_id_by_name(
+            &self.companies,
+            crate::company::RIVAL_NAME_TRANSCARGO,
+        )
+        .is_some()
+        {
             return;
         }
         let id = u8::try_from(self.companies.len()).unwrap_or(1);
@@ -810,6 +815,34 @@ impl GameState {
         );
         rival.id = crate::company::CompanyId(id);
         self.companies.push(rival);
+    }
+
+    /// Añade rival `RoadHaul` (buses) si aún no existe.
+    pub fn ensure_rival_roadhaul(&mut self) {
+        self.ensure_companies();
+        if crate::company::company_id_by_name(&self.companies, crate::company::RIVAL_NAME_ROADHAUL)
+            .is_some()
+        {
+            return;
+        }
+        let id = u8::try_from(self.companies.len()).unwrap_or(2);
+        let colour = crate::company::first_free_company_colour(&self.companies);
+        let mut rival = crate::company::Company::rival_roadhaul(
+            CompanyEconomy {
+                money: 150_000,
+                loan: 0,
+                max_loan: crate::economy::DEFAULT_MAX_LOAN,
+            },
+            colour,
+        );
+        rival.id = crate::company::CompanyId(id);
+        self.companies.push(rival);
+    }
+
+    /// Rivales Rust de nueva partida: `TransCargo` + `RoadHaul`.
+    pub fn ensure_rival_ais(&mut self) {
+        self.ensure_rival_transcargo();
+        self.ensure_rival_roadhaul();
     }
 
     /// Economía de una compañía (fallback al espejo del jugador).

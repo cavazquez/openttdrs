@@ -41,6 +41,11 @@ pub fn tile_with_owner(mut tile: crate::map::Tile, owner: CompanyId) -> crate::m
     tile
 }
 
+/// Nombre canónico del rival ferroviario.
+pub const RIVAL_NAME_TRANSCARGO: &str = "TransCargo";
+/// Nombre canónico del rival de carretera / buses.
+pub const RIVAL_NAME_ROADHAUL: &str = "RoadHaul";
+
 /// Compañía jugable o IA.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Company {
@@ -93,7 +98,7 @@ impl Company {
     pub fn rival_transcargo(economy: CompanyEconomy, colour: u8) -> Self {
         Self {
             id: CompanyId(1),
-            name: "TransCargo".to_string(),
+            name: RIVAL_NAME_TRANSCARGO.to_string(),
             colour,
             economy,
             is_ai: true,
@@ -105,6 +110,29 @@ impl Company {
             bankruptcy_months: 0,
         }
     }
+
+    #[must_use]
+    pub fn rival_roadhaul(economy: CompanyEconomy, colour: u8) -> Self {
+        Self {
+            id: CompanyId(2),
+            name: RIVAL_NAME_ROADHAUL.to_string(),
+            colour,
+            economy,
+            is_ai: true,
+            cargo_income_earned: 0,
+            vehicle_running_costs: 0,
+            cargo_deliveries: 0,
+            economy_history: crate::game_state::EconomyHistory::default(),
+            quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
+            bankruptcy_months: 0,
+        }
+    }
+}
+
+/// Id de compañía por nombre exacto.
+#[must_use]
+pub fn company_id_by_name(companies: &[Company], name: &str) -> Option<CompanyId> {
+    companies.iter().find(|c| c.name == name).map(|c| c.id)
 }
 
 /// Fracción del pago feeder (`_settings_game.economy.feeder_payment_share`, default 75 %).

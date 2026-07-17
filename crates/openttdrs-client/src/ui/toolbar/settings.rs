@@ -185,8 +185,15 @@ pub(crate) fn handle_company_colour_swatches(
         if *interaction != Interaction::Pressed {
             continue;
         }
-        let colour = swatch.0 % 16;
+        let colour = swatch.0 % openttdrs_core::COMPANY_COLOUR_SLOTS;
         if sim.state.company_colour == colour {
+            continue;
+        }
+        if openttdrs_core::company_colour_taken_by_other(
+            &sim.state.companies,
+            sim.state.active_company,
+            colour,
+        ) {
             continue;
         }
         if crate::network::apply_player_command(
@@ -203,15 +210,42 @@ pub(crate) fn handle_company_colour_swatches(
 pub(crate) fn sync_company_colour_swatch_visuals(
     sim: Res<SimWorld>,
     mut q: Query<
-        (&CompanyColourSwatch, &mut BorderColor, &Interaction),
+        (
+            &CompanyColourSwatch,
+            &mut BorderColor,
+            &mut BackgroundColor,
+            &Interaction,
+        ),
         (With<Button>, Without<SaveMenuAction>),
     >,
 ) {
-    let active = sim.state.company_colour % 16;
-    for (swatch, mut border, interaction) in &mut q {
-        let selected = swatch.0 == active;
+    use crate::sprites::company_colour_swatch_color;
+
+    let active = sim.state.company_colour % openttdrs_core::COMPANY_COLOUR_SLOTS;
+    let active_id = sim.state.active_company;
+    for (swatch, mut border, mut bg, interaction) in &mut q {
+        let colour = swatch.0 % openttdrs_core::COMPANY_COLOUR_SLOTS;
+        let taken = openttdrs_core::company_colour_taken_by_other(
+            &sim.state.companies,
+            active_id,
+            colour,
+        );
+        let base = company_colour_swatch_color(colour).to_srgba();
+        *bg = if taken {
+            BackgroundColor(Color::srgba(
+                base.red * 0.4,
+                base.green * 0.4,
+                base.blue * 0.4,
+                0.55,
+            ))
+        } else {
+            BackgroundColor(Color::srgba(base.red, base.green, base.blue, 1.0))
+        };
+        let selected = colour == active;
         *border = if selected {
             BorderColor::all(Color::srgb(0.98, 0.92, 0.35))
+        } else if taken {
+            BorderColor::all(Color::srgb(0.35, 0.35, 0.32))
         } else if *interaction == Interaction::Hovered {
             BorderColor::all(Color::srgb(0.86, 0.86, 0.72))
         } else {
@@ -341,6 +375,32 @@ mod tests {
             .unwrap();
         assert_eq!(world.resource::<SimWorld>().state.company_colour, 6);
         assert_eq!(world.resource::<SimWorld>().state.companies[0].colour, 6);
+    }
+
+    #[test]
+    fn company_colour_swatch_ignores_taken_colour() {
+        let mut world = World::new();
+        let mut sim = SimWorld::default();
+        sim.state.ensure_companies();
+        sim.state.ensure_rival_transcargo();
+        let rival_colour = sim
+            .state
+            .companies
+            .iter()
+            .find(|c| c.is_ai)
+            .expect("rival")
+            .colour;
+        world.insert_resource(sim);
+
+        world.spawn((
+            Button,
+            CompanyColourSwatch(rival_colour),
+            Interaction::Pressed,
+        ));
+        world
+            .run_system_once(handle_company_colour_swatches)
+            .unwrap();
+        assert_eq!(world.resource::<SimWorld>().state.company_colour, 0);
     }
 
     #[test]

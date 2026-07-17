@@ -799,13 +799,14 @@ impl GameState {
             return;
         }
         let id = u8::try_from(self.companies.len()).unwrap_or(1);
+        let colour = crate::company::first_free_company_colour(&self.companies);
         let mut rival = crate::company::Company::rival_transcargo(
             CompanyEconomy {
                 money: 200_000,
                 loan: 0,
                 max_loan: crate::economy::DEFAULT_MAX_LOAN,
             },
-            1, // rojo
+            colour,
         );
         rival.id = crate::company::CompanyId(id);
         self.companies.push(rival);

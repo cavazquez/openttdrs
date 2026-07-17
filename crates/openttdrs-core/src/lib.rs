@@ -115,7 +115,8 @@ pub use command::{
     road_locked_tool_axis,
 };
 pub use company::{
-    Company, CompanyId, FEEDER_SHARE_DEN, FEEDER_SHARE_NUM, feeder_share_of, tile_owner_colour,
+    COMPANY_COLOUR_SLOTS, Company, CompanyId, FEEDER_SHARE_DEN, FEEDER_SHARE_NUM,
+    company_colour_taken_by_other, feeder_share_of, first_free_company_colour, tile_owner_colour,
     tile_with_owner,
 };
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};

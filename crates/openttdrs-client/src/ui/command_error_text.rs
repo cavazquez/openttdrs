@@ -114,6 +114,7 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::CheatsDisabled => "Cheats desactivados (consola: cheat on).",
         CommandError::InvalidCheatYear => "Año de cheat inválido (1950–2450).",
         CommandError::CompanyNotFound => "Compañía no encontrada.",
+        CommandError::CompanyColourTaken => "Ese color ya lo usa otra compañía.",
         CommandError::CannotBuyOwnCompany => "No puedes comprar tu propia compañía.",
         CommandError::CompanyNotBankrupt => "La compañía no está en quiebra.",
         CommandError::AuthorityRatingTooLow => {
@@ -211,6 +212,7 @@ mod tests {
             CommandError::CheatsDisabled,
             CommandError::InvalidCheatYear,
             CommandError::CompanyNotFound,
+            CommandError::CompanyColourTaken,
             CommandError::CannotBuyOwnCompany,
             CommandError::CompanyNotBankrupt,
             CommandError::AuthorityRatingTooLow,

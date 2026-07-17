@@ -505,6 +505,34 @@ fn set_company_colour_and_build_selectors() {
 }
 
 #[test]
+fn set_company_colour_rejects_taken_by_rival() {
+    let mut s = GameState::new(8, 8);
+    s.ensure_rival_transcargo();
+    let rival_colour = s.companies.iter().find(|c| c.is_ai).unwrap().colour;
+    assert_eq!(
+        apply_command(&mut s, &Command::SetCompanyColour(rival_colour)),
+        Err(CommandError::CompanyColourTaken)
+    );
+    assert_eq!(s.company_colour, 0);
+}
+
+#[test]
+fn ensure_rival_picks_first_free_colour() {
+    let mut s = GameState::new(8, 8);
+    // Jugador en color 1 → el primer libre es 0 (no hardcode 1).
+    apply_command(&mut s, &Command::SetCompanyColour(1)).unwrap();
+    s.ensure_rival_transcargo();
+    let rival = s.companies.iter().find(|c| c.is_ai).unwrap();
+    assert_eq!(rival.colour, 0);
+    assert_ne!(rival.colour, s.company_colour);
+
+    let mut s2 = GameState::new(8, 8);
+    s2.ensure_rival_transcargo();
+    let rival2 = s2.companies.iter().find(|c| c.is_ai).unwrap();
+    assert_eq!(rival2.colour, 1); // jugador default 0
+}
+
+#[test]
 fn set_ai_settings_clamps() {
     let mut s = GameState::new(8, 8);
     apply_command(

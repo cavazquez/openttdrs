@@ -486,9 +486,16 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             Ok(())
         }
         Command::SetCompanyColour(colour) => {
-            let colour = *colour % 16;
+            let colour = *colour % crate::company::COMPANY_COLOUR_SLOTS;
             if state.company_colour == colour {
                 return Ok(());
+            }
+            if crate::company::company_colour_taken_by_other(
+                &state.companies,
+                state.active_company,
+                colour,
+            ) {
+                return Err(CommandError::CompanyColourTaken);
             }
             state.company_colour = colour;
             Ok(())

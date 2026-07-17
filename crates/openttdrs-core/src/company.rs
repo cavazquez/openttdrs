@@ -114,6 +114,30 @@ impl Company {
 pub const FEEDER_SHARE_NUM: i64 = 75;
 pub const FEEDER_SHARE_DEN: i64 = 100;
 
+/// Colores de compañía OpenTTD (0–15).
+pub const COMPANY_COLOUR_SLOTS: u8 = 16;
+
+/// `true` si otra compañía (≠ `except`) ya usa ese color.
+#[must_use]
+pub fn company_colour_taken_by_other(companies: &[Company], except: CompanyId, colour: u8) -> bool {
+    let colour = colour % COMPANY_COLOUR_SLOTS;
+    companies
+        .iter()
+        .any(|c| c.id != except && c.colour % COMPANY_COLOUR_SLOTS == colour)
+}
+
+/// Primer índice 0–15 libre en el pool; si están todos ocupados, `0`.
+#[must_use]
+pub fn first_free_company_colour(companies: &[Company]) -> u8 {
+    let mut used = [false; COMPANY_COLOUR_SLOTS as usize];
+    for c in companies {
+        used[usize::from(c.colour % COMPANY_COLOUR_SLOTS)] = true;
+    }
+    used.iter()
+        .position(|&u| !u)
+        .map_or(0, |i| u8::try_from(i).unwrap_or(0))
+}
+
 /// Parte del pago que corresponde al feeder (`first_station`).
 #[must_use]
 pub fn feeder_share_of(payment: i64) -> i64 {
@@ -176,6 +200,7 @@ pub fn tile_owner_colour(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::game_state::CompanyEconomy;
     use crate::map::{Map, TileCoord, TileKind};
     use crate::station::Station;
 
@@ -184,6 +209,32 @@ mod tests {
         assert_eq!(feeder_share_of(100), 75);
         assert_eq!(feeder_share_of(0), 0);
         assert_eq!(feeder_share_of(-10), 0);
+    }
+
+    #[test]
+    fn first_free_company_colour_skips_taken() {
+        let player = Company::player(CompanyEconomy::default(), 0);
+        assert_eq!(first_free_company_colour(&[player.clone()]), 1);
+        let mut rival = Company::rival_transcargo(CompanyEconomy::default(), 1);
+        rival.id = CompanyId(1);
+        assert_eq!(first_free_company_colour(&[player, rival]), 2);
+    }
+
+    #[test]
+    fn company_colour_taken_ignores_self() {
+        let player = Company::player(CompanyEconomy::default(), 3);
+        assert!(!company_colour_taken_by_other(
+            &[player.clone()],
+            CompanyId::PLAYER,
+            3
+        ));
+        let mut rival = Company::rival_transcargo(CompanyEconomy::default(), 3);
+        rival.id = CompanyId(1);
+        assert!(company_colour_taken_by_other(
+            &[player, rival],
+            CompanyId::PLAYER,
+            3
+        ));
     }
 
     #[test]

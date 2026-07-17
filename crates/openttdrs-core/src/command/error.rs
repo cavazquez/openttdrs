@@ -126,6 +126,8 @@ pub enum CommandError {
     InvalidCheatYear,
     /// Compañía no encontrada en el pool.
     CompanyNotFound,
+    /// El color ya lo usa otra compañía.
+    CompanyColourTaken,
     /// No se puede comprar la propia compañía.
     CannotBuyOwnCompany,
     /// La compañía rival no está en quiebra.

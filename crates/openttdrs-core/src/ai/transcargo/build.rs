@@ -182,12 +182,16 @@ fn place_path_corner_curve(
     ) {
         return;
     }
-    let dx_in = (corner.x - from_prev.x).signum();
-    let dy_in = (corner.y - from_prev.y).signum();
-    let dx_out = (to_next.x - corner.x).signum();
-    let dy_out = (to_next.y - corner.y).signum();
-    let entry = diag_dir_from_step(dx_in, dy_in);
-    let exit = diag_dir_from_step(dx_out, dy_out);
+    let step_in = (
+        (corner.x - from_prev.x).signum(),
+        (corner.y - from_prev.y).signum(),
+    );
+    let step_out = (
+        (to_next.x - corner.x).signum(),
+        (to_next.y - corner.y).signum(),
+    );
+    let entry = diag_dir_from_step(step_in.0, step_in.1);
+    let exit = diag_dir_from_step(step_out.0, step_out.1);
     let curve = rail_bit_for_sides(entry, exit);
     if curve == 0 {
         return;
@@ -633,7 +637,11 @@ fn try_place_depot_near(state: &mut GameState, load_st: TileCoord) -> Option<Til
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::expect_used)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::many_single_char_names
+)]
 mod tests {
     use super::*;
     use crate::map::TileCoord;
@@ -670,7 +678,10 @@ mod tests {
         let corner = TileCoord::new(8, 2);
         let tb = state.map.get(corner).expect("corner rail").m5 & 0x3F;
         // step_x>0, step_y>0 → RIGHT (NE↔SE), sin ejes X|Y.
-        assert_eq!(tb, 0x20, "codo L debe ser curva RIGHT, no cruce: m5={tb:#04x}");
+        assert_eq!(
+            tb, 0x20,
+            "codo L debe ser curva RIGHT, no cruce: m5={tb:#04x}"
+        );
         assert!(
             find_path(
                 &state.map,
@@ -752,40 +763,48 @@ mod tests {
                 .set_kind(TileCoord::new(x, 2), TileKind::Water)
                 .unwrap();
         }
-        let a = TileCoord::new(2, 2);
-        let b = TileCoord::new(10, 4);
-        let planned = find_rail_build_path(&state.map, a, b).expect("A* build");
-        let corridor = place_rail_corridor(&mut state, a, b);
+        let start = TileCoord::new(2, 2);
+        let end = TileCoord::new(10, 4);
+        let planned = find_rail_build_path(&state.map, start, end).expect("A* build");
+        let corridor = place_rail_corridor(&mut state, start, end);
         let BuiltCorridor::Path(path) = corridor else {
             panic!("debe usar pathfind para rodear agua");
         };
         assert_eq!(path, planned);
-        for &c in &path {
+        for &tile in &path {
             assert_ne!(
-                state.map.get_kind(c),
+                state.map.get_kind(tile),
                 Some(TileKind::Water),
-                "path no debe incluir agua {c:?}"
+                "path no debe incluir agua {tile:?}"
             );
         }
         let rail_on_path = path
             .iter()
-            .filter(|c| state.map.get_kind(**c) == Some(TileKind::Rail))
+            .filter(|tile| state.map.get_kind(**tile) == Some(TileKind::Rail))
             .count();
         assert!(
             rail_on_path >= path.len().saturating_sub(1),
             "casi todo el path debe ser Rail; rail={rail_on_path} path={path:?}"
         );
         for i in 1..path.len() - 1 {
-            let p = path[i - 1];
-            let c = path[i];
-            let n = path[i + 1];
-            let turn = (c.x - p.x, c.y - p.y) != (n.x - c.x, n.y - c.y);
-            if !turn || state.map.get_kind(c) != Some(TileKind::Rail) {
+            let prev = path[i - 1];
+            let corner = path[i];
+            let next = path[i + 1];
+            let turn =
+                (corner.x - prev.x, corner.y - prev.y) != (next.x - corner.x, next.y - corner.y);
+            if !turn || state.map.get_kind(corner) != Some(TileKind::Rail) {
                 continue;
             }
-            let tb = state.map.get(c).unwrap().m5 & 0x3F;
-            assert_ne!(tb, 0x03, "codo pathfind no debe ser CROSS en {c:?}: {tb:#04x}");
-            assert_ne!(tb & 0x03, 0x03, "codo no debe tener X|Y en {c:?}: {tb:#04x}");
+            let tb = state.map.get(corner).unwrap().m5 & 0x3F;
+            assert_ne!(
+                tb, 0x03,
+                "codo pathfind no debe ser CROSS en {corner:?}: {tb:#04x}"
+            );
+            assert_ne!(
+                tb & 0x03,
+                0x03,
+                "codo no debe tener X|Y en {corner:?}: {tb:#04x}"
+            );
         }
     }
 
@@ -799,7 +818,10 @@ mod tests {
         place_rail_manhattan_corridor(&mut state, TileCoord::new(4, 4), TileCoord::new(8, 6));
         let corner = TileCoord::new(8, 4);
         let tb = state.map.get(corner).expect("shared corner").m5 & 0x3F;
-        assert_eq!(tb, 0x22, "codo compartido = RIGHT|Y, no cruce: m5={tb:#04x}");
+        assert_eq!(
+            tb, 0x22,
+            "codo compartido = RIGHT|Y, no cruce: m5={tb:#04x}"
+        );
         assert!(
             find_path(
                 &state.map,

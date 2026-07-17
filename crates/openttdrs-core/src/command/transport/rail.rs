@@ -306,7 +306,7 @@ pub(in crate::command::transport) fn refresh_rail_trackbits(
     let current = tile.m5 & 0x3F;
     // Una sola curva (codo L, con o sin un eje ajeno): no re-inferir.
     // Con 3–4 vecinos `from_neighbors` lo convertiría en CROSS y rompería el giro.
-    if current != 0 && (current & RAIL_PARALLEL_MASK).count_ones() == 1 {
+    if current != 0 && (current & RAIL_PARALLEL_MASK).is_power_of_two() {
         return Ok(());
     }
     // Carriles paralelos sin diagonal: no re-inferir con `from_neighbors` (destruye líneas).

@@ -225,11 +225,8 @@ pub(crate) fn sync_company_colour_swatch_visuals(
     let active_id = sim.state.active_company;
     for (swatch, mut border, mut bg, interaction) in &mut q {
         let colour = swatch.0 % openttdrs_core::COMPANY_COLOUR_SLOTS;
-        let taken = openttdrs_core::company_colour_taken_by_other(
-            &sim.state.companies,
-            active_id,
-            colour,
-        );
+        let taken =
+            openttdrs_core::company_colour_taken_by_other(&sim.state.companies, active_id, colour);
         let base = company_colour_swatch_color(colour).to_srgba();
         *bg = if taken {
             BackgroundColor(Color::srgba(

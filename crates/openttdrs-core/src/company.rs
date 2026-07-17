@@ -114,7 +114,7 @@ impl Company {
 pub const FEEDER_SHARE_NUM: i64 = 75;
 pub const FEEDER_SHARE_DEN: i64 = 100;
 
-/// Colores de compañía OpenTTD (0–15).
+/// Colores de compañía `OpenTTD` (0–15).
 pub const COMPANY_COLOUR_SLOTS: u8 = 16;
 
 /// `true` si otra compañía (≠ `except`) ya usa ese color.
@@ -214,7 +214,7 @@ mod tests {
     #[test]
     fn first_free_company_colour_skips_taken() {
         let player = Company::player(CompanyEconomy::default(), 0);
-        assert_eq!(first_free_company_colour(&[player.clone()]), 1);
+        assert_eq!(first_free_company_colour(std::slice::from_ref(&player)), 1);
         let mut rival = Company::rival_transcargo(CompanyEconomy::default(), 1);
         rival.id = CompanyId(1);
         assert_eq!(first_free_company_colour(&[player, rival]), 2);
@@ -224,7 +224,7 @@ mod tests {
     fn company_colour_taken_ignores_self() {
         let player = Company::player(CompanyEconomy::default(), 3);
         assert!(!company_colour_taken_by_other(
-            &[player.clone()],
+            std::slice::from_ref(&player),
             CompanyId::PLAYER,
             3
         ));

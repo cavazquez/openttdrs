@@ -40,7 +40,7 @@
 | [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md) | Export `.sav` |
 | [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md) | Industrias gfx / NewGRF |
 | [DEV_BOT.md](DEV_BOT.md) | Sonda headless carga/ingresos |
-| [epics/ai_build_pathfind.md](epics/ai_build_pathfind.md) | Épica: pathfind construcción IA (sin Squirrel) |
+| [archive/epics/ai_build_pathfind.md](archive/epics/ai_build_pathfind.md) | Épica #184 pathfind IA (cerrada) |
 | [parity/status.md](parity/status.md) · [parity/rail_status.md](parity/rail_status.md) | Madurez road/rail |
 | [parity/MAPPING.md](parity/MAPPING.md) | Índice mapeos C++ ↔ Rust |
 | [parity/ui_windows_parity.md](parity/ui_windows_parity.md) | Paridad ventanas UI |

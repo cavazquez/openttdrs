@@ -266,10 +266,10 @@ pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{
     PathCache, PathNetwork, TunnelWormholes, diag_dir_offset, find_path, find_path_cached,
     find_path_with_wormholes, find_rail_build_path, find_rail_path_for_engine,
-    path_network_for_vehicle, tile_allows_rail_build,
-    station_entrance_faces_rail, station_entrance_faces_road, station_site_adjacent_to_rail,
-    station_site_adjacent_to_transport, station_site_tile_allows_build,
-    station_site_tile_needs_clear, tile_is_path_traversable,
+    path_network_for_vehicle, station_entrance_faces_rail, station_entrance_faces_road,
+    station_site_adjacent_to_rail, station_site_adjacent_to_transport,
+    station_site_tile_allows_build, station_site_tile_needs_clear, tile_allows_rail_build,
+    tile_is_path_traversable,
 };
 pub use pathfinding_settings::{
     DEFAULT_PATH_BACKOFF_INTERVAL, DEFAULT_WAIT_FOR_PBS_PATH_DAYS, PBS_WAIT_FOREVER,

@@ -1,6 +1,6 @@
 //! A* de **construcción** ferroviaria: teselas buildables (no red ya tendida).
 //!
-//! Usado por la IA TransCargo (#184). El pathfinder YAPF/`find_path` Rail exige
+//! Usado por la IA `TransCargo` (#184). El pathfinder YAPF/`find_path` Rail exige
 //! vía existente; aquí el grafo es hierba/bosque/vía reutilizable.
 
 use std::collections::{BinaryHeap, HashMap};
@@ -94,7 +94,7 @@ pub fn find_rail_build_path(map: &Map, from: TileCoord, to: TileCoord) -> Option
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::map::TileKind;
@@ -112,7 +112,8 @@ mod tests {
         assert_eq!(path.first().copied(), Some(from));
         assert_eq!(path.last().copied(), Some(to));
         assert!(
-            path.iter().all(|c| map.get_kind(*c) != Some(TileKind::Water)),
+            path.iter()
+                .all(|c| map.get_kind(*c) != Some(TileKind::Water)),
             "el path no debe pisar agua"
         );
         assert!(
@@ -126,7 +127,8 @@ mod tests {
         let mut map = Map::new_flat(10, 6, 1);
         // Pasillo norte hierba; sur bosque en la línea directa.
         for x in 3..7 {
-            map.set_kind(TileCoord::new(x, 2), TileKind::Forest).unwrap();
+            map.set_kind(TileCoord::new(x, 2), TileKind::Forest)
+                .unwrap();
         }
         let from = TileCoord::new(2, 2);
         let to = TileCoord::new(8, 2);

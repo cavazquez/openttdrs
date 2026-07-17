@@ -27,6 +27,7 @@ Trabajo vivo:
 | `ROADMAP_PARIDAD_UI_GLOBAL_DETAIL.md` | Inventario UI-0…UI-8; vivo = `../ROADMAP_PARIDAD_UI_GLOBAL.md` |
 | `RAIL_REVIEW_HANDOFF.md`, `rail_debugging_plan.md` | Rail 0–4 hechos; stubs en `../parity/` |
 | `HANDOFF_BUGS_VISUALES_TERRAIN.md` | Detalle largo; vivo = `../HANDOFF_BUGS_VISUALES_TERRAIN.md` |
+| `epics/ai_build_pathfind.md` | #184 pathfind construcción IA cerrado |
 
 ## Archivo previo
 

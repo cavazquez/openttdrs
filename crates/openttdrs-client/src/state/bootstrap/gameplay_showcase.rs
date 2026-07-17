@@ -241,7 +241,10 @@ mod tests {
     #[test]
     fn showcase_has_town_factory_and_rail_assets() {
         let state = showcase_state();
-        assert!(state.map.get_kind(TileCoord::new(16, 2)) == Some(TileKind::House));
+        assert_eq!(
+            state.map.get_kind(TileCoord::new(16, 2)),
+            Some(TileKind::House)
+        );
         assert!(
             state
                 .stations

@@ -254,7 +254,7 @@ mod tests {
             state,
             ..SimWorld::default()
         };
-        let head = sim.state.vehicles.iter().find(|v| v.id == 1).unwrap();
+        let head = &sim.state.vehicles[0];
         let ids = details_unit_ids(head, &sim);
         assert_eq!(ids, vec![1, 2]);
         let body = vehicle_details_body(head, &sim, VehicleDetailsTab::Cargo);

@@ -528,8 +528,8 @@ mod tests {
         apply_newgrf_action5_catenary(&mut state, &[&dir]);
         assert_eq!(state.runtime.catenary_newgrf_sprites.len(), 36);
         assert!(state.runtime.catenary_newgrf_sprites[0].is_some());
-        assert!(crate::catenary_action5_local_slot(1039) == Some(0));
-        assert!(crate::catenary_action5_local_slot(910_067) == Some(28));
+        assert_eq!(crate::catenary_action5_local_slot(1039), Some(0));
+        assert_eq!(crate::catenary_action5_local_slot(910_067), Some(28));
     }
 
     #[test]

@@ -108,8 +108,6 @@ fn place_road_bits_force_axis_ignores_single_cardinal_neighbor() {
     );
 }
 
-
-
 #[test]
 fn place_road_bits_reinforce_same_axis_keeps_bits_with_parallel() {
     let mut s = GameState::new(12, 12);

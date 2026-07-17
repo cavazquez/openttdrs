@@ -373,7 +373,7 @@ fn vehicle_group_assign_and_save_v8_fields() {
     )
     .unwrap();
     assert_eq!(s.vehicles[0].group_id, Some(group_id));
-    assert!(s.vehicles[0].vehicle_age_years(s.tick.get()) == 0);
+    assert_eq!(s.vehicles[0].vehicle_age_years(s.tick.get()), 0);
 }
 
 #[test]

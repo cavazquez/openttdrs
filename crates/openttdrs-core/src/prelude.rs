@@ -3,7 +3,7 @@
 //! No incluye [`crate::command::Command`]: en el cliente Bevy choca con
 //! `bevy::prelude::Command`. Importar comandos desde la raíz o `command::`.
 //!
-//! NewGRF avanzado, fixtures, paridad y tooling van por módulo
+//! `NewGRF` avanzado, fixtures, paridad y tooling van por módulo
 //! (`newgrf_sprites::`, `newgrf_actions::`, `parity::`, `tnbp_decode::`, …).
 
 pub use crate::command::{CommandError, LevelMode, apply_command, command_would_fail};

@@ -14,10 +14,7 @@ const STATUS_WARN: Color = Color::srgb(0.95, 0.55, 0.25);
 
 /// Texto + color de la barra de estado bajo el viewport.
 #[must_use]
-pub(crate) fn format_vehicle_status(
-    vehicle: &Vehicle,
-    sim: &SimWorld,
-) -> (String, Color) {
+pub(crate) fn format_vehicle_status(vehicle: &Vehicle, sim: &SimWorld) -> (String, Color) {
     if vehicle.breakdown_ticks_remaining > 0 {
         return ("Averiado".into(), STATUS_WARN);
     }
@@ -40,10 +37,7 @@ pub(crate) fn format_vehicle_status(
     let kmh = speed_to_kmh(vehicle.kind, vehicle.cur_speed);
     let dest = active_destination_label(vehicle, sim);
     if let Some(dest) = dest {
-        (
-            format!("En marcha a {kmh} km/h → {dest}"),
-            STATUS_RUNNING,
-        )
+        (format!("En marcha a {kmh} km/h → {dest}"), STATUS_RUNNING)
     } else if vehicle.orders.is_empty() {
         (
             format!("En marcha a {kmh} km/h (sin órdenes)"),
@@ -64,7 +58,11 @@ fn active_destination_label(vehicle: &Vehicle, sim: &SimWorld) -> Option<String>
     let order = vehicle.orders[idx];
     let pos = resolve_order_destination(&sim.state.map, vehicle.kind, order);
     if let Some(station) = sim.state.stations.iter().find(|s| s.pos == pos)
-        && let Some(name) = station.name.as_deref().map(str::trim).filter(|n| !n.is_empty())
+        && let Some(name) = station
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
     {
         return Some(name.to_string());
     }
@@ -96,8 +94,12 @@ mod tests {
 
     #[test]
     fn stopped_when_not_running() {
-        let mut vehicle =
-            Vehicle::new(1, VehicleKind::Train, TileCoord::new(1, 1), TileCoord::new(1, 1));
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
         vehicle.running = false;
         let (sim, _) = sim_with_vehicle(vehicle.clone());
         let (text, _) = format_vehicle_status(&vehicle, &sim);
@@ -106,8 +108,12 @@ mod tests {
 
     #[test]
     fn running_includes_speed_and_destination() {
-        let mut vehicle =
-            Vehicle::new(1, VehicleKind::Train, TileCoord::new(1, 1), TileCoord::new(1, 1));
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Train,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
         vehicle.running = true;
         vehicle.cur_speed = 88;
         vehicle.orders = vec![VehicleOrder::Tile(TileCoord::new(5, 7))];
@@ -121,8 +127,12 @@ mod tests {
 
     #[test]
     fn no_route_overrides_running() {
-        let mut vehicle =
-            Vehicle::new(1, VehicleKind::Bus, TileCoord::new(1, 1), TileCoord::new(1, 1));
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
         vehicle.running = true;
         vehicle.no_network_route_to_order = true;
         let (sim, _) = sim_with_vehicle(vehicle.clone());

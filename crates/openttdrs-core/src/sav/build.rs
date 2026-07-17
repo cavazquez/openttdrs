@@ -9,7 +9,7 @@ use super::chunks::{CH_ARRAY, CH_TABLE, RawChunk, find_chunk};
 use super::table::{SlValue, parse_table_chunk, record_get};
 
 const SLV_INCREASE_HOUSE_LIMIT: u16 = 348;
-/// PR#6811: a partir de aquí RoadType vive en m4 (road) / m8 bits 6–11 (tram).
+/// PR#6811: a partir de aquí `RoadType` vive en m4 (road) / m8 bits 6–11 (tram).
 const SLV_ROAD_TYPES: u16 = 214;
 /// PR#13030: a partir de aquí `WaterTileType` vive directo en bits 4–7 de m5.
 const SLV_WATER_TILE_TYPE: u16 = 342;
@@ -188,7 +188,7 @@ fn tile_needs_road_types(mapt: u8, m5: u8, m6: u8) -> bool {
     }
 }
 
-/// Saves < `SLV_ROAD_TYPES`: RoadType desde bits 6–7 de m7 → m4 + m8 bits 6–11.
+/// Saves < `SLV_ROAD_TYPES`: `RoadType` desde bits 6–7 de m7 → m4 + m8 bits 6–11.
 fn apply_slv_road_types(
     version: u16,
     mapt: &[u8],
@@ -447,13 +447,13 @@ mod tests {
         let w = 64u32;
         let n = (w * w) as usize;
         let mut mapt = vec![0u8; n];
-        let mut map7 = vec![0u8; n];
+        let mut map7_bytes = vec![0u8; n];
         mapt[0] = MP_ROAD << 4;
-        map7[0] = 1 << 6; // pre-NRT: ROADTYPE_ROAD
+        map7_bytes[0] = 1 << 6; // pre-NRT: ROADTYPE_ROAD
         let chunks = vec![
             maps_table_chunk(w, w),
             riff(*b"MAPT", mapt),
-            riff(*b"MAP7", map7),
+            riff(*b"MAP7", map7_bytes),
         ];
         let body = export_ottdmap(&chunks, 211).expect("export");
         let (map, _) = crate::Map::from_ottd_binary_with_extras(&body).expect("load");

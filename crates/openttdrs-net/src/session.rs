@@ -634,6 +634,7 @@ impl Drop for ClientSession {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn client_thread(
     mut stream: TcpStream,
     cmd_rx: Receiver<ClientCmd>,

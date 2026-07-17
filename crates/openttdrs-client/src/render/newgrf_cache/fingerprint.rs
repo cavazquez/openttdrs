@@ -44,8 +44,10 @@ mod tests {
 
     #[test]
     fn fingerprint_is_deterministic_for_same_vars() {
-        let mut ctx = Action2EvalCtx::default();
-        ctx.random_bits = 7;
+        let mut ctx = Action2EvalCtx {
+            random_bits: 7,
+            ..Default::default()
+        };
         ctx.vars.insert(0x40, 11);
         ctx.vars.insert(0x5F, 22);
         let a = runtime_fingerprint(&ctx, vars::INDUSTRY, false);
@@ -56,8 +58,10 @@ mod tests {
 
     #[test]
     fn consist_random_changes_train_fingerprint() {
-        let mut ctx = Action2EvalCtx::default();
-        ctx.random_bits = 1;
+        let mut ctx = Action2EvalCtx {
+            random_bits: 1,
+            ..Default::default()
+        };
         let without = runtime_fingerprint(&ctx, vars::TRAIN, true);
         ctx.consist_random_bits = HashMap::from([(0u8, 99u32)]);
         let with = runtime_fingerprint(&ctx, vars::TRAIN, true);

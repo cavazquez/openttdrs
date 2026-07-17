@@ -397,7 +397,11 @@ fn move_rail_vehicle_transfers_wagon_between_consists() {
     )
     .unwrap();
     assert_eq!(
-        s.vehicles.iter().find(|v| v.id == head_a).unwrap().next_unit,
+        s.vehicles
+            .iter()
+            .find(|v| v.id == head_a)
+            .unwrap()
+            .next_unit,
         Some(wagon)
     );
 
@@ -419,7 +423,11 @@ fn move_rail_vehicle_transfers_wagon_between_consists() {
             .is_none()
     );
     assert_eq!(
-        s.vehicles.iter().find(|v| v.id == head_b).unwrap().next_unit,
+        s.vehicles
+            .iter()
+            .find(|v| v.id == head_b)
+            .unwrap()
+            .next_unit,
         Some(wagon)
     );
     let w = s.vehicles.iter().find(|v| v.id == wagon).unwrap();

@@ -225,6 +225,8 @@ pub(crate) fn run(asset_root: &str, net_cli: NetCli) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used, clippy::expect_used)]
+
     use super::{FixedUpdateSet, StartupSet, UpdateSet};
 
     #[test]

@@ -5,9 +5,7 @@ use super::*;
 use crate::cargo::CargoType;
 use crate::industry::IndustryKind;
 use crate::map::TileCoord;
-use crate::rail_signals::{
-    SIGTYPE_BLOCK, SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SIGTYPE_PATH, SIGTYPE_PATH_ONEWAY,
-};
+use crate::rail_signals::{SIGTYPE_BLOCK, SIGTYPE_ENTRY, SIGTYPE_EXIT};
 use crate::station::road_stop_approach_tile;
 use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
 use crate::{PathNetwork, find_path};

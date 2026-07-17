@@ -56,8 +56,8 @@ use crate::ui::toolbar::{
 use crate::ui::town_directory::TownDirectoryState;
 use crate::ui::town_window::TownWindowState;
 use crate::ui::ui5_blocked_stubs::LinkGraphWindowState;
-use crate::ui::vehicle_list::VehicleListState;
 use crate::ui::vehicle_details_window::VehicleDetailsWindowState;
+use crate::ui::vehicle_list::VehicleListState;
 use crate::ui::vehicle_window::VehicleWindowState;
 
 const OPEN_FRAME: u32 = 30;

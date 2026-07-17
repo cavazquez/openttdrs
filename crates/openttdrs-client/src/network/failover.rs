@@ -131,9 +131,7 @@ fn promote_local_host(
         };
         return false;
     };
-    status.failover_phase = FailoverUiPhase::Promoting {
-        bind: bind.clone(),
-    };
+    status.failover_phase = FailoverUiPhase::Promoting { bind: bind.clone() };
     let snapshot = match sim.state.save_json() {
         Ok(s) => s,
         Err(e) => {

@@ -27,7 +27,7 @@ env:
   CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS: "-C link-arg=-fuse-ld=mold"
 
 jobs:
-  # Un solo job: clippy compila una vez; nextest reutiliza binarios (--no-build).
+  # Un solo job: clippy + nextest con perfil Cargo `ci`.
   # En push a main, llvm-cov nextest sustituye a nextest (2ª compilación instrumentada,
   # pero sin un segundo job ni checkout/caché/APT duplicados).
   check:
@@ -77,13 +77,13 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: tests (nextest, sin recompilar)
+      - name: tests (nextest)
         if: github.event_name != 'push' || github.ref != 'refs/heads/main'
-        run: cargo nextest run --workspace --profile ci --no-build
+        run: cargo nextest run --workspace --cargo-profile ci
 
       - name: tests + cobertura (main, recompila con instrumentación)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: cargo llvm-cov nextest --workspace --all-targets --profile ci --lcov --output-path lcov.info
+        run: cargo llvm-cov nextest --workspace --all-targets --cargo-profile ci --lcov --output-path lcov.info
 
       - name: Upload coverage reports to Codecov
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -173,6 +173,7 @@ def build_content(repo: Path, upstream: Path) -> tuple[str, int, int, int, list[
         "// Fuente: OpenTTD _town_draw_tile_data (110 casas × 16 filas).",
         "// Índice: house_id * 16 + TileHash2Bit * 4 + building_stage.",
         "#![allow(clippy::large_const_arrays)]",
+        "#![cfg_attr(rustfmt, rustfmt_skip)]",
         "",
         "use super::HouseDrawSpec;",
         "",

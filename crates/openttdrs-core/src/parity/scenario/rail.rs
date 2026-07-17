@@ -1,4 +1,4 @@
-//! Escenarios ferroviarios: line, supply, signal, PBS, rail_signals_mixed.
+//! Escenarios ferroviarios: line, supply, signal, PBS, `rail_signals_mixed`.
 
 use std::collections::VecDeque;
 
@@ -78,6 +78,8 @@ pub const TRAIN_DUAL_VEHICLE_2_ID: u32 = 2;
 /// Alias del tren líder del escenario dual (sonda `DevBot`).
 pub const TRAIN_DUAL_VEHICLE_OUT_ID: u32 = TRAIN_DUAL_VEHICLE_ID;
 
+#[must_use]
+#[allow(clippy::expect_used, clippy::missing_panics_doc)] // escenario fijo
 pub fn build_train_line() -> GameState {
     let mut state = GameState::new(20, 14);
     state.world_seed = 0;

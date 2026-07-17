@@ -76,10 +76,7 @@ mod tests {
     fn raw_policy_keeps_rgba_bytes() {
         let sprite = sprite_with_rgba(vec![10, 20, 30, 255]);
         let img = decoded_sprite_image(&sprite, DecodedSpriteImagePolicy::Raw);
-        assert_eq!(
-            img.data.as_ref().map(|d| d.as_slice()),
-            Some(&[10, 20, 30, 255][..])
-        );
+        assert_eq!(img.data.as_deref(), Some(&[10, 20, 30, 255][..]));
     }
 
     #[test]
@@ -89,9 +86,6 @@ mod tests {
             &sprite,
             DecodedSpriteImagePolicy::MaskedAndRecolored { colour: None },
         );
-        assert_eq!(
-            img.data.as_ref().map(|d| d.as_slice()),
-            Some(&[1, 2, 3, 255][..])
-        );
+        assert_eq!(img.data.as_deref(), Some(&[1, 2, 3, 255][..]));
     }
 }

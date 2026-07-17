@@ -1,4 +1,4 @@
-//! Catálogo vanilla estático de motores OpenGFX.
+//! Catálogo vanilla estático de motores `OpenGFX`.
 
 use std::sync::OnceLock;
 

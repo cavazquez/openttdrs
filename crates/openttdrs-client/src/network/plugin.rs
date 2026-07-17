@@ -462,10 +462,7 @@ fn handle_event(
                     fo.reconnect_addr = Some(addr.clone());
                     fo.failover_attempted = false;
                     status.label = format!("host_announce:{bind}");
-                    status.failover_phase = FailoverUiPhase::Reconnecting {
-                        addr,
-                        attempt: 1,
-                    };
+                    status.failover_phase = FailoverUiPhase::Reconnecting { addr, attempt: 1 };
                     return Ok(EventOutcome::HostLost);
                 }
             }

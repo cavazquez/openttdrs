@@ -49,10 +49,7 @@ pub(crate) struct VehicleDetailsTabButton(pub(crate) VehicleDetailsTab);
 #[derive(Component)]
 pub(crate) struct VehicleDetailsBodyText;
 
-pub(crate) fn setup_vehicle_details_window(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-) {
+pub(crate) fn setup_vehicle_details_window(mut commands: Commands, asset_server: Res<AssetServer>) {
     let asset_server = &*asset_server;
     let (_root, content) = spawn_floating_window(
         &mut commands,
@@ -137,7 +134,10 @@ pub(crate) fn sync_vehicle_details_window(
     mut title_q: Query<(&FloatingWindowTitleText, &mut Text)>,
     mut body_q: Query<
         &mut Text,
-        (With<VehicleDetailsBodyText>, Without<FloatingWindowTitleText>),
+        (
+            With<VehicleDetailsBodyText>,
+            Without<FloatingWindowTitleText>,
+        ),
     >,
     mut tab_buttons: Query<
         (&VehicleDetailsTabButton, &Interaction, &mut BackgroundColor),

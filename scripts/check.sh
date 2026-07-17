@@ -180,13 +180,13 @@ do_all() {
 do_ci() {
     export CARGO_PROFILE="${CARGO_PROFILE:-ci}"
     do_fmt_check
-    # Paridad con CI: clippy compila todo; nextest reutiliza binarios (--no-build).
+    # Paridad con CI: clippy + nextest con perfil Cargo `ci`.
     if command -v cargo-nextest &>/dev/null; then
         info "Ejecutando Clippy (profile ci)..."
         cargo clippy --workspace --all-targets --profile ci -- -D warnings
         info "Clippy OK ✓"
-        info "Ejecutando tests (nextest, --no-build)..."
-        cargo nextest run --workspace --profile ci --no-build
+        info "Ejecutando tests (nextest, --cargo-profile ci)..."
+        cargo nextest run --workspace --cargo-profile ci
         info "Tests OK ✓"
     else
         do_lint

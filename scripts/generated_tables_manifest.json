@@ -26,9 +26,9 @@
       ],
       "check": "hash",
       "requires_opengfx": true,
-      "output_sha256": "5e8a2fb026ccef1760a6727d194e3995db6bdea91ea86fcba8e29223a8ef2727",
+      "output_sha256": "259d9758fe8225572f930c13e9caf00cc4649c6d0aefb158cc4ef61a3812a844",
       "license": "GPL-2.0-only (OpenTTD) + offsets OpenGFX locales",
-      "note": "Regenerado 2026-07-16 con OpenGFX local (264 offsets/dims vs pin anterior). CI solo hash."
+      "note": "Regenerado 2026-07-16 con OpenGFX local (264 offsets/dims vs pin anterior). CI solo hash. rustfmt_skip para mantener filas compactas."
     },
     {
       "id": "vehicle_gfx_data",

@@ -1,9 +1,10 @@
-//! Escenario AI rival (TransCargo).
+//! Escenario AI rival (`TransCargo`).
 
 use crate::GameState;
 use crate::industry::{Industry, IndustryKind};
 use crate::map::TileCoord;
 
+#[must_use]
 pub fn build_ai_rival_line() -> GameState {
     let mut state = GameState::new(24, 14);
     state.world_seed = 0;

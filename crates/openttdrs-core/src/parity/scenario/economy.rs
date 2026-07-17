@@ -15,7 +15,6 @@ pub fn build_loan_interest() -> GameState {
 /// Fase 4 / #86: mina+fábrica + bosque + pozo (3 rutas; L en madera/petróleo).
 #[must_use]
 #[allow(clippy::expect_used)]
-
 pub fn build_town_growth() -> GameState {
     use crate::map::TileKind;
     use crate::station::StopKind;

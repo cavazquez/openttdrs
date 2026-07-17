@@ -1,5 +1,6 @@
 //! Helpers compartidos entre benches headless (#116).
 #![allow(dead_code)] // cada [[bench]] incluye el módulo completo
+#![allow(clippy::expect_used)] // fixtures de bench: fallo = setup inválido
 
 use openttdrs_core::parity::build_scenario;
 use openttdrs_core::{Climate, GameState, WorldGenConfig, apply_world_gen};

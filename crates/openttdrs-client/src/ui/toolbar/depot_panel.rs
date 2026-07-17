@@ -491,9 +491,8 @@ pub(crate) fn sync_depot_panel(
         node.display = Display::Flex;
         let selected = depot_state.selected_vehicle == Some(vehicle.id);
         let is_drag_source = drag_from == Some(container.slot);
-        let is_drop_target = drag_from.is_some_and(|from| {
-            from != container.slot && hovered_slot == Some(container.slot)
-        });
+        let is_drop_target = drag_from
+            .is_some_and(|from| from != container.slot && hovered_slot == Some(container.slot));
         *bg = if is_drop_target {
             BackgroundColor(Color::srgb(0.42, 0.48, 0.28))
         } else if is_drag_source {
@@ -530,8 +529,8 @@ pub(crate) fn sync_depot_panel(
             {
                 node.display = Display::Flex;
                 image.image = vehicle_side_sprite(trucks, unit);
-                let dragging_this = drag_from == Some(sprite.slot)
-                    && drag_unit == Some(sprite.unit_idx);
+                let dragging_this =
+                    drag_from == Some(sprite.slot) && drag_unit == Some(sprite.unit_idx);
                 *border = if dragging_this || *interaction == Interaction::Hovered {
                     BorderColor::all(Color::srgb(0.9, 0.78, 0.48))
                 } else {
@@ -647,8 +646,7 @@ pub(crate) fn finish_depot_list_drag(
     let drop_slot = row_q
         .iter()
         .find_map(|(row, interaction)| {
-            matches!(*interaction, Interaction::Hovered | Interaction::Pressed)
-                .then_some(row.slot)
+            matches!(*interaction, Interaction::Hovered | Interaction::Pressed).then_some(row.slot)
         })
         .or_else(|| {
             unit_q.iter().find_map(|(unit, interaction, node)| {
@@ -661,29 +659,28 @@ pub(crate) fn finish_depot_list_drag(
     if let Some(to_slot) = drop_slot
         && to_slot != from_slot
     {
-        if depot_is_rail(&sim, depot_pos) {
-            if let Some((head_id, unit_id)) =
+        if depot_is_rail(&sim, depot_pos)
+            && let Some((head_id, unit_id)) =
                 resolve_rail_depot_drag_move(&sim, depot_pos, from_slot, to_slot, unit_idx)
-            {
-                match crate::network::apply_player_command(
-                    &mut sim.state,
-                    &Command::MoveRailVehicle {
-                        head_id,
-                        unit_id,
-                        after_id: None,
-                    },
-                ) {
-                    Ok(()) => {
-                        pending.pending = true;
-                        depot_state.selected_vehicle = Some(head_id);
-                        depot_state.reorder_from_slot = None;
-                    }
-                    Err(e) => {
-                        push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
-                    }
+        {
+            match crate::network::apply_player_command(
+                &mut sim.state,
+                &Command::MoveRailVehicle {
+                    head_id,
+                    unit_id,
+                    after_id: None,
+                },
+            ) {
+                Ok(()) => {
+                    pending.pending = true;
+                    depot_state.selected_vehicle = Some(head_id);
+                    depot_state.reorder_from_slot = None;
                 }
-                return;
+                Err(e) => {
+                    push_build_command_error(&mut hud_feedback, e, time.elapsed_secs());
+                }
             }
+            return;
         }
         match crate::network::apply_player_command(
             &mut sim.state,

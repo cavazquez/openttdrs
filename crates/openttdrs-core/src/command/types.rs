@@ -384,7 +384,7 @@ pub enum Command {
     },
     /// Sustituye los ajustes PBS / pathfinding de la partida (deuda I8 settings).
     SetPathfindingSettings(crate::pathfinding_settings::PathfindingSettings),
-    /// Cambia el modo CargoDist y reconstruye flows de estación.
+    /// Cambia el modo `CargoDist` y reconstruye flows de estación.
     SetCargoDistDistribution(crate::flow_stat::DistributionType),
     /// Color de la compañía activa (0..=15).
     SetCompanyColour(u8),
@@ -402,14 +402,14 @@ pub enum Command {
     SetCurrentAirportClass(crate::airport_class::AirportClassId),
     /// Spec de aeropuerto activo.
     SetCurrentAirportSpec(crate::airport_class::AirportSpecId),
-    /// Ajustes de IA TransCargo de la partida.
+    /// Ajustes de IA `TransCargo` de la partida.
     SetAiSettings(crate::ai::AiSettings),
     /// Post-proceso de arrastre de carretera (merge/propagate bits entre vecinos).
     FinalizeRoadDragLine {
         tiles: Vec<TileCoord>,
         axis: u8,
     },
-    /// Regenera el mapa (editor GenLand): world_gen + limpia entidades.
+    /// Regenera el mapa (editor GenLand): `world_gen` + limpia entidades.
     RegenerateLandscape {
         climate: crate::world_gen::Climate,
         seed: u64,

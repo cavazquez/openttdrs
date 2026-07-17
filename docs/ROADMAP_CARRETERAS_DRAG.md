@@ -5,8 +5,8 @@ correcto** en juego. Se deja así a petición suya. Este documento es para que o
 IA (o un humano) retome el trabajo sin re-descubrir el contexto.
 
 **Relacionado:** [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) § road bits,
-[SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) § orientación isométrica, [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md)
-T3 autoslope, [SP2_CHECKLIST.md](SP2_CHECKLIST.md) § drag carretera.
+[SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) § orientación isométrica, [archive/ROADMAP_TERRAFORM.md](archive/ROADMAP_TERRAFORM.md)
+T3 autoslope, [archive/SP2_CHECKLIST.md](archive/SP2_CHECKLIST.md) § drag carretera.
 
 ---
 
@@ -55,7 +55,7 @@ bloquea eje). La mejora deseada en openttdrs sería UX extra, no paridad estrict
 `GetRoadSpriteOffset` en OpenTTD (`road_cmd.cpp`): en `SLOPE_NE/SE/SW/NW` **ignora** `road_bits`
 y usa sprites 11–14. Mismo comportamiento en `road_flat_sprite_index` (cliente). En colina,
 una recta plana puede **verse** “girada” aunque `m5` sea correcto → hace falta **autoslope**
-([ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) T3) o cimientos.
+([archive/ROADMAP_TERRAFORM.md](archive/ROADMAP_TERRAFORM.md) T3) o cimientos.
 
 ---
 

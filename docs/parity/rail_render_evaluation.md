@@ -1,6 +1,7 @@
 # Evaluación render/interpolación ferroviaria (Fase Rail 3E)
 
-Fecha: 2026-07-04 · Complementa `rail_status.md` y `rail_debugging_plan.md`.
+Fecha: 2026-07-04 · Complementa `rail_status.md` y
+[`rail_debugging_plan.md`](rail_debugging_plan.md) (stub → archive).
 
 ## Objetivo
 

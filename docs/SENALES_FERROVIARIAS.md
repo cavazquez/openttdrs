@@ -176,7 +176,7 @@ En openttdrs: `resolve_signal_track` en `rail_signals.rs` (misma lógica). Coman
 
 ### 4.3 Sprites
 
-`DrawSingleSignal` → IDs OpenGFX; bases `1275` (block eléctrico clásico) y alternativa (`1352` / `OPENTTDRS_SIGNAL_ALT_BASE`) para presignals y PBS. Cliente: `signal_sprite_id`, `collect_signal_sprite_ids`, precarga en `rail_sprite_ids_for_preload` (8 IDs PBS sin PNG en OpenGFX — ver `SP3_AUDIT_SUMMARY.md`).
+`DrawSingleSignal` → IDs OpenGFX; bases `1275` (block eléctrico clásico) y alternativa (`1352` / `OPENTTDRS_SIGNAL_ALT_BASE`) para presignals y PBS. Cliente: `signal_sprite_id`, `collect_signal_sprite_ids`, precarga en `rail_sprite_ids_for_preload` (8 IDs PBS sin PNG en OpenGFX — ver `archive/SP3_AUDIT_SUMMARY.md`).
 
 ---
 
@@ -377,5 +377,5 @@ cargo run -p openttdrs-client
 
 - Codificación tiles vía: [TILES_Y_SAVEGAMES_OPENTTD.md §7.1](TILES_Y_SAVEGAMES_OPENTTD.md#71-mp_railway--teselas-con-señales)  
 - Sprint plan: [ROADMAP_SPRINTS.md § S5](ROADMAP_SPRINTS.md)  
-- Render / assets: [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md), [archive/SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md](archive/SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md)  
+- Render / assets: [archive/SP3_AUDIT_SUMMARY.md](archive/SP3_AUDIT_SUMMARY.md), [archive/SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md](archive/SESION_OTTDMAP_SIGNALS_SIM_2026-04-28.md)  
 - Paridad global: [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md)

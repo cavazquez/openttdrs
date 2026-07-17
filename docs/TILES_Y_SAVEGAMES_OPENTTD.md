@@ -1,14 +1,31 @@
 # Teselas, mapas y savegames de OpenTTD — Referencia técnica para openttdrs
 
-Este documento recoge **todo lo aprendido** al cargar mapas reales (`.sav` → `.ottdmap`) y
-al renderizar terreno, carreteras, vías, industrias y objetos. Complementa
-[SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) y [SPRITES_OPENGFX_COMPLETO.md](SPRITES_OPENGFX_COMPLETO.md).
+Referencia **vigente** de bytes MAPT/`m5`/chunks y pipeline `.sav` → `.ottdmap`.
+Complementa [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) (catálogos en
+[archive/SPRITES_OPENGFX_COMPLETO.md](archive/SPRITES_OPENGFX_COMPLETO.md) y
+[archive/INDUSTRIAS_OPENGFX.md](archive/INDUSTRIAS_OPENGFX.md)).
 
 Código relevante:
 - `scripts/parse_sav.py` — conversor `.sav` → `.ottdmap`
 - `crates/openttdrs-core/src/map.rs` — struct `Tile`, `Map::from_ottd_binary`
 - `crates/openttdrs-client/src/iso.rs` — proyección isométrica y pendientes
 - `crates/openttdrs-client/src/sprites.rs` — constantes y lógica de sprites
+
+### Lectura rápida (vigente)
+
+| Necesitas | Ir a |
+|-----------|------|
+| Tipo de tesela / planos | §1–4 |
+| Road / rail / señales en tile | §5–7 |
+| Industrias / objetos / casas | §8–10 |
+| Slopes + sprites terreno | §12–13 |
+| Import `.sav` / limitaciones | §16–17 |
+| Terraform T1–T3 | §20 |
+| Spec binaria corta | [OTTDMAP_FORMAT.md](OTTDMAP_FORMAT.md) |
+| Flujo cliente | [FLUJO_MAPA_Y_CLIENTE.md](FLUJO_MAPA_Y_CLIENTE.md) |
+
+Las secciones siguientes son el cuerpo de referencia (fórmulas no repetidas en
+otros docs). Preferir código si hay divergencia.
 
 ---
 
@@ -1061,6 +1078,7 @@ No impide construir encima (paridad parcial con OpenTTD; reserva de terreno comp
 | `crates/openttdrs-client/src/iso.rs` | Proyección isométrica, `compute_tileh`, `SLOPE_HALF_H` |
 | `crates/openttdrs-client/src/sprites.rs` | `HOUSE_DRAW_DATA` (128 casas), `INDUSTRY_GFX_DATA`, road/rail bits |
 | `crates/openttdrs-client/src/main.rs` | Sistema de render Bevy: teselas, overlays, cámara |
-| `docs/SPRITES_OPENGFX_COMPLETO.md` | Catálogo completo de IDs de sprites OpenGFX |
-| `docs/INDUSTRIAS_OPENGFX.md` | Detalle de sprites de industrias |
+| `docs/SPRITES_OPENGFX.md` | Extracción / isometría (+ anexos archive) |
+| `docs/archive/SPRITES_OPENGFX_COMPLETO.md` | Catálogo IDs OpenGFX (histórico) |
+| `docs/archive/INDUSTRIAS_OPENGFX.md` | Sprites industrias (histórico; preferir código) |
 | `docs/INFORME_ARQUITECTURA_OPENTTD.md` | Arquitectura general del proyecto |

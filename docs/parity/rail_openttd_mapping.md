@@ -1,8 +1,11 @@
 # Mapa OpenTTD → openttdrs (ferrocarriles)
 
+Índice: [MAPPING.md](MAPPING.md). Complemento road: [openttd_mapping.md](openttd_mapping.md).
+Madurez: [rail_status.md](rail_status.md).
+
 Correspondencia entre el código C++ de referencia (`OpenTTD/`, solo lectura) y
 los módulos Rust ferroviarios, con el mecanismo de validación disponible para
-cada pieza. Complementa `openttd_mapping.md` (vehículos de carretera).
+cada pieza.
 
 ## Vías y mapa
 

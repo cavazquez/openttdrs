@@ -193,7 +193,7 @@ Reglas:
 
 - Import detallado: [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) §16–17  
 - Paridad producto: [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) (fila Save)  
-- Menú / cargar: [ROADMAP_MAIN_MENU.md](ROADMAP_MAIN_MENU.md)  
+- Menú / cargar: [archive/ROADMAP_MAIN_MENU.md](archive/ROADMAP_MAIN_MENU.md)  
 - Fixture demo: `scripts/gen_demo_sav.py`
 
 ---

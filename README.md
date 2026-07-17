@@ -17,7 +17,7 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Gobierno:** [CONTRIBUTING.md](CONTRIBUTING.md) · [SECURITY.md](SECURITY.md) · [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [ADRs](docs/adr/)
 
-**Última actualización:** 2026-07-16
+**Última actualización:** 2026-07-17
 
 ---
 
@@ -29,11 +29,11 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 | **Cliente** (`openttdrs-client`) | Vista isométrica OpenGFX, menú de inicio, toolbar, listas UI, noticias; `--server` / `--client` (I8) |
 | **Red** (`openttdrs-net`) | TCP lockstep + bin `openttdrs-dedicated` ([ADR 0001](docs/adr/0001-multiplayer-v1.md)) |
 | **NewGRF** | Action0–14 parse; Action1/2/3/5 con sprites in-world (trenes, stations, roadtypes, shore, catenary); vars de tesela/vehículo en runtime |
-| **Hito 0.1** | Fundación I0–I7 hecha; solitario jugable. **I8 red** = [#21](https://github.com/cavazquez/openttdrs/issues/21) (post-0.1) |
+| **Hito 0.1** | Fundación I0–I7 hecha; solitario jugable. **I8 red** MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅) + host migration ([#171](https://github.com/cavazquez/openttdrs/issues/171), [ADR 0004](docs/adr/0004-host-migration-post-v1.md)) |
 
 **Trabajo reciente (jul 2026):** Action2 variational (trains/stations/road), procedure `7E` / `\2psto`, vars de vehículo y de tesela al dibujar. Issues de backlog: [issues abiertas](https://github.com/cavazquez/openttdrs/issues).
 
-**Siguiente corte (roadmap):** red (#21, aplazada) u otro P3 — ver [ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md). Editor #42 ✅ · GameScript-lite #43 ✅ (story/goals/league; Squirrel OOS).
+**Siguiente corte (roadmap):** paridad UI / pulido — ver [ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md). Editor #42 ✅ · GameScript-lite #43 ✅ · IA TransCargo ✅ (Squirrel OOS).
 
 ---
 
@@ -171,8 +171,8 @@ Leyenda: ✅ hecho · 🟡 parcial · ❌ / 🔮 backlog (issues en GitHub)
 | Multi-compañía | 🟡 | Mínima + ownership; segunda humana OOS |
 | NewGRF Action0–14 + Action2 runtime | ✅ | Action1/3; estaciones `m5`+CB24; params `0x7F`; industrias ≥175 |
 | Barcos / aviones | 🔮 | |
-| Multijugador (I8) | 🔮 | [#21](https://github.com/cavazquez/openttdrs/issues/21) |
-| IA rivales / GameScript / editor | 🟡 | IA + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
+| Multijugador (I8) | 🟡 | MVP lockstep + dedicated + host migration; desync/UI OOS |
+| IA rivales / GameScript / editor | 🟡 | TransCargo + editor #42 ✅; GS-lite #43 ✅; Squirrel OOS |
 
 Backlog vivo: [issues del repo](https://github.com/cavazquez/openttdrs/issues) (generadas desde los ROADMAP, jul 2026).
 

@@ -1,9 +1,12 @@
 # Características de OpenTTD aún no consideradas en openttdrs
 
+**Madurez canónica:** [status.md](status.md). Índice de mapeos: [MAPPING.md](MAPPING.md).
+Rail: [rail_unknown_features.md](rail_unknown_features.md).
+
 Subsistemas y reglas del original detectados durante el análisis de paridad
 (Fase 1) que hoy no tienen equivalente en la sim Rust. Priorizados por impacto
 en el caso «camión entra a playa de carga» y en la paridad general de
-vehículos de carretera.
+vehículos de carretera. Muchos ítems ya están ~~tachados~~ (implementados).
 
 ## Prioridad alta (afectan el caso de los videos)
 

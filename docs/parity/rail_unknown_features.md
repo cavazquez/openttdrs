@@ -1,8 +1,11 @@
 # Características ferroviarias de OpenTTD aún no consideradas en openttdrs
 
+**Madurez canónica:** [rail_status.md](rail_status.md). Índice: [MAPPING.md](MAPPING.md).
+Road: [unknown_features.md](unknown_features.md).
+
 Subsistemas y reglas del original detectados durante la auditoría de la Fase
-Rail 0 que hoy no tienen equivalente en la sim Rust. Priorizados por impacto
-en la paridad de movimiento y estaciones (los casos más visibles).
+Rail 0. Priorizados por impacto en movimiento y estaciones. Muchos ítems ya
+están ~~tachados~~ (implementados).
 
 Supuesto histórico (Rail 0): tren puntual. **Fase 1 estructural** añadió consist
 (`next_unit` / longitud / ocupación multi-tesela). Varios ítems abajo ya están
@@ -105,8 +108,8 @@ parcialmente resueltos; se mantienen tachados o anotados.
   (`train_keeps_speed_on_direction_change`,
   `showcase_train_stays_on_rail_not_station_platform`): al corregirlos hay que
   invertir esos tests, como se hizo con los de bahía en la Fase 2.
-- El plan de fases con criterios de terminado está en
-  `rail_debugging_plan.md`; el estado por subsistema en `rail_status.md`.
-- Tras Rail 4, una **IA avanzada debe auditar** el trabajo según
-  [`RAIL_REVIEW_HANDOFF.md`](RAIL_REVIEW_HANDOFF.md) antes de abrir la siguiente
-  oleada ferroviaria.
+- Plan de fases (archivo): [`rail_debugging_plan.md`](rail_debugging_plan.md);
+  estado vivo en [`rail_status.md`](rail_status.md).
+- Tras Rail 4, auditar según
+  [`RAIL_REVIEW_HANDOFF.md`](RAIL_REVIEW_HANDOFF.md) (stub → archive) antes de
+  abrir la siguiente oleada ferroviaria.

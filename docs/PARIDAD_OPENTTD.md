@@ -1,110 +1,58 @@
-# Paridad con OpenTTD — inventario y costos
+# Paridad con OpenTTD — vista corta de gaps
 
-Comparación **openttdrs** (hito 0.1) vs **OpenTTD oficial**. Para el plan de trabajo ver
-[ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md). Para toolbar, menús, directorios,
-ventanas y subventanas ver
-[ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md).
+Resumen vivo de **openttdrs** vs OpenTTD. Detalle por dominio:
 
-**Leyenda:** ✅ implementado · 🟡 parcial · ❌ no implementado · **Costo:** S = días · M = 1–2 sem · L = 1–2 meses · XL = 3–6 meses · XXL = 6+ meses
+| Tema | Documento |
+|------|-----------|
+| UI / NewGRF cortes | [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) |
+| Sim estructural (consist, PBS, economía, railtypes) | [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md) |
+| Madurez road / tick | [parity/status.md](parity/status.md) |
+| Madurez rail | [parity/rail_status.md](parity/rail_status.md) |
+| Sprints 0.1 | [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) |
+
+**Leyenda:** ✅ hecho · 🟡 parcial · ❌ no · 🔮 backlog lejano
 
 ---
 
-## Resumen ejecutivo
+## Resumen ejecutivo (jul 2026)
 
 | Bloque | Estado |
 |--------|--------|
 | Carretera + ferrocarril (construcción, sim básica) | ✅ alto |
 | Paridad visual OpenGFX vanilla | 🟡 ~85–90 % |
 | Audio espacial + música OGG (subset) | 🟡 |
-| Economía (préstamos, subsidios, averías) | 🟡 |
+| Economía (préstamos, subsidios, averías, packets) | 🟡 |
+| CargoDist MCF nivel 2 | 🟡 (MVP; jobs async OOS) |
 | Ciudades (rating, crecimiento) | 🟡 |
 | Órdenes y operación de flota | 🟡 |
-| Barcos / aviones (MVP) | 🟡 |
-| Multijugador, NewGRF, Cargo Dist, IA rivales | ❌ |
+| Barcos / aviones | 🔮 |
+| NewGRF Action0–14 + Action2 runtime | 🟡 (parse + sprites in-world; paridad total OOS) |
+| Multijugador I8 | 🟡 MVP ([#21](https://github.com/cavazquez/openttdrs/issues/21) ✅, host migration #171) |
+| IA rivales (TransCargo) / GameScript-lite / editor | 🟡 (Squirrel OOS) |
 
 ---
 
-## Tabla por costo de incorporación (gaps y mejoras)
+## Gaps / mejoras por costo (orden barato → caro)
 
-Ordenada de **más barato a más caro**.
-
-| # | Área | Feature | OTTD | openttdrs | Costo |
-|---|------|---------|------|-----------|-------|
-| 1 | Pulido | Migraciones save JSON | ✅ | ✅ | S |
-| 2 | Audio | Música y SFX in-game (`SimEvent`, ~20 SFX, OGG) | ✅ | 🟡 | S |
-| 3 | Render | Depósito carretera RemapCoords | ✅ | ✅ | S — `gen_road_depot_gfx_data.py`, tests `iso/mod.rs` |
-| 4 | Render | Junctions vía en pendiente | ✅ | ✅ | S–M — regresión checklist y=11/13/15 |
-| 5 | Construcción | Quitar vía (`RailRemove`) | ✅ | ✅ | S |
-| 6 | Construcción | Waypoint ferroviario | ✅ | ✅ | S–M |
-| 7 | Tests | `effective_road_bits` en fixture | ✅ | ✅ | S |
-| 8 | Render | Culling mapas grandes | ✅ | ✅ | M — teselas + town labels |
-| 9 | Render | Industrias gfx 120–174 | ✅ | ✅ | M — `INDUSTRY_GFX_TABLE_LEN=175` |
-| 9b | Render | Sprites locomotoras por grupo (5 sets OpenGFX) | ✅ | ✅ | S — [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) § locomotoras |
-| 10 | Construcción | Señales bloque (sin PBS) | ✅ | 🟡 render | M |
-| 11 | Construcción | Convertir tipo de vía | ✅ | ❌ | M |
-| 12 | Import | `.sav` jugable (órdenes, dinero) | ✅ | 🟡 | M |
-| 13 | Sim | Servicio en depósito | ✅ | ❌ | M |
-| 14 | Sim | Rating estación / cargo packets | ✅ | 🟡 | M |
-| 15 | Sim | Órdenes condicionales | ✅ | ✅ | M–L — F6 |
-| 16 | Sim | Horarios (timetable) | ✅ | 🟡 | M–L — F1/F4/F5 MVP |
-| 16b | Sim | Autoreemplazo | ✅ | 🟡 | M — F2/F3 MVP |
-| 17 | Carretera | Un solo sentido / drive-through | ✅ | 🟡 | M |
-| 18 | Mundo | Subvencios, autoridad local | ✅ | 🟡 | M–L |
-| 19 | Mundo | Terraform + 4 climas + gen mundo | ✅ | 🟡 | T1–T3 + T4 MVP (clima/gen); industrias por clima L — [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) |
-| 19b | Ferrocarril | Consist / vagones (longitud, enganche) | ✅ | 🟡 | M — Fase 1 estructural (`train_consist`); ver [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md) |
-| 20 | Ferrocarril | PBS + path signals | ✅ | 🟡 | L — Fase 3 MVP (`rail_pbs` + `train_pbs`); falta golden vs OTTD |
-| 21 | Economía | Multi-compañía + feeder + IA | ✅ | 🟡 | M — Fase 4 MVP; link graph completo pendiente |
-| 22 | Transporte | Barcos / aviones | ✅ | 🟡 | L — barcos (canal+esclusa Δh+4 motores); aviones (helipuerto + small 4×3 + fases vuelo) |
-| 23 | Modding | NewGRF runtime | ✅ | 🟡 | XXL — Fase 7 MVP config/save/UI; Action0–14 pendiente |
-| 24 | Red | Multijugador I8 | ✅ | ❌ | XXL |
-| 25 | UI | Barra inferior + noticias (ticker, cartel) | ✅ | 🟡 | M — N1–N5 MVP |
+| # | Área | Feature | openttdrs | Costo | Notas |
+|---|------|---------|-----------|-------|-------|
+| 1 | Construcción | Convertir tipo de vía (ciclo UI) | 🟡 | S–M | `RailConvert` core; pulido UI |
+| 2 | Sim | Servicio en depósito | ❌ | M | |
+| 3 | Import/export | `.sav` roundtrip oficial | 🟡 | M | Export propio parcial — [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md) |
+| 4 | Ferrocarril | PBS golden vs OTTD | 🟡 | L | MVP interno; captura externa |
+| 5 | UI | Paridad ventanas flota/estación | 🟡 | M | [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) |
+| 6 | Mundo | Industrias por clima / gen | 🟡 | L | T1–T3 hechos; T4 parcial |
+| 7 | Transporte | Barcos / aviones | 🔮 | L | |
+| 8 | Modding | NewGRF paridad total | 🟡 | XXL | Fase 7 MVP en estructural |
+| 9 | Red | Desync UI / lobby | 🟡 | XL | Core lockstep hecho |
+| 10 | IA | Pathfind construcción / multi-rival | 🟡 | M–L | TransCargo = L Manhattan |
 
 ---
 
-## Lo que ya tenemos (✅)
+## Ya tenemos (alto nivel)
 
-| Categoría | Detalle |
-|-----------|---------|
-| **Mapa** | Teselas `mapt/m1–m8`, `.ottdmap`, TNBP/JGR |
-| **Carretera** | Autorail, drag, depósito, túnel, puente, paradas bus/camión |
-| **Ferrocarril** | Autorail con curvas/cruce X\|Y, depósito rotado, estación multi-tesela (1–7×1–7), ventana selección, túnel, puente |
-| **Pathfinding** | A* carretera; A* direccional vía; invalidación al editar mapa |
-| **Industrias** | 10 specs sandbox; producción 256 ticks |
-| **Ciudades** | Demanda, etiquetas, ventana pueblo |
-| **Vehículos** | Bus, camión, tren con consist (loco+vagones); compra/venta cadena; órdenes simples |
-| **Economía** | Dinero, costes, inflación, 6 cargos, pago transporte |
-| **Save** | JSON versionado (v4) |
-| **Import** | `parse_sav.py`, parser Rust, golden CI |
-| **Render** | OpenGFX + atlas; terreno, agua, costa, casas, industrias 0–174 (vanilla), estaciones, depósito carretera (RemapCoords) |
-| **UI** | Toolbar, minimapa, ventanas flotantes, ghost preview |
+Mapa `.ottdmap`/TNBP · road+rail+señales/PBS MVP · consist · packets/rating · multi-compañía + feeder · IA TransCargo · NewGRF Action0–14 parse + Action2 sprites · I8 TCP + dedicated · save JSON + import/export `.sav` parcial · UI solitario (toolbar, listas, noticias).
 
 ---
 
-## Mecánicas iguales vs diferentes
-
-### Parecidas a OpenTTD
-
-- Grilla isométrica y trackbits (X, Y, curvas, cruce X\|Y).
-- Autorail por vecinos; giros de tren solo con pieza que conecta.
-- Estación tren multi-tesela con layout estándar; cobertura radio 4.
-- Tren para en vía adyacente, no sobre plataforma.
-- Túneles JGR (wormholes); producción industria 256 ticks.
-- Pipeline `.sav` → `.ottdmap` → cliente.
-
-### Simplificadas o distintas
-
-| Mecánica | OpenTTD | openttdrs |
-|----------|---------|-----------|
-| Tiempo | Calendario + wallclock opcional | Tick numérico |
-| Save | Binario comprimido | JSON completo; `.sav` import + export (mapa+STNN+CITY+INDY+VEHS/ORDL+DATE+PLYR) — [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md) |
-| Pathfinding | YAPF | A* / BFS direccional |
-| Señales | PBS, reserva de rutas | Render en mapas importados |
-| Cargo | Packets, rating, transit time | 🟡 packets + carga gradual (Fase 2); 6 cargos temperate |
-| Órdenes | 20+ tipos, condicionales, shared pool | Lista `Station`/`Tile` |
-| Vehículos | 4 redes + subtipos | Bus, Truck, Train |
-| Multijugador | Replay comandos + desync | No (I8 backlog) |
-| Modding | NewGRF runtime | Stack + scan cabecera (v17); sprites OpenGFX estáticos |
-
----
-
-*Última actualización: 2026-06-22*
+*Última actualización: 2026-07-17 — vista corta; no duplicar tablas largas aquí.*

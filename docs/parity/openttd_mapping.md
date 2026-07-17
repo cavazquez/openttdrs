@@ -1,5 +1,8 @@
 # Mapa OpenTTD → openttdrs (vehículos de carretera y estaciones)
 
+Índice: [MAPPING.md](MAPPING.md). Complemento rail: [rail_openttd_mapping.md](rail_openttd_mapping.md).
+Madurez: [status.md](status.md).
+
 Correspondencia entre el código C++ de referencia (`OpenTTD/`, solo lectura) y
 los módulos Rust, con el mecanismo de validación disponible para cada pieza.
 

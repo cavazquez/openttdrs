@@ -1,6 +1,6 @@
 //! Hooks para decisión automática de compañías (rivales CPU).
 //!
-//! Ver `docs/epics/ai_rivals.md`. La medición headless vive en [`crate::dev_metrics`].
+//! Ver `docs/archive/epics/ai_rivals.md` (épica cerrada). La medición headless vive en [`crate::dev_metrics`].
 
 mod settings;
 mod transcargo;

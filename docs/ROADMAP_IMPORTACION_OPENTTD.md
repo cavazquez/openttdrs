@@ -215,7 +215,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | **Decaimiento carga en estación + ratings** | `station_cmd.cpp:3959` | Parcial→casi (rating por compañía + gate urbana) | Media |
 | **Desastres** (UFO, accidentes, submarinos) | `disaster_vehicle.cpp` | Parcial→casi (noticias + toggle nueva partida) | Media |
 | **Árboles** (crecer / talar / plantar) | `tree_cmd.cpp` | Parcial (`tree_tile_loop.rs`) | Baja–Media |
-| **IA de compañías rivales** | `ai/` (Squirrel) | Falta (doc `epics/ai_rivals.md`) | Baja |
+| **IA de compañías rivales** | `ai/` (Squirrel) | TransCargo Rust ✅ (`archive/epics/ai_rivals.md`) | Baja (Squirrel OOS) |
 | **Barcos y aviones** | `ship_cmd.cpp`, `aircraft_cmd.cpp` | Parcial (movimiento básico) | Media |
 | **NewGRF (mods)** | `newgrf.cpp` + ecosistema | Falta | Fuera de alcance actual |
 
@@ -312,7 +312,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Subsidios | ✅ Parcial | `subsidy.rs` |
 | Desastres | ✅ Parcial | `disaster.rs` |
 | Préstamos activos | ✅ Parcial | `economy.rs`, `command/economy.rs` |
-| IA rivales | ✅ (#86) | `docs/epics/ai_rivals.md` |
+| IA rivales | ✅ (#86) | `docs/archive/epics/ai_rivals.md` |
 | Barcos / aviones | ✅ Parcial | `ship_movement.rs`, `aircraft_movement.rs` |
 
 ### 5.2 Cliente (`openttdrs-client`)

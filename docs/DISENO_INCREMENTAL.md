@@ -33,27 +33,28 @@ El [informe de arquitectura](INFORME_ARQUITECTURA_OPENTTD.md) resume el código 
 | YAPF (siguiente tramo, cachés, regiones agua) | `pathfinder/yapf/` | **I5:** BFS que devuelve **`Vec` de teselas** es deliberado y más simple; migrar a heurística tipo A* si el mapa crece. |
 | Registro masivo de comandos `*_cmd` | `command.cpp` | **I6:** mismo patrón abstracto (`Command` + `apply`), sin el árbol enorme del upstream. |
 | `SaveLoadVersion` (`SLV_*`) | `saveload/saveload.h` | **I7:** formato propio versionado; **parcial:** `scripts/parse_sav.py` lee `.sav` → `.ottdmap` (solo mapa, no economía). |
-| Red = replay de comandos + hash estado | `network/` | **I8 (backlog):** misma idea lógica; solo después de cerrar solitario (0.1). |
+| Red = replay de comandos + hash estado | `network/` / `openttdrs-net` | **I8 MVP (jul 2026):** lockstep TCP, dedicated, host migration — [ADR 0001](adr/0001-multiplayer-v1.md), [ADR 0004](adr/0004-host-migration-post-v1.md). |
 
 ---
 
-## Estado actual del código (mayo 2026)
+## Estado actual del código (jul 2026)
 
-Los incrementos de **fundación I0–I7** están implementados en `main` (mapa, simulación, comandos, save/load JSON en `save/`). El hito **0.1** se redefine como **partida en solitario jugable y coherente**, no como “cerrar I8”.
+Los incrementos **I0–I7** y el **MVP de I8** están en `main`. El hito **0.1** = partida en solitario jugable; la red ya no bloquea ese cierre.
 
 | Capa | Qué hay hoy |
 |------|-------------|
-| `openttdrs-core` | `Tile { height, kind, mapt, m5 }`, `TileKind` ampliado, `Map`, `Map::from_ottd_binary`, TNBP/JGR decode, `command` (carretera/estación/industria/vehículos), `save`, industrias, estaciones, vehículos, BFS por red carretera/vía, tests. |
-| `openttdrs-client` | Vista **isométrica**, sprites **OpenGFX**, toolbar y preview, órdenes, minimapa, HUD, **F5/Ctrl+S** y **F9/Ctrl+L**, `OTTDMAP_FILE` / `OTTDJSON_LOAD`. |
-| Scripts | `parse_sav.py` (`.sav` → `.ottdmap`), `descargar_graficos.sh` / `descargar_sonidos.sh`, validación TNBP en CI. |
-| Docs | [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md), [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md), [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md), [FLUJO_MAPA_Y_CLIENTE.md](FLUJO_MAPA_Y_CLIENTE.md). |
+| `openttdrs-core` | Mapa TNBP/JGR, comandos road/rail, PBS/YAPF parcial, economía multi-compañía, NewGRF parse/Action2, IA TransCargo, save JSON + `.sav` parcial. |
+| `openttdrs-client` | Vista isométrica OpenGFX, toolbar, menús, noticias, `--server` / `--client`. |
+| `openttdrs-net` | TCP lockstep + `openttdrs-dedicated`. |
+| Scripts | `parse_sav.py`, `descargar_assets.sh`, `doctor.sh`, validación TNBP en CI. |
+| Docs | [docs/README.md](README.md), [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md), [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md). |
 
 **Carreteras en mapas reales:** orientación desde `mapt` + `m5` (normal, cruce a nivel,
 depósito, túnel/puente carretera). Los PNG `road_tx` / `road_ty` se asignan **cruzados**
 respecto a `RoadDir` para alinear la textura con la proyección del cliente (~90° respecto
 a “nombre de archivo = eje”); validado en pantalla.
 
-Lo **pendiente para cerrar 0.1** está en las fases **SP** (solitario) más abajo. **I8 (red / multijugador)** queda explícitamente **fuera del hito 0.1** y con **mínima prioridad** hasta que el juego de un jugador esté terminado. Detalle operativo: [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md).
+Detalle operativo y hallazgos: [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md). Gaps: [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md).
 
 ---
 
@@ -61,27 +62,27 @@ Lo **pendiente para cerrar 0.1** está en las fases **SP** (solitario) más abaj
 
 ### Principio
 
-1. **Primero:** terminar el **juego en solitario** (construir, simular, guardar/cargar, entender qué pasa en pantalla).
-2. **Después (o mucho después):** **I8 — red** (replicar comandos entre instancias). Los comandos serializables de I6 ya preparan el terreno, pero **no obligan** a implementar multijugador para dar por cerrado el 0.1.
+1. **Solitario jugable** (construir, simular, guardar/cargar) — prioridad de producto del 0.1.
+2. **I8 red** — MVP ya mergeado; pulido desync/UI es trabajo posterior, no bloquea el 0.1.
 
 ### Hito 0.1 — vertical slice en solitario
 
 | Fase | Objetivo | Ejemplos de trabajo |
 |------|----------|---------------------|
 | **SP1 — Ciclo jugable** | Partida local con bucle claro: industria → estación → vehículo → carga/entrega → economía visible | Feedback HUD (sin ruta, dinero, órdenes), coherencia estación en mapa vs `state.stations`, pausa/velocidad, pruebas de integración comando↔sim |
-| **SP2 — Construcción y herramientas** | **Cerrado** (SP2.6 manual 2026-05-22) — [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | Mensajes HUD, preview, transporte, paradas, tren, industria, órdenes |
-| **SP3 — Presentación del mapa** | Que el mapa **se lea** como OpenTTD, sin exigir paridad total | ✅ S3 cerrado (jul 2026): slope/junctions, culling, industrias 0–174 — [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md) |
+| **SP2 — Construcción y herramientas** | **Cerrado** (SP2.6 manual 2026-05-22) — [archive/SP2_CHECKLIST.md](archive/SP2_CHECKLIST.md) | Mensajes HUD, preview, transporte, paradas, tren, industria, órdenes |
+| **SP3 — Presentación del mapa** | Que el mapa **se lea** como OpenTTD, sin exigir paridad total | ✅ S3 cerrado (jul 2026): slope/junctions, culling, industrias 0–174 — [archive/ROADMAP_PARIDAD_VISUAL.md](archive/ROADMAP_PARIDAD_VISUAL.md) |
 | **SP4 — Pulido y deuda** | Estabilidad antes de abrir nuevas grandes features | Migraciones de save si hace falta, `check.sh` alineado con CI, bootstrap demo sin inconsistencias tile/estación, documentación al día |
 
 **Criterio de “0.1 hecho”:** una sesión en solitario de ~15–30 minutos donde se puede **construir red y estaciones**, **asignar órdenes**, **ver vehículos y economía evolucionar**, **guardar y reanudar** sin pasos manuales raros — sin necesidad de red ni segundo cliente.
 
-### Backlog — I8 Red (mínima prioridad)
+### I8 Red — MVP hecho (jul 2026)
 
-| Incremento | Cuándo | Notas |
+| Incremento | Estado | Notas |
 |------------|--------|--------|
-| **I8** | Post-0.1 / hito futuro (p. ej. 0.2) | Log de comandos, `apply_command_log`, TCP mínimo, `--server` / `--client`. Spec conservada en [§ Incremento 8](#incremento-8--dos-instancias-comparten-el-mundo-backlog) abajo. |
+| **I8** | ✅ MVP | TCP lockstep, dedicated, `--server` / `--client`, host migration (#171). Spec histórica en [§ Incremento 8](#incremento-8--dos-instancias-comparten-el-mundo-backlog). Pendiente: UX desync / lobby. |
 
-Los issues históricos [#14](https://github.com/cavazquez/openttdrs/issues/14)–[#21](https://github.com/cavazquez/openttdrs/issues/21) del milestone 0.1 siguen describiendo la **cadena técnica I0–I8**; para planificación nueva, tratar **I0–I7 como hechos** y priorizar tareas **SP** en issues o checklist hasta cerrar solitario.
+Cadena técnica [#14](https://github.com/cavazquez/openttdrs/issues/14)–[#21](https://github.com/cavazquez/openttdrs/issues/21): **I0–I8 MVP hechos**. Priorizar SP / UI / gaps en [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md).
 
 ---
 

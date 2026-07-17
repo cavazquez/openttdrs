@@ -2,17 +2,16 @@
 
 Índice de `docs/`. Orden sugerido al entrar al proyecto:
 
-0. [../CONTRIBUTING.md](../CONTRIBUTING.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [adr/](adr/) — gobierno (#117)
-1. [ROADMAP_AUDITORIA_2026.md](ROADMAP_AUDITORIA_2026.md) — roadmap maestro post-auditoría ([#121](https://github.com/cavazquez/openttdrs/issues/121))
-2. [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) — paridad UI + NewGRF (fuente de “siguiente corte”)
-3. [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) — sprints del hito 0.1
-4. [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) — gaps vs OpenTTD
-5. [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) — hallazgos técnicos fijos y comandos
-6. [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) — filosofía I0–I8
-7. [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) — arquitectura red v1 (listen-server + dedicated)
-8. [adr/0003-tick-37hz-openttd.md](adr/0003-tick-37hz-openttd.md) — tick ~37 Hz; [0002](adr/0002-determinismo-tick-referencia.md) hash/pin (tick histórico)
+0. [../CONTRIBUTING.md](../CONTRIBUTING.md) · [ARCHITECTURE.md](ARCHITECTURE.md) · [adr/](adr/) — gobierno
+1. [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) — paridad UI + NewGRF (fuente de “siguiente corte”)
+2. [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) — sprints del hito 0.1
+3. [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) — vista corta de gaps vs OpenTTD
+4. [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) — hallazgos técnicos fijos y comandos
+5. [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) — filosofía I0–I8
+6. [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) — arquitectura red v1
+7. [adr/0003-tick-37hz-openttd.md](adr/0003-tick-37hz-openttd.md) — tick ~37 Hz; [0002](adr/0002-determinismo-tick-referencia.md) hash/pin
 
-**Issues de backlog:** [github.com/cavazquez/openttdrs/issues](https://github.com/cavazquez/openttdrs/issues) (abiertas desde los ROADMAP, jul 2026).
+**Issues de backlog:** [github.com/cavazquez/openttdrs/issues](https://github.com/cavazquez/openttdrs/issues).
 
 ---
 
@@ -20,34 +19,30 @@
 
 | Documento | Uso |
 |-----------|-----|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Capas core → Bevy → net (#117) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Capas core → Bevy → net |
 | [adr/README.md](adr/README.md) | Índice + plantilla de ADRs |
-| [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) | ADR: lockstep, listen-server + dedicated headless, sin host migration v1 |
-| [adr/0003-tick-37hz-openttd.md](adr/0003-tick-37hz-openttd.md) | ADR: tick ~37 Hz (supersede tick de 0002) |
-| [adr/0002-determinismo-tick-referencia.md](adr/0002-determinismo-tick-referencia.md) | ADR: determinismo + pin OpenTTD (tick histórico) |
-| Crate `openttdrs-net` | TCP I8; bin `openttdrs-dedicated`; cliente `--server` / `--client` |
-| [INVENTARIO_HASHMAP_DETERMINISMO.md](INVENTARIO_HASHMAP_DETERMINISMO.md) | #115: HashMap/HashSet vs hash canónico |
-| [INVENTARIO_MUTACIONES_CLIENTE.md](INVENTARIO_MUTACIONES_CLIENTE.md) | #114: mutaciones `SimWorld` fuera de `Command` |
-| [ROADMAP_AUDITORIA_2026.md](ROADMAP_AUDITORIA_2026.md) | Tablero vivo del roadmap #121 (fases, camino crítico, DoD) |
-| [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) | UI-0…UI-8, NewGRF Action0–14, siguiente corte |
-| [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md) | Cargo packets, YAPF/PBS, economía, mono/maglev |
-| [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) | Sprints S1–S6, criterios de cierre 0.1 |
-| [ROADMAP_IMPORTACION_OPENTTD.md](ROADMAP_IMPORTACION_OPENTTD.md) | Animaciones, audio, dinámicas importables |
-| [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) | Menús de flota (órdenes, vehículo, depósito) |
-| [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) | Inventario features vs original |
+| [adr/0001-multiplayer-v1.md](adr/0001-multiplayer-v1.md) | ADR: lockstep, listen-server + dedicated |
+| [adr/0003-tick-37hz-openttd.md](adr/0003-tick-37hz-openttd.md) | ADR: tick ~37 Hz |
+| [adr/0002-determinismo-tick-referencia.md](adr/0002-determinismo-tick-referencia.md) | ADR: determinismo + pin OpenTTD |
+| [adr/0004-host-migration-post-v1.md](adr/0004-host-migration-post-v1.md) | ADR: host migration |
+| Crate `openttdrs-net` | TCP I8; bin `openttdrs-dedicated`; `--server` / `--client` |
+| [INVENTARIO_HASHMAP_DETERMINISMO.md](INVENTARIO_HASHMAP_DETERMINISMO.md) | #115 |
+| [INVENTARIO_MUTACIONES_CLIENTE.md](INVENTARIO_MUTACIONES_CLIENTE.md) | #114 |
+| [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) | Siguiente corte UI (detalle en archive) |
+| [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md) | Consist, PBS, economía, mono/maglev |
+| [ROADMAP_SPRINTS.md](ROADMAP_SPRINTS.md) | Sprints S1–S6 |
+| [ROADMAP_IMPORTACION_OPENTTD.md](ROADMAP_IMPORTACION_OPENTTD.md) | Animaciones, audio, dinámicas |
+| [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) | Vista corta de gaps |
 | [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) | Spec I0–I8 |
-| [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) | Hallazgos de tiles/sprites, comandos |
-| [ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md) | Checklist visual SP3 |
-| [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) | Elevar / bajar / nivelar / gen mundo |
-| [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) | Barra inferior y noticias |
-| [ROADMAP_MAIN_MENU.md](ROADMAP_MAIN_MENU.md) | Menú inicio / Nueva partida |
-| [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md) | Handoff drag carretera |
-| [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md) | Cruces ferroviarios (Junctionary) |
+| [SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) | Hallazgos y comandos |
+| [ROADMAP_CARRETERAS_DRAG.md](ROADMAP_CARRETERAS_DRAG.md) | Handoff drag carretera (paused) |
+| [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md) | Cruces ferroviarios |
 | [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md) | Export `.sav` |
-| [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md) | Industrias gfx 0–174 / NewGRF ≥175 |
+| [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md) | Industrias gfx / NewGRF |
 | [DEV_BOT.md](DEV_BOT.md) | Sonda headless carga/ingresos |
-| [epics/ai_rivals.md](epics/ai_rivals.md) | Épica IA rivales |
-| [parity/RAIL_REVIEW_HANDOFF.md](parity/RAIL_REVIEW_HANDOFF.md) | Handoff revisión ferroviaria |
+| [parity/status.md](parity/status.md) · [parity/rail_status.md](parity/rail_status.md) | Madurez road/rail |
+| [parity/MAPPING.md](parity/MAPPING.md) | Índice mapeos C++ ↔ Rust |
+| [parity/ui_windows_parity.md](parity/ui_windows_parity.md) | Paridad ventanas UI |
 
 ### Organización del código
 
@@ -58,7 +53,7 @@
 | NewGRF render | `render/station_newgrf.rs`, `road_newgrf.rs`, `vehicles.rs` |
 | Población procedural | `state/bootstrap/procedural_population/` |
 | Comandos transporte | `openttdrs-core/src/command/transport/` |
-| Tests rail por dominio | `openttdrs-core/src/command/tests/rail/` (#139) |
+| Tests rail por dominio | `openttdrs-core/src/command/tests/rail/` |
 | Action2 / sprites GRF | `openttdrs-core/src/newgrf_sprites.rs`, `station_action2.rs`, `road_action2.rs` |
 
 ---
@@ -80,22 +75,17 @@
 
 | Documento | Uso |
 |-----------|-----|
-| [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) | Extracción, isometría, locomotoras |
-| [SPRITES_OPENGFX_COMPLETO.md](SPRITES_OPENGFX_COMPLETO.md) | Catálogo de IDs |
-| [INDUSTRIAS_OPENGFX.md](INDUSTRIAS_OPENGFX.md) | gfx → sprite |
-| [SP3_AUDIT_SUMMARY.md](SP3_AUDIT_SUMMARY.md) | Auditoría PNG / fixtures |
+| [SPRITES_OPENGFX.md](SPRITES_OPENGFX.md) | Extracción, isometría, locomotoras (+ anexos de catálogo) |
 | [HANDOFF_BUGS_VISUALES_TERRAIN.md](HANDOFF_BUGS_VISUALES_TERRAIN.md) | Bugs visuales terreno |
 | [HANDOFF_WAYPOINTS_RAIL.md](HANDOFF_WAYPOINTS_RAIL.md) | Waypoints rail |
 
 ---
 
-## Construcción (SP2 cerrado)
+## Checklists vivos
 
 | Documento | Uso |
 |-----------|-----|
-| [SP2_CHECKLIST.md](SP2_CHECKLIST.md) | Checklist construcción |
 | [SP1_CHECKLIST.md](SP1_CHECKLIST.md) | Ciclo jugable (sesión manual) |
-| [SP2_PARADAS_Y_ESTACIONES.md](SP2_PARADAS_Y_ESTACIONES.md) | Paradas bus/camión/tren |
 
 ---
 
@@ -103,22 +93,23 @@
 
 | Documento | Uso |
 |-----------|-----|
-| [parity/openttd-reference.json](parity/openttd-reference.json) | Manifiesto pin (#109): URL, commit, tag, licencia |
+| [parity/openttd-reference.json](parity/openttd-reference.json) | Manifiesto pin (#109) |
 | [parity/OPENTTD_REFERENCE.md](parity/OPENTTD_REFERENCE.md) | Cómo clonar / actualizar la referencia |
-| [parity/SNAPSHOT_SCHEMA.md](parity/SNAPSHOT_SCHEMA.md) | Esquema JSON oráculo ↔ candidato (#110) |
-| [parity/SNAPSHOT_FIRST_DIVERGENCE.md](parity/SNAPSHOT_FIRST_DIVERGENCE.md) | Evidencia oráculo (#110); road_bits alineado |
-| [parity/GENERATED_TABLES.md](parity/GENERATED_TABLES.md) | Reproducibilidad de `*_generated.rs` (#119) |
-| [SNAPSHOT_ORACLE_WORKFLOW.md](SNAPSHOT_ORACLE_WORKFLOW.md) | Flujo oráculo OpenTTD C++ vs snapshot_dumper |
+| [parity/SNAPSHOT_SCHEMA.md](parity/SNAPSHOT_SCHEMA.md) | Esquema JSON oráculo (#110) |
+| [parity/SNAPSHOT_FIRST_DIVERGENCE.md](parity/SNAPSHOT_FIRST_DIVERGENCE.md) | Evidencia oráculo |
+| [parity/GENERATED_TABLES.md](parity/GENERATED_TABLES.md) | Reproducibilidad `#119` |
+| [SNAPSHOT_ORACLE_WORKFLOW.md](SNAPSHOT_ORACLE_WORKFLOW.md) | Flujo oráculo |
 | [INFORME_ARQUITECTURA_OPENTTD.md](INFORME_ARQUITECTURA_OPENTTD.md) | Arquitectura C++ (clon local) |
 
-Clon: `./scripts/fetch-openttd-reference.sh` → `reference/openttd-upstream/` (commit del manifiesto).
+Clon: `./scripts/fetch-openttd-reference.sh` → `reference/openttd-upstream/`.
 
 ---
 
 ## Archivo histórico
 
-Planes cerrados o absorbidos — no son fuente de verdad actual: [archive/README.md](archive/README.md).
+Planes y roadmaps cerrados: [archive/README.md](archive/README.md)  
+(incluye auditoría #121, NEWS, terraform, SP2/SP3, menús UI, épicas IA/GS).
 
 ---
 
-*Última actualización: 2026-07-12 (NewGRF Action2, issues de backlog, índice alineado al README raíz)*
+*Última actualización: 2026-07-17 (limpieza docs / roadmaps)*

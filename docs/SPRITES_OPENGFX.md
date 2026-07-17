@@ -3,6 +3,11 @@
 Este documento registra todo lo aprendido sobre la extracción y uso de sprites de
 [OpenGFX](https://github.com/OpenTTD/OpenGFX) en el renderer isométrico de openttdrs.
 
+**Anexos (catálogos históricos, no mantener en paralelo):**
+
+- [archive/SPRITES_OPENGFX_COMPLETO.md](archive/SPRITES_OPENGFX_COMPLETO.md) — IDs OpenGFX / `sprites.h`
+- [archive/INDUSTRIAS_OPENGFX.md](archive/INDUSTRIAS_OPENGFX.md) — gfx industria → sprite (abr 2026; preferir código + [ROADMAP_INDUSTRIAS_PARIDAD.md](ROADMAP_INDUSTRIAS_PARIDAD.md))
+
 ---
 
 ## Estructura del paquete OpenGFX
@@ -314,8 +319,8 @@ requiere ampliar `GFX_SETS` en `gen_vehicle_gfx_data.py`, `train_layers_for` y
 | `scripts/gen_vehicle_gfx_data.py` | Generador Rust desde PNG + NFO |
 | `scripts/descargar_graficos.sh` | Recorte `crop_by_id` de sprites 2905–2972 |
 
-Ver también [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) § limitaciones y
-[ROADMAP_PARIDAD_VISUAL.md](ROADMAP_PARIDAD_VISUAL.md) § 14.
+Ver también [archive/ROADMAP_MENUS_UI.md](archive/ROADMAP_MENUS_UI.md) § limitaciones y
+[archive/ROADMAP_PARIDAD_VISUAL.md](archive/ROADMAP_PARIDAD_VISUAL.md) § 14.
 
 ---
 

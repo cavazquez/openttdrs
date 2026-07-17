@@ -1,7 +1,7 @@
 //! IA rival «TransCargo»: hasta N rutas de freight (carbón / madera / petróleo).
 //!
 //! Vía Manhattan en L, nivelado del corredor y señales de bloque bidireccionales.
-//! Ver `docs/epics/ai_rivals.md`.
+//! Ver `docs/archive/epics/ai_rivals.md` (épica cerrada).
 
 mod build;
 mod fleet;
@@ -21,7 +21,7 @@ pub const MAX_AI_ROUTES: usize = super::DEFAULT_AI_MAX_ROUTES as usize;
 /// Alias histórico (= [`super::DEFAULT_AI_BUILD_MONEY_THRESHOLD`]).
 pub const AI_BUILD_MONEY_THRESHOLD: i64 = super::DEFAULT_AI_BUILD_MONEY_THRESHOLD;
 
-/// Rival estático documentado en `docs/epics/ai_rivals.md`.
+/// Rival estático documentado en `docs/archive/epics/ai_rivals.md`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TransCargoAi;
 

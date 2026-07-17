@@ -1,10 +1,12 @@
 # Roadmap por sprints — hito 0.1 (solitario)
 
 Plan operativo en **6 sprints** (~2 semanas c/u). Solo ítems de costo **S–M** (días a ~2 semanas).
-Objetivo: cerrar el **vertical slice en solitario** sin abrir multijugador, NewGRF runtime ni Cargo Dist.
+Objetivo histórico: cerrar el **vertical slice en solitario**.
 
-**Relacionado:** [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md) (tabla completa tenemos / falta),
-[SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md) (comandos y hallazgos técnicos),
+**Estado (jul 2026):** I0–I7 ✅ · I8 red MVP + host migration ✅ · NewGRF Action0–14/Action2 parcial ✅ · CargoDist MCF nivel 2 ✅ · IA TransCargo ✅. Este documento sigue siendo la checklist de sprints S1–S6; gaps vivos en [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md).
+
+**Relacionado:** [PARIDAD_OPENTTD.md](PARIDAD_OPENTTD.md),
+[SIGUIENTES_PASOS.md](SIGUIENTES_PASOS.md),
 [DISENO_INCREMENTAL.md](DISENO_INCREMENTAL.md) (spec I0–I8).
 
 ---
@@ -30,7 +32,7 @@ Objetivo: cerrar el **vertical slice en solitario** sin abrir multijugador, NewG
 |-------|-------|------------|
 | Migración save real al cambiar esquema (bump v4 + test roundtrip) | S | `save.rs` + test v3→v4 ✅ |
 | Test `effective_road_bits` en fixture `.ottdmap` | S | Regresión carreteras importadas ✅ |
-| Cerrar checklist SP2 manual pendiente (1 pasada) | S | `SP2_CHECKLIST.md` § S1 refresh ✅ |
+| Cerrar checklist SP2 manual pendiente (1 pasada) | S | `archive/SP2_CHECKLIST.md` § S1 refresh ✅ |
 | Documentar flujo `check.sh ci` en README si falta | S | README ✅ |
 
 **Done:** `bash scripts/check.sh` verde; migración probada; golden `parse_sav` OK.
@@ -136,13 +138,13 @@ Detalle vivo: [ROADMAP_PARIDAD_ESTRUCTURAL.md](ROADMAP_PARIDAD_ESTRUCTURAL.md).
 |------|--------|
 | PBS / path signals | Hito 0.3 (Fase 3) |
 | Barcos / aviones | paralelo / hito transporte |
-| Terraform (elevar / bajar / nivelar) | [ROADMAP_TERRAFORM.md](ROADMAP_TERRAFORM.md) T1–T3; paralelo a S4 |
-| Barra de estado + noticias | [ROADMAP_NEWS_STATUSBAR.md](ROADMAP_NEWS_STATUSBAR.md) N1–N3; mejora SP1 |
+| Terraform (elevar / bajar / nivelar) | [archive/ROADMAP_TERRAFORM.md](archive/ROADMAP_TERRAFORM.md) T1–T3; paralelo a S4 |
+| Barra de estado + noticias | [archive/ROADMAP_NEWS_STATUSBAR.md](archive/ROADMAP_NEWS_STATUSBAR.md) N1–N3; mejora SP1 |
 | Generación de mundo + 4 climas | Hito 0.2+ |
 | Cargo Dist / link graph | Hito 0.4 (Fase 4) |
 | Multijugador I8 | Explícitamente post-paridad de sim |
 | NewGRF runtime | Hito 0.6 (Fase 7) |
-| Flota F0–F8 (timetable, autoreemplazo, pool) | [ROADMAP_MENUS_UI.md](ROADMAP_MENUS_UI.md) §13 |
+| Flota F0–F8 (timetable, autoreemplazo, pool) | [archive/ROADMAP_MENUS_UI.md](archive/ROADMAP_MENUS_UI.md) §13 · [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) |
 | **Paridad UI global** (toolbar, menús, directorios, ventanas) | [ROADMAP_PARIDAD_UI_GLOBAL.md](ROADMAP_PARIDAD_UI_GLOBAL.md) UI-0–UI-8 |
 | **Junctionary completo** (cruces comunidad OTTD) | [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md) J0–J5 |
 
@@ -169,7 +171,7 @@ S2 y S3 pueden ir en paralelo.
 - [ ] Señales bloque básicas
 - [ ] Import `.sav` con vehículos que se mueven
 - [ ] `check.sh` + CI verdes
-- [ ] Paridad visual SP3 ≥ 90 % (`ROADMAP_PARIDAD_VISUAL.md`)
+- [ ] Paridad visual SP3 ≥ 90 % (`archive/ROADMAP_PARIDAD_VISUAL.md`)
 
 ---
 

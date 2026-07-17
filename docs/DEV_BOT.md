@@ -1,8 +1,8 @@
 # DevBot — sonda headless de carga / descarga / ingresos
 
 **Fecha:** jul 2026  
-**Estado:** implementado (módulo opcional, sin rival CPU aún).  
-**Relacionado:** [epics/ai_rivals.md](epics/ai_rivals.md), [parity/status.md](parity/status.md), [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md)
+**Estado:** implementado (módulo opcional). Rival CPU **TransCargo** en core (`ai/`); escenario `ai_rival_line`.  
+**Relacionado:** [archive/epics/ai_rivals.md](archive/epics/ai_rivals.md) (épica cerrada), [parity/status.md](parity/status.md), [ROADMAP_JUNCTIONARY.md](ROADMAP_JUNCTIONARY.md)
 
 Herramienta de desarrollo y QA que corre la simulación **sin cliente Bevy** y responde:
 ¿el vehículo **cargó**, **descargó** y **cuánto ganó**?
@@ -273,7 +273,7 @@ API pública en `openttdrs_core::dev_metrics` y reexportada en la raíz del crat
 2. Borrar `crates/openttdrs-core/src/bin/dev_bot.rs`
 3. Borrar `crates/openttdrs-core/src/ai/` (si no hay rival aún)
 4. Quitar en `lib.rs`: `pub mod dev_metrics`, `pub mod ai`, y el `pub use dev_metrics::…`
-5. Borrar esta doc y la sección en `epics/ai_rivals.md`
+5. Borrar esta doc y la sección en `archive/epics/ai_rivals.md`
 
 No afecta al cliente Bevy ni a partidas guardadas.
 
@@ -297,7 +297,7 @@ No afecta al cliente Bevy ni a partidas guardadas.
 | 4 | Escenario `ai_smoke`: bot construye vía + estación + tren | Nuevo en `parity/scenario.rs` |
 | 5 | Política `CompanyAi` mínima (reglas, no ML) | `ai/rule_based.rs` |
 | 6 | CI: `dev_bot --require-delivery` tras `check.sh` | `.github/workflows/ci.yml` |
-| 7 | Rival jugable multi-compañía | Ver [epics/ai_rivals.md](epics/ai_rivals.md) |
+| 7 | Rival jugable multi-compañía | Ver [archive/epics/ai_rivals.md](archive/epics/ai_rivals.md) (cerrada) |
 
 ---
 

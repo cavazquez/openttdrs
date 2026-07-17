@@ -68,7 +68,7 @@ python3 scripts/extract_roadveh_movement.py
 
 | Documento | Uso |
 |-----------|-----|
-| [parity/RAIL_REVIEW_HANDOFF.md](parity/RAIL_REVIEW_HANDOFF.md) | **Handoff para IA avanzada** — revisión obligatoria post Rail 4 |
-| [parity/rail_debugging_plan.md](parity/rail_debugging_plan.md) | Plan por fases (0–4 implementadas) |
-| [parity/rail_status.md](parity/rail_status.md) | Estado por subsistema |
-| [parity/train_line_divergences.md](parity/train_line_divergences.md) | Reporte generado (`regenerate_parity_reports.sh`) |
+| [RAIL_REVIEW_HANDOFF.md](RAIL_REVIEW_HANDOFF.md) | Stub → archive; revisión post Rail 4 |
+| [rail_debugging_plan.md](rail_debugging_plan.md) | Stub → archive; fases 0–4 hechas |
+| [rail_status.md](rail_status.md) | Estado vivo por subsistema |
+| [train_line_divergences.md](train_line_divergences.md) | Reporte generado (`regenerate_parity_reports.sh`) |

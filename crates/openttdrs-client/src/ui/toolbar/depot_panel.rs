@@ -529,7 +529,7 @@ pub(crate) fn sync_depot_panel(
             &mut BorderColor,
             &Interaction,
         ),
-        Without<DepotRowContainer>,
+        (Without<DepotRowContainer>, Without<DepotSellDrop>),
     >,
     mut clone_label_q: Query<
         &mut Text,
@@ -555,7 +555,11 @@ pub(crate) fn sync_depot_panel(
             &mut BorderColor,
             &Interaction,
         ),
-        (With<Button>, Without<DepotRowContainer>),
+        (
+            With<Button>,
+            Without<DepotRowContainer>,
+            Without<DepotConsistUnitSprite>,
+        ),
     >,
 ) {
     let Some((_, mut vis)) = root_q

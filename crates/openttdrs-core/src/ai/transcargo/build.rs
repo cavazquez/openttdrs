@@ -221,19 +221,96 @@ fn reapply_path_corners(state: &mut GameState, path: &[TileCoord]) {
     }
 }
 
+/// Nivela la **banda** del polyline (±`margin`), sin bbox Manhattan.
+///
+/// Cada `LevelLand` solo cubre un tramo corto (par adyacente o vecino ±1),
+/// propagando la altura del inicio del path. Evita aplanar medio mapa en L/desvíos.
 fn flatten_path_band(state: &mut GameState, path: &[TileCoord]) {
-    let Some(&anchor) = path.first() else {
+    const MARGIN: i32 = 1;
+    if path.len() < 2 {
         return;
-    };
+    }
+    for w in path.windows(2) {
+        level_path_strip(state, w[0], w[1], MARGIN);
+    }
+    // Vecinos laterales de cada tesela del path (misma altura local).
     for &c in path {
-        let _ = apply_command(
-            state,
-            &Command::LevelLand {
-                from: anchor,
-                to: c,
-                mode: LevelMode::Level,
-            },
-        );
+        if tile_skip_path_terraform(state, c) {
+            continue;
+        }
+        for (dx, dy) in [(-1_i32, 0), (1, 0), (0, -1), (0, 1)] {
+            let n = TileCoord::new(c.x + dx, c.y + dy);
+            if state.map.get(n).is_none() || tile_skip_path_terraform(state, n) {
+                continue;
+            }
+            let _ = apply_command(
+                state,
+                &Command::LevelLand {
+                    from: c,
+                    to: n,
+                    mode: LevelMode::Level,
+                },
+            );
+        }
+    }
+}
+
+fn tile_skip_path_terraform(state: &GameState, c: TileCoord) -> bool {
+    matches!(
+        state.map.get_kind(c),
+        Some(
+            TileKind::Water
+                | TileKind::Void
+                | TileKind::House
+                | TileKind::Industry
+                | TileKind::Station
+                | TileKind::RailDepot
+        )
+    )
+}
+
+/// Nivela el segmento cardenal `a`→`b` y un margen perpendicular ±`margin`.
+fn level_path_strip(state: &mut GameState, a: TileCoord, b: TileCoord, margin: i32) {
+    if tile_skip_path_terraform(state, a) {
+        return;
+    }
+    let dx = (b.x - a.x).signum();
+    let dy = (b.y - a.y).signum();
+    let (px, py) = (-dy, dx); // perpendicular
+    let _ = apply_command(
+        state,
+        &Command::LevelLand {
+            from: a,
+            to: b,
+            mode: LevelMode::Level,
+        },
+    );
+    if margin <= 0 || (px == 0 && py == 0) {
+        return;
+    }
+    for m in [-margin, margin] {
+        let side_a = TileCoord::new(a.x + px * m, a.y + py * m);
+        let side_b = TileCoord::new(b.x + px * m, b.y + py * m);
+        if state.map.get(side_a).is_some() && !tile_skip_path_terraform(state, side_a) {
+            let _ = apply_command(
+                state,
+                &Command::LevelLand {
+                    from: a,
+                    to: side_a,
+                    mode: LevelMode::Level,
+                },
+            );
+        }
+        if state.map.get(side_b).is_some() && !tile_skip_path_terraform(state, side_b) {
+            let _ = apply_command(
+                state,
+                &Command::LevelLand {
+                    from: b,
+                    to: side_b,
+                    mode: LevelMode::Level,
+                },
+            );
+        }
     }
 }
 
@@ -604,6 +681,64 @@ mod tests {
             .is_some(),
             "la curva del codo debe permitir girar X→Y"
         );
+    }
+
+    #[test]
+    fn path_terraform_does_not_flatten_outside_band() {
+        let mut state = GameState::new(16, 16);
+        state.economy.money = 500_000;
+        let from = TileCoord::new(2, 2);
+        let to = TileCoord::new(10, 8);
+        let planned = find_rail_build_path(&state.map, from, to).expect("A*");
+        let mut band = std::collections::HashSet::new();
+        for &c in &planned {
+            for (dx, dy) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1)] {
+                band.insert(TileCoord::new(c.x + dx, c.y + dy));
+            }
+        }
+        let far = (2..=10)
+            .flat_map(|x| (2..=8).map(move |y| TileCoord::new(x, y)))
+            .find(|c| !band.contains(c))
+            .expect("tesela en bbox Manhattan fuera de la banda");
+        state.map.set_height(far, 4).unwrap();
+
+        let corridor = place_rail_corridor(&mut state, from, to);
+        assert!(matches!(corridor, BuiltCorridor::Path(_)));
+        assert_eq!(
+            state.map.get(far).unwrap().height,
+            4,
+            "terraform de path no debe aplanar {far:?} fuera de la banda ±1"
+        );
+    }
+
+    #[test]
+    fn path_corridor_prefers_grass_around_dense_forest() {
+        let mut state = GameState::new(14, 8);
+        state.economy.money = 500_000;
+        for x in 3..10 {
+            state
+                .map
+                .set_kind(TileCoord::new(x, 2), TileKind::Forest)
+                .unwrap();
+        }
+        let a = TileCoord::new(2, 2);
+        let b = TileCoord::new(11, 2);
+        let planned = find_rail_build_path(&state.map, a, b).expect("A*");
+        let forest_hits = planned
+            .iter()
+            .filter(|c| state.map.get_kind(**c) == Some(TileKind::Forest))
+            .count();
+        assert!(
+            forest_hits < 7,
+            "debe cruzar menos bosque que la línea directa (7): hits={forest_hits} path={planned:?}"
+        );
+        let corridor = place_rail_corridor(&mut state, a, b);
+        assert!(matches!(corridor, BuiltCorridor::Path(_)));
+        let rail_n = (0..14)
+            .flat_map(|x| (0..8).map(move |y| TileCoord::new(x, y)))
+            .filter(|&c| state.map.get_kind(c) == Some(TileKind::Rail))
+            .count();
+        assert!(rail_n >= 8, "corredor tendido; rail_tiles={rail_n}");
     }
 
     #[test]

@@ -39,14 +39,15 @@ codos con trackbits correctos, sin depender de L Manhattan puro.
 - [x] Corredor con obstáculo (agua) rodea vía A* buildables (`find_rail_build_path`); fallback L.
 - [x] Codos path/L sin CROSS; tests `path_corridor_*` + `manhattan_corridor_*`.
 - [x] Pathfind usado en `place_rail_corridor` (TransCargo).
-- [ ] Terraform solo en banda del path (hoy LevelLand por tesela del path); pulir.
-- [ ] `scripts/check.sh` completo en CI.
+- [x] Terraform solo en banda del path (±1, franjas cortas; no bbox Manhattan).
+- [x] Preferir hierba ante bosque denso (test + coste A*).
+- [ ] `scripts/check.sh` completo en CI (opcional al cerrar épica).
 - [x] Sin runtime Squirrel.
 
-## Hecho (jul 2026, primer corte)
+## Hecho (jul 2026)
 
 - `pathfinder/build_corridor.rs` — A* hierba/vía coste bajo, bosque alto, agua bloqueada.
-- `ai/transcargo/build.rs` — `place_rail_corridor` + curvas por polyline + señales en path.
+- `ai/transcargo/build.rs` — `place_rail_corridor` + curvas + señales + `flatten_path_band` acotado.
 
 ## Issue de seguimiento
 

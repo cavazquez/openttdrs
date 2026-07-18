@@ -1,20 +1,21 @@
 # Rendimiento mapas grandes vs OpenTTD
 
-Fecha: 2026-07-18 · Commit: `18dba41` (+ harness de esta investigación)  
+Fecha: 2026-07-18 · Commit: `2112f86` (+ comparación Flatpak OpenTTD 15.3)  
 Hardware: AMD Ryzen 5 9600X, 29 GiB RAM, Linux x86_64  
-Presupuesto 1×: **27 000 µs/tick** (~37 Hz, ADR 0003).
+Presupuesto 1×: **27 000 µs/tick** (~37 Hz, ADR 0003).  
+OpenTTD: Flatpak `org.openttd.OpenTTD` **15.3**, dedicated + consola `fps`.
 
 ## Resumen ejecutivo
 
 | Área | Veredicto |
 |------|-----------|
-| Sim vacía temperate 1024² | **OK** (~41 µs/tick ≪ 27 ms) |
-| Sim vacía temperate 4096² | **OK** (~1,4 ms/tick) |
-| Sim SubArctic **día de nieve** 4096² | **CRÍTICO** (~25 ms solo en `economy_and_world` ≈ presupuesto 1×) |
+| Sim vacía temperate 1024² | **OK** (~41 µs/tick ≪ 27 ms); mejor que OTTD (~150 µs) |
+| Sim vacía temperate 4096² | **OK** (~1,4 ms); similar a OTTD (~1,85 ms) |
+| Sim SubArctic **día de nieve** 4096² | **CRÍTICO** (~25 ms); OTTD arctic vacío promedia ~4,9 ms y mantiene 37 fps |
 | Memoria `Tile` | +2 B/tile vs OpenTTD (~16,7 %); 4096² = 224 MiB vs ~192 MiB |
 | Cliente culling | Activo ≥1024 teselas; en 256² ~30k teselas visibles |
 | Cliente remap dirty | **CRÍTICO**: cualquier tesela dirty refresca **todo** el viewport (~144 chunks/frame) |
-| OpenTTD head-to-head | No medido aquí (paquete no instalable sin sudo); protocolo abajo |
+| OpenTTD head-to-head (sim) | Medido vía Flatpak dedicated — ver § Comparación |
 
 ## Herramientas
 
@@ -24,6 +25,9 @@ cargo run -p openttdrs-core --release --bin sim_profile -- --side 1024 --ticks 2
 cargo run -p openttdrs-core --release --bin sim_profile -- --side 4096 --climate subarctic --ticks 160
 cargo run -p openttdrs-core --release --bin map_memory -- --alloc-max 4096
 # Cliente: scripts/bench_large_map_viewport.md
+# OpenTTD Flatpak:
+./scripts/bench_openttd_flatpak.sh
+MAP_BITS=12 LANDSCAPE=arctic ./scripts/bench_openttd_flatpak.sh
 ```
 
 ## Criterion (`sim_tick`, warm 0,5 s / meas 2 s / n=20)
@@ -75,21 +79,26 @@ Hallazgo: con culling ON, el log muestra `↻144 chunks` **cada frame** mientras
 
 Protocolo FPS interactivo (1024²/4096²): [`scripts/bench_large_map_viewport.md`](../scripts/bench_large_map_viewport.md).
 
-## Comparación OpenTTD
+## Comparación OpenTTD (Flatpak 15.3, misma máquina)
 
-En esta máquina **no** se pudo instalar `openttd` (apt requiere sudo interactivo). Criterio acordado para cuando esté disponible:
+Método: servidor dedicado (`-D`), mapa nuevo vacío (0 towns / 0 industries), seed 116, consola `fps`.
+Script: [`scripts/bench_openttd_flatpak.sh`](../scripts/bench_openttd_flatpak.sh).
+OpenTTD reporta **Game loop times** en ms/tick (media corta); rate esperado 37,04 fps.
 
-1. Misma resolución de ventana, 1× speed, mapa vacío 1024² y 4096².
-2. Anotar FPS / lag perceptible; en SubArctic avanzar un día de invierno.
-3. Completar tabla:
+| Mapa | Clima | openttdrs µs/tick | OpenTTD Game loop | OTTD rate | Notas |
+|------|-------|------------------:|------------------:|-----------|-------|
+| 256² | temperate | 2,6 | **30 µs** (0,03 ms) | 37,04 fps | ambos holgados |
+| 1024² | temperate | 41 | **150 µs** (0,15 ms) | 37,04 fps | openttdrs más barato |
+| 1024² | arctic / SubArctic | 62 (día nieve **1 560**) | **280 µs** (0,28 ms) | 37,04 fps | pico diario nuestro ≫ media OTTD |
+| 4096² | temperate | 1 415 | **1 850 µs** (1,85 ms) | 37,04 fps | mismo orden de magnitud |
+| 4096² | arctic / SubArctic | 1 697 (día nieve **25 100**) | **4 860 µs** (4,86 ms) | 37,04 fps | media OTTD OK; **nuestro pico diario ≈ presupuesto 1×** |
 
-| Tamaño | openttdrs µs/tick | openttdrs FPS | OpenTTD FPS | Notas |
-|--------|------------------|---------------|-------------|-------|
-| 1024² temp | ~41 | (manual) | | |
-| 4096² temp | ~1415 | (manual) | | |
-| 4096² arctic día | ~25000 | (manual) | | |
+Conclusión sim: en mapas vacíos temperate/arctic **promedio**, openttdrs ya está a la par o mejor que OpenTTD 15.3. El gap de “mapa más grande igual de eficiente” no es el tick base, sino:
 
-OpenTTD también usa tile-loop stride 256; la divergencia medida aquí es el **full-scan diario de nieve** y el **remap Bevy por dirty**.
+1. Picos de `apply_seasonal_snow` (#196) — OTTD no paga ~25 ms en un solo tick en 4096² arctic vacío.
+2. Remap Bevy (#197) — fuera del game loop dedicated; afecta FPS del cliente.
+
+FPS gráfico GUI (pan/zoom) sigue siendo medición manual en ambos clientes.
 
 ## Ranking de hot paths (con evidencia)
 

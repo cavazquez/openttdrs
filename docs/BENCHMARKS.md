@@ -49,6 +49,7 @@ cargo run -p openttdrs-core --release --bin sim_profile -- --side 4096 --ticks 8
 ```
 
 Informe de investigación mapas grandes: [`PERF_LARGE_MAP.md`](PERF_LARGE_MAP.md).
+Comparación OpenTTD Flatpak: [`scripts/bench_openttd_flatpak.sh`](../scripts/bench_openttd_flatpak.sh).
 
 ## Fuera de este harness
 

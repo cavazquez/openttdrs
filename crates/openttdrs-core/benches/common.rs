@@ -14,7 +14,13 @@ pub fn scenario(name: &str) -> GameState {
 /// Mapa grande procedural (256×256) sin flota — mide coste de tick sobre terreno.
 #[must_use]
 pub fn large_world_gen_map() -> GameState {
-    let mut state = GameState::new(256, 256);
+    large_world_gen_map_sized(256)
+}
+
+/// Mapa procedural cuadrado `side×side` sin flota (seed 116, temperate).
+#[must_use]
+pub fn large_world_gen_map_sized(side: u32) -> GameState {
+    let mut state = GameState::new(side, side);
     let cfg = WorldGenConfig {
         climate: Climate::Temperate,
         seed: 116,
@@ -22,7 +28,9 @@ pub fn large_world_gen_map() -> GameState {
         island: false,
         height_span: 6,
     };
-    apply_world_gen(&mut state.map, &cfg, &[]).expect("world_gen bench 256×256");
+    apply_world_gen(&mut state.map, &cfg, &[]).unwrap_or_else(|e| {
+        panic!("world_gen bench {side}×{side}: {e:?}");
+    });
     state.world_seed = cfg.seed;
     state.climate = cfg.climate;
     state

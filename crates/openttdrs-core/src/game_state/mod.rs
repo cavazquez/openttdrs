@@ -661,6 +661,12 @@ impl GameState {
         crate::sim_step::step(self);
     }
 
+    /// Igual que [`Self::step`] con tiempos por fase (profiling headless).
+    #[must_use]
+    pub fn step_profiled(&mut self) -> crate::sim_step::TickPhaseTimings {
+        crate::sim_step::step_profiled(self)
+    }
+
     /// Aplica una secuencia de comandos en orden (núcleo I8 / #21).
     ///
     /// No avanza ticks: el caller debe llamar [`Self::step`] según el protocolo

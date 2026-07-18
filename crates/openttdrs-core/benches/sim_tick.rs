@@ -1,6 +1,6 @@
 //! Benchmarks headless de `GameState::step` (#116).
 //!
-//! Escenarios: flota parity (`truck_bay`, `train_pbs`) y mapa 256×256 procedural.
+//! Escenarios: flota parity (`truck_bay`, `train_pbs`) y mapas procedurales 256²–4096².
 //! No muta fixtures ni goldens.
 
 use std::hint::black_box;
@@ -10,7 +10,7 @@ use criterion::{BatchSize, Criterion, Throughput, criterion_group, criterion_mai
 #[path = "common.rs"]
 mod common;
 
-use common::{large_world_gen_map, scenario, step_n};
+use common::{large_world_gen_map, large_world_gen_map_sized, scenario, step_n};
 
 fn bench_sim_tick(c: &mut Criterion) {
     let mut group = c.benchmark_group("sim_tick");
@@ -44,6 +44,30 @@ fn bench_sim_tick(c: &mut Criterion) {
             },
             BatchSize::LargeInput,
         );
+    });
+
+    // 1024² ≈ 14 MiB de tiles: clonar plantilla por iteración es viable.
+    group.throughput(Throughput::Elements(50));
+    group.bench_function("large_1024_world_gen/50", |b| {
+        let template = large_world_gen_map_sized(1024);
+        b.iter_batched(
+            || template.clone(),
+            |mut state| {
+                step_n(&mut state, 50);
+                black_box(state.tick.get());
+            },
+            BatchSize::LargeInput,
+        );
+    });
+
+    // 4096² ≈ 224 MiB: evitar clonar; medir ticks en estado estable (acumula tick).
+    group.throughput(Throughput::Elements(20));
+    group.bench_function("large_4096_world_gen/20", |b| {
+        let mut state = large_world_gen_map_sized(4096);
+        b.iter(|| {
+            step_n(&mut state, 20);
+            black_box(state.tick.get());
+        });
     });
 
     group.finish();

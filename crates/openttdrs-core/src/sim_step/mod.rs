@@ -23,12 +23,68 @@ mod movement;
 mod routing;
 mod vehicle_ops;
 
+use std::time::Instant;
+
 use crate::{GameState, station};
 
-/// Tick principal de la simulación.
-///
-/// Avanza el estado del juego un tick, ejecutando todas las fases de economía, mundo, vehículos
-/// y lógica del juego en el orden correcto para `OpenTTD`.
+/// Tiempos por fase de un tick (`GameState::step_profiled` / bin `sim_profile`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TickPhaseTimings {
+    pub economy_and_world_ns: u64,
+    pub routing_and_signals_ns: u64,
+    pub tile_animation_ns: u64,
+    pub cargo_transfer_ns: u64,
+    pub vehicle_ops_pre_move_ns: u64,
+    pub movement_ns: u64,
+    pub post_tick_ns: u64,
+    pub total_ns: u64,
+}
+
+impl TickPhaseTimings {
+    /// Suma las fases en nanosegundos (sin overhead de instrumentación entre fases).
+    #[must_use]
+    pub const fn phases_sum_ns(self) -> u64 {
+        self.economy_and_world_ns
+            + self.routing_and_signals_ns
+            + self.tile_animation_ns
+            + self.cargo_transfer_ns
+            + self.vehicle_ops_pre_move_ns
+            + self.movement_ns
+            + self.post_tick_ns
+    }
+
+    /// Acumula otro tick (para promedios).
+    pub fn accumulate(&mut self, other: Self) {
+        self.economy_and_world_ns += other.economy_and_world_ns;
+        self.routing_and_signals_ns += other.routing_and_signals_ns;
+        self.tile_animation_ns += other.tile_animation_ns;
+        self.cargo_transfer_ns += other.cargo_transfer_ns;
+        self.vehicle_ops_pre_move_ns += other.vehicle_ops_pre_move_ns;
+        self.movement_ns += other.movement_ns;
+        self.post_tick_ns += other.post_tick_ns;
+        self.total_ns += other.total_ns;
+    }
+
+    /// Divide totales por `n` ticks (media aritmética).
+    #[must_use]
+    pub fn mean(self, n: u64) -> Self {
+        if n == 0 {
+            return Self::default();
+        }
+        Self {
+            economy_and_world_ns: self.economy_and_world_ns / n,
+            routing_and_signals_ns: self.routing_and_signals_ns / n,
+            tile_animation_ns: self.tile_animation_ns / n,
+            cargo_transfer_ns: self.cargo_transfer_ns / n,
+            vehicle_ops_pre_move_ns: self.vehicle_ops_pre_move_ns / n,
+            movement_ns: self.movement_ns / n,
+            post_tick_ns: self.post_tick_ns / n,
+            total_ns: self.total_ns / n,
+        }
+    }
+}
+
+/// Tick principal de la simulación (sin instrumentación).
 pub(crate) fn step(state: &mut GameState) {
     state.ensure_companies();
     state.tick.advance();
@@ -46,6 +102,55 @@ pub(crate) fn step(state: &mut GameState) {
     phase_vehicle_ops_pre_move(state);
     phase_movement(state);
     phase_post_tick(state);
+}
+
+/// Igual que [`step`], midiendo cada fase (solo para profiling / bin `sim_profile`).
+#[must_use]
+pub fn step_profiled(state: &mut GameState) -> TickPhaseTimings {
+    let wall0 = Instant::now();
+    let mut timings = TickPhaseTimings::default();
+
+    state.ensure_companies();
+    state.tick.advance();
+    let t = state.tick.get();
+
+    let p0 = Instant::now();
+    phase_economy_and_world(state, t);
+    timings.economy_and_world_ns = nanos(p0);
+
+    let p0 = Instant::now();
+    phase_routing_and_signals(state);
+    timings.routing_and_signals_ns = nanos(p0);
+
+    let p0 = Instant::now();
+    phase_tile_animation(state, t);
+    timings.tile_animation_ns = nanos(p0);
+
+    let p0 = Instant::now();
+    let mut loaded_this_tick = vec![false; state.vehicles.len()];
+    let mut unloaded_this_tick = vec![false; state.vehicles.len()];
+    cargo_transfer::unload_vehicles(state, t, &loaded_this_tick, &mut unloaded_this_tick);
+    cargo_transfer::load_vehicles(state, &mut loaded_this_tick, &unloaded_this_tick);
+    timings.cargo_transfer_ns = nanos(p0);
+
+    let p0 = Instant::now();
+    phase_vehicle_ops_pre_move(state);
+    timings.vehicle_ops_pre_move_ns = nanos(p0);
+
+    let p0 = Instant::now();
+    phase_movement(state);
+    timings.movement_ns = nanos(p0);
+
+    let p0 = Instant::now();
+    phase_post_tick(state);
+    timings.post_tick_ns = nanos(p0);
+    timings.total_ns = nanos(wall0);
+
+    timings
+}
+
+fn nanos(start: Instant) -> u64 {
+    u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX)
 }
 
 /// Fase 1: economía mensual, producción de industrias/ciudades, envejecimiento de carga, subsidios.

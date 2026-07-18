@@ -24,6 +24,8 @@ Informes HTML: `target/criterion/*/report/index.html`.
 | `sim_tick/truck_bay/{100,500}` | parity `truck_bay` (camión + red) | N × `GameState::step` |
 | `sim_tick/train_pbs/{100,500}` | parity `train_pbs` | N × tick con PBS |
 | `sim_tick/large_256_world_gen/50` | mapa 256×256 + `apply_world_gen` (seed 116) | tick sobre mapa grande sin flota |
+| `sim_tick/large_1024_world_gen/50` | mapa 1024×1024 procedural (clon plantilla) | tick mapa grande sin flota |
+| `sim_tick/large_4096_world_gen/20` | mapa 4096×4096 (estado estable, sin clon) | tick mapa máximo sin flota |
 | `pathfinding/road/truck_bay/cold` | `truck_bay` | `find_path` Road load→deliver |
 | `pathfinding/road/truck_bay/hot_cache` | idem + `PathCache` | hit de `find_path_cached` |
 | `pathfinding/rail/train_line/cold` | `train_line` | YAPF depósito→estación A |
@@ -38,12 +40,23 @@ Throughput Criterion: elementos = ticks (sim) o 1 ruta (pathfinding).
 - **No** se versionan goldens de tiempo (dependen de máquina). Adjuntar `latest.md` al PR cuando se cierre una medición.
 - Los benches **no** escriben fixtures ni tablas generadas.
 
+## Perfil por fase del tick
+
+```bash
+cargo run -p openttdrs-core --release --bin sim_profile -- --side 1024 --ticks 200
+cargo run -p openttdrs-core --release --bin sim_profile -- --side 1024 --climate subarctic --ticks 300
+cargo run -p openttdrs-core --release --bin sim_profile -- --side 4096 --ticks 80
+```
+
+Informe de investigación mapas grandes: [`PERF_LARGE_MAP.md`](PERF_LARGE_MAP.md).
+
 ## Fuera de este harness
 
 | Tema | Dónde |
 |------|--------|
 | Remap / culling viewport (Bevy) | Manual: [`scripts/bench_large_map_viewport.md`](../scripts/bench_large_map_viewport.md) |
-| FPS de ventana | Cliente con `OTTDMAP_FILE=…` |
+| FPS de ventana | Cliente con `OTTDMAP_FILE=…` o nueva partida 1024²/4096² |
+| Densidad / RSS de mapa | `cargo run -p openttdrs-core --bin map_memory -- --alloc-max 4096` |
 | Optimizaciones | Issues aparte; este harness solo mide |
 
 ## Perfil recomendado

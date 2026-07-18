@@ -1,6 +1,6 @@
 # Rendimiento mapas grandes vs OpenTTD
 
-Fecha: 2026-07-18 · Actualizado tras fix nieve `#196`  
+Fecha: 2026-07-18 · Actualizado tras tope zoom/spawn + remap dirty  
 Hardware: AMD Ryzen 5 9600X, 29 GiB RAM, Linux x86_64  
 Presupuesto 1×: **27 000 µs/tick** (~37 Hz, ADR 0003).  
 OpenTTD: Flatpak `org.openttd.OpenTTD` **15.3**, dedicated + consola `fps`.
@@ -13,8 +13,9 @@ OpenTTD: Flatpak `org.openttd.OpenTTD` **15.3**, dedicated + consola `fps`.
 | Sim vacía temperate 4096² | **OK** (~1,4 ms/tick) |
 | Sim SubArctic 4096² | **OK** tras #196 (~2,0 ms media; max ~2,3 ms; sin pico diario) |
 | Memoria `Tile` | +2 B/tile vs OpenTTD (~16,7 %); 4096² = 224 MiB vs ~192 MiB |
-| Cliente culling | Activo ≥1024 teselas |
-| Cliente remap dirty | **CRÍTICO** pendiente — [#197](https://github.com/cavazquez/openttdrs/issues/197) |
+| Cliente culling | Activo ≥1024 teselas; spawn acotado a ~192² |
+| Cliente zoom mínimo | Tope iso (~0,27× @ 1280×720) — AABB spawn ≤192² sin huecos |
+| Cliente remap dirty | Solo chunks dirty ∩ viewport (antes: todo el viewport) |
 
 ## Fix #196 — nieve al estilo `TileLoopClearAlps`
 
@@ -72,7 +73,10 @@ MAP_BITS=12 LANDSCAPE=arctic ./scripts/bench_openttd_flatpak.sh
 
 ## Cliente Bevy
 
-Culling ≥1024 teselas. Hallazgo pendiente: dirty de sim amplía refresh a **todo** el viewport (`↻144 chunks`) — #197.
+Culling ≥1024 teselas. En zoom extremo el viewport ortográfico cubría cientos de miles de teselas (p. ej. **332 928** a 0,05× → ~2–9 FPS). Mitigaciones:
+
+1. **Tope de zoom isométrico** (`MAX_SPAWN_SPAN_TILES = 192`, `clamp_ortho_scale`): el span en teselas es `scale·(w/(2·ISO_HW)+h/(2·ISO_QH))`; a 1280×720 el máximo es ~0,27×. No se recorta el spawn (eso dejaba franjas diagonales vacías).
+2. **Remap dirty** (#197): `refresh_chunks` se queda en dirty ∩ viewport (ya no se clona todo `needed`).
 
 ## Comparación OpenTTD (Flatpak 15.3)
 
@@ -87,12 +91,13 @@ Script: [`scripts/bench_openttd_flatpak.sh`](../scripts/bench_openttd_flatpak.sh
 ## Ranking hot paths
 
 1. ~~`apply_seasonal_snow` O(map)/día~~ ✅ #196
-2. **Remap dirty → viewport completo** — #197 (cliente)
+2. ~~Remap dirty → viewport completo~~ ✅ (retain dirty ∩ viewport + tope spawn)
 3. `tile_animation` stripe ~0,9 ms @ 4096² vacío
 4. Densidad Tile +2 B (memoria)
 5. CargoDist / YAPF con flota — no medido en vacío
+6. LOD / atlas a zoom muy bajo (opcional; el tope de spawn ya evita el colapso)
 
 ## Issues
 
 1. ~~[#196](https://github.com/cavazquez/openttdrs/issues/196)~~ — nieve tile-loop
-2. [#197](https://github.com/cavazquez/openttdrs/issues/197) — Remap Bevy dirty → viewport
+2. [#197](https://github.com/cavazquez/openttdrs/issues/197) — Remap Bevy dirty → viewport (mitigado en cliente; verificar/cerrar)

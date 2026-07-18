@@ -10,6 +10,7 @@ Fuente de verdad: `crates/openttdrs-client/src/render/viewport.rs`
 | `OPENTTDRS_MAP_VIEWPORT_THRESHOLD` | override 256…65536 |
 | `OPENTTDRS_MAP_VIEWPORT_OFF=1` | desactiva culling |
 | Span cámara inicial (culling on) | ~64 teselas |
+| `MAX_SPAWN_SPAN_TILES` | **192** (tope spawn / zoom out) |
 | Margen | 10 teselas |
 | Chunks | 16×16 |
 
@@ -34,18 +35,20 @@ cargo run -p openttdrs-client --release
 
 | Escenario | Esperado |
 |-----------|----------|
-| ≥1024 tiles, culling ON | ~viewport (~84² teselas base + overlays); pan fluido |
+| ≥1024 tiles, culling ON | ~viewport (≤~192² spawn + overlays); pan fluido |
+| Zoom mínimo (rueda/UI) | no baja de ~0,27× @ 1280×720; mapa continuo sin huecos |
 | Culling OFF en 1024² | ~1M entidades base → FPS colapsa / carga larga |
 | 4096² culling ON | mismo orden de entidades visibles que 1024² (viewport acotado) |
 
 ## Relación con sim headless
 
 La simulación se mide aparte (`docs/BENCHMARKS.md`, `sim_profile`, `docs/PERF_LARGE_MAP.md`).
-Un tick vacío 4096² temperate ≈ 1,4 ms; un **día de nieve** SubArctic en 4096² ≈ **25 ms** (casi el presupuesto 1×).
+Un tick vacío 4096² temperate ≈ 1,4 ms; SubArctic tras #196 ≈ 2,0 ms (sin pico diario).
 
-## Hallazgo remap (2026-07-18)
+## Remap dirty (mitigado)
 
-En map_shot 256² con culling, el log muestra `↻144 chunks` casi cada frame si hay teselas dirty de landscape/industria. Causa: en `remap.rs`, cualquier `refresh_chunks` no vacío se amplía a **todos** los chunks del viewport. Ver `docs/PERF_LARGE_MAP.md`.
+Antes: dirty de landscape ampliaba refresh a **todo** el viewport (`↻N chunks` ≈ área visible).  
+Ahora: solo chunks dirty que siguen en `needed`. El zoom out también está acotado (`clamp_ortho_scale` / `MAX_SPAWN_SPAN_TILES`). Ver `docs/PERF_LARGE_MAP.md`.
 
 ## Checklist de sesión
 

@@ -58,6 +58,8 @@ pub(crate) fn resolve_spawn_viewport_at(
         mh,
         VIEWPORT_MARGIN_TILES,
     );
+    // El zoom (`clamp_ortho_scale`) ya garantiza que este rectángulo ≤ MAX_SPAWN_SPAN.
+    // No recortar aquí: un AABB isométrico cortado a cuadrado deja franjas vacías en pantalla.
     visible.expand(VIEWPORT_REBUILD_LEAD_TILES, mw, mh)
 }
 

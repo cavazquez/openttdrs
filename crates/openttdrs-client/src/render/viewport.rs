@@ -62,6 +62,16 @@ pub const LARGE_MAP_TILE_THRESHOLD: u32 = 1_024;
 /// Ancho visible inicial (teselas) cuando el culling está activo.
 const DEFAULT_VIEWPORT_SPAN_TILES: f32 = 64.0;
 
+/// Máximo lado del rectángulo de spawn en mapas grandes (~192² ≈ 37k teselas).
+/// Sin esto, zoom 0.05× (ortho scale 20) instancia cientos de miles de sprites.
+pub const MAX_SPAWN_SPAN_TILES: u32 = 192;
+
+/// Zoom más cercano (ortho scale mínimo).
+pub const MIN_ORTHO_SCALE: f32 = 0.25;
+
+/// Techo absoluto de alejamiento (mapas pequeños / sin culling).
+pub const ABSOLUTE_MAX_ORTHO_SCALE: f32 = 20.0;
+
 /// Margen extra (teselas) alrededor del rectángulo visible (rombos isométricos).
 pub const VIEWPORT_MARGIN_TILES: u32 = 10;
 
@@ -80,6 +90,43 @@ fn map_viewport_tile_threshold() -> u32 {
 pub fn large_map_viewport_cull_enabled(mw: u32, mh: u32) -> bool {
     mw.saturating_mul(mh) >= map_viewport_tile_threshold()
         && !env_flag("OPENTTDRS_MAP_VIEWPORT_OFF")
+}
+
+/// Márgenes que `resolve_spawn_viewport` suma al AABB visible (ambos lados).
+const SPAWN_BOUND_PAD_TILES: u32 = VIEWPORT_MARGIN_TILES + 2 + VIEWPORT_REBUILD_LEAD_TILES;
+
+/// Escala ortho máxima para que el AABB isométrico de spawn quepa en [`MAX_SPAWN_SPAN_TILES`].
+///
+/// En iso, el span en teselas de un rectángulo de pantalla es
+/// `scale * (w/(2·ISO_HW) + h/(2·ISO_QH))` — no solo el ancho. Un tope solo por ancho
+/// dejaba huecos diagonales al recortar el spawn.
+#[must_use]
+pub fn max_ortho_scale_for_window(window_width: f32, window_height: f32) -> f32 {
+    use crate::iso::{ISO_HW, ISO_QH};
+    let w = window_width.max(320.0);
+    let h = window_height.max(240.0);
+    let pad = 2 * SPAWN_BOUND_PAD_TILES;
+    let budget = MAX_SPAWN_SPAN_TILES.saturating_sub(pad).max(32) as f32;
+    // span_tx = span_ty = half_w/ISO_HW + half_h/ISO_QH
+    let coeff = w / (2.0 * ISO_HW) + h / (2.0 * ISO_QH);
+    let scale = budget / coeff.max(1.0);
+    scale.clamp(MIN_ORTHO_SCALE, ABSOLUTE_MAX_ORTHO_SCALE)
+}
+
+/// Acota el zoom: en mapas con culling, el alejamiento máximo evita spawn masivo.
+#[must_use]
+pub fn clamp_ortho_scale(
+    scale: f32,
+    window_width: f32,
+    window_height: f32,
+    large_map_cull: bool,
+) -> f32 {
+    let max = if large_map_cull {
+        max_ortho_scale_for_window(window_width, window_height)
+    } else {
+        ABSOLUTE_MAX_ORTHO_SCALE
+    };
+    scale.clamp(MIN_ORTHO_SCALE, max)
 }
 
 /// Zoom ortográfico inicial: mapas pequeños encuadran todo el mapa; mapas grandes
@@ -246,5 +293,45 @@ mod tests {
         assert_eq!(b.ty0, 240);
         assert_eq!(b.tx1, 256);
         assert_eq!(b.ty1, 256);
+    }
+
+    #[test]
+    fn max_ortho_scale_keeps_spawn_aabb_within_cap() {
+        let max = max_ortho_scale_for_window(1280.0, 720.0);
+        assert!(max < ABSOLUTE_MAX_ORTHO_SCALE);
+        assert!(max > MIN_ORTHO_SCALE);
+        // Tope iso correcto (~3.7 @ 1280×720), no el antiguo ~9.6 solo-por-ancho.
+        assert!(max < 5.0, "scale={max}");
+        assert!(max > 2.5, "scale={max}");
+
+        let b = ortho_visible_tile_bounds(
+            Vec2::ZERO,
+            max,
+            1280.0,
+            720.0,
+            4096,
+            4096,
+            VIEWPORT_MARGIN_TILES,
+        )
+        .expand(VIEWPORT_REBUILD_LEAD_TILES, 4096, 4096);
+        assert!(
+            b.tx1 - b.tx0 <= MAX_SPAWN_SPAN_TILES,
+            "tx span {}",
+            b.tx1 - b.tx0
+        );
+        assert!(
+            b.ty1 - b.ty0 <= MAX_SPAWN_SPAN_TILES,
+            "ty span {}",
+            b.ty1 - b.ty0
+        );
+    }
+
+    #[test]
+    fn clamp_ortho_scale_respects_large_map_cap() {
+        assert_eq!(
+            clamp_ortho_scale(20.0, 1280.0, 720.0, true),
+            max_ortho_scale_for_window(1280.0, 720.0)
+        );
+        assert_eq!(clamp_ortho_scale(20.0, 1280.0, 720.0, false), 20.0);
     }
 }

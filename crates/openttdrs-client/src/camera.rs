@@ -7,8 +7,10 @@ use openttdrs_core::prelude::*;
 
 use crate::bevy_app::UpdateSet;
 use crate::iso::tile_pos;
-use crate::render::{MapPreviewCamera, PrimaryGameCamera};
-use crate::state::ClientScreen;
+use crate::render::{
+    MapPreviewCamera, PrimaryGameCamera, clamp_ortho_scale, large_map_viewport_cull_enabled,
+};
+use crate::state::{ClientScreen, SimWorld};
 
 /// Paneo con botón derecho: factor × `OrthographicProjection::scale` × delta en píxeles.
 const PAN_RMB_SCALE: f32 = 1.35;
@@ -98,6 +100,7 @@ pub fn move_camera(
     motion: Res<AccumulatedMouseMotion>,
     scroll: Res<AccumulatedMouseScroll>,
     windows: Query<&Window, With<PrimaryWindow>>,
+    sim: Res<SimWorld>,
     mut cam_q: Query<
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
@@ -110,6 +113,14 @@ pub fn move_camera(
     let Projection::Orthographic(ref mut proj) = *projection else {
         return;
     };
+
+    let (mw, mh) = sim.state.map.dimensions();
+    let large_cull = large_map_viewport_cull_enabled(mw, mh);
+    let (win_w, win_h) = windows
+        .iter()
+        .next()
+        .map(|w| (w.width(), w.height()))
+        .unwrap_or((1280.0, 720.0));
 
     let dt = time.delta_secs();
 
@@ -158,10 +169,10 @@ pub fn move_camera(
     // Zoom con teclado
     let z = ZOOM_KEY_RATE * dt;
     if kbd.pressed(KeyCode::Equal) || kbd.pressed(KeyCode::NumpadAdd) {
-        proj.scale = (proj.scale * (1.0 - z)).max(0.25);
+        proj.scale = clamp_ortho_scale(proj.scale * (1.0 - z), win_w, win_h, large_cull);
     }
     if kbd.pressed(KeyCode::Minus) || kbd.pressed(KeyCode::NumpadSubtract) {
-        proj.scale = (proj.scale * (1.0 + z)).min(20.0);
+        proj.scale = clamp_ortho_scale(proj.scale * (1.0 + z), win_w, win_h, large_cull);
     }
 
     // Zoom con rueda del ratón hacia la posición del cursor
@@ -181,12 +192,20 @@ pub fn move_camera(
             + cursor_offset_world * proj.scale;
 
         let old_scale = proj.scale;
-        let new_scale = (old_scale * (1.0 - scroll.delta.y * ZOOM_WHEEL_SENS)).clamp(0.25, 20.0);
+        let new_scale = clamp_ortho_scale(
+            old_scale * (1.0 - scroll.delta.y * ZOOM_WHEEL_SENS),
+            window.width(),
+            window.height(),
+            large_cull,
+        );
         proj.scale = new_scale;
 
         let new_cam_pos = world_pos - cursor_offset_world * new_scale;
         transform.translation.x = new_cam_pos.x;
         transform.translation.y = new_cam_pos.y;
+    } else {
+        // Mantener escala dentro del tope si cambió el tamaño de mapa / ventana.
+        proj.scale = clamp_ortho_scale(proj.scale, win_w, win_h, large_cull);
     }
 }
 
@@ -214,6 +233,7 @@ mod tests {
         world.insert_resource(AccumulatedMouseMotion::default());
         world.insert_resource(AccumulatedMouseScroll::default());
         world.insert_resource(CameraVelocity::default());
+        world.insert_resource(SimWorld::default());
         world.run_system_once(move_camera).unwrap();
     }
 
@@ -241,6 +261,7 @@ mod tests {
             ..default()
         });
         world.insert_resource(CameraVelocity::default());
+        world.insert_resource(SimWorld::default());
 
         world.spawn((
             Window {
@@ -274,6 +295,7 @@ mod tests {
         world.insert_resource(AccumulatedMouseMotion::default());
         world.insert_resource(AccumulatedMouseScroll::default());
         world.insert_resource(CameraVelocity::default());
+        world.insert_resource(SimWorld::default());
 
         world.spawn((
             PrimaryGameCamera,
@@ -304,6 +326,7 @@ mod tests {
             ..default()
         });
         world.insert_resource(CameraVelocity::default());
+        world.insert_resource(SimWorld::default());
 
         world.spawn((
             PrimaryGameCamera,

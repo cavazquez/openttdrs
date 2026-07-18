@@ -3,10 +3,13 @@
 
 use bevy::prelude::*;
 use bevy::ui::FocusPolicy;
+use bevy::window::PrimaryWindow;
 use openttdrs_core::Command;
 use openttdrs_core::{RoadTramType, calendar_day_index, calendar_year_day, format_calendar_date};
 
-use crate::render::{MapPreviewCamera, PrimaryGameCamera};
+use crate::render::{
+    MapPreviewCamera, PrimaryGameCamera, clamp_ortho_scale, large_map_viewport_cull_enabled,
+};
 use crate::state::ingame_lifecycle::InGameUi;
 use crate::state::{EditorSession, SimRunState, SimWorld, sim_is_paused, toggle_sim_run_state};
 use crate::ui::audio_settings_window::SoundMusicWindowState;
@@ -549,6 +552,7 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
         (&mut Transform, &mut Projection),
         (With<PrimaryGameCamera>, Without<MapPreviewCamera>),
     >,
+    windows: Query<&Window, With<PrimaryWindow>>,
     mut feedback: ResMut<HudBuildFeedback>,
     time: Res<Time>,
 ) {
@@ -577,18 +581,26 @@ pub(crate) fn handle_editor_toolbar_control_buttons(
                 let _ = std::fs::create_dir_all(&dir);
                 save_window.open_in_mode(SaveWindowMode::Save, &dir);
             }
-            EditorToolbarAction::ZoomIn => {
+            EditorToolbarAction::ZoomIn | EditorToolbarAction::ZoomOut => {
                 if let Ok((_tf, mut projection)) = cam_q.single_mut()
                     && let Projection::Orthographic(o) = &mut *projection
                 {
-                    o.scale = (o.scale * 0.85).max(0.25);
-                }
-            }
-            EditorToolbarAction::ZoomOut => {
-                if let Ok((_tf, mut projection)) = cam_q.single_mut()
-                    && let Projection::Orthographic(o) = &mut *projection
-                {
-                    o.scale = (o.scale * 1.15).min(20.0);
+                    let (mw, mh) = sim
+                        .as_ref()
+                        .map(|s| s.state.map.dimensions())
+                        .unwrap_or((64, 64));
+                    let large_cull = large_map_viewport_cull_enabled(mw, mh);
+                    let (win_w, win_h) = windows
+                        .iter()
+                        .next()
+                        .map(|w| (w.width(), w.height()))
+                        .unwrap_or((1280.0, 720.0));
+                    let factor = if *action == EditorToolbarAction::ZoomIn {
+                        0.85
+                    } else {
+                        1.15
+                    };
+                    o.scale = clamp_ortho_scale(o.scale * factor, win_w, win_h, large_cull);
                 }
             }
             EditorToolbarAction::DateBackward | EditorToolbarAction::DateForward => {

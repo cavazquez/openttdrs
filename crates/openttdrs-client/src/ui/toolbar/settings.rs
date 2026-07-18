@@ -1,7 +1,10 @@
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 
 use crate::render::RemapMapVisualsPending;
-use crate::render::{MapPreviewCamera, PrimaryGameCamera};
+use crate::render::{
+    MapPreviewCamera, PrimaryGameCamera, clamp_ortho_scale, large_map_viewport_cull_enabled,
+};
 use crate::settings::ClientPreferences;
 use crate::sprites::company_colour_name;
 use crate::state::SimWorld;
@@ -43,6 +46,8 @@ pub(crate) fn handle_settings_menu_buttons(
         ResMut<crate::ui::endscreen::RetireGameRequested>,
         ResMut<crate::ui::ai_settings_window::AiSettingsWindowState>,
         ResMut<crate::ui::cargo_dist_settings_window::CargoDistSettingsWindowState>,
+        Query<&'static Window, With<PrimaryWindow>>,
+        Option<Res<'static, SimWorld>>,
     )>,
 ) {
     for (interaction, action) in &mut q {
@@ -86,14 +91,38 @@ pub(crate) fn handle_settings_menu_buttons(
                 if let Ok((_cam_tf, mut projection)) = cam_q.single_mut()
                     && let Projection::Orthographic(o) = &mut *projection
                 {
-                    o.scale = (o.scale * 0.85).max(0.25);
+                    let (mw, mh) = help_tools
+                        .p7()
+                        .as_ref()
+                        .map(|s| s.state.map.dimensions())
+                        .unwrap_or((64, 64));
+                    let large_cull = large_map_viewport_cull_enabled(mw, mh);
+                    let (win_w, win_h) = help_tools
+                        .p6()
+                        .iter()
+                        .next()
+                        .map(|w| (w.width(), w.height()))
+                        .unwrap_or((1280.0, 720.0));
+                    o.scale = clamp_ortho_scale(o.scale * 0.85, win_w, win_h, large_cull);
                 }
             }
             SaveMenuAction::ZoomOut => {
                 if let Ok((_cam_tf, mut projection)) = cam_q.single_mut()
                     && let Projection::Orthographic(o) = &mut *projection
                 {
-                    o.scale = (o.scale * 1.15).min(20.0);
+                    let (mw, mh) = help_tools
+                        .p7()
+                        .as_ref()
+                        .map(|s| s.state.map.dimensions())
+                        .unwrap_or((64, 64));
+                    let large_cull = large_map_viewport_cull_enabled(mw, mh);
+                    let (win_w, win_h) = help_tools
+                        .p6()
+                        .iter()
+                        .next()
+                        .map(|w| (w.width(), w.height()))
+                        .unwrap_or((1280.0, 720.0));
+                    o.scale = clamp_ortho_scale(o.scale * 1.15, win_w, win_h, large_cull);
                 }
             }
             SaveMenuAction::NewsSettings => {

@@ -86,7 +86,8 @@ pub(crate) use vehicles::{
     pick_vehicle_id_at_world, vehicle_sprite_pos_at, vehicle_world_position,
 };
 pub(crate) use viewport::{
-    TileViewportBounds, chunk_tile_bounds, chunks_in_bounds, large_map_viewport_cull_enabled,
+    TileViewportBounds, chunk_tile_bounds, chunks_in_bounds, clamp_ortho_scale,
+    large_map_viewport_cull_enabled,
 };
 pub(crate) use water::WaterAnimationPlugin;
 pub(crate) use world::{

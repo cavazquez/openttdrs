@@ -110,11 +110,8 @@ pub(crate) fn apply_remap_map_visuals(
 
     if use_incremental {
         let needed = chunks_in_bounds(spawn_bounds);
-        // Construcción: regenerar todo el viewport visible para evitar capas
-        // de hierba superpuestas (teselas oscuras en rombo).
-        if !refresh_chunks.is_empty() {
-            refresh_chunks = needed.clone();
-        }
+        // Solo refrescar chunks dirty que siguen en el viewport (no todo el área visible).
+        refresh_chunks.retain(|c| needed.contains(c));
         let to_remove: HashSet<_> = loaded_chunks.chunks.difference(&needed).copied().collect();
         let to_add: HashSet<_> = needed.difference(&loaded_chunks.chunks).copied().collect();
 

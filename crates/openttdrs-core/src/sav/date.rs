@@ -67,7 +67,10 @@ pub(crate) fn game_tick_from_sav_time(time: SavGameTime) -> GameTick {
     let from_calendar = tick_from_packed_calendar_date(time.calendar_date);
     // Nuestros .sav escriben tick ≈ calendar→tick; OpenTTD suele traer tick << calendar.
     if time.calendar_date > 0
-        && from_calendar.get() > from_tick.get().saturating_add(crate::economy::TICKS_PER_YEAR)
+        && from_calendar.get()
+            > from_tick
+                .get()
+                .saturating_add(crate::economy::TICKS_PER_YEAR)
     {
         from_calendar
     } else {
@@ -87,7 +90,11 @@ pub(crate) fn tick_from_packed_calendar_date(calendar_date: i32) -> GameTick {
 }
 
 #[cfg(test)]
-#[allow(clippy::expect_used, clippy::cast_possible_truncation)]
+#[allow(
+    clippy::expect_used,
+    clippy::unwrap_used,
+    clippy::cast_possible_truncation
+)]
 mod tests {
     use super::super::table::tests::write_str;
 
@@ -139,7 +146,10 @@ mod tests {
             tick.get() > 12_345 + TICKS_PER_YEAR,
             "debe anclar al calendario, no al tick_counter"
         );
-        assert_eq!(format_calendar_date(tick), format_calendar_date(tick_for_calendar_year(1980)));
+        assert_eq!(
+            format_calendar_date(tick),
+            format_calendar_date(tick_for_calendar_year(1980))
+        );
     }
 
     #[test]

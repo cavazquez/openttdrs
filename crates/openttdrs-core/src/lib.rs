@@ -95,10 +95,11 @@ pub use airport_class::{
 };
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
 pub use bridge_spec::{
-    BRIDGE_SPECS, BridgePiece, BridgeSpec, BridgeType, bridge_above_axis_from_mapt, road_bridge_other_end,
+    BRIDGE_SPECS, BridgePiece, BridgeSpec, BridgeType, bridge_above_axis_from_mapt,
     bridge_available, bridge_available_at_tick, bridge_build_cost, bridge_line_tiles,
     bridge_max_speed_for_tile, bridge_middle_length, bridge_spec, bridge_total_length,
-    bridge_type_from_m6, calc_bridge_piece, set_bridge_middle_mapt, set_bridge_type_m6,
+    bridge_type_from_m6, calc_bridge_piece, road_bridge_other_end, set_bridge_middle_mapt,
+    set_bridge_type_m6,
 };
 pub use cargo::{ALL_CARGO_TYPES, CargoStock, CargoType, OrderSettings, TEMPERATE_CARGO_TYPES};
 pub use cargo_packet::{
@@ -122,7 +123,7 @@ pub use company::{
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
 pub use depot_leave::{TRAIN_DEPOT_LEAVE_WAIT_TICKS, tick_train_stay_in_depot};
 pub use disaster::{
-    DISASTER_CHECK_INTERVAL, UFO_ALTITUDE, UFO_FLIGHT_TICKS, DisasterCraft, force_disaster,
+    DISASTER_CHECK_INTERVAL, DisasterCraft, UFO_ALTITUDE, UFO_FLIGHT_TICKS, force_disaster,
     tick_disaster_crafts, tick_disasters, trigger_disaster_at,
 };
 pub use economy::{
@@ -261,10 +262,9 @@ pub use news::{
     NewsQueue, NewsReference, NewsType, PendingNewsEvent, VehicleAdviceKind, add_news_item,
     calendar_day_index, calendar_year_day, cargo_display_name, default_display_for_type,
     format_calendar_date, format_calendar_day_index, format_money, maybe_purge_old_news,
-    news_display_mode_label,
-    news_type_label, poll_vehicle_advice_news, purge_old_news_items, push_cargo_delivery_news,
-    push_first_vehicle_running_news, push_rival_achievement_news, push_vehicle_advice_news,
-    tick_for_calendar_year, vehicle_kind_label,
+    news_display_mode_label, news_type_label, poll_vehicle_advice_news, purge_old_news_items,
+    push_cargo_delivery_news, push_first_vehicle_running_news, push_rival_achievement_news,
+    push_vehicle_advice_news, tick_for_calendar_year, vehicle_kind_label,
 };
 pub use ottdmap_extras::{OttdmapExtras, dense_payload_end};
 pub use pathfinder::{

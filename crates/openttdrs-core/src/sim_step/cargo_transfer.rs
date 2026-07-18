@@ -548,8 +548,13 @@ fn vehicle_should_unload_at_station(vehicle: &crate::Vehicle, state: &GameState)
     }
     let station_pos = state.stations[station_idx].pos;
     if let Some(cargo) = vehicle.cargo_type {
-        // Pax/mail: nunca descargar en la estación de origen.
-        if cargo.is_town_cargo() && vehicle.cargo_source == Some(station_pos) {
+        // Pax/mail: nunca descargar donde se embarcó.
+        // `cargo_source` tras sync apunta a la casa productora, no a la parada;
+        // usar `last_pickup_station` (y first_station en decide_unload).
+        if cargo.is_town_cargo()
+            && (vehicle.last_pickup_station == Some(station_pos)
+                || vehicle.cargo_source == Some(station_pos))
+        {
             return false;
         }
         // Freight: no descargar en la parada de la orden actual si es de recogida

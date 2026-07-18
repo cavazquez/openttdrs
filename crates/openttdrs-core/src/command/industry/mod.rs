@@ -69,11 +69,12 @@ pub(super) fn place_industry_spec_sandbox(
             .set_mapt_m5(*tile, 0x80, *m5)
             .map_err(|_| CommandError::OutOfBounds)?;
         // Obra desde etapa 0; el tile loop (P6) avanza `m1` hasta `IsIndustryCompleted`.
-        // Oil rigs (gfx 24–28): WaterClass::Sea como OpenTTD `IsTileOnWater`.
+        // OpenTTD `MakeIndustry`: tierra → WaterClass::Invalid; oil rig → Sea.
+        // `m1 = 0` sería Sea y el cliente pintaría agua bajo la fábrica.
         let m1 = if crate::map::industry_gfx_is_oil_rig(u16::from(*m5)) {
             crate::map::set_water_class_m1(0, crate::map::WaterClass::Sea)
         } else {
-            0
+            crate::map::set_water_class_m1(0, crate::map::WaterClass::Invalid)
         };
         state
             .map

@@ -68,7 +68,8 @@ fn craft_image(handles: &UfoSpriteHandles, kind: DisasterKind) -> Handle<Image> 
 
 fn craft_world_pos(craft: &DisasterCraft, map: &openttdrs_core::Map, bob: f32) -> Vec3 {
     let (tx, ty) = (craft.pos.x, craft.pos.y);
-    let (_, base_z) = tile_slope_and_min_z(map, tx.max(0) as u32, ty.max(0) as u32);
+    let (_, base_z) =
+        tile_slope_and_min_z(map, tx.max(0).cast_unsigned(), ty.max(0).cast_unsigned());
     let height = base_z.saturating_add(craft.altitude);
     let (w, h, xrel, yrel) = craft_meta(craft.kind);
     overlay_pos(iso(tx, ty), xrel, yrel - bob, w, h, height, 1.15, tx, ty)
@@ -76,7 +77,8 @@ fn craft_world_pos(craft: &DisasterCraft, map: &openttdrs_core::Map, bob: f32) -
 
 fn shadow_world_pos(craft: &DisasterCraft, map: &openttdrs_core::Map) -> Vec3 {
     let (tx, ty) = (craft.pos.x, craft.pos.y);
-    let (_, base_z) = tile_slope_and_min_z(map, tx.max(0) as u32, ty.max(0) as u32);
+    let (_, base_z) =
+        tile_slope_and_min_z(map, tx.max(0).cast_unsigned(), ty.max(0).cast_unsigned());
     let (w, h, xrel, yrel) = UFO_SHADOW_META;
     // Sombra en el suelo; el harvester reutiliza el scout oscuro escalado vía custom_size.
     overlay_pos(iso(tx, ty), xrel, yrel, w, h, base_z, 0.55, tx, ty)
@@ -106,12 +108,7 @@ fn sync_disaster_crafts(
     }
 
     for (entity, sprite, mut transform, mut spr) in &mut q {
-        let Some(craft) = sim
-            .state
-            .disaster_crafts
-            .iter()
-            .find(|c| c.id == sprite.id)
-        else {
+        let Some(craft) = sim.state.disaster_crafts.iter().find(|c| c.id == sprite.id) else {
             commands.entity(entity).despawn();
             continue;
         };

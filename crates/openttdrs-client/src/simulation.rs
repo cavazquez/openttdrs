@@ -9,8 +9,7 @@ use openttdrs_core::{SIM_TICKS_PER_SECOND, SimEvent};
 use crate::bevy_app::FixedUpdateSet;
 use crate::network::{NetworkRole, NetworkRuntime};
 use crate::render::{
-    RemapMapVisualsPending, VehicleIndex, large_map_viewport_cull_enabled,
-    request_map_visual_remap,
+    RemapMapVisualsPending, VehicleIndex, large_map_viewport_cull_enabled, request_map_visual_remap,
 };
 use crate::state::{ClientScreen, SimRunState, SimWorld, sim_is_paused};
 use crate::ui::SimHudControls;
@@ -243,10 +242,13 @@ mod tests {
         app.update();
         {
             let mut sim = app.world_mut().resource_mut::<SimWorld>();
-            sim.state.runtime.pending_sim_events.push(SimEvent::Construction {
-                kind: ConstructionKind::Rail,
-                at: TileCoord::new(4, 4),
-            });
+            sim.state
+                .runtime
+                .pending_sim_events
+                .push(SimEvent::Construction {
+                    kind: ConstructionKind::Rail,
+                    at: TileCoord::new(4, 4),
+                });
         }
         assert!(!app.world().resource::<RemapMapVisualsPending>().pending);
         app.world_mut()

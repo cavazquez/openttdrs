@@ -326,7 +326,9 @@ fn loads_synthetic_sav_with_map_stations_and_towns() {
     assert_eq!(state.towns.len(), 2);
     assert_eq!(state.economy.money, 777_000);
     assert_eq!(state.company_colour, 6);
-    assert_eq!(state.tick.get(), 42_000);
+    // DATE trae calendar_date=737790 y tick_counter=42000 (desfasado a propósito).
+    // Tras #189 el estado jugable ancla al calendario, no al contador envuelto.
+    assert_eq!(state.tick.get(), 1_926_960);
     assert_eq!(state.vehicles.len(), 1);
     assert_eq!(state.vehicles[0].kind, VehicleKind::Train);
     assert_eq!(state.vehicles[0].pos, TileCoord::new(6, 2));

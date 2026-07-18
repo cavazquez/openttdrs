@@ -1,7 +1,6 @@
 //! Ventana flotante «Historial de noticias» (N4 — Message history).
 
 use bevy::prelude::*;
-use openttdrs_core::prelude::*;
 use openttdrs_core::NewsDisplayMode;
 
 use crate::state::SimWorld;

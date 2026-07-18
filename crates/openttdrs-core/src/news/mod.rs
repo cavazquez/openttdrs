@@ -7,8 +7,7 @@ mod vehicle_advice;
 
 pub use calendar::{
     CALENDAR_BASE_YEAR, CALENDAR_DAYS_PER_YEAR, calendar_day_index, calendar_year_day,
-    format_calendar_date, format_calendar_day_index,
-    tick_for_calendar_year,
+    format_calendar_date, format_calendar_day_index, tick_for_calendar_year,
 };
 pub use formatting::{
     cargo_display_name, format_money, news_display_mode_label, news_type_label, vehicle_kind_label,
@@ -23,6 +22,7 @@ pub use queue::{
 pub use vehicle_advice::{VehicleAdviceKind, poll_vehicle_advice_news, push_vehicle_advice_news};
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {
     use super::*;
     use crate::GameState;

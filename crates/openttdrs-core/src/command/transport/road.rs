@@ -32,11 +32,11 @@ pub(in crate::command::transport) fn road_depot_entrance_faces_road(
     let Some((exit, _)) = road_depot_exit_for_dir(map, depot_pos, dir) else {
         return false;
     };
-    map.get_kind(exit).is_some_and(|kind| {
+    map.get(exit).is_some_and(|t| {
         matches!(
-            kind,
+            t.kind,
             TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge
-        )
+        ) || (t.kind == TileKind::Station && (t.m3 & 0x0F) != 0)
     })
 }
 

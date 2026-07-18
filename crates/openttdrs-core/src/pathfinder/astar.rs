@@ -6,7 +6,9 @@ use std::collections::{BinaryHeap, HashMap};
 use crate::bridge_spec::road_bridge_other_end;
 use crate::map::{Map, TileCoord, TileKind};
 
-use super::network::{PathNetwork, TunnelWormholes, is_network_tile, tiles_connected};
+use super::network::{
+    PathNetwork, TunnelWormholes, is_network_tile, is_road_stop_station_tile, tiles_connected,
+};
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 pub(super) struct AstarNode {
@@ -100,6 +102,12 @@ pub(super) fn find_road_or_tram_path_with_wormholes(
             let cur_kind = map.get_kind(cur).unwrap_or(TileKind::Grass);
             let reachable = if is_network_tile(map, next, next_kind, network) {
                 tiles_connected(map, cur, next, network)
+                    // Destino parada road: entrar desde cualquier tesela de red adyacente
+                    // (la boca m3 puede mirar a otro lado tras el corredor IA).
+                    || (network == PathNetwork::Road
+                        && next == to
+                        && is_road_stop_station_tile(map, next)
+                        && is_network_tile(map, cur, cur_kind, network))
             } else if network == PathNetwork::Road && next == to {
                 // Paradas bus/camión: la tesela de destino puede no ser carretera pura.
                 is_network_tile(map, cur, cur_kind, network)

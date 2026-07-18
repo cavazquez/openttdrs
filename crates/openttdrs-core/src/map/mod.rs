@@ -43,8 +43,9 @@ pub use industry_random::{
     trigger_industry_tile_randomisation,
 };
 pub use industry_terrain::{
-    GFX_OILRIG_FIRST, GFX_OILRIG_LAST, SPR_FLAT_GRASS_TILE, industry_gfx_is_oil_rig,
-    industry_tile_on_water, industry_uses_water_ground, tile_adjacent_to_water,
+    GFX_OILRIG_FIRST, GFX_OILRIG_LAST, SPR_FLAT_BARE_LAND, SPR_FLAT_GRASS_TILE,
+    SPR_FLAT_WATER_TILE, industry_gfx_is_oil_rig, industry_tile_on_water,
+    industry_uses_water_ground, tile_adjacent_to_water,
 };
 pub use industry_tile_anim::{
     GFX_COAL_MINE_TOWER_ANIMATED, GFX_COPPER_MINE_TOWER_ANIMATED, GFX_GOLD_MINE_TOWER_ANIMATED,

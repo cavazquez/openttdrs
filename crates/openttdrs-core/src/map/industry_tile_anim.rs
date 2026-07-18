@@ -226,12 +226,8 @@ fn advance_plastic_fountain(tile: &mut Tile, gfx: u16, tick: u64) -> bool {
 }
 
 fn industry_draw_proc_gfx(gfx: u16, m1: u8) -> u8 {
-    let stage = if m1 & 0x80 != 0 {
-        3usize
-    } else {
-        usize::from((m1 & 0x60) >> 5)
-    }
-    .min(3);
+    // Bits 5–6 de m1 son WaterClass, no la etapa de obra.
+    let stage = usize::from(super::industry_construction_stage(m1)).min(3);
     match gfx {
         10 if stage == 3 => 5,
         143 if stage == 3 => 4,

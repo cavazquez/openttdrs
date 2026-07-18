@@ -84,7 +84,7 @@ pub(crate) fn is_road_network_tile(kind: TileKind) -> bool {
 
 /// Parada bus/camión con boca a carretera (`m3` = road bits de acceso).
 #[must_use]
-fn is_road_stop_station_tile(map: &Map, c: TileCoord) -> bool {
+pub(super) fn is_road_stop_station_tile(map: &Map, c: TileCoord) -> bool {
     map.get(c)
         .is_some_and(|t| is_road_stop_station(&t) && (t.m3 & 0x0F) != 0)
 }
@@ -166,10 +166,17 @@ fn effective_road_bits(map: &Map, c: TileCoord) -> u8 {
     match t.kind {
         // Rampas: m5 guarda DiagDir del puente/túnel, no road bits cardinales.
         TileKind::RoadTunnel | TileKind::RoadBridge => 0x0F,
-        TileKind::Road | TileKind::RoadDepot => {
+        TileKind::Road => {
             let bits = t.m5 & 0x0F;
             if bits == 0 { 0x0F } else { bits }
         }
+        // m5 low bits = DiagDir de la boca (no road bits cardinales).
+        TileKind::RoadDepot => match t.m5 & 0x03 {
+            0 => 0x08, // boca oeste
+            1 => 0x04, // boca sur
+            2 => 0x02, // boca este
+            _ => 0x01, // boca norte
+        },
         TileKind::Station if is_road_stop_station(&t) => t.m3 & 0x0F,
         _ => 0,
     }

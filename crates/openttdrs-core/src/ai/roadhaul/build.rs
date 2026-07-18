@@ -72,11 +72,13 @@ pub(super) fn build_bus_line(
         .stations
         .iter()
         .any(|s| s.owner == ai_id && s.pos == stop_b);
-    if has_a && has_b {
-        Some((stop_a, stop_b, depot))
-    } else {
-        None
+    if !has_a || !has_b {
+        return None;
     }
+    // No encolar línea a medias: paradas + depósito deben estar unidos por road.
+    find_path(&state.map, stop_a, stop_b, PathNetwork::Road)?;
+    find_path(&state.map, depot, stop_a, PathNetwork::Road)?;
+    Some((stop_a, stop_b, depot))
 }
 
 fn with_ai_active(state: &mut GameState, ai_id: CompanyId, f: impl FnOnce(&mut GameState)) {
@@ -286,7 +288,7 @@ fn repair_road_stop_neighbors(state: &mut GameState, from: TileCoord, to: TileCo
             }
             let toward_stop = road_bits_toward(n, stop);
             let along = match (dx, dy) {
-                (-1, 0) | (1, 0) => 0x0A,
+                (-1 | 1, 0) => 0x0A,
                 _ => 0x05,
             };
             let bits = toward_stop | along;
@@ -311,23 +313,14 @@ const fn road_bits_toward(from: TileCoord, to: TileCoord) -> u8 {
 }
 
 /// Parada con boca hacia una carretera/puente ya tendido.
-fn place_bus_stop_facing_road(
-    state: &mut GameState,
-    st_pos: TileCoord,
-    ai_id: CompanyId,
-) -> bool {
+fn place_bus_stop_facing_road(state: &mut GameState, st_pos: TileCoord, ai_id: CompanyId) -> bool {
     if state.stations.iter().any(|s| s.pos == st_pos) {
         if let Some(st) = state.stations.iter_mut().find(|s| s.pos == st_pos) {
             st.owner = ai_id;
         }
         return true;
     }
-    let dirs = [
-        (0_i32, -1, 3u8),
-        (0, 1, 1),
-        (-1, 0, 0),
-        (1, 0, 2),
-    ];
+    let dirs = [(0_i32, -1, 3u8), (0, 1, 1), (-1, 0, 0), (1, 0, 2)];
     for (dx, dy, dir) in dirs {
         let road = TileCoord::new(st_pos.x + dx, st_pos.y + dy);
         if !matches!(
@@ -369,6 +362,10 @@ fn try_place_road_depot_near(state: &mut GameState, stop: TileCoord) -> Option<T
         (TileCoord::new(stop.x, stop.y - 1), 1u8),
         (TileCoord::new(stop.x + 1, stop.y + 1), 3u8),
         (TileCoord::new(stop.x - 1, stop.y - 1), 1u8),
+        (TileCoord::new(stop.x + 2, stop.y), 0u8),
+        (TileCoord::new(stop.x - 2, stop.y), 2u8),
+        (TileCoord::new(stop.x, stop.y + 2), 3u8),
+        (TileCoord::new(stop.x, stop.y - 2), 1u8),
     ];
     for (depot, dir) in preferred {
         if state.map.get(depot).is_none() {
@@ -393,11 +390,22 @@ fn try_place_road_depot_near(state: &mut GameState, stop: TileCoord) -> Option<T
             _ => (0, -1),
         };
         let mouth = TileCoord::new(depot.x + mx, depot.y + my);
-        if state.map.get(mouth).is_some() {
-            let _ = apply_command(state, &Command::PlaceRoad(mouth));
+        if state.map.get(mouth).is_none() {
+            continue;
+        }
+        // Nunca convertir la parada en Road: destruye Station y rompe el path.
+        match state.map.get_kind(mouth) {
+            Some(TileKind::Grass | TileKind::Forest) => {
+                let _ = apply_command(state, &Command::PlaceRoad(mouth));
+            }
+            Some(TileKind::Road | TileKind::Station) => {}
+            _ => continue,
         }
         if apply_command(state, &Command::PlaceRoadDepotDir(depot, dir)).is_err() {
             continue;
+        }
+        if state.map.get_kind(mouth) == Some(TileKind::Road) {
+            let _ = apply_command(state, &Command::PlaceRoadBits(mouth, 0x0F));
         }
         if find_path(&state.map, depot, stop, PathNetwork::Road).is_some() {
             return Some(depot);
@@ -418,6 +426,41 @@ mod tests {
         assert!(place_bus_stop_facing_road(state, a, CompanyId::PLAYER));
         assert!(place_bus_stop_facing_road(state, b, CompanyId::PLAYER));
         link_stops_to_corridor(state, a, b);
+    }
+
+    #[test]
+    fn bus_line_places_depot_without_clearing_stop() {
+        use crate::ai::roadhaul::plan::next_bus_plan;
+        use crate::company::{RIVAL_NAME_ROADHAUL, company_id_by_name};
+        use crate::town::Town;
+        let mut state = GameState::new(32, 24);
+        state.ensure_rival_ais();
+        state.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(4, 4),
+            name: "Norte".into(),
+            population: 800,
+            ..Town::default()
+        });
+        state.towns.push(Town {
+            id: 2,
+            pos: TileCoord::new(20, 16),
+            name: "Sur".into(),
+            population: 600,
+            ..Town::default()
+        });
+        let ai_id = company_id_by_name(&state.companies, RIVAL_NAME_ROADHAUL).unwrap();
+        if let Some(c) = state.companies.iter_mut().find(|c| c.id == ai_id) {
+            c.economy.money = 200_000;
+        }
+        let plan = next_bus_plan(&state, ai_id).expect("plan");
+        let built = build_bus_line(&mut state, ai_id, plan);
+        assert!(built.is_some(), "línea bus con depósito pathfindeable");
+        let (stop_a, stop_b, depot) = built.unwrap();
+        assert_eq!(state.map.get_kind(stop_a), Some(TileKind::Station));
+        assert_eq!(state.map.get_kind(stop_b), Some(TileKind::Station));
+        assert_eq!(state.map.get_kind(depot), Some(TileKind::RoadDepot));
+        assert!(find_path(&state.map, depot, stop_a, PathNetwork::Road).is_some());
     }
 
     #[test]

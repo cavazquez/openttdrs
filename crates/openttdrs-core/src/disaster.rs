@@ -153,8 +153,10 @@ fn spawn_ufo_craft(state: &mut GameState, kind: DisasterKind, target: TileCoord)
 
 fn ufo_spawn_pos(map: &Map, target: TileCoord) -> TileCoord {
     let (w, h) = map.dimensions();
-    let x = (target.x - 8).clamp(0, (w as i32).saturating_sub(1).max(0));
-    let y = (target.y - 8).clamp(0, (h as i32).saturating_sub(1).max(0));
+    let max_x = w.cast_signed().saturating_sub(1).max(0);
+    let max_y = h.cast_signed().saturating_sub(1).max(0);
+    let x = (target.x - 8).clamp(0, max_x);
+    let y = (target.y - 8).clamp(0, max_y);
     TileCoord::new(x, y)
 }
 
@@ -244,13 +246,7 @@ mod tests {
         // Aún no impactó: vía y tren siguen.
         assert_eq!(state.vehicles.len(), 1);
         assert_eq!(state.map.get_kind(pos), Some(TileKind::Rail));
-        assert!(
-            state
-                .news
-                .items
-                .iter()
-                .any(|n| n.headline.contains("OVNI"))
-        );
+        assert!(state.news.items.iter().any(|n| n.headline.contains("OVNI")));
     }
 
     #[test]

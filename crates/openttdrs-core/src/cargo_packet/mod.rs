@@ -70,4 +70,21 @@ mod tests {
             CargoUnloadAction::Transfer
         );
     }
+
+    #[test]
+    fn decide_unload_keeps_at_boarding_station_even_without_next_hop() {
+        let stop = TileCoord::new(3, 3);
+        let house = TileCoord::new(4, 3);
+        let mut p = CargoPacket::new(CargoType::Passengers, 5, house);
+        p.first_station = Some(stop);
+        assert_eq!(
+            decide_cargo_unload_action(&p, stop, false),
+            CargoUnloadAction::Keep
+        );
+        let dest = TileCoord::new(12, 8);
+        assert_eq!(
+            decide_cargo_unload_action(&p, dest, false),
+            CargoUnloadAction::Deliver
+        );
+    }
 }

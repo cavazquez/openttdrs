@@ -329,26 +329,30 @@ pub fn bridge_above_axis_from_mapt(mapt: u8) -> Option<bool> {
 ///
 /// El pathfinder usa esto como wormhole (#187): el vano central sigue siendo agua.
 #[must_use]
-pub fn road_bridge_other_end(map: &crate::map::Map, c: TileCoord) -> Option<TileCoord> {
-    let tile = map.get(c)?;
+pub fn road_bridge_other_end(map: &crate::map::Map, ramp: TileCoord) -> Option<TileCoord> {
+    let tile = map.get(ramp)?;
     if tile.kind != crate::map::TileKind::RoadBridge {
         return None;
     }
-    let (mw, mh) = map.dimensions();
-    for (dx, dy) in [(1_i32, 0), (-1, 0), (0, 1), (0, -1)] {
-        let mut x = c.x + dx;
-        let mut y = c.y + dy;
+    let (map_w, map_h) = map.dimensions();
+    let max_x = map_w.cast_signed();
+    let max_y = map_h.cast_signed();
+    for (step_x, step_y) in [(1_i32, 0), (-1, 0), (0, 1), (0, -1)] {
+        let mut cur_x = ramp.x + step_x;
+        let mut cur_y = ramp.y + step_y;
         for _ in 0..64 {
-            if x < 0 || y < 0 || x >= mw as i32 || y >= mh as i32 {
+            if cur_x < 0 || cur_y < 0 || cur_x >= max_x || cur_y >= max_y {
                 break;
             }
-            let p = TileCoord::new(x, y);
-            let Some(t) = map.get(p) else { break };
-            match t.kind {
-                crate::map::TileKind::RoadBridge => return Some(p),
-                crate::map::TileKind::Water if bridge_above_axis_from_mapt(t.mapt).is_some() => {
-                    x += dx;
-                    y += dy;
+            let pos = TileCoord::new(cur_x, cur_y);
+            let Some(probe) = map.get(pos) else { break };
+            match probe.kind {
+                crate::map::TileKind::RoadBridge => return Some(pos),
+                crate::map::TileKind::Water
+                    if bridge_above_axis_from_mapt(probe.mapt).is_some() =>
+                {
+                    cur_x += step_x;
+                    cur_y += step_y;
                 }
                 _ => break,
             }
@@ -356,7 +360,6 @@ pub fn road_bridge_other_end(map: &crate::map::Map, c: TileCoord) -> Option<Tile
     }
     None
 }
-
 
 /// Pieza de vano según distancia a cada rampa (`CalcBridgePiece` en `tunnelbridge_cmd.cpp`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

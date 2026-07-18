@@ -165,6 +165,15 @@ fn place_industry_spec_starts_construction_in_progress() {
         };
         assert_eq!(tile.kind, TileKind::Industry);
         assert_eq!(tile.m1 & 0x80, 0, "obra en curso en {coord:?}");
+        assert_eq!(
+            crate::water_class_from_m1(tile.m1),
+            crate::WaterClass::Invalid,
+            "tierra no debe marcarse Sea (agua bajo la fábrica) en {coord:?}"
+        );
+        assert!(
+            !crate::industry_uses_water_ground(&s.map, coord, u16::from(tile.m5), 0),
+            "obra en tierra no debe usar WaterTile en {coord:?}"
+        );
         assert_eq!(tile.m2, 1);
         // P7: MakeIndustry siembra m3 y deja triggers (m6 bits 3–5) a 0.
         assert_eq!(

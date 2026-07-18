@@ -33,6 +33,11 @@ pub fn decide_cargo_unload_action(
     at: TileCoord,
     reinsert_freight: bool,
 ) -> CargoUnloadAction {
+    // Pax/mail: nunca entregar en la estación de embarque (next_hop None +
+    // cargo_source=casa generaban ingreso fantasma en el origen).
+    if packet.cargo.is_town_cargo() && packet.first_station == Some(at) {
+        return CargoUnloadAction::Keep;
+    }
     if packet.next_hop.is_some_and(|hop| hop != at) {
         return CargoUnloadAction::Keep;
     }

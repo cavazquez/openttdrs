@@ -6,7 +6,9 @@ use crate::vehicle::{MAX_VEHICLE_NAME_CHARS, Vehicle, VehicleKind, VehicleOrder}
 
 use super::error::OrderMoveDirection;
 use super::transport::road_depot_exit_for_dir;
-use super::{CommandError, in_bounds, require_tile_owned_by_active, require_vehicle_owned_by_active};
+use super::{
+    CommandError, in_bounds, require_tile_owned_by_active, require_vehicle_owned_by_active,
+};
 
 pub(super) fn set_vehicle_order_list(
     state: &mut GameState,

@@ -6,7 +6,7 @@ use crate::vehicle::{MAX_VEHICLE_NAME_CHARS, Vehicle, VehicleKind, VehicleOrder}
 
 use super::error::OrderMoveDirection;
 use super::transport::road_depot_exit_for_dir;
-use super::{CommandError, in_bounds, require_vehicle_owned_by_active};
+use super::{CommandError, in_bounds, require_tile_owned_by_active, require_vehicle_owned_by_active};
 
 pub(super) fn set_vehicle_order_list(
     state: &mut GameState,
@@ -115,6 +115,8 @@ pub(super) fn build_vehicle_at_depot(
     let Some(tile) = state.map.get(depot_pos) else {
         return Err(CommandError::OutOfBounds);
     };
+    // Validar ownership del depósito antes de comprar.
+    require_tile_owned_by_active(state, depot_pos)?;
     let Some(engine) = crate::engine::engine_in_catalog(&state.engine_catalog, engine_id)
         .cloned()
         .or_else(|| crate::engine::engine_by_id(engine_id).cloned())

@@ -171,12 +171,20 @@ fn try_spur_to_existing_network(
 
 /// Reutilizar un depósito ya enlazado a la red si el nuevo no cabe (2ª ruta).
 fn find_rail_depot_linked_to(state: &GameState, load_st: TileCoord) -> Option<TileCoord> {
+    let ai_id = state.active_company;
     let (mw, mh) = state.map.dimensions();
     for y in 0..mh.cast_signed() {
         for x in 0..mw.cast_signed() {
             let c = TileCoord::new(x, y);
             if state.map.get_kind(c) != Some(TileKind::RailDepot) {
                 continue;
+            }
+            // Solo reutilizar depósitos propios.
+            if let Some(tile) = state.map.get(c) {
+                let owner = crate::company::CompanyId::from_tile_m1(tile.m1, state.companies.len());
+                if owner != ai_id {
+                    continue;
+                }
             }
             if find_path(&state.map, c, load_st, PathNetwork::Rail).is_some() {
                 return Some(c);
@@ -1107,6 +1115,52 @@ mod tests {
             )
             .is_some(),
             "la ruta 2 debe poder girar en el codo"
+        );
+    }
+
+    #[test]
+    fn find_rail_depot_linked_to_filters_own_depots_only() {
+        use crate::command::{Command, apply_command};
+
+        let mut state = GameState::new(16, 16);
+        state.economy.money = 500_000;
+
+        // Crear una compañía rival.
+        state.ensure_rival_transcargo();
+        let rival = crate::company::CompanyId(1);
+
+        // Rival crea un depósito conectado a una vía.
+        state.set_active_company(rival);
+        for x in 2..=6_i32 {
+            apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
+        }
+        let rival_depot = TileCoord::new(4, 5);
+        apply_command(&mut state, &Command::PlaceRailDepotDir(rival_depot, 3)).unwrap();
+
+        // Jugador crea vías en otra ubicación sin depósito propio.
+        state.set_active_company(crate::company::CompanyId::PLAYER);
+        let player_station = TileCoord::new(5, 8);
+        for x in 3..=7_i32 {
+            apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, 8))).unwrap();
+        }
+
+        // La búsqueda no debe devolver el depósito del rival.
+        let result = find_rail_depot_linked_to(&state, player_station);
+        assert!(
+            result.is_none(),
+            "no debe reutilizar depósito de otra compañía"
+        );
+
+        // Ahora el jugador crea su propio depósito conectado a sus vías.
+        let player_depot = TileCoord::new(5, 9);
+        apply_command(&mut state, &Command::PlaceRailDepotDir(player_depot, 3)).unwrap();
+
+        // Ahora la búsqueda debe encontrar el depósito del jugador.
+        let result = find_rail_depot_linked_to(&state, player_station);
+        assert_eq!(
+            result,
+            Some(player_depot),
+            "debe encontrar el depósito propio"
         );
     }
 }

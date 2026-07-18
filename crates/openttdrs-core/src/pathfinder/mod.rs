@@ -16,7 +16,9 @@ pub mod yapf;
 
 /// Reexport canónico `OpenTTD` (`map::diag_dir_offset`).
 pub use crate::map::diag_dir_offset;
-pub use build_corridor::{find_rail_build_path, tile_allows_rail_build};
+pub use build_corridor::{
+    find_rail_build_path, find_road_build_path, tile_allows_rail_build, tile_allows_road_build,
+};
 pub use cache::PathCache;
 pub use network::{
     PathNetwork, TunnelWormholes, path_network_for_vehicle, tile_is_path_traversable,

@@ -3,6 +3,7 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 
+use crate::bridge_spec::road_bridge_other_end;
 use crate::map::{Map, TileCoord, TileKind};
 
 use super::network::{PathNetwork, TunnelWormholes, is_network_tile, tiles_connected};
@@ -137,6 +138,21 @@ pub(super) fn find_road_or_tram_path_with_wormholes(
                         pos: other,
                     });
                 }
+            }
+        }
+        // Puente road: salto rampa→rampa sobre vano Water (#187).
+        if network == PathNetwork::Road
+            && map.get_kind(cur) == Some(TileKind::RoadBridge)
+            && let Some(other) = road_bridge_other_end(map, cur)
+        {
+            let tentative = cur_g + step_cost(cur, other);
+            if g_score.get(&other).is_none_or(|&g| tentative < g) {
+                g_score.insert(other, tentative);
+                parent.insert(other, cur);
+                heap.push(AstarNode {
+                    est_total: tentative + manhattan(other, to),
+                    pos: other,
+                });
             }
         }
     }

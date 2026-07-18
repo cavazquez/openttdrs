@@ -22,8 +22,17 @@ pub(in crate::command::transport) struct CardinalBitOverlay {
     pub mask_nibble: bool,
 }
 
+fn road_stop_neighbor(map: &Map, n: TileCoord) -> bool {
+    map.get(n).is_some_and(|t| {
+        t.kind == TileKind::Station && (t.m3 & 0x0F) != 0
+    })
+}
+
 fn road_neighbor_active(map: &Map, n: TileCoord) -> bool {
-    map.get_kind(n) == Some(TileKind::Road)
+    matches!(
+        map.get_kind(n),
+        Some(TileKind::Road | TileKind::RoadBridge)
+    ) || road_stop_neighbor(map, n)
 }
 
 fn tram_neighbor_active(map: &Map, n: TileCoord) -> bool {
@@ -33,16 +42,32 @@ fn tram_neighbor_active(map: &Map, n: TileCoord) -> bool {
 
 fn road_connect(map: &Map, c: TileCoord) -> u8 {
     let mut bits = 0u8;
-    if map.get_kind(TileCoord::new(c.x - 1, c.y)) == Some(TileKind::Road) {
+    let west = TileCoord::new(c.x - 1, c.y);
+    let north = TileCoord::new(c.x, c.y - 1);
+    let east = TileCoord::new(c.x + 1, c.y);
+    let south = TileCoord::new(c.x, c.y + 1);
+    if map.get_kind(west) == Some(TileKind::Road)
+        || map.get_kind(west) == Some(TileKind::RoadBridge)
+        || road_stop_neighbor(map, west)
+    {
         bits |= 8;
     }
-    if map.get_kind(TileCoord::new(c.x, c.y - 1)) == Some(TileKind::Road) {
+    if map.get_kind(north) == Some(TileKind::Road)
+        || map.get_kind(north) == Some(TileKind::RoadBridge)
+        || road_stop_neighbor(map, north)
+    {
         bits |= 1;
     }
-    if map.get_kind(TileCoord::new(c.x + 1, c.y)) == Some(TileKind::Road) {
+    if map.get_kind(east) == Some(TileKind::Road)
+        || map.get_kind(east) == Some(TileKind::RoadBridge)
+        || road_stop_neighbor(map, east)
+    {
         bits |= 2;
     }
-    if map.get_kind(TileCoord::new(c.x, c.y + 1)) == Some(TileKind::Road) {
+    if map.get_kind(south) == Some(TileKind::Road)
+        || map.get_kind(south) == Some(TileKind::RoadBridge)
+        || road_stop_neighbor(map, south)
+    {
         bits |= 4;
     }
     bits

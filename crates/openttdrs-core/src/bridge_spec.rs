@@ -325,6 +325,39 @@ pub fn bridge_above_axis_from_mapt(mapt: u8) -> Option<bool> {
     }
 }
 
+/// Otra rampa de un puente de carretera (`RoadBridge`), saltando el vano `Water`.
+///
+/// El pathfinder usa esto como wormhole (#187): el vano central sigue siendo agua.
+#[must_use]
+pub fn road_bridge_other_end(map: &crate::map::Map, c: TileCoord) -> Option<TileCoord> {
+    let tile = map.get(c)?;
+    if tile.kind != crate::map::TileKind::RoadBridge {
+        return None;
+    }
+    let (mw, mh) = map.dimensions();
+    for (dx, dy) in [(1_i32, 0), (-1, 0), (0, 1), (0, -1)] {
+        let mut x = c.x + dx;
+        let mut y = c.y + dy;
+        for _ in 0..64 {
+            if x < 0 || y < 0 || x >= mw as i32 || y >= mh as i32 {
+                break;
+            }
+            let p = TileCoord::new(x, y);
+            let Some(t) = map.get(p) else { break };
+            match t.kind {
+                crate::map::TileKind::RoadBridge => return Some(p),
+                crate::map::TileKind::Water if bridge_above_axis_from_mapt(t.mapt).is_some() => {
+                    x += dx;
+                    y += dy;
+                }
+                _ => break,
+            }
+        }
+    }
+    None
+}
+
+
 /// Pieza de vano según distancia a cada rampa (`CalcBridgePiece` en `tunnelbridge_cmd.cpp`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BridgePiece {

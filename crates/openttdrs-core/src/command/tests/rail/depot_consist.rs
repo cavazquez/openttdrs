@@ -590,3 +590,80 @@ fn depot_reorder_vehicle_slot_updates_display_order() {
     assert_eq!(s.vehicles[0].depot_display_slot, Some(1));
     assert_eq!(s.vehicles[1].depot_display_slot, Some(0));
 }
+
+#[test]
+fn build_vehicle_at_depot_rejects_other_company_depot() {
+    use crate::test_fixtures::SandboxMap;
+
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
+    s.ensure_rival_transcargo();
+
+    // Compañía B crea un depósito.
+    let rival = crate::company::CompanyId(1);
+    assert!(s.set_active_company(rival));
+    let depot = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
+
+    // Verificar que el depósito pertenece a la compañía rival.
+    let tile = s.map.get(depot).unwrap();
+    let owner = crate::company::CompanyId::from_tile_m1(tile.m1, s.companies.len());
+    assert_eq!(owner, rival);
+
+    // Compañía A (jugador) intenta comprar un vehículo en el depósito de B.
+    assert!(s.set_active_company(crate::company::CompanyId::PLAYER));
+    let result = apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_KIRBY),
+    );
+    assert_eq!(result, Err(CommandError::TileNotOwned));
+    assert!(s.vehicles.is_empty(), "no debe crear vehículo");
+}
+
+#[test]
+fn build_vehicle_at_depot_allows_own_depot() {
+    use crate::test_fixtures::SandboxMap;
+
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
+    let depot = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(3, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailDepotDir(depot, 0)).unwrap();
+
+    // Verificar que el depósito pertenece al jugador.
+    let tile = s.map.get(depot).unwrap();
+    let owner = crate::company::CompanyId::from_tile_m1(tile.m1, s.companies.len());
+    assert_eq!(owner, crate::company::CompanyId::PLAYER);
+
+    // El jugador puede comprar en su propio depósito.
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(depot, crate::engine::ENGINE_TRAIN_KIRBY),
+    )
+    .unwrap();
+    assert_eq!(s.vehicles.len(), 1);
+    assert_eq!(s.vehicles[0].owner, crate::company::CompanyId::PLAYER);
+}
+
+#[test]
+fn build_road_vehicle_at_depot_rejects_other_company_depot() {
+    use crate::test_fixtures::SandboxMap;
+
+    let mut s = SandboxMap::flat_rich(12, 12, 1);
+    s.ensure_rival_transcargo();
+
+    // Compañía B crea un depósito de carretera.
+    let rival = crate::company::CompanyId(1);
+    assert!(s.set_active_company(rival));
+    let depot = TileCoord::new(4, 4);
+    apply_command(&mut s, &Command::PlaceRoad(TileCoord::new(3, 4))).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+
+    // Compañía A (jugador) intenta comprar un vehículo en el depósito de B.
+    assert!(s.set_active_company(crate::company::CompanyId::PLAYER));
+    let result = apply_command(
+        &mut s,
+        &Command::BuildRoadVehicleAtDepot(depot, VehicleKind::Bus),
+    );
+    assert_eq!(result, Err(CommandError::TileNotOwned));
+    assert!(s.vehicles.is_empty(), "no debe crear vehículo");
+}

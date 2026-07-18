@@ -164,7 +164,9 @@ fn effective_road_bits(map: &Map, c: TileCoord) -> u8 {
         return 0;
     };
     match t.kind {
-        TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge => {
+        // Rampas: m5 guarda DiagDir del puente/túnel, no road bits cardinales.
+        TileKind::RoadTunnel | TileKind::RoadBridge => 0x0F,
+        TileKind::Road | TileKind::RoadDepot => {
             let bits = t.m5 & 0x0F;
             if bits == 0 { 0x0F } else { bits }
         }

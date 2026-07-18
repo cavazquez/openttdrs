@@ -267,7 +267,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Mecánica | Original | Port |
 |----------|----------|------|
 | 4 climas (LandscapeType) | `landscape.h` | **PARCIAL** (`world_gen.rs` `Climate`) |
-| Nieve estacional variable | `landscape.cpp:612` | **EXISTE** (`apply_seasonal_snow` + dirty remap) |
+| Nieve por altura / tile-loop | `clear_cmd.cpp` `TileLoopClearAlps` | **EXISTE** (#196: franja + `DEF_SNOW_LINE_HEIGHT`; NewGRF snow table OOS) |
 | Zonas desierto/selva tropical | `landscape.cpp:984` | **PARCIAL** |
 | Industrias por clima | `industry_cmd.cpp` | **EXISTE** (`industry.rs`) |
 

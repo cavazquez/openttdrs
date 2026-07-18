@@ -44,6 +44,9 @@ pub const CLEAR_GROUND_ROCKY: u8 = 2;
 pub const CLEAR_GROUND_SNOW: u8 = 4;
 pub const CLEAR_GROUND_DESERT: u8 = 5;
 
+/// Altura de línea de nieve por defecto (`DEF_SNOWLINE_HEIGHT` / `snow_line_height` en `OpenTTD`).
+pub const DEF_SNOW_LINE_HEIGHT: u8 = 10;
+
 /// Empaqueta `ClearGround` + densidad de hierba en `m5`.
 #[must_use]
 pub const fn clear_ground_m5(ground: u8, density: u8) -> u8 {
@@ -68,13 +71,13 @@ pub fn effective_clear_ground(climate: Climate, tile_m5: u8, tx: i32, ty: i32, s
     }
 }
 
-/// Suelo inicial al generar mapa (ártico: nieve al norte de la línea estacional).
+/// Suelo inicial al generar mapa (ártico: nieve si `tile_z` ≥ línea de nieve, como `OpenTTD`).
 #[must_use]
-pub fn initial_clear_ground(climate: Climate, tx: i32, ty: i32, map_h: i32, seed: u64) -> u8 {
+pub fn initial_clear_ground(climate: Climate, tx: i32, ty: i32, tile_z: u8, seed: u64) -> u8 {
     match climate {
         Climate::SubArctic => {
-            let snow_line = map_h * 2 / 5;
-            if ty < snow_line {
+            // `k = z - snow_line + 1 >= 0` ⇒ `z + 1 >= snow_line`.
+            if i32::from(tile_z) + 1 >= i32::from(DEF_SNOW_LINE_HEIGHT) {
                 CLEAR_GROUND_SNOW
             } else {
                 CLEAR_GROUND_GRASS

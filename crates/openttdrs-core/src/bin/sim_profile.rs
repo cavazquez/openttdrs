@@ -80,7 +80,7 @@ fn main() {
 
     if day_n > 0 {
         println!();
-        println!("=== Media en ticks de día de tránsito (nieve O(map); n={day_n}) ===");
+        println!("=== Media en ticks de día de tránsito (n={day_n}) ===");
         print_timings(&day_acc.mean(day_n));
     } else {
         println!();

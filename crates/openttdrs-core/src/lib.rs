@@ -416,8 +416,9 @@ pub use vehicle::{
 pub use vehicle_group::{MAX_VEHICLE_GROUP_NAME_CHARS, VehicleGroup};
 pub use world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-    CLEAR_GROUND_SNOW, Climate, HeightmapData, PreserveRect, WorldGenConfig, apply_heightmap,
-    apply_world_gen, clear_ground_m5, effective_clear_ground, initial_clear_ground, parse_hmap,
+    CLEAR_GROUND_SNOW, Climate, DEF_SNOW_LINE_HEIGHT, HeightmapData, PreserveRect, WorldGenConfig,
+    apply_heightmap, apply_world_gen, clear_ground_m5, effective_clear_ground,
+    initial_clear_ground, parse_hmap,
 };
 
 #[cfg(test)]

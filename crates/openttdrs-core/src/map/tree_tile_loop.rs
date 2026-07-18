@@ -9,12 +9,11 @@
 //! Campos (`CoalField`) siguen etapa 0…7 lineal.
 
 use crate::GameState;
-use crate::economy::TICKS_PER_TRANSIT_DAY;
 use crate::map::tile_loop::{MAP_TILE_LOOP_STRIDE, for_each_map_tile_loop_stripe};
-use crate::map::{Map, TileCoord, TileKind, coord_to_linear_index};
+use crate::map::{Map, TileCoord, TileKind, coord_to_linear_index, tile_slope_and_z};
 use crate::world_gen::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-    CLEAR_GROUND_SNOW, Climate, clear_ground_m5,
+    CLEAR_GROUND_SNOW, Climate, DEF_SNOW_LINE_HEIGHT, clear_ground_m5,
 };
 
 /// OpenTTD `TILE_UPDATE_FREQUENCY`: ticks entre visitas a la misma tesela.
@@ -385,7 +384,10 @@ fn clear_dead_tree_tile(map: &mut Map, c: TileCoord, m2: u8) {
     let _ = map.set_m2(c, 0);
 }
 
-/// Nieve estacional simplificada para clima ártico (línea de nieve por latitud + estación).
+/// Nieve ártico al estilo OpenTTD `TileLoopClearAlps`: altura vs snow line, franja tile-loop.
+///
+/// Cada tick procesa `MapSize/256` teselas (misma franja que el landscape). La densidad
+/// sube/baja de a 1 hasta el nivel requerido; no hay barrido O(map) diario.
 ///
 /// Devuelve las teselas cuyo `m5` cambió (para remap del cliente).
 pub fn apply_seasonal_snow(
@@ -394,47 +396,77 @@ pub fn apply_seasonal_snow(
     tick: u64,
     world_seed: u64,
 ) -> Vec<TileCoord> {
+    let _ = world_seed;
+    apply_seasonal_snow_with_line(map, climate, tick, DEF_SNOW_LINE_HEIGHT)
+}
+
+/// Como [`apply_seasonal_snow`] con línea de nieve explícita (tests / settings futuros).
+pub fn apply_seasonal_snow_with_line(
+    map: &mut Map,
+    climate: Climate,
+    tick: u64,
+    snow_line_height: u8,
+) -> Vec<TileCoord> {
     if !climate.uses_snow_ground() {
         return Vec::new();
     }
-    if tick == 0 || !tick.is_multiple_of(u64::from(TICKS_PER_TRANSIT_DAY)) {
-        return Vec::new();
-    }
-    let day = tick / u64::from(TICKS_PER_TRANSIT_DAY);
-    let day_of_year = day % 365;
-    let winter = (300..=364).contains(&day_of_year) || day_of_year < 75;
-    // Barrido completo del mapa cada día de tránsito (no franja tile-loop):
-    // en mapas grandes la franja dejaría 255/256 teselas sin actualizar.
-    let (w, h) = map.dimensions();
-    let snow_line = i32::try_from(h).unwrap_or(0) * 2 / 5;
+    let snow_line = i32::from(snow_line_height);
     let mut updates = Vec::new();
-    for y in 0..h {
-        for x in 0..w {
-            let c = TileCoord::new(x.cast_signed(), y.cast_signed());
-            let Some(tile) = map.get(c) else {
-                continue;
-            };
-            if tile.kind != TileKind::Grass {
-                continue;
-            }
-            let ground = if winter && c.y < snow_line {
-                CLEAR_GROUND_SNOW
-            } else {
-                CLEAR_GROUND_GRASS
-            };
-            let density = tile.m5 & 0x03;
-            let new_m5 = clear_ground_m5(ground, density);
-            if new_m5 != tile.m5 {
-                updates.push((c, tile.mapt, new_m5));
-            }
+    for_each_map_tile_loop_stripe(map, tick, |c, tile| {
+        if tile.kind != TileKind::Grass {
+            return;
         }
-    }
+        let ground = clear_ground_type(tile.m5);
+        if matches!(ground, CLEAR_GROUND_ROCKY | CLEAR_GROUND_DESERT) {
+            return;
+        }
+        let Some((_, z)) = tile_slope_and_z(map, c) else {
+            return;
+        };
+        let k = i32::from(z) - snow_line + 1;
+        let is_snow = ground == CLEAR_GROUND_SNOW;
+        let density = clear_density(tile.m5);
+        let new_m5 = if is_snow {
+            let req = if k < 0 {
+                0_u8
+            } else {
+                u8::try_from(k.clamp(0, 3)).unwrap_or(3)
+            };
+            match density.cmp(&req) {
+                std::cmp::Ordering::Equal => {
+                    if k < 0 {
+                        // ClearSnow → hierba densa.
+                        Some(clear_ground_m5(CLEAR_GROUND_GRASS, 3))
+                    } else {
+                        None
+                    }
+                }
+                std::cmp::Ordering::Less => Some(clear_ground_m5(
+                    CLEAR_GROUND_SNOW,
+                    density.saturating_add(1),
+                )),
+                std::cmp::Ordering::Greater => Some(clear_ground_m5(
+                    CLEAR_GROUND_SNOW,
+                    density.saturating_sub(1),
+                )),
+            }
+        } else if k >= 0 {
+            // MakeSnow(density=0): transición gradual hacia la densidad requerida.
+            Some(clear_ground_m5(CLEAR_GROUND_SNOW, 0))
+        } else {
+            None
+        };
+        if let Some(new_m5) = new_m5
+            && new_m5 != tile.m5
+        {
+            updates.push((c, tile.mapt, new_m5));
+        }
+    });
     let mut dirty = Vec::with_capacity(updates.len());
     for (c, mapt, new_m5) in updates {
         let _ = map.set_mapt_m5(c, mapt, new_m5);
         dirty.push(c);
     }
-    let _ = world_seed;
     dirty
 }
 
@@ -767,51 +799,88 @@ mod tests {
     }
 
     #[test]
-    fn seasonal_snow_thaws_in_summer_and_returns_in_winter() {
-        let mut map = Map::new_flat(10, 10, 0);
-        for y in 0..10 {
-            for x in 0..10 {
-                let c = TileCoord::new(x, y);
-                map.set_kind(c, TileKind::Grass).unwrap();
-                map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_SNOW, 0))
-                    .unwrap();
-            }
+    fn clear_alps_makes_snow_above_line_and_thaws_below() {
+        let mut map = Map::new_flat(8, 8, 0);
+        let high = TileCoord::new(2, 2);
+        let low = TileCoord::new(5, 5);
+        for c in [high, low] {
+            map.set_kind(c, TileKind::Grass).unwrap();
+            map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
+                .unwrap();
         }
-        // Día de verano (~150): deshielo (MVP: nieve solo en invierno + norte).
-        let summer_tick = u64::from(TICKS_PER_TRANSIT_DAY) * 150;
-        let dirty = apply_seasonal_snow(&mut map, Climate::SubArctic, summer_tick, 0);
-        assert!(!dirty.is_empty());
-        let north = map.get(TileCoord::new(1, 1)).unwrap().m5;
-        let south = map.get(TileCoord::new(1, 7)).unwrap().m5;
-        assert_eq!((north >> 2) & 0x7, CLEAR_GROUND_GRASS);
-        assert_eq!((south >> 2) & 0x7, CLEAR_GROUND_GRASS);
-        // Día de invierno: nieve solo al norte de la línea (y < 4).
-        let winter_tick = u64::from(TICKS_PER_TRANSIT_DAY) * 320;
-        let dirty_w = apply_seasonal_snow(&mut map, Climate::SubArctic, winter_tick, 0);
-        assert!(!dirty_w.is_empty());
-        let north_w = map.get(TileCoord::new(1, 1)).unwrap().m5;
-        let south_w = map.get(TileCoord::new(1, 7)).unwrap().m5;
-        assert_eq!((north_w >> 2) & 0x7, CLEAR_GROUND_SNOW);
-        assert_eq!((south_w >> 2) & 0x7, CLEAR_GROUND_GRASS);
+        // Esquinas altas → GetTileZ ≈ 12; plano → 0.
+        map.set_height(high, 12).unwrap();
+        for (dx, dy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            map.set_height(TileCoord::new(high.x + dx, high.y + dy), 12)
+                .unwrap();
+        }
+
+        let stripe = u64::from(coord_to_linear_index(high, 8).unwrap() % MAP_TILE_LOOP_STRIDE);
+        let dirty = apply_seasonal_snow_with_line(&mut map, Climate::SubArctic, stripe, 10);
+        assert!(dirty.contains(&high));
+        assert_eq!(
+            clear_ground_type(map.get(high).unwrap().m5),
+            CLEAR_GROUND_SNOW
+        );
+        assert_eq!(clear_density(map.get(high).unwrap().m5), 0);
+
+        // Bajo la línea: nieve existente se descongela en visitas sucesivas.
+        map.set_mapt_m5(low, 0, clear_ground_m5(CLEAR_GROUND_SNOW, 0))
+            .unwrap();
+        let low_stripe = u64::from(coord_to_linear_index(low, 8).unwrap() % MAP_TILE_LOOP_STRIDE);
+        let dirty_thaw =
+            apply_seasonal_snow_with_line(&mut map, Climate::SubArctic, low_stripe, 10);
+        assert!(dirty_thaw.contains(&low));
+        assert_eq!(
+            clear_ground_type(map.get(low).unwrap().m5),
+            CLEAR_GROUND_GRASS
+        );
     }
 
     #[test]
-    fn seasonal_snow_covers_large_map_north_in_one_day() {
-        // > MAP_FULL_SCAN_TILE_LIMIT: antes solo una franja/día.
-        let mut map = Map::new_flat(512, 512, 0);
-        for y in 0..20 {
-            for x in 0..20 {
+    fn clear_alps_raises_snow_density_gradually() {
+        let mut map = Map::new_flat(4, 4, 12);
+        let c = TileCoord::new(1, 1);
+        map.set_kind(c, TileKind::Grass).unwrap();
+        map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_SNOW, 0))
+            .unwrap();
+        let stripe = u64::from(coord_to_linear_index(c, 4).unwrap() % MAP_TILE_LOOP_STRIDE);
+        // z≈12, snow_line=10 → k=3 → req density 3.
+        apply_seasonal_snow_with_line(&mut map, Climate::SubArctic, stripe, 10);
+        assert_eq!(clear_density(map.get(c).unwrap().m5), 1);
+        apply_seasonal_snow_with_line(
+            &mut map,
+            Climate::SubArctic,
+            stripe + u64::from(MAP_TILE_LOOP_STRIDE),
+            10,
+        );
+        assert_eq!(clear_density(map.get(c).unwrap().m5), 2);
+    }
+
+    #[test]
+    fn clear_alps_stripe_reaches_interior_high_tiles_within_256_ticks() {
+        // Altura en el campo `Tile::height` de cada celda; GetTileZ usa 4 esquinas,
+        // así que el borde E/S del mapa ve z=0 (fuera de mapa) — solo interior cuenta.
+        let mut map = Map::new_flat(32, 32, 12);
+        for y in 0..32 {
+            for x in 0..32 {
                 let c = TileCoord::new(x, y);
                 map.set_kind(c, TileKind::Grass).unwrap();
                 map.set_mapt_m5(c, 0, clear_ground_m5(CLEAR_GROUND_GRASS, 3))
                     .unwrap();
             }
         }
-        let winter_tick = u64::from(TICKS_PER_TRANSIT_DAY) * 320;
-        let dirty = apply_seasonal_snow(&mut map, Climate::SubArctic, winter_tick, 0);
-        assert!(dirty.len() >= 20 * 20);
+        let mut snowed = 0_u32;
+        for tick in 0..256_u64 {
+            let dirty = apply_seasonal_snow_with_line(&mut map, Climate::SubArctic, tick, 10);
+            snowed += u32::try_from(dirty.len()).unwrap_or(0);
+        }
+        assert!(
+            snowed >= 31 * 31,
+            "teselas interiores altas deben nevizarse en ≤256 ticks (got {snowed})"
+        );
         assert_eq!(
-            (map.get(TileCoord::new(10, 5)).unwrap().m5 >> 2) & 0x7,
+            clear_ground_type(map.get(TileCoord::new(10, 10)).unwrap().m5),
             CLEAR_GROUND_SNOW
         );
     }

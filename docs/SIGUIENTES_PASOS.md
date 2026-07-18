@@ -55,7 +55,7 @@ ver [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md).
 
 **Toolbar rail:** `RailConvert` convierte al tipo seleccionado (área + ghost). `RailRemove`, waypoint y señales ya cableados.
 
-**Perf mapas grandes:** baseline en [`PERF_LARGE_MAP.md`](PERF_LARGE_MAP.md) — nieve O(map) [#196](https://github.com/cavazquez/openttdrs/issues/196), remap viewport [#197](https://github.com/cavazquez/openttdrs/issues/197); harness `sim_profile` + Criterion 1024²/4096².
+**Perf mapas grandes:** [`PERF_LARGE_MAP.md`](PERF_LARGE_MAP.md) — nieve tile-loop ✅ [#196](https://github.com/cavazquez/openttdrs/issues/196); pendiente remap viewport [#197](https://github.com/cavazquez/openttdrs/issues/197).
 
 ---
 

@@ -91,7 +91,7 @@ pub fn apply_heightmap(
                 map.set_mapt_m5(c, 0x60, 0)?;
                 map.set_m1(c, set_water_class_m1(0, WaterClass::Sea))?;
             } else {
-                let ground = initial_clear_ground(climate, x, y, mh, seed);
+                let ground = initial_clear_ground(climate, x, y, h, seed);
                 let m5 = clear_ground_m5(ground, grass_density(x, y, seed));
                 map.set_kind(c, TileKind::Grass)?;
                 map.set_mapt_m5(c, 0x40, m5)?;

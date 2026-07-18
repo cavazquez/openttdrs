@@ -17,8 +17,8 @@ mod rivers;
 
 pub use config::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-    CLEAR_GROUND_SNOW, Climate, PreserveRect, WorldGenConfig, clear_ground_m5,
-    effective_clear_ground, initial_clear_ground,
+    CLEAR_GROUND_SNOW, Climate, DEF_SNOW_LINE_HEIGHT, PreserveRect, WorldGenConfig,
+    clear_ground_m5, effective_clear_ground, initial_clear_ground,
 };
 pub use heightmap::{HeightmapData, apply_heightmap, parse_hmap};
 
@@ -103,7 +103,7 @@ pub fn apply_world_gen(
                 map.set_m1(c, set_water_class_m1(0, WaterClass::Sea))?;
                 continue;
             }
-            let ground = initial_clear_ground(config.climate, x, y, map_h, config.seed);
+            let ground = initial_clear_ground(config.climate, x, y, z, config.seed);
             let m5 = clear_ground_m5(ground, grass_density(x, y, config.seed));
             if forest_patch(x, y, config.seed, config.climate) {
                 // MP_TREES: m5 = (count-1)<<6 | growth; adulto por defecto (OpenTTD Grown).
@@ -326,11 +326,11 @@ mod tests {
             CLEAR_GROUND_SNOW
         );
         assert_eq!(
-            initial_clear_ground(Climate::SubArctic, 0, 0, 100, 0),
+            initial_clear_ground(Climate::SubArctic, 0, 0, 12, 0),
             CLEAR_GROUND_SNOW
         );
         assert_eq!(
-            initial_clear_ground(Climate::SubArctic, 0, 50, 100, 0),
+            initial_clear_ground(Climate::SubArctic, 0, 50, 0, 0),
             CLEAR_GROUND_GRASS
         );
     }

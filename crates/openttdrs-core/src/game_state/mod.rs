@@ -379,6 +379,9 @@ pub struct GameState {
     /// Ticks hasta la próxima comprobación de desastre.
     #[serde(default = "default_disaster_timer")]
     pub disaster_timer: u64,
+    /// OVNIs u otros crafts de desastre en vuelo (#188; efímero, no se guarda).
+    #[serde(skip, default)]
+    pub disaster_crafts: Vec<crate::disaster::DisasterCraft>,
     /// Ajustes de pathfinding / PBS (`pf.wait_for_pbs_path`, etc.).
     #[serde(default)]
     pub pathfinding: crate::pathfinding_settings::PathfindingSettings,
@@ -491,6 +494,7 @@ impl GameState {
             next_subsidy_id: 1,
             disasters_enabled: true,
             disaster_timer: default_disaster_timer(),
+            disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             ai: crate::ai::AiSettings::default(),
             cheats: crate::cheats::CheatsState::default(),
@@ -552,6 +556,7 @@ impl GameState {
             next_subsidy_id: 1,
             disasters_enabled: true,
             disaster_timer: default_disaster_timer(),
+            disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
             ai: crate::ai::AiSettings::default(),
             cheats: crate::cheats::CheatsState::default(),

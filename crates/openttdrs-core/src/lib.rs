@@ -121,7 +121,10 @@ pub use company::{
 };
 pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
 pub use depot_leave::{TRAIN_DEPOT_LEAVE_WAIT_TICKS, tick_train_stay_in_depot};
-pub use disaster::{DISASTER_CHECK_INTERVAL, force_disaster, tick_disasters, trigger_disaster_at};
+pub use disaster::{
+    DISASTER_CHECK_INTERVAL, UFO_ALTITUDE, UFO_FLIGHT_TICKS, DisasterCraft, force_disaster,
+    tick_disaster_crafts, tick_disasters, trigger_disaster_at,
+};
 pub use economy::{
     ANNUAL_INTEREST_RATE_PCT, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL,
     OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND, TICKS_PER_MONTH, TICKS_PER_TRANSIT_DAY,

@@ -1076,6 +1076,10 @@ for i, sid in enumerate(range(3709, 3725)):
     crop_by_id(sid, f"explosion_large_{i - 3709}.png")
 for i, sid in enumerate(range(3737, 3741)):
     crop_by_id(sid, f"breakdown_smoke_{i - 3737}.png")
+# OVNI desastres (SPR_UFO_SMALL_SCOUT / darker / HARVESTER; ver gen_ufo_sprites.py)
+crop_by_id(3908, "ufo_small_scout.png")
+crop_by_id(3909, "ufo_small_scout_darker.png")
+crop_by_id(3920, "ufo_harvester.png")
 # HQ Tiny
 for i, sid in enumerate(range(2603, 2607)):
     crop_by_id(sid, f"hq_tiny_{i}.png")
@@ -1339,6 +1343,7 @@ python3 "$(dirname "$0")/gen_rail_station_draw_data.py" || true
 python3 "$(dirname "$0")/gen_bridge_sprites.py" || true
 python3 "$(dirname "$0")/gen_bridge_structure_palette.py" || true
 python3 "$(dirname "$0")/gen_effect_vehicle_sprites.py" || true
+python3 "$(dirname "$0")/gen_ufo_sprites.py" || true
 # Catenaria Action5 (wires + postes + entradas de túnel) desde ogfxe_extra.
 python3 "$(dirname "$0")/extract_elrail_catenary.py" || true
 

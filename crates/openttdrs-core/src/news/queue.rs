@@ -325,11 +325,11 @@ fn disaster_copy(kind: crate::sim_events::DisasterKind, at: TileCoord) -> (Strin
     match kind {
         DisasterKind::SmallUfo => (
             "OVNI pequeño avistado".into(),
-            format!("Un OVNI pequeño causa destrozos en {where_}."),
+            format!("Un OVNI pequeño se aproxima a {where_}."),
         ),
         DisasterKind::BigUfo => (
-            "OVNI enorme".into(),
-            format!("Un OVNI enorme arrasa la zona {where_}."),
+            "OVNI enorme avistado".into(),
+            format!("Un OVNI enorme se aproxima a {where_}."),
         ),
         DisasterKind::Airplane => (
             "Accidente aéreo".into(),

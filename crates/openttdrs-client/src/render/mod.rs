@@ -7,6 +7,7 @@ mod atlas;
 mod catenary_newgrf;
 mod company_recolor;
 mod components;
+mod disaster_craft;
 pub(crate) mod effect_fx;
 mod effect_vehicle;
 mod fizzy_drink;
@@ -46,6 +47,7 @@ pub(crate) use components::{
     MapSpriteBatches, MapTileChunk, MapVisualLayer, PrimaryGameCamera, RefineryFireAnimFrames,
     ShoreTile, WaterAnimFrames, WaterTile,
 };
+pub(crate) use disaster_craft::DisasterCraftPlugin;
 pub(crate) use effect_fx::EffectVehiclePlugin;
 pub(crate) use effect_vehicle::EffectVehicleFrames;
 pub(crate) use fizzy_drink::{FizzyDrinkAnim, FizzyDrinkAnimPlugin};

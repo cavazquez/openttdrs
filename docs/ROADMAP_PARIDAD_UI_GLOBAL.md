@@ -51,7 +51,7 @@ Prioridad tras cierre UI-0…UI-8 (no reabrir fases cerradas salvo regresión):
 
 ### P0 — Pulido y huecos jugables
 
-1. Drag nativo de órdenes (pendiente UI-4 polish).
+1. ~~Drag nativo de órdenes (pendiente UI-4 polish).~~ ✅ [#194](https://github.com/cavazquez/openttdrs/issues/194)
 2. Pulido UI `RailConvert` / ciclo tipo de vía (core existe).
 3. Paridad ventanas flota/estación restante — ver [ui_windows_parity.md](parity/ui_windows_parity.md).
 

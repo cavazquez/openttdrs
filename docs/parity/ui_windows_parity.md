@@ -106,7 +106,7 @@ picker; no ocupa el borde derecho de forma permanente.
 |---|---|---|
 | Lista de órdenes con orden activa | Sí (32 slots, resaltado, marcador `>`) | ✔ |
 | Insertar por clic en mapa (`GetOrderCmdFromTile`) | Sí: picker de destino + clic en mapa + `destination_window` | ✔ |
-| Skip / delete / reordenar (drag) | Saltar, Borrar, ↑/↓ (`MoveVehicleOrder`) | ✔ (drag en lista es A) |
+| Skip / delete / reordenar (drag) | Saltar, Borrar, ↑/↓ + drag nativo (#194) | ✔ |
 | Full load (variantes any/all) | Flag «Carga compl.» (una variante) | ✔ básico; variantes **B** |
 | Unload / **transfer** / no unload | Solo «No descargar» | unload forzado y transfer son **B** (transfer necesita feeder share en core → más bien **C**) |
 | **Non-stop / go via** | No existe | **C** hoy: la sim no tiene paradas intermedias implícitas (los vehículos no paran en estaciones de paso), así que non-stop es el único comportamiento; documentado como divergencia semántica, no como botón faltante. Cambia si se implementa `ShouldStopAtStation` |

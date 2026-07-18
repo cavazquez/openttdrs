@@ -90,9 +90,73 @@ pub(crate) fn cancel_order_destination_pick(next_pick: &mut NextState<OrderPickS
     next_pick.set(OrderPickState::Idle);
 }
 
+/// Inicia drag al pulsar una fila de órdenes (#194).
+pub(crate) fn begin_order_list_drag(
+    mut row_q: Query<
+        (&Interaction, &OrderPanelRow),
+        (
+            Changed<Interaction>,
+            With<Button>,
+            Without<OrderPanelButton>,
+        ),
+    >,
+    mut order_state: ResMut<OrderEditState>,
+) {
+    for (interaction, row) in &mut row_q {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        if row.slot < order_state.orders.len() {
+            order_state.list_drag_from = Some(row.slot);
+            order_state.selected_slot = Some(row.slot);
+        }
+    }
+}
+
+/// Al soltar: reordena con `MoveVehicleOrder` o confirma selección (clic).
+#[allow(clippy::too_many_arguments)] // sistema ECS Bevy
+pub(crate) fn finish_order_list_drag(
+    mouse: Res<ButtonInput<MouseButton>>,
+    mut order_state: ResMut<OrderEditState>,
+    row_q: Query<(&OrderPanelRow, &Interaction), With<Button>>,
+    mut sim: ResMut<SimWorld>,
+    mut pending: ResMut<RemapMapVisualsPending>,
+    mut hud_feedback: ResMut<HudBuildFeedback>,
+    time: Res<Time>,
+) {
+    let Some(from_slot) = order_state.list_drag_from else {
+        return;
+    };
+    if mouse.pressed(MouseButton::Left) {
+        return;
+    }
+    order_state.list_drag_from = None;
+    let drop_slot = row_q.iter().find_map(|(row, interaction)| {
+        (row.slot < order_state.orders.len()
+            && matches!(*interaction, Interaction::Hovered | Interaction::Pressed))
+        .then_some(row.slot)
+    });
+    if let Some(to_slot) = drop_slot
+        && to_slot != from_slot
+    {
+        move_order_to_slot(
+            &mut order_state,
+            &mut sim,
+            &mut pending,
+            &mut hud_feedback,
+            time.elapsed_secs(),
+            from_slot,
+            to_slot,
+        );
+        return;
+    }
+    if from_slot < order_state.orders.len() {
+        order_state.selected_slot = Some(from_slot);
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn handle_order_panel_buttons(
-    mut row_q: Query<(&Interaction, &OrderPanelRow), (Changed<Interaction>, With<Button>)>,
     mut btn_q: Query<
         (&Interaction, &OrderPanelButton),
         (Changed<Interaction>, With<Button>, Without<OrderPanelRow>),
@@ -108,15 +172,6 @@ pub(crate) fn handle_order_panel_buttons(
     mut destination_picker: Option<ResMut<DestinationPickerState>>,
     time: Res<Time>,
 ) {
-    for (interaction, row) in &mut row_q {
-        if *interaction != Interaction::Pressed {
-            continue;
-        }
-        if row.slot < order_state.orders.len() {
-            order_state.selected_slot = Some(row.slot);
-        }
-    }
-
     for (interaction, button) in &mut btn_q {
         if *interaction != Interaction::Pressed {
             continue;
@@ -449,9 +504,6 @@ fn move_selected_order(
     elapsed_secs: f32,
     direction: OrderMoveDirection,
 ) {
-    let Some(vehicle_id) = order_state.vehicle_id else {
-        return;
-    };
     let Some(index) = order_state.selected_slot else {
         push_build_command_error(
             hud_feedback,
@@ -460,6 +512,78 @@ fn move_selected_order(
         );
         return;
     };
+    let Some(new_slot) = apply_move_vehicle_order(
+        order_state,
+        sim,
+        pending,
+        hud_feedback,
+        elapsed_secs,
+        index,
+        direction,
+    ) else {
+        return;
+    };
+    order_state.selected_slot = Some(new_slot);
+}
+
+/// Reordena la orden `from` hasta el índice `to` con pasos ↑/↓ adyacentes.
+fn move_order_to_slot(
+    order_state: &mut OrderEditState,
+    sim: &mut SimWorld,
+    pending: &mut RemapMapVisualsPending,
+    hud_feedback: &mut HudBuildFeedback,
+    elapsed_secs: f32,
+    from: usize,
+    to: usize,
+) {
+    if from == to || from >= order_state.orders.len() || to >= order_state.orders.len() {
+        return;
+    }
+    let mut idx = from;
+    if to > from {
+        while idx < to {
+            let Some(next) = apply_move_vehicle_order(
+                order_state,
+                sim,
+                pending,
+                hud_feedback,
+                elapsed_secs,
+                idx,
+                OrderMoveDirection::Down,
+            ) else {
+                return;
+            };
+            idx = next;
+        }
+    } else {
+        while idx > to {
+            let Some(next) = apply_move_vehicle_order(
+                order_state,
+                sim,
+                pending,
+                hud_feedback,
+                elapsed_secs,
+                idx,
+                OrderMoveDirection::Up,
+            ) else {
+                return;
+            };
+            idx = next;
+        }
+    }
+    order_state.selected_slot = Some(to);
+}
+
+fn apply_move_vehicle_order(
+    order_state: &mut OrderEditState,
+    sim: &mut SimWorld,
+    pending: &mut RemapMapVisualsPending,
+    hud_feedback: &mut HudBuildFeedback,
+    elapsed_secs: f32,
+    index: usize,
+    direction: OrderMoveDirection,
+) -> Option<usize> {
+    let vehicle_id = order_state.vehicle_id?;
     match crate::network::apply_player_command(
         &mut sim.state,
         &Command::MoveVehicleOrder {
@@ -471,14 +595,17 @@ fn move_selected_order(
         Ok(()) => {
             pending.pending = true;
             refresh_orders_from_sim(order_state, sim);
-            order_state.selected_slot = Some(match direction {
+            Some(match direction {
                 OrderMoveDirection::Up => index.saturating_sub(1),
                 OrderMoveDirection::Down => {
                     (index + 1).min(order_state.orders.len().saturating_sub(1))
                 }
-            });
+            })
         }
-        Err(e) => push_build_command_error(hud_feedback, e, elapsed_secs),
+        Err(e) => {
+            push_build_command_error(hud_feedback, e, elapsed_secs);
+            None
+        }
     }
 }
 
@@ -623,6 +750,7 @@ mod tests {
                 .orders
                 .clone(),
             selected_slot: Some(0),
+            list_drag_from: None,
         });
         world.init_resource::<RemapMapVisualsPending>();
         world.init_resource::<HudBuildFeedback>();
@@ -643,6 +771,91 @@ mod tests {
         assert_eq!(
             sim.state.vehicles[0].orders[0],
             VehicleOrder::station(TileCoord::new(3, 3))
+        );
+    }
+
+    fn order_drag_test_world(orders: Vec<VehicleOrder>) -> World {
+        let mut world = World::new();
+        let mut state = GameState::new(16, 16);
+        let mut vehicle = Vehicle::new(
+            1,
+            VehicleKind::Bus,
+            TileCoord::new(1, 1),
+            TileCoord::new(1, 1),
+        );
+        vehicle.orders = orders.clone();
+        state.vehicles.push(vehicle);
+        world.insert_resource(SimWorld {
+            state,
+            ..SimWorld::default()
+        });
+        world.insert_resource(OrderEditState {
+            vehicle_id: Some(1),
+            orders,
+            selected_slot: Some(0),
+            list_drag_from: None,
+        });
+        world.init_resource::<RemapMapVisualsPending>();
+        world.init_resource::<HudBuildFeedback>();
+        world.insert_resource(Time::<()>::default());
+        world.insert_resource(ButtonInput::<MouseButton>::default());
+        world
+    }
+
+    #[test]
+    fn begin_order_list_drag_sets_source_slot() {
+        let mut world = order_drag_test_world(vec![
+            VehicleOrder::station(TileCoord::new(2, 2)),
+            VehicleOrder::station(TileCoord::new(3, 3)),
+        ]);
+        world.spawn((Button, OrderPanelRow { slot: 1 }, Interaction::Pressed));
+        world.run_system_once(begin_order_list_drag).unwrap();
+        let order_state = world.resource::<OrderEditState>();
+        assert_eq!(order_state.list_drag_from, Some(1));
+        assert_eq!(order_state.selected_slot, Some(1));
+    }
+
+    #[test]
+    fn finish_order_list_drag_moves_non_adjacent_slot() {
+        let mut world = order_drag_test_world(vec![
+            VehicleOrder::station(TileCoord::new(2, 2)),
+            VehicleOrder::station(TileCoord::new(3, 3)),
+            VehicleOrder::station(TileCoord::new(4, 4)),
+        ]);
+        world.resource_mut::<OrderEditState>().list_drag_from = Some(0);
+        world.spawn((Button, OrderPanelRow { slot: 2 }, Interaction::Hovered));
+        // LMB no presionado → soltar.
+        world.run_system_once(finish_order_list_drag).unwrap();
+        let order_state = world.resource::<OrderEditState>();
+        assert_eq!(order_state.list_drag_from, None);
+        assert_eq!(order_state.selected_slot, Some(2));
+        let sim = world.resource::<SimWorld>();
+        assert_eq!(
+            sim.state.vehicles[0].orders,
+            vec![
+                VehicleOrder::station(TileCoord::new(3, 3)),
+                VehicleOrder::station(TileCoord::new(4, 4)),
+                VehicleOrder::station(TileCoord::new(2, 2)),
+            ]
+        );
+    }
+
+    #[test]
+    fn finish_order_list_drag_same_slot_only_selects() {
+        let mut world = order_drag_test_world(vec![
+            VehicleOrder::station(TileCoord::new(2, 2)),
+            VehicleOrder::station(TileCoord::new(3, 3)),
+        ]);
+        world.resource_mut::<OrderEditState>().list_drag_from = Some(1);
+        world.spawn((Button, OrderPanelRow { slot: 1 }, Interaction::Hovered));
+        world.run_system_once(finish_order_list_drag).unwrap();
+        let order_state = world.resource::<OrderEditState>();
+        assert_eq!(order_state.list_drag_from, None);
+        assert_eq!(order_state.selected_slot, Some(1));
+        let sim = world.resource::<SimWorld>();
+        assert_eq!(
+            sim.state.vehicles[0].orders[0],
+            VehicleOrder::station(TileCoord::new(2, 2))
         );
     }
 }

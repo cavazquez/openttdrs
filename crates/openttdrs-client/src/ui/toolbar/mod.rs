@@ -45,8 +45,9 @@ pub(crate) use minimap::{
     setup_minimap, sync_minimap,
 };
 pub(crate) use order_panel::{
-    handle_order_panel_buttons, open_order_edit_for_vehicle, order_panel_on_closed,
-    setup_order_panel, start_order_destination_pick, sync_order_panel, try_append_order_at_tile,
+    begin_order_list_drag, finish_order_list_drag, handle_order_panel_buttons,
+    open_order_edit_for_vehicle, order_panel_on_closed, setup_order_panel,
+    start_order_destination_pick, sync_order_panel, try_append_order_at_tile,
 };
 pub(crate) use orders_cursor::sync_orders_pick_cursor;
 pub(crate) use preview::{
@@ -422,6 +423,8 @@ pub(crate) struct OrderEditState {
     pub(crate) orders: Vec<openttdrs_core::VehicleOrder>,
     /// Fila seleccionada en el panel (para borrar o editar flags).
     pub(crate) selected_slot: Option<usize>,
+    /// Origen de drag nativo para reordenar (`MoveVehicleOrder`, #194).
+    pub(crate) list_drag_from: Option<usize>,
 }
 
 impl OrderEditState {
@@ -429,6 +432,7 @@ impl OrderEditState {
         self.vehicle_id = None;
         self.orders.clear();
         self.selected_slot = None;
+        self.list_drag_from = None;
     }
 }
 

@@ -22,6 +22,7 @@ pub(crate) fn sync_order_panel(
         &mut Node,
         &mut BackgroundColor,
         &mut BorderColor,
+        &Interaction,
     )>,
     mut row_text_q: Query<(&OrderPanelRowText, &mut Text), Without<FloatingWindowTitleText>>,
 ) {
@@ -66,7 +67,8 @@ pub(crate) fn sync_order_panel(
         **text = format!("{} (Órdenes){shared}{pick_hint}", vehicle.display_name());
     }
 
-    for (row, mut node, mut bg, mut border) in &mut row_q {
+    let drag_from = order_state.list_drag_from;
+    for (row, mut node, mut bg, mut border, interaction) in &mut row_q {
         let has_content = row.slot == 0 && order_state.orders.is_empty()
             || row.slot < order_state.orders.len().min(ORDER_PANEL_ROWS);
         node.display = if has_content {
@@ -81,14 +83,26 @@ pub(crate) fn sync_order_panel(
                     .min(order_state.orders.len().saturating_sub(1));
         let is_selected =
             order_state.selected_slot == Some(row.slot) && row.slot < order_state.orders.len();
-        *bg = if is_selected {
+        let is_drag_source = drag_from == Some(row.slot);
+        let is_drop_target = drag_from.is_some_and(|from| {
+            from != row.slot
+                && row.slot < order_state.orders.len()
+                && matches!(*interaction, Interaction::Hovered | Interaction::Pressed)
+        });
+        *bg = if is_drop_target {
+            BackgroundColor(Color::srgb(0.42, 0.48, 0.28))
+        } else if is_drag_source {
+            BackgroundColor(Color::srgb(0.62, 0.54, 0.34))
+        } else if is_selected {
             BackgroundColor(Color::srgb(0.28, 0.32, 0.42))
         } else if is_current {
             BackgroundColor(Color::srgb(0.42, 0.35, 0.22))
         } else {
             BackgroundColor(Color::srgb(0.22, 0.18, 0.12))
         };
-        *border = if is_selected {
+        *border = if is_drop_target {
+            BorderColor::all(Color::srgb(0.72, 0.88, 0.42))
+        } else if is_selected || is_drag_source {
             BorderColor::all(Color::srgb(0.55, 0.72, 0.95))
         } else if is_current {
             BorderColor::all(Color::srgb(0.88, 0.74, 0.46))
@@ -135,9 +149,10 @@ fn hide_order_rows(
         &mut Node,
         &mut BackgroundColor,
         &mut BorderColor,
+        &Interaction,
     )>,
 ) {
-    for (_, mut node, _, _) in row_q {
+    for (_, mut node, _, _, _) in row_q {
         node.display = Display::None;
     }
 }

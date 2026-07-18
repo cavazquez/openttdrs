@@ -4,12 +4,13 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 
-use openttdrs_core::SIM_TICKS_PER_SECOND;
+use openttdrs_core::{SIM_TICKS_PER_SECOND, SimEvent};
 
 use crate::bevy_app::FixedUpdateSet;
 use crate::network::{NetworkRole, NetworkRuntime};
 use crate::render::{
-    MapTileChunk, RemapMapVisualsPending, VehicleIndex, large_map_viewport_cull_enabled,
+    RemapMapVisualsPending, VehicleIndex, large_map_viewport_cull_enabled,
+    request_map_visual_remap,
 };
 use crate::state::{ClientScreen, SimRunState, SimWorld, sim_is_paused};
 use crate::ui::SimHudControls;
@@ -86,19 +87,11 @@ fn step_sim(
 }
 
 fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVisualsPending>) {
-    if sim.state.runtime.industry_tile_dirty.is_empty()
-        && sim.state.runtime.landscape_tile_dirty.is_empty()
-        && sim.state.runtime.signal_tile_dirty.is_empty()
-        && sim.state.runtime.reservation_tile_dirty.is_empty()
-    {
-        return;
-    }
     let (mw, mh) = sim.state.map.dimensions();
-    pending.pending = true;
-    pending.sync_camera = false;
-    pending.full = (!sim.state.runtime.signal_tile_dirty.is_empty()
-        || !sim.state.runtime.reservation_tile_dirty.is_empty())
-        && !large_map_viewport_cull_enabled(mw, mh);
+    let mw_i = mw as i32;
+    let mh_i = mh as i32;
+    let mut tiles: Vec<(i32, i32)> = Vec::new();
+
     for coord in sim
         .state
         .runtime
@@ -108,8 +101,38 @@ fn flag_map_tile_dirty_remap(sim: Res<SimWorld>, mut pending: ResMut<RemapMapVis
         .chain(sim.state.runtime.signal_tile_dirty.iter())
         .chain(sim.state.runtime.reservation_tile_dirty.iter())
     {
-        let ch = MapTileChunk::from_tile(coord.x.max(0) as u32, coord.y.max(0) as u32);
-        pending.refresh_chunks.insert((ch.cx, ch.cy));
+        tiles.push((coord.x, coord.y));
+    }
+
+    // Obra IA / comandos del tick: `SimEvent::Construction` se emite en `apply_command`
+    // pero no marca landscape_tile_dirty (#186).
+    for event in sim.state.runtime.pending_sim_events.iter() {
+        let at = match event {
+            SimEvent::Construction { at, .. } | SimEvent::Demolition { at } => *at,
+            SimEvent::Disaster { at, .. } => *at,
+            _ => continue,
+        };
+        tiles.push((at.x, at.y));
+        for (dx, dy) in [(-1_i32, 0), (1, 0), (0, -1), (0, 1)] {
+            let nx = at.x + dx;
+            let ny = at.y + dy;
+            if nx >= 0 && ny >= 0 && nx < mw_i && ny < mh_i {
+                tiles.push((nx, ny));
+            }
+        }
+    }
+
+    if tiles.is_empty() {
+        return;
+    }
+
+    let force_full = (!sim.state.runtime.signal_tile_dirty.is_empty()
+        || !sim.state.runtime.reservation_tile_dirty.is_empty())
+        && !large_map_viewport_cull_enabled(mw, mh);
+
+    request_map_visual_remap(&mut pending, mw, mh, &tiles);
+    if force_full {
+        pending.full = true;
     }
 }
 
@@ -130,14 +153,15 @@ pub(crate) fn sync_tick_alpha(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::{
-        SIM_TICK_HZ, SimClock, init_sim_fixed_timestep, step_sim, sync_sim_time_controls,
-        sync_tick_alpha,
+        SIM_TICK_HZ, SimClock, flag_map_tile_dirty_remap, init_sim_fixed_timestep, step_sim,
+        sync_sim_time_controls, sync_tick_alpha,
     };
     use bevy::ecs::system::RunSystemOnce;
     use bevy::prelude::*;
     use bevy::state::app::StatesPlugin;
+    use openttdrs_core::{ConstructionKind, SimEvent, TileCoord};
 
-    use crate::render::VehicleIndex;
+    use crate::render::{RemapMapVisualsPending, VehicleIndex};
     use crate::state::{ClientScreen, SimRunState, SimWorld};
     use crate::ui::SimHudControls;
 
@@ -210,5 +234,28 @@ mod tests {
         assert!(after > before);
         app.world_mut().run_system_once(sync_tick_alpha).unwrap();
         assert!(app.world().resource::<SimClock>().tick_alpha >= 0.0);
+    }
+
+    #[test]
+    fn construction_sim_event_flags_remap_pending() {
+        let mut app = sim_test_app();
+        app.insert_resource(RemapMapVisualsPending::default());
+        app.update();
+        {
+            let mut sim = app.world_mut().resource_mut::<SimWorld>();
+            sim.state.runtime.pending_sim_events.push(SimEvent::Construction {
+                kind: ConstructionKind::Rail,
+                at: TileCoord::new(4, 4),
+            });
+        }
+        assert!(!app.world().resource::<RemapMapVisualsPending>().pending);
+        app.world_mut()
+            .run_system_once(flag_map_tile_dirty_remap)
+            .unwrap();
+        let pending = app.world().resource::<RemapMapVisualsPending>();
+        assert!(
+            pending.pending,
+            "Construction del tick debe encolar remap visual (#186)"
+        );
     }
 }

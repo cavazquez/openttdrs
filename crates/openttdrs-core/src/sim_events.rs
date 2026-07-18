@@ -154,4 +154,9 @@ impl SimEventQueue {
     pub fn is_empty(&self) -> bool {
         self.events.is_empty()
     }
+
+    /// Vista de eventos aún no drenados (p. ej. remap visual antes del SFX).
+    pub fn iter(&self) -> impl Iterator<Item = &SimEvent> {
+        self.events.iter()
+    }
 }

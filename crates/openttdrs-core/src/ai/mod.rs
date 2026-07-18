@@ -271,6 +271,77 @@ mod tests {
     }
 
     #[test]
+    fn roadhaul_can_build_second_route_after_first_completes() {
+        let mut state = GameState::new(48, 32);
+        state.ensure_rival_ais();
+        state.towns.push(Town {
+            id: 1,
+            pos: TileCoord::new(4, 4),
+            name: "A".into(),
+            population: 900,
+            ..Town::default()
+        });
+        state.towns.push(Town {
+            id: 2,
+            pos: TileCoord::new(14, 4),
+            name: "B".into(),
+            population: 800,
+            ..Town::default()
+        });
+        state.towns.push(Town {
+            id: 3,
+            pos: TileCoord::new(4, 18),
+            name: "C".into(),
+            population: 700,
+            ..Town::default()
+        });
+        if let Some(c) = state
+            .companies
+            .iter_mut()
+            .find(|c| c.name == RIVAL_NAME_ROADHAUL)
+        {
+            c.economy.money = 500_000;
+        }
+        let rh_id = state
+            .companies
+            .iter()
+            .find(|c| c.name == RIVAL_NAME_ROADHAUL)
+            .unwrap()
+            .id;
+
+        // Dos ciclos mes + drenado de cola → hasta 2 buses (#191).
+        for cycle in 0_u64..2 {
+            let target_buses = usize::try_from(cycle + 1).unwrap_or(1);
+            let tick = TICKS_PER_MONTH.saturating_mul(cycle + 1);
+            state.tick = crate::GameTick::new(tick);
+            tick_ai_companies(&mut state, tick);
+            for _ in 0..4_000 {
+                let buses = state
+                    .vehicles
+                    .iter()
+                    .filter(|v| v.owner == rh_id && v.kind == VehicleKind::Bus)
+                    .count();
+                if buses >= target_buses {
+                    break;
+                }
+                let t = state.tick.get();
+                tick_ai_companies(&mut state, t);
+                state.tick.advance();
+            }
+        }
+
+        let buses = state
+            .vehicles
+            .iter()
+            .filter(|v| v.owner == rh_id && v.kind == VehicleKind::Bus)
+            .count();
+        assert!(
+            buses >= 2,
+            "RoadHaul debe poder abrir una segunda línea; buses={buses}"
+        );
+    }
+
+    #[test]
     fn monthly_tick_does_not_enqueue_second_route_while_queue_active() {
         let mut state = GameState::new(32, 24);
         state.ensure_rival_ais();

@@ -1,6 +1,7 @@
-//! IA rival «RoadHaul»: una línea de buses entre dos pueblos (MVP).
+//! IA rival «RoadHaul»: líneas de buses entre pueblos.
 //!
 //! Carretera Manhattan + `PlaceBusStop`; sin Squirrel. Complementa `TransCargo`.
+//! Varias rutas (#191); par por score población/distancia (#192).
 
 mod build;
 mod fleet;
@@ -17,8 +18,8 @@ use plan::{next_bus_plan, roadhaul_route_count};
 
 use super::build_queue::{company_has_build_queue, enqueue_build_queue, road_endpoints_connected};
 
-/// Máximo de rutas bus en el MVP (una línea).
-pub const ROADHAUL_MAX_ROUTES: usize = 1;
+/// Máximo de líneas bus (#191).
+pub const ROADHAUL_MAX_ROUTES: usize = 3;
 
 /// Mantiene buses `RoadHaul` en marcha (cada tick).
 pub fn maintain_roadhaul_vehicles(state: &mut GameState) {

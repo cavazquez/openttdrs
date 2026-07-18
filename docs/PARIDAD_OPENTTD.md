@@ -36,7 +36,7 @@ Resumen vivo de **openttdrs** vs OpenTTD. Detalle por dominio:
 
 | # | Área | Feature | openttdrs | Costo | Notas |
 |---|------|---------|-----------|-------|-------|
-| 1 | Construcción | Convertir tipo de vía (ciclo UI) | 🟡 | S–M | `RailConvert` core; pulido UI |
+| 1 | Construcción | Convertir tipo de vía | ✅ | S–M | `RailConvert` → tipo seleccionado (#195) |
 | 2 | Sim | Servicio en depósito | ❌ | M | |
 | 3 | Import/export | `.sav` roundtrip oficial | 🟡 | M | Export propio parcial — [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md) |
 | 4 | Ferrocarril | PBS golden vs OTTD | 🟡 | L | MVP interno; captura externa |

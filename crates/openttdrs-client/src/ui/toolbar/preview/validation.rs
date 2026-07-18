@@ -109,6 +109,7 @@ pub(crate) fn preview_build_command_valid(
         tile_fract,
         station_state.signal_type,
         false,
+        state.current_rail_type,
     ) else {
         return true;
     };

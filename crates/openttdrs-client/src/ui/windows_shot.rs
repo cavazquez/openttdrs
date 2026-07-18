@@ -205,6 +205,7 @@ fn map_shot_driver(
                 None,
                 station_state.signal_type,
                 false,
+                sim.state.current_rail_type,
             ) else {
                 continue;
             };

@@ -48,9 +48,9 @@ Objetivo histórico: cerrar el **vertical slice en solitario**.
 | `RailRemove`: borrar solo vía + `refresh_rail_neighbors` | S | ✅ `Command::RemoveRail` + preview |
 | `RailWaypoint`: tesela waypoint + orden “pasar por” | S–M | ✅ `PlaceRailWaypoint` + render ogfx2 |
 | Depósito carretera: calibración RemapCoords | S | ✅ Hecho — `gen_road_depot_gfx_data.py`, `road_depot_build_sprite_center` |
-| `RailConvert`: ciclo normal→eléctrico→mono→maglev (`Command::ConvertRail`) | S | ✅ MVP visible en toolbar Rail |
+| `RailConvert`: al tipo seleccionado, área + ghost (`Command::ConvertRail`) | S | ✅ [#195](https://github.com/cavazquez/openttdrs/issues/195) |
 
-**Done:** construir T, quitar tramo, waypoint visitable por tren; depósito carretera alineado. **Resto:** solo `RailConvert`.
+**Done:** construir T, quitar tramo, waypoint visitable por tren; depósito carretera alineado; `RailConvert` al tipo seleccionado.
 
 ---
 

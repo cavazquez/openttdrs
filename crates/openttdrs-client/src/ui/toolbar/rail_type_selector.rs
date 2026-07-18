@@ -34,10 +34,10 @@ pub(crate) fn spawn_rail_type_selector(
 ) {
     for rt in RAIL_TYPES {
         let tip = match rt {
-            RailType::Rail => "Tipo de vía: normal",
-            RailType::Electric => "Tipo de vía: eléctrica (catenaria)",
-            RailType::Monorail => "Tipo de vía: monorail",
-            RailType::Maglev => "Tipo de vía: maglev",
+            RailType::Rail => "Tipo de vía: normal (construir / convertir)",
+            RailType::Electric => "Tipo de vía: eléctrica (construir / convertir)",
+            RailType::Monorail => "Tipo de vía: monorail (construir / convertir)",
+            RailType::Maglev => "Tipo de vía: maglev (construir / convertir)",
         };
         buttons.spawn((
             Button,

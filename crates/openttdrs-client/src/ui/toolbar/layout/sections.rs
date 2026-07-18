@@ -497,7 +497,7 @@ pub(super) fn spawn_rail_panel(root: &mut ChildSpawnerCommands, asset_server: &A
                             BuildMenuAction::RailRemove,
                         ),
                         (
-                            "Convertir vía",
+                            "Convertir vía al tipo seleccionado (Norm/Eléc/Mono/Mag)",
                             "assets/opengfx/tiles/toolbar_rail_convert.png",
                             BuildMenuAction::RailConvert,
                         ),

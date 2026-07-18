@@ -1,5 +1,5 @@
 use openttdrs_core::{
-    Command, LevelMode, Map, TileCoord, TileKind,
+    Command, LevelMode, Map, RailType, TileCoord, TileKind,
     rail_signals::{
         rail_signal_present_mask, rail_tile_is_signals, resolve_signal_track, signal_on_track_mask,
     },
@@ -19,6 +19,7 @@ pub(crate) fn command_for_action(
     tile_fract: Option<(u8, u8)>,
     sig_type: u8,
     cycle_existing_signal_type: bool,
+    current_rail_type: RailType,
 ) -> Option<Command> {
     match action {
         BuildMenuAction::Road => {
@@ -120,17 +121,7 @@ pub(crate) fn command_for_action(
                 sig_type,
             ))
         }
-        BuildMenuAction::RailConvert => {
-            // Ciclo Rail → Electric → Monorail → Maglev → Rail.
-            let to = map
-                .and_then(|m| m.get(pos))
-                .map(|t| {
-                    use openttdrs_core::rail_type_from_tile;
-                    rail_type_from_tile(t).next().as_u8()
-                })
-                .unwrap_or(1);
-            Some(Command::ConvertRail(pos, to))
-        }
+        BuildMenuAction::RailConvert => Some(Command::ConvertRail(pos, current_rail_type.as_u8())),
         BuildMenuAction::Orders => None,
         BuildMenuAction::RailWaypoint => Some(Command::PlaceRailWaypoint(pos)),
         BuildMenuAction::RoadWaypoint => Some(Command::PlaceRoadWaypoint(pos)),

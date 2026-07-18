@@ -54,6 +54,7 @@ pub(crate) fn action_supports_area_drag(action: BuildMenuAction) -> bool {
             | BuildMenuAction::LevelLand
             | BuildMenuAction::BuyLand
             | BuildMenuAction::PlantTree
+            | BuildMenuAction::RailConvert
     )
 }
 
@@ -398,29 +399,6 @@ pub(crate) fn apply_drag_action(
         return (changed, if changed { None } else { last_err });
     }
 
-    if action == BuildMenuAction::RailConvert {
-        use openttdrs_core::rail_type_from_tile;
-        let mut changed = false;
-        let mut last_err = None;
-        for (x, y) in tiles {
-            let pos = TileCoord::new(x, y);
-            let to = sim
-                .state
-                .map
-                .get(pos)
-                .map(|t| rail_type_from_tile(t).next().as_u8())
-                .unwrap_or(1);
-            match crate::network::apply_player_command(
-                &mut sim.state,
-                &Command::ConvertRail(pos, to),
-            ) {
-                Ok(()) => changed = true,
-                Err(e) => last_err = Some(e),
-            }
-        }
-        return (changed, if changed { None } else { last_err });
-    }
-
     if matches!(
         action,
         BuildMenuAction::Rail
@@ -484,6 +462,7 @@ pub(crate) fn apply_drag_action(
             station_state.signal_drag_fract,
             station_state.signal_type,
             false,
+            sim.state.current_rail_type,
         ) {
             match crate::network::apply_player_command(&mut sim.state, &cmd) {
                 Ok(()) => changed = true,
@@ -600,6 +579,16 @@ fn rect_drag_tiles(from: (i32, i32), to: (i32, i32)) -> Vec<(i32, i32)> {
 mod tests {
     use super::*;
     use crate::state::SimWorld;
+
+    #[test]
+    fn rail_convert_uses_rectangular_area_drag() {
+        let tiles = drag_line_tiles(None, BuildMenuAction::RailConvert, (2, 2), (4, 4));
+        assert_eq!(tiles.len(), 9);
+        assert!(tiles.contains(&(2, 2)));
+        assert!(tiles.contains(&(3, 3)));
+        assert!(tiles.contains(&(4, 4)));
+        assert!(!tiles.contains(&(5, 2)));
+    }
 
     #[test]
     fn rail_remap_neighbor_tiles_includes_orthogonal_neighbors() {

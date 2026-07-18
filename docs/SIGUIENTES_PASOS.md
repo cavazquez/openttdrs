@@ -53,7 +53,7 @@ ver [ROADMAP_SAV_EXPORT.md](ROADMAP_SAV_EXPORT.md).
 
 **Refactor módulos (jun 2026):** `ui/main_menu/`, `bootstrap/procedural_population/`, `command/transport/`, `command/tests/` — sin cambio de API pública; CI usa perfil nextest `ci` en `.config/nextest.toml`.
 
-**Toolbar rail:** `RailConvert` es MVP visible (ciclo de railtypes). `RailRemove`, waypoint y señales ya cableados.
+**Toolbar rail:** `RailConvert` convierte al tipo seleccionado (área + ghost). `RailRemove`, waypoint y señales ya cableados.
 
 ---
 

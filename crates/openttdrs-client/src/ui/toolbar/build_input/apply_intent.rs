@@ -290,6 +290,7 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
                 Some(tile_fract),
                 sig_type,
                 cycle,
+                ctx.sim.state.current_rail_type,
             ) {
                 if let Err(e) = crate::network::apply_player_command(&mut ctx.sim.state, &cmd) {
                     push_build_command_error(&mut ctx.hud_feedback, e, time_secs);

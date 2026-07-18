@@ -35,7 +35,7 @@ pub(crate) fn tool_hud_label(action: BuildMenuAction) -> &'static str {
             "Señales (Ctrl: tipo block/entry/exit/combo/path; Shift+RMB: densidad)"
         }
         BuildMenuAction::RailRemove => "Quitar vía",
-        BuildMenuAction::RailConvert => "Convertir vía (ciclo: normal→eléc→mono→maglev)",
+        BuildMenuAction::RailConvert => "Convertir vía (al tipo seleccionado)",
         BuildMenuAction::Station => "Parada camión",
         BuildMenuAction::BusStop => "Parada bus",
         BuildMenuAction::Clear => "Demoler (señal: quita sin vía)",

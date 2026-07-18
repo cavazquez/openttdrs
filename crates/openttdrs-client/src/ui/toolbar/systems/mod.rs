@@ -487,6 +487,7 @@ mod tests {
         assert!(action_supports_drag(BuildMenuAction::RailTunnel));
         assert!(action_supports_drag(BuildMenuAction::RaiseLand));
         assert!(action_supports_area_drag(BuildMenuAction::LevelLand));
+        assert!(action_supports_area_drag(BuildMenuAction::RailConvert));
         assert!(!action_supports_drag(BuildMenuAction::BuildHouse));
         assert!(!action_supports_drag(BuildMenuAction::Station));
 
@@ -507,6 +508,7 @@ mod tests {
                 None,
                 openttdrs_core::SIGTYPE_BLOCK,
                 false,
+                openttdrs_core::RailType::Rail,
             ),
             Some(Command::PlaceStationDir(_, 3))
         ));
@@ -523,6 +525,7 @@ mod tests {
                 None,
                 openttdrs_core::SIGTYPE_BLOCK,
                 false,
+                openttdrs_core::RailType::Rail,
             ),
             Some(Command::PlaceRoadDepotDir(_, 2))
         ));
@@ -536,6 +539,7 @@ mod tests {
                 None,
                 openttdrs_core::SIGTYPE_BLOCK,
                 false,
+                openttdrs_core::RailType::Rail,
             ),
             Some(Command::PlaceIndustrySpec(
                 _,
@@ -552,9 +556,24 @@ mod tests {
                 None,
                 openttdrs_core::SIGTYPE_BLOCK,
                 false,
+                openttdrs_core::RailType::Rail,
             )
             .is_none()
         );
+        assert!(matches!(
+            command_for_action(
+                BuildMenuAction::RailConvert,
+                TileCoord::new(1, 2),
+                &StationBuildState::default(),
+                None,
+                None,
+                None,
+                openttdrs_core::SIGTYPE_BLOCK,
+                false,
+                openttdrs_core::RailType::Electric,
+            ),
+            Some(Command::ConvertRail(_, 1))
+        ));
 
         assert!(matches!(
             command_for_line_action(

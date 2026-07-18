@@ -125,7 +125,7 @@ pub(crate) enum BuildMenuAction {
     RailWaypoint,
     RailSignals,
     RailRemove,
-    /// Convierte el tipo de vía existente (ciclo normal→eléc→mono→maglev).
+    /// Convierte la vía existente al tipo seleccionado (`current_rail_type`).
     RailConvert,
     Station,
     Clear,

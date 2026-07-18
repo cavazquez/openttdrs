@@ -166,22 +166,18 @@ fn dispatch_tile_kind(
         });
     }
 
+    // Convertir vía: ghost con trackbits existentes y tipo destino seleccionado.
+    if action == BuildMenuAction::RailConvert {
+        return rail_convert_preview_kind(game_state, coord);
+    }
+
     // Vía ferroviaria (bit por tesela: en L Manhattan X/Y/curva coinciden con el path)
     if let Some(bits) = rail_preview_bits(action, coord, preview_tiles, ctx.rail_lane_bit) {
         let (tileh, _) = tile_slope_and_min_z(&game_state.map, coord.x as u32, coord.y as u32);
-        let rail_type = if action == BuildMenuAction::RailConvert {
-            game_state
-                .map
-                .get(coord)
-                .map(|t| openttdrs_core::rail_type_from_tile(t).next())
-                .unwrap_or(openttdrs_core::RailType::Electric)
-        } else {
-            game_state.current_rail_type
-        };
         return Some(TilePreviewKind::Rail {
             bits,
             tileh,
-            rail_type,
+            rail_type: game_state.current_rail_type,
         });
     }
 
@@ -215,6 +211,28 @@ fn dispatch_tile_kind(
 
     // Sprite genérico para otras acciones
     Some(TilePreviewKind::GenericSprite)
+}
+
+/// Ghost de conversión: misma geometría de vía, tint/tipo = `current_rail_type`.
+fn rail_convert_preview_kind(game_state: &GameState, coord: TileCoord) -> Option<TilePreviewKind> {
+    use openttdrs_core::{OTTD_MP_RAILWAY, TileKind, effective_rail_trackbits};
+
+    let tile = game_state.map.get(coord)?;
+    if tile.kind != TileKind::Rail {
+        return None;
+    }
+    let bits = effective_rail_trackbits(tile.mapt, tile.m5, tile.kind, OTTD_MP_RAILWAY)
+        .unwrap_or(tile.m5 & 0x3F)
+        & 0x3F;
+    if bits == 0 {
+        return None;
+    }
+    let (tileh, _) = tile_slope_and_min_z(&game_state.map, coord.x as u32, coord.y as u32);
+    Some(TilePreviewKind::Rail {
+        bits,
+        tileh,
+        rail_type: game_state.current_rail_type,
+    })
 }
 
 /// Trackbits a previsualizar para las herramientas de vía.
@@ -339,5 +357,26 @@ mod tests {
             None,
         );
         assert_eq!(bits, Some(RAIL_TB_X));
+    }
+
+    #[test]
+    fn rail_convert_preview_uses_existing_bits_and_selected_type() {
+        use crate::sprites::RAIL_TB_X;
+        use openttdrs_core::{Command, RailType, apply_command};
+
+        let mut state = GameState::new(10, 10);
+        state.economy.money = 100_000;
+        state.current_rail_type = RailType::Electric;
+        let coord = TileCoord::new(4, 4);
+        assert!(apply_command(&mut state, &Command::PlaceRailBits(coord, RAIL_TB_X)).is_ok());
+        let Some(TilePreviewKind::Rail {
+            bits, rail_type, ..
+        }) = rail_convert_preview_kind(&state, coord)
+        else {
+            panic!("expected Rail convert ghost");
+        };
+        assert_eq!(bits, RAIL_TB_X);
+        assert_eq!(rail_type, RailType::Electric);
+        assert!(rail_convert_preview_kind(&state, TileCoord::new(5, 5)).is_none());
     }
 }

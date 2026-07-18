@@ -14,7 +14,7 @@ use crate::town::{self, authority_allows_new_station};
 #[allow(unused_imports)]
 use crate::command::transport::internal::{
     RAIL_TB_X, RAIL_TB_Y, check_in_bounds, connect_road_stop, rail_axis_y_from_trackbits,
-    road_stop_m5,
+    rail_axis_y_unambiguous, road_stop_m5,
 };
 
 pub(crate) fn check_station_placement(
@@ -95,6 +95,16 @@ pub(in crate::command::transport) fn rail_station_gfx_from_axis(axis_y: bool) ->
 }
 
 pub(in crate::command::transport) fn rail_station_m5(map: &Map, c: TileCoord, dir: u8) -> u8 {
+    // Preferir vecino con un solo eje; CROSS no impone andén (cae a `dir`).
+    for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+        let n = TileCoord::new(c.x + dx, c.y + dy);
+        if let Some(t) = map.get(n)
+            && t.kind == TileKind::Rail
+            && let Some(axis_y) = rail_axis_y_unambiguous(t.m5)
+        {
+            return rail_station_gfx_from_axis(axis_y);
+        }
+    }
     for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
         let n = TileCoord::new(c.x + dx, c.y + dy);
         if let Some(t) = map.get(n)
@@ -295,6 +305,9 @@ pub(in crate::command::transport) fn station_placement_on_tile(
         return Err(CommandError::AuthorityRatingTooLow);
     }
     let kind = state.map.get_kind(c).unwrap_or(TileKind::Grass);
+    // Snapshot para rollback si `connect_road_stop` falla (antes dejaba Station huérfana
+    // y RoadHaul no podía reintentar otra boca).
+    let prev_tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
     if station_site_tile_needs_clear(kind) {
         clear_station_site_tile(state, c)?;
     }
@@ -315,8 +328,11 @@ pub(in crate::command::transport) fn station_placement_on_tile(
         .map
         .set_tile(c, tile)
         .map_err(|_| CommandError::OutOfBounds)?;
-    if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop) {
-        connect_road_stop(state, c, dir)?;
+    if matches!(stop_kind, StopKind::BusStop | StopKind::TruckStop)
+        && let Err(e) = connect_road_stop(state, c, dir)
+    {
+        let _ = state.map.set_tile(c, prev_tile);
+        return Err(e);
     }
     let mut st = Station::new_with_kind(c, stop_kind);
     st.owner = state.active_company;

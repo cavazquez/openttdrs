@@ -3,7 +3,7 @@ use crate::pathfinder::{diag_dir_offset, station_site_tile_allows_build};
 use crate::{DEPOT_BUILD_COST, GameState, ROAD_BUILD_COST};
 
 use super::super::terraform::apply_autoslope_if_needed;
-use super::super::{CommandError, require_tile_owned_by_active};
+use super::super::{CommandError, require_tile_owned_by_active, tile_owner};
 
 #[allow(unused_imports)]
 use crate::command::transport::internal::{check_in_bounds, place_single_transport_tile};
@@ -123,6 +123,20 @@ pub(in crate::command) fn place_road_bits(
         }
     });
     let road_bits = merge_road_bits_with_neighbors(&state.map, c, requested, existing, force_axis);
+    // Calle ajena / pueblo (`m1` de otra compañía): solo OR de bits, sin robar owner.
+    // Sin esto RoadHaul no puede enlazar paradas a la red del pueblo.
+    let foreign_road = state.map.get_kind(c) == Some(TileKind::Road)
+        && tile_owner(state, c).is_some_and(|o| o != state.active_company);
+    if foreign_road {
+        let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+        tile.m5 = (road_bits & 0x0F).max(0x01);
+        state
+            .map
+            .set_tile(c, tile)
+            .map_err(|_| CommandError::OutOfBounds)?;
+        state.economy.money -= ROAD_BUILD_COST;
+        return Ok(());
+    }
     write_normal_road_tile(state, c, road_bits)?;
     propagate_road_bits_to_neighbors(state, c, road_bits)?;
     state.economy.money -= ROAD_BUILD_COST;
@@ -587,9 +601,14 @@ pub(in crate::command::transport) fn merge_road_bits(
     if state.map.get_kind(c) != Some(TileKind::Road) {
         return Ok(());
     }
-    let existing = state.map.get(c).map_or(0, |t| t.m5 & 0x0F);
-    let merged = (existing | (bits & 0x0F)).max(0x01);
-    write_normal_road_tile(state, c, merged)
+    // Conservar owner (pueblo / otra compañía): solo añadir stubs de acceso.
+    let mut tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    let existing = tile.m5 & 0x0F;
+    tile.m5 = (existing | (bits & 0x0F)).max(0x01);
+    state
+        .map
+        .set_tile(c, tile)
+        .map_err(|_| CommandError::OutOfBounds)
 }
 
 pub(in crate::command::transport) fn connect_road_stop(

@@ -25,7 +25,7 @@ use crate::ui::vehicle_window::VehicleWindowState;
 use super::click_intent::MapClickIntent;
 use super::commands::command_for_action;
 use super::drag::{
-    action_is_tunnel, apply_drag_action, drag_line_tiles, subsample_drag_tiles,
+    action_is_tunnel, apply_drag_action, drag_line_tiles_with_rail_bit, subsample_drag_tiles,
     tunnel_placement_is_valid,
 };
 use super::orders::order_pick_valid;
@@ -205,7 +205,13 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
             if let Some(action) = ctx.drag_state.last_action
                 && let Some(start) = ctx.drag_state.start_tile
             {
-                let line = drag_line_tiles(Some(&ctx.sim.state.map), action, start, end_tile);
+                let line = drag_line_tiles_with_rail_bit(
+                    Some(&ctx.sim.state.map),
+                    action,
+                    start,
+                    end_tile,
+                    ctx.drag_state.rail_lane_bit,
+                );
                 ctx.drag_state.pending_tiles = if action == BuildMenuAction::RailSignals {
                     subsample_drag_tiles(&line, ctx.station_state.signal_density)
                 } else {

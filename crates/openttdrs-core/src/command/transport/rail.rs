@@ -20,6 +20,8 @@ pub(crate) fn check_place_rail(map: &Map, c: TileCoord) -> Result<(), CommandErr
     match map.get_kind(c).unwrap_or(TileKind::Grass) {
         TileKind::Water => Err(CommandError::CannotPlaceRailOnWater),
         TileKind::Void => Err(CommandError::CannotPlaceRailOnVoid),
+        // No pisar estaciones: dejaba label `Tren` + tile Rail CROSS (#193).
+        TileKind::Station => Err(CommandError::CannotPlaceStationOnOccupiedTile),
         _ => Ok(()),
     }
 }
@@ -424,7 +426,21 @@ pub(in crate::command::transport) fn rail_axis_y_from_trackbits(tb: u8) -> bool 
     if tb & RAIL_TB_Y != 0 && tb & RAIL_TB_X == 0 {
         return true;
     }
+    // CROSS / ambiguo: sin preferencia (el caller debe usar `dir`).
     true
+}
+
+/// Eje inequívoco desde trackbits (`Some` solo si hay un solo eje X/Y).
+#[must_use]
+pub(in crate::command::transport) fn rail_axis_y_unambiguous(tb: u8) -> Option<bool> {
+    let tb = tb & 0x3F;
+    let has_x = tb & RAIL_TB_X != 0;
+    let has_y = tb & RAIL_TB_Y != 0;
+    match (has_x, has_y) {
+        (true, false) => Some(false),
+        (false, true) => Some(true),
+        _ => None,
+    }
 }
 
 pub(in crate::command::transport) fn merge_rail_trackbits(existing: u8, add: u8) -> u8 {

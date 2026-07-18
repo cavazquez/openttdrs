@@ -1,8 +1,8 @@
 use openttdrs_core::Command;
 use openttdrs_core::prelude::*;
 use openttdrs_core::{
-    ROAD_PLACE_FORCE_AXIS, infer_road_drag_axis, resolve_tunnel_end, road_drag_line_tiles,
-    road_locked_tool_axis, tunnel_preview_path,
+    ROAD_PLACE_FORCE_AXIS, infer_road_drag_axis, opposite_diag_dir, rail_bit_for_sides,
+    resolve_tunnel_end, road_drag_line_tiles, road_locked_tool_axis, tunnel_preview_path,
 };
 
 use crate::state::SimWorld;
@@ -87,19 +87,113 @@ pub(crate) fn tunnel_placement_is_valid(
     openttdrs_core::command_would_fail(state, &cmd).is_none()
 }
 
-pub(crate) fn rail_bits_for_drag_action(
+/// Trackbit por tesela del arrastre (autorail en L: X/Y/curva según vecinos del path).
+#[must_use]
+pub(crate) fn rail_bits_for_drag_tile(
     action: BuildMenuAction,
+    tiles: &[(i32, i32)],
+    index: usize,
     lane_bit: Option<u8>,
 ) -> Option<u8> {
     match action {
-        BuildMenuAction::RailX | BuildMenuAction::RailY => {
-            super::rail_lane::rail_lane_bits_for_action(action, None)
-        }
-        BuildMenuAction::RailHorz | BuildMenuAction::RailVert => {
+        BuildMenuAction::RailX => Some(0x01),
+        BuildMenuAction::RailY => Some(0x02),
+        BuildMenuAction::RailHorz | BuildMenuAction::RailVert | BuildMenuAction::RailRemove => {
             lane_bit.or_else(|| super::rail_lane::rail_lane_bits_for_action(action, None))
+        }
+        BuildMenuAction::Rail => rail_bit_from_drag_path(tiles, index)
+            .or(lane_bit)
+            .or(Some(0x01)),
+        _ => None,
+    }
+}
+
+fn step_to_pf_diag(dx: i32, dy: i32) -> u8 {
+    // DiagDir pathfinder: W=0, S=1, E=2, N=3 (igual que TransCargo).
+    match (dx.signum(), dy.signum()) {
+        (-1, 0) => 0,
+        (0, 1) => 1,
+        (1, 0) => 2,
+        (0, -1) => 3,
+        _ => 0,
+    }
+}
+
+/// Infiera X / Y / curva desde el polyline del arrastre (evita piezas sueltas en el codo).
+fn rail_bit_from_drag_path(tiles: &[(i32, i32)], index: usize) -> Option<u8> {
+    let (cx, cy) = *tiles.get(index)?;
+    let prev = index.checked_sub(1).and_then(|j| tiles.get(j).copied());
+    let next = tiles.get(index + 1).copied();
+    match (prev, next) {
+        (Some((px, py)), Some((nx, ny))) => {
+            let d_in = ((cx - px).signum(), (cy - py).signum());
+            let d_out = ((nx - cx).signum(), (ny - cy).signum());
+            if d_in == d_out {
+                Some(if d_in.1 != 0 { 0x02 } else { 0x01 })
+            } else {
+                let travel_in = step_to_pf_diag(d_in.0, d_in.1);
+                let travel_out = step_to_pf_diag(d_out.0, d_out.1);
+                let curve = rail_bit_for_sides(opposite_diag_dir(travel_in), travel_out);
+                if curve == 0 {
+                    Some(if d_out.1 != 0 { 0x02 } else { 0x01 })
+                } else {
+                    Some(curve)
+                }
+            }
+        }
+        (Some((ox, _oy)), None) | (None, Some((ox, _oy))) => {
+            Some(if cx == ox { 0x02 } else { 0x01 })
         }
         _ => None,
     }
+}
+
+fn manhattan_rail_tiles(from: (i32, i32), to: (i32, i32), x_first: bool) -> Vec<(i32, i32)> {
+    let mut out = Vec::new();
+    if x_first {
+        let step = if to.0 >= from.0 { 1 } else { -1 };
+        let mut x = from.0;
+        loop {
+            out.push((x, from.1));
+            if x == to.0 {
+                break;
+            }
+            x += step;
+        }
+        if to.1 != from.1 {
+            let step = if to.1 >= from.1 { 1 } else { -1 };
+            let mut y = from.1 + step;
+            loop {
+                out.push((to.0, y));
+                if y == to.1 {
+                    break;
+                }
+                y += step;
+            }
+        }
+    } else {
+        let step = if to.1 >= from.1 { 1 } else { -1 };
+        let mut y = from.1;
+        loop {
+            out.push((from.0, y));
+            if y == to.1 {
+                break;
+            }
+            y += step;
+        }
+        if to.0 != from.0 {
+            let step = if to.0 >= from.0 { 1 } else { -1 };
+            let mut x = from.0 + step;
+            loop {
+                out.push((x, to.1));
+                if x == to.0 {
+                    break;
+                }
+                x += step;
+            }
+        }
+    }
+    out
 }
 
 fn road_tool_axis(action: BuildMenuAction, from: (i32, i32), to: (i32, i32)) -> u8 {
@@ -327,19 +421,28 @@ pub(crate) fn apply_drag_action(
         return (changed, if changed { None } else { last_err });
     }
 
-    if let Some(rail_bits) = rail_bits_for_drag_action(action, rail_lane_bit) {
+    if matches!(
+        action,
+        BuildMenuAction::Rail
+            | BuildMenuAction::RailX
+            | BuildMenuAction::RailY
+            | BuildMenuAction::RailHorz
+            | BuildMenuAction::RailVert
+            | BuildMenuAction::RailRemove
+    ) {
         let mut changed = false;
         let mut last_err = None;
-        let cmd_fn = if action == BuildMenuAction::RailRemove {
-            |pos: TileCoord, bits: u8| Command::RemoveRailBits(pos, bits)
-        } else {
-            |pos: TileCoord, bits: u8| Command::PlaceRailBits(pos, bits)
-        };
-        for (x, y) in tiles {
-            match crate::network::apply_player_command(
-                &mut sim.state,
-                &cmd_fn(TileCoord::new(x, y), rail_bits),
-            ) {
+        let remove = action == BuildMenuAction::RailRemove;
+        for (i, (x, y)) in tiles.iter().copied().enumerate() {
+            let Some(rail_bits) = rail_bits_for_drag_tile(action, &tiles, i, rail_lane_bit) else {
+                continue;
+            };
+            let cmd = if remove {
+                Command::RemoveRailBits(TileCoord::new(x, y), rail_bits)
+            } else {
+                Command::PlaceRailBits(TileCoord::new(x, y), rail_bits)
+            };
+            match crate::network::apply_player_command(&mut sim.state, &cmd) {
                 Ok(()) => changed = true,
                 Err(e) => last_err = Some(e),
             }
@@ -409,6 +512,17 @@ pub(crate) fn drag_line_tiles(
     from: (i32, i32),
     to: (i32, i32),
 ) -> Vec<(i32, i32)> {
+    drag_line_tiles_with_rail_bit(map, action, from, to, None)
+}
+
+/// Como [`drag_line_tiles`], con bit de autorail/carril para fijar el eje del trazo.
+pub(crate) fn drag_line_tiles_with_rail_bit(
+    map: Option<&Map>,
+    action: BuildMenuAction,
+    from: (i32, i32),
+    to: (i32, i32),
+    rail_bit: Option<u8>,
+) -> Vec<(i32, i32)> {
     if action_supports_area_drag(action) {
         return rect_drag_tiles(from, to);
     }
@@ -419,9 +533,25 @@ pub(crate) fn drag_line_tiles(
         return road_drag_line_tiles(map, from, to, road_tool_axis(action, from, to)).0;
     }
 
+    // Autorail: si el cursor se mueve en ambos ejes, L Manhattan con bit por tramo
+    // (evita la escalera de piezas X sobre un trazo en Y).
+    if action == BuildMenuAction::Rail && from.0 != to.0 && from.1 != to.1 {
+        let x_first = rail_bit.is_none_or(openttdrs_core::autorail_drag_uses_x_axis);
+        return manhattan_rail_tiles(from, to, x_first);
+    }
+
+    // Eje de mapa: X/UPPER/LOWER avanzan variando x; Y/LEFT/RIGHT variando y.
+    // RailHorz = E-O (UPPER/LOWER) → eje X; RailVert = N-S (LEFT/RIGHT) → eje Y.
     let use_x_axis = match action {
-        BuildMenuAction::RoadX | BuildMenuAction::TramX | BuildMenuAction::RailVert => true,
-        BuildMenuAction::RoadY | BuildMenuAction::TramY | BuildMenuAction::RailHorz => false,
+        BuildMenuAction::RoadX
+        | BuildMenuAction::TramX
+        | BuildMenuAction::RailX
+        | BuildMenuAction::RailHorz => true,
+        BuildMenuAction::RoadY
+        | BuildMenuAction::TramY
+        | BuildMenuAction::RailY
+        | BuildMenuAction::RailVert => false,
+        BuildMenuAction::Rail => rail_bit.is_none_or(openttdrs_core::autorail_drag_uses_x_axis),
         _ => (to.0 - from.0).abs() >= (to.1 - from.1).abs(),
     };
     let mut out = Vec::new();
@@ -573,6 +703,83 @@ mod tests {
             sim.state.map.get(TileCoord::new(1, 5)).unwrap().m5 & 0x0F,
             0x0A,
             "primera tesela del arrastre horizontal debe ser eje X"
+        );
+    }
+
+    #[test]
+    fn rail_x_drag_locks_map_x_axis_even_when_dy_larger() {
+        let line = drag_line_tiles(None, BuildMenuAction::RailX, (3, 4), (5, 9));
+        assert_eq!(
+            line,
+            vec![(3, 4), (4, 4), (5, 4)],
+            "RailX debe trazar en y fijo del inicio"
+        );
+    }
+
+    #[test]
+    fn rail_horz_drag_locks_map_x_axis() {
+        let line = drag_line_tiles(None, BuildMenuAction::RailHorz, (3, 4), (5, 9));
+        assert_eq!(
+            line,
+            vec![(3, 4), (4, 4), (5, 4)],
+            "RailHorz (E-O) arrastra en eje X, no en escalera por Y"
+        );
+    }
+
+    #[test]
+    fn rail_vert_drag_locks_map_y_axis() {
+        let line = drag_line_tiles(None, BuildMenuAction::RailVert, (3, 4), (5, 9));
+        assert_eq!(
+            line,
+            vec![(3, 4), (3, 5), (3, 6), (3, 7), (3, 8), (3, 9)],
+            "RailVert (N-S) arrastra en eje Y"
+        );
+    }
+
+    #[test]
+    fn autorail_drag_axis_follows_piece_bit() {
+        let along_x =
+            drag_line_tiles_with_rail_bit(None, BuildMenuAction::Rail, (2, 3), (6, 8), Some(0x01));
+        assert_eq!(
+            along_x,
+            vec![
+                (2, 3),
+                (3, 3),
+                (4, 3),
+                (5, 3),
+                (6, 3),
+                (6, 4),
+                (6, 5),
+                (6, 6),
+                (6, 7),
+                (6, 8)
+            ],
+            "autorail con pieza X: L Manhattan (X luego Y), no escalera"
+        );
+        assert_eq!(
+            rail_bits_for_drag_tile(BuildMenuAction::Rail, &along_x, 2, Some(0x01)),
+            Some(0x01)
+        );
+        assert_eq!(
+            rail_bits_for_drag_tile(BuildMenuAction::Rail, &along_x, 7, Some(0x01)),
+            Some(0x02)
+        );
+        let along_y =
+            drag_line_tiles_with_rail_bit(None, BuildMenuAction::Rail, (2, 3), (6, 8), Some(0x02));
+        assert_eq!(
+            along_y,
+            vec![
+                (2, 3),
+                (2, 4),
+                (2, 5),
+                (2, 6),
+                (2, 7),
+                (2, 8),
+                (3, 8),
+                (4, 8),
+                (5, 8),
+                (6, 8)
+            ]
         );
     }
 

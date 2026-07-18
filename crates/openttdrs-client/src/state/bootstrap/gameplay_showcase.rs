@@ -8,7 +8,7 @@ use openttdrs_core::{IndustryKind, IndustrySpec, PathNetwork, find_path};
 /// Carretera del barrio residencial (eje X).
 pub const SHOWCASE_TOWN_ROAD_Y: i32 = 4;
 /// Vía del circuito de tren ampliado.
-pub const SHOWCASE_RAIL_Y: i32 = 15;
+pub const SHOWCASE_RAIL_Y: i32 = 16;
 /// Parada bus «centro».
 pub const SHOWCASE_BUS_A: TileCoord = TileCoord::new(15, 3);
 /// Parada bus «residencial».
@@ -26,7 +26,7 @@ pub const SHOWCASE_RAIL_WEST: TileCoord = TileCoord::new(14, SHOWCASE_RAIL_Y);
 /// Estación de tren «este».
 pub const SHOWCASE_RAIL_EAST: TileCoord = TileCoord::new(21, SHOWCASE_RAIL_Y);
 /// Depósito de tren al sur de la vía.
-pub const SHOWCASE_RAIL_DEPOT: TileCoord = TileCoord::new(12, 16);
+pub const SHOWCASE_RAIL_DEPOT: TileCoord = TileCoord::new(12, 17);
 
 const STATION_ENTRANCE_SOUTH: u8 = 1;
 
@@ -35,6 +35,7 @@ pub(crate) fn place_gameplay_showcase(state: &mut GameState) {
     state.economy.money = 500_000;
     place_factory_chain_block(state);
     place_town_block(state);
+    // Tras industrias: el bosque (15,11) llega a y=15; vía en y=16 (#193).
     place_rail_showcase(state);
     place_pathfinding_lab(state);
     spawn_showcase_vehicles(state);

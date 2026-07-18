@@ -279,7 +279,9 @@ pub use pathfinding_settings::{
     DEFAULT_PATH_BACKOFF_INTERVAL, DEFAULT_WAIT_FOR_PBS_PATH_DAYS, PBS_WAIT_FOREVER,
     PathfindingSettings,
 };
-pub use rail_lane::{rail_horz_lane_bit, rail_vert_lane_bit};
+pub use rail_lane::{
+    autorail_drag_uses_x_axis, autorail_trackbit_from_fract, rail_horz_lane_bit, rail_vert_lane_bit,
+};
 pub use rail_pbs::{
     ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY, decode_rail_reservation_m2_hi,
     encode_rail_reservation_to_m2_hi, find_path_to_safe_wait,

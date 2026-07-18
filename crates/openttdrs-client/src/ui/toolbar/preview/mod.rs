@@ -161,10 +161,14 @@ pub(crate) fn update_build_ghost_preview(
 
     let cursor_rail_lane = rail_lane_bits_for_action(action, Some(tile_fract));
     let preview_rail_lane = match action {
-        BuildMenuAction::RailHorz | BuildMenuAction::RailVert if drag_state.armed => {
-            drag_state.rail_lane_bit
+        BuildMenuAction::Rail | BuildMenuAction::RailHorz | BuildMenuAction::RailVert
+            if drag_state.armed =>
+        {
+            drag_state.rail_lane_bit.or(cursor_rail_lane)
         }
-        BuildMenuAction::RailHorz | BuildMenuAction::RailVert => cursor_rail_lane,
+        BuildMenuAction::Rail | BuildMenuAction::RailHorz | BuildMenuAction::RailVert => {
+            cursor_rail_lane
+        }
         _ => None,
     };
 

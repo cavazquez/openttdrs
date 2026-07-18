@@ -454,3 +454,21 @@ fn place_rail_waypoint_rejects_curved_track() {
         Err(CommandError::CannotPlaceWaypointOnTrack)
     );
 }
+
+#[test]
+fn place_rail_rejects_overwrite_of_rail_station() {
+    let mut s = GameState::new(8, 8);
+    let st = TileCoord::new(3, 3);
+    apply_command(&mut s, &Command::PlaceRail(TileCoord::new(2, 3))).unwrap();
+    apply_command(&mut s, &Command::PlaceRailStation(st, 0)).unwrap();
+    assert_eq!(s.map.get_kind(st), Some(TileKind::Station));
+    assert_eq!(s.map.get(st).unwrap().mapt, 0x50);
+    assert_eq!(
+        apply_command(&mut s, &Command::PlaceRail(st)),
+        Err(CommandError::CannotPlaceStationOnOccupiedTile)
+    );
+    assert_eq!(s.map.get_kind(st), Some(TileKind::Station));
+    assert_eq!(s.map.get(st).unwrap().mapt, 0x50);
+    assert_eq!(s.stations.len(), 1);
+    assert_eq!(s.stations[0].pos, st);
+}

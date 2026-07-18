@@ -755,13 +755,23 @@ fn place_rail_if_needed(state: &mut GameState, c: TileCoord) {
 }
 
 fn place_rail_station_owned(state: &mut GameState, st_pos: TileCoord, ai_id: CompanyId) -> bool {
-    if state.stations.iter().any(|s| s.pos == st_pos) {
+    let tile_is_station = state.map.get_kind(st_pos) == Some(TileKind::Station);
+    let has_entity = state.stations.iter().any(|s| s.pos == st_pos);
+    // Entidad + tile coherentes: solo reclamar owner.
+    if has_entity && tile_is_station {
         if let Some(st) = state.stations.iter_mut().find(|s| s.pos == st_pos) {
             st.owner = ai_id;
         }
         return true;
     }
-    if state.map.get_kind(st_pos) == Some(TileKind::Rail) {
+    // Label huérfana (p.ej. PlaceRail pisó la estación): quitar entidad y reponer tile.
+    if has_entity && !tile_is_station {
+        state.stations.retain(|s| s.pos != st_pos);
+    }
+    if matches!(
+        state.map.get_kind(st_pos),
+        Some(TileKind::Rail | TileKind::Station)
+    ) {
         let _ = apply_command(state, &Command::ClearTile(st_pos));
     }
     for dir in 0..4u8 {
@@ -1161,6 +1171,47 @@ mod tests {
             result,
             Some(player_depot),
             "debe encontrar el depósito propio"
+        );
+    }
+
+    #[test]
+    fn place_rail_station_owned_repairs_orphan_over_rail_cross() {
+        use crate::command::{Command, apply_command};
+        use crate::company::CompanyId;
+        use crate::station::{Station, StopKind};
+
+        let mut state = GameState::new(8, 8);
+        state.economy.money = 500_000;
+        let st = TileCoord::new(3, 3);
+        // Vecinos en cruz → PlaceRail deja CROSS en `st` (la X marrón del cliente).
+        for n in [
+            TileCoord::new(2, 3),
+            TileCoord::new(4, 3),
+            TileCoord::new(3, 2),
+            TileCoord::new(3, 4),
+            st,
+        ] {
+            apply_command(&mut state, &Command::PlaceRail(n)).unwrap();
+        }
+        assert_eq!(state.map.get_kind(st), Some(TileKind::Rail));
+        let mut orphan = Station::new_with_kind(st, StopKind::RailStation);
+        orphan.owner = CompanyId::PLAYER;
+        state.stations.push(orphan);
+
+        assert!(place_rail_station_owned(&mut state, st, CompanyId::PLAYER));
+        assert_eq!(state.map.get_kind(st), Some(TileKind::Station));
+        assert_eq!(state.map.get(st).unwrap().mapt, 0x50);
+        assert_eq!(state.stations.len(), 1);
+        assert_eq!(state.stations[0].pos, st);
+        assert!(
+            find_path(
+                &state.map,
+                TileCoord::new(2, 3),
+                TileCoord::new(4, 3),
+                PathNetwork::Rail
+            )
+            .is_some(),
+            "la estación reparada debe unirse al tramo"
         );
     }
 }

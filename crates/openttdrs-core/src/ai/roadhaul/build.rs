@@ -94,28 +94,44 @@ fn with_ai_active(state: &mut GameState, ai_id: CompanyId, f: impl FnOnce(&mut G
 }
 
 fn pick_stop_tile(state: &GameState, near: TileCoord, toward: TileCoord) -> Option<TileCoord> {
+    use crate::pathfinder::station_site_tile_allows_build;
+
     let mut cands = Vec::new();
-    for (dx, dy) in [
-        (-1, 0),
-        (1, 0),
-        (0, -1),
-        (0, 1),
-        (-2, 0),
-        (2, 0),
-        (0, -2),
-        (0, 2),
-    ] {
-        let c = TileCoord::new(near.x + dx, near.y + dy);
-        if state.map.get(c).is_none() {
-            continue;
+    // Solo hierba/bosque: `PlaceBusStop` no admite Road (#RoadHaul no encolaba).
+    for radius in 1..=8_i32 {
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                if dx.abs().max(dy.abs()) != radius {
+                    continue;
+                }
+                let c = TileCoord::new(near.x + dx, near.y + dy);
+                let Some(kind) = state.map.get_kind(c) else {
+                    continue;
+                };
+                if !station_site_tile_allows_build(kind) {
+                    continue;
+                }
+                // Debe poder abrir boca a road existente o a hierba (corredor).
+                let mouth_ok = [(-1, 0), (1, 0), (0, -1), (0, 1)].iter().any(|(mx, my)| {
+                    matches!(
+                        state.map.get_kind(TileCoord::new(c.x + mx, c.y + my)),
+                        Some(
+                            TileKind::Grass
+                                | TileKind::Forest
+                                | TileKind::Road
+                                | TileKind::RoadBridge
+                        )
+                    )
+                });
+                if !mouth_ok {
+                    continue;
+                }
+                cands.push(c);
+            }
         }
-        if !matches!(
-            state.map.get_kind(c),
-            Some(TileKind::Grass | TileKind::Forest | TileKind::Road)
-        ) {
-            continue;
+        if !cands.is_empty() {
+            break;
         }
-        cands.push(c);
     }
     cands.sort_by_key(|c| c.x.abs_diff(toward.x) + c.y.abs_diff(toward.y));
     cands.into_iter().next()
@@ -461,6 +477,61 @@ mod tests {
         assert_eq!(state.map.get_kind(stop_b), Some(TileKind::Station));
         assert_eq!(state.map.get_kind(depot), Some(TileKind::RoadDepot));
         assert!(find_path(&state.map, depot, stop_a, PathNetwork::Road).is_some());
+    }
+
+    /// Regresión: calles de pueblo (`m1=0` = jugador) no deben impedir encolar la línea.
+    #[test]
+    fn bus_line_builds_beside_town_owned_roads() {
+        use crate::ai::roadhaul::plan::next_bus_plan;
+        use crate::company::{RIVAL_NAME_ROADHAUL, company_id_by_name};
+        use crate::town::Town;
+        use crate::town_expand::expand_town_once;
+
+        let mut state = GameState::new(32, 24);
+        state.ensure_rival_ais();
+        let town_a = Town {
+            id: 1,
+            pos: TileCoord::new(5, 5),
+            name: "Norte".into(),
+            population: 900,
+            ..Town::default()
+        };
+        let town_b = Town {
+            id: 2,
+            pos: TileCoord::new(22, 14),
+            name: "Sur".into(),
+            population: 700,
+            ..Town::default()
+        };
+        // Generar calles/casas como en partida real (owner m1=0).
+        for seed in 0..24 {
+            let _ = expand_town_once(&mut state.map, &town_a, seed);
+            let _ = expand_town_once(&mut state.map, &town_b, seed.wrapping_add(40));
+        }
+        state.towns.push(town_a);
+        state.towns.push(town_b);
+
+        let ai_id = company_id_by_name(&state.companies, RIVAL_NAME_ROADHAUL).unwrap();
+        if let Some(c) = state.companies.iter_mut().find(|c| c.id == ai_id) {
+            c.economy.money = 250_000;
+        }
+        let plan = next_bus_plan(&state, ai_id).expect("plan entre pueblos");
+        let queue = plan_bus_line_queue(&state, ai_id, plan);
+        assert!(
+            queue.is_some(),
+            "con calles de pueblo debe planificar y encolar (antes: ni empezaba)"
+        );
+        let built = build_bus_line(&mut state, ai_id, plan);
+        assert!(built.is_some(), "línea bus junto a calles de pueblo");
+        let (stop_a, stop_b, _) = built.unwrap();
+        assert_ne!(
+            state.map.get_kind(stop_a),
+            Some(TileKind::Road),
+            "parada no debe caer sobre Road"
+        );
+        assert_eq!(state.map.get_kind(stop_a), Some(TileKind::Station));
+        assert_eq!(state.map.get_kind(stop_b), Some(TileKind::Station));
+        assert!(find_path(&state.map, stop_a, stop_b, PathNetwork::Road).is_some());
     }
 
     #[test]

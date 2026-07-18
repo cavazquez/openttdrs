@@ -166,14 +166,8 @@ fn dispatch_tile_kind(
         });
     }
 
-    // Vía ferroviaria
-    if let Some(bits) = rail_preview_bits(
-        action,
-        &game_state.map,
-        coord,
-        preview_tiles,
-        ctx.rail_lane_bit,
-    ) {
+    // Vía ferroviaria (bit por tesela: en L Manhattan X/Y/curva coinciden con el path)
+    if let Some(bits) = rail_preview_bits(action, coord, preview_tiles, ctx.rail_lane_bit) {
         let (tileh, _) = tile_slope_and_min_z(&game_state.map, coord.x as u32, coord.y as u32);
         let rail_type = if action == BuildMenuAction::RailConvert {
             game_state
@@ -226,30 +220,25 @@ fn dispatch_tile_kind(
 /// Trackbits a previsualizar para las herramientas de vía.
 fn rail_preview_bits(
     action: BuildMenuAction,
-    map: &Map,
     coord: TileCoord,
     preview_tiles: &[(i32, i32)],
     rail_lane_bit: Option<u8>,
 ) -> Option<u8> {
     use crate::sprites::{RAIL_TB_X, RAIL_TB_Y};
+    use crate::ui::toolbar::build_input::drag::rail_bits_for_drag_tile;
+
+    let index = preview_tiles
+        .iter()
+        .position(|&(x, y)| x == coord.x && y == coord.y)
+        .unwrap_or(0);
     match action {
         BuildMenuAction::RailX => Some(RAIL_TB_X),
         BuildMenuAction::RailY => Some(RAIL_TB_Y),
+        BuildMenuAction::Rail => {
+            rail_bits_for_drag_tile(action, preview_tiles, index, rail_lane_bit).or(Some(RAIL_TB_X))
+        }
         BuildMenuAction::RailHorz | BuildMenuAction::RailVert | BuildMenuAction::RailRemove => {
             rail_lane_bit
-        }
-        BuildMenuAction::Rail => {
-            if preview_tiles.len() >= 2 {
-                let (sx, sy) = preview_tiles[0];
-                let (ex, ey) = preview_tiles[preview_tiles.len() - 1];
-                Some(if (ex - sx).abs() >= (ey - sy).abs() {
-                    RAIL_TB_X
-                } else {
-                    RAIL_TB_Y
-                })
-            } else {
-                Some(openttdrs_core::rail_trackbits_from_neighbors(map, coord))
-            }
         }
         _ => None,
     }
@@ -342,11 +331,9 @@ mod tests {
 
     #[test]
     fn rail_preview_bits_computes_trackbits() {
-        let map = Map::new_flat(10, 10, 0);
         use crate::sprites::RAIL_TB_X;
         let bits = rail_preview_bits(
             BuildMenuAction::RailX,
-            &map,
             TileCoord::new(5, 5),
             &[(5, 5)],
             None,

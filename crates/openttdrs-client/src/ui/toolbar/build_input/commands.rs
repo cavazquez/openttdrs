@@ -35,7 +35,12 @@ pub(crate) fn command_for_action(
         BuildMenuAction::TramY => Some(Command::PlaceTramBits(pos, 0x05)),
         BuildMenuAction::TramRemove => Some(Command::RemoveTramBits(pos)),
         BuildMenuAction::JoinStation => None,
-        BuildMenuAction::Rail => Some(Command::PlaceRail(pos)),
+        BuildMenuAction::Rail => {
+            let bits = rail_lane_bits
+                .or_else(|| rail_lane_bits_for_action(action, tile_fract))
+                .unwrap_or(0x01);
+            Some(Command::PlaceRailBits(pos, bits))
+        }
         BuildMenuAction::RailX => Some(Command::PlaceRailBits(pos, 0x01)),
         BuildMenuAction::RailY => Some(Command::PlaceRailBits(pos, 0x02)),
         BuildMenuAction::RailHorz | BuildMenuAction::RailVert => {

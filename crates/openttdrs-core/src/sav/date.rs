@@ -56,10 +56,34 @@ fn tick_counter_from_record(record: &super::table::SlRecord, save_version: u16) 
     }
 }
 
-/// Convierte ticks del save a [`GameTick`] del estado jugable.
+/// Convierte el reloj del save a [`GameTick`] del estado jugable.
+///
+/// En `OpenTTD`, `tick_counter` puede envolver / no anclar el calendario; la fecha
+/// jugable debe salir de `calendar_date` cuando implica un año claramente posterior
+/// (#189: noticias/status en 1950 tras cargar un .sav avanzado).
 #[must_use]
 pub(crate) fn game_tick_from_sav_time(time: SavGameTime) -> GameTick {
-    GameTick::new(time.tick)
+    let from_tick = GameTick::new(time.tick);
+    let from_calendar = tick_from_packed_calendar_date(time.calendar_date);
+    // Nuestros .sav escriben tick ≈ calendar→tick; OpenTTD suele traer tick << calendar.
+    if time.calendar_date > 0
+        && from_calendar.get() > from_tick.get().saturating_add(crate::economy::TICKS_PER_YEAR)
+    {
+        from_calendar
+    } else {
+        from_tick
+    }
+}
+
+/// `calendar_date` empaquetado como en `sav/write/meta.rs`: `year * 365 + (doy - 1)`.
+#[must_use]
+pub(crate) fn tick_from_packed_calendar_date(calendar_date: i32) -> GameTick {
+    use crate::economy::TICKS_PER_TRANSIT_DAY;
+    use crate::news::{CALENDAR_BASE_YEAR, CALENDAR_DAYS_PER_YEAR};
+    let packed = u64::try_from(calendar_date.max(0)).unwrap_or(0);
+    let base = u64::from(CALENDAR_BASE_YEAR).saturating_mul(CALENDAR_DAYS_PER_YEAR);
+    let day_index = packed.saturating_sub(base);
+    GameTick::new(day_index.saturating_mul(u64::from(TICKS_PER_TRANSIT_DAY)))
 }
 
 #[cfg(test)]
@@ -98,5 +122,35 @@ mod tests {
         assert_eq!(time.calendar_date, 12_345);
         assert_eq!(time.tick, 99_000);
         assert_eq!(game_tick_from_sav_time(time).get(), 99_000);
+    }
+
+    #[test]
+    fn prefers_calendar_date_when_tick_is_stale() {
+        use crate::economy::TICKS_PER_YEAR;
+        use crate::news::{format_calendar_date, tick_for_calendar_year};
+        // Año ~1980 empaquetado (write/meta) con tick_counter envuelto/pequeño.
+        let calendar_date = i32::try_from(1980u64 * 365).unwrap();
+        let time = SavGameTime {
+            calendar_date,
+            tick: 12_345, // << un año de sim
+        };
+        let tick = game_tick_from_sav_time(time);
+        assert!(
+            tick.get() > 12_345 + TICKS_PER_YEAR,
+            "debe anclar al calendario, no al tick_counter"
+        );
+        assert_eq!(format_calendar_date(tick), format_calendar_date(tick_for_calendar_year(1980)));
+    }
+
+    #[test]
+    fn keeps_tick_when_aligned_with_calendar() {
+        use crate::news::tick_for_calendar_year;
+        let tick = tick_for_calendar_year(1980).get();
+        let calendar_date = i32::try_from(1980u64 * 365).unwrap();
+        let time = SavGameTime {
+            calendar_date,
+            tick,
+        };
+        assert_eq!(game_tick_from_sav_time(time).get(), tick);
     }
 }

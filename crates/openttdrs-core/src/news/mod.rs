@@ -6,7 +6,8 @@ mod queue;
 mod vehicle_advice;
 
 pub use calendar::{
-    CALENDAR_BASE_YEAR, calendar_day_index, calendar_year_day, format_calendar_date,
+    CALENDAR_BASE_YEAR, CALENDAR_DAYS_PER_YEAR, calendar_day_index, calendar_year_day,
+    format_calendar_date, format_calendar_day_index,
     tick_for_calendar_year,
 };
 pub use formatting::{
@@ -168,5 +169,30 @@ mod tests {
         purge_old_news_items(&mut state);
         assert_eq!(state.news.items.len(), 1);
         assert_eq!(state.news.items[0].headline, "Reciente");
+    }
+
+    #[test]
+    fn disaster_news_date_matches_state_tick_year() {
+        use crate::disaster::force_disaster;
+        use crate::map::TileCoord;
+        use crate::sim_events::DisasterKind;
+        use crate::tick::GameTick;
+        let mut state = GameState::new(8, 8);
+        state.tick = tick_for_calendar_year(1980);
+        // Avanzar ~91 días → ~2 abr 1980.
+        state.tick = GameTick::new(
+            state
+                .tick
+                .get()
+                .saturating_add(u64::from(crate::economy::TICKS_PER_TRANSIT_DAY) * 91),
+        );
+        force_disaster(&mut state, DisasterKind::BigUfo, TileCoord::new(3, 3));
+        let item = state.news.items.back().expect("noticia OVNI");
+        assert_eq!(item.date_label(), format_calendar_date(state.tick));
+        assert!(
+            item.date_label().contains("1980"),
+            "popup no debe quedar anclado a 1950: {}",
+            item.date_label()
+        );
     }
 }

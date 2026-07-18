@@ -28,7 +28,13 @@ pub fn calendar_year_day(day_index: u64) -> (u32, u64) {
 
 #[must_use]
 pub fn format_calendar_date(tick: GameTick) -> String {
-    let (year, doy) = calendar_year_day(calendar_day_index(tick));
+    format_calendar_day_index(calendar_day_index(tick))
+}
+
+/// Formatea un índice de día de calendario (p. ej. `NewsItem.calendar_day`).
+#[must_use]
+pub fn format_calendar_day_index(day_index: u64) -> String {
+    let (year, doy) = calendar_year_day(day_index);
     let (day, month) = doy_to_month_day(doy);
     format!("{day} {month} {year}")
 }

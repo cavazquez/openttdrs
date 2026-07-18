@@ -9,7 +9,7 @@ use crate::map::TileCoord;
 use crate::tick::GameTick;
 use crate::vehicle::VehicleKind;
 
-use super::calendar::calendar_day_index;
+use super::calendar::{calendar_day_index, format_calendar_day_index};
 use super::formatting::{cargo_display_name, format_money, vehicle_kind_label};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -70,6 +70,12 @@ impl NewsItem {
             calendar_day: calendar_day_index(tick),
             reference,
         }
+    }
+
+    /// Etiqueta de fecha del ítem (usa `calendar_day`, no el tick crudo).
+    #[must_use]
+    pub fn date_label(&self) -> String {
+        format_calendar_day_index(self.calendar_day)
     }
 }
 

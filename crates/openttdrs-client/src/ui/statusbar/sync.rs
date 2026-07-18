@@ -247,8 +247,7 @@ fn spawn_news_popup(
 
     let target_bottom = super::STATUS_BAR_HEIGHT + 4.0;
     let body = item.body.clone().unwrap_or_else(|| item.headline.clone());
-    let date_label =
-        openttdrs_core::format_calendar_date(openttdrs_core::GameTick::new(item.economy_tick));
+    let date_label = item.date_label();
 
     let entity = commands
         .spawn((

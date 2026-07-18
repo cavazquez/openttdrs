@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::prelude::*;
-use openttdrs_core::{NewsDisplayMode, format_calendar_date};
+use openttdrs_core::NewsDisplayMode;
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -156,7 +156,7 @@ pub(crate) fn sync_news_history_window(
             let Some(item) = sim.state.news.get(id) else {
                 continue;
             };
-            let date = format_calendar_date(GameTick::new(item.economy_tick));
+            let date = item.date_label();
             let headline = truncate_headline(&item.headline);
             let mode = display_mode_tag(item.display);
             list.spawn((

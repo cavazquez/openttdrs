@@ -34,6 +34,12 @@ pub struct EngineDef {
     /// `RailVehicleType::Multihead` (`engines.h`): compra spawnea cabina trasera.
     #[serde(default)]
     pub dual_headed: bool,
+    /// `EngineInfo::flags` `RailTilts` — bonus +20 % en `GetCurveSpeedLimit`.
+    #[serde(default)]
+    pub rail_tilts: bool,
+    /// Modificador de curva en punto fijo 8.8 (`GetCurveSpeedModifier`).
+    #[serde(default)]
+    pub curve_speed_mod: i16,
     /// Procedente de Action0 Vehicles `NewGRF`.
     #[serde(default)]
     pub from_newgrf: bool,

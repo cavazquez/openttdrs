@@ -76,7 +76,11 @@ fn maglev_45_degree_turn_skips_small_turn_penalty() {
     let mut v = Vehicle::new(0, VehicleKind::Train, c, c);
     v.direction = DIR_NE;
     v.cur_speed = 200;
-    v.set_direction_with_curve_penalty(DIR_N, Some(&map));
+    v.set_direction_with_curve_penalty(
+        DIR_N,
+        Some(&map),
+        crate::engine::TrainAccelerationModel::Original,
+    );
     assert_eq!(
         v.cur_speed, 200,
         "maglev small_turn=0: giro 45° sin penalización"
@@ -307,6 +311,53 @@ fn train_loses_speed_on_direction_change() {
         v.cur_speed,
         cruise - ((cruise * 128) >> 8),
         "giro SE→SW: −50 % de velocidad"
+    );
+}
+
+#[test]
+fn train_realistic_skips_accel_slowdown_on_turn() {
+    let mut v = Vehicle::new(
+        0,
+        VehicleKind::Train,
+        TileCoord::new(1, 1),
+        TileCoord::new(1, 1),
+    );
+    v.direction = DIR_SE;
+    v.cur_speed = 128;
+    v.set_direction_with_curve_penalty(
+        DIR_SW,
+        None,
+        crate::engine::TrainAccelerationModel::Realistic,
+    );
+    assert_eq!(v.cur_speed, 128, "AM_REALISTIC no aplica _accel_slowdown");
+    assert_eq!(v.direction, DIR_SW);
+}
+
+#[test]
+fn train_realistic_respects_cached_curve_speed_cap() {
+    let mut v = Vehicle::new(
+        0,
+        VehicleKind::Train,
+        TileCoord::new(1, 1),
+        TileCoord::new(5, 1),
+    );
+    v.running = true;
+    v.path = VecDeque::from([
+        TileCoord::new(2, 1),
+        TileCoord::new(3, 1),
+        TileCoord::new(4, 1),
+        TileCoord::new(5, 1),
+    ]);
+    v.cached_max_curve_speed = 61;
+    v.cur_speed = 100;
+    v.subspeed = 0;
+    for _ in 0..40 {
+        v.step_with_map_and_accel(None, crate::engine::TrainAccelerationModel::Realistic);
+    }
+    assert!(
+        v.cur_speed <= 61,
+        "techo de curva Realistic: speed={}",
+        v.cur_speed
     );
 }
 

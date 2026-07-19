@@ -150,9 +150,10 @@ pub use engine::{
     default_engine_id, do_update_speed, engine_available_in_year, engine_by_id, engine_catalog,
     engine_for_vehicle, engine_in_catalog, engines_for_depot_kind, engines_for_depot_kind_in,
     engines_for_depot_purchase, engines_of_kind, get_advance_distance, get_advance_speed,
-    next_free_engine_id, progress_step_for_speed, tile_progress_length, train_acceleration,
-    train_default_air_drag, train_max_te_n, train_realistic_acceleration, train_smoke_kind,
-    train_sprite_group, train_visual_progress_from_pixel, update_road_speed, update_train_speed,
+    get_curve_speed_limit, next_free_engine_id, progress_step_for_speed, tile_progress_length,
+    train_acceleration, train_default_air_drag, train_max_te_n, train_realistic_acceleration,
+    train_realistic_station_max_speed, train_smoke_kind, train_sprite_group,
+    train_visual_progress_from_pixel, update_road_speed, update_train_speed,
     vanilla_engine_catalog, vanilla_train_tractive_effort,
 };
 pub use entity_history::{

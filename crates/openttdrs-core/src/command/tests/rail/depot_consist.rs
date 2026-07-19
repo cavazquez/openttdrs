@@ -283,6 +283,8 @@ fn build_vehicle_at_depot_buys_newgrf_train_from_catalog() {
         reliability_pct: 85,
         train_image_index: 2,
         dual_headed: false,
+        rail_tilts: false,
+        curve_speed_mod: 0,
         from_newgrf: true,
         newgrf_views: Vec::new(),
         newgrf_local_id: 0,

@@ -69,6 +69,10 @@ const fn default_vehicle_direction() -> VehicleDirection {
     DIR_NE
 }
 
+const fn default_max_curve_speed() -> u16 {
+    u16::MAX
+}
+
 fn default_unit_length() -> u8 {
     crate::train_consist::VEHICLE_LENGTH
 }
@@ -119,6 +123,18 @@ pub struct Vehicle {
     /// Caché de coeficiente de arrastre del consist; cabeza.
     #[serde(default)]
     pub cached_air_drag: u32,
+    /// Consist: todos los motores tienen `RailTilts` (`tcache.cached_tilt`).
+    #[serde(default)]
+    pub cached_tilt: bool,
+    /// Consist: mínimo `curve_speed_mod` (`tcache.cached_curve_speed_mod`).
+    #[serde(default)]
+    pub cached_curve_speed_mod: i16,
+    /// Techo de curva Realistic (`tcache.cached_max_curve_speed`); `u16::MAX` = sin límite.
+    #[serde(default = "default_max_curve_speed")]
+    pub cached_max_curve_speed: u16,
+    /// Dirección previa de la cabeza (lag de vagones para `GetCurveSpeedLimit`).
+    #[serde(default = "default_vehicle_direction")]
+    pub curve_prev_direction: VehicleDirection,
     /// Orientación gráfica (`OpenTTD` `Direction` 0..7).
     #[serde(default = "default_vehicle_direction")]
     pub direction: VehicleDirection,
@@ -327,6 +343,10 @@ impl Vehicle {
             rail_pixel: 0,
             cached_max_te_n: 0,
             cached_air_drag: 0,
+            cached_tilt: false,
+            cached_curve_speed_mod: 0,
+            cached_max_curve_speed: u16::MAX,
+            curve_prev_direction: DIR_NE,
             direction: DIR_NE,
             engine_id: Some(engine_id),
             name: None,

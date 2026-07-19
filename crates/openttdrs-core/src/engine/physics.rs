@@ -326,6 +326,104 @@ pub fn train_visual_progress_from_pixel(rail_pixel: u8) -> f32 {
     (f32::from(rail_pixel) / 16.0) * 255.0
 }
 
+/// Longitud de unidad `OpenTTD` (`VEHICLE_LENGTH`) usada por [`get_curve_speed_limit`].
+const CURVE_VEHICLE_LENGTH: i32 = 8;
+
+/// `Train::GetCurveSpeedLimit` (`train_cmd.cpp:312-381`).
+///
+/// `units`: pares `(direction, cached_veh_length)` de cabeza a cola.
+/// `railtype_curve_speed`: ventaja del railtype (vanilla 0).
+#[must_use]
+pub fn get_curve_speed_limit(
+    model: TrainAccelerationModel,
+    units: &[(u8, u8)],
+    railtype_curve_speed: u8,
+    cached_tilt: bool,
+    cached_curve_speed_mod: i16,
+) -> u16 {
+    const ABSOLUTE_MAX: i32 = 65_535;
+    if matches!(model, TrainAccelerationModel::Original) {
+        return u16::MAX;
+    }
+    let mut max_speed = ABSOLUTE_MAX;
+    let mut curvecount = [0_i32, 0_i32];
+    let mut numcurve = 0_i32;
+    let mut sum = 0_i32;
+    let mut pos = 0_i32;
+    let mut lastpos = -1_i32;
+
+    for window in units.windows(2) {
+        let (this_dir, next_len) = (window[0].0, window[1].1);
+        let next_dir = window[1].0;
+        pos += i32::from(next_len.max(1));
+        let dirdiff = this_dir.wrapping_sub(next_dir) % 8;
+        if dirdiff == 0 {
+            continue;
+        }
+        if dirdiff == 7 {
+            // DirDiff::Left45
+            curvecount[0] += 1;
+        }
+        if dirdiff == 1 {
+            // DirDiff::Right45
+            curvecount[1] += 1;
+        }
+        if dirdiff == 1 || dirdiff == 7 {
+            if lastpos != -1 {
+                numcurve += 1;
+                sum += pos - lastpos;
+                if pos - lastpos <= CURVE_VEHICLE_LENGTH && max_speed > 88 {
+                    max_speed = 88;
+                }
+            }
+            lastpos = pos;
+        }
+        if dirdiff == 2 || dirdiff == 6 {
+            max_speed = 61;
+        }
+    }
+
+    if numcurve > 0 && max_speed > 88 {
+        if curvecount[0] == 1 && curvecount[1] == 1 {
+            max_speed = ABSOLUTE_MAX;
+        } else {
+            let avg = ((sum + CURVE_VEHICLE_LENGTH - 1) / CURVE_VEHICLE_LENGTH) / numcurve;
+            let n = avg.clamp(1, 12);
+            max_speed = 232 - (13 - n) * (13 - n);
+        }
+    }
+
+    if max_speed != ABSOLUTE_MAX {
+        max_speed += (max_speed / 2) * i32::from(railtype_curve_speed);
+        if cached_tilt {
+            max_speed += max_speed / 5;
+        }
+        max_speed += (max_speed * i32::from(cached_curve_speed_mod)) / 256;
+        max_speed = max_speed.clamp(2, ABSOLUTE_MAX);
+    }
+    u16::try_from(max_speed).unwrap_or(u16::MAX)
+}
+
+/// Techo de aproximación a plataforma en `AM_REALISTIC` (`train_cmd.cpp:405-414`).
+#[must_use]
+pub fn train_realistic_station_max_speed(
+    cur_speed: u16,
+    distance_to_go: i32,
+    current_max: u16,
+) -> u16 {
+    if distance_to_go <= 0 {
+        return current_max;
+    }
+    let mut st_max_speed = 120_i32;
+    let delta_v = i32::from(cur_speed) / (distance_to_go + 1);
+    if i32::from(current_max) > i32::from(cur_speed) - delta_v {
+        st_max_speed = i32::from(cur_speed) - (delta_v / 10);
+    }
+    st_max_speed = st_max_speed.max(25 * distance_to_go);
+    let st = u16::try_from(st_max_speed.max(0)).unwrap_or(u16::MAX);
+    current_max.min(st)
+}
+
 /// Esfuerzo tractor vanilla por `engine_id` interno (`RVI` param g).
 #[must_use]
 pub fn vanilla_train_tractive_effort(engine_id: u16) -> u8 {
@@ -521,5 +619,69 @@ mod tests {
         assert!((train_visual_progress_from_pixel(8) - 127.5).abs() < f32::EPSILON);
         assert!((train_visual_progress_from_pixel(0)).abs() < f32::EPSILON);
         assert!((train_visual_progress_from_pixel(16) - 255.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn curve_speed_limit_original_is_unbounded() {
+        let units = [(1_u8, 8_u8), (3, 8)]; // 90°
+        assert_eq!(
+            get_curve_speed_limit(TrainAccelerationModel::Original, &units, 0, false, 0),
+            u16::MAX
+        );
+    }
+
+    #[test]
+    fn curve_speed_limit_ninety_degree_is_61() {
+        let units = [(1_u8, 8_u8), (3, 8)]; // DirDiff Left90
+        assert_eq!(
+            get_curve_speed_limit(TrainAccelerationModel::Realistic, &units, 0, false, 0),
+            61
+        );
+    }
+
+    #[test]
+    fn curve_speed_limit_tight_45_pair_caps_88() {
+        let units = [(1_u8, 8_u8), (2, 8), (3, 8)]; // dos Left45 seguidos
+        assert_eq!(
+            get_curve_speed_limit(TrainAccelerationModel::Realistic, &units, 0, false, 0),
+            88
+        );
+    }
+
+    #[test]
+    fn curve_speed_limit_spacing_formula_matches_openttd() {
+        // n=12 → 232 - 1² = 231; spacing largo entre dos 45° del mismo sentido.
+        let units = [(1_u8, 8_u8), (2, 8), (2, 96), (3, 8)];
+        assert_eq!(
+            get_curve_speed_limit(TrainAccelerationModel::Realistic, &units, 0, false, 0),
+            231
+        );
+    }
+
+    #[test]
+    fn curve_speed_limit_tilt_adds_twenty_percent() {
+        let units = [(1_u8, 8_u8), (3, 8)];
+        assert_eq!(
+            get_curve_speed_limit(TrainAccelerationModel::Realistic, &units, 0, true, 0),
+            73 // 61 + 61/5
+        );
+    }
+
+    #[test]
+    fn curve_speed_limit_mod_applies_fixed_point() {
+        let units = [(1_u8, 8_u8), (3, 8)];
+        assert_eq!(
+            get_curve_speed_limit(TrainAccelerationModel::Realistic, &units, 0, false, 64),
+            76 // 61 + 61*64/256
+        );
+    }
+
+    #[test]
+    fn station_approach_max_speed_respects_distance_floor() {
+        // Alta velocidad: st_max = cur - delta_v/10 (196), por encima del suelo 100.
+        assert_eq!(train_realistic_station_max_speed(200, 4, 250), 196);
+        // Baja velocidad: manda el suelo 25·distance.
+        assert_eq!(train_realistic_station_max_speed(10, 4, 250), 100);
+        assert_eq!(train_realistic_station_max_speed(50, 0, 250), 250);
     }
 }

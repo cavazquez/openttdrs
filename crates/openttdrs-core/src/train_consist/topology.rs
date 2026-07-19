@@ -76,6 +76,9 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
     let mut total_weight = 0_u16;
     let mut total_power = 0_u32;
     let mut cargo_type = None;
+    let mut tilt = true;
+    let mut curve_mod = i16::MAX;
+    let mut saw_engine = false;
     for &id in &ids {
         let Some(v) = vehicles.iter().find(|v| v.id == id) else {
             continue;
@@ -99,6 +102,17 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
                 cargo_type = eng.cargo;
             }
         }
+        if eng.is_train_engine() || eng.is_wagon() {
+            saw_engine = true;
+            tilt = tilt && eng.rail_tilts;
+            curve_mod = curve_mod.min(eng.curve_speed_mod);
+        }
+    }
+    if !saw_engine {
+        tilt = false;
+        curve_mod = 0;
+    } else if curve_mod == i16::MAX {
+        curve_mod = 0;
     }
     // Capacidad mínima 1 para locos solas (compatibilidad con trenes puntuales previos).
     if total_cap == 0 {
@@ -119,21 +133,39 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
             .map_or(128, |e| e.max_speed);
         let parts = u32::try_from(ids.len()).unwrap_or(1);
         head.cached_air_drag = crate::engine::train_default_air_drag(display_max, parts);
+        head.cached_tilt = tilt;
+        head.cached_curve_speed_mod = curve_mod;
         if head.cargo_type.is_none() {
             head.cargo_type = cargo_type;
         }
     }
-    let head_pos = vehicles
-        .iter()
-        .find(|v| v.id == head_id)
-        .map(|v| (v.pos, v.direction, v.running, v.progress, v.rail_pixel));
-    let Some((pos, dir, running, progress, rail_pixel)) = head_pos else {
+    sync_consist_followers_and_curve_cache(vehicles, head_id, &ids);
+}
+
+/// Sincroniza pose de vagones (con lag de dirección) y `cached_max_curve_speed`.
+fn sync_consist_followers_and_curve_cache(vehicles: &mut [Vehicle], head_id: u32, ids: &[u32]) {
+    let head_snap = vehicles.iter().find(|v| v.id == head_id).map(|v| {
+        (
+            v.pos,
+            v.direction,
+            v.curve_prev_direction,
+            v.running,
+            v.progress,
+            v.rail_pixel,
+        )
+    });
+    let Some((pos, head_dir, prev_dir, running, progress, rail_pixel)) = head_snap else {
         return;
     };
+    let dir_changed = head_dir != prev_dir;
     for &id in ids.iter().skip(1) {
         if let Some(v) = vehicles.iter_mut().find(|v| v.id == id) {
             v.pos = pos;
-            v.direction = dir;
+            if dir_changed {
+                v.direction = prev_dir;
+            } else if rail_pixel == 0 {
+                v.direction = head_dir;
+            }
             v.running = running;
             v.progress = progress;
             v.rail_pixel = rail_pixel;
@@ -141,5 +173,21 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
             v.orders.clear();
             v.current_order = 0;
         }
+    }
+    let mut units = Vec::with_capacity(ids.len());
+    for &id in ids {
+        if let Some(v) = vehicles.iter().find(|v| v.id == id) {
+            units.push((v.direction, v.unit_length.max(1)));
+        }
+    }
+    if let Some(head) = vehicles.iter_mut().find(|v| v.id == head_id) {
+        head.curve_prev_direction = head_dir;
+        head.cached_max_curve_speed = crate::engine::get_curve_speed_limit(
+            crate::engine::TrainAccelerationModel::Realistic,
+            &units,
+            0,
+            head.cached_tilt,
+            head.cached_curve_speed_mod,
+        );
     }
 }

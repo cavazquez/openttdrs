@@ -66,14 +66,16 @@ parcialmente resueltos; se mantienen tachados o anotados.
     → [#99](https://github.com/cavazquez/openttdrs/issues/99).
 14. ~~**Ownership por tile de vía**~~ ✅ `m1` = compañía activa en
     `PlaceRail` / depósito / túnel / puente.
-15. **AM_REALISTIC + `GetCurveSpeedLimit`** — `train_cmd.cpp:312-381`
-    (límites 61 / 88 / `232-(13-n)²`, tilt +20 %, `curve_speed_mod` por motor)
-    y `GetAcceleration` física completa (`ground_vehicle.cpp:105-183`). Solo
-    relevante si se adopta el modelo realista. **Diferido** (sin issue hasta
-    decidir `AM_REALISTIC`).
-16. **Frenado anticipado en plataforma (AM_REALISTIC)** —
-    `train_cmd.cpp:394-415` (`st_max_speed`, mínimo `25·distance_to_go`).
-    Depende del ítem 15.
+15. ~~**AM_REALISTIC + `GetCurveSpeedLimit`**~~ — **Parcial (2026-07-19)**:
+    `GetAcceleration` llano + oráculo PBS `train_pbs_15_3`; `GetCurveSpeedLimit`
+    (61 / 88 / `232-(13-n)²`, tilt +20 %, `curve_speed_mod`) + techo en
+    `train_do_update_speed`; en Realistic no se aplica `_accel_slowdown`.
+    Residual: `RailTypeInfo::curve_speed`; geometría de consist (dirs por
+    vagón) aún aproximada con lag de dirección.
+16. ~~**Frenado anticipado en plataforma (AM_REALISTIC)**~~ — **MVP**:
+    `st_max_speed` (`25·distance_to_go`, techo 120) al estar en plataforma
+    con destino en la misma. Residual: `GetTrainStopLocation` exacto
+    (ahead/length/stop_at en píxeles).
 17. ~~**Multi-head / dual-headed**~~ ✅ Spawn de cabina trasera +
     `other_multiheaded_part` + potencia½ por cabina (vanilla). Residual:
     articulados NewGRF / Action0 `0x13`.

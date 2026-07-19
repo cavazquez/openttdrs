@@ -2,8 +2,9 @@
 
 use crate::engine::{
     ROAD_ACCEL_ORIGINAL, TrainAccelerationModel, decelerate_road_speed, get_advance_distance,
-    progress_step_for_speed, train_default_air_drag, train_max_te_n, update_road_speed,
-    update_train_speed, vanilla_train_tractive_effort,
+    progress_step_for_speed, train_default_air_drag, train_max_te_n,
+    train_realistic_station_max_speed, update_road_speed, update_train_speed,
+    vanilla_train_tractive_effort,
 };
 use crate::map::{Map, TileCoord, slope_pixel_z};
 use crate::rail_type::rail_type_from_tile;
@@ -210,6 +211,7 @@ impl super::model::Vehicle {
                     self.set_direction_with_curve_penalty(
                         super::direction_from_tile_step(self.pos, next),
                         map,
+                        TrainAccelerationModel::Original,
                     );
                 }
             }
@@ -256,7 +258,7 @@ impl super::model::Vehicle {
             return;
         }
 
-        self.apply_immediate_train_turnaround(map);
+        self.apply_immediate_train_turnaround(map, train_accel);
 
         if self.movement_target().is_none() {
             self.update_movement_speed(map, train_accel);
@@ -282,6 +284,7 @@ impl super::model::Vehicle {
                     self.set_direction_with_curve_penalty(
                         super::direction_from_tile_step(self.pos, next),
                         map,
+                        train_accel,
                     );
                 }
             }
@@ -345,6 +348,17 @@ impl super::model::Vehicle {
         {
             max_speed = max_speed.min(bridge_cap);
         }
+        if matches!(train_accel, TrainAccelerationModel::Realistic) {
+            max_speed = max_speed.min(self.cached_max_curve_speed);
+            if let Some(map) = map {
+                if crate::refit::vehicle_in_depot(map, self.pos) {
+                    max_speed = max_speed.min(61);
+                }
+                if let Some(dist) = self.realistic_station_distance_to_go(map) {
+                    max_speed = train_realistic_station_max_speed(self.cur_speed, dist, max_speed);
+                }
+            }
+        }
         let (power, weight) = if self.cached_power_hp > 0 || self.cached_weight_t > 0 {
             (
                 self.cached_power_hp.max(engine.power_hp),
@@ -376,6 +390,21 @@ impl super::model::Vehicle {
             max_speed,
             braking,
         )
+    }
+
+    /// Distancia en teselas hasta el stop en plataforma (`GetCurrentMaxSpeed` estación).
+    fn realistic_station_distance_to_go(&self, map: &Map) -> Option<i32> {
+        if !crate::station::train_on_rail_platform(map, self.pos) {
+            return None;
+        }
+        if self.pos == self.dest {
+            return None;
+        }
+        if !crate::station::train_on_rail_platform(map, self.dest) {
+            return None;
+        }
+        let ahead = i32::try_from(self.path.len()).unwrap_or(0);
+        Some(ahead.max(1))
     }
 
     /// `true` si este tick de juego (2× loco handler) cruzaría la tesela actual.
@@ -528,35 +557,42 @@ impl super::model::Vehicle {
     }
 
     fn update_direction_step(&mut self, from: TileCoord, to: TileCoord, map: Option<&Map>) {
-        self.set_direction_with_curve_penalty(super::direction_from_tile_step(from, to), map);
+        self.set_direction_with_curve_penalty(
+            super::direction_from_tile_step(from, to),
+            map,
+            TrainAccelerationModel::Original,
+        );
     }
 
     /// Cambia `direction` aplicando penalización de curva del modelo original:
     /// carretera `v->cur_speed -= v->cur_speed >> 2` (`roadveh_cmd.cpp:1481`);
-    /// tren `_accel_slowdown` (`train_cmd.cpp:3564-3568`, locomotora).
+    /// tren `_accel_slowdown` solo con `AM_ORIGINAL` (`train_cmd.cpp:3564-3568`).
     pub(super) fn set_direction_with_curve_penalty(
         &mut self,
         new_dir: super::model::VehicleDirection,
         map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
     ) {
         if new_dir != self.direction {
             match self.kind {
                 super::model::VehicleKind::Train => {
-                    // Índice por railtype: normal/eléctrico=0, mono=1, maglev=2.
-                    let rail_idx = map
-                        .and_then(|m| m.get(self.pos))
-                        .map_or(0, |t| rail_type_from_tile(t).accel_table_index())
-                        .min(ACCEL_SLOWDOWN.len() - 1);
-                    let params = &ACCEL_SLOWDOWN[rail_idx];
-                    let turn = if is_45_degree_turn(self.direction, new_dir) {
-                        params.small_turn
-                    } else {
-                        params.large_turn
-                    };
-                    let penalty = (u32::from(turn) * u32::from(self.cur_speed)) >> 8;
-                    self.cur_speed = self
-                        .cur_speed
-                        .saturating_sub(u16::try_from(penalty).unwrap_or(0));
+                    if matches!(train_accel, TrainAccelerationModel::Original) {
+                        // Índice por railtype: normal/eléctrico=0, mono=1, maglev=2.
+                        let rail_idx = map
+                            .and_then(|m| m.get(self.pos))
+                            .map_or(0, |t| rail_type_from_tile(t).accel_table_index())
+                            .min(ACCEL_SLOWDOWN.len() - 1);
+                        let params = &ACCEL_SLOWDOWN[rail_idx];
+                        let turn = if is_45_degree_turn(self.direction, new_dir) {
+                            params.small_turn
+                        } else {
+                            params.large_turn
+                        };
+                        let penalty = (u32::from(turn) * u32::from(self.cur_speed)) >> 8;
+                        self.cur_speed = self
+                            .cur_speed
+                            .saturating_sub(u16::try_from(penalty).unwrap_or(0));
+                    }
                 }
                 super::model::VehicleKind::Bus
                 | super::model::VehicleKind::Truck
@@ -589,6 +625,9 @@ impl super::model::Vehicle {
             (engine.power_hp, engine.weight_t)
         };
         if self.kind == super::model::VehicleKind::Train {
+            if matches!(train_accel, TrainAccelerationModel::Realistic) {
+                max_speed = max_speed.min(self.cached_max_curve_speed);
+            }
             let braking = !(self.running && self.movement_target().is_some());
             // Sin controlador: no mezclar el remanente físico en el avance.
             let te = if self.cached_max_te_n > 0 {
@@ -673,7 +712,11 @@ impl super::model::Vehicle {
     }
 
     /// Tren: invierte el rumbo en el acto si la siguiente tesela exige sentido opuesto.
-    fn apply_immediate_train_turnaround(&mut self, map: Option<&Map>) {
+    fn apply_immediate_train_turnaround(
+        &mut self,
+        map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
+    ) {
         let Some(next) = self.movement_target() else {
             return;
         };
@@ -681,7 +724,7 @@ impl super::model::Vehicle {
         if outbound != super::reverse_direction(self.direction) {
             return;
         }
-        self.set_direction_with_curve_penalty(outbound, map);
+        self.set_direction_with_curve_penalty(outbound, map, train_accel);
         self.depart_turn = 0;
         if self.progress == 255 {
             self.progress = 0;

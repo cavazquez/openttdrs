@@ -392,7 +392,10 @@ impl super::model::Vehicle {
         )
     }
 
-    /// Distancia en teselas hasta el stop en plataforma (`GetCurrentMaxSpeed` estación).
+    /// Distancia en teselas hasta el stop (`Train::GetCurrentMaxSpeed` estación).
+    ///
+    /// `distance_to_go = station_ahead - (station_length - stop_at)/TILE_SIZE`
+    /// con parada Middle ≈ `station_ahead - station_length/2`.
     fn realistic_station_distance_to_go(&self, map: &Map) -> Option<i32> {
         if !crate::station::train_on_rail_platform(map, self.pos) {
             return None;
@@ -403,8 +406,58 @@ impl super::model::Vehicle {
         if !crate::station::train_on_rail_platform(map, self.dest) {
             return None;
         }
-        let ahead = i32::try_from(self.path.len()).unwrap_or(0);
-        Some(ahead.max(1))
+        let axis_y = map.get(self.pos).is_some_and(|t| t.m5 & 1 != 0);
+        let on_track = |c: TileCoord| {
+            crate::station::train_on_rail_platform(map, c)
+                && if axis_y {
+                    c.x == self.pos.x
+                } else {
+                    c.y == self.pos.y
+                }
+        };
+        // Andén contiguo sobre la misma vía, ordenado a lo largo del eje.
+        let mut platforms = Vec::new();
+        let (mut x, mut y) = (self.pos.x, self.pos.y);
+        while on_track(TileCoord::new(x, y)) {
+            if axis_y {
+                y -= 1;
+            } else {
+                x -= 1;
+            }
+        }
+        if axis_y {
+            y += 1;
+        } else {
+            x += 1;
+        }
+        loop {
+            let c = TileCoord::new(x, y);
+            if !on_track(c) {
+                break;
+            }
+            platforms.push(c);
+            if axis_y {
+                y += 1;
+            } else {
+                x += 1;
+            }
+        }
+        let station_length = i32::try_from(platforms.len()).unwrap_or(0);
+        if station_length == 0 {
+            return None;
+        }
+        let pos_i = platforms.iter().position(|c| *c == self.pos)?;
+        let dest_i = platforms.iter().position(|c| *c == self.dest)?;
+        let going_positive = dest_i > pos_i;
+        let station_ahead = if going_positive {
+            station_length - i32::try_from(pos_i).unwrap_or(0)
+        } else {
+            i32::try_from(pos_i).unwrap_or(0) + 1
+        };
+        // Middle: `(station_length - stop_at)/TILE_SIZE ≈ station_length/2`.
+        let past_stop_to_end = station_length / 2;
+        let distance_to_go = station_ahead - past_stop_to_end;
+        (distance_to_go > 0).then_some(distance_to_go)
     }
 
     /// `true` si este tick de juego (2× loco handler) cruzaría la tesela actual.

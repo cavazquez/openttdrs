@@ -79,13 +79,19 @@ pub fn yapf_routing_signal(map: &Map, tile: TileCoord, exit_dir: u8) -> YapfSign
         }
     }
 
-    let is_oneway = present.is_power_of_two()
-        || (0..4).any(|bit| {
-            present & (1 << bit) != 0
-                && signal_track_for_bit(rails, bit)
-                    .map(|track| signal_type_for_track(t.m2, track))
-                    .is_some_and(|ty| ty == SIGTYPE_PATH_ONEWAY)
-        });
+    // One-way real: PathOneWay, o señal de bloque convencional con un solo lado.
+    // Un Path "two-way" suele tener un solo bit presente; ir en contra es
+    // `YAPF_PBS_BEHIND_PENALTY`, no callejón sin salida (OpenTTD `SignalCost`).
+    let is_oneway = (0..4).any(|bit| {
+        if present & (1 << bit) == 0 {
+            return false;
+        }
+        let Some(track) = signal_track_for_bit(rails, bit) else {
+            return false;
+        };
+        let ty = signal_type_for_track(t.m2, track);
+        ty == SIGTYPE_PATH_ONEWAY || (present.is_power_of_two() && !is_pbs_signal_type(ty))
+    });
     if against && !along && is_oneway {
         return YapfSignalRouting::DeadEnd;
     }

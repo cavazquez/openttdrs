@@ -2,7 +2,7 @@ use crate::map::{Map, TileCoord};
 use crate::vehicle::{VehicleKind, VehicleOrder};
 
 use super::geometry::{
-    is_connected_bay_road_stop, rail_station_approach_tile, rail_station_stop_tile,
+    is_connected_bay_road_stop, rail_station_approach_tile, rail_station_stop_tile_for_approach,
     road_stop_approach_tile,
 };
 use super::{Station, StopKind};
@@ -15,9 +15,21 @@ use super::{Station, StopKind};
 /// Tren: la tesela de parada en la plataforma (`GetTrainStopLocation` simplificado).
 #[must_use]
 pub fn resolve_order_destination(map: &Map, kind: VehicleKind, order: VehicleOrder) -> TileCoord {
+    resolve_order_destination_from(map, kind, order, order.destination())
+}
+
+/// Como [`resolve_order_destination`], eligiendo el andén alineado con `from`
+/// cuando la orden es una estación rail multi-vía.
+#[must_use]
+pub fn resolve_order_destination_from(
+    map: &Map,
+    kind: VehicleKind,
+    order: VehicleOrder,
+    from: TileCoord,
+) -> TileCoord {
     match (kind, order) {
         (VehicleKind::Train, VehicleOrder::Station { station, .. }) => {
-            rail_station_stop_tile(map, station)
+            rail_station_stop_tile_for_approach(map, station, from)
                 .or_else(|| rail_station_approach_tile(map, station))
                 .unwrap_or(station)
         }

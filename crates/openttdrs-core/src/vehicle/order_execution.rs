@@ -192,10 +192,12 @@ impl super::model::Vehicle {
                 crate::vehicle::order::VehicleOrder::Station { station, .. } => {
                     crate::airport::airport_loading_tile_at(map, station)
                 }
-                _ => crate::station::resolve_order_destination(map, self.kind, order),
+                _ => {
+                    crate::station::resolve_order_destination_from(map, self.kind, order, self.pos)
+                }
             }
         } else {
-            crate::station::resolve_order_destination(map, self.kind, order)
+            crate::station::resolve_order_destination_from(map, self.kind, order, self.pos)
         };
     }
 

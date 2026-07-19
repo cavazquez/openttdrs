@@ -125,6 +125,10 @@ pub fn rail_station_platform_tiles(map: &Map, station_anchor: TileCoord) -> Vec<
 
 /// Tesela de parada en plataforma (paridad simplificada con `GetTrainStopLocation`:
 /// tren puntual → `Middle`; una sola tesela → esa tesela).
+///
+/// En estaciones multi-andén sin contexto de aproximación, toma el medio de
+/// **todas** las plataformas. Preferí [`rail_station_stop_tile_for_approach`]
+/// cuando se conoce la posición del tren.
 #[must_use]
 pub fn rail_station_stop_tile(map: &Map, station_anchor: TileCoord) -> Option<TileCoord> {
     let platforms = rail_station_platform_tiles(map, station_anchor);
@@ -133,6 +137,35 @@ pub fn rail_station_stop_tile(map: &Map, station_anchor: TileCoord) -> Option<Ti
         1 => Some(platforms[0]),
         n => Some(platforms[n / 2]),
     }
+}
+
+/// Parada `Middle` en el andén alineado con `from` (misma vía / columna).
+///
+/// `OpenTTD` `GetTrainStopLocation` usa la tesela actual del tren para medir el
+/// andén (`GetPlatformLength(tile, …)`); sin eso, un destino en el andén
+/// paralelo deja el pathfinder sin ruta (señales path-oneway / sin cruce).
+#[must_use]
+pub fn rail_station_stop_tile_for_approach(
+    map: &Map,
+    station_anchor: TileCoord,
+    from: TileCoord,
+) -> Option<TileCoord> {
+    let platforms = rail_station_platform_tiles(map, station_anchor);
+    if platforms.is_empty() {
+        return None;
+    }
+    let axis_y = map.get(platforms[0]).is_some_and(|t| t.m5 & 1 != 0);
+    let track_key = |c: TileCoord| if axis_y { c.x } else { c.y };
+    let want = track_key(from);
+    let mut on_track: Vec<TileCoord> = platforms
+        .into_iter()
+        .filter(|c| track_key(*c) == want)
+        .collect();
+    if on_track.is_empty() {
+        return rail_station_stop_tile(map, station_anchor);
+    }
+    on_track.sort_by(|a, b| if axis_y { a.y.cmp(&b.y) } else { a.x.cmp(&b.x) });
+    Some(on_track[on_track.len() / 2])
 }
 
 /// `true` si el tren está sobre una plataforma rail de alguna estación del mapa.

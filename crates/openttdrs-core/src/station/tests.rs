@@ -37,6 +37,28 @@ mod coherence_tests {
     }
 
     #[test]
+    fn dual_platform_stop_prefers_approach_track() {
+        use crate::command::{Command, apply_command};
+        let mut state = GameState::new(20, 20);
+        apply_command(
+            &mut state,
+            &Command::PlaceRailStationArea {
+                origin: TileCoord::new(4, 4),
+                axis_y: true,
+                platforms: 2,
+                length: 4,
+            },
+        )
+        .unwrap();
+        let anchor = state.stations[0].pos;
+        let left = rail_station_stop_tile_for_approach(&state.map, anchor, TileCoord::new(4, 8));
+        let right = rail_station_stop_tile_for_approach(&state.map, anchor, TileCoord::new(5, 8));
+        assert_ne!(left, right, "andenes paralelos no deben compartir parada");
+        assert_eq!(left.map(|c| c.x), Some(4));
+        assert_eq!(right.map(|c| c.x), Some(5));
+    }
+
+    #[test]
     fn stop_kind_from_m6_maps_openttd_station_types() {
         assert_eq!(stop_kind_from_m6(2 << 3), StopKind::TruckStop);
         assert_eq!(stop_kind_from_m6(3 << 3), StopKind::BusStop);

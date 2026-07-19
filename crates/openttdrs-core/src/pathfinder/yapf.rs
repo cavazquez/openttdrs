@@ -487,7 +487,7 @@ pub fn find_rail_path_yapf_for_type(
         closed.insert(key);
 
         if key.tile == to {
-            return Some(reconstruct(key, ctx.parent));
+            return Some(reconstruct(key, ctx.parent, from));
         }
 
         let cur_td = RailTrackdir {
@@ -499,13 +499,22 @@ pub fn find_rail_path_yapf_for_type(
     None
 }
 
-fn reconstruct(goal: NodeKey, parent: &HashMap<NodeKey, NodeKey>) -> Vec<TileCoord> {
+fn reconstruct(
+    goal: NodeKey,
+    parent: &HashMap<NodeKey, NodeKey>,
+    from: TileCoord,
+) -> Vec<TileCoord> {
     let mut path = Vec::new();
     let mut cur = goal;
-    // Los nodos raíz tienen `parent[key] == k` (p. ej. vía adyacente si `from` es estación).
+    // Los nodos raíz tienen `parent[key] == key` (p. ej. vía/andén adyacente si
+    // `from` es estación: el seed no está en `from`).
     while parent.get(&cur) != Some(&cur) {
         path.push(cur.tile);
         cur = parent[&cur];
+    }
+    // Incluir el hop raíz cuando la búsqueda arrancó fuera de `from`.
+    if cur.tile != from {
+        path.push(cur.tile);
     }
     path.reverse();
     path
@@ -524,6 +533,29 @@ mod tests {
         RAIL_TILE_SIGNALS, YapfSignalRouting, encode_block_signal_on_track_with_variant,
         yapf_routing_signal,
     };
+
+    #[test]
+    fn yapf_station_adjacent_platform_includes_dest_tile() {
+        let mut map = Map::new_flat(8, 8, 0);
+        for y in 1..=4 {
+            let c = TileCoord::new(2, y);
+            map.set_kind(c, TileKind::Station).expect("station");
+            let mut t = map.get(c).expect("tile");
+            t.m5 = 0x01; // eje Y
+            t.m6 = 0; // StationType::Rail
+            map.set_tile(c, t).expect("set");
+        }
+        let path = find_rail_path_yapf(&map, TileCoord::new(2, 2), TileCoord::new(2, 3), None)
+            .expect("andén adyacente");
+        assert_eq!(path, vec![TileCoord::new(2, 3)]);
+        let path = find_rail_path_yapf(&map, TileCoord::new(2, 2), TileCoord::new(2, 4), None)
+            .expect("dos teselas de andén");
+        assert_eq!(
+            path,
+            vec![TileCoord::new(2, 3), TileCoord::new(2, 4)],
+            "no debe saltar el andén intermedio"
+        );
+    }
 
     #[test]
     fn yapf_one_way_signal_blocks_reverse_direction() {

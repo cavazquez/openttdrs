@@ -1294,4 +1294,29 @@ mod tests {
             "PathOneWay debe bloquear el sentido contrario a la señal"
         );
     }
+
+    #[test]
+    fn path_signal_allows_reverse_with_behind_penalty() {
+        use crate::command::{Command, apply_command};
+
+        let mut state = GameState::new(8, 4);
+        for x in 0..=4 {
+            write_rail(&mut state.map, TileCoord::new(x, 0), RAIL_TB_X);
+        }
+        apply_command(
+            &mut state,
+            &Command::PlaceRailSignal(TileCoord::new(2, 0), 0, 128, 128, SIGTYPE_PATH),
+        )
+        .expect("path");
+        // Señal mirando +x (dir 0): ir en -x es «por detrás».
+        assert_eq!(
+            yapf_routing_signal(&state.map, TileCoord::new(2, 0), 0),
+            YapfSignalRouting::Clear
+        );
+        assert_eq!(
+            yapf_routing_signal(&state.map, TileCoord::new(2, 0), 2),
+            YapfSignalRouting::Penalty(YAPF_PBS_BEHIND_PENALTY),
+            "Path two-way con un solo lado: no DeadEnd al ir en contra"
+        );
+    }
 }

@@ -1,8 +1,6 @@
 //! Oráculo externo: `train_dual_pbs_curve_15_3.sav` (2 trenes, PBS, curva, plataformas).
 //!
-//! Paridad cerrada en la muestra `initial`. El primer tick de juego aún diverge
-//! (cinemática / techos Realistic en estación); ver
-//! `docs/PBS_EXTERNAL_ORACLE.md`.
+//! Paridad cerrada: muestra `initial` + 40 ticks (cinemática y reservas PBS).
 
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
@@ -75,6 +73,32 @@ fn runtime_trains(state: &GameState) -> Vec<OracleTrain> {
     trains
 }
 
+fn runtime_reservations(state: &GameState) -> Vec<OracleReservation> {
+    let mut got = Vec::new();
+    let (w, h) = state.map.dimensions();
+    for y in 0..h as i32 {
+        for x in 0..w as i32 {
+            let tile = TileCoord::new(x, y);
+            let Some(data) = state.map.get(tile) else {
+                continue;
+            };
+            if data.kind != openttdrs_core::TileKind::Rail {
+                continue;
+            }
+            let bits = openttdrs_core::decode_rail_reservation_m2_hi(data.m2_hi);
+            if bits != 0 {
+                got.push(OracleReservation {
+                    x,
+                    y,
+                    track_bits: bits,
+                });
+            }
+        }
+    }
+    got.sort_by_key(|r| (r.x, r.y, r.track_bits));
+    got
+}
+
 #[test]
 fn imports_dual_pbs_curve_fixture_shape() {
     let raw = std::fs::read(fixture_path("train_dual_pbs_curve_15_3.sav")).expect("fixture");
@@ -144,63 +168,37 @@ fn oracle_trace_has_two_trains_and_forty_ticks() {
 }
 
 #[test]
-fn rust_matches_openttd_initial_sample() {
-    let oracle = load_oracle();
-    let raw = std::fs::read(fixture_path("train_dual_pbs_curve_15_3.sav")).expect("fixture");
-    let state = GameState::from_sav_game(sav::load(&raw).expect("load"));
-    let expected = sorted_trains(oracle[1].trains.as_ref().expect("trains"));
-    assert_eq!(runtime_trains(&state), expected, "cinemática initial");
-
-    let expected_res = oracle[1].rail_reservations.as_ref().expect("reservas");
-    let mut got = Vec::new();
-    let (w, h) = state.map.dimensions();
-    for y in 0..h as i32 {
-        for x in 0..w as i32 {
-            let tile = TileCoord::new(x, y);
-            let Some(data) = state.map.get(tile) else {
-                continue;
-            };
-            if data.kind != openttdrs_core::TileKind::Rail {
-                continue;
-            }
-            let bits = openttdrs_core::decode_rail_reservation_m2_hi(data.m2_hi);
-            if bits != 0 {
-                got.push(OracleReservation {
-                    x,
-                    y,
-                    track_bits: bits,
-                });
-            }
-        }
-    }
-    got.sort_by_key(|r| (r.x, r.y, r.track_bits));
-    let mut want = expected_res.clone();
-    want.sort_by_key(|r| (r.x, r.y, r.track_bits));
-    assert_eq!(got, want, "reservas PBS initial");
-}
-
-/// Documenta la primera divergencia conocida (tick 1) hasta cerrar cinemática
-/// Realistic en plataforma / path signal.
-#[test]
-fn first_tick_still_diverges_from_openttd() {
+fn rust_matches_openttd_oracle_for_forty_ticks() {
     let oracle = load_oracle();
     let raw = std::fs::read(fixture_path("train_dual_pbs_curve_15_3.sav")).expect("fixture");
     let mut state = GameState::from_sav_game(sav::load(&raw).expect("load"));
-    assert_eq!(runtime_trains(&state), sorted_trains(oracle[1].trains.as_ref().unwrap()));
 
-    state.step();
-    let expected = sorted_trains(oracle[2].trains.as_ref().expect("tick1 trains"));
-    let got = runtime_trains(&state);
-    assert_ne!(
-        got, expected,
-        "si este assert falla, el tick 1 ya está alineado: actualizá a paridad completa"
-    );
-    // Tren en plataforma sur: OpenTTD avanza progress; Rust aún no en este fixture.
-    let south = got.iter().find(|t| t.x == 25 && t.y == 14).expect("sur");
-    let south_ottd = expected
-        .iter()
-        .find(|t| t.x == 25 && t.y == 14)
-        .expect("sur ottd");
-    assert_eq!(south.progress, 117);
-    assert_eq!(south_ottd.progress, 153);
+    let expected = sorted_trains(oracle[1].trains.as_ref().expect("trains"));
+    assert_eq!(runtime_trains(&state), expected, "cinemática initial");
+
+    let mut want = oracle[1]
+        .rail_reservations
+        .as_ref()
+        .expect("reservas")
+        .clone();
+    want.sort_by_key(|r| (r.x, r.y, r.track_bits));
+    assert_eq!(runtime_reservations(&state), want, "reservas PBS initial");
+
+    for (i, row) in oracle.iter().enumerate().skip(2) {
+        state.step();
+        let expected = sorted_trains(row.trains.as_ref().expect("trains"));
+        assert_eq!(
+            runtime_trains(&state),
+            expected,
+            "cinemática diverge en muestra oracle índice {i}"
+        );
+
+        let mut want = row.rail_reservations.as_ref().expect("reservas").clone();
+        want.sort_by_key(|r| (r.x, r.y, r.track_bits));
+        assert_eq!(
+            runtime_reservations(&state),
+            want,
+            "reservas PBS divergen en muestra oracle índice {i}"
+        );
+    }
 }

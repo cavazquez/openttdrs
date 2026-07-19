@@ -84,10 +84,8 @@ oráculo de 40 ticks están versionados.
 - Tests: `tests/pbs_dual_curve_oracle.rs`
 
 Contenido: 2 trenes Ginzu A4, 2 estaciones duales, path / path-oneway, curva en
-`(25–26, 8)`, depósito `(24, 9)`. **Paridad `initial` cerrada** (cinemática +
-reserva en `(26,7)`). El tick 1 aún diverge (tren en plataforma no avanza
-`progress` como OpenTTD); el test `first_tick_still_diverges_from_openttd`
-documenta el gap.
+`(25–26, 8)`, depósito `(24, 9)`. **Paridad cerrada** (`initial` + 40 ticks:
+cinemática y reservas PBS) en `tests/pbs_dual_curve_oracle.rs`.
 
 Contrato rail (solo trenes):
 

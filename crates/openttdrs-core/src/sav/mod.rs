@@ -296,18 +296,19 @@ fn vehicle_already_on_own_network(map: &Map, vehicle: &Vehicle) -> bool {
         return false;
     };
     match vehicle.kind {
-        VehicleKind::Train => matches!(
-            tile.kind,
-            TileKind::Rail
-                | TileKind::RailDepot
-                | TileKind::RailTunnel
-                | TileKind::RailBridge
-                | TileKind::Station
-        ) && (tile.kind != TileKind::Station
-            || {
+        VehicleKind::Train => {
+            matches!(
+                tile.kind,
+                TileKind::Rail
+                    | TileKind::RailDepot
+                    | TileKind::RailTunnel
+                    | TileKind::RailBridge
+                    | TileKind::Station
+            ) && (tile.kind != TileKind::Station || {
                 let st = crate::station::station_type_from_m6(tile.m6);
                 st == 0 || st == crate::station::STATION_TYPE_RAIL_WAYPOINT
-            }),
+            })
+        }
         VehicleKind::Bus | VehicleKind::Truck => matches!(
             tile.kind,
             TileKind::Road
@@ -365,12 +366,26 @@ fn stop_kind_from_facilities(facilities: u8) -> StopKind {
     }
 }
 
-/// Píxeles consumidos en la tesela hacia el cruce, desde `x_pos`/`direction`.
+/// Píxeles consumidos en la tesela hacia el cruce, desde `x_pos`/`y_pos`/`direction`.
 ///
-/// En `DIR_NE` (`x` decreciente) el oráculo PBS encaja con `15 - (x_pos & 15)`.
-fn rail_pixel_from_openttd_pos(x_pos: i32, _direction: u8) -> u8 {
-    let fract = u8::try_from(x_pos.rem_euclid(16)).unwrap_or(0);
-    15u8.saturating_sub(fract)
+/// Deltas de tesela `OpenTTD` (`_tileoffs_by_dir` en `map.cpp`):
+/// `NE=(-1,0)`, `SE=(0,+1)`, `SW=(+1,0)`, `NW=(0,-1)`. El eje que avanza
+/// determina la fracción; sentido negativo → `15 - fract`.
+fn rail_pixel_from_openttd_pos(x_pos: i32, y_pos: i32, direction: u8) -> u8 {
+    use crate::vehicle::{DIR_E, DIR_N, DIR_NW, DIR_S, DIR_SE, DIR_SW, DIR_W};
+    let xf = u8::try_from(x_pos.rem_euclid(16)).unwrap_or(0);
+    let yf = u8::try_from(y_pos.rem_euclid(16)).unwrap_or(0);
+    match direction {
+        DIR_SW => xf,
+        DIR_SE => yf,
+        DIR_NW => 15u8.saturating_sub(yf),
+        DIR_N => 15u8.saturating_sub(xf).min(15u8.saturating_sub(yf)),
+        DIR_S => xf.min(yf),
+        DIR_E => 15u8.saturating_sub(xf).min(yf),
+        DIR_W => xf.min(15u8.saturating_sub(yf)),
+        // `DIR_NE` y fallback: eje X decreciente.
+        _ => 15u8.saturating_sub(xf),
+    }
 }
 
 /// IDs vanilla de motor rail de `OpenTTD` no son contiguos con el catálogo Rust:
@@ -454,7 +469,7 @@ impl GameState {
             vehicle.subspeed = v.subspeed;
             vehicle.direction = v.direction;
             if kind == VehicleKind::Train {
-                vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.direction);
+                vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.y_pos, v.direction);
                 if let Some(candidate) = vanilla_train_engine_id(v.engine_type)
                     && crate::engine::engine_by_id(candidate).is_some()
                 {
@@ -486,7 +501,7 @@ impl GameState {
             // al importar debe conservar exactamente el estado sub-tesela del save.
             vehicle.progress = v.progress;
             if kind == VehicleKind::Train {
-                vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.direction);
+                vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.y_pos, v.direction);
             }
             state.vehicles.push(vehicle);
             if kind == VehicleKind::Train {
@@ -512,6 +527,17 @@ mod tests {
         assert_eq!(stop_kind_from_facilities(0x04), StopKind::BusStop);
         assert_eq!(stop_kind_from_facilities(0x02), StopKind::TruckStop);
         assert_eq!(stop_kind_from_facilities(0x08), StopKind::TruckStop);
+    }
+
+    #[test]
+    fn rail_pixel_uses_axis_of_openttd_direction() {
+        use crate::vehicle::{DIR_NE, DIR_NW, DIR_SE};
+        // Fixture PBS: DIR_NE, x_fract=10 → 15-10=5.
+        assert_eq!(rail_pixel_from_openttd_pos(762, 600, DIR_NE), 5);
+        // Dual norte: DIR_NW, y_fract=14 → 15-14=1.
+        assert_eq!(rail_pixel_from_openttd_pos(424, 126, DIR_NW), 1);
+        // Dual sur: DIR_SE, y_fract=3 → 3.
+        assert_eq!(rail_pixel_from_openttd_pos(408, 227, DIR_SE), 3);
     }
 
     #[test]

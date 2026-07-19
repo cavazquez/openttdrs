@@ -29,6 +29,27 @@ pub(crate) struct SavStationIndex {
     pub name: Option<String>,
 }
 
+/// Primer (y único) registro de un campo struct de tabla.
+fn nested_struct<'a>(record: &'a SlRecord, name: &str) -> Option<&'a SlRecord> {
+    match record_get(record, name)? {
+        SlValue::Structs(items) => items.first(),
+        _ => None,
+    }
+}
+
+/// Base de estación: top-level en saves legacy, anidada en `normal.base` o
+/// `waypoint.base` en las tablas `STNN` modernas.
+fn station_base_record(record: &SlRecord) -> &SlRecord {
+    for station_kind in ["normal", "waypoint"] {
+        if let Some(kind) = nested_struct(record, station_kind)
+            && let Some(base) = nested_struct(kind, "base")
+        {
+            return base;
+        }
+    }
+    record
+}
+
 /// Mapa `StationID` → tesela para resolver destinos de órdenes.
 #[must_use]
 pub(crate) fn station_index_from_chunks(
@@ -41,17 +62,19 @@ pub(crate) fn station_index_from_chunks(
     };
     let mut out = std::collections::HashMap::new();
     for (idx, record) in table_rows(stnn, save_version) {
-        let Some(xy) = record_get(&record, "xy").and_then(SlValue::as_u64) else {
+        let base = station_base_record(&record);
+        let Some(xy) = record_get(base, "xy").and_then(SlValue::as_u64) else {
             continue;
         };
         let Some(pos) = coord_from_linear_index(xy, map_w) else {
             continue;
         };
-        let facilities = record_get(&record, "facilities")
+        let facilities = record_get(base, "facilities")
             .and_then(SlValue::as_u64)
+            .or_else(|| record_get(&record, "facilities").and_then(SlValue::as_u64))
             .unwrap_or(0);
         let is_waypoint = facilities & FACIL_WAYPOINT != 0;
-        let name = record_get(&record, "name")
+        let name = record_get(base, "name")
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
             .map(str::to_string);
@@ -247,6 +270,13 @@ pub enum SavVehicleKind {
 pub struct SavVehicle {
     pub kind: SavVehicleKind,
     pub pos: TileCoord,
+    /// Progreso sub-tesela (`Vehicle::progress`, 0…255) al guardar.
+    pub progress: u8,
+    /// Velocidad y fracción interna al guardar (`cur_speed` / `subspeed`).
+    pub cur_speed: u16,
+    pub subspeed: u8,
+    /// Dirección visual/de movimiento (`Vehicle::direction`) al guardar.
+    pub direction: u8,
     /// `CargoType` de `OpenTTD` (0 = pasajeros).
     pub cargo_type: u8,
     /// Órdenes de la lista referenciada (`ORDL`).
@@ -257,14 +287,6 @@ pub struct SavVehicle {
     pub running: bool,
     /// Tren: unidad sin `GVSF_FRONT` (vagón del consist anterior).
     pub is_wagon: bool,
-}
-
-/// Primer (y único) registro de un campo struct de tabla.
-fn nested_struct<'a>(record: &'a SlRecord, name: &str) -> Option<&'a SlRecord> {
-    match record_get(record, name)? {
-        SlValue::Structs(items) => items.first(),
-        _ => None,
-    }
 }
 
 /// Bit `GVSF_FRONT` de `Vehicle::subtype` (cabeza de convoy en tren/camión).
@@ -313,6 +335,26 @@ pub(crate) fn vehicles_from_chunks(
         let Some(pos) = coord_from_linear_index(tile, map_w) else {
             continue;
         };
+        let progress = record_get(common, "progress")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or(u8::MAX);
+        let cur_speed = record_get(common, "cur_speed")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or(u16::MAX);
+        let subspeed = record_get(common, "subspeed")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or(u8::MAX);
+        let direction = record_get(common, "direction")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or(u8::MAX);
         let cargo_type = record_get(common, "cargo_type")
             .and_then(SlValue::as_u64)
             .unwrap_or(0xFF);
@@ -336,6 +378,10 @@ pub(crate) fn vehicles_from_chunks(
         out.push(SavVehicle {
             kind,
             pos,
+            progress,
+            cur_speed,
+            subspeed,
+            direction,
             cargo_type: cargo_type.min(255) as u8,
             orders,
             current_order,

@@ -181,12 +181,22 @@ pub(crate) fn vehicle_orders_from_sav(
     stations: &HashMap<u32, SavStationIndex>,
     map_w: u32,
 ) -> Vec<VehicleOrder> {
+    let station_for_dest = |dest: u16| {
+        stations.get(&u32::from(dest)).or_else(|| {
+            // Algunos saves modernos con una sola estación conservan el destino
+            // como 0 aunque el pool `STNN` empieza en 1. No adivinar cuando hay
+            // más de una estación: ahí el ID exacto sigue siendo obligatorio.
+            (stations.len() == 1)
+                .then(|| stations.values().next())
+                .flatten()
+        })
+    };
     let mut out = Vec::new();
     for order in sav_orders {
         let ot = order.order_type & 0x0F;
         match ot {
             OT_GOTO_STATION => {
-                if let Some(st) = stations.get(&u32::from(order.dest)) {
+                if let Some(st) = station_for_dest(order.dest) {
                     let (full_load, no_unload) = stop_flags_from_sav(order.flags);
                     if st.is_waypoint {
                         out.push(VehicleOrder::waypoint(st.pos));
@@ -198,7 +208,7 @@ pub(crate) fn vehicle_orders_from_sav(
                 }
             }
             OT_GOTO_WAYPOINT => {
-                if let Some(st) = stations.get(&u32::from(order.dest)) {
+                if let Some(st) = station_for_dest(order.dest) {
                     out.push(VehicleOrder::waypoint(st.pos));
                 }
             }
@@ -310,6 +320,29 @@ mod tests {
         );
         let decoded = vehicle_orders_from_sav(&[sav], &stations, 64);
         assert_eq!(decoded, vec![order]);
+    }
+
+    #[test]
+    fn station_order_falls_back_to_only_station_for_modern_pool_offset() {
+        let mut stations = HashMap::new();
+        stations.insert(
+            1,
+            SavStationIndex {
+                pos: TileCoord::new(7, 9),
+                is_waypoint: false,
+                facilities: 1,
+                name: None,
+            },
+        );
+        let order = SavOrder {
+            order_type: OT_GOTO_STATION,
+            dest: 0,
+            flags: 0,
+        };
+        assert_eq!(
+            vehicle_orders_from_sav(&[order], &stations, 64),
+            vec![VehicleOrder::station(TileCoord::new(7, 9))]
+        );
     }
 
     #[test]

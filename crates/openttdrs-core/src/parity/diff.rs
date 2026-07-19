@@ -528,6 +528,39 @@ fn push_event_divergences(
     }
 }
 
+fn rail_reservation_divergence(
+    expected: &TickRecord,
+    actual: &TickRecord,
+    filter: &DiffFilter,
+) -> Option<Divergence> {
+    if filter.vehicle.is_some()
+        || filter
+            .subsystem
+            .is_some_and(|subsystem| subsystem != Subsystem::Reservation)
+        || expected.rail_reservations == actual.rail_reservations
+    {
+        return None;
+    }
+    let touches_filter_tile = filter.tile.is_none_or(|tile| {
+        expected
+            .rail_reservations
+            .iter()
+            .any(|reservation| reservation.tile == tile)
+            || actual
+                .rail_reservations
+                .iter()
+                .any(|reservation| reservation.tile == tile)
+    });
+    touches_filter_tile.then(|| Divergence {
+        tick: expected.tick,
+        vehicle: None,
+        field: "rail_reservations".to_string(),
+        expected: format!("{:?}", expected.rail_reservations),
+        actual: format!("{:?}", actual.rail_reservations),
+        subsystem: Subsystem::Reservation,
+    })
+}
+
 /// Compara dos trazas y devuelve la primera divergencia + resumen por subsistema.
 ///
 /// `expected` es la traza de referencia (lado A), `actual` la observada (lado B).
@@ -610,6 +643,10 @@ pub fn compare_traces(
                     &tiles,
                 );
             }
+        }
+
+        if let Some(divergence) = rail_reservation_divergence(ra, rb, filter) {
+            push_diff(&mut report, divergence, &[]);
         }
 
         let ev_a = events_for_vehicle(&ra.events, filter.vehicle);
@@ -716,6 +753,7 @@ mod tests {
                 rail: None,
             }],
             events: Vec::new(),
+            rail_reservations: Vec::new(),
         }
     }
 
@@ -802,7 +840,7 @@ mod tests {
 
     // ---- Fase Rail 2: fixtures artificiales con una divergencia por subsistema ----
 
-    use super::super::record::{RailPartRecord, RailRecord};
+    use super::super::record::{RailPartRecord, RailRecord, RailReservationRecord};
 
     fn rail_block() -> RailRecord {
         RailRecord {
@@ -847,6 +885,20 @@ mod tests {
         assert_eq!(first.field, "rail.track_bits_under");
         assert_eq!(first.expected, "0x01");
         assert_eq!(first.actual, "0x08");
+    }
+
+    #[test]
+    fn map_reservation_divergence_is_reservation_subsystem() {
+        let a = vec![train_record(1)];
+        let mut b = a.clone();
+        b[0].rail_reservations.push(RailReservationRecord {
+            tile: TileCoord::new(3, 3),
+            track_bits: 0x01,
+        });
+        let report = compare_traces(&a, &b, &DiffFilter::default());
+        let first = report.first.unwrap();
+        assert_eq!(first.subsystem, Subsystem::Reservation);
+        assert_eq!(first.field, "rail_reservations");
     }
 
     #[test]

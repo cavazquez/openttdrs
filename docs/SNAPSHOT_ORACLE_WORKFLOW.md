@@ -57,3 +57,10 @@ python3 scripts/test_compare_snapshots_mutation.py
 - Ottdmap 2×2 (solo candidato): `m3_road_tram_2x2.ottdmap`
 
 Sin binario OpenTTD compilado el paso 1 no corre; el resto del tooling y el parche sí están versionados.
+
+## Trazas PBS por tick
+
+Este workflow compara snapshots de mapa al cargar un save. Las reservas PBS son
+dinámicas y usan un productor separado: [PBS_EXTERNAL_ORACLE.md](PBS_EXTERNAL_ORACLE.md).
+El parche comparte integración, pero el export PBS emite JSONL post-tick y
+finaliza automáticamente tras el número de filas solicitado.

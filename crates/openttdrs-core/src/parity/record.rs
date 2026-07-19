@@ -71,6 +71,17 @@ pub struct RailRecord {
     pub at_platform: bool,
 }
 
+/// Reserva PBS observada directamente en una tesela del mapa.
+///
+/// Es independiente del ID de vehículo para que una traza emitida por `OpenTTD`
+/// pueda compararse incluso si las pools de ambos motores asignan IDs distintos.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct RailReservationRecord {
+    pub tile: TileCoord,
+    /// `TrackBits` reservado en la tesela (`GetRailReservationTrackBits`).
+    pub track_bits: u8,
+}
+
 /// Instantánea de un vehículo al final de un tick de simulación.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct VehicleRecord {
@@ -236,6 +247,9 @@ pub struct TickRecord {
     pub tick: u64,
     pub vehicles: Vec<VehicleRecord>,
     pub events: Vec<ParityEvent>,
+    /// Reservas PBS activas del mapa al final del tick, ordenadas por tesela.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rail_reservations: Vec<RailReservationRecord>,
 }
 
 /// Nombre estable del tipo de orden para la traza.

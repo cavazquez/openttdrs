@@ -16,4 +16,15 @@
  */
 bool OpenttdrsMaybeExportSnapshot(const std::string &source_path);
 
+/**
+ * Arms an optional PBS JSONL exporter once the requested save completed loading.
+ *
+ * The exporter is enabled only when OPENTTDRS_PBS_TRACE_OUT is set. Its rows
+ * are emitted by OpenttdrsMaybeExportPbsTraceTick() after each game tick.
+ */
+void OpenttdrsMaybeStartPbsTrace(const std::string &source_path);
+
+/** Emits one post-tick PBS row and exits after the configured number of rows. */
+void OpenttdrsMaybeExportPbsTraceTick();
+
 #endif /* OPENTTDRS_SNAPSHOT_EXPORT_H */

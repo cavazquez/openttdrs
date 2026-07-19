@@ -55,9 +55,10 @@ if '#include "../snapshot_export.h"' not in at:
     print("afterload: include")
 
 hook = (
-    "\tif (!OpenttdrsMaybeExportSnapshot({})) {\n"
+    "\tif (!OpenttdrsMaybeExportSnapshot(\"\")) {\n"
     "\t\tDebug(misc, 0, \"openttdrs snapshot export failed\");\n"
     "\t}\n"
+    "\tOpenttdrsMaybeStartPbsTrace(\"\");\n"
 )
 anchor = "\treturn true;\n}\n\n/**\n * Reload all NewGRF"
 if "OpenttdrsMaybeExportSnapshot" not in at:
@@ -69,6 +70,26 @@ else:
     print("afterload: hook ya presente")
 
 after.write_text(at, encoding="utf-8")
+
+openttd = dest / "src" / "openttd.cpp"
+ot = openttd.read_text(encoding="utf-8")
+if '#include "snapshot_export.h"' not in ot:
+    nl = ot.find("\n#include ")
+    if nl < 0:
+        raise SystemExit("no encuentro includes en openttd.cpp")
+    ot = ot[: nl + 1] + '#include "snapshot_export.h"\n' + ot[nl + 1 :]
+    print("openttd: include")
+
+tick_hook = "\tOpenttdrsMaybeExportPbsTraceTick();\n"
+tick_anchor = "\tcur_company.Restore();\n"
+if "OpenttdrsMaybeExportPbsTraceTick" not in ot:
+    if tick_anchor not in ot:
+        raise SystemExit("no encuentro ancla cur_company.Restore de StateGameLoop")
+    ot = ot.replace(tick_anchor, tick_anchor + tick_hook, 1)
+    print("openttd: hook post StateGameLoop")
+else:
+    print("openttd: hook ya presente")
+openttd.write_text(ot, encoding="utf-8")
 PY
 
 echo "Integrado en ${DEST}"
@@ -76,5 +97,8 @@ echo "Build dedicated (ejemplo):"
 echo "  cmake -B ${DEST}/build -S ${DEST} -DOPTION_DEDICATED=ON && cmake --build ${DEST}/build -j"
 echo "Export:"
 echo "  OPENTTDRS_SNAPSHOT_OUT=/tmp/openttd.json OPENTTDRS_OPENTTD_COMMIT=${EXPECTED} \\"
+echo "    ${DEST}/build/openttd -D -g path/to/game.sav"
+echo "PBS JSONL (post-tick, termina tras N filas):"
+echo "  OPENTTDRS_PBS_TRACE_OUT=/tmp/openttd-pbs.jsonl OPENTTDRS_PBS_TRACE_TICKS=40 \\"
 echo "    ${DEST}/build/openttd -D -g path/to/game.sav"
 openttd_manifest_summary "$ROOT"

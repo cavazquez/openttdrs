@@ -68,6 +68,7 @@
 | [OTTDMAP_FORMAT.md](OTTDMAP_FORMAT.md) | Spec binaria `.ottdmap` |
 | [TILES_Y_SAVEGAMES_OPENTTD.md](TILES_Y_SAVEGAMES_OPENTTD.md) | MAPT, `m5`, chunks |
 | [SENALES_FERROVIARIAS.md](SENALES_FERROVIARIAS.md) | Señales, PBS, pick diagonal |
+| [PBS_EXTERNAL_ORACLE.md](PBS_EXTERNAL_ORACLE.md) | Golden PBS externo OpenTTD ↔ openttdrs |
 | [VIAS_FERROVIARIAS_COLOCACION.md](VIAS_FERROVIARIAS_COLOCACION.md) | Autorail vs bits, uniones |
 | [SNAPSHOT_ORACLE_WORKFLOW.md](SNAPSHOT_ORACLE_WORKFLOW.md) | Comparación con fork oráculo |
 

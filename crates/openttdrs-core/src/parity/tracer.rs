@@ -12,8 +12,8 @@ use crate::vehicle::VehicleKind;
 use crate::{GameState, rail_signals, refit, road_movement, station};
 
 use super::record::{
-    ParityEvent, RailPartRecord, RailRecord, SpeedTrend, TickRecord, VehicleRecord,
-    derive_vehicle_state, order_kind_name,
+    ParityEvent, RailPartRecord, RailRecord, RailReservationRecord, SpeedTrend, TickRecord,
+    VehicleRecord, derive_vehicle_state, order_kind_name,
 };
 
 /// Estado mínimo del tick anterior para derivar eventos por diff.
@@ -178,6 +178,31 @@ fn capture_signal_states(map: &Map) -> BTreeMap<TileCoord, u8> {
                 continue;
             }
             out.insert(c, rail_signals::rail_signal_state_mask(t.m3hi) & present);
+        }
+    }
+    out
+}
+
+/// Reservas PBS activas de vía plana, en el orden canónico `(y, x)`.
+///
+/// `OpenTTD` puede exportar el mismo dato con `GetRailReservationTrackBits`; se
+/// registra aparte de cada tren porque la reserva vive en el mapa.
+fn capture_rail_reservations(map: &Map) -> Vec<RailReservationRecord> {
+    let (w, h) = map.dimensions();
+    let mut out = Vec::new();
+    for y in 0..i32::try_from(h).unwrap_or(i32::MAX) {
+        for x in 0..i32::try_from(w).unwrap_or(i32::MAX) {
+            let tile = TileCoord::new(x, y);
+            let Some(t) = map.get(tile) else {
+                continue;
+            };
+            if t.kind != TileKind::Rail {
+                continue;
+            }
+            let track_bits = crate::rail_pbs::decode_rail_reservation_m2_hi(t.m2_hi);
+            if track_bits != 0 {
+                out.push(RailReservationRecord { tile, track_bits });
+            }
         }
     }
     out
@@ -477,6 +502,7 @@ pub(crate) fn record_tick(state: &mut GameState) {
         tick: state.tick.get(),
         vehicles,
         events,
+        rail_reservations: capture_rail_reservations(&state.map),
     });
     state.runtime.parity = Some(tracer);
 }

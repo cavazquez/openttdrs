@@ -7,8 +7,11 @@
 
 #include "map_func.h"
 #include "openttd.h"
+#include "rail_map.h"
 #include "tile_map.h"
 #include "tile_type.h"
+#include "timer/timer_game_tick.h"
+#include "vehicle_base.h"
 
 #include "3rdparty/nlohmann/json.hpp"
 
@@ -159,6 +162,63 @@ size_t CountComponents(uint8_t want)
 	return comps;
 }
 
+struct PbsTraceState {
+	std::ofstream out;
+	std::string source_path;
+	uint64_t rows = 0;
+	uint64_t max_rows = 40;
+	bool armed = false;
+};
+
+PbsTraceState _openttdrs_pbs_trace;
+
+uint64_t ParseTraceTicks()
+{
+	const char *raw = std::getenv("OPENTTDRS_PBS_TRACE_TICKS");
+	if (raw == nullptr || raw[0] == '\0') return 40;
+	const long long parsed = std::atoll(raw);
+	return parsed > 0 ? static_cast<uint64_t>(parsed) : 40;
+}
+
+void WritePbsTraceRow(const char *kind)
+{
+	nlohmann::json row;
+	row["kind"] = kind;
+	row["tick"] = TimerGameTick::counter;
+	row["trains"] = nlohmann::json::array();
+	row["rail_reservations"] = nlohmann::json::array();
+
+	for (const Vehicle *v : Vehicle::Iterate()) {
+		if (v->type != VEH_TRAIN || !v->IsPrimaryVehicle() || v->tile == INVALID_TILE) continue;
+		nlohmann::json train;
+		train["vehicle"] = v->index.base();
+		train["x"] = TileX(v->tile);
+		train["y"] = TileY(v->tile);
+		train["progress"] = v->progress;
+		train["speed"] = v->cur_speed;
+		train["subspeed"] = v->subspeed;
+		train["direction"] = static_cast<uint8_t>(v->direction);
+		row["trains"].push_back(train);
+	}
+
+	for (uint y = 0; y < Map::SizeY(); y++) {
+		for (uint x = 0; x < Map::SizeX(); x++) {
+			Tile tile(TileXY(x, y));
+			if (!IsPlainRailTile(tile)) continue;
+			const TrackBits reserved = GetRailReservationTrackBits(tile);
+			if (reserved == TRACK_BIT_NONE) continue;
+			nlohmann::json reservation;
+			reservation["x"] = x;
+			reservation["y"] = y;
+			reservation["track_bits"] = static_cast<uint32_t>(reserved);
+			row["rail_reservations"].push_back(reservation);
+		}
+	}
+
+	_openttdrs_pbs_trace.out << row.dump() << '\n';
+	_openttdrs_pbs_trace.out.flush();
+}
+
 } // namespace
 
 bool OpenttdrsMaybeExportSnapshot(const std::string &source_path)
@@ -248,4 +308,57 @@ bool OpenttdrsMaybeExportSnapshot(const std::string &source_path)
 	/* Dedicated: salir tras exportar (evita servidor colgado). */
 	_exit_game = true;
 	return true;
+}
+
+void OpenttdrsMaybeStartPbsTrace(const std::string &source_path)
+{
+	const char *out_path = std::getenv("OPENTTDRS_PBS_TRACE_OUT");
+	if (out_path == nullptr || out_path[0] == '\0') return;
+
+	/* Dedicated + -g loads a new game before the requested save. Match the
+	 * snapshot exporter and arm only after the requested AfterLoadGame call. */
+	static int call_count = 0;
+	call_count++;
+	const char *min_s = std::getenv("OPENTTDRS_SNAPSHOT_MIN_CALL");
+	const int min_call = (min_s != nullptr && min_s[0] != '\0') ? std::atoi(min_s) : 2;
+	if (call_count < min_call || _openttdrs_pbs_trace.armed) return;
+
+	_openttdrs_pbs_trace.out.open(out_path, std::ios::out | std::ios::trunc);
+	if (!_openttdrs_pbs_trace.out.is_open()) {
+		std::fprintf(stderr, "openttdrs PBS trace cannot open %s\n", out_path);
+		return;
+	}
+	const char *trace_source = std::getenv("OPENTTDRS_PBS_TRACE_SOURCE");
+	_openttdrs_pbs_trace.source_path =
+		trace_source != nullptr && trace_source[0] != '\0' ? trace_source : source_path;
+	_openttdrs_pbs_trace.rows = 0;
+	_openttdrs_pbs_trace.max_rows = ParseTraceTicks();
+	_openttdrs_pbs_trace.armed = true;
+
+	nlohmann::json metadata;
+	metadata["kind"] = "metadata";
+	metadata["schema_version"] = 1;
+	metadata["producer"] = "openttd";
+	const char *commit = std::getenv("OPENTTDRS_OPENTTD_COMMIT");
+	metadata["openttd_commit"] = commit != nullptr ? commit : "";
+	metadata["source_path"] = _openttdrs_pbs_trace.source_path;
+	metadata["initial_sample_point"] = "after_load_game";
+	metadata["tick_sample_point"] = "after_state_game_loop";
+	metadata["max_ticks"] = _openttdrs_pbs_trace.max_rows;
+	_openttdrs_pbs_trace.out << metadata.dump() << '\n';
+	_openttdrs_pbs_trace.out.flush();
+	WritePbsTraceRow("initial");
+}
+
+void OpenttdrsMaybeExportPbsTraceTick()
+{
+	if (!_openttdrs_pbs_trace.armed) return;
+
+	WritePbsTraceRow("tick");
+	_openttdrs_pbs_trace.rows++;
+	if (_openttdrs_pbs_trace.rows >= _openttdrs_pbs_trace.max_rows) {
+		_openttdrs_pbs_trace.armed = false;
+		_openttdrs_pbs_trace.out.close();
+		_exit_game = true;
+	}
 }

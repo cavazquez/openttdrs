@@ -62,6 +62,12 @@ fn collect_rows() -> Vec<TickRow> {
             });
         }
     }
+    assert!(
+        records
+            .iter()
+            .any(|record| !record.rail_reservations.is_empty()),
+        "PBS no dejó reservas observables en el mapa"
+    );
     out.sort_by(|a, b| a.tick.cmp(&b.tick).then(a.vehicle.cmp(&b.vehicle)));
     out
 }

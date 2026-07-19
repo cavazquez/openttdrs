@@ -372,6 +372,10 @@ impl GameState {
             #[allow(clippy::cast_possible_truncation)]
             let id = i as u32;
             let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
+            vehicle.progress = v.progress;
+            vehicle.cur_speed = v.cur_speed;
+            vehicle.subspeed = v.subspeed;
+            vehicle.direction = v.direction;
             if v.is_wagon && kind == VehicleKind::Train {
                 vehicle.engine_id = Some(crate::engine::ENGINE_WAGON_GOODS);
                 vehicle.capacity = crate::engine::engine_by_id(crate::engine::ENGINE_WAGON_GOODS)
@@ -393,6 +397,9 @@ impl GameState {
                 vehicle.running = true;
                 reconcile_imported_vehicle_position(&state.map, &mut vehicle);
             }
+            // `set_vehicle_orders` reinicia progreso para comandos nuevos, pero
+            // al importar debe conservar exactamente el estado sub-tesela del save.
+            vehicle.progress = v.progress;
             state.vehicles.push(vehicle);
             if kind == VehicleKind::Train {
                 last_train_head = Some(id);
@@ -448,6 +455,10 @@ mod tests {
                 SavVehicle {
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
+                    progress: 0,
+                    cur_speed: 0,
+                    subspeed: 0,
+                    direction: 0,
                     cargo_type: 9,
                     orders: Vec::new(),
                     current_order: 0,
@@ -457,6 +468,10 @@ mod tests {
                 SavVehicle {
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(6, 6),
+                    progress: 0,
+                    cur_speed: 0,
+                    subspeed: 0,
+                    direction: 0,
                     cargo_type: 0,
                     orders: Vec::new(),
                     current_order: 0,
@@ -466,6 +481,10 @@ mod tests {
                 SavVehicle {
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(7, 7),
+                    progress: 0,
+                    cur_speed: 0,
+                    subspeed: 0,
+                    direction: 0,
                     cargo_type: 5,
                     orders: Vec::new(),
                     current_order: 0,

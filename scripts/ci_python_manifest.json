@@ -28,12 +28,17 @@
     "scripts/gen_water_lock_tiles.py",
     "scripts/compare_snapshots.py",
     "scripts/test_compare_snapshots_mutation.py",
+    "scripts/validate_pbs_trace.py",
+    "scripts/normalize_pbs_trace.py",
+    "scripts/compare_pbs_traces.py",
+    "scripts/test_pbs_trace_tools.py",
     "scripts/run_ci_python.py",
     "scripts/test_ci_workflow_parity.py"
   ],
   "runs": [
     "scripts/test_openttd_reference_manifest.py",
     "scripts/test_compare_snapshots_mutation.py",
+    "scripts/test_pbs_trace_tools.py",
     "scripts/test_ci_workflow_parity.py"
   ]
 }

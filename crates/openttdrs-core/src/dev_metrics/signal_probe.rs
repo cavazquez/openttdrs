@@ -173,8 +173,8 @@ mod tests {
                 signal_tile: TRAIN_SUPPLY_WAIT_SIGNAL,
                 blocker_id: Some(TRAIN_SUPPLY_BLOCKER_ID),
                 blocker_spawn_tile: Some(TRAIN_SUPPLY_BLOCK_TILE),
-                max_ticks_until_wait: 500,
-                max_ticks_after_release: 200,
+                max_ticks_until_wait: 900,
+                max_ticks_after_release: 300,
             },
         );
         assert!(

@@ -330,13 +330,17 @@ pub fn build_train_supply_dual() -> GameState {
 }
 
 /// Pone en marcha el tren 2 del escenario dual cuando el 1 ya cargó en A
-/// (`current_order > 0`) y puede usar la vía de ida sin cruzarse de frente.
+/// (`current_order > 0`) y ya pasó la boca del depósito en la vía de ida.
 pub(crate) fn release_staged_depot_trains(state: &mut GameState) {
     let leader_ready = state
         .vehicles
         .iter()
         .find(|v| v.id == TRAIN_DUAL_VEHICLE_ID)
-        .is_some_and(|v| v.current_order > 0);
+        .is_some_and(|v| {
+            v.current_order > 0
+                && v.pos.y == TRAIN_DUAL_TRACK_OUT_Y
+                && v.pos.x > TRAIN_DUAL_DEPOT_EXIT.x
+        });
     if !leader_ready {
         return;
     }

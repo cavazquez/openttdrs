@@ -6,6 +6,11 @@
 use crate::map::TileCoord;
 use crate::vehicle::{Vehicle, VehicleOrder};
 
+#[allow(clippy::trivially_copy_pass_by_ref)] // firma exigida por `serde(skip_serializing_if)`
+fn is_zero_u8(v: &u8) -> bool {
+    *v == 0
+}
+
 /// Estado derivado del vehículo (no existe como enum en la sim; se deriva de campos).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -87,7 +92,11 @@ pub struct RailReservationRecord {
 pub struct VehicleRecord {
     pub id: u32,
     pub tile: TileCoord,
+    /// Remanente físico `DoUpdateSpeed` (trenes) o fracción 0..=255 (road).
     pub progress: u8,
+    /// Paso de píxel en la tesela (0..15); solo trenes. Ausente en trazas antiguas.
+    #[serde(default, skip_serializing_if = "is_zero_u8")]
+    pub rail_pixel: u8,
     pub dir: u8,
     pub speed: u16,
     pub subspeed: u8,

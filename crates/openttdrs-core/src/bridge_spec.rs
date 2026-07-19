@@ -484,7 +484,21 @@ mod tests {
         assert!(train.cur_speed > wood_cap, "motor más rápido que el puente");
         s.vehicles.push(train);
 
-        for _ in 0..30 {
+        // `DoUpdateSpeed` baja gradualmente hasta el tope (no clamp duro).
+        let mut capped = false;
+        for _ in 0..200 {
+            s.step();
+            if s.vehicles[0].cur_speed <= wood_cap {
+                capped = true;
+                break;
+            }
+        }
+        assert!(
+            capped,
+            "velocidad {} no bajó al tope de puente {}",
+            s.vehicles[0].cur_speed, wood_cap
+        );
+        for _ in 0..20 {
             s.step();
             assert!(
                 s.vehicles[0].cur_speed <= wood_cap,

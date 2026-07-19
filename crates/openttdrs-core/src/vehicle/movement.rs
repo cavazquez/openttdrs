@@ -1,8 +1,9 @@
 //! Lógica de movimiento del vehículo: step, progress, dirección, velocidad.
 
 use crate::engine::{
-    ROAD_ACCEL_ORIGINAL, accelerate_train_speed, decelerate_road_speed, decelerate_train_speed,
-    progress_step_for_speed, train_acceleration, update_road_speed,
+    ROAD_ACCEL_ORIGINAL, TrainAccelerationModel, decelerate_road_speed, get_advance_distance,
+    progress_step_for_speed, train_default_air_drag, train_max_te_n, update_road_speed,
+    update_train_speed, vanilla_train_tractive_effort,
 };
 use crate::map::{Map, TileCoord, slope_pixel_z};
 use crate::rail_type::rail_type_from_tile;
@@ -46,6 +47,14 @@ impl super::model::Vehicle {
     /// Ticks de sim estimados para cruzar una tesela en la dirección actual.
     #[must_use]
     pub fn ticks_per_tile(&self) -> u32 {
+        if self.kind == super::model::VehicleKind::Train {
+            // 16 píxeles × `GetAdvanceDistance` / (2× `GetAdvanceSpeed` por tick).
+            let adv = crate::engine::get_advance_distance(self.movement_direction()).max(1);
+            let speed_adv = crate::engine::get_advance_speed(self.effective_speed()).max(1);
+            let per_tick = speed_adv.saturating_mul(2).max(1);
+            let units = adv.saturating_mul(16);
+            return units.div_ceil(per_tick).saturating_mul(2).max(16);
+        }
         let step = self.progress_step().max(1);
         255_u32.div_ceil(u32::from(step))
     }
@@ -128,16 +137,27 @@ impl super::model::Vehicle {
 
     /// Como [`Self::step`], aplicando límites de velocidad del mapa (puentes).
     pub fn step_with_map(&mut self, map: Option<&Map>) {
+        self.step_with_map_and_accel(map, TrainAccelerationModel::Original);
+    }
+
+    /// Como [`Self::step_with_map`] con modelo de aceleración de tren explícito.
+    pub fn step_with_map_and_accel(
+        &mut self,
+        map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
+    ) {
         if !self.running {
-            self.update_movement_speed(map);
-            self.progress = 0;
+            self.update_movement_speed(map, train_accel);
+            if self.kind != super::model::VehicleKind::Train {
+                self.progress = 0;
+            }
             return;
         }
 
         self.resolve_conditional_orders();
 
         if self.holding_for_timetable() {
-            self.update_movement_speed(map);
+            self.update_movement_speed(map, train_accel);
             return;
         }
 
@@ -155,11 +175,15 @@ impl super::model::Vehicle {
         // de la parada se decide ahora.
         self.complete_station_load_window();
 
-        self.update_movement_speed(map);
-
         if self.kind == super::model::VehicleKind::Train {
-            self.apply_immediate_train_turnaround(map);
+            // `Train::Tick` llama `TrainLocoHandler` dos veces por tick de juego.
+            for _ in 0..2 {
+                self.train_loco_handler(map, train_accel);
+            }
+            return;
         }
+
+        self.update_movement_speed(map, train_accel);
 
         if self.movement_target().is_none() {
             if self.cur_speed == 0 && self.pos == self.dest {
@@ -203,9 +227,6 @@ impl super::model::Vehicle {
             if let Ok(progress) = u8::try_from(next) {
                 self.progress = progress;
             }
-            if let Some(map) = map {
-                self.sync_train_slope_speed(map);
-            }
             return;
         }
         let mut remaining = next;
@@ -220,18 +241,200 @@ impl super::model::Vehicle {
                 {
                     self.progress = progress;
                 }
-                if let Some(map) = map {
-                    self.sync_train_slope_speed(map);
-                }
                 return;
             }
             if self.movement_target().is_none() {
-                if let Some(map) = map {
-                    self.sync_train_slope_speed(map);
-                }
                 return;
             }
         }
+    }
+
+    /// Un `TrainLocoHandler` de `OpenTTD`: actualizar velocidad y consumir distancia.
+    fn train_loco_handler(&mut self, map: Option<&Map>, train_accel: TrainAccelerationModel) {
+        // Parada en estación / transferencia: no consumir el ancla `progress=255`.
+        if self.awaiting_load_window || self.cargo_transfer_active() {
+            return;
+        }
+
+        self.apply_immediate_train_turnaround(map);
+
+        if self.movement_target().is_none() {
+            self.update_movement_speed(map, train_accel);
+            if self.cur_speed == 0 && self.pos == self.dest {
+                self.advance_destination_after_arrival();
+            }
+            return;
+        }
+
+        if self.depart_turn > 0 {
+            self.update_movement_speed(map, train_accel);
+            let step = u16::from(self.progress_step().max(1));
+            let next = u16::from(self.depart_turn) + step;
+            if next < 255 {
+                if let Ok(t) = u8::try_from(next) {
+                    self.depart_turn = t;
+                }
+            } else {
+                self.depart_turn = 0;
+                self.progress = 0;
+                self.rail_pixel = 0;
+                if let Some(next) = self.movement_target() {
+                    self.set_direction_with_curve_penalty(
+                        super::direction_from_tile_step(self.pos, next),
+                        map,
+                    );
+                }
+            }
+            return;
+        }
+
+        let braking = !self.running || self.pbs_stuck;
+        let result = self.train_do_update_speed(map, train_accel, braking);
+        self.cur_speed = result.cur_speed;
+        self.subspeed = result.subspeed;
+        self.progress = 0;
+
+        if self.cur_speed == 0 {
+            return;
+        }
+
+        let mut j = result.advance;
+        let mut adv_spd = get_advance_distance(self.movement_direction());
+        if j < adv_spd {
+            self.progress = u8::try_from(j.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
+            if let Some(map) = map {
+                self.sync_train_slope_speed(map);
+            }
+            return;
+        }
+
+        loop {
+            j -= adv_spd;
+            self.rail_pixel = self.rail_pixel.saturating_add(1);
+            if self.rail_pixel >= 16 {
+                self.rail_pixel = 0;
+                self.advance_one_tile(map);
+            }
+            if self.cur_speed == 0 || self.movement_target().is_none() {
+                break;
+            }
+            adv_spd = get_advance_distance(self.movement_direction());
+            if j < adv_spd {
+                break;
+            }
+        }
+        // OpenTTD: `if (v->progress == 0) v->progress = j` (j cabe en u8 tras el bucle).
+        if self.progress == 0 {
+            self.progress = u8::try_from(j.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
+        }
+        if let Some(map) = map {
+            self.sync_train_slope_speed(map);
+        }
+    }
+
+    fn train_do_update_speed(
+        &self,
+        map: Option<&Map>,
+        train_accel: TrainAccelerationModel,
+        braking: bool,
+    ) -> crate::engine::DoUpdateSpeedResult {
+        let engine = self.effective_engine();
+        let mut max_speed = engine.max_speed;
+        if let Some(map) = map
+            && let Some(bridge_cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, self.pos)
+        {
+            max_speed = max_speed.min(bridge_cap);
+        }
+        let (power, weight) = if self.cached_power_hp > 0 || self.cached_weight_t > 0 {
+            (
+                self.cached_power_hp.max(engine.power_hp),
+                self.cached_weight_t.max(engine.weight_t),
+            )
+        } else {
+            (engine.power_hp, engine.weight_t)
+        };
+        let te = if self.cached_max_te_n > 0 {
+            self.cached_max_te_n
+        } else {
+            let te_coeff = vanilla_train_tractive_effort(engine.id);
+            train_max_te_n(weight, te_coeff)
+        };
+        let air = if self.cached_air_drag > 0 {
+            self.cached_air_drag
+        } else {
+            train_default_air_drag(engine.max_speed, 1)
+        };
+        update_train_speed(
+            self.cur_speed,
+            self.subspeed,
+            self.progress,
+            train_accel,
+            power,
+            weight,
+            te,
+            air,
+            max_speed,
+            braking,
+        )
+    }
+
+    /// `true` si este tick de juego (2× loco handler) cruzaría la tesela actual.
+    #[must_use]
+    pub fn train_would_leave_tile_this_tick(&self, train_accel: TrainAccelerationModel) -> bool {
+        if self.kind != super::model::VehicleKind::Train || self.cur_speed == 0 {
+            return false;
+        }
+        let mut speed = self.cur_speed;
+        let mut sub = self.subspeed;
+        let mut progress = self.progress;
+        let mut pixel = self.rail_pixel;
+        let engine = self.effective_engine();
+        let (power, weight) = if self.cached_power_hp > 0 || self.cached_weight_t > 0 {
+            (
+                self.cached_power_hp.max(engine.power_hp),
+                self.cached_weight_t.max(engine.weight_t),
+            )
+        } else {
+            (engine.power_hp, engine.weight_t)
+        };
+        let te = if self.cached_max_te_n > 0 {
+            self.cached_max_te_n
+        } else {
+            train_max_te_n(weight, vanilla_train_tractive_effort(engine.id))
+        };
+        let air = if self.cached_air_drag > 0 {
+            self.cached_air_drag
+        } else {
+            train_default_air_drag(engine.max_speed, 1)
+        };
+        for _ in 0..2 {
+            let r = update_train_speed(
+                speed,
+                sub,
+                progress,
+                train_accel,
+                power,
+                weight,
+                te,
+                air,
+                engine.max_speed,
+                false,
+            );
+            speed = r.cur_speed;
+            sub = r.subspeed;
+            let mut j = r.advance;
+            let mut adv = get_advance_distance(self.direction);
+            while j >= adv && speed > 0 {
+                j -= adv;
+                pixel = pixel.saturating_add(1);
+                if pixel >= 16 {
+                    return true;
+                }
+                adv = get_advance_distance(self.direction);
+            }
+            progress = u8::try_from(j.min(u32::from(u8::MAX))).unwrap_or(u8::MAX);
+        }
+        false
     }
 
     /// Máximo de teselas recordadas para huella PBS / consist.
@@ -367,7 +570,7 @@ impl super::model::Vehicle {
         self.direction = new_dir;
     }
 
-    fn update_movement_speed(&mut self, map: Option<&Map>) {
+    fn update_movement_speed(&mut self, map: Option<&Map>, train_accel: TrainAccelerationModel) {
         let engine = self.effective_engine();
         let mut max_speed = engine.max_speed;
         if let Some(map) = map
@@ -385,27 +588,47 @@ impl super::model::Vehicle {
         } else {
             (engine.power_hp, engine.weight_t)
         };
-        if self.running && self.movement_target().is_some() {
-            let (cur, sub) = if self.kind == super::model::VehicleKind::Train {
-                accelerate_train_speed(self.cur_speed, self.subspeed, power, weight, max_speed)
+        if self.kind == super::model::VehicleKind::Train {
+            let braking = !(self.running && self.movement_target().is_some());
+            // Sin controlador: no mezclar el remanente físico en el avance.
+            let te = if self.cached_max_te_n > 0 {
+                self.cached_max_te_n
             } else {
-                update_road_speed(
-                    self.cur_speed,
-                    self.subspeed,
-                    ROAD_ACCEL_ORIGINAL,
-                    0,
-                    max_speed,
-                )
+                train_max_te_n(weight, vanilla_train_tractive_effort(engine.id))
             };
+            let air = if self.cached_air_drag > 0 {
+                self.cached_air_drag
+            } else {
+                train_default_air_drag(engine.max_speed, 1)
+            };
+            let r = update_train_speed(
+                self.cur_speed,
+                self.subspeed,
+                0,
+                train_accel,
+                power,
+                weight,
+                te,
+                air,
+                max_speed,
+                braking,
+            );
+            self.cur_speed = r.cur_speed.min(max_speed);
+            self.subspeed = r.subspeed;
+            return;
+        }
+        if self.running && self.movement_target().is_some() {
+            let (cur, sub) = update_road_speed(
+                self.cur_speed,
+                self.subspeed,
+                ROAD_ACCEL_ORIGINAL,
+                0,
+                max_speed,
+            );
             self.cur_speed = cur;
             self.subspeed = sub;
         } else {
-            let (cur, sub) = if self.kind == super::model::VehicleKind::Train {
-                let accel = train_acceleration(power, weight);
-                decelerate_train_speed(self.cur_speed, self.subspeed, accel)
-            } else {
-                decelerate_road_speed(self.cur_speed, self.subspeed)
-            };
+            let (cur, sub) = decelerate_road_speed(self.cur_speed, self.subspeed);
             self.cur_speed = cur;
             self.subspeed = sub;
         }

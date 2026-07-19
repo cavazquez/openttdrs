@@ -321,6 +321,37 @@ fn stop_kind_from_facilities(facilities: u8) -> StopKind {
     }
 }
 
+/// Píxeles consumidos en la tesela hacia el cruce, desde `x_pos`/`direction`.
+///
+/// En `DIR_NE` (`x` decreciente) el oráculo PBS encaja con `15 - (x_pos & 15)`.
+fn rail_pixel_from_openttd_pos(x_pos: i32, _direction: u8) -> u8 {
+    let fract = u8::try_from(x_pos.rem_euclid(16)).unwrap_or(0);
+    15u8.saturating_sub(fract)
+}
+
+/// IDs vanilla de motor rail de `OpenTTD` no son contiguos con el catálogo Rust:
+/// entre Kirby (0) y Chaney (8) están locomotoras de otros climas.
+fn vanilla_train_engine_id(openttd_id: u16) -> Option<u16> {
+    let id = match openttd_id {
+        0 => 100,  // Kirby Paul Tank
+        8 => 101,  // Chaney 'Jubilee'
+        9 => 102,  // Ginzu 'A4'
+        10 => 103, // SH '8P'
+        11 => 104, // Manley-Morel
+        12 => 105, // Dash
+        13 => 106, // SH/Hendry '25'
+        14 => 107, // UU '37'
+        15 => 108, // Floss '47'
+        22 => 109, // SH '125'
+        23 => 110, // SH '30'
+        24 => 111, // SH '40'
+        25 => 112, // T.I.M.
+        26 => 113, // AsiaStar
+        _ => return None,
+    };
+    Some(id)
+}
+
 impl GameState {
     /// Estado jugable desde un save de `OpenTTD`: mapa, estaciones, ciudades,
     /// vehículos (cabezas de convoy) y dinero de la empresa.
@@ -334,6 +365,8 @@ impl GameState {
         normalize_rail_trackbits_from_neighbors(&mut map);
         bridge_collinear_rail_gaps(&mut map);
         let mut state = Self::from_map(map);
+        // OpenTTD ≥15 default `train_acceleration_model = 1` (realista).
+        state.train_acceleration_model = crate::engine::TrainAccelerationModel::Realistic;
         if let Some(time) = sav.game_time {
             state.tick = date::game_tick_from_sav_time(time);
         }
@@ -376,6 +409,14 @@ impl GameState {
             vehicle.cur_speed = v.cur_speed;
             vehicle.subspeed = v.subspeed;
             vehicle.direction = v.direction;
+            if kind == VehicleKind::Train {
+                vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.direction);
+                if let Some(candidate) = vanilla_train_engine_id(v.engine_type)
+                    && crate::engine::engine_by_id(candidate).is_some()
+                {
+                    vehicle.engine_id = Some(candidate);
+                }
+            }
             if v.is_wagon && kind == VehicleKind::Train {
                 vehicle.engine_id = Some(crate::engine::ENGINE_WAGON_GOODS);
                 vehicle.capacity = crate::engine::engine_by_id(crate::engine::ENGINE_WAGON_GOODS)
@@ -400,6 +441,9 @@ impl GameState {
             // `set_vehicle_orders` reinicia progreso para comandos nuevos, pero
             // al importar debe conservar exactamente el estado sub-tesela del save.
             vehicle.progress = v.progress;
+            if kind == VehicleKind::Train {
+                vehicle.rail_pixel = rail_pixel_from_openttd_pos(v.x_pos, v.direction);
+            }
             state.vehicles.push(vehicle);
             if kind == VehicleKind::Train {
                 last_train_head = Some(id);
@@ -456,9 +500,12 @@ mod tests {
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
                     progress: 0,
+                    x_pos: 5 * 16,
+                    y_pos: 5 * 16,
                     cur_speed: 0,
                     subspeed: 0,
                     direction: 0,
+                    engine_type: 0,
                     cargo_type: 9,
                     orders: Vec::new(),
                     current_order: 0,
@@ -469,9 +516,12 @@ mod tests {
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(6, 6),
                     progress: 0,
+                    x_pos: 6 * 16,
+                    y_pos: 6 * 16,
                     cur_speed: 0,
                     subspeed: 0,
                     direction: 0,
+                    engine_type: 0,
                     cargo_type: 0,
                     orders: Vec::new(),
                     current_order: 0,
@@ -482,9 +532,12 @@ mod tests {
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(7, 7),
                     progress: 0,
+                    x_pos: 7 * 16,
+                    y_pos: 7 * 16,
                     cur_speed: 0,
                     subspeed: 0,
                     direction: 0,
+                    engine_type: 0,
                     cargo_type: 5,
                     orders: Vec::new(),
                     current_order: 0,

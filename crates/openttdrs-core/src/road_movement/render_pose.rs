@@ -16,6 +16,9 @@ use crate::vehicle::{Vehicle, VehicleDirection, VehicleKind, direction_from_tile
 /// Sub-tesela `OpenTTD` para dibujo (recto, curva de giro o media vuelta en parada).
 #[must_use]
 pub fn vehicle_subtile(v: &Vehicle) -> (f32, f32) {
+    if matches!(v.kind, VehicleKind::Train) {
+        return vehicle_subtile_at(v, VehiclePose::from_vehicle(v));
+    }
     vehicle_subtile_with_progress(v, v.progress)
 }
 
@@ -85,7 +88,7 @@ pub fn vehicle_subtile_at_with_map(
 
 #[must_use]
 pub fn train_subtile_direction(v: &Vehicle) -> VehicleDirection {
-    if v.movement_target().is_some() && (v.progress < 255 || v.cur_speed > 0) {
+    if v.movement_target().is_some() && (v.rail_pixel > 0 || v.cur_speed > 0 || v.progress > 0) {
         return v.movement_direction();
     }
     v.direction

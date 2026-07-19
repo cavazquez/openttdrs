@@ -740,6 +740,7 @@ mod tests {
                 id: 1,
                 tile: TileCoord::new(2, 3),
                 progress: 10,
+                rail_pixel: 0,
                 dir: 5,
                 speed,
                 subspeed: 0,

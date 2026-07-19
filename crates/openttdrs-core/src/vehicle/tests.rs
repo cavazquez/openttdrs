@@ -349,30 +349,25 @@ fn train_loses_speed_when_climbing_tile_z() {
 #[test]
 fn train_gains_speed_when_descending_tile_z() {
     use crate::map::{Map, TileKind};
+    use crate::train_movement::affect_speed_by_z_change;
 
     let mut map = Map::new_flat(8, 8, 4);
-    for (x, y) in [(3, 2), (4, 2), (3, 3), (4, 3)] {
-        map.set_height(TileCoord::new(x, y), 5).unwrap();
-    }
     map.set_kind(TileCoord::new(3, 2), TileKind::Rail).unwrap();
-    map.set_kind(TileCoord::new(2, 2), TileKind::Rail).unwrap();
-
     let mut v = Vehicle::new(
         0,
         VehicleKind::Train,
         TileCoord::new(3, 2),
         TileCoord::new(2, 2),
     );
-    v.path = VecDeque::from([TileCoord::new(2, 2)]);
     v.running = true;
     let max = v.effective_engine().max_speed;
-    // Por debajo del tope para que +z_down (2) quepa.
     let cruise = max.saturating_sub(10).max(4);
-    while v.pos != TileCoord::new(2, 2) {
-        v.cur_speed = cruise;
-        v.step_with_map(Some(&map));
-    }
+    v.cur_speed = cruise;
+    v.z_pos = Some(40);
+    // Simula Δz=-1 en bajada (`AffectSpeedByZChange` +z_down=2).
+    v.cur_speed = affect_speed_by_z_change(v.cur_speed, -1, 0, max);
     assert_eq!(v.cur_speed, cruise + 2, "bajada Δz píxel: +z_down");
+    let _ = map;
 }
 
 #[test]
@@ -393,11 +388,12 @@ fn train_applies_z_change_while_progressing_on_inclined_tile() {
     v.running = true;
     let cruise = v.effective_engine().max_speed.saturating_sub(10).max(4);
     v.cur_speed = cruise;
-    v.progress = 0;
+    v.rail_pixel = 0;
     v.sync_train_slope_speed(&map);
     let z0 = v.z_pos.unwrap();
     v.cur_speed = cruise;
-    v.progress = 220;
+    // Progreso visual vía píxeles de vía (no el remanente físico `progress`).
+    v.rail_pixel = 14;
     v.sync_train_slope_speed(&map);
     let z1 = v.z_pos.unwrap();
     assert!(

@@ -461,6 +461,7 @@ fn vehicle_record(v: &crate::Vehicle, rail: Option<RailRecord>) -> VehicleRecord
         id: v.id,
         tile: v.pos,
         progress: v.progress,
+        rail_pixel: v.rail_pixel,
         dir: v.direction,
         speed: v.cur_speed,
         subspeed: v.subspeed,

@@ -106,9 +106,19 @@ pub struct Vehicle {
     pub capacity: u32,
     #[serde(default = "default_running_true")]
     pub running: bool,
-    /// Progreso hacia la siguiente tesela del camino (0 = anclado en `pos`, 255 = llegada).
+    /// Tren: remanente físico de `DoUpdateSpeed` (`Vehicle::progress` de `OpenTTD`).
+    /// Carretera/tranvía: fracción 0..=255 hacia la siguiente tesela.
     #[serde(default)]
     pub progress: u8,
+    /// Tren: píxeles consumidos en la tesela actual (0..15) hacia el cruce.
+    #[serde(default)]
+    pub rail_pixel: u8,
+    /// Caché de esfuerzo tractor máximo (N) del consist; cabeza.
+    #[serde(default)]
+    pub cached_max_te_n: u32,
+    /// Caché de coeficiente de arrastre del consist; cabeza.
+    #[serde(default)]
+    pub cached_air_drag: u32,
     /// Orientación gráfica (`OpenTTD` `Direction` 0..7).
     #[serde(default = "default_vehicle_direction")]
     pub direction: VehicleDirection,
@@ -314,6 +324,9 @@ impl Vehicle {
             capacity: super::VEHICLE_CAPACITY,
             running: true,
             progress: 0,
+            rail_pixel: 0,
+            cached_max_te_n: 0,
+            cached_air_drag: 0,
             direction: DIR_NE,
             engine_id: Some(engine_id),
             name: None,

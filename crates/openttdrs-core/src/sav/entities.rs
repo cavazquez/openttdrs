@@ -272,11 +272,16 @@ pub struct SavVehicle {
     pub pos: TileCoord,
     /// Progreso sub-tesela (`Vehicle::progress`, 0…255) al guardar.
     pub progress: u8,
+    /// Coordenada píxel absoluta (`Vehicle::x_pos` / `y_pos`).
+    pub x_pos: i32,
+    pub y_pos: i32,
     /// Velocidad y fracción interna al guardar (`cur_speed` / `subspeed`).
     pub cur_speed: u16,
     pub subspeed: u8,
     /// Dirección visual/de movimiento (`Vehicle::direction`) al guardar.
     pub direction: u8,
+    /// ID de motor vanilla de `OpenTTD` (`Vehicle::engine_type`).
+    pub engine_type: u16,
     /// `CargoType` de `OpenTTD` (0 = pasajeros).
     pub cargo_type: u8,
     /// Órdenes de la lista referenciada (`ORDL`).
@@ -295,6 +300,7 @@ const GVSF_FRONT: u64 = 0x01;
 /// Vehículos del chunk `VEHS` (sparse table): trenes (cabeza + vagones) y
 /// vehículos de carretera cabeza de convoy; barcos/aviones se omiten.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub(crate) fn vehicles_from_chunks(
     chunks: &[RawChunk],
     map_w: u32,
@@ -340,6 +346,12 @@ pub(crate) fn vehicles_from_chunks(
             .unwrap_or(0)
             .try_into()
             .unwrap_or(u8::MAX);
+        let x_pos = record_get(common, "x_pos")
+            .and_then(SlValue::as_i64)
+            .unwrap_or(i64::from(pos.x) * 16);
+        let y_pos = record_get(common, "y_pos")
+            .and_then(SlValue::as_i64)
+            .unwrap_or(i64::from(pos.y) * 16);
         let cur_speed = record_get(common, "cur_speed")
             .and_then(SlValue::as_u64)
             .unwrap_or(0)
@@ -355,6 +367,11 @@ pub(crate) fn vehicles_from_chunks(
             .unwrap_or(0)
             .try_into()
             .unwrap_or(u8::MAX);
+        let engine_type = record_get(common, "engine_type")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or(u16::MAX);
         let cargo_type = record_get(common, "cargo_type")
             .and_then(SlValue::as_u64)
             .unwrap_or(0xFF);
@@ -379,9 +396,12 @@ pub(crate) fn vehicles_from_chunks(
             kind,
             pos,
             progress,
+            x_pos: i32::try_from(x_pos).unwrap_or(0),
+            y_pos: i32::try_from(y_pos).unwrap_or(0),
             cur_speed,
             subspeed,
             direction,
+            engine_type,
             cargo_type: cargo_type.min(255) as u8,
             orders,
             current_order,

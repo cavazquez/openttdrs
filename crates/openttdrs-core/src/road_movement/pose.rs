@@ -19,10 +19,17 @@ pub struct VehiclePose {
 impl VehiclePose {
     #[must_use]
     pub fn from_vehicle(v: &Vehicle) -> Self {
+        let progress_f = if v.kind == VehicleKind::Train {
+            crate::engine::train_visual_progress_from_pixel(v.rail_pixel)
+        } else {
+            f32::from(v.progress)
+        };
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let progress = progress_f.round() as u8;
         Self {
             pos: v.pos,
-            progress: v.progress,
-            progress_f: f32::from(v.progress),
+            progress,
+            progress_f,
             depart_turn: v.depart_turn,
             depart_turn_f: f32::from(v.depart_turn),
             path_index: 0,

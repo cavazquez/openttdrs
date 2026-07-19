@@ -9,9 +9,36 @@ pub const REFERENCE_PROGRESS_STEP: u8 = 112;
 /// Aceleración carretera modelo original (`RoadVehicle::UpdateSpeed`, `AM_ORIGINAL`).
 pub const ROAD_ACCEL_ORIGINAL: u16 = 256;
 
+/// Aceleración gravitatoria de `OpenTTD` (`GROUND_ACCELERATION`, N/tonelada efectiva).
+pub const GROUND_ACCELERATION: u32 = 9800;
+
+/// Área frontal de tren fuera de túnel (`Train::GetAirDragArea`).
+pub const TRAIN_AIR_DRAG_AREA: u8 = 14;
+
 const REFERENCE_MAX_SPEED: u16 = 112;
 const TILE_AXIAL_DISTANCE: u32 = 192;
-const TILE_CORNER_DISTANCE: u32 = 256;
+/// `TILE_CORNER_DISTANCE` de `OpenTTD` es 128; `GetAdvanceDistance` usa `* 2` → 256.
+const TILE_CORNER_ADVANCE: u32 = 256;
+
+/// Modelo de aceleración de tren (`_settings_game.vehicle.train_acceleration_model`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[repr(u8)]
+pub enum TrainAccelerationModel {
+    /// `AM_ORIGINAL`: `acceleration * 2` / freno `* 4`.
+    #[default]
+    Original = 0,
+    /// `AM_REALISTIC`: `GetAcceleration()` por potencia/resistencia.
+    Realistic = 1,
+}
+
+/// Resultado de `GroundVehicleBase::DoUpdateSpeed`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DoUpdateSpeedResult {
+    pub cur_speed: u16,
+    pub subspeed: u8,
+    /// Distancia física del tick (`GetAdvanceSpeed(spd) + progress` previo, sin el resto).
+    pub advance: u32,
+}
 
 /// Longitud lógica de tesela (`GetAdvanceDistance` de `OpenTTD`).
 #[must_use]
@@ -19,11 +46,60 @@ pub const fn tile_progress_length(direction: VehicleDirection) -> u32 {
     if direction & 1 == 1 {
         TILE_AXIAL_DISTANCE
     } else {
-        TILE_CORNER_DISTANCE
+        TILE_CORNER_ADVANCE
     }
 }
 
-/// Actualiza `cur_speed`/`subspeed` (`GroundVehicleBase::DoUpdateSpeed`).
+/// Alias explícito de [`tile_progress_length`].
+#[must_use]
+pub const fn get_advance_distance(direction: VehicleDirection) -> u32 {
+    tile_progress_length(direction)
+}
+
+/// `Vehicle::GetAdvanceSpeed`.
+#[must_use]
+pub const fn get_advance_speed(speed: u16) -> u32 {
+    (speed as u32) * 3 / 4
+}
+
+/// Actualiza `cur_speed`/`subspeed` y devuelve la distancia (`DoUpdateSpeed`).
+///
+/// `prior_progress` es el remanente físico (`Vehicle::progress`) al inicio del
+/// handler; `OpenTTD` lo suma y lo pone a 0 dentro de `DoUpdateSpeed`.
+#[must_use]
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // `subspeed = (uint8_t)spd`
+pub fn do_update_speed(
+    cur_speed: u16,
+    subspeed: u8,
+    accel: i32,
+    min_speed: u16,
+    max_speed: u16,
+    prior_progress: u8,
+) -> DoUpdateSpeedResult {
+    let spd = i32::from(subspeed).saturating_add(accel);
+    let new_subspeed = spd as u8;
+    let cur = i32::from(cur_speed);
+    let max_i = i32::from(max_speed);
+    let tempmax = if cur > max_i {
+        std::cmp::max(cur - (cur / 10) - 1, max_i)
+    } else {
+        max_i
+    };
+    let speed_delta = spd >> 8;
+    let new_cur = std::cmp::max(
+        std::cmp::min(cur.saturating_add(speed_delta), tempmax),
+        i32::from(min_speed),
+    );
+    let new_cur_u16 = u16::try_from(new_cur).unwrap_or(0);
+    let advance = get_advance_speed(new_cur_u16).saturating_add(u32::from(prior_progress));
+    DoUpdateSpeedResult {
+        cur_speed: new_cur_u16,
+        subspeed: new_subspeed,
+        advance,
+    }
+}
+
+/// Actualiza `cur_speed`/`subspeed` (`GroundVehicleBase::DoUpdateSpeed`) sin distancia.
 #[must_use]
 #[allow(clippy::cast_possible_truncation)] // `subspeed = (uint8_t)spd` en upstream
 pub fn update_road_speed(
@@ -33,20 +109,15 @@ pub fn update_road_speed(
     min_speed: u16,
     max_speed: u16,
 ) -> (u16, u8) {
-    let spd = u16::from(subspeed).saturating_add(accel);
-    let new_subspeed = spd as u8;
-    let cur = i32::from(cur_speed);
-    let max_i = i32::from(max_speed);
-    let tempmax = if cur > max_i {
-        std::cmp::max(cur - (cur / 10) - 1, max_i)
-    } else {
-        max_i
-    };
-    let new_cur = std::cmp::max(
-        std::cmp::min(cur + i32::from(spd >> 8), tempmax),
-        i32::from(min_speed),
+    let r = do_update_speed(
+        cur_speed,
+        subspeed,
+        i32::from(accel),
+        min_speed,
+        max_speed,
+        0,
     );
-    (u16::try_from(new_cur).unwrap_or(0), new_subspeed)
+    (r.cur_speed, r.subspeed)
 }
 
 /// Aceleración `AM_ORIGINAL` de tren (`Train::UpdateAcceleration`, `train_cmd.cpp:451`).
@@ -54,6 +125,75 @@ pub fn update_road_speed(
 pub fn train_acceleration(power_hp: u32, weight_t: u16) -> u8 {
     let weight = u32::from(weight_t.max(1));
     ((power_hp / weight) * 4).clamp(1, 255) as u8
+}
+
+/// Coeficiente de arrastre por defecto desde velocidad máxima de display (`PowerChanged`).
+#[must_use]
+pub fn train_default_air_drag(display_max_speed: u16, consist_parts: u32) -> u32 {
+    let air_drag = if display_max_speed <= 10 {
+        192
+    } else {
+        std::cmp::max(2048 / u32::from(display_max_speed.max(1)), 1)
+    };
+    let parts = consist_parts.max(1);
+    air_drag + 3 * air_drag * parts / 20
+}
+
+/// Esfuerzo tractor máximo en N (`PowerChanged`: `weight * TE * g / 256`).
+#[must_use]
+pub fn train_max_te_n(weight_t: u16, tractive_effort: u8) -> u32 {
+    u32::from(weight_t)
+        .saturating_mul(u32::from(tractive_effort))
+        .saturating_mul(GROUND_ACCELERATION)
+        / 256
+}
+
+/// `Train::GetRollingFriction`.
+#[must_use]
+pub fn train_rolling_friction(speed: u16) -> u32 {
+    15 * (512 + u32::from(speed)) / 512
+}
+
+/// `GroundVehicle::GetAcceleration` para tren no-maglev en llano (`AS_ACCEL`).
+#[must_use]
+pub fn train_realistic_acceleration(
+    speed: u16,
+    power_hp: u32,
+    weight_t: u16,
+    max_te_n: u32,
+    air_drag: u32,
+    area: u8,
+    slope_resistance: i64,
+) -> i32 {
+    let mass = i64::from(weight_t.max(1));
+    let power_w = i64::from(power_hp) * 746;
+    let axle = 10 * mass;
+    let mut resistance = axle + mass * i64::from(train_rolling_friction(speed));
+    resistance +=
+        i64::from(area) * i64::from(air_drag) * i64::from(speed) * i64::from(speed) / 1000;
+    resistance += slope_resistance;
+
+    let force = if speed > 0 {
+        let mut force = power_w * 18 / (i64::from(speed) * 5);
+        if force > i64::from(max_te_n) {
+            force = i64::from(max_te_n);
+        }
+        force
+    } else {
+        let kick = std::cmp::min(i64::from(max_te_n), power_w);
+        std::cmp::max(kick, mass * 8 + resistance)
+    };
+
+    if force == resistance {
+        return 0;
+    }
+    let accel = (force - resistance) / (mass * 4);
+    #[allow(clippy::cast_possible_truncation)] // OpenTTD usa `int` tras Clamp implícito
+    if force < resistance {
+        i32::try_from(accel.min(-1)).unwrap_or(i32::MIN)
+    } else {
+        i32::try_from(accel.max(1)).unwrap_or(i32::MAX)
+    }
 }
 
 /// Avance de velocidad de tren `AM_ORIGINAL` (`Train::UpdateSpeed`, `accel·2`).
@@ -68,6 +208,70 @@ pub fn accelerate_train_speed(
     let accel = u16::from(train_acceleration(power_hp, weight_t));
     let delta = accel.saturating_mul(2);
     update_road_speed(cur_speed, subspeed, delta, 0, max_speed)
+}
+
+/// `Train::UpdateSpeed` + `DoUpdateSpeed` con distancia (original o realista).
+#[must_use]
+#[allow(clippy::too_many_arguments)]
+pub fn update_train_speed(
+    cur_speed: u16,
+    subspeed: u8,
+    prior_progress: u8,
+    model: TrainAccelerationModel,
+    power_hp: u32,
+    weight_t: u16,
+    max_te_n: u32,
+    air_drag: u32,
+    max_speed: u16,
+    braking: bool,
+) -> DoUpdateSpeedResult {
+    match model {
+        TrainAccelerationModel::Original => {
+            let base = train_acceleration(power_hp, weight_t);
+            let accel = if braking {
+                -i32::from(base) * 4
+            } else {
+                i32::from(base) * 2
+            };
+            do_update_speed(cur_speed, subspeed, accel, 0, max_speed, prior_progress)
+        }
+        TrainAccelerationModel::Realistic => {
+            let accel = if braking {
+                // Frenado realista: `GetAcceleration` con `AS_BRAKE` (fuerza negativa).
+                // Para el fixture PBS el tren acelera; usamos magnitud realista hacia 0.
+                -train_realistic_acceleration(
+                    cur_speed,
+                    power_hp,
+                    weight_t,
+                    max_te_n,
+                    air_drag,
+                    TRAIN_AIR_DRAG_AREA,
+                    0,
+                )
+                .abs()
+                .max(1)
+            } else {
+                train_realistic_acceleration(
+                    cur_speed,
+                    power_hp,
+                    weight_t,
+                    max_te_n,
+                    air_drag,
+                    TRAIN_AIR_DRAG_AREA,
+                    0,
+                )
+            };
+            let min_speed = if braking { 0 } else { 2 };
+            do_update_speed(
+                cur_speed,
+                subspeed,
+                accel,
+                min_speed,
+                max_speed,
+                prior_progress,
+            )
+        }
+    }
 }
 
 /// Frenado de tren `AM_ORIGINAL` (`Train::UpdateSpeed`, `accel·4` hacia 0).
@@ -98,20 +302,56 @@ pub fn decelerate_road_speed(cur_speed: u16, subspeed: u8) -> (u16, u8) {
 }
 
 /// Avance sub-tile por tick (`GetAdvanceSpeed` × escala a `progress` 0–255).
+///
+/// Solo carretera/tranvía: los trenes usan distancia física + píxeles.
 #[must_use]
 pub fn progress_step_for_speed(max_speed: u16, direction: VehicleDirection) -> u8 {
     if max_speed == 0 {
         return 0;
     }
-    let advance = u32::from(max_speed) * 3 / 4;
+    let advance = get_advance_speed(max_speed);
     let tile_len = tile_progress_length(direction);
-    let reference_advance = u32::from(REFERENCE_MAX_SPEED) * 3 / 4;
+    let reference_advance = get_advance_speed(REFERENCE_MAX_SPEED);
     let step = advance * u32::from(REFERENCE_PROGRESS_STEP) * TILE_AXIAL_DISTANCE
         / (reference_advance * tile_len);
     if step == 0 {
         return 0;
     }
     step.clamp(1, 255) as u8
+}
+
+/// Progreso visual 0..=255 desde píxeles de vía (`16` píxeles / tesela).
+#[must_use]
+pub fn train_visual_progress_from_pixel(rail_pixel: u8) -> f32 {
+    (f32::from(rail_pixel) / 16.0) * 255.0
+}
+
+/// Esfuerzo tractor vanilla por `engine_id` interno (`RVI` param g).
+#[must_use]
+pub fn vanilla_train_tractive_effort(engine_id: u16) -> u8 {
+    use super::{
+        ENGINE_TRAIN_ASIASTAR, ENGINE_TRAIN_CHANEY_JUBILEE, ENGINE_TRAIN_DASH,
+        ENGINE_TRAIN_FLOSS_47, ENGINE_TRAIN_GINZU_A4, ENGINE_TRAIN_KIRBY, ENGINE_TRAIN_LEV1,
+        ENGINE_TRAIN_MANLEY_MOREL, ENGINE_TRAIN_SH_8P, ENGINE_TRAIN_SH_30, ENGINE_TRAIN_SH_40,
+        ENGINE_TRAIN_SH_125, ENGINE_TRAIN_SH_HENDRY_25, ENGINE_TRAIN_TIM, ENGINE_TRAIN_UU_37,
+        ENGINE_TRAIN_X2001,
+    };
+    match engine_id {
+        ENGINE_TRAIN_KIRBY => 50,
+        ENGINE_TRAIN_CHANEY_JUBILEE | ENGINE_TRAIN_UU_37 => 120,
+        ENGINE_TRAIN_GINZU_A4 | ENGINE_TRAIN_FLOSS_47 => 140,
+        ENGINE_TRAIN_SH_8P => 130,
+        ENGINE_TRAIN_MANLEY_MOREL => 85,
+        ENGINE_TRAIN_DASH => 70,
+        ENGINE_TRAIN_SH_HENDRY_25 => 95,
+        ENGINE_TRAIN_SH_125 => 190,
+        ENGINE_TRAIN_SH_30 | ENGINE_TRAIN_X2001 => 180,
+        ENGINE_TRAIN_SH_40 => 205,
+        ENGINE_TRAIN_TIM => 240,
+        ENGINE_TRAIN_ASIASTAR => 250,
+        ENGINE_TRAIN_LEV1 => 200,
+        _ => 75,
+    }
 }
 
 #[cfg(test)]
@@ -167,6 +407,70 @@ mod tests {
     }
 
     #[test]
+    fn ginzu_realistic_accel_matches_pbs_oracle_series() {
+        let power = 1200_u32;
+        let weight = 162_u16;
+        let te = 140_u8;
+        let max_te = train_max_te_n(weight, te);
+        let air = train_default_air_drag(128, 1);
+        let samples = [(73, 59), (74, 58), (75, 57), (80, 52), (85, 48), (89, 46)];
+        for (speed, expected) in samples {
+            let accel = train_realistic_acceleration(
+                speed,
+                power,
+                weight,
+                max_te,
+                air,
+                TRAIN_AIR_DRAG_AREA,
+                0,
+            );
+            assert_eq!(accel, expected, "speed {speed}");
+        }
+    }
+
+    #[test]
+    fn do_update_speed_adds_prior_progress_like_openttd() {
+        let r = do_update_speed(73, 52, 59, 2, 128, 51);
+        assert_eq!(r.cur_speed, 73);
+        assert_eq!(r.subspeed, 111);
+        assert_eq!(r.advance, get_advance_speed(73) + 51);
+    }
+
+    #[test]
+    fn pbs_fixture_first_tick_double_loco_handler() {
+        let power = 1200;
+        let weight = 162;
+        let te = train_max_te_n(weight, 140);
+        let air = train_default_air_drag(128, 1);
+        let mut speed = 73_u16;
+        let mut sub = 52_u8;
+        let mut progress = 51_u8;
+        for _ in 0..2 {
+            let r = update_train_speed(
+                speed,
+                sub,
+                progress,
+                TrainAccelerationModel::Realistic,
+                power,
+                weight,
+                te,
+                air,
+                128,
+                false,
+            );
+            speed = r.cur_speed;
+            sub = r.subspeed;
+            let adv = get_advance_distance(1);
+            let mut j = r.advance;
+            while j >= adv && speed > 0 {
+                j -= adv;
+            }
+            progress = u8::try_from(j & 0xFF).unwrap();
+        }
+        assert_eq!((progress, speed, sub), (159, 73, 170));
+    }
+
+    #[test]
     fn train_accel_slower_than_road_at_standstill() {
         let mut road_cur = 0_u16;
         let road_sub;
@@ -195,5 +499,27 @@ mod tests {
         let train = progress_step_for_speed(64, DIR_SW);
         assert!(bus > truck);
         assert!(truck > train);
+    }
+
+    #[test]
+    fn axial_and_corner_advance_distances_match_openttd() {
+        assert_eq!(get_advance_distance(1), 192); // DIR_NE odd → axial
+        assert_eq!(get_advance_distance(2), 256); // DIR_E even → corner*2
+    }
+
+    #[test]
+    fn axial_controller_keeps_remainder_under_threshold() {
+        // j = 54+100 = 154 < 192 → no paso de píxel; progress = 154.
+        let r = do_update_speed(72, 0, 0, 0, 128, 100);
+        assert_eq!(r.advance, 54 + 100);
+        assert!(r.advance < get_advance_distance(1));
+    }
+
+    #[test]
+    fn corner_threshold_is_wider_than_axial() {
+        assert!(get_advance_distance(0) > get_advance_distance(1));
+        assert!((train_visual_progress_from_pixel(8) - 127.5).abs() < f32::EPSILON);
+        assert!((train_visual_progress_from_pixel(0)).abs() < f32::EPSILON);
+        assert!((train_visual_progress_from_pixel(16) - 255.0).abs() < f32::EPSILON);
     }
 }

@@ -146,6 +146,7 @@ fn run(args: &Args) -> Result<(), String> {
                 vehicle.cur_speed,
                 vehicle.subspeed,
                 vehicle.direction,
+                vehicle.engine_type,
             )
         })
         .collect();
@@ -191,7 +192,7 @@ fn run(args: &Args) -> Result<(), String> {
     if !raw_orders.is_empty() {
         println!("órdenes SAV type/dest: {raw_orders:?}");
     }
-    println!("movimiento SAV progress/speed/subspeed/direction: {raw_motion:?}");
+    println!("movimiento SAV progress/speed/subspeed/direction/engine: {raw_motion:?}");
     Ok(())
 }
 

@@ -437,6 +437,7 @@ fn subtile_from_train_record(v: &VehicleRecord) -> Option<(f32, f32)> {
     v.rail.as_ref()?;
     let mut train = Vehicle::new(v.id, VehicleKind::Train, v.tile, v.dest);
     train.progress = v.progress;
+    train.rail_pixel = v.rail_pixel;
     train.direction = v.dir;
     train.cur_speed = v.speed;
     train.depart_turn = v.depart_turn;

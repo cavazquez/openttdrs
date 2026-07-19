@@ -67,15 +67,20 @@ en openttdrs.
      /tmp/train_pbs_openttdrs.jsonl
    ```
 
-## Estado y primera divergencia
+## Estado
 
 El exportador, normalizador, validador y comparador están implementados y el
 exportador fue compilado contra el commit OpenTTD 15.3 fijado. El fixture y su
 oráculo de 40 ticks están versionados.
 
-La muestra `initial` coincide en tesela, progreso (`51`), velocidad (`73`),
-subspeed (`52`), dirección y reserva PBS. La primera divergencia real queda en
-el primer tick: OpenTTD avanza a `progress=159` con velocidad `73`, mientras
-Rust llega a `progress=115` y velocidad `64`. La cinemática del tick sigue
-siendo distinta; `rail_status.md` mantiene nivel 2 hasta que también coincidan
-movimiento y reservas.
+**Paridad cerrada** para este escenario (un tren, path signal, `AM_REALISTIC`):
+`initial` y los 40 ticks coinciden en tesela, `progress` físico, `cur_speed`,
+`subspeed`, dirección y reservas PBS (`tests/pbs_openttd_oracle.rs`).
+
+Contrato rail (solo trenes):
+
+- `DoUpdateSpeed` devuelve distancia (`GetAdvanceSpeed` + remanente).
+- Umbral `GetAdvanceDistance` (192 axial / 256 corner); sobrante en `progress`.
+- Un tick de juego = 2× `TrainLocoHandler`; 16 pasos de píxel por tesela.
+- Aceleración realista al importar `.sav` (`train_acceleration_model = Realistic`).
+- Render: `rail_pixel / 16` → progreso visual 0..=255 (no usar el remanente físico).

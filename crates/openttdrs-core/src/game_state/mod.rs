@@ -385,6 +385,9 @@ pub struct GameState {
     /// Ajustes de pathfinding / PBS (`pf.wait_for_pbs_path`, etc.).
     #[serde(default)]
     pub pathfinding: crate::pathfinding_settings::PathfindingSettings,
+    /// Modelo de aceleración de trenes (`vehicle.train_acceleration_model`).
+    #[serde(default)]
+    pub train_acceleration_model: crate::engine::TrainAccelerationModel,
     /// Ajustes de IA rival (`TransCargo`; UI-8 / #44).
     #[serde(default)]
     pub ai: crate::ai::AiSettings,
@@ -496,6 +499,7 @@ impl GameState {
             disaster_timer: default_disaster_timer(),
             disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
+            train_acceleration_model: crate::engine::TrainAccelerationModel::Original,
             ai: crate::ai::AiSettings::default(),
             cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),
@@ -558,6 +562,7 @@ impl GameState {
             disaster_timer: default_disaster_timer(),
             disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
+            train_acceleration_model: crate::engine::TrainAccelerationModel::Original,
             ai: crate::ai::AiSettings::default(),
             cheats: crate::cheats::CheatsState::default(),
             order: crate::cargo::OrderSettings::default(),

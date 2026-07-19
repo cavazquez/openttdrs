@@ -44,6 +44,14 @@ impl SlValue {
         }
     }
 
+    pub(crate) fn as_i64(&self) -> Option<i64> {
+        match self {
+            Self::Int(v) => Some(*v),
+            Self::Uint(v) => i64::try_from(*v).ok(),
+            _ => None,
+        }
+    }
+
     pub(crate) fn as_str(&self) -> Option<&str> {
         match self {
             Self::Str(s) => Some(s),

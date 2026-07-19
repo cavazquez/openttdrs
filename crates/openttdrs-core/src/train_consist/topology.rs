@@ -109,6 +109,16 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
         head.capacity = total_cap;
         head.cached_power_hp = total_power;
         head.cached_weight_t = total_weight.max(1);
+        let te_coeff = head
+            .engine_id
+            .map_or(75, crate::engine::vanilla_train_tractive_effort);
+        head.cached_max_te_n = crate::engine::train_max_te_n(head.cached_weight_t, te_coeff);
+        let display_max = head
+            .engine_id
+            .and_then(crate::engine::engine_by_id)
+            .map_or(128, |e| e.max_speed);
+        let parts = u32::try_from(ids.len()).unwrap_or(1);
+        head.cached_air_drag = crate::engine::train_default_air_drag(display_max, parts);
         if head.cargo_type.is_none() {
             head.cargo_type = cargo_type;
         }
@@ -116,8 +126,8 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
     let head_pos = vehicles
         .iter()
         .find(|v| v.id == head_id)
-        .map(|v| (v.pos, v.direction, v.running, v.progress));
-    let Some((pos, dir, running, progress)) = head_pos else {
+        .map(|v| (v.pos, v.direction, v.running, v.progress, v.rail_pixel));
+    let Some((pos, dir, running, progress, rail_pixel)) = head_pos else {
         return;
     };
     for &id in ids.iter().skip(1) {
@@ -126,6 +136,7 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
             v.direction = dir;
             v.running = running;
             v.progress = progress;
+            v.rail_pixel = rail_pixel;
             v.path.clear();
             v.orders.clear();
             v.current_order = 0;

@@ -121,7 +121,8 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         let vehicle_id = state.vehicles[i].id;
         let vehicle_kind = state.vehicles[i].kind;
         let vehicle_running = state.vehicles[i].running;
-        state.vehicles[i].step_with_map(Some(&state.map));
+        let train_accel = state.train_acceleration_model;
+        state.vehicles[i].step_with_map_and_accel(Some(&state.map), train_accel);
         if vehicle_kind == VehicleKind::Train {
             crate::train_consist::consist_changed(&mut state.vehicles, vehicle_id);
         }

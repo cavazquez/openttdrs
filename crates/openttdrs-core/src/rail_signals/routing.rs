@@ -230,11 +230,14 @@ fn train_would_complete_current_tile(vehicle: &Vehicle) -> bool {
     if vehicle.progress == 255 && vehicle.needs_depart_turnaround() {
         return true;
     }
-    let step = u16::from(vehicle.progress_step());
-    if step == 0 {
-        return false;
-    }
-    u16::from(vehicle.progress).saturating_add(step) >= 255
+    // Usa el modelo físico (2× loco handler + píxeles); el setting de partida
+    // realista se aplica al importar SAV; aquí asumimos realista si hay caché TE.
+    let model = if vehicle.cached_max_te_n > 0 {
+        crate::engine::TrainAccelerationModel::Realistic
+    } else {
+        crate::engine::TrainAccelerationModel::Original
+    };
+    vehicle.train_would_leave_tile_this_tick(model)
 }
 
 /// `true` si la salida path en `signal_tile` → `beyond` carece de reserva completa.
@@ -290,8 +293,9 @@ fn train_held_before_signal_tile(
     if vehicle.pos == to {
         return true;
     }
-    // Detenido en la tesela de aproximación: mantener espera aunque `progress_step` sea 0.
-    if vehicle.cur_speed == 0 && vehicle.progress > 0 {
+    // Detenido avanzando hacia la señal: mantener espera (usar píxeles, no el
+    // remanente físico `progress`, que suele ser >0 en el modelo rail exacto).
+    if vehicle.cur_speed == 0 && vehicle.rail_pixel > 0 {
         return true;
     }
     train_would_complete_current_tile(vehicle)

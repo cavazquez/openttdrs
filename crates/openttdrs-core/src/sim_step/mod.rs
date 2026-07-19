@@ -239,6 +239,26 @@ fn phase_vehicle_ops_pre_move(state: &mut GameState) {
 fn phase_movement(state: &mut GameState) {
     movement::move_vehicles(state);
     crate::train_collision::resolve_train_collisions(state);
+    // OpenTTD sigue/libera la reserva al cruzar tesela dentro del tick del tren.
+    // Recalcular tras el movimiento evita un tick de retraso en `m2_hi`.
+    let wormholes_pbs = state.jgr_tunnel_wormholes();
+    let wh_pbs = if wormholes_pbs.is_empty() {
+        None
+    } else {
+        Some(&wormholes_pbs)
+    };
+    crate::rail_pbs::update_train_reservations_with_wormholes(
+        &state.map,
+        &mut state.vehicles,
+        state.pathfinding,
+        wh_pbs,
+    );
+    crate::rail_pbs::sync_reservations_to_map(
+        &mut state.map,
+        &state.vehicles,
+        &mut state.runtime.reservation_tiles_active,
+        &mut state.runtime.reservation_tile_dirty,
+    );
 }
 
 /// Fase 7: refits, señales post-movimiento, sincronización de destinos, costos, noticias, paridad.

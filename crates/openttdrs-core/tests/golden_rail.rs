@@ -396,7 +396,9 @@ fn train_line_divergences_are_absent_after_rail_3b() {
 
     let mut state = parity::build_train_line();
     state.enable_parity_trace();
-    for _ in 0..600 {
+    // Física rail exacta (~16 píxeles/tesela): hace falta más recorrido para
+    // alcanzar la esquina en L (piezas diagonales documentadas).
+    for _ in 0..2500 {
         state.step();
     }
     let records = state.take_parity_records();

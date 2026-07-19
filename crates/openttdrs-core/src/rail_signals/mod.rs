@@ -1020,6 +1020,7 @@ mod tests {
             ]);
             follower.running = true;
             follower.set_cruise_speed();
+            follower.rail_pixel = 15;
             follower.progress = 200;
         }
         let mut dirty = Vec::new();
@@ -1075,6 +1076,7 @@ mod tests {
             ]);
             follower.running = true;
             follower.set_cruise_speed();
+            follower.rail_pixel = 15;
             follower.progress = 200;
         }
 
@@ -1136,6 +1138,7 @@ mod tests {
             !train_blocked_by_signal(&state.map, &state.vehicles, &state.vehicles[0]),
             "puede avanzar sub-tesela dentro de la tesela de aproximación"
         );
+        state.vehicles[0].rail_pixel = 15;
         state.vehicles[0].progress = 200;
         state.vehicles[0].set_cruise_speed();
         assert!(

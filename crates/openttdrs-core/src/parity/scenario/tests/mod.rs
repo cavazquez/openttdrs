@@ -940,6 +940,9 @@ fn train_supply_dual_follower_waits_before_last_signal() {
         ]);
         follower.running = true;
         follower.set_cruise_speed();
+        // A punto de cruzar de tesela (16 píxeles); `progress` ya no es fracción visual.
+        // Remanente físico alto + último píxel: el tick completaría la tesela.
+        follower.rail_pixel = 15;
         follower.progress = 200;
     }
 
@@ -1016,6 +1019,7 @@ fn train_supply_dual_follower_waits_at_signal_behind_leader() {
         ]);
         follower.running = true;
         follower.set_cruise_speed();
+        follower.rail_pixel = 15;
         follower.progress = 200;
     }
 
@@ -1065,7 +1069,8 @@ fn train_supply_dual_follower_waits_at_signal_behind_leader() {
 fn train_supply_dual_round_trip_returns_to_a() {
     let mut state = build_train_supply_dual();
     let mut used_return_track = false;
-    for _ in 0..12_000 {
+    // Modelo físico rail (16 px/tesela × 2 loco/tick) necesita más ticks por ciclo.
+    for _ in 0..48_000 {
         state.step();
         let train = state
             .vehicles
@@ -1247,7 +1252,8 @@ fn rail_signals_mixed_demo_has_presignal_station_and_two_way() {
 fn rail_signals_mixed_train_cycles_orders_after_delivery() {
     let mut state = build_rail_signals_mixed();
     let mut saw_delivery = false;
-    for _ in 0..1200 {
+    // Física rail exacta (~16 píxeles/tesela) alarga el ciclo carga↔entrega.
+    for _ in 0..6000 {
         let before = state.stats.cargo_deliveries;
         state.step();
         let v = state

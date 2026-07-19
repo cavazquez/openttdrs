@@ -77,6 +77,18 @@ oráculo de 40 ticks están versionados.
 `initial` y los 40 ticks coinciden en tesela, `progress` físico, `cur_speed`,
 `subspeed`, dirección y reservas PBS (`tests/pbs_openttd_oracle.rs`).
 
+### Fixture dual (curva + PBS + plataformas)
+
+- Save: `crates/openttdrs-core/tests/fixtures/train_dual_pbs_curve_15_3.sav`
+- Oráculo: `tests/fixtures/parity/train_dual_pbs_curve_15_3_openttd.jsonl`
+- Tests: `tests/pbs_dual_curve_oracle.rs`
+
+Contenido: 2 trenes Ginzu A4, 2 estaciones duales, path / path-oneway, curva en
+`(25–26, 8)`, depósito `(24, 9)`. **Paridad `initial` cerrada** (cinemática +
+reserva en `(26,7)`). El tick 1 aún diverge (tren en plataforma no avanza
+`progress` como OpenTTD); el test `first_tick_still_diverges_from_openttd`
+documenta el gap.
+
 Contrato rail (solo trenes):
 
 - `DoUpdateSpeed` devuelve distancia (`GetAdvanceSpeed` + remanente).
@@ -84,3 +96,4 @@ Contrato rail (solo trenes):
 - Un tick de juego = 2× `TrainLocoHandler`; 16 pasos de píxel por tesela.
 - Aceleración realista al importar `.sav` (`train_acceleration_model = Realistic`).
 - Render: `rail_pixel / 16` → progreso visual 0..=255 (no usar el remanente físico).
+- Import: no teletransportar vehículos ya sobre su red aunque YAPF falle (path signal).

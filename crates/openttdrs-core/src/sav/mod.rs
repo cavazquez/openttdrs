@@ -289,8 +289,49 @@ fn nearest_network_tile(
     best.map(|(_, c)| c)
 }
 
+/// `true` si el vehículo ya está sobre una tesela válida de su red (no hay que
+/// teletransportarlo aunque YAPF falle por path signal / PBS).
+fn vehicle_already_on_own_network(map: &Map, vehicle: &Vehicle) -> bool {
+    let Some(tile) = map.get(vehicle.pos) else {
+        return false;
+    };
+    match vehicle.kind {
+        VehicleKind::Train => matches!(
+            tile.kind,
+            TileKind::Rail
+                | TileKind::RailDepot
+                | TileKind::RailTunnel
+                | TileKind::RailBridge
+                | TileKind::Station
+        ) && (tile.kind != TileKind::Station
+            || {
+                let st = crate::station::station_type_from_m6(tile.m6);
+                st == 0 || st == crate::station::STATION_TYPE_RAIL_WAYPOINT
+            }),
+        VehicleKind::Bus | VehicleKind::Truck => matches!(
+            tile.kind,
+            TileKind::Road
+                | TileKind::RoadDepot
+                | TileKind::RoadTunnel
+                | TileKind::RoadBridge
+                | TileKind::Station
+        ),
+        VehicleKind::Tram => {
+            matches!(
+                tile.kind,
+                TileKind::Road | TileKind::RoadDepot | TileKind::RoadTunnel | TileKind::RoadBridge
+            ) && crate::road_type::tram_track_bits(&tile) != 0
+        }
+        VehicleKind::Ship => matches!(tile.kind, TileKind::Water | TileKind::ShipDepot),
+        VehicleKind::Aircraft => true,
+    }
+}
+
 /// Si un vehículo importado no tiene ruta (p. ej. en depósito sin boca a la red),
 /// lo coloca en la tesela de red más cercana con ruta al destino de la orden.
+///
+/// No mueve vehículos que ya están sobre su red: un path signal oneway puede
+/// hacer fallar `find_path` sin que la posición del `.sav` sea inválida.
 fn reconcile_imported_vehicle_position(map: &Map, vehicle: &mut Vehicle) {
     if vehicle.orders.is_empty() {
         return;
@@ -298,6 +339,9 @@ fn reconcile_imported_vehicle_position(map: &Map, vehicle: &mut Vehicle) {
     vehicle.sync_order_destination(map);
     let net = pathfinder::path_network_for_vehicle(vehicle.kind);
     if pathfinder::find_path(map, vehicle.pos, vehicle.dest, net).is_some() {
+        return;
+    }
+    if vehicle_already_on_own_network(map, vehicle) {
         return;
     }
     let Some(net_tile) = nearest_network_tile(map, vehicle.pos, vehicle.kind, 12) else {

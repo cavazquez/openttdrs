@@ -51,8 +51,8 @@ cada pieza.
 | Entrada del tren a plataforma + `GetTrainStopLocation` (OSL near/middle/far) | `train_cmd.cpp:266-305`, `order_type.h:97-102` | **Paridad (Rail 3C)**: `rail_station_stop_tile` (Middle por defecto); `resolve_order_destination` → plataforma | `showcase_train_enters_rail_station_platform`, `train_platform_stop` |
 | Frenado sub-tile en plataforma `cur_speed = max(0, (stop-x)·20 − 15)` | `station_cmd.cpp:3874-3880` | **No implementado** | — |
 | Waypoints | `waypoint_cmd.cpp` | `place_rail_waypoint` (solo vía recta X/Y) + orden `Waypoint` sin parada completa | `train_order_through_waypoint_advances_without_full_stop` |
-| Depósito: dirección de boca, entrada/salida con frames | `rail_map.h:171-185`, `rail_cmd.cpp:2975-3064` (`_fractcoords_enter`, `TicksToLeaveDepot`) | `place_rail_depot_dir` + `rail_depot_exit_for_dir`; **sin frames ni timing** | `rail_depot_beside_x_line_connects_exit_tile` |
-| Espera en depósito (`CheckTrainStayInDepot`, ~37 ticks) | `train_cmd.cpp:2354-2427` | **No implementado** (salida inmediata) | — |
+| Depósito: boca, reserva `m5` bit 4, frames leave | `rail_map.h:256-272`, `rail_cmd.cpp:2975-3044` (`TicksToLeaveDepot`) | `has/set_depot_reservation` + `ticks_to_leave_depot` + stagger de units | `depot_leave::*`, `depot_reservation_bit_roundtrips` |
+| Espera en depósito (`CheckTrainStayInDepot`, ~37 ticks + PBS) | `train_cmd.cpp:2354-2427` | `tick_train_stay_in_depot` + `try_path_reserve` + reentrada/force | `train_waits_37_ticks_*`, `second_train_waits_while_depot_reserved` |
 | Túnel/puente: wormhole, ocultamiento (`_tunnel_visibility_frame` {12,8,8,12}), límite de velocidad de puente | `tunnelbridge_cmd.cpp:1956-2087`, `train_cmd.cpp:427-429` | Colocación en `command/transport/bridge.rs`; tránsito como vía normal (bits X\|Y); **sin ocultar tren ni límite de puente** | 0 tests rail de túnel/puente (hueco detectado) |
 
 ## Pathfinding

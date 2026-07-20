@@ -150,7 +150,7 @@ fn train_consist_sell_head_sells_chain() {
 }
 
 #[test]
-fn two_trains_can_leave_same_rail_depot() {
+fn two_trains_leave_same_rail_depot_sequentially() {
     let mut s = SandboxMap::flat_rich(12, 12, 1);
     for x in 2..=8_i32 {
         apply_command(&mut s, &Command::PlaceRail(TileCoord::new(x, 4))).unwrap();
@@ -177,17 +177,28 @@ fn two_trains_can_leave_same_rail_depot() {
     apply_command(&mut s, &Command::ToggleVehicleRunning(id1)).unwrap();
     apply_command(&mut s, &Command::ToggleVehicleRunning(id2)).unwrap();
 
-    let mut any_left = false;
-    for _ in 0..10_000 {
+    let mut saw_exclusive = false;
+    let mut both_left = false;
+    for _ in 0..20_000 {
         s.step();
-        if s.vehicles[0].pos != depot || s.vehicles[1].pos != depot {
-            any_left = true;
+        let v1 = s.vehicles.iter().find(|v| v.id == id1).unwrap();
+        let v2 = s.vehicles.iter().find(|v| v.id == id2).unwrap();
+        if (v1.depot_leave_cleared || v1.pos != depot) && v2.pos == depot && !v2.depot_leave_cleared
+        {
+            saw_exclusive = true;
+        }
+        if v1.pos != depot && v2.pos != depot {
+            both_left = true;
             break;
         }
     }
     assert!(
-        any_left,
-        "al menos un tren debe salir del depósito compartido"
+        saw_exclusive,
+        "la reserva de depósito debe serializar la salida"
+    );
+    assert!(
+        both_left,
+        "ambos trenes deben acabar saliendo del depósito compartido"
     );
 }
 

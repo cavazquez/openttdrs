@@ -67,6 +67,15 @@ pub fn same_consist(vehicles: &[Vehicle], vehicle_id: u32, other_id: u32) -> boo
 
 /// Recalcula `cached_total_length` y capacidad agregada en la cabeza.
 pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
+    consist_changed_with_map(vehicles, head_id, None);
+}
+
+/// Como [`consist_changed`], con mapa para retener followers en `Track::Depot`.
+pub fn consist_changed_with_map(
+    vehicles: &mut [Vehicle],
+    head_id: u32,
+    map: Option<&crate::map::Map>,
+) {
     let ids = consist_unit_ids(vehicles, head_id);
     if ids.is_empty() {
         return;
@@ -140,11 +149,16 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
             head.cargo_type = cargo_type;
         }
     }
-    sync_consist_followers_and_curve_cache(vehicles, head_id, &ids);
+    sync_consist_followers_and_curve_cache(vehicles, head_id, &ids, map);
 }
 
 /// Sincroniza poses derivadas de las unidades y `cached_max_curve_speed`.
-fn sync_consist_followers_and_curve_cache(vehicles: &mut [Vehicle], head_id: u32, ids: &[u32]) {
+fn sync_consist_followers_and_curve_cache(
+    vehicles: &mut [Vehicle],
+    head_id: u32,
+    ids: &[u32],
+    map: Option<&crate::map::Map>,
+) {
     let head_snap = vehicles
         .iter()
         .find(|v| v.id == head_id)
@@ -152,7 +166,7 @@ fn sync_consist_followers_and_curve_cache(vehicles: &mut [Vehicle], head_id: u32
     let Some(head_dir) = head_snap else {
         return;
     };
-    super::controller::propagate_consist_unit_poses(vehicles, head_id);
+    super::controller::propagate_consist_unit_poses_with_map(vehicles, head_id, map);
     let mut units = Vec::with_capacity(ids.len());
     for &id in ids {
         if let Some(v) = vehicles.iter().find(|v| v.id == id) {

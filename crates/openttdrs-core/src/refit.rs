@@ -136,9 +136,14 @@ fn vehicle_hidden_on_depot_tile(map: &Map, vehicle: &Vehicle) -> bool {
     if vehicle.kind != VehicleKind::Train {
         return false;
     }
+    // `!depot_leave_cleared` ≡ `Track::Depot` / `VehState::Hidden` en OpenTTD.
+    if !vehicle.depot_leave_cleared {
+        return true;
+    }
     if vehicle_in_depot(map, next) {
         return true;
     }
+    // Cabeza ya autorizada: visible; residual de progreso solo si aún no cruzó.
     rail_depot_mouth_dir(map, vehicle.pos)
         .is_some_and(|_| vehicle.progress < TRAIN_DEPOT_EXIT_VISIBILITY_PROGRESS)
 }
@@ -252,6 +257,11 @@ mod tests {
         train.running = true;
         train.cur_speed = 48;
         train.path = VecDeque::from([exit]);
+        // Sin autorización de leave (= Track::Depot) permanece oculto.
+        train.depot_leave_cleared = false;
+        train.progress = 200;
+        assert!(vehicle_hidden_on_map(&map, &train));
+        train.depot_leave_cleared = true;
         train.progress = 64;
         assert!(vehicle_hidden_on_map(&map, &train));
         train.progress = 200;

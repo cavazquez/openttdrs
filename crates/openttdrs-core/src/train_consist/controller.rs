@@ -1,5 +1,6 @@
 //! Cascada de poses de unidades después del avance autoritativo de la cabeza.
 
+use crate::map::{Map, TileKind};
 use crate::vehicle::Vehicle;
 
 use super::pose::consist_unit_poses;
@@ -11,6 +12,16 @@ use super::topology::consist_unit_ids;
 /// propaga la geometría física a las unidades siguientes. El controlador de
 /// track/PBS por unidad se añadirá sobre esta API.
 pub fn propagate_consist_unit_poses(vehicles: &mut [Vehicle], head_id: u32) {
+    propagate_consist_unit_poses_with_map(vehicles, head_id, None);
+}
+
+/// Como [`propagate_consist_unit_poses`], reteniendo en depósito unidades con
+/// `Track::Depot` (`!depot_leave_cleared` sobre `RailDepot`).
+pub fn propagate_consist_unit_poses_with_map(
+    vehicles: &mut [Vehicle],
+    head_id: u32,
+    map: Option<&Map>,
+) {
     let ids = consist_unit_ids(vehicles, head_id);
     let Some(head) = vehicles.iter().find(|v| v.id == head_id) else {
         return;
@@ -47,6 +58,17 @@ pub fn propagate_consist_unit_poses(vehicles: &mut [Vehicle], head_id: u32) {
             continue;
         };
         if let Some(unit) = vehicles.iter_mut().find(|v| v.id == id) {
+            let hold_in_depot = !unit.depot_leave_cleared
+                && map.is_some_and(|m| m.get_kind(unit.pos) == Some(TileKind::RailDepot));
+            if hold_in_depot {
+                unit.direction = head_dir;
+                unit.curve_prev_direction = head_dir;
+                unit.running = running;
+                unit.path.clear();
+                unit.orders.clear();
+                unit.current_order = 0;
+                continue;
+            }
             unit.pos = pose.tile;
             unit.rail_pixel = pose.rail_pixel;
             unit.direction = pose.direction;

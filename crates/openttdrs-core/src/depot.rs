@@ -3,6 +3,50 @@
 use crate::map::{Map, TileCoord, TileKind};
 use crate::vehicle::VehicleKind;
 
+/// Bit de reserva PBS en depósitos ferroviarios (`HasDepotReservation` / `m5` bit 4).
+///
+/// Coincide con el bit de cruces a nivel; la interpretación depende de `TileKind`.
+pub const DEPOT_RESERVATION_M5_BIT: u8 = 1 << 4;
+
+/// `HasDepotReservation` (`rail_map.h`): bit 4 de `m5` en `RailDepot`.
+#[must_use]
+pub fn has_depot_reservation(map: &Map, pos: TileCoord) -> bool {
+    map.get(pos)
+        .is_some_and(|t| t.kind == TileKind::RailDepot && t.m5 & DEPOT_RESERVATION_M5_BIT != 0)
+}
+
+/// `SetDepotReservation` (`rail_map.h`). Devuelve `true` si el mapa cambió.
+pub fn set_depot_reservation(map: &mut Map, pos: TileCoord, reserved: bool) -> bool {
+    let Some(mut tile) = map.get(pos) else {
+        return false;
+    };
+    if tile.kind != TileKind::RailDepot {
+        return false;
+    }
+    let had = tile.m5 & DEPOT_RESERVATION_M5_BIT != 0;
+    if reserved {
+        tile.m5 |= DEPOT_RESERVATION_M5_BIT;
+    } else {
+        tile.m5 &= !DEPOT_RESERVATION_M5_BIT;
+    }
+    if had == reserved {
+        return false;
+    }
+    let _ = map.set_tile(pos, tile);
+    true
+}
+
+/// Limpia reservas de depósito huérfanas tras importar un `.sav` (`afterload.cpp`).
+pub fn clear_all_depot_reservations(map: &mut Map) {
+    let (w, h) = map.dimensions();
+    for y in 0..h.cast_signed() {
+        for x in 0..w.cast_signed() {
+            let c = TileCoord::new(x, y);
+            let _ = set_depot_reservation(map, c, false);
+        }
+    }
+}
+
 /// Tesela de depósito compatible con el tipo de vehículo.
 #[must_use]
 pub fn depot_tile_kind_for_vehicle(kind: VehicleKind) -> TileKind {
@@ -139,5 +183,24 @@ mod tests {
             Some(rail)
         );
         assert_eq!(s.map.get_kind(road), Some(TileKind::RoadDepot));
+    }
+
+    #[test]
+    fn depot_reservation_bit_roundtrips() {
+        let mut s = GameState::new(8, 8);
+        let rail = TileCoord::new(5, 5);
+        apply_command(&mut s, &Command::PlaceRail(TileCoord::new(5, 4))).unwrap();
+        apply_command(&mut s, &Command::PlaceRailDepotDir(rail, 3)).unwrap();
+        assert!(!has_depot_reservation(&s.map, rail));
+        assert!(set_depot_reservation(&mut s.map, rail, true));
+        assert!(has_depot_reservation(&s.map, rail));
+        assert!(set_depot_reservation(&mut s.map, rail, false));
+        assert!(!has_depot_reservation(&s.map, rail));
+        // Tesela no-depósito: no-op.
+        assert!(!set_depot_reservation(
+            &mut s.map,
+            TileCoord::new(5, 4),
+            true
+        ));
     }
 }

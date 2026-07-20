@@ -426,6 +426,8 @@ impl GameState {
         let mut map = sav.map;
         normalize_rail_trackbits_from_neighbors(&mut map);
         bridge_collinear_rail_gaps(&mut map);
+        // OpenTTD afterload: reservas de depósito no son autoritativas al cargar.
+        crate::depot::clear_all_depot_reservations(&mut map);
         let mut state = Self::from_map(map);
         // OpenTTD ≥15 default `train_acceleration_model = 1` (realista).
         state.train_acceleration_model = crate::engine::TrainAccelerationModel::Realistic;

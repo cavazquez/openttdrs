@@ -120,8 +120,14 @@ pub use company::{
     RIVAL_NAME_ROADHAUL, RIVAL_NAME_TRANSCARGO, company_colour_taken_by_other, company_id_by_name,
     feeder_share_of, first_free_company_colour, tile_owner_colour, tile_with_owner,
 };
-pub use depot::{depot_tile_kind_for_vehicle, nearest_depot_tile, rail_depot_mouth_dir};
-pub use depot_leave::{TRAIN_DEPOT_LEAVE_WAIT_TICKS, tick_train_stay_in_depot};
+pub use depot::{
+    DEPOT_RESERVATION_M5_BIT, clear_all_depot_reservations, depot_tile_kind_for_vehicle,
+    has_depot_reservation, nearest_depot_tile, rail_depot_mouth_dir, set_depot_reservation,
+};
+pub use depot_leave::{
+    TRAIN_DEPOT_LEAVE_WAIT_TICKS, activate_depot_leave_units, tick_train_stay_in_depot,
+    ticks_to_leave_depot,
+};
 pub use disaster::{
     DISASTER_CHECK_INTERVAL, DisasterCraft, UFO_ALTITUDE, UFO_FLIGHT_TICKS, force_disaster,
     tick_disaster_crafts, tick_disasters, trigger_disaster_at,
@@ -292,7 +298,7 @@ pub use rail_pbs::{
     find_path_to_safe_wait_with_wormholes, follow_train_reservation, is_safe_waiting_position,
     rail_tile_has_pbs_reservation, reservation_ends_at_safe_wait, sync_reservations_to_map,
     tick_pbs_wait_and_maybe_reverse, train_blocked_by_reservation, train_waiting_for_pbs_path,
-    update_train_reservations, update_train_reservations_with_settings,
+    try_path_reserve, update_train_reservations, update_train_reservations_with_settings,
     update_train_reservations_with_wormholes,
 };
 pub use rail_signals::{
@@ -398,10 +404,11 @@ pub use townname::generate_town_name;
 pub use train_collision::{TrainCollision, detect_train_collisions, resolve_train_collisions};
 pub use train_consist::{
     TrainUnitPose, VEHICLE_LENGTH, action2_eval_ctx_for_unit, attach_wagon, attach_wagon_chain,
-    cargo_class_bits, cargo_type_a_id, consist_changed, consist_head_id, consist_occupied_tiles,
-    consist_power_hp, consist_tile_span, consist_unit_ids, consist_unit_poses, consist_weight_t,
-    detach_unit, detach_unit_keep_tail, engine_is_train_engine, engine_is_wagon,
-    propagate_consist_unit_poses, same_consist, sell_chain_ids,
+    cargo_class_bits, cargo_type_a_id, consist_changed, consist_changed_with_map, consist_head_id,
+    consist_occupied_tiles, consist_power_hp, consist_tile_span, consist_unit_ids,
+    consist_unit_poses, consist_weight_t, detach_unit, detach_unit_keep_tail,
+    engine_is_train_engine, engine_is_wagon, propagate_consist_unit_poses, same_consist,
+    sell_chain_ids,
 };
 pub use train_movement::{
     ACCEL_SLOWDOWN, AccelSlowdownParams, DELTACOORD_LEAVE_OFFSET, FRACTCOORDS_BEHIND,

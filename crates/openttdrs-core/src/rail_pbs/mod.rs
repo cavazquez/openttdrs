@@ -12,6 +12,7 @@ mod map_sync;
 mod model;
 mod search;
 mod train_reservation;
+mod try_reserve;
 mod wait_policy;
 
 #[cfg(test)]
@@ -43,6 +44,9 @@ pub use train_reservation::{
     train_blocked_by_reservation, update_train_reservations,
     update_train_reservations_with_settings, update_train_reservations_with_wormholes,
 };
+
+// Reexports públicos desde try_reserve
+pub use try_reserve::try_path_reserve;
 
 // Reexports públicos desde wait_policy
 pub use wait_policy::{tick_pbs_wait_and_maybe_reverse, train_waiting_for_pbs_path};

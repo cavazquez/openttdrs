@@ -125,9 +125,13 @@ fn reserve_along_path(
     path: &[TileCoord],
     already_reserved: &HashSet<ReservedRailStep>,
 ) -> Vec<ReservedRailStep> {
+    // Desde depósito el follower PBS empieza en la boca (`path[0]`).
+    if map.get_kind(vehicle.pos) == Some(TileKind::RailDepot) {
+        return reserve_along_path_from_depot(map, vehicles, vehicle, path, already_reserved);
+    }
+
     let mut out = Vec::new();
     let mut cur = vehicle.pos;
-
     let Some(pos_track) = path
         .first()
         .and_then(|&next| track_on_departure_tile(map, cur, next))
@@ -145,18 +149,89 @@ fn reserve_along_path(
         return out;
     };
     out.push(ReservedRailStep::new(cur, pos_track));
-    let mut passed_path = tile_has_any_pbs_signal(map, cur);
+    extend_reservation_along_path(
+        map,
+        vehicles,
+        vehicle.id,
+        path,
+        already_reserved,
+        &mut out,
+        &mut cur,
+        0,
+    );
+    out
+}
 
-    for (i, &next) in path.iter().enumerate() {
+fn reserve_along_path_from_depot(
+    map: &Map,
+    vehicles: &[Vehicle],
+    vehicle: &Vehicle,
+    path: &[TileCoord],
+    already_reserved: &HashSet<ReservedRailStep>,
+) -> Vec<ReservedRailStep> {
+    let mut out = Vec::new();
+    let Some(&entrance) = path.first() else {
+        return out;
+    };
+    let beyond = path.get(1).copied();
+    let Some(track) = beyond
+        .and_then(|next| track_on_departure_tile(map, entrance, next))
+        .or_else(|| {
+            let tb = rail_traversal_bits(map, entrance);
+            (0..6u8).find_map(|i| {
+                let bit = 1_u8 << i;
+                if tb & bit != 0 { Some(bit) } else { None }
+            })
+        })
+    else {
+        return out;
+    };
+    let step = ReservedRailStep::new(entrance, track);
+    if already_reserved.contains(&step)
+        || tile_occupied_by_other_train(map, vehicles, vehicle.id, entrance, track)
+    {
+        return out;
+    }
+    out.push(step);
+    let mut cur = entrance;
+    if is_safe_waiting_position(map, cur, beyond, tile_has_any_pbs_signal(map, cur)) {
+        return out;
+    }
+    extend_reservation_along_path(
+        map,
+        vehicles,
+        vehicle.id,
+        path,
+        already_reserved,
+        &mut out,
+        &mut cur,
+        1,
+    );
+    out
+}
+
+#[allow(clippy::too_many_arguments)]
+fn extend_reservation_along_path(
+    map: &Map,
+    vehicles: &[Vehicle],
+    vehicle_id: u32,
+    path: &[TileCoord],
+    already_reserved: &HashSet<ReservedRailStep>,
+    out: &mut Vec<ReservedRailStep>,
+    cur: &mut TileCoord,
+    path_skip: usize,
+) {
+    let mut passed_path = tile_has_any_pbs_signal(map, *cur);
+    for (i, &next) in path.iter().enumerate().skip(path_skip) {
         if out.len() >= MAX_TRAIN_RESERVATION_LEN {
             break;
         }
         let beyond = path.get(i + 1).copied();
-        if !crate::rail_signals::rail_step_signal_allows(map, vehicles, cur, next, beyond) {
+        if !crate::rail_signals::rail_step_signal_allows(map, vehicles, *cur, next, beyond) {
             break;
         }
-        let Some(track) =
-            track_on_departure_tile(map, cur, next).or_else(|| track_for_rail_step(map, cur, next))
+        let Some(track) = track_on_departure_tile(map, *cur, next)
+            .or_else(|| track_for_rail_step(map, *cur, next))
         else {
             break;
         };
@@ -164,20 +239,18 @@ fn reserve_along_path(
         if already_reserved.contains(&step) {
             break;
         }
-        if tile_occupied_by_other_train(map, vehicles, vehicle.id, next, track) {
+        if tile_occupied_by_other_train(map, vehicles, vehicle_id, next, track) {
             break;
         }
         out.push(step);
-        cur = next;
-        if tile_has_any_pbs_signal(map, cur) {
+        *cur = next;
+        if tile_has_any_pbs_signal(map, *cur) {
             passed_path = true;
         }
-        if is_safe_waiting_position(map, cur, beyond, passed_path) {
+        if is_safe_waiting_position(map, *cur, beyond, passed_path) {
             break;
         }
     }
-
-    out
 }
 
 /// Conserva pasos de una reserva previa aún válidos si `TryReserve` falla

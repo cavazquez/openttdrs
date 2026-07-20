@@ -38,11 +38,28 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         if state.vehicles[i].is_wagon_unit() {
             continue;
         }
-        // Espera ~37 ticks + chequeo de boca (`CheckTrainStayInDepot`).
+        // Espera ~37 ticks + reserva/PBS de boca (`CheckTrainStayInDepot`).
         if state.vehicles[i].kind == VehicleKind::Train
-            && crate::depot_leave::tick_train_stay_in_depot(&state.map, &mut state.vehicles, i)
+            && crate::depot_leave::tick_train_stay_in_depot(
+                &mut state.map,
+                &mut state.vehicles,
+                i,
+                pf,
+            )
         {
             continue;
+        }
+        // Activación escalonada de vagones aún en Track::Depot.
+        if state.vehicles[i].kind == VehicleKind::Train
+            && state.vehicles[i].is_consist_head()
+            && state.vehicles[i].depot_leave_cleared
+        {
+            let head_id = state.vehicles[i].id;
+            crate::depot_leave::activate_depot_leave_units(
+                &state.map,
+                &mut state.vehicles,
+                head_id,
+            );
         }
         if tick_road_depot_movement(state, i) {
             continue;
@@ -160,7 +177,11 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             state.vehicles[i].cur_speed = 0;
         }
         if vehicle_kind == VehicleKind::Train {
-            crate::train_consist::consist_changed(&mut state.vehicles, vehicle_id);
+            crate::train_consist::consist_changed_with_map(
+                &mut state.vehicles,
+                vehicle_id,
+                Some(&state.map),
+            );
         }
         if state.vehicles[i].pos != prev_pos {
             crate::ship_movement::maybe_start_lock_transit(&mut state.vehicles[i], &state.map);

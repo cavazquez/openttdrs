@@ -104,6 +104,10 @@ fn seed_newgrf_random_bits(id: u32) -> u8 {
     (id.wrapping_mul(0x9E37_79B9) >> 24) as u8
 }
 
+const fn default_depot_leave_cleared() -> bool {
+    true
+}
+
 /// Vehículo que avanza sub-tile (`progress` 0–255) siguiendo un camino BFS.
 ///
 /// Si no hay camino calculado (`path` vacío y `pos != dest`) usa movimiento Manhattan
@@ -226,8 +230,9 @@ pub struct Vehicle {
     /// Contador de ticks esperando path PBS / señal (`wait_counter` en `OpenTTD`).
     #[serde(default)]
     pub wait_counter: u32,
-    /// Ya pasó `CheckTrainStayInDepot` en esta estancia (equivalente a dejar `Track::Depot`).
-    #[serde(default)]
+    /// Proxy de `Track::Depot`: `false` = en depósito (oculto); `true` = fuera / leave OK.
+    /// Por defecto `true` para no bloquear poses de vagones en vía tras import/spawn.
+    #[serde(default = "default_depot_leave_cleared")]
     pub depot_leave_cleared: bool,
     /// Estado de depósito para bus/camión/tranvía.
     #[serde(default)]
@@ -393,7 +398,7 @@ impl Vehicle {
             awaiting_load_window: false,
             force_proceed: false,
             wait_counter: 0,
-            depot_leave_cleared: false,
+            depot_leave_cleared: true,
             road_depot_phase: RoadDepotPhase::None,
             pbs_stuck: false,
             timetable_active: false,

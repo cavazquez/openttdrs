@@ -203,6 +203,7 @@ pub(super) fn build_vehicle_at_depot(
     {
         vehicle.direction = crate::train_movement::train_depot_facing(mouth);
         vehicle.progress = 0;
+        vehicle.depot_leave_cleared = false;
     }
     state.vehicles.push(vehicle);
     if engine.kind == VehicleKind::Train && engine.is_dual_headed() {
@@ -237,6 +238,7 @@ fn spawn_dual_headed_rear(
         .map_or(crate::DIR_NE, |v| v.direction);
     rear.prev_unit = Some(front_id);
     rear.other_multiheaded_part = Some(front_id);
+    rear.depot_leave_cleared = false;
     if let Some(front) = state.vehicles.iter_mut().find(|v| v.id == front_id) {
         front.next_unit = Some(rear_id);
         front.other_multiheaded_part = Some(rear_id);

@@ -66,6 +66,20 @@ const HELIDEPOT_LAYOUT: &[AirportPiece] = &[
     AirportPiece::Apron,  // (1,1) APT_APRON
 ];
 
+/// Helistation 4×2 (`_tile_table_helistation_0`): hangar + edificio + 3 helipads + apron.
+const HELISTATION_LAYOUT: &[AirportPiece] = &[
+    // y=0
+    AirportPiece::Hangar, // (0,0) APT_DEPOT_SE
+    AirportPiece::Apron,  // (1,0) APT_LOW_BUILDING
+    AirportPiece::Stand,  // (2,0) APT_HELIPAD_3
+    AirportPiece::Stand,  // (3,0) APT_HELIPAD_3
+    // y=1
+    AirportPiece::Apron, // (0,1)
+    AirportPiece::Apron, // (1,1)
+    AirportPiece::Apron, // (2,1)
+    AirportPiece::Stand, // (3,1) APT_HELIPAD_3
+];
+
 /// Country / Small (`_tile_table_country_0`): edificios + césped + pista.
 const SMALL_LAYOUT: &[AirportPiece] = &[
     // y=0
@@ -383,6 +397,7 @@ fn layout_for_spec(spec: AirportSpecId) -> &'static [AirportPiece] {
     match spec {
         AirportSpecId::Heliport | AirportSpecId::Oilrig => HELIPORT_LAYOUT,
         AirportSpecId::Helidepot => HELIDEPOT_LAYOUT,
+        AirportSpecId::Helistation => HELISTATION_LAYOUT,
         AirportSpecId::Small => SMALL_LAYOUT,
         AirportSpecId::Commuter => COMMUTER_LAYOUT,
         AirportSpecId::City => CITY_LAYOUT,

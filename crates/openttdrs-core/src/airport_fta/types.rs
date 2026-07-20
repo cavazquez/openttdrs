@@ -103,6 +103,8 @@ pub const BLOCK_TERM6: AirportBlockBits = 1 << 5;
 pub const BLOCK_HELIPAD1: AirportBlockBits = 1 << 6;
 /// Bit de `AirportBlock::Helipad2` (índice 7).
 pub const BLOCK_HELIPAD2: AirportBlockBits = 1 << 7;
+/// Bit de `AirportBlock::Helipad3` (índice 24).
+pub const BLOCK_HELIPAD3: AirportBlockBits = 1 << 24;
 /// Bit de `AirportBlock::TaxiwayBusy` (índice 10).
 pub const BLOCK_TAXIWAY_BUSY: AirportBlockBits = 1 << 10;
 /// Bit de `AirportBlock::OutWay` (índice 11).
@@ -171,6 +173,8 @@ pub enum AirportFtaKind {
     Helidepot,
     /// Heliport 1×1 u Oilrig (mismo FTA, sin hangar).
     Heliport,
+    /// Helistation 4×2 (hangar + 3 helipads).
+    Helistation,
     Commuter,
     City,
     Metropolitan,

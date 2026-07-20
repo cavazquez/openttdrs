@@ -51,7 +51,7 @@ pub fn tick_country_airport_fta(
     tick_airport_fta(v, map, stations)
 }
 
-/// Tick FTA para specs soportados hasta Oilrig / Heliport.
+/// Tick FTA para specs soportados hasta Helistation.
 pub fn tick_airport_fta(
     v: &mut Vehicle,
     _map: &Map,
@@ -109,7 +109,9 @@ fn try_enter_approach(v: &mut Vehicle, stations: &[Station]) -> Option<AircraftP
     v.airport_pos = entry;
     v.airport_prev_pos = entry;
     v.airport_heading = match profile.kind {
-        AirportFtaKind::Helidepot | AirportFtaKind::Heliport => AirportHeading::HeliLanding,
+        AirportFtaKind::Helidepot | AirportFtaKind::Heliport | AirportFtaKind::Helistation => {
+            AirportHeading::HeliLanding
+        }
         AirportFtaKind::Country
         | AirportFtaKind::Commuter
         | AirportFtaKind::City
@@ -142,6 +144,7 @@ fn should_finish_takeoff(v: &Vehicle, profile: &AirportFtaProfile) -> bool {
     let heli_takeoff_node = match profile.kind {
         AirportFtaKind::Helidepot => matches!(v.airport_pos, 11 | 15),
         AirportFtaKind::Heliport => v.airport_pos == 1,
+        AirportFtaKind::Helistation => matches!(v.airport_pos, 3 | 12 | 13 | 14),
         AirportFtaKind::Commuter => matches!(v.airport_pos, 31 | 32 | 37),
         AirportFtaKind::City => v.airport_pos == 22,
         AirportFtaKind::Metropolitan => v.airport_pos == 24,
@@ -206,6 +209,7 @@ fn advance_fta_node(
             profile.kind,
             AirportFtaKind::Helidepot
                 | AirportFtaKind::Heliport
+                | AirportFtaKind::Helistation
                 | AirportFtaKind::Commuter
                 | AirportFtaKind::City
                 | AirportFtaKind::Metropolitan
@@ -242,6 +246,13 @@ fn nudge_heading_at_node(v: &mut Vehicle, profile: &AirportFtaProfile) {
             2 | 3 => v.airport_heading = AirportHeading::HeliLanding,
             // 4: self-loop HELIENDLANDING → pad.
             4 => v.airport_heading = AirportHeading::Helipad1,
+            _ => {}
+        },
+        AirportFtaKind::Helistation => match v.airport_pos {
+            3 | 12 | 13 | 14 => v.airport_heading = AirportHeading::HeliTakeoff,
+            2 | 15 => v.airport_heading = AirportHeading::HeliLanding,
+            // 16: self-loop HELIENDLANDING → pad1.
+            16 => v.airport_heading = AirportHeading::Helipad1,
             _ => {}
         },
         AirportFtaKind::Commuter => match v.airport_pos {
@@ -307,7 +318,9 @@ fn hold_or_wait(v: &mut Vehicle, profile: &AirportFtaProfile) {
         v.airport_pos = if v.airport_pos >= profile.hold_max {
             match profile.kind {
                 AirportFtaKind::Country => 10,
-                AirportFtaKind::Helidepot | AirportFtaKind::Heliport => 2,
+                AirportFtaKind::Helidepot
+                | AirportFtaKind::Heliport
+                | AirportFtaKind::Helistation => 2,
                 AirportFtaKind::Commuter => 16,
                 AirportFtaKind::City | AirportFtaKind::Metropolitan => 13,
                 AirportFtaKind::International => 32,
@@ -526,6 +539,24 @@ fn apply_enter_heading(v: &mut Vehicle, next: u8, profile: &AirportFtaProfile) {
             4 => v.airport_heading = AirportHeading::HeliEndLanding,
             _ => {}
         },
+        AirportFtaKind::Helistation => match next {
+            6 => {
+                v.airport_heading = AirportHeading::Helipad1;
+                v.dest = v.pos;
+            }
+            7 => {
+                v.airport_heading = AirportHeading::Helipad2;
+                v.dest = v.pos;
+            }
+            8 => {
+                v.airport_heading = AirportHeading::Helipad3;
+                v.dest = v.pos;
+            }
+            3 | 12 | 13 | 14 => v.airport_heading = AirportHeading::HeliTakeoff,
+            15 => v.airport_heading = AirportHeading::HeliLanding,
+            16 => v.airport_heading = AirportHeading::HeliEndLanding,
+            _ => {}
+        },
         AirportFtaKind::Commuter => match next {
             3 => {
                 v.airport_heading = AirportHeading::Term1;
@@ -709,6 +740,32 @@ fn update_heading_heliport(v: &mut Vehicle, remote: bool) {
     }
 }
 
+fn update_heading_helistation(v: &mut Vehicle, remote: bool) {
+    if v.orders.is_empty() {
+        return;
+    }
+    if matches!(
+        v.airport_heading,
+        AirportHeading::HeliLanding | AirportHeading::HeliEndLanding
+    ) || matches!(v.airport_pos, 2 | 15..=32)
+    {
+        if v.airport_pos == 16 && matches!(v.airport_heading, AirportHeading::HeliEndLanding) {
+            v.airport_heading = AirportHeading::Helipad1;
+        }
+        return;
+    }
+    if remote {
+        if matches!(v.airport_pos, 6..=14 | 0 | 1 | 3) {
+            v.airport_heading = AirportHeading::HeliTakeoff;
+            if v.aircraft_phase == AircraftPhase::InHangar {
+                v.aircraft_phase = AircraftPhase::Taxi;
+            }
+        }
+    } else {
+        v.airport_heading = AirportHeading::Helipad1;
+    }
+}
+
 fn update_heading_for_orders(v: &mut Vehicle, station: &Station, kind: AirportFtaKind) {
     let remote = !station.covers_tile(v.dest) && v.pos != v.dest;
     if kind == AirportFtaKind::Helidepot {
@@ -717,6 +774,10 @@ fn update_heading_for_orders(v: &mut Vehicle, station: &Station, kind: AirportFt
     }
     if kind == AirportFtaKind::Heliport {
         update_heading_heliport(v, remote);
+        return;
+    }
+    if kind == AirportFtaKind::Helistation {
+        update_heading_helistation(v, remote);
         return;
     }
     // Country / Commuter / City / Metropolitan / International / Intercontinental.
@@ -808,6 +869,37 @@ fn choose_next_edge_city_metro(
             edges
                 .iter()
                 .find(|e| e.heading == AirportHeading::Term1)
+                .copied(),
+        );
+    }
+    EdgeOverride::Continue
+}
+
+fn choose_next_edge_helistation(v: &Vehicle, edges: &[AirportFtaEdge]) -> EdgeOverride {
+    if v.airport_pos == 2 && matches!(v.airport_heading, AirportHeading::HeliLanding) {
+        return EdgeOverride::Done(edges.iter().find(|e| e.next_position == 15).copied());
+    }
+    if matches!(v.airport_pos, 3 | 12 | 13 | 14) {
+        return EdgeOverride::Done(None);
+    }
+    if v.airport_pos == 16
+        && matches!(
+            v.airport_heading,
+            AirportHeading::HeliEndLanding | AirportHeading::Helipad1
+        )
+    {
+        return EdgeOverride::Done(
+            edges
+                .iter()
+                .find(|e| e.heading == AirportHeading::Helipad1)
+                .copied(),
+        );
+    }
+    if v.airport_pos == 5 && matches!(v.airport_heading, AirportHeading::Helipad1) {
+        return EdgeOverride::Done(
+            edges
+                .iter()
+                .find(|e| e.heading == AirportHeading::Helipad1)
                 .copied(),
         );
     }
@@ -909,7 +1001,9 @@ fn choose_next_edge(v: &Vehicle, profile: &AirportFtaProfile) -> Option<AirportF
     }
     let want = match v.airport_heading {
         AirportHeading::TermGroup => match profile.kind {
-            AirportFtaKind::Helidepot | AirportFtaKind::Heliport => AirportHeading::Helipad1,
+            AirportFtaKind::Helidepot | AirportFtaKind::Heliport | AirportFtaKind::Helistation => {
+                AirportHeading::Helipad1
+            }
             _ => AirportHeading::Term1,
         },
         AirportHeading::EndTakeoff
@@ -962,6 +1056,11 @@ fn choose_next_edge(v: &Vehicle, profile: &AirportFtaProfile) -> Option<AirportF
                 .find(|e| e.heading == AirportHeading::Helipad1)
                 .copied();
         }
+    }
+    if profile.kind == AirportFtaKind::Helistation
+        && let EdgeOverride::Done(special) = choose_next_edge_helistation(v, &edges)
+    {
+        return special;
     }
     if profile.kind == AirportFtaKind::Commuter {
         if v.airport_pos == 14 {
@@ -1044,6 +1143,8 @@ fn sync_phase_from_node(v: &mut Vehicle, profile: &AirportFtaProfile) -> Aircraf
         || (profile.kind == AirportFtaKind::Country && v.airport_pos == 10)
         || (profile.kind == AirportFtaKind::Helidepot && matches!(v.airport_pos, 2 | 12))
         || (profile.kind == AirportFtaKind::Heliport && matches!(v.airport_pos, 2 | 5..=8))
+        || (profile.kind == AirportFtaKind::Helistation
+            && matches!(v.airport_pos, 2 | 15 | 23 | 25..=32))
         || (profile.kind == AirportFtaKind::Commuter && matches!(v.airport_pos, 16 | 25 | 26 | 33))
         || (profile.kind == AirportFtaKind::City && matches!(v.airport_pos, 13 | 18..=21 | 25..=29))
         || (profile.kind == AirportFtaKind::Metropolitan && matches!(v.airport_pos, 13 | 19..=22))
@@ -1080,6 +1181,8 @@ fn apply_waypoint_pose(v: &mut Vehicle, station: &Station, profile: &AirportFtaP
         || (profile.kind == AirportFtaKind::Helidepot
             && matches!(v.airport_pos, 2 | 11 | 12 | 15 | 16))
         || (profile.kind == AirportFtaKind::Heliport && matches!(v.airport_pos, 1..=3 | 5..=8))
+        || (profile.kind == AirportFtaKind::Helistation
+            && matches!(v.airport_pos, 2 | 3 | 12..=14 | 15..=19 | 23..=32))
         || (profile.kind == AirportFtaKind::Commuter
             && matches!(v.airport_pos, 15 | 16 | 25..=28 | 31..=33 | 37))
         || (profile.kind == AirportFtaKind::City

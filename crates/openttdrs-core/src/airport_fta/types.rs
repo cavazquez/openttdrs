@@ -136,6 +136,7 @@ pub enum AirportFtaKind {
     Country,
     Helidepot,
     Commuter,
+    City,
 }
 
 /// Descriptor de tablas + comportamiento especial por aeropuerto.

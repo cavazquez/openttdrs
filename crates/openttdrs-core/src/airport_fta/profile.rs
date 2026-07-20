@@ -2,6 +2,7 @@
 
 use crate::airport_class::AirportSpecId;
 
+use super::city::{CITY_ENTRIES, CITY_MOVING_DATA, city_fta_edges};
 use super::commuter::{COMMUTER_ENTRIES, COMMUTER_MOVING_DATA, commuter_fta_edges};
 use super::country::{COUNTRY_ENTRIES, COUNTRY_MOVING_DATA, country_fta_edges};
 use super::helidepot::{HELIDEPOT_ENTRIES, HELIDEPOT_MOVING_DATA, helidepot_fta_edges};
@@ -46,6 +47,18 @@ pub fn fta_profile_for_spec(spec: AirportSpecId) -> Option<AirportFtaProfile> {
             hold_max: 24,
             footprint_w: 5,
             footprint_h: 4,
+        }),
+        AirportSpecId::City => Some(AirportFtaProfile {
+            kind: AirportFtaKind::City,
+            spec,
+            moving_data: &CITY_MOVING_DATA,
+            entries: CITY_ENTRIES,
+            fta_edges: city_fta_edges,
+            fixedwing_takeoff_pos: Some(12),
+            hold_min: 18,
+            hold_max: 21,
+            footprint_w: 6,
+            footprint_h: 6,
         }),
         _ => None,
     }

@@ -169,6 +169,8 @@ pub struct AirportFtaEdge {
 pub enum AirportFtaKind {
     Country,
     Helidepot,
+    /// Heliport 1×1 u Oilrig (mismo FTA, sin hangar).
+    Heliport,
     Commuter,
     City,
     Metropolitan,

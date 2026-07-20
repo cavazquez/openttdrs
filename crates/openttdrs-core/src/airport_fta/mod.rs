@@ -1,4 +1,4 @@
-//! Motor FTA de aeropuerto (Country … Intercontinental).
+//! Motor FTA de aeropuerto (Country … Oilrig / Heliport).
 //!
 //! Port parcial de `AirportMovingData` + `AirportFTA` (`table/airport_movement.h`).
 
@@ -6,9 +6,11 @@ mod city;
 mod commuter;
 mod country;
 mod helidepot;
+mod heliport;
 mod intercontinental;
 mod international;
 mod metropolitan;
+mod oilrig;
 mod profile;
 mod tick;
 mod types;
@@ -20,6 +22,9 @@ pub use commuter::{
 pub use country::{COUNTRY_ENTRIES, COUNTRY_MOVING_DATA, COUNTRY_NOF_ELEMENTS, country_fta_edges};
 pub use helidepot::{
     HELIDEPOT_ENTRIES, HELIDEPOT_MOVING_DATA, HELIDEPOT_NOF_ELEMENTS, helidepot_fta_edges,
+};
+pub use heliport::{
+    HELIPORT_ENTRIES, HELIPORT_MOVING_DATA, HELIPORT_NOF_ELEMENTS, heliport_fta_edges,
 };
 pub use intercontinental::{
     INTERCONTINENTAL_ENTRIES, INTERCONTINENTAL_MOVING_DATA, INTERCONTINENTAL_NOF_ELEMENTS,
@@ -33,6 +38,7 @@ pub use metropolitan::{
     METROPOLITAN_ENTRIES, METROPOLITAN_MOVING_DATA, METROPOLITAN_NOF_ELEMENTS,
     metropolitan_fta_edges,
 };
+pub use oilrig::{OILRIG_ENTRIES, OILRIG_MOVING_DATA, OILRIG_NOF_ELEMENTS, oilrig_fta_edges};
 pub use profile::fta_profile_for_spec;
 pub use tick::{
     airport_nw_origin, init_airport_fta_on_purchase, init_country_fta_on_purchase,
@@ -879,5 +885,113 @@ mod tests {
         assert!(saw_flying, "Intercontinental: crucero");
         assert!(saw_landing, "Intercontinental: landing");
         assert!(saw_term, "Intercontinental: terminal/hangar destino");
+    }
+
+    #[test]
+    fn oilrig_tables_share_heliport_fta() {
+        assert_eq!(OILRIG_MOVING_DATA.len(), 9);
+        assert_eq!(OILRIG_NOF_ELEMENTS, 9);
+        assert_eq!(OILRIG_ENTRIES, [7, 7, 7, 7]);
+        assert!(OILRIG_MOVING_DATA[1].flags & FLAG_HELI_RAISE != 0);
+        assert!(OILRIG_MOVING_DATA[3].flags & FLAG_HELI_LOWER != 0);
+        let from_pad = oilrig_fta_edges(0);
+        assert!(
+            from_pad
+                .iter()
+                .any(|e| e.heading == AirportHeading::Helipad1 && e.next_position == 1)
+        );
+        let from_hold = oilrig_fta_edges(8);
+        assert!(
+            from_hold
+                .iter()
+                .any(|e| e.heading == AirportHeading::HeliLanding && e.next_position == 2)
+        );
+    }
+
+    #[test]
+    fn oilrig_cycle_pad_takeoff_fly_land_pad() {
+        let mut s = GameState::new(48, 48);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: AirportSpecId::Oilrig,
+            },
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(20, 20),
+                axis_y: false,
+                spec: AirportSpecId::Oilrig,
+            },
+        )
+        .unwrap();
+        assert!(station_uses_airport_fta(&s.stations[0]));
+        assert_eq!(s.stations[0].airport_spec, AirportSpecId::Oilrig);
+        assert_eq!(s.stations[0].airport_tiles.len(), 1);
+
+        let pad_a = s.stations[0].pos;
+        let pad_b = s.stations[1].pos;
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(pad_a, ENGINE_AIRCRAFT_TRICARIO),
+        )
+        .unwrap();
+        let id = s.vehicles[0].id;
+        assert!(s.vehicles[0].airport_fta_active);
+        assert_eq!(s.vehicles[0].airport_pos, 0);
+
+        apply_command(
+            &mut s,
+            &Command::SetVehicleOrderList(
+                id,
+                vec![VehicleOrder::station(pad_b), VehicleOrder::station(pad_a)],
+            ),
+        )
+        .unwrap();
+        apply_command(&mut s, &Command::ToggleVehicleRunning(id)).unwrap();
+
+        let mut saw_takeoff = false;
+        let mut saw_flying = false;
+        let mut saw_landing = false;
+        let mut saw_pad = false;
+
+        for _ in 0..12_000 {
+            s.step();
+            if s.vehicles.is_empty() {
+                break;
+            }
+            let events = s.runtime.pending_sim_events.drain();
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::AircraftTakeoff { .. }))
+            {
+                saw_takeoff = true;
+            }
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::AircraftLanding { .. }))
+            {
+                saw_landing = true;
+            }
+            let v = &s.vehicles[0];
+            if v.aircraft_phase == AircraftPhase::Flying {
+                saw_flying = true;
+            }
+            if saw_landing && v.airport_pos == 0 && s.stations[1].covers_tile(v.pos) {
+                saw_pad = true;
+            }
+            if saw_takeoff && saw_flying && saw_landing && saw_pad {
+                break;
+            }
+        }
+
+        assert!(saw_takeoff, "Oilrig: takeoff heli");
+        assert!(saw_flying, "Oilrig: crucero");
+        assert!(saw_landing, "Oilrig: landing/lower");
+        assert!(saw_pad, "Oilrig: llegar al pad destino");
     }
 }

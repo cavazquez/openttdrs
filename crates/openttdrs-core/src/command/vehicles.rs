@@ -235,12 +235,15 @@ fn maybe_init_country_airport_fta(state: &GameState, depot_pos: TileCoord, vehic
     if vehicle.kind != VehicleKind::Aircraft {
         return;
     }
-    if state
+    let Some(st) = state
         .stations
         .iter()
-        .any(|s| crate::airport_fta::station_uses_airport_fta(s) && s.covers_tile(depot_pos))
-    {
-        crate::airport_fta::init_airport_fta_on_purchase(vehicle);
+        .find(|s| crate::airport_fta::station_uses_airport_fta(s) && s.covers_tile(depot_pos))
+    else {
+        return;
+    };
+    if let Some(profile) = crate::airport_fta::fta_profile_for_spec(st.airport_spec) {
+        crate::airport_fta::init_airport_fta_on_purchase(vehicle, profile.kind);
     }
 }
 

@@ -68,6 +68,8 @@ pub enum AirportSpecId {
     International = 6,
     /// Intercontinental 9×11.
     Intercontinental = 7,
+    /// Oilrig 1×1 (helipad sobre plataforma; FTA = Heliport).
+    Oilrig = 8,
 }
 
 impl AirportSpecId {
@@ -81,6 +83,7 @@ impl AirportSpecId {
             5 => Self::Metropolitan,
             6 => Self::International,
             7 => Self::Intercontinental,
+            8 => Self::Oilrig,
             _ => Self::Small,
         }
     }
@@ -92,7 +95,7 @@ impl AirportSpecId {
 
     #[must_use]
     pub const fn is_heliport_only(self) -> bool {
-        matches!(self, Self::Heliport | Self::Helidepot)
+        matches!(self, Self::Heliport | Self::Helidepot | Self::Oilrig)
     }
 }
 
@@ -222,6 +225,16 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         catchment: 10,
         from_newgrf: false,
     },
+    AirportSpecDef {
+        id: AirportSpecId::Oilrig,
+        class: AirportClassId::Heliport,
+        label: "Oilrig",
+        short_label: "Oil",
+        size_x: 1,
+        size_y: 1,
+        catchment: 4,
+        from_newgrf: false,
+    },
 ];
 
 #[must_use]
@@ -279,6 +292,7 @@ mod tests {
         let heli = list_airport_specs(AirportClassId::Heliport, "");
         assert!(heli.iter().any(|s| s.id == AirportSpecId::Heliport));
         assert!(heli.iter().any(|s| s.id == AirportSpecId::Helidepot));
+        assert!(heli.iter().any(|s| s.id == AirportSpecId::Oilrig));
         assert!(!heli.iter().any(|s| s.id == AirportSpecId::Small));
 
         let large = list_airport_specs(AirportClassId::Large, "");

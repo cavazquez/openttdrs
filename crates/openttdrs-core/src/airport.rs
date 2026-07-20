@@ -381,7 +381,7 @@ const INTERCONTINENTAL_LAYOUT: &[AirportPiece] = &[
 
 fn layout_for_spec(spec: AirportSpecId) -> &'static [AirportPiece] {
     match spec {
-        AirportSpecId::Heliport => HELIPORT_LAYOUT,
+        AirportSpecId::Heliport | AirportSpecId::Oilrig => HELIPORT_LAYOUT,
         AirportSpecId::Helidepot => HELIDEPOT_LAYOUT,
         AirportSpecId::Small => SMALL_LAYOUT,
         AirportSpecId::Commuter => COMMUTER_LAYOUT,

@@ -6,6 +6,7 @@ use super::city::{CITY_ENTRIES, CITY_MOVING_DATA, city_fta_edges};
 use super::commuter::{COMMUTER_ENTRIES, COMMUTER_MOVING_DATA, commuter_fta_edges};
 use super::country::{COUNTRY_ENTRIES, COUNTRY_MOVING_DATA, country_fta_edges};
 use super::helidepot::{HELIDEPOT_ENTRIES, HELIDEPOT_MOVING_DATA, helidepot_fta_edges};
+use super::heliport::{HELIPORT_ENTRIES, HELIPORT_MOVING_DATA, heliport_fta_edges};
 use super::intercontinental::{
     INTERCONTINENTAL_ENTRIES, INTERCONTINENTAL_MOVING_DATA, intercontinental_fta_edges,
 };
@@ -13,10 +14,12 @@ use super::international::{
     INTERNATIONAL_ENTRIES, INTERNATIONAL_MOVING_DATA, international_fta_edges,
 };
 use super::metropolitan::{METROPOLITAN_ENTRIES, METROPOLITAN_MOVING_DATA, metropolitan_fta_edges};
+use super::oilrig::{OILRIG_ENTRIES, OILRIG_MOVING_DATA, oilrig_fta_edges};
 use super::types::{AirportFtaKind, AirportFtaProfile};
 
 /// Perfil FTA si el spec está soportado en este corte.
 #[must_use]
+#[allow(clippy::too_many_lines)]
 pub fn fta_profile_for_spec(spec: AirportSpecId) -> Option<AirportFtaProfile> {
     match spec {
         AirportSpecId::Small => Some(AirportFtaProfile {
@@ -42,6 +45,30 @@ pub fn fta_profile_for_spec(spec: AirportSpecId) -> Option<AirportFtaProfile> {
             hold_max: 6,
             footprint_w: 2,
             footprint_h: 2,
+        }),
+        AirportSpecId::Heliport => Some(AirportFtaProfile {
+            kind: AirportFtaKind::Heliport,
+            spec,
+            moving_data: &HELIPORT_MOVING_DATA,
+            entries: HELIPORT_ENTRIES,
+            fta_edges: heliport_fta_edges,
+            fixedwing_takeoff_pos: None,
+            hold_min: 5,
+            hold_max: 8,
+            footprint_w: 1,
+            footprint_h: 1,
+        }),
+        AirportSpecId::Oilrig => Some(AirportFtaProfile {
+            kind: AirportFtaKind::Heliport,
+            spec,
+            moving_data: &OILRIG_MOVING_DATA,
+            entries: OILRIG_ENTRIES,
+            fta_edges: oilrig_fta_edges,
+            fixedwing_takeoff_pos: None,
+            hold_min: 5,
+            hold_max: 8,
+            footprint_w: 1,
+            footprint_h: 1,
         }),
         AirportSpecId::Commuter => Some(AirportFtaProfile {
             kind: AirportFtaKind::Commuter,
@@ -103,6 +130,5 @@ pub fn fta_profile_for_spec(spec: AirportSpecId) -> Option<AirportFtaProfile> {
             footprint_w: 9,
             footprint_h: 11,
         }),
-        AirportSpecId::Heliport => None,
     }
 }

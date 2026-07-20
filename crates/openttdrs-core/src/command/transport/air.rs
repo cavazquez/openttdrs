@@ -85,7 +85,7 @@ pub(in crate::command) fn place_airport_area(
         write_airport_tile(state, c, piece)?;
         tiles.push(c);
     }
-    if matches!(spec, AirportSpecId::Heliport) {
+    if matches!(spec, AirportSpecId::Heliport | AirportSpecId::Oilrig) {
         state.economy.money -= DEPOT_BUILD_COST;
     } else {
         let cost = STATION_BUILD_COST.saturating_mul(i64::try_from(tile_count).unwrap_or(1));

@@ -154,7 +154,7 @@ fn ferry_engine_is_passenger_ship() {
 }
 
 #[test]
-fn aircraft_phase_starts_in_hangar() {
+fn aircraft_phase_starts_on_heliport_pad() {
     let mut s = GameState::new(12, 12);
     let c = TileCoord::new(4, 4);
     apply_command(&mut s, &Command::PlaceAirport(c)).unwrap();
@@ -163,7 +163,9 @@ fn aircraft_phase_starts_in_hangar() {
         &Command::BuildVehicleAtDepot(c, ENGINE_AIRCRAFT_TRICARIO),
     )
     .unwrap();
-    assert_eq!(s.vehicles[0].aircraft_phase, AircraftPhase::InHangar);
+    // Heliport/Oilrig FTA: sin hangar; arranca en pad (Taxi + Helipad1).
+    assert_eq!(s.vehicles[0].aircraft_phase, AircraftPhase::Taxi);
+    assert!(s.vehicles[0].airport_fta_active);
     assert_eq!(s.vehicles[0].altitude, 0);
 }
 

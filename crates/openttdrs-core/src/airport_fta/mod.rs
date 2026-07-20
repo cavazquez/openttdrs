@@ -1,4 +1,4 @@
-//! Motor FTA de aeropuerto (Country … Metropolitan).
+//! Motor FTA de aeropuerto (Country … International).
 //!
 //! Port parcial de `AirportMovingData` + `AirportFTA` (`table/airport_movement.h`).
 
@@ -6,6 +6,7 @@ mod city;
 mod commuter;
 mod country;
 mod helidepot;
+mod international;
 mod metropolitan;
 mod profile;
 mod tick;
@@ -18,6 +19,10 @@ pub use commuter::{
 pub use country::{COUNTRY_ENTRIES, COUNTRY_MOVING_DATA, COUNTRY_NOF_ELEMENTS, country_fta_edges};
 pub use helidepot::{
     HELIDEPOT_ENTRIES, HELIDEPOT_MOVING_DATA, HELIDEPOT_NOF_ELEMENTS, helidepot_fta_edges,
+};
+pub use international::{
+    INTERNATIONAL_ENTRIES, INTERNATIONAL_MOVING_DATA, INTERNATIONAL_NOF_ELEMENTS,
+    international_fta_edges,
 };
 pub use metropolitan::{
     METROPOLITAN_ENTRIES, METROPOLITAN_MOVING_DATA, METROPOLITAN_NOF_ELEMENTS,
@@ -628,5 +633,125 @@ mod tests {
         assert!(saw_flying, "Metropolitan: crucero");
         assert!(saw_landing, "Metropolitan: landing");
         assert!(saw_term, "Metropolitan: terminal/hangar destino");
+    }
+
+    #[test]
+    fn international_tables_have_expected_size() {
+        assert_eq!(INTERNATIONAL_MOVING_DATA.len(), 53);
+        assert_eq!(INTERNATIONAL_NOF_ELEMENTS, 53);
+        assert_eq!(INTERNATIONAL_ENTRIES, [38, 37, 40, 39]);
+        assert!(INTERNATIONAL_MOVING_DATA[31].flags & FLAG_TAKEOFF != 0);
+        assert!(INTERNATIONAL_MOVING_DATA[33].flags & FLAG_LAND != 0);
+        let from_term_group = international_fta_edges(25);
+        assert!(
+            from_term_group
+                .iter()
+                .any(|e| e.heading == AirportHeading::Takeoff && e.next_position == 26)
+        );
+        assert!(
+            from_term_group
+                .iter()
+                .any(|e| e.heading == AirportHeading::Term3 && e.next_position == 6)
+        );
+        let from_approach = international_fta_edges(32);
+        assert!(
+            from_approach
+                .iter()
+                .any(|e| e.heading == AirportHeading::Landing && e.next_position == 33)
+        );
+    }
+
+    #[test]
+    fn international_cycle_hangar_takeoff_fly_land_term() {
+        let mut s = GameState::new(64, 64);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: AirportSpecId::International,
+            },
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(20, 20),
+                axis_y: false,
+                spec: AirportSpecId::International,
+            },
+        )
+        .unwrap();
+        assert!(station_uses_airport_fta(&s.stations[0]));
+        assert_eq!(s.stations[0].airport_tiles.len(), 49);
+
+        let hangar_a = s.stations[0].pos;
+        let hangar_b = s.stations[1].pos;
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(hangar_a, ENGINE_AIRCRAFT_DAKOTA),
+        )
+        .unwrap();
+        let id = s.vehicles[0].id;
+        assert!(s.vehicles[0].airport_fta_active);
+
+        apply_command(
+            &mut s,
+            &Command::SetVehicleOrderList(
+                id,
+                vec![
+                    VehicleOrder::station(hangar_b),
+                    VehicleOrder::station(hangar_a),
+                ],
+            ),
+        )
+        .unwrap();
+        apply_command(&mut s, &Command::ToggleVehicleRunning(id)).unwrap();
+
+        let mut saw_takeoff = false;
+        let mut saw_flying = false;
+        let mut saw_landing = false;
+        let mut saw_term = false;
+
+        for _ in 0..24_000 {
+            s.step();
+            if s.vehicles.is_empty() {
+                break;
+            }
+            let events = s.runtime.pending_sim_events.drain();
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::AircraftTakeoff { .. }))
+            {
+                saw_takeoff = true;
+            }
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::AircraftLanding { .. }))
+            {
+                saw_landing = true;
+            }
+            let v = &s.vehicles[0];
+            if v.aircraft_phase == AircraftPhase::Flying {
+                saw_flying = true;
+            }
+            if saw_landing
+                && (matches!(v.airport_pos, 4..=9)
+                    || (matches!(
+                        v.aircraft_phase,
+                        AircraftPhase::Taxi | AircraftPhase::InHangar
+                    ) && s.stations[1].covers_tile(v.pos)))
+            {
+                saw_term = true;
+            }
+            if saw_takeoff && saw_flying && saw_landing && saw_term {
+                break;
+            }
+        }
+
+        assert!(saw_takeoff, "International: takeoff");
+        assert!(saw_flying, "International: crucero");
+        assert!(saw_landing, "International: landing");
+        assert!(saw_term, "International: terminal/hangar destino");
     }
 }

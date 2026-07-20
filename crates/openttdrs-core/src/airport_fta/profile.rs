@@ -6,6 +6,9 @@ use super::city::{CITY_ENTRIES, CITY_MOVING_DATA, city_fta_edges};
 use super::commuter::{COMMUTER_ENTRIES, COMMUTER_MOVING_DATA, commuter_fta_edges};
 use super::country::{COUNTRY_ENTRIES, COUNTRY_MOVING_DATA, country_fta_edges};
 use super::helidepot::{HELIDEPOT_ENTRIES, HELIDEPOT_MOVING_DATA, helidepot_fta_edges};
+use super::international::{
+    INTERNATIONAL_ENTRIES, INTERNATIONAL_MOVING_DATA, international_fta_edges,
+};
 use super::metropolitan::{METROPOLITAN_ENTRIES, METROPOLITAN_MOVING_DATA, metropolitan_fta_edges};
 use super::types::{AirportFtaKind, AirportFtaProfile};
 
@@ -72,6 +75,18 @@ pub fn fta_profile_for_spec(spec: AirportSpecId) -> Option<AirportFtaProfile> {
             hold_max: 22,
             footprint_w: 6,
             footprint_h: 6,
+        }),
+        AirportSpecId::International => Some(AirportFtaProfile {
+            kind: AirportFtaKind::International,
+            spec,
+            moving_data: &INTERNATIONAL_MOVING_DATA,
+            entries: INTERNATIONAL_ENTRIES,
+            fta_edges: international_fta_edges,
+            fixedwing_takeoff_pos: Some(31),
+            hold_min: 37,
+            hold_max: 40,
+            footprint_w: 7,
+            footprint_h: 7,
         }),
         _ => None,
     }

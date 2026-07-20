@@ -93,6 +93,12 @@ pub const BLOCK_TERM1: AirportBlockBits = 1 << 0;
 pub const BLOCK_TERM2: AirportBlockBits = 1 << 1;
 /// Bit de `AirportBlock::Term3`.
 pub const BLOCK_TERM3: AirportBlockBits = 1 << 2;
+/// Bit de `AirportBlock::Term4`.
+pub const BLOCK_TERM4: AirportBlockBits = 1 << 3;
+/// Bit de `AirportBlock::Term5`.
+pub const BLOCK_TERM5: AirportBlockBits = 1 << 4;
+/// Bit de `AirportBlock::Term6`.
+pub const BLOCK_TERM6: AirportBlockBits = 1 << 5;
 /// Bit de `AirportBlock::Helipad1` (índice 6).
 pub const BLOCK_HELIPAD1: AirportBlockBits = 1 << 6;
 /// Bit de `AirportBlock::Helipad2` (índice 7).
@@ -105,8 +111,20 @@ pub const BLOCK_OUT_WAY: AirportBlockBits = 1 << 11;
 pub const BLOCK_IN_WAY: AirportBlockBits = 1 << 12;
 /// Bit de `AirportBlock::AirportEntrance` (índice 13).
 pub const BLOCK_AIRPORT_ENTRANCE: AirportBlockBits = 1 << 13;
+/// Bit de `AirportBlock::TermGroup1` (índice 14).
+pub const BLOCK_TERM_GROUP1: AirportBlockBits = 1 << 14;
+/// Bit de `AirportBlock::TermGroup2` (índice 15).
+pub const BLOCK_TERM_GROUP2: AirportBlockBits = 1 << 15;
 /// Bit de `AirportBlock::Hangar2Area` (índice 16).
 pub const BLOCK_HANGAR2_AREA: AirportBlockBits = 1 << 16;
+/// Bit de `AirportBlock::TermGroup2Enter1` (índice 17).
+pub const BLOCK_TERM_GROUP2_ENTER1: AirportBlockBits = 1 << 17;
+/// Bit de `AirportBlock::TermGroup2Enter2` (índice 18).
+pub const BLOCK_TERM_GROUP2_ENTER2: AirportBlockBits = 1 << 18;
+/// Bit de `AirportBlock::TermGroup2Exit1` (índice 19).
+pub const BLOCK_TERM_GROUP2_EXIT1: AirportBlockBits = 1 << 19;
+/// Bit de `AirportBlock::TermGroup2Exit2` (índice 20).
+pub const BLOCK_TERM_GROUP2_EXIT2: AirportBlockBits = 1 << 20;
 /// Bit de `AirportBlock::PreHelipad` (índice 21).
 pub const BLOCK_PRE_HELIPAD: AirportBlockBits = 1 << 21;
 
@@ -140,6 +158,7 @@ pub enum AirportFtaKind {
     Commuter,
     City,
     Metropolitan,
+    International,
 }
 
 /// Descriptor de tablas + comportamiento especial por aeropuerto.

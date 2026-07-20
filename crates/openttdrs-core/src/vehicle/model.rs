@@ -81,6 +81,25 @@ fn default_cached_total_length() -> u16 {
     u16::from(crate::train_consist::VEHICLE_LENGTH)
 }
 
+/// Fase interna de un vehículo road dentro de un depósito.
+///
+/// Equivale al estado `RVSB_IN_DEPOT` y a los frames de entrada/salida de
+/// `OpenTTD`, sin exponer detalles de la tabla de conducción al resto del core.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+pub enum RoadDepotPhase {
+    #[default]
+    None,
+    InDepot,
+    Entering {
+        direction: VehicleDirection,
+        progress: u8,
+    },
+    Exiting {
+        direction: VehicleDirection,
+        progress: u8,
+    },
+}
+
 fn seed_newgrf_random_bits(id: u32) -> u8 {
     (id.wrapping_mul(0x9E37_79B9) >> 24) as u8
 }
@@ -210,6 +229,9 @@ pub struct Vehicle {
     /// Ya pasó `CheckTrainStayInDepot` en esta estancia (equivalente a dejar `Track::Depot`).
     #[serde(default)]
     pub depot_leave_cleared: bool,
+    /// Estado de depósito para bus/camión/tranvía.
+    #[serde(default)]
+    pub road_depot_phase: RoadDepotPhase,
     /// Tren marcado stuck ante path sin reserva (`VehicleRailFlag::Stuck`).
     #[serde(default)]
     pub pbs_stuck: bool,
@@ -372,6 +394,7 @@ impl Vehicle {
             force_proceed: false,
             wait_counter: 0,
             depot_leave_cleared: false,
+            road_depot_phase: RoadDepotPhase::None,
             pbs_stuck: false,
             timetable_active: false,
             timetable_wait_remaining: 0,

@@ -5,13 +5,23 @@
 
 #include "snapshot_export.h"
 
+#include "company_func.h"
+#include "core/random_func.hpp"
+#include "direction_type.h"
+#include "engine_base.h"
+#include "fileio_type.h"
+#include "group_type.h"
 #include "map_func.h"
 #include "openttd.h"
 #include "rail_map.h"
+#include "saveload/saveload.h"
+#include "table/sprites.h"
 #include "tile_map.h"
 #include "tile_type.h"
 #include "timer/timer_game_tick.h"
+#include "train.h"
 #include "vehicle_base.h"
+#include "vehicle_func.h"
 
 #include "3rdparty/nlohmann/json.hpp"
 
@@ -25,6 +35,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+/* From train_cmd.cpp — spacing wagons after attach. */
+bool TrainController(Train *v, Vehicle *nomove, bool reverse = true);
 
 namespace {
 
@@ -180,6 +193,125 @@ uint64_t ParseTraceTicks()
 	return parsed > 0 ? static_cast<uint64_t>(parsed) : 40;
 }
 
+/** Misma convención que openttdrs `rail_pixel_from_openttd_pos`. */
+uint8_t RailPixelFromPos(int x_pos, int y_pos, Direction direction)
+{
+	const uint8_t xf = static_cast<uint8_t>(((x_pos % 16) + 16) % 16);
+	const uint8_t yf = static_cast<uint8_t>(((y_pos % 16) + 16) % 16);
+	switch (direction) {
+		case DIR_SW: return xf;
+		case DIR_SE: return yf;
+		case DIR_NW: return static_cast<uint8_t>(15 - yf);
+		case DIR_N: return std::min(static_cast<uint8_t>(15 - xf), static_cast<uint8_t>(15 - yf));
+		case DIR_S: return std::min(xf, yf);
+		case DIR_E: return std::min(static_cast<uint8_t>(15 - xf), yf);
+		case DIR_W: return std::min(xf, static_cast<uint8_t>(15 - yf));
+		default: return static_cast<uint8_t>(15 - xf); /* DIR_NE */
+	}
+}
+
+nlohmann::json UnitsForTrain(const Train *head)
+{
+	nlohmann::json units = nlohmann::json::array();
+	int index = 0;
+	for (const Train *u = head; u != nullptr; u = u->Next(), index++) {
+		nlohmann::json unit;
+		unit["index"] = index;
+		unit["x"] = TileX(u->tile);
+		unit["y"] = TileY(u->tile);
+		unit["rail_pixel"] = RailPixelFromPos(u->x_pos, u->y_pos, u->direction);
+		unit["direction"] = static_cast<uint8_t>(u->direction);
+		units.push_back(unit);
+	}
+	return units;
+}
+
+/**
+ * Engancha N vagones Goods Van (engine 32) detrás del primer tren y los
+ * espacia con TrainController. Opcionalmente guarda el .sav resultante.
+ *
+ * Activación:
+ *   OPENTTDRS_FIXTURE_ATTACH_WAGONS=2
+ *   OPENTTDRS_FIXTURE_SAVE_OUT=/ruta/absoluta/salida.sav
+ */
+void MaybeAttachWagonsForFixture()
+{
+	const char *raw = std::getenv("OPENTTDRS_FIXTURE_ATTACH_WAGONS");
+	if (raw == nullptr || raw[0] == '\0') return;
+	const int count = std::atoi(raw);
+	if (count <= 0) return;
+
+	Train *head = nullptr;
+	for (Vehicle *v : Vehicle::Iterate()) {
+		if (v->type != VEH_TRAIN || !v->IsPrimaryVehicle()) continue;
+		head = Train::From(v);
+		break;
+	}
+	if (head == nullptr) {
+		std::fprintf(stderr, "openttdrs fixture: no hay tren primario\n");
+		return;
+	}
+
+	const Engine *wagon_engine = Engine::GetIfValid(EngineID{32}); /* Goods Van temperate */
+	if (wagon_engine == nullptr || wagon_engine->type != VEH_TRAIN) {
+		std::fprintf(stderr, "openttdrs fixture: engine 32 (Goods Van) no disponible\n");
+		return;
+	}
+	const RailVehicleInfo *rvi = &wagon_engine->VehInfo<RailVehicleInfo>();
+	_current_company = head->owner;
+
+	for (int n = 0; n < count; n++) {
+		Train *last = head->Last();
+		Train *wagon = new Train();
+		wagon->spritenum = rvi->image_index;
+		wagon->engine_type = wagon_engine->index;
+		wagon->gcache.first_engine = EngineID::Invalid();
+		wagon->direction = last->direction;
+		wagon->tile = last->tile;
+		wagon->x_pos = last->x_pos;
+		wagon->y_pos = last->y_pos;
+		wagon->z_pos = last->z_pos;
+		wagon->owner = head->owner;
+		wagon->track = last->track;
+		wagon->vehstatus = last->vehstatus;
+		wagon->vehstatus.Reset(VehState::Stopped);
+		wagon->vehstatus.Reset(VehState::Hidden);
+		wagon->SetWagon();
+		wagon->cargo_type = wagon_engine->GetDefaultCargoType();
+		wagon->cargo_cap = rvi->capacity;
+		wagon->refit_cap = 0;
+		wagon->railtypes = rvi->railtypes;
+		wagon->date_of_last_service = head->date_of_last_service;
+		wagon->date_of_last_service_newgrf = head->date_of_last_service_newgrf;
+		wagon->build_year = head->build_year;
+		wagon->sprite_cache.sprite_seq.Set(SPR_IMG_QUERY);
+		wagon->random_bits = Random();
+		wagon->group_id = DEFAULT_GROUP;
+		wagon->UpdatePosition();
+
+		last->SetNext(wagon);
+		head->ConsistChanged(CCF_ARRANGE);
+
+		const int steps = last->CalcNextVehicleOffset();
+		for (int i = 0; i < steps; i++) {
+			if (!TrainController(head, wagon, false)) break;
+		}
+		head->ConsistChanged(CCF_TRACK);
+	}
+
+	std::fprintf(stderr, "openttdrs fixture: enganchados %d vagón(es); unidades=%d\n",
+			count, CountVehiclesInChain(head));
+
+	const char *save_out = std::getenv("OPENTTDRS_FIXTURE_SAVE_OUT");
+	if (save_out != nullptr && save_out[0] != '\0') {
+		if (SaveOrLoad(save_out, SLO_SAVE, DFT_GAME_FILE, NO_DIRECTORY, false) != SL_OK) {
+			std::fprintf(stderr, "openttdrs fixture: falló el save en %s\n", save_out);
+		} else {
+			std::fprintf(stderr, "openttdrs fixture: guardado %s\n", save_out);
+		}
+	}
+}
+
 void WritePbsTraceRow(const char *kind)
 {
 	nlohmann::json row;
@@ -190,6 +322,7 @@ void WritePbsTraceRow(const char *kind)
 
 	for (const Vehicle *v : Vehicle::Iterate()) {
 		if (v->type != VEH_TRAIN || !v->IsPrimaryVehicle() || v->tile == INVALID_TILE) continue;
+		const Train *train_v = Train::From(v);
 		nlohmann::json train;
 		train["vehicle"] = v->index.base();
 		train["x"] = TileX(v->tile);
@@ -198,6 +331,7 @@ void WritePbsTraceRow(const char *kind)
 		train["speed"] = v->cur_speed;
 		train["subspeed"] = v->subspeed;
 		train["direction"] = static_cast<uint8_t>(v->direction);
+		train["units"] = UnitsForTrain(train_v);
 		row["trains"].push_back(train);
 	}
 
@@ -313,7 +447,9 @@ bool OpenttdrsMaybeExportSnapshot(const std::string &source_path)
 void OpenttdrsMaybeStartPbsTrace(const std::string &source_path)
 {
 	const char *out_path = std::getenv("OPENTTDRS_PBS_TRACE_OUT");
-	if (out_path == nullptr || out_path[0] == '\0') return;
+	const char *fixture_wagons = std::getenv("OPENTTDRS_FIXTURE_ATTACH_WAGONS");
+	const bool want_fixture = fixture_wagons != nullptr && fixture_wagons[0] != '\0';
+	if ((out_path == nullptr || out_path[0] == '\0') && !want_fixture) return;
 
 	/* Dedicated + -g loads a new game before the requested save. Match the
 	 * snapshot exporter and arm only after the requested AfterLoadGame call. */
@@ -322,6 +458,14 @@ void OpenttdrsMaybeStartPbsTrace(const std::string &source_path)
 	const char *min_s = std::getenv("OPENTTDRS_SNAPSHOT_MIN_CALL");
 	const int min_call = (min_s != nullptr && min_s[0] != '\0') ? std::atoi(min_s) : 2;
 	if (call_count < min_call || _openttdrs_pbs_trace.armed) return;
+
+	MaybeAttachWagonsForFixture();
+
+	/* Solo generar el .sav del fixture, sin traza. */
+	if (out_path == nullptr || out_path[0] == '\0') {
+		_exit_game = true;
+		return;
+	}
 
 	_openttdrs_pbs_trace.out.open(out_path, std::ios::out | std::ios::trunc);
 	if (!_openttdrs_pbs_trace.out.is_open()) {
@@ -337,7 +481,7 @@ void OpenttdrsMaybeStartPbsTrace(const std::string &source_path)
 
 	nlohmann::json metadata;
 	metadata["kind"] = "metadata";
-	metadata["schema_version"] = 1;
+	metadata["schema_version"] = 2;
 	metadata["producer"] = "openttd";
 	const char *commit = std::getenv("OPENTTDRS_OPENTTD_COMMIT");
 	metadata["openttd_commit"] = commit != nullptr ? commit : "";

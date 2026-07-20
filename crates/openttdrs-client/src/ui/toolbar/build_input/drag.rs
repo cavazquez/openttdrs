@@ -435,12 +435,13 @@ pub(crate) fn apply_drag_action(
         let mut changed = false;
         let mut last_err = None;
         for (x, y) in spaced {
-            let cmd = Command::PlaceRailSignal(
+            let cmd = Command::PlaceRailSignalWithVariant(
                 TileCoord::new(x, y),
                 station_state.orientation,
                 fx,
                 fy,
                 station_state.signal_type,
+                station_state.signal_variant,
             );
             match crate::network::apply_player_command(&mut sim.state, &cmd) {
                 Ok(()) => changed = true,

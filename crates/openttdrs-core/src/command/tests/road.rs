@@ -369,11 +369,69 @@ fn toggle_road_vehicle_running_targets_depot_exit() {
         &Command::BuildRoadVehicleAtDepot(depot, VehicleKind::Truck),
     )
     .unwrap();
+    assert_eq!(
+        s.vehicles[0].road_depot_phase,
+        crate::vehicle::RoadDepotPhase::InDepot
+    );
 
     apply_command(&mut s, &Command::ToggleVehicleRunning(1)).unwrap();
 
     assert!(s.vehicles[0].running);
     assert_eq!(s.vehicles[0].dest, exit);
+}
+
+#[test]
+fn road_vehicle_leaves_depot_through_subtile_phase() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    let exit = TileCoord::new(3, 2);
+    apply_command(&mut s, &Command::PlaceRoad(exit)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 2)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildRoadVehicleAtDepot(depot, VehicleKind::Bus),
+    )
+    .unwrap();
+    apply_command(&mut s, &Command::ToggleVehicleRunning(1)).unwrap();
+
+    s.step();
+    assert_eq!(s.vehicles[0].pos, depot, "aún cruza la boca");
+    assert!(matches!(
+        s.vehicles[0].road_depot_phase,
+        crate::vehicle::RoadDepotPhase::Exiting { .. }
+    ));
+    for _ in 0..8 {
+        s.step();
+    }
+    assert_eq!(s.vehicles[0].pos, exit);
+    assert_eq!(
+        s.vehicles[0].road_depot_phase,
+        crate::vehicle::RoadDepotPhase::None
+    );
+}
+
+#[test]
+fn road_vehicle_waits_when_depot_exit_is_occupied() {
+    let mut s = GameState::new(8, 8);
+    let depot = TileCoord::new(2, 2);
+    let exit = TileCoord::new(3, 2);
+    apply_command(&mut s, &Command::PlaceRoad(exit)).unwrap();
+    apply_command(&mut s, &Command::PlaceRoadDepotDir(depot, 2)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildRoadVehicleAtDepot(depot, VehicleKind::Bus),
+    )
+    .unwrap();
+    let mut blocker = Vehicle::new(2, VehicleKind::Truck, exit, exit);
+    blocker.running = true;
+    s.vehicles.push(blocker);
+    apply_command(&mut s, &Command::ToggleVehicleRunning(1)).unwrap();
+
+    s.step();
+    assert_eq!(
+        s.vehicles[0].road_depot_phase,
+        crate::vehicle::RoadDepotPhase::InDepot
+    );
 }
 
 #[test]

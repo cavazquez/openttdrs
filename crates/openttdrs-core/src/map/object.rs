@@ -31,3 +31,31 @@ pub const fn object_type_from_tile(tile: &Tile) -> Option<u8> {
 pub const fn is_owned_land_tile(tile: &Tile) -> bool {
     is_map_object_tile(tile.mapt) && tile.m5 == OBJECT_TYPE_OWNED_LAND
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::GameState;
+    use crate::TileCoord;
+    use crate::sav;
+
+    #[test]
+    fn dual_fixture_overlays_transmitter_and_lighthouse_types() {
+        let raw = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/train_dual_pbs_curve_15_3.sav"
+        ))
+        .expect("fixture");
+        let state = GameState::from_sav_game(sav::load(&raw).expect("load"));
+        let tx = state
+            .map
+            .get(TileCoord::new(47, 33))
+            .expect("transmitter tile");
+        let lh = state
+            .map
+            .get(TileCoord::new(60, 55))
+            .expect("lighthouse tile");
+        assert_eq!(object_type_from_tile(&tx), Some(OBJECT_TYPE_TRANSMITTER));
+        assert_eq!(object_type_from_tile(&lh), Some(OBJECT_TYPE_LIGHTHOUSE));
+    }
+}

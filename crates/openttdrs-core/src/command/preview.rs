@@ -122,12 +122,18 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
                 Some(CommandError::NoRailToConvert)
             }
         }),
-        Command::PlaceRailSignal(c, orientation, fract_x, fract_y, _) => {
+        Command::PlaceRailSignal(c, orientation, fract_x, fract_y, _)
+        | Command::PlaceRailSignalWithVariant(c, orientation, fract_x, fract_y, _, _) => {
             require_tile_owned_by_active(state, *c).err().or_else(|| {
                 check_place_rail_signal_oriented(map, *c, *orientation, *fract_x, *fract_y).err()
             })
         }
         Command::CycleRailSignalType(c, fract_x, fract_y) => {
+            require_tile_owned_by_active(state, *c)
+                .err()
+                .or_else(|| check_cycle_rail_signal_type(map, *c, *fract_x, *fract_y).err())
+        }
+        Command::CycleRailSignalVariant(c, fract_x, fract_y) => {
             require_tile_owned_by_active(state, *c)
                 .err()
                 .or_else(|| check_cycle_rail_signal_type(map, *c, *fract_x, *fract_y).err())

@@ -14,13 +14,13 @@ pub use encoding::{
     SIGTYPE_BLOCK, SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SIGTYPE_LAST_NOPBS, SIGTYPE_PATH,
     SIGTYPE_PATH_ONEWAY, SignalPlacement, SignalTrack, calendar_year_at_tick,
     clear_signal_type_bits_m2, cycle_signal_facing, cycle_signal_side_m3, cycle_signal_type_m2,
-    default_signal_variant, encode_block_signal_on_track,
+    cycle_signal_variant_m2, default_signal_variant, encode_block_signal_on_track,
     encode_block_signal_on_track_with_variant, is_pbs_signal_type, m2_for_signal,
     next_placeable_signal_type, rail_signal_present_mask, rail_signal_state_mask,
-    resolve_signal_track, signal_bit_for_facing, signal_facing_for_orientation, signal_is_green,
-    signal_on_track_mask, signal_placement_for_facing, signal_placement_for_track,
-    signal_type_for_track, signal_type_label, signal_variant_for_track, tracks_overlap,
-    valid_signal_facings_track,
+    resolve_signal_track, set_signal_variant_m2, signal_bit_for_facing,
+    signal_facing_for_orientation, signal_is_green, signal_on_track_mask,
+    signal_placement_for_facing, signal_placement_for_track, signal_type_for_track,
+    signal_type_label, signal_variant_for_track, tracks_overlap, valid_signal_facings_track,
 };
 pub(crate) use encoding::{signal_exit_dir, signal_track_for_bit};
 
@@ -30,7 +30,8 @@ pub use topology::{rail_block_ahead, rail_block_ahead_with_wormholes};
 pub(crate) use routing::rail_step_signal_allows;
 pub use routing::{
     YAPF_PBS_BEHIND_PENALTY, YAPF_RED_SIGNAL_PENALTY, YapfSignalRouting, train_blocked_by_pbs_path,
-    train_blocked_by_signal, train_blocked_by_traffic, yapf_routing_signal,
+    train_blocked_by_signal, train_blocked_by_traffic, train_facing_head_on_traffic,
+    yapf_routing_signal,
 };
 
 pub use update::{
@@ -369,16 +370,16 @@ mod tests {
 
     #[test]
     fn default_signal_variant_before_and_after_semaphore_year() {
-        assert_eq!(default_signal_variant(1949), 0);
-        assert_eq!(default_signal_variant(1950), 1);
+        assert_eq!(default_signal_variant(1949), 1); // SIG_SEMAPHORE
+        assert_eq!(default_signal_variant(1950), 0); // SIG_ELECTRIC
     }
 
     #[test]
-    fn m2_variant_bit_set_for_electric_on_x() {
-        let p = signal_placement_for_track(SignalTrack::X, 0, 1, SIGTYPE_BLOCK).expect("electric");
-        assert_eq!(p.m2 & 0x08, 0x08);
-        let s = signal_placement_for_track(SignalTrack::X, 0, 0, SIGTYPE_BLOCK).expect("semaphore");
-        assert_eq!(s.m2 & 0x08, 0);
+    fn m2_variant_bit_clear_for_electric_on_x() {
+        let p = signal_placement_for_track(SignalTrack::X, 0, 0, SIGTYPE_BLOCK).expect("electric");
+        assert_eq!(p.m2 & 0x08, 0);
+        let s = signal_placement_for_track(SignalTrack::X, 0, 1, SIGTYPE_BLOCK).expect("semaphore");
+        assert_eq!(s.m2 & 0x08, 0x08);
     }
 
     #[test]

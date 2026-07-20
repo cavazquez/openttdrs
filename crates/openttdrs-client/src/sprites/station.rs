@@ -180,9 +180,8 @@ pub fn rail_waypoint_sprite_center(
     crate::iso::overlay_pos(ref_pos, xrel, yrel, w, h, base_z, layer_z, tx, ty)
 }
 
-// Secuencias de `_station_display_datas_rail` (gfx 0..7). Los childsprites de
-// vidrio del techo (1083–1086, PALETTE_TO_TRANSPARENT) se omiten: requieren
-// remapeo translúcido de paleta.
+// Secuencias de `_station_display_datas_rail` (gfx 0..7). Cristal 1083–1086:
+// alpha aproximado en el cliente (`PALETTE_TO_TRANSPARENT` → ~0.45).
 static RAIL_STATION_SEQ_0: [RailStationLayer; 2] = [
     layer(1070, 0.0, 0.0, 0.0, 0.03),
     layer(1072, 0.0, 11.0, 0.0, 0.04),
@@ -199,26 +198,36 @@ static RAIL_STATION_SEQ_3: [RailStationLayer; 2] = [
     layer(1074, 0.0, 0.0, 0.0, 0.03),
     layer(1069, 11.0, 0.0, 0.0, 0.05),
 ];
-static RAIL_STATION_SEQ_4: [RailStationLayer; 3] = [
+static RAIL_STATION_SEQ_4: [RailStationLayer; 4] = [
     layer(1076, 0.0, 0.0, 0.0, 0.03),
     layer(1072, 0.0, 11.0, 0.0, 0.04),
     layer(1079, 0.0, 0.0, 16.0, 0.05),
+    layer(1083, 0.0, 0.0, 16.0, 0.06),
 ];
-static RAIL_STATION_SEQ_5: [RailStationLayer; 3] = [
+static RAIL_STATION_SEQ_5: [RailStationLayer; 4] = [
     layer(1077, 0.0, 0.0, 0.0, 0.03),
     layer(1069, 11.0, 0.0, 0.0, 0.04),
     layer(1080, 0.0, 0.0, 16.0, 0.05),
+    layer(1084, 0.0, 0.0, 16.0, 0.06),
 ];
-static RAIL_STATION_SEQ_6: [RailStationLayer; 3] = [
+static RAIL_STATION_SEQ_6: [RailStationLayer; 4] = [
     layer(1070, 0.0, 0.0, 0.0, 0.03),
     layer(1078, 0.0, 11.0, 0.0, 0.04),
     layer(1081, 0.0, 0.0, 16.0, 0.05),
+    layer(1085, 0.0, 0.0, 16.0, 0.06),
 ];
-static RAIL_STATION_SEQ_7: [RailStationLayer; 3] = [
+static RAIL_STATION_SEQ_7: [RailStationLayer; 4] = [
     layer(1071, 0.0, 0.0, 0.0, 0.03),
     layer(1075, 11.0, 0.0, 0.0, 0.04),
     layer(1082, 0.0, 0.0, 16.0, 0.05),
+    layer(1086, 0.0, 0.0, 16.0, 0.06),
 ];
+
+/// Cristal de techo (`SPR_RAIL_ROOF_GLASS_*`): tint translúcido, sin company colour.
+#[must_use]
+pub const fn rail_station_roof_glass_sprite(sprite_id: u32) -> bool {
+    matches!(sprite_id, 1083..=1086)
+}
 
 /// Cuerpo ogfx2 19/20 + toldos CC 21/22 (eje X).
 ///
@@ -358,15 +367,23 @@ mod tests {
 
     #[test]
     fn rail_layers_gfx_4_to_7_include_roof_halves() {
-        // `_station_display_datas_4..7`: pilares/plataforma + techo (dz = 16).
+        // `_station_display_datas_4..7`: pilares/plataforma + estructura + cristal.
         assert_eq!(rail_station_draw_layers(4)[0].sprite_id, 1076);
         assert_eq!(rail_station_draw_layers(4)[2].sprite_id, 1079);
+        assert_eq!(rail_station_draw_layers(4)[3].sprite_id, 1083);
         assert_eq!(rail_station_draw_layers(5)[2].sprite_id, 1080);
+        assert_eq!(rail_station_draw_layers(5)[3].sprite_id, 1084);
         assert_eq!(rail_station_draw_layers(6)[1].sprite_id, 1078);
         assert_eq!(rail_station_draw_layers(6)[2].sprite_id, 1081);
+        assert_eq!(rail_station_draw_layers(6)[3].sprite_id, 1085);
         assert_eq!(rail_station_draw_layers(7)[2].sprite_id, 1082);
+        assert_eq!(rail_station_draw_layers(7)[3].sprite_id, 1086);
         for gfx in 4..=7u8 {
-            assert_eq!(rail_station_draw_layers(gfx)[2].dz, 16.0);
+            let layers = rail_station_draw_layers(gfx);
+            assert_eq!(layers.len(), 4);
+            assert_eq!(layers[2].dz, 16.0);
+            assert_eq!(layers[3].dz, 16.0);
+            assert!(rail_station_roof_glass_sprite(layers[3].sprite_id));
         }
     }
 

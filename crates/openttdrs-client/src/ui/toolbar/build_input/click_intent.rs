@@ -37,6 +37,7 @@ pub(crate) struct MapClickContext {
     pub join_station_keep: Option<TileCoord>,
     pub signal_tile_has_signals: bool,
     pub ctrl_held: bool,
+    pub shift_held: bool,
 }
 
 /// Intención de acción resultante de un clic en el mapa.
@@ -93,6 +94,7 @@ pub(crate) enum MapClickIntent {
         tile_fract: (u8, u8),
         ctrl_held: bool,
         cycle_signal: bool,
+        cycle_signal_variant: bool,
     },
 }
 
@@ -193,8 +195,10 @@ pub(crate) fn resolve_click_intent(ctx: &MapClickContext) -> MapClickIntent {
     // Prioridad 6: construcción inmediata
     if ctx.mouse_left_pressed {
         let mut cycle_signal = false;
+        let mut cycle_signal_variant = false;
         if ctx.ctrl_held && action == BuildMenuAction::RailSignals && ctx.signal_tile_has_signals {
-            cycle_signal = true;
+            cycle_signal_variant = ctx.shift_held;
+            cycle_signal = !cycle_signal_variant;
         }
         return MapClickIntent::BuildImmediate {
             action,
@@ -203,6 +207,7 @@ pub(crate) fn resolve_click_intent(ctx: &MapClickContext) -> MapClickIntent {
             tile_fract: ctx.tile_fract,
             ctrl_held: ctx.ctrl_held,
             cycle_signal,
+            cycle_signal_variant,
         };
     }
 
@@ -282,6 +287,7 @@ mod tests {
             join_station_keep: None,
             signal_tile_has_signals: false,
             ctrl_held: false,
+            shift_held: false,
         }
     }
 

@@ -90,16 +90,22 @@ pub fn industry_building_needs_client_anim(gfx: u16, m1: u8) -> bool {
 /// Torres de llama refinería (gfx 19–22): animación `oil_refinery` de paleta.
 pub const REFINERY_FIRE_GFX_MIN: u16 = 19;
 pub const REFINERY_FIRE_GFX_MAX: u16 = 22;
+/// Acería (gfx 52–57): mismo ciclo de paleta en el metal fundido del suelo.
+pub const STEEL_MILL_FIRE_GFX_MIN: u16 = 52;
+pub const STEEL_MILL_FIRE_GFX_MAX: u16 = 57;
 
-/// Sprites OpenGFX con llama (`_industry_draw_tile_data` gfx 19–22).
-pub const REFINERY_FIRE_SPRITE_IDS: [u32; 12] = [
-    2081, 2082, 2083, 2084, 2085, 2086, 2087, 2088, 2089, 2090, 2091, 2092,
+/// Sprites OpenGFX con ciclo `oil_refinery` (refinería + suelos acería).
+pub const REFINERY_FIRE_SPRITE_IDS: [u32; 18] = [
+    2081, 2082, 2083, 2084, 2085, 2086, 2087, 2088, 2089, 2090, 2091, 2092, 2118, 2120, 2122, 2124,
+    2125, 2127,
 ];
 
-/// Tesela terminada con fuego animado por ciclo de paleta.
+/// Tesela terminada con fuego/metal fundido animado por ciclo de paleta.
 #[must_use]
 pub fn industry_gfx_uses_refinery_fire_anim(gfx: u16, m1: u8) -> bool {
-    (REFINERY_FIRE_GFX_MIN..=REFINERY_FIRE_GFX_MAX).contains(&gfx) && m1 & 0x80 != 0
+    m1 & 0x80 != 0
+        && ((REFINERY_FIRE_GFX_MIN..=REFINERY_FIRE_GFX_MAX).contains(&gfx)
+            || (STEEL_MILL_FIRE_GFX_MIN..=STEEL_MILL_FIRE_GFX_MAX).contains(&gfx))
 }
 
 /// Fábrica de bebidas gaseosas Toyland (gfx 156–158).
@@ -120,11 +126,26 @@ pub fn industry_sprite_uses_fizzy_drink_anim(sprite_id: u32) -> bool {
     FIZZY_DRINK_SPRITE_IDS.contains(&sprite_id)
 }
 
-/// Edificios con `PALETTE_MODIFIER_COLOUR` en tabla vanilla (gfx 29–174,
-/// excl. pozos/torres animados 30–32, 48, 88).
+/// Teselas con `PALETTE_MODIFIER_COLOUR` en `industry_land.h` (bit en sprite).
+///
+/// Lista derivada del `.h` vanilla: **no** usar un rango amplio (p. ej. 29..=174)
+/// — eso recolorea suelos `PAL_NONE` (mina de hierro 100–115) y convierte
+/// marrones/verdes de la rampa CC en cian.
 #[must_use]
 pub fn industry_gfx_uses_random_colour(gfx: u16) -> bool {
-    (29..=174).contains(&gfx) && !matches!(gfx, 30 | 31 | 32 | 48 | 88)
+    matches!(
+        gfx,
+        18..=22
+            | 33..=35
+            | 39..=46
+            | 52..=57
+            | 60..=63
+            | 118..=124
+            | 132..=134
+            | 157..=162
+            | 167..=170
+            | 172..=174
+    )
 }
 
 /// Color de compañía OpenTTD para la instancia (`Industry.random_colour` vía `m2`).
@@ -530,10 +551,28 @@ mod industry_coverage_tests {
     }
 
     #[test]
-    fn toyland_gfx_uses_random_colour() {
-        assert!(super::industry_gfx_uses_random_colour(143)); // toy factory band
+    fn industry_gfx_uses_random_colour_matches_industry_land() {
+        assert!(super::industry_gfx_uses_random_colour(18)); // oil refinery tanks
+        assert!(super::industry_gfx_uses_random_colour(22)); // oil refinery tower
+        assert!(!super::industry_gfx_uses_random_colour(23)); // refinery no-CC piece
+        assert!(super::industry_gfx_uses_random_colour(52)); // steel mill
+        assert!(super::industry_gfx_uses_random_colour(157)); // toyland CC band
         assert!(!super::industry_gfx_uses_random_colour(30)); // oil well anim
-        assert!(!super::industry_gfx_uses_random_colour(10)); // below band
+        assert!(!super::industry_gfx_uses_random_colour(10)); // coal / PAL_NONE
+        // Mina de hierro: solo PAL_NONE — remapeo CC pintaba el suelo de cian.
+        assert!(!super::industry_gfx_uses_random_colour(100));
+        assert!(!super::industry_gfx_uses_random_colour(105));
+        assert!(!super::industry_gfx_uses_random_colour(115));
+    }
+
+    #[test]
+    fn steel_mill_and_refinery_use_oil_refinery_palette_anim() {
+        assert!(super::industry_gfx_uses_refinery_fire_anim(19, 0x80));
+        assert!(super::industry_gfx_uses_refinery_fire_anim(52, 0x80));
+        assert!(super::industry_gfx_uses_refinery_fire_anim(57, 0x80));
+        assert!(!super::industry_gfx_uses_refinery_fire_anim(52, 0)); // en construcción
+        assert!(!super::industry_gfx_uses_refinery_fire_anim(51, 0x80));
+        assert!(super::REFINERY_FIRE_SPRITE_IDS.contains(&2120));
     }
 
     #[test]

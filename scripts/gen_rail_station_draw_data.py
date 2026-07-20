@@ -41,6 +41,10 @@ SPRITES = [
     (1080, "rail_roof_1.png"),  # SPR_RAIL_ROOF_STRUCTURE_Y_TILE_A
     (1081, "rail_roof_2.png"),  # SPR_RAIL_ROOF_STRUCTURE_X_TILE_B
     (1082, "rail_roof_3.png"),  # SPR_RAIL_ROOF_STRUCTURE_Y_TILE_B
+    (1083, "rail_roof_4.png"),  # SPR_RAIL_ROOF_GLASS_X_TILE_A
+    (1084, "rail_roof_5.png"),  # SPR_RAIL_ROOF_GLASS_Y_TILE_A
+    (1085, "rail_roof_6.png"),  # SPR_RAIL_ROOF_GLASS_X_TILE_B
+    (1086, "rail_roof_7.png"),  # SPR_RAIL_ROOF_GLASS_Y_TILE_B
     # Waypoints ogfx2_stations (cuerpo + toldos CC; ver gen_rail_waypoint_sprites.py).
     (4974, "rail_4974.png"),
     (4975, "rail_4975.png"),

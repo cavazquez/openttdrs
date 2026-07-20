@@ -240,7 +240,10 @@ pub fn rail_sprite_ids_for_company_palette() -> Vec<u32> {
     for gfx in 0..=7u8 {
         ids.insert(super::station::rail_station_ground_track_sprite(gfx, 0));
         for layer in rail_station_draw_layers(gfx) {
-            ids.insert(layer.sprite_id);
+            // Cristal: PALETTE_TO_TRANSPARENT, no company colour.
+            if !super::station::rail_station_roof_glass_sprite(layer.sprite_id) {
+                ids.insert(layer.sprite_id);
+            }
         }
     }
     for m5 in [0u8, 1] {

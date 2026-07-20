@@ -129,6 +129,30 @@ fn cycle_rail_signal_type_full_openttd_order() {
 }
 
 #[test]
+fn explicit_and_cycled_signal_variant_preserve_signal_type() {
+    use crate::rail_signals::{
+        SIGTYPE_PATH, SignalTrack, signal_type_for_track, signal_variant_for_track,
+    };
+
+    let mut s = GameState::new(8, 8);
+    let c = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::SetRailBits(c, 0x01)).unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceRailSignalWithVariant(c, 0, 128, 128, SIGTYPE_PATH, 1),
+    )
+    .unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert_eq!(signal_type_for_track(tile.m2, SignalTrack::X), SIGTYPE_PATH);
+    assert_eq!(signal_variant_for_track(tile.m2, SignalTrack::X), 1);
+
+    apply_command(&mut s, &Command::CycleRailSignalVariant(c, 128, 128)).unwrap();
+    let tile = s.map.get(c).unwrap();
+    assert_eq!(signal_type_for_track(tile.m2, SignalTrack::X), SIGTYPE_PATH);
+    assert_eq!(signal_variant_for_track(tile.m2, SignalTrack::X), 0);
+}
+
+#[test]
 fn place_presignal_types_write_m2() {
     use crate::rail_signals::{
         SIGTYPE_COMBO, SIGTYPE_ENTRY, SIGTYPE_EXIT, SignalTrack, signal_type_for_track,
@@ -205,12 +229,12 @@ fn remove_rail_signal_one_lane_on_horz_keeps_other() {
     apply_command(&mut s, &Command::SetRailBits(c, 0x0C)).unwrap(); // HORZ
     apply_command(
         &mut s,
-        &Command::PlaceRailSignal(c, 0, 64, 64, crate::rail_signals::SIGTYPE_BLOCK),
+        &Command::PlaceRailSignalWithVariant(c, 0, 64, 64, crate::rail_signals::SIGTYPE_BLOCK, 1),
     )
     .unwrap();
     apply_command(
         &mut s,
-        &Command::PlaceRailSignal(c, 1, 200, 200, crate::rail_signals::SIGTYPE_BLOCK),
+        &Command::PlaceRailSignalWithVariant(c, 1, 200, 200, crate::rail_signals::SIGTYPE_BLOCK, 1),
     )
     .unwrap();
     assert!(crate::rail_signals::rail_tile_is_signals(
@@ -231,14 +255,14 @@ fn place_second_signal_on_horz_merges_m2() {
     apply_command(&mut s, &Command::SetRailBits(c, 0x0C)).unwrap();
     apply_command(
         &mut s,
-        &Command::PlaceRailSignal(c, 0, 64, 64, crate::rail_signals::SIGTYPE_BLOCK),
+        &Command::PlaceRailSignalWithVariant(c, 0, 64, 64, crate::rail_signals::SIGTYPE_BLOCK, 1),
     )
     .unwrap();
     let m2_upper = s.map.get(c).unwrap().m2;
     assert_ne!(m2_upper, 0);
     apply_command(
         &mut s,
-        &Command::PlaceRailSignal(c, 1, 200, 200, crate::rail_signals::SIGTYPE_BLOCK),
+        &Command::PlaceRailSignalWithVariant(c, 1, 200, 200, crate::rail_signals::SIGTYPE_BLOCK, 1),
     )
     .unwrap();
     let tile = s.map.get(c).unwrap();

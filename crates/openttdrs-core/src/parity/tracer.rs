@@ -121,19 +121,25 @@ fn rail_snapshot(
     if v.kind != VehicleKind::Train || !v.is_consist_head() {
         return None;
     }
-    let (subtile_x, subtile_y) = road_movement::vehicle_subtile(v);
-    let occupied = crate::train_consist::consist_occupied_tiles(&state.vehicles, v.id);
-    let parts: Vec<RailPartRecord> = occupied
+    let poses = crate::train_consist::consist_unit_poses(&state.vehicles, v.id);
+    let ids = crate::train_consist::consist_unit_ids(&state.vehicles, v.id);
+    let parts: Vec<RailPartRecord> = poses
         .iter()
         .enumerate()
-        .map(|(i, tile)| RailPartRecord {
-            part_index: i,
-            tile: *tile,
-            subtile_x: if i == 0 { subtile_x } else { 128.0 },
-            subtile_y: if i == 0 { subtile_y } else { 128.0 },
+        .map(|(i, pose)| {
+            let (subtile_x, subtile_y) = ids
+                .get(i)
+                .and_then(|id| state.vehicles.iter().find(|unit| unit.id == *id))
+                .map_or((128.0, 128.0), road_movement::vehicle_subtile);
+            RailPartRecord {
+                part_index: i,
+                tile: pose.tile,
+                subtile_x,
+                subtile_y,
+            }
         })
         .collect();
-    let tail_tile = occupied.last().copied().unwrap_or(v.pos);
+    let tail_tile = parts.last().map_or(v.pos, |part| part.tile);
     let reservation_end = v.reserved_steps.last().map(|s| s.tile);
     Some(RailRecord {
         parts,

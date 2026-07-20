@@ -277,6 +277,13 @@ impl Industry {
         self
     }
 
+    /// Asigna `Industry.random_colour` (`Colours` 0–15).
+    #[must_use]
+    pub fn with_random_colour(mut self, random_colour: u8) -> Self {
+        self.random_colour = random_colour % 16;
+        self
+    }
+
     #[must_use]
     pub fn contains_tile(&self, c: TileCoord) -> bool {
         self.pos == c || self.tiles.contains(&c)

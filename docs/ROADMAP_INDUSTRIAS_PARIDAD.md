@@ -136,7 +136,8 @@ HUD: `⚠gfx≥175` solo fuera de tabla.
 ### P4 — Fundación / agua / paleta — **hecho**
 
 Fundación en pendiente; agua si oil-rig / `IsTileOnWater` (`WaterClass`) / hierba+costa;
-paleta company en gfx 29–174 (excl. pozos/torres animados); lookup por `instance_id`/`m2`.
+paleta company en gfx 18–22 (Oil Refinery) y 29–174 (excl. pozos/torres animados);
+`random_colour` desde chunk `INDY` al cargar `.sav`; lookup por `instance_id`/`m2`.
 
 ### P5 — `m2` IndustryID — **hecho**
 

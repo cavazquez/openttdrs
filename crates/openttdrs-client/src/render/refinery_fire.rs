@@ -1,6 +1,7 @@
-//! Fuego de refinería — ciclo de paleta `oil_refinery[7]` (`palette.cpp`).
+//! Fuego / metal fundido — ciclo de paleta `oil_refinery[7]` (`palette.cpp`).
 //!
-//! Frames pre-horneados por `scripts/gen_oil_refinery_anim_frames.py`; gfx 19–22.
+//! Frames pre-horneados por `scripts/gen_oil_refinery_anim_frames.py`;
+//! refinería gfx 19–22 y suelos de acería gfx 52–57.
 
 use bevy::prelude::*;
 
@@ -40,8 +41,10 @@ pub(crate) fn refinery_fire_frame_index(elapsed_secs: f32) -> usize {
     (elapsed_secs / REFINERY_FRAME_SECS) as usize % REFINERY_FIRE_FRAME_COUNT
 }
 
+/// Usa reloj real: el virtual tiene `max_delta` de 1 tick de sim y puede
+/// quedar pausado sin afectar el parpadeo de paleta (como el agua).
 pub(crate) fn animate_refinery_fire(
-    time: Res<Time>,
+    time: Res<Time<Real>>,
     frames: Option<Res<RefineryFireAnimFrames>>,
     mut last_frame: Local<Option<usize>>,
     mut q: Query<(&RefineryFireAnim, &mut Sprite)>,
@@ -109,7 +112,7 @@ mod tests {
     #[test]
     fn animate_refinery_fire_swaps_on_frame_change() {
         let mut world = World::new();
-        let mut time = Time::<()>::default();
+        let mut time = Time::<Real>::default();
         time.advance_by(std::time::Duration::from_millis(250));
         world.insert_resource(time);
         world.insert_resource(frames_resource());

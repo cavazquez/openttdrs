@@ -713,7 +713,7 @@ fn try_place_two_way_block_signal(state: &mut GameState, c: TileCoord, axis_y: b
     let orient = u8::from(axis_y);
     if apply_command(
         state,
-        &Command::PlaceRailSignal(c, orient, 128, 128, SIGTYPE_BLOCK),
+        &Command::PlaceRailSignalWithVariant(c, orient, 128, 128, SIGTYPE_BLOCK, 0),
     )
     .is_err()
     {
@@ -722,7 +722,7 @@ fn try_place_two_way_block_signal(state: &mut GameState, c: TileCoord, axis_y: b
     // 2.º clic → bidireccional (mismo encoding que la UI).
     let _ = apply_command(
         state,
-        &Command::PlaceRailSignal(c, orient, 128, 128, SIGTYPE_BLOCK),
+        &Command::PlaceRailSignalWithVariant(c, orient, 128, 128, SIGTYPE_BLOCK, 0),
     );
 }
 

@@ -19,6 +19,23 @@ pub fn sync_reservations_to_map(
     prev_active: &mut HashSet<TileCoord>,
     dirty: &mut Vec<TileCoord>,
 ) {
+    // Primera sync tras importar un `.sav`: las reservas `m2_hi` del save deben
+    // entrar en `prev_active` para poder liberarse cuando el consist ya no las usa.
+    if prev_active.is_empty() {
+        let (w, h) = map.dimensions();
+        for y in 0..h.cast_signed() {
+            for x in 0..w.cast_signed() {
+                let c = TileCoord::new(x, y);
+                let Some(tile) = map.get(c) else {
+                    continue;
+                };
+                if tile.kind == TileKind::Rail && decode_rail_reservation_m2_hi(tile.m2_hi) != 0 {
+                    prev_active.insert(c);
+                }
+            }
+        }
+    }
+
     let mut next_tracks: HashMap<TileCoord, u8> = HashMap::new();
     for v in vehicles {
         if v.kind != VehicleKind::Train {

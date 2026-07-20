@@ -18,7 +18,7 @@
 //! **P** pausa el tick de simulación; **F4** alterna la ruta de guardado entre `save/openttdrs_sim.json` y
 //! `save/openttdrs_autosave.json` (visible en el HUD). **Clic en el mapa** selecciona tesela; **panel Construir**
 //! (esquina inferior izquierda) aplica carretera / estación en esa tesela.
-//! Bases de sprites de señal: `OPENTTDRS_SIGNAL_BASE` / `OPENTTDRS_SIGNAL_ALT_BASE` (512–4096).
+//! Bases de sprites de señal: `OPENTTDRS_SIGNAL_BASE` / `OPENTTDRS_SIGNAL_ALT_BASE` (512–8192).
 //!
 //! Red (I8 / #21): `--server [HOST:PORT]` listen-server, `--client HOST[:PORT]`,
 //! o `cargo run -p openttdrs-net --bin openttdrs-dedicated`. Ver `docs/adr/0001-multiplayer-v1.md`.

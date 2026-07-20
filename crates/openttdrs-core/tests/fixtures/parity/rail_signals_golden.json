@@ -2,13 +2,13 @@
   "source": {
     "scenario": "build_rail_signals_mixed",
     "sav_fixture": "rail_signals_mixed.sav",
-    "encoding": "OpenTTD signal_type.h + rail_map.h (TRACK_X, face NE, electric)"
+    "encoding": "OpenTTD signal_type.h SIG_ELECTRIC=0 + DrawSingleSignal (TRACK_X, face NE, verde)"
   },
   "encodings": [
     {
       "label": "block",
       "sig_type": 0,
-      "m2": 8,
+      "m2": 0,
       "m3": 64,
       "m3hi": 64,
       "m5": 65,
@@ -17,47 +17,47 @@
     {
       "label": "entry",
       "sig_type": 1,
-      "m2": 9,
+      "m2": 1,
       "m3": 64,
       "m3hi": 64,
       "m5": 65,
-      "sprite_texture_id": 1435
+      "sprite_texture_id": 5091
     },
     {
       "label": "exit",
       "sig_type": 2,
-      "m2": 10,
+      "m2": 2,
       "m3": 64,
       "m3hi": 64,
       "m5": 65,
-      "sprite_texture_id": 1451
+      "sprite_texture_id": 5107
     },
     {
       "label": "combo",
       "sig_type": 3,
-      "m2": 11,
+      "m2": 3,
       "m3": 64,
       "m3hi": 64,
       "m5": 65,
-      "sprite_texture_id": 1467
+      "sprite_texture_id": 5123
     },
     {
       "label": "path",
       "sig_type": 4,
-      "m2": 12,
+      "m2": 4,
       "m3": 64,
       "m3hi": 64,
       "m5": 65,
-      "sprite_texture_id": 1547
+      "sprite_texture_id": 5203
     },
     {
       "label": "path_oneway",
       "sig_type": 5,
-      "m2": 13,
+      "m2": 5,
       "m3": 64,
       "m3hi": 64,
       "m5": 65,
-      "sprite_texture_id": 1563
+      "sprite_texture_id": 5219
     }
   ],
   "pbs_reservation": {

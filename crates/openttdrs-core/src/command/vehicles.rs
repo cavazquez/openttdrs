@@ -192,6 +192,12 @@ pub(super) fn build_vehicle_at_depot(
     }
     vehicle.build_tick = state.tick.get();
     vehicle.owner = state.active_company;
+    if matches!(
+        engine.kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) {
+        vehicle.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
+    }
     if engine.kind == VehicleKind::Train
         && let Some(mouth) = crate::depot::rail_depot_mouth_dir(&state.map, depot_pos)
     {
@@ -455,6 +461,20 @@ pub(super) fn toggle_vehicle_running(
         {
             vehicle.dest = dest;
             vehicle.path.clear();
+        }
+        if now_running
+            && matches!(
+                vehicle.kind,
+                VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+            )
+            && state.map.get_kind(vehicle.pos) == Some(crate::TileKind::RoadDepot)
+            && matches!(
+                vehicle.road_depot_phase,
+                crate::vehicle::RoadDepotPhase::None
+            )
+        {
+            vehicle.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
+            vehicle.progress = 0;
         }
         (was_running, vehicle_pos, vehicle_kind, now_running)
     };

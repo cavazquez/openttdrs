@@ -2,7 +2,7 @@
 //! `EV_CHIMNEY_SMOKE` de OpenTTD (`industry_cmd.cpp` + `effectvehicle.cpp`):
 //! se ancla en la tesela `GFX_POWERPLANT_CHIMNEY` en el punto de mundo
 //! `(+15, +14, z+59)` y cicla `SPR_CHIMNEY_SMOKE_0..7` (un frame cada
-//! 8 ticks ≈ 0.22 s, con fase inicial aleatoria).
+//! 8 ticks de juego, con fase inicial aleatoria).
 
 use bevy::prelude::*;
 
@@ -12,7 +12,7 @@ use crate::render::{AtlasSprite, MapVisualLayer, TileRenderContext, WorldAssets}
 use crate::sprites::{
     CHIMNEY_SMOKE_FRAMES, CHIMNEY_SMOKE_META, COPPER_MINE_SMOKE_FRAMES, COPPER_MINE_SMOKE_META,
 };
-use crate::state::ClientScreen;
+use crate::state::{ClientScreen, SimWorld};
 
 pub(crate) struct IndustrySmokePlugin;
 
@@ -33,11 +33,11 @@ pub(crate) const GFX_COPPER_MINE_CHIMNEY: u16 = 49;
 /// `GetIndustryGfx` de la tesela de chimenea de la central (`industry_map.h`).
 pub(crate) const GFX_POWERPLANT_CHIMNEY: u16 = 8;
 
-/// Duración de cada frame del penacho de central (8 ticks de juego de ~27 ms).
-const SMOKE_FRAME_SECS: f32 = 0.22;
+/// `ChimneySmokeTick`: tras avanzar el sprite, `progress = 7` → 8 ticks/frame.
+const CHIMNEY_SMOKE_TICKS_PER_FRAME: u64 = 8;
 
 /// Humo mina cobre: sprite cada ~16 ticks (`SmokeTick`, `progress & 0xF == 4`).
-const COPPER_SMOKE_FRAME_SECS: f32 = 0.43;
+const COPPER_SMOKE_TICKS_PER_FRAME: u64 = 16;
 
 /// Ascenso por frame (~4 ticks entre pasos de `z_pos`).
 const COPPER_SMOKE_RISE: f32 = 1.5;
@@ -144,22 +144,23 @@ pub(crate) fn spawn_copper_mine_smoke(
     ));
 }
 
-/// Frame global del penacho para `elapsed_secs` y fase inicial (puro, testeable).
+/// Frame del penacho según tick de juego y fase (`ChimneySmokeTick`).
 #[must_use]
-pub(crate) fn smoke_frame_index(elapsed_secs: f32, phase: usize) -> usize {
-    ((elapsed_secs / SMOKE_FRAME_SECS) as usize + phase) % CHIMNEY_SMOKE_FRAMES
+pub(crate) fn smoke_frame_index(tick: u64, phase: usize) -> usize {
+    ((tick / CHIMNEY_SMOKE_TICKS_PER_FRAME) as usize + phase) % CHIMNEY_SMOKE_FRAMES
 }
 
 pub(crate) fn animate_chimney_smoke(
-    time: Res<Time>,
+    sim: Res<SimWorld>,
     frames: Option<Res<ChimneySmokeFrames>>,
     mut q: Query<(&ChimneySmoke, &mut Sprite, &mut Transform)>,
 ) {
     let Some(frames) = frames else {
         return;
     };
+    let tick = sim.state.tick.get();
     for (smoke, mut sprite, mut transform) in &mut q {
-        let idx = smoke_frame_index(time.elapsed_secs(), smoke.phase);
+        let idx = smoke_frame_index(tick, smoke.phase);
         if frames.0[idx].matches(&sprite) {
             continue;
         }
@@ -179,22 +180,23 @@ pub(crate) fn animate_chimney_smoke(
     }
 }
 
+/// Frame del humo de mina de cobre según tick (`SmokeTick`, cada 16).
 #[must_use]
-pub(crate) fn copper_smoke_frame_index(elapsed_secs: f32, phase: usize) -> usize {
-    ((elapsed_secs / COPPER_SMOKE_FRAME_SECS) as usize + phase) % COPPER_MINE_SMOKE_FRAMES
+pub(crate) fn copper_smoke_frame_index(tick: u64, phase: usize) -> usize {
+    ((tick / COPPER_SMOKE_TICKS_PER_FRAME) as usize + phase) % COPPER_MINE_SMOKE_FRAMES
 }
 
 pub(crate) fn animate_copper_mine_smoke(
-    time: Res<Time>,
+    sim: Res<SimWorld>,
     frames: Option<Res<CopperMineSmokeFrames>>,
     mut q: Query<(&CopperMineSmoke, &mut Sprite, &mut Transform)>,
 ) {
     let Some(frames) = frames else {
         return;
     };
-    let elapsed = time.elapsed_secs();
+    let tick = sim.state.tick.get();
     for (smoke, mut sprite, mut transform) in &mut q {
-        let idx = copper_smoke_frame_index(elapsed, smoke.phase);
+        let idx = copper_smoke_frame_index(tick, smoke.phase);
         if !frames.0[idx].matches(&sprite) {
             frames.0[idx].apply_to(&mut sprite);
         }
@@ -220,6 +222,7 @@ pub(crate) fn animate_copper_mine_smoke(
 #[allow(clippy::unwrap_used)]
 mod tests {
     use bevy::ecs::system::RunSystemOnce;
+    use openttdrs_core::{GameState, GameTick};
 
     use super::*;
 
@@ -239,20 +242,36 @@ mod tests {
         }
     }
 
+    fn sim_at_tick(tick: u64) -> SimWorld {
+        let mut state = GameState::new(1, 1);
+        state.tick = GameTick::new(tick);
+        SimWorld {
+            state,
+            loaded_file: false,
+            ottdmap_extras: None,
+        }
+    }
+
     #[test]
     fn frame_index_cycles_with_phase() {
-        assert_eq!(smoke_frame_index(0.0, 0), 0);
-        assert_eq!(smoke_frame_index(0.0, 3), 3);
-        assert_eq!(smoke_frame_index(0.23, 0), 1);
-        assert_eq!(smoke_frame_index(0.22 * 8.5, 0), 0);
+        assert_eq!(smoke_frame_index(0, 0), 0);
+        assert_eq!(smoke_frame_index(0, 3), 3);
+        assert_eq!(smoke_frame_index(8, 0), 1);
+        assert_eq!(smoke_frame_index(7, 0), 0);
+        assert_eq!(smoke_frame_index(8 * 8, 0), 0);
+    }
+
+    #[test]
+    fn copper_frame_index_uses_sixteen_ticks() {
+        assert_eq!(copper_smoke_frame_index(0, 0), 0);
+        assert_eq!(copper_smoke_frame_index(15, 0), 0);
+        assert_eq!(copper_smoke_frame_index(16, 0), 1);
     }
 
     #[test]
     fn animate_swaps_image_and_repositions() {
         let mut world = World::new();
-        let mut time = Time::<()>::default();
-        time.advance_by(std::time::Duration::from_millis(500));
-        world.insert_resource(time);
+        world.insert_resource(sim_at_tick(20)); // frame 2 con phase 0
         world.insert_resource(ChimneySmokeFrames(
             (0..CHIMNEY_SMOKE_FRAMES as u128).map(weak_sprite).collect(),
         ));
@@ -271,7 +290,7 @@ mod tests {
 
         world.run_system_once(animate_chimney_smoke).unwrap();
 
-        let expected = smoke_frame_index(0.5, 0);
+        let expected = smoke_frame_index(20, 0);
         assert!(weak_sprite(expected as u128).matches(world.get::<Sprite>(e).unwrap()));
         assert_ne!(world.get::<Transform>(e).unwrap().translation, Vec3::ZERO);
     }

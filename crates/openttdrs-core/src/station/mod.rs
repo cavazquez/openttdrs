@@ -23,9 +23,9 @@ pub use destination::{
 pub use geometry::{
     bay_entry_direction, is_connected_bay_road_stop, rail_station_approach_tile,
     rail_station_axis_y, rail_station_owned_tiles, rail_station_platform_tiles,
-    rail_station_stop_tile, rail_station_stop_tile_for_approach, road_stop_approach_tile,
-    station_at_tile, station_footprint_tiles, station_tile_sets_adjacent, train_on_rail_platform,
-    vehicle_at_road_stop, vehicle_physically_at_station,
+    rail_station_stop_candidates, rail_station_stop_tile, rail_station_stop_tile_for_approach,
+    road_stop_approach_tile, station_at_tile, station_footprint_tiles, station_tile_sets_adjacent,
+    train_on_rail_platform, vehicle_at_road_stop, vehicle_physically_at_station,
 };
 pub use model::{CargoTimeSincePickup, Station, StopKind};
 pub use tile_encoding::{

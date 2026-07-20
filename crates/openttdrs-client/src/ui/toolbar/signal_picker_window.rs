@@ -28,10 +28,12 @@ const SIGNAL_TYPES: [(u8, &str); 6] = [
 ];
 
 const DENSITIES: [u8; 7] = [1, 2, 4, 8, 12, 16, 20];
+const SIGNAL_VARIANTS: [(u8, &str); 2] = [(0, "Eléctrica"), (1, "Semáforo")];
 
 #[derive(Component, Clone, Copy)]
 pub(crate) enum SignalPickerButton {
     Type(u8),
+    Variant(u8),
     Density(u8),
 }
 
@@ -48,7 +50,7 @@ pub(crate) fn setup_signal_picker(mut commands: Commands, asset_server: Res<Asse
     );
     commands.entity(content).with_children(|panel| {
         panel.spawn((
-            Text::new("Tipo (Ctrl+clic en mapa cicla)"),
+            Text::new("Tipo (Ctrl+clic cicla; Ctrl+Shift cambia estilo)"),
             window_text_font(asset_server, UiFontRole::Caption),
             TextColor(Color::srgb(0.82, 0.78, 0.68)),
         ));
@@ -65,6 +67,33 @@ pub(crate) fn setup_signal_picker(mut commands: Commands, asset_server: Res<Asse
             .with_children(|row| {
                 for (sig, label) in SIGNAL_TYPES {
                     spawn_chip(row, asset_server, SignalPickerButton::Type(sig), label);
+                }
+            });
+        panel.spawn((
+            Text::new("Estilo"),
+            window_text_font(asset_server, UiFontRole::Caption),
+            TextColor(Color::srgb(0.82, 0.78, 0.68)),
+            Node {
+                margin: UiRect::top(Val::Px(8.0)),
+                ..default()
+            },
+        ));
+        panel
+            .spawn(Node {
+                width: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(4.0),
+                margin: UiRect::top(Val::Px(4.0)),
+                ..default()
+            })
+            .with_children(|row| {
+                for (variant, label) in SIGNAL_VARIANTS {
+                    spawn_chip(
+                        row,
+                        asset_server,
+                        SignalPickerButton::Variant(variant),
+                        label,
+                    );
                 }
             });
         panel.spawn((
@@ -155,14 +184,20 @@ pub(crate) fn sync_signal_picker(
         .find(|(t, _)| t.0 == FloatingWindowId::SignalPicker)
     {
         **title = format!(
-            "Señales · {} · dens {}",
+            "Señales · {} · {} · dens {}",
             signal_type_label(station_state.signal_type),
+            if station_state.signal_variant == 0 {
+                "eléctrica"
+            } else {
+                "semáforo"
+            },
             station_state.signal_density
         );
     }
     for (button, mut bg) in &mut buttons {
         let on = match *button {
             SignalPickerButton::Type(t) => station_state.signal_type == t,
+            SignalPickerButton::Variant(v) => station_state.signal_variant == v,
             SignalPickerButton::Density(d) => station_state.signal_density == d,
         };
         *bg = BackgroundColor(if on { BTN_ACTIVE } else { BTN_BG });
@@ -179,6 +214,7 @@ pub(crate) fn handle_signal_picker_buttons(
         }
         match *button {
             SignalPickerButton::Type(t) => station_state.signal_type = t,
+            SignalPickerButton::Variant(v) => station_state.signal_variant = v,
             SignalPickerButton::Density(d) => station_state.signal_density = d,
         }
     }
@@ -217,5 +253,14 @@ mod tests {
             world.resource::<StationBuildState>().signal_type,
             SIGTYPE_BLOCK
         );
+    }
+
+    #[test]
+    fn picking_semaphore_updates_station_state() {
+        let mut world = World::new();
+        world.insert_resource(StationBuildState::default());
+        world.spawn((Button, SignalPickerButton::Variant(1), Interaction::Pressed));
+        world.run_system_once(handle_signal_picker_buttons).unwrap();
+        assert_eq!(world.resource::<StationBuildState>().signal_variant, 1);
     }
 }

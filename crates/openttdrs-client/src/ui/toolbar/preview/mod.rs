@@ -209,8 +209,8 @@ pub(crate) fn update_build_ghost_preview(
                     fx,
                     fy,
                     station_state.signal_type,
+                    station_state.signal_variant,
                     valid,
-                    sim.state.tick,
                     rail_ghost.sprites,
                 );
             }

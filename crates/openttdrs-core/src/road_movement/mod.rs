@@ -2,12 +2,17 @@
 
 pub mod bay;
 mod curves;
+pub mod depot;
 pub mod pose;
 mod render_pose;
 
 // Re-exportar tipos y funciones públicas principales
 pub use bay::{BayStationTable, bay_station_table, parked_inside_bay};
 pub use curves::{straight_subtile, train_straight_subtile, turn_curve_points};
+pub use depot::{
+    ROAD_DEPOT_ENTRY_STOP, ROAD_DEPOT_EXIT_START, ROAD_DEPOT_PROGRESS_STEP, road_depot_direction,
+    road_depot_entry_direction, road_depot_exit_direction, road_depot_subtile,
+};
 pub use pose::{
     VehiclePose, extrapolate_vehicle_pose, retreat_vehicle_pose, vehicle_render_progress,
 };

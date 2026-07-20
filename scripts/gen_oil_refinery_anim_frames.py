@@ -5,9 +5,11 @@ OpenTTD anima los índices de paleta 232–238 con la tabla `oil_refinery[7]`
 (`DoPaletteAnimations` en `palette.cpp`). Los PNG RGBA hornean un frame estático;
 aquí remapeamos píxeles de llama al slot del ciclo y avanzamos `(slot + f) % 7`.
 
-Sprites: torres de fuego de refinería (gfx 19–22, OpenGFX 2081–2092).
+Sprites:
+  - torres de fuego de refinería (gfx 19–22, OpenGFX 2081–2092)
+  - suelos de acería con metal fundido (gfx 52–57, OpenGFX 2118/2120/…)
 
-Salida: `industry_{id}_fire_anim_{f:02d}.png` (f=0 idéntico al base).
+Salida: `industry_{id}_fire_anim_{f:02d}.png` (f=0 remapeado al ciclo).
 
 Uso: python3 scripts/gen_oil_refinery_anim_frames.py
 """
@@ -32,7 +34,7 @@ OIL_REFINERY = [
 ]
 FRAME_COUNT = len(OIL_REFINERY)
 
-# Sprites de llama refinería (gfx 19–22, todos los estadios 0–3).
+# Sprites de llama refinería (gfx 19–22) + suelos acería (gfx 52–57).
 REFINERY_FIRE_SPRITE_IDS = [
     2081,
     2082,
@@ -46,6 +48,13 @@ REFINERY_FIRE_SPRITE_IDS = [
     2090,
     2091,
     2092,
+    # Steel mill ground (metal fundido / convertidores).
+    2118,
+    2120,
+    2122,
+    2124,
+    2125,
+    2127,
 ]
 
 OIL_SLOT = {c: k for k, c in enumerate(OIL_REFINERY)}
@@ -63,14 +72,19 @@ def nearest_slot(r: int, g: int, b: int) -> int:
 
 
 def is_fire_pixel(r: int, g: int, b: int, a: int) -> bool:
+    """Detecta llama / metal fundido en PNG 32bpp OpenGFX / OpenGFX2."""
     if a == 0:
         return False
     if (r, g, b) in OIL_SLOT:
         return True
-    # Llama naranja/amarilla (32bpp puede no coincidir exacto con la tabla).
-    if r >= 200 and g >= 100 and b <= 80 and r >= g:
+    # Naranjas del horneado 32bpp cercanos a la tabla (p. ej. 252,104,0 / 252,192,0).
+    if r >= 240 and b <= 48 and g <= 200 and r > g:
         return True
-    if r >= 240 and g >= 50 and b <= 60:
+    # Núcleo rojo OpenGFX2 (212,52,52) / (252,52,52): llama y brillos.
+    if r >= 200 and g <= 90 and b <= 90 and r >= g + 80:
+        return True
+    # Amarillo-naranja clásico.
+    if r >= 200 and g >= 100 and b <= 80 and r >= g:
         return True
     return False
 
@@ -97,10 +111,18 @@ def main() -> None:
             print(f"  (omitido industry_{sid}.png: no existe)")
             continue
         base = Image.open(src).convert("RGBA")
+        fire_px = sum(1 for r, g, b, a in base.getdata() if is_fire_pixel(r, g, b, a))
         for f in range(FRAME_COUNT):
             out_name = f"industry_{sid}_fire_anim_{f:02d}.png"
             render_frame(base, f).save(TILES_DIR / out_name)
             total += 1
+        uniq = len(
+            {
+                Image.open(TILES_DIR / f"industry_{sid}_fire_anim_{f:02d}.png").tobytes()
+                for f in range(FRAME_COUNT)
+            }
+        )
+        print(f"  industry_{sid}: fire_px={fire_px} unique_frames={uniq}")
     print(
         f"Generados {total} frames de fuego refinería "
         f"({len(REFINERY_FIRE_SPRITE_IDS)} sprites × {FRAME_COUNT}) en {TILES_DIR}"

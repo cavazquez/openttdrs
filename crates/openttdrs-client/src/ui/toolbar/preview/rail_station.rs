@@ -103,14 +103,18 @@ fn spawn_one_tile(
             coord.x,
             coord.y,
         );
-        let sprite = company
-            .and_then(|c| c.rail_handle(layer.sprite_id))
-            .map(|handle| Sprite {
-                image: handle.clone(),
-                color: tint,
-                ..default()
-            })
-            .unwrap_or_else(|| img.sprite_colored(tint));
+        let sprite = if crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id) {
+            img.sprite_colored(Color::srgba(0.0, 0.0, 0.0, 0.28))
+        } else {
+            company
+                .and_then(|c| c.rail_handle(layer.sprite_id))
+                .map(|handle| Sprite {
+                    image: handle.clone(),
+                    color: tint,
+                    ..default()
+                })
+                .unwrap_or_else(|| img.sprite_colored(tint))
+        };
         commands.spawn((
             BuildGhostPreview,
             sprite,

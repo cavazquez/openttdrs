@@ -233,12 +233,22 @@ pub(crate) fn spawn_station_tile(
                             ctx.ty_i32(),
                         )
                     };
-                    let sprite = tint_building_sprite(sprite_from_atlas_or_company_white_colour(
-                        company,
-                        owner_colour,
-                        img,
-                        &format!("rail_{}.png", layer.sprite_id),
-                    ));
+                    let sprite = if crate::sprites::rail_station_roof_glass_sprite(layer.sprite_id)
+                    {
+                        // OpenTTD: `PALETTE_TO_TRANSPARENT` oscurece el destino (máscara),
+                        // no pinta el blob CC amarillo del PNG como vidrio tintado.
+                        use crate::sprites::with_to_alpha;
+                        let mut s = img.sprite_colored(Color::srgba(0.0, 0.0, 0.0, 0.28));
+                        s.color = with_to_alpha(s.color, TransparencyOption::Buildings);
+                        s
+                    } else {
+                        tint_building_sprite(sprite_from_atlas_or_company_white_colour(
+                            company,
+                            owner_colour,
+                            img,
+                            &format!("rail_{}.png", layer.sprite_id),
+                        ))
+                    };
                     commands.spawn((
                         MapVisualLayer,
                         ctx.map_tile_chunk(),

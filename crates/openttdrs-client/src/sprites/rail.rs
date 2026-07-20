@@ -273,6 +273,7 @@ pub fn rail_sprite_atlas_keys(id: u32) -> Vec<String> {
 
 fn rail_sprite_named_alias(id: u32) -> Option<String> {
     match id {
+        1083..=1086 => Some(format!("rail_roof_{}.png", id - 1079)),
         1087..=1092 => Some(format!("mono_single_{}.png", id - 1087)),
         1093 => Some("mono_track_y.png".into()),
         1094 => Some("mono_track_x.png".into()),
@@ -1010,10 +1011,12 @@ const TB_RIGHT: u8 = 1 << OTTD_TRACK_RIGHT;
 
 /// Sprite base OpenTTD para señales eléctricas clásicas (`SPR_ORIGINAL_SIGNALS_BASE`).
 const SPR_ORIGINAL_SIGNALS_BASE: u32 = 1275;
-/// Base por defecto OpenGFX 8bpp para señales no “clásicas eléctricas” (semáforo/PBS); +77 respecto a 1275 en el GRF base.
-const SPR_SIGNAL_ALT_BASE: u32 = 1352;
+/// `SPR_SIGNALS_BASE - 16` (`DrawSingleSignal`): banco Action5 tipo 04 (presignals/PBS).
+/// `SPR_SIGNALS_BASE` = 4896+192 = 5088; los PNG viven en `rail_5088..rail_5327`.
+const SPR_SIGNAL_ALT_BASE: u32 = 5072;
 
-/// Bases de sprite para señales (OpenGFX 8bpp por defecto). Sobrescribibles con `OPENTTDRS_SIGNAL_BASE` / `OPENTTDRS_SIGNAL_ALT_BASE` (valores 512–4096).
+/// Bases de sprite para señales. Sobrescribibles con `OPENTTDRS_SIGNAL_BASE` /
+/// `OPENTTDRS_SIGNAL_ALT_BASE` (512–8192; el banco Action5 llega a ~5327).
 #[must_use]
 pub fn signal_sprite_bases() -> (u32, u32) {
     static MAIN: OnceLock<u32> = OnceLock::new();
@@ -1022,11 +1025,11 @@ pub fn signal_sprite_bases() -> (u32, u32) {
         config::env_u32_in_range(
             "OPENTTDRS_SIGNAL_BASE",
             SPR_ORIGINAL_SIGNALS_BASE,
-            512..=4096,
+            512..=8192,
         )
     });
     let alt = *ALT.get_or_init(|| {
-        config::env_u32_in_range("OPENTTDRS_SIGNAL_ALT_BASE", SPR_SIGNAL_ALT_BASE, 512..=4096)
+        config::env_u32_in_range("OPENTTDRS_SIGNAL_ALT_BASE", SPR_SIGNAL_ALT_BASE, 512..=8192)
     });
     (main, alt)
 }
@@ -1082,13 +1085,15 @@ pub fn signal_sprite_texture_id(sprite_id: u32) -> u32 {
     sprite_id
 }
 
-/// Ajuste del centro del sprite 3×14 respecto al ancla `DrawSingleSignal`
+/// Ajuste del centro del sprite respecto al ancla `DrawSingleSignal`
 /// (xrel/yrel OpenGFX + mitad del bbox; Bevy ancla al centro del sprite).
 #[must_use]
 pub fn signal_sprite_center_offset(tex_id: u32) -> Vec2 {
     match tex_id {
         1275 | 1276 => Vec2::new(0.5, 5.0),
         1277 | 1278 => Vec2::new(1.5, 5.0),
+        // Action5 (`rail_5088..`): típico 4×20, xrel=-1, yrel≈-18 → (1, -8).
+        5088..=5327 => Vec2::new(1.0, -8.0),
         _ => Vec2::ZERO,
     }
 }
@@ -1902,10 +1907,11 @@ mod tests {
         let m5 = (RAIL_TILE_SIGNALS << 6) | RAIL_TB_X;
         let m3 = 1 << (4 + 3); // SW present
         let m3hi = m3;
-        let m2 = m2_for_signal_encoding(0, 1, OTTD_TRACK_X);
+        // OpenTTD: SIG_ELECTRIC = 0 → `SPR_ORIGINAL_SIGNALS_BASE` (1275).
+        let m2 = m2_for_signal_encoding(0, 0, OTTD_TRACK_X);
         let draws = collect_signal_sprite_draws(m2, m3, m3hi, m5);
         assert_eq!(draws.len(), 1);
-        assert_eq!(draws[0].sprite_id, 1276, "1417 eléctrica → PNG 1276");
+        assert_eq!(draws[0].sprite_id, 1276, "block eléctrico verde → 1276");
     }
 
     #[test]
@@ -2101,14 +2107,14 @@ mod tests {
     #[test]
     fn golden_rail_signal_sprite_texture_ids() {
         // Paridad con `crates/openttdrs-core/tests/fixtures/parity/rail_signals_golden.json`
-        // (TRACK_X, cara NE, eléctrica, verde).
+        // (TRACK_X, cara NE, SIG_ELECTRIC=0, verde). Banco alt = Action5 (`SPR_SIGNALS_BASE-16`).
         const ROWS: &[(u8, u8, u8, u8, u32, &str)] = &[
-            (8, 64, 64, 65, 1278, "block"),
-            (9, 64, 64, 65, 1435, "entry"),
-            (10, 64, 64, 65, 1451, "exit"),
-            (11, 64, 64, 65, 1467, "combo"),
-            (12, 64, 64, 65, 1547, "path"),
-            (13, 64, 64, 65, 1563, "path_oneway"),
+            (0, 64, 64, 65, 1278, "block"),
+            (1, 64, 64, 65, 5091, "entry"),
+            (2, 64, 64, 65, 5107, "exit"),
+            (3, 64, 64, 65, 5123, "combo"),
+            (4, 64, 64, 65, 5203, "path"),
+            (5, 64, 64, 65, 5219, "path_oneway"),
         ];
         for &(m2, m3, m3hi, m5, tex_id, label) in ROWS {
             let ids = collect_signal_sprite_ids(m2, m3, m3hi, m5);

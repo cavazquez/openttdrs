@@ -161,41 +161,29 @@ pub(crate) fn update_vehicles(
             *visibility = Visibility::Hidden;
             continue;
         };
-        let pose = extrapolate_vehicle_pose(head, sim_clock.tick_alpha);
-        if vehicle_is_hidden_from_view(&sim, head, pose) {
+        let trailer_pose = openttdrs_core::VehiclePose::from_vehicle(unit);
+        if vehicle_is_hidden_from_view(&sim, unit, trailer_pose) {
             *visibility = Visibility::Hidden;
             continue;
         }
         *visibility = Visibility::Visible;
         let base = vehicle_sprite_pos_at_with_catalog(
-            head,
+            unit,
             &sim.state.map,
-            pose,
+            trailer_pose,
             Some(&sim.state.engine_catalog),
         );
-        let back = openttdrs_core::reverse_direction(head.direction);
-        let (dx, dy) = match back {
-            0 => (0.0, -8.0),
-            1 => (6.0, -4.0),
-            2 => (8.0, 0.0),
-            3 => (6.0, 4.0),
-            4 => (0.0, 8.0),
-            5 => (-6.0, 4.0),
-            6 => (-8.0, 0.0),
-            _ => (-6.0, -4.0),
-        };
-        let i = trailer.unit_index as f32;
-        transform.translation = Vec3::new(base.x + dx * i, base.y + dy * i, base.z - 0.01 * i);
+        transform.translation = base - Vec3::Z * (trailer.unit_index as f32 * 0.01);
         sprite.image = trucks.for_vehicle_with_newgrf(
             unit,
-            pose,
+            trailer_pose,
             Some(&company),
             Some(vehicle_owner_colour(&sim, unit)),
             &sim,
             &mut cache,
             &mut images,
         );
-        sprite.color = vehicle_tint(head);
+        sprite.color = vehicle_tint(unit);
     }
 
     for (label, mut transform, mut text, mut color, mut visibility) in &mut labels {

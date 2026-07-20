@@ -114,7 +114,8 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
     } else if curve_mod == i16::MAX {
         curve_mod = 0;
     }
-    // Capacidad mínima 1 para locos solas (compatibilidad con trenes puntuales previos).
+    // Los trenes genéricos sin definición de motor se usan en escenarios y
+    // saves antiguos; las locomotoras reales se filtran al cargar en estación.
     if total_cap == 0 {
         total_cap = crate::vehicle::VEHICLE_CAPACITY;
     }
@@ -142,38 +143,16 @@ pub fn consist_changed(vehicles: &mut [Vehicle], head_id: u32) {
     sync_consist_followers_and_curve_cache(vehicles, head_id, &ids);
 }
 
-/// Sincroniza pose de vagones (con lag de dirección) y `cached_max_curve_speed`.
+/// Sincroniza poses derivadas de las unidades y `cached_max_curve_speed`.
 fn sync_consist_followers_and_curve_cache(vehicles: &mut [Vehicle], head_id: u32, ids: &[u32]) {
-    let head_snap = vehicles.iter().find(|v| v.id == head_id).map(|v| {
-        (
-            v.pos,
-            v.direction,
-            v.curve_prev_direction,
-            v.running,
-            v.progress,
-            v.rail_pixel,
-        )
-    });
-    let Some((pos, head_dir, prev_dir, running, progress, rail_pixel)) = head_snap else {
+    let head_snap = vehicles
+        .iter()
+        .find(|v| v.id == head_id)
+        .map(|v| v.direction);
+    let Some(head_dir) = head_snap else {
         return;
     };
-    let dir_changed = head_dir != prev_dir;
-    for &id in ids.iter().skip(1) {
-        if let Some(v) = vehicles.iter_mut().find(|v| v.id == id) {
-            v.pos = pos;
-            if dir_changed {
-                v.direction = prev_dir;
-            } else if rail_pixel == 0 {
-                v.direction = head_dir;
-            }
-            v.running = running;
-            v.progress = progress;
-            v.rail_pixel = rail_pixel;
-            v.path.clear();
-            v.orders.clear();
-            v.current_order = 0;
-        }
-    }
+    super::controller::propagate_consist_unit_poses(vehicles, head_id);
     let mut units = Vec::with_capacity(ids.len());
     for &id in ids {
         if let Some(v) = vehicles.iter().find(|v| v.id == id) {

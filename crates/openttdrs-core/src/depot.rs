@@ -74,6 +74,33 @@ pub fn rail_depot_for_entrance_tile(map: &Map, entrance: TileCoord) -> Option<Ti
     None
 }
 
+/// Boca del depósito road (`m5 & 3`) si la tesela corresponde a uno.
+#[must_use]
+pub fn road_depot_mouth_dir(map: &Map, pos: TileCoord) -> Option<u8> {
+    map.get(pos)
+        .filter(|t| t.kind == TileKind::RoadDepot)
+        .map(|t| t.m5 & 0x03)
+}
+
+/// Tesela road contigua a la boca del depósito.
+#[must_use]
+pub fn road_depot_entrance_tile(map: &Map, depot_pos: TileCoord) -> Option<TileCoord> {
+    let mouth = road_depot_mouth_dir(map, depot_pos)?;
+    let (dx, dy) = match mouth {
+        0 => (-1_i32, 0_i32),
+        1 => (0_i32, 1_i32),
+        2 => (1_i32, 0_i32),
+        _ => (0_i32, -1_i32),
+    };
+    let entrance = TileCoord::new(depot_pos.x + dx, depot_pos.y + dy);
+    let (mw, mh) = map.dimensions();
+    (entrance.x >= 0
+        && entrance.y >= 0
+        && entrance.x < mw.cast_signed()
+        && entrance.y < mh.cast_signed())
+    .then_some(entrance)
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used, clippy::expect_used)]
 mod tests {

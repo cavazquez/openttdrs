@@ -39,7 +39,7 @@ def main() -> None:
         fail("metadata producer debe ser openttd u openttdrs")
     if expected_producer is not None and producer != expected_producer:
         fail(f"metadata producer debe ser {expected_producer}")
-    if metadata.get("schema_version") != 1:
+    if metadata.get("schema_version") not in {1, 2}:
         fail("schema_version PBS no soportada")
     allowed_tick_points = {"after_state_game_loop", "after_game_state_step"}
     tick_point = metadata.get("tick_sample_point", metadata.get("sample_point"))
@@ -69,6 +69,16 @@ def main() -> None:
                 for field in ("vehicle", "x", "y", "progress", "speed", "subspeed", "direction")
             ):
                 fail("tren PBS inválido")
+            units = train.get("units")
+            if units is not None:
+                if not isinstance(units, list):
+                    fail("units PBS debe ser lista")
+                for unit in units:
+                    if not all(
+                        isinstance(unit.get(field), int)
+                        for field in ("index", "x", "y", "rail_pixel", "direction")
+                    ):
+                        fail("unidad PBS inválida")
         for reservation in row.get("rail_reservations", []):
             if not all(isinstance(reservation.get(field), int) for field in ("x", "y", "track_bits")):
                 fail("reserva PBS inválida")

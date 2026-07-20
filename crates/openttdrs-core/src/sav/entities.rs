@@ -18,6 +18,10 @@ pub struct SavStation {
     pub name: Option<String>,
     /// Bits `FACIL_*` de `OpenTTD` (1 tren, 2 camión, 4 bus, 8 aeropuerto, 0x10 muelle).
     pub facilities: u8,
+    /// `BaseStation::string_id` (`STR_SV_STNAME_*`) cuando no hay nombre custom.
+    pub string_id: Option<u16>,
+    /// Índice de ciudad (`BaseStation::town`) para armar el nombre generado.
+    pub town_id: Option<u32>,
 }
 
 /// Entrada del índice de estación (`StationID`) en `STNN`.
@@ -27,6 +31,8 @@ pub(crate) struct SavStationIndex {
     pub is_waypoint: bool,
     pub facilities: u8,
     pub name: Option<String>,
+    pub string_id: Option<u16>,
+    pub town_id: Option<u32>,
 }
 
 /// Primer (y único) registro de un campo struct de tabla.
@@ -78,6 +84,14 @@ pub(crate) fn station_index_from_chunks(
             .and_then(|v| v.as_str())
             .filter(|s| !s.is_empty())
             .map(str::to_string);
+        let string_id = record_get(base, "string_id")
+            .and_then(SlValue::as_u64)
+            .and_then(|v| u16::try_from(v).ok());
+        // `SLE_REF(..., REF_TOWN)`: 0 = null, resto = `Town::index + 1`.
+        #[allow(clippy::cast_possible_truncation)]
+        let town_id = record_get(base, "town")
+            .and_then(SlValue::as_u64)
+            .and_then(|v| (v > 0).then_some((v - 1) as u32));
         #[allow(clippy::cast_possible_truncation)]
         out.insert(
             idx,
@@ -86,6 +100,8 @@ pub(crate) fn station_index_from_chunks(
                 is_waypoint,
                 facilities: facilities as u8,
                 name,
+                string_id,
+                town_id,
             },
         );
     }
@@ -110,8 +126,67 @@ pub(crate) fn stations_from_chunks(
             pos: st.pos,
             name: st.name,
             facilities: st.facilities,
+            string_id: st.string_id,
+            town_id: st.town_id,
         })
         .collect()
+}
+
+/// `STR_SV_STNAME` … `STR_SV_STNAME_FALLBACK` (`table/strings.h` de `OpenTTD`).
+const STR_SV_STNAME: u16 = 0x6006;
+const STR_SV_STNAME_FALLBACK: u16 = 0x6027;
+
+/// Nombre de estación generado (plantillas españolas `STR_SV_STNAME_*`).
+#[must_use]
+pub fn format_generated_station_name(string_id: u16, town_name: &str) -> Option<String> {
+    if !(STR_SV_STNAME..=STR_SV_STNAME_FALLBACK).contains(&string_id) {
+        return None;
+    }
+    let t = town_name;
+    let formatted = match string_id {
+        0x6006 | 0x6017 | 0x6018 => t.to_string(), // BASE / BUOY / WAYPOINT
+        0x6007 => format!("{t} Norte"),            // NORTH
+        0x6008 => format!("{t} Sur"),              // SOUTH
+        0x6009 => format!("{t} Este"),             // EAST
+        0x600A => format!("{t} Oeste"),            // WEST
+        0x600B => format!("{t} Central"),          // CENTRAL
+        0x600C => format!("{t} Transferencia"),    // TRANSFER
+        0x600D => format!("{t} Parada"),           // HALT
+        0x600E => format!("Valle de {t}"),         // VALLEY
+        0x600F => format!("Cumbres de {t}"),       // HEIGHTS
+        0x6010 => format!("Arboleda de {t}"),      // WOODS
+        0x6011 => format!("Lago de {t}"),          // LAKESIDE
+        0x6012 => format!("{t} Intercambio"),      // EXCHANGE
+        0x6013 => format!("Aeropuerto de {t}"),    // AIRPORT
+        0x6014 => format!("Campo petrolífero de {t}"), // OILFIELD
+        0x6015 => format!("Minas de {t}"),         // MINES
+        0x6016 => format!("Muelles de {t}"),       // DOCKS
+        0x6020 => format!("{t} Anexo"),            // ANNEXE
+        0x6021 => format!("Proximidades de {t}"),  // SIDINGS
+        0x6022 => format!("Ramal de {t}"),         // BRANCH
+        0x6023 => format!("{t} Alto"),             // UPPER
+        0x6024 => format!("{t} Bajo"),             // LOWER
+        0x6025 => format!("Helipuerto de {t}"),    // HELIPORT
+        0x6026 => format!("Bosque de {t}"),        // FOREST
+        0x6027 => format!("{t} Estación"),         // FALLBACK (sin #{NUM})
+        _ => return None,
+    };
+    Some(formatted)
+}
+
+/// Resuelve el nombre visible: custom, o plantilla `string_id` + ciudad.
+#[must_use]
+pub fn resolve_sav_station_name(station: &SavStation, towns: &[Town]) -> Option<String> {
+    if let Some(name) = station.name.as_ref().filter(|n| !n.is_empty()) {
+        return Some(name.clone());
+    }
+    let string_id = station.string_id?;
+    let town_name = station
+        .town_id
+        .and_then(|id| towns.iter().find(|t| t.id == id))
+        .map(|t| t.name.as_str())
+        .filter(|n| !n.is_empty())?;
+    format_generated_station_name(string_id, town_name)
 }
 
 /// Nombre generado con el generador nativo de `OpenTTD` a partir de los
@@ -178,6 +253,8 @@ pub struct SavIndustry {
     pub height: u8,
     /// `IndustryType` de `OpenTTD` (índice en la tabla de specs).
     pub industry_type: u8,
+    /// `Industry.random_colour` (`Colours`, 0–15) para `PALETTE_MODIFIER_COLOUR`.
+    pub random_colour: u8,
 }
 
 /// Industrias del chunk `INDY` (solo saves con tablas); best-effort.
@@ -204,6 +281,7 @@ pub(crate) fn industries_from_chunks(
                     width: 1,
                     height: 1,
                     industry_type,
+                    random_colour: 0,
                 });
             }
         }
@@ -223,12 +301,16 @@ fn sav_industry_from_record(record: &SlRecord, map_w: u32) -> Option<SavIndustry
     let industry_type = record_get(record, "type")
         .and_then(SlValue::as_u64)
         .unwrap_or(0);
+    let random_colour = record_get(record, "random_colour")
+        .and_then(SlValue::as_u64)
+        .unwrap_or(0);
     #[allow(clippy::cast_possible_truncation)]
     Some(SavIndustry {
         pos,
         width: width.min(255) as u8,
         height: height.min(255) as u8,
         industry_type: industry_type.min(255) as u8,
+        random_colour: (random_colour % 16) as u8,
     })
 }
 
@@ -673,5 +755,84 @@ mod tests {
         assert!(!vehicles[2].is_wagon);
         assert_eq!(vehicles[2].pos, TileCoord::new(7, 2));
         assert_eq!(vehicles[2].cargo_type, 0);
+    }
+}
+
+#[cfg(test)]
+mod generated_station_name_tests {
+    use super::*;
+    use crate::GameState;
+    use crate::sav::{chunks, container};
+
+    #[test]
+    fn formats_valley_and_north_spanish_templates() {
+        assert_eq!(
+            format_generated_station_name(0x600E, "Sarnpool Bridge").as_deref(),
+            Some("Valle de Sarnpool Bridge")
+        );
+        assert_eq!(
+            format_generated_station_name(0x6007, "Sarnpool Bridge").as_deref(),
+            Some("Sarnpool Bridge Norte")
+        );
+    }
+
+    #[test]
+    fn dual_fixture_imports_openttd_generated_station_names()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let raw = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/train_dual_pbs_curve_15_3.sav"
+        ))?;
+        let (data, version) = container::decompress(&raw)?;
+        let chunk_list = chunks::parse_chunks(&data)?;
+        let map_w = 64;
+        let stations = stations_from_chunks(&chunk_list, map_w, version);
+        let towns = towns_from_chunks(&chunk_list, map_w, version);
+        let names: Vec<_> = stations
+            .iter()
+            .filter_map(|s| resolve_sav_station_name(s, &towns))
+            .collect();
+        assert!(
+            names.iter().any(|n| n == "Valle de Sarnpool Bridge"),
+            "nombres={names:?}"
+        );
+        assert!(
+            names.iter().any(|n| n == "Sarnpool Bridge Norte"),
+            "nombres={names:?}"
+        );
+
+        let state = GameState::from_sav_game(crate::sav::load(&raw)?);
+        let state_names: Vec<_> = state
+            .stations
+            .iter()
+            .filter_map(|s| s.name.clone())
+            .collect();
+        assert!(state_names.iter().any(|n| n == "Valle de Sarnpool Bridge"));
+        assert!(state_names.iter().any(|n| n == "Sarnpool Bridge Norte"));
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod oil_refinery_colour_tests {
+    use super::*;
+    use crate::sav::{chunks, container};
+
+    #[test]
+    fn dual_fixture_oil_refinery_imports_grey_random_colour()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let raw = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/train_dual_pbs_curve_15_3.sav"
+        ))?;
+        let (data, version) = container::decompress(&raw)?;
+        let chunk_list = chunks::parse_chunks(&data)?;
+        let industries = industries_from_chunks(&chunk_list, 64, version);
+        let refinery = industries
+            .iter()
+            .find(|i| i.industry_type == 4)
+            .ok_or("oil refinery type 4")?;
+        assert_eq!(refinery.random_colour, 14, "OpenTTD Grey");
+        Ok(())
     }
 }

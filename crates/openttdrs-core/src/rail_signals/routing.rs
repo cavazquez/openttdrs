@@ -400,35 +400,75 @@ pub fn train_blocked_by_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehic
     let self_tiles = crate::train_consist::consist_occupied_tiles(vehicles, self_id);
     for other in vehicles.iter().filter(|v| foreign(v)) {
         let other_tiles = crate::train_consist::consist_occupied_tiles(vehicles, other.id);
-        if other_tiles.contains(&next)
-            || self_tiles
-                .iter()
-                .any(|t| other_tiles.contains(t) && *t != vehicle.pos)
-        {
-            // Solape de huellas (excepto compartir depósito ya filtrado).
-            if map.get_kind(vehicle.pos) != Some(crate::map::TileKind::RailDepot) {
-                return true;
-            }
+        if other_tiles.contains(&next) {
+            return true;
+        }
+        // Varios trenes pueden compartir un depósito (OpenTTD); el solape de
+        // huella solo bloquea fuera de teselas `RailDepot`.
+        let footprint_conflict = self_tiles.iter().any(|t| {
+            other_tiles.contains(t)
+                && *t != vehicle.pos
+                && map.get_kind(*t) != Some(crate::map::TileKind::RailDepot)
+        });
+        if footprint_conflict {
+            return true;
         }
     }
 
     let mut prev = vehicle.pos;
     let mut cur = next;
-    for _ in 0..64 {
+    for dist in 0..64u8 {
         if let Some(other) = vehicles.iter().find(|v| foreign(v) && v.pos == cur) {
             if !other.running {
                 return true;
             }
             if let Some(other_next) = other.movement_target() {
+                // Frente a frente: bloquear a cualquier distancia.
                 if other_next == prev || other_next == vehicle.pos {
                     return true;
                 }
-            } else {
-                return true;
+                // Misma dirección: solo evitar embestir de cerca (no deadlock a 50 teselas).
+                return dist < 2;
             }
             return true;
         }
 
+        let neighbors = rail_neighbors(map, cur, Some(prev));
+        let continuations: Vec<_> = neighbors.into_iter().filter(|n| *n != prev).collect();
+        if continuations.len() != 1 {
+            break;
+        }
+        prev = cur;
+        cur = continuations[0];
+    }
+    false
+}
+
+/// `true` si el look-ahead detecta otro tren viniendo de frente (no un seguidor).
+#[must_use]
+pub fn train_facing_head_on_traffic(map: &Map, vehicles: &[Vehicle], vehicle: &Vehicle) -> bool {
+    if vehicle.kind != VehicleKind::Train || !vehicle.running || !vehicle.is_consist_head() {
+        return false;
+    }
+    let Some(next) = vehicle.movement_target() else {
+        return false;
+    };
+    let self_id = vehicle.id;
+    let foreign = |v: &Vehicle| {
+        v.kind == VehicleKind::Train
+            && v.is_consist_head()
+            && !crate::train_consist::same_consist(vehicles, self_id, v.id)
+    };
+
+    let mut prev = vehicle.pos;
+    let mut cur = next;
+    for _ in 0..64 {
+        if let Some(other) = vehicles.iter().find(|v| foreign(v) && v.pos == cur) {
+            if let Some(other_next) = other.movement_target() {
+                return other_next == prev || other_next == vehicle.pos;
+            }
+            return false;
+        }
         let neighbors = rail_neighbors(map, cur, Some(prev));
         let continuations: Vec<_> = neighbors.into_iter().filter(|n| *n != prev).collect();
         if continuations.len() != 1 {

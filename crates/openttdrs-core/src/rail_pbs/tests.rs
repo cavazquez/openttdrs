@@ -562,11 +562,12 @@ fn wait_for_pbs_path_marks_stuck_and_reverses_on_timeout() {
 
     for _ in 0..timeout.saturating_sub(1) {
         let reversed =
-            tick_pbs_wait_and_maybe_reverse(&state.map, &mut state.vehicles[0], settings);
+            tick_pbs_wait_and_maybe_reverse(&state.map, &mut state.vehicles[0], settings, false);
         assert!(!reversed);
         assert!(state.vehicles[0].pbs_stuck);
     }
-    let reversed = tick_pbs_wait_and_maybe_reverse(&state.map, &mut state.vehicles[0], settings);
+    let reversed =
+        tick_pbs_wait_and_maybe_reverse(&state.map, &mut state.vehicles[0], settings, false);
     assert!(reversed, "debe girar al timeout");
     assert_ne!(state.vehicles[0].direction, dir_before);
     assert!(!state.vehicles[0].pbs_stuck);
@@ -619,7 +620,8 @@ fn wait_for_pbs_path_255_never_reverses() {
         assert!(!tick_pbs_wait_and_maybe_reverse(
             &state.map,
             &mut state.vehicles[0],
-            settings
+            settings,
+            false
         ));
     }
     assert!(state.vehicles[0].pbs_stuck);

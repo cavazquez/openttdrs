@@ -35,6 +35,7 @@ pub(crate) struct RailSignalGhostKey {
     fract_y: u8,
     orientation: u8,
     signal_type: u8,
+    signal_variant: u8,
 }
 
 #[derive(Resource, Default)]
@@ -66,15 +67,14 @@ fn build_rail_signal_ghost_plan(
     fract_x: u8,
     fract_y: u8,
     signal_type: u8,
+    signal_variant: u8,
     valid: bool,
-    tick: GameTick,
 ) -> Option<RailSignalGhostPlan> {
     let tile = map.get(coord).filter(|t| t.kind == TileKind::Rail)?;
     let tb = tile.m5 & 0x3F;
     let track = resolve_signal_track(tb, fract_x, fract_y)?;
     let face = signal_facing_for_orientation(track, orientation);
-    let variant = default_signal_variant(calendar_year_at_tick(tick));
-    let placement = signal_placement_for_track(track, face, variant, signal_type)?;
+    let placement = signal_placement_for_track(track, face, signal_variant & 1, signal_type)?;
     let (tileh, base_z) = tile_slope_and_min_z(map, coord.x as u32, coord.y as u32);
     let half_h = if tileh == 0 {
         TILE_HALF_H
@@ -152,6 +152,7 @@ fn build_rail_signal_ghost_plan(
             fract_y,
             orientation,
             signal_type,
+            signal_variant: signal_variant & 1,
         },
         valid,
         layers,
@@ -258,8 +259,8 @@ pub(crate) fn update_rail_signal_ghost_preview(
     fract_x: u8,
     fract_y: u8,
     signal_type: u8,
+    signal_variant: u8,
     valid: bool,
-    tick: GameTick,
     mut existing: Query<(Entity, &mut GhostLerp, &mut Sprite), With<RailSignalGhost>>,
 ) {
     let Some(plan) = build_rail_signal_ghost_plan(
@@ -271,8 +272,8 @@ pub(crate) fn update_rail_signal_ghost_preview(
         fract_x,
         fract_y,
         signal_type,
+        signal_variant,
         valid,
-        tick,
     ) else {
         state.key = None;
         return;

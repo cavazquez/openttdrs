@@ -124,6 +124,15 @@ fn vehicle_hidden_on_depot_tile(map: &Map, vehicle: &Vehicle) -> bool {
     let Some(next) = vehicle.movement_target() else {
         return true;
     };
+    if matches!(
+        vehicle.kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) {
+        return matches!(
+            vehicle.road_depot_phase,
+            crate::vehicle::RoadDepotPhase::InDepot
+        );
+    }
     if vehicle.kind != VehicleKind::Train {
         return false;
     }
@@ -214,6 +223,17 @@ mod tests {
         train.running = true;
         train.cur_speed = 48;
         assert!(vehicle_hidden_on_map(&map, &train));
+    }
+
+    #[test]
+    fn road_vehicle_in_depot_phase_is_hidden() {
+        let mut map = crate::map::Map::new_flat(8, 8, 0);
+        let depot = TileCoord::new(3, 3);
+        map.set_kind(depot, TileKind::RoadDepot).unwrap();
+        let mut bus = Vehicle::new(1, VehicleKind::Bus, depot, depot);
+        bus.running = true;
+        bus.road_depot_phase = crate::vehicle::RoadDepotPhase::InDepot;
+        assert!(vehicle_hidden_on_map(&map, &bus));
     }
 
     #[test]

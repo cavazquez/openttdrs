@@ -208,6 +208,39 @@ pub fn follow_train_reservation(
         .collect()
 }
 
+/// Añade a la reserva las teselas aún ocupadas por el consist (vagones detrás
+/// de la cabeza). `OpenTTD` mantiene esas pistas reservadas hasta que la cola las
+/// abandona.
+fn merge_consist_footprint(
+    map: &Map,
+    vehicles: &[Vehicle],
+    head_id: u32,
+    mut reserved: Vec<ReservedRailStep>,
+) -> Vec<ReservedRailStep> {
+    let occupied = crate::train_consist::consist_occupied_tiles(vehicles, head_id);
+    let existing: HashSet<TileCoord> = reserved.iter().map(|s| s.tile).collect();
+    for tile in occupied {
+        if existing.contains(&tile) {
+            continue;
+        }
+        // El depósito puede albergar varios consists; no es pista PBS reservable.
+        if map.get_kind(tile) == Some(TileKind::RailDepot) {
+            continue;
+        }
+        let tb = rail_traversal_bits(map, tile);
+        let track = (0..6u8)
+            .find_map(|i| {
+                let bit = 1_u8 << i;
+                if tb & bit != 0 { Some(bit) } else { None }
+            })
+            .unwrap_or(tb & 0x3F);
+        if track != 0 {
+            reserved.push(ReservedRailStep::new(tile, track));
+        }
+    }
+    reserved
+}
+
 /// Recalcula `reserved_steps` de todos los trenes (orden por índice = prioridad).
 pub fn update_train_reservations(map: &Map, vehicles: &mut [Vehicle]) {
     update_train_reservations_with_settings(
@@ -240,11 +273,13 @@ pub fn update_train_reservations_with_wormholes(
             vehicles[i].reserved_steps.clear();
             continue;
         }
+        let head_id = vehicles[i].id;
         let previous = vehicles[i].reserved_steps.clone();
         let reserved = compute_train_reservation_with_wormholes(
             map, vehicles, i, &global, settings, wormholes,
         );
         let reserved = follow_train_reservation(&previous, reserved, &vehicles[i]);
+        let reserved = merge_consist_footprint(map, vehicles, head_id, reserved);
         for step in &reserved {
             global.insert(*step);
         }

@@ -170,10 +170,11 @@ pub fn calendar_year_at_tick(tick: GameTick) -> u32 {
     calendar_year_day(calendar_day_index(tick)).0
 }
 
-/// `0` = semáforo, `1` = eléctrica (`SignalVariant` en `OpenTTD`).
+/// `0` = eléctrica (`SIG_ELECTRIC`), `1` = semáforo (`SIG_SEMAPHORE`) — mismos valores que `OpenTTD`.
+/// Antes de [`SEMAPHORE_BUILD_BEFORE_YEAR`] se colocan semáforos; a partir de ese año, eléctricas.
 #[must_use]
 pub fn default_signal_variant(year: u32) -> u8 {
-    u8::from(year >= SEMAPHORE_BUILD_BEFORE_YEAR)
+    u8::from(year < SEMAPHORE_BUILD_BEFORE_YEAR)
 }
 
 #[must_use]
@@ -216,6 +217,23 @@ pub fn signal_variant_for_track(m2: u8, track: SignalTrack) -> u8 {
         3
     };
     (m2 >> bit) & 1
+}
+
+/// Reemplaza la variante visual de una señal sin alterar su tipo.
+#[must_use]
+pub fn set_signal_variant_m2(m2: u8, track: SignalTrack, variant: u8) -> u8 {
+    let bit = if matches!(track, SignalTrack::Lower | SignalTrack::Right) {
+        7
+    } else {
+        3
+    };
+    (m2 & !(1 << bit)) | ((variant & 1) << bit)
+}
+
+/// Alterna eléctrica ↔ semáforo sin alterar el tipo de señal.
+#[must_use]
+pub fn cycle_signal_variant_m2(m2: u8, track: SignalTrack) -> u8 {
+    set_signal_variant_m2(m2, track, signal_variant_for_track(m2, track) ^ 1)
 }
 
 /// Reemplaza el tipo PBS/block de una señal en `m2` (`SetSignalType` en `rail_map.h`).

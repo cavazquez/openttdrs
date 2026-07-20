@@ -113,6 +113,7 @@ pub(crate) fn handle_tile_click(
                 join_station_keep: apply_ctx.station_state.join_keep,
                 signal_tile_has_signals: false,
                 ctrl_held: apply_ctx.station_state.ctrl_held,
+                shift_held: apply_ctx.station_state.shift_held,
             };
             let intent = resolve_click_intent(&ctx);
             apply_intent(intent, &mut apply_ctx, time.elapsed_secs());
@@ -214,6 +215,7 @@ pub(crate) fn handle_tile_click(
         join_station_keep: apply_ctx.station_state.join_keep,
         signal_tile_has_signals,
         ctrl_held: apply_ctx.station_state.ctrl_held,
+        shift_held: apply_ctx.station_state.shift_held,
     };
 
     let intent = resolve_click_intent(&ctx);
@@ -226,4 +228,6 @@ pub(crate) fn sync_build_pointer_modifiers(
 ) {
     station_state.ctrl_held =
         keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
+    station_state.shift_held =
+        keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
 }

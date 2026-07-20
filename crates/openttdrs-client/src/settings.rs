@@ -26,6 +26,8 @@ pub(crate) struct ClientPreferences {
     pub(crate) sound_disaster: bool,
     pub(crate) sound_confirm: bool,
     pub(crate) sound_click_beep: bool,
+    /// Año previo al cual el selector de señales inicia en semáforo.
+    pub(crate) semaphore_build_before: u32,
     pub(crate) show_debug_gizmos: bool,
     pub(crate) show_diagnostics_overlay: bool,
     /// Tinte naranja en vías con reserva PBS activa.
@@ -76,6 +78,7 @@ impl Default for ClientPreferences {
             sound_disaster: true,
             sound_confirm: true,
             sound_click_beep: true,
+            semaphore_build_before: openttdrs_core::SEMAPHORE_BUILD_BEFORE_YEAR,
             show_debug_gizmos: false,
             show_diagnostics_overlay: false,
             show_pbs_reservations: true,

@@ -42,19 +42,15 @@ pub(crate) fn place_industries_from_sav(state: &mut GameState, sav_industries: &
             .get(origin)
             .map(|t| u16::from(t.m5) | (u16::from((t.m6 >> 2) & 1) << 8));
         if let Some(spec) = gfx.and_then(classify_industry_spec_from_gfx) {
-            let colour = state
-                .map
-                .get(origin)
-                .map(|t| industry_random_colour(t.m2))
-                .unwrap_or(0);
             state.industries.push(
-                Industry::with_tiles_spec(origin, kind, spec, tiles, colour)
+                Industry::with_tiles_spec(origin, kind, spec, tiles, si.random_colour)
                     .with_instance_id(state.map.get(origin).map(|t| t.m2).unwrap_or(0)),
             );
         } else {
             state.industries.push(
                 Industry::with_tiles(origin, kind, tiles)
-                    .with_instance_id(state.map.get(origin).map(|t| t.m2).unwrap_or(0)),
+                    .with_instance_id(state.map.get(origin).map(|t| t.m2).unwrap_or(0))
+                    .with_random_colour(si.random_colour),
             );
         }
     }
@@ -561,12 +557,14 @@ mod tests {
                 width: 1,
                 height: 2,
                 industry_type: 0, // coal mine
+                random_colour: 14,
             },
             SavIndustry {
                 pos: TileCoord::new(3, 2),
                 width: 1,
                 height: 2,
                 industry_type: 0,
+                random_colour: 3,
             },
         ];
 
@@ -577,5 +575,7 @@ mod tests {
         assert_eq!(state.industries[0].tiles.len(), 2);
         assert_eq!(state.industries[1].pos, TileCoord::new(3, 2));
         assert_eq!(state.industries[0].spec, Some(IndustrySpec::CoalMine));
+        assert_eq!(state.industries[0].random_colour, 14);
+        assert_eq!(state.industries[1].random_colour, 3);
     }
 }

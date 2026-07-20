@@ -164,13 +164,15 @@ pub use rail::{
 #[allow(unused_imports)]
 pub use station::{
     StationTileClass, rail_station_axis_y, rail_station_draw_layers,
-    rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_sprite_layers,
-    rail_station_sprite_meta, rail_waypoint_draw_layers, rail_waypoint_layer_meta,
-    rail_waypoint_sprite_center, road_stop_build_layers, road_stop_ground_index, road_stop_seq_gfx,
-    station_tile_class, station_type_from_m6, stop_kind_from_m6,
+    rail_station_ground_track_sprite, rail_station_overlay_rel, rail_station_roof_glass_sprite,
+    rail_station_sprite_layers, rail_station_sprite_meta, rail_waypoint_draw_layers,
+    rail_waypoint_layer_meta, rail_waypoint_sprite_center, road_stop_build_layers,
+    road_stop_ground_index, road_stop_seq_gfx, station_tile_class, station_type_from_m6,
+    stop_kind_from_m6,
 };
+#[allow(unused_imports)]
 pub use transparency::{
-    TransparencyMode, TransparencyOption, apply_mode_to_bits, catenary_hidden,
+    TRANSPARENT_ALPHA, TransparencyMode, TransparencyOption, apply_mode_to_bits, catenary_hidden,
     catenary_sprite_color, is_hidden, mode_from_bits, set_transparency_preferences, sprite_color,
     text_color, with_to_alpha,
 };
@@ -597,8 +599,8 @@ mod signal_sprite_collect_tests {
         let m5 = (RAIL_TILE_SIGNALS << 6) | RAIL_TB_Y;
         let m3 = 0xC0;
         let m3hi = 0;
-        let ids_e = collect_signal_sprite_ids(0, m3, m3hi, m5);
-        // variant 1 en bit 3 del byte bajo de m2 para pistas que leen variante en bit 3 (TRACK_X/Y)
+        let ids_e = collect_signal_sprite_ids(0, m3, m3hi, m5); // SIG_ELECTRIC
+        // SIG_SEMAPHORE: bit 3 de m2 en pistas X/Y
         let ids_s = collect_signal_sprite_ids(0x08, m3, m3hi, m5);
         assert_eq!(ids_e.len(), 2);
         assert_eq!(ids_s.len(), 2);
@@ -622,8 +624,12 @@ mod signal_sprite_collect_tests {
             .max()
             .unwrap_or(0);
         assert!(
-            mx < 1700,
-            "máx sprite id {mx}: ampliar range(1275,…) en descargar_graficos.sh si hace falta"
+            mx < 5400,
+            "máx sprite id {mx}: el banco Action5 de señales llega a ~5327"
+        );
+        assert!(
+            ids.iter().any(|&id| (5088..5328).contains(&id)),
+            "preload debe incluir señales Action5 (rail_5088..)"
         );
         assert!(ids.contains(&super::PYLON_SPRITE_BASE));
         assert!(ids.contains(&super::CATENARY_ENTRANCE_SPRITE_BASE));
@@ -653,8 +659,10 @@ mod signal_sprite_collect_tests {
     }
 
     #[test]
-    fn opengfx_default_signal_alt_is_seventy_seven_above_classic() {
-        // Ancla documentada: bloque extendido de señales en `ogfx1_base.grf` sigue al rango 1275…
-        assert_eq!(1352_u32 - 1275_u32, 77);
+    fn opengfx_default_signal_alt_is_signals_base_minus_sixteen() {
+        // `DrawSingleSignal`: SPR_SIGNALS_BASE (5088) - 16; clásico eléctrico en 1275.
+        assert_eq!(5072_u32, 5088_u32 - 16);
+        assert_eq!(1275_u32, super::rail::signal_sprite_bases().0);
+        assert_eq!(5072_u32, super::rail::signal_sprite_bases().1);
     }
 }

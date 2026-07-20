@@ -28,7 +28,11 @@ pub const MAP_H: u32 = 18;
 
 /// Carga un save de `OpenTTD` (`.sav`) y aplica el bootstrap de mapas reales:
 /// industrias del chunk `INDY` (o heurística en saves sin tablas), estaciones
-/// por teselas deduplicadas con las del chunk `STNN`, vehículos y dinero.
+/// del chunk `STNN` (una entrada lógica por estación, no por tesela de andén),
+/// vehículos y dinero.
+///
+/// Si `STNN` ya aportó estaciones, **no** se inventan entradas extra desde
+/// `MP_STATION`/`STXY`: eso generaba etiquetas `Tren (x, y)` en cada andén.
 pub(crate) fn load_sav_state(bytes: &[u8]) -> Result<GameState, String> {
     let sav = openttdrs_core::sav::load(bytes).map_err(|e| e.to_string())?;
     let extras = sav.extras.clone();
@@ -40,8 +44,10 @@ pub(crate) fn load_sav_state(bytes: &[u8]) -> Result<GameState, String> {
     } else {
         place_industries_from_sav(&mut state, &sav_industries);
     }
-    place_stations_from_map_tiles(&mut state);
-    place_stations_from_footer_stxy(&mut state, Some(&extras));
+    if state.stations.is_empty() {
+        place_stations_from_map_tiles(&mut state);
+        place_stations_from_footer_stxy(&mut state, Some(&extras));
+    }
     info!(
         "Save OpenTTD cargado: {} estaciones, {} ciudades, {} industrias, {} vehículos, ${}",
         state.stations.len(),
@@ -359,8 +365,30 @@ impl Default for SimWorld {
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod sim_world_coverage_tests {
-    use super::{BootstrapLoadSource, SimWorld};
+    use super::{BootstrapLoadSource, SimWorld, load_sav_state};
     use crate::state::bootstrap::NewGameSettings;
+
+    #[test]
+    fn load_sav_keeps_stnn_stations_not_one_per_platform_tile() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../openttdrs-core/tests/fixtures/train_dual_pbs_curve_15_3.sav"
+        );
+        let raw = std::fs::read(path).expect("fixture dual");
+        let state = load_sav_state(&raw).expect("load_sav_state");
+        assert_eq!(
+            state.stations.len(),
+            2,
+            "STNN trae 2 estaciones; no inventar una por andén"
+        );
+        let names: Vec<_> = state
+            .stations
+            .iter()
+            .filter_map(|s| s.name.as_deref())
+            .collect();
+        assert!(names.contains(&"Valle de Sarnpool Bridge"), "{names:?}");
+        assert!(names.contains(&"Sarnpool Bridge Norte"), "{names:?}");
+    }
 
     #[test]
     fn sim_world_default_runs_procedural_bootstrap() {

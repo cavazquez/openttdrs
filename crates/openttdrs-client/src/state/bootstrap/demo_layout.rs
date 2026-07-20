@@ -384,7 +384,7 @@ mod tests {
     }
 
     #[test]
-    fn demo_economy_loop_delivers_cargo_over_sim_steps() {
+    fn demo_economy_loop_transfers_cargo_over_sim_steps() {
         let mut state = GameState::new(MAP_W, MAP_H);
         fill_flat_grass(&mut state);
         place_clean_demo_transport(&mut state);
@@ -396,11 +396,11 @@ mod tests {
         assert!(state.stats.cargo_units_loaded > 0, "debe cargar en la mina");
         assert!(
             state.stats.cargo_units_delivered > 0,
-            "debe entregar en la estación lejana"
+            "el trasbordo registra las unidades descargadas en la estación lejana"
         );
         assert!(
             state.stats.cargo_income_earned > 0,
-            "entrega genera ingresos TTD"
+            "el trasbordo genera ingresos TTD"
         );
         let deliver = state
             .stations
@@ -409,7 +409,7 @@ mod tests {
             .expect("parada descarga");
         assert!(
             deliver.cargo_stock.coal > 0 || deliver.income > 0,
-            "carbón acumulado en parada de descarga tras entregas del camión"
+            "carbón acumulado en parada de descarga tras el trasbordo del camión"
         );
     }
 

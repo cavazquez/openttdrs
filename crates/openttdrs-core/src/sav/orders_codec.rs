@@ -316,6 +316,8 @@ mod tests {
                 is_waypoint: false,
                 facilities: 1,
                 name: None,
+                string_id: None,
+                town_id: None,
             },
         );
         let decoded = vehicle_orders_from_sav(&[sav], &stations, 64);
@@ -332,6 +334,8 @@ mod tests {
                 is_waypoint: false,
                 facilities: 1,
                 name: None,
+                string_id: None,
+                town_id: None,
             },
         );
         let order = SavOrder {
@@ -372,6 +376,8 @@ mod tests {
                 is_waypoint: true,
                 facilities: 0,
                 name: None,
+                string_id: None,
+                town_id: None,
             },
         );
         assert_eq!(vehicle_orders_from_sav(&[sav], &stations, 32), vec![order]);

@@ -361,10 +361,10 @@ pub use station::{
     default_station_catenary_flags, industry_in_station_coverage, is_rail_waypoint_at,
     is_rail_waypoint_tile, load_amount_for_rating, on_station_cargo_pickup,
     rail_station_approach_tile, rail_station_axis_y, rail_station_owned_tiles,
-    rail_station_platform_tiles, rail_station_stop_tile, rail_station_stop_tile_for_approach,
-    recompute_station_rating, resolve_order_destination, resolve_order_destination_from,
-    road_stop_approach_tile, station_at_tile, station_coverage_at, station_covers_tile,
-    station_footprint_tiles, station_map_coherence, station_rating_for_cargo,
+    rail_station_platform_tiles, rail_station_stop_candidates, rail_station_stop_tile,
+    rail_station_stop_tile_for_approach, recompute_station_rating, resolve_order_destination,
+    resolve_order_destination_from, road_stop_approach_tile, station_at_tile, station_coverage_at,
+    station_covers_tile, station_footprint_tiles, station_map_coherence, station_rating_for_cargo,
     station_rating_for_company_cargo, station_tile_can_have_pylons, station_tile_can_have_wires,
     station_tile_sets_adjacent, station_type_from_m6, stop_kind_from_m6, tick_station_cargo_age,
     train_on_rail_platform, vehicle_at_road_stop, vehicle_physically_at_station,
@@ -397,18 +397,20 @@ pub use town_expand::{
 pub use townname::generate_town_name;
 pub use train_collision::{TrainCollision, detect_train_collisions, resolve_train_collisions};
 pub use train_consist::{
-    VEHICLE_LENGTH, action2_eval_ctx_for_unit, attach_wagon, attach_wagon_chain, cargo_class_bits,
-    cargo_type_a_id, consist_changed, consist_head_id, consist_occupied_tiles, consist_power_hp,
-    consist_tile_span, consist_unit_ids, consist_weight_t, detach_unit, detach_unit_keep_tail,
-    engine_is_train_engine, engine_is_wagon, same_consist, sell_chain_ids,
+    TrainUnitPose, VEHICLE_LENGTH, action2_eval_ctx_for_unit, attach_wagon, attach_wagon_chain,
+    cargo_class_bits, cargo_type_a_id, consist_changed, consist_head_id, consist_occupied_tiles,
+    consist_power_hp, consist_tile_span, consist_unit_ids, consist_unit_poses, consist_weight_t,
+    detach_unit, detach_unit_keep_tail, engine_is_train_engine, engine_is_wagon,
+    propagate_consist_unit_poses, same_consist, sell_chain_ids,
 };
 pub use train_movement::{
     ACCEL_SLOWDOWN, AccelSlowdownParams, DELTACOORD_LEAVE_OFFSET, FRACTCOORDS_BEHIND,
     FRACTCOORDS_ENTER, TRAIN_UPDATE_SPEED_ACCEL_MUL, TRAIN_UPDATE_SPEED_BRAKE_MUL,
     TUNNEL_VISIBILITY_FRAME, VEHICLE_INITIAL_X_FRACT, VEHICLE_INITIAL_Y_FRACT, VEHICLE_SUBCOORD,
-    VehicleSubcoord, affect_speed_by_z_change, diag_dir_index, dir_difference, is_45_degree_turn,
-    is_diagonal_rail_piece, openttd_subcoord_at_entry, rail_track_index, track_bit_for_movement,
-    train_depot_facing, train_depot_subtile, train_render_dir_on_rail, train_subtile_on_rail,
+    VehicleSubcoord, advance_train_pixel, affect_speed_by_z_change, calc_next_vehicle_offset,
+    diag_dir_index, dir_difference, is_45_degree_turn, is_diagonal_rail_piece,
+    openttd_subcoord_at_entry, rail_track_index, track_bit_for_movement, train_depot_facing,
+    train_depot_subtile, train_render_dir_on_rail, train_subtile_on_rail,
     tunnel_hides_train_at_progress,
 };
 pub use vehicle::reverse_direction;

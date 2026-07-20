@@ -492,7 +492,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             25,
             Some(CargoType::Goods),
             0,
-            18,
+            21, // OpenTTD RVI weight (engine 32 Goods Van)
             1920,
             RELIABILITY_STEAM,
             2

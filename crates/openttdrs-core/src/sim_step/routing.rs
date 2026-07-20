@@ -62,12 +62,40 @@ pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
                 wh,
             )
         };
-        match path {
-            Some(path) => {
-                state.vehicles[i].path = path.into_iter().collect();
-                state.vehicles[i].no_network_route_to_order = false;
+        if let Some(path) = path {
+            state.vehicles[i].path = path.into_iter().collect();
+            state.vehicles[i].no_network_route_to_order = false;
+        } else {
+            // Estación multi-andén: el andén alineado puede no tener ruta
+            // (PBS one-way / vía muerta); probar el resto de plataformas.
+            let mut routed = false;
+            if state.vehicles[i].kind == VehicleKind::Train
+                && let Some(crate::vehicle::VehicleOrder::Station { station, .. }) =
+                    state.vehicles[i].current_order_ref().copied()
+            {
+                let candidates =
+                    crate::station::rail_station_stop_candidates(&state.map, station, from);
+                for alt in candidates {
+                    if alt == to {
+                        continue;
+                    }
+                    let alt_path = pathfinder::find_rail_path_for_engine(
+                        &state.map,
+                        from,
+                        alt,
+                        wh,
+                        state.vehicles[i].engine_id,
+                    );
+                    if let Some(path) = alt_path {
+                        state.vehicles[i].dest = alt;
+                        state.vehicles[i].path = path.into_iter().collect();
+                        state.vehicles[i].no_network_route_to_order = false;
+                        routed = true;
+                        break;
+                    }
+                }
             }
-            None => {
+            if !routed {
                 state.vehicles[i].no_network_route_to_order = has_orders;
             }
         }

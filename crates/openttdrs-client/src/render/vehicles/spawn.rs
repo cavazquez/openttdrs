@@ -105,7 +105,7 @@ pub(crate) fn spawn_initial_vehicles(
         ));
         if vehicle.kind == VehicleKind::Train {
             spawn_consist_trailer_sprites(
-                commands, sim, trucks, company, vehicle, pose, vis, cache, images,
+                commands, sim, trucks, company, vehicle, vis, cache, images,
             );
         }
         if !crate::sprites::is_hidden(crate::sprites::TransparencyOption::Text) {
@@ -135,7 +135,6 @@ fn spawn_consist_trailer_sprites(
     trucks: &TruckHandles,
     company: &CompanyColoredSprites,
     head: &Vehicle,
-    pose: openttdrs_core::VehiclePose,
     vis: Visibility,
     cache: &mut NewGrfTrainSpriteCache,
     images: &mut Assets<Image>,
@@ -146,25 +145,13 @@ fn spawn_consist_trailer_sprites(
         let Some(unit) = sim.state.vehicles.iter().find(|v| v.id == uid) else {
             continue;
         };
-        let unit_pose = pose;
-        let back = openttdrs_core::reverse_direction(head.direction);
-        let (dx, dy) = match back {
-            0 => (0.0, -8.0),
-            1 => (6.0, -4.0),
-            2 => (8.0, 0.0),
-            3 => (6.0, 4.0),
-            4 => (0.0, 8.0),
-            5 => (-6.0, 4.0),
-            6 => (-8.0, 0.0),
-            _ => (-6.0, -4.0),
-        };
+        let unit_pose = openttdrs_core::VehiclePose::from_vehicle(unit);
         let base = vehicle_sprite_pos_at_with_catalog(
-            head,
+            unit,
             &sim.state.map,
-            pose,
+            unit_pose,
             Some(&sim.state.engine_catalog),
         );
-        let fi = i as f32;
         commands.spawn((
             MapVisualLayer,
             ConsistUnitSprite {
@@ -184,11 +171,7 @@ fn spawn_consist_trailer_sprites(
                 color: Color::WHITE,
                 ..default()
             },
-            Transform::from_translation(Vec3::new(
-                base.x + dx * fi,
-                base.y + dy * fi,
-                base.z - 0.01 * fi,
-            )),
+            Transform::from_translation(base - Vec3::Z * (i as f32 * 0.01)),
             vis,
         ));
     }

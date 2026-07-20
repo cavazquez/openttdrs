@@ -187,6 +187,15 @@ impl super::model::Vehicle {
         if order.is_conditional() {
             return;
         }
+        // Si ya vamos a un andén alcanzable de la misma estación, no pisar el
+        // destino (recompute puede haber elegido la vía alternativa vía YAPF).
+        if self.kind == super::model::VehicleKind::Train
+            && !self.path.is_empty()
+            && let crate::vehicle::order::VehicleOrder::Station { station, .. } = order
+            && crate::station::rail_station_platform_tiles(map, station).contains(&self.dest)
+        {
+            return;
+        }
         self.dest = if self.kind == super::model::VehicleKind::Aircraft {
             match order {
                 crate::vehicle::order::VehicleOrder::Station { station, .. } => {

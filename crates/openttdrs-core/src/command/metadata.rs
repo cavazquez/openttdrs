@@ -71,7 +71,9 @@ pub fn command_effects(cmd: &Command) -> CommandEffects {
         | Command::PlaceRailDepot(c)
         | Command::PlaceRailDepotDir(c, _)
         | Command::PlaceRailSignal(c, _, _, _, _)
+        | Command::PlaceRailSignalWithVariant(c, _, _, _, _, _)
         | Command::CycleRailSignalType(c, _, _)
+        | Command::CycleRailSignalVariant(c, _, _)
         | Command::RemoveRailSignal(c, _, _)
         | Command::PlaceRailStation(c, _)
         | Command::PlaceRailTunnel(c, _) => CommandEffects::construction(Rail, *c),

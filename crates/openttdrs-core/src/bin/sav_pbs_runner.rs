@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use openttdrs_core::{
-    GameState, SavVehicleKind, TileCoord, TileKind, VehicleKind, decode_rail_reservation_m2_hi, sav,
+    GameState, SavVehicleKind, TileCoord, TileKind, VehicleKind, consist_unit_ids,
+    consist_unit_poses, decode_rail_reservation_m2_hi, sav,
 };
 use serde::Serialize;
 
@@ -13,6 +14,15 @@ struct Args {
     save: PathBuf,
     ticks: u64,
     out: PathBuf,
+}
+
+#[derive(Serialize)]
+struct PbsUnit {
+    index: usize,
+    x: i32,
+    y: i32,
+    rail_pixel: u8,
+    direction: u8,
 }
 
 #[derive(Serialize)]
@@ -24,6 +34,7 @@ struct PbsTrain {
     speed: u16,
     subspeed: u8,
     direction: u8,
+    units: Vec<PbsUnit>,
 }
 
 #[derive(Serialize)]
@@ -74,6 +85,22 @@ fn parse_args() -> Result<Args, String> {
     Ok(Args { save, ticks, out })
 }
 
+fn units_for_head(state: &GameState, head_id: u32) -> Vec<PbsUnit> {
+    let ids = consist_unit_ids(&state.vehicles, head_id);
+    let poses = consist_unit_poses(&state.vehicles, head_id);
+    ids.into_iter()
+        .zip(poses)
+        .enumerate()
+        .map(|(index, (_id, pose))| PbsUnit {
+            index,
+            x: pose.tile.x,
+            y: pose.tile.y,
+            rail_pixel: pose.rail_pixel,
+            direction: pose.direction,
+        })
+        .collect()
+}
+
 fn trace_row(state: &GameState, kind: &'static str) -> PbsTraceRow {
     let trains = state
         .vehicles
@@ -87,6 +114,7 @@ fn trace_row(state: &GameState, kind: &'static str) -> PbsTraceRow {
             speed: vehicle.cur_speed,
             subspeed: vehicle.subspeed,
             direction: vehicle.direction,
+            units: units_for_head(state, vehicle.id),
         })
         .collect();
     let (width, height) = state.map.dimensions();
@@ -167,7 +195,7 @@ fn run(args: &Args) -> Result<(), String> {
         &mut writer,
         &serde_json::json!({
             "kind": "metadata",
-            "schema_version": 1,
+            "schema_version": 2,
             "producer": "openttdrs",
             "source_path": args.save,
             "initial_sample_point": "after_sav_import",

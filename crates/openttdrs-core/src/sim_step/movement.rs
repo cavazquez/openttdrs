@@ -44,6 +44,9 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         {
             continue;
         }
+        if tick_road_depot_movement(state, i) {
+            continue;
+        }
         let blocked = {
             let vehicles = &state.vehicles;
             let vehicle = &vehicles[i];
@@ -69,25 +72,39 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             }
         };
         if blocked {
-            state.vehicles[i].cur_speed = 0;
-            let reversed = crate::rail_pbs::tick_pbs_wait_and_maybe_reverse(
+            let head_on = crate::rail_signals::train_facing_head_on_traffic(
                 &state.map,
-                &mut state.vehicles[i],
-                pf,
+                &state.vehicles,
+                &state.vehicles[i],
             );
-            if reversed {
-                let vehicle_id = state.vehicles[i].id;
-                let order = state.vehicles[i].current_order;
-                let pos = state.vehicles[i].pos;
-                state.vehicles[i].sync_order_destination(&state.map);
-                state.vehicles[i].pbs_stuck = true;
-                crate::news::push_vehicle_advice_news(
-                    state,
-                    vehicle_id,
-                    order,
-                    pos,
-                    crate::news::VehicleAdviceKind::PbsStuck,
+            let waiting_pbs =
+                crate::rail_pbs::train_waiting_for_pbs_path(&state.map, &state.vehicles[i]);
+            state.vehicles[i].cur_speed = 0;
+            // Solo acumular/girar en PBS o head-on. Si llamamos al tick con
+            // tráfico genérico, se resetea `wait_counter` al perder head-on un instante.
+            if waiting_pbs || head_on {
+                let reversed = crate::rail_pbs::tick_pbs_wait_and_maybe_reverse(
+                    &state.map,
+                    &mut state.vehicles[i],
+                    pf,
+                    head_on,
                 );
+                if reversed {
+                    let vehicle_id = state.vehicles[i].id;
+                    let order = state.vehicles[i].current_order;
+                    let pos = state.vehicles[i].pos;
+                    state.vehicles[i].sync_order_destination(&state.map);
+                    if head_on {
+                        reroute_head_on_to_alt_platform(state, i);
+                    }
+                    crate::news::push_vehicle_advice_news(
+                        state,
+                        vehicle_id,
+                        order,
+                        pos,
+                        crate::news::VehicleAdviceKind::PbsStuck,
+                    );
+                }
             }
             continue;
         }
@@ -123,6 +140,25 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         let vehicle_running = state.vehicles[i].running;
         let train_accel = state.train_acceleration_model;
         state.vehicles[i].step_with_map_and_accel(Some(&state.map), train_accel);
+        if matches!(
+            vehicle_kind,
+            VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+        ) && state.vehicles[i].pos != prev_pos
+            && state.map.get_kind(state.vehicles[i].pos) == Some(crate::TileKind::RoadDepot)
+            && matches!(
+                state.vehicles[i].road_depot_phase,
+                crate::vehicle::RoadDepotPhase::None
+            )
+        {
+            let mouth =
+                crate::depot::road_depot_mouth_dir(&state.map, state.vehicles[i].pos).unwrap_or(0);
+            let direction = crate::road_movement::road_depot_entry_direction(mouth);
+            state.vehicles[i].road_depot_phase = crate::vehicle::RoadDepotPhase::Entering {
+                direction,
+                progress: 0,
+            };
+            state.vehicles[i].cur_speed = 0;
+        }
         if vehicle_kind == VehicleKind::Train {
             crate::train_consist::consist_changed(&mut state.vehicles, vehicle_id);
         }
@@ -166,6 +202,100 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         update_vehicle_running_sounds(state, i, tick);
         if had_force && vehicle_kind == VehicleKind::Train {
             state.vehicles[i].force_proceed = false;
+        }
+    }
+}
+
+/// Cruce de la boca de un depósito road. El vehículo queda oculto mientras
+/// está dentro y aparece recién al iniciar el frame de salida.
+fn tick_road_depot_movement(state: &mut GameState, i: usize) -> bool {
+    use crate::VehicleKind;
+    use crate::road_movement::{
+        ROAD_DEPOT_EXIT_START, ROAD_DEPOT_PROGRESS_STEP, road_depot_exit_direction,
+    };
+    use crate::vehicle::RoadDepotPhase;
+
+    if !matches!(
+        state.vehicles[i].kind,
+        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+    ) {
+        return false;
+    }
+    let phase = state.vehicles[i].road_depot_phase;
+    let depot = state.vehicles[i].pos;
+    match phase {
+        RoadDepotPhase::None => false,
+        RoadDepotPhase::Entering {
+            direction,
+            progress,
+        } => {
+            let next = progress.saturating_add(ROAD_DEPOT_PROGRESS_STEP);
+            if next >= crate::road_movement::ROAD_DEPOT_ENTRY_STOP {
+                state.vehicles[i].road_depot_phase = RoadDepotPhase::InDepot;
+                state.vehicles[i].progress = 0;
+                state.vehicles[i].cur_speed = 0;
+                state.vehicles[i].running = false;
+            } else {
+                state.vehicles[i].road_depot_phase = RoadDepotPhase::Entering {
+                    direction,
+                    progress: next,
+                };
+                state.vehicles[i].progress = next;
+            }
+            true
+        }
+        RoadDepotPhase::InDepot => {
+            if !state.vehicles[i].running {
+                return true;
+            }
+            let Some(exit) = crate::depot::road_depot_entrance_tile(&state.map, depot) else {
+                return true;
+            };
+            let blocked = state.vehicles.iter().enumerate().any(|(other_i, other)| {
+                other_i != i
+                    && matches!(
+                        other.kind,
+                        VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+                    )
+                    && other.pos == exit
+                    && !matches!(other.road_depot_phase, RoadDepotPhase::InDepot)
+            });
+            if blocked {
+                state.vehicles[i].cur_speed = 0;
+                return true;
+            }
+            let Some(mouth) = crate::depot::road_depot_mouth_dir(&state.map, depot) else {
+                return true;
+            };
+            let direction = road_depot_exit_direction(mouth);
+            state.vehicles[i].direction = direction;
+            state.vehicles[i].progress = ROAD_DEPOT_EXIT_START;
+            state.vehicles[i].road_depot_phase = RoadDepotPhase::Exiting {
+                direction,
+                progress: ROAD_DEPOT_EXIT_START,
+            };
+            true
+        }
+        RoadDepotPhase::Exiting {
+            direction,
+            progress,
+        } => {
+            let next = progress.saturating_add(ROAD_DEPOT_PROGRESS_STEP);
+            state.vehicles[i].progress = next;
+            if next == u8::MAX {
+                if let Some(exit) = crate::depot::road_depot_entrance_tile(&state.map, depot) {
+                    state.vehicles[i].pos = exit;
+                    state.vehicles[i].origin = exit;
+                }
+                state.vehicles[i].road_depot_phase = RoadDepotPhase::None;
+                state.vehicles[i].progress = 0;
+            } else {
+                state.vehicles[i].road_depot_phase = RoadDepotPhase::Exiting {
+                    direction,
+                    progress: next,
+                };
+            }
+            true
         }
     }
 }
@@ -231,5 +361,41 @@ fn update_vehicle_running_sounds(state: &mut GameState, i: usize, tick: u64) {
                     VehicleRunningPhase::Stopped16
                 },
             });
+    }
+}
+
+/// Tras un reverse por head-on, cambia el destino a otro andén de la misma estación
+/// si hay ruta, para no volver a encararse en la misma vía.
+fn reroute_head_on_to_alt_platform(state: &mut GameState, vehicle_idx: usize) {
+    let Some(crate::vehicle::VehicleOrder::Station { station, .. }) =
+        state.vehicles[vehicle_idx].current_order_ref().copied()
+    else {
+        return;
+    };
+    let from = state.vehicles[vehicle_idx].pos;
+    let current_dest = state.vehicles[vehicle_idx].dest;
+    let engine_id = state.vehicles[vehicle_idx].engine_id;
+    let wormholes = crate::pathfinder::TunnelWormholes::from_jgr_records(
+        &state.map,
+        &state.jgr_tunnels_from_footer,
+    );
+    let wh = if wormholes.is_empty() {
+        None
+    } else {
+        Some(&wormholes)
+    };
+    let candidates = crate::station::rail_station_stop_candidates(&state.map, station, from);
+    for alt in candidates {
+        if alt == current_dest {
+            continue;
+        }
+        if let Some(path) =
+            crate::pathfinder::find_rail_path_for_engine(&state.map, from, alt, wh, engine_id)
+        {
+            state.vehicles[vehicle_idx].dest = alt;
+            state.vehicles[vehicle_idx].path = path.into_iter().collect();
+            state.vehicles[vehicle_idx].no_network_route_to_order = false;
+            return;
+        }
     }
 }

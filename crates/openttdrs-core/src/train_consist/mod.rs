@@ -4,11 +4,14 @@
 //! lleva órdenes y pathfinding; los vagones siguen la posición de la cabeza
 //! con offset por longitud acumulada.
 
+mod controller;
 mod couple;
 mod metrics;
 mod newgrf_vars;
+mod pose;
 mod topology;
 
+pub use controller::propagate_consist_unit_poses;
 pub use couple::{
     attach_wagon, attach_wagon_chain, detach_unit, detach_unit_keep_tail, sell_chain_ids,
 };
@@ -16,6 +19,7 @@ pub use metrics::{
     consist_capacity, consist_occupied_tiles, consist_power_hp, consist_tile_span, consist_weight_t,
 };
 pub use newgrf_vars::{action2_eval_ctx_for_unit, cargo_class_bits, cargo_type_a_id};
+pub use pose::{TrainUnitPose, consist_unit_poses};
 pub use topology::{
     consist_changed, consist_head_id, consist_unit_ids, engine_is_train_engine, engine_is_wagon,
     same_consist,

@@ -46,10 +46,14 @@ pub enum Command {
     ConvertRail(TileCoord, u8),
     /// Coloca señal ferroviaria; `face` es `DiagDir` (0=NE..3=NW).
     /// `fract_x`/`fract_y` (0–255) eligen carril en teselas HORZ/VERT como en `OpenTTD`.
-    /// `sig_type`: `SIGTYPE_BLOCK`, `SIGTYPE_PATH` o `SIGTYPE_PATH_ONEWAY`.
+    /// Coloca señal usando la variante predeterminada para el año de juego.
     PlaceRailSignal(TileCoord, u8, u8, u8, u8),
+    /// Coloca señal con una variante explícita: 0=eléctrica, 1=semáforo.
+    PlaceRailSignalWithVariant(TileCoord, u8, u8, u8, u8, u8),
     /// Cicla el tipo de señal existente (Ctrl+clic en `OpenTTD`).
     CycleRailSignalType(TileCoord, u8, u8),
+    /// Alterna la variante eléctrica / semáforo de una señal existente.
+    CycleRailSignalVariant(TileCoord, u8, u8),
     /// Quita la señal del carril bajo el cursor sin demoler la vía.
     /// `fract_x`/`fract_y` eligen carril en teselas HORZ/VERT.
     RemoveRailSignal(TileCoord, u8, u8),

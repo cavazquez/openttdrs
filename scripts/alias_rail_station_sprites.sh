@@ -20,6 +20,10 @@ pairs=(
   "rail_roof_1.png:1080"
   "rail_roof_2.png:1081"
   "rail_roof_3.png:1082"
+  "rail_roof_4.png:1083"
+  "rail_roof_5.png:1084"
+  "rail_roof_6.png:1085"
+  "rail_roof_7.png:1086"
 )
 for pair in "${pairs[@]}"; do
   src="${pair%%:*}"

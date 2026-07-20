@@ -331,7 +331,14 @@ pub(crate) fn spawn_industry_tile(
                     0.45,
                 );
             } else if let Some(img) = assets.industries.get(&s.ground_sprite_id) {
-                let mut sprite = if industry_gfx_uses_random_colour(gfx) {
+                // Acería: metal fundido está en la capa ground (ciclo `oil_refinery`).
+                let ground_fire = industry_gfx_uses_refinery_fire_anim(gfx, m1)
+                    && assets
+                        .refinery_fire_frames
+                        .contains_key(&s.ground_sprite_id);
+                let mut sprite = if ground_fire {
+                    assets.refinery_fire_frames[&s.ground_sprite_id][0].sprite()
+                } else if industry_gfx_uses_random_colour(gfx) {
                     sprite_from_atlas_or_industry_palette(
                         company,
                         images,
@@ -344,12 +351,17 @@ pub(crate) fn spawn_industry_tile(
                 };
                 sprite.color = with_to_alpha(sprite.color, TransparencyOption::Industries);
                 let pos_g = overlay_at(s.ground_xrel, s.ground_yrel, s.ground_w, s.ground_h, 0.45);
-                commands.spawn((
+                let mut entity = commands.spawn((
                     MapVisualLayer,
                     chunk,
                     sprite,
                     Transform::from_translation(pos_g),
                 ));
+                if ground_fire {
+                    entity.insert(crate::render::RefineryFireAnim {
+                        sprite_id: s.ground_sprite_id,
+                    });
+                }
             }
         }
         if s.sprite_id != 0 && s.w > 0.0 && s.h > 0.0 {
@@ -371,11 +383,15 @@ pub(crate) fn spawn_industry_tile(
                     && assets.refinery_fire_frames.contains_key(&s.sprite_id);
                 let fizzy_drink = industry_gfx_uses_fizzy_drink_anim(gfx, m1)
                     && assets.fizzy_drink_frames.contains_key(&s.sprite_id);
+                // Fuego: nunca recolorear con paleta de compañía el PNG base
+                // (congela la llama); usar frames `oil_refinery` o el atlas.
                 let mut sprite = if refinery_fire {
                     assets.refinery_fire_frames[&s.sprite_id][0].sprite()
                 } else if fizzy_drink {
                     assets.fizzy_drink_frames[&s.sprite_id][0].sprite()
-                } else if industry_gfx_uses_random_colour(gfx) {
+                } else if industry_gfx_uses_random_colour(gfx)
+                    && !industry_gfx_uses_refinery_fire_anim(gfx, m1)
+                {
                     sprite_from_atlas_or_industry_palette(
                         company,
                         images,
@@ -514,9 +530,10 @@ pub(crate) fn spawn_generic_land_tile(
             return;
         }
         let tint = sprite_color(TransparencyOption::Structures);
+        // Offsets NFO OpenGFX2 32ez (`ogfx21_base_32ez.nfo` sprites 2601/2602).
         let (obj_img, obj_xrel, obj_yrel, obj_w, obj_h) = match tile_m5 {
-            OBJECT_TYPE_TRANSMITTER => (Some(assets.transmitter.clone()), -26.0, -71.0, 55.0, 77.0),
-            OBJECT_TYPE_LIGHTHOUSE => (Some(assets.lighthouse.clone()), -22.0, -48.0, 41.0, 61.0),
+            OBJECT_TYPE_TRANSMITTER => (Some(assets.transmitter.clone()), -26.0, -80.0, 54.0, 94.0),
+            OBJECT_TYPE_LIGHTHOUSE => (Some(assets.lighthouse.clone()), -9.0, -52.0, 21.0, 64.0),
             OBJECT_TYPE_OWNED_LAND => (Some(assets.bought_land.clone()), -16.0, -40.0, 32.0, 48.0),
             _ => (None, 0.0, 0.0, 0.0, 0.0),
         };

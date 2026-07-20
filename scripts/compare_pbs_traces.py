@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compara el contrato PBS v1 de OpenTTD y openttdrs por primera divergencia."""
+"""Compara el contrato PBS v1/v2 de OpenTTD y openttdrs por primera divergencia."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ def read_trace(path: Path) -> tuple[dict[str, object], list[dict[str, object]]]:
     if not rows or rows[0].get("kind") != "metadata":
         fail(f"{path}: falta metadata")
     metadata = rows[0]
-    if metadata.get("schema_version") != 1:
+    if metadata.get("schema_version") not in {1, 2}:
         fail(f"{path}: schema PBS no soportado")
     samples = rows[1:]
     if any(row.get("kind") not in {"initial", "tick"} for row in samples):
@@ -43,6 +43,33 @@ def comparable_trains(row: dict[str, object]) -> list[tuple[int, int, int, int, 
         )
         for train in trains
     )
+
+
+def comparable_units(row: dict[str, object]) -> list[list[tuple[int, int, int, int, int]]] | None:
+    """Unidades por tren (ordenadas). None si el oráculo no declara units (v1)."""
+    trains = row.get("trains", [])
+    assert isinstance(trains, list)
+    if not any(isinstance(train, dict) and "units" in train for train in trains):
+        return None
+    per_train: list[list[tuple[int, int, int, int, int]]] = []
+    for train in trains:
+        assert isinstance(train, dict)
+        units = train.get("units", [])
+        assert isinstance(units, list)
+        per_train.append(
+            sorted(
+                (
+                    unit["index"],
+                    unit["x"],
+                    unit["y"],
+                    unit["rail_pixel"],
+                    unit["direction"],
+                )
+                for unit in units
+            )
+        )
+    per_train.sort()
+    return per_train
 
 
 def comparable_reservations(row: dict[str, object]) -> list[tuple[int, int, int]]:
@@ -80,6 +107,13 @@ def main() -> None:
         actual_trains = comparable_trains(actual_row)
         if expected_trains != actual_trains:
             fail(f"{frame_label}: trenes OpenTTD={expected_trains} openttdrs={actual_trains}")
+        expected_units = comparable_units(expected_row)
+        if expected_units is not None:
+            actual_units = comparable_units(actual_row)
+            if actual_units is None:
+                fail(f"{frame_label}: el candidato no declara units[] (schema v2)")
+            if expected_units != actual_units:
+                fail(f"{frame_label}: units OpenTTD={expected_units} openttdrs={actual_units}")
         expected_reservations = comparable_reservations(expected_row)
         actual_reservations = comparable_reservations(actual_row)
         if expected_reservations != actual_reservations:

@@ -12,6 +12,22 @@ use crate::rail_signals::{
 use crate::vehicle::{Vehicle, VehicleKind, VehicleOrder};
 use crate::{GameState, PathNetwork, find_path};
 
+/// Añade un vagón de carga al tren de un escenario fijo.
+#[allow(clippy::expect_used)] // enlace inválido = bug del escenario
+fn attach_cargo_wagon(state: &mut GameState, head_id: u32, engine_id: u16) {
+    let head = state
+        .vehicles
+        .iter()
+        .find(|v| v.id == head_id)
+        .expect("locomotora de escenario");
+    let wagon_id = 10_000_u32.saturating_add(head_id);
+    let mut wagon = Vehicle::new(wagon_id, VehicleKind::Train, head.pos, head.dest);
+    wagon.engine_id = Some(engine_id);
+    state.vehicles.push(wagon);
+    crate::train_consist::attach_wagon(&mut state.vehicles, head_id, wagon_id)
+        .expect("enganchar vagón de escenario");
+}
+
 /// Id del tren del escenario `train_line`.
 pub const TRAIN_LINE_VEHICLE_ID: u32 = 1;
 /// Plataforma de la estación A (carga; al oeste de la línea).
@@ -138,6 +154,9 @@ pub fn build_train_line() -> GameState {
     }
     // Escenario: ya en servicio (sin espera de 37 ticks al spawnear).
     train.depot_leave_cleared = true;
+    // Escenario legado de una unidad abstracta: no representa una locomotora
+    // comprable y conserva la capacidad sintética usada por las trazas.
+    train.engine_id = None;
     state.vehicles.push(train);
 
     state
@@ -243,6 +262,11 @@ fn build_train_supply_core() -> GameState {
     }
     train.depot_leave_cleared = true;
     state.vehicles.push(train);
+    attach_cargo_wagon(
+        &mut state,
+        TRAIN_SUPPLY_VEHICLE_ID,
+        crate::ENGINE_WAGON_COAL,
+    );
 
     state
 }
@@ -390,6 +414,7 @@ fn push_dual_train(state: &mut GameState, id: u32, orders: Vec<VehicleOrder>, ru
         train.path = VecDeque::from(path);
     }
     state.vehicles.push(train);
+    attach_cargo_wagon(state, id, crate::ENGINE_WAGON_COAL);
 }
 
 /// Señales de un solo sentido en un carril recto (sin `make_signal_bidirectional_x`).
@@ -731,6 +756,7 @@ fn build_rail_signals_demo_track(state: &mut GameState) {
 
     state.vehicles.push(lead);
     state.vehicles.push(blocker2);
+    attach_cargo_wagon(state, RAIL_SIGNALS_DEMO_LEAD_ID, crate::ENGINE_WAGON_GOODS);
 }
 
 #[allow(clippy::expect_used)]

@@ -255,7 +255,7 @@ fn vehicle_delivers_when_inside_station_coverage() {
 }
 
 #[test]
-fn sim_stats_count_pickup_and_delivery() {
+fn sim_stats_do_not_count_freight_transfer_as_delivery() {
     let mut s = GameState::new(8, 8);
     let ipos = TileCoord::new(0, 0);
     let spos = TileCoord::new(1, 0);
@@ -276,6 +276,15 @@ fn sim_stats_count_pickup_and_delivery() {
     SimHarness::until_vehicle_cargo(&mut s, 0, 0, 16);
     assert_eq!(s.stats.cargo_deliveries, 1);
     assert!(s.stats.cargo_units_delivered > 0);
+    assert!(
+        !s.news.items.iter().any(|item| {
+            matches!(
+                item.news_type,
+                crate::news::NewsType::CargoDelivered | crate::news::NewsType::FirstCargoDelivered
+            )
+        }),
+        "un trasbordo de carbón no debe publicar una noticia de entrega"
+    );
 }
 
 #[test]
@@ -375,7 +384,7 @@ fn truck_loads_freight_waiting_at_station_hub() {
 }
 
 #[test]
-fn train_loads_freight_from_rail_station_waiting_cargo() {
+fn locomotive_without_wagon_does_not_load_station_freight() {
     let mut s = GameState::new(12, 8);
     let hub = TileCoord::new(3, 2);
     s.stations
@@ -387,11 +396,11 @@ fn train_loads_freight_from_rail_station_waiting_cargo() {
         hub,
         TileCoord::new(7, 2),
     ));
-
-    SimHarness::until_vehicle_cargo(&mut s, 0, 9, 8);
-
-    assert_eq!(s.vehicles[0].cargo, 9);
-    assert_eq!(s.vehicles[0].cargo_type, Some(CargoType::Goods));
+    for _ in 0..16 {
+        s.step();
+    }
+    assert_eq!(s.vehicles[0].cargo, 0);
+    assert_eq!(s.stations[0].cargo_stock.goods, 9);
 }
 
 #[test]

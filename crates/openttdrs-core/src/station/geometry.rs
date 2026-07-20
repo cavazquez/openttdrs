@@ -150,22 +150,50 @@ pub fn rail_station_stop_tile_for_approach(
     station_anchor: TileCoord,
     from: TileCoord,
 ) -> Option<TileCoord> {
+    rail_station_stop_candidates(map, station_anchor, from)
+        .into_iter()
+        .next()
+}
+
+/// Paradas candidatas: primero el andén alineado con `from`, luego el resto
+/// (middle de cada vía). Sirve para reintentar YAPF si la vía preferida no
+/// tiene ruta (red dual / PBS one-way).
+#[must_use]
+pub fn rail_station_stop_candidates(
+    map: &Map,
+    station_anchor: TileCoord,
+    from: TileCoord,
+) -> Vec<TileCoord> {
     let platforms = rail_station_platform_tiles(map, station_anchor);
     if platforms.is_empty() {
-        return None;
+        return Vec::new();
     }
     let axis_y = map.get(platforms[0]).is_some_and(|t| t.m5 & 1 != 0);
     let track_key = |c: TileCoord| if axis_y { c.x } else { c.y };
     let want = track_key(from);
-    let mut on_track: Vec<TileCoord> = platforms
-        .into_iter()
-        .filter(|c| track_key(*c) == want)
-        .collect();
-    if on_track.is_empty() {
-        return rail_station_stop_tile(map, station_anchor);
+    let mut by_track: std::collections::BTreeMap<i32, Vec<TileCoord>> =
+        std::collections::BTreeMap::new();
+    for c in platforms {
+        by_track.entry(track_key(c)).or_default().push(c);
     }
-    on_track.sort_by(|a, b| if axis_y { a.y.cmp(&b.y) } else { a.x.cmp(&b.x) });
-    Some(on_track[on_track.len() / 2])
+    let middle = |tiles: &mut Vec<TileCoord>| -> TileCoord {
+        tiles.sort_by(|a, b| if axis_y { a.y.cmp(&b.y) } else { a.x.cmp(&b.x) });
+        tiles[tiles.len() / 2]
+    };
+    let mut out = Vec::with_capacity(by_track.len());
+    if let Some(tiles) = by_track.remove(&want) {
+        let mut tiles = tiles;
+        out.push(middle(&mut tiles));
+    }
+    for (_, mut tiles) in by_track {
+        out.push(middle(&mut tiles));
+    }
+    if out.is_empty()
+        && let Some(fallback) = rail_station_stop_tile(map, station_anchor)
+    {
+        out.push(fallback);
+    }
+    out
 }
 
 /// `true` si el tren está sobre una plataforma rail de alguna estación del mapa.

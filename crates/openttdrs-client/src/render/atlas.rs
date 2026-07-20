@@ -166,6 +166,17 @@ mod tests {
     }
 
     #[test]
+    fn refinery_fire_anim_frames_resolve() {
+        let (atlas, _layouts) = test_atlas();
+        for &id in &crate::sprites::REFINERY_FIRE_SPRITE_IDS {
+            let frames: Vec<_> = (0..7)
+                .filter_map(|f| atlas.try_get(&format!("industry_{id}_fire_anim_{f:02}.png")))
+                .collect();
+            assert_eq!(frames.len(), 7, "sprite {id} fire frames");
+        }
+    }
+
+    #[test]
     fn known_tiles_resolve() {
         let (atlas, _layouts) = test_atlas();
         for name in ["grass.png", "water.png", "rail_1011.png"] {

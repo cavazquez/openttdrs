@@ -618,7 +618,11 @@ fn train_line_layout_is_consistent() {
         Some(TileCoord::new(12, 9)),
         "acceso a la estación B (boca al norte)"
     );
-    assert_eq!(state.vehicles.len(), 1);
+    assert_eq!(
+        state.vehicles.len(),
+        1,
+        "tren abstracto del escenario legado"
+    );
     assert_eq!(state.stations.len(), 2);
     assert_eq!(state.vehicles[0].kind, VehicleKind::Train);
     assert!(
@@ -665,7 +669,7 @@ fn train_supply_has_mine_factory_and_signals() {
     use crate::station;
 
     let state = build_train_supply();
-    assert_eq!(state.vehicles.len(), 1);
+    assert_eq!(state.vehicles.len(), 2, "locomotora más vagón carbonero");
     assert_eq!(state.industries.len(), 2);
     assert_eq!(state.industries[0].kind, IndustryKind::CoalMine);
     assert_eq!(state.industries[1].kind, IndustryKind::Factory);
@@ -702,11 +706,11 @@ fn train_supply_has_mine_factory_and_signals() {
 #[test]
 fn train_supply_signal_snapshot_has_blocker_on_signal() {
     let state = build_train_supply_signal_snapshot();
-    assert_eq!(state.vehicles.len(), 2);
+    assert_eq!(state.vehicles.len(), 3, "locomotora, vagón y bloqueador");
     assert_eq!(state.vehicles[0].pos, TRAIN_SUPPLY_WAIT_SIGNAL);
     assert_eq!(state.vehicles[0].cargo, 20);
-    assert_eq!(state.vehicles[1].id, TRAIN_SUPPLY_BLOCKER_ID);
-    assert_eq!(state.vehicles[1].pos, TRAIN_SUPPLY_BLOCK_TILE);
+    assert_eq!(state.vehicles[2].id, TRAIN_SUPPLY_BLOCKER_ID);
+    assert_eq!(state.vehicles[2].pos, TRAIN_SUPPLY_BLOCK_TILE);
 }
 
 #[test]
@@ -716,7 +720,7 @@ fn train_supply_dual_has_two_tracks_signals_and_paths() {
     use crate::station::{self, rail_station_stop_tile};
 
     let state = build_train_supply_dual();
-    assert_eq!(state.vehicles.len(), 2);
+    assert_eq!(state.vehicles.len(), 4, "dos locomotoras con sus vagones");
     assert_eq!(state.stations.len(), 2);
     assert_eq!(
         state.map.get_kind(TRAIN_DUAL_DEPOT),
@@ -1069,8 +1073,8 @@ fn train_supply_dual_follower_waits_at_signal_behind_leader() {
 fn train_supply_dual_round_trip_returns_to_a() {
     let mut state = build_train_supply_dual();
     let mut used_return_track = false;
-    // Modelo físico rail (16 px/tesela × 2 loco/tick) necesita más ticks por ciclo.
-    for _ in 0..48_000 {
+    // Consist multi-vagón + física rail (16 px/tesela × 2 loco/tick): ciclo A→B→A más largo.
+    for _ in 0..120_000 {
         state.step();
         let train = state
             .vehicles
@@ -1161,8 +1165,8 @@ fn rail_signals_mixed_demo_has_presignal_station_and_two_way() {
     assert_eq!(state.stations.len(), 2);
     assert_eq!(
         state.vehicles.len(),
-        2,
-        "líder activo + bloqueador en plataforma 2"
+        3,
+        "líder con vagón de carga + bloqueador en plataforma 2"
     );
     assert_eq!(state.industries.len(), 2);
     assert!(

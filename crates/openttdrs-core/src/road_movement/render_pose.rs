@@ -4,6 +4,7 @@ use super::bay::{bay_render_direction, bay_subtile, parked_inside_bay};
 use super::curves::{
     depart_u_turn_curve, sample_curve, straight_subtile, train_straight_subtile, turn_curve,
 };
+use super::depot::{road_depot_direction, road_depot_subtile};
 use super::pose::{VehiclePose, movement_target_at};
 use crate::depot::rail_depot_mouth_dir;
 use crate::map::{Map, TileKind};
@@ -53,6 +54,9 @@ pub fn vehicle_subtile_at_with_map(
 ) -> (f32, f32) {
     if matches!(v.kind, VehicleKind::Train) {
         return train_subtile_with_map(v, pose, map);
+    }
+    if let Some(subtile) = road_depot_subtile(v.road_depot_phase) {
+        return subtile;
     }
     if parked_inside_bay(v, pose.pos)
         && let Some(subtile) = bay_subtile(v, pose)
@@ -166,6 +170,9 @@ pub fn vehicle_render_direction_at_with_map(
         && let Some(mouth) = rail_depot_mouth_dir(map, pose.pos)
     {
         return train_depot_facing(mouth);
+    }
+    if let Some(direction) = road_depot_direction(v.road_depot_phase) {
+        return direction;
     }
     if matches!(v.kind, VehicleKind::Train) {
         if let Some(map) = map {

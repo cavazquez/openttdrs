@@ -1338,6 +1338,8 @@ python3 "$(dirname "$0")/gen_rail_waypoint_sprites.py" || true
 bash "$(dirname "$0")/alias_rail_station_sprites.sh" || true
 # Señales: reexporta 1275–1699 eligiendo el mejor recorte entre NFO base y extra.
 python3 "$(dirname "$0")/gen_rail_signal_sprites.py" || true
+# Banco Action5 tipo 04 (presignals/PBS) → rail_5088..5327 (`SPR_SIGNALS_BASE`).
+python3 "$(dirname "$0")/gen_rail_signal_action5_sprites.py" || true
 python3 "$(dirname "$0")/gen_rail_station_draw_data.py" || true
 # Sprites de puentes por tipo (tablero + pilares; ver gen_bridge_sprites.py).
 python3 "$(dirname "$0")/gen_bridge_sprites.py" || true

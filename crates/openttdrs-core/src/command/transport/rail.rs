@@ -675,6 +675,7 @@ pub(in crate::command) fn place_rail_signal(
     fract_x: u8,
     fract_y: u8,
     sig_type: u8,
+    variant: u8,
 ) -> Result<(), CommandError> {
     require_tile_owned_by_active(state, c)?;
     let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
@@ -684,7 +685,11 @@ pub(in crate::command) fn place_rail_signal(
     let face = crate::rail_signals::signal_facing_for_orientation(track, orientation);
     check_place_rail_signal(&state.map, c, track, face)?;
     let year = crate::rail_signals::calendar_year_at_tick(state.tick);
-    let variant = crate::rail_signals::default_signal_variant(year);
+    let variant = if variant <= 1 {
+        variant
+    } else {
+        crate::rail_signals::default_signal_variant(year)
+    };
     let placement_sig_type = match sig_type {
         crate::rail_signals::SIGTYPE_BLOCK
         | crate::rail_signals::SIGTYPE_ENTRY
@@ -750,6 +755,34 @@ pub(in crate::command) fn cycle_rail_signal_type(
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
     crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, c);
+    Ok(())
+}
+
+/// Alterna la variante visual de una señal existente sin cambiar su lógica.
+pub(in crate::command) fn cycle_rail_signal_variant(
+    state: &mut GameState,
+    c: TileCoord,
+    fract_x: u8,
+    fract_y: u8,
+) -> Result<(), CommandError> {
+    require_tile_owned_by_active(state, c)?;
+    let tile = state.map.get(c).ok_or(CommandError::OutOfBounds)?;
+    if !rail_tile_is_signals(tile.m5) {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
+    let tb = tile.m5 & 0x3F;
+    let track = crate::rail_signals::resolve_signal_track(tb, fract_x, fract_y)
+        .ok_or(CommandError::CannotPlaceSignalOnTrack)?;
+    let present = crate::rail_signals::rail_signal_present_mask(tile.m3);
+    if present & crate::rail_signals::signal_on_track_mask(track) == 0 {
+        return Err(CommandError::CannotPlaceSignalOnTrack);
+    }
+    let mut out = tile;
+    out.m2 = crate::rail_signals::cycle_signal_variant_m2(out.m2, track);
+    state
+        .map
+        .set_tile(c, out)
+        .map_err(|_| CommandError::OutOfBounds)?;
     Ok(())
 }
 

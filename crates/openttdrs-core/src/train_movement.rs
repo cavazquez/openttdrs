@@ -74,6 +74,31 @@ pub const FRACTCOORDS_BEHIND: [(u8, u8); 4] = [(15, 8), (8, 0), (0, 8), (8, 15)]
 /// `_deltacoord_leaveoffset` NE, SE, SW, NW (`rail_cmd.cpp:2986`).
 pub const DELTACOORD_LEAVE_OFFSET: [(i8, i8); 4] = [(-1, 0), (0, 1), (1, 0), (0, -1)];
 
+/// Distancia centro-a-centro entre dos unidades consecutivas del consist.
+///
+/// Port de `Train::CalcNextVehicleOffset`: conserva el redondeo asimétrico
+/// durante conducción inversa para longitudes impares.
+#[must_use]
+#[allow(clippy::manual_midpoint)] // fórmula exacta de OpenTTD con redondeo direccional
+pub const fn calc_next_vehicle_offset(
+    self_length: u8,
+    next_length: u8,
+    driving_backwards: bool,
+) -> u16 {
+    let rounding = if driving_backwards { 1 } else { 0 };
+    ((self_length as u16 + rounding) / 2) + ((next_length as u16 + 1 - rounding) / 2)
+}
+
+/// Avanza un píxel ferroviario dentro de una tesela según la dirección.
+///
+/// La entrada/snap de tesela sigue siendo responsabilidad del controlador de
+/// vía, que conoce el `track` elegido por la cabeza.
+#[must_use]
+pub const fn advance_train_pixel(rail_pixel: u8) -> (u8, bool) {
+    let next = rail_pixel.saturating_add(1);
+    if next >= 16 { (0, true) } else { (next, false) }
+}
+
 /// `_tunnel_visibility_frame` NE, SE, SW, NW (`tunnelbridge_cmd.cpp:1956`).
 pub const TUNNEL_VISIBILITY_FRAME: [u8; 4] = [12, 8, 8, 12];
 

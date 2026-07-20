@@ -70,7 +70,10 @@ use crate::station::{Station, StopKind};
 use crate::town::Town;
 use crate::vehicle::{Vehicle, VehicleKind};
 
-pub use entities::{SavIndustry, SavStation, SavVehicle, SavVehicleKind};
+pub use entities::{
+    SavIndustry, SavStation, SavVehicle, SavVehicleKind, format_generated_station_name,
+    resolve_sav_station_name,
+};
 pub use write::{
     EXPORT_SAVE_VERSION, REQUIRED_EXPORT_CHUNKS, SavContainer, exported_chunk_names, save,
     save_to_bytes, save_to_bytes_with, save_with,
@@ -443,7 +446,7 @@ impl GameState {
         for st in sav.stations {
             let mut station =
                 Station::new_with_kind(st.pos, stop_kind_from_facilities(st.facilities));
-            station.name = st.name;
+            station.name = entities::resolve_sav_station_name(&st, &state.towns);
             state.stations.push(station);
         }
         state.link_graph = sav.link_graph;
@@ -551,6 +554,8 @@ mod tests {
                 pos: crate::TileCoord::new(3, 3),
                 name: Some("Estación Norte".into()),
                 facilities: 0x01,
+                string_id: None,
+                town_id: None,
             }],
             towns: vec![Town {
                 id: 0,

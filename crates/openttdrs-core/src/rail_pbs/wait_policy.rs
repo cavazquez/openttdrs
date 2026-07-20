@@ -3,6 +3,9 @@
 use crate::map::Map;
 use crate::vehicle::{Vehicle, VehicleKind};
 
+/// Espera corta ante deadlock frente-a-frente (sin señal PBS de por medio).
+const HEAD_ON_REVERSE_TIMEOUT_TICKS: u32 = 120;
+
 /// `true` si el tren está detenido ante una path signal sin reserva completa.
 #[must_use]
 pub fn train_waiting_for_pbs_path(map: &Map, vehicle: &Vehicle) -> bool {
@@ -15,14 +18,19 @@ pub fn train_waiting_for_pbs_path(map: &Map, vehicle: &Vehicle) -> bool {
 /// Actualiza `wait_counter` / `pbs_stuck` y, si toca, gira el tren.
 ///
 /// Paridad simplificada de stuck + `wait_for_pbs_path` en `train_cmd.cpp`.
+/// También cubre deadlock de tráfico frente-a-frente (`also_head_on`), que antes
+/// no acumulaba espera porque solo se miraba el bloqueo PBS.
+///
 /// El look-ahead (`TryReserve`) se reintenta según `path_backoff_interval`
 /// en [`crate::rail_pbs::train_reservation::compute_train_reservation_with_settings`]; `255` desactiva look-ahead y giro.
 pub fn tick_pbs_wait_and_maybe_reverse(
     map: &Map,
     vehicle: &mut Vehicle,
     settings: crate::pathfinding_settings::PathfindingSettings,
+    also_head_on: bool,
 ) -> bool {
-    if !train_waiting_for_pbs_path(map, vehicle) {
+    let waiting_pbs = train_waiting_for_pbs_path(map, vehicle);
+    if !waiting_pbs && !also_head_on {
         if vehicle.pbs_stuck || vehicle.wait_counter > 0 {
             vehicle.pbs_stuck = false;
             vehicle.wait_counter = 0;
@@ -41,8 +49,16 @@ pub fn tick_pbs_wait_and_maybe_reverse(
         return false;
     }
 
-    let Some(timeout) = settings.pbs_reverse_timeout_ticks() else {
+    let Some(pbs_timeout) = settings.pbs_reverse_timeout_ticks() else {
         return false;
+    };
+    // Head-on: acortar el timeout PBS (p. ej. 30 días) y desfasar por id.
+    let timeout = if also_head_on {
+        let short =
+            HEAD_ON_REVERSE_TIMEOUT_TICKS.saturating_add((vehicle.id % 8).saturating_mul(15));
+        pbs_timeout.min(short)
+    } else {
+        pbs_timeout
     };
     if vehicle.wait_counter < timeout {
         return false;

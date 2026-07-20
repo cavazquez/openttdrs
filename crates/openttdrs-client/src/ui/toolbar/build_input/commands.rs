@@ -113,12 +113,13 @@ pub(crate) fn command_for_action(
                     }
                 }
             }
-            Some(Command::PlaceRailSignal(
+            Some(Command::PlaceRailSignalWithVariant(
                 pos,
                 station_state.orientation,
                 fx,
                 fy,
                 sig_type,
+                station_state.signal_variant,
             ))
         }
         BuildMenuAction::RailConvert => Some(Command::ConvertRail(pos, current_rail_type.as_u8())),

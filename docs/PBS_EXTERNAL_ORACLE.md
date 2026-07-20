@@ -31,6 +31,20 @@ direction)` de trenes y las reservas `(x, y, track_bits)` por muestra.
 `GetRailReservationTrackBits` en OpenTTD y a la reserva `m2_hi` decodificada
 en openttdrs.
 
+## Contrato JSONL v2
+
+`schema_version: 2` añade `units[]` por cabeza de tren (recorrido `Next()`),
+sin romper fixtures v1: el comparador solo exige unidades cuando el oráculo
+las declara.
+
+Cada unidad exporta `index` (0 = cabeza), tile `x`/`y`, `rail_pixel` (misma
+convención que `rail_pixel_from_openttd_pos` en Rust) y `direction`. La cabeza
+conserva los campos v1 de velocidad/progreso.
+
+```json
+{"kind":"initial","tick":4685,"trains":[{"vehicle":2,"x":46,"y":37,"progress":51,"speed":73,"subspeed":52,"direction":1,"units":[{"index":0,"x":46,"y":37,"rail_pixel":5,"direction":1},{"index":1,"x":47,"y":37,"rail_pixel":13,"direction":1},{"index":2,"x":47,"y":37,"rail_pixel":5,"direction":1}]}],"rail_reservations":[{"x":43,"y":37,"track_bits":1}]}
+```
+
 ## Generación reproducible
 
 1. Obtener e integrar OpenTTD 15.3:
@@ -86,6 +100,24 @@ oráculo de 40 ticks están versionados.
 Contenido: 2 trenes Ginzu A4, 2 estaciones duales, path / path-oneway, curva en
 `(25–26, 8)`, depósito `(24, 9)`. **Paridad cerrada** (`initial` + 40 ticks:
 cinemática y reservas PBS) en `tests/pbs_dual_curve_oracle.rs`.
+
+### Fixture multi-vagón (consist + PBS, schema v2)
+
+- Save: `crates/openttdrs-core/tests/fixtures/train_consist_2wagon_pbs_15_3.sav`
+- Oráculo: `tests/fixtures/parity/train_consist_2wagon_pbs_15_3_openttd.jsonl`
+- Tests: `tests/consist_pbs_openttd_oracle.rs`
+
+Contenido: locomotora Ginzu A4 + 2 Goods Van sobre la recta PBS de
+`train_pbs_15_3`, sin NewGRF. La cola ocupa otra tesela/píxel que la cabeza.
+Regeneración:
+
+```bash
+./scripts/gen_consist_2wagon_fixture.sh 40
+```
+
+El generador engancha vagones en AfterLoad (`OPENTTDRS_FIXTURE_ATTACH_WAGONS`)
+sobre `train_pbs_15_3.sav`, guarda el `.sav` materializado y exporta el JSONL
+desde ese save (sin re-enganchar).
 
 Contrato rail (solo trenes):
 

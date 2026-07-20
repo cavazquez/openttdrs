@@ -66,6 +66,14 @@ Helpers en `rail_map.h`:
 
 En teselas Horz/Vert hay **dos grupos** de tipo/variante: pistas Upper/Left/X/Y usan bits 0–3; Lower/Right usan bits 4–7 (`GetSignalType` / `GetSignalVariant` en `rail_map.h`).
 
+En el cliente, la ventana **Señales** permite elegir explícitamente
+**Eléctrica** o **Semáforo** antes de colocar o arrastrar señales. El cambio
+solo afecta su aspecto: conserva el mismo tipo de señal y lógica PBS. Sobre
+una señal existente, `Ctrl+Shift+clic` alterna la variante sin modificar su
+orientación, tipo o estado rojo/verde. La preferencia
+`semaphore_build_before` define la variante inicial al abrir la herramienta:
+antes de ese año usa semáforos y desde ese año, señales eléctricas.
+
 ### 2.3 `SignalState`
 
 | Valor | Significado en simulación |
@@ -176,7 +184,7 @@ En openttdrs: `resolve_signal_track` en `rail_signals.rs` (misma lógica). Coman
 
 ### 4.3 Sprites
 
-`DrawSingleSignal` → IDs OpenGFX; bases `1275` (block eléctrico clásico) y alternativa (`1352` / `OPENTTDRS_SIGNAL_ALT_BASE`) para presignals y PBS. Cliente: `signal_sprite_id`, `collect_signal_sprite_ids`, precarga en `rail_sprite_ids_for_preload` (8 IDs PBS sin PNG en OpenGFX — ver `archive/SP3_AUDIT_SUMMARY.md`).
+`DrawSingleSignal` → IDs OpenGFX; bases `1275` (block eléctrico clásico) y `SPR_SIGNALS_BASE - 16` = `5072` (`OPENTTDRS_SIGNAL_ALT_BASE`) para presignals/PBS (PNG Action5 `rail_5088..5327`). Cliente: `signal_sprite_id`, `collect_signal_sprite_ids`, precarga en `rail_sprite_ids_for_preload`.
 
 ---
 

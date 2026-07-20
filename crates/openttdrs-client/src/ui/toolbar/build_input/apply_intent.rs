@@ -275,23 +275,36 @@ pub(crate) fn apply_intent(intent: MapClickIntent, ctx: &mut IntentApplyContext,
             tile_fract,
             ctrl_held,
             cycle_signal,
+            cycle_signal_variant,
         } => {
             let mut sig_type = ctx.station_state.signal_type;
             let cycle = cycle_signal;
             if ctrl_held && action == BuildMenuAction::RailSignals && !cycle_signal {
                 sig_type = openttdrs_core::next_placeable_signal_type(sig_type);
             }
-            if let Some(cmd) = command_for_action(
-                action,
-                pos,
-                &ctx.station_state,
-                rail_lane_bit,
-                Some(&ctx.sim.state.map),
-                Some(tile_fract),
-                sig_type,
-                cycle,
-                ctx.sim.state.current_rail_type,
-            ) {
+            let signal_variant_cmd =
+                if cycle_signal_variant && action == BuildMenuAction::RailSignals {
+                    Some(openttdrs_core::Command::CycleRailSignalVariant(
+                        pos,
+                        tile_fract.0,
+                        tile_fract.1,
+                    ))
+                } else {
+                    None
+                };
+            if let Some(cmd) = signal_variant_cmd.or_else(|| {
+                command_for_action(
+                    action,
+                    pos,
+                    &ctx.station_state,
+                    rail_lane_bit,
+                    Some(&ctx.sim.state.map),
+                    Some(tile_fract),
+                    sig_type,
+                    cycle,
+                    ctx.sim.state.current_rail_type,
+                )
+            }) {
                 if let Err(e) = crate::network::apply_player_command(&mut ctx.sim.state, &cmd) {
                     push_build_command_error(&mut ctx.hud_feedback, e, time_secs);
                 } else {

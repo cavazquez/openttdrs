@@ -56,6 +56,9 @@ mod coherence_tests {
         assert_ne!(left, right, "andenes paralelos no deben compartir parada");
         assert_eq!(left.map(|c| c.x), Some(4));
         assert_eq!(right.map(|c| c.x), Some(5));
+        let cands = rail_station_stop_candidates(&state.map, anchor, TileCoord::new(4, 8));
+        assert_eq!(cands.first().map(|c| c.x), Some(4));
+        assert!(cands.iter().any(|c| c.x == 5), "incluye andén paralelo");
     }
 
     #[test]

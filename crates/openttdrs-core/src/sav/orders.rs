@@ -293,6 +293,8 @@ mod tests {
                 is_waypoint: false,
                 facilities: 1,
                 name: None,
+                string_id: None,
+                town_id: None,
             },
         );
         let orders = vehicle_orders_from_sav(
@@ -317,6 +319,8 @@ mod tests {
                 is_waypoint: false,
                 facilities: 1,
                 name: None,
+                string_id: None,
+                town_id: None,
             },
         );
         let full = stop_flags_from_sav(OTTD_LOAD_FULL << 4);

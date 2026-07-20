@@ -270,10 +270,16 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             transport::convert_rail(state, *c, crate::rail_type::RailType::from_u8(*to))
         }
         Command::PlaceRailSignal(c, face, fx, fy, sig_type) => {
-            transport::place_rail_signal(state, *c, *face, *fx, *fy, *sig_type)
+            transport::place_rail_signal(state, *c, *face, *fx, *fy, *sig_type, u8::MAX)
+        }
+        Command::PlaceRailSignalWithVariant(c, face, fx, fy, sig_type, variant) => {
+            transport::place_rail_signal(state, *c, *face, *fx, *fy, *sig_type, *variant)
         }
         Command::CycleRailSignalType(c, fx, fy) => {
             transport::cycle_rail_signal_type(state, *c, *fx, *fy)
+        }
+        Command::CycleRailSignalVariant(c, fx, fy) => {
+            transport::cycle_rail_signal_variant(state, *c, *fx, *fy)
         }
         Command::RemoveRailSignal(c, fx, fy) => transport::remove_rail_signal(state, *c, *fx, *fy),
         Command::PlaceRoadDepot(c) => transport::place_road_depot_dir(state, *c, 0),

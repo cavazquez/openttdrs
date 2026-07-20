@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::settings::ClientPreferences;
 use crate::state::{EditorSession, OrderPickState};
 use crate::ui::toolbar::build_input::cancel_placement;
 use crate::ui::toolbar::order_panel::start_order_destination_pick;
@@ -8,13 +9,15 @@ use crate::ui::toolbar::{
 };
 
 /// El boton del menu selecciona la herramienta activa para aplicar en el mapa.
-#[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
 pub(crate) fn build_menu_interaction(
     editor: Res<EditorSession>,
     mut q: Query<(&Interaction, &BuildMenuAction), (Changed<Interaction>, With<Button>)>,
     mut tool_state: ResMut<UiToolState>,
     mut drag_state: ResMut<DragBuildState>,
     mut station_state: ResMut<crate::ui::toolbar::StationBuildState>,
+    prefs: Option<Res<ClientPreferences>>,
+    sim: Option<Res<crate::state::SimWorld>>,
     order_state: Res<OrderEditState>,
     mut next_pick: ResMut<NextState<OrderPickState>>,
 ) {
@@ -27,6 +30,13 @@ pub(crate) fn build_menu_interaction(
         }
         tool_state.active_tool = Some(*action);
         cancel_placement(&mut drag_state);
+        if *action == BuildMenuAction::RailSignals
+            && let (Some(prefs), Some(sim)) = (prefs.as_deref(), sim.as_deref())
+        {
+            let year = openttdrs_core::calendar_year_at_tick(sim.state.tick);
+            station_state.signal_variant =
+                u8::from(year < prefs.semaphore_build_before.clamp(1800, 2200));
+        }
         if *action != BuildMenuAction::JoinStation {
             station_state.join_keep = None;
         }

@@ -179,7 +179,10 @@ pub(super) fn unload_vehicles(
             });
         let first_chunk = !state.vehicles[i].cargo_unloading;
         let first_delivery = state.stats.cargo_deliveries == 0 && first_chunk;
-        if first_chunk {
+        // Freight baja en una estación como trasbordo: no es una entrega
+        // final ni debe disparar una noticia de cargo entregado.
+        let final_delivery = !reinsert;
+        if first_chunk && final_delivery {
             crate::news::push_cargo_delivery_news(
                 state,
                 unload_units,
@@ -188,6 +191,8 @@ pub(super) fn unload_vehicles(
                 station_pos,
                 first_delivery,
             );
+        }
+        if first_chunk {
             state.stats.cargo_deliveries += 1;
             if let Some(c) = state.companies.get_mut(vehicle_owner.index()) {
                 c.cargo_deliveries += 1;
@@ -232,6 +237,19 @@ pub(super) fn load_vehicles(
         }
         if state.vehicles[i].cargo_unloading {
             // Descarga gradual: no cargar en el mismo tick.
+            continue;
+        }
+        // Una locomotora definida por motor no transporta carga por sí sola:
+        // necesita al menos un vagón en su consist. Los trenes genéricos sin
+        // engine_id se preservan para escenarios y saves antiguos.
+        let locomotive_without_wagon = state.vehicles[i].kind == VehicleKind::Train
+            && state.vehicles[i].engine_id.is_some_and(|engine_id| {
+                crate::engine::engine_by_id(engine_id)
+                    .is_some_and(crate::engine::EngineDef::is_train_engine)
+            })
+            && crate::consist_unit_ids(&state.vehicles, state.vehicles[i].id).len() <= 1;
+        if state.vehicles[i].capacity == 0 || locomotive_without_wagon {
+            state.vehicles[i].cargo_loading = false;
             continue;
         }
         if (allow_top_up || loading) && state.vehicles[i].cargo >= state.vehicles[i].capacity {

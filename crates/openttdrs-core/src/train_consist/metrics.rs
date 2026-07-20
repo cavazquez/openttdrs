@@ -65,53 +65,33 @@ pub fn consist_tile_span(vehicles: &[Vehicle], head_id: u32) -> u32 {
         .max(1)
 }
 
-/// Teselas ocupadas por el consist: cabeza + cola.
-///
-/// Preferencia: historial real de la cabeza (`rail_tile_history`); si falta,
-/// vecinos en sentido opuesto a la dirección (MVP).
+/// Teselas ocupadas por el consist según las posiciones persistentes de cada
+/// unidad (no la proyección efímera: en depósito varios consists pueden compartir
+/// tesela y la proyección «detrás» sacaría vagones a la boca).
 #[must_use]
 pub fn consist_occupied_tiles(vehicles: &[Vehicle], head_id: u32) -> Vec<TileCoord> {
-    let Some(head) = vehicles.iter().find(|v| v.id == head_id) else {
-        return Vec::new();
-    };
-    let span = consist_tile_span(vehicles, head_id) as usize;
-    let mut tiles = vec![head.pos];
-    if span <= 1 {
-        return tiles;
-    }
-    // Historial: teselas que la cabeza acaba de abandonar (frente = más reciente).
-    for &t in head.rail_tile_history.iter().take(span.saturating_sub(1)) {
-        if tiles.last() != Some(&t) {
-            tiles.push(t);
-        }
-        if tiles.len() >= span {
-            return tiles;
+    let ids = super::topology::consist_unit_ids(vehicles, head_id);
+    let mut tiles = Vec::new();
+    for id in &ids {
+        let Some(unit) = vehicles.iter().find(|v| v.id == *id) else {
+            continue;
+        };
+        if !tiles.contains(&unit.pos) {
+            tiles.push(unit.pos);
         }
     }
-    let back = opposite_diag(head.direction);
-    let mut cur = *tiles.last().unwrap_or(&head.pos);
-    while tiles.len() < span {
-        let next = offset_tile(cur, back);
-        tiles.push(next);
-        cur = next;
+    // Saves/escenarios antiguos pueden declarar longitud de consist sin
+    // unidades encadenadas. Conservamos la huella conservadora hasta que se
+    // reconstruya la topología física al cargar.
+    if ids.len() <= 1 {
+        let span = consist_tile_span(vehicles, head_id) as usize;
+        if let Some(head) = vehicles.iter().find(|v| v.id == head_id) {
+            for &tile in head.rail_tile_history.iter().take(span.saturating_sub(1)) {
+                if !tiles.contains(&tile) {
+                    tiles.push(tile);
+                }
+            }
+        }
     }
     tiles
-}
-
-fn opposite_diag(dir: u8) -> u8 {
-    dir.wrapping_add(4) % 8
-}
-
-fn offset_tile(c: TileCoord, dir: u8) -> TileCoord {
-    let (dx, dy) = match dir {
-        0 => (0, -1),  // N
-        1 => (1, -1),  // NE
-        2 => (1, 0),   // E
-        3 => (1, 1),   // SE
-        4 => (0, 1),   // S
-        5 => (-1, 1),  // SW
-        6 => (-1, 0),  // W
-        _ => (-1, -1), // NW
-    };
-    TileCoord::new(c.x + dx, c.y + dy)
 }

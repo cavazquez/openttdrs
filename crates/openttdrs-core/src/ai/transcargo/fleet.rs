@@ -5,7 +5,7 @@ use crate::cargo::CargoType;
 use crate::command::{Command, apply_command};
 use crate::company::CompanyId;
 use crate::economy::TICKS_PER_MONTH;
-use crate::engine::ENGINE_TRAIN_KIRBY;
+use crate::engine::{ENGINE_TRAIN_KIRBY, ENGINE_WAGON_GOODS};
 use crate::map::{TileCoord, TileKind};
 use crate::pathfinder::{PathNetwork, find_path};
 use crate::subsidy::{SUBSIDY_OFFER_MONTHS, Subsidy};
@@ -75,6 +75,36 @@ pub(super) fn buy_and_order_train(
         else {
             return;
         };
+        // La locomotora no transporta carga: comprar y enganchar un vagón
+        // antes de darle órdenes de carga.
+        if apply_command(
+            state,
+            &Command::BuildVehicleAtDepot(depot, ENGINE_WAGON_GOODS),
+        )
+        .is_err()
+        {
+            return;
+        }
+        let Some(wagon_id) = state
+            .vehicles
+            .iter()
+            .filter(|v| v.owner == ai_id && v.id != vid)
+            .map(|v| v.id)
+            .max()
+        else {
+            return;
+        };
+        if apply_command(
+            state,
+            &Command::AttachWagonToConsist {
+                head_id: vid,
+                wagon_id,
+            },
+        )
+        .is_err()
+        {
+            return;
+        }
 
         let _ = apply_command(
             state,

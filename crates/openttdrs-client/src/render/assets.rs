@@ -447,6 +447,11 @@ impl WorldAssets {
                 .collect();
             if frames.len() == 7 {
                 refinery_fire_frames.insert(id, frames);
+            } else {
+                bevy::log::warn!(
+                    "Faltan frames de fuego refinería para sprite {id} ({}/7 en atlas)",
+                    frames.len()
+                );
             }
         }
 
@@ -614,6 +619,14 @@ mod world_assets_tests {
             })
         };
         let mut images = app.world_mut().resource_mut::<Assets<Image>>();
-        let _assets = WorldAssets::load(&atlas, &mut images);
+        let assets = WorldAssets::load(&atlas, &mut images);
+        // Torres terminadas (2083/2086/2089) deben tener ciclo oil_refinery.
+        for id in [2083u32, 2086, 2089, 2120] {
+            let frames = assets
+                .refinery_fire_frames
+                .get(&id)
+                .unwrap_or_else(|| panic!("faltan frames de fuego para {id}"));
+            assert_eq!(frames.len(), 7, "sprite {id}");
+        }
     }
 }

@@ -60,8 +60,12 @@ def is_light_pixel(r: int, g: int, b: int, a: int) -> bool:
         return False
     if (r, g, b) in LIGHTHOUSE_SLOT:
         return True
-    # Amarillo/ámbar de la linterna (32bpp puede diferir ligeramente).
-    if r >= 200 and g >= 160 and b <= 80 and r >= g:
+    # OpenGFX2 32ez: linterna en amarillo puro `(255,255,0)`.
+    if r >= 240 and g >= 240 and b <= 40:
+        return True
+    # Amarillo/ámbar de la linterna (8bpp / variantes). No incluir oliva
+    # `(80,80,0)` del cristal: nearest_slot lo trata como negro y rompe el ciclo.
+    if r >= 200 and g >= 160 and b <= 80 and r > g:
         return True
     if r >= 220 and g >= 180 and b <= 40:
         return True

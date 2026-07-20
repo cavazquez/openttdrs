@@ -374,12 +374,16 @@ pub(crate) struct StationBuildState {
     pub(crate) airport_show_coverage: bool,
     /// Tipo de señal a colocar (`SIGTYPE_*`; Ctrl cicla block→entry→exit→combo→path→path1vía).
     pub(crate) signal_type: u8,
+    /// Variante visual a colocar: 0=eléctrica, 1=semáforo.
+    pub(crate) signal_variant: u8,
     /// Densidad de señales al arrastrar (1..=20; OpenTTD default 4).
     pub(crate) signal_density: u8,
     /// Fract de tesela al iniciar arrastre de señales (elige carril HORZ/VERT).
     pub(crate) signal_drag_fract: Option<(u8, u8)>,
     /// Ctrl pulsado (actualizado cada frame para colocación PBS).
     pub(crate) ctrl_held: bool,
+    /// Shift pulsado; Ctrl+Shift+clic alterna eléctrica / semáforo.
+    pub(crate) shift_held: bool,
     /// Primera estación elegida al unir (herramienta JoinStation).
     pub(crate) join_keep: Option<openttdrs_core::TileCoord>,
 }
@@ -396,9 +400,11 @@ impl Default for StationBuildState {
             airport_axis_y: false,
             airport_show_coverage: true,
             signal_type: openttdrs_core::SIGTYPE_PATH,
+            signal_variant: 0,
             signal_density: 4,
             signal_drag_fract: None,
             ctrl_held: false,
+            shift_held: false,
             join_keep: None,
         }
     }

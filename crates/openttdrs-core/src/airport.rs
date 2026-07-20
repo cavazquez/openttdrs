@@ -85,27 +85,32 @@ const SMALL_LAYOUT: &[AirportPiece] = &[
     AirportPiece::Runway,
 ];
 
+/// Commuter 5×4 (`_tile_table_commuter_0`): torre/edificio, 2 helipads, hangar, stands y pista.
 const COMMUTER_LAYOUT: &[AirportPiece] = &[
-    AirportPiece::Hangar,
-    AirportPiece::Apron,
-    AirportPiece::Terminal,
+    // y=0
     AirportPiece::Tower,
+    AirportPiece::Terminal,
+    AirportPiece::Stand, // helipad
+    AirportPiece::Stand, // helipad
+    AirportPiece::Hangar,
+    // y=1 apron
     AirportPiece::Apron,
-    AirportPiece::Runway,
-    AirportPiece::Runway,
-    AirportPiece::Runway,
-    AirportPiece::Runway,
-    AirportPiece::Runway,
-    AirportPiece::Taxiway,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    AirportPiece::Apron,
+    // y=2 stands
+    AirportPiece::Apron,
+    AirportPiece::Stand,
+    AirportPiece::Stand,
     AirportPiece::Stand,
     AirportPiece::Apron,
-    AirportPiece::Stand,
-    AirportPiece::Taxiway,
-    AirportPiece::Taxiway,
-    AirportPiece::Apron,
-    AirportPiece::Stand,
-    AirportPiece::Apron,
-    AirportPiece::Taxiway,
+    // y=3 runway
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
 ];
 
 /// City 6×6 (inspirado en `_tile_table_city_0`).

@@ -1,13 +1,17 @@
-//! Motor FTA de aeropuerto (cortes Country/Small + Helidepot).
+//! Motor FTA de aeropuerto (Country / Helidepot / Commuter).
 //!
 //! Port parcial de `AirportMovingData` + `AirportFTA` (`table/airport_movement.h`).
 
+mod commuter;
 mod country;
 mod helidepot;
 mod profile;
 mod tick;
 mod types;
 
+pub use commuter::{
+    COMMUTER_ENTRIES, COMMUTER_MOVING_DATA, COMMUTER_NOF_ELEMENTS, commuter_fta_edges,
+};
 pub use country::{COUNTRY_ENTRIES, COUNTRY_MOVING_DATA, COUNTRY_NOF_ELEMENTS, country_fta_edges};
 pub use helidepot::{
     HELIDEPOT_ENTRIES, HELIDEPOT_MOVING_DATA, HELIDEPOT_NOF_ELEMENTS, helidepot_fta_edges,
@@ -20,8 +24,8 @@ pub use tick::{
 pub use types::{
     AirportBlockBits, AirportFtaEdge, AirportFtaKind, AirportFtaProfile, AirportHeading,
     AirportMovingData, AirportMovingDataFlags, BLOCK_HANGAR2_AREA, BLOCK_HELIPAD1, BLOCK_HELIPAD2,
-    BLOCK_PRE_HELIPAD, FLAG_BRAKE, FLAG_EXACT, FLAG_HELI_LOWER, FLAG_HELI_RAISE, FLAG_HOLD,
-    FLAG_LAND, FLAG_NO_SPEED_CLAMP, FLAG_SLOW_TURN, FLAG_TAKEOFF,
+    BLOCK_PRE_HELIPAD, BLOCK_TERM3, FLAG_BRAKE, FLAG_EXACT, FLAG_HELI_LOWER, FLAG_HELI_RAISE,
+    FLAG_HOLD, FLAG_LAND, FLAG_NO_SPEED_CLAMP, FLAG_SLOW_TURN, FLAG_TAKEOFF,
 };
 
 #[cfg(test)]
@@ -268,5 +272,120 @@ mod tests {
             .expect("edge HELIPAD1");
         assert_ne!(pad_edge.blocks & BLOCK_HELIPAD1, 0);
         assert_ne!(st.airport_blocks & pad_edge.blocks, 0);
+    }
+
+    #[test]
+    fn commuter_tables_have_expected_size() {
+        assert_eq!(COMMUTER_MOVING_DATA.len(), 38);
+        assert_eq!(COMMUTER_NOF_ELEMENTS, 38);
+        assert_eq!(COMMUTER_ENTRIES, [22, 21, 24, 23]);
+        assert!(COMMUTER_MOVING_DATA[15].flags & FLAG_TAKEOFF != 0);
+        assert!(COMMUTER_MOVING_DATA[17].flags & FLAG_LAND != 0);
+        assert!(COMMUTER_MOVING_DATA[6].flags & FLAG_EXACT != 0);
+        let from_hangar = commuter_fta_edges(1);
+        assert!(
+            from_hangar
+                .iter()
+                .any(|e| e.heading == AirportHeading::Takeoff && e.next_position == 11)
+        );
+        assert!(
+            from_hangar
+                .iter()
+                .any(|e| e.heading == AirportHeading::Helipad1)
+        );
+    }
+
+    #[test]
+    fn commuter_cycle_hangar_takeoff_fly_land_term() {
+        let mut s = GameState::new(56, 56);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: AirportSpecId::Commuter,
+            },
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(24, 24),
+                axis_y: false,
+                spec: AirportSpecId::Commuter,
+            },
+        )
+        .unwrap();
+        assert!(station_uses_airport_fta(&s.stations[0]));
+        assert_eq!(s.stations[0].airport_tiles.len(), 20);
+
+        let hangar_a = s.stations[0].pos;
+        let hangar_b = s.stations[1].pos;
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(hangar_a, ENGINE_AIRCRAFT_DAKOTA),
+        )
+        .unwrap();
+        let id = s.vehicles[0].id;
+        assert!(s.vehicles[0].airport_fta_active);
+
+        apply_command(
+            &mut s,
+            &Command::SetVehicleOrderList(
+                id,
+                vec![
+                    VehicleOrder::station(hangar_b),
+                    VehicleOrder::station(hangar_a),
+                ],
+            ),
+        )
+        .unwrap();
+        apply_command(&mut s, &Command::ToggleVehicleRunning(id)).unwrap();
+
+        let mut saw_takeoff = false;
+        let mut saw_flying = false;
+        let mut saw_landing = false;
+        let mut saw_term = false;
+
+        for _ in 0..15_000 {
+            s.step();
+            if s.vehicles.is_empty() {
+                break;
+            }
+            let events = s.runtime.pending_sim_events.drain();
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::AircraftTakeoff { .. }))
+            {
+                saw_takeoff = true;
+            }
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::AircraftLanding { .. }))
+            {
+                saw_landing = true;
+            }
+            let v = &s.vehicles[0];
+            if v.aircraft_phase == AircraftPhase::Flying {
+                saw_flying = true;
+            }
+            if saw_landing
+                && (matches!(v.airport_pos, 3..=5)
+                    || (matches!(
+                        v.aircraft_phase,
+                        AircraftPhase::Taxi | AircraftPhase::InHangar
+                    ) && s.stations[1].covers_tile(v.pos)))
+            {
+                saw_term = true;
+            }
+            if saw_takeoff && saw_flying && saw_landing && saw_term {
+                break;
+            }
+        }
+
+        assert!(saw_takeoff, "Commuter: takeoff");
+        assert!(saw_flying, "Commuter: crucero");
+        assert!(saw_landing, "Commuter: landing");
+        assert!(saw_term, "Commuter: terminal/hangar destino");
     }
 }

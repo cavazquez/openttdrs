@@ -89,10 +89,20 @@ pub const BLOCK_AIRPORT_BUSY: AirportBlockBits = 1 << 8;
 pub const BLOCK_TERM1: AirportBlockBits = 1 << 0;
 /// Bit de `AirportBlock::Term2`.
 pub const BLOCK_TERM2: AirportBlockBits = 1 << 1;
+/// Bit de `AirportBlock::Term3`.
+pub const BLOCK_TERM3: AirportBlockBits = 1 << 2;
 /// Bit de `AirportBlock::Helipad1` (índice 6).
 pub const BLOCK_HELIPAD1: AirportBlockBits = 1 << 6;
 /// Bit de `AirportBlock::Helipad2` (índice 7).
 pub const BLOCK_HELIPAD2: AirportBlockBits = 1 << 7;
+/// Bit de `AirportBlock::TaxiwayBusy` (índice 10).
+pub const BLOCK_TAXIWAY_BUSY: AirportBlockBits = 1 << 10;
+/// Bit de `AirportBlock::OutWay` (índice 11).
+pub const BLOCK_OUT_WAY: AirportBlockBits = 1 << 11;
+/// Bit de `AirportBlock::InWay` (índice 12).
+pub const BLOCK_IN_WAY: AirportBlockBits = 1 << 12;
+/// Bit de `AirportBlock::AirportEntrance` (índice 13).
+pub const BLOCK_AIRPORT_ENTRANCE: AirportBlockBits = 1 << 13;
 /// Bit de `AirportBlock::Hangar2Area` (índice 16).
 pub const BLOCK_HANGAR2_AREA: AirportBlockBits = 1 << 16;
 /// Bit de `AirportBlock::PreHelipad` (índice 21).
@@ -125,6 +135,7 @@ pub struct AirportFtaEdge {
 pub enum AirportFtaKind {
     Country,
     Helidepot,
+    Commuter,
 }
 
 /// Descriptor de tablas + comportamiento especial por aeropuerto.

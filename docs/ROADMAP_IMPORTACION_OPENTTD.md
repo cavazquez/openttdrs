@@ -313,7 +313,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Desastres | ✅ Parcial | `disaster.rs` |
 | Préstamos activos | ✅ Parcial | `economy.rs`, `command/economy.rs` |
 | IA rivales | ✅ (#86) | `docs/archive/epics/ai_rivals.md` |
-| Barcos / aviones | ✅ Parcial | `ship_movement.rs`, `aircraft_movement.rs`; FTA Country + Helidepot (`airport_fta/`, #198 cortes 1–2) |
+| Barcos / aviones | ✅ Parcial | `ship_movement.rs`, `aircraft_movement.rs`; FTA Country + Helidepot + Commuter (`airport_fta/`, #198 cortes 1–3) |
 
 ### 5.2 Cliente (`openttdrs-client`)
 

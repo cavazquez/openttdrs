@@ -127,6 +127,20 @@ pub const BLOCK_TERM_GROUP2_EXIT1: AirportBlockBits = 1 << 19;
 pub const BLOCK_TERM_GROUP2_EXIT2: AirportBlockBits = 1 << 20;
 /// Bit de `AirportBlock::PreHelipad` (índice 21).
 pub const BLOCK_PRE_HELIPAD: AirportBlockBits = 1 << 21;
+/// Bit de `AirportBlock::Term7` (índice 22).
+pub const BLOCK_TERM7: AirportBlockBits = 1 << 22;
+/// Bit de `AirportBlock::Term8` (índice 23).
+pub const BLOCK_TERM8: AirportBlockBits = 1 << 23;
+/// Bit de `AirportBlock::Hangar1Area` (índice 26).
+pub const BLOCK_HANGAR1_AREA: AirportBlockBits = 1 << 26;
+/// Bit de `AirportBlock::OutWay2` (índice 27).
+pub const BLOCK_OUT_WAY2: AirportBlockBits = 1 << 27;
+/// Bit de `AirportBlock::InWay2` (índice 28).
+pub const BLOCK_IN_WAY2: AirportBlockBits = 1 << 28;
+/// Bit de `AirportBlock::RunwayIn2` (índice 29).
+pub const BLOCK_RUNWAY_IN2: AirportBlockBits = 1 << 29;
+/// Bit de `AirportBlock::OutWay3` (índice 31).
+pub const BLOCK_OUT_WAY3: AirportBlockBits = 1 << 31;
 
 /// Waypoint de movimiento (`AirportMovingData`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -159,6 +173,7 @@ pub enum AirportFtaKind {
     City,
     Metropolitan,
     International,
+    Intercontinental,
 }
 
 /// Descriptor de tablas + comportamiento especial por aeropuerto.

@@ -51,7 +51,7 @@ pub fn tick_country_airport_fta(
     tick_airport_fta(v, map, stations)
 }
 
-/// Tick FTA para specs soportados hasta International.
+/// Tick FTA para specs soportados hasta Intercontinental.
 pub fn tick_airport_fta(
     v: &mut Vehicle,
     _map: &Map,
@@ -114,7 +114,8 @@ fn try_enter_approach(v: &mut Vehicle, stations: &[Station]) -> Option<AircraftP
         | AirportFtaKind::Commuter
         | AirportFtaKind::City
         | AirportFtaKind::Metropolitan
-        | AirportFtaKind::International => AirportHeading::Landing,
+        | AirportFtaKind::International
+        | AirportFtaKind::Intercontinental => AirportHeading::Landing,
     };
     v.aircraft_phase = AircraftPhase::Landing;
     v.aircraft_phase_ticks = FTA_HOLD_DWELL_TICKS;
@@ -127,8 +128,9 @@ fn should_finish_takeoff(v: &Vehicle, profile: &AirportFtaProfile) -> bool {
     if !v.airport_fta_active || v.aircraft_phase_ticks != 0 {
         return false;
     }
-    if let Some(pos) = profile.fixedwing_takeoff_pos
-        && v.airport_pos == pos
+    let at_fixedwing_takeoff = profile.fixedwing_takeoff_pos == Some(v.airport_pos)
+        || (profile.kind == AirportFtaKind::Intercontinental && v.airport_pos == 62);
+    if at_fixedwing_takeoff
         && matches!(
             v.airport_heading,
             AirportHeading::EndTakeoff | AirportHeading::Takeoff | AirportHeading::StartTakeoff
@@ -143,6 +145,7 @@ fn should_finish_takeoff(v: &Vehicle, profile: &AirportFtaProfile) -> bool {
         AirportFtaKind::City => v.airport_pos == 22,
         AirportFtaKind::Metropolitan => v.airport_pos == 24,
         AirportFtaKind::International => matches!(v.airport_pos, 47 | 48 | 51 | 52),
+        AirportFtaKind::Intercontinental => matches!(v.airport_pos, 53 | 54 | 74 | 75),
         AirportFtaKind::Country => false,
     };
     heli_takeoff_node && matches!(v.airport_heading, AirportHeading::HeliTakeoff)
@@ -197,6 +200,7 @@ fn advance_fta_node(
     let ev = sync_phase_from_node(v, profile);
     apply_waypoint_pose(v, station, profile);
     if profile.fixedwing_takeoff_pos == Some(next)
+        || (profile.kind == AirportFtaKind::Intercontinental && next == 62)
         || (matches!(
             profile.kind,
             AirportFtaKind::Helidepot
@@ -204,6 +208,7 @@ fn advance_fta_node(
                 | AirportFtaKind::City
                 | AirportFtaKind::Metropolitan
                 | AirportFtaKind::International
+                | AirportFtaKind::Intercontinental
         ) && md.flags & FLAG_HELI_RAISE != 0)
     {
         return AircraftPhaseEvent::Takeoff;
@@ -273,6 +278,17 @@ fn nudge_heading_at_node(v: &mut Vehicle, profile: &AirportFtaProfile) {
             47 | 48 | 51 | 52 => v.airport_heading = AirportHeading::HeliTakeoff,
             _ => {}
         },
+        AirportFtaKind::Intercontinental => match v.airport_pos {
+            32 | 59 => v.airport_heading = AirportHeading::Takeoff,
+            34 | 61 => v.airport_heading = AirportHeading::StartTakeoff,
+            35 | 62 => v.airport_heading = AirportHeading::EndTakeoff,
+            37 | 63 | 76 | 69 => v.airport_heading = AirportHeading::Landing,
+            40..=42 | 66..=68 => v.airport_heading = AirportHeading::EndLanding,
+            47 => v.airport_heading = AirportHeading::HeliLanding,
+            48 => v.airport_heading = AirportHeading::Helipad1,
+            53 | 54 | 74 | 75 => v.airport_heading = AirportHeading::HeliTakeoff,
+            _ => {}
+        },
     }
 }
 
@@ -286,6 +302,7 @@ fn hold_or_wait(v: &mut Vehicle, profile: &AirportFtaProfile) {
                 AirportFtaKind::Commuter => 16,
                 AirportFtaKind::City | AirportFtaKind::Metropolitan => 13,
                 AirportFtaKind::International => 32,
+                AirportFtaKind::Intercontinental => 76,
             }
         } else {
             v.airport_pos.saturating_add(1)
@@ -404,6 +421,61 @@ fn apply_enter_heading_international(v: &mut Vehicle, next: u8) {
     }
 }
 
+fn apply_enter_heading_intercontinental(v: &mut Vehicle, next: u8) {
+    match next {
+        4 => {
+            v.airport_heading = AirportHeading::Term1;
+            v.dest = v.pos;
+        }
+        5 => {
+            v.airport_heading = AirportHeading::Term2;
+            v.dest = v.pos;
+        }
+        6 => {
+            v.airport_heading = AirportHeading::Term3;
+            v.dest = v.pos;
+        }
+        7 => {
+            v.airport_heading = AirportHeading::Term4;
+            v.dest = v.pos;
+        }
+        8 => {
+            v.airport_heading = AirportHeading::Term5;
+            v.dest = v.pos;
+        }
+        9 => {
+            v.airport_heading = AirportHeading::Term6;
+            v.dest = v.pos;
+        }
+        10 => {
+            v.airport_heading = AirportHeading::Term7;
+            v.dest = v.pos;
+        }
+        11 => {
+            v.airport_heading = AirportHeading::Term8;
+            v.dest = v.pos;
+        }
+        12 => {
+            v.airport_heading = AirportHeading::Helipad1;
+            v.dest = v.pos;
+        }
+        13 => {
+            v.airport_heading = AirportHeading::Helipad2;
+            v.dest = v.pos;
+        }
+        30 | 32 | 57 | 59 => v.airport_heading = AirportHeading::Takeoff,
+        34 | 61 => v.airport_heading = AirportHeading::StartTakeoff,
+        35 | 62 => v.airport_heading = AirportHeading::EndTakeoff,
+        37 | 63 => v.airport_heading = AirportHeading::Landing,
+        40..=42 | 66..=68 => v.airport_heading = AirportHeading::EndLanding,
+        26 if matches!(v.airport_heading, AirportHeading::EndLanding) => {
+            v.airport_heading = AirportHeading::Term1;
+        }
+        53 | 54 | 74 | 75 => v.airport_heading = AirportHeading::HeliTakeoff,
+        _ => {}
+    }
+}
+
 fn apply_enter_heading(v: &mut Vehicle, next: u8, profile: &AirportFtaProfile) {
     match profile.kind {
         AirportFtaKind::Country => match next {
@@ -470,6 +542,7 @@ fn apply_enter_heading(v: &mut Vehicle, next: u8, profile: &AirportFtaProfile) {
         AirportFtaKind::City => apply_enter_heading_city(v, next),
         AirportFtaKind::Metropolitan => apply_enter_heading_metropolitan(v, next),
         AirportFtaKind::International => apply_enter_heading_international(v, next),
+        AirportFtaKind::Intercontinental => apply_enter_heading_intercontinental(v, next),
     }
 }
 
@@ -529,6 +602,15 @@ fn fixedwing_approach_locked(v: &Vehicle, kind: AirportFtaKind) -> bool {
                             | AirportHeading::EndLanding
                             | AirportHeading::Term1
                     ))))
+        || (kind == AirportFtaKind::Intercontinental
+            && (matches!(v.airport_pos, 30..=76)
+                || (matches!(v.airport_pos, 2 | 14..=29)
+                    && matches!(
+                        v.airport_heading,
+                        AirportHeading::Landing
+                            | AirportHeading::EndLanding
+                            | AirportHeading::Term1
+                    ))))
 }
 
 fn nudge_endlanding_to_term1(v: &mut Vehicle, kind: AirportFtaKind) {
@@ -537,6 +619,7 @@ fn nudge_endlanding_to_term1(v: &mut Vehicle, kind: AirportFtaKind) {
         AirportFtaKind::City => v.airport_pos == 7,
         AirportFtaKind::Metropolitan => v.airport_pos == 27,
         AirportFtaKind::International => matches!(v.airport_pos, 2 | 23 | 36),
+        AirportFtaKind::Intercontinental => matches!(v.airport_pos, 2 | 26 | 42 | 66 | 68),
         _ => false,
     };
     if at && matches!(v.airport_heading, AirportHeading::EndLanding) {
@@ -707,6 +790,60 @@ fn choose_next_edge_international(v: &Vehicle, edges: &[AirportFtaEdge]) -> Edge
     EdgeOverride::Continue
 }
 
+fn choose_next_edge_intercontinental(v: &Vehicle, edges: &[AirportFtaEdge]) -> EdgeOverride {
+    if v.airport_pos == 34 {
+        return EdgeOverride::Done(edges.iter().find(|e| e.next_position == 35).copied());
+    }
+    if v.airport_pos == 61 {
+        return EdgeOverride::Done(edges.iter().find(|e| e.next_position == 62).copied());
+    }
+    // Preferir pista 1: en entry 44 no tomar LANDING→69 todavía.
+    if v.airport_pos == 44 && matches!(v.airport_heading, AirportHeading::Landing) {
+        return EdgeOverride::Done(
+            edges
+                .iter()
+                .find(|e| e.heading == AirportHeading::ToAll)
+                .copied(),
+        );
+    }
+    if v.airport_pos == 46 && matches!(v.airport_heading, AirportHeading::Landing) {
+        return EdgeOverride::Done(edges.iter().find(|e| e.next_position == 76).copied());
+    }
+    if v.airport_pos == 76
+        && matches!(
+            v.airport_heading,
+            AirportHeading::Landing | AirportHeading::ToAll
+        )
+    {
+        return EdgeOverride::Done(edges.iter().find(|e| e.next_position == 37).copied());
+    }
+    if matches!(v.airport_pos, 35 | 62 | 53 | 54 | 74 | 75) {
+        return EdgeOverride::Done(None);
+    }
+    if matches!(v.airport_pos, 42 | 66)
+        && matches!(
+            v.airport_heading,
+            AirportHeading::EndLanding | AirportHeading::Term1
+        )
+    {
+        return EdgeOverride::Done(
+            edges
+                .iter()
+                .find(|e| e.heading == AirportHeading::ToAll)
+                .copied(),
+        );
+    }
+    if v.airport_pos == 26 && matches!(v.airport_heading, AirportHeading::Term1) {
+        return EdgeOverride::Done(
+            edges
+                .iter()
+                .find(|e| e.heading == AirportHeading::Term1)
+                .copied(),
+        );
+    }
+    EdgeOverride::Continue
+}
+
 fn choose_next_edge(v: &Vehicle, profile: &AirportFtaProfile) -> Option<AirportFtaEdge> {
     let edges = (profile.fta_edges)(v.airport_pos);
     if edges.is_empty() {
@@ -772,6 +909,11 @@ fn choose_next_edge(v: &Vehicle, profile: &AirportFtaProfile) -> Option<AirportF
     {
         return special;
     }
+    if profile.kind == AirportFtaKind::Intercontinental
+        && let EdgeOverride::Done(special) = choose_next_edge_intercontinental(v, &edges)
+    {
+        return special;
+    }
     if let Some(e) = edges.iter().find(|e| e.heading == AirportHeading::ToAll) {
         return Some(*e);
     }
@@ -829,6 +971,8 @@ fn sync_phase_from_node(v: &mut Vehicle, profile: &AirportFtaProfile) -> Aircraf
         || (profile.kind == AirportFtaKind::Metropolitan && matches!(v.airport_pos, 13 | 19..=22))
         || (profile.kind == AirportFtaKind::International
             && matches!(v.airport_pos, 32 | 37..=40 | 41..=44 | 49))
+        || (profile.kind == AirportFtaKind::Intercontinental
+            && matches!(v.airport_pos, 36 | 43..=50 | 55 | 69 | 76))
     {
         v.aircraft_phase = AircraftPhase::Flying;
         v.altitude = AIRCRAFT_CRUISE_ALTITUDE;
@@ -860,7 +1004,9 @@ fn apply_waypoint_pose(v: &mut Vehicle, station: &Station, profile: &AirportFtaP
         || (profile.kind == AirportFtaKind::Metropolitan
             && matches!(v.airport_pos, 12 | 13 | 19..=22 | 24..=26))
         || (profile.kind == AirportFtaKind::International
-            && matches!(v.airport_pos, 31 | 32 | 37..=52));
+            && matches!(v.airport_pos, 31 | 32 | 37..=52))
+        || (profile.kind == AirportFtaKind::Intercontinental
+            && matches!(v.airport_pos, 35 | 36 | 43..=56 | 62 | 63 | 69 | 74..=76));
     if airish {
         tx = tx.clamp(-1, profile.footprint_w);
         ty = ty.clamp(-1, profile.footprint_h);

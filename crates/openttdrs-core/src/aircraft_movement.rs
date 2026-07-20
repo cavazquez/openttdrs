@@ -48,9 +48,17 @@ pub fn airport_station_at(stations: &[Station], pos: TileCoord) -> Option<&Stati
 }
 
 /// Actualiza fase/altitud de un avión una vez por tick (antes o después de `step`).
-pub fn tick_aircraft_phase(v: &mut Vehicle, map: &Map, stations: &[Station]) -> AircraftPhaseEvent {
+pub fn tick_aircraft_phase(
+    v: &mut Vehicle,
+    map: &Map,
+    stations: &mut [Station],
+) -> AircraftPhaseEvent {
     if v.kind != VehicleKind::Aircraft {
         return AircraftPhaseEvent::None;
+    }
+    // Country/Small: motor FTA cuando aplica.
+    if let Some(ev) = crate::airport_fta::tick_country_airport_fta(v, map, stations) {
+        return ev;
     }
     match v.aircraft_phase {
         AircraftPhase::InHangar => {

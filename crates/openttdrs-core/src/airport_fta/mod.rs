@@ -1,0 +1,272 @@
+//! Motor FTA de aeropuerto (cortes Country/Small + Helidepot).
+//!
+//! Port parcial de `AirportMovingData` + `AirportFTA` (`table/airport_movement.h`).
+
+mod country;
+mod helidepot;
+mod profile;
+mod tick;
+mod types;
+
+pub use country::{COUNTRY_ENTRIES, COUNTRY_MOVING_DATA, COUNTRY_NOF_ELEMENTS, country_fta_edges};
+pub use helidepot::{
+    HELIDEPOT_ENTRIES, HELIDEPOT_MOVING_DATA, HELIDEPOT_NOF_ELEMENTS, helidepot_fta_edges,
+};
+pub use profile::fta_profile_for_spec;
+pub use tick::{
+    airport_nw_origin, init_airport_fta_on_purchase, init_country_fta_on_purchase,
+    station_uses_airport_fta, station_uses_country_fta, tick_airport_fta, tick_country_airport_fta,
+};
+pub use types::{
+    AirportBlockBits, AirportFtaEdge, AirportFtaKind, AirportFtaProfile, AirportHeading,
+    AirportMovingData, AirportMovingDataFlags, BLOCK_HANGAR2_AREA, BLOCK_HELIPAD1, BLOCK_HELIPAD2,
+    BLOCK_PRE_HELIPAD, FLAG_BRAKE, FLAG_EXACT, FLAG_HELI_LOWER, FLAG_HELI_RAISE, FLAG_HOLD,
+    FLAG_LAND, FLAG_NO_SPEED_CLAMP, FLAG_SLOW_TURN, FLAG_TAKEOFF,
+};
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used)]
+mod tests {
+    use super::*;
+    use crate::engine::{ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_TRICARIO};
+    use crate::sim_events::SimEvent;
+    use crate::vehicle::{AircraftPhase, VehicleOrder};
+    use crate::{AirportSpecId, Command, GameState, TileCoord, apply_command};
+
+    #[test]
+    fn country_tables_have_expected_size() {
+        assert_eq!(COUNTRY_MOVING_DATA.len(), 22);
+        assert_eq!(COUNTRY_NOF_ELEMENTS, 22);
+        assert_eq!(COUNTRY_ENTRIES.len(), 4);
+        assert!(COUNTRY_MOVING_DATA[9].flags & FLAG_TAKEOFF != 0);
+        assert!(COUNTRY_MOVING_DATA[11].flags & FLAG_LAND != 0);
+        assert!(COUNTRY_MOVING_DATA[12].flags & FLAG_BRAKE != 0);
+    }
+
+    #[test]
+    fn country_fta_hangar_leads_outside() {
+        let edges = country_fta_edges(0);
+        assert!(!edges.is_empty());
+        assert_eq!(edges[0].next_position, 1);
+        assert_eq!(edges[0].heading, AirportHeading::Hangar);
+    }
+
+    #[test]
+    fn helidepot_tables_have_expected_size() {
+        assert_eq!(HELIDEPOT_MOVING_DATA.len(), 18);
+        assert_eq!(HELIDEPOT_NOF_ELEMENTS, 18);
+        assert_eq!(HELIDEPOT_ENTRIES, [4, 4, 4, 4]);
+        assert!(HELIDEPOT_MOVING_DATA[11].flags & FLAG_HELI_RAISE != 0);
+        assert!(HELIDEPOT_MOVING_DATA[10].flags & FLAG_HELI_LOWER != 0);
+        let from_pad = helidepot_fta_edges(14);
+        assert!(
+            from_pad
+                .iter()
+                .any(|e| e.heading == AirportHeading::HeliTakeoff && e.next_position == 17)
+        );
+    }
+
+    #[test]
+    fn country_airport_cycle_hangar_takeoff_fly_land_term() {
+        let mut s = GameState::new(48, 48);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(20, 20),
+                axis_y: false,
+                spec: AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        assert_eq!(s.stations.len(), 2);
+        assert!(station_uses_country_fta(&s.stations[0]));
+        assert!(station_uses_country_fta(&s.stations[1]));
+
+        let hangar_a = s.stations[0].pos;
+        let hangar_b = s.stations[1].pos;
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(hangar_a, ENGINE_AIRCRAFT_DAKOTA),
+        )
+        .unwrap();
+        let id = s.vehicles[0].id;
+        assert!(s.vehicles[0].airport_fta_active);
+        assert_eq!(s.vehicles[0].airport_pos, 0);
+        assert_eq!(s.vehicles[0].aircraft_phase, AircraftPhase::InHangar);
+
+        apply_command(
+            &mut s,
+            &Command::SetVehicleOrderList(
+                id,
+                vec![
+                    VehicleOrder::station(hangar_b),
+                    VehicleOrder::station(hangar_a),
+                ],
+            ),
+        )
+        .unwrap();
+        apply_command(&mut s, &Command::ToggleVehicleRunning(id)).unwrap();
+
+        let mut saw_takeoff = false;
+        let mut saw_flying = false;
+        let mut saw_landing = false;
+        let mut saw_term = false;
+
+        for _ in 0..12_000 {
+            s.step();
+            let events = s.runtime.pending_sim_events.drain();
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::AircraftTakeoff { .. }))
+            {
+                saw_takeoff = true;
+            }
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::AircraftLanding { .. }))
+            {
+                saw_landing = true;
+            }
+            let v = &s.vehicles[0];
+            if v.aircraft_phase == AircraftPhase::Flying {
+                saw_flying = true;
+            }
+            if saw_landing
+                && (matches!(v.airport_pos, 2 | 3)
+                    || (matches!(
+                        v.aircraft_phase,
+                        AircraftPhase::Taxi | AircraftPhase::InHangar
+                    ) && s.stations[1].covers_tile(v.pos)))
+            {
+                saw_term = true;
+            }
+            if saw_takeoff && saw_flying && saw_landing && saw_term {
+                break;
+            }
+        }
+
+        assert!(saw_takeoff, "debe emitir takeoff FTA");
+        assert!(saw_flying, "debe entrar en crucero Flying");
+        assert!(saw_landing, "debe emitir/aterrizar Landing");
+        assert!(saw_term, "debe llegar a terminal/hangar del destino");
+    }
+
+    #[test]
+    fn helidepot_cycle_hangar_takeoff_fly_land_pad() {
+        let mut s = GameState::new(48, 48);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: AirportSpecId::Helidepot,
+            },
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(20, 20),
+                axis_y: false,
+                spec: AirportSpecId::Helidepot,
+            },
+        )
+        .unwrap();
+        assert!(station_uses_airport_fta(&s.stations[0]));
+        assert_eq!(s.stations[0].airport_spec, AirportSpecId::Helidepot);
+        assert_eq!(s.stations[0].airport_tiles.len(), 4);
+
+        let hangar_a = s.stations[0].pos;
+        let hangar_b = s.stations[1].pos;
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(hangar_a, ENGINE_AIRCRAFT_TRICARIO),
+        )
+        .unwrap();
+        let id = s.vehicles[0].id;
+        assert!(s.vehicles[0].airport_fta_active);
+
+        apply_command(
+            &mut s,
+            &Command::SetVehicleOrderList(
+                id,
+                vec![
+                    VehicleOrder::station(hangar_b),
+                    VehicleOrder::station(hangar_a),
+                ],
+            ),
+        )
+        .unwrap();
+        apply_command(&mut s, &Command::ToggleVehicleRunning(id)).unwrap();
+
+        let mut saw_takeoff = false;
+        let mut saw_flying = false;
+        let mut saw_landing = false;
+        let mut saw_pad = false;
+
+        for _ in 0..12_000 {
+            s.step();
+            if s.vehicles.is_empty() {
+                break;
+            }
+            let events = s.runtime.pending_sim_events.drain();
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::AircraftTakeoff { .. }))
+            {
+                saw_takeoff = true;
+            }
+            if events
+                .iter()
+                .any(|e| matches!(e, SimEvent::AircraftLanding { .. }))
+            {
+                saw_landing = true;
+            }
+            let v = &s.vehicles[0];
+            if v.aircraft_phase == AircraftPhase::Flying {
+                saw_flying = true;
+            }
+            if saw_landing && v.airport_pos == 14 && s.stations[1].covers_tile(v.pos) {
+                saw_pad = true;
+            }
+            if saw_takeoff && saw_flying && saw_landing && saw_pad {
+                break;
+            }
+        }
+
+        assert!(saw_takeoff, "Helidepot: takeoff heli");
+        assert!(saw_flying, "Helidepot: crucero");
+        assert!(saw_landing, "Helidepot: landing/lower");
+        assert!(saw_pad, "Helidepot: llegar a helipad1 (pos 14)");
+    }
+
+    #[test]
+    fn helidepot_pad_block_blocks_second_reservation() {
+        let mut st =
+            crate::Station::new_with_kind(TileCoord::new(0, 0), crate::station::StopKind::Airport);
+        st.airport_spec = AirportSpecId::Helidepot;
+        st.airport_tiles = vec![
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+            TileCoord::new(0, 1),
+            TileCoord::new(1, 1),
+        ];
+        st.airport_blocks = BLOCK_HELIPAD1;
+        let edges = helidepot_fta_edges(1);
+        let pad_edge = edges
+            .iter()
+            .find(|e| e.heading == AirportHeading::Helipad1)
+            .expect("edge HELIPAD1");
+        assert_ne!(pad_edge.blocks & BLOCK_HELIPAD1, 0);
+        assert_ne!(st.airport_blocks & pad_edge.blocks, 0);
+    }
+}

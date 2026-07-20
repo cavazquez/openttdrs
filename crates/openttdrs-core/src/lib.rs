@@ -9,6 +9,7 @@ pub mod ai;
 pub mod aircraft_movement;
 pub mod airport;
 pub mod airport_class;
+pub mod airport_fta;
 pub mod autoreplace;
 pub mod bridge_spec;
 pub mod cargo;
@@ -92,6 +93,11 @@ pub use airport_class::{
     AirportClassDef, AirportClassId, AirportSpecDef, AirportSpecId, airport_class_def,
     airport_spec_def, all_airport_class_defs, all_airport_spec_defs, list_airport_classes,
     list_airport_specs,
+};
+pub use airport_fta::{
+    AirportHeading, AirportMovingData, COUNTRY_ENTRIES, COUNTRY_MOVING_DATA, COUNTRY_NOF_ELEMENTS,
+    HELIDEPOT_ENTRIES, HELIDEPOT_MOVING_DATA, HELIDEPOT_NOF_ELEMENTS, station_uses_airport_fta,
+    station_uses_country_fta,
 };
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
 pub use bridge_spec::{

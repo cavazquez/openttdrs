@@ -6,7 +6,7 @@ pub(super) fn tick_aircraft_phases(state: &mut GameState) {
     use crate::sim_events::SimEvent;
 
     for i in 0..state.vehicles.len() {
-        let ev = tick_aircraft_phase(&mut state.vehicles[i], &state.map, &state.stations);
+        let ev = tick_aircraft_phase(&mut state.vehicles[i], &state.map, &mut state.stations);
         let id = state.vehicles[i].id;
         let at = state.vehicles[i].pos;
         match ev {

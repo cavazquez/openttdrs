@@ -140,11 +140,7 @@ pub(super) fn build_vehicle_at_depot(
         return Err(CommandError::InvalidDepotTile);
     }
     if engine.kind == VehicleKind::Aircraft {
-        let heli_tile = crate::airport::airport_tile_is_heliport(&state.map, depot_pos);
-        let heli_engine = crate::engine::aircraft_is_helicopter(engine_id);
-        if heli_tile != heli_engine {
-            return Err(CommandError::VehicleKindNotAllowed);
-        }
+        check_aircraft_heli_depot_compat(state, depot_pos, engine_id)?;
     }
     // Compatibilidad motor↔vía adyacente (eléctrico / mono / maglev).
     if engine.kind == VehicleKind::Train {
@@ -205,6 +201,7 @@ pub(super) fn build_vehicle_at_depot(
         vehicle.progress = 0;
         vehicle.depot_leave_cleared = false;
     }
+    maybe_init_country_airport_fta(state, depot_pos, &mut vehicle);
     state.vehicles.push(vehicle);
     if engine.kind == VehicleKind::Train && engine.is_dual_headed() {
         spawn_dual_headed_rear(state, next_id, depot_pos, &engine);
@@ -214,6 +211,37 @@ pub(super) fn build_vehicle_at_depot(
     }
     state.economy.money -= engine.price;
     Ok(())
+}
+
+fn check_aircraft_heli_depot_compat(
+    state: &GameState,
+    depot_pos: TileCoord,
+    engine_id: u16,
+) -> Result<(), CommandError> {
+    let heli_engine = crate::engine::aircraft_is_helicopter(engine_id);
+    // Helipuerto 1×1 o Helidepot: solo hélices. Hangar de aeropuerto "grande": solo ala fija.
+    let heli_only_airport = state
+        .stations
+        .iter()
+        .any(|s| s.covers_tile(depot_pos) && s.airport_spec.is_heliport_only())
+        || crate::airport::airport_tile_is_heliport(&state.map, depot_pos);
+    if heli_only_airport != heli_engine {
+        return Err(CommandError::VehicleKindNotAllowed);
+    }
+    Ok(())
+}
+
+fn maybe_init_country_airport_fta(state: &GameState, depot_pos: TileCoord, vehicle: &mut Vehicle) {
+    if vehicle.kind != VehicleKind::Aircraft {
+        return;
+    }
+    if state
+        .stations
+        .iter()
+        .any(|s| crate::airport_fta::station_uses_airport_fta(s) && s.covers_tile(depot_pos))
+    {
+        crate::airport_fta::init_airport_fta_on_purchase(vehicle);
+    }
 }
 
 /// Cabina trasera multihead (`AddRearEngineToMultiheadedTrain`).

@@ -94,6 +94,8 @@ pub(in crate::command) fn place_airport_area(
     let mut st = Station::new_with_kind(station_anchor, StopKind::Airport);
     st.owner = state.active_company;
     st.airport_tiles = tiles;
+    st.airport_spec = spec;
+    st.airport_blocks = 0;
     if let Some(def) = airport_spec_def(spec) {
         let _ = def.catchment; // catchment se usará en cobertura UI; sim usa radio global hoy
     }

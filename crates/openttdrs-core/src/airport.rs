@@ -58,26 +58,31 @@ pub const AIRPORT_SMALL_H: i32 = 3;
 
 const HELIPORT_LAYOUT: &[AirportPiece] = &[AirportPiece::Heliport];
 
+/// Helidepot 2×2 (`_tile_table_helidepot_0`): edificio + hangar + helipad + apron.
 const HELIDEPOT_LAYOUT: &[AirportPiece] = &[
-    AirportPiece::Hangar,
-    AirportPiece::Apron,
-    AirportPiece::Taxiway,
-    AirportPiece::Stand,
+    AirportPiece::Apron,  // (0,0) APT_LOW_BUILDING
+    AirportPiece::Hangar, // (1,0) APT_DEPOT_SE
+    AirportPiece::Stand,  // (0,1) APT_HELIPAD_*
+    AirportPiece::Apron,  // (1,1) APT_APRON
 ];
 
+/// Country / Small (`_tile_table_country_0`): edificios + césped + pista.
 const SMALL_LAYOUT: &[AirportPiece] = &[
-    AirportPiece::Hangar,
-    AirportPiece::Apron,
-    AirportPiece::Terminal,
-    AirportPiece::Tower,
-    AirportPiece::Runway,
-    AirportPiece::Runway,
-    AirportPiece::Runway,
-    AirportPiece::Runway,
-    AirportPiece::Taxiway,
-    AirportPiece::Apron,
+    // y=0
+    AirportPiece::Terminal, // APT_SMALL_BUILDING_1
+    AirportPiece::Terminal, // APT_SMALL_BUILDING_2
+    AirportPiece::Tower,    // APT_SMALL_BUILDING_3
+    AirportPiece::Hangar,   // APT_SMALL_DEPOT_SE
+    // y=1
+    AirportPiece::Apron, // grass / fence
+    AirportPiece::Stand, // grass (terminal stands area)
     AirportPiece::Stand,
-    AirportPiece::Taxiway,
+    AirportPiece::Apron,
+    // y=2 runway
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
+    AirportPiece::Runway,
 ];
 
 const COMMUTER_LAYOUT: &[AirportPiece] = &[

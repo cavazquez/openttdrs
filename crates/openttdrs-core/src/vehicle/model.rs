@@ -305,6 +305,18 @@ pub struct Vehicle {
     /// Ticks restantes en fase Takeoff/Landing.
     #[serde(default)]
     pub aircraft_phase_ticks: u16,
+    /// Índice de waypoint FTA en el aeropuerto actual (`v->pos` en `OpenTTD`).
+    #[serde(default)]
+    pub airport_pos: u8,
+    /// Waypoint FTA previo (liberación de bloques).
+    #[serde(default)]
+    pub airport_prev_pos: u8,
+    /// Heading FTA (`v->state` / `AirportMovementStates`).
+    #[serde(default)]
+    pub airport_heading: crate::airport_fta::AirportHeading,
+    /// `true` mientras el avión está bajo control FTA de un aeropuerto Country.
+    #[serde(default)]
+    pub airport_fta_active: bool,
     /// Siguiente unidad del consist (`OpenTTD` `Next()`); solo trenes.
     #[serde(default)]
     pub next_unit: Option<u32>,
@@ -423,6 +435,10 @@ impl Vehicle {
             aircraft_phase: AircraftPhase::InHangar,
             altitude: 0,
             aircraft_phase_ticks: 0,
+            airport_pos: 0,
+            airport_prev_pos: 0,
+            airport_heading: crate::airport_fta::AirportHeading::Hangar,
+            airport_fta_active: false,
             next_unit: None,
             prev_unit: None,
             other_multiheaded_part: None,

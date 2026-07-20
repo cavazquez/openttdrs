@@ -96,6 +96,12 @@ pub struct Station {
     /// Teselas del aeropuerto (helipuerto = `[pos]`; small = footprint completo).
     #[serde(default)]
     pub airport_tiles: Vec<TileCoord>,
+    /// Spec de aeropuerto vanilla/NewGRF (`AirportSpecId`).
+    #[serde(default)]
+    pub airport_spec: crate::airport_class::AirportSpecId,
+    /// Bloques FTA reservados (`AirportBlocks` / `st->airport.blocks`).
+    #[serde(default)]
+    pub airport_blocks: u64,
     /// Teselas adicionales unidas con `JoinStation` (paradas road 1×1).
     #[serde(default)]
     pub joined_tiles: Vec<TileCoord>,
@@ -156,6 +162,8 @@ impl Station {
             rating: default_station_rating(),
             company_time_since_pickup: vec![(CompanyId::PLAYER, CargoTimeSincePickup::default())],
             airport_tiles: Vec::new(),
+            airport_spec: crate::airport_class::AirportSpecId::Heliport,
+            airport_blocks: 0,
             joined_tiles: Vec::new(),
             station_spec: crate::station_class::StationSpecId::DefaultRail,
             newgrf_random_bits: seed_station_newgrf_random_bits(pos),

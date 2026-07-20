@@ -98,7 +98,8 @@ pub use airport_fta::{
     AirportHeading, AirportMovingData, CITY_ENTRIES, CITY_MOVING_DATA, CITY_NOF_ELEMENTS,
     COMMUTER_ENTRIES, COMMUTER_MOVING_DATA, COMMUTER_NOF_ELEMENTS, COUNTRY_ENTRIES,
     COUNTRY_MOVING_DATA, COUNTRY_NOF_ELEMENTS, HELIDEPOT_ENTRIES, HELIDEPOT_MOVING_DATA,
-    HELIDEPOT_NOF_ELEMENTS, station_uses_airport_fta, station_uses_country_fta,
+    HELIDEPOT_NOF_ELEMENTS, METROPOLITAN_ENTRIES, METROPOLITAN_MOVING_DATA,
+    METROPOLITAN_NOF_ELEMENTS, station_uses_airport_fta, station_uses_country_fta,
 };
 pub use autoreplace::{AutoReplaceRule, try_autoreplace_vehicle};
 pub use bridge_spec::{

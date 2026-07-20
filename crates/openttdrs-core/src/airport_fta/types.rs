@@ -83,8 +83,10 @@ impl AirportHeading {
 /// Bitset de bloques (`AirportBlocks`, `u64`).
 pub type AirportBlockBits = u64;
 
-/// Bit de `AirportBlock::AirportBusy` / `RunwayInOut` (índice 8).
+/// Bit de `AirportBlock::AirportBusy` / `RunwayInOut` / `RunwayIn` (índice 8).
 pub const BLOCK_AIRPORT_BUSY: AirportBlockBits = 1 << 8;
+/// Bit de `AirportBlock::RunwayOut` (índice 9).
+pub const BLOCK_RUNWAY_OUT: AirportBlockBits = 1 << 9;
 /// Bit de `AirportBlock::Term1`.
 pub const BLOCK_TERM1: AirportBlockBits = 1 << 0;
 /// Bit de `AirportBlock::Term2`.
@@ -137,6 +139,7 @@ pub enum AirportFtaKind {
     Helidepot,
     Commuter,
     City,
+    Metropolitan,
 }
 
 /// Descriptor de tablas + comportamiento especial por aeropuerto.

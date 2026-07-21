@@ -122,6 +122,11 @@ pub enum SimEvent {
         vehicle_id: u32,
         at: TileCoord,
     },
+    /// Jet estrellado en pista corta (`MaybeCrashAirplane`).
+    AircraftCrash {
+        vehicle_id: u32,
+        at: TileCoord,
+    },
 }
 
 /// Cola de eventos del tick actual (no persistida).

@@ -281,6 +281,7 @@ pub const CARGO_DELIVERY_PAYMENT: i64 = 12;
 ///
 /// Ver [`SimulationRuntime`] para detalles de campos no persistidos.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct GameState {
     // ───── Campos persistidos ─────
     pub map: Map,
@@ -376,6 +377,9 @@ pub struct GameState {
     /// Desastres ambientales habilitados.
     #[serde(default = "default_true")]
     pub disasters_enabled: bool,
+    /// Límite de ruido de aeropuerto (`economy.station_noise_level`).
+    #[serde(default)]
+    pub station_noise_level: bool,
     /// Ticks hasta la próxima comprobación de desastre.
     #[serde(default = "default_disaster_timer")]
     pub disaster_timer: u64,
@@ -496,6 +500,7 @@ impl GameState {
             subsidies: Vec::new(),
             next_subsidy_id: 1,
             disasters_enabled: true,
+            station_noise_level: false,
             disaster_timer: default_disaster_timer(),
             disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
@@ -559,6 +564,7 @@ impl GameState {
             subsidies: Vec::new(),
             next_subsidy_id: 1,
             disasters_enabled: true,
+            station_noise_level: false,
             disaster_timer: default_disaster_timer(),
             disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),

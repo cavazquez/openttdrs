@@ -13,6 +13,7 @@ pub const fn year_in_range(year: u32) -> bool {
 
 /// Estado de cheats de la partida (no afecta saves antiguos: `#[serde(default)]`).
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct CheatsState {
     /// Maestro: sin esto, el resto se ignora.
     pub enabled: bool,
@@ -20,6 +21,9 @@ pub struct CheatsState {
     pub infinite_money: bool,
     /// `ClearTile` ignora propiedad de tesela.
     pub magic_bulldozer: bool,
+    /// Desactiva crash de jets en pista corta (`_cheats.no_jetcrash`).
+    #[serde(default)]
+    pub no_jetcrash: bool,
 }
 
 impl CheatsState {
@@ -31,5 +35,10 @@ impl CheatsState {
     #[must_use]
     pub const fn magic_bulldozer_active(&self) -> bool {
         self.enabled && self.magic_bulldozer
+    }
+
+    #[must_use]
+    pub const fn no_jetcrash_active(&self) -> bool {
+        self.enabled && self.no_jetcrash
     }
 }

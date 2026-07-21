@@ -190,6 +190,12 @@ fn dispatch_sim_events(
                     sfx.write(PlayWorldSfx::new(SoundId::SkidPlane, at, 0.8).with_priority(78));
                 }
             }
+            SimEvent::AircraftCrash { at, .. } => {
+                if hud.sound_disaster || hud.sound_vehicle {
+                    sfx.write(PlayWorldSfx::new(SoundId::Explosion, at, 1.0).with_priority(130));
+                }
+                fx.push_explosion(at);
+            }
             SimEvent::TownRatingChanged { .. } => {}
             SimEvent::SubsidyCreated { station_pos, .. } => {
                 if hud.sound_confirm {

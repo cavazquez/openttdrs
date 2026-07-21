@@ -3,9 +3,9 @@
 use crate::vehicle::VehicleKind;
 
 use super::catalog_data::{
-    ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_TRICARIO, ENGINE_BUS_MPS, ENGINE_SHIP_MPS,
-    ENGINE_TRAIN_KIRBY, ENGINE_TRAM_MPS, ENGINE_TRUCK_MPS, RELIABILITY_ELECTRIC, RELIABILITY_STEAM,
-    engines_table,
+    ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_FOKKER, ENGINE_AIRCRAFT_TRICARIO, ENGINE_BUS_MPS,
+    ENGINE_SHIP_MPS, ENGINE_TRAIN_KIRBY, ENGINE_TRAM_MPS, ENGINE_TRUCK_MPS, RELIABILITY_ELECTRIC,
+    RELIABILITY_STEAM, engines_table,
 };
 use super::model::{EngineDef, NEWGRF_ENGINE_ID_BASE};
 
@@ -191,6 +191,12 @@ pub const fn default_engine_id(kind: VehicleKind) -> u16 {
 #[must_use]
 pub const fn aircraft_is_helicopter(engine_id: u16) -> bool {
     engine_id == ENGINE_AIRCRAFT_TRICARIO
+}
+
+/// ¿El motor aéreo es jet (`AIR_FAST`)? Catálogo reducido: Fokker F27.
+#[must_use]
+pub const fn aircraft_is_jet(engine_id: u16) -> bool {
+    engine_id == ENGINE_AIRCRAFT_FOKKER
 }
 
 #[must_use]

@@ -185,6 +185,8 @@ pub struct AirportSpecDef {
     pub size_y: i32,
     /// Radio de cobertura (teselas).
     pub catchment: i32,
+    /// Ruido base (`AirportSpec.noise_level` en `airport_defaults.h`).
+    pub noise_level: u8,
     /// Flags FTA (`Airplanes` / `Helicopters` / `ShortStrip`).
     pub fta_flags: AirportFtaFlags,
     pub from_newgrf: bool,
@@ -243,6 +245,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 1,
         size_y: 1,
         catchment: 4,
+        noise_level: 1,
         fta_flags: HELI_ONLY,
         from_newgrf: false,
     },
@@ -254,6 +257,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 2,
         size_y: 2,
         catchment: 4,
+        noise_level: 2,
         fta_flags: HELI_ONLY,
         from_newgrf: false,
     },
@@ -265,6 +269,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 4,
         size_y: 3,
         catchment: 4,
+        noise_level: 3,
         fta_flags: SHORT_STRIP,
         from_newgrf: false,
     },
@@ -276,6 +281,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 5,
         size_y: 4,
         catchment: 4,
+        noise_level: 4,
         fta_flags: SHORT_STRIP,
         from_newgrf: false,
     },
@@ -287,6 +293,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 6,
         size_y: 6,
         catchment: 5,
+        noise_level: 5,
         fta_flags: FULL_STRIP,
         from_newgrf: false,
     },
@@ -298,6 +305,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 6,
         size_y: 6,
         catchment: 6,
+        noise_level: 8,
         fta_flags: FULL_STRIP,
         from_newgrf: false,
     },
@@ -309,6 +317,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 7,
         size_y: 7,
         catchment: 8,
+        noise_level: 17,
         fta_flags: FULL_STRIP,
         from_newgrf: false,
     },
@@ -320,6 +329,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 9,
         size_y: 11,
         catchment: 10,
+        noise_level: 25,
         fta_flags: FULL_STRIP,
         from_newgrf: false,
     },
@@ -331,6 +341,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 1,
         size_y: 1,
         catchment: 4,
+        noise_level: 0,
         fta_flags: HELI_ONLY,
         from_newgrf: false,
     },
@@ -342,6 +353,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 4,
         size_y: 2,
         catchment: 4,
+        noise_level: 3,
         fta_flags: HELI_ONLY,
         from_newgrf: false,
     },
@@ -396,6 +408,40 @@ pub fn list_airport_specs(class: AirportClassId, filter: &str) -> Vec<&'static A
 #[must_use]
 pub fn airport_allows_aircraft(spec: AirportSpecId, is_helicopter: bool) -> bool {
     airport_spec_def(spec).is_none_or(|d| d.allows_aircraft_subtype(is_helicopter))
+}
+
+/// Población por unidad de ruido (índice 0 / consejo permisivo; `economy_settings.ini`).
+pub const TOWN_NOISE_POPULATION_DEFAULT: u32 = 800;
+
+/// Ruido efectivo tras atenuar por distancia al pueblo (`GetAirportNoiseLevelForDistance`).
+#[must_use]
+pub fn airport_noise_for_distance(
+    noise_level: u8,
+    distance: u32,
+    town_tolerance_distance: u32,
+) -> u8 {
+    if noise_level < 2 {
+        return noise_level;
+    }
+    let step = town_tolerance_distance.max(1);
+    let noise_reduction = distance / step;
+    let nl = u32::from(noise_level);
+    if noise_reduction >= nl {
+        1
+    } else {
+        u8::try_from(nl - noise_reduction).unwrap_or(1)
+    }
+}
+
+/// Máximo de ruido que tolera un pueblo (`Town::MaxTownNoise`).
+#[must_use]
+pub fn max_town_noise(population: u32, town_noise_population: u32) -> u16 {
+    if population == 0 {
+        return 0;
+    }
+    let denom = town_noise_population.max(1);
+    let v = population / denom + 3;
+    u16::try_from(v.min(u32::from(u16::MAX))).unwrap_or(u16::MAX)
 }
 
 #[cfg(test)]

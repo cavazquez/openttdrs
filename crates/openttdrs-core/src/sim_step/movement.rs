@@ -5,7 +5,10 @@ pub(super) fn tick_aircraft_phases(state: &mut GameState) {
     use crate::aircraft_movement::{AircraftPhaseEvent, tick_aircraft_phase};
     use crate::sim_events::SimEvent;
 
+    let mut brake_checks = Vec::new();
     for i in 0..state.vehicles.len() {
+        let prev_pos = state.vehicles[i].airport_pos;
+        let prev_fta = state.vehicles[i].airport_fta_active;
         let ev = tick_aircraft_phase(&mut state.vehicles[i], &state.map, &mut state.stations);
         let id = state.vehicles[i].id;
         let at = state.vehicles[i].pos;
@@ -24,6 +27,10 @@ pub(super) fn tick_aircraft_phases(state: &mut GameState) {
             }
             AircraftPhaseEvent::None => {}
         }
+        brake_checks.push((id, prev_pos, prev_fta));
+    }
+    for (id, prev_pos, prev_fta) in brake_checks {
+        let _ = crate::aircraft_crash::maybe_crash_after_brake_tick(state, id, prev_pos, prev_fta);
     }
 }
 

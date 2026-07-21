@@ -70,6 +70,9 @@ pub struct Town {
     /// Series mensuales (población / servicio).
     #[serde(default)]
     pub history: TownHistory,
+    /// Ruido acumulado de aeropuertos (`Town::noise_reached`).
+    #[serde(default)]
+    pub noise_reached: u16,
 }
 
 impl Default for Town {
@@ -89,6 +92,7 @@ impl Default for Town {
             fund_buildings_months: 0,
             is_growing: false,
             history: TownHistory::default(),
+            noise_reached: 0,
         }
     }
 }

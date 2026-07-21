@@ -134,6 +134,8 @@ pub enum CommandError {
     CompanyNotBankrupt,
     /// La autoridad local no permite construir aquí.
     AuthorityRatingTooLow,
+    /// El pueblo rechaza el aeropuerto por exceso de ruido.
+    AirportNoiseTooHigh,
     /// No se puede plantar un árbol aquí.
     CannotPlantTreeHere,
     /// No hay árbol ni cultivo que quitar.

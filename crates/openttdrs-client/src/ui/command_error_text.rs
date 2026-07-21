@@ -120,6 +120,9 @@ pub const fn command_error_message(err: CommandError) -> &'static str {
         CommandError::AuthorityRatingTooLow => {
             "La autoridad local no permite construir una estación aquí."
         }
+        CommandError::AirportNoiseTooHigh => {
+            "La autoridad local rechaza el aeropuerto: demasiado ruido."
+        }
         CommandError::CannotPlantTreeHere => "No se puede plantar un árbol aquí.",
         CommandError::NoTreeHere => "No hay árbol ni cultivo en esta tesela.",
         CommandError::SignNotFound => "Cartel no encontrado.",
@@ -216,6 +219,7 @@ mod tests {
             CommandError::CannotBuyOwnCompany,
             CommandError::CompanyNotBankrupt,
             CommandError::AuthorityRatingTooLow,
+            CommandError::AirportNoiseTooHigh,
             CommandError::CannotPlantTreeHere,
             CommandError::NoTreeHere,
             CommandError::SignNotFound,

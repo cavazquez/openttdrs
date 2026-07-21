@@ -76,6 +76,8 @@ pub(in crate::command) fn place_airport_area(
         return Err(CommandError::AuthorityRatingTooLow);
     }
 
+    let noise_add = airport_noise_contribution(state, station_anchor, spec)?;
+
     let tile_count = airport_spec_tiles(origin, spec, axis_y).count();
     let mut tiles = Vec::with_capacity(tile_count);
     for (c, piece) in airport_spec_tiles(origin, spec, axis_y) {
@@ -91,6 +93,11 @@ pub(in crate::command) fn place_airport_area(
         let cost = STATION_BUILD_COST.saturating_mul(i64::try_from(tile_count).unwrap_or(1));
         state.economy.money -= cost;
     }
+    if let Some((town_idx, add)) = noise_add {
+        state.towns[town_idx].noise_reached = state.towns[town_idx]
+            .noise_reached
+            .saturating_add(u16::from(add));
+    }
     let mut st = Station::new_with_kind(station_anchor, StopKind::Airport);
     st.owner = state.active_company;
     st.airport_tiles = tiles;
@@ -99,6 +106,36 @@ pub(in crate::command) fn place_airport_area(
     // Catchment: `station_catchment_radius` lee `airport_spec` en cobertura.
     state.stations.push(st);
     Ok(())
+}
+
+/// Contribución de ruido al pueblo más cercano (`GetAirportNoiseLevelForDistance`).
+///
+/// Con `station_noise_level` activo, rechaza si supera `MaxTownNoise`.
+fn airport_noise_contribution(
+    state: &GameState,
+    airport_pos: TileCoord,
+    spec: AirportSpecId,
+) -> Result<Option<(usize, u8)>, CommandError> {
+    use crate::airport_class::{
+        TOWN_NOISE_POPULATION_DEFAULT, airport_noise_for_distance, airport_spec_def, max_town_noise,
+    };
+    use crate::town::nearest_town_index;
+
+    let Some((town_idx, dist)) = nearest_town_index(&state.towns, airport_pos) else {
+        return Ok(None);
+    };
+    let noise_level = airport_spec_def(spec).map_or(0, |d| d.noise_level);
+    // Tolerancia permisiva: 8 + 0×4 (sin setting de council tolerance).
+    let effective = airport_noise_for_distance(noise_level, dist, 8);
+    if state.station_noise_level {
+        let town = &state.towns[town_idx];
+        let max = max_town_noise(town.population, TOWN_NOISE_POPULATION_DEFAULT);
+        let next = u32::from(town.noise_reached).saturating_add(u32::from(effective));
+        if next > u32::from(max) {
+            return Err(CommandError::AirportNoiseTooHigh);
+        }
+    }
+    Ok(Some((town_idx, effective)))
 }
 
 fn write_airport_tile(

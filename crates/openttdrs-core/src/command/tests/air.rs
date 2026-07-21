@@ -257,6 +257,34 @@ fn airplane_order_to_heliport_rejected() {
 }
 
 #[test]
+fn airport_noise_rejects_intercontinental_near_small_town() {
+    let mut s = GameState::new(40, 40);
+    s.station_noise_level = true;
+    s.towns.push(crate::Town {
+        id: 1,
+        pos: TileCoord::new(5, 5),
+        name: "Villa".into(),
+        population: 100, // MaxTownNoise = 100/800+3 = 3
+        local_authority_rating: 500,
+        ..crate::Town::default()
+    });
+    let err = apply_command(
+        &mut s,
+        &Command::PlaceAirportArea {
+            origin: TileCoord::new(4, 4),
+            axis_y: false,
+            spec: crate::AirportSpecId::Intercontinental, // noise 25
+        },
+    )
+    .unwrap_err();
+    assert!(matches!(err, crate::CommandError::AirportNoiseTooHigh));
+
+    // Helipuerto (noise 1) cabe en max 3.
+    apply_command(&mut s, &Command::PlaceAirport(TileCoord::new(8, 8))).unwrap();
+    assert_eq!(s.towns[0].noise_reached, 1);
+}
+
+#[test]
 fn airplane_order_to_small_and_intercon_ok() {
     let mut s = GameState::new(40, 40);
     apply_command(

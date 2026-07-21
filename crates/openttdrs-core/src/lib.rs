@@ -6,6 +6,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub mod ai;
+pub mod aircraft_crash;
 pub mod aircraft_movement;
 pub mod airport;
 pub mod airport_class;
@@ -83,6 +84,10 @@ pub use ai::{
     AI_BUILD_MONEY_THRESHOLD, AiSettings, CompanyAi, DEFAULT_AI_BUILD_MONEY_THRESHOLD,
     DEFAULT_AI_MAX_ROUTES, MAX_AI_ROUTES, TransCargoAi, format_ai_debug_status, tick_ai_companies,
 };
+pub use aircraft_crash::{
+    SHORT_STRIP_JET_CRASH_PROB, crash_airplane, maybe_crash_after_brake_tick,
+    should_crash_short_strip_jet,
+};
 pub use aircraft_movement::{aircraft_requires_path, straight_line_path};
 pub use airport::{
     AIRPORT_SMALL_H, AIRPORT_SMALL_W, AirportPiece, airport_loading_tile, airport_loading_tile_at,
@@ -91,8 +96,9 @@ pub use airport::{
 };
 pub use airport_class::{
     AirportClassDef, AirportClassId, AirportFtaFlags, AirportSpecDef, AirportSpecId,
-    airport_allows_aircraft, airport_class_def, airport_spec_def, all_airport_class_defs,
-    all_airport_spec_defs, list_airport_classes, list_airport_specs,
+    TOWN_NOISE_POPULATION_DEFAULT, airport_allows_aircraft, airport_class_def,
+    airport_noise_for_distance, airport_spec_def, all_airport_class_defs, all_airport_spec_defs,
+    list_airport_classes, list_airport_specs, max_town_noise,
 };
 pub use airport_fta::{
     AirportHeading, AirportMovingData, CITY_ENTRIES, CITY_MOVING_DATA, CITY_NOF_ELEMENTS,
@@ -164,14 +170,14 @@ pub use engine::{
     ENGINE_TRAIN_X2001, ENGINE_TRUCK_MPS, ENGINE_WAGON_COAL, ENGINE_WAGON_GOODS, ENGINE_WAGON_MAIL,
     ENGINE_WAGON_PASSENGER, EngineCatalogSort, EngineDef, NEWGRF_ENGINE_ID_BASE,
     REFERENCE_PROGRESS_STEP, ROAD_ACCEL_ORIGINAL, RoadEngineFilter, TrainAccelerationModel,
-    accelerate_train_speed, aircraft_is_helicopter, decelerate_road_speed, decelerate_train_speed,
-    default_engine_id, do_update_speed, engine_available_in_year, engine_by_id, engine_catalog,
-    engine_for_vehicle, engine_in_catalog, engines_for_depot_kind, engines_for_depot_kind_in,
-    engines_for_depot_purchase, engines_of_kind, get_advance_distance, get_advance_speed,
-    get_curve_speed_limit, next_free_engine_id, progress_step_for_speed, tile_progress_length,
-    train_acceleration, train_default_air_drag, train_max_te_n, train_realistic_acceleration,
-    train_realistic_station_max_speed, train_smoke_kind, train_sprite_group,
-    train_visual_progress_from_pixel, update_road_speed, update_train_speed,
+    accelerate_train_speed, aircraft_is_helicopter, aircraft_is_jet, decelerate_road_speed,
+    decelerate_train_speed, default_engine_id, do_update_speed, engine_available_in_year,
+    engine_by_id, engine_catalog, engine_for_vehicle, engine_in_catalog, engines_for_depot_kind,
+    engines_for_depot_kind_in, engines_for_depot_purchase, engines_of_kind, get_advance_distance,
+    get_advance_speed, get_curve_speed_limit, next_free_engine_id, progress_step_for_speed,
+    tile_progress_length, train_acceleration, train_default_air_drag, train_max_te_n,
+    train_realistic_acceleration, train_realistic_station_max_speed, train_smoke_kind,
+    train_sprite_group, train_visual_progress_from_pixel, update_road_speed, update_train_speed,
     vanilla_engine_catalog, vanilla_train_tractive_effort,
 };
 pub use entity_history::{

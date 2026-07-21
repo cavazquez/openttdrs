@@ -50,9 +50,10 @@ pub use tick::{
 };
 pub use types::{
     AirportBlockBits, AirportFtaEdge, AirportFtaKind, AirportFtaProfile, AirportHeading,
-    AirportMovingData, AirportMovingDataFlags, BLOCK_HANGAR2_AREA, BLOCK_HELIPAD1, BLOCK_HELIPAD2,
-    BLOCK_PRE_HELIPAD, BLOCK_TERM3, FLAG_BRAKE, FLAG_EXACT, FLAG_HELI_LOWER, FLAG_HELI_RAISE,
-    FLAG_HOLD, FLAG_LAND, FLAG_NO_SPEED_CLAMP, FLAG_SLOW_TURN, FLAG_TAKEOFF,
+    AirportMovingData, AirportMovingDataFlags, BLOCK_AIRPORT_BUSY, BLOCK_HANGAR2_AREA,
+    BLOCK_HELIPAD1, BLOCK_HELIPAD2, BLOCK_PRE_HELIPAD, BLOCK_TERM1, BLOCK_TERM3, FLAG_BRAKE,
+    FLAG_EXACT, FLAG_HELI_LOWER, FLAG_HELI_RAISE, FLAG_HOLD, FLAG_LAND, FLAG_NO_SPEED_CLAMP,
+    FLAG_SLOW_TURN, FLAG_TAKEOFF,
 };
 
 #[cfg(test)]
@@ -372,6 +373,84 @@ mod tests {
             "tras liberar HELIPAD1 el segundo heli llega al pad"
         );
         assert_ne!(s.vehicles[1].airport_blocks_held & BLOCK_HELIPAD1, 0);
+    }
+
+    #[test]
+    fn multi_aircraft_second_waits_while_runway_busy() {
+        let mut s = GameState::new(32, 32);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: AirportSpecId::Small,
+            },
+        )
+        .unwrap();
+        let hangar = s.stations[0].pos;
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_DAKOTA),
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_DAKOTA),
+        )
+        .unwrap();
+        assert_eq!(s.vehicles.len(), 2);
+
+        // Avión 0 en pista (pos 7) con AirportBusy.
+        s.vehicles[0].airport_fta_active = true;
+        s.vehicles[0].airport_pos = 7;
+        s.vehicles[0].airport_heading = AirportHeading::Takeoff;
+        s.vehicles[0].aircraft_phase = AircraftPhase::Taxi;
+        s.vehicles[0].airport_blocks_held = BLOCK_AIRPORT_BUSY;
+        s.stations[0].airport_blocks = BLOCK_AIRPORT_BUSY;
+
+        // Avión 1 en umbral de pista (pos 6 → 7 requiere AirportBusy).
+        s.vehicles[1].airport_fta_active = true;
+        s.vehicles[1].airport_pos = 6;
+        s.vehicles[1].airport_heading = AirportHeading::Takeoff;
+        s.vehicles[1].aircraft_phase = AircraftPhase::Taxi;
+        s.vehicles[1].airport_blocks_held = 0;
+        s.vehicles[1].aircraft_phase_ticks = 0;
+        s.vehicles[1].running = true;
+
+        let runway_edge = country_fta_edges(6)
+            .into_iter()
+            .find(|e| e.next_position == 7)
+            .expect("Country 6→7");
+        assert_ne!(runway_edge.blocks & BLOCK_AIRPORT_BUSY, 0);
+
+        for _ in 0..80 {
+            let _ = tick_airport_fta(&mut s.vehicles[1], &s.map, &mut s.stations);
+            assert_ne!(
+                s.vehicles[1].airport_pos, 7,
+                "segundo avión no debe entrar a pista mientras AirportBusy está reservado"
+            );
+            assert_eq!(
+                s.stations[0].airport_blocks & BLOCK_AIRPORT_BUSY,
+                BLOCK_AIRPORT_BUSY,
+                "reserva de pista del primero debe persistir"
+            );
+        }
+
+        s.stations[0].airport_blocks &= !BLOCK_AIRPORT_BUSY;
+        s.vehicles[0].airport_blocks_held = 0;
+        let mut reached = false;
+        for _ in 0..80 {
+            let _ = tick_airport_fta(&mut s.vehicles[1], &s.map, &mut s.stations);
+            if s.vehicles[1].airport_pos == 7 {
+                reached = true;
+                break;
+            }
+        }
+        assert!(
+            reached,
+            "tras liberar AirportBusy el segundo avión entra a pista (pos 7)"
+        );
+        assert_ne!(s.vehicles[1].airport_blocks_held & BLOCK_AIRPORT_BUSY, 0);
     }
 
     #[test]

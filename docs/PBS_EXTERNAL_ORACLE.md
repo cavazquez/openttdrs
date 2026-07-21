@@ -86,14 +86,24 @@ conserva los campos v1 de velocidad/progreso.
 Para ver por dónde pasa el tren y qué reservas PBS hay en cada muestra:
 
 ```bash
+# Oráculo corto (paridad, 40 ticks)
 python3 scripts/view_pbs_trace.py \
   crates/openttdrs-core/tests/fixtures/parity/train_pbs_15_3_openttd.jsonl \
   /tmp/pbs_trace.html
+
+# Recorrido completo del mismo save (400 ticks → estación destino)
+python3 scripts/view_pbs_trace.py \
+  crates/openttdrs-core/tests/fixtures/parity/train_pbs_15_3_400_openttd.jsonl \
+  /tmp/pbs_trace_400.html
+# HTML versionado: docs/parity/train_pbs_15_3_400_trace.html
 ```
 
 Abre el HTML en el navegador: scrubber de muestras, mapa del corredor,
 lista de tiles visitados y anotación de señal (`--signal X,Y,label`; el
 fixture `train_pbs_15_3` usa por defecto la path signal en `(46,37)`).
+
+La traza de **400 ticks** es solo para inspección visual (path
+`47,37 → … → 42,37`). El golden de paridad sigue siendo la de **40 ticks**.
 
 ## Estado
 

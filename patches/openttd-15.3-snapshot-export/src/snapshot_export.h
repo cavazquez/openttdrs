@@ -27,4 +27,13 @@ void OpenttdrsMaybeStartPbsTrace(const std::string &source_path);
 /** Emits one post-tick PBS row and exits after the configured number of rows. */
 void OpenttdrsMaybeExportPbsTraceTick();
 
+/**
+ * Arms an optional airport FTA JSONL exporter when OPENTTDRS_AIRPORT_FTA_TRACE_OUT is set.
+ * Rows are emitted by OpenttdrsMaybeExportAirportFtaTraceTick() after each game tick.
+ */
+void OpenttdrsMaybeStartAirportFtaTrace(const std::string &source_path);
+
+/** Emits one post-tick airport FTA row and exits after the configured number of rows. */
+void OpenttdrsMaybeExportAirportFtaTraceTick();
+
 #endif /* OPENTTDRS_SNAPSHOT_EXPORT_H */

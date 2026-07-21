@@ -5,6 +5,7 @@
 
 #include "snapshot_export.h"
 
+#include "aircraft.h"
 #include "company_func.h"
 #include "core/random_func.hpp"
 #include "direction_type.h"
@@ -15,6 +16,7 @@
 #include "openttd.h"
 #include "rail_map.h"
 #include "saveload/saveload.h"
+#include "station_base.h"
 #include "table/sprites.h"
 #include "tile_map.h"
 #include "tile_type.h"
@@ -503,6 +505,131 @@ void OpenttdrsMaybeExportPbsTraceTick()
 	if (_openttdrs_pbs_trace.rows >= _openttdrs_pbs_trace.max_rows) {
 		_openttdrs_pbs_trace.armed = false;
 		_openttdrs_pbs_trace.out.close();
+		_exit_game = true;
+	}
+}
+
+namespace {
+
+struct AirportFtaTraceState {
+	std::ofstream out;
+	std::string source_path;
+	uint64_t rows = 0;
+	uint64_t max_rows = 80;
+	bool armed = false;
+};
+
+AirportFtaTraceState _openttdrs_airport_fta_trace;
+
+uint64_t ParseAirportFtaTraceTicks()
+{
+	const char *raw = std::getenv("OPENTTDRS_AIRPORT_FTA_TRACE_TICKS");
+	if (raw == nullptr || raw[0] == '\0') return 80;
+	const long long parsed = std::atoll(raw);
+	return parsed > 0 ? static_cast<uint64_t>(parsed) : 80;
+}
+
+void WriteAirportFtaTraceRow(const char *kind)
+{
+	nlohmann::json row;
+	row["kind"] = kind;
+	row["tick"] = TimerGameTick::counter;
+	row["aircraft"] = nlohmann::json::array();
+	row["airports"] = nlohmann::json::array();
+
+	for (const Vehicle *v : Vehicle::Iterate()) {
+		if (v->type != VEH_AIRCRAFT) continue;
+		const Aircraft *a = Aircraft::From(v);
+		if (!a->IsNormalAircraft()) continue;
+
+		nlohmann::json ac;
+		ac["vehicle"] = v->index.base();
+		ac["engine"] = a->engine_type.base();
+		ac["x"] = TileX(v->tile);
+		ac["y"] = TileY(v->tile);
+		ac["x_pos"] = v->x_pos;
+		ac["y_pos"] = v->y_pos;
+		ac["z_pos"] = v->z_pos;
+		ac["direction"] = static_cast<uint8_t>(v->direction);
+		ac["pos"] = a->pos;
+		ac["previous_pos"] = a->previous_pos;
+		ac["state"] = a->state;
+		ac["targetairport"] = a->targetairport.base();
+		ac["speed"] = v->cur_speed;
+		ac["running"] = !v->vehstatus.Test(VehState::Stopped);
+		row["aircraft"].push_back(ac);
+	}
+
+	for (const Station *st : Station::Iterate()) {
+		if (!st->facilities.Test(StationFacility::Airport) || st->airport.tile == INVALID_TILE) {
+			continue;
+		}
+		nlohmann::json ap;
+		ap["station"] = st->index.base();
+		ap["x"] = TileX(st->airport.tile);
+		ap["y"] = TileY(st->airport.tile);
+		ap["w"] = st->airport.w;
+		ap["h"] = st->airport.h;
+		ap["type"] = st->airport.type;
+		ap["layout"] = st->airport.layout;
+		ap["blocks"] = st->airport.blocks.base();
+		row["airports"].push_back(ap);
+	}
+
+	_openttdrs_airport_fta_trace.out << row.dump() << '\n';
+	_openttdrs_airport_fta_trace.out.flush();
+}
+
+} // namespace
+
+void OpenttdrsMaybeStartAirportFtaTrace(const std::string &source_path)
+{
+	const char *out_path = std::getenv("OPENTTDRS_AIRPORT_FTA_TRACE_OUT");
+	if (out_path == nullptr || out_path[0] == '\0') return;
+
+	static int call_count = 0;
+	call_count++;
+	const char *min_s = std::getenv("OPENTTDRS_SNAPSHOT_MIN_CALL");
+	const int min_call = (min_s != nullptr && min_s[0] != '\0') ? std::atoi(min_s) : 2;
+	if (call_count < min_call || _openttdrs_airport_fta_trace.armed) return;
+
+	_openttdrs_airport_fta_trace.out.open(out_path, std::ios::out | std::ios::trunc);
+	if (!_openttdrs_airport_fta_trace.out.is_open()) {
+		std::fprintf(stderr, "openttdrs airport FTA trace cannot open %s\n", out_path);
+		return;
+	}
+	const char *trace_source = std::getenv("OPENTTDRS_AIRPORT_FTA_TRACE_SOURCE");
+	_openttdrs_airport_fta_trace.source_path =
+		trace_source != nullptr && trace_source[0] != '\0' ? trace_source : source_path;
+	_openttdrs_airport_fta_trace.rows = 0;
+	_openttdrs_airport_fta_trace.max_rows = ParseAirportFtaTraceTicks();
+	_openttdrs_airport_fta_trace.armed = true;
+
+	nlohmann::json metadata;
+	metadata["kind"] = "metadata";
+	metadata["schema_version"] = 1;
+	metadata["producer"] = "openttd";
+	metadata["trace"] = "airport_fta";
+	const char *commit = std::getenv("OPENTTDRS_OPENTTD_COMMIT");
+	metadata["openttd_commit"] = commit != nullptr ? commit : "";
+	metadata["source_path"] = _openttdrs_airport_fta_trace.source_path;
+	metadata["initial_sample_point"] = "after_load_game";
+	metadata["tick_sample_point"] = "after_state_game_loop";
+	metadata["max_ticks"] = _openttdrs_airport_fta_trace.max_rows;
+	_openttdrs_airport_fta_trace.out << metadata.dump() << '\n';
+	_openttdrs_airport_fta_trace.out.flush();
+	WriteAirportFtaTraceRow("initial");
+}
+
+void OpenttdrsMaybeExportAirportFtaTraceTick()
+{
+	if (!_openttdrs_airport_fta_trace.armed) return;
+
+	WriteAirportFtaTraceRow("tick");
+	_openttdrs_airport_fta_trace.rows++;
+	if (_openttdrs_airport_fta_trace.rows >= _openttdrs_airport_fta_trace.max_rows) {
+		_openttdrs_airport_fta_trace.armed = false;
+		_openttdrs_airport_fta_trace.out.close();
 		_exit_game = true;
 	}
 }

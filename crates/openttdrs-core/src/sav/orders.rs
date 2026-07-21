@@ -295,6 +295,11 @@ mod tests {
                 name: None,
                 string_id: None,
                 town_id: None,
+                airport_type: 0,
+                airport_w: 0,
+                airport_h: 0,
+                airport_layout: 0,
+                airport_blocks: 0,
             },
         );
         let orders = vehicle_orders_from_sav(
@@ -321,6 +326,11 @@ mod tests {
                 name: None,
                 string_id: None,
                 town_id: None,
+                airport_type: 0,
+                airport_w: 0,
+                airport_h: 0,
+                airport_layout: 0,
+                airport_blocks: 0,
             },
         );
         let full = stop_flags_from_sav(OTTD_LOAD_FULL << 4);

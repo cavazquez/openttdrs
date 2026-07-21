@@ -13,6 +13,9 @@ const FACIL_WAYPOINT: u64 = 0x80;
 /// Estación decodificada del save (posición + nombre custom + facilities).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavStation {
+    /// `StationID` de `OpenTTD` (clave real de la tabla `STNN`, no el índice
+    /// del `Vec`); necesario para correlacionar con oráculos/trazas externas.
+    pub station_id: u32,
     pub pos: TileCoord,
     /// Nombre puesto por el jugador; `None` si usa nombre generado.
     pub name: Option<String>,
@@ -22,6 +25,15 @@ pub struct SavStation {
     pub string_id: Option<u16>,
     /// Índice de ciudad (`BaseStation::town`) para armar el nombre generado.
     pub town_id: Option<u32>,
+    /// `Station::airport.type` (`AT_*` de `OpenTTD`); solo válido si `facilities` trae `FACIL_AIRPORT`.
+    pub airport_type: u8,
+    /// `Station::airport.w` / `airport.h` (footprint en teselas).
+    pub airport_w: u16,
+    pub airport_h: u16,
+    /// `Station::airport.layout`.
+    pub airport_layout: u8,
+    /// `Station::airport.blocks` (guardado como `airport.flags`).
+    pub airport_blocks: u64,
 }
 
 /// Entrada del índice de estación (`StationID`) en `STNN`.
@@ -33,6 +45,11 @@ pub(crate) struct SavStationIndex {
     pub name: Option<String>,
     pub string_id: Option<u16>,
     pub town_id: Option<u32>,
+    pub airport_type: u8,
+    pub airport_w: u16,
+    pub airport_h: u16,
+    pub airport_layout: u8,
+    pub airport_blocks: u64,
 }
 
 /// Primer (y único) registro de un campo struct de tabla.
@@ -92,6 +109,29 @@ pub(crate) fn station_index_from_chunks(
         let town_id = record_get(base, "town")
             .and_then(SlValue::as_u64)
             .and_then(|v| (v > 0).then_some((v - 1) as u32));
+        // Campos `airport.*` solo existen bajo el struct `normal` (ausentes en waypoints).
+        let normal = nested_struct(&record, "normal");
+        let airport_type = normal
+            .and_then(|n| record_get(n, "airport.type"))
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        let airport_w = normal
+            .and_then(|n| record_get(n, "airport.w"))
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        let airport_h = normal
+            .and_then(|n| record_get(n, "airport.h"))
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        let airport_layout = normal
+            .and_then(|n| record_get(n, "airport.layout"))
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
+        // Guardado en disco como `airport.flags` (`SLE_VARNAME`); `Station::airport.blocks` en memoria.
+        let airport_blocks = normal
+            .and_then(|n| record_get(n, "airport.flags"))
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0);
         #[allow(clippy::cast_possible_truncation)]
         out.insert(
             idx,
@@ -102,6 +142,11 @@ pub(crate) fn station_index_from_chunks(
                 name,
                 string_id,
                 town_id,
+                airport_type: airport_type as u8,
+                airport_w: airport_w as u16,
+                airport_h: airport_h as u16,
+                airport_layout: airport_layout as u8,
+                airport_blocks,
             },
         );
     }
@@ -119,15 +164,27 @@ pub(crate) fn stations_from_chunks(
     map_w: u32,
     save_version: u16,
 ) -> Vec<SavStation> {
-    station_index_from_chunks(chunks, map_w, save_version)
-        .into_values()
-        .filter(|st| !st.is_waypoint)
-        .map(|st| SavStation {
+    let mut indexed: Vec<_> = station_index_from_chunks(chunks, map_w, save_version)
+        .into_iter()
+        .filter(|(_, st)| !st.is_waypoint)
+        .collect();
+    // Orden determinístico por `StationID` (el `HashMap` no lo garantiza) y
+    // para que el `Vec` resultante quede alineado con el índice real del save.
+    indexed.sort_by_key(|(idx, _)| *idx);
+    indexed
+        .into_iter()
+        .map(|(station_id, st)| SavStation {
+            station_id,
             pos: st.pos,
             name: st.name,
             facilities: st.facilities,
             string_id: st.string_id,
             town_id: st.town_id,
+            airport_type: st.airport_type,
+            airport_w: st.airport_w,
+            airport_h: st.airport_h,
+            airport_layout: st.airport_layout,
+            airport_blocks: st.airport_blocks,
         })
         .collect()
 }
@@ -345,18 +402,28 @@ fn first_company_record(chunks: &[RawChunk], save_version: u16) -> Option<SlReco
 pub enum SavVehicleKind {
     Train,
     RoadVehicle,
+    Aircraft,
 }
 
 /// Vehículo decodificado del chunk `VEHS`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SavVehicle {
     pub kind: SavVehicleKind,
+    /// Tesela utilizable por el motor. Para trenes/carretera es literal
+    /// `Vehicle::tile`; para aviones se recalcula desde `x_pos`/`y_pos`
+    /// (ver [`Self::raw_tile`] para el valor crudo del save).
     pub pos: TileCoord,
+    /// `Vehicle::tile` crudo del save, sin recalcular. En aviones bajo FTA
+    /// suele quedar vestigial en `(0, 0)` (`OpenTTD` no lo actualiza en
+    /// vuelo); se conserva para trazas/oráculos que lo esperan tal cual.
+    pub raw_tile: TileCoord,
     /// Progreso sub-tesela (`Vehicle::progress`, 0…255) al guardar.
     pub progress: u8,
     /// Coordenada píxel absoluta (`Vehicle::x_pos` / `y_pos`).
     pub x_pos: i32,
     pub y_pos: i32,
+    /// Altura en píxeles (`Vehicle::z_pos`); solo relevante para aviones.
+    pub z_pos: i32,
     /// Velocidad y fracción interna al guardar (`cur_speed` / `subspeed`).
     pub cur_speed: u16,
     pub subspeed: u8,
@@ -374,6 +441,16 @@ pub struct SavVehicle {
     pub running: bool,
     /// Tren: unidad sin `GVSF_FRONT` (vagón del consist anterior).
     pub is_wagon: bool,
+    /// Avión: `subtype == AIR_HELICOPTER` (0) del save (heli vs. ala fija).
+    pub is_helicopter: bool,
+    /// Avión: waypoint FTA actual (`Aircraft::pos`).
+    pub airport_pos: u8,
+    /// Avión: waypoint FTA previo (`Aircraft::previous_pos`).
+    pub airport_previous_pos: u8,
+    /// Avión: heading FTA (`Aircraft::state` / `AirportMovementStates`).
+    pub airport_state: u8,
+    /// Avión: `StationID` destino FTA (`Aircraft::targetairport`).
+    pub airport_targetairport: u16,
 }
 
 /// Bit `GVSF_FRONT` de `Vehicle::subtype` (cabeza de convoy en tren/camión).
@@ -400,6 +477,7 @@ pub(crate) fn vehicles_from_chunks(
         let (kind, sub_name) = match vtype {
             0 => (SavVehicleKind::Train, "train"),
             1 => (SavVehicleKind::RoadVehicle, "roadveh"),
+            3 => (SavVehicleKind::Aircraft, "aircraft"),
             _ => continue,
         };
         let Some(sub) = nested_struct(&record, sub_name) else {
@@ -411,12 +489,19 @@ pub(crate) fn vehicles_from_chunks(
         let subtype = record_get(common, "subtype")
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
+        // `Aircraft::IsNormalAircraft`: subtype <= AIR_AIRCRAFT (2); descarta
+        // sombra (4) y rotor (6), que no son vehículos primarios.
+        if kind == SavVehicleKind::Aircraft && subtype > 2 {
+            continue;
+        }
         let is_front = subtype & GVSF_FRONT != 0;
         // Carretera: solo cabezas. Tren: cabeza y vagones.
         if kind == SavVehicleKind::RoadVehicle && !is_front {
             continue;
         }
         let is_wagon = kind == SavVehicleKind::Train && !is_front;
+        // `AIR_HELICOPTER = 0` en `AirVehicleSubType`.
+        let is_helicopter = kind == SavVehicleKind::Aircraft && subtype == 0;
         let Some(tile) = record_get(common, "tile").and_then(SlValue::as_u64) else {
             continue;
         };
@@ -434,6 +519,22 @@ pub(crate) fn vehicles_from_chunks(
         let y_pos = record_get(common, "y_pos")
             .and_then(SlValue::as_i64)
             .unwrap_or(i64::from(pos.y) * 16);
+        let z_pos = record_get(common, "z_pos")
+            .and_then(SlValue::as_i64)
+            .unwrap_or(0);
+        // `Vehicle::tile` es vestigial en aviones bajo control FTA (queda en 0
+        // mientras `x_pos`/`y_pos` sí trackean la posición real); recalcular
+        // desde el píxel absoluto para tener una tesela utilizable, pero
+        // conservando el valor crudo aparte (`raw_tile`) para reportarlo.
+        let raw_tile = pos;
+        let pos = if kind == SavVehicleKind::Aircraft {
+            TileCoord::new(
+                i32::try_from(x_pos.div_euclid(16)).unwrap_or(pos.x),
+                i32::try_from(y_pos.div_euclid(16)).unwrap_or(pos.y),
+            )
+        } else {
+            pos
+        };
         let cur_speed = record_get(common, "cur_speed")
             .and_then(SlValue::as_u64)
             .unwrap_or(0)
@@ -473,13 +574,37 @@ pub(crate) fn vehicles_from_chunks(
             .and_then(SlValue::as_u64)
             .unwrap_or(0);
         let running = vehstatus & 1 == 0;
+        // Campos FTA (`Aircraft::pos/previous_pos/state/targetairport`); viven
+        // en `sub` (nivel aeronave), no en `common` (nivel `Vehicle` base).
+        let airport_pos = record_get(sub, "pos")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or(u8::MAX);
+        let airport_previous_pos = record_get(sub, "previous_pos")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or(u8::MAX);
+        let airport_state = record_get(sub, "state")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or(u8::MAX);
+        let airport_targetairport = record_get(sub, "targetairport")
+            .and_then(SlValue::as_u64)
+            .unwrap_or(0)
+            .try_into()
+            .unwrap_or(u16::MAX);
         #[allow(clippy::cast_possible_truncation)]
         out.push(SavVehicle {
             kind,
             pos,
+            raw_tile,
             progress,
             x_pos: i32::try_from(x_pos).unwrap_or(0),
             y_pos: i32::try_from(y_pos).unwrap_or(0),
+            z_pos: i32::try_from(z_pos).unwrap_or(0),
             cur_speed,
             subspeed,
             direction,
@@ -489,6 +614,11 @@ pub(crate) fn vehicles_from_chunks(
             current_order,
             running,
             is_wagon,
+            is_helicopter,
+            airport_pos,
+            airport_previous_pos,
+            airport_state,
+            airport_targetairport,
         });
     }
     out
@@ -500,8 +630,8 @@ mod tests {
     use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE, RawChunk, find_chunk, parse_chunks};
     use super::super::container;
     use super::super::orders::SavOrderImport;
-    use super::super::table::{SlValue, record_get};
     use super::super::table::tests::{build_table_body, write_str};
+    use super::super::table::{SlValue, record_get};
     use super::*;
 
     /// Smoke del fixture oráculo FTA Helidepot (2 pads + 1 Tricario A↔B).

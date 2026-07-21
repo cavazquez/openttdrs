@@ -59,6 +59,7 @@ hook = (
     "\t\tDebug(misc, 0, \"openttdrs snapshot export failed\");\n"
     "\t}\n"
     "\tOpenttdrsMaybeStartPbsTrace(\"\");\n"
+    "\tOpenttdrsMaybeStartAirportFtaTrace(\"\");\n"
 )
 anchor = "\treturn true;\n}\n\n/**\n * Reload all NewGRF"
 if "OpenttdrsMaybeExportSnapshot" not in at:
@@ -88,7 +89,36 @@ if "OpenttdrsMaybeExportPbsTraceTick" not in ot:
     ot = ot.replace(tick_anchor, tick_anchor + tick_hook, 1)
     print("openttd: hook post StateGameLoop")
 else:
-    print("openttd: hook ya presente")
+    print("openttd: hook PBS ya presente")
+
+fta_tick_hook = "\tOpenttdrsMaybeExportAirportFtaTraceTick();\n"
+if "OpenttdrsMaybeExportAirportFtaTraceTick" not in ot:
+    if "OpenttdrsMaybeExportPbsTraceTick();" in ot:
+        ot = ot.replace(
+            "\tOpenttdrsMaybeExportPbsTraceTick();\n",
+            "\tOpenttdrsMaybeExportPbsTraceTick();\n" + fta_tick_hook,
+            1,
+        )
+        print("openttd: hook airport FTA post StateGameLoop")
+    else:
+        raise SystemExit("no encuentro hook PBS para enganchar FTA")
+else:
+    print("openttd: hook FTA ya presente")
+
+if "OpenttdrsMaybeStartAirportFtaTrace" not in at:
+    if "OpenttdrsMaybeStartPbsTrace(\"\");" in at:
+        at = at.replace(
+            "\tOpenttdrsMaybeStartPbsTrace(\"\");\n",
+            "\tOpenttdrsMaybeStartPbsTrace(\"\");\n\tOpenttdrsMaybeStartAirportFtaTrace(\"\");\n",
+            1,
+        )
+        after.write_text(at, encoding="utf-8")
+        print("afterload: hook Airport FTA")
+    else:
+        raise SystemExit("no encuentro StartPbsTrace para enganchar FTA")
+else:
+    print("afterload: hook FTA ya presente")
+
 openttd.write_text(ot, encoding="utf-8")
 PY
 

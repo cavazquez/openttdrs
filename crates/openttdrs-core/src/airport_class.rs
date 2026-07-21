@@ -103,6 +103,27 @@ impl AirportSpecId {
             Self::Heliport | Self::Helidepot | Self::Oilrig | Self::Helistation
         )
     }
+
+    /// Mapea `AirportTypes` (`AT_*`) de `OpenTTD` a nuestro `AirportSpecId`.
+    ///
+    /// `AT_SMALL=0, AT_LARGE=1, AT_HELIPORT=2, AT_METROPOLITAN=3,
+    /// AT_INTERNATIONAL=4, AT_COMMUTER=5, AT_HELIDEPOT=6, AT_INTERCON=7,
+    /// AT_HELISTATION=8, AT_OILRIG=9` (`airport.h`). `NewGRF` (≥10) → `Small`.
+    #[must_use]
+    pub const fn from_ottd_airport_type(at: u8) -> Self {
+        match at {
+            1 => Self::City, // AT_LARGE
+            2 => Self::Heliport,
+            3 => Self::Metropolitan,
+            4 => Self::International,
+            5 => Self::Commuter,
+            6 => Self::Helidepot,
+            7 => Self::Intercontinental,
+            8 => Self::Helistation,
+            9 => Self::Oilrig,
+            _ => Self::Small, // AT_SMALL=0 y NewGRF (≥10, best-effort).
+        }
+    }
 }
 
 /// Metadatos de una clase.

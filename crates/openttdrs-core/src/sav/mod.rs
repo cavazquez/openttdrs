@@ -60,6 +60,9 @@ mod orders_codec;
 mod table;
 pub mod write;
 
+use crate::airport::airport_spec_tiles;
+use crate::airport_class::{AirportSpecId, airport_spec_def};
+use crate::airport_fta::AirportHeading;
 use crate::command::{bridge_collinear_rail_gaps, normalize_rail_trackbits_from_neighbors};
 use crate::game_state::GameState;
 use crate::link_graph::LinkGraphStats;
@@ -68,7 +71,7 @@ use crate::ottdmap_extras::OttdmapExtras;
 use crate::pathfinder;
 use crate::station::{Station, StopKind};
 use crate::town::Town;
-use crate::vehicle::{Vehicle, VehicleKind};
+use crate::vehicle::{AircraftPhase, Vehicle, VehicleKind};
 
 pub use entities::{
     SavIndustry, SavStation, SavVehicle, SavVehicleKind, format_generated_station_name,
@@ -83,6 +86,7 @@ pub use write::{
 const FACIL_TRAIN: u8 = 0x01;
 const FACIL_TRUCK_STOP: u8 = 0x02;
 const FACIL_BUS_STOP: u8 = 0x04;
+const FACIL_AIRPORT: u8 = 0x08;
 
 /// Error al cargar o guardar un `.sav`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -357,13 +361,45 @@ fn reconcile_imported_vehicle_position(map: &Map, vehicle: &mut Vehicle) {
     }
 }
 
+/// `true` si el footprint guardado (`w`×`h`, ya rotado) está transpuesto
+/// respecto al spec base → hay que iterar `airport_spec_tiles` con eje Y.
+fn airport_axis_y_from_saved_footprint(spec: AirportSpecId, w: u16, h: u16) -> bool {
+    let Some(def) = airport_spec_def(spec) else {
+        return false;
+    };
+    let (w, h) = (i32::from(w), i32::from(h));
+    def.size_x != def.size_y && w == def.size_y && h == def.size_x
+}
+
+/// Fase de vuelo MVP aproximada desde el heading FTA importado del save.
+///
+/// Best-effort: `OpenTTD` no persiste una fase equivalente; se infiere del
+/// heading (`AirportMovementStates`) para que el FSM MVP arranque coherente.
+fn aircraft_phase_from_airport_heading(h: AirportHeading) -> AircraftPhase {
+    match h {
+        AirportHeading::Hangar => AircraftPhase::InHangar,
+        AirportHeading::Takeoff
+        | AirportHeading::StartTakeoff
+        | AirportHeading::EndTakeoff
+        | AirportHeading::HeliTakeoff => AircraftPhase::Takeoff,
+        AirportHeading::Landing
+        | AirportHeading::EndLanding
+        | AirportHeading::HeliLanding
+        | AirportHeading::HeliEndLanding => AircraftPhase::Landing,
+        AirportHeading::Flying => AircraftPhase::Flying,
+        _ => AircraftPhase::Taxi,
+    }
+}
+
 fn stop_kind_from_facilities(facilities: u8) -> StopKind {
     if facilities & FACIL_TRAIN != 0 {
         StopKind::RailStation
     } else if facilities & FACIL_BUS_STOP != 0 {
         StopKind::BusStop
+    } else if facilities & FACIL_AIRPORT != 0 {
+        StopKind::Airport
     } else {
-        // Camión por defecto (incluye FACIL_TRUCK_STOP, aeropuertos y muelles).
+        // Camión por defecto (incluye FACIL_TRUCK_STOP y muelles).
         let _ = FACIL_TRUCK_STOP;
         StopKind::TruckStop
     }
@@ -422,6 +458,7 @@ impl GameState {
     /// `SavGame::industries` cuando hay chunk `INDY` de tabla, o la heurística
     /// de teselas con `SavGame::extras` en saves antiguos.
     #[must_use]
+    #[allow(clippy::too_many_lines)]
     pub fn from_sav_game(sav: SavGame) -> Self {
         let mut map = sav.map;
         normalize_rail_trackbits_from_neighbors(&mut map);
@@ -446,9 +483,29 @@ impl GameState {
             state.company_colour = colour;
         }
         for st in sav.stations {
-            let mut station =
-                Station::new_with_kind(st.pos, stop_kind_from_facilities(st.facilities));
+            let stop_kind = stop_kind_from_facilities(st.facilities);
+            let mut station = Station::new_with_kind(st.pos, stop_kind);
             station.name = entities::resolve_sav_station_name(&st, &state.towns);
+            if stop_kind == StopKind::Airport {
+                let spec = AirportSpecId::from_ottd_airport_type(st.airport_type);
+                let axis_y = airport_axis_y_from_saved_footprint(spec, st.airport_w, st.airport_h);
+                station.airport_spec = spec;
+                station.airport_blocks = st.airport_blocks;
+                station.airport_tiles = airport_spec_tiles(st.pos, spec, axis_y)
+                    .map(|(c, _piece)| c)
+                    .collect();
+                // El chunk de mapa reconstruido tipa `MP_STATION` genérico
+                // (`TileKind::Station`); retaguear a `Airport` como haría el
+                // engine al construir, para que hangares/heliports se detecten.
+                for &c in &station.airport_tiles {
+                    if let Some(mut tile) = state.map.get(c)
+                        && tile.kind == TileKind::Station
+                    {
+                        tile.kind = TileKind::Airport;
+                        let _ = state.map.set_tile(c, tile);
+                    }
+                }
+            }
             state.stations.push(station);
         }
         state.link_graph = sav.link_graph;
@@ -465,9 +522,72 @@ impl GameState {
                 // Pasajeros (cargo 0) → bus; el resto, camión.
                 SavVehicleKind::RoadVehicle if v.cargo_type == 0 => VehicleKind::Bus,
                 SavVehicleKind::RoadVehicle => VehicleKind::Truck,
+                SavVehicleKind::Aircraft => VehicleKind::Aircraft,
             };
             #[allow(clippy::cast_possible_truncation)]
             let id = i as u32;
+            if kind == VehicleKind::Aircraft {
+                let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
+                vehicle.running = v.running;
+                vehicle.cur_speed = v.cur_speed;
+                vehicle.subspeed = v.subspeed;
+                vehicle.direction = v.direction;
+                // `ENGINE_AIRCRAFT_TRICARIO`/`ENGINE_AIRCRAFT_DAKOTA`: OpenTTD
+                // trae IDs vanilla (`engine_type`) que no coinciden con
+                // nuestro catálogo; best-effort por `is_helicopter` (subtype).
+                vehicle.engine_id = Some(if v.is_helicopter {
+                    crate::engine::ENGINE_AIRCRAFT_TRICARIO
+                } else {
+                    crate::engine::ENGINE_AIRCRAFT_DAKOTA
+                });
+                let map_w = state.map.dimensions().0;
+                let imported_orders =
+                    orders::vehicle_orders_from_sav(&v.orders, &sav.station_index, map_w);
+                if !imported_orders.is_empty() {
+                    vehicle.set_vehicle_orders(imported_orders);
+                    vehicle.current_order =
+                        v.current_order.min(vehicle.orders.len().saturating_sub(1));
+                }
+                if let Some(target) = sav.station_index.get(&u32::from(v.airport_targetairport)) {
+                    vehicle.dest = target.pos;
+                }
+                vehicle.airport_pos = v.airport_pos;
+                vehicle.airport_prev_pos = v.airport_previous_pos;
+                vehicle.airport_heading = AirportHeading::from_u8(v.airport_state);
+                vehicle.aircraft_phase =
+                    aircraft_phase_from_airport_heading(vehicle.airport_heading);
+                // El save no persiste el motor FTA como tal: si el avión está
+                // en/entrando a un aeropuerto (heading ≠ vuelo libre), asumimos
+                // control FTA activo, que es el caso relevante para este oráculo.
+                vehicle.airport_fta_active = true;
+                // El save no persiste el contador de espera (`aircraft_phase_ticks`);
+                // aproximar el dwell restante del nodo actual por sus flags, para
+                // que el FSM MVP no complete el nodo instantáneamente al primer tick.
+                vehicle.aircraft_phase_ticks = state
+                    .stations
+                    .iter()
+                    .find(|s| s.covers_tile(vehicle.pos))
+                    .and_then(|s| crate::airport_fta::fta_profile_for_spec(s.airport_spec))
+                    .and_then(|p| {
+                        p.moving_data
+                            .get(usize::from(vehicle.airport_pos))
+                            .map(|md| md.flags)
+                    })
+                    .map_or(0, |flags| {
+                        if flags
+                            & (crate::airport_fta::FLAG_TAKEOFF
+                                | crate::airport_fta::FLAG_HELI_RAISE)
+                            != 0
+                        {
+                            12
+                        } else {
+                            0
+                        }
+                    });
+                state.vehicles.push(vehicle);
+                last_train_head = None;
+                continue;
+            }
             let mut vehicle = Vehicle::new(id, kind, v.pos, v.pos);
             vehicle.progress = v.progress;
             vehicle.cur_speed = v.cur_speed;
@@ -531,7 +651,7 @@ mod tests {
         assert_eq!(stop_kind_from_facilities(0x05), StopKind::RailStation);
         assert_eq!(stop_kind_from_facilities(0x04), StopKind::BusStop);
         assert_eq!(stop_kind_from_facilities(0x02), StopKind::TruckStop);
-        assert_eq!(stop_kind_from_facilities(0x08), StopKind::TruckStop);
+        assert_eq!(stop_kind_from_facilities(0x08), StopKind::Airport);
     }
 
     #[test]
@@ -546,6 +666,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn from_sav_game_builds_state_with_entities() {
         let map = Map::new_flat(64, 64, 0);
         let sav = SavGame {
@@ -553,11 +674,17 @@ mod tests {
             map,
             extras: OttdmapExtras::default(),
             stations: vec![SavStation {
+                station_id: 0,
                 pos: crate::TileCoord::new(3, 3),
                 name: Some("Estación Norte".into()),
                 facilities: 0x01,
                 string_id: None,
                 town_id: None,
+                airport_type: 0,
+                airport_w: 0,
+                airport_h: 0,
+                airport_layout: 0,
+                airport_blocks: 0,
             }],
             towns: vec![Town {
                 id: 0,
@@ -576,9 +703,11 @@ mod tests {
                 SavVehicle {
                     kind: SavVehicleKind::Train,
                     pos: crate::TileCoord::new(5, 5),
+                    raw_tile: crate::TileCoord::new(5, 5),
                     progress: 0,
                     x_pos: 5 * 16,
                     y_pos: 5 * 16,
+                    z_pos: 0,
                     cur_speed: 0,
                     subspeed: 0,
                     direction: 0,
@@ -588,13 +717,20 @@ mod tests {
                     current_order: 0,
                     running: true,
                     is_wagon: false,
+                    is_helicopter: false,
+                    airport_pos: 0,
+                    airport_previous_pos: 0,
+                    airport_state: 0,
+                    airport_targetairport: 0,
                 },
                 SavVehicle {
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(6, 6),
+                    raw_tile: crate::TileCoord::new(6, 6),
                     progress: 0,
                     x_pos: 6 * 16,
                     y_pos: 6 * 16,
+                    z_pos: 0,
                     cur_speed: 0,
                     subspeed: 0,
                     direction: 0,
@@ -604,13 +740,20 @@ mod tests {
                     current_order: 0,
                     running: true,
                     is_wagon: false,
+                    is_helicopter: false,
+                    airport_pos: 0,
+                    airport_previous_pos: 0,
+                    airport_state: 0,
+                    airport_targetairport: 0,
                 },
                 SavVehicle {
                     kind: SavVehicleKind::RoadVehicle,
                     pos: crate::TileCoord::new(7, 7),
+                    raw_tile: crate::TileCoord::new(7, 7),
                     progress: 0,
                     x_pos: 7 * 16,
                     y_pos: 7 * 16,
+                    z_pos: 0,
                     cur_speed: 0,
                     subspeed: 0,
                     direction: 0,
@@ -620,6 +763,11 @@ mod tests {
                     current_order: 0,
                     running: true,
                     is_wagon: false,
+                    is_helicopter: false,
+                    airport_pos: 0,
+                    airport_previous_pos: 0,
+                    airport_state: 0,
+                    airport_targetairport: 0,
                 },
             ],
             money: Some(123_456),

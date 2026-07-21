@@ -81,6 +81,20 @@ conserva los campos v1 de velocidad/progreso.
      /tmp/train_pbs_openttdrs.jsonl
    ```
 
+## Viewer de traza (tiles + reservas + señal)
+
+Para ver por dónde pasa el tren y qué reservas PBS hay en cada muestra:
+
+```bash
+python3 scripts/view_pbs_trace.py \
+  crates/openttdrs-core/tests/fixtures/parity/train_pbs_15_3_openttd.jsonl \
+  /tmp/pbs_trace.html
+```
+
+Abre el HTML en el navegador: scrubber de muestras, mapa del corredor,
+lista de tiles visitados y anotación de señal (`--signal X,Y,label`; el
+fixture `train_pbs_15_3` usa por defecto la path signal en `(46,37)`).
+
 ## Estado
 
 El exportador, normalizador, validador y comparador están implementados y el

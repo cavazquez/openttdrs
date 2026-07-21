@@ -31,6 +31,7 @@
     "scripts/validate_pbs_trace.py",
     "scripts/normalize_pbs_trace.py",
     "scripts/compare_pbs_traces.py",
+    "scripts/view_pbs_trace.py",
     "scripts/test_pbs_trace_tools.py",
     "scripts/run_ci_python.py",
     "scripts/test_ci_workflow_parity.py"

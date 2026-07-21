@@ -79,6 +79,24 @@ def main() -> None:
         run(sys.executable, "scripts/validate_pbs_trace.py", str(oracle), "1", "openttd")
         run(sys.executable, "scripts/compare_pbs_traces.py", str(oracle), str(candidate))
 
+        html = work / "trace.html"
+        fixture = (
+            ROOT
+            / "crates/openttdrs-core/tests/fixtures/parity/train_pbs_15_3_openttd.jsonl"
+        )
+        run(
+            sys.executable,
+            "scripts/view_pbs_trace.py",
+            str(fixture),
+            str(html),
+            "--signal",
+            "46,37,path",
+        )
+        content = html.read_text(encoding="utf-8")
+        assert "PBS trace viewer" in content
+        assert '"x":46' in content and '"y":37' in content
+        assert '"label":"path"' in content
+
     print("OK: herramientas PBS externas")
 
 

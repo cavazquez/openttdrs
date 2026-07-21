@@ -7,8 +7,8 @@ use crate::vehicle::{AircraftPhase, Vehicle, VehicleKind};
 
 use super::profile::fta_profile_for_spec;
 use super::types::{
-    AirportFtaEdge, AirportFtaKind, AirportFtaProfile, AirportHeading, BLOCK_AIRPORT_BUSY,
-    FLAG_BRAKE, FLAG_HELI_LOWER, FLAG_HELI_RAISE, FLAG_LAND, FLAG_TAKEOFF,
+    AirportFtaEdge, AirportFtaKind, AirportFtaProfile, AirportHeading, FLAG_BRAKE, FLAG_HELI_LOWER,
+    FLAG_HELI_RAISE, FLAG_LAND, FLAG_TAKEOFF,
 };
 
 const FTA_DWELL_TICKS: u16 = 6;
@@ -106,6 +106,7 @@ fn try_enter_approach(v: &mut Vehicle, stations: &[Station]) -> Option<AircraftP
     }
     let entry = profile.entries[0];
     v.airport_fta_active = true;
+    v.airport_blocks_held = 0;
     v.airport_pos = entry;
     v.airport_prev_pos = entry;
     v.airport_heading = match profile.kind {
@@ -161,9 +162,6 @@ fn advance_fta_node(
     profile: &AirportFtaProfile,
 ) -> AircraftPhaseEvent {
     let prev = v.airport_pos;
-    clear_blocks_for_pos(station, prev, profile);
-    // Un avión: liberar antes de reservar el siguiente (multi-avión vendrá después).
-    station.airport_blocks = 0;
     nudge_heading_at_node(v, profile);
 
     let Some(edge) = choose_next_edge(v, profile) else {
@@ -187,12 +185,15 @@ fn advance_fta_node(
     }
 
     let next = edge.next_position;
-    if !try_reserve_blocks(station, edge.blocks) {
+    // Multi-avión: no pisar reservas ajenas; mantener las propias hasta poder avanzar.
+    if !blocks_free_for(station, v.airport_blocks_held, edge.blocks) {
         hold_or_wait(v, profile);
         let ev = sync_phase_from_node(v, profile);
         apply_waypoint_pose(v, station, profile);
         return ev;
     }
+    release_held_blocks(station, v);
+    acquire_blocks(station, v, edge.blocks);
 
     v.airport_prev_pos = prev;
     v.airport_pos = next;
@@ -621,6 +622,7 @@ fn activate_fta_in_hangar(v: &mut Vehicle) {
     v.aircraft_phase = AircraftPhase::InHangar;
     v.aircraft_phase_ticks = 0;
     v.altitude = 0;
+    v.airport_blocks_held = 0;
 }
 
 fn activate_fta_on_pad(v: &mut Vehicle) {
@@ -631,6 +633,7 @@ fn activate_fta_on_pad(v: &mut Vehicle) {
     v.aircraft_phase = AircraftPhase::Taxi;
     v.aircraft_phase_ticks = 0;
     v.altitude = 0;
+    v.airport_blocks_held = 0;
 }
 
 /// Inicializa estado FTA al comprar en hangar con perfil soportado.
@@ -808,7 +811,7 @@ fn update_heading_for_orders(v: &mut Vehicle, station: &Station, kind: AirportFt
 }
 
 fn finish_takeoff(v: &mut Vehicle, station: &mut Station) -> AircraftPhaseEvent {
-    station.airport_blocks = 0;
+    release_held_blocks(station, v);
     v.airport_fta_active = false;
     v.aircraft_phase = AircraftPhase::Flying;
     v.altitude = AIRCRAFT_CRUISE_ALTITUDE;
@@ -1096,24 +1099,19 @@ fn choose_next_edge(v: &Vehicle, profile: &AirportFtaProfile) -> Option<AirportF
     edges.first().copied()
 }
 
-fn try_reserve_blocks(station: &mut Station, blocks: u64) -> bool {
-    if blocks == 0 {
-        return true;
-    }
-    if station.airport_blocks & blocks != 0 {
-        return false;
-    }
-    station.airport_blocks |= blocks;
-    true
+/// `true` si `blocks` está libre respecto a reservas ajenas (`held` = las del propio avión).
+fn blocks_free_for(station: &Station, held: u64, blocks: u64) -> bool {
+    blocks == 0 || (station.airport_blocks & !held & blocks) == 0
 }
 
-fn clear_blocks_for_pos(station: &mut Station, pos: u8, profile: &AirportFtaProfile) {
-    for e in (profile.fta_edges)(pos) {
-        station.airport_blocks &= !e.blocks;
-    }
-    if profile.kind == AirportFtaKind::Country && matches!(pos, 6 | 7 | 11 | 12 | 13 | 14) {
-        station.airport_blocks &= !BLOCK_AIRPORT_BUSY;
-    }
+fn release_held_blocks(station: &mut Station, v: &mut Vehicle) {
+    station.airport_blocks &= !v.airport_blocks_held;
+    v.airport_blocks_held = 0;
+}
+
+fn acquire_blocks(station: &mut Station, v: &mut Vehicle, blocks: u64) {
+    station.airport_blocks |= blocks;
+    v.airport_blocks_held = blocks;
 }
 
 fn sync_phase_from_node(v: &mut Vehicle, profile: &AirportFtaProfile) -> AircraftPhaseEvent {

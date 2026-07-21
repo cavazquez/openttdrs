@@ -302,6 +302,79 @@ mod tests {
     }
 
     #[test]
+    fn multi_aircraft_second_waits_while_pad_occupied() {
+        let mut s = GameState::new(32, 32);
+        apply_command(
+            &mut s,
+            &Command::PlaceAirportArea {
+                origin: TileCoord::new(2, 2),
+                axis_y: false,
+                spec: AirportSpecId::Helidepot,
+            },
+        )
+        .unwrap();
+        let hangar = s.stations[0].pos;
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_TRICARIO),
+        )
+        .unwrap();
+        apply_command(
+            &mut s,
+            &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_TRICARIO),
+        )
+        .unwrap();
+        assert_eq!(s.vehicles.len(), 2);
+
+        // Avión 0 ocupa el helipad1.
+        s.vehicles[0].airport_fta_active = true;
+        s.vehicles[0].airport_pos = 14;
+        s.vehicles[0].airport_heading = AirportHeading::Helipad1;
+        s.vehicles[0].aircraft_phase = AircraftPhase::Taxi;
+        s.vehicles[0].airport_blocks_held = BLOCK_HELIPAD1;
+        s.stations[0].airport_blocks = BLOCK_HELIPAD1;
+
+        // Avión 1 en taxi hacia el pad.
+        s.vehicles[1].airport_fta_active = true;
+        s.vehicles[1].airport_pos = 1;
+        s.vehicles[1].airport_heading = AirportHeading::Helipad1;
+        s.vehicles[1].aircraft_phase = AircraftPhase::Taxi;
+        s.vehicles[1].airport_blocks_held = 0;
+        s.vehicles[1].aircraft_phase_ticks = 0;
+        s.vehicles[1].running = true;
+
+        for _ in 0..80 {
+            let _ = tick_airport_fta(&mut s.vehicles[1], &s.map, &mut s.stations);
+            assert_ne!(
+                s.vehicles[1].airport_pos, 14,
+                "segundo heli no debe ocupar pad mientras HELIPAD1 está reservado"
+            );
+            assert_eq!(
+                s.stations[0].airport_blocks & BLOCK_HELIPAD1,
+                BLOCK_HELIPAD1,
+                "reserva del primero debe persistir"
+            );
+        }
+
+        // Liberar pad: el segundo puede entrar.
+        s.stations[0].airport_blocks &= !BLOCK_HELIPAD1;
+        s.vehicles[0].airport_blocks_held = 0;
+        let mut reached = false;
+        for _ in 0..80 {
+            let _ = tick_airport_fta(&mut s.vehicles[1], &s.map, &mut s.stations);
+            if s.vehicles[1].airport_pos == 14 {
+                reached = true;
+                break;
+            }
+        }
+        assert!(
+            reached,
+            "tras liberar HELIPAD1 el segundo heli llega al pad"
+        );
+        assert_ne!(s.vehicles[1].airport_blocks_held & BLOCK_HELIPAD1, 0);
+    }
+
+    #[test]
     fn commuter_tables_have_expected_size() {
         assert_eq!(COMMUTER_MOVING_DATA.len(), 38);
         assert_eq!(COMMUTER_NOF_ELEMENTS, 38);

@@ -317,6 +317,9 @@ pub struct Vehicle {
     /// `true` mientras el avión está bajo control FTA de un aeropuerto Country.
     #[serde(default)]
     pub airport_fta_active: bool,
+    /// Bloques FTA que este avión tiene reservados en la estación (`airport_blocks`).
+    #[serde(default)]
+    pub airport_blocks_held: u64,
     /// Siguiente unidad del consist (`OpenTTD` `Next()`); solo trenes.
     #[serde(default)]
     pub next_unit: Option<u32>,
@@ -439,6 +442,7 @@ impl Vehicle {
             airport_prev_pos: 0,
             airport_heading: crate::airport_fta::AirportHeading::Hangar,
             airport_fta_active: false,
+            airport_blocks_held: 0,
             next_unit: None,
             prev_unit: None,
             other_multiheaded_part: None,

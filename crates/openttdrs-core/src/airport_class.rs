@@ -134,6 +134,46 @@ pub struct AirportClassDef {
     pub from_newgrf: bool,
 }
 
+/// Flags FTA de aeropuerto (`AirportFTAClass::Flag` en `airport.h` / `airport.cpp`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AirportFtaFlags(u8);
+
+impl AirportFtaFlags {
+    pub const AIRPLANES: Self = Self(1);
+    pub const HELICOPTERS: Self = Self(2);
+    pub const SHORT_STRIP: Self = Self(4);
+
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
+    #[must_use]
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    #[must_use]
+    pub const fn contains(self, flag: Self) -> bool {
+        self.0 & flag.0 == flag.0
+    }
+
+    #[must_use]
+    pub const fn allows_airplanes(self) -> bool {
+        self.contains(Self::AIRPLANES)
+    }
+
+    #[must_use]
+    pub const fn allows_helicopters(self) -> bool {
+        self.contains(Self::HELICOPTERS)
+    }
+
+    #[must_use]
+    pub const fn short_strip(self) -> bool {
+        self.contains(Self::SHORT_STRIP)
+    }
+}
+
 /// Spec de aeropuerto (tamaño base; layout en [`crate::airport`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AirportSpecDef {
@@ -145,7 +185,21 @@ pub struct AirportSpecDef {
     pub size_y: i32,
     /// Radio de cobertura (teselas).
     pub catchment: i32,
+    /// Flags FTA (`Airplanes` / `Helicopters` / `ShortStrip`).
+    pub fta_flags: AirportFtaFlags,
     pub from_newgrf: bool,
+}
+
+impl AirportSpecDef {
+    /// Compatibilidad motor↔aeropuerto (`CanVehicleUseStation` para aviones).
+    #[must_use]
+    pub const fn allows_aircraft_subtype(self, is_helicopter: bool) -> bool {
+        if is_helicopter {
+            self.fta_flags.allows_helicopters()
+        } else {
+            self.fta_flags.allows_airplanes()
+        }
+    }
 }
 
 const VANILLA_CLASSES: &[AirportClassDef] = &[
@@ -171,6 +225,15 @@ const VANILLA_CLASSES: &[AirportClassDef] = &[
     },
 ];
 
+/// Helipuertos: solo hélices (`HELIPORT` macro en `airport.cpp`).
+const HELI_ONLY: AirportFtaFlags = AirportFtaFlags::HELICOPTERS;
+/// Country / Commuter: ala fija + hélices + pista corta.
+const SHORT_STRIP: AirportFtaFlags = AirportFtaFlags::AIRPLANES
+    .union(AirportFtaFlags::HELICOPTERS)
+    .union(AirportFtaFlags::SHORT_STRIP);
+/// Resto de aeropuertos con pista: ala fija + hélices.
+const FULL_STRIP: AirportFtaFlags = AirportFtaFlags::AIRPLANES.union(AirportFtaFlags::HELICOPTERS);
+
 const VANILLA_SPECS: &[AirportSpecDef] = &[
     AirportSpecDef {
         id: AirportSpecId::Heliport,
@@ -180,6 +243,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 1,
         size_y: 1,
         catchment: 4,
+        fta_flags: HELI_ONLY,
         from_newgrf: false,
     },
     AirportSpecDef {
@@ -190,6 +254,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 2,
         size_y: 2,
         catchment: 4,
+        fta_flags: HELI_ONLY,
         from_newgrf: false,
     },
     AirportSpecDef {
@@ -200,6 +265,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 4,
         size_y: 3,
         catchment: 4,
+        fta_flags: SHORT_STRIP,
         from_newgrf: false,
     },
     AirportSpecDef {
@@ -210,6 +276,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 5,
         size_y: 4,
         catchment: 4,
+        fta_flags: SHORT_STRIP,
         from_newgrf: false,
     },
     AirportSpecDef {
@@ -220,6 +287,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 6,
         size_y: 6,
         catchment: 5,
+        fta_flags: FULL_STRIP,
         from_newgrf: false,
     },
     AirportSpecDef {
@@ -230,6 +298,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 6,
         size_y: 6,
         catchment: 6,
+        fta_flags: FULL_STRIP,
         from_newgrf: false,
     },
     AirportSpecDef {
@@ -240,6 +309,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 7,
         size_y: 7,
         catchment: 8,
+        fta_flags: FULL_STRIP,
         from_newgrf: false,
     },
     AirportSpecDef {
@@ -250,6 +320,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 9,
         size_y: 11,
         catchment: 10,
+        fta_flags: FULL_STRIP,
         from_newgrf: false,
     },
     AirportSpecDef {
@@ -260,6 +331,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 1,
         size_y: 1,
         catchment: 4,
+        fta_flags: HELI_ONLY,
         from_newgrf: false,
     },
     AirportSpecDef {
@@ -270,6 +342,7 @@ const VANILLA_SPECS: &[AirportSpecDef] = &[
         size_x: 4,
         size_y: 2,
         catchment: 4,
+        fta_flags: HELI_ONLY,
         from_newgrf: false,
     },
 ];
@@ -319,6 +392,12 @@ pub fn list_airport_specs(class: AirportClassId, filter: &str) -> Vec<&'static A
         .collect()
 }
 
+/// ¿Puede este aeropuerto atender el subtipo de aeronave?
+#[must_use]
+pub fn airport_allows_aircraft(spec: AirportSpecId, is_helicopter: bool) -> bool {
+    airport_spec_def(spec).is_none_or(|d| d.allows_aircraft_subtype(is_helicopter))
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -358,5 +437,39 @@ mod tests {
                 .size_y,
             11
         );
+    }
+
+    #[test]
+    fn fta_flags_match_openttd_airport_macros() {
+        let heli = airport_spec_def(AirportSpecId::Heliport).unwrap();
+        assert!(!heli.fta_flags.allows_airplanes());
+        assert!(heli.fta_flags.allows_helicopters());
+        assert!(!heli.fta_flags.short_strip());
+
+        let small = airport_spec_def(AirportSpecId::Small).unwrap();
+        assert!(
+            small.fta_flags.allows_airplanes()
+                && small.fta_flags.allows_helicopters()
+                && small.fta_flags.short_strip()
+        );
+
+        let city = airport_spec_def(AirportSpecId::City).unwrap();
+        assert!(
+            city.fta_flags.allows_airplanes()
+                && city.fta_flags.allows_helicopters()
+                && !city.fta_flags.short_strip()
+        );
+
+        let inter = airport_spec_def(AirportSpecId::Intercontinental).unwrap();
+        assert!(
+            inter.fta_flags.allows_airplanes()
+                && inter.fta_flags.allows_helicopters()
+                && !inter.fta_flags.short_strip()
+        );
+
+        assert!(!airport_allows_aircraft(AirportSpecId::Heliport, false));
+        assert!(airport_allows_aircraft(AirportSpecId::Heliport, true));
+        assert!(airport_allows_aircraft(AirportSpecId::Small, false));
+        assert!(airport_allows_aircraft(AirportSpecId::Small, true));
     }
 }

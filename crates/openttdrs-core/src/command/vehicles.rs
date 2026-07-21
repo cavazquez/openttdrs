@@ -20,6 +20,7 @@ pub(super) fn set_vehicle_order_list(
         return Err(CommandError::VehicleNotFound);
     };
     let vehicle_kind = state.vehicles[vehicle_idx].kind;
+    let aircraft_engine_id = state.vehicles[vehicle_idx].engine_id;
     for order in &orders {
         in_bounds(&state.map, order.destination())?;
         match order {
@@ -29,6 +30,15 @@ pub(super) fn set_vehicle_order_list(
                 };
                 if !st.can_service_vehicle(vehicle_kind) || st.is_waypoint() {
                     return Err(CommandError::IncompatibleStopForVehicle);
+                }
+                // `CanVehicleUseStation`: avión/hélico vs flags FTA del aeropuerto.
+                if vehicle_kind == VehicleKind::Aircraft
+                    && let Some(engine_id) = aircraft_engine_id
+                {
+                    let is_heli = crate::engine::aircraft_is_helicopter(engine_id);
+                    if !crate::airport_class::airport_allows_aircraft(st.airport_spec, is_heli) {
+                        return Err(CommandError::IncompatibleStopForVehicle);
+                    }
                 }
             }
             VehicleOrder::Waypoint { waypoint, .. } => {
@@ -219,13 +229,20 @@ fn check_aircraft_heli_depot_compat(
     engine_id: u16,
 ) -> Result<(), CommandError> {
     let heli_engine = crate::engine::aircraft_is_helicopter(engine_id);
-    // Helipuerto 1×1 o Helidepot: solo hélices. Hangar de aeropuerto "grande": solo ala fija.
-    let heli_only_airport = state
+    // `CanVehicleUseStation` / `CmdBuildAircraft`: flags FTA del aeropuerto.
+    let spec = state
         .stations
         .iter()
-        .any(|s| s.covers_tile(depot_pos) && s.airport_spec.is_heliport_only())
-        || crate::airport::airport_tile_is_heliport(&state.map, depot_pos);
-    if heli_only_airport != heli_engine {
+        .find(|s| s.covers_tile(depot_pos))
+        .map(|s| s.airport_spec)
+        .or_else(|| {
+            crate::airport::airport_tile_is_heliport(&state.map, depot_pos)
+                .then_some(crate::airport_class::AirportSpecId::Heliport)
+        });
+    let Some(spec) = spec else {
+        return Ok(());
+    };
+    if !crate::airport_class::airport_allows_aircraft(spec, heli_engine) {
         return Err(CommandError::VehicleKindNotAllowed);
     }
     Ok(())

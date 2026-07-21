@@ -170,7 +170,7 @@ fn aircraft_phase_starts_on_heliport_pad() {
 }
 
 #[test]
-fn small_airport_rejects_helicopter() {
+fn small_airport_accepts_helicopter_and_airplane() {
     let mut s = GameState::new(20, 20);
     let origin = TileCoord::new(2, 2);
     apply_command(
@@ -184,10 +184,126 @@ fn small_airport_rejects_helicopter() {
     .unwrap();
     let hangar = s.stations[0].pos;
     assert!(!airport_tile_is_heliport(&s.map, hangar));
-    let err = apply_command(
+    // Country: Airplanes + Helicopters (+ ShortStrip).
+    apply_command(
         &mut s,
         &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_TRICARIO),
     )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_DAKOTA),
+    )
+    .unwrap();
+    assert_eq!(
+        s.vehicles
+            .iter()
+            .filter(|v| v.kind == VehicleKind::Aircraft)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn airplane_order_to_heliport_rejected() {
+    let mut s = GameState::new(24, 24);
+    let heliport = TileCoord::new(2, 2);
+    apply_command(&mut s, &Command::PlaceAirport(heliport)).unwrap();
+    let small_origin = TileCoord::new(8, 2);
+    apply_command(
+        &mut s,
+        &Command::PlaceAirportArea {
+            origin: small_origin,
+            axis_y: false,
+            spec: crate::AirportSpecId::Small,
+        },
+    )
+    .unwrap();
+    let hangar = s.stations.iter().find(|st| st.pos != heliport).unwrap().pos;
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(hangar, ENGINE_AIRCRAFT_DAKOTA),
+    )
+    .unwrap();
+    let plane_id = s.vehicles[0].id;
+    let err = apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(
+            plane_id,
+            vec![crate::vehicle::VehicleOrder::station(heliport)],
+        ),
+    )
     .unwrap_err();
-    assert!(matches!(err, crate::CommandError::VehicleKindNotAllowed));
+    assert!(matches!(
+        err,
+        crate::CommandError::IncompatibleStopForVehicle
+    ));
+
+    // Hélico sí puede ordenar al helipuerto.
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(heliport, ENGINE_AIRCRAFT_TRICARIO),
+    )
+    .unwrap();
+    let heli_id = s.vehicles.iter().find(|v| v.id != plane_id).unwrap().id;
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(
+            heli_id,
+            vec![crate::vehicle::VehicleOrder::station(heliport)],
+        ),
+    )
+    .unwrap();
+}
+
+#[test]
+fn airplane_order_to_small_and_intercon_ok() {
+    let mut s = GameState::new(40, 40);
+    apply_command(
+        &mut s,
+        &Command::PlaceAirportArea {
+            origin: TileCoord::new(2, 2),
+            axis_y: false,
+            spec: crate::AirportSpecId::Small,
+        },
+    )
+    .unwrap();
+    apply_command(
+        &mut s,
+        &Command::PlaceAirportArea {
+            origin: TileCoord::new(12, 2),
+            axis_y: false,
+            spec: crate::AirportSpecId::Intercontinental,
+        },
+    )
+    .unwrap();
+    let small = s
+        .stations
+        .iter()
+        .find(|st| st.airport_spec == crate::AirportSpecId::Small)
+        .unwrap()
+        .pos;
+    let inter = s
+        .stations
+        .iter()
+        .find(|st| st.airport_spec == crate::AirportSpecId::Intercontinental)
+        .unwrap()
+        .pos;
+    apply_command(
+        &mut s,
+        &Command::BuildVehicleAtDepot(small, ENGINE_AIRCRAFT_DAKOTA),
+    )
+    .unwrap();
+    let id = s.vehicles[0].id;
+    apply_command(
+        &mut s,
+        &Command::SetVehicleOrderList(
+            id,
+            vec![
+                crate::vehicle::VehicleOrder::station(small),
+                crate::vehicle::VehicleOrder::station(inter),
+            ],
+        ),
+    )
+    .unwrap();
 }

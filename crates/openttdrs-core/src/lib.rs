@@ -90,9 +90,9 @@ pub use airport::{
     airport_spec_footprint, airport_spec_tiles, airport_tile_is_hangar, airport_tile_is_heliport,
 };
 pub use airport_class::{
-    AirportClassDef, AirportClassId, AirportSpecDef, AirportSpecId, airport_class_def,
-    airport_spec_def, all_airport_class_defs, all_airport_spec_defs, list_airport_classes,
-    list_airport_specs,
+    AirportClassDef, AirportClassId, AirportFtaFlags, AirportSpecDef, AirportSpecId,
+    airport_allows_aircraft, airport_class_def, airport_spec_def, all_airport_class_defs,
+    all_airport_spec_defs, list_airport_classes, list_airport_specs,
 };
 pub use airport_fta::{
     AirportHeading, AirportMovingData, CITY_ENTRIES, CITY_MOVING_DATA, CITY_NOF_ELEMENTS,

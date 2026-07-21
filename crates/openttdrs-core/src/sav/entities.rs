@@ -497,9 +497,67 @@ pub(crate) fn vehicles_from_chunks(
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::cast_possible_truncation)]
 mod tests {
-    use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE, RawChunk};
+    use super::super::chunks::{CH_SPARSE_TABLE, CH_TABLE, RawChunk, find_chunk, parse_chunks};
+    use super::super::container;
+    use super::super::orders::SavOrderImport;
+    use super::super::table::{SlValue, record_get};
     use super::super::table::tests::{build_table_body, write_str};
     use super::*;
+
+    /// Smoke del fixture oráculo FTA Helidepot (2 pads + 1 Tricario A↔B).
+    #[test]
+    fn helidepot_fta_cycle_fixture_shape() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/helidepot_fta_cycle_15_3.sav");
+        let raw = std::fs::read(&path).expect("fixture helidepot_fta_cycle_15_3.sav");
+        let (data, version) = container::decompress(&raw).expect("decompress");
+        let chunks = parse_chunks(&data).expect("chunks");
+        let map_w = 64u32;
+
+        let stnn = find_chunk(&chunks, "STNN").expect("STNN");
+        let mut helidepots = 0usize;
+        for (_, record) in table_rows(stnn, version) {
+            let Some(normal) = nested_struct(&record, "normal") else {
+                continue;
+            };
+            let atype = record_get(normal, "airport.type").and_then(SlValue::as_u64);
+            let aw = record_get(normal, "airport.w").and_then(SlValue::as_u64);
+            let ah = record_get(normal, "airport.h").and_then(SlValue::as_u64);
+            // OpenTTD `AT_HELIDEPOT = 6`.
+            if atype == Some(6) && aw == Some(2) && ah == Some(2) {
+                helidepots += 1;
+            }
+        }
+        assert_eq!(helidepots, 2);
+
+        let vehs = find_chunk(&chunks, "VEHS").expect("VEHS");
+        let order_import = SavOrderImport::from_chunks(&chunks, version);
+        let mut primary = 0usize;
+        for (_, record) in table_rows(vehs, version) {
+            if record_get(&record, "type").and_then(SlValue::as_u64) != Some(3) {
+                continue;
+            }
+            let Some(sub) = nested_struct(&record, "aircraft") else {
+                continue;
+            };
+            let Some(common) = nested_struct(sub, "common") else {
+                continue;
+            };
+            let orders_ref = record_get(common, "orders").and_then(SlValue::as_u64);
+            let orders = orders_ref
+                .map(|r| order_import.orders_for_vehicle_ref(r))
+                .unwrap_or_default();
+            if orders.len() == 2 {
+                primary += 1;
+                let fta_pos = record_get(sub, "pos").and_then(SlValue::as_u64);
+                let prev = record_get(sub, "previous_pos").and_then(SlValue::as_u64);
+                assert_eq!(fta_pos, Some(11), "heli en raise takeoff Helidepot");
+                assert_eq!(prev, Some(17));
+                let _ = map_w;
+            }
+        }
+        assert_eq!(primary, 1, "un helicóptero con órdenes A↔B");
+    }
 
     fn station_chunk(records: &[Vec<u8>]) -> RawChunk {
         RawChunk {

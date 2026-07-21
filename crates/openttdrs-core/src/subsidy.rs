@@ -115,7 +115,11 @@ pub fn try_create_subsidy(state: &mut GameState) -> bool {
         .filter(|(_, st)| {
             !st.is_waypoint()
                 && st.accepts_cargo(cargo)
-                && station::industry_in_station_coverage(industry, st.pos, STATION_COVERAGE_RADIUS)
+                && station::industry_in_station_coverage(
+                    industry,
+                    st.pos,
+                    station::station_catchment_radius(st),
+                )
                 && st.pos != industry.pos
         })
         .map(|(i, st)| (i, st.pos))

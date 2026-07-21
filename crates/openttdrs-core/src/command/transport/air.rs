@@ -3,7 +3,7 @@
 use crate::airport::{
     AirportPiece, airport_m6_airport, airport_spec_footprint, airport_spec_tiles,
 };
-use crate::airport_class::{AirportSpecId, airport_spec_def};
+use crate::airport_class::AirportSpecId;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{station_site_tile_allows_build, station_site_tile_needs_clear};
 use crate::town::authority_allows_new_station;
@@ -96,9 +96,7 @@ pub(in crate::command) fn place_airport_area(
     st.airport_tiles = tiles;
     st.airport_spec = spec;
     st.airport_blocks = 0;
-    if let Some(def) = airport_spec_def(spec) {
-        let _ = def.catchment; // catchment se usará en cobertura UI; sim usa radio global hoy
-    }
+    // Catchment: `station_catchment_radius` lee `airport_spec` en cobertura.
     state.stations.push(st);
     Ok(())
 }

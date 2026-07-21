@@ -14,8 +14,8 @@ pub use cargo_rating::{
 };
 pub use coverage::{
     STATION_COVERAGE_RADIUS, StationCoverage, StationMapCoherenceReport,
-    industry_in_station_coverage, industry_in_station_coverage_by_pos, station_coverage_at,
-    station_covers_tile, station_map_coherence,
+    industry_in_station_coverage, industry_in_station_coverage_by_pos, station_catchment_radius,
+    station_coverage_at, station_coverage_for, station_covers_tile, station_map_coherence,
 };
 pub use destination::{
     resolve_aircraft_station_dest, resolve_order_destination, resolve_order_destination_from,

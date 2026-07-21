@@ -313,7 +313,7 @@ Inventario de mecánicas del original cruzado con `openttdrs-core`. Estados: **E
 | Desastres | ✅ Parcial | `disaster.rs` |
 | Préstamos activos | ✅ Parcial | `economy.rs`, `command/economy.rs` |
 | IA rivales | ✅ (#86) | `docs/archive/epics/ai_rivals.md` |
-| Barcos / aviones | ✅ Parcial | `ship_movement.rs`, `aircraft_movement.rs`; FTA Country–Helistation + multi-avión + oráculo Helidepot (`airport_fta/`, #198; [AIRPORT_FTA_ORACLE.md](AIRPORT_FTA_ORACLE.md)) |
+| Barcos / aviones | ✅ Parcial | FTA + oráculo Helidepot (#198 cerrado); catchment por `AirportSpec` (#212 corte 1) |
 
 ### 5.2 Cliente (`openttdrs-client`)
 

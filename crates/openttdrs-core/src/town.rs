@@ -251,11 +251,10 @@ pub fn produce_town_cargo(
     let mut mail = 0_u64;
 
     for station in stations {
-        if station.stop_kind != StopKind::BusStop {
+        if !matches!(station.stop_kind, StopKind::BusStop | StopKind::Airport) {
             continue;
         }
-        let coverage =
-            station::station_coverage_at(map, industries, station.pos, STATION_COVERAGE_RADIUS);
+        let coverage = station::station_coverage_for(map, industries, station);
         if coverage.house_tiles == 0 {
             continue;
         }

@@ -1,5 +1,5 @@
 use crate::vehicle::VehicleKind;
-use crate::{CargoType, GameState, STATION_COVERAGE_RADIUS, TileCoord, economy, station, town};
+use crate::{CargoType, GameState, TileCoord, economy, station, town};
 
 #[allow(clippy::too_many_lines)]
 pub(super) fn unload_vehicles(
@@ -334,7 +334,11 @@ fn try_load_from_industry(
             ind.stock > 0
                 && vcargo_type.is_none_or(|c| c == output)
                 && state.stations[station_idx].accepts_cargo(output)
-                && station::industry_in_station_coverage(ind, station_pos, STATION_COVERAGE_RADIUS)
+                && station::industry_in_station_coverage(
+                    ind,
+                    station_pos,
+                    station::station_catchment_radius(&state.stations[station_idx]),
+                )
         })
         .min_by_key(|(_, ind)| {
             (ind.pos.x - station_pos.x).unsigned_abs() + (ind.pos.y - station_pos.y).unsigned_abs()
@@ -657,7 +661,7 @@ fn station_index_for_industry_load(state: &GameState, vehicle: &crate::Vehicle) 
                     && station::industry_in_station_coverage(
                         ind,
                         station.pos,
-                        STATION_COVERAGE_RADIUS,
+                        station::station_catchment_radius(station),
                     )
             })
         })

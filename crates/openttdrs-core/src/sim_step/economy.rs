@@ -66,12 +66,23 @@ pub(super) fn process_monthly_economy(state: &mut GameState, tick: u64) {
     // Flows desde totales del link graph (mapper ingenuo; sin MCF).
     state.rebuild_station_flows();
     // Metas de crecimiento urbano + historiales de pueblos e industrias (UI-3).
-    town::process_town_monthly_growth(&mut state.towns, &state.stations);
+    let company_count = state.companies.len();
+    town::process_town_monthly_growth(
+        &mut state.towns,
+        &state.stations,
+        &state.map,
+        &state.industries,
+        state.climate,
+        state.world_seed,
+        &mut state.cargo_rng,
+        company_count,
+    );
+    let active_rating_company = state.active_company;
     for town in &mut state.towns {
         let population = town.population;
         let passengers = town.passengers_served;
         let mail = town.mail_served;
-        let rating = town.local_authority_rating;
+        let rating = town.authority_rating(active_rating_company);
         town.history
             .push_month(population, passengers, mail, rating);
     }

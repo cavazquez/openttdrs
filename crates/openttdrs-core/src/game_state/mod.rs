@@ -374,6 +374,9 @@ pub struct GameState {
     /// Contador para IDs de subsidio.
     #[serde(default)]
     pub next_subsidy_id: u32,
+    /// Tolerancia del ayuntamiento a demolición municipal (`difficulty.town_council_tolerance`).
+    #[serde(default)]
+    pub town_council_tolerance: crate::town::TownCouncilTolerance,
     /// Desastres ambientales habilitados.
     #[serde(default = "default_true")]
     pub disasters_enabled: bool,
@@ -504,6 +507,7 @@ impl GameState {
             next_subsidy_id: 1,
             disasters_enabled: true,
             station_noise_level: false,
+            town_council_tolerance: crate::town::TownCouncilTolerance::default(),
             disaster_timer: default_disaster_timer(),
             disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),
@@ -588,6 +592,7 @@ impl GameState {
             next_subsidy_id: 1,
             disasters_enabled: true,
             station_noise_level: false,
+            town_council_tolerance: crate::town::TownCouncilTolerance::default(),
             disaster_timer: default_disaster_timer(),
             disaster_crafts: Vec::new(),
             pathfinding: crate::pathfinding_settings::PathfindingSettings::default(),

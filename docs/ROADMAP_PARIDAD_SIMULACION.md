@@ -148,7 +148,7 @@ con la clasificación de segmentos de señal y está reclasificada a P2 (detalle
 - **Hecho** — constante `TOWN_RATING_INITIAL = 500` usada por `Default for Town` y por el
   `serde(default)` del campo, así que también aplica a los pueblos importados de un `.sav` y a las
   partidas guardadas antes del cambio. Test `new_town_starts_at_initial_rating`.
-- **Pendiente** — el desglose por compañía sigue en [P1.9](#p19--autoridad-local-por-compañía).
+- **Hecho (P1.9)** — el desglose por compañía está en `authority_ratings[]` con migración serde.
 
 ### P0.5 — Todas las industrias producen en el mismo tick · hecho
 
@@ -199,7 +199,7 @@ con la clasificación de segmentos de señal y está reclasificada a P2 (detalle
 
 ## 5. P1 — Reglas de comportamiento
 
-Veintidós entradas, **seis cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.3+P1.4 de industrias, P1.15 y P1.22).
+Veintidós entradas, **diez cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.3+P1.4 de industrias, P1.8, P1.9, P1.10, P1.11, P1.12, P1.15 y P1.22).
 
 ### P1.1 — `UpdateStationRating` completo · hecho
 
@@ -325,7 +325,7 @@ Veintidós entradas, **seis cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.
   (`sav/house_population_generated.rs`), hoy sin uso en runtime.
 - **Coste** — L.
 
-### P1.8 — Tasa de crecimiento urbano
+### P1.8 — Tasa de crecimiento urbano · hecho
 
 - **Problema** — las ciudades suman 10 de población por pulso, sin depender de cuántas estaciones
   las sirven de verdad ni de su tamaño.
@@ -334,12 +334,14 @@ Veintidós entradas, **seis cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.
   ajusta por ciudad y divide por `num_houses/50+1` (`town_cmd.cpp:3819-3856`). Sin estaciones y
   sin financiación solo crece con `Chance16(1,12)` (`town_cmd.cpp:3876-3911`).
 - **Port** — `grow_town_if_served` con paso fijo (`town.rs:222`, `293-331`).
-- **Solución** — portar `growth_rate` y `grow_counter` por ciudad junto con la cadencia real de
-  70 ticks, y calcular la tasa desde estaciones activas. Añadir las metas de invierno y desierto
-  que hoy ignoran la altura y la zona tropical (`town.rs:156-172`).
+- **Hecho** — `growth_rate` y `grow_counter` por pueblo; cadencia `TOWN_GROWTH_TICKS = 70`;
+  `get_normal_growth_rate` desde estaciones activas y tablas `_grow_count_values`; expansión física
+  sin step abstracto de población; `Chance16(1,12)` sin estaciones; metas invierno/desierto con
+  altura (`DEF_SNOW_LINE_HEIGHT`) y desierto tropical. Tests `growth_rate_scales_with_active_stations`,
+  `unserved_town_growth_requires_chance_without_funding`.
 - **Coste** — L.
 
-### P1.9 — Autoridad local por compañía
+### P1.9 — Autoridad local por compañía · hecho
 
 - **Problema** — hay un único rating compartido, así que dos compañías en el mismo pueblo son
   indistinguibles para el ayuntamiento y no hay penalización ni recuperación con el tiempo.
@@ -348,8 +350,10 @@ Veintidós entradas, **seis cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.
   mal servidas (`town_cmd.cpp:3766-3794`); `CheckforTownRating` exige umbrales según
   `town_council_tolerance` para tocar carretera, túnel o puente municipal (`town_cmd.cpp:4077-4104`).
 - **Port** — un `i16` y un umbral fijo de −200 solo para estaciones (`town.rs:43-45`, `355-363`).
-- **Solución** — convertir el campo en mapa por compañía (parte de [P0.4](#p04--rating-inicial-de-autoridad-local---hecho)),
-  portar `UpdateTownRating` mensual y los chequeos de demolición con la tabla de tolerancia.
+- **Hecho** — `authority_ratings[]` por `CompanyId` (serde + save v23); `update_town_rating` mensual;
+  estaciones y financiación usan `active_company`; `check_town_rating` con `TownCouncilTolerance` en
+  demolición municipal (`OWNER_TOWN_M1`). Tests `authority_ratings_are_per_company`,
+  `update_town_rating_recovers_and_penalizes_by_station_service`.
 - **Coste** — M el modelo, L con los chequeos.
 
 ### P1.10 — Efecto real de la publicidad · hecho
@@ -365,28 +369,33 @@ Veintidós entradas, **seis cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.
 - **Pendiente** — estatua (+26 rating estaciones y pending de P1.1), exclusividad 12 meses y
   soborno; tamaños small/large de publicidad si se exponen en UI.
 
-### P1.11 — Modelo de averías
+### P1.11 — Modelo de averías · hecho
 
-- **Problema** — la avería es determinista (`tick * id % 256` bajo un umbral de fiabilidad) y dura
-  siempre 3 días. No hay acumulación de riesgo ni relación con la velocidad.
+- **Problema** — la avería era determinista (`tick * id % 256` bajo un umbral de fiabilidad) y duraba
+  siempre 3 días. No había acumulación de riesgo ni relación con la velocidad.
 - **Original** — `breakdown_chance` acumulativo (+1 por tick, +25 con probabilidad 1/25) contra la
   tabla `_breakdown_chance[rel >> 10]`, con `breakdown_ctr = GB(r,16,6)+0x3F` y
   `breakdown_delay = GB(r,24,7)+0x80` sacados de `Random()`, y solo con `cur_speed >= 5`
   (`vehicle.cpp:1276-1324`). `HandleBreakdown` tiene fases (`vehicle.cpp:1332-1392`).
-- **Port** — `vehicle/reliability.rs:48-68`.
-- **Solución** — portar la tabla, el acumulador y las fases. Depende del RNG global de
-  [P2.3](#tabla-p2) para ser reproducible, pero el modelo se puede portar antes con el RNG actual.
-- **Coste** — L.
+- **Hecho** — `vehicle/reliability.rs` porta la tabla, el acumulador diario (`check_vehicle_breakdown`
+  con `cargo_rng`), las fases `HandleBreakdown` (`breakdown_ctr` / `breakdown_delay`) en cada tick de
+  movimiento, bonus de fiabilidad para barcos y umbral `cur_speed >= 5`. El evento `SimEvent::Breakdown`
+  se emite al entrar en avería activa (fase 2→1). Tests en `reliability.rs` y
+  `check_breakdown_triggers_when_unreliable`.
+- **Pendiente** — ajuste `vehicle_breakdowns` reducido/nulo y RNG global de [P2.3](#tabla-p2) para
+  reproducibilidad bit a bit.
 
-### P1.12 — Decaimiento de fiabilidad por motor
+### P1.12 — Decaimiento de fiabilidad por motor · hecho
 
-- **Problema** — todos los motores pierden 10 puntos cada 256 ticks; el catálogo no influye.
+- **Problema** — todos los motores perdían 10 puntos cada 256 ticks; el catálogo no influaba.
 - **Original** — `reliability -= reliability_spd_dec` propio del motor (`engine.cpp:785`,
   `vehicle.cpp:1294`), que además se duplica al pasar `max_age` (`vehicle.cpp:1410-1450`).
-- **Port** — `vehicle/reliability.rs:56-58`.
-- **Solución** — añadir `reliability_spd_dec` al catálogo de motores y usarlo, con el barrido
-  diario de [P2.5](#tabla-p2).
-- **Coste** — M.
+- **Hecho** — `EngineDef` incluye `reliability_spd_dec` y `lifelength_years` (valores del upstream en
+  `catalog_data.rs`; barcos con `decay_speed` 5 → 20). Barrido diario con escala port 0..10 000,
+  copia al vehículo al comprar, y `age_vehicle_calendar_day` duplica `reliability_spd_dec` en los
+  años tras `max_age`. Tests `reliability_decays_by_engine_spd_dec` y
+  `reliability_spd_dec_doubles_after_max_age_year_boundary`.
+- **Pendiente** — barrido diario de economía separado del calendario si se porta [P2.5](#tabla-p2).
 
 ### P1.13 — Autorenew
 

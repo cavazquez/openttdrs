@@ -7,6 +7,7 @@ mod operational_status;
 mod order;
 mod order_execution;
 mod reliability;
+pub(crate) use reliability::{init_vehicle_reliability_from_engine, process_vehicle_economy_day};
 
 // Re-exportaciones públicas desde model.rs
 pub use model::{

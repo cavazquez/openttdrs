@@ -5,6 +5,19 @@ use serde::{Deserialize, Serialize};
 use crate::cargo::CargoType;
 use crate::vehicle::VehicleKind;
 
+/// `decay_speed` vanilla típico (20) escalado como en `engine.cpp`.
+pub const DEFAULT_RELIABILITY_SPD_DEC: u16 = 80;
+/// Barcos: `MS` usa `decay_speed` 5 → `20`.
+pub const SHIP_RELIABILITY_SPD_DEC: u16 = 20;
+
+fn default_reliability_spd_dec() -> u16 {
+    DEFAULT_RELIABILITY_SPD_DEC
+}
+
+fn default_lifelength_years() -> u8 {
+    30
+}
+
 /// Primer ID reservado para motores Action0 `NewGRF` (trains).
 pub const NEWGRF_ENGINE_ID_BASE: u16 = 1000;
 
@@ -29,6 +42,12 @@ pub struct EngineDef {
     pub intro_year: u16,
     /// Fiabilidad inicial mostrada en la compra (aprox. por clase de motor).
     pub reliability_pct: u8,
+    /// Decaimiento diario de fiabilidad (`OpenTTD` `reliability_spd_dec`, `decay_speed << 2`).
+    #[serde(default = "default_reliability_spd_dec")]
+    pub reliability_spd_dec: u16,
+    /// Vida útil del modelo en años de calendario (`EngineInfo::lifelength`).
+    #[serde(default = "default_lifelength_years")]
+    pub lifelength_years: u8,
     /// Índice de sprite de locomotora (`OpenTTD` `image_index`; 0 en carretera).
     pub train_image_index: u8,
     /// `RailVehicleType::Multihead` (`engines.h`): compra spawnea cabina trasera.

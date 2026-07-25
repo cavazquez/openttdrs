@@ -13,6 +13,7 @@ mod config;
 mod height;
 mod heightmap;
 mod landcover;
+pub(crate) use landcover::desert_patch;
 mod rivers;
 
 pub use config::{

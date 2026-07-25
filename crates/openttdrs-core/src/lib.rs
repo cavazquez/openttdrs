@@ -70,6 +70,7 @@ pub mod tick;
 pub mod timetable;
 pub mod tnbp_decode;
 pub mod town;
+pub mod town_authority_serde;
 pub mod town_expand;
 pub mod townname;
 pub mod train_collision;

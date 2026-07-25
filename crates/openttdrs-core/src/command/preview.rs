@@ -190,7 +190,7 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
             if stations.iter().any(|s| s.pos == *c) {
                 return Some(CommandError::StationAlreadyExists);
             }
-            if !crate::town::authority_allows_new_station(&state.towns, *c) {
+            if !crate::town::authority_allows_new_station(&state.towns, *c, state.active_company) {
                 return Some(CommandError::AuthorityRatingTooLow);
             }
             preview_depot_any(map, *c, |m, tile, dir| {
@@ -337,7 +337,7 @@ fn preview_station_with_authority(
     dir: u8,
     stop_kind: StopKind,
 ) -> Option<CommandError> {
-    if !crate::town::authority_allows_new_station(&state.towns, c) {
+    if !crate::town::authority_allows_new_station(&state.towns, c, state.active_company) {
         return Some(CommandError::AuthorityRatingTooLow);
     }
     check_station_placement(&state.map, &state.stations, c, dir, stop_kind).err()

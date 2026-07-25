@@ -186,6 +186,7 @@ pub(super) fn build_vehicle_at_depot(
     let mut vehicle = Vehicle::new(next_id, engine.kind, depot_pos, depot_pos);
     vehicle.running = false;
     vehicle.engine_id = Some(engine.id);
+    crate::vehicle::init_vehicle_reliability_from_engine(&mut vehicle, &engine);
     if engine.capacity > 0 {
         vehicle.capacity = engine.capacity;
     } else if engine.kind == VehicleKind::Train && engine.is_train_engine() {
@@ -996,7 +997,7 @@ pub(super) fn turn_around_vehicle(
     if state.vehicles[idx].kind != VehicleKind::Train {
         return Err(CommandError::VehicleKindNotAllowed);
     }
-    if state.vehicles[idx].breakdown_ticks_remaining > 0 {
+    if state.vehicles[idx].breakdown_ctr != 0 {
         return Err(CommandError::VehicleKindNotAllowed);
     }
     // `CmdReverseTrainDirection`: velocidad a 0 + liberar reserva delante.

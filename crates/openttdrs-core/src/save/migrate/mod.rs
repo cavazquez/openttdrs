@@ -32,6 +32,7 @@ pub(super) fn migrate_loaded_state(
             19 => migrate_state_v19_to_v20(&mut state),
             20 => migrate_state_v20_to_v21(&mut state),
             21 => migrate_state_v21_to_v22(&mut state),
+            22 => migrate_state_v22_to_v23(&mut state),
             _ => return Err(SaveError::UnsupportedVersion(version)),
         }
         v += 1;
@@ -45,6 +46,20 @@ pub(super) fn migrate_loaded_state(
 /// v20: modo `CargoDist` por defecto (`Manual`); `station_flows` se reconstruyen.
 fn migrate_state_v19_to_v20(state: &mut GameState) {
     state.cargo_dist = crate::flow_stat::CargoDistSettings::default();
+}
+
+/// v23: rating de autoridad por compañía; campos de crecimiento urbano.
+fn migrate_state_v22_to_v23(state: &mut GameState) {
+    for town in &mut state.towns {
+        town.migrate_legacy_authority_rating();
+        if town.authority_ratings.is_empty() {
+            town.authority_ratings =
+                vec![crate::town::TOWN_RATING_INITIAL; crate::town::MAX_TOWN_AUTHORITY_COMPANIES];
+        }
+        if town.growth_rate == 0 && town.grow_counter == 0 {
+            town.init_grow_counter();
+        }
+    }
 }
 
 /// v22: rating persistente por carga (`Station::goods`).

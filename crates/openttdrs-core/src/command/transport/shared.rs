@@ -221,11 +221,54 @@ pub(crate) fn axis_line(a: TileCoord, b: TileCoord) -> Vec<TileCoord> {
     }
 }
 
+fn check_town_demolition_rating(
+    state: &GameState,
+    c: TileCoord,
+    kind: TileKind,
+) -> Result<(), CommandError> {
+    if state.cheats.magic_bulldozer_active() {
+        return Ok(());
+    }
+    let tile = state
+        .map
+        .get(c)
+        .ok_or(CommandError::OutOfBounds)?;
+    if !crate::company::CompanyId::is_town_owner_m1(tile.m1) {
+        return Ok(());
+    }
+    let check_type = match kind {
+        TileKind::RoadBridge | TileKind::RailBridge | TileKind::RoadTunnel | TileKind::RailTunnel => {
+            crate::town::TownRatingCheckType::TunnelBridgeRemove
+        }
+        TileKind::Road => crate::town::TownRatingCheckType::RoadRemove,
+        _ => return Ok(()),
+    };
+    let Some((idx, dist)) = crate::town::nearest_town_index(&state.towns, c) else {
+        return Ok(());
+    };
+    if dist > crate::town::TOWN_AUTHORITY_RADIUS {
+        return Ok(());
+    }
+    if crate::town::check_town_rating(
+        &state.towns[idx],
+        state.active_company,
+        check_type,
+        state.town_council_tolerance,
+    ) {
+        Ok(())
+    } else {
+        Err(CommandError::AuthorityRatingTooLow)
+    }
+}
+
 pub(in crate::command) fn clear_tile(
     state: &mut GameState,
     c: TileCoord,
 ) -> Result<(), CommandError> {
     check_clear_tile(&state.map, c)?;
+    if let Some(kind) = state.map.get_kind(c) {
+        check_town_demolition_rating(state, c, kind)?;
+    }
     if !state.cheats.magic_bulldozer_active() {
         require_tile_owned_by_active(state, c)?;
     }

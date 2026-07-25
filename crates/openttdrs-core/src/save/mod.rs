@@ -35,7 +35,8 @@ pub use io::{load, load_from_str, save};
 /// v20: `cargo_dist` (modo Manual/Asymmetric/Symmetric; flows reconstruidos).
 /// v21: `cargo_rng` persistido en `GameState` (antes efímero en runtime).
 /// v22: rating persistente por carga (`Station::goods`) en vez de derivado del tiempo de espera.
-pub const CURRENT_SAVE_VERSION: u32 = 22;
+/// v23: rating de autoridad local por compañía + `growth_rate` / `grow_counter` por pueblo.
+pub const CURRENT_SAVE_VERSION: u32 = 23;
 
 const SAVE_VERSION: u32 = CURRENT_SAVE_VERSION;
 

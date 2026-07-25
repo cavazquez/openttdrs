@@ -265,7 +265,7 @@ fn airport_noise_rejects_intercontinental_near_small_town() {
         pos: TileCoord::new(5, 5),
         name: "Villa".into(),
         population: 100, // MaxTownNoise = 100/800+3 = 3
-        local_authority_rating: 500,
+        authority_ratings: vec![500],
         ..crate::Town::default()
     });
     let err = apply_command(

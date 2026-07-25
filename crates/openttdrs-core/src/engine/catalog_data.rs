@@ -5,7 +5,9 @@ use std::sync::OnceLock;
 use crate::cargo::CargoType;
 use crate::vehicle::VehicleKind;
 
-use super::model::EngineDef;
+use super::model::{
+    EngineDef, DEFAULT_RELIABILITY_SPD_DEC, SHIP_RELIABILITY_SPD_DEC,
+};
 
 pub const ENGINE_BUS_MPS: u16 = 0;
 pub const ENGINE_BUS_HEREFORD: u16 = 1;
@@ -58,6 +60,18 @@ pub(crate) const RELIABILITY_ELECTRIC: u8 = 90;
 pub(crate) const RELIABILITY_ROAD: u8 = 85;
 macro_rules! road {
     ($id:expr, $kind:expr, $name:expr, $speed:expr, $cf:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr) => {
+        road!(
+            $id, $kind, $name, $speed, $cf, $rc, $cap, $cargo, $hp, $wt, $year, 40,
+            DEFAULT_RELIABILITY_SPD_DEC
+        )
+    };
+    ($id:expr, $kind:expr, $name:expr, $speed:expr, $cf:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $life:expr) => {
+        road!(
+            $id, $kind, $name, $speed, $cf, $rc, $cap, $cargo, $hp, $wt, $year, $life,
+            DEFAULT_RELIABILITY_SPD_DEC
+        )
+    };
+    ($id:expr, $kind:expr, $name:expr, $speed:expr, $cf:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $life:expr, $spd_dec:expr) => {
         EngineDef {
             id: $id,
             kind: $kind,
@@ -71,6 +85,8 @@ macro_rules! road {
             weight_t: $wt,
             intro_year: $year,
             reliability_pct: RELIABILITY_ROAD,
+            reliability_spd_dec: $spd_dec,
+            lifelength_years: $life,
             train_image_index: 0,
             dual_headed: false,
             rail_tilts: false,
@@ -88,10 +104,22 @@ macro_rules! train {
     ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr, $img:expr) => {
         train!(
             $id, $name, $speed, $cf, $rc_base, $rc, $cap, $cargo, $hp, $wt, $year, $rel, $img,
-            false
+            30, false
+        )
+    };
+    ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr, $img:expr, $life:expr) => {
+        train!(
+            $id, $name, $speed, $cf, $rc_base, $rc, $cap, $cargo, $hp, $wt, $year, $rel, $img,
+            $life, false
         )
     };
     ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr, $img:expr, $dual:expr) => {
+        train!(
+            $id, $name, $speed, $cf, $rc_base, $rc, $cap, $cargo, $hp, $wt, $year, $rel, $img,
+            30, $dual
+        )
+    };
+    ($id:expr, $name:expr, $speed:expr, $cf:expr, $rc_base:expr, $rc:expr, $cap:expr, $cargo:expr, $hp:expr, $wt:expr, $year:expr, $rel:expr, $img:expr, $life:expr, $dual:expr) => {
         EngineDef {
             id: $id,
             kind: VehicleKind::Train,
@@ -105,6 +133,8 @@ macro_rules! train {
             weight_t: $wt,
             intro_year: $year,
             reliability_pct: $rel,
+            reliability_spd_dec: DEFAULT_RELIABILITY_SPD_DEC,
+            lifelength_years: $life,
             train_image_index: $img,
             dual_headed: $dual,
             rail_tilts: false,
@@ -154,7 +184,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Passengers),
             120,
             15,
-            1964
+            1964,
+            30
         ),
         road!(
             ENGINE_BUS_FOSTER,
@@ -194,7 +225,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Mail),
             120,
             10,
-            1935
+            1935,
+            55
         ),
         road!(
             ENGINE_TRUCK_BALOGH_GOODS,
@@ -207,7 +239,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Goods),
             120,
             10,
-            1935
+            1935,
+            55
         ),
         road!(
             ENGINE_TRUCK_CRAIGHEAD_GOODS,
@@ -220,7 +253,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Goods),
             220,
             12,
-            1974
+            1974,
+            85
         ),
         road!(
             ENGINE_TRUCK_GOSS_GOODS,
@@ -233,7 +267,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Goods),
             450,
             17,
-            2005
+            2005,
+            85
         ),
         // Trenes (clima templado del original).
         train!(
@@ -249,7 +284,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             47,
             1925,
             RELIABILITY_STEAM,
-            2
+            2,
+            30
         ),
         train!(
             ENGINE_TRAIN_CHANEY_JUBILEE,
@@ -294,7 +330,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             170,
             1954,
             RELIABILITY_STEAM,
-            0
+            0,
+            25
         ),
         train!(
             ENGINE_TRAIN_MANLEY_MOREL,
@@ -310,6 +347,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             1956,
             RELIABILITY_DIESEL,
             8,
+            35,
             true
         ),
         train!(
@@ -326,6 +364,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             1984,
             RELIABILITY_DIESEL,
             10,
+            35,
             true
         ),
         train!(
@@ -341,7 +380,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             72,
             1961,
             RELIABILITY_DIESEL,
-            4
+            4,
+            28
         ),
         train!(
             ENGINE_TRAIN_UU_37,
@@ -371,7 +411,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             112,
             1962,
             RELIABILITY_DIESEL,
-            4
+            4,
+            33
         ),
         train!(
             ENGINE_TRAIN_SH_125,
@@ -387,6 +428,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             1977,
             RELIABILITY_DIESEL,
             6,
+            25,
             true
         ),
         train!(
@@ -417,7 +459,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             82,
             1973,
             RELIABILITY_ELECTRIC,
-            20
+            20,
+            80
         ),
         train!(
             ENGINE_TRAIN_TIM,
@@ -433,6 +476,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             1984,
             RELIABILITY_ELECTRIC,
             21,
+            30,
             true
         ),
         train!(
@@ -449,6 +493,7 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             1992,
             RELIABILITY_ELECTRIC,
             23,
+            50,
             true
         ),
         // Vagones (power_hp = 0): se enganchan a locomotoras.
@@ -465,7 +510,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             25,
             1920,
             RELIABILITY_STEAM,
-            2
+            2,
+            50
         ),
         train!(
             ENGINE_WAGON_MAIL,
@@ -480,7 +526,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             20,
             1920,
             RELIABILITY_STEAM,
-            2
+            2,
+            50
         ),
         train!(
             ENGINE_WAGON_GOODS,
@@ -495,7 +542,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             21, // OpenTTD RVI weight (engine 32 Goods Van)
             1920,
             RELIABILITY_STEAM,
-            2
+            2,
+            50
         ),
         train!(
             ENGINE_WAGON_COAL,
@@ -510,7 +558,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             22,
             1920,
             RELIABILITY_STEAM,
-            2
+            2,
+            50
         ),
         // Monorail / Maglev (Fase 6; ids OpenTTD +100).
         train!(
@@ -526,7 +575,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             70,
             1990,
             RELIABILITY_MONORAIL,
-            24
+            24,
+            50
         ),
         train!(
             ENGINE_TRAIN_LEV1,
@@ -541,7 +591,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             65,
             2000,
             RELIABILITY_MAGLEV,
-            25
+            25,
+            50
         ),
         road!(
             ENGINE_SHIP_MPS,
@@ -554,7 +605,9 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Goods),
             400,
             80,
-            1920
+            1920,
+            30,
+            SHIP_RELIABILITY_SPD_DEC
         ),
         road!(
             ENGINE_SHIP_OIL,
@@ -567,7 +620,9 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Oil),
             500,
             120,
-            1930
+            1930,
+            30,
+            SHIP_RELIABILITY_SPD_DEC
         ),
         road!(
             ENGINE_SHIP_COAL,
@@ -580,7 +635,9 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Coal),
             450,
             110,
-            1925
+            1925,
+            30,
+            SHIP_RELIABILITY_SPD_DEC
         ),
         road!(
             ENGINE_SHIP_FERRY,
@@ -593,7 +650,9 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Passengers),
             600,
             70,
-            1950
+            1950,
+            90,
+            SHIP_RELIABILITY_SPD_DEC
         ),
         road!(
             ENGINE_AIRCRAFT_DAKOTA,
@@ -606,7 +665,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Passengers),
             1_200,
             20,
-            1944
+            1944,
+            20
         ),
         road!(
             ENGINE_AIRCRAFT_FOKKER,
@@ -619,7 +679,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Passengers),
             1_800,
             25,
-            1958
+            1958,
+            24
         ),
         road!(
             ENGINE_AIRCRAFT_TRICARIO,
@@ -632,7 +693,8 @@ fn build_vanilla_engines() -> Vec<EngineDef> {
             Some(CargoType::Passengers),
             800,
             8,
-            1960
+            1960,
+            25
         ),
     ]
 }

@@ -57,6 +57,14 @@ const fn default_vehicle_reliability() -> u16 {
     8_500
 }
 
+const fn default_vehicle_reliability_spd_dec() -> u16 {
+    crate::engine::DEFAULT_RELIABILITY_SPD_DEC
+}
+
+const fn default_vehicle_max_age_days() -> u32 {
+    30 * crate::vehicle::reliability::DAYS_PER_VEHICLE_YEAR
+}
+
 const fn default_service_interval_days() -> u16 {
     crate::vehicle::reliability::DEFAULT_SERVICE_INTERVAL_DAYS
 }
@@ -293,9 +301,21 @@ pub struct Vehicle {
     /// Día de calendario del último servicio en depósito.
     #[serde(default)]
     pub last_service_day: u64,
-    /// Ticks restantes de avería (vehículo parado).
+    /// Decaimiento diario de fiabilidad (copia del motor al comprar).
+    #[serde(default = "default_vehicle_reliability_spd_dec")]
+    pub reliability_spd_dec: u16,
+    /// Vida útil máxima en días de calendario (`max_age`).
+    #[serde(default = "default_vehicle_max_age_days")]
+    pub max_age_days: u32,
+    /// Acumulador de riesgo de avería (`breakdown_chance`).
     #[serde(default)]
-    pub breakdown_ticks_remaining: u32,
+    pub breakdown_chance: u8,
+    /// Fase de avería (`breakdown_ctr`; ver `HandleBreakdown`).
+    #[serde(default)]
+    pub breakdown_ctr: u8,
+    /// Ticks restantes de avería activa (`breakdown_delay`).
+    #[serde(default)]
+    pub breakdown_delay: u8,
     /// Fase de vuelo (solo aviones; resto ignora).
     #[serde(default)]
     pub aircraft_phase: AircraftPhase,
@@ -368,8 +388,12 @@ impl Vehicle {
             VehicleKind::Truck | VehicleKind::Train | VehicleKind::Ship => None,
         };
         let engine_id = crate::engine::default_engine_id(kind);
+        let engine = crate::engine::engine_for_vehicle(kind, engine_id);
         let reliability =
             crate::vehicle::reliability::initial_reliability_for_engine(engine_id, kind);
+        let reliability_spd_dec = engine.reliability_spd_dec;
+        let max_age_days =
+            u32::from(engine.lifelength_years) * crate::vehicle::reliability::DAYS_PER_VEHICLE_YEAR;
         Self {
             id,
             kind,
@@ -434,7 +458,11 @@ impl Vehicle {
             needs_servicing: false,
             service_interval_days: crate::vehicle::reliability::DEFAULT_SERVICE_INTERVAL_DAYS,
             last_service_day: 0,
-            breakdown_ticks_remaining: 0,
+            reliability_spd_dec,
+            max_age_days,
+            breakdown_chance: 0,
+            breakdown_ctr: 0,
+            breakdown_delay: 0,
             aircraft_phase: AircraftPhase::InHangar,
             altitude: 0,
             aircraft_phase_ticks: 0,

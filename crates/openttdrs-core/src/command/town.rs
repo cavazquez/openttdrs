@@ -42,7 +42,8 @@ pub(crate) fn town_fund_buildings(state: &mut GameState, town_id: u32) -> Result
         return Err(CommandError::InsufficientFunds);
     }
     state.economy.money -= FUND_BUILDINGS_COST;
-    let delta = state.towns[idx].adjust_rating(FUND_BUILDINGS_RATING_BOOST);
+    let owner = state.active_company;
+    let delta = state.towns[idx].adjust_rating(owner, FUND_BUILDINGS_RATING_BOOST);
     crate::town::apply_fund_buildings_boost(&mut state.towns[idx]);
     state
         .runtime
@@ -122,6 +123,7 @@ pub(crate) fn found_town(state: &mut GameState, center: TileCoord) -> Result<(),
         ..Default::default()
     };
     town.init_growth_goals(state.climate);
+    town.init_grow_counter();
     state.towns.push(town);
     Ok(())
 }
@@ -200,12 +202,12 @@ mod tests {
         st.goods.get_mut(CargoType::Passengers).rating = 100;
         s.stations.push(st);
 
-        let authority_before = s.towns[0].local_authority_rating;
+        let authority_before = s.towns[0].authority_rating(s.active_company);
         let station_before = station_rating_for_cargo(&s.stations[0], CargoType::Passengers);
 
         apply_command(&mut s, &Command::TownAdvertise(1)).unwrap();
 
-        assert_eq!(s.towns[0].local_authority_rating, authority_before);
+        assert_eq!(s.towns[0].authority_rating(s.active_company), authority_before);
         assert_eq!(
             station_rating_for_cargo(&s.stations[0], CargoType::Passengers),
             station_before.saturating_add(crate::station::TOWN_ADVERTISE_MEDIUM_RATING_BOOST)

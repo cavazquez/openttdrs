@@ -161,6 +161,7 @@ fn phase_economy_and_world(state: &mut GameState, t: u64) {
     crate::gs::tick_gs(state);
     economy::produce_industries(state, t);
     economy::maybe_change_industry_production(state, t);
+    crate::vehicle::process_vehicle_economy_day(state, t);
     economy::produce_town_demand(state, t);
     economy::grow_towns(state, t);
     economy::age_vehicle_cargo(state);

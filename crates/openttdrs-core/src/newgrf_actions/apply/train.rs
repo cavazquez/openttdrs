@@ -56,6 +56,8 @@ pub fn apply_newgrf_vehicles_trains(state: &mut GameState, search_dirs: &[&Path]
                 weight_t: 80,
                 intro_year: meta.intro_year,
                 reliability_pct: 85,
+                reliability_spd_dec: crate::engine::DEFAULT_RELIABILITY_SPD_DEC,
+                lifelength_years: 30,
                 train_image_index: 2,
                 dual_headed: false,
                 rail_tilts: false,

@@ -506,11 +506,13 @@ fn service_at_depot_restores_reliability() {
     );
     v.reliability = 2_000;
     v.needs_servicing = true;
-    v.breakdown_ticks_remaining = 50;
+    v.breakdown_ctr = 50;
+    v.breakdown_delay = 10;
     v.service_at_depot();
     assert!(v.reliability >= 8_000);
     assert!(!v.needs_servicing);
-    assert_eq!(v.breakdown_ticks_remaining, 0);
+    assert_eq!(v.breakdown_ctr, 0);
+    assert_eq!(v.breakdown_delay, 0);
 }
 
 #[test]
@@ -564,13 +566,16 @@ fn check_breakdown_triggers_when_unreliable() {
         TileCoord::new(0, 0),
         TileCoord::new(1, 0),
     );
-    v.reliability = 3_000;
+    v.reliability = 100;
     v.running = true;
     v.cur_speed = 50;
-    let tick = 7_u64 * 256;
-    assert!(v.check_breakdown(tick));
-    assert!(v.breakdown_ticks_remaining > 0);
-    assert_eq!(v.cur_speed, 0);
+    v.breakdown_chance = 250;
+    v.check_vehicle_breakdown(&mut crate::cargodist::parity::Randomizer::new(42));
+    assert!(v.breakdown_ctr > 0);
+    assert!(v.handle_breakdown(0) || v.breakdown_ctr > 2);
+    if v.breakdown_ctr == 1 {
+        assert_eq!(v.cur_speed, 0);
+    }
 }
 
 #[test]

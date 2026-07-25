@@ -211,7 +211,7 @@ pub(in crate::command) fn place_rail_station_area(
     let (w, h) = rail_station_footprint(axis_y, platforms, length);
     check_rail_station_area(state, origin, w, h)?;
     let anchor = TileCoord::new(origin.x + (w - 1) / 2, origin.y + (h - 1) / 2);
-    if !authority_allows_new_station(&state.towns, anchor) {
+    if !authority_allows_new_station(&state.towns, anchor, state.active_company) {
         return Err(CommandError::AuthorityRatingTooLow);
     }
 
@@ -269,7 +269,7 @@ pub(in crate::command) fn place_rail_station_area(
     st.station_spec = spec_id;
     state.stations.push(st);
     if let Some((town_id, delta)) =
-        town::apply_station_build_rating_penalty(&mut state.towns, anchor)
+        town::apply_station_build_rating_penalty(&mut state.towns, anchor, state.active_company)
     {
         state
             .runtime
@@ -301,7 +301,7 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     dir: u8,
     stop_kind: StopKind,
 ) -> Result<(), CommandError> {
-    if !authority_allows_new_station(&state.towns, c) {
+    if !authority_allows_new_station(&state.towns, c, state.active_company) {
         return Err(CommandError::AuthorityRatingTooLow);
     }
     let kind = state.map.get_kind(c).unwrap_or(TileKind::Grass);
@@ -341,7 +341,9 @@ pub(in crate::command::transport) fn station_placement_on_tile(
     }
     state.stations.push(st);
     state.economy.money -= STATION_BUILD_COST;
-    if let Some((town_id, delta)) = town::apply_station_build_rating_penalty(&mut state.towns, c) {
+    if let Some((town_id, delta)) =
+        town::apply_station_build_rating_penalty(&mut state.towns, c, state.active_company)
+    {
         state
             .runtime
             .pending_sim_events

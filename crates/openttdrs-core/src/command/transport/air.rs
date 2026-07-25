@@ -72,7 +72,7 @@ pub(in crate::command) fn place_airport_area(
     let station_anchor = airport_spec_tiles(origin, spec, axis_y)
         .find(|(_, p)| p.is_hangar())
         .map_or(origin, |(c, _)| c);
-    if !authority_allows_new_station(&state.towns, station_anchor) {
+    if !authority_allows_new_station(&state.towns, station_anchor, state.active_company) {
         return Err(CommandError::AuthorityRatingTooLow);
     }
 

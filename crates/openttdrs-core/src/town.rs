@@ -1,11 +1,17 @@
 //! Demanda urbana mínima: casas en cobertura de parada generan pasajeros y correo.
 
-use crate::cargo::CargoType;
+use crate::cargo::{ALL_CARGO_TYPES, CargoType};
+use crate::cargodist::parity::Randomizer;
+use crate::company::CompanyId;
 use crate::entity_history::TownHistory;
 use crate::industry::Industry;
-use crate::map::{Map, TileCoord};
+use crate::map::{Map, TileCoord, tile_slope_and_z};
 use crate::station::{self, STATION_COVERAGE_RADIUS, Station, StopKind};
-use crate::world_gen::Climate;
+use crate::world_gen::{
+    Climate, CLEAR_GROUND_DESERT, DEF_SNOW_LINE_HEIGHT, desert_patch, effective_clear_ground,
+};
+
+use crate::town_authority_serde as authority_serde;
 
 /// Efectos de carga que alimentan metas de crecimiento (`TownEffect` simplificado).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +40,42 @@ pub const TOWN_GROWTH_DESERT_POP_THRESHOLD: u32 = 60;
 pub const FUND_BUILDINGS_MONTHS: u8 = 3;
 /// Valoración de partida de la autoridad local (`RATING_INITIAL`, `town_type.h:45`).
 pub const TOWN_RATING_INITIAL: i16 = 500;
+/// Rating máximo de recuperación mensual automática (`RATING_GROWTH_MAXIMUM`).
+pub const RATING_GROWTH_MAXIMUM: i16 = 200;
+/// Paso mensual de recuperación hacia `RATING_GROWTH_MAXIMUM`.
+pub const RATING_GROWTH_UP_STEP: i8 = 5;
+/// Bonus mensual por estación bien servida (`RATING_STATION_UP_STEP`).
+pub const RATING_STATION_UP_STEP: i8 = 12;
+/// Penalización mensual por estación mal servida (`RATING_STATION_DOWN_STEP`).
+pub const RATING_STATION_DOWN_STEP: i8 = -15;
+/// Días sin actividad para considerar una estación inactiva (`time_since_load` ≤ 20).
+pub const STATION_ACTIVE_DAYS: u8 = 20;
+/// Slots de rating por compañía (`ratings[MAX_COMPANIES]`).
+pub const MAX_TOWN_AUTHORITY_COMPANIES: usize = 15;
+/// Sin crecimiento (`TOWN_GROWTH_RATE_NONE`).
+pub const TOWN_GROWTH_RATE_NONE: u16 = 0xFFFF;
+/// Tope de ticks originales en `TownTicksToGameTicks`.
+pub const MAX_TOWN_GROWTH_SOURCE_TICKS: u16 = 930;
+
+/// Tolerancia del ayuntamiento a demolición municipal (`town_council_tolerance`).
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum TownCouncilTolerance {
+  Lenient,
+  #[default]
+  Neutral,
+  Hostile,
+  Permissive,
+}
+
+/// Tipo de chequeo de rating para demolición (`TownRatingCheckType`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TownRatingCheckType {
+    RoadRemove,
+    TunnelBridgeRemove,
+}
 
 /// Ciudad (importada de saves de `OpenTTD` o creada por el juego).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -42,9 +84,16 @@ pub struct Town {
     pub pos: crate::map::TileCoord,
     pub name: String,
     pub population: u32,
-    /// Valoración de la autoridad local (-1000..=1000; arranca en `TOWN_RATING_INITIAL`).
-    #[serde(default = "default_town_rating")]
-    pub local_authority_rating: i16,
+    /// Valoración de la autoridad local por compañía (`ratings[MAX_COMPANIES]`).
+    #[serde(
+        default = "default_authority_ratings",
+        serialize_with = "authority_serde::serialize",
+        deserialize_with = "authority_serde::deserialize"
+    )]
+    pub authority_ratings: Vec<i16>,
+    /// Campo legado en saves v22 (`local_authority_rating` único).
+    #[serde(default, skip_serializing, rename = "local_authority_rating")]
+    pub(crate) legacy_local_authority_rating: Option<i16>,
     /// Pasajeros entregados cerca de la ciudad (contador de crecimiento).
     #[serde(default)]
     pub passengers_served: u32,
@@ -69,6 +118,12 @@ pub struct Town {
     /// Resultado de `UpdateTownGrowth` (solo crece si es `true`).
     #[serde(default)]
     pub is_growing: bool,
+    /// Ticks de juego entre intentos de expansión (`Town::growth_rate`).
+    #[serde(default)]
+    pub growth_rate: u16,
+    /// Contador decreciente hacia el siguiente intento (`Town::grow_counter`).
+    #[serde(default)]
+    pub grow_counter: u16,
     /// Series mensuales (población / servicio).
     #[serde(default)]
     pub history: TownHistory,
@@ -77,8 +132,8 @@ pub struct Town {
     pub noise_reached: u16,
 }
 
-const fn default_town_rating() -> i16 {
-    TOWN_RATING_INITIAL
+fn default_authority_ratings() -> Vec<i16> {
+    vec![TOWN_RATING_INITIAL; MAX_TOWN_AUTHORITY_COMPANIES]
 }
 
 impl Default for Town {
@@ -88,7 +143,8 @@ impl Default for Town {
             pos: TileCoord::new(0, 0),
             name: String::new(),
             population: 0,
-            local_authority_rating: TOWN_RATING_INITIAL,
+            authority_ratings: default_authority_ratings(),
+            legacy_local_authority_rating: None,
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
@@ -97,6 +153,8 @@ impl Default for Town {
             received_old: [0; TOWN_GROWTH_EFFECT_COUNT],
             fund_buildings_months: 0,
             is_growing: false,
+            growth_rate: 0,
+            grow_counter: 0,
             history: TownHistory::default(),
             noise_reached: 0,
         }
@@ -104,6 +162,38 @@ impl Default for Town {
 }
 
 impl Town {
+    /// Rating de autoridad para una compañía (default `TOWN_RATING_INITIAL` si falta slot).
+    #[must_use]
+    pub fn authority_rating(&self, company: CompanyId) -> i16 {
+        self.authority_ratings
+            .get(company.index())
+            .copied()
+            .unwrap_or(TOWN_RATING_INITIAL)
+    }
+
+    /// Asegura slots de rating para todas las compañías del pool.
+    pub fn ensure_authority_ratings(&mut self, company_count: usize) {
+        self.migrate_legacy_authority_rating();
+        let need = company_count.max(MAX_TOWN_AUTHORITY_COMPANIES);
+        if self.authority_ratings.len() < need {
+            self.authority_ratings.resize(need, TOWN_RATING_INITIAL);
+        }
+    }
+
+    /// Migra el rating único de saves antiguos al vector por compañía.
+    pub fn migrate_legacy_authority_rating(&mut self) {
+        if let Some(legacy) = self.legacy_local_authority_rating {
+            self.authority_ratings = vec![legacy; MAX_TOWN_AUTHORITY_COMPANIES];
+            self.legacy_local_authority_rating = None;
+        }
+    }
+
+    /// Inicializa `grow_counter` dispersado (`InitTownAndName` / afterload).
+    pub fn init_grow_counter(&mut self) {
+        self.grow_counter =
+            u16::try_from(self.id % u32::try_from(TOWN_GROWTH_TICKS).unwrap_or(1)).unwrap_or(0);
+    }
+
     /// Inicializa metas según clima (`InitTownAndName` / clima ártico-trópico).
     pub fn init_growth_goals(&mut self, climate: Climate) {
         self.goals = [0; TOWN_GROWTH_EFFECT_COUNT];
@@ -119,12 +209,14 @@ impl Town {
         }
     }
 
-    /// Ajusta la valoración y devuelve el delta aplicado (clamp -1000..=1000).
-    pub fn adjust_rating(&mut self, delta: i8) -> i8 {
-        let before = self.local_authority_rating;
+    /// Ajusta la valoración de una compañía y devuelve el delta aplicado (clamp -1000..=1000).
+    pub fn adjust_rating(&mut self, company: CompanyId, delta: i8) -> i8 {
+        self.ensure_authority_ratings(company.index() + 1);
+        let idx = company.index();
+        let before = self.authority_ratings[idx];
         let next = i32::from(before) + i32::from(delta);
-        self.local_authority_rating = i16::try_from(next.clamp(-1000, 1000)).unwrap_or(0);
-        i8::try_from(self.local_authority_rating - before).unwrap_or(delta)
+        self.authority_ratings[idx] = i16::try_from(next.clamp(-1000, 1000)).unwrap_or(0);
+        i8::try_from(self.authority_ratings[idx] - before).unwrap_or(delta)
     }
 
     /// Registra entrega de carga urbana que impulsa el crecimiento.
@@ -178,53 +270,265 @@ pub fn town_goal_satisfied(goal: u32, received: u32, population: u32) -> bool {
     received >= goal
 }
 
+/// Variante con contexto de mapa/clima para metas invierno/desierto (`UpdateTownGrowth`).
+#[must_use]
+pub fn town_goal_satisfied_with_context(
+    goal: u32,
+    received: u32,
+    population: u32,
+    town_pos: TileCoord,
+    map: &Map,
+    climate: Climate,
+    world_seed: u64,
+) -> bool {
+    if goal == 0 {
+        return true;
+    }
+    if goal == TOWN_GROWTH_WINTER {
+        if population <= TOWN_GROWTH_WINTER_POP_THRESHOLD {
+            return true;
+        }
+        let height = tile_slope_and_z(map, town_pos)
+            .map(|(z, _)| z)
+            .unwrap_or(0);
+        if i32::from(height) < i32::from(DEF_SNOW_LINE_HEIGHT) {
+            return true;
+        }
+        return received > 0;
+    }
+    if goal == TOWN_GROWTH_DESERT {
+        if population <= TOWN_GROWTH_DESERT_POP_THRESHOLD {
+            return true;
+        }
+        if !is_desert_tile(map, climate, town_pos, world_seed) {
+            return true;
+        }
+        return received > 0;
+    }
+    received >= goal
+}
+
+#[must_use]
+fn is_desert_tile(map: &Map, climate: Climate, pos: TileCoord, world_seed: u64) -> bool {
+    if climate != Climate::SubTropical {
+        return false;
+    }
+    if let Some(tile) = map.get(pos) {
+        let ground = effective_clear_ground(climate, tile.m5, pos.x, pos.y, world_seed);
+        if ground == CLEAR_GROUND_DESERT {
+            return true;
+        }
+    }
+    desert_patch(pos.x, pos.y, world_seed)
+}
+
+/// Convierte ticks de ciudad a ticks de juego (`TownTicksToGameTicks`).
+#[must_use]
+pub fn town_ticks_to_game_ticks(ticks: u16) -> u16 {
+    let capped = ticks.min(MAX_TOWN_GROWTH_SOURCE_TICKS);
+    (capped + 1) * u16::try_from(TOWN_GROWTH_TICKS).unwrap_or(1) - 1
+}
+
+static GROW_COUNT_VALUES_FUNDED: [u16; 6] = [120, 120, 120, 100, 80, 60];
+static GROW_COUNT_VALUES_NORMAL: [u16; 6] = [320, 420, 300, 220, 160, 100];
+
+#[must_use]
+fn count_houses_for_growth(
+    map: &Map,
+    industries: &[Industry],
+    town: &Town,
+) -> u32 {
+    station::station_coverage_at(
+        map,
+        industries,
+        town.pos,
+        i32::try_from(TOWN_AUTHORITY_RADIUS).unwrap_or(i32::MAX),
+    )
+    .house_tiles
+}
+
+/// Estaciones cerca del pueblo que no son waypoints/boyas.
+fn stations_near_town<'a>(town: &'a Town, stations: &'a [Station]) -> Vec<&'a Station> {
+    stations
+        .iter()
+        .filter(|st| {
+            !matches!(
+                st.stop_kind,
+                StopKind::RailWaypoint | StopKind::RoadWaypoint | StopKind::Buoy
+            ) && crate::economy::manhattan_distance(st.pos, town.pos) <= TOWN_AUTHORITY_RADIUS
+        })
+        .collect()
+}
+
+#[must_use]
+fn station_recently_active(station: &Station) -> bool {
+    ALL_CARGO_TYPES
+        .iter()
+        .any(|cargo| station.time_since_pickup.get(*cargo) <= STATION_ACTIVE_DAYS)
+}
+
+#[must_use]
+pub fn count_active_stations_near_town(town: &Town, stations: &[Station]) -> usize {
+    stations_near_town(town, stations)
+        .iter()
+        .filter(|st| station_recently_active(*st))
+        .count()
+}
+
+#[must_use]
+pub fn get_normal_growth_rate(
+    town: &Town,
+    stations: &[Station],
+    map: &Map,
+    industries: &[Industry],
+) -> u16 {
+    let n = count_active_stations_near_town(town, stations);
+    let table = if town.fund_buildings_months > 0 {
+        &GROW_COUNT_VALUES_FUNDED
+    } else {
+        &GROW_COUNT_VALUES_NORMAL
+    };
+    let idx = n.min(5);
+    let m = table[idx];
+    let houses = count_houses_for_growth(map, industries, town);
+    let divisor = u16::try_from((houses / 50) + 1).unwrap_or(1);
+    town_ticks_to_game_ticks(m / divisor)
+}
+
+fn update_town_grow_counter(town: &mut Town, prev_growth_rate: u16) {
+    if town.growth_rate == TOWN_GROWTH_RATE_NONE {
+        return;
+    }
+    if prev_growth_rate == TOWN_GROWTH_RATE_NONE {
+        town.grow_counter = town.growth_rate.min(town.grow_counter);
+        return;
+    }
+    let next = (u32::from(town.grow_counter) * (u32::from(town.growth_rate) + 1))
+        / (u32::from(prev_growth_rate) + 1);
+    town.grow_counter = u16::try_from(next).unwrap_or(town.growth_rate);
+}
+
+pub fn update_town_growth_rate(
+    town: &mut Town,
+    stations: &[Station],
+    map: &Map,
+    industries: &[Industry],
+) {
+    let old_rate = town.growth_rate;
+    town.growth_rate = get_normal_growth_rate(town, stations, map, industries);
+    update_town_grow_counter(town, old_rate);
+}
+
+fn chance16(rng: &mut Randomizer, a: u32, b: u32) -> bool {
+    if b == 0 {
+        return false;
+    }
+    rng.random_range(b) < a
+}
+
 /// Actualiza `is_growing` (`UpdateTownGrowth`).
-///
-/// Financiar edificios fuerza crecimiento aunque no haya estación cerca.
-pub fn update_town_growth_state(town: &mut Town, stations: &[Station]) {
+pub fn update_town_growth_state(
+    town: &mut Town,
+    stations: &[Station],
+    map: &Map,
+    industries: &[Industry],
+    climate: Climate,
+    world_seed: u64,
+    rng: &mut Randomizer,
+) {
+    update_town_growth_rate(town, stations, map, industries);
+    town.is_growing = false;
+
     if town.fund_buildings_months > 0 {
         town.is_growing = true;
         return;
     }
-    let has_station = stations.iter().any(|st| {
-        !matches!(
-            st.stop_kind,
-            StopKind::RailWaypoint | StopKind::RoadWaypoint | StopKind::Buoy
-        ) && crate::economy::manhattan_distance(st.pos, town.pos) <= TOWN_AUTHORITY_RADIUS
-    });
+
+    let has_station = !stations_near_town(town, stations).is_empty();
     if !has_station {
-        town.is_growing = false;
         return;
     }
+
     for (i, &goal) in town.goals.iter().enumerate() {
-        if !town_goal_satisfied(goal, town.received_old[i], town.population) {
-            town.is_growing = false;
+        if !town_goal_satisfied_with_context(
+            goal,
+            town.received_old[i],
+            town.population,
+            town.pos,
+            map,
+            climate,
+            world_seed,
+        ) {
             return;
         }
     }
-    let activity = town.received_old.iter().copied().sum::<u32>() > 0
-        || town.passengers_served.saturating_add(town.mail_served) > 0
-        || town.growth_funded > 0;
-    town.is_growing = activity;
+
+    if count_active_stations_near_town(town, stations) == 0 && !chance16(rng, 1, 12) {
+        return;
+    }
+
+    town.is_growing = true;
 }
 
 /// Rollover mensual de entregas + decaimiento de financiación + gate de crecimiento.
-pub fn process_town_monthly_growth(towns: &mut [Town], stations: &[Station]) {
+pub fn process_town_monthly_growth(
+    towns: &mut [Town],
+    stations: &[Station],
+    map: &Map,
+    industries: &[Industry],
+    climate: Climate,
+    world_seed: u64,
+    rng: &mut Randomizer,
+    company_count: usize,
+) {
     for town in towns {
+        town.ensure_authority_ratings(company_count);
+        update_town_rating(town, stations, company_count);
         town.received_old = town.received_new;
         town.received_new = [0; TOWN_GROWTH_EFFECT_COUNT];
         if town.fund_buildings_months > 0 {
             town.fund_buildings_months = town.fund_buildings_months.saturating_sub(1);
         }
-        update_town_growth_state(town, stations);
+        update_town_growth_state(town, stations, map, industries, climate, world_seed, rng);
+    }
+}
+
+/// Evolución mensual de ratings (`UpdateTownRating`).
+pub fn update_town_rating(town: &mut Town, stations: &[Station], company_count: usize) {
+    town.ensure_authority_ratings(company_count);
+    for i in 0..company_count.min(town.authority_ratings.len()) {
+        if town.authority_ratings[i] < RATING_GROWTH_MAXIMUM {
+            town.authority_ratings[i] = town.authority_ratings[i]
+                .saturating_add(i16::from(RATING_GROWTH_UP_STEP))
+                .min(RATING_GROWTH_MAXIMUM);
+        }
+    }
+
+    let station_rating_updates: Vec<(usize, i32)> = stations_near_town(town, stations)
+        .iter()
+        .filter_map(|station| {
+            let idx = station.owner.index();
+            if idx >= town.authority_ratings.len() {
+                return None;
+            }
+            let delta = if station_recently_active(station) {
+                RATING_STATION_UP_STEP
+            } else {
+                RATING_STATION_DOWN_STEP
+            };
+            Some((idx, i32::from(town.authority_ratings[idx]) + i32::from(delta)))
+        })
+        .collect();
+    for (idx, next) in station_rating_updates {
+        town.authority_ratings[idx] = i16::try_from(next.clamp(-1000, 1000)).unwrap_or(0);
     }
 }
 
 /// Periodo de generación (mismo orden de magnitud que [`crate::INDUSTRY_PRODUCE_TICKS`]).
 pub const TOWN_PRODUCE_TICKS: u64 = 256;
-/// Revisión de crecimiento urbano.
-pub const TOWN_GROWTH_TICKS: u64 = 512;
-/// Población añadida por ciclo de crecimiento cuando hay servicio.
+/// Ciclo de intento de crecimiento urbano (`Ticks::TOWN_GROWTH_TICKS`).
+pub const TOWN_GROWTH_TICKS: u64 = 70;
+/// Población añadida al financiar edificios (feedback inmediato en UI).
 pub const TOWN_GROWTH_POPULATION_STEP: u32 = 10;
 
 pub const PASSENGERS_PER_HOUSE: u32 = 2;
@@ -307,7 +611,7 @@ pub fn produce_town_cargo(
     (passengers, mail)
 }
 
-/// Crece la población si `is_growing` y hay cobertura de casas (o financiación).
+/// Crece la población si `is_growing` (`TownTickHandler` / `GrowTown`).
 ///
 /// Además intenta expansión física (calles/casas) y devuelve teselas dirty.
 pub fn grow_town_if_served(
@@ -315,40 +619,69 @@ pub fn grow_town_if_served(
     industries: &[Industry],
     stations: &[Station],
     towns: &mut [Town],
-    tick: u64,
+    _tick: u64,
 ) -> Vec<TileCoord> {
-    if tick == 0 || !tick.is_multiple_of(TOWN_GROWTH_TICKS) {
-        return Vec::new();
-    }
     let mut dirty = Vec::new();
     for town in towns {
-        update_town_growth_state(town, stations);
         if !town.is_growing {
             continue;
         }
-        let funded = town.fund_buildings_months > 0 || town.growth_funded > 0;
-        let has_station = stations.iter().any(|st| {
-            !matches!(
-                st.stop_kind,
-                StopKind::RailWaypoint | StopKind::RoadWaypoint | StopKind::Buoy
-            ) && crate::economy::manhattan_distance(st.pos, town.pos) <= TOWN_AUTHORITY_RADIUS
-        });
-        // Financiación permite crecer sin estación; el resto exige una cerca.
-        if !funded && !has_station {
-            continue;
+        let mut counter = i32::from(town.grow_counter) - 1;
+        if counter < 0 {
+            let funded = town.fund_buildings_months > 0 || town.growth_funded > 0;
+            let has_station = !stations_near_town(town, stations).is_empty();
+            if !funded && !has_station {
+                counter = i32::from(town.growth_rate.min(u16::try_from(TOWN_GROWTH_TICKS - 1).unwrap_or(0)));
+            } else if try_expand_growing_town(map, industries, stations, town, _tick, &mut dirty) {
+                counter = i32::from(town.growth_rate);
+            } else {
+                counter = i32::from(
+                    town.growth_rate
+                        .min(u16::try_from(TOWN_GROWTH_TICKS - 1).unwrap_or(0)),
+                );
+            }
         }
-        let coverage =
-            station::station_coverage_at(map, industries, town.pos, STATION_COVERAGE_RADIUS);
-        // Casas existentes / financiación: step abstracto. Con estación también
-        // expandimos físicamente aunque aún no haya casas en cobertura.
-        if coverage.house_tiles > 0 || funded || has_station {
-            town.population = town.population.saturating_add(
-                TOWN_GROWTH_POPULATION_STEP + u32::from(town.fund_buildings_months.min(3)),
-            );
-            dirty.extend(crate::town_expand::expand_town_physically(map, town, tick));
-        }
+        town.grow_counter = u16::try_from(counter.max(0)).unwrap_or(0);
     }
     dirty
+}
+
+fn try_expand_growing_town(
+    map: &mut Map,
+    industries: &[Industry],
+    stations: &[Station],
+    town: &mut Town,
+    tick: u64,
+    dirty: &mut Vec<TileCoord>,
+) -> bool {
+    let funded = town.fund_buildings_months > 0 || town.growth_funded > 0;
+    let has_station = !stations_near_town(town, stations).is_empty();
+    if !funded && !has_station {
+        return false;
+    }
+    let coverage =
+        station::station_coverage_at(map, industries, town.pos, STATION_COVERAGE_RADIUS);
+    if coverage.house_tiles == 0 && !funded && !has_station {
+        return false;
+    }
+    let placed = crate::town_expand::expand_town_physically(map, town, tick);
+    if placed.is_empty() {
+        return false;
+    }
+    dirty.extend(placed);
+    true
+}
+
+/// Límite de spam al financiar (`TownActionFundBuildings`).
+pub fn cap_grow_counter_after_fund(town: &mut Town) {
+    let growth_ticks = u16::try_from(TOWN_GROWTH_TICKS).unwrap_or(1);
+    let modulo = if town.growth_rate > 0 {
+        (town.growth_rate - (town.grow_counter % town.growth_rate)) % growth_ticks
+    } else {
+        0
+    };
+    let cap = 2 * growth_ticks - modulo;
+    town.grow_counter = town.grow_counter.min(cap);
 }
 
 /// Impulso inmediato al financiar edificios (feedback en UI + arranque del ciclo).
@@ -359,6 +692,7 @@ pub fn apply_fund_buildings_boost(town: &mut Town) {
     town.population = town
         .population
         .saturating_add(TOWN_GROWTH_POPULATION_STEP + u32::from(FUND_BUILDINGS_MONTHS));
+    cap_grow_counter_after_fund(town);
 }
 
 #[must_use]
@@ -370,26 +704,71 @@ pub fn nearest_town_index(towns: &[Town], pos: TileCoord) -> Option<(usize, u32)
         .min_by_key(|(_, d)| *d)
 }
 
+/// Umbrales mínimos de rating para demolición municipal (`needed_rating` en `CheckforTownRating`).
+#[must_use]
+pub fn needed_rating_for_demolition(
+    tolerance: TownCouncilTolerance,
+    check_type: TownRatingCheckType,
+) -> i16 {
+    match tolerance {
+        TownCouncilTolerance::Permissive => -1000,
+        TownCouncilTolerance::Lenient => match check_type {
+            TownRatingCheckType::RoadRemove => 16,
+            TownRatingCheckType::TunnelBridgeRemove => 144,
+        },
+        TownCouncilTolerance::Neutral => match check_type {
+            TownRatingCheckType::RoadRemove => 64,
+            TownRatingCheckType::TunnelBridgeRemove => 208,
+        },
+        TownCouncilTolerance::Hostile => match check_type {
+            TownRatingCheckType::RoadRemove => 112,
+            TownRatingCheckType::TunnelBridgeRemove => 400,
+        },
+    }
+}
+
+/// ¿La autoridad permite la acción destructiva? (`CheckforTownRating`).
+#[must_use]
+pub fn check_town_rating(
+    town: &Town,
+    company: CompanyId,
+    check_type: TownRatingCheckType,
+    tolerance: TownCouncilTolerance,
+) -> bool {
+    if tolerance == TownCouncilTolerance::Permissive {
+        return true;
+    }
+    town.authority_rating(company) >= needed_rating_for_demolition(tolerance, check_type)
+}
+
 /// Comprueba si la autoridad local permite una nueva estación en `pos`.
 #[must_use]
-pub fn authority_allows_new_station(towns: &[Town], pos: TileCoord) -> bool {
+pub fn authority_allows_new_station(
+    towns: &[Town],
+    pos: TileCoord,
+    company: CompanyId,
+) -> bool {
     let Some((idx, dist)) = nearest_town_index(towns, pos) else {
         return true;
     };
     if dist > TOWN_AUTHORITY_RADIUS {
         return true;
     }
-    towns[idx].local_authority_rating >= AUTHORITY_MIN_STATION
+    towns[idx].authority_rating(company) >= AUTHORITY_MIN_STATION
 }
 
 /// Aplica penalización de autoridad al construir estación cerca de una ciudad.
-pub fn apply_station_build_rating_penalty(towns: &mut [Town], pos: TileCoord) -> Option<(u32, i8)> {
+pub fn apply_station_build_rating_penalty(
+    towns: &mut [Town],
+    pos: TileCoord,
+    company: CompanyId,
+) -> Option<(u32, i8)> {
     let (idx, dist) = nearest_town_index(towns, pos)?;
     if dist > TOWN_AUTHORITY_RADIUS {
         return None;
     }
     let town_id = towns[idx].id;
-    let delta = towns[idx].adjust_rating(STATION_BUILD_RATING_PENALTY);
+    let delta = towns[idx].adjust_rating(company, STATION_BUILD_RATING_PENALTY);
     Some((town_id, delta))
 }
 
@@ -449,19 +828,25 @@ mod tests {
 
     #[test]
     fn authority_blocks_station_when_rating_too_low() {
-        let towns = vec![Town {
+        let mut towns = vec![Town {
             id: 1,
             pos: TileCoord::new(5, 5),
             name: "Test".into(),
             population: 100,
-            local_authority_rating: -500,
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
             ..Default::default()
         }];
-        assert!(!authority_allows_new_station(&towns, TileCoord::new(6, 5)));
-        assert!(authority_allows_new_station(&towns, TileCoord::new(30, 30)));
+        towns[0].authority_ratings[CompanyId::PLAYER.index()] = -500;
+        assert!(
+            !authority_allows_new_station(&towns, TileCoord::new(6, 5), CompanyId::PLAYER)
+        );
+        assert!(authority_allows_new_station(
+            &towns,
+            TileCoord::new(30, 30),
+            CompanyId::PLAYER
+        ));
     }
 
     #[test]
@@ -474,18 +859,19 @@ mod tests {
             pos: town_pos,
             name: "Grow".into(),
             population: 100,
-            local_authority_rating: 0,
             passengers_served: 10,
             mail_served: 0,
             growth_funded: 0,
             is_growing: true,
+            grow_counter: 0,
+            growth_rate: 70,
             ..Default::default()
         }];
         let stations = vec![Station::new_with_kind(
             TileCoord::new(8, 9),
             StopKind::BusStop,
         )];
-        grow_town_if_served(&mut map, &[], &stations, &mut towns, TOWN_GROWTH_TICKS);
+        grow_town_if_served(&mut map, &[], &stations, &mut towns, 1);
         assert!(towns[0].population > 100);
     }
 
@@ -493,6 +879,7 @@ mod tests {
     fn town_does_not_grow_when_goals_unmet() {
         let mut map = Map::new_flat(16, 16, 0);
         let town_pos = TileCoord::new(8, 8);
+        map.set_height(town_pos, 12).unwrap();
         map.set_kind(TileCoord::new(7, 8), TileKind::House).unwrap();
         let mut towns = vec![Town {
             id: 0,
@@ -500,6 +887,8 @@ mod tests {
             name: "Stuck".into(),
             population: 120,
             passengers_served: 10,
+            is_growing: false,
+            grow_counter: 0,
             ..Default::default()
         }];
         towns[0].init_growth_goals(Climate::SubArctic);
@@ -507,13 +896,24 @@ mod tests {
             TileCoord::new(8, 9),
             StopKind::BusStop,
         )];
-        grow_town_if_served(&mut map, &[], &stations, &mut towns, TOWN_GROWTH_TICKS);
+        let mut rng = Randomizer::new(1);
+        update_town_growth_state(
+            &mut towns[0],
+            &stations,
+            &map,
+            &[],
+            Climate::SubArctic,
+            0,
+            &mut rng,
+        );
+        grow_town_if_served(&mut map, &[], &stations, &mut towns, 1);
         assert_eq!(towns[0].population, 120);
         assert!(!towns[0].is_growing);
     }
 
     #[test]
     fn arctic_food_goal_blocks_large_town_without_goods() {
+        let mut map = Map::new_flat(16, 16, 0);
         let mut town = Town {
             id: 0,
             pos: TileCoord::new(5, 5),
@@ -522,20 +922,39 @@ mod tests {
             passengers_served: 50,
             ..Default::default()
         };
+        map.set_height(town.pos, 12).unwrap();
         town.init_growth_goals(Climate::SubArctic);
         let stations = vec![Station::new_with_kind(
             TileCoord::new(5, 6),
             StopKind::BusStop,
         )];
-        update_town_growth_state(&mut town, &stations);
+        let mut rng = Randomizer::new(1);
+        update_town_growth_state(
+            &mut town,
+            &stations,
+            &map,
+            &[],
+            Climate::SubArctic,
+            0,
+            &mut rng,
+        );
         assert!(!town.is_growing);
         town.received_old[TownGrowthEffect::Food as usize] = 1;
-        update_town_growth_state(&mut town, &stations);
+        update_town_growth_state(
+            &mut town,
+            &stations,
+            &map,
+            &[],
+            Climate::SubArctic,
+            0,
+            &mut rng,
+        );
         assert!(town.is_growing);
     }
 
     #[test]
     fn fund_buildings_forces_growth_gate_without_station() {
+        let map = Map::new_flat(8, 8, 0);
         let mut town = Town {
             id: 0,
             pos: TileCoord::new(5, 5),
@@ -545,7 +964,16 @@ mod tests {
             ..Default::default()
         };
         town.init_growth_goals(Climate::SubArctic);
-        update_town_growth_state(&mut town, &[]);
+        let mut rng = Randomizer::new(1);
+        update_town_growth_state(
+            &mut town,
+            &[],
+            &map,
+            &[],
+            Climate::SubArctic,
+            0,
+            &mut rng,
+        );
         assert!(town.is_growing);
     }
 
@@ -560,9 +988,11 @@ mod tests {
             fund_buildings_months: 3,
             growth_funded: 1,
             is_growing: true,
+            grow_counter: 0,
+            growth_rate: 70,
             ..Default::default()
         }];
-        grow_town_if_served(&mut map, &[], &[], &mut towns, TOWN_GROWTH_TICKS);
+        grow_town_if_served(&mut map, &[], &[], &mut towns, 1);
         assert!(towns[0].population > 50);
         assert!(towns[0].is_growing);
     }
@@ -590,14 +1020,98 @@ mod tests {
             pos: TileCoord::new(0, 0),
             name: "X".into(),
             population: 0,
-            local_authority_rating: 990,
+            authority_ratings: vec![990],
             passengers_served: 0,
             mail_served: 0,
             growth_funded: 0,
             ..Default::default()
         };
-        town.adjust_rating(50);
-        assert_eq!(town.local_authority_rating, 1000);
+        town.adjust_rating(CompanyId::PLAYER, 50);
+        assert_eq!(town.authority_rating(CompanyId::PLAYER), 1000);
+    }
+
+    #[test]
+    fn update_town_rating_recovers_and_penalizes_by_station_service() {
+        let mut town = Town {
+            id: 1,
+            pos: TileCoord::new(10, 10),
+            name: "Rate".into(),
+            authority_ratings: vec![0, 100],
+            ..Default::default()
+        };
+        let mut good = Station::new_with_kind(TileCoord::new(10, 11), StopKind::BusStop);
+        good.owner = CompanyId::PLAYER;
+        good.time_since_pickup.passengers = 0;
+        let mut bad = Station::new_with_kind(TileCoord::new(11, 10), StopKind::BusStop);
+        bad.owner = CompanyId(1);
+        bad.time_since_pickup.passengers = 50;
+        update_town_rating(&mut town, &[good, bad], 2);
+        assert_eq!(town.authority_rating(CompanyId::PLAYER), 17);
+        assert_eq!(town.authority_rating(CompanyId(1)), 90);
+    }
+
+    #[test]
+    fn authority_ratings_are_per_company() {
+        let mut town = Town::default();
+        town.adjust_rating(CompanyId::PLAYER, 10);
+        town.adjust_rating(CompanyId(1), -20);
+        assert_eq!(town.authority_rating(CompanyId::PLAYER), 510);
+        assert_eq!(town.authority_rating(CompanyId(1)), 480);
+    }
+
+    #[test]
+    fn growth_rate_scales_with_active_stations() {
+        let map = Map::new_flat(16, 16, 0);
+        let town = Town {
+            id: 0,
+            pos: TileCoord::new(8, 8),
+            name: "Rate".into(),
+            ..Default::default()
+        };
+        let none = get_normal_growth_rate(&town, &[], &map, &[]);
+        let mut st = Station::new_with_kind(TileCoord::new(8, 9), StopKind::BusStop);
+        st.time_since_pickup.passengers = 0;
+        let one = get_normal_growth_rate(&town, &[st], &map, &[]);
+        assert!(one < none, "más estaciones activas aceleran el crecimiento");
+    }
+
+    #[test]
+    fn unserved_town_growth_requires_chance_without_funding() {
+        let map = Map::new_flat(8, 8, 0);
+        let mut town = Town {
+            id: 0,
+            pos: TileCoord::new(4, 4),
+            name: "Lonely".into(),
+            population: 80,
+            ..Default::default()
+        };
+        let stations = vec![Station::new_with_kind(
+            TileCoord::new(4, 5),
+            StopKind::BusStop,
+        )];
+        let mut never = Randomizer::new(42);
+        update_town_growth_state(
+            &mut town,
+            &stations,
+            &map,
+            &[],
+            Climate::Temperate,
+            0,
+            &mut never,
+        );
+        assert!(!town.is_growing);
+        let mut town2 = town.clone();
+        let mut lucky = Randomizer::new(1);
+        update_town_growth_state(
+            &mut town2,
+            &stations,
+            &map,
+            &[],
+            Climate::Temperate,
+            0,
+            &mut lucky,
+        );
+        assert!(town2.is_growing);
     }
 
     /// `OpenTTD` arranca los pueblos en `RATING_INITIAL = 500` (`town_type.h:45`),
@@ -608,11 +1122,12 @@ mod tests {
             pos: TileCoord::new(5, 5),
             ..Default::default()
         };
-        assert_eq!(town.local_authority_rating, TOWN_RATING_INITIAL);
+        assert_eq!(town.authority_rating(CompanyId::PLAYER), TOWN_RATING_INITIAL);
         assert_eq!(TOWN_RATING_INITIAL, 500);
         assert!(authority_allows_new_station(
             std::slice::from_ref(&town),
-            TileCoord::new(6, 6)
+            TileCoord::new(6, 6),
+            CompanyId::PLAYER
         ));
     }
 }

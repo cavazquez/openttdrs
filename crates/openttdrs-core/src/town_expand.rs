@@ -206,6 +206,7 @@ fn place_town_road(map: &mut Map, pos: TileCoord, road_bits: u8) -> bool {
     tile.m6 = 0;
     tile.m7 = 0;
     tile.m8 = 0;
+    tile.m1 = crate::company::OWNER_TOWN_M1;
     map.set_tile(pos, tile).is_ok()
 }
 

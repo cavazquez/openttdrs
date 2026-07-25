@@ -3,9 +3,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use crate::command::{Command, CommandError, apply_command};
+use crate::economy::{station_build_cost, waypoint_build_cost};
 use crate::{
-    GameState, STATION_BUILD_COST, STATION_TYPE_RAIL_WAYPOINT, StopKind, TileCoord, TileKind,
-    WAYPOINT_BUILD_COST, station_type_from_m6,
+    GameState, STATION_TYPE_RAIL_WAYPOINT, StopKind, TileCoord, TileKind, station_type_from_m6,
 };
 
 #[test]
@@ -86,7 +86,8 @@ fn place_rail_station_area_writes_layout_and_anchors_center() {
         s.stations[0].station_spec,
         crate::StationSpecId::DefaultRail
     );
-    assert_eq!(s.economy.money, money_before - 15 * STATION_BUILD_COST);
+    let station_cost = station_build_cost(&s.global_economy);
+    assert_eq!(s.economy.money, money_before - 15 * station_cost);
 }
 
 #[test]
@@ -430,7 +431,10 @@ fn place_rail_waypoint_on_straight_track() {
         s.stations[0].station_spec,
         crate::station_class::StationSpecId::DEFAULT_RAIL
     );
-    assert_eq!(s.economy.money, money - WAYPOINT_BUILD_COST);
+    assert_eq!(
+        s.economy.money,
+        money - waypoint_build_cost(&s.global_economy)
+    );
 }
 
 #[test]

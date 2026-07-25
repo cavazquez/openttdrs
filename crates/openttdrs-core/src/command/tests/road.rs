@@ -1,4 +1,5 @@
 use crate::command::{Command, CommandError, apply_command, command_would_fail};
+use crate::economy::{road_build_cost, waypoint_build_cost};
 use crate::{
     GameState, ROAD_BUILD_COST, ROAD_PLACE_FORCE_AXIS, TileCoord, TileKind, Vehicle, VehicleKind,
     infer_road_drag_axis, road_bits_for_autoroute, tile_slope_and_z,
@@ -16,7 +17,10 @@ fn place_road_mutates_tile_kind() {
     assert_eq!(s.map.get_kind(c), Some(TileKind::Road));
     assert_eq!(s.map.get(c).unwrap().m5 & 0x0F, 0x05);
     assert_eq!((s.map.get(c).unwrap().mapt >> 4) & 0x0F, 2);
-    assert_eq!(s.economy.money, money_before - ROAD_BUILD_COST);
+    assert_eq!(
+        s.economy.money,
+        money_before - road_build_cost(&s.global_economy)
+    );
 }
 
 #[test]
@@ -602,7 +606,6 @@ fn build_tram_at_depot_and_toggle_uses_tram_network() {
 
 #[test]
 fn place_road_waypoint_on_straight_road() {
-    use crate::WAYPOINT_BUILD_COST;
     use crate::station::{STATION_TYPE_ROAD_WAYPOINT, StopKind, station_type_from_m6};
 
     let mut s = GameState::new(8, 8);
@@ -617,7 +620,10 @@ fn place_road_waypoint_on_straight_road() {
     assert_eq!(s.stations.len(), 1);
     assert_eq!(s.stations[0].stop_kind, StopKind::RoadWaypoint);
     assert!(s.stations[0].is_waypoint());
-    assert_eq!(s.economy.money, money - WAYPOINT_BUILD_COST);
+    assert_eq!(
+        s.economy.money,
+        money - waypoint_build_cost(&s.global_economy)
+    );
 }
 
 #[test]

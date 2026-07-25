@@ -516,7 +516,17 @@ fn service_at_depot_restores_reliability() {
 }
 
 #[test]
-fn requires_service_by_reliability_and_interval() {
+fn requires_service_by_percent_threshold() {
+    let mut v = Vehicle::new(1, VehicleKind::Bus, TileCoord::new(0, 0), TileCoord::new(1, 0));
+    v.service_interval_days = 20;
+    v.reliability = 7_500;
+    assert!(!v.requires_service_for_company(true));
+    v.reliability = 6_000;
+    assert!(v.requires_service_for_company(true));
+}
+
+#[test]
+fn requires_service_by_day_interval() {
     let mut v = Vehicle::new(
         1,
         VehicleKind::Bus,
@@ -527,15 +537,11 @@ fn requires_service_by_reliability_and_interval() {
     v.last_service_day = 0;
     v.sim_tick = 0;
     v.reliability = 9_000;
-    assert!(!v.requires_service());
-    v.reliability = 4_000;
-    assert!(v.requires_service());
-    v.reliability = 9_000;
-    // 10 días × TICKS_PER_DAY
+    assert!(!v.requires_service_for_company(false));
     v.sim_tick = u64::from(crate::economy::TICKS_PER_DAY) * 10;
-    assert!(v.requires_service());
+    assert!(v.requires_service_for_company(false));
     v.service_at_depot();
-    assert!(!v.requires_service());
+    assert!(!v.requires_service_for_company(false));
 }
 
 #[test]

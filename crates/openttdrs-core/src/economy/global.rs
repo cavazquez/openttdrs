@@ -13,6 +13,10 @@ pub const ORIGINAL_BASE_YEAR: u32 = 1920;
 pub const ORIGINAL_MAX_YEAR: u32 = 2090;
 /// Interés/inflación inicial por defecto en dificultad media (`StartupEconomy`).
 pub const DEFAULT_INITIAL_INTEREST: u8 = 2;
+/// Tasa de interés anual sobre préstamo y caja negativa (`_economy.interest_rate`).
+pub const DEFAULT_INTEREST_RATE: u8 = 10;
+/// Dificultad media: `construction_cost` / `vehicle_costs` = 1 → multiplicador ×8.
+pub const DEFAULT_DIFFICULTY_MOD: u8 = 1;
 
 /// Evento mensual de fluctuación económica (`HandleEconomyFluctuations`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,6 +52,15 @@ pub struct GlobalEconomy {
     /// Préstamo máximo base sin inflación (`difficulty.max_loan`).
     #[serde(default = "default_base_max_loan")]
     pub base_max_loan: i64,
+    /// `difficulty.construction_cost` (0=bajo, 1=medio, 2=alto).
+    #[serde(default = "default_difficulty_mod")]
+    pub construction_cost: u8,
+    /// `difficulty.vehicle_costs` (0=bajo, 1=medio, 2=alto).
+    #[serde(default = "default_difficulty_mod")]
+    pub vehicle_costs: u8,
+    /// Interés anual % sobre préstamo y caja negativa.
+    #[serde(default = "default_interest_rate")]
+    pub interest_rate: u8,
 }
 
 const fn default_inflation_frac_one() -> u64 {
@@ -64,6 +77,14 @@ const fn default_infl_amount_pr() -> u8 {
 
 const fn default_base_max_loan() -> i64 {
     DEFAULT_MAX_LOAN
+}
+
+const fn default_difficulty_mod() -> u8 {
+    DEFAULT_DIFFICULTY_MOD
+}
+
+const fn default_interest_rate() -> u8 {
+    DEFAULT_INTEREST_RATE
 }
 
 const fn default_true() -> bool {
@@ -89,6 +110,9 @@ impl GlobalEconomy {
             recessions_enabled: false,
             inflation_enabled: true,
             base_max_loan: DEFAULT_MAX_LOAN,
+            construction_cost: DEFAULT_DIFFICULTY_MOD,
+            vehicle_costs: DEFAULT_DIFFICULTY_MOD,
+            interest_rate: DEFAULT_INTEREST_RATE,
         }
     }
 

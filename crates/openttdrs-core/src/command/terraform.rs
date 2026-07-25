@@ -2,7 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::economy::terraform_cost_per_corner;
+use crate::economy::{terraform_cost_per_corner, terraform_cost_per_corner_inflated};
 use crate::game_state::GameState;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::tile_slope_and_z;
@@ -389,7 +389,7 @@ pub(crate) fn check_raise_land(
     c: TileCoord,
     inflation_prices: u64,
 ) -> Result<i64, CommandError> {
-    Ok(simulate_raise_land(map, c, terraform_cost_per_corner(inflation_prices))?.cost)
+    Ok(simulate_raise_land(map, c, terraform_cost_per_corner_inflated(inflation_prices))?.cost)
 }
 
 /// Coste previsto y validación de solo lectura para bajar terreno.
@@ -398,7 +398,7 @@ pub(crate) fn check_lower_land(
     c: TileCoord,
     inflation_prices: u64,
 ) -> Result<i64, CommandError> {
-    Ok(simulate_lower_land(map, c, terraform_cost_per_corner(inflation_prices))?.cost)
+    Ok(simulate_lower_land(map, c, terraform_cost_per_corner_inflated(inflation_prices))?.cost)
 }
 
 pub(crate) fn check_level_land(
@@ -413,7 +413,7 @@ pub(crate) fn check_level_land(
         from,
         to,
         mode,
-        terraform_cost_per_corner(inflation_prices),
+        terraform_cost_per_corner_inflated(inflation_prices),
     )?
     .cost)
 }
@@ -423,14 +423,14 @@ pub(crate) fn check_autoslope_flat(
     c: TileCoord,
     inflation_prices: u64,
 ) -> Result<i64, CommandError> {
-    Ok(simulate_autoslope_flat(map, c, terraform_cost_per_corner(inflation_prices))?.cost)
+    Ok(simulate_autoslope_flat(map, c, terraform_cost_per_corner_inflated(inflation_prices))?.cost)
 }
 
 pub(super) fn apply_autoslope_if_needed(
     state: &mut GameState,
     c: TileCoord,
 ) -> Result<i64, CommandError> {
-    let cost_per = terraform_cost_per_corner(state.global_economy.inflation_prices);
+    let cost_per = terraform_cost_per_corner(&state.global_economy);
     let result = simulate_autoslope_flat(&state.map, c, cost_per)?;
     let charged = result.cost;
     if charged > 0 {
@@ -440,13 +440,13 @@ pub(super) fn apply_autoslope_if_needed(
 }
 
 pub(super) fn raise_land(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
-    let cost_per = terraform_cost_per_corner(state.global_economy.inflation_prices);
+    let cost_per = terraform_cost_per_corner(&state.global_economy);
     let result = simulate_raise_land(&state.map, c, cost_per)?;
     apply_terraform_result(state, result)
 }
 
 pub(super) fn lower_land(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
-    let cost_per = terraform_cost_per_corner(state.global_economy.inflation_prices);
+    let cost_per = terraform_cost_per_corner(&state.global_economy);
     let result = simulate_lower_land(&state.map, c, cost_per)?;
     apply_terraform_result(state, result)
 }
@@ -457,7 +457,7 @@ pub(super) fn level_land(
     to: TileCoord,
     mode: LevelMode,
 ) -> Result<(), CommandError> {
-    let cost_per = terraform_cost_per_corner(state.global_economy.inflation_prices);
+    let cost_per = terraform_cost_per_corner(&state.global_economy);
     let result = simulate_level_land(&state.map, from, to, mode, cost_per)?;
     apply_terraform_result(state, result)
 }

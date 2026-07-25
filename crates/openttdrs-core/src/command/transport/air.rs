@@ -7,7 +7,8 @@ use crate::airport_class::AirportSpecId;
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{station_site_tile_allows_build, station_site_tile_needs_clear};
 use crate::town::authority_allows_new_station;
-use crate::{DEPOT_BUILD_COST, GameState, STATION_BUILD_COST, Station, StopKind};
+use crate::economy::station_build_cost;
+use crate::{DEPOT_BUILD_COST, GameState, Station, StopKind};
 
 use super::super::CommandError;
 use super::shared::check_in_bounds;
@@ -90,7 +91,8 @@ pub(in crate::command) fn place_airport_area(
     if matches!(spec, AirportSpecId::Heliport | AirportSpecId::Oilrig) {
         state.economy.money -= DEPOT_BUILD_COST;
     } else {
-        let cost = STATION_BUILD_COST.saturating_mul(i64::try_from(tile_count).unwrap_or(1));
+        let cost = station_build_cost(&state.global_economy)
+            .saturating_mul(i64::try_from(tile_count).unwrap_or(1));
         state.economy.money -= cost;
     }
     if let Some((town_idx, add)) = noise_add {

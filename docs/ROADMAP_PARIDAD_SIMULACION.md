@@ -199,7 +199,7 @@ con la clasificación de segmentos de señal y está reclasificada a P2 (detalle
 
 ## 5. P1 — Reglas de comportamiento
 
-Veintidós entradas, **diez cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.3+P1.4 de industrias, P1.8, P1.9, P1.10, P1.11, P1.12, P1.15 y P1.22).
+Veintidós entradas, **dieciséis cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.3+P1.4 de industrias, P1.8, P1.9, P1.10, P1.11, P1.12, P1.13, P1.14, P1.15, P1.16, P1.17, P1.18, P1.19 y P1.22).
 
 ### P1.1 — `UpdateStationRating` completo · hecho
 
@@ -397,20 +397,20 @@ Veintidós entradas, **diez cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.
   `reliability_spd_dec_doubles_after_max_age_year_boundary`.
 - **Pendiente** — barrido diario de economía separado del calendario si se porta [P2.5](#tabla-p2).
 
-### P1.13 — Autorenew
+### P1.13 — Autorenew · hecho
 
 - **Problema** — solo existen las reglas de reemplazo `from → to`. Un vehículo viejo sin regla
   configurada envejece para siempre.
 - **Original** — `GetNewEngineType` devuelve el mismo `engine_type` cuando `NeedsAutorenewing`
   (`age - max_age >= engine_renew_months * 30`), aparte de las reglas de grupo
   (`autoreplace_cmd.cpp:281-309`, `vehicle.cpp:156-171`).
-- **Port** — `autoreplace.rs:79-136`, con `needs_autorenewing` fijado en 20 años
-  (`vehicle/model.rs:560-562`).
-- **Solución** — portar `max_age` por motor y el ajuste `engine_renew_months`, y añadir la rama de
-  renovación del mismo modelo. Reservar `engine_renew_money` al evaluar el servicio.
+- **Hecho** — `autoreplace.rs` renueva al mismo motor si `engine_renew` y
+  `needs_autorenewing(tick, engine_renew_months)` con `max_age_days` del motor; reserva
+  `engine_renew_money` en reemplazo y en `pending_autoreplace_for_service`. Tests
+  `autorenew_same_engine_when_old_enough` y `autorenew_respects_engine_renew_money`.
 - **Coste** — L.
 
-### P1.14 — Servicio automático
+### P1.14 — Servicio automático · hecho
 
 - **Problema** — el intervalo solo se expresa en días y el vehículo no busca depósito por su
   cuenta.
@@ -418,8 +418,10 @@ Veintidós entradas, **diez cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.
   respeta `no_servicing_if_no_breakdowns` y puede mandar a depósito solo por un autoreplace
   pendiente si hay dinero para el doble del coste (`vehicle.cpp:201-276`);
   `CheckIfRoadVehNeedsService` inserta la orden vía pathfinder (`roadveh_cmd.cpp:1682-1718`).
-- **Port** — umbral fijo de fiabilidad o 150 días, sin ruta automática.
-- **Solución** — portar ambas modalidades de intervalo y la inserción de orden de depósito.
+- **Hecho** — `requires_service_for_company` / `requires_service_with` con intervalo en días o %,
+  `no_servicing_if_no_breakdowns` + `vehicle_breakdowns`, y `check_road_vehicles_need_service`
+  inserta `depot_pass_through` con pathfinder road. Tests `requires_service_by_percent_threshold`,
+  `requires_service_by_day_interval` y `road_vehicle_inserts_depot_order_when_service_due`.
 - **Coste** — L.
 
 ### P1.15 — Inflación · hecho
@@ -435,43 +437,51 @@ Veintidós entradas, **diez cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.
   construcción leen los acumuladores (no la fórmula lineal). Tests `compound_inflation_matches_openttd_monthly_step`,
   `inflation_stops_outside_original_year_window`, `max_loan_scales_with_inflation_prices`,
   `startup_applies_pre_1950_inflation`.
-- **Pendiente** — tabla `_price` completa ([P1.16](#p116--sistema-de-precios-base)).
+- **Pendiente** — multiplicadores NewGRF por índice (`SetPriceBaseMultiplier`).
 
-### P1.16 — Sistema de precios base
+### P1.16 — Sistema de precios base · hecho
 
-- **Problema** — los costes son constantes sueltas por acción, sin dificultad ni escala común.
+- **Problema** — los costes eran constantes sueltas por acción, sin dificultad ni escala común.
 - **Original** — tabla `PriceBase` escalada por dificultad (6/8/9) e inflación, consultada como
   `GetPrice(index, cost_factor, grf, shift)` (`economy.cpp:742-794`, `949-962`,
   `table/pricebase.h`).
-- **Port** — `economy/build_costs.rs` y constantes en `game_state/mod.rs:252-266`.
-- **Solución** — introducir la tabla `_price` y migrar los costes a `GetPrice`. Es el cimiento de
-  P1.17 y del valor de compañía.
-- **Coste** — XL.
+- **Hecho** — `economy/pricebase.rs` con tabla `_price` de los índices principales,
+  `get_price`/`base_price_at` escalando `GlobalEconomy.inflation_prices` y dificultad
+  (`construction_cost`, `vehicle_costs`). Migrados a `GetPrice`: terraform, compra de terreno,
+  objetos, vía, carretera, estación y waypoint (`economy/build_costs.rs` + comandos de
+  construcción). Constantes en `game_state/mod.rs` alineadas a dificultad media sin inflación.
+- **Pendiente** — depósitos, túneles/puentes, señales, clear-tile, compra de vehículos vía índice,
+  infraestructura de mantenimiento y multiplicadores NewGRF.
 
-### P1.17 — Costes de funcionamiento
+### P1.17 — Costes de funcionamiento · hecho
 
-- **Problema** — coste fijo por tipo y por tick mientras el vehículo se mueve; un vehículo parado
-  no cuesta nada.
+- **Problema** — coste fijo por tipo y solo en movimiento; un vehículo parado no costaba nada.
 - **Original** — `GetRunningCost()` desde el spec del motor, prorrateado como
-  `coste * running_ticks / (365 * DAY_TICKS)` (`train_cmd.cpp:4090-4209`).
-- **Port** — `economy/vehicle_costs.rs:20-30`.
-- **Solución** — añadir `running_cost` y su clase al catálogo y prorratear por año.
-- **Coste** — L.
+  `coste * running_ticks / (365 * DAY_TICKS)` (`train_cmd.cpp:4195-4287`).
+- **Hecho** — `running_cost_year` del catálogo, prorrateo con acumulador fraccional
+  (`running_cost_accum`) en `economy/vehicle_costs.rs`; cobro en `sim_step/economy.rs` aunque el
+  vehículo esté parado si sigue en servicio (`running` / tren con `cur_speed > 0`). Suma del
+  consist ferroviario. Tests `running_cost_prorates_yearly_catalog_cost`,
+  `stopped_bus_with_running_flag_still_costs`.
 
-### P1.18 — Interés, valor de compañía e índice de rendimiento
+### P1.18 — Interés, valor de compañía e índice de rendimiento · hecho
 
-- **Problema** — tres fórmulas financieras aproximadas que desalinean las finanzas y el ranking.
+- **Problema** — tres fórmulas financieras aproximadas que desalineaban las finanzas y el ranking.
 - **Original** — interés: cuota anual prorrateada por mes, interés también sobre caja negativa y
-  cargo fijo de `_price[PR_STATION_VALUE] >> 2` (`economy.cpp:829-839`). Valor:
+  cargo fijo de `_price[PR_STATION_VALUE] >> 2` (`economy.cpp:800-827`). Valor:
   `instalaciones * PR_STATION_VALUE * 25 + Σ(v->value * 3/2) - préstamo + caja`
   (`economy.cpp:115-158`). Rendimiento: nueve componentes de `_score_part` con topes propios
   escalados a 1000 (`economy.cpp:91-102`, `202-314`).
-- **Port** — `economy/payments.rs:148-152` y `economy_quarterly.rs:76-144`.
-- **Solución** — portar las tres tal cual. Dependen de [P1.16](#p116--sistema-de-precios-base) para
-  `PR_STATION_VALUE`.
-- **Coste** — M cada una.
+- **Hecho** — `monthly_company_interest` + `monthly_station_maintenance_fee` en `economy/payments.rs`
+  (mes 0..11 desde `calendar_month_index`); valor con `StationValue` vía `get_price` y
+  `vehicle_asset_value` en `economy_quarterly.rs`; rating con componentes principales de
+  `_score_part` (vehículos rentables, estaciones servidas, entregas, liquidez, préstamo).
+  Tests `monthly_interest_on_100k_loan`, `monthly_interest_includes_negative_cash`,
+  `company_value_uses_station_value_times_facilities`, `performance_rating_includes_profit_and_stations`.
+- **Pendiente** — `v->value` con depreciación diaria; variedad real de cargas en `ScoreID::Cargo`;
+  ingresos min/max desde 12 meses con desglose por tipo de cargo.
 
-### P1.19 — Subsidios
+### P1.19 — Subsidios · hecho
 
 - **Problema** — generación determinista cada 8 meses, solo industria a estación, sin límite de
   distancia y con multiplicador fijo ×2.
@@ -479,8 +489,10 @@ Veintidós entradas, **diez cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.
   industria 1/16; filtros de población y porcentaje transportado; `SUBSIDY_MAX_DISTANCE = 70`;
   duración `subsidy_duration * 12` meses; multiplicador configurable +50 %/×2/×3/×4
   (`subsidy.cpp:425-497`, `507-572`, `economy.cpp:1124-1131`).
-- **Port** — `subsidy.rs:84-227`.
-- **Solución** — portar generación, elegibilidad y multiplicador por dificultad.
+- **Hecho** — `subsidy.rs` genera mensualmente (pax/town/industry), aplica `SUBSIDY_MAX_DISTANCE`,
+  población mínima, duración `subsidy_duration * 12` y multiplicador por `subsidy_multiplier`.
+  Rutas pueblo→pueblo y carga con destino town/industry. Tests `passenger_subsidy_respects_distance_and_population`,
+  `subsidy_award_duration_uses_subsidy_duration_years` y `award_on_first_delivery_uses_difficulty_multiplier`.
 - **Coste** — L.
 
 ### P1.20 — Flags de orden que faltan

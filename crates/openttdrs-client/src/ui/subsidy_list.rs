@@ -429,6 +429,8 @@ mod tests {
             cargo: CargoType::Coal,
             source_industry_pos: src,
             dest_station_pos: dest,
+            source_town_pos: None,
+            dest_town_pos: None,
             offer_expires_tick: 10_000,
             awarded: false,
             award_expires_tick: 0,

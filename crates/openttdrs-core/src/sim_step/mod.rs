@@ -237,6 +237,7 @@ fn phase_vehicle_ops_pre_move(state: &mut GameState) {
     vehicle_ops::tick_vehicle_timetables(state);
     vehicle_ops::sync_autoreplace_depot_flags(state);
     vehicle_ops::run_autoreplace_in_depots(state);
+    vehicle_ops::update_servicing_and_road_depot_orders(state);
     routing::extend_orderless_vehicle_paths(state);
     routing::assign_orderless_wander_destinations(state);
     movement::tick_aircraft_phases(state);

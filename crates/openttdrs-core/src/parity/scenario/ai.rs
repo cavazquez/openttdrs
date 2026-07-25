@@ -38,6 +38,8 @@ pub fn build_ai_rival_line() -> GameState {
     for pos in [mine, forest, oil] {
         if let Some(ind) = state.industries.iter_mut().find(|i| i.pos == pos) {
             ind.stock = 200;
+            // Evitar cierre por bajo transporte antes de que la IA abra la 3ª ruta.
+            ind.prod_level = crate::industry::PRODLEVEL_MAXIMUM;
         }
     }
     state

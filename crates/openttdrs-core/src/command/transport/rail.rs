@@ -4,7 +4,8 @@ use crate::rail_signals::{
     RAIL_REMOVE_REFUND, RAIL_TILE_NORMAL, RAIL_TILE_SIGNALS, SIGNAL_BUILD_COST,
     SIGNAL_REMOVE_REFUND, rail_signal_present_mask, rail_signal_state_mask, rail_tile_is_signals,
 };
-use crate::{DEPOT_BUILD_COST, GameState, RAIL_BUILD_COST};
+use crate::economy::rail_build_cost;
+use crate::{DEPOT_BUILD_COST, GameState};
 
 use super::super::terraform::{apply_autoslope_if_needed, check_autoslope_flat};
 use super::super::{CommandError, require_tile_owned_by_active};
@@ -469,7 +470,7 @@ pub(in crate::command) fn place_rail_bits(
     } else if (add & RAIL_PARALLEL_MASK) != 0 {
         refresh_rail_neighbors_after_place(state, c)?;
     }
-    state.economy.money -= RAIL_BUILD_COST;
+    state.economy.money -= rail_build_cost(&state.global_economy);
     Ok(())
 }
 
@@ -484,7 +485,7 @@ pub(in crate::command) fn set_rail_bits(
     check_rail_trackbits_on_tile(&state.map, c, tb)?;
     write_normal_rail_tile(state, c, tb)?;
     refresh_rail_neighbors(state, c)?;
-    state.economy.money -= RAIL_BUILD_COST;
+    state.economy.money -= rail_build_cost(&state.global_economy);
     Ok(())
 }
 
@@ -498,7 +499,7 @@ pub(in crate::command) fn place_rail(
     check_rail_trackbits_on_tile(&state.map, c, tb)?;
     write_normal_rail_tile(state, c, tb)?;
     refresh_rail_neighbors(state, c)?;
-    state.economy.money -= RAIL_BUILD_COST;
+    state.economy.money -= rail_build_cost(&state.global_economy);
     Ok(())
 }
 

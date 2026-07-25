@@ -75,7 +75,12 @@ pub(crate) fn vehicle_details_unit_line(
     match tab {
         VehicleDetailsTab::Info => {
             let age = unit.vehicle_age_years(sim.state.tick.get());
-            let age_note = if unit.needs_autorenewing(sim.state.tick.get()) {
+            let renew_months = sim
+                .state
+                .companies
+                .get(unit.owner.index())
+                .map_or(6, |c| c.engine_renew_months);
+            let age_note = if unit.needs_autorenewing(sim.state.tick.get(), renew_months) {
                 " · renovar"
             } else {
                 ""

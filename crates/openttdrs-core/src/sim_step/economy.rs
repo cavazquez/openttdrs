@@ -114,23 +114,31 @@ fn apply_monthly_inflation_and_fluctuations(state: &mut GameState, tick: u64) {
 }
 
 fn apply_monthly_interest_and_bankruptcy(state: &mut GameState) {
+    let day = state.tick.get() / u64::from(economy::TICKS_PER_DAY);
+    let month = economy::calendar_month_index(day);
+    let rate = i64::from(state.global_economy.interest_rate);
+    let maintenance = economy::monthly_station_maintenance_fee(&state.global_economy);
     for i in 0..state.companies.len() {
         let loan = state.companies[i].economy.loan;
         let max_loan = state.companies[i].economy.max_loan;
-        let interest = economy::monthly_loan_interest(loan);
-        if interest > 0 {
-            state.companies[i].economy.money -= interest;
+        let money = state.companies[i].economy.money;
+        let interest = economy::monthly_company_interest(loan, money, rate, month);
+        let monthly_fee = interest.saturating_add(maintenance);
+        if monthly_fee > 0 {
+            state.companies[i].economy.money -= monthly_fee;
         }
         let money = state.companies[i].economy.money;
         let is_active = state.companies[i].id == state.active_company;
         let company_name = state.companies[i].name.clone();
         if is_active {
             state.economy = state.companies[i].economy;
-            if interest > 0 {
+            if monthly_fee > 0 {
                 state
                     .runtime
                     .pending_sim_events
-                    .push(crate::sim_events::SimEvent::LoanInterestPaid { amount: interest });
+                    .push(crate::sim_events::SimEvent::LoanInterestPaid {
+                        amount: monthly_fee,
+                    });
             }
             if economy::check_bankruptcy(money, loan, max_loan) {
                 state.bankruptcy_streak = state.bankruptcy_streak.saturating_add(1);
@@ -297,24 +305,25 @@ pub(super) fn rollover_vehicle_profit_year(state: &mut GameState, tick: u64) {
 }
 
 pub(super) fn apply_vehicle_running_costs(state: &mut GameState) {
-    for i in 0..state.vehicles.len() {
-        let kind = state.vehicles[i].kind;
-        let running = state.vehicles[i].running;
-        let moving = running && state.vehicles[i].cur_speed > 0;
+    let len = state.vehicles.len();
+    for i in 0..len {
+        let head_id = state.vehicles[i].id;
+        let yearly = economy::consist_running_cost_year(&state.vehicles, head_id);
+        let cost = economy::accumulate_running_cost_for_head(&mut state.vehicles[i], yearly);
+        if cost <= 0 {
+            continue;
+        }
         let owner = state.vehicles[i].owner;
         let vehicle_id = state.vehicles[i].id;
-        let cost = economy::vehicle_running_cost_per_tick(kind, running, moving);
-        if cost > 0 {
-            state.debit_company(owner, cost);
-            let cost_u = cost.cast_unsigned();
-            state.stats.vehicle_running_costs += cost_u;
-            if let Some(c) = state.companies.get_mut(owner.index()) {
-                c.vehicle_running_costs += cost_u;
-            }
-            let head_id = crate::consist_head_id(&state.vehicles, vehicle_id).unwrap_or(vehicle_id);
-            if let Some(head) = state.vehicles.iter_mut().find(|v| v.id == head_id) {
-                head.profit_this_year = head.profit_this_year.saturating_sub(cost);
-            }
+        state.debit_company(owner, cost);
+        let cost_u = cost.cast_unsigned();
+        state.stats.vehicle_running_costs += cost_u;
+        if let Some(c) = state.companies.get_mut(owner.index()) {
+            c.vehicle_running_costs += cost_u;
+        }
+        let head_id = crate::consist_head_id(&state.vehicles, vehicle_id).unwrap_or(vehicle_id);
+        if let Some(head) = state.vehicles.iter_mut().find(|v| v.id == head_id) {
+            head.profit_this_year = head.profit_this_year.saturating_sub(cost);
         }
     }
 }

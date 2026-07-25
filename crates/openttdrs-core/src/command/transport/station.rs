@@ -4,8 +4,9 @@ use crate::pathfinder::{
     station_site_tile_needs_clear,
 };
 use crate::station::is_rail_waypoint_tile;
+use crate::economy::{station_build_cost, waypoint_build_cost};
 use crate::{
-    CLEAR_TILE_COST, GameState, STATION_BUILD_COST, Station, StopKind, WAYPOINT_BUILD_COST,
+    CLEAR_TILE_COST, GameState, Station, StopKind,
 };
 
 use super::super::{CommandError, require_tile_owned_by_active};
@@ -259,7 +260,7 @@ pub(in crate::command) fn place_rail_station_area(
                 .map
                 .set_tile(c, tile)
                 .map_err(|_| CommandError::OutOfBounds)?;
-            state.economy.money -= STATION_BUILD_COST;
+            state.economy.money -= station_build_cost(&state.global_economy);
         }
     }
 
@@ -340,7 +341,7 @@ pub(in crate::command::transport) fn station_placement_on_tile(
         st.station_spec = state.current_station_spec;
     }
     state.stations.push(st);
-    state.economy.money -= STATION_BUILD_COST;
+    state.economy.money -= station_build_cost(&state.global_economy);
     if let Some((town_id, delta)) =
         town::apply_station_build_rating_penalty(&mut state.towns, c, state.active_company)
     {
@@ -417,7 +418,7 @@ pub(in crate::command) fn place_rail_waypoint(
     st.owner = state.active_company;
     st.station_spec = state.current_station_spec;
     state.stations.push(st);
-    state.economy.money -= WAYPOINT_BUILD_COST;
+    state.economy.money -= waypoint_build_cost(&state.global_economy);
     Ok(())
 }
 
@@ -479,7 +480,7 @@ pub(in crate::command) fn place_road_waypoint(
     let mut st = Station::new_with_kind(c, StopKind::RoadWaypoint);
     st.owner = state.active_company;
     state.stations.push(st);
-    state.economy.money -= WAYPOINT_BUILD_COST;
+    state.economy.money -= waypoint_build_cost(&state.global_economy);
     Ok(())
 }
 

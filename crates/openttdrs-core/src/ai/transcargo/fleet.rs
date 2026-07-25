@@ -170,6 +170,8 @@ fn seed_route_subsidy(
         cargo,
         source_industry_pos: source,
         dest_station_pos: unload_st,
+        source_town_pos: None,
+        dest_town_pos: None,
         offer_expires_tick: tick.saturating_add(u64::from(SUBSIDY_OFFER_MONTHS) * TICKS_PER_MONTH),
         awarded: false,
         award_expires_tick: 0,

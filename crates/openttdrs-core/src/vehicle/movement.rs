@@ -860,7 +860,7 @@ impl super::model::Vehicle {
         let pass_through = order.is_pass_through();
         if order.is_depot() {
             let halt = order.depot_stops();
-            let needs = self.requires_service();
+            let needs = self.needs_servicing;
             if halt || needs {
                 if let Some(cargo) = order.depot_refit_cargo() {
                     self.pending_depot_order_refit = Some(cargo);

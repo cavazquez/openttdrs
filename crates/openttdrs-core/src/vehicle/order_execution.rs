@@ -223,7 +223,7 @@ impl super::model::Vehicle {
             if matches!(
                 order,
                 crate::vehicle::order::VehicleOrder::Depot { stop: false, .. }
-            ) && !self.requires_service()
+            ) && !self.needs_servicing
             {
                 self.current_order = (self.current_order + 1) % self.orders.len();
                 self.path.clear();

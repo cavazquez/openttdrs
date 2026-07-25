@@ -17,9 +17,6 @@ pub(super) fn sync_autoreplace_depot_flags(state: &mut GameState) {
 }
 
 pub(super) fn run_autoreplace_in_depots(state: &mut GameState) {
-    if state.autoreplace_rules.is_empty() {
-        return;
-    }
     let candidates: Vec<u32> = state
         .vehicles
         .iter()
@@ -37,6 +34,11 @@ pub(super) fn run_autoreplace_in_depots(state: &mut GameState) {
         }
         let _ = crate::autoreplace::try_autoreplace_vehicle(state, vehicle_id);
     }
+}
+
+pub(super) fn update_servicing_and_road_depot_orders(state: &mut GameState) {
+    crate::vehicle::update_vehicle_servicing_flags(state);
+    crate::vehicle::check_road_vehicles_need_service(state);
 }
 
 pub(super) fn apply_pending_depot_order_refits(state: &mut GameState) {

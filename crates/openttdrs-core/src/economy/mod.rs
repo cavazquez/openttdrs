@@ -3,25 +3,35 @@
 pub mod build_costs;
 pub mod global;
 pub mod payments;
+pub mod pricebase;
 pub mod time;
 pub mod vehicle_costs;
 
-pub use build_costs::{build_object_cost, buy_land_cost, terraform_cost_per_corner};
+pub use build_costs::{
+    build_object_cost, buy_land_cost, rail_build_cost, road_build_cost, station_build_cost,
+    terraform_cost_per_corner, terraform_cost_per_corner_inflated, waypoint_build_cost,
+};
 pub use global::{
     FluctuationEvent, GlobalEconomy, INFLATION_FRAC_ONE, MAX_INFLATION, ORIGINAL_BASE_YEAR,
-    ORIGINAL_MAX_YEAR,
+    ORIGINAL_MAX_YEAR, DEFAULT_DIFFICULTY_MOD, DEFAULT_INTEREST_RATE,
 };
 pub use payments::{
     ANNUAL_INTEREST_RATE_PCT, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL, cargo_time_factor,
     check_bankruptcy, decrease_loan, increase_loan, inflation_income_factor,
-    inflation_prices_factor, manhattan_distance, monthly_loan_interest, transported_goods_income,
+    inflation_prices_factor, manhattan_distance, monthly_company_interest,
+    monthly_loan_interest, monthly_loan_interest_with_rate, monthly_station_maintenance_fee,
+    transported_goods_income,
 };
+pub use pricebase::{PriceIndex, base_price_at, get_price, medium_default_price};
 pub use time::{
     CARGO_AGING_TICKS, OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND, STATION_RATING_TICKS,
-    TICKS_PER_DAY, TICKS_PER_MONTH, TICKS_PER_YEAR, ticks_to_transit_periods,
+    TICKS_PER_DAY, TICKS_PER_MONTH, TICKS_PER_YEAR, calendar_month_index, ticks_to_transit_periods,
 };
 pub use vehicle_costs::{
-    vehicle_purchase_cost, vehicle_running_cost_per_tick, vehicle_sell_refund,
+    accumulate_running_cost_for_head, accumulate_vehicle_running_cost, consist_running_cost_year,
+    engine_running_cost_from_price_base, engine_running_cost_year, vehicle_asset_value,
+    vehicle_counts_running_tick, vehicle_purchase_cost, vehicle_running_cost_per_tick,
+    vehicle_sell_refund, YEAR_TICKS,
 };
 
 #[cfg(test)]
@@ -94,8 +104,12 @@ mod tests {
         for _ in 0..24 {
             ge.add_monthly_inflation(CALENDAR_BASE_YEAR, true);
         }
-        let base = terraform_cost_per_corner(base_prices);
-        let later = terraform_cost_per_corner(ge.inflation_prices);
+        let base_ge = GlobalEconomy {
+            inflation_prices: base_prices,
+            ..GlobalEconomy::new()
+        };
+        let base = terraform_cost_per_corner(&base_ge);
+        let later = terraform_cost_per_corner(&ge);
         assert!(later > base);
     }
 
@@ -191,8 +205,22 @@ mod tests {
 
     #[test]
     fn monthly_interest_on_100k_loan() {
-        let interest = monthly_loan_interest(100_000);
+        let interest = monthly_company_interest(100_000, 0, 10, 0);
         assert_eq!(interest, 833);
+    }
+
+    #[test]
+    fn monthly_interest_includes_negative_cash() {
+        let loan_only = monthly_company_interest(0, -100_000, 10, 0);
+        assert_eq!(loan_only, 833);
+        let combined = monthly_company_interest(100_000, -50_000, 10, 0);
+        assert_eq!(combined, 1250);
+    }
+
+    #[test]
+    fn monthly_station_maintenance_uses_station_value() {
+        let ge = GlobalEconomy::new();
+        assert_eq!(monthly_station_maintenance_fee(&ge), 25);
     }
 
     #[test]

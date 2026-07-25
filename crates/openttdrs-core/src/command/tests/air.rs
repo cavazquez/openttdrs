@@ -1,8 +1,9 @@
 //! Tests de aeropuerto, canal y esclusa.
 
+use crate::economy::station_build_cost;
 use crate::{
     AircraftPhase, Command, DEPOT_BUILD_COST, ENGINE_AIRCRAFT_DAKOTA, ENGINE_AIRCRAFT_TRICARIO,
-    ENGINE_SHIP_FERRY, GameState, STATION_BUILD_COST, StopKind, TileCoord, TileKind, VehicleKind,
+    ENGINE_SHIP_FERRY, GameState, StopKind, TileCoord, TileKind, VehicleKind,
     airport_tile_is_hangar, airport_tile_is_heliport, apply_command,
 };
 
@@ -84,7 +85,10 @@ fn place_canal_converts_grass_to_water() {
     let money = s.economy.money;
     apply_command(&mut s, &Command::PlaceCanal(c)).unwrap();
     assert_eq!(s.map.get_kind(c), Some(TileKind::Water));
-    assert_eq!(s.economy.money, money - STATION_BUILD_COST / 2);
+    assert_eq!(
+        s.economy.money,
+        money - station_build_cost(&s.global_economy) / 2
+    );
 }
 
 #[test]

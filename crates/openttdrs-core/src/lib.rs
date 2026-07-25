@@ -410,8 +410,8 @@ pub use station_class::{
     vanilla_station_class_catalog, vanilla_station_spec_catalog,
 };
 pub use subsidy::{
-    SUBSIDY_AWARDED_YEARS, SUBSIDY_OFFER_MONTHS, SUBSIDY_PAYMENT_MULTIPLIER, Subsidy,
-    delivery_income_multiplier, tick_subsidies, try_award_subsidy, try_create_subsidy,
+    SUBSIDY_MAX_DISTANCE, SUBSIDY_OFFER_MONTHS, Subsidy, delivery_income_multiplier,
+    subsidy_payment_multiplier_from_index, tick_subsidies, try_award_subsidy, try_create_subsidy,
 };
 pub use tick::GameTick;
 pub use timetable::{TRAVEL_PRESETS, WAIT_PRESETS, cycle_travel_ticks, cycle_wait_ticks};

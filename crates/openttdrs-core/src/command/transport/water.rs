@@ -7,7 +7,8 @@ use crate::map::{
     Map, TileCoord, TileKind, WaterClass, inclined_slope_direction, is_tunnel_entrance_slope,
     make_water_tile, tile_slope_and_z,
 };
-use crate::{DEPOT_BUILD_COST, GameState, STATION_BUILD_COST, Station, StopKind};
+use crate::economy::station_build_cost;
+use crate::{DEPOT_BUILD_COST, GameState, Station, StopKind};
 
 use super::super::CommandError;
 use super::shared::check_in_bounds;
@@ -127,7 +128,7 @@ pub(in crate::command) fn place_dock(
     let mut st = Station::new_with_kind(c, StopKind::Dock);
     st.owner = state.active_company;
     state.stations.push(st);
-    state.economy.money -= STATION_BUILD_COST;
+    state.economy.money -= station_build_cost(&state.global_economy);
     Ok(())
 }
 
@@ -154,7 +155,7 @@ pub(in crate::command) fn place_canal(
         return Ok(());
     }
     make_water_tile(&mut state.map, c, WaterClass::Canal).map_err(|_| CommandError::OutOfBounds)?;
-    state.economy.money -= STATION_BUILD_COST / 2;
+    state.economy.money -= station_build_cost(&state.global_economy) / 2;
     Ok(())
 }
 
@@ -186,7 +187,7 @@ pub(in crate::command) fn place_river(
     if state.climate.uses_desert_patches() {
         clear_desert_around(&mut state.map, c);
     }
-    state.economy.money -= STATION_BUILD_COST / 4;
+    state.economy.money -= station_build_cost(&state.global_economy) / 4;
     Ok(())
 }
 
@@ -253,7 +254,7 @@ pub(in crate::command) fn place_buoy(
     let mut st = Station::new_with_kind(c, StopKind::Buoy);
     st.owner = state.active_company;
     state.stations.push(st);
-    state.economy.money -= STATION_BUILD_COST / 2;
+    state.economy.money -= station_build_cost(&state.global_economy) / 2;
     Ok(())
 }
 
@@ -408,7 +409,7 @@ pub(in crate::command) fn place_lock(
         .map
         .set_tile(c, tile)
         .map_err(|_| CommandError::OutOfBounds)?;
-    state.economy.money -= STATION_BUILD_COST;
+    state.economy.money -= station_build_cost(&state.global_economy);
     Ok(())
 }
 

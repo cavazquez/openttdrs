@@ -249,21 +249,21 @@ impl Default for CompanyEconomy {
     }
 }
 
-pub const ROAD_BUILD_COST: i64 = 10;
-pub const RAIL_BUILD_COST: i64 = 25;
+pub const ROAD_BUILD_COST: i64 = 95;
+pub const RAIL_BUILD_COST: i64 = 100;
 pub const STATION_BUILD_COST: i64 = 200;
 /// Coste de waypoint ferroviario (`Price::BuildWaypointRail` en `OpenTTD`).
-pub const WAYPOINT_BUILD_COST: i64 = 100;
+pub const WAYPOINT_BUILD_COST: i64 = 600;
 pub const DEPOT_BUILD_COST: i64 = 150;
 pub const TUNNEL_BUILD_COST_PER_TILE: i64 = 90;
 pub const BRIDGE_BUILD_COST_PER_TILE: i64 = 70;
 pub const CLEAR_TILE_COST: i64 = 5;
-/// Precio base por esquina (`PriceBaseSpec` 250 → normalizado dificultad media ≈ 500).
-pub const TERRAFORM_BASE_PRICE: i64 = 500;
-/// Precio base por tesela de terreno comprado (`Price::BuildObject` / owned land).
-pub const BUY_LAND_BASE_PRICE: i64 = 50;
-/// Precio base faro/transmisor jugable (`CmdBuildObject` vanilla simplificado).
-pub const BUILD_OBJECT_BASE_PRICE: i64 = 400;
+/// Precio base por esquina (`Price::Terraform`, dificultad media sin inflación).
+pub const TERRAFORM_BASE_PRICE: i64 = 250;
+/// Precio base por tesela de terreno comprado (`Price::BuildObject`).
+pub const BUY_LAND_BASE_PRICE: i64 = 40;
+/// Precio base faro/transmisor (`Price::BuildObject`).
+pub const BUILD_OBJECT_BASE_PRICE: i64 = 40;
 /// Alias en tick 0 (sin inflación de precios); preferir [`crate::economy::terraform_cost_per_corner`].
 pub const TERRAFORM_COST: i64 = TERRAFORM_BASE_PRICE;
 
@@ -434,6 +434,18 @@ pub struct GameState {
     /// Inflación compuesta, recesiones y escala global de `max_loan` (`_economy`).
     #[serde(default)]
     pub global_economy: crate::economy::GlobalEconomy,
+    /// No mandar a servicio si no hay averías (`order.no_servicing_if_no_breakdowns`).
+    #[serde(default = "default_true")]
+    pub no_servicing_if_no_breakdowns: bool,
+    /// Nivel de averías (`difficulty.vehicle_breakdowns`: 0=ninguna, 1=reducidas, 2=normales).
+    #[serde(default = "default_vehicle_breakdowns")]
+    pub vehicle_breakdowns: u8,
+    /// Años de bonificación de subsidio adjudicado (`difficulty.subsidy_duration`).
+    #[serde(default = "default_subsidy_duration")]
+    pub subsidy_duration: u8,
+    /// Índice de multiplicador de subsidio (`difficulty.subsidy_multiplier`: 0..=3).
+    #[serde(default = "default_subsidy_multiplier")]
+    pub subsidy_multiplier: u8,
 
     // ───── Campos efímeros (NO persistidos) ─────
     /// Datos de runtime que no se guardan en el save JSON.
@@ -446,6 +458,18 @@ pub struct GameState {
 
 const fn default_true() -> bool {
     true
+}
+
+const fn default_vehicle_breakdowns() -> u8 {
+    2
+}
+
+const fn default_subsidy_duration() -> u8 {
+    1
+}
+
+const fn default_subsidy_multiplier() -> u8 {
+    1
 }
 
 const fn default_disaster_timer() -> u64 {
@@ -525,6 +549,10 @@ impl GameState {
             gs: crate::gs::GsState::default(),
             cargo_rng: crate::linkgraph_parity::Randomizer::new(1),
             global_economy: crate::economy::GlobalEconomy::new(),
+            no_servicing_if_no_breakdowns: true,
+            vehicle_breakdowns: default_vehicle_breakdowns(),
+            subsidy_duration: default_subsidy_duration(),
+            subsidy_multiplier: default_subsidy_multiplier(),
             runtime: SimulationRuntime::new(),
             ai_build_queues: Vec::new(),
         };
@@ -610,6 +638,10 @@ impl GameState {
             gs: crate::gs::GsState::default(),
             cargo_rng: crate::linkgraph_parity::Randomizer::new(1),
             global_economy: crate::economy::GlobalEconomy::new(),
+            no_servicing_if_no_breakdowns: true,
+            vehicle_breakdowns: default_vehicle_breakdowns(),
+            subsidy_duration: default_subsidy_duration(),
+            subsidy_multiplier: default_subsidy_multiplier(),
             runtime: SimulationRuntime::new(),
             ai_build_queues: Vec::new(),
         };

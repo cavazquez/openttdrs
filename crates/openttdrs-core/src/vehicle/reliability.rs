@@ -95,20 +95,61 @@ impl super::model::Vehicle {
             crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
     }
 
-    /// ¿Toca revisión? (`NeedsServicing`: intervalo o fiabilidad baja).
+    /// ¿Toca revisión? (`NeedsServicing`: intervalo en días o % de fiabilidad).
     ///
     /// Órdenes `Depot { stop: false }` = «servicio si hace falta» (se saltan si esto es false).
     #[must_use]
     pub fn requires_service(&self) -> bool {
+        self.interval_requires_service(false)
+    }
+
+    /// Igual que [`requires_service`] pero con intervalo en % si la compañía lo usa.
+    #[must_use]
+    pub fn requires_service_for_company(&self, servint_ispercent: bool) -> bool {
+        self.interval_requires_service(servint_ispercent)
+    }
+
+    /// Evaluación completa con ajustes de partida y autoreemplazo (`NeedsServicing`).
+    #[must_use]
+    pub fn requires_service_with(&self, state: &crate::GameState) -> bool {
+        if !self.running {
+            return false;
+        }
+        let servint_ispercent = state
+            .companies
+            .get(self.owner.index())
+            .is_some_and(|c| c.servint_ispercent);
+        if !self.interval_requires_service(servint_ispercent) {
+            return false;
+        }
+        if !state.no_servicing_if_no_breakdowns || state.vehicle_breakdowns != 0 {
+            return true;
+        }
+        crate::autoreplace::pending_autoreplace_for_service(state, self)
+    }
+
+    fn interval_requires_service(&self, servint_ispercent: bool) -> bool {
         if self.breakdown_ctr != 0 {
             return false;
         }
-        if self.reliability < SERVICING_RELIABILITY_THRESHOLD {
-            return true;
+        if servint_ispercent {
+            let engine_id = self
+                .engine_id
+                .unwrap_or_else(|| crate::engine::default_engine_id(self.kind));
+            let engine_rel = initial_reliability_for_engine(engine_id, self.kind);
+            let pct = u32::from(self.service_interval_days.min(100));
+            let threshold = u32::from(engine_rel) * (100 - pct) / 100;
+            if u32::from(self.reliability) >= threshold {
+                return false;
+            }
+        } else {
+            let day = crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
+            let interval = u64::from(self.service_interval_days.max(1));
+            if day.saturating_sub(self.last_service_day) < interval {
+                return false;
+            }
         }
-        let day = crate::news::calendar_day_index(crate::tick::GameTick::new(self.sim_tick));
-        let interval = u64::from(self.service_interval_days.max(1));
-        day.saturating_sub(self.last_service_day) >= interval
+        true
     }
 
     /// ¿El vehículo está parado por avería activa? (`breakdown_ctr == 1`).
@@ -248,6 +289,88 @@ pub(crate) fn process_vehicle_economy_day(state: &mut crate::GameState, tick: u6
     }
 }
 
+/// Actualiza `needs_servicing` con la lógica completa de `NeedsServicing`.
+pub(crate) fn update_vehicle_servicing_flags(state: &mut crate::GameState) {
+    let tick = state.tick.get();
+    let len = state.vehicles.len();
+    for i in 0..len {
+        if state.vehicles[i].prev_unit.is_some() {
+            continue;
+        }
+        state.vehicles[i].sim_tick = tick;
+    }
+    for i in 0..len {
+        if state.vehicles[i].prev_unit.is_some() {
+            continue;
+        }
+        let needs = {
+            let state_ref: &crate::GameState = state;
+            state_ref.vehicles[i].requires_service_with(state_ref)
+        };
+        state.vehicles[i].needs_servicing = needs;
+    }
+}
+
+/// Penalización máxima de desvío para depósito automático (simplificado de `roadveh_cmd.cpp`).
+const ROAD_SERVICE_MAX_PENALTY: u32 = 20;
+
+/// Inserta orden de depósito si un vehículo road necesita servicio (`CheckIfRoadVehNeedsService`).
+pub(crate) fn check_road_vehicles_need_service(state: &mut crate::GameState) {
+    use crate::depot::nearest_reachable_depot_tile;
+    use crate::pathfinder::{PathNetwork, find_path};
+    use crate::vehicle::VehicleKind;
+    use crate::vehicle::order::VehicleOrder;
+
+    let tick = state.tick.get();
+    if tick == 0 || !tick.is_multiple_of(u64::from(crate::economy::TICKS_PER_DAY)) {
+        return;
+    }
+
+    let candidates: Vec<usize> = state
+        .vehicles
+        .iter()
+        .enumerate()
+        .filter(|(_, v)| {
+            matches!(v.kind, VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram)
+                && v.running
+                && v.prev_unit.is_none()
+                && !v.orders.iter().any(|o| matches!(o, VehicleOrder::Depot { .. }))
+        })
+        .map(|(i, _)| i)
+        .collect();
+
+    for idx in candidates {
+        state.vehicles[idx].sim_tick = tick;
+        let needs = {
+            let state_ref: &crate::GameState = state;
+            state_ref.vehicles[idx].requires_service_with(state_ref)
+        };
+        if !needs {
+            continue;
+        }
+        let (pos, kind) = {
+            let v = &state.vehicles[idx];
+            (v.pos, v.kind)
+        };
+        let Some(depot) = nearest_reachable_depot_tile(&state.map, pos, kind) else {
+            continue;
+        };
+        let path_target = crate::depot::road_depot_entrance_tile(&state.map, depot).unwrap_or(depot);
+        if find_path(&state.map, pos, path_target, PathNetwork::Road).is_none() {
+            continue;
+        }
+        let dist = crate::economy::manhattan_distance(pos, depot);
+        if dist > ROAD_SERVICE_MAX_PENALTY {
+            continue;
+        }
+        let vehicle = &mut state.vehicles[idx];
+        vehicle.needs_servicing = true;
+        vehicle.orders.insert(vehicle.current_order, VehicleOrder::depot_pass_through(depot));
+        vehicle.path.clear();
+        vehicle.sync_order_destination(&state.map);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,14 +432,33 @@ mod tests {
     }
 
     #[test]
-    fn low_reliability_can_trigger_breakdown_with_rng() {
-        let mut v = Vehicle::new(7, VehicleKind::Truck, TileCoord::new(0, 0), TileCoord::new(1, 0));
-        v.reliability = 100;
+    fn road_vehicle_inserts_depot_order_when_service_due() {
+        use crate::vehicle::order::VehicleOrder;
+        use crate::{Command, GameState, apply_command};
+
+        let mut state = GameState::new(12, 12);
+        let depot = TileCoord::new(6, 4);
+        let road = TileCoord::new(3, 4);
+        for x in 2..=5 {
+            apply_command(
+                &mut state,
+                &Command::PlaceRoadBits(TileCoord::new(x, 4), 0x0F),
+            )
+            .unwrap();
+        }
+        apply_command(&mut state, &Command::PlaceRoadDepotDir(depot, 0)).unwrap();
+        let mut v = Vehicle::new(1, VehicleKind::Bus, road, TileCoord::new(6, 4));
         v.running = true;
-        v.cur_speed = 50;
-        v.breakdown_chance = 250;
-        v.check_vehicle_breakdown(&mut Randomizer::new(42));
-        assert!(v.breakdown_ctr > 0);
-        assert!(v.breakdown_delay >= 0x80);
+        v.service_interval_days = 1;
+        v.last_service_day = 0;
+        v.orders = vec![VehicleOrder::station(TileCoord::new(8, 4))];
+        state.vehicles.push(v);
+        state.tick = crate::GameTick::new(u64::from(crate::economy::TICKS_PER_DAY));
+        state.vehicles[0].sim_tick = state.tick.get();
+        check_road_vehicles_need_service(&mut state);
+        assert!(matches!(
+            state.vehicles[0].orders[0],
+            VehicleOrder::Depot { stop: false, .. }
+        ));
     }
 }

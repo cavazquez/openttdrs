@@ -1,12 +1,59 @@
 //! Valoración trimestral de compañía (`CompaniesGenStatistics` / `UpdateCompanyRatingAndValue`).
 
+use crate::cargo::ALL_CARGO_TYPES;
 use crate::company::CompanyId;
-use crate::economy::vehicle_purchase_cost;
-use crate::game_state::{GameState, STATION_BUILD_COST, company_net_value};
+use crate::economy::{get_price, pricebase::PriceIndex, vehicle_asset_value};
+use crate::game_state::GameState;
+use crate::station::{Station, StopKind};
 use crate::vehicle::VehicleKind;
 
 /// Trimestres retenidos (`OpenTTD` `MAX_HISTORY_QUARTERS`).
 pub const ECONOMY_HISTORY_QUARTERS: usize = 24;
+
+/// Componentes de `_score_info` (`economy.cpp:91-102`).
+#[derive(Debug, Clone, Copy)]
+struct ScoreInfo {
+    score: i32,
+    needed: i64,
+}
+
+const SCORE_VEHICLES: ScoreInfo = ScoreInfo {
+    score: 120,
+    needed: 100,
+};
+const SCORE_STATIONS: ScoreInfo = ScoreInfo {
+    score: 80,
+    needed: 100,
+};
+const SCORE_MIN_PROFIT: ScoreInfo = ScoreInfo {
+    score: 100,
+    needed: 10_000,
+};
+const SCORE_MIN_INCOME: ScoreInfo = ScoreInfo {
+    score: 50,
+    needed: 50_000,
+};
+const SCORE_MAX_INCOME: ScoreInfo = ScoreInfo {
+    score: 100,
+    needed: 100_000,
+};
+const SCORE_DELIVERED: ScoreInfo = ScoreInfo {
+    score: 400,
+    needed: 40_000,
+};
+const SCORE_CARGO: ScoreInfo = ScoreInfo {
+    score: 50,
+    needed: 8,
+};
+const SCORE_MONEY: ScoreInfo = ScoreInfo {
+    score: 50,
+    needed: 10_000_000,
+};
+const SCORE_LOAN: ScoreInfo = ScoreInfo {
+    score: 50,
+    needed: 250_000,
+};
+const SCORE_MAX: i32 = 1000;
 
 /// Entrada de un trimestre cerrado.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -16,7 +63,7 @@ pub struct QuarterlyEconomyEntry {
     pub deliveries: u64,
     /// Rating 0..=1000 (`performance_history`).
     pub performance_history: i32,
-    /// Valoración con activos (`CalculateCompanyValue` simplificado).
+    /// Valoración con activos (`CalculateCompanyValue`).
     pub company_value: i64,
 }
 
@@ -56,7 +103,7 @@ impl QuarterlyEconomyHistory {
             income: self.cur_income,
             expenses: self.cur_expenses,
             deliveries: self.cur_deliveries,
-            performance_history: performance.clamp(0, 1000),
+            performance_history: performance.clamp(0, SCORE_MAX),
             company_value,
         };
         self.samples.push(entry);
@@ -71,38 +118,73 @@ impl QuarterlyEconomyHistory {
     }
 }
 
-/// Valoración con activos: patrimonio líquido + estaciones×coste + vehículos×1.5×precio.
+fn score_component(part: i64, info: ScoreInfo) -> i32 {
+    let clamped = part.clamp(0, info.needed);
+    i32::try_from(clamped * i64::from(info.score) / info.needed).unwrap_or(0)
+}
+
+/// Instalaciones de estación (`facilities.Count()` simplificado).
+#[must_use]
+pub fn station_facility_count(station: &Station) -> u32 {
+    match station.stop_kind {
+        StopKind::RailWaypoint | StopKind::RoadWaypoint | StopKind::Buoy => 0,
+        StopKind::Airport => u32::try_from(station.airport_tiles.len().max(1)).unwrap_or(1),
+        _ => 1_u32.saturating_add(u32::try_from(station.joined_tiles.len()).unwrap_or(0)),
+    }
+}
+
+fn station_recently_served(station: &Station) -> bool {
+    ALL_CARGO_TYPES
+        .iter()
+        .any(|cargo| station.time_since_pickup.get(*cargo) <= 20)
+}
+
+/// `CalculateCompanyAssetValue` + patrimonio (`economy.cpp:115-158`).
 #[must_use]
 pub fn calculate_company_value(state: &GameState, company_id: CompanyId) -> i64 {
     let Some(company) = state.companies.get(company_id.index()) else {
         return 0;
     };
-    let liquid = company_net_value(company.economy.money, company.economy.loan);
-    let stations = state
+    let station_value = get_price(
+        &state.global_economy,
+        PriceIndex::StationValue,
+        1,
+        0,
+    );
+    let facilities: u64 = state
         .stations
         .iter()
         .filter(|s| s.owner == company_id)
-        .count();
-    let station_assets = STATION_BUILD_COST.saturating_mul(i64::try_from(stations).unwrap_or(0));
+        .map(|s| u64::from(station_facility_count(s)))
+        .sum();
+    let station_assets = i64::try_from(facilities)
+        .unwrap_or(i64::MAX)
+        .saturating_mul(station_value)
+        .saturating_mul(25);
+
     let mut vehicle_assets = 0_i64;
     for v in &state.vehicles {
         if v.owner != company_id || v.is_wagon_unit() {
             continue;
         }
-        let price = if matches!(v.kind, VehicleKind::Train) {
-            v.effective_engine().price
-        } else {
-            vehicle_purchase_cost(v.kind)
-        };
-        vehicle_assets = vehicle_assets.saturating_add(price.saturating_mul(3) / 2);
+        if matches!(
+            v.kind,
+            VehicleKind::Train | VehicleKind::Bus | VehicleKind::Truck | VehicleKind::Tram
+                | VehicleKind::Ship | VehicleKind::Aircraft
+        ) {
+            vehicle_assets =
+                vehicle_assets.saturating_add(vehicle_asset_value(v).saturating_mul(3) / 2);
+        }
     }
+
+    let liquid = company.economy.money.saturating_sub(company.economy.loan);
     liquid
         .saturating_add(station_assets)
         .saturating_add(vehicle_assets)
         .max(1)
 }
 
-/// Rating 0..=1000 a partir de flota, estaciones, entregas del trimestre y liquidez.
+/// `_score_part` simplificado → 0..=1000 (`economy.cpp:202-314`).
 #[must_use]
 pub fn calculate_performance_rating(
     state: &GameState,
@@ -112,6 +194,7 @@ pub fn calculate_performance_rating(
     let Some(company) = state.companies.get(company_id.index()) else {
         return 0;
     };
+
     let profitable_vehicles = state
         .vehicles
         .iter()
@@ -124,31 +207,73 @@ pub fn calculate_performance_rating(
     let active_stations = state
         .stations
         .iter()
-        .filter(|s| s.owner == company_id && s.income > 0)
-        .count();
-    let money_score = (company.economy.money.max(0) / 5_000).min(200);
-    let loan_headroom = (company
-        .economy
-        .max_loan
-        .saturating_sub(company.economy.loan)
-        / 2_000)
-        .clamp(0, 150);
-    let vehicle_score = i64::try_from(profitable_vehicles.saturating_mul(40)).unwrap_or(0);
-    let station_score = i64::try_from(active_stations.saturating_mul(30)).unwrap_or(0);
-    let delivery_score = i64::try_from(quarter_deliveries.min(250)).unwrap_or(0);
-    let total = vehicle_score
-        .saturating_add(station_score)
-        .saturating_add(delivery_score)
-        .saturating_add(money_score)
-        .saturating_add(loan_headroom);
-    i32::try_from(total.clamp(0, 1000)).unwrap_or(0)
+        .filter(|s| s.owner == company_id && station_recently_served(s))
+        .map(|s| u64::from(station_facility_count(s)))
+        .sum::<u64>();
+
+    let mut min_profit = 0_i64;
+    let mut min_profit_set = false;
+    for v in &state.vehicles {
+        if v.owner != company_id || !v.is_consist_head() {
+            continue;
+        }
+        if v.profit_last_year > 0 && (!min_profit_set || v.profit_last_year < min_profit) {
+            min_profit = v.profit_last_year;
+            min_profit_set = true;
+        }
+    }
+    let min_profit_score = if min_profit > 0 {
+        min_profit >> 8
+    } else {
+        0
+    };
+
+    let recent = company
+        .economy_history
+        .samples
+        .iter()
+        .rev()
+        .take(12)
+        .map(|m| {
+            m.income
+                .cast_signed()
+                .saturating_add(m.operating_profit())
+        })
+        .collect::<Vec<_>>();
+    let (min_income, max_income) = if recent.is_empty() {
+        (0, 0)
+    } else {
+        let min_v = recent.iter().copied().min().unwrap_or(0);
+        let max_v = recent.iter().copied().max().unwrap_or(0);
+        (min_v.max(0), max_v)
+    };
+
+    let delivered = i64::try_from(quarter_deliveries.min(40_000)).unwrap_or(i64::MAX);
+    let cargo_variety = if quarter_deliveries > 0 { 1 } else { 0 };
+    let money = company.economy.money.max(0);
+    let loan_headroom = i64::from(SCORE_LOAN.needed).saturating_sub(company.economy.loan);
+
+    let mut score = 0_i32;
+    score += score_component(
+        i64::try_from(profitable_vehicles).unwrap_or(0),
+        SCORE_VEHICLES,
+    );
+    score += score_component(active_stations as i64, SCORE_STATIONS);
+    score += score_component(min_profit_score, SCORE_MIN_PROFIT);
+    score += score_component(min_income, SCORE_MIN_INCOME);
+    score += score_component(max_income, SCORE_MAX_INCOME);
+    score += score_component(delivered, SCORE_DELIVERED);
+    score += score_component(cargo_variety, SCORE_CARGO);
+    score += score_component(money, SCORE_MONEY);
+    score += score_component(loan_headroom, SCORE_LOAN);
+    score.clamp(0, SCORE_MAX)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::company::CompanyId;
-    use crate::game_state::GameState;
+    use crate::game_state::{GameState, company_net_value};
     use crate::map::TileCoord;
     use crate::station::{Station, StopKind};
     use crate::vehicle::{Vehicle, VehicleKind};
@@ -170,7 +295,7 @@ mod tests {
     }
 
     #[test]
-    fn company_value_includes_station_and_vehicle_assets() {
+    fn company_value_uses_station_value_times_facilities() {
         let mut state = GameState::new(8, 8);
         state.ensure_companies();
         let money = state.companies[0].economy.money;
@@ -178,7 +303,6 @@ mod tests {
         let liquid = company_net_value(money, loan);
         let mut st = Station::new_with_kind(TileCoord::new(2, 2), StopKind::RailStation);
         st.owner = CompanyId::PLAYER;
-        st.income = 1;
         state.stations.push(st);
         let mut train = Vehicle::new(
             1,
@@ -189,6 +313,29 @@ mod tests {
         train.owner = CompanyId::PLAYER;
         state.vehicles.push(train);
         let value = calculate_company_value(&state, CompanyId::PLAYER);
-        assert!(value > liquid);
+        let station_part = 100 * 25;
+        assert!(value >= liquid + station_part);
+    }
+
+    #[test]
+    fn performance_rating_includes_profit_and_stations() {
+        let mut state = GameState::new(8, 8);
+        state.ensure_companies();
+        let mut train = Vehicle::new(
+            2,
+            VehicleKind::Bus,
+            TileCoord::new(0, 0),
+            TileCoord::new(1, 0),
+        );
+        train.owner = CompanyId::PLAYER;
+        train.profit_this_year = 5_000;
+        state.vehicles.push(train);
+        let mut st = Station::new_with_kind(TileCoord::new(1, 1), StopKind::BusStop);
+        st.owner = CompanyId::PLAYER;
+        st.time_since_pickup.passengers = 5;
+        state.stations.push(st);
+        let rating = calculate_performance_rating(&state, CompanyId::PLAYER, 1_000);
+        assert!(rating > 0);
+        assert!(rating <= 1000);
     }
 }

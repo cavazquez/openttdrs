@@ -160,16 +160,49 @@ pub fn transported_goods_income(
 pub const DEFAULT_MAX_LOAN: i64 = 300_000;
 /// Incremento/decremento por comando de préstamo (`LOAN_INTERVAL`).
 pub const LOAN_INTERVAL: i64 = 10_000;
-/// Tasa de interés anual aproximada (~10 % en dificultad media).
+/// Tasa de interés anual sobre préstamo y caja negativa (~10 % en dificultad media).
 pub const ANNUAL_INTEREST_RATE_PCT: i64 = 10;
 
-/// Interés mensual sobre el préstamo actual (~10 % anual / 12).
+/// Interés mensual sobre el préstamo (media aritmética; preferir [`monthly_company_interest`]).
 #[must_use]
 pub fn monthly_loan_interest(loan: i64) -> i64 {
+    monthly_loan_interest_with_rate(loan, ANNUAL_INTEREST_RATE_PCT)
+}
+
+/// Interés mensual con tasa explícita.
+#[must_use]
+pub fn monthly_loan_interest_with_rate(loan: i64, annual_rate_pct: i64) -> i64 {
     if loan <= 0 {
         return 0;
     }
-    loan.saturating_mul(ANNUAL_INTEREST_RATE_PCT) / 100 / 12
+    loan.saturating_mul(annual_rate_pct) / 100 / 12
+}
+
+/// Cuota mensual exacta (`CompaniesPayInterest`, `economy.cpp:800-827`).
+///
+/// `month` es 0..=11 dentro del año de calendario. Incluye interés sobre caja negativa
+/// (`money < 0`) además del préstamo.
+#[must_use]
+pub fn monthly_company_interest(
+    loan: i64,
+    money: i64,
+    annual_rate_pct: i64,
+    month: u8,
+) -> i64 {
+    let mut yearly_fee = loan.saturating_mul(annual_rate_pct) / 100;
+    if money < 0 {
+        yearly_fee = yearly_fee.saturating_add((-money).saturating_mul(annual_rate_pct) / 100);
+    }
+    let m = i64::from(month.min(11));
+    let up_to_previous = yearly_fee.saturating_mul(m) / 12;
+    let up_to_this = yearly_fee.saturating_mul(m + 1) / 12;
+    up_to_this.saturating_sub(up_to_previous)
+}
+
+/// Cargo fijo mensual de mantenimiento (`_price[PR_STATION_VALUE] >> 2`).
+#[must_use]
+pub fn monthly_station_maintenance_fee(ge: &super::global::GlobalEconomy) -> i64 {
+    super::pricebase::get_price(ge, super::pricebase::PriceIndex::StationValue, 1, 0) >> 2
 }
 
 /// `true` si la compañía superó el límite de deuda (`CompanyCheckBankrupt`).

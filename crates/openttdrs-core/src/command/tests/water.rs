@@ -1,8 +1,9 @@
 //! Tests de construcción acuática (depósito, muelle, boya, acueducto).
 
+use crate::economy::station_build_cost;
 use crate::test_fixtures::SandboxMap;
 use crate::{
-    Command, DEPOT_BUILD_COST, GameState, STATION_BUILD_COST, StopKind, TileCoord, TileKind,
+    Command, DEPOT_BUILD_COST, GameState, StopKind, TileCoord, TileKind,
     VehicleKind, apply_command, bridge_above_axis_from_mapt,
 };
 
@@ -45,7 +46,10 @@ fn place_dock_on_coast_and_serves_ship() {
     assert_eq!(s.stations.len(), 1);
     assert_eq!(s.stations[0].stop_kind, StopKind::Dock);
     assert!(s.stations[0].can_service_vehicle(VehicleKind::Ship));
-    assert_eq!(s.economy.money, money - STATION_BUILD_COST);
+    assert_eq!(
+        s.economy.money,
+        money - station_build_cost(&s.global_economy)
+    );
 }
 
 #[test]
@@ -61,7 +65,10 @@ fn place_buoy_on_water_is_ship_waypoint() {
     assert!(s.stations[0].is_waypoint());
     assert!(s.stations[0].can_service_vehicle(VehicleKind::Ship));
     assert!(!s.stations[0].accepts_cargo(crate::CargoType::Goods));
-    assert_eq!(s.economy.money, money - STATION_BUILD_COST / 2);
+    assert_eq!(
+        s.economy.money,
+        money - station_build_cost(&s.global_economy) / 2
+    );
 }
 
 #[test]

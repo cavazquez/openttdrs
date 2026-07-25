@@ -1,6 +1,7 @@
 use crate::map::{Map, TileCoord, TileKind};
 use crate::pathfinder::{diag_dir_offset, station_site_tile_allows_build};
-use crate::{DEPOT_BUILD_COST, GameState, ROAD_BUILD_COST};
+use crate::economy::road_build_cost;
+use crate::{DEPOT_BUILD_COST, GameState};
 
 use super::super::terraform::apply_autoslope_if_needed;
 use super::super::{CommandError, require_tile_owned_by_active, tile_owner};
@@ -134,12 +135,12 @@ pub(in crate::command) fn place_road_bits(
             .map
             .set_tile(c, tile)
             .map_err(|_| CommandError::OutOfBounds)?;
-        state.economy.money -= ROAD_BUILD_COST;
+        state.economy.money -= road_build_cost(&state.global_economy);
         return Ok(());
     }
     write_normal_road_tile(state, c, road_bits)?;
     propagate_road_bits_to_neighbors(state, c, road_bits)?;
-    state.economy.money -= ROAD_BUILD_COST;
+    state.economy.money -= road_build_cost(&state.global_economy);
     Ok(())
 }
 
@@ -368,7 +369,7 @@ pub(in crate::command) fn set_road_bits(
     check_place_road_bits(&state.map, c)?;
     let road_bits = (bits & 0x0F).max(0x01);
     write_normal_road_tile(state, c, road_bits)?;
-    state.economy.money -= ROAD_BUILD_COST;
+    state.economy.money -= road_build_cost(&state.global_economy);
     Ok(())
 }
 
@@ -441,7 +442,7 @@ pub(in crate::command) fn place_tram_bits(
         merge_tram_bits_with_neighbors(&state.map, c, requested, existing_tram, force_axis);
     write_tram_geometry(state, c, tram_bits)?;
     propagate_tram_bits_to_neighbors(state, c, tram_bits)?;
-    state.economy.money -= ROAD_BUILD_COST;
+    state.economy.money -= road_build_cost(&state.global_economy);
     Ok(())
 }
 
@@ -471,7 +472,7 @@ pub(in crate::command) fn remove_tram_bits(
         .map
         .set_tile(c, out)
         .map_err(|_| CommandError::OutOfBounds)?;
-    state.economy.money -= ROAD_BUILD_COST / 2;
+    state.economy.money -= road_build_cost(&state.global_economy) / 2;
     Ok(())
 }
 

@@ -78,6 +78,43 @@ pub fn nearest_depot_tile(map: &Map, from: TileCoord, kind: VehicleKind) -> Opti
     best.map(|(_, c)| c)
 }
 
+/// Depósito alcanzable más cercano por pathfinding (road/tram).
+#[must_use]
+pub fn nearest_reachable_depot_tile(
+    map: &Map,
+    from: TileCoord,
+    kind: VehicleKind,
+) -> Option<TileCoord> {
+    use crate::pathfinder::{PathNetwork, find_path};
+
+    let target = depot_tile_kind_for_vehicle(kind);
+    let network = if kind == VehicleKind::Tram {
+        PathNetwork::Tram
+    } else {
+        PathNetwork::Road
+    };
+    let (mw, mh) = map.dimensions();
+    let mut best: Option<(u32, TileCoord)> = None;
+    for y in 0..mh {
+        for x in 0..mw {
+            let c = TileCoord::new(x.cast_signed(), y.cast_signed());
+            if map.get_kind(c) != Some(target) {
+                continue;
+            }
+            let path_target =
+                road_depot_entrance_tile(map, c).unwrap_or(c);
+            if find_path(map, from, path_target, network).is_none() {
+                continue;
+            }
+            let dist = from.x.abs_diff(c.x) + from.y.abs_diff(c.y);
+            if best.is_none_or(|(d, _)| dist < d) {
+                best = Some((dist, c));
+            }
+        }
+    }
+    best.map(|(_, c)| c)
+}
+
 /// Boca del depósito de vía (`m5 & 3`) si la tesela es un depósito ferroviario.
 #[must_use]
 pub fn rail_depot_mouth_dir(map: &Map, pos: TileCoord) -> Option<u8> {

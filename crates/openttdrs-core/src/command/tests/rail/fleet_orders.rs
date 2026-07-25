@@ -336,6 +336,9 @@ fn autoreplace_upgrades_truck_in_depot() {
         },
     )
     .unwrap();
+    // `try_autoreplace_vehicle` usa la economía de la compañía y respeta `engine_renew_money`.
+    s.companies[0].economy.money = s.economy.money;
+    s.companies[0].engine_renew_money = 0;
     assert!(crate::autoreplace::try_autoreplace_vehicle(&mut s, id).unwrap());
     assert_eq!(
         s.vehicles[0].engine_id,
@@ -490,12 +493,19 @@ fn vehicle_profit_tracks_income_and_running_costs() {
     s.vehicles[0].profit_this_year = 0;
     s.vehicles[0].running = true;
     s.vehicles[0].cur_speed = 10;
-    s.step();
+    for _ in 0..5_000 {
+        if let Some(v) = s.vehicles.iter_mut().find(|v| v.id == id) {
+            v.running = true;
+            v.cur_speed = 10;
+        }
+        s.step();
+    }
+    let truck = s.vehicles.iter().find(|v| v.id == id).expect("camión");
     assert!(
-        s.vehicles[0].profit_this_year < 0,
+        truck.profit_this_year < 0,
         "costes de marcha restan beneficio"
     );
-    let after_cost = s.vehicles[0].profit_this_year;
+    let after_cost = truck.profit_this_year;
     if let Some(v) = s.vehicles.iter_mut().find(|v| v.id == id) {
         v.profit_this_year = after_cost.saturating_add(500);
     }

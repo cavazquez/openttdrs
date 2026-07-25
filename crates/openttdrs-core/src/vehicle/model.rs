@@ -376,6 +376,9 @@ pub struct Vehicle {
     /// Refit pendiente al llegar a depósito con orden (`VehicleOrder::Depot.refit_cargo`).
     #[serde(skip, default)]
     pub(crate) pending_depot_order_refit: Option<CargoType>,
+    /// Acumulador fraccional de coste de explotación (prorrateo anual por tick).
+    #[serde(default)]
+    pub running_cost_accum: u64,
 }
 
 impl Vehicle {
@@ -482,6 +485,7 @@ impl Vehicle {
             newgrf_persistent_regs: std::collections::HashMap::new(),
             profit_this_year: 0,
             profit_last_year: 0,
+            running_cost_accum: 0,
             pending_depot_order_refit: None,
         }
     }
@@ -583,10 +587,27 @@ impl Vehicle {
         self.depart_turn = 0;
     }
 
-    /// Umbral simplificado: últimos ~20 % de vida útil (25 años).
+    /// Umbral simplificado: `age - max_age >= engine_renew_months * 30` días.
     #[must_use]
-    pub fn needs_autorenewing(&self, current_tick: u64) -> bool {
-        self.vehicle_age_years(current_tick) >= 20
+    pub fn needs_autorenewing(&self, current_tick: u64, engine_renew_months: i16) -> bool {
+        if self.prev_unit.is_some() {
+            return false;
+        }
+        if self.kind == VehicleKind::Train
+            && self
+                .engine_id
+                .map(|id| {
+                    !crate::engine::engine_for_vehicle(self.kind, id).is_train_engine()
+                })
+                .unwrap_or(false)
+        {
+            return false;
+        }
+        let age_days = self.vehicle_age_days(current_tick);
+        let threshold = i64::from(engine_renew_months) * 30;
+        i64::try_from(age_days.saturating_sub(u64::from(self.max_age_days)))
+            .unwrap_or(i64::MAX)
+            >= threshold
     }
 
     /// Sanitiza `current_order` para prevenir indexación fuera de límites.

@@ -73,7 +73,7 @@ fn raise_land_on_grass_costs_and_creates_slope() {
     let c = TileCoord::new(3, 4);
     let money_before = s.economy.money;
     let expected_cost =
-        crate::economy::terraform_cost_per_corner(s.global_economy.inflation_prices);
+        crate::economy::terraform_cost_per_corner_inflated(s.global_economy.inflation_prices);
     apply_command(&mut s, &Command::RaiseLand(c)).unwrap();
     assert_eq!(s.economy.money, money_before - expected_cost);
     let (tileh, _) = tile_slope_and_z(&s.map, c).unwrap();

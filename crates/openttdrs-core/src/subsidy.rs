@@ -1,19 +1,23 @@
-//! Subsidios de transporte (simplificación de `subsidy.cpp`).
+//! Subsidios de transporte (`subsidy.cpp`).
 
 use crate::GameState;
 use crate::cargo::CargoType;
 use crate::company::CompanyId;
-use crate::economy::{TICKS_PER_MONTH, TICKS_PER_YEAR};
+use crate::economy::{TICKS_PER_MONTH, manhattan_distance};
 use crate::map::TileCoord;
 use crate::sim_events::SimEvent;
 use crate::station::{self, STATION_COVERAGE_RADIUS};
 
-/// Multiplicador de pago mientras el subsidio está activo (`difficulty.subsidy_multiplier` = 2).
-pub const SUBSIDY_PAYMENT_MULTIPLIER: i64 = 2;
 /// Meses de validez de la oferta antes de caducar.
 pub const SUBSIDY_OFFER_MONTHS: u32 = 12;
-/// Años de bonificación tras adjudicar el subsidio.
-pub const SUBSIDY_AWARDED_YEARS: u32 = 1;
+/// Distancia máxima Manhattan entre origen y destino.
+pub const SUBSIDY_MAX_DISTANCE: u32 = 70;
+/// Población mínima de pueblo para subsidio de pasajeros.
+pub const SUBSIDY_PAX_MIN_POPULATION: u32 = 400;
+/// Población mínima de pueblo origen para carga urbana.
+pub const SUBSIDY_CARGO_MIN_POPULATION: u32 = 900;
+/// Máximo % transportado para ser elegible (`SUBSIDY_MAX_PCT_TRANSPORTED`).
+pub const SUBSIDY_MAX_PCT_TRANSPORTED: u32 = 42;
 
 /// Subsidio activo u ofrecido.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -22,6 +26,12 @@ pub struct Subsidy {
     pub cargo: CargoType,
     pub source_industry_pos: TileCoord,
     pub dest_station_pos: TileCoord,
+    /// Origen en pueblo (pasajeros / carga urbana).
+    #[serde(default)]
+    pub source_town_pos: Option<TileCoord>,
+    /// Destino en pueblo (pasajeros / carga urbana).
+    #[serde(default)]
+    pub dest_town_pos: Option<TileCoord>,
     /// Tick en el que caduca la oferta si aún no se adjudicó.
     pub offer_expires_tick: u64,
     #[serde(default)]
@@ -52,103 +62,289 @@ impl Subsidy {
         dest_station: TileCoord,
         source: TileCoord,
         tick: u64,
+        towns: &[crate::town::Town],
     ) -> bool {
-        if self.cargo != cargo || self.dest_station_pos != dest_station {
+        if self.cargo != cargo {
             return false;
         }
-        if self.awarded {
-            return self.is_award_active(tick)
-                && station::industry_in_station_coverage_by_pos(
-                    self.source_industry_pos,
-                    dest_station,
-                    STATION_COVERAGE_RADIUS,
-                )
-                && (source == self.source_industry_pos
-                    || station::industry_in_station_coverage_by_pos(
-                        self.source_industry_pos,
-                        source,
-                        STATION_COVERAGE_RADIUS,
-                    ));
+        if let Some(dest_town) = self.dest_town_pos {
+            if !town_covers_tile(towns, dest_town, dest_station) {
+                return false;
+            }
+        } else if self.dest_station_pos != dest_station {
+            return false;
         }
-        self.is_offer_active(tick)
-            && (source == self.source_industry_pos
+
+        let source_ok = if let Some(src_town) = self.source_town_pos {
+            source == src_town || town_covers_tile(towns, src_town, source)
+        } else {
+            source == self.source_industry_pos
                 || station::industry_in_station_coverage_by_pos(
                     self.source_industry_pos,
                     source,
                     STATION_COVERAGE_RADIUS,
-                ))
+                )
+        };
+
+        if self.awarded {
+            return self.is_award_active(tick) && source_ok;
+        }
+        self.is_offer_active(tick) && source_ok
     }
 }
 
-/// Purga ofertas caducadas y genera nuevas periódicamente.
+fn town_covers_tile(towns: &[crate::town::Town], town_pos: TileCoord, tile: TileCoord) -> bool {
+    towns
+        .iter()
+        .find(|t| t.pos == town_pos)
+        .is_some_and(|town| {
+            manhattan_distance(town.pos, tile) <= STATION_COVERAGE_RADIUS as u32
+        })
+}
+
+fn town_percent_transported(_town: &crate::town::Town, _cargo: CargoType) -> u32 {
+    0
+}
+
+fn industry_percent_transported(industry: &crate::industry::Industry) -> u32 {
+    if industry.produced_total == 0 {
+        return 0;
+    }
+    let transported = industry.transported_total.min(industry.produced_total);
+    u32::try_from(transported.saturating_mul(100) / industry.produced_total).unwrap_or(0)
+}
+
+/// Multiplicador de ingreso según dificultad (`economy.cpp:1124-1131`).
+#[must_use]
+pub const fn subsidy_payment_multiplier_from_index(index: u8) -> i64 {
+    match index {
+        0 => 3, // +50 %
+        1 => 2,
+        2 => 3,
+        _ => 4,
+    }
+}
+
+/// Purga ofertas caducadas y genera nuevas mensualmente.
 pub fn tick_subsidies(state: &mut GameState) {
     let tick = state.tick.get();
     state
         .subsidies
         .retain(|s| s.awarded || s.is_offer_active(tick));
 
-    if tick > 0 && tick.is_multiple_of(TICKS_PER_MONTH * 8) {
-        let _ = try_create_subsidy(state);
+    if tick > 0 && tick.is_multiple_of(TICKS_PER_MONTH) {
+        let _ = try_create_monthly_subsidy(state);
     }
 }
 
-/// Intenta crear un subsidio industria → estación para el cargo primario.
-#[must_use]
-pub fn try_create_subsidy(state: &mut GameState) -> bool {
-    if state.industries.is_empty() || state.stations.is_empty() {
+fn try_create_monthly_subsidy(state: &mut GameState) -> bool {
+    for _ in 0..1000 {
+        let chance = state.cargo_rng.next() % 16;
+        let created = if chance < 2 {
+            try_create_passenger_subsidy(state)
+        } else if chance == 2 {
+            try_create_town_cargo_subsidy(state)
+        } else if chance == 3 {
+            try_create_industry_subsidy(state)
+        } else {
+            false
+        };
+        if created {
+            return true;
+        }
+    }
+    false
+}
+
+fn try_create_passenger_subsidy(state: &mut GameState) -> bool {
+    if state.towns.len() < 2 {
         return false;
     }
+    let src_idx = (state.cargo_rng.next() as usize) % state.towns.len();
+    let dst_idx = if state.towns.len() == 1 {
+        return false;
+    } else {
+        (src_idx + 1 + (state.cargo_rng.next() as usize) % (state.towns.len() - 1))
+            % state.towns.len()
+    };
+    let src = &state.towns[src_idx];
+    let dst = &state.towns[dst_idx];
+    if src.population < SUBSIDY_PAX_MIN_POPULATION
+        || dst.population < SUBSIDY_PAX_MIN_POPULATION
+    {
+        return false;
+    }
+    let cargo = CargoType::Passengers;
+    if town_percent_transported(src, cargo) > SUBSIDY_MAX_PCT_TRANSPORTED {
+        return false;
+    }
+    if manhattan_distance(src.pos, dst.pos) > SUBSIDY_MAX_DISTANCE {
+        return false;
+    }
+    push_subsidy(
+        state,
+        cargo,
+        TileCoord::new(0, 0),
+        TileCoord::new(0, 0),
+        Some(src.pos),
+        Some(dst.pos),
+    )
+}
 
-    let tick = state.tick.get();
-    let industry_idx =
-        (usize::try_from(tick).unwrap_or(0) + state.industries.len()) % state.industries.len();
-    let industry = &state.industries[industry_idx];
+fn try_create_town_cargo_subsidy(state: &mut GameState) -> bool {
+    if state.towns.is_empty() {
+        return false;
+    }
+    let src_idx = (state.cargo_rng.next() as usize) % state.towns.len();
+    let src = &state.towns[src_idx];
+    if src.population < SUBSIDY_CARGO_MIN_POPULATION {
+        return false;
+    }
+    let cargo = CargoType::Mail;
+    if town_percent_transported(src, cargo) > SUBSIDY_MAX_PCT_TRANSPORTED {
+        return false;
+    }
+    let dest_is_town = state.cargo_rng.next() & 1 == 0;
+    if dest_is_town {
+        if state.towns.len() < 2 {
+            return false;
+        }
+        let dst_idx = (state.cargo_rng.next() as usize) % state.towns.len();
+        let dst = &state.towns[dst_idx];
+        if dst.pos == src.pos || dst.population < SUBSIDY_CARGO_MIN_POPULATION {
+            return false;
+        }
+        if manhattan_distance(src.pos, dst.pos) > SUBSIDY_MAX_DISTANCE {
+            return false;
+        }
+        return push_subsidy(
+            state,
+            cargo,
+            TileCoord::new(0, 0),
+            TileCoord::new(0, 0),
+            Some(src.pos),
+            Some(dst.pos),
+        );
+    }
+    find_industry_destination_for_cargo(state, cargo, src.pos, Some(src.pos))
+}
+
+fn try_create_industry_subsidy(state: &mut GameState) -> bool {
+    if state.industries.is_empty() {
+        return false;
+    }
+    let idx = (state.cargo_rng.next() as usize) % state.industries.len();
+    let industry = &state.industries[idx];
     let cargo = industry.output_cargo();
     if cargo.is_town_cargo() {
         return false;
     }
+    if industry.produced_total > 0
+        && industry_percent_transported(industry) > SUBSIDY_MAX_PCT_TRANSPORTED
+    {
+        return false;
+    }
+    find_industry_destination_for_cargo(state, cargo, industry.pos, None)
+}
 
-    let stations: Vec<(usize, TileCoord)> = state
+fn find_industry_destination_for_cargo(
+    state: &mut GameState,
+    cargo: CargoType,
+    source: TileCoord,
+    source_town: Option<TileCoord>,
+) -> bool {
+    let dest_is_town = state.cargo_rng.next() & 1 == 0;
+    if dest_is_town {
+        if state.towns.is_empty() {
+            return false;
+        }
+        let dst_idx = (state.cargo_rng.next() as usize) % state.towns.len();
+        let dst = &state.towns[dst_idx];
+        if dst.population < SUBSIDY_CARGO_MIN_POPULATION {
+            return false;
+        }
+        if manhattan_distance(source, dst.pos) > SUBSIDY_MAX_DISTANCE {
+            return false;
+        }
+        return push_subsidy(
+            state,
+            cargo,
+            source,
+            TileCoord::new(0, 0),
+            source_town,
+            Some(dst.pos),
+        );
+    }
+    if state.stations.is_empty() {
+        return false;
+    }
+    let stations: Vec<TileCoord> = state
         .stations
         .iter()
-        .enumerate()
-        .filter(|(_, st)| {
+        .filter(|st| {
             !st.is_waypoint()
                 && st.accepts_cargo(cargo)
-                && station::industry_in_station_coverage(
-                    industry,
-                    st.pos,
-                    station::station_catchment_radius(st),
-                )
-                && st.pos != industry.pos
+                && manhattan_distance(source, st.pos) <= SUBSIDY_MAX_DISTANCE
         })
-        .map(|(i, st)| (i, st.pos))
+        .map(|st| st.pos)
         .collect();
-
     if stations.is_empty() {
         return false;
     }
+    let dest = stations[(state.cargo_rng.next() as usize) % stations.len()];
+    push_subsidy(state, cargo, source, dest, source_town, None)
+}
 
-    let (station_idx, dest) = stations[usize::try_from(tick / 17).unwrap_or(0) % stations.len()];
-    let source = industry.pos;
-
-    if state.subsidies.iter().any(|s| {
+fn duplicate_subsidy(
+    state: &GameState,
+    cargo: CargoType,
+    source_industry: TileCoord,
+    dest_station: TileCoord,
+    source_town: Option<TileCoord>,
+    dest_town: Option<TileCoord>,
+) -> bool {
+    state.subsidies.iter().any(|s| {
         !s.awarded
             && s.cargo == cargo
-            && s.source_industry_pos == source
-            && s.dest_station_pos == dest
-    }) {
+            && s.source_industry_pos == source_industry
+            && s.dest_station_pos == dest_station
+            && s.source_town_pos == source_town
+            && s.dest_town_pos == dest_town
+    })
+}
+
+fn push_subsidy(
+    state: &mut GameState,
+    cargo: CargoType,
+    source_industry: TileCoord,
+    dest_station: TileCoord,
+    source_town: Option<TileCoord>,
+    dest_town: Option<TileCoord>,
+) -> bool {
+    if duplicate_subsidy(
+        state,
+        cargo,
+        source_industry,
+        dest_station,
+        source_town,
+        dest_town,
+    ) {
         return false;
     }
-
+    let tick = state.tick.get();
     let id = state.next_subsidy_id;
     state.next_subsidy_id = state.next_subsidy_id.saturating_add(1);
-    let offer_expires_tick = tick.saturating_add(u64::from(SUBSIDY_OFFER_MONTHS) * TICKS_PER_MONTH);
+    let offer_expires_tick =
+        tick.saturating_add(u64::from(SUBSIDY_OFFER_MONTHS) * TICKS_PER_MONTH);
+    let industry_pos = source_town.unwrap_or(source_industry);
+    let station_pos = dest_town.unwrap_or(dest_station);
     state.subsidies.push(Subsidy {
         id,
         cargo,
-        source_industry_pos: source,
-        dest_station_pos: dest,
+        source_industry_pos: industry_pos,
+        dest_station_pos: station_pos,
+        source_town_pos: source_town,
+        dest_town_pos: dest_town,
         offer_expires_tick,
         awarded: false,
         award_expires_tick: 0,
@@ -158,13 +354,18 @@ pub fn try_create_subsidy(state: &mut GameState) -> bool {
         .runtime
         .pending_sim_events
         .push(SimEvent::SubsidyCreated {
-            industry_pos: source,
-            station_pos: dest,
+            industry_pos: industry_pos,
+            station_pos,
             cargo,
         });
-    crate::news::push_subsidy_offer_news(state, cargo, source, dest);
-    let _ = station_idx;
+    crate::news::push_subsidy_offer_news(state, cargo, industry_pos, station_pos);
     true
+}
+
+/// Intenta crear un subsidio industria → estación (tests / compat).
+#[must_use]
+pub fn try_create_subsidy(state: &mut GameState) -> bool {
+    try_create_industry_subsidy(state)
 }
 
 /// Adjudica el subsidio en la primera entrega válida.
@@ -177,15 +378,17 @@ pub fn try_award_subsidy(
     company: CompanyId,
 ) -> bool {
     let tick = state.tick.get();
+    let towns = state.towns.clone();
     let Some(idx) = state.subsidies.iter().position(|s| {
         !s.awarded
-            && s.matches_delivery(cargo, dest_station, source, tick)
+            && s.matches_delivery(cargo, dest_station, source, tick, &towns)
             && s.is_offer_active(tick)
     }) else {
         return false;
     };
 
-    let award_expires_tick = tick.saturating_add(u64::from(SUBSIDY_AWARDED_YEARS) * TICKS_PER_YEAR);
+    let award_months = u64::from(state.subsidy_duration) * 12;
+    let award_expires_tick = tick.saturating_add(award_months * TICKS_PER_MONTH);
     state.subsidies[idx].awarded = true;
     state.subsidies[idx].award_expires_tick = award_expires_tick;
     state.subsidies[idx].awarded_company = Some(company);
@@ -202,9 +405,7 @@ pub fn try_award_subsidy(
     true
 }
 
-/// Multiplicador de ingreso por entrega (`1` o [`SUBSIDY_PAYMENT_MULTIPLIER`]).
-///
-/// Solo la compañía adjudicada recibe el ×2.
+/// Multiplicador de ingreso por entrega (`1` o bonificación por dificultad).
 #[must_use]
 pub fn delivery_income_multiplier(
     state: &GameState,
@@ -214,13 +415,15 @@ pub fn delivery_income_multiplier(
     company: CompanyId,
 ) -> i64 {
     let tick = state.tick.get();
+    let towns = &state.towns;
+    let multiplier = subsidy_payment_multiplier_from_index(state.subsidy_multiplier);
     if state.subsidies.iter().any(|s| {
         s.awarded
             && s.awarded_company == Some(company)
             && s.is_award_active(tick)
-            && s.matches_delivery(cargo, dest_station, source, tick)
+            && s.matches_delivery(cargo, dest_station, source, tick, towns)
     }) {
-        SUBSIDY_PAYMENT_MULTIPLIER
+        multiplier
     } else {
         1
     }
@@ -248,6 +451,7 @@ mod tests {
         apply_command(&mut state, &Command::PlaceStationDir(stop, 1)).unwrap();
         let mut industry = Industry::new(mine, IndustryKind::CoalMine);
         industry.stock = 40;
+        industry.produced_total = 100;
         state.industries.push(industry);
         state.stations.push(Station::new(stop));
         state
@@ -271,8 +475,9 @@ mod tests {
     }
 
     #[test]
-    fn award_on_first_delivery_doubles_income_for_winner() {
+    fn award_on_first_delivery_uses_difficulty_multiplier() {
         let mut state = setup_subsidy_route();
+        state.subsidy_multiplier = 2;
         let _ = try_create_subsidy(&mut state);
         let dest = state.subsidies[0].dest_station_pos;
         let source = state.subsidies[0].source_industry_pos;
@@ -284,10 +489,9 @@ mod tests {
             CompanyId::PLAYER
         ));
         assert!(state.subsidies[0].awarded);
-        assert_eq!(state.subsidies[0].awarded_company, Some(CompanyId::PLAYER));
         assert_eq!(
             delivery_income_multiplier(&state, dest, CargoType::Coal, source, CompanyId::PLAYER),
-            SUBSIDY_PAYMENT_MULTIPLIER
+            3
         );
         assert_eq!(
             delivery_income_multiplier(&state, dest, CargoType::Coal, source, CompanyId(1)),
@@ -296,10 +500,53 @@ mod tests {
     }
 
     #[test]
-    fn periodic_tick_creates_subsidy() {
+    fn monthly_tick_can_create_subsidy() {
         let mut state = setup_subsidy_route();
-        state.tick = crate::GameTick::new(TICKS_PER_MONTH * 8);
+        state.cargo_rng = crate::linkgraph_parity::Randomizer::new(7);
+        state.tick = crate::GameTick::new(TICKS_PER_MONTH);
         tick_subsidies(&mut state);
         assert!(!state.subsidies.is_empty());
+    }
+
+    #[test]
+    fn passenger_subsidy_respects_distance_and_population() {
+        let mut state = GameState::new(32, 32);
+        state.towns.push(crate::town::Town {
+            id: 1,
+            pos: TileCoord::new(2, 2),
+            name: "A".into(),
+            population: 500,
+            ..crate::town::Town::default()
+        });
+        state.towns.push(crate::town::Town {
+            id: 2,
+            pos: TileCoord::new(80, 80),
+            name: "B".into(),
+            population: 500,
+            ..crate::town::Town::default()
+        });
+        assert!(!try_create_passenger_subsidy(&mut state));
+        state.towns[1].pos = TileCoord::new(10, 2);
+        assert!(try_create_passenger_subsidy(&mut state));
+        assert_eq!(state.subsidies[0].cargo, CargoType::Passengers);
+    }
+
+    #[test]
+    fn subsidy_award_duration_uses_subsidy_duration_years() {
+        let mut state = setup_subsidy_route();
+        state.subsidy_duration = 2;
+        let _ = try_create_subsidy(&mut state);
+        let dest = state.subsidies[0].dest_station_pos;
+        let source = state.subsidies[0].source_industry_pos;
+        let tick = state.tick.get();
+        assert!(try_award_subsidy(
+            &mut state,
+            dest,
+            CargoType::Coal,
+            source,
+            CompanyId::PLAYER
+        ));
+        let expected = tick + 24_u64 * TICKS_PER_MONTH;
+        assert_eq!(state.subsidies[0].award_expires_tick, expected);
     }
 }

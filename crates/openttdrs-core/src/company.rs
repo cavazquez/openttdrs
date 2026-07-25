@@ -83,6 +83,30 @@ pub struct Company {
     /// Meses consecutivos en quiebra (rivales; el jugador usa `GameState::bankruptcy_streak`).
     #[serde(default)]
     pub bankruptcy_months: u8,
+    /// Autorenovación de vehículos viejos (`settings.engine_renew`).
+    #[serde(default = "default_engine_renew")]
+    pub engine_renew: bool,
+    /// Meses antes/después de `max_age` para renovar (`settings.engine_renew_months`).
+    #[serde(default = "default_engine_renew_months")]
+    pub engine_renew_months: i16,
+    /// Dinero mínimo a conservar al renovar (`settings.engine_renew_money`).
+    #[serde(default = "default_engine_renew_money")]
+    pub engine_renew_money: i64,
+    /// Intervalo de servicio en % en lugar de días (`settings.vehicle.servint_ispercent`).
+    #[serde(default)]
+    pub servint_ispercent: bool,
+}
+
+const fn default_engine_renew() -> bool {
+    true
+}
+
+const fn default_engine_renew_months() -> i16 {
+    6
+}
+
+const fn default_engine_renew_money() -> i64 {
+    100_000
 }
 
 impl Company {
@@ -100,6 +124,10 @@ impl Company {
             economy_history: crate::game_state::EconomyHistory::default(),
             quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
             bankruptcy_months: 0,
+            engine_renew: true,
+            engine_renew_months: 6,
+            engine_renew_money: 100_000,
+            servint_ispercent: false,
         }
     }
 
@@ -117,6 +145,10 @@ impl Company {
             economy_history: crate::game_state::EconomyHistory::default(),
             quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
             bankruptcy_months: 0,
+            engine_renew: true,
+            engine_renew_months: 6,
+            engine_renew_money: 100_000,
+            servint_ispercent: false,
         }
     }
 
@@ -134,6 +166,10 @@ impl Company {
             economy_history: crate::game_state::EconomyHistory::default(),
             quarterly_economy: crate::economy_quarterly::QuarterlyEconomyHistory::default(),
             bankruptcy_months: 0,
+            engine_renew: true,
+            engine_renew_months: 6,
+            engine_renew_money: 100_000,
+            servint_ispercent: false,
         }
     }
 }

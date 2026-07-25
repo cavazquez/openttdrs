@@ -179,12 +179,23 @@ impl PopulationDensity {
         }
     }
 
+    /// Sparse/Normal/Dense del menú → densidades OpenTTD de pueblos (`{5,11,23,46}`).
     #[must_use]
-    pub const fn multiplier_bps(self) -> u32 {
+    pub const fn to_town_density(self) -> openttdrs_core::TownDensity {
         match self {
-            Self::Sparse => 50,
-            Self::Normal => 100,
-            Self::Dense => 175,
+            Self::Sparse => openttdrs_core::TownDensity::VeryLow,
+            Self::Normal => openttdrs_core::TownDensity::Normal,
+            Self::Dense => openttdrs_core::TownDensity::High,
+        }
+    }
+
+    /// Sparse/Normal/Dense del menú → densidades OpenTTD de industrias (`{10,25,55,80}`).
+    #[must_use]
+    pub const fn to_industry_density(self) -> openttdrs_core::IndustryDensity {
+        match self {
+            Self::Sparse => openttdrs_core::IndustryDensity::VeryLow,
+            Self::Normal => openttdrs_core::IndustryDensity::Normal,
+            Self::Dense => openttdrs_core::IndustryDensity::High,
         }
     }
 }

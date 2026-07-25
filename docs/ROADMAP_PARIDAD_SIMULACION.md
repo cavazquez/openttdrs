@@ -71,12 +71,13 @@ abrir el issue.
 | 4 | [P1.1](#p11--updatestationrating-completo--hecho) `UpdateStationRating` + [P0.3](#p03--rating-inicial-de-estación--hecho-con-p11) | P1 | XL | hecho | Es lo que hace que servir bien una estación importe |
 | 5 | [P1.2](#p12--reparto-de-carga-entre-estaciones-competidoras--hecho) Reparto entre estaciones | P1 | L | hecho | Cierra la mitad que le faltaba a P1.1: el rating ya reparte la producción |
 | 6 | [P1.4](#p14--prod_level-y-cierre-de-industrias--hecho) Industrias dinámicas + [P1.3](#p13--producción-industrial-por-spec--hecho) rates | P1 | XL | hecho | Sin esto el mundo económico es estático y las rutas no caducan |
-| 7 | [P3.1](#tabla-p3) `GenerateTowns` / `GenerateIndustries` | P3 | XL | | Un mapa nuevo nace vacío: bloquea comparar una partida completa |
+| 7 | [P3.1](#tabla-p3) `GenerateTowns` / `GenerateIndustries` | P3 | XL | hecho | Un mapa nuevo nace vacío: bloquea comparar una partida completa |
 | 8 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | hecho | Habilita los barridos escalonados de los que todo depende |
 | 9 | Bloque 6: [P2.17](#tabla-p2)–[P2.22](#tabla-p2) órdenes/carga/linkgraph | P2 | XL | hecho | Órdenes implícitas, staging de carga y planificador linkgraph |
 
-**P1 completo** (22/22). **Siguiente: [P3.1](#tabla-p3)** (`GenerateTowns` /
-`GenerateIndustries`). El Bloque 6 de órdenes/carga/linkgraph (P2.17–P2.22) está cerrado.
+**P1 completo** (22/22). **P3.1 hecho** (`GenerateTowns` / `GenerateIndustries` en
+`world_gen/population`). Siguiente foco P3: inundación ([P3.2](#tabla-p3)) u otras
+entradas de la tabla. El Bloque 6 de órdenes/carga/linkgraph (P2.17–P2.22) está cerrado.
 Los P0 puntuales también están cerrados (P0.7 reclasificado a P2).
 
 ---
@@ -624,6 +625,12 @@ por `next_hop`+`reserved`; `PrepareUnload`/`Stage`; `OnTick_LinkGraph` en `date_
 `tgen_smoothness`/`variety`, costas por `island`, y coberturas nieve/desierto vía
 `CalculateCoverageLine`; heightmap externo intacto.
 
+**P3.1 · hecho** — `world_gen/population`: tablas `{5,11,23,46}` / `{0,0,10,25,55,80}` +
+`ScaleBySize` (`CeilDiv`); `generate_towns` / `generate_industries` /
+`apply_population_gen` sobre `GameState`; cliente thin wrapper; enganche post-terreno y
+en `RegenerateLandscape`. MVP de colocación (calle+casas / specs por clima); falta
+paridad fina de layouts, land-proportion y probs land/water.
+
 ---
 
 ## 7. P3 — Mundo y contenido
@@ -632,7 +639,7 @@ por `next_hop`+`reserved`; `PrepareUnload`/`Stage`; `OnTick_LinkGraph` en `date_
 
 | ID | Tema | Problema (port) | Original | Solución | Coste |
 |----|------|-----------------|----------|----------|-------|
-| **P3.1** | Generación de pueblos e industrias | Ausente en la generación de mundo; solo fundación manual (`command/town.rs:49-121`) | `GenerateTowns` coloca `{5,11,23,46}` pueblos escalados por tamaño con layout y proporción de ciudades (`town_cmd.cpp:2432-2485`); `GenerateIndustries` reparte por probabilidad, clima y proporción tierra/agua (`industry_cmd.cpp:2488-2540`) | Portar ambas al `world_gen`; sin esto no hay escenario para comparar una partida completa | XL |
+| **P3.1** | Generación de pueblos e industrias · hecho | Ausente en la generación de mundo; solo fundación manual (`command/town.rs:49-121`) | `GenerateTowns` coloca `{5,11,23,46}` pueblos escalados por tamaño con layout y proporción de ciudades (`town_cmd.cpp:2432-2485`); `GenerateIndustries` reparte por probabilidad, clima y proporción tierra/agua (`industry_cmd.cpp:2488-2540`) | Portar ambas al `world_gen`; sin esto no hay escenario para comparar una partida completa | XL · **hecho** |
 | **P3.2** | Inundación | El agua nunca inunda | `TileLoop_Water` propaga en diagonal, arrasa la tesela y ahoga vehículos (`water_cmd.cpp:1074-1301`) | Portar `DoFloodTile` y `FloodVehicles` | XL |
 | **P3.3** | Generación de terreno · hecho | Ruido por capas propio (`world_gen/mod.rs`) | TGP con Perlin y ajustes por `terrain_type`, `quantity_sea_lakes` y coberturas de nieve y desierto (`tgp.cpp`, `landscape.cpp:1606-1706`) | Portar TGP con sus parámetros de configuración | XL · **hecho** |
 | **P3.4** | Expansión física del pueblo | Radio 12, tres intentos y solo hierba plana (`town_expand.rs:9-43`) | `GrowTownAtRoad` recorre el grafo de carreteras con iteraciones según `TownLayout` y respeta rejillas y puentes (`town_cmd.cpp:1793-1950`) | Portar el recorrido y los layouts | XL |

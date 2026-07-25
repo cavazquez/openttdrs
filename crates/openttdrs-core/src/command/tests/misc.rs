@@ -613,6 +613,7 @@ fn regenerate_landscape_clears_entities_via_command() {
     )
     .unwrap();
     assert_eq!(s.world_seed, 99);
-    assert!(s.towns.is_empty());
     assert!(s.vehicles.is_empty());
+    // Se limpian entidades previas; P3.1 puede volver a generar pueblos tras el terreno.
+    assert!(s.towns.iter().all(|t| t.name != "X"));
 }

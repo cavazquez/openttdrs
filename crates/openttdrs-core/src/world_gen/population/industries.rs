@@ -1,22 +1,30 @@
-use openttdrs_core::Command;
-use openttdrs_core::prelude::*;
-use openttdrs_core::{Climate, IndustrySpec, check_place_industry_spec};
+//! Colocación de industrias (MVP de `GenerateIndustries`).
+
+use crate::command::{Command, apply_command, check_place_industry_spec};
+use crate::industry::IndustrySpec;
+use crate::map::TileCoord;
 
 use super::{PopCtx, in_preserve, min_distance_sq};
 
+/// Intenta colocar hasta `target` industrias; devuelve cuántas se crearon.
 pub(super) fn place_industries(
     ctx: &mut PopCtx<'_>,
-    climate: Climate,
     target: usize,
     town_centers: &[TileCoord],
-) {
-    let specs = IndustrySpec::specs_for_climate(climate);
+) -> usize {
+    if target == 0 {
+        return 0;
+    }
+    let specs = IndustrySpec::specs_for_climate(ctx.state.climate);
+    if specs.is_empty() {
+        return 0;
+    }
     let margin = 3_u32;
     let span_w = ctx.mw.saturating_sub(margin * 2).max(1);
     let span_h = ctx.mh.saturating_sub(margin * 2).max(1);
     let min_town_dist_sq = 10_i32 * 10;
     let min_industry_dist_sq = 8_i32 * 8;
-    let max_attempts = target.saturating_mul(120);
+    let max_attempts = target.saturating_mul(200).max(4_000);
     let mut industry_origins: Vec<TileCoord> = Vec::with_capacity(target);
 
     for _ in 0..max_attempts {
@@ -53,4 +61,5 @@ pub(super) fn place_industries(
         }
         industry_origins.push(origin);
     }
+    industry_origins.len()
 }

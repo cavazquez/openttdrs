@@ -1,6 +1,10 @@
-use openttdrs_core::Command;
-use openttdrs_core::prelude::*;
-use openttdrs_core::{Town, generate_town_name, tile_slope_and_z};
+//! Colocación de pueblos con calle y casas 1×1 (MVP de `GenerateTowns`).
+
+use crate::command::{Command, apply_command, command_would_fail};
+use crate::map::{TileCoord, TileKind, tile_slope_and_z};
+use crate::sav::house_spec_population;
+use crate::town::Town;
+use crate::townname::generate_town_name;
 
 use super::{
     PROCEDURAL_HOUSE_STYLE_SPREAD, PopCtx, in_preserve, min_distance_sq, procedural_house_choices,
@@ -24,12 +28,19 @@ struct StreetTownPlan {
     town_pos: TileCoord,
 }
 
-pub(super) fn place_towns(ctx: &mut PopCtx<'_>, target: usize, town_centers: &mut Vec<TileCoord>) {
+/// Intenta colocar hasta `target` pueblos; devuelve cuántos se crearon.
+pub(super) fn place_towns(
+    ctx: &mut PopCtx<'_>,
+    target: usize,
+    town_centers: &mut Vec<TileCoord>,
+) -> usize {
+    let before = town_centers.len();
     let margin = 5_u32;
     let span_w = ctx.mw.saturating_sub(margin * 2).max(1);
     let span_h = ctx.mh.saturating_sub(margin * 2).max(1);
     let min_town_dist_sq = 14_i32 * 14;
-    let max_attempts = target.saturating_mul(80);
+    // OpenTTD reintenta con agresividad si el mapa no admite el total pedido.
+    let max_attempts = target.saturating_mul(200).max(4_000);
     let map_w = i32::try_from(ctx.mw).unwrap_or(i32::MAX);
     let map_h = i32::try_from(ctx.mh).unwrap_or(i32::MAX);
 
@@ -97,6 +108,7 @@ pub(super) fn place_towns(ctx: &mut PopCtx<'_>, target: usize, town_centers: &mu
         ctx.state.towns.push(town);
         town_centers.push(plan.town_pos);
     }
+    town_centers.len().saturating_sub(before)
 }
 
 fn plan_street_town(
@@ -159,7 +171,6 @@ fn plan_street_town(
     })
 }
 
-/// Filas de casas en la acera (±1 tesela respecto a la calle).
 fn house_rows_beside_road(second_side: bool) -> Vec<i32> {
     let mut rows = vec![-1];
     if second_side {
@@ -209,7 +220,10 @@ fn plan_fits_terrain(ctx: &PopCtx<'_>, plan: &StreetTownPlan) -> bool {
         >= 3
 }
 
-fn street_roads_are_flat_and_level(state: &GameState, roads: &[TileCoord]) -> bool {
+fn street_roads_are_flat_and_level(
+    state: &crate::game_state::GameState,
+    roads: &[TileCoord],
+) -> bool {
     let mut base_z = None;
     for &c in roads {
         if !tile_is_flat_grass(&state.map, c) {
@@ -230,7 +244,6 @@ fn street_roads_are_flat_and_level(state: &GameState, roads: &[TileCoord]) -> bo
     true
 }
 
-/// Coloca calles/casas; devuelve `(casas_colocadas, población HouseSpec)`.
 fn build_street_town(
     ctx: &mut PopCtx<'_>,
     plan: &StreetTownPlan,
@@ -269,36 +282,16 @@ fn build_street_town(
         let age = u8::try_from(ctx.rng.next_u32() % 200).unwrap_or(0);
         if ctx.state.map.set_completed_house(c, house_id, age).is_ok() {
             placed += 1;
-            population = population
-                .saturating_add(u32::from(openttdrs_core::house_spec_population(house_id)));
+            population = population.saturating_add(u32::from(house_spec_population(house_id)));
         }
     }
     (placed, population)
 }
 
-fn rollback_road_tiles(state: &mut GameState, roads: &[TileCoord]) {
+fn rollback_road_tiles(state: &mut crate::game_state::GameState, roads: &[TileCoord]) {
     for &c in roads {
         if state.map.get_kind(c) == Some(TileKind::Road) {
             let _ = state.map.set_kind(c, TileKind::Grass);
         }
     }
-}
-
-#[cfg(test)]
-pub(super) fn road_tiles_are_flat(map: &openttdrs_core::Map, roads: &[TileCoord]) -> bool {
-    roads.iter().all(|&c| {
-        map.get_kind(c) == Some(TileKind::Road)
-            && tile_slope_and_z(map, c).is_some_and(|(tileh, _)| tileh == 0)
-    })
-}
-
-#[cfg(test)]
-pub(super) fn house_beside_road(map: &openttdrs_core::Map, house: TileCoord) -> bool {
-    for (dx, dy) in [(0, 1), (0, -1), (1, 0), (-1, 0)] {
-        let n = TileCoord::new(house.x + dx, house.y + dy);
-        if map.get_kind(n) == Some(TileKind::Road) {
-            return true;
-        }
-    }
-    false
 }

@@ -14,6 +14,7 @@ mod height;
 mod heightmap;
 mod landcover;
 pub(crate) use landcover::desert_patch;
+mod population;
 mod rivers;
 mod tgp;
 
@@ -24,6 +25,11 @@ pub use config::{
     effective_clear_ground, initial_clear_ground, initial_clear_ground_with_lines,
 };
 pub use heightmap::{HeightmapData, apply_heightmap, parse_hmap};
+pub use population::{
+    IndustryDensity, NUM_INITIAL_INDUSTRIES, NUM_INITIAL_TOWNS, PopulationGenConfig, TownDensity,
+    apply_population_gen, ceil_div, generate_industries, generate_towns, house_beside_road,
+    industry_target_count, road_tiles_are_flat, scale_by_size, town_target_count,
+};
 
 use crate::map::{
     Map, MapError, TileCoord, TileKind, WaterClass, set_water_class_m1, tile_slope_and_z,

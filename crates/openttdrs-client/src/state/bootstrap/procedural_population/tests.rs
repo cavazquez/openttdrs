@@ -1,8 +1,8 @@
 use super::should_populate_procedurally;
-use super::towns::{house_beside_road, road_tiles_are_flat};
 use crate::state::bootstrap::{NewGameSettings, PopulationDensity, build_procedural_demo_world};
 use openttdrs_core::Climate;
 use openttdrs_core::prelude::*;
+use openttdrs_core::{house_beside_road, road_tiles_are_flat};
 
 #[test]
 fn skips_population_on_compact_demo() {

@@ -602,6 +602,16 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             state.stations.clear();
             state.vehicles.clear();
             state.signs.clear();
+            // Orden genworld: terreno → pueblos → industrias (P3.1).
+            crate::world_gen::apply_population_gen(
+                state,
+                &crate::world_gen::PopulationGenConfig {
+                    town_density: crate::world_gen::TownDensity::Normal,
+                    industry_density: crate::world_gen::IndustryDensity::Normal,
+                    seed,
+                },
+                &[],
+            );
             Ok(())
         }
     }

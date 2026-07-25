@@ -552,9 +552,9 @@ tick contra OpenTTD seguirá divergiendo aunque las fórmulas individuales sean 
 | ID | Tema | Problema (port) | Original | Solución | Coste |
 |----|------|-----------------|----------|----------|-------|
 | **P2.1** | Relojes separados | Un único `GameTick`; el calendario se deriva como `tick / 74` (`tick.rs:16-31`) | Tres relojes independientes —calendario, economía y tick— con `date_fract` 0..73 (`timer_game_economy.cpp:131`, `timer_game_calendar.cpp:117`) | Introducir los tres timers con su `date_fract`; es la base de todos los barridos escalonados | XL · **hecho** |
-| **P2.2** | Orden del tick | Routing y PBS completos antes de la carga (`sim_step/mod.rs:88-105`) | `AnimateAnimatedTiles` → timers → `RunTileLoop` → `CallVehicleTicks` (carga y luego movimiento en la misma pasada) → `CallLandscapeTick` (`openttd.cpp:1261-1276`, `vehicle.cpp:954-976`) | Reordenar `sim_step` a la secuencia original; el PBS debe resolverse dentro del movimiento, no antes | XL |
+| **P2.2** | Orden del tick | · hecho | `AnimateAnimatedTiles` → timers → `RunTileLoop` → `CallVehicleTicks` (carga y luego movimiento) → `CallLandscapeTick` (`openttd.cpp:1257-1265`) | Secuencia OpenTTD; PBS grueso post-move (elección atómica en B4) | XL · **hecho** |
 | **P2.3** | RNG global | · hecho | `_random` global consumido por toda la simulación y persistido en el save, con `_interactive_random` aparte (`random_func.cpp:36-48`, `misc_sl.cpp:96`) | `random` + `interactive_random` en `GameState`; alias serde `cargo_rng` → `random`; consumido en rating/subsidios/averías/desastres | XL |
-| **P2.4** | `CallLandscapeTick` | Subsistemas repartidos sin orden fijo, sin hook de compañías ni de linkgraph (`sim_step/mod.rs:157-175`) | Orden town → trees → station → industry → companies → linkgraph (`landscape.cpp:1717-1729`) | Agrupar los `OnTick_*` en una función con ese orden | L |
+| **P2.4** | `CallLandscapeTick` | · hecho | Orden town → trees → station → industry → companies → linkgraph (`landscape.cpp:1727-1740`) | `sim_step/landscape.rs::call_landscape_tick`; linkgraph stub hasta P2.21 | L · **hecho** |
 | **P2.5** | Barridos diarios de vehículos | · hecho | `RunVehicleCalendarDayProc` y `RunEconomyVehicleDayProc` recorren 1/74 de la flota por día, con costes y averías cada 8 días (`vehicle.cpp:907-951`) | Barrido escalonado por `date_fract`; calendar day envejece, economy day averías; cada tick en `sim_step` | M · **hecho** |
 | **P2.6** | `RunTileLoop` | · hecho | LFSR de Galois con feedback según tamaño de mapa y estado en `_cur_tileloop_tile` (`landscape.cpp:798-835`) | LFSR portado; una pasada por tick; tesela 0 especial cada 256 ticks; estado persistido | M |
 | **P2.7** | `TrainController` | El tren consume un `path` precalculado; no se elige vía en el cruce (`vehicle/movement.rs:537-545`) | `ChooseTrainTrack` decide el ramal con YAPF y reserva de forma atómica al entrar en la tesela; los vagones siguen `_connecting_track` (`train_cmd.cpp:3289-3487`, `2727-2888`) | Portar el controlador con la elección de vía integrada en el movimiento | XL |
@@ -582,6 +582,12 @@ wallclock).
 
 **P2.5 · hecho** — `process_vehicle_calendar_day` / `process_vehicle_economy_day` recorren
 `index % DAY_TICKS == date_fract` cada tick (`vehicle/reliability.rs`); cadencia OpenTTD 1/74.
+
+**P2.2 · hecho** — `sim_step`: animación → tile loop → paths (sin PBS) → load/unload → move →
+PBS post-move → landscape. El routing PBS completo ya no precede a la carga.
+
+**P2.4 · hecho** — `call_landscape_tick`: town → trees → station → industry → companies →
+linkgraph (stub).
 
 ---
 

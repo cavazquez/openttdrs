@@ -90,12 +90,14 @@ fn main() {
 
 fn print_timings(t: &TickPhaseTimings) {
     let rows = [
-        ("economy_and_world", t.economy_and_world_ns),
-        ("routing_and_signals", t.routing_and_signals_ns),
+        ("timer_economy", t.timer_economy_ns),
         ("tile_animation", t.tile_animation_ns),
-        ("cargo_transfer", t.cargo_transfer_ns),
+        ("tile_loop", t.tile_loop_ns),
+        ("path_recompute", t.path_recompute_ns),
         ("vehicle_ops_pre_move", t.vehicle_ops_pre_move_ns),
+        ("cargo_transfer", t.cargo_transfer_ns),
         ("movement", t.movement_ns),
+        ("landscape", t.landscape_ns),
         ("post_tick", t.post_tick_ns),
         ("TOTAL", t.total_ns),
     ];

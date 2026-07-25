@@ -485,6 +485,8 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
             let mut next = *settings;
             next.wait_for_pbs_path = next.wait_for_pbs_path.max(2);
             next.path_backoff_interval = next.path_backoff_interval.max(1);
+            next.wait_oneway_signal = next.wait_oneway_signal.max(2);
+            next.wait_twoway_signal = next.wait_twoway_signal.max(2);
             if state.pathfinding == next {
                 return Ok(());
             }

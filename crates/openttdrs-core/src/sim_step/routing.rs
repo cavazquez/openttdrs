@@ -17,6 +17,14 @@ pub(super) fn drain_signal_globset_now(state: &mut GameState) {
     );
 }
 
+/// Encola y, si `_globset` llega a 64 entradas, drena de inmediato (`SIG_GLOB_UPDATE`).
+pub(super) fn enqueue_signal_glob_flush(state: &mut GameState, tile: TileCoord) {
+    crate::rail_signals::enqueue_signal_glob(&mut state.runtime.signal_globset, tile);
+    if crate::rail_signals::signal_globset_needs_flush(&state.runtime.signal_globset) {
+        drain_signal_globset_now(state);
+    }
+}
+
 pub(super) fn recompute_vehicle_paths(state: &mut GameState) {
     state.runtime.path_cache.begin_tick(state.tick.get());
     let wormholes =

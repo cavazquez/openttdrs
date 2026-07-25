@@ -446,6 +446,7 @@ fn set_pathfinding_settings_clamps_and_is_idempotent() {
         wait_for_pbs_path: 10,
         path_backoff_interval: 60,
         reverse_at_signals: false,
+        ..crate::PathfindingSettings::default()
     };
     apply_command(&mut s, &Command::SetPathfindingSettings(custom)).unwrap();
     assert_eq!(s.pathfinding, custom);
@@ -457,6 +458,7 @@ fn set_pathfinding_settings_clamps_and_is_idempotent() {
         wait_for_pbs_path: 1,
         path_backoff_interval: 0,
         reverse_at_signals: true,
+        ..crate::PathfindingSettings::default()
     };
     apply_command(&mut s, &Command::SetPathfindingSettings(too_low)).unwrap();
     assert_eq!(s.pathfinding.wait_for_pbs_path, 2);

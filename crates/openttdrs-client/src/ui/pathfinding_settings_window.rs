@@ -2,10 +2,7 @@
 
 use bevy::prelude::*;
 use openttdrs_core::Command;
-use openttdrs_core::{
-    DEFAULT_PATH_BACKOFF_INTERVAL, DEFAULT_WAIT_FOR_PBS_PATH_DAYS, PBS_WAIT_FOREVER,
-    PathfindingSettings,
-};
+use openttdrs_core::{PBS_WAIT_FOREVER, PathfindingSettings};
 
 use crate::state::SimWorld;
 use crate::ui::floating_window::{
@@ -267,11 +264,7 @@ pub(crate) fn handle_pathfinding_settings_buttons(
                 next.reverse_at_signals = !next.reverse_at_signals;
             }
             PathfindingSettingsAction::ResetDefaults => {
-                next = PathfindingSettings {
-                    wait_for_pbs_path: DEFAULT_WAIT_FOR_PBS_PATH_DAYS,
-                    path_backoff_interval: DEFAULT_PATH_BACKOFF_INTERVAL,
-                    reverse_at_signals: true,
-                };
+                next = PathfindingSettings::default();
             }
         }
         let _ = crate::network::apply_player_command(

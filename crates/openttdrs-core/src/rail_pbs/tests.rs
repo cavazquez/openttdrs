@@ -900,3 +900,85 @@ fn follow_train_reservation_keeps_previous_when_try_reserve_empty() {
     assert!(!kept_stale.iter().any(|s| s.tile == TileCoord::new(1, 0)));
     assert!(kept_stale.iter().any(|s| s.tile == pos));
 }
+
+#[test]
+fn free_train_track_reservation_clears_steps_and_m2() {
+    let mut state = GameState::new(10, 4);
+    let y = 1;
+    for x in 0..=6 {
+        apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, y))).expect("vía");
+    }
+    apply_command(
+        &mut state,
+        &Command::PlaceRailSignal(TileCoord::new(2, y), 0, 128, 128, SIGTYPE_PATH),
+    )
+    .expect("path");
+    let mut train = Vehicle::new(
+        1,
+        VehicleKind::Train,
+        TileCoord::new(1, y),
+        TileCoord::new(6, y),
+    );
+    train.running = true;
+    train.path = VecDeque::from([
+        TileCoord::new(2, y),
+        TileCoord::new(3, y),
+        TileCoord::new(4, y),
+    ]);
+    train.reserved_steps = vec![
+        ReservedRailStep::new(TileCoord::new(1, y), 0x01),
+        ReservedRailStep::new(TileCoord::new(2, y), 0x01),
+        ReservedRailStep::new(TileCoord::new(3, y), 0x01),
+    ];
+    state.vehicles = vec![train];
+    sync_reservations_to_map(
+        &mut state.map,
+        &state.vehicles,
+        &mut state.runtime.reservation_tiles_active,
+        &mut Vec::new(),
+    );
+    assert_ne!(
+        decode_rail_reservation_m2_hi(state.map.get(TileCoord::new(2, y)).unwrap().m2_hi),
+        0
+    );
+    let mut dirty = Vec::new();
+    free_train_track_reservation(&mut state.map, &mut state.vehicles[0], &mut dirty);
+    assert!(state.vehicles[0].reserved_steps.is_empty());
+    assert_eq!(
+        decode_rail_reservation_m2_hi(state.map.get(TileCoord::new(2, y)).unwrap().m2_hi),
+        0
+    );
+    assert!(!dirty.is_empty());
+}
+
+#[test]
+fn choose_train_track_reserves_on_enter() {
+    let mut state = GameState::new(10, 4);
+    let y = 1;
+    for x in 0..=6 {
+        apply_command(&mut state, &Command::PlaceRail(TileCoord::new(x, y))).expect("vía");
+    }
+    let mut train = Vehicle::new(
+        1,
+        VehicleKind::Train,
+        TileCoord::new(1, y),
+        TileCoord::new(6, y),
+    );
+    train.running = true;
+    train.path = VecDeque::from([
+        TileCoord::new(2, y),
+        TileCoord::new(3, y),
+        TileCoord::new(4, y),
+        TileCoord::new(5, y),
+        TileCoord::new(6, y),
+    ]);
+    let chosen = choose_train_track_on_enter(&state.map, &mut train, None);
+    assert!(chosen.is_some());
+    assert!(
+        train
+            .reserved_steps
+            .iter()
+            .any(|s| s.tile == TileCoord::new(2, y)),
+        "debe reservar la tesela de entrada"
+    );
+}

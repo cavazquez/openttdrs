@@ -13,13 +13,13 @@ use super::encoding::{signal_exit_dir, signal_track_for_bit};
 use super::rail_tile_is_signals;
 use super::rail_traversal_bits;
 use super::topology::{
-    block_is_occupied_by_trains, rail_block_ahead_with_wormholes, rail_neighbors,
+    block_is_occupied_by_trains, dir_from_to, rail_block_ahead_with_wormholes, rail_neighbors,
 };
 
 /// Resultado simplificado de `ProbeSigSeg` / `ExploreSegment` (`signal.cpp`).
 ///
-/// Flags `Exit` / `MultiExit` / `Green` / `MultiGreen`. Ocupación (`Train`) sigue
-/// vía [`rail_block_ahead`] + [`block_is_occupied_by_trains`].
+/// Flags `Exit` / `MultiExit` / `Green` / `MultiGreen` / `Split` / `MultiEnter`.
+/// Ocupación (`Train`) sigue vía [`rail_block_ahead`] + [`block_is_occupied_by_trains`].
 #[derive(Debug, Clone, Default)]
 #[allow(clippy::struct_excessive_bools)] // espejo de `SigFlag` upstream
 pub(super) struct SigSegmentProbe {
@@ -29,6 +29,10 @@ pub(super) struct SigSegmentProbe {
     pub(super) multi_exit: bool,
     pub(super) has_green: bool,
     pub(super) multi_green: bool,
+    /// Bifurcación / empalme en el segmento (`SigFlag::Split`).
+    pub(super) split: bool,
+    /// Dos o más señales entrando al bloque (`SigFlag::MultiEnter`).
+    pub(super) multi_enter: bool,
 }
 
 impl SigSegmentProbe {
@@ -55,8 +59,10 @@ pub(super) fn is_sig_segment_traversable(map: &Map, c: TileCoord) -> bool {
 
 /// Explora el segmento PBS/presignal desde `signal_tile` hacia `exit_dir`.
 ///
-/// Paridad v0 de `ProbeSigSeg`: atraviesa estación/túnel/puente y wormholes JGR;
-/// no atraviesa señales block/path/entry; al hallar exit/combo registra y corta esa rama.
+/// Paridad v0 de `ProbeSigSeg` / `ExploreSegment`: atraviesa estación/túnel/puente
+/// y wormholes JGR; registra `Split` (vía con >1 track) y `MultiEnter` (varias
+/// señales entrando); no atraviesa señales block/path/entry; al hallar exit/combo
+/// registra y corta esa rama.
 pub(super) fn explore_sig_segment(
     map: &Map,
     signal_tile: TileCoord,
@@ -66,10 +72,12 @@ pub(super) fn explore_sig_segment(
     let (dx, dy) = diag_dir_offset(exit_dir);
     let start = TileCoord::new(signal_tile.x + dx, signal_tile.y + dy);
     let mut probe = SigSegmentProbe::default();
-    let mut queue = vec![start];
+    // BFS con dirección de entrada a cada tesela (para detectar Enter).
+    let mut queue = vec![(start, crate::map::opposite_diag_dir(exit_dir))];
     let mut visited = HashSet::from([signal_tile]);
+    let mut enter_count = 0u8;
 
-    while let Some(cur) = queue.pop() {
+    while let Some((cur, enterdir)) = queue.pop() {
         if !visited.insert(cur) {
             continue;
         }
@@ -78,6 +86,13 @@ pub(super) fn explore_sig_segment(
         };
         if !is_sig_segment_traversable(map, cur) {
             continue;
+        }
+        // Split: más de una pieza de vía (`tracks.Count() > 1` en `ExploreSegment`).
+        if tile.kind == TileKind::Rail {
+            let rails = rail_traversal_bits(map, cur);
+            if rails.count_ones() > 1 {
+                probe.split = true;
+            }
         }
         // Señales solo en `TileKind::Rail` (no sobre estación/túnel/puente).
         if tile.kind == TileKind::Rail && rail_tile_is_signals(tile.m5) {
@@ -90,6 +105,11 @@ pub(super) fn explore_sig_segment(
                 }
                 let sig_type = signal_track_for_bit(rails, bit)
                     .map_or(SIGTYPE_BLOCK, |track| signal_type_for_track(tile.m2, track));
+                let sig_exit = signal_exit_dir(rails, bit);
+                // Enter: señal en sentido contrario al de entrada (`reversedir`).
+                if sig_exit == enterdir {
+                    enter_count = enter_count.saturating_add(1);
+                }
                 if sig_type == SIGTYPE_EXIT || sig_type == SIGTYPE_COMBO {
                     probe.exits.push((cur, bit));
                     closes_segment = true;
@@ -103,9 +123,13 @@ pub(super) fn explore_sig_segment(
             }
         }
         for n in rail_neighbors(map, cur, None) {
-            if !visited.contains(&n) {
-                queue.push(n);
+            if visited.contains(&n) {
+                continue;
             }
+            let Some(dir) = dir_from_to(cur, n) else {
+                continue;
+            };
+            queue.push((n, crate::map::opposite_diag_dir(dir)));
         }
         // Wormhole JGR: salto al otro extremo del túnel (desconectado en el mapa).
         if let Some(wh) = wormholes
@@ -113,11 +137,12 @@ pub(super) fn explore_sig_segment(
             && is_sig_segment_traversable(map, other)
             && !visited.contains(&other)
         {
-            queue.push(other);
+            queue.push((other, enterdir));
         }
     }
     probe.has_exit = !probe.exits.is_empty();
     probe.multi_exit = probe.exits.len() >= 2;
+    probe.multi_enter = enter_count >= 2;
     probe
 }
 
@@ -231,8 +256,18 @@ fn signal_bit_block_green(
     let exit_dir = signal_exit_dir(tile.m5 & 0x3F, bit);
     let block = rail_block_ahead_with_wormholes(map, c, exit_dir, wormholes);
     if is_pbs_signal_type(sig_type) {
-        // Path verde solo con reserva válida hasta posición segura (TryReservePath OK).
-        crate::rail_pbs::pbs_exit_has_complete_reservation(map, vehicles, c, exit_dir, &block)
+        let reserved =
+            crate::rail_pbs::pbs_exit_has_complete_reservation(map, vehicles, c, exit_dir, &block);
+        if reserved {
+            return true;
+        }
+        // OpenTTD: PBS sin reserva -> rojo con Split/MultiEnter (sin tren).
+        let probe = explore_sig_segment(map, c, exit_dir, wormholes);
+        if probe.split || probe.multi_enter {
+            return false;
+        }
+        // Path semantics del port: sin reserva completa permanece roja.
+        false
     } else {
         !block_is_occupied_by_trains(vehicles, c, &block)
     }

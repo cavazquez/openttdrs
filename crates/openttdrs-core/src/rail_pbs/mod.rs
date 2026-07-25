@@ -7,6 +7,7 @@
 
 #![allow(clippy::implicit_hasher)]
 
+mod choose_track;
 mod conflicts;
 mod map_sync;
 mod model;
@@ -49,7 +50,14 @@ pub use train_reservation::{
 pub use try_reserve::try_path_reserve;
 
 // Reexports públicos desde wait_policy
-pub use wait_policy::{tick_pbs_wait_and_maybe_reverse, train_waiting_for_pbs_path};
+pub use wait_policy::{
+    tick_pbs_wait_and_maybe_reverse, tick_signal_wait_and_maybe_reverse, train_waiting_for_pbs_path,
+};
 
 // Reexports públicos desde map_sync
-pub use map_sync::{CROSSING_RESERVATION_M5_BIT, sync_reservations_to_map};
+pub use map_sync::{
+    CROSSING_RESERVATION_M5_BIT, free_train_track_reservation, sync_reservations_to_map,
+};
+
+// Reexports públicos desde choose_track
+pub use choose_track::{ChosenTrainTrack, choose_train_track_on_enter, tile_is_track_choice};

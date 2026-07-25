@@ -557,13 +557,13 @@ tick contra OpenTTD seguirá divergiendo aunque las fórmulas individuales sean 
 | **P2.4** | `CallLandscapeTick` | · hecho | Orden town → trees → station → industry → companies → linkgraph (`landscape.cpp:1727-1740`) | `sim_step/landscape.rs::call_landscape_tick`; linkgraph stub hasta P2.21 | L · **hecho** |
 | **P2.5** | Barridos diarios de vehículos | · hecho | `RunVehicleCalendarDayProc` y `RunEconomyVehicleDayProc` recorren 1/74 de la flota por día, con costes y averías cada 8 días (`vehicle.cpp:907-951`) | Barrido escalonado por `date_fract`; calendar day envejece, economy day averías; cada tick en `sim_step` | M · **hecho** |
 | **P2.6** | `RunTileLoop` | · hecho | LFSR de Galois con feedback según tamaño de mapa y estado en `_cur_tileloop_tile` (`landscape.cpp:798-835`) | LFSR portado; una pasada por tick; tesela 0 especial cada 256 ticks; estado persistido | M |
-| **P2.7** | `TrainController` | El tren consume un `path` precalculado; no se elige vía en el cruce (`vehicle/movement.rs:537-545`) | `ChooseTrainTrack` decide el ramal con YAPF y reserva de forma atómica al entrar en la tesela; los vagones siguen `_connecting_track` (`train_cmd.cpp:3289-3487`, `2727-2888`) | Portar el controlador con la elección de vía integrada en el movimiento | XL |
-| **P2.8** | Liberación de reservas | El mapa se reescribe desde `reserved_steps` (`rail_pbs/map_sync.rs:16-99`) | `FreeTrainTrackReservation` recorre la reserva tesela a tesela y pone en rojo las señales PBS al liberarlas (`train_cmd.cpp:2419-2477`) | Portar el walk de liberación y el flip de señal | L |
+| **P2.7** | `TrainController` | · hecho | `ChooseTrainTrack` decide el ramal con YAPF y reserva de forma atómica al entrar en la tesela; los vagones siguen `_connecting_track` (`train_cmd.cpp:3289-3487`, `2727-2888`) | `choose_train_track_on_enter` + YAPF en `advance_one_tile` | XL · **hecho** |
+| **P2.8** | Liberación de reservas | · hecho | `FreeTrainTrackReservation` recorre la reserva tesela a tesela y pone en rojo las señales PBS al liberarlas (`train_cmd.cpp:2419-2477`) | `free_train_track_reservation` walk + PBS rojo en sync | L · **hecho** |
 | **P2.9** | Costes de YAPF | A* con tesela 1, señal roja 100, cruce de reserva 80; sin caché ni look-ahead (`pathfinder/yapf.rs:24-194`) | Segmentos con caché y penalizaciones calibradas: tesela 100, esquina 71, primera roja 1000, cruce de reserva 300, coste de estación y plataforma (`yapf_costrail.hpp:59-615`) | Portar la escala de costes y la segmentación; hoy las elecciones de ramal divergen en redes densas | XL |
-| **P2.10** | Reversa en señal | El ajuste solo afecta al timeout PBS (`rail_pbs/wait_policy.rs:26-74`) | `wait_oneway_signal`, `wait_twoway_signal` y `reverse_at_signals` actúan durante el movimiento (`train_cmd.cpp:3375-3422`) | Portar la decisión de reversa al bucle de movimiento | L |
+| **P2.10** | Reversa en señal | · hecho | `wait_oneway_signal`, `wait_twoway_signal` y `reverse_at_signals` actúan durante el movimiento (`train_cmd.cpp:3375-3422`) | `tick_signal_wait_and_maybe_reverse` en el bucle de movimiento | L · **hecho** |
 | **P2.11** | Geometría del consist | Las poses de los vagones se proyectan desde el historial de la cabeza (`train_consist/pose.rs:25-78`) | Cada unidad avanza en su propio paso con `CalcNextVehicleOffset` dentro de `TrainController` (`train_cmd.cpp:1903-1966`) | Simular unidad a unidad; afecta a trenes largos en curvas y túneles | XL |
-| **P2.12** | PBS en cruces | Una señal PBS puede quedarse verde sin reserva si el bloque está vacío (`rail_signals/presignal.rs:147-220`) | Con `Split` o `MultiEnter` la señal va a rojo aunque no haya tren (`signal.cpp:410-458`) | Añadir los flags de segmento al explorador | M |
-| **P2.13** | Buffer de señales | Conjunto de teselas sin dirección y sin umbral (`rail_signals/update.rs:20-50`) | `_globset` guarda pares (tesela, `DiagDirection`) y fuerza actualización a las 64 entradas (`signal.cpp:589-610`) | Guardar la dirección de entrada para acotar el recálculo | M |
+| **P2.12** | PBS en cruces | · hecho | Con `Split` o `MultiEnter` la señal va a rojo aunque no haya tren (`signal.cpp:410-458`) | Flags en `explore_sig_segment` → PBS rojo sin reserva | M · **hecho** |
+| **P2.13** | Buffer de señales | · hecho | `_globset` guarda pares (tesela, `DiagDirection`) y fuerza actualización a las 64 entradas (`signal.cpp:589-610`) | `SignalGlobEntry` + flush a 64 | M · **hecho** |
 | **P2.14** | Controlador de carretera | · hecho | `IndividualRoadVehicleController` avanza frame a frame con `_road_drive_data` y los estados `RVSB_*` (`roadveh_cmd.cpp:1201-1576`, `roadveh.h:38-57`) | FSM en `road_movement/controller.rs` + tablas `drive_data` | XL · **hecho** |
 | **P2.15** | Tráfico en carretera | · hecho | `RoadVehFindCloseTo` sincroniza velocidad con el de delante y `blocked_ctr > 1480` permite atravesarlo (`roadveh_cmd.cpp:627-694`) | `road_movement/traffic.rs` | XL · **hecho** |
 | **P2.16** | Pasos por tick | · hecho | Bucle `while (j >= adv_spd)` que consume varios sub-pasos en el mismo tick (`roadveh_cmd.cpp:1610-1645`) | `road_vehicle_tick` con remanente en `progress` | L · **hecho** |
@@ -588,6 +588,22 @@ PBS post-move → landscape. El routing PBS completo ya no precede a la carga.
 
 **P2.4 · hecho** — `call_landscape_tick`: town → trees → station → industry → companies →
 linkgraph (stub).
+
+**P2.7 · hecho** — `choose_train_track_on_enter` elige ramal con `next_rail_trackdir_yapf`
+en cruces y anota reserva atómica al entrar; `advance_one_tile` lo invoca antes de consumir
+el `path`.
+
+**P2.8 · hecho** — `free_train_track_reservation` recorre `reserved_steps`, pone PBS a rojo y
+limpia `m2_hi`; `sync_reservations_to_map` también enrojece PBS al liberar teselas.
+
+**P2.10 · hecho** — `wait_oneway_signal` / `wait_twoway_signal` (defaults 15/41 días ×2) y
+`reverse_at_signals` en el bucle de movimiento vía `tick_signal_wait_and_maybe_reverse`.
+
+**P2.12 · hecho** — `SigSegmentProbe::{split,multi_enter}` en `explore_sig_segment`; PBS sin
+reserva permanece roja con Split/MultiEnter.
+
+**P2.13 · hecho** — `_globset` como `SignalGlobEntry { tile, enter_dir }` con
+`SIG_GLOB_UPDATE = 64` y flush inmediato al encolar en movimiento.
 
 **P2.14–P2.16 · hecho** — controlador road con `road_state`/`frame`, tablas drive, bucle
 `while j >= adv_spd` y `RoadVehFindCloseTo` (`blocked_ctr`).

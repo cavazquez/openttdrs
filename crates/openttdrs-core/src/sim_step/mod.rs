@@ -113,7 +113,7 @@ pub(crate) fn step(state: &mut GameState) {
     // Ops que pueden cambiar destino van tras la carga (p. ej. wander orderless).
     phase_vehicle_ops_pre_move(state);
     // PBS grueso tras la carga y antes del move (P2.2: ya no precede a LoadUnload).
-    // La elección atómica en cruce llega en B4 (`ChooseTrainTrack`).
+    // ChooseTrainTrack (P2.7) elige vía + reserva atómica al entrar en tesela.
     phase_pbs_reservations(state);
 
     phase_movement(state);

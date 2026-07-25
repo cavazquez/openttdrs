@@ -311,18 +311,19 @@ pub use pathfinder::{
     tile_is_path_traversable,
 };
 pub use pathfinding_settings::{
-    DEFAULT_PATH_BACKOFF_INTERVAL, DEFAULT_WAIT_FOR_PBS_PATH_DAYS, PBS_WAIT_FOREVER,
-    PathfindingSettings,
+    DEFAULT_PATH_BACKOFF_INTERVAL, DEFAULT_WAIT_FOR_PBS_PATH_DAYS, DEFAULT_WAIT_ONEWAY_SIGNAL_DAYS,
+    DEFAULT_WAIT_TWOWAY_SIGNAL_DAYS, PBS_WAIT_FOREVER, PathfindingSettings,
 };
 pub use rail_lane::{
     autorail_drag_uses_x_axis, autorail_trackbit_from_fract, rail_horz_lane_bit, rail_vert_lane_bit,
 };
 pub use rail_pbs::{
-    ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY, decode_rail_reservation_m2_hi,
-    encode_rail_reservation_to_m2_hi, find_path_to_safe_wait,
-    find_path_to_safe_wait_with_wormholes, follow_train_reservation, is_safe_waiting_position,
-    rail_tile_has_pbs_reservation, reservation_ends_at_safe_wait, sync_reservations_to_map,
-    tick_pbs_wait_and_maybe_reverse, train_blocked_by_reservation, train_waiting_for_pbs_path,
+    ChosenTrainTrack, ReservedRailStep, YAPF_RESERVATION_CROSS_PENALTY,
+    choose_train_track_on_enter, decode_rail_reservation_m2_hi, encode_rail_reservation_to_m2_hi,
+    find_path_to_safe_wait, find_path_to_safe_wait_with_wormholes, follow_train_reservation,
+    free_train_track_reservation, is_safe_waiting_position, rail_tile_has_pbs_reservation,
+    reservation_ends_at_safe_wait, sync_reservations_to_map, tick_pbs_wait_and_maybe_reverse,
+    tick_signal_wait_and_maybe_reverse, train_blocked_by_reservation, train_waiting_for_pbs_path,
     try_path_reserve, update_train_reservations, update_train_reservations_with_settings,
     update_train_reservations_with_wormholes,
 };

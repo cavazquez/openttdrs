@@ -104,7 +104,7 @@ pub fn yapf_routing_signal(map: &Map, tile: TileCoord, exit_dir: u8) -> YapfSign
 
 /// Bits de señal presentes que controlan la salida `from` → `to`.
 #[must_use]
-pub(super) fn signal_bits_for_exit(map: &Map, from: TileCoord, to: TileCoord) -> Vec<u8> {
+pub(crate) fn signal_bits_for_exit(map: &Map, from: TileCoord, to: TileCoord) -> Vec<u8> {
     let Some(tile) = map.get(from) else {
         return Vec::new();
     };

@@ -1,18 +1,26 @@
-//! Sincronización de reservas PBS al mapa (`m2_hi`, `m5`).
+//! Sincronización de reservas PBS al mapa (`m2_hi`, `m5`) y liberación walk.
 
 use std::collections::{HashMap, HashSet};
 
 use crate::map::{Map, TileCoord, TileKind};
+use crate::rail_signals::{
+    is_pbs_signal_type, rail_signal_present_mask, rail_signal_state_mask, rail_tile_is_signals,
+    signal_exit_dir, signal_track_for_bit, signal_type_for_track,
+};
 use crate::vehicle::{Vehicle, VehicleKind};
 
 use super::model::{
-    RAIL_RESERVATION_M2_HI_MASK, decode_rail_reservation_m2_hi, encode_rail_reservation_to_m2_hi,
+    RAIL_RESERVATION_M2_HI_MASK, ReservedRailStep, decode_rail_reservation_m2_hi,
+    encode_rail_reservation_to_m2_hi,
 };
 
 /// Bit de reserva PBS en cruces a nivel (`HasCrossingReservation` / `m5` bit 4).
 pub const CROSSING_RESERVATION_M5_BIT: u8 = 1 << 4;
 
 /// Escribe reservas PBS en `m2_hi` (vía plana) y `m5` bit 4 (cruces); marca `dirty`.
+///
+/// Al liberar teselas que dejan de estar reservadas, pone en rojo las señales PBS
+/// de esa tesela (paridad de `FreeTrainTrackReservation` / `ClearPathReservation`).
 pub fn sync_reservations_to_map(
     map: &mut Map,
     vehicles: &[Vehicle],
@@ -74,9 +82,13 @@ pub fn sync_reservations_to_map(
         let want = next_tracks.get(&c).copied().unwrap_or(0);
         let changed = if tile.kind == TileKind::Rail {
             let had = decode_rail_reservation_m2_hi(tile.m2_hi);
+            // Liberación: PBS a rojo al quitar reserva (FreeTrainTrackReservation).
+            if had != 0 && want == 0 {
+                set_pbs_signals_red_on_tile(&mut tile);
+            }
             tile.m2_hi = (tile.m2_hi & !RAIL_RESERVATION_M2_HI_MASK)
                 | encode_rail_reservation_to_m2_hi(want);
-            had != want
+            had != want || (had != 0 && want == 0)
         } else if crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind) {
             let had = tile.m5 & CROSSING_RESERVATION_M5_BIT != 0;
             let want_flag = want != 0;
@@ -96,4 +108,95 @@ pub fn sync_reservations_to_map(
     }
 
     *prev_active = next_tracks.keys().copied().collect();
+}
+
+/// `FreeTrainTrackReservation`: recorre la reserva tesela a tesela, pone PBS a rojo
+/// y limpia `reserved_steps` del tren (`train_cmd.cpp:2476-2536`).
+pub fn free_train_track_reservation(
+    map: &mut Map,
+    vehicle: &mut Vehicle,
+    dirty: &mut Vec<TileCoord>,
+) {
+    if vehicle.kind != VehicleKind::Train || !vehicle.is_consist_head() {
+        return;
+    }
+    let steps: Vec<ReservedRailStep> = std::mem::take(&mut vehicle.reserved_steps);
+    let mut prev: Option<TileCoord> = Some(vehicle.pos);
+    for step in steps {
+        let Some(mut tile) = map.get(step.tile) else {
+            prev = Some(step.tile);
+            continue;
+        };
+        let mut changed = false;
+        if tile.kind == TileKind::Rail {
+            let before_m3hi = tile.m3hi;
+            if rail_tile_is_signals(tile.m5) {
+                let exit_dir = prev.and_then(|p| crate::rail_signals::dir_from_to(p, step.tile));
+                set_pbs_signals_red_along(&mut tile, exit_dir);
+            }
+            changed |= tile.m3hi != before_m3hi;
+            let had = decode_rail_reservation_m2_hi(tile.m2_hi);
+            let next_bits = if had & step.track != 0 {
+                had & !step.track
+            } else {
+                had
+            };
+            if next_bits != had {
+                tile.m2_hi = (tile.m2_hi & !RAIL_RESERVATION_M2_HI_MASK)
+                    | encode_rail_reservation_to_m2_hi(next_bits);
+                changed = true;
+            }
+        } else if crate::map::is_road_level_crossing(tile.mapt, tile.m5, tile.kind)
+            && tile.m5 & CROSSING_RESERVATION_M5_BIT != 0
+        {
+            tile.m5 &= !CROSSING_RESERVATION_M5_BIT;
+            changed = true;
+        }
+        if changed {
+            let _ = map.set_tile(step.tile, tile);
+            dirty.push(step.tile);
+        }
+        prev = Some(step.tile);
+    }
+}
+
+fn set_pbs_signals_red_on_tile(tile: &mut crate::map::Tile) {
+    set_pbs_signals_red_along(tile, None);
+}
+
+fn set_pbs_signals_red_along(tile: &mut crate::map::Tile, along_exit: Option<u8>) {
+    if tile.kind != TileKind::Rail || !rail_tile_is_signals(tile.m5) {
+        return;
+    }
+    let present = rail_signal_present_mask(tile.m3);
+    if present == 0 {
+        return;
+    }
+    let rails = tile.m5 & 0x3F;
+    let mut states = rail_signal_state_mask(tile.m3hi);
+    let mut changed = false;
+    for bit in 0..4u8 {
+        if present & (1 << bit) == 0 {
+            continue;
+        }
+        let sig_type = signal_track_for_bit(rails, bit)
+            .map_or(0, |track| signal_type_for_track(tile.m2, track));
+        if !is_pbs_signal_type(sig_type) {
+            continue;
+        }
+        if let Some(dir) = along_exit {
+            let exit = signal_exit_dir(rails, bit);
+            // PBS a favor o en contra (OpenTTD también marca la opuesta para update).
+            if exit != dir && exit != crate::map::opposite_diag_dir(dir) {
+                continue;
+            }
+        }
+        if states & (1 << bit) != 0 {
+            states &= !(1 << bit);
+            changed = true;
+        }
+    }
+    if changed {
+        tile.m3hi = (tile.m3hi & 0x0F) | (states << 4);
+    }
 }

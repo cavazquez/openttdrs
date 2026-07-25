@@ -114,36 +114,57 @@ pub(super) fn move_vehicles(state: &mut GameState) {
             );
             let waiting_pbs =
                 crate::rail_pbs::train_waiting_for_pbs_path(&state.map, &state.vehicles[i]);
+            let waiting_signal = !waiting_pbs
+                && crate::rail_signals::train_blocked_by_signal(
+                    &state.map,
+                    &state.vehicles,
+                    &state.vehicles[i],
+                );
             state.vehicles[i].cur_speed = 0;
-            // Solo acumular/girar en PBS o head-on. Si llamamos al tick con
-            // tráfico genérico, se resetea `wait_counter` al perder head-on un instante.
-            if waiting_pbs || head_on {
-                let reversed = crate::rail_pbs::tick_pbs_wait_and_maybe_reverse(
+            // PBS / head-on: timeout `wait_for_pbs_path`. Señal de bloque: oneway/twoway.
+            let steps_before = state.vehicles[i].reserved_steps.clone();
+            let reversed = if waiting_pbs || head_on {
+                crate::rail_pbs::tick_pbs_wait_and_maybe_reverse(
                     &state.map,
                     &mut state.vehicles[i],
                     pf,
                     head_on,
+                )
+            } else if waiting_signal {
+                crate::rail_pbs::tick_signal_wait_and_maybe_reverse(
+                    &state.map,
+                    &mut state.vehicles[i],
+                    pf,
+                )
+            } else {
+                false
+            };
+            if reversed {
+                let vehicle_id = state.vehicles[i].id;
+                let order = state.vehicles[i].current_order;
+                let pos = state.vehicles[i].pos;
+                // Liberar reserva al girar (FreeTrainTrackReservation walk + PBS rojo).
+                state.vehicles[i].reserved_steps = steps_before;
+                crate::rail_pbs::free_train_track_reservation(
+                    &mut state.map,
+                    &mut state.vehicles[i],
+                    &mut state.runtime.reservation_tile_dirty,
                 );
-                if reversed {
-                    let vehicle_id = state.vehicles[i].id;
-                    let order = state.vehicles[i].current_order;
-                    let pos = state.vehicles[i].pos;
-                    state.vehicles[i].sync_order_destination(&state.map);
-                    if head_on {
-                        reroute_head_on_to_alt_platform(state, i);
-                    }
-                    crate::news::push_vehicle_advice_news(
-                        state,
-                        vehicle_id,
-                        order,
-                        pos,
-                        crate::news::VehicleAdviceKind::PbsStuck,
-                    );
+                state.vehicles[i].sync_order_destination(&state.map);
+                if head_on {
+                    reroute_head_on_to_alt_platform(state, i);
                 }
+                crate::news::push_vehicle_advice_news(
+                    state,
+                    vehicle_id,
+                    order,
+                    pos,
+                    crate::news::VehicleAdviceKind::PbsStuck,
+                );
             }
             continue;
         }
-        // Liberó el path PBS: limpiar stuck (no tocar wait_counter de esclusas).
+        // Liberó el path PBS / señal: limpiar stuck (no tocar wait_counter de esclusas).
         if state.vehicles[i].kind == VehicleKind::Train
             && (state.vehicles[i].pbs_stuck || state.vehicles[i].wait_counter > 0)
         {
@@ -204,14 +225,9 @@ pub(super) fn move_vehicles(state: &mut GameState) {
         if state.vehicles[i].pos != prev_pos {
             crate::ship_movement::maybe_start_lock_transit(&mut state.vehicles[i], &state.map);
             if vehicle_kind == VehicleKind::Train {
-                crate::rail_signals::enqueue_signal_glob(
-                    &mut state.runtime.signal_globset,
-                    prev_pos,
-                );
-                crate::rail_signals::enqueue_signal_glob(
-                    &mut state.runtime.signal_globset,
-                    state.vehicles[i].pos,
-                );
+                super::routing::enqueue_signal_glob_flush(state, prev_pos);
+                let pos = state.vehicles[i].pos;
+                super::routing::enqueue_signal_glob_flush(state, pos);
             }
         }
         if vehicle_running {

@@ -8,6 +8,12 @@ pub const DEFAULT_WAIT_FOR_PBS_PATH_DAYS: u8 = 30;
 /// Intervalo de reintento de reserva (`pf.path_backoff_interval`).
 pub const DEFAULT_PATH_BACKOFF_INTERVAL: u8 = 20;
 
+/// Espera ante señal unidireccional (`pf.wait_oneway_signal`, días).
+pub const DEFAULT_WAIT_ONEWAY_SIGNAL_DAYS: u8 = 15;
+
+/// Espera ante señal bidireccional (`pf.wait_twoway_signal`, días).
+pub const DEFAULT_WAIT_TWOWAY_SIGNAL_DAYS: u8 = 41;
+
 /// Valor especial: no girar nunca / no hacer look-ahead.
 pub const PBS_WAIT_FOREVER: u8 = 255;
 
@@ -20,6 +26,20 @@ pub struct PathfindingSettings {
     pub path_backoff_interval: u8,
     /// Si `false`, no girar automáticamente en señales (incluye path stuck).
     pub reverse_at_signals: bool,
+    /// Días de espera ante señal unidireccional roja antes de girar (2..=255).
+    #[serde(default = "default_wait_oneway")]
+    pub wait_oneway_signal: u8,
+    /// Días de espera ante señal bidireccional roja antes de girar (2..=255).
+    #[serde(default = "default_wait_twoway")]
+    pub wait_twoway_signal: u8,
+}
+
+fn default_wait_oneway() -> u8 {
+    DEFAULT_WAIT_ONEWAY_SIGNAL_DAYS
+}
+
+fn default_wait_twoway() -> u8 {
+    DEFAULT_WAIT_TWOWAY_SIGNAL_DAYS
 }
 
 impl Default for PathfindingSettings {
@@ -28,6 +48,8 @@ impl Default for PathfindingSettings {
             wait_for_pbs_path: DEFAULT_WAIT_FOR_PBS_PATH_DAYS,
             path_backoff_interval: DEFAULT_PATH_BACKOFF_INTERVAL,
             reverse_at_signals: true,
+            wait_oneway_signal: DEFAULT_WAIT_ONEWAY_SIGNAL_DAYS,
+            wait_twoway_signal: DEFAULT_WAIT_TWOWAY_SIGNAL_DAYS,
         }
     }
 }
@@ -40,6 +62,32 @@ impl PathfindingSettings {
             return None;
         }
         Some(u32::from(self.wait_for_pbs_path).saturating_mul(TICKS_PER_DAY))
+    }
+
+    /// Ticks de espera ante señal unidireccional (`wait_oneway_signal * DAY_TICKS * 2`).
+    #[must_use]
+    pub fn oneway_signal_timeout_ticks(self) -> Option<u32> {
+        if self.wait_oneway_signal == PBS_WAIT_FOREVER || !self.reverse_at_signals {
+            return None;
+        }
+        Some(
+            u32::from(self.wait_oneway_signal)
+                .saturating_mul(TICKS_PER_DAY)
+                .saturating_mul(2),
+        )
+    }
+
+    /// Ticks de espera ante señal bidireccional (`wait_twoway_signal * DAY_TICKS * 2`).
+    #[must_use]
+    pub fn twoway_signal_timeout_ticks(self) -> Option<u32> {
+        if self.wait_twoway_signal == PBS_WAIT_FOREVER || !self.reverse_at_signals {
+            return None;
+        }
+        Some(
+            u32::from(self.wait_twoway_signal)
+                .saturating_mul(TICKS_PER_DAY)
+                .saturating_mul(2),
+        )
     }
 
     /// `true` si este tick debe reintentar look-ahead / reserva (`path_backoff_interval`).
@@ -69,9 +117,18 @@ mod tests {
             ..Default::default()
         };
         assert!(no_reverse.pbs_reverse_timeout_ticks().is_none());
+        assert!(no_reverse.oneway_signal_timeout_ticks().is_none());
         assert_eq!(
             PathfindingSettings::default().pbs_reverse_timeout_ticks(),
             Some(30 * TICKS_PER_DAY)
+        );
+        assert_eq!(
+            PathfindingSettings::default().oneway_signal_timeout_ticks(),
+            Some(15 * TICKS_PER_DAY * 2)
+        );
+        assert_eq!(
+            PathfindingSettings::default().twoway_signal_timeout_ticks(),
+            Some(41 * TICKS_PER_DAY * 2)
         );
     }
 

@@ -23,6 +23,7 @@ pub use encoding::{
     signal_type_label, signal_variant_for_track, tracks_overlap, valid_signal_facings_track,
 };
 pub(crate) use encoding::{signal_exit_dir, signal_track_for_bit};
+pub(crate) use routing::signal_bits_for_exit;
 
 pub(crate) use topology::{dir_from_to, rail_neighbors};
 pub use topology::{rail_block_ahead, rail_block_ahead_with_wormholes};
@@ -35,17 +36,16 @@ pub use routing::{
 };
 
 pub use update::{
-    SignalGlobSet, collect_signals_affected_by_tiles,
+    SIG_GLOB_UPDATE, SignalGlobEntry, SignalGlobSet, collect_signals_affected_by_tiles,
     collect_signals_affected_by_tiles_with_wormholes, drain_signal_globset,
     drain_signal_globset_with_wormholes, enqueue_pbs_reservations_for_signal_update,
-    enqueue_signal_glob, enqueue_trains_for_signal_update, update_rail_signal_states,
-    update_rail_signal_states_scoped, update_rail_signal_states_with_wormholes,
+    enqueue_signal_glob, enqueue_signal_glob_side, enqueue_trains_for_signal_update,
+    signal_globset_needs_flush, update_rail_signal_states, update_rail_signal_states_scoped,
+    update_rail_signal_states_with_wormholes,
 };
 
 #[cfg(test)]
 use presignal::{compute_exit_signal_greens, explore_sig_segment, presignal_exit_targets_ahead};
-#[cfg(test)]
-use routing::signal_bits_for_exit;
 
 #[cfg(test)]
 #[allow(clippy::expect_used)]
@@ -866,6 +866,7 @@ mod tests {
         let probe =
             explore_sig_segment(&map, TileCoord::new(1, 3), 0, None).with_green_flags(&greens);
         assert!(probe.multi_exit, "debe ver 2 exits: {:?}", probe.exits);
+        assert!(probe.split, "cruce X|Y → Split");
         assert!(probe.has_green, "rama norte libre → Green");
         assert!(!probe.multi_green, "solo una exit verde");
 

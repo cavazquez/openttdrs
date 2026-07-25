@@ -17,12 +17,52 @@ use super::presignal::{
 use super::rail_tile_is_signals;
 use super::topology::rail_block_ahead_with_wormholes;
 
-/// Cola de invalidación de señales (`_globset` simplificado de `signal.cpp`).
-pub type SignalGlobSet = HashSet<TileCoord>;
+/// Umbral `OpenTTD`: forzar drenado al llegar a 64 entradas ([`SIG_GLOB_UPDATE`]).
+pub const SIG_GLOB_UPDATE: usize = 64;
 
-/// Encola una tesela ferroviaria para refresco local de señales.
+/// Entrada de `_globset`: tesela + dirección de entrada (`DiagDirection`).
+///
+/// `enter_dir == u8::MAX` significa «cualquier dirección» (invalidación amplia).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SignalGlobEntry {
+    pub tile: TileCoord,
+    pub enter_dir: u8,
+}
+
+impl SignalGlobEntry {
+    pub const ANY_DIR: u8 = u8::MAX;
+
+    #[must_use]
+    pub const fn new(tile: TileCoord, enter_dir: u8) -> Self {
+        Self { tile, enter_dir }
+    }
+
+    #[must_use]
+    pub const fn any_dir(tile: TileCoord) -> Self {
+        Self {
+            tile,
+            enter_dir: Self::ANY_DIR,
+        }
+    }
+}
+
+/// Cola de invalidación de señales (`_globset` de `signal.cpp`).
+pub type SignalGlobSet = HashSet<SignalGlobEntry>;
+
+/// `true` si el globset alcanzó el umbral de flush (64).
+#[must_use]
+pub fn signal_globset_needs_flush(set: &SignalGlobSet) -> bool {
+    set.len() >= SIG_GLOB_UPDATE
+}
+
+/// Encola una tesela ferroviaria para refresco local de señales (cualquier dir).
 pub fn enqueue_signal_glob(set: &mut SignalGlobSet, tile: TileCoord) {
-    set.insert(tile);
+    set.insert(SignalGlobEntry::any_dir(tile));
+}
+
+/// Encola `(tile, DiagDirection)` como en `AddSideToSignalBuffer`.
+pub fn enqueue_signal_glob_side(set: &mut SignalGlobSet, tile: TileCoord, enter_dir: u8) {
+    set.insert(SignalGlobEntry::new(tile, enter_dir));
 }
 
 /// Encola posiciones (y `movement_target`) de trenes para invalidar bloques ocupados.
@@ -50,7 +90,7 @@ pub fn enqueue_pbs_reservations_for_signal_update(set: &mut SignalGlobSet, vehic
     }
 }
 
-/// Señales cuyo bloque contiene `tile`, más entries/combos que miran esas exits.
+/// Señales cuyo bloque contiene alguna tesela de `seeds`, más entries/combos aguas arriba.
 #[must_use]
 pub fn collect_signals_affected_by_tiles(map: &Map, seeds: &SignalGlobSet) -> HashSet<TileCoord> {
     collect_signals_affected_by_tiles_with_wormholes(map, seeds, None)
@@ -66,6 +106,7 @@ pub fn collect_signals_affected_by_tiles_with_wormholes(
     if seeds.is_empty() {
         return HashSet::new();
     }
+    let seed_tiles: HashSet<TileCoord> = seeds.iter().map(|e| e.tile).collect();
     let (w, h) = map.dimensions();
     let mut affected = HashSet::new();
     let mut signal_tiles = Vec::new();
@@ -79,7 +120,7 @@ pub fn collect_signals_affected_by_tiles_with_wormholes(
                 continue;
             }
             signal_tiles.push(c);
-            if seeds.contains(&c) {
+            if seed_tiles.contains(&c) {
                 affected.insert(c);
             }
             let present = rail_signal_present_mask(tile.m3);
@@ -90,7 +131,7 @@ pub fn collect_signals_affected_by_tiles_with_wormholes(
                 }
                 let exit_dir = signal_exit_dir(rails, bit);
                 let block = rail_block_ahead_with_wormholes(map, c, exit_dir, wormholes);
-                if block.iter().any(|t| seeds.contains(t)) {
+                if block.iter().any(|t| seed_tiles.contains(t)) {
                     affected.insert(c);
                 }
             }

@@ -559,6 +559,13 @@ impl super::model::Vehicle {
     }
 
     pub(crate) fn advance_one_tile(&mut self, map: Option<&Map>) {
+        // P2.7: en cruces elegir vía con YAPF y reservar atómicamente al entrar.
+        if self.kind == super::model::VehicleKind::Train
+            && self.is_consist_head()
+            && let Some(map) = map
+        {
+            let _ = crate::rail_pbs::choose_train_track_on_enter(map, self, None);
+        }
         if let Some(next) = self.path.pop_front() {
             self.update_direction_step(self.pos, next, map);
             if self.orders.is_empty() {

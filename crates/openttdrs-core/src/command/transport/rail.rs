@@ -36,7 +36,7 @@ pub(crate) fn check_rail_trackbits_with_autoslope(
     map: &Map,
     c: TileCoord,
     final_bits: u8,
-    tick: u64,
+    inflation_prices: u64,
 ) -> Result<(), CommandError> {
     if check_rail_trackbits_on_tile(map, c, final_bits).is_ok() {
         return Ok(());
@@ -45,7 +45,7 @@ pub(crate) fn check_rail_trackbits_with_autoslope(
     if tileh == 0 {
         return Err(CommandError::InvalidRailOnSlope);
     }
-    check_autoslope_flat(map, c, tick)?;
+    check_autoslope_flat(map, c, inflation_prices)?;
     if !rail_trackbits_valid_on_slope(0, final_bits) {
         return Err(CommandError::InvalidRailOnSlope);
     }

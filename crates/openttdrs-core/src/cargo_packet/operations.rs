@@ -24,14 +24,17 @@ pub const fn load_unload_speed(cargo: CargoType) -> u32 {
     }
 }
 
-/// Decide si el packet debe bajarse en `at` según `next_hop`.
+/// Decide si el packet debe bajarse en `at` según `next_hop` y flags de orden.
 ///
-/// `reinsert_freight`: freight que queda en cola de estación (hub), no sink final.
+/// `force_transfer`: orden con `OrderUnloadType::Transfer` (P1.20). El reinsert
+/// físico de freight en cola **no** implica trasbordo económico: sin este flag la
+/// bajada cobra como entrega final (`PayFinalDelivery`). Con él solo se acumula
+/// `feeder_share` (`PayTransfer`).
 #[must_use]
 pub fn decide_cargo_unload_action(
     packet: &CargoPacket,
     at: TileCoord,
-    reinsert_freight: bool,
+    force_transfer: bool,
 ) -> CargoUnloadAction {
     // Pax/mail: nunca entregar en la estación de embarque (next_hop None +
     // cargo_source=casa generaban ingreso fantasma en el origen).
@@ -41,7 +44,7 @@ pub fn decide_cargo_unload_action(
     if packet.next_hop.is_some_and(|hop| hop != at) {
         return CargoUnloadAction::Keep;
     }
-    if reinsert_freight {
+    if force_transfer {
         CargoUnloadAction::Transfer
     } else {
         CargoUnloadAction::Deliver

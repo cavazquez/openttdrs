@@ -72,13 +72,17 @@ abrir el issue.
 | 5 | [P1.2](#p12--reparto-de-carga-entre-estaciones-competidoras--hecho) Reparto entre estaciones | P1 | L | hecho | Cierra la mitad que le faltaba a P1.1: el rating ya reparte la producción |
 | 6 | [P1.4](#p14--prod_level-y-cierre-de-industrias--hecho) Industrias dinámicas + [P1.3](#p13--producción-industrial-por-spec--hecho) rates | P1 | XL | hecho | Sin esto el mundo económico es estático y las rutas no caducan |
 | 7 | [P3.1](#tabla-p3) `GenerateTowns` / `GenerateIndustries` | P3 | XL | | Un mapa nuevo nace vacío: bloquea comparar una partida completa |
-| 8 | [P1.6](#p16--pago-diferido-de-transferencias) Pago diferido de transferencias | P1 | L | | El cobro inmediato hace rentables cadenas que no lo son |
+| 8 | [P1.6](#p16--pago-diferido-de-transferencias--hecho) Pago diferido de transferencias | P1 | L | hecho | El cobro inmediato hace rentables cadenas que no lo son |
 | 9 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | | Habilita los barridos escalonados de los que todo depende |
 
 P3.1 se adelanta al resto de P3 porque sin mundo generado no hay escenario de comparación.
 
 Los otros dos P0 que quedaban ([P0.5](#p05--todas-las-industrias-producen-en-el-mismo-tick--hecho) y
 [P0.6](#p06--la-hierba-crece-ocho-veces-más-rápido--hecho)) también están cerrados.
+
+Fuera del camino crítico pero ya cerrados en P1: [P1.15](#p115--inflación--hecho) (inflación
+compuesta mensual) y [P1.22](#p122--rama-asintótica-del-factor-de-tiempo-y-fluctuaciones--hecho)
+(factor de tiempo asintótico + recesiones con noticias).
 
 ---
 
@@ -195,7 +199,7 @@ con la clasificación de segmentos de señal y está reclasificada a P2 (detalle
 
 ## 5. P1 — Reglas de comportamiento
 
-Veintidós entradas, **cuatro cerradas** (P1.1 —con P0.3—, P1.2, y el bloque P1.3+P1.4 de industrias).
+Veintidós entradas, **seis cerradas** (P1.1 —con P0.3—, P1.2, el bloque P1.3+P1.4 de industrias, P1.15 y P1.22).
 
 ### P1.1 — `UpdateStationRating` completo · hecho
 
@@ -292,7 +296,7 @@ Veintidós entradas, **cuatro cerradas** (P1.1 —con P0.3—, P1.2, y el bloque
   multiplicadores en la tabla de specs.
 - **Coste** — XL.
 
-### P1.6 — Pago diferido de transferencias
+### P1.6 — Pago diferido de transferencias · hecho
 
 - **Problema** — cada descarga cobra el ingreso completo en el acto, también cuando es una
   transferencia intermedia. Eso hace rentables cadenas de feeder que en el original no lo son y
@@ -302,9 +306,13 @@ Veintidós entradas, **cuatro cerradas** (P1.1 —con P0.3—, P1.2, y el bloque
   (`economy.cpp:1217-1248`).
 - **Port** — ingreso completo por descarga y 75 % a la primera estación
   (`sim_step/cargo_transfer.rs:76-128`).
-- **Solución** — separar los dos caminos según la acción del paquete y liquidar solo en la
-  entrega final. El ratio del 75 % ya está bien (`company.rs:171`); lo que falla es el momento.
-- **Coste** — L.
+- **Hecho** — `CargoUnloadAction::Transfer` solo acumula `feeder_share` (75 % del tramo) sin
+  `credit_company`; `Deliver` liquida el acumulado al owner de `first_station` y paga al
+  entregador `income - feeder_share`. Tests `feeder_share_paid_on_unload_preserves_packet_flags`
+  (sin cobro en trasbordo) y `final_delivery_liquidates_accumulated_feeder_share`.
+- **Pendiente** — el freight en hub sigue clasificándose siempre como `Transfer` hasta portar el
+  staging de OpenTTD ([P2.19](#p219--clasificación-de-carga)); hoy no hay ingreso en andén
+  intermedio, solo en entrega final de pax/mail.
 
 ### P1.7 — Producción de pasajeros por casa
 
@@ -344,16 +352,18 @@ Veintidós entradas, **cuatro cerradas** (P1.1 —con P0.3—, P1.2, y el bloque
   portar `UpdateTownRating` mensual y los chequeos de demolición con la tabla de tolerancia.
 - **Coste** — M el modelo, L con los chequeos.
 
-### P1.10 — Efecto real de la publicidad
+### P1.10 — Efecto real de la publicidad · hecho
 
 - **Problema** — la campaña sube el rating del ayuntamiento, cuando en el original no lo toca.
 - **Original** — la publicidad llama a `ModifyStationRatingAround` con +0x40/+0x70/+0xA0 según el
   tamaño (`town_cmd.cpp:3412-3445`). Lo que sí afecta al ayuntamiento es financiar edificios
   (`fund_buildings_months = 3`), la estatua, el soborno y reconstruir carreteras.
 - **Port** — `TOWN_ADVERTISE_RATING_BOOST` sobre el rating del pueblo (`command/town.rs:20-46`).
-- **Solución** — redirigir el efecto a las estaciones del radio y añadir las acciones que faltan
-  (exclusividad 12 meses, estatua, soborno).
-- **Coste** — M.
+- **Hecho** — `station::modify_station_rating_around` (+0x70, radio 15, campaña mediana única) sobre
+  cargas activas de estaciones del `active_company` en el radio; `town_advertise` ya no toca
+  `local_authority_rating`. Test `town_advertise_boosts_nearby_station_rating_not_authority`.
+- **Pendiente** — estatua (+26 rating estaciones y pending de P1.1), exclusividad 12 meses y
+  soborno; tamaños small/large de publicidad si se exponen en UI.
 
 ### P1.11 — Modelo de averías
 
@@ -403,17 +413,20 @@ Veintidós entradas, **cuatro cerradas** (P1.1 —con P0.3—, P1.2, y el bloque
 - **Solución** — portar ambas modalidades de intervalo y la inserción de orden de depósito.
 - **Coste** — L.
 
-### P1.15 — Inflación
+### P1.15 — Inflación · hecho
 
 - **Problema** — inflación lineal inventada (`1024 + años × 4`), que diverge del original desde el
   primer año y no tiene tope.
 - **Original** — compuesta mensual: `inflation_prices += (inflation_prices * infl_amount * 54) >> 16`
   y lo mismo para pagos con `infl_amount_pr = max(0, initial_interest - 1)`, solo entre 1920 y
   2090, con base `1 << 16` (`economy.cpp:704-737`, `909-922`).
-- **Port** — `economy/payments.rs:89-102`.
-- **Solución** — portar los dos acumuladores con su actualización mensual y el rango de años.
-  También alimenta `max_loan`, que en el original escala con `inflation_prices` (`economy.cpp:745`).
-- **Coste** — L.
+- **Hecho** — `GlobalEconomy` en `economy/global.rs` con acumuladores `inflation_prices` /
+  `inflation_payment`, actualización mensual en `sim_step/economy.rs`, inflación previa al año de
+  arranque en `startup`, y `max_loan` escalado vía `scaled_max_loan`. Pagos y costes de
+  construcción leen los acumuladores (no la fórmula lineal). Tests `compound_inflation_matches_openttd_monthly_step`,
+  `inflation_stops_outside_original_year_window`, `max_loan_scales_with_inflation_prices`,
+  `startup_applies_pre_1950_inflation`.
+- **Pendiente** — tabla `_price` completa ([P1.16](#p116--sistema-de-precios-base)).
 
 ### P1.16 — Sistema de precios base
 
@@ -488,16 +501,19 @@ Veintidós entradas, **cuatro cerradas** (P1.1 —con P0.3—, P1.2, y el bloque
   importar.
 - **Coste** — L.
 
-### P1.22 — Rama asintótica del factor de tiempo y fluctuaciones
+### P1.22 — Rama asintótica del factor de tiempo y fluctuaciones · hecho
 
 - **Problema** — dos reglas menores del pago y del clima económico.
 - **Original** — para tránsitos muy largos el factor cae por
   `max(2 * MIN_TIME_FACTOR * 16 * 16 / (exceso + 32), 1)` con desplazamiento 25
   (`economy.cpp:1010-1015`); `HandleEconomyFluctuations` genera recesiones con noticias
   (`economy.cpp:844-863`).
-- **Port** — solo la rama lineal con suelo en 31 (`economy/payments.rs:107-137`); sin recesiones.
-- **Solución** — portar ambas; son autocontenidas.
-- **Coste** — M.
+- **Hecho** — `cargo_time_factor` devuelve la rama asintótica con `TIME_FACTOR_FRAC = 16` y
+  desplazamiento 25 en `transported_goods_income`. `GlobalEconomy::fluct` con
+  `handle_monthly_fluctuations` y noticias `NewsType::Economy`. Tests
+  `asymptotic_time_factor_for_very_long_transit`, `recession_cycle_emits_fluctuation_events`.
+- **Pendiente** — efectos de recesión en producción industrial / pueblos (hoy solo el contador y
+  las noticias).
 
 ---
 

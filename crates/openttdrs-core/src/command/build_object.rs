@@ -77,7 +77,7 @@ pub(crate) fn build_object(
     object_type: u8,
 ) -> Result<(), CommandError> {
     check_build_object_placement(&state.map, c, object_type)?;
-    let cost = build_object_cost(state.tick.get());
+    let cost = build_object_cost(state.global_economy.inflation_prices);
     if state.economy.money < cost {
         return Err(CommandError::InsufficientFunds);
     }
@@ -106,7 +106,7 @@ pub(crate) fn build_object_quote(state: &GameState, cmd: &super::types::Command)
         Command::BuildObject { pos, object_type }
             if check_build_object_placement(&state.map, *pos, *object_type).is_ok() =>
         {
-            build_object_cost(state.tick.get())
+            build_object_cost(state.global_economy.inflation_prices)
         }
         _ => 0,
     }

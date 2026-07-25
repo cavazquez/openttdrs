@@ -428,6 +428,9 @@ pub struct GameState {
     /// RNG de partida para `GetVia` (`Random` de `OpenTTD`) — persistido desde v21.
     #[serde(default = "default_cargo_rng")]
     pub cargo_rng: crate::linkgraph_parity::Randomizer,
+    /// Inflación compuesta, recesiones y escala global de `max_loan` (`_economy`).
+    #[serde(default)]
+    pub global_economy: crate::economy::GlobalEconomy,
 
     // ───── Campos efímeros (NO persistidos) ─────
     /// Datos de runtime que no se guardan en el save JSON.
@@ -461,7 +464,7 @@ fn default_cargo_rng() -> crate::linkgraph_parity::Randomizer {
 impl GameState {
     #[must_use]
     pub fn new(map_width: u32, map_height: u32) -> Self {
-        Self {
+        let mut state = Self {
             map: Map::new_flat(map_width, map_height, 1),
             tick: GameTick::default(),
             industries: Vec::new(),
@@ -517,15 +520,35 @@ impl GameState {
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             gs: crate::gs::GsState::default(),
             cargo_rng: crate::linkgraph_parity::Randomizer::new(1),
+            global_economy: crate::economy::GlobalEconomy::new(),
             runtime: SimulationRuntime::new(),
             ai_build_queues: Vec::new(),
+        };
+        state.finish_new_game_startup();
+        state
+    }
+
+    /// Inicializa economía global (inflación previa a 1950, `max_loan` escalado).
+    pub fn finish_new_game_startup(&mut self) {
+        let start_year = crate::news::CALENDAR_BASE_YEAR;
+        self.global_economy
+            .startup(&mut self.cargo_rng, start_year);
+        self.sync_scaled_max_loan();
+    }
+
+    /// Propaga `global_economy.scaled_max_loan()` a todas las compañías y al espejo activo.
+    pub fn sync_scaled_max_loan(&mut self) {
+        let max_loan = self.global_economy.scaled_max_loan();
+        for company in &mut self.companies {
+            company.economy.max_loan = max_loan;
         }
+        self.economy.max_loan = max_loan;
     }
 
     /// Crea un estado a partir de un mapa ya construido (sin industrias ni vehículos).
     #[must_use]
     pub fn from_map(map: Map) -> Self {
-        Self {
+        let mut state = Self {
             map,
             tick: GameTick::default(),
             industries: Vec::new(),
@@ -581,9 +604,12 @@ impl GameState {
             cargo_dist: crate::flow_stat::CargoDistSettings::default(),
             gs: crate::gs::GsState::default(),
             cargo_rng: crate::linkgraph_parity::Randomizer::new(1),
+            global_economy: crate::economy::GlobalEconomy::new(),
             runtime: SimulationRuntime::new(),
             ai_build_queues: Vec::new(),
-        }
+        };
+        state.finish_new_game_startup();
+        state
     }
 
     /// Reconstruye datos efímeros tras cargar un save (caches, RNG, etc.).
@@ -594,6 +620,7 @@ impl GameState {
         self.runtime = SimulationRuntime::new();
         self.rebuild_station_flows();
         self.sanitize_all_vehicle_orders();
+        self.sync_scaled_max_loan();
     }
 
     /// Sanitiza `current_order` en todos los vehículos para prevenir indexación fuera de límites.

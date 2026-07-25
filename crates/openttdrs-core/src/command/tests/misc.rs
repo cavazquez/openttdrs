@@ -1,7 +1,7 @@
 use crate::command::{Command, CommandError, apply_command};
 use crate::test_fixtures::SandboxMap;
 use crate::{
-    GameState, IndustryKind, IndustrySpec, LevelMode, TERRAFORM_COST, TileCoord, TileKind,
+    GameState, IndustryKind, IndustrySpec, LevelMode, TileCoord, TileKind,
     industry_template, tile_slope_and_z,
 };
 
@@ -72,8 +72,10 @@ fn raise_land_on_grass_costs_and_creates_slope() {
     let mut s = SandboxMap::flat(8, 8, 4);
     let c = TileCoord::new(3, 4);
     let money_before = s.economy.money;
+    let expected_cost =
+        crate::economy::terraform_cost_per_corner(s.global_economy.inflation_prices);
     apply_command(&mut s, &Command::RaiseLand(c)).unwrap();
-    assert_eq!(s.economy.money, money_before - TERRAFORM_COST);
+    assert_eq!(s.economy.money, money_before - expected_cost);
     let (tileh, _) = tile_slope_and_z(&s.map, c).unwrap();
     assert_ne!(tileh, 0);
     // CommandError::Display ahora retorna el nombre técnico del variant (sin mensajes UI)

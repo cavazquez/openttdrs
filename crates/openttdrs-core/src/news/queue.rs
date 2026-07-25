@@ -24,6 +24,8 @@ pub enum NewsType {
     CompanyInfo,
     /// Industria que anuncia cierre o acaba de cerrar (`NewsType::IndustryClose`).
     IndustryClose,
+    /// Recesión económica (`NewsType::Economy` en `OpenTTD`).
+    Economy,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -122,6 +124,8 @@ pub struct NewsDisplaySettings {
     pub company_info: NewsDisplayMode,
     #[serde(default = "default_industry_close_display")]
     pub industry_close: NewsDisplayMode,
+    #[serde(default = "default_economy_display")]
+    pub economy: NewsDisplayMode,
 }
 
 const fn default_accident_display() -> NewsDisplayMode {
@@ -133,6 +137,10 @@ const fn default_company_info_display() -> NewsDisplayMode {
 }
 
 const fn default_industry_close_display() -> NewsDisplayMode {
+    NewsDisplayMode::Summary
+}
+
+const fn default_economy_display() -> NewsDisplayMode {
     NewsDisplayMode::Summary
 }
 
@@ -153,6 +161,7 @@ impl NewsDisplaySettings {
             accident: NewsDisplayMode::Full,
             company_info: NewsDisplayMode::Summary,
             industry_close: NewsDisplayMode::Summary,
+            economy: NewsDisplayMode::Summary,
         }
     }
 
@@ -166,6 +175,7 @@ impl NewsDisplaySettings {
             NewsType::Accident => self.accident,
             NewsType::CompanyInfo => self.company_info,
             NewsType::IndustryClose => self.industry_close,
+            NewsType::Economy => self.economy,
         }
     }
 
@@ -178,6 +188,7 @@ impl NewsDisplaySettings {
             NewsType::Accident => self.accident = mode,
             NewsType::CompanyInfo => self.company_info = mode,
             NewsType::IndustryClose => self.industry_close = mode,
+            NewsType::Economy => self.economy = mode,
         }
     }
 }
@@ -288,6 +299,35 @@ pub fn report_industry_closed(state: &mut crate::GameState, at: TileCoord) {
         default_display_for_type(NewsType::IndustryClose),
         state.tick,
         NewsReference::Tile(at),
+    );
+    add_news_item(state, item);
+}
+
+/// Noticias de recesión (`STR_NEWS_BEGIN_OF_RECESSION` / `STR_NEWS_END_OF_RECESSION`).
+pub fn push_economy_fluctuation_news(
+    state: &mut crate::GameState,
+    event: crate::economy::FluctuationEvent,
+) {
+    let (headline, body) = match event {
+        crate::economy::FluctuationEvent::RecessionStart => (
+            "Comienza una recesión económica",
+            Some("La demanda de carga y la producción industrial se reducirán.".into()),
+        ),
+        crate::economy::FluctuationEvent::RecessionEnd => (
+            "La recesión ha terminado",
+            Some("La economía vuelve a la normalidad.".into()),
+        ),
+    };
+    let id = state.news.next_id;
+    state.news.next_id = state.news.next_id.saturating_add(1);
+    let item = NewsItem::new(
+        id,
+        headline,
+        body,
+        NewsType::Economy,
+        default_display_for_type(NewsType::Economy),
+        state.tick,
+        NewsReference::None,
     );
     add_news_item(state, item);
 }

@@ -10,10 +10,11 @@ mod tile_encoding;
 
 // Re-exports públicos para mantener compatibilidad con imports existentes
 pub use cargo_rating::{
-    MAX_TIME_SINCE_PICKUP_DAYS, StationVisit, TOWN_CARGO_MIN_OWNER_RATING, load_amount_for_rating,
-    note_station_load_attempt, on_station_cargo_pickup, recompute_station_rating,
-    station_is_freight_pickup_stop, station_rating_for_cargo, station_rating_for_company_cargo,
-    update_station_ratings,
+    MAX_TIME_SINCE_PICKUP_DAYS, StationVisit, TOWN_ADVERTISE_MEDIUM_RADIUS,
+    TOWN_ADVERTISE_MEDIUM_RATING_BOOST, TOWN_CARGO_MIN_OWNER_RATING, load_amount_for_rating,
+    modify_station_rating_around, note_station_load_attempt, on_station_cargo_pickup,
+    recompute_station_rating, station_is_freight_pickup_stop, station_rating_for_cargo,
+    station_rating_for_company_cargo, update_station_ratings,
 };
 pub use coverage::{
     STATION_COVERAGE_RADIUS, StationCoverage, StationMapCoherenceReport,

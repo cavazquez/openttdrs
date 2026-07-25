@@ -14,6 +14,11 @@ pub const MAX_TIME_SINCE_PICKUP_DAYS: u8 = 255;
 /// Rating mínimo del dueño para generar pax/correo en parada bus (`station_cmd.cpp` ≈ 130).
 pub const TOWN_CARGO_MIN_OWNER_RATING: u8 = 130;
 
+/// Boost de rating por campaña publicitaria mediana (`TownActionAdvertiseMedium`, +0x70).
+pub const TOWN_ADVERTISE_MEDIUM_RATING_BOOST: u8 = 0x70;
+/// Radio manhattan de la publicidad mediana (`TownActionAdvertiseMedium`, 15 teselas).
+pub const TOWN_ADVERTISE_MEDIUM_RADIUS: i32 = 15;
+
 /// A partir de esta cantidad en espera empieza el recorte progresivo
 /// (`WAITING_CARGO_THRESHOLD`, `station_cmd.cpp:4101`).
 const WAITING_CARGO_THRESHOLD: u32 = 1 << 12;
@@ -103,6 +108,52 @@ fn station_rating_target(station: &Station, cargo: CargoType) -> i16 {
     }
 
     rating
+}
+
+/// Suma `amount` al rating de cada carga activa en estaciones del `owner` dentro de `radius`
+/// teselas manhattan de `center` (`ModifyStationRatingAround`, `station_cmd.cpp:4398`).
+///
+/// Una entrada cuenta como activa si `has_rating`, si algún vehículo intentó cargar o si hay
+/// stock en espera — alineado a `GoodsEntry::status.Any()` del original.
+#[must_use]
+pub fn modify_station_rating_around(
+    stations: &mut [Station],
+    center: TileCoord,
+    owner: CompanyId,
+    radius: i32,
+    amount: u8,
+) -> usize {
+    let mut touched = 0usize;
+    for station in stations.iter_mut() {
+        if station.owner != owner {
+            continue;
+        }
+        let dx = (station.pos.x - center.x).abs();
+        let dy = (station.pos.y - center.y).abs();
+        if dx.saturating_add(dy) > radius {
+            continue;
+        }
+        station.ensure_packets_from_stock();
+        let mut station_changed = false;
+        for cargo in ALL_CARGO_TYPES {
+            let entry = station.goods.get(cargo);
+            let active = entry.has_rating
+                || entry.has_vehicle_ever_tried_loading()
+                || station.cargo_stock.get(cargo) > 0;
+            if !active {
+                continue;
+            }
+            let entry = station.goods.get_mut(cargo);
+            entry.rating = entry.rating.saturating_add(amount).min(255);
+            entry.has_rating = true;
+            station_changed = true;
+            touched += 1;
+        }
+        if station_changed {
+            recompute_station_rating(station);
+        }
+    }
+    touched
 }
 
 /// Resumen para la UI: el peor rating entre las cargas que la estación llegó a mover.

@@ -151,13 +151,14 @@ pub use disaster::{
     tick_disaster_crafts, tick_disasters, trigger_disaster_at,
 };
 pub use economy::{
-    ANNUAL_INTEREST_RATE_PCT, CARGO_AGING_TICKS, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL,
-    OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND, STATION_RATING_TICKS, TICKS_PER_DAY,
-    TICKS_PER_MONTH, TICKS_PER_YEAR, build_object_cost, buy_land_cost, cargo_time_factor,
-    check_bankruptcy, decrease_loan, increase_loan, inflation_income_factor,
-    inflation_prices_factor, manhattan_distance, monthly_loan_interest, terraform_cost_per_corner,
-    ticks_to_transit_periods, transported_goods_income, vehicle_purchase_cost,
-    vehicle_running_cost_per_tick, vehicle_sell_refund,
+    ANNUAL_INTEREST_RATE_PCT, CARGO_AGING_TICKS, CargoPaymentSpec, DEFAULT_MAX_LOAN,
+    FluctuationEvent, GlobalEconomy, INFLATION_FRAC_ONE, LOAN_INTERVAL, MAX_INFLATION,
+    ORIGINAL_BASE_YEAR, ORIGINAL_MAX_YEAR, OTTD_MILLISECONDS_PER_TICK, SIM_TICKS_PER_SECOND,
+    STATION_RATING_TICKS, TICKS_PER_DAY, TICKS_PER_MONTH, TICKS_PER_YEAR, build_object_cost,
+    buy_land_cost, cargo_time_factor, check_bankruptcy, decrease_loan, increase_loan,
+    inflation_income_factor, inflation_prices_factor, manhattan_distance, monthly_loan_interest,
+    terraform_cost_per_corner, ticks_to_transit_periods, transported_goods_income,
+    vehicle_purchase_cost, vehicle_running_cost_per_tick, vehicle_sell_refund,
 };
 pub use economy_quarterly::{
     ECONOMY_HISTORY_QUARTERS, QuarterlyEconomyEntry, QuarterlyEconomyHistory,

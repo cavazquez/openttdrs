@@ -3,7 +3,7 @@
 use crate::cargo::CargoType;
 use crate::map::TileCoord;
 
-use super::time::TICKS_PER_YEAR;
+use super::global::GlobalEconomy;
 
 /// Tasas base del clima templado de `OpenTTD` (`cargo_const.h`), sin inflación.
 #[derive(Debug, Clone, Copy)]
@@ -84,55 +84,75 @@ pub const fn manhattan_distance(a: TileCoord, b: TileCoord) -> u32 {
     (a.x - b.x).unsigned_abs() + (a.y - b.y).unsigned_abs()
 }
 
-/// Factor de inflación de ingresos (punto fijo /1024). Crece ~0,4 % por año simulado.
+/// Factor de inflación de ingresos (/1024) desde el acumulador `inflation_payment`.
 #[must_use]
-pub fn inflation_income_factor(tick: u64) -> u32 {
-    let years = tick / TICKS_PER_YEAR;
-    1024 + u32::try_from(years).unwrap_or(u32::MAX).saturating_mul(4)
+pub fn inflation_income_factor(inflation_payment: u64) -> u32 {
+    GlobalEconomy::inflation_factor_from_accumulator(inflation_payment)
 }
 
-/// Factor de inflación de precios de construcción (/1024), al estilo `inflation_prices`.
-///
-/// `OpenTTD` usa `infl_amount_pr = max(0, initial_interest - 1)` (por defecto 1 %/año
-/// frente a ~2 % en ingresos). Aquí ~0,3 %/año (`+3` por 1024).
+/// Factor de inflación de precios (/1024) desde el acumulador `inflation_prices`.
 #[must_use]
-pub fn inflation_prices_factor(tick: u64) -> u32 {
-    let years = tick / TICKS_PER_YEAR;
-    1024 + u32::try_from(years).unwrap_or(u32::MAX).saturating_mul(3)
+pub fn inflation_prices_factor(inflation_prices: u64) -> u32 {
+    GlobalEconomy::inflation_factor_from_accumulator(inflation_prices)
 }
 
 const MIN_TIME_FACTOR: i32 = 31;
 const MAX_TIME_FACTOR: i32 = 255;
+const TIME_FACTOR_FRAC_BITS: i32 = 4;
+const TIME_FACTOR_FRAC: i32 = 1 << TIME_FACTOR_FRAC_BITS;
 
+/// Factor de tiempo del pago y si entra en la rama asintótica (`economy.cpp:989-1013`).
 #[must_use]
-pub fn cargo_time_factor(transit_days: u16, spec: CargoPaymentSpec) -> i32 {
+pub fn cargo_time_factor(transit_days: u16, spec: CargoPaymentSpec) -> (i32, bool) {
     let tp = i32::from(transit_days);
     let periods1 = i32::from(spec.transit_fast_days);
     let periods2 = i32::from(spec.transit_slow_days);
     let over1 = (tp - periods1).max(0);
     let over2 = (over1 - periods2).max(0);
-    (MAX_TIME_FACTOR - over1 - over2).max(MIN_TIME_FACTOR)
+
+    let mut periods_over_max = MIN_TIME_FACTOR - MAX_TIME_FACTOR;
+    if periods2 > -periods_over_max {
+        periods_over_max += tp - periods1;
+    } else {
+        periods_over_max += 2 * (tp - periods1) - periods2;
+    }
+
+    if periods_over_max > 0 {
+        let time_factor = (2 * MIN_TIME_FACTOR * TIME_FACTOR_FRAC * TIME_FACTOR_FRAC
+            / (periods_over_max + 2 * TIME_FACTOR_FRAC))
+            .max(1);
+        (time_factor, true)
+    } else {
+        let time_factor = (MAX_TIME_FACTOR - over1 - over2).max(MIN_TIME_FACTOR);
+        (time_factor, false)
+    }
 }
 
-/// Ingreso por entrega final (simplificación de `OpenTTD` `GetTransportedGoodsIncome`).
+/// Ingreso por entrega final (`GetTransportedGoodsIncome`, `economy.cpp:952-1013`).
 #[must_use]
 pub fn transported_goods_income(
     count: u32,
     distance: u32,
     transit_days: u16,
     cargo: CargoType,
-    tick: u64,
+    inflation_payment: u64,
 ) -> i64 {
     if count == 0 {
         return 0;
     }
     let dist = distance.max(1);
     let spec = cargo.payment_spec();
-    let time_factor = cargo_time_factor(transit_days, spec);
+    let (time_factor, asymptotic) = cargo_time_factor(transit_days, spec);
+    let effective_rate =
+        (i64::from(spec.base_rate) * i64::try_from(inflation_payment).unwrap_or(i64::MAX)) >> 16;
     let mut income =
-        i64::from(dist) * i64::from(time_factor) * i64::from(count) * i64::from(spec.base_rate);
-    income >>= 21;
-    income = income.saturating_mul(i64::from(inflation_income_factor(tick))) / 1024;
+        i64::from(dist) * i64::from(time_factor) * i64::from(count) * effective_rate;
+    let shift = if asymptotic {
+        21 + TIME_FACTOR_FRAC_BITS
+    } else {
+        21
+    };
+    income >>= shift;
     income.max(1)
 }
 

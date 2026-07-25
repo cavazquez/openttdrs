@@ -17,6 +17,9 @@ pub enum VehicleOrder {
         /// No descargar en esta parada (`OrderUnloadType::NoUnload`).
         #[serde(default)]
         no_unload: bool,
+        /// Trasbordo forzado (`OrderUnloadType::Transfer`): acumula feeder, no cobra.
+        #[serde(default)]
+        transfer: bool,
         /// Espera mínima en parada con horario activo (ticks de sim).
         #[serde(default)]
         wait_ticks: u32,
@@ -124,6 +127,7 @@ impl VehicleOrder {
             station,
             full_load: false,
             no_unload: false,
+            transfer: false,
             wait_ticks: 0,
             travel_ticks: 0,
         }
@@ -158,6 +162,7 @@ impl VehicleOrder {
             station,
             full_load,
             no_unload,
+            transfer: false,
             wait_ticks: 0,
             travel_ticks: 0,
         }
@@ -246,6 +251,18 @@ impl VehicleOrder {
         )
     }
 
+    /// Trasbordo forzado: no cobra entrega, solo acumula `feeder_share`.
+    #[must_use]
+    pub const fn transfer(self) -> bool {
+        matches!(
+            self,
+            Self::Station {
+                transfer: true,
+                ..
+            }
+        )
+    }
+
     /// Alterna «carga completa» en una parada de estación.
     #[must_use]
     pub fn with_toggled_full_load(self) -> Option<Self> {
@@ -254,12 +271,14 @@ impl VehicleOrder {
                 station,
                 full_load,
                 no_unload,
+                transfer,
                 wait_ticks,
                 travel_ticks,
             } => Some(Self::Station {
                 station,
                 full_load: !full_load,
                 no_unload,
+                transfer,
                 wait_ticks,
                 travel_ticks,
             }),
@@ -275,12 +294,14 @@ impl VehicleOrder {
                 station,
                 full_load,
                 no_unload,
+                transfer,
                 wait_ticks,
                 travel_ticks,
             } => Some(Self::Station {
                 station,
                 full_load,
                 no_unload: !no_unload,
+                transfer,
                 wait_ticks,
                 travel_ticks,
             }),
@@ -369,12 +390,14 @@ impl VehicleOrder {
                 station,
                 full_load,
                 no_unload,
+                transfer,
                 wait_ticks,
                 travel_ticks,
             } => Some(Self::Station {
                 station,
                 full_load,
                 no_unload,
+                transfer,
                 wait_ticks: cycle_wait_ticks(wait_ticks),
                 travel_ticks,
             }),
@@ -403,12 +426,14 @@ impl VehicleOrder {
                 station,
                 full_load,
                 no_unload,
+                transfer,
                 wait_ticks,
                 travel_ticks,
             } => Self::Station {
                 station,
                 full_load,
                 no_unload,
+                transfer,
                 wait_ticks,
                 travel_ticks: cycle_travel_ticks(travel_ticks),
             },
@@ -452,12 +477,14 @@ impl VehicleOrder {
                 station,
                 full_load,
                 no_unload,
+                transfer,
                 travel_ticks,
                 ..
             } => Some(Self::Station {
                 station,
                 full_load,
                 no_unload,
+                transfer,
                 wait_ticks,
                 travel_ticks,
             }),
@@ -485,12 +512,14 @@ impl VehicleOrder {
                 station,
                 full_load,
                 no_unload,
+                transfer,
                 wait_ticks,
                 ..
             } => Self::Station {
                 station,
                 full_load,
                 no_unload,
+                transfer,
                 wait_ticks,
                 travel_ticks,
             },

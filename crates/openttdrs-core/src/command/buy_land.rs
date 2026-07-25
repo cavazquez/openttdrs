@@ -47,7 +47,7 @@ pub(crate) fn buy_land_area(
     from: TileCoord,
     to: TileCoord,
 ) -> Result<(), CommandError> {
-    let cost_per = buy_land_cost(state.tick.get());
+    let cost_per = buy_land_cost(state.global_economy.inflation_prices);
     let candidates: Vec<TileCoord> = tile_rect(from, to)
         .filter(|c| check_buy_land(&state.map, *c).is_ok())
         .collect();
@@ -74,7 +74,7 @@ pub(crate) fn buy_land_area(
 
 pub(crate) fn buy_land_quote(state: &GameState, cmd: &super::types::Command) -> i64 {
     use super::types::Command;
-    let cost_per = buy_land_cost(state.tick.get());
+    let cost_per = buy_land_cost(state.global_economy.inflation_prices);
     match cmd {
         Command::BuyLand(c) if check_buy_land(&state.map, *c).is_ok() => cost_per,
         Command::BuyLandArea { from, to } => {

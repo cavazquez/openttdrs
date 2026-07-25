@@ -4,6 +4,7 @@ pub(super) fn process_monthly_economy(state: &mut GameState, tick: u64) {
     if tick == 0 || !tick.is_multiple_of(economy::TICKS_PER_MONTH) {
         return;
     }
+    apply_monthly_inflation_and_fluctuations(state, tick);
     apply_monthly_interest_and_bankruptcy(state);
     // Industrias ya marcadas con prod_level = 0 el mes pasado: fuera del mapa.
     let closed = crate::industry::remove_closed_industries(&mut state.industries, &mut state.map);
@@ -79,6 +80,25 @@ pub(super) fn process_monthly_economy(state: &mut GameState, tick: u64) {
         let produced = industry.produced_total;
         let transported = industry.transported_total;
         industry.history.push_month(stock, produced, transported);
+    }
+}
+
+fn apply_monthly_inflation_and_fluctuations(state: &mut GameState, tick: u64) {
+    let calendar_year = {
+        let day = tick / u64::from(economy::TICKS_PER_DAY);
+        crate::news::calendar_year_day(day).0
+    };
+    if !state
+        .global_economy
+        .add_monthly_inflation(calendar_year, true)
+    {
+        state.sync_scaled_max_loan();
+    }
+    if let Some(event) = state
+        .global_economy
+        .handle_monthly_fluctuations(&mut state.cargo_rng)
+    {
+        crate::news::push_economy_fluctuation_news(state, event);
     }
 }
 

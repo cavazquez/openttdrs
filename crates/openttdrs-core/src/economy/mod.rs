@@ -1,11 +1,16 @@
 //! Pagos de transporte inspirados en `GetTransportedGoodsIncome` de `OpenTTD` (Camino B).
 
 pub mod build_costs;
+pub mod global;
 pub mod payments;
 pub mod time;
 pub mod vehicle_costs;
 
 pub use build_costs::{build_object_cost, buy_land_cost, terraform_cost_per_corner};
+pub use global::{
+    FluctuationEvent, GlobalEconomy, INFLATION_FRAC_ONE, MAX_INFLATION, ORIGINAL_BASE_YEAR,
+    ORIGINAL_MAX_YEAR,
+};
 pub use payments::{
     ANNUAL_INTEREST_RATE_PCT, CargoPaymentSpec, DEFAULT_MAX_LOAN, LOAN_INTERVAL, cargo_time_factor,
     check_bankruptcy, decrease_loan, increase_loan, inflation_income_factor,
@@ -24,58 +29,157 @@ pub use vehicle_costs::{
 mod tests {
     use super::*;
     use crate::cargo::CargoType;
+    use crate::economy::global::{GlobalEconomy, INFLATION_FRAC_ONE};
+    use crate::linkgraph_parity::Randomizer;
     use crate::map::TileCoord;
+    use crate::news::CALENDAR_BASE_YEAR;
+
+    fn base_inflation_payment() -> u64 {
+        let mut ge = GlobalEconomy::new();
+        ge.startup(&mut Randomizer::new(42), CALENDAR_BASE_YEAR);
+        ge.inflation_payment
+    }
 
     #[test]
     fn coal_pays_more_than_passengers_on_same_route() {
+        let inflation = base_inflation_payment();
         let dist = 12;
         let days = 3;
         let count = 10;
-        let coal = transported_goods_income(count, dist, days, CargoType::Coal, 0);
-        let pax = transported_goods_income(count, dist, days, CargoType::Passengers, 0);
+        let coal = transported_goods_income(count, dist, days, CargoType::Coal, inflation);
+        let pax = transported_goods_income(count, dist, days, CargoType::Passengers, inflation);
         assert!(coal > pax, "carbón {coal} vs pasajeros {pax}");
     }
 
     #[test]
     fn longer_distance_pays_more() {
-        let short = transported_goods_income(5, 4, 2, CargoType::Wood, 0);
-        let long = transported_goods_income(5, 20, 2, CargoType::Wood, 0);
+        let inflation = base_inflation_payment();
+        let short = transported_goods_income(5, 4, 2, CargoType::Wood, inflation);
+        let long = transported_goods_income(5, 20, 2, CargoType::Wood, inflation);
         assert!(long > short);
     }
 
     #[test]
     fn slow_transit_reduces_income() {
-        let fast = transported_goods_income(8, 10, 2, CargoType::Goods, 0);
-        let slow = transported_goods_income(8, 10, 80, CargoType::Goods, 0);
+        let inflation = base_inflation_payment();
+        let fast = transported_goods_income(8, 10, 2, CargoType::Goods, inflation);
+        let slow = transported_goods_income(8, 10, 80, CargoType::Goods, inflation);
         assert!(fast > slow);
     }
 
     #[test]
     fn packet_transit_days_match_payment_formula() {
-        let young = transported_goods_income(4, 12, 1, CargoType::Coal, 0);
-        let aged = transported_goods_income(4, 12, 40, CargoType::Coal, 0);
+        let inflation = base_inflation_payment();
+        let young = transported_goods_income(4, 12, 1, CargoType::Coal, inflation);
+        let aged = transported_goods_income(4, 12, 40, CargoType::Coal, inflation);
         assert!(young > aged, "packet joven {young} vs envejecido {aged}");
     }
 
     #[test]
-    fn inflation_increases_income_over_years() {
-        let base = transported_goods_income(10, 8, 4, CargoType::Coal, 0);
-        let later = transported_goods_income(10, 8, 4, CargoType::Coal, TICKS_PER_YEAR * 10);
+    fn inflation_increases_income_over_months() {
+        let mut ge = GlobalEconomy::new();
+        let base_payment = ge.inflation_payment;
+        for _ in 0..24 {
+            ge.add_monthly_inflation(CALENDAR_BASE_YEAR, true);
+        }
+        let base = transported_goods_income(10, 8, 4, CargoType::Coal, base_payment);
+        let later = transported_goods_income(10, 8, 4, CargoType::Coal, ge.inflation_payment);
         assert!(later > base);
     }
 
     #[test]
-    fn inflation_increases_terraform_cost_over_years() {
-        let base = terraform_cost_per_corner(0);
-        let later = terraform_cost_per_corner(TICKS_PER_YEAR * 20);
+    fn inflation_increases_terraform_cost_over_months() {
+        let mut ge = GlobalEconomy::new();
+        let base_prices = ge.inflation_prices;
+        for _ in 0..24 {
+            ge.add_monthly_inflation(CALENDAR_BASE_YEAR, true);
+        }
+        let base = terraform_cost_per_corner(base_prices);
+        let later = terraform_cost_per_corner(ge.inflation_prices);
         assert!(later > base);
     }
 
     #[test]
-    fn price_inflation_grows_slower_than_income_inflation() {
-        let income = inflation_income_factor(TICKS_PER_YEAR * 50);
-        let prices = inflation_prices_factor(TICKS_PER_YEAR * 50);
-        assert!(income > prices);
+    fn payment_inflation_grows_slower_than_price_inflation() {
+        let mut ge = GlobalEconomy::new();
+        for _ in 0..120 {
+            ge.add_monthly_inflation(CALENDAR_BASE_YEAR, true);
+        }
+        let income = inflation_income_factor(ge.inflation_payment);
+        let prices = inflation_prices_factor(ge.inflation_prices);
+        assert!(prices > income, "precios {prices} vs pagos {income}");
+    }
+
+    #[test]
+    fn compound_inflation_matches_openttd_monthly_step() {
+        let mut ge = GlobalEconomy::new();
+        let before = ge.inflation_prices;
+        ge.add_monthly_inflation(CALENDAR_BASE_YEAR, true);
+        let expected = before + (before * u64::from(ge.infl_amount) * 54) / (1 << 16);
+        assert_eq!(ge.inflation_prices, expected);
+    }
+
+    #[test]
+    fn inflation_stops_outside_original_year_window() {
+        let mut ge = GlobalEconomy::new();
+        let before = ge.inflation_prices;
+        ge.add_monthly_inflation(1919, true);
+        assert_eq!(ge.inflation_prices, before);
+        ge.add_monthly_inflation(2090, true);
+        assert_eq!(ge.inflation_prices, before);
+    }
+
+    #[test]
+    fn max_loan_scales_with_inflation_prices() {
+        let mut ge = GlobalEconomy::new();
+        let base = ge.scaled_max_loan();
+        for _ in 0..120 {
+            ge.add_monthly_inflation(CALENDAR_BASE_YEAR, true);
+        }
+        assert!(ge.scaled_max_loan() > base);
+        assert_eq!(ge.scaled_max_loan() % LOAN_INTERVAL, 0);
+    }
+
+    #[test]
+    fn asymptotic_time_factor_for_very_long_transit() {
+        let spec = CargoType::Passengers.payment_spec();
+        let (medium, medium_asym) = cargo_time_factor(40, spec);
+        let (very_long, is_asymptotic) = cargo_time_factor(600, spec);
+        assert!(!medium_asym);
+        assert!(is_asymptotic);
+        assert!(very_long >= 1);
+        assert!(very_long < medium);
+        assert!(very_long < 31, "la rama asintótica cae por debajo del suelo fijo antiguo");
+    }
+
+    #[test]
+    fn recession_cycle_emits_fluctuation_events() {
+        let mut ge = GlobalEconomy::new();
+        ge.recessions_enabled = true;
+        ge.fluct = 1;
+        let mut rng = Randomizer::new(7);
+        assert_eq!(
+            ge.handle_monthly_fluctuations(&mut rng),
+            Some(crate::economy::FluctuationEvent::RecessionStart)
+        );
+        assert!(ge.is_in_recession());
+
+        ge.recessions_enabled = false;
+        ge.fluct = -5;
+        assert_eq!(
+            ge.handle_monthly_fluctuations(&mut rng),
+            Some(crate::economy::FluctuationEvent::RecessionEnd)
+        );
+        assert!(!ge.is_in_recession());
+    }
+
+    #[test]
+    fn startup_applies_pre_1950_inflation() {
+        let mut ge = GlobalEconomy::new();
+        ge.startup(&mut Randomizer::new(1), CALENDAR_BASE_YEAR);
+        assert!(ge.inflation_prices > INFLATION_FRAC_ONE);
+        assert!(ge.inflation_payment > INFLATION_FRAC_ONE);
+        assert!(ge.inflation_prices > ge.inflation_payment);
     }
 
     #[test]

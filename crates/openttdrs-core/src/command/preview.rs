@@ -30,12 +30,16 @@ fn preview_industry_error(
     check_place_industry_spec(map, c, spec).err()
 }
 
-fn preview_terraform(map: &crate::map::Map, cmd: &Command, tick: u64) -> Option<CommandError> {
+fn preview_terraform(
+    map: &crate::map::Map,
+    cmd: &Command,
+    inflation_prices: u64,
+) -> Option<CommandError> {
     match cmd {
-        Command::RaiseLand(c) => check_raise_land(map, *c, tick).err(),
-        Command::LowerLand(c) => check_lower_land(map, *c, tick).err(),
+        Command::RaiseLand(c) => check_raise_land(map, *c, inflation_prices).err(),
+        Command::LowerLand(c) => check_lower_land(map, *c, inflation_prices).err(),
         Command::LevelLand { from, to, mode } => {
-            check_level_land(map, *from, *to, *mode, tick).err()
+            check_level_land(map, *from, *to, *mode, inflation_prices).err()
         }
         _ => None,
     }
@@ -77,7 +81,7 @@ where
 fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
     let map = &state.map;
     let stations = &state.stations;
-    let tick = state.tick.get();
+    let inflation_prices = state.global_economy.inflation_prices;
     match cmd {
         Command::PlaceRoad(c)
         | Command::PlaceRoadBits(c, _)
@@ -89,21 +93,21 @@ fn preview_build_cmd(state: &GameState, cmd: &Command) -> Option<CommandError> {
         Command::PlaceRail(c) => require_tile_owned_by_active(state, *c).err().or_else(|| {
             check_place_rail(map, *c).err().or_else(|| {
                 let tb = rail_trackbits_from_neighbors(map, *c);
-                check_rail_trackbits_with_autoslope(map, *c, tb, tick).err()
+                check_rail_trackbits_with_autoslope(map, *c, tb, inflation_prices).err()
             })
         }),
         Command::PlaceRailBits(c, bits) => {
             require_tile_owned_by_active(state, *c).err().or_else(|| {
                 check_place_rail(map, *c).err().or_else(|| {
                     let tb = merged_rail_trackbits_on_tile(map, *c, *bits);
-                    check_rail_trackbits_with_autoslope(map, *c, tb, tick).err()
+                    check_rail_trackbits_with_autoslope(map, *c, tb, inflation_prices).err()
                 })
             })
         }
         Command::SetRailBits(c, bits) => require_tile_owned_by_active(state, *c)
             .err()
             .or_else(|| check_place_rail(map, *c).err())
-            .or_else(|| check_rail_trackbits_with_autoslope(map, *c, bits & 0x3F, tick).err()),
+            .or_else(|| check_rail_trackbits_with_autoslope(map, *c, bits & 0x3F, inflation_prices).err()),
         Command::PlaceRailWaypoint(c) => require_tile_owned_by_active(state, *c)
             .err()
             .or_else(|| check_place_rail_waypoint(map, *c, stations).err()),
@@ -358,7 +362,7 @@ pub fn command_would_fail(state: &GameState, cmd: &Command) -> Option<CommandErr
         cmd,
         Command::RaiseLand(_) | Command::LowerLand(_) | Command::LevelLand { .. }
     ) {
-        return preview_terraform(&state.map, cmd, state.tick.get());
+        return preview_terraform(&state.map, cmd, state.global_economy.inflation_prices);
     }
     if let Some(err) = preview_industry_cmd(&state.map, cmd) {
         return Some(err);

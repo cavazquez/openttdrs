@@ -4,7 +4,7 @@ use crate::{CargoType, GameState, TileCoord, economy, station, town};
 #[allow(clippy::too_many_lines)]
 pub(super) fn unload_vehicles(
     state: &mut GameState,
-    tick: u64,
+    _tick: u64,
     loaded_this_tick: &[bool],
     unloaded_this_tick: &mut [bool],
 ) {
@@ -42,8 +42,12 @@ pub(super) fn unload_vehicles(
         }
         // CargoDist: no bajar si `next_hop` apunta a otra estación.
         let reinsert = !cargo_type.is_town_cargo();
+        let force_transfer = state.vehicles[i]
+            .orders
+            .get(state.vehicles[i].current_order)
+            .is_some_and(|o| o.transfer());
         if state.vehicles[i].cargo_packets.packets.iter().all(|p| {
-            crate::cargo_packet::decide_cargo_unload_action(p, station_pos, reinsert)
+            crate::cargo_packet::decide_cargo_unload_action(p, station_pos, force_transfer)
                 == crate::cargo_packet::CargoUnloadAction::Keep
         }) {
             continue;
@@ -79,12 +83,12 @@ pub(super) fn unload_vehicles(
         let mut taken = taken;
         for packet in &mut taken {
             let distance = economy::manhattan_distance(packet.source, station_pos);
-            let mut part = economy::transported_goods_income(
+            let part = economy::transported_goods_income(
                 u32::from(packet.count),
                 distance,
                 packet.periods_in_transit,
                 packet.cargo,
-                tick,
+                state.global_economy.inflation_payment,
             );
             let _ = crate::subsidy::try_award_subsidy(
                 state,
@@ -93,39 +97,57 @@ pub(super) fn unload_vehicles(
                 packet.source,
                 vehicle_owner,
             );
-            part = part.saturating_mul(crate::subsidy::delivery_income_multiplier(
+            let part = part.saturating_mul(crate::subsidy::delivery_income_multiplier(
                 state,
                 station_pos,
                 packet.cargo,
                 packet.source,
                 vehicle_owner,
             ));
-            // Feeder: 75 % al owner de first_station si es distinta del destino.
-            if !packet.feeder_paid
-                && let Some(first) = packet.first_station
-                && first != station_pos
-            {
-                let share = crate::company::feeder_share_of(part);
-                if share > 0
-                    && let Some(feeder_st) = state.stations.iter().find(|s| s.pos == first)
-                {
-                    let feeder_owner = feeder_st.owner;
-                    state.credit_company(feeder_owner, share);
-                    feeder_total = feeder_total.saturating_add(share);
-                    if let Some((_, acc)) = feeder_income_by_owner
-                        .iter_mut()
-                        .find(|(id, _)| *id == feeder_owner)
+            let action = crate::cargo_packet::decide_cargo_unload_action(
+                packet,
+                station_pos,
+                force_transfer,
+            );
+            match action {
+                crate::cargo_packet::CargoUnloadAction::Transfer => {
+                    if !packet.feeder_paid
+                        && let Some(first) = packet.first_station
+                        && first != station_pos
                     {
-                        *acc = acc.saturating_add(share);
-                    } else {
-                        feeder_income_by_owner.push((feeder_owner, share));
+                        let share = crate::company::feeder_share_of(part);
+                        if share > 0 {
+                            packet.feeder_share = packet.feeder_share.saturating_add(share);
+                        }
                     }
-                    part = part.saturating_sub(share);
-                    packet.feeder_share = packet.feeder_share.saturating_add(share);
-                    packet.feeder_paid = true;
                 }
+                crate::cargo_packet::CargoUnloadAction::Deliver => {
+                    let mut deliverer_part = part;
+                    if !packet.feeder_paid
+                        && packet.feeder_share > 0
+                        && let Some(first) = packet.first_station
+                        && first != station_pos
+                        && let Some(feeder_st) = state.stations.iter().find(|s| s.pos == first)
+                    {
+                        let feeder_owner = feeder_st.owner;
+                        let accumulated = packet.feeder_share;
+                        state.credit_company(feeder_owner, accumulated);
+                        feeder_total = feeder_total.saturating_add(accumulated);
+                        if let Some((_, acc)) = feeder_income_by_owner
+                            .iter_mut()
+                            .find(|(id, _)| *id == feeder_owner)
+                        {
+                            *acc = acc.saturating_add(accumulated);
+                        } else {
+                            feeder_income_by_owner.push((feeder_owner, accumulated));
+                        }
+                        packet.feeder_paid = true;
+                        deliverer_part = part.saturating_sub(accumulated);
+                    }
+                    payment = payment.saturating_add(deliverer_part);
+                }
+                crate::cargo_packet::CargoUnloadAction::Keep => {}
             }
-            payment = payment.saturating_add(part);
         }
 
         let town_cargo = cargo_type.is_town_cargo();

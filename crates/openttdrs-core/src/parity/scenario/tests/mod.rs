@@ -332,8 +332,8 @@ fn feeder_share_credits_first_station_owner() {
     );
 }
 
-/// Hub IA → destino jugador: al descargar se paga 75 % al feeder, se marca
-/// `feeder_paid` y se reinserta el packet con `first_station` intacto.
+/// Hub IA → destino jugador: al trasbordar se acumula `feeder_share` sin cobrar;
+/// `feeder_paid` queda pendiente hasta una entrega final.
 #[test]
 fn feeder_share_paid_on_unload_preserves_packet_flags() {
     use crate::cargo::CargoType;
@@ -354,7 +354,15 @@ fn feeder_share_paid_on_unload_preserves_packet_flags() {
     state.stations = vec![hub_st, dest_st];
 
     let mut truck = Vehicle::new(90, VehicleKind::Truck, dest, dest);
-    truck.set_vehicle_orders(vec![VehicleOrder::station(dest)]);
+    let mut transfer_order = VehicleOrder::station(dest);
+    if let VehicleOrder::Station {
+        transfer, no_unload, ..
+    } = &mut transfer_order
+    {
+        *transfer = true;
+        *no_unload = false;
+    }
+    truck.set_vehicle_orders(vec![transfer_order]);
     truck.sync_order_destination(&state.map);
     let mut packet = CargoPacket::new(CargoType::Coal, 8, TileCoord::new(1, 1));
     packet.first_station = Some(hub);
@@ -385,15 +393,71 @@ fn feeder_share_paid_on_unload_preserves_packet_flags() {
         .expect("packet reinsertado");
     assert_eq!(reinserted.first_station, Some(hub));
     assert!(reinserted.next_hop.is_none(), "trasbordo limpia next_hop");
-    assert!(reinserted.feeder_paid, "feeder liquidado una sola vez");
     assert!(
-        state.company_economy(ai).money > ai_before,
-        "IA feeder debe cobrar su 75 %"
+        !reinserted.feeder_paid,
+        "feeder no se liquida en trasbordo"
     );
     assert!(reinserted.feeder_share > 0, "packet acumula feeder_share");
+    assert_eq!(
+        state.company_economy(ai).money,
+        ai_before,
+        "IA feeder no cobra en transfer"
+    );
+    assert_eq!(
+        state.company_economy(CompanyId::PLAYER).money,
+        player_before,
+        "jugador no cobra ingreso completo en transfer"
+    );
+}
+
+/// Entrega final de pax: liquida `feeder_share` acumulado al owner de `first_station`.
+#[test]
+fn final_delivery_liquidates_accumulated_feeder_share() {
+    use crate::cargo::CargoType;
+    use crate::cargo_packet::CargoPacket;
+    use crate::company::CompanyId;
+    use crate::station::StopKind;
+
+    let mut state = GameState::new(16, 10);
+    state.ensure_companies();
+    state.ensure_rival_transcargo();
+    let ai = state.companies.iter().find(|c| c.is_ai).unwrap().id;
+    let hub = TileCoord::new(2, 2);
+    let dest = TileCoord::new(10, 5);
+    let mut hub_st = crate::Station::new_with_kind(hub, StopKind::BusStop);
+    hub_st.owner = ai;
+    state.stations = vec![
+        hub_st,
+        crate::Station::new_with_kind(dest, StopKind::BusStop),
+    ];
+
+    let mut bus = Vehicle::new(92, VehicleKind::Bus, dest, dest);
+    bus.set_vehicle_orders(vec![VehicleOrder::station(dest)]);
+    bus.sync_order_destination(&state.map);
+    let mut packet = CargoPacket::new(CargoType::Passengers, 8, TileCoord::new(3, 2));
+    packet.first_station = Some(hub);
+    packet.feeder_share = 10;
+    packet.feeder_paid = false;
+    bus.cargo_packets.push(packet);
+    bus.sync_cargo_from_packets();
+    bus.last_pickup_station = Some(hub);
+    state.vehicles.push(bus);
+
+    let ai_before = state.company_economy(ai).money;
+    let player_before = state.company_economy(CompanyId::PLAYER).money;
+    for _ in 0..8 {
+        state.step();
+        if state.vehicles[0].cargo == 0 {
+            break;
+        }
+    }
+
+    assert_eq!(state.vehicles[0].cargo, 0, "debe entregar pasajeros");
+    let paid_delta = state.company_economy(ai).money - ai_before;
+    assert_eq!(paid_delta, 10, "feeder recibe el acumulado");
     assert!(
         state.company_economy(CompanyId::PLAYER).money > player_before,
-        "jugador cobra el resto del ingreso"
+        "entregador cobra income - feeder_share"
     );
 }
 

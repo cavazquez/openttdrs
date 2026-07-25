@@ -384,13 +384,21 @@ fn simulate_autoslope_flat(
 }
 
 /// Coste previsto y validación de solo lectura para elevar terreno.
-pub(crate) fn check_raise_land(map: &Map, c: TileCoord, tick: u64) -> Result<i64, CommandError> {
-    Ok(simulate_raise_land(map, c, terraform_cost_per_corner(tick))?.cost)
+pub(crate) fn check_raise_land(
+    map: &Map,
+    c: TileCoord,
+    inflation_prices: u64,
+) -> Result<i64, CommandError> {
+    Ok(simulate_raise_land(map, c, terraform_cost_per_corner(inflation_prices))?.cost)
 }
 
 /// Coste previsto y validación de solo lectura para bajar terreno.
-pub(crate) fn check_lower_land(map: &Map, c: TileCoord, tick: u64) -> Result<i64, CommandError> {
-    Ok(simulate_lower_land(map, c, terraform_cost_per_corner(tick))?.cost)
+pub(crate) fn check_lower_land(
+    map: &Map,
+    c: TileCoord,
+    inflation_prices: u64,
+) -> Result<i64, CommandError> {
+    Ok(simulate_lower_land(map, c, terraform_cost_per_corner(inflation_prices))?.cost)
 }
 
 pub(crate) fn check_level_land(
@@ -398,24 +406,31 @@ pub(crate) fn check_level_land(
     from: TileCoord,
     to: TileCoord,
     mode: LevelMode,
-    tick: u64,
+    inflation_prices: u64,
 ) -> Result<i64, CommandError> {
-    Ok(simulate_level_land(map, from, to, mode, terraform_cost_per_corner(tick))?.cost)
+    Ok(simulate_level_land(
+        map,
+        from,
+        to,
+        mode,
+        terraform_cost_per_corner(inflation_prices),
+    )?
+    .cost)
 }
 
 pub(crate) fn check_autoslope_flat(
     map: &Map,
     c: TileCoord,
-    tick: u64,
+    inflation_prices: u64,
 ) -> Result<i64, CommandError> {
-    Ok(simulate_autoslope_flat(map, c, terraform_cost_per_corner(tick))?.cost)
+    Ok(simulate_autoslope_flat(map, c, terraform_cost_per_corner(inflation_prices))?.cost)
 }
 
 pub(super) fn apply_autoslope_if_needed(
     state: &mut GameState,
     c: TileCoord,
 ) -> Result<i64, CommandError> {
-    let cost_per = terraform_cost_per_corner(state.tick.get());
+    let cost_per = terraform_cost_per_corner(state.global_economy.inflation_prices);
     let result = simulate_autoslope_flat(&state.map, c, cost_per)?;
     let charged = result.cost;
     if charged > 0 {
@@ -425,13 +440,13 @@ pub(super) fn apply_autoslope_if_needed(
 }
 
 pub(super) fn raise_land(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
-    let cost_per = terraform_cost_per_corner(state.tick.get());
+    let cost_per = terraform_cost_per_corner(state.global_economy.inflation_prices);
     let result = simulate_raise_land(&state.map, c, cost_per)?;
     apply_terraform_result(state, result)
 }
 
 pub(super) fn lower_land(state: &mut GameState, c: TileCoord) -> Result<(), CommandError> {
-    let cost_per = terraform_cost_per_corner(state.tick.get());
+    let cost_per = terraform_cost_per_corner(state.global_economy.inflation_prices);
     let result = simulate_lower_land(&state.map, c, cost_per)?;
     apply_terraform_result(state, result)
 }
@@ -442,7 +457,7 @@ pub(super) fn level_land(
     to: TileCoord,
     mode: LevelMode,
 ) -> Result<(), CommandError> {
-    let cost_per = terraform_cost_per_corner(state.tick.get());
+    let cost_per = terraform_cost_per_corner(state.global_economy.inflation_prices);
     let result = simulate_level_land(&state.map, from, to, mode, cost_per)?;
     apply_terraform_result(state, result)
 }
@@ -498,7 +513,7 @@ mod tests {
         let s = SandboxMap::flat(8, 8, 0);
         let c = TileCoord::new(2, 2);
         assert_eq!(
-            check_lower_land(&s.map, c, 0),
+            check_lower_land(&s.map, c, crate::economy::INFLATION_FRAC_ONE),
             Err(CommandError::TerrainTooLow)
         );
     }
@@ -550,7 +565,7 @@ mod tests {
         let c = TileCoord::new(2, 2);
         s.map.set_kind(c, TileKind::Road).unwrap();
         assert_eq!(
-            check_lower_land(&s.map, c, 0),
+            check_lower_land(&s.map, c, crate::economy::INFLATION_FRAC_ONE),
             Err(CommandError::TileNotTerraformable)
         );
     }
@@ -561,7 +576,7 @@ mod tests {
         let c = TileCoord::new(2, 2);
         s.map.set_kind(c, TileKind::Road).unwrap();
         assert_eq!(
-            check_raise_land(&s.map, c, 0),
+            check_raise_land(&s.map, c, crate::economy::INFLATION_FRAC_ONE),
             Err(CommandError::TileNotTerraformable)
         );
     }

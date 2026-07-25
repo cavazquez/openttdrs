@@ -392,6 +392,7 @@ mod tests {
             station: TileCoord::new(28, 39),
             full_load: false,
             no_unload: false,
+            transfer: false,
             wait_ticks: 0,
             travel_ticks: 0,
         }]);
@@ -406,6 +407,7 @@ mod tests {
             station: TileCoord::new(17, 15),
             full_load: false,
             no_unload: false,
+            transfer: false,
             wait_ticks: 0,
             travel_ticks: 0,
         }]);

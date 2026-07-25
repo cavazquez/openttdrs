@@ -16,7 +16,8 @@ pub use queue::{
     NEWS_MAX_AGE_DAYS, NewsDisplayMode, NewsDisplaySettings, NewsItem, NewsQueue, NewsReference,
     NewsType, PendingNewsEvent, add_news_item, default_display_for_type, maybe_purge_old_news,
     purge_old_news_items, push_autoreplace_failed_news, push_bankruptcy_news,
-    push_cargo_delivery_news, push_disaster_news, push_first_vehicle_running_news,
+    push_cargo_delivery_news, push_disaster_news, push_economy_fluctuation_news,
+    push_first_vehicle_running_news,
     push_rival_achievement_news, push_subsidy_awarded_news, push_subsidy_offer_news,
     report_industry_closed, report_industry_closing,
 };

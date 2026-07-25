@@ -2,10 +2,11 @@
 
 use crate::GameState;
 use crate::map::{TileCoord, TileKind, tile_slope_and_z};
-use crate::town::{
-    FUND_BUILDINGS_COST, FUND_BUILDINGS_RATING_BOOST, TOWN_ADVERTISE_COST,
-    TOWN_ADVERTISE_RATING_BOOST, Town,
+use crate::station::{
+    TOWN_ADVERTISE_MEDIUM_RADIUS, TOWN_ADVERTISE_MEDIUM_RATING_BOOST,
+    modify_station_rating_around,
 };
+use crate::town::{FUND_BUILDINGS_COST, FUND_BUILDINGS_RATING_BOOST, TOWN_ADVERTISE_COST, Town};
 use crate::townname::generate_town_name;
 
 use super::error::CommandError;
@@ -23,11 +24,15 @@ pub(crate) fn town_advertise(state: &mut GameState, town_id: u32) -> Result<(), 
         return Err(CommandError::InsufficientFunds);
     }
     state.economy.money -= TOWN_ADVERTISE_COST;
-    let delta = state.towns[idx].adjust_rating(TOWN_ADVERTISE_RATING_BOOST);
-    state
-        .runtime
-        .pending_sim_events
-        .push(crate::sim_events::SimEvent::TownRatingChanged { town_id, delta });
+    let center = state.towns[idx].pos;
+    let owner = state.active_company;
+    let _ = modify_station_rating_around(
+        &mut state.stations,
+        center,
+        owner,
+        TOWN_ADVERTISE_MEDIUM_RADIUS,
+        TOWN_ADVERTISE_MEDIUM_RATING_BOOST,
+    );
     Ok(())
 }
 
@@ -151,7 +156,9 @@ fn town_index(state: &GameState, town_id: u32) -> Result<usize, CommandError> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
-    use crate::{Command, GameState, apply_command};
+    use crate::cargo::CargoType;
+    use crate::station::{StopKind, station_rating_for_cargo};
+    use crate::{Command, GameState, apply_command, map::TileCoord};
 
     #[test]
     fn found_town_places_roads_houses_and_entity() {
@@ -174,5 +181,34 @@ mod tests {
         apply_command(&mut s, &Command::FoundTown(TileCoord::new(10, 10))).unwrap();
         let err = apply_command(&mut s, &Command::FoundTown(TileCoord::new(16, 10))).unwrap_err();
         assert_eq!(err, CommandError::TownTooClose);
+    }
+
+    #[test]
+    fn town_advertise_boosts_nearby_station_rating_not_authority() {
+        let mut s = GameState::new(32, 32);
+        s.economy.money = 10_000;
+        let town_pos = TileCoord::new(10, 10);
+        s.towns.push(Town {
+            id: 1,
+            pos: town_pos,
+            name: "Testville".to_string(),
+            ..Default::default()
+        });
+        let stop = TileCoord::new(12, 10);
+        let mut st = crate::Station::new_with_kind(stop, StopKind::BusStop);
+        st.goods.get_mut(CargoType::Passengers).has_rating = true;
+        st.goods.get_mut(CargoType::Passengers).rating = 100;
+        s.stations.push(st);
+
+        let authority_before = s.towns[0].local_authority_rating;
+        let station_before = station_rating_for_cargo(&s.stations[0], CargoType::Passengers);
+
+        apply_command(&mut s, &Command::TownAdvertise(1)).unwrap();
+
+        assert_eq!(s.towns[0].local_authority_rating, authority_before);
+        assert_eq!(
+            station_rating_for_cargo(&s.stations[0], CargoType::Passengers),
+            station_before.saturating_add(crate::station::TOWN_ADVERTISE_MEDIUM_RATING_BOOST)
+        );
     }
 }

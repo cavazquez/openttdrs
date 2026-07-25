@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, VecDeque};
 use serde::{Deserialize, Serialize};
 
 use crate::cargo::{ALL_CARGO_TYPES, CargoStock, CargoType};
+use crate::cargodist::parity::Randomizer;
 use crate::map::TileCoord;
 
 /// Acción al llegar a una estación (`MoveToAction` / `ChooseAction`).
@@ -20,12 +21,25 @@ pub enum CargoUnloadAction {
     Load,
 }
 
+/// Vector acumulado de teselas recorridas en vehículo (`Coord2D` de `OpenTTD`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TravelledVector {
+    pub x: i16,
+    pub y: i16,
+}
+
 /// Lote de carga con origen y edad (`CargoPacket` de `OpenTTD`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CargoPacket {
     pub cargo: CargoType,
     pub count: u16,
     pub source: TileCoord,
+    /// Orígen geográfico de pago (`source_xy`); se fija en la primera carga.
+    #[serde(default)]
+    pub source_xy: Option<TileCoord>,
+    /// Vector de distancia recorrida en vehículo (`travelled`).
+    #[serde(default)]
+    pub travelled: TravelledVector,
     /// Periodos de tránsito (incrementa cada `CARGO_AGING_TICKS` = 185 ticks, ~2,5 días).
     #[serde(default)]
     pub periods_in_transit: u16,
@@ -50,6 +64,8 @@ impl CargoPacket {
             cargo,
             count,
             source,
+            source_xy: None,
+            travelled: TravelledVector::default(),
             periods_in_transit: 0,
             first_station: None,
             feeder_paid: false,
@@ -69,6 +85,74 @@ impl CargoPacket {
         self.next_hop = hop;
         self
     }
+
+    /// Parte proporcional de `feeder_share` para `part` unidades (`GetFeederShare`).
+    #[must_use]
+    pub fn feeder_share_of(&self, part: u16) -> i64 {
+        if self.count == 0 || part == 0 {
+            return 0;
+        }
+        self.feeder_share * i64::from(part) / i64::from(self.count)
+    }
+
+    /// `CargoPacket::Split` — divide el paquete prorrateando `feeder_share`.
+    #[must_use]
+    pub fn split(&mut self, new_size: u16) -> Option<Self> {
+        if new_size == 0 || new_size >= self.count {
+            return None;
+        }
+        let fs = self.feeder_share_of(new_size);
+        let mut taken = self.clone();
+        taken.count = new_size;
+        taken.feeder_share = fs;
+        self.feeder_share = self.feeder_share.saturating_sub(fs);
+        self.count -= new_size;
+        Some(taken)
+    }
+
+    /// `UpdateLoadingTile` — fija `source_xy` y acumula el tile de carga en `travelled`.
+    pub fn update_loading_tile(&mut self, tile: TileCoord) {
+        if self.source_xy.is_none() {
+            self.source_xy = Some(tile);
+        }
+        self.travelled.x = self.travelled.x.saturating_add(clamp_coord(tile.x));
+        self.travelled.y = self.travelled.y.saturating_add(clamp_coord(tile.y));
+    }
+
+    /// `UpdateUnloadingTile` — resta el tile de descarga del vector `travelled`.
+    pub fn update_unloading_tile(&mut self, tile: TileCoord) {
+        self.travelled.x = self.travelled.x.saturating_sub(clamp_coord(tile.x));
+        self.travelled.y = self.travelled.y.saturating_sub(clamp_coord(tile.y));
+    }
+
+    /// Distancia de pago por tramos (`CargoPacket::GetDistance`).
+    ///
+    /// Usa el vector recorrido en vehículo, acotado por Manhattan `source_xy`→destino.
+    #[must_use]
+    pub fn get_distance(&self, current_tile: TileCoord) -> u32 {
+        let source = self.source_xy.unwrap_or(self.source);
+        let local_x = i32::from(self.travelled.x) - current_tile.x;
+        let local_y = i32::from(self.travelled.y) - current_tile.y;
+        let distance_travelled = local_x.unsigned_abs() + local_y.unsigned_abs();
+        let distance_source_dest = crate::economy::manhattan_distance(source, current_tile);
+        distance_travelled.min(distance_source_dest)
+    }
+
+    fn same_merge_key(&self, other: &Self) -> bool {
+        self.cargo == other.cargo
+            && self.source == other.source
+            && self.source_xy == other.source_xy
+            && self.travelled == other.travelled
+            && self.periods_in_transit == other.periods_in_transit
+            && self.first_station == other.first_station
+            && self.feeder_paid == other.feeder_paid
+            && self.feeder_share == other.feeder_share
+            && self.next_hop == other.next_hop
+    }
+}
+
+fn clamp_coord(v: i32) -> i16 {
+    i16::try_from(v).unwrap_or(if v < 0 { i16::MIN } else { i16::MAX })
 }
 
 /// Clave de hop en la cola de estación (`INVALID_STATION` → `None`).
@@ -187,15 +271,10 @@ impl StationCargoList {
         let key = StationHopKey(packet.next_hop);
         let queue = self.by_next_hop.entry(key).or_default();
         if let Some(last) = queue.back_mut()
-            && last.cargo == packet.cargo
-            && last.source == packet.source
-            && last.periods_in_transit == packet.periods_in_transit
-            && last.first_station == packet.first_station
-            && last.feeder_paid == packet.feeder_paid
-            && last.feeder_share == packet.feeder_share
-            && last.next_hop == packet.next_hop
+            && last.same_merge_key(&packet)
         {
             last.count = last.count.saturating_add(packet.count);
+            last.feeder_share = last.feeder_share.saturating_add(packet.feeder_share);
             return;
         }
         queue.push_back(packet);
@@ -243,12 +322,13 @@ impl StationCargoList {
                 } else {
                     #[allow(clippy::cast_possible_truncation)]
                     let take = left as u16;
-                    let mut taken = p.clone();
-                    taken.count = take;
-                    p.count -= take;
-                    left = 0;
-                    out.push(taken);
-                    kept.push_back(p);
+                    if let Some(taken) = p.split(take) {
+                        left = 0;
+                        out.push(taken);
+                        kept.push_back(p);
+                    } else {
+                        kept.push_back(p);
+                    }
                 }
             }
             *queue = kept;
@@ -315,15 +395,149 @@ impl StationCargoList {
         self.by_next_hop.retain(|_, q| !q.is_empty());
     }
 
-    /// Descarta hasta `amount` unidades del tipo, empezando por lo más viejo
-    /// (`TruncateCargo` con `max_move`). Devuelve lo realmente descartado.
-    pub fn truncate_cargo_amount(&mut self, cargo: CargoType, amount: u32) -> u32 {
-        let removed: u32 = self
-            .take(cargo, amount)
-            .iter()
-            .map(|p| u32::from(p.count))
-            .sum();
-        removed
+    /// Truncado aleatorio por destino (`StationCargoList::Truncate`).
+    ///
+    /// Cada hop pierde aproximadamente el mismo porcentaje; opcionalmente
+    /// acumula descartes por `first_station` (castigo de rating en origen).
+    pub fn truncate_cargo_amount(
+        &mut self,
+        cargo: CargoType,
+        amount: u32,
+        rng: &mut Randomizer,
+    ) -> (u32, BTreeMap<Option<TileCoord>, u32>) {
+        self.migrate_legacy();
+        let mut cargo_per_source: BTreeMap<Option<TileCoord>, u32> = BTreeMap::new();
+        let total = self.total_of(cargo);
+        let max_move = amount.min(total);
+        if max_move == 0 {
+            return (0, cargo_per_source);
+        }
+
+        // Materializar solo los packets del tipo (preservando hops ajenos).
+        let mut packets: Vec<CargoPacket> = Vec::new();
+        for q in self.by_next_hop.values_mut() {
+            let mut kept = VecDeque::new();
+            for p in q.drain(..) {
+                if p.cargo == cargo {
+                    packets.push(p);
+                } else {
+                    kept.push_back(p);
+                }
+            }
+            *q = kept;
+        }
+        self.by_next_hop.retain(|_, q| !q.is_empty());
+
+        let mut prev_count = total;
+        let mut moved = 0_u32;
+        let mut loop_n = 0_u32;
+        let mut remaining = packets;
+        while max_move > moved && loop_n < 8 {
+            let mut next_remaining = Vec::new();
+            let mut early_done = false;
+            for mut p in remaining {
+                if early_done || max_move <= moved {
+                    next_remaining.push(p);
+                    continue;
+                }
+                if prev_count > max_move && rng.random_range(prev_count) < prev_count - max_move {
+                    if loop_n == 0 {
+                        *cargo_per_source.entry(p.first_station).or_default() += u32::from(p.count);
+                    }
+                    next_remaining.push(p);
+                    continue;
+                }
+                let diff = max_move - moved;
+                if u32::from(p.count) > diff {
+                    if diff > 0 {
+                        #[allow(clippy::cast_possible_truncation)]
+                        let take = diff as u16;
+                        let _ = p.split(take);
+                        moved += diff;
+                        if loop_n > 0 {
+                            let entry = cargo_per_source.entry(p.first_station).or_default();
+                            *entry = entry.saturating_sub(diff);
+                            next_remaining.push(p);
+                            early_done = true;
+                            continue;
+                        }
+                        *cargo_per_source.entry(p.first_station).or_default() += u32::from(p.count);
+                    }
+                    next_remaining.push(p);
+                } else {
+                    let cnt = u32::from(p.count);
+                    if loop_n > 0 {
+                        let entry = cargo_per_source.entry(p.first_station).or_default();
+                        *entry = entry.saturating_sub(cnt);
+                    }
+                    moved += cnt;
+                }
+            }
+            remaining = next_remaining;
+            if early_done || moved >= max_move {
+                break;
+            }
+            loop_n = loop_n.saturating_add(1);
+            prev_count = remaining
+                .iter()
+                .map(|p| u32::from(p.count))
+                .fold(0, u32::saturating_add)
+                .max(1);
+        }
+        for p in remaining {
+            self.push(p);
+        }
+        (moved, cargo_per_source)
+    }
+
+    /// `StationCargoList::Reroute` — reasigna `next_hop == avoid` a otra vía.
+    pub fn reroute(
+        &mut self,
+        max_move: u32,
+        avoid: TileCoord,
+        avoid2: Option<TileCoord>,
+        mut pick_next: impl FnMut(Option<TileCoord>) -> Option<TileCoord>,
+    ) -> u32 {
+        self.migrate_legacy();
+        let key = StationHopKey(Some(avoid));
+        let Some(mut queue) = self.by_next_hop.remove(&key) else {
+            return 0;
+        };
+        let mut moved = 0_u32;
+        let mut kept = VecDeque::new();
+        while let Some(mut p) = queue.pop_front() {
+            if moved >= max_move {
+                kept.push_back(p);
+                continue;
+            }
+            let available = u32::from(p.count);
+            let take = available.min(max_move - moved);
+            if take == 0 {
+                kept.push_back(p);
+                continue;
+            }
+            let new_hop = pick_next(p.first_station)
+                .filter(|h| *h != avoid && avoid2.is_none_or(|a2| *h != a2));
+            if take < available {
+                #[allow(clippy::cast_possible_truncation)]
+                if let Some(mut taken) = p.split(take as u16) {
+                    taken.next_hop = new_hop;
+                    moved += take;
+                    self.push(taken);
+                    kept.push_back(p);
+                } else {
+                    kept.push_back(p);
+                }
+            } else {
+                p.next_hop = new_hop;
+                moved += available;
+                self.push(p);
+            }
+        }
+        if !kept.is_empty() {
+            self.by_next_hop.insert(key, kept);
+        }
+        moved
     }
 }
 
@@ -387,15 +601,10 @@ impl VehicleCargoList {
             return;
         }
         if let Some(last) = self.packets.last_mut()
-            && last.cargo == packet.cargo
-            && last.source == packet.source
-            && last.periods_in_transit == packet.periods_in_transit
-            && last.first_station == packet.first_station
-            && last.feeder_paid == packet.feeder_paid
-            && last.feeder_share == packet.feeder_share
-            && last.next_hop == packet.next_hop
+            && last.same_merge_key(&packet)
         {
             last.count = last.count.saturating_add(packet.count);
+            last.feeder_share = last.feeder_share.saturating_add(packet.feeder_share);
             return;
         }
         self.packets.push(packet);
@@ -428,21 +637,42 @@ impl VehicleCargoList {
             } else {
                 #[allow(clippy::cast_possible_truncation)]
                 let take = left as u16;
-                let mut taken = p.clone();
-                taken.count = take;
-                if p.feeder_share > 0 {
-                    let share = (p.feeder_share * i64::from(take)) / i64::from(p.count);
-                    taken.feeder_share = share;
-                    p.feeder_share = p.feeder_share.saturating_sub(share);
+                if let Some(taken) = p.split(take) {
+                    left = 0;
+                    out.push(taken);
+                    kept.push(p);
+                } else {
+                    kept.push(p);
                 }
-                p.count -= take;
-                left = 0;
-                out.push(taken);
-                kept.push(p);
             }
         }
         self.packets = kept;
         out
+    }
+
+    /// `VehicleCargoList::Reroute` — reescribe `next_hop` de packets en TRANSFER.
+    pub fn reroute(
+        &mut self,
+        max_move: u32,
+        avoid: TileCoord,
+        avoid2: Option<TileCoord>,
+        mut pick_next: impl FnMut(Option<TileCoord>) -> Option<TileCoord>,
+    ) -> u32 {
+        let mut moved = 0_u32;
+        for p in &mut self.packets {
+            if moved >= max_move {
+                break;
+            }
+            let hop = p.next_hop;
+            if hop != Some(avoid) && avoid2.is_none_or(|a2| hop != Some(a2)) {
+                continue;
+            }
+            let new_hop = pick_next(p.first_station)
+                .filter(|h| *h != avoid && avoid2.is_none_or(|a2| *h != a2));
+            p.next_hop = new_hop;
+            moved = moved.saturating_add(u32::from(p.count));
+        }
+        moved
     }
 
     /// Envejece un periodo todos los packets a bordo.

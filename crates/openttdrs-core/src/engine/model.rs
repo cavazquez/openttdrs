@@ -59,6 +59,12 @@ pub struct EngineDef {
     /// Modificador de curva en punto fijo 8.8 (`GetCurveSpeedModifier`).
     #[serde(default)]
     pub curve_speed_mod: i16,
+    /// Potencia aportada por vagones motorizados (`pow_wag_power`).
+    #[serde(default)]
+    pub pow_wag_power: u32,
+    /// Peso extra de vagones motorizados (`pow_wag_weight`).
+    #[serde(default)]
+    pub pow_wag_weight: u16,
     /// Procedente de Action0 Vehicles `NewGRF`.
     #[serde(default)]
     pub from_newgrf: bool,

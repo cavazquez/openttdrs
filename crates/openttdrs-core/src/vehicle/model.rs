@@ -171,6 +171,15 @@ pub struct Vehicle {
     /// Techo de curva Realistic (`tcache.cached_max_curve_speed`); `u16::MAX` = sin límite.
     #[serde(default = "default_max_curve_speed")]
     pub cached_max_curve_speed: u16,
+    /// Velocidad máxima del consist (`vcache.cached_max_speed`); mínimo por unidad.
+    #[serde(default = "default_max_curve_speed")]
+    pub cached_max_speed: u16,
+    /// Railtypes compatibles del consist (`compatible_railtypes`, bitmask `RailType`).
+    #[serde(default)]
+    pub compatible_railtypes: u8,
+    /// Vagón motorizado (`VehicleRailFlag::PoweredWagon`).
+    #[serde(default)]
+    pub powered_wagon: bool,
     /// Dirección previa de la cabeza (lag de vagones para `GetCurveSpeedLimit`).
     #[serde(default = "default_vehicle_direction")]
     pub curve_prev_direction: VehicleDirection,
@@ -443,6 +452,9 @@ impl Vehicle {
             cached_tilt: false,
             cached_curve_speed_mod: 0,
             cached_max_curve_speed: u16::MAX,
+            cached_max_speed: u16::MAX,
+            compatible_railtypes: 0,
+            powered_wagon: false,
             curve_prev_direction: DIR_NE,
             direction: DIR_NE,
             engine_id: Some(engine_id),

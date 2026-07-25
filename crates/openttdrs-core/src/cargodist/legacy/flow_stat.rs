@@ -98,6 +98,35 @@ impl FlowStat {
         self.shares.last().map(|(via, _)| *via)
     }
 
+    /// `FlowStat::GetVia(excluded, excluded2)` — evita hops obsoletos al reroute.
+    pub fn get_via_excluding(
+        &self,
+        excluded: TileCoord,
+        excluded2: Option<TileCoord>,
+        rng: &mut crate::cargodist::parity::Randomizer,
+    ) -> Option<TileCoord> {
+        let filtered: Vec<(TileCoord, u32)> = self
+            .shares
+            .iter()
+            .copied()
+            .filter(|(via, amount)| {
+                *amount > 0 && *via != excluded && excluded2.is_none_or(|e2| *via != e2)
+            })
+            .collect();
+        let total: u32 = filtered.iter().map(|(_, a)| *a).sum();
+        if total == 0 {
+            return None;
+        }
+        let mut pick = rng.random_range(total);
+        for (via, amount) in &filtered {
+            if pick < *amount {
+                return Some(*via);
+            }
+            pick = pick.saturating_sub(*amount);
+        }
+        filtered.last().map(|(via, _)| *via)
+    }
+
     #[must_use]
     pub fn get_share(&self, via: TileCoord) -> u32 {
         self.shares
@@ -139,6 +168,18 @@ impl FlowStatMap {
             .get(&origin)
             .and_then(|fs| fs.get_via_random(rng))
     }
+
+    pub fn get_via_excluding(
+        &self,
+        origin: TileCoord,
+        excluded: TileCoord,
+        excluded2: Option<TileCoord>,
+        rng: &mut crate::cargodist::parity::Randomizer,
+    ) -> Option<TileCoord> {
+        self.by_origin
+            .get(&origin)
+            .and_then(|fs| fs.get_via_excluding(excluded, excluded2, rng))
+    }
 }
 
 /// Tabla de flows de una estación: por cargo.
@@ -169,6 +210,19 @@ impl StationFlowTable {
         self.by_cargo
             .get(&cargo)
             .and_then(|m| m.get_via_random(origin, rng))
+    }
+
+    pub fn get_via_excluding(
+        &self,
+        cargo: CargoType,
+        origin: TileCoord,
+        excluded: TileCoord,
+        excluded2: Option<TileCoord>,
+        rng: &mut crate::cargodist::parity::Randomizer,
+    ) -> Option<TileCoord> {
+        self.by_cargo
+            .get(&cargo)
+            .and_then(|m| m.get_via_excluding(origin, excluded, excluded2, rng))
     }
 }
 
@@ -231,6 +285,22 @@ impl StationFlows {
         table
             .get_via_random(cargo, origin, rng)
             .or_else(|| table.get_via_random(cargo, at_station, rng))
+    }
+
+    /// `GoodsEntry::GetVia(source, excluded, excluded2)` para reroute de carga.
+    pub fn get_via_excluding(
+        &self,
+        at_station: TileCoord,
+        cargo: CargoType,
+        origin: TileCoord,
+        excluded: TileCoord,
+        excluded2: Option<TileCoord>,
+        rng: &mut crate::cargodist::parity::Randomizer,
+    ) -> Option<TileCoord> {
+        let table = self.by_station.get(&at_station)?;
+        table
+            .get_via_excluding(cargo, origin, excluded, excluded2, rng)
+            .or_else(|| table.get_via_excluding(cargo, at_station, excluded, excluded2, rng))
     }
 
     /// Agrega shares como aristas planificadas (orden: amount desc).

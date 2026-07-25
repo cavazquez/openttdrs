@@ -75,11 +75,10 @@ abrir el issue.
 | 8 | [P2.1](#tabla-p2) Relojes calendario/economía | P2 | XL | hecho | Habilita los barridos escalonados de los que todo depende |
 | 9 | Bloque 6: [P2.17](#tabla-p2)–[P2.22](#tabla-p2) órdenes/carga/linkgraph | P2 | XL | hecho | Órdenes implícitas, staging de carga y planificador linkgraph |
 
-**P1 completo** (22/22). **P3.1–P3.9 hechos** (terreno, población, inundación, desierto
-y pueblo vivo: zonas, house specs, expansión, renovación, aceptación). Siguiente foco P3:
-[P3.10](#tabla-p3)+ (carretera/crash/replace) u otras entradas. El Bloque 6 de
-órdenes/carga/linkgraph (P2.17–P2.22) está cerrado. Los P0 puntuales también están
-cerrados (P0.7 reclasificado a P2).
+**P1 completo** (22/22). **P2 completo** (22/22). **P3 completo** (20/20): terreno,
+población, inundación, desierto, pueblo vivo, carretera/crash/replace/andén/railtype,
+carga (`travelled`/`Reroute`/`Split`), wallclock y consist fino. Sin entradas P3
+pendientes. Los P0 puntuales también están cerrados (P0.7 reclasificado a P2).
 
 ---
 
@@ -640,6 +639,13 @@ antes del crecimiento de hierba (nieve ártico intacta).
 sobre visitas LFSR; mar a z=0 inunda tierra clara diagonal; ahoga tren/carretera;
 ríos/canales no propagan. Enganche en `sim_step/landscape`.
 
+**P3.10–P3.15 · hecho** — Adelantamiento carretera, crash en cruces, `ReplaceChain`,
+pendiente road, `GetTrainStopLocation`/`OrderStopLocation`, `cached_max_track_speed`.
+
+**P3.16–P3.20 · hecho** — `travelled`/`source_xy` y pago por tramos; truncado aleatorio
++ `Split` con prorrateo feeder; `Reroute` tras rebuild de flows; wallclock (meses 30
+días); powered wagons / min speed / `compatible_railtypes` en `consist_changed`.
+
 ---
 
 ## 7. P3 — Mundo y contenido
@@ -657,17 +663,17 @@ ríos/canales no propagan. Enganche en `sim_step/landscape`.
 | **P3.7** | Aceptación de carga urbana · hecho | Ausente | `AddAcceptedCargo_Town` acepta bienes, comida o agua según el spec (`town_cmd.cpp:805-851`) | Portar la aceptación por casa | L · **hecho** |
 | **P3.8** | Radio de zonas del pueblo · hecho | Población abstracta, sin zonas | `UpdateTownRadius` con `_town_squared_town_zone_radius_data` según número de casas (`town_cmd.cpp:1956-1997`) | Portar la tabla de radios; requisito de P3.5 | M · **hecho** |
 | **P3.9** | Propagación del desierto · hecho | Solo se pinta en la generación inicial | `TileLoopClearDesert` ajusta densidad según vecinos y convierte hierba en desierto (`clear_cmd.cpp:234-253`) | Portar la transición en el tile loop | M · **hecho** |
-| **P3.10** | Adelantamiento en carretera | Ausente | `RoadVehCheckOvertake` con carril opuesto, aceleración 512 y `RV_OVERTAKE_TIMEOUT = 35` (`roadveh_cmd.cpp:806-857`) | Portar tras P2.14 y P2.15 | L |
-| **P3.11** | Choques en tierra | Solo está implementado el choque de aviones (`aircraft_crash.rs`) | `Vehicle::Crash` con `crashed_ctr` hasta 2220 ticks y `RoadVehCheckTrainCrash` en pasos a nivel (`roadveh_cmd.cpp:524-553`, `vehicle.cpp:291-317`) | Portar el estado `Crashed` y el chequeo en cruces | L |
-| **P3.12** | Reemplazo de cadena | Cambia `engine_id` sobre el mismo vehículo (`autoreplace.rs:61-77`) | `ReplaceChain` reconstruye el consist con articulados, dual-head y wagon removal (`autoreplace_cmd.cpp:739-816`) | Portar la reconstrucción; depende de P1.13 | XL |
-| **P3.13** | Pendiente en carretera | El efecto solo existe en trenes | `RoadZPosAffectSpeed` aplica 232/256 al subir y +2 al bajar (`roadveh_cmd.cpp:859-868`) | Portar la corrección por altura | M |
-| **P3.14** | Punto de parada en andén | Siempre en el centro del andén (`station/geometry.rs:142-197`) | `GetTrainStopLocation` coloca al principio, en medio o al final según orden y longitud (`train_cmd.cpp:263-299`) | Portar junto con `OrderStopLocation` (P1.20) | M |
-| **P3.15** | Límite del tipo de vía | No se aplica durante el movimiento | `cached_max_track_speed` limita según el railtype de la tesela (`train_cmd.cpp:382-426`) | Consultar el railtype al avanzar | M |
-| **P3.16** | Distancia de pago | Manhattan entre origen y estación de entrega (`sim_step/cargo_transfer.rs:81-82`) | El paquete acumula distancia recorrida y `GetDistance` la usa por tramos (`cargopacket.h:220-252`) | Añadir `travelled` y `source_xy` al paquete | M |
-| **P3.17** | Truncado y división de paquetes | Truncado por tipo, sin prorrateo del feeder (`cargo_packet/types.rs:136-204`) | Truncado aleatorio por destino; `Split` reparte `feeder_share` proporcionalmente (`cargopacket.cpp:94-102`, `763-806`) | Portar ambas operaciones | M |
-| **P3.18** | Reroute de carga | Ausente | `Reroute` reasigna `next_hop` cuando cambian los flujos (`cargopacket.cpp:663-667`) | Portar tras P2.21 | M |
-| **P3.19** | Modo wallclock | Ausente | `TimerGameEconomy::UsingWallclockUnits` con meses de 30 días desacoplados del calendario (`timer_game_economy.cpp:98-103`) | Añadir el modo tras P2.1 | L |
-| **P3.20** | Consist: vagones y railtypes | Sin powered wagons, límites de velocidad por vagón ni `compatible_railtypes` por unidad (`train_consist/topology.rs:68-150`) | `ConsistChanged` los calcula por unidad con callbacks GRF (`train_cmd.cpp:107-250`) | Extender el cacheo del consist | M |
+| **P3.10** | Adelantamiento en carretera · hecho | Ausente | `RoadVehCheckOvertake` con carril opuesto, aceleración 512 y `RV_OVERTAKE_TIMEOUT = 35` (`roadveh_cmd.cpp:806-857`) | Portar tras P2.14 y P2.15 | L · **hecho** |
+| **P3.11** | Choques en tierra · hecho | Solo está implementado el choque de aviones (`aircraft_crash.rs`) | `Vehicle::Crash` con `crashed_ctr` hasta 2220 ticks y `RoadVehCheckTrainCrash` en pasos a nivel (`roadveh_cmd.cpp:524-553`, `vehicle.cpp:291-317`) | Portar el estado `Crashed` y el chequeo en cruces | L · **hecho** |
+| **P3.12** | Reemplazo de cadena · hecho | Cambia `engine_id` sobre el mismo vehículo (`autoreplace.rs:61-77`) | `ReplaceChain` reconstruye el consist con articulados, dual-head y wagon removal (`autoreplace_cmd.cpp:739-816`) | Portar la reconstrucción; depende de P1.13 | XL · **hecho** |
+| **P3.13** | Pendiente en carretera · hecho | El efecto solo existe en trenes | `RoadZPosAffectSpeed` aplica 232/256 al subir y +2 al bajar (`roadveh_cmd.cpp:859-868`) | Portar la corrección por altura | M · **hecho** |
+| **P3.14** | Punto de parada en andén · hecho | Siempre en el centro del andén (`station/geometry.rs:142-197`) | `GetTrainStopLocation` coloca al principio, en medio o al final según orden y longitud (`train_cmd.cpp:263-299`) | Portar junto con `OrderStopLocation` (P1.20) | M · **hecho** |
+| **P3.15** | Límite del tipo de vía · hecho | No se aplica durante el movimiento | `cached_max_track_speed` limita según el railtype de la tesela (`train_cmd.cpp:382-426`) | Consultar el railtype al avanzar | M · **hecho** |
+| **P3.16** | Distancia de pago · hecho | Manhattan entre origen y estación de entrega (`sim_step/cargo_transfer.rs:81-82`) | El paquete acumula distancia recorrida y `GetDistance` la usa por tramos (`cargopacket.h:220-252`) | Añadir `travelled` y `source_xy` al paquete | M · **hecho** |
+| **P3.17** | Truncado y división de paquetes · hecho | Truncado por tipo, sin prorrateo del feeder (`cargo_packet/types.rs:136-204`) | Truncado aleatorio por destino; `Split` reparte `feeder_share` proporcionalmente (`cargopacket.cpp:94-102`, `763-806`) | Portar ambas operaciones | M · **hecho** |
+| **P3.18** | Reroute de carga · hecho | Ausente | `Reroute` reasigna `next_hop` cuando cambian los flujos (`cargopacket.cpp:663-667`) | Portar tras P2.21 | M · **hecho** |
+| **P3.19** | Modo wallclock · hecho | Ausente | `TimerGameEconomy::UsingWallclockUnits` con meses de 30 días desacoplados del calendario (`timer_game_economy.cpp:98-103`) | Añadir el modo tras P2.1 | L · **hecho** |
+| **P3.20** | Consist: vagones y railtypes · hecho | Sin powered wagons, límites de velocidad por vagón ni `compatible_railtypes` por unidad (`train_consist/topology.rs:68-150`) | `ConsistChanged` los calcula por unidad con callbacks GRF (`train_cmd.cpp:107-250`) | Extender el cacheo del consist | M · **hecho** |
 
 ---
 

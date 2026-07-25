@@ -114,7 +114,8 @@ pub(super) fn unload_vehicles(
         let mut feeder_income_by_owner: Vec<(crate::company::CompanyId, i64)> = Vec::new();
         let mut taken = taken;
         for packet in &mut taken {
-            let distance = economy::manhattan_distance(packet.source, station_pos);
+            // P3.16: pago por tramos recorridos (`GetDistance`), no Manhattan origen→destino.
+            let distance = packet.get_distance(station_pos);
             let part = economy::transported_goods_income(
                 u32::from(packet.count),
                 distance,
@@ -199,6 +200,7 @@ pub(super) fn unload_vehicles(
             // Trasbordo: limpiar next_hop; el siguiente vehículo lo vuelve a fijar.
             let mut taken = taken;
             for p in &mut taken {
+                p.update_unloading_tile(station_pos);
                 p.next_hop = None;
             }
             state.stations[station_idx].push_waiting_packets(taken);
@@ -450,6 +452,7 @@ fn try_load_from_industry(
         order_hop,
         &mut state.random,
     );
+    packet.update_loading_tile(station_pos);
     let first_pickup = state.vehicles[vehicle_idx].cargo == 0;
     state.vehicles[vehicle_idx].cargo_packets.push(packet);
     state.vehicles[vehicle_idx].mark_cargo_loaded(source);
@@ -603,6 +606,7 @@ fn try_load_from_station_waiting_cargo(
             order_hop,
             &mut state.random,
         );
+        packet.update_loading_tile(station_pos);
     }
     let loaded_units: u32 = taken.iter().map(|p| u32::from(p.count)).sum();
     // P2.20: consumir reserva de la cola indexada por hop.

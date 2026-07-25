@@ -274,9 +274,19 @@ fn truncate_waiting_cargo(
     let available = station.cargo_packets.total_of(cargo);
     if changed && left < available {
         station.goods.get_mut(cargo).max_waiting_cargo = 0;
-        station
-            .cargo_packets
-            .truncate_cargo_amount(cargo, available - left);
+        let (_moved, per_source) =
+            station
+                .cargo_packets
+                .truncate_cargo_amount(cargo, available - left, rng);
+        // OpenTTD castiga `max_waiting_cargo` del origen; aquí el origen suele ser
+        // esta estación (`first_station`).
+        for (src, amount) in per_source {
+            if amount == 0 || src != Some(station.pos) {
+                continue;
+            }
+            let entry = station.goods.get_mut(cargo);
+            entry.max_waiting_cargo = entry.max_waiting_cargo.max(amount);
+        }
     } else {
         station.goods.get_mut(cargo).max_waiting_cargo = waiting_avg;
     }

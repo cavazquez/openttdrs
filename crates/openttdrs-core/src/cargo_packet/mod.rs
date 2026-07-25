@@ -15,10 +15,12 @@ pub use operations::{
     choose_cargo_action, decide_cargo_unload_action, load_unload_speed, prepare_unload,
 };
 pub use types::{
-    CargoPacket, CargoUnloadAction, StationCargoList, StationHopKey, VehicleCargoList,
+    CargoPacket, CargoUnloadAction, StationCargoList, StationHopKey, TravelledVector,
+    VehicleCargoList,
 };
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     use crate::cargo::CargoType;
@@ -123,5 +125,55 @@ mod tests {
             decide_cargo_unload_action(&p, dest, false),
             CargoUnloadAction::Deliver
         );
+    }
+
+    #[test]
+    fn split_prorates_feeder_share() {
+        let mut p = CargoPacket::new(CargoType::Goods, 10, TileCoord::new(0, 0));
+        p.feeder_share = 100;
+        let taken = p.split(4).unwrap();
+        assert_eq!(taken.count, 4);
+        assert_eq!(taken.feeder_share, 40);
+        assert_eq!(p.count, 6);
+        assert_eq!(p.feeder_share, 60);
+    }
+
+    #[test]
+    fn get_distance_uses_travelled_capped_by_source_xy() {
+        let mut p = CargoPacket::new(CargoType::Coal, 1, TileCoord::new(0, 0));
+        p.update_loading_tile(TileCoord::new(10, 10));
+        // En vehículo en (15,10): distancia Manhattan al load = 5.
+        assert_eq!(p.get_distance(TileCoord::new(15, 10)), 5);
+        // Cap por source_xy→destino: si viajamos en zigzag, no se paga de más.
+        p.travelled.x = 10 + 100;
+        p.travelled.y = 10;
+        assert_eq!(p.get_distance(TileCoord::new(15, 10)), 5);
+    }
+
+    #[test]
+    fn truncate_random_by_destination_preserves_other_cargo() {
+        let mut list = StationCargoList::default();
+        let a = TileCoord::new(1, 1);
+        let b = TileCoord::new(2, 2);
+        list.push(CargoPacket::new(CargoType::Coal, 20, a).with_next_hop(Some(b)));
+        list.push(CargoPacket::new(CargoType::Goods, 5, a).with_next_hop(Some(b)));
+        let mut rng = crate::cargodist::parity::Randomizer::new(42);
+        let (moved, _) = list.truncate_cargo_amount(CargoType::Coal, 10, &mut rng);
+        assert_eq!(moved, 10);
+        assert_eq!(list.total_of(CargoType::Coal), 10);
+        assert_eq!(list.total_of(CargoType::Goods), 5);
+    }
+
+    #[test]
+    fn reroute_rewrites_next_hop() {
+        let mut list = StationCargoList::default();
+        let a = TileCoord::new(1, 1);
+        let avoid = TileCoord::new(2, 2);
+        let alt = TileCoord::new(3, 3);
+        list.push(CargoPacket::new(CargoType::Coal, 7, a).with_next_hop(Some(avoid)));
+        let moved = list.reroute(u32::MAX, avoid, Some(a), |_| Some(alt));
+        assert_eq!(moved, 7);
+        assert!(list.by_next_hop.contains_key(&StationHopKey(Some(alt))));
+        assert!(!list.by_next_hop.contains_key(&StationHopKey(Some(avoid))));
     }
 }

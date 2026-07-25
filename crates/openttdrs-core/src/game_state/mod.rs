@@ -461,6 +461,9 @@ pub struct GameState {
     /// Índice de multiplicador de subsidio (`difficulty.subsidy_multiplier`: 0..=3).
     #[serde(default = "default_subsidy_multiplier")]
     pub subsidy_multiplier: u8,
+    /// `economy.timekeeping_units == Wallclock` — meses económicos de 30 días.
+    #[serde(default)]
+    pub using_wallclock_units: bool,
 
     // ───── Campos efímeros (NO persistidos) ─────
     /// Datos de runtime que no se guardan en el save JSON.
@@ -576,6 +579,7 @@ impl GameState {
             vehicle_breakdowns: default_vehicle_breakdowns(),
             subsidy_duration: default_subsidy_duration(),
             subsidy_multiplier: default_subsidy_multiplier(),
+            using_wallclock_units: false,
             runtime: SimulationRuntime::new(),
             ai_build_queues: Vec::new(),
         };
@@ -668,6 +672,7 @@ impl GameState {
             vehicle_breakdowns: default_vehicle_breakdowns(),
             subsidy_duration: default_subsidy_duration(),
             subsidy_multiplier: default_subsidy_multiplier(),
+            using_wallclock_units: false,
             runtime: SimulationRuntime::new(),
             ai_build_queues: Vec::new(),
         };
@@ -700,11 +705,15 @@ impl GameState {
     /// Fuerza la alineación de relojes con el tick actual (tests / cheats).
     pub fn sync_timers_from_tick(&mut self) {
         self.calendar = crate::timer::CalendarTimer::from_tick(self.tick.get());
-        self.economy_timer = crate::timer::EconomyTimer::from_tick(self.tick.get());
+        self.economy_timer = crate::timer::EconomyTimer::from_tick_with_wallclock(
+            self.tick.get(),
+            self.using_wallclock_units,
+        );
     }
 
     /// Avanza los relojes de calendario y economía un tick de simulación.
     pub(crate) fn advance_game_timers(&mut self) {
+        self.economy_timer.using_wallclock = self.using_wallclock_units;
         self.runtime.calendar_triggers = self.calendar.elapsed_tick();
         self.runtime.economy_triggers = self.economy_timer.elapsed_tick();
     }
@@ -755,6 +764,103 @@ impl GameState {
             }
         }
         self.runtime.station_flows = merged;
+        // P3.18: `RerouteCargo` cuando cambian los flows (hop obsoleto).
+        self.reroute_stale_cargo_hops();
+    }
+
+    /// Reasigna `next_hop` de packets cuya vía ya no existe en los flows.
+    fn reroute_stale_cargo_hops(&mut self) {
+        use crate::cargo::ALL_CARGO_TYPES;
+        use crate::cargo_packet::StationHopKey;
+        use crate::flow_stat::DistributionType;
+
+        if matches!(self.cargo_dist.distribution, DistributionType::Manual) {
+            return;
+        }
+
+        let station_count = self.stations.len();
+        for st_idx in 0..station_count {
+            let st_pos = self.stations[st_idx].pos;
+            let hops: Vec<_> = self.stations[st_idx]
+                .cargo_packets
+                .by_next_hop
+                .keys()
+                .filter_map(|StationHopKey(h)| *h)
+                .collect();
+            for avoid in hops {
+                for cargo in ALL_CARGO_TYPES {
+                    // ¿Algún share sigue apuntando a `avoid`?
+                    let still_valid = self
+                        .runtime
+                        .station_flows
+                        .by_station
+                        .get(&st_pos)
+                        .and_then(|t| t.by_cargo.get(&cargo))
+                        .is_some_and(|m| {
+                            m.by_origin.values().any(|fs| {
+                                fs.shares.iter().any(|(via, amt)| *via == avoid && *amt > 0)
+                            })
+                        });
+                    if still_valid {
+                        continue;
+                    }
+                    let flows = &self.runtime.station_flows;
+                    let rng = &mut self.random;
+                    let _ = self.stations[st_idx].cargo_packets.reroute(
+                        u32::MAX,
+                        avoid,
+                        Some(st_pos),
+                        |origin| {
+                            let origin = origin.unwrap_or(st_pos);
+                            flows.get_via_excluding(st_pos, cargo, origin, avoid, Some(st_pos), rng)
+                        },
+                    );
+                }
+            }
+        }
+
+        // Vehicles unloading / staged transfer at stations.
+        for v_idx in 0..self.vehicles.len() {
+            let Some(st_pos) = self.vehicles[v_idx].last_station_visited else {
+                continue;
+            };
+            let Some(cargo) = self.vehicles[v_idx].cargo_type else {
+                continue;
+            };
+            let hops: Vec<_> = self.vehicles[v_idx]
+                .cargo_packets
+                .packets
+                .iter()
+                .filter_map(|p| p.next_hop)
+                .collect();
+            for avoid in hops {
+                let still_valid = self
+                    .runtime
+                    .station_flows
+                    .by_station
+                    .get(&st_pos)
+                    .and_then(|t| t.by_cargo.get(&cargo))
+                    .is_some_and(|m| {
+                        m.by_origin
+                            .values()
+                            .any(|fs| fs.shares.iter().any(|(via, amt)| *via == avoid && *amt > 0))
+                    });
+                if still_valid {
+                    continue;
+                }
+                let flows = &self.runtime.station_flows;
+                let rng = &mut self.random;
+                let _ = self.vehicles[v_idx].cargo_packets.reroute(
+                    u32::MAX,
+                    avoid,
+                    Some(st_pos),
+                    |origin| {
+                        let origin = origin.unwrap_or(st_pos);
+                        flows.get_via_excluding(st_pos, cargo, origin, avoid, Some(st_pos), rng)
+                    },
+                );
+            }
+        }
     }
 
     /// Activa la traza de paridad: cada `step()` añade un registro por tick.

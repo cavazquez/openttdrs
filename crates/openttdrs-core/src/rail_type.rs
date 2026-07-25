@@ -112,6 +112,30 @@ pub fn rail_types_compatible(a: RailType, b: RailType) -> bool {
     )
 }
 
+/// Bitmask de un `RailType` (bit 0=Rail … 3=Maglev) para `compatible_railtypes`.
+#[must_use]
+pub const fn rail_type_bit(rt: RailType) -> u8 {
+    1u8 << (rt as u8)
+}
+
+/// `GetAllPoweredRailTypes` simplificado: vías donde el motor obtiene tracción.
+#[must_use]
+pub const fn powered_railtypes_mask(rt: RailType) -> u8 {
+    match rt {
+        // Vapor/diésel: circulan en normal y eléctrica.
+        RailType::Rail => rail_type_bit(RailType::Rail) | rail_type_bit(RailType::Electric),
+        RailType::Electric => rail_type_bit(RailType::Electric),
+        RailType::Monorail => rail_type_bit(RailType::Monorail),
+        RailType::Maglev => rail_type_bit(RailType::Maglev),
+    }
+}
+
+/// ¿El bitmask `compatible_railtypes` incluye este tipo de vía?
+#[must_use]
+pub const fn railtypes_mask_contains(mask: u8, rt: RailType) -> bool {
+    mask & rail_type_bit(rt) != 0
+}
+
 /// ¿El motor puede circular / comprarse sobre este tipo de vía?
 #[must_use]
 pub fn engine_compatible_with_rail(engine: &EngineDef, rail_type: RailType) -> bool {

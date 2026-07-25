@@ -367,6 +367,10 @@ impl super::model::Vehicle {
     ) -> crate::engine::DoUpdateSpeedResult {
         let engine = self.effective_engine();
         let mut max_speed = engine.max_speed;
+        // P3.20: techo del consist (mínimo por unidad); `u16::MAX` = aún no cacheado.
+        if self.cached_max_speed > 0 && self.cached_max_speed < u16::MAX {
+            max_speed = max_speed.min(self.cached_max_speed);
+        }
         if let Some(map) = map
             && let Some(bridge_cap) = crate::bridge_spec::bridge_max_speed_for_tile(map, self.pos)
         {

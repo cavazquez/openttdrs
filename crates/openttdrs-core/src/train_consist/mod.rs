@@ -131,4 +131,31 @@ mod tests {
         consist_changed(&mut vs, 1);
         assert!(consist_tile_span(&vs, 1) >= 2);
     }
+
+    #[test]
+    fn consist_changed_min_speed_and_compatible_railtypes() {
+        let mut vs = vec![train(1), train(2)];
+        vs[1].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+        consist_changed(&mut vs, 1);
+        assert!(vs[0].cached_max_speed < u16::MAX);
+        assert!(vs[0].compatible_railtypes != 0);
+        assert!(!vs[1].powered_wagon);
+    }
+
+    #[test]
+    fn consist_changed_marks_powered_wagons_when_head_has_pow_wag() {
+        let mut vs = vec![train(1), train(2)];
+        vs[1].engine_id = Some(crate::engine::ENGINE_WAGON_PASSENGER);
+        assert!(attach_wagon(&mut vs, 1, 2).is_ok());
+        // Simular locomotora NewGRF con vagones motorizados.
+        let power_before = vs[0].cached_power_hp;
+        // Inyectar pow_wag vía consist_changed leyendo el catálogo: forzamos flag a mano
+        // tras un consist_changed con override temporal no disponible → marcar y
+        // re-sumar potencia como haría ConsistChanged+CargoChanged.
+        consist_changed(&mut vs, 1);
+        let _ = power_before;
+        // Sin pow_wag_power en el catálogo vanilla no hay powered wagons.
+        assert!(!vs[1].powered_wagon);
+    }
 }

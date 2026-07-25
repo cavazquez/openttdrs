@@ -345,7 +345,8 @@ pub use rail_signals::{
 };
 pub use rail_type::{
     RAIL_CONVERT_COST, RailType, engine_compatible_with_rail, engine_requires_electric,
-    engine_requires_maglev, engine_requires_monorail, rail_type_from_tile, rail_types_compatible,
+    engine_requires_maglev, engine_requires_monorail, powered_railtypes_mask, rail_type_bit,
+    rail_type_from_tile, rail_types_compatible, railtypes_mask_contains,
     required_rail_type_for_engine, set_rail_type_on_tile, tile_usable_by_rail_type,
 };
 pub use refit::{

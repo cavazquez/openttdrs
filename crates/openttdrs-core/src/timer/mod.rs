@@ -2,6 +2,9 @@
 //!
 //! Por defecto ambos avanzan alineados (sin wallclock). El tick de simulación sigue siendo
 //! independiente; estos timers mantienen `date_fract` 0..=73 y el contador de días.
+//! Con [`EconomyTimer::using_wallclock`] los meses económicos son siempre 30 días
+//! (`EconomyTime::DAYS_IN_ECONOMY_MONTH`) y el año económico 360 días, desacoplados
+//! del calendario gregoriano.
 
 use crate::economy::{TICKS_PER_DAY, calendar_month_index};
 use crate::news::calendar_year_day;
@@ -9,6 +12,11 @@ use crate::news::calendar_year_day;
 /// Ticks de simulación en un día de calendario (`Ticks::DAY_TICKS`).
 #[allow(clippy::cast_possible_truncation)]
 pub const DAY_TICKS: u16 = TICKS_PER_DAY as u16;
+
+/// Días por mes económico en modo wallclock (`EconomyTime::DAYS_IN_ECONOMY_MONTH`).
+pub const DAYS_IN_ECONOMY_MONTH: u32 = 30;
+/// Días por año económico en modo wallclock (`EconomyTime::DAYS_IN_ECONOMY_YEAR`).
+pub const DAYS_IN_ECONOMY_YEAR: u32 = 360;
 
 /// Longitudes de mes usadas para `days_since_last_month` (sin bisectos).
 const MONTH_LEN: [u64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -77,18 +85,39 @@ impl CalendarTimer {
 }
 
 /// Reloj de economía: intereses, inflación mensual, subsidios, producción industrial.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct EconomyTimer {
     pub date: u32,
     pub date_fract: u16,
     pub year: u32,
     pub month: u8,
     pub days_since_last_month: u16,
+    /// `TimerGameEconomy::UsingWallclockUnits` — meses de 30 días fijos.
+    #[serde(default)]
+    pub using_wallclock: bool,
+}
+
+impl Default for EconomyTimer {
+    fn default() -> Self {
+        Self {
+            date: 0,
+            date_fract: 0,
+            year: crate::news::CALENDAR_BASE_YEAR,
+            month: 0,
+            days_since_last_month: 0,
+            using_wallclock: false,
+        }
+    }
 }
 
 impl EconomyTimer {
     #[must_use]
     pub fn from_tick(tick: u64) -> Self {
+        Self::from_tick_with_wallclock(tick, false)
+    }
+
+    #[must_use]
+    pub fn from_tick_with_wallclock(tick: u64, using_wallclock: bool) -> Self {
         let cal = CalendarTimer::from_tick(tick);
         let mut timer = Self {
             date: cal.date,
@@ -96,9 +125,21 @@ impl EconomyTimer {
             year: cal.year,
             month: cal.month,
             days_since_last_month: 0,
+            using_wallclock,
         };
-        timer.days_since_last_month = days_in_current_month(timer.date);
+        timer.sync_ymd();
+        timer.days_since_last_month = if using_wallclock {
+            days_in_economy_month(timer.date)
+        } else {
+            days_in_current_month(timer.date)
+        };
         timer
+    }
+
+    /// `TimerGameEconomy::UsingWallclockUnits`.
+    #[must_use]
+    pub const fn using_wallclock_units(self) -> bool {
+        self.using_wallclock
     }
 
     #[must_use]
@@ -107,9 +148,15 @@ impl EconomyTimer {
     }
 
     fn sync_ymd(&mut self) {
-        let (year, _) = calendar_year_day(u64::from(self.date));
-        self.year = year;
-        self.month = calendar_month_index(u64::from(self.date));
+        if self.using_wallclock {
+            // Meses de 30 días / años de 360 (`ConvertDateToYMD` wallclock).
+            self.year = crate::news::CALENDAR_BASE_YEAR + self.date / DAYS_IN_ECONOMY_YEAR;
+            self.month = ((self.date % DAYS_IN_ECONOMY_YEAR) / DAYS_IN_ECONOMY_MONTH) as u8;
+        } else {
+            let (year, _) = calendar_year_day(u64::from(self.date));
+            self.year = year;
+            self.month = calendar_month_index(u64::from(self.date));
+        }
     }
 
     /// Avanza un tick de simulación en este reloj.
@@ -148,6 +195,11 @@ fn days_in_current_month(date: u32) -> u16 {
         remaining -= len;
     }
     1
+}
+
+/// Día dentro del mes económico wallclock (1..=30).
+fn days_in_economy_month(date: u32) -> u16 {
+    u16::try_from((date % DAYS_IN_ECONOMY_MONTH) + 1).unwrap_or(1)
 }
 
 /// Tick de simulación al final del día `day_index` (último fract antes del rollover).
@@ -204,6 +256,34 @@ mod tests {
         assert!(triggers.new_month);
         assert!(triggers.new_year);
         assert_eq!(eco.year, crate::news::CALENDAR_BASE_YEAR + 1);
+    }
+
+    #[test]
+    fn wallclock_economy_months_are_30_days() {
+        // Día 29 → al cerrar entra el día 30 = primer día del mes 1.
+        let mut eco = EconomyTimer::from_tick_with_wallclock(tick_at_end_of_day(29), true);
+        assert!(eco.using_wallclock_units());
+        assert_eq!(eco.month, 0);
+        let triggers = eco.elapsed_tick();
+        assert!(triggers.new_day);
+        assert!(triggers.new_month);
+        assert_eq!(eco.month, 1);
+        assert_eq!(eco.days_since_last_month, 0);
+        // Calendario independiente: enero tiene 31 días.
+        let mut cal = CalendarTimer::from_tick(tick_at_end_of_day(29));
+        let cal_t = cal.elapsed_tick();
+        assert!(cal_t.new_day);
+        assert!(!cal_t.new_month);
+    }
+
+    #[test]
+    fn wallclock_economy_year_is_360_days() {
+        let mut eco = EconomyTimer::from_tick_with_wallclock(tick_at_end_of_day(359), true);
+        let triggers = eco.elapsed_tick();
+        assert!(triggers.new_year);
+        assert!(triggers.new_month);
+        assert_eq!(eco.year, crate::news::CALENDAR_BASE_YEAR + 1);
+        assert_eq!(eco.month, 0);
     }
 
     #[test]

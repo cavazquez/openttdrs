@@ -26,7 +26,7 @@ pub fn large_world_gen_map_sized(side: u32) -> GameState {
         seed: 116,
         sea_level: 1,
         island: false,
-        height_span: 6,
+        ..WorldGenConfig::default().with_height_span(6)
     };
     apply_world_gen(&mut state.map, &cfg, &[]).unwrap_or_else(|e| {
         panic!("world_gen bench {side}×{side}: {e:?}");

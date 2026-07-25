@@ -39,7 +39,9 @@ pub(super) fn pick_river_source(
     preserve: &[PreserveRect],
     idx: u64,
 ) -> Option<TileCoord> {
-    let min_z = config.sea_level.saturating_add(2);
+    // TGP deja el mar en altura 0; `sea_level` legado (heightmaps) suele ser 1.
+    let sea = config.sea_level.min(1);
+    let min_z = sea.saturating_add(2);
     for attempt in 0..64u64 {
         let hash = hash2(
             config.seed ^ 0x5249_5645,

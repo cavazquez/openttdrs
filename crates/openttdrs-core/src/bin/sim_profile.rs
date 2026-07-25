@@ -34,7 +34,7 @@ fn main() {
         seed: 116,
         sea_level: 1,
         island: false,
-        height_span: 6,
+        ..WorldGenConfig::default().with_height_span(6)
     };
     apply_world_gen(&mut state.map, &cfg, &[]).expect("world_gen");
     state.world_seed = cfg.seed;

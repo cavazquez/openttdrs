@@ -1,4 +1,6 @@
-//! Generación de altura procedural: ruido, suavizado y falloff de isla.
+//! Generación de altura legado (pre-TGP): ruido por capas.
+//! Conservado por si hace falta comparar o reactivar el backend antiguo.
+#![allow(dead_code)]
 
 /// Ruido grueso que marca cuencas de lagos interiores (0 = sin lago, 1 = depresión máxima).
 pub(super) fn lake_depression(cx: i32, cy: i32, seed: u64) -> f32 {

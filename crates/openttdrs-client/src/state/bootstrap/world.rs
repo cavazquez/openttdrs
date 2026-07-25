@@ -342,7 +342,8 @@ pub(crate) fn build_procedural_demo_world(settings: &NewGameSettings) -> GameSta
                 seed,
                 sea_level: 1,
                 island: settings.island,
-                height_span: settings.terrain_roughness.height_span(),
+                ..WorldGenConfig::default()
+                    .with_height_span(settings.terrain_roughness.height_span())
             },
             &preserve,
         );
@@ -390,7 +391,8 @@ pub(crate) fn build_empty_procedural_world(
                 seed,
                 sea_level: 1,
                 island: settings.island,
-                height_span: settings.terrain_roughness.height_span(),
+                ..WorldGenConfig::default()
+                    .with_height_span(settings.terrain_roughness.height_span())
             },
             &[],
         );

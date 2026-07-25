@@ -109,7 +109,7 @@ fn build_dedicated_world(seed: u64) -> GameState {
         seed,
         sea_level: 1,
         island: true,
-        height_span: 6,
+        ..WorldGenConfig::default().with_height_span(6)
     };
     if let Err(e) = apply_world_gen(&mut state.map, &cfg, &[]) {
         eprintln!("warning: world_gen falló ({e:?}); mapa plano");

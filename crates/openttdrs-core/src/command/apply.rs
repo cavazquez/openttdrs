@@ -591,7 +591,7 @@ fn apply_command_inner(state: &mut GameState, cmd: &Command) -> Result<(), Comma
                 seed,
                 sea_level: 1,
                 island: *island,
-                height_span: *height_span,
+                ..crate::world_gen::WorldGenConfig::default().with_height_span(*height_span)
             };
             crate::world_gen::apply_world_gen(&mut state.map, &cfg, &[])
                 .map_err(|_| CommandError::OutOfBounds)?;

@@ -15,11 +15,13 @@ mod heightmap;
 mod landcover;
 pub(crate) use landcover::desert_patch;
 mod rivers;
+mod tgp;
 
 pub use config::{
     CLEAR_GROUND_DESERT, CLEAR_GROUND_GRASS, CLEAR_GROUND_ROCKY, CLEAR_GROUND_ROUGH,
-    CLEAR_GROUND_SNOW, Climate, DEF_SNOW_LINE_HEIGHT, PreserveRect, WorldGenConfig,
-    clear_ground_m5, effective_clear_ground, initial_clear_ground,
+    CLEAR_GROUND_SNOW, Climate, DEF_DESERT_COVERAGE, DEF_SNOW_COVERAGE, DEF_SNOW_LINE_HEIGHT,
+    PreserveRect, QuantitySeaLakes, TerrainType, TgenSmoothness, WorldGenConfig, clear_ground_m5,
+    effective_clear_ground, initial_clear_ground, initial_clear_ground_with_lines,
 };
 pub use heightmap::{HeightmapData, apply_heightmap, parse_hmap};
 
@@ -27,15 +29,14 @@ use crate::map::{
     Map, MapError, TileCoord, TileKind, WaterClass, set_water_class_m1, tile_slope_and_z,
 };
 
-use height::{
-    corner_height_from_grid, island_falloff, lake_depression, layered_noise, smooth_corners,
-};
 use landcover::{forest_patch, grass_density};
 use rivers::{carve_rivers, mark_water_coasts};
+use tgp::{calculate_coverage_line, generate_tgp_heights};
 
-/// Genera colinas, lagos y bosques sobre un mapa ya inicializado.
+/// Genera colinas, lagos y bosques sobre un mapa ya inicializado (backend TGP / Perlin).
 ///
 /// Las teselas dentro de `preserve` conservan tipo y altura actuales.
+/// El heightmap externo sigue disponible vía [`apply_heightmap`].
 ///
 /// # Errors
 ///
@@ -49,46 +50,37 @@ pub fn apply_world_gen(
     let map_w = i32::try_from(mw).expect("map width fits i32");
     let map_h = i32::try_from(mh).expect("map height fits i32");
 
-    let corners_w = map_w + 1;
-    let corners_h = map_h + 1;
-    let mut corners = vec![0f32; (corners_w * corners_h) as usize];
-
-    for cy in 0..corners_h {
-        for cx in 0..corners_w {
-            let mut n = layered_noise(cx, cy, config.seed);
-            if config.island {
-                n *= island_falloff(cx, cy, map_w, map_h);
-            }
-            let lake = lake_depression(cx, cy, config.seed);
-            if lake > 0.0 {
-                n *= 1.0 - lake;
-            }
-            corners[(cy * corners_w + cx) as usize] = n.clamp(0.0, 1.0);
-        }
-    }
-
-    for _ in 0..4 {
-        smooth_corners(&mut corners, corners_w, corners_h);
-    }
+    let heights = generate_tgp_heights(map_w, map_h, config);
 
     for y in 0..map_h {
         for x in 0..map_w {
             if preserve.iter().any(|r| r.contains(x, y)) {
                 continue;
             }
-            let h = corner_height_from_grid(
-                &corners,
-                corners_w,
-                x,
-                y,
-                config.sea_level,
-                config.height_span,
-            );
-            let c = TileCoord::new(x, y);
-            map.set_height(c, h)?;
+            let h = heights[(y * map_w + x) as usize];
+            map.set_height(TileCoord::new(x, y), h)?;
         }
     }
 
+    // Coberturas post-relieve (`CalculateSnowLine` / `CalculateDesertLine`).
+    let snow_line = if config.climate == Climate::SubArctic {
+        calculate_coverage_line(&heights, map_w, map_h, config.snow_coverage, 0).max(2)
+    } else {
+        DEF_SNOW_LINE_HEIGHT
+    };
+    let desert_line = if config.climate == Climate::SubTropical {
+        Some(calculate_coverage_line(
+            &heights,
+            map_w,
+            map_h,
+            100u8.saturating_sub(config.desert_coverage),
+            4,
+        ))
+    } else {
+        None
+    };
+
+    // TGP normaliza el mar a altura 0 (`ConvertGroundTilesIntoWaterTiles`).
     for y in 0..map_h {
         for x in 0..map_w {
             if preserve.iter().any(|r| r.contains(x, y)) {
@@ -98,15 +90,23 @@ pub fn apply_world_gen(
             let Some((_, z)) = tile_slope_and_z(map, c) else {
                 continue;
             };
-            if z <= config.sea_level {
+            if z == 0 {
                 map.set_kind(c, TileKind::Water)?;
                 map.set_mapt_m5(c, 0x60, 0)?;
                 map.set_m1(c, set_water_class_m1(0, WaterClass::Sea))?;
                 continue;
             }
-            let ground = initial_clear_ground(config.climate, x, y, z, config.seed);
+            let ground = initial_clear_ground_with_lines(
+                config.climate,
+                x,
+                y,
+                z,
+                config.seed,
+                snow_line,
+                desert_line,
+            );
             let m5 = clear_ground_m5(ground, grass_density(x, y, config.seed));
-            if forest_patch(x, y, config.seed, config.climate) {
+            if forest_patch(x, y, config.seed, config.climate) && ground != CLEAR_GROUND_DESERT {
                 // MP_TREES: m5 = (count-1)<<6 | growth; adulto por defecto (OpenTTD Grown).
                 let count_m1 = ((config
                     .seed
@@ -126,7 +126,7 @@ pub fn apply_world_gen(
         }
     }
 
-    mark_water_coasts(map, map_w, map_h, config.sea_level, preserve);
+    mark_water_coasts(map, map_w, map_h, 0, preserve);
     carve_rivers(map, config, map_w, map_h, preserve)?;
     Ok(())
 }
@@ -179,6 +179,7 @@ mod tests {
             &mut map,
             &WorldGenConfig {
                 seed: 99,
+                quantity_sea_lakes: QuantitySeaLakes::Medium,
                 ..Default::default()
             },
             &[],
@@ -231,6 +232,7 @@ mod tests {
             &WorldGenConfig {
                 seed: 0xDEAD_BEEF,
                 island: true,
+                quantity_sea_lakes: QuantitySeaLakes::Medium,
                 ..Default::default()
             },
             &[],
@@ -256,6 +258,7 @@ mod tests {
             &WorldGenConfig {
                 seed: 0x00C0_FFEE,
                 island: true,
+                quantity_sea_lakes: QuantitySeaLakes::Low,
                 ..Default::default()
             },
             &[],
@@ -284,6 +287,7 @@ mod tests {
         let base_cfg = WorldGenConfig {
             seed: 7,
             island: false,
+            quantity_sea_lakes: QuantitySeaLakes::VeryLow,
             ..Default::default()
         };
         let island_cfg = WorldGenConfig {
@@ -355,18 +359,16 @@ mod tests {
     }
 
     #[test]
-    fn hilly_height_span_raises_peaks() {
-        let mut flat = Map::new_flat(16, 12, 2);
-        let mut hilly = Map::new_flat(16, 12, 2);
+    fn hilly_terrain_type_raises_peaks() {
+        let mut flat = Map::new_flat(64, 64, 2);
+        let mut hilly = Map::new_flat(64, 64, 2);
         let base = WorldGenConfig {
             seed: 123,
-            height_span: 3,
             island: false,
-            ..Default::default()
+            ..WorldGenConfig::default().with_terrain_type(TerrainType::VeryFlat)
         };
         let tall = WorldGenConfig {
-            height_span: 10,
-            ..base
+            ..base.with_terrain_type(TerrainType::Mountainous)
         };
         apply_world_gen(&mut flat, &base, &[]).expect("flat");
         apply_world_gen(&mut hilly, &tall, &[]).expect("hilly");
@@ -379,5 +381,34 @@ mod tests {
                 .unwrap_or(0)
         };
         assert!(max_h(&hilly) >= max_h(&flat));
+    }
+
+    #[test]
+    fn distinct_params_diverge_stably() {
+        let a = WorldGenConfig {
+            seed: 1,
+            ..WorldGenConfig::default().with_terrain_type(TerrainType::Flat)
+        };
+        let b = WorldGenConfig {
+            seed: 1,
+            quantity_sea_lakes: QuantitySeaLakes::High,
+            ..WorldGenConfig::default().with_terrain_type(TerrainType::Mountainous)
+        };
+        let mut ma = Map::new_flat(32, 32, 2);
+        let mut mb = Map::new_flat(32, 32, 2);
+        apply_world_gen(&mut ma, &a, &[]).expect("a");
+        apply_world_gen(&mut mb, &b, &[]).expect("b");
+        let mut ha = Vec::with_capacity(32 * 32);
+        let mut hb = Vec::with_capacity(32 * 32);
+        for y in 0..32i32 {
+            for x in 0..32 {
+                ha.push(ma.get(TileCoord::new(x, y)).map(|t| t.height));
+                hb.push(mb.get(TileCoord::new(x, y)).map(|t| t.height));
+            }
+        }
+        assert_ne!(
+            ha, hb,
+            "terrain_type / sea params should change the height field"
+        );
     }
 }

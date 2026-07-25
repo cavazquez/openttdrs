@@ -620,6 +620,10 @@ reserva permanece roja con Split/MultiEnter.
 `ProcessOrders`/`UpdateOrderDest`; `GetNextStoppingStation` recursivo; `StationCargoList`
 por `next_hop`+`reserved`; `PrepareUnload`/`Stage`; `OnTick_LinkGraph` en `date_fract==21`.
 
+**P3.3 · hecho** — `world_gen/tgp.rs`: Perlin TGP con `terrain_type`, `quantity_sea_lakes`,
+`tgen_smoothness`/`variety`, costas por `island`, y coberturas nieve/desierto vía
+`CalculateCoverageLine`; heightmap externo intacto.
+
 ---
 
 ## 7. P3 — Mundo y contenido
@@ -630,7 +634,7 @@ por `next_hop`+`reserved`; `PrepareUnload`/`Stage`; `OnTick_LinkGraph` en `date_
 |----|------|-----------------|----------|----------|-------|
 | **P3.1** | Generación de pueblos e industrias | Ausente en la generación de mundo; solo fundación manual (`command/town.rs:49-121`) | `GenerateTowns` coloca `{5,11,23,46}` pueblos escalados por tamaño con layout y proporción de ciudades (`town_cmd.cpp:2432-2485`); `GenerateIndustries` reparte por probabilidad, clima y proporción tierra/agua (`industry_cmd.cpp:2488-2540`) | Portar ambas al `world_gen`; sin esto no hay escenario para comparar una partida completa | XL |
 | **P3.2** | Inundación | El agua nunca inunda | `TileLoop_Water` propaga en diagonal, arrasa la tesela y ahoga vehículos (`water_cmd.cpp:1074-1301`) | Portar `DoFloodTile` y `FloodVehicles` | XL |
-| **P3.3** | Generación de terreno | Ruido por capas propio (`world_gen/mod.rs:35-130`) | TGP con Perlin y ajustes por `terrain_type`, `quantity_sea_lakes` y coberturas de nieve y desierto (`tgp.cpp`, `landscape.cpp:1606-1706`) | Portar TGP con sus parámetros de configuración | XL |
+| **P3.3** | Generación de terreno · hecho | Ruido por capas propio (`world_gen/mod.rs`) | TGP con Perlin y ajustes por `terrain_type`, `quantity_sea_lakes` y coberturas de nieve y desierto (`tgp.cpp`, `landscape.cpp:1606-1706`) | Portar TGP con sus parámetros de configuración | XL · **hecho** |
 | **P3.4** | Expansión física del pueblo | Radio 12, tres intentos y solo hierba plana (`town_expand.rs:9-43`) | `GrowTownAtRoad` recorre el grafo de carreteras con iteraciones según `TownLayout` y respeta rejillas y puentes (`town_cmd.cpp:1793-1950`) | Portar el recorrido y los layouts | XL |
 | **P3.5** | Elección de casa | Identificador por `seed % 110` (`town_expand.rs:228-235`) | `TryBuildTownHouse` filtra por `HouseZone`, años de validez y probabilidad ponderada, con edificios únicos (`town_cmd.cpp:2814-2935`) | Portar `_house_specs` completa al runtime | L |
 | **P3.6** | Renovación de casas | Las casas no envejecen | Pasado `minimum_life` se demuelen y se reconstruyen con probabilidad 20/256 (`town_cmd.cpp:671-705`) | Portar la edad de casa dentro de `TileLoop_Town` (P1.7) | L |

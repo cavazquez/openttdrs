@@ -3,7 +3,7 @@
 Convierte un savegame de OpenTTD (.sav) a un archivo binario simple
 que puede cargar openttdrs-client sin dependencias externas.
 
-Especificación detallada del binario: docs/OTTDMAP_FORMAT.md (raíz del repo).
+Especificación detallada del binario: docs/MAPA_Y_FERROCARRIL.md (raíz del repo).
 
 Formato de salida (.ottdmap) versionado:
   4 bytes LE  – magic: 0x4D415031 ('MAP1')

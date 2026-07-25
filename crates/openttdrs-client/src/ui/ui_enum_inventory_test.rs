@@ -4,7 +4,7 @@ use super::floating_window::FloatingWindowId;
 use super::toolbar::editor_toolbar::EditorToolbarAction;
 use super::toolbar::{BuildMenuAction, SaveMenuAction, ToolbarGroup};
 
-/// Debe coincidir con la tabla de `docs/parity/ui_route_inventory.md`.
+/// Debe coincidir con la tabla de `docs/PARIDAD.md`.
 const EXPECTED_FLOATING_WINDOWS: usize = 43;
 const EXPECTED_BUILD_MENU_ACTIONS: usize = 66;
 const EXPECTED_SAVE_MENU_ACTIONS: usize = 22;
@@ -16,7 +16,7 @@ fn ui_enum_inventory_counts() {
     assert_eq!(
         FloatingWindowId::ALL.len(),
         EXPECTED_FLOATING_WINDOWS,
-        "actualizar FloatingWindowId::ALL y docs/parity/ui_route_inventory.md"
+        "actualizar FloatingWindowId::ALL y docs/PARIDAD.md"
     );
     assert_eq!(
         BuildMenuAction::ALL.len(),

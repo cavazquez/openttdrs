@@ -1,7 +1,7 @@
 //! Reporte de divergencias conocidas contra `OpenTTD` (evidencia archivo:línea
 //! de ambos lados). Se genera desde la traza del escenario `truck_bay`; las
 //! divergencias detectadas NO rompen CI: se documentan en
-//! `docs/parity/divergences_found.md` y quedan pendientes para la Fase 2.
+//! `docs/parity/divergences_found.md` (artefacto) / `docs/PARIDAD.md`; pendientes Fase 2.
 
 use std::collections::VecDeque;
 use std::fmt::Write as _;
@@ -595,7 +595,7 @@ pub fn detect_known_divergences(records: &[TickRecord]) -> Vec<KnownDivergence> 
     out
 }
 
-/// Markdown para `docs/parity/divergences_found.md`.
+/// Markdown para `docs/parity/divergences_found.md` (regenerable).
 #[must_use]
 pub fn divergences_markdown(divergences: &[KnownDivergence]) -> String {
     use crate::{OTTD_MILLISECONDS_PER_TICK, REFERENCE_PROGRESS_STEP, SIM_TICKS_PER_SECOND};

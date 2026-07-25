@@ -229,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.check and not assets_available(repo):
         print(
             "SKIP: --check de house_draw_data requiere assets/opengfx/tiles/house_s*.png "
-            "(no vendorizados; ver docs/parity/GENERATED_TABLES.md)",
+            "(no vendorizados; ver docs/PARIDAD.md)",
             file=sys.stderr,
         )
         return 2

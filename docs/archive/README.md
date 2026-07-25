@@ -2,13 +2,17 @@
 
 Planes, roadmaps y épicas **cerrados o absorbidos**. No son fuente de verdad actual.
 
-Trabajo vivo:
+## Consolidación jul 2026 (un archivo por categoría)
+
+Fuentes absorbidas en: [merged-2026-07/](merged-2026-07/).
+
+Destinos vivos: [../ARCHITECTURE.md](../ARCHITECTURE.md), [../PLANIFICACION.md](../PLANIFICACION.md), [../PARIDAD.md](../PARIDAD.md), [../MAPA_Y_FERROCARRIL.md](../MAPA_Y_FERROCARRIL.md), [../GRAFICOS.md](../GRAFICOS.md), [../RENDIMIENTO.md](../RENDIMIENTO.md).
+
+Trabajo vivo (actualizar punteros):
 
 - [../README.md](../README.md) — índice de `docs/`
-- [../ROADMAP_SPRINTS.md](../ROADMAP_SPRINTS.md) — sprints 0.1
-- [../ROADMAP_PARIDAD_UI_GLOBAL.md](../ROADMAP_PARIDAD_UI_GLOBAL.md) — siguiente corte UI
-- [../PARIDAD_OPENTTD.md](../PARIDAD_OPENTTD.md) — vista corta de gaps
-- [../SIGUIENTES_PASOS.md](../SIGUIENTES_PASOS.md) — hallazgos y comandos
+- [../PLANIFICACION.md](../PLANIFICACION.md) — roadmaps / gaps / sprints
+- [../PARIDAD.md](../PARIDAD.md) — madurez y oráculos
 
 ## Archivado jul 2026 (limpieza docs)
 

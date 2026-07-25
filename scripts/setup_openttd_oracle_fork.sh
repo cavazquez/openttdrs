@@ -58,4 +58,4 @@ echo "  cmake --build \"$DEST/build\" -j"
 echo "  OPENTTD_BIN=\"$DEST/build/openttd\" \\"
 echo "    $ROOT_DIR/scripts/export_openttd_oracle_snapshot.sh partida.sav /tmp/openttd.oracle.json"
 echo
-echo "Docs: docs/SNAPSHOT_ORACLE_WORKFLOW.md · docs/parity/SNAPSHOT_SCHEMA.md"
+echo "Docs: docs/PARIDAD.md (oráculos / snapshot)"

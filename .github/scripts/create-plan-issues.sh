@@ -29,7 +29,7 @@ I2=$(gh issue create \
   --title "Docs: clon de referencia OpenTTD e informe de arquitectura" \
   --label "documentation" --label "dificultad:baja" \
   --body "## Objetivo
-Mantener \`scripts/fetch-openttd-reference.sh\`, \`reference/openttd-upstream/\` (gitignored) y \`docs/INFORME_ARQUITECTURA_OPENTTD.md\` al día con la versión analizada del upstream.
+Mantener \`scripts/fetch-openttd-reference.sh\`, \`reference/openttd-upstream/\` (gitignored) y \`docs/ARCHITECTURE.md\` al día con la versión analizada del upstream.
 
 ## Criterios de aceptación
 - [ ] Instrucciones claras en README.

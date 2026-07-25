@@ -4,7 +4,7 @@
 - **Fecha:** 2026-07-16
 - **Issues:** [#125](https://github.com/cavazquez/openttdrs/issues/125)
 - **Supersede:** el punto de tick de [ADR 0002](0002-determinismo-tick-referencia.md) (determinismo, frontera Command y pin OpenTTD de 0002 siguen vigentes)
-- **Commit / referencia:** pin OpenTTD en [`docs/parity/openttd-reference.json`](../parity/openttd-reference.json); detalle en [`tick_rate_decision.md`](../parity/tick_rate_decision.md)
+- **Commit / referencia:** pin OpenTTD en [`docs/parity/openttd-reference.json`](../parity/openttd-reference.json); detalle en [`PARIDAD.md` § tick](../PARIDAD.md#tick-de-simulación)
 
 ## Contexto
 

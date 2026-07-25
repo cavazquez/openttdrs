@@ -6,7 +6,7 @@
 //! (`Map::from_ottd_binary_with_extras`), generando el bloque en memoria.
 //!
 //! Export: [`save`] / [`save_to_bytes`] escriben mapa + `DATE` + `PLYR`
-//! (ver `docs/ROADMAP_SAV_EXPORT.md`).
+//! (ver `docs/PLANIFICACION.md`).
 
 mod array_legacy;
 mod build;

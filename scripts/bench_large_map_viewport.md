@@ -42,13 +42,13 @@ cargo run -p openttdrs-client --release
 
 ## Relación con sim headless
 
-La simulación se mide aparte (`docs/BENCHMARKS.md`, `sim_profile`, `docs/PERF_LARGE_MAP.md`).
+La simulación se mide aparte (`docs/RENDIMIENTO.md`, `sim_profile`, `docs/RENDIMIENTO.md`).
 Un tick vacío 4096² temperate ≈ 1,4 ms; SubArctic tras #196 ≈ 2,0 ms (sin pico diario).
 
 ## Remap dirty (mitigado)
 
 Antes: dirty de landscape ampliaba refresh a **todo** el viewport (`↻N chunks` ≈ área visible).  
-Ahora: solo chunks dirty que siguen en `needed`. El zoom out también está acotado (`clamp_ortho_scale` / `MAX_SPAWN_SPAN_TILES`). Ver `docs/PERF_LARGE_MAP.md`.
+Ahora: solo chunks dirty que siguen en `needed`. El zoom out también está acotado (`clamp_ortho_scale` / `MAX_SPAWN_SPAN_TILES`). Ver `docs/RENDIMIENTO.md`.
 
 ## Checklist de sesión
 

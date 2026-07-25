@@ -1,24 +1,32 @@
 #!/usr/bin/env bash
 # check_parity_docs_fresh.sh — niega afirmaciones obsoletas de tick 5 Hz / carga
-# instantánea como estado vigente en docs/parity (#125).
+# instantánea como estado vigente en docs de paridad (#125).
 #
-# No escanea docs/adr/ (ADR 0002 conserva texto histórico a propósito).
+# No escanea docs/adr/ (ADR 0002 conserva texto histórico a propósito)
+# ni docs/archive/.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ROOT="docs/parity"
+# Narrativa consolidada + artefactos regenerables en parity/
+SCAN_PATHS=(
+  docs/PARIDAD.md
+  docs/PLANIFICACION.md
+  docs/parity/divergences_found.md
+  docs/parity/train_line_divergences.md
+)
+
 FAIL=0
 
 info() { echo "[parity-docs] $*"; }
 err() { echo "[parity-docs] ERROR: $*" >&2; FAIL=1; }
 
-info "Buscando afirmaciones obsoletas en $ROOT ..."
+info "Buscando afirmaciones obsoletas en docs de paridad ..."
 
 check_pat() {
   local pat="$1"
   local hits
-  hits="$(rg -n -e "$pat" "$ROOT" --glob '!**/archive/**' || true)"
+  hits="$(rg -n -e "$pat" "${SCAN_PATHS[@]}" || true)"
   if [[ -n "$hits" ]]; then
     err "patrón /$pat/:"
     printf '%s\n' "$hits" >&2

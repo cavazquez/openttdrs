@@ -33,7 +33,7 @@ Simulador de transporte inspirado en [OpenTTD](https://www.openttd.org/), escrit
 
 **Trabajo reciente (jul 2026):** Action2 variational (trains/stations/road), procedure `7E` / `\2psto`, vars de vehículo y de tesela al dibujar. Issues de backlog: [issues abiertas](https://github.com/cavazquez/openttdrs/issues).
 
-**Siguiente corte (roadmap):** paridad UI / pulido — ver [ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md). Editor #42 ✅ · GameScript-lite #43 ✅ · IA TransCargo ✅ (Squirrel OOS).
+**Siguiente corte (roadmap):** paridad UI / pulido — ver [PLANIFICACION.md](docs/PLANIFICACION.md#paridad-ui-global). Editor #42 ✅ · GameScript-lite #43 ✅ · IA TransCargo ✅ (Squirrel OOS).
 
 ---
 
@@ -131,7 +131,7 @@ Referencia OpenTTD (clon local, no versionado; commit fijado en manifiesto #109)
 ./scripts/fetch-openttd-reference.sh   # → reference/openttd-upstream/ @ docs/parity/openttd-reference.json
 ```
 
-Detalle: [docs/parity/OPENTTD_REFERENCE.md](docs/parity/OPENTTD_REFERENCE.md).
+Detalle: [docs/PARIDAD.md](docs/PARIDAD.md).
 
 ---
 
@@ -182,13 +182,13 @@ Backlog vivo: [issues del repo](https://github.com/cavazquez/openttdrs/issues) (
 
 | Documento | Uso |
 |-----------|-----|
-| [docs/README.md](docs/README.md) | Índice de toda la carpeta `docs/` |
-| [docs/ROADMAP_PARIDAD_UI_GLOBAL.md](docs/ROADMAP_PARIDAD_UI_GLOBAL.md) | Paridad UI + progreso NewGRF Action0–14 |
-| [docs/ROADMAP_SPRINTS.md](docs/ROADMAP_SPRINTS.md) | Sprints hito 0.1 |
-| [docs/PARIDAD_OPENTTD.md](docs/PARIDAD_OPENTTD.md) | Gaps vs OpenTTD |
-| [docs/FLUJO_MAPA_Y_CLIENTE.md](docs/FLUJO_MAPA_Y_CLIENTE.md) | Save → `.ottdmap` → cliente → JSON |
-| [docs/TILES_Y_SAVEGAMES_OPENTTD.md](docs/TILES_Y_SAVEGAMES_OPENTTD.md) | Bytes de mapa y saves |
-| [docs/DISENO_INCREMENTAL.md](docs/DISENO_INCREMENTAL.md) | Filosofía I0–I8 |
+| [docs/README.md](docs/README.md) | Índice (un archivo por temática) |
+| [docs/PLANIFICACION.md](docs/PLANIFICACION.md) | Roadmaps, gaps, sprints, UI/NewGRF |
+| [docs/PARIDAD.md](docs/PARIDAD.md) | Madurez, mapeos, oráculos |
+| [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.md) | Saves, `.ottdmap`, tiles, señales |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Capas + diseño I0–I8 |
+| [docs/GRAFICOS.md](docs/GRAFICOS.md) | OpenGFX |
+| [docs/RENDIMIENTO.md](docs/RENDIMIENTO.md) | Benches y mapas grandes |
 
 Saves OpenTTD → mapa del cliente:
 
@@ -197,7 +197,7 @@ python3 scripts/parse_sav.py partida.sav salida.ottdmap
 OTTDMAP_FILE=salida.ottdmap cargo run -p openttdrs-client
 ```
 
-Detalle de planos/chunks: [docs/OTTDMAP_FORMAT.md](docs/OTTDMAP_FORMAT.md). Regenerar assets: `./scripts/descargar_assets.sh --help`.
+Detalle de planos/chunks: [docs/MAPA_Y_FERROCARRIL.md](docs/MAPA_Y_FERROCARRIL.md#formato-ottdmap). Regenerar assets: `./scripts/descargar_assets.sh --help`.
 
 ---
 

@@ -52,4 +52,4 @@ fi
 
 openttd_manifest_summary "${ROOT}"
 echo "Listo en ${DEST} (detached HEAD @ ${ACTUAL})."
-echo "Para cambiar la referencia: editá docs/parity/openttd-reference.json y abrí un PR (ver docs/parity/OPENTTD_REFERENCE.md)."
+echo "Para cambiar la referencia: editá docs/parity/openttd-reference.json y abrí un PR (ver docs/PARIDAD.md)."

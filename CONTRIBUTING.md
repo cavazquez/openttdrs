@@ -8,9 +8,9 @@ Guía corta. Detalle de arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.m
 2. Cambios acotados a un issue o ADR; sin refactors colaterales.
 3. No regenerar goldens, `*_generated.rs` ni fixtures “de pasada”. Si hace falta:
    - goldens / parse_sav → documentar el motivo en el PR;
-   - tablas generadas → [docs/parity/GENERATED_TABLES.md](docs/parity/GENERATED_TABLES.md);
-   - pin OpenTTD → [docs/parity/OPENTTD_REFERENCE.md](docs/parity/OPENTTD_REFERENCE.md).
-4. Lógica de partida en `openttdrs-core` vía `Command` / `apply_command`. El cliente no debe mutar el mundo de juego fuera de ese canal (inventario: [docs/INVENTARIO_MUTACIONES_CLIENTE.md](docs/INVENTARIO_MUTACIONES_CLIENTE.md)).
+   - tablas generadas → [docs/PARIDAD.md](docs/PARIDAD.md#tablas-generadas);
+   - pin OpenTTD → [docs/PARIDAD.md](docs/PARIDAD.md#referencia-openttd-clonpin) · [docs/parity/openttd-reference.json](docs/parity/openttd-reference.json).
+4. Lógica de partida en `openttdrs-core` vía `Command` / `apply_command`. El cliente no debe mutar el mundo de juego fuera de ese canal (inventario: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#mutaciones-del-cliente)).
 
 ## Baseline local (alineado con CI)
 
@@ -21,7 +21,7 @@ Guía corta. Detalle de arquitectura: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.m
 ./scripts/check.sh ci            # núcleo compartido con .github/workflows/ci.yml
 ```
 
-Benchmarks headless (informativos, no bloquean CI): [docs/BENCHMARKS.md](docs/BENCHMARKS.md) — `./scripts/check.sh bench` o `./scripts/bench_baseline.sh`.
+Benchmarks headless (informativos, no bloquean CI): [docs/RENDIMIENTO.md](docs/RENDIMIENTO.md#benchmarks) — `./scripts/check.sh bench` o `./scripts/bench_baseline.sh`.
 
 Solo en GitHub Actions (no obligatorio en cada commit local): `rustdoc`, `cargo audit`, `cargo deny`, cobertura en `main`, fetch OpenTTD para regen de tablas. Cabecera de `scripts/check.sh` y [README](README.md#ci-y-calidad).
 

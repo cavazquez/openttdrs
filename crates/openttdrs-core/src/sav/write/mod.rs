@@ -3,7 +3,7 @@
 //! Contenedor por defecto: `OTTZ` (zlib). Versión de save: [`EXPORT_SAVE_VERSION`].
 //! Chunks: `MAPS` + planos + `STNN`/`CITY`/`INDY`/`ORDL`/`VEHS`/`LGRP` + `DATE` + `PLYR`.
 //!
-//! Limitaciones: ver `docs/ROADMAP_SAV_EXPORT.md`.
+//! Limitaciones: ver `docs/PLANIFICACION.md`.
 
 #![allow(clippy::cast_possible_truncation)]
 

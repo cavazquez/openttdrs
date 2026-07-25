@@ -3,7 +3,7 @@
 - **Estado:** supersedida parcialmente por [ADR 0003](0003-tick-37hz-openttd.md) (tick ~37 Hz). Siguen vigentes determinismo (`canonical_hash`), frontera Command y pin OpenTTD.
 - **Fecha:** 2026-07-16
 - **Issues:** [#108](https://github.com/cavazquez/openttdrs/issues/108), [#109](https://github.com/cavazquez/openttdrs/issues/109), [#117](https://github.com/cavazquez/openttdrs/issues/117)
-- **Commit / referencia:** pin OpenTTD en [`docs/parity/openttd-reference.json`](../parity/openttd-reference.json) (tag **15.3**, SHA del manifiesto); tick vigente: [`tick_rate_decision.md`](../parity/tick_rate_decision.md) + ADR 0003
+- **Commit / referencia:** pin OpenTTD en [`docs/parity/openttd-reference.json`](../parity/openttd-reference.json) (tag **15.3**, SHA del manifiesto); tick vigente: [`PARIDAD.md` § tick](../PARIDAD.md#tick-de-simulación) + ADR 0003
 
 ## Contexto
 

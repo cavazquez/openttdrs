@@ -11,7 +11,7 @@
 # En --32bpp también prepara un side-cache mínimo de OpenGFX 8bpp en
 # assets/opengfx/.signal-src-8bpp/ (ogfxe_extra Action5 elrail): hace falta
 # para iconos de vía eléctrica y catenaria hasta que exista equivalente nativo
-# 32bpp en OpenGFX2. Ver docs/SPRITES_OPENGFX.md § «Side-cache 8bpp».
+# 32bpp en OpenGFX2. Ver docs/GRAFICOS.md § «Side-cache 8bpp».
 #
 # Uso:
 #   ./scripts/descargar_graficos.sh --8bpp
@@ -181,7 +181,7 @@ ensure_signal_src_8bpp() {
     (( need_extra == 1 )) && printf ' ogfxe_extra'
     (( need_base == 1 )) && printf ' ogfx1_base'
   ))…"
-  echo "  (provisional hasta equivalentes nativos en OpenGFX2 32bpp; ver docs/SPRITES_OPENGFX.md)"
+  echo "  (provisional hasta equivalentes nativos en OpenGFX2 32bpp; ver docs/GRAFICOS.md)"
   ensure_opengfx_8bpp_tar
 
   if ! command -v grfcodec &>/dev/null; then
